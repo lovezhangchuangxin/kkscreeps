@@ -1,0 +1,6 @@
+{
+  "name": "@kkscreeps/compat",
+  "version": "0.0.0",
+  "private": true,
+  "description": "兼容性验收：screeps-ok 适配器（sidecar JSON-RPC 客户端）与 bot 环境验收工具。M0 实装。"
+}

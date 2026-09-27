@@ -1,0 +1,9 @@
+{
+  "name": "@kkscreeps/api",
+  "version": "0.0.0",
+  "private": true,
+  "description": "类型化网络客户端（浏览器/Node 通用）。占位包，M3 起实装。设计见 docs/architecture/frontend.md。",
+  "scripts": {
+    "test": "node --test"
+  }
+}

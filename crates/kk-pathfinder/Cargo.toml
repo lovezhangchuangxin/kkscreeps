@@ -1,0 +1,10 @@
+[package]
+name = "kk-pathfinder"
+description = "寻路：FFI 复用官方 C++ 源码，保证路径逐点一致"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]

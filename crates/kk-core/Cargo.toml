@@ -1,0 +1,10 @@
+[package]
+name = "kk-core"
+description = "基础数据：游戏数值表、房间名编解码、地形编解码、随机数"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]

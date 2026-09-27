@@ -1,0 +1,10 @@
+[package]
+name = "kk-backend"
+description = "网络层：HTTP 接口 + WebSocket 推送（兼容官方协议）"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]

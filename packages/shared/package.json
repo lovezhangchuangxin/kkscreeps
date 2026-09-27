@@ -1,0 +1,9 @@
+{
+  "name": "@kkscreeps/shared",
+  "version": "0.0.0",
+  "private": true,
+  "description": "游戏常量（从 kk-core 生成，单一事实来源）+ 网络协议类型。占位包，M3 起实装。设计见 docs/architecture/frontend.md。",
+  "scripts": {
+    "test": "node --test"
+  }
+}

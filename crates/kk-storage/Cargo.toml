@@ -1,0 +1,10 @@
+[package]
+name = "kk-storage"
+description = "存储：内存缓存 + 定期写盘；跨机部署时的 Redis 等后端"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]

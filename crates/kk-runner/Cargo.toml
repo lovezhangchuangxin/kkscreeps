@@ -1,0 +1,12 @@
+[package]
+name = "kk-runner"
+description = "玩家代码沙箱：deno_core 封装、CPU/内存限制、CommonJS 模块加载"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+deno_core = { workspace = true }
+tokio = { workspace = true }

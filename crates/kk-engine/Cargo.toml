@@ -1,0 +1,14 @@
+[package]
+name = "kk-engine"
+description = "游戏循环：意图执行、移动仲裁、战斗、能量、市场结算"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+kk-world = { workspace = true }
+kk-runner = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

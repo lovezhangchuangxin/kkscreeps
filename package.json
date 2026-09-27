@@ -1,0 +1,12 @@
+{
+  "name": "kkscreeps",
+  "private": true,
+  "packageManager": "pnpm@12.4.2",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "fmt": "cargo fmt --all",
+    "check": "cargo fmt --all --check && cargo clippy --workspace --all-targets && cargo test --workspace && pnpm -r run test && node scripts/check-doc-links.mjs"
+  }
+}

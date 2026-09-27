@@ -1,0 +1,10 @@
+[package]
+name = "kk-schema"
+description = "房间快照的编码格式：字段布局、版本升级、读写器"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]

@@ -1,0 +1,11 @@
+[package]
+name = "kk-world"
+description = "世界模型：房间快照的内存表示、空间索引、对象类型定义"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }

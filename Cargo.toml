@@ -1,0 +1,32 @@
+# kkscreeps Rust workspace
+#
+# 布局与依赖方向见 docs/architecture/overall.md。
+# spikes/ 是已完成使命的技术验证工程，保留独立 Cargo.lock 作证据冻结，不加入本 workspace。
+
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+exclude = ["spikes/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+
+[workspace.dependencies]
+kk-core = { path = "crates/kk-core" }
+kk-schema = { path = "crates/kk-schema" }
+kk-world = { path = "crates/kk-world" }
+kk-engine = { path = "crates/kk-engine" }
+kk-runner = { path = "crates/kk-runner" }
+kk-storage = { path = "crates/kk-storage" }
+kk-pathfinder = { path = "crates/kk-pathfinder" }
+kk-backend = { path = "crates/kk-backend" }
+
+deno_core = "0.412.0"
+tokio = { version = "1", features = ["rt", "macros", "time", "sync"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+clap = { version = "4", features = ["derive"] }
+
+[workspace.lints.clippy]
+all = { level = "deny" }

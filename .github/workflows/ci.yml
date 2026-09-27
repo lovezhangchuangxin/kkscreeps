@@ -1,0 +1,47 @@
+name: CI
+
+# 三个 job 对应 roadmap M0 的 CI 条目：格式化/静态检查/单元测试 + 文档链接检查。
+# 仓库尚未推远端时，本地等价命令是 `pnpm run check`（根 package.json）。
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: 格式化检查
+        run: cargo fmt --all --check
+      - name: 静态检查
+        run: cargo clippy --workspace --all-targets
+      - name: 单元测试
+        run: cargo test --workspace
+
+  js:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install
+      - name: 工作区测试
+        run: pnpm -r run test
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: 文档链接检查
+        run: node scripts/check-doc-links.mjs

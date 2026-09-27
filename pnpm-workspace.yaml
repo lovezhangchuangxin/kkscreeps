@@ -1,0 +1,6 @@
+# JS workspace：与根 Cargo.toml 的 Rust workspace 共存于仓库根（互不干扰）。
+# 布局见 docs/architecture/frontend.md。
+packages:
+  - apps/*
+  - packages/*
+  - compat
