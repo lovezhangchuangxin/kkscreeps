@@ -2,7 +2,8 @@
 // 没有 kkscreeps 二进制时跳过（JS-only 环境，如 CI 的 js job）。
 
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, writeFileSync, mkdtempSync, chmodSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { test } from 'node:test';
 
@@ -46,3 +47,72 @@ test(
     }
   },
 );
+
+test(
+  'tick 的 AbortSignal：每 tick 前检查、中止即抛 reason',
+  { skip: bin ? false : '未找到 kkscreeps 二进制（先 cargo build -p kk-cli）' },
+  async () => {
+    const { createAdapter } = await import('../dist/adapter.js');
+    const adapter = await createAdapter();
+    try {
+      await adapter.createShard({
+        players: ['p1'],
+        rooms: [{ name: 'W1N1', rcl: 1, owner: 'p1' }],
+      });
+      // 预中止：立即抛 reason，一个 tick 也不推进
+      const c0 = new AbortController();
+      c0.abort();
+      const t0 = await adapter.getGameTime();
+      await assert.rejects(
+        adapter.tick(5, { signal: c0.signal }),
+        (e) => e === c0.signal.reason,
+        '预中止抛 signal.reason 本体',
+      );
+      assert.equal(await adapter.getGameTime(), t0, '未推进任何 tick');
+      // 正常 signal：跑完不抛
+      await adapter.tick(2, { signal: new AbortController().signal });
+      assert.equal(await adapter.getGameTime(), t0 + 2, 'signal 在途不误伤');
+      // 中途中止（上游围栏的真实用法——fixture 在 tick 间 abort）：抛 reason 本体、
+      // 后续 tick 不再开始（区间断言：推进量 < 请求数，不锁精确 tick 数）
+      const reason = new Error('围栏超时');
+      const c1 = new AbortController();
+      setTimeout(() => c1.abort(reason), 0);
+      const t1 = await adapter.getGameTime();
+      await assert.rejects(
+        adapter.tick(1000, { signal: c1.signal }),
+        (e) => e === reason,
+        '中途中止抛 reason 本体',
+      );
+      const advanced = (await adapter.getGameTime()) - t1;
+      assert.ok(advanced < 1000, `中止后不再推进（已推进 ${advanced}）`);
+    } finally {
+      await adapter.teardown();
+    }
+  },
+);
+
+test('RPC 超时：死锁 sidecar 被拒绝并 kill（新调用恢复）', async () => {
+  const { EmbedClient } = await import('../dist/rpc.js');
+  // 假 sidecar：吃掉 stdin 永不回行——确定性死锁
+  const dir = mkdtempSync(resolve(tmpdir(), 'kk-rpc-'));
+  const hangBin = resolve(dir, 'hang.sh');
+  writeFileSync(hangBin, '#!/bin/sh\nexec cat > /dev/null\n');
+  chmodSync(hangBin, 0o755);
+  const prevBin = process.env['KKSCREEPS_BIN'];
+  const prevTimeout = process.env['KKSCREEPS_RPC_TIMEOUT_MS'];
+  process.env['KKSCREEPS_BIN'] = hangBin;
+  process.env['KKSCREEPS_RPC_TIMEOUT_MS'] = '120';
+  const client = new EmbedClient();
+  try {
+    await assert.rejects(client.call('getGameTime', {}), /RPC 超时/, '超时拒绝');
+    // kill 已触发：child 清空，下一次调用尝试重新 spawn（仍挂 → 再次超时）
+    await assert.rejects(client.call('getGameTime', {}), /RPC 超时/, 'kill 后可再 spawn');
+  } finally {
+    client.kill();
+    rmSync(dir, { recursive: true, force: true });
+    if (prevBin === undefined) delete process.env['KKSCREEPS_BIN'];
+    else process.env['KKSCREEPS_BIN'] = prevBin;
+    if (prevTimeout === undefined) delete process.env['KKSCREEPS_RPC_TIMEOUT_MS'];
+    else process.env['KKSCREEPS_RPC_TIMEOUT_MS'] = prevTimeout;
+  }
+});

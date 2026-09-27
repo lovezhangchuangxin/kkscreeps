@@ -28,7 +28,13 @@
   function reportMissing(path) {
     missing.set(path, (missing.get(path) || 0) + 1);
   }
-  const PROBE_IGNORE = new Set(['then', 'constructor', '__proto__', 'prototype', 'inspect', 'toJSON', 'nodeType', 'length', 'name']);
+  // has-trap 的缺失记录独立成桶：`!('x' in obj)` 式否定能力探测与真实缺失在
+  // trap 内不可区分，全部降为"低置信 has 探测"，不计入缺失清单（验收面只看
+  // get-trap——访问了且拿不到才是确定的缺失）
+  const hasProbes = new Map();
+  // 'pos'：官方 RoomPosition 无 pos 属性（RoomObject 才有）——bot 的防御性访问
+  // 在官方也得 undefined，不按缺失计；wrapObject 的对象自带真 pos 不受影响
+  const PROBE_IGNORE = new Set(['then', 'constructor', '__proto__', 'prototype', 'inspect', 'toJSON', 'nodeType', 'length', 'name', 'pos']);
   function probe(target, basePath) {
     return new Proxy(target, {
       get(t, prop) {
@@ -42,7 +48,7 @@
         // 整串做 in 检查），不是真实属性访问，不报仪表
         if (typeof prop === 'string' && !prop.includes('.') && !prop.includes('[')
           && !(prop in t) && !PROBE_IGNORE.has(prop)) {
-          reportMissing(basePath + '.' + prop);
+          hasProbes.set(basePath + '.' + prop, (hasProbes.get(basePath + '.' + prop) || 0) + 1);
         }
         return prop in t;
       },
@@ -94,5 +100,5 @@
 
   // ---------------------------------------------------------------- 段间私有上下文
   // 90_host 执行完删除本属性；各段在自身加载时捕获所需引用进闭包。
-  globalThis.__kkp = { ops, probe, reportMissing, PROBE_IGNORE, missing, stubCalls, countStub, lodash: _ };
+  globalThis.__kkp = { ops, probe, reportMissing, PROBE_IGNORE, missing, hasProbes, stubCalls, countStub, lodash: _ };
 })();

@@ -10,7 +10,7 @@
 (() => {
   'use strict';
 
-  const { missing, stubCalls } = globalThis.__kkp;
+  const { missing, hasProbes, stubCalls } = globalThis.__kkp;
   const { require: requireFn, moduleCache, lodash: _ } = globalThis.__kkp.cjs;
   const { beginTick, writeBackMemory } = globalThis.__kkp.memoryWorld;
 
@@ -119,9 +119,12 @@
       moduleCache.lodash = { exports: _ };
     },
     drainMissing() {
-      const out = {};
-      for (const [k, c] of missing) out[k] = c;
+      // 两桶：missing（get-trap 确定缺失）+ hasProbes（has-trap 低置信，可能是否定式探测）
+      const out = { missing: {}, hasProbes: {} };
+      for (const [k, c] of missing) out.missing[k] = c;
+      for (const [k, c] of hasProbes) out.hasProbes[k] = c;
       missing.clear();
+      hasProbes.clear();
       return JSON.stringify(out);
     },
     drainStubCalls() {

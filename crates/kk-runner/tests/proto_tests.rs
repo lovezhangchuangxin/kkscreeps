@@ -51,6 +51,40 @@ fn m0_thread_model_suite() -> anyhow::Result<()> {
     idle_eviction_and_rebuild()?;
     crash_isolation()?;
     lifo_shutdown_clean()?;
+    run_expr_watchdog()?;
+    Ok(())
+}
+
+/// runExpr 通道的看门狗（并发-4 清偿）：纯 CPU 死循环必须在窗口内被掐断（此前
+/// 未武装会永久挂死线程），且合法的重表达式不得被误杀、善后后线程可继续服务。
+/// 窗口 = min(maxPerTick, limit+bucket) 官方公式现算（新沙箱 ≈ 520ms——锁定
+/// 量级，防回归到 1ms 窗口）。
+fn run_expr_watchdog() -> anyhow::Result<()> {
+    let mut pool = PlayerThreads::new();
+    pool.spawn_player(7, config())?;
+    // 合法忙循环（~10-50ms << 窗口）必须完成——曾因读 stale tick_limit 塌缩成
+    // 1ms 窗口被误掐
+    let v = pool.run_expr(7, "let s = 0; for (let i = 0; i < 2e7; i++) s += i; s")?;
+    assert_eq!(v["ok"], true, "合法重表达式不被误掐: {v:?}");
+    let t0 = Instant::now();
+    let v = pool.run_expr(7, "while (true) {}")?;
+    let elapsed = t0.elapsed();
+    assert_eq!(
+        v.get("kind").and_then(serde_json::Value::as_str),
+        Some("terminated"),
+        "死循环被掐断: {v:?}"
+    );
+    // 窗口 ≈ 520ms + 善后余量；旧实现（未武装）此处永挂
+    assert!(elapsed.as_millis() < 2000, "掐断及时（{elapsed:?}）");
+    // 线程善后后可复用；且独立通道不动预算桶（后续 tick 不因本通道停跑）
+    let v = pool.run_expr(7, "1 + 1")?;
+    assert_eq!(v["value"], 2, "掐断后通道可继续服务");
+    let report = pool.tick(7, &world())?;
+    assert!(
+        matches!(report.outcome, TickOutcome::Completed { .. }),
+        "独立通道掐断不动桶——后续 tick 正常执行"
+    );
+    pool.shutdown_all();
     Ok(())
 }
 

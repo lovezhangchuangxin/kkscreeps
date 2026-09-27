@@ -115,7 +115,9 @@ impl PlayerThreads {
                             let _ = ack.send(run_one_tick(&mut sandbox, &world));
                         }
                         Cmd::RunExpr { code, ack } => {
-                            let _ = ack.send(sandbox.run_expr(&code));
+                            // 看门狗编排（并发-4 清偿）：通道执行任意玩家代码，
+                            // 纯 CPU 死循环必须可被掐断，否则线程永久挂死（join 无效）
+                            let _ = ack.send(sandbox.run_expr_guarded(&code));
                         }
                         Cmd::RunPlayer { world, code, ack } => {
                             let _ = ack.send(run_eval_tick(&mut sandbox, &world, &code));

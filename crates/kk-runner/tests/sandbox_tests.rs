@@ -450,6 +450,25 @@ fn terrain_look_and_console_semantics() -> anyhow::Result<()> {
     )?;
     assert_eq!(v["value"], "Spawn1", "lodash 对象谓词过滤生效");
 
+    // RoomPosition.findInRange（官方 rooms.js:1518-1543）：数字 type + Chebyshev
+    // 半径过滤；数组 type 直传；不可达房抛错
+    let v = sb.run_expr(
+        "Game.rooms['W1N1'].getPositionAt(10,10).findInRange(FIND_STRUCTURES, 1).length",
+    )?;
+    assert_eq!(v["value"], 1, "半径 1 内只有 controller");
+    let v = sb.run_expr(
+        "Game.rooms['W1N1'].getPositionAt(10,10).findInRange(FIND_STRUCTURES, 15).map((s) => s.structureType)",
+    )?;
+    assert_eq!(
+        v["value"],
+        serde_json::json!(["controller", "spawn"]),
+        "半径 15 覆盖两结构（find 序）"
+    );
+    let v = sb.run_expr(
+        "(() => { try { Game.rooms['W1N1'].getPositionAt(1,1).findInRange.call({roomName: 'E9S9', x: 1, y: 1}, FIND_SOURCES, 5); return 'no'; } catch (e) { return e.message; } })()",
+    )?;
+    assert_eq!(v["value"], "Could not access room E9S9", "不可达房抛错");
+
     // Room.Terrain 静态挂法（rooms.js:1135）
     let v = sb.run_expr("typeof Room.Terrain")?;
     assert_eq!(v["value"], "function", "Room.Terrain 是静态属性");
@@ -950,32 +969,44 @@ fn stub_game_projection() -> anyhow::Result<()> {
     let v = sb.run_expr("Game.creeps['w1'].move(TOP)")?;
     assert_eq!(v["value"], 0, "桩方法返回 OK");
 
-    // 缺失属性探测：访问 Game 上不存在的属性会被登记
+    // 缺失属性探测：访问 Game 上不存在的属性会被登记（missing 桶 = get-trap 确定缺失）
     sb.run_expr("void Game.totallyMissing")?;
     let missing = sb.drain_missing_api()?;
     assert_eq!(
-        missing["Game.totallyMissing"], 1,
+        missing["missing"]["Game.totallyMissing"], 1,
         "缺失 API 探测: {missing}"
     );
 
-    // `in` 检查同样触发探测（has trap）——此前静默漏报
+    // `in` 检查（has trap）进独立低置信桶 hasProbes——否定式能力探测与真实缺失
+    // 在 trap 内不可区分，不计入缺失清单；drain 后两桶都清空
     sb.run_expr("'notThere' in Game")?;
     let missing = sb.drain_missing_api()?;
     assert_eq!(
-        missing["Game.notThere"], 1,
-        "in 检查触发缺失 API 探测: {missing}"
+        missing["hasProbes"]["Game.notThere"], 1,
+        "in 检查进 hasProbes 桶: {missing}"
+    );
+    assert!(
+        missing["missing"].as_object().is_some_and(|m| m.is_empty()),
+        "has 探测不计入缺失: {missing}"
+    );
+    let again = sb.drain_missing_api()?;
+    assert_eq!(
+        again,
+        serde_json::json!({ "missing": {}, "hasProbes": {} }),
+        "drain 后两桶清空: {again}"
     );
 
-    // pos 实例面（RoomPosition）与 Buffer 静态面纳入探测
-    sb.run_expr("void Game.creeps['w1'].pos.findInRange")?;
+    // pos 实例面（RoomPosition）与 Buffer 静态面纳入探测（findInRange 已实装，
+    // 用真缺失的方法名验证探针）
+    sb.run_expr("void Game.creeps['w1'].pos.findPathToDestination")?;
     sb.run_expr("void Buffer.poolAllocThings")?;
     let missing = sb.drain_missing_api()?;
     assert_eq!(
-        missing["RoomPosition.findInRange"], 1,
+        missing["missing"]["RoomPosition.findPathToDestination"], 1,
         "pos 实例面探测: {missing}"
     );
     assert_eq!(
-        missing["Buffer.poolAllocThings"], 1,
+        missing["missing"]["Buffer.poolAllocThings"], 1,
         "Buffer 静态面探测: {missing}"
     );
 

@@ -536,3 +536,52 @@ staticTerrainData 同款抛错，rooms.js:665；世界内房间恒有地形）�
 capabilities.terrain 翻真、灰区表新登记 5 条（controller hits 不发/typed 单资源
 槽/未注册房间拒置/objects 房间名序/safeMode 绝对值）。
 
+
+## 追记：M1 步 6 实施与评审（2026-09-28，看门狗编排/超时/中止/退出码/仪表）
+
+步 6（方案 §12.6）清偿欠账 #1（并发-4 runExpr 看门狗）、#7（工具链-4 RPC 超时）、
+#8（工具链-9 tick AbortSignal）、#9（测试-4 bot-check 退出码）、#11（has-trap
+噪声分桶）、#14 余项（console 折叠统计；跨房间 getDirectionTo 已随步 5 清偿）：
+
+- **runExpr 看门狗**：独立通道（无 tick 生命周期）编排为清标志→武装→求值→双路径
+  disarm+清标志；窗口按官方公式现算 `min(maxPerTick, limit+bucket)`（make.js:86-89）；
+  **独立通道不动预算桶**（计费归 M2 intent 通道定型——评审实证 stale 计费可打负桶
+  令后续 tick 停跑）；测试锁定死循环掐断 + 合法重表达式不误杀 + 后续 tick 不受影响；
+- **RPC 超时**：默认 60s（KKSCREEPS_RPC_TIMEOUT_MS 覆盖），超时 reject + kill 死锁
+  sidecar（下次调用重 spawn）；child error/exit 加陈旧子进程守卫、pending 携带
+  timer 三路径 clearTimeout、超时 kill 加 child 同一性校验（评审推演出"孤儿 pending
+  迟到超时误杀健康重 spawn child"的第三种交错）；假 sidecar 死锁脚本确定性测试；
+- **tick AbortSignal**：每 tick 前检查、中止抛 `signal.reason` 本体（上游契约
+  adapter.ts:338-342，与 vanilla/xxscreeps 参照同形）；无 signal 走单 RPC 快路径
+  （套件内 fixture 恒注入 signal，恒走循环路径）；预中止/在途/中途中止三形态测试；
+- **bot-check 退出码**：0 通过 / 1 基础设施失败 / 2 验收未通过（硬中断、未跑完——
+  **跳帧也算未跑完**（玩家代码未执行即覆盖不完整，失败消息明示跳帧数）、确定缺失
+  API 非空）；console 错误不硬判（overmind 每 tick 自捕获异常属登记项）；verdict 与
+  normalize_line 抽出纯函数并单测；退出码 0/2 双路径实测；
+- **仪表分桶**：has-trap 缺失从 missing 分离到独立 hasProbes 桶（否定式能力探测
+  与真实缺失在 trap 内不可分，全量降为低置信、不计验收但完整留存报告）——比计划
+  #11 的"访问后否定标记"更粗但无信息丢失；drainMissing 形状改 `{missing, hasProbes}`；
+- **console 折叠**：全部级别 + player_error 通道、不受 head 截幅影响、数字归一
+  （连续数字段→#）；overmind 2000-tick 报告实证折叠计数正确。
+
+评审连带修复（三方并行评审，含两条实证 high）：① 新沙箱 runExpr 窗口曾塌缩为
+1ms（读 stale `tick_limit` 字段——`Bucket::new` 初值 0，`.max(1.0)` 兜成 1ms，
+合法 2ms 表达式被误掐）→ 官方公式现算；② isInRangeTo 两参形态 `(pos, range)` 被
+`typeof y` 判定误判为三参形态取 undefined（M0 潜伏 bug，官方以第三参缺省判定，
+rooms.js:1362-1376）→ 逐字修复；③ overmind 深度推进暴露的真缺失
+`RoomPosition.findInRange`（官方 rooms.js:1518-1543，RoomIntel 每 tick 调用）→ 补桩；
+④ `RoomPosition.pos` 探测噪声（官方无此属性，bot 防御性访问）→ PROBE_IGNORE。
+
+**基线 265 → 268**（+3 转绿 0 转红：ROOMPOS-FIND-004/006（findInRange 两形态）、
+ROOMPOS-SPATIAL-002（inRangeTo 两参修复））。三 bot 报告以新结构重生成：
+tooangel 300t / overmind 2000t / wasm-bot 10t 全部判定通过（overmind 从 M0 的
+"每 tick 错误流"推进到 RoomIntel 全量执行，缺失 API 清零）。
+
+### 已知登记（步 6 遗留）
+
+- set_modules/set_raw_memory 不预清终止标志（迟到 terminate 残留可一次性误报）——
+  M0 既有表面，随 M2 玩家 API 层重写统一处理；run_expr_guarded 的 Ok 路径已自清；
+- run_one_tick 的 drain_missing_api 失败静默兜空（`unwrap_or(json!({}))`）——missing
+  硬判面可能假通过；drain 失败意味着沙箱已坏（硬中断大概率同时计入），实际不可达；
+- EmbedClient 并发 in-flight 场景（当前套件串行调用）下孤儿 pending 各自超时的
+  恢复路径已闭合但无并发测试——M2 多实例接入时补。

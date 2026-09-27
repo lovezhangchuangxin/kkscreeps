@@ -131,9 +131,17 @@
     }
     isNearTo(x, y) { return this.getRangeTo(x, y) <= 1; }
     isInRangeTo(x, y, range) {
-      // 官方 rooms.js:1362-1376 inRangeTo：三参 (x,y,range) 取第三参；两参 (pos,range) 取第二参
-      const r = typeof y === 'number' ? range : y;
-      return this.getRangeTo(x, y) <= r;
+      // 官方 rooms.js:1362-1376：第三参缺省 → 两参形态（目标 + range），目标先
+      // 解包 .pos；否则三参 (x, y, range)。逐轴 abs 比较（= Chebyshev）
+      let tx = x, ty = y, r = range, roomName;
+      if (r === undefined) {
+        let p = x;
+        if (p && p.pos) p = p.pos;
+        tx = p.x; ty = p.y; roomName = p.roomName;
+        r = y;
+      }
+      return Math.abs(tx - this.x) <= r && Math.abs(ty - this.y) <= r
+        && (!roomName || roomName === this.roomName);
     }
     getRangeTo(x, y) {
       const p = fetchXY(x, y);
@@ -165,6 +173,16 @@
     }
     findClosestByRange() { countStub('RoomPosition.findClosestByRange'); return null; }
     findClosestByPath() { countStub('RoomPosition.findClosestByPath'); return null; }
+    // 官方 rooms.js:1518-1543：数字 type 走 room.find（opts 透传含 filter）、
+    // 数组 type 直接过滤；不可达房抛错；inRangeTo（Chebyshev）过滤
+    findInRange(type, range, opts) {
+      const room = Game.rooms[this.roomName];
+      if (!room) throw new Error('Could not access room ' + this.roomName);
+      const objects = typeof type === 'number'
+        ? room.find(type, opts)
+        : (opts && opts.filter ? _.filter(type, opts.filter) : type);
+      return objects.filter((i) => this.inRangeTo(i, range));
+    }
     findPathTo() { countStub('RoomPosition.findPathTo'); return []; }
     moveTo() { countStub('RoomPosition.moveTo'); return 0; }
     createConstructionSite() { countStub('RoomPosition.createConstructionSite'); return 0; }

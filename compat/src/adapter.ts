@@ -34,6 +34,12 @@ export interface PlaceSpec {
 
 export type PlayerCode = string;
 
+/** 上游 TickOptions（screeps-ok src/adapter.ts）的已实装子集：signal（AbortSignal）。
+ *  random 注入要求 randomInjection capability（本适配器为 false，未声明）。 */
+export interface TickOptions {
+  signal?: AbortSignal;
+}
+
 export interface PlayerRunResult {
   executed: boolean;
   expr: { ok: true; value: unknown } | { ok: false; kind: string; error: string };
@@ -117,8 +123,18 @@ export class KkscreepsAdapter {
     return out;
   }
 
-  async tick(count = 1, _options?: unknown): Promise<void> {
-    await client().call('tick', { count });
+  async tick(count = 1, options?: TickOptions): Promise<void> {
+    // 官方契约（adapter.ts:338-342）：signal 每 tick 前检查，中止即抛 reason、
+    // 不再开始下一 tick——真结算有 per-tick 循环，超时围栏必须可中止
+    const signal = options?.signal;
+    if (!signal) {
+      await client().call('tick', { count });
+      return;
+    }
+    for (let i = 0; i < count; i++) {
+      if (signal.aborted) throw signal.reason ?? new Error('tick 序列已中止');
+      await client().call('tick', { count: 1 });
+    }
   }
 
   async getObject(id: string): Promise<unknown> {

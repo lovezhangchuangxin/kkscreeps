@@ -67,6 +67,13 @@ impl Bucket {
         self.tick_limit
     }
 
+    /// 按官方公式现算下一窗口（`min(maxPerTick, limit + bucket)`，make.js:86-89）。
+    /// 独立 runExpr 通道无 begin_tick，不能读 stale 的 `tick_limit` 字段
+    /// （新沙箱为 0、tick 过的沙箱为上一 tick 残留值）。
+    pub fn next_tick_limit(&self) -> f64 {
+        self.max_per_tick.min(self.bucket + self.limit)
+    }
+
     pub fn bucket(&self) -> f64 {
         self.bucket
     }

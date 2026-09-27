@@ -332,6 +332,31 @@ impl Sandbox {
         }
     }
 
+    /// 独立 runExpr 通道（无 tick 生命周期）的看门狗编排：清遗留标志 → 武装
+    /// 一个按官方公式现算的窗口（`min(maxPerTick, limit+bucket)`——不能读 stale
+    /// 的 `tick_limit` 字段：新沙箱为 0、tick 过的为残留值）→ 求值 → 双路径
+    /// disarm + 清标志（迟到的 terminate 不得残留到下一条命令）。
+    /// 不带 begin/end_tick：无世界注入、**不动预算桶**（该通道的计费归 M2
+    /// intent 通道定型；tick 上下文的善后结算走 `run_expr` 的 Err 路径）。
+    pub fn run_expr_guarded(&mut self, code: &str) -> anyhow::Result<serde_json::Value> {
+        let script = serde_json::to_string(code)?; // arm 前完成可失败步骤
+        self.clear_terminate_flag();
+        let window = self.budget.next_tick_limit().max(1.0);
+        self.watchdog
+            .arm(Instant::now() + Duration::from_millis(window as u64));
+        let out = self.exec_json(format!("globalThis.__kk.runExpr({script})"));
+        self.watchdog.disarm();
+        self.runtime.v8_isolate().cancel_terminate_execution();
+        match out {
+            Ok(v) => Ok(v),
+            Err(_) => {
+                // 独立通道被掐断：恢复堆上限即可，不动桶、不碰 tick 生命周期状态
+                self.restore_heap_limit();
+                Ok(serde_json::json!({ "ok": false, "kind": "terminated", "error": "硬中断" }))
+            }
+        }
+    }
+
     /// 硬中断善后：解除武装、清终止标志、结算（官方语义：扣整份 tickLimit，桶充足
     /// 不跳帧，负桶由 begin_tick 停跑）、恢复堆上限、清 tick_start。幂等；
     /// 本 tick 已由善后结算的，end_tick 不再重复结算。

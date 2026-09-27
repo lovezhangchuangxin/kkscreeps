@@ -6,6 +6,7 @@
   "ticks_skipped_penalty": 0,
   "ticks_with_console_error": 0,
   "missing_api": {},
+  "has_probes": {},
   "stub_calls_top": [
     [
       "RoomPosition.lookFor",
@@ -85,6 +86,32 @@
     ]
   ],
   "console_errors_head": [],
+  "console_errors_folded": [
+    [
+      "[log] # W#N#   harvester#           [room W#N# pos #,#] Creep role not defined for: crp# harvester",
+      300
+    ],
+    [
+      "[log] Brain Exception TypeError: RawMemory.setPublicSegments is not a function\n    at checkPlayers (kk_module/diplomacy, <anonymous>:#:#)\n    at module.exports.execute (kk_module/brain_main, <anonymous>:#:#)\n    at runMainLogic (kk_module/main, <anonymous>:#:#)\n    at Object.module.exports.loop (kk_module/main, <anonymous>:#:#)\n    at Object.runLoop (kk-prelude-#-host:#:#)\n    at kk:#:#",
+      3
+    ],
+    [
+      "[log] # Script reload - Load: # tickLimit: # limit: # Bucket: #",
+      1
+    ],
+    [
+      "[log] # W#N#                        Setting misplacedSpawn",
+      1
+    ],
+    [
+      "[log] # W#N#                        Setup complete - storing data",
+      1
+    ],
+    [
+      "[log] # W#N#                        Setup completed - storing data",
+      1
+    ]
+  ],
   "console_head": [
     "[tick 1][log] 1 Script reload - Load: 6 tickLimit: 500 limit: 20 Bucket: 10000",
     "[tick 1][log] 1 W1N1                        Setting misplacedSpawn",

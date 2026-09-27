@@ -1,9 +1,10 @@
-//! `kkscreeps bot-check` 子命令：M0 bot 环境兼容性验收。
+//! `kkscreeps bot-check` 子命令：bot 环境兼容性验收。
 //!
 //! 在桩环境（deno_core + CJS 加载器 + lodash 预置 + stub Game）下加载真实社区 bot，
-//! 跑 N 个 tick 的 loop 循环，产出：运行结局统计、console 错误流、缺失 API 清单、
-//! 桩方法调用统计。验收口径是"加载运行无崩溃 + 缺失 API 清零或登记"（roadmap M0），
-//! 不要求游戏行为正确——那需要引擎（M1+）。
+//! 跑 N 个 tick 的 loop 循环，产出：运行结局统计、console 错误流（含重复行折叠）、
+//! 缺失 API 清单（get-trap 确定 missing + has-trap 低置信探测两桶）、桩方法调用统计。
+//! 退出码机器可判定：0 通过 / 1 基础设施失败 / 2 验收未通过（硬中断、未跑完——
+//! 跳帧也算未跑完、确定缺失 API 非零）；console 错误属登记项口径不硬判。
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -16,7 +17,9 @@ const PLAYER: u64 = 0;
 
 pub fn run(path: &str, ticks: u32, report_path: &str) -> i32 {
     match run_inner(path, ticks, report_path) {
-        Ok(()) => 0,
+        // 退出码：0 = 验收通过；1 = 基础设施失败；2 = 验收未通过（中断/缺失/未跑完）
+        Ok(true) => 0,
+        Ok(false) => 2,
         Err(e) => {
             eprintln!("bot-check 失败: {e:#}");
             1
@@ -24,7 +27,7 @@ pub fn run(path: &str, ticks: u32, report_path: &str) -> i32 {
     }
 }
 
-fn run_inner(path: &str, ticks: u32, report_path: &str) -> anyhow::Result<()> {
+fn run_inner(path: &str, ticks: u32, report_path: &str) -> anyhow::Result<bool> {
     let bot_dir = PathBuf::from(path);
     let table = ModuleTable::from_directory(&bot_dir)?;
     let module_count = table.len();
@@ -48,7 +51,9 @@ fn run_inner(path: &str, ticks: u32, report_path: &str) -> anyhow::Result<()> {
 
     let mut console_errors: Vec<String> = Vec::new();
     let mut console_head: Vec<String> = Vec::new();
+    let mut console_error_folds: BTreeMap<String, u64> = BTreeMap::new();
     let mut missing_api: BTreeMap<String, u64> = BTreeMap::new();
+    let mut has_probes: BTreeMap<String, u64> = BTreeMap::new();
     let mut stub_calls: BTreeMap<String, u64> = BTreeMap::new();
     let mut completed = 0u32;
     let mut terminated = 0u32;
@@ -70,20 +75,31 @@ fn run_inner(path: &str, ticks: u32, report_path: &str) -> anyhow::Result<()> {
         if report.player_error.is_some() || report.console.iter().any(|l| l.level == "error") {
             errored_ticks += 1;
         }
-        if let Some(err) = &report.player_error
-            && console_errors.len() < 300
-        {
-            console_errors.push(format!("[tick {t}] [loop] {}", err));
+        if let Some(err) = &report.player_error {
+            if console_errors.len() < 300 {
+                console_errors.push(format!("[tick {t}] [loop] {}", err));
+            }
+            *console_error_folds
+                .entry(format!("[loop] {}", normalize_line(err)))
+                .or_insert(0) += 1;
         }
+        // 重复行折叠（数字归一）：bot 自捕获异常逐 tick 重打——多为 log/error 级，
+        // 折叠覆盖全部级别且不受 head 截幅影响（head 只限量原文留存）
         for line in report.console {
             if line.level == "error" && console_errors.len() < 300 {
                 console_errors.push(format!("[tick {t}] {}", line.text));
             }
+            *console_error_folds
+                .entry(format!("[{}] {}", line.level, normalize_line(&line.text)))
+                .or_insert(0) += 1;
             if console_head.len() < 20 {
                 console_head.push(format!("[tick {t}][{}] {}", line.level, line.text));
             }
         }
-        merge_counts(&mut missing_api, &report.missing_api);
+        // 仪表两桶：missing（get-trap 确定缺失）计验收；hasProbes（has-trap 低置信，
+        // 可能是否定式能力探测）仅随报告留存
+        merge_counts(&mut missing_api, &report.missing_api["missing"]);
+        merge_counts(&mut has_probes, &report.missing_api["hasProbes"]);
         merge_counts(&mut stub_calls, &report.stub_calls);
     }
 
@@ -95,8 +111,10 @@ fn run_inner(path: &str, ticks: u32, report_path: &str) -> anyhow::Result<()> {
         "ticks_skipped_penalty": skipped_penalty,
         "ticks_with_console_error": errored_ticks,
         "missing_api": missing_api,
+        "has_probes": has_probes,
         "stub_calls_top": top(&stub_calls, 30),
         "console_errors_head": console_errors,
+        "console_errors_folded": top(&console_error_folds, 10),
         "console_head": console_head,
     });
     std::fs::write(report_path, serde_json::to_string_pretty(&report)?)?;
@@ -107,7 +125,11 @@ fn run_inner(path: &str, ticks: u32, report_path: &str) -> anyhow::Result<()> {
         "  完成 tick：{completed}/{}（硬中断 {terminated}，跳帧（桶透支停跑） {skipped_penalty}，含 console 错误的 tick {errored_ticks}）",
         ticks
     );
-    println!("  缺失 API：{} 项", missing_api.len());
+    println!(
+        "  缺失 API：{} 项（另有 has 探测 {} 项，低置信不计验收）",
+        missing_api.len(),
+        has_probes.len()
+    );
     for (k, v) in top(&missing_api, 20) {
         println!("    {k} × {v}");
     }
@@ -124,13 +146,67 @@ fn run_inner(path: &str, ticks: u32, report_path: &str) -> anyhow::Result<()> {
         println!("    {}", l.lines().next().unwrap_or_default());
     }
     if !console_errors.is_empty() {
-        println!("  console 错误（前 5 条）：");
+        println!("  console 错误（前 5 条，折叠 top 3）：");
         for e in console_errors.iter().take(5) {
             println!("    {}", e.lines().next().unwrap_or_default());
         }
+        for (k, v) in top(&console_error_folds, 3) {
+            println!("    ×{v} {k}");
+        }
     }
     pool.shutdown_all();
-    Ok(())
+
+    let verdict = verdict(
+        terminated,
+        completed,
+        skipped_penalty,
+        ticks,
+        missing_api.len(),
+    );
+    match &verdict {
+        Verdict::Pass => println!("  验收判定：通过"),
+        Verdict::Fail(reasons) => println!("  验收判定：未通过 —— {}", reasons.join("；")),
+    }
+    Ok(verdict == Verdict::Pass)
+}
+
+/// 机器可判定验收（测试-4 清偿）。硬判三项：硬中断（官方不可恢复事故）、
+/// 未跑完（completed < ticks——跳帧也算：该 tick 玩家代码未执行即覆盖不完整，
+/// 失败消息明示跳帧数供归因）、确定缺失 API 非空。console 错误不硬判
+/// （bot 自捕获异常属登记项口径，人工裁量——overmind 每 tick 1 条即此类）。
+#[derive(Debug, PartialEq)]
+enum Verdict {
+    Pass,
+    Fail(Vec<String>),
+}
+
+fn verdict(
+    terminated: u32,
+    completed: u32,
+    skipped_penalty: u32,
+    ticks: u32,
+    missing_api_len: usize,
+) -> Verdict {
+    let failures: Vec<String> = [
+        (terminated > 0, format!("硬中断 {terminated} 次")),
+        (
+            completed < ticks,
+            format!("完成 {completed}/{ticks}（含跳帧 {skipped_penalty}）"),
+        ),
+        (
+            missing_api_len > 0,
+            format!("缺失 API {missing_api_len} 项"),
+        ),
+    ]
+    .into_iter()
+    .filter(|(fail, _)| *fail)
+    .map(|(_, reason)| reason)
+    .collect();
+    if failures.is_empty() {
+        Verdict::Pass
+    } else {
+        Verdict::Fail(failures)
+    }
 }
 
 fn merge_counts(target: &mut BTreeMap<String, u64>, source: &Value) {
@@ -149,7 +225,24 @@ fn top(map: &BTreeMap<String, u64>, n: usize) -> Vec<(String, u64)> {
     v
 }
 
-/// 桩世界的"家"：一个被玩家拥有的房间（controller/source/spawn/creep 各一）。
+/// 重复行归一：连续数字段替换为 #（tick 号、坐标、计数等），同源错误可折叠计数。
+fn normalize_line(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut in_digits = false;
+    for ch in line.chars() {
+        if ch.is_ascii_digit() {
+            if !in_digits {
+                out.push('#');
+                in_digits = true;
+            }
+        } else {
+            in_digits = false;
+            out.push(ch);
+        }
+    }
+    out
+}
+
 /// 地形全平原——Terrain 面（getTerrain/lookFor(LOOK_TERRAIN)）经世界 JSON 的
 /// rooms[].terrain 生效，tooangel 布局阶段依赖它。
 fn home_world(t: u32) -> Value {
@@ -174,4 +267,37 @@ fn home_world(t: u32) -> Value {
               "fatigue": 0 }
         ]
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Verdict, normalize_line, verdict};
+
+    /// 判定口径锁定：跳帧也算未跑完（覆盖不完整）；console 错误不在判定面。
+    #[test]
+    fn verdict_thresholds() {
+        assert_eq!(verdict(0, 100, 0, 100, 0), Verdict::Pass);
+        // 跳帧：completed < ticks → 失败（消息明示跳帧数）
+        assert_eq!(
+            verdict(0, 99, 1, 100, 0),
+            Verdict::Fail(vec!["完成 99/100（含跳帧 1）".into()])
+        );
+        assert_eq!(
+            verdict(2, 98, 0, 100, 0),
+            Verdict::Fail(vec!["硬中断 2 次".into(), "完成 98/100（含跳帧 0）".into()])
+        );
+        assert_eq!(
+            verdict(0, 100, 0, 100, 3),
+            Verdict::Fail(vec!["缺失 API 3 项".into()])
+        );
+    }
+
+    #[test]
+    fn normalize_folds_digit_runs() {
+        assert_eq!(normalize_line("pos 12,34 energy 7"), "pos #,# energy #");
+        assert_eq!(normalize_line("12345"), "#");
+        // 非 ASCII 逐字符透传（中文错误消息不损坏）
+        assert_eq!(normalize_line("房间 W1N1 失败"), "房间 W#N# 失败");
+        assert_eq!(normalize_line(""), "");
+    }
 }

@@ -45,10 +45,22 @@ export function locateBinary(): string {
   throw new Error(`找不到 kkscreeps 二进制（设置 KKSCREEPS_BIN 或构建 target/release|debug/kkscreeps）`);
 }
 
-class EmbedClient {
+interface PendingWaiter {
+  resolve: (r: RpcOk) => void;
+  reject: (e: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+}
+
+/** 调用超时：默认 60s，KKSCREEPS_RPC_TIMEOUT_MS 覆盖（CI 棘轮防卡死）。 */
+function rpcTimeoutMs(): number {
+  const v = Number(process.env['KKSCREEPS_RPC_TIMEOUT_MS']);
+  return Number.isFinite(v) && v > 0 ? v : 60_000;
+}
+
+export class EmbedClient {
   private child: ChildProcess | null = null;
   private nextId = 1;
-  private pending = new Map<number, { resolve: (r: RpcOk) => void; reject: (e: Error) => void }>();
+  private pending = new Map<number, PendingWaiter>();
 
   private ensure(): ChildProcess {
     // 存活判断用 exitCode：被信号杀死（OOM SIGKILL / 外部 kill）时 exitCode 保持 null
@@ -65,10 +77,14 @@ class EmbedClient {
     (child.stdout as unknown as Unrefable).unref?.();
     (child.stdin as unknown as Unrefable).unref?.();
     child.on('error', (e) => {
+      // 陈旧子进程守卫：超时 kill 后旧 child 的回调可能在重 spawn 之后到达，
+      // 不得误清新 child 与其 pending
+      if (this.child !== child) return;
       this.child = null;
       this.failAll(e);
     });
     child.on('exit', () => {
+      if (this.child !== child) return;
       this.child = null;
       this.failAll(new Error('kkscreeps embed 子进程退出'));
     });
@@ -99,6 +115,7 @@ class EmbedClient {
     const waiter = this.pending.get(msg.id);
     if (!waiter) return;
     this.pending.delete(msg.id);
+    clearTimeout(waiter.timer);
     if (msg.ok) waiter.resolve(msg);
     else waiter.reject(new Error(msg.error));
   }
@@ -106,7 +123,10 @@ class EmbedClient {
   private failAll(e: Error): void {
     const pending = [...this.pending.values()];
     this.pending.clear();
-    for (const w of pending) w.reject(e);
+    for (const w of pending) {
+      clearTimeout(w.timer);
+      w.reject(e);
+    }
   }
 
   call<T = unknown>(method: string, params: unknown): Promise<T> {
@@ -114,11 +134,30 @@ class EmbedClient {
     const id = this.nextId++;
     const stdin = child.stdin;
     if (!stdin) throw new Error('子进程 stdin 不可用');
+    // 调用超时（工具链-4 清偿）：sidecar 死锁时 pending 永不结算，会把上游
+    // 测试进程挂死——超时拒绝并 kill 子进程（死锁的 sidecar 不可恢复，下一次
+    // 调用会重新 spawn，即"外部 SIGTERM 可恢复"的内置化）
+    const timeoutMs = rpcTimeoutMs();
     return new Promise<T>((resolve, reject) => {
-      this.pending.set(id, { resolve: (r) => resolve(r.result as T), reject });
+      // timer 在 pending.set 之后赋值：dispatch/failAll 都在异步 IO 回调里，
+      // 不会读到未赋值的 timer
+      const waiter = {
+        resolve: (r: RpcOk) => resolve(r.result as T),
+        reject,
+      } as PendingWaiter;
+      this.pending.set(id, waiter);
+      waiter.timer = setTimeout(() => {
+        if (!this.pending.delete(id)) return;
+        reject(new Error(`RPC 超时（${timeoutMs}ms）: ${method}`));
+        // 死锁的 sidecar 不可恢复：kill 之，下一次调用重新 spawn。
+        // 同一性校验：陈旧 child 上的孤儿 pending 各自超时时，不得误杀已重
+        // spawn 的健康 child
+        if (this.child === child) this.kill();
+      }, timeoutMs);
+      waiter.timer.unref?.();
       stdin.write(JSON.stringify({ id, method, params }) + '\n', (err) => {
-        if (err) {
-          this.pending.delete(id);
+        if (err && this.pending.delete(id)) {
+          clearTimeout(waiter.timer);
           reject(err);
         }
       });
