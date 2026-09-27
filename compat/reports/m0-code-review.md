@@ -617,3 +617,31 @@ fetch-depth 1 下 HEAD blob 完整可用；报告 1.7MB 需显式 maxBuffer）�
 - flake 策略：floor=268 等于精确当前值，单例偶发红即门禁红——贡献者文档注明
   "单例红先重跑 job 再归因"或 CI 重试一次；
 - 首跑盯 setup-screeps-ok.sh（node-gyp/webpack 链路首次登 GH Actions）。
+
+## 追记：M1 收官——欠账处置终表（2026-09-28，步 8）
+
+方案 §9 处置表的最终结局（17 项：14 修 + 3 重登记）：
+
+| # | 登记项 | 结局（提交） |
+|---|---|---|
+| 1 | 并发-4 runExpr 看门狗 | **修**（步 6 0390574：独立通道编排，窗口官方公式现算） |
+| 2 | 正确性-5 createShard 互斥 | **修**（步 5 7fe3b8d：校验先行不改状态；套件两用例转绿） |
+| 3 | 正确性-6 controller undefined | **修**（步 5：prelude 投影） |
+| 4 | 正确性-7 terrain 四角墙 | **修**（步 3 582bb4d：Terrain::normalize 统一强制；套件用例转绿） |
+| 5 | 正确性-8 terrain 校验 | **修**（步 3 构造即校验 + 步 5 embed 全链严格；守卫测试随步 6 评审回补） |
+| 6 | JS语义-17 constructedWall | **修**（步 5：类映射补键） |
+| 7 | 工具链-4 RPC 超时 | **修**（步 6：60s 默认 + kill + 陈旧 child 守卫；棘轮前置） |
+| 8 | 工具链-9 tick AbortSignal | **修**（步 6：每 tick 前检查抛 reason 本体） |
+| 9 | 测试-4 bot-check 退出码 | **修**（步 6：0/1/2 三值判定 + 单测） |
+| 10 | console 格式化 | **修**（步 5：官方逐参映射） |
+| 11 | has-trap 否定探测噪声 | **修**（步 6：hasProbes 低置信桶，比"访问后否定标记"更粗但无信息丢失） |
+| 12 | typed placement 初态/泄入 | **修**（步 3：place.rs 归一化表对照 vanilla） |
+| 13 | LIFO 进程级所有者/evict_idle | **重登记 M2-2A**（按方案维持） |
+| 14 | bot 折叠 + 跨房间 getDirectionTo | **修**（步 5 方向换算 + 步 6 全级别折叠） |
+| 15 | getTerrain/Terrain/lookFor | **修**（步 5：官方 rooms.js 全套；套件 5 用例转绿） |
+| 16 | serializePath/findPath 步进对象 | **重登记 M2-2A**（真寻路 kk-pathfinder 接入范围） |
+| 17 | prelude.js 拆分 | **修**（步 1 5e60c23：四段 IIFE 零行为变更） |
+
+M1 期间新增登记（非 §9 原 17 项）：灰区表步 3/4/5 三批（迭代序/玩家序/失败回退/
+投影形态等，见 docs/designs/compatibility.md）；棘轮运维四项与步 6 已知登记三项
+（见上文追记）。基线终值 **268/2914**（ratchet.json 唯一真相源）。

@@ -9,7 +9,7 @@
 | 里程碑 | 内容 | 验收关卡 |
 |---|---|---|
 | **M0** 兼容验收与工程基建 | 详见下节 | CI 可用；适配器出报告；两个真实 bot 桩环境下加载运行无崩溃、缺失 API 清单清零或登记 |
-| **M1** 引擎骨架 | 详见下节 | screeps-ok 基线确立并在 CI 棘轮运行 |
+| **M1** 引擎骨架 ✅ | 详见下节 | screeps-ok 基线确立并在 CI 棘轮运行 |
 | **M2** 单机可玩（两道关卡） | 详见下节 | 2A：通过率过半；2B：≥95% 且缺口登记、真实 bot 全功能运行 |
 | **M2.5** 开发套件 | `kkscreeps sim / test / watch / deploy` | 千 tick 集成测试秒级完成（基准实测） |
 | **M3** 网络、客户端与多用户 | 详见下节 | 自建客户端登录游玩（核心端点冒烟清单全过）；官方客户端可连接 |
@@ -33,16 +33,20 @@
 
 **验收关卡**：CI 可用；适配器出报告；两个真实 bot 在桩环境下加载运行无崩溃、缺失 API 清单清零或登记。
 
-## M1 引擎骨架
+## M1 引擎骨架 ✅（2026-09-28 完成）
 
 **内容**：kk-core / kk-schema / 单房间结算（暂无沙箱，用固定指令脚本驱动，Sandbox trait 用假实现，见 [ADR-008](decisions/ADR-008-runtime-model.md) 第 5 条）；世界用预生成地形 + 手工摆房（官方地形生成算法的移植放 M4）；建立 screeps-ok 通过率基线与**棘轮机制**（通过率只增不减，回归即 CI 失败）。
 
 **验收关卡**：基线确立并在 CI 棘轮运行。
 
-> **进度（2026-09-28）**：实施中——kk-core/kk-schema/kk-world typed world/kk-engine 单房间结算/embed 通道切真实结算已交付（开发方案 [docs/plans/m1-engine-skeleton.md](plans/m1-engine-skeleton.md)，
-> 每步经三方并行评审）；**棘轮已进 CI（第四 job）**，地板 268/2914（[compat/reports/ratchet.json](../compat/reports/ratchet.json) 唯一真相源；M0 起点 237 →
-> 步 5 embed 切 typed world+真结算 265 → 步 6 仪表批次 268）。
-> bot 验收：tooangel 房间管线完整执行、overmind 推进到 RoomIntel 全量执行，2000 tick 零中断、缺失 API 清零，bot-check 退出码机器可判定。
+> **收官（2026-09-28）**：八步全部交付（开发方案 [docs/plans/m1-engine-skeleton.md](plans/m1-engine-skeleton.md)，
+> 每步经三方并行评审；架构结论升格 [ADR-011](decisions/ADR-011-engine-skeleton.md)）——kk-core/kk-schema/kk-world
+> typed world/kk-engine 单房间结算（movement 仲裁/资源经济/孵化链）/**embed 通道切真实结算**（screeps-ok
+> 适配器经 settle_room 推进世界，DumbWorld 退役）；**棘轮进 CI（第四 job）**，地板 268/2914
+> （[compat/reports/ratchet.json](../compat/reports/ratchet.json) 唯一真相源；沿革 M0 237 → 步 5 真结算 265 → 步 6 仪表批次 268）。
+> bot 验收：tooangel 房间管线完整执行、overmind 推进到 RoomIntel 全量执行，2000 tick 零中断、
+> 缺失 API 清零，bot-check 退出码机器可判定（0/1/2）。欠账处置终表见
+> [M0 评审台账](../compat/reports/m0-code-review.md) 追记（17 项：14 修 + 3 重登记 M2-2A）。
 
 ## M2 单机可玩（内部两道关卡）
 
