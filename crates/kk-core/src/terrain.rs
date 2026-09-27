@@ -49,6 +49,13 @@ impl Terrain {
         Ok(Self(arr))
     }
 
+    /// 从已验证的字节构造（快照解码等信任源；绕过校验但类型上仍是合法位）。
+    pub fn from_slice(codes: &[u8; TERRAIN_LEN]) -> Self {
+        let mut arr = Box::new([0u8; TERRAIN_LEN]);
+        arr.copy_from_slice(codes);
+        Self(arr)
+    }
+
     /// 官方字符串形态解码（官方 DB 历史存数字串；`checkTerrain` 的
     /// `terrain.charAt(y*50+x)` 分支）：每字符一个数字。
     pub fn from_digit_string(s: &str) -> Result<Self, String> {
@@ -104,6 +111,11 @@ impl Terrain {
 
     pub fn as_slice(&self) -> &[u8; TERRAIN_LEN] {
         &self.0
+    }
+
+    /// 可变访问（测试/地图构造用；值域约束由调用方自负——正式路径走 from_codes）。
+    pub fn as_mut_slice(&mut self) -> &mut [u8; TERRAIN_LEN] {
+        &mut self.0
     }
 }
 

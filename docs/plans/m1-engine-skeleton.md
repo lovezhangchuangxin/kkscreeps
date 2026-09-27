@@ -247,7 +247,7 @@ kk-world/src/
 | 5. 玩家 intents：按用户→对象遍历；`room` 级 intents（createConstructionSite/createFlag）先于对象级；所有权检查 | :227-322（:241 room、:248 `object.user != userId → skip`） | 做（用户序=玩家名排序，D5） |
 | 6. `movement.check`（仲裁 + 级联移除） | :324 + movement.js:104-187 | 做 |
 | 7. energyAvailable 重算 | :326 | 做 |
-| 8. 逐对象 tick（energy→source→creep→spawn→…固定序） | :342-483 | 做 M1 类型：energy（衰减）、source（重生+容量归一 sources/tick.js）、creep（移动执行+TTL 死亡 creeps/tick.js）、spawn（孵化推进 spawns/tick.js + 出生 _born-creep.js）、constructionSite（超时）、controller（降级计时 controllers/tick.js） |
+| 8. 逐对象 tick（energy→source→creep→spawn→…固定序） | :342-483 | 做 M1 类型：energy（衰减）、source（重生+容量归一 sources/tick.js）、creep（移动执行+TTL 死亡 creeps/tick.js）、spawn（孵化推进 spawns/tick.js + 出生 _born-creep.js）、constructionSite（官方 tick 为空、无超时）、controller（降级计时 controllers/tick.js） |
 | 9. 落盘（bulk/eventLog/history/mapView） | :489-518 | 内存模型：直接变更；eventLog 产出留存；history/mapView 不做 |
 
 ### 6.3 movement 仲裁（movement.js 全套移植）
@@ -283,8 +283,8 @@ kk-world/src/
 - `upgradeController`（upgradeController.js）：3 格；level 0/非本人拒；8 级每 tick 上限 15；
   升级条件含 downgradeTime 窗口（:63-66）；progress 进位、level+1、`downgrade_time = now +
   DOWNGRADE[new_level]/2`、gcl 计入玩家（M1 玩家档案存内存，persist M2）；
-- `controller tick`（controllers/tick.js）：降级计时——超窗 level-1（progress 清零、通知），
-  M1 做基础版（升级/降级计时/归零），safeMode 细节 M2；
+- `controller tick`（controllers/tick.js）：降级计时——超窗 level-1（level 0 清 owner/progress；
+  非 0 为 progress += round(LEVELS[新级]×0.9)），M1 做基础版，safeMode 细节 M2；
 - `transfer/withdraw/drop/pickup`：邻接/同格语义、capacity 双形态
   （`storeCapacityResource` 单资源槽 vs `storeCapacity` 总量，transfer.js:30-40 官方口径）、
   掉落 energy 对象合并（官方 drop → 同格 energy 叠加）；

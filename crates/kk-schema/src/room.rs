@@ -27,6 +27,13 @@ crate::kk_schema! {
     pub Store { (pub energy: u32) }
 }
 
+#[allow(clippy::derivable_impls)]
+impl Default for Store {
+    fn default() -> Self {
+        Self { energy: 0 }
+    }
+}
+
 crate::kk_schema! {
     /// 身体部件（官方形态 {type, hits, boost?}；kind 的 str 映射见 kk-world）。
     pub BodyPart {
@@ -95,12 +102,13 @@ crate::kk_schema! {
 }
 
 crate::kk_schema! {
-    /// 孵化器（hits 上限 SPAWN_HITS，落成时写入 build.js:131）。
+    /// 孵化器（hits 上限 SPAWN_HITS；off = RCL 超限停用，_calc_spawns 维护）。
     pub SpawnObj {
         (pub id: u64)
         (pub x: u8)
         (pub y: u8)
         (pub hits: u32)
+        (pub off: bool)
         (pub name: str)
         (pub owner: str)
         (pub store: Store)
@@ -109,12 +117,13 @@ crate::kk_schema! {
 }
 
 crate::kk_schema! {
-    /// 扩展（hits 上限 EXTENSION_HITS）。
+    /// 扩展（hits 上限 EXTENSION_HITS；off = RCL 超限停用，_calc_spawns 维护）。
     pub ExtensionObj {
         (pub id: u64)
         (pub x: u8)
         (pub y: u8)
         (pub hits: u32)
+        (pub off: bool)
         (pub owner: str)
         (pub store: Store)
     }
@@ -540,6 +549,7 @@ mod tests {
                     x: 25,
                     y: 25,
                     hits: 5000,
+                    off: false,
                     name: "Spawn1".into(),
                     owner: "p1".into(),
                     store: Store { energy: 300 },

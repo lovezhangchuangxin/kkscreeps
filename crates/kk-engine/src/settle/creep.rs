@@ -1,0 +1,765 @@
+//! creep 指令执行与 creep tick（官方 creeps/intents.js 执行序 + tick.js）。
+
+use std::collections::BTreeMap;
+
+use kk_core::constants as c;
+use kk_schema::room::{BodyPart, RoomObject};
+use kk_world::ObjId;
+use kk_world::types::BodyKind;
+
+use super::movement::{self, offsets_by_direction};
+use super::{SettleError, Working};
+use crate::intent::{Action, EXECUTION_ORDER, IntentData};
+
+/// 官方 creeps/intents.js：按 creepActions 序执行（压制过滤内建）。
+pub fn process_creep_intents(w: &mut Working, id: ObjId, actions: &BTreeMap<Action, IntentData>) {
+    for action in EXECUTION_ORDER {
+        if !Action::executes(&actions.keys().copied().collect(), action) {
+            continue;
+        }
+        let data = &actions[&action];
+        match action {
+            Action::Move => intent_move(w, id, data),
+            Action::Harvest => intent_harvest(w, id, data),
+            Action::Build => intent_build(w, id, data),
+            Action::UpgradeController => intent_upgrade_controller(w, id, data),
+            Action::Transfer => intent_transfer(w, id, data),
+            Action::Withdraw => intent_withdraw(w, id, data),
+            Action::Drop => intent_drop(w, id, data),
+            Action::Pickup => intent_pickup(w, id, data),
+            // M1 无执行器的动作（战斗/占位/杂项）：压制图已生效，此处静默跳过
+            _ => {}
+        }
+    }
+}
+
+/// 官方 move.js：静态障碍预检后入矩阵（creep 不预检——挤格语义）。
+fn intent_move(w: &mut Working, id: ObjId, data: &IntentData) {
+    let (spawning, fatigue, x, y, owner) = match w.creep(id) {
+        Some(c) => (
+            c.spawning,
+            c.fatigue,
+            c.x as i32,
+            c.y as i32,
+            c.owner.clone(),
+        ),
+        None => return,
+    };
+    if spawning {
+        return;
+    }
+    // 官方 object._oldFatigue = object.fatigue（canMove 判定用）
+    w.old_fatigue.insert(id, fatigue);
+
+    let Some(direction) = data.direction else {
+        return;
+    };
+    let Some((dx, dy)) = offsets_by_direction(direction) else {
+        return;
+    };
+    if x + dx < 0 || x + dx > 49 || y + dy < 0 || y + dy > 49 {
+        return;
+    }
+    // 目标格静态障碍预检（官方 move.js:33-37）：OBSTACLE 非 creep 对象 +
+    // 非公开 rampart + powerCreep 的跨 shard portal（M1 无）
+    let target = ((x + dx) as u8, (y + dy) as u8);
+    let mover_owner = owner;
+    let has_static_obstacle = w
+        .index
+        .at(target.0 as usize, target.1 as usize)
+        .iter()
+        .any(|tid| {
+            match w.room.objects.get(tid) {
+                Some(RoomObject::Creep(_)) => false, // creep 不预检
+                Some(RoomObject::Generic(o)) => {
+                    let data: serde_json::Value = serde_json::from_str(&o.data).unwrap_or_default();
+                    let st = data
+                        .get("structureType")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    if st == "rampart" {
+                        let public = data
+                            .get("isPublic")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false);
+                        let owner = data.get("owner").and_then(|v| v.as_str()).unwrap_or("");
+                        !public && owner != mover_owner
+                    } else {
+                        kk_world::types::is_obstacle_type(st)
+                    }
+                }
+                Some(other) => kk_world::types::is_obstacle_type(movement::type_name_of(other)),
+                None => false,
+            }
+        });
+    if has_static_obstacle {
+        return;
+    }
+    w.movement.add(id, (x as u8, y as u8), dx, dy);
+}
+
+/// 官方 harvest.js source 分支（29-70）：邻接、能量、controller 归属、WORK×2。
+fn intent_harvest(w: &mut Working, id: ObjId, data: &IntentData) {
+    let Some(target_id) = data.id else { return };
+    let (creep_pos, owner, work_power, store_energy, store_cap) = match w.creep(id) {
+        Some(c) => (
+            (c.x, c.y),
+            c.owner.clone(),
+            harvest_power(c),
+            c.store.energy as i64,
+            store_capacity(c),
+        ),
+        None => return,
+    };
+    if w.creep(id).is_some_and(|c| c.spawning) {
+        return;
+    }
+    // 目标必须是同格邻接的 source
+    let target_ok = matches!(w.room.objects.get(&target_id), Some(RoomObject::Source(_)))
+        && w.room.objects.get(&target_id).is_some_and(|o| {
+            let (tx, ty) = o.pos();
+            (tx as i32 - creep_pos.0 as i32).abs() <= 1
+                && (ty as i32 - creep_pos.1 as i32).abs() <= 1
+        });
+    if !target_ok {
+        return;
+    }
+    // controller 非本人/非本预约拒（harvest.js:37-39；M1 无 reservation）
+    if let Some(ctl) = w.controller()
+        && ctl.owner.as_deref().is_some_and(|u| u != owner)
+    {
+        return;
+    }
+    let energy = match w.room.objects.get_mut(&target_id) {
+        Some(RoomObject::Source(s)) if s.energy > 0 => s.energy.min(work_power as u32),
+        _ => return,
+    };
+    let amount = energy as i64;
+    if let Some(RoomObject::Source(s)) = w.room.objects.get_mut(&target_id) {
+        s.energy -= amount as u32;
+    }
+    // 官方顺序（harvest.js:49-60）：先满额入仓，再对超容部分 drop
+    let sum = store_energy + amount;
+    if let Some(c) = w.creep_mut(id) {
+        c.store.energy = sum.min(u32::MAX as i64) as u32;
+        set_action_log(&mut c.action_log, ACTION_HARVEST);
+    }
+    if sum > store_cap {
+        intent_drop_amount(w, id, sum - store_cap);
+    }
+    let (tx, ty) = w
+        .room
+        .objects
+        .get(&target_id)
+        .map(|o| o.pos())
+        .unwrap_or((0, 0));
+    w.push_event(
+        c::EVENT_HARVEST,
+        id,
+        serde_json::json!({ "targetId": target_id.as_str(), "amount": amount }),
+    );
+    let _ = (tx, ty);
+}
+
+/// 官方 build.js：3 格范围、障碍格拒建、WORK×5、完成落成。
+fn intent_build(w: &mut Working, id: ObjId, data: &IntentData) {
+    let Some(target_id) = data.id else { return };
+    let (pos, energy) = match w.creep(id) {
+        Some(c) if !c.spawning => ((c.x, c.y), c.store.energy as i64),
+        _ => return,
+    };
+    if energy <= 0 {
+        return;
+    }
+    let Some(RoomObject::ConstructionSite(site)) = w.room.objects.get(&target_id).cloned() else {
+        return;
+    };
+    if kk_world::types::construction_cost(&site.structure_type).is_none() {
+        return;
+    }
+    if (site.x as i32 - pos.0 as i32).abs() > 3 || (site.y as i32 - pos.1 as i32).abs() > 3 {
+        return;
+    }
+    // 目标格静态检查（build.js:37-60）：同类型结构已存在拒；障碍类型对象拒
+    // （M1 简化 safeMode 敌 creep 判定——M1 无 safeMode 激活路径）
+    let cell = (site.x, site.y);
+    for tid in w.index.at(cell.0 as usize, cell.1 as usize) {
+        match w.room.objects.get(tid) {
+            Some(RoomObject::ConstructionSite(_)) if *tid != target_id => return,
+            Some(other) => {
+                let name = movement::type_name_of(other);
+                if name == "constructionSite" {
+                    continue;
+                }
+                if kk_world::types::is_obstacle_type(&site.structure_type)
+                    && kk_world::types::is_obstacle_type(name)
+                {
+                    return;
+                }
+            }
+            None => {}
+        }
+    }
+    // 非 extractor/road 不可建在墙（build.js:68-70）
+    if site.structure_type != "extractor"
+        && site.structure_type != "road"
+        && w.room
+            .terrain
+            .check_mask(cell.0 as usize, cell.1 as usize, kk_core::TERRAIN_MASK_WALL)
+    {
+        return;
+    }
+    let build_power = match w.creep(id) {
+        Some(c) => BodyKind::count_active(&c.body, BodyKind::Work) as i64 * c::BUILD_POWER,
+        None => 0,
+    };
+    // 官方 progressTotal 含地形系数（create-construction-site.js:38-48）：road
+    // 在沼泽 ×5、墙 ×150——派生自当前地形（schema 不存 progressTotal）
+    let mut total = kk_world::types::construction_cost(&site.structure_type).unwrap_or(0);
+    if site.structure_type == "road" {
+        let (tx, ty) = (site.x as usize, site.y as usize);
+        if w.room
+            .terrain
+            .check_mask(tx, ty, kk_core::TERRAIN_MASK_SWAMP)
+        {
+            total *= c::CONSTRUCTION_COST_ROAD_SWAMP_RATIO;
+        }
+        if w.room
+            .terrain
+            .check_mask(tx, ty, kk_core::TERRAIN_MASK_WALL)
+        {
+            total *= c::CONSTRUCTION_COST_ROAD_WALL_RATIO;
+        }
+    }
+    let remaining = total.saturating_sub(site.progress as i64);
+    let effect = build_power.min(remaining).min(energy);
+    if effect <= 0 {
+        return;
+    }
+    let new_progress = site.progress as i64 + effect;
+    if let Some(c) = w.creep_mut(id) {
+        c.store.energy -= effect as u32;
+        set_action_log(&mut c.action_log, ACTION_BUILD);
+    }
+    let incomplete = new_progress < total;
+    w.push_event(
+        c::EVENT_BUILD,
+        id,
+        serde_json::json!({
+            "targetId": target_id.as_str(),
+            "amount": effect,
+            "structureType": site.structure_type,
+            "x": site.x,
+            "y": site.y,
+            "incomplete": incomplete,
+        }),
+    );
+    if incomplete {
+        if let Some(RoomObject::ConstructionSite(s)) = w.room.objects.get_mut(&target_id) {
+            s.progress = new_progress as u32;
+        }
+    } else {
+        complete_construction(w, target_id, site);
+    }
+}
+
+/// 官方 build.js 落成分支（124-230）：移除工地 + 新结构初值。
+fn complete_construction(
+    w: &mut Working,
+    site_id: ObjId,
+    site: kk_schema::room::ConstructionSiteObj,
+) {
+    let time = w.time;
+    w.remove_obj(site_id);
+    let obj = match site.structure_type.as_str() {
+        "spawn" => RoomObject::Spawn(kk_schema::room::SpawnObj {
+            id: 0,
+            x: site.x,
+            y: site.y,
+            hits: c::SPAWN_HITS as u32,
+            off: false,
+            name: site.name.unwrap_or_default(),
+            owner: site.owner.unwrap_or_default(),
+            store: Default::default(),
+            spawning: None,
+        }),
+        "extension" => RoomObject::Extension(kk_schema::room::ExtensionObj {
+            id: 0,
+            x: site.x,
+            y: site.y,
+            hits: c::EXTENSION_HITS as u32,
+            off: false,
+            owner: site.owner.unwrap_or_default(),
+            store: Default::default(),
+        }),
+        "constructedWall" => RoomObject::ConstructedWall(kk_schema::room::ConstructedWallObj {
+            id: 0,
+            x: site.x,
+            y: site.y,
+            hits: c::WALL_HITS as u32,
+        }),
+        "road" => {
+            // 官方：swamp/wall 上的路耐久按系数缩放（build.js:172-187）
+            let mut hits = c::ROAD_HITS as u64;
+            if w.room.terrain.check_mask(
+                site.x as usize,
+                site.y as usize,
+                kk_core::TERRAIN_MASK_SWAMP,
+            ) {
+                hits *= c::CONSTRUCTION_COST_ROAD_SWAMP_RATIO as u64;
+            }
+            if w.room.terrain.check_mask(
+                site.x as usize,
+                site.y as usize,
+                kk_core::TERRAIN_MASK_WALL,
+            ) {
+                hits *= c::CONSTRUCTION_COST_ROAD_WALL_RATIO as u64;
+            }
+            RoomObject::Road(kk_schema::room::RoadObj {
+                id: 0,
+                x: site.x,
+                y: site.y,
+                hits: hits.min(u32::MAX as u64) as u32,
+                next_decay_time: time + c::ROAD_DECAY_TIME as u64,
+            })
+        }
+        "storage" => RoomObject::Storage(kk_schema::room::StorageObj {
+            id: 0,
+            x: site.x,
+            y: site.y,
+            hits: c::STORAGE_HITS as u32,
+            owner: site.owner.unwrap_or_default(),
+            store: Default::default(),
+        }),
+        other => {
+            // 其余类型（tower/rampart/lab/…）：透传桶落成（官方全字段表 M2 对齐）
+            let data = serde_json::json!({
+                "type": "structure",
+                "structureType": other,
+                "user": site.owner,
+                "hits": 1,
+            });
+            RoomObject::Generic(kk_schema::room::GenericObj {
+                id: 0,
+                x: site.x,
+                y: site.y,
+                data: data.to_string(),
+            })
+        }
+    };
+    w.insert_new(obj);
+}
+
+/// 官方 upgradeController.js：3 格、归属、8 级上限、升级进位、gcl 计入。
+fn intent_upgrade_controller(w: &mut Working, id: ObjId, data: &IntentData) {
+    let Some(target_id) = data.id else { return };
+    let (pos, owner, energy, work_power) = match w.creep(id) {
+        Some(c) if !c.spawning && c.store.energy > 0 => (
+            (c.x, c.y),
+            c.owner.clone(),
+            c.store.energy as i64,
+            BodyKind::count_active(&c.body, BodyKind::Work) as i64 * c::UPGRADE_CONTROLLER_POWER,
+        ),
+        _ => return,
+    };
+    let Some(RoomObject::Controller(_)) = w.room.objects.get(&target_id) else {
+        return;
+    };
+    let (ctl_x, ctl_y, ctl_owner, level, progress) = match w.room.objects.get(&target_id) {
+        Some(RoomObject::Controller(t)) => (t.x, t.y, t.owner.clone(), t.level, t.progress),
+        _ => return,
+    };
+    if (ctl_x as i32 - pos.0 as i32).abs() > 3 || (ctl_y as i32 - pos.1 as i32).abs() > 3 {
+        return;
+    }
+    if level == 0 || ctl_owner.as_deref() != Some(owner.as_str()) {
+        return;
+    }
+    let mut effect = work_power.min(energy);
+    // 官方 _upgraded 累计（8 级每 tick 上限 15）
+    let upgraded = *w.upgraded.get(&target_id).unwrap_or(&0);
+    if level == 8 {
+        let limit = c::CONTROLLER_MAX_UPGRADE_PER_TICK;
+        if upgraded >= limit {
+            return;
+        }
+        effect = effect.min(limit - upgraded);
+    }
+    if effect <= 0 {
+        return;
+    }
+    let new_progress;
+    if level < 8 {
+        let next_level_progress = controller_levels(level);
+        let downgrade_time = match w.room.objects.get(&target_id) {
+            Some(RoomObject::Controller(t)) => t.downgrade_time,
+            _ => None,
+        };
+        // 官方升级条件（upgradeController.js:63-66）：进位需 downgrade 窗口健康
+        if progress + effect as u64 >= next_level_progress
+            && downgrade_time.is_some_and(|dt| {
+                dt + c::CONTROLLER_DOWNGRADE_RESTORE as u64 >= w.time + controller_downgrade(level)
+            })
+        {
+            new_progress = progress + effect as u64 - next_level_progress;
+            *w.upgraded.entry(target_id).or_insert(0) += effect;
+            if let Some(RoomObject::Controller(t)) = w.room.objects.get_mut(&target_id) {
+                t.level = level + 1;
+                t.progress = new_progress;
+                if level + 1 == 8 {
+                    t.progress = 0;
+                }
+                t.safe_mode_available += 1;
+                t.downgrade_time = Some(w.time + controller_downgrade(level + 1) / 2);
+            }
+        } else {
+            new_progress = progress + effect as u64;
+            *w.upgraded.entry(target_id).or_insert(0) += effect;
+            if let Some(RoomObject::Controller(t)) = w.room.objects.get_mut(&target_id) {
+                t.progress = new_progress;
+            }
+        }
+    } else {
+        *w.upgraded.entry(target_id).or_insert(0) += effect;
+    }
+    // gcl 计入玩家（官方 bulkUsers.inc(target.user, 'gcl', boostedEffect)）
+    let player = w.players.entry(owner.clone()).or_default();
+    player.gcl += effect;
+    if let Some(c) = w.creep_mut(id) {
+        c.store.energy -= effect as u32;
+        set_action_log(&mut c.action_log, ACTION_UPGRADE);
+    }
+    w.push_event(
+        c::EVENT_UPGRADE_CONTROLLER,
+        id,
+        serde_json::json!({ "amount": effect, "energySpent": effect }),
+    );
+}
+
+/// 官方 transfer.js：白名单资源、邻接、容量双形态（M1 单资源槽=总量一致）。
+fn intent_transfer(w: &mut Working, id: ObjId, data: &IntentData) {
+    let resource = data.resource_type.as_deref().unwrap_or("");
+    if resource != "energy" {
+        return; // M1 资源白名单仅 energy
+    }
+    let Some(amount_req) = data.amount else {
+        return;
+    };
+    let (pos, owner, held) = match w.creep(id) {
+        Some(c) if !c.spawning => ((c.x, c.y), c.owner.clone(), c.store.energy as i64),
+        _ => return,
+    };
+    if held < amount_req || amount_req < 0 {
+        return;
+    }
+    let Some(target_id) = data.id else { return };
+    let (target_cap, t_pos, t_stored) = match w.room.objects.get(&target_id) {
+        Some(RoomObject::Creep(t)) if !t.spawning => {
+            (store_capacity(t), (t.x, t.y), t.store.energy as i64)
+        }
+        Some(RoomObject::Spawn(t)) => (c::SPAWN_ENERGY_CAPACITY, (t.x, t.y), t.store.energy as i64),
+        Some(RoomObject::Extension(t)) => {
+            // per-RCL 容量表未入 schema（灰区登记）——M1 按不设上限
+            (i64::MAX / 2, (t.x, t.y), t.store.energy as i64)
+        }
+        Some(RoomObject::Storage(t)) => (c::STORAGE_CAPACITY, (t.x, t.y), t.store.energy as i64),
+        _ => return,
+    };
+    if (t_pos.0 as i32 - pos.0 as i32).abs() > 1 || (t_pos.1 as i32 - pos.1 as i32).abs() > 1 {
+        return;
+    }
+    if t_stored >= target_cap {
+        return;
+    }
+    let mut amount = amount_req.min(held);
+    if t_stored + amount > target_cap {
+        amount = target_cap - t_stored;
+    }
+    if amount == 0 {
+        return;
+    }
+    let _ = owner;
+    match w.room.objects.get_mut(&target_id) {
+        Some(RoomObject::Creep(t)) => t.store.energy += amount as u32,
+        Some(RoomObject::Spawn(t)) => t.store.energy += amount as u32,
+        Some(RoomObject::Extension(t)) => t.store.energy += amount as u32,
+        Some(RoomObject::Storage(t)) => t.store.energy += amount as u32,
+        _ => return,
+    }
+    if let Some(c) = w.creep_mut(id) {
+        c.store.energy -= amount as u32;
+    }
+    w.push_event(
+        c::EVENT_TRANSFER,
+        id,
+        serde_json::json!({ "targetId": target_id.as_str(), "resourceType": resource, "amount": amount }),
+    );
+}
+
+/// 官方 withdraw.js：邻接、空容量、safeMode/rampart 保护（M1 无 rampart 变体）。
+fn intent_withdraw(w: &mut Working, id: ObjId, data: &IntentData) {
+    if data.resource_type.as_deref().is_some_and(|r| r != "energy") {
+        return;
+    }
+    let Some(target_id) = data.id else { return };
+    let (pos, cap, held) = match w.creep(id) {
+        Some(c) if !c.spawning && store_capacity(c) > 0 => {
+            ((c.x, c.y), store_capacity(c), c.store.energy as i64)
+        }
+        _ => return,
+    };
+    let empty_space = cap - held;
+    let Some(amount_req) = data.amount else {
+        return;
+    };
+    let mut amount = amount_req.min(empty_space);
+    if amount < 0 {
+        return;
+    }
+    // 可提取对象：有 store 的结构（spawn/extension/storage）；source 只能
+    // harvest、掉落资源只能 pickup（官方引擎层无 source/energy 的 withdraw 路径）
+    let (t_pos, t_energy) = match w.room.objects.get(&target_id) {
+        Some(RoomObject::Spawn(t)) => ((t.x, t.y), t.store.energy as i64),
+        Some(RoomObject::Extension(t)) => ((t.x, t.y), t.store.energy as i64),
+        Some(RoomObject::Storage(t)) => ((t.x, t.y), t.store.energy as i64),
+        _ => return,
+    };
+    if (t_pos.0 as i32 - pos.0 as i32).abs() > 1 || (t_pos.1 as i32 - pos.1 as i32).abs() > 1 {
+        return;
+    }
+    amount = amount.min(t_energy);
+    if amount <= 0 {
+        return;
+    }
+    match w.room.objects.get_mut(&target_id) {
+        Some(RoomObject::Spawn(t)) => t.store.energy -= amount as u32,
+        Some(RoomObject::Extension(t)) => t.store.energy -= amount as u32,
+        Some(RoomObject::Storage(t)) => t.store.energy -= amount as u32,
+        _ => return,
+    }
+    if let Some(c) = w.creep_mut(id) {
+        c.store.energy += amount as u32;
+    }
+    // 官方 withdraw 的 EVENT_TRANSFER 反向（objectId=target, data.targetId=object）
+    w.push_event(
+        c::EVENT_TRANSFER,
+        target_id,
+        serde_json::json!({ "targetId": id.as_str(), "resourceType": "energy", "amount": amount }),
+    );
+}
+
+/// 官方 drop.js：amount>0 落地为同格 energy。
+fn intent_drop(w: &mut Working, id: ObjId, data: &IntentData) {
+    if data.resource_type.as_deref().is_some_and(|r| r != "energy") {
+        return;
+    }
+    let Some(amount) = data.amount else { return };
+    if amount <= 0 {
+        return;
+    }
+    intent_drop_amount(w, id, amount);
+}
+
+fn intent_drop_amount(w: &mut Working, id: ObjId, amount: i64) {
+    let (pos, held) = match w.creep(id) {
+        Some(c) if !c.spawning => ((c.x, c.y), c.store.energy as i64),
+        _ => return,
+    };
+    let amount = amount.min(held);
+    if amount <= 0 {
+        return;
+    }
+    if let Some(c) = w.creep_mut(id) {
+        c.store.energy -= amount as u32;
+    }
+    w.create_energy(pos.0, pos.1, amount);
+}
+
+/// 官方 pickup.js：邻接 energy、余量钳制、目标清零移除。
+fn intent_pickup(w: &mut Working, id: ObjId, data: &IntentData) {
+    let Some(target_id) = data.id else { return };
+    let (pos, cap, held) = match w.creep(id) {
+        Some(c) if !c.spawning => ((c.x, c.y), store_capacity(c), c.store.energy as i64),
+        _ => return,
+    };
+    if held >= cap {
+        return;
+    }
+    let Some(RoomObject::Energy(target)) = w.room.objects.get(&target_id) else {
+        return;
+    };
+    let (tx, ty, amount) = (target.x, target.y, target.amount as i64);
+    if (tx as i32 - pos.0 as i32).abs() > 1 || (ty as i32 - pos.1 as i32).abs() > 1 {
+        return;
+    }
+    let amount = amount.min(cap - held);
+    if amount <= 0 {
+        return;
+    }
+    if let Some(RoomObject::Energy(t)) = w.room.objects.get_mut(&target_id) {
+        t.amount -= amount as u32;
+    }
+    let drained = w
+        .room
+        .objects
+        .get(&target_id)
+        .is_some_and(|o| matches!(o, RoomObject::Energy(e) if e.amount == 0));
+    if drained {
+        w.remove_obj(target_id);
+    }
+    if let Some(c) = w.creep_mut(id) {
+        c.store.energy += amount as u32;
+    }
+}
+
+/// 官方 creeps/tick.js（M1 子集）：移动落格、TTL 死亡、疲劳恢复。
+pub fn creep_tick(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
+    // 移动落格（movement.js execute）
+    movement_execute(w, id)?;
+    if !w.room.objects.contains_key(&id) {
+        return Ok(()); // 结算中被移除（不会发生于 M1 路径，防御）
+    }
+    let (pos, spawning, age_time, store_energy) = match w.creep(id) {
+        Some(c) => ((c.x, c.y), c.spawning, c.age_time, c.store.energy),
+        None => return Ok(()),
+    };
+    if !spawning {
+        // TTL 死亡（creeps/tick.js:93-95 gameTime >= ageTime-1）
+        if age_time > 0 && w.time >= age_time.saturating_sub(1) {
+            die_creep(w, id);
+            return Ok(());
+        }
+    }
+    // 疲劳恢复（creeps/tick.js:105-108）：-2 × 存活 MOVE 部件
+    if let Some(c) = w.creep(id) {
+        let moves = BodyKind::count_active(&c.body, BodyKind::Move) as i64;
+        if moves > 0 {
+            w.add_fatigue(id, -2 * moves);
+        }
+    }
+    let _ = (pos, store_energy);
+    Ok(())
+}
+
+/// 官方 movement.js execute（189-252）。
+fn movement_execute(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
+    let Some(target) = w.movement.take_move(id) else {
+        return Ok(());
+    };
+    let (from, owner, body_len) = match w.creep(id) {
+        Some(c) => ((c.x, c.y), c.owner.clone(), c.body.len()),
+        None => return Ok(()),
+    };
+    // canMove 复查（execute 内官方再判一次）
+    let old_fatigue = w.old_fatigue.get(&id).copied().unwrap_or(0);
+    if !movement::can_move(w.creep(id).expect("上游已判"), old_fatigue) {
+        return Ok(());
+    }
+    // 官方疲劳率判定顺序（movement.js:204-222）：默认 2 → 沼泽 10 →
+    // 路最后覆盖为 1（路上的沼泽按路走）；路磨损；进格踩掉敌方工地
+    let mut fatigue_rate = 2i64;
+    let mut road_id = None;
+    let cell_ids: Vec<ObjId> = w.index.at(target.0 as usize, target.1 as usize).to_vec();
+    for tid in cell_ids {
+        match w.room.objects.get(&tid).cloned() {
+            Some(RoomObject::Road(_)) => {
+                road_id = Some(tid);
+            }
+            Some(RoomObject::ConstructionSite(site))
+                // 官方 :224-233：非 safeMode 保护时，踩掉敌方工地（退一半工程为能量）
+                if site.owner.as_deref() != Some(owner.as_str()) => {
+                    let pos = (site.x, site.y);
+                    w.remove_obj(tid);
+                    if site.progress > 1 {
+                        w.create_energy(pos.0, pos.1, (site.progress / 2) as i64);
+                    }
+                }
+            _ => {}
+        }
+    }
+    if w.room.terrain.check_mask(
+        target.0 as usize,
+        target.1 as usize,
+        kk_core::TERRAIN_MASK_SWAMP,
+    ) {
+        fatigue_rate = 10;
+    }
+    if let Some(rid) = road_id {
+        fatigue_rate = 1;
+        if let Some(RoomObject::Road(r)) = w.room.objects.get_mut(&rid) {
+            r.next_decay_time = r
+                .next_decay_time
+                .saturating_sub((c::ROAD_WEAROUT * body_len as i64).max(0) as u64);
+        }
+    }
+    // 疲劳（movement.js:235-251）：体重 × 系数；边缘特例（从非边缘进边缘格 = 0，
+    // 为跨房间预备——M1 单房间无落地，仍按官方给 0）
+    let fatigue = movement::move_weight(w.creep(id).expect("上游已判")) as i64 * fatigue_rate;
+    let to_edge = target.0 == 0 || target.0 == 49 || target.1 == 0 || target.1 == 49;
+    let from_edge = from.0 == 0 || from.0 == 49 || from.1 == 0 || from.1 == 49;
+    w.move_obj(id, target);
+    if to_edge && !from_edge {
+        if let Some(c) = w.creep_mut(id) {
+            c.fatigue = 0;
+        }
+        w.tick_fatigue.insert(id, 0);
+    } else {
+        w.add_fatigue(id, fatigue);
+    }
+    Ok(())
+}
+
+/// creep 死亡（官方 _die.js 的 M1 形态：资源掉地、无墓碑——灰区登记）。
+pub fn die_creep(w: &mut Working, id: ObjId) {
+    if let Some(c) = w.creep(id) {
+        let (x, y, energy) = (c.x, c.y, c.store.energy as i64);
+        if energy > 0 {
+            w.create_energy(x, y, energy);
+        }
+    }
+    w.remove_obj(id);
+}
+
+// ---- 公共小工具 ----
+
+pub const ACTION_HARVEST: u8 = 1 << 0;
+pub const ACTION_BUILD: u8 = 1 << 1;
+pub const ACTION_UPGRADE: u8 = 1 << 2;
+
+pub fn set_action_log(bits: &mut u8, bit: u8) {
+    *bits |= bit;
+}
+
+/// 官方 harvest 功率：WORK 部件数 × HARVEST_POWER（无 boost）。
+pub fn harvest_power(creep: &kk_schema::room::CreepObj) -> i64 {
+    BodyKind::count_active(&creep.body, BodyKind::Work) as i64 * c::HARVEST_POWER
+}
+
+/// 官方 storeCapacity（M1 无 boost）：CARRY 部件数 × CARRY_CAPACITY。
+pub fn store_capacity(creep: &kk_schema::room::CreepObj) -> i64 {
+    BodyKind::count_active(&creep.body, BodyKind::Carry) as i64 * c::CARRY_CAPACITY
+}
+
+fn controller_levels(level: u8) -> u64 {
+    let key = level.to_string();
+    c::CONTROLLER_LEVELS
+        .iter()
+        .find(|(k, _)| *k == key)
+        .map(|(_, v)| *v)
+        .unwrap_or(0) as u64
+}
+
+fn controller_downgrade(level: u8) -> u64 {
+    let key = level.to_string();
+    c::CONTROLLER_DOWNGRADE
+        .iter()
+        .find(|(k, _)| *k == key)
+        .map(|(_, v)| *v)
+        .unwrap_or(0) as u64
+}
+
+pub fn body_parts_kinds(body: &[BodyPart]) -> Vec<BodyKind> {
+    body.iter()
+        .filter_map(|p| BodyKind::from_code(p.kind))
+        .collect()
+}

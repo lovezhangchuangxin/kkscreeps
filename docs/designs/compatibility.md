@@ -49,6 +49,15 @@
 | 非 energy 掉落资源（M1 place） | 显式拒绝（Err）；vanilla 支持 power/矿物 | M2 扩展 schema 资源种类时放开 |
 | 未知类型工地（M1 place） | 接受、progressTotal 派生 0；vanilla placeSite 对无 CONSTRUCTION_COST 类型抛错 | M0 宽松接受面决策；build 结算按官方 build.js:19-21 拒绝无 cost 目标 |
 | creep 放置 ttl 无上限钳制（M1 place） | `time + ttl` 原样（可超 1500）；官方 renew 才有 1500 上限语义（拒绝式非钳制） | 三方评审裁决跟 vanilla 放置语义（index.ts:1087），2026-09-28 |
+| 玩家内 room intents 先于对象 intents（M1 结算） | createConstructionSite/createFlag 全部先于 creep/spawn 对象指令执行 | 官方单层 objects map 中 'room' 键按插入序交错；结果序无关（房间指令与对象指令无共享状态面），登记迭代序差异 |
+| move intent 的 id 形态（M1 结算） | 仅支持 direction 形态；官方 move.js:15-21 还支持"朝相邻 creep 移动"（id 字段） | M2 玩家 API 层补（真沙箱才会产生该形态） |
+| creep 死亡事件与墓碑（M1 结算） | 无 EVENT_OBJECT_DESTROYED、无墓碑（资源直接掉地已另登记） | 随墓碑变体（M2 schema 升级）一并补事件 |
+| spawn/extension 的 off 标记生效时序（M1 结算） | `_calc_spawns` 直接改工作副本 → 同 tick 即时生效 | 官方经 bulk.update 延迟落库 → 同 tick 读到旧值；仅配额翻转 tick 可观测（多一个 spawn 被计费的窗口） |
+| 踩敌方工地的 safeMode 门（M1 结算） | 未实现（M1 无 safeMode 激活路径） | 官方 movement.js:224 要求 controller 非敌 safeMode；activateSafeMode 实装时补 |
+| 无 controller 房间的建造配额（M1 结算） | 完全跳过配额检查 | 官方按 rcl=0 计（spawn/extension 配额 0 → 拒、road 2500 → 允许）；M1 测试房间恒有 controller |
+| createCreep 空 energyStructures（M1 结算） | `[]` 落回全房间扣费（与缺省同路径） | 官方空数组走显式列表模式（可用 0 → 失败）；根因是 sanitize 后 None/[] 不可区分，M2 intent 通道定型时修 |
+| harvest 0 个 WORK 部件的事件形态（M1 结算） | 推 EVENT_HARVEST(amount=0) | 官方 harvest.js:44 `if(harvestAmount)` 整体跳过；upgrade/build 我们在 effect=0 时跳过（与官方反向）——M2 统一零量事件原则时对齐 |
+| Engine 沙箱的玩家身份信任（M1） | 按沙箱自报的玩家名合并 intents | M1 沙箱是自家 ScriptedSandbox；M2 真沙箱接入时按注册名强制（防冒名 room intent） |
 
 ## 四、验收关卡（不做完不算兼容）
 

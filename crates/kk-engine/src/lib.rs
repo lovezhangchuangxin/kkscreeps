@@ -5,5 +5,10 @@
 //! 它同时是 screeps-ok 适配器（compat/）与 `kkscreeps sim` 共用的同一接口（ADR-008 第 8 条）。
 
 pub mod embed;
+pub mod intent;
+pub mod sandbox;
+pub mod settle;
 
 pub use embed::{EmbedEngine, PlayerRun};
+pub use sandbox::{Sandbox, ScriptedSandbox, WorldView};
+pub use settle::{Engine, PlayerState, SettleError, settle_room};

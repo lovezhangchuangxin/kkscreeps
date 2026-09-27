@@ -176,6 +176,7 @@ fn normalize_spawn(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<SpawnOb
         x,
         y,
         hits,
+        off: false,
         name,
         owner,
         store,
@@ -256,7 +257,10 @@ fn normalize_structure(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<Roo
             id: 0,
             x,
             y,
-            hits: hits_override.unwrap_or(c::EXTENSION_HITS as u64) as u32,
+            hits: hits_override
+                .map(saturating_u32)
+                .unwrap_or(c::EXTENSION_HITS as u32),
+            off: false,
             owner: owner.unwrap_or_default(),
             store: store_energy(spec),
         })),
