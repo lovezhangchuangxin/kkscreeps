@@ -7,10 +7,12 @@
 pub mod budget;
 pub mod modules;
 pub mod ops;
+pub mod proto;
 pub mod sandbox;
 pub mod watchdog;
 
 pub use budget::{Bucket, TickPlan};
 pub use modules::{ModuleCode, ModuleKind, ModuleTable};
 pub use ops::LogLine;
+pub use proto::{PlayerThreads, TickReport};
 pub use sandbox::{Sandbox, SandboxConfig, TickOutcome, live_sandbox_count};
