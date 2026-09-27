@@ -69,6 +69,81 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     roomposition_official_semantics()?;
     writeback_watchdog_and_contract()?;
     stub_value_shapes()?;
+    official_string_and_error_shapes()?;
+    run_loop_without_loop_silent()?;
+    Ok(())
+}
+
+/// 第七轮修复的验证：官方 toString 家族（bot 日志拼接的事实标准）、Buffer toJSON
+/// 与负 length 边缘（Node 对照）、require 错误消息官方形态。
+fn official_string_and_error_shapes() -> anyhow::Result<()> {
+    let mut sb = Sandbox::new(SandboxConfig::default())?;
+    let mut table = ModuleTable::new();
+    table.insert_js("main", "module.exports.loop = function () {};");
+    sb.set_modules(table)?;
+    tick(&mut sb, &world())?;
+
+    // toString 家族（官方 engine/src/game 各 prototype.toString；缺失时
+    // String(obj) 得 '[object Object]'）
+    let v = sb.run_expr("String(new RoomPosition(1,2,'W1N1'))")?;
+    assert_eq!(
+        v["value"], "[room W1N1 pos 1,2]",
+        "RoomPosition（rooms.js:1358）"
+    );
+    let v = sb.run_expr("String(Game.creeps['w1'])")?;
+    assert_eq!(v["value"], "[creep w1]", "Creep（creeps.js:122）");
+    let v = sb.run_expr("String(Game.rooms['W1N1'])")?;
+    assert_eq!(v["value"], "[room W1N1]", "Room（rooms.js:536）");
+    let v = sb.run_expr("String(Game.spawns['Spawn1'])")?;
+    assert_eq!(
+        v["value"], "[spawn Spawn1]",
+        "StructureSpawn（structures.js:893）"
+    );
+    let v = sb.run_expr("String(Game.getObjectById('src1'))")?;
+    assert_eq!(v["value"], "[source #src1]", "Source（sources.js:41）");
+    let v = sb.run_expr("String(Game.rooms['W1N1'].controller)")?;
+    assert_eq!(
+        v["value"], "[structure (controller) #k1]",
+        "Structure 子类继承根格式（structures.js:68）"
+    );
+
+    // Buffer.toJSON（Node/官方：{"type":"Buffer","data":[...]}；缺失时 TypedArray 形态）
+    let v = sb.run_expr(
+        "const j = JSON.parse(JSON.stringify(Buffer.from('hi'))); j.type + ':' + j.data.join(',')",
+    )?;
+    assert_eq!(v["value"], "Buffer:104,105", "Buffer.toJSON");
+
+    // Buffer.from 负整数 length 钳 0（Node 实测空 Buffer；>>>0 会 wrap 成 4GB 分配）
+    let v = sb.run_expr("Buffer.from({length: -1}).length")?;
+    assert_eq!(v["value"], 0, "负 length 钳 0");
+    let v = sb.run_expr("Buffer.from({length: 2.7, 0: 1, 1: 2, 2: 3}).length")?;
+    assert_eq!(v["value"], 2, "小数 length 截断（Node 同款）");
+
+    // require 失败消息：官方形态 Unknown module（game.js:587）
+    let v = sb.run_expr("(() => { try { require('nope_mod'); return 'no-throw'; } catch (e) { return e.message; } })()")?;
+    assert_eq!(v["value"], "Unknown module 'nope_mod'", "官方错误消息形态");
+    Ok(())
+}
+
+/// 官方 game.js:555-563：main 未导出 loop() 时静默跳过（无 else 分支）——
+/// 不是玩家错误，不得进 player_error 统计。
+fn run_loop_without_loop_silent() -> anyhow::Result<()> {
+    let mut sb = Sandbox::new(SandboxConfig::default())?;
+    let mut table = ModuleTable::new();
+    table.insert_js("main", "module.exports.other = 1;"); // 无 loop
+    sb.set_modules(table)?;
+    let w = world();
+    sb.begin_tick(&w)?;
+    let out = sb.run_loop()?;
+    assert!(
+        matches!(out, TickOutcome::Completed { .. }),
+        "无 loop 的 main 静默跳过（官方语义，非玩家错误）"
+    );
+    assert!(
+        sb.take_last_loop_error().is_none(),
+        "未导出 loop() 不产生玩家错误"
+    );
+    sb.end_tick()?;
     Ok(())
 }
 

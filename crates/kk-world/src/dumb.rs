@@ -13,9 +13,11 @@ use serde_json::{Value, json};
 pub mod find {
     pub const CREEPS: i64 = 101;
     pub const MY_CREEPS: i64 = 102;
+    pub const SOURCES_ACTIVE: i64 = 104;
     pub const SOURCES: i64 = 105;
     pub const DROPPED_RESOURCES: i64 = 106;
     pub const STRUCTURES: i64 = 107;
+    pub const MY_STRUCTURES: i64 = 108;
     pub const FLAGS: i64 = 110;
     pub const CONSTRUCTION_SITES: i64 = 111;
     pub const MY_SPAWNS: i64 = 112;
@@ -160,11 +162,16 @@ fn obj_str<'a>(o: &'a Value, key: &str) -> Option<&'a str> {
 fn matches_find(o: &Value, find_const: i64) -> bool {
     let kind = obj_str(o, "type").unwrap_or("");
     let st = obj_str(o, "structureType").unwrap_or("");
+    let is_struct = kind == "structure" || kind == "spawn";
     match find_const {
         f if f == find::CREEPS || f == find::MY_CREEPS => kind == "creep",
-        f if f == find::SOURCES => kind == "structure" && st == "source",
+        // 104/105：哑世界无 energy 衰减语义，ACTIVE 与 SOURCES 同款（与 prelude
+        // room.find 的 104/105 分支对齐——同一 FIND 语义两层行为必须一致）
+        f if f == find::SOURCES_ACTIVE || f == find::SOURCES => {
+            kind == "structure" && st == "source"
+        }
         f if f == find::DROPPED_RESOURCES => kind == "resource",
-        f if f == find::STRUCTURES => kind == "structure" || kind == "spawn",
+        f if f == find::STRUCTURES || f == find::MY_STRUCTURES => is_struct,
         f if f == find::FLAGS => kind == "flag",
         f if f == find::CONSTRUCTION_SITES => kind == "constructionSite",
         f if f == find::MY_SPAWNS => kind == "spawn",

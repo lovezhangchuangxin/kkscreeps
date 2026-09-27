@@ -222,7 +222,10 @@
         if (typeof input.length !== 'number') {
           throw new TypeError('Buffer.from: 非数组对象必须带 length（array-like）');
         }
-        const len = input.length >>> 0;
+        // 负 length 钳 0（Node 实测 Buffer.from({length:-1}) 得空 Buffer）：
+        // >>> 0 会把 -1 wrap 成 4294967295 —— TypedArray backing store 是 V8 堆外
+        // 内存，near-heap 闸门管不住，一次调用即分配 4GB
+        const len = input.length < 0 ? 0 : input.length >>> 0;
         const b = new Buffer(len);
         for (let k = 0; k < len; k++) {
           const v = input[k];
@@ -287,6 +290,11 @@
       }
       return utf8Decode(this);
     }
+    // Node Buffer 的 toJSON（官方沙箱的 binary 模块链路就是 Node Buffer）：
+    // 缺失时 JSON.stringify(buf) 得 TypedArray 形态 {"0":104,"1":105}
+    toJSON() {
+      return { type: 'Buffer', data: Array.from(this) };
+    }
   }
   // Buffer 静态面套探测仪表：官方缺失的静态成员（如 poolAlloc）以 'Buffer.*' 登记
   globalThis.Buffer = probe(Buffer, 'Buffer');
@@ -328,7 +336,9 @@
       if (c === 'lodash') return c;
       if (ops.op_kk_module_kind(c) !== 'missing') return c;
     }
-    throw new Error("Cannot find module '" + spec + "'");
+    // 官方消息形态（game.js:587 requireFn：`Unknown module '...'`；Node 形态是
+    // Cannot find module——bot/用例可能按官方文本匹配错误）
+    throw new Error("Unknown module '" + spec + "'");
   }
 
   function requireImpl(spec) {
@@ -443,9 +453,11 @@
       return { ok: false, error: 'Memory 不可序列化: ' + (e && e.message) };
     }
   }
-  // Memory 作为懒 getter（官方语义：访问才解析）
+  // Memory 作为懒 getter（官方语义：访问才解析）。官方 game.js:470-473 两处
+  // defineProperty 均 enumerable: true（初始 getter 与首访固化后的 value 属性）
   Object.defineProperty(globalThis, 'Memory', {
     configurable: true,
+    enumerable: true,
     get() { return ensureMemory(); },
   });
 
@@ -468,6 +480,8 @@
       this.y = y;
       this.roomName = roomName;
     }    get room() { return Game.rooms[this.roomName] || undefined; }
+    // 官方 rooms.js:1358：`[room ${roomName} pos ${x},${y}]`——bot 生态日志拼接的事实标准
+    toString() { return '[room ' + this.roomName + ' pos ' + this.x + ',' + this.y + ']'; }
     // 官方 utils.js:34-63 fetchXYArguments：第二参是 number → 数值形态（roomName 为
     // undefined，视为同房间）；否则对象形态（RoomObject 先解包 .pos）
     isEqualTo(x, y) {
@@ -647,6 +661,38 @@
   globalThis.Spawn = globalThis.StructureSpawn;
   globalThis.Energy = globalThis.Resource;
 
+  // 官方 toString 家族（engine/src/game 各文件 prototype.toString，bot 生态日志
+  // 拼接的事实标准格式）：缺失时 String(obj) 得 '[object Object]'。挂类原型，
+  // wrapObject 的对象经 setPrototypeOf 自动获得；未列出的 Structure 子类按官方
+  // 同构继承 Structure 根的 `[structure (type) #id]`。
+  const OFFICIAL_TOSTRING = {
+    // creeps.js:122 / power-creeps.js:102
+    Creep: (o) => '[creep ' + o.name + ']',
+    PowerCreep: (o) => '[powerCreep ' + o.name + ']',
+    // rooms.js:536 / flags.js:53
+    Room: (o) => '[room ' + o.name + ']',
+    Flag: (o) => '[flag ' + o.name + ']',
+    // structures.js:68 / 893（官方 spawn：自家显示名、他家 #id；M0 桩全 my，见正确性-3 登记）
+    Structure: (o) => '[structure (' + o.structureType + ') #' + o.id + ']',
+    StructureSpawn: (o) => '[spawn ' + o.name + ']',
+    // sources.js:41 / minerals.js:42 / resources.js:41 / deposits.js:40
+    Source: (o) => '[source #' + o.id + ']',
+    Mineral: (o) => '[mineral (' + o.mineralType + ') #' + o.id + ']',
+    Resource: (o) => '[resource (' + o.resourceType + ') #' + o.id + ']',
+    Deposit: (o) => '[deposit (' + o.depositType + ') #' + o.id + ']',
+    // construction-sites.js:46 / tombstones.js:236 / ruins.js:68 / nukes.js:40
+    ConstructionSite: (o) => '[construction site (' + o.structureType + ') #' + o.id + ']',
+    Tombstone: (o) => '[Tombstone #' + o.id + ']',
+    Ruin: (o) => '[ruin (' + (o.structure && o.structure.structureType) + ') #' + o.id + ']',
+    Nuke: (o) => '[nuke #' + o.id + ']',
+  };
+  for (const [name, fmt] of Object.entries(OFFICIAL_TOSTRING)) {
+    const c = globalThis[name];
+    if (c && c.prototype) {
+      c.prototype.toString = function () { return fmt(this); };
+    }
+  }
+
   // ---------------------------------------------------------------- 世界投影（stub Game）
 
   let world = { time: 0, cpu: { limit: 20, tickLimit: 500, bucket: 10000 }, rooms: {}, objects: [] };
@@ -666,7 +712,7 @@
       return 0; // OK
     };
   }
-  const CREEP_METHODS = ['move', 'moveByPath', 'moveTo', 'harvest', 'build', 'repair', 'dismantle', 'upgradeController', 'attack', 'rangedAttack', 'rangedMassAttack', 'heal', 'rangedHeal', 'claimController', 'reserveController', 'attackController', 'transfer', 'withdraw', 'drop', 'pickup', 'say', 'suicide', 'spawn', 'generateSafeMode', 'pull', ' recycleCreep', 'renewCreep', 'cancelOrder', 'moveHead'];
+  const CREEP_METHODS = ['move', 'moveByPath', 'moveTo', 'harvest', 'build', 'repair', 'dismantle', 'upgradeController', 'attack', 'rangedAttack', 'rangedMassAttack', 'heal', 'rangedHeal', 'claimController', 'reserveController', 'attackController', 'transfer', 'withdraw', 'drop', 'pickup', 'say', 'suicide', 'spawn', 'generateSafeMode', 'pull', 'recycleCreep', 'renewCreep', 'cancelOrder', 'moveHead'];
   const SPAWN_METHODS = ['spawnCreep', 'renewCreep', 'recycleCreep', 'destroy', 'setActive', 'notifyWhenAttacked'];
   const STRUCTURE_METHODS = ['destroy', 'setActive', 'notifyWhenAttacked'];
   const CONTROLLER_METHODS = ['activateSafeMode'];
@@ -1061,7 +1107,10 @@
           main.loop();
           out = { ok: true };
         } else {
-          out = { ok: false, kind: 'runtime', error: "main 模块未导出 loop()" };
+          // 官方 game.js:555-563 run()：`if(isObject && isFunction(loop)) {...}` 无
+          // else——未导出 loop() 的 main 静默跳过，不是玩家错误（不打 console、
+          // 不计入错误统计；bot-check 的 errored_ticks 口径据此）
+          out = { ok: true };
         }
       } catch (e) {
         // 官方行为：未捕获的玩家错误打进 console（bot-check 据此采集每 tick 错误流）

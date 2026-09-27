@@ -330,3 +330,88 @@ room.getTerrain()/Terrain 对象与 lookFor(LOOK_TERRAIN)（tooangel 布局阶�
 
 验证：全套 cargo test（21 组）与 pnpm run check 绿；GPT 挂死探针复现通过（即时返回、
 进程存活）；tooangel 2000 tick 与 wasm-bot 复验稳定（零中断、缺失清单零）。
+
+---
+
+## 追记：第七轮评审（2026-09-27，全新会话系统性审计 + 修复）
+
+方法与前六轮的区别：不再做增量复审，而是**逐文件通读全部 M0 代码**（prelude.js 1233 行 /
+sandbox / watchdog / budget / proto / ops / modules / embed / embed_main / bot_check /
+dumb / adapter / rpc / 全部测试），先列不变量清单再逐条验证；对 prelude↔sandbox↔proto↔
+embed↔adapter 做五层契约对表；对官方源码做**正向通读**（game.js 全局装配区、runtime.js
+run() 末尾、runtime-driver.js evalCode、utils.js 全量函数、rooms.js RoomPosition 区、
+map.js getTerrainAt、make.js 桶经济）而非仅按台账已记录行号回查；Node 与本环境双实证。
+至此七轮累计：108 条发现、87 项修复、26 项登记。
+
+### 已修复（9 条：5 medium + 4 low，全部有官方源码或 Node 实证）
+
+| # | 级别 | 位置 | 问题与证据 | 修复 |
+|---|---|---|---|---|
+| 七-1 | medium | prelude.js Buffer.from | array-like 负整数 length 经 `>>>0` 变 4294967295：一次调用分配 4GB TypedArray backing store（V8 堆外内存，near-heap 闸门无效；runExpr 通道无看门狗——并发-4 登记的放大器）。Node 实测 `Buffer.from({length:-1})` 得空 Buffer | 负 length 钳 0，保留非负截断；测试锁定（含 2.7→2 的小数截断） |
+| 七-2 | medium | prelude.js Buffer 类 | 缺 `toJSON`：`JSON.stringify(buf)` 得 TypedArray 形态 `{"0":104,...}`；Node/官方（binary 模块链路就是 Node Buffer，runtime-driver.js:17）得 `{"type":"Buffer","data":[...]}` | 原型补 toJSON；测试锁定 |
+| 七-3 | medium | prelude.js runLoop | "main 未导出 loop()" 被报成玩家 runtime 错误；官方 game.js:555-563 `if(isObject&&isFunction(loop)){…}` **无 else**，静默跳过——bot-check 的 errored_ticks 口径被失真 | else 分支返回 `{ok:true}`；新增 run_loop_without_loop_silent 测试（Completed + player_error None） |
+| 七-4 | medium | prelude.js / ops.rs | require 失败消息 "Cannot find module"（Node 形态）；官方 game.js:587 为 `Unknown module '…'` | prelude 与 op 层消息一并改官方形态；测试锁定 |
+| 七-5 | medium | prelude.js | 游戏对象 toString 家族全缺：`String(pos)` 得 '[object Object]'。官方 15 个类各有 prototype.toString（rooms.js:1358 `[room X pos x,y]`、creeps.js:122 `[creep name]`、structures.js:68/893、sources.js:41、minerals.js:42、resources.js:41、deposits.js:40、construction-sites.js:46、tombstones.js:236、ruins.js:68、nukes.js:40、power-creeps.js:102、rooms.js:536 Room、flags.js:53）——bot 生态日志拼接的事实标准 | RoomPosition 类内 + OFFICIAL_TOSTRING 映射挂各类原型（wrapObject 对象经原型链自动获得；未列出的 Structure 子类按官方同构继承 Structure 根格式）；6 项断言锁定 |
+| 七-6 | medium | kk-world/dumb.rs matches_find | 缺 FIND_SOURCES_ACTIVE(104)/FIND_MY_STRUCTURES(108)：prelude room.find 有此二分支而 embed findInRoom 无——**同一 FIND 语义两层行为不一致**（玩家代码可见、适配器查询为空） | 补 104（哑世界无 active 语义，与 105 同款）与 108（与 107 同款全部结构）；embed 测试锁定 |
+| 七-7 | low | prelude.js Memory getter | 初始懒 getter 安装缺 `enumerable:true`（官方 game.js:470-487 两处 defineProperty 均 true；我们首访固化后才 true） | 补齐描述符 |
+| 七-8 | low | prelude.js CREEP_METHODS | `' recycleCreep'` 前导空格（trim 掩盖） | 源头清理（行为不变） |
+| 七-9 | low | sandbox.rs begin_tick | world 序列化在 watchdog.arm 之后，失败路径（理论不可达）不 disarm——违反"arm 后所有失败路径必须 disarm"不变量 | 序列化挪到 arm 之前（防御性，行为不变） |
+
+### 登记留待后续（5 组行为差异 → compatibility.md 灰区表已同步）
+
+- [M2] Memory 官方解析语义三细节：解析失败官方 `Memory=null` 且不写回（已登记 JS语义-7
+  的补充）；合法 JSON 非对象值（RawMemory="5"）官方保留原值 5、我们重置 {}；解析成功后
+  官方顶层 `__proto__=null`（无原型对象）。game.js:470-487。归 M2-2A Memory 正式实现；
+- [M2] RoomPosition 参数解包：官方 fetchXYArguments（utils.js:36-63）只认 RoomPosition
+  实例/带其实例 pos 的对象，裸 {x,y} 字面量官方得 NaN、我们按同房间计算（宽松超集）；
+  官方 inRangeTo 两参形态对无 roomName 目标恒 false（官方自身与 getRangeTo 不一致）；
+- [M2] 官方 RoomPosition 有 `__packedPos` own 属性（isEqualTo 快路径 rooms.js:1577），
+  我们按坐标比较等价、属性缺失玩家可感知；
+- [M2] 模块包装形态：官方 evalCode（runtime-driver.js:52-77）为
+  `(function __module(module,exports){…})`，require 是全局变量、非严格模块 this 绑定全局
+  对象；我们 Node 形态（require 为参数、this=module.exports）——与循环 require（JS语义-10）
+  同批拍板；
+- [M2] Game 全局官方为普通可写属性（每 tick 重挂），我们 getter-only——极端边缘。
+
+本轮确认与官方一致、无需动作的高风险区（抽查记录）：FIND_* 常量值 28 项逐项一致
+（官方 constants.js:21-48 ↔ assets/constants.json）；budget 桶经济四条规则与
+make.js:78-90/194/206-212 逐条一致；Memory 写回条件（`_parsed` truthy 才写回、写回耗时
+计入 usedCleanTime）与 runtime.js:249-272 一致；getTerrainAt 与 map.js:235-258 逐字一致；
+getDirectionTo 与 utils.js:64-103 逐字一致；serialization 检测口径（constructor 非
+Object/Array、数组豁免、ctor undefined 豁免）与 adapter-spec.md 一致；官方 toString 中
+generatePixel 在本地官方源码中不存在，桩值 -9 维持现状不臆改。
+
+### 结构健康度评估（M1 建议）
+
+prelude.js 已 1233 行单 IIFE，六类职责（探测仪表/console/Buffer 垫片/CJS 加载器/
+RawMemory+Memory/世界投影+宿主通道）共享 8 个闭包状态变量。M0 内风险可控（测试覆盖
+到位），但它同时是"验收仪表"与"被验收环境"，继续膨胀会让每轮评审的回归面指数增长。
+建议：M1 期间按 sandbox.rs 的注入顺序拆为 3~4 个脚本段（buffer-shim / cjs-loader /
+memory+world-projection / host-channel），各段独立 IIFE、只经 globalThis.__kk 与共享对象
+交互——零行为变更的结构拆分，可在 M1 任意时点做，不必等 M2 玩家 API 层整体替换。
+sandbox.rs / proto.rs / embed.rs 分层清晰，无需拆分。
+
+### "六轮仍有新 bug"的根因分析
+
+1. **桩保真度的形态学盲区**：第五轮对照了"返回值形态"、第六轮对照了"生命周期"，
+   但**字符串化形态（toString）与序列化形态（toJSON）**这一族从未被系统性对照——
+   本轮 9 条修复中 3 条（七-2/七-5 及错误消息七-4）属于这一族。方法补齐：对每个桩
+   对象枚举 ECMAScript 协议钩子（toString/toJSON/Symbol.toPrimitive/hasInstance）。
+2. **层间一致从未作为独立审计维度**：prelude room.find 与 dumb matches_find 是同一
+   FIND 语义的两个实现，六轮都在单层内找 bug，没有"同一语义两层对表"（七-6）。
+3. **官方取证入口单一**：六轮依赖台账已记录的官方行号回查（rooms.js:1588 等），
+   被"踩到过"的面才有行号——toString 家族、evalCode 包装、requireFn 错误消息都是
+   bot 没踩到的面。本轮改为对官方源码文件正向通读（utils.js 全量、game.js 装配区、
+   runtime-driver.js），未踩面才有机会显形。
+4. **错误路径的资源量级没被审计**：代码正确性审过（抛不抛、抛什么），但"抛之前
+   分配了多少内存"这类量级维度漏了（七-1 的 4GB）。
+
+### 验证记录（第七轮）
+
+- `cargo fmt --all` + `cargo clippy --workspace --all-targets`：通过（零警告）；
+- `cargo test --workspace`：全绿（kk-runner 单测 8 + m0_sandbox_suite/m0_thread_model_suite
+  含新增 2 个子场景、embed_engine_suite 含新断言、embed_rpc/dumb/budget 全过）；
+- `pnpm run check` 全套：cargo 三件套 + renderer/shared/compat JS 测试（适配器端到端
+  1 pass）+ 文档链接检查（47 个 Markdown / 135 个本地链接）通过；
+- release 冒烟：tooangel 300 tick 完成 300/300（硬中断 0、跳帧 0、缺失 API 0 项）、
+  wasm-bot 10 tick 完成 10/10（wasm loaded: true、零中断、缺失 API 0）。

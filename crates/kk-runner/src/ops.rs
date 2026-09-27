@@ -97,7 +97,8 @@ fn op_kk_module_load_js(state: &mut OpState, #[string] name: &str) -> Result<Str
         .borrow::<ModuleTable>()
         .load_js(name)
         .map(str::to_owned)
-        .ok_or_else(|| JsErrorBox::generic(format!("Cannot find module '{name}'")))
+        // 官方消息形态（game.js requireFn：`Unknown module '...'`）
+        .ok_or_else(|| JsErrorBox::generic(format!("Unknown module '{name}'")))
 }
 
 #[op2]
@@ -110,7 +111,7 @@ fn op_kk_module_load_binary(
         .borrow::<ModuleTable>()
         .load_binary(name)
         .map(BytesMut::from)
-        .ok_or_else(|| JsErrorBox::generic(format!("Cannot find module '{name}'")))
+        .ok_or_else(|| JsErrorBox::generic(format!("Unknown module '{name}'")))
 }
 
 #[op2(fast)]

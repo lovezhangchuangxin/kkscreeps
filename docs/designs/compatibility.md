@@ -30,6 +30,11 @@
 | 官方 bug | screeps-ok 覆盖的全部复刻；未覆盖的官方 bug 若被证明有玩家依赖再评估复刻 | 例如官方 market `_.shuffle` 用 Math.random 破坏确定性——replay 需要确定性时以"官方行为"为准还是"官方文档"为准，逐例登记 |
 | `Math.random` 等非确定性源 | 保留官方行为（真实随机） | 官方本就不可复现；内部结算的确定性（replay 用）与玩家可见随机性分开处理 |
 | 循环 require 的行为（M0 桩环境） | **Node 语义**（循环点拿半成品 exports）；官方为抛 "Circular reference to module" | M2 玩家 API 层对照官方 game.js 拍板跟谁——翻转前带循环依赖的 bot 在 kk 通过≠官方通过（验收反向假绿风险） |
+| 模块包装形态（M0 桩环境） | **Node 形态**：require 为包装参数、模块 `this = module.exports`；官方（runtime-driver.js evalCode）为 `(function __module(module,exports){…})`、require 是全局变量、非严格模块 `this` 绑定全局对象 | 与循环 require 同批（M2 玩家 API 层）拍板；`this` 用法在官方 bot 生态极罕见 |
+| RoomPosition 参数解包宽松度（M0 桩环境） | **宽松**：裸 `{x,y}` 字面量按同房间坐标计算；官方 fetchXYArguments（utils.js:36-63）只认 RoomPosition 实例或带其实例 pos 的对象，裸字面量得 NaN | 官方 inRangeTo 两参形态对无 roomName 目标恒 false（utils.js 官方自身与 getRangeTo 不一致）——M2 精确移植时逐条对齐官方源码，含官方自不一致处 |
+| RoomPosition.__packedPos（M0 桩环境） | 未实现（官方 RoomPosition 有 `__packedPos` own 属性，isEqualTo 走 packed 快路径 rooms.js:1577）；我们按坐标比较等价 | M2 packed 坐标移植（screeps-ok 兼容）时一并实现，玩家读该属性可感知差异 |
+| Memory 官方解析语义三细节（M0 桩环境） | M0：解析失败重置 `{}`、非对象 JSON 值重置 `{}`、顶层保留 Object 原型。官方（game.js:470-487）：解析失败 `Memory = null` 且不写回；合法 JSON 非对象值（如 `"5"`）保留原值；解析成功后顶层 `__proto__ = null`（无原型对象，hasOwnProperty 等不可用） | 属 M2-2A Memory 正式实现（与台账 JS语义-7 同批）对照移植范围；M0 桩 RawMemory 由宿主注入、无损坏输入路径 |
+| Game 全局可写性（M0 桩环境） | M0 用 getter-only defineProperty（每 tick 重挂新实例）；官方 `globals.Game = makeGameObject(...)` 为普通可写属性、玩家可覆盖 | 极端边缘（无 bot 覆盖 Game）；M2 玩家 API 层按官方形态重挂 |
 | `Game.structures` 收录范围（M0 桩环境） | M0 桩收录全部结构；官方只收自家 owned 结构（含 spawn、自家 controller），source/mineral/road/wall/container 不入 | M2 玩家 API 层对齐官方 game.js:298-339 的分册逻辑 |
 | 验收仪表/宿主 tick 通道的防篡改深度（M0 桩环境） | `__kk` 已整体 freeze（防属性覆盖）；玩家直接调用 `drainMissing()` 抢先清空仪表的深层防御未做 | 根治需宿主侧闭包/独立 op，归 M2 玩家 API 层重写范围 |
 

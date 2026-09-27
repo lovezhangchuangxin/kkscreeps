@@ -37,6 +37,28 @@ fn embed_engine_roundtrip_impl() -> anyhow::Result<()> {
 
     // findInRoom
     assert_eq!(e.find_in_room("W1N1", 101).len(), 1, "FIND_CREEPS");
+    // 104/108 与 prelude room.find 对齐（同一 FIND 语义两层一致；哑世界无 active 语义）
+    assert_eq!(
+        e.find_in_room("W1N1", 104).len(),
+        0,
+        "FIND_SOURCES_ACTIVE（本房间尚无 source）"
+    );
+    e.place_object(
+        "W1N1",
+        "structure",
+        &json!({ "pos": [10, 10], "structureType": "source" }),
+    )?;
+    assert_eq!(
+        e.find_in_room("W1N1", 104).len(),
+        1,
+        "FIND_SOURCES_ACTIVE 含 source"
+    );
+    assert_eq!(e.find_in_room("W1N1", 105).len(), 1, "FIND_SOURCES");
+    assert_eq!(
+        e.find_in_room("W1N1", 108).len(),
+        2,
+        "FIND_MY_STRUCTURES 含默认 controller 与 source"
+    );
 
     // runPlayer：真实沙箱求值，恰好 +1 tick
     let t0 = e.get_game_time();

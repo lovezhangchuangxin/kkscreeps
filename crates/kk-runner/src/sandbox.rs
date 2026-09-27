@@ -209,13 +209,15 @@ impl Sandbox {
                 // 清除可能遗留的终止标志，然后武装看门狗
                 self.terminated_this_tick = false;
                 self.runtime.v8_isolate().cancel_terminate_execution();
+                // world 序列化在 arm 之前完成：arm 之后的任何失败路径都必须 disarm
+                // （序列化 Value 理论不可达失败，防御性保证不变量成立）
+                let world_json = serde_json::to_string(world)?;
                 let deadline = Instant::now()
                     + Duration::from_millis(self.budget.tick_limit().max(1.0) as u64);
                 self.watchdog.arm(deadline);
                 *self.shared.tick_start.lock().unwrap() = Some(Instant::now());
                 self.shared.reset_console_gate();
                 self.shared.near_heap_fired.store(false, Ordering::Relaxed);
-                let world_json = serde_json::to_string(world)?;
                 // beginTick 世界注入也在武装窗口内，硬中断（看门狗/near-heap）同样可能
                 // 打在它身上——失败必须走统一的硬中断善后，不留"中毒"状态
                 self.exec_script(format!("globalThis.__kk.beginTick({world_json})"))
