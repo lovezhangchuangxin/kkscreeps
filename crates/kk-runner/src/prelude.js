@@ -950,9 +950,12 @@
           const w = objectsById.get(o.id);
           if (!w) continue;
           const isStruct = o.type === 'structure' || o.type === 'spawn';
+          // 官方 FIND_SOURCES_ACTIVE 条件 energy > 0（game.js:23）；初态缺省 3000
+          // （与 wrapObject 的 source 投影缺省一致）
           if (type === 101 /* FIND_CREEPS */ && o.type === 'creep') out.push(w);
           else if (type === 102 /* FIND_MY_CREEPS */ && o.type === 'creep') out.push(w);
-          else if ((type === 104 /* FIND_SOURCES_ACTIVE */ || type === 105 /* FIND_SOURCES */) && o.type === 'structure' && o.structureType === 'source') out.push(w);
+          else if (type === 104 /* FIND_SOURCES_ACTIVE */ && o.type === 'structure' && o.structureType === 'source' && (o.energy ?? 3000) > 0) out.push(w);
+          else if (type === 105 /* FIND_SOURCES */ && o.type === 'structure' && o.structureType === 'source') out.push(w);
           else if (type === 106 /* FIND_DROPPED_RESOURCES */ && o.type === 'resource') out.push(w);
           else if (type === 107 /* FIND_STRUCTURES */ && isStruct) out.push(w);
           else if (type === 108 /* FIND_MY_STRUCTURES */ && isStruct) out.push(w);
@@ -1171,6 +1174,15 @@
           return JSON.stringify({
             ok: false, kind: 'serialization',
             error: 'Return value is not JSON-serializable: ' + (e && e.message),
+          });
+        }
+        // toJSON 返回非字符串（如 undefined）时 stringify 产物不是字符串——失败
+        // 发生在返回值序列化阶段，按契约归 serialization（不得漏到 JSON.parse 再
+        // 被"not valid JSON"误报 runtime）
+        if (typeof json !== 'string') {
+          return JSON.stringify({
+            ok: false, kind: 'serialization',
+            error: 'Return value is not JSON-serializable: toJSON produced ' + typeof json,
           });
         }
         return JSON.stringify({ ok: true, value: JSON.parse(json) });

@@ -451,3 +451,39 @@ sandbox.rs / proto.rs / embed.rs 分层清晰，无需拆分。
 
 **棘轮登记值更新为 236**（基线报告与 README/roadmap 已同步）；教训入棘轮机制条目：
 入库 JSON 必须随修复重跑更新，防止修复效果迟到显形与假绿滞留。
+
+---
+
+## 追记：第八轮评审（2026-09-27，外部 ChatGPT 复核收官 HEAD 28162a5）
+
+6 条发现逐条复核（关键两条以 vanilla 参照实现与官方源码裁决），修复 4 条、登记 2 条：
+
+### 已修复（4 条）
+
+| # | 级别 | 复核结论与处置 |
+|---|---|---|
+| 八-5 | high（ChatGPT 标"存疑"，复核确认存在） | **end_tick 写回前的 cancel 清除唯一超时信号**：若看门狗恰在 run 成功后投递 terminate（同代只投一次），cancel 清标志后挂死的写回（`Memory.toJSON` 死循环）没有第二次终止机会 → 线程永久挂死。窗口为 µs 级、ChatGPT 12 次探针未复现，但代码路径推演成立。修复：cancel 后**重新武装到本 tick 原 deadline**（由 tick_start 重算，与 begin_tick 零漂移）——迟到标志照清（第三轮"防误伤"语义保留）、写回挂死由新代兜底（第六轮"写回在武装窗口内"语义保留），两个既有语义不再矛盾。附带收紧：deadline 已过时写回被掐（官方"超时打断整个 run 含序列化"的正确方向，旧行为反是漏计费）。确定性测试 writeback_rearmed_after_cancel（手动武装过期 deadline + 等其 fire + 挂死写回必须被掐，旧代码此测试挂死超时） |
+| 八-3 | medium | `runPlayer("({toJSON(){return undefined}})")` 被归 runtime（错误消息 '"undefined" is not valid JSON' 显系序列化阶段）。spec 文本：失败在返回值序列化阶段归 serialization；vanilla 参照是意外成功返回 null（其 value 键被 stringify 丢弃）、套件无锁定用例——按 spec 文本与阶段语义修为 serialization（JSON.stringify 产物非字符串的显式分支）。同第六轮"Memory.toJSON 返回非字符串"的返回值对称问题 |
+| 八-4 | medium | FIND_SOURCES_ACTIVE 把 energy:0 的 source 也算 active——官方 game.js:23 条件 `energy > 0`，且第七轮的"哑世界无 active 语义"判断错误（place 的初态 energy 就是充分信息）。修复：dumb matches_find 与 prelude room.find 两层同步按初态能量过滤（energy 缺省 3000，与 wrapObject 投影缺省一致）。**基线随之 236→237：ROOM-FIND-005（"FIND_SOURCES_ACTIVE only those with energy > 0"）转绿——套件本就锁定此语义**，无转红 |
+| 八-6 | low | sandbox 套件的"全流程 LIFO 零违规"断言位于中段（其后还有 6 个建沙箱场景，后半段违规会漏网）。移至全部场景之后 |
+
+### 登记留待后续（2 条，均有官方/参照对照依据）
+
+- **八-1 [high→M5]** TypedArray backing store 不受 heap 闸门约束（`new Uint8Array(270MB)` 成功且 RSS 288MB，探针复现）：**官方 ivm 的 memoryLimit 同样不覆盖 backing store**（官方玩家同样可分配）——非玩家可见差异，是资源治理缺口，与已登记的 wasm 线性内存同族。M0~M2 的兜底：看门狗掐断持续写循环 + 按组拆进程。每 isolate backing store 计量与限额归 **M5 安全加固**；sandbox.md 安全边界节已扩充登记
+- **八-2 [high→登记上游分歧]** runPlayer 嵌套值的静默 JSON 转换（`[undefined,NaN,Infinity]`→`[null,null,null]`、`{p:RoomPosition}`→退化坐标对象）：spec 文本字面要求"recursively composed of number/string/boolean/null"，但 **vanilla 参照实现完全不深检**（Game Object Detection 段明文"top-level check / does not require deep inspection"，嵌套活对象豁免）且我们行为与 vanilla 一致（2897 vanilla 通过率下套件未锁定）。按第四轮先例（spec 文本与参照分歧登记上游、行为以参照为准）不改行为，登记分歧；若上游日后澄清要求深检，M2 玩家 API 层一并实现
+
+### 对"是否影响 M0 完工"的回应
+
+ChatGPT 总体判断称八-1/八-2 使 M0 不宜宣告完成。复核结论：八-1 官方引擎同款行为（非玩家可见差异），sandbox.md/roadmap 的资源隔离与安全加固本就定义在 M5（"自用阶段可单进程"）；八-2 与 vanilla 参照一致且套件未锁定。两条均不构成 M0 验收关卡的缺口；八-5 是真问题且已修复。M0 完工结论维持。
+
+### 验证记录（第八轮）
+
+cargo fmt/clippy 零警告；cargo test --workspace 21 组全绿（含新增 writeback_rearmed_after_cancel 与 104 过滤/toJSON 分类断言）；pnpm run check 全套绿；tooangel 300 tick 与 wasm-bot 10 tick 零中断零缺失；基线重跑 **237**/1651/1026（ROOM-FIND-005 转绿、无转红，入库 JSON 已随行为变化更新——收官教训落实）。
+
+### 追记：八-7（本轮连带发现，修复验证期间实测触发）
+
+八-5 修复后的全量门禁中 `cargo test` 偶发挂死（sandbox_tests 进程 join 永久阻塞，sample 取栈定位）。**根因：watchdog 的 arm/disarm/shutdown 三个 notify_all 都在锁外调用**——锁外 notify 与看门狗线程"持锁检查状态 → cond.wait 原子注册等待"的临界区赛跑：notify 恰落在临界区内时落空，看门狗随后睡死，`Watchdog::shutdown` 的 join 永久挂起（进程无法收尾）。微秒级窗口、极易漏测：并发-1 修复时只原子化了"代际递增与状态变更"，唤醒侧未同步审视；八-5 增加的 end_tick 重新武装加大了 arm/disarm 往返频率，把窗口概率放大到实测可触发。修复：三个 notify 改为**持锁 notify**（Mesa 模式——对方要么已在等待队列、要么拿锁后必见新状态，全部路径闭合）。验证：修复后压测 sandbox 套件 20 连跑全绿（修复前全量门禁可复现挂死）；watchdog 语义（arm/disarm/disarm 后再 arm、shutdown 幂等）不变。八-7 属纯并发正确性修复，无 JS 可见行为变化，基线 237 不受影响。
+
+### 验证记录补充（八-7 后重跑）
+
+cargo fmt/clippy 零警告；cargo test --workspace 21 组全绿；pnpm run check 全套绿；tooangel 300 tick 与 wasm-bot 10 tick 零中断零缺失（重建后的 release 二进制）。

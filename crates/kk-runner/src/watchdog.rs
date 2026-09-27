@@ -10,6 +10,9 @@
 //!   都在 state 互斥锁内完成——看门狗持锁跨过 terminate 投递（非阻塞的异步标志设置），
 //!   因此 disarm 的完成意味着 terminate 已投递完毕，下一 tick 开始时的
 //!   `cancel_terminate_execution()`（双保险）必然发生在任何迟到 terminate 之后。
+//! - **唤醒不丢失**：arm/disarm/shutdown 的 `notify_all` 一律**持锁**调用——锁外
+//!   notify 会与看门狗"持锁检查 → cond.wait 原子注册等待"的临界区赛跑，notify
+//!   落空则看门狗睡死（join 永久挂死，八-7 实测偶发）。
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
@@ -103,8 +106,11 @@ impl Watchdog {
         let generation = self.shared.generation.fetch_add(1, Ordering::SeqCst) + 1;
         st.deadline = Some(deadline);
         st.armed_generation = generation;
-        drop(st);
+        // 持锁 notify（Mesa 模式）：锁外 notify 会与看门狗"持锁检查 → cond.wait
+        // 原子注册"的临界区赛跑，notify 落空则看门狗睡死（丢失唤醒，八-7 实测
+        // 偶发 join 永久挂死）；持锁时对方要么已在等待队列、要么拿锁后必见新状态
         self.shared.cond.notify_all();
+        drop(st);
         generation
     }
 
@@ -114,8 +120,8 @@ impl Watchdog {
         let mut st = self.shared.state.lock().unwrap();
         self.shared.generation.fetch_add(1, Ordering::SeqCst);
         st.deadline = None;
+        self.shared.cond.notify_all(); // 持锁 notify，见 arm 的注释
         drop(st);
-        self.shared.cond.notify_all();
     }
 
     /// 停止并回收线程。幂等。
@@ -123,7 +129,12 @@ impl Watchdog {
         if self.shared.shutdown.swap(true, Ordering::AcqRel) {
             return;
         }
-        self.shared.cond.notify_all();
+        {
+            // 持锁 notify：shutdown 的唤醒若落空，看门狗将永久睡死在 cond.wait，
+            // join 挂死整个进程收尾（这是唯一没有"下一次 notify"补救的唤醒点）
+            let _st = self.shared.state.lock().unwrap();
+            self.shared.cond.notify_all();
+        }
         if let Some(t) = self.thread.take() {
             let _ = t.join();
         }

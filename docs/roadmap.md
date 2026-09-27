@@ -19,7 +19,7 @@
 ## M0 兼容验收与工程基建 ✅（2026-09-27 完成）
 
 > 交付物：monorepo 与 CI 基建；screeps-ok 上游基准独立复现零偏差（报告 [compat/reports/m0-screeps-ok-parity.md](../compat/reports/m0-screeps-ok-parity.md)）；
-> 适配器跑通全量套件出基线 229/1659/1026，七轮评审修复后重验为 236/1652/1026（M1 棘轮起点，[基线报告](../compat/reports/m0-screeps-ok-baseline.md)）；
+> 适配器跑通全量套件出基线 229/1659/1026，八轮评审修复后重验为 237/1651/1026（M1 棘轮起点，[基线报告](../compat/reports/m0-screeps-ok-baseline.md)）；
 > tooangel + overmind 桩环境 2000 tick 零崩溃、缺失 API 清单清零（[bot 验收报告](../compat/reports/m0-bot-missing-api.md)）；
 > 一实例一线程原型测试全绿。架构决策见 [ADR-010](decisions/ADR-010-screeps-ok-adapter-bridge.md)。
 

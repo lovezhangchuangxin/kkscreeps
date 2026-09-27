@@ -64,13 +64,50 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     watchdog_late_expiry_does_not_kill_next_tick()?;
     memory_gate_terminates_and_reuses()?;
     lifo_registry_drains()?;
-    assert_eq!(kk_runner::lifo_violations(), 0, "全流程 LIFO 纪律零违规");
     memory_alias_setters()?;
     roomposition_official_semantics()?;
     writeback_watchdog_and_contract()?;
     stub_value_shapes()?;
     official_string_and_error_shapes()?;
     run_loop_without_loop_silent()?;
+    writeback_rearmed_after_cancel()?;
+    // LIFO 零违规断言在**全部**场景之后——中段断言会让后半段场景的违规漏网（第八轮）
+    assert_eq!(kk_runner::lifo_violations(), 0, "全流程 LIFO 纪律零违规");
+    Ok(())
+}
+
+/// 第八轮交界竞态的确定性复现：run 成功后、写回前，terminate 已投递（看门狗
+/// 同代只投一次，不会再 terminate）——end_tick 的 cancel 清掉这个唯一信号后，
+/// 挂死的写回必须由重新武装的新代兜底掐断（否则线程永久挂死）。
+fn writeback_rearmed_after_cancel() -> anyhow::Result<()> {
+    let cfg = SandboxConfig {
+        max_per_tick: 150.0,
+        initial_bucket: 150.0,
+        ..SandboxConfig::default()
+    };
+    let mut sb = Sandbox::new(cfg)?;
+    let mut table = ModuleTable::new();
+    table.insert_js(
+        "main",
+        "module.exports.loop = function () { Memory.toJSON = function () { while (true) {} }; };",
+    );
+    sb.set_modules(table)?;
+    sb.begin_tick(&world())?;
+    let out = sb.run_loop()?; // loop 快速返回（只装挂死用的 toJSON）
+    assert!(matches!(out, TickOutcome::Completed { .. }));
+    // 模拟"看门狗恰在 run 成功后投递 terminate"：手动武装一个已过期的 deadline
+    // 并等它 fire——此后该代已 fired，看门狗不会再投递（竞态窗口的前提）
+    sb.watchdog().arm(std::time::Instant::now());
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    let t0 = std::time::Instant::now();
+    let wb = sb.end_tick()?;
+    let elapsed = t0.elapsed().as_millis();
+    assert_eq!(
+        wb.get("terminated").and_then(serde_json::Value::as_bool),
+        Some(true),
+        "写回挂死被重新武装的新代兜底掐断: {wb:?}"
+    );
+    assert!(elapsed < 5_000, "不挂死线程（{elapsed}ms）");
     Ok(())
 }
 
@@ -122,6 +159,35 @@ fn official_string_and_error_shapes() -> anyhow::Result<()> {
     // require 失败消息：官方形态 Unknown module（game.js:587）
     let v = sb.run_expr("(() => { try { require('nope_mod'); return 'no-throw'; } catch (e) { return e.message; } })()")?;
     assert_eq!(v["value"], "Unknown module 'nope_mod'", "官方错误消息形态");
+
+    // toJSON 返回非字符串：失败在返回值序列化阶段 → serialization（第八轮；
+    // 此前漏到 JSON.parse 被 "not valid JSON" 误报 runtime）
+    let v = sb.run_expr("({toJSON(){return undefined}})")?;
+    assert_eq!(v["ok"], false, "toJSON 产物非字符串: {v:?}");
+    assert_eq!(
+        v["kind"], "serialization",
+        "序列化阶段失败归 serialization: {v:?}"
+    );
+
+    // FIND_SOURCES_ACTIVE 官方条件 energy > 0（game.js:23），energy 缺省 3000
+    let world_sources = serde_json::json!({
+        "time": 1,
+        "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+        "rooms": { "W1N1": { "name": "W1N1" } },
+        "objects": [
+            { "id": "sa0", "type": "structure", "structureType": "source",
+              "room": "W1N1", "x": 5, "y": 5, "energy": 0 },
+            { "id": "sa1", "type": "structure", "structureType": "source",
+              "room": "W1N1", "x": 6, "y": 6, "energy": 500 }
+        ]
+    });
+    sb.begin_tick(&world_sources)?;
+    sb.run_loop()?;
+    sb.end_tick()?;
+    let v = sb.run_expr("Game.rooms['W1N1'].find(FIND_SOURCES_ACTIVE).length")?;
+    assert_eq!(v["value"], 1, "energy:0 的 source 不算 active");
+    let v = sb.run_expr("Game.rooms['W1N1'].find(FIND_SOURCES).length")?;
+    assert_eq!(v["value"], 2, "FIND_SOURCES 收全部 source");
     Ok(())
 }
 

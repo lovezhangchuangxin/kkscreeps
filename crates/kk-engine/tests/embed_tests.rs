@@ -37,7 +37,8 @@ fn embed_engine_roundtrip_impl() -> anyhow::Result<()> {
 
     // findInRoom
     assert_eq!(e.find_in_room("W1N1", 101).len(), 1, "FIND_CREEPS");
-    // 104/108 与 prelude room.find 对齐（同一 FIND 语义两层一致；哑世界无 active 语义）
+    // 104/108 与 prelude room.find 对齐（同一 FIND 语义两层一致）；
+    // 104 官方条件 energy > 0（game.js:23），energy 缺省 3000
     assert_eq!(
         e.find_in_room("W1N1", 104).len(),
         0,
@@ -51,13 +52,23 @@ fn embed_engine_roundtrip_impl() -> anyhow::Result<()> {
     assert_eq!(
         e.find_in_room("W1N1", 104).len(),
         1,
-        "FIND_SOURCES_ACTIVE 含 source"
+        "FIND_SOURCES_ACTIVE 含有能量的 source（缺省 3000）"
     );
-    assert_eq!(e.find_in_room("W1N1", 105).len(), 1, "FIND_SOURCES");
+    e.place_object(
+        "W1N1",
+        "structure",
+        &json!({ "pos": [11, 11], "structureType": "source", "energy": 0 }),
+    )?;
+    assert_eq!(
+        e.find_in_room("W1N1", 104).len(),
+        1,
+        "energy:0 的 source 不算 active（官方 energy > 0）"
+    );
+    assert_eq!(e.find_in_room("W1N1", 105).len(), 2, "FIND_SOURCES 收全部");
     assert_eq!(
         e.find_in_room("W1N1", 108).len(),
-        2,
-        "FIND_MY_STRUCTURES 含默认 controller 与 source"
+        3,
+        "FIND_MY_STRUCTURES 含默认 controller 与两个 source"
     );
 
     // runPlayer：真实沙箱求值，恰好 +1 tick

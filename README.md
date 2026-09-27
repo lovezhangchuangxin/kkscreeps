@@ -4,7 +4,7 @@
 
 > **给没玩过 Screeps 的读者**：Screeps 是一个"写代码玩游戏"的 MMO——玩家用 JavaScript 编写 AI，控制名为爬爬虫（creep）的单位在分成一个个 50×50 格房间的世界里采集能量、建造、战斗。服务器按固定节拍（tick）推进世界；玩家的代码每 tick 在服务器上运行一次，消耗的"CPU"是一种按 tick 发放、可攒可透支的配额货币（约等于毫秒）。玩家代码不直接改世界，而是下达"指令"（intent），由服务器统一结算。
 
-**当前状态（2026-09-27）：M0（兼容验收与工程基建）已完成**——monorepo 与 CI 就位（[GitHub Actions](https://github.com/lovezhangchuangxin/kkscreeps/actions) 三 job 全绿）；screeps-ok 上游基准独立复现零偏差（vanilla 2897 / xxscreeps 2642）；适配器可跑全量套件出通过率基线（229 passed / 1659 failed / 1026 skipped；七轮评审修复后重验为 236/1652/1026——M1 棘轮起点，报告见 [compat/](compat/)）；tooangel 与 overmind 两个真实 bot 在桩环境跑 2000 tick 零崩溃、缺失 API 清单清零；一实例一线程承载原型验证通过（[ADR-010](docs/decisions/ADR-010-screeps-ok-adapter-bridge.md)）。下一步 M1：引擎骨架与通过率棘轮。
+**当前状态（2026-09-27）：M0（兼容验收与工程基建）已完成**——monorepo 与 CI 就位（[GitHub Actions](https://github.com/lovezhangchuangxin/kkscreeps/actions) 三 job 全绿）；screeps-ok 上游基准独立复现零偏差（vanilla 2897 / xxscreeps 2642）；适配器可跑全量套件出通过率基线（229 passed / 1659 failed / 1026 skipped；八轮评审修复后重验为 237/1651/1026——M1 棘轮起点，报告见 [compat/](compat/)）；tooangel 与 overmind 两个真实 bot 在桩环境跑 2000 tick 零崩溃、缺失 API 清单清零；一实例一线程承载原型验证通过（[ADR-010](docs/decisions/ADR-010-screeps-ok-adapter-bridge.md)）。下一步 M1：引擎骨架与通过率棘轮。
 
 ## 技术定案摘要
 

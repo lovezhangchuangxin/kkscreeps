@@ -159,17 +159,23 @@ fn obj_str<'a>(o: &'a Value, key: &str) -> Option<&'a str> {
     o.get(key).and_then(Value::as_str)
 }
 
+/// source 初态能量（energy 缺省视为 3000——与 prelude wrapObject 的投影缺省一致）。
+fn obj_energy(o: &Value) -> i64 {
+    o.get("energy").and_then(Value::as_i64).unwrap_or(3000)
+}
+
 fn matches_find(o: &Value, find_const: i64) -> bool {
     let kind = obj_str(o, "type").unwrap_or("");
     let st = obj_str(o, "structureType").unwrap_or("");
     let is_struct = kind == "structure" || kind == "spawn";
     match find_const {
         f if f == find::CREEPS || f == find::MY_CREEPS => kind == "creep",
-        // 104/105：哑世界无 energy 衰减语义，ACTIVE 与 SOURCES 同款（与 prelude
-        // room.find 的 104/105 分支对齐——同一 FIND 语义两层行为必须一致）
-        f if f == find::SOURCES_ACTIVE || f == find::SOURCES => {
-            kind == "structure" && st == "source"
+        // 104 的官方条件是 energy > 0（game.js:23）——哑世界按初态能量过滤；
+        // 与 prelude room.find 的 104/105 分支对齐（同一 FIND 语义两层一致）
+        f if f == find::SOURCES_ACTIVE => {
+            kind == "structure" && st == "source" && obj_energy(o) > 0
         }
+        f if f == find::SOURCES => kind == "structure" && st == "source",
         f if f == find::DROPPED_RESOURCES => kind == "resource",
         f if f == find::STRUCTURES || f == find::MY_STRUCTURES => is_struct,
         f if f == find::FLAGS => kind == "flag",

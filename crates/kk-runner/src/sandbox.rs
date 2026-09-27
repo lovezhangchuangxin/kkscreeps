@@ -275,8 +275,18 @@ impl Sandbox {
                 "error": "本 tick 已硬中断，按官方语义跳过 Memory 写回",
             }));
         }
-        // 迟到的看门狗 terminate 标志不得误伤写回（run 恰在 deadline 前完成时）
+        // 迟到的看门狗 terminate 标志不得误伤写回（run 恰在 deadline 前完成时）——
+        // 但 cancel 清掉的是**唯一**的超时信号：若该代 terminate 已投递（fired 已
+        // 记录、同代不再重投），随后挂死的写回将没有第二次终止机会（第八轮评审
+        // 指出的交界竞态）。因此 cancel 后**重新武装到本 tick 的原 deadline**（由
+        // tick_start 重算，与 begin_tick 无漂移）：正常写回不受影响（旧标志已清），
+        // 写回挂死由新代兜底——第三轮的"防误伤"与第六轮的"写回在武装窗口内"
+        // 两个语义不再矛盾
         self.runtime.v8_isolate().cancel_terminate_execution();
+        if let Some(t0) = *self.shared.tick_start.lock().unwrap() {
+            let deadline = t0 + Duration::from_millis(self.budget.tick_limit().max(1.0) as u64);
+            self.watchdog.arm(deadline);
+        }
         let exec = self.exec_json("globalThis.__kk.endTick()");
         match exec {
             Ok(v) => {
