@@ -416,6 +416,13 @@ fn prelude_basics() -> anyhow::Result<()> {
 
     let v = sb.run_expr("require('lodash') === _")?;
     assert_eq!(v["value"], true, "require('lodash') 命中预置");
+    // require('lodash') 在缓存查询前短路，唯一可观察形态是 require.cache——
+    // 该形状同时是 resetModules 重建产物的直接校验面
+    let v = sb.run_expr("require.cache.lodash && require.cache.lodash.exports === _")?;
+    assert_eq!(
+        v["value"], true,
+        "require.cache 的 lodash 预置存在且为同一对象"
+    );
 
     // ---- Buffer 垫片语义（对齐官方 Node 行为） ----
     let v = sb.run_expr("typeof Buffer !== 'undefined' && Buffer.from('hi').length")?;

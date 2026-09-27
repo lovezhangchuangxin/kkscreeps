@@ -2,7 +2,7 @@
 //!
 //! 命名纪律：一律 `op_kk_` 前缀，绝不与 deno_core 内置 op 撞名
 //! （撞名会触发 V8 CHECK 直接 abort，spike 踩过的坑）。
-//! prelude.js 在遮蔽 `Deno` 之前把这些 op 的引用捕获进闭包。
+//! prelude 各段在遮蔽 `Deno` 之前把这些 op 的引用捕获进闭包。
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};

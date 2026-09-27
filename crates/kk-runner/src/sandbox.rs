@@ -26,7 +26,7 @@ use crate::watchdog::Watchdog;
 
 const LODASH_SRC: &str = include_str!("../assets/lodash-3.10.1.js");
 const CONSTANTS_JSON: &str = include_str!("../assets/constants.json");
-/// prelude 按职责分四个段（共享仪表/Buffer/CJS/memory+世界投影/宿主通道），
+/// prelude 按职责分五个段（共享仪表/Buffer/CJS/memory+世界投影/宿主通道），
 /// 各段独立 IIFE、经 globalThis.__kkp 共享私有状态（末段删除）。
 const PRELUDE_SEGMENTS: [(&str, &str); 5] = [
     ("kk-prelude-00-shared", include_str!("prelude/00_shared.js")),
