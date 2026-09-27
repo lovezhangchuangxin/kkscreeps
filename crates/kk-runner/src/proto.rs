@@ -266,13 +266,16 @@ impl Drop for PlayerThreads {
 
 fn run_one_tick(sandbox: &mut Sandbox, world: &Value) -> anyhow::Result<TickReport> {
     match sandbox.begin_tick(world)? {
+        // 跳帧 tick（桶为负透支，官方 cpuAvailable<0 停跑语义）：不执行玩家代码。
+        // TickReport.plan 携带 SkipPenalty 供消费方（bot_check 等）与真实硬中断区分；
+        // outcome 有意映射为 Terminated（runPlayer 的 executed=false 契约依赖它）。
         plan @ TickPlan::SkipPenalty => Ok(TickReport {
             outcome: TickOutcome::Terminated,
             plan,
             used_ms: 0.0,
             console: sandbox.drain_console(),
-            missing_api: serde_json::json!({}),
-            stub_calls: serde_json::json!({}),
+            missing_api: sandbox.drain_missing_api().unwrap_or(serde_json::json!({})),
+            stub_calls: sandbox.drain_stub_calls().unwrap_or(serde_json::json!({})),
             bucket_after: sandbox.bucket(),
         }),
         plan @ TickPlan::Run { .. } => {
@@ -296,13 +299,13 @@ fn run_one_tick(sandbox: &mut Sandbox, world: &Value) -> anyhow::Result<TickRepo
 }
 
 /// runPlayer 通道：世界注入 → 表达式求值（真实沙箱）→ Memory 写回与结算。
-/// 跳帧惩罚时表达式不执行，返回硬中断分类（与"代码真的被执行过"契约一致：
-/// 由调用方把"未执行"视作适配器错误而非玩家返回值）。
+/// 跳帧（桶为负透支，官方 cpuAvailable<0 停跑语义）时表达式不执行，返回硬中断分类
+/// （与"代码真的被执行过"契约一致：由调用方把"未执行"视作适配器错误而非玩家返回值）。
 fn run_eval_tick(sandbox: &mut Sandbox, world: &Value, code: &str) -> anyhow::Result<EvalReport> {
     match sandbox.begin_tick(world)? {
         TickPlan::SkipPenalty => Ok(EvalReport {
             expr: serde_json::json!({
-                "ok": false, "kind": "terminated", "error": "本 tick 被跳帧惩罚（上一 tick 硬中断）",
+                "ok": false, "kind": "terminated", "error": "本 tick 停跑（桶透支为负，官方 cpuAvailable<0 停跑语义）",
             }),
             console: sandbox.drain_console(),
             bucket_after: sandbox.bucket(),

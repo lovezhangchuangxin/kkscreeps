@@ -22,9 +22,21 @@ if [ -z "${KKSCREEPS_BIN:-}" ] && [ ! -x "$ROOT/target/release/kkscreeps" ] && [
   exit 1
 fi
 
+# 可选：--quiet 把 vitest 输出转存 /tmp/kk-run-suite.log（stdout 清空，退出码不变）
+# ——供 CI/工作流调用，避免海量测试输出撑爆调用方的输出上限
+QUIET=0
+if [ "${1:-}" = "--quiet" ]; then
+  QUIET=1
+  shift
+fi
+
 cd "$ROOT/.compat/screeps-ok"
 export SCREEPS_OK_ADAPTER="$ADAPTER"
 export SCREEPS_OK_REPORT_NAME="kkscreeps"
 export SCREEPS_OK_PROJECT_ROOT="$ROOT/compat"
 export CI=1
-exec npx vitest run "$@"
+if [ "$QUIET" = "1" ]; then
+  npx vitest run "$@" > /tmp/kk-run-suite.log 2>&1
+else
+  exec npx vitest run "$@"
+fi

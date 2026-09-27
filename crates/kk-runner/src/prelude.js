@@ -14,8 +14,45 @@
     throw new Error('kk-runner prelude: op 不可达（extension 未注册？）');
   }
 
+  // ---------------------------------------------------------------- 缺失 API 探测
+  // M0 环境验收的核心仪表：记录"玩家代码访问了但桩环境没有"的路径（含次数）。
+  // get trap 覆盖属性访问/解构（GetV），has trap 覆盖 `in` 检查——`hasOwnProperty`/
+  // Object.keys 枚举不触发 trap，属仪表的已知边界（枚举无法反推玩家想找什么）。
+
+  const missing = new Map();
+  function reportMissing(path) {
+    missing.set(path, (missing.get(path) || 0) + 1);
+  }
+  const PROBE_IGNORE = new Set(['then', 'constructor', '__proto__', 'prototype', 'inspect', 'toJSON', 'nodeType', 'length', 'name']);
+  function probe(target, basePath) {
+    return new Proxy(target, {
+      get(t, prop) {
+        if (typeof prop === 'string' && !(prop in t) && !PROBE_IGNORE.has(prop)) {
+          reportMissing(basePath + '.' + prop);
+        }
+        return t[prop];
+      },
+      has(t, prop) {
+        // 含 ./[ 的"属性名"是 lodash 等库的路径探测串（如 isKey 对 'owner.username'
+        // 整串做 in 检查），不是真实属性访问，不报仪表
+        if (typeof prop === 'string' && !prop.includes('.') && !prop.includes('[')
+          && !(prop in t) && !PROBE_IGNORE.has(prop)) {
+          reportMissing(basePath + '.' + prop);
+        }
+        return prop in t;
+      },
+    });
+  }
+
+  // 桩方法调用计数：存在但不做事的官方方法（返回 OK），统计实际被用到的部分。
+  const stubCalls = new Map();
+  function countStub(name) {
+    stubCalls.set(name, (stubCalls.get(name) || 0) + 1);
+  }
+
   // ---------------------------------------------------------------- console
   // 收集型 console：经 op 推给宿主（替代 deno_core 自带的直写 stdout 版本）。
+  // 套探测仪表：console.dir/trace 等官方缺口以 'console.*' 登记，不静默 undefined。
 
   function inspectValue(v, depth, seen) {
     if (v === null) return 'null';
@@ -26,6 +63,7 @@
     if (t === 'function') return `[Function: ${v.name || 'anonymous'}]`;
     if (t === 'symbol') return v.toString();
     if (v instanceof Error) return `${v.name}: ${v.message}`;
+    if (v instanceof DataView) return `DataView(${v.byteLength})`; // DataView 无 slice
     if (ArrayBuffer.isView(v)) return `${v.constructor.name}(${v.length}) [${Array.from(v.slice(0, 8)).join(', ')}${v.length > 8 ? ', …' : ''}]`;
     if (seen.has(v)) return '[Circular]';
     if (depth >= 3) return Array.isArray(v) ? '[Array]' : '{Object}';
@@ -48,13 +86,13 @@
     function (...args) {
       ops.op_kk_console(level, fmtArgs(args));
     };
-  globalThis.console = {
+  globalThis.console = probe({
     log: mkLevel('log'),
     info: mkLevel('info'),
     warn: mkLevel('warn'),
     error: mkLevel('error'),
     debug: mkLevel('debug'),
-  };
+  }, 'console');
 
   // ---------------------------------------------------------------- lodash
   // lodash 资产脚本已执行并把结果放在 globalThis.__kkLodash（CJS 导出或 UMD 根挂载）。
@@ -82,24 +120,76 @@
     return out;
   }
   function utf8Decode(bytes) {
+    // 对齐官方 Buffer：非法/截断的 UTF-8 序列产出 U+FFFD 替换字符，而非抛 RangeError
     let s = '';
     let i = 0;
-    while (i < bytes.length) {
+    const n = bytes.length;
+    while (i < n) {
       const b = bytes[i];
-      let cp;
-      if (b < 0x80) { cp = b; i += 1; }
-      else if (b < 0xe0) { cp = ((b & 31) << 6) | (bytes[i + 1] & 63); i += 2; }
-      else if (b < 0xf0) { cp = ((b & 15) << 12) | ((bytes[i + 1] & 63) << 6) | (bytes[i + 2] & 63); i += 3; }
-      else { cp = ((b & 7) << 18) | ((bytes[i + 1] & 63) << 12) | ((bytes[i + 2] & 63) << 6) | (bytes[i + 3] & 63); i += 4; }
+      if (b < 0x80) { s += String.fromCharCode(b); i += 1; continue; }
+      let size = 0;
+      let cp = 0;
+      if (b >= 0xc2 && b <= 0xdf) { size = 2; cp = b & 0x1f; } // 0xc0/0xc1 为 overlong，非法
+      else if (b >= 0xe0 && b <= 0xef) { size = 3; cp = b & 0x0f; }
+      else if (b >= 0xf0 && b <= 0xf4) { size = 4; cp = b & 0x07; }
+      if (size === 0 || i + size > n) { s += '\ufffd'; i += 1; continue; } // 非法 leading / 截断
+      let ok = true;
+      for (let k = 1; k < size; k++) {
+        const c = bytes[i + k];
+        if ((c & 0xc0) !== 0x80) { ok = false; break; } // 非法 continuation
+        cp = (cp << 6) | (c & 0x3f);
+      }
+      if (!ok || cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff)) {
+        s += '\ufffd';
+        i += 1;
+        continue;
+      }
       s += String.fromCodePoint(cp);
+      i += size;
     }
     return s;
   }
 
+  const HEX_DIGITS = '0123456789abcdefABCDEF';
+  function hexVal(ch) {
+    const v = HEX_DIGITS.indexOf(ch);
+    // 0-f 共 22 个合法字符，>9 时换算大写
+    return v < 0 ? -1 : v % 16;
+  }
+  const BASE64_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  function base64Val(ch) { return BASE64_CHARS.indexOf(ch); }
+
   class Buffer extends Uint8Array {
     static from(input, encoding) {
       if (typeof input === 'string') {
-        const bytes = utf8Encode(input);
+        const enc = encoding || 'utf8';
+        let bytes;
+        if (enc === 'utf8' || enc === 'utf-8') bytes = utf8Encode(input);
+        else if (enc === 'hex') {
+          if (input.length % 2 !== 0) throw new TypeError('Buffer.from(hex): 奇数长度');
+          bytes = [];
+          for (let i = 0; i < input.length; i += 2) {
+            const hi = hexVal(input[i]), lo = hexVal(input[i + 1]);
+            if (hi < 0 || lo < 0) throw new TypeError('Buffer.from(hex): 非法字符');
+            bytes.push((hi << 4) | lo);
+          }
+        } else if (enc === 'base64') {
+          const clean = input.replace(/\s/g, '');
+          bytes = [];
+          let buf = 0;
+          let bits = 0;
+          for (const ch of clean) {
+            if (ch === '=') break;
+            const v = base64Val(ch);
+            if (v < 0) throw new TypeError('Buffer.from(base64): 非法字符');
+            buf = (buf << 6) | v;
+            bits += 6;
+            if (bits >= 8) { bits -= 8; bytes.push((buf >> bits) & 0xff); }
+          }
+        } else {
+          // 未支持的编码显式报错，不静默按 utf8 处理（wasm 工具链会拿到错误数据）
+          throw new TypeError('Buffer.from: 不支持的 encoding: ' + enc);
+        }
         const b = new Buffer(bytes.length);
         b.set(bytes);
         return b;
@@ -122,9 +212,24 @@
       }
       throw new TypeError('Buffer.from: 不支持的入参形态');
     }
-    static alloc(size, fill) {
+    static alloc(size, fill, encoding) {
       const b = new Buffer(size);
-      if (fill !== undefined) b.fill(fill);
+      if (fill !== undefined) {
+        if (typeof fill === 'string') {
+          // 官方语义：字符串 fill 按其（按 encoding 编码的）字节循环填充，
+          // 如 alloc(8,'x') → 8 个 120；alloc(2,'65') → [54,53]（字符 '6'/'5' 的字节）
+          const f = Buffer.from(fill, encoding);
+          if (f.length > 0) {
+            for (let i = 0; i < size; i++) b[i] = f[i % f.length];
+          }
+        } else if (fill instanceof Uint8Array) {
+          if (fill.length > 0) {
+            for (let i = 0; i < size; i++) b[i] = fill[i % fill.length];
+          }
+        } else {
+          b.fill(fill);
+        }
+      }
       return b;
     }
     static allocUnsafe(size) { return new Buffer(size); }
@@ -163,36 +268,14 @@
       return utf8Decode(this);
     }
   }
-  globalThis.Buffer = Buffer;
-
-  // ---------------------------------------------------------------- 缺失 API 探测
-  // M0 环境验收的核心仪表：记录"玩家代码访问了但桩环境没有"的路径（含次数）。
-
-  const missing = new Map();
-  function reportMissing(path) {
-    missing.set(path, (missing.get(path) || 0) + 1);
-  }
-  const PROBE_IGNORE = new Set(['then', 'constructor', '__proto__', 'prototype', 'inspect', 'toJSON', 'nodeType', 'length', 'name']);
-  function probe(target, basePath) {
-    return new Proxy(target, {
-      get(t, prop) {
-        if (typeof prop === 'string' && !(prop in t) && !PROBE_IGNORE.has(prop)) {
-          reportMissing(basePath + '.' + prop);
-        }
-        return t[prop];
-      },
-    });
-  }
-
-  // 桩方法调用计数：存在但不做事的官方方法（返回 OK），统计实际被用到的部分。
-  const stubCalls = new Map();
-  function countStub(name) {
-    stubCalls.set(name, (stubCalls.get(name) || 0) + 1);
-  }
+  // Buffer 静态面套探测仪表：官方缺失的静态成员（如 poolAlloc）以 'Buffer.*' 登记
+  globalThis.Buffer = probe(Buffer, 'Buffer');
 
   // ---------------------------------------------------------------- CommonJS 加载器
   // 官方形态：引擎自制 requireFn（engine/src/game/game.js），模块缓存跨 tick、
-  // 循环 require 拿半成品 exports、require.cache 预置 lodash。
+  // 循环 require 拿半成品 exports（**Node 语义**；官方为抛 "Circular reference to
+  // module" 错——两者不一致，行为跟谁已在 compatibility.md 灰区表登记，M2 拍板）、
+  // require.cache 预置 lodash。
   // 相对路径按真实规则解析（spike 垫片的扁平解析升级），二进制模块返回 Buffer。
 
   const moduleCache = Object.create(null);
@@ -232,7 +315,7 @@
     if (spec === 'lodash') return _;
     const name = resolveModuleName(spec, currentModule);
     const cached = moduleCache[name];
-    if (cached) return cached.exports; // 循环 require 期间拿到半成品 exports —— Node/官方同款
+    if (cached) return cached.exports; // 循环 require 期间拿到半成品 exports —— Node 语义（官方为抛 Circular reference 错，见段首注释）
     const kind = ops.op_kk_module_kind(name);
     if (kind === 'binary') {
       // 官方语义：二进制（.wasm）模块 require 返回 Buffer
@@ -254,6 +337,11 @@
       // this === module.exports（Node 语义；官方形态的差异留待 screeps-ok 契约用例对照）
       wrapper.call(module.exports, module, module.exports, requireImpl, globalThis);
       module.loaded = true;
+    } catch (e) {
+      // 执行失败删缓存再重抛（Node 原生与官方 game.js:578-581 同款）：
+      // 否则瞬时初始化错误会永久复用半成品 exports，官方每 tick 重跑可自愈
+      delete moduleCache[name];
+      throw e;
     } finally {
       currentModule = prev;
     }
@@ -305,7 +393,16 @@
   }
   function writeBackMemory() {
     if (parsedMemory !== undefined) {
-      const s = JSON.stringify(parsedMemory);
+      let s;
+      try {
+        s = JSON.stringify(parsedMemory);
+      } catch (e) {
+        // 玩家侧错误（Memory.big = 1n / 循环引用等不可序列化）：打 console、跳过写回
+        // （保留上一 tick 存档），归类为玩家错误而非基础设施 Err——对齐 runExpr 的
+        // kind:'serialization' 防护
+        console.error('Memory 写回失败（不可序列化），保留上一 tick 存档: ' + (e && e.message));
+        return;
+      }
       if (s.length <= RAW_MEMORY_LIMIT) rawMemoryData = s;
     }
   }
@@ -331,13 +428,17 @@
     }
     isNearTo(x, y) { return this.getRangeTo(x, y) <= 1; }
     isInRangeTo(x, y, range) {
+      // 形态按原始第一参区分（官方 rooms.js:1362-1376）：三参 (x,y,range) 时 r 取
+      // 第三参；两参 (pos, range) 时 r 取第二参。不能先包装成 p 再判（p 恒为对象）
       const p = typeof x === 'object' ? x : { x, y };
-      const r = typeof p === 'object' && typeof y === 'number' ? y : range;
+      const r = typeof x === 'object' ? y : range;
       return this.getRangeTo(p) <= r;
     }
     getRangeTo(x, y) {
       const p = typeof x === 'object' ? x : { x, y };
-      if (this.roomName !== p.roomName) return Infinity; // 跨房间（M0 桩：不实现）
+      // 官方 rooms.js:1588：仅目标带 roomName 且不等时才跨房间；数值形态（x,y 双参）
+      // 视为同房间坐标
+      if (p.roomName && this.roomName !== p.roomName) return Infinity; // 跨房间（M0 桩：不实现）
       return Math.max(Math.abs(this.x - p.x), Math.abs(this.y - p.y));
     }
     getDirectionTo(x, y) {
@@ -424,14 +525,17 @@
 
   // ---------------------------------------------------------------- 类全局（官方全集）
   // 官方运行时把 41 个类挂成裸全局（engine/src/game 各文件 defineProperty(globals,...)），
-  // 含 Spawn=StructureSpawn、Energy=Resource 两个别名。tooangel 等 bot 直接引用 Room 等。
+  // 其中 Spawn、Energy 是别名（官方 structures.js:1293 `globals.Spawn=StructureSpawn`、
+  // resources.js:46 `globals.Energy=Resource`）——这里在类注册后直接赋同一引用，
+  // spawn 对象 instanceof Spawn 与官方一致。tooangel 等 bot 直接引用 Room 等。
   // M0：桩类——可 new、可静态引用（未知静态成员进缺失 API 探测）。
-  // 已知限制：Game 上的对象不是这些类的实例（instanceof=false），M2 玩家 API 层对齐。
+  // Game 上的对象经原型链接挂在类原型链上（见 wrapObject），instanceof 已成立；
+  // 实例属性面的差异由 M2 玩家 API 层对齐。
 
   const GAME_CLASS_NAMES = [
-    'ConstructionSite', 'Creep', 'Deposit', 'Energy', 'Flag', 'Mineral', 'Nuke',
+    'ConstructionSite', 'Creep', 'Deposit', 'Flag', 'Mineral', 'Nuke',
     'OwnedStructure', 'PowerCreep', 'Resource', 'Ruin', 'Room', 'RoomObject',
-    'Source', 'Spawn', 'Store', 'Structure', 'StructureContainer', 'StructureController',
+    'Source', 'Store', 'Structure', 'StructureContainer', 'StructureController',
     'StructureExtension', 'StructureExtractor', 'StructureFactory', 'StructureInvaderCore',
     'StructureKeeperLair', 'StructureLab', 'StructureLink', 'StructureNuker',
     'StructureObserver', 'StructurePortal', 'StructurePowerBank', 'StructurePowerSpawn',
@@ -481,6 +585,9 @@
       }
     }
   }
+  // 官方别名：同一引用（structures.js:1293 / resources.js:46），非独立 stub 类
+  globalThis.Spawn = globalThis.StructureSpawn;
+  globalThis.Energy = globalThis.Resource;
 
   // ---------------------------------------------------------------- 世界投影（stub Game）
 
@@ -521,7 +628,9 @@
   }
 
   function wrapObject(o) {
-    const pos = new RoomPosition(o.x, o.y, o.room);
+    // pos 套探测仪表：RoomPosition 实例面的官方缺口（如 findInRange）以
+    // 'RoomPosition.*' 登记，不静默 undefined
+    const pos = probe(new RoomPosition(o.x, o.y, o.room), 'RoomPosition');
     const base = {
       id: o.id,
       pos,
@@ -695,11 +804,10 @@
       else if (o.type === 'constructionSite') constructionSites[o.id] = w;
       else if (o.type === 'resource') resources[o.id] = w;
       else if (o.type === 'structure') {
-        if (o.structureType === 'controller' || o.structureType === 'source' || o.structureType === 'mineral') {
-          structures[o.id] = w; // 自然结构也在 Game.structures 里（官方语义）
-        } else {
-          structures[o.id] = w;
-        }
+        // M0 桩：全部结构入 structures。官方语义（game.js:298-339）只收自家 owned 结构
+        //（含 spawn、自家 controller）；source/mineral/road/wall/container 等不入——
+        // M2 对齐，已登记 compatibility.md 灰区表
+        structures[o.id] = w;
       }
     }
     const rooms = {};
@@ -876,8 +984,11 @@
       let out;
       let v;
       try {
+        // 间接 eval（(0,eval)）在全局作用域求值——切断对 prelude 闭包（含捕获的
+        // Deno.core.ops 引用等引擎内部状态）的访问；官方控制台命令同样在全局作用域
+        // 求值（game.js:535-547），不得有超常特权（screeps-ok 契约）
         // eslint-disable-next-line no-eval
-        v = eval(code);
+        v = (0, eval)(code);
       } catch (e) {
         // 区分语法错误与运行期错误：能否通过 Function 预解析
         let isSyntax = false;
@@ -918,11 +1029,22 @@
       return JSON.stringify(out);
     },
   };
-  // __kk 不可枚举（玩家代码不应该把它当 API 面）
+  // __kk 不可枚举（玩家代码不应该把它当 API 面）且整体冻结——防止玩家覆盖
+  // drainMissing 造假验收仪表、把 beginTick/runLoop 换成抛错函数劫持宿主通道。
+  // 已知残余：冻结防不住玩家直接调用 __kk.drainMissing() 抢先清空仪表，根治需
+  // 宿主侧闭包/独立 op——M2 玩家 API 层重写，已登记 compatibility.md 灰区表。
+  Object.freeze(globalThis.__kk);
   Object.defineProperty(globalThis, '__kk', { enumerable: false, writable: false, configurable: false });
 
-  // ---------------------------------------------------------------- 遮蔽 Deno
-  // deno_core 的内部函数集合（Deno.core，约 100 个 op）默认对玩家可见——ADR-002 纪律。
-  // op 引用已捕获进闭包，遮蔽不影响宿主通道；遮蔽后的全局面复查见 sandbox 测试。
+  // ---------------------------------------------------------------- 遮蔽 deno_core 内部面
+  // deno_core 的内部函数集合默认对玩家可见——ADR-002 纪律。
+  // - Deno.core（约 100 个 op，含可一行 abort 宿主的 op_panic）；
+  // - globalThis.__bootstrap：deno_core 0.412 的 bootstrap 命名空间，挂有与
+  //   Deno.core 同一个 core 对象及 internals（00_infra.js:549 / 01_core.js:1301），
+  //   只删 Deno 会漏掉它。
+  // op 引用已捕获进闭包，遮蔽不影响宿主通道；遮蔽后的全局面复查
+  //（getOwnPropertyNames 白名单比对）见 sandbox 测试——deno_core 升级若新增
+  // 残留全局，测试会显形。
   delete globalThis.Deno;
+  delete globalThis.__bootstrap;
 })();

@@ -17,7 +17,10 @@ git -C "$DEST" checkout "$SCREEPS_OK_PIN"
 
 # 上游 lockfile 把 isolated-vm 锁成 git+ssh（需要 GitHub SSH 密钥），
 # 改写成 https 形式（同一 commit，无需凭据）。
-sed -i '' 's|git+ssh://git@github.com/|git+https://github.com/|g' "$DEST/package-lock.json"
+# -i.bak 跨 BSD/GNU sed（BSD 专用的 `sed -i ''` 在 GNU sed 上会把替换式当文件名、退出码 2，
+# set -e 直接中断——Linux CI 上整条复现路径不可用）
+sed -i.bak 's|git+ssh://git@github.com/|git+https://github.com/|g' "$DEST/package-lock.json"
+rm -f "$DEST/package-lock.json.bak"
 
 cd "$DEST"
 npm ci

@@ -57,7 +57,8 @@ impl Default for SandboxConfig {
 pub enum TickOutcome {
     /// 正常执行完毕（玩家逻辑自身的错误由 runLoop 结果 JSON 携带，不算这里）。
     Completed { used_ms: f64 },
-    /// 看门狗/内存闸门强制掐断（已按整份 tickLimit 计费并触发跳帧惩罚）。
+    /// 看门狗/内存闸门强制掐断（已按整份 tickLimit 计费；官方语义下桶充足不跳帧，
+    /// 桶被扣成负数时由下一 begin_tick 的停跑规则处理）。
     Terminated,
 }
 
@@ -79,6 +80,8 @@ pub struct Sandbox {
     seq: u64,
     budget: Bucket,
     shared: SharedRef,
+    /// 配置的堆硬上限（near-heap 触发放大后据此恢复）。
+    heap_limit: usize,
 }
 
 impl Sandbox {
@@ -99,14 +102,6 @@ impl Sandbox {
         runtime.op_state().borrow_mut().put(ModuleTable::new());
         runtime.op_state().borrow_mut().put(shared.clone());
 
-        // 双闸门之二：接近堆上限回调内 terminate（返回放大后的上限让当前分配完成，
-        // 随即在中断检查点展开——spike 实验 C 验证的 deno_core 官方测试同款模式）。
-        let near_heap_handle = runtime.v8_isolate().thread_safe_handle();
-        runtime.add_near_heap_limit_callback(move |current_limit, _initial| {
-            near_heap_handle.terminate_execution();
-            current_limit * 2
-        });
-
         let watchdog = Watchdog::spawn(runtime.v8_isolate().thread_safe_handle());
 
         // 注入顺序：lodash（结果放 __kkLodash）→ 常量平铺 → prelude（捕获 op、遮蔽 Deno）。
@@ -117,7 +112,7 @@ impl Sandbox {
         let seq = SEQ.fetch_add(1, Ordering::SeqCst);
         LIFO_REGISTRY.lock().unwrap().push(seq);
 
-        Ok(Self {
+        let mut sb = Self {
             watchdog,
             runtime,
             tokio,
@@ -129,7 +124,36 @@ impl Sandbox {
                 config.initial_bucket,
             ),
             shared,
-        })
+            heap_limit: config.heap_limit_bytes,
+        };
+        sb.install_near_heap_callback();
+        Ok(sb)
+    }
+
+    /// 双闸门之二：接近堆上限回调内 terminate（返回放大后的上限让当前分配完成，
+    /// 随即在中断检查点展开——spike 实验 C 验证的 deno_core 官方测试同款模式）。
+    /// 触发即置诊断标志；放大的上限由 `restore_heap_limit`（硬中断善后）恢复——
+    /// V8 会把回调返回值持久写为新的堆上限，不恢复则"触发 OOM→再触发"可指数级架空配置。
+    fn install_near_heap_callback(&mut self) {
+        let handle = self.runtime.v8_isolate().thread_safe_handle();
+        let shared = self.shared.clone();
+        self.runtime
+            .add_near_heap_limit_callback(move |current_limit, _initial| {
+                shared.near_heap_fired.store(true, Ordering::Relaxed);
+                handle.terminate_execution();
+                current_limit * 2
+            });
+    }
+
+    /// 恢复堆硬上限（仅在 near-heap 触发过后执行：remove 会顺带把上限恢复为参数值，
+    /// re-add 重新武装回调——deno_core 官方测试同款 remove+re-add 模式）。
+    /// 诊断标志保留到下一 begin_tick 复位（"本 tick 是否触发过"语义，测试可观察）。
+    fn restore_heap_limit(&mut self) {
+        if self.shared.near_heap_fired.load(Ordering::Relaxed) {
+            self.runtime
+                .remove_near_heap_limit_callback(self.heap_limit);
+            self.install_near_heap_callback();
+        }
     }
 
     /// 注册（或替换）玩家模块表；替换时清空 require 缓存。
@@ -138,7 +162,9 @@ impl Sandbox {
             let state = self.runtime.op_state();
             state.borrow_mut().put(table);
         }
-        self.exec_script("globalThis.__kk.resetModules()")?;
+        // 失败也清掉可能遗留的终止标志，沙箱不留"中毒"状态（tick 外路径不结算预算）
+        self.exec_script("globalThis.__kk.resetModules()")
+            .inspect_err(|_| self.clear_terminate_flag())?;
         Ok(())
     }
 
@@ -148,7 +174,8 @@ impl Sandbox {
             "(function(){{ const s = {}; globalThis.RawMemory.set(s); }})()",
             serde_json::to_string(data)?
         );
-        self.exec_script(script)?;
+        self.exec_script(script)
+            .inspect_err(|_| self.clear_terminate_flag())?;
         Ok(())
     }
 
@@ -171,8 +198,13 @@ impl Sandbox {
                     + Duration::from_millis(self.budget.tick_limit().max(1.0) as u64);
                 self.watchdog.arm(deadline);
                 *self.shared.tick_start.lock().unwrap() = Some(Instant::now());
+                self.shared.reset_console_gate();
+                self.shared.near_heap_fired.store(false, Ordering::Relaxed);
                 let world_json = serde_json::to_string(world)?;
-                self.exec_script(format!("globalThis.__kk.beginTick({world_json})"))?;
+                // beginTick 世界注入也在武装窗口内，硬中断（看门狗/near-heap）同样可能
+                // 打在它身上——失败必须走统一的硬中断善后，不留"中毒"状态
+                self.exec_script(format!("globalThis.__kk.beginTick({world_json})"))
+                    .inspect_err(|_| self.after_termination())?;
                 Ok(TickPlan::Run {
                     tick_limit: self.budget.tick_limit(),
                 })
@@ -194,12 +226,15 @@ impl Sandbox {
     }
 
     /// tick 结束：Memory 写回 + CPU 结算。
+    /// 结算与 tick_start 清理**不因脚本错误跳过**——endTick 的玩家侧错误（如 Memory
+    /// 不可序列化）已在 prelude 内归类处理（console.error + 跳过写回），这里返回的
+    /// Err 只可能是基础设施级故障。
     pub fn end_tick(&mut self, used_ms: f64) -> anyhow::Result<()> {
         self.watchdog.disarm();
-        self.exec_script("globalThis.__kk.endTick()")?;
+        let exec = self.exec_script("globalThis.__kk.endTick()");
         self.budget.settle(used_ms);
         *self.shared.tick_start.lock().unwrap() = None;
-        Ok(())
+        exec
     }
 
     /// 求值一段玩家表达式（screeps-ok 适配器的 runPlayer 通道），恰好占用一个 tick 的
@@ -215,11 +250,29 @@ impl Sandbox {
         }
     }
 
+    /// 硬中断善后：解除武装、清终止标志、结算（官方语义：扣整份 tickLimit，桶充足
+    /// 不跳帧，负桶由 begin_tick 停跑）、恢复堆上限、清 tick_start。幂等。
     fn after_termination(&mut self) {
         self.watchdog.disarm();
         self.runtime.v8_isolate().cancel_terminate_execution();
         self.budget.settle_terminated();
+        self.restore_heap_limit();
         *self.shared.tick_start.lock().unwrap() = None;
+    }
+
+    /// tick 外路径（set_modules/set_raw_memory 等）失败的轻量善后：只清终止标志。
+    fn clear_terminate_flag(&mut self) {
+        self.runtime.v8_isolate().cancel_terminate_execution();
+    }
+
+    /// 看门狗句柄（测试驱动真实看门狗线程的代际守卫用）。
+    pub fn watchdog(&self) -> &Watchdog {
+        &self.watchdog
+    }
+
+    /// 近堆回调是否在本 tick 触发过（诊断：区分内存闸门与看门狗兜底路径）。
+    pub fn near_heap_fired(&self) -> bool {
+        self.shared.near_heap_fired.load(Ordering::Relaxed)
     }
 
     /// 当前 tick 已用的墙钟毫秒（M0 口径；正式实现换线程 CPU 时钟）。
@@ -238,10 +291,12 @@ impl Sandbox {
 
     pub fn drain_missing_api(&mut self) -> anyhow::Result<serde_json::Value> {
         self.exec_json("globalThis.__kk.drainMissing()")
+            .inspect_err(|_| self.clear_terminate_flag())
     }
 
     pub fn drain_stub_calls(&mut self) -> anyhow::Result<serde_json::Value> {
         self.exec_json("globalThis.__kk.drainStubCalls()")
+            .inspect_err(|_| self.clear_terminate_flag())
     }
 
     fn exec_script(&mut self, code: impl Into<String>) -> anyhow::Result<()> {

@@ -7,7 +7,9 @@ use std::time::{Duration, Instant};
 
 use serde_json::json;
 
-use kk_runner::{ModuleTable, PlayerThreads, SandboxConfig, TickOutcome, live_sandbox_count};
+use kk_runner::{
+    ModuleTable, PlayerThreads, SandboxConfig, TickOutcome, TickPlan, live_sandbox_count,
+};
 
 fn config() -> SandboxConfig {
     SandboxConfig {
@@ -111,6 +113,9 @@ fn idle_eviction_and_rebuild() -> anyhow::Result<()> {
 }
 
 /// 崩溃隔离：一个玩家死循环被硬中断，另一个玩家不受影响。
+/// 按 plan 区分真实硬中断与跳帧 tick（官方语义：桶充足时硬中断不跳帧，
+/// 此配置下三轮全部是 Run+Terminated——若跳帧逻辑回归为"每中断必跳一帧"，
+/// 第 2 轮的 plan 会变成 SkipPenalty 而被此断言抓住）。
 fn crash_isolation() -> anyhow::Result<()> {
     let hang_cfg = SandboxConfig {
         max_per_tick: 60.0,
@@ -123,11 +128,16 @@ fn crash_isolation() -> anyhow::Result<()> {
     pool.spawn_player(2, config())?;
     pool.set_modules(2, counter_bot())?;
 
-    for _ in 0..3 {
+    for round in 1..=3 {
         let r1 = pool.tick(1, &world())?;
         assert!(
             matches!(r1.outcome, TickOutcome::Terminated),
-            "死循环玩家被硬中断"
+            "死循环玩家被硬中断（第 {round} 轮）"
+        );
+        assert!(
+            matches!(r1.plan, TickPlan::Run { .. }),
+            "桶充足时硬中断 tick 的 plan 仍是 Run（官方：不跳帧），实际 {:?}",
+            r1.plan
         );
         let r2 = pool.tick(2, &world())?;
         assert!(

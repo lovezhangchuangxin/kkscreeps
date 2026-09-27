@@ -2,4 +2,7 @@
 const role = require('role_harvester');
 
 module.exports.identity = function (x) { return x; };
-module.exports.roleSeenDuringCycle = role.role; // role_harvester 此刻可能已缓存（取决于加载序）
+module.exports.roleSeenDuringCycle = role.role; // 循环点读半成品属性 → 应为 undefined
+// 循环点持有的半成品对象引用：模块完成后 role_harvester.role 的后续赋值应对其可见
+// （若加载器在循环点返回新空对象，lateProbe 将不是同一引用、lateProbe.role 为 undefined）
+module.exports.lateProbe = role;

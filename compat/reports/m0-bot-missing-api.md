@@ -43,9 +43,10 @@ controller/source/spawn/creep 各一）。详细 JSON：`bot-tooangel.json` / `b
 |---|---|---|
 | 1 | overmind `Visualizer.drawLogo` 每 tick `reading 'poly'` 异常：其可视化逻辑依赖真实房间状态（哑世界无地形/对象细节），每 tick 被 runner 捕获打印、bot 下一 tick 重启循环，宿主不受影响 | M1 引擎有真实世界后复核；属游戏行为缺失而非 API 面 |
 | 2 | tooangel 首个 tick 起 "Executing room failed: reading 'position'"（bot 房间逻辑对哑世界结算结果的降级路径，自行捕获继续） | 同上 |
-| 3 | 两个 bot 的发布形态均不含 `.wasm` 模块（overmind 仓库构建链为 2018 年代 rollup 0.62 + TS 2.9，Node 24 不可用，按预案取 release 单文件产物）→ wasm 的 require 语义用合成夹具 wasm-bot 覆盖（require 返回 Buffer → WebAssembly.Module 编译成功） | wasm 路径已有自动化覆盖；overmind 源码构建链如需真实验收，待社区工具链更新 |
-| 4 | CJS 垫片的 `this === module.exports` 等边角语义按 Node 语义实现并单测锁定；与官方实现的逐项对照 | M2 玩家 API 层对照官方 game.js 复核 |
+| 3 | 两个 bot 的发布形态均不含 `.wasm` 模块（overmind 仓库构建链为 2018 年代 rollup 0.62 + TS 2.9，Node 24 不可用，按预案取 release 单文件产物）→ wasm 的 require 语义用合成夹具 wasm-bot 覆盖（require 返回 Buffer → WebAssembly.Module 编译成功） | wasm 的 require 语义已进 CI（kk-runner sandbox_tests 合成 .wasm 夹具：require 返回 Buffer → WebAssembly.Module 编译 + 内容一致）；gitignored 的 wasm-bot 夹具仍为手动 bot-check 路径。overmind 源码构建链如需真实验收，待社区工具链更新 |
+| 4 | CJS 垫片的 `this === module.exports` 等边角语义按 Node 语义实现并单测锁定；循环依赖同样为 Node 语义（半成品 exports），**官方为抛 "Circular reference to module" 错**——行为跟谁已在 compatibility.md 灰区表登记 | M2 玩家 API 层对照官方 game.js 复核 |
 | 5 | bot 直接 `new Room(...)` 等构造桩类得到的实例无游戏语义（构造计数器记录） | M2 真实类实现后自然消除 |
+| 6 | 探测仪表补 has trap 与 RoomPosition 实例/console/Buffer 静态面后，overmind 暴露 `RoomPosition.findInRange × 100`（官方 rooms.js 存在、M0 桩缺失；此前以 undefined 调用 TypeError 形式混在错误流里不可见） | M1 补桩（findInRange 依赖 room.find 语义，属游戏规则面） |
 
 ## 对后续里程碑的输入
 

@@ -10,7 +10,7 @@ use std::path::PathBuf;
 
 use serde_json::{Value, json};
 
-use kk_runner::{ModuleTable, PlayerThreads, SandboxConfig, TickOutcome};
+use kk_runner::{ModuleTable, PlayerThreads, SandboxConfig, TickOutcome, TickPlan};
 
 const PLAYER: u64 = 0;
 
@@ -46,19 +46,19 @@ fn run_inner(path: &str, ticks: u32, report_path: &str) -> anyhow::Result<()> {
     let mut stub_calls: BTreeMap<String, u64> = BTreeMap::new();
     let mut completed = 0u32;
     let mut terminated = 0u32;
+    let mut skipped_penalty = 0u32;
     let mut errored_ticks = 0u32;
 
     for t in 1..=ticks {
         let world = home_world(t);
         let report = pool.tick(PLAYER, &world)?;
-        match report.outcome {
-            TickOutcome::Completed { .. } => completed += 1,
-            TickOutcome::Terminated => terminated += 1,
+        // 按 plan 区分真实硬中断与跳帧 tick（跳帧的 outcome 也是 Terminated——
+        // runPlayer 的 executed=false 契约；统计上混计会把一次硬中断记成两次）
+        match (&report.outcome, &report.plan) {
+            (TickOutcome::Completed { .. }, _) => completed += 1,
+            (TickOutcome::Terminated, TickPlan::SkipPenalty) => skipped_penalty += 1,
+            (TickOutcome::Terminated, TickPlan::Run { .. }) => terminated += 1,
         }
-        let tick_had_error = report.console.iter().any(|l| {
-            l.level == "error" && l.text.starts_with("Error")
-                || l.level == "error" && l.text.contains("at kk_module")
-        });
         if report.console.iter().any(|l| l.level == "error") {
             errored_ticks += 1;
         }
@@ -72,7 +72,6 @@ fn run_inner(path: &str, ticks: u32, report_path: &str) -> anyhow::Result<()> {
         }
         merge_counts(&mut missing_api, &report.missing_api);
         merge_counts(&mut stub_calls, &report.stub_calls);
-        let _ = tick_had_error;
     }
 
     let report = json!({
@@ -80,6 +79,7 @@ fn run_inner(path: &str, ticks: u32, report_path: &str) -> anyhow::Result<()> {
         "ticks_requested": ticks,
         "ticks_completed": completed,
         "ticks_terminated": terminated,
+        "ticks_skipped_penalty": skipped_penalty,
         "ticks_with_console_error": errored_ticks,
         "missing_api": missing_api,
         "stub_calls_top": top(&stub_calls, 30),
@@ -91,7 +91,7 @@ fn run_inner(path: &str, ticks: u32, report_path: &str) -> anyhow::Result<()> {
     println!();
     println!("== bot-check 报告（{report_path}） ==");
     println!(
-        "  完成 tick：{completed}/{}（硬中断 {terminated}，含 console 错误的 tick {errored_ticks}）",
+        "  完成 tick：{completed}/{}（硬中断 {terminated}，跳帧（桶透支停跑） {skipped_penalty}，含 console 错误的 tick {errored_ticks}）",
         ticks
     );
     println!("  缺失 API：{} 项", missing_api.len());

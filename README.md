@@ -25,7 +25,7 @@
 | [docs/designs/](docs/designs/) | **功能设计**：玩家可见行为与工具的设计（兼容性红线、开发套件……） |
 | [docs/architecture/](docs/architecture/) | **技术架构**：模块划分、游戏循环、沙箱、存储与传输 |
 | [docs/research/](docs/research/) | **调研底稿**：四份主报告 + 15 份笔记（另有 1 份实验输出存档），全部决策的证据链 |
-| [docs/decisions/](docs/decisions/) | **决策记录**：九条 ADR 与否决方案清单 |
+| [docs/decisions/](docs/decisions/) | **决策记录**：十条 ADR 与否决方案清单 |
 | [docs/roadmap.md](docs/roadmap.md) | **路线图**：里程碑 M0–M5 的内容与验收关卡 |
 
 新读者建议顺序：[decisions](docs/decisions/)（为什么这么做）→ [architecture](docs/architecture/)（要建什么）→ [designs/compatibility.md](docs/designs/compatibility.md)（什么不能动）→ 按需查 [research](docs/research/)。

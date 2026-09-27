@@ -6,7 +6,10 @@
 //! 代际守卫语义（防止上一个 tick 迟到的掐断误杀下一个 tick）：
 //! - `arm(deadline)` 把代际 +1 并登记期限；只有"当前代际"的期限到达才有权 terminate；
 //! - 执行自然结束调用 `disarm()`（代际 +1，期限清空），迟到的到期检查因代际已变而作废；
-//! - 沙箱每 tick 执行前仍会 `cancel_terminate_execution()` 清掉可能遗留的终止标志（双保险）。
+//! - **原子性**：arm/disarm 的代际递增与状态变更、看门狗的"代际检查 + terminate 投递"
+//!   都在 state 互斥锁内完成——看门狗持锁跨过 terminate 投递（非阻塞的异步标志设置），
+//!   因此 disarm 的完成意味着 terminate 已投递完毕，下一 tick 开始时的
+//!   `cancel_terminate_execution()`（双保险）必然发生在任何迟到 terminate 之后。
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
@@ -64,15 +67,16 @@ impl Watchdog {
                         Some(deadline) => {
                             let now = Instant::now();
                             if now >= deadline {
-                                // 只有当前代际才有权终止；已触发过的代际不再重复触发
+                                // 只有当前代际才有权终止；已触发过的代际不再重复触发。
+                                // 持锁跨过 terminate 投递（非阻塞的异步标志设置）：
+                                // 与 arm/disarm 原子——disarm 完成即意味着 terminate 已投递，
+                                // 迟到的 terminate 不可能越过 disarm/arm 交界误杀下一个 tick。
                                 let armed = st.armed_generation;
                                 if armed != st.fired_generation
                                     && worker.generation.load(Ordering::Acquire) == armed
                                 {
                                     st.fired_generation = armed;
-                                    drop(st); // 先放锁，再跨线程 terminate
                                     isolate.terminate_execution();
-                                    st = worker.state.lock().unwrap();
                                 }
                                 // 等待下一次 arm/disarm/shutdown 唤醒，避免忙转
                                 st = worker.cond.wait(st).unwrap();
@@ -93,20 +97,24 @@ impl Watchdog {
     }
 
     /// 武装：`deadline` 到达且代际未变时 terminate。返回本次代际。
+    /// 代际递增在 state 锁内——与看门狗的"检查 + 投递"互斥（见模块注释）。
     pub fn arm(&self, deadline: Instant) -> u64 {
-        let generation = self.shared.generation.fetch_add(1, Ordering::SeqCst) + 1;
         let mut st = self.shared.state.lock().unwrap();
+        let generation = self.shared.generation.fetch_add(1, Ordering::SeqCst) + 1;
         st.deadline = Some(deadline);
         st.armed_generation = generation;
+        drop(st);
         self.shared.cond.notify_all();
         generation
     }
 
     /// 解除武装（执行自然结束，或硬中断后的善后）。
+    /// 代际递增同样在 state 锁内；完成即意味着任何旧代际的 terminate 已投递完毕。
     pub fn disarm(&self) {
-        self.shared.generation.fetch_add(1, Ordering::SeqCst);
         let mut st = self.shared.state.lock().unwrap();
+        self.shared.generation.fetch_add(1, Ordering::SeqCst);
         st.deadline = None;
+        drop(st);
         self.shared.cond.notify_all();
     }
 

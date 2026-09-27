@@ -51,6 +51,9 @@ class EmbedClient {
   private pending = new Map<number, { resolve: (r: RpcOk) => void; reject: (e: Error) => void }>();
 
   private ensure(): ChildProcess {
+    // 存活判断用 exitCode：被信号杀死（OOM SIGKILL / 外部 kill）时 exitCode 保持 null
+    // 但 exit 回调已把 this.child 置空——不会出现"死子进程被永久复用、RPC 全部
+    // ERR_STREAM_DESTROYED 且永不重启"的状态
     if (this.child && this.child.exitCode === null) return this.child;
     const bin = locateBinary();
     const child = spawn(bin, ['embed'], { stdio: ['pipe', 'pipe', 'inherit'] });
@@ -61,8 +64,14 @@ class EmbedClient {
     }
     (child.stdout as unknown as Unrefable).unref?.();
     (child.stdin as unknown as Unrefable).unref?.();
-    child.on('error', (e) => this.failAll(e));
-    child.on('exit', () => this.failAll(new Error('kkscreeps embed 子进程退出')));
+    child.on('error', (e) => {
+      this.child = null;
+      this.failAll(e);
+    });
+    child.on('exit', () => {
+      this.child = null;
+      this.failAll(new Error('kkscreeps embed 子进程退出'));
+    });
     const stdout = child.stdout as Readable;
     let buf = '';
     stdout.setEncoding('utf8');
@@ -135,11 +144,17 @@ export function client(): EmbedClient {
   if (!globalForClient.__kkEmbedClient) {
     const c = new EmbedClient();
     globalForClient.__kkEmbedClient = c;
-    // 进程退出时兜底回收，防止 vitest worker 直接退出留下孤儿进程
+    // 进程退出时兜底回收，防止 vitest worker 直接退出留下孤儿进程。
+    // 信号处理：cleanup 后重发信号——注册 SIGTERM/SIGINT 监听会抑制 Node 默认终止
+    // 行为，不重发的话有未决定时器时进程会挂住不退（Ctrl+C / timeout 命令场景）
     const cleanup = () => c.kill();
     process.once('exit', cleanup);
-    process.once('SIGTERM', cleanup);
-    process.once('SIGINT', cleanup);
+    for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+      process.once(sig, () => {
+        cleanup();
+        process.kill(process.pid, sig);
+      });
+    }
   }
   return globalForClient.__kkEmbedClient;
 }

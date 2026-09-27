@@ -1,6 +1,7 @@
 // 适配器能力声明（M0 基线）。
 // 全部如实为 false：哑世界没有任何游戏规则能力；随着引擎里程碑推进逐项翻真。
-// 字段清单与语义对齐 screeps-ok src/adapter.ts 的 AdapterCapabilities（29 项）。
+// 字段清单与语义对齐 screeps-ok src/adapter.ts 的 AdapterCapabilities（27 项，
+// pin 34a630e 实测；此前误多列 structures/construction 两键，上游不存在）。
 
 export interface AdapterCapabilities {
   chemistry: boolean;
@@ -30,8 +31,6 @@ export interface AdapterCapabilities {
   actionLogCapture: boolean;
   randomInjection: boolean;
   deprecationNotices: boolean;
-  structures: boolean;
-  construction: boolean;
 }
 
 export const capabilities: AdapterCapabilities = {
@@ -62,6 +61,4 @@ export const capabilities: AdapterCapabilities = {
   actionLogCapture: false,
   randomInjection: false,
   deprecationNotices: false,
-  structures: false,
-  construction: false,
 };

@@ -51,6 +51,33 @@ fn embed_engine_roundtrip() -> anyhow::Result<()> {
     let run = e.run_player("p1", "var a = ;")?;
     assert_eq!(run.expr["kind"], "syntax");
 
+    // 同一引擎二次 create_shard：完全重置（screeps-ok 套件每个测试都走的路径——
+    // 旧沙箱回收、时间归零、handle 重建后 run_player 正常服务）
+    e.create_shard(&json!({
+        "players": ["p1"],
+        "rooms": [{ "name": "W2N2", "rcl": 1, "owner": "p1" }],
+    }))?;
+    assert_eq!(e.get_game_time(), 0, "二次 createShard 时间重置");
+    assert_eq!(e.get_controller_pos("W2N2"), Some((1, 1)), "新房间布局生效");
+    assert!(e.get_controller_pos("W1N1").is_none(), "旧房间已清除");
+    let run = e.run_player("p1", "Game.time")?;
+    assert!(run.executed);
+    assert_eq!(run.expr["value"], 0, "重置后的第一 tick：注入的世界 time=0");
+    assert_eq!(e.get_game_time(), 1, "runPlayer 恰好 +1 tick");
+
+    // createShard 的 PlayerSpec 对象形式（screeps-ok 契约 players: (string|PlayerSpec)[]）
+    e.create_shard(&json!({
+        "players": [{ "name": "p1", "gcl": { "level": 3 } }, "p3"],
+        "rooms": [],
+    }))?;
+    let run = e.run_player("p1", "'obj-spec-ok'")?;
+    assert!(run.executed, "对象形式 PlayerSpec 的玩家已注册且可执行");
+    assert_eq!(run.expr["value"], "obj-spec-ok");
+    // run_players 对未知 handle 显式报错（不再静默缺项）
+    let mut codes = std::collections::BTreeMap::new();
+    codes.insert("ghost".to_string(), "1".to_string());
+    assert!(e.run_players(&codes).is_err(), "未知 handle 显式报错");
+
     // teardown 幂等
     e.teardown();
     e.teardown();

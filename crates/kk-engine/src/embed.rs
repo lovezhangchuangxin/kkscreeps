@@ -73,8 +73,20 @@ impl EmbedEngine {
 
         let players = self.players.get_or_insert_with(PlayerThreads::new);
         if let Some(handles) = spec.get("players").and_then(Value::as_array) {
-            for handle in handles {
-                let handle = handle.as_str().unwrap_or_default().to_string();
+            for entry in handles {
+                // screeps-ok 契约：players 为 (string | PlayerSpec)[]，PlayerSpec={name,gcl?,power?}
+                // （adapter.ts:16-19；套件 setup 实际使用对象形式）。取 name 注册 handle；
+                // gcl/power 影响玩家可见的 Game.gcl/gpl 状态，M1 规则实装时接上（哑世界
+                // 阶段写入无处生效，静默吞掉注册则会让 runPlayer 直接找不到玩家）。
+                let handle = match entry {
+                    Value::String(s) => s.clone(),
+                    Value::Object(o) => o
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_string(),
+                    _ => continue,
+                };
                 if handle.is_empty() {
                     continue;
                 }
@@ -221,6 +233,12 @@ impl EmbedEngine {
         &mut self,
         codes: &BTreeMap<String, String>,
     ) -> anyhow::Result<BTreeMap<String, PlayerRun>> {
+        // 未知 handle 显式报错：静默跳过会让结果映射缺项，调用方无从得知玩家没跑
+        for handle in codes.keys() {
+            if !self.handles.contains_key(handle) {
+                anyhow::bail!("未知玩家 handle: {handle}");
+            }
+        }
         let players = self
             .players
             .as_mut()
