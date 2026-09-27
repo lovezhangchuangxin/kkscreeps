@@ -67,6 +67,54 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     memory_alias_setters()?;
     roomposition_official_semantics()?;
     writeback_watchdog_and_contract()?;
+    stub_value_shapes()?;
+    Ok(())
+}
+
+/// 桩返回值形态抽查（第五轮同类问题修复的验证）：
+/// RoomVisual 链式返回 this、Memory 首访后可整体赋值（官方 game.js:492-495）、
+/// getTerrainAt 官方词汇表与边界语义（map.js:235-258）。
+fn stub_value_shapes() -> anyhow::Result<()> {
+    let mut sb = Sandbox::new(SandboxConfig::default())?;
+    let mut table = ModuleTable::new();
+    table.insert_js("main", "module.exports.loop = function () {};");
+    sb.set_modules(table)?;
+    tick(&mut sb, &world())?;
+
+    // RoomVisual 绘制方法返回 this（链式调用是官方承诺行为）
+    let v = sb.run_expr("(() => { const rv = new RoomVisual('W1N1'); return rv.circle(1,2).line(0,0,2,2) === rv; })()")?;
+    assert_eq!(v["value"], true, "RoomVisual 链式调用");
+
+    // Memory 整体赋值合法（官方：首访后固化为普通可写属性）
+    let v = sb
+        .run_expr("(() => { void Memory.fresh; Memory = { fresh: 1 }; return Memory.fresh; })()")?;
+    assert_eq!(v["value"], 1, "Memory 整体赋值（官方固化语义）");
+
+    // 无地形数据的世界：getTerrainAt → undefined（官方对缺失地形的行为）
+    let v = sb.run_expr("typeof Game.map.getTerrainAt(5,5,'W1N1')")?;
+    assert_eq!(v["value"], "undefined", "无地形数据 → undefined");
+    let v = sb.run_expr("typeof Game.map.getTerrainAt(-1,5,'W1N1')")?;
+    assert_eq!(v["value"], "undefined", "越界 → undefined");
+
+    // 有地形数据：官方词汇表 wall/swamp/plain（bit 语义 TERRAIN_MASK_*）
+    let mut terrain = vec![0u32; 2500];
+    terrain[0] = 1; // (0,0) wall
+    terrain[10] = 2; // (10,0) swamp
+    let world_with_terrain = serde_json::json!({
+        "time": 1,
+        "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+        "rooms": { "W1N1": { "name": "W1N1", "terrain": terrain } },
+        "objects": []
+    });
+    sb.begin_tick(&world_with_terrain)?;
+    sb.run_loop()?;
+    sb.end_tick()?;
+    let v = sb.run_expr("Game.map.getTerrainAt(0,0,'W1N1')")?;
+    assert_eq!(v["value"], "wall");
+    let v = sb.run_expr("Game.map.getTerrainAt(10,0,'W1N1')")?;
+    assert_eq!(v["value"], "swamp");
+    let v = sb.run_expr("Game.map.getTerrainAt(5,5,'W1N1')")?;
+    assert_eq!(v["value"], "plain");
     Ok(())
 }
 

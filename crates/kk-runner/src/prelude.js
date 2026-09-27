@@ -409,6 +409,14 @@
       }
       if (parsedMemory === null || typeof parsedMemory !== 'object') parsedMemory = {};
     }
+    // 官方 game.js:492-495：首次访问后把自己重定义为普通可写值属性——
+    // `Memory = {...}` 在官方合法（解析失败保持 null 的语义是已登记的 M2 差异项）
+    Object.defineProperty(globalThis, 'Memory', {
+      configurable: true,
+      enumerable: true,
+      writable: true,
+      value: parsedMemory,
+    });
     return parsedMemory;
   }
   function writeBackMemory() {
@@ -557,7 +565,10 @@
   visualBridge.prototype = new Proxy({}, {
     get(t, prop) {
       if (prop in t) return t[prop];
-      if (typeof prop === 'string') return function () { countStub('RoomVisual.' + prop); };
+      // 官方 rooms.js:1157：绘制方法返回 this（链式调用是官方文档承诺的行为）
+      if (typeof prop === 'string') {
+        return function () { countStub('RoomVisual.' + prop); return this; };
+      }
       return undefined;
     },
   });
@@ -633,6 +644,7 @@
   // ---------------------------------------------------------------- 世界投影（stub Game）
 
   let world = { time: 0, cpu: { limit: 20, tickLimit: 500, bucket: 10000 }, rooms: {}, objects: [] };
+  let terrainByRoom = {};
   let objectsById = new Map();
 
   function creepMemoryFor(name) {
@@ -981,7 +993,20 @@
         describeExits: () => ({}),
         findExit: () => -1,
         findRoute: () => [],
-        getTerrainAt: () => 'p',
+        // 官方 map.js:235-258：返回 'wall'|'swamp'|'plain'（完整词，非缩写）；
+        // 越界或无地形数据 → undefined。M0 世界仅在 createShard/setTerrain 提供
+        // 地形时可用（bit 语义同官方 TERRAIN_MASK_*）
+        getTerrainAt(x, y, roomName) {
+          if (x && typeof x === 'object') { y = x.y; roomName = x.roomName; x = x.x; }
+          if (x < 0 || x > 49 || y < 0 || y > 49) return undefined;
+          const terrain = terrainByRoom[roomName];
+          if (!terrain) return undefined;
+          const t = terrain[y * 50 + x];
+          if (t === undefined || t === null) return undefined;
+          if (t & TERRAIN_MASK_WALL) return 'wall';
+          if (t & TERRAIN_MASK_SWAMP) return 'swamp';
+          return 'plain';
+        },
       },
     };
     game.cpu = probe(game.cpu, 'Game.cpu');
@@ -1010,6 +1035,15 @@
     beginTick(worldJson) {
       world = typeof worldJson === 'string' ? JSON.parse(worldJson) : worldJson;
       parsedMemory = undefined; // 官方语义：Memory 每 tick 从 RawMemory 懒解析
+      // 上一 tick 首访后 Memory 已固化为普通值属性（官方同款），本 tick 重装懒 getter
+      Object.defineProperty(globalThis, 'Memory', {
+        configurable: true,
+        get() { return ensureMemory(); },
+      });
+      terrainByRoom = {};
+      for (const [n, r] of Object.entries(world.rooms || {})) {
+        if (Array.isArray(r.terrain)) terrainByRoom[n] = r.terrain;
+      }
       refreshGame();
     },
     /** 执行玩家入口：require('main').loop()。返回结果 JSON 字符串（宿主 exec_json 约定）。 */

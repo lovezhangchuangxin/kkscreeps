@@ -294,3 +294,20 @@ M0/M1 的真实边界（地形编解码属 kk-core，M1 交付）。宿主稳定
 验证：`pnpm run check` 全套绿；新增 5 组测试（memory setter 双向、RoomPosition 官方
 语义、写回看门狗、契约分类、spawn 归一）全过；wasm-bot 冒烟通过；tooangel 2000 tick
 宿主稳定。
+
+### 追记：同类问题专项审计（第五轮，问题驱动的自查）
+
+针对"桩返回值形态/生命周期与官方不一致"这一类问题（PathFinder.search 返回
+{dx,dy} 而非 RoomPosition 实例是首个被 bot 踩中的样本），对全部桩表面做了
+返回值形态专项对照，确认并修复 3 处：
+
+| 问题 | 官方证据 | 修复 |
+|---|---|---|
+| RoomVisual 绘制方法返回 undefined | 官方 rooms.js:1157 全部 `return this`（链式调用是文档承诺） | 桩返回 this，链式恢复 |
+| `Memory = {...}` 整体赋值被静默吞掉 | 官方 game.js:492-495：首次访问后把自己重定义为普通可写值属性（每 tick 由运行时重装懒 getter） | ensureMemory 首访固化 + beginTick 重装，与官方生命周期一致 |
+| getTerrainAt 恒返回 'p' | 官方 map.js:235-258：返回 'wall'/'swamp'/'plain' 完整词，越界或无地形数据 → undefined | 官方语义移植 + 世界 JSON 携带真实地形（bit 语义 TERRAIN_MASK_*，经 createShard/setTerrain 提供时生效） |
+
+同一审计中确认为**桩保真度边界**（属 M1 地形/寻路实装范围，维持登记）：
+room.getTerrain()/Terrain 对象与 lookFor(LOOK_TERRAIN)（tooangel 布局阶段的
+真正依赖）、serializePath/deserializePath 的真实编解码、store.getCapacity 的
+数值语义、findPath 的步进对象内容。测试：stub_value_shapes 新增 8 项断言全绿。

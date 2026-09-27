@@ -135,7 +135,19 @@ impl DumbWorld {
         json!({
             "time": self.time,
             "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
-            "rooms": self.rooms.keys().map(|name| (name.clone(), json!({ "name": name }))).collect::<BTreeMap<_, _>>(),
+            "rooms": self
+                .rooms
+                .iter()
+                .map(|(name, r)| {
+                    // 地形随快照下发（getTerrainAt 等官方语义消费；无地形的世界省略该字段）
+                    let mut entry = serde_json::Map::new();
+                    entry.insert("name".into(), json!(name));
+                    if let Some(t) = &r.terrain {
+                        entry.insert("terrain".into(), json!(t));
+                    }
+                    (name.clone(), Value::Object(entry))
+                })
+                .collect::<BTreeMap<_, _>>(),
             "objects": self.objects.values().cloned().collect::<Vec<_>>(),
         })
     }
