@@ -39,6 +39,11 @@
 
 **验收关卡**：基线确立并在 CI 棘轮运行。
 
+> **进度（2026-09-28）**：实施中——kk-core/kk-schema/kk-world typed world/kk-engine 单房间结算/embed 通道切真实结算已交付（开发方案 [docs/plans/m1-engine-skeleton.md](plans/m1-engine-skeleton.md)，
+> 每步经三方并行评审）；**棘轮已进 CI（第四 job）**，地板 268/2914（[compat/reports/ratchet.json](../compat/reports/ratchet.json) 唯一真相源；M0 起点 237 →
+> 步 5 embed 切 typed world+真结算 265 → 步 6 仪表批次 268）。
+> bot 验收：tooangel 房间管线完整执行、overmind 推进到 RoomIntel 全量执行，2000 tick 零中断、缺失 API 清零，bot-check 退出码机器可判定。
+
 ## M2 单机可玩（内部两道关卡）
 
 这是**全项目最长的杆**：玩家 API 层要对照移植约 340 个方法（官方 game/ 层约 7000 行的对应物）。内部设两道关卡，在长杆中间留检查点。

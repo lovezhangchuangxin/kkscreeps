@@ -64,3 +64,28 @@ jobs:
           node-version: 24
       - name: 文档链接检查
         run: node scripts/check-doc-links.mjs
+
+  # M1 验收关卡（roadmap）：通过率棘轮——全量 screeps-ok 套件跑通且 passed 不低于
+  # 地板（compat/reports/ratchet.json，唯一真相源）。RPC 超时（compat/src/rpc.ts）
+  # 是前置：sidecar 挂死时由卡死变为超时红。
+  ratchet:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.98.1
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install
+      - name: 构建引擎二进制（release）
+        run: cargo build --release -p kk-cli
+      - name: 准备 screeps-ok 上游（pin 固定）
+        run: bash scripts/setup-screeps-ok.sh
+      - name: 构建适配器 dist
+        run: pnpm --filter @kkscreeps/compat run build
+      - name: 通过率棘轮
+        run: node compat/scripts/ratchet.mjs

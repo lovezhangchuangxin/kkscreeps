@@ -60,9 +60,11 @@ M0 收官时重跑两次全量（run1 与 run2 逐用例零差异，数字可复
 
 ## M1 起的棘轮机制（本基线的用途）
 
-- 每次合入跑 `compat/scripts/run-suite.sh`，passed 数不得低于上次登记值（当前登记值
-  **237**，第八轮重验）；**入库 JSON 必须随修复重跑更新**——首份基线从 3b35de2
+- 每次合入跑 `compat/scripts/run-suite.sh`，passed 数不得低于上次登记值；**入库 JSON 必须随修复重跑更新**——首份基线从 3b35de2
   之后未重跑，导致二~六轮修复的效果迟到六个提交才显形（本次重验的教训）；
 - failed 用例随引擎实装逐区转绿（01-movement/03-harvesting 等按 M1 引擎骨架的推进顺序）；
 - capability 从 false 逐项翻真时，对应 skip 池转入 passed/failed 统计，需在翻真 commit
-  里登记新的基线值与理由。
+  里登记新的基线值与理由；
+- **M1 步 7 起棘轮自动化**：`compat/scripts/ratchet.mjs` + CI 第四 job，地板唯一真相源
+  [ratchet.json](ratchet.json)（沿革：M0 收官 237 → 步 5 embed 切 typed world+真结算 265 →
+  步 6 仪表批次 268），本文件的历史数字仅作 M0 存档。

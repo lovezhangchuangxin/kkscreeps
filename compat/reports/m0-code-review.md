@@ -585,3 +585,35 @@ tooangel 300t / overmind 2000t / wasm-bot 10t 全部判定通过（overmind 从 
   硬判面可能假通过；drain 失败意味着沙箱已坏（硬中断大概率同时计入），实际不可达；
 - EmbedClient 并发 in-flight 场景（当前套件串行调用）下孤儿 pending 各自超时的
   恢复路径已闭合但无并发测试——M2 多实例接入时补。
+
+## 追记：M1 步 7 实施与评审（2026-09-28，棘轮进 CI）
+
+步 7（方案 §12.7/D6/§8）：`compat/reports/ratchet.json`（floor **268**，唯一真相源，
+沿革 237→265→268 注释在文件内）+ `compat/scripts/ratchet.mjs` + CI 第四 job `ratchet`
+（ubuntu、rust 1.98.1 + rust-cache + node24/pnpm、release 构建 → setup-screeps-ok →
+compat build → ratchet.mjs、40min timeout、push/PR 都跑）。文档数字同步三处
+（README 状态段/roadmap M1 进度注记/基线报告棘轮节降为 M0 存档）。
+
+关键设计（三方评审核实）：**vitest 退出码不作判定**（数千预期失败下 exit 1 属常态）；
+**报告 mtime 新鲜度守卫**防套件早崩读陈旧报告假绿；红时与上一入库基线逐用例 diff
+（`git show HEAD:` 读对象库——工作区报告已被本轮覆盖不受影响；浅克隆
+fetch-depth 1 下 HEAD blob 完整可用；报告 1.7MB 需显式 maxBuffer）列转红前 10 条
+含 failureMessages 摘要 + 转绿计数；早崩/解析失败路径 tail 套件日志尾部 100 行
+（--quiet 重定向的 /tmp/kk-run-suite.log 在 CI 上随 runner 丢弃，不带回则红得
+零诊断信息）。本地验证：绿路径 268/268 exit 0；红路径（floor 临时 269）exit 1
++ 转红名单。
+
+### 登记下一步（棘轮运维，随首个真实 CI run 推进）
+
+- 用例总数漂移从警告升级硬红（worker 崩溃后报告照写、崩溃点靠后时可能带警告
+  假绿；pin 变更随 ratchet.json 同步改 numTotalTests）；
+- ratchet.mjs 套件级 JS 看门狗（spawnSync 原生 timeout，超时 kill + tail 日志——
+  当前 job timeout 直接杀时零输出）；
+- setup 脚本 `--suite-only` 裁剪（棘轮路径不需要 vanilla/xxscreeps 基准构建——
+  isolated-vm 在 npm ci 与 setup 里被编译两次；评审核实 vitest include 只有
+  tests/**、fixture 只加载我们的 dist）与 `.compat` node_modules 缓存（key=pin）——
+  方案 §11 的"setup 2min"估算不成立（isolated-vm 全量重编，首跑预估 8-18min），
+  待首跑实测分步时长后定；
+- flake 策略：floor=268 等于精确当前值，单例偶发红即门禁红——贡献者文档注明
+  "单例红先重跑 job 再归因"或 CI 重试一次；
+- 首跑盯 setup-screeps-ok.sh（node-gyp/webpack 链路首次登 GH Actions）。
