@@ -66,10 +66,16 @@ pub enum TickOutcome {
 
 static SEQ: AtomicU64 = AtomicU64::new(0);
 static LIFO_REGISTRY: LazyLock<Mutex<Vec<u64>>> = LazyLock::new(|| Mutex::new(Vec::new()));
+static LIFO_VIOLATIONS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
+/// 进程内 LIFO 销毁纪律的违规次数（测试断言为零——告警不该被无视）。
 /// 当前进程存活的 Sandbox 数（测试用：全部销毁后应归零）。
 pub fn live_sandbox_count() -> usize {
     LIFO_REGISTRY.lock().unwrap().len()
+}
+
+pub fn lifo_violations() -> usize {
+    LIFO_VIOLATIONS.load(Ordering::SeqCst)
 }
 
 pub struct Sandbox {
@@ -82,8 +88,10 @@ pub struct Sandbox {
     shared: SharedRef,
     /// 配置的堆硬上限（near-heap 触发放大后据此恢复）。
     heap_limit: usize,
-    /// 本 tick 的预算是否已结算（硬中断善后与 end_tick 二选一结算，防双计）。
-    tick_settled: bool,
+    /// 本 tick 是否已硬中断（after_termination 已按整份结算）——end_tick 据此
+    /// 跳过写回（官方：超时打断整个 run 含序列化）。注意与"正常结算完毕"区分：
+    /// 正常 end_tick 之后此标志保持 false，tick 外的 run_expr+end_tick 仍可写回。
+    terminated_this_tick: bool,
     /// 上一次 runLoop 捕获的玩家逻辑错误（run_loop 写入，take_last_loop_error 取走）。
     last_loop_error: Option<String>,
 }
@@ -129,7 +137,7 @@ impl Sandbox {
             ),
             shared,
             heap_limit: config.heap_limit_bytes,
-            tick_settled: false,
+            terminated_this_tick: false,
             last_loop_error: None,
         };
         sb.install_near_heap_callback();
@@ -199,7 +207,7 @@ impl Sandbox {
             TickPlan::SkipPenalty => Ok(TickPlan::SkipPenalty),
             TickPlan::Run { .. } => {
                 // 清除可能遗留的终止标志，然后武装看门狗
-                self.tick_settled = false;
+                self.terminated_this_tick = false;
                 self.runtime.v8_isolate().cancel_terminate_execution();
                 let deadline = Instant::now()
                     + Duration::from_millis(self.budget.tick_limit().max(1.0) as u64);
@@ -256,16 +264,22 @@ impl Sandbox {
     /// 玩家 runtime 错误）| `{ok:false,terminated:true}`（写回阶段被硬中断，已按
     /// 整份 tickLimit 善后结算）。Err 仅剩基础设施级故障。
     pub fn end_tick(&mut self) -> anyhow::Result<serde_json::Value> {
+        // 官方语义：硬超时打断的是**整个 run（含 tick 末序列化）**——被中断的 tick
+        // 不再写回，Memory 保持上一 tick 存档。此前在硬中断后仍执行写回，玩家可经
+        // Memory.toJSON 在无看门狗保护的阶段挂死线程（第六轮评审探针实证）
+        if self.terminated_this_tick {
+            return Ok(serde_json::json!({
+                "ok": false, "terminated": true,
+                "error": "本 tick 已硬中断，按官方语义跳过 Memory 写回",
+            }));
+        }
         // 迟到的看门狗 terminate 标志不得误伤写回（run 恰在 deadline 前完成时）
         self.runtime.v8_isolate().cancel_terminate_execution();
         let exec = self.exec_json("globalThis.__kk.endTick()");
         match exec {
             Ok(v) => {
                 self.watchdog.disarm();
-                if !self.tick_settled {
-                    self.budget.settle(self.cpu_used_ms()); // 含写回耗时（官方口径）
-                    self.tick_settled = true;
-                }
+                self.budget.settle(self.cpu_used_ms()); // 含写回耗时（官方口径）
                 *self.shared.tick_start.lock().unwrap() = None;
                 Ok(v)
             }
@@ -299,9 +313,9 @@ impl Sandbox {
     fn after_termination(&mut self) {
         self.watchdog.disarm();
         self.runtime.v8_isolate().cancel_terminate_execution();
-        if !self.tick_settled {
+        if !self.terminated_this_tick {
             self.budget.settle_terminated();
-            self.tick_settled = true;
+            self.terminated_this_tick = true;
         }
         self.restore_heap_limit();
         *self.shared.tick_start.lock().unwrap() = None;
@@ -387,6 +401,7 @@ impl Drop for Sandbox {
                 self.seq,
                 registry.last()
             );
+            LIFO_VIOLATIONS.fetch_add(1, Ordering::SeqCst);
             registry.retain(|s| *s != self.seq);
         } else {
             registry.pop();

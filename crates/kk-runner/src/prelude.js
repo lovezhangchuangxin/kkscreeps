@@ -409,34 +409,39 @@
       }
       if (parsedMemory === null || typeof parsedMemory !== 'object') parsedMemory = {};
     }
-    // 官方 game.js:492-495：首次访问后把自己重定义为普通可写值属性——
-    // `Memory = {...}` 在官方合法（解析失败保持 null 的语义是已登记的 M2 差异项）
+    // 官方 game.js:492-495：首次访问后把自己重定义为值属性——注意官方**没有**
+    // 写 writable（默认 false）：Memory 首访后是只读的，`Memory = {...}` 官方会
+    // 静默失败（严格模式抛错）。对齐官方描述符，不自行放宽
     Object.defineProperty(globalThis, 'Memory', {
       configurable: true,
       enumerable: true,
-      writable: true,
       value: parsedMemory,
     });
     return parsedMemory;
   }
   function writeBackMemory() {
     // 返回 {ok} | {ok:false,error}：screeps-ok 契约（adapter-spec:229）把 tick 末
-    // 序列化失败归为 runPlayer 的 runtime 错误——不能只在 console 里报完就算成功
+    // 序列化失败归为 runPlayer 的 runtime 错误——不能只在 console 里报完就算成功。
+    // 玩家侧写回错误（不可序列化 / Memory.toJSON 返回非字符串等）一律走这里，
+    // 绝不抛出——抛出会被宿主误判为硬中断并按整份 tickLimit 计费
     if (parsedMemory === undefined) return { ok: true };
-    let s;
     try {
-      s = JSON.stringify(parsedMemory);
+      const s = JSON.stringify(parsedMemory);
+      if (typeof s !== 'string') {
+        // Memory.toJSON 返回非字符串时 stringify 得 undefined——玩家侧写回失败
+        console.error('Memory 写回失败（toJSON 返回非字符串），保留上一 tick 存档');
+        return { ok: false, error: 'Memory.toJSON 返回了非字符串' };
+      }
+      if (s.length > RAW_MEMORY_LIMIT) {
+        console.error('Memory 写回超过 2MB 上限，保留上一 tick 存档');
+        return { ok: false, error: 'Memory 写回超过 2MB 上限' };
+      }
+      rawMemoryData = s;
+      return { ok: true };
     } catch (e) {
-      // 玩家侧错误（Memory.big = 1n / 循环引用等）：跳过写回、保留上一 tick 存档
       console.error('Memory 写回失败（不可序列化），保留上一 tick 存档: ' + (e && e.message));
       return { ok: false, error: 'Memory 不可序列化: ' + (e && e.message) };
     }
-    if (s.length > RAW_MEMORY_LIMIT) {
-      console.error('Memory 写回超过 2MB 上限，保留上一 tick 存档');
-      return { ok: false, error: 'Memory 写回超过 2MB 上限' };
-    }
-    rawMemoryData = s;
-    return { ok: true };
   }
   // Memory 作为懒 getter（官方语义：访问才解析）
   Object.defineProperty(globalThis, 'Memory', {
@@ -531,7 +536,8 @@
     let x = from.x, y = from.y;
     const roomName = from.roomName;
     let guard = 0;
-    positions.push(new RoomPosition(x, y, roomName));
+    // 官方 pf.cc:574：回溯在 pos == origin 处停止——path **不含起点**（bot 生态
+    // 依赖此语义，tooangel 甚至自行 splice 把起点插回头部）；同起终点 → 空路径
     while ((x !== to.x || y !== to.y) && guard++ < 100) {
       x += Math.sign(to.x - x);
       y += Math.sign(to.y - y);
@@ -550,7 +556,7 @@
         origin.pos ? origin.pos : origin,
         { x: to.x, y: to.y },
       );
-      return { path, ops: 0, cost: path.length - 1, incomplete: false };
+      return { path, ops: 0, cost: path.length, incomplete: false };
     },
   };
   globalThis.PathFinder = PathFinder;
@@ -1087,32 +1093,41 @@
         return JSON.stringify(out);
       }
       if (v === undefined) {
-        out = { ok: true, value: null };
-      } else {
+        return JSON.stringify({ ok: true, value: null });
+      }
+      try {
         // 活游戏对象检测，逐条对齐 vanilla 参照实现（buildConsoleCommand）：
         //  function/symbol → serialization；非数组对象且 constructor 不是
-        //  Object/undefined（引擎类实例，如 RoomPosition/Creep/Room）→ serialization
+        //  Object/undefined（引擎类实例，如 RoomPosition/Creep/Room）→ serialization。
+        // 检测代码自身抛错（如 constructor 为 null 的病态对象）不得逃逸——逃逸会被
+        // 宿主误判为硬中断并错误计费；vanilla 的 wrapper 同样整体 catch
         let serErr = null;
         if (typeof v === 'function' || typeof v === 'symbol') {
           serErr = 'Return value is a ' + typeof v + ', not a plain JSON value';
         } else if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
           const ctor = v.constructor;
           if (ctor !== Object && ctor !== undefined) {
-            serErr = 'Return value is a ' + (ctor.name || 'non-plain') + ' object, not a plain JSON value';
-          }
-        }
-        if (serErr === null) {
-          try {
-            out = { ok: true, value: JSON.parse(JSON.stringify(v)) };
-          } catch (e) {
-            serErr = 'Return value is not JSON-serializable: ' + (e && e.message);
+            const ctorName = (ctor && typeof ctor === 'object' && ctor.name) || 'non-plain';
+            serErr = 'Return value is a ' + ctorName + ' object, not a plain JSON value';
           }
         }
         if (serErr !== null) {
-          out = { ok: false, kind: 'serialization', error: serErr };
+          return JSON.stringify({ ok: false, kind: 'serialization', error: serErr });
         }
+        // 循环引用等 stringify 失败 → serialization（区别于检测代码自身抛错 → runtime）
+        let json;
+        try {
+          json = JSON.stringify(v);
+        } catch (e) {
+          return JSON.stringify({
+            ok: false, kind: 'serialization',
+            error: 'Return value is not JSON-serializable: ' + (e && e.message),
+          });
+        }
+        return JSON.stringify({ ok: true, value: JSON.parse(json) });
+      } catch (e) {
+        return JSON.stringify({ ok: false, kind: 'runtime', error: String((e && e.message) || e) });
       }
-      return JSON.stringify(out);
     },
     /** tick 末：Memory 写回 RawMemory。返回 JSON 字符串（宿主 exec_json 约定）：
      *  {ok:true} | {ok:false,error}——写回失败按契约归为玩家 runtime 错误。 */

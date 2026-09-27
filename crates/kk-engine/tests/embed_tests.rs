@@ -5,7 +5,15 @@ use serde_json::json;
 use kk_engine::EmbedEngine;
 
 #[test]
-fn embed_engine_roundtrip() -> anyhow::Result<()> {
+fn embed_engine_suite() -> anyhow::Result<()> {
+    // 两个场景必须串行（同进程多 isolate 的 LIFO 销毁纪律；并行会互相干扰销毁顺序）
+    embed_engine_roundtrip_impl()?;
+    embed_run_player_contract_impl()?;
+    assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");
+    Ok(())
+}
+
+fn embed_engine_roundtrip_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
 
     e.create_shard(&json!({
@@ -88,8 +96,7 @@ fn embed_engine_roundtrip() -> anyhow::Result<()> {
 /// ① Memory 不可序列化 → tick 末失败归 runtime 而非成功（adapter-spec:229）；
 /// ② 已开始执行后硬中断 → runtime（executed=true）；
 /// ③ 活对象返回值 → serialization（vanilla 的 constructor 检测口径）。
-#[test]
-fn embed_run_player_contract_classification() -> anyhow::Result<()> {
+fn embed_run_player_contract_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
         "players": ["p1"],
@@ -118,25 +125,26 @@ fn embed_run_player_contract_classification() -> anyhow::Result<()> {
     let run = e.run_player("p1", "new RoomPosition(1,2,'W1N1')")?;
     assert_eq!(run.expr["kind"], "serialization", "活对象 → serialization");
 
-    // ④ placeStructure 摆 spawn 可见（内部类别归一）
+    // ④ placeStructure 摆 spawn 可见（内部类别归一 + 无名输入生成稳定名称——
+    //    上游 StructureSpec 没有 name 字段，无名是契约合法形态）
     let id = e.place_object(
         "W1N1",
         "structure",
-        &json!({ "pos": [20, 20], "structureType": "spawn", "name": "Spawn9", "owner": "p1" }),
+        &json!({ "pos": [20, 20], "structureType": "spawn", "owner": "p1" }),
     )?;
     let id_json = serde_json::to_string(&id)?;
     let code = format!(
-        "[Object.keys(Game.spawns).join(','), \
+        "[Object.keys(Game.spawns).length, \
+         typeof Game.spawns[Object.keys(Game.spawns)[0]].name, \
          Game.rooms['W1N1'].find(FIND_MY_SPAWNS).length, \
          Game.getObjectById({id_json}) instanceof StructureSpawn]"
     );
     let run = e.run_player("p1", &code)?;
-    assert_eq!(
-        run.expr["value"],
-        json!(["Spawn9", 1, true]),
-        "spawn 经 placeStructure 摆放后可见且 instanceof 成立: {:?}",
-        run.expr
-    );
+    let v = &run.expr["value"];
+    assert_eq!(v[0], 1, "spawn 可见: {v:?}");
+    assert_eq!(v[1], "string", "无名 spawn 生成了稳定名称: {v:?}");
+    assert_eq!(v[2], 1, "FIND_MY_SPAWNS: {v:?}");
+    assert_eq!(v[3], true, "instanceof StructureSpawn: {v:?}");
     e.teardown();
     Ok(())
 }

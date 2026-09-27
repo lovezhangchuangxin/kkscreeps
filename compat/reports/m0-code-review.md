@@ -311,3 +311,22 @@ M0/M1 的真实边界（地形编解码属 kk-core，M1 交付）。宿主稳定
 room.getTerrain()/Terrain 对象与 lookFor(LOOK_TERRAIN)（tooangel 布局阶段的
 真正依赖）、serializePath/deserializePath 的真实编解码、store.getCapacity 的
 数值语义、findPath 的步进对象内容。测试：stub_value_shapes 新增 8 项断言全绿。
+
+---
+
+## 追记：第六轮评审（外部 GPT 复审 HEAD fb38acc）
+
+7 条发现逐条复核，全部属实（含对我方第四/五轮修复的两个纠偏），全部修复：
+
+| 发现 | 复核与处置 |
+|---|---|
+| [high] 硬中断后仍执行写回，玩家可经 Memory.toJSON 挂死线程（探针实证 3s+ 无响应） | 属实——第四轮修复只覆盖了"未中断"路径。按官方语义修复：硬超时打断的是整个 run（含序列化），被中断的 tick **跳过写回**（Memory 保持上一 tick）；以专门的 terminated_this_tick 标志判定（修复过程中发现初版误用"已结算"标志会破坏 tick 外写回，已纠正）。GPT 探针复现：即时返回 runtime、进程存活 |
+| [high] Memory 固化描述符 writable:true 与官方不符 | 属实——官方 defineProperty 无 writable（默认 false，首访后只读）。我方第五轮想当然写成了可写。已对齐官方（整体赋值静默失败），测试含跨 tick 断言 |
+| [high] 返回值检测自身抛错（constructor:null）被误判硬中断并按整份计费 | 属实。检测整体 try/catch 防护 + ctor 空值守卫；病态对象按规范字面归 serialization（constructor ∉ {Object, undefined}），不再触发硬中断结算 |
+| [high] placeStructure 无名 spawn 产生 Game.spawns["undefined"] | 属实（上游 StructureSpec 无 name 字段）。按归一化后的记录 type 生成稳定名称（Spawn_N / creep_N）；测试改用无名契约输入 |
+| [medium] PathFinder.search 的 path 含起点 | 属实（官方 pf.cc:574 回溯在 origin 停止；tooangel 甚至自行 splice 起点回头部——反证官方语义）。去掉起点，同点→空路径，测试锁定 |
+| [medium] Memory.toJSON 返回非字符串被报"写回阶段硬中断"+整份计费 | 属实。writeBackMemory 整体防护：玩家侧写回错误一律 {ok:false}（含 toJSON 非字符串显式分支），绝不抛出 |
+| [medium] embed_tests 两个 #[test] 并行违反 LIFO 纪律且告警不失败 | 属实（实测 12 次中 4 次告警仍全绿）。合并为串行套件 + 新增 lifo_violations() 计数并在两套件断言零违规 |
+
+验证：全套 cargo test（21 组）与 pnpm run check 绿；GPT 挂死探针复现通过（即时返回、
+进程存活）；tooangel 2000 tick 与 wasm-bot 复验稳定（零中断、缺失清单零）。

@@ -15,4 +15,4 @@ pub use budget::{Bucket, TickPlan};
 pub use modules::{ModuleCode, ModuleKind, ModuleTable};
 pub use ops::LogLine;
 pub use proto::{EvalReport, PlayerThreads, TickReport};
-pub use sandbox::{Sandbox, SandboxConfig, TickOutcome, live_sandbox_count};
+pub use sandbox::{Sandbox, SandboxConfig, TickOutcome, lifo_violations, live_sandbox_count};

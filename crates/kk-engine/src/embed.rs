@@ -186,9 +186,17 @@ impl EmbedEngine {
         {
             obj.insert("structureType".into(), json!(st));
         }
-        // creep 无名时生成一个（prelude 按 name 建索引）
-        if kind == "creep" && !obj.contains_key("name") {
-            let name = format!("creep_{}", self.world.objects.len());
+        // creep/spawn 无名时生成稳定名称（prelude 按 name 建索引；官方两者必有名字。
+        // 上游 StructureSpec/CreepSpec 均无 name 字段——无名输入是契约合法形态）。
+        // 按归一化后的记录 type 判定（placeStructure 的 spawn 已在上文改写 type）
+        let record_type = obj.get("type").and_then(Value::as_str).unwrap_or(kind);
+        if matches!(record_type, "creep" | "spawn") && !obj.contains_key("name") {
+            let prefix = if record_type == "creep" {
+                "creep"
+            } else {
+                "Spawn"
+            };
+            let name = format!("{prefix}_{}", self.world.objects.len());
             obj.insert("name".into(), json!(name));
         }
         Ok(self.world.place(record))

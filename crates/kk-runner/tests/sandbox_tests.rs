@@ -64,6 +64,7 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     watchdog_late_expiry_does_not_kill_next_tick()?;
     memory_gate_terminates_and_reuses()?;
     lifo_registry_drains()?;
+    assert_eq!(kk_runner::lifo_violations(), 0, "全流程 LIFO 纪律零违规");
     memory_alias_setters()?;
     roomposition_official_semantics()?;
     writeback_watchdog_and_contract()?;
@@ -85,10 +86,17 @@ fn stub_value_shapes() -> anyhow::Result<()> {
     let v = sb.run_expr("(() => { const rv = new RoomVisual('W1N1'); return rv.circle(1,2).line(0,0,2,2) === rv; })()")?;
     assert_eq!(v["value"], true, "RoomVisual 链式调用");
 
-    // Memory 整体赋值合法（官方：首访后固化为普通可写属性）
+    // Memory 整体赋值：官方描述符无 writable（game.js:492-495）——首访后只读，
+    // sloppy 下静默失败、Memory 保持原对象（GPT 第六轮纠偏，跨 tick 也不变）
     let v = sb
         .run_expr("(() => { void Memory.fresh; Memory = { fresh: 1 }; return Memory.fresh; })()")?;
-    assert_eq!(v["value"], 1, "Memory 整体赋值（官方固化语义）");
+    assert_eq!(
+        v["value"],
+        serde_json::Value::Null,
+        "整体赋值被官方语义忽略"
+    );
+    let v = sb.run_expr("Memory.fresh")?;
+    assert_eq!(v["value"], serde_json::Value::Null, "Memory 保持原对象");
 
     // 无地形数据的世界：getTerrainAt → undefined（官方对缺失地形的行为）
     let v = sb.run_expr("typeof Game.map.getTerrainAt(5,5,'W1N1')")?;
@@ -115,6 +123,43 @@ fn stub_value_shapes() -> anyhow::Result<()> {
     assert_eq!(v["value"], "swamp");
     let v = sb.run_expr("Game.map.getTerrainAt(5,5,'W1N1')")?;
     assert_eq!(v["value"], "plain");
+
+    // PathFinder：官方 path 不含起点（pf.cc:574 回溯在 origin 停止）；同点 → 空
+    let v = sb.run_expr("JSON.stringify(PathFinder.search(new RoomPosition(1,1,'W1N1'), new RoomPosition(3,3,'W1N1')).path.map(p => [p.x, p.y]))")?;
+    assert_eq!(v["value"], "[[2,2],[3,3]]", "path 不含起点: {:?}", v);
+    let v = sb.run_expr(
+        "PathFinder.search(new RoomPosition(5,5,'W1N1'), new RoomPosition(5,5,'W1N1')).path.length",
+    )?;
+    assert_eq!(v["value"], 0, "同起终点 → 空路径");
+    let v = sb.run_expr(
+        "PathFinder.search(new RoomPosition(1,1,'W1N1'), new RoomPosition(2,1,'W1N1')).path.length",
+    )?;
+    assert_eq!(v["value"], 1, "一步路径恰一个位置");
+
+    // runExpr 返回值检测遇病态对象（constructor:null）不崩、不误判硬中断：
+    // 按规范字面归 serialization（constructor ∉ {Object, undefined}），且绝不触发
+    // 整份 tickLimit 计费（第六轮评审修复的核心是误判硬中断+错误计费）
+    let v = sb.run_expr("({constructor: null, x: 1})")?;
+    assert_eq!(v["ok"], false, "病态对象: {v:?}");
+    assert_eq!(
+        v["kind"], "serialization",
+        "检测防护生效（不逃逸、不误判硬中断）"
+    );
+    assert!(
+        sb.bucket() > 9_600.0,
+        "未被错误按整份 tickLimit 计费: {}",
+        sb.bucket()
+    );
+
+    // Memory.toJSON 返回非字符串 → 玩家侧写回失败（非"写回阶段硬中断"）
+    sb.run_expr("Memory.toJSON = () => undefined; 1")?;
+    let wb = sb.end_tick()?;
+    assert_eq!(wb["ok"], false, "写回失败: {wb}");
+    assert_eq!(
+        wb.get("terminated").and_then(serde_json::Value::as_bool),
+        None,
+        "不是硬中断: {wb}"
+    );
     Ok(())
 }
 
