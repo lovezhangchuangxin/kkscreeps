@@ -12,3 +12,4 @@ kk-world = { workspace = true }
 kk-runner = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+anyhow = { workspace = true }

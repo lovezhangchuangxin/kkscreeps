@@ -5,6 +5,9 @@
 
 use clap::{Parser, Subcommand};
 
+mod bot_check;
+mod embed_main;
+
 #[derive(Parser)]
 #[command(name = "kkscreeps", about = "Screeps 服务端的 Rust 重写版", version)]
 struct Cli {
@@ -46,12 +49,10 @@ fn main() {
             std::process::exit(2);
         }
         Command::Embed => {
-            eprintln!("`kkscreeps embed` 将在 M0 的嵌入式 API 工作流（WS5）中实装");
-            std::process::exit(2);
+            std::process::exit(crate::embed_main::run());
         }
-        Command::BotCheck { .. } => {
-            eprintln!("`kkscreeps bot-check` 将在 M0 的 bot 验收工作流（WS6）中实装");
-            std::process::exit(2);
+        Command::BotCheck { path, ticks, report } => {
+            std::process::exit(bot_check::run(&path, ticks, &report));
         }
     }
 }

@@ -2,5 +2,16 @@
   "name": "@kkscreeps/compat",
   "version": "0.0.0",
   "private": true,
-  "description": "兼容性验收：screeps-ok 适配器（sidecar JSON-RPC 客户端）与 bot 环境验收工具。M0 实装。"
+  "description": "兼容性验收：screeps-ok 适配器（sidecar JSON-RPC 客户端）与 bot 环境验收工具。",
+  "type": "module",
+  "main": "dist/adapter.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && cp src/parity.json dist/parity.json",
+    "test": "pnpm run build && node --test",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
 }

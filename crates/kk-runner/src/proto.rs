@@ -32,6 +32,15 @@ pub struct TickReport {
     pub bucket_after: f64,
 }
 
+/// 一次"玩家代码求值 tick"的报告（screeps-ok runPlayer 通道）。
+#[derive(Debug)]
+pub struct EvalReport {
+    /// runExpr 的结果 JSON：`{ok, value?} | {ok:false, kind, error}`。
+    pub expr: Value,
+    pub console: Vec<LogLine>,
+    pub bucket_after: f64,
+}
+
 enum Cmd {
     SetModules(ModuleTable, mpsc::Sender<anyhow::Result<()>>),
     Tick {
@@ -41,6 +50,13 @@ enum Cmd {
     RunExpr {
         code: String,
         ack: mpsc::Sender<anyhow::Result<Value>>,
+    },
+    /// 一条原子指令：begin_tick（世界注入）→ run_expr（求值玩家代码）→ end_tick。
+    /// screeps-ok 的 runPlayer 语义（"恰好推进 1 tick"）靠它保证。
+    RunPlayer {
+        world: Value,
+        code: String,
+        ack: mpsc::Sender<anyhow::Result<EvalReport>>,
     },
     Shutdown,
 }
@@ -98,6 +114,9 @@ impl PlayerThreads {
                         }
                         Cmd::RunExpr { code, ack } => {
                             let _ = ack.send(sandbox.run_expr(&code));
+                        }
+                        Cmd::RunPlayer { world, code, ack } => {
+                            let _ = ack.send(run_eval_tick(&mut sandbox, &world, &code));
                         }
                         Cmd::Shutdown => break,
                     }
@@ -183,6 +202,20 @@ impl PlayerThreads {
             .map_err(|_| anyhow::anyhow!("玩家 {id} 线程无响应"))?
     }
 
+    /// 原子"求值 tick"：begin→run_expr→end（screeps-ok runPlayer 通道）。
+    pub fn run_player(&mut self, id: u64, world: &Value, code: &str) -> anyhow::Result<EvalReport> {
+        let p = self.player_mut(id)?;
+        let (ack_tx, ack_rx) = mpsc::channel();
+        p.send(Cmd::RunPlayer {
+            world: world.clone(),
+            code: code.to_string(),
+            ack: ack_tx,
+        });
+        ack_rx
+            .recv()
+            .map_err(|_| anyhow::anyhow!("玩家 {id} 线程无响应"))?
+    }
+
     /// 逐出空闲超过 `idle` 的玩家（逆序从栈顶弹出，保持 LIFO）。
     /// 返回被逐出的玩家 id 列表。官方语义：V8 实例 3 分钟空闲销毁，线程按需重建。
     pub fn evict_idle(&mut self, idle: Duration) -> Vec<u64> {
@@ -256,6 +289,30 @@ fn run_one_tick(sandbox: &mut Sandbox, world: &Value) -> anyhow::Result<TickRepo
                 console: sandbox.drain_console(),
                 missing_api: sandbox.drain_missing_api().unwrap_or(serde_json::json!({})),
                 stub_calls: sandbox.drain_stub_calls().unwrap_or(serde_json::json!({})),
+                bucket_after: sandbox.bucket(),
+            })
+        }
+    }
+}
+
+/// runPlayer 通道：世界注入 → 表达式求值（真实沙箱）→ Memory 写回与结算。
+/// 跳帧惩罚时表达式不执行，返回硬中断分类（与"代码真的被执行过"契约一致：
+/// 由调用方把"未执行"视作适配器错误而非玩家返回值）。
+fn run_eval_tick(sandbox: &mut Sandbox, world: &Value, code: &str) -> anyhow::Result<EvalReport> {
+    match sandbox.begin_tick(world)? {
+        TickPlan::SkipPenalty => Ok(EvalReport {
+            expr: serde_json::json!({
+                "ok": false, "kind": "terminated", "error": "本 tick 被跳帧惩罚（上一 tick 硬中断）",
+            }),
+            console: sandbox.drain_console(),
+            bucket_after: sandbox.bucket(),
+        }),
+        TickPlan::Run { .. } => {
+            let expr = sandbox.run_expr(code)?;
+            sandbox.end_tick(sandbox.cpu_used_ms().min(sandbox.tick_limit()))?;
+            Ok(EvalReport {
+                expr,
+                console: sandbox.drain_console(),
                 bucket_after: sandbox.bucket(),
             })
         }

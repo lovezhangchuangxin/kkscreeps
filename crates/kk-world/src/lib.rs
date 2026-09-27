@@ -2,3 +2,7 @@
 //!
 //! M0 阶段提供一个"哑世界"（`dumb` 模块）：只有对象存取与时间计数，没有任何游戏规则，
 //! 服务于 screeps-ok 适配器与 bot 桩环境验收。真正的世界模型从 M1 起构建。
+
+pub mod dumb;
+
+pub use dumb::DumbWorld;

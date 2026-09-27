@@ -630,14 +630,17 @@
           if (o.room !== name) continue;
           const w = objectsById.get(o.id);
           if (!w) continue;
+          const isStruct = o.type === 'structure' || o.type === 'spawn';
           if (type === 101 /* FIND_CREEPS */ && o.type === 'creep') out.push(w);
           else if (type === 102 /* FIND_MY_CREEPS */ && o.type === 'creep') out.push(w);
-          else if (type === 105 /* FIND_SOURCES */ && o.type === 'structure' && o.structureType === 'source') out.push(w);
-          else if (type === 106 /* FIND_MINERALS */ && o.type === 'structure' && o.structureType === 'mineral') out.push(w);
-          else if (type === 107 /* FIND_STRUCTURES */ && (o.type === 'structure' || o.type === 'spawn')) out.push(w);
-          else if (type === 111 /* FIND_FLAGS */ && o.type === 'flag') out.push(w);
-          else if (type === 112 /* FIND_CONSTRUCTION_SITES */ && o.type === 'constructionSite') out.push(w);
-          else if (type === 113 /* FIND_DROPPED_RESOURCES */ && o.type === 'resource') out.push(w);
+          else if ((type === 104 /* FIND_SOURCES_ACTIVE */ || type === 105 /* FIND_SOURCES */) && o.type === 'structure' && o.structureType === 'source') out.push(w);
+          else if (type === 106 /* FIND_DROPPED_RESOURCES */ && o.type === 'resource') out.push(w);
+          else if (type === 107 /* FIND_STRUCTURES */ && isStruct) out.push(w);
+          else if (type === 108 /* FIND_MY_STRUCTURES */ && isStruct) out.push(w);
+          else if (type === 110 /* FIND_FLAGS */ && o.type === 'flag') out.push(w);
+          else if (type === 111 /* FIND_CONSTRUCTION_SITES */ && o.type === 'constructionSite') out.push(w);
+          else if (type === 112 /* FIND_MY_SPAWNS */ && o.type === 'spawn') out.push(w);
+          else if (type === 116 /* FIND_MINERALS */ && o.type === 'structure' && o.structureType === 'mineral') out.push(w);
         }
         return out;
       };
@@ -740,6 +743,8 @@
           out = { ok: false, kind: 'runtime', error: "main 模块未导出 loop()" };
         }
       } catch (e) {
+        // 官方行为：未捕获的玩家错误打进 console（bot-check 据此采集每 tick 错误流）
+        console.error(String((e && e.stack) || e));
         out = { ok: false, kind: 'runtime', error: String((e && e.stack) || e) };
       }
       try {

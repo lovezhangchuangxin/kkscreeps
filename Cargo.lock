@@ -892,6 +892,7 @@ version = "0.1.0"
 name = "kk-cli"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "clap",
  "kk-engine",
  "kk-runner",
@@ -908,6 +909,7 @@ version = "0.1.0"
 name = "kk-engine"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "kk-runner",
  "kk-world",
  "serde",
@@ -943,6 +945,7 @@ name = "kk-world"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "serde_json",
 ]
 
 [[package]]
