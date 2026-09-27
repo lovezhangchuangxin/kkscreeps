@@ -904,6 +904,9 @@ dependencies = [
 [[package]]
 name = "kk-core"
 version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
 
 [[package]]
 name = "kk-engine"
@@ -935,6 +938,9 @@ dependencies = [
 [[package]]
 name = "kk-schema"
 version = "0.1.0"
+dependencies = [
+ "paste",
+]
 
 [[package]]
 name = "kk-storage"

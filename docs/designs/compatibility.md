@@ -37,6 +37,10 @@
 | Game 全局可写性（M0 桩环境） | M0 用 getter-only defineProperty（每 tick 重挂新实例）；官方 `globals.Game = makeGameObject(...)` 为普通可写属性、玩家可覆盖 | 极端边缘（无 bot 覆盖 Game）；M2 玩家 API 层按官方形态重挂 |
 | `Game.structures` 收录范围（M0 桩环境） | M0 桩收录全部结构；官方只收自家 owned 结构（含 spawn、自家 controller），source/mineral/road/wall/container 不入 | M2 玩家 API 层对齐官方 game.js:298-339 的分册逻辑 |
 | 验收仪表/宿主 tick 通道的防篡改深度（M0 桩环境） | `__kk` 已整体 freeze（防属性覆盖）；玩家直接调用 `drainMissing()` 抢先清空仪表的深层防御未做 | 根治需宿主侧闭包/独立 op，归 M2 玩家 API 层重写范围 |
+| 房间名解析强度（kk-core RoomName） | **强类型构造即校验**：方向位非法/符号消费错位/Unicode 数字一律 Err；官方 roomNameToXY（utils.js:374-392）对方向位只判 W/w 与 N/n、其余一律当 E/S（"X1N1"→[1,-2]、"E1X1"→[1,1]、"W-100N5"→[99,0] 静默别名到其他房间），parseInt 还认 Unicode 数字 | 官方这些形态得到"合法但错误"的坐标；我们不产出静默别名坐标。embed 边界吃外部房间名时该差异玩家可见（screeps-ok 用例若依赖官方宽松态会显形） |
+| creep TTL 死亡的产物（M1 引擎） | **资源直接掉地为 energy 对象，不产 tombstone**；官方 _die.js:16-33 产 tombstone 承接全部资源与 body 造价回收 | M1 范围无 tombstone 变体（kk-schema v1）；M2 加 tombstone 变体走 schema 版本升级。M1 内资源守恒语义一致（总量不变），缺的是墓碑对象与 decay 链 |
+| flag 的存储位置（M1 引擎） | flag 折进 RoomObject 变体（tag 8）；官方 flag 是独立集合（processor.js:22 bulkFlags，不参与 roomObjects 循环与结算） | M1 单房间结算 flag 无规则行为差异；投影层（world_json → prelude）输出官方形状即可 |
+| 地形输入校验强度（kk-core Terrain） | 长度≠2500、未知位（& !0b111）、数字串形态的 '8'/'9' 一律 Err；官方 checkTerrain 对字符串形态照单全收（'9' 判为 wall） | 正确性-7/8 的清偿方向：非法输入前置拒绝而非静默截短/误读；官方吃 '9' 是无校验不是语义 |
 
 ## 四、验收关卡（不做完不算兼容）
 

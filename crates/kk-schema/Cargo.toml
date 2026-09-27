@@ -8,3 +8,4 @@ edition.workspace = true
 workspace = true
 
 [dependencies]
+paste.workspace = true
