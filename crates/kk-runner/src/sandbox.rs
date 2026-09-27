@@ -267,8 +267,8 @@ impl Sandbox {
     /// 整份 tickLimit 善后结算）。Err 仅剩基础设施级故障。
     pub fn end_tick(&mut self) -> anyhow::Result<serde_json::Value> {
         // 官方语义：硬超时打断的是**整个 run（含 tick 末序列化）**——被中断的 tick
-        // 不再写回，Memory 保持上一 tick 存档。此前在硬中断后仍执行写回，玩家可经
-        // Memory.toJSON 在无看门狗保护的阶段挂死线程（第六轮评审探针实证）
+        // 不再写回，Memory 保持上一 tick 存档。硬中断后仍执行写回的话，玩家可经
+        // Memory.toJSON 在无看门狗保护的阶段挂死线程
         if self.terminated_this_tick {
             return Ok(serde_json::json!({
                 "ok": false, "terminated": true,
@@ -277,11 +277,10 @@ impl Sandbox {
         }
         // 迟到的看门狗 terminate 标志不得误伤写回（run 恰在 deadline 前完成时）——
         // 但 cancel 清掉的是**唯一**的超时信号：若该代 terminate 已投递（fired 已
-        // 记录、同代不再重投），随后挂死的写回将没有第二次终止机会（第八轮评审
-        // 指出的交界竞态）。因此 cancel 后**重新武装到本 tick 的原 deadline**（由
-        // tick_start 重算，与 begin_tick 无漂移）：正常写回不受影响（旧标志已清），
-        // 写回挂死由新代兜底——第三轮的"防误伤"与第六轮的"写回在武装窗口内"
-        // 两个语义不再矛盾
+        // 记录、同代不再重投），随后挂死的写回将没有第二次终止机会。因此 cancel
+        // 后**重新武装到本 tick 的原 deadline**（由 tick_start 重算，与 begin_tick
+        // 无漂移）：正常写回不受影响（旧标志已清），写回挂死由新代兜底——cancel
+        // 的"防误伤"与"写回保持在武装窗口内"两个约束不再矛盾
         self.runtime.v8_isolate().cancel_terminate_execution();
         if let Some(t0) = *self.shared.tick_start.lock().unwrap() {
             let deadline = t0 + Duration::from_millis(self.budget.tick_limit().max(1.0) as u64);

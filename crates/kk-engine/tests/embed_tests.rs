@@ -125,7 +125,7 @@ fn embed_engine_roundtrip_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// runPlayer 契约分类（第四轮评审修复的验证）：
+/// runPlayer 契约分类：
 /// ① Memory 不可序列化 → tick 末失败归 runtime 而非成功（adapter-spec:229）；
 /// ② 已开始执行后硬中断 → runtime（executed=true）；
 /// ③ 活对象返回值 → serialization（vanilla 的 constructor 检测口径）。

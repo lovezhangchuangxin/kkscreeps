@@ -71,12 +71,12 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     official_string_and_error_shapes()?;
     run_loop_without_loop_silent()?;
     writeback_rearmed_after_cancel()?;
-    // LIFO 零违规断言在**全部**场景之后——中段断言会让后半段场景的违规漏网（第八轮）
+    // LIFO 零违规断言在**全部**场景之后——中段断言会让其后场景的违规漏网
     assert_eq!(kk_runner::lifo_violations(), 0, "全流程 LIFO 纪律零违规");
     Ok(())
 }
 
-/// 第八轮交界竞态的确定性复现：run 成功后、写回前，terminate 已投递（看门狗
+/// 写回前交界竞态的确定性复现：run 成功后、写回前，terminate 已投递（看门狗
 /// 同代只投一次，不会再 terminate）——end_tick 的 cancel 清掉这个唯一信号后，
 /// 挂死的写回必须由重新武装的新代兜底掐断（否则线程永久挂死）。
 fn writeback_rearmed_after_cancel() -> anyhow::Result<()> {
@@ -111,8 +111,8 @@ fn writeback_rearmed_after_cancel() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// 第七轮修复的验证：官方 toString 家族（bot 日志拼接的事实标准）、Buffer toJSON
-/// 与负 length 边缘（Node 对照）、require 错误消息官方形态。
+/// 官方形态回归锁定：toString 家族（bot 日志拼接的事实标准）、Buffer toJSON 与
+/// 负 length 边缘（Node 对照）、require 错误消息。
 fn official_string_and_error_shapes() -> anyhow::Result<()> {
     let mut sb = Sandbox::new(SandboxConfig::default())?;
     let mut table = ModuleTable::new();
@@ -160,8 +160,8 @@ fn official_string_and_error_shapes() -> anyhow::Result<()> {
     let v = sb.run_expr("(() => { try { require('nope_mod'); return 'no-throw'; } catch (e) { return e.message; } })()")?;
     assert_eq!(v["value"], "Unknown module 'nope_mod'", "官方错误消息形态");
 
-    // toJSON 返回非字符串：失败在返回值序列化阶段 → serialization（第八轮；
-    // 此前漏到 JSON.parse 被 "not valid JSON" 误报 runtime）
+    // toJSON 返回非字符串：失败在返回值序列化阶段 → serialization（回归锁定：
+    // 曾漏到 JSON.parse 被 "not valid JSON" 误报 runtime）
     let v = sb.run_expr("({toJSON(){return undefined}})")?;
     assert_eq!(v["ok"], false, "toJSON 产物非字符串: {v:?}");
     assert_eq!(
@@ -213,7 +213,7 @@ fn run_loop_without_loop_silent() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// 桩返回值形态抽查（第五轮同类问题修复的验证）：
+/// 桩返回值形态抽查：
 /// RoomVisual 链式返回 this、Memory 首访后可整体赋值（官方 game.js:492-495）、
 /// getTerrainAt 官方词汇表与边界语义（map.js:235-258）。
 fn stub_value_shapes() -> anyhow::Result<()> {
@@ -228,7 +228,7 @@ fn stub_value_shapes() -> anyhow::Result<()> {
     assert_eq!(v["value"], true, "RoomVisual 链式调用");
 
     // Memory 整体赋值：官方描述符无 writable（game.js:492-495）——首访后只读，
-    // sloppy 下静默失败、Memory 保持原对象（GPT 第六轮纠偏，跨 tick 也不变）
+    // sloppy 下静默失败、Memory 保持原对象（跨 tick 也不变）
     let v = sb
         .run_expr("(() => { void Memory.fresh; Memory = { fresh: 1 }; return Memory.fresh; })()")?;
     assert_eq!(
@@ -279,7 +279,7 @@ fn stub_value_shapes() -> anyhow::Result<()> {
 
     // runExpr 返回值检测遇病态对象（constructor:null）不崩、不误判硬中断：
     // 按规范字面归 serialization（constructor ∉ {Object, undefined}），且绝不触发
-    // 整份 tickLimit 计费（第六轮评审修复的核心是误判硬中断+错误计费）
+    // 整份 tickLimit 计费（回归锁定：病态对象曾被误判硬中断并按整份计费）
     let v = sb.run_expr("({constructor: null, x: 1})")?;
     assert_eq!(v["ok"], false, "病态对象: {v:?}");
     assert_eq!(
@@ -701,7 +701,7 @@ fn cjs_and_loop() -> anyhow::Result<()> {
     assert_eq!(v["value"], "mine", "creep.memory 懒别名跨 tick 一致");
 
     // ---- Memory 写回失败保护：玩家一行代码（BigInt）不得使 endTick 升级为 Err ----
-    // （第四轮修复后：失败以 {ok:false} 回传，由 runPlayer 通道归为玩家 runtime 错误）
+    // 失败以 {ok:false} 回传（而非基础设施 Err），由 runPlayer 通道归为玩家 runtime 错误
     sb.run_expr("Memory.big = 1n")?;
     let wb = sb.end_tick()?;
     assert_eq!(wb["ok"], false, "写回失败按玩家侧错误回传而非 Err: {wb}");
