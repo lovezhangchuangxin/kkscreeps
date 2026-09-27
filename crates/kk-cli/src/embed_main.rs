@@ -8,7 +8,7 @@
 
 use std::io::{BufRead, Write};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use kk_engine::EmbedEngine;
 
@@ -72,7 +72,12 @@ fn handle_line(engine: &mut EmbedEngine, line: &str) -> anyhow::Result<Value> {
             let terrain: Vec<u8> = params
                 .get("terrain")
                 .and_then(Value::as_array)
-                .map(|a| a.iter().filter_map(Value::as_i64).map(|x| x as u8).collect())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(Value::as_i64)
+                        .map(|x| x as u8)
+                        .collect()
+                })
                 .ok_or_else(|| anyhow::anyhow!("缺少 terrain 数组"))?;
             engine.set_terrain(room, terrain)?;
             json!({ "done": true })

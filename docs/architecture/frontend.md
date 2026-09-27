@@ -33,7 +33,7 @@
 kkscreeps/
 ├── Cargo.toml / rust-toolchain        ← Rust workspace
 ├── crates/ …                          （9 个引擎 crate，见 overall.md）
-├── compat/                            （screeps-ok 适配器，Rust）
+├── compat/                            （screeps-ok 适配器，TS 包，见 ADR-010）
 ├── pnpm-workspace.yaml / package.json ← JS workspace（仓库根）
 ├── apps/
 │   └── game/                          # 客户端应用（唯一的 app）

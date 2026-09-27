@@ -51,7 +51,11 @@ fn main() {
         Command::Embed => {
             std::process::exit(crate::embed_main::run());
         }
-        Command::BotCheck { path, ticks, report } => {
+        Command::BotCheck {
+            path,
+            ticks,
+            report,
+        } => {
             std::process::exit(bot_check::run(&path, ticks, &report));
         }
     }

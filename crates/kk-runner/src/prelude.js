@@ -422,6 +422,66 @@
   Object.setPrototypeOf(RoomVisual.prototype, visualBridge.prototype);
   globalThis.RoomVisual = RoomVisual;
 
+  // ---------------------------------------------------------------- 类全局（官方全集）
+  // 官方运行时把 41 个类挂成裸全局（engine/src/game 各文件 defineProperty(globals,...)），
+  // 含 Spawn=StructureSpawn、Energy=Resource 两个别名。tooangel 等 bot 直接引用 Room 等。
+  // M0：桩类——可 new、可静态引用（未知静态成员进缺失 API 探测）。
+  // 已知限制：Game 上的对象不是这些类的实例（instanceof=false），M2 玩家 API 层对齐。
+
+  const GAME_CLASS_NAMES = [
+    'ConstructionSite', 'Creep', 'Deposit', 'Energy', 'Flag', 'Mineral', 'Nuke',
+    'OwnedStructure', 'PowerCreep', 'Resource', 'Ruin', 'Room', 'RoomObject',
+    'Source', 'Spawn', 'Store', 'Structure', 'StructureContainer', 'StructureController',
+    'StructureExtension', 'StructureExtractor', 'StructureFactory', 'StructureInvaderCore',
+    'StructureKeeperLair', 'StructureLab', 'StructureLink', 'StructureNuker',
+    'StructureObserver', 'StructurePortal', 'StructurePowerBank', 'StructurePowerSpawn',
+    'StructureRampart', 'StructureRoad', 'StructureSpawn', 'StructureStorage',
+    'StructureTerminal', 'StructureTower', 'StructureWall', 'Tombstone',
+  ];
+  function makeStubClass(name) {
+    const ctor = function () {
+      countStub('new ' + name);
+    };
+    Object.defineProperty(ctor, 'name', { value: name });
+    return new Proxy(ctor, {
+      get(t, prop) {
+        if (typeof prop === 'string' && !(prop in t) && !PROBE_IGNORE.has(prop)) {
+          reportMissing(name + '.' + prop);
+        }
+        return t[prop];
+      },
+    });
+  }
+  for (const name of GAME_CLASS_NAMES) {
+    if (globalThis[name] === undefined) globalThis[name] = makeStubClass(name);
+  }
+  // 官方类层级（RoomObject 为根；bot 生态跨层级打补丁，如 RoomObject.prototype.ref）：
+  // Structure* 大多 extends OwnedStructure，wall/road/container/portal 直接 extends Structure
+  const CLASS_PARENTS = {
+    Creep: 'RoomObject', PowerCreep: 'RoomObject', Structure: 'RoomObject',
+    OwnedStructure: 'Structure', Source: 'RoomObject', Mineral: 'RoomObject',
+    Deposit: 'RoomObject', Resource: 'RoomObject', Tombstone: 'RoomObject',
+    Ruin: 'RoomObject', Nuke: 'RoomObject', ConstructionSite: 'RoomObject',
+    StructureContainer: 'Structure', StructureRoad: 'Structure',
+    StructureWall: 'Structure', StructurePortal: 'Structure',
+  };
+  for (const [cls, parent] of Object.entries(CLASS_PARENTS)) {
+    const c = globalThis[cls], p = globalThis[parent];
+    if (c && p && c.prototype && p.prototype
+      && Object.getPrototypeOf(c.prototype) === Object.prototype) {
+      Object.setPrototypeOf(c.prototype, p.prototype);
+    }
+  }
+  for (const name of GAME_CLASS_NAMES) {
+    if (name.startsWith('Structure') && name !== 'Structure' && name !== 'OwnedStructure'
+      && !CLASS_PARENTS[name]) {
+      const c = globalThis[name], p = globalThis.OwnedStructure;
+      if (c && p && Object.getPrototypeOf(c.prototype) === Object.prototype) {
+        Object.setPrototypeOf(c.prototype, p.prototype);
+      }
+    }
+  }
+
   // ---------------------------------------------------------------- 世界投影（stub Game）
 
   let world = { time: 0, cpu: { limit: 20, tickLimit: 500, bucket: 10000 }, rooms: {}, objects: [] };
@@ -499,6 +559,7 @@
           spawning: null,
           isStructure: true,
         });
+        obj.isActive = () => { countStub('structure.isActive'); return true; };
         for (const m of SPAWN_METHODS) obj[m] = mkStubMethod('spawn.' + m);
         break;
       }
@@ -532,6 +593,7 @@
         } else {
           obj.energy = (o.store && o.store.energy) || 0;
           obj.energyCapacity = o.energyCapacity || 0;
+          obj.isActive = () => { countStub('structure.isActive'); return true; };
           for (const m of STRUCTURE_METHODS) obj[m] = mkStubMethod('structure.' + m);
         }
         break;
@@ -570,7 +632,42 @@
         obj = base;
       }
     }
-    return obj;
+    const cls = classGlobalFor(o);
+    if (cls && globalThis[cls] && globalThis[cls].prototype) {
+      // 官方语义：Game 对象是类的实例；bot 生态普遍给官方原型打补丁
+      //（tooangel 的 prototype_*.js 全系），原型链接通后补丁可见、instanceof 成立
+      Object.setPrototypeOf(obj, globalThis[cls].prototype);
+    }
+    const name = o.name ? ':' + o.name : '';
+    return probe(obj, (cls || o.type) + name);
+  }
+
+  function classGlobalFor(o) {
+    switch (o.type) {
+      case 'creep': return 'Creep';
+      case 'spawn': return 'StructureSpawn';
+      case 'flag': return 'Flag';
+      case 'constructionSite': return 'ConstructionSite';
+      case 'resource': return 'Resource';
+      case 'tombstone': return 'Tombstone';
+      case 'ruin': return 'Ruin';
+      case 'deposit': return 'Deposit';
+      case 'powerCreep': return 'PowerCreep';
+      case 'nuke': return 'Nuke';
+      case 'structure': {
+        const m = { controller: 'StructureController', source: 'Source', mineral: 'Mineral',
+          storage: 'StructureStorage', terminal: 'StructureTerminal', tower: 'StructureTower',
+          extension: 'StructureExtension', link: 'StructureLink', lab: 'StructureLab',
+          rampart: 'StructureRampart', road: 'StructureRoad', wall: 'StructureWall',
+          container: 'StructureContainer', extractor: 'StructureExtractor',
+          factory: 'StructureFactory', nuker: 'StructureNuker', observer: 'StructureObserver',
+          powerBank: 'StructurePowerBank', powerSpawn: 'StructurePowerSpawn',
+          portal: 'StructurePortal', invaderCore: 'StructureInvaderCore',
+          keeperLair: 'StructureKeeperLair' };
+        return m[o.structureType] || 'Structure';
+      }
+      default: return null;
+    }
   }
 
   function flagMemoryFor(name) {
@@ -651,7 +748,19 @@
       room.getPositionAt = (x, y) => new RoomPosition(x, y, name);
       room.serializePath = () => '';
       room.deserializePath = () => [];
-      rooms[name] = room;
+      Object.defineProperty(room, 'memory', {
+        configurable: true,
+        get() {
+          const m = ensureMemory();
+          if (!m.rooms) m.rooms = {};
+          if (!m.rooms[name]) m.rooms[name] = {};
+          return m.rooms[name];
+        },
+      });
+      if (globalThis.Room && globalThis.Room.prototype) {
+        Object.setPrototypeOf(room, globalThis.Room.prototype);
+      }
+      rooms[name] = probe(room, 'Room[' + name + ']');
     }
     // 回填对象上的 room 引用
     for (const [id, w] of objectsById) {
@@ -669,6 +778,7 @@
         bucket: cpu.bucket,
         shardLimits: { shard0: cpu.limit },
         getUsed: () => ops.op_kk_get_used(),
+        getHeapStatistics: () => { countStub('Game.cpu.getHeapStatistics'); return { total_heap_size: 0, used_heap_size: 0, heap_size_limit: 0, externally_allocated_size: 0, physical_total: 0, malloced_memory: 0, peak_malloced_memory: 0, does_zap_garbage: 0, number_of_native_contexts: 1, number_of_detached_contexts: 0 }; },
         halt: () => { countStub('Game.cpu.halt'); },
         setShardLimits: () => 0,
         generatePixel: () => { countStub('Game.cpu.generatePixel'); return -9; },
@@ -685,6 +795,7 @@
       rooms,
       market: {
         credits: 0,
+        getAllOrders: () => { countStub('Game.market.getAllOrders'); return []; },
         orders: {},
         incomingTransactions: [],
         outgoingTransactions: [],
@@ -709,6 +820,12 @@
         getTerrainAt: () => 'p',
       },
     };
+    game.cpu = probe(game.cpu, 'Game.cpu');
+    game.market = probe(game.market, 'Game.market');
+    game.map = probe(game.map, 'Game.map');
+    game.shard = probe(game.shard, 'Game.shard');
+    game.gcl = probe(game.gcl, 'Game.gcl');
+    game.gpl = probe(game.gpl, 'Game.gpl');
     return probe(game, 'Game');
   }
 

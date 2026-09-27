@@ -7,7 +7,7 @@
   "main": "dist/adapter.js",
   "scripts": {
     "build": "tsc -p tsconfig.json && cp src/parity.json dist/parity.json",
-    "test": "pnpm run build && node --test",
+    "test": "pnpm run build && node --test \"test/**/*.test.mjs\"",
     "check": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {

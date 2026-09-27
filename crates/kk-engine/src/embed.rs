@@ -11,7 +11,7 @@
 
 use std::collections::BTreeMap;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use kk_runner::{EvalReport, PlayerThreads, SandboxConfig};
 use kk_world::DumbWorld;
@@ -94,11 +94,21 @@ impl EmbedEngine {
                 let terrain: Vec<u8> = room
                     .get("terrain")
                     .and_then(Value::as_array)
-                    .map(|a| a.iter().filter_map(Value::as_i64).map(|x| x as u8).collect())
-                    .unwrap_or_else(|| default_terrain_with_corner_walls());
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(Value::as_i64)
+                            .map(|x| x as u8)
+                            .collect()
+                    })
+                    .unwrap_or_else(default_terrain_with_corner_walls);
                 self.world.register_room(name);
-                self.world.set_terrain(name, terrain).map_err(anyhow::Error::msg)?;
-                let has_controller = room.get("controller").and_then(Value::as_bool).unwrap_or(true);
+                self.world
+                    .set_terrain(name, terrain)
+                    .map_err(anyhow::Error::msg)?;
+                let has_controller = room
+                    .get("controller")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(true);
                 if has_controller {
                     let owner = room.get("owner").and_then(Value::as_str);
                     let rcl = room.get("rcl").and_then(Value::as_i64).unwrap_or(1).max(0);
@@ -124,7 +134,11 @@ impl EmbedEngine {
     /// 摆放对象（全部 placeXxx 的统一后端；spec 是 screeps-ok 的 PlaceSpec JSON）。
     /// `kind` 决定世界记录的 type 字段：creep/spawn/structure/constructionSite/flag/…。
     pub fn place_object(&mut self, room: &str, kind: &str, spec: &Value) -> anyhow::Result<String> {
-        let pos = spec.get("pos").and_then(Value::as_array).unwrap_or(&vec![]).to_vec();
+        let pos = spec
+            .get("pos")
+            .and_then(Value::as_array)
+            .unwrap_or(&vec![])
+            .to_vec();
         let (x, y) = (
             pos.first().and_then(Value::as_i64).unwrap_or(0),
             pos.get(1).and_then(Value::as_i64).unwrap_or(0),
@@ -148,12 +162,10 @@ impl EmbedEngine {
         // 结构类：structureType 从 spec.type / spec.structureType 归一
         if matches!(kind, "structure" | "spawn" | "constructionSite")
             && !obj.contains_key("structureType")
+            && let Some(st) = spec.get("type").and_then(Value::as_str)
+            && st != kind
         {
-            if let Some(st) = spec.get("type").and_then(Value::as_str) {
-                if st != kind {
-                    obj.insert("structureType".into(), json!(st));
-                }
-            }
+            obj.insert("structureType".into(), json!(st));
         }
         // creep 无名时生成一个（prelude 按 name 建索引）
         if kind == "creep" && !obj.contains_key("name") {
@@ -164,7 +176,9 @@ impl EmbedEngine {
     }
 
     pub fn set_terrain(&mut self, room: &str, terrain: Vec<u8>) -> anyhow::Result<()> {
-        self.world.set_terrain(room, terrain).map_err(anyhow::Error::msg)
+        self.world
+            .set_terrain(room, terrain)
+            .map_err(anyhow::Error::msg)
     }
 
     /// 执行一个玩家的代码并恰好推进 1 tick（screeps-ok runPlayer 契约）。
@@ -173,7 +187,10 @@ impl EmbedEngine {
             .handles
             .get(handle)
             .ok_or_else(|| anyhow::anyhow!("未知玩家 handle: {handle}"))?;
-        let players = self.players.as_mut().ok_or_else(|| anyhow::anyhow!("分片未创建"))?;
+        let players = self
+            .players
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("分片未创建"))?;
         let world = self.world.world_json();
         let report: EvalReport = players.run_player(thread_id, &world, code)?;
         let executed = report
@@ -182,22 +199,39 @@ impl EmbedEngine {
             .and_then(Value::as_str)
             .map(|k| k != "terminated")
             .unwrap_or(true);
-        let console = report.console.iter().map(|l| l.text.clone()).collect::<Vec<_>>();
-        self.last_console.insert(handle.to_string(), console.clone());
+        let console = report
+            .console
+            .iter()
+            .map(|l| l.text.clone())
+            .collect::<Vec<_>>();
+        self.last_console
+            .insert(handle.to_string(), console.clone());
         // runPlayer 恰好 +1 tick
         self.world.time += 1;
         self.world.player_ticks += 1;
-        Ok(PlayerRun { executed, expr: report.expr, console })
+        Ok(PlayerRun {
+            executed,
+            expr: report.expr,
+            console,
+        })
     }
 
     /// 多玩家对同一状态求值后合计推进 1 tick（runPlayers 契约）。
-    pub fn run_players(&mut self, codes: &BTreeMap<String, String>) -> anyhow::Result<BTreeMap<String, PlayerRun>> {
-        let players = self.players.as_mut().ok_or_else(|| anyhow::anyhow!("分片未创建"))?;
+    pub fn run_players(
+        &mut self,
+        codes: &BTreeMap<String, String>,
+    ) -> anyhow::Result<BTreeMap<String, PlayerRun>> {
+        let players = self
+            .players
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("分片未创建"))?;
         let world = self.world.world_json();
         let mut out = BTreeMap::new();
         // 固定顺序（handle 排序）求值——确定性
         for (handle, thread_id) in self.handles.clone() {
-            let Some(code) = codes.get(&handle) else { continue };
+            let Some(code) = codes.get(&handle) else {
+                continue;
+            };
             let report = players.run_player(thread_id, &world, code)?;
             let executed = report
                 .expr
@@ -205,11 +239,19 @@ impl EmbedEngine {
                 .and_then(Value::as_str)
                 .map(|k| k != "terminated")
                 .unwrap_or(true);
-            let console = report.console.iter().map(|l| l.text.clone()).collect::<Vec<_>>();
+            let console = report
+                .console
+                .iter()
+                .map(|l| l.text.clone())
+                .collect::<Vec<_>>();
             self.last_console.insert(handle.clone(), console.clone());
             out.insert(
                 handle,
-                PlayerRun { executed, expr: report.expr, console },
+                PlayerRun {
+                    executed,
+                    expr: report.expr,
+                    console,
+                },
             );
         }
         self.world.time += 1;
@@ -231,7 +273,11 @@ impl EmbedEngine {
     }
 
     pub fn find_in_room(&self, room: &str, find_const: i64) -> Vec<Value> {
-        self.world.find_in_room(room, find_const).iter().map(|o| snapshot_of(o)).collect()
+        self.world
+            .find_in_room(room, find_const)
+            .iter()
+            .map(|o| snapshot_of(o))
+            .collect()
     }
 
     pub fn get_game_time(&self) -> u64 {

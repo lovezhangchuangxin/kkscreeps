@@ -4,7 +4,7 @@
 
 > **给没玩过 Screeps 的读者**：Screeps 是一个"写代码玩游戏"的 MMO——玩家用 JavaScript 编写 AI，控制名为爬爬虫（creep）的单位在分成一个个 50×50 格房间的世界里采集能量、建造、战斗。服务器按固定节拍（tick）推进世界；玩家的代码每 tick 在服务器上运行一次，消耗的"CPU"是一种按 tick 发放、可攒可透支的配额货币（约等于毫秒）。玩家代码不直接改世界，而是下达"指令"（intent），由服务器统一结算。
 
-**当前状态（2026-09-27）**：三轮调研与技术验证完成，技术方案全部定案（见[决策记录](docs/decisions/)），可行性问题全部关闭。尚未开始写引擎代码，下一步是 M0（兼容性验收基建）。
+**当前状态（2026-09-27）：M0（兼容验收与工程基建）已完成**——monorepo 与 CI 就位；screeps-ok 上游基准独立复现零偏差（vanilla 2897 / xxscreeps 2642）；适配器可跑全量套件出通过率基线（229 passed / 1659 failed / 1026 skipped，报告见 [compat/](compat/)）；tooangel 与 overmind 两个真实 bot 在桩环境跑 2000 tick 零崩溃、缺失 API 清单清零；一实例一线程承载原型验证通过（[ADR-010](docs/decisions/ADR-010-screeps-ok-adapter-bridge.md)）。下一步 M1：引擎骨架与通过率棘轮。
 
 ## 技术定案摘要
 
@@ -34,14 +34,17 @@
 
 ```
 docs/            文档（见上表）
+compat/          兼容性验收（TS 包）：screeps-ok 适配器（经 kkscreeps embed sidecar）、
+                 bot 验收工具与验收报告——见 compat/README.md
+crates/          Rust 引擎工作区（九个 kk-* crate，见 docs/architecture/overall.md）
+apps/ packages/  JS 工作区：Vue3 客户端 + 渲染器/API/编辑器/共享类型库（M3 前为占位包），
+                  见 docs/architecture/frontend.md
+scripts/         仓库工具脚本（screeps-ok pin 克隆、bot 拉取、文档链接检查）
 spikes/          技术验证工程（cargo crate，使命已完成，保留作证据）
 ├── deno-spike/    ★ 主力验证：沙箱基础 / 游戏 API 交互模式 / 指令回调 / 预算桶仿真
 │                  运行：cargo run --release [--example game_api | op_callback | bucket_sim]
 ├── rquickjs-spike/（评估后淘汰，保留作证据）
 └── boa-spike/     （评估后淘汰，保留作证据）
-crates/ compat/  （待建）Rust 引擎工作区，见 docs/architecture/overall.md
-apps/ packages/  （待建）JS 工作区：Vue3 客户端 + 渲染器/API/编辑器/共享类型库，
-                  见 docs/architecture/frontend.md
 ```
 
 ## 路线图

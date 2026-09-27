@@ -16,7 +16,12 @@
 | **M4** 完整玩法与扩展 | 详见下节 | 全功能对照官方可玩；负载基准 |
 | **M5** 生产化 | 详见下节 | 基准报告发布；72 小时 soak 无泄漏 |
 
-## M0 兼容验收与工程基建
+## M0 兼容验收与工程基建 ✅（2026-09-27 完成）
+
+> 交付物：monorepo 与 CI 基建；screeps-ok 上游基准独立复现零偏差（报告 [compat/reports/m0-screeps-ok-parity.md](../compat/reports/m0-screeps-ok-parity.md)）；
+> 适配器跑通全量套件出基线 229/1659/1026（[基线报告](../compat/reports/m0-screeps-ok-baseline.md)）；
+> tooangel + overmind 桩环境 2000 tick 零崩溃、缺失 API 清单清零（[bot 验收报告](../compat/reports/m0-bot-missing-api.md)）；
+> 一实例一线程原型测试全绿。架构决策见 [ADR-010](decisions/ADR-010-screeps-ok-adapter-bridge.md)。
 
 **内容**：
 - monorepo 骨架（Rust workspace + pnpm workspace，按 [overall.md](architecture/overall.md) 与 [frontend.md](architecture/frontend.md) 的布局）；
@@ -79,4 +84,5 @@
 
 ## 修订记录
 
+- **2026-09-27（M0 完成）**：全部验收关卡达成，报告归档于 compat/reports/；适配器桥接与哑世界等四项决策记入 ADR-010。
 - **2026-09-27（全面 review）**：① M0 重定义——原验收"机器人原样运行 / screeps-ok 首批用例通过"存在依赖倒置（都需要引擎存在，M0 时还没有），改为"环境兼容性 + 适配器能测并出报告"；② M2 内部拆出 2A/2B 两道关卡（最长杆需要中间检查点）；③ M2 通过率从模糊的"达标"定量为 ≥95% + 缺口登记（锚点：xxscreeps 91%）；④ CI 基建从隐含变为 M0 显式条目；⑤ M3 补上"账号与多用户"，端点明确"核心先行、市场随 M4"；⑥ M5 的 soak 定量（72 小时）、安全加固标注为公网部署前置条件；⑦ 路线图从 README 拆出为独立文档；⑧ screeps-ok 深度评估后（ADR-006），M0 增加『独立复现 parity 数字』前置项。

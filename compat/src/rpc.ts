@@ -56,8 +56,11 @@ class EmbedClient {
     const child = spawn(bin, ['embed'], { stdio: ['pipe', 'pipe', 'inherit'] });
     // 子进程不能把宿主事件循环挂住：unref 后由进程退出钩子负责回收
     child.unref();
-    child.stdout?.unref();
-    child.stdin?.unref();
+    interface Unrefable {
+      unref?(): void;
+    }
+    (child.stdout as unknown as Unrefable).unref?.();
+    (child.stdin as unknown as Unrefable).unref?.();
     child.on('error', (e) => this.failAll(e));
     child.on('exit', () => this.failAll(new Error('kkscreeps embed 子进程退出')));
     const stdout = child.stdout as Readable;

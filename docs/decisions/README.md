@@ -15,6 +15,7 @@
 | [ADR-007](ADR-007-mod-system.md) | mod 系统自建，不兼容官方 mod 生态 | 已接受 |
 | [ADR-008](ADR-008-runtime-model.md) | 运行时执行模型与资源管理（线程三层次/同步+并行/事务性结算/速率保护等八项） | 已接受 |
 | [ADR-009](ADR-009-frontend-stack.md) | 前端栈（Vue3+Vite+TS+pnpm）与单 monorepo、自建渲染器 | 已接受 |
+| [ADR-010](ADR-010-screeps-ok-adapter-bridge.md) | screeps-ok 适配器桥接（sidecar 子进程）与嵌入式 API、M0 哑世界、bot 验收与上游 pin 策略 | 已接受 |
 
 ## 评估过但没有采纳的方案
 

@@ -8,7 +8,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use kk_runner::{ModuleTable, PlayerThreads, SandboxConfig, TickOutcome};
 
@@ -31,13 +31,17 @@ fn run_inner(path: &str, ticks: u32, report_path: &str) -> anyhow::Result<()> {
     if module_count == 0 {
         anyhow::bail!("模块目录为空（没有 *.js 模块）");
     }
-    println!("bot-check: {}（{module_count} 个模块）× {ticks} ticks", bot_dir.display());
+    println!(
+        "bot-check: {}（{module_count} 个模块）× {ticks} ticks",
+        bot_dir.display()
+    );
 
     let mut pool = PlayerThreads::new();
     pool.spawn_player(PLAYER, SandboxConfig::default())?;
     pool.set_modules(PLAYER, table)?;
 
     let mut console_errors: Vec<String> = Vec::new();
+    let mut console_head: Vec<String> = Vec::new();
     let mut missing_api: BTreeMap<String, u64> = BTreeMap::new();
     let mut stub_calls: BTreeMap<String, u64> = BTreeMap::new();
     let mut completed = 0u32;
@@ -51,16 +55,19 @@ fn run_inner(path: &str, ticks: u32, report_path: &str) -> anyhow::Result<()> {
             TickOutcome::Completed { .. } => completed += 1,
             TickOutcome::Terminated => terminated += 1,
         }
-        let tick_had_error = report
-            .console
-            .iter()
-            .any(|l| l.level == "error" && l.text.starts_with("Error") || l.level == "error" && l.text.contains("at kk_module"));
+        let tick_had_error = report.console.iter().any(|l| {
+            l.level == "error" && l.text.starts_with("Error")
+                || l.level == "error" && l.text.contains("at kk_module")
+        });
         if report.console.iter().any(|l| l.level == "error") {
             errored_ticks += 1;
         }
         for line in report.console {
             if line.level == "error" && console_errors.len() < 300 {
                 console_errors.push(format!("[tick {t}] {}", line.text));
+            }
+            if console_head.len() < 20 {
+                console_head.push(format!("[tick {t}][{}] {}", line.level, line.text));
             }
         }
         merge_counts(&mut missing_api, &report.missing_api);
@@ -77,19 +84,32 @@ fn run_inner(path: &str, ticks: u32, report_path: &str) -> anyhow::Result<()> {
         "missing_api": missing_api,
         "stub_calls_top": top(&stub_calls, 30),
         "console_errors_head": console_errors,
+        "console_head": console_head,
     });
     std::fs::write(report_path, serde_json::to_string_pretty(&report)?)?;
 
     println!();
     println!("== bot-check 报告（{report_path}） ==");
-    println!("  完成 tick：{completed}/{}（硬中断 {terminated}，含 console 错误的 tick {errored_ticks}）", ticks);
+    println!(
+        "  完成 tick：{completed}/{}（硬中断 {terminated}，含 console 错误的 tick {errored_ticks}）",
+        ticks
+    );
     println!("  缺失 API：{} 项", missing_api.len());
     for (k, v) in top(&missing_api, 20) {
         println!("    {k} × {v}");
     }
-    println!("  桩方法调用：{} 种，top: {:?}",
+    println!(
+        "  桩方法调用：{} 种，top: {:?}",
         stub_calls.len(),
-        top(&stub_calls, 8).into_iter().map(|(k, v)| format!("{k}×{v}")).collect::<Vec<_>>());
+        top(&stub_calls, 8)
+            .into_iter()
+            .map(|(k, v)| format!("{k}×{v}"))
+            .collect::<Vec<_>>()
+    );
+    println!("  console 头部输出（前 5 条）：");
+    for l in console_head.iter().take(5) {
+        println!("    {}", l.lines().next().unwrap_or_default());
+    }
     if !console_errors.is_empty() {
         println!("  console 错误（前 5 条）：");
         for e in console_errors.iter().take(5) {

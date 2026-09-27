@@ -7,7 +7,7 @@
 
 use std::collections::BTreeMap;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// 官方语义常量（来自 common/lib/constants.js，M1 由 kk-core 正式生成取代硬编码）。
 pub mod find {
@@ -61,7 +61,10 @@ impl DumbWorld {
 
     pub fn register_room(&mut self, name: impl Into<String>) {
         let name = name.into();
-        self.rooms.entry(name.clone()).or_insert(RoomRecord { name, terrain: None });
+        self.rooms.entry(name.clone()).or_insert(RoomRecord {
+            name,
+            terrain: None,
+        });
     }
 
     pub fn set_terrain(&mut self, room: &str, terrain: Vec<u8>) -> Result<(), String> {
@@ -69,7 +72,10 @@ impl DumbWorld {
             // screeps-ok 契约：首个玩家 tick 之后必须抛错且不改变状态
             return Err("setTerrain 只允许在第一个玩家 tick 之前调用".into());
         }
-        let record = self.rooms.get_mut(room).ok_or_else(|| format!("房间 {room} 不存在"))?;
+        let record = self
+            .rooms
+            .get_mut(room)
+            .ok_or_else(|| format!("房间 {room} 不存在"))?;
         record.terrain = Some(terrain);
         Ok(())
     }
@@ -110,15 +116,18 @@ impl DumbWorld {
 
     /// 房间内的 controller 位置（getControllerPos）。
     pub fn controller_pos(&self, room: &str) -> Option<(u64, u64)> {
-        self.objects.values().find(|o| {
-            o.get("room").and_then(Value::as_str) == Some(room)
-                && o.get("type").and_then(Value::as_str) == Some("structure")
-                && o.get("structureType").and_then(Value::as_str) == Some("controller")
-        }).and_then(|o| {
-            let x = o.get("x")?.as_u64()?;
-            let y = o.get("y")?.as_u64()?;
-            Some((x, y))
-        })
+        self.objects
+            .values()
+            .find(|o| {
+                o.get("room").and_then(Value::as_str) == Some(room)
+                    && o.get("type").and_then(Value::as_str) == Some("structure")
+                    && o.get("structureType").and_then(Value::as_str) == Some("controller")
+            })
+            .and_then(|o| {
+                let x = o.get("x")?.as_u64()?;
+                let y = o.get("y")?.as_u64()?;
+                Some((x, y))
+            })
     }
 
     /// 产出注入沙箱的"世界 JSON"（kk-runner prelude 的 beginTick 约定）。
@@ -126,7 +135,7 @@ impl DumbWorld {
         json!({
             "time": self.time,
             "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
-            "rooms": self.rooms.iter().map(|(name, _)| (name.clone(), json!({ "name": name }))).collect::<BTreeMap<_, _>>(),
+            "rooms": self.rooms.keys().map(|name| (name.clone(), json!({ "name": name }))).collect::<BTreeMap<_, _>>(),
             "objects": self.objects.values().cloned().collect::<Vec<_>>(),
         })
     }
@@ -143,9 +152,7 @@ fn matches_find(o: &Value, find_const: i64) -> bool {
         f if f == find::CREEPS || f == find::MY_CREEPS => kind == "creep",
         f if f == find::SOURCES => kind == "structure" && st == "source",
         f if f == find::DROPPED_RESOURCES => kind == "resource",
-        f if f == find::STRUCTURES => {
-            kind == "structure" || kind == "spawn"
-        }
+        f if f == find::STRUCTURES => kind == "structure" || kind == "spawn",
         f if f == find::FLAGS => kind == "flag",
         f if f == find::CONSTRUCTION_SITES => kind == "constructionSite",
         f if f == find::MY_SPAWNS => kind == "spawn",

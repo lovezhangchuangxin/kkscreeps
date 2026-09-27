@@ -29,7 +29,7 @@ kkscreeps/
 │   ├── kk-pathfinder  寻路：复用官方 C++ 源码（保证路径逐点一致）
 │   ├── kk-backend     网络层：HTTP 接口 + WebSocket 推送（兼容官方协议）
 │   └── kk-cli         命令行入口：组装以上模块
-├── compat/            兼容性验收：screeps-ok 适配器、官方 API 对照检查
+├── compat/            兼容性验收（TS 包）：screeps-ok 适配器（经 kkscreeps embed sidecar）+ bot 验收工具，见 ADR-010
 ├── pnpm-workspace.yaml / package.json   JS workspace（仓库根）
 ├── apps/
 │   └── game           客户端应用（Vue 3，构建产物嵌入服务器二进制）
