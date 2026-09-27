@@ -154,12 +154,13 @@ crate::kk_schema! {
 }
 
 crate::kk_schema! {
-    /// 工地（progress_total 由 CONSTRUCTION_COST 派生，不入快照）。
+    /// 工地（progress_total 由 CONSTRUCTION_COST 派生，不入快照；structure_type
+    /// 存官方字符串——M1 结算外类型照常可摆放）。
     pub ConstructionSiteObj {
         (pub id: u64)
         (pub x: u8)
         (pub y: u8)
-        (pub structure_type: u8)
+        (pub structure_type: str)
         (pub progress: u32)
         (pub owner: opt str)
         (pub name: opt str)
@@ -179,6 +180,17 @@ crate::kk_schema! {
 }
 
 crate::kk_schema! {
+    /// M1 结算范围外对象的透传桶：完整记录以 JSON 存放（含 type 与
+    /// structureType 等玩家可见字段），结算忽略、投影还原。
+    pub GenericObj {
+        (pub id: u64)
+        (pub x: u8)
+        (pub y: u8)
+        (pub data: str)
+    }
+}
+
+kk_schema! {
     /// 旗帜。官方 flag 是独立集合（processor.js:22 bulkFlags，不参与 roomObjects
     /// 循环）；M1 折进 RoomObject 变体是故意简化，投影层注意官方形状差异。
     pub FlagObj {
@@ -206,6 +218,9 @@ pub enum RoomObject {
     Flag(FlagObj),
     Road(RoadObj),
     Storage(StorageObj),
+    /// M1 结算范围外的对象（tower/rampart/lab/tombstone/portal/…）：完整记录
+    /// 以 JSON 透传存放——保持与 M0 哑世界相同的放置接受面，结算忽略之。
+    Generic(GenericObj),
 }
 
 impl RoomObject {
@@ -223,6 +238,7 @@ impl RoomObject {
             Self::Flag(o) => o.id,
             Self::Road(o) => o.id,
             Self::Storage(o) => o.id,
+            Self::Generic(o) => o.id,
         }
     }
 
@@ -240,6 +256,7 @@ impl RoomObject {
             Self::Flag(o) => (o.x, o.y),
             Self::Road(o) => (o.x, o.y),
             Self::Storage(o) => (o.x, o.y),
+            Self::Generic(o) => (o.x, o.y),
         }
     }
 
@@ -289,6 +306,10 @@ impl RoomObject {
                 o.x = x;
                 o.y = y;
             }
+            Self::Generic(o) => {
+                o.x = x;
+                o.y = y;
+            }
         }
     }
 }
@@ -308,24 +329,28 @@ impl Schema for RoomObject {
             Self::Flag(o) => o.encode_into(out),
             Self::Road(o) => o.encode_into(out),
             Self::Storage(o) => o.encode_into(out),
+            Self::Generic(o) => o.encode_into(out),
         }
     }
 
     fn decode_from(cur: &mut Cursor<'_>) -> Result<Self, SchemaError> {
         match cur.read_u8()? {
-            0 => Ok(Self::Creep(CreepObj::decode_from(cur)?)),
-            1 => Ok(Self::Source(SourceObj::decode_from(cur)?)),
-            2 => Ok(Self::Controller(ControllerObj::decode_from(cur)?)),
-            3 => Ok(Self::Spawn(SpawnObj::decode_from(cur)?)),
-            4 => Ok(Self::Extension(ExtensionObj::decode_from(cur)?)),
-            5 => Ok(Self::ConstructedWall(ConstructedWallObj::decode_from(cur)?)),
-            6 => Ok(Self::ConstructionSite(ConstructionSiteObj::decode_from(
-                cur,
-            )?)),
-            7 => Ok(Self::Energy(EnergyObj::decode_from(cur)?)),
-            8 => Ok(Self::Flag(FlagObj::decode_from(cur)?)),
-            9 => Ok(Self::Road(RoadObj::decode_from(cur)?)),
-            10 => Ok(Self::Storage(StorageObj::decode_from(cur)?)),
+            tags::CREEP => Ok(Self::Creep(CreepObj::decode_from(cur)?)),
+            tags::SOURCE => Ok(Self::Source(SourceObj::decode_from(cur)?)),
+            tags::CONTROLLER => Ok(Self::Controller(ControllerObj::decode_from(cur)?)),
+            tags::SPAWN => Ok(Self::Spawn(SpawnObj::decode_from(cur)?)),
+            tags::EXTENSION => Ok(Self::Extension(ExtensionObj::decode_from(cur)?)),
+            tags::CONSTRUCTED_WALL => {
+                Ok(Self::ConstructedWall(ConstructedWallObj::decode_from(cur)?))
+            }
+            tags::CONSTRUCTION_SITE => Ok(Self::ConstructionSite(
+                ConstructionSiteObj::decode_from(cur)?,
+            )),
+            tags::ENERGY => Ok(Self::Energy(EnergyObj::decode_from(cur)?)),
+            tags::FLAG => Ok(Self::Flag(FlagObj::decode_from(cur)?)),
+            tags::ROAD => Ok(Self::Road(RoadObj::decode_from(cur)?)),
+            tags::STORAGE => Ok(Self::Storage(StorageObj::decode_from(cur)?)),
+            tags::GENERIC => Ok(Self::Generic(GenericObj::decode_from(cur)?)),
             b => Err(SchemaError::InvalidVariantTag(b)),
         }
     }
@@ -345,6 +370,7 @@ pub mod tags {
     pub const FLAG: u8 = 8;
     pub const ROAD: u8 = 9;
     pub const STORAGE: u8 = 10;
+    pub const GENERIC: u8 = 11;
 }
 
 impl RoomObject {
@@ -361,6 +387,7 @@ impl RoomObject {
             Self::Flag(_) => tags::FLAG,
             Self::Road(_) => tags::ROAD,
             Self::Storage(_) => tags::STORAGE,
+            Self::Generic(_) => tags::GENERIC,
         }
     }
 }
@@ -529,6 +556,21 @@ mod tests {
                     y: 13,
                     resource_type: 0,
                     amount: 40,
+                }),
+                RoomObject::ConstructionSite(ConstructionSiteObj {
+                    id: 6,
+                    x: 30,
+                    y: 31,
+                    structure_type: "tower".into(),
+                    progress: 120,
+                    owner: Some("p1".into()),
+                    name: None,
+                }),
+                RoomObject::Generic(GenericObj {
+                    id: 7,
+                    x: 9,
+                    y: 9,
+                    data: r#"{"type":"tombstone","store":{"energy":30}}"#.into(),
                 }),
             ],
         }

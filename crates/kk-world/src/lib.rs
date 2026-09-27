@@ -1,8 +1,17 @@
-//! 世界模型：房间的内存表示、按类型分桶的对象存储、50×50 空间索引。
+//! 世界模型：typed 房间状态、place 归一化、世界 JSON 投影、格子索引。
 //!
-//! M0 阶段提供一个"哑世界"（`dumb` 模块）：只有对象存取与时间计数，没有任何游戏规则，
-//! 服务于 screeps-ok 适配器与 bot 桩环境验收。真正的世界模型从 M1 起构建。
+//! M1 起取代 M0 的哑世界（JSON Value 存储）成为 embed 与引擎的共同后端；
+//! prelude"世界 JSON"契约形状不变（world_json 模块）。
 
 pub mod dumb;
+pub mod index;
+pub mod place;
+pub mod types;
+pub mod world;
+pub mod world_json;
 
+pub use index::RoomIndex;
+pub use world::{ObjId, RoomState, World};
+
+// M0 哑世界：embed 切换 typed world 后退役（M1 步 5）
 pub use dumb::DumbWorld;

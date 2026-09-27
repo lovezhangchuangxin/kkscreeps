@@ -196,8 +196,9 @@ kk-world/src/
   - `constructionSite`：`progress_total = CONSTRUCTION_COST[structureType]`；
   - `constructedWall`：`hits` 缺省 `WALL_HITS`（官方常量 1？——注意 `WALL_HITS=1` 是旧常量，
     新墙血量官方为 `WALL_HITS_MAX` 语义，实现时以 constants.json 实值 + build.js 新建分支取证）；
-  - `creep`：`age_time` 缺省 `now + CREEP_LIFE_TIME`（claim 体 `CREEP_CLAIM_LIFE_TIME`）、
-    body 元素 `{type, hits:100}`、`store_capacity` 按 carry 数计；
+  - `creep`：`age_time = time + (ticksToLive ?? CREEP_LIFE_TIME)`——**跟 vanilla
+    放置语义**（claim 区分寿命是引擎孵化的 ageTime 缺失分支，放置路径不适用；
+    三方评审裁决，2026-09-28）、body 元素 `{type, hits:100}`；
   - `boosts` 等 spec 私有字段不泄入快照（第四轮登记项）。
 - `world_json.rs`：投影保持 M0 形状（`{time, cpu, rooms, objects}`，对象字段名=prelude 约定）——
   runPlayer 路径零改动；

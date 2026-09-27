@@ -41,6 +41,14 @@
 | creep TTL 死亡的产物（M1 引擎） | **资源直接掉地为 energy 对象，不产 tombstone**；官方 _die.js:16-33 产 tombstone 承接全部资源与 body 造价回收 | M1 范围无 tombstone 变体（kk-schema v1）；M2 加 tombstone 变体走 schema 版本升级。M1 内资源守恒语义一致（总量不变），缺的是墓碑对象与 decay 链 |
 | flag 的存储位置（M1 引擎） | flag 折进 RoomObject 变体（tag 8）；官方 flag 是独立集合（processor.js:22 bulkFlags，不参与 roomObjects 循环与结算） | M1 单房间结算 flag 无规则行为差异；投影层（world_json → prelude）输出官方形状即可 |
 | 地形输入校验强度（kk-core Terrain） | 长度≠2500、未知位（& !0b111）、数字串形态的 '8'/'9' 一律 Err；官方 checkTerrain 对字符串形态照单全收（'9' 判为 wall） | 正确性-7/8 的清偿方向：非法输入前置拒绝而非静默截短/误读；官方吃 '9' 是无校验不是语义 |
+| spawn.spawning 投影形态（M1 typed world） | 发绝对 `spawnTime`；官方 StructureSpawn.Spawning 暴露 `name/needTime/remainingTime/directions`（structures.js:1302-1310，remainingTime=spawnTime−time） | prelude 尚未消费（硬编码 null）；embed 接线暴露给玩家时改 remainingTime 形态 |
+| source/controller 的 None→0 投影（M1 typed world） | `ticksToRegeneration`/`safeMode` 无钟时发 0；官方 getter 与 vanilla 快照为 undefined/null | 0 vs null 仅 getObject 断言面可见；prelude `?? 0` 归一，玩家面等价 |
+| 放置的 owner 宽松接受面（M1 place 归一化） | typed 变体不强制 owner（缺省空串）；vanilla 对 REQUIRING_OWNER 类型与 placeCreep/placeSite/placeFlag 强制 owner 并抛错 | M0 哑世界同宽松；强制化随 M2 玩家 API 层（届时违规放置显形） |
+| source 容量三分支缺 reservation（M1 place 归一化） | ControllerObj 无 reservation 字段，被预定（无主）房间 source 容量判 1500；vanilla 读 user || reservation 判 3000 | 当前放置 spec 无法表达 reservation 不触发；reserveController intent 实装时补字段 |
+| extension 能量容量字段缺失（M1） | ExtensionObj 无 per-RCL 容量（EXTENSION_ENERGY_CAPACITY[rcl] 50..200）；prelude 兜 0 | M1 结算不消费（_calc_spawns 只合计 spawn/extension 存量）；energyAvailable 语义实装时补 |
+| 非 energy 掉落资源（M1 place） | 显式拒绝（Err）；vanilla 支持 power/矿物 | M2 扩展 schema 资源种类时放开 |
+| 未知类型工地（M1 place） | 接受、progressTotal 派生 0；vanilla placeSite 对无 CONSTRUCTION_COST 类型抛错 | M0 宽松接受面决策；build 结算按官方 build.js:19-21 拒绝无 cost 目标 |
+| creep 放置 ttl 无上限钳制（M1 place） | `time + ttl` 原样（可超 1500）；官方 renew 才有 1500 上限语义（拒绝式非钳制） | 三方评审裁决跟 vanilla 放置语义（index.ts:1087），2026-09-28 |
 
 ## 四、验收关卡（不做完不算兼容）
 

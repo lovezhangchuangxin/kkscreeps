@@ -8,5 +8,6 @@ edition.workspace = true
 workspace = true
 
 [dependencies]
-serde = { workspace = true }
-serde_json = { workspace = true }
+kk-core.workspace = true
+kk-schema.workspace = true
+serde_json.workspace = true
