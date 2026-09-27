@@ -171,6 +171,13 @@ impl EmbedEngine {
                 obj.insert(k.clone(), v.clone());
             }
         }
+        // placeStructure 摆放 spawn（structureType=spawn）必须成为玩家可见的 spawn：
+        // 内部类别按 structureType 归一（否则 Game.spawns / FIND_MY_SPAWNS /
+        // instanceof StructureSpawn 全部落空）
+        if kind == "structure" && obj.get("structureType").and_then(Value::as_str) == Some("spawn")
+        {
+            obj.insert("type".into(), json!("spawn"));
+        }
         // 结构类：structureType 从 spec.type / spec.structureType 归一
         if matches!(kind, "structure" | "spawn" | "constructionSite")
             && !obj.contains_key("structureType")

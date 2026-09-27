@@ -26,6 +26,8 @@ pub struct TickReport {
     pub outcome: TickOutcome,
     pub plan: TickPlan,
     pub used_ms: f64,
+    /// 玩家 loop 逻辑自身的错误（入口执行≠无异常；None = 正常完成或硬中断）。
+    pub player_error: Option<String>,
     pub console: Vec<LogLine>,
     pub missing_api: Value,
     pub stub_calls: Value,
@@ -273,22 +275,40 @@ fn run_one_tick(sandbox: &mut Sandbox, world: &Value) -> anyhow::Result<TickRepo
             outcome: TickOutcome::Terminated,
             plan,
             used_ms: 0.0,
+            player_error: None,
             console: sandbox.drain_console(),
             missing_api: sandbox.drain_missing_api().unwrap_or(serde_json::json!({})),
             stub_calls: sandbox.drain_stub_calls().unwrap_or(serde_json::json!({})),
             bucket_after: sandbox.bucket(),
         }),
         plan @ TickPlan::Run { .. } => {
-            let outcome = sandbox.run_loop()?;
+            let mut outcome = sandbox.run_loop()?;
+            let player_error = sandbox.take_last_loop_error();
             let used_ms = match &outcome {
                 TickOutcome::Completed { .. } => sandbox.cpu_used_ms(),
                 TickOutcome::Terminated => 0.0,
             };
-            sandbox.end_tick(used_ms)?;
+            // end_tick 自带结算（含写回耗时）；写回阶段被硬中断（如玩家经
+            // Memory.toJSON 挂死写回）→ 本 tick 记 Terminated
+            let writeback = sandbox.end_tick()?;
+            if writeback.get("terminated").and_then(Value::as_bool) == Some(true) {
+                outcome = TickOutcome::Terminated;
+            }
+            let player_error = match player_error {
+                Some(e) => Some(e),
+                None => match writeback.get("ok").and_then(Value::as_bool) {
+                    Some(false) => writeback
+                        .get("error")
+                        .and_then(Value::as_str)
+                        .map(str::to_owned),
+                    _ => None,
+                },
+            };
             Ok(TickReport {
                 outcome,
                 plan,
                 used_ms,
+                player_error,
                 console: sandbox.drain_console(),
                 missing_api: sandbox.drain_missing_api().unwrap_or(serde_json::json!({})),
                 stub_calls: sandbox.drain_stub_calls().unwrap_or(serde_json::json!({})),
@@ -299,20 +319,38 @@ fn run_one_tick(sandbox: &mut Sandbox, world: &Value) -> anyhow::Result<TickRepo
 }
 
 /// runPlayer 通道：世界注入 → 表达式求值（真实沙箱）→ Memory 写回与结算。
-/// 跳帧（桶为负透支，官方 cpuAvailable<0 停跑语义）时表达式不执行，返回硬中断分类
-/// （与"代码真的被执行过"契约一致：由调用方把"未执行"视作适配器错误而非玩家返回值）。
 fn run_eval_tick(sandbox: &mut Sandbox, world: &Value, code: &str) -> anyhow::Result<EvalReport> {
     match sandbox.begin_tick(world)? {
         TickPlan::SkipPenalty => Ok(EvalReport {
+            // 负桶停跑：代码根本没执行——契约规定这是适配器的普通基础设施错误
+            //（"未执行 ≠ undefined"），不是 RunPlayerError
             expr: serde_json::json!({
-                "ok": false, "kind": "terminated", "error": "本 tick 停跑（桶透支为负，官方 cpuAvailable<0 停跑语义）",
+                "ok": false, "kind": "terminated", "error": "本 tick 停跑（桶透支为负，玩家代码未执行）",
             }),
             console: sandbox.drain_console(),
             bucket_after: sandbox.bucket(),
         }),
         TickPlan::Run { .. } => {
-            let expr = sandbox.run_expr(code)?;
-            sandbox.end_tick(sandbox.cpu_used_ms().min(sandbox.tick_limit()))?;
+            let mut expr = sandbox.run_expr(code)?;
+            let writeback = sandbox.end_tick()?;
+            // 契约（adapter-spec:221-235，vanilla 参照同口径）：按失败阶段分类——
+            // 代码已开始执行后被硬中断、或 tick 末 Memory 序列化失败 → runtime；
+            // 只有"根本没执行"（上面的停跑分支）才保持 terminated
+            if expr.get("ok").and_then(Value::as_bool) == Some(false)
+                && expr.get("kind").and_then(Value::as_str) == Some("terminated")
+            {
+                expr = serde_json::json!({
+                    "ok": false, "kind": "runtime",
+                    "error": "硬中断（超时或内存闸门，代码已开始执行）",
+                });
+            } else if expr.get("ok").and_then(Value::as_bool) == Some(true)
+                && writeback.get("ok").and_then(Value::as_bool) == Some(false)
+            {
+                expr = serde_json::json!({
+                    "ok": false, "kind": "runtime",
+                    "error": writeback.get("error").cloned().unwrap_or_else(|| "Memory 写回失败".into()),
+                });
+            }
             Ok(EvalReport {
                 expr,
                 console: sandbox.drain_console(),

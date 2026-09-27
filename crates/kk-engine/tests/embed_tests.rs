@@ -83,3 +83,60 @@ fn embed_engine_roundtrip() -> anyhow::Result<()> {
     e.teardown();
     Ok(())
 }
+
+/// runPlayer 契约分类（第四轮评审修复的验证）：
+/// ① Memory 不可序列化 → tick 末失败归 runtime 而非成功（adapter-spec:229）；
+/// ② 已开始执行后硬中断 → runtime（executed=true）；
+/// ③ 活对象返回值 → serialization（vanilla 的 constructor 检测口径）。
+#[test]
+fn embed_run_player_contract_classification() -> anyhow::Result<()> {
+    let mut e = EmbedEngine::new();
+    e.create_shard(&json!({
+        "players": ["p1"],
+        "rooms": [{ "name": "W1N1", "rcl": 1, "owner": "p1" }],
+    }))?;
+
+    // ① 写回失败不再是"成功 + console 报错"
+    let run = e.run_player("p1", "Memory.big = 1n; 7")?;
+    assert!(run.executed, "代码已执行");
+    assert_eq!(run.expr["ok"], false, "写回失败不再是成功: {:?}", run.expr);
+    assert_eq!(
+        run.expr["kind"], "runtime",
+        "tick 末序列化失败按契约归 runtime"
+    );
+
+    // 正常路径不受影响（含上一 tick 的坏 Memory 已被保留、不炸后续）
+    let run = e.run_player("p1", "1")?;
+    assert_eq!(run.expr["value"], 1);
+
+    // ② 死循环：已开始执行 → runtime（而非 executed:false 的基础设施错误）
+    let run = e.run_player("p1", "while (true) {}")?;
+    assert!(run.executed, "代码已开始执行（硬中断≠未执行）");
+    assert_eq!(run.expr["kind"], "runtime", "硬中断按契约归 runtime");
+
+    // ③ 活对象返回值
+    let run = e.run_player("p1", "new RoomPosition(1,2,'W1N1')")?;
+    assert_eq!(run.expr["kind"], "serialization", "活对象 → serialization");
+
+    // ④ placeStructure 摆 spawn 可见（内部类别归一）
+    let id = e.place_object(
+        "W1N1",
+        "structure",
+        &json!({ "pos": [20, 20], "structureType": "spawn", "name": "Spawn9", "owner": "p1" }),
+    )?;
+    let id_json = serde_json::to_string(&id)?;
+    let code = format!(
+        "[Object.keys(Game.spawns).join(','), \
+         Game.rooms['W1N1'].find(FIND_MY_SPAWNS).length, \
+         Game.getObjectById({id_json}) instanceof StructureSpawn]"
+    );
+    let run = e.run_player("p1", &code)?;
+    assert_eq!(
+        run.expr["value"],
+        json!(["Spawn9", 1, true]),
+        "spawn 经 placeStructure 摆放后可见且 instanceof 成立: {:?}",
+        run.expr
+    );
+    e.teardown();
+    Ok(())
+}

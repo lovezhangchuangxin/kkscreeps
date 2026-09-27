@@ -246,3 +246,51 @@ embed 契约的实现与测试均成立；CI 干净环境推演通过。
   screeps-ok 输出比对类用例，M1 对照 console.js 处理；
 - 探测 has-trap 会把否定式能力探测（`!('x' in Game)`）计入缺失清单（仪表噪声方向，
   不影响语义），M1 仪表增强时处理。
+
+---
+
+## 追记：第四轮评审（2026-09-27，外部独立评审——ChatGPT 仓库实读）
+
+外部评审员直接读取仓库并以 release 二进制做探针实证，报告 17 条发现。逐条复核
+结论（对照 screeps-ok 契约文档、vanilla 参照实现、官方引擎源码）：
+
+### 已修复（13 条）
+
+| 发现 | 复核结论与处置 |
+|---|---|
+| [high] end_tick 写回阶段无看门狗（`Memory.toJSON` 可挂死进程，探针实证 3s+ 无响应） | 属实。看门狗保持武装直到写回完成（官方：序列化计入超时窗口与 CPU 计费），结算含写回耗时；`{terminated:true}` 回传并按硬中断善后。测试锁定（挂死→150ms 内被掐断） |
+| [high] Memory 写回失败报成 runPlayer 成功 | 属实（adapter-spec:229 归 runtime，vanilla 参照同款）。endTick 结果回传，runPlayer 通道归 runtime；正常路径不受影响 |
+| [high] placeStructure 摆放的 spawn 玩家不可见 | 属实（探针实证三处全落空）。placeObject 按 structureType 归一内部类别；测试断言 Game.spawns/FIND_MY_SPAWNS/instanceof |
+| [high] Room.memory 只有 getter（tooangel 从 tick 2 起每 tick 抛 setter 异常而被验收漏计） | 属实（官方 rooms.js:551 双向；归档报告实证）。room/creep/flag 三处 memory 全部补 setter；bot-check 计数纳入 player_error；修复后 tooangel 推进到布局阶段 |
+| [medium] runLoop 玩家异常被丢弃（Completed 无法证明无异常） | 属实。run_loop 暂存玩家错误，TickReport.player_error 暴露，bot-check 统计区分"执行到入口/玩家抛错" |
+| [medium] 运行期抛 SyntaxError 被错分 syntax | **部分成立但不修**：vanilla 参照实现同样按异常类型名分类（errorType==='SyntaxError'）——我们与参照一致；spec 文本与参照的分歧登记上游。行为测试以套件为准 |
+| [medium] 可 JSON 化的活对象（RoomPosition）当合法返回值 | 属实。逐条移植 vanilla 的 constructor 检测（function/symbol/非纯对象 → serialization） |
+| [medium] 已执行的硬超时被标"未执行"（适配器抛基础设施错误） | 属实（契约：执行后中止归 runtime）。run_eval_tick 区分"负桶停跑未执行"（保持普通 Error）与"执行中被终止"（runtime）；测试锁定 |
+| [medium] 结算缺官方逐 tick ceil | 属实（make.js:193 Math.ceil）。settle/settle_terminated 取整 + 亚毫秒单测 |
+| [medium] isEqualTo 忽略房间名 | 属实（官方 rooms.js:1579）。修复 + 单测（跨房间同坐标 false） |
+| [medium] getDirectionTo 角度算法与官方阈值不同 | 属实（官方 utils.js:64 阈值判定）。逐字移植 + 单测（(7,3)→RIGHT）；跨房间换算登记 M1 |
+| [low] 重建测试 1500ms 墙钟阈值 | 属实。放宽为病理性上限 10s，性能基线归 M5 |
+| （连带）PathFinder.search 返回 {dx,dy} 步进对象 | 修复 setter 后 bot 推进暴露：官方 path 元素是 RoomPosition 实例（path-finder.js），bot 生态在其上调用方法（含自打的原型补丁）。已改绝对坐标 RoomPosition 数组，tooangel 立即多跑出 8000 次真实寻路 |
+
+### 登记留待后续（4 条）
+
+- [M1] typed placement 精确初态与快照规范化（placeSource 缺省字段、boosts 泄入快照）——
+  属快照语义，与 M1 引擎结算同批做；
+- [M1] 全局 LIFO 约束仅告警未强制（多 EmbedEngine 实例场景）——需进程级所有者统一
+  创建/回收顺序，与多实例架构（M2 正式接入）一起设计；evict_idle 只查栈顶的逐出
+  策略同理（非栈顶逐出与 LIFO 冲突，需一起设计）；
+- [M1] bot 验收仪表：重复 console 行折叠统计（bot 自捕获异常仅 log 级，逐条计数噪声大）；
+  跨房间 getDirectionTo（官方走出口换算）；
+- [M2] 旧对象引用失效语义已在 sandbox.md 修正设计（对象仍存活时缓存引用可继续读写，
+  对齐 screeps-ok 27.12 官方基准）——M2 快照设计按此区分两种形态。
+
+### 第四轮后的 bot 验收现状
+
+tooangel 推进到**房间布局规划阶段**（`data.positions` 构建）后停在最深处：布局算法
+依赖真实地形面（`Room.getTerrain()` / `lookFor(LOOK_TERRAIN)`），桩世界无地形——这是
+M0/M1 的真实边界（地形编解码属 kk-core，M1 交付）。宿主稳定性、loop 每 tick 执行、
+缺失 API 清单三项 M0 验收口径继续成立；bot 内部降级路径与每层缺口已逐层记录。
+
+验证：`pnpm run check` 全套绿；新增 5 组测试（memory setter 双向、RoomPosition 官方
+语义、写回看门狗、契约分类、spawn 归一）全过；wasm-bot 冒烟通过；tooangel 2000 tick
+宿主稳定。

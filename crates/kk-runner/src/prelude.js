@@ -412,19 +412,23 @@
     return parsedMemory;
   }
   function writeBackMemory() {
-    if (parsedMemory !== undefined) {
-      let s;
-      try {
-        s = JSON.stringify(parsedMemory);
-      } catch (e) {
-        // 玩家侧错误（Memory.big = 1n / 循环引用等不可序列化）：打 console、跳过写回
-        // （保留上一 tick 存档），归类为玩家错误而非基础设施 Err——对齐 runExpr 的
-        // kind:'serialization' 防护
-        console.error('Memory 写回失败（不可序列化），保留上一 tick 存档: ' + (e && e.message));
-        return;
-      }
-      if (s.length <= RAW_MEMORY_LIMIT) rawMemoryData = s;
+    // 返回 {ok} | {ok:false,error}：screeps-ok 契约（adapter-spec:229）把 tick 末
+    // 序列化失败归为 runPlayer 的 runtime 错误——不能只在 console 里报完就算成功
+    if (parsedMemory === undefined) return { ok: true };
+    let s;
+    try {
+      s = JSON.stringify(parsedMemory);
+    } catch (e) {
+      // 玩家侧错误（Memory.big = 1n / 循环引用等）：跳过写回、保留上一 tick 存档
+      console.error('Memory 写回失败（不可序列化），保留上一 tick 存档: ' + (e && e.message));
+      return { ok: false, error: 'Memory 不可序列化: ' + (e && e.message) };
     }
+    if (s.length > RAW_MEMORY_LIMIT) {
+      console.error('Memory 写回超过 2MB 上限，保留上一 tick 存档');
+      return { ok: false, error: 'Memory 写回超过 2MB 上限' };
+    }
+    rawMemoryData = s;
+    return { ok: true };
   }
   // Memory 作为懒 getter（官方语义：访问才解析）
   Object.defineProperty(globalThis, 'Memory', {
@@ -454,8 +458,9 @@
     // 官方 utils.js:34-63 fetchXYArguments：第二参是 number → 数值形态（roomName 为
     // undefined，视为同房间）；否则对象形态（RoomObject 先解包 .pos）
     isEqualTo(x, y) {
+      // 官方 rooms.js:1579：目标带 roomName 时房间也必须相等（数值形态视为同房间）
       const p = fetchXY(x, y);
-      return this.x === p.x && this.y === p.y;
+      return this.x === p.x && this.y === p.y && (!p.roomName || p.roomName === this.roomName);
     }
     isNearTo(x, y) { return this.getRangeTo(x, y) <= 1; }
     isInRangeTo(x, y, range) {
@@ -470,17 +475,20 @@
       return Math.max(Math.abs(this.x - p.x), Math.abs(this.y - p.y));
     }
     getDirectionTo(x, y) {
+      // 官方 utils.js:64-103 getDirection 的逐字移植（阈值判定而非角度最近）：
+      //   |dx| > 2|dy| → 左右；|dy| > 2|dx| → 上下；否则对角。
+      // 官方对 (0,0) 无特判（落到 else 无命中分支 → undefined）。
+      // 跨房间的官方行为（rooms.js:1390 走出口换算）M0 不实现，登记 M1。
       const p = fetchXY(x, y);
       const dx = p.x - this.x, dy = p.y - this.y;
-      if (dx === 0 && dy === 0) return 0;
-      const dirs = [[0, -1, TOP], [1, -1, TOP_RIGHT], [1, 0, RIGHT], [1, 1, BOTTOM_RIGHT], [0, 1, BOTTOM], [-1, 1, BOTTOM_LEFT], [-1, 0, LEFT], [-1, -1, TOP_LEFT]];
-      let best = dirs[0], bestDot = -Infinity;
-      const len = Math.hypot(dx, dy) || 1;
-      for (const d of dirs) {
-        const dot = (d[0] * dx + d[1] * dy) / len / Math.hypot(d[0], d[1]);
-        if (dot > bestDot) { bestDot = dot; best = d; }
-      }
-      return best[2];
+      const adx = Math.abs(dx), ady = Math.abs(dy);
+      if (adx > ady * 2) return dx > 0 ? RIGHT : LEFT;
+      if (ady > adx * 2) return dy > 0 ? BOTTOM : TOP;
+      if (dx > 0 && dy > 0) return BOTTOM_RIGHT;
+      if (dx > 0 && dy < 0) return TOP_RIGHT;
+      if (dx < 0 && dy > 0) return BOTTOM_LEFT;
+      if (dx < 0 && dy < 0) return TOP_LEFT;
+      return undefined;
     }
     findClosestByRange() { countStub('RoomPosition.findClosestByRange'); return null; }
     findClosestByPath() { countStub('RoomPosition.findClosestByPath'); return null; }
@@ -508,15 +516,20 @@
     static deserialize() { countStub('CostMatrix.deserialize'); return new CostMatrix(); }
   }
   function straightPath(from, to) {
-    const steps = [];
+    // 官方 path-finder.js：search 返回的 path 元素是 **RoomPosition 实例**（绝对
+    // 坐标）——bot 生态（tooangel 等）直接在这些元素上调用方法（含其自打的
+    // 原型补丁），返回 {dx,dy} 步进对象会让 bot 每 tick 崩溃
+    const positions = [];
     let x = from.x, y = from.y;
+    const roomName = from.roomName;
     let guard = 0;
+    positions.push(new RoomPosition(x, y, roomName));
     while ((x !== to.x || y !== to.y) && guard++ < 100) {
-      const dx = Math.sign(to.x - x), dy = Math.sign(to.y - y);
-      steps.push({ dx, dy });
-      x += dx; y += dy;
+      x += Math.sign(to.x - x);
+      y += Math.sign(to.y - y);
+      positions.push(new RoomPosition(x, y, roomName));
     }
-    return steps;
+    return positions;
   }
   const PathFinder = {
     CostMatrix,
@@ -529,7 +542,7 @@
         origin.pos ? origin.pos : origin,
         { x: to.x, y: to.y },
       );
-      return { path, ops: 0, cost: path.length, incomplete: false };
+      return { path, ops: 0, cost: path.length - 1, incomplete: false };
     },
   };
   globalThis.PathFinder = PathFinder;
@@ -680,7 +693,11 @@
           store: makeStore(o.store || { energy: 0 }),
           _memoryName: o.name,
         });
-        Object.defineProperty(obj, 'memory', { configurable: true, get: () => creepMemoryFor(o.name) });
+        Object.defineProperty(obj, 'memory', {
+          configurable: true,
+          get: () => creepMemoryFor(o.name),
+          set: (v) => { const m = ensureMemory(); if (!m.creeps) m.creeps = {}; m.creeps[o.name] = v; },
+        });
         for (const m of CREEP_METHODS) obj[m.trim()] = mkStubMethod('creep.' + m.trim());
         break;
       }
@@ -751,8 +768,13 @@
           color: o.color || 10,
           secondaryColor: o.secondaryColor || 10,
           pos,
-          memory: flagMemoryFor(o.name),
         };
+        // 官方 flags.js:31：memory 是懒 getter（赋值也允许——补 setter）
+        Object.defineProperty(obj, 'memory', {
+          configurable: true,
+          get: () => flagMemoryFor(o.name),
+          set: (v) => { const m = ensureMemory(); if (!m.flags) m.flags = {}; m.flags[o.name] = v; },
+        });
         obj.remove = mkStubMethod('flag.remove');
         obj.setPosition = mkStubMethod('flag.setPosition');
         obj.setColor = mkStubMethod('flag.setColor');
@@ -892,6 +914,12 @@
           if (!m.rooms[name]) m.rooms[name] = {};
           return m.rooms[name];
         },
+        // 官方 rooms.js:551 同时定义 setter——tooangel 等 bot 直接对 room.memory 赋值
+        set(v) {
+          const m = ensureMemory();
+          if (!m.rooms) m.rooms = {};
+          m.rooms[name] = v;
+        },
       });
       if (globalThis.Room && globalThis.Room.prototype) {
         Object.setPrototypeOf(room, globalThis.Room.prototype);
@@ -1027,17 +1055,35 @@
       if (v === undefined) {
         out = { ok: true, value: null };
       } else {
-        try {
-          out = { ok: true, value: JSON.parse(JSON.stringify(v)) };
-        } catch (e) {
-          out = { ok: false, kind: 'serialization', error: '返回值不可 JSON 序列化: ' + e.message };
+        // 活游戏对象检测，逐条对齐 vanilla 参照实现（buildConsoleCommand）：
+        //  function/symbol → serialization；非数组对象且 constructor 不是
+        //  Object/undefined（引擎类实例，如 RoomPosition/Creep/Room）→ serialization
+        let serErr = null;
+        if (typeof v === 'function' || typeof v === 'symbol') {
+          serErr = 'Return value is a ' + typeof v + ', not a plain JSON value';
+        } else if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+          const ctor = v.constructor;
+          if (ctor !== Object && ctor !== undefined) {
+            serErr = 'Return value is a ' + (ctor.name || 'non-plain') + ' object, not a plain JSON value';
+          }
+        }
+        if (serErr === null) {
+          try {
+            out = { ok: true, value: JSON.parse(JSON.stringify(v)) };
+          } catch (e) {
+            serErr = 'Return value is not JSON-serializable: ' + (e && e.message);
+          }
+        }
+        if (serErr !== null) {
+          out = { ok: false, kind: 'serialization', error: serErr };
         }
       }
       return JSON.stringify(out);
     },
-    /** tick 末：Memory 写回 RawMemory。 */
+    /** tick 末：Memory 写回 RawMemory。返回 JSON 字符串（宿主 exec_json 约定）：
+     *  {ok:true} | {ok:false,error}——写回失败按契约归为玩家 runtime 错误。 */
     endTick() {
-      writeBackMemory();
+      return JSON.stringify(writeBackMemory());
     },
     /** 清空 require 缓存（玩家代码更新/换模块表时）。lodash 预置保留。 */
     resetModules() {

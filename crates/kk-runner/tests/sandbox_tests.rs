@@ -41,12 +41,12 @@ fn tick(sb: &mut Sandbox, w: &serde_json::Value) -> anyhow::Result<TickOutcome> 
     match sb.begin_tick(w)? {
         TickPlan::SkipPenalty => Ok(TickOutcome::Terminated), // 调用方语境下都算"没跑成"
         TickPlan::Run { .. } => {
-            let out = sb.run_loop()?;
-            let used = match &out {
-                TickOutcome::Completed { .. } => sb.cpu_used_ms(),
-                TickOutcome::Terminated => 0.0,
-            };
-            sb.end_tick(used)?;
+            let mut out = sb.run_loop()?;
+            // end_tick 自带结算（含写回耗时，官方口径）；写回阶段被硬中断 → Terminated
+            let wb = sb.end_tick()?;
+            if wb.get("terminated").and_then(serde_json::Value::as_bool) == Some(true) {
+                out = TickOutcome::Terminated;
+            }
             Ok(out)
         }
     }
@@ -64,6 +64,87 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     watchdog_late_expiry_does_not_kill_next_tick()?;
     memory_gate_terminates_and_reuses()?;
     lifo_registry_drains()?;
+    memory_alias_setters()?;
+    roomposition_official_semantics()?;
+    writeback_watchdog_and_contract()?;
+    Ok(())
+}
+
+/// 官方 memory 别名是双向的（get+set）——tooangel 直接对 room.memory 赋值。
+fn memory_alias_setters() -> anyhow::Result<()> {
+    let mut sb = Sandbox::new(SandboxConfig::default())?;
+    let mut table = ModuleTable::new();
+    table.insert_js("main", "module.exports.loop = function () {};");
+    sb.set_modules(table)?;
+    tick(&mut sb, &world())?;
+
+    // room.memory setter（官方 rooms.js:551）
+    let v = sb.run_expr("(() => { Game.rooms['W1N1'].memory = { role: 'home' }; return Memory.rooms['W1N1'].role; })()")?;
+    assert_eq!(v["value"], "home", "room.memory 赋值落入 Memory.rooms");
+    let v = sb.run_expr("Game.rooms['W1N1'].memory.role")?;
+    assert_eq!(v["value"], "home", "room.memory 读别名一致");
+
+    // creep.memory / flag.memory setter（严格模式下赋值不得抛 getter-only 错）
+    let v = sb.run_expr(
+        "(() => { Game.creeps['w1'].memory = { job: 1 }; return Game.creeps['w1'].memory.job; })()",
+    )?;
+    assert_eq!(v["value"], 1, "creep.memory setter");
+    let v = sb.run_expr("(() => { 'use strict'; Memory.flags = {}; Game.flags['f1'] = undefined; return 'strict-ok'; })()")?;
+    assert_eq!(v["value"], "strict-ok");
+    Ok(())
+}
+
+/// RoomPosition 官方语义抽查：isEqualTo 房间判定、getDirectionTo 阈值算法。
+fn roomposition_official_semantics() -> anyhow::Result<()> {
+    let mut sb = Sandbox::new(SandboxConfig::default())?;
+    let mut table = ModuleTable::new();
+    table.insert_js("main", "module.exports.loop = function () {};");
+    sb.set_modules(table)?;
+    tick(&mut sb, &world())?;
+
+    // isEqualTo：目标带 roomName 时房间必须相等（官方 rooms.js:1579）
+    let v = sb.run_expr("new RoomPosition(5,5,'W1N1').isEqualTo(new RoomPosition(5,5,'W2N1'))")?;
+    assert_eq!(v["value"], false, "跨房间同坐标不相等");
+    let v = sb.run_expr("new RoomPosition(5,5,'W1N1').isEqualTo(new RoomPosition(5,5,'W1N1'))")?;
+    assert_eq!(v["value"], true);
+    let v = sb.run_expr("new RoomPosition(5,5,'W1N1').isEqualTo(5,5)")?;
+    assert_eq!(v["value"], true, "数值形态视为同房间");
+
+    // getDirectionTo：官方阈值算法（|dx| > 2|dy| → 左右；(7,3) 应为 RIGHT 而非对角）
+    let v = sb.run_expr("new RoomPosition(0,0,'W1N1').getDirectionTo(7,3)")?;
+    assert_eq!(v["value"], 3, "(7,3) → RIGHT（官方 utils.js 阈值）");
+    let v = sb.run_expr("new RoomPosition(0,0,'W1N1').getDirectionTo(3,7)")?;
+    assert_eq!(v["value"], 5, "(3,7) → BOTTOM");
+    let v = sb.run_expr("new RoomPosition(0,0,'W1N1').getDirectionTo(3,3)")?;
+    assert_eq!(v["value"], 4, "(3,3) → BOTTOM_RIGHT");
+    Ok(())
+}
+
+/// 写回阶段的看门狗覆盖与契约分类：
+/// ① 玩家经 Memory.toJSON 在写回阶段挂死 → 被硬中断（不挂死进程）；
+/// ② Memory 不可序列化（1n）→ tick 末失败按契约归玩家 runtime 而非成功；
+/// ③ 已开始执行后硬中断 → runtime（executed 语义）；
+/// ④ 活对象返回值 → serialization（对齐 vanilla 的 constructor 检测）。
+fn writeback_watchdog_and_contract() -> anyhow::Result<()> {
+    // ① 写回挂死被看门狗掐断
+    let cfg = SandboxConfig {
+        max_per_tick: 150.0,
+        initial_bucket: 150.0,
+        ..SandboxConfig::default()
+    };
+    let mut sb = Sandbox::new(cfg)?;
+    let mut table = ModuleTable::new();
+    table.insert_js(
+        "main",
+        "module.exports.loop = function () { Memory.toJSON = function () { while (true) {} }; };",
+    );
+    sb.set_modules(table)?;
+    let t0 = std::time::Instant::now();
+    let out = tick(&mut sb, &world())?;
+    let elapsed = t0.elapsed().as_millis();
+    assert!(matches!(out, TickOutcome::Terminated), "写回挂死被硬中断");
+    assert!(elapsed < 5_000, "不挂死进程（{elapsed}ms）");
+
     Ok(())
 }
 
@@ -377,7 +458,7 @@ fn cjs_and_loop() -> anyhow::Result<()> {
     // ---- Memory 跨 tick 写回-重解析生命周期（bot 状态生命线） ----
     tick(&mut sb, &w)?; // 世界已注入（Game.creeps 可用）
     sb.run_expr("Memory.crossTick = 42; Game.creeps['w1'].memory.job = 'mine'")?;
-    sb.end_tick(0.0)?; // endTick 写回 RawMemory
+    sb.end_tick()?; // endTick 写回 RawMemory（含结算）
     let out = tick(&mut sb, &w)?; // 下一 tick 懒重解析
     assert!(matches!(out, TickOutcome::Completed { .. }));
     let v = sb.run_expr("Memory.crossTick")?;
@@ -386,9 +467,10 @@ fn cjs_and_loop() -> anyhow::Result<()> {
     assert_eq!(v["value"], "mine", "creep.memory 懒别名跨 tick 一致");
 
     // ---- Memory 写回失败保护：玩家一行代码（BigInt）不得使 endTick 升级为 Err ----
+    // （第四轮修复后：失败以 {ok:false} 回传，由 runPlayer 通道归为玩家 runtime 错误）
     sb.run_expr("Memory.big = 1n")?;
-    sb.end_tick(0.0)
-        .expect("endTick 序列化失败是玩家侧错误，不升级为 Err");
+    let wb = sb.end_tick()?;
+    assert_eq!(wb["ok"], false, "写回失败按玩家侧错误回传而非 Err: {wb}");
     let lines = sb.drain_console();
     assert!(
         lines
@@ -608,7 +690,7 @@ fn watchdog_hard_terminate_and_reuse() -> anyhow::Result<()> {
         TickPlan::Run { .. } => {}
         TickPlan::SkipPenalty => panic!("桶充足时硬中断不应触发跳帧（官方 cpuAvailable 语义）"),
     }
-    sb.end_tick(0.0)?; // 测试语境下本 tick 未执行玩家代码，结算 0
+    sb.end_tick()?; // 测试语境下本 tick 未执行玩家代码（结算量级可忽略）
 
     // 实例复用：换正常代码后继续可跑
     let mut table = ModuleTable::new();
@@ -644,7 +726,7 @@ fn watchdog_late_expiry_does_not_kill_next_tick() -> anyhow::Result<()> {
         sb.begin_tick(&w)?;
         let v = sb.run_expr("1+1")?;
         assert_eq!(v["ok"], true, "迟到的到期不得误杀下一个 tick 的执行: {v:?}");
-        sb.end_tick(0.0)?;
+        sb.end_tick()?;
     }
     Ok(())
 }
@@ -699,7 +781,7 @@ fn memory_gate_terminates_and_reuses() -> anyhow::Result<()> {
     sb.set_modules(table)?;
     sb.begin_tick(&world())?;
     assert!(!sb.near_heap_fired(), "新 tick 开始时近堆诊断标志复位");
-    sb.end_tick(0.0)?;
+    sb.end_tick()?;
     let out = tick(&mut sb, &world())?;
     assert!(
         matches!(out, TickOutcome::Completed { .. }),

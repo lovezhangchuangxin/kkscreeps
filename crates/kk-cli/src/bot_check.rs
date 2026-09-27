@@ -59,8 +59,15 @@ fn run_inner(path: &str, ticks: u32, report_path: &str) -> anyhow::Result<()> {
             (TickOutcome::Terminated, TickPlan::SkipPenalty) => skipped_penalty += 1,
             (TickOutcome::Terminated, TickPlan::Run { .. }) => terminated += 1,
         }
-        if report.console.iter().any(|l| l.level == "error") {
+        // 玩家 loop 逻辑错误（bot 常自行 try/catch 后用 console.log 记录，
+        // 只看 error 级会漏——player_error 是更可靠的信号）
+        if report.player_error.is_some() || report.console.iter().any(|l| l.level == "error") {
             errored_ticks += 1;
+        }
+        if let Some(err) = &report.player_error
+            && console_errors.len() < 300
+        {
+            console_errors.push(format!("[tick {t}] [loop] {}", err));
         }
         for line in report.console {
             if line.level == "error" && console_errors.len() < 300 {
@@ -148,6 +155,9 @@ fn home_world(t: u32) -> Value {
               "owner": "bot", "hits": 10000, "hitsMax": 10000 },
             { "id": "src1", "type": "structure", "structureType": "source",
               "room": "W1N1", "x": 15, "y": 15, "energy": 2500, "energyCapacity": 3000 },
+            { "id": "min1", "type": "structure", "structureType": "mineral",
+              "room": "W1N1", "x": 30, "y": 30, "mineralType": "XUH2O",
+              "mineralAmount": 50000, "density": 3 },
             { "id": "spw1", "type": "spawn", "room": "W1N1", "x": 20, "y": 20, "name": "Spawn1",
               "owner": "bot", "store": { "energy": 300 }, "energyCapacity": 300 },
             { "id": "crp1", "type": "creep", "room": "W1N1", "x": 25, "y": 25, "name": "harvester1",

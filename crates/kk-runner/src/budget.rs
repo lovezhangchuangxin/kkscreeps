@@ -71,15 +71,16 @@ impl Bucket {
         self.bucket
     }
 
-    /// 正常结算（官方 make.js:206-212）：`bucket += limit − used`，封顶 cap、可为负、不落 0。
+    /// 正常结算（官方 make.js:193/206-212）：`bucket += limit − ceil(used)`，封顶 cap、
+    /// 可为负、不落 0——官方逐 tick 向上取整，亚毫秒耗时也计 1。
     pub fn settle(&mut self, used_ms: f64) {
-        self.bucket = (self.bucket + self.limit - used_ms).min(self.cap);
+        self.bucket = (self.bucket + self.limit - used_ms.ceil()).min(self.cap);
     }
 
     /// 硬中断结算（官方 make.js:187+206-212）：超时被沙箱内捕获、按整份 tickLimit 计费，
     /// 与正常结算同路径回充。桶充足时**不**跳帧，负桶由 `begin_tick` 的停跑规则处理。
     pub fn settle_terminated(&mut self) {
-        self.bucket = (self.bucket + self.limit - self.tick_limit).min(self.cap);
+        self.bucket = (self.bucket + self.limit - self.tick_limit.ceil()).min(self.cap);
     }
 }
 
@@ -139,6 +140,17 @@ mod tests {
             matches!(b.begin_tick(), TickPlan::Run { tick_limit: 20.0 }),
             "回正后恢复执行，tickLimit = limit + bucket"
         );
+    }
+
+    #[test]
+    fn settle_ceils_sub_millisecond_usage() {
+        // 官方 make.js:193 Math.ceil：0.1ms 也计 1，亚毫秒连续 tick 不会白嫖预算
+        let mut b = Bucket::new(20.0, 10_000.0, 500.0, 0.0);
+        assert!(matches!(b.begin_tick(), TickPlan::Run { tick_limit: 20.0 }));
+        b.settle(0.1);
+        assert_eq!(b.bucket(), 19.0, "ceil(0.1) = 1");
+        b.settle(0.0);
+        assert_eq!(b.bucket(), 39.0, "ceil(0) = 0（官方对 0 不虚计）");
     }
 
     #[test]

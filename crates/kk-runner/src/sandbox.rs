@@ -84,6 +84,8 @@ pub struct Sandbox {
     heap_limit: usize,
     /// 本 tick 的预算是否已结算（硬中断善后与 end_tick 二选一结算，防双计）。
     tick_settled: bool,
+    /// 上一次 runLoop 捕获的玩家逻辑错误（run_loop 写入，take_last_loop_error 取走）。
+    last_loop_error: Option<String>,
 }
 
 impl Sandbox {
@@ -128,6 +130,7 @@ impl Sandbox {
             shared,
             heap_limit: config.heap_limit_bytes,
             tick_settled: false,
+            last_loop_error: None,
         };
         sb.install_near_heap_callback();
         Ok(sb)
@@ -216,11 +219,22 @@ impl Sandbox {
         }
     }
 
-    /// 执行玩家入口 `require('main').loop()`。
+    /// 执行玩家入口 `require('main').loop()`。入口执行完毕即 Completed——
+    /// "执行到入口"≠"玩家代码无异常"：玩家逻辑错误由 runLoop 内部捕获，
+    /// 经 `take_last_loop_error` 暴露（报告/验收统计据此区分）。
     pub fn run_loop(&mut self) -> anyhow::Result<TickOutcome> {
         let result = self.exec_json("globalThis.__kk.runLoop()");
         match result {
-            Ok(_) => Ok(TickOutcome::Completed { used_ms: 0.0 }),
+            Ok(v) => {
+                self.last_loop_error = match v.get("ok").and_then(serde_json::Value::as_bool) {
+                    Some(false) => v
+                        .get("error")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_owned),
+                    _ => None,
+                };
+                Ok(TickOutcome::Completed { used_ms: 0.0 })
+            }
             Err(_) => {
                 // execute_script 失败且非玩家逻辑错误（runLoop 内部已 try/catch）≈ 硬中断
                 self.after_termination();
@@ -229,29 +243,41 @@ impl Sandbox {
         }
     }
 
+    /// 取走上一次 runLoop 捕获的玩家逻辑错误（None = 正常完成或硬中断）。
+    pub fn take_last_loop_error(&mut self) -> Option<String> {
+        self.last_loop_error.take()
+    }
+
     /// tick 结束：Memory 写回 + CPU 结算。
-    /// 结算与 tick_start 清理**不因脚本错误跳过**——endTick 的玩家侧错误（如 Memory
-    /// 不可序列化）已在 prelude 内归类处理（console.error + 跳过写回），这里返回的
-    /// Err 只可能是基础设施级故障。
-    pub fn end_tick(&mut self, used_ms: f64) -> anyhow::Result<()> {
-        self.watchdog.disarm();
-        // 迟到的看门狗 terminate 可能恰好落在本 tick 的 Memory 写回上（玩家代码在
-        // deadline 前一瞬自然完成时）。此刻玩家代码已返回，清标志恒安全；
-        // 不清则写回被打死、Memory 丢失，验收运行被 `?` 中断
+    /// **看门狗保持武装直到写回完成**（官方：Memory 序列化计入玩家的超时窗口与
+    /// CPU 计费——玩家可经 `Memory.toJSON` 在写回阶段执行任意代码，不能 disarm
+    /// 后再执行玩家可感代码）。
+    /// 返回写回结果 JSON：`{ok:true}` | `{ok:false,error}`（按 screeps-ok 契约归为
+    /// 玩家 runtime 错误）| `{ok:false,terminated:true}`（写回阶段被硬中断，已按
+    /// 整份 tickLimit 善后结算）。Err 仅剩基础设施级故障。
+    pub fn end_tick(&mut self) -> anyhow::Result<serde_json::Value> {
+        // 迟到的看门狗 terminate 标志不得误伤写回（run 恰在 deadline 前完成时）
         self.runtime.v8_isolate().cancel_terminate_execution();
-        let exec = self.exec_script("globalThis.__kk.endTick()");
-        if exec.is_err() {
-            // near-heap 也可能打在 endTick 的大分配（Memory stringify）上：
-            // 恢复被回调抬高的堆上限，并清残留标志，不留"中毒"状态
-            self.clear_terminate_flag();
-            self.restore_heap_limit();
+        let exec = self.exec_json("globalThis.__kk.endTick()");
+        match exec {
+            Ok(v) => {
+                self.watchdog.disarm();
+                if !self.tick_settled {
+                    self.budget.settle(self.cpu_used_ms()); // 含写回耗时（官方口径）
+                    self.tick_settled = true;
+                }
+                *self.shared.tick_start.lock().unwrap() = None;
+                Ok(v)
+            }
+            Err(_) => {
+                // 写回阶段被硬中断（如玩家经 Memory.toJSON 挂死写回）：统一善后
+                // （disarm、清标志、按整份 tickLimit 结算、恢复堆上限）
+                self.after_termination();
+                Ok(
+                    serde_json::json!({ "ok": false, "terminated": true, "error": "写回阶段硬中断" }),
+                )
+            }
         }
-        if !self.tick_settled {
-            self.budget.settle(used_ms);
-            self.tick_settled = true;
-        }
-        *self.shared.tick_start.lock().unwrap() = None;
-        exec
     }
 
     /// 求值一段玩家表达式（screeps-ok 适配器的 runPlayer 通道），恰好占用一个 tick 的
