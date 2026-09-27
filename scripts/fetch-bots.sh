@@ -37,7 +37,7 @@ fi
 
 # 合成 wasm 夹具：require('mod.wasm') 返回 Buffer → 编译为 WebAssembly.Module
 mkdir -p "$DEST/wasm-bot"
-if [ ! -s "$DEST/wasm-bot/main.js" ]; then
+if [ ! -s "$DEST/wasm-bot/main.js" ] || [ ! -s "$DEST/wasm-bot/mod.wasm" ]; then
   cat > "$DEST/wasm-bot/main.js" <<'EOF'
 // 合成 bot：验证官方语义——二进制模块 require 返回 Buffer，可直接喂给 WebAssembly
 module.exports.loop = function () {

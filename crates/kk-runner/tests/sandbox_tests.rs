@@ -291,8 +291,11 @@ fn is_allowed_global(name: &str) -> bool {
     if ECMA_BUILTINS.contains(&name) || ENV_NAMES.contains(&name) {
         return true;
     }
-    // 官方常量平铺（443 个，全大写 + 下划线，如 OK/FIND_CREEPS/BODYPARTS_ALL）
+    // 官方常量平铺（443 个，全大写 + 下划线，如 OK/FIND_CREEPS/BODYPARTS_ALL）。
+    // 排除 __ 前缀：deno_core 的内部全局惯例是双下划线开头（如 __bootstrap），
+    // 不能被全大写兜底放行
     name.len() > 1
+        && !name.starts_with("__")
         && name
             .chars()
             .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
@@ -679,6 +682,12 @@ fn memory_gate_terminates_and_reuses() -> anyhow::Result<()> {
     assert!(
         elapsed_ms < 10_000,
         "近堆触发远快于看门狗兜底线（{elapsed_ms}ms < 10000ms）"
+    );
+    assert!(
+        sb.heap_size_limit_bytes() <= 60 * 1024 * 1024,
+        "善后已把被回调抬高的堆上限恢复到配置值 48MB 附近（实测 {} 字节；\
+         若 restore 失效会停留在 96MB）",
+        sb.heap_size_limit_bytes()
     );
 
     // 复用（善后已 remove+re-add 回调并恢复堆上限；诊断标志在下一 begin_tick 复位）

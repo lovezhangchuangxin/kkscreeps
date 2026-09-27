@@ -14,7 +14,8 @@ import { capabilities, type AdapterCapabilities } from './capabilities.js';
 // ---- screeps-ok 契约类型（结构等价的本地声明；规范以 screeps-ok src/adapter.ts 为准） ----
 
 export interface ShardSpec {
-  players?: string[];
+  /** 官方契约（adapter.ts:16-19）：玩家可以是字符串 handle 或 PlayerSpec 对象。 */
+  players?: Array<string | { name: string; gcl?: unknown; power?: unknown }>;
   rooms?: Array<{
     name: string;
     rcl?: number;

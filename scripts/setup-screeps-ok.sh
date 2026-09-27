@@ -13,6 +13,7 @@ if [ ! -d "$DEST/.git" ]; then
   git clone "$REPO_URL" "$DEST"
 fi
 git -C "$DEST" fetch --all
+git -C "$DEST" checkout -- package-lock.json 2>/dev/null || true
 git -C "$DEST" checkout "$SCREEPS_OK_PIN"
 
 # 上游 lockfile 把 isolated-vm 锁成 git+ssh（需要 GitHub SSH 密钥），

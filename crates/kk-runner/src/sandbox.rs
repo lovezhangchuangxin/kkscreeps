@@ -82,6 +82,8 @@ pub struct Sandbox {
     shared: SharedRef,
     /// 配置的堆硬上限（near-heap 触发放大后据此恢复）。
     heap_limit: usize,
+    /// 本 tick 的预算是否已结算（硬中断善后与 end_tick 二选一结算，防双计）。
+    tick_settled: bool,
 }
 
 impl Sandbox {
@@ -125,6 +127,7 @@ impl Sandbox {
             ),
             shared,
             heap_limit: config.heap_limit_bytes,
+            tick_settled: false,
         };
         sb.install_near_heap_callback();
         Ok(sb)
@@ -193,6 +196,7 @@ impl Sandbox {
             TickPlan::SkipPenalty => Ok(TickPlan::SkipPenalty),
             TickPlan::Run { .. } => {
                 // 清除可能遗留的终止标志，然后武装看门狗
+                self.tick_settled = false;
                 self.runtime.v8_isolate().cancel_terminate_execution();
                 let deadline = Instant::now()
                     + Duration::from_millis(self.budget.tick_limit().max(1.0) as u64);
@@ -231,8 +235,21 @@ impl Sandbox {
     /// Err 只可能是基础设施级故障。
     pub fn end_tick(&mut self, used_ms: f64) -> anyhow::Result<()> {
         self.watchdog.disarm();
+        // 迟到的看门狗 terminate 可能恰好落在本 tick 的 Memory 写回上（玩家代码在
+        // deadline 前一瞬自然完成时）。此刻玩家代码已返回，清标志恒安全；
+        // 不清则写回被打死、Memory 丢失，验收运行被 `?` 中断
+        self.runtime.v8_isolate().cancel_terminate_execution();
         let exec = self.exec_script("globalThis.__kk.endTick()");
-        self.budget.settle(used_ms);
+        if exec.is_err() {
+            // near-heap 也可能打在 endTick 的大分配（Memory stringify）上：
+            // 恢复被回调抬高的堆上限，并清残留标志，不留"中毒"状态
+            self.clear_terminate_flag();
+            self.restore_heap_limit();
+        }
+        if !self.tick_settled {
+            self.budget.settle(used_ms);
+            self.tick_settled = true;
+        }
         *self.shared.tick_start.lock().unwrap() = None;
         exec
     }
@@ -251,11 +268,15 @@ impl Sandbox {
     }
 
     /// 硬中断善后：解除武装、清终止标志、结算（官方语义：扣整份 tickLimit，桶充足
-    /// 不跳帧，负桶由 begin_tick 停跑）、恢复堆上限、清 tick_start。幂等。
+    /// 不跳帧，负桶由 begin_tick 停跑）、恢复堆上限、清 tick_start。幂等；
+    /// 本 tick 已由善后结算的，end_tick 不再重复结算。
     fn after_termination(&mut self) {
         self.watchdog.disarm();
         self.runtime.v8_isolate().cancel_terminate_execution();
-        self.budget.settle_terminated();
+        if !self.tick_settled {
+            self.budget.settle_terminated();
+            self.tick_settled = true;
+        }
         self.restore_heap_limit();
         *self.shared.tick_start.lock().unwrap() = None;
     }
@@ -273,6 +294,15 @@ impl Sandbox {
     /// 近堆回调是否在本 tick 触发过（诊断：区分内存闸门与看门狗兜底路径）。
     pub fn near_heap_fired(&self) -> bool {
         self.shared.near_heap_fired.load(Ordering::Relaxed)
+    }
+
+    /// V8 当前生效的堆上限。近堆回调的返回值会把它持久抬高（remove+re-add 恢复），
+    /// 测试据此断言"触发后恢复到配置值"而非仅凭实例复用。
+    pub fn heap_size_limit_bytes(&mut self) -> usize {
+        self.runtime
+            .v8_isolate()
+            .get_heap_statistics()
+            .heap_size_limit()
     }
 
     /// 当前 tick 已用的墙钟毫秒（M0 口径；正式实现换线程 CPU 时钟）。

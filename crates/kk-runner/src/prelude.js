@@ -112,6 +112,9 @@
     for (let i = 0; i < str.length; i++) {
       let c = str.codePointAt(i);
       if (c > 0xffff) i++;
+      // 孤代理（合法对的 codePointAt 返回合并码点，落代理区间的必是孤代理）：
+      // Node 输出 U+FFFD 的 UTF-8 字节，而非 CESU-8 形态
+      else if (c >= 0xd800 && c <= 0xdfff) c = 0xfffd;
       if (c < 0x80) out.push(c);
       else if (c < 0x800) out.push(0xc0 | (c >> 6), 0x80 | (c & 63));
       else if (c < 0x10000) out.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
@@ -120,32 +123,40 @@
     return out;
   }
   function utf8Decode(bytes) {
-    // 对齐官方 Buffer：非法/截断的 UTF-8 序列产出 U+FFFD 替换字符，而非抛 RangeError
+    // 对齐 Node/V8（well-formed UTF-8 解码 + maximal-subpart 替换策略）：
+    // - 非法/截断序列产出 U+FFFD，替换粒度 = 已验证的合法前缀（截断的 3 字节序列
+    //   整体一个 FFFD，而非每字节一个）；
+    // - 第二字节按 leading 的受限范围校验（E0≥A0、ED≤9F、F0≥90、F4≤8F），
+    //   overlong/代理区/超界由此天然排除。
+    const REPL = '\ufffd';
     let s = '';
     let i = 0;
     const n = bytes.length;
     while (i < n) {
       const b = bytes[i];
       if (b < 0x80) { s += String.fromCharCode(b); i += 1; continue; }
-      let size = 0;
-      let cp = 0;
-      if (b >= 0xc2 && b <= 0xdf) { size = 2; cp = b & 0x1f; } // 0xc0/0xc1 为 overlong，非法
-      else if (b >= 0xe0 && b <= 0xef) { size = 3; cp = b & 0x0f; }
-      else if (b >= 0xf0 && b <= 0xf4) { size = 4; cp = b & 0x07; }
-      if (size === 0 || i + size > n) { s += '\ufffd'; i += 1; continue; } // 非法 leading / 截断
-      let ok = true;
-      for (let k = 1; k < size; k++) {
-        const c = bytes[i + k];
-        if ((c & 0xc0) !== 0x80) { ok = false; break; } // 非法 continuation
-        cp = (cp << 6) | (c & 0x3f);
+      let size, lo2, hi2;
+      if (b >= 0xc2 && b <= 0xdf) { size = 2; lo2 = 0x80; hi2 = 0xbf; }
+      else if (b === 0xe0) { size = 3; lo2 = 0xa0; hi2 = 0xbf; }
+      else if (b >= 0xe1 && b <= 0xec) { size = 3; lo2 = 0x80; hi2 = 0xbf; }
+      else if (b === 0xed) { size = 3; lo2 = 0x80; hi2 = 0x9f; }
+      else if (b === 0xf0) { size = 4; lo2 = 0x90; hi2 = 0xbf; }
+      else if (b >= 0xf1 && b <= 0xf3) { size = 4; lo2 = 0x80; hi2 = 0xbf; }
+      else if (b === 0xf4) { size = 4; lo2 = 0x80; hi2 = 0x8f; }
+      else { s += REPL; i += 1; continue; } // 0xc0/0xc1（overlong）与 0xf5-0xff：非法 leading
+      const b2 = bytes[i + 1];
+      if (b2 === undefined || b2 < lo2 || b2 > hi2) {
+        s += REPL; i += 1; continue; // 第二字节非法或截断：只吃 leading 一个字节
       }
-      if (!ok || cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff)) {
-        s += '\ufffd';
-        i += 1;
-        continue;
+      let cp = ((b & (size === 2 ? 0x1f : size === 3 ? 0x0f : 0x07)) << 6) | (b2 & 0x3f);
+      let j = i + 2;
+      while (j < n && j - i < size && (bytes[j] & 0xc0) === 0x80) {
+        cp = (cp << 6) | (bytes[j] & 0x3f);
+        j += 1;
       }
+      if (j - i < size) { s += REPL; i = j; continue; } // 截断：已验证前缀整体一个 FFFD
       s += String.fromCodePoint(cp);
-      i += size;
+      i = j;
     }
     return s;
   }
@@ -166,14 +177,16 @@
         let bytes;
         if (enc === 'utf8' || enc === 'utf-8') bytes = utf8Encode(input);
         else if (enc === 'hex') {
-          if (input.length % 2 !== 0) throw new TypeError('Buffer.from(hex): 奇数长度');
+          // Node 宽松语义：奇数长度静默截断最后一个半字节；非法字符处停止解码
           bytes = [];
-          for (let i = 0; i < input.length; i += 2) {
+          const len = input.length - (input.length % 2);
+          for (let i = 0; i < len; i += 2) {
             const hi = hexVal(input[i]), lo = hexVal(input[i + 1]);
-            if (hi < 0 || lo < 0) throw new TypeError('Buffer.from(hex): 非法字符');
+            if (hi < 0 || lo < 0) break;
             bytes.push((hi << 4) | lo);
           }
         } else if (enc === 'base64') {
+          // Node 宽松语义：跳过字母表外的字符继续解码
           const clean = input.replace(/\s/g, '');
           bytes = [];
           let buf = 0;
@@ -181,7 +194,7 @@
           for (const ch of clean) {
             if (ch === '=') break;
             const v = base64Val(ch);
-            if (v < 0) throw new TypeError('Buffer.from(base64): 非法字符');
+            if (v < 0) continue;
             buf = (buf << 6) | v;
             bits += 6;
             if (bits >= 8) { bits -= 8; bytes.push((buf >> bits) & 0xff); }
@@ -205,9 +218,16 @@
         return b;
       }
       if (typeof input === 'object' && input !== null) {
-        const keys = Object.keys(input);
-        const b = new Buffer(keys.length);
-        keys.forEach((k, idx) => { b[idx] = input[k]; });
+        // Node 语义：对象形态按 array-like 处理（取 length 与索引），否则报错
+        if (typeof input.length !== 'number') {
+          throw new TypeError('Buffer.from: 非数组对象必须带 length（array-like）');
+        }
+        const len = input.length >>> 0;
+        const b = new Buffer(len);
+        for (let k = 0; k < len; k++) {
+          const v = input[k];
+          b[k] = v === undefined ? 0 : v;
+        }
         return b;
       }
       throw new TypeError('Buffer.from: 不支持的入参形态');
@@ -415,34 +435,42 @@
   // ---------------------------------------------------------------- RoomPosition
   // 官方全局类；纯计算方法给真实现，副作用方法为桩。
 
+  // 参数形态归一（官方 utils.js:34-63 fetchXYArguments 的桩版）：
+  // 第二参是 number → 数值形态（x 直接当数字用，roomName=undefined 视为同房间）；
+  // 否则对象形态（RoomObject 先解包 .pos，RoomPosition 用自身）
+  function fetchXY(x, y) {
+    if (typeof y === 'number') return { x: Number(x), y, roomName: undefined };
+    const p = x && typeof x === 'object' && x.pos && typeof x.pos === 'object'
+      && typeof x.pos.x === 'number' ? x.pos : x;
+    return p;
+  }
+
   class RoomPosition {
     constructor(x, y, roomName) {
       this.x = x;
       this.y = y;
       this.roomName = roomName;
-    }
-    get room() { return Game.rooms[this.roomName] || undefined; }
+    }    get room() { return Game.rooms[this.roomName] || undefined; }
+    // 官方 utils.js:34-63 fetchXYArguments：第二参是 number → 数值形态（roomName 为
+    // undefined，视为同房间）；否则对象形态（RoomObject 先解包 .pos）
     isEqualTo(x, y) {
-      const p = typeof x === 'object' ? x : { x, y };
+      const p = fetchXY(x, y);
       return this.x === p.x && this.y === p.y;
     }
     isNearTo(x, y) { return this.getRangeTo(x, y) <= 1; }
     isInRangeTo(x, y, range) {
-      // 形态按原始第一参区分（官方 rooms.js:1362-1376）：三参 (x,y,range) 时 r 取
-      // 第三参；两参 (pos, range) 时 r 取第二参。不能先包装成 p 再判（p 恒为对象）
-      const p = typeof x === 'object' ? x : { x, y };
-      const r = typeof x === 'object' ? y : range;
-      return this.getRangeTo(p) <= r;
+      // 官方 rooms.js:1362-1376 inRangeTo：三参 (x,y,range) 取第三参；两参 (pos,range) 取第二参
+      const r = typeof y === 'number' ? range : y;
+      return this.getRangeTo(x, y) <= r;
     }
     getRangeTo(x, y) {
-      const p = typeof x === 'object' ? x : { x, y };
-      // 官方 rooms.js:1588：仅目标带 roomName 且不等时才跨房间；数值形态（x,y 双参）
-      // 视为同房间坐标
-      if (p.roomName && this.roomName !== p.roomName) return Infinity; // 跨房间（M0 桩：不实现）
+      const p = fetchXY(x, y);
+      // 官方 rooms.js:1588：仅目标带 roomName 且不等时才跨房间；数值形态视为同房间
+      if (p.roomName && this.roomName !== p.roomName) return Infinity;
       return Math.max(Math.abs(this.x - p.x), Math.abs(this.y - p.y));
     }
     getDirectionTo(x, y) {
-      const p = typeof x === 'object' ? x : { x, y };
+      const p = fetchXY(x, y);
       const dx = p.x - this.x, dy = p.y - this.y;
       if (dx === 0 && dy === 0) return 0;
       const dirs = [[0, -1, TOP], [1, -1, TOP_RIGHT], [1, 0, RIGHT], [1, 1, BOTTOM_RIGHT], [0, 1, BOTTOM], [-1, 1, BOTTOM_LEFT], [-1, 0, LEFT], [-1, -1, TOP_LEFT]];
@@ -990,10 +1018,10 @@
         // eslint-disable-next-line no-eval
         v = (0, eval)(code);
       } catch (e) {
-        // 区分语法错误与运行期错误：能否通过 Function 预解析
-        let isSyntax = false;
-        try { new Function(code); } catch (pe) { isSyntax = pe instanceof SyntaxError; }
-        out = { ok: false, kind: isSyntax ? 'syntax' : 'runtime', error: String((e && e.message) || e) };
+        // eval 在全局作用域抛出的 SyntaxError 即解析期错误（官方控制台同口径）；
+        // 运行期错误（含运行期动态构造的语法异常）归 runtime
+        const kind = e instanceof SyntaxError ? 'syntax' : 'runtime';
+        out = { ok: false, kind, error: String((e && e.message) || e) };
         return JSON.stringify(out);
       }
       if (v === undefined) {

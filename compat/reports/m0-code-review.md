@@ -209,3 +209,40 @@
 - `git diff HEAD --stat` 复核全部改动面（24 文件 +964/-167，另有新增 crates/kk-cli/tests/）；
 - 文档核对发现并已修的不一致：README.md:28"九条 ADR"→"十条"（docs/decisions/ 实有 ADR-001..010）；docs/architecture/sandbox.md 模块系统段"留待真实机器人代码验收（M0）"已过时→改为 M0 已验收+灰区登记现状；安全边界段"遮蔽复查列入实现期验证项"已兑现→改为 __bootstrap 遮蔽+白名单比对测试已实装。
 - 未验证项：完整 workspace 测试套件、docs 链接检查、screeps-ok 全量基线的正式重跑（按任务分工留给脚本统一执行）。
+
+---
+
+## 追记：修复后复审（2026-09-27，第三轮，直接子代理）
+
+三个独立评审员对 commit 3b35de2 的 38 项修复本体做了聚焦复审（官方源码逐行对照、
+deno_core/v8 registry 源码核查、CI 干净环境推演、JS 边界实测）。结论：修复方向全部
+正确、无行为回归；但发现 2 条 medium + 若干 low 的"修复不完整/顺带引入"，当场修复：
+
+| 问题 | 处置 |
+|---|---|
+| 负桶停跑的判定顺序与官方相反（官方回充**前**判定；kk 在 (-limit,0) 区间会跑缩水 tick 甚至 tickLimit=0 的 1ms 秒杀 tick） | **已修**：budget 重写为官方形态——回充并入结算（`bucket += limit − used`，封顶、可为负）、begin_tick 回充前判定、停跑分支带官方 −2×limit 地板；同步单测（含新增深负地板用例） |
+| end_tick 缺 cancel：迟到的看门狗 terminate 可打死 Memory 写回、中断整轮验收 | **已修**：disarm 后 cancel + 失败善后恢复堆上限 |
+| near-heap 打在 endTick 的 Memory stringify 上时抬高的上限不恢复 | **已修**：end_tick 失败路径接 restore_heap_limit |
+| 堆上限恢复无防回归断言 | **已修**：暴露 heap_size_limit_bytes，memory_gate 测试断言恢复到 48MB 附近 |
+| 回充并入结算后 after_termination 与 end_tick 双计费 | **已修**：tick_settled 标志二选一结算 |
+| utf8Decode：overlong 3/4 字节漏检、截断的 FFFD 计数是 Node 两倍 | **已修**：按官方第二字节受限范围（E0≥A0/ED≤9F/F0≥90/F4≤8F）+ maximal-subpart 重写；全部边界经 embed RPC 对照 Node 实测一致 |
+| utf8Encode 孤代理产出 CESU-8 | **已修**：输出 U+FFFD |
+| Buffer.from hex/base64 非法输入 throw（Node 宽松：截断/停止/跳过） | **已修**：对齐 Node 宽松行为 |
+| Buffer.from(object) 非 array-like 形态与 Node 相反 | **已修**：有 length 按 array-like，否则报错 |
+| RoomPosition 系列不解包 `.pos`、分发条件与官方相反 | **已修**：fetchXY 按第二参分发 + .pos 解包（官方 fetchXYArguments 语义） |
+| runExpr 错误分类用 new Function 预探（`return 1` 误判 runtime） | **已修**：以 eval 抛出的 `instanceof SyntaxError` 为准 |
+| 白名单全大写兜底可放行 `__FOO` 形内部全局 | **已修**：排除 `__` 前缀 |
+| embed PlayerSpec 已支持但 adapter.ts 类型未同步 | **已修**：联合类型 |
+| fetch-bots.sh wasm 夹具半成品不幂等；setup-screeps-ok.sh 换 pin 被脏树卡住；CI 无 job 超时 | **已修**：分别处理 |
+
+复审确认无问题（要点）：看门狗锁原子化无死锁/丢唤醒（v8 terminate 仅短暂持内部锁）；
+budget 桶充足不跳帧与官方 make.js 对照成立；near-heap remove+re-add 的 API 用法正确
+（deno_core jsruntime 源码核查，isolate 亲和线程调用）；console 闸门不误杀正常 bot
+（tooangel 2000 tick 零截断）；间接 eval/`__bootstrap` 删除/类别名/CJS 失败删缓存/
+embed 契约的实现与测试均成立；CI 干净环境推演通过。
+
+**新登记留待后续**：
+- console 格式化与官方不同（官方逐参 `toString()`，对象得 `[object Object]`）——影响
+  screeps-ok 输出比对类用例，M1 对照 console.js 处理；
+- 探测 has-trap 会把否定式能力探测（`!('x' in Game)`）计入缺失清单（仪表噪声方向，
+  不影响语义），M1 仪表增强时处理。

@@ -1,12 +1,13 @@
 //! CPU 预算桶（bucket）经济——官方语义的 Rust 化（spike bucket_sim 实验的移植）。
 //!
-//! 官方规则（engine/driver 源码取证，见 sandbox.md；@screeps/driver make.js:72-83/206-212）：
-//! - 每 tick 回充 `limit`（默认 20），桶容量上限 10000；
-//! - `Game.cpu.tickLimit = min(500, bucket + limit)`（回充后计）；
-//! - 硬超时 → 看门狗按整份 tickLimit 计费，**桶可为负**；只有桶被扣成负数
-//!   （cpuAvailable<0）时下一 tick 才停跑一次（停跑的 tick 照常回充）；桶充足的
-//!   普通超时不跳帧。官方 skipTicksPenalty 是 runtime 进程硬重置专用，与普通超时无关；
-//! - 正常结算 `bucket -= 实际用量 + 0.2×intents`（M0 桩环境无 intent 计费，M2 沙箱补全）。
+//! 官方规则（@screeps/driver make.js:72-83/187/206-212 逐行对照）：
+//! - 回充并入结算：`bucket += limit − used`，封顶 10000、可为负、不落 0；
+//! - `Game.cpu.tickLimit = min(500, limit + bucket)`（结算前口径）；
+//! - **回充前**判定桶为负 → 整 tick 停跑（停跑 tick 照常回充，深负桶钳到 −2×limit
+//!   地板）；桶充足的普通超时不跳帧——官方 skipTicksPenalty 是 runtime 进程硬重置
+//!   专用，与普通超时无关；
+//! - 硬超时按整份 tickLimit 计费（usedCleanTime≈tickLimit）。
+//! - M0 无 intent 计费（+0.2×intents 项），M2 沙箱补全。
 //!
 //! M0 计时口径为墙钟毫秒（与 bucket_sim 一致）；正式实现换线程 CPU 时钟
 //! （CLOCK_THREAD_CPUTIME_ID，纳秒精度，02 报告已实测），机制不变。
@@ -25,9 +26,6 @@ pub enum TickPlan {
     /// 本 tick 跳过玩家代码执行：桶为负（透支），停跑回血（官方 make.js:72-83 语义）。
     SkipPenalty,
 }
-
-/// 桶为负的判定容差（浮点误差防护；真实透支至少是 tick 级毫秒量）。
-const NEG_EPSILON: f64 = 0.01;
 
 #[derive(Debug)]
 pub struct Bucket {
@@ -49,20 +47,22 @@ impl Bucket {
         }
     }
 
-    /// 每 tick 开始：回充并给出本 tick 的执行计划。
-    /// 官方语义：回充后桶仍为负（cpuAvailable<0）时本 tick 停跑（停跑 tick 照常回充）。
+    /// 每 tick 开始：给出本 tick 的执行计划。
+    /// 官方语义（make.js:72-83）：**回充前**判定桶为负（cpuAvailable<0）→ 整 tick 停跑，
+    /// 停跑 tick 照常回充且深负桶钳到 −2×limit 地板（约 2 tick 内恢复）；
+    /// 桶非负 → 执行，`tickLimit = min(500, limit + bucket)`（回充在结算时并入）。
     pub fn begin_tick(&mut self) -> TickPlan {
-        self.bucket = (self.bucket + self.limit).min(self.cap);
-        self.tick_limit = self.max_per_tick.min(self.bucket.max(0.0));
-        if self.bucket < -NEG_EPSILON {
+        if self.bucket < 0.0 {
+            self.bucket = (self.bucket + self.limit).max(-2.0 * self.limit);
             return TickPlan::SkipPenalty;
         }
+        self.tick_limit = self.max_per_tick.min(self.bucket + self.limit);
         TickPlan::Run {
             tick_limit: self.tick_limit,
         }
     }
 
-    /// 本 tick 预算（回充后），即玩家读到的 `Game.cpu.tickLimit`。
+    /// 本 tick 预算，即玩家读到的 `Game.cpu.tickLimit`。
     pub fn tick_limit(&self) -> f64 {
         self.tick_limit
     }
@@ -71,15 +71,15 @@ impl Bucket {
         self.bucket
     }
 
-    /// 正常结算。桶可为负（官方结算不落 0，封顶只在回充时做）。
+    /// 正常结算（官方 make.js:206-212）：`bucket += limit − used`，封顶 cap、可为负、不落 0。
     pub fn settle(&mut self, used_ms: f64) {
-        self.bucket -= used_ms;
+        self.bucket = (self.bucket + self.limit - used_ms).min(self.cap);
     }
 
-    /// 硬中断结算：按整份 tickLimit 计费。官方语义：桶充足时**不**触发下一 tick 跳帧，
-    /// 只有扣成负数的部分由 `begin_tick` 的负桶停跑规则处理。
+    /// 硬中断结算（官方 make.js:187+206-212）：超时被沙箱内捕获、按整份 tickLimit 计费，
+    /// 与正常结算同路径回充。桶充足时**不**跳帧，负桶由 `begin_tick` 的停跑规则处理。
     pub fn settle_terminated(&mut self) {
-        self.bucket -= self.tick_limit;
+        self.bucket = (self.bucket + self.limit - self.tick_limit).min(self.cap);
     }
 }
 
@@ -126,21 +126,33 @@ mod tests {
 
     #[test]
     fn negative_bucket_skips_until_recharged() {
-        // 桶被扣成负数（透支）→ 停跑并逐 tick 回血，回正后恢复执行（官方 make.js:72-83）
+        // 官方语义（make.js:72-83）：回充前判定负桶即整 tick 停跑；停跑 tick 照常回充
         let mut b = Bucket::new(20.0, 10_000.0, 500.0, 0.0);
-        b.begin_tick(); // 回充到 20
-        b.settle(60.0); // 超扣 → -40
-        assert!(b.bucket() < 0.0);
-        // 停跑 tick 照常回充：-40 → -20（仍停）→ 0（恢复执行，tickLimit=0）
+        assert!(matches!(b.begin_tick(), TickPlan::Run { tick_limit: 20.0 }));
+        b.settle(60.0); // 0 + 20 − 60 = −40（结算并入回充）
+        assert_eq!(b.bucket(), -40.0);
         assert!(matches!(b.begin_tick(), TickPlan::SkipPenalty), "负桶停跑");
-        assert!(
-            matches!(b.begin_tick(), TickPlan::Run { tick_limit: 0.0 }),
-            "停跑 tick 照常回充，回到 0 边界即恢复执行"
-        );
-        b.settle_terminated(); // tickLimit=0 → 扣 0
+        assert_eq!(b.bucket(), -20.0, "停跑 tick 照常回充");
+        assert!(matches!(b.begin_tick(), TickPlan::SkipPenalty), "-20 仍停");
+        assert_eq!(b.bucket(), 0.0);
         assert!(
             matches!(b.begin_tick(), TickPlan::Run { tick_limit: 20.0 }),
-            "回充累积后正常执行"
+            "回正后恢复执行，tickLimit = limit + bucket"
         );
+    }
+
+    #[test]
+    fn deep_negative_floors_at_minus_two_limits() {
+        // 官方 make.js:77：深负桶在停跑回充时钳到 −2×limit 地板（约 2 tick 内恢复）
+        let mut b = Bucket::new(20.0, 10_000.0, 500.0, 0.0);
+        b.settle(600.0); // 0 + 20 − 600 = −580
+        assert_eq!(b.bucket(), -580.0);
+        assert!(matches!(b.begin_tick(), TickPlan::SkipPenalty));
+        assert_eq!(b.bucket(), -40.0, "深负钳到 −2×limit 地板");
+        assert!(matches!(b.begin_tick(), TickPlan::SkipPenalty));
+        assert_eq!(b.bucket(), -20.0);
+        assert!(matches!(b.begin_tick(), TickPlan::SkipPenalty));
+        assert_eq!(b.bucket(), 0.0);
+        assert!(matches!(b.begin_tick(), TickPlan::Run { tick_limit: 20.0 }));
     }
 }
