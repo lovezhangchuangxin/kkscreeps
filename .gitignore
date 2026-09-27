@@ -1,0 +1,36 @@
+# ===== Rust =====
+target/
+**/*.rs.bk
+# 注意：Cargo.lock 提交（workspace 产出二进制，锁定依赖版本）
+
+# ===== Node / pnpm / Vite =====
+node_modules/
+dist/
+*.local
+*.tsbuildinfo
+.pnpm-store/
+coverage/
+*.lcov
+.nyc_output/
+test-results/
+playwright-report/
+
+# ===== 环境与密钥 =====
+.env
+.env.*
+!.env.example
+
+# ===== 运行时产物（服务器/模拟器的本地数据）=====
+data/
+logs/
+*.log
+*.db
+*.db.tmp
+
+# ===== 工具与编辑器 =====
+.zcode/
+.idea/
+.vscode/
+.DS_Store
+*.swp
+*.swo

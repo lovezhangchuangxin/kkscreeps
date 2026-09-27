@@ -1,0 +1,15 @@
+[package]
+name = "rquickjs-spike"
+version = "0.1.0"
+edition = "2021"
+description = "rquickjs (quickjs-ng) 能力验证 spike：性能基准 / 硬中断 / 内存上限 / 创建开销 / 安全速查"
+
+[dependencies]
+# rquickjs 0.14.0 默认且唯一的后端是 quickjs-ng（sys/quickjs 子模块指向 quickjs-ng/quickjs）
+rquickjs = { version = "0.14", features = ["macro"] }
+sysinfo = "0.39"
+
+[profile.release]
+# 保留默认 release 优化（O3 + LTO 关），加 lto 以贴近生产配置
+lto = true
+codegen-units = 1
