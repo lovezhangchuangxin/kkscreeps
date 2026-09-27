@@ -59,33 +59,17 @@
   // 收集型 console：经 op 推给宿主（替代 deno_core 自带的直写 stdout 版本）。
   // 套探测仪表：console.dir/trace 等官方缺口以 'console.*' 登记，不静默 undefined。
 
-  function inspectValue(v, depth, seen) {
-    if (v === null) return 'null';
-    if (v === undefined) return 'undefined';
-    const t = typeof v;
-    if (t === 'string') return depth === 0 ? v : JSON.stringify(v);
-    if (t === 'number' || t === 'boolean' || t === 'bigint') return String(v);
-    if (t === 'function') return `[Function: ${v.name || 'anonymous'}]`;
-    if (t === 'symbol') return v.toString();
-    if (v instanceof Error) return `${v.name}: ${v.message}`;
-    if (v instanceof DataView) return `DataView(${v.byteLength})`; // DataView 无 slice
-    if (ArrayBuffer.isView(v)) return `${v.constructor.name}(${v.length}) [${Array.from(v.slice(0, 8)).join(', ')}${v.length > 8 ? ', …' : ''}]`;
-    if (seen.has(v)) return '[Circular]';
-    if (depth >= 3) return Array.isArray(v) ? '[Array]' : '{Object}';
-    seen.add(v);
-    try {
-      if (Array.isArray(v)) {
-        return `[ ${v.slice(0, 8).map((x) => inspectValue(x, depth + 1, seen)).join(', ')}${v.length > 8 ? ', …' : ''} ]`;
-      }
-      const keys = Object.keys(v).slice(0, 8);
-      return `{ ${keys.map((k) => `${k}: ${inspectValue(v[k], depth + 1, seen)}`).join(', ')}${Object.keys(v).length > 8 ? ', …' : ''} }`;
-    } finally {
-      seen.delete(v);
-    }
-  }
-
+  // 官方格式化（engine/src/game/console.js log 分支逐参映射）：
+  //   真值且有 toString → toString()（普通对象得 '[object Object]'，游戏对象得
+  //   官方 toString 家族如 '[creep x]'，数组得逗号拼接）；
+  //   undefined → 'undefined'；其余 falsy（null/0/false/''/NaN）→ JSON.stringify
+  //   （null→'null'、NaN→'null'）。join(' ')。
   function fmtArgs(args) {
-    return Array.prototype.map.call(args, (a) => inspectValue(a, 0, new Set())).join(' ');
+    return Array.prototype.map.call(args, (i) => {
+      if (i && i.toString) return i.toString();
+      if (typeof i === 'undefined') return 'undefined';
+      return JSON.stringify(i);
+    }).join(' ');
   }
   const mkLevel = (level) =>
     function (...args) {

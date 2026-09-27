@@ -40,6 +40,12 @@ fn run_inner(path: &str, ticks: u32, report_path: &str) -> anyhow::Result<()> {
     pool.spawn_player(PLAYER, SandboxConfig::default())?;
     pool.set_modules(PLAYER, table)?;
 
+    // tick 0 播种 `Memory.creeps = {}`（begin→expr→end 原子序，写回 RawMemory）。
+    // 夹具世界预置了 creep，而真实新服首 tick 无 creep——bot（tooangel）的角色
+    // 检查直接读 Memory.creeps（该对象由 creep.memory 访问或既有存档创建），
+    // 常态服务器上恒存在；播种把夹具对齐"bot 已运行过"的常态
+    pool.run_player(PLAYER, &home_world(0), "Memory.creeps = {}; 0")?;
+
     let mut console_errors: Vec<String> = Vec::new();
     let mut console_head: Vec<String> = Vec::new();
     let mut missing_api: BTreeMap<String, u64> = BTreeMap::new();
@@ -144,11 +150,14 @@ fn top(map: &BTreeMap<String, u64>, n: usize) -> Vec<(String, u64)> {
 }
 
 /// 桩世界的"家"：一个被玩家拥有的房间（controller/source/spawn/creep 各一）。
+/// 地形全平原——Terrain 面（getTerrain/lookFor(LOOK_TERRAIN)）经世界 JSON 的
+/// rooms[].terrain 生效，tooangel 布局阶段依赖它。
 fn home_world(t: u32) -> Value {
+    let plains: Vec<u8> = vec![0; 2500];
     json!({
         "time": t,
         "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
-        "rooms": { "W1N1": { "name": "W1N1" } },
+        "rooms": { "W1N1": { "name": "W1N1", "terrain": plains } },
         "objects": [
             { "id": "ctrl1", "type": "structure", "structureType": "controller",
               "room": "W1N1", "x": 10, "y": 10, "level": 4, "progress": 0, "progressTotal": 121500,

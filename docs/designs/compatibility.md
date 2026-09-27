@@ -58,6 +58,11 @@
 | createCreep 空 energyStructures（M1 结算） | `[]` 落回全房间扣费（与缺省同路径） | 官方空数组走显式列表模式（可用 0 → 失败）；根因是 sanitize 后 None/[] 不可区分，M2 intent 通道定型时修 |
 | harvest 0 个 WORK 部件的事件形态（M1 结算） | 推 EVENT_HARVEST(amount=0) | 官方 harvest.js:44 `if(harvestAmount)` 整体跳过；upgrade/build 我们在 effect=0 时跳过（与官方反向）——M2 统一零量事件原则时对齐 |
 | Engine 沙箱的玩家身份信任（M1） | 按沙箱自报的玩家名合并 intents | M1 沙箱是自家 ScriptedSandbox；M2 真沙箱接入时按注册名强制（防冒名 room intent） |
+| controller 的 hits/hitsMax 投影（M1 typed world） | 不发（prelude 兜 0） | M0 哑世界发 10000 手抄值；官方 getter 直读 DB 字段、vanilla 放置不带 hits → 官方为 undefined。0 vs undefined 是 prelude 残差，M2 玩家 API 层对齐 |
+| typed 变体丢弃 spec 的非 energy 资源与私有时序字段（M1 place） | creep/spawn/extension/storage 的 store 仅保 energy；ticksToDecay/cooldown 等不透传（road 恒 ROAD_DECAY_TIME） | M1 schema 资源单槽；多资源种类随 M2 schema 扩展放开 |
+| 未注册房间放置（M1 embed） | 报错（房间不存在） | M0 哑世界自动建房、vanilla 不校验——显式拒绝优于静默建出无地形房间；screeps-ok 套件先 createShard 后放置，不可达 |
+| 多房间世界 JSON 的 objects 序（M1 typed world） | 房间名序 × 房内 id 升序 | M0 为全局 id 序（单房间等价）；多房间下 Game.creeps 等键插入序可能不同——若出现顺序敏感用例以此归因 |
+| controller safeMode 投影发绝对 tick（M1 typed world） | 玩家面应发剩余值（官方 structures.js:187 getter） | prelude 硬编码 0 不消费、M1 无激活路径（activateSafeMode 是 M2）；激活实装时改 remainingTime 形态（同 spawn.spawning 条目） |
 
 ## 四、验收关卡（不做完不算兼容）
 

@@ -100,6 +100,20 @@
     return p;
   }
 
+  // 官方 engine/src/utils.js roomNameToXY 逐字移植（玩家可见的宽松解析——
+  // parseInt 认前缀数字、W/w 与 N/n 取负减一、其余方向字母当 E/S；与 kk-core
+  // RoomName 的强类型构造校验是两层：embed 边界拒非法名，玩家面对齐官方行为）
+  function roomNameToXY(name) {
+    let xx = parseInt(name.substr(1), 10);
+    let verticalPos = 2;
+    if (xx >= 100) verticalPos = 4;
+    else if (xx >= 10) verticalPos = 3;
+    let yy = parseInt(name.substr(verticalPos + 1), 10);
+    if (name.charAt(0) === 'W' || name.charAt(0) === 'w') xx = -xx - 1;
+    if (name.charAt(verticalPos) === 'N' || name.charAt(verticalPos) === 'n') yy = -yy - 1;
+    return [xx, yy];
+  }
+
   class RoomPosition {
     constructor(x, y, roomName) {
       this.x = x;
@@ -131,9 +145,15 @@
       // 官方 utils.js:64-103 getDirection 的逐字移植（阈值判定而非角度最近）：
       //   |dx| > 2|dy| → 左右；|dy| > 2|dx| → 上下；否则对角。
       // 官方对 (0,0) 无特判（落到 else 无命中分支 → undefined）。
-      // 跨房间的官方行为（rooms.js:1390 走出口换算）M0 不实现，登记 M1。
+      // 跨房间（rooms.js:1383-1393）：目标带 roomName 且不等时按世界坐标换算
       const p = fetchXY(x, y);
-      const dx = p.x - this.x, dy = p.y - this.y;
+      let dx = p.x - this.x, dy = p.y - this.y;
+      if (p.roomName && p.roomName !== this.roomName) {
+        const [tx, ty] = roomNameToXY(p.roomName);
+        const [mx, my] = roomNameToXY(this.roomName);
+        dx = tx * 50 + p.x - mx * 50 - this.x;
+        dy = ty * 50 + p.y - my * 50 - this.y;
+      }
       const adx = Math.abs(dx), ady = Math.abs(dy);
       if (adx > ady * 2) return dx > 0 ? RIGHT : LEFT;
       if (ady > adx * 2) return dy > 0 ? BOTTOM : TOP;
@@ -149,10 +169,51 @@
     moveTo() { countStub('RoomPosition.moveTo'); return 0; }
     createConstructionSite() { countStub('RoomPosition.createConstructionSite'); return 0; }
     createFlag() { countStub('RoomPosition.createFlag'); return 'stub-flag'; }
-    lookFor() { countStub('RoomPosition.lookFor'); return []; }
+    lookFor(type) {
+      // 官方 rooms.js:1601-1610：terrain 分支直接读静态地形返回单词数组；
+      // 其余 look 类型走 room.lookForAt（M1 桩）
+      if (type === LOOK_TERRAIN) {
+        return [terrainWordAt(this.roomName, this.x, this.y)];
+      }
+      countStub('RoomPosition.lookFor'); return [];
+    }
     inRangeTo() { return this.isInRangeTo.apply(this, arguments); }
   }
   globalThis.RoomPosition = RoomPosition;
+
+  // ---------------------------------------------------------------- Terrain
+  // 官方 rooms.js:1223-1241 Room.Terrain 逐字移植：闭包式对象（非 class），
+  // 无地形数据的房间构造即抛错；get 返回位码（wall=1/swamp=2/plain=0），
+  // getRawBuffer 填充给定 TypedArray或新建 Uint8Array。地形数据经世界 JSON
+  // 注入（terrainByRoom，beginTick 填充）。
+
+  function Terrain(roomName) {
+    const array = terrainByRoom['' + roomName];
+    if (!array) throw new Error('Could not access room ' + roomName);
+    this.get = function (x, y) {
+      const value = array[y * 50 + x];
+      return (value & TERRAIN_MASK_WALL) || (value & TERRAIN_MASK_SWAMP) || 0;
+    };
+    this.getRawBuffer = function (destinationArray) {
+      if (destinationArray) {
+        destinationArray.set(array);
+        return destinationArray;
+      }
+      return new Uint8Array(array);
+    };
+  }
+
+  // 地形单词（look 面）：swamp 先判、wall 后覆盖（rooms.js:663-671）。
+  // 无地形数据的房间（玩家自造未注册房间名）自然 TypeError——与官方
+  // _lookSpatialRegister 直读 staticTerrainData[id]（rooms.js:665）的行为一致；
+  // 世界内全部房间恒有地形（world_json 恒发 terrain）
+  function terrainWordAt(roomName, x, y) {
+    const t = terrainByRoom[roomName][y * 50 + x];
+    let result = 'plain';
+    if (t & TERRAIN_MASK_SWAMP) result = 'swamp';
+    if (t & TERRAIN_MASK_WALL) result = 'wall';
+    return result;
+  }
 
   // 常量在 prelude 之前已平铺为裸全局（TOP/OK/FIND_* 等，官方形态）。
 
@@ -168,7 +229,7 @@
     serialize() { countStub('CostMatrix.serialize'); return { bits: Array.from(this._bits) }; }
     static deserialize() { countStub('CostMatrix.deserialize'); return new CostMatrix(); }
   }
-  function straightPath(from, to) {
+  function straightPath(from, to, range) {
     // 官方 path-finder.js：search 返回的 path 元素是 **RoomPosition 实例**（绝对
     // 坐标）——bot 生态（tooangel 等）直接在这些元素上调用方法（含其自打的
     // 原型补丁），返回 {dx,dy} 步进对象会让 bot 每 tick 崩溃
@@ -177,8 +238,12 @@
     const roomName = from.roomName;
     let guard = 0;
     // 官方 pf.cc:574：回溯在 pos == origin 处停止——path **不含起点**（bot 生态
-    // 依赖此语义，tooangel 甚至自行 splice 把起点插回头部）；同起终点 → 空路径
-    while ((x !== to.x || y !== to.y) && guard++ < 100) {
+    // 依赖此语义，tooangel 甚至自行 splice 把起点插回头部）；同起终点 → 空路径。
+    // goal {pos, range}：进入目标的 range（Chebyshev）邻域即停，range 缺省 0——
+    // 官方路径止于 range 边界，bot 自行拼端点（tooangel buildPath 的 push(end)）
+    // 才不会产生重复项
+    const dist = () => Math.max(Math.abs(to.x - x), Math.abs(to.y - y));
+    while (dist() > range && guard++ < 100) {
       x += Math.sign(to.x - x);
       y += Math.sign(to.y - y);
       positions.push(new RoomPosition(x, y, roomName));
@@ -191,12 +256,19 @@
     search(origin, goal, opts) {
       countStub('PathFinder.search');
       const goals = Array.isArray(goal) ? goal : [goal];
-      const to = goals[0] && goals[0].pos ? goals[0].pos : goals[0];
+      const g0 = goals[0];
+      const to = g0 && g0.pos ? g0.pos : g0;
+      // 官方 goal 形态：{pos, range} 或裸 RoomPosition（range 0）；负 range
+      // 夹 0（官方 driver/lib/path-finder.js:106 Math.max(0, range|0)）
+      const range = g0 && g0.pos && typeof g0.range === 'number'
+        ? Math.max(0, g0.range) : 0;
       const path = straightPath(
         origin.pos ? origin.pos : origin,
         { x: to.x, y: to.y },
+        range,
       );
-      return { path, ops: 0, cost: path.length, incomplete: false };
+      // 官方 ops 是搜索消耗计数（非空路径恒 ≥1，pf.cc:594）；直线桩以步数为近似
+      return { path, ops: path.length, cost: path.length, incomplete: false };
     },
   };
   globalThis.PathFinder = PathFinder;
@@ -286,6 +358,9 @@
   // 官方别名：同一引用（structures.js:1293 / resources.js:46），非独立 stub 类
   globalThis.Spawn = globalThis.StructureSpawn;
   globalThis.Energy = globalThis.Resource;
+  // 官方 Terrain 挂法：Room 的静态属性（rooms.js:1135 `new Room.Terrain(...)`），
+  // 非裸全局
+  globalThis.Room.Terrain = Terrain;
 
   // 官方 toString 家族（engine/src/game 各文件 prototype.toString，bot 生态日志
   // 拼接的事实标准格式）：缺失时 String(obj) 得 '[object Object]'。挂类原型，
@@ -508,6 +583,7 @@
           storage: 'StructureStorage', terminal: 'StructureTerminal', tower: 'StructureTower',
           extension: 'StructureExtension', link: 'StructureLink', lab: 'StructureLab',
           rampart: 'StructureRampart', road: 'StructureRoad', wall: 'StructureWall',
+          constructedWall: 'StructureWall',
           container: 'StructureContainer', extractor: 'StructureExtractor',
           factory: 'StructureFactory', nuker: 'StructureNuker', observer: 'StructureObserver',
           powerBank: 'StructurePowerBank', powerSpawn: 'StructurePowerSpawn',
@@ -552,9 +628,16 @@
     }
     const rooms = {};
     for (const [name, r] of Object.entries(world.rooms || {})) {
+      // 无 controller 房间的官方投影是 undefined（非 null）
+      let controller;
+      for (const o of world.objects || []) {
+        if (o.room === name && o.type === 'structure' && o.structureType === 'controller') {
+          controller = objectsById.get(o.id);
+        }
+      }
       const room = {
         name,
-        controller: null,
+        controller,
         energyAvailable: 0,
         energyCapacityAvailable: 300,
         storage: undefined,
@@ -562,13 +645,7 @@
         visual: new RoomVisual(name),
         mode: 'world',
       };
-      // controller 挂进房间
-      for (const o of world.objects || []) {
-        if (o.room === name && o.type === 'structure' && o.structureType === 'controller') {
-          room.controller = objectsById.get(o.id) || null;
-        }
-      }
-      room.find = function (type) {
+      room.find = function (type, opts) {
         countStub('room.find:' + type);
         const out = [];
         for (const o of world.objects || []) {
@@ -590,10 +667,30 @@
           else if (type === 112 /* FIND_MY_SPAWNS */ && o.type === 'spawn') out.push(w);
           else if (type === 116 /* FIND_MINERALS */ && o.type === 'structure' && o.structureType === 'mineral') out.push(w);
         }
+        // 官方 rooms.js:648-654：opts.filter（函数或 lodash 对象谓词）经
+        // _.filter 应用——bot 生态最常用的 find 形态
+        if (opts && opts.filter) return _.filter(out, opts.filter);
         return out;
       };
-      room.lookAt = function () { countStub('room.lookAt'); return []; };
-      room.lookForAt = function () { countStub('room.lookForAt'); return []; };
+      // 地形 look 面（官方 rooms.js:659-679/798-830）：lookAt 恒含 terrain 项
+      // （对象形态）；lookForAt(LOOK_TERRAIN) 是单词数组（官方 :681 `return [result]`）；
+      // 其余 look 类型 M1 桩
+      function unpackXY(firstArg, secondArg) {
+        if (firstArg && typeof firstArg === 'object') return [firstArg.x, firstArg.y];
+        return [firstArg, secondArg];
+      }
+      room.lookAt = function (x, y) {
+        [x, y] = unpackXY(x, y);
+        return [{ type: 'terrain', terrain: terrainWordAt(name, x, y) }];
+      };
+      room.lookForAt = function (type, x, y) {
+        if (type === LOOK_TERRAIN) {
+          [x, y] = unpackXY(x, y);
+          return [terrainWordAt(name, x, y)];
+        }
+        countStub('room.lookForAt'); return [];
+      };
+      room.getTerrain = function () { return new Terrain(name); };
       room.createConstructionSite = function () { countStub('room.createConstructionSite'); return 0; };
       room.createFlag = function () { countStub('room.createFlag'); return 'stub-flag'; };
       room.getPositionAt = (x, y) => new RoomPosition(x, y, name);
@@ -674,6 +771,8 @@
         describeExits: () => ({}),
         findExit: () => -1,
         findRoute: () => [],
+        // 官方 map.js:262-264：getRoomTerrain 返回 Room.Terrain 实例
+        getRoomTerrain: (roomName) => new Terrain(roomName),
         // 官方 map.js:235-258：返回 'wall'|'swamp'|'plain'（完整词，非缩写）；
         // 越界或无地形数据 → undefined。M0 世界仅在 createShard/setTerrain 提供
         // 地形时可用（bit 语义同官方 TERRAIN_MASK_*）

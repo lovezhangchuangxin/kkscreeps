@@ -26,7 +26,8 @@ export interface ShardSpec {
 }
 
 export interface PlaceSpec {
-  pos?: [number, number];
+  /** 引擎侧必填（缺 pos / 越界坐标会被拒绝）——上游 PlaceSpec 契约。 */
+  pos: [number, number];
   owner?: string;
   [key: string]: unknown;
 }

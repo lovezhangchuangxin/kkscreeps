@@ -48,7 +48,8 @@ export const capabilities: AdapterCapabilities = {
   nuke: false,
   deposit: false,
   powerBank: false,
-  terrain: false,
+  // M1 步 5：setTerrain 严格实装（元素级校验 + 四角墙 + 首 tick 守卫，测试锁定）
+  terrain: true,
   roomStatus: false,
   portals: false,
   invaderCore: false,

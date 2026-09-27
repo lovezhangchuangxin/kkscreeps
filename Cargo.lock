@@ -913,7 +913,9 @@ name = "kk-engine"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "kk-core",
  "kk-runner",
+ "kk-schema",
  "kk-world",
  "serde",
  "serde_json",
@@ -950,7 +952,8 @@ version = "0.1.0"
 name = "kk-world"
 version = "0.1.0"
 dependencies = [
- "serde",
+ "kk-core",
+ "kk-schema",
  "serde_json",
 ]
 

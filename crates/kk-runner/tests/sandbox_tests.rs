@@ -66,6 +66,7 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     lifo_registry_drains()?;
     memory_alias_setters()?;
     roomposition_official_semantics()?;
+    terrain_look_and_console_semantics()?;
     writeback_watchdog_and_contract()?;
     stub_value_shapes()?;
     official_string_and_error_shapes()?;
@@ -277,6 +278,28 @@ fn stub_value_shapes() -> anyhow::Result<()> {
     )?;
     assert_eq!(v["value"], 1, "一步路径恰一个位置");
 
+    // goal {pos, range}：进入 range 邻域即停（官方语义；bot 生态据此自拼端点）；
+    // 裸 goal 即 range:0 走到目标格；origin 已在邻域内 → 空路径
+    let v = sb.run_expr(
+        "JSON.stringify(PathFinder.search(new RoomPosition(1,1,'W1N1'), {pos: new RoomPosition(5,5,'W1N1'), range: 1}).path.map(p => [p.x, p.y]))",
+    )?;
+    assert_eq!(v["value"], "[[2,2],[3,3],[4,4]]", "range:1 止于邻格: {v:?}");
+    let v = sb.run_expr(
+        "PathFinder.search(new RoomPosition(1,1,'W1N1'), {pos: new RoomPosition(3,3,'W1N1'), range: 2}).path.length",
+    )?;
+    assert_eq!(v["value"], 0, "origin 已在 range 内 → 空路径");
+
+    // 负 range 夹 0（官方 driver/lib/path-finder.js:106 Math.max(0, range|0)）；
+    // 非空路径的 ops ≥ 1（官方 ops 是搜索消耗，pf.cc:594）
+    let v = sb.run_expr(
+        "(() => { const r = PathFinder.search(new RoomPosition(1,1,'W1N1'), {pos: new RoomPosition(3,3,'W1N1'), range: -5}); return [r.path.length, r.ops > 0]; })()",
+    )?;
+    assert_eq!(
+        v["value"],
+        serde_json::json!([2, true]),
+        "负 range 夹 0 走到目标格；ops 非零"
+    );
+
     // runExpr 返回值检测遇病态对象（constructor:null）不崩、不误判硬中断：
     // 按规范字面归 serialization（constructor ∉ {Object, undefined}），且绝不触发
     // 整份 tickLimit 计费（回归锁定：病态对象曾被误判硬中断并按整份计费）
@@ -351,6 +374,130 @@ fn roomposition_official_semantics() -> anyhow::Result<()> {
     assert_eq!(v["value"], 5, "(3,7) → BOTTOM");
     let v = sb.run_expr("new RoomPosition(0,0,'W1N1').getDirectionTo(3,3)")?;
     assert_eq!(v["value"], 4, "(3,3) → BOTTOM_RIGHT");
+
+    // 跨房间 getDirectionTo（官方 rooms.js:1383-1393）：世界坐标换算后再阈值判定。
+    // roomNameToXY：W1N1=[-2,-2]、E1N1=[1,-2] ⇒ dx=150, dy=0 → RIGHT
+    let v = sb.run_expr(
+        "new RoomPosition(25,25,'W1N1').getDirectionTo(new RoomPosition(25,25,'E1N1'))",
+    )?;
+    assert_eq!(v["value"], 3, "跨房间东邻 → RIGHT");
+    // W1N2=[-2,-3] ⇒ dx=0, dy=-50 → TOP
+    let v = sb.run_expr(
+        "new RoomPosition(25,25,'W1N1').getDirectionTo(new RoomPosition(25,25,'W1N2'))",
+    )?;
+    assert_eq!(v["value"], 1, "跨房间北邻 → TOP");
+    // W2N1=[-3,-2] ⇒ dx=-50, dy=0 → LEFT
+    let v = sb.run_expr(
+        "new RoomPosition(25,25,'W1N1').getDirectionTo(new RoomPosition(25,25,'W2N1'))",
+    )?;
+    assert_eq!(v["value"], 7, "跨房间西邻 → LEFT");
+    // E0S0=[0,0]、对角世界坐标 (80,80) → BOTTOM_RIGHT
+    let v =
+        sb.run_expr("new RoomPosition(25,25,'W1N1').getDirectionTo(new RoomPosition(5,5,'E0S0'))")?;
+    assert_eq!(v["value"], 4, "跨房间对角 → BOTTOM_RIGHT");
+    // 数值形态（无 roomName）视为同房间——跨房间换算不触发
+    let v = sb.run_expr("new RoomPosition(0,0,'W1N1').getDirectionTo(3,3)")?;
+    assert_eq!(v["value"], 4, "数值形态同房间（不换算）");
+    Ok(())
+}
+
+/// M1 步 5 的 prelude 配套：Terrain 对象（rooms.js:1223-1241）、look 面 terrain
+/// 项、room.controller undefined、console 官方格式化（console.js:16-22）。
+fn terrain_look_and_console_semantics() -> anyhow::Result<()> {
+    let mut sb = Sandbox::new(SandboxConfig::default())?;
+    let mut table = ModuleTable::new();
+    table.insert_js("main", "module.exports.loop = function () {};");
+    sb.set_modules(table)?;
+    let mut terrain = vec![0u32; 2500];
+    terrain[0] = 1; // (0,0) wall
+    terrain[10] = 2; // (10,0) swamp
+    let w = serde_json::json!({
+        "time": 1,
+        "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+        "rooms": { "W1N1": { "name": "W1N1", "terrain": terrain } },
+        "objects": []
+    });
+    tick(&mut sb, &w)?;
+
+    // room.controller：无 controller 房间投影 undefined（非 null）
+    let v = sb.run_expr("typeof Game.rooms['W1N1'].controller")?;
+    assert_eq!(v["value"], "undefined", "无 controller → undefined");
+
+    // room.find(type, {filter})：官方经 _.filter 应用（rooms.js:648-654）——
+    // 函数谓词与 lodash 对象谓词两形态（换带对象的世界验证）
+    let w2 = serde_json::json!({
+        "time": 2,
+        "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+        "rooms": { "W1N1": { "name": "W1N1", "terrain": terrain } },
+        "objects": [
+            { "id": "k1", "type": "structure", "structureType": "controller", "room": "W1N1",
+              "x": 10, "y": 10, "level": 3 },
+            { "id": "s1", "type": "spawn", "room": "W1N1", "x": 20, "y": 20, "name": "Spawn1",
+              "store": { "energy": 300 } },
+        ]
+    });
+    sb.begin_tick(&w2)?;
+    sb.run_loop()?;
+    sb.end_tick()?;
+    let v = sb.run_expr("Game.rooms['W1N1'].find(FIND_STRUCTURES).length")?;
+    assert_eq!(v["value"], 2, "无 filter 返回全部结构");
+    let v = sb.run_expr(
+        "Game.rooms['W1N1'].find(FIND_STRUCTURES, {filter: (s) => s.structureType === 'spawn'}).length",
+    )?;
+    assert_eq!(v["value"], 1, "函数谓词过滤生效");
+    let v = sb.run_expr(
+        "Game.rooms['W1N1'].find(FIND_STRUCTURES, {filter: {structureType: 'spawn'}})[0].name",
+    )?;
+    assert_eq!(v["value"], "Spawn1", "lodash 对象谓词过滤生效");
+
+    // Room.Terrain 静态挂法（rooms.js:1135）
+    let v = sb.run_expr("typeof Room.Terrain")?;
+    assert_eq!(v["value"], "function", "Room.Terrain 是静态属性");
+
+    // Terrain.get：位码语义 wall=1/swamp=2/plain=0（rooms.js:1230-1233）
+    let v = sb.run_expr("[Game.rooms['W1N1'].getTerrain().get(0,0), Game.rooms['W1N1'].getTerrain().get(10,0), Game.rooms['W1N1'].getTerrain().get(5,5)]")?;
+    assert_eq!(v["value"], serde_json::json!([1, 2, 0]), "get 位码");
+
+    // getRawBuffer：无参新建、有参填充返回原数组（rooms.js:1235-1239）
+    let v = sb.run_expr("Game.rooms['W1N1'].getTerrain().getRawBuffer().length")?;
+    assert_eq!(v["value"], 2500, "getRawBuffer 2500 字节");
+    let v = sb.run_expr("(() => { const u = new Uint8Array(2500); const t = Game.map.getRoomTerrain('W1N1'); return [t.getRawBuffer(u) === u, u[0], u[10]]; })()")?;
+    assert_eq!(
+        v["value"],
+        serde_json::json!([true, 1, 2]),
+        "getRawBuffer 填充给定数组（map.js:262-264 getRoomTerrain 同一 Terrain）"
+    );
+
+    // 无地形数据的房间：构造即抛错（rooms.js:1226-1228 官方错误文案）
+    let v = sb.run_expr("(() => { try { new Room.Terrain('E9S9'); return 'no'; } catch (e) { return e.message; } })()")?;
+    assert_eq!(v["value"], "Could not access room E9S9", "未知房间报错");
+
+    // RoomPosition.lookFor(LOOK_TERRAIN)：单词数组（rooms.js:1601-1610）
+    let v = sb.run_expr("JSON.stringify([new RoomPosition(0,0,'W1N1').lookFor(LOOK_TERRAIN), new RoomPosition(10,0,'W1N1').lookFor(LOOK_TERRAIN), new RoomPosition(5,5,'W1N1').lookFor(LOOK_TERRAIN)])")?;
+    assert_eq!(
+        v["value"], r#"[["wall"],["swamp"],["plain"]]"#,
+        "lookFor(LOOK_TERRAIN) 词汇表"
+    );
+
+    // room.lookForAt(LOOK_TERRAIN) 是单词数组（rooms.js:798-806 → :681 return [result]）；
+    // room.lookAt 的 terrain 项是对象形态（rooms.js:663-681 带 outArray 分支）
+    let v = sb.run_expr("JSON.stringify(Game.rooms['W1N1'].lookForAt(LOOK_TERRAIN, 0, 0))")?;
+    assert_eq!(v["value"], r#"["wall"]"#);
+    let v =
+        sb.run_expr("JSON.stringify(Game.rooms['W1N1'].lookAt(new RoomPosition(10,0,'W1N1')))")?;
+    assert_eq!(v["value"], r#"[{"type":"terrain","terrain":"swamp"}]"#);
+
+    // console 官方格式化（console.js:16-22 逐参映射）：真值走 toString、
+    // undefined → 'undefined'、falsy 走 JSON.stringify（NaN → 'null'）
+    sb.run_expr(
+        "console.log(null, 0, undefined, NaN, '', 'x', [1,2], new RoomPosition(1,2,'W1N1'))",
+    )?;
+    let lines = sb.drain_console();
+    assert_eq!(
+        lines[0].text, "null 0 undefined null \"\" x 1,2 [room W1N1 pos 1,2]",
+        "官方 console 格式化: {:?}",
+        lines
+    );
     Ok(())
 }
 
@@ -745,7 +892,11 @@ fn console_capture() -> anyhow::Result<()> {
         .map(|l| l.text.as_str())
         .collect::<Vec<_>>()
         .join("\n");
-    assert!(log_text.contains("hello { a: 1 }"), "log 捕获: {log_text}");
+    // 官方 console 格式化（console.js:16-22）：对象参数走 toString → '[object Object]'
+    assert!(
+        log_text.contains("hello [object Object]"),
+        "log 捕获: {log_text}"
+    );
     assert!(log_text.contains("bad"), "error 捕获");
 
     // 每 tick 行数闸门：高频输出不越限（防跨边界放大约 OOM 宿主），超限出告知行

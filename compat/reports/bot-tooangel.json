@@ -1,69 +1,110 @@
 {
-  "bot": "compat/fixtures/tooangel/src",
-  "ticks_requested": 2000,
-  "ticks_completed": 2000,
+  "bot": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/tooangel/src",
+  "ticks_requested": 300,
+  "ticks_completed": 300,
   "ticks_terminated": 0,
+  "ticks_skipped_penalty": 0,
   "ticks_with_console_error": 0,
   "missing_api": {},
   "stub_calls_top": [
     [
+      "RoomPosition.lookFor",
+      1713
+    ],
+    [
       "room.find:103",
-      3998
+      1200
     ],
     [
-      "Game.cpu.getHeapStatistics",
-      2000
-    ],
-    [
-      "Game.market.getAllOrders",
-      2000
-    ],
-    [
-      "Game.notify",
-      2000
+      "room.find:111",
+      1200
     ],
     [
       "room.find:112",
-      1999
+      903
+    ],
+    [
+      "room.find:108",
+      700
+    ],
+    [
+      "room.find:102",
+      602
+    ],
+    [
+      "room.find:105",
+      306
+    ],
+    [
+      "room.find:107",
+      303
+    ],
+    [
+      "Game.cpu.getHeapStatistics",
+      300
+    ],
+    [
+      "Game.market.getAllOrders",
+      300
+    ],
+    [
+      "RoomPosition.createConstructionSite",
+      300
+    ],
+    [
+      "creep.suicide",
+      300
+    ],
+    [
+      "PathFinder.search",
+      4
+    ],
+    [
+      "room.find:116",
+      4
     ],
     [
       "RawMemory.setActiveSegments",
-      20
+      3
+    ],
+    [
+      "CostMatrix.serialize",
+      2
+    ],
+    [
+      "room.find:117",
+      2
     ],
     [
       "CostMatrix.deserialize",
       1
     ],
     [
-      "room.find:105",
-      1
-    ],
-    [
-      "room.find:116",
+      "structure.isActive",
       1
     ]
   ],
   "console_errors_head": [],
   "console_head": [
-    "[tick 1][log] 1 Script reload - Load: 5 tickLimit: 500 limit: 20 Bucket: 10000",
-    "[tick 1][log] 1 W1N1                        Executing room failed: W1N1 TypeError: Cannot read properties of undefined (reading 'mineralType') TypeError: Cannot read properties of undefined (reading 'mineralType')\n    at updateBasicData (kk_module/prototype_room, <anonymous>:115:41)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:132:3)\n    at Proxy.Room.execute (kk_module/prototype_room, <anonymous>:143:29)\n    at eval (kk_module/brain_main, <anonymous>:32:50)\n    at kk-lodash:1934:13\n    at kk-lodash:3075:15\n    at baseForOwn (kk-lodash:2048:14)\n    at kk-lodash:3045:18\n    at baseFilter (kk-lodash:1933:7)\n    at filter (kk-lodash:6311:14)",
-    "[tick 2][log] 2 W1N1                        Executing room failed: W1N1 TypeError: Cannot set property memory of #<ctor> which has only a getter TypeError: Cannot set property memory of #<ctor> which has only a getter\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:87:17)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)\n    at Proxy.Room.execute (kk_module/prototype_room, <anonymous>:143:29)\n    at eval (kk_module/brain_main, <anonymous>:32:50)\n    at kk-lodash:1934:13\n    at kk-lodash:3075:15\n    at baseForOwn (kk-lodash:2048:14)\n    at kk-lodash:3045:18",
-    "[tick 3][log] 3 W1N1                        Executing room failed: W1N1 TypeError: Cannot set property memory of #<ctor> which has only a getter TypeError: Cannot set property memory of #<ctor> which has only a getter\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:87:17)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)\n    at Proxy.Room.execute (kk_module/prototype_room, <anonymous>:143:29)\n    at eval (kk_module/brain_main, <anonymous>:32:50)\n    at kk-lodash:1934:13\n    at kk-lodash:3075:15\n    at baseForOwn (kk-lodash:2048:14)\n    at kk-lodash:3045:18",
-    "[tick 4][log] 4 W1N1                        Executing room failed: W1N1 TypeError: Cannot set property memory of #<ctor> which has only a getter TypeError: Cannot set property memory of #<ctor> which has only a getter\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:87:17)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)\n    at Proxy.Room.execute (kk_module/prototype_room, <anonymous>:143:29)\n    at eval (kk_module/brain_main, <anonymous>:32:50)\n    at kk-lodash:1934:13\n    at kk-lodash:3075:15\n    at baseForOwn (kk-lodash:2048:14)\n    at kk-lodash:3045:18",
-    "[tick 5][log] 5 W1N1                        Executing room failed: W1N1 TypeError: Cannot set property memory of #<ctor> which has only a getter TypeError: Cannot set property memory of #<ctor> which has only a getter\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:87:17)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)\n    at Proxy.Room.execute (kk_module/prototype_room, <anonymous>:143:29)\n    at eval (kk_module/brain_main, <anonymous>:32:50)\n    at kk-lodash:1934:13\n    at kk-lodash:3075:15\n    at baseForOwn (kk-lodash:2048:14)\n    at kk-lodash:3045:18",
-    "[tick 6][log] 6 W1N1                        Executing room failed: W1N1 TypeError: Cannot set property memory of #<ctor> which has only a getter TypeError: Cannot set property memory of #<ctor> which has only a getter\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:87:17)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)\n    at Proxy.Room.execute (kk_module/prototype_room, <anonymous>:143:29)\n    at eval (kk_module/brain_main, <anonymous>:32:50)\n    at kk-lodash:1934:13\n    at kk-lodash:3075:15\n    at baseForOwn (kk-lodash:2048:14)\n    at kk-lodash:3045:18",
-    "[tick 7][log] 7 W1N1                        Executing room failed: W1N1 TypeError: Cannot set property memory of #<ctor> which has only a getter TypeError: Cannot set property memory of #<ctor> which has only a getter\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:87:17)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)\n    at Proxy.Room.execute (kk_module/prototype_room, <anonymous>:143:29)\n    at eval (kk_module/brain_main, <anonymous>:32:50)\n    at kk-lodash:1934:13\n    at kk-lodash:3075:15\n    at baseForOwn (kk-lodash:2048:14)\n    at kk-lodash:3045:18",
-    "[tick 8][log] 8 W1N1                        Executing room failed: W1N1 TypeError: Cannot set property memory of #<ctor> which has only a getter TypeError: Cannot set property memory of #<ctor> which has only a getter\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:87:17)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)\n    at Proxy.Room.execute (kk_module/prototype_room, <anonymous>:143:29)\n    at eval (kk_module/brain_main, <anonymous>:32:50)\n    at kk-lodash:1934:13\n    at kk-lodash:3075:15\n    at baseForOwn (kk-lodash:2048:14)\n    at kk-lodash:3045:18",
-    "[tick 9][log] 9 W1N1                        Executing room failed: W1N1 TypeError: Cannot set property memory of #<ctor> which has only a getter TypeError: Cannot set property memory of #<ctor> which has only a getter\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:87:17)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)\n    at Proxy.Room.execute (kk_module/prototype_room, <anonymous>:143:29)\n    at eval (kk_module/brain_main, <anonymous>:32:50)\n    at kk-lodash:1934:13\n    at kk-lodash:3075:15\n    at baseForOwn (kk-lodash:2048:14)\n    at kk-lodash:3045:18",
-    "[tick 10][log] 10 W1N1                        Executing room failed: W1N1 TypeError: Cannot set property memory of #<ctor> which has only a getter TypeError: Cannot set property memory of #<ctor> which has only a getter\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:87:17)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)\n    at Proxy.Room.execute (kk_module/prototype_room, <anonymous>:143:29)\n    at eval (kk_module/brain_main, <anonymous>:32:50)\n    at kk-lodash:1934:13\n    at kk-lodash:3075:15\n    at baseForOwn (kk-lodash:2048:14)\n    at kk-lodash:3045:18",
-    "[tick 11][log] 11 W1N1                        Executing room failed: W1N1 TypeError: Cannot set property memory of #<ctor> which has only a getter TypeError: Cannot set property memory of #<ctor> which has only a getter\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:87:17)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)\n    at Proxy.Room.execute (kk_module/prototype_room, <anonymous>:143:29)\n    at eval (kk_module/brain_main, <anonymous>:32:50)\n    at kk-lodash:1934:13\n    at kk-lodash:3075:15\n    at baseForOwn (kk-lodash:2048:14)\n    at kk-lodash:3045:18",
-    "[tick 12][log] 12 W1N1                        Executing room failed: W1N1 TypeError: Cannot set property memory of #<ctor> which has only a getter TypeError: Cannot set property memory of #<ctor> which has only a getter\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:87:17)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)\n    at Proxy.Room.execute (kk_module/prototype_room, <anonymous>:143:29)\n    at eval (kk_module/brain_main, <anonymous>:32:50)\n    at kk-lodash:1934:13\n    at kk-lodash:3075:15\n    at baseForOwn (kk-lodash:2048:14)\n    at kk-lodash:3045:18",
-    "[tick 13][log] 13 W1N1                        Executing room failed: W1N1 TypeError: Cannot set property memory of #<ctor> which has only a getter TypeError: Cannot set property memory of #<ctor> which has only a getter\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:87:17)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)\n    at Proxy.Room.execute (kk_module/prototype_room, <anonymous>:143:29)\n    at eval (kk_module/brain_main, <anonymous>:32:50)\n    at kk-lodash:1934:13\n    at kk-lodash:3075:15\n    at baseForOwn (kk-lodash:2048:14)\n    at kk-lodash:3045:18",
-    "[tick 14][log] 14 W1N1                        Executing room failed: W1N1 TypeError: Cannot set property memory of #<ctor> which has only a getter TypeError: Cannot set property memory of #<ctor> which has only a getter\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:87:17)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)\n    at Proxy.Room.execute (kk_module/prototype_room, <anonymous>:143:29)\n    at eval (kk_module/brain_main, <anonymous>:32:50)\n    at kk-lodash:1934:13\n    at kk-lodash:3075:15\n    at baseForOwn (kk-lodash:2048:14)\n    at kk-lodash:3045:18",
-    "[tick 15][log] 15 W1N1                        Executing room failed: W1N1 TypeError: Cannot set property memory of #<ctor> which has only a getter TypeError: Cannot set property memory of #<ctor> which has only a getter\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:87:17)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)\n    at Proxy.Room.execute (kk_module/prototype_room, <anonymous>:143:29)\n    at eval (kk_module/brain_main, <anonymous>:32:50)\n    at kk-lodash:1934:13\n    at kk-lodash:3075:15\n    at baseForOwn (kk-lodash:2048:14)\n    at kk-lodash:3045:18",
-    "[tick 16][log] 16 W1N1                        Executing room failed: W1N1 TypeError: Cannot set property memory of #<ctor> which has only a getter TypeError: Cannot set property memory of #<ctor> which has only a getter\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:87:17)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)\n    at Proxy.Room.execute (kk_module/prototype_room, <anonymous>:143:29)\n    at eval (kk_module/brain_main, <anonymous>:32:50)\n    at kk-lodash:1934:13\n    at kk-lodash:3075:15\n    at baseForOwn (kk-lodash:2048:14)\n    at kk-lodash:3045:18",
-    "[tick 17][log] 17 W1N1                        Executing room failed: W1N1 TypeError: Cannot set property memory of #<ctor> which has only a getter TypeError: Cannot set property memory of #<ctor> which has only a getter\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:87:17)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)\n    at Proxy.Room.execute (kk_module/prototype_room, <anonymous>:143:29)\n    at eval (kk_module/brain_main, <anonymous>:32:50)\n    at kk-lodash:1934:13\n    at kk-lodash:3075:15\n    at baseForOwn (kk-lodash:2048:14)\n    at kk-lodash:3045:18",
-    "[tick 18][log] 18 W1N1                        Executing room failed: W1N1 TypeError: Cannot set property memory of #<ctor> which has only a getter TypeError: Cannot set property memory of #<ctor> which has only a getter\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:87:17)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)\n    at Proxy.Room.execute (kk_module/prototype_room, <anonymous>:143:29)\n    at eval (kk_module/brain_main, <anonymous>:32:50)\n    at kk-lodash:1934:13\n    at kk-lodash:3075:15\n    at baseForOwn (kk-lodash:2048:14)\n    at kk-lodash:3045:18",
-    "[tick 19][log] 19 W1N1                        Executing room failed: W1N1 TypeError: Cannot set property memory of #<ctor> which has only a getter TypeError: Cannot set property memory of #<ctor> which has only a getter\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:87:17)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)\n    at Proxy.Room.execute (kk_module/prototype_room, <anonymous>:143:29)\n    at eval (kk_module/brain_main, <anonymous>:32:50)\n    at kk-lodash:1934:13\n    at kk-lodash:3075:15\n    at baseForOwn (kk-lodash:2048:14)\n    at kk-lodash:3045:18"
+    "[tick 1][log] 1 Script reload - Load: 6 tickLimit: 500 limit: 20 Bucket: 10000",
+    "[tick 1][log] 1 W1N1                        Setting misplacedSpawn",
+    "[tick 1][log] 1 W1N1                        Setup complete - storing data",
+    "[tick 1][log] 1 W1N1                        Setup completed - storing data",
+    "[tick 1][log] 1 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 2][log] 2 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 3][log] 3 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 4][log] 4 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 5][log] 5 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 6][log] 6 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 7][log] 7 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 8][log] 8 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 9][log] 9 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 10][log] 10 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 11][log] 11 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 12][log] 12 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 13][log] 13 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 14][log] 14 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 15][log] 15 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 16][log] 16 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester"
   ]
 }

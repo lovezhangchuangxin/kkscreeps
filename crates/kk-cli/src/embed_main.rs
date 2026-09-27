@@ -69,16 +69,10 @@ fn handle_line(engine: &mut EmbedEngine, line: &str) -> anyhow::Result<Value> {
         }
         "setTerrain" => {
             let room = s(&params, "room")?;
-            let terrain: Vec<u8> = params
+            let terrain_value = params
                 .get("terrain")
-                .and_then(Value::as_array)
-                .map(|a| {
-                    a.iter()
-                        .filter_map(Value::as_i64)
-                        .map(|x| x as u8)
-                        .collect()
-                })
                 .ok_or_else(|| anyhow::anyhow!("缺少 terrain 数组"))?;
+            let terrain = kk_engine::embed::terrain_codes_from_json(terrain_value)?;
             engine.set_terrain(room, terrain)?;
             json!({ "done": true })
         }

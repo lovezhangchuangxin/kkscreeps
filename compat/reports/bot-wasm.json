@@ -1,8 +1,9 @@
 {
-  "bot": "compat/fixtures/wasm-bot",
-  "ticks_requested": 5,
-  "ticks_completed": 5,
+  "bot": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/wasm-bot",
+  "ticks_requested": 10,
+  "ticks_completed": 10,
   "ticks_terminated": 0,
+  "ticks_skipped_penalty": 0,
   "ticks_with_console_error": 0,
   "missing_api": {},
   "stub_calls_top": [],

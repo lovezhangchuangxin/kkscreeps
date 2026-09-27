@@ -44,6 +44,14 @@ impl RoomState {
         }
     }
 
+    /// 房间内 controller（place 归一化的上下文）。
+    pub fn controller(&self) -> Option<&kk_schema::room::ControllerObj> {
+        self.objects.values().find_map(|o| match o {
+            RoomObject::Controller(c) => Some(c),
+            _ => None,
+        })
+    }
+
     /// 以指定 id 放入（快照解码/导入用）。
     pub fn insert_with_id(&mut self, id: u64, mut object: RoomObject) {
         set_object_id(&mut object, id);

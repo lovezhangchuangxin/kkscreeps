@@ -487,3 +487,52 @@ cargo fmt/clippy 零警告；cargo test --workspace 21 组全绿（含新增 wri
 ### 验证记录补充（八-7 后重跑）
 
 cargo fmt/clippy 零警告；cargo test --workspace 21 组全绿；pnpm run check 全套绿；tooangel 300 tick 与 wasm-bot 10 tick 零中断零缺失（重建后的 release 二进制）。
+
+## 追记：M1 步 5 实施发现（2026-09-28，embed 切 typed world + 真结算）
+
+M1 步 5（方案 §7）落地期间的连带发现与处置：
+
+- **PathFinder 桩忽略 goal.range**（tooangel 冒烟实证触发）：`buildPath` 依官方
+  "路径止于 range 边界"语义自拼端点（`splice(0,0,start); push(end)`），桩走到终点
+  导致重拼产生相邻相等项 → bot 的 `getDirectionTo(等点)=undefined`（官方语义）→
+  `getAdjacentPosition(undefined)` 崩溃。修复：桩按 Chebyshev 距离在 range 邻域
+  停步（range 缺省 0，裸 goal 同义）；
+- **room.find 忽略第二参 `{filter}`**：bot 生态最常用的 find 形态（`findTowers`
+  等 lodash 函数/对象谓词两用），桩返回未过滤全集使 bot 把 controller 当 tower
+  调 `.heal`。修复：官方 rooms.js:648-654 的 `_.filter(result, opts.filter)` 语义；
+- **bot-check 夹具配套**：家房间地形全平原（Terrain 面经世界 JSON 生效）+ tick 0
+  播种 `Memory.creeps={}`（真实新服首 tick 无 creep——bot 角色检查直读
+  Memory.creeps，常态服务器上该对象由 creep.memory 访问或既有存档创建，夹具预置
+  creep 时需对齐"bot 已运行过"常态）。
+
+**bot 验收深度跃迁**：tooangel 从 M0 的"布局规划入口被 getTerrain 挡住"推进到
+**房间管线完整执行**（布局落成 → 角色检查 → spawn 队列 → creep 分发），300 tick
+零中断、零缺失 API、无 room failed；缺失 API 清单从"逐层记录缺口"变为空。
+
+**基线 237 → 265**（+28 转绿、0 转红，逐用例归因；评审修复后复跑终值）：首轮 253
+（MAP-TERRAIN-001/002/003 Terrain 对象、PATHFINDER-002/016/017/019 goal range、
+ROOM-FIND-002 两谓词 filter、SPAWN-REGEN-001 真结算 spawn 回能、CREEP-DEATH-001
+TTL 死亡、createShard 互斥两用例=正确性-5 清偿、默认地形四角墙、STORE-ACCESS-001
+typed store 投影、fixture fence 超时）；评审修复追加：ROOM-LOOK-004（lookForAt
+单词数组形状——官方 rooms.js:681）+ **terrain 能力翻真激活的 10 个用例**
+（ROOM-TERRAIN-001×3/002/003、PATHFINDER-021、SPAWN-STOMP-005、createShard 地形
+刷新/两 setTerrain 守卫/terrain 四角墙）。terrain:false→true 同时使 **29 个此前被
+skip 掩盖的用例显形失败**（多房间寻路/沼泽墙道路磨损与疲劳/踩踏战斗/地形造价
+乘数/roomCallback 排除——属 intent 通道 M2-2A、真寻路 M2、战斗、磨损 tick 等
+未实装能力，地板按 passed 计不受影响，随能力实装逐批转绿）。入库 JSON 与 bot
+报告已更新。
+
+### 三方评审与修复（步 5 提交前）
+
+三个并行 subagent 评审（官方语义对照 / 契约与投影保真 / Rust 正确性与测试），
+必修 4 项全采纳修复：lookForAt(LOOK_TERRAIN) 单词数组形状（评审 1，官方
+rooms.js:798-806→:681）；setTerrain 守卫与 terrain 元素级严格性测试回补（评审
+2/3——DumbWorld 退役使其失去唯一锁定）；无名稳定名序号改单调 id 分配器源（评审
+3——对象随结算消亡，可回退计数会 mid-run 重名）；PathFinder 负 range 夹 0 + 非
+空路径 ops≥1（评审 1，官方 driver/lib/path-finder.js:106、pf.cc:594）。有据驳回
+1 项：terrainWordAt 无地形 TypeError 维持（官方 _lookSpatialRegister 直读
+staticTerrainData 同款抛错，rooms.js:665；世界内房间恒有地形）。建议项采纳：rcl
+上界预检（防 as u8 截断）、tick 结算 Err 混合态 doc、adapter.ts pos 必填注解、
+capabilities.terrain 翻真、灰区表新登记 5 条（controller hits 不发/typed 单资源
+槽/未注册房间拒置/objects 房间名序/safeMode 绝对值）。
+

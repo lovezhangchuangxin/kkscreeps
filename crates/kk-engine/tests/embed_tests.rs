@@ -6,10 +6,166 @@ use kk_engine::EmbedEngine;
 
 #[test]
 fn embed_engine_suite() -> anyhow::Result<()> {
-    // 两个场景必须串行（同进程多 isolate 的 LIFO 销毁纪律；并行会互相干扰销毁顺序）
+    // 场景必须串行（同进程多 isolate 的 LIFO 销毁纪律；并行会互相干扰销毁顺序）
     embed_engine_roundtrip_impl()?;
     embed_run_player_contract_impl()?;
+    embed_create_shard_validation_impl()?;
+    embed_real_settlement_impl()?;
+    embed_run_players_shared_snapshot_impl()?;
     assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");
+    Ok(())
+}
+
+/// createShard 契约校验（screeps-ok adapter.ts:45-48）：`controller: false` 与
+/// 显式控制器字段互斥、非法地形拒绝——报错且**不改状态**（旧分片继续可用）。
+fn embed_create_shard_validation_impl() -> anyhow::Result<()> {
+    let mut e = EmbedEngine::new();
+    e.create_shard(&json!({
+        "players": ["p1"],
+        "rooms": [{ "name": "W1N1", "rcl": 1, "owner": "p1" }],
+    }))?;
+    e.place_object(
+        "W1N1",
+        "creep",
+        &json!({ "pos": [25, 25], "owner": "p1", "body": ["move"], "name": "w1" }),
+    )?;
+    e.run_player("p1", "1")?;
+    let time_before = e.get_game_time();
+
+    // 互斥：controller:false + 显式 rcl
+    let bad = json!({
+        "players": ["p1"],
+        "rooms": [{ "name": "W2N2", "controller": false, "rcl": 3 }],
+    });
+    let err = e.create_shard(&bad).unwrap_err();
+    assert!(
+        err.to_string().contains("controller: false takes no rcl"),
+        "契约错误文案: {err}"
+    );
+    // 报错且不改状态：旧分片完好
+    assert_eq!(e.get_game_time(), time_before, "时间未变");
+    assert_eq!(e.find_in_room("W1N1", 101).len(), 1, "旧分片对象仍在");
+    let run = e.run_player("p1", "Game.creeps ? Object.keys(Game.creeps).length : -1")?;
+    assert_eq!(run.expr["value"], 1, "旧分片继续可跑");
+
+    // 非法地形（长度不足）同样拒绝且不改状态
+    let bad_terrain = json!({
+        "players": ["p1"],
+        "rooms": [{ "name": "W3N3", "terrain": [0, 1, 2] }],
+    });
+    assert!(e.create_shard(&bad_terrain).is_err());
+    assert!(e.get_controller_pos("W3N3").is_none(), "坏分片未落任何房间");
+    assert_eq!(e.find_in_room("W1N1", 101).len(), 1, "旧分片不受影响");
+    e.teardown();
+    Ok(())
+}
+
+/// typed world + 真结算经 embed 通道可见：source 重生回满、creep TTL 死亡掉能量。
+fn embed_real_settlement_impl() -> anyhow::Result<()> {
+    let mut e = EmbedEngine::new();
+    e.create_shard(&json!({
+        "players": ["p1"],
+        "rooms": [{ "name": "W1N1", "rcl": 1, "owner": "p1" }],
+    }))?;
+    // 归属 controller 房间的 source 容量 3000；放置 energy 100 → 未满挂 300 tick 钟
+    e.place_object(
+        "W1N1",
+        "structure",
+        &json!({ "pos": [10, 10], "structureType": "source", "energy": 100 }),
+    )?;
+    // 短命 creep：5 tick 后死亡，携带 50 energy 掉地
+    e.place_object(
+        "W1N1",
+        "creep",
+        &json!({
+            "pos": [20, 20], "owner": "p1", "body": ["move", "carry"],
+            "store": { "energy": 50 }, "ticksToLive": 5,
+        }),
+    )?;
+
+    // 首个 tick 不结算到位前：creep 存活
+    e.tick(1)?;
+    assert_eq!(e.find_in_room("W1N1", 101).len(), 1, "TTL 未到 creep 存活");
+
+    // 越过 TTL：creep 死亡，50 energy 落在同格（死亡 tick 立即检查——
+    // 掉落 energy 此后每 tick 衰减 ceil(amount/ENERGY_DECAY)，官方 energy/tick.js）
+    e.tick(4)?;
+    assert_eq!(e.find_in_room("W1N1", 101).len(), 0, "TTL 到期 creep 死亡");
+    let dropped = e.find_in_room("W1N1", 106);
+    assert_eq!(dropped.len(), 1, "死亡掉落一个 resource");
+    assert_eq!(dropped[0]["amount"], 50, "掉落数量 = 携带 energy");
+    assert_eq!(dropped[0]["pos"]["x"], 20, "掉落位置 = 死亡格");
+
+    // 越过重生钟：source 回满 3000（放置 energy 100 + 300 tick 钟）
+    e.tick(305)?;
+    let sources = e.find_in_room("W1N1", 105);
+    assert_eq!(sources.len(), 1);
+    assert_eq!(sources[0]["energy"], 3000, "重生钟到点回满");
+    assert_eq!(sources[0]["energyCapacity"], 3000, "归属房间容量 3000");
+
+    // 无名稳定名不因对象消亡而重名（序号源是单调 id 分配器，对象总数会回退）
+    let id2 = e.place_object(
+        "W1N1",
+        "creep",
+        &json!({ "pos": [22, 22], "owner": "p1", "body": ["move"], "ticksToLive": 2 }),
+    )?;
+    let name2 = e.get_object(&id2).unwrap()["name"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    e.tick(4)?; // 死亡（对象总数回退）
+    let id3 = e.place_object(
+        "W1N1",
+        "creep",
+        &json!({ "pos": [23, 23], "owner": "p1", "body": ["move"] }),
+    )?;
+    let name3 = e.get_object(&id3).unwrap()["name"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert_ne!(name2, name3, "对象消亡后无名摆放不得重名");
+
+    // runPlayer 的 +1 也是真实结算（玩家可见状态随结算推进）
+    let run = e.run_player("p1", "Game.time")?;
+    assert_eq!(
+        run.expr["value"],
+        e.get_game_time() - 1,
+        "求值先于结算（上一 tick 视图）"
+    );
+
+    // setTerrain 守卫：首个玩家 tick 之后拒绝且世界不变（screeps-ok 契约；
+    // DumbWorld 退役后此处是唯一测试锁定）
+    let err = e.set_terrain("W1N1", vec![0; 2500]).unwrap_err();
+    assert!(
+        err.to_string().contains("第一个玩家 tick"),
+        "守卫错误信息: {err}"
+    );
+    assert_eq!(
+        e.find_in_room("W1N1", 105)[0]["energyCapacity"],
+        3000,
+        "世界不受失败的 setTerrain 影响"
+    );
+    e.teardown();
+    Ok(())
+}
+
+/// runPlayers：全部玩家对同一世界快照求值（同一 Game.time），合计恰好 +1 tick。
+fn embed_run_players_shared_snapshot_impl() -> anyhow::Result<()> {
+    let mut e = EmbedEngine::new();
+    e.create_shard(&json!({
+        "players": ["p1", "p2"],
+        "rooms": [{ "name": "W1N1", "rcl": 1, "owner": "p1" }],
+    }))?;
+    e.run_player("p1", "1")?; // time 0 → 1
+    let t = e.get_game_time();
+    let mut codes = std::collections::BTreeMap::new();
+    codes.insert("p1".to_string(), "Game.time".to_string());
+    codes.insert("p2".to_string(), "Game.time".to_string());
+    let runs = e.run_players(&codes)?;
+    assert_eq!(runs["p1"].expr["value"], t, "p1 看到结算前世界");
+    assert_eq!(runs["p2"].expr["value"], t, "p2 与 p1 同一快照");
+    assert_eq!(e.get_game_time(), t + 1, "合计恰好 +1 tick");
+    e.teardown();
     Ok(())
 }
 
