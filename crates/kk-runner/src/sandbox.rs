@@ -26,7 +26,18 @@ use crate::watchdog::Watchdog;
 
 const LODASH_SRC: &str = include_str!("../assets/lodash-3.10.1.js");
 const CONSTANTS_JSON: &str = include_str!("../assets/constants.json");
-const PRELUDE_JS: &str = include_str!("prelude.js");
+/// prelude 按职责分四个段（共享仪表/Buffer/CJS/memory+世界投影/宿主通道），
+/// 各段独立 IIFE、经 globalThis.__kkp 共享私有状态（末段删除）。
+const PRELUDE_SEGMENTS: [(&str, &str); 5] = [
+    ("kk-prelude-00-shared", include_str!("prelude/00_shared.js")),
+    ("kk-prelude-10-buffer", include_str!("prelude/10_buffer.js")),
+    ("kk-prelude-20-cjs", include_str!("prelude/20_cjs.js")),
+    (
+        "kk-prelude-30-memory-world",
+        include_str!("prelude/30_memory_world.js"),
+    ),
+    ("kk-prelude-90-host", include_str!("prelude/90_host.js")),
+];
 
 /// 官方配额：单实例堆上限约 256MB。
 const DEFAULT_HEAP_LIMIT: usize = 256 * 1024 * 1024;
@@ -116,10 +127,13 @@ impl Sandbox {
 
         let watchdog = Watchdog::spawn(runtime.v8_isolate().thread_safe_handle());
 
-        // 注入顺序：lodash（结果放 __kkLodash）→ 常量平铺 → prelude（捕获 op、遮蔽 Deno）。
+        // 注入顺序：lodash（结果放 __kkLodash）→ 常量平铺 → prelude 各段
+        // （首段捕获 op、末段遮蔽 Deno 并删除 __kkp）。
         runtime.execute_script("kk-lodash", lodash_script())?;
         runtime.execute_script("kk-constants", constants_script())?;
-        runtime.execute_script("kk-prelude", PRELUDE_JS.to_string())?;
+        for (name, src) in PRELUDE_SEGMENTS {
+            runtime.execute_script(name, src.to_string())?;
+        }
 
         let seq = SEQ.fetch_add(1, Ordering::SeqCst);
         LIFO_REGISTRY.lock().unwrap().push(seq);
