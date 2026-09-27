@@ -7,14 +7,31 @@
 
 全量 **2914** 用例执行完毕、宿主与适配器全程稳定、JSON 报告产出：
 
-| 指标 | 数值 | 含义 |
-|---|---|---|
-| **passed** | **229** | 哑世界 + 真实沙箱已经能真实通过的用例 |
-| failed | 1659 | 等待引擎（M1+）的游戏行为用例——正是后续里程碑的工作清单 |
-| skipped | 1026 | capability 门如实声明（M0 全 false）+ 上游 skip 规则 |
+| 指标 | 首份基线（3b35de2） | **重验基线（6674a80，M0 收官）** | 含义 |
+|---|---|---|---|
+| **passed** | 229 | **236** | 哑世界 + 真实沙箱已经能真实通过的用例 |
+| failed | 1659 | 1652 | 等待引擎（M1+）的游戏行为用例——正是后续里程碑的工作清单 |
+| skipped | 1026 | 1026 | capability 门如实声明（M0 全 false）+ 上游 skip 规则 |
 
 对照锚点：vanilla 2897 通过（其中 10 expected-fail）、xxscreeps 2642 通过（77 ef）——
-我们的 229 是**零游戏规则前提下**的起步线，M1 棘轮从 229 起只增不减。
+我们的 236 是**零游戏规则前提下**的起步线，**M1 棘轮从 236 起只增不减**。
+
+### 重验记录（2026-09-27，M0 收官轮）
+
+首份基线的入库 JSON 产自第一轮评审修复（3b35de2），第二~七轮修复合入后从未重跑——
+M0 收官时重跑两次全量（run1 与 run2 逐用例零差异，数字可复现），229→236 的 15 项
+翻转全部归因闭环：
+
+- **11 项转绿**是二~六轮已合入修复的迟到显形：RECYCLE-CREEP-001/003（第四轮
+  placeStructure→spawn 归一，旧失败消息 "spawn.recycleCreep is not a function" 即归一
+  缺失的症状）、PATHFINDER 系列（第五/六轮 PathFinder 返回形态与 path 语义）、
+  VISUAL-ROOM-002 clear()（第五轮 RoomVisual return this）、UNDOC-PROTO/IDENTITY
+  （原型链与对象身份相关修复）等；
+- **4 项转红（UNDOC-STALERECV-001 × 3 + 附带）是假绿显形，不是回归**：该系列期待
+  "stale 缓存引用调用方法抛 runtime 错"，旧代码里 spawn 方法因归一缺失根本不存在 →
+  TypeError 恰好满足断言而意外通过；归一修复后方法存在、桩返回 OK 不抛 → 显形为
+  真失败。stale 引用失效语义属 M2 已登记范围（见 m0-code-review.md 第四轮与
+  sandbox.md 设计节），转入 parity 失败池如实登记。
 
 ## 通过用例的构成（有信息量的部分）
 
@@ -43,7 +60,9 @@
 
 ## M1 起的棘轮机制（本基线的用途）
 
-- 每次合入跑 `compat/scripts/run-suite.sh`，passed 数不得低于上次登记值；
+- 每次合入跑 `compat/scripts/run-suite.sh`，passed 数不得低于上次登记值（当前登记值
+  **236**，重验于 6674a80）；**入库 JSON 必须随修复重跑更新**——首份基线从 3b35de2
+  之后未重跑，导致二~六轮修复的效果迟到六个提交才显形（本次重验的教训）；
 - failed 用例随引擎实装逐区转绿（01-movement/03-harvesting 等按 M1 引擎骨架的推进顺序）；
 - capability 从 false 逐项翻真时，对应 skip 池转入 passed/failed 统计，需在翻真 commit
   里登记新的基线值与理由。

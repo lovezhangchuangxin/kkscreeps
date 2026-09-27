@@ -415,3 +415,39 @@ sandbox.rs / proto.rs / embed.rs 分层清晰，无需拆分。
   1 pass）+ 文档链接检查（47 个 Markdown / 135 个本地链接）通过；
 - release 冒烟：tooangel 300 tick 完成 300/300（硬中断 0、跳帧 0、缺失 API 0 项）、
   wasm-bot 10 tick 完成 10/10（wasm loaded: true、零中断、缺失 API 0）。
+
+---
+
+## 追记：M0 收官（2026-09-27）：CI 上线 + 基线重验
+
+第七轮后的两个收尾缺口处理完毕，M0 三条验收关卡全部闭环：
+
+### 1. GitHub 远端与在线 CI 建立（"CI 可用"关卡闭环）
+
+- 私有仓库 `lovezhangchuangxin/kkscreeps`，main 分支全量推送；
+- 推送前修正 ci.yml：rust job 工具链从 `@stable` 固定为 `1.98.1`（与
+  rust-toolchain.toml 同步——@stable 会因 toml 自动切换但 rustfmt/clippy 组件
+  只装在 stable 上，`cargo fmt` 会报组件缺失；这是 CI 从未真跑过暴露的问题）；
+- **Actions 首跑三 job 全绿**（Linux：rust 2m36s 含 fmt/clippy/test/构建/适配器
+  端到端冒烟、js 17s、docs 8s）——Linux 复测随首跑完成（第一轮工具链-1 类平台
+  差异在 Linux 无复发）。
+
+### 2. 基线正式重验（229 → 236，入库 JSON 是第一轮修复的迟到产物）
+
+首份基线 JSON 产自 3b35de2（第一轮评审修复），第二~七轮修复合入后**从未重跑**。
+收官轮重跑两次全量：**236 passed / 1652 failed / 1026 skipped**，run1 与 run2
+逐用例零差异（数字可复现）。229→236 的 15 项翻转全部归因闭环：
+
+- 11 项转绿 = 二~六轮修复的迟到显形（第四轮 placeStructure→spawn 归一、第五轮
+  RoomVisual return this、五/六轮 PathFinder 形态与 path 语义等——旧失败消息
+  "spawn.recycleCreep is not a function" 即归一缺失的直接症状）；
+- 4 项转红（UNDOC-STALERECV-001 系列）= **假绿显形，非回归**：测试期待 stale
+  缓存引用调用抛 runtime 错，旧代码方法不存在 → TypeError 恰好满足断言；归一
+  修复后方法存在、桩返回 OK → 显形为真失败（stale 引用失效语义属 M2 登记范围）。
+
+机制实证方法：git worktree 在 14668be 构建旧二进制，对同一用例单跑对照
+（RECYCLE-CREEP-001 单跑即 pass、STALERECV-001 单跑即 fail，与首份入库基线相反
+——差异源于入库 JSON 的代码版本，而非套件顺序依赖，排除 flaky）。
+
+**棘轮登记值更新为 236**（基线报告与 README/roadmap 已同步）；教训入棘轮机制条目：
+入库 JSON 必须随修复重跑更新，防止修复效果迟到显形与假绿滞留。
