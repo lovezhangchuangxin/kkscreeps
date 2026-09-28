@@ -10,7 +10,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 ADAPTER="$ROOT/compat/dist/adapter.js"
 if [ ! -f "$ADAPTER" ]; then
-  echo "缺少 $ADAPTER——先在 compat/ 下 pnpm install && pnpm run build" >&2
+  echo "缺少 ${ADAPTER}——先在 compat/ 下 pnpm install && pnpm run build" >&2
   exit 1
 fi
 if [ ! -d "$ROOT/.compat/screeps-ok/node_modules" ]; then

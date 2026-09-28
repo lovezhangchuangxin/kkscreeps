@@ -94,6 +94,13 @@
 | query 面 FIND_MY_* 的 owner 过滤缺失（层间不一致，A3c 清偿） | embed matches_find 的 FIND_MY_CREEPS/MY_STRUCTURES/MY_SPAWNS 与对应 FIND_* 同臂无 owner 过滤；prelude room.find 已按 viewerName 过滤——两层语义现已分歧（M0 第七轮层间一致教训的现存实例） | screeps-ok 经 embed oracle 验 MY_* 存在假绿面；A3c per-viewer 批将 viewer 贯穿 find_in_room 签名链时一并清偿 |
 | 预置常量的写入面（自审 P3 登记） | C 表对象常量冻结共享引用（freezeConst）：判定面与官方等价（覆写不影响 API 判定），但玩家写入严格模式抛 TypeError——官方 C 是每 tick 深拷贝（game.js:435 `_.extend(globals, jsonParse(jsonStringify(C)))`），玩家写自己全局静默成功且下 tick 重置 | 极端边缘（无 bot 写常量全局）；如需收尾改 C 表捕获时深拷贝即可；sandbox.rs 常量平铺不 freeze 的待验证注释同此归并 |
 | 寻路回调内 load_terrain 的拒绝（C2，我方结构性防护） | `search` 回调内再调 `load_terrain` 返回 Err（重入锁拒绝）而非死锁 | 官方无此面（地形仅启动期载入，driver/lib/path-finder.js:23-46，回调内无 loadTerrain 调用点）；玩家不可达（宿主 Rust API），登记备查 |
+| sign 的 datetime 墙钟字段（B2 登记） | 官方 signController.js:27 落 `datetime: Date.now()`（第四字段）；我方不落盘（确定性引擎） | screeps-ok SIGN_SHAPE 含 datetime——投影层合成（轨 A 接线时合成当前墙钟或登记差异） |
+| reserve 超窗的"幻影预约"（B2 登记） | 官方 reserveController.js:35-39 先写内存对象再于 :43-45 拒（幻影仅本 tick 后续处理器可见、不入库）；我方超窗整票拒绝 | 同 tick 多 reserve 且首条恰好超窗时可观察分歧；与"结算期直接写工作副本"类既有登记同族，顺序敏感用例显形时归因 |
+| 饱和截断的官方负数等价族（B2 登记） | attack 削减 endTime/downgradeTime 官方可得负数（null−effect / 削穿 0）；我方 u64 饱和 0 | 两实现终态等价（负值与 0 均被同 tick 清除/降级链消费，清除条件同真）——锁值测试钉死（null downgradeTime 当 tick失主权、削穿即清除） |
+| EVENT_ATTACK_CONTROLLER 的 data 键（B2 登记） | 官方事件无 data 键（attackController.js:52）；我方 push_event 封套恒带空 data | 投影层形状，轨 A eventLog 投影接线时消化 |
+| controller 族的 GCL 门读数（B2 清偿记录） | 结算期读上一 tick 的 PlayerState.rooms 定集（官方 bulkUsers.addToSet 不改内存对象，bulk.js:93-101）；Engine tick 末按世界真值重建 | 同 tick 双 claim 都按旧定集放行（官方 quirk，锁值测试钉死——settle 期若误更新 rooms 即转红） |
+| unclaim 未实现（B2 范围决策） | intent 白名单无 unclaim（官方 system.js:80 + processor.js:307-309 有）；controller.rs 预留挂接点 | 归 controller 族后续批（embed 玩家 API 面就绪前无生产者）；A4 规格提醒 |
+| to_user_string 的 falsy 折叠角落（B2 登记，承 M1） | 官方 `("" + (value\|\|""))` 将 0/false/NaN 折叠为 ""（→sign 清除语义）；我方 Number(0)→"0"、Bool(false)→"false" | 仅畸形 intent 输入面可达（API 层预检先挡）；与 UTF-16 截断同条登记的姊妹差异 |
 
 ## 四、验收关卡（不做完不算兼容）
 
