@@ -8,8 +8,11 @@
 //!
 //! M1 不结算：NPC、战斗全家、power、市场、跨房间落地、Generic 桶对象
 //! （tower/rampart 等透传对象只保证可见，无规则行为）。
+//! B1 起 hits 模型落地：近战 attack/repair/dismantle 已结算（damage.rs），
+//! ranged/heal/boost 仍不在范围。
 
 pub mod creep;
+pub mod damage;
 pub mod economy;
 pub mod movement;
 pub mod room;
@@ -65,6 +68,9 @@ pub struct Working<'w> {
     pub tick_fatigue: BTreeMap<ObjId, i64>,
     /// 本 tick controller 升级量（官方 _upgraded）。
     pub upgraded: BTreeMap<ObjId, i64>,
+    /// 本 tick 对 creep 的待施加伤害（官方 `_damageToApply`，_damage.js:20——
+    /// intent 期累加、creep 自己的 tick 结算；对象移除时一并清理）。
+    pub damage_to_apply: BTreeMap<ObjId, i64>,
     pub movement: movement::Movement,
 }
 
@@ -109,6 +115,7 @@ impl<'w> Working<'w> {
         self.index.remove(id, (x, y));
         self.old_fatigue.remove(&id);
         self.tick_fatigue.remove(&id);
+        self.damage_to_apply.remove(&id);
         Some(obj)
     }
 
@@ -228,6 +235,7 @@ pub fn settle_room(
         old_fatigue: BTreeMap::new(),
         tick_fatigue: BTreeMap::new(),
         upgraded: BTreeMap::new(),
+        damage_to_apply: BTreeMap::new(),
         movement: movement::Movement::new(),
     };
 
