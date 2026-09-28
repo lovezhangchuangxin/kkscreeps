@@ -7,4 +7,8 @@ edition.workspace = true
 [lints]
 workspace = true
 
+[build-dependencies]
+# 官方 binding.gyp 用 node-gyp 编译 pf.cc；此处用 cc crate 等价编译（c++20 + 异常开启）
+cc = "1"
+
 [dependencies]
