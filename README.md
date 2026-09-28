@@ -24,7 +24,7 @@
 |---|---|
 | [docs/designs/](docs/designs/) | **功能设计**：玩家可见行为与工具的设计（兼容性红线、开发套件……） |
 | [docs/architecture/](docs/architecture/) | **技术架构**：模块划分、游戏循环、沙箱、存储与传输 |
-| [docs/research/](docs/research/) | **调研底稿**：四份主报告 + 15 份笔记（另有 1 份实验输出存档），全部决策的证据链 |
+| [docs/research/](docs/research/) | **调研底稿**：四份主报告 + 16 份笔记（另有 1 份实验输出存档），全部决策的证据链 |
 | [docs/decisions/](docs/decisions/) | **决策记录**：十条 ADR 与否决方案清单 |
 | [docs/roadmap.md](docs/roadmap.md) | **路线图**：里程碑 M0–M5 的内容与验收关卡 |
 
@@ -43,6 +43,8 @@ scripts/         仓库工具脚本（screeps-ok pin 克隆、bot 拉取、文�
 spikes/          技术验证工程（cargo crate，使命已完成，保留作证据）
 ├── deno-spike/    ★ 主力验证：沙箱基础 / 游戏 API 交互模式 / 指令回调 / 预算桶仿真
 │                  运行：cargo run --release [--example game_api | op_callback | bucket_sim]
+├── inspector-spike/ 玩家断点调试验证：CDP 全链路 / 暂停×看门狗 / 快照 / 多 isolate 多 target
+│                  运行：cargo run --release（证据见 docs/research/notes/spike-deno-inspector.md）
 ├── rquickjs-spike/（评估后淘汰，保留作证据）
 └── boa-spike/     （评估后淘汰，保留作证据）
 ```

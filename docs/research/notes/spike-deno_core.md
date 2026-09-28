@@ -2,6 +2,7 @@
 
 - 日期：2026-09-27
 - 后续篇：[spike-deno-game-api.md](./spike-deno-game-api.md)（实验 F~K：Screeps 游戏 API 形态的高风险交互模式——惰性 overlay / roomCallback 零拷贝 / 2MB RawMemory / CommonJS 垫片 / 游戏 runtime snapshot / console 与堆栈，6/6 PASS）
+- 后续篇：[spike-deno-inspector.md](./spike-deno-inspector.md)（实验 M~Q：V8 inspector + deno_inspector_server 断点调试全链路 / 暂停×看门狗 / 全局面 diff / 快照可调试 / 多 isolate 多 target，5/5 PASS；关闭本篇 §11 的 inspector 未测项）
 - 实验对象：`deno_core` 0.412.0（V8 绑定 `deno_v8` 0.4.0 → `v8` crate 150.4.0，即 rusty_v8；引擎版本串 `15.0.245.2-rusty`，来自 `v8::V8::get_version()` 运行时输出）
 - 代码位置：`spikes/deno-spike/`（独立 crate，不在 workspace 内）
 - 复现命令（在本目录 `spikes/deno-spike/` 下）：
@@ -215,7 +216,7 @@ NOTE fib_n=30 方法=预热1次后5次取中位(Rust Instant 含边界开销)
 ## 11. 未尽事项（n/a 与待办）
 
 - **未测**：把 JsRuntime 放进独立 OS 线程逐玩家运行（`JsRuntime` 内含 `Rc`，非 `Send`，需线程绑定 + 消息通信，或 v8 `Locker` 抢占模型）。本 spike 的中断验证走的是"单线程宿主 + 看门狗线程 terminate"，已满足任务要求；多线程宿主模型留到原型阶段验证。
-- **未测**：`SharedArrayBufferStore` / 跨 isolate 传输；`inspector`（调试协议）；V8 code cache（与 snapshot 互补的另一种缓存）。
+- **未测**：`SharedArrayBufferStore` / 跨 isolate 传输；V8 code cache（与 snapshot 互补的另一种缓存）。（`inspector` 调试协议已测——后续篇 [spike-deno-inspector.md](./spike-deno-inspector.md) 实验 M~Q 五项全 PASS。）
 - objchurn 单次仅 ~0.4–0.9ms，如需更细的数字应加重复轮数（本笔记如实报告 5 次中位及原始 5 个样本）。
 - RSS 基线（35.7MB）是"跑过实验A/B 之后"的进程内基线（受 V8 平台驻留影响），边际增量（1→10 个 runtime）才是有效数字；未另起纯净进程测绝对基线。
 - negctl 阴性对照示例（`spikes/deno-spike/examples/negctl.rs`）故意 abort 进程，仅手动运行，不参与主输出。
