@@ -302,6 +302,10 @@
     });
   }
   refreshGame();
+  // 官方 API 内部经闭包 globals 对象读 Game/Memory（structures.js:1073
+  // `globals.Game.creeps[name]` 等）——玩家重定义 globalThis.Game 不影响官方
+  // 路径。等价物：gw.currentGame() 返回当前 tick 的 Game 实例（闭包引用）。
+  gw.currentGame = () => gameInstance;
 
   // ---------------------------------------------------------------- intents 收集器
   // 官方同形（driver/lib/runtime/runtime.js:60-100）：闭包私有对象，玩家拿不到
@@ -379,6 +383,11 @@
       gw.terrainByRoom = {};
       for (const [n, r] of __Object.entries(gw.world.rooms || {})) {
         if (Array.isArray(r.terrain)) gw.terrainByRoom[n] = r.terrain;
+      }
+      // per-tick 重置钩（官方 game/structures.js make 每 tick 重置
+      // createdCreepNames:29 的等价物——spawn 族的同 tick 同名拒名单）
+      if (gw.perTickReset) {
+        for (const fn of gw.perTickReset) fn();
       }
       refreshGame();
     },

@@ -51,6 +51,8 @@ impl World {
             let mut entry = serde_json::Map::new();
             entry.insert("name".into(), json!(name));
             entry.insert("terrain".into(), json!(&state.terrain.as_slice()[..]));
+            // RCL（extension 的 storeCapacityResource 归一与房间聚合共用）
+            let rcl = room_rcl(state);
             if visible.contains(name) {
                 let (available, capacity) = room_energy(state);
                 entry.insert("energyAvailable".into(), json!(available));
@@ -74,7 +76,14 @@ impl World {
                         continue;
                     }
                 }
-                objects.push(object_json(name, *id, object, self.time, &state.terrain));
+                objects.push(object_json(
+                    name,
+                    *id,
+                    object,
+                    self.time,
+                    &state.terrain,
+                    rcl,
+                ));
             }
         }
         json!({
@@ -92,10 +101,16 @@ impl World {
         let Some(state) = self.rooms.get(room) else {
             return Vec::new();
         };
+        let rcl = room_rcl(state);
         state
             .objects
             .iter()
-            .map(|(id, o)| (*id, object_json(room, *id, o, self.time, &state.terrain)))
+            .map(|(id, o)| {
+                (
+                    *id,
+                    object_json(room, *id, o, self.time, &state.terrain, rcl),
+                )
+            })
             .filter(|(_, o)| matches_find(o, find_const))
             .collect()
     }
@@ -112,8 +127,16 @@ impl World {
     /// 单对象投影（embed getObject 后端）。
     pub fn object_json_by_id(&self, id: crate::world::ObjId) -> Option<Value> {
         let (room, object) = self.get(id)?;
-        let terrain = &self.rooms.get(room)?.terrain;
-        Some(object_json(room, id, object, self.time, terrain))
+        let state = self.rooms.get(room)?;
+        let terrain = &state.terrain;
+        Some(object_json(
+            room,
+            id,
+            object,
+            self.time,
+            terrain,
+            room_rcl(state),
+        ))
     }
 }
 
@@ -151,18 +174,25 @@ fn object_owner(object: &RoomObject) -> Option<std::borrow::Cow<'_, str>> {
     }
 }
 
-/// 房间能量面（官方 game.js:325-328：非 off 的 spawn/extension 计入；容量侧
-/// spawn 固定 300、extension 按 RCL 表）。官方按查看者过滤自家结构，M1 单投影
-/// 先按房间合计（灰区登记：多主人房间的 per-owner 视图 M2 玩家 API 层实现）。
-fn room_energy(state: &crate::world::RoomState) -> (i64, i64) {
-    let rcl = state
+/// 房间 RCL（无 controller 为 0）：extension 的 storeCapacityResource 归一
+/// （官方 extensions/tick.js:11-17 每 tick 按 EXTENSION_ENERGY_CAPACITY[rcl]
+/// 重写）与房间能量聚合共用。pub(crate)：snapshot.rs 查询面过滤复用。
+pub(crate) fn room_rcl(state: &crate::world::RoomState) -> u8 {
+    state
         .objects
         .values()
         .find_map(|o| match o {
             RoomObject::Controller(ctl) => Some(ctl.level),
             _ => None,
         })
-        .unwrap_or(0);
+        .unwrap_or(0)
+}
+
+/// 房间能量面（官方 game.js:325-328：非 off 的 spawn/extension 计入；容量侧
+/// spawn 固定 300、extension 按 RCL 表）。官方按查看者过滤自家结构，M1 单投影
+/// 先按房间合计（灰区登记：多主人房间的 per-owner 视图 M2 玩家 API 层实现）。
+fn room_energy(state: &crate::world::RoomState) -> (i64, i64) {
+    let rcl = room_rcl(state);
     let mut available = 0i64;
     let mut capacity = 0i64;
     for o in state.objects.values() {
@@ -183,27 +213,44 @@ fn room_energy(state: &crate::world::RoomState) -> (i64, i64) {
 
 /// 对象 → 世界 JSON 记录（字段名 = prelude wrapObject 消费面约定）。
 /// pub(crate)：snapshot.rs 的查询面过滤复用同源投影（FIND 语义单源）。
+/// `rcl`：extension 的 storeCapacityResource.energy 归一（官方 extensions/
+/// tick.js:11-17 每 tick 按房 RCL 查表重写——投影期直存等价）。
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn object_json(
     room: &str,
     id: crate::world::ObjId,
     object: &RoomObject,
     time: u64,
     terrain: &kk_core::Terrain,
+    rcl: u8,
 ) -> Value {
     let id_str = id.as_str();
     let mut v = match object {
-        RoomObject::Creep(o) => json!({
-            "type": "creep", "id": id_str, "room": room, "x": o.x, "y": o.y,
-            "name": o.name, "owner": o.owner,
-            "body": o.body.iter().map(part_json).collect::<Vec<_>>(),
-            "fatigue": o.fatigue,
-            "ageTime": o.age_time,
-            "ticksToLive": o.age_time.saturating_sub(time),
-            "hits": o.hits,
-            "hitsMax": o.body.len() * 100,
-            "store": { "energy": o.store.energy },
-            "spawning": o.spawning,
-        }),
+        RoomObject::Creep(o) => {
+            // 官方 creeps.js:78 `o.ageTime ? o.ageTime - time : undefined`：
+            // 孵化中的雏形不带 ageTime（create-creep.js:80-98 无该字段，出生后
+            // 首个 creep tick 赋值——CREEP-SPAWNING-002 锁值）→ 键缺省（prelude
+            // 读 undefined；快照面 remaining(0) 同构 null）
+            let mut v = json!({
+                "type": "creep", "id": id_str, "room": room, "x": o.x, "y": o.y,
+                "name": o.name, "owner": o.owner,
+                "body": o.body.iter().map(part_json).collect::<Vec<_>>(),
+                "fatigue": o.fatigue,
+                "ageTime": o.age_time,
+                "hits": o.hits,
+                "hitsMax": o.body.len() * 100,
+                "store": { "energy": o.store.energy },
+                // 官方 creep 落库带 storeCapacity（_recalc-body：活跃 CARRY ×
+                // CARRY_CAPACITY × boost 乘数）——creeps.js carryCapacity 直读
+                // `o.storeCapacity`、Store.getCapacity() 同源（A4-i Store 族）
+                "storeCapacity": crate::snapshot::creep_store_capacity_raw(&o.body),
+                "spawning": o.spawning,
+            });
+            if o.age_time != 0 {
+                v["ticksToLive"] = json!(o.age_time.saturating_sub(time));
+            }
+            v
+        }
         RoomObject::Source(o) => json!({
             "type": "structure", "structureType": "source",
             "id": id_str, "room": room, "x": o.x, "y": o.y,
@@ -233,29 +280,35 @@ pub(crate) fn object_json(
             }
             v
         }
-        RoomObject::Spawn(o) => json!({
-            "type": "spawn", "structureType": "spawn",
-            "id": id_str, "room": room, "x": o.x, "y": o.y,
-            "name": o.name, "owner": o.owner,
-            "store": { "energy": o.store.energy },
-            "energy": o.store.energy,
-            "energyCapacity": c::SPAWN_ENERGY_CAPACITY,
-            "hits": o.hits, "hitsMax": c::SPAWN_HITS,
-            "spawning": match &o.spawning {
-                None => Value::Null,
-                Some(job) => json!({
-                    "name": job.name, "needTime": job.need_time,
-                    "spawnTime": job.spawn_time,
-                    "directions": job.directions,
-                }),
-            },
-        }),
+        RoomObject::Spawn(o) => {
+            // 官方落库形态（build.js:119-127）：store + storeCapacityResource
+            // {energy: SPAWN_ENERGY_CAPACITY}、无 storeCapacity 键——Store 三函数
+            // 族按此分岔（getCapacity() 读 null、getCapacity('energy') 读 300）
+            json!({
+                "type": "spawn", "structureType": "spawn",
+                "id": id_str, "room": room, "x": o.x, "y": o.y,
+                "name": o.name, "owner": o.owner,
+                "store": { "energy": o.store.energy },
+                "energy": o.store.energy,
+                "energyCapacity": c::SPAWN_ENERGY_CAPACITY,
+                "storeCapacityResource": { "energy": c::SPAWN_ENERGY_CAPACITY },
+                // off（_calc_spawns 维护的 RCL 超限标记）：spawnCreep/
+                // renewCreep/recycleCreep 的 data(this.id).off 显式回查面
+                "off": o.off,
+                "hits": o.hits, "hitsMax": c::SPAWN_HITS,
+                "spawning": spawn_spawning_json(o),
+            })
+        }
         RoomObject::Extension(o) => json!({
             "type": "structure", "structureType": "extension",
             "id": id_str, "room": room, "x": o.x, "y": o.y,
             "owner": o.owner,
             "store": { "energy": o.store.energy },
             "energy": o.store.energy,
+            // 同 spawn 的官方落库形态（build.js:130-137 + extensions/tick.js
+            // :11-17 的 RCL 归一——投影期直存等价）
+            "storeCapacityResource": { "energy": crate::types::extension_energy_capacity(rcl) },
+            "off": o.off,
             "hits": o.hits, "hitsMax": c::EXTENSION_HITS,
         }),
         RoomObject::ConstructedWall(o) => json!({
@@ -274,6 +327,9 @@ pub(crate) fn object_json(
             "id": id_str, "room": room, "x": o.x, "y": o.y,
             "owner": o.owner,
             "store": { "energy": o.store.energy },
+            // 官方 storage 落库带数值 storeCapacity（build.js:150-156）、无
+            // storeCapacityResource——Store.getCapacity() 读数值（A4-i Store 族）
+            "storeCapacity": c::STORAGE_CAPACITY,
             "hits": o.hits, "hitsMax": c::STORAGE_HITS,
         }),
         RoomObject::ConstructionSite(o) => {
@@ -334,6 +390,26 @@ pub(crate) fn part_json(p: &kk_schema::room::BodyPart) -> Value {
         (Some(b), Some(k)) => json!({ "type": k, "hits": p.hits, "boost": b }),
         (None, Some(k)) => json!({ "type": k, "hits": p.hits }),
         (_, None) => json!({ "hits": p.hits }),
+    }
+}
+
+/// spawn 的孵化任务投影（官方 DB 形态 `{name, needTime, spawnTime, directions}`，
+/// create-creep.js:68-74）：directions 未指定时官方 undefined——键不落库，
+/// runtimeData 对象上读 `spawning.directions` 得 undefined（Spawning 构造器
+/// structures.js:1309 同读）。空列表在 typed 世界即"未指定"，投影按官方缺键。
+fn spawn_spawning_json(o: &kk_schema::room::SpawnObj) -> Value {
+    match &o.spawning {
+        None => Value::Null,
+        Some(job) => {
+            let mut v = json!({
+                "name": job.name, "needTime": job.need_time,
+                "spawnTime": job.spawn_time,
+            });
+            if !job.directions.is_empty() {
+                v["directions"] = json!(job.directions);
+            }
+            v
+        }
     }
 }
 
@@ -567,6 +643,134 @@ mod tests {
                 .get("owner")
                 .is_none(),
             "从未拥有无键"
+        );
+    }
+
+    /// Store 族容量投影锁（A4-i）：官方落库形态——spawn/extension 带
+    /// storeCapacityResource（build.js:119-137 + extensions/tick.js:11-17 的
+    /// RCL 归一）、storage 带数值 storeCapacity（build.js:150-156）、creep 带
+    /// storeCapacity（_recalc-body）；off 是 spawnCreep 族 data(id).off 的
+    /// 显式回查面；spawning.directions 未指定时官方缺键（undefined）。
+    #[test]
+    fn store_capacity_projection_family() {
+        let mut world = World::new(7);
+        let mut terrain = Terrain::plains();
+        terrain.normalize();
+        world.register_room("W1N1", terrain);
+        let ctl = ControllerObj {
+            id: 0,
+            x: 5,
+            y: 5,
+            level: 7,
+            safe_mode: 0,
+            safe_mode_available: 0,
+            progress: 0,
+            downgrade_time: None,
+            owner: Some("p1".into()),
+            owner_cleared: false,
+            is_power_enabled: false,
+            reservation: None,
+            sign: None,
+            upgrade_blocked: None,
+            safe_mode_cooldown: None,
+        };
+        let ctx = PlaceCtx {
+            time: world.time,
+            controller: Some(&ctl),
+            name_seq: 0,
+        };
+        world
+            .insert("W1N1", RoomObject::Controller(ctl.clone()))
+            .unwrap();
+        let spawn = normalize(
+            "spawn",
+            &serde_json::json!({ "pos": [20, 20], "structureType": "spawn", "owner": "p1" }),
+            &ctx,
+        )
+        .unwrap();
+        let spawn_id = world.insert("W1N1", spawn).unwrap();
+        let ext = normalize(
+            "structure",
+            &serde_json::json!({ "pos": [21, 20], "structureType": "extension", "owner": "p1" }),
+            &ctx,
+        )
+        .unwrap();
+        let ext_id = world.insert("W1N1", ext).unwrap();
+        let storage = normalize(
+            "structure",
+            &serde_json::json!({ "pos": [22, 20], "structureType": "storage", "owner": "p1" }),
+            &ctx,
+        )
+        .unwrap();
+        let storage_id = world.insert("W1N1", storage).unwrap();
+        let creep = normalize(
+            "creep",
+            &serde_json::json!({
+                "pos": [23, 20], "owner": "p1", "body": ["carry", "carry", "move"], "name": "c1"
+            }),
+            &ctx,
+        )
+        .unwrap();
+        let creep_id = world.insert("W1N1", creep).unwrap();
+
+        let spawn_j = world.object_json_by_id(spawn_id).unwrap();
+        assert_eq!(spawn_j["storeCapacityResource"]["energy"], 300);
+        assert!(
+            spawn_j.get("storeCapacity").is_none(),
+            "spawn 无数值容量键（官方落库无 storeCapacity）"
+        );
+        assert_eq!(spawn_j["off"], false, "off 标记投影（data(id).off 回查面）");
+        // 孵化任务 directions 缺键（官方 undefined 语义）
+        assert_eq!(spawn_j["spawning"], serde_json::Value::Null);
+
+        let ext_j = world.object_json_by_id(ext_id).unwrap();
+        assert_eq!(
+            ext_j["storeCapacityResource"]["energy"], 100,
+            "RCL 7 的 extension 容量（EXTENSION_ENERGY_CAPACITY[7]）"
+        );
+        assert_eq!(ext_j["off"], false);
+
+        let storage_j = world.object_json_by_id(storage_id).unwrap();
+        assert_eq!(storage_j["storeCapacity"], 1_000_000);
+        assert!(
+            storage_j.get("storeCapacityResource").is_none(),
+            "storage 无 per-resource 容量（通用商店）"
+        );
+
+        let creep_j = world.object_json_by_id(creep_id).unwrap();
+        assert_eq!(creep_j["storeCapacity"], 100, "CARRY×2 × 50");
+
+        // 手写孵化任务（带 directions）经 world_json 全量投影
+        if let Some(RoomObject::Spawn(s)) =
+            world.room_mut("W1N1").unwrap().objects.get_mut(&spawn_id)
+        {
+            s.spawning = Some(kk_schema::room::SpawningJob {
+                name: "child".into(),
+                need_time: 6,
+                spawn_time: 6,
+                directions: vec![3, 5],
+            });
+        }
+        let spawn_j = world.object_json_by_id(spawn_id).unwrap();
+        assert_eq!(spawn_j["spawning"]["name"], "child");
+        assert_eq!(spawn_j["spawning"]["needTime"], 6);
+        assert_eq!(spawn_j["spawning"]["spawnTime"], 6);
+        assert_eq!(spawn_j["spawning"]["directions"], serde_json::json!([3, 5]));
+        // 空 directions = 未指定 → 缺键（官方 undefined）
+        if let Some(RoomObject::Spawn(s)) =
+            world.room_mut("W1N1").unwrap().objects.get_mut(&spawn_id)
+        {
+            s.spawning = Some(kk_schema::room::SpawningJob {
+                name: "child".into(),
+                need_time: 6,
+                spawn_time: 6,
+                directions: vec![],
+            });
+        }
+        let spawn_j = world.object_json_by_id(spawn_id).unwrap();
+        assert!(
+            spawn_j["spawning"].get("directions").is_none(),
+            "空 directions 缺键（官方 Spawning.directions === undefined）"
         );
     }
 }

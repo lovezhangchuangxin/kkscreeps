@@ -92,7 +92,9 @@
   // ---------------------------------------------------------------- Creep 原型：字段表
   // 官方 creeps.js:64-90 字段表对照（我方投影字段名换算：ticksToLive 直存
   // 剩余值、owner 是用户名、body 部件归一 {type,hits}、saying 的 actionLog
-  // 面未投影——官方无 say 记录同样 undefined）
+  // 面未投影——官方无 say 记录同样 undefined）。store/carry 走官方
+  // _storeGetter 形态（吃整个 raw 投影 o——creep 落库带 storeCapacity，
+  // A4-i 起投影携带，Store 三函数族经它取数）
   gw.defineGameObjectProperties(globalThis.Creep.prototype, gw.rawData, {
     name: (o) => o.name,
     body: (o) => (o.body || []).map((p) => (typeof p === 'string' ? { type: p, hits: 100 } : p)),
@@ -101,8 +103,8 @@
     spawning: (o) => o.spawning ?? false,
     ticksToLive: (o) => o.ticksToLive,
     carryCapacity: (o) => o.storeCapacity,
-    carry: (o) => gw.makeStore(o.store || { energy: 0 }),
-    store: (o) => gw.makeStore(o.store || { energy: 0 }),
+    carry: (o) => gw.makeStore(o),
+    store: (o) => gw.makeStore(o),
     fatigue: (o) => o.fatigue || 0,
     hits: (o) => o.hits ?? 0,
     hitsMax: (o) => o.hitsMax ?? 0,

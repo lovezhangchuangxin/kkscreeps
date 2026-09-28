@@ -34,6 +34,7 @@ impl World {
             return Vec::new();
         };
         let terrain = &state.terrain;
+        let rcl = crate::world_json::room_rcl(state);
         state
             .objects
             .iter()
@@ -41,7 +42,8 @@ impl World {
                 if matches!(*o, RoomObject::Flag(_)) {
                     return false;
                 }
-                let internal = crate::world_json::object_json(room, **id, o, self.time, terrain);
+                let internal =
+                    crate::world_json::object_json(room, **id, o, self.time, terrain, rcl);
                 crate::world_json::matches_find(&internal, find_const)
             })
             .map(|(id, o)| snapshot_json(room, *id, o, self.time, terrain))
@@ -95,9 +97,10 @@ fn snap_store(energy: u32) -> Value {
 /// creep 载荷容量：活跃（hits>0）CARRY 数 × CARRY_CAPACITY，boosted 部件乘
 /// BOOSTS.carry 的 capacity 系数（KH×2/KH2O×3/XKH2O×4——constants.js BOOSTS 表；
 /// hits>0 门对照官方 _recalc-body → calcBodyEffectiveness，utils.js:623-636——
-/// 受损部件不计容量）。形态对齐 vanilla `storeCapacity || null`：0（无活跃
-/// CARRY）读 null；带 CARRY 的 creep 恒 number（inspection 用例锁 number）。
-fn creep_store_capacity(body: &[kk_schema::room::BodyPart]) -> Value {
+/// 受损部件不计容量）。pub(crate)：world_json 的 creep 投影同源直存
+/// `storeCapacity`（官方 creep 落库字段，creeps.js carryCapacity/Store 同读），
+/// 两消费面（快照契约 null 形态 vs 世界投影裸数值）由各自包装层定型。
+pub(crate) fn creep_store_capacity_raw(body: &[kk_schema::room::BodyPart]) -> i64 {
     let mut capacity = 0i64;
     let mut boost_table: Option<serde_json::Value> = None;
     for part in body {
@@ -123,6 +126,13 @@ fn creep_store_capacity(body: &[kk_schema::room::BodyPart]) -> Value {
         };
         capacity += c::CARRY_CAPACITY * multiplier;
     }
+    capacity
+}
+
+/// 快照契约形态：vanilla `storeCapacity || null`（store.js:31 同构）——0（无活跃
+/// CARRY）读 null；带 CARRY 的 creep 恒 number（inspection 用例锁 number）。
+fn creep_store_capacity(body: &[kk_schema::room::BodyPart]) -> Value {
+    let capacity = creep_store_capacity_raw(body);
     if capacity > 0 {
         json!(capacity)
     } else {
@@ -689,6 +699,67 @@ mod tests {
                 .get("owner")
                 .is_none(),
             "从未拥有无键"
+        );
+    }
+
+    /// Store 族容量快照锁（A4-i，与 world_json::store_capacity_projection_family
+    /// 层间对表）：storage 数值容量、spawn/extension 无参容量 null（官方落库带
+    /// storeCapacityResource——build.js:119-137、store.js:28-33）、creep 数值。
+    #[test]
+    fn snapshot_store_capacity_family() {
+        let mut world = world_with_room();
+        // ctx 借 world（immutable）与 insert（mutable）交替——每个 normalize
+        // 用独立作用域的 ctx，产物 owned 后再 insert
+        let storage = {
+            let c = ctx(&world);
+            normalize(
+                "structure",
+                &serde_json::json!({
+                    "pos": [9, 9], "structureType": "storage", "owner": "p1",
+                    "store": { "energy": 700 }
+                }),
+                &c,
+            )
+            .unwrap()
+        };
+        let storage_id = world.insert("W1N1", storage).unwrap();
+        let snap = world.object_snapshot_by_id(storage_id).unwrap();
+        assert_eq!(snap["storeCapacity"], 1_000_000, "STORAGE_CAPACITY 数值");
+        assert_eq!(snap["store"]["energy"], 700, "正量资源入表");
+
+        let ext = {
+            let c = ctx(&world);
+            normalize(
+                "structure",
+                &serde_json::json!({ "pos": [9, 10], "structureType": "extension", "owner": "p1" }),
+                &c,
+            )
+            .unwrap()
+        };
+        let ext_id = world.insert("W1N1", ext).unwrap();
+        let snap = world.object_snapshot_by_id(ext_id).unwrap();
+        assert_eq!(
+            snap["storeCapacity"],
+            serde_json::Value::Null,
+            "extension 无参 getCapacity() 读 null"
+        );
+
+        let creep = {
+            let c = ctx(&world);
+            normalize(
+                "creep",
+                &serde_json::json!({
+                    "pos": [9, 11], "owner": "p1", "body": ["carry", "carry"], "name": "c9"
+                }),
+                &c,
+            )
+            .unwrap()
+        };
+        let creep_id = world.insert("W1N1", creep).unwrap();
+        let snap = world.object_snapshot_by_id(creep_id).unwrap();
+        assert_eq!(
+            snap["storeCapacity"], 100,
+            "CARRY×2 × 50（与 world_json 同源）"
         );
     }
 }

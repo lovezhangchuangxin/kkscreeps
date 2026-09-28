@@ -4,8 +4,10 @@
 use kk_core::constants as c;
 use kk_schema::room::{CreepObj, RoomObject, SpawningJob};
 use kk_world::ObjId;
+use kk_world::types::BodyKind;
 
 use super::Working;
+use super::creep::{ACTION_HEALED, body_parts_kinds, set_action_log, store_capacity};
 use super::movement::{self, offsets_by_direction};
 use crate::intent::{IntentData, creep_cost};
 
@@ -91,14 +93,30 @@ pub fn energy_available(w: &Working) -> i64 {
         .sum()
 }
 
-/// 官方 spawns/intents.js 的 M1 子集：仅 createCreep。
+/// 官方 spawns/intents.js:3-24 的分派序：createCreep → renewCreep →
+/// recycleCreep → setSpawnDirections → cancelSpawning（同对象可并存多个
+/// 动作——前者改状态后后者按新状态裁决，如 createCreep 置 spawning 后
+/// renewCreep 的 object.spawning 门拒）。
 pub fn process_spawn_intents(
     w: &mut Working,
     spawn_id: ObjId,
     actions: &std::collections::BTreeMap<crate::intent::Action, IntentData>,
 ) {
-    if let Some(data) = actions.get(&crate::intent::Action::CreateCreep) {
+    use crate::intent::Action;
+    if let Some(data) = actions.get(&Action::CreateCreep) {
         intent_create_creep(w, spawn_id, data);
+    }
+    if let Some(data) = actions.get(&Action::RenewCreep) {
+        intent_renew_creep(w, spawn_id, data);
+    }
+    if let Some(data) = actions.get(&Action::RecycleCreep) {
+        intent_recycle_creep(w, spawn_id, data);
+    }
+    if let Some(data) = actions.get(&Action::SetSpawnDirections) {
+        intent_set_spawn_directions(w, spawn_id, data);
+    }
+    if actions.contains_key(&Action::CancelSpawning) {
+        intent_cancel_spawning(w, spawn_id);
     }
 }
 
@@ -153,13 +171,16 @@ pub fn intent_create_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) 
             directions,
         });
     }
-    // 雏形 creep（create-creep.js:80-98）：占位于 spawn 格、spawning=true
+    // 雏形 creep（create-creep.js:80-98）：占位于 spawn 格、spawning=true。
+    // 官方**不带 ageTime**——孵化中 ticksToLive 读 undefined（creeps.js:78 的
+    // `o.ageTime ? … : undefined`），寿命在出生后首个 creep tick 赋值
+    // （creeps/tick.js:88-91；CREEP-SPAWNING-002 锁值）；0 即官方 falsy 未设位
     w.insert_new(RoomObject::Creep(CreepObj {
         id: 0,
         x: spawn.x,
         y: spawn.y,
         fatigue: 0,
-        age_time: w.time + c::CREEP_LIFE_TIME as u64,
+        age_time: 0,
         hits: (body.len() * 100) as u32,
         spawning: true,
         action_log: 0,
@@ -168,6 +189,165 @@ pub fn intent_create_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) 
         body,
         store: Default::default(),
     }));
+}
+
+/// 官方 spawns/renew-creep.js：结算层全额复核（不信任 API 层预检）——
+/// 孵化中拒、同主非孵化 creep、Chebyshev ≤1 邻接、CLAIM 部件拒、满寿拒
+/// （`ageTime + effect > gameTime + CREEP_LIFE_TIME`，effect = floor(
+/// SPAWN_RENEW_RATIO·CREEP_LIFE_TIME/CREEP_SPAWN_TIME/body.length)）、
+/// 全房扣费（_charge-energy 的 energyStructures=undefined → oldEnergyHandling）、
+/// ageTime += effect + actionLog.healed；boost 部件清除后容量收缩、溢出掉落。
+/// `stats.inc('energyCreeps')` 无 M1 统计面（跳过，同登记口径）。
+pub fn intent_renew_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) {
+    // 官方 :12-14：孵化中拒（先于 target 校验）
+    let Some(RoomObject::Spawn(spawn)) = w.room.objects.get(&spawn_id).cloned() else {
+        return;
+    };
+    if spawn.spawning.is_some() {
+        return;
+    }
+    // 官方 :16-21：目标存在、creep、同主、非孵化、邻接、无 CLAIM
+    let Some(target_id) = data.id else { return };
+    let Some(RoomObject::Creep(target)) = w.room.objects.get(&target_id).cloned() else {
+        return;
+    };
+    if target.owner != spawn.owner || target.spawning {
+        return;
+    }
+    if (target.x as i32 - spawn.x as i32).abs() > 1 || (target.y as i32 - spawn.y as i32).abs() > 1
+    {
+        return;
+    }
+    if target
+        .body
+        .iter()
+        .any(|p| BodyKind::from_code(p.kind) == Some(BodyKind::Claim))
+    {
+        return;
+    }
+    // 官方 :25-28：满寿拒（effect = floor(1.2·1500/3/len) = floor(600/len)）
+    let effect = ((c::SPAWN_RENEW_RATIO * c::CREEP_LIFE_TIME as f64)
+        / c::CREEP_SPAWN_TIME as f64
+        / target.body.len() as f64)
+        .floor() as i64;
+    if target.age_time.saturating_add(effect.max(0) as u64) > w.time + c::CREEP_LIFE_TIME as u64 {
+        return;
+    }
+    // 官方 :30-35：cost = ceil(SPAWN_RENEW_RATIO·calcCreepCost/CREEP_SPAWN_TIME/
+    // body.length)，全房扣费（同主非 off 的 spawn→extension，距本 spawn 升序）
+    let cost = ((c::SPAWN_RENEW_RATIO * creep_cost(&body_parts_kinds(&target.body)) as f64)
+        / c::CREEP_SPAWN_TIME as f64
+        / target.body.len() as f64)
+        .ceil() as i64;
+    if !charge_energy(w, &spawn, cost, None) {
+        return;
+    }
+    // 官方 :42-43：actionLog.healed + bulk.inc(target, 'ageTime', effect)
+    if let Some(creep) = w.creep_mut(target_id) {
+        creep.age_time = creep.age_time.saturating_add(effect.max(0) as u64);
+        set_action_log(&mut creep.action_log, ACTION_HEALED);
+    }
+    // 官方 :45-53：boost 部件清除（_recalc-body 容量收缩）+
+    // _drop-resources-without-space（RESOURCES_ALL 序、energy 先）。
+    // ghodium 溢出无 M1 掉落形态（EnergyObj 仅 energy/power——灰区登记）
+    if target.body.iter().any(|p| p.boost.is_some()) {
+        let (x, y) = (target.x, target.y);
+        if let Some(creep) = w.creep_mut(target_id) {
+            for p in creep.body.iter_mut() {
+                p.boost = None;
+            }
+        }
+        let capacity = w.creep(target_id).map(store_capacity).unwrap_or(0);
+        let energy = w
+            .creep(target_id)
+            .map(|c| c.store.energy as i64)
+            .unwrap_or(0);
+        let ghodium = w
+            .creep(target_id)
+            .map(|c| c.store.ghodium as i64)
+            .unwrap_or(0);
+        let excess = (energy + ghodium - capacity).max(0);
+        let take_energy = excess.min(energy);
+        if take_energy > 0 {
+            w.create_energy(x, y, take_energy);
+            if let Some(creep) = w.creep_mut(target_id) {
+                creep.store.energy -= take_energy as u32;
+            }
+        }
+    }
+}
+
+/// 官方 spawns/recycle-creep.js：目标复核（同主非孵化 creep + 邻接——
+/// **无** CLAIM 条件、**无** object.spawning 门，与 renew 的差异面）后
+/// `_die(target, 1.0, false)`——满掉落死亡（M1 死亡形态：能量掉地、无墓碑
+/// 与 EVENT_OBJECT_DESTROYED，B3 批次清偿——die_creep 既有灰区口径）。
+pub fn intent_recycle_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) {
+    let Some(RoomObject::Spawn(spawn)) = w.room.objects.get(&spawn_id).cloned() else {
+        return;
+    };
+    let Some(target_id) = data.id else { return };
+    let Some(RoomObject::Creep(target)) = w.room.objects.get(&target_id).cloned() else {
+        return;
+    };
+    if target.owner != spawn.owner || target.spawning {
+        return;
+    }
+    if (target.x as i32 - spawn.x as i32).abs() > 1 || (target.y as i32 - spawn.y as i32).abs() > 1
+    {
+        return;
+    }
+    super::creep::die_creep(w, target_id);
+}
+
+/// 官方 spawns/set-spawn-directions.js：孵化任务存在时整组替换 directions。
+/// sanitize 已做 parseInt 截断与保序去重（number[] transform）；此处按官方
+/// `_.any(越界/非整)` 复核后替换——任一非法元素整单忽略（非过滤）。
+/// 空列表官方静默忽略（`directions.length > 0` 门）。
+pub fn intent_set_spawn_directions(w: &mut Working, spawn_id: ObjId, data: &IntentData) {
+    if data.directions.is_empty() {
+        return;
+    }
+    if data.directions.iter().any(|d| !(1..=8).contains(d)) {
+        return;
+    }
+    let directions: Vec<u8> = data.directions.iter().map(|d| *d as u8).collect();
+    if let Some(RoomObject::Spawn(s)) = w.room.objects.get_mut(&spawn_id)
+        && let Some(job) = s.spawning.as_mut()
+    {
+        job.directions = directions;
+    }
+}
+
+/// 官方 spawns/cancel-spawning.js：移除孵化中的雏形 creep（同名、spawn 格）+
+/// 清孵化任务。官方 `_.find` 找不到时 `spawningCreep._id` 直接 TypeError
+/// 崩 tick——雏形与任务由 create-creep 同笔创建、不变式内不可达，我方按
+/// 防御形态跳过移除仅清任务（不崩 tick——D4 结算失败即整房回退的代价面，
+/// 灰区登记）。注意官方是裸 bulk.remove（非 _die：无掉落无事件）。
+pub fn intent_cancel_spawning(w: &mut Working, spawn_id: ObjId) {
+    let Some(RoomObject::Spawn(spawn)) = w.room.objects.get(&spawn_id).cloned() else {
+        return;
+    };
+    let Some(job) = &spawn.spawning else {
+        return;
+    };
+    let job = job.clone();
+    let chick = w
+        .room
+        .objects
+        .iter()
+        .find(|(_, o)| match o {
+            RoomObject::Creep(c) => {
+                c.spawning && c.name == job.name && c.x == spawn.x && c.y == spawn.y
+            }
+            _ => false,
+        })
+        .map(|(id, _)| *id);
+    if let Some(chick_id) = chick {
+        w.remove_obj(chick_id);
+    }
+    if let Some(RoomObject::Spawn(s)) = w.room.objects.get_mut(&spawn_id) {
+        s.spawning = None;
+    }
 }
 
 /// 官方 _charge-energy.js：返回是否足额扣毕。
@@ -312,7 +492,7 @@ pub fn spawn_tick(w: &mut Working, id: ObjId, energy_available: i64) {
         && w.time >= job.spawn_time.saturating_sub(1)
     {
         let job = job.clone();
-        let born = born_creep(w, id, &job);
+        let born = born_creep(w, id, &job.name, &job.directions);
         if born {
             if let Some(RoomObject::Spawn(s)) = w.room.objects.get_mut(&id) {
                 s.spawning = None;
@@ -352,7 +532,14 @@ pub fn spawn_tick(w: &mut Working, id: ObjId, energy_available: i64) {
 }
 
 /// 官方 _born-creep.js：八方向找空位出生；被围时踩死第一个敌 creep（spawnstomp）。
-fn born_creep(w: &mut Working, spawn_id: ObjId, job: &SpawningJob) -> bool {
+/// 入参取（雏形名, 出生方向序）而非整个任务——creep 侧出生路径
+/// （creeps/tick.js:20-24：spawn 任务已清/换名时的对偶出生）任务可不存在。
+pub(crate) fn born_creep(
+    w: &mut Working,
+    spawn_id: ObjId,
+    chick_name: &str,
+    job_directions: &[u8],
+) -> bool {
     let Some(RoomObject::Spawn(spawn)) = w.room.objects.get(&spawn_id).cloned() else {
         return false;
     };
@@ -363,7 +550,7 @@ fn born_creep(w: &mut Working, spawn_id: ObjId, job: &SpawningJob) -> bool {
         .iter()
         .find(|(_, o)| match o {
             RoomObject::Creep(c) => {
-                c.spawning && c.name == job.name && c.x == spawn.x && c.y == spawn.y
+                c.spawning && c.name == chick_name && c.x == spawn.x && c.y == spawn.y
             }
             _ => false,
         })
@@ -373,10 +560,10 @@ fn born_creep(w: &mut Working, spawn_id: ObjId, job: &SpawningJob) -> bool {
         return true;
     };
     // 方向序列：任务指定或 1..8
-    let mut directions: Vec<u8> = if job.directions.is_empty() {
+    let mut directions: Vec<u8> = if job_directions.is_empty() {
         (1..=8).collect()
     } else {
-        job.directions.clone()
+        job_directions.to_vec()
     };
     let mut occupied_at: Option<(u8, u8)> = None;
     let mut hostile: Option<ObjId> = None;

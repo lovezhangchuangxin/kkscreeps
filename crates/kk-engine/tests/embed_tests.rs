@@ -15,7 +15,130 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     embed_snapshot_contract_impl()?;
     embed_intent_channel_impl()?;
     embed_per_viewer_and_caps_impl()?;
+    embed_spawn_family_chain_impl()?;
     assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");
+    Ok(())
+}
+
+/// A4-i spawn 族全链（prelude spawnCreep/renewCreep → intentsList 清洗 →
+/// settle/spawn.rs 执行器 → 投影回读）：孵化任务落库、能量扣费与涓流、
+/// 到点出生、renewCreep 的 ageTime 递延。
+fn embed_spawn_family_chain_impl() -> anyhow::Result<()> {
+    let mut e = EmbedEngine::new();
+    e.create_shard(&json!({
+        "players": ["p1"],
+        "rooms": [{ "name": "W1N1", "rcl": 3, "owner": "p1" }],
+    }))?;
+    let spawn_id = e.place_object(
+        "W1N1",
+        "structure",
+        &json!({ "pos": [25, 25], "structureType": "spawn", "owner": "p1", "store": { "energy": 300 } }),
+    )?;
+    let spawn_json = serde_json::to_string(&spawn_id)?;
+
+    // spawnCreep [WORK, WORK]：成本 200、needTime=3×2=6、spawnTime=0+6
+    // （run_player 的结算即发生）——孵化任务 + 雏形落库；扣费 200 后
+    // energyAvailable 100<300 → 免费涓流 +1 → 101
+    let run = e.run_player(
+        "p1",
+        &format!("Game.getObjectById({spawn_json}).spawnCreep([WORK, WORK], 'child')"),
+    )?;
+    assert_eq!(run.expr["value"], 0, "spawnCreep OK");
+    let snap = e.get_object(&spawn_id).unwrap();
+    assert_eq!(snap["store"]["energy"], 101, "扣 200 + 涓流 1");
+    assert_eq!(snap["spawning"]["name"], "child");
+    assert_eq!(snap["spawning"]["needTime"], 6);
+    assert_eq!(
+        snap["spawning"]["remainingTime"], 5,
+        "spawnTime(6) − time(1)"
+    );
+    assert_eq!(
+        snap["storeCapacity"],
+        serde_json::Value::Null,
+        "spawn 无参容量 null（typed 投影 storeCapacityResource）"
+    );
+
+    // 同名拒（下一 tick：真实雏形已在 Game.creeps）
+    let run = e.run_player(
+        "p1",
+        &format!("Game.getObjectById({spawn_json}).spawnCreep([WORK], 'child')"),
+    )?;
+    assert_eq!(run.expr["value"], -3, "ERR_NAME_EXISTS");
+    // 该 tick spawn 仍在孵化 → BUSY
+    let run = e.run_player(
+        "p1",
+        &format!("Game.getObjectById({spawn_json}).spawnCreep([WORK], 'child2')"),
+    )?;
+    assert_eq!(run.expr["value"], -4, "ERR_BUSY（真实孵化任务）");
+
+    // CREEP-SPAWNING-001/002/004（孵化中雏形）：spawning=true、ticksToLive
+    // undefined（官方雏形不带 ageTime，creeps.js:78 的 undefined 分支——
+    // runExpr 通道把 undefined 归 null）、body 出生前可见
+    let run = e.run_player(
+        "p1",
+        "(()=>{ const c = Game.creeps['child']; return [c ? c.spawning : 'none', c ? c.ticksToLive : 'none', c.body.length]; })()",
+    )?;
+    let v = &run.expr["value"];
+    assert_eq!(v[0], true, "孵化中 spawning=true");
+    assert_eq!(
+        v[1],
+        serde_json::Value::Null,
+        "孵化中 ticksToLive undefined"
+    );
+    assert_eq!(v[2], 2, "出生前 body 可见");
+
+    // 推进到出生（time 5 即 spawnTime−1）：雏形移出 spawn 格、spawning=false
+    e.tick(3)?;
+    let creeps = e.find_in_room("W1N1", 101);
+    assert_eq!(creeps.len(), 1, "child 出生");
+    assert_eq!(creeps[0]["name"], "child");
+    assert_eq!(creeps[0]["spawning"], false);
+    assert_ne!(
+        (&creeps[0]["pos"]["x"], &creeps[0]["pos"]["y"]),
+        (&serde_json::json!(25), &serde_json::json!(25)),
+        "已移出 spawn 格（TOP 方向出生 → (25,24)）"
+    );
+    let snap = e.get_object(&spawn_id).unwrap();
+    assert_eq!(snap["spawning"], serde_json::Value::Null, "任务清空");
+
+    // renewCreep 全链：短命 creep +600 tick（effect=floor(1.2·1500/3/1)）
+    let old_id = e.place_object(
+        "W1N1",
+        "creep",
+        &json!({ "pos": [26, 25], "owner": "p1", "body": ["move"], "name": "old", "ticksToLive": 100 }),
+    )?;
+    let old_json = serde_json::to_string(&old_id)?;
+    assert_eq!(e.get_object(&old_id).unwrap()["ticksToLive"], 100);
+    let run = e.run_player(
+        "p1",
+        &format!("Game.getObjectById({spawn_json}).renewCreep(Game.getObjectById({old_json}))"),
+    )?;
+    assert_eq!(run.expr["value"], 0, "renewCreep OK");
+    // ageTime(time4+100) + 600 = 704，time 推进到 5 → 剩余 699
+    assert_eq!(
+        e.get_object(&old_id).unwrap()["ticksToLive"],
+        699,
+        "+600 续命"
+    );
+
+    // recycleCreep 全链：creep 移除 + 携带能量掉地（M1 无墓碑形态）
+    let rich_id = e.place_object(
+        "W1N1",
+        "creep",
+        &json!({ "pos": [24, 25], "owner": "p1", "body": ["move"], "name": "rich", "store": { "energy": 40 } }),
+    )?;
+    let rich_json = serde_json::to_string(&rich_id)?;
+    let run = e.run_player(
+        "p1",
+        &format!("Game.getObjectById({spawn_json}).recycleCreep(Game.getObjectById({rich_json}))"),
+    )?;
+    assert_eq!(run.expr["value"], 0, "recycleCreep OK");
+    assert!(e.get_object(&rich_id).is_none(), "回收目标移除");
+    let dropped = e.find_in_room("W1N1", 106);
+    assert_eq!(dropped.len(), 1, "满掉落一个 resource");
+    assert_eq!(dropped[0]["amount"], 39, "40 − 当 tick 衰减 ceil(40/1000)");
+    assert_eq!(dropped[0]["pos"]["x"], 24, "掉落位置 = 死亡格");
+    e.teardown();
     Ok(())
 }
 
