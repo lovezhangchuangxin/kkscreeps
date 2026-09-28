@@ -101,6 +101,12 @@
 | controller 族的 GCL 门读数（B2 清偿记录） | 结算期读上一 tick 的 PlayerState.rooms 定集（官方 bulkUsers.addToSet 不改内存对象，bulk.js:93-101）；Engine tick 末按世界真值重建 | 同 tick 双 claim 都按旧定集放行（官方 quirk，锁值测试钉死——settle 期若误更新 rooms 即转红） |
 | unclaim 未实现（B2 范围决策） | intent 白名单无 unclaim（官方 system.js:80 + processor.js:307-309 有）；controller.rs 预留挂接点 | 归 controller 族后续批（embed 玩家 API 面就绪前无生产者）；A4 规格提醒 |
 | to_user_string 的 falsy 折叠角落（B2 登记，承 M1） | 官方 `("" + (value\|\|""))` 将 0/false/NaN 折叠为 ""（→sign 清除语义）；我方 Number(0)→"0"、Bool(false)→"false" | 仅畸形 intent 输入面可达（API 层预检先挡）；与 UTF-16 截断同条登记的姊妹差异 |
+| 类原型 toJSON 的出口窗口（A3b.1 登记，评审 2） | sanitizedStringify 窗口只摘 Object/Array 根原型 toJSON；A3b 起各游戏类原型挂官方同形 toJSON（可覆写）——runExpr 探针值通道上玩家可伪造嵌套壳的序列化形态 | 官方 ivm 出口对玩家 toJSON 不可见（runtime.js:296）；intents/Memory 宿主消息面无游戏对象（实证）；出口窗口扩类原型清单归 M2B 出口批，验收探针侧先读 id/原语 |
+| beginTick 装配路径的裸全局查找族（A3b.1 登记，评审 2） | 装配期 `new Map/Set/Proxy`、`Object.setPrototypeOf`、兜底 `Object.keys/defineProperties` 经可交换全局——玩家交换后下一 tick 自家装配崩（自害面，封顶于视野/仪表） | makeStore 已用预置 `gw.__Object`；其余统一预置捕获归 A3c/M2B 装配批（对抗评审"预置捕获全家桶"原则的贯彻项） |
+| isStructure/isActive 超集进 toJSON（A3b.1 登记） | 我方壳 own 挂 isStructure:true/isActive（官方无此字段）——进 Object.keys 与 toJSON 输出 | M0 起既有暴露面；A4 Store 族清偿时随官方字段面收敛 |
+| CREEP_METHODS 超集/缺集（A3b.1 登记，承 A2） | 桩列表含 spawn/recycleCreep/renewCreep/moveHead（非官方 Creep 方法）；缺 getActiveBodyparts/notifyWhenAttacked/signController | A4 方法族换真时按官方 creeps.js 全集对表收敛 |
+| Memory 破损态的优雅降级（A3b.1 登记，评审 1） | `Memory.creeps = 5` 类破损后官方读 undefined/写抛专用错（creeps.js:94-120 的 _.isObject 特判）；我方 strict 下写属性 TypeError | 玩家自伤边角，文案差异；随 A4 memory 面批次对齐 |
+| upgradeBlocked 未暴露（A3b.1 登记） | 官方 controller getter 有（structures.js:147）；我方 Controller 字段表未列（投影有 upgrade_blocked） | A4-iii controller API 面连同 reservation/sign/safeModeCooldown 投影一起补 |
 
 ## 四、验收关卡（不做完不算兼容）
 
