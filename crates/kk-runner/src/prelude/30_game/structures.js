@@ -83,11 +83,14 @@
   });
 
   // 官方 register.deprecated（game.js:111-117）：每 tick 每条消息只 console.log
-  // 一次（deprecatedShown 同 tick 去重）
+  // 一次（deprecatedShown 同 tick 去重）。console 装载期捕获（评审 1 P3-1：
+  // 玩家重绑 globalThis.console 不截获官方警告文本——官方经注入的
+  // globals.console 闭包同构）
+  const __console = globalThis.console;
   function deprecated(msg) {
     if (!_.contains(deprecatedShown, msg)) {
       deprecatedShown.push(msg);
-      globalThis.console.log(msg);
+      __console.log(msg);
     }
   }
 

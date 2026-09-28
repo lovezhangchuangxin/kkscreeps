@@ -386,8 +386,11 @@
       }
       // per-tick 重置钩（官方 game/structures.js make 每 tick 重置
       // createdCreepNames:29 的等价物——spawn 族的同 tick 同名拒名单）
+      // 索引迭代（A4-i 评审 2 P2-1：beginTick 宿主路径的 for...of 经
+      // Array.prototype[Symbol.iterator] 运行期解析——家族修法，同 A4-ii.1）
       if (gw.perTickReset) {
-        for (const fn of gw.perTickReset) fn();
+        const fns = gw.perTickReset;
+        for (let i = 0; i < fns.length; i++) fns[i]();
       }
       refreshGame();
     },

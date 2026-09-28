@@ -1837,7 +1837,7 @@ fn spawn_family_api_impl() -> anyhow::Result<()> {
                 const near = Game.creeps['carrier'];
                 return [
                     Game.spawns['Spawn2'].renewCreep(near),   // -4 busy（spawning 最先）
-                    sp.renewCreep(near),                       // 0（cost=ceil(1.2·150/3/3)=18 ≤ 200；1000+200 ≤ 1500）
+                    sp.renewCreep(near),                       // 0（cost=ceil(1.2·150/3/3)=20 ≤ 200；1000+200 ≤ 1500）
                     sp.renewCreep(Game.creeps['claimer']),    // -7 CLAIM 部件
                     sp.renewCreep(Game.creeps['far']),        // -9 非邻接
                     sp.renewCreep(null),                      // -7 空 target

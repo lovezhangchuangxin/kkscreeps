@@ -743,7 +743,9 @@ fn renew_creep_guards() {
     }
     let mut b = IntentBatch::default();
     b.add_object_intent("p1", spawn, Action::RenewCreep, IntentData::target(far));
-    // near 也拒：spawn 能量 0（energyAvailable 0 < ceil(1.2·50/3/1)=20）
+    // near 也拒：energyAvailable 面为 0（该 fixture 无 controller——spawn 同时
+    // 被 calc_spawns 标 off，可观察结果与官方 energyAvailable 0 < cost=20 一致；
+    // 评审 3 O2：归因注释按实际机制写）
     b.add_object_intent("p1", spawn, Action::RenewCreep, IntentData::target(near));
     f.settle(b);
     for id in [far, near] {
