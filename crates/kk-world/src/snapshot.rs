@@ -96,12 +96,20 @@ fn snap_pos(room: &str, x: u8, y: u8) -> Value {
 }
 
 /// 官方 store getter 只暴露正量资源（vanilla snapStore：amount > 0 才入表）。
-fn snap_store(energy: u32) -> Value {
-    if energy > 0 {
-        json!({ "energy": energy })
-    } else {
-        json!({})
+/// 全资源口径（A4-iii 评审 3 清偿：world_json 已投 ghodium 正量键，查询契约
+/// 面同步——层间一致；M2 世界资源集 = energy/G）
+fn snap_store(store: &kk_schema::room::Store) -> Value {
+    let mut v = serde_json::Map::new();
+    if store.energy > 0 {
+        v.insert("energy".into(), json!(store.energy));
     }
+    if store.ghodium > 0 {
+        v.insert(
+            kk_core::constants::RESOURCE_GHODIUM.into(),
+            json!(store.ghodium),
+        );
+    }
+    Value::Object(v)
 }
 
 /// creep 载荷容量：活跃（hits>0）CARRY 数 × CARRY_CAPACITY，boosted 部件乘
@@ -184,7 +192,7 @@ fn snapshot_json(
             "owner": o.owner,
             "ticksToLive": remaining(o.age_time, time),
             "spawning": o.spawning,
-            "store": snap_store(o.store.energy),
+            "store": snap_store(&o.store),
             "storeCapacity": creep_store_capacity(&o.body),
         }),
         RoomObject::Source(o) => json!({
@@ -240,7 +248,7 @@ fn snapshot_json(
             "id": id_str, "pos": snap_pos(room, o.x, o.y), "owner": o.owner,
             "hits": o.hits, "hitsMax": c::SPAWN_HITS,
             "name": o.name,
-            "store": snap_store(o.store.energy),
+            "store": snap_store(&o.store),
             // 官方 spawn 落库即带 storeCapacityResource（build.js:117-124），
             // 无资源参数的 getCapacity() 读 null（store.js:28-33；
             // adapter-spec.md:359-360 明文 "null for a store with per-resource
@@ -261,7 +269,7 @@ fn snapshot_json(
             "kind": "structure", "structureType": "extension",
             "id": id_str, "pos": snap_pos(room, o.x, o.y), "owner": o.owner,
             "hits": o.hits, "hitsMax": c::EXTENSION_HITS,
-            "store": snap_store(o.store.energy),
+            "store": snap_store(&o.store),
             // 同 spawn：官方 extension 带 storeCapacityResource（build.js:131-135、
             // extensions/tick.js:11-17 按 RCL 归一），getCapacity() 读 null
             "storeCapacity": Value::Null,
@@ -281,7 +289,7 @@ fn snapshot_json(
             "kind": "structure", "structureType": "storage",
             "id": id_str, "pos": snap_pos(room, o.x, o.y), "owner": o.owner,
             "hits": o.hits, "hitsMax": c::STORAGE_HITS,
-            "store": snap_store(o.store.energy),
+            "store": snap_store(&o.store),
             "storeCapacity": c::STORAGE_CAPACITY,
         }),
         RoomObject::ConstructionSite(o) => {
@@ -389,6 +397,26 @@ mod tests {
             "默认寿命：age_time(=10+1500) − time=10"
         );
         assert!(snap["spawning"].is_boolean());
+
+        // ghodium 正量键（A4-iii 评审 3 清偿：查询契约面与 world_json 同为
+        // 全资源正量口径——层间一致）
+        let gh_creep = normalize(
+            "creep",
+            &serde_json::json!({
+                "pos": [6, 6], "owner": "p1", "body": ["move"],
+                "store": { "energy": 30, "G": 200 },
+            }),
+            &PlaceCtx {
+                time: world.time,
+                controller: None,
+                name_seq: 1,
+            },
+        )
+        .unwrap();
+        let gh_id = world.insert("W1N1", gh_creep).unwrap();
+        let gh_snap = world.object_snapshot_by_id(gh_id).unwrap();
+        assert_eq!(gh_snap["store"]["energy"], 30);
+        assert_eq!(gh_snap["store"]["G"], 200, "ghodium 正量入快照");
 
         let spawn = normalize(
             "structure",

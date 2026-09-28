@@ -297,7 +297,7 @@
   // Controller（官方 structures.js:139-174）。A4-iii 投影清偿：reservation/
   // sign/upgradeBlocked/safeModeCooldown 四 getter 换官方真形态（绝对 tick
   // 挂钟 → `> time ? 差值 : undefined`；{user,endTime} → {username,
-  // ticksToEnd}——官方 :143-146/:151/:157-169）。ticksToDowngrade/safeMode
+  // ticksToEnd}——官方 :176-179/:185/:187-197）。ticksToDowngrade/safeMode
   // 维持既有 None→0 口径（灰区表登记，A3b 只换访问机制）——注意
   // activateSafeMode 门③ 读 this.ticksToDowngrade 时无钟房 0 < 阈值为真
   // （官方 undefined < 阈值为假——API 返回码差异，登记报告；终态一致：结算
@@ -321,7 +321,7 @@
           username: o.sign.user,
           text: o.sign.text,
           time: o.sign.time,
-          // 官方第四字段 datetime: new Date(o.sign.datetime)（structures.js:163，
+          // 官方第四字段 datetime: new Date(o.sign.datetime)（structures.js:192，
           // 墙钟落库）——确定性引擎不落盘，合成当前墙钟（灰区表登记口径：
           // 合成或差异登记，replay 不确定性与官方 Date.now() 同源）
           datetime: new Date(),
@@ -603,22 +603,22 @@
     return C.OK;
   };
 
-  /** StructureController.activateSafeMode：官方 structures.js:210-234 六门
+  /** StructureController.activateSafeMode：官方 structures.js:211-234 六门
    *  全序（预检序不重排）：
-   *  ① !this.my → ERR_NOT_OWNER（:211）
-   *  ② safeModeAvailable <= 0 → ERR_NOT_ENOUGH_RESOURCES（:214）
+   /*  ① !this.my → ERR_NOT_OWNER（:213）
+   /*  ② safeModeAvailable <= 0 → ERR_NOT_ENOUGH_RESOURCES（:216）
    *  ③ safeModeCooldown || upgradeBlocked > 0 || ticksToDowngrade <
-   *    CONTROLLER_DOWNGRADE[level]/2 − THRESHOLD → ERR_TIRED（:215-218）——
+   /*    CONTROLLER_DOWNGRADE[level]/2 − THRESHOLD → ERR_TIRED（:219-221）——
    *    经 getter 通道读（官方 this.xxx）；cooldown/blocked 官方 undefined
    *    参与比较恒假，我方同（新 getter undefined 形态）；ticksToDowngrade
    *    无钟 0（None→0 既有口径）→ 0 < 阈值为真，官方 undefined 比较为假
    *    ——API 返回码差异（登记报告；终态一致：结算侧对无钟房同拒）
-   *  ④ 第六门：任何自家房 controller safeMode 生效中 → ERR_BUSY（:223-225，
+   /*  ④ 第六门：任何自家房 controller safeMode 生效中 → ERR_BUSY（:223-225，
    *    官方 _.any(register.structures)——我方对注入世界全结构扫描等价）
    *  ⑤ lastActivateSafeMode 闭包：有则 intents.remove(旧 id,
-   *    'activateSafeMode')（收集器退费），记录本 id（:227-231）——同 tick
+   /*    'activateSafeMode')（收集器退费），记录本 id（:227-231）——同 tick
    *    后开者覆盖先开者；per-tick 重置（beginTick，官方 make 每 tick 新闭包）
-   *  ⑥ intents.set('activateSafeMode', {})（:233） */
+   /*  ⑥ intents.set('activateSafeMode', {})（:233） */
   globalThis.StructureController.prototype.activateSafeMode = function activateSafeMode() {
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.safeModeAvailable <= 0) return C.ERR_NOT_ENOUGH_RESOURCES;
@@ -627,7 +627,12 @@
         - C.CONTROLLER_DOWNGRADE_SAFEMODE_THRESHOLD) {
       return C.ERR_TIRED;
     }
-    for (const o of gw.world.objects || []) {
+    // 门④扫描用索引迭代：for...of 经 Array.prototype[Symbol.iterator] 运行期
+    // 解析，同 realm 玩家可污染迭代器喂空本门（A4-iii 评审 2 必修）——Engine
+    // 层 tick_with_intents 已按世界真值兜底，此处索引迭代是纵深防御
+    const objs = gw.world.objects || [];
+    for (let i = 0; i < objs.length; i++) {
+      const o = objs[i];
       if (o.type === 'structure' && o.structureType === 'controller'
         && o.owner === gw.viewerName && o.safeMode && o.safeMode > now()) {
         return C.ERR_BUSY;

@@ -116,6 +116,8 @@
 | claimController 预检的 GCL 读数（A4-iii 登记，A3c 清偿） | 官方读 `runtimeData.user.gcl` 点数；我方按 Game.gcl 逆变换近似（level/progress → 点数）——Game.gcl 现状硬编码 {level:1,progress:0} → 0 点：首房（claimed=0）门短路放行、已有房/同 tick 二 claim 时 ERR_GCL_NOT_ENOUGH | 已占房计数按注入世界真值即时算（= 官方 runtimeData.user.rooms 的上一 tick 定集，投影 tick 内静态——同形）；结算侧 claimController.js:41-43 用 PlayerState 真值复核，本门最坏是说谎返回码 + 0.2 计费；Game.gcl 真值接线归 A3c per-viewer 批 |
 | 查询面 controller 快照的超额键 upgradeBlocked（A4-iii 登记） | vanilla ControllerSnapshot 契约无 upgradeBlocked 键（common.ts:44-54 的字段表止于 safeModeCooldown/reservation/sign）；我方快照额外出 active_remaining 形态的该键 | 契约消费方结构校验不受额外键影响；prelude attackController 门⑦ 需要该面（读原始投影，不经快照）——保留供调试/对表，随契约演化定夺 |
 | creep 世界投影 store 的 ghodium 键（A4-iii 登记） | 正量才投影（0 值无 "G" 键——官方 store getter 正量暴露口径/vanilla snapStore 同构）；energy 维持恒投影的既有形状 | generateSafeMode 预检读原始投影 `store['G']`（官方 data(this.id).store 同位）——缺键得 undefined 判 NOT_ENOUGH_RESOURCES，语义同官方空 store |
+| API 判定门路径的缺失键原型污染族（A4-iii 评审 2 登记） | 玩家 tick 内执行的判定门读 `store['G']`/`C.CONTROLLER_DOWNGRADE[投毒 _level]` 等——缺键经 Object.prototype 原型链可被喂假值（gclPoints 读可改写的 Game.gcl 同族） | 均被结算侧世界真值复核兜住（最坏说谎返回码 + 0.2 计费，无世界推进——伪实例面既有登记族）；myClaimedRoomCount 的 Set 已预置捕获（评审必修）、门路径扫描已改索引迭代；彻底消除归 API 门路径统一预置/纯量化批 |
+| activateSafeMode 门④ 的可信侧兜底（A4-iii 评审 2 必修清偿记录） | 官方 game 层跑 isolated-vm 可信 realm，门④（任一自家 controller safeMode 生效 → ERR_BUSY）处理器不复核；我方 prelude 与玩家共享 realm——原型迭代器污染可令门④扫描失明 → 双房 safeMode 并存（官方不可能态） | Engine 层 tick_with_intents 按世界真值兜底（玩家已有生效 safeMode → 其 ActivateSafeMode intent 全部丢弃）；prelude 门④扫描改索引迭代（纵深防御）；同 tick 多 controller 去重由收集器同名覆盖+lastActivateSafeMode 结构性保证 |
 
 ## 四、验收关卡（不做完不算兼容）
 

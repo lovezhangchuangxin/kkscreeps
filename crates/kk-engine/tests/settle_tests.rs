@@ -4329,3 +4329,61 @@ fn unclaim_rejections() {
     assert_eq!(t.level, 3);
     assert_eq!(t.safe_mode_available, 1);
 }
+
+#[test]
+fn engine_safemode_gate4_backstop_drops_cross_room_activation() {
+    // 门④可信侧兜底（A4-iii 评审 2 必修锁值）：官方 game 层在 isolated-vm
+    // 可信 realm，门④（任一自家 controller safeMode 生效 → ERR_BUSY，
+    // structures.js:223-225）处理器不复核；我方 prelude 与玩家共享 realm，
+    // 迭代器污染可令门④扫描失明——Engine 层按世界真值兜底：玩家已有生效
+    // 中的 safeMode → 其 ActivateSafeMode intent 全部丢弃（双房 safeMode
+    // 并存是官方不可能态）
+    use kk_engine::Engine;
+    let mut world = World::new(3);
+    let mut t = kk_core::Terrain::plains();
+    t.normalize();
+    world.register_room("W1N1", t.clone());
+    world.register_room("W2N2", t);
+    let mk_ctl = |safe_mode: u64, level: u8| {
+        RoomObject::Controller(kk_schema::room::ControllerObj {
+            id: 0,
+            x: 5,
+            y: 5,
+            level,
+            safe_mode,
+            safe_mode_available: 1,
+            progress: 0,
+            downgrade_time: Some(20_000),
+            owner: Some("p1".into()),
+            owner_cleared: false,
+            is_power_enabled: false,
+            reservation: None,
+            sign: None,
+            upgrade_blocked: None,
+            safe_mode_cooldown: None,
+        })
+    };
+    // W1N1：safeMode 已生效（time=3 起算挂 1000）；W2N2：五门真值可通过
+    let a = world.insert("W1N1", mk_ctl(3 + 1000, 1)).unwrap();
+    let b = world.insert("W2N2", mk_ctl(0, 1)).unwrap();
+    let mut engine = Engine::new(world);
+    // 恶意场景：绕过 prelude 门④直接构造 B 房的 ActivateSafeMode intent
+    //（embed 侧收集器闭包私有本不可达——本测试模拟的就是门④失明的等价批）
+    let mut batch = IntentBatch::default();
+    batch.add_object_intent("p1", b, Action::ActivateSafeMode, IntentData::bare());
+    engine.tick_with_intents(batch).unwrap();
+    let ctl = engine.world.room("W2N2").unwrap().objects.get(&b).unwrap();
+    match ctl {
+        RoomObject::Controller(c) => {
+            assert_eq!(c.safe_mode, 0, "A 房生效中 → B 房激活被 Engine 兜底丢弃");
+            assert_eq!(c.safe_mode_available, 1, "可用数不消耗");
+        }
+        _ => panic!("controller 不见了"),
+    }
+    // 对照：A 房自身的 safeMode 不受影响
+    let ctl_a = engine.world.room("W1N1").unwrap().objects.get(&a).unwrap();
+    match ctl_a {
+        RoomObject::Controller(c) => assert_eq!(c.safe_mode, 3 + 1000),
+        _ => panic!(),
+    }
+}

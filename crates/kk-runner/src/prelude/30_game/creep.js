@@ -125,9 +125,12 @@
   }
 
   // ---- controller 族（A4-iii）的 GCL 门读数 ----
-  // 预置 Math.pow（官方 calcNeededGcl 在引擎闭包内求值——玩家交换 Math 不影响
-  // API 判定，与预置常量 C 表同一原则）
+  // 预置 Math.pow 与 Set（官方 calcNeededGcl/定集在引擎闭包内求值——玩家交换
+  // Math/Set 不影响 API 判定，与预置常量 C 表同一原则；A4-iii 评审 2 必修：
+  // 裸 new Set 在玩家 tick 内执行，假 Set 的 size=undefined 可令 GCL 门整条
+  // 短路——虽然结算侧真值复核兜住，判定门路径不得经可交换全局）
   const mathPow = Math.pow;
+  const __Set = Set;
 
   /** 官方 calcNeededGcl（utils.js:661-663）：GCL_MULTIPLY × (level−1)^GCL_POW。 */
   function calcNeededGcl(level) {
@@ -148,10 +151,14 @@
 
   /** runtimeData.user.rooms.length 的等价物：查看者已占房数（去重计 controller
    *  owner 归属房——官方 user.rooms 经 addRoomToUser/removeRoomFromUser 维护的
-   *  正是此集，我方 Engine 每 tick 按世界真值重建的同一定集）。 */
+   *  正是此集，我方 Engine 每 tick 按世界真值重建的同一定集）。索引迭代 +
+   *  预置 Set：for...of 经 Array.prototype[Symbol.iterator] 运行期解析，同
+   *  realm 玩家可污染迭代器喂空扫描（A4-iii 评审 2——判定门路径的纵深防御）。 */
   function myClaimedRoomCount() {
-    const seen = new Set();
-    for (const o of gw.world.objects || []) {
+    const seen = new __Set();
+    const objs = gw.world.objects || [];
+    for (let i = 0; i < objs.length; i++) {
+      const o = objs[i];
       if (o.type === 'structure' && o.structureType === 'controller'
         && o.owner === gw.viewerName) {
         seen.add(o.room);
@@ -710,13 +717,13 @@
   };
 
   // ---------------------------------------------------------------- controller 族（A4-iii 换真）
-  /** Creep.claimController：官方 creeps.js:839-887。预检序不重排——
-   *  my/spawning → GCL 门（:845-848，读 rooms+同 tick 已 claim 计数）→
-   *  新手区门（:849-851，N/A——世界无 novice 概念，官方私服 roomInfo.novice=0
+  /** Creep.claimController：官方 creeps.js:839-886。预检序不重排——
+   *  my/spawning → GCL 门（:848-852，读 rooms+同 tick 已 claim 计数）→
+   *  新手区门（:853-855，N/A——世界无 novice 概念，官方私服 roomInfo.novice=0
    *  恒不触发）→ 目标（:852-855）→ CLAIM 部件（:856-858）→ shardAccess
-   *  （:859-861，单分片 N/A）→ 邻接（:862-864）→ controller 类型（:865-867）
-   *  → level>0（:868-870）→ 他人预定（:871-873）→ 本房 safeMode（:874-876，
-   *  blockedBySafeMode 同形）→ 计数 +1（:878）→ intents.set（:880-881）。 */
+   *  （:863-865，单分片 N/A）→ 邻接（:866-868）→ controller 类型（:869-871）
+   *  → level>0（:872-874）→ 他人预定（:875-877）→ 本房 safeMode（:878-880，
+   *  blockedBySafeMode 同形）→ 计数 +1（:882）→ intents.set（:884）。 */
   globalThis.Creep.prototype.claimController = function claimController(target) {
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;
@@ -741,10 +748,10 @@
     return C.OK;
   };
 
-  /** Creep.attackController：官方 creeps.js:888-926。目标须 StructureController
-   *  实例（:897）；CLAIM 部件（:901——官方 _getActiveBodyparts 复数形，零部件
+  /** Creep.attackController：官方 creeps.js:888-920。目标须 StructureController
+   /*  实例（:897）；CLAIM 部件（:901——官方 _getActiveBodyparts 复数形，零部件
    *  同判 NO_BODYPART）；邻接（:905）；原始房（无主无预定）不可攻（:908-910）；
-   *  upgradeBlocked 显式回查原始投影（:911-913——`data(target.id)` 的我方对齐
+   *  upgradeBlocked 显式回查原始投影（:908-910——`data(target.id)` 的我方对齐
    *  gw.rawData，绝对 tick > 当前 tick 判 TIRED）；本房 safeMode（:914-916）；
    *  EFFECT_INVULNERABILITY 免疫（:917-919，power 体系 N/A）。 */
   globalThis.Creep.prototype.attackController = function attackController(target) {
@@ -762,8 +769,8 @@
     return C.OK;
   };
 
-  /** Creep.reserveController：官方 creeps.js:961-1023。目标 Structure 实例
-   *  （:970-973）→ 邻接（:974-976）→ controller 类型（:977-979）→ 已占房不可
+  /** Creep.reserveController：官方 creeps.js:961-987。目标 Structure 实例
+   /*  （:970-973）→ 邻接（:974-976）→ controller 类型（:977-979）→ 已占房不可
    *  预定（:980-982，房主自己也不行）→ 他人预定不可覆盖（:983-985）→ CLAIM
    *  部件（:986-988）→ shardAccess（:989-991，N/A）→ intents.set。 */
   globalThis.Creep.prototype.reserveController = function reserveController(target) {
@@ -783,8 +790,8 @@
     return C.OK;
   };
 
-  /** Creep.generateSafeMode：官方 creeps.js:1062-1080。ghodium 消耗门（:1069-
-   *  1071，SAFE_MODE_COST=1000——显式回查原始投影 store，官方 `data(this.id)
+  /** Creep.generateSafeMode：官方 creeps.js:1057-1077。ghodium 消耗门（:1062-
+   /*  1064，SAFE_MODE_COST=1000——显式回查原始投影 store，官方 `data(this.id)
    *  .store` 的对齐；无 store/不足皆 NOT_ENOUGH_RESOURCES，无部件门——BODYPARTS
    *  无关）→ 目标 StructureController（:1072-1075）→ 邻接（:1076-1078）→
    *  intents.set。 */
