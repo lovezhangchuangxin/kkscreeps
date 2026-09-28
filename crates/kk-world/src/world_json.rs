@@ -216,6 +216,21 @@ fn room_energy(state: &crate::world::RoomState) -> (i64, i64) {
 /// `rcl`：extension 的 storeCapacityResource.energy 归一（官方 extensions/
 /// tick.js:11-17 每 tick 按房 RCL 查表重写——投影期直存等价）。
 #[allow(clippy::too_many_arguments)]
+/// store 两槽的全资源正量投影（官方 store.js:19-25 按资源名键构造、正量
+/// 才暴露——GPT 复审 P2-3：spawn/extension/storage 与 creep 共用同口径，
+/// 两投影面单源）。energy 恒投影是既有形状（M0 契约）。
+pub(crate) fn store_json(store: &kk_schema::room::Store) -> Value {
+    let mut v = serde_json::Map::new();
+    v.insert("energy".into(), json!(store.energy));
+    if store.ghodium > 0 {
+        v.insert(
+            kk_core::constants::RESOURCE_GHODIUM.into(),
+            json!(store.ghodium),
+        );
+    }
+    Value::Object(v)
+}
+
 pub(crate) fn object_json(
     room: &str,
     id: crate::world::ObjId,
@@ -234,14 +249,7 @@ pub(crate) fn object_json(
             // store：energy 恒投影（既有形状）；ghodium（A4-iii 的
             // generateSafeMode 消耗面）按正量投影——0 值不出现（官方 store
             // getter 正量暴露的既有口径，vanilla snapStore 同构）
-            let mut store = serde_json::Map::new();
-            store.insert("energy".into(), json!(o.store.energy));
-            if o.store.ghodium > 0 {
-                store.insert(
-                    kk_core::constants::RESOURCE_GHODIUM.to_string(),
-                    json!(o.store.ghodium),
-                );
-            }
+            let store = store_json(&o.store);
             let mut v = json!({
                 "type": "creep", "id": id_str, "room": room, "x": o.x, "y": o.y,
                 "name": o.name, "owner": o.owner,
@@ -250,7 +258,7 @@ pub(crate) fn object_json(
                 "ageTime": o.age_time,
                 "hits": o.hits,
                 "hitsMax": o.body.len() * 100,
-                "store": Value::Object(store),
+                "store": store,
                 // 官方 creep 落库带 storeCapacity（_recalc-body：活跃 CARRY ×
                 // CARRY_CAPACITY × boost 乘数）——creeps.js carryCapacity 直读
                 // `o.storeCapacity`、Store.getCapacity() 同源（A4-i Store 族）
@@ -293,7 +301,18 @@ pub(crate) fn object_json(
                     None => Value::Null,
                 },
                 "sign": match &o.sign {
-                    Some(s) => json!({ "user": s.user, "text": s.text, "time": s.time }),
+                    Some(s) => {
+                        let mut sv = serde_json::Map::new();
+                        sv.insert("user".into(), json!(s.user));
+                        sv.insert("text".into(), json!(s.text));
+                        sv.insert("time".into(), json!(s.time));
+                        // datetime 结算时落的墙钟毫秒（signController.js:23）；
+                        // None（手写世界缺省）缺键——官方 DB 恒有，放置面不可达
+                        if let Some(dt) = s.datetime {
+                            sv.insert("datetime".into(), json!(dt));
+                        }
+                        Value::Object(sv)
+                    }
                     None => Value::Null,
                 },
             });
@@ -314,7 +333,7 @@ pub(crate) fn object_json(
                 "type": "spawn", "structureType": "spawn",
                 "id": id_str, "room": room, "x": o.x, "y": o.y,
                 "name": o.name, "owner": o.owner,
-                "store": { "energy": o.store.energy },
+                "store": store_json(&o.store),
                 "energy": o.store.energy,
                 "energyCapacity": c::SPAWN_ENERGY_CAPACITY,
                 "storeCapacityResource": { "energy": c::SPAWN_ENERGY_CAPACITY },
@@ -336,7 +355,7 @@ pub(crate) fn object_json(
             "type": "structure", "structureType": "extension",
             "id": id_str, "room": room, "x": o.x, "y": o.y,
             "owner": o.owner,
-            "store": { "energy": o.store.energy },
+            "store": store_json(&o.store),
             "energy": o.store.energy,
             // 同 spawn 的官方落库形态（build.js:130-137 + extensions/tick.js
             // :11-17 的 RCL 归一——投影期直存等价）
@@ -383,7 +402,7 @@ pub(crate) fn object_json(
             "type": "structure", "structureType": "storage",
             "id": id_str, "room": room, "x": o.x, "y": o.y,
             "owner": o.owner,
-            "store": { "energy": o.store.energy },
+            "store": store_json(&o.store),
             // 官方 storage 落库带数值 storeCapacity（build.js:150-156）、无
             // storeCapacityResource——Store.getCapacity() 读数值（A4-i Store 族）
             "storeCapacity": c::STORAGE_CAPACITY,
@@ -414,7 +433,7 @@ pub(crate) fn object_json(
         }
         RoomObject::Energy(o) => json!({
             "type": "resource",
-            "resourceType": if o.resource_type == 0 { "energy" } else { "power" },
+            "resourceType": match o.resource_type { 0 => "energy", 1 => "power", _ => kk_core::constants::RESOURCE_GHODIUM },
             "id": id_str, "room": room, "x": o.x, "y": o.y,
             "amount": o.amount,
         }),
@@ -876,6 +895,7 @@ mod tests {
                         user: "p1".into(),
                         text: "hi".into(),
                         time: 80,
+                        datetime: None,
                     }),
                     Some(400),
                     Some(50_500),

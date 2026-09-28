@@ -189,12 +189,18 @@ impl<'w> Working<'w> {
 
     /// 掉落资源落地（官方 _create-energy：同格同资源叠加；M1 无 container）。
     pub fn create_energy(&mut self, x: u8, y: u8, amount: i64) {
+        self.create_energy_typed(x, y, amount, 0);
+    }
+
+    /// 资源参数化落地（resource_type 编码 0=energy/1=power/2=G——GPT 复审
+    /// P1-1：官方 _create-energy 按资源类型键同格叠加，同格异资源不并堆）。
+    pub fn create_energy_typed(&mut self, x: u8, y: u8, amount: i64, res_code: u8) {
         if amount <= 0 {
             return;
         }
         let existing = self.index.at(x as usize, y as usize).iter().find_map(|id| {
             match self.room.objects.get(id) {
-                Some(RoomObject::Energy(e)) if e.resource_type == 0 => Some(*id),
+                Some(RoomObject::Energy(e)) if e.resource_type == res_code => Some(*id),
                 _ => None,
             }
         });
@@ -213,7 +219,7 @@ impl<'w> Working<'w> {
                     id: 0,
                     x,
                     y,
-                    resource_type: 0,
+                    resource_type: res_code,
                     amount: u32::try_from(amount).unwrap_or(u32::MAX),
                 }));
             }

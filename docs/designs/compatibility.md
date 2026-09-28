@@ -46,7 +46,7 @@
 | 放置的 owner 宽松接受面（M1 place 归一化） | typed 变体不强制 owner（缺省空串）；vanilla 对 REQUIRING_OWNER 类型与 placeCreep/placeSite/placeFlag 强制 owner 并抛错 | M0 哑世界同宽松；强制化随 M2 玩家 API 层（届时违规放置显形） |
 | source 容量三分支缺 reservation（M1 place 归一化） | ControllerObj 无 reservation 字段，被预定（无主）房间 source 容量判 1500；vanilla 读 user || reservation 判 3000 | 当前放置 spec 无法表达 reservation 不触发；reserveController intent 实装时补字段 |
 | extension 能量容量（M1，深评清偿） | transfer 钳制与 energyAvailable/energyCapacityAvailable 投影均按 `EXTENSION_ENERGY_CAPACITY[rcl]`（extensions/tick.js:10-17）；无 controller 房按 0 拒收（官方 capacityForResource undefined ⇒ 拒） | ExtensionObj 仍无容量字段（结算/投影实时查表）——多资源槽（storeCapacityResource 全量）M2 schema 扩展时一并定型 |
-| 非 energy 掉落资源（M1 place） | 显式拒绝（Err）；vanilla 支持 power/矿物 | M2 扩展 schema 资源种类时放开 |
+| 非 energy 掉落资源（M1 place；GPT 复审清偿更新） | 已支持 power(1)/G(2)（resource_type 编码；G 掉落同格同资源并堆、全资源同式衰减 energy/tick.js:12）；其余矿物仍拒 | 矿物种类随 schema 资源槽扩展放开 |
 | 未知类型工地（M1 place，深评收严） | 无 CONSTRUCTION_COST 的类型 Err（与 vanilla getProgressTotal:1873 抛错对齐；原先宽松接受、progressTotal 派生 0） | build 结算同样拒绝无 cost 目标（build.js:19-21），两侧一致 |
 | creep 放置 ttl 无上限钳制（M1 place） | `time + ttl` 原样（可超 1500）；官方 renew 才有 1500 上限语义（拒绝式非钳制） | 三方评审裁决跟 vanilla 放置语义（index.ts:1087），2026-09-28 |
 | 玩家内 room intents 先于对象 intents（M1 结算） | createConstructionSite/createFlag 全部先于 creep/spawn 对象指令执行 | 官方单层 objects map 中 'room' 键按插入序交错；结果序无关（房间指令与对象指令无共享状态面），登记迭代序差异 |
@@ -94,7 +94,7 @@
 | query 面 FIND_MY_* 的 owner 过滤缺失（层间不一致，A3c 清偿） | embed matches_find 的 FIND_MY_CREEPS/MY_STRUCTURES/MY_SPAWNS 与对应 FIND_* 同臂无 owner 过滤；prelude room.find 已按 viewerName 过滤——两层语义现已分歧（M0 第七轮层间一致教训的现存实例） | screeps-ok 经 embed oracle 验 MY_* 存在假绿面；A3c per-viewer 批将 viewer 贯穿 find_in_room 签名链时一并清偿 |
 | 预置常量的写入面（自审 P3 登记） | C 表对象常量冻结共享引用（freezeConst）：判定面与官方等价（覆写不影响 API 判定），但玩家写入严格模式抛 TypeError——官方 C 是每 tick 深拷贝（game.js:435 `_.extend(globals, jsonParse(jsonStringify(C)))`），玩家写自己全局静默成功且下 tick 重置 | 极端边缘（无 bot 写常量全局）；如需收尾改 C 表捕获时深拷贝即可；sandbox.rs 常量平铺不 freeze 的待验证注释同此归并 |
 | 寻路回调内 load_terrain 的拒绝（C2，我方结构性防护） | `search` 回调内再调 `load_terrain` 返回 Err（重入锁拒绝）而非死锁 | 官方无此面（地形仅启动期载入，driver/lib/path-finder.js:23-46，回调内无 loadTerrain 调用点）；玩家不可达（宿主 Rust API），登记备查 |
-| sign 的 datetime 墙钟字段（B2 登记；A4-iii 清偿记录） | 官方 signController.js:27 落 `datetime: Date.now()`（第四字段）；我方不落盘（确定性引擎） | prelude getter 侧合成当前墙钟 `new Date()`（structures.js 对照 :157-169——重放不确定性与官方 Date.now() 同源）；查询面快照按 vanilla 契约无 datetime 键；世界投影无该键（getter 自合成） |
+| sign 的 datetime 墙钟字段（B2 登记；GPT 复审灰区纠错已清偿） | 官方结算时落一次 Date.now()（signController.js:23）、getter 从持久值构造——已对齐：schema Sign.datetime(opt u64 毫秒)+结算落墙钟+双投影 Some 带键+getter new Date(o.sign.datetime)；缺省回落当前墙钟仅手写世界无 datetime 可达（官方不可达） | 已清偿销账 |
 | reserve 超窗的"幻影预约"（B2 登记） | 官方 reserveController.js:35-39 先写内存对象再于 :43-45 拒（幻影仅本 tick 后续处理器可见、不入库）；我方超窗整票拒绝 | 同 tick 多 reserve 且首条恰好超窗时可观察分歧；与"结算期直接写工作副本"类既有登记同族，顺序敏感用例显形时归因 |
 | 饱和截断的官方负数等价族（B2 登记） | attack 削减 endTime/downgradeTime 官方可得负数（null−effect / 削穿 0）；我方 u64 饱和 0 | 两实现终态等价（负值与 0 均被同 tick 清除/降级链消费，清除条件同真）——锁值测试钉死（null downgradeTime 当 tick失主权、削穿即清除） |
 | EVENT_ATTACK_CONTROLLER 的 data 键（B2 登记） | 官方事件无 data 键（attackController.js:52）；我方 push_event 封套恒带空 data | 投影层形状，轨 A eventLog 投影接线时消化 |
@@ -132,3 +132,6 @@
 2. 真实开源 bot 回归（tooangel/overmind 类）在 deno_core + CJS 垫片 + lodash3 底座上原样可跑；
 3. 官方客户端/renderer 可正常连接游玩（API/sockjs 协议兼容）；
 4. 对照移植检查表：每个 API 移植时登记"官方实现 file:line ↔ 本实现 file:line"映射。
+| G 资源执行器丢弃（GPT 复审 P1-1 清偿记录） | A4-ii prelude 按 RESOURCES_ALL 放行而执行器仅 energy（API 返回 OK 结算静默丢弃+计费）——已参数化：transfer/withdraw/drop 的 energy/G 两槽结算（Store 槽助手+per-resource 容量分岔+G 掉落 resource_type=2+同格同资源并堆+全资源同式衰减） | 矿物等其余资源随 schema 槽扩展；A4-ii 报告的执行器分歧 1/2/4/5（safeMode 拒/敌 rampart/container 先入桶/Generic 目标族）仍登记待轨 B |
+| 部件强化效能统一（GPT 复审 P1-2 清偿记录） | 容量投影算 boost 而移动重量/疲劳恢复/仲裁 moves 不算（boosted CARRY/KH 重量虚高、ZO 恢复虚低）——已统一：kk_world::types::calc_body_effectiveness（官方 utils.js:623-636 的 OnceLock 查表版）单源供 12 处消费（容量/重量/仲裁/恢复/build/upgrade/attack/repair/dismantle/heal×2/harvest）；canMove 保持 _.some 计数（官方 movement.js:11-14 同款） | rangedAttack/rangedMassAttack 执行器接线时按 BOOSTS.ranged_attack 键接效能；claim/reserve/attackController 官方纯计数不接（BOOSTS 表无 claim 键） |
+| progress/progressTotal 的边界等级（GPT 复审 P2-4 清偿记录） | 我方 `|| 0` 折叠使 RCL 0 的 progress/progressTotal 与 RCL 8 的 progressTotal 恒 0；官方（structures.js:180-181）分别为 undefined——已修：getter 加 level 门（level>0 / level>0&&level<8） | 已清偿；ticksToDowngrade/safeMode 的 None→0 口径仍维持（既有登记，API 返回码差异随换真批次消除） |

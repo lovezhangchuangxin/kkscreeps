@@ -272,7 +272,13 @@ fn intent_build(w: &mut Working, id: ObjId, data: &IntentData) {
         return;
     }
     let build_power = match w.creep(id) {
-        Some(c) => BodyKind::count_active(&c.body, BodyKind::Work) as i64 * c::BUILD_POWER,
+        Some(c) => kk_world::types::calc_body_effectiveness(
+            &c.body,
+            BodyKind::Work,
+            "work",
+            "build",
+            c::BUILD_POWER,
+        ),
         None => 0,
     };
     // progressTotal 为创建时定格的存值（官方 build.js:68 读存的 progressTotal；
@@ -415,7 +421,13 @@ fn intent_upgrade_controller(w: &mut Working, id: ObjId, data: &IntentData) {
             (c.x, c.y),
             c.owner.clone(),
             c.store.energy as i64,
-            BodyKind::count_active(&c.body, BodyKind::Work) as i64 * c::UPGRADE_CONTROLLER_POWER,
+            kk_world::types::calc_body_effectiveness(
+                &c.body,
+                BodyKind::Work,
+                "work",
+                "upgradeController",
+                c::UPGRADE_CONTROLLER_POWER,
+            ),
         ),
         _ => return,
     };
@@ -509,15 +521,16 @@ fn intent_upgrade_controller(w: &mut Working, id: ObjId, data: &IntentData) {
 
 /// 官方 transfer.js：白名单资源、邻接、容量双形态（M1 单资源槽=总量一致）。
 fn intent_transfer(w: &mut Working, id: ObjId, data: &IntentData) {
+    // 官方 transfer.js:8 白名单资源结算——我方 schema 现两资源槽（energy/G）
     let resource = data.resource_type.as_deref().unwrap_or("");
-    if resource != "energy" {
-        return; // M1 资源白名单仅 energy
+    if !matches!(resource, "energy" | "G") {
+        return;
     }
     let Some(amount_req) = data.amount else {
         return;
     };
     let (pos, held) = match w.creep(id) {
-        Some(c) if !c.spawning => ((c.x, c.y), c.store.energy as i64),
+        Some(c) if !c.spawning => ((c.x, c.y), store_slot(&c.store, resource)),
         _ => return,
     };
     if held < amount_req || amount_req < 0 {
@@ -532,13 +545,31 @@ fn intent_transfer(w: &mut Working, id: ObjId, data: &IntentData) {
             .map(|ctl| kk_world::types::extension_energy_capacity(ctl.level))
             .unwrap_or(0)
     };
+    // 容量按资源分岔（官方 utils.capacityForResource）：通用仓（creep/
+    // storage）两资源共用数值容量；per-resource 商店（spawn/extension 的
+    // scr.energy）对 G 得 0 ⇒ `!targetCapacity` 拒（同官方 scr 缺键路径）
+    let per_resource_cap = |base: i64| if resource == "energy" { base } else { 0 };
     let (target_cap, t_pos, t_stored) = match w.room.objects.get(&target_id) {
-        Some(RoomObject::Creep(t)) if !t.spawning => {
-            (store_capacity(t), (t.x, t.y), t.store.energy as i64)
-        }
-        Some(RoomObject::Spawn(t)) => (c::SPAWN_ENERGY_CAPACITY, (t.x, t.y), t.store.energy as i64),
-        Some(RoomObject::Extension(t)) => (extension_cap(), (t.x, t.y), t.store.energy as i64),
-        Some(RoomObject::Storage(t)) => (c::STORAGE_CAPACITY, (t.x, t.y), t.store.energy as i64),
+        Some(RoomObject::Creep(t)) if !t.spawning => (
+            store_capacity(t),
+            (t.x, t.y),
+            store_slot(&t.store, resource),
+        ),
+        Some(RoomObject::Spawn(t)) => (
+            per_resource_cap(c::SPAWN_ENERGY_CAPACITY),
+            (t.x, t.y),
+            store_slot(&t.store, resource),
+        ),
+        Some(RoomObject::Extension(t)) => (
+            per_resource_cap(extension_cap()),
+            (t.x, t.y),
+            store_slot(&t.store, resource),
+        ),
+        Some(RoomObject::Storage(t)) => (
+            c::STORAGE_CAPACITY,
+            (t.x, t.y),
+            store_slot(&t.store, resource),
+        ),
         _ => return,
     };
     if (t_pos.0 as i32 - pos.0 as i32).abs() > 1 || (t_pos.1 as i32 - pos.1 as i32).abs() > 1 {
@@ -555,14 +586,14 @@ fn intent_transfer(w: &mut Working, id: ObjId, data: &IntentData) {
         return;
     }
     match w.room.objects.get_mut(&target_id) {
-        Some(RoomObject::Creep(t)) => t.store.energy += amount as u32,
-        Some(RoomObject::Spawn(t)) => t.store.energy += amount as u32,
-        Some(RoomObject::Extension(t)) => t.store.energy += amount as u32,
-        Some(RoomObject::Storage(t)) => t.store.energy += amount as u32,
+        Some(RoomObject::Creep(t)) => store_slot_add(&mut t.store, resource, amount),
+        Some(RoomObject::Spawn(t)) => store_slot_add(&mut t.store, resource, amount),
+        Some(RoomObject::Extension(t)) => store_slot_add(&mut t.store, resource, amount),
+        Some(RoomObject::Storage(t)) => store_slot_add(&mut t.store, resource, amount),
         _ => return,
     }
     if let Some(c) = w.creep_mut(id) {
-        c.store.energy -= amount as u32;
+        store_slot_sub(&mut c.store, resource, amount);
     }
     w.push_event(
         c::EVENT_TRANSFER,
@@ -573,14 +604,19 @@ fn intent_transfer(w: &mut Working, id: ObjId, data: &IntentData) {
 
 /// 官方 withdraw.js：邻接、空容量、safeMode/rampart 保护（M1 无 rampart 变体）。
 fn intent_withdraw(w: &mut Working, id: ObjId, data: &IntentData) {
-    if data.resource_type.as_deref().is_some_and(|r| r != "energy") {
+    // 官方 withdraw.js:8 白名单资源（我方两槽 energy/G）
+    let resource = data.resource_type.as_deref().unwrap_or("energy");
+    if !matches!(resource, "energy" | "G") {
         return;
     }
     let Some(target_id) = data.id else { return };
+    // actor 的空容量按 store 全槽求和（官方 calcResources）——两资源共用
     let (pos, cap, held) = match w.creep(id) {
-        Some(c) if !c.spawning && store_capacity(c) > 0 => {
-            ((c.x, c.y), store_capacity(c), c.store.energy as i64)
-        }
+        Some(c) if !c.spawning && store_capacity(c) > 0 => (
+            (c.x, c.y),
+            store_capacity(c),
+            (c.store.energy + c.store.ghodium) as i64,
+        ),
         _ => return,
     };
     let empty_space = cap - held;
@@ -593,40 +629,43 @@ fn intent_withdraw(w: &mut Working, id: ObjId, data: &IntentData) {
     }
     // 可提取对象：有 store 的结构（spawn/extension/storage）；source 只能
     // harvest、掉落资源只能 pickup（官方引擎层无 source/energy 的 withdraw 路径）
-    let (t_pos, t_energy) = match w.room.objects.get(&target_id) {
-        Some(RoomObject::Spawn(t)) => ((t.x, t.y), t.store.energy as i64),
-        Some(RoomObject::Extension(t)) => ((t.x, t.y), t.store.energy as i64),
-        Some(RoomObject::Storage(t)) => ((t.x, t.y), t.store.energy as i64),
+    let (t_pos, t_amount) = match w.room.objects.get(&target_id) {
+        Some(RoomObject::Spawn(t)) => ((t.x, t.y), store_slot(&t.store, resource)),
+        Some(RoomObject::Extension(t)) => ((t.x, t.y), store_slot(&t.store, resource)),
+        Some(RoomObject::Storage(t)) => ((t.x, t.y), store_slot(&t.store, resource)),
         _ => return,
     };
     if (t_pos.0 as i32 - pos.0 as i32).abs() > 1 || (t_pos.1 as i32 - pos.1 as i32).abs() > 1 {
         return;
     }
-    amount = amount.min(t_energy);
+    amount = amount.min(t_amount);
     if amount <= 0 {
         return;
     }
     match w.room.objects.get_mut(&target_id) {
-        Some(RoomObject::Spawn(t)) => t.store.energy -= amount as u32,
-        Some(RoomObject::Extension(t)) => t.store.energy -= amount as u32,
-        Some(RoomObject::Storage(t)) => t.store.energy -= amount as u32,
+        Some(RoomObject::Spawn(t)) => store_slot_sub(&mut t.store, resource, amount),
+        Some(RoomObject::Extension(t)) => store_slot_sub(&mut t.store, resource, amount),
+        Some(RoomObject::Storage(t)) => store_slot_sub(&mut t.store, resource, amount),
         _ => return,
     }
     if let Some(c) = w.creep_mut(id) {
-        c.store.energy += amount as u32;
+        store_slot_add(&mut c.store, resource, amount);
     }
     // 官方 withdraw 的 EVENT_TRANSFER 反向（objectId=target, data.targetId=object）
     w.push_event(
         c::EVENT_TRANSFER,
         target_id,
-        serde_json::json!({ "targetId": id.as_str(), "resourceType": "energy", "amount": amount }),
+        serde_json::json!({ "targetId": id.as_str(), "resourceType": resource, "amount": amount }),
     );
 }
 
 /// 官方 drop.js：amount>0 落地为同格 energy；持有不足整条拒绝（:13
 /// `!(store[resourceType] >= intent.amount)` ⇒ return，不钳制部分掉落）。
 fn intent_drop(w: &mut Working, id: ObjId, data: &IntentData) {
-    if data.resource_type.as_deref().is_some_and(|r| r != "energy") {
+    // 官方 drop.js:10 白名单资源（我方两槽 energy/G——掉落对象 resource_type
+    // 编码 0=energy/1=power/2=G）
+    let resource = data.resource_type.as_deref().unwrap_or("energy");
+    if !matches!(resource, "energy" | "G") {
         return;
     }
     let Some(amount) = data.amount else { return };
@@ -634,17 +673,25 @@ fn intent_drop(w: &mut Working, id: ObjId, data: &IntentData) {
         return;
     }
     if w.creep(id)
-        .is_none_or(|c| c.spawning || (c.store.energy as i64) < amount)
+        .is_none_or(|c| c.spawning || store_slot(&c.store, resource) < amount)
     {
         return;
     }
-    intent_drop_amount(w, id, amount);
+    intent_drop_amount_res(w, id, resource, amount);
 }
 
 /// 掉落能量（drop.js 落地路径；dismantle 回流超容与 harvest 超容共用）。
 pub(super) fn intent_drop_amount(w: &mut Working, id: ObjId, amount: i64) {
+    // 内部调用方（dismantle 回流/harvest 超容）恒为 energy 槽
+    intent_drop_amount_res(w, id, "energy", amount);
+}
+
+/// 官方 drop.js 落地路径（_create-energy 同格插入）——资源参数化
+/// （GPT 复审 P1-1：G 掉落为 resource_type=2 的资源对象；衰减对全资源
+/// 同式（官方 energy/tick.js:12 按 resourceType 键通用））。
+fn intent_drop_amount_res(w: &mut Working, id: ObjId, resource: &str, amount: i64) {
     let (pos, held) = match w.creep(id) {
-        Some(c) if !c.spawning => ((c.x, c.y), c.store.energy as i64),
+        Some(c) if !c.spawning => ((c.x, c.y), store_slot(&c.store, resource)),
         _ => return,
     };
     // 钳制仅服务内部调用方（harvest 超容路径已保证 held ≥ amount）
@@ -653,9 +700,13 @@ pub(super) fn intent_drop_amount(w: &mut Working, id: ObjId, amount: i64) {
         return;
     }
     if let Some(c) = w.creep_mut(id) {
-        c.store.energy -= amount as u32;
+        store_slot_sub(&mut c.store, resource, amount);
     }
-    w.create_energy(pos.0, pos.1, amount);
+    let res_code = match resource {
+        "G" => 2,
+        _ => 0,
+    };
+    w.create_energy_typed(pos.0, pos.1, amount, res_code);
 }
 
 /// 官方 pickup.js：邻接 energy、余量钳制、目标清零移除。
@@ -704,7 +755,13 @@ fn intent_attack(w: &mut Working, id: ObjId, data: &IntentData) {
         Some(c) if !c.spawning => (
             (c.x, c.y),
             c.owner.clone(),
-            BodyKind::count_active(&c.body, BodyKind::Attack) as i64 * c::ATTACK_POWER,
+            kk_world::types::calc_body_effectiveness(
+                &c.body,
+                BodyKind::Attack,
+                "attack",
+                "attack",
+                c::ATTACK_POWER,
+            ),
         ),
         _ => return,
     };
@@ -757,7 +814,13 @@ fn intent_repair(w: &mut Working, id: ObjId, data: &IntentData) {
         Some(c) if !c.spawning && c.store.energy > 0 => (
             (c.x, c.y),
             c.store.energy as i64,
-            BodyKind::count_active(&c.body, BodyKind::Work) as i64 * c::REPAIR_POWER,
+            kk_world::types::calc_body_effectiveness(
+                &c.body,
+                BodyKind::Work,
+                "work",
+                "repair",
+                c::REPAIR_POWER,
+            ),
         ),
         _ => return,
     };
@@ -823,7 +886,13 @@ fn intent_dismantle(w: &mut Working, id: ObjId, data: &IntentData) {
         Some(c) if !c.spawning => (
             (c.x, c.y),
             c.owner.clone(),
-            BodyKind::count_active(&c.body, BodyKind::Work) as i64 * c::DISMANTLE_POWER,
+            kk_world::types::calc_body_effectiveness(
+                &c.body,
+                BodyKind::Work,
+                "work",
+                "dismantle",
+                c::DISMANTLE_POWER,
+            ),
         ),
         _ => return,
     };
@@ -884,12 +953,25 @@ fn intent_heal(w: &mut Working, id: ObjId, data: &IntentData, ranged: bool) {
         Some(c) if !c.spawning => (
             (c.x, c.y),
             c.owner.clone(),
-            BodyKind::count_active(&c.body, BodyKind::Heal) as i64
-                * if ranged {
-                    c::RANGED_HEAL_POWER
-                } else {
-                    c::HEAL_POWER
-                },
+            // heal.js:26 / rangedHeal.js:26——效应键随分支（BOOSTS.heal 表的
+            // heal/rangedHeal 两键乘数同值，官方两调用各自查键）
+            if ranged {
+                kk_world::types::calc_body_effectiveness(
+                    &c.body,
+                    BodyKind::Heal,
+                    "heal",
+                    "rangedHeal",
+                    c::RANGED_HEAL_POWER,
+                )
+            } else {
+                kk_world::types::calc_body_effectiveness(
+                    &c.body,
+                    BodyKind::Heal,
+                    "heal",
+                    "heal",
+                    c::HEAL_POWER,
+                )
+            },
         ),
         _ => return,
     };
@@ -1192,6 +1274,14 @@ fn intent_sign_controller(w: &mut Working, id: ObjId, data: &IntentData) {
             user: owner,
             text: text.clone(),
             time: w.time,
+            // 官方 signController.js:23：datetime 落一次 Date.now() 毫秒墙钟
+            //（确定性引擎的墙钟面与官方同源——replay 不确定性官方同样存在）
+            datetime: Some(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0),
+            ),
         });
     if let Some(RoomObject::Controller(t)) = w.room.objects.get_mut(&target_id) {
         t.sign = sign;
@@ -1366,7 +1456,8 @@ pub fn creep_tick(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
     }
     // 疲劳恢复（creeps/tick.js:105-108，两分支共用尾部）：-2 × 存活 MOVE 部件
     if let Some(c) = w.creep(id) {
-        let moves = BodyKind::count_active(&c.body, BodyKind::Move) as i64;
+        let moves =
+            kk_world::types::calc_body_effectiveness(&c.body, BodyKind::Move, "move", "fatigue", 1);
         if moves > 0 {
             w.add_fatigue(id, -2 * moves);
         }
@@ -1503,12 +1594,50 @@ pub fn set_action_log(bits: &mut u16, bit: impl Into<u16>) {
 
 /// 官方 harvest 功率：WORK 部件数 × HARVEST_POWER（无 boost）。
 pub fn harvest_power(creep: &kk_schema::room::CreepObj) -> i64 {
-    BodyKind::count_active(&creep.body, BodyKind::Work) as i64 * c::HARVEST_POWER
+    kk_world::types::calc_body_effectiveness(
+        &creep.body,
+        BodyKind::Work,
+        "work",
+        "harvest",
+        c::HARVEST_POWER,
+    )
 }
 
 /// 官方 storeCapacity（M1 无 boost）：CARRY 部件数 × CARRY_CAPACITY。
+/// Store 两槽（energy/G）的资源键访问——官方 store 对象按资源名为键
+/// （GPT 复审 P1-1 清偿：transfer/withdraw/drop 参数化，schema 现两资源槽）。
+fn store_slot(store: &kk_schema::room::Store, resource: &str) -> i64 {
+    match resource {
+        "energy" => store.energy as i64,
+        "G" => store.ghodium as i64,
+        _ => 0,
+    }
+}
+
+fn store_slot_sub(store: &mut kk_schema::room::Store, resource: &str, amount: i64) {
+    match resource {
+        "energy" => store.energy = store.energy.saturating_sub(amount as u32),
+        "G" => store.ghodium = store.ghodium.saturating_sub(amount as u32),
+        _ => {}
+    }
+}
+
+fn store_slot_add(store: &mut kk_schema::room::Store, resource: &str, amount: i64) {
+    match resource {
+        "energy" => store.energy = store.energy.saturating_add(amount as u32),
+        "G" => store.ghodium = store.ghodium.saturating_add(amount as u32),
+        _ => {}
+    }
+}
+
 pub fn store_capacity(creep: &kk_schema::room::CreepObj) -> i64 {
-    BodyKind::count_active(&creep.body, BodyKind::Carry) as i64 * c::CARRY_CAPACITY
+    kk_world::types::calc_body_effectiveness(
+        &creep.body,
+        BodyKind::Carry,
+        "carry",
+        "capacity",
+        c::CARRY_CAPACITY,
+    )
 }
 
 fn controller_levels(level: u8) -> u64 {

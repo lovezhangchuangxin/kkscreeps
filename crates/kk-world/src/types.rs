@@ -85,3 +85,80 @@ pub fn extension_energy_capacity(rcl: u8) -> i64 {
         .map(|(_, v)| *v)
         .unwrap_or(0)
 }
+
+/// 官方 calcBodyEffectiveness（engine/src/utils.js:623-636）的等价物：遍历
+/// body，hits>0 且类型匹配的部件按 base × BOOSTS[type][boost][effect] 乘数
+/// 求和。GPT 复审 P1-2 清偿：容量投影/移动重量/仲裁 moves/疲劳恢复四消费点
+/// 共用（官方 movement.js:41-59 的 weight 用同表的 capacity、:117-118 的
+/// moves 与 creeps/tick.js:105 的恢复用 fatigue）。
+pub fn calc_body_effectiveness(
+    body: &[kk_schema::room::BodyPart],
+    kind: BodyKind,
+    part_key: &str,
+    effect: &str,
+    base: i64,
+) -> i64 {
+    static BOOSTS: std::sync::OnceLock<Option<serde_json::Value>> = std::sync::OnceLock::new();
+    let table = BOOSTS.get_or_init(|| serde_json::from_str(c::BOOSTS).ok());
+    let mut power = 0i64;
+    for part in body {
+        if part.hits == 0 || BodyKind::from_code(part.kind) != Some(kind) {
+            continue;
+        }
+        let multiplier = match &part.boost {
+            None => 1,
+            Some(boost) => table
+                .as_ref()
+                .and_then(|t| t.get(part_key))
+                .and_then(|t| t.get(boost.as_str()))
+                .and_then(|t| t.get(effect))
+                .and_then(serde_json::Value::as_i64)
+                .unwrap_or(1),
+        };
+        power += base * multiplier;
+    }
+    power
+}
+
+/// 官方 calcResourcesWeight（movement.js:41-59）：store 全槽求和作为携带量，
+/// 自 body 尾部往前，hits>0 的 CARRY 按 CARRY_CAPACITY × 强化容量乘数逐个
+/// 扣减——装下携带量所需的 CARRY 部件数即重量。
+pub fn resources_weight(
+    body: &[kk_schema::room::BodyPart],
+    store: &kk_schema::room::Store,
+) -> usize {
+    let mut total_carry = (store.energy + store.ghodium) as i64;
+    let mut weight = 0usize;
+    for part in body.iter().rev() {
+        if total_carry <= 0 {
+            break;
+        }
+        if part.hits == 0 || BodyKind::from_code(part.kind) != Some(BodyKind::Carry) {
+            continue;
+        }
+        let boost = match &part.boost {
+            None => 1,
+            Some(b) => boost_multiplier(part, b, "carry", "capacity"),
+        };
+        total_carry -= (c::CARRY_CAPACITY * boost).min(total_carry);
+        weight += 1;
+    }
+    weight
+}
+
+fn boost_multiplier(
+    _part: &kk_schema::room::BodyPart,
+    boost: &str,
+    part_key: &str,
+    effect: &str,
+) -> i64 {
+    static BOOSTS: std::sync::OnceLock<Option<serde_json::Value>> = std::sync::OnceLock::new();
+    let table = BOOSTS.get_or_init(|| serde_json::from_str(c::BOOSTS).ok());
+    table
+        .as_ref()
+        .and_then(|t| t.get(part_key))
+        .and_then(|t| t.get(boost))
+        .and_then(|t| t.get(effect))
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(1)
+}
