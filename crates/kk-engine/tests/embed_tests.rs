@@ -349,12 +349,14 @@ fn embed_engine_roundtrip_impl() -> anyhow::Result<()> {
         "energy:0 的 source 不算 active（官方 energy > 0）"
     );
     assert_eq!(e.find_in_room("W1N1", 105).len(), 2, "FIND_SOURCES 收全部");
-    // FIND_MY_STRUCTURES 不含 source/mineral（官方 game.js:229-251 structureTypes
-    // 表；与 prelude room.find 两层一致）——房间仅默认 controller 入选
+    // FIND_MY_STRUCTURES 在视角中立面不可判定 → 空（A3c 修掉 MY_* 与
+    // FIND_* 同臂的假绿面——screeps-ok find.ts 契约只支持 9 个中立常量；
+    // 旧断言"仅 controller"是灰区登记的假绿）。归属语义由玩家面承载（下方
+    // runPlayer 锁值：p1 的 MY_STRUCTURES = controller，source 不入）
     assert_eq!(
         e.find_in_room("W1N1", 108).len(),
-        1,
-        "FIND_MY_STRUCTURES 仅 controller（source 不入）"
+        0,
+        "FIND_MY_STRUCTURES 中立面无视角 → 空"
     );
 
     // runPlayer：真实沙箱求值，恰好 +1 tick
@@ -365,14 +367,57 @@ fn embed_engine_roundtrip_impl() -> anyhow::Result<()> {
     assert_eq!(run.expr["value"], 1, "玩家代码看见摆放的 creep");
     assert_eq!(e.get_game_time(), t0 + 1, "恰好推进 1 tick");
 
+    // 玩家面 FIND 族 per-viewer 锁（A3c）：MY_STRUCTURES=controller（source
+    // 不入——game.js:24 my===true 且 structureTypes 表无 source）、
+    // HOSTILE_STRUCTURES 空、MY_CREEPS=本人 creep
+    let run = e.run_player(
+        "p1",
+        "(()=>{ const r = Game.rooms['W1N1']; const st = r.find(FIND_MY_STRUCTURES).map(s=>s.structureType).sort(); \
+         return [st.join(','), r.find(FIND_HOSTILE_STRUCTURES).length, r.find(FIND_MY_CREEPS).length, r.find(FIND_CREEPS).length]; })()",
+    )?;
+    let v = &run.expr["value"];
+    assert_eq!(v[0], "controller", "MY_STRUCTURES 归属过滤 + source 不入");
+    assert_eq!(v[1], 0, "HOSTILE_STRUCTURES 无敌对结构");
+    assert_eq!(v[2], 1, "MY_CREEPS 本人");
+    assert_eq!(v[3], 1, "FIND_CREEPS 全部（本房仅一只）");
+
+    // Game.gcl 真值链（A3c）：upgrade 结算累点 PlayerState.gcl（settle/creep.rs
+    // 的 player.gcl += boosted）→ 下一 tick world.gcl 投影 → prelude 正变换
+    // （Game.gcl.progress）。行为探针：跨层链路而非单点锁值。upgradeController
+    // 的 prelude API 面仍是桩（A4 族漏网，批次报告登记归 API 补漏批）——意图
+    // 经 settle_external 直注（生产同形清洗路径），链路验证不受桩影响
+    let upgrader_id = e.place_object(
+        "W1N1",
+        "creep",
+        &json!({ "pos": [1, 2], "owner": "p1", "body": ["work", "carry"], "store": { "energy": 10 }, "name": "upgrader" }),
+    )?;
+    let run = e.run_player("p1", "Game.rooms['W1N1'].controller.id")?;
+    let ctl_id = run.expr["value"]
+        .as_str()
+        .expect("controller id 字符串")
+        .to_string();
+    let batch = kk_engine::intent::IntentBatch::from_json(
+        "p1",
+        &json!({ upgrader_id.clone(): { "upgradeController": { "id": ctl_id } } }),
+    );
+    e.settle_external(batch)?;
+    let run = e.run_player(
+        "p1",
+        "[Game.rooms['W1N1'].controller.progress, Game.gcl.level, Game.gcl.progress]",
+    )?;
+    let v = &run.expr["value"];
+    assert_eq!(v[0], 1, "controller.progress 结算 +1");
+    assert_eq!(v[1], 1, "1 点仍在 1 级");
+    assert_eq!(v[2], 1, "upgrade +1 GCL 点 → Game.gcl.progress 跨层可见");
+
     // console 捕获
     let run = e.run_player("p1", "console.log('hello'); 42")?;
     assert_eq!(run.expr["value"], 42);
     assert_eq!(e.capture_console_logs("p1"), vec!["hello".to_string()]);
 
-    // tick(n) 推进
+    // tick(n) 推进（五次 runPlayer + settle_external 各 +1 + tick(5) = t0+11）
     e.tick(5)?;
-    assert_eq!(e.get_game_time(), t0 + 7);
+    assert_eq!(e.get_game_time(), t0 + 11);
 
     // 语法错误分类透传
     let run = e.run_player("p1", "var a = ;")?;

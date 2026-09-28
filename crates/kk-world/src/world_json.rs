@@ -21,12 +21,15 @@ impl World {
     /// driver/lib/runtime/data.js:103 按 userObjects 归集房间后拉全房对象），
     /// 房间内对象全量保留（可见房内的敌方对象官方同样可见）；附带 `user`
     /// 字段供 prelude 装配 per-viewer 集合（官方 runtimeData.user 等价物）。
+    /// `gcl_points`：官方 runtimeData.user.gcl（GCL 点数）——PlayerState 真值，
+    /// prelude 按官方公式换算 Game.gcl（game.js:130-163）。
     /// observer/预订等更宽的可见性来源随对应能力批扩展。
-    pub fn world_json_for_viewer(&self, user: &str) -> Value {
-        self.world_json_impl(Some(user))
+    pub fn world_json_for_viewer(&self, user: &str, gcl_points: i64) -> Value {
+        self.world_json_impl(Some((user, gcl_points)))
     }
 
-    fn world_json_impl(&self, user: Option<&str>) -> Value {
+    fn world_json_impl(&self, viewer: Option<(&str, i64)>) -> Value {
+        let user = viewer.map(|(u, _)| u);
         let visible: std::collections::BTreeSet<&String> = match user {
             None => self.rooms.keys().collect(),
             Some(user) => self
@@ -54,7 +57,9 @@ impl World {
             // RCL（extension 的 storeCapacityResource 归一与房间聚合共用）
             let rcl = room_rcl(state);
             if visible.contains(name) {
-                let (available, capacity) = room_energy(state);
+                // per-viewer 房间能量面（官方 game.js:324-328 按查看者过滤自家
+                // spawn/extension；None 面=M1 全量投影，测试/内部消费）
+                let (available, capacity) = room_energy(state, user);
                 entry.insert("energyAvailable".into(), json!(available));
                 entry.insert("energyCapacityAvailable".into(), json!(capacity));
             }
@@ -88,16 +93,25 @@ impl World {
         }
         json!({
             "time": self.time,
-            // M1：cpu 桩值与 M0 一致（真实预算桶接入是 M2 沙箱正式接入范围）
+            // cpu 为占位基准值（默认配置下与预算真值相等）：真值由沙箱注入点
+            // 富化（proto.rs run_eval_tick——budget 真值在沙箱线程内，注入前
+            // 就地覆写，官方 make.js 先算窗口再装 runtimeData 的同构）
             "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
             "user": user,
+            "gcl": viewer.map(|(_, g)| g).unwrap_or(0),
             "rooms": Value::Object(rooms),
             "objects": objects,
         })
     }
 
     /// 按 FIND 常量过滤房间内对象（embed findInRoom 的后端）。
-    pub fn find_in_room(&self, room: &str, find_const: i64) -> Vec<(crate::world::ObjId, Value)> {
+    /// `viewer`：玩家面归属语义（MY_*/HOSTILE_*）；None = 视角中立面。
+    pub fn find_in_room(
+        &self,
+        room: &str,
+        find_const: i64,
+        viewer: Option<&str>,
+    ) -> Vec<(crate::world::ObjId, Value)> {
         let Some(state) = self.rooms.get(room) else {
             return Vec::new();
         };
@@ -111,7 +125,7 @@ impl World {
                     object_json(room, *id, o, self.time, &state.terrain, rcl),
                 )
             })
-            .filter(|(_, o)| matches_find(o, find_const))
+            .filter(|(_, o)| matches_find(o, find_const, viewer))
             .collect()
     }
 
@@ -188,24 +202,27 @@ pub(crate) fn room_rcl(state: &crate::world::RoomState) -> u8 {
         .unwrap_or(0)
 }
 
-/// 房间能量面（官方 game.js:325-328：非 off 的 spawn/extension 计入；容量侧
-/// spawn 固定 300、extension 按 RCL 表）。官方按查看者过滤自家结构，M1 单投影
-/// 先按房间合计（灰区登记：多主人房间的 per-owner 视图 M2 玩家 API 层实现）。
-fn room_energy(state: &crate::world::RoomState) -> (i64, i64) {
+/// 房间能量面（官方 game.js:324-328：非 off 的 spawn/extension 且
+/// `object.user == runtimeData.user._id` 才计入——**per-viewer 过滤**，容量侧
+/// spawn 固定 300、extension 按 RCL 表；结算侧重算不滤 owner（processor.js:326
+/// 全房聚合）——两口径并存是官方事实，勿互抄）。`viewer=None` = 全房聚合
+///（M1 全量投影面，测试/内部消费）。
+fn room_energy(state: &crate::world::RoomState, viewer: Option<&str>) -> (i64, i64) {
     let rcl = room_rcl(state);
     let mut available = 0i64;
     let mut capacity = 0i64;
     for o in state.objects.values() {
-        match o {
-            RoomObject::Spawn(s) if !s.off => {
-                available += s.store.energy as i64;
-                capacity += c::SPAWN_ENERGY_CAPACITY;
-            }
-            RoomObject::Extension(e) if !e.off => {
-                available += e.store.energy as i64;
-                capacity += crate::types::extension_energy_capacity(rcl);
-            }
-            _ => {}
+        let (energy, cap) = match o {
+            RoomObject::Spawn(s) if !s.off => (s.store.energy as i64, c::SPAWN_ENERGY_CAPACITY),
+            RoomObject::Extension(e) if !e.off => (
+                e.store.energy as i64,
+                crate::types::extension_energy_capacity(rcl),
+            ),
+            _ => continue,
+        };
+        if viewer.is_none_or(|v| object_owner(o).as_deref() == Some(v)) {
+            available += energy;
+            capacity += cap;
         }
     }
     (available, capacity)
@@ -518,28 +535,65 @@ fn obj_energy(o: &Value) -> i64 {
 }
 
 /// FIND 常量过滤（dumb.rs 语义原样迁移；与 prelude room.find 两层一致）。
-pub fn matches_find(o: &Value, find_const: i64) -> bool {
+///
+/// `viewer`：玩家面语义（官方 findCacheFn 表 game.js:17-28——MY_*/HOSTILE_* 按
+/// 归属过滤、FIND_CREEPS 族滤孵化雏形 `!i.spawning`）。`None` = 视角中立面
+/// （screeps-ok oracle 契约 find.ts 只支持 9 个中立常量）：101 不滤雏形
+/// （CreepSnapshot.spawning 字段存在本身即证据——中立快照含孵化中 creep），
+/// MY_*/HOSTILE_* 无视角不可判定 → false（官方不支持该面查询，不假装有结果）。
+pub fn matches_find(o: &Value, find_const: i64, viewer: Option<&str>) -> bool {
     let kind = obj_str(o, "type");
     let st = obj_str(o, "structureType");
     let is_struct = kind == "structure" || kind == "spawn";
+    // 归属三态（raw 投影面）：Some(v) 字符串=有主、null=降级清零（controller
+    // 哨兵）、缺键=从未拥有。official `my === false && i.owner`：owner getter
+    // 对 null 归 undefined（structures.js:136-138）→ 敌对臂只认字符串 owner
+    let owner_str = o.get("owner").and_then(Value::as_str);
+    let owned_by = |v: &str| owner_str == Some(v);
+    let hostile_of = |v: &str| owner_str.is_some() && owner_str != Some(v);
+    let spawning = o.get("spawning").and_then(Value::as_bool).unwrap_or(false);
     match find_const {
-        f if f == c::FIND_CREEPS || f == c::FIND_MY_CREEPS => kind == "creep",
+        // 官方 FIND_CREEPS 族滤 `!i.spawning`（game.js:18-19，雏形不进玩家面
+        // FIND；中立面保留雏形——见函数头注）
+        f if f == c::FIND_CREEPS => match viewer {
+            Some(_) => kind == "creep" && !spawning,
+            None => kind == "creep",
+        },
+        f if f == c::FIND_MY_CREEPS => kind == "creep" && !spawning && viewer.is_some_and(owned_by),
+        f if f == c::FIND_HOSTILE_CREEPS => {
+            kind == "creep" && !spawning && viewer.is_some_and(hostile_of)
+        }
         // 104 官方条件 energy > 0（game.js:23）
         f if f == c::FIND_SOURCES_ACTIVE => {
             kind == "structure" && st == "source" && obj_energy(o) > 0
         }
         f if f == c::FIND_SOURCES => kind == "structure" && st == "source",
         f if f == c::FIND_DROPPED_RESOURCES => kind == "resource",
-        f if f == c::FIND_STRUCTURES || f == c::FIND_MY_STRUCTURES => {
+        f if f == c::FIND_STRUCTURES => {
             // 官方 FIND_STRUCTURES 不含 source/mineral：game.js:229-251 的
             // structureTypes 表无此三类（source/mineral/deposit 是独立装配分支
             // game.js:329-345）；vanilla 查询面 findTypeMap 同构
             // （snapshots.ts:478-491）
             is_struct && st != "source" && st != "mineral"
         }
+        f if f == c::FIND_MY_STRUCTURES => {
+            is_struct && st != "source" && st != "mineral" && viewer.is_some_and(owned_by)
+        }
+        f if f == c::FIND_HOSTILE_STRUCTURES => {
+            // 官方 `i.my === false && i.owner`（game.js:25）：owner getter 对
+            // null/缺键归 undefined → 敌对臂只认字符串 owner
+            is_struct && st != "source" && st != "mineral" && viewer.is_some_and(hostile_of)
+        }
         f if f == c::FIND_FLAGS => kind == "flag",
         f if f == c::FIND_CONSTRUCTION_SITES => kind == "constructionSite",
-        f if f == c::FIND_MY_SPAWNS => kind == "spawn",
+        f if f == c::FIND_MY_SPAWNS => kind == "spawn" && viewer.is_some_and(owned_by),
+        f if f == c::FIND_HOSTILE_SPAWNS => kind == "spawn" && viewer.is_some_and(hostile_of),
+        f if f == c::FIND_MY_CONSTRUCTION_SITES => {
+            kind == "constructionSite" && viewer.is_some_and(owned_by)
+        }
+        f if f == c::FIND_HOSTILE_CONSTRUCTION_SITES => {
+            kind == "constructionSite" && viewer.is_some_and(hostile_of)
+        }
         f if f == c::FIND_MINERALS => kind == "structure" && st == "mineral",
         f if f == c::FIND_TOMBSTONES => kind == "tombstone",
         f if f == c::FIND_POWER_CREEPS => kind == "powerCreep",
@@ -624,14 +678,21 @@ mod tests {
         );
 
         // FIND 两层：104 按 energy>0（源 3000 满）
-        let sources = world.find_in_room("W1N1", c::FIND_SOURCES_ACTIVE);
+        let sources = world.find_in_room("W1N1", c::FIND_SOURCES_ACTIVE, None);
         assert_eq!(sources.len(), 1);
         assert_eq!(sources[0].0, source_id);
-        assert_eq!(world.find_in_room("W1N1", c::FIND_CREEPS).len(), 1);
-        assert_eq!(world.find_in_room("W1N1", c::FIND_MY_SPAWNS).len(), 0);
+        assert_eq!(world.find_in_room("W1N1", c::FIND_CREEPS, None).len(), 1);
+        // 中立面 MY_* 无视角不可判定（screeps-ok find.ts 不支持该面查询）
+        assert_eq!(world.find_in_room("W1N1", c::FIND_MY_SPAWNS, None).len(), 0);
+        assert_eq!(
+            world
+                .find_in_room("W1N1", c::FIND_MY_SPAWNS, Some("p1"))
+                .len(),
+            0
+        );
 
         // 对象字段名对齐 prelude
-        let (_, creep_json) = world.find_in_room("W1N1", c::FIND_CREEPS)[0].clone();
+        let (_, creep_json) = world.find_in_room("W1N1", c::FIND_CREEPS, None)[0].clone();
         assert_eq!(creep_json["name"], "w1");
         // age_time(=time+1500) − time
         assert_eq!(creep_json["ticksToLive"], 1500);
@@ -671,12 +732,15 @@ mod tests {
         .unwrap();
         world.insert("W1N1", tombstone).unwrap();
 
-        let structs = world.find_in_room("W1N1", c::FIND_STRUCTURES);
+        let structs = world.find_in_room("W1N1", c::FIND_STRUCTURES, None);
         assert_eq!(structs.len(), 1, "tower 必须对 FIND_STRUCTURES 可见");
         assert_eq!(structs[0].0, tower_id);
         assert_eq!(structs[0].1["type"], "structure");
         assert_eq!(structs[0].1["structureType"], "tower");
-        assert_eq!(world.find_in_room("W1N1", c::FIND_TOMBSTONES).len(), 1);
+        assert_eq!(
+            world.find_in_room("W1N1", c::FIND_TOMBSTONES, None).len(),
+            1
+        );
         // 投影单对象可见
         let j = world.object_json_by_id(tower_id).unwrap();
         assert_eq!(j["structureType"], "tower");
@@ -923,5 +987,185 @@ mod tests {
         assert_eq!(e["sign"], serde_json::Value::Null);
         assert_eq!(e["upgradeBlocked"], serde_json::Value::Null);
         assert_eq!(e["safeModeCooldown"], serde_json::Value::Null);
+    }
+
+    /// A3c：FIND 族 per-viewer 语义锁（官方 findCacheFn 表 game.js:17-28）。
+    /// 双主人房：creep（含孵化雏形）/spawn/extension/tower/工地，验证
+    /// MY_*/HOSTILE_* 归属分野 + FIND_CREEPS 玩家面滤雏形 + 中立面语义。
+    #[test]
+    fn find_per_viewer_semantics() {
+        let mut world = World::new(3);
+        world.time = 10;
+        let mut terrain = Terrain::plains();
+        terrain.normalize();
+        world.register_room("W1N1", terrain);
+        let ctx = PlaceCtx {
+            time: world.time,
+            controller: None,
+            name_seq: 0,
+        };
+        // p1：普通 creep + 孵化雏形 + spawn + extension；p2：creep + spawn；
+        // 工地 p1 一个
+        let creep1 = normalize(
+            "creep",
+            &serde_json::json!({ "pos": [10, 10], "owner": "p1", "body": ["move"], "name": "c1" }),
+            &ctx,
+        )
+        .unwrap();
+        world.insert("W1N1", creep1).unwrap();
+        let ghost = normalize(
+            "creep",
+            &serde_json::json!({ "pos": [11, 10], "owner": "p1", "body": ["move"], "name": "g1" }),
+            &ctx,
+        )
+        .unwrap();
+        let ghost_id = world.insert("W1N1", ghost).unwrap();
+        // place 对 spawning 硬编码 false——insert 后直改（孵化雏形形态）
+        if let Some(RoomObject::Creep(g)) =
+            world.room_mut("W1N1").unwrap().objects.get_mut(&ghost_id)
+        {
+            g.spawning = true;
+        }
+        let creep2 = normalize(
+            "creep",
+            &serde_json::json!({ "pos": [12, 10], "owner": "p2", "body": ["move"], "name": "c2" }),
+            &ctx,
+        )
+        .unwrap();
+        world.insert("W1N1", creep2).unwrap();
+        let spawn1 = normalize(
+            "spawn",
+            &serde_json::json!({ "pos": [13, 10], "structureType": "spawn", "owner": "p1", "name": "s1" }),
+            &ctx,
+        )
+        .unwrap();
+        world.insert("W1N1", spawn1).unwrap();
+        let spawn2 = normalize(
+            "spawn",
+            &serde_json::json!({ "pos": [14, 10], "structureType": "spawn", "owner": "p2", "name": "s2" }),
+            &ctx,
+        )
+        .unwrap();
+        world.insert("W1N1", spawn2).unwrap();
+        let ext1 = normalize(
+            "structure",
+            &serde_json::json!({ "pos": [15, 10], "structureType": "extension", "owner": "p1" }),
+            &ctx,
+        )
+        .unwrap();
+        world.insert("W1N1", ext1).unwrap();
+        let tower2 = normalize(
+            "structure",
+            &serde_json::json!({ "pos": [16, 10], "structureType": "tower", "owner": "p2" }),
+            &ctx,
+        )
+        .unwrap();
+        world.insert("W1N1", tower2).unwrap();
+        let wall = normalize(
+            "structure",
+            &serde_json::json!({ "pos": [17, 10], "structureType": "constructedWall" }),
+            &ctx,
+        )
+        .unwrap();
+        world.insert("W1N1", wall).unwrap();
+        let site1 = normalize(
+            "constructionSite",
+            &serde_json::json!({ "pos": [18, 10], "structureType": "road", "owner": "p1" }),
+            &ctx,
+        )
+        .unwrap();
+        world.insert("W1N1", site1).unwrap();
+
+        let count = |f: i64, v: Option<&str>| world.find_in_room("W1N1", f, v).len();
+        // FIND_CREEPS：玩家面滤雏形（game.js:18 !i.spawning）；中立面含雏形
+        assert_eq!(count(c::FIND_CREEPS, Some("p1")), 2, "c1+c2，雏形被滤");
+        assert_eq!(count(c::FIND_CREEPS, None), 3, "中立面含孵化雏形");
+        // MY/HOSTILE creep（game.js:18-19）
+        assert_eq!(count(c::FIND_MY_CREEPS, Some("p1")), 1);
+        assert_eq!(count(c::FIND_MY_CREEPS, Some("p2")), 1);
+        assert_eq!(count(c::FIND_HOSTILE_CREEPS, Some("p1")), 1, "p2 的 c2");
+        assert_eq!(
+            count(c::FIND_HOSTILE_CREEPS, Some("p2")),
+            1,
+            "p1 的 c1（雏形滤）"
+        );
+        // MY/HOSTILE spawns（game.js:22-23）
+        assert_eq!(count(c::FIND_MY_SPAWNS, Some("p1")), 1);
+        assert_eq!(count(c::FIND_HOSTILE_SPAWNS, Some("p1")), 1);
+        // MY/HOSTILE structures（game.js:24-25）：spawn+extension+tower 归属
+        // 分野；wall 无 owner（my undefined）两边都不进
+        assert_eq!(count(c::FIND_MY_STRUCTURES, Some("p1")), 2, "s1+ext1");
+        assert_eq!(count(c::FIND_MY_STRUCTURES, Some("p2")), 2, "s2+tower");
+        assert_eq!(
+            count(c::FIND_HOSTILE_STRUCTURES, Some("p1")),
+            2,
+            "s2+tower；wall 无 owner 不进"
+        );
+        assert_eq!(count(c::FIND_HOSTILE_STRUCTURES, Some("p2")), 2, "s1+ext1");
+        // MY/HOSTILE construction sites（game.js:26-27）
+        assert_eq!(count(c::FIND_MY_CONSTRUCTION_SITES, Some("p1")), 1);
+        assert_eq!(count(c::FIND_HOSTILE_CONSTRUCTION_SITES, Some("p2")), 1);
+        assert_eq!(count(c::FIND_MY_CONSTRUCTION_SITES, Some("p2")), 0);
+        // 中立面 MY_*：不可判定 → 空
+        assert_eq!(count(c::FIND_MY_CREEPS, None), 0);
+        assert_eq!(count(c::FIND_HOSTILE_STRUCTURES, None), 0);
+    }
+
+    /// A3c：energyAvailable/CapacityAvailable per-viewer（官方 game.js:324-328
+    /// 只累计查看者自家非 off 的 spawn/extension）。双主人房 + off spawn。
+    #[test]
+    fn energy_per_viewer_projection() {
+        let mut world = World::new(3);
+        world.time = 1;
+        let mut terrain = Terrain::plains();
+        terrain.normalize();
+        world.register_room("W1N1", terrain);
+        let ctx = PlaceCtx {
+            time: world.time,
+            controller: None,
+            name_seq: 0,
+        };
+        let mk_spawn = |name: &str, owner: &str, energy: i64| {
+            normalize(
+                "spawn",
+                &serde_json::json!({ "pos": [10, 10], "structureType": "spawn", "owner": owner,
+                    "name": name, "store": { "energy": energy } }),
+                &ctx,
+            )
+            .unwrap()
+        };
+        world.insert("W1N1", mk_spawn("s1", "p1", 100)).unwrap();
+        let off_id = world.insert("W1N1", mk_spawn("s1off", "p1", 50)).unwrap();
+        // place 对 off 硬编码 false——insert 后直改（_calc_spawns 的 off 标记）
+        if let Some(RoomObject::Spawn(s)) = world.room_mut("W1N1").unwrap().objects.get_mut(&off_id)
+        {
+            s.off = true;
+        }
+        world.insert("W1N1", mk_spawn("s2", "p2", 200)).unwrap();
+        let j1 = world.world_json_for_viewer("p1", 0);
+        // p1 只见自家非 off spawn：100/300（off 的 50 不计、p2 的 200 不计）
+        assert_eq!(j1["rooms"]["W1N1"]["energyAvailable"], 100);
+        assert_eq!(j1["rooms"]["W1N1"]["energyCapacityAvailable"], 300);
+        let j2 = world.world_json_for_viewer("p2", 0);
+        assert_eq!(j2["rooms"]["W1N1"]["energyAvailable"], 200);
+        assert_eq!(j2["rooms"]["W1N1"]["energyCapacityAvailable"], 300);
+        // 全量面（M1 测试/内部消费）：全房聚合
+        let jn = world.world_json();
+        assert_eq!(jn["rooms"]["W1N1"]["energyAvailable"], 300);
+        assert_eq!(jn["rooms"]["W1N1"]["energyCapacityAvailable"], 600);
+    }
+
+    /// A3c：world.gcl 投影（官方 runtimeData.user.gcl 点数直存——换算在
+    /// prelude，game.js:130-163 正变换的锚点数据）。
+    #[test]
+    fn gcl_points_projection() {
+        let mut world = World::new(1);
+        let mut terrain = Terrain::plains();
+        terrain.normalize();
+        world.register_room("W1N1", terrain);
+        let j = world.world_json_for_viewer("p1", 1_000_000);
+        assert_eq!(j["gcl"], 1_000_000);
+        assert_eq!(j["user"], "p1");
+        assert_eq!(world.world_json()["gcl"], 0);
     }
 }

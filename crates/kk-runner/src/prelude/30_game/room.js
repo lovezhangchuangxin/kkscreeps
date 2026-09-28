@@ -13,6 +13,13 @@
   const { countStub, probe } = globalThis.__kkp;
   const gw = globalThis.__kkp.gw;
 
+  // 预置捕获（A3c 装配批，同 game.js 原则）：makeRoom 每 tick 装配，Object
+  // 交换会使原型链接/memory 定义走假实现；Room 构造器捕获自安装位（官方
+  // globals.Room 闭包引用等价——.prototype 运行期解引用，玩家原型补丁/
+  // 重挂语义保持可见，绑定交换不可）
+  const __Object = Object;
+  const __RoomCtor = globalThis.Room;
+
   // ---------------------------------------------------------------- Terrain
   // 官方 rooms.js:1223-1241 Room.Terrain 逐字移植：闭包式对象（非 class），
   // 无地形数据的房间构造即抛错；get 返回位码（wall=1/swamp=2/plain=0），
@@ -78,7 +85,9 @@
   function makeRoom(name, r) {
     // 无 controller 房间的官方投影是 undefined（非 null）
     let controller;
-    for (const o of gw.world.objects || []) {
+    const worldObjs = gw.world.objects || [];
+    for (let i = 0; i < worldObjs.length; i++) {
+      const o = worldObjs[i];
       if (o.room === name && o.type === 'structure' && o.structureType === 'controller') {
         controller = gw.objectsById.get(o.id);
       }
@@ -98,15 +107,20 @@
     room.find = function (type, opts) {
       countStub('room.find:' + type);
       const out = [];
-      for (const o of gw.world.objects || []) {
+      // 索引迭代（装配批纪律）：for...of 经可交换的 Symbol.iterator
+      for (let i = 0; i < worldObjs.length; i++) {
+        const o = worldObjs[i];
         if (o.room !== name) continue;
         const w = gw.objectsById.get(o.id);
         if (!w) continue;
         const isStruct = o.type === 'structure' || o.type === 'spawn';
-        // 官方 FIND_SOURCES_ACTIVE 条件 energy > 0（game.js:23）；初态缺省 3000
-        // （与 wrapObject 的 source 投影缺省一致）
-        if (type === 101 /* FIND_CREEPS */ && o.type === 'creep') out.push(w);
-        else if (type === 102 /* FIND_MY_CREEPS */ && o.type === 'creep' && o.owner === gw.viewerName) out.push(w);
+        // 官方 findCacheFn 表（game.js:17-28）：FIND_CREEPS 族滤孵化雏形
+        //（!i.spawning——雏形经 Game.creeps 可见但不进 FIND）；HOSTILE 臂
+        // `my === false`（owner 字符串存在且非本人；owner null/缺键不进）
+        const creepOk = o.type === 'creep' && !o.spawning;
+        if (type === 101 /* FIND_CREEPS */ && creepOk) out.push(w);
+        else if (type === 102 /* FIND_MY_CREEPS */ && creepOk && o.owner === gw.viewerName) out.push(w);
+        else if (type === 103 /* FIND_HOSTILE_CREEPS */ && creepOk && o.owner !== undefined && o.owner !== gw.viewerName) out.push(w);
         else if (type === 104 /* FIND_SOURCES_ACTIVE */ && o.type === 'structure' && o.structureType === 'source' && (o.energy ?? 3000) > 0) out.push(w);
         else if (type === 105 /* FIND_SOURCES */ && o.type === 'structure' && o.structureType === 'source') out.push(w);
         else if (type === 106 /* FIND_DROPPED_RESOURCES */ && o.type === 'resource') out.push(w);
@@ -115,9 +129,13 @@
         // 与 Rust 侧 matches_find 两层一致
         else if (type === 107 /* FIND_STRUCTURES */ && isStruct && o.structureType !== 'source' && o.structureType !== 'mineral') out.push(w);
         else if (type === 108 /* FIND_MY_STRUCTURES */ && isStruct && o.structureType !== 'source' && o.structureType !== 'mineral' && o.owner === gw.viewerName) out.push(w);
+        else if (type === 109 /* FIND_HOSTILE_STRUCTURES */ && isStruct && o.structureType !== 'source' && o.structureType !== 'mineral' && typeof o.owner === 'string' && o.owner !== gw.viewerName) out.push(w);
         else if (type === 110 /* FIND_FLAGS */ && o.type === 'flag') out.push(w);
         else if (type === 111 /* FIND_CONSTRUCTION_SITES */ && o.type === 'constructionSite') out.push(w);
         else if (type === 112 /* FIND_MY_SPAWNS */ && o.type === 'spawn' && o.owner === gw.viewerName) out.push(w);
+        else if (type === 113 /* FIND_HOSTILE_SPAWNS */ && o.type === 'spawn' && o.owner !== undefined && o.owner !== gw.viewerName) out.push(w);
+        else if (type === 114 /* FIND_MY_CONSTRUCTION_SITES */ && o.type === 'constructionSite' && o.owner === gw.viewerName) out.push(w);
+        else if (type === 115 /* FIND_HOSTILE_CONSTRUCTION_SITES */ && o.type === 'constructionSite' && o.owner !== undefined && o.owner !== gw.viewerName) out.push(w);
         else if (type === 116 /* FIND_MINERALS */ && o.type === 'structure' && o.structureType === 'mineral') out.push(w);
       }
       // 官方 rooms.js:648-654：opts.filter（函数或 lodash 对象谓词）经
@@ -149,7 +167,7 @@
     room.getPositionAt = (x, y) => new gw.RoomPosition(x, y, name);
     room.serializePath = () => '';
     room.deserializePath = () => [];
-    Object.defineProperty(room, 'memory', {
+    __Object.defineProperty(room, 'memory', {
       configurable: true,
       get() {
         const m = gw.ensureMemory();
@@ -164,8 +182,8 @@
         m.rooms[name] = v;
       },
     });
-    if (globalThis.Room && globalThis.Room.prototype) {
-      Object.setPrototypeOf(room, globalThis.Room.prototype);
+    if (__RoomCtor && __RoomCtor.prototype) {
+      __Object.setPrototypeOf(room, __RoomCtor.prototype);
     }
     return probe(room, 'Room[' + name + ']');
   }

@@ -205,14 +205,12 @@
     return C.GCL_MULTIPLY * mathPow(level - 1, C.GCL_POW);
   }
 
-  /** runtimeData.user.gcl（GCL 点数总量）的现状近似：按 Game.gcl 逆变换
-   *  points = GCL_MULTIPLY × (level−1)^GCL_POW + progress（官方 game.js:130-162
-   *  正变换的逆）。Game.gcl 现状硬编码 {level:1,progress:0} → 0 点——真值
-   *  接线归 A3c per-viewer 批；硬编码值下的可观察行为：首房（claimed=0）门
-   *  短路放行，已有房/同 tick 二 claim 时 ERR_GCL_NOT_ENOUGH（登记报告）。
-   *  结算侧 claimController.js:41-43 用 PlayerState 真值复核，本门最坏是说谎
-   *  的返回码 + 0.2 计费（伪实例面既有登记族）。 */
+  /** runtimeData.user.gcl（GCL 点数总量）：A3c 起直读 world.gcl（PlayerState
+   *  投影，与 Game.gcl 正变换 game.js:130-163 同源——精确点数）；缺省世界
+   *  （无 gcl 键）按 Game.gcl 逆变换兜底，等价 0 点。结算侧 claimController
+   *  .js:41-43 用 PlayerState 真值复核，本门最坏是说谎的返回码 + 0.2 计费。 */
   function gclPoints() {
+    if (typeof gw.world.gcl === 'number') return gw.world.gcl;
     const g = Game.gcl;
     return C.GCL_MULTIPLY * mathPow(g.level - 1, C.GCL_POW) + g.progress;
   }
@@ -385,7 +383,9 @@
       if (!target.mineralAmount) return C.ERR_NOT_ENOUGH_RESOURCES;
       if (!target.pos.isNearTo(this.pos)) return C.ERR_NOT_IN_RANGE;
       let extractor = null;
-      for (const o of gw.world.objects || []) {
+      const objs = gw.world.objects || [];
+      for (let i = 0; i < objs.length; i++) {
+        const o = objs[i];
         if (o.room === target.pos.roomName && o.x === target.pos.x && o.y === target.pos.y
           && o.structureType === 'extractor') {
           extractor = gw.objectsById.get(o.id);
@@ -447,7 +447,9 @@
       let objectsInTile = false;
       let creepsInTile = false;
       let myCreepsInTile = false;
-      for (const o of gw.world.objects || []) {
+      const objs = gw.world.objects || [];
+      for (let i = 0; i < objs.length; i++) {
+        const o = objs[i];
         if (o.room !== target.pos.roomName || o.x !== target.pos.x || o.y !== target.pos.y) continue;
         const t = o.type === 'structure' || o.type === 'spawn'
           ? (o.structureType || 'spawn') : o.type;

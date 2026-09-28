@@ -42,9 +42,12 @@
 
   // 官方各 game/ 文件的 data 闭包等价物（creeps.js:44-56 等全部同形）：
   // 对象消亡（id 不在当前 tick 投影）时抛 runtime error——STALERECV-001
-  // 语义的抛错点。文案与官方逐字（"Could not find an object with ID "+id）
+  // 语义的抛错点。文案与官方逐字（"Could not find an object with ID "+id）。
+  // mapGet 预置捕获（A3c 装配批）：全部壳 getter/判定门的回查承重面，不得经
+  // 可交换的 Map.prototype.get
+  const __mapGet = Map.prototype.get;
   gw.rawData = function rawData(id) {
-    const o = gw.rawById.get(id);
+    const o = __mapGet.call(gw.rawById, id);
     if (o === undefined) {
       throw new Error('Could not find an object with ID ' + id);
     }
@@ -235,6 +238,29 @@
   }
   gw.classGlobalFor = classGlobalFor;
 
+  // wrapObject 的类解析捕获表（A3c 装配批）：官方经引擎闭包 globals.X 解析
+  //（game.js:285 `new globals.Source(i)` 等）——绑定交换不可见。首次 wrapObject
+  // 时（首个 beginTick 装配期，先于任何玩家代码）从 globalThis 惰性定格；此后
+  // 构造器引用固定，.prototype 运行期解引用（玩家原型补丁/重挂语义保持）
+  let classTable = null;
+  function classCtor(cls) {
+    if (classTable === null) {
+      classTable = gw.__Object.create(null);
+      const names = ['Creep', 'StructureSpawn', 'Flag', 'ConstructionSite', 'Resource',
+        'Tombstone', 'Ruin', 'Deposit', 'PowerCreep', 'Nuke', 'StructureController',
+        'Source', 'Mineral', 'StructureStorage', 'StructureTerminal', 'StructureTower',
+        'StructureExtension', 'StructureLink', 'StructureLab', 'StructureRampart',
+        'StructureRoad', 'StructureWall', 'StructureContainer', 'StructureExtractor',
+        'StructureFactory', 'StructureNuker', 'StructureObserver', 'StructurePowerBank',
+        'StructurePowerSpawn', 'StructurePortal', 'StructureInvaderCore',
+        'StructureKeeperLair', 'Structure'];
+      for (let i = 0; i < names.length; i++) {
+        classTable[names[i]] = globalThis[names[i]];
+      }
+    }
+    return classTable[cls];
+  }
+
   function wrapObject(o, now) {
     // pos 套探测仪表：RoomPosition 实例面的官方缺口（如 findInRange）以
     // 'RoomPosition.*' 登记，不静默 undefined
@@ -252,10 +278,11 @@
     const assemble = gw.assemblers[o.type];
     const obj = assemble ? assemble(o, base, pos, now) : base;
     const cls = classGlobalFor(o);
-    if (cls && globalThis[cls] && globalThis[cls].prototype) {
+    const ctor = cls ? classCtor(cls) : null;
+    if (ctor && ctor.prototype) {
       // 官方语义：Game 对象是类的实例；bot 生态普遍给官方原型打补丁
       //（tooangel 的 prototype_*.js 全系），原型链接通后补丁可见、instanceof 成立
-      Object.setPrototypeOf(obj, globalThis[cls].prototype);
+      gw.__Object.setPrototypeOf(obj, ctor.prototype);
     }
     const name = o.name ? ':' + o.name : '';
     return probe(obj, (cls || o.type) + name);

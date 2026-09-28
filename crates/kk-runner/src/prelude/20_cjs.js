@@ -36,8 +36,10 @@
     const candidates = [base];
     if (base.endsWith('.js')) candidates.push(base.slice(0, -3));
     else candidates.push(base + '.js');
-    const uniq = [...new Set(candidates)];
-    for (const c of uniq) {
+    // 至多两项且必互异（带/不带 .js 后缀），官方 [...new Set(...)] 去重为
+    // no-op——索引迭代不经可交换的 Set/迭代器（require 是宿主基础设施）
+    for (let i = 0; i < candidates.length; i++) {
+      const c = candidates[i];
       if (c === 'lodash') return c;
       if (ops.op_kk_module_kind(c) !== 'missing') return c;
     }

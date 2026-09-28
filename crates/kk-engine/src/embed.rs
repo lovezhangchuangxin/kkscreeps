@@ -310,8 +310,9 @@ impl EmbedEngine {
             .as_mut()
             .ok_or_else(|| anyhow::anyhow!("分片未创建"))?;
         // per-viewer 视野裁切（外部复审 P1-3 修复）：注入世界只含该玩家有
-        // 对象的房间 + user 字段（prelude 装配 per-viewer 集合）
-        let world = self.engine.world.world_json_for_viewer(handle);
+        // 对象的房间 + user/gcl 字段（prelude 装配 per-viewer 集合与 Game.gcl）
+        let gcl = self.engine.players.get(handle).map(|p| p.gcl).unwrap_or(0);
+        let world = self.engine.world.world_json_for_viewer(handle, gcl);
         let report: EvalReport = players.run_player(thread_id, &world, code)?;
         self.settle_tick_with_reports(std::iter::once((handle, &report)))
             .map_err(|e| anyhow::anyhow!("{e}"))?;
@@ -359,7 +360,9 @@ impl EmbedEngine {
                 let Some(code) = codes.get(handle) else {
                     continue;
                 };
-                let world = self.engine.world.world_json_for_viewer(handle);
+                // gcl 点数 = PlayerState 真值（官方 runtimeData.user.gcl）
+                let gcl = self.engine.players.get(handle).map(|p| p.gcl).unwrap_or(0);
+                let world = self.engine.world.world_json_for_viewer(handle, gcl);
                 reports.insert(
                     handle.clone(),
                     players.run_player(*thread_id, &world, code)?,
