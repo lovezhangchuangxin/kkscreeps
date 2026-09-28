@@ -208,16 +208,10 @@ fn snapshot_json(
                     None => Value::Null,
                 },
                 "sign": match &o.sign {
-                    Some(s) => {
-                        let mut sv = serde_json::Map::new();
-                        sv.insert("owner".into(), json!(s.user));
-                        sv.insert("text".into(), json!(s.text));
-                        sv.insert("time".into(), json!(s.time));
-                        if let Some(dt) = s.datetime {
-                            sv.insert("datetime".into(), json!(dt));
-                        }
-                        Value::Object(sv)
-                    },
+                    // 契约面只有 owner/text/time（vanilla snapshots.ts:157-161，
+                    // GPT 二轮 P2-4：datetime 不进查询快照——世界投影 Some 带键
+                    // 供 prelude getter 构造）
+                    Some(s) => json!({ "owner": s.user, "text": s.text, "time": s.time }),
                     None => Value::Null,
                 },
                 // 官方 getter 有（structures.js:147）而 vanilla ControllerSnapshot

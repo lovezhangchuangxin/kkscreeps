@@ -52,8 +52,13 @@ pub fn apply_damage(
         // _damage.js:17-19：近战、目标为 creep、攻击者不站 rampart → 目标以自身
         // 近战攻击力反击（反击伤害同样延迟到攻击者的 tick）
         if attack_type == c::EVENT_ATTACK_TYPE_MELEE && rampart_at(w, attacker_pos).is_none() {
-            attack_back =
-                BodyKind::count_active(&t.body, BodyKind::Attack) as i64 * c::ATTACK_POWER;
+            attack_back = kk_world::types::calc_body_effectiveness(
+                &t.body,
+                BodyKind::Attack,
+                "attack",
+                "attack",
+                c::ATTACK_POWER,
+            );
         }
         // _damage.js:20-21：creep 伤害延迟（累加器）
         *w.damage_to_apply.entry(target_id).or_insert(0) += damage;

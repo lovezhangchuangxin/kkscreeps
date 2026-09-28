@@ -4958,3 +4958,159 @@ fn sign_settlement_persists_datetime() {
         _ => panic!(),
     }
 }
+
+// ---- GPT 二轮复审清偿锁值 ----
+
+#[test]
+fn boosted_build_two_step_official_values() {
+    // 官方 build.js:67-84 两步：基础量定耗能（energy -= base effect），
+    // 增量数组定进度。GPT 探针值：5 能量单 WORK——LH(×1.5) 进度 7、
+    // XLH2O(×2) 进度 10、能耗均 5
+    for (boost, want_progress) in [("LH", 7), ("XLH2O", 10)] {
+        let mut f = Fixture::new(1, terrain_with(&[]));
+        let site = f
+            .world
+            .insert(
+                "W1N1",
+                RoomObject::ConstructionSite(kk_schema::room::ConstructionSiteObj {
+                    id: 0,
+                    x: 10,
+                    y: 10,
+                    structure_type: "road".into(),
+                    progress: 0,
+                    progress_total: 100,
+                    owner: Some("p1".into()),
+                    name: None,
+                }),
+            )
+            .unwrap();
+        let c = f
+            .world
+            .insert(
+                "W1N1",
+                RoomObject::Creep(CreepObj {
+                    id: 0,
+                    x: 10,
+                    y: 11,
+                    fatigue: 0,
+                    age_time: 9_000,
+                    hits: 100,
+                    spawning: false,
+                    action_log: 0,
+                    name: "w".into(),
+                    owner: "p1".into(),
+                    body: vec![kk_schema::room::BodyPart {
+                        kind: BodyKind::Work.code(),
+                        hits: 100,
+                        boost: Some(boost.into()),
+                    }],
+                    store: kk_schema::room::Store {
+                        energy: 5,
+                        ghodium: 0,
+                    },
+                }),
+            )
+            .unwrap();
+        let _ = site;
+        let mut b = IntentBatch::default();
+        b.add_object_intent("p1", c, Action::Build, IntentData::target(site));
+        f.settle(b);
+        let progress = f
+            .world
+            .rooms
+            .get("W1N1")
+            .unwrap()
+            .objects
+            .get(&site)
+            .map(|o| match o {
+                RoomObject::ConstructionSite(s) => s.progress,
+                _ => 0,
+            })
+            .unwrap_or(0);
+        let energy = match f.obj(c) {
+            RoomObject::Creep(cc) => cc.store.energy,
+            _ => 0,
+        };
+        assert_eq!(progress as i64, want_progress, "{boost} 进度");
+        assert_eq!(energy, 0, "{boost} 能量扣基础量 5");
+    }
+}
+
+#[test]
+fn transfer_mixed_holdings_respect_total_capacity() {
+    // 官方 transfer.js:32：通用容量目标按 calcResources 全槽求和——
+    // 满 energy 的 storage 只能收差额 G（GPT 二轮 P1-2 探针场景）
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let st = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Storage(kk_schema::room::StorageObj {
+                id: 0,
+                x: 20,
+                y: 20,
+                hits: 10_000,
+                owner: "p1".into(),
+                store: kk_schema::room::Store {
+                    energy: 999_990,
+                    ghodium: 0,
+                },
+                notify_when_attacked: None,
+            }),
+        )
+        .unwrap();
+    let c1 = f.creep("w1", "p1", 21, 20, &[BodyKind::Move, BodyKind::Carry], 0);
+    if let Some(RoomObject::Creep(cc)) = f.world.get_mut(c1) {
+        cc.store.ghodium = 20;
+    }
+    // 单笔 20G：余量 1e6-999990=10 ⇒ 只收 10
+    let mut b = IntentBatch::default();
+    let mut d = IntentData::bare();
+    d.id = Some(st);
+    d.amount = Some(20);
+    d.resource_type = Some("G".into());
+    b.add_object_intent("p1", c1, Action::Transfer, d);
+    f.settle(b);
+    match f.obj(st) {
+        RoomObject::Storage(s) => {
+            assert_eq!(s.store.energy, 999_990);
+            assert_eq!(s.store.ghodium, 10, "全槽总量钳制：余量 10 G");
+        }
+        _ => panic!(),
+    }
+    match f.obj(c1) {
+        RoomObject::Creep(cc) => assert_eq!(cc.store.ghodium, 10, "退回未收的 10"),
+        _ => panic!(),
+    }
+}
+
+#[test]
+fn pickup_ghodium_routes_to_ghodium_slot() {
+    // 官方 pickup.js:9/23-28：carry 全槽求和、按堆 resourceType 入槽
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let c = f.creep("w1", "p1", 10, 10, &[BodyKind::Move, BodyKind::Carry], 30);
+    let pile = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Energy(kk_schema::room::EnergyObj {
+                id: 0,
+                x: 10,
+                y: 11,
+                resource_type: 2,
+                amount: 10,
+            }),
+        )
+        .unwrap();
+    let mut b = IntentBatch::default();
+    b.add_object_intent("p1", c, Action::Pickup, IntentData::target(pile));
+    f.settle(b);
+    match f.obj(c) {
+        RoomObject::Creep(cc) => {
+            assert_eq!(cc.store.energy, 30, "energy 槽不动");
+            assert_eq!(cc.store.ghodium, 10, "G 入 ghodium 槽（GPT 二轮 P1-3）");
+        }
+        _ => panic!(),
+    }
+    assert!(f.world.get(pile).is_none(), "堆清零移除");
+}

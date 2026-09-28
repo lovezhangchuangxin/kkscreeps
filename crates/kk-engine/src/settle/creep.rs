@@ -271,25 +271,34 @@ fn intent_build(w: &mut Working, id: ObjId, data: &IntentData) {
     {
         return;
     }
-    let build_power = match w.creep(id) {
-        Some(c) => kk_world::types::calc_body_effectiveness(
+    // progressTotal 为创建时定格的存值（官方 build.js:68 读存的 progressTotal；
+    // 放置路径=裸成本、intent 建工地=成本×地形系数，见 ConstructionSiteObj）
+    let total = site.progress_total as i64;
+    let remaining = total.saturating_sub(site.progress as i64);
+    // 官方两步（build.js:67-84，GPT 二轮复审 P1-1）：基础量（无强化计数 ×
+    // BUILD_POWER）定耗能与效果点数 min(power, remaining, energy)；强化效果
+    // 按增量数组（降序取前 effect 个、整体 floor、钳 remaining）；能量扣基础
+    // 量、进度加强化量
+    let Some((effect, boosted)) = w.creep(id).map(|c| {
+        let base = BodyKind::count_active(&c.body, BodyKind::Work) as i64 * c::BUILD_POWER;
+        let effect = base.min(remaining).min(energy);
+        let boosted = kk_world::types::boosted_effect(
             &c.body,
             BodyKind::Work,
             "work",
             "build",
             c::BUILD_POWER,
-        ),
-        None => 0,
+            effect,
+            remaining,
+        );
+        (effect, boosted)
+    }) else {
+        return;
     };
-    // progressTotal 为创建时定格的存值（官方 build.js:68 读存的 progressTotal；
-    // 放置路径=裸成本、intent 建工地=成本×地形系数，见 ConstructionSiteObj）
-    let total = site.progress_total as i64;
-    let remaining = total.saturating_sub(site.progress as i64);
-    let effect = build_power.min(remaining).min(energy);
     if effect <= 0 {
         return;
     }
-    let new_progress = site.progress as i64 + effect;
+    let new_progress = site.progress as i64 + boosted;
     if let Some(c) = w.creep_mut(id) {
         c.store.energy -= effect as u32;
         set_action_log(&mut c.action_log, ACTION_BUILD);
@@ -416,12 +425,16 @@ fn complete_construction(
 /// 官方 upgradeController.js：3 格、归属、8 级上限、升级进位、gcl 计入。
 fn intent_upgrade_controller(w: &mut Working, id: ObjId, data: &IntentData) {
     let Some(target_id) = data.id else { return };
-    let (pos, owner, energy, work_power) = match w.creep(id) {
+    // 官方两步（upgradeController.js:51-58，GPT 二轮复审 P1-1）：基础量
+    // （无强化计数 × POWER）定耗能与效果点数；强化效果按增量数组
+    // （UPGRADE_CONTROLLER_POWER=1 ⇒ 增量=(m-1)）
+    let (pos, owner, energy, base_power, boost_incs) = match w.creep(id) {
         Some(c) if !c.spawning && c.store.energy > 0 => (
             (c.x, c.y),
             c.owner.clone(),
             c.store.energy as i64,
-            kk_world::types::calc_body_effectiveness(
+            BodyKind::count_active(&c.body, BodyKind::Work) as i64 * c::UPGRADE_CONTROLLER_POWER,
+            kk_world::types::boost_increments(
                 &c.body,
                 BodyKind::Work,
                 "work",
@@ -458,7 +471,7 @@ fn intent_upgrade_controller(w: &mut Working, id: ObjId, data: &IntentData) {
     if upgrade_blocked.unwrap_or(0) > w.time {
         return;
     }
-    let mut effect = work_power.min(energy);
+    let mut effect = base_power.min(energy);
     // 官方 _upgraded 累计（8 级每 tick 上限 15）
     let upgraded = *w.upgraded.get(&target_id).unwrap_or(&0);
     if level == 8 {
@@ -471,6 +484,9 @@ fn intent_upgrade_controller(w: &mut Working, id: ObjId, data: &IntentData) {
     if effect <= 0 {
         return;
     }
+    // 官方两步尾段（:51-58）：强化效果（boosted）用于 progress/_upgraded/
+    // gcl/事件量；能量扣基础量（:58 store.energy -= buildEffect）
+    let boosted = kk_world::types::apply_boost(&boost_incs, effect, effect);
     let new_progress;
     if level < 8 {
         let next_level_progress = controller_levels(level);
@@ -479,13 +495,13 @@ fn intent_upgrade_controller(w: &mut Working, id: ObjId, data: &IntentData) {
             _ => None,
         };
         // 官方升级条件（upgradeController.js:63-66）：进位需 downgrade 窗口健康
-        if progress + effect as u64 >= next_level_progress
+        if progress + boosted as u64 >= next_level_progress
             && downgrade_time.is_some_and(|dt| {
                 dt + c::CONTROLLER_DOWNGRADE_RESTORE as u64 >= w.time + controller_downgrade(level)
             })
         {
-            new_progress = progress + effect as u64 - next_level_progress;
-            *w.upgraded.entry(target_id).or_insert(0) += effect;
+            new_progress = progress + boosted as u64 - next_level_progress;
+            *w.upgraded.entry(target_id).or_insert(0) += boosted;
             if let Some(RoomObject::Controller(t)) = w.room.objects.get_mut(&target_id) {
                 t.level = level + 1;
                 t.progress = new_progress;
@@ -496,18 +512,18 @@ fn intent_upgrade_controller(w: &mut Working, id: ObjId, data: &IntentData) {
                 t.downgrade_time = Some(w.time + controller_downgrade(level + 1) / 2);
             }
         } else {
-            new_progress = progress + effect as u64;
-            *w.upgraded.entry(target_id).or_insert(0) += effect;
+            new_progress = progress + boosted as u64;
+            *w.upgraded.entry(target_id).or_insert(0) += boosted;
             if let Some(RoomObject::Controller(t)) = w.room.objects.get_mut(&target_id) {
                 t.progress = new_progress;
             }
         }
     } else {
-        *w.upgraded.entry(target_id).or_insert(0) += effect;
+        *w.upgraded.entry(target_id).or_insert(0) += boosted;
     }
     // gcl 计入玩家（官方 bulkUsers.inc(target.user, 'gcl', boostedEffect)）
     let player = w.players.entry(owner.clone()).or_default();
-    player.gcl += effect;
+    player.gcl += boosted;
     if let Some(c) = w.creep_mut(id) {
         c.store.energy -= effect as u32;
         set_action_log(&mut c.action_log, ACTION_UPGRADE);
@@ -515,7 +531,7 @@ fn intent_upgrade_controller(w: &mut Working, id: ObjId, data: &IntentData) {
     w.push_event(
         c::EVENT_UPGRADE_CONTROLLER,
         id,
-        serde_json::json!({ "amount": effect, "energySpent": effect }),
+        serde_json::json!({ "amount": boosted, "energySpent": effect }),
     );
 }
 
@@ -553,7 +569,8 @@ fn intent_transfer(w: &mut Working, id: ObjId, data: &IntentData) {
         Some(RoomObject::Creep(t)) if !t.spawning => (
             store_capacity(t),
             (t.x, t.y),
-            store_slot(&t.store, resource),
+            // 官方 transfer.js:32：通用容量目标按 calcResources 全槽求和
+            (t.store.energy + t.store.ghodium) as i64,
         ),
         Some(RoomObject::Spawn(t)) => (
             per_resource_cap(c::SPAWN_ENERGY_CAPACITY),
@@ -568,7 +585,8 @@ fn intent_transfer(w: &mut Working, id: ObjId, data: &IntentData) {
         Some(RoomObject::Storage(t)) => (
             c::STORAGE_CAPACITY,
             (t.x, t.y),
-            store_slot(&t.store, resource),
+            // 同 creep：全槽求和（GPT 二轮复审 P1-2/评审交叉确认）
+            (t.store.energy + t.store.ghodium) as i64,
         ),
         _ => return,
     };
@@ -712,8 +730,14 @@ fn intent_drop_amount_res(w: &mut Working, id: ObjId, resource: &str, amount: i6
 /// 官方 pickup.js：邻接 energy、余量钳制、目标清零移除。
 fn intent_pickup(w: &mut Working, id: ObjId, data: &IntentData) {
     let Some(target_id) = data.id else { return };
+    // 官方 pickup.js:9：carry = calcResources(object)（全槽求和）——两资源
+    // 共用数值容量（GPT 二轮复审 P1-3）
     let (pos, cap, held) = match w.creep(id) {
-        Some(c) if !c.spawning => ((c.x, c.y), store_capacity(c), c.store.energy as i64),
+        Some(c) if !c.spawning => (
+            (c.x, c.y),
+            store_capacity(c),
+            (c.store.energy + c.store.ghodium) as i64,
+        ),
         _ => return,
     };
     if held >= cap {
@@ -721,6 +745,13 @@ fn intent_pickup(w: &mut Working, id: ObjId, data: &IntentData) {
     }
     let Some(RoomObject::Energy(target)) = w.room.objects.get(&target_id) else {
         return;
+    };
+    // 官方 pickup.js:23-28：按堆的 resourceType 入对应槽——energy(0)/G(2)；
+    // power(1) 无 schema 槽（拾取维持拒绝——登记，随 power 槽扩展放开）
+    let slot_resource = match target.resource_type {
+        0 => "energy",
+        2 => "G",
+        _ => return,
     };
     let (tx, ty, amount) = (target.x, target.y, target.amount as i64);
     if (tx as i32 - pos.0 as i32).abs() > 1 || (ty as i32 - pos.1 as i32).abs() > 1 {
@@ -742,7 +773,7 @@ fn intent_pickup(w: &mut Working, id: ObjId, data: &IntentData) {
         w.remove_obj(target_id);
     }
     if let Some(c) = w.creep_mut(id) {
-        c.store.energy += amount as u32;
+        store_slot_add(&mut c.store, slot_resource, amount);
     }
 }
 
@@ -810,11 +841,14 @@ fn blocked_by_safe_mode(w: &Working, actor: &str) -> bool {
 fn intent_repair(w: &mut Working, id: ObjId, data: &IntentData) {
     let Some(target_id) = data.id else { return };
     // repair.js:8-13：spawning 或空仓拒；:23 功率 = 活跃 WORK × REPAIR_POWER
-    let (pos, energy, repair_power) = match w.creep(id) {
+    // 官方两步（repair.js:23-38，GPT 二轮复审 P1-1）：基础功率定 effect 与
+    // cost；强化增量数组定 boostedEffect（加血量）
+    let (pos, energy, repair_power, boost_incs) = match w.creep(id) {
         Some(c) if !c.spawning && c.store.energy > 0 => (
             (c.x, c.y),
             c.store.energy as i64,
-            kk_world::types::calc_body_effectiveness(
+            BodyKind::count_active(&c.body, BodyKind::Work) as i64 * c::REPAIR_POWER,
+            kk_world::types::boost_increments(
                 &c.body,
                 BodyKind::Work,
                 "work",
@@ -855,23 +889,24 @@ fn intent_repair(w: &mut Working, id: ObjId, data: &IntentData) {
     let missing = hits_max - hits;
     let effect = repair_power.min(energy_remaining).min(missing);
     let cost = energy.min((effect + 99) / 100); // ceil(effect × REPAIR_COST)
-    // repair.js:38-42：无 boost 时 boostedEffect = effect；零效应拒（无 WORK）
+    // repair.js:28-38：增量数组按 effect 点数取、floor、钳缺口——零效应拒
+    let boosted = kk_world::types::apply_boost(&boost_incs, effect, missing);
     if effect <= 0 {
         return;
     }
-    // repair.js:44-51：加血（钳 hitsMax）、扣能
-    damage::set_structure_hits(w, target_id, (hits + effect).min(hits_max));
+    // repair.js:44-51：加血（boosted 亦钳 hitsMax）、扣能按基础 cost
+    damage::set_structure_hits(w, target_id, (hits + boosted).min(hits_max));
     if let Some(creep) = w.creep_mut(id) {
         creep.store.energy -= cost as u32;
         set_action_log(&mut creep.action_log, ACTION_REPAIR);
     }
-    // repair.js:58-60
+    // repair.js:58-60（事件 amount = boostedEffect）
     w.push_event(
         c::EVENT_REPAIR,
         id,
         serde_json::json!({
             "targetId": target_id.as_str(),
-            "amount": effect,
+            "amount": boosted,
             "energySpent": cost,
         }),
     );

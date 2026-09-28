@@ -106,16 +106,16 @@ pub fn calc_body_effectiveness(
             continue;
         }
         let multiplier = match &part.boost {
-            None => 1,
+            None => 1.0,
             Some(boost) => table
                 .as_ref()
                 .and_then(|t| t.get(part_key))
                 .and_then(|t| t.get(boost.as_str()))
                 .and_then(|t| t.get(effect))
-                .and_then(serde_json::Value::as_i64)
-                .unwrap_or(1),
+                .and_then(serde_json::Value::as_f64)
+                .unwrap_or(1.0),
         };
-        power += base * multiplier;
+        power += (base as f64 * multiplier) as i64;
     }
     power
 }
@@ -161,4 +161,67 @@ fn boost_multiplier(
         .and_then(|t| t.get(effect))
         .and_then(serde_json::Value::as_i64)
         .unwrap_or(1)
+}
+
+/// 官方 build/repair/upgradeController 的强化两步算法（GPT 二轮复审 P1-1
+/// 清偿）：能量与基础量按无强化功率计（count × base），效果按增量数组——
+/// 每强化部件贡献 (multiplier-1) × base 浮点增量，降序排序后取前
+/// effect_points（基础效果点数）个，整体 floor 再钳 cap（官方
+/// build.js:71-81 / repair.js:28-38 / upgradeController.js:51-58——
+/// 官方 build/repair 不走 calcBodyEffectiveness 的直乘路径）。
+pub fn boost_increments(
+    body: &[kk_schema::room::BodyPart],
+    kind: BodyKind,
+    part_key: &str,
+    effect: &str,
+    base: i64,
+) -> Vec<f64> {
+    static BOOSTS: std::sync::OnceLock<Option<serde_json::Value>> = std::sync::OnceLock::new();
+    let table = BOOSTS.get_or_init(|| serde_json::from_str(c::BOOSTS).ok());
+    let mut increments: Vec<f64> = Vec::new();
+    for part in body {
+        if part.hits == 0 || BodyKind::from_code(part.kind) != Some(kind) {
+            continue;
+        }
+        let inc = match &part.boost {
+            None => 0.0,
+            Some(boost) => {
+                let m = table
+                    .as_ref()
+                    .and_then(|t| t.get(part_key))
+                    .and_then(|t| t.get(boost.as_str()))
+                    .and_then(|t| t.get(effect))
+                    .and_then(serde_json::Value::as_f64)
+                    .unwrap_or(0.0);
+                (m - 1.0) * base as f64
+            }
+        };
+        if inc > 0.0 {
+            increments.push(inc);
+        }
+    }
+    increments.sort_by(|a, b| b.partial_cmp(a).unwrap());
+    increments
+}
+
+/// 应用强化增量（官方 slice(0, effect) + floor(effect + sum) + 钳 cap）。
+pub fn apply_boost(increments: &[f64], effect_points: i64, cap: i64) -> i64 {
+    let n = effect_points.max(0) as usize;
+    let sum: f64 = increments.iter().take(n).sum();
+    let boosted = (effect_points as f64 + sum).floor() as i64;
+    boosted.min(cap)
+}
+
+/// 一步式（效果点数已在手的调用方——build/repair）。
+pub fn boosted_effect(
+    body: &[kk_schema::room::BodyPart],
+    kind: BodyKind,
+    part_key: &str,
+    effect: &str,
+    base: i64,
+    effect_points: i64,
+    cap: i64,
+) -> i64 {
+    let incs = boost_increments(body, kind, part_key, effect, base);
+    apply_boost(&incs, effect_points, cap)
 }

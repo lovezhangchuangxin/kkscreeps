@@ -855,7 +855,6 @@ mod tests {
 
     /// B2 schema 四字段（A4-iii 投影清偿）的 prelude 世界投影锁：绝对 tick/
     /// {user,endTime} 官方 DB 原始形态（prelude getter 换算用），None → null；
-    /// sign 无 datetime 键（墙钟不落盘——灰区表既有登记，getter 侧合成）。
     /// 与 snapshot.rs 同名测试层间对表（两消费面各自换算、字段单源）。
     #[test]
     fn controller_b2_projection_fields() {
