@@ -998,6 +998,8 @@ fn intent_claim_controller(w: &mut Working, id: ObjId, data: &IntentData) {
     if let Some(RoomObject::Controller(t)) = w.room.objects.get_mut(&target_id) {
         t.level = 1;
         t.owner = Some(owner);
+        // 重新占领清除"曾拥有"哨兵（claimController.js:45-53 只写 user）
+        t.owner_cleared = false;
         t.progress = 0;
         t.downgrade_time = None;
         t.reservation = None;

@@ -192,6 +192,10 @@ fn snapshot_json(
             });
             if let Some(owner) = &o.owner {
                 v["owner"] = json!(owner);
+            } else if o.owner_cleared {
+                // 降级归零哨兵（官方 user=null，controllers/tick.js:56）——
+                // 与 world_json 同步（层间一致）
+                v["owner"] = Value::Null;
             }
             v
         }
@@ -409,6 +413,7 @@ mod tests {
             progress: 0,
             downgrade_time: Some(500),
             owner: Some("p1".into()),
+            owner_cleared: false,
             is_power_enabled: false,
             reservation: None,
             sign: None,
@@ -641,6 +646,49 @@ mod tests {
             world
                 .find_snapshots_in_room("W1N1", c::FIND_FLAGS)
                 .is_empty()
+        );
+    }
+    /// owner 三态投影锁（官方 controllers/tick.js:56 降级归零 `user = null`
+    /// 哨兵）：Some → 字符串；cleared → null（玩家侧 my === false）；
+    /// 从未拥有 → 无键（my === undefined）。与 snapshot.rs 同名测试层间对表。
+    #[test]
+    fn controller_owner_three_states() {
+        let mk = |owner: Option<&str>, cleared: bool| {
+            RoomObject::Controller(kk_schema::room::ControllerObj {
+                id: 0,
+                x: 1,
+                y: 1,
+                level: 1,
+                safe_mode: 0,
+                safe_mode_available: 0,
+                progress: 0,
+                downgrade_time: None,
+                owner: owner.map(str::to_string),
+                owner_cleared: cleared,
+                is_power_enabled: false,
+                reservation: None,
+                sign: None,
+                upgrade_blocked: None,
+                safe_mode_cooldown: None,
+            })
+        };
+        let mut world = world_with_room();
+        let owned = world.insert("W1N1", mk(Some("p1"), false)).unwrap();
+        let cleared = world.insert("W1N1", mk(None, true)).unwrap();
+        let virgin = world.insert("W1N1", mk(None, false)).unwrap();
+        assert_eq!(world.object_snapshot_by_id(owned).unwrap()["owner"], "p1");
+        assert_eq!(
+            world.object_snapshot_by_id(cleared).unwrap()["owner"],
+            serde_json::Value::Null,
+            "降级归零哨兵投影 null"
+        );
+        assert!(
+            world
+                .object_snapshot_by_id(virgin)
+                .unwrap()
+                .get("owner")
+                .is_none(),
+            "从未拥有无键"
         );
     }
 }

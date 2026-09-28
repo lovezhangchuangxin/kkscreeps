@@ -275,6 +275,8 @@ fn normalize_structure(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<Roo
                 progress: spec.get("progress").and_then(Value::as_u64).unwrap_or(0),
                 downgrade_time: spec.get("downgradeTime").and_then(Value::as_u64),
                 owner,
+                // 放置面不从"曾拥有"态进入（降级归零才置位——官方 tick.js:56）
+                owner_cleared: false,
                 is_power_enabled: spec
                     .get("isPowerEnabled")
                     .and_then(Value::as_bool)
@@ -501,6 +503,7 @@ mod tests {
             progress: 0,
             downgrade_time: None,
             owner: Some("p1".into()),
+            owner_cleared: false,
             is_power_enabled: false,
             reservation: None,
             sign: None,

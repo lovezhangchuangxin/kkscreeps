@@ -160,6 +160,9 @@ pub fn controller_tick(w: &mut Working, id: ObjId) {
                 t.level = 0;
                 t.progress = 0;
                 t.owner = None;
+                // 官方 `user = null`（tick.js:56）落库哨兵：投影 owner:null →
+                // 玩家侧 my === false（区别于从未拥有的 undefined）
+                t.owner_cleared = true;
                 t.downgrade_time = None;
                 t.upgrade_blocked = None;
                 t.safe_mode = 0;
