@@ -275,9 +275,9 @@ impl<'w> Working<'w> {
             return amount;
         };
         let mut data: Value = serde_json::from_str(&g.data).unwrap_or_default();
-        // 槽值非 i64（放置面伪造的浮点等）按 0 折算——filter_map 跳过会使
-        // headroom 高估（container 超 CONTAINER_CAPACITY），下方写入侧同口径
-        //（B3 评审 2 P3-2：taken 已扣减不入槽也不退回 = 资源静默灭失）
+        // 读侧折零与 filter_map 跳过在和式中恒等（本行是口径统一）——真正的
+        // 行为修复在下方写入侧：taken 已扣减而不入槽也不退回 = 资源静默灭失
+        //（B3 评审 2 P3-2 + 清偿复审 P3-1 归因勘误）
         let total_before = data
             .pointer("/store")
             .and_then(Value::as_object)

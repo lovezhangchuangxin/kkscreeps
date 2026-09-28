@@ -1709,7 +1709,7 @@ fn claim_body_life_time_denominator() {
 }
 
 /// B3 评审 3-6 边界：!decayTime（放置面 0）立即到点——官方
-/// tombstones/ruins/tick.js:6 `!object.decayTime || ...` 的 falsy 分支。
+/// tombstones/ruins/tick.js:9 `!object.decayTime || ...` 的 falsy 分支。
 #[test]
 fn tombstone_zero_decay_time_dumps_immediately() {
     let mut f = Fixture::new(1, terrain_with(&[]));

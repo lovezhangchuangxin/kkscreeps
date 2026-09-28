@@ -746,7 +746,7 @@ fn intent_pickup(w: &mut Working, id: ObjId, data: &IntentData) {
     let Some(RoomObject::Energy(target)) = w.room.objects.get(&target_id) else {
         return;
     };
-    // 官方 pickup.js:26-30：按堆的 resourceType 入开放 store 对应键——M2 双槽
+    // 官方 pickup.js:23-30：按堆的 resourceType 入开放 store 对应键——M2 双槽
     // schema 只放 energy/G，其余（power、B3 起衰减落地的命名矿物堆——
     // code 恒 0 + resource:Some(name)，只看 code 会把矿物洗白成能量）一律拒拾
     //（B3 评审 2/3 交叉实证；随 power/矿物槽扩展放开）。判定走
