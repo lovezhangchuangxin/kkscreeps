@@ -125,6 +125,9 @@ crate::kk_schema! {
     /// upgrade_blocked（attackController 的升级封锁钟，绝对 tick：
     /// attackController.js:48 / controllers/tick.js:20-23）、
     /// safe_mode_cooldown（safeMode 冷却钟，绝对 tick：controllers/tick.js:29）。
+    /// A3b 补 owner 三态哨兵（官方降级归零 `user = null`，controllers/tick.js:56）：
+    /// owner_cleared=true 表示曾拥有但已清（投影 owner: null → 玩家侧
+    /// my === false）；false 且 owner None = 从未拥有（投影无键 → my undefined）。
     pub ControllerObj {
         (pub id: u64)
         (pub x: u8)
@@ -135,6 +138,7 @@ crate::kk_schema! {
         (pub progress: u64)
         (pub downgrade_time: opt u64)
         (pub owner: opt str)
+        (pub owner_cleared: bool)
         (pub is_power_enabled: bool)
         (pub reservation: opt Reservation)
         (pub sign: opt Sign)
@@ -611,6 +615,7 @@ mod tests {
                     progress: 12_345,
                     downgrade_time: None,
                     owner: Some("p1".into()),
+                    owner_cleared: false,
                     is_power_enabled: false,
                     reservation: Some(Reservation {
                         user: "p2".into(),

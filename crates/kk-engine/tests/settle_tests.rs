@@ -98,6 +98,7 @@ impl Fixture {
             progress: 0,
             downgrade_time: None,
             owner: owner.map(str::to_string),
+            owner_cleared: false,
             is_power_enabled: false,
             reservation: None,
             sign: None,
@@ -1025,6 +1026,7 @@ fn engine_scripted_sandbox_closed_loop() {
                 progress: 0,
                 downgrade_time: None,
                 owner: Some("p1".into()),
+                owner_cleared: false,
                 is_power_enabled: false,
                 reservation: None,
                 sign: None,
@@ -3589,6 +3591,7 @@ fn engine_recomputes_player_rooms_after_tick() {
                     safe_mode_available: 0,
                     progress: 0,
                     downgrade_time: None,
+                    owner_cleared: false,
                     owner: if name == "W1N1" {
                         Some("p1".into())
                     } else {

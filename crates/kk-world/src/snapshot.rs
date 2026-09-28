@@ -192,6 +192,10 @@ fn snapshot_json(
             });
             if let Some(owner) = &o.owner {
                 v["owner"] = json!(owner);
+            } else if o.owner_cleared {
+                // 降级归零哨兵（官方 user=null，controllers/tick.js:56）——
+                // 与 world_json 同步（层间一致）
+                v["owner"] = Value::Null;
             }
             v
         }
@@ -409,6 +413,7 @@ mod tests {
             progress: 0,
             downgrade_time: Some(500),
             owner: Some("p1".into()),
+            owner_cleared: false,
             is_power_enabled: false,
             reservation: None,
             sign: None,

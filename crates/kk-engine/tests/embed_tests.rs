@@ -571,6 +571,7 @@ fn embed_intent_channel_impl() -> anyhow::Result<()> {
                 progress: 0,
                 downgrade_time: None,
                 owner: Some("p1".into()),
+                owner_cleared: false,
                 is_power_enabled: false,
                 reservation: None,
                 sign: None,

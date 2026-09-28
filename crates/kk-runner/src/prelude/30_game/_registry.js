@@ -23,12 +23,28 @@
     world: { time: 0, cpu: { limit: 20, tickLimit: 500, bucket: 10000 }, rooms: {}, objects: [] },
     terrainByRoom: {},
     objectsById: new Map(),
+    // 原始投影 id 索引（官方 runtimeData.roomObjects 的等价物）：beginTick 从
+    // world.objects 重建。类原型上的字段 getter/方法经 rawData(id) 回查它——
+    // 跨 tick 旧壳的未缓存字段读到当前 tick 值（官方 data 闭包引用模块级
+    // 可变 runtimeData 的同构，creeps.js:44-56；"旧引用定格旧值"是错误推断）
+    rawById: new Map(),
     // 当前查看者（world.user，官方 runtimeData.user 等价物）——per-viewer
     // 装配（Game.collections/my/FIND_MY_*）的判定基准（外部复审 P1-3 修复）
     viewerName: null,
     // 类型装配注册表：o.type → assembler(o, base, pos, now)（各文件注册，
     // wrapObject 分发——对照官方各 game/ 文件在注册表登记类型）
     assemblers: Object.create(null),
+  };
+
+  // 官方各 game/ 文件的 data 闭包等价物（creeps.js:44-56 等全部同形）：
+  // 对象消亡（id 不在当前 tick 投影）时抛 runtime error——STALERECV-001
+  // 语义的抛错点。文案与官方逐字（"Could not find an object with ID "+id）
+  gw.rawData = function rawData(id) {
+    const o = gw.rawById.get(id);
+    if (o === undefined) {
+      throw new Error('Could not find an object with ID ' + id);
+    }
+    return o;
   };
 
   function mkStubMethod(label) {
@@ -38,6 +54,50 @@
     };
   }
   gw.mkStubMethod = mkStubMethod;
+
+  // ---------------------------------------------------------------- defineGameObjectProperties
+  // 官方 engine/src/utils.js:509-545 对照移植（行为等价重写，不用官方的 eval）：
+  // 把字段表装成 lazy getter + 首访缓存 `_${name}` own 属性。要点全部保留：
+  //   · 值计算 properties[name](dataFn(this.id), this.id)——未缓存访问回查
+  //     当前 tick 投影（消亡时经 rawData 抛错——A3b 消亡语义的唯一机制）；
+  //   · `if(!this['_${name}'])` falsy 不缓存：0/''/null 每次访问重算（官方
+  //     quirk 原样保留——同一 tick 内投影不变故无可观测差异，跨 tick 旧壳的
+  //     falsy 字段读新值与官方一致）；
+  //   · enumerable 默认 true、configurable 默认 false（玩家不可 redefine）、
+  //     opts.canSet 时挂 set（写 `_${name}` 缓存）；
+  //   · toJSON 挂目标原型：跳过 `_` 前缀缓存键与 toJSON/toString，其余键
+  //     （含 getter，访问即求值并缓存）进输出——stringify(壳) 的官方形态。
+  // 官方挂在各游戏类 prototype 上（本函数的 obj 参数是 prototype）。
+  gw.defineGameObjectProperties = function defineGameObjectProperties(obj, dataFn, properties, opts) {
+    opts = opts || {};
+    const enumerable = opts.enumerable === undefined ? true : !!opts.enumerable;
+    const info = {};
+    for (const name of Object.keys(properties)) {
+      const compute = properties[name];
+      info[name] = {
+        configurable: !!opts.configurable,
+        enumerable,
+        get() {
+          if (!this['_' + name]) {
+            this['_' + name] = compute(dataFn(this.id), this.id);
+          }
+          return this['_' + name];
+        },
+        set: opts.canSet
+          ? function (value) { this['_' + name] = value; }
+          : undefined,
+      };
+    }
+    Object.defineProperties(obj, info);
+    obj.toJSON = function () {
+      const result = {};
+      for (const i in this) {
+        if (i[0] === '_' || i === 'toJSON' || i === 'toString') continue;
+        result[i] = this[i];
+      }
+      return result;
+    };
+  };
 
   // ---------------------------------------------------------------- 类全局（官方全集）
   // 官方运行时把 41 个类挂成裸全局（engine/src/game 各文件 defineProperty(globals,...)），
@@ -175,12 +235,15 @@
     // pos 套探测仪表：RoomPosition 实例面的官方缺口（如 findInRange）以
     // 'RoomPosition.*' 登记，不静默 undefined
     const pos = probe(new gw.RoomPosition(o.x, o.y, o.room), 'RoomPosition');
+    // 官方 own 定格面（构造器语义，rooms.js:1648-1660 RoomObject.call 挂
+    // room/pos + 各构造器 this.id = id）：id/pos 构造定格、room 由 buildGame
+    // 回填。业务字段（hits/store/name/my...）不再值拷贝——各游戏类原型上的
+    // lazy getter 经 rawData(id) 回查（A3b 薄壳化，官方 defineGameObjectProperties
+    // 机制），跨 tick 旧壳读当前 tick 值、消亡时抛错
     const base = {
       id: o.id,
       pos,
       room: undefined, // 由 buildGame 回填（Game.rooms[name]）
-      hits: o.hits ?? 0,
-      hitsMax: o.hitsMax ?? 0,
     };
     const assemble = gw.assemblers[o.type];
     const obj = assemble ? assemble(o, base, pos, now) : base;

@@ -361,6 +361,12 @@
       // 内层对象官方同样不剥——缺失键走原型链的暴露面官方一致，不深剥
       __Object.setPrototypeOf(gw.world, null);
       gw.viewerName = gw.world.user ?? null;
+      // 原始投影索引（官方 runtimeData.roomObjects 等价物）：原型字段 getter/
+      // 方法经 gw.rawData(id) 回查（A3b）——先于 refreshGame（壳装配期即有回查面）
+      gw.rawById = new Map();
+      for (const o of gw.world.objects || []) {
+        if (o && o.id !== undefined) gw.rawById.set(o.id, o);
+      }
       resetIntents(); // 官方每 tick 新建收集器（runtime.js _start 每 tick 执行）
       parsedMemory = undefined; // 官方语义：Memory 每 tick 从 RawMemory 懒解析
       // 上一 tick 首访后 Memory 已固化为普通值属性（官方同款），本 tick 重装懒 getter

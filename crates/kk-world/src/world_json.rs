@@ -226,6 +226,10 @@ pub(crate) fn object_json(
             });
             if let Some(owner) = &o.owner {
                 v["owner"] = json!(owner);
+            } else if o.owner_cleared {
+                // 官方降级归零 `user = null`（controllers/tick.js:56）的落库
+                // 哨兵——玩家侧 my === false；从未拥有则无键（my undefined）
+                v["owner"] = Value::Null;
             }
             v
         }
@@ -413,6 +417,7 @@ mod tests {
             progress: 10,
             downgrade_time: None,
             owner: Some("p1".into()),
+            owner_cleared: false,
             is_power_enabled: false,
             reservation: None,
             sign: None,
