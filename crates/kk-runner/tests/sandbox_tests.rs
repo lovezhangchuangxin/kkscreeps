@@ -79,6 +79,8 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     store_class_semantics_impl()?;
     spawn_family_api_impl()?;
     resource_family_prelude_matrix_impl()?;
+    viewer_meta_semantics_impl()?;
+    claim_gate_gcl_behavior_impl()?;
     // LIFO 零违规断言在**全部**场景之后——中段断言会让其后场景的违规漏网
     assert_eq!(kk_runner::lifo_violations(), 0, "全流程 LIFO 纪律零违规");
     Ok(())
@@ -1910,6 +1912,102 @@ fn spawn_family_api_impl() -> anyhow::Result<()> {
 /// A4-ii 资源族四方法（transfer/withdraw/drop/pickup）prelude 换真的预检返回码
 /// 矩阵——官方 creeps.js:404-593 的预检序逐条锁值（预检顺序即断言顺序）。
 /// 世界：rcl3 房（extension 容量 50）；w1 两 carry（容量 100 存 80）为 actor。
+/// A3c per-viewer 元信息：Game.gcl 官方点数正变换（game.js:130-163——
+/// level=floor(pow(gcl/1e6, 1/2.4))+1、progress=点数−前级基数、progressTotal
+/// 浮点不取整）与 Game.cpu 预算真值（begin_tick 注入点覆写——自定义配置下
+/// limit/tickLimit=min(maxPerTick, limit+bucket)/bucket=初桶）。
+fn viewer_meta_semantics_impl() -> anyhow::Result<()> {
+    let mk_world = |gcl: i64| {
+        json!({
+            "time": 1,
+            "user": "p1",
+            "gcl": gcl,
+            "rooms": { "W1N1": { "name": "W1N1" } },
+            "objects": [],
+        })
+    };
+    // 0 点：1 级、progress 0、progressTotal = 1^2.4×1e6 − 0 = 1e6
+    let mut sb = Sandbox::new(SandboxConfig::default())?;
+    sb.begin_tick(&mk_world(0))?;
+    let v =
+        sb.run_expr("[Game.gcl.level, Game.gcl.progress, Game.gcl.progressTotal, Game.gpl.level]")?;
+    let v = v["value"].as_array().expect("数组");
+    assert_eq!(v[0], 1, "0 点 → 1 级");
+    assert_eq!(v[1], 0, "0 点 → progress 0");
+    assert_eq!(v[2], 1_000_000, "1 级 progressTotal = 1e6");
+    assert_eq!(v[3], 0, "gpl 桩不随本批变化");
+
+    // 1e6 点：正跨 2 级边界（pow(1, 1/2.4)=1 → floor+1=2）、progress 归 0；
+    // 1.5e6：2 级 progress 500000
+    sb.begin_tick(&mk_world(1_000_000))?;
+    let v = sb.run_expr("[Game.gcl.level, Game.gcl.progress, Game.gcl.progressTotal]")?;
+    let v = v["value"].as_array().expect("数组");
+    assert_eq!(v[0], 2, "1e6 点 → 2 级");
+    assert_eq!(v[1], 0, "恰好跨级 → progress 0");
+    let expected_total = 2.0_f64.powf(2.4) * 1e6 - 1e6;
+    let got = v[2].as_f64().expect("浮点");
+    assert!(
+        (got - expected_total).abs() < 1e-6,
+        "2 级 progressTotal 浮点不取整: {got} vs {expected_total}"
+    );
+
+    sb.begin_tick(&mk_world(1_500_000))?;
+    let v = sb.run_expr("[Game.gcl.level, Game.gcl.progress]")?;
+    let v = v["value"].as_array().expect("数组");
+    assert_eq!(v[0], 2, "1.5e6 点仍在 2 级");
+    assert_eq!(v[1], 500_000, "progress = 点数 − 2 级基数");
+
+    // Game.cpu 预算真值：自定义配置（limit 10、初桶 30）+ 世界无 cpu 键——
+    // begin_tick 注入点创建并覆写（tickLimit = min(500, 10+30) = 40）
+    let cfg = SandboxConfig {
+        cpu_limit: 10.0,
+        initial_bucket: 30.0,
+        ..SandboxConfig::default()
+    };
+    let mut sb2 = Sandbox::new(cfg)?;
+    sb2.begin_tick(&mk_world(0))?;
+    let v = sb2.run_expr(
+        "[Game.cpu.limit, Game.cpu.tickLimit, Game.cpu.bucket, Game.cpu.shardLimits.shard0]",
+    )?;
+    let v = v["value"].as_array().expect("数组");
+    assert_eq!(v[0], 10, "limit = 配置真值");
+    assert_eq!(v[1], 40, "tickLimit = min(maxPerTick, limit+bucket)");
+    assert_eq!(v[2], 30, "bucket = tick 初桶值");
+    assert_eq!(v[3], 10, "shardLimits 跟随 limit");
+    Ok(())
+}
+
+/// A3c 清偿（评审 3 P2-1）：claimController 预检 GCL 门 gclPoints 直读的
+/// 行为级锁——gcl 0+已占 1 房 → ERR_GCL_NOT_ENOUGH；gcl 1e6（=calcNeededGcl(2)
+/// 的 2 房需求点）→ 放行记 intent（官方 creeps.js:849-851 读
+/// runtimeData.user.gcl；本批前硬编码 Game.gcl 使该门恒 0 点）。
+fn claim_gate_gcl_behavior_impl() -> anyhow::Result<()> {
+    let mk_world = |gcl: i64| {
+        json!({
+            "time": 1,
+            "user": "p1",
+            "gcl": gcl,
+            "rooms": { "W1N1": { "name": "W1N1" }, "W2N1": { "name": "W2N1" } },
+            "objects": [
+                { "id": "ctl1", "type": "structure", "structureType": "controller",
+                  "room": "W1N1", "x": 1, "y": 1, "owner": "p1", "level": 1 },
+                { "id": "ctl2", "type": "structure", "structureType": "controller",
+                  "room": "W2N1", "x": 1, "y": 1, "level": 0 },
+                { "id": "ck1", "type": "creep", "room": "W2N1", "x": 1, "y": 2,
+                  "name": "claimer", "owner": "p1", "body": ["claim", "move"], "spawning": false },
+            ],
+        })
+    };
+    let mut sb = Sandbox::new(SandboxConfig::default())?;
+    sb.begin_tick(&mk_world(0))?;
+    let v = sb.run_expr("Game.creeps['claimer'].claimController(Game.rooms['W2N1'].controller)")?;
+    assert_eq!(v["value"], -15, "gcl 0 + 已占 1 房 → ERR_GCL_NOT_ENOUGH");
+    sb.begin_tick(&mk_world(1_000_000))?;
+    let v = sb.run_expr("Game.creeps['claimer'].claimController(Game.rooms['W2N1'].controller)")?;
+    assert_eq!(v["value"], 0, "gcl 1e6 = calcNeededGcl(2) → 放行");
+    Ok(())
+}
+
 fn resource_family_prelude_matrix_impl() -> anyhow::Result<()> {
     let mut sb = Sandbox::new(SandboxConfig::default())?;
     let w = json!({

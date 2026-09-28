@@ -41,9 +41,10 @@
   const { beginTick, writeBackMemory, intentsPayload } = globalThis.__kkp.memoryWorld;
 
   globalThis.__kk = {
-    /** 每 tick 注入世界快照并重建 Game。 */
-    beginTick(worldJson) {
-      beginTick(worldJson);
+    /** 每 tick 注入世界快照并重建 Game。cpuMeta：宿主预算真值（Rust 侧
+     * begin_tick 第二参数——避免整世界深拷贝覆写三键，JS 侧合并覆盖占位基准）。 */
+    beginTick(worldJson, cpuMeta) {
+      beginTick(worldJson, cpuMeta);
     },
     /** 执行玩家入口：require('main').loop()。返回结果 JSON 字符串（宿主 exec_json 约定）。 */
     runLoop() {

@@ -23,6 +23,20 @@
   // 交换 Object 使 nullEnv 产出真原型对象，null-proto 防线整体绕过）
   const __Object = Object;
   const __Array = Array;
+  // 预置构造器/方法捕获（A3c 装配批，同 __Object 原则）：buildGame/beginTick
+  // 每 tick 在玩家 realm 内执行，上一 tick 的全局/原型交换会让自家装配崩或
+  // 视野失真（官方引擎 bundle 私有 lodash + 闭包捕获内建——我方等价物）
+  const __Map = Map;
+  const __Set = Set;
+  const __mapGet = Map.prototype.get;
+  const __mapSet = Map.prototype.set;
+  const __setAdd = Set.prototype.add;
+  const __setHas = Set.prototype.has;
+  const __objectEntries = Object.entries;
+  const mathPow = Math.pow;
+  const mathFloor = Math.floor;
+  const GCL_MULTIPLY = globalThis.GCL_MULTIPLY;
+  const GCL_POW = globalThis.GCL_POW;
 
   // null 原型信封（官方 runtime.js:214 `outMessage = systemFunctions.Object.create(null)`
   // 同款）：宿主消息对象不得携带 Object.prototype——继承的 toJSON 会让预置
@@ -160,17 +174,19 @@
   const { probe } = globalThis.__kkp;
 
   function buildGame() {
-    gw.objectsById = new Map();
+    gw.objectsById = new __Map();
     const creeps = {};
     const spawns = {};
     const structures = {};
     const constructionSites = {};
     const flags = {};
     const resources = {};
-    for (const o of gw.world.objects || []) {
+    const worldObjs = gw.world.objects || [];
+    for (let i = 0; i < worldObjs.length; i++) {
+      const o = worldObjs[i];
       const w = gw.wrapObject(o, gw.world.time);
       w.room = undefined;
-      gw.objectsById.set(o.id, w);
+      __mapSet.call(gw.objectsById, o.id, w);
       const mine = o.owner === gw.viewerName;
       if (o.type === 'creep') {
         // 官方 game.js:273-280：Game.creeps 只收本人 creep
@@ -199,22 +215,36 @@
     // P2：自家工地经 world 破例导出进 objects 后，此处若不排除会把工地所在
     // 房带回 Game.rooms，"工地不授视野"在房间存在性层被击穿）；工地全集经
     // Game.constructionSites 收录（官方 data.js:103 + game.js:366-374），两语义正交
-    const visibleRooms = new Set(
-      (gw.world.objects || []).filter((o) => o.owner === gw.viewerName
-        && o.type !== 'constructionSite').map((o) => o.room),
-    );
-    const rooms = {};
-    for (const [name, r] of __Object.entries(gw.world.rooms || {})) {
-      if (gw.viewerName !== null && !visibleRooms.has(name)) continue;
-      rooms[name] = gw.makeRoom(name, r);
+    const visibleRooms = new __Set();
+    for (let i = 0; i < worldObjs.length; i++) {
+      const o = worldObjs[i];
+      // 官方 data.js:113-116 归集跳过表：工地不授房视野
+      if (o.owner === gw.viewerName && o.type !== 'constructionSite') {
+        __setAdd.call(visibleRooms, o.room);
+      }
     }
-    // 回填对象上的 room 引用
-    for (const [id, w] of gw.objectsById) {
-      const orig = (gw.world.objects || []).find((x) => x.id === id);
-      if (orig && rooms[orig.room]) w.room = rooms[orig.room];
+    const rooms = {};
+    const roomEntries = __objectEntries(gw.world.rooms || {});
+    for (let i = 0; i < roomEntries.length; i++) {
+      const name = roomEntries[i][0];
+      if (gw.viewerName !== null && !__setHas.call(visibleRooms, name)) continue;
+      rooms[name] = gw.makeRoom(name, roomEntries[i][1]);
+    }
+    // 回填对象上的 room 引用：rawById 直查替代数组 .find（O(N²)→O(N)，
+    // 官方 byRoom 索引同构；.find 经可交换原型，装配路径不得经——A3c 装配批）
+    for (let i = 0; i < worldObjs.length; i++) {
+      const o = worldObjs[i];
+      const w = __mapGet.call(gw.objectsById, o.id);
+      if (w && rooms[o.room]) w.room = rooms[o.room];
     }
 
     const cpu = gw.world.cpu || { limit: 20, tickLimit: 500, bucket: 10000 };
+    // Game.gcl 真值（官方 game.js:130-163 点数正变换）：world.gcl = 官方
+    // runtimeData.user.gcl 点数（PlayerState 投影）；缺省 0 点 = 1 级满配
+    // progressTotal（Math.pow 精确浮点，与官方逐位一致——勿取整）
+    const gclPoints = typeof gw.world.gcl === 'number' ? gw.world.gcl : 0;
+    const gclLevel = mathFloor(mathPow(gclPoints / GCL_MULTIPLY, 1 / GCL_POW)) + 1;
+    const gclBaseProgress = mathPow(gclLevel - 1, GCL_POW) * GCL_MULTIPLY;
     const game = {
       time: gw.world.time,
       shard: { name: 'shard0', type: 'normal', ptr: false },
@@ -231,7 +261,11 @@
         generatePixel: () => { countStub('Game.cpu.generatePixel'); return -9; },
         unlock: () => -4,
       },
-      gcl: { level: 1, progress: 0, progressTotal: 1000000 },
+      gcl: {
+        level: gclLevel,
+        progress: gclPoints - gclBaseProgress,
+        progressTotal: mathPow(gclLevel, GCL_POW) * GCL_MULTIPLY - gclBaseProgress,
+      },
       gpl: { level: 0, progress: 0, progressTotal: 1000 },
       creeps,
       spawns,
@@ -254,7 +288,7 @@
         getHistory: () => [],
       },
       getObjectById(id) {
-        return gw.objectsById.get(id) || null;
+        return __mapGet.call(gw.objectsById, id) || null;
       },
       notify() { countStub('Game.notify'); },
       map: {
@@ -357,11 +391,16 @@
 
   globalThis.__kkp.memoryWorld = {
     /** 每 tick 注入世界快照（宿主以 JSON 字面量内嵌，此处已是对象）并重建 Game。 */
-    beginTick(worldJson) {
+    beginTick(worldJson, cpuMeta) {
       // 世界解码走预置 parse（官方 runtime.js:207 对宿主数据用
       // systemFunctions.JSON.parse 同款）：全局 parse 玩家可覆写，可伪造
       // 整份世界含 user → per-viewer 判定翻转（自审 P2）
       gw.world = typeof worldJson === 'string' ? __jsonParse(worldJson) : worldJson;
+      // Game.cpu 真值合并（宿主 begin_tick 第二参数——官方 make.js 先算窗口
+      // 再装 runtimeData 的等价物；world.cpu 占位基准被此覆盖，键恒权威）
+      if (cpuMeta !== undefined && cpuMeta !== null) {
+        gw.world.cpu = typeof cpuMeta === 'string' ? __jsonParse(cpuMeta) : cpuMeta;
+      }
       // 注入侧剥顶层原型（官方 runtime.js:56 `systemFunctions.Object.setPrototypeOf
       //(data, null)` 同位）：顶层缺失键（cpu/user 兜底读）不被继承 getter 命中；
       // 内层对象官方同样不剥——缺失键走原型链的暴露面官方一致，不深剥
@@ -369,9 +408,11 @@
       gw.viewerName = gw.world.user ?? null;
       // 原始投影索引（官方 runtimeData.roomObjects 等价物）：原型字段 getter/
       // 方法经 gw.rawData(id) 回查（A3b）——先于 refreshGame（壳装配期即有回查面）
-      gw.rawById = new Map();
-      for (const o of gw.world.objects || []) {
-        if (o && o.id !== undefined) gw.rawById.set(o.id, o);
+      gw.rawById = new __Map();
+      const tickObjs = gw.world.objects || [];
+      for (let i = 0; i < tickObjs.length; i++) {
+        const o = tickObjs[i];
+        if (o && o.id !== undefined) __mapSet.call(gw.rawById, o.id, o);
       }
       resetIntents(); // 官方每 tick 新建收集器（runtime.js _start 每 tick 执行）
       // A4-iii per-tick 闭包重置（官方 game 层每 tick 新 make 闭包的等价物）：
@@ -387,8 +428,10 @@
         get() { return ensureMemory(); },
       });
       gw.terrainByRoom = {};
-      for (const [n, r] of __Object.entries(gw.world.rooms || {})) {
-        if (Array.isArray(r.terrain)) gw.terrainByRoom[n] = r.terrain;
+      const terrainEntries = __objectEntries(gw.world.rooms || {});
+      for (let i = 0; i < terrainEntries.length; i++) {
+        const r = terrainEntries[i][1];
+        if (__Array.isArray(r.terrain)) gw.terrainByRoom[terrainEntries[i][0]] = r.terrain;
       }
       // per-tick 重置钩（官方 game/structures.js make 每 tick 重置
       // createdCreepNames:29 的等价物——spawn 族的同 tick 同名拒名单）

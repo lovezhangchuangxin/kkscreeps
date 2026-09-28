@@ -29,6 +29,8 @@ impl World {
     /// 按 FIND 常量过滤房间内对象并出快照（embed findInRoom 后端）。
     /// 过滤复用 world_json::matches_find（FIND 语义单源）；flag 不进快照结果
     /// （契约查询面的中性选择器不含 flags——vanilla findTypeMap 同构）。
+    /// `viewer=None`：本面是 screeps-ok 视角中立面（find.ts 只支持 9 个中立
+    /// 常量）——MY_*/HOSTILE_* 无视角不可判定返回空，不假装有归属结果。
     pub fn find_snapshots_in_room(&self, room: &str, find_const: i64) -> Vec<Value> {
         let Some(state) = self.rooms.get(room) else {
             return Vec::new();
@@ -44,7 +46,7 @@ impl World {
                 }
                 let internal =
                     crate::world_json::object_json(room, **id, o, self.time, terrain, rcl);
-                crate::world_json::matches_find(&internal, find_const)
+                crate::world_json::matches_find(&internal, find_const, None)
             })
             .map(|(id, o)| snapshot_json(room, *id, o, self.time, terrain))
             .collect()

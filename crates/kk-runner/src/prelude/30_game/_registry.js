@@ -42,9 +42,12 @@
 
   // 官方各 game/ 文件的 data 闭包等价物（creeps.js:44-56 等全部同形）：
   // 对象消亡（id 不在当前 tick 投影）时抛 runtime error——STALERECV-001
-  // 语义的抛错点。文案与官方逐字（"Could not find an object with ID "+id）
+  // 语义的抛错点。文案与官方逐字（"Could not find an object with ID "+id）。
+  // mapGet 预置捕获（A3c 装配批）：全部壳 getter/判定门的回查承重面，不得经
+  // 可交换的 Map.prototype.get
+  const __mapGet = Map.prototype.get;
   gw.rawData = function rawData(id) {
-    const o = gw.rawById.get(id);
+    const o = __mapGet.call(gw.rawById, id);
     if (o === undefined) {
       throw new Error('Could not find an object with ID ' + id);
     }
@@ -72,11 +75,17 @@
   //   · toJSON 挂目标原型：跳过 `_` 前缀缓存键与 toJSON/toString，其余键
   //     （含 getter，访问即求值并缓存）进输出——stringify(壳) 的官方形态。
   // 官方挂在各游戏类 prototype 上（本函数的 obj 参数是 prototype）。
+  // keys/defineProperties 预置捕获（评审 2 P2-2）：本函数除类定义期外还在
+  // wrapObject 装配路径执行（road/wall/未知结构 else 分支每 tick 走这里）
+  const __objectKeys = Object.keys;
+  const __objectDefineProperties = Object.defineProperties;
   gw.defineGameObjectProperties = function defineGameObjectProperties(obj, dataFn, properties, opts) {
     opts = opts || {};
     const enumerable = opts.enumerable === undefined ? true : !!opts.enumerable;
     const info = {};
-    for (const name of Object.keys(properties)) {
+    const propNames = __objectKeys(properties);
+    for (let pi = 0; pi < propNames.length; pi++) {
+      const name = propNames[pi];
       const compute = properties[name];
       info[name] = {
         configurable: !!opts.configurable,
@@ -92,7 +101,7 @@
           : undefined,
       };
     }
-    Object.defineProperties(obj, info);
+    __objectDefineProperties(obj, info);
     obj.toJSON = function () {
       const result = {};
       for (const i in this) {
@@ -104,10 +113,11 @@
   };
 
   // ---------------------------------------------------------------- 类全局（官方全集）
-  // 官方运行时把 41 个类挂成裸全局（engine/src/game 各文件 defineProperty(globals,...)），
-  // 其中 Spawn、Energy 是别名（官方 structures.js:1293 `globals.Spawn=StructureSpawn`、
-  // resources.js:46 `globals.Energy=Resource`）——这里在类注册后直接赋同一引用，
-  // spawn 对象 instanceof Spawn 与官方一致。tooangel 等 bot 直接引用 Room 等。
+  // 官方运行时把 41 个类挂成裸全局，安装形统一为非可写 defineProperty
+  //（engine/src/game 各文件，含别名：structures.js:1293 `defineProperty(globals,
+  // 'Spawn',...)`、resources.js:46 Energy——清偿复审 P3-N1 勘误：官方无一 plain
+  // 赋值）。别名挂同一引用，spawn 对象 instanceof Spawn 与官方一致。
+  // tooangel 等 bot 直接引用 Room 等。
   // M0：桩类——可 new、可静态引用（未知静态成员进缺失 API 探测）。
   // Game 上的对象经原型链接挂在类原型链上（见 wrapObject），instanceof 已成立；
   // 实例属性面的差异由 M2 玩家 API 层对齐。
@@ -115,13 +125,15 @@
   const GAME_CLASS_NAMES = [
     'ConstructionSite', 'Creep', 'Deposit', 'Flag', 'Mineral', 'Nuke',
     'OwnedStructure', 'PowerCreep', 'Resource', 'Ruin', 'Room', 'RoomObject',
-    'Source', 'Store', 'Structure', 'StructureContainer', 'StructureController',
+    'Source', 'Structure', 'StructureContainer', 'StructureController',
     'StructureExtension', 'StructureExtractor', 'StructureFactory', 'StructureInvaderCore',
     'StructureKeeperLair', 'StructureLab', 'StructureLink', 'StructureNuker',
     'StructureObserver', 'StructurePortal', 'StructurePowerBank', 'StructurePowerSpawn',
     'StructureRampart', 'StructureRoad', 'StructureSpawn', 'StructureStorage',
     'StructureTerminal', 'StructureTower', 'StructureWall', 'Tombstone',
   ];
+  // Store 不在本表：真类由 structures 段安装（官方 store.js:99 defineProperty
+  // 同形）——本表的非可写安装会挡掉那次唯一重绑
   function makeStubClass(name) {
     const ctor = function () {
       countStub('new ' + name);
@@ -136,8 +148,16 @@
       },
     });
   }
+  // 官方安装形（creeps.js:1123 defineProperty(globals,'Creep',{enumerable:true,
+  // value}) 无 writable）：类全局绑定不可交换——玩家侧 instanceof/new 走真类，
+  // 原型补丁（bot 生态唯一官方支持的扩展形）照常生效（绑定非可写 ≠ 对象冻结）
   for (const name of GAME_CLASS_NAMES) {
-    if (globalThis[name] === undefined) globalThis[name] = makeStubClass(name);
+    if (globalThis[name] === undefined) {
+      Object.defineProperty(globalThis, name, {
+        enumerable: true,
+        value: makeStubClass(name),
+      });
+    }
   }
   // 官方类层级（RoomObject 为根；bot 生态跨层级打补丁，如 RoomObject.prototype.ref）：
   // Structure* 大多 extends OwnedStructure，wall/road/container/portal 直接 extends Structure
@@ -166,8 +186,14 @@
     }
   }
   // 官方别名：同一引用（structures.js:1293 / resources.js:46），非独立 stub 类
-  globalThis.Spawn = globalThis.StructureSpawn;
-  globalThis.Energy = globalThis.Resource;
+  // 官方别名同为非可写 defineProperty（structures.js:1293/resources.js:46，
+  // 清偿复审 P3-N1：原 plain 赋值可被玩家重绑——同一引用、官方同形安装）
+  Object.defineProperty(globalThis, 'Spawn', {
+    enumerable: true, value: globalThis.StructureSpawn,
+  });
+  Object.defineProperty(globalThis, 'Energy', {
+    enumerable: true, value: globalThis.Resource,
+  });
 
   // 官方 toString 家族（engine/src/game 各文件 prototype.toString，bot 生态日志
   // 拼接的事实标准格式）：缺失时 String(obj) 得 '[object Object]'。挂类原型，
@@ -235,6 +261,29 @@
   }
   gw.classGlobalFor = classGlobalFor;
 
+  // wrapObject 的类解析捕获表（A3c 装配批，评审 2 P2-1 清偿）：官方经引擎
+  // 闭包 globals.X 解析（game.js:285 `new globals.Source(i)` 等）——绑定交换
+  // 不可见。**加载期立即定格**（本位置已在全部类安装循环之后；类全局非可写
+  // 定义后无重绑路径）：惰性定格曾有窗口——game.js 加载期的 refreshGame()
+  // 在空世界下零 wrapObject，空世界首 tick（新玩家/全灭玩家每 tick 如此）
+  // 玩家代码可先于首次 wrapObject 执行并污染定格表（探针实证）。构造器
+  // 引用固定、.prototype 运行期解引用（玩家原型补丁/重挂语义保持）
+  const classTable = gw.__Object.create(null);
+  const CLASS_TABLE_NAMES = ['Creep', 'StructureSpawn', 'Flag', 'ConstructionSite',
+    'Resource', 'Tombstone', 'Ruin', 'Deposit', 'PowerCreep', 'Nuke',
+    'StructureController', 'Source', 'Mineral', 'StructureStorage', 'StructureTerminal',
+    'StructureTower', 'StructureExtension', 'StructureLink', 'StructureLab',
+    'StructureRampart', 'StructureRoad', 'StructureWall', 'StructureContainer',
+    'StructureExtractor', 'StructureFactory', 'StructureNuker', 'StructureObserver',
+    'StructurePowerBank', 'StructurePowerSpawn', 'StructurePortal',
+    'StructureInvaderCore', 'StructureKeeperLair', 'Structure'];
+  for (let i = 0; i < CLASS_TABLE_NAMES.length; i++) {
+    classTable[CLASS_TABLE_NAMES[i]] = globalThis[CLASS_TABLE_NAMES[i]];
+  }
+  function classCtor(cls) {
+    return classTable[cls];
+  }
+
   function wrapObject(o, now) {
     // pos 套探测仪表：RoomPosition 实例面的官方缺口（如 findInRange）以
     // 'RoomPosition.*' 登记，不静默 undefined
@@ -252,10 +301,11 @@
     const assemble = gw.assemblers[o.type];
     const obj = assemble ? assemble(o, base, pos, now) : base;
     const cls = classGlobalFor(o);
-    if (cls && globalThis[cls] && globalThis[cls].prototype) {
+    const ctor = cls ? classCtor(cls) : null;
+    if (ctor && ctor.prototype) {
       // 官方语义：Game 对象是类的实例；bot 生态普遍给官方原型打补丁
       //（tooangel 的 prototype_*.js 全系），原型链接通后补丁可见、instanceof 成立
-      Object.setPrototypeOf(obj, globalThis[cls].prototype);
+      gw.__Object.setPrototypeOf(obj, ctor.prototype);
     }
     const name = o.name ? ':' + o.name : '';
     return probe(obj, (cls || o.type) + name);

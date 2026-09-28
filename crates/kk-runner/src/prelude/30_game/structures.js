@@ -226,9 +226,9 @@
     });
   }
   gw.Store = Store;
-  // 官方 Object.defineProperty(globals, 'Store', ...)（store.js:99）——替换
-  // _registry 段的 M0 桩类（instanceof Store / new Store({...}) 对玩家可用）
-  globalThis.Store = Store;
+  // 官方安装形（store.js:99 Object.defineProperty(globals,'Store',...) 无
+  // writable）：非可写绑定——_registry 段不再装 Store 桩（非可写会挡掉本安装）
+  Object.defineProperty(globalThis, 'Store', { enumerable: true, value: Store });
 
   /** 官方 _storeGetter（structures.js:62-64 / creeps.js:37-39）：吃整个 raw
    *  投影对象 o（store/storeCapacity/storeCapacityResource 三键的消费者）。 */

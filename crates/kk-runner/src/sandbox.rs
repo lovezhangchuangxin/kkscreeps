@@ -276,6 +276,17 @@ impl Sandbox {
                 self.terminated_this_tick = false;
                 self.pending_intents = None;
                 self.runtime.v8_isolate().cancel_terminate_execution();
+                // Game.cpu 真值（官方 make.js:85-86 先算窗口再装 runtimeData：
+                // 玩家看到本 tick 窗口与 tick 初桶值；预算真值在沙箱内）。经
+                // beginTick 第二参数在 JS 侧合并（world_json.rs 的 cpu 键是占位
+                // 基准，被此真值覆盖）——避免每 tick 深拷贝整个世界（含每房
+                // 2500 元素地形数组）只为覆写三键（评审 3 P3-2 清偿）
+                let cpu_json = serde_json::json!({
+                    "limit": self.budget.limit,
+                    "tickLimit": self.budget.tick_limit(),
+                    "bucket": self.budget.bucket(),
+                })
+                .to_string();
                 // world 序列化在 arm 之前完成：arm 之后的任何失败路径都必须 disarm
                 // （序列化 Value 理论不可达失败，防御性保证不变量成立）
                 let world_json = serde_json::to_string(world)?;
@@ -287,8 +298,10 @@ impl Sandbox {
                 self.shared.near_heap_fired.store(false, Ordering::Relaxed);
                 // beginTick 世界注入也在武装窗口内，硬中断（看门狗/near-heap）同样可能
                 // 打在它身上——失败必须走统一的硬中断善后，不留"中毒"状态
-                self.exec_script(format!("globalThis.__kk.beginTick({world_json})"))
-                    .inspect_err(|_| self.after_termination())?;
+                self.exec_script(format!(
+                    "globalThis.__kk.beginTick({world_json}, {cpu_json})"
+                ))
+                .inspect_err(|_| self.after_termination())?;
                 Ok(TickPlan::Run {
                     tick_limit: self.budget.tick_limit(),
                 })
