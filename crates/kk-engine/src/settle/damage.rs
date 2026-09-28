@@ -1,13 +1,16 @@
-//! hits 模型与伤害施加（官方 `_damage.js` / `creeps/tick.js` 伤害段 /
+//! hits 模型与伤害/治疗施加（官方 `_damage.js` / `creeps/heal.js`、
+//! `creeps/rangedHeal.js` / `creeps/tick.js` 伤害-治疗段 /
 //! `creeps/_recalc-body.js` / `structures/_destroy.js` 的 B1 无 boost/power 子集）。
 //!
-//! 官方伤害链路（file:line 见各函数注释）：
-//! - creep 目标的伤害**延迟施加**：intent 期累加进 `_damageToApply`（_damage.js:20），
-//!   在该 creep 自己的 tick 里结算（tick.js:118-123）——同 tick 多次攻击叠加；
+//! 官方伤害/治疗链路（file:line 见各函数注释）：
+//! - creep 目标的伤害与治疗都**延迟施加**：intent 期分别累加进 `_damageToApply`
+//!   （_damage.js:20）与 `_healToApply`（heal.js:29），在该 creep 自己的 tick 里
+//!   先伤害后治疗、死亡判定在两者之后（tick.js:118-136）——同 tick 多次攻击与
+//!   多次治疗各自叠加、等量伤害与治疗互相抵消；
 //! - 结构目标立即扣血（_damage.js:32），击毁走 `_destroy`（:46-52）；
 //! - 近战对 creep 目标触发反击（同样延迟），除非攻击者站在 rampart 上（:17-19）；
 //! - 部件伤害分布 = 总 hits 从 body 尾部灌满（_recalc-body.js:10-18）——
-//!   数组前部的部件先掉 hit，前列部件先报废。
+//!   数组前部的部件先掉 hit，前列部件先报废（治疗反向回补）。
 
 use kk_core::constants as c;
 use kk_schema::room::{BodyPart, RoomObject};
@@ -119,39 +122,50 @@ pub fn apply_damage(
     );
 }
 
-/// creep tick 的延迟伤害结算（官方 tick.js:118-150 的伤害段，B1 无 heal）。
+/// creep tick 的延迟伤害/治疗结算（官方 tick.js:118-150，无 boost/power）。
 /// 返回 false 表示对象已死亡（调用方停止后续处理）。
-pub fn apply_pending_damage(w: &mut Working, id: ObjId) -> bool {
-    // 官方 `if (object._damageToApply)` 真值判定：0 伤害（无 ATTACK 部件的攻击
-    // intent）不进伤害路径——只有事件与 actionLog 已在 apply_damage 产出
-    let Some(damage) = w.damage_to_apply.remove(&id) else {
-        return true;
-    };
-    if damage <= 0 {
+///
+/// 施加序严格对照官方：先伤害后治疗（:120-128，伤害可使 hits 瞬时为负、
+/// 治疗随后回补——**死亡判定在两者之后**，同 tick 等量伤害与治疗互相抵消，
+/// 即 COMBAT-SIMULT-002 的引擎侧语义）→ 钳 hitsMax（:130-132，hitsMax =
+/// body.length×100，create-creep.js:84）→ ≤0 死（:134-136）→ 有变化才重排
+/// 部件（:137-139，治疗也重排——前列部件先回血）→ 净减少才缩容掉落（:141-143）。
+pub fn apply_pending_hits(w: &mut Working, id: ObjId) -> bool {
+    // 官方两个真值门（`if (object._damageToApply)` / `if (object._healToApply)`）：
+    // 0 值跳过（无 ATTACK/HEAL 部件的 intent 不进结算路径）
+    let damage = w.damage_to_apply.remove(&id).unwrap_or(0);
+    let heal = w.heal_to_apply.remove(&id).unwrap_or(0);
+    if damage <= 0 && heal <= 0 {
         return true;
     }
-    let old_hits = match w.creep(id) {
-        Some(creep) => creep.hits as i64,
+    let (old_hits, hits_max) = match w.creep(id) {
+        Some(creep) => (creep.hits as i64, creep.body.len() as i64 * 100),
         None => return true,
     };
-    let new_hits = old_hits - damage;
+    // _applyDamage（无 boost：裸减）+ tick.js:126-128 治疗后加
+    let mut new_hits = old_hits - damage + heal;
+    if new_hits > hits_max {
+        new_hits = hits_max;
+    }
     if new_hits <= 0 {
-        // tick.js:134-136：hits 归零 → 暴力死亡，与 TTL 死亡同路径（掉能量、移除；
-        // 墓碑与 EVENT_OBJECT_DESTROYED 留 B3）
+        // tick.js:134-136：hits 归零 → 暴力死亡，与 TTL 死亡同路径（掉能量、
+        // 移除；墓碑与 EVENT_OBJECT_DESTROYED 留 B3）
         super::creep::die_creep(w, id);
         return false;
     }
-    // tick.js:130-132（heal 钳 hitsMax 不在 B1）；:137 仅 hits 变化才重算
+    // tick.js:137：hits 无变化（如满血被治疗后钳回）不重排
     if new_hits == old_hits {
         return true;
     }
     if let Some(creep) = w.creep_mut(id) {
         creep.hits = new_hits as u32;
-        // tick.js:139 → _recalc-body.js：总 hits 从尾部灌满，前列部件先掉
+        // tick.js:139 → _recalc-body.js：总 hits 从尾部灌满，前列部件先掉/先回
         distribute_hits(&mut creep.body, new_hits);
     }
-    // tick.js:141-143 → _drop-resources-without-space.js：CARRY 部件损毁可能缩容
-    drop_energy_over_capacity(w, id);
+    // tick.js:141-143 → _drop-resources-without-space.js：仅净减少（CARRY 缩容）
+    if new_hits < old_hits {
+        drop_energy_over_capacity(w, id);
+    }
     true
 }
 

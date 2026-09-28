@@ -71,6 +71,9 @@ pub struct Working<'w> {
     /// 本 tick 对 creep 的待施加伤害（官方 `_damageToApply`，_damage.js:20——
     /// intent 期累加、creep 自己的 tick 结算；对象移除时一并清理）。
     pub damage_to_apply: BTreeMap<ObjId, i64>,
+    /// 本 tick 对 creep 的待施加治疗（官方 `_healToApply`，heal.js:29——
+    /// 伤害通道的对称面，tick.js:126-128 在死亡判定前施加）。
+    pub heal_to_apply: BTreeMap<ObjId, i64>,
     pub movement: movement::Movement,
 }
 
@@ -116,6 +119,7 @@ impl<'w> Working<'w> {
         self.old_fatigue.remove(&id);
         self.tick_fatigue.remove(&id);
         self.damage_to_apply.remove(&id);
+        self.heal_to_apply.remove(&id);
         Some(obj)
     }
 
@@ -236,6 +240,7 @@ pub fn settle_room(
         tick_fatigue: BTreeMap::new(),
         upgraded: BTreeMap::new(),
         damage_to_apply: BTreeMap::new(),
+        heal_to_apply: BTreeMap::new(),
         movement: movement::Movement::new(),
     };
 
