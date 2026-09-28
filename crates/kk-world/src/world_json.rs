@@ -128,6 +128,7 @@ fn object_json(room: &str, id: crate::world::ObjId, object: &RoomObject, time: u
                 "progressTotal": controller_progress_total(o.level),
                 "safeMode": o.safe_mode,
                 "safeModeAvailable": o.safe_mode_available,
+                "downgradeTime": o.downgrade_time,
                 "isPowerEnabled": o.is_power_enabled,
             });
             if let Some(owner) = &o.owner {

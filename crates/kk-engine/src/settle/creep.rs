@@ -89,7 +89,7 @@ fn intent_move(w: &mut Working, id: ObjId, data: &IntentData) {
                         kk_world::types::is_obstacle_type(st)
                     }
                 }
-                Some(other) => kk_world::types::is_obstacle_type(movement::type_name_of(other)),
+                Some(other) => kk_world::types::is_obstacle_type(&movement::type_name_of(other)),
                 None => false,
             }
         });
@@ -207,7 +207,7 @@ fn intent_build(w: &mut Working, id: ObjId, data: &IntentData) {
                 if name == "constructionSite" {
                     continue;
                 }
-                if site_is_obstacle && kk_world::types::is_obstacle_type(name) {
+                if site_is_obstacle && kk_world::types::is_obstacle_type(name.as_ref()) {
                     return;
                 }
             }

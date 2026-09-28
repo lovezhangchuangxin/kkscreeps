@@ -451,7 +451,7 @@
     });
   }
 
-  function wrapObject(o) {
+  function wrapObject(o, now) {
     // pos 套探测仪表：RoomPosition 实例面的官方缺口（如 findInRange）以
     // 'RoomPosition.*' 登记，不静默 undefined
     const pos = probe(new RoomPosition(o.x, o.y, o.room), 'RoomPosition');
@@ -513,9 +513,12 @@
           obj.progress = o.progress || 0;
           obj.progressTotal = o.progressTotal || 0;
           obj.reservation = undefined;
-          obj.safeMode = 0;
-          obj.safeModeAvailable = 0;
+          // 官方 getter（structures.js:174-186）：绝对存储 − 当前 tick = 剩余量；
+          // 无值/已过期归 0（None→0 投影归一，灰区登记口径）
+          obj.safeMode = o.safeMode && o.safeMode > now ? o.safeMode - now : 0;
+          obj.safeModeAvailable = o.safeModeAvailable ?? 0;
           obj.safeModeCooldown = 0;
+          obj.ticksToDowngrade = o.downgradeTime != null ? o.downgradeTime - now : 0;
           obj.activationDate = undefined;
           // 官方 controller.isPowerEnabled（power API 本体 M2+，字段先行透传）
           obj.isPowerEnabled = o.isPowerEnabled === true;
@@ -631,7 +634,7 @@
     const flags = {};
     const resources = {};
     for (const o of world.objects || []) {
-      const w = wrapObject(o);
+      const w = wrapObject(o, world.time);
       w.room = undefined;
       objectsById.set(o.id, w);
       if (o.type === 'creep') creeps[o.name] = w;

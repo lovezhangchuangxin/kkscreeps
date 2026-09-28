@@ -88,7 +88,7 @@ fn create_construction_site(
                     && structure_type != "road"
                     && tn != "rampart"
                     && tn != "road"
-                    && kk_world::types::construction_cost(tn).is_some()
+                    && kk_world::types::construction_cost(&tn).is_some()
                 {
                     return;
                 }

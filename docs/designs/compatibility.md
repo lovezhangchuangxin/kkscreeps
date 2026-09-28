@@ -57,12 +57,12 @@
 | 无 controller 房间的建造配额（M1 结算） | 完全跳过配额检查 | 官方按 rcl=0 计（spawn/extension 配额 0 → 拒、road 2500 → 允许）；M1 测试房间恒有 controller |
 | createCreep 空 energyStructures（M1 结算） | `[]` 落回全房间扣费（与缺省同路径） | 官方空数组走显式列表模式（可用 0 → 失败）；根因是 sanitize 后 None/[] 不可区分，M2 intent 通道定型时修 |
 | harvest 0 个 WORK 部件的事件形态（M1 结算，深评清偿） | 已对齐官方：`work_power<=0` 整体跳过（harvest.js:44 `if(harvestAmount)` 包住 actionLog+eventLog），不产 amount=0 事件 | API 层不可达（ERR_NO_BODYPART 拦截）；引擎侧零量事件原则已与官方一致 |
-| Engine 沙箱的玩家身份信任（M1） | 按沙箱自报的玩家名合并 intents | M1 沙箱是自家 ScriptedSandbox；M2 真沙箱接入时按注册名强制（防冒名 room intent） |
+| Engine 沙箱的玩家身份（M1，外部复审提前清偿） | **结构性强制**：intent 只归本沙箱注册键，冒名键整批丢弃 | M2 真沙箱接入时该不变量直接复用；沙箱内多玩家形态（如观察者）届时另议 |
 | controller 的 hits/hitsMax 投影（M1 typed world） | 不发（prelude 兜 0） | M0 哑世界发 10000 手抄值；官方 getter 直读 DB 字段、vanilla 放置不带 hits → 官方为 undefined。0 vs undefined 是 prelude 残差，M2 玩家 API 层对齐 |
 | typed 变体丢弃 spec 的非 energy 资源与私有时序字段（M1 place） | creep/spawn/extension/storage 的 store 仅保 energy；ticksToDecay/cooldown 等不透传（road 恒 ROAD_DECAY_TIME） | M1 schema 资源单槽；多资源种类随 M2 schema 扩展放开 |
 | 未注册房间放置（M1 embed） | 报错（房间不存在） | M0 哑世界自动建房、vanilla 不校验——显式拒绝优于静默建出无地形房间；screeps-ok 套件先 createShard 后放置，不可达 |
 | 多房间世界 JSON 的 objects 序（M1 typed world） | 房间名序 × 房内 id 升序 | M0 为全局 id 序（单房间等价）；多房间下 Game.creeps 等键插入序可能不同——若出现顺序敏感用例以此归因 |
-| controller safeMode 投影发绝对 tick（M1 typed world） | 玩家面应发剩余值（官方 structures.js:187 getter） | prelude 硬编码 0 不消费、M1 无激活路径（activateSafeMode 是 M2）；激活实装时改 remainingTime 形态（同 spawn.spawning 条目） |
+| controller safeMode 族投影（M1 typed world，外部复审清偿） | 世界投影发绝对 tick（safeMode/downgradeTime），prelude 按官方 getter（structures.js:174-186）换算剩余值：safeMode/ticksToDowngrade=绝对−time、safeModeAvailable 透传 | 无值/过期归 0（None→0 归一口径）；safeModeCooldown 仍桩 0（无该状态字段，M2 激活链路时补） |
 | movement 四键完全平手的决胜序（M1 结算，深评登记） | 矩阵登记序 = 对象 id 升序；官方 = 玩家 intent 到达序（processor.js:236 for...in 插入序） | 四键全平时胜者可观察分歧；官方到达序本身依赖 DB 查询序（弱保证），id 序是更强的不变量——顺序敏感用例出现时以此归因（D4-1 的 intent 序侧补充） |
 | sanitize 层未接生产（M1 结算，深评登记） | `sanitize_object_intent` 只有单测消费（M1 唯一 intent 源是 typed 的 ScriptedSandbox，无不可信输入面） | M2 真沙箱 intent 通道定型时在入口接线，否则为死代码 |
 | to_int 的字符串前缀语义（M1 sanitize，深评登记） | 全串 parse 后截断（`"1e3"`→1000、`"12abc"`→Err）；官方 parseInt 前缀截断（`"1e3"`→1、`"12abc"`→12） | 干净数字串两侧一致（主流形态）；差异数值形态 M2 接线时按需对齐 |

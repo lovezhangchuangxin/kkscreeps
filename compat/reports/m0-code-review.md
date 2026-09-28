@@ -695,3 +695,19 @@ intent+movement（B）、经济+孵化（B+）。5 路评审员逐模块对照�
 
 基线影响：energyAvailable/progressTotal/controller 种子三处投影变更 → 全量重跑棘轮
 **268 → 274（+6 全转绿零转红）**，floor 已随本轮上调（ratchet.json 沿革）。
+
+## 追记：M1 外部复审轮（ChatGPT，2026-09-28，逐条复核官方源码裁决）
+
+对深评 follow-up 提交（59a1b43）的外部复审，5 条发现**全部属实**、全部本阶段修复：
+
+| # | 级 | 发现 | 复核裁决与处置 |
+|---|---|---|---|
+| 1 | P1 | Generic 透传结构在部分结算路径被当 "structure"：type_name_of 对 tower 等恒返 "structure"（不在 OBSTACLE 表）→ 出生可落 tower 格、建塔配额漏算现存 tower、build 障碍检查漏 tower | 属实（官方 OBSTACLE_OBJECT_TYPES 含 tower；checkObstacleFn/checkControllerAvailability/build.js 均吃真实类型名）。**连带发现第四条同根路径：工地共置检查（room.rs 同型/互斥判定）同样漏**。修：type_name_of 解析 Generic 的 data.structureType（Cow 返回），四路径统一；测试 placed_tower_blocks_birth / tower_counts_toward_controller_quota / build_blocked_by_tower_on_site_tile |
+| 2 | P1 | 掉落能量合并裸 u32 加法：u32::MAX 堆 +1 在 debug 溢出 panic、release 回绕后衰减可清堆丢数据；放置面接受该数值 | 属实（saturating 修复）。修：合并与新建均饱和转换；测试 energy_merge_saturates_at_u32_max（含随后衰减的精确断言） |
+| 3 | P2 | controller 种子值未到玩家视图：createShard 已种 safeMode/降级钟，但 prelude 硬编码 [0,0] 且无 ticksToDowngrade——runPlayer 读不到（上轮种子修复引入的可观察跨层不一致） | 属实。修：world_json 补发 downgradeTime（绝对 tick），prelude 按官方 getter（structures.js:174-186）换算剩余值（safeMode=绝对−time、ticksToDowngrade=downgradeTime−time、safeModeAvailable 透传；无值归 0 维持 None→0 归一口径） |
+| 4 | P2 | 棘轮只护总数：一红一绿对冲可放行、少跑用例只告警 | 属实（M1 步7 已登记的运维项，本轮收紧）。修：门禁三重化——总数地板 + 相对 HEAD 基线逐用例转红即红 + 用例总数漂移硬红 |
+| 5 | 边界 | 引擎直接采信沙箱自报玩家键（结算按其判所有权）——真沙箱接入前的冒名面 | 属实（灰区原登记 M2 处置）。提前修：Engine::tick 合并时 intent 只归本沙箱注册键（结构性不变量）；测试 sandbox_intents_bound_to_registered_player |
+
+灰区同步：safeMode 投影条目更新（剩余值已接，cooldown 仍桩 0）；身份信任条目更新
+（结构性强制）；ratchet.json note 更新（三重门禁）。全量重跑 **274 → 277**
+（+3 全转绿零转红——controller 种子到视图的修复显形），floor 已上调。

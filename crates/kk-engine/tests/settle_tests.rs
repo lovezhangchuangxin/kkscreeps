@@ -1387,3 +1387,183 @@ fn drop_rejects_amount_over_holdings() {
         "无掉落"
     );
 }
+
+// ---- 外部复审（ChatGPT）回归：Generic 透传结构的类型名解析 ----
+
+fn generic_tower(x: u8, y: u8) -> RoomObject {
+    RoomObject::Generic(kk_schema::room::GenericObj {
+        id: 0,
+        x,
+        y,
+        data: r#"{"type":"structure","structureType":"tower","owner":"p1","hits":1}"#.into(),
+    })
+}
+
+#[test]
+fn placed_tower_blocks_birth() {
+    // 官方 checkObstacleFn 吃真实类型名（'tower' ∈ OBSTACLE_OBJECT_TYPES）——
+    // Generic 透传桶不得报成 "structure"（不在表内 → 原实现可在 tower 格出生）
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    f.controller(3, Some("p1"));
+    let spawn = f.spawn("Spawn1", 20, 20, 300);
+    f.world.insert("W1N1", generic_tower(20, 19)).unwrap();
+    let mut b = IntentBatch::default();
+    let mut d = IntentData::bare();
+    d.name = Some("child".into());
+    d.body = vec![BodyKind::Move, BodyKind::Work];
+    d.directions = vec![1];
+    b.add_object_intent("p1", spawn, Action::CreateCreep, d);
+    f.settle(b);
+    for _ in 0..12 {
+        f.settle(IntentBatch::default());
+    }
+    // 方向 1 被 tower 永占：反复重试、永不出世（tower 不会让开）
+    let chick = f
+        .world
+        .room("W1N1")
+        .unwrap()
+        .objects
+        .values()
+        .find_map(|o| match o {
+            RoomObject::Creep(c) if c.name == "child" => Some((c.x, c.y, c.spawning)),
+            _ => None,
+        })
+        .expect("雏形存在");
+    assert!(chick.2, "tower 格不可出生");
+    assert_eq!((chick.0, chick.1), (20, 20), "雏形留在 spawn 格");
+}
+
+#[test]
+fn tower_counts_toward_controller_quota() {
+    // utils.checkControllerAvailability 按真实结构类型数现存对象——
+    // Generic tower 必须计入配额（原实现报 "structure" 永不计入 → 可超配额建塔）
+    let mk_intent = |b: &mut IntentBatch| {
+        b.add_room_intent(
+            "p1",
+            kk_engine::intent::RoomIntent::CreateConstructionSite {
+                room: "W1N1".into(),
+                x: 15,
+                y: 15,
+                structure_type: "tower".into(),
+                name: None,
+            },
+        );
+    };
+    let has_tower_site =
+        |f: &Fixture| {
+            f.world.room("W1N1").unwrap().objects.values().any(
+                |o| matches!(o, RoomObject::ConstructionSite(s) if s.structure_type == "tower"),
+            )
+        };
+    // 无 tower：rcl 3 允许 1 座 → 工地建成
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    f.controller(3, Some("p1"));
+    let mut b = IntentBatch::default();
+    mk_intent(&mut b);
+    f.settle(b);
+    assert!(has_tower_site(&f), "配额空位：允许建塔");
+    // 已有 1 座 tower：配额满 → 拒建
+    let mut f2 = Fixture::new(1, terrain_with(&[]));
+    f2.controller(3, Some("p1"));
+    f2.world.insert("W1N1", generic_tower(25, 25)).unwrap();
+    let mut b2 = IntentBatch::default();
+    mk_intent(&mut b2);
+    f2.settle(b2);
+    assert!(!has_tower_site(&f2), "现存 tower 计入配额：拒建");
+}
+
+#[test]
+fn build_blocked_by_tower_on_site_tile() {
+    // build.js:51-53 障碍对象拒建——Generic tower 在工地格上必须挡建造
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let site = f.site(12, 10, "spawn", 0, 15000, "p1");
+    f.world.insert("W1N1", generic_tower(12, 10)).unwrap();
+    let c = f.creep("w1", "p1", 11, 10, &[BodyKind::Move, BodyKind::Work], 10);
+    let mut b = IntentBatch::default();
+    b.add_object_intent("p1", c, Action::Build, IntentData::target(site));
+    f.settle(b);
+    match f.obj(site) {
+        RoomObject::ConstructionSite(s) => {
+            assert_eq!(s.progress, 0, "tower 占格：拒建")
+        }
+        _ => panic!(),
+    }
+    assert_eq!(f.creep_state(c).3, 10);
+}
+
+#[test]
+fn energy_merge_saturates_at_u32_max() {
+    // 掉落合并的受检运算：u32::MAX 堆 + 1 不 panic（debug）/不回绕丢数据（release），
+    // 随后照常衰减 ceil(MAX/1000)
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    f.world
+        .insert(
+            "W1N1",
+            RoomObject::Energy(kk_schema::room::EnergyObj {
+                id: 0,
+                x: 10,
+                y: 10,
+                resource_type: 0,
+                amount: u32::MAX,
+            }),
+        )
+        .unwrap();
+    let c = f.creep("w1", "p1", 10, 11, &[BodyKind::Move, BodyKind::Carry], 1);
+    let mut b = IntentBatch::default();
+    let mut d = IntentData::bare();
+    d.amount = Some(1);
+    d.resource_type = Some("energy".into());
+    b.add_object_intent("p1", c, Action::Drop, d);
+    f.settle(b);
+    let decay = (u32::MAX as i64 + 999) / 1000; // ceil(4294967295/1000) = 4294968
+    let expected = u32::MAX - decay as u32;
+    let heap = f
+        .world
+        .room("W1N1")
+        .unwrap()
+        .objects
+        .values()
+        .find_map(|o| match o {
+            RoomObject::Energy(e) => Some(e.amount),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(heap, expected, "饱和合并后照常衰减（无 panic/回绕）");
+}
+
+#[test]
+fn sandbox_intents_bound_to_registered_player() {
+    // 身份边界：沙箱返回的 intent 只归其注册玩家——冒名键（操作他人对象）整批丢弃
+    let mut world = World::new(1);
+    world.register_room("W1N1", kk_core::Terrain::plains());
+    let victim = world
+        .insert(
+            "W1N1",
+            RoomObject::Creep(CreepObj {
+                id: 0,
+                x: 10,
+                y: 10,
+                fatigue: 0,
+                age_time: u64::MAX / 2,
+                hits: 100,
+                spawning: false,
+                action_log: 0,
+                name: "victim".into(),
+                owner: "p2".into(),
+                body: body(&[BodyKind::Move]),
+                store: Default::default(),
+            }),
+        )
+        .unwrap();
+    // 恶意沙箱注册为 p1，却发 p2 键的 move intent
+    let mut sandbox = kk_engine::ScriptedSandbox::new();
+    sandbox.at(0, move_intent(victim, 3));
+    let mut engine = kk_engine::Engine::new(world);
+    engine.sandboxes.insert("p1".into(), Box::new(sandbox));
+    engine.tick().unwrap();
+    let (x, y) = match engine.world.get(victim).unwrap().1 {
+        RoomObject::Creep(c) => (c.x, c.y),
+        _ => panic!(),
+    };
+    assert_eq!((x, y), (10, 10), "冒名 intent 被丢弃：p2 的 creep 未被移动");
+}

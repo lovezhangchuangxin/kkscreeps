@@ -93,12 +93,24 @@ for (const tr of report.testResults ?? []) {
 }
 const total = passed + failed + skipped;
 console.log(`ratchet: passed ${passed} / failed ${failed} / skipped ${skipped}（floor ${ratchet.floor}）`);
-if (Number.isFinite(ratchet.numTotalTests) && total !== ratchet.numTotalTests) {
-  console.warn(`ratchet: 警告——用例总数漂移 ${ratchet.numTotalTests} → ${total}（上游 pin 固定，理论不可能，请人工核因）`);
+let gateFailed = false;
+if (total !== ratchet.numTotalTests) {
+  console.error(`ratchet: 用例总数漂移 ${ratchet.numTotalTests} → ${total}（上游 pin 固定，理论不可能）——套件范围变化须显式归因，门禁红`);
+  gateFailed = true;
 }
 if (passed < ratchet.floor) {
   console.error(`ratchet: 回归——passed ${passed} < floor ${ratchet.floor}（差 ${ratchet.floor - passed}）。逐用例归因后修复，或（确属有意的行为变化）随全量重跑上调地板`);
-  printFlipsAgainstBaseline(report);
+  gateFailed = true;
+}
+// 逐用例回归：总数口径对冲放不过门禁（一红一绿 passed 不变、少跑用例总数降）——
+// 相对上一入库基线（HEAD 的 kkscreeps.json）任何转红即红；有意行为变化须随全量
+// 重跑更新基线入库并在提交说明归因，疑似偶发先重跑 job 复核（flake 策略）
+const flipsRed = printFlipsAgainstBaseline(report);
+if (flipsRed > 0) {
+  console.error(`ratchet: 相对上一入库基线转红 ${flipsRed} 条 ⇒ 门禁红`);
+  gateFailed = true;
+}
+if (gateFailed) {
   process.exit(1);
 }
 if (passed > ratchet.floor) {
@@ -136,4 +148,5 @@ function printFlipsAgainstBaseline(current) {
     console.error(`  [红] ${name}${msg ? `\n       ${msg}` : ''}`);
   }
   if (flipsRed.length > 10) console.error(`  …另有 ${flipsRed.length - 10} 条转红`);
+  return flipsRed.length;
 }

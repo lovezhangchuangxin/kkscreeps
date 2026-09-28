@@ -160,7 +160,11 @@ impl<'w> Working<'w> {
         match existing {
             Some(id) => {
                 if let Some(RoomObject::Energy(e)) = self.room.objects.get_mut(&id) {
-                    e.amount += amount as u32;
+                    // 饱和合并：放置面可造 u32::MAX 堆（官方 JS 数值无此界），
+                    // 裸加法在 debug 溢出 panic、release 回绕后衰减清堆丢数据
+                    e.amount = e
+                        .amount
+                        .saturating_add(u32::try_from(amount).unwrap_or(u32::MAX));
                 }
             }
             None => {
@@ -169,7 +173,7 @@ impl<'w> Working<'w> {
                     x,
                     y,
                     resource_type: 0,
-                    amount: amount as u32,
+                    amount: u32::try_from(amount).unwrap_or(u32::MAX),
                 }));
             }
         }
@@ -321,6 +325,11 @@ impl Engine {
             for (player, sandbox) in &mut self.sandboxes {
                 let part = sandbox.collect_intents(&view, player);
                 for (p, intents) in part.users {
+                    // 身份边界：intent 只归本沙箱注册的玩家（结算按玩家键判所有权，
+                    // 冒名键直接丢弃——真沙箱接入后这是防跨玩家操作的硬不变量）
+                    if p != *player {
+                        continue;
+                    }
                     let entry = batch.users.entry(p).or_default();
                     entry.objects.extend(intents.objects);
                     entry.room.extend(intents.room);

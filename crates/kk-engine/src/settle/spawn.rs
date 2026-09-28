@@ -408,7 +408,7 @@ fn born_creep(w: &mut Working, spawn_id: ObjId, job: &SpawningJob) -> bool {
                     Some(RoomObject::ConstructionSite(s)) => {
                         kk_world::types::is_obstacle_type(&s.structure_type)
                     }
-                    Some(o) => kk_world::types::is_obstacle_type(movement::type_name_of(o)),
+                    Some(o) => kk_world::types::is_obstacle_type(&movement::type_name_of(o)),
                     None => false,
                 })
                 || (w.room.terrain.check_mask(
@@ -463,7 +463,7 @@ fn born_creep(w: &mut Working, spawn_id: ObjId, job: &SpawningJob) -> bool {
                     Some(RoomObject::ConstructionSite(s)) => {
                         kk_world::types::is_obstacle_type(&s.structure_type)
                     }
-                    Some(o) => kk_world::types::is_obstacle_type(movement::type_name_of(o)),
+                    Some(o) => kk_world::types::is_obstacle_type(&movement::type_name_of(o)),
                     None => false,
                 })
                 && !w

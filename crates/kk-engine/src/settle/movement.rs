@@ -314,7 +314,7 @@ pub fn check_obstacle_at_xy(
             }
             other => {
                 // 类型化对象按官方类型名判障碍（source/controller/spawn/extension/wall/storage）
-                if is_obstacle_type(type_name_of(other)) {
+                if is_obstacle_type(&type_name_of(other)) {
                     return true;
                 }
             }
@@ -331,21 +331,32 @@ pub fn check_obstacle_at_xy(
     false
 }
 
-/// 类型化对象的官方 type 名。
-pub fn type_name_of(obj: &RoomObject) -> &'static str {
+/// 类型化对象的官方 type 名；Generic 透传桶（tower/lab/…）按 data 的
+/// structureType 报告——官方 OBSTACLE 障碍、RCL 配额、工地共置判定都吃
+/// 真实类型名（"structure" 不是官方类型，恒不在 OBSTACLE 表内）。
+/// rampart 的公开性特判不在本函数（movement 预检/仲裁各有专门分支）。
+pub fn type_name_of(obj: &RoomObject) -> std::borrow::Cow<'static, str> {
     match obj {
-        RoomObject::Creep(_) => "creep",
-        RoomObject::Source(_) => "source",
-        RoomObject::Controller(_) => "controller",
-        RoomObject::Spawn(_) => "spawn",
-        RoomObject::Extension(_) => "extension",
-        RoomObject::ConstructedWall(_) => "constructedWall",
-        RoomObject::ConstructionSite(_) => "constructionSite",
-        RoomObject::Energy(_) => "energy",
-        RoomObject::Flag(_) => "flag",
-        RoomObject::Road(_) => "road",
-        RoomObject::Storage(_) => "storage",
-        RoomObject::Generic(_) => "structure",
+        RoomObject::Generic(o) => {
+            let data: serde_json::Value = serde_json::from_str(&o.data).unwrap_or_default();
+            std::borrow::Cow::Owned(
+                data.get("structureType")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+            )
+        }
+        RoomObject::Creep(_) => "creep".into(),
+        RoomObject::Source(_) => "source".into(),
+        RoomObject::Controller(_) => "controller".into(),
+        RoomObject::Spawn(_) => "spawn".into(),
+        RoomObject::Extension(_) => "extension".into(),
+        RoomObject::ConstructedWall(_) => "constructedWall".into(),
+        RoomObject::ConstructionSite(_) => "constructionSite".into(),
+        RoomObject::Energy(_) => "energy".into(),
+        RoomObject::Flag(_) => "flag".into(),
+        RoomObject::Road(_) => "road".into(),
+        RoomObject::Storage(_) => "storage".into(),
     }
 }
 
