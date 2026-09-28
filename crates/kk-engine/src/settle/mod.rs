@@ -275,10 +275,13 @@ impl<'w> Working<'w> {
             return amount;
         };
         let mut data: Value = serde_json::from_str(&g.data).unwrap_or_default();
+        // 槽值非 i64（放置面伪造的浮点等）按 0 折算——filter_map 跳过会使
+        // headroom 高估（container 超 CONTAINER_CAPACITY），下方写入侧同口径
+        //（B3 评审 2 P3-2：taken 已扣减不入槽也不退回 = 资源静默灭失）
         let total_before = data
             .pointer("/store")
             .and_then(Value::as_object)
-            .map(|s| s.values().filter_map(Value::as_i64).sum::<i64>())
+            .map(|s| s.values().map(|v| v.as_i64().unwrap_or(0)).sum::<i64>())
             .unwrap_or(0);
         let headroom = kk_core::constants::CONTAINER_CAPACITY - total_before;
         let taken = amount.min(headroom);
@@ -295,9 +298,8 @@ impl<'w> Working<'w> {
             return amount;
         };
         let slot = store.entry(resource.to_string()).or_insert(json!(0));
-        if let Some(v) = slot.as_i64() {
-            *slot = json!(v.saturating_add(taken));
-        }
+        let v = slot.as_i64().unwrap_or(0);
+        *slot = json!(v.saturating_add(taken));
         g.data = data.to_string();
         amount - taken
     }

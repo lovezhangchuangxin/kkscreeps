@@ -159,8 +159,8 @@ pub fn apply_pending_hits(w: &mut Working, id: ObjId) -> bool {
         new_hits = hits_max;
     }
     if new_hits <= 0 {
-        // tick.js:134-136：hits 归零 → 暴力死亡，与 TTL 死亡同路径（掉能量、
-        // 移除；墓碑与 EVENT_OBJECT_DESTROYED 留 B3）
+        // tick.js:134-136：hits 归零 → 暴力死亡，与 TTL 死亡同路径
+        //（B3 起 die_creep 即官方 _die.js 全量：墓碑/store 转移/事件）
         super::creep::die_creep(w, id);
         return false;
     }

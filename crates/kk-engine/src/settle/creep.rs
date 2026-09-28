@@ -746,11 +746,14 @@ fn intent_pickup(w: &mut Working, id: ObjId, data: &IntentData) {
     let Some(RoomObject::Energy(target)) = w.room.objects.get(&target_id) else {
         return;
     };
-    // 官方 pickup.js:23-28：按堆的 resourceType 入对应槽——energy(0)/G(2)；
-    // power(1) 无 schema 槽（拾取维持拒绝——登记，随 power 槽扩展放开）
-    let slot_resource = match target.resource_type {
-        0 => "energy",
-        2 => "G",
+    // 官方 pickup.js:26-30：按堆的 resourceType 入开放 store 对应键——M2 双槽
+    // schema 只放 energy/G，其余（power、B3 起衰减落地的命名矿物堆——
+    // code 恒 0 + resource:Some(name)，只看 code 会把矿物洗白成能量）一律拒拾
+    //（B3 评审 2/3 交叉实证；随 power/矿物槽扩展放开）。判定走
+    // energy_resource_name 单源——code 与命名槽双态都折算后再放行
+    let slot_resource = match super::energy_resource_name(target) {
+        "energy" => "energy",
+        "G" => "G",
         _ => return,
     };
     let (tx, ty, amount) = (target.x, target.y, target.amount as i64);
@@ -1372,8 +1375,9 @@ fn intent_say(w: &mut Working, id: ObjId, data: &IntentData) {
 }
 
 /// 官方 suicide.js：intent 相即死（_die.js，dropRate=CREEP_CORPSE_RATE、
-/// violentDeath=false——墓碑/尸沉归 M1 die_creep 形态，灰区沿用 TTL 死亡的
-/// 登记）。user=='2'（Source Keeper dropRate=0）不建模——NPC 不入 M2 世界。
+/// violentDeath=false——B3 起 die_creep_with_rate 即官方 _die.js 全量，
+/// TTL/暴亡/suicide 0.2、recycle 1.0 四路 dropRate 对位）。user=='2'
+///（Source Keeper dropRate=0）不建模——NPC 不入 M2 世界。
 /// 死亡发生在 intent 相（官方同位）；已入矩阵的 move 不再落格（官方 execute
 /// 经 roomObjects forEach，死对象不被遍历——同形）。
 /// **有意分歧（A4-iv 评审 1/3 双确认登记）**：官方后序处理器（claim/

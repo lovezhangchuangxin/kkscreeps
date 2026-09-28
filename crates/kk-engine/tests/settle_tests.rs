@@ -1434,6 +1434,325 @@ fn ruin_decay_dumps_store_and_removes() {
     );
 }
 
+/// B3 评审 2/3 P1 清偿锁值：pickup 对命名矿物堆（衰减落地产物——code 恒 0 +
+/// resource:Some(name)）拒绝——只看 code 会把 XUHO2 洗白成 energy（矿物凭空
+/// 转换 + 灭失，普通玩法链：boosted creep 死亡→衰减→搬运工拾取）。
+#[test]
+fn pickup_rejects_named_mineral_pile() {
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let pile = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Energy(kk_schema::room::EnergyObj {
+                id: 0,
+                x: 10,
+                y: 10,
+                resource_type: 0,
+                resource: Some("XUHO2".into()),
+                amount: 6,
+            }),
+        )
+        .unwrap();
+    let c = f.creep("w1", "p1", 10, 10, &[BodyKind::Carry], 0);
+    let mut batch = IntentBatch::default();
+    batch.add_object_intent("p1", c, Action::Pickup, IntentData::target(pile));
+    f.settle(batch);
+    match f.obj(pile) {
+        RoomObject::Energy(e) => {
+            assert_eq!(kk_engine::settle::energy_resource_name(e), "XUHO2");
+            // 6 − 1 = 5：当 tick 掉落衰减 1（energy/tick.js 全资源同式——G 掉落
+            // 测试同款口径），未被拾取
+            assert_eq!(e.amount, 5, "命名堆不被拾走（−1 为当 tick 衰减）");
+        }
+        _ => panic!("堆必须仍在"),
+    }
+    assert_eq!(f.creep_state(c).3, 0, "矿物不得洗白进 energy 槽");
+}
+
+/// B3 评审 3-2 锁值：container 余量的**跨资源竞争序**（官方 bodyResources 键
+/// 序 = energy 先、矿物按 body 首现序——_die.js:38-76 两段循环间容量是活的）。
+/// headroom=10 只够吃部分 energy：energy 先入 container、矿物全进墓碑。
+#[test]
+fn tombstone_container_cross_resource_competition() {
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    // container 余量 10（1990/2000）
+    let container = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Generic(kk_schema::room::GenericObj {
+                id: 0,
+                x: 10,
+                y: 10,
+                data: serde_json::json!({
+                    "type": "structure", "structureType": "container",
+                    "owner": "p1", "hits": 250000,
+                    "store": { "energy": 1990 },
+                })
+                .to_string(),
+            }),
+        )
+        .unwrap();
+    // body [Work(XUHO2), Move]、ttl=1500 自杀 → lifeRate=0.2×1500/1500=0.2：
+    // energy 回收 = min(125,100×0.2) + 20×0.2 + min(125,50×0.2) = 20+4+10 = 34；
+    // XUHO2 = 30×0.2 = 6。键序：energy 34 先过门（container 吃 10 → 墓碑 24、
+    // 余量 0）→ XUHO2 6 全进墓碑
+    let c = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Creep(CreepObj {
+                id: 0,
+                x: 10,
+                y: 10,
+                fatigue: 0,
+                age_time: 1500,
+                hits: 200,
+                spawning: false,
+                action_log: 0,
+                name: "w1".into(),
+                owner: "p1".into(),
+                body: vec![
+                    kk_schema::room::BodyPart {
+                        kind: BodyKind::Work.code(),
+                        hits: 100,
+                        boost: Some("XUHO2".into()),
+                    },
+                    kk_schema::room::BodyPart {
+                        kind: BodyKind::Move.code(),
+                        hits: 100,
+                        boost: None,
+                    },
+                ],
+                store: kk_schema::room::Store {
+                    energy: 0,
+                    ghodium: 0,
+                },
+            }),
+        )
+        .unwrap();
+    let mut batch = IntentBatch::default();
+    batch.add_object_intent("p1", c, Action::Suicide, IntentData::bare());
+    f.settle(batch);
+    match f.obj(container) {
+        RoomObject::Generic(g) => {
+            let data: serde_json::Value = serde_json::from_str(&g.data).unwrap();
+            assert_eq!(data["store"]["energy"], 2000, "container 吃满");
+            assert!(
+                data["store"].get("XUHO2").is_none(),
+                "键序 energy 先——余量 10 全被 energy 吃掉，矿物不进 container"
+            );
+        }
+        _ => panic!(),
+    }
+    match f
+        .world
+        .room("W1N1")
+        .unwrap()
+        .objects
+        .values()
+        .find_map(|o| match o {
+            RoomObject::Tombstone(t) => Some(t.clone()),
+            _ => None,
+        }) {
+        Some(t) => {
+            assert_eq!(t.store.energy, 24, "34−10 进墓碑");
+            assert_eq!(
+                t.store_extra,
+                vec![kk_schema::room::ResourceStack {
+                    resource: "XUHO2".into(),
+                    amount: 6
+                }],
+                "矿物 6 全进墓碑（余量竞争可观察面锁值）"
+            );
+        }
+        None => panic!("墓碑必须建"),
+    }
+}
+
+/// B3 评审 3-3 锁值：引擎产废墟对混合 store（Generic 开放资源面）的承接全链
+/// ——container(energy+XUHO2) 击毁 → ruin.store 承接（含 store_extra）→
+/// 衰减落地两堆。
+#[test]
+fn ruin_inherits_mixed_store_and_dumps_on_decay() {
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let container = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Generic(kk_schema::room::GenericObj {
+                id: 0,
+                x: 10,
+                y: 10,
+                data: serde_json::json!({
+                    "type": "structure", "structureType": "container",
+                    "owner": "p1", "hits": 1,
+                    "store": { "energy": 20, "XUHO2": 8 },
+                })
+                .to_string(),
+            }),
+        )
+        .unwrap();
+    let dis = f.creep("dis", "p1", 11, 10, &[BodyKind::Work], 0);
+    let mut batch = IntentBatch::default();
+    batch.add_object_intent("p1", dis, Action::Dismantle, IntentData::target(container));
+    let events = f.settle(batch);
+    assert_eq!(
+        events[0]["event"],
+        kk_core::constants::EVENT_OBJECT_DESTROYED,
+        "击毁事件"
+    );
+    let ruin = f
+        .world
+        .room("W1N1")
+        .unwrap()
+        .objects
+        .values()
+        .find_map(|o| match o {
+            RoomObject::Ruin(r) => Some(r.clone()),
+            _ => None,
+        })
+        .expect("废墟承接");
+    assert_eq!(ruin.store.energy, 20);
+    assert_eq!(
+        ruin.store_extra,
+        vec![kk_schema::room::ResourceStack {
+            resource: "XUHO2".into(),
+            amount: 8
+        }],
+        "混合 store 的非 energy/G 资源进 store_extra"
+    );
+    // 加速衰减到点（放置面直改钟——decay 语义本身另有锁值）
+    for o in f.world.room_mut("W1N1").unwrap().objects.values_mut() {
+        if let RoomObject::Ruin(r) = o {
+            r.decay_time = 1;
+        }
+    }
+    f.settle(IntentBatch::default());
+    let piles: Vec<(String, u32)> = f
+        .world
+        .room("W1N1")
+        .unwrap()
+        .objects
+        .values()
+        .filter_map(|o| match o {
+            RoomObject::Energy(e) if e.x == 10 && e.y == 10 => Some((
+                kk_engine::settle::energy_resource_name(e).to_string(),
+                e.amount,
+            )),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        piles,
+        vec![("energy".to_string(), 20), ("XUHO2".to_string(), 8)],
+        "废墟衰减落地两堆（承接全链闭环）"
+    );
+}
+
+/// B3 评审 3-4 锁值：CLAIM 部件的寿命分母（CREEP_CLAIM_LIFE_TIME=600——
+/// _.any 不看 hits）。ttl=600 自杀 → lifeRate=0.2×600/600=0.2：回收
+/// min(125,50×0.2)+min(125,600×0.2)=10+120=130（错分母 1500 会得 4+48=52）。
+#[test]
+fn claim_body_life_time_denominator() {
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let c = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Creep(CreepObj {
+                id: 0,
+                x: 10,
+                y: 10,
+                fatigue: 0,
+                age_time: 600,
+                hits: 200,
+                spawning: false,
+                action_log: 0,
+                name: "w1".into(),
+                owner: "p1".into(),
+                body: vec![
+                    kk_schema::room::BodyPart {
+                        kind: BodyKind::Move.code(),
+                        hits: 100,
+                        boost: None,
+                    },
+                    kk_schema::room::BodyPart {
+                        kind: BodyKind::Claim.code(),
+                        hits: 100,
+                        boost: None,
+                    },
+                ],
+                store: kk_schema::room::Store {
+                    energy: 0,
+                    ghodium: 0,
+                },
+            }),
+        )
+        .unwrap();
+    let mut batch = IntentBatch::default();
+    batch.add_object_intent("p1", c, Action::Suicide, IntentData::bare());
+    f.settle(batch);
+    let tomb = f
+        .world
+        .room("W1N1")
+        .unwrap()
+        .objects
+        .values()
+        .find_map(|o| match o {
+            RoomObject::Tombstone(t) => Some(t.store.energy),
+            _ => None,
+        })
+        .expect("墓碑仍建");
+    assert_eq!(tomb, 130, "CLAIM 分母 600：(50+600)×0.2");
+}
+
+/// B3 评审 3-6 边界：!decayTime（放置面 0）立即到点——官方
+/// tombstones/ruins/tick.js:6 `!object.decayTime || ...` 的 falsy 分支。
+#[test]
+fn tombstone_zero_decay_time_dumps_immediately() {
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let t = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Tombstone(kk_schema::room::TombstoneObj {
+                id: 0,
+                x: 10,
+                y: 10,
+                death_time: 0,
+                decay_time: 0,
+                creep_id: None,
+                creep_name: None,
+                creep_ticks_to_live: 0,
+                creep_body: vec![],
+                creep_saying: None,
+                owner: None,
+                store: kk_schema::room::Store {
+                    energy: 12,
+                    ghodium: 0,
+                },
+                store_extra: vec![],
+            }),
+        )
+        .unwrap();
+    f.settle(IntentBatch::default());
+    assert!(f.world.get(t).is_none(), "decayTime=0 falsy 立即到点");
+    let energy = f
+        .world
+        .room("W1N1")
+        .unwrap()
+        .objects
+        .values()
+        .filter_map(|o| match o {
+            RoomObject::Energy(e) if e.x == 10 && e.y == 10 => Some(e.amount),
+            _ => None,
+        })
+        .sum::<u32>();
+    assert_eq!(energy, 12);
+}
+
 /// structure.destroy() 的 room intent（destroy-structure.js：可建类型 +
 /// controller 归本人 + 房内无敌方 creep）；事件为套件口径（OSS 无 push——
 /// ROOM-EVENTLOG-027 期望有，登记报告）。
@@ -3138,6 +3457,22 @@ fn dismantle_redirects_to_rampart() {
         "amount=min(100,80) 钳 rampart 血量"
     );
     assert!(f.world.get(rampart2).is_none(), "80-80=0：击毁");
+    // B3 评审 3-9：房事件缓冲（RoomState.events——getEventLog 的落账面）与
+    // 返回序一致（DESTROYED 先于 ATTACK）
+    let buffered: Vec<serde_json::Value> = f
+        .world
+        .room("W1N1")
+        .unwrap()
+        .events
+        .iter()
+        .map(|s| serde_json::from_str(s).unwrap())
+        .collect();
+    assert_eq!(buffered.len(), 2);
+    assert_eq!(
+        buffered[0]["event"],
+        kk_core::constants::EVENT_OBJECT_DESTROYED,
+        "缓冲序 = 官方 _damage.js 序（:51 先于 :93）"
+    );
     assert!(f.world.get(ext2).is_some(), "本体未动");
     assert_eq!(f.creep_state(dis2).3, 0, "floor(80×0.005)=0 无回流");
     // rampart 击毁同样产废墟（Generic 透传结构——存照按 data 面）

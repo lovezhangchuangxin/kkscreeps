@@ -479,7 +479,7 @@ fn normalize_tombstone(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> TombstoneO
         x,
         y,
         death_time,
-        decay_time: death_time + ticks_to_decay,
+        decay_time: death_time.saturating_add(ticks_to_decay),
         creep_id: spec
             .get("creepId")
             .and_then(Value::as_str)
@@ -546,7 +546,7 @@ fn normalize_ruin(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> RuinObj {
             .and_then(Value::as_u64)
             .map(saturating_u32),
         destroy_time,
-        decay_time: destroy_time + ticks_to_decay,
+        decay_time: destroy_time.saturating_add(ticks_to_decay),
         owner: spec
             .get("structureOwner")
             .or_else(|| spec.get("owner"))

@@ -69,7 +69,7 @@
 ## 三、灰区登记提案（回写归主会话）
 
 1. **destroyStructure 的事件：OSS 引擎与套件分歧（本批按套件）**——OSS 4.3.2 的 room/destroy-structure.js 与 structures/_destroy.js 均无 eventLog.push（OBJECT_DESTROYED 只在 _damage.js:51 与 _die.js:97 两处）；vanilla 与 screeps-ok ROOM-EVENTLOG-027 期望 `Structure.destroy()` 产事件。我方在 room.rs 结算侧补 push（objectId=被毁结构、data.type=structureType）。建议灰区表登记"以套件为准"的裁决。
-2. **eventLog 保存窗口：官方文档 vs OSS 实现单 tick 覆写**——OSS saveRoomEventLog 每 tick hset 整体覆写（单 tick 窗口，screeps-ok 16.6 用例名即 "current tick"）；官方文档宣称 100 tick 窗口且 ROOM_EVENT_LOG_LENGTH 常量在 4.3.2 快照不存在。我方 RoomState.events 按单 tick 覆写（同 OSS/套件）。若后续判官方 hosted 行为为准需改滚动窗。
+2. **eventLog 保存窗口：单 tick 覆写**——OSS saveRoomEventLog 每 tick hset 整体覆写（driver/lib/index.js:583-585）；本地官方文档镜像（screeps-cn Room.html）表述为"前一个 tick 的事件"与覆写一致。评审 1 勘误：原"官方文档 100 tick 窗口"主张未取证成立（ROOM_EVENT_LOG_LENGTH 常量在 4.3.2 快照不存在），已删。我方 RoomState.events 按单 tick 覆写（同 OSS/套件/文档镜像三方一致）。
 3. **墓碑的 creepSaying 恒无**——官方 creepSaying 取死亡 tick actionLog.say 的公开遗言（_die.js:33）；我方 u16 位图 action_log 无文本载荷（既有 say 登记的延伸）——tombstone.creep.saying 玩家面读 undefined。
 4. **ruin 的 hitsMax None 边缘**——无 controller 房的 Generic rampart 击毁时 hitsMax 计算得 None（官方 ramparts/tick.js:17 归一后恒有数值）→ 投影 undefined。放置面 structureHitsMax 可显式给值。
 5. **_create-energy 容器承接的行为变化（清偿）**——M1 的掉落路径无 container 分支；B3 补齐后 drop/墓碑废墟衰减/踩工地退费等全部掉落官方同式先进同格 container（hits>0，容量 2000−全槽）。灰区表 49 行"其余矿物仍拒"同步清偿（place 掉落白名单放开到 RESOURCES_ALL）。
@@ -82,6 +82,7 @@
 2. `room.getEventLog()/getEventLog(true)`——消费 RoomState.events（需 world_json/beginTick 通道把事件注入 runtimeData.roomEventLog 等价物）；B2 登记的"EVENT 封套空 data"（attackController）在该接线时一并消化。
 3. 世界投影的 tombstone/ruin 已透出（DB 形态 + ticksToDecay 折叠）——prelude 薄壳 getter 化时按官方类面对照。
 4. FIND_TOMBSTONES/FIND_RUINS 两层（查询面 matches_find + prelude room.find）已通——prelude 类点亮后即完整。
+5. `Structure.destroy()` prelude 仍是桩（structures.js）——引擎侧 DestroyStructure room intent 已实装（评审 1 F3 补列）；套件 ROOM-EVENTLOG-027 经该 API 走通，接线时点亮。
 
 **轨 B 后续/其他**：
 1. withdraw/pickup 以 tombstone/ruin 为目标（官方 withdraw.js 对有 store 的对象放行；墓碑/废墟的资源回收 API）——本批未接（结算侧 intent_withdraw 目标白名单仍 spawn/extension/storage）。
@@ -93,3 +94,34 @@
 - **事件序锁定**：OBJECT_DESTROYED 先于 EVENT_ATTACK（_damage.js:51 vs :93）已按官方序落账并锁值——embed/棘轮侧若有依赖旧事件序的用例会显形（本批全绿）。
 - **store_extra 与 EnergyObj.resource 是 v1 内演化**：尚无落盘字节在流通（既有登记口径）；首个持久化格式发布起 bump 纪律生效。
 - **掉落路径过 container 的行为变化**：放置面造的 container（Generic）现在会吃掉落——screeps-ok 用例如预设掉落堆旁有 container 可能显形（本批 CI 全绿，棘轮全量回归归主会话合入门禁）。
+
+## 六、三路评审清偿记录
+
+三路结论：评审 1（官方语义）可合入 1×P2+4×P3；评审 2（Rust）需修复后合入
+1×P2+3×P3（pickup 矿物洗白 embed 实证）；评审 3（测试/契约）需修复后合入
+1×P1+2×P2+7×P3。pickup 命名矿物堆被评审 2/3 独立交叉确认。全部清偿：
+
+- **P1/P2-1 pickup 命名矿物堆洗白**（两路实证）：slot_resource 改走
+  energy_resource_name 单源（code 与命名槽双态折算后仅 energy/G 放行）；
+  power 堆同根覆盖（create_energy_typed(1) 新形态 (0,Some("power"))）；
+  锁值 pickup_rejects_named_mineral_pile（含当 tick 衰减 −1 口径）
+- **P2 废墟投影 structure 内键名 structureType→type**（评审 1 F1/评审 3-10
+  交叉确认，官方四源：_destroy.js:29/ruins.js 代理/vanilla placeRuin+
+  snapshots.ts:394/xxscreeps schema）+ 测试断言与 prelude Ruin toString 同步
+- **P2 测试缺口两条**（评审 3-2/3-3）：tombstone_container_cross_resource_
+  competition（energy 先吃余量、矿物全进墓碑的键序可观察面）+ ruin_inherits_
+  mixed_store_and_dumps_on_decay（Generic 混合 store 击毁→store_extra→衰减落地
+  全链闭环）
+- **P3 顺手清偿**：deposit_into_container 非整数槽按 0 折算（原 filter_map
+  跳过使 headroom 高估+taken 不入槽资源灭失）；place.rs 两处衰减钟裸加法改
+  saturating_add；CLAIM 600 分母锁值（claim_body_life_time_denominator，
+  130 vs 错分母 52 可分辨）；!decayTime falsy 立即到点锁值；事件缓冲序断言
+  （buffered DESTROYED 先于 ATTACK）；两处陈旧注释更新
+- **P3 登记项**（灰区表）：room intent 提交序 vs 官方分型批次序
+  （removeFlag→createFlag→createSite→removeSite→destroyStructure）；power 掉落
+  双表示（place (1,None) vs 引擎 (0,Some)——energy_resource_name 折算后玩家
+  面无差）；world_json store energy:0 恒投影扩展至 tombstone/ruin（M0 契约
+  外延，空墓碑我方 energy:0 vs 官方 {}，快照正量口径一致）；placeRuin 缺省
+  面（hitsMax None 缺键 vs vanilla 0、structureId 解析失败归零）；Generic
+  透传臂的 tombstone/ruin 无 ticksToDecay 折叠（遗留路径：旧持久化/
+  structureType 通道）

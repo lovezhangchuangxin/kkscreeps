@@ -522,12 +522,16 @@ pub(crate) fn object_json(
             v
         }
         // B3：官方 DB 形态（structures/_destroy.js:22-40）——structure 存照
-        // {id(字符串), structureType, hits: 0, hitsMax, user}；user 双落
-        // （顶层与 structure 内同值——官方两处同写）
+        // {id(字符串), type, hits: 0, hitsMax, user}；user 双落（顶层与
+        // structure 内同值——官方两处同写）。键名 `type`：官方四源一致
+        //（_destroy.js:29 `type: object.type`、ruins.js 代理 getter 读
+        // o.structure.type、vanilla placeRuin/snapshots.ts:394、xxscreeps
+        // schema——B3 评审 1 F1/评审 3-10 清偿：原 structureType 轨 A 按
+        // ruins.js 接线时读 .type 会落空）
         RoomObject::Ruin(o) => {
             let mut structure = json!({
                 "id": crate::world::ObjId(o.structure_id).as_str(),
-                "structureType": o.structure_type,
+                "type": o.structure_type,
                 "hits": 0,
             });
             if let Some(hits_max) = o.structure_hits_max {
@@ -925,7 +929,7 @@ mod tests {
         assert_eq!(r["destroyTime"], 98);
         assert_eq!(r["ticksToDecay"], 498);
         assert_eq!(r["structure"]["id"], "kk0000000000000009");
-        assert_eq!(r["structure"]["structureType"], "spawn");
+        assert_eq!(r["structure"]["type"], "spawn");
         assert_eq!(
             r["structure"]["hits"], 0,
             "存照 hits 恒 0（_destroy.js:29）"
