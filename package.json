@@ -7,6 +7,15 @@
   },
   "scripts": {
     "fmt": "cargo fmt --all",
-    "check": "cargo fmt --all --check && cargo clippy --workspace --all-targets && cargo test --workspace && pnpm -r run test && node scripts/check-doc-links.mjs"
+    "check": "cargo fmt --all --check && cargo clippy --workspace --all-targets && cargo test --workspace && pnpm -r run test && node scripts/check-doc-links.mjs",
+    "prepare": "simple-git-hooks"
+  },
+  "devDependencies": {
+    "simple-git-hooks": "2.14.0"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "cargo fmt --all --check || { echo '✗ rustfmt 检查未通过：运行 pnpm run fmt 修复后重新暂存并提交'; exit 1; }",
+    "pre-merge-commit": "cargo fmt --all --check || { echo '✗ rustfmt 检查未通过：合并结果未过格式检查——运行 pnpm run fmt 后重新提交结束合并'; exit 1; }",
+    "commit-msg": "if [ -f scripts/check-commit-msg.mjs ]; then node scripts/check-commit-msg.mjs \"$1\"; fi"
   }
 }

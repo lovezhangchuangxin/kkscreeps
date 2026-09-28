@@ -459,7 +459,8 @@ structureType 补（属于既有执行器的小扩展，非新能力）。
 推进轨 A 并掌握全局进度；轨 B/C 为后台 subagent，各自在 `.worktrees/track-b|c`（独立分支
 `m2/track-b`、`m2/track-c`）开发、自验 `cargo test -p <crate>`、提交到自己的分支。**开发并行、
 合入串行**：一次只合一条轨一批 → 分支 diff 上 3 路评审 subagent（轨 B 视角：官方结算语义对照 /
-Rust 正确性 / 测试锁值充分性；轨 C 视角：官方对照 / unsafe 边界 / 测试与基准）→ 合入 main →
+Rust 正确性 / 测试锁值充分性；轨 C 视角：官方对照 / unsafe 边界 / 测试与基准）→ 合入 main（
+合入轨提交由 pre-commit、merge 由 pre-merge-commit hook 拦 rustfmt，见 README「本地开发与提交检查」）→
 `cargo test --workspace` → 全量棘轮 → bot 回归 → 地板更新 → 单一归因提交。合入由主会话执行。
 
 **文件所有权**（写进每批规格，越界即评审打回）：

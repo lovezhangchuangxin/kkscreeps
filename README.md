@@ -39,7 +39,7 @@ compat/          兼容性验收（TS 包）：screeps-ok 适配器（经 kkscre
 crates/          Rust 引擎工作区（九个 kk-* crate，见 docs/architecture/overall.md）
 apps/ packages/  JS 工作区：Vue3 客户端 + 渲染器/API/编辑器/共享类型库（M3 前为占位包），
                   见 docs/architecture/frontend.md
-scripts/         仓库工具脚本（screeps-ok pin 克隆、bot 拉取、文档链接检查）
+scripts/         仓库工具脚本（screeps-ok pin 克隆、bot 拉取、文档链接检查、提交信息校验）
 spikes/          技术验证工程（cargo crate，使命已完成，保留作证据）
 ├── deno-spike/    ★ 主力验证：沙箱基础 / 游戏 API 交互模式 / 指令回调 / 预算桶仿真
 │                  运行：cargo run --release [--example game_api | op_callback | bucket_sim]
@@ -48,6 +48,17 @@ spikes/          技术验证工程（cargo crate，使命已完成，保留作�
 ├── rquickjs-spike/（评估后淘汰，保留作证据）
 └── boa-spike/     （评估后淘汰，保留作证据）
 ```
+
+## 本地开发与提交检查
+
+首次克隆后在仓库根执行 `pnpm install` 会自动安装 git hooks（[simple-git-hooks](https://github.com/toplenboren/simple-git-hooks)，经根 package.json 的 `prepare` 脚本）。hooks 只做秒级快速门禁；代码质量门禁仍是 `pnpm run check`（fmt/clippy/test/文档链接，覆盖 CI 同名检查——CI 另有构建类与 ratchet job）。
+
+- **pre-commit / pre-merge-commit**：`cargo fmt --all --check`——未通过时运行 `pnpm run fmt` 修复后重新暂存提交（merge 路径修复后重新提交结束合并）。
+- **commit-msg**：`node scripts/check-commit-msg.mjs` 校验 subject——「前缀：描述」格式（全角/半角冒号均可，冒号前 ≤48 字符、描述非空）、非空、首尾无空白、≤350 字符；git 自动生成的 merge/revert/fixup/squash 提交豁免。
+
+修改 hook 配置后需 `pnpm exec simple-git-hooks` 重新应用；确需跳过用 `git commit --no-verify` 或临时设 `SKIP_SIMPLE_GIT_HOOKS=1`（不推荐）。彻底移除：先 `node node_modules/simple-git-hooks/uninstall.js`（依赖构建脚本已被 pnpm 审批拒绝，hook 文件不会随之清理）再卸载依赖。CI 里的 `pnpm install` 同样会安装 hooks，无副作用（CI 不产生提交）。
+
+**worktree 说明**：hooks 位于主仓库 `.git/hooks`，`.worktrees/` 下的三轨 worktree 共享生效。commit-msg 依赖检出内的校验脚本——尚未并入本机制的旧分支自动跳过，该轨分支并入后即启用；fmt 检查无此依赖、在普通提交与 merge 提交路径始终生效（cherry-pick 不触发任何 hook，由 CI 兜底），旧分支若含未格式化代码，首次提交前先在该 worktree 跑一次 `pnpm run fmt`（一次性修复，随提交合入）。
 
 ## 路线图
 

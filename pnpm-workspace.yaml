@@ -4,3 +4,8 @@ packages:
   - apps/*
   - packages/*
   - compat
+# simple-git-hooks 的安装走根 package.json 的 prepare 脚本（官方推荐，pnpm 兼容），
+# 依赖自带的 postinstall 无需执行，显式拒绝以满足 pnpm 构建脚本审批。
+# allowBuilds 是 pnpm 12 的键，版本由 package.json 的 packageManager 钉死。
+allowBuilds:
+  simple-git-hooks: false
