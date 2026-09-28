@@ -2,21 +2,23 @@
 //!
 //! 素材：`driver/native/sample-terrain.js`（143 个真实房间的地形）+
 //! `driver/native/profile.js` 的全对搜索场景与其校验和 **11843305**
-//! （profile.js:87-98，官方以此校验路径长度与 ops 的总量——任何 tie-breaking
-//! 或代价计算的偏差都会改变该和）。
+//! （profile.js:102，官方以此校验路径长度与 ops 的总量）。注意 checksum 只锁
+//! 聚合量——等长异形路径 + 相同 ops 的 tie-breaking 翻转不会被察觉；逐点一致
+//! 的真正保证是结构性的（pf.cc 逐字节官方 + compat 层不触碰值语义），checksum
+//! 是经验性旁证。
 //!
 //! 场景逐点对照 profile.js：
-//! - 21 个出发点（profile.js:62-85 的 RoomPosition 列表）两两互搜（跳过自身），
+//! - 24 个出发点（profile.js 的 RoomPosition 列表）两两互搜（跳过自身），
 //!   重复 5 轮；
 //! - `range = ii % 3`（ii 为出发点下标）；选项 `1, 5, 16, 100000, 100000, 0,
-//!   1.2`（profile.js:75，即 plain=1/swamp=5/maxRooms=16/maxOps=100000/
+//!   1.2`（profile.js:90-93，即 plain=1/swamp=5/maxRooms=16/maxOps=100000/
 //!   maxCost=100000/flee=false/hw=1.2）；
 //! - 回调语义复刻 profile.js:86-89——注意官方脚本有一处笔误
-//!   `costMatrix = ii % 11`（应为 `costMatrix[ii] = ...`，profile.js:53-58），
+//!   `costMatrix = ii % 11`（应为 `costMatrix[ii] = ...`，profile.js:41-46），
 //!   导致回调实际返回标量 2 而非 TypedArray：native 侧 TypedArrayContents
 //!   长度检查（pf.cc:55）不过 → 等价于「无矩阵」。本测试用 `None` 复刻该行为
 //!   （`false` 封锁分支保留：`jj % 5 == 0 && ii % 2 == 0` 时 `Blocked`）；
-//! - checksum += path.len() + ops（profile.js:94-97，ret 恒真值对象；native -1
+//! - checksum += path.len() + ops（profile.js:99-102，ret 恒真值对象；native -1
 //!   时 path/ops 按 0 计——driver 映射后同为 0）。
 
 use kk_pathfinder::{

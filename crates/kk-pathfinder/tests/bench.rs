@@ -1,7 +1,7 @@
 //! 简单基准（手动计时，不引 criterion）。运行方式：
 //! `cargo test -p kk-pathfinder --release --test bench -- --ignored --nocapture`
 //!
-//! 场景对照官方 profile.js（driver/native/native/profile.js:62-103）：
+//! 场景对照官方 profile.js（driver/native/profile.js:62-103）：
 //! 官方在同一硬件量级下用该场景做 PGO 校验（checksum 11843305）。
 
 use std::time::Instant;
@@ -48,6 +48,7 @@ const POSITIONS: &[(&str, u32, u32)] = &[
 ];
 
 /// 单次 search 量级（短程）：同房直线 ~5 步。
+/// 注：debug 档约 28µs/次，release 档实测约 2µs/次——口径以运行档位为准。
 #[test]
 #[ignore]
 fn bench_short_search() {

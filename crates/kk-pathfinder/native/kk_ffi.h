@@ -1,6 +1,6 @@
 // kk-pathfinder 自有文件（非官方拷贝）：官方 pf.cc 的 C ABI 包装声明。
 // Rust 绑定见 src/ffi.rs；参数形态对照官方 JS 调用面：
-// - search 实参 ↔ driver/lib/path-finder.js:94（mod.search(origin, goals, cb,
+// - search 实参 ↔ driver/lib/path-finder.js:134（mod.search(origin, goals, cb,
 //   plainCost, swampCost, maxRooms, maxOps, maxCost, flee, heuristicWeight)）；
 // - origin/goals 的世界坐标形态 ↔ driver/lib/path-finder.js:34-44（toWorldPosition）；
 // - 地形加载 ↔ driver/lib/path-finder.js:12-30 + pf.cc:605-613（loadTerrain）。

@@ -191,7 +191,7 @@ impl Goal {
     }
 }
 
-/// 搜索选项。`Default` 与选项钳制均对照 driver/lib/path-finder.js:63-70：
+/// 搜索选项。`Default` 与选项钳制均对照 driver/lib/path-finder.js:90-96：
 /// `plainCost: min(254, max(1, x||1))`、`swampCost: … x||5`、
 /// `heuristicWeight: min(9, max(1, x||1.2))`、`maxOps: max(1, x||2000)`、
 /// `maxCost: max(1, x||0xffffffff)`、`maxRooms: min(64, max(1, x||16))`。
@@ -225,7 +225,7 @@ impl Default for SearchOptions {
 
 impl SearchOptions {
     /// 按 JS 语义钳制（`x || default` 的 0/NaN 回退 + min/max 夹逼，
-    /// driver/lib/path-finder.js:63-70）。
+    /// driver/lib/path-finder.js:90-96）。
     fn clamped(&self) -> SearchOptions {
         let or = |v: u32, d: u32| if v == 0 { d } else { v };
         let hw = if self.heuristic_weight == 0.0 || self.heuristic_weight.is_nan() {
@@ -246,7 +246,7 @@ impl SearchOptions {
 }
 
 /// roomCallback 的返回决策（对照官方 JS bridge 给 native 的返回形态，
-/// driver/lib/path-finder.js:83-92 → pf.cc:47-58）。
+/// driver/lib/path-finder.js:114-131 → pf.cc:47-58）。
 pub enum RoomDecision<'a> {
     /// 返回 undefined / 非 TypedArray：该房间用纯地形（pf.cc:55 长度检查不过 →
     /// cost_matrix 保持 null）。
@@ -488,8 +488,10 @@ where
     let tramp = ffi::trampoline::<'a, F>();
     let user_data = (&mut callback) as *mut F as *mut std::ffi::c_void;
     let _terrain = terrain_read();
-    // Safety: 闭包位于本栈帧（存活至调用结束）；其返回的 CostMatrix 引用的
-    // 生命周期 'a 由签名约束为长于本次调用；goals 切片调用期内有效；读锁防并发写
+    // Safety: 闭包位于本栈帧（存活至调用结束）；其返回的 CostMatrix 引用只能
+    // 溯源到闭包外层的所有者（FnMut Output 无法借用 &mut self），借用存活于整次
+    // 调用；goals 切片调用期内有效；读锁防并发写。回调内 panic 会穿越 extern "C"
+    // 边界（Rust ≥1.81 对 unwind 是 abort 而非 UB）；回调内 load_terrain 会死锁
     let outcome = unsafe {
         ffi::ffi_search(
             (origin.xx, origin.yy),
@@ -558,7 +560,7 @@ mod tests {
         );
     }
 
-    // ===== 选项钳制（对照 driver/lib/path-finder.js:63-70） =====
+    // ===== 选项钳制（对照 driver/lib/path-finder.js:90-96） =====
 
     #[test]
     fn options_clamping() {
