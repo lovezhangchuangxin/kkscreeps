@@ -1567,3 +1567,733 @@ fn sandbox_intents_bound_to_registered_player() {
     };
     assert_eq!((x, y), (10, 10), "冒名 intent 被丢弃：p2 的 creep 未被移动");
 }
+
+// ---- B1：hits 模型 + attack/repair/dismantle ----
+// 官方对照：engine/src/processor/intents/creeps/{attack,repair,dismantle}.js、
+// _damage.js、creeps/tick.js（_applyDamage/_recalc-body）、structures/_destroy.js。
+
+/// 直插 extension（可自定义 hits/store——Fixture.spawn 只造 spawn）。
+fn extension_at(f: &mut Fixture, x: u8, y: u8, hits: u32, energy: u32) -> ObjId {
+    f.world
+        .insert(
+            "W1N1",
+            RoomObject::Extension(kk_schema::room::ExtensionObj {
+                id: 0,
+                x,
+                y,
+                hits,
+                off: false,
+                owner: "p2".into(),
+                store: kk_schema::room::Store { energy },
+            }),
+        )
+        .unwrap()
+}
+
+/// 直插 Generic 结构（rampart 等），hits 存 data JSON。
+fn generic_structure(
+    f: &mut Fixture,
+    x: u8,
+    y: u8,
+    structure_type: &str,
+    owner: &str,
+    hits: i64,
+) -> ObjId {
+    f.world
+        .insert(
+            "W1N1",
+            RoomObject::Generic(kk_schema::room::GenericObj {
+                id: 0,
+                x,
+                y,
+                data: serde_json::json!({
+                    "type": "structure",
+                    "structureType": structure_type,
+                    "owner": owner,
+                    "hits": hits,
+                })
+                .to_string(),
+            }),
+        )
+        .unwrap()
+}
+
+fn attack_intent(attacker: ObjId, target: ObjId) -> IntentBatch {
+    attack_intent_by("p1", attacker, target)
+}
+
+fn attack_intent_by(player: &str, attacker: ObjId, target: ObjId) -> IntentBatch {
+    let mut b = IntentBatch::default();
+    b.add_object_intent(player, attacker, Action::Attack, IntentData::target(target));
+    b
+}
+
+/// creep 侧对象断言小工具。
+fn creep_parts(f: &Fixture, id: ObjId) -> (u32, Vec<u32>) {
+    match f.obj(id) {
+        RoomObject::Creep(c) => (c.hits, c.body.iter().map(|p| p.hits).collect()),
+        _ => panic!("非 creep"),
+    }
+}
+
+#[test]
+fn melee_attack_damage_and_body_distribution() {
+    // attack.js:38 伤害 = 2×ATTACK×30=60；_recalc-body.js:10-18 从尾部灌满——
+    // 前列部件先掉 hit：[tough,work,work,move] 400→340，tough 100→40
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let a = f.creep(
+        "atk",
+        "p1",
+        10,
+        10,
+        &[BodyKind::Attack, BodyKind::Attack],
+        0,
+    );
+    let b = f.creep(
+        "victim",
+        "p2",
+        11,
+        10,
+        &[
+            BodyKind::Tough,
+            BodyKind::Work,
+            BodyKind::Work,
+            BodyKind::Move,
+        ],
+        0,
+    );
+    let events = f.settle(attack_intent(a, b));
+    assert_eq!(events.len(), 1, "无反击目标（无 ATTACK 部件）→ 单事件");
+    assert_eq!(events[0]["event"], kk_core::constants::EVENT_ATTACK);
+    assert_eq!(events[0]["objectId"], a.as_str());
+    assert_eq!(events[0]["data"]["targetId"], b.as_str());
+    assert_eq!(events[0]["data"]["damage"], 60);
+    assert_eq!(
+        events[0]["data"]["attackType"],
+        kk_core::constants::EVENT_ATTACK_TYPE_MELEE
+    );
+    let (hits, parts) = creep_parts(&f, b);
+    assert_eq!(hits, 340, "400 - 60");
+    assert_eq!(parts, vec![40, 100, 100, 100], "受伤自头部推进");
+    // actionLog（_damage.js:59-75）：攻击方 attack 位、受击方 attacked 位
+    let (log_a, log_b) = match (f.obj(a), f.obj(b)) {
+        (RoomObject::Creep(x), RoomObject::Creep(y)) => (x.action_log, y.action_log),
+        _ => panic!(),
+    };
+    assert_eq!(log_a, kk_engine::settle::creep::ACTION_ATTACK);
+    assert_eq!(log_b, kk_engine::settle::creep::ACTION_ATTACKED);
+}
+
+#[test]
+fn melee_hit_back_and_event_order() {
+    // _damage.js:17-19：近战 creep 目标反击（同样延迟）；:89-93 反击事件先于主事件
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let a = f.creep(
+        "atk",
+        "p1",
+        10,
+        10,
+        &[
+            BodyKind::Attack,
+            BodyKind::Attack,
+            BodyKind::Attack,
+            BodyKind::Attack,
+        ],
+        0,
+    );
+    let b = f.creep(
+        "victim",
+        "p2",
+        11,
+        10,
+        &[
+            BodyKind::Attack,
+            BodyKind::Attack,
+            BodyKind::Tough,
+            BodyKind::Tough,
+        ],
+        0,
+    );
+    let events = f.settle(attack_intent(a, b));
+    assert_eq!(events.len(), 2, "反击事件 + 主事件");
+    assert_eq!(events[0]["event"], kk_core::constants::EVENT_ATTACK);
+    assert_eq!(
+        events[0]["objectId"],
+        b.as_str(),
+        "反击事件以受击者为 objectId"
+    );
+    assert_eq!(events[0]["data"]["targetId"], a.as_str());
+    assert_eq!(events[0]["data"]["damage"], 60, "2×ATTACK×30 反击");
+    assert_eq!(
+        events[0]["data"]["attackType"],
+        kk_core::constants::EVENT_ATTACK_TYPE_HIT_BACK
+    );
+    assert_eq!(events[1]["data"]["damage"], 120, "4×ATTACK×30 主伤害");
+    // 双方伤害同 tick 各自结算：a 400-60=340、b 400-120=280
+    assert_eq!(creep_parts(&f, a).0, 340);
+    let (hits, parts) = creep_parts(&f, b);
+    assert_eq!(hits, 280);
+    assert_eq!(parts, vec![0, 80, 100, 100], "b 首个 ATTACK 部件被击毁");
+    // 攻击者同时记 attack 与 attacked（_damage.js:74 + :88）
+    let log_a = match f.obj(a) {
+        RoomObject::Creep(c) => c.action_log,
+        _ => panic!(),
+    };
+    assert_eq!(
+        log_a,
+        kk_engine::settle::creep::ACTION_ATTACK | kk_engine::settle::creep::ACTION_ATTACKED
+    );
+}
+
+#[test]
+fn no_hit_back_when_attacker_on_rampart() {
+    // _damage.js:17：攻击者站 rampart（不分敌我/公开性）→ 无反击
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let a = f.creep("atk", "p1", 10, 10, &[BodyKind::Attack], 0);
+    generic_structure(&mut f, 10, 10, "rampart", "p2", 1000);
+    let b = f.creep(
+        "victim",
+        "p2",
+        11,
+        10,
+        &[BodyKind::Attack, BodyKind::Tough],
+        0,
+    );
+    let events = f.settle(attack_intent(a, b));
+    assert_eq!(events.len(), 1, "仅主事件");
+    assert_eq!(creep_parts(&f, a).0, 100, "攻击者无伤");
+    assert_eq!(creep_parts(&f, b).0, 170, "200 - 30");
+}
+
+#[test]
+fn multiple_attackers_accumulate_damage() {
+    // _damage.js:20：creep 目标伤害累加进 _damageToApply，目标自己的 tick 一次结算
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let a1 = f.creep("a1", "p1", 10, 10, &[BodyKind::Attack, BodyKind::Attack], 0);
+    let a2 = f.creep("a2", "p1", 12, 10, &[BodyKind::Attack, BodyKind::Attack], 0);
+    let b = f.creep(
+        "victim",
+        "p2",
+        11,
+        10,
+        &[
+            BodyKind::Tough,
+            BodyKind::Tough,
+            BodyKind::Tough,
+            BodyKind::Tough,
+        ],
+        0,
+    );
+    let mut batch = attack_intent(a1, b);
+    batch.add_object_intent("p1", a2, Action::Attack, IntentData::target(b));
+    let events = f.settle(batch);
+    assert_eq!(events.len(), 2, "两次主事件");
+    let (hits, parts) = creep_parts(&f, b);
+    assert_eq!(hits, 280, "400 - 60×2");
+    assert_eq!(parts, vec![0, 80, 100, 100]);
+}
+
+#[test]
+fn attack_kills_creep_and_drops_store() {
+    // tick.js:134-136：hits 归零 → 暴力死亡，与 TTL 死亡同路径（掉能量、无墓碑）
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let mut bodylist = vec![BodyKind::Attack; 40];
+    bodylist.push(BodyKind::Move);
+    let a = f.creep("atk", "p1", 10, 10, &bodylist, 0);
+    let b = f.creep(
+        "victim",
+        "p2",
+        11,
+        10,
+        &[BodyKind::Tough, BodyKind::Tough],
+        40,
+    );
+    f.settle(attack_intent(a, b));
+    assert!(f.world.get(b).is_none(), "1200 ≥ 200：击杀");
+    // 死亡掉落发生在 tick 阶段（键快照已拍）→ 本 tick 不衰减，40 原值
+    let dropped = f
+        .world
+        .room("W1N1")
+        .unwrap()
+        .objects
+        .values()
+        .find_map(|o| match o {
+            RoomObject::Energy(e) if e.x == 11 && e.y == 10 => Some(e.amount),
+            _ => None,
+        });
+    assert_eq!(dropped, Some(40), "store 掉地为 energy");
+}
+
+#[test]
+fn attack_kills_structure_and_spawn_chick() {
+    // structures/_destroy.js:9-15：孵化中的 spawn 被毁 → 雏形一并移除；
+    // store 落地为掉落能量（官方进 ruin——B1 偏离登记）；phase 5 落地 → 本 tick 衰减 1
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    f.controller(3, Some("p1"));
+    let spawn = f.spawn("Spawn1", 20, 20, 300);
+    // 造孵化任务与雏形（走真 createCreep intent）
+    let mut b0 = IntentBatch::default();
+    let mut d0 = IntentData::bare();
+    d0.name = Some("child".into());
+    d0.body = vec![BodyKind::Move];
+    b0.add_object_intent("p1", spawn, Action::CreateCreep, d0);
+    f.settle(b0);
+    // 削弱 spawn 至一击必杀（120 伤害）
+    if let Some(RoomObject::Spawn(s)) = f.world.get_mut(spawn) {
+        s.hits = 100;
+    }
+    let atk = f.creep("atk", "p2", 20, 21, &[BodyKind::Attack; 4], 0);
+    f.settle(attack_intent_by("p2", atk, spawn));
+    assert!(f.world.get(spawn).is_none(), "spawn 被击毁");
+    assert!(
+        !f.world
+            .room("W1N1")
+            .unwrap()
+            .objects
+            .values()
+            .any(|o| matches!(o, RoomObject::Creep(c) if c.name == "child")),
+        "雏形随 spawn 一并移除"
+    );
+    let dropped = f
+        .world
+        .room("W1N1")
+        .unwrap()
+        .objects
+        .values()
+        .find_map(|o| match o {
+            RoomObject::Energy(e) if e.x == 20 && e.y == 20 => Some(e.amount),
+            _ => None,
+        });
+    assert_eq!(
+        dropped,
+        Some(250),
+        "store 落地后当 tick 衰减 ceil(251/1000)=1（300-50 孵化费+1 涓流=251）"
+    );
+}
+
+#[test]
+fn rampart_redirects_attack_until_broken() {
+    // attack.js:33-36：目标格 rampart 存在 → 伤害转打 rampart；打破后直击本体
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let a = f.creep("atk", "p1", 11, 10, &[BodyKind::Attack; 10], 0);
+    let ext = extension_at(&mut f, 12, 10, 1000, 0);
+    let rampart = generic_structure(&mut f, 12, 10, "rampart", "p2", 1000);
+    // t1：extension 无伤、rampart -300
+    let events = f.settle(attack_intent(a, ext));
+    assert_eq!(
+        events[0]["data"]["targetId"],
+        rampart.as_str(),
+        "事件指向 rampart"
+    );
+    match f.obj(ext) {
+        RoomObject::Extension(e) => assert_eq!(e.hits, 1000, "本体受 rampart 保护"),
+        _ => panic!(),
+    }
+    match f.obj(rampart) {
+        RoomObject::Generic(g) => {
+            let data: serde_json::Value = serde_json::from_str(&g.data).unwrap();
+            assert_eq!(data["hits"], 700);
+        }
+        _ => panic!(),
+    }
+    // t2-t3：rampart 700→400→100
+    f.settle(attack_intent(a, ext));
+    f.settle(attack_intent(a, ext));
+    // t4：100-300 ≤ 0 → rampart 击毁
+    f.settle(attack_intent(a, ext));
+    assert!(f.world.get(rampart).is_none(), "rampart 击毁");
+    assert!(f.world.get(ext).is_some(), "本体仍在");
+    // t5：无 rampart → 直击 extension
+    let events = f.settle(attack_intent(a, ext));
+    assert_eq!(events[0]["data"]["targetId"], ext.as_str());
+    match f.obj(ext) {
+        RoomObject::Extension(e) => assert_eq!(e.hits, 700),
+        _ => panic!(),
+    }
+}
+
+#[test]
+fn safe_mode_blocks_hostile_attack_and_dismantle() {
+    // attack.js:30-32 / dismantle.js:24-26：他人 safeMode 生效期拒（引擎层二次门）
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let ctl = f.controller(2, Some("p2"));
+    let atk = f.creep("atk", "p1", 10, 10, &[BodyKind::Attack, BodyKind::Work], 0);
+    let ext = extension_at(&mut f, 11, 10, 1000, 0);
+    let wall = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::ConstructedWall(kk_schema::room::ConstructedWallObj {
+                id: 0,
+                x: 10,
+                y: 11,
+                hits: 1000,
+            }),
+        )
+        .unwrap();
+    // 手动挂 safeMode（激活链属 B2）
+    if let Some(RoomObject::Controller(t)) = f.world.get_mut(ctl) {
+        t.safe_mode = 1000;
+    }
+    let mut batch = attack_intent(atk, ext);
+    batch.add_object_intent("p1", atk, Action::Dismantle, IntentData::target(wall));
+    let events = f.settle(batch);
+    assert!(events.is_empty(), "safeMode：攻击与拆解全拒");
+    match f.obj(ext) {
+        RoomObject::Extension(e) => assert_eq!(e.hits, 1000),
+        _ => panic!(),
+    }
+    match f.obj(wall) {
+        RoomObject::ConstructedWall(w) => assert_eq!(w.hits, 1000),
+        _ => panic!(),
+    }
+}
+
+#[test]
+fn repair_effect_cost_and_clamps() {
+    // repair.js:23-27：effect=min(功率,能量×100,缺口)；cost=min(存量,ceil(effect×0.01))
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let ext = extension_at(&mut f, 12, 10, 900, 0);
+    let w1 = f.creep("fixer", "p1", 11, 10, &[BodyKind::Work, BodyKind::Carry], 1);
+    let mut b = IntentBatch::default();
+    b.add_object_intent("p1", w1, Action::Repair, IntentData::target(ext));
+    let events = f.settle(b);
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0]["event"], kk_core::constants::EVENT_REPAIR);
+    assert_eq!(events[0]["data"]["amount"], 100, "1×WORK×100");
+    assert_eq!(events[0]["data"]["energySpent"], 1, "ceil(100×0.01)=1");
+    match f.obj(ext) {
+        RoomObject::Extension(e) => assert_eq!(e.hits, 1000, "钳到 hitsMax"),
+        _ => panic!(),
+    }
+    assert_eq!(f.creep_state(w1).3, 0, "能量扣尽");
+
+    // 缺口小于功率：effect 钳缺口，cost 仍按 ceil 计 1
+    if let Some(RoomObject::Extension(e)) = f.world.get_mut(ext) {
+        e.hits = 950;
+    }
+    let mut b2 = IntentBatch::default();
+    b2.add_object_intent("p1", w1, Action::Repair, IntentData::target(ext));
+    let events2 = f.settle(b2);
+    assert_eq!(events2.len(), 0, "无能量：整条拒绝（repair.js:11）");
+    if let Some(RoomObject::Extension(e)) = f.world.get_mut(ext) {
+        e.hits = 950;
+    }
+    if let Some(RoomObject::Creep(c)) = f.world.get_mut(w1) {
+        c.store.energy = 5;
+    }
+    let mut b3 = IntentBatch::default();
+    b3.add_object_intent("p1", w1, Action::Repair, IntentData::target(ext));
+    let events3 = f.settle(b3);
+    assert_eq!(events3[0]["data"]["amount"], 50, "缺口 50 钳制");
+    assert_eq!(events3[0]["data"]["energySpent"], 1, "ceil(50×0.01)=1");
+    match f.obj(ext) {
+        RoomObject::Extension(e) => assert_eq!(e.hits, 1000),
+        _ => panic!(),
+    }
+    assert_eq!(f.creep_state(w1).3, 4);
+
+    // 满血目标拒绝（repair.js:16 target.hits >= hitsMax）
+    let mut b4 = IntentBatch::default();
+    b4.add_object_intent("p1", w1, Action::Repair, IntentData::target(ext));
+    assert!(f.settle(b4).is_empty(), "满血不修");
+
+    // 无 WORK 部件：effect 0 → 拒（repair.js:40 `!boostedEffect`）
+    let nowork = f.creep("nowork", "p1", 11, 10, &[BodyKind::Carry], 10);
+    let mut b5 = IntentBatch::default();
+    b5.add_object_intent("p1", nowork, Action::Repair, IntentData::target(ext));
+    assert!(f.settle(b5).is_empty());
+}
+
+#[test]
+fn repair_wall_and_rampart_hits_max() {
+    // build.js:192 墙 hitsMax=WALL_HITS_MAX(300M)；ramparts/tick.js:17 按 RCL 表
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let wall = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::ConstructedWall(kk_schema::room::ConstructedWallObj {
+                id: 0,
+                x: 12,
+                y: 10,
+                hits: 1,
+            }),
+        )
+        .unwrap();
+    let fixer = f.creep(
+        "fixer",
+        "p1",
+        11,
+        10,
+        &[BodyKind::Work, BodyKind::Carry, BodyKind::Carry],
+        100,
+    );
+    let mut b = IntentBatch::default();
+    b.add_object_intent("p1", fixer, Action::Repair, IntentData::target(wall));
+    let events = f.settle(b);
+    assert_eq!(events[0]["data"]["amount"], 100, "300M 缺口不钳功率");
+    match f.obj(wall) {
+        RoomObject::ConstructedWall(w) => assert_eq!(w.hits, 101),
+        _ => panic!(),
+    }
+
+    // rampart：RCL 3 上限 1,000,000（RAMPART_HITS_MAX["3"]）
+    f.controller(3, Some("p1"));
+    let rampart = generic_structure(&mut f, 12, 11, "rampart", "p1", 999_900);
+    let fixer2 = f.creep(
+        "fixer2",
+        "p1",
+        11,
+        11,
+        &[BodyKind::Work, BodyKind::Carry],
+        10,
+    );
+    let mut b2 = IntentBatch::default();
+    b2.add_object_intent("p1", fixer2, Action::Repair, IntentData::target(rampart));
+    let events2 = f.settle(b2);
+    assert_eq!(events2[0]["data"]["amount"], 100, "缺口 100");
+    match f.obj(rampart) {
+        RoomObject::Generic(g) => {
+            let data: serde_json::Value = serde_json::from_str(&g.data).unwrap();
+            assert_eq!(data["hits"], 1_000_000, "修到 RCL 3 上限");
+        }
+        _ => panic!(),
+    }
+}
+
+#[test]
+fn dismantle_reflux_and_destroy() {
+    // dismantle.js:33-52：amount=min(WORK×50, hits)、回流 floor(amount×0.005)、
+    // 先回流后施伤；击毁时 store 落地（官方进 ruin——B1 偏离登记）
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let dis = f.creep(
+        "dis",
+        "p1",
+        11,
+        10,
+        &[
+            BodyKind::Work,
+            BodyKind::Work,
+            BodyKind::Work,
+            BodyKind::Work,
+            BodyKind::Work,
+            BodyKind::Carry,
+            BodyKind::Carry,
+        ],
+        0,
+    );
+    let ext = extension_at(&mut f, 12, 10, 1000, 200);
+    let mut b = IntentBatch::default();
+    b.add_object_intent("p1", dis, Action::Dismantle, IntentData::target(ext));
+    let events = f.settle(b.clone());
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0]["event"], kk_core::constants::EVENT_ATTACK);
+    assert_eq!(
+        events[0]["data"]["attackType"],
+        kk_core::constants::EVENT_ATTACK_TYPE_DISMANTLE
+    );
+    assert_eq!(events[0]["data"]["damage"], 250, "5×WORK×50");
+    match f.obj(ext) {
+        RoomObject::Extension(e) => assert_eq!(e.hits, 750),
+        _ => panic!(),
+    }
+    assert_eq!(f.creep_state(dis).3, 1, "回流 floor(250×0.005)=1");
+    // 继续拆：750→500→250→0（第 4 tick 击毁，amount=250 回流 1）
+    f.settle(b.clone());
+    f.settle(b.clone());
+    let events4 = f.settle(b.clone());
+    assert_eq!(events4[0]["data"]["damage"], 250, "amount=min(250,250)");
+    assert!(f.world.get(ext).is_none(), "击毁");
+    assert_eq!(f.creep_state(dis).3, 4, "四 tick 共回流 4");
+    let dropped = f
+        .world
+        .room("W1N1")
+        .unwrap()
+        .objects
+        .values()
+        .find_map(|o| match o {
+            RoomObject::Energy(e) if e.x == 12 && e.y == 10 => Some(e.amount),
+            _ => None,
+        });
+    assert_eq!(dropped, Some(199), "store 200 落地后当 tick 衰减 1");
+}
+
+#[test]
+fn dismantle_redirects_to_rampart() {
+    // dismantle.js:27-35：rampart 重定向后 amount 按重定向目标（rampart）的 hits 取
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let dis = f.creep("dis", "p1", 11, 10, &[BodyKind::Work, BodyKind::Carry], 0);
+    let ext = extension_at(&mut f, 12, 10, 1000, 0);
+    let rampart = generic_structure(&mut f, 12, 10, "rampart", "p2", 80);
+    let mut b = IntentBatch::default();
+    b.add_object_intent("p1", dis, Action::Dismantle, IntentData::target(ext));
+    let events = f.settle(b);
+    assert_eq!(events[0]["data"]["targetId"], rampart.as_str());
+    assert_eq!(events[0]["data"]["damage"], 50, "1×WORK×50");
+    match f.obj(rampart) {
+        RoomObject::Generic(g) => {
+            let data: serde_json::Value = serde_json::from_str(&g.data).unwrap();
+            assert_eq!(data["hits"], 30, "80-50：rampart 存活");
+        }
+        _ => panic!(),
+    }
+    assert_eq!(f.creep_state(dis).3, 0, "floor(50×0.005)=0 无回流");
+    match f.obj(ext) {
+        RoomObject::Extension(e) => assert_eq!(e.hits, 1000, "本体受保护"),
+        _ => panic!(),
+    }
+
+    // 功率超过 rampart 血量：amount 钳到 80，恰击毁、回流 0
+    let dis2 = f.creep(
+        "dis2",
+        "p1",
+        11,
+        12,
+        &[BodyKind::Work, BodyKind::Work, BodyKind::Carry],
+        0,
+    );
+    let rampart2 = generic_structure(&mut f, 12, 12, "rampart", "p2", 80);
+    let ext2 = extension_at(&mut f, 12, 12, 1000, 0);
+    let mut b2 = IntentBatch::default();
+    b2.add_object_intent("p1", dis2, Action::Dismantle, IntentData::target(ext2));
+    let events2 = f.settle(b2);
+    assert_eq!(
+        events2[0]["data"]["damage"], 80,
+        "amount=min(100,80) 钳 rampart 血量"
+    );
+    assert!(f.world.get(rampart2).is_none(), "80-80=0：击毁");
+    assert!(f.world.get(ext2).is_some(), "本体未动");
+    assert_eq!(f.creep_state(dis2).3, 0, "floor(80×0.005)=0 无回流");
+}
+
+#[test]
+fn attack_suppresses_harvest() {
+    // intents.js 优先级图：attack 压制 harvest——同 tick 只执行 attack
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let src = f.source(10, 11, 3000);
+    let enemy = f.creep(
+        "victim",
+        "p2",
+        11,
+        10,
+        &[BodyKind::Tough, BodyKind::Tough],
+        0,
+    );
+    let hybrid = f.creep(
+        "hy",
+        "p1",
+        10,
+        10,
+        &[BodyKind::Attack, BodyKind::Work, BodyKind::Carry],
+        0,
+    );
+    let mut b = IntentBatch::default();
+    b.add_object_intent("p1", hybrid, Action::Attack, IntentData::target(enemy));
+    b.add_object_intent("p1", hybrid, Action::Harvest, IntentData::target(src));
+    let events = f.settle(b);
+    assert!(
+        events
+            .iter()
+            .all(|e| e["event"] != kk_core::constants::EVENT_HARVEST),
+        "harvest 被压制：无采集事件"
+    );
+    assert_eq!(creep_parts(&f, enemy).0, 170, "attack 照常执行");
+    match f.obj(src) {
+        RoomObject::Source(s) => assert_eq!(s.energy, 3000, "source 未被动"),
+        _ => panic!(),
+    }
+}
+
+#[test]
+fn carry_death_drops_overflow_energy() {
+    // tick.js:141-143 → _drop-resources-without-space：CARRY 部件损毁缩容 → 超容掉落
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let a = f.creep("atk", "p1", 10, 10, &[BodyKind::Attack; 4], 0);
+    let b = f.creep(
+        "haul",
+        "p2",
+        11,
+        10,
+        &[BodyKind::Carry, BodyKind::Carry],
+        80,
+    );
+    f.settle(attack_intent(a, b));
+    let (hits, parts) = creep_parts(&f, b);
+    assert_eq!(hits, 80, "200-120");
+    assert_eq!(parts, vec![0, 80], "首个 carry 报废");
+    assert_eq!(f.creep_state(b).3, 50, "容量缩至 50");
+    let dropped = f
+        .world
+        .room("W1N1")
+        .unwrap()
+        .objects
+        .values()
+        .find_map(|o| match o {
+            RoomObject::Energy(e) if e.x == 11 && e.y == 10 => Some(e.amount),
+            _ => None,
+        });
+    assert_eq!(dropped, Some(30), "超容 80-50 掉地（tick 阶段不衰减）");
+}
+
+#[test]
+fn attack_target_validation_rejections() {
+    // attack.js 各前置门：自指（:18）、射程（:21-23）、spawning 目标（:24-26）、
+    // 无 hits 目标（:27-29）
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let a = f.creep("atk", "p1", 10, 10, &[BodyKind::Attack], 0);
+    let far = f.creep("far", "p2", 20, 20, &[BodyKind::Tough], 0);
+    let src = f.source(10, 11, 3000);
+    // spawning 目标：直插 spawning=true 的 creep
+    let chick = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Creep(CreepObj {
+                id: 0,
+                x: 11,
+                y: 10,
+                fatigue: 0,
+                age_time: u64::MAX / 2,
+                hits: 100,
+                spawning: true,
+                action_log: 0,
+                name: "chick".into(),
+                owner: "p2".into(),
+                body: body(&[BodyKind::Move]),
+                store: Default::default(),
+            }),
+        )
+        .unwrap();
+    let e1 = f.settle(attack_intent(a, a));
+    assert!(e1.is_empty(), "自指拒");
+    let e2 = f.settle(attack_intent(a, far));
+    assert!(e2.is_empty(), "射程外拒");
+    let e3 = f.settle(attack_intent(a, src));
+    assert!(e3.is_empty(), "source 无 hits 不可攻");
+    let e4 = f.settle(attack_intent(a, chick));
+    assert!(e4.is_empty(), "spawning 目标拒");
+    match f.obj(src) {
+        RoomObject::Source(s) => assert_eq!(s.energy, 3000),
+        _ => panic!(),
+    }
+}
+
+#[test]
+fn zero_power_attack_still_logs() {
+    // 官方引擎层无部件预检（那是 API 层的事）：无 ATTACK 部件的攻击 intent
+    // 仍产 actionLog 与 0 伤害事件（_damage.js:59-93 无条件段）
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let a = f.creep("weak", "p1", 10, 10, &[BodyKind::Work, BodyKind::Carry], 0);
+    let b = f.creep("victim", "p2", 11, 10, &[BodyKind::Tough], 0);
+    let events = f.settle(attack_intent(a, b));
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0]["data"]["damage"], 0);
+    assert_eq!(creep_parts(&f, b).0, 100, "0 伤害不进伤害路径");
+    let (log_a, log_b) = match (f.obj(a), f.obj(b)) {
+        (RoomObject::Creep(x), RoomObject::Creep(y)) => (x.action_log, y.action_log),
+        _ => panic!(),
+    };
+    assert_eq!(log_a, kk_engine::settle::creep::ACTION_ATTACK);
+    assert_eq!(log_b, kk_engine::settle::creep::ACTION_ATTACKED);
+}

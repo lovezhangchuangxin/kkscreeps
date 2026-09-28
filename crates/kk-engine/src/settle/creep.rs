@@ -1,4 +1,5 @@
 //! creep 指令执行与 creep tick（官方 creeps/intents.js 执行序 + tick.js）。
+//! B1 增补近战 attack / repair / dismantle 执行器（伤害机制见 damage.rs）。
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -7,6 +8,7 @@ use kk_schema::room::{BodyPart, RoomObject};
 use kk_world::ObjId;
 use kk_world::types::BodyKind;
 
+use super::damage;
 use super::movement::{self, offsets_by_direction};
 use super::{SettleError, Working};
 use crate::intent::{Action, EXECUTION_ORDER, IntentData};
@@ -28,6 +30,9 @@ pub fn process_creep_intents(w: &mut Working, id: ObjId, actions: &BTreeMap<Acti
             Action::Withdraw => intent_withdraw(w, id, data),
             Action::Drop => intent_drop(w, id, data),
             Action::Pickup => intent_pickup(w, id, data),
+            Action::Attack => intent_attack(w, id, data),
+            Action::Repair => intent_repair(w, id, data),
+            Action::Dismantle => intent_dismantle(w, id, data),
             // M1 无执行器的动作（战斗/占位/杂项）：压制图已生效，此处静默跳过
             _ => {}
         }
@@ -564,7 +569,8 @@ fn intent_drop(w: &mut Working, id: ObjId, data: &IntentData) {
     intent_drop_amount(w, id, amount);
 }
 
-fn intent_drop_amount(w: &mut Working, id: ObjId, amount: i64) {
+/// 掉落能量（drop.js 落地路径；dismantle 回流超容与 harvest 超容共用）。
+pub(super) fn intent_drop_amount(w: &mut Working, id: ObjId, amount: i64) {
     let (pos, held) = match w.creep(id) {
         Some(c) if !c.spawning => ((c.x, c.y), c.store.energy as i64),
         _ => return,
@@ -617,6 +623,177 @@ fn intent_pickup(w: &mut Working, id: ObjId, data: &IntentData) {
     }
 }
 
+/// 官方 attack.js（近战）：邻接、有 hits 的目标、他人 safeMode 拒、目标格
+/// rampart 重定向、ATTACK 部件数 × ATTACK_POWER（无 boost）。
+fn intent_attack(w: &mut Working, id: ObjId, data: &IntentData) {
+    let Some(target_id) = data.id else { return };
+    // attack.js:13-15：spawning 拒；:38 功率 = 活跃 ATTACK × ATTACK_POWER
+    let (pos, owner, power) = match w.creep(id) {
+        Some(c) if !c.spawning => (
+            (c.x, c.y),
+            c.owner.clone(),
+            BodyKind::count_active(&c.body, BodyKind::Attack) as i64 * c::ATTACK_POWER,
+        ),
+        _ => return,
+    };
+    // attack.js:18：目标不存在或自指拒
+    if target_id == id {
+        return;
+    }
+    let Some(target) = w.room.objects.get(&target_id).cloned() else {
+        return;
+    };
+    let (tx, ty) = target.pos();
+    // attack.js:21-23：近战射程 1（Chebyshev）
+    if (tx as i32 - pos.0 as i32).abs() > 1 || (ty as i32 - pos.1 as i32).abs() > 1 {
+        return;
+    }
+    // attack.js:24-26：spawning 中的 creep 目标拒
+    if let RoomObject::Creep(t) = &target
+        && t.spawning
+    {
+        return;
+    }
+    // attack.js:27-29：无 hits 的对象不可攻（source/controller/工地/掉落/旗）
+    if damage::object_hits(&target) <= 0 {
+        return;
+    }
+    // attack.js:30-32：他人（含无主房）safeMode 生效期拒
+    if blocked_by_safe_mode(w, &owner) {
+        return;
+    }
+    // attack.js:33-36：目标格有 rampart → 转打 rampart（任何主人/公开性）
+    let target_id = damage::rampart_at(w, (tx, ty)).unwrap_or(target_id);
+    // attack.js:40：统一伤害入口（0 功率也走——官方引擎层无部件预检）
+    damage::apply_damage(w, id, target_id, power, c::EVENT_ATTACK_TYPE_MELEE);
+    // attack.js:42 `object._attack = true`：官方全库只写不读的死标记，不移植
+}
+
+/// 官方 attack.js:30-32 / dismantle.js:24-26 的 safeMode 门：controller 归
+/// 他人（undefined user ≠ object.user 同样成立）且 safeMode > gameTime。
+fn blocked_by_safe_mode(w: &Working, actor: &str) -> bool {
+    w.controller()
+        .is_some_and(|ctl| ctl.owner.as_deref() != Some(actor) && ctl.safe_mode > w.time)
+}
+
+/// 官方 repair.js：射程 3、WORK × REPAIR_POWER、能量按 REPAIR_COST 折算消耗、
+/// hitsMax 钳制（无 boost）。
+fn intent_repair(w: &mut Working, id: ObjId, data: &IntentData) {
+    let Some(target_id) = data.id else { return };
+    // repair.js:8-13：spawning 或空仓拒；:23 功率 = 活跃 WORK × REPAIR_POWER
+    let (pos, energy, repair_power) = match w.creep(id) {
+        Some(c) if !c.spawning && c.store.energy > 0 => (
+            (c.x, c.y),
+            c.store.energy as i64,
+            BodyKind::count_active(&c.body, BodyKind::Work) as i64 * c::REPAIR_POWER,
+        ),
+        _ => return,
+    };
+    // repair.js:15-18：目标须为可修结构（CONSTRUCTION_COST 类型 + 有 hitsMax）
+    // 且未满血——creep/source 等不在 CONSTRUCTION_COST 表，天然拒
+    let Some(target) = w.room.objects.get(&target_id).cloned() else {
+        return;
+    };
+    if kk_world::types::construction_cost(&movement::type_name_of(&target)).is_none() {
+        return;
+    }
+    let Some(hits_max) = damage::structure_hits_max(w, &target) else {
+        return;
+    };
+    let hits = damage::object_hits(&target);
+    if hits >= hits_max {
+        return;
+    }
+    let (tx, ty) = target.pos();
+    // repair.js:19-21：射程 3（Chebyshev）
+    if (tx as i32 - pos.0 as i32).abs() > 3 || (ty as i32 - pos.1 as i32).abs() > 3 {
+        return;
+    }
+    // repair.js:23-27：effect = min(功率, 能量折算, 缺口)；cost = min(存量,
+    // ceil(effect×REPAIR_COST))。JS 浮点（energy/0.01、ceil(e*0.01)）在此值域
+    // 恒等于整数运算（数值穷证过：energy×100 与 ceil 除 100 都无浮点误差显形）
+    let energy_remaining = energy * 100; // energy / REPAIR_COST
+    let missing = hits_max - hits;
+    let effect = repair_power.min(energy_remaining).min(missing);
+    let cost = energy.min((effect + 99) / 100); // ceil(effect × REPAIR_COST)
+    // repair.js:38-42：无 boost 时 boostedEffect = effect；零效应拒（无 WORK）
+    if effect <= 0 {
+        return;
+    }
+    // repair.js:44-51：加血（钳 hitsMax）、扣能
+    damage::set_structure_hits(w, target_id, (hits + effect).min(hits_max));
+    if let Some(creep) = w.creep_mut(id) {
+        creep.store.energy -= cost as u32;
+        set_action_log(&mut creep.action_log, ACTION_REPAIR);
+    }
+    // repair.js:58-60
+    w.push_event(
+        c::EVENT_REPAIR,
+        id,
+        serde_json::json!({
+            "targetId": target_id.as_str(),
+            "amount": effect,
+            "energySpent": cost,
+        }),
+    );
+}
+
+/// 官方 dismantle.js：邻接、CONSTRUCTION_COST 结构、他人 safeMode 拒、目标格
+/// rampart 重定向、WORK × DISMANTLE_POWER、按 DISMANTLE_COST 回流能量。
+fn intent_dismantle(w: &mut Working, id: ObjId, data: &IntentData) {
+    let Some(target_id) = data.id else { return };
+    // dismantle.js:10-12：spawning 拒；:33 功率 = 活跃 WORK × DISMANTLE_POWER
+    let (pos, owner, power) = match w.creep(id) {
+        Some(c) if !c.spawning => (
+            (c.x, c.y),
+            c.owner.clone(),
+            BodyKind::count_active(&c.body, BodyKind::Work) as i64 * c::DISMANTLE_POWER,
+        ),
+        _ => return,
+    };
+    // dismantle.js:17-19：目标须为可建类型结构（creep/source 等拒）
+    let Some(target) = w.room.objects.get(&target_id).cloned() else {
+        return;
+    };
+    if kk_world::types::construction_cost(&movement::type_name_of(&target)).is_none() {
+        return;
+    }
+    let (tx, ty) = target.pos();
+    // dismantle.js:21-23：邻接
+    if (tx as i32 - pos.0 as i32).abs() > 1 || (ty as i32 - pos.1 as i32).abs() > 1 {
+        return;
+    }
+    // dismantle.js:24-26：safeMode 门
+    if blocked_by_safe_mode(w, &owner) {
+        return;
+    }
+    // dismantle.js:27-30：rampart 重定向——amount 须按重定向后的目标 hits 取
+    let target_id = damage::rampart_at(w, (tx, ty)).unwrap_or(target_id);
+    let hits = w
+        .room
+        .objects
+        .get(&target_id)
+        .map(damage::object_hits)
+        .unwrap_or(0);
+    // dismantle.js:33-35：amount = min(功率, 目标 hits)；回流 = floor(amount ×
+    // DISMANTLE_COST)（JS 浮点恒等于 amount/200 整除，数值穷证过）
+    let amount = power.min(hits);
+    let energy_gain = amount / 200;
+    // dismantle.js:42-52：amount 为零不动；先回流能量、超容掉落、再施伤（可击毁）
+    if amount <= 0 {
+        return;
+    }
+    if let Some(creep) = w.creep_mut(id) {
+        creep.store.energy = creep
+            .store
+            .energy
+            .saturating_add(u32::try_from(energy_gain).unwrap_or(u32::MAX));
+    }
+    // dismantle.js:47-50：回流后超容立即掉落
+    damage::drop_energy_over_capacity(w, id);
+    damage::apply_damage(w, id, target_id, amount, c::EVENT_ATTACK_TYPE_DISMANTLE);
+}
+
 /// 官方 creeps/tick.js（M1 子集）：移动落格、TTL 死亡、疲劳恢复。
 pub fn creep_tick(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
     // 移动落格（movement.js execute）
@@ -642,6 +819,9 @@ pub fn creep_tick(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
             w.add_fatigue(id, -2 * moves);
         }
     }
+    // 延迟伤害结算（creeps/tick.js:118-150 在疲劳恢复之后）：hits 归零 → 暴力
+    // 死亡（与 TTL 死亡同路径），否则重排部件分布并处理缩容掉落
+    damage::apply_pending_damage(w, id);
     Ok(())
 }
 
@@ -720,6 +900,8 @@ fn movement_execute(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
 }
 
 /// creep 死亡（官方 _die.js 的 M1 形态：资源掉地、无墓碑——灰区登记）。
+/// B1 起两条死因合流：TTL 到期（tick.js:93-95）与部件全灭的暴力死亡
+/// （tick.js:134-136，damage::apply_pending_damage）。
 pub fn die_creep(w: &mut Working, id: ObjId) {
     if let Some(c) = w.creep(id) {
         let (x, y, energy) = (c.x, c.y, c.store.energy as i64);
@@ -735,6 +917,12 @@ pub fn die_creep(w: &mut Working, id: ObjId) {
 pub const ACTION_HARVEST: u8 = 1 << 0;
 pub const ACTION_BUILD: u8 = 1 << 1;
 pub const ACTION_UPGRADE: u8 = 1 << 2;
+/// 官方 actionLog.attack：近战与 dismantle 共用此键（_damage.js:60-65）。
+pub const ACTION_ATTACK: u8 = 1 << 3;
+/// 官方 actionLog.attacked（_damage.js:73-75）。
+pub const ACTION_ATTACKED: u8 = 1 << 4;
+/// 官方 actionLog.repair（repair.js:53）。
+pub const ACTION_REPAIR: u8 = 1 << 5;
 
 pub fn set_action_log(bits: &mut u8, bit: u8) {
     *bits |= bit;
