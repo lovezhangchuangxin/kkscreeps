@@ -18,6 +18,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <deque>
+#include <limits>
 #include <memory>
 #include <new>
 #include <utility>
