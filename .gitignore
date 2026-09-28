@@ -34,6 +34,9 @@ compat/fixtures/
 compat/reports/tmp/
 .test-output/
 
+# ===== M2 三轨并行的轨道工作区（git worktree，本地开发用）=====
+.worktrees/
+
 # ===== 工具与编辑器 =====
 .zcode/
 .idea/
