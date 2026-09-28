@@ -149,6 +149,9 @@ crate::kk_schema! {
 
 crate::kk_schema! {
     /// 孵化器（hits 上限 SPAWN_HITS；off = RCL 超限停用，_calc_spawns 维护）。
+    /// A4-iv 补 notify_when_attacked（官方 processor.js:313-314 通用段落库；
+    /// 玩家建造的结构出生即 true——build.js:116，放置面缺省 None=官方
+    /// undefined：与任意布尔不等，API 首调恒记 intent）。
     pub SpawnObj {
         (pub id: u64)
         (pub x: u8)
@@ -159,11 +162,13 @@ crate::kk_schema! {
         (pub owner: str)
         (pub store: Store)
         (pub spawning: opt SpawningJob)
+        (pub notify_when_attacked: opt bool)
     }
 }
 
 crate::kk_schema! {
     /// 扩展（hits 上限 EXTENSION_HITS；off = RCL 超限停用，_calc_spawns 维护）。
+    /// A4-iv 补 notify_when_attacked（同 SpawnObj 注释）。
     pub ExtensionObj {
         (pub id: u64)
         (pub x: u8)
@@ -172,32 +177,39 @@ crate::kk_schema! {
         (pub off: bool)
         (pub owner: str)
         (pub store: Store)
+        (pub notify_when_attacked: opt bool)
     }
 }
 
 crate::kk_schema! {
     /// 建造中的墙（hits 从 1 起步，上限 WALL_HITS_MAX=300M）。
+    /// A4-iv 补 notify_when_attacked（同 SpawnObj 注释——中性结构同样可设，
+    /// 官方基类版 API 对 my===undefined 放行）。
     pub ConstructedWallObj {
         (pub id: u64)
         (pub x: u8)
         (pub y: u8)
         (pub hits: u32)
+        (pub notify_when_attacked: opt bool)
     }
 }
 
 crate::kk_schema! {
     /// 道路（decay 到时移除）。
+    /// A4-iv 补 notify_when_attacked（同 SpawnObj 注释）。
     pub RoadObj {
         (pub id: u64)
         (pub x: u8)
         (pub y: u8)
         (pub hits: u32)
         (pub next_decay_time: u64)
+        (pub notify_when_attacked: opt bool)
     }
 }
 
 crate::kk_schema! {
     /// 仓库（hits 上限 STORAGE_HITS）。
+    /// A4-iv 补 notify_when_attacked（同 SpawnObj 注释）。
     pub StorageObj {
         (pub id: u64)
         (pub x: u8)
@@ -205,6 +217,7 @@ crate::kk_schema! {
         (pub hits: u32)
         (pub owner: str)
         (pub store: Store)
+        (pub notify_when_attacked: opt bool)
     }
 }
 
@@ -641,6 +654,7 @@ mod tests {
                         energy: 300,
                         ghodium: 0,
                     },
+                    notify_when_attacked: Some(true),
                     spawning: Some(SpawningJob {
                         name: "w2".into(),
                         need_time: 9,

@@ -44,6 +44,9 @@ pub enum Action {
     GenerateSafeMode,
     SignController,
     Pull,
+    /// 结构（及 creep——API 面只在结构类暴露）的通知开关（官方挂在
+    /// processor.js:313-314 的对象级通用段，不在 creepActions 序列）。
+    NotifyWhenAttacked,
     /// spawn 对象的动作（官方 spawns/intents.js:3-24 的分派序）。
     CreateCreep,
     /// renewCreep（白名单 `{id: 'string'}`，system.js:62；结算链见
@@ -94,6 +97,7 @@ impl Action {
             Self::GenerateSafeMode => "generateSafeMode",
             Self::SignController => "signController",
             Self::Pull => "pull",
+            Self::NotifyWhenAttacked => "notifyWhenAttacked",
             Self::CreateCreep => "createCreep",
             Self::RenewCreep => "renewCreep",
             Self::RecycleCreep => "recycleCreep",
@@ -129,6 +133,7 @@ impl Action {
             "generateSafeMode" => Self::GenerateSafeMode,
             "signController" => Self::SignController,
             "pull" => Self::Pull,
+            "notifyWhenAttacked" => Self::NotifyWhenAttacked,
             "createCreep" => Self::CreateCreep,
             "renewCreep" => Self::RenewCreep,
             "recycleCreep" => Self::RecycleCreep,
@@ -236,6 +241,13 @@ pub struct IntentData {
     pub y: Option<i64>,
     /// createCreep 专属（挂在 spawn 对象上）。
     pub name: Option<String>,
+    /// say 专属（system.js:68 `message: 'userString'`——截 100；官方 transform
+    /// 对缺省折叠为 ""，我方 None 由执行器按 "" 对齐）。
+    pub message: Option<String>,
+    /// say 专属（`isPublic: 'boolean'`——!!value）。
+    pub is_public: Option<bool>,
+    /// notifyWhenAttacked 专属（system.js:51 `enabled: 'boolean'`——!!value）。
+    pub enabled: Option<bool>,
     /// signController 专属：官方白名单 `sign: 'userString'`（system.js:74），
     /// 截 100（UTF-16 码元 vs Unicode chars 的差异沿用既有灰区登记）。
     /// 官方形态缺省与空串同值（userString 的 `value||""` 折叠），signController
@@ -263,6 +275,9 @@ impl IntentData {
             x: None,
             y: None,
             name: None,
+            message: None,
+            is_public: None,
+            enabled: None,
             sign: None,
             body: Vec::new(),
             energy_structures: None,
@@ -279,6 +294,9 @@ impl IntentData {
             x: None,
             y: None,
             name: None,
+            message: None,
+            is_public: None,
+            enabled: None,
             sign: None,
             body: Vec::new(),
             energy_structures: None,
@@ -483,6 +501,20 @@ fn to_id(v: Option<&Value>) -> Option<ObjId> {
     v.and_then(Value::as_str).and_then(ObjId::parse)
 }
 
+/// 官方 boolean transform（system.js:8 `value => !!value`）：JS 真值表——
+/// null/false/0/-0/NaN/'' 假，其余真（NaN 不出现在严格 JSON）。缺键 None
+/// （与官方 transform 后的显式 false 区分——say/notifyWhenAttacked 结算层
+/// 均按 falsy 折叠，None ≙ undefined）。
+fn to_bool(v: Option<&Value>) -> Option<bool> {
+    v.map(|x| match x {
+        Value::Null => false,
+        Value::Bool(b) => *b,
+        Value::Number(n) => n.as_f64().is_none_or(|f| f != 0.0),
+        Value::String(s) => !s.is_empty(),
+        Value::Array(_) | Value::Object(_) => true,
+    })
+}
+
 /// 官方 userString（system.js:12）：`("" + (value||"")).substring(0, 100)`。
 fn to_user_string(v: Option<&Value>) -> Option<String> {
     v.map(|x| match x {
@@ -507,6 +539,9 @@ pub fn sanitize_object_intent(_action: Action, raw: &Value) -> IntentData {
         x: to_int(f("x")),
         y: to_int(f("y")),
         name: to_user_string(f("name")),
+        message: to_user_string(f("message")),
+        is_public: to_bool(f("isPublic")),
+        enabled: to_bool(f("enabled")),
         sign: to_user_string(f("sign")),
         body: f("body")
             .and_then(Value::as_array)

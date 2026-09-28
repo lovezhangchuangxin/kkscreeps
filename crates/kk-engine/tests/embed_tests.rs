@@ -17,6 +17,7 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     embed_per_viewer_and_caps_impl()?;
     embed_spawn_family_chain_impl()?;
     embed_resource_family_impl()?;
+    embed_move_misc_family_impl()?;
     assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");
     Ok(())
 }
@@ -968,6 +969,90 @@ fn embed_resource_family_impl() -> anyhow::Result<()> {
         e.find_in_room("W1N1", 106).is_empty(),
         "房间无残留 resource"
     );
+    e.teardown();
+    Ok(())
+}
+
+/// A4-iv 移动杂项族闭环（prelude API → intentsList 清洗 → settle）：
+/// pull+move(puller) 配对位移（被拉者无 MOVE 照样动、疲劳归链拉者）；
+/// suicide 当 tick 死亡并掉落；say 免费且不影响位移。
+fn embed_move_misc_family_impl() -> anyhow::Result<()> {
+    let mut e = EmbedEngine::new();
+    e.create_shard(&json!({
+        "players": ["p1"],
+        "rooms": [{ "name": "W1N1", "rcl": 1, "owner": "p1" }],
+    }))?;
+    // 拉者 [move,work]@(10,10)：被拉者 [work]@(11,10)（无 MOVE、无 fatigue）
+    let _puller = e.place_object(
+        "W1N1",
+        "creep",
+        &json!({ "pos": [10, 10], "owner": "p1", "body": ["move", "work"], "name": "puller" }),
+    )?;
+    let _pulled = e.place_object(
+        "W1N1",
+        "creep",
+        &json!({ "pos": [11, 10], "owner": "p1", "body": ["work"], "name": "pulled" }),
+    )?;
+    // 自杀者携带 40 energy
+    let _martyr = e.place_object(
+        "W1N1",
+        "creep",
+        &json!({
+            "pos": [20, 20], "owner": "p1", "body": ["move", "carry"],
+            "name": "martyr", "store": { "energy": 40 }
+        }),
+    )?;
+
+    let run = e.run_player(
+        "p1",
+        r#"
+        Game.creeps['puller'].pull(Game.creeps['pulled']);
+        Game.creeps['pulled'].move(Game.creeps['puller']);
+        Game.creeps['puller'].move(LEFT);
+        Game.creeps['martyr'].suicide();
+        Game.creeps['martyr'].say('bye', true);
+        Game.creeps['puller'].say('hi');
+    "#,
+    )?;
+    assert!(run.executed, "玩家代码应真实执行");
+
+    // 拉者 (10,10)→(9,10)；被拉者 (11,10)→(10,10)（补拉者让位格——无 MOVE
+    // 经 pull 配对移动，官方 canMove 的 _pulled 分支）
+    let by_name = |e: &EmbedEngine, name: &str| {
+        e.find_in_room("W1N1", 101)
+            .into_iter()
+            .find(|o| o["name"] == name)
+            .unwrap_or_else(|| panic!("{name} 应存活"))
+            .clone()
+    };
+    let puller = by_name(&e, "puller");
+    assert_eq!(
+        (puller["pos"]["x"].clone(), puller["pos"]["y"].clone()),
+        (json!(9), json!(10))
+    );
+    let pulled = by_name(&e, "pulled");
+    assert_eq!(
+        (pulled["pos"]["x"].clone(), pulled["pos"]["y"].clone()),
+        (json!(10), json!(10))
+    );
+    // 疲劳归链：拉者自身 1 work×2 + 被拉者 1 work×2 归链 = 4，1 MOVE 恢复 -2
+    assert_eq!(puller["fatigue"], json!(2), "被拉者的移动疲劳记在拉者头上");
+    assert_eq!(pulled["fatigue"], json!(0), "被拉者无疲劳");
+
+    // suicide：当 tick 消亡，携带 40 落地（同 tick energy 衰减 1 → 39）
+    assert!(
+        e.find_in_room("W1N1", 101)
+            .into_iter()
+            .all(|o| o["name"] != "martyr"),
+        "suicide 当 tick 死亡"
+    );
+    let dropped: Vec<_> = e
+        .find_in_room("W1N1", 106)
+        .into_iter()
+        .filter(|o| o["pos"]["x"] == 20 && o["pos"]["y"] == 20)
+        .collect();
+    assert_eq!(dropped.len(), 1, "死亡掉落一个 resource");
+    assert_eq!(dropped[0]["amount"], json!(39), "40 落地 + 当 tick 衰减 1");
     e.teardown();
     Ok(())
 }

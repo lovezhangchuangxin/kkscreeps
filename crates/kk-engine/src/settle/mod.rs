@@ -27,7 +27,7 @@ use kk_schema::room::{CreepObj, RoomObject};
 use kk_world::{ObjId, RoomIndex, RoomState};
 use serde_json::{Value, json};
 
-use crate::intent::IntentBatch;
+use crate::intent::{Action, IntentBatch, IntentData};
 
 /// RCL 配额查询（CONTROLLER_STRUCTURES，嵌套 JSON 常量解析一次）。
 /// 返回该结构类型在给定 RCL 的允许数量（无条目 = 0）。
@@ -153,8 +153,9 @@ impl<'w> Working<'w> {
         }
     }
 
-    /// 官方 _add-fatigue（无 pull 的 M1 形态）：负贡献先消自身疲劳，再入累加器；
-    /// 持久值 = max(0, 累加器)。
+    /// 官方 _add-fatigue（_add-fatigue.js:24-27 的拉拽归链）：负贡献先消自身
+    /// 疲劳，剩余部分沿被拉链（`object._pulled`）上溯到链首拉者施加——被拉
+    /// creep 的移动疲劳记在拉者头上（拉拽官方语义）；持久值 = max(0, 累加器)。
     pub fn add_fatigue(&mut self, id: ObjId, mut d: i64) {
         // 官方 _add-fatigue.js:5：累加器首触达时以持久 fatigue 播种
         let mut acc = match self.tick_fatigue.get(&id) {
@@ -173,9 +174,15 @@ impl<'w> Working<'w> {
                 return;
             }
         }
+        // 拉拽归链（官方 while 循环）：链上拉者消亡即断链（!!roomObjects 守卫）
+        let head = self.movement.head_puller(self.room, id);
+        let mut acc = match self.tick_fatigue.get(&head) {
+            Some(v) => *v,
+            None => self.creep(head).map(|c| c.fatigue as i64).unwrap_or(0),
+        };
         acc += d;
-        self.tick_fatigue.insert(id, acc);
-        if let Some(creep) = self.creep_mut(id) {
+        self.tick_fatigue.insert(head, acc);
+        if let Some(creep) = self.creep_mut(head) {
             creep.fatigue = acc.max(0) as u32;
         }
     }
@@ -239,6 +246,70 @@ impl<'w> Working<'w> {
     }
 }
 
+/// 对象归属（官方 processor.js:248 的 `object.user` 面）：typed 变体直读；
+/// Generic 透传解析 data.owner。与 world_json 的 object_owner 同语义（那侧
+/// 是投影私有，此处结算侧单源）。
+fn object_owner_of(obj: &RoomObject) -> Option<std::borrow::Cow<'_, str>> {
+    match obj {
+        RoomObject::Creep(o) => Some(o.owner.as_str().into()),
+        RoomObject::Spawn(o) => Some(o.owner.as_str().into()),
+        RoomObject::Extension(o) => Some(o.owner.as_str().into()),
+        RoomObject::Storage(o) => Some(o.owner.as_str().into()),
+        RoomObject::Controller(o) => o.owner.as_deref().map(Into::into),
+        RoomObject::ConstructionSite(o) => o.owner.as_deref().map(Into::into),
+        RoomObject::Generic(o) => serde_json::from_str::<Value>(&o.data).ok().and_then(|v| {
+            v.get("owner")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .map(Into::into)
+        }),
+        // wall/road/source/energy/flag 等无主（官方 user undefined——通用段
+        // 的所有权门不拦，中性结构可设标志）
+        _ => None,
+    }
+}
+
+/// 官方 processor.js:313-314 的 notifyWhenAttacked 通用段：intent 存在且对象
+/// 是 CONSTRUCTION_COST 类型（或 creep/powerCreep——后者 M4）→ 落库
+/// `notifyWhenAttacked: !!enabled`。:248 的所有权门（他人对象跳过）内联。
+/// 消费面是伤害通知（_damage.js:78 / towers/attack.js:63——M2 通知面未接线，
+/// 本批只持久化标志，通知发送灰区登记）。
+fn notify_when_attacked(w: &mut Working, player: &str, id: ObjId, data: &IntentData) {
+    let Some(obj) = w.room.objects.get(&id) else {
+        return;
+    };
+    if object_owner_of(obj).is_some_and(|owner| owner != player) {
+        return; // 官方 :248：他人对象（无主不拦——中性墙/路可设）
+    }
+    // 官方 :313 门：CONSTRUCTION_COST[object.type] || creep || powerCreep
+    //（controller/source/工地/旗等不在表内——API 面也只在结构类暴露，此处
+    // 是清洗层允许伪造 intent 后的兜底）
+    let type_gated = matches!(obj, RoomObject::Creep(_))
+        || kk_world::types::construction_cost(&movement::type_name_of(obj)).is_some();
+    if !type_gated {
+        return;
+    }
+    let enabled = data.enabled.unwrap_or(false); // 官方 !!intent.enabled
+    match w.room.objects.get_mut(&id) {
+        Some(RoomObject::Spawn(o)) => o.notify_when_attacked = Some(enabled),
+        Some(RoomObject::Extension(o)) => o.notify_when_attacked = Some(enabled),
+        Some(RoomObject::Storage(o)) => o.notify_when_attacked = Some(enabled),
+        Some(RoomObject::ConstructedWall(o)) => o.notify_when_attacked = Some(enabled),
+        Some(RoomObject::Road(o)) => o.notify_when_attacked = Some(enabled),
+        Some(RoomObject::Generic(o)) => {
+            // 透传桶：标志写进 data JSON（投影层原样还原，prelude 的
+            // rawData(id).notifyWhenAttacked 读到）
+            let mut v: Value = serde_json::from_str(&o.data).unwrap_or_default();
+            v["notifyWhenAttacked"] = Value::Bool(enabled);
+            o.data = v.to_string();
+        }
+        // creep：官方经 bulk.update 同样落库（出生即 true，create-creep.js:93）
+        // ——CreepObj 无该字段且 API 面不暴露（Creep 无 notifyWhenAttacked
+        // 方法），通知面未接线前不可观测，灰区登记
+        _ => {}
+    }
+}
+
 /// 结算一个房间（processor.js processRoom 的 M1 子集）。
 ///
 /// 工作副本由调用方 clone（失败即回退的载体）；`batch` 只取指向本房间的部分。
@@ -281,6 +352,12 @@ pub fn settle_room(
     for (player, intents) in &batch.users {
         room::process_room_intents(&mut w, player, &intents.room);
         for (obj_id, actions) in &intents.objects {
+            // notifyWhenAttacked 通用段（官方 processor.js:313-314——各类型
+            // intent 处理器之外的对象级通用段，对任何对象类型生效；纯标志写
+            // 与类型处理器无交互，前置执行等价）
+            if let Some(data) = actions.get(&Action::NotifyWhenAttacked) {
+                notify_when_attacked(&mut w, player, *obj_id, data);
+            }
             // 官方 :248：对象不存在或所有权不符 → 跳过；按对象类型分派
             match w.room.objects.get(obj_id) {
                 Some(RoomObject::Creep(o)) if o.owner == *player => {

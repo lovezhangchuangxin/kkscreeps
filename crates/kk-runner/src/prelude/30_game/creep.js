@@ -7,9 +7,11 @@
  * （STALERECV-001），跨 tick 旧壳读当前 tick 新值（STALERECV-002）。
  * 动作方法（A2 起从桩换真：预检 + intents.set）维持官方预检序，字段访问走
  * this（getter 通道，与官方 this.my 一致）；官方方法体显式 data(this.id)
- * 回查的位置我方对齐 gw.rawData。
+ * 回查的位置我方对齐 gw.rawData。A4-iv 增补移动杂项族：moveTo（直线桩形态
+ * ——A* 归 M2B FFI 批）/moveByPath/say/suicide/pull 换真。
  * 依赖：gw.intents（收集器，30_game/game.js）、gw.rawData/gw.rawById、
- * gw.viewerName、gw.ensureMemory、gw.mkStubMethod、gw.defineGameObjectProperties。
+ * gw.viewerName、gw.ensureMemory、gw.mkStubMethod、gw.defineGameObjectProperties、
+ * gw.RoomPosition、gw.deserializePath、gw.__Object。
  */
 (() => {
   'use strict';
@@ -27,6 +29,70 @@
   // A4-iii 换真下架（原桩列表项）：claimController/reserveController/
   // attackController/generateSafeMode（signController 官方在缺集登记里——本批
   // 一并换真，不入桩表）
+
+  // 官方 utils.js:80-100 offsetsByDirection 表（deserializePath 的方向位移源）
+  const OFFSETS_BY_DIRECTION = {
+    1: [0, -1], 2: [1, -1], 3: [1, 0], 4: [1, 1],
+    5: [0, 1], 6: [-1, 1], 7: [-1, 0], 8: [-1, -1],
+  };
+
+  /** 官方 `_.isObject`（creeps.js:172 的 moveTo opts 归位门）：对象与函数
+   *  都算（null 除外）。 */
+  function isObjectLike(v) {
+    return v !== null && (typeof v === 'object' || typeof v === 'function');
+  }
+
+  /** 官方 utils.js:34-63 fetchXYArguments（moveTo 目标解析）：第二参是
+   *  number → 数值形态；否则对象形态（RoomPosition 取自身、RoomObject 取
+   *  .pos——两者都不是则 x/y 保持 undefined）。NaN 归 undefined。instanceof
+   *  用 gw.RoomPosition（预置捕获——玩家换 globalThis.RoomPosition 不影响
+   *  API 判定，与 C 表纪律一致）。 */
+  function fetchXYArguments(firstArg, secondArg) {
+    let x, y, roomName;
+    if (secondArg === undefined || typeof secondArg !== 'number') {
+      if (!isObjectLike(firstArg)) return [undefined, undefined, undefined];
+      if (firstArg instanceof gw.RoomPosition) {
+        x = firstArg.x; y = firstArg.y; roomName = firstArg.roomName;
+      }
+      if (firstArg.pos && firstArg.pos instanceof gw.RoomPosition) {
+        x = firstArg.pos.x; y = firstArg.pos.y; roomName = firstArg.pos.roomName;
+      }
+    } else {
+      x = firstArg; y = secondArg;
+    }
+    if (Number.isNaN(x)) x = undefined;
+    if (Number.isNaN(y)) y = undefined;
+    return [x, y, roomName];
+  }
+
+  /** 官方 utils.js:576-609 deserializePath：序列化串 "XXYYddd..." →
+   *  [{x, y, dx, dy, direction}]（首项坐标 = 第一步的落点，x-dx/y-dy 即其
+   *  起步格——moveByPath 的对象形态匹配面）。非串/坐标 NaN/非法方向位都抛
+   *  官方同文案错误。 */
+  function deserializePath(path) {
+    if (typeof path !== 'string') {
+      throw new Error('`path` is not a string');
+    }
+    const result = [];
+    if (!path.length) return result;
+    let x = parseInt(path.substring(0, 2), 10);
+    let y = parseInt(path.substring(2, 4), 10);
+    if (Number.isNaN(x) || Number.isNaN(y)) {
+      throw new Error('`path` is not a valid serialized path string');
+    }
+    for (let i = 4; i < path.length; i++) {
+      const direction = parseInt(path.charAt(i), 10);
+      const offs = OFFSETS_BY_DIRECTION[direction];
+      if (!offs) {
+        throw new Error('`path` is not a valid serialized path string');
+      }
+      const dx = offs[0], dy = offs[1];
+      if (i > 4) { x += dx; y += dy; }
+      result.push({ x, y, dx, dy, direction });
+    }
+    return result;
+  }
+  gw.deserializePath = deserializePath;
 
   // API 实现用的预置常量（官方 game 层的 C 来自 driver.constants 注入对象，
   // 玩家覆盖全局常量不影响 API 判定——game.js 头部 C = driver.constants 同款）
@@ -225,6 +291,83 @@
     if (!direction || direction < 1 || direction > 8) return C.ERR_INVALID_ARGS;
     gw.intents.set(this.id, 'move', { direction });
     return C.OK;
+  };
+
+  /** Creep.moveTo：官方 creeps.js:158-257 的**直线桩形态**——预检段完整
+   *  对照，寻路退化为 getDirectionTo 直线一步（真 A* 归 M2B FFI 批）。
+   *  官方序：my(:166) → spawning(:169) → opts 归位（对象形态取第二参浅拷贝
+   *  :172-177——数值形态不拷贝，reusePath 缺省赋值会改写调用方 opts 对象，
+   *  官方 quirk 原样保留）→ fatigue 显式回查（:180，visualizePathStyle 在场
+   *  免疲劳门——纯可视化 tick；官方 `!opts` 是 opts||{} 后的死条件不移植）→
+   *  MOVE 部件(:184) → fetchXYArguments(:187) → roomName 缺省本房(:188) →
+   *  x/y undefined 拒(:189-192，官方 assertTargetObject 是 Memory 序列化壳
+   *  探针，我方无注册表断言面不移植) → 同格即 OK(:213，宽松 ==) →
+   *  reusePath/serializeMemory 缺省 5/true(:205-211，memory._move 缓存面
+   *  桩化登记) → noPathFinding(:253) → 寻路(:255) → move(path[0].direction)。
+   *  直线退化与官方 A* 的行为差异面（绕障/对角穿墙/路径复用/跨房）见批次
+   *  登记报告——ERR_NO_PATH 分支在退化形态下不可达（直线方向恒存在）。 */
+  globalThis.Creep.prototype.moveTo = function moveTo(firstArg, secondArg, opts) {
+    if (!this.my) return C.ERR_NOT_OWNER;
+    if (this.spawning) return C.ERR_BUSY;
+    if (isObjectLike(firstArg)) {
+      opts = gw.__Object.assign({}, secondArg);
+    }
+    opts = opts || {};
+    if (gw.rawData(this.id).fatigue > 0 && !opts.visualizePathStyle) {
+      return C.ERR_TIRED;
+    }
+    if (countActiveParts(this.body, C.MOVE) === 0) return C.ERR_NO_BODYPART;
+    const [x, y, rawRoomName] = fetchXYArguments(firstArg, secondArg);
+    const roomName = rawRoomName || this.pos.roomName;
+    if (x === undefined || y === undefined) {
+      return C.ERR_INVALID_TARGET;
+    }
+    const targetPos = new gw.RoomPosition(x, y, roomName);
+    if (opts.reusePath === undefined) opts.reusePath = 5;
+    if (opts.serializeMemory === undefined) opts.serializeMemory = true;
+    if (x == this.pos.x && y == this.pos.y && roomName == this.pos.roomName) {
+      return C.OK;
+    }
+    if (opts.noPathFinding) {
+      return C.ERR_NOT_FOUND;
+    }
+    // 官方 :255 `this.pos.findPathTo(targetPos, opts)` 的 A* 寻路退化为直线
+    // 方向（官方阈值算法已在我方 RoomPosition.getDirectionTo）——只取一步，
+    // 后续每 tick 由玩家代码再次调用推进
+    const direction = this.pos.getDirectionTo(targetPos);
+    if (direction === undefined) {
+      return C.ERR_NO_PATH; // 防御：同格已提前 return OK，此路不可达
+    }
+    return this.move(direction);
+  };
+
+  /** Creep.moveByPath：官方 creeps.js:305-327——自身无任何预检（my/spawning/
+   *  fatigue/MOVE 全部经委托的 this.move 生效）。RoomPosition 数组形态：当前
+   *  位置在路径中找 idx（找不到则须紧邻首步，否则 ERR_NOT_FOUND），取下一
+   *  步方向 move；序列化串形态先 deserializePath（官方 utils.js:576-609，
+   *  非法串抛错）；findPathTo 风格对象数组按 x-dx/y-dy 匹配当前格取方向。 */
+  globalThis.Creep.prototype.moveByPath = function moveByPath(path) {
+    if (Array.isArray(path) && path.length > 0 && path[0] instanceof gw.RoomPosition) {
+      let idx = -1;
+      for (let i = 0; i < path.length; i++) {
+        if (path[i].isEqualTo(this.pos)) { idx = i; break; }
+      }
+      if (idx === -1 && !path[0].isNearTo(this.pos)) {
+        return C.ERR_NOT_FOUND;
+      }
+      idx += 1;
+      if (idx >= path.length) return C.ERR_NOT_FOUND;
+      return this.move(this.pos.getDirectionTo(path[idx]));
+    }
+    if (typeof path === 'string') {
+      path = deserializePath(path);
+    }
+    if (!Array.isArray(path)) return C.ERR_INVALID_ARGS;
+    const cur = path.find(
+      (i) => i.x - i.dx == this.pos.x && i.y - i.dy == this.pos.y,
+    );
+    if (!cur) return C.ERR_NOT_FOUND;
+    return this.move(cur.direction);
   };
 
   /** Creep.harvest：官方 creeps.js:335-402 的 source 分支（mineral/deposit 随
@@ -824,6 +967,46 @@
     if (!target.pos.isNearTo(this.pos)) return C.ERR_NOT_IN_RANGE;
     if (target.structureType !== 'controller') return C.ERR_INVALID_TARGET;
     gw.intents.set(this.id, 'signController', { id: target.id, sign: '' + sign });
+    return C.OK;
+  };
+
+  /** 官方 say（creeps.js:826-838）：my/spawning 后 `""+message` 字符串化记
+   *  intent（免费表已含 say——game.js 收集器）。message 截 100 在宿主清洗层
+   *  （system.js userString），actionLog 的截 10 在执行器（say.js:15）。
+   *  isPublic 出口前 !!折叠（A4-iv.1：官方 system.js:8 的 boolean transform
+   *  在 JS 边界——对象自有 toJSON 不应过通道）。 */
+  globalThis.Creep.prototype.say = function say(message, isPublic) {
+    if (!this.my) return C.ERR_NOT_OWNER;
+    if (this.spawning) return C.ERR_BUSY;
+    gw.intents.set(this.id, 'say', { message: '' + message, isPublic: !!isPublic });
+    return C.OK;
+  };
+
+  /** 官方 suicide（creeps.js:813-825）：my/spawning 后记空载荷 intent——
+   *  执行器当 tick 即死（官方 processor intents/creeps/suicide.js → _die）。 */
+  globalThis.Creep.prototype.suicide = function suicide() {
+    if (!this.my) return C.ERR_NOT_OWNER;
+    if (this.spawning) return C.ERR_BUSY;
+    gw.intents.set(this.id, 'suicide', {});
+    return C.OK;
+  };
+
+  /** 官方 pull（creeps.js:1101-1126）：my/spawning 后目标必须是已出生、邻接、
+   *  非自身的 Creep（官方 `register.creeps[target.id]` 注册表成员检查的等价
+   *  物是 gw.rawById 当前 tick 投影成员；官方 assertTargetObject 的序列化壳
+   *  探针不移植）。免费表已含 pull。位移的另一半：被拉 creep 须同 tick 记
+   *  move(puller) intent（move 的朝相邻 creep 形态）——官方 movement 配对
+   *  结算（执行器 intent_pull 对照 pull.js + movement.js addPulling）。 */
+  globalThis.Creep.prototype.pull = function pull(target) {
+    if (!this.my) return C.ERR_NOT_OWNER;
+    if (this.spawning) return C.ERR_BUSY;
+    if (!target || !target.id || !gw.rawById.has(target.id)
+      || !(target instanceof globalThis.Creep) || target.spawning
+      || target.id == this.id) {
+      return C.ERR_INVALID_TARGET;
+    }
+    if (!target.pos.isNearTo(this.pos)) return C.ERR_NOT_IN_RANGE;
+    gw.intents.set(this.id, 'pull', { id: target.id });
     return C.OK;
   };
 

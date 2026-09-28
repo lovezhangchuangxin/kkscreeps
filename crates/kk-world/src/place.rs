@@ -198,6 +198,7 @@ fn normalize_spawn(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<SpawnOb
         owner,
         store,
         spawning: None,
+        notify_when_attacked: spec.get("notifyWhenAttacked").and_then(Value::as_bool),
     })
 }
 
@@ -311,6 +312,7 @@ fn normalize_structure(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<Roo
             off: false,
             owner: owner.unwrap_or_default(),
             store: store_energy(spec),
+            notify_when_attacked: spec.get("notifyWhenAttacked").and_then(Value::as_bool),
         })),
         "constructedWall" => Ok(RoomObject::ConstructedWall(ConstructedWallObj {
             id: 0,
@@ -320,6 +322,7 @@ fn normalize_structure(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<Roo
             hits: hits_override
                 .map(saturating_u32)
                 .unwrap_or(c::WALL_HITS as u32),
+            notify_when_attacked: spec.get("notifyWhenAttacked").and_then(Value::as_bool),
         })),
         "road" => Ok(RoomObject::Road(RoadObj {
             id: 0,
@@ -329,6 +332,7 @@ fn normalize_structure(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<Roo
                 .map(saturating_u32)
                 .unwrap_or(c::ROAD_HITS as u32),
             next_decay_time: ctx.time + c::ROAD_DECAY_TIME as u64,
+            notify_when_attacked: spec.get("notifyWhenAttacked").and_then(Value::as_bool),
         })),
         "storage" => Ok(RoomObject::Storage(StorageObj {
             id: 0,
@@ -339,6 +343,7 @@ fn normalize_structure(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<Roo
                 .unwrap_or(c::STORAGE_HITS as u32),
             owner: owner.unwrap_or_default(),
             store: store_energy(spec),
+            notify_when_attacked: spec.get("notifyWhenAttacked").and_then(Value::as_bool),
         })),
         _ => {
             let mut data = generic_fields("structure", spec);

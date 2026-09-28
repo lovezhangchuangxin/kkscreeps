@@ -22,6 +22,16 @@
  * 依赖：gw.rawData/gw.rawById/gw.objectsById/gw.viewerName/gw.currentGame/
  * gw.world/gw.intents/gw.ensureMemory/gw.RoomPosition/gw.mkStubMethod/
  * gw.defineGameObjectProperties/gw.__Object/gw.perTickReset、__kkp.lodash。
+ * A3b 薄壳化：字段表挂各类原型（官方 defineGameObjectProperties 挂 prototype
+ * 的同构），实例 own 面只剩 id/pos/room + 少量静态标记。getter 经
+ * gw.rawData(this.id) 回查当前 tick 投影（消亡抛错/旧壳读新值）。
+ * 值换算口径保持 A1 起的既有语义（None→0 归一等灰区口径不变——A3b 只改
+ * 访问机制不改值语义；官方有而现状未暴露的字段（storage.storeCapacity、
+ * road.ticksToDecay、reservation/sign 等）随 A4-iii/Store 族批次补）。
+ * A4-iv：notifyWhenAttacked 换真（Structure 基类版 + StructureSpawn 覆盖版，
+ * 官方 structures.js:89-101/:1220-1233）。
+ * 依赖：gw.viewerName、gw.rawData、gw.mkStubMethod、gw.defineGameObjectProperties、
+ * gw.intents。
  */
 (() => {
   'use strict';
@@ -583,8 +593,42 @@
     return C.OK;
   };
 
+  // ---------------------------------------------------------------- notifyWhenAttacked（A4-iv 换真）
+  /** Structure.notifyWhenAttacked 基类版（官方 structures.js:89-101）：
+   *  无房 INVALID_TARGET；非己结构（my === false——undefined 中性结构放行）
+   *  或房 controller 归他人 → NOT_OWNER；非布尔参数 INVALID_ARGS；与当前
+   *  存值不同才记 intent（官方 `!=`——undefined 与任何布尔不等，首调恒记）。
+   *  挂 Structure 基类原型（官方同位）：controller 经 OwnedStructure 继承链
+   *  同样持有本方法（官方语义即如此——其 intent 在 processor 层因 controller
+   *  不在 CONSTRUCTION_COST 而空转）；source/mineral 官方不 extends Structure，
+   *  我方原型链同构（RoomObject 直挂）不受影响。 */
+  globalThis.Structure.prototype.notifyWhenAttacked = function notifyWhenAttacked(enabled) {
+    if (!this.room) return C.ERR_INVALID_TARGET;
+    const ctl = this.room.controller;
+    if (this.my === false || (ctl && ctl.owner && !ctl.my)) {
+      return C.ERR_NOT_OWNER;
+    }
+    if (typeof enabled !== 'boolean') return C.ERR_INVALID_ARGS;
+    if (enabled !== gw.rawData(this.id).notifyWhenAttacked) {
+      gw.intents.set(this.id, 'notifyWhenAttacked', { enabled });
+    }
+    return C.OK;
+  };
+
+  /** StructureSpawn.notifyWhenAttacked 覆盖版（官方 structures.js:1220-1233）：
+   *  与基类版的差异——无 `!this.room` 门、无 controller 归属分支（spawn 恒有
+   *  主，my 判定即足）。 */
+  globalThis.StructureSpawn.prototype.notifyWhenAttacked = function notifyWhenAttacked(enabled) {
+    if (!this.my) return C.ERR_NOT_OWNER;
+    if (typeof enabled !== 'boolean') return C.ERR_INVALID_ARGS;
+    if (enabled !== gw.rawData(this.id).notifyWhenAttacked) {
+      gw.intents.set(this.id, 'notifyWhenAttacked', { enabled });
+    }
+    return C.OK;
+  };
+
   // ---------------------------------------------------------------- 原型方法（桩）
-  const STRUCTURE_METHODS = ['destroy', 'setActive', 'notifyWhenAttacked'];
+  const STRUCTURE_METHODS = ['destroy', 'setActive']; // notifyWhenAttacked 已换真（上方）
   // spawn：destroy/setActive/notifyWhenAttacked 保持桩（官方 destroy :79-97/
   // setActive :103-127/notifyWhenAttacked :89-101——A4-iv 批次换真面）
   for (const m of STRUCTURE_METHODS) {
@@ -645,6 +689,43 @@
     gw.intents.set(this.id, 'activateSafeMode', {});
     return C.OK;
   };
+
+  /** Structure.notifyWhenAttacked 基类版（官方 structures.js:89-101）：
+   *  无房 INVALID_TARGET；非己结构（my === false——undefined 中性结构放行）
+   *  或房 controller 归他人 → NOT_OWNER；非布尔参数 INVALID_ARGS；与当前
+   *  存值不同才记 intent（官方 `!=`——undefined 与任何布尔不等，首调恒记）。
+   *  挂 Structure 基类原型（官方同位）：controller 经 OwnedStructure 继承链
+   *  同样持有本方法（官方语义即如此——其 intent 在 processor 层因 controller
+   *  不在 CONSTRUCTION_COST 而空转）；source/mineral 官方不 extends Structure，
+   *  我方原型链同构（RoomObject 直挂）不受影响。 */
+  globalThis.Structure.prototype.notifyWhenAttacked = function notifyWhenAttacked(enabled) {
+    if (!this.room) return C.ERR_INVALID_TARGET;
+    const ctl = this.room.controller;
+    if (this.my === false || (ctl && ctl.owner && !ctl.my)) {
+      return C.ERR_NOT_OWNER;
+    }
+    if (typeof enabled !== 'boolean') return C.ERR_INVALID_ARGS;
+    if (enabled !== gw.rawData(this.id).notifyWhenAttacked) {
+      gw.intents.set(this.id, 'notifyWhenAttacked', { enabled });
+    }
+    return C.OK;
+  };
+
+  /** StructureSpawn.notifyWhenAttacked 覆盖版（官方 structures.js:1220-1233）：
+   *  与基类版的差异——无 `!this.room` 门、无 controller 归属分支（spawn 恒有
+   *  主，my 判定即足）。 */
+  globalThis.StructureSpawn.prototype.notifyWhenAttacked = function notifyWhenAttacked(enabled) {
+    if (!this.my) return C.ERR_NOT_OWNER;
+    if (typeof enabled !== 'boolean') return C.ERR_INVALID_ARGS;
+    if (enabled !== gw.rawData(this.id).notifyWhenAttacked) {
+      gw.intents.set(this.id, 'notifyWhenAttacked', { enabled });
+    }
+    return C.OK;
+  };
+
+  // 其余结构方法（destroy/setActive）保持桩：按类原型挂载（else 族的类原型
+  // + 未知类型实例兜底——notifyWhenAttacked 已在 Structure 基类换真，类原型
+  // 不再挂同名桩防遮蔽）
 
   // ---------------------------------------------------------------- 装配
   // spawn 装配：字段/方法全在原型，own 面只剩 id/pos/room + 静态标记
