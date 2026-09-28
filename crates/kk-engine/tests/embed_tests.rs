@@ -13,6 +13,7 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     embed_real_settlement_impl()?;
     embed_run_players_shared_snapshot_impl()?;
     embed_snapshot_contract_impl()?;
+    embed_intent_channel_impl()?;
     assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");
     Ok(())
 }
@@ -507,5 +508,150 @@ fn embed_snapshot_contract_impl() -> anyhow::Result<()> {
         "prelude find(FIND_FLAGS) 不受查询面影响"
     );
     e.teardown();
+    Ok(())
+}
+
+/// M2A-A2 intent 通道端到端（tick 契约场景 1）：真实沙箱的 move/harvest 经
+/// 清洗、结算，下一轮玩家视图可见；假沙箱（ScriptedSandbox）与真沙箱走同一条
+/// 结算入口（Engine::tick 与 tick_with_intents 汇合于 settle_room），相同
+/// intent 序列产出相同世界转移。
+fn embed_intent_channel_impl() -> anyhow::Result<()> {
+    let mut e = EmbedEngine::new();
+    e.create_shard(&json!({
+        "players": ["p1"],
+        "rooms": [{ "name": "W1N1", "rcl": 3, "owner": "p1" }],
+    }))?;
+    let creep_id = e.place_object(
+        "W1N1",
+        "creep",
+        &json!({ "pos": [25, 25], "owner": "p1", "body": ["move", "work", "carry"], "name": "w1" }),
+    )?;
+    let source_id = e.place_object(
+        "W1N1",
+        "structure",
+        &json!({ "pos": [24, 25], "structureType": "source" }),
+    )?;
+    let src_json = serde_json::to_string(&source_id)?;
+
+    // 真沙箱 move(BOTTOM)：预检过返回 OK，下一 tick 视图位置 (25,26)
+    let run = e.run_player("p1", "Game.creeps['w1'].move(5)")?;
+    assert_eq!(run.expr["value"], 0, "预检通过返回 OK");
+    let snap = e.get_object(&creep_id).unwrap();
+    assert_eq!(snap["pos"]["x"], 25, "x 不变");
+    assert_eq!(snap["pos"]["y"], 26, "BOTTOM 落格 (25,26)");
+
+    // 真沙箱 harvest（相邻 source）：WORK×HARVEST_POWER(2) 进 store、source 扣减
+    let run = e.run_player(
+        "p1",
+        &format!("Game.creeps['w1'].harvest(Game.getObjectById({src_json}))"),
+    )?;
+    assert_eq!(run.expr["value"], 0);
+    let snap = e.get_object(&creep_id).unwrap();
+    assert_eq!(snap["store"]["energy"], 2, "1×WORK × 2");
+    let src_snap = e.get_object(&source_id).unwrap();
+    assert_eq!(src_snap["energy"], 2998, "3000 − 2");
+    e.teardown();
+
+    // ---- 同一入口等价：ScriptedSandbox 相同 intent 序列 → 相同世界转移 ----
+    let mut world = kk_world::World::new(1);
+    let mut terrain = kk_core::Terrain::plains();
+    terrain.normalize();
+    world.register_room("W1N1", terrain);
+    world
+        .insert(
+            "W1N1",
+            kk_schema::room::RoomObject::Controller(kk_schema::room::ControllerObj {
+                id: 0,
+                x: 1,
+                y: 1,
+                level: 3,
+                safe_mode: 0,
+                safe_mode_available: 1,
+                progress: 0,
+                downgrade_time: None,
+                owner: Some("p1".into()),
+                is_power_enabled: false,
+            }),
+        )
+        .unwrap();
+    let part = |k: kk_world::types::BodyKind| kk_schema::room::BodyPart {
+        kind: k.code(),
+        hits: 100,
+        boost: None,
+    };
+    let fake_creep = world
+        .insert(
+            "W1N1",
+            kk_schema::room::RoomObject::Creep(kk_schema::room::CreepObj {
+                id: 0,
+                x: 25,
+                y: 25,
+                fatigue: 0,
+                age_time: 1500,
+                hits: 200,
+                spawning: false,
+                action_log: 0,
+                name: "w1".into(),
+                owner: "p1".into(),
+                body: vec![
+                    part(kk_world::types::BodyKind::Move),
+                    part(kk_world::types::BodyKind::Work),
+                    part(kk_world::types::BodyKind::Carry),
+                ],
+                store: Default::default(),
+            }),
+        )
+        .unwrap();
+    let fake_source = world
+        .insert(
+            "W1N1",
+            kk_schema::room::RoomObject::Source(kk_schema::room::SourceObj {
+                id: 0,
+                x: 24,
+                y: 25,
+                energy: 3000,
+                energy_capacity: 3000,
+                next_regeneration_time: None,
+            }),
+        )
+        .unwrap();
+    let mut sandbox = kk_engine::ScriptedSandbox::new();
+    let mut move_batch = kk_engine::intent::IntentBatch::default();
+    move_batch.add_object_intent(
+        "p1",
+        fake_creep,
+        kk_engine::intent::Action::Move,
+        kk_engine::intent::IntentData {
+            direction: Some(5),
+            ..kk_engine::intent::IntentData::bare()
+        },
+    );
+    let mut harvest_batch = kk_engine::intent::IntentBatch::default();
+    harvest_batch.add_object_intent(
+        "p1",
+        fake_creep,
+        kk_engine::intent::Action::Harvest,
+        kk_engine::intent::IntentData::target(fake_source),
+    );
+    sandbox.at(0, move_batch);
+    sandbox.at(1, harvest_batch);
+    let mut engine = kk_engine::Engine::new(world);
+    engine.sandboxes.insert("p1".into(), Box::new(sandbox));
+    engine.tick().map_err(|err| anyhow::anyhow!("{err}"))?;
+    engine.tick().map_err(|err| anyhow::anyhow!("{err}"))?;
+    let (x, y, energy, src_energy) = match engine.world.get(fake_creep).unwrap().1 {
+        kk_schema::room::RoomObject::Creep(c) => match engine.world.get(fake_source).unwrap().1 {
+            kk_schema::room::RoomObject::Source(s) => {
+                (c.x, c.y, c.store.energy as i64, s.energy as i64)
+            }
+            _ => panic!(),
+        },
+        _ => panic!(),
+    };
+    assert_eq!(
+        (x, y, energy, src_energy),
+        (25, 26, 2, 2998),
+        "假沙箱与真沙箱同一结算入口：世界转移一致"
+    );
     Ok(())
 }

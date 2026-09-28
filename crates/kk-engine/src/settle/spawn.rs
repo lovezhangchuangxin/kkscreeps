@@ -140,7 +140,7 @@ pub fn intent_create_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) 
     }
     let cost = creep_cost(&data.body[..body.len()]);
     // 扣费（_charge-energy：显式 energyStructures 按序；缺省全房间 spawn→extension）
-    if !charge_energy(w, &spawn, cost, &data.energy_structures) {
+    if !charge_energy(w, &spawn, cost, data.energy_structures.as_deref()) {
         return;
     }
     let need_time = c::CREEP_SPAWN_TIME * body.len() as i64;
@@ -175,11 +175,13 @@ fn charge_energy(
     w: &mut Working,
     spawn: &kk_schema::room::SpawnObj,
     mut cost: i64,
-    explicit: &[ObjId],
+    explicit: Option<&[ObjId]>,
 ) -> bool {
-    // 候选结构：显式列表（按序、过滤合法）或全房间 spawn（距本 spawn 升序）→ extension
+    // 候选结构（官方 _charge-energy + create-creep.js:19-24）：Some(列表) 走
+    // 显式模式（按序、过滤合法——**空列表也是显式模式**，可用 0 → 失败）；
+    // None 才是缺省全房间 spawn（距本 spawn 升序）→ extension
     let mut candidates: Vec<ObjId> = Vec::new();
-    if !explicit.is_empty() {
+    if let Some(explicit) = explicit {
         for id in explicit {
             let ok = match w.room.objects.get(id) {
                 Some(RoomObject::Spawn(s)) => !s.off && s.owner == spawn.owner,

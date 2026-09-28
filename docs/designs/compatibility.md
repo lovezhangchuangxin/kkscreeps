@@ -77,6 +77,13 @@
 | 查询面剩余值的 saturating 钳 0（M2A-A1） | 契约头注明 "unclamped"（官方过期挂钟发负数），我方 saturating_sub 钳 0 | 正常路径不可达（钟到点被结算消费清掉）；仅缺结算路径（如 road decay 未实装）或构造性放置可观察，消费方按 <=0 过期等价 |
 | createShard 种子钟 +1 与无 warm-up tick 失配（M2A-A1 评审登记，既有根因） | kk createShard 不消耗 vanilla 的 warm-up tick（种子 +1 的前提，vanilla index.ts:968-975），engine time 停 0 而 kk embed.rs 种子公式含 +1 | inspection 的 controller timer relativity 两用例差 1（基线红）——归 createShard 语义轨道（A3c 或 createShard 补 warm-up tick 时清偿） |
 | Generic 透传快照不折算 getter 形态（M2A-A1） | 透传对象（mineral/tombstone 等）的计时字段（decayTime/cooldown/lastCooldown 公式）不做剩余值换算，只保底 kind/id/pos | 契约相关用例（deposit/tombstone 族）本就在能力门 skip 池；随 B3/B4 对应能力批补折算 |
+| intent 通道的编码与键覆盖（M2A-A2） | intentsList 以 JSON 编码经 endTick 返回值带出（官方为 ExternalCopy 结构化拷出，runtime.js:271-296——玩家不可见面）；'room' 键数组通道已实装，'global'（market/powerCreep）与 'notify' 键未实装（随对应能力批） | 二进制编码（ADR-004 决策 5）随 M2B 性能基线评估；未实装键当前无生产者 |
+| Memory 写回失败时 intents 的处置（M2A-A2，套件裁决后对齐官方） | 写回失败（ok:false）→ intents 同步丢弃、Memory 保留上一 tick（UNDOC-MEMJSON-005 锁定）；错误分类仍归玩家 runtime（M1 六轮定谳的契约不变） | 官方 stringify 抛错传播为 isolate 级故障故 intents 整轮丢（make.js:279-294）——我方分类降级为软错误但 intents 处置跟官方；计费维持正常结算路径（套件未锁该面） |
+| cancelOrder 退费不查免费表（M2A-A2） | remove 对 say/pull 也退 0.2（官方 runtime.js:95 无条件减——可把 intents.cpu 减为负的官方 quirk） | 原样保留（红线第 30 条官方 quirk 复刻）；prelude 收集器同实现 |
+| prelude harvest 预检的 reservation 缺失（M2A-A2） | API 层预检只判 controller.owner（被预定无主房官方判 reservation 归属）；schema 无 reservation 字段 | 与"source 容量三分支缺 reservation"同根，B2 controller 结算族补字段时一并清偿 |
+| API 实现读预置常量而非全局（M2A-A2） | prelude 动作方法经闭包捕获的预置常量表判定错误码/部件名；玩家覆盖全局常量不影响 API 判定 | 官方 game 层的 C 来自 driver.constants 注入对象不可篡改（game.js 头部），同款防篡改语义 |
+| room 级 intent 的计费形态（M2A-A2 登记，room 生产者落地前修） | 宿主 count_billed 对 room 数组动作按键计 1（官方 make.js:105 按数组长度计）；prelude pushByName 不加 0.2（官方 runtime.js:89 每次 push 计费）且无 maxLen 参数；官方 push 方法（notify 通道，上限 20）整体缺席 | room/global API 全是桩（A4 接线）——当前无生产者不可见；接线时同步修正两处计费并补 push |
+| 预检的伪实例面（M2A-A2） | prelude harvest 等只判 instanceof（官方 register.sources 等注册表成员校验 + assertTargetObject）；伪 Source 形对象可过预检（计 0.2、结算侧真身检查丢弃） | 玩家影响 = 白付 0.2 与说谎的返回码，无法推动世界；wrapper 世界全量来自投影、伪造面有限，A3b 薄壳化时随注册表语义收紧 |
 
 ## 四、验收关卡（不做完不算兼容）
 

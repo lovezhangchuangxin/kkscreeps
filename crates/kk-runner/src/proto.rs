@@ -32,6 +32,9 @@ pub struct TickReport {
     pub missing_api: Value,
     pub stub_calls: Value,
     pub bucket_after: f64,
+    /// endTick 带出的本 tick intentsList（Null = 无/硬中断丢弃）——embed
+    /// 结算通道消费（IntentBatch::from_json 清洗后进引擎）。
+    pub intents: Value,
 }
 
 /// 一次"玩家代码求值 tick"的报告（screeps-ok runPlayer 通道）。
@@ -41,6 +44,8 @@ pub struct EvalReport {
     pub expr: Value,
     pub console: Vec<LogLine>,
     pub bucket_after: f64,
+    /// endTick 带出的本 tick intentsList（Null = 无/硬中断丢弃）。
+    pub intents: Value,
 }
 
 enum Cmd {
@@ -282,6 +287,7 @@ fn run_one_tick(sandbox: &mut Sandbox, world: &Value) -> anyhow::Result<TickRepo
             missing_api: sandbox.drain_missing_api().unwrap_or(serde_json::json!({})),
             stub_calls: sandbox.drain_stub_calls().unwrap_or(serde_json::json!({})),
             bucket_after: sandbox.bucket(),
+            intents: Value::Null,
         }),
         plan @ TickPlan::Run { .. } => {
             let mut outcome = sandbox.run_loop()?;
@@ -293,6 +299,7 @@ fn run_one_tick(sandbox: &mut Sandbox, world: &Value) -> anyhow::Result<TickRepo
             // end_tick 自带结算（含写回耗时）；写回阶段被硬中断（如玩家经
             // Memory.toJSON 挂死写回）→ 本 tick 记 Terminated
             let writeback = sandbox.end_tick()?;
+            let intents = sandbox.take_intents().unwrap_or(Value::Null);
             if writeback.get("terminated").and_then(Value::as_bool) == Some(true) {
                 outcome = TickOutcome::Terminated;
             }
@@ -315,6 +322,7 @@ fn run_one_tick(sandbox: &mut Sandbox, world: &Value) -> anyhow::Result<TickRepo
                 missing_api: sandbox.drain_missing_api().unwrap_or(serde_json::json!({})),
                 stub_calls: sandbox.drain_stub_calls().unwrap_or(serde_json::json!({})),
                 bucket_after: sandbox.bucket(),
+                intents,
             })
         }
     }
@@ -331,10 +339,12 @@ fn run_eval_tick(sandbox: &mut Sandbox, world: &Value, code: &str) -> anyhow::Re
             }),
             console: sandbox.drain_console(),
             bucket_after: sandbox.bucket(),
+            intents: Value::Null,
         }),
         TickPlan::Run { .. } => {
             let mut expr = sandbox.run_expr(code)?;
             let writeback = sandbox.end_tick()?;
+            let intents = sandbox.take_intents().unwrap_or(Value::Null);
             // 契约（adapter-spec:221-235，vanilla 参照同口径）：按失败阶段分类——
             // 代码已开始执行后被硬中断、或 tick 末 Memory 序列化失败 → runtime；
             // 只有"根本没执行"（上面的停跑分支）才保持 terminated
@@ -357,6 +367,7 @@ fn run_eval_tick(sandbox: &mut Sandbox, world: &Value, code: &str) -> anyhow::Re
                 expr,
                 console: sandbox.drain_console(),
                 bucket_after: sandbox.bucket(),
+                intents,
             })
         }
     }

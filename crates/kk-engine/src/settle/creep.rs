@@ -40,6 +40,22 @@ pub fn process_creep_intents(w: &mut Working, id: ObjId, actions: &BTreeMap<Acti
 }
 
 /// 官方 move.js：静态障碍预检后入矩阵（creep 不预检——挤格语义）。
+/// 位移符号 → 方向常量（官方 move.js:24-29 的 `d = [dx, dy]` 判定；两轴同零
+/// 不可达——同格 creep 被 API 层 isNearTo 排除，防御性返回 0 丢弃）。
+fn direction_from_delta(dx: i32, dy: i32) -> u8 {
+    match (dx.signum(), dy.signum()) {
+        (0, -1) => 1,  // TOP
+        (1, -1) => 2,  // TOP_RIGHT
+        (1, 0) => 3,   // RIGHT
+        (1, 1) => 4,   // BOTTOM_RIGHT
+        (0, 1) => 5,   // BOTTOM
+        (-1, 1) => 6,  // BOTTOM_LEFT
+        (-1, 0) => 7,  // LEFT
+        (-1, -1) => 8, // TOP_LEFT
+        _ => 0,
+    }
+}
+
 fn intent_move(w: &mut Working, id: ObjId, data: &IntentData) {
     let (spawning, fatigue, x, y, owner) = match w.creep(id) {
         Some(c) => (
@@ -57,8 +73,23 @@ fn intent_move(w: &mut Working, id: ObjId, data: &IntentData) {
     // 官方 object._oldFatigue = object.fatigue（canMove 判定用）
     w.old_fatigue.insert(id, fatigue);
 
-    let Some(direction) = data.direction else {
-        return;
+    // 官方双形态（move.js:15-29）：朝相邻 creep 移动（intent 带 id）按位移
+    // 符号换算方向；direction 形态直取。id 形态目标不可达/不邻接 → 整条丢弃
+    let direction = match data.direction {
+        Some(d) => d,
+        None => {
+            let Some(target_id) = data.id else {
+                return;
+            };
+            let Some((tx, ty)) = w.creep(target_id).map(|c| (c.x as i32, c.y as i32)) else {
+                return;
+            };
+            let (ddx, ddy) = (tx - x, ty - y);
+            if ddx.abs() > 1 || ddy.abs() > 1 {
+                return; // 官方 API 层已挡 isNearTo；结算复核
+            }
+            direction_from_delta(ddx, ddy)
+        }
     };
     let Some((dx, dy)) = offsets_by_direction(direction) else {
         return;

@@ -13,6 +13,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use kk_core::Terrain;
 use kk_runner::{EvalReport, PlayerThreads, SandboxConfig};
+
+use crate::intent::IntentBatch;
 use kk_world::place::{PlaceCtx, normalize};
 use serde_json::Value;
 
@@ -309,9 +311,27 @@ impl EmbedEngine {
             .ok_or_else(|| anyhow::anyhow!("分片未创建"))?;
         let world = self.engine.world.world_json();
         let report: EvalReport = players.run_player(thread_id, &world, code)?;
+        self.settle_tick_with_reports(std::iter::once((handle, &report)))
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
         let out = self.finish_player_run(handle, report);
-        self.engine.tick().map_err(|e| anyhow::anyhow!("{e}"))?;
         Ok(out)
+    }
+
+    /// 一轮结算：把各玩家沙箱带出的 intentsList 清洗成 IntentBatch 进引擎
+    /// （M2A-A2 通道闭合：真实玩家代码 → intents → sanitize → settle_room →
+    /// 下一 tick 世界可见）。身份边界：batch 按注册 handle 逐玩家构造，冒名面
+    /// 结构上不存在。硬中断/停跑玩家的 intents 为 Null（from_json 收空批）。
+    fn settle_tick_with_reports<'a, I>(&mut self, reports: I) -> Result<(), crate::SettleError>
+    where
+        I: IntoIterator<Item = (&'a str, &'a EvalReport)>,
+    {
+        let mut batch = IntentBatch::default();
+        for (handle, report) in reports {
+            if let Some(list) = report.intents.as_object() {
+                batch.extend_from(IntentBatch::from_json(handle, &Value::Object(list.clone())));
+            }
+        }
+        self.engine.tick_with_intents(batch)
     }
 
     /// 多玩家对同一状态求值后合计推进 1 tick（runPlayers 契约）。
@@ -344,11 +364,12 @@ impl EmbedEngine {
             }
         }
         let mut out = BTreeMap::new();
+        self.settle_tick_with_reports(reports.iter().map(|(h, r)| (h.as_str(), r)))
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
         for (handle, report) in reports {
             let run = self.finish_player_run(&handle, report);
             out.insert(handle, run);
         }
-        self.engine.tick().map_err(|e| anyhow::anyhow!("{e}"))?;
         Ok(out)
     }
 

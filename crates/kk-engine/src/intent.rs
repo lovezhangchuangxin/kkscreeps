@@ -102,6 +102,7 @@ impl Action {
             "generateSafeMode" => Self::GenerateSafeMode,
             "signController" => Self::SignController,
             "pull" => Self::Pull,
+            "createCreep" => Self::CreateCreep,
             _ => return None,
         })
     }
@@ -200,7 +201,10 @@ pub struct IntentData {
     /// createCreep 专属（挂在 spawn 对象上）。
     pub name: Option<String>,
     pub body: Vec<BodyKind>,
-    pub energy_structures: Vec<ObjId>,
+    /// None = 玩家未传（缺省全房扣费）；Some([]) = 显式空列表（官方走
+    /// "仅列表扣费"模式——可用 0 → 失败）。presence 由 JSON 键存在性区分
+    /// （官方 system.js transforms 不区分，语义分叉在 create-creep.js:19-24）。
+    pub energy_structures: Option<Vec<ObjId>>,
     /// 官方链路分两步：system.js 的 number[] transform 逐元素 parseInt（在此
     /// 完成，无法解析的元素以 i64::MIN 哨兵传递）；create-creep.js:27 再
     /// _.uniq 保序全局去重。1..=8 校验在 createCreep 侧整单拒绝（官方语义是
@@ -219,7 +223,7 @@ impl IntentData {
             y: None,
             name: None,
             body: Vec::new(),
-            energy_structures: Vec::new(),
+            energy_structures: None,
             directions: Vec::new(),
         }
     }
@@ -234,7 +238,7 @@ impl IntentData {
             y: None,
             name: None,
             body: Vec::new(),
-            energy_structures: Vec::new(),
+            energy_structures: None,
             directions: Vec::new(),
         }
     }
@@ -260,6 +264,31 @@ pub enum RoomIntent {
     },
 }
 
+/// room 级 intent 参数解析（官方 system.js:116-140 sanitizeUserRoomIntents 的
+/// 字段面 + room/intents.js 消费字段；坐标/颜色走 parseInt，名称走 userString）。
+fn parse_room_intent(name: &str, raw: &Value) -> Option<RoomIntent> {
+    let f = |k: &str| raw.get(k);
+    let room = f("roomName").and_then(Value::as_str)?.to_string();
+    match name {
+        "createConstructionSite" => Some(RoomIntent::CreateConstructionSite {
+            room,
+            x: to_int(f("x"))?,
+            y: to_int(f("y"))?,
+            structure_type: f("structureType").and_then(Value::as_str)?.to_string(),
+            name: to_user_string(f("name")),
+        }),
+        "createFlag" => Some(RoomIntent::CreateFlag {
+            room,
+            x: to_int(f("x"))?,
+            y: to_int(f("y"))?,
+            name: to_user_string(f("name"))?,
+            color: to_int(f("color")).unwrap_or(0),
+            secondary_color: to_int(f("secondaryColor")).unwrap_or(0),
+        }),
+        _ => None,
+    }
+}
+
 /// 单玩家的指令集：对象级（对象 → 动作 → 载荷，同名覆盖）+ 房间级列表。
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct UserIntents {
@@ -274,6 +303,55 @@ pub struct IntentBatch {
 }
 
 impl IntentBatch {
+    /// 沙箱传出的 intentsList（官方形态：`{对象id: {动作名: 参数}}`，room 级
+    /// 挂 'room' 键数组）→ 清洗后的 IntentBatch。**生产清洗入口**（M2A-A2
+    /// 接线）：对照官方链路——沙箱传出原始 list（runtime.js:271-296），宿主
+    /// 进程逐字段白名单清洗（utils.js:405-436 storeIntents → system.js）。
+    /// 不可信输入纪律：未知动作名丢弃（sanitize 白名单语义）、对象 id 不可
+    /// 解析丢弃（官方 utils.js:427-429 同款）、参数只保留白名单字段。
+    /// 身份边界：全部归 `player`（调用方保证 = 沙箱注册键；settle 侧另有
+    /// 结构性复核）。
+    pub fn from_json(player: &str, list: &Value) -> IntentBatch {
+        let mut batch = IntentBatch::default();
+        let Some(objects) = list.as_object() else {
+            return batch;
+        };
+        for (obj_key, actions) in objects {
+            if obj_key == "room" {
+                // room 级：pushByName('room', name, data) 的数组形态
+                // （runtime.js:80-90；room/intents.js 逐条消费）
+                let Some(actions) = actions.as_object() else {
+                    continue;
+                };
+                for (name, arr) in actions {
+                    let Some(items) = arr.as_array() else {
+                        continue;
+                    };
+                    for item in items {
+                        if let Some(intent) = parse_room_intent(name, item) {
+                            batch.add_room_intent(player, intent);
+                        }
+                    }
+                }
+                continue;
+            }
+            let Some(obj) = ObjId::parse(obj_key) else {
+                continue; // 官方 utils.js:427-429：反查不到的对象丢弃
+            };
+            let Some(actions) = actions.as_object() else {
+                continue;
+            };
+            for (name, params) in actions {
+                let Some(action) = Action::parse(name) else {
+                    continue; // 未知动作名：sanitizeUserIntents 白名单外丢弃
+                };
+                let data = sanitize_object_intent(action, params);
+                batch.add_object_intent(player, obj, action, data);
+            }
+        }
+        batch
+    }
+
     pub fn add_object_intent(
         &mut self,
         player: &str,
@@ -288,6 +366,15 @@ impl IntentBatch {
             .entry(obj)
             .or_default()
             .insert(action, data);
+    }
+
+    /// 合并另一批（同玩家键合并 objects/room；后写覆盖同名动作——幂等语义）。
+    pub fn extend_from(&mut self, other: IntentBatch) {
+        for (player, intents) in other.users {
+            let entry = self.users.entry(player).or_default();
+            entry.objects.extend(intents.objects);
+            entry.room.extend(intents.room);
+        }
     }
 
     pub fn add_room_intent(&mut self, player: &str, intent: RoomIntent) {
@@ -386,14 +473,11 @@ pub fn sanitize_object_intent(_action: Action, raw: &Value) -> IntentData {
                     .collect()
             })
             .unwrap_or_default(),
-        energy_structures: f("energyStructures")
-            .and_then(Value::as_array)
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|p| p.as_str().and_then(ObjId::parse))
-                    .collect()
-            })
-            .unwrap_or_default(),
+        energy_structures: f("energyStructures").and_then(Value::as_array).map(|arr| {
+            arr.iter()
+                .filter_map(|p| p.as_str().and_then(ObjId::parse))
+                .collect()
+        }),
         directions: f("directions")
             .and_then(Value::as_array)
             .map(|arr| {
@@ -420,6 +504,76 @@ pub fn creep_cost(body: &[BodyKind]) -> i64 {
                 .unwrap_or(0)
         })
         .sum()
+}
+
+#[cfg(test)]
+mod from_json_tests {
+    use super::*;
+
+    /// 生产清洗入口的对抗面：伪造对象 id / 未知动作名 / 畸形参数 / 'room'
+    /// 键伪造（数组形态检查）——全部 fail-closed 丢弃，白名单内条目存活。
+    #[test]
+    fn from_json_adversarial_inputs() {
+        let list = serde_json::json!({
+            "kk0000000000000001": { "move": { "direction": 3 }, "explode": {}, "5": {} },
+            "not-an-id": { "move": { "direction": 3 } },
+            "room": "forged-non-object",
+            "kk0000000000000002": 7,
+        });
+        let batch = IntentBatch::from_json("p1", &list);
+        let user = &batch.users["p1"];
+        assert_eq!(user.objects.len(), 1, "只有合法对象键存活");
+        let obj = kk_world::ObjId::parse("kk0000000000000001").unwrap();
+        let actions = &user.objects[&obj];
+        assert_eq!(actions.len(), 1, "未知动作名 'explode' 丢弃");
+        assert_eq!(actions[&Action::Move].direction, Some(3));
+        assert!(user.room.is_empty(), "'room' 键非对象丢弃");
+    }
+
+    /// createCreep 经通道往返（评审 F1：parse 曾缺此臂——静默黑洞）+ presence：
+    /// 缺键 None / 空数组 Some([])（显式列表模式）。
+    #[test]
+    fn from_json_create_creep_roundtrip_and_presence() {
+        let list = serde_json::json!({
+            "kk0000000000000003": {
+                "createCreep": { "body": ["move", "work"], "name": "c1", "energyStructures": [] }
+            },
+            "kk0000000000000004": {
+                "createCreep": { "body": ["move"], "name": "c2" }
+            }
+        });
+        let batch = IntentBatch::from_json("p1", &list);
+        let user = &batch.users["p1"];
+        let s1 = kk_world::ObjId::parse("kk0000000000000003").unwrap();
+        let s2 = kk_world::ObjId::parse("kk0000000000000004").unwrap();
+        assert_eq!(
+            user.objects[&s1][&Action::CreateCreep].energy_structures,
+            Some(vec![]),
+            "空数组保持 Some（显式列表模式）"
+        );
+        assert_eq!(
+            user.objects[&s2][&Action::CreateCreep].energy_structures,
+            None,
+            "缺键读 None（缺省全房扣费）"
+        );
+        assert_eq!(user.objects[&s1][&Action::CreateCreep].body.len(), 2);
+    }
+
+    /// room 级数组通道：createFlag/createConstructionSite 解析 + 未知名丢弃。
+    #[test]
+    fn from_json_room_intents() {
+        let list = serde_json::json!({
+            "room": {
+                "createFlag": [
+                    { "roomName": "W1N1", "x": 10, "y": 11, "name": "f1", "color": 1, "secondaryColor": 1 },
+                    { "roomName": "W1N1", "x": 12, "y": 13, "name": "f2" }
+                ],
+                "teleport": [{ "roomName": "W1N1", "x": 0, "y": 0 }]
+            }
+        });
+        let batch = IntentBatch::from_json("p1", &list);
+        assert_eq!(batch.users["p1"].room.len(), 2, "未知 room intent 名丢弃");
+    }
 }
 
 #[cfg(test)]

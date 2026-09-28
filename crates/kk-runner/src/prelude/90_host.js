@@ -12,7 +12,7 @@
 
   const { missing, hasProbes, stubCalls } = globalThis.__kkp;
   const { require: requireFn, moduleCache, lodash: _ } = globalThis.__kkp.cjs;
-  const { beginTick, writeBackMemory } = globalThis.__kkp.memoryWorld;
+  const { beginTick, writeBackMemory, intentsPayload } = globalThis.__kkp.memoryWorld;
 
   globalThis.__kk = {
     /** 每 tick 注入世界快照并重建 Game。 */
@@ -108,10 +108,18 @@
         return JSON.stringify({ ok: false, kind: 'runtime', error: String((e && e.message) || e) });
       }
     },
-    /** tick 末：Memory 写回 RawMemory。返回 JSON 字符串（宿主 exec_json 约定）：
-     *  {ok:true} | {ok:false,error}——写回失败按契约归为玩家 runtime 错误。 */
+    /** tick 末：Memory 写回 RawMemory + 本 tick intentsList 一次性带出（官方
+     *  run 闭包尾 outMessage 同构，runtime.js:271-296——intents 与 memory 同批
+     *  传出）。返回 JSON 字符串（宿主 exec_json 约定）：
+     *  {ok:true, intentsList, intentsCpu} | {ok:false, error, intentsList, intentsCpu}。 */
     endTick() {
-      return JSON.stringify(writeBackMemory());
+      const out = writeBackMemory();
+      const payload = intentsPayload();
+      if (typeof out === 'object' && out !== null) {
+        out.intentsList = payload ? payload.list : null;
+        out.intentsCpu = payload ? payload.cpu : 0;
+      }
+      return JSON.stringify(out);
     },
     /** 清空 require 缓存（玩家代码更新/换模块表时）。lodash 预置保留。 */
     resetModules() {

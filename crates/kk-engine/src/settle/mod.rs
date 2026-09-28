@@ -346,6 +346,15 @@ impl Engine {
                 }
             }
         }
+        self.tick_with_intents(batch)
+    }
+
+    /// 以外部构造的 intent 批推进一个 tick——**embed 真沙箱通道的结算入口**
+    /// （M2A-A2：batch 由 [`crate::intent::IntentBatch::from_json`] 从沙箱
+    /// intentsList 清洗而来；假沙箱 [`Engine::tick`] 与本入口共用同一条
+    /// settle_room 链——tick 契约场景 1 的"同一结算入口"）。身份边界由调用方
+    /// 保证（EmbedEngine 按注册 handle 逐玩家构造，冒名面结构上不存在）。
+    pub fn tick_with_intents(&mut self, batch: IntentBatch) -> Result<(), SettleError> {
         let mut events = Vec::new();
         let mut settled: Vec<(String, RoomState)> = Vec::new();
         let mut next = self

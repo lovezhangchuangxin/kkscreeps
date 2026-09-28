@@ -25,6 +25,7 @@ use crate::budget::{BUCKET_CAP, Bucket, DEFAULT_CPU_LIMIT, MAX_PER_TICK, TickPla
 use crate::modules::ModuleTable;
 use crate::ops::{LogLine, Shared, SharedRef, kk_runner};
 use crate::watchdog::Watchdog;
+use serde_json::Value;
 
 const LODASH_SRC: &str = include_str!("../assets/lodash-3.10.1.js");
 const CONSTANTS_JSON: &str = include_str!("../assets/constants.json");
@@ -107,6 +108,11 @@ pub struct Sandbox {
     terminated_this_tick: bool,
     /// 上一次 runLoop 捕获的玩家逻辑错误（run_loop 写入，take_last_loop_error 取走）。
     last_loop_error: Option<String>,
+    /// endTick 带出的本 tick intentsList（官方 run 闭包尾 outMessage.intentsList，
+    /// runtime.js:274-296 的对应物）。硬中断 tick 置 None（官方 isolate 级故障
+    /// 整轮丢弃，make.js:279-294）；EmbedEngine 经 take_intents 消费后转
+    /// IntentBatch 进结算。
+    pending_intents: Option<Value>,
 }
 
 impl Sandbox {
@@ -155,6 +161,7 @@ impl Sandbox {
             heap_limit: config.heap_limit_bytes,
             terminated_this_tick: false,
             last_loop_error: None,
+            pending_intents: None,
         };
         sb.install_near_heap_callback();
         Ok(sb)
@@ -222,10 +229,17 @@ impl Sandbox {
     /// tick 开始：预算结算 + 世界注入。返回 SkipPenalty 时本 tick 不执行玩家代码。
     pub fn begin_tick(&mut self, world: &serde_json::Value) -> anyhow::Result<TickPlan> {
         match self.budget.begin_tick() {
-            TickPlan::SkipPenalty => Ok(TickPlan::SkipPenalty),
+            // 停跑 tick 不执行任何代码——stale intents 一并清置（不变量：
+            // 任何 tick 边界不留上一轮未消费的 intents；该分支报告 intents 恒 Null）
+            TickPlan::SkipPenalty => {
+                self.pending_intents = None;
+                Ok(TickPlan::SkipPenalty)
+            }
             TickPlan::Run { .. } => {
-                // 清除可能遗留的终止标志，然后武装看门狗
+                // 清除可能遗留的终止标志与上一 tick 未消费的 intents
+                //（消费方漏取不得把旧 intent 泄漏进新 tick），然后武装看门狗
                 self.terminated_this_tick = false;
+                self.pending_intents = None;
                 self.runtime.v8_isolate().cancel_terminate_execution();
                 // world 序列化在 arm 之前完成：arm 之后的任何失败路径都必须 disarm
                 // （序列化 Value 理论不可达失败，防御性保证不变量成立）
@@ -289,6 +303,9 @@ impl Sandbox {
     pub fn end_tick(&mut self) -> anyhow::Result<serde_json::Value> {
         // 硬中断后的 Memory 保持上一 tick 的存档。
         if self.terminated_this_tick {
+            // 硬中断 tick 丢弃本轮 intents（官方 isolate 级故障整轮丢弃，
+            // make.js:279-294；计费已由 after_termination 按整份结算）
+            self.pending_intents = None;
             return Ok(serde_json::json!({
                 "ok": false, "terminated": true,
                 "error": "本 tick 已硬中断，按官方语义跳过 Memory 写回",
@@ -308,19 +325,79 @@ impl Sandbox {
         match exec {
             Ok(v) => {
                 self.watchdog.disarm();
-                self.budget.settle(self.cpu_used_ms()); // 含写回耗时（官方口径）
+                // intentsList 带出与宿主计费（官方双轨：沙箱内 intents.cpu 供
+                // getUsed 即时显示 runtime.js:202-204；宿主按最终清单重算
+                // 0.2×count 并入扣桶 make.js:193-194——排除 say/pull）。
+                // 硬中断 tick 不进此分支（Err 路径丢弃 intents 并按整份结算，
+                // 官方 isolate 级故障同款 make.js:279-294）
+                let (intents, billed) = self.take_endtick_intents(&v);
+                // Memory 写回失败（ok:false，非硬中断）→ intents 同步丢弃：
+                // 官方 stringify 抛错传播为 isolate 级故障整轮丢（make.js
+                // 垂直链路；UNDOC-MEMJSON-005 以套件锁定该语义）——我方 M1
+                // 契约把该失败归类玩家 runtime 错误，intents 处置跟官方对齐
+                let intents = if v.get("ok").and_then(Value::as_bool) == Some(false) {
+                    None
+                } else {
+                    intents
+                };
+                self.pending_intents = intents;
+                self.budget.settle(self.cpu_used_ms() + 0.2 * billed as f64); // 含写回耗时（官方口径）
                 *self.shared.tick_start.lock().unwrap() = None;
                 Ok(v)
             }
             Err(_) => {
                 // 写回阶段被硬中断（如玩家经 Memory.toJSON 挂死写回）：统一善后
-                // （disarm、清标志、按整份 tickLimit 结算、恢复堆上限）
+                // （disarm、清标志、按整份 tickLimit 结算、恢复堆上限）；
+                // 本轮 intents 丢弃（官方语义）
+                self.pending_intents = None;
                 self.after_termination();
                 Ok(
                     serde_json::json!({ "ok": false, "terminated": true, "error": "写回阶段硬中断" }),
                 )
             }
         }
+    }
+
+    /// endTick 返回值里的 intentsList：解析 + 上行闸门 + 宿主计费条数。
+    /// 闸门（约束②纵深，玩家不可见面）：对象键数超上限截断并出告知行。
+    /// 不可达论证是**键空间界**：list 键只能来自被 API 调用的自有对象 id、
+    /// 同键 last-wins 覆盖 ⇒ 键数 ≤ 视图对象数，50k 需单 tick 对 5 万个
+    /// 不同对象发动作——M2A 世界规模不可达（与 M0 console 闸门同形态的
+    /// 第二道纵深；第一道是堆/看门狗对生成量的物理约束）。
+    fn take_endtick_intents(&mut self, v: &Value) -> (Option<Value>, usize) {
+        const MAX_INTENT_OBJECTS: usize = 50_000;
+        let Some(list) = v.get("intentsList") else {
+            return (None, 0);
+        };
+        let free: &[&str] = &["say", "pull"];
+        let count_billed = |map: &serde_json::Map<String, Value>| {
+            map.values()
+                .filter_map(|a| a.as_object())
+                .map(|a| a.keys().filter(|k| !free.contains(&k.as_str())).count())
+                .sum::<usize>()
+        };
+        let objects = list.as_object().map(|m| m.len()).unwrap_or(0);
+        if objects > MAX_INTENT_OBJECTS {
+            let mut truncated = serde_json::Map::new();
+            if let Some(map) = list.as_object() {
+                for (k, val) in map.iter().take(MAX_INTENT_OBJECTS) {
+                    truncated.insert(k.clone(), val.clone());
+                }
+            }
+            self.shared.push_console_line(
+                "error",
+                &format!("intent 上行闸门：对象数 {objects} 超上限 {MAX_INTENT_OBJECTS}，已截断"),
+            );
+            let billed = count_billed(&truncated);
+            return (Some(Value::Object(truncated)), billed);
+        }
+        let billed = list.as_object().map(count_billed).unwrap_or(0);
+        (Some(list.clone()), billed)
+    }
+
+    /// 取走本 tick 的 intentsList（embed 结算通道消费；None = 无或已取）。
+    pub fn take_intents(&mut self) -> Option<Value> {
+        self.pending_intents.take()
     }
 
     /// 求值一段玩家表达式（screeps-ok 适配器的 runPlayer 通道），恰好占用一个 tick 的

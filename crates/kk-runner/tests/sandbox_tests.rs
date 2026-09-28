@@ -58,6 +58,7 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     cjs_and_loop()?;
     console_capture()?;
     stub_game_projection()?;
+    intent_channel_prelude_forms_impl()?;
     run_expr_channel()?;
     wasm_binary_module()?;
     watchdog_hard_terminate_and_reuse()?;
@@ -1039,10 +1040,11 @@ fn stub_game_projection() -> anyhow::Result<()> {
         "跨房间（带 roomName 且不等）仍为 Infinity → JSON null"
     );
 
-    // 桩调用计数
+    // 桩调用计数（A2 起 move/harvest 已从桩换真——真方法不再计数，改锁
+    // 仪表总体工作：sample bot 的 room.find 仍在桩面）
     let stubs = sb.drain_stub_calls()?;
     assert!(
-        stubs["creep.move"].as_i64().unwrap_or(0) >= 1,
+        stubs["room.find:101"].as_i64().unwrap_or(0) >= 1,
         "桩方法调用计数: {stubs}"
     );
     Ok(())
@@ -1252,5 +1254,81 @@ fn lifo_registry_drains() -> anyhow::Result<()> {
         // 作用域结束按声明逆序 drop（_b 先于 _a）——恰好是 LIFO
     }
     assert_eq!(live_sandbox_count(), before, "销毁后注册栈回到基线");
+    Ok(())
+}
+
+/// M2A-A2：intentsList 形态（对象id→动作名→参数）、同名覆盖 last-wins、
+/// 覆盖只计一次费、getUsed 含 intents.cpu、软异常照收、硬中断丢弃且整份计费。
+/// （并入串行套件——LIFO 纪律，不得作独立 #[test] 与长套件并行）
+fn intent_channel_prelude_forms_impl() -> anyhow::Result<()> {
+    // M2A-A2：intentsList 形态（对象id→动作名→参数）、同名覆盖 last-wins、
+    // 覆盖只计一次费、getUsed 含 intents.cpu、软异常照收、硬中断丢弃且整份计费
+    let mut sb = Sandbox::new(SandboxConfig::default())?;
+    let w = json!({
+        "time": 1,
+        "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+        "rooms": { "W1N1": { "name": "W1N1" } },
+        "objects": [
+            { "id": "kk1", "type": "creep", "room": "W1N1", "x": 25, "y": 25, "name": "w1",
+              "body": ["move", "work"], "store": { "energy": 0 } },
+            { "id": "kk2", "type": "structure", "structureType": "source", "room": "W1N1",
+              "x": 26, "y": 25, "energy": 2500, "energyCapacity": 3000 }
+        ]
+    });
+    // 计费双轨的沙箱侧：getUsed 差值含虚拟 0.2（官方 runtime.js:202-204）
+    match sb.begin_tick(&w)? {
+        TickPlan::Run { .. } => {
+            let v = sb.run_expr(
+                r#"(()=>{
+                const b = Game.cpu.getUsed();
+                Game.creeps['w1'].move(3);
+                const d1 = Game.cpu.getUsed() - b;
+                Game.creeps['w1'].move(5);
+                const d2 = Game.cpu.getUsed() - b;
+                return [d1, d2];
+            })()"#,
+            )?;
+            let d1 = v["value"][0].as_f64().expect("d1 数值");
+            let d2 = v["value"][1].as_f64().expect("d2 数值");
+            assert!(d1 >= 0.19, "首推计费 +0.2（实际 {d1}）");
+            assert!(d2 - d1 < 0.19, "同名覆盖只计一次（d1={d1} d2={d2}）");
+            let end = sb.end_tick()?;
+            assert_eq!(end["ok"], true);
+            assert_eq!(end["intentsCpu"], 0.2);
+            let intents = sb.take_intents().expect("intentsList 带出");
+            assert_eq!(intents["kk1"]["move"]["direction"], 5, "last-wins 覆盖");
+            assert!(sb.take_intents().is_none(), "take 后置空");
+        }
+        _ => panic!("应正常执行"),
+    }
+    // 软异常：throw 前已 push 的 intent 照收（官方 runtime.js:241-244 catch 后
+    // 照常组装 outMessage.intentsList）
+    match sb.begin_tick(&w)? {
+        TickPlan::Run { .. } => {
+            let v = sb.run_expr("Game.creeps['w1'].move(3); (()=>{ throw new Error('x') })()")?;
+            assert_eq!(v["ok"], false, "软异常归 runtime");
+            let _ = sb.end_tick()?;
+            assert!(sb.take_intents().is_some(), "软异常 intents 照收");
+        }
+        _ => panic!("应正常执行"),
+    }
+    // 硬中断：本轮 intents 丢弃（官方 isolate 级故障整轮丢，make.js:279-294）
+    // 且按整份 tickLimit 计费
+    match sb.begin_tick(&w)? {
+        TickPlan::Run { .. } => {
+            let bucket_before = sb.bucket();
+            let _ = sb.run_expr("Game.creeps['w1'].move(3); while (true) {}")?;
+            let end = sb.end_tick()?;
+            assert_eq!(end["terminated"], true, "硬中断");
+            assert!(sb.take_intents().is_none(), "硬中断 intents 丢弃");
+            assert!(
+                bucket_before - sb.bucket() >= 470.0,
+                "整份计费（{} → {}）",
+                bucket_before,
+                sb.bucket()
+            );
+        }
+        _ => panic!("应正常执行"),
+    }
     Ok(())
 }
