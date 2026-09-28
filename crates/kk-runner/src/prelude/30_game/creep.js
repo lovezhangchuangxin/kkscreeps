@@ -129,7 +129,8 @@
   // ---------------------------------------------------------------- Creep 原型：动作方法
   /** Creep.move：官方 creeps.js:126-156——重预检（fatigue/bodypart/方向）后记
    *  intent 返回 OK；朝相邻 creep 形态（target 为 Creep 实例）同官方 :132-141。
-   *  官方 :130-133 读 this.my/this.spawning（getter 通道）。 */
+   *  官方 :130-133 读 this.my/this.spawning（getter 通道）；:145 的 fatigue 是
+   *  data(this.id) 显式回查（新鲜读绕缓存——跨 tick 旧壳按当前值判 ERR_TIRED）。 */
   globalThis.Creep.prototype.move = function move(target) {
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;
@@ -138,7 +139,7 @@
       gw.intents.set(this.id, 'move', { id: target.id });
       return C.OK;
     }
-    if (this.fatigue > 0) return C.ERR_TIRED;
+    if (gw.rawData(this.id).fatigue > 0) return C.ERR_TIRED;
     if (countActiveParts(this.body, C.MOVE) === 0) return C.ERR_NO_BODYPART;
     const direction = +target;
     if (!direction || direction < 1 || direction > 8) return C.ERR_INVALID_ARGS;

@@ -100,7 +100,9 @@
   function ensureMemory() {
     if (parsedMemory === undefined) {
       try {
-        parsedMemory = rawMemoryData ? JSON.parse(rawMemoryData) : {};
+        // 预置 parse（对抗评审建议：裸 JSON.parse 在玩家 tick 内懒解析时经
+        // 可交换的全局——兑现"预置 parse 全链"的 P2 修复宣称）
+        parsedMemory = rawMemoryData ? __jsonParse(rawMemoryData) : {};
       } catch (e) {
         console.error('Memory 解析失败，重置为空对象: ' + e.message);
         parsedMemory = {};

@@ -523,4 +523,50 @@ mod tests {
         assert_eq!(j["structureType"], "tower");
         assert_eq!(j["pos"]["x"], 7);
     }
+    /// owner 三态投影锁（官方 controllers/tick.js:56 降级归零 `user = null`
+    /// 哨兵）：Some → 字符串；cleared → null（玩家侧 my === false）；
+    /// 从未拥有 → 无键（my === undefined）。与 snapshot.rs 同名测试层间对表。
+    #[test]
+    fn controller_owner_three_states() {
+        let mk = |owner: Option<&str>, cleared: bool| {
+            RoomObject::Controller(ControllerObj {
+                id: 0,
+                x: 1,
+                y: 1,
+                level: 1,
+                safe_mode: 0,
+                safe_mode_available: 0,
+                progress: 0,
+                downgrade_time: None,
+                owner: owner.map(str::to_string),
+                owner_cleared: cleared,
+                is_power_enabled: false,
+                reservation: None,
+                sign: None,
+                upgrade_blocked: None,
+                safe_mode_cooldown: None,
+            })
+        };
+        let mut world = World::new(42);
+        let mut terrain = Terrain::plains();
+        terrain.normalize();
+        world.register_room("W1N1", terrain);
+        let owned = world.insert("W1N1", mk(Some("p1"), false)).unwrap();
+        let cleared = world.insert("W1N1", mk(None, true)).unwrap();
+        let virgin = world.insert("W1N1", mk(None, false)).unwrap();
+        assert_eq!(world.object_json_by_id(owned).unwrap()["owner"], "p1");
+        assert_eq!(
+            world.object_json_by_id(cleared).unwrap()["owner"],
+            serde_json::Value::Null,
+            "降级归零哨兵投影 null"
+        );
+        assert!(
+            world
+                .object_json_by_id(virgin)
+                .unwrap()
+                .get("owner")
+                .is_none(),
+            "从未拥有无键"
+        );
+    }
 }

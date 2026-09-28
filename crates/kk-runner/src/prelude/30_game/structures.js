@@ -50,9 +50,12 @@
     structureType: (o) => o.structureType,
   });
 
-  // OwnedStructure（官方 structures.js:83-90）：owner/my 的 undefined 语义
+  // OwnedStructure（官方 structures.js:135-139）：owner 的 undefined 语义
+  // （_.isUndefined(o.user) || o.user === null ? undefined——降级归零的
+  // user:null 哨兵同样归 undefined）；my 三态（官方 :139，null 走比较得
+  // false——我方 === viewerName 同构）
   gw.defineGameObjectProperties(globalThis.OwnedStructure.prototype, gw.rawData, {
-    owner: (o) => (o.owner !== undefined ? { username: o.owner } : undefined),
+    owner: (o) => (o.owner != null ? { username: o.owner } : undefined),
     my: (o) => (o.owner === undefined ? undefined : o.owner === gw.viewerName),
   });
 

@@ -3145,11 +3145,37 @@ fn attack_controller_null_downgrade_time_loses_room_next_tick() {
     let t = ctl_of(&f);
     assert_eq!(t.level, 0, "当 tick 即走降级链归零");
     assert_eq!(t.owner, None, "主权丢失");
+    assert!(
+        t.owner_cleared,
+        "降级归零置 owner 哨兵（tick.js:56 user=null）"
+    );
     assert_eq!(
         t.safe_mode_cooldown,
         Some(kk_core::constants::SAFE_MODE_COOLDOWN as u64),
         "降级到 0 挂冷却（tick.js:61）"
     );
+}
+
+#[test]
+fn downgrade_then_claim_resets_owner_sentinel() {
+    // owner 三态往返锁：降级归零（cleared=true）→ 重新 claim（cleared=false）。
+    // 防未来 claim 路径漏复位导致落库态长期不一致（投影 Some 分支优先，
+    // 漏复位属潜伏态——owner_cleared 断言是唯一可见面）
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let ctl = f.controller_full(1, Some("p2"), |t| {
+        t.downgrade_time = None; // 当 tick即归零（同上 quirk）
+    });
+    let attacker = f.creep("w1", "p1", 5, 6, &[BodyKind::Claim], 0);
+    f.settle(controller_intent(attacker, Action::AttackController, ctl));
+    assert_eq!(ctl_of(&f).owner, None);
+    assert!(ctl_of(&f).owner_cleared, "归零后哨兵置位");
+    // p1 重新 claim（claimController.js:45-53 只写 user——哨兵同步复位）
+    let claimer = f.creep("w2", "p1", 5, 6, &[BodyKind::Claim], 0);
+    f.settle(controller_intent(claimer, Action::ClaimController, ctl));
+    let t = ctl_of(&f);
+    assert_eq!(t.owner, Some("p1".into()));
+    assert!(!t.owner_cleared, "claim 复位哨兵");
+    assert_eq!(t.level, 1);
 }
 
 #[test]
