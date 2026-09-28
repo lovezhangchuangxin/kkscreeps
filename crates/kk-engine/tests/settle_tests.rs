@@ -1914,11 +1914,12 @@ fn rampart_redirects_attack_until_broken() {
 
 #[test]
 fn safe_mode_blocks_hostile_attack_and_dismantle() {
-    // attack.js:30-32 / dismantle.js:24-26：他人 safeMode 生效期拒（引擎层二次门）
+    // attack.js:30-32 / dismantle.js:24-26：他人 safeMode 生效期拒（引擎层二次门）。
+    // attack 与 dismantle 各自独立 settle 验证——两者同 creep 同 tick 会互相压制
+    // （dismantle 在 attack 的压制表里），单一空事件断言无法归因到 attack 的门
     let mut f = Fixture::new(1, terrain_with(&[]));
     let ctl = f.controller(2, Some("p2"));
     let atk = f.creep("atk", "p1", 10, 10, &[BodyKind::Attack, BodyKind::Work], 0);
-    let ext = extension_at(&mut f, 11, 10, 1000, 0);
     let wall = f
         .world
         .insert(
@@ -1935,14 +1936,19 @@ fn safe_mode_blocks_hostile_attack_and_dismantle() {
     if let Some(RoomObject::Controller(t)) = f.world.get_mut(ctl) {
         t.safe_mode = 1000;
     }
-    let mut batch = attack_intent(atk, ext);
-    batch.add_object_intent("p1", atk, Action::Dismantle, IntentData::target(wall));
-    let events = f.settle(batch);
-    assert!(events.is_empty(), "safeMode：攻击与拆解全拒");
+    let ext = extension_at(&mut f, 11, 10, 1000, 0);
+    // attack 的门：单独 settle
+    let events = f.settle(attack_intent(atk, ext));
+    assert!(events.is_empty(), "safeMode：攻击拒");
     match f.obj(ext) {
         RoomObject::Extension(e) => assert_eq!(e.hits, 1000),
         _ => panic!(),
     }
+    // dismantle 的门：单独 settle
+    let mut batch = IntentBatch::default();
+    batch.add_object_intent("p1", atk, Action::Dismantle, IntentData::target(wall));
+    let events2 = f.settle(batch);
+    assert!(events2.is_empty(), "safeMode：拆解拒");
     match f.obj(wall) {
         RoomObject::ConstructedWall(w) => assert_eq!(w.hits, 1000),
         _ => panic!(),
@@ -2296,4 +2302,103 @@ fn zero_power_attack_still_logs() {
     };
     assert_eq!(log_a, kk_engine::settle::creep::ACTION_ATTACK);
     assert_eq!(log_b, kk_engine::settle::creep::ACTION_ATTACKED);
+}
+
+// ---- B1 复审阻塞项追证：官方 _oldHits 是不可观测死机制，损毁部件下一 tick 失效 ----
+// 证据链见 damage.rs distribute_hits 注释：recalcBody 冻结 _oldHits 后紧随的
+// bulk.update 经 removeHidden 原位剥离（活对象与落库载荷同时失去），下一 tick
+// 功率计数恒为 hits>0。以下两用例锁该可观测语义。
+
+#[test]
+fn destroyed_attack_part_loses_power_next_tick() {
+    // t1：B [attack,attack,tough,tough] 受击 120 → 首个 attack 报废；
+    // t2：B 的反击功率 = 1×30（hits>0 计数）而非 2×30；t3：两个 attack 全灭 → 无反击
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let a = f.creep("atk", "p1", 10, 10, &[BodyKind::Attack; 4], 0);
+    let b = f.creep(
+        "victim",
+        "p2",
+        11,
+        10,
+        &[
+            BodyKind::Attack,
+            BodyKind::Attack,
+            BodyKind::Tough,
+            BodyKind::Tough,
+        ],
+        0,
+    );
+    // t1：双方满编——反击 2×30=60
+    let events1 = f.settle(attack_intent(a, b));
+    assert_eq!(
+        events1[0]["data"]["damage"], 60,
+        "受损当 tick 部件尚未灭：反击 60"
+    );
+    let (hits, parts) = creep_parts(&f, b);
+    assert_eq!(
+        (hits, parts),
+        (280, vec![0, 80, 100, 100]),
+        "首个 attack 报废"
+    );
+    // t2：反击功率 = 存活 attack 部件数 ×30 = 30（不是 _oldHits 冻结的 60）
+    let events2 = f.settle(attack_intent(a, b));
+    assert_eq!(events2[0]["data"]["damage"], 30, "损毁部件下一 tick 失效");
+    assert_eq!(
+        events2[1]["data"]["damage"], 120,
+        "攻击者未受损：主伤害不变"
+    );
+    let (hits, parts) = creep_parts(&f, b);
+    assert_eq!(
+        (hits, parts),
+        (160, vec![0, 0, 60, 100]),
+        "两个 attack 均灭"
+    );
+    // t3：无存活 attack 部件 → 无反击事件
+    let events3 = f.settle(attack_intent(a, b));
+    assert_eq!(events3.len(), 1, "仅主事件");
+    assert_eq!(events3[0]["data"]["damage"], 120);
+}
+
+#[test]
+fn destroyed_work_part_repairs_at_half_power_next_tick() {
+    // repair.js:23 的 (hits>0||_oldHits>0) 同族：WORK 部件损毁后下一 tick
+    // 修复功率按存活部件数计（_oldHits 已被 removeHidden 剥离）
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let fixer = f.creep(
+        "fixer",
+        "p1",
+        11,
+        10,
+        &[BodyKind::Work, BodyKind::Work, BodyKind::Carry],
+        100,
+    );
+    let enemy = f.creep("atk", "p2", 10, 10, &[BodyKind::Attack; 4], 0);
+    // t1：fixer 受击 120 → 300-120=180 → [0,80,100]（首个 work 报废）
+    f.settle(attack_intent_by("p2", enemy, fixer));
+    let (hits, parts) = creep_parts(&f, fixer);
+    assert_eq!((hits, parts), (180, vec![0, 80, 100]));
+    // t2：修复功率 = 1×REPAIR_POWER = 100（不是 _oldHits 冻结的 200）
+    let wall = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::ConstructedWall(kk_schema::room::ConstructedWallObj {
+                id: 0,
+                x: 12,
+                y: 10,
+                hits: 1,
+            }),
+        )
+        .unwrap();
+    let mut b = IntentBatch::default();
+    b.add_object_intent("p1", fixer, Action::Repair, IntentData::target(wall));
+    let events = f.settle(b);
+    assert_eq!(
+        events[0]["data"]["amount"], 100,
+        "损毁的 WORK 部件下一 tick 不计功率"
+    );
+    match f.obj(wall) {
+        RoomObject::ConstructedWall(w) => assert_eq!(w.hits, 101),
+        _ => panic!(),
+    }
 }

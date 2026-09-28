@@ -711,7 +711,11 @@ fn intent_repair(w: &mut Working, id: ObjId, data: &IntentData) {
     }
     // repair.js:23-27：effect = min(功率, 能量折算, 缺口)；cost = min(存量,
     // ceil(effect×REPAIR_COST))。JS 浮点（energy/0.01、ceil(e*0.01)）在此值域
-    // 恒等于整数运算（数值穷证过：energy×100 与 ceil 除 100 都无浮点误差显形）
+    // 恒等于整数运算——值域自明：部件数 ≤ MAX_CREEP_SIZE(50) ⇒ effect ≤
+    // 50×REPAIR_POWER = 5000；0.01 的 double 表示相对误差 ~2.1e-15，e×0.01 真值
+    // 偏离精确整数至多 ~1e-11，而 5000 量级 double 的半 ULP 仅 ~4.6e-13——
+    // 乘积必舍入到精确整数 ⇒ ceil == ceil(e/100) 整除（数值验证另覆盖至 6×10⁸
+    // 无失配）
     let energy_remaining = energy * 100; // energy / REPAIR_COST
     let missing = hits_max - hits;
     let effect = repair_power.min(energy_remaining).min(missing);
@@ -776,7 +780,10 @@ fn intent_dismantle(w: &mut Working, id: ObjId, data: &IntentData) {
         .map(damage::object_hits)
         .unwrap_or(0);
     // dismantle.js:33-35：amount = min(功率, 目标 hits)；回流 = floor(amount ×
-    // DISMANTLE_COST)（JS 浮点恒等于 amount/200 整除，数值穷证过）
+    // DISMANTLE_COST)——值域自明：amount ≤ 50×DISMANTLE_POWER = 2500，
+    // 0.005 的 double 相对误差 ~2.1e-15 使乘积偏离整数至多 ~5e-12，远小于该
+    // 量级半 ULP（~2.3e-13）⇒ JS floor == amount/200 整除（数值验证另覆盖至
+    // 6×10⁸ 无失配）
     let amount = power.min(hits);
     let energy_gain = amount / 200;
     // dismantle.js:42-52：amount 为零不动；先回流能量、超容掉落、再施伤（可击毁）

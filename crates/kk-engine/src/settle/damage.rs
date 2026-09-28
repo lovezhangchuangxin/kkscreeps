@@ -157,6 +157,24 @@ pub fn apply_pending_damage(w: &mut Working, id: ObjId) -> bool {
 
 /// 官方 _recalc-body.js:10-18：从 body 尾部向前灌 `min(剩余, 100)`——
 /// 受伤自数组头部向尾部推进（前列部件先报废）。
+///
+/// 关于官方 `_oldHits`（双路评审追证，结论：不可观测的死机制，不移植）：
+/// - _recalc-body.js:11 在重算时冻结 `i._oldHits = i._oldHits || i.hits`
+///   （首次受伤时为分发前的初值 100）；utils.js:623-636 calcBodyEffectiveness
+///   不带 withoutOldHits 时按 `hits || _oldHits` 计数（attack/dismantle/
+///   heal/ranged*/harvest/疲劳/反击全族）——若 _oldHits 能存活到下一 tick，
+///   已损毁部件将永久保留功率；
+/// - 但 recalcBody 的全部四个调用点都**紧随** bulk.update(obj, {body, ...})
+///   持久化（creeps/tick.js:139→145、spawns/renew-creep.js:49→52、
+///   labs/boost-creep.js:58→60、labs/unboost-creep.js:29→30），而
+///   driver/lib/bulk.js:33-55 的 update 会 `data[key] = originalValue` 把
+///   载荷 body **别名到活对象的数组**，removeHidden（:6-17）随即原位 delete
+///   所有 `_` 前缀键——活对象与落库载荷同时失去 _oldHits（已用官方 lodash
+///   复刻验证）；两行之间只跑 _drop-resources-without-space（只读 store）；
+/// - 故下一 tick 的 intent 期功率与疲劳恢复看到的 body 恒无 _oldHits，
+///   可观测语义 = `hits > 0` 计数（与 kk count_active 一致；玩家面
+///   game/creeps.js:9-18 的尾部扫描 break 同语义互证）。官方若真按
+///   "损毁部件永久保留功率"运行，screeps-ok 7.16 族反而会转红。
 pub fn distribute_hits(body: &mut [BodyPart], mut hits: i64) {
     for part in body.iter_mut().rev() {
         part.hits = hits.clamp(0, 100) as u32;
