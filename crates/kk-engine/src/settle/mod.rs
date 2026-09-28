@@ -10,15 +10,18 @@
 //! （tower/rampart 等透传对象只保证可见，无规则行为）。
 //! B1 起 hits 模型落地：近战 attack/repair/dismantle 已结算（damage.rs），
 //! ranged/heal/boost 仍不在范围。
+//! B2 起 controller 结算族落地（creep.rs 五执行器 + controller.rs 的
+//! activateSafeMode + economy.rs 的 controllers/tick 补齐）。
 
 pub mod creep;
+pub mod controller;
 pub mod damage;
 pub mod economy;
 pub mod movement;
 pub mod room;
 pub mod spawn;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use kk_schema::room::{CreepObj, RoomObject};
 use kk_world::{ObjId, RoomIndex, RoomState};
@@ -49,9 +52,19 @@ impl std::fmt::Display for SettleError {
 }
 
 /// 玩家状态（M1 仅 gcl；持久化 M2）。
+///
+/// `rooms` 是官方 `user.rooms` 等价物（driver/lib/index.js:542-547
+/// addRoomToUser 的 addToSet 集合）：claimController 的 GCL 门读
+/// `user.rooms.length`（claimController.js:34-35）。维护时序对齐官方——
+/// addRoomToUser 的 bulk addToSet **不**改内存对象（bulk.js:101-107，仅入队
+/// DB 操作，tick 末落盘），故结算期读到的永远是上一 tick 的定集；本引擎由
+/// [`Engine::tick_with_intents`] 在全部房间结算完成后按世界真值重建（与官方
+/// 每 tick controllers/tick.js:18 对已占房重加 + unclaim/降级路径移除的
+/// 不动点一致），同 tick 的后序 claim 不会看到先序 claim 的新房——官方同形。
 #[derive(Debug, Default, Clone)]
 pub struct PlayerState {
     pub gcl: i64,
+    pub rooms: BTreeSet<String>,
 }
 
 /// 结算工作上下文：房间工作副本 + 索引 + per-tick 瞬态。
@@ -74,6 +87,14 @@ pub struct Working<'w> {
     /// 本 tick 对 creep 的待施加治疗（官方 `_healToApply`，heal.js:29——
     /// 伤害通道的对称面，tick.js:126-128 在死亡判定前施加）。
     pub heal_to_apply: BTreeMap<ObjId, i64>,
+    /// 本 tick controller 的升级封锁钟（官方 `target._upgradeBlocked`，
+    /// attackController.js:48 写、controllers/tick.js:20-23 持久化后清除）。
+    /// 值为绝对 tick（gameTime + CONTROLLER_ATTACK_BLOCKED_UPGRADE）。
+    pub upgrade_block_pending: BTreeMap<ObjId, u64>,
+    /// 本 tick 的 safeMode 激活标记（官方 `object._safeModeActivated`，
+    /// activateSafeMode.js:24 写、controllers/tick.js:25-31 在 controller tick
+    /// 消费——两文件间的瞬态通道）。
+    pub safe_mode_activated: BTreeSet<ObjId>,
     pub movement: movement::Movement,
 }
 
@@ -241,6 +262,8 @@ pub fn settle_room(
         upgraded: BTreeMap::new(),
         damage_to_apply: BTreeMap::new(),
         heal_to_apply: BTreeMap::new(),
+        upgrade_block_pending: BTreeMap::new(),
+        safe_mode_activated: BTreeSet::new(),
         movement: movement::Movement::new(),
     };
 
@@ -265,6 +288,16 @@ pub fn settle_room(
                 }
                 Some(RoomObject::Spawn(o)) if o.owner == *player => {
                     spawn::process_spawn_intents(&mut w, *obj_id, actions);
+                }
+                // controller 对象：官方 :248 的所有权门是 `object.user &&
+                // object.user != userId`——他人 controller 的 intent 跳过；
+                // 无主 controller 不拦（activateSafeMode 处理器自身 :8
+                // `!object.user || !object.level` 再拒）， :306-311 分派
+                // unclaim/activateSafeMode
+                Some(RoomObject::Controller(o))
+                    if o.owner.as_deref().is_none_or(|u| u == player.as_str()) =>
+                {
+                    controller::process_controller_intents(&mut w, *obj_id, actions);
                 }
                 _ => continue,
             }
@@ -380,6 +413,27 @@ impl Engine {
         }
         for (name, room) in settled {
             self.world.rooms.insert(name, room);
+        }
+        // user.rooms 重建（官方不动点，见 PlayerState 文档）：claimController
+        // 的 addRoomToUser（claimController.js:55）与每 tick 已占房重加
+        // （controllers/tick.js:18）经 bulk addToSet 在 tick 末落盘——等价于
+        // 结算完成后按世界真值（各房 controller.owner）重建集合；unclaim/降级
+        // 到 0 的 removeRoomFromUser（unclaim.js:15 / tick.js:53）同被覆盖。
+        for state in players.values_mut() {
+            state.rooms.clear();
+        }
+        for room in self.world.rooms.values() {
+            if let Some(owner) = room
+                .objects
+                .values()
+                .find_map(|o| match o {
+                    RoomObject::Controller(c) => c.owner.clone(),
+                    _ => None,
+                })
+                && let Some(state) = players.get_mut(&owner)
+            {
+                state.rooms.insert(room.name.clone());
+            }
         }
         self.players = players;
         self.next_id = next;

@@ -1,5 +1,6 @@
 //! creep 指令执行与 creep tick（官方 creeps/intents.js 执行序 + tick.js）。
-//! B1 增补近战 attack / repair / dismantle 执行器（伤害机制见 damage.rs）。
+//! B1 增补近战 attack / repair / dismantle 执行器（伤害机制见 damage.rs）；
+//! B2 增补 controller 结算族（claim/reserve/attack/sign/generateSafeMode）。
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -35,6 +36,13 @@ pub fn process_creep_intents(w: &mut Working, id: ObjId, actions: &BTreeMap<Acti
             Action::Dismantle => intent_dismantle(w, id, data),
             Action::Heal => intent_heal(w, id, data, false),
             Action::RangedHeal => intent_heal(w, id, data, true),
+            // B2 controller 结算族（claimController/reserveController/
+            // attackController/signController/generateSafeMode）
+            Action::ClaimController => intent_claim_controller(w, id, data),
+            Action::ReserveController => intent_reserve_controller(w, id, data),
+            Action::AttackController => intent_attack_controller(w, id, data),
+            Action::SignController => intent_sign_controller(w, id, data),
+            Action::GenerateSafeMode => intent_generate_safe_mode(w, id, data),
             // M1 无执行器的动作（战斗/占位/杂项）：压制图已生效，此处静默跳过
             _ => {}
         }
@@ -137,7 +145,8 @@ fn intent_move(w: &mut Working, id: ObjId, data: &IntentData) {
     w.movement.add(id, (x as u8, y as u8), dx, dy);
 }
 
-/// 官方 harvest.js source 分支（29-70）：邻接、能量、controller 归属、WORK×2。
+/// 官方 harvest.js source 分支（29-70）：邻接、controller 归属/预定门（B2 补
+/// reservation 分支）、WORK×2。
 fn intent_harvest(w: &mut Working, id: ObjId, data: &IntentData) {
     let Some(target_id) = data.id else { return };
     let (creep_pos, owner, work_power, store_energy, store_cap) = match w.creep(id) {
@@ -163,15 +172,21 @@ fn intent_harvest(w: &mut Working, id: ObjId, data: &IntentData) {
     if !target_ok {
         return;
     }
+    // 官方 harvest.js:31-34：controller 归他人**或被他人预定**拒——
+    // `roomController.user && user != object.user ||
+    //  roomController.reservation && reservation.user != object.user`
+    if let Some(ctl) = w.controller()
+        && (ctl.owner.as_deref().is_some_and(|u| u != owner)
+            || ctl
+                .reservation
+                .as_ref()
+                .is_some_and(|r| r.user != owner))
+    {
+        return;
+    }
     // 官方 harvest.js:37 `if (harvestAmount)`：零功率（无 WORK）整体跳过——
     // 不扣减、无 actionLog、无事件
     if work_power <= 0 {
-        return;
-    }
-    // controller 非本人/非本预约拒（harvest.js:37-39；M1 无 reservation）
-    if let Some(ctl) = w.controller()
-        && ctl.owner.as_deref().is_some_and(|u| u != owner)
-    {
         return;
     }
     let energy = match w.room.objects.get_mut(&target_id) {
@@ -397,14 +412,28 @@ fn intent_upgrade_controller(w: &mut Working, id: ObjId, data: &IntentData) {
     let Some(RoomObject::Controller(_)) = w.room.objects.get(&target_id) else {
         return;
     };
-    let (ctl_x, ctl_y, ctl_owner, level, progress) = match w.room.objects.get(&target_id) {
-        Some(RoomObject::Controller(t)) => (t.x, t.y, t.owner.clone(), t.level, t.progress),
-        _ => return,
-    };
+    let (ctl_x, ctl_y, ctl_owner, level, progress, upgrade_blocked) =
+        match w.room.objects.get(&target_id) {
+            Some(RoomObject::Controller(t)) => (
+                t.x,
+                t.y,
+                t.owner.clone(),
+                t.level,
+                t.progress,
+                t.upgrade_blocked,
+            ),
+            _ => return,
+        };
     if (ctl_x as i32 - pos.0 as i32).abs() > 3 || (ctl_y as i32 - pos.1 as i32).abs() > 3 {
         return;
     }
     if level == 0 || ctl_owner.as_deref() != Some(owner.as_str()) {
+        return;
+    }
+    // 官方 upgradeController.js:25-27：`target.upgradeBlocked &&
+    // upgradeBlocked > gameTime` 拒——attackController 的 1000 tick 封锁期
+    //（B2 起生效；null → 0 > t 恒假，放行）
+    if upgrade_blocked.unwrap_or(0) > w.time {
         return;
     }
     let mut effect = work_power.min(energy);
@@ -901,6 +930,293 @@ fn intent_heal(w: &mut Working, id: ObjId, data: &IntentData, ranged: bool) {
     );
 }
 
+// ---- B2：controller 结算族（官方 processor/intents/creeps/ 同名文件） ----
+
+/// controller 族公共预检：目标存在、是 controller、Chebyshev 邻接 ≤ 1
+/// （claimController.js:15-21 / reserveController.js:19-24 /
+/// attackController.js:15-20 / signController.js:14-18 /
+/// generateSafeMode.js:11-16 五处同形）。返回目标 id。
+fn controller_target(w: &Working, id: ObjId, data: &IntentData) -> Option<ObjId> {
+    let target_id = data.id?;
+    let (x, y) = w.creep(id).map(|c| (c.x as i32, c.y as i32))?;
+    let target = w.room.objects.get(&target_id)?;
+    if !matches!(target, RoomObject::Controller(_)) {
+        return None;
+    }
+    let (tx, ty) = target.pos();
+    if (tx as i32 - x).abs() > 1 || (ty as i32 - y).abs() > 1 {
+        return None;
+    }
+    Some(target_id)
+}
+
+/// 官方 claimController.js：夺主。0 级无主（或仅被自己预定）的 controller，
+/// 带存活 CLAIM 部件的 creep 邻接claim → level=1、owner 换人、progress 清零、
+/// downgradeTime/reservation 清空。
+fn intent_claim_controller(w: &mut Working, id: ObjId, data: &IntentData) {
+    // claimController.js:8-13：非 creep 拒（分派层保证）、spawning 拒
+    let owner = match w.creep(id) {
+        Some(c) if !c.spawning => c.owner.clone(),
+        _ => return,
+    };
+    // :15-21：目标 + 邻接（公共预检）
+    let Some(target_id) = controller_target(w, id, data) else {
+        return;
+    };
+    let (level, reservation) = match w.room.objects.get(&target_id) {
+        Some(RoomObject::Controller(t)) => (t.level, t.reservation.clone()),
+        _ => return,
+    };
+    // :22-24：`target.bindUser && object.user != target.bindUser` 拒——bindUser
+    // 在官方 OSS 引擎全库无写入点（仅 hosted 后端 backend-npm 读取），私有服
+    // 世界不可达，不建模
+    // :25-27：level > 0 拒（已占房不可夺，unclaim/降级才回 0 级）
+    if level > 0 {
+        return;
+    }
+    // :28-30：存活 CLAIM 部件数为零拒
+    let claim_parts = w
+        .creep(id)
+        .map(|c| BodyKind::count_active(&c.body, BodyKind::Claim))
+        .unwrap_or(0);
+    if claim_parts == 0 {
+        return;
+    }
+    // :31-33：他人预定拒（自己的预定不拦，:52 落地时清掉）
+    if reservation.is_some_and(|r| r.user != owner) {
+        return;
+    }
+    // :34-43：GCL 门。shardAccess（:37-39）是 intershard 门槛，单分片恒有——
+    // N/A。claimedRooms 读 user.rooms（官方 bulk addToSet 不改内存对象
+    // （bulk.js:101-107）——读到上一 tick 定集，我方 PlayerState.rooms 同形）；
+    // calcNeededGcl（utils.js:661-663）= GCL_MULTIPLY × (n-1)^GCL_POW
+    let claimed_rooms = w
+        .players
+        .get(&owner)
+        .map(|p| p.rooms.len())
+        .unwrap_or(0);
+    let needed_gcl = c::GCL_MULTIPLY as f64 * (claimed_rooms as f64).powf(c::GCL_POW);
+    let gcl = w.players.get(&owner).map(|p| p.gcl).unwrap_or(0);
+    if (gcl as f64) < needed_gcl {
+        return;
+    }
+    // :45-53：落地。addRoomToUser（:55）经 tick 末 rooms 重建承载
+    // （settle/mod.rs PlayerState 文档）
+    if let Some(RoomObject::Controller(t)) = w.room.objects.get_mut(&target_id) {
+        t.level = 1;
+        t.owner = Some(owner);
+        t.progress = 0;
+        t.downgrade_time = None;
+        t.reservation = None;
+    }
+}
+
+/// 官方 reserveController.js：无主房预定。CONTROLLER_RESERVE(1)/CLAIM 部件/
+/// tick，上限 CONTROLLER_RESERVE_MAX(5000)（相对 gameTime 的滑动窗）。
+fn intent_reserve_controller(w: &mut Working, id: ObjId, data: &IntentData) {
+    // reserveController.js:8-13：spawning 拒；:15-17 shardAccess 单分片 N/A
+    let owner = match w.creep(id) {
+        Some(c) if !c.spawning => c.owner.clone(),
+        _ => return,
+    };
+    // :19-24：目标 + 邻接
+    let Some(target_id) = controller_target(w, id, data) else {
+        return;
+    };
+    let (ctl_owner, reservation) = match w.room.objects.get(&target_id) {
+        Some(RoomObject::Controller(t)) => (t.owner.clone(), t.reservation.clone()),
+        _ => return,
+    };
+    // :26-28：`target.user || (target.reservation && reservation.user !=
+    // object.user)` 拒——已占房不可预定（房主自己也不行）；他人预定不可覆盖
+    if ctl_owner.is_some() || reservation.as_ref().is_some_and(|r| r.user != owner) {
+        return;
+    }
+    // :30-33：effect = 存活 CLAIM × CONTROLLER_RESERVE；零功率拒（无事件）
+    let effect = w
+        .creep(id)
+        .map(|c| BodyKind::count_active(&c.body, BodyKind::Claim) as i64 * c::CONTROLLER_RESERVE)
+        .unwrap_or(0);
+    if effect == 0 {
+        return;
+    }
+    // :35-40：无预约先建 {user, endTime: gameTime+1}（仅内存值，未持久化）
+    let base_end = match &reservation {
+        Some(r) => r.end_time,
+        None => w.time + 1,
+    };
+    // :43-45：滑窗上限：endTime + effect > gameTime + CONTROLLER_RESERVE_MAX 拒。
+    // 官方在内存对象上先建了预约再判上限——被拒的"幻影预约"仅本 tick 后续
+    // 处理器可见、永不入库；我方工作副本即持久层（D4-2 灰区），按整票拒绝
+    // （不落任何预约状态）
+    if base_end + effect as u64 > w.time + c::CONTROLLER_RESERVE_MAX as u64 {
+        return;
+    }
+    // :47：actionLog.reserveController（官方独立键，位图 bit8）
+    if let Some(c) = w.creep_mut(id) {
+        set_action_log(&mut c.action_log, ACTION_RESERVE);
+    }
+    // :49-50：endTime += effect 并持久化
+    if let Some(RoomObject::Controller(t)) = w.room.objects.get_mut(&target_id) {
+        t.reservation = Some(kk_schema::room::Reservation {
+            user: owner,
+            end_time: base_end + effect as u64,
+        });
+    }
+    // :52：EVENT_RESERVE_CONTROLLER {amount: effect}
+    w.push_event(
+        c::EVENT_RESERVE_CONTROLLER,
+        id,
+        serde_json::json!({ "amount": effect }),
+    );
+}
+
+/// 官方 attackController.js：预定削减 + 占房 downgrade 挂钟后移 +
+/// 升级封锁（CONTROLLER_ATTACK_BLOCKED_UPGRADE=1000 tick）。
+fn intent_attack_controller(w: &mut Working, id: ObjId, data: &IntentData) {
+    // attackController.js:8-13：spawning 拒
+    let owner = match w.creep(id) {
+        Some(c) if !c.spawning => c.owner.clone(),
+        _ => return,
+    };
+    // :15-20：目标 + 邻接
+    let Some(target_id) = controller_target(w, id, data) else {
+        return;
+    };
+    let (ctl_owner, reservation, safe_mode, upgrade_blocked) =
+        match w.room.objects.get(&target_id) {
+            Some(RoomObject::Controller(t)) => (
+                t.owner.clone(),
+                t.reservation.clone(),
+                t.safe_mode,
+                t.upgrade_blocked,
+            ),
+            _ => return,
+        };
+    // :22-24：原始房（无主无预定）不可攻
+    if ctl_owner.is_none() && reservation.is_none() {
+        return;
+    }
+    // :25-28：`(roomController.user != object.user && safeMode > gameTime) ||
+    // upgradeBlocked > gameTime` 拒——他人 safeMode 生效期不可攻；
+    // upgradeBlocked 对任何攻击者（含房主自己）生效。roomController 即目标
+    // （同房唯一 controller）
+    if (ctl_owner.as_deref() != Some(owner.as_str()) && safe_mode > w.time)
+        || upgrade_blocked.unwrap_or(0) > w.time
+    {
+        return;
+    }
+    // :29-31：EFFECT_INVULNERABILITY 免疫属 power 体系（M4）——N/A
+    // 存活 CLAIM 部件（:34/:42 两分支共用）
+    let claim_parts = w
+        .creep(id)
+        .map(|c| BodyKind::count_active(&c.body, BodyKind::Claim) as i64)
+        .unwrap_or(0);
+    // :33-40：预定削减分支——effect = floor(CLAIM × CONTROLLER_RESERVE)
+    //（整数常量下 floor 恒等）；endTime -= effect（官方 bulk update 为
+    // merge，user 保留）
+    if let Some(r) = reservation {
+        let effect = claim_parts * c::CONTROLLER_RESERVE;
+        if effect == 0 {
+            return;
+        }
+        let new_end = r.end_time.saturating_sub(effect as u64);
+        if let Some(RoomObject::Controller(t)) = w.room.objects.get_mut(&target_id) {
+            t.reservation = Some(kk_schema::room::Reservation {
+                user: r.user,
+                end_time: new_end,
+            });
+        }
+    }
+    // :41-49：占房分支——effect = floor(CLAIM × CONTROLLER_CLAIM_DOWNGRADE)；
+    // downgradeTime -= effect；_upgradeBlocked = gameTime + 1000（瞬态，
+    // controller tick 持久化）。downgradeTime 未挂钟（新 claim 的房）时官方
+    // null − effect 得负数 → 下 tick 降级链即刻触发；u64 饱和到 0 同 observable
+    //（两者都 ≤ gameTime−1，触发条件同真）
+    if ctl_owner.is_some() {
+        let effect = claim_parts * c::CONTROLLER_CLAIM_DOWNGRADE;
+        if effect == 0 {
+            return;
+        }
+        let new_dt = match w.room.objects.get(&target_id) {
+            Some(RoomObject::Controller(t)) => {
+                t.downgrade_time.unwrap_or(0).saturating_sub(effect as u64)
+            }
+            _ => return,
+        };
+        if let Some(RoomObject::Controller(t)) = w.room.objects.get_mut(&target_id) {
+            t.downgrade_time = Some(new_dt);
+        }
+        w.upgrade_block_pending
+            .insert(target_id, w.time + c::CONTROLLER_ATTACK_BLOCKED_UPGRADE as u64);
+    }
+    // :50：actionLog.attack（与近战/dismantle 共用官方键）
+    if let Some(c) = w.creep_mut(id) {
+        set_action_log(&mut c.action_log, ACTION_ATTACK);
+    }
+    // :52：EVENT_ATTACK_CONTROLLER——官方事件无 data 键；我方事件封套恒带
+    // data（push_event 形态），空对象差异属投影层可见的既有形态（登记报告）
+    w.push_event(c::EVENT_ATTACK_CONTROLLER, id, serde_json::json!({}));
+}
+
+/// 官方 signController.js：签名落库 / 空签名清除。
+fn intent_sign_controller(w: &mut Working, id: ObjId, data: &IntentData) {
+    // signController.js:8-13：spawning 拒
+    let owner = match w.creep(id) {
+        Some(c) if !c.spawning => c.owner.clone(),
+        _ => return,
+    };
+    // :14-18：目标 + 邻接
+    let Some(target_id) = controller_target(w, id, data) else {
+        return;
+    };
+    // :23-28：`intent.sign ? {user, text: intent.sign, time: gameTime,
+    // datetime: Date.now()} : null`——userString 清洗下缺省与空串同为 ""
+    // （falsy），都落清除。官方第四字段 datetime 为墙钟，确定性引擎不落盘
+    //（schema Sign 文档；投影层合成——轨 A 接线）
+    let sign = data
+        .sign
+        .as_ref()
+        .filter(|s| !s.is_empty())
+        .map(|text| kk_schema::room::Sign {
+            user: owner,
+            text: text.clone(),
+            time: w.time,
+        });
+    if let Some(RoomObject::Controller(t)) = w.room.objects.get_mut(&target_id) {
+        t.sign = sign;
+    }
+}
+
+/// 官方 generateSafeMode.js：消耗 1000 ghodium 为 controller 充一枚
+/// safeModeAvailable。激活（消耗 available 设 safeMode 时钟）是另一半——
+/// controller 对象的 activateSafeMode intent（settle/controller.rs）。
+fn intent_generate_safe_mode(w: &mut Working, id: ObjId, data: &IntentData) {
+    // generateSafeMode.js:8-10：spawning 拒（本文件无 type 检查——分派层保证）
+    let spawning = w.creep(id).is_some_and(|c| c.spawning);
+    if spawning {
+        return;
+    }
+    // :11-16：目标 + 邻接
+    let Some(target_id) = controller_target(w, id, data) else {
+        return;
+    };
+    // :19-21：`!object.store || !(store[RESOURCE_GHODIUM] >= SAFE_MODE_COST)`
+    // 拒——store 缺失/ghodium 不足皆拒（无部分消耗）
+    let ghodium = w.creep(id).map(|c| c.store.ghodium as i64).unwrap_or(0);
+    if ghodium < c::SAFE_MODE_COST {
+        return;
+    }
+    // :23-24：available += 1（官方 `(target.safeModeAvailable || 0) + 1`）；
+    // store.G -= SAFE_MODE_COST
+    if let Some(RoomObject::Controller(t)) = w.room.objects.get_mut(&target_id) {
+        t.safe_mode_available = t.safe_mode_available.saturating_add(1);
+    }
+    if let Some(c) = w.creep_mut(id) {
+        c.store.ghodium -= c::SAFE_MODE_COST as u32;
+    }
+}
+
 /// 官方 creeps/tick.js（M1 子集）：移动落格、TTL 死亡、疲劳恢复。
 pub fn creep_tick(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
     // 移动落格（movement.js execute）
@@ -955,6 +1271,12 @@ fn movement_execute(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
     );
     // 官方疲劳率判定顺序（movement.js:204-222）：默认 2 → 沼泽 10 →
     // 路最后覆盖为 1（路上的沼泽按路走）；路磨损；进格踩掉敌方工地
+    //（:224-233 的 safeMode 门：`!roomController || controller.user ===
+    // object.user || !(safeMode > gameTime)` 才允许踩——他人 safeMode 生效期
+    // 敌方工地受保护；M1 只做了工地归属半边，B2 补齐 safeMode 门）
+    let stomp_allowed = w.controller().is_none_or(|ctl| {
+        ctl.owner.as_deref() == Some(owner.as_str()) || ctl.safe_mode <= w.time
+    });
     let mut fatigue_rate = 2i64;
     let mut road_id = None;
     let cell_ids: Vec<ObjId> = w.index.at(target.0 as usize, target.1 as usize).to_vec();
@@ -964,8 +1286,8 @@ fn movement_execute(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
                 road_id = Some(tid);
             }
             Some(RoomObject::ConstructionSite(site))
-                // 官方 :224-233：非 safeMode 保护时，踩掉敌方工地（退一半工程为能量）
-                if site.owner.as_deref() != Some(owner.as_str()) => {
+                // 官方 :224-233：safeMode 门放行时踩掉敌方工地（退一半工程为能量）
+                if stomp_allowed && site.owner.as_deref() != Some(owner.as_str()) => {
                     let pos = (site.x, site.y);
                     w.remove_obj(tid);
                     if site.progress > 1 {
@@ -1038,9 +1360,12 @@ pub const ACTION_REPAIR: u8 = 1 << 5;
 pub const ACTION_HEAL: u8 = 1 << 6;
 /// 官方 actionLog.healed（heal.js:32；renew-creep.js:42 也置此键）。
 pub const ACTION_HEALED: u8 = 1 << 7;
+/// 官方 actionLog.reserveController（reserveController.js:47）。u8 位图在 B1
+/// 已满 8 位，B2 起 action_log 拓宽为 u16，本键落在 bit8。
+pub const ACTION_RESERVE: u16 = 1 << 8;
 
-pub fn set_action_log(bits: &mut u8, bit: u8) {
-    *bits |= bit;
+pub fn set_action_log(bits: &mut u16, bit: impl Into<u16>) {
+    *bits |= bit.into();
 }
 
 /// 官方 harvest 功率：WORK 部件数 × HARVEST_POWER（无 boost）。
