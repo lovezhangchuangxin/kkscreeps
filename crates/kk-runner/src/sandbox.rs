@@ -370,10 +370,17 @@ impl Sandbox {
             return (None, 0);
         };
         let free: &[&str] = &["say", "pull"];
+        // 官方 intentsCount（make.js:100-106）：对象级按动作名、数组通道
+        //（room/global）按元素数计；排除 say/pull
         let count_billed = |map: &serde_json::Map<String, Value>| {
             map.values()
                 .filter_map(|a| a.as_object())
-                .map(|a| a.keys().filter(|k| !free.contains(&k.as_str())).count())
+                .map(|a| {
+                    a.iter()
+                        .filter(|(k, _)| !free.contains(&k.as_str()))
+                        .map(|(_, v)| v.as_array().map_or(1, Vec::len))
+                        .sum::<usize>()
+                })
                 .sum::<usize>()
         };
         let objects = list.as_object().map(|m| m.len()).unwrap_or(0);

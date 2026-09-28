@@ -309,7 +309,9 @@ impl EmbedEngine {
             .players
             .as_mut()
             .ok_or_else(|| anyhow::anyhow!("分片未创建"))?;
-        let world = self.engine.world.world_json();
+        // per-viewer 视野裁切（外部复审 P1-3 修复）：注入世界只含该玩家有
+        // 对象的房间 + user 字段（prelude 装配 per-viewer 集合）
+        let world = self.engine.world.world_json_for_viewer(handle);
         let report: EvalReport = players.run_player(thread_id, &world, code)?;
         self.settle_tick_with_reports(std::iter::once((handle, &report)))
             .map_err(|e| anyhow::anyhow!("{e}"))?;
@@ -345,18 +347,19 @@ impl EmbedEngine {
                 anyhow::bail!("未知玩家 handle: {handle}");
             }
         }
-        let world = self.engine.world.world_json();
         let mut reports = BTreeMap::new();
         {
             let players = self
                 .players
                 .as_mut()
                 .ok_or_else(|| anyhow::anyhow!("分片未创建"))?;
-            // 固定顺序（handle 排序）求值——确定性
+            // 固定顺序（handle 排序）求值——确定性；各玩家看同一已提交世界的
+            // 自家视野（官方 runtimeData.get(userId) 同构）
             for (handle, thread_id) in &self.handles {
                 let Some(code) = codes.get(handle) else {
                     continue;
                 };
+                let world = self.engine.world.world_json_for_viewer(handle);
                 reports.insert(
                     handle.clone(),
                     players.run_player(*thread_id, &world, code)?,
@@ -371,6 +374,14 @@ impl EmbedEngine {
             out.insert(handle, run);
         }
         Ok(out)
+    }
+
+    /// 直接以外部构造的 intent 批结算一轮（测试/工具面；生产路径经 run_player
+    /// 的 intentsList 清洗）。身份边界同 from_json 约定：批内玩家键由调用方负责。
+    pub fn settle_external(&mut self, batch: IntentBatch) -> anyhow::Result<()> {
+        self.engine
+            .tick_with_intents(batch)
+            .map_err(|e| anyhow::anyhow!("{e}"))
     }
 
     /// 求值报告 → PlayerRun（executed 判定 + console 捕获）。

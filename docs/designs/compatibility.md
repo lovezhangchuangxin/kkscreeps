@@ -35,7 +35,7 @@
 | RoomPosition.__packedPos（M0 桩环境） | 未实现（官方 RoomPosition 有 `__packedPos` own 属性，isEqualTo 走 packed 快路径 rooms.js:1577）；我们按坐标比较等价 | M2 packed 坐标移植（screeps-ok 兼容）时一并实现，玩家读该属性可感知差异 |
 | Memory 官方解析语义三细节（M0 桩环境） | M0：解析失败重置 `{}`、非对象 JSON 值重置 `{}`、顶层保留 Object 原型。官方（game.js:470-487）：解析失败 `Memory = null` 且不写回；合法 JSON 非对象值（如 `"5"`）保留原值；解析成功后顶层 `__proto__ = null`（无原型对象，hasOwnProperty 等不可用） | 属 M2-2A Memory 正式实现（与台账 JS语义-7 同批）对照移植范围；M0 桩 RawMemory 由宿主注入、无损坏输入路径 |
 | Game 全局可写性（M0 桩环境） | M0 用 getter-only defineProperty（每 tick 重挂新实例）；官方 `globals.Game = makeGameObject(...)` 为普通可写属性、玩家可覆盖 | 极端边缘（无 bot 覆盖 Game）；M2 玩家 API 层按官方形态重挂 |
-| `Game.structures` 收录范围（M0 桩环境） | M0 桩收录全部结构；官方只收自家 owned 结构（含 spawn、自家 controller），source/mineral/road/wall/container 不入 | M2 玩家 API 层对齐官方 game.js:298-339 的分册逻辑 |
+| `Game.structures` 收录范围（M0 桩环境；M2A-A2.1 已清偿） | 已按官方只收自家 owned 结构（game.js:302-307 OwnedStructure + userObjects；无 owner 的 neutral 结构不入）；Game.creeps/spawns/constructionSites 同批切 per-viewer（game.js:273-280/:313-318/:366-372） | my/FIND_MY_* 按 world.user 判定；视野数据面裁切见下方新条目 |
 | 验收仪表/宿主 tick 通道的防篡改深度（M0 桩环境） | `__kk` 已整体 freeze（防属性覆盖）；玩家直接调用 `drainMissing()` 抢先清空仪表的深层防御未做 | 根治需宿主侧闭包/独立 op，归 M2 玩家 API 层重写范围 |
 | 房间名解析强度（kk-core RoomName） | **强类型构造即校验**：方向位非法/符号消费错位/Unicode 数字一律 Err；官方 roomNameToXY（utils.js:374-392）对方向位只判 W/w 与 N/n、其余一律当 E/S（"X1N1"→[1,-2]、"E1X1"→[1,1]、"W-100N5"→[99,0] 静默别名到其他房间），parseInt 还认 Unicode 数字 | 官方这些形态得到"合法但错误"的坐标；我们不产出静默别名坐标。embed 边界吃外部房间名时该差异玩家可见（screeps-ok 用例若依赖官方宽松态会显形） |
 | creep TTL 死亡的产物（M1 引擎） | **资源直接掉地为 energy 对象，不产 tombstone**；官方 _die.js:16-33 产 tombstone 承接全部资源与 body 造价回收 | M1 范围无 tombstone 变体（kk-schema v1）；M2 加 tombstone 变体走 schema 版本升级。M1 内资源守恒语义一致（总量不变），缺的是墓碑对象与 decay 链 |
@@ -67,7 +67,7 @@
 | sanitize 层未接生产（M1 结算，深评登记） | `sanitize_object_intent` 只有单测消费（M1 唯一 intent 源是 typed 的 ScriptedSandbox，无不可信输入面） | M2 真沙箱 intent 通道定型时在入口接线，否则为死代码 |
 | to_int 的数值域上限（M1 sanitize，代码质量轮清偿） | parseInt 语义已全量仿真（前缀截断 `"12abc"`→12、`"0x10"`→16、`"1e2"`→1、指数形态 Number 取首位 `1e-7`→1）；与官方的剩余差异仅 i64 域外：官方 parseInt 返回大数（如 1e20），我们返回 None（整体拒绝/哨兵） | 差异只在荒谬输入面可达：\|值\|≥~9.2e18（数值路径）、字符串 >2^53 我方比官方更精确（i128 不舍入）、数组元素形态（官方 String([5])="5"→5，我们 None）、空白集边界（U+0085/U+FEFF 两侧 trim 集不同）；M2 intent 通道接线如有对齐需要再议 |
 | userString 截断单位（M1 sanitize，深评登记） | 按 Unicode chars 截 100；官方 substring 按 UTF-16 码元（100 单位 = 50 个 CJK 字符） | ASCII 名字无差异；M2 玩家名/旗名面显形时对齐 |
-| energyAvailable 投影的房主过滤（M1 typed world，深评登记） | 房间合计全部非 off spawn/extension；官方 game.js:325-328 按查看者过滤自家结构 | 单主人测试房等价；多主人房间的 per-owner 视图随 M2 玩家 API 层实现（runPlayer 按 viewer 投影） |
+| energyAvailable 投影的房主过滤（M1 typed world，深评登记） | 房间合计全部非 off spawn/extension；官方 game.js:325-328 按查看者过滤自家结构 | runPlayer 已按 viewer 注入（M2A-A2.1），房间能量值的 per-viewer 过滤随 A3c 收尾（当前单主测试房等价） |
 | directions 显式空数组（M1 结算，深评登记） | `[]` 折为"无限制"（缺省 1..8）；官方存 `[]`（truthy）→ _born-creep 零方向循环、出生坐标 undefined 的病态行为 | 官方自身行为即坏，不作对照基线；JS API 层 `directions: []` 官方就判 ERR_INVALID_ARGS，intent 层不可达 |
 | build 的"同格 swamp/wall 对象"系数分支（M1 结算，深评登记） | 不查（typed 世界无 swamp/wall 对象类型，地形走 Terrain）；官方 create-construction-site.js:39-44 对同格对象也乘系数 | 当前状态空间不可达；M2 若经 Generic 通道合成此类对象需补判定 |
 | schema v1 内字段追加（M1 kk-schema，深评登记） | ControllerObj 尾部加 `is_power_enabled`、ConstructionSiteObj 中部加 `progress_total`，未 bump SCHEMA_VERSION | 版本冻结纪律保护的是已发布的持久字节流；M1 快照尚无任何落盘数据在流通，v1 内演化无损。首个持久化格式发布（M2 存储）起 bump 纪律生效，升级链挂载点已在 `UPGRADE_CHAIN` 占位 |
@@ -84,6 +84,9 @@
 | API 实现读预置常量而非全局（M2A-A2） | prelude 动作方法经闭包捕获的预置常量表判定错误码/部件名；玩家覆盖全局常量不影响 API 判定 | 官方 game 层的 C 来自 driver.constants 注入对象不可篡改（game.js 头部），同款防篡改语义 |
 | room 级 intent 的计费形态（M2A-A2 登记，room 生产者落地前修） | 宿主 count_billed 对 room 数组动作按键计 1（官方 make.js:105 按数组长度计）；prelude pushByName 不加 0.2（官方 runtime.js:89 每次 push 计费）且无 maxLen 参数；官方 push 方法（notify 通道，上限 20）整体缺席 | room/global API 全是桩（A4 接线）——当前无生产者不可见；接线时同步修正两处计费并补 push |
 | 预检的伪实例面（M2A-A2） | prelude harvest 等只判 instanceof（官方 register.sources 等注册表成员校验 + assertTargetObject）；伪 Source 形对象可过预检（计 0.2、结算侧真身检查丢弃） | 玩家影响 = 白付 0.2 与说谎的返回码，无法推动世界；wrapper 世界全量来自投影、伪造面有限，A3b 薄壳化时随注册表语义收紧 |
+| 视野过滤的数据面裁切（M2A-A2.1，外部复审 P1-3 清偿方向） | runPlayer 注入世界按查看者裁切：只注入其有对象的房间（官方 runtimeData.get 近似，data.js:103），可见房内敌方对象保留（官方同构）；observer/预订等更宽可见性随对应能力批 | 官方按 userObjects 归集房间——M2A 近似不含"仅 observer 可见"等形态；world.user 字段是官方 runtimeData.user 等价物 |
+| 结算侧工地总量帽（M2A-A2.1，外部复审 P1-2 纵深） | 官方 MAX_CONSTRUCTION_SITES=100 检查在 game 层（rooms.js:1071-1073），结算侧不复查；我方结算按（玩家,房间）现存数复核 | 正规路径不可达（API 层先挡）；per-room 近似跨房总量随多房引擎；意图是伪造/绕过 API 面的兜底 |
+| 宿主消息的预置 JSON（M2A-A2.1，外部复审 P1-1 清偿） | endTick/runLoop/runExpr/Memory 写回等宿主消息编码用 prelude 闭包捕获的预置 stringify（官方 systemFunctions.JSON 同款）；玩家覆写全局 JSON.stringify 不影响宿主通道 | 官方 ExternalCopy 亦不经玩家全局；对抗探针锁定（覆写后伪造 room intent 不进通道） |
 
 ## 四、验收关卡（不做完不算兼容）
 

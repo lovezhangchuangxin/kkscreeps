@@ -17,12 +17,13 @@ fn world() -> serde_json::Value {
     json!({
         "time": 1,
         "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+        "user": "p1",
         "rooms": { "W1N1": { "name": "W1N1" } },
         "objects": [
             { "id": "c1", "type": "creep", "room": "W1N1", "x": 25, "y": 25, "name": "w1",
-              "body": ["move", "work"], "store": { "energy": 50 } },
+              "owner": "p1", "body": ["move", "work"], "store": { "energy": 50 } },
             { "id": "s1", "type": "spawn", "room": "W1N1", "x": 20, "y": 20, "name": "Spawn1",
-              "store": { "energy": 300 } },
+              "owner": "p1", "store": { "energy": 300 } },
             { "id": "k1", "type": "structure", "structureType": "controller", "room": "W1N1",
               "x": 10, "y": 10, "level": 3, "progress": 100, "progressTotal": 1000 },
             { "id": "src1", "type": "structure", "structureType": "source", "room": "W1N1",
@@ -59,6 +60,7 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     console_capture()?;
     stub_game_projection()?;
     intent_channel_prelude_forms_impl()?;
+    hostile_probes_impl()?;
     run_expr_channel()?;
     wasm_binary_module()?;
     watchdog_hard_terminate_and_reuse()?;
@@ -175,8 +177,11 @@ fn official_string_and_error_shapes() -> anyhow::Result<()> {
     let world_sources = serde_json::json!({
         "time": 1,
         "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+        "user": "p1",
         "rooms": { "W1N1": { "name": "W1N1" } },
         "objects": [
+            { "id": "ca0", "type": "creep", "room": "W1N1", "x": 7, "y": 7, "name": "anchor",
+              "owner": "p1", "body": ["move"], "store": { "energy": 0 } },
             { "id": "sa0", "type": "structure", "structureType": "source",
               "room": "W1N1", "x": 5, "y": 5, "energy": 0 },
             { "id": "sa1", "type": "structure", "structureType": "source",
@@ -254,6 +259,7 @@ fn stub_value_shapes() -> anyhow::Result<()> {
     let world_with_terrain = serde_json::json!({
         "time": 1,
         "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+        "user": "p1",
         "rooms": { "W1N1": { "name": "W1N1", "terrain": terrain } },
         "objects": []
     });
@@ -415,8 +421,13 @@ fn terrain_look_and_console_semantics() -> anyhow::Result<()> {
     let w = serde_json::json!({
         "time": 1,
         "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+        "user": "p1",
         "rooms": { "W1N1": { "name": "W1N1", "terrain": terrain } },
-        "objects": []
+        "objects": [
+            // 视野锚点：官方无对象玩家看不到任何房（runtimeData.rooms 为空）
+            { "id": "c9", "type": "creep", "room": "W1N1", "x": 30, "y": 30, "name": "anchor",
+              "owner": "p1", "body": ["move"], "store": { "energy": 0 } }
+        ]
     });
     tick(&mut sb, &w)?;
 
@@ -429,12 +440,13 @@ fn terrain_look_and_console_semantics() -> anyhow::Result<()> {
     let w2 = serde_json::json!({
         "time": 2,
         "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+        "user": "p1",
         "rooms": { "W1N1": { "name": "W1N1", "terrain": terrain } },
         "objects": [
             { "id": "k1", "type": "structure", "structureType": "controller", "room": "W1N1",
-              "x": 10, "y": 10, "level": 3 },
+              "x": 10, "y": 10, "level": 3, "owner": "p1" },
             { "id": "s1", "type": "spawn", "room": "W1N1", "x": 20, "y": 20, "name": "Spawn1",
-              "store": { "energy": 300 } },
+              "owner": "p1", "store": { "energy": 300 } },
         ]
     });
     sb.begin_tick(&w2)?;
@@ -1267,10 +1279,11 @@ fn intent_channel_prelude_forms_impl() -> anyhow::Result<()> {
     let w = json!({
         "time": 1,
         "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+        "user": "p1",
         "rooms": { "W1N1": { "name": "W1N1" } },
         "objects": [
             { "id": "kk1", "type": "creep", "room": "W1N1", "x": 25, "y": 25, "name": "w1",
-              "body": ["move", "work"], "store": { "energy": 0 } },
+              "owner": "p1", "body": ["move", "work"], "store": { "energy": 0 } },
             { "id": "kk2", "type": "structure", "structureType": "source", "room": "W1N1",
               "x": 26, "y": 25, "energy": 2500, "energyCapacity": 3000 }
         ]
@@ -1327,6 +1340,67 @@ fn intent_channel_prelude_forms_impl() -> anyhow::Result<()> {
                 bucket_before,
                 sb.bucket()
             );
+        }
+        _ => panic!("应正常执行"),
+    }
+    Ok(())
+}
+
+/// 对抗性探针（外部复审 P1-1/P2-5 修复的回归锁）：覆写全局 JSON.stringify
+/// 不得影响宿主消息（预置函数）；原型污染不得使计费免费化（null 原型免费表）。
+fn hostile_probes_impl() -> anyhow::Result<()> {
+    let mut sb = Sandbox::new(SandboxConfig::default())?;
+    let w = json!({
+        "time": 1,
+        "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+        "user": "p1",
+        "rooms": { "W1N1": { "name": "W1N1" } },
+        "objects": [
+            { "id": "kk1", "type": "creep", "room": "W1N1", "x": 25, "y": 25, "name": "w1",
+              "owner": "p1", "body": ["move", "work"], "store": { "energy": 0 } }
+        ]
+    });
+    match sb.begin_tick(&w)? {
+        TickPlan::Run { .. } => {
+            // P1-1 探针：覆写 stringify 试图伪造 room intent——宿主用预置函数，
+            // intentsList 只含真实 move，伪造内容不进通道
+            let v = sb.run_expr(r#"(()=>{
+                const orig = JSON.stringify;
+                JSON.stringify = function(o) {
+                    if (o && o.intentsList !== undefined) {
+                        return orig({ ok: true, intentsList: { room: { createConstructionSite:
+                            [{ roomName: 'W1N1', x: 10, y: 10, structureType: 'road' }] } }, intentsCpu: 0 });
+                    }
+                    return orig(o);
+                };
+                Game.creeps['w1'].move(3);
+                return 'done';
+            })()"#)?;
+            assert_eq!(v["value"], "done");
+            let end = sb.end_tick()?;
+            assert_eq!(end["ok"], true);
+            let intents = sb.take_intents().expect("intentsList 带出");
+            assert_eq!(intents["kk1"]["move"]["direction"], 3, "真实 move 存活");
+            assert!(
+                intents.get("room").is_none(),
+                "伪造的 room intent 不得进入通道（P1-1）: {intents}"
+            );
+        }
+        _ => panic!("应正常执行"),
+    }
+    // P2-5 探针：原型污染免费表——计费不免费化
+    match sb.begin_tick(&w)? {
+        TickPlan::Run { .. } => {
+            let v = sb.run_expr(
+                r#"(()=>{
+                Object.prototype.move = true;
+                Game.creeps['w1'].move(5);
+                return 'done';
+            })()"#,
+            )?;
+            assert_eq!(v["value"], "done");
+            let end = sb.end_tick()?;
+            assert_eq!(end["intentsCpu"], 0.2, "原型污染不得使 move 免费（P2-5）");
         }
         _ => panic!("应正常执行"),
     }

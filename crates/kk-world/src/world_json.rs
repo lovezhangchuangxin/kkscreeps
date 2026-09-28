@@ -11,8 +11,36 @@ use serde_json::{Value, json};
 use crate::world::World;
 
 impl World {
-    /// 产出注入沙箱的世界 JSON。
+    /// 产出注入沙箱的世界 JSON（全量——bot 验收/内部消费）。
     pub fn world_json(&self) -> Value {
+        self.world_json_impl(None)
+    }
+
+    /// 按查看者过滤的世界 JSON（runPlayer 注入面，M2A-A2.1 视野裁切）：
+    /// 只注入查看者有对象的房间（官方 runtimeData.get 的可见房间近似——
+    /// driver/lib/runtime/data.js:103 按 userObjects 归集房间后拉全房对象），
+    /// 房间内对象全量保留（可见房内的敌方对象官方同样可见）；附带 `user`
+    /// 字段供 prelude 装配 per-viewer 集合（官方 runtimeData.user 等价物）。
+    /// observer/预订等更宽的可见性来源随对应能力批扩展。
+    pub fn world_json_for_viewer(&self, user: &str) -> Value {
+        self.world_json_impl(Some(user))
+    }
+
+    fn world_json_impl(&self, user: Option<&str>) -> Value {
+        let visible: std::collections::BTreeSet<&String> = match user {
+            None => self.rooms.keys().collect(),
+            Some(user) => self
+                .rooms
+                .iter()
+                .filter(|(_, state)| {
+                    state
+                        .objects
+                        .values()
+                        .any(|o| object_owner(o).as_deref() == Some(user))
+                })
+                .map(|(name, _)| name)
+                .collect(),
+        };
         let mut objects = Vec::new();
         let mut rooms = serde_json::Map::new();
         for (name, state) in &self.rooms {
@@ -23,14 +51,17 @@ impl World {
             entry.insert("energyAvailable".into(), json!(available));
             entry.insert("energyCapacityAvailable".into(), json!(capacity));
             rooms.insert(name.clone(), Value::Object(entry));
-            for (id, object) in &state.objects {
-                objects.push(object_json(name, *id, object, self.time));
+            if visible.contains(name) {
+                for (id, object) in &state.objects {
+                    objects.push(object_json(name, *id, object, self.time, &state.terrain));
+                }
             }
         }
         json!({
             "time": self.time,
             // M1：cpu 桩值与 M0 一致（真实预算桶接入是 M2 沙箱正式接入范围）
             "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+            "user": user,
             "rooms": Value::Object(rooms),
             "objects": objects,
         })
@@ -44,7 +75,7 @@ impl World {
         state
             .objects
             .iter()
-            .map(|(id, o)| (*id, object_json(room, *id, o, self.time)))
+            .map(|(id, o)| (*id, object_json(room, *id, o, self.time, &state.terrain)))
             .filter(|(_, o)| matches_find(o, find_const))
             .collect()
     }
@@ -61,7 +92,42 @@ impl World {
     /// 单对象投影（embed getObject 后端）。
     pub fn object_json_by_id(&self, id: crate::world::ObjId) -> Option<Value> {
         let (room, object) = self.get(id)?;
-        Some(object_json(room, id, object, self.time))
+        let terrain = &self.rooms.get(room)?.terrain;
+        Some(object_json(room, id, object, self.time, terrain))
+    }
+}
+
+/// 道路 hitsMax 的地形系数（官方 build.js:172-184：落成时把放大值同时写入
+/// hits 与 hitsMax；同格 swamp/wall **对象**分支官方另有——typed 世界无该对象
+/// 类型，与 damage.rs 修复上限同一近似）。snapshot.rs 复用本函数保持两投影一致。
+pub(crate) fn road_hits_max(terrain: &kk_core::Terrain, x: u8, y: u8) -> i64 {
+    let mut hits = c::ROAD_HITS;
+    if terrain.check_mask(x as usize, y as usize, kk_core::TERRAIN_MASK_SWAMP) {
+        hits *= c::CONSTRUCTION_COST_ROAD_SWAMP_RATIO;
+    }
+    if terrain.check_mask(x as usize, y as usize, kk_core::TERRAIN_MASK_WALL) {
+        hits *= c::CONSTRUCTION_COST_ROAD_WALL_RATIO;
+    }
+    hits
+}
+
+/// 对象归属（视野过滤判定用）：typed 变体直读；Generic 透传解析 data.owner。
+/// 官方 userObjects 按 DB 的 user 字段归集（data.js:103）——与投影面同源。
+fn object_owner(object: &RoomObject) -> Option<std::borrow::Cow<'_, str>> {
+    match object {
+        RoomObject::Creep(o) => Some(o.owner.as_str().into()),
+        RoomObject::Spawn(o) => Some(o.owner.as_str().into()),
+        RoomObject::Extension(o) => Some(o.owner.as_str().into()),
+        RoomObject::Storage(o) => Some(o.owner.as_str().into()),
+        RoomObject::Controller(o) => o.owner.as_deref().map(Into::into),
+        RoomObject::ConstructionSite(o) => o.owner.as_deref().map(Into::into),
+        RoomObject::Generic(o) => serde_json::from_str::<Value>(&o.data).ok().and_then(|v| {
+            v.get("owner")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .map(Into::into)
+        }),
+        _ => None,
     }
 }
 
@@ -102,6 +168,7 @@ pub(crate) fn object_json(
     id: crate::world::ObjId,
     object: &RoomObject,
     time: u64,
+    terrain: &kk_core::Terrain,
 ) -> Value {
     let id_str = id.as_str();
     let mut v = match object {
@@ -175,7 +242,7 @@ pub(crate) fn object_json(
         RoomObject::Road(o) => json!({
             "type": "structure", "structureType": "road",
             "id": id_str, "room": room, "x": o.x, "y": o.y,
-            "hits": o.hits, "hitsMax": c::ROAD_HITS,
+            "hits": o.hits, "hitsMax": road_hits_max(terrain, o.x, o.y),
             "nextDecayTime": o.next_decay_time,
         }),
         RoomObject::Storage(o) => json!({

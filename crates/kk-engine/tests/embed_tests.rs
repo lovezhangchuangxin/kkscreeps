@@ -14,6 +14,7 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     embed_run_players_shared_snapshot_impl()?;
     embed_snapshot_contract_impl()?;
     embed_intent_channel_impl()?;
+    embed_per_viewer_and_caps_impl()?;
     assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");
     Ok(())
 }
@@ -652,6 +653,71 @@ fn embed_intent_channel_impl() -> anyhow::Result<()> {
         (x, y, energy, src_energy),
         (25, 26, 2, 2998),
         "假沙箱与真沙箱同一结算入口：世界转移一致"
+    );
+    Ok(())
+}
+
+/// 外部复审 P1-2/P1-3 修复的回归锁：per-viewer 视野裁切（不可见房/对象/集合）
+/// 与工地总量帽（伪造批量 room intent 也被 100 帽挡住）。
+fn embed_per_viewer_and_caps_impl() -> anyhow::Result<()> {
+    let mut e = EmbedEngine::new();
+    e.create_shard(&json!({
+        "players": ["p1", "p2"],
+        "rooms": [
+            { "name": "W1N1", "rcl": 3, "owner": "p1" },
+            { "name": "W2N2", "rcl": 3, "owner": "p2" },
+        ],
+    }))?;
+    let mine = e.place_object(
+        "W1N1",
+        "creep",
+        &json!({ "pos": [25, 25], "owner": "p1", "body": ["move"], "name": "mine" }),
+    )?;
+    let secret = e.place_object(
+        "W2N2",
+        "creep",
+        &json!({ "pos": [25, 25], "owner": "p2", "body": ["move"], "name": "secret" }),
+    )?;
+    let secret_json = serde_json::to_string(&secret)?;
+
+    // P1-3：p1 的视图——看不见 W2N2、看不见 secret、Game.creeps 只收自家
+    let run = e.run_player(
+        "p1",
+        &format!(
+            "[Object.keys(Game.rooms).sort().join(','), Object.keys(Game.creeps).join(','), String(Game.getObjectById({secret_json}) === undefined)]"
+        ),
+    )?;
+    let v = &run.expr["value"];
+    assert_eq!(v[0], "W1N1", "敌方房间不进 Game.rooms: {v:?}");
+    assert_eq!(v[1], "mine", "Game.creeps 只收本人: {v:?}");
+
+    // p2 的视图对偶
+    let run = e.run_player("p2", "Object.keys(Game.rooms).join(',')")?;
+    assert_eq!(run.expr["value"], "W2N2", "p2 只见自家房");
+
+    // 我方对象的 my 判定
+    let mine_json = serde_json::to_string(&mine)?;
+    let run = e.run_player("p1", &format!("Game.getObjectById({mine_json}).my"))?;
+    assert_eq!(run.expr["value"], true);
+
+    // P1-2：批量 room intent（engine 直驱，等价伪造面）被总量帽挡住——
+    // 120 条 createConstructionSite 只落 100
+    let mut room_intents = Vec::new();
+    for i in 0..120 {
+        room_intents.push(json!({
+            "roomName": "W1N1", "x": (i % 40) + 5, "y": (i / 40) * 10 + 5,
+            "structureType": "road"
+        }));
+    }
+    let list = json!({ "room": { "createConstructionSite": room_intents } });
+    let batch = kk_engine::intent::IntentBatch::from_json("p1", &list);
+    let sites_before = e.find_in_room("W1N1", 111).len();
+    e.settle_external(batch)?;
+    let sites_after = e.find_in_room("W1N1", 111).len();
+    assert_eq!(
+        sites_after - sites_before,
+        100,
+        "MAX_CONSTRUCTION_SITES 总量帽：120 条只落 100"
     );
     Ok(())
 }

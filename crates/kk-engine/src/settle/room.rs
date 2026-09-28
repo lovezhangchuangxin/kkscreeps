@@ -52,6 +52,21 @@ fn create_construction_site(
     let Some(cost) = kk_world::types::construction_cost(structure_type) else {
         return;
     };
+    // 总量帽（纵深，非官方结算语义）：官方 MAX_CONSTRUCTION_SITES=100 的检查
+    // 在 game 层（rooms.js:1071-1073，按玩家全对象计数 + 本 tick 已建数——官方
+    // 分开数是因其快照不随建增长）；我们的工作副本即时插入，现存数已覆盖
+    // 本 tick 新建。按（玩家,房间）近似（跨房总量随多房引擎，灰区登记）
+    let existing_sites = w
+        .room
+        .objects
+        .values()
+        .filter(
+            |o| matches!(o, RoomObject::ConstructionSite(s) if s.owner.as_deref() == Some(player)),
+        )
+        .count();
+    if existing_sites >= c::MAX_CONSTRUCTION_SITES as usize {
+        return;
+    }
     // 官方 W/E 房间分支：控制器非本人/非本预约拒 + RCL 配额
     if let Some(ctl) = w.controller() {
         if ctl.owner.as_deref().is_some_and(|u| u != player) {

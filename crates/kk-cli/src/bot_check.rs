@@ -15,6 +15,10 @@ use kk_runner::{ModuleTable, PlayerThreads, SandboxConfig, TickOutcome, TickPlan
 
 const PLAYER: u64 = 0;
 
+/// 验收口径（外部复审 P2-6 限定）：本工具证明 bot 在沙箱底座上的**模块加载、
+/// loop 执行、API 面/运行时存活性**（零硬中断/零缺失）；其 intents 不进引擎
+/// 结算（静态夹具世界，无 Engine）——世界状态变化的验收随 A6 的统一驱动
+///（EmbedEngine tick 驱动注册玩家）落地。
 pub fn run(path: &str, ticks: u32, report_path: &str) -> i32 {
     match run_inner(path, ticks, report_path) {
         // 退出码：0 = 验收通过；1 = 基础设施失败；2 = 验收未通过（中断/缺失/未跑完）
@@ -250,6 +254,7 @@ fn home_world(t: u32) -> Value {
     json!({
         "time": t,
         "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+        "user": "bot",
         "rooms": { "W1N1": { "name": "W1N1", "terrain": plains } },
         "objects": [
             { "id": "ctrl1", "type": "structure", "structureType": "controller",
@@ -262,7 +267,7 @@ fn home_world(t: u32) -> Value {
               "mineralAmount": 50000, "density": 3 },
             { "id": "spw1", "type": "spawn", "room": "W1N1", "x": 20, "y": 20, "name": "Spawn1",
               "owner": "bot", "store": { "energy": 300 }, "energyCapacity": 300 },
-            { "id": "crp1", "type": "creep", "room": "W1N1", "x": 25, "y": 25, "name": "harvester1",
+            { "id": "crp1", "type": "creep", "room": "W1N1", "x": 25, "y": 25, "name": "harvester1", "owner": "bot",
               "owner": "bot", "body": ["move", "work", "carry"], "store": { "energy": 50 },
               "fatigue": 0 }
         ]

@@ -10,6 +10,11 @@
 (() => {
   'use strict';
 
+  // 预置 JSON 函数（官方 systemFunctions.JSON 同款语义）：宿主消息编码不得
+  // 经玩家可覆写的全局——覆写全局 stringify 曾可伪造 intentsList（外部复审
+  // P1 实证：无 API 调用造出工地）。玩家自己的代码仍用全局 JSON，不受影响。
+  const stringify = JSON.stringify;
+
   const { missing, hasProbes, stubCalls } = globalThis.__kkp;
   const { require: requireFn, moduleCache, lodash: _ } = globalThis.__kkp.cjs;
   const { beginTick, writeBackMemory, intentsPayload } = globalThis.__kkp.memoryWorld;
@@ -39,9 +44,9 @@
         out = { ok: false, kind: 'runtime', error: String((e && e.stack) || e) };
       }
       try {
-        return JSON.stringify(out);
+        return stringify(out);
       } catch (e) {
-        return JSON.stringify({ ok: true, note: 'loop 完成（结果不可序列化）' });
+        return stringify({ ok: true, note: 'loop 完成（结果不可序列化）' });
       }
     },
     /** 求值一段玩家表达式代码，返回末表达式值（screeps-ok runPlayer 通道）。
@@ -60,10 +65,10 @@
         // 运行期错误（含运行期动态构造的语法异常）归 runtime
         const kind = e instanceof SyntaxError ? 'syntax' : 'runtime';
         out = { ok: false, kind, error: String((e && e.message) || e) };
-        return JSON.stringify(out);
+        return stringify(out);
       }
       if (v === undefined) {
-        return JSON.stringify({ ok: true, value: null });
+        return stringify({ ok: true, value: null });
       }
       try {
         // 活游戏对象检测，逐条对齐 vanilla 参照实现（buildConsoleCommand）：
@@ -82,14 +87,14 @@
           }
         }
         if (serErr !== null) {
-          return JSON.stringify({ ok: false, kind: 'serialization', error: serErr });
+          return stringify({ ok: false, kind: 'serialization', error: serErr });
         }
         // 循环引用等 stringify 失败 → serialization（区别于检测代码自身抛错 → runtime）
         let json;
         try {
-          json = JSON.stringify(v);
+          json = stringify(v);
         } catch (e) {
-          return JSON.stringify({
+          return stringify({
             ok: false, kind: 'serialization',
             error: 'Return value is not JSON-serializable: ' + (e && e.message),
           });
@@ -98,14 +103,14 @@
         // 发生在返回值序列化阶段，按契约归 serialization（不得漏到 JSON.parse 再
         // 被"not valid JSON"误报 runtime）
         if (typeof json !== 'string') {
-          return JSON.stringify({
+          return stringify({
             ok: false, kind: 'serialization',
             error: 'Return value is not JSON-serializable: toJSON produced ' + typeof json,
           });
         }
-        return JSON.stringify({ ok: true, value: JSON.parse(json) });
+        return stringify({ ok: true, value: JSON.parse(json) });
       } catch (e) {
-        return JSON.stringify({ ok: false, kind: 'runtime', error: String((e && e.message) || e) });
+        return stringify({ ok: false, kind: 'runtime', error: String((e && e.message) || e) });
       }
     },
     /** tick 末：Memory 写回 RawMemory + 本 tick intentsList 一次性带出（官方
@@ -119,7 +124,7 @@
         out.intentsList = payload ? payload.list : null;
         out.intentsCpu = payload ? payload.cpu : 0;
       }
-      return JSON.stringify(out);
+      return stringify(out);
     },
     /** 清空 require 缓存（玩家代码更新/换模块表时）。lodash 预置保留。 */
     resetModules() {
@@ -133,13 +138,13 @@
       for (const [k, c] of hasProbes) out.hasProbes[k] = c;
       missing.clear();
       hasProbes.clear();
-      return JSON.stringify(out);
+      return stringify(out);
     },
     drainStubCalls() {
       const out = {};
       for (const [k, c] of stubCalls) out[k] = c;
       stubCalls.clear();
-      return JSON.stringify(out);
+      return stringify(out);
     },
   };
   // __kk 不可枚举（玩家代码不应该把它当 API 面）且整体冻结——防止玩家覆盖

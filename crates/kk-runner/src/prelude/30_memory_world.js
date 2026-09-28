@@ -6,6 +6,15 @@
 (() => {
   'use strict';
 
+  // 预置 JSON 函数（官方 systemFunctions.JSON 同款）：Memory 写回等宿主
+  // 关键序列化不经玩家可覆写的全局（外部复审 P1 修复面）
+  const __jsonStringify = JSON.stringify;
+
+  // 当前查看者（world.user，官方 runtimeData.user 等价物）——per-viewer
+  // 装配（Game.collections/my/FIND_MY_*）的判定基准（外部复审 P1-3 修复）
+  let viewerName = null;
+
+
   const { ops, probe, reportMissing, PROBE_IGNORE, countStub } = globalThis.__kkp;
 
   // ---------------------------------------------------------------- RawMemory / Memory
@@ -62,7 +71,7 @@
     // 绝不抛出——抛出会被宿主误判为硬中断并按整份 tickLimit 计费
     if (parsedMemory === undefined) return { ok: true };
     try {
-      const s = JSON.stringify(parsedMemory);
+      const s = __jsonStringify(parsedMemory);
       if (typeof s !== 'string') {
         // Memory.toJSON 返回非字符串时 stringify 得 undefined——玩家侧写回失败
         console.error('Memory 写回失败（toJSON 返回非字符串），保留上一 tick 存档');
@@ -435,6 +444,15 @@
 
   // API 实现用的预置常量（官方 game 层的 C 来自 driver.constants 注入对象，
   // 玩家覆盖全局常量不影响 API 判定——game.js 头部 C = driver.constants 同款）
+  // 对象型常量是全局对象的共享引用——冻结内容防玩家篡改（数值/字符串不可变无需处理）
+  function freezeConst(obj) {
+    if (obj && typeof obj === 'object') {
+      Object.freeze(obj);
+      for (const k of Object.keys(obj)) freezeConst(obj[k]);
+    }
+    return obj;
+  }
+
   const C = {
     OK: globalThis.OK,
     ERR_NOT_OWNER: globalThis.ERR_NOT_OWNER,
@@ -451,9 +469,9 @@
     HEAL: globalThis.HEAL,
     ERR_NOT_FOUND: globalThis.ERR_NOT_FOUND,
     ERR_RCL_NOT_ENOUGH: globalThis.ERR_RCL_NOT_ENOUGH,
-    OBSTACLE_OBJECT_TYPES: globalThis.OBSTACLE_OBJECT_TYPES,
-    CONSTRUCTION_COST: globalThis.CONSTRUCTION_COST,
-    CONTROLLER_STRUCTURES: globalThis.CONTROLLER_STRUCTURES,
+    OBSTACLE_OBJECT_TYPES: freezeConst(globalThis.OBSTACLE_OBJECT_TYPES),
+    CONSTRUCTION_COST: freezeConst(globalThis.CONSTRUCTION_COST),
+    CONTROLLER_STRUCTURES: freezeConst(globalThis.CONTROLLER_STRUCTURES),
   };
 
   // 官方 _hasActiveBodypart（game/creeps.js:9-17 的等价物）：hits>0 的指定部件数
@@ -719,7 +737,7 @@
       case 'creep': {
         obj = Object.assign(base, {
           name: o.name,
-          my: true,
+          my: o.owner === viewerName,
           owner: { username: o.owner || 'bot' },
           body: (o.body || []).map((p) => (typeof p === 'string' ? { type: p, hits: 100 } : p)),
           fatigue: o.fatigue || 0,
@@ -752,7 +770,7 @@
       case 'spawn': {
         obj = Object.assign(base, {
           name: o.name,
-          my: true,
+          my: o.owner === viewerName,
           owner: { username: o.owner || 'bot' },
           structureType: o.structureType || 'spawn',
           store: makeStore(o.store || { energy: 0 }),
@@ -768,7 +786,7 @@
       case 'structure': {
         obj = Object.assign(base, {
           structureType: o.structureType,
-          my: true,
+          my: o.owner === viewerName,
           owner: o.owner ? { username: o.owner } : undefined,
           isStructure: true,
           store: makeStore(o.store || {}),
@@ -810,7 +828,7 @@
           structureType: o.structureType,
           progress: o.progress || 0,
           progressTotal: o.progressTotal || 100,
-          my: true,
+          my: o.owner === viewerName,
         });
         obj.remove = mkStubMethod('constructionSite.remove');
         break;
@@ -902,20 +920,30 @@
       const w = wrapObject(o, world.time);
       w.room = undefined;
       objectsById.set(o.id, w);
-      if (o.type === 'creep') creeps[o.name] = w;
-      else if (o.type === 'spawn') spawns[o.name] = w;
-      else if (o.type === 'flag') flags[o.name] = w;
-      else if (o.type === 'constructionSite') constructionSites[o.id] = w;
-      else if (o.type === 'resource') resources[o.id] = w;
+      const mine = o.owner === viewerName;
+      if (o.type === 'creep') {
+        // 官方 game.js:273-280：Game.creeps 只收本人 creep
+        if (mine) creeps[o.name] = w;
+      } else if (o.type === 'spawn') {
+        if (mine) spawns[o.name] = w; // game.js:313-318
+      } else if (o.type === 'flag') flags[o.name] = w;
+      else if (o.type === 'constructionSite') {
+        if (mine) constructionSites[o.id] = w; // game.js:366-372
+      } else if (o.type === 'resource') resources[o.id] = w;
       else if (o.type === 'structure') {
-        // M0 桩：全部结构入 structures。官方语义（game.js:298-339）只收自家 owned 结构
-        //（含 spawn、自家 controller）；source/mineral/road/wall/container 等不入——
-        // M2 对齐，已登记 compatibility.md 灰区表
-        structures[o.id] = w;
+        // 官方 game.structures 只收自家 owned 结构（game.js:302-307
+        /// OwnedStructure + userObjects）；source/mineral/road/wall 不入
+        if (mine && o.owner !== undefined) structures[o.id] = w;
       }
     }
+    // 可见房（官方 game.js:218-220 只注册 runtimeData.rooms）：查看者有对象
+    /// 的房间；world.rooms 全量携带地图级地形（Game.map 面，不进 Game.rooms）
+    const visibleRooms = new Set(
+      (world.objects || []).filter((o) => o.owner === viewerName).map((o) => o.room),
+    );
     const rooms = {};
     for (const [name, r] of Object.entries(world.rooms || {})) {
+      if (viewerName !== null && !visibleRooms.has(name)) continue;
       // 无 controller 房间的官方投影是 undefined（非 null）
       let controller;
       for (const o of world.objects || []) {
@@ -946,7 +974,7 @@
           // 官方 FIND_SOURCES_ACTIVE 条件 energy > 0（game.js:23）；初态缺省 3000
           // （与 wrapObject 的 source 投影缺省一致）
           if (type === 101 /* FIND_CREEPS */ && o.type === 'creep') out.push(w);
-          else if (type === 102 /* FIND_MY_CREEPS */ && o.type === 'creep') out.push(w);
+          else if (type === 102 /* FIND_MY_CREEPS */ && o.type === 'creep' && o.owner === viewerName) out.push(w);
           else if (type === 104 /* FIND_SOURCES_ACTIVE */ && o.type === 'structure' && o.structureType === 'source' && (o.energy ?? 3000) > 0) out.push(w);
           else if (type === 105 /* FIND_SOURCES */ && o.type === 'structure' && o.structureType === 'source') out.push(w);
           else if (type === 106 /* FIND_DROPPED_RESOURCES */ && o.type === 'resource') out.push(w);
@@ -954,10 +982,10 @@
           // game.js:229-251 structureTypes 表无此三类（独立装配分支 :329-345），
           // 与 Rust 侧 matches_find 两层一致
           else if (type === 107 /* FIND_STRUCTURES */ && isStruct && o.structureType !== 'source' && o.structureType !== 'mineral') out.push(w);
-          else if (type === 108 /* FIND_MY_STRUCTURES */ && isStruct && o.structureType !== 'source' && o.structureType !== 'mineral') out.push(w);
+          else if (type === 108 /* FIND_MY_STRUCTURES */ && isStruct && o.structureType !== 'source' && o.structureType !== 'mineral' && o.owner === viewerName) out.push(w);
           else if (type === 110 /* FIND_FLAGS */ && o.type === 'flag') out.push(w);
           else if (type === 111 /* FIND_CONSTRUCTION_SITES */ && o.type === 'constructionSite') out.push(w);
-          else if (type === 112 /* FIND_MY_SPAWNS */ && o.type === 'spawn') out.push(w);
+          else if (type === 112 /* FIND_MY_SPAWNS */ && o.type === 'spawn' && o.owner === viewerName) out.push(w);
           else if (type === 116 /* FIND_MINERALS */ && o.type === 'structure' && o.structureType === 'mineral') out.push(w);
         }
         // 官方 rooms.js:648-654：opts.filter（函数或 lodash 对象谓词）经
@@ -1110,7 +1138,10 @@
   // 只计一次费（:68）、say/pull 免费（:61）、cancelOrder 退费不查免费表（:95，
   // 官方 quirk 原样保留）；list 按对象 id → 动作名组织，room/global 级走
   // 数组通道（M2A-A2 只实装对象级与 room 级，global 随 market 批次）。
-  const FREE_INTENT_NAMES = { say: true, pull: true };
+  // null 原型 + 自有键（官方 runtime.js:60 同款）：原型污染不可使计费免费化
+  const FREE_INTENT_NAMES = Object.create(null);
+  FREE_INTENT_NAMES.say = true;
+  FREE_INTENT_NAMES.pull = true;
   let intents = null;
   function resetIntents() {
     const list = Object.create(null);
@@ -1148,6 +1179,7 @@
     /** 每 tick 注入世界快照（宿主以 JSON 字面量内嵌，此处已是对象）并重建 Game。 */
     beginTick(worldJson) {
       world = typeof worldJson === 'string' ? JSON.parse(worldJson) : worldJson;
+      viewerName = world.user ?? null;
       resetIntents(); // 官方每 tick 新建收集器（runtime.js _start 每 tick 执行）
       parsedMemory = undefined; // 官方语义：Memory 每 tick 从 RawMemory 懒解析
       // 上一 tick 首访后 Memory 已固化为普通值属性（官方同款），本 tick 重装懒 getter

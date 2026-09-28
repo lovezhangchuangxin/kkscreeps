@@ -22,7 +22,8 @@ impl World {
         if matches!(object, RoomObject::Flag(_)) {
             return None;
         }
-        Some(snapshot_json(room, id, object, self.time))
+        let terrain = &self.rooms.get(room)?.terrain;
+        Some(snapshot_json(room, id, object, self.time, terrain))
     }
 
     /// 按 FIND 常量过滤房间内对象并出快照（embed findInRoom 后端）。
@@ -32,6 +33,7 @@ impl World {
         let Some(state) = self.rooms.get(room) else {
             return Vec::new();
         };
+        let terrain = &state.terrain;
         state
             .objects
             .iter()
@@ -39,10 +41,10 @@ impl World {
                 if matches!(*o, RoomObject::Flag(_)) {
                     return false;
                 }
-                let internal = crate::world_json::object_json(room, **id, o, self.time);
+                let internal = crate::world_json::object_json(room, **id, o, self.time, terrain);
                 crate::world_json::matches_find(&internal, find_const)
             })
-            .map(|(id, o)| snapshot_json(room, *id, o, self.time))
+            .map(|(id, o)| snapshot_json(room, *id, o, self.time, terrain))
             .collect()
     }
 }
@@ -144,7 +146,13 @@ fn controller_progress_total(level: u8) -> Value {
 }
 
 /// typed 对象 → 契约快照（逐组对照 vanilla snapshots.ts）。
-fn snapshot_json(room: &str, id: ObjId, object: &RoomObject, time: u64) -> Value {
+fn snapshot_json(
+    room: &str,
+    id: ObjId,
+    object: &RoomObject,
+    time: u64,
+    terrain: &kk_core::Terrain,
+) -> Value {
     let id_str = id.as_str();
     match object {
         RoomObject::Creep(o) => json!({
@@ -226,7 +234,7 @@ fn snapshot_json(room: &str, id: ObjId, object: &RoomObject, time: u64) -> Value
         RoomObject::Road(o) => json!({
             "kind": "structure", "structureType": "road",
             "id": id_str, "pos": snap_pos(room, o.x, o.y),
-            "hits": o.hits, "hitsMax": c::ROAD_HITS,
+            "hits": o.hits, "hitsMax": crate::world_json::road_hits_max(terrain, o.x, o.y),
             "ticksToDecay": remaining(o.next_decay_time, time),
         }),
         RoomObject::Storage(o) => json!({
@@ -541,6 +549,75 @@ mod tests {
             snap["kind"], "tombstone",
             "直通道 tombstone 按透传 type 判 kind"
         );
+    }
+
+    /// 道路 hitsMax 的地形系数（外部复审 P2-4：官方 build.js:172-184 把放大值
+    /// 写进 hits 与 hitsMax；两投影共用 road_hits_max）。
+    #[test]
+    fn road_hits_max_terrain_scaling() {
+        let mut world = world_with_room();
+        let mut terrain = kk_core::Terrain::plains();
+        terrain.as_mut_slice()[25 * 50 + 10] |= kk_core::TERRAIN_MASK_SWAMP;
+        terrain.as_mut_slice()[25 * 50 + 11] |= kk_core::TERRAIN_MASK_WALL;
+        terrain.normalize();
+        world.rooms.get_mut("W1N1").unwrap().terrain = terrain;
+        let plain_road = normalize(
+            "structure",
+            &serde_json::json!({ "pos": [10, 24], "structureType": "road" }),
+            &PlaceCtx {
+                time: world.time,
+                controller: None,
+                name_seq: 0,
+            },
+        )
+        .unwrap();
+        let plain_id = world.insert("W1N1", plain_road).unwrap();
+        let swamp_road = normalize(
+            "structure",
+            &serde_json::json!({ "pos": [10, 25], "structureType": "road" }),
+            &PlaceCtx {
+                time: world.time,
+                controller: None,
+                name_seq: 0,
+            },
+        )
+        .unwrap();
+        let swamp_id = world.insert("W1N1", swamp_road).unwrap();
+        let wall_road = normalize(
+            "structure",
+            &serde_json::json!({ "pos": [11, 25], "structureType": "road" }),
+            &PlaceCtx {
+                time: world.time,
+                controller: None,
+                name_seq: 0,
+            },
+        )
+        .unwrap();
+        let wall_id = world.insert("W1N1", wall_road).unwrap();
+        assert_eq!(
+            world.object_snapshot_by_id(plain_id).unwrap()["hitsMax"],
+            5000
+        );
+        assert_eq!(
+            world.object_snapshot_by_id(swamp_id).unwrap()["hitsMax"],
+            25000,
+            "沼泽 ×5"
+        );
+        assert_eq!(
+            world.object_snapshot_by_id(wall_id).unwrap()["hitsMax"],
+            750000,
+            "墙 ×150"
+        );
+        // prelude 世界投影同源
+        let wj = world.world_json();
+        let roads: Vec<&serde_json::Value> = wj["objects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|o| o["structureType"] == "road")
+            .collect();
+        assert_eq!(roads.len(), 3);
+        assert!(roads.iter().all(|o| o["hitsMax"].as_i64().unwrap() > 0));
     }
 
     /// flag 不进查询面（vanilla snapshotObject 无 flag 分支）。
