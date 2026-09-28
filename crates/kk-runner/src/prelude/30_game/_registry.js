@@ -113,10 +113,11 @@
   };
 
   // ---------------------------------------------------------------- 类全局（官方全集）
-  // 官方运行时把 41 个类挂成裸全局（engine/src/game 各文件 defineProperty(globals,...)），
-  // 其中 Spawn、Energy 是别名（官方 structures.js:1293 `globals.Spawn=StructureSpawn`、
-  // resources.js:46 `globals.Energy=Resource`）——这里在类注册后直接赋同一引用，
-  // spawn 对象 instanceof Spawn 与官方一致。tooangel 等 bot 直接引用 Room 等。
+  // 官方运行时把 41 个类挂成裸全局，安装形统一为非可写 defineProperty
+  //（engine/src/game 各文件，含别名：structures.js:1293 `defineProperty(globals,
+  // 'Spawn',...)`、resources.js:46 Energy——清偿复审 P3-N1 勘误：官方无一 plain
+  // 赋值）。别名挂同一引用，spawn 对象 instanceof Spawn 与官方一致。
+  // tooangel 等 bot 直接引用 Room 等。
   // M0：桩类——可 new、可静态引用（未知静态成员进缺失 API 探测）。
   // Game 上的对象经原型链接挂在类原型链上（见 wrapObject），instanceof 已成立；
   // 实例属性面的差异由 M2 玩家 API 层对齐。
@@ -185,8 +186,14 @@
     }
   }
   // 官方别名：同一引用（structures.js:1293 / resources.js:46），非独立 stub 类
-  globalThis.Spawn = globalThis.StructureSpawn;
-  globalThis.Energy = globalThis.Resource;
+  // 官方别名同为非可写 defineProperty（structures.js:1293/resources.js:46，
+  // 清偿复审 P3-N1：原 plain 赋值可被玩家重绑——同一引用、官方同形安装）
+  Object.defineProperty(globalThis, 'Spawn', {
+    enumerable: true, value: globalThis.StructureSpawn,
+  });
+  Object.defineProperty(globalThis, 'Energy', {
+    enumerable: true, value: globalThis.Resource,
+  });
 
   // 官方 toString 家族（engine/src/game 各文件 prototype.toString，bot 生态日志
   // 拼接的事实标准格式）：缺失时 String(obj) 得 '[object Object]'。挂类原型，

@@ -61,5 +61,8 @@
       return { path, ops: path.length, cost: path.length, incomplete: false };
     },
   };
-  globalThis.PathFinder = PathFinder;
+  // 官方 path-finder.js:78 同为非可写 defineProperty（清偿复审 P3-N1）
+  Object.defineProperty(globalThis, 'PathFinder', {
+    enumerable: true, value: PathFinder,
+  });
 })();

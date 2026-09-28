@@ -118,7 +118,10 @@
     }
     inRangeTo() { return this.isInRangeTo.apply(this, arguments); }
   }
-  globalThis.RoomPosition = RoomPosition;
+  // 官方 rooms.js:1638 同为非可写 defineProperty（清偿复审 P3-N1）
+  Object.defineProperty(globalThis, 'RoomPosition', {
+    enumerable: true, value: RoomPosition,
+  });
   // 内部装配面走捕获引用（与拆分前单闭包绑定等价）：玩家覆写 globalThis.RoomPosition
   // 不影响 wrapObject/makeRoom/PathFinder 桩内部的构造
   gw.RoomPosition = RoomPosition;

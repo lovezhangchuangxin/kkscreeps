@@ -78,7 +78,10 @@
     },
   });
   Object.setPrototypeOf(RoomVisual.prototype, visualBridge.prototype);
-  globalThis.RoomVisual = RoomVisual;
+  // 官方 rooms.js:1220 同为非可写 defineProperty（清偿复审 P3-N1）
+  Object.defineProperty(globalThis, 'RoomVisual', {
+    enumerable: true, value: RoomVisual,
+  });
 
   // ---------------------------------------------------------------- Room 装配
   // 对照官方 rooms.js Room 类实例面（find/lookAt/lookForAt/getTerrain/memory...）。

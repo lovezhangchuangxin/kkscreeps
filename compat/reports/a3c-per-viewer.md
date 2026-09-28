@@ -105,3 +105,7 @@ user/cpu 真值；Game.collections/my/FIND_MY_*/energyAvailable 按 viewer——
   随 powerCreep 批、真值/严格 false 混合）
 - **F-2（评审 1）**：JS find 臂止于 116 的覆盖缺口登记（归 B3 接线批）
 - **F-4（评审 1）**：hostile_of 两臂差异注释（防 schema 演化静默沿分歧）
+- **P3-N1（清偿复审）**：五个类族全局（Spawn/Energy/RoomPosition/RoomVisual/
+  PathFinder）官方同为非可写 defineProperty（structures.js:1293/resources.js:46/
+  rooms.js:1638/:1220/path-finder.js:78）——随批同形安装（各一行）+ 头部注释
+  勘误（"别名 plain 赋值"表述失实，官方无一 plain）
