@@ -50,7 +50,7 @@
 | 未知类型工地（M1 place，深评收严） | 无 CONSTRUCTION_COST 的类型 Err（与 vanilla getProgressTotal:1873 抛错对齐；原先宽松接受、progressTotal 派生 0） | build 结算同样拒绝无 cost 目标（build.js:19-21），两侧一致 |
 | creep 放置 ttl 无上限钳制（M1 place） | `time + ttl` 原样（可超 1500）；官方 renew 才有 1500 上限语义（拒绝式非钳制） | 三方评审裁决跟 vanilla 放置语义（index.ts:1087），2026-09-28 |
 | 玩家内 room intents 先于对象 intents（M1 结算） | createConstructionSite/createFlag 全部先于 creep/spawn 对象指令执行 | 官方单层 objects map 中 'room' 键按插入序交错；结果序无关（房间指令与对象指令无共享状态面），登记迭代序差异 |
-| move intent 的 id 形态（M1 结算） | 仅支持 direction 形态；官方 move.js:15-21 还支持"朝相邻 creep 移动"（id 字段） | M2 玩家 API 层补（真沙箱才会产生该形态） |
+| move intent 的 id 形态（M1 结算登记；A4-iv 核对时确认已清偿） | intent_move 双形态（direction/id）与 prelude move 的朝相邻 creep 形态均已实装（creep.js move :137-141 / creep.rs intent_move :86-103） | 登记条目滞后未销——A4-iv 的 pull 位移依赖该形态（被拉 creep 记 `move(拉者)`），embed/settle 锁值测试已钉死 |
 | creep 死亡事件与墓碑（M1 结算） | 无 EVENT_OBJECT_DESTROYED、无墓碑（资源直接掉地已另登记） | 随墓碑变体（M2 schema 升级）一并补事件 |
 | spawn/extension 的 off 标记生效时序（M1 结算） | `_calc_spawns` 直接改工作副本 → 同 tick 即时生效 | 官方经 bulk.update 延迟落库 → 同 tick 读到旧值；仅配额翻转 tick 可观测（多一个 spawn 被计费的窗口） |
 | 踩敌方工地的 safeMode 门（M1 结算） | 未实现（M1 无 safeMode 激活路径） | 官方 movement.js:224 要求 controller 非敌 safeMode；activateSafeMode 实装时补 |
@@ -118,6 +118,13 @@
 | creep 世界投影 store 的 ghodium 键（A4-iii 登记） | 正量才投影（0 值无 "G" 键——官方 store getter 正量暴露口径/vanilla snapStore 同构）；energy 维持恒投影的既有形状 | generateSafeMode 预检读原始投影 `store['G']`（官方 data(this.id).store 同位）——缺键得 undefined 判 NOT_ENOUGH_RESOURCES，语义同官方空 store |
 | API 判定门路径的缺失键原型污染族（A4-iii 评审 2 登记） | 玩家 tick 内执行的判定门读 `store['G']`/`C.CONTROLLER_DOWNGRADE[投毒 _level]` 等——缺键经 Object.prototype 原型链可被喂假值（gclPoints 读可改写的 Game.gcl 同族） | 均被结算侧世界真值复核兜住（最坏说谎返回码 + 0.2 计费，无世界推进——伪实例面既有登记族）；myClaimedRoomCount 的 Set 已预置捕获（评审必修）、门路径扫描已改索引迭代；彻底消除归 API 门路径统一预置/纯量化批 |
 | activateSafeMode 门④ 的可信侧兜底（A4-iii 评审 2 必修清偿记录） | 官方 game 层跑 isolated-vm 可信 realm，门④（任一自家 controller safeMode 生效 → ERR_BUSY）处理器不复核；我方 prelude 与玩家共享 realm——原型迭代器污染可令门④扫描失明 → 双房 safeMode 并存（官方不可能态） | Engine 层 tick_with_intents 按世界真值兜底（玩家已有生效 safeMode → 其 ActivateSafeMode intent 全部丢弃）；prelude 门④扫描改索引迭代（纵深防御）；同 tick 多 controller 去重由收集器同名覆盖+lastActivateSafeMode 结构性保证 |
+| moveTo 寻路退化（A4-iv 登记，**本批最大灰区**） | **直线桩形态**：预检段完整对照官方（creeps.js:158-257），寻路退化为 `getDirectionTo` 直线一步；`memory._move` 路径缓存（reusePath=5/serializeMemory 面）不落 | 行为差异面：①绕障——被墙/结构围住的目标官方 A* 绕行或 ERR_NO_PATH，我方恒朝直线方向发 move intent（返回 OK）、结算侧被障碍静默拦截；②对角穿墙——官方代价/拓扑约束下不走的对角步我方可能发出；③路径复用——官方 5 tick 内沿缓存路径走、我方每 tick 重算方向（十字震荡目标下逐 tick 之字形同 Official 直线趋势，但贴墙绕行场景路径逐点不同）；④跨房——官方可寻至邻房（含出口格语义），我方按世界坐标给直线方向、move intent 在边缘格被钳。归 M2B FFI 批（红线一·7：官方 pf.cc 逐点一致）；01-movement 的 moveTo 族用例（MOVE-* 直线可达子集外）预期仍红 |
+| say 的 actionLog 文本载荷（A4-iv 登记，B1.1 healType 同口径） | u16 位图只落事件位 bit9（ACTION_SAY）；官方 actionLog.say 是 `{message: 截 10 字, isPublic}` 对象 | `creep.saying` 读不到文本（恒 undefined——官方无 say 记录时同值，有记录时官方返回消息）；EVENT 层无 say 事件（官方亦无）；schema 换正式 actionLog 形态时恢复双键与文本 |
+| creep 侧 notifyWhenAttacked 落库（A4-iv 登记） | 官方 creep 出生即 `notifyWhenAttacked: true`（create-creep.js:93）且 processor 通用段可写（processor.js:313 的 creep 分支）；我方 CreepObj 无该字段 | Creep API 面本就无 notifyWhenAttacked 方法（官方也只在结构类暴露）、通知面未接线——不可观测；damage 通知接线时若需 creep 侧读数随 schema 补字段 |
+| notifyWhenAttacked 的通知发送面（A4-iv 登记） | 只持久化标志（typed 五对象 + Generic data JSON + build 落成即 true 对齐 build.js:116）；`_damage.js:78`/`towers/attack.js:63` 的受击 Game.notify 发送不发生 | M2 通知面（notify 通道 + 上线推送）未接线；结构/塔被攻击的玩家提醒缺失，flag 值本身已可读写并可经投影观察到 |
+| suicide 后序 intent 的幽灵语义（A4-iv 评审 1/3 双确认登记） | 官方处理器持死引用快照继续执行且对其他对象的效果落地（processor.js:241 先取引用、_die.js:12-13 只删集合、claim/upgrade/…/pull 处理器无 actor 存活复检）——`suicide(); upgradeController(c)` 同 tick 官方升级照常生效；我方对象消亡后全早退 | 有意分歧：处理器持 pre-death 快照侵入面大、真实 bot 罕见该组合；次级边角同根——死者矩阵项我方零 rate 必输、官方幽灵按真 body 竞争可赢格；已入矩阵的 move 不落格两侧同形（官方 execute 不遍历死对象） |
+| moveTo 越界坐标（A4-iv 评审 1 登记） | 官方 RoomPosition 构造器对 x/y∉[0,49] 抛 'Invalid arguments...'（rooms.js:1280-1287）；我方构造无校验，moveTo(60,25) 静默直线 | 目标解析段的未复刻抛错面；随 RoomPosition 构造器校验批次决定（bot 生态罕见传越界）；fetchXY 的 Number.isNaN 类型门 vs 官方强转 isNaN 的返回码差同族（'ab' 类目标我方放行到寻路段） |
+| say 的 isPublic 出口折叠（A4-iv 评审 2 清偿记录） | 官方 system.js:8 的 boolean transform 在 JS 边界 !!value；我方出口序列化不摘对象自有 toJSON——对象形态可携大载荷过通道（结算 to_bool 终值兜住） | 已清偿：出口前 `!!isPublic` 折叠对齐官方边界；同通道的 message 为字符串字面量拼接免疫 |
 
 ## 四、验收关卡（不做完不算兼容）
 

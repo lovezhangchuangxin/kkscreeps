@@ -32,6 +32,11 @@ pub struct Movement {
     matrix: BTreeMap<(u8, u8), Vec<RateEntry>>,
     /// 获准移动者 → 目标格。
     winners: BTreeMap<ObjId, (u8, u8)>,
+    /// 官方 `object._pull`（拉者 → 被拉者，pull.js 经 addPulling 配对）——
+    /// per-tick 瞬态（官方内存字段不入库，tick 末随工作副本消亡）。
+    pull_of: BTreeMap<ObjId, ObjId>,
+    /// 官方 `object._pulled`（被拉者 → 拉者，_pull 的反向索引）。
+    pulled_by: BTreeMap<ObjId, ObjId>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -59,6 +64,42 @@ impl Movement {
 
     pub fn is_tile_busy(&self, x: u8, y: u8) -> bool {
         self.matrix.contains_key(&(x, y))
+    }
+
+    /// 被拉标记（canMove 的 `_pulled` 分支与疲劳归链的判定源）。
+    pub fn is_pulled(&self, id: ObjId) -> bool {
+        self.pulled_by.contains_key(&id)
+    }
+
+    /// 疲劳归链（官方 _add-fatigue.js:24-27 的 while 循环）：沿 `_pulled`
+    /// 上溯到链首拉者；链上拉者消亡即断（!!roomObjects 守卫）。
+    pub fn head_puller(&self, room: &RoomState, id: ObjId) -> ObjId {
+        let mut cur = id;
+        while let Some(&puller) = self.pulled_by.get(&cur)
+            && room.objects.contains_key(&puller)
+        {
+            cur = puller;
+        }
+        cur
+    }
+
+    /// 官方 movement.addPulling（movement.js:69-75）：环链检查后配对
+    /// `_pull`/`_pulled`。checkRecursiveTarget 从 target 沿 `_pull` 链下溯，
+    /// 回到拉者即环（链上对象消亡视为断链——官方 `!!roomObjects[t._pull]`
+    /// 同款）；自拉（target == 拉者）天然命中环拒绝。
+    pub fn add_pulling(&mut self, room: &RoomState, puller: ObjId, target: ObjId) {
+        let mut t = target;
+        loop {
+            if t == puller {
+                return;
+            }
+            match self.pull_of.get(&t) {
+                Some(&next) if room.objects.contains_key(&next) => t = next,
+                _ => break,
+            }
+        }
+        self.pull_of.insert(puller, target);
+        self.pulled_by.insert(target, puller);
     }
 
     /// 本轮获准的目标格（creep 落格结算用；消费即不移除——官方 objects 映射同寿）。
@@ -92,7 +133,7 @@ impl Movement {
             let winner = if entries.len() > 1 {
                 let mut rates: Vec<Rate> = entries
                     .iter()
-                    .map(|e| rate_of(&original, room, *e, cell))
+                    .map(|e| rate_of(&original, room, &self.pulled_by, &self.pull_of, *e, cell))
                     .collect();
                 // 官方 sort（movement.js:139）：四键降序；V8 稳定排序 ⇒ 平手保登记序，
                 // sort_by 稳定性同语义
@@ -146,13 +187,32 @@ impl Movement {
         };
         let object_id = entries[0].id;
         let entry = entries[0];
+        // 官方 movement.js:176-180：被拉对象的配对校验——拉者仍拉我（_pull
+        // 回指）**且**我的 move 目标格是拉者的当前格（被拉 creep 须 move(拉者)
+        // 挤进拉者让出的位置），否则解除配对（随后按常规 canMove/障碍判定）。
+        // 拉者对象消亡则保持配对（官方外层 !!roomObjects[object._pulled] 守卫）
+        if let Some(&puller) = self.pulled_by.get(&object_id)
+            && let Some(puller_obj) = room.objects.get(&puller)
+        {
+            let pair_intact = self.pull_of.get(&puller) == Some(&object_id);
+            let dest_is_puller_pos = key == puller_obj.pos();
+            if !pair_intact || !dest_is_puller_pos {
+                self.pull_of.remove(&puller);
+                self.pulled_by.remove(&object_id);
+            }
+        }
         let creep = room.objects.get(&object_id).and_then(|o| match o {
             RoomObject::Creep(c) => Some(c),
             _ => None,
         });
         // canMove 或目标格静态障碍不过 → 移除（官方 :183-186）
-        let movable =
-            creep.is_some_and(|c| can_move(c, old_fatigue.get(&object_id).copied().unwrap_or(0)));
+        let movable = creep.is_some_and(|c| {
+            can_move(
+                c,
+                old_fatigue.get(&object_id).copied().unwrap_or(0),
+                self.pulled_by.contains_key(&object_id),
+            )
+        });
         let obstacle = check_obstacle_at_xy(
             room,
             index,
@@ -176,6 +236,8 @@ impl Movement {
 fn rate_of(
     original: &BTreeMap<(u8, u8), Vec<RateEntry>>,
     room: &RoomState,
+    pulled_by: &BTreeMap<ObjId, ObjId>,
+    pull_of: &BTreeMap<ObjId, ObjId>,
     entry: RateEntry,
     cell: (u8, u8),
 ) -> Rate {
@@ -201,8 +263,9 @@ fn rate_of(
     {
         rate1 = 100;
     }
-    let rate2 = 0; // pulled（M1 无 pull）
-    let rate3 = 0; // pull
+    // rate2/rate3（movement.js:133-134）：被拉/在拉——挤格裁决的 tie-breaker
+    let rate2 = i64::from(pulled_by.contains_key(&entry.id));
+    let rate3 = i64::from(pull_of.contains_key(&entry.id));
     // rate4 = moves / weight：weight = 非 move/carry 部件 + 资源重量
     // （movement.js:120-123，weight||1）
     let moves = BodyKind::count_active(&creep.body, BodyKind::Move) as f64;
@@ -222,9 +285,10 @@ fn movers_at(m: &RateEntry, cell: (u8, u8)) -> bool {
     m.origin == cell
 }
 
-/// 官方 canMove（movement.js:11-14，无 pull 的 M1 形态）。
-pub fn can_move(creep: &CreepObj, old_fatigue: u32) -> bool {
-    old_fatigue == 0 && BodyKind::count_active(&creep.body, BodyKind::Move) > 0
+/// 官方 canMove（movement.js:11-14）：被拉对象免疲劳/MOVE 检查（拉拽语义
+/// 的核心——被拉 creep 可以没有 MOVE 部件或带疲劳）。
+pub fn can_move(creep: &CreepObj, old_fatigue: u32, is_pulled: bool) -> bool {
+    is_pulled || (old_fatigue == 0 && BodyKind::count_active(&creep.body, BodyKind::Move) > 0)
 }
 
 /// 官方 calcResourcesWeight（movement.js:41-59）：从 body 尾部数起，

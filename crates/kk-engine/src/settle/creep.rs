@@ -43,6 +43,11 @@ pub fn process_creep_intents(w: &mut Working, id: ObjId, actions: &BTreeMap<Acti
             Action::AttackController => intent_attack_controller(w, id, data),
             Action::SignController => intent_sign_controller(w, id, data),
             Action::GenerateSafeMode => intent_generate_safe_mode(w, id, data),
+            // A4-iv 移动杂项族（say/suicide/pull——官方 processor/intents/creeps/
+            // 同名文件）
+            Action::Say => intent_say(w, id, data),
+            Action::Suicide => intent_suicide(w, id),
+            Action::Pull => intent_pull(w, id, data),
             // M1 无执行器的动作（战斗/占位/杂项）：压制图已生效，此处静默跳过
             _ => {}
         }
@@ -324,6 +329,8 @@ fn complete_construction(
             owner: site.owner.unwrap_or_default(),
             store: Default::default(),
             spawning: None,
+            // 官方 build.js:116：玩家建造的结构出生即 notifyWhenAttacked: true
+            notify_when_attacked: Some(true),
         }),
         "extension" => RoomObject::Extension(kk_schema::room::ExtensionObj {
             id: 0,
@@ -333,12 +340,14 @@ fn complete_construction(
             off: false,
             owner: site.owner.unwrap_or_default(),
             store: Default::default(),
+            notify_when_attacked: Some(true),
         }),
         "constructedWall" => RoomObject::ConstructedWall(kk_schema::room::ConstructedWallObj {
             id: 0,
             x: site.x,
             y: site.y,
             hits: c::WALL_HITS as u32,
+            notify_when_attacked: Some(true),
         }),
         "road" => {
             // 官方：swamp/wall 上的路耐久按系数缩放（build.js:172-187）
@@ -363,6 +372,7 @@ fn complete_construction(
                 y: site.y,
                 hits: hits.min(u32::MAX as u64) as u32,
                 next_decay_time: time + c::ROAD_DECAY_TIME as u64,
+                notify_when_attacked: Some(true),
             })
         }
         "storage" => RoomObject::Storage(kk_schema::room::StorageObj {
@@ -372,6 +382,7 @@ fn complete_construction(
             hits: c::STORAGE_HITS as u32,
             owner: site.owner.unwrap_or_default(),
             store: Default::default(),
+            notify_when_attacked: Some(true),
         }),
         other => {
             // 其余类型（tower/rampart/lab/…）：透传桶落成（官方全字段表 M2 对齐）。
@@ -382,6 +393,8 @@ fn complete_construction(
                 "structureType": other,
                 "owner": site.owner,
                 "hits": 1,
+                // build.js:116：出生即 true
+                "notifyWhenAttacked": true,
             });
             RoomObject::Generic(kk_schema::room::GenericObj {
                 id: 0,
@@ -1214,6 +1227,67 @@ fn intent_generate_safe_mode(w: &mut Working, id: ObjId, data: &IntentData) {
     }
 }
 
+// ---- A4-iv：移动杂项族执行器（官方 processor/intents/creeps/ 同名文件） ----
+
+/// 官方 say.js：spawning 拒后落 actionLog.say。官方键携带 message（截 10）与
+/// isPublic——u16 位图只落事件位（ACTION_SAY），文本载荷不可承载：prelude 的
+/// `saying` getter 读不到消息文本（恒 undefined），与 healType 的 B1.1 登记
+/// 同口径（schema 换正式 actionLog 形态时恢复）。message 的 isString 门
+///（say.js:14-16）：清洗层 userString 后官方恒字符串（缺省折叠 ""），我方
+/// None 按 "" 对齐。
+fn intent_say(w: &mut Working, id: ObjId, data: &IntentData) {
+    if w.creep(id).is_none_or(|c| c.spawning) {
+        return;
+    }
+    let _message = data.message.as_deref().unwrap_or("");
+    let _is_public = data.is_public.unwrap_or(false);
+    if let Some(c) = w.creep_mut(id) {
+        set_action_log(&mut c.action_log, ACTION_SAY);
+    }
+}
+
+/// 官方 suicide.js：intent 相即死（_die.js，dropRate=CREEP_CORPSE_RATE、
+/// violentDeath=false——墓碑/尸沉归 M1 die_creep 形态，灰区沿用 TTL 死亡的
+/// 登记）。user=='2'（Source Keeper dropRate=0）不建模——NPC 不入 M2 世界。
+/// 死亡发生在 intent 相（官方同位）；已入矩阵的 move 不再落格（官方 execute
+/// 经 roomObjects forEach，死对象不被遍历——同形）。
+/// **有意分歧（A4-iv 评审 1/3 双确认登记）**：官方后序处理器（claim/
+/// upgrade/.../pull，creepActions 序 suicide 之后）持有死引用快照继续执行
+/// 且对**其他对象**的效果落地（processor.js:241 先取引用、_die.js:12-13 只
+/// delete 集合不清引用、各处理器无 actor 存活复检）——`suicide();
+/// upgradeController(c)` 同 tick 官方升级照常生效。我方对象消亡后
+/// w.creep(id)→None 全早退（对其他对象的效果也跳过）。实装需处理器持
+/// pre-death 快照（侵入面大），真实 bot 罕见该组合——登记有意分歧。
+fn intent_suicide(w: &mut Working, id: ObjId) {
+    if w.creep(id).is_none_or(|c| c.spawning) {
+        return;
+    }
+    die_creep(w, id);
+}
+
+/// 官方 pull.js：目标 creep 存在、已出生、邻接 → movement.addPulling（配对
+/// _pull/_pulled，环链拒绝）。位移的另一半是被拉 creep 自己的 move(puller)
+/// intent（move 的朝相邻 creep 形态，intent_move 的 id 分支）——仲裁期
+/// canMove 对被拉者放行（免疲劳/MOVE）、其移动疲劳沿链记在拉者头上
+///（Working::add_fatigue 的归链）。
+fn intent_pull(w: &mut Working, id: ObjId, data: &IntentData) {
+    let Some(target_id) = data.id else { return };
+    let (x, y) = match w.creep(id) {
+        Some(c) if !c.spawning => (c.x as i32, c.y as i32),
+        _ => return,
+    };
+    let (tx, ty) = match w.creep(target_id) {
+        Some(t) if !t.spawning => (t.x as i32, t.y as i32),
+        _ => return,
+    };
+    // pull.js:16-18：邻接复核（API 层 isNearTo 的结算侧对照）
+    if (tx - x).abs() > 1 || (ty - y).abs() > 1 {
+        return;
+    }
+    w.movement.add_pulling(w.room, id, target_id);
+}
+
+/// 官方 creeps/tick.js（M1 子集）：移动落格、TTL 死亡、疲劳恢复。
 /// 官方 creeps/tick.js（M1 子集）：孵化中的雏形自愈/出生（spawn 侧的对偶
 /// 路径）、移动落格、ageTime 首触赋值、TTL 死亡、疲劳恢复。
 pub fn creep_tick(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
@@ -1316,7 +1390,7 @@ fn movement_execute(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
         return Ok(());
     };
     let old_fatigue = w.old_fatigue.get(&id).copied().unwrap_or(0);
-    if !movement::can_move(creep, old_fatigue) {
+    if !movement::can_move(creep, old_fatigue, w.movement.is_pulled(id)) {
         return Ok(());
     }
     let (from, owner, body_len, weight) = (
@@ -1419,6 +1493,9 @@ pub const ACTION_HEALED: u8 = 1 << 7;
 /// 官方 actionLog.reserveController（reserveController.js:47）。u8 位图在 B1
 /// 已满 8 位，B2 起 action_log 拓宽为 u16，本键落在 bit8。
 pub const ACTION_RESERVE: u16 = 1 << 8;
+/// 官方 actionLog.say（say.js:18-21）。官方键是带 message(截 10)/isPublic 的
+/// 对象——位图只落事件位，文本载荷不可承载（intent_say 注释的灰区口径）。
+pub const ACTION_SAY: u16 = 1 << 9;
 
 pub fn set_action_log(bits: &mut u16, bit: impl Into<u16>) {
     *bits |= bit.into();

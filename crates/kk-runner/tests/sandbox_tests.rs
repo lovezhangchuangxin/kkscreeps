@@ -61,6 +61,7 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     stub_game_projection()?;
     intent_channel_prelude_forms_impl()?;
     hostile_probes_impl()?;
+    move_misc_family_prelude_forms_impl()?;
     run_expr_channel()?;
     wasm_binary_module()?;
     watchdog_hard_terminate_and_reuse()?;
@@ -1905,6 +1906,7 @@ fn spawn_family_api_impl() -> anyhow::Result<()> {
     }
     Ok(())
 }
+
 /// A4-ii 资源族四方法（transfer/withdraw/drop/pickup）prelude 换真的预检返回码
 /// 矩阵——官方 creeps.js:404-593 的预检序逐条锁值（预检顺序即断言顺序）。
 /// 世界：rcl3 房（extension 容量 50）；w1 两 carry（容量 100 存 80）为 actor。
@@ -2264,6 +2266,194 @@ fn resource_family_prelude_matrix_impl() -> anyhow::Result<()> {
                 r#"{"id":"r1"}"#,
                 "pickup 载荷仅 id（无 amount/resourceType）"
             );
+        }
+        _ => panic!("应正常执行"),
+    }
+    Ok(())
+}
+
+/// A4-iv 移动杂项族 prelude 预检矩阵（moveTo 直线桩/moveByPath/say/suicide/
+/// pull/notifyWhenAttacked）：逐分支对照官方 creeps.js:158-257/305-327/826-838/
+/// 813-825/1101-1126 与 structures.js:89-101/1220-1233 的返回码与 intent 形态。
+fn move_misc_family_prelude_forms_impl() -> anyhow::Result<()> {
+    let mut sb = Sandbox::new(SandboxConfig::default())?;
+    let w = json!({
+        "time": 1,
+        "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+        "user": "p1",
+        "rooms": { "W1N1": { "name": "W1N1" } },
+        "objects": [
+            // 主体：p1 的 move+work @ (25,25)
+            { "id": "kk1", "type": "creep", "room": "W1N1", "x": 25, "y": 25, "name": "w1",
+              "owner": "p1", "body": ["move", "work"] },
+            // 敌方 creep 邻接 @ (26,25)（pull 可拉敌 creep——官方无目标归属门）
+            { "id": "kk2", "type": "creep", "room": "W1N1", "x": 26, "y": 25, "name": "e1",
+              "owner": "p2", "body": ["move"] },
+            // 远处敌方 creep @ (40,40)（NOT_IN_RANGE 分支）
+            { "id": "kk3", "type": "creep", "room": "W1N1", "x": 40, "y": 40, "name": "e2",
+              "owner": "p2", "body": ["move"] },
+            // 孵化中自家 creep（BUSY 分支）
+            { "id": "kk4", "type": "creep", "room": "W1N1", "x": 25, "y": 26, "name": "b1",
+              "owner": "p1", "body": ["move"], "spawning": true },
+            // 疲劳 creep（moveTo 的 TIRED 门——官方 fatigue 显式回查）
+            { "id": "kk5", "type": "creep", "room": "W1N1", "x": 25, "y": 24, "name": "t1",
+              "owner": "p1", "body": ["move", "work"], "fatigue": 2 },
+            // 无 MOVE creep（NO_BODYPART 门）
+            { "id": "kk6", "type": "creep", "room": "W1N1", "x": 25, "y": 23, "name": "nm1",
+              "owner": "p1", "body": ["work", "carry"] },
+            // 自家 spawn（notifyWhenAttacked 覆盖版 + 已存 true 的差分门）
+            { "id": "kk7", "type": "spawn", "structureType": "spawn", "room": "W1N1",
+              "x": 24, "y": 25, "name": "S1", "owner": "p1", "store": { "energy": 300 },
+              "notifyWhenAttacked": true },
+            // 中性路（基类版：my===undefined 放行——房间归 p1 controller）
+            { "id": "kk8", "type": "structure", "structureType": "road", "room": "W1N1",
+              "x": 25, "y": 27 },
+            // 敌方 tower（基类版 my===false → NOT_OWNER）
+            { "id": "kk9", "type": "structure", "structureType": "tower", "room": "W1N1",
+              "x": 23, "y": 25, "owner": "p2", "hits": 1 },
+            // controller 归 p1（基类版的房归属分支基准）
+            { "id": "kk10", "type": "structure", "structureType": "controller", "room": "W1N1",
+              "x": 10, "y": 10, "level": 3, "owner": "p1" }
+        ]
+    });
+    match sb.begin_tick(&w)? {
+        TickPlan::Run { .. } => {
+            let v = sb.run_expr(r#"(()=>{
+                const g = (i) => Game.getObjectById(i);
+                const RP = RoomPosition;
+                return {
+                  say: [g('kk1').say('hi', true), g('kk2').say('x'), g('kk4').say('x'), g('kk5').say(42)],
+                  suicide: [g('kk1').suicide(), g('kk4').suicide()],
+                  pull: [g('kk1').pull(g('kk2')), g('kk1').pull(g('kk1')), g('kk1').pull(g('kk7')),
+                         g('kk1').pull(g('kk3')), g('kk4').pull(g('kk1')), g('kk1').pull(null)],
+                  moveTo: [g('kk2').moveTo(30, 25),
+                           g('kk1').moveTo(new RP(25, 25, 'W1N1')), g('kk1').moveTo(25, 25),
+                           g('kk1').moveTo('abc'), g('kk1').moveTo({x: 30}),
+                           g('kk1').moveTo(30, 25), g('kk1').moveTo(g('kk2')),
+                           g('kk5').moveTo(30, 25), g('kk6').moveTo(30, 25),
+                           g('kk1').moveTo(30, 25, {noPathFinding: true}) ],
+                  moveByPath: [g('kk1').moveByPath([new RP(25, 25, 'W1N1'), new RP(26, 25, 'W1N1')]),
+                               g('kk1').moveByPath([new RP(40, 40, 'W1N1')]),
+                               g('kk1').moveByPath('26253'),
+                               g('kk1').moveByPath(5),
+                               g('kk1').moveByPath([]),
+                               (()=>{ try { g('kk1').moveByPath('abc'); return 'no-throw'; } catch (e) { return 'threw'; } })()],
+                  nwa: [g('kk7').notifyWhenAttacked(true), g('kk7').notifyWhenAttacked(false),
+                        g('kk7').notifyWhenAttacked(42), g('kk8').notifyWhenAttacked(true),
+                        g('kk9').notifyWhenAttacked(true)],
+                };
+            })()"#)?;
+            let r = &v["value"];
+            let expect = |arr: serde_json::Value, want: &[i64], label: &str| {
+                let got: Vec<i64> = arr
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|x| x.as_i64().unwrap())
+                    .collect();
+                assert_eq!(&got, want, "{label}");
+            };
+            // say：OK / NOT_OWNER / BUSY(spawning) / OK（疲劳 creep 可 say——
+            // 官方无疲劳门；数字字符串化在 intent 面）
+            expect(
+                r["say"].clone(),
+                &[0, -1, -4, 0],
+                "say 预检序（creeps.js:826-838）",
+            );
+            expect(
+                r["suicide"].clone(),
+                &[0, -4],
+                "suicide（creeps.js:813-825）",
+            );
+            // pull：邻接敌方 OK / 自身 INVALID_TARGET / spawn 非 creep INVALID_TARGET /
+            // 远处 NOT_IN_RANGE / spawning BUSY / null INVALID_TARGET
+            expect(
+                r["pull"].clone(),
+                &[0, -7, -7, -9, -4, -7],
+                "pull（creeps.js:1101-1126）",
+            );
+            // moveTo：敌方 NOT_OWNER / 同格 RoomPosition OK / 同格数值 OK /
+            // 非对象目标 INVALID_TARGET / 无 pos 对象 INVALID_TARGET / 数值 OK /
+            // 对象形态（creep 目标解包 .pos）OK / 疲劳 TIRED（显式回查）/
+            // 无 MOVE NO_BODYPART / noPathFinding 且无缓存 → NOT_FOUND
+            expect(
+                r["moveTo"].clone(),
+                &[-1, 0, 0, -7, -7, 0, 0, -11, -12, -5],
+                "moveTo 预检序（creeps.js:158-257 直线桩形态）",
+            );
+            // moveByPath：RoomPosition 数组（路径首项即当前位 → 下一步方向 3）OK /
+            // 不在路径且不邻首项 NOT_FOUND / 序列化串（首落点 (26,25) 的起步格
+            // (25,25) 命中）OK / 数字 INVALID_ARGS / 空数组 NOT_FOUND /
+            // 非法串抛官方同文案错误（第 6 项是字符串哨兵，单独断言）
+            let mbp: Vec<i64> = r["moveByPath"].as_array().unwrap()[..5]
+                .iter()
+                .map(|x| x.as_i64().unwrap())
+                .collect();
+            assert_eq!(
+                &mbp,
+                &[0, -5, 0, -10, -5],
+                "moveByPath（creeps.js:305-327）"
+            );
+            assert_eq!(
+                r["moveByPath"][5], "threw",
+                "非法序列化串抛错（utils.js:584）"
+            );
+            // notifyWhenAttacked：spawn 覆盖版已存 true → 同值不记（OK）/
+            // false 记 intent / 非布尔 INVALID_ARGS / 中性路（本房归 p1）OK /
+            // 敌方 tower NOT_OWNER
+            expect(
+                r["nwa"].clone(),
+                &[0, 0, -10, 0, -1],
+                "notifyWhenAttacked 两版预检",
+            );
+            let end = sb.end_tick()?;
+            assert_eq!(end["ok"], true);
+            // 免费表：say/pull 免费（runtime.js:61）——计费面只有 move/suicide/
+            // notifyWhenAttacked(false)/中性路共 4×0.2
+            let cpu = end["intentsCpu"].as_f64().unwrap();
+            assert!(
+                (cpu - 0.8).abs() < 1e-9,
+                "免费表生效（say/pull 免费）：{cpu}"
+            );
+            let intents = sb.take_intents().expect("intentsList 带出");
+            assert_eq!(intents["kk1"]["say"]["message"], "hi");
+            assert_eq!(intents["kk1"]["say"]["isPublic"], true);
+            assert_eq!(
+                intents["kk5"]["say"]["message"], "42",
+                "数字字符串化（空串拼接 message）"
+            );
+            assert_eq!(intents["kk1"]["suicide"], json!({}), "空载荷");
+            assert_eq!(intents["kk1"]["pull"]["id"], "kk2");
+            assert_eq!(
+                intents["kk1"]["move"]["direction"], 3,
+                "直线方向（getDirectionTo 阈值算法）"
+            );
+            // 同值差分门：spawn 已存 true，notifyWhenAttacked(true) 不记
+            assert!(intents["kk7"].get("notifyWhenAttacked").is_some());
+            assert_eq!(
+                intents["kk7"]["notifyWhenAttacked"],
+                json!({"enabled": false}),
+                "只有 false 调用记录（true 与存值相同被差分门拦）"
+            );
+            assert_eq!(
+                intents["kk8"]["notifyWhenAttacked"],
+                json!({"enabled": true}),
+                "中性路首调恒记（undefined != true）"
+            );
+            assert!(intents.get("kk9").is_none(), "敌方结构无 intent");
+            // 桩清偿面：本族方法不再进 stub 计数
+            let stubs = sb.drain_stub_calls()?;
+            for name in [
+                "creep.moveTo",
+                "creep.moveByPath",
+                "creep.say",
+                "creep.suicide",
+                "creep.pull",
+                "spawn.notifyWhenAttacked",
+                "structure.notifyWhenAttacked",
+            ] {
+                assert!(stubs.get(name).is_none(), "{name} 已换真，不应再有桩计数");
+            }
         }
         _ => panic!("应正常执行"),
     }

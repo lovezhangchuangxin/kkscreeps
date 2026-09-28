@@ -132,6 +132,7 @@ impl Fixture {
             .insert(
                 "W1N1",
                 RoomObject::Spawn(SpawnObj {
+                    notify_when_attacked: None,
                     id: 0,
                     x,
                     y,
@@ -167,6 +168,23 @@ impl Fixture {
                     progress_total,
                     owner: Some(owner.into()),
                     name: None,
+                }),
+            )
+            .unwrap()
+    }
+
+    /// 中性路（A4-iv notifyWhenAttacked 的无主结构用例）。
+    fn road_at(&mut self, x: u8, y: u8) -> ObjId {
+        self.world
+            .insert(
+                "W1N1",
+                RoomObject::Road(kk_schema::room::RoadObj {
+                    id: 0,
+                    x,
+                    y,
+                    hits: 5000,
+                    next_decay_time: 5000,
+                    notify_when_attacked: None,
                 }),
             )
             .unwrap()
@@ -508,6 +526,7 @@ fn spawn_creep_cycle() {
         .insert(
             "W1N1",
             RoomObject::Spawn(SpawnObj {
+                notify_when_attacked: None,
                 id: 0,
                 x: 20,
                 y: 20,
@@ -605,6 +624,7 @@ fn spawn_with_job(
                 owner: "p1".into(),
                 store: kk_schema::room::Store { energy, ghodium: 0 },
                 spawning: job,
+                notify_when_attacked: None,
             }),
         )
         .unwrap()
@@ -1268,6 +1288,7 @@ fn road_on_swamp_costs_one() {
         .insert(
             "W1N1",
             RoomObject::Road(kk_schema::room::RoadObj {
+                notify_when_attacked: None,
                 id: 0,
                 x: 10,
                 y: 11,
@@ -1403,6 +1424,7 @@ fn transfer_clamps_to_target_capacity() {
         .insert(
             "W1N1",
             RoomObject::Spawn(SpawnObj {
+                notify_when_attacked: None,
                 id: 0,
                 x: 20,
                 y: 20,
@@ -1666,6 +1688,7 @@ fn transfer_into_extension_clamps_by_rcl() {
         .insert(
             "W1N1",
             RoomObject::Extension(kk_schema::room::ExtensionObj {
+                notify_when_attacked: None,
                 id: 0,
                 x: 20,
                 y: 20,
@@ -1752,6 +1775,7 @@ fn movement_wears_road() {
         .insert(
             "W1N1",
             RoomObject::Road(kk_schema::room::RoadObj {
+                notify_when_attacked: None,
                 id: 0,
                 x: 10,
                 y: 11,
@@ -2081,6 +2105,7 @@ fn extension_at(f: &mut Fixture, x: u8, y: u8, hits: u32, energy: u32) -> ObjId 
         .insert(
             "W1N1",
             RoomObject::Extension(kk_schema::room::ExtensionObj {
+                notify_when_attacked: None,
                 id: 0,
                 x,
                 y,
@@ -2429,6 +2454,7 @@ fn safe_mode_blocks_hostile_attack_and_dismantle() {
         .insert(
             "W1N1",
             RoomObject::ConstructedWall(kk_schema::room::ConstructedWallObj {
+                notify_when_attacked: None,
                 id: 0,
                 x: 10,
                 y: 11,
@@ -2524,6 +2550,7 @@ fn repair_wall_and_rampart_hits_max() {
         .insert(
             "W1N1",
             RoomObject::ConstructedWall(kk_schema::room::ConstructedWallObj {
+                notify_when_attacked: None,
                 id: 0,
                 x: 12,
                 y: 10,
@@ -2887,6 +2914,7 @@ fn destroyed_work_part_repairs_at_half_power_next_tick() {
         .insert(
             "W1N1",
             RoomObject::ConstructedWall(kk_schema::room::ConstructedWallObj {
+                notify_when_attacked: None,
                 id: 0,
                 x: 12,
                 y: 10,
@@ -4386,4 +4414,367 @@ fn engine_safemode_gate4_backstop_drops_cross_room_activation() {
         RoomObject::Controller(c) => assert_eq!(c.safe_mode, 3 + 1000),
         _ => panic!(),
     }
+}
+// ---- A4-iv：移动杂项族（say/suicide/pull/notifyWhenAttacked） ----
+
+#[test]
+fn say_intent_sets_action_log_bit() {
+    // say.js:18-21：actionLog.say 落位（u16 位图 bit9）；spawning 拒；
+    // message 缺省按官方 userString 折叠 "" 同样落位（isString 门恒过）
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let c = f.creep("w1", "p1", 10, 10, &[BodyKind::Move, BodyKind::Work], 0);
+    let b1 = f.creep("b1", "p1", 11, 11, &[BodyKind::Move], 0);
+
+    let mut batch = IntentBatch::default();
+    let mut d = IntentData::bare();
+    d.message = Some("hello".into());
+    d.is_public = Some(true);
+    batch.add_object_intent("p1", c, Action::Say, d);
+    let d2 = IntentData::bare(); // 缺省 message（None ≙ 官方 ""）
+    batch.add_object_intent("p1", b1, Action::Say, d2);
+    assert!(f.world.get(c).is_some(), "settle 前对象在");
+    assert!(f.world.get(b1).is_some(), "settle 前b1在");
+    let events_dbg = f.settle(batch);
+    println!("DBG events: {}", serde_json::Value::Array(events_dbg));
+    assert!(f.world.get(c).is_some(), "settle 后 c 还在");
+
+    let action_log = |fx: &Fixture, id: ObjId| match fx.obj(id) {
+        RoomObject::Creep(cc) => cc.action_log,
+        _ => panic!("非 creep"),
+    };
+    println!(
+        "DBG after settle: c={} b1={}",
+        f.world.get(c).is_some(),
+        f.world.get(b1).is_some()
+    );
+    // 官方 say 键带 message(截 10)/isPublic——位图只落事件位（灰区登记）
+    assert_eq!(action_log(&f, c), 1 << 9, "say 落 ACTION_SAY 位");
+    assert_eq!(
+        action_log(&f, b1),
+        1 << 9,
+        "缺省 message（None ≙ 官方 \"\"）同落位"
+    );
+
+    // spawning creep：处理器拒（无 actionLog）。A4-i 的孵化模型并入后，孤立
+    // 的 spawning 雏形会在 tick 相被孤儿移除——本例给它配同格带匹配任务
+    // （name "sp1"）的 spawn：intent 相 say 拒先于 tick 相的孵化处理，断言
+    // 窗口内 s 恒在
+    let mut f2 = Fixture::new(1, terrain_with(&[]));
+    let spawn_id = f2
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Spawn(kk_schema::room::SpawnObj {
+                id: 0,
+                x: 10,
+                y: 10,
+                hits: 0,
+                off: false,
+                name: "S".into(),
+                owner: "p1".into(),
+                store: kk_schema::room::Store::default(),
+                spawning: Some(kk_schema::room::SpawningJob {
+                    name: "sp1".into(),
+                    need_time: 3,
+                    spawn_time: 5,
+                    directions: vec![],
+                }),
+                notify_when_attacked: None,
+            }),
+        )
+        .unwrap();
+    let s = f2
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Creep(kk_schema::room::CreepObj {
+                id: 0,
+                x: 10,
+                y: 10,
+                fatigue: 0,
+                age_time: u64::MAX / 2,
+                hits: 100,
+                spawning: true,
+                action_log: 0,
+                name: "sp1".into(),
+                owner: "p1".into(),
+                body: body(&[BodyKind::Move]),
+                store: kk_schema::room::Store::default(),
+            }),
+        )
+        .unwrap();
+    let _ = spawn_id;
+    let mut batch2 = IntentBatch::default();
+    batch2.add_object_intent(
+        "p1",
+        s,
+        Action::Say,
+        IntentData {
+            message: Some("x".into()),
+            ..IntentData::bare()
+        },
+    );
+    f2.settle(batch2);
+    assert_eq!(
+        action_log(&f2, s),
+        0,
+        "spawning 中 say 不落位（say.js:11-13）"
+    );
+}
+
+#[test]
+fn suicide_intent_kills_creep_same_tick() {
+    // suicide.js：intent 相即 _die——对象当 tick 消亡，携带 energy 落地
+    //（墓碑 M1 灰区：die_creep 形态与 TTL 死亡同路径）
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let c = f.creep("w1", "p1", 10, 10, &[BodyKind::Move, BodyKind::Carry], 40);
+    let mut batch = IntentBatch::default();
+    batch.add_object_intent("p1", c, Action::Suicide, IntentData::bare());
+    let events = f.settle(batch);
+    assert!(f.world.get(c).is_none(), "suicide 当 tick 死亡");
+    let dropped = f
+        .world
+        .rooms
+        .get("W1N1")
+        .unwrap()
+        .objects
+        .values()
+        .find_map(|o| match o {
+            RoomObject::Energy(e) => Some(e.amount),
+            _ => None,
+        });
+    // 掉落发生在 intent 相（先于阶段 8 的对象 id 快照）——同 tick 即吃
+    // energy/tick 衰减 ceil(40/ENERGY_DECAY)=1（官方 _create-energy 直插
+    // roomObjects，processor.js:342 的 tick 循环覆盖新掉落，同语义）
+    assert_eq!(dropped, Some(39), "携带 40 energy 落地后当 tick 衰减 1");
+    assert!(
+        events.is_empty(),
+        "suicide 无事件（官方 _die 的 EVENT_OBJECT_DESTROYED 未投影——既有灰区）"
+    );
+
+    // 同 tick 后续 intents 不再作用（对象消亡）——**有意分歧**：官方执行序
+    // creepActions 里 upgradeController 排 suicide 之后（intents.js:15-17），
+    // 但官方处理器持死引用快照继续执行、对其他对象的效果落地（processor.js:241/
+    // _die.js:12-13 不清引用、upgradeController.js 无存活复检——同 tick 官方
+    // 升级照常生效）；我方对象消亡即跳过（A4-iv 评审 1/3 双确认，compatibility.md
+    // 登记为有意分歧：处理器持 pre-death 快照侵入面大、真实 bot 罕见）——本断言
+    // 锁的是我方登记后的分歧行为，非官方语义
+    let mut f2 = Fixture::new(2, terrain_with(&[]));
+    let ctl = f2.controller(1, Some("p1"));
+    let c2 = f2.creep("w2", "p1", 6, 6, &[BodyKind::Move, BodyKind::Work], 100);
+    let mut batch2 = IntentBatch::default();
+    batch2.add_object_intent("p1", c2, Action::Suicide, IntentData::bare());
+    batch2.add_object_intent("p1", c2, Action::UpgradeController, IntentData::target(ctl));
+    f2.settle(batch2);
+    assert!(f2.world.get(c2).is_none(), "对象消亡");
+    match f2.obj(ctl) {
+        RoomObject::Controller(t) => {
+            assert_eq!(t.progress, 0, "死后 upgradeController 静默跳过")
+        }
+        _ => panic!(),
+    }
+}
+
+#[test]
+fn pull_pair_moves_fatigue_free_creep() {
+    // 拉拽官方语义（pull.js + movement.js）：拉者 A 记 pull，被拉 B 记
+    // move(A)（id 形态）——A 移动让位，B 挤入 A 原格；B 无 MOVE 部件也带疲劳
+    // 照样移动（canMove 的 _pulled 分支），B 的移动疲劳沿链记在 A 头上
+    //（_add-fatigue 归链）
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let a = f.creep("A", "p1", 10, 10, &[BodyKind::Move, BodyKind::Work], 0); // 拉者
+    let b = f.creep("B", "p1", 11, 10, &[BodyKind::Work], 0); // 被拉（无 MOVE）
+    if let RoomObject::Creep(cc) = f
+        .world
+        .rooms
+        .get_mut("W1N1")
+        .unwrap()
+        .objects
+        .get_mut(&b)
+        .unwrap()
+    {
+        cc.fatigue = 2; // 被拉者带疲劳
+    }
+
+    let mut batch = IntentBatch::default();
+    batch.add_object_intent("p1", a, Action::Pull, IntentData::target(b));
+    let mut m = IntentData::bare();
+    m.id = Some(a); // 被拉 creep 的 move(拉者)——id 形态
+    batch.add_object_intent("p1", b, Action::Move, m);
+    let mut m2 = IntentData::bare();
+    m2.direction = Some(7); // LEFT：A 从 (10,10) → (9,10)
+    batch.add_object_intent("p1", a, Action::Move, m2);
+    f.settle(batch);
+
+    // A 移至 (9,10)；B 挤入 A 原格 (10,10)
+    assert_eq!(f.creep_state(a).0, 9, "拉者左移");
+    assert_eq!(f.creep_state(b).0, 10, "被拉者补位（无 MOVE + 疲劳照移）");
+    // 疲劳（官方 movement.js:235-245 无 weight||1——纯 MOVE 移动 0 疲劳）：
+    // A 自身移动 1 部件×2 + B 的移动 1×2 归链到 A = 4，A 的 1 MOVE 恢复 -2 → 2
+    //（无归链则 A 仅 2-2=0——2 锁的就是归链发生）；B 自身疲劳不动（2）且无
+    // 恢复（无 MOVE）
+    assert_eq!(f.creep_state(a).2, 2, "拉者累计双方移动疲劳后恢复 -2");
+    assert_eq!(
+        f.creep_state(b).2,
+        2,
+        "被拉者疲劳不动（归链 + 无 MOVE 无恢复）"
+    );
+}
+
+#[test]
+fn pull_pairing_breaks_on_destination_mismatch() {
+    // movement.js:176-180：被拉对象的 move 目标格 ≠ 拉者当前格 → 解除配对
+    // → 常规 canMove（无 MOVE 部件拒）——B 不动；A 独自移动
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let a = f.creep("A", "p1", 10, 10, &[BodyKind::Move], 0);
+    let b = f.creep("B", "p1", 11, 10, &[BodyKind::Work], 0);
+
+    let mut batch = IntentBatch::default();
+    batch.add_object_intent("p1", a, Action::Pull, IntentData::target(b));
+    let mut m = IntentData::bare();
+    m.direction = Some(3); // RIGHT：B 朝 (12,10)——不是拉者的当前格
+    batch.add_object_intent("p1", b, Action::Move, m);
+    let mut m2 = IntentData::bare();
+    m2.direction = Some(7);
+    batch.add_object_intent("p1", a, Action::Move, m2);
+    f.settle(batch);
+
+    assert_eq!(f.creep_state(a).0, 9, "拉者照常移动");
+    assert_eq!(f.creep_state(b).0, 11, "配对解除后 B 无 MOVE 不动");
+    assert_eq!(f.creep_state(b).2, 0, "B 无疲劳发生");
+}
+
+#[test]
+fn pulled_creep_without_move_intent_stays() {
+    // 只有 pull 没有被拉方的 move：位移不发生（官方矩阵只收 move intent；
+    // _pull/_pulled 只影响仲裁 tie-break 与 canMove）
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let a = f.creep("A", "p1", 10, 10, &[BodyKind::Move], 0);
+    let b = f.creep("B", "p1", 11, 10, &[BodyKind::Work], 0);
+
+    let mut batch = IntentBatch::default();
+    batch.add_object_intent("p1", a, Action::Pull, IntentData::target(b));
+    let mut m2 = IntentData::bare();
+    m2.direction = Some(7);
+    batch.add_object_intent("p1", a, Action::Move, m2);
+    f.settle(batch);
+
+    assert_eq!(f.creep_state(a).0, 9);
+    assert_eq!(f.creep_state(b).0, 11, "无 move intent 的被拉者不动");
+}
+
+#[test]
+fn pull_cycle_chain_rejected() {
+    // movement.js:70-75 checkRecursiveTarget：A→B→C 后 C 拉 A 成环——配对
+    // 拒绝（C 的 pull 无效；A/B 链不受影响照常工作）
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let a = f.creep("A", "p1", 10, 10, &[BodyKind::Move], 0);
+    let b = f.creep("B", "p1", 11, 10, &[BodyKind::Move], 0);
+    let c = f.creep("C", "p1", 10, 11, &[BodyKind::Move], 0);
+
+    let mut batch = IntentBatch::default();
+    batch.add_object_intent("p1", a, Action::Pull, IntentData::target(b));
+    batch.add_object_intent("p1", b, Action::Pull, IntentData::target(c));
+    batch.add_object_intent("p1", c, Action::Pull, IntentData::target(a)); // 成环
+    // 三方 move：B move(A)、C move(B)、A move(7)
+    let mut mb = IntentData::bare();
+    mb.id = Some(a);
+    batch.add_object_intent("p1", b, Action::Move, mb);
+    let mut mc = IntentData::bare();
+    mc.id = Some(b);
+    batch.add_object_intent("p1", c, Action::Move, mc);
+    let mut ma = IntentData::bare();
+    ma.direction = Some(7);
+    batch.add_object_intent("p1", a, Action::Move, ma);
+    f.settle(batch);
+
+    // A (10,10)→(9,10)；B (11,10)→(10,10)（A 的让位格）；C (10,11) 的目标
+    // 是 B 的原格 (11,10)——C→B 配对成立（环只在 C 拉 A 处断），B 让位可入。
+    // 全员纯 MOVE：每步疲劳 0（movement.js:235-245 无 weight||1）
+    assert_eq!(f.creep_state(a), (9, 10, 0, 0), "A 移动");
+    assert_eq!(f.creep_state(b).0, 10, "B 补 A 的位");
+    assert_eq!(f.creep_state(c).0, 11, "C 补 B 的位（链式拉拽传递）");
+}
+
+#[test]
+fn notify_when_attacked_intent_sets_flag() {
+    // processor.js:313-314：CONSTRUCTION_COST 类型 + 所有权门 → 落库
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let sp = f.spawn("S1", 20, 20, 300);
+    let rd = f.road_at(21, 20);
+    let ctl = f.controller(3, Some("p1"));
+
+    let mut batch = IntentBatch::default();
+    let mut d = IntentData::bare();
+    d.enabled = Some(false);
+    batch.add_object_intent("p1", sp, Action::NotifyWhenAttacked, d);
+    let mut d2 = IntentData::bare();
+    d2.enabled = Some(true);
+    batch.add_object_intent("p1", rd, Action::NotifyWhenAttacked, d2.clone());
+    // controller 不在 CONSTRUCTION_COST——通用段类型门拒（API 面不暴露，
+    // 伪造 intent 的兜底）
+    batch.add_object_intent("p1", ctl, Action::NotifyWhenAttacked, d2);
+    f.settle(batch);
+
+    assert_eq!(
+        match f.obj(sp) {
+            RoomObject::Spawn(s) => s.notify_when_attacked,
+            _ => panic!(),
+        },
+        Some(false),
+        "spawn 落 enabled=false"
+    );
+    assert_eq!(
+        match f.obj(rd) {
+            RoomObject::Road(r) => r.notify_when_attacked,
+            _ => panic!(),
+        },
+        Some(true),
+        "中性路同样可落（无主不拦——官方 :248）"
+    );
+
+    // 他人对象：分派层通用段跳过（p2 对 p1 的 spawn）
+    let mut batch2 = IntentBatch::default();
+    let mut d3 = IntentData::bare();
+    d3.enabled = Some(true);
+    batch2.add_object_intent("p2", sp, Action::NotifyWhenAttacked, d3);
+    f.settle(batch2);
+    assert_eq!(
+        match f.obj(sp) {
+            RoomObject::Spawn(s) => s.notify_when_attacked,
+            _ => panic!(),
+        },
+        Some(false),
+        "他人 intent 跳过"
+    );
+}
+
+#[test]
+fn built_structure_born_with_notify_attacked_true() {
+    // build.js:116：玩家建造落成的结构出生即 notifyWhenAttacked: true
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    f.controller(1, Some("p1"));
+    let builder = f.creep("w1", "p1", 10, 10, &[BodyKind::Move, BodyKind::Work], 200);
+    // 进度 45/50：1 WORK×BUILD_POWER(5) 恰好补完剩余 5 → 落成
+    let site = f.site(11, 10, "extension", 45, 50, "p1");
+    let mut batch = IntentBatch::default();
+    batch.add_object_intent("p1", builder, Action::Build, {
+        let mut d = IntentData::target(site);
+        d.x = Some(11);
+        d.y = Some(10);
+        d
+    });
+    f.settle(batch);
+    let ext = f
+        .world
+        .rooms
+        .get("W1N1")
+        .unwrap()
+        .objects
+        .values()
+        .find_map(|o| match o {
+            RoomObject::Extension(e) => Some(e.notify_when_attacked),
+            _ => None,
+        });
+    assert_eq!(ext, Some(Some(true)), "落成 extension 出生即 true");
 }

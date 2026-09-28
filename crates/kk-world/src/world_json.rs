@@ -310,7 +310,7 @@ pub(crate) fn object_json(
             // 官方落库形态（build.js:119-127）：store + storeCapacityResource
             // {energy: SPAWN_ENERGY_CAPACITY}、无 storeCapacity 键——Store 三函数
             // 族按此分岔（getCapacity() 读 null、getCapacity('energy') 读 300）
-            json!({
+            let mut v = json!({
                 "type": "spawn", "structureType": "spawn",
                 "id": id_str, "room": room, "x": o.x, "y": o.y,
                 "name": o.name, "owner": o.owner,
@@ -323,9 +323,16 @@ pub(crate) fn object_json(
                 "off": o.off,
                 "hits": o.hits, "hitsMax": c::SPAWN_HITS,
                 "spawning": spawn_spawning_json(o),
-            })
+            });
+            // A4-iv：通知开关落库面（官方 build.js:111-117 出生即 true；
+            // place 放置面 opt 透传）——None≙undefined 缺键
+            if let Some(flag) = o.notify_when_attacked {
+                v["notifyWhenAttacked"] = json!(flag);
+            }
+            v
         }
-        RoomObject::Extension(o) => json!({
+        RoomObject::Extension(o) => {
+            let mut v = json!({
             "type": "structure", "structureType": "extension",
             "id": id_str, "room": room, "x": o.x, "y": o.y,
             "owner": o.owner,
@@ -336,19 +343,43 @@ pub(crate) fn object_json(
             "storeCapacityResource": { "energy": crate::types::extension_energy_capacity(rcl) },
             "off": o.off,
             "hits": o.hits, "hitsMax": c::EXTENSION_HITS,
-        }),
-        RoomObject::ConstructedWall(o) => json!({
+            });
+            // A4-iv：通知开关落库面（官方 build.js:111-117 出生即 true；
+            // place 放置面 opt 透传）——None≙undefined 缺键
+            if let Some(flag) = o.notify_when_attacked {
+                v["notifyWhenAttacked"] = json!(flag);
+            }
+            v
+        }
+        RoomObject::ConstructedWall(o) => {
+            let mut v = json!({
             "type": "structure", "structureType": "constructedWall",
             "id": id_str, "room": room, "x": o.x, "y": o.y,
             "hits": o.hits, "hitsMax": c::WALL_HITS_MAX,
-        }),
-        RoomObject::Road(o) => json!({
+            });
+            // A4-iv：通知开关落库面（官方 build.js:111-117 出生即 true；
+            // place 放置面 opt 透传）——None≙undefined 缺键
+            if let Some(flag) = o.notify_when_attacked {
+                v["notifyWhenAttacked"] = json!(flag);
+            }
+            v
+        }
+        RoomObject::Road(o) => {
+            let mut v = json!({
             "type": "structure", "structureType": "road",
             "id": id_str, "room": room, "x": o.x, "y": o.y,
             "hits": o.hits, "hitsMax": road_hits_max(terrain, o.x, o.y),
             "nextDecayTime": o.next_decay_time,
-        }),
-        RoomObject::Storage(o) => json!({
+            });
+            // A4-iv：通知开关落库面（官方 build.js:111-117 出生即 true；
+            // place 放置面 opt 透传）——None≙undefined 缺键
+            if let Some(flag) = o.notify_when_attacked {
+                v["notifyWhenAttacked"] = json!(flag);
+            }
+            v
+        }
+        RoomObject::Storage(o) => {
+            let mut v = json!({
             "type": "structure", "structureType": "storage",
             "id": id_str, "room": room, "x": o.x, "y": o.y,
             "owner": o.owner,
@@ -357,7 +388,14 @@ pub(crate) fn object_json(
             // storeCapacityResource——Store.getCapacity() 读数值（A4-i Store 族）
             "storeCapacity": c::STORAGE_CAPACITY,
             "hits": o.hits, "hitsMax": c::STORAGE_HITS,
-        }),
+            });
+            // A4-iv：通知开关落库面（官方 build.js:111-117 出生即 true；
+            // place 放置面 opt 透传）——None≙undefined 缺键
+            if let Some(flag) = o.notify_when_attacked {
+                v["notifyWhenAttacked"] = json!(flag);
+            }
+            v
+        }
         RoomObject::ConstructionSite(o) => {
             let mut v = json!({
                 "type": "constructionSite",
