@@ -2790,6 +2790,92 @@ fn claim_controller_gcl_gate() {
 }
 
 #[test]
+fn claim_controller_own_room_rejected() {
+    // claimController.js:26-28：level > 0 拒——自己已拥有的房再 claim 同路
+    //（分支评审 3 补测：既有测试只锁他人房形态）
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let ctl = f.controller(1, Some("p1"));
+    let c = f.creep("w1", "p1", 5, 6, &[BodyKind::Claim], 0);
+    f.settle(controller_intent(c, Action::ClaimController, ctl));
+    let t = ctl_of(&f);
+    assert_eq!(t.owner.as_deref(), Some("p1"), "owner 不变");
+    assert_eq!(t.level, 1, "level>0 拒对自家房同效（不重置）");
+}
+
+#[test]
+fn claim_controller_gcl_reads_last_tick_set() {
+    // 官方 quirk：GCL 门读上一 tick 定集（bulkUsers.addToSet 不改内存对象，
+    // bulk.js:93-101 亲验）——同 tick 双 claim 都按旧 rooms 判定（rooms=
+    // {W2N2}、gcl 恰好 1e6 时两条都放行）。锁定"settle 期不更新
+    // PlayerState.rooms"（重建在 Engine tick 末；若被挪进 settle_room，
+    // 第二条 claim 会读到增长的 rooms 而拒，此测试转红）
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let ctl1 = f.controller(0, None);
+    let ctl2 = f.controller(0, None);
+    let c1 = f.creep("w1", "p1", 5, 6, &[BodyKind::Claim], 0);
+    let c2 = f.creep("w2", "p1", 5, 4, &[BodyKind::Claim], 0);
+    let mut p = PlayerState::default();
+    p.rooms.insert("W2N2".into());
+    p.gcl = 1_000_000;
+    f.players.insert("p1".into(), p);
+    let mut batch = controller_intent(c1, Action::ClaimController, ctl1);
+    batch.add_object_intent("p1", c2, Action::ClaimController, IntentData::target(ctl2));
+    f.settle(batch);
+    let t1 = ctl_of(&f);
+    assert_eq!(t1.owner.as_deref(), Some("p1"), "第一条过门");
+    // 第二条也过门：GCL 读数是 settle 前的定集（官方同 tick 不涨）
+    let t2 = f
+        .world
+        .room("W1N1")
+        .unwrap()
+        .objects
+        .get(&ctl2)
+        .and_then(|o| match o {
+            kk_schema::room::RoomObject::Controller(c) => Some(c.clone()),
+            _ => None,
+        })
+        .expect("第二个 controller 存在");
+    assert_eq!(t2.owner.as_deref(), Some("p1"), "同 tick 双 claim 都按上一 tick 定集放行");
+}
+
+#[test]
+fn attack_controller_zero_claim_rejected() {
+    // attackController.js:34/:42：effect 为 0（无存活 CLAIM）整票拒——
+    // 无削减、无封锁、无事件（评审 3 补测：若删掉 effect==0 守卫，
+    // upgrade_blocked 断言抓回）
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let ctl = f.controller_full(1, Some("p2"), |t| {
+        t.downgrade_time = Some(20_000);
+    });
+    let c = f.creep("w1", "p1", 5, 6, &[BodyKind::Move], 0);
+    let ev = f.settle(controller_intent(c, Action::AttackController, ctl));
+    assert_eq!(ctl_of(&f).downgrade_time, Some(20_000), "零 CLAIM 不削减");
+    assert_eq!(ctl_of(&f).upgrade_blocked, None, "零 CLAIM 不挂封锁");
+    assert!(ev.is_empty());
+}
+
+#[test]
+fn attack_controller_reservation_drain_below_zero_cleared_same_tick() {
+    // 预约削减穿透 0：官方 endTime − effect 得负数入内存、同 tick 被
+    // controllers/tick 预定清除分支消解（清除条件在 0/负数下同真）——
+    // 我方 u64 饱和 0，终态等价（评审 3 补测：锁"削穿即清除"官方可观察值）
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let ctl = f.controller_full(0, None, |t| {
+        t.reservation = Some(kk_schema::room::Reservation {
+            user: "p2".into(),
+            end_time: 1,
+        });
+    });
+    let c = f.creep("w1", "p1", 5, 6, &[BodyKind::Claim, BodyKind::Claim], 0);
+    f.settle(controller_intent(c, Action::AttackController, ctl));
+    assert_eq!(
+        ctl_of(&f).reservation,
+        None,
+        "1 − 2 削穿 → 同 tick 清除（官方负数同终态）"
+    );
+}
+
+#[test]
 fn reserve_controller_success_and_cap() {
     // reserveController.js:35-52：新预定 endTime = gameTime+1 再 += effect；
     // 事件 amount=effect；上限 gameTime+CONTROLLER_RESERVE_MAX(5000)（:43-45）
@@ -3029,7 +3115,6 @@ fn attack_controller_null_downgrade_time_loses_room_next_tick() {
     f.settle(controller_intent(c, Action::AttackController, ctl));
     let t = ctl_of(&f);
     assert_eq!(t.level, 0, "当 tick 即走降级链归零");
-    assert_eq!(t.owner, None, "主权丢失");
     assert_eq!(t.owner, None, "主权丢失");
     assert_eq!(
         t.safe_mode_cooldown,
