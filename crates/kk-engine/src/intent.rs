@@ -44,8 +44,20 @@ pub enum Action {
     GenerateSafeMode,
     SignController,
     Pull,
-    /// spawn 对象的动作（官方 spawns/intents.js 的 M1 子集）。
+    /// spawn 对象的动作（官方 spawns/intents.js:3-24 的分派序）。
     CreateCreep,
+    /// renewCreep（白名单 `{id: 'string'}`，system.js:62；结算链见
+    /// settle/spawn.rs intent_renew_creep——对照 spawns/renew-creep.js）。
+    RenewCreep,
+    /// recycleCreep（白名单 `{id: 'string'}`，system.js:60；
+    /// spawns/recycle-creep.js）。
+    RecycleCreep,
+    /// setSpawnDirections（白名单 `{directions: 'number[]'}`，system.js:73；
+    /// spawns/set-spawn-directions.js）。
+    SetSpawnDirections,
+    /// cancelSpawning（空白名单 `{}`，system.js:39；
+    /// spawns/cancel-spawning.js）。
+    CancelSpawning,
     /// controller 对象的动作（官方 processor.js:306-311 分派，intent 白名单
     /// `activateSafeMode: {}`——system.js:34；语义链见 settle/controller.rs）。
     /// 与 CreateCreep 同理不在 creepActions 序列（EXECUTION_ORDER）里。
@@ -79,6 +91,10 @@ impl Action {
             Self::SignController => "signController",
             Self::Pull => "pull",
             Self::CreateCreep => "createCreep",
+            Self::RenewCreep => "renewCreep",
+            Self::RecycleCreep => "recycleCreep",
+            Self::SetSpawnDirections => "setSpawnDirections",
+            Self::CancelSpawning => "cancelSpawning",
             Self::ActivateSafeMode => "activateSafeMode",
         }
     }
@@ -109,6 +125,10 @@ impl Action {
             "signController" => Self::SignController,
             "pull" => Self::Pull,
             "createCreep" => Self::CreateCreep,
+            "renewCreep" => Self::RenewCreep,
+            "recycleCreep" => Self::RecycleCreep,
+            "setSpawnDirections" => Self::SetSpawnDirections,
+            "cancelSpawning" => Self::CancelSpawning,
             "activateSafeMode" => Self::ActivateSafeMode,
             _ => return None,
         })
@@ -167,8 +187,11 @@ impl Action {
     }
 }
 
-/// 官方执行顺序（creepActions，intents.js:15-17）。CreateCreep 是 spawn
-/// 对象的动作（spawns/intents.js），不在 creep 序列里、由 spawn 分派单独执行。
+/// 官方执行顺序（creepActions，intents.js:15-17）。CreateCreep/RenewCreep/
+/// RecycleCreep/SetSpawnDirections/CancelSpawning 是 spawn 对象的动作
+/// （spawns/intents.js:3-24 按 createCreep→renewCreep→recycleCreep→
+/// setSpawnDirections→cancelSpawning 的序分派），不在 creep 序列里、由
+/// settle/spawn.rs 的 spawn 分派单独执行。
 pub const EXECUTION_ORDER: [Action; 23] = [
     Action::Drop,
     Action::Transfer,
@@ -588,6 +611,60 @@ mod from_json_tests {
         });
         let batch = IntentBatch::from_json("p1", &list);
         assert_eq!(batch.users["p1"].room.len(), 2, "未知 room intent 名丢弃");
+    }
+
+    /// A4-i spawn 族白名单（system.js:39/60/62/73）：renewCreep/recycleCreep
+    /// 只认 id、setSpawnDirections 的 number[]、cancelSpawning 空载荷；四者
+    /// 都不在 EXECUTION_ORDER（spawns/intents.js 的 spawn 分派序）里。
+    #[test]
+    fn from_json_spawn_family_whitelist() {
+        let spawn = "kk0000000000000021";
+        let creep = "kk0000000000000022";
+        let list = serde_json::json!({
+            spawn: {
+                "renewCreep": { "id": creep, "forged": 1 },
+                "recycleCreep": { "id": creep },
+                "setSpawnDirections": { "directions": [3, 5, "7tail", 3] },
+                "cancelSpawning": { "forged": "field" }
+            }
+        });
+        let batch = IntentBatch::from_json("p1", &list);
+        let user = &batch.users["p1"];
+        let spawn_id = ObjId::parse(spawn).unwrap();
+        let creep_id = ObjId::parse(creep).unwrap();
+        let actions = &user.objects[&spawn_id];
+        assert_eq!(actions.len(), 4);
+        assert_eq!(
+            actions[&Action::RenewCreep].id,
+            Some(creep_id),
+            "renewCreep 只留 id"
+        );
+        assert_eq!(
+            actions[&Action::RecycleCreep].id,
+            Some(creep_id),
+            "recycleCreep 只留 id"
+        );
+        assert_eq!(
+            actions[&Action::SetSpawnDirections].directions,
+            vec![3, 5, 7],
+            "number[]：parseInt 截断（\"7tail\"→7）+ 保序去重"
+        );
+        let cancel = &actions[&Action::CancelSpawning];
+        assert_eq!(cancel.id, None, "cancelSpawning 空白名单——无字段");
+        // 名字与 parse 往返 + 不在 creep 执行序
+        for (action, name) in [
+            (Action::RenewCreep, "renewCreep"),
+            (Action::RecycleCreep, "recycleCreep"),
+            (Action::SetSpawnDirections, "setSpawnDirections"),
+            (Action::CancelSpawning, "cancelSpawning"),
+        ] {
+            assert_eq!(Action::parse(name), Some(action));
+            assert_eq!(action.name(), name);
+            assert!(
+                !EXECUTION_ORDER.contains(&action),
+                "{name} 不在 creepActions 序列（spawns/intents.js 的 spawn 分派序）"
+            );
+        }
     }
 
     /// B2 controller 族白名单（system.js:34/36/40/46/67/74）：五个 creep 动作

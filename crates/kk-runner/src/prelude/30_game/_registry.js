@@ -23,6 +23,10 @@
     world: { time: 0, cpu: { limit: 20, tickLimit: 500, bucket: 10000 }, rooms: {}, objects: [] },
     terrainByRoom: {},
     objectsById: new Map(),
+    // 预置 Object 的最早捕获（game.js 段装配时再赋同值）：先于 game.js 装配的
+    // 段（structures.js 的 Store 类等）在装配期即需引用——玩家 tick 内执行
+    // 路径一律经它，不得经可交换的 globalThis.Object（对抗评审 P1 全家桶原则）
+    __Object: Object,
     // 原始投影 id 索引（官方 runtimeData.roomObjects 的等价物）：beginTick 从
     // world.objects 重建。类原型上的字段 getter/方法经 rawData(id) 回查它——
     // 跨 tick 旧壳的未缓存字段读到当前 tick 值（官方 data 闭包引用模块级

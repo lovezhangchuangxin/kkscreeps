@@ -107,6 +107,9 @@
 | CREEP_METHODS 超集/缺集（A3b.1 登记，承 A2） | 桩列表含 spawn/recycleCreep/renewCreep/moveHead（非官方 Creep 方法）；缺 getActiveBodyparts/notifyWhenAttacked/signController | A4 方法族换真时按官方 creeps.js 全集对表收敛 |
 | Memory 破损态的优雅降级（A3b.1 登记，评审 1） | `Memory.creeps = 5` 类破损后官方读 undefined/写抛专用错（creeps.js:94-120 的 _.isObject 特判）；我方 strict 下写属性 TypeError | 玩家自伤边角，文案差异；随 A4 memory 面批次对齐 |
 | upgradeBlocked 未暴露（A3b.1 登记） | 官方 controller getter 有（structures.js:147）；我方 Controller 字段表未列（投影有 upgrade_blocked） | A4-iii controller API 面连同 reservation/sign/safeModeCooldown 投影一起补 |
+| prelude lodash 共享实例（A4-i 评审 2 P2-2 登记，承 M0） | 官方把 engine bundle 编进玩家 isolate、内建共享，**唯独 lodash 私有**（user-vm.js:38 + game.js:478-480 的 runInContext 独立实例）；我方 `__kkp.lodash === globalThis._` 同一实例——玩家改写 _.contains/_.isArray 等可骗 API 判定门 | 全部状态改变经 Rust 结算真值裁决（from_json body 白名单/directions range/calcCreepCost 消毒后计费——谎言只作用于攻击者自己的返回码）；私有 lodash 副本（runInContext 同构）为轨道级结构项归 M2B |
+| spawn 族数组载荷的出口注入面（A4-i 评审 2 P3 登记） | body/directions 数组经引用入 intents，出口 sanitizedStringify 只摘两根原型 toJSON——数组**自有** toJSON 可在序列化窗口改写载荷 | 结算吸收链完备（BodyKind 白名单滤空→body.is_empty 早退/MAX_CREEP_SIZE 截断/消毒后计费+真值扣费/越界整单拒）——注入更贵 body→扣费失败、更便宜→等价合法传参；代码注释"数组元素经净化窗口兜底"措辞仅对继承面成立（已修正认知） |
+| storage 容量的 RCL 归零（A4-i 评审 1 P3-4 登记） | 官方 storages/tick.js:8 按 RCL/归属把 storeCapacity 归零（controller 失效→0）；我方投影恒 1e6 | M2 无结构停用路径不可达（isActive/RCL 门未接线）；随结构停用批清偿 |
 
 ## 四、验收关卡（不做完不算兼容）
 

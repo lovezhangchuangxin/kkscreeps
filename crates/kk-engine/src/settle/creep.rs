@@ -1214,25 +1214,83 @@ fn intent_generate_safe_mode(w: &mut Working, id: ObjId, data: &IntentData) {
     }
 }
 
-/// 官方 creeps/tick.js（M1 子集）：移动落格、TTL 死亡、疲劳恢复。
+/// 官方 creeps/tick.js（M1 子集）：孵化中的雏形自愈/出生（spawn 侧的对偶
+/// 路径）、移动落格、ageTime 首触赋值、TTL 死亡、疲劳恢复。
 pub fn creep_tick(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
     // 移动落格（movement.js execute）
     movement_execute(w, id)?;
     if !w.room.objects.contains_key(&id) {
         return Ok(()); // 结算中被移除（不会发生于 M1 路径，防御）
     }
-    let (spawning, age_time) = match w.creep(id) {
-        Some(c) => (c.spawning, c.age_time),
+    let (spawning, age_time, x, y, name) = match w.creep(id) {
+        Some(c) => (c.spawning, c.age_time, c.x, c.y, c.name.clone()),
         None => return Ok(()),
     };
-    if !spawning {
+    if spawning {
+        // 官方 tick.js:10-27：孵化中的雏形——同格无 spawn（M2 无 invaderCore
+        // 孵化）→ 移除；spawn 任务已清/换名 → 雏形侧出生（cancelSpawning 移除
+        // 雏形、spawn 侧 spawn_tick 出生并清任务，正常路径不可达——防御对偶）。
+        // 出生后**不**走 else 的 ageTime/TTL 分支（官方 if/else 互斥——出生
+        // 雏形的寿命在下一 tick 赋值），但共用尾部的疲劳/伤害照常
+        let spawn_id = w
+            .index
+            .at(x as usize, y as usize)
+            .iter()
+            .find(|tid| matches!(w.room.objects.get(tid), Some(RoomObject::Spawn(_))))
+            .copied();
+        match spawn_id {
+            None => {
+                w.remove_obj(id);
+                return Ok(());
+            }
+            Some(sid) => {
+                let mismatch = match w.room.objects.get(&sid) {
+                    Some(RoomObject::Spawn(s)) => {
+                        s.spawning.as_ref().map(|j| j.name.as_str()) != Some(name.as_str())
+                    }
+                    _ => true,
+                };
+                if mismatch {
+                    let job_directions = match w.room.objects.get(&sid) {
+                        Some(RoomObject::Spawn(s)) => s
+                            .spawning
+                            .as_ref()
+                            .map(|j| j.directions.clone())
+                            .unwrap_or_default(),
+                        _ => Vec::new(),
+                    };
+                    super::spawn::born_creep(w, sid, &name, &job_directions);
+                }
+            }
+        }
+    } else {
+        // ageTime 首触赋值（官方 tick.js:88-91：孵化出生的雏形不带 ageTime——
+        // CLAIM 部件 600、其余 1500；放置路径 place.rs 已显式赋值不走此分支）
+        if age_time == 0 {
+            let has_claim = w.creep(id).is_some_and(|c| {
+                c.body
+                    .iter()
+                    .any(|p| BodyKind::from_code(p.kind) == Some(BodyKind::Claim))
+            });
+            let life = if has_claim {
+                c::CREEP_CLAIM_LIFE_TIME
+            } else {
+                c::CREEP_LIFE_TIME
+            } as u64;
+            let born_at = w.time + life;
+            if let Some(creep) = w.creep_mut(id) {
+                creep.age_time = born_at;
+            }
+        }
         // TTL 死亡（creeps/tick.js:93-95 gameTime >= ageTime-1）
-        if age_time > 0 && w.time >= age_time.saturating_sub(1) {
+        if let Some(age_time) = w.creep(id).map(|c| c.age_time)
+            && w.time >= age_time.saturating_sub(1)
+        {
             die_creep(w, id);
             return Ok(());
         }
     }
-    // 疲劳恢复（creeps/tick.js:105-108）：-2 × 存活 MOVE 部件
+    // 疲劳恢复（creeps/tick.js:105-108，两分支共用尾部）：-2 × 存活 MOVE 部件
     if let Some(c) = w.creep(id) {
         let moves = BodyKind::count_active(&c.body, BodyKind::Move) as i64;
         if moves > 0 {
@@ -1241,7 +1299,8 @@ pub fn creep_tick(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
     }
     // 延迟伤害/治疗结算（creeps/tick.js:118-150 在疲劳恢复之后）：伤害先于
     // 治疗施加、死亡判定在两者之后——同 tick 等量互相抵消；归零 → 暴力死亡
-    // （与 TTL 死亡同路径），否则重排部件分布并处理缩容掉落
+    // （与 TTL 死亡同路径），否则重排部件分布并处理缩容掉落。官方对孵化中
+    // 的雏形同样施加（攻击 intent 期照常入 _damageToApply）
     damage::apply_pending_hits(w, id);
     Ok(())
 }
