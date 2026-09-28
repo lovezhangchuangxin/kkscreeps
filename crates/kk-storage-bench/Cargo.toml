@@ -1,0 +1,27 @@
+[package]
+name = "kk-storage-bench"
+description = "存储选型基准（M2-C3）：redb vs libmdbx 微基准骨架 + 场景夹具。非正式选型，正式选型待 2A 后真实负载（ADR-008 第 7 条）"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+kk-core.workspace = true
+kk-schema.workspace = true
+kk-world.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+# 候选引擎一律 feature gate（default = []）——CI 的 workspace 构建（test/clippy/
+# fmt）不拉这两个依赖：redb 纯 Rust 但体积可观，libmdbx 走 cc/bindgen 的 C++
+# 构建。基准本机跑法：cargo run -p kk-storage-bench --release --features redb,libmdbx -- --json 报告.json
+redb = { workspace = true, optional = true }
+libmdbx = { workspace = true, optional = true }
+
+[features]
+default = []
+redb = ["dep:redb"]
+libmdbx = ["dep:libmdbx"]

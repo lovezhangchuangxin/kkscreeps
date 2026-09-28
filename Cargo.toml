@@ -23,6 +23,13 @@ kk-pathfinder = { path = "crates/kk-pathfinder" }
 kk-backend = { path = "crates/kk-backend" }
 
 deno_core = "0.412.0"
+
+# C3 存储选型基准的候选引擎（ADR-008 第 7 条）：仅作 kk-storage-bench 的
+# 可选 feature 依赖（default = []），CI 的 test/clippy --workspace 不编译它们；
+# 方法学与初轮数字见 docs/research/notes/storage-bench.md。
+redb = "4.3"
+libmdbx = "0.9"
+
 tokio = { version = "1", features = ["rt", "macros", "time", "sync"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
