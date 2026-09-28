@@ -12,6 +12,9 @@
 //! ranged/heal/boost 仍不在范围。
 //! B2 起 controller 结算族落地（creep.rs 五执行器 + controller.rs 的
 //! activateSafeMode + economy.rs 的 controllers/tick 补齐）。
+//! B3 起 death/decay 族落地（creep.rs 的 _die 全量——墓碑承接 + 死亡事件；
+//! damage.rs 的 _destroy 全量——废墟承接；economy.rs 的 tombstones/ruins
+//! tick；room.rs 的 destroyStructure；mod.rs 的 _create-energy 容器承接）。
 
 pub mod controller;
 pub mod creep;
@@ -187,7 +190,7 @@ impl<'w> Working<'w> {
         }
     }
 
-    /// 掉落资源落地（官方 _create-energy：同格同资源叠加；M1 无 container）。
+    /// 掉落资源落地（官方 _create-energy：同格同资源叠加；容器承接 B3 补齐）。
     pub fn create_energy(&mut self, x: u8, y: u8, amount: i64) {
         self.create_energy_typed(x, y, amount, 0);
     }
@@ -195,12 +198,29 @@ impl<'w> Working<'w> {
     /// 资源参数化落地（resource_type 编码 0=energy/1=power/2=G——GPT 复审
     /// P1-1：官方 _create-energy 按资源类型键同格叠加，同格异资源不并堆）。
     pub fn create_energy_typed(&mut self, x: u8, y: u8, amount: i64, res_code: u8) {
+        let name = match res_code {
+            1 => "power",
+            2 => kk_core::constants::RESOURCE_GHODIUM,
+            _ => "energy",
+        };
+        self.create_resource(x, y, amount, name);
+    }
+
+    /// 官方 _create-energy.js（B3 全量形态）：任意资源名落地——同格 container
+    /// （hits>0）先承接（容量 = CONTAINER_CAPACITY − 全槽合计，:17-27），余量
+    /// 同格同资源并堆（:29-42）。tombstone/ruin 衰减掉落的 boost 矿物等经
+    /// 命名槽承载（EnergyObj.resource）。
+    pub fn create_resource(&mut self, x: u8, y: u8, amount: i64, resource: &str) {
+        if amount <= 0 {
+            return;
+        }
+        let amount = self.deposit_into_container(x, y, resource, amount);
         if amount <= 0 {
             return;
         }
         let existing = self.index.at(x as usize, y as usize).iter().find_map(|id| {
             match self.room.objects.get(id) {
-                Some(RoomObject::Energy(e)) if e.resource_type == res_code => Some(*id),
+                Some(RoomObject::Energy(e)) if energy_resource_name(e) == resource => Some(*id),
                 _ => None,
             }
         });
@@ -215,15 +235,73 @@ impl<'w> Working<'w> {
                 }
             }
             None => {
+                let (res_code, named) = match resource {
+                    kk_core::constants::RESOURCE_GHODIUM => (2u8, None),
+                    other => (0u8, Some(other.to_string())),
+                };
                 self.insert_new(RoomObject::Energy(kk_schema::room::EnergyObj {
                     id: 0,
                     x,
                     y,
                     resource_type: res_code,
                     amount: u32::try_from(amount).unwrap_or(u32::MAX),
+                    resource: named,
                 }));
             }
         }
+    }
+
+    /// 官方 _create-energy.js:17-27 的容器承接分支：同格 container（hits>0）
+    /// 先收，容量余量 = CONTAINER_CAPACITY − 全槽合计（calcResources）；返回
+    /// 未承接的余量。container 在 typed 世界是 Generic 透传（结算范围外类型），
+    /// store 读写走 data JSON。
+    fn deposit_into_container(&mut self, x: u8, y: u8, resource: &str, amount: i64) -> i64 {
+        let container = self
+            .index
+            .at(x as usize, y as usize)
+            .iter()
+            .find(|id| {
+                self.room.objects.get(id).is_some_and(|o| {
+                    matches!(o, RoomObject::Generic(_))
+                        && movement::type_name_of(o) == "container"
+                        && damage::object_hits(o) > 0
+                })
+            })
+            .copied();
+        let Some(cid) = container else {
+            return amount;
+        };
+        let Some(RoomObject::Generic(g)) = self.room.objects.get_mut(&cid) else {
+            return amount;
+        };
+        let mut data: Value = serde_json::from_str(&g.data).unwrap_or_default();
+        // 读侧折零与 filter_map 跳过在和式中恒等（本行是口径统一）——真正的
+        // 行为修复在下方写入侧：taken 已扣减而不入槽也不退回 = 资源静默灭失
+        //（B3 评审 2 P3-2 + 清偿复审 P3-1 归因勘误）
+        let total_before = data
+            .pointer("/store")
+            .and_then(Value::as_object)
+            .map(|s| s.values().map(|v| v.as_i64().unwrap_or(0)).sum::<i64>())
+            .unwrap_or(0);
+        let headroom = kk_core::constants::CONTAINER_CAPACITY - total_before;
+        let taken = amount.min(headroom);
+        if taken <= 0 {
+            return amount;
+        }
+        // 官方 `container.store = container.store || {}`（:19-20）：缺 store
+        // 键的 container 现场建空对象后承接
+        let Some(obj) = data.as_object_mut() else {
+            return amount;
+        };
+        let store = obj.entry("store".to_string()).or_insert_with(|| json!({}));
+        let Some(store) = store.as_object_mut() else {
+            return amount;
+        };
+        let slot = store.entry(resource.to_string()).or_insert(json!(0));
+        let v = slot.as_i64().unwrap_or(0);
+        *slot = json!(v.saturating_add(taken));
+        g.data = data.to_string();
+        amount - taken
     }
 
     /// 阶段 6 入口：movement 仲裁（字段分裂借用——矩阵可变、世界只读）。
@@ -254,7 +332,8 @@ impl<'w> Working<'w> {
 
 /// 对象归属（官方 processor.js:248 的 `object.user` 面）：typed 变体直读；
 /// Generic 透传解析 data.owner。与 world_json 的 object_owner 同语义（那侧
-/// 是投影私有，此处结算侧单源）。
+/// 是投影私有，此处结算侧单源）。B3：tombstone/ruin 官方带 user（_die.js:27 /
+/// _destroy.js:38）——结算面收录（视野归集在 world_json 侧同源）。
 fn object_owner_of(obj: &RoomObject) -> Option<std::borrow::Cow<'_, str>> {
     match obj {
         RoomObject::Creep(o) => Some(o.owner.as_str().into()),
@@ -263,6 +342,8 @@ fn object_owner_of(obj: &RoomObject) -> Option<std::borrow::Cow<'_, str>> {
         RoomObject::Storage(o) => Some(o.owner.as_str().into()),
         RoomObject::Controller(o) => o.owner.as_deref().map(Into::into),
         RoomObject::ConstructionSite(o) => o.owner.as_deref().map(Into::into),
+        RoomObject::Tombstone(o) => o.owner.as_deref().map(Into::into),
+        RoomObject::Ruin(o) => o.owner.as_deref().map(Into::into),
         RoomObject::Generic(o) => serde_json::from_str::<Value>(&o.data).ok().and_then(|v| {
             v.get("owner")
                 .and_then(Value::as_str)
@@ -313,6 +394,18 @@ fn notify_when_attacked(w: &mut Working, player: &str, id: ObjId, data: &IntentD
         // ——CreepObj 无该字段且 API 面不暴露（Creep 无 notifyWhenAttacked
         // 方法），通知面未接线前不可观测，灰区登记
         _ => {}
+    }
+}
+
+/// EnergyObj 的资源名（code 0/energy、1/power、2/G 之外经命名槽——与
+/// kk-world 投影侧的 world_json::energy_resource_name 同语义；跨 crate 不能
+/// 复用 pub(crate)，此处为结算侧单源）。pub：settle_tests 锁值断言消费。
+pub fn energy_resource_name(o: &kk_schema::room::EnergyObj) -> &str {
+    match (&o.resource, o.resource_type) {
+        (Some(name), _) => name.as_str(),
+        (None, 1) => "power",
+        (None, 2) => kk_core::constants::RESOURCE_GHODIUM,
+        (None, _) => "energy",
     }
 }
 
@@ -394,7 +487,8 @@ pub fn settle_room(
     let _energy_available = spawn::energy_available(&w);
 
     // 阶段 8：逐对象 tick（官方 :342-483 的 M1 类型集；新插入对象不入本轮——
-    // 官方 lodash forEach 键快照同语义）
+    // 官方 lodash forEach 键快照同语义）。B3 补 tombstone/ruin（官方
+    // processor.js:379-382 的两行分派——衰减到点掉落全量 store 并移除）
     let ids: Vec<ObjId> = w.room.objects.keys().copied().collect();
     for id in ids {
         match w.room.objects.get(&id) {
@@ -403,9 +497,16 @@ pub fn settle_room(
             Some(RoomObject::Creep(_)) => creep::creep_tick(&mut w, id)?,
             Some(RoomObject::Spawn(_)) => spawn::spawn_tick(&mut w, id, _energy_available),
             Some(RoomObject::Controller(_)) => economy::controller_tick(&mut w, id),
+            Some(RoomObject::Tombstone(_)) => economy::tombstone_tick(&mut w, id),
+            Some(RoomObject::Ruin(_)) => economy::ruin_tick(&mut w, id),
             _ => {}
         }
     }
+
+    // 官方 saveRoomEventLog（processor.js:497 → driver/lib/index.js:583-585 的
+    // hset 整体覆写）：本 tick 事件数组随房持久化（快照 events 缓冲——玩家
+    // 下一 tick 的 room.getEventLog 读到本 tick 全量）
+    w.room.events = w.events.iter().map(Value::to_string).collect();
 
     Ok(w.events)
 }

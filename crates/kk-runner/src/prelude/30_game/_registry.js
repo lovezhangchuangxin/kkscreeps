@@ -217,7 +217,7 @@
     // construction-sites.js:46 / tombstones.js:236 / ruins.js:68 / nukes.js:40
     ConstructionSite: (o) => '[construction site (' + o.structureType + ') #' + o.id + ']',
     Tombstone: (o) => '[Tombstone #' + o.id + ']',
-    Ruin: (o) => '[ruin (' + (o.structure && o.structure.structureType) + ') #' + o.id + ']',
+    Ruin: (o) => '[ruin (' + (o.structure && o.structure.type) + ') #' + o.id + ']',
     Nuke: (o) => '[nuke #' + o.id + ']',
   };
   for (const [name, fmt] of Object.entries(OFFICIAL_TOSTRING)) {

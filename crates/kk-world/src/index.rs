@@ -79,6 +79,7 @@ mod tests {
                 y: 6,
                 resource_type: 0,
                 amount: 1,
+                resource: None,
             }),
         );
         objects.insert(
@@ -89,6 +90,7 @@ mod tests {
                 y: 6,
                 resource_type: 0,
                 amount: 2,
+                resource: None,
             }),
         );
         let mut idx = RoomIndex::build(&objects);

@@ -746,11 +746,14 @@ fn intent_pickup(w: &mut Working, id: ObjId, data: &IntentData) {
     let Some(RoomObject::Energy(target)) = w.room.objects.get(&target_id) else {
         return;
     };
-    // 官方 pickup.js:23-28：按堆的 resourceType 入对应槽——energy(0)/G(2)；
-    // power(1) 无 schema 槽（拾取维持拒绝——登记，随 power 槽扩展放开）
-    let slot_resource = match target.resource_type {
-        0 => "energy",
-        2 => "G",
+    // 官方 pickup.js:23-30：按堆的 resourceType 入开放 store 对应键——M2 双槽
+    // schema 只放 energy/G，其余（power、B3 起衰减落地的命名矿物堆——
+    // code 恒 0 + resource:Some(name)，只看 code 会把矿物洗白成能量）一律拒拾
+    //（B3 评审 2/3 交叉实证；随 power/矿物槽扩展放开）。判定走
+    // energy_resource_name 单源——code 与命名槽双态都折算后再放行
+    let slot_resource = match super::energy_resource_name(target) {
+        "energy" => "energy",
+        "G" => "G",
         _ => return,
     };
     let (tx, ty, amount) = (target.x, target.y, target.amount as i64);
@@ -1372,8 +1375,9 @@ fn intent_say(w: &mut Working, id: ObjId, data: &IntentData) {
 }
 
 /// 官方 suicide.js：intent 相即死（_die.js，dropRate=CREEP_CORPSE_RATE、
-/// violentDeath=false——墓碑/尸沉归 M1 die_creep 形态，灰区沿用 TTL 死亡的
-/// 登记）。user=='2'（Source Keeper dropRate=0）不建模——NPC 不入 M2 世界。
+/// violentDeath=false——B3 起 die_creep_with_rate 即官方 _die.js 全量，
+/// TTL/暴亡/suicide 0.2、recycle 1.0 四路 dropRate 对位）。user=='2'
+///（Source Keeper dropRate=0）不建模——NPC 不入 M2 世界。
 /// 死亡发生在 intent 相（官方同位）；已入矩阵的 move 不再落格（官方 execute
 /// 经 roomObjects forEach，死对象不被遍历——同形）。
 /// **有意分歧（A4-iv 评审 1/3 双确认登记）**：官方后序处理器（claim/
@@ -1585,17 +1589,173 @@ fn movement_execute(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
     Ok(())
 }
 
-/// creep 死亡（官方 _die.js 的 M1 形态：资源掉地、无墓碑——灰区登记）。
-/// B1 起两条死因合流：TTL 到期（tick.js:93-95）与部件全灭的暴力死亡
-/// （tick.js:134-136，damage::apply_pending_damage）。
+/// creep 死亡（官方 _die.js 全量，B3）：移除本体 → 墓碑承接全部资源
+/// （部件造价回收 + 携带 store，同格 container 先收）→ EVENT_OBJECT_DESTROYED。
+/// 四条 M2 死因合流：TTL 到期（tick.js:93-95）、部件全灭的暴亡
+/// （tick.js:134-136）、suicide（suicide.js:14）——官方均传 dropRate=undefined
+/// （落 CREEP_CORPSE_RATE=0.2，走 [`die_creep`]）；recycleCreep
+/// （recycle-creep.js:23）传 1.0（走 [`die_creep_with_rate`]）。
+/// attackType 恒 undefined（墓碑抑制分支是核弹专属，M2 无核弹路径）。
+///
+/// 不建模面（官方 NPC/宿主体系，登记报告）：userSummoned/strongholdId 跳过
+/// 回收的门（:38）；tombstoneDecay 覆盖键（:18——OSS 引擎全库无写入点）；
+/// Source Keeper 的 dropRate=0（suicide.js:14 的 user=='2'）；stats.creepsLost
+/// （:99-101 宿主统计面）。
 pub fn die_creep(w: &mut Working, id: ObjId) {
-    if let Some(c) = w.creep(id) {
-        let (x, y, energy) = (c.x, c.y, c.store.energy as i64);
-        if energy > 0 {
-            w.create_energy(x, y, energy);
+    die_creep_with_rate(w, id, c::CREEP_CORPSE_RATE);
+}
+
+pub fn die_creep_with_rate(w: &mut Working, id: ObjId, drop_rate: f64) {
+    let Some(c) = w.creep(id) else { return };
+    let (x, y, owner, name, age_time, body, store) = (
+        c.x,
+        c.y,
+        c.owner.clone(),
+        c.name.clone(),
+        c.age_time,
+        c.body.clone(),
+        c.store.clone(),
+    );
+    let time = w.time;
+    // _die.js:10-11：先移除本体
+    w.remove_obj(id);
+
+    // _die.js:16-19：decayTime = body.length × TOMBSTONE_DECAY_PER_PART
+    let decay_time = time + body.len() as u64 * c::TOMBSTONE_DECAY_PER_PART as u64;
+    // processor.js:50：_ticksToLive = ageTime − gameTime（tick 首拍维护，死亡
+    // 时点读到的即本值）
+    let ticks_to_live = age_time.saturating_sub(time);
+
+    // ---- 资源承接（_die.js:37-91；:38 `dropRate > 0` 门包住两循环——0 时
+    // 跳过回收与携带承接，墓碑仍建（空 store）） ----
+    // 墓碑 store 累计器（官方 tombstone.store 的内存对象）：energy/G 双槽 +
+    // 额外资源列表；每次入账先经同格 container 承接（:45-59/:79-90 的两段
+    // 同形分支）
+    let mut tomb = TombStore::default();
+    if drop_rate > 0.0 {
+        // :40-41 lifeTime 按 body 是否含 CLAIM 部件（_.any 不看 hits——含损毁件）
+        let life_time = if body.iter().any(|p| p.kind == BodyKind::Claim.code()) {
+            c::CREEP_CLAIM_LIFE_TIME
+        } else {
+            c::CREEP_LIFE_TIME
+        } as f64;
+        // :42 lifeRate = dropRate × _ticksToLive / lifeTime
+        let life_rate = drop_rate * ticks_to_live as f64 / life_time;
+
+        // :43-53 部件造价回收：energy 起步累加；boosted 件额外产出 boost 矿物
+        //（LAB_BOOST_MINERAL × lifeRate）与能量（LAB_BOOST_ENERGY × lifeRate）；
+        // 每件能量 = min(CREEP_PART_MAX_ENERGY, BODYPART_COST × lifeRate)。
+        // 官方键序 = bodyResources 的插入序（energy 先、矿物按 body 首现序）——
+        // 仅 container 余量竞争时可观察，按同序遍历
+        let mut energy: f64 = 0.0;
+        let mut minerals: Vec<(String, f64)> = Vec::new();
+        for part in &body {
+            if let Some(boost) = &part.boost {
+                match minerals.iter_mut().find(|(res, _)| res == boost) {
+                    Some((_, amount)) => *amount += c::LAB_BOOST_MINERAL as f64 * life_rate,
+                    None => minerals.push((boost.clone(), c::LAB_BOOST_MINERAL as f64 * life_rate)),
+                }
+                energy += c::LAB_BOOST_ENERGY as f64 * life_rate;
+            }
+            let part_cost = BodyKind::from_code(part.kind)
+                .and_then(|k| {
+                    c::BODYPART_COST
+                        .iter()
+                        .find(|(name, _)| *name == k.name())
+                        .map(|(_, v)| *v)
+                })
+                .unwrap_or(0) as f64;
+            energy += (c::CREEP_PART_MAX_ENERGY as f64).min(part_cost * life_rate);
+        }
+        // :61-76 第一循环（bodyResources：资源总额 floor 后逐键入账）
+        tomb.add(w, x, y, "energy", energy.floor() as i64);
+        for (res, amount) in minerals {
+            tomb.add(w, x, y, &res, amount.floor() as i64);
+        }
+        // :78-91 第二循环（object.store 携带资源——双槽 schema 的全集）
+        tomb.add(w, x, y, "energy", store.energy as i64);
+        tomb.add(
+            w,
+            x,
+            y,
+            kk_core::constants::RESOURCE_GHODIUM,
+            store.ghodium as i64,
+        );
+    }
+
+    // _die.js:22-34/93：墓碑落库。creepSaying 官方取 actionLog.say 的公开
+    // 遗言——位图 action_log 无文本载荷，恒 None（灰区表既有 say 登记的延伸）
+    w.insert_new(RoomObject::Tombstone(kk_schema::room::TombstoneObj {
+        id: 0,
+        x,
+        y,
+        death_time: time,
+        decay_time,
+        creep_id: Some(id.0),
+        creep_name: Some(name),
+        creep_ticks_to_live: ticks_to_live.min(u32::MAX as u64) as u32,
+        creep_body: body.iter().map(|p| p.kind).collect(),
+        creep_saying: None,
+        owner: Some(owner),
+        store: tomb.store,
+        store_extra: tomb.extra,
+    }));
+
+    // _die.js:97：死亡事件（墓碑先落、事件在后——官方同序）
+    w.push_event(
+        c::EVENT_OBJECT_DESTROYED,
+        id,
+        serde_json::json!({ "type": "creep" }),
+    );
+}
+
+/// 墓碑 store 的入账累计器（官方 _die.js 的 tombstone.store 内存对象 +
+/// 两段 container 承接分支的 Rust 形态）。
+#[derive(Default)]
+struct TombStore {
+    store: kk_schema::room::Store,
+    extra: Vec<kk_schema::room::ResourceStack>,
+}
+
+impl TombStore {
+    /// 一次资源入账：同格 container 先承接（余量竞争按入账序——官方两循环
+    /// 的 per-key 时序），余量进墓碑槽。amount ≤ 0 无事发生（官方 floor 后
+    /// `if(amount > 0)` 门）。
+    fn add(&mut self, w: &mut Working, x: u8, y: u8, resource: &str, amount: i64) {
+        if amount <= 0 {
+            return;
+        }
+        let leftover = w.deposit_into_container(x, y, resource, amount);
+        if leftover <= 0 {
+            return;
+        }
+        match resource {
+            "energy" => {
+                self.store.energy = self
+                    .store
+                    .energy
+                    .saturating_add(u32::try_from(leftover).unwrap_or(u32::MAX))
+            }
+            kk_core::constants::RESOURCE_GHODIUM => {
+                self.store.ghodium = self
+                    .store
+                    .ghodium
+                    .saturating_add(u32::try_from(leftover).unwrap_or(u32::MAX))
+            }
+            other => {
+                if let Some(slot) = self.extra.iter_mut().find(|s| s.resource == other) {
+                    slot.amount = slot
+                        .amount
+                        .saturating_add(u32::try_from(leftover).unwrap_or(u32::MAX));
+                } else {
+                    self.extra.push(kk_schema::room::ResourceStack {
+                        resource: other.to_string(),
+                        amount: u32::try_from(leftover).unwrap_or(u32::MAX),
+                    });
+                }
+            }
         }
     }
-    w.remove_obj(id);
 }
 
 // ---- 公共小工具 ----

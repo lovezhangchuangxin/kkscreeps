@@ -33,6 +33,10 @@ pub struct RoomState {
     pub name: String,
     pub terrain: Terrain,
     pub objects: BTreeMap<ObjId, RoomObject>,
+    /// 房间事件日志缓冲（B3）：最近一个 tick 的事件 JSON 数组——官方
+    /// saveRoomEventLog 每 tick 整体覆写（processor.js:497 → driver/lib/
+    /// index.js:583-585），settle 每 tick 重写本缓冲同口径；快照随房携带。
+    pub events: Vec<String>,
 }
 
 impl RoomState {
@@ -41,6 +45,7 @@ impl RoomState {
             name: name.into(),
             terrain,
             objects: BTreeMap::new(),
+            events: Vec::new(),
         }
     }
 
@@ -71,6 +76,7 @@ impl RoomState {
                 terrain: *self.terrain.as_slice(),
             },
             objects: self.objects.values().cloned().collect(),
+            events: self.events.clone(),
         }
     }
 
@@ -89,6 +95,7 @@ impl RoomState {
                 return Err(format!("快照对象 id 重复: {}", id.as_str()));
             }
         }
+        room.events = snapshot.events.clone();
         Ok(room)
     }
 }
@@ -106,6 +113,8 @@ fn set_object_id(object: &mut RoomObject, id: u64) {
         RoomObject::Flag(o) => o.id = id,
         RoomObject::Road(o) => o.id = id,
         RoomObject::Storage(o) => o.id = id,
+        RoomObject::Tombstone(o) => o.id = id,
+        RoomObject::Ruin(o) => o.id = id,
         RoomObject::Generic(o) => o.id = id,
     }
 }
@@ -261,6 +270,7 @@ mod tests {
             y: 1,
             resource_type: 0,
             amount,
+            resource: None,
         })
     }
 

@@ -114,6 +114,24 @@ fn snap_store(store: &kk_schema::room::Store) -> Value {
     Value::Object(v)
 }
 
+/// [`snap_store`] 的双槽 + 额外资源列表形态（B3：tombstone/ruin 的全资源
+/// 正量口径——boost 矿物等经 store_extra 承载的资源同入表）。
+fn snap_store_extra(
+    store: &kk_schema::room::Store,
+    extra: &[kk_schema::room::ResourceStack],
+) -> Value {
+    let mut v = match snap_store(store) {
+        Value::Object(m) => m,
+        _ => unreachable!("snap_store 恒产出对象"),
+    };
+    for stack in extra {
+        if stack.amount > 0 {
+            v.insert(stack.resource.clone(), json!(stack.amount));
+        }
+    }
+    Value::Object(v)
+}
+
 /// creep 载荷容量：活跃（hits>0）CARRY 数 × CARRY_CAPACITY，boosted 部件乘
 /// BOOSTS.carry 的 capacity 系数（KH×2/KH2O×3/XKH2O×4——constants.js BOOSTS 表；
 /// hits>0 门对照官方 _recalc-body → calcBodyEffectiveness，utils.js:623-636——
@@ -295,8 +313,28 @@ fn snapshot_json(
         RoomObject::Energy(o) => json!({
             "kind": "resource", "id": id_str,
             "pos": snap_pos(room, o.x, o.y),
-            "resourceType": match o.resource_type { 0 => "energy", 1 => "power", _ => kk_core::constants::RESOURCE_GHODIUM },
+            "resourceType": crate::world_json::energy_resource_name(o),
             "amount": o.amount,
+        }),
+        // B3 typed 变体的契约形态（vanilla snapshots.ts:405-414 / :392-402）：
+        // ticksToDecay 为裸减法（不走 remaining 家族——vanilla 原文
+        // `obj.decayTime - gameTime`，我方 saturating 钳 0 属既有登记口径）、
+        // store 全资源正量
+        RoomObject::Tombstone(o) => json!({
+            "kind": "tombstone", "id": id_str,
+            "pos": snap_pos(room, o.x, o.y),
+            "creepName": o.creep_name,
+            "deathTime": o.death_time,
+            "store": snap_store_extra(&o.store, &o.store_extra),
+            "ticksToDecay": o.decay_time.saturating_sub(time),
+        }),
+        RoomObject::Ruin(o) => json!({
+            "kind": "ruin", "id": id_str,
+            "pos": snap_pos(room, o.x, o.y),
+            "structureType": o.structure_type,
+            "destroyTime": o.destroy_time,
+            "store": snap_store_extra(&o.store, &o.store_extra),
+            "ticksToDecay": o.decay_time.saturating_sub(time),
         }),
         // 透传桶：kind 按透传 type 或 structureType 映射（tombstone/ruin/
         // mineral/deposit 有独立契约 kind——mineral 经适配器 structure 通道
@@ -703,6 +741,89 @@ mod tests {
     /// owner 三态投影锁（官方 controllers/tick.js:56 降级归零 `user = null`
     /// 哨兵）：Some → 字符串；cleared → null（玩家侧 my === false）；
     /// 从未拥有 → 无键（my === undefined）。与 snapshot.rs 同名测试层间对表。
+    /// B3：typed tombstone/ruin 的查询契约形态（vanilla snapshots.ts:405-414 /
+    /// :392-402）——七键面、ticksToDecay 裸减法、store 全资源正量；命名资源
+    /// 堆（EnergyObj.resource）经 resourceType 透出。
+    #[test]
+    fn tombstone_and_ruin_snapshot_contract() {
+        let mut world = world_with_room(); // time = 10
+        let tomb = {
+            let c = ctx(&world);
+            normalize(
+                "tombstone",
+                &serde_json::json!({
+                    "pos": [13, 13], "creepName": "w1", "deathTime": 5, "ticksToDecay": 500,
+                    "store": { "energy": 30, "XUHO2": 6 },
+                }),
+                &c,
+            )
+            .unwrap()
+        };
+        let tomb_id = world.insert("W1N1", tomb).unwrap();
+        let snap = world.object_snapshot_by_id(tomb_id).unwrap();
+        assert_eq!(snap["kind"], "tombstone");
+        assert_eq!(snap["creepName"], "w1");
+        assert_eq!(snap["deathTime"], 5);
+        assert_eq!(
+            snap["store"],
+            serde_json::json!({ "energy": 30, "XUHO2": 6 }),
+            "全资源正量（额外资源并入）"
+        );
+        assert_eq!(
+            snap["ticksToDecay"], 495,
+            "decayTime 505 − time 10（裸减法，vanilla 同式）"
+        );
+        assert_eq!(
+            snap.as_object().unwrap().len(),
+            7,
+            "契约键面：kind/id/pos/creepName/deathTime/store/ticksToDecay"
+        );
+
+        let ruin = {
+            let c = ctx(&world);
+            normalize(
+                "ruin",
+                &serde_json::json!({
+                    "pos": [14, 14], "structureType": "container", "structureOwner": "p1",
+                    "destroyTime": 8, "ticksToDecay": 500, "store": { "energy": 700 },
+                }),
+                &c,
+            )
+            .unwrap()
+        };
+        let ruin_id = world.insert("W1N1", ruin).unwrap();
+        let snap = world.object_snapshot_by_id(ruin_id).unwrap();
+        assert_eq!(snap["kind"], "ruin");
+        assert_eq!(snap["structureType"], "container");
+        assert_eq!(snap["destroyTime"], 8);
+        assert_eq!(snap["store"]["energy"], 700);
+        assert_eq!(snap["ticksToDecay"], 498, "508 − 10");
+        assert_eq!(snap.as_object().unwrap().len(), 7, "契约七键面");
+
+        // FIND 面与命名资源堆
+        assert_eq!(
+            world
+                .find_snapshots_in_room("W1N1", c::FIND_TOMBSTONES)
+                .len(),
+            1
+        );
+        assert_eq!(world.find_snapshots_in_room("W1N1", c::FIND_RUINS).len(), 1);
+        let mineral_pile = {
+            let c2 = ctx(&world);
+            normalize(
+                "resource",
+                &serde_json::json!({ "pos": [15, 15], "resourceType": "XUHO2", "amount": 12 }),
+                &c2,
+            )
+            .unwrap()
+        };
+        let pile_id = world.insert("W1N1", mineral_pile).unwrap();
+        let snap = world.object_snapshot_by_id(pile_id).unwrap();
+        assert_eq!(snap["kind"], "resource");
+        assert_eq!(snap["resourceType"], "XUHO2", "命名槽透出资源名");
+        assert_eq!(snap["amount"], 12);
+    }
+
     #[test]
     fn controller_owner_three_states() {
         let mk = |owner: Option<&str>, cleared: bool| {

@@ -279,8 +279,8 @@ pub fn intent_renew_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) {
 
 /// 官方 spawns/recycle-creep.js：目标复核（同主非孵化 creep + 邻接——
 /// **无** CLAIM 条件、**无** object.spawning 门，与 renew 的差异面）后
-/// `_die(target, 1.0, false)`——满掉落死亡（M1 死亡形态：能量掉地、无墓碑
-/// 与 EVENT_OBJECT_DESTROYED，B3 批次清偿——die_creep 既有灰区口径）。
+/// `_die(target, 1.0, false)`——dropRate=1.0 的全额造价回收（B3 起墓碑承接
+/// 链区分 TTL/暴亡/suicide 的 0.2 缺省）。
 pub fn intent_recycle_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) {
     let Some(RoomObject::Spawn(spawn)) = w.room.objects.get(&spawn_id).cloned() else {
         return;
@@ -296,7 +296,8 @@ pub fn intent_recycle_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData)
     {
         return;
     }
-    super::creep::die_creep(w, target_id);
+    // recycle-creep.js:23 的 dropRate=1.0
+    super::creep::die_creep_with_rate(w, target_id, 1.0);
 }
 
 /// 官方 spawns/set-spawn-directions.js：孵化任务存在时整组替换 directions。

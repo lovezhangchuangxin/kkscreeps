@@ -123,7 +123,8 @@ fn embed_spawn_family_chain_impl() -> anyhow::Result<()> {
         "+600 续命"
     );
 
-    // recycleCreep 全链：creep 移除 + 携带能量掉地（M1 无墓碑形态）
+    // recycleCreep 全链：creep 移除 + 携带与全额造价回收进墓碑（B3——官方
+    // recycle-creep.js:23 的 dropRate=1.0，非 0.2 缺省）
     let rich_id = e.place_object(
         "W1N1",
         "creep",
@@ -136,10 +137,17 @@ fn embed_spawn_family_chain_impl() -> anyhow::Result<()> {
     )?;
     assert_eq!(run.expr["value"], 0, "recycleCreep OK");
     assert!(e.get_object(&rich_id).is_none(), "回收目标移除");
-    let dropped = e.find_in_room("W1N1", 106);
-    assert_eq!(dropped.len(), 1, "满掉落一个 resource");
-    assert_eq!(dropped[0]["amount"], 39, "40 − 当 tick 衰减 ceil(40/1000)");
-    assert_eq!(dropped[0]["pos"]["x"], 24, "掉落位置 = 死亡格");
+    let tombstones = e.find_in_room("W1N1", 118);
+    assert_eq!(tombstones.len(), 1, "回收死亡产墓碑");
+    assert_eq!(tombstones[0]["pos"]["x"], 24, "墓碑位置 = 死亡格");
+    assert_eq!(tombstones[0]["creepName"], "rich", "尸体信息（creepName）");
+    // 契约面（vanilla TombstoneSnapshot）只有 kind/id/pos/creepName/deathTime/
+    // store/ticksToDecay 七键——creepBody 等引擎面字段不进查询快照
+    assert_eq!(
+        tombstones[0].as_object().unwrap().len(),
+        7,
+        "查询契约键面（vanilla snapshots.ts:405-414）"
+    );
     e.teardown();
     Ok(())
 }
@@ -188,7 +196,7 @@ fn embed_create_shard_validation_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// typed world + 真结算经 embed 通道可见：source 重生回满、creep TTL 死亡掉能量。
+/// typed world + 真结算经 embed 通道可见：source 重生回满、creep TTL 死亡产墓碑。
 fn embed_real_settlement_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
@@ -201,7 +209,7 @@ fn embed_real_settlement_impl() -> anyhow::Result<()> {
         "structure",
         &json!({ "pos": [10, 10], "structureType": "source", "energy": 100 }),
     )?;
-    // 短命 creep：5 tick 后死亡，携带 50 energy 掉地
+    // 短命 creep：5 tick 后死亡，携带 50 energy 由墓碑承接
     e.place_object(
         "W1N1",
         "creep",
@@ -215,14 +223,25 @@ fn embed_real_settlement_impl() -> anyhow::Result<()> {
     e.tick(1)?;
     assert_eq!(e.find_in_room("W1N1", 101).len(), 1, "TTL 未到 creep 存活");
 
-    // 越过 TTL：creep 死亡，50 energy 落在同格（死亡 tick 立即检查——
-    // 掉落 energy 此后每 tick 衰减 ceil(amount/ENERGY_DECAY)，官方 energy/tick.js）
+    // 越过 TTL：creep 死亡——B3（官方 _die.js）：产墓碑承接全部资源（M1
+    // "资源直接掉地"灰区清偿）。body 2 件 ⇒ ticksToDecay = 2×5 = 10；TTL 死亡
+    // 的造价回收 lifeRate = 0.2×1/1500 → floor 后 0，store 只含携带 50 energy；
+    // 掉落只发生在墓碑衰减到点（此后每 tick 衰减 ceil(amount/ENERGY_DECAY)，
+    // 官方 energy/tick.js）
     e.tick(4)?;
     assert_eq!(e.find_in_room("W1N1", 101).len(), 0, "TTL 到期 creep 死亡");
-    let dropped = e.find_in_room("W1N1", 106);
-    assert_eq!(dropped.len(), 1, "死亡掉落一个 resource");
-    assert_eq!(dropped[0]["amount"], 50, "掉落数量 = 携带 energy");
-    assert_eq!(dropped[0]["pos"]["x"], 20, "掉落位置 = 死亡格");
+    assert!(
+        e.find_in_room("W1N1", 106).is_empty(),
+        "携带资源不再直接掉地（墓碑承接）"
+    );
+    let tombstones = e.find_in_room("W1N1", 118);
+    assert_eq!(tombstones.len(), 1, "死亡产一枚墓碑（FIND_TOMBSTONES）");
+    assert_eq!(tombstones[0]["store"]["energy"], 50, "墓碑承接携带 energy");
+    assert_eq!(tombstones[0]["pos"]["x"], 20, "墓碑位置 = 死亡格");
+    assert_eq!(
+        tombstones[0]["ticksToDecay"], 9,
+        "decayTime = 死亡 tick 4 + 2 部件 × 5 = 14；查询时 time 已推进到 5"
+    );
 
     // 越过重生钟：source 回满 3000（放置 energy 100 + 300 tick 钟）
     e.tick(305)?;
@@ -1084,20 +1103,27 @@ fn embed_move_misc_family_impl() -> anyhow::Result<()> {
     assert_eq!(puller["fatigue"], json!(2), "被拉者的移动疲劳记在拉者头上");
     assert_eq!(pulled["fatigue"], json!(0), "被拉者无疲劳");
 
-    // suicide：当 tick 消亡，携带 40 落地（同 tick energy 衰减 1 → 39）
+    // suicide：当 tick消亡——B3 墓碑承接（官方 _die.js）：携带 40 + 造价回收
+    // min(125,50×0.2)×2 = 20（dropRate 0.2、TTL 满寿 lifeRate=0.2）⇒ store 60；
+    // 掉落发生在墓碑衰减到点（2 部件 ⇒ 10 tick）
     assert!(
         e.find_in_room("W1N1", 101)
             .into_iter()
             .all(|o| o["name"] != "martyr"),
         "suicide 当 tick 死亡"
     );
-    let dropped: Vec<_> = e
-        .find_in_room("W1N1", 106)
+    let martyrs_tomb: Vec<_> = e
+        .find_in_room("W1N1", 118)
         .into_iter()
         .filter(|o| o["pos"]["x"] == 20 && o["pos"]["y"] == 20)
         .collect();
-    assert_eq!(dropped.len(), 1, "死亡掉落一个 resource");
-    assert_eq!(dropped[0]["amount"], json!(39), "40 落地 + 当 tick 衰减 1");
+    assert_eq!(martyrs_tomb.len(), 1, "suicide 产墓碑");
+    assert_eq!(
+        martyrs_tomb[0]["store"]["energy"],
+        json!(60),
+        "携带 40 + 造价回收 20"
+    );
+    assert!(e.find_in_room("W1N1", 106).is_empty(), "不直接掉地");
     e.teardown();
     Ok(())
 }

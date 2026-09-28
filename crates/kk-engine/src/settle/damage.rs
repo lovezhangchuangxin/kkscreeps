@@ -67,9 +67,15 @@ pub fn apply_damage(
         // 属 power 体系（B1 无）；结构立即扣血
         let new_hits = object_hits(&target) - damage;
         if new_hits <= 0 {
-            // _damage.js:46-52：击毁（_destroy + EVENT_OBJECT_DESTROYED——事件与
-            // ruin 承接留 B3，见 destroy_structure 注释）
+            // _damage.js:46-52：击毁——_destroy 建废墟承接，随后落
+            // EVENT_OBJECT_DESTROYED（:51，data.type = 官方对象 type；
+            // 该事件先于反击/主攻击事件——:89/:93 的官方序）
             destroy_structure(w, target_id);
+            w.push_event(
+                c::EVENT_OBJECT_DESTROYED,
+                target_id,
+                json!({ "type": type_name_of(&target) }),
+            );
         } else {
             // _damage.js:54-57：存活则持久化新血量
             set_structure_hits(w, target_id, new_hits);
@@ -153,8 +159,8 @@ pub fn apply_pending_hits(w: &mut Working, id: ObjId) -> bool {
         new_hits = hits_max;
     }
     if new_hits <= 0 {
-        // tick.js:134-136：hits 归零 → 暴力死亡，与 TTL 死亡同路径（掉能量、
-        // 移除；墓碑与 EVENT_OBJECT_DESTROYED 留 B3）
+        // tick.js:134-136：hits 归零 → 暴力死亡，与 TTL 死亡同路径
+        //（B3 起 die_creep 即官方 _die.js 全量：墓碑/store 转移/事件）
         super::creep::die_creep(w, id);
         return false;
     }
@@ -332,12 +338,15 @@ pub fn rampart_at(w: &Working, at: (u8, u8)) -> Option<ObjId> {
         })
 }
 
-/// 官方 structures/_destroy.js 的 B1 子集：孵化中 spawn 的雏形一并移除、
-/// 结构移除。偏离登记：官方建 ruin 承接 store 并发 EVENT_OBJECT_DESTROYED
-/// （_damage.js:51）——ruin 变体与死亡事件族整批留 B3，B1 让 store 落地为
-/// 掉落能量（延续 M1 creep 死亡掉地语义，能量不凭空消失）。
-fn destroy_structure(w: &mut Working, id: ObjId) {
-    // _destroy.js:9-15：孵化中的 spawn 被毁 → 雏形 creep 一并移除（按主人+名查）
+/// 官方 structures/_destroy.js 全量（B3）：孵化中 spawn 的雏形一并移除、
+/// 建废墟承接结构存照与全量 store、移除本体。核弹抑制分支（:21
+/// `attackType != EVENT_ATTACK_TYPE_NUKE`）M2 无核弹路径——恒建废墟。
+/// invaderCore 分支（:17-19）NPC 体系不建模。
+/// 事件由调用方落账：_damage 路径在 _damage.js:51（本函数返回后 push）；
+/// destroyStructure room intent 路径见 room.rs（OSS 无 push，套件期望有
+/// ——登记报告）。
+pub(super) fn destroy_structure(w: &mut Working, id: ObjId) {
+    // _destroy.js:8-15：孵化中的 spawn 被毁 → 雏形 creep 一并移除（按主人+名查）
     let chick_query = match w.room.objects.get(&id) {
         Some(RoomObject::Spawn(s)) => s
             .spawning
@@ -362,25 +371,74 @@ fn destroy_structure(w: &mut Working, id: ObjId) {
     let Some(obj) = w.room.objects.get(&id) else {
         return;
     };
-    let (pos, store) = (obj.pos(), structure_store_energy(obj));
+    let (pos, structure_type) = (obj.pos(), type_name_of(obj).to_string());
+    // :24-36 衰减钟：RUIN_DECAY_STRUCTURES[type] || RUIN_DECAY（powerBank 10、
+    // 其余 500）；结构存照 {id, type, hits: 0, hitsMax, user}
+    let decay = c::RUIN_DECAY_STRUCTURES
+        .iter()
+        .find(|(k, _)| *k == structure_type)
+        .map(|(_, v)| *v)
+        .unwrap_or(c::RUIN_DECAY) as u64;
+    let hits_max = structure_hits_max(w, obj).map(|v| v.clamp(0, u32::MAX as i64) as u32);
+    // :37-38：user 仅真值落（官方 `if(object.user)`——空串 falsy）
+    let owner = super::object_owner_of(obj)
+        .filter(|o| !o.is_empty())
+        .map(|o| o.into_owned());
+    // :40：store = object.store || {}（全量承接——双槽 + 额外资源）
+    let (store, store_extra) = structure_store(obj);
+    // :41-45 effects/collapse（power 体系）N/A
     w.remove_obj(id);
-    if store > 0 {
-        w.create_energy(pos.0, pos.1, store);
-    }
+    w.insert_new(RoomObject::Ruin(kk_schema::room::RuinObj {
+        id: 0,
+        x: pos.0,
+        y: pos.1,
+        structure_id: id.0,
+        structure_type,
+        structure_hits_max: hits_max,
+        destroy_time: w.time,
+        decay_time: w.time + decay,
+        owner,
+        store,
+        store_extra,
+    }));
 }
 
-/// 结构携带的能量（击毁落地用；M1 仅 energy 槽）。
-fn structure_store_energy(obj: &RoomObject) -> i64 {
+/// 结构携带的全量资源（击毁废墟承接用）：typed 结构读双槽；Generic 透传
+/// （container/tower 等）解析 data.store 的开放资源对象——energy/G 进双槽、
+/// 其余进额外列表；无 store 概念的类型（road/wall）为空。
+fn structure_store(
+    obj: &RoomObject,
+) -> (kk_schema::room::Store, Vec<kk_schema::room::ResourceStack>) {
+    let mut store = kk_schema::room::Store::default();
+    let mut extra = Vec::new();
     match obj {
-        RoomObject::Spawn(o) => o.store.energy as i64,
-        RoomObject::Extension(o) => o.store.energy as i64,
-        RoomObject::Storage(o) => o.store.energy as i64,
+        RoomObject::Spawn(o) => store = o.store.clone(),
+        RoomObject::Extension(o) => store = o.store.clone(),
+        RoomObject::Storage(o) => store = o.store.clone(),
         RoomObject::Generic(o) => {
             let data: serde_json::Value = serde_json::from_str(&o.data).unwrap_or_default();
-            data.pointer("/store/energy")
-                .and_then(|v| v.as_i64())
-                .unwrap_or(0)
+            if let Some(map) = data
+                .pointer("/store")
+                .and_then(serde_json::Value::as_object)
+            {
+                for (resource, value) in map {
+                    let amount = value.as_i64().unwrap_or(0);
+                    if amount <= 0 {
+                        continue;
+                    }
+                    let amount = amount.min(u32::MAX as i64) as u32;
+                    match resource.as_str() {
+                        "energy" => store.energy = amount,
+                        kk_core::constants::RESOURCE_GHODIUM => store.ghodium = amount,
+                        other => extra.push(kk_schema::room::ResourceStack {
+                            resource: other.to_string(),
+                            amount,
+                        }),
+                    }
+                }
+            }
         }
-        _ => 0,
+        _ => {}
     }
+    (store, extra)
 }
