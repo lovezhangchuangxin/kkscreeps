@@ -33,10 +33,14 @@ impl World {
                 .rooms
                 .iter()
                 .filter(|(_, state)| {
-                    state
-                        .objects
-                        .values()
-                        .any(|o| object_owner(o).as_deref() == Some(user))
+                    state.objects.values().any(|o| {
+                        // 官方视野归集（driver/lib/runtime/data.js:113-116）显式
+                        // 跳过 flag 与 constructionSite——工地不授房视野（自审
+                        // P2：工地授视野与官方相反，且 A4 接线 createConstructionSite
+                        // 后变成玩家可自主触发的持续视野）。flag 无 owner 天然不授
+                        !matches!(o, RoomObject::ConstructionSite(_))
+                            && object_owner(o).as_deref() == Some(user)
+                    })
                 })
                 .map(|(name, _)| name)
                 .collect(),
@@ -47,14 +51,30 @@ impl World {
             let mut entry = serde_json::Map::new();
             entry.insert("name".into(), json!(name));
             entry.insert("terrain".into(), json!(&state.terrain.as_slice()[..]));
-            let (available, capacity) = room_energy(state);
-            entry.insert("energyAvailable".into(), json!(available));
-            entry.insert("energyCapacityAvailable".into(), json!(capacity));
-            rooms.insert(name.clone(), Value::Object(entry));
             if visible.contains(name) {
-                for (id, object) in &state.objects {
-                    objects.push(object_json(name, *id, object, self.time, &state.terrain));
+                let (available, capacity) = room_energy(state);
+                entry.insert("energyAvailable".into(), json!(available));
+                entry.insert("energyCapacityAvailable".into(), json!(capacity));
+            }
+            // 不可见房条目只保地形（Game.map 面全量地形，灰区登记口径）——
+            // 房间聚合（energy 等）不注入，防未来任何读 rooms[n].energy* 的
+            // 新代码泄漏敌房聚合（自审 P3：载荷面收窄，当前无消费者）
+            rooms.insert(name.clone(), Value::Object(entry));
+            let room_visible = visible.contains(name);
+            for (id, object) in &state.objects {
+                if !room_visible {
+                    // 自家工地破例导出：官方按 user 全量拉自家对象
+                    //（data.js:103），Game.constructionSites 收全部自家工地含
+                    // 不可见房（game.js:366-374）——工地不授视野（可见性判定）
+                    // 与工地全集进 Game.constructionSites（装配面）是两个正交
+                    // 官方语义，裁掉工地视野后此破例使全集仍成立
+                    let own_site = matches!(object, RoomObject::ConstructionSite(_))
+                        && object_owner(object).as_deref() == Some(user.unwrap_or(""));
+                    if !own_site {
+                        continue;
+                    }
                 }
+                objects.push(object_json(name, *id, object, self.time, &state.terrain));
             }
         }
         json!({

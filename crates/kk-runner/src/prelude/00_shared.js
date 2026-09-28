@@ -71,6 +71,8 @@
   //   官方 toString 家族如 '[creep x]'，数组得逗号拼接）；
   //   undefined → 'undefined'；其余 falsy（null/0/false/''/NaN）→ JSON.stringify
   //   （null→'null'、NaN→'null'）。join(' ')。
+  // falsy 分支官方用调用时全局 stringify（console.js:25 逐字）——玩家覆写全局
+  // 影响自家 console 渲染是官方行为，保持一致
   function fmtArgs(args) {
     return Array.prototype.map.call(args, (i) => {
       if (i && i.toString) return i.toString();

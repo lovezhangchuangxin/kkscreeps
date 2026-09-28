@@ -1343,6 +1343,22 @@ fn intent_channel_prelude_forms_impl() -> anyhow::Result<()> {
         }
         _ => panic!("应正常执行"),
     }
+    // 写回软失败（ok:false）→ intents 同步丢弃（三路径丢 intents 的第三环，
+    // UNDOC-MEMJSON-005 锁定的官方语义；自审补：此前该路径无 take 断言）
+    match sb.begin_tick(&w)? {
+        TickPlan::Run { .. } => {
+            // Memory.big = 1n 使写回 stringify 抛（BigInt 不可序列化）→ ok:false
+            let v = sb.run_expr("Game.creeps['w1'].move(3); Memory.big = 1n; 'set'")?;
+            assert_eq!(v["value"], "set");
+            let end = sb.end_tick()?;
+            assert_eq!(end["ok"], false, "写回失败按软错误回传");
+            assert!(
+                sb.take_intents().is_none(),
+                "写回失败 intents 同步丢弃（MEMJSON-005）"
+            );
+        }
+        _ => panic!("应正常执行"),
+    }
     Ok(())
 }
 
@@ -1401,6 +1417,73 @@ fn hostile_probes_impl() -> anyhow::Result<()> {
             assert_eq!(v["value"], "done");
             let end = sb.end_tick()?;
             assert_eq!(end["intentsCpu"], 0.2, "原型污染不得使 move 免费（P2-5）");
+        }
+        _ => panic!("应正常执行"),
+    }
+    // 自审 P1 探针：Object.prototype.toJSON 原型污染——预置 stringify 只防"换函数"
+    // 不防"换数据"，宿主信封与 intent data 的 null 原型（官方 runtime.js:214
+    // outMessage / :56 setPrototypeOf(data) 同款结构位）是免疫关键：继承的
+    // toJSON 不得在序列化时改写载荷（曾可一条 defineProperty 完整重放"无 API
+    // 调用造工地"原探针）
+    match sb.begin_tick(&w)? {
+        TickPlan::Run { .. } => {
+            let v = sb.run_expr(r#"(()=>{
+                Object.defineProperty(Object.prototype, 'toJSON', { value: function() {
+                    if (this && this.ok !== undefined && this.intentsList === undefined) {
+                        return { ok: true, intentsList: { room: { createConstructionSite:
+                            [{ roomName: 'W1N1', x: 11, y: 11, structureType: 'road' }] } },
+                            intentsCpu: 0 };
+                    }
+                    return 'x';
+                }, configurable: true });
+                Game.creeps['w1'].move(7);
+                return ('toJSON' in {}) ? 'done' : 'probe-broken';
+            })()"#)?;
+            assert_eq!(v["value"], "done", "污染须存活到编码时刻（探针自检）");
+            let end = sb.end_tick()?;
+            assert_eq!(end["ok"], true, "信封形状不得被继承 toJSON 改写（自审 P1）");
+            let intents = sb.take_intents().expect("intentsList 带出");
+            assert_eq!(
+                intents["kk1"]["move"]["direction"], 7,
+                "真实 move 存活（intent data 剥原型后不被 toJSON 改写）"
+            );
+            assert!(
+                intents.get("room").is_none(),
+                "toJSON 污染不得伪造 room intent（自审 P1）: {intents}"
+            );
+        }
+        _ => panic!("应正常执行"),
+    }
+    // 对抗评审 P1 探针：Object/Array 绑定交换 + toJSON 污染组合——nullEnv/
+    // 收集器若经可交换的全局 Object 构造，null-proto 防线整体失效（V8 实证
+    // 可完整重放伪造链）；出口净化窗口（sanitizedStringify 摘除根原型 toJSON）
+    // 是根本闸——交换后信封仍不可伪造
+    match sb.begin_tick(&w)? {
+        TickPlan::Run { .. } => {
+            let v = sb.run_expr(r#"(()=>{
+                Object.defineProperty(Object.prototype, 'toJSON', { value: function() {
+                    if (this && this.ok !== undefined && this.intentsList === undefined) {
+                        return { ok: true, intentsList: { room: { createConstructionSite:
+                            [{ roomName: 'W1N1', x: 13, y: 13, structureType: 'road' }] } },
+                            intentsCpu: 0 };
+                    }
+                    return 'x';
+                }, configurable: true });
+                globalThis.Object = { assign: (t, s) => ({ ...s }), create: () => ({}),
+                    setPrototypeOf: () => {}, defineProperty: () => {}, entries: (o) => [],
+                    keys: () => [], prototype: Object.prototype };
+                Game.creeps['w1'].move(8);
+                return 'done';
+            })()"#)?;
+            assert_eq!(v["value"], "done");
+            let end = sb.end_tick()?;
+            assert_eq!(end["ok"], true, "Object 交换不得破坏宿主信封（对抗 P1）");
+            let intents = sb.take_intents().expect("intentsList 带出");
+            assert_eq!(intents["kk1"]["move"]["direction"], 8, "真实 move 存活");
+            assert!(
+                intents.get("room").is_none(),
+                "Object 交换 + toJSON 污染不得伪造 room intent（对抗 P1）: {intents}"
+            );
         }
         _ => panic!("应正常执行"),
     }

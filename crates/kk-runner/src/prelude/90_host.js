@@ -13,7 +13,28 @@
   // 预置 JSON 函数（官方 systemFunctions.JSON 同款语义）：宿主消息编码不得
   // 经玩家可覆写的全局——覆写全局 stringify 曾可伪造 intentsList（外部复审
   // P1 实证：无 API 调用造出工地）。玩家自己的代码仍用全局 JSON，不受影响。
+  // 信封一律 null 原型 + 出口一律净化序列化（sanitizedStringify——序列化窗口
+  // 内摘除根原型 toJSON，对抗评审 P1 的 Object/Array 绑定交换与数组 toJSON 面；
+  // 官方 ExternalCopy 出口对玩家 toJSON 同样不可见，runtime.js:296）。
+  // 回程 parse 预置化（自审 P2）；eval 捕获（对抗评审 P2：全局 eval 可交换使
+  // 探针代码根本不执行）。
   const stringify = JSON.stringify;
+  const parse = JSON.parse;
+  const __eval = eval;
+  const gw = globalThis.__kkp.gw;
+  const nullEnv = gw.nullEnv;
+  const safeStringify = gw.sanitizedStringify;
+  const hostObject = gw.__Object;
+  // 玩家异常对象的消息拼接安全化：e.message/stack 可是污染 getter（抛错逃逸
+  // 会被宿主误判硬中断并错误计费）——不可打印错误降级为占位文本
+  function safeErrorText(e, preferStack) {
+    try {
+      const m = preferStack ? (e && e.stack) || e : (e && e.message) || e;
+      return String(m);
+    } catch (_) {
+      return 'unprintable player error';
+    }
+  }
 
   const { missing, hasProbes, stubCalls } = globalThis.__kkp;
   const { require: requireFn, moduleCache, lodash: _ } = globalThis.__kkp.cjs;
@@ -31,22 +52,25 @@
         const main = requireFn('main');
         if (main && typeof main.loop === 'function') {
           main.loop();
-          out = { ok: true };
+          out = nullEnv({ ok: true });
         } else {
           // 官方 game.js:555-563 run()：`if(isObject && isFunction(loop)) {...}` 无
           // else——未导出 loop() 的 main 静默跳过，不是玩家错误（不打 console、
           // 不计入错误统计；bot-check 的 errored_ticks 口径据此）
-          out = { ok: true };
+          out = nullEnv({ ok: true });
         }
       } catch (e) {
         // 官方行为：未捕获的玩家错误打进 console（bot-check 据此采集每 tick 错误流）
-        console.error(String((e && e.stack) || e));
-        out = { ok: false, kind: 'runtime', error: String((e && e.stack) || e) };
+        const msg = safeErrorText(e, true);
+        console.error(msg);
+        out = nullEnv({ ok: false, kind: 'runtime', error: msg });
       }
       try {
-        return stringify(out);
+        return safeStringify(out);
       } catch (e) {
-        return stringify({ ok: true, note: 'loop 完成（结果不可序列化）' });
+        // 字面量终极兜底（对抗评审 P1）：sanitizedStringify 自身失败（如根原型
+        // 被 freeze）时不得二次抛——逃逸会被宿主判硬中断并误计费
+        return '{"ok":true,"note":"loop 完成（结果不可序列化）"}';
       }
     },
     /** 求值一段玩家表达式代码，返回末表达式值（screeps-ok runPlayer 通道）。
@@ -59,16 +83,16 @@
         // Deno.core.ops 引用等引擎内部状态）的访问；官方控制台命令同样在全局作用域
         // 求值（game.js:535-547），不得有超常特权（screeps-ok 契约）
         // eslint-disable-next-line no-eval
-        v = (0, eval)(code);
+        v = __eval(code);
       } catch (e) {
         // eval 在全局作用域抛出的 SyntaxError 即解析期错误（官方控制台同口径）；
         // 运行期错误（含运行期动态构造的语法异常）归 runtime
         const kind = e instanceof SyntaxError ? 'syntax' : 'runtime';
-        out = { ok: false, kind, error: String((e && e.message) || e) };
-        return stringify(out);
+        out = nullEnv({ ok: false, kind, error: safeErrorText(e, false) });
+        return safeStringify(out);
       }
       if (v === undefined) {
-        return stringify({ ok: true, value: null });
+        return safeStringify(nullEnv({ ok: true, value: null }));
       }
       try {
         // 活游戏对象检测，逐条对齐 vanilla 参照实现（buildConsoleCommand）：
@@ -87,30 +111,35 @@
           }
         }
         if (serErr !== null) {
-          return stringify({ ok: false, kind: 'serialization', error: serErr });
+          return safeStringify(nullEnv({ ok: false, kind: 'serialization', error: serErr }));
         }
         // 循环引用等 stringify 失败 → serialization（区别于检测代码自身抛错 → runtime）
         let json;
         try {
-          json = stringify(v);
+          // 值序列化同入净化窗口：官方控制台返回值走 ivm（不经 stringify、
+          // 不调玩家 toJSON），净化更贴官方（对抗评审 P2：探针读值不得被污染改写）
+          json = safeStringify(v);
         } catch (e) {
-          return stringify({
+          return safeStringify(nullEnv({
             ok: false, kind: 'serialization',
-            error: 'Return value is not JSON-serializable: ' + (e && e.message),
-          });
+            error: 'Return value is not JSON-serializable: ' + safeErrorText(e, false),
+          }));
         }
         // toJSON 返回非字符串（如 undefined）时 stringify 产物不是字符串——失败
         // 发生在返回值序列化阶段，按契约归 serialization（不得漏到 JSON.parse 再
         // 被"not valid JSON"误报 runtime）
         if (typeof json !== 'string') {
-          return stringify({
+          return safeStringify(nullEnv({
             ok: false, kind: 'serialization',
             error: 'Return value is not JSON-serializable: toJSON produced ' + typeof json,
-          });
+          }));
         }
-        return stringify({ ok: true, value: JSON.parse(json) });
+        // 值规范化往返的 parse 走预置捕获（覆写全局 parse 可伪造 {ok:true,value}
+        // 的 value——runExpr 是验收探针读值通道，自审 P2）
+        return safeStringify(nullEnv({ ok: true, value: parse(json) }));
       } catch (e) {
-        return stringify({ ok: false, kind: 'runtime', error: String((e && e.message) || e) });
+        // 字面量终极兜底（对抗评审 P1）：sanitizedStringify 自身失败时不得二次抛
+        return '{"ok":false,"kind":"runtime","error":"runExpr 出口序列化失败"}';
       }
     },
     /** tick 末：Memory 写回 RawMemory + 本 tick intentsList 一次性带出（官方
@@ -118,33 +147,49 @@
      *  传出）。返回 JSON 字符串（宿主 exec_json 约定）：
      *  {ok:true, intentsList, intentsCpu} | {ok:false, error, intentsList, intentsCpu}。 */
     endTick() {
-      const out = writeBackMemory();
+      // writeBackMemory 整体守卫（对抗评审 P3）：玩家异常对象的 message getter
+      // 可在写回 catch 块内再抛——逃逸会被宿主判硬中断并误计费
+      let out;
+      try {
+        out = writeBackMemory();
+      } catch (e) {
+        out = nullEnv({ ok: false, error: 'Memory 写回阶段异常: ' + safeErrorText(e, false) });
+      }
       const payload = intentsPayload();
       if (typeof out === 'object' && out !== null) {
         out.intentsList = payload ? payload.list : null;
         out.intentsCpu = payload ? payload.cpu : 0;
       }
-      return stringify(out);
+      // 编码守卫（与 writeBackMemory 同构，自审 P2-3）：载荷携带抛错 getter 等
+      // 病态形态时 stringify 抛错不得逃逸——逃逸会被宿主判硬中断并误计费。
+      // 净化窗口覆盖信封与 intentsList 全图（数组通道同面）
+      try {
+        return safeStringify(out);
+      } catch (e) {
+        // 字面量终极兜底（同 runLoop）：ok:false 使宿主按写回失败处置（丢 intents）
+        return '{"ok":false,"error":"endTick 序列化失败"}';
+      }
     },
     /** 清空 require 缓存（玩家代码更新/换模块表时）。lodash 预置保留。 */
     resetModules() {
-      for (const k of Object.keys(moduleCache)) delete moduleCache[k];
+      for (const k of hostObject.keys(moduleCache)) delete moduleCache[k];
       moduleCache.lodash = { exports: _ };
     },
     drainMissing() {
       // 两桶：missing（get-trap 确定缺失）+ hasProbes（has-trap 低置信，可能是否定式探测）
-      const out = { missing: {}, hasProbes: {} };
+      // 内层桶同样 null 原型——污染可从任意层级的继承 toJSON 触发
+      const out = nullEnv({ missing: Object.create(null), hasProbes: Object.create(null) });
       for (const [k, c] of missing) out.missing[k] = c;
       for (const [k, c] of hasProbes) out.hasProbes[k] = c;
       missing.clear();
       hasProbes.clear();
-      return stringify(out);
+      return safeStringify(out);
     },
     drainStubCalls() {
-      const out = {};
+      const out = nullEnv({});
       for (const [k, c] of stubCalls) out[k] = c;
       stubCalls.clear();
-      return stringify(out);
+      return safeStringify(out);
     },
   };
   // __kk 不可枚举（玩家代码不应该把它当 API 面）且整体冻结——防止玩家覆盖

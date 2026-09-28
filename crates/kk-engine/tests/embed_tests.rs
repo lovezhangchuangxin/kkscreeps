@@ -684,12 +684,14 @@ fn embed_per_viewer_and_caps_impl() -> anyhow::Result<()> {
     let run = e.run_player(
         "p1",
         &format!(
-            "[Object.keys(Game.rooms).sort().join(','), Object.keys(Game.creeps).join(','), String(Game.getObjectById({secret_json}) === undefined)]"
+            "[Object.keys(Game.rooms).sort().join(','), Object.keys(Game.creeps).join(','), String(Game.getObjectById({secret_json}) == null)]"
         ),
     )?;
     let v = &run.expr["value"];
     assert_eq!(v[0], "W1N1", "敌方房间不进 Game.rooms: {v:?}");
     assert_eq!(v[1], "mine", "Game.creeps 只收本人: {v:?}");
+    // getObjectById 对不可见对象返回 null（官方同构；== null 同时覆盖 undefined）
+    assert_eq!(v[2], "true", "敌方对象 getObjectById 得 null: {v:?}");
 
     // p2 的视图对偶
     let run = e.run_player("p2", "Object.keys(Game.rooms).join(',')")?;
@@ -719,5 +721,34 @@ fn embed_per_viewer_and_caps_impl() -> anyhow::Result<()> {
         100,
         "MAX_CONSTRUCTION_SITES 总量帽：120 条只落 100"
     );
+
+    // 自家工地全集（官方 data.js:103 按 user 全量拉 + game.js:366-374）：工地
+    // 不授房视野（data.js:113-116），但 Game.constructionSites 收全部自家工地
+    // 含不可见房——两个语义正交（对抗评审 P2 的回归锁：world 破例导出 +
+    // buildGame visibleRooms 排除工地）
+    let own_site_in_hidden_room = e.place_object(
+        "W2N2",
+        "constructionSite",
+        &json!({ "pos": [15, 15], "owner": "p1", "structureType": "road" }),
+    )?;
+    let site_json = serde_json::to_string(&own_site_in_hidden_room)?;
+    let run = e.run_player(
+        "p1",
+        &format!(
+            "[Object.keys(Game.rooms).sort().join(','), \
+             Object.keys(Game.constructionSites).join(','), \
+             String(Game.getObjectById({site_json}) !== null), \
+             String(Game.rooms['W2N2'])]"
+        ),
+    )?;
+    let v = &run.expr["value"];
+    assert_eq!(v[0], "W1N1", "工地不授房视野：W2N2 不进 Game.rooms: {v:?}");
+    let sites_keys = v[1].as_str().unwrap_or_default();
+    assert!(
+        sites_keys.split(',').any(|k| k == site_json.trim_matches('"')),
+        "自家工地全集进 Game.constructionSites（含不可见房，此前帽测试的 100 工地 + 新 1）: {v:?}"
+    );
+    assert_eq!(v[2], "true", "不可见房自家工地 getObjectById 可达: {v:?}");
+    assert_eq!(v[3], "undefined", "工地所在不可见房 Game.rooms 条目 undefined: {v:?}");
     Ok(())
 }

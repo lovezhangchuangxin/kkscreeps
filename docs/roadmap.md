@@ -62,7 +62,7 @@
 [端到端验收方案](architecture/performance-acceptance.md) 建立基线。三份契约均为 M2 目标，
 其字节布局与负载数字须经过原型和行为测试后冻结。
 
-- **2A 沙箱运行时 + 玩家 API 核心**（进行中，方案 [m2-playable.md](plans/m2-playable.md)，三轨并行——A 沙箱/API、B 引擎结算、C pathfinder/存储；A1 查询面契约快照 277→374、A2+B1/B1.1 intent 通道与动作方法族 374→592、A2.1 外部复审修复（安全网收口）592→648，全程零转红）：deno_core 沙箱正式接入（一实例一线程、预算桶、内存双闸门、快照、遮蔽内部函数——全部按 [sandbox.md](architecture/sandbox.md)）；玩家 API 先做核心（Game/Room/Creep/基础指令/Memory）。
+- **2A 沙箱运行时 + 玩家 API 核心**（进行中，方案 [m2-playable.md](plans/m2-playable.md)，三轨并行——A 沙箱/API、B 引擎结算、C pathfinder/存储；A1 查询面契约快照 277→374、A2+B1/B1.1 intent 通道与动作方法族 374→592、A2.1 外部复审修复（安全网收口）592→648、A3a prelude 30_game/ 零行为拆分（棘轮零翻转）与自审清偿（toJSON null-proto 结构位/工地不授视野/spawn 入 structures/预置 parse 全链）648→649，全程零转红）：deno_core 沙箱正式接入（一实例一线程、预算桶、内存双闸门、快照、遮蔽内部函数——全部按 [sandbox.md](architecture/sandbox.md)）；玩家 API 先做核心（Game/Room/Creep/基础指令/Memory）。
   - 关卡：screeps-ok 通过率过半（内部目标，随 2A 时的实际基线校准）。
 - **2B 完整玩家 API + 存储 + 完整世界**：API 补全；存储落盘（redb vs libmdbx 基准后定，[ADR-008](decisions/ADR-008-runtime-model.md) 第 7 条）；命令行启动一个完整世界，含机器人对手。
   - 关卡：screeps-ok ≥95% 且每个未过用例有登记的差异说明（参照：xxscreeps 当前为 91%）；真实 bot 全功能运行。
