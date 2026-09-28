@@ -1914,7 +1914,7 @@ fn resource_family_prelude_matrix_impl() -> anyhow::Result<()> {
         "time": 1,
         "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
         "user": "p1",
-        "rooms": { "W1N1": { "name": "W1N1" } },
+        "rooms": { "W1N1": { "name": "W1N1" }, "W2N1": { "name": "W2N1" } },
         "objects": [
             { "id": "kk1", "type": "creep", "room": "W1N1", "x": 25, "y": 25, "name": "w1",
               "owner": "p1", "body": ["carry", "carry"], "store": { "energy": 80 } },
@@ -1943,7 +1943,25 @@ fn resource_family_prelude_matrix_impl() -> anyhow::Result<()> {
             { "id": "r1", "type": "resource", "room": "W1N1", "x": 25, "y": 24,
               "resourceType": "energy", "amount": 30 },
             { "id": "r2", "type": "resource", "room": "W1N1", "x": 45, "y": 44,
-              "resourceType": "energy", "amount": 30 }
+              "resourceType": "energy", "amount": 30 },
+            // A4-ii 评审 3 P1 补测面：nuker/powerBank/terminal（W1N1，kk2 邻接
+            // (25,27)/(26,27)/(24,27)；powerBank 手写世界造 store 使 :532 分支
+            // 可达——官方 powerBank 无 store 在目标门即拒）与 p2 safeMode 房
+            { "id": "nk1", "type": "structure", "structureType": "nuker", "room": "W1N1",
+              "x": 25, "y": 27, "owner": "p2", "store": { "energy": 100 } },
+            { "id": "pb1", "type": "structure", "structureType": "powerBank", "room": "W1N1",
+              "x": 26, "y": 27, "owner": "p2", "store": { "power": 100 } },
+            { "id": "tm1", "type": "structure", "structureType": "terminal", "room": "W1N1",
+              "x": 24, "y": 27, "owner": "p2", "store": { "energy": 500 },
+              "effects": [{ "power": 15, "ticksRemaining": 5 }] },
+            { "id": "tm2", "type": "structure", "structureType": "terminal", "room": "W1N1",
+              "x": 26, "y": 25, "owner": "p1", "store": { "energy": 500 } },
+            { "id": "w7", "type": "creep", "room": "W2N1", "x": 25, "y": 25, "name": "w7",
+              "owner": "p1", "body": ["carry"], "store": { "energy": 0 } },
+            { "id": "k2", "type": "structure", "structureType": "controller", "room": "W2N1",
+              "x": 10, "y": 10, "level": 3, "owner": "p2", "safeMode": 100 },
+            { "id": "sp2", "type": "spawn", "room": "W2N1", "x": 26, "y": 25, "name": "Spawn2",
+              "owner": "p2", "store": { "energy": 300 }, "energyCapacity": 300 }
         ]
     });
     // 预检返回码断言宏（直持 sb——闭包形式与穿插的裸 run_expr 抢借用）
@@ -2117,6 +2135,45 @@ fn resource_family_prelude_matrix_impl() -> anyhow::Result<()> {
                     .unwrap_or("")
                     .contains("Could not find an object with ID"),
                 "官方文案: {v:?}"
+            );
+
+            // ---- withdraw 补测（A4-ii 评审 3 P1：已实现零覆盖分支）----
+            // safeMode 门（:528-530）：W2N1 是 p2 的 safeMode 生效房（k2
+            // safeMode=100 绝对挂钟 > time=1），p1 creep 提取该房任何 store 即拒
+            ck!(
+                "Game.getObjectById('w7').withdraw(Game.getObjectById('sp2'), RESOURCE_ENERGY)",
+                -1
+            );
+            // nuker/powerBank 不可提取（:532-534）——powerBank 经手写 store 造
+            // 到该分支（官方无 store 在目标门即拒）
+            ck!(
+                "Game.creeps['w2'].withdraw(Game.getObjectById('nk1'), RESOURCE_ENERGY)",
+                -7
+            );
+            ck!(
+                "Game.creeps['w2'].withdraw(Game.getObjectById('pb1'), RESOURCE_ENERGY)",
+                -7
+            );
+            // terminal 被 PWR_DISRUPT_TERMINAL(15) 封锁（:518-521）与无 effects 放行
+            ck!(
+                "Game.creeps['w2'].withdraw(Game.getObjectById('tm1'), RESOURCE_ENERGY)",
+                -7
+            );
+            // actor 用 w2（w1 的 withdraw intent 已被矩阵主链 last-wins 锁 s1——
+            // 不覆盖；w2 之前只有被拒的 nk1 调用无 intent）
+            ck!(
+                "Game.creeps['w2'].withdraw(Game.getObjectById('tm2'), RESOURCE_ENERGY, 5)",
+                0
+            );
+            // transfer 的 owner/busy 门（评审 3：同形门在 drop/withdraw 有覆盖
+            // 而 transfer 缺席）
+            ck!(
+                "Game.getObjectById('kk3').transfer(Game.creeps['w1'], RESOURCE_ENERGY, 1)",
+                -1
+            );
+            ck!(
+                "Game.creeps['w4'].transfer(Game.creeps['w1'], RESOURCE_ENERGY, 1)",
+                -4
             );
 
             // ---- pickup（官方 :566-593：my/spawning → Resource 目标 → 满仓 →

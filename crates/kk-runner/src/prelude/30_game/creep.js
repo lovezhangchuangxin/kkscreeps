@@ -347,6 +347,13 @@
   //  · assertTargetObject（官方 game.js:122-126）：预检拒绝分支里对 plain
   //    object + 24 位 id 的序列化对象抛错——调用位置与返回码次序逐条对照不动。
 
+  // 预置 Math/Array.prototype.includes（A4-ii 评审 2 清偿：缺省钳制与白名单
+  // 判定路径不得经可交换全局——交换 Math 可产负缺省绕 amount<0 前置门、劫持
+  // includes 可放宽资源白名单；结算侧真值复核均兜住，此处为判定门纪律）
+  const __MathMin = Math.min;
+  const __MathMax = Math.max;
+  const __arrayIncludes = Array.prototype.includes;
+
   /** 官方 structureTypes 键集（game.js:224-247，21 型）+ 'wall' 投影别名
    *  （classGlobalFor 将 wall/constructedWall 归并 StructureWall——手写世界
    *  两种拼法等价；官方 raw type 恒为 'constructedWall'）。 */
@@ -393,8 +400,11 @@
    *  加成随 power 批（M1 无 boost 面，两侧一致——执行器 store_capacity 同形）。 */
   function carryCapacityOf(raw) {
     let parts = 0;
-    for (const p of raw.body || []) {
-      const part = typeof p === 'string' ? { type: p, hits: 100 } : p;
+    // 索引迭代（A4-ii 评审 2：for...of 经 Array.prototype[Symbol.iterator]
+    // 运行期解析可被同 realm 污染——判定门路径纵深防御）
+    const body = raw.body || [];
+    for (let i = 0; i < body.length; i++) {
+      const part = typeof body[i] === 'string' ? { type: body[i], hits: 100 } : body[i];
       if (part && part.hits > 0 && part.type === 'carry') parts += 1;
     }
     return parts * C.CARRY_CAPACITY;
@@ -405,7 +415,11 @@
    *  controller 房保持落成值 0——build.js:134）。 */
   function extensionCapacityIn(roomName) {
     let level = null;
-    for (const o of gw.world.objects || []) {
+    // 索引迭代（A4-ii 评审 2：A4-iii.1 已修 structures.js 同模式——本处家族
+    // 扫描漏网；迭代器污染可令扫描失明/喂假 level）
+    const objs = gw.world.objects || [];
+    for (let i = 0; i < objs.length; i++) {
+      const o = objs[i];
       if (o.type === 'structure' && o.structureType === 'controller' && o.room === roomName) {
         level = o.level || 0;
         break;
@@ -464,8 +478,11 @@
     const perResource = fields.perResource;
     if (perResource && perResource[resourceType]) return perResource[resourceType];
     let reserved = 0;
-    if (perResource) for (const k of gw.__Object.keys(perResource)) reserved += perResource[k];
-    return Math.max(0, (fields.capacity || 0) - reserved);
+    if (perResource) {
+      const keys = gw.__Object.keys(perResource);
+      for (let i = 0; i < keys.length; i++) reserved += perResource[keys[i]];
+    }
+    return __MathMax(0, (fields.capacity || 0) - reserved);
   }
 
   /** 官方 utils.js:615-620 calcResources 的 store 分支（own 键求和——_.sum
@@ -475,7 +492,8 @@
     const store = raw.store;
     if (!store) return 0;
     let sum = 0;
-    for (const k of gw.__Object.keys(store)) sum += store[k];
+    const keys = gw.__Object.keys(store);
+    for (let i = 0; i < keys.length; i++) sum += store[keys[i]];
     return sum;
   }
 
@@ -491,7 +509,7 @@
   globalThis.Creep.prototype.drop = function drop(resourceType, amount) {
     if (!this.my) return C.ERR_NOT_OWNER; // :405-407
     if (this.spawning) return C.ERR_BUSY; // :408-410
-    if (!(C.RESOURCES_ALL || []).includes(resourceType)) return C.ERR_INVALID_ARGS; // :411-413
+    if (!__arrayIncludes.call(C.RESOURCES_ALL || [], resourceType)) return C.ERR_INVALID_ARGS; // :411-413
     if (!gw.rawData(this.id).store || !gw.rawData(this.id).store[resourceType]) {
       return C.ERR_NOT_ENOUGH_RESOURCES; // :414-416
     }
@@ -508,7 +526,7 @@
     if (!this.my) return C.ERR_NOT_OWNER; // :429-431
     if (this.spawning) return C.ERR_BUSY; // :432-434
     if (amount < 0) return C.ERR_INVALID_ARGS; // :435-437
-    if (!(C.RESOURCES_ALL || []).includes(resourceType)) return C.ERR_INVALID_ARGS; // :438-440
+    if (!__arrayIncludes.call(C.RESOURCES_ALL || [], resourceType)) return C.ERR_INVALID_ARGS; // :438-440
     // 目标门 :441-452。customObjects M2 无（官方 register.customObjects 恒空表
     // ⇒ 该合取项恒真，省略）。structEntry 裸解引用保留官方求值形态：目标有
     // store 时 && 短路不解引用；storeless 的 creep/powerCreep 目标官方在此
@@ -550,7 +568,7 @@
     const targetCapacity = capacityForResource(rawTarget, resourceType);
     if (!rawTarget.store || storedAmount >= targetCapacity) return C.ERR_FULL; // :473-475
     if (!amount) {
-      amount = Math.min(gw.rawData(this.id).store[resourceType], targetCapacity - storedAmount); // :477-479
+      amount = __MathMin(gw.rawData(this.id).store[resourceType], targetCapacity - storedAmount); // :477-479
     }
     if (gw.rawData(this.id).store[resourceType] < amount) return C.ERR_NOT_ENOUGH_RESOURCES; // :481-483
     if (amount + storedAmount > targetCapacity) return C.ERR_FULL; // :485-487（显式超容不钳制——拒）
@@ -566,7 +584,7 @@
     if (!this.my) return C.ERR_NOT_OWNER; // :494-496
     if (this.spawning) return C.ERR_BUSY; // :497-499
     if (amount < 0) return C.ERR_INVALID_ARGS; // :500-502
-    if (!(C.RESOURCES_ALL || []).includes(resourceType)) return C.ERR_INVALID_ARGS; // :503-505
+    if (!__arrayIncludes.call(C.RESOURCES_ALL || [], resourceType)) return C.ERR_INVALID_ARGS; // :503-505
     // 目标门 :507-516：store 面在 data() 读——未知 id 在此抛官方同文案错误
     // （rawData 的求值点 = 官方第三操作数，早于 assertTargetObject）
     if (!target || !target.id) {
@@ -614,7 +632,7 @@
     // :544-545：actor 空容量（storeCapacity − calcResources——raw 面等价）
     const emptySpace = rawStoreCapacity(gw.rawData(this.id)) - sumStore(gw.rawData(this.id));
     if (emptySpace <= 0) return C.ERR_FULL; // :546-548
-    if (!amount) amount = Math.min(emptySpace, rawTarget.store[resourceType]); // :550-552
+    if (!amount) amount = __MathMin(emptySpace, rawTarget.store[resourceType]); // :550-552
     if (amount > emptySpace) return C.ERR_FULL; // :554-556
     if (!amount || (rawTarget.store[resourceType] || 0) < amount) {
       return C.ERR_NOT_ENOUGH_RESOURCES; // :558-560

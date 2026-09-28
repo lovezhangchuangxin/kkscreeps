@@ -110,6 +110,7 @@
 | prelude lodash 共享实例（A4-i 评审 2 P2-2 登记，承 M0） | 官方把 engine bundle 编进玩家 isolate、内建共享，**唯独 lodash 私有**（user-vm.js:38 + game.js:478-480 的 runInContext 独立实例）；我方 `__kkp.lodash === globalThis._` 同一实例——玩家改写 _.contains/_.isArray 等可骗 API 判定门 | 全部状态改变经 Rust 结算真值裁决（from_json body 白名单/directions range/calcCreepCost 消毒后计费——谎言只作用于攻击者自己的返回码）；私有 lodash 副本（runInContext 同构）为轨道级结构项归 M2B |
 | spawn 族数组载荷的出口注入面（A4-i 评审 2 P3 登记） | body/directions 数组经引用入 intents，出口 sanitizedStringify 只摘两根原型 toJSON——数组**自有** toJSON 可在序列化窗口改写载荷 | 结算吸收链完备（BodyKind 白名单滤空→body.is_empty 早退/MAX_CREEP_SIZE 截断/消毒后计费+真值扣费/越界整单拒）——注入更贵 body→扣费失败、更便宜→等价合法传参；代码注释"数组元素经净化窗口兜底"措辞仅对继承面成立（已修正认知） |
 | storage 容量的 RCL 归零（A4-i 评审 1 P3-4 登记） | 官方 storages/tick.js:8 按 RCL/归属把 storeCapacity 归零（controller 失效→0）；我方投影恒 1e6 | M2 无结构停用路径不可达（isActive/RCL 门未接线）；随结构停用批清偿 |
+| 资源族判定门的预置捕获清偿（A4-ii 评审 2 清偿记录） | 缺省钳制路径裸 Math.min/max（交换可产负缺省绕 amount<0 前置门）、白名单裸 Array.prototype.includes、容量折算的 for...of 迭代（Symbol.iterator 可污染）——结算真值复核均兜住（最坏说谎码+0.2），判定门纪律统一预置（__MathMin/__MathMax/__arrayIncludes）+ 索引迭代 ×4 处 | 家族登记项：STRUCTURE_REGISTER_TYPES.has（Set.prototype.has）/.find/.some 为视野或自害路径不预置；beginTick/buildGame 裸 new Map/Set、既有 harvest/build 扫描归 A3c 装配批统一；intents 载荷对象 amount 的自有 toJSON 出口差异（官方 ExternalCopy 不调、我方序列化窗口可换值——结算四路钳死）归 M2B 出口批 |
 
 ## 四、验收关卡（不做完不算兼容）
 

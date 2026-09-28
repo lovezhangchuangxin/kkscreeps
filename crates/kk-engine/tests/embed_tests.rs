@@ -949,7 +949,7 @@ fn embed_resource_family_impl() -> anyhow::Result<()> {
     assert_eq!(snap["store"]["energy"], 50, "80 − 30");
     let dropped = e.find_in_room("W1N1", 106);
     assert_eq!(dropped.len(), 1, "drop 落地一个 resource");
-    // 掉落当 tick 即经 energy 衰减（objects/tick：ceil(30/500)=1）→ 29
+    // 掉落当 tick 即经 energy 衰减（objects/tick：ceil(30/1000)=1）→ 29
     assert_eq!(dropped[0]["amount"], 29, "掉落 30 − 当 tick 衰减 1");
     assert_eq!(dropped[0]["pos"]["x"], 25, "掉落位置 = creep 格");
     let pile_id = dropped[0]["id"].as_str().unwrap().to_string();
