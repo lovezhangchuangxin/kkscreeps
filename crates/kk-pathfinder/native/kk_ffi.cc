@@ -112,7 +112,9 @@ extern "C" int kk_pf_search(kk_pf_world_pos_t origin, const kk_pf_goal_t* goals,
 	}
 
 	// 回调句柄：nullptr → undefined（pf.cc:488-492 据此禁用回调通道）；
-	// 否则注入 C 函数指针 + user_data（Nan::Call 分派，见 compat/nan.h）。
+	// 否则注入 C 函数指针 + user_data（Nan::Call 分派，见 compat/nan.h；返回码
+	// 0/1/2/3 的语义见 kk_ffi.h 的 kk_pf_room_callback_t 注释——3 = 回调异常，
+	// 经 compat 层汇入官方 js_error 处理链 pf.cc:43-46 → :563-567）。
 	v8::Local<v8::Function> room_callback;
 	if (callback != nullptr) {
 		Value* fn = kk_compat::t_arena->alloc();

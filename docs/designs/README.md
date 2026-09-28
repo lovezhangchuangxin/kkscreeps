@@ -8,6 +8,7 @@
 |---|---|
 | [compatibility.md](compatibility.md) | 兼容性红线：哪些行为必须与官方逐点一致、少量灰色地带的默认决策、验收关卡。注：本篇写于调研期，部分术语沿用调研笔记的叫法（如 blob、intent），与架构文档的正式叫法（房间快照、指令）对照见顶层 README 的术语速查 |
 | [dev-kit.md](dev-kit.md) | 开发套件：玩家本地编写、模拟、集成测试、一键部署的完整闭环 |
+| [pathfinder-callback.md](pathfinder-callback.md) | PathFinder.roomCallback 玩家侧通道：官方回调/异常/静默语义取证、kk-pathfinder 回调契约（M2-C2 已实装）、prelude→op 接线设计与处置矩阵（轨 A A4/A5 输入） |
 
 ## 规划中（待补文档）
 
