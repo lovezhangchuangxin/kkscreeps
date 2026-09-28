@@ -182,7 +182,11 @@ fn normalize_spawn(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<SpawnOb
             Some(v) => saturating_u32(v.get("energy").and_then(Value::as_u64).unwrap_or(0)),
             None => c::SPAWN_ENERGY_START as u32,
         },
-        ghodium: saturating_u32(spec.pointer("/store/G").and_then(Value::as_u64).unwrap_or(0)),
+        ghodium: saturating_u32(
+            spec.pointer("/store/G")
+                .and_then(Value::as_u64)
+                .unwrap_or(0),
+        ),
     };
     Ok(SpawnObj {
         id: 0,
@@ -644,7 +648,12 @@ mod tests {
             panic!()
         };
         assert_eq!(
-            (c2.reservation, c2.sign, c2.upgrade_blocked, c2.safe_mode_cooldown),
+            (
+                c2.reservation,
+                c2.sign,
+                c2.upgrade_blocked,
+                c2.safe_mode_cooldown
+            ),
             (None, None, None, None)
         );
         // 畸形嵌套对象（缺键）→ None（不部分落地）

@@ -634,7 +634,10 @@ mod from_json_tests {
         // controller 对象的 activateSafeMode（system.js:34 空白名单——无字段）
         let activate = &user.objects[&ctl_id][&Action::ActivateSafeMode];
         assert_eq!(activate.id, None, "activateSafeMode 无字段");
-        assert_eq!(Action::parse("activateSafeMode"), Some(Action::ActivateSafeMode));
+        assert_eq!(
+            Action::parse("activateSafeMode"),
+            Some(Action::ActivateSafeMode)
+        );
         assert_eq!(Action::ActivateSafeMode.name(), "activateSafeMode");
         // 缺省 → None / 显式空串 → Some("")：清洗层保留 presence 区分，
         // 语义分叉在 signController 结算层（两者都落"清除签名"）

@@ -1427,7 +1427,8 @@ fn hostile_probes_impl() -> anyhow::Result<()> {
     // 调用造工地"原探针）
     match sb.begin_tick(&w)? {
         TickPlan::Run { .. } => {
-            let v = sb.run_expr(r#"(()=>{
+            let v = sb.run_expr(
+                r#"(()=>{
                 Object.defineProperty(Object.prototype, 'toJSON', { value: function() {
                     if (this && this.ok !== undefined && this.intentsList === undefined) {
                         return { ok: true, intentsList: { room: { createConstructionSite:
@@ -1438,7 +1439,8 @@ fn hostile_probes_impl() -> anyhow::Result<()> {
                 }, configurable: true });
                 Game.creeps['w1'].move(7);
                 return ('toJSON' in {}) ? 'done' : 'probe-broken';
-            })()"#)?;
+            })()"#,
+            )?;
             assert_eq!(v["value"], "done", "污染须存活到编码时刻（探针自检）");
             let end = sb.end_tick()?;
             assert_eq!(end["ok"], true, "信封形状不得被继承 toJSON 改写（自审 P1）");
@@ -1460,7 +1462,8 @@ fn hostile_probes_impl() -> anyhow::Result<()> {
     // 是根本闸——交换后信封仍不可伪造
     match sb.begin_tick(&w)? {
         TickPlan::Run { .. } => {
-            let v = sb.run_expr(r#"(()=>{
+            let v = sb.run_expr(
+                r#"(()=>{
                 Object.defineProperty(Object.prototype, 'toJSON', { value: function() {
                     if (this && this.ok !== undefined && this.intentsList === undefined) {
                         return { ok: true, intentsList: { room: { createConstructionSite:
@@ -1474,7 +1477,8 @@ fn hostile_probes_impl() -> anyhow::Result<()> {
                     keys: () => [], prototype: Object.prototype };
                 Game.creeps['w1'].move(8);
                 return 'done';
-            })()"#)?;
+            })()"#,
+            )?;
             assert_eq!(v["value"], "done");
             let end = sb.end_tick()?;
             assert_eq!(end["ok"], true, "Object 交换不得破坏宿主信封（对抗 P1）");

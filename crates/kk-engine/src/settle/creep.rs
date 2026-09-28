@@ -177,10 +177,7 @@ fn intent_harvest(w: &mut Working, id: ObjId, data: &IntentData) {
     //  roomController.reservation && reservation.user != object.user`
     if let Some(ctl) = w.controller()
         && (ctl.owner.as_deref().is_some_and(|u| u != owner)
-            || ctl
-                .reservation
-                .as_ref()
-                .is_some_and(|r| r.user != owner))
+            || ctl.reservation.as_ref().is_some_and(|r| r.user != owner))
     {
         return;
     }
@@ -990,11 +987,7 @@ fn intent_claim_controller(w: &mut Working, id: ObjId, data: &IntentData) {
     // N/A。claimedRooms 读 user.rooms（官方 bulk addToSet 不改内存对象
     // （bulk.js:101-107）——读到上一 tick 定集，我方 PlayerState.rooms 同形）；
     // calcNeededGcl（utils.js:661-663）= GCL_MULTIPLY × (n-1)^GCL_POW
-    let claimed_rooms = w
-        .players
-        .get(&owner)
-        .map(|p| p.rooms.len())
-        .unwrap_or(0);
+    let claimed_rooms = w.players.get(&owner).map(|p| p.rooms.len()).unwrap_or(0);
     let needed_gcl = c::GCL_MULTIPLY as f64 * (claimed_rooms as f64).powf(c::GCL_POW);
     let gcl = w.players.get(&owner).map(|p| p.gcl).unwrap_or(0);
     if (gcl as f64) < needed_gcl {
@@ -1083,16 +1076,16 @@ fn intent_attack_controller(w: &mut Working, id: ObjId, data: &IntentData) {
     let Some(target_id) = controller_target(w, id, data) else {
         return;
     };
-    let (ctl_owner, reservation, safe_mode, upgrade_blocked) =
-        match w.room.objects.get(&target_id) {
-            Some(RoomObject::Controller(t)) => (
-                t.owner.clone(),
-                t.reservation.clone(),
-                t.safe_mode,
-                t.upgrade_blocked,
-            ),
-            _ => return,
-        };
+    let (ctl_owner, reservation, safe_mode, upgrade_blocked) = match w.room.objects.get(&target_id)
+    {
+        Some(RoomObject::Controller(t)) => (
+            t.owner.clone(),
+            t.reservation.clone(),
+            t.safe_mode,
+            t.upgrade_blocked,
+        ),
+        _ => return,
+    };
     // :22-24：原始房（无主无预定）不可攻
     if ctl_owner.is_none() && reservation.is_none() {
         return;
@@ -1147,8 +1140,10 @@ fn intent_attack_controller(w: &mut Working, id: ObjId, data: &IntentData) {
         if let Some(RoomObject::Controller(t)) = w.room.objects.get_mut(&target_id) {
             t.downgrade_time = Some(new_dt);
         }
-        w.upgrade_block_pending
-            .insert(target_id, w.time + c::CONTROLLER_ATTACK_BLOCKED_UPGRADE as u64);
+        w.upgrade_block_pending.insert(
+            target_id,
+            w.time + c::CONTROLLER_ATTACK_BLOCKED_UPGRADE as u64,
+        );
     }
     // :50：actionLog.attack（与近战/dismantle 共用官方键）
     if let Some(c) = w.creep_mut(id) {
@@ -1274,9 +1269,9 @@ fn movement_execute(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
     //（:224-233 的 safeMode 门：`!roomController || controller.user ===
     // object.user || !(safeMode > gameTime)` 才允许踩——他人 safeMode 生效期
     // 敌方工地受保护；M1 只做了工地归属半边，B2 补齐 safeMode 门）
-    let stomp_allowed = w.controller().is_none_or(|ctl| {
-        ctl.owner.as_deref() == Some(owner.as_str()) || ctl.safe_mode <= w.time
-    });
+    let stomp_allowed = w
+        .controller()
+        .is_none_or(|ctl| ctl.owner.as_deref() == Some(owner.as_str()) || ctl.safe_mode <= w.time);
     let mut fatigue_rate = 2i64;
     let mut road_id = None;
     let cell_ids: Vec<ObjId> = w.index.at(target.0 as usize, target.1 as usize).to_vec();

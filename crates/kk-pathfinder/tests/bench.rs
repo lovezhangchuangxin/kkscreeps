@@ -163,10 +163,9 @@ fn bench_callback_overhead() {
 
     // 预热 + 一致性断言（无矩阵时回调不得改变结果）
     let plain = search(origin, &[goal], &options).unwrap();
-    let with_cb = search_with_room_callback(origin, &[goal], &options, |_xx, _yy| {
-        RoomDecision::None
-    })
-    .unwrap();
+    let with_cb =
+        search_with_room_callback(origin, &[goal], &options, |_xx, _yy| RoomDecision::None)
+            .unwrap();
     assert_eq!(plain, with_cb, "None 决策不得改变搜索结果");
 
     let start = Instant::now();

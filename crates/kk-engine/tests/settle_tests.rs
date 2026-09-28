@@ -514,7 +514,10 @@ fn spawn_creep_cycle() {
                 off: false,
                 name: "Spawn1".into(),
                 owner: "p1".into(),
-                store: kk_schema::room::Store { energy: 300, ghodium: 0 },
+                store: kk_schema::room::Store {
+                    energy: 300,
+                    ghodium: 0,
+                },
                 spawning: None,
             }),
         )
@@ -645,7 +648,10 @@ fn creep_dies_at_age_time() {
                 name: "old".into(),
                 owner: "p1".into(),
                 body: body(&[BodyKind::Move, BodyKind::Work]),
-                store: kk_schema::room::Store { energy: 30, ghodium: 0 },
+                store: kk_schema::room::Store {
+                    energy: 30,
+                    ghodium: 0,
+                },
             }),
         )
         .unwrap();
@@ -933,7 +939,10 @@ fn transfer_clamps_to_target_capacity() {
                 off: false,
                 name: "Spawn1".into(),
                 owner: "p1".into(),
-                store: kk_schema::room::Store { energy: 250, ghodium: 0 },
+                store: kk_schema::room::Store {
+                    energy: 250,
+                    ghodium: 0,
+                },
                 spawning: None,
             }),
         )
@@ -1191,7 +1200,10 @@ fn transfer_into_extension_clamps_by_rcl() {
                 hits: 1000,
                 off: false,
                 owner: "p1".into(),
-                store: kk_schema::room::Store { energy: 40, ghodium: 0 },
+                store: kk_schema::room::Store {
+                    energy: 40,
+                    ghodium: 0,
+                },
             }),
         )
         .unwrap();
@@ -1760,7 +1772,8 @@ fn melee_hit_back_and_event_order() {
     };
     assert_eq!(
         log_a,
-        kk_engine::settle::creep::ACTION_ATTACK as u16 | kk_engine::settle::creep::ACTION_ATTACKED as u16
+        kk_engine::settle::creep::ACTION_ATTACK as u16
+            | kk_engine::settle::creep::ACTION_ATTACKED as u16
     );
 }
 
@@ -2562,7 +2575,8 @@ fn self_heal_allowed() {
     };
     assert_eq!(
         log,
-        kk_engine::settle::creep::ACTION_HEAL as u16 | kk_engine::settle::creep::ACTION_HEALED as u16
+        kk_engine::settle::creep::ACTION_HEAL as u16
+            | kk_engine::settle::creep::ACTION_HEALED as u16
     );
 }
 
@@ -2762,9 +2776,10 @@ fn claim_controller_rejections() {
     // 目标非 controller（source）拒
     let src = f.source(10, 10, 100);
     let c5 = f.creep("w5", "p1", 10, 11, &[BodyKind::Claim], 0);
-    assert!(f
-        .settle(controller_intent(c5, Action::ClaimController, src))
-        .is_empty());
+    assert!(
+        f.settle(controller_intent(c5, Action::ClaimController, src))
+            .is_empty()
+    );
 }
 
 #[test]
@@ -2835,7 +2850,11 @@ fn claim_controller_gcl_reads_last_tick_set() {
             _ => None,
         })
         .expect("第二个 controller 存在");
-    assert_eq!(t2.owner.as_deref(), Some("p1"), "同 tick 双 claim 都按上一 tick 定集放行");
+    assert_eq!(
+        t2.owner.as_deref(),
+        Some("p1"),
+        "同 tick 双 claim 都按上一 tick 定集放行"
+    );
 }
 
 #[test]
@@ -3029,10 +3048,13 @@ fn attack_controller_owned_downgrade_and_block() {
     let t = ctl_of(&f);
     assert_eq!(t.downgrade_time, Some(20_000 - 2 * 300), "2 CLAIM × 300");
     assert_eq!(t.upgrade_blocked, Some(1000), "time=0 + 1000");
-    assert!(events.iter().any(|e| e["event"]
-        == kk_core::constants::EVENT_ATTACK_CONTROLLER
-        && e["objectId"] == c.as_str()),
-        "EVENT_ATTACK_CONTROLLER(3)（官方无 data 键——我方封套空对象）");
+    assert!(
+        events.iter().any(
+            |e| e["event"] == kk_core::constants::EVENT_ATTACK_CONTROLLER
+                && e["objectId"] == c.as_str()
+        ),
+        "EVENT_ATTACK_CONTROLLER(3)（官方无 data 键——我方封套空对象）"
+    );
     match f.obj(c) {
         RoomObject::Creep(cr) => assert_eq!(cr.action_log, 1 << 3, "attack 位"),
         _ => panic!(),
@@ -3041,7 +3063,12 @@ fn attack_controller_owned_downgrade_and_block() {
     // 下一 tick 升级被拒（progress 不动）
     let worker = f.creep("up", "p2", 5, 6, &[BodyKind::Work, BodyKind::Carry], 50);
     let mut b = IntentBatch::default();
-    b.add_object_intent("p2", worker, Action::UpgradeController, IntentData::target(ctl));
+    b.add_object_intent(
+        "p2",
+        worker,
+        Action::UpgradeController,
+        IntentData::target(ctl),
+    );
     f.settle(b);
     assert_eq!(ctl_of(&f).progress, 0, "封锁期升级拒");
 }
@@ -3146,7 +3173,9 @@ fn attack_controller_suppressed_by_heal() {
         "attackController 被 heal 压制：预约不动"
     );
     assert!(
-        events.iter().any(|e| e["event"] == kk_core::constants::EVENT_HEAL),
+        events
+            .iter()
+            .any(|e| e["event"] == kk_core::constants::EVENT_HEAL),
         "heal 照常执行"
     );
     assert!(
@@ -3284,7 +3313,11 @@ fn activate_safe_mode_full_chain() {
     let t = ctl_of(&f);
     assert_eq!(t.safe_mode_available, 0, "消耗一枚");
     assert_eq!(t.safe_mode, 10 + 20_000, "time + SAFE_MODE_DURATION");
-    assert_eq!(t.safe_mode_cooldown, Some(10 + 50_000), "time + SAFE_MODE_COOLDOWN");
+    assert_eq!(
+        t.safe_mode_cooldown,
+        Some(10 + 50_000),
+        "time + SAFE_MODE_COOLDOWN"
+    );
 }
 
 #[test]
@@ -3302,36 +3335,75 @@ fn activate_safe_mode_rejections() {
     // 无 available
     let mut f = Fixture::new(1, terrain_with(&[]));
     let ctl = base(&mut f, &|t| t.safe_mode_available = 0);
-    f.settle(controller_action("p1", ctl, Action::ActivateSafeMode, IntentData::bare()));
+    f.settle(controller_action(
+        "p1",
+        ctl,
+        Action::ActivateSafeMode,
+        IntentData::bare(),
+    ));
     assert_eq!(ctl_of(&f).safe_mode, 0, "无 available 拒");
     // 冷却中（cooldown >= gameTime）
     let mut f2 = Fixture::new(1, terrain_with(&[]));
     let ctl2 = base(&mut f2, &|t| t.safe_mode_cooldown = Some(100)); // >= 10
-    f2.settle(controller_action("p1", ctl2, Action::ActivateSafeMode, IntentData::bare()));
+    f2.settle(controller_action(
+        "p1",
+        ctl2,
+        Action::ActivateSafeMode,
+        IntentData::bare(),
+    ));
     assert_eq!(ctl_of(&f2).safe_mode, 0, "冷却中拒");
     // upgradeBlocked
     let mut f3 = Fixture::new(1, terrain_with(&[]));
     let ctl3 = base(&mut f3, &|t| t.upgrade_blocked = Some(500));
-    f3.settle(controller_action("p1", ctl3, Action::ActivateSafeMode, IntentData::bare()));
+    f3.settle(controller_action(
+        "p1",
+        ctl3,
+        Action::ActivateSafeMode,
+        IntentData::bare(),
+    ));
     assert_eq!(ctl_of(&f3).safe_mode, 0, "封锁期拒");
     // 降级危险窗：level1 阈值 time+5000；downgradeTime=time+4999 拒 / +5000 放行
     let mut f4 = Fixture::new(1, terrain_with(&[]));
     let ctl4 = base(&mut f4, &|t| t.downgrade_time = Some(10 + 4_999));
-    f4.settle(controller_action("p1", ctl4, Action::ActivateSafeMode, IntentData::bare()));
+    f4.settle(controller_action(
+        "p1",
+        ctl4,
+        Action::ActivateSafeMode,
+        IntentData::bare(),
+    ));
     assert_eq!(ctl_of(&f4).safe_mode, 0, "危险窗拒（5009 < 5010）");
     let mut f5 = Fixture::new(1, terrain_with(&[]));
     let ctl5 = base(&mut f5, &|t| t.downgrade_time = Some(10 + 5_000));
-    f5.settle(controller_action("p1", ctl5, Action::ActivateSafeMode, IntentData::bare()));
-    assert_eq!(ctl_of(&f5).safe_mode, 10 + 20_000, "恰好压线放行（< 严格比较）");
+    f5.settle(controller_action(
+        "p1",
+        ctl5,
+        Action::ActivateSafeMode,
+        IntentData::bare(),
+    ));
+    assert_eq!(
+        ctl_of(&f5).safe_mode,
+        10 + 20_000,
+        "恰好压线放行（< 严格比较）"
+    );
     // 无主 / 0 级
     let mut f6 = Fixture::new(1, terrain_with(&[]));
     let ctl6 = f6.controller_full(0, None, |t| t.safe_mode_available = 1);
-    f6.settle(controller_action("p1", ctl6, Action::ActivateSafeMode, IntentData::bare()));
+    f6.settle(controller_action(
+        "p1",
+        ctl6,
+        Action::ActivateSafeMode,
+        IntentData::bare(),
+    ));
     assert_eq!(ctl_of(&f6).safe_mode, 0, "无主 0 级拒");
     // downgradeTime 未挂钟（null → 0 < time+5000）拒——新 claim 房当 tick不可激活
     let mut f7 = Fixture::new(1, terrain_with(&[]));
     let ctl7 = base(&mut f7, &|t| t.downgrade_time = None);
-    f7.settle(controller_action("p1", ctl7, Action::ActivateSafeMode, IntentData::bare()));
+    f7.settle(controller_action(
+        "p1",
+        ctl7,
+        Action::ActivateSafeMode,
+        IntentData::bare(),
+    ));
     assert_eq!(ctl_of(&f7).safe_mode, 0, "未挂钟拒（官方 null 数值比较）");
 }
 
@@ -3442,8 +3514,13 @@ fn harvest_rejected_under_foreign_reservation() {
         _ => panic!(),
     }
     // 自己的预定放行
-    if let Some(t) =
-        f.world.room_mut("W1N1").unwrap().objects.values_mut().find_map(|o| match o {
+    if let Some(t) = f
+        .world
+        .room_mut("W1N1")
+        .unwrap()
+        .objects
+        .values_mut()
+        .find_map(|o| match o {
             RoomObject::Controller(t) => Some(t),
             _ => None,
         })
@@ -3527,14 +3604,13 @@ fn engine_recomputes_player_rooms_after_tick() {
             .unwrap();
     }
     let mut engine = Engine::new(world);
-    engine
-        .players
-        .entry("p1".to_string())
-        .or_default()
-        .gcl = 1_000_000;
+    engine.players.entry("p1".to_string()).or_default().gcl = 1_000_000;
     // 空 tick 后 rooms 重建 = {W1N1}
     engine.tick().unwrap();
-    assert_eq!(engine.players["p1"].rooms, BTreeSet::from(["W1N1".to_string()]));
+    assert_eq!(
+        engine.players["p1"].rooms,
+        BTreeSet::from(["W1N1".to_string()])
+    );
     // W2N2 claim：rooms=1 → 需要 GCL 1e6（恰好放行）
     let w2_ctl = *engine
         .world
@@ -3565,16 +3641,26 @@ fn engine_recomputes_player_rooms_after_tick() {
         )
         .unwrap();
     let mut b = IntentBatch::default();
-    b.add_object_intent("p1", claimer, Action::ClaimController, IntentData::target(w2_ctl));
+    b.add_object_intent(
+        "p1",
+        claimer,
+        Action::ClaimController,
+        IntentData::target(w2_ctl),
+    );
     engine.tick_with_intents(b).unwrap();
     assert_eq!(
         engine.players["p1"].rooms,
         BTreeSet::from(["W1N1".to_string(), "W2N2".to_string()]),
         "claim 后纳入 rooms"
     );
-    match engine.world.room("W2N2").unwrap().objects.values().find(|o| {
-        matches!(o, RoomObject::Controller(_))
-    }) {
+    match engine
+        .world
+        .room("W2N2")
+        .unwrap()
+        .objects
+        .values()
+        .find(|o| matches!(o, RoomObject::Controller(_)))
+    {
         Some(RoomObject::Controller(c)) => {
             assert_eq!(c.level, 1);
             assert_eq!(c.owner.as_deref(), Some("p1"));
@@ -3593,7 +3679,12 @@ fn activate_safe_mode_owner_gate_at_dispatch() {
         t.safe_mode_available = 1;
         t.downgrade_time = Some(10 + 20_001);
     });
-    f.settle(controller_action("p1", ctl, Action::ActivateSafeMode, IntentData::bare()));
+    f.settle(controller_action(
+        "p1",
+        ctl,
+        Action::ActivateSafeMode,
+        IntentData::bare(),
+    ));
     let t = ctl_of(&f);
     assert_eq!(t.safe_mode, 0, "敌方 intent 分派层丢弃");
     assert_eq!(t.safe_mode_available, 1, "available 未被动");
@@ -3610,6 +3701,11 @@ fn activate_safe_mode_null_cooldown_at_time_zero_rejects() {
         t.downgrade_time = Some(20_001);
     });
     assert_eq!(f.world.time, 0);
-    f.settle(controller_action("p1", ctl, Action::ActivateSafeMode, IntentData::bare()));
+    f.settle(controller_action(
+        "p1",
+        ctl,
+        Action::ActivateSafeMode,
+        IntentData::bare(),
+    ));
     assert_eq!(ctl_of(&f).safe_mode, 0, "time=0 + 冷却 None（0>=0）拒");
 }

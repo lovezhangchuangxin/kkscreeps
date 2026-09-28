@@ -474,8 +474,12 @@ fn missing_terrain_throws_not_empty() {
     // ——异常上抛给玩家（"Could not load terrain data"），C++ 返回 Undefined 只是
     // 占位（V8 api 边界挂起异常胜过返回值）。锁 Err + 官方文案。
     plain_room("W60N0"); // W59N0（+x 方向邻房）不载入
-    let err = search(pos("W60N0", 45, 25), &[Goal::pos(pos("W59N0", 25, 25))], &SearchOptions::default())
-        .expect_err("地形缺失官方上抛");
+    let err = search(
+        pos("W60N0", 45, 25),
+        &[Goal::pos(pos("W59N0", 25, 25))],
+        &SearchOptions::default(),
+    )
+    .expect_err("地形缺失官方上抛");
     assert!(
         matches!(&err, kk_pathfinder::Error::JSError(Some(m)) if m == "Could not load terrain data"),
         "地形缺失映射 JSError + 官方文案: {err:?}"

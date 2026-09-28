@@ -149,8 +149,7 @@ where
     let callback = unsafe { &mut *(user_data as *mut F) };
     // AssertUnwindSafe：&mut F 跨 unwind 边界——捕获后本函数立即返回 3，不再
     // 触碰 callback，观测不到可能的逻辑破坏。
-    let decision =
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| callback(xx, yy)));
+    let decision = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| callback(xx, yy)));
     match decision {
         Err(_payload) => 3, // 回调异常 → 官方 js_error 链（见函数文档）
         Ok(RoomDecision::None) => 0,

@@ -13,8 +13,8 @@
 //! B2 起 controller 结算族落地（creep.rs 五执行器 + controller.rs 的
 //! activateSafeMode + economy.rs 的 controllers/tick 补齐）。
 
-pub mod creep;
 pub mod controller;
+pub mod creep;
 pub mod damage;
 pub mod economy;
 pub mod movement;
@@ -423,14 +423,10 @@ impl Engine {
             state.rooms.clear();
         }
         for room in self.world.rooms.values() {
-            if let Some(owner) = room
-                .objects
-                .values()
-                .find_map(|o| match o {
-                    RoomObject::Controller(c) => c.owner.clone(),
-                    _ => None,
-                })
-                && let Some(state) = players.get_mut(&owner)
+            if let Some(owner) = room.objects.values().find_map(|o| match o {
+                RoomObject::Controller(c) => c.owner.clone(),
+                _ => None,
+            }) && let Some(state) = players.get_mut(&owner)
             {
                 state.rooms.insert(room.name.clone());
             }

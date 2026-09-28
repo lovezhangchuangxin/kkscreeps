@@ -811,7 +811,11 @@ mod tests {
         m.set(0, 50, 1);
         assert_eq!(m.get(0, 50), Some(1));
         m.set(1, 0, 9);
-        assert_eq!(m.get(0, 50), Some(9), "(0,50) 与 (1,0) 必须与官方同字节别名");
+        assert_eq!(
+            m.get(0, 50),
+            Some(9),
+            "(0,50) 与 (1,0) 必须与官方同字节别名"
+        );
     }
 
     #[test]

@@ -17,8 +17,8 @@ use std::thread;
 use std::time::Duration;
 
 use kk_pathfinder::{
-    CostMatrix, Error, Goal, RoomDecision, SearchOptions, SearchResult, TERRAIN_PLAIN, WorldPosition,
-    load_terrain, pack_terrain, search, search_with_room_callback,
+    CostMatrix, Error, Goal, RoomDecision, SearchOptions, SearchResult, TERRAIN_PLAIN,
+    WorldPosition, load_terrain, pack_terrain, search, search_with_room_callback,
 };
 
 fn pos(room: &str, x: u32, y: u32) -> WorldPosition {
@@ -56,8 +56,12 @@ fn cost_matrix_wrong_length_ignored_at_search() {
     let goal = Goal::pos(pos("E3N0", 14, 25));
 
     // 基线（无矩阵）：直列（同 tests/search.rs 用例 4 推导）
-    let baseline = search(pos("E3N0", 10, 25), std::slice::from_ref(&goal), &SearchOptions::default())
-        .unwrap();
+    let baseline = search(
+        pos("E3N0", 10, 25),
+        std::slice::from_ref(&goal),
+        &SearchOptions::default(),
+    )
+    .unwrap();
     assert_eq!(
         path_xy(&baseline, "E3N0"),
         vec![(11, 25), (12, 25), (13, 25), (14, 25)]
@@ -67,7 +71,11 @@ fn cost_matrix_wrong_length_ignored_at_search() {
     let mut words = vec![0u32; 625];
     words[156] = 3 << 8; // 字节 625 = (12,25) ← LE word 156 的 byte 1
     let full = CostMatrix::deserialize(&words);
-    assert_eq!(full.get(12, 25), Some(3), "(12,25) 字节应在 2500 字节矩阵界内");
+    assert_eq!(
+        full.get(12, 25),
+        Some(3),
+        "(12,25) 字节应在 2500 字节矩阵界内"
+    );
     let r = search_with_room_callback(
         pos("E3N0", 10, 25),
         std::slice::from_ref(&goal),

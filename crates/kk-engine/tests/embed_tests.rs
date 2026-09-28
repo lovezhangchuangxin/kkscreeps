@@ -749,10 +749,15 @@ fn embed_per_viewer_and_caps_impl() -> anyhow::Result<()> {
     assert_eq!(v[0], "W1N1", "工地不授房视野：W2N2 不进 Game.rooms: {v:?}");
     let sites_keys = v[1].as_str().unwrap_or_default();
     assert!(
-        sites_keys.split(',').any(|k| k == site_json.trim_matches('"')),
+        sites_keys
+            .split(',')
+            .any(|k| k == site_json.trim_matches('"')),
         "自家工地全集进 Game.constructionSites（含不可见房，此前帽测试的 100 工地 + 新 1）: {v:?}"
     );
     assert_eq!(v[2], "true", "不可见房自家工地 getObjectById 可达: {v:?}");
-    assert_eq!(v[3], "undefined", "工地所在不可见房 Game.rooms 条目 undefined: {v:?}");
+    assert_eq!(
+        v[3], "undefined",
+        "工地所在不可见房 Game.rooms 条目 undefined: {v:?}"
+    );
     Ok(())
 }
