@@ -27,6 +27,11 @@
 #ifndef KK_PATHFINDER_COMPAT_NAN_H_
 #define KK_PATHFINDER_COMPAT_NAN_H_
 
+// libstdc++（Linux）不传递包含 <limits>/<cstdint>——真实 nan.h 经 v8 头提供；
+// pf.h/pf.cc 直接使用 std::numeric_limits/uint*_t，兼容层须先行包含（官方文件不动）
+#include <cstdint>
+#include <limits>
+
 #include <cstdint>
 #include <cstring>
 #include <deque>
