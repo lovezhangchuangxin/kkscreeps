@@ -96,7 +96,13 @@ fn room_energy(state: &crate::world::RoomState) -> (i64, i64) {
 }
 
 /// 对象 → 世界 JSON 记录（字段名 = prelude wrapObject 消费面约定）。
-fn object_json(room: &str, id: crate::world::ObjId, object: &RoomObject, time: u64) -> Value {
+/// pub(crate)：snapshot.rs 的查询面过滤复用同源投影（FIND 语义单源）。
+pub(crate) fn object_json(
+    room: &str,
+    id: crate::world::ObjId,
+    object: &RoomObject,
+    time: u64,
+) -> Value {
     let id_str = id.as_str();
     let mut v = match object {
         RoomObject::Creep(o) => json!({
@@ -231,7 +237,7 @@ fn object_json(room: &str, id: crate::world::ObjId, object: &RoomObject, time: u
     v
 }
 
-fn part_json(p: &kk_schema::room::BodyPart) -> Value {
+pub(crate) fn part_json(p: &kk_schema::room::BodyPart) -> Value {
     let kind = crate::types::BodyKind::from_code(p.kind).map(crate::types::BodyKind::name);
     match (&p.boost, kind) {
         (Some(b), Some(k)) => json!({ "type": k, "hits": p.hits, "boost": b }),
@@ -274,7 +280,13 @@ pub fn matches_find(o: &Value, find_const: i64) -> bool {
         }
         f if f == c::FIND_SOURCES => kind == "structure" && st == "source",
         f if f == c::FIND_DROPPED_RESOURCES => kind == "resource",
-        f if f == c::FIND_STRUCTURES || f == c::FIND_MY_STRUCTURES => is_struct,
+        f if f == c::FIND_STRUCTURES || f == c::FIND_MY_STRUCTURES => {
+            // 官方 FIND_STRUCTURES 不含 source/mineral：game.js:229-251 的
+            // structureTypes 表无此三类（source/mineral/deposit 是独立装配分支
+            // game.js:329-345）；vanilla 查询面 findTypeMap 同构
+            // （snapshots.ts:478-491）
+            is_struct && st != "source" && st != "mineral"
+        }
         f if f == c::FIND_FLAGS => kind == "flag",
         f if f == c::FIND_CONSTRUCTION_SITES => kind == "constructionSite",
         f if f == c::FIND_MY_SPAWNS => kind == "spawn",

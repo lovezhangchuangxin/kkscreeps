@@ -41,8 +41,8 @@
 | creep TTL 死亡的产物（M1 引擎） | **资源直接掉地为 energy 对象，不产 tombstone**；官方 _die.js:16-33 产 tombstone 承接全部资源与 body 造价回收 | M1 范围无 tombstone 变体（kk-schema v1）；M2 加 tombstone 变体走 schema 版本升级。M1 内资源守恒语义一致（总量不变），缺的是墓碑对象与 decay 链 |
 | flag 的存储位置（M1 引擎） | flag 折进 RoomObject 变体（tag 8）；官方 flag 是独立集合（processor.js:22 bulkFlags，不参与 roomObjects 循环与结算） | M1 单房间结算 flag 无规则行为差异；投影层（world_json → prelude）输出官方形状即可 |
 | 地形输入校验强度（kk-core Terrain） | 长度≠2500、未知位（& !0b111）、数字串形态的 '8'/'9' 一律 Err；官方 checkTerrain 对字符串形态照单全收（'9' 判为 wall） | 正确性-7/8 的清偿方向：非法输入前置拒绝而非静默截短/误读；官方吃 '9' 是无校验不是语义 |
-| spawn.spawning 投影形态（M1 typed world） | 发绝对 `spawnTime`；官方 StructureSpawn.Spawning 暴露 `name/needTime/remainingTime/directions`（structures.js:1302-1310，remainingTime=spawnTime−time） | prelude 尚未消费（硬编码 null）；embed 接线暴露给玩家时改 remainingTime 形态 |
-| source/controller 的 None→0 投影（M1 typed world） | `ticksToRegeneration`/`safeMode` 无钟时发 0；官方 getter 与 vanilla 快照为 undefined/null | 0 vs null 仅 getObject 断言面可见；prelude `?? 0` 归一，玩家面等价 |
+| spawn.spawning 投影形态（M1 typed world；查询面已清偿 M2A-A1） | 世界投影（prelude 消费面）发绝对 `spawnTime`；查询面快照（getObject）已按官方 Spawning 形态发 `name/needTime/remainingTime`（structures.js:1302-1310，remainingTime=spawnTime−time；vanilla snapSpawning 同构）；directions 字段契约快照不含 | prelude 玩家面消费随 M2A-A4 动作族接线 |
+| source/controller 的 None→0 投影（M1 typed world；查询面已切 null 形态 M2A-A1） | 世界投影（prelude 消费面）无钟时发 0；查询面快照已按契约发 null（`t ? t−time : null`；safeMode 用 `t>time` 的 active 形态）——两消费面各自契约 | 玩家面仍是 0 形态（inspection "preserves undefined as null" 用例红）——M2B 快照直读时玩家面收拢到同族 null 形态 |
 | 放置的 owner 宽松接受面（M1 place 归一化） | typed 变体不强制 owner（缺省空串）；vanilla 对 REQUIRING_OWNER 类型与 placeCreep/placeSite/placeFlag 强制 owner 并抛错 | M0 哑世界同宽松；强制化随 M2 玩家 API 层（届时违规放置显形） |
 | source 容量三分支缺 reservation（M1 place 归一化） | ControllerObj 无 reservation 字段，被预定（无主）房间 source 容量判 1500；vanilla 读 user || reservation 判 3000 | 当前放置 spec 无法表达 reservation 不触发；reserveController intent 实装时补字段 |
 | extension 能量容量（M1，深评清偿） | transfer 钳制与 energyAvailable/energyCapacityAvailable 投影均按 `EXTENSION_ENERGY_CAPACITY[rcl]`（extensions/tick.js:10-17）；无 controller 房按 0 拒收（官方 capacityForResource undefined ⇒ 拒） | ExtensionObj 仍无容量字段（结算/投影实时查表）——多资源槽（storeCapacityResource 全量）M2 schema 扩展时一并定型 |
@@ -71,6 +71,12 @@
 | directions 显式空数组（M1 结算，深评登记） | `[]` 折为"无限制"（缺省 1..8）；官方存 `[]`（truthy）→ _born-creep 零方向循环、出生坐标 undefined 的病态行为 | 官方自身行为即坏，不作对照基线；JS API 层 `directions: []` 官方就判 ERR_INVALID_ARGS，intent 层不可达 |
 | build 的"同格 swamp/wall 对象"系数分支（M1 结算，深评登记） | 不查（typed 世界无 swamp/wall 对象类型，地形走 Terrain）；官方 create-construction-site.js:39-44 对同格对象也乘系数 | 当前状态空间不可达；M2 若经 Generic 通道合成此类对象需补判定 |
 | schema v1 内字段追加（M1 kk-schema，深评登记） | ControllerObj 尾部加 `is_power_enabled`、ConstructionSiteObj 中部加 `progress_total`，未 bump SCHEMA_VERSION | 版本冻结纪律保护的是已发布的持久字节流；M1 快照尚无任何落盘数据在流通，v1 内演化无损。首个持久化格式发布（M2 存储）起 bump 纪律生效，升级链挂载点已在 `UPGRADE_CHAIN` 占位 |
+| 查询面快照投影独立于 prelude 世界投影（M2A-A1） | embed getObject/findInRoom 出 screeps-ok 契约形状（`kind` 字段族 + getter 值形态：剩余 tick/正量 store/storeCapacity），snapshot.rs 单源；prelude 世界投影（world_json.rs）维持 M0 契约形状 | 两个消费面（验收查询 vs 玩家世界视图）契约不同；一致性由 embed_tests 对表断言锁定（M0 第七轮层间一致教训）；M2B 快照直读时玩家面收拢到同族 getter 形态 |
+| FIND_STRUCTURES/FIND_MY_STRUCTURES 的 source/mineral 排除（M2A-A1 修正） | matches_find 与 prelude room.find 两层同步排除 source/mineral（官方 game.js:229-251 structureTypes 表无此三类、:329-345 独立装配分支；vanilla 查询面 findTypeMap 同构 snapshots.ts:478-491） | 修正前 source 会漏进 FIND_STRUCTURES（M0 以来两层同错）；FIND_MY_* 的 owner 过滤仍缺（M2A-A3c per-viewer） |
+| 查询面 storeCapacity 的 null 形态（M2A-A1，评审三轮定裁） | creep 发 `>0` 数值（活跃 hits>0 CARRY × 50 × boost 乘数，vanilla `storeCapacity || null` 同构——0/无 CARRY 读 null）；spawn/extension 恒 null（官方落库带 storeCapacityResource——build.js:117-135，无参 getCapacity() 为 null，store.js:28-33；adapter-spec.md 明文 "null for a store with per-resource limits such as a spawn's"）；storage 发 STORAGE_CAPACITY 数值 | kk 单资源槽 schema 无 storeCapacityResource 概念，数值容量经 energyCapacityAvailable/结算面消费；storeCapacityByResource 面随 M2 schema 扩展 |
+| 查询面剩余值的 saturating 钳 0（M2A-A1） | 契约头注明 "unclamped"（官方过期挂钟发负数），我方 saturating_sub 钳 0 | 正常路径不可达（钟到点被结算消费清掉）；仅缺结算路径（如 road decay 未实装）或构造性放置可观察，消费方按 <=0 过期等价 |
+| createShard 种子钟 +1 与无 warm-up tick 失配（M2A-A1 评审登记，既有根因） | kk createShard 不消耗 vanilla 的 warm-up tick（种子 +1 的前提，vanilla index.ts:968-975），engine time 停 0 而 kk embed.rs 种子公式含 +1 | inspection 的 controller timer relativity 两用例差 1（基线红）——归 createShard 语义轨道（A3c 或 createShard 补 warm-up tick 时清偿） |
+| Generic 透传快照不折算 getter 形态（M2A-A1） | 透传对象（mineral/tombstone 等）的计时字段（decayTime/cooldown/lastCooldown 公式）不做剩余值换算，只保底 kind/id/pos | 契约相关用例（deposit/tombstone 族）本就在能力门 skip 池；随 B3/B4 对应能力批补折算 |
 
 ## 四、验收关卡（不做完不算兼容）
 

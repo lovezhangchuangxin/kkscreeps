@@ -685,8 +685,11 @@
           else if (type === 104 /* FIND_SOURCES_ACTIVE */ && o.type === 'structure' && o.structureType === 'source' && (o.energy ?? 3000) > 0) out.push(w);
           else if (type === 105 /* FIND_SOURCES */ && o.type === 'structure' && o.structureType === 'source') out.push(w);
           else if (type === 106 /* FIND_DROPPED_RESOURCES */ && o.type === 'resource') out.push(w);
-          else if (type === 107 /* FIND_STRUCTURES */ && isStruct) out.push(w);
-          else if (type === 108 /* FIND_MY_STRUCTURES */ && isStruct) out.push(w);
+          // 官方 FIND_STRUCTURES/FIND_MY_STRUCTURES 不含 source/mineral：
+          // game.js:229-251 structureTypes 表无此三类（独立装配分支 :329-345），
+          // 与 Rust 侧 matches_find 两层一致
+          else if (type === 107 /* FIND_STRUCTURES */ && isStruct && o.structureType !== 'source' && o.structureType !== 'mineral') out.push(w);
+          else if (type === 108 /* FIND_MY_STRUCTURES */ && isStruct && o.structureType !== 'source' && o.structureType !== 'mineral') out.push(w);
           else if (type === 110 /* FIND_FLAGS */ && o.type === 'flag') out.push(w);
           else if (type === 111 /* FIND_CONSTRUCTION_SITES */ && o.type === 'constructionSite') out.push(w);
           else if (type === 112 /* FIND_MY_SPAWNS */ && o.type === 'spawn') out.push(w);

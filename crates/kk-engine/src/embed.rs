@@ -382,18 +382,15 @@ impl EmbedEngine {
         Ok(())
     }
 
-    /// 对象快照（字段名=玩家 getter 名的投影，world_json 同一形状）。
+    /// 对象快照：screeps-ok 契约形状（kind 族 + 玩家 getter 值，snapshot.rs；
+    /// flag 不在查询面契约内 → None）。
     pub fn get_object(&self, id: &str) -> Option<Value> {
-        kk_world::ObjId::parse(id).and_then(|id| self.engine.world.object_json_by_id(id))
+        kk_world::ObjId::parse(id).and_then(|id| self.engine.world.object_snapshot_by_id(id))
     }
 
+    /// 房间 FIND 查询：契约快照形状（过滤复用 matches_find 单源语义）。
     pub fn find_in_room(&self, room: &str, find_const: i64) -> Vec<Value> {
-        self.engine
-            .world
-            .find_in_room(room, find_const)
-            .into_iter()
-            .map(|(_, v)| v)
-            .collect()
+        self.engine.world.find_snapshots_in_room(room, find_const)
     }
 
     pub fn get_game_time(&self) -> u64 {

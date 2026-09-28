@@ -12,6 +12,7 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     embed_create_shard_validation_impl()?;
     embed_real_settlement_impl()?;
     embed_run_players_shared_snapshot_impl()?;
+    embed_snapshot_contract_impl()?;
     assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");
     Ok(())
 }
@@ -187,7 +188,7 @@ fn embed_engine_roundtrip_impl() -> anyhow::Result<()> {
         &json!({ "pos": [25, 25], "owner": "p1", "body": ["move", "work"], "store": { "energy": 30 } }),
     )?;
     let snap = e.get_object(&id).expect("对象存在");
-    assert_eq!(snap["type"], "creep");
+    assert_eq!(snap["kind"], "creep", "查询面快照出契约 kind 字段");
     assert_eq!(snap["pos"]["x"], 25);
     assert_eq!(snap["owner"], "p1");
 
@@ -221,10 +222,12 @@ fn embed_engine_roundtrip_impl() -> anyhow::Result<()> {
         "energy:0 的 source 不算 active（官方 energy > 0）"
     );
     assert_eq!(e.find_in_room("W1N1", 105).len(), 2, "FIND_SOURCES 收全部");
+    // FIND_MY_STRUCTURES 不含 source/mineral（官方 game.js:229-251 structureTypes
+    // 表；与 prelude room.find 两层一致）——房间仅默认 controller 入选
     assert_eq!(
         e.find_in_room("W1N1", 108).len(),
-        3,
-        "FIND_MY_STRUCTURES 含默认 controller 与两个 source"
+        1,
+        "FIND_MY_STRUCTURES 仅 controller（source 不入）"
     );
 
     // runPlayer：真实沙箱求值，恰好 +1 tick
@@ -334,6 +337,175 @@ fn embed_run_player_contract_impl() -> anyhow::Result<()> {
     assert_eq!(v[1], "string", "无名 spawn 生成了稳定名称: {v:?}");
     assert_eq!(v[2], 1, "FIND_MY_SPAWNS: {v:?}");
     assert_eq!(v[3], true, "instanceof StructureSpawn: {v:?}");
+    e.teardown();
+    Ok(())
+}
+
+/// 查询面快照契约（screeps-ok common.ts + vanilla snapshots.ts 对照）：
+/// kind 映射、getter 剩余值/null 形态、正量 store、storeCapacity number、
+/// flag 不进查询面。embed 查询面（snapshot.rs）与 prelude 世界投影
+/// （world_json.rs）是两个消费面——本用例锁契约面的形状。
+fn embed_snapshot_contract_impl() -> anyhow::Result<()> {
+    let mut e = EmbedEngine::new();
+    e.create_shard(&json!({
+        "players": ["p1"],
+        "rooms": [{ "name": "W1N1", "rcl": 3, "owner": "p1" }],
+    }))?;
+
+    // creep：kind/storeCapacity（CARRY×2×50=100）/0 值资源不出现/ticksToLive 剩余值
+    let creep_id = e.place_object(
+        "W1N1",
+        "creep",
+        &json!({ "pos": [5, 5], "owner": "p1", "body": ["carry", "carry"], "ticksToLive": 100 }),
+    )?;
+    let snap = e.get_object(&creep_id).unwrap();
+    assert_eq!(snap["kind"], "creep");
+    assert_eq!(snap["storeCapacity"], 100, "CARRY×2 × CARRY_CAPACITY(50)");
+    assert_eq!(
+        snap["store"].as_object().unwrap().len(),
+        0,
+        "0 值 energy 不出现在 store"
+    );
+    assert_eq!(snap["ticksToLive"], 100);
+
+    // spawn：storeCapacity 读 null（官方带 storeCapacityResource，无参
+    // getCapacity() 为 null——store.js:28-33 + adapter-spec 明文）、spawning 无任务读 null
+    let spawn_id = e.place_object(
+        "W1N1",
+        "structure",
+        &json!({ "pos": [6, 6], "structureType": "spawn", "owner": "p1", "store": { "energy": 50 } }),
+    )?;
+    let snap = e.get_object(&spawn_id).unwrap();
+    assert_eq!(snap["kind"], "structure");
+    assert_eq!(snap["structureType"], "spawn");
+    assert_eq!(snap["storeCapacity"], serde_json::Value::Null);
+    assert_eq!(
+        snap["spawning"],
+        serde_json::Value::Null,
+        "无孵化任务读 null"
+    );
+    assert_eq!(snap["store"]["energy"], 50);
+
+    // extension：同 spawn——带 storeCapacityResource（build.js:131-135），读 null
+    let ext_id = e.place_object(
+        "W1N1",
+        "structure",
+        &json!({ "pos": [7, 6], "structureType": "extension", "owner": "p1" }),
+    )?;
+    let snap = e.get_object(&ext_id).unwrap();
+    assert_eq!(
+        snap["storeCapacity"],
+        serde_json::Value::Null,
+        "extension 无参 getCapacity() 读 null"
+    );
+
+    // source：独立 kind；满能量未挂钟读 null，放置即不满则预挂钟读剩余数
+    // （place.rs 归一化预挂钟是 M1 既定语义——放置 energy<capacity 即挂 300 钟）
+    let source_id = e.place_object(
+        "W1N1",
+        "structure",
+        &json!({ "pos": [10, 10], "structureType": "source" }),
+    )?;
+    let snap = e.get_object(&source_id).unwrap();
+    assert_eq!(snap["kind"], "source");
+    assert_eq!(
+        snap["ticksToRegeneration"],
+        serde_json::Value::Null,
+        "满能量未挂钟读 null"
+    );
+    let drained_id = e.place_object(
+        "W1N1",
+        "structure",
+        &json!({ "pos": [11, 10], "structureType": "source", "energy": 100 }),
+    )?;
+    let snap = e.get_object(&drained_id).unwrap();
+    assert_eq!(
+        snap["ticksToRegeneration"], 300,
+        "放置即不满：预挂钟读剩余数（M1 place 语义）"
+    );
+
+    // controller：8 级 progressTotal 读 null、isPowerEnabled 布尔、reservation/sign 占位 null
+    let ctl = e.find_in_room("W1N1", 107)[0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let snap = e.get_object(&ctl).unwrap();
+    assert_eq!(snap["structureType"], "controller");
+    assert_eq!(snap["isPowerEnabled"], false);
+    assert_eq!(snap["reservation"], serde_json::Value::Null);
+    assert_eq!(snap["sign"], serde_json::Value::Null);
+
+    // site：kind 'site'；resource：kind 'resource'
+    let site_id = e.place_object(
+        "W1N1",
+        "constructionSite",
+        &json!({ "pos": [15, 15], "structureType": "road" }),
+    )?;
+    let snap = e.get_object(&site_id).unwrap();
+    assert_eq!(snap["kind"], "site");
+    assert_eq!(snap["structureType"], "road");
+    assert_eq!(snap["progress"], 0);
+
+    let res_id = e.place_object(
+        "W1N1",
+        "resource",
+        &json!({ "pos": [16, 16], "amount": 40 }),
+    )?;
+    let snap = e.get_object(&res_id).unwrap();
+    assert_eq!(snap["kind"], "resource");
+    assert_eq!(snap["resourceType"], "energy");
+    assert_eq!(snap["amount"], 40);
+
+    // mineral 经 structure 通道放置（适配器 placeMineral 真实路径）：kind 判
+    // structureType 而非透传 type（契约要求 kind:'mineral'）
+    let mineral_id = e.place_object(
+        "W1N1",
+        "structure",
+        &json!({ "pos": [17, 16], "structureType": "mineral", "mineralType": "X", "mineralAmount": 2000 }),
+    )?;
+    let snap = e.get_object(&mineral_id).unwrap();
+    assert_eq!(snap["kind"], "mineral", "structure 通道的 mineral 判 kind");
+    assert_eq!(e.find_in_room("W1N1", 116)[0]["kind"], "mineral");
+
+    // 跨面锁定：prelude 玩家面的 FIND_STRUCTURES 同步排除 source/mineral
+    // （与查询面 matches_find 两层一致——官方 game.js:229-251 structureTypes 表）
+    let run = e.run_player(
+        "p1",
+        "Game.rooms['W1N1'].find(FIND_STRUCTURES).map(s => s.structureType).sort().join(',')",
+    )?;
+    assert_eq!(
+        run.expr["value"],
+        "controller,extension,spawn", // mineral/source 均被排除
+        "prelude find(FIND_STRUCTURES) 不含 source: {:?}",
+        run.expr
+    );
+
+    // flag 不在查询面契约内（vanilla snapshotObject 无 flag 分支）
+    let flag_id = e.place_object("W1N1", "flag", &json!({ "pos": [3, 3], "name": "f1" }))?;
+    assert!(
+        e.get_object(&flag_id).is_none(),
+        "flag 的 getObject 读 null"
+    );
+    assert!(
+        e.find_in_room("W1N1", 110).is_empty(),
+        "FIND_FLAGS 不在查询面中性选择器内"
+    );
+
+    // 玩家面不受查询面影响：prelude 仍能看见 flag 与 Game.flags
+    let run = e.run_player(
+        "p1",
+        "[Game.flags ? Object.keys(Game.flags).length : -1, \
+          Game.rooms['W1N1'].find(FIND_FLAGS).length]",
+    )?;
+    assert_eq!(
+        run.expr["value"][0], 1,
+        "prelude 玩家面 flag 可见: {:?}",
+        run.expr
+    );
+    assert_eq!(
+        run.expr["value"][1], 1,
+        "prelude find(FIND_FLAGS) 不受查询面影响"
+    );
     e.teardown();
     Ok(())
 }
