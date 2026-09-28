@@ -940,13 +940,19 @@ mod tests {
         assert_eq!(r["store"]["energy"], 300);
         assert_eq!(r["store"]["G"], 4);
 
-        // FIND 两层
-        assert_eq!(world.find_in_room("W1N1", c::FIND_TOMBSTONES).len(), 1);
-        assert_eq!(world.find_in_room("W1N1", c::FIND_RUINS).len(), 1);
-        assert_eq!(world.find_in_room("W1N1", c::FIND_STRUCTURES).len(), 0);
+        // FIND 两层（A3c 起 find_in_room 带 viewer——中立面 None）
+        assert_eq!(
+            world.find_in_room("W1N1", c::FIND_TOMBSTONES, None).len(),
+            1
+        );
+        assert_eq!(world.find_in_room("W1N1", c::FIND_RUINS, None).len(), 1);
+        assert_eq!(
+            world.find_in_room("W1N1", c::FIND_STRUCTURES, None).len(),
+            0
+        );
 
         // 视野：仅有一枚墓碑的房间对 p1 可见（官方 userObjects 归集含墓碑）
-        let viewer = world.world_json_for_viewer("p1");
+        let viewer = world.world_json_for_viewer("p1", 0);
         let rooms = viewer["rooms"].as_object().unwrap();
         assert!(rooms["W1N1"].get("terrain").is_some(), "墓碑授视野");
         assert!(rooms["W2N2"].get("terrain").is_some(), "地形面恒在");
