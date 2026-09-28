@@ -722,3 +722,15 @@ intent+movement（B）、经济+孵化（B+）。5 路评审员逐模块对照�
 | 1 | P2 | 棘轮逐用例比较只认 failed：passed→skipped 不计红——"一条转跳过 + 一条转通过"可同时保住 passed 总数与用例总数，三重门禁全数放行（构造报告实测）；基线 git show 失败时静默跳过比较，门禁整体失效 | 修：判定核心抽为纯模块 `ratchet-flips.mjs`（脚本自身有顶层副作用不可 import 测试），基线 passed 在当前**非 passed**（缺失/失败/转跳过）一律计红；基线不可读 ⇒ -1 ⇒ fail closed。单测三场景锁死（含对冲场景） |
 | 2 | P2 | RPC 把子进程/管道/超时计时器全部 unref：独立 Node 脚本（顶层 await，无测试运行器句柄）事件循环被掏空，响应到达前退出（实测 exit 13）；vitest 环境掩盖 | 修：pending RPC 的超时计时器恢复 ref（合法兜底句柄；dispatch/failAll/超时路径均 clearTimeout，不挂正常退出）。回归测试 spawn 全新 node 进程 + 延迟回包假 sidecar 确定性复现独立环境 |
 | 3 | P3 | roadmap M1 段仍写"地板 268/2914"（沿革与 ratchet.json 已是 277） | 修：数字同步 |
+
+## 追记：M1 外部复审第三轮（ChatGPT 复审 HEAD 88eb746，2026-09-28）
+
+前轮 3 条修复全部复核通过（对冲计红/fail closed/独立进程返回均实测确认）。新发现
+1 条门禁边界问题，属实并处置：
+
+| # | 级 | 发现 | 处置 |
+|---|---|---|---|
+| 1 | P2 | 逐用例基线取 HEAD：同一提交把代码与重跑报告一起入库时，回归被烙进"新基线"、对自身比较恒零翻转——只要有转绿抵消 passed 下降，CI 仍通过 | 修：基线改取 **HEAD~1**（push = 上一 main 状态；pull_request 合并提交的 HEAD~1 = 受保护基分支尖端；CI ratchet job 配 fetch-depth: 2）。有意行为变化的转红走 **ratchet-allow.json 显式豁免**：条目精确/前缀匹配，放行但打印留痕、同提交须归因，未命中的陈旧条目打警告。判定与豁免逻辑在 ratchet-flips.mjs 纯模块，applyAllow 三场景单测锁死 |
+
+门禁最终形态（四重）：总数地板 + 逐用例 vs HEAD~1（转跳过同罪、fail closed）+
+总数漂移 + 显式豁免表。

@@ -1,16 +1,20 @@
 #!/usr/bin/env node
-// screeps-ok 通过率棘轮（方案 D6 / M1 步 7）：
+// screeps-ok 通过率棘轮（方案 D6 / M1 步 7，外部复审三轮后定型为四重门禁）：
 //   全量跑套件（run-suite.sh --quiet，约 3 分钟）→ 解析 vitest JSON 报告 →
-//   passed < floor ⇒ exit 1（打印差值与最近转红用例）；passed > floor ⇒ exit 0 并
-//   提示上调地板；用例总数漂移（上游 pin 固定，理论不可能）打印警告。
-// 地板唯一真相源：compat/reports/ratchet.json。本地等价：node compat/scripts/ratchet.mjs
-// （macOS 无 timeout 命令——本脚本与其调用的 run-suite.sh 都不用它）。
+//   ① passed < floor ⇒ 红；② 用例总数漂移 ⇒ 红；③ 相对 HEAD~1 基线逐用例转红
+//   （缺失/失败/转跳过同罪）⇒ 红，基线不可读 fail closed；④ 有意行为变化的
+//   转红走 ratchet-allow.json 显式豁免（放行但打印留痕，同提交须归因）。
+// 地板唯一真相源：compat/reports/ratchet.json；基线取 HEAD~1（同提交把代码与
+// 重跑报告一起入库时，回归不再被烙进新基线自我洗白——push 的 HEAD~1 = 上一
+// main 状态，pull_request 的合并提交 HEAD~1 = 受保护基分支尖端；CI 需
+// fetch-depth ≥ 2）。本地等价：node compat/scripts/ratchet.mjs（macOS 无
+// timeout 命令——本脚本与其调用的 run-suite.sh 都不用它）。
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { analyzeFlips } from './ratchet-flips.mjs';
+import { analyzeFlips, applyAllow } from './ratchet-flips.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const ratchetPath = resolve(root, 'compat/reports/ratchet.json');
@@ -33,6 +37,19 @@ if (!Number.isInteger(ratchet.floor) || ratchet.floor <= 0) {
 }
 if (!Number.isInteger(ratchet.numTotalTests) || ratchet.numTotalTests <= 0) {
   console.error(`ratchet: ratchet.json 形状非法——需 {numTotalTests: 正整数}，实得 ${JSON.stringify(ratchet)}`);
+  process.exit(1);
+}
+// 豁免表是门禁契约的一部分：缺失/形状非法即红（空表 = 零豁免的正常态）
+const allowPath = resolve(root, 'compat/reports/ratchet-allow.json');
+let allowPatterns;
+try {
+  const allow = JSON.parse(readFileSync(allowPath, 'utf8'));
+  if (!Array.isArray(allow.allow) || !allow.allow.every((p) => typeof p === 'string' && p.length > 0)) {
+    throw new Error('需 {allow: 非空字符串[]}');
+  }
+  allowPatterns = allow.allow;
+} catch (e) {
+  console.error(`ratchet: 无法读取/解析 ${allowPath}: ${e?.message ?? e}——fail closed`);
   process.exit(1);
 }
 
@@ -92,15 +109,15 @@ if (passed < ratchet.floor) {
   console.error(`ratchet: 回归——passed ${passed} < floor ${ratchet.floor}（差 ${ratchet.floor - passed}）。逐用例归因后修复，或（确属有意的行为变化）随全量重跑上调地板`);
   gateFailed = true;
 }
-// 逐用例回归：总数口径对冲放不过门禁（一红一绿 passed 不变、少跑用例总数降）——
-// 相对上一入库基线（HEAD 的 kkscreeps.json）任何转红即红；有意行为变化须随全量
-// 重跑更新基线入库并在提交说明归因，疑似偶发先重跑 job 复核（flake 策略）
+// 逐用例回归：总数口径对冲放不过门禁（一红一绿 passed 不变、少跑用例总数降）；
+// 有意行为变化的转红走豁免表（同提交更新 ratchet-allow.json 并在提交说明/台账
+// 归因——豁免即公开）；疑似偶发先重跑 job 复核（flake 策略）
 const flipsRed = printFlipsAgainstBaseline(report);
 if (flipsRed < 0) {
   console.error('ratchet: 基线不可读 ⇒ 门禁红（fail closed）');
   gateFailed = true;
 } else if (flipsRed > 0) {
-  console.error(`ratchet: 相对上一入库基线转红 ${flipsRed} 条 ⇒ 门禁红`);
+  console.error(`ratchet: 相对 HEAD~1 基线有 ${flipsRed} 条未豁免转红 ⇒ 门禁红`);
   gateFailed = true;
 }
 if (gateFailed) {
@@ -110,26 +127,38 @@ if (passed > ratchet.floor) {
   console.log(`ratchet: 地板可上调 ${ratchet.floor} → ${passed}（行为变化收尾时更新 ratchet.json 并同步 README/roadmap 数字）`);
 }
 
-/** 与上一入库基线逐用例 diff（git show 读对象库——工作区报告已被本轮覆盖不受影响；
- *  浅克隆（actions/checkout 默认 fetch-depth 1）下 HEAD 的 blob 完整可用）。 */
+/** 与 HEAD~1 基线逐用例 diff（git show 读对象库——工作区报告已被本轮覆盖不受
+ *  影响）。基线取 HEAD~1 而非 HEAD：同提交把代码与重跑报告一起入库时，HEAD 的
+ *  报告已含回归、对自身比较恒零翻转；HEAD~1 保持"受保护前一状态"为基准（CI 需
+ *  fetch-depth ≥ 2）。 */
 function printFlipsAgainstBaseline(current) {
   // 报告约 1.7MB，超过 spawnSync 默认 1MB maxBuffer（ENOBUFS）——显式放大
-  const shown = spawnSync('git', ['-C', root, 'show', 'HEAD:compat/reports/kkscreeps.json'], {
+  const shown = spawnSync('git', ['-C', root, 'show', 'HEAD~1:compat/reports/kkscreeps.json'], {
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
   });
   // 基线不可读 ⇒ -1：无法验证逐用例回归时 fail closed，不得静默跳过（跳过
   // 会让这道门禁整体失效）
   if (shown.status !== 0) {
-    console.error('ratchet: 无法读取上一入库基线（git show 失败）——逐用例回归不可验证');
+    console.error('ratchet: 无法读取 HEAD~1 基线（git show 失败——CI 需 fetch-depth ≥ 2）——逐用例回归不可验证');
     return -1;
   }
   const { flipsRed, flipsGreen } = analyzeFlips(JSON.parse(shown.stdout), current);
-  console.error(`ratchet: 相对上一基线——转红 ${flipsRed.length} 条，转绿 ${flipsGreen} 条`);
-  for (const [name, cur] of flipsRed.slice(0, 10)) {
+  const { blocked, allowed, stale } = applyAllow(flipsRed, allowPatterns);
+  console.error(
+    `ratchet: 相对 HEAD~1 基线——转红 ${flipsRed.length} 条（豁免 ${allowed.length}、待归因 ${blocked.length}），转绿 ${flipsGreen} 条`,
+  );
+  for (const [name] of allowed.slice(0, 10)) {
+    console.error(`  [豁免] ${name}`);
+  }
+  if (allowed.length > 10) console.error(`  …另有 ${allowed.length - 10} 条豁免`);
+  for (const [name, cur] of blocked.slice(0, 10)) {
     const msg = (cur?.failureMessages?.[0] ?? '').split('\n')[0].slice(0, 200);
     console.error(`  [红] ${name}${msg ? `\n       ${msg}` : ''}`);
   }
-  if (flipsRed.length > 10) console.error(`  …另有 ${flipsRed.length - 10} 条转红`);
-  return flipsRed.length;
+  if (blocked.length > 10) console.error(`  …另有 ${blocked.length - 10} 条待归因转红`);
+  for (const p of stale) {
+    console.warn(`ratchet: 警告——豁免条目未命中任何转红（可能已转绿，应清理）: ${p}`);
+  }
+  return blocked.length;
 }

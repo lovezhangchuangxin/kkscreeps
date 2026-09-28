@@ -34,3 +34,32 @@ export function analyzeFlips(baselineReport, currentReport) {
   }
   return { flipsRed, flipsGreen };
 }
+
+/**
+ * 豁免表应用（有意行为变化的显式审核通道）：
+ * - 条目为用例 fullName 精确匹配，尾缀 `*` 为前缀匹配；
+ * - blocked：未豁免的转红——门禁红；
+ * - allowed：已豁免的转红——放行但打印留痕（豁免即公开）；
+ * - stale：未命中任何转红的条目——多半已转绿、应清理，调用方仅警告。
+ */
+export function applyAllow(flipsRed, allowPatterns) {
+  const matches = (name, pattern) =>
+    pattern.endsWith('*') ? name.startsWith(pattern.slice(0, -1)) : name === pattern;
+  const blocked = [];
+  const allowed = [];
+  const hit = allowPatterns.map(() => false);
+  for (const entry of flipsRed) {
+    const name = entry[0];
+    let exempt = false;
+    allowPatterns.forEach((p, i) => {
+      if (matches(name, p)) {
+        hit[i] = true;
+        exempt = true;
+      }
+    });
+    if (exempt) allowed.push(entry);
+    else blocked.push(entry);
+  }
+  const stale = allowPatterns.filter((_, i) => !hit[i]);
+  return { blocked, allowed, stale };
+}

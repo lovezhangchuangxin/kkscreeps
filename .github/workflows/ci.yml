@@ -75,7 +75,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
+      # 逐用例门禁基线取 HEAD~1（同提交入库的回归不自我洗白）——需深度 ≥ 2
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - uses: dtolnay/rust-toolchain@1.98.1
       - uses: Swatinem/rust-cache@v2
       - uses: pnpm/action-setup@v4
