@@ -77,6 +77,7 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     writeback_rearmed_after_cancel()?;
     store_class_semantics_impl()?;
     spawn_family_api_impl()?;
+    resource_family_prelude_matrix_impl()?;
     // LIFO 零违规断言在**全部**场景之后——中段断言会让其后场景的违规漏网
     assert_eq!(kk_runner::lifo_violations(), 0, "全流程 LIFO 纪律零违规");
     Ok(())
@@ -1899,6 +1900,313 @@ fn spawn_family_api_impl() -> anyhow::Result<()> {
                 serde_json::json!([2, 3])
             );
             assert_eq!(intents["s2"]["cancelSpawning"], serde_json::json!({}));
+        }
+        _ => panic!("应正常执行"),
+    }
+    Ok(())
+}
+/// A4-ii 资源族四方法（transfer/withdraw/drop/pickup）prelude 换真的预检返回码
+/// 矩阵——官方 creeps.js:404-593 的预检序逐条锁值（预检顺序即断言顺序）。
+/// 世界：rcl3 房（extension 容量 50）；w1 两 carry（容量 100 存 80）为 actor。
+fn resource_family_prelude_matrix_impl() -> anyhow::Result<()> {
+    let mut sb = Sandbox::new(SandboxConfig::default())?;
+    let w = json!({
+        "time": 1,
+        "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+        "user": "p1",
+        "rooms": { "W1N1": { "name": "W1N1" } },
+        "objects": [
+            { "id": "kk1", "type": "creep", "room": "W1N1", "x": 25, "y": 25, "name": "w1",
+              "owner": "p1", "body": ["carry", "carry"], "store": { "energy": 80 } },
+            { "id": "kk2", "type": "creep", "room": "W1N1", "x": 25, "y": 26, "name": "w2",
+              "owner": "p1", "body": ["carry"], "store": { "energy": 10 } },
+            { "id": "kk3", "type": "creep", "room": "W1N1", "x": 26, "y": 26, "name": "w3",
+              "owner": "p2", "body": ["carry"], "store": { "energy": 5 } },
+            { "id": "kk4", "type": "creep", "room": "W1N1", "x": 27, "y": 27, "name": "w4",
+              "owner": "p1", "body": ["carry"], "store": { "energy": 50 }, "spawning": true },
+            { "id": "kk5", "type": "creep", "room": "W1N1", "x": 28, "y": 28, "name": "w5",
+              "owner": "p1", "body": ["carry"], "store": { "energy": 0 } },
+            { "id": "kk6", "type": "creep", "room": "W1N1", "x": 24, "y": 24, "name": "w6",
+              "owner": "p1", "body": ["carry", "carry"], "store": { "energy": 100 } },
+            { "id": "s1", "type": "spawn", "room": "W1N1", "x": 24, "y": 25, "name": "Spawn1",
+              "owner": "p1", "store": { "energy": 300 }, "energyCapacity": 300 },
+            { "id": "e1", "type": "structure", "structureType": "extension", "room": "W1N1",
+              "x": 26, "y": 24, "owner": "p1", "store": { "energy": 0 } },
+            { "id": "e2", "type": "structure", "structureType": "extension", "room": "W1N1",
+              "x": 24, "y": 26, "owner": "p1", "store": { "energy": 50 } },
+            { "id": "k1", "type": "structure", "structureType": "controller", "room": "W1N1",
+              "x": 10, "y": 10, "level": 3, "owner": "p1" },
+            { "id": "src1", "type": "structure", "structureType": "source", "room": "W1N1",
+              "x": 40, "y": 40, "energy": 2500 },
+            { "id": "st1", "type": "structure", "structureType": "storage", "room": "W1N1",
+              "x": 45, "y": 45, "owner": "p1", "store": { "energy": 500 } },
+            { "id": "r1", "type": "resource", "room": "W1N1", "x": 25, "y": 24,
+              "resourceType": "energy", "amount": 30 },
+            { "id": "r2", "type": "resource", "room": "W1N1", "x": 45, "y": 44,
+              "resourceType": "energy", "amount": 30 }
+        ]
+    });
+    // 预检返回码断言宏（直持 sb——闭包形式与穿插的裸 run_expr 抢借用）
+    macro_rules! ck {
+        ($expr:expr, $want:expr) => {{
+            let v = sb.run_expr($expr)?;
+            assert_eq!(v["ok"], true, "矩阵求值须成功: {} → {:?}", $expr, v);
+            assert_eq!(v["value"].as_i64(), Some($want), "预检返回码: {}", $expr);
+        }};
+    }
+
+    match sb.begin_tick(&w)? {
+        TickPlan::Run { .. } => {
+            // ---- drop（官方 creeps.js:404-427：my/spawning → 白名单 → 保有 → 缺省）----
+            ck!("Game.creeps['w1'].drop(RESOURCE_ENERGY, 30)", 0);
+            // 官方无 amount<0 预检：负数不落 INVALID_ARGS（全段无 amount<0 检查，
+            // store 80 ≥ -5 放行——执行器 amount>0 才落地，官方同形 no-op）
+            ck!("Game.creeps['w1'].drop(RESOURCE_ENERGY, -5)", 0);
+            ck!("Game.creeps['w1'].drop(RESOURCE_ENERGY, 999)", -6);
+            ck!("Game.creeps['w1'].drop('notaresource')", -10);
+            ck!("Game.creeps['w5'].drop(RESOURCE_ENERGY)", -6);
+            ck!("Game.getObjectById('kk3').drop(RESOURCE_ENERGY)", -1);
+            ck!("Game.creeps['w4'].drop(RESOURCE_ENERGY)", -4);
+
+            // ---- transfer（官方 :428-492：amount<0 → 白名单 → 目标族 → 容量 →
+            // 邻接 → 保有 → 缺省钳制/显式超容拒）----
+            ck!(
+                "Game.creeps['w1'].transfer(Game.getObjectById('e1'), RESOURCE_ENERGY)",
+                0
+            );
+            // e2 已满（rcl3 档 50——容量折算的投影锁值）
+            ck!(
+                "Game.creeps['w1'].transfer(Game.getObjectById('e2'), RESOURCE_ENERGY)",
+                -8
+            );
+            // spawn 满仓 300/300
+            ck!(
+                "Game.creeps['w1'].transfer(Game.spawns['Spawn1'], RESOURCE_ENERGY)",
+                -8
+            );
+            // creep 目标：显式超容拒（60+10 > 50），部分量放行（20+10 ≤ 50）
+            ck!(
+                "Game.creeps['w1'].transfer(Game.getObjectById('kk2'), RESOURCE_ENERGY, 60)",
+                -8
+            );
+            ck!(
+                "Game.creeps['w1'].transfer(Game.getObjectById('kk2'), RESOURCE_ENERGY, 20)",
+                0
+            );
+            // 邻接后置：远 storage 过容量门后在 isNearTo 拒
+            ck!(
+                "Game.creeps['w1'].transfer(Game.getObjectById('st1'), RESOURCE_ENERGY)",
+                -9
+            );
+            // source 不在 register.structures（game.js:224-247 键集无 source）
+            ck!(
+                "Game.creeps['w1'].transfer(Game.getObjectById('src1'), RESOURCE_ENERGY)",
+                -7
+            );
+            // spawning 目标拒（:445）
+            ck!(
+                "Game.creeps['w1'].transfer(Game.getObjectById('kk4'), RESOURCE_ENERGY)",
+                -7
+            );
+            // 非能量资源进 perResource 结构：容量 0 → INVALID_TARGET（:459）
+            ck!(
+                "Game.creeps['w1'].transfer(Game.spawns['Spawn1'], RESOURCE_POWER)",
+                -7
+            );
+            ck!(
+                "Game.creeps['w1'].transfer(Game.getObjectById('e1'), RESOURCE_POWER)",
+                -7
+            );
+            // 参数门在目标门之前（:435/:438）
+            ck!(
+                "Game.creeps['w1'].transfer(Game.getObjectById('kk2'), RESOURCE_ENERGY, -5)",
+                -10
+            );
+            ck!(
+                "Game.creeps['w1'].transfer(Game.getObjectById('kk2'), 'bogus')",
+                -10
+            );
+            ck!("Game.creeps['w1'].transfer(null, RESOURCE_ENERGY)", -7);
+            ck!(
+                "Game.creeps['w1'].transfer({id: 'short'}, RESOURCE_ENERGY)",
+                -7
+            );
+            // controller+能量重定向 upgradeController（:449-451；A4-iii 换真前经
+            // 桩返回 OK——本断言锁重定向形态而非 upgrade 语义）
+            ck!(
+                "Game.creeps['w1'].transfer(Game.getObjectById('k1'), RESOURCE_ENERGY)",
+                0
+            );
+            // 非能量进 controller：容量 0 → INVALID_TARGET
+            ck!(
+                "Game.creeps['w1'].transfer(Game.getObjectById('k1'), RESOURCE_POWER)",
+                -7
+            );
+            // 序列化对象拒绝（game.js:122-126 assertTargetObject 抛错点）
+            let v = sb.run_expr(
+                "Game.creeps['w1'].transfer({id: '123456789012345678901234'}, RESOURCE_ENERGY)",
+            )?;
+            assert_eq!(v["ok"], false, "plain object + 24 位 id 须抛序列化拒绝");
+            assert!(
+                v["error"]
+                    .as_str()
+                    .unwrap_or("")
+                    .contains("serialized game object"),
+                "官方文案: {v:?}"
+            );
+
+            // ---- withdraw（官方 :493-565：参数门 → store 面/目标族 → terminal →
+            // rampart（桩面恒放行）→ safeMode → nuker/powerBank → 容量/保有 →
+            // 邻接 → 空容量 → 缺省/超容拒）----
+            ck!(
+                "Game.creeps['w1'].withdraw(Game.spawns['Spawn1'], RESOURCE_ENERGY, 10)",
+                0
+            );
+            // 超过自身空容量（100-80=20）
+            ck!(
+                "Game.creeps['w1'].withdraw(Game.spawns['Spawn1'], RESOURCE_ENERGY, 30)",
+                -8
+            );
+            // 满仓 creep
+            ck!(
+                "Game.creeps['w6'].withdraw(Game.spawns['Spawn1'], RESOURCE_ENERGY)",
+                -8
+            );
+            // 空目标结构：过容量门后缺省 amount=0 → NOT_ENOUGH_RESOURCES
+            ck!(
+                "Game.creeps['w1'].withdraw(Game.getObjectById('e1'), RESOURCE_ENERGY)",
+                -6
+            );
+            ck!(
+                "Game.creeps['w1'].withdraw(Game.getObjectById('st1'), RESOURCE_ENERGY)",
+                -9
+            );
+            // source/creep 目标族拒（:507-516）
+            ck!(
+                "Game.creeps['w1'].withdraw(Game.getObjectById('src1'), RESOURCE_ENERGY)",
+                -7
+            );
+            ck!(
+                "Game.creeps['w1'].withdraw(Game.getObjectById('kk2'), RESOURCE_ENERGY)",
+                -7
+            );
+            ck!(
+                "Game.creeps['w1'].withdraw(Game.spawns['Spawn1'], RESOURCE_ENERGY, -1)",
+                -10
+            );
+            ck!(
+                "Game.creeps['w1'].withdraw(Game.spawns['Spawn1'], 'bogus')",
+                -10
+            );
+            ck!(
+                "Game.getObjectById('kk3').withdraw(Game.spawns['Spawn1'], RESOURCE_ENERGY)",
+                -1
+            );
+            ck!(
+                "Game.creeps['w4'].withdraw(Game.spawns['Spawn1'], RESOURCE_ENERGY)",
+                -4
+            );
+            // 未知 id 在 store 面（data() 求值点）抛官方同文案——早于 assertTargetObject
+            let v = sb.run_expr(
+                "Game.creeps['w1'].withdraw({id: 'aaaaaaaaaaaaaaaaaaaaaaaa'}, RESOURCE_ENERGY)",
+            )?;
+            assert_eq!(v["ok"], false, "未知 id 须抛 Could not find");
+            assert!(
+                v["error"]
+                    .as_str()
+                    .unwrap_or("")
+                    .contains("Could not find an object with ID"),
+                "官方文案: {v:?}"
+            );
+
+            // ---- pickup（官方 :566-593：my/spawning → Resource 目标 → 满仓 →
+            // isNearTo ≤1 格）----
+            ck!("Game.creeps['w1'].pickup(Game.getObjectById('r1'))", 0);
+            ck!("Game.creeps['w1'].pickup(Game.getObjectById('r2'))", -9);
+            ck!("Game.creeps['w6'].pickup(Game.getObjectById('r1'))", -8);
+            ck!("Game.creeps['w1'].pickup(Game.spawns['Spawn1'])", -7);
+            ck!(
+                "Game.getObjectById('kk3').pickup(Game.getObjectById('r1'))",
+                -1
+            );
+            ck!("Game.creeps['w4'].pickup(Game.getObjectById('r1'))", -4);
+            let v = sb.run_expr("Game.creeps['w1'].pickup({id: '123456789012345678901234'})")?;
+            assert_eq!(v["ok"], false, "pickup 序列化对象同抛");
+            assert!(
+                v["error"]
+                    .as_str()
+                    .unwrap_or("")
+                    .contains("serialized game object"),
+                "官方文案: {v:?}"
+            );
+
+            let end = sb.end_tick()?;
+            assert_eq!(end["ok"], true);
+            // 矩阵 tick 的 last-wins 锁值：drop 负 amount 官方无门原样进 intent
+            //（执行器 amount>0 才落地——no-op）；transfer 到 kk2 20
+            let intents = sb.take_intents().expect("intentsList 带出");
+            assert_eq!(
+                intents["kk1"]["drop"]["amount"], -5,
+                "负 amount 原样记录（官方无门）"
+            );
+            assert_eq!(intents["kk1"]["drop"]["resourceType"], "energy");
+            assert_eq!(intents["kk1"]["transfer"]["id"], "kk2");
+            assert_eq!(intents["kk1"]["transfer"]["amount"], 20, "显式部分量 20");
+            // 矩阵内唯一放行的 withdraw（10）last-wins 存留；被拒的调用不得记 intent
+            assert_eq!(intents["kk1"]["withdraw"]["id"], "s1");
+            assert_eq!(intents["kk1"]["withdraw"]["amount"], 10);
+            assert_eq!(
+                intents["kk1"]["pickup"]["id"], "r1",
+                "矩阵内唯一放行的 pickup"
+            );
+        }
+        _ => panic!("应正常执行"),
+    }
+
+    // ---- 第二 tick：四方法缺省量/钳制的 intent 载荷锁值 ----
+    match sb.begin_tick(&w)? {
+        TickPlan::Run { .. } => {
+            let v = sb.run_expr(
+                r#"(()=>{
+                const w1 = Game.creeps['w1'];
+                return [
+                    w1.drop(RESOURCE_ENERGY, 30),
+                    w1.transfer(Game.getObjectById('e1'), RESOURCE_ENERGY),
+                    w1.withdraw(Game.spawns['Spawn1'], RESOURCE_ENERGY),
+                    w1.pickup(Game.getObjectById('r1')),
+                ].join(',');
+            })()"#,
+            )?;
+            assert_eq!(v["value"], "0,0,0,0", "四方法缺省形态全部放行");
+            let end = sb.end_tick()?;
+            assert_eq!(end["ok"], true);
+            let intents = sb.take_intents().expect("intentsList 带出");
+            // drop 显式 30
+            assert_eq!(intents["kk1"]["drop"]["amount"], 30);
+            // transfer 缺省 = min(保有 80, 目标容量 50 − 已存 0) = 50——
+            // extension 容量按房 rcl3 折算（官方 extensions/tick.js:10-17 的
+            // storeCapacityResource.energy 投影等价锁值）
+            assert_eq!(intents["kk1"]["transfer"]["id"], "e1");
+            assert_eq!(
+                intents["kk1"]["transfer"]["amount"], 50,
+                "缺省钳到 rcl3 extension 容量"
+            );
+            assert_eq!(intents["kk1"]["transfer"]["resourceType"], "energy");
+            // withdraw 缺省 = min(空容量 20, spawn 存量 300) = 20——
+            // actor 容量按 body CARRY×50 折算（_recalc-body.js:23 投影等价锁值）
+            assert_eq!(intents["kk1"]["withdraw"]["id"], "s1");
+            assert_eq!(
+                intents["kk1"]["withdraw"]["amount"], 20,
+                "缺省钳到自身空容量"
+            );
+            assert_eq!(intents["kk1"]["withdraw"]["resourceType"], "energy");
+            // pickup 载荷只有 id（官方 :586）
+            assert_eq!(intents["kk1"]["pickup"]["id"], "r1");
+            assert_eq!(
+                serde_json::to_string(&intents["kk1"]["pickup"])?,
+                r#"{"id":"r1"}"#,
+                "pickup 载荷仅 id（无 amount/resourceType）"
+            );
         }
         _ => panic!("应正常执行"),
     }

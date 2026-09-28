@@ -16,6 +16,7 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     embed_intent_channel_impl()?;
     embed_per_viewer_and_caps_impl()?;
     embed_spawn_family_chain_impl()?;
+    embed_resource_family_impl()?;
     assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");
     Ok(())
 }
@@ -883,5 +884,90 @@ fn embed_per_viewer_and_caps_impl() -> anyhow::Result<()> {
         v[3], "undefined",
         "工地所在不可见房 Game.rooms 条目 undefined: {v:?}"
     );
+    Ok(())
+}
+
+/// A4-ii 资源族四方法端到端（prelude 换真 ↔ 执行器已有结算的接线）：
+/// transfer/withdraw/drop/pickup 的能量流经真实投影（含 extension 容量按
+/// rcl 折算的 prelude/执行器双源一致）。
+fn embed_resource_family_impl() -> anyhow::Result<()> {
+    let mut e = EmbedEngine::new();
+    e.create_shard(&json!({
+        "players": ["p1"],
+        "rooms": [{ "name": "W1N1", "rcl": 3, "owner": "p1" }],
+    }))?;
+    let creep_id = e.place_object(
+        "W1N1",
+        "creep",
+        &json!({
+            "pos": [25, 25], "owner": "p1", "body": ["carry", "carry", "move"], "name": "w1",
+            "store": { "energy": 80 },
+        }),
+    )?;
+    let ext_id = e.place_object(
+        "W1N1",
+        "structure",
+        &json!({
+            "pos": [26, 24], "structureType": "extension", "owner": "p1",
+            "store": { "energy": 0 },
+        }),
+    )?;
+    let ext_json = serde_json::to_string(&ext_id)?;
+
+    // transfer：缺省钳到 rcl3 extension 容量 50（prelude 折算）＝ 执行器
+    // extension_cap(rcl) 钳制（settle/creep.rs）——双源一致的能量转移
+    let run = e.run_player(
+        "p1",
+        &format!("Game.creeps['w1'].transfer(Game.getObjectById({ext_json}), RESOURCE_ENERGY)"),
+    )?;
+    assert_eq!(run.expr["value"], 0, "transfer 预检通过");
+    let snap = e.get_object(&creep_id).unwrap();
+    assert_eq!(snap["store"]["energy"], 30, "80 − 50（缺省钳到目标容量）");
+    let ext = e.get_object(&ext_id).unwrap();
+    assert_eq!(ext["store"]["energy"], 50, "extension 0 → 50");
+
+    // withdraw：缺省 min(空容量 70, 存量 50) = 50 全量取回
+    let run = e.run_player(
+        "p1",
+        &format!("Game.creeps['w1'].withdraw(Game.getObjectById({ext_json}), RESOURCE_ENERGY)"),
+    )?;
+    assert_eq!(run.expr["value"], 0, "withdraw 预检通过");
+    let snap = e.get_object(&creep_id).unwrap();
+    assert_eq!(snap["store"]["energy"], 80, "30 + 50");
+    let ext = e.get_object(&ext_id).unwrap();
+    // snapshot 契约：空 store 折叠为 {}（snap_store），0 值键缺省
+    assert_eq!(
+        ext["store"]["energy"].as_i64().unwrap_or(0),
+        0,
+        "extension 50 → 0"
+    );
+
+    // drop 30：同格生成 resource 堆
+    let run = e.run_player("p1", "Game.creeps['w1'].drop(RESOURCE_ENERGY, 30)")?;
+    assert_eq!(run.expr["value"], 0, "drop 预检通过");
+    let snap = e.get_object(&creep_id).unwrap();
+    assert_eq!(snap["store"]["energy"], 50, "80 − 30");
+    let dropped = e.find_in_room("W1N1", 106);
+    assert_eq!(dropped.len(), 1, "drop 落地一个 resource");
+    // 掉落当 tick 即经 energy 衰减（objects/tick：ceil(30/500)=1）→ 29
+    assert_eq!(dropped[0]["amount"], 29, "掉落 30 − 当 tick 衰减 1");
+    assert_eq!(dropped[0]["pos"]["x"], 25, "掉落位置 = creep 格");
+    let pile_id = dropped[0]["id"].as_str().unwrap().to_string();
+
+    // pickup：整堆拾取（余量 50 ≥ 30）
+    let pile_json = serde_json::to_string(&pile_id)?;
+    let run = e.run_player(
+        "p1",
+        &format!("Game.creeps['w1'].pickup(Game.getObjectById({pile_json}))"),
+    )?;
+    assert_eq!(run.expr["value"], 0, "pickup 预检通过");
+    let snap = e.get_object(&creep_id).unwrap();
+    assert_eq!(snap["store"]["energy"], 79, "50 + 29（衰减后余量）");
+    assert!(e.get_object(&pile_id).is_none(), "堆清零移除");
+    assert!(
+        e.find_in_room("W1N1", 106).is_empty(),
+        "房间无残留 resource"
+    );
+    e.teardown();
     Ok(())
 }
