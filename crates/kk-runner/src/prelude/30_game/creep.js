@@ -123,6 +123,7 @@
     ERR_NOT_FOUND: globalThis.ERR_NOT_FOUND,
     ERR_RCL_NOT_ENOUGH: globalThis.ERR_RCL_NOT_ENOUGH,
     ERR_FULL: globalThis.ERR_FULL,
+    ERR_NO_PATH: globalThis.ERR_NO_PATH,
     ERR_GCL_NOT_ENOUGH: globalThis.ERR_GCL_NOT_ENOUGH,
     // controller 族（A4-iii）：generateSafeMode 的 ghodium 消耗门 +
     // claimController 的 GCL 门（calcNeededGcl = GCL_MULTIPLY × (n-1)^GCL_POW，
@@ -131,6 +132,7 @@
     RESOURCE_GHODIUM: globalThis.RESOURCE_GHODIUM,
     GCL_MULTIPLY: globalThis.GCL_MULTIPLY,
     GCL_POW: globalThis.GCL_POW,
+    ERR_NO_PATH: globalThis.ERR_NO_PATH,
     OBSTACLE_OBJECT_TYPES: freezeConst(globalThis.OBSTACLE_OBJECT_TYPES),
     CONSTRUCTION_COST: freezeConst(globalThis.CONSTRUCTION_COST),
     CONTROLLER_STRUCTURES: freezeConst(globalThis.CONTROLLER_STRUCTURES),
@@ -978,6 +980,9 @@
   globalThis.Creep.prototype.say = function say(message, isPublic) {
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;
+    // isPublic 出口前布尔折叠（官方 system.js:8 的 boolean transform 在 JS
+    // 边界 !!value——我方出口序列化不摘对象自有 toJSON，对象形态可携 1MB
+    // 载荷过通道（结算 to_bool 终值兜住）；折叠对齐官方边界语义
     gw.intents.set(this.id, 'say', { message: '' + message, isPublic: !!isPublic });
     return C.OK;
   };

@@ -1227,8 +1227,6 @@ fn intent_generate_safe_mode(w: &mut Working, id: ObjId, data: &IntentData) {
     }
 }
 
-/// 官方 creeps/tick.js（M1 子集）：孵化中的雏形自愈/出生（spawn 侧的对偶
-/// 路径）、移动落格、ageTime 首触赋值、TTL 死亡、疲劳恢复。
 // ---- A4-iv：移动杂项族执行器（官方 processor/intents/creeps/ 同名文件） ----
 
 /// 官方 say.js：spawning 拒后落 actionLog.say。官方键携带 message（截 10）与
@@ -1251,8 +1249,15 @@ fn intent_say(w: &mut Working, id: ObjId, data: &IntentData) {
 /// 官方 suicide.js：intent 相即死（_die.js，dropRate=CREEP_CORPSE_RATE、
 /// violentDeath=false——墓碑/尸沉归 M1 die_creep 形态，灰区沿用 TTL 死亡的
 /// 登记）。user=='2'（Source Keeper dropRate=0）不建模——NPC 不入 M2 世界。
-/// 死亡发生在 intent 相（官方同位）：本 tick 后续动作（claim/upgrade/...）
-/// 因对象消亡静默跳过、已入矩阵的 move 不再落格。
+/// 死亡发生在 intent 相（官方同位）；已入矩阵的 move 不再落格（官方 execute
+/// 经 roomObjects forEach，死对象不被遍历——同形）。
+/// **有意分歧（A4-iv 评审 1/3 双确认登记）**：官方后序处理器（claim/
+/// upgrade/.../pull，creepActions 序 suicide 之后）持有死引用快照继续执行
+/// 且对**其他对象**的效果落地（processor.js:241 先取引用、_die.js:12-13 只
+/// delete 集合不清引用、各处理器无 actor 存活复检）——`suicide();
+/// upgradeController(c)` 同 tick 官方升级照常生效。我方对象消亡后
+/// w.creep(id)→None 全早退（对其他对象的效果也跳过）。实装需处理器持
+/// pre-death 快照（侵入面大），真实 bot 罕见该组合——登记有意分歧。
 fn intent_suicide(w: &mut Working, id: ObjId) {
     if w.creep(id).is_none_or(|c| c.spawning) {
         return;
@@ -1283,6 +1288,8 @@ fn intent_pull(w: &mut Working, id: ObjId, data: &IntentData) {
 }
 
 /// 官方 creeps/tick.js（M1 子集）：移动落格、TTL 死亡、疲劳恢复。
+/// 官方 creeps/tick.js（M1 子集）：孵化中的雏形自愈/出生（spawn 侧的对偶
+/// 路径）、移动落格、ageTime 首触赋值、TTL 死亡、疲劳恢复。
 pub fn creep_tick(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
     // 移动落格（movement.js execute）
     movement_execute(w, id)?;

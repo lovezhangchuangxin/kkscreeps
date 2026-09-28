@@ -4552,9 +4552,13 @@ fn suicide_intent_kills_creep_same_tick() {
         "suicide 无事件（官方 _die 的 EVENT_OBJECT_DESTROYED 未投影——既有灰区）"
     );
 
-    // 同 tick 后续 intents 不再作用（对象消亡）：官方执行序 creepActions 里
-    // upgradeController 排在 suicide **之后**（intents.js:15-17）——先死后跳
-    //（harvest 等排在前序的动作照常生效，顺序本身即官方语义）
+    // 同 tick 后续 intents 不再作用（对象消亡）——**有意分歧**：官方执行序
+    // creepActions 里 upgradeController 排 suicide 之后（intents.js:15-17），
+    // 但官方处理器持死引用快照继续执行、对其他对象的效果落地（processor.js:241/
+    // _die.js:12-13 不清引用、upgradeController.js 无存活复检——同 tick 官方
+    // 升级照常生效）；我方对象消亡即跳过（A4-iv 评审 1/3 双确认，compatibility.md
+    // 登记为有意分歧：处理器持 pre-death 快照侵入面大、真实 bot 罕见）——本断言
+    // 锁的是我方登记后的分歧行为，非官方语义
     let mut f2 = Fixture::new(2, terrain_with(&[]));
     let ctl = f2.controller(1, Some("p1"));
     let c2 = f2.creep("w2", "p1", 6, 6, &[BodyKind::Move, BodyKind::Work], 100);

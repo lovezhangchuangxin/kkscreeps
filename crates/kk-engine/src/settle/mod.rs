@@ -272,7 +272,7 @@ fn object_owner_of(obj: &RoomObject) -> Option<std::borrow::Cow<'_, str>> {
 /// 官方 processor.js:313-314 的 notifyWhenAttacked 通用段：intent 存在且对象
 /// 是 CONSTRUCTION_COST 类型（或 creep/powerCreep——后者 M4）→ 落库
 /// `notifyWhenAttacked: !!enabled`。:248 的所有权门（他人对象跳过）内联。
-/// 消费面是伤害通知（_damage.js:78 / towers/attack.js:63——M2 通知面未接线，
+/// 消费面是伤害通知（_damage.js:76 / towers/attack.js:63——M2 通知面未接线，
 /// 本批只持久化标志，通知发送灰区登记）。
 fn notify_when_attacked(w: &mut Working, player: &str, id: ObjId, data: &IntentData) {
     let Some(obj) = w.room.objects.get(&id) else {

@@ -122,6 +122,9 @@
 | say 的 actionLog 文本载荷（A4-iv 登记，B1.1 healType 同口径） | u16 位图只落事件位 bit9（ACTION_SAY）；官方 actionLog.say 是 `{message: 截 10 字, isPublic}` 对象 | `creep.saying` 读不到文本（恒 undefined——官方无 say 记录时同值，有记录时官方返回消息）；EVENT 层无 say 事件（官方亦无）；schema 换正式 actionLog 形态时恢复双键与文本 |
 | creep 侧 notifyWhenAttacked 落库（A4-iv 登记） | 官方 creep 出生即 `notifyWhenAttacked: true`（create-creep.js:93）且 processor 通用段可写（processor.js:313 的 creep 分支）；我方 CreepObj 无该字段 | Creep API 面本就无 notifyWhenAttacked 方法（官方也只在结构类暴露）、通知面未接线——不可观测；damage 通知接线时若需 creep 侧读数随 schema 补字段 |
 | notifyWhenAttacked 的通知发送面（A4-iv 登记） | 只持久化标志（typed 五对象 + Generic data JSON + build 落成即 true 对齐 build.js:116）；`_damage.js:78`/`towers/attack.js:63` 的受击 Game.notify 发送不发生 | M2 通知面（notify 通道 + 上线推送）未接线；结构/塔被攻击的玩家提醒缺失，flag 值本身已可读写并可经投影观察到 |
+| suicide 后序 intent 的幽灵语义（A4-iv 评审 1/3 双确认登记） | 官方处理器持死引用快照继续执行且对其他对象的效果落地（processor.js:241 先取引用、_die.js:12-13 只删集合、claim/upgrade/…/pull 处理器无 actor 存活复检）——`suicide(); upgradeController(c)` 同 tick 官方升级照常生效；我方对象消亡后全早退 | 有意分歧：处理器持 pre-death 快照侵入面大、真实 bot 罕见该组合；次级边角同根——死者矩阵项我方零 rate 必输、官方幽灵按真 body 竞争可赢格；已入矩阵的 move 不落格两侧同形（官方 execute 不遍历死对象） |
+| moveTo 越界坐标（A4-iv 评审 1 登记） | 官方 RoomPosition 构造器对 x/y∉[0,49] 抛 'Invalid arguments...'（rooms.js:1280-1287）；我方构造无校验，moveTo(60,25) 静默直线 | 目标解析段的未复刻抛错面；随 RoomPosition 构造器校验批次决定（bot 生态罕见传越界）；fetchXY 的 Number.isNaN 类型门 vs 官方强转 isNaN 的返回码差同族（'ab' 类目标我方放行到寻路段） |
+| say 的 isPublic 出口折叠（A4-iv 评审 2 清偿记录） | 官方 system.js:8 的 boolean transform 在 JS 边界 !!value；我方出口序列化不摘对象自有 toJSON——对象形态可携大载荷过通道（结算 to_bool 终值兜住） | 已清偿：出口前 `!!isPublic` 折叠对齐官方边界；同通道的 message 为字符串字面量拼接免疫 |
 
 ## 四、验收关卡（不做完不算兼容）
 

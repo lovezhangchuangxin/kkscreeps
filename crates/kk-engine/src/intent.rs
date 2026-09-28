@@ -855,3 +855,53 @@ mod tests {
         );
     }
 }
+
+/// A4-iv 清偿（评审 3 建议）：say/pull/notifyWhenAttacked 的载荷清洗面
+/// 白名单臂 + to_bool 真值表（JS `!!value` 语义）+ EXECUTION_ORDER 的
+/// suicide/say/pull 位次锁（官方 creepActions intents.js:15-17）。
+#[test]
+fn from_json_misc_family_whitelist_and_order() {
+    let creep = "kk0000000000000011";
+    let target = "kk0000000000000012";
+    let list = serde_json::json!({
+        creep: {
+            "say": { "message": "hello", "isPublic": "yes", "unknown": 1 },
+            "pull": { "id": target, "extra": true },
+            "suicide": { "unknown": "dropped" },
+        },
+        target: {
+            "notifyWhenAttacked": { "enabled": "false", "junk": 0 },
+        },
+    });
+    let batch = IntentBatch::from_json("p1", &list);
+    let u = &batch.users["p1"];
+    let c_intents = &u.objects[&ObjId::parse(creep).unwrap()];
+    // say：message 经 userString（截 100）；isPublic 经 to_bool——JS !! 真值表
+    //（"yes" 非空串 → true，"false" 同样 true——字符串除 "" 外恒真）
+    let say = &c_intents[&Action::Say];
+    assert_eq!(say.message.as_deref(), Some("hello"));
+    assert_eq!(
+        say.is_public,
+        Some(true),
+        "to_bool('yes') === true（JS !! 真值表）"
+    );
+    assert_eq!(say.id, None, "say 无 id 字段，未知字段丢弃");
+    // pull：只认 id
+    let pull = &c_intents[&Action::Pull];
+    assert_eq!(pull.id, Some(ObjId::parse(target).unwrap()));
+    // suicide：空白名单（未知字段丢弃）
+    assert_eq!(c_intents[&Action::Suicide].id, None);
+    // notifyWhenAttacked：enabled 折叠（"false" 字符串在 JS !! 下是 true！）
+    let t_intents = &u.objects[&ObjId::parse(target).unwrap()];
+    assert_eq!(
+        t_intents[&Action::NotifyWhenAttacked].enabled,
+        Some(true),
+        "to_bool('false') === true——官方 transform 是 !!value 非 JSON 解析"
+    );
+    // EXECUTION_ORDER 位次（官方 creepActions：harvest(8) < say(14) <
+    // suicide(15) < pull(22)）
+    let pos = |a: Action| EXECUTION_ORDER.iter().position(|x| *x == a).unwrap();
+    assert!(pos(Action::Harvest) < pos(Action::Say));
+    assert!(pos(Action::Say) < pos(Action::Suicide));
+    assert!(pos(Action::Suicide) < pos(Action::Pull));
+}
