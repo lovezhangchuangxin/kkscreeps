@@ -94,8 +94,8 @@ impl World {
         json!({
             "time": self.time,
             // cpu 为占位基准值（默认配置下与预算真值相等）：真值由沙箱注入点
-            // 富化（proto.rs run_eval_tick——budget 真值在沙箱线程内，注入前
-            // 就地覆写，官方 make.js 先算窗口再装 runtimeData 的同构）
+            // 传递（sandbox.rs Sandbox::begin_tick 的 beginTick 第二参数，JS
+            // 侧合并覆盖——官方 make.js 先算窗口再装 runtimeData 的同构）
             "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
             "user": user,
             "gcl": viewer.map(|(_, g)| g).unwrap_or(0),
@@ -547,7 +547,12 @@ pub fn matches_find(o: &Value, find_const: i64, viewer: Option<&str>) -> bool {
     let is_struct = kind == "structure" || kind == "spawn";
     // 归属三态（raw 投影面）：Some(v) 字符串=有主、null=降级清零（controller
     // 哨兵）、缺键=从未拥有。official `my === false && i.owner`：owner getter
-    // 对 null 归 undefined（structures.js:136-138）→ 敌对臂只认字符串 owner
+    // 对 null 归 undefined（structures.js:136-138）→ 敌对臂只认字符串 owner。
+    // 注：官方 103/113/115（creep/spawn/site 敌对臂）无 `&& i.owner` 检查
+    //（game.js:18/24/29）——null owner 假想态官方判敌对我方排除；typed 投影
+    // 下 owner 恒字符串或缺键（creep/spawn 必填、site None 投影缺键），null
+    // owner 唯一可达对象是 controller（其敌对臂 109 官方也排除）→ 现有
+    // schema 下两层与官方三方一致；schema 演化（owner 可无主化）时需复核
     let owner_str = o.get("owner").and_then(Value::as_str);
     let owned_by = |v: &str| owner_str == Some(v);
     let hostile_of = |v: &str| owner_str.is_some() && owner_str != Some(v);
@@ -1076,6 +1081,27 @@ mod tests {
         .unwrap();
         world.insert("W1N1", site1).unwrap();
 
+        // 降级清零 controller（owner:null 哨兵——官方 owner getter 对 null 归
+        // undefined，structures.js:136-138）：MY/HOSTILE 双臂均不进（109 的
+        // `my===false && i.owner` 把它挡在敌对外——评审 3 P3-3 边角锁）
+        let cleared_ctl = RoomObject::Controller(ControllerObj {
+            id: 0,
+            x: 2,
+            y: 1,
+            level: 1,
+            safe_mode: 0,
+            safe_mode_available: 0,
+            progress: 0,
+            downgrade_time: None,
+            owner: None,
+            owner_cleared: true,
+            is_power_enabled: false,
+            reservation: None,
+            sign: None,
+            upgrade_blocked: None,
+            safe_mode_cooldown: None,
+        });
+        world.insert("W1N1", cleared_ctl).unwrap();
         let count = |f: i64, v: Option<&str>| world.find_in_room("W1N1", f, v).len();
         // FIND_CREEPS：玩家面滤雏形（game.js:18 !i.spawning）；中立面含雏形
         assert_eq!(count(c::FIND_CREEPS, Some("p1")), 2, "c1+c2，雏形被滤");
@@ -1093,13 +1119,14 @@ mod tests {
         assert_eq!(count(c::FIND_MY_SPAWNS, Some("p1")), 1);
         assert_eq!(count(c::FIND_HOSTILE_SPAWNS, Some("p1")), 1);
         // MY/HOSTILE structures（game.js:24-25）：spawn+extension+tower 归属
-        // 分野；wall 无 owner（my undefined）两边都不进
+        // 分野；wall 无 owner（my undefined）与降级清零 controller（owner:
+        // null 哨兵）两边都不进
         assert_eq!(count(c::FIND_MY_STRUCTURES, Some("p1")), 2, "s1+ext1");
         assert_eq!(count(c::FIND_MY_STRUCTURES, Some("p2")), 2, "s2+tower");
         assert_eq!(
             count(c::FIND_HOSTILE_STRUCTURES, Some("p1")),
             2,
-            "s2+tower；wall 无 owner 不进"
+            "s2+tower；wall 无 owner/cleared ctl 的 null owner 都不进"
         );
         assert_eq!(count(c::FIND_HOSTILE_STRUCTURES, Some("p2")), 2, "s1+ext1");
         // MY/HOSTILE construction sites（game.js:26-27）

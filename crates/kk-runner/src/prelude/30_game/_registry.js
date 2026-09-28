@@ -75,11 +75,17 @@
   //   · toJSON 挂目标原型：跳过 `_` 前缀缓存键与 toJSON/toString，其余键
   //     （含 getter，访问即求值并缓存）进输出——stringify(壳) 的官方形态。
   // 官方挂在各游戏类 prototype 上（本函数的 obj 参数是 prototype）。
+  // keys/defineProperties 预置捕获（评审 2 P2-2）：本函数除类定义期外还在
+  // wrapObject 装配路径执行（road/wall/未知结构 else 分支每 tick 走这里）
+  const __objectKeys = Object.keys;
+  const __objectDefineProperties = Object.defineProperties;
   gw.defineGameObjectProperties = function defineGameObjectProperties(obj, dataFn, properties, opts) {
     opts = opts || {};
     const enumerable = opts.enumerable === undefined ? true : !!opts.enumerable;
     const info = {};
-    for (const name of Object.keys(properties)) {
+    const propNames = __objectKeys(properties);
+    for (let pi = 0; pi < propNames.length; pi++) {
+      const name = propNames[pi];
       const compute = properties[name];
       info[name] = {
         configurable: !!opts.configurable,
@@ -95,7 +101,7 @@
           : undefined,
       };
     }
-    Object.defineProperties(obj, info);
+    __objectDefineProperties(obj, info);
     obj.toJSON = function () {
       const result = {};
       for (const i in this) {
@@ -118,13 +124,15 @@
   const GAME_CLASS_NAMES = [
     'ConstructionSite', 'Creep', 'Deposit', 'Flag', 'Mineral', 'Nuke',
     'OwnedStructure', 'PowerCreep', 'Resource', 'Ruin', 'Room', 'RoomObject',
-    'Source', 'Store', 'Structure', 'StructureContainer', 'StructureController',
+    'Source', 'Structure', 'StructureContainer', 'StructureController',
     'StructureExtension', 'StructureExtractor', 'StructureFactory', 'StructureInvaderCore',
     'StructureKeeperLair', 'StructureLab', 'StructureLink', 'StructureNuker',
     'StructureObserver', 'StructurePortal', 'StructurePowerBank', 'StructurePowerSpawn',
     'StructureRampart', 'StructureRoad', 'StructureSpawn', 'StructureStorage',
     'StructureTerminal', 'StructureTower', 'StructureWall', 'Tombstone',
   ];
+  // Store 不在本表：真类由 structures 段安装（官方 store.js:99 defineProperty
+  // 同形）——本表的非可写安装会挡掉那次唯一重绑
   function makeStubClass(name) {
     const ctor = function () {
       countStub('new ' + name);
@@ -139,8 +147,16 @@
       },
     });
   }
+  // 官方安装形（creeps.js:1123 defineProperty(globals,'Creep',{enumerable:true,
+  // value}) 无 writable）：类全局绑定不可交换——玩家侧 instanceof/new 走真类，
+  // 原型补丁（bot 生态唯一官方支持的扩展形）照常生效（绑定非可写 ≠ 对象冻结）
   for (const name of GAME_CLASS_NAMES) {
-    if (globalThis[name] === undefined) globalThis[name] = makeStubClass(name);
+    if (globalThis[name] === undefined) {
+      Object.defineProperty(globalThis, name, {
+        enumerable: true,
+        value: makeStubClass(name),
+      });
+    }
   }
   // 官方类层级（RoomObject 为根；bot 生态跨层级打补丁，如 RoomObject.prototype.ref）：
   // Structure* 大多 extends OwnedStructure，wall/road/container/portal 直接 extends Structure
@@ -238,26 +254,26 @@
   }
   gw.classGlobalFor = classGlobalFor;
 
-  // wrapObject 的类解析捕获表（A3c 装配批）：官方经引擎闭包 globals.X 解析
-  //（game.js:285 `new globals.Source(i)` 等）——绑定交换不可见。首次 wrapObject
-  // 时（首个 beginTick 装配期，先于任何玩家代码）从 globalThis 惰性定格；此后
-  // 构造器引用固定，.prototype 运行期解引用（玩家原型补丁/重挂语义保持）
-  let classTable = null;
+  // wrapObject 的类解析捕获表（A3c 装配批，评审 2 P2-1 清偿）：官方经引擎
+  // 闭包 globals.X 解析（game.js:285 `new globals.Source(i)` 等）——绑定交换
+  // 不可见。**加载期立即定格**（本位置已在全部类安装循环之后；类全局非可写
+  // 定义后无重绑路径）：惰性定格曾有窗口——game.js 加载期的 refreshGame()
+  // 在空世界下零 wrapObject，空世界首 tick（新玩家/全灭玩家每 tick 如此）
+  // 玩家代码可先于首次 wrapObject 执行并污染定格表（探针实证）。构造器
+  // 引用固定、.prototype 运行期解引用（玩家原型补丁/重挂语义保持）
+  const classTable = gw.__Object.create(null);
+  const CLASS_TABLE_NAMES = ['Creep', 'StructureSpawn', 'Flag', 'ConstructionSite',
+    'Resource', 'Tombstone', 'Ruin', 'Deposit', 'PowerCreep', 'Nuke',
+    'StructureController', 'Source', 'Mineral', 'StructureStorage', 'StructureTerminal',
+    'StructureTower', 'StructureExtension', 'StructureLink', 'StructureLab',
+    'StructureRampart', 'StructureRoad', 'StructureWall', 'StructureContainer',
+    'StructureExtractor', 'StructureFactory', 'StructureNuker', 'StructureObserver',
+    'StructurePowerBank', 'StructurePowerSpawn', 'StructurePortal',
+    'StructureInvaderCore', 'StructureKeeperLair', 'Structure'];
+  for (let i = 0; i < CLASS_TABLE_NAMES.length; i++) {
+    classTable[CLASS_TABLE_NAMES[i]] = globalThis[CLASS_TABLE_NAMES[i]];
+  }
   function classCtor(cls) {
-    if (classTable === null) {
-      classTable = gw.__Object.create(null);
-      const names = ['Creep', 'StructureSpawn', 'Flag', 'ConstructionSite', 'Resource',
-        'Tombstone', 'Ruin', 'Deposit', 'PowerCreep', 'Nuke', 'StructureController',
-        'Source', 'Mineral', 'StructureStorage', 'StructureTerminal', 'StructureTower',
-        'StructureExtension', 'StructureLink', 'StructureLab', 'StructureRampart',
-        'StructureRoad', 'StructureWall', 'StructureContainer', 'StructureExtractor',
-        'StructureFactory', 'StructureNuker', 'StructureObserver', 'StructurePowerBank',
-        'StructurePowerSpawn', 'StructurePortal', 'StructureInvaderCore',
-        'StructureKeeperLair', 'Structure'];
-      for (let i = 0; i < names.length; i++) {
-        classTable[names[i]] = globalThis[names[i]];
-      }
-    }
     return classTable[cls];
   }
 

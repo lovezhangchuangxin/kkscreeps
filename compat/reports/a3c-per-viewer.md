@@ -75,3 +75,33 @@ user/cpu 真值；Game.collections/my/FIND_MY_*/energyAvailable 按 viewer——
 - room.find 玩家面新臂的 owner 三态（字符串/null/缺键）与 Rust matches_find
   的 `owner_str` 判定需逐臂对表
 - cpu 覆写在 begin_tick（skip 分支不覆写——停跑 tick 玩家根本不执行，无泄漏面）
+
+## 三路评审清偿记录（508a9c1 评审后）
+
+三路结论：评审 1（官方语义）可合入 4×P3；评审 2（防篡改/装配）需修复后合入
+2×P2+2×P3（含两组探针实证）；评审 3（Rust/测试）可合入 1×P2+3×P3。全部清偿：
+
+- **P2-1（评审 2）类表惰性定格被证伪**：game.js 加载期 refreshGame() 在空世界下
+  零 wrapObject → 空世界首 tick（新玩家）玩家代码可先于首次 wrapObject 执行并
+  污染定格表（探针实证装配对象永久携带攻击者原型）。清偿：类表改**加载期
+  立即定格**（_registry 安装循环后）；类全局同时改官方同形非可写
+  defineProperty（creeps.js:1123/store.js:99——P3-3 一并根治，绑定交换结构性
+  免疫）；Store 移出桩表由 structures 段官方同形安装（非可写会挡掉唯一重绑）
+- **P2-2（评审 2）装配清偿覆盖不全**：补 Map.prototype.set、Set.prototype.add/
+  .has、Object.entries、Array.isArray（game.js——__Array 已捕获未用）、
+  Map.prototype.get（room.js makeRoom/find/getObjectById）、Object.keys/
+  defineProperties（defineGameObjectProperties 每 tick 装配路径）全部捕获
+- **P3-4（评审 2）+ P3-3（评审 3）**：敌对臂 103/113/115 改 `typeof owner ===
+  'string'`（与 Rust/109 同口径）；hostile_of 注释补官方 103/113/115 无 owner
+  检查的分歧说明与不可达依据；cleared controller 的 109 臂锁值断言补齐
+- **P3-1（评审 3）**：world_json.rs cpu 注释改指 sandbox.rs begin_tick（原指
+  proto.rs 失准）
+- **P3-2（评审 3）**：cpu 覆写改 beginTick 第二参数 JS 侧合并——消灭每 tick
+  整世界深拷贝（含每房 2500 元素地形数组）
+- **P2-1（评审 3）**：claim 门 gclPoints 直读行为级锁（claim_gate_gcl_behavior：
+  gcl 0+已占 1 房 → -15 / gcl 1e6 → 0）
+- **F-1/F-3（评审 1）**：prelude 裸 run 中立面语义收口（MY_*/HOSTILE_* 空、101
+  含雏形——与 Rust None 臂同构）；灰区表口径精化（viewer 相关 10 臂、120/121
+  随 powerCreep 批、真值/严格 false 混合）
+- **F-2（评审 1）**：JS find 臂止于 116 的覆盖缺口登记（归 B3 接线批）
+- **F-4（评审 1）**：hostile_of 两臂差异注释（防 schema 演化静默沿分歧）

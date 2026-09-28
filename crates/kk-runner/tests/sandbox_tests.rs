@@ -80,6 +80,7 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     spawn_family_api_impl()?;
     resource_family_prelude_matrix_impl()?;
     viewer_meta_semantics_impl()?;
+    claim_gate_gcl_behavior_impl()?;
     // LIFO 零违规断言在**全部**场景之后——中段断言会让其后场景的违规漏网
     assert_eq!(kk_runner::lifo_violations(), 0, "全流程 LIFO 纪律零违规");
     Ok(())
@@ -1973,6 +1974,37 @@ fn viewer_meta_semantics_impl() -> anyhow::Result<()> {
     assert_eq!(v[1], 40, "tickLimit = min(maxPerTick, limit+bucket)");
     assert_eq!(v[2], 30, "bucket = tick 初桶值");
     assert_eq!(v[3], 10, "shardLimits 跟随 limit");
+    Ok(())
+}
+
+/// A3c 清偿（评审 3 P2-1）：claimController 预检 GCL 门 gclPoints 直读的
+/// 行为级锁——gcl 0+已占 1 房 → ERR_GCL_NOT_ENOUGH；gcl 1e6（=calcNeededGcl(2)
+/// 的 2 房需求点）→ 放行记 intent（官方 creeps.js:849-851 读
+/// runtimeData.user.gcl；本批前硬编码 Game.gcl 使该门恒 0 点）。
+fn claim_gate_gcl_behavior_impl() -> anyhow::Result<()> {
+    let mk_world = |gcl: i64| {
+        json!({
+            "time": 1,
+            "user": "p1",
+            "gcl": gcl,
+            "rooms": { "W1N1": { "name": "W1N1" }, "W2N1": { "name": "W2N1" } },
+            "objects": [
+                { "id": "ctl1", "type": "structure", "structureType": "controller",
+                  "room": "W1N1", "x": 1, "y": 1, "owner": "p1", "level": 1 },
+                { "id": "ctl2", "type": "structure", "structureType": "controller",
+                  "room": "W2N1", "x": 1, "y": 1, "level": 0 },
+                { "id": "ck1", "type": "creep", "room": "W2N1", "x": 1, "y": 2,
+                  "name": "claimer", "owner": "p1", "body": ["claim", "move"], "spawning": false },
+            ],
+        })
+    };
+    let mut sb = Sandbox::new(SandboxConfig::default())?;
+    sb.begin_tick(&mk_world(0))?;
+    let v = sb.run_expr("Game.creeps['claimer'].claimController(Game.rooms['W2N1'].controller)")?;
+    assert_eq!(v["value"], -15, "gcl 0 + 已占 1 房 → ERR_GCL_NOT_ENOUGH");
+    sb.begin_tick(&mk_world(1_000_000))?;
+    let v = sb.run_expr("Game.creeps['claimer'].claimController(Game.rooms['W2N1'].controller)")?;
+    assert_eq!(v["value"], 0, "gcl 1e6 = calcNeededGcl(2) → 放行");
     Ok(())
 }
 

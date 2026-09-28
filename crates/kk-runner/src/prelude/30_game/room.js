@@ -19,6 +19,7 @@
   // 重挂语义保持可见，绑定交换不可）
   const __Object = Object;
   const __RoomCtor = globalThis.Room;
+  const __mapGet = Map.prototype.get;
 
   // ---------------------------------------------------------------- Terrain
   // 官方 rooms.js:1223-1241 Room.Terrain 逐字移植：闭包式对象（非 class），
@@ -89,7 +90,7 @@
     for (let i = 0; i < worldObjs.length; i++) {
       const o = worldObjs[i];
       if (o.room === name && o.type === 'structure' && o.structureType === 'controller') {
-        controller = gw.objectsById.get(o.id);
+        controller = __mapGet.call(gw.objectsById, o.id);
       }
     }
     const room = {
@@ -107,20 +108,28 @@
     room.find = function (type, opts) {
       countStub('room.find:' + type);
       const out = [];
-      // 索引迭代（装配批纪律）：for...of 经可交换的 Symbol.iterator
+      // 索引迭代（装配批纪律）：for...of 经可交换的 Symbol.iterator。
+      // 裸 run（viewerName=null，无 user 的注入面）= 视角中立面：与 Rust
+      // matches_find 的 None 臂同构——MY_*/HOSTILE_* 不可判定返回空、
+      // 101 保留孵化雏形（评审 1 F-1：两层中立语义同步收口）
+      const neutral = gw.viewerName === null;
       for (let i = 0; i < worldObjs.length; i++) {
         const o = worldObjs[i];
         if (o.room !== name) continue;
-        const w = gw.objectsById.get(o.id);
+        const w = __mapGet.call(gw.objectsById, o.id);
         if (!w) continue;
         const isStruct = o.type === 'structure' || o.type === 'spawn';
-        // 官方 findCacheFn 表（game.js:17-28）：FIND_CREEPS 族滤孵化雏形
-        //（!i.spawning——雏形经 Game.creeps 可见但不进 FIND）；HOSTILE 臂
-        // `my === false`（owner 字符串存在且非本人；owner null/缺键不进）
-        const creepOk = o.type === 'creep' && !o.spawning;
+        // 官方 findCacheFn 表（game.js:17-29）viewer 相关 10 臂：FIND_CREEPS
+        // 族滤孵化雏形（!i.spawning——中立面保留）；MY_*=真值 my、HOSTILE_*
+        // =严格 false 混合（可达状态等价——creep/spawn owner 恒字符串、site
+        // null 投影缺键）；109 官方另有 `&& i.owner`（owner getter 对 null/
+        // 缺键归 undefined，structures.js:136-138）→ 敌对结构臂只认字符串
+        // owner（与 Rust hostile_of 同口径；cleared controller 的 owner:null
+        // 双层双臂均不进）
+        const creepOk = o.type === 'creep' && (neutral || !o.spawning);
         if (type === 101 /* FIND_CREEPS */ && creepOk) out.push(w);
-        else if (type === 102 /* FIND_MY_CREEPS */ && creepOk && o.owner === gw.viewerName) out.push(w);
-        else if (type === 103 /* FIND_HOSTILE_CREEPS */ && creepOk && o.owner !== undefined && o.owner !== gw.viewerName) out.push(w);
+        else if (type === 102 /* FIND_MY_CREEPS */ && !neutral && creepOk && o.owner === gw.viewerName) out.push(w);
+        else if (type === 103 /* FIND_HOSTILE_CREEPS */ && !neutral && creepOk && typeof o.owner === 'string' && o.owner !== gw.viewerName) out.push(w);
         else if (type === 104 /* FIND_SOURCES_ACTIVE */ && o.type === 'structure' && o.structureType === 'source' && (o.energy ?? 3000) > 0) out.push(w);
         else if (type === 105 /* FIND_SOURCES */ && o.type === 'structure' && o.structureType === 'source') out.push(w);
         else if (type === 106 /* FIND_DROPPED_RESOURCES */ && o.type === 'resource') out.push(w);
@@ -128,14 +137,14 @@
         // game.js:229-251 structureTypes 表无此三类（独立装配分支 :329-345），
         // 与 Rust 侧 matches_find 两层一致
         else if (type === 107 /* FIND_STRUCTURES */ && isStruct && o.structureType !== 'source' && o.structureType !== 'mineral') out.push(w);
-        else if (type === 108 /* FIND_MY_STRUCTURES */ && isStruct && o.structureType !== 'source' && o.structureType !== 'mineral' && o.owner === gw.viewerName) out.push(w);
-        else if (type === 109 /* FIND_HOSTILE_STRUCTURES */ && isStruct && o.structureType !== 'source' && o.structureType !== 'mineral' && typeof o.owner === 'string' && o.owner !== gw.viewerName) out.push(w);
+        else if (type === 108 /* FIND_MY_STRUCTURES */ && !neutral && isStruct && o.structureType !== 'source' && o.structureType !== 'mineral' && o.owner === gw.viewerName) out.push(w);
+        else if (type === 109 /* FIND_HOSTILE_STRUCTURES */ && !neutral && isStruct && o.structureType !== 'source' && o.structureType !== 'mineral' && typeof o.owner === 'string' && o.owner !== gw.viewerName) out.push(w);
         else if (type === 110 /* FIND_FLAGS */ && o.type === 'flag') out.push(w);
         else if (type === 111 /* FIND_CONSTRUCTION_SITES */ && o.type === 'constructionSite') out.push(w);
-        else if (type === 112 /* FIND_MY_SPAWNS */ && o.type === 'spawn' && o.owner === gw.viewerName) out.push(w);
-        else if (type === 113 /* FIND_HOSTILE_SPAWNS */ && o.type === 'spawn' && o.owner !== undefined && o.owner !== gw.viewerName) out.push(w);
-        else if (type === 114 /* FIND_MY_CONSTRUCTION_SITES */ && o.type === 'constructionSite' && o.owner === gw.viewerName) out.push(w);
-        else if (type === 115 /* FIND_HOSTILE_CONSTRUCTION_SITES */ && o.type === 'constructionSite' && o.owner !== undefined && o.owner !== gw.viewerName) out.push(w);
+        else if (type === 112 /* FIND_MY_SPAWNS */ && !neutral && o.type === 'spawn' && o.owner === gw.viewerName) out.push(w);
+        else if (type === 113 /* FIND_HOSTILE_SPAWNS */ && !neutral && o.type === 'spawn' && typeof o.owner === 'string' && o.owner !== gw.viewerName) out.push(w);
+        else if (type === 114 /* FIND_MY_CONSTRUCTION_SITES */ && !neutral && o.type === 'constructionSite' && o.owner === gw.viewerName) out.push(w);
+        else if (type === 115 /* FIND_HOSTILE_CONSTRUCTION_SITES */ && !neutral && o.type === 'constructionSite' && typeof o.owner === 'string' && o.owner !== gw.viewerName) out.push(w);
         else if (type === 116 /* FIND_MINERALS */ && o.type === 'structure' && o.structureType === 'mineral') out.push(w);
       }
       // 官方 rooms.js:648-654：opts.filter（函数或 lodash 对象谓词）经

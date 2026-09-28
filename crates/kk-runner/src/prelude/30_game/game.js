@@ -29,6 +29,10 @@
   const __Map = Map;
   const __Set = Set;
   const __mapGet = Map.prototype.get;
+  const __mapSet = Map.prototype.set;
+  const __setAdd = Set.prototype.add;
+  const __setHas = Set.prototype.has;
+  const __objectEntries = Object.entries;
   const mathPow = Math.pow;
   const mathFloor = Math.floor;
   const GCL_MULTIPLY = globalThis.GCL_MULTIPLY;
@@ -182,7 +186,7 @@
       const o = worldObjs[i];
       const w = gw.wrapObject(o, gw.world.time);
       w.room = undefined;
-      gw.objectsById.set(o.id, w);
+      __mapSet.call(gw.objectsById, o.id, w);
       const mine = o.owner === gw.viewerName;
       if (o.type === 'creep') {
         // 官方 game.js:273-280：Game.creeps 只收本人 creep
@@ -216,14 +220,14 @@
       const o = worldObjs[i];
       // 官方 data.js:113-116 归集跳过表：工地不授房视野
       if (o.owner === gw.viewerName && o.type !== 'constructionSite') {
-        visibleRooms.add(o.room);
+        __setAdd.call(visibleRooms, o.room);
       }
     }
     const rooms = {};
-    const roomEntries = __Object.entries(gw.world.rooms || {});
+    const roomEntries = __objectEntries(gw.world.rooms || {});
     for (let i = 0; i < roomEntries.length; i++) {
       const name = roomEntries[i][0];
-      if (gw.viewerName !== null && !visibleRooms.has(name)) continue;
+      if (gw.viewerName !== null && !__setHas.call(visibleRooms, name)) continue;
       rooms[name] = gw.makeRoom(name, roomEntries[i][1]);
     }
     // 回填对象上的 room 引用：rawById 直查替代数组 .find（O(N²)→O(N)，
@@ -284,7 +288,7 @@
         getHistory: () => [],
       },
       getObjectById(id) {
-        return gw.objectsById.get(id) || null;
+        return __mapGet.call(gw.objectsById, id) || null;
       },
       notify() { countStub('Game.notify'); },
       map: {
@@ -387,11 +391,16 @@
 
   globalThis.__kkp.memoryWorld = {
     /** 每 tick 注入世界快照（宿主以 JSON 字面量内嵌，此处已是对象）并重建 Game。 */
-    beginTick(worldJson) {
+    beginTick(worldJson, cpuMeta) {
       // 世界解码走预置 parse（官方 runtime.js:207 对宿主数据用
       // systemFunctions.JSON.parse 同款）：全局 parse 玩家可覆写，可伪造
       // 整份世界含 user → per-viewer 判定翻转（自审 P2）
       gw.world = typeof worldJson === 'string' ? __jsonParse(worldJson) : worldJson;
+      // Game.cpu 真值合并（宿主 begin_tick 第二参数——官方 make.js 先算窗口
+      // 再装 runtimeData 的等价物；world.cpu 占位基准被此覆盖，键恒权威）
+      if (cpuMeta !== undefined && cpuMeta !== null) {
+        gw.world.cpu = typeof cpuMeta === 'string' ? __jsonParse(cpuMeta) : cpuMeta;
+      }
       // 注入侧剥顶层原型（官方 runtime.js:56 `systemFunctions.Object.setPrototypeOf
       //(data, null)` 同位）：顶层缺失键（cpu/user 兜底读）不被继承 getter 命中；
       // 内层对象官方同样不剥——缺失键走原型链的暴露面官方一致，不深剥
@@ -403,7 +412,7 @@
       const tickObjs = gw.world.objects || [];
       for (let i = 0; i < tickObjs.length; i++) {
         const o = tickObjs[i];
-        if (o && o.id !== undefined) gw.rawById.set(o.id, o);
+        if (o && o.id !== undefined) __mapSet.call(gw.rawById, o.id, o);
       }
       resetIntents(); // 官方每 tick 新建收集器（runtime.js _start 每 tick 执行）
       // A4-iii per-tick 闭包重置（官方 game 层每 tick 新 make 闭包的等价物）：
@@ -419,10 +428,10 @@
         get() { return ensureMemory(); },
       });
       gw.terrainByRoom = {};
-      const terrainEntries = __Object.entries(gw.world.rooms || {});
+      const terrainEntries = __objectEntries(gw.world.rooms || {});
       for (let i = 0; i < terrainEntries.length; i++) {
         const r = terrainEntries[i][1];
-        if (Array.isArray(r.terrain)) gw.terrainByRoom[terrainEntries[i][0]] = r.terrain;
+        if (__Array.isArray(r.terrain)) gw.terrainByRoom[terrainEntries[i][0]] = r.terrain;
       }
       // per-tick 重置钩（官方 game/structures.js make 每 tick 重置
       // createdCreepNames:29 的等价物——spawn 族的同 tick 同名拒名单）
