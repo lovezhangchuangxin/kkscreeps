@@ -572,6 +572,10 @@ fn embed_intent_channel_impl() -> anyhow::Result<()> {
                 downgrade_time: None,
                 owner: Some("p1".into()),
                 is_power_enabled: false,
+                reservation: None,
+                sign: None,
+                upgrade_blocked: None,
+                safe_mode_cooldown: None,
             }),
         )
         .unwrap();

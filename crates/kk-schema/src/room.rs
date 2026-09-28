@@ -25,14 +25,22 @@ crate::kk_schema! {
 }
 
 crate::kk_schema! {
-    /// 携带资源（M1 仅 energy；资源种类 M2 扩展经版本升级）。
-    pub Store { (pub energy: u32) }
+    /// 携带资源（M1 起 energy；B2 增 ghodium——官方 store 键为资源常量
+    /// `RESOURCE_GHODIUM = "G"`，generateSafeMode 的消耗面；其余资源种类经
+    /// 版本升级扩展）。
+    pub Store {
+        (pub energy: u32)
+        (pub ghodium: u32)
+    }
 }
 
 #[allow(clippy::derivable_impls)]
 impl Default for Store {
     fn default() -> Self {
-        Self { energy: 0 }
+        Self {
+            energy: 0,
+            ghodium: 0,
+        }
     }
 }
 
@@ -65,10 +73,12 @@ crate::kk_schema! {
         (pub age_time: u64)
         (pub hits: u32)
         (pub spawning: bool)
-        (pub action_log: u8)
+        (pub action_log: u16)
         // ↑ 官方 actionLog 是 13 键 {x,y} 对象（processor.js:51-65）；M1 压缩为
         // 位图：bit0=harvest、bit1=build、bit2=upgradeController。坐标与战斗
-        // 动作（attack/heal/...）M2 以正式形态替换（schema 版本升级）
+        // 动作（attack/heal/...）M2 以正式形态替换（schema 版本升级）。
+        // B2 起 u8 → u16：8 位已满，reserveController 的官方独立键
+        // `reserveController`（reserveController.js:47）需要第 9 位
         (pub name: str)
         (pub owner: str)
         (pub body: vec BodyPart)
@@ -89,7 +99,32 @@ crate::kk_schema! {
 }
 
 crate::kk_schema! {
+    /// controller 预定（官方 DB 形态 `{user, endTime}`：reserveController.js:36-39
+    /// 创建、:49 递增；controllers/tick.js:10-12 到期或房被占时清除）。
+    /// `user` 官方存内部 _id，我方身份模型按玩家名（与 owner 字段同基）。
+    pub Reservation {
+        (pub user: str)
+        (pub end_time: u64)
+    }
+}
+
+crate::kk_schema! {
+    /// controller 签名（官方 DB 形态 `{user, text, time, datetime}`：
+    /// signController.js:23-28）。第四字段 `datetime` 为墙钟 Date.now()——
+    /// 确定性引擎不落盘（投影层按玩家可见形状合成，轨 A 接线；灰区登记）。
+    pub Sign {
+        (pub user: str)
+        (pub text: str)
+        (pub time: u64)
+    }
+}
+
+crate::kk_schema! {
     /// 控制器（safe_mode 0 = 关闭；downgrade_time None = 未挂钟）。
+    /// B2 补齐官方持久化面：reservation（预定）、sign（签名）、
+    /// upgrade_blocked（attackController 的升级封锁钟，绝对 tick：
+    /// attackController.js:48 / controllers/tick.js:20-23）、
+    /// safe_mode_cooldown（safeMode 冷却钟，绝对 tick：controllers/tick.js:29）。
     pub ControllerObj {
         (pub id: u64)
         (pub x: u8)
@@ -101,6 +136,10 @@ crate::kk_schema! {
         (pub downgrade_time: opt u64)
         (pub owner: opt str)
         (pub is_power_enabled: bool)
+        (pub reservation: opt Reservation)
+        (pub sign: opt Sign)
+        (pub upgrade_blocked: opt u64)
+        (pub safe_mode_cooldown: opt u64)
     }
 }
 
@@ -549,7 +588,10 @@ mod tests {
                             boost: Some("XUHO2".into()),
                         },
                     ],
-                    store: Store { energy: 37 },
+                    store: Store {
+                        energy: 37,
+                        ghodium: 1000,
+                    },
                 }),
                 RoomObject::Source(SourceObj {
                     id: 2,
@@ -570,6 +612,17 @@ mod tests {
                     downgrade_time: None,
                     owner: Some("p1".into()),
                     is_power_enabled: false,
+                    reservation: Some(Reservation {
+                        user: "p2".into(),
+                        end_time: 4321,
+                    }),
+                    sign: Some(Sign {
+                        user: "p1".into(),
+                        text: "room owned by p1".into(),
+                        time: 100,
+                    }),
+                    upgrade_blocked: Some(1100),
+                    safe_mode_cooldown: Some(50_100),
                 }),
                 RoomObject::Spawn(SpawnObj {
                     id: 4,
@@ -579,7 +632,10 @@ mod tests {
                     off: false,
                     name: "Spawn1".into(),
                     owner: "p1".into(),
-                    store: Store { energy: 300 },
+                    store: Store {
+                        energy: 300,
+                        ghodium: 0,
+                    },
                     spawning: Some(SpawningJob {
                         name: "w2".into(),
                         need_time: 9,

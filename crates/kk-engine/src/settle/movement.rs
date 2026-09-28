@@ -228,9 +228,11 @@ pub fn can_move(creep: &CreepObj, old_fatigue: u32) -> bool {
 }
 
 /// 官方 calcResourcesWeight（movement.js:41-59）：从 body 尾部数起，
-/// 装下当前携带量所需的 CARRY 部件数。
+/// 装下当前携带量所需的 CARRY 部件数。携带量是 store 全槽求和（官方
+/// `_.sum(creep.store)`，movement.js:42——评审 P3：ghodium "G" 槽同计，
+/// 我方 schema 仅 energy+ghodium 两槽）
 pub fn resources_weight(creep: &CreepObj) -> usize {
-    let mut total_carry = creep.store.energy as i64;
+    let mut total_carry = creep.store.energy as i64 + creep.store.ghodium as i64;
     let mut weight = 0usize;
     for part in creep.body.iter().rev() {
         if total_carry <= 0 {

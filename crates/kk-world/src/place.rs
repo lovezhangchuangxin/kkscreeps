@@ -9,7 +9,8 @@
 use kk_core::constants as c;
 use kk_schema::room::{
     BodyPart, ConstructedWallObj, ConstructionSiteObj, ControllerObj, CreepObj, EnergyObj,
-    ExtensionObj, FlagObj, GenericObj, RoadObj, RoomObject, SourceObj, SpawnObj, StorageObj, Store,
+    ExtensionObj, FlagObj, GenericObj, Reservation, RoadObj, RoomObject, Sign, SourceObj, SpawnObj,
+    StorageObj, Store,
 };
 use serde_json::{Value, json};
 
@@ -95,6 +96,13 @@ fn store_energy(spec: &Value) -> Store {
                 .and_then(Value::as_u64)
                 .unwrap_or(0),
         ),
+        // 官方 store 键为资源常量（RESOURCE_GHODIUM = "G"，constants 同名项）；
+        // generateSafeMode 的消耗面经放置通道可预置
+        ghodium: saturating_u32(
+            spec.pointer("/store/G")
+                .and_then(Value::as_u64)
+                .unwrap_or(0),
+        ),
     }
 }
 
@@ -174,6 +182,7 @@ fn normalize_spawn(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<SpawnOb
             Some(v) => saturating_u32(v.get("energy").and_then(Value::as_u64).unwrap_or(0)),
             None => c::SPAWN_ENERGY_START as u32,
         },
+        ghodium: saturating_u32(spec.pointer("/store/G").and_then(Value::as_u64).unwrap_or(0)),
     };
     Ok(SpawnObj {
         id: 0,
@@ -266,6 +275,24 @@ fn normalize_structure(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<Roo
                     .get("isPowerEnabled")
                     .and_then(Value::as_bool)
                     .unwrap_or(false),
+                // B2 持久化面透传（官方 DB 字段名 camelCase，绝对 tick）：
+                // reservation {user, endTime} / sign {user, text, time} /
+                // upgradeBlocked / safeModeCooldown
+                reservation: spec.get("reservation").and_then(|r| {
+                    Some(Reservation {
+                        user: r.get("user")?.as_str()?.to_string(),
+                        end_time: r.get("endTime")?.as_u64()?,
+                    })
+                }),
+                sign: spec.get("sign").and_then(|s| {
+                    Some(Sign {
+                        user: s.get("user")?.as_str()?.to_string(),
+                        text: s.get("text")?.as_str()?.to_string(),
+                        time: s.get("time")?.as_u64()?,
+                    })
+                }),
+                upgrade_blocked: spec.get("upgradeBlocked").and_then(Value::as_u64),
+                safe_mode_cooldown: spec.get("safeModeCooldown").and_then(Value::as_u64),
             }))
         }
         "extension" => Ok(RoomObject::Extension(ExtensionObj {
@@ -471,6 +498,10 @@ mod tests {
             downgrade_time: None,
             owner: Some("p1".into()),
             is_power_enabled: false,
+            reservation: None,
+            sign: None,
+            upgrade_blocked: None,
+            safe_mode_cooldown: None,
         };
         let c2 = PlaceCtx {
             controller: Some(&ctl),
@@ -574,6 +605,66 @@ mod tests {
             panic!()
         };
         assert_eq!(sp3.store.energy, 0);
+    }
+
+    /// B2：controller 持久化面透传（官方 DB 字段名 camelCase）+ store 的
+    /// ghodium 槽（官方 store 键 RESOURCE_GHODIUM = "G"）。
+    #[test]
+    fn controller_b2_fields_and_ghodium_passthrough() {
+        let s = spec(json!({
+            "pos": [9, 9], "structureType": "controller", "level": 4, "owner": "p1",
+            "upgradeBlocked": 1200,
+            "safeModeCooldown": 50100,
+            "reservation": { "user": "p2", "endTime": 4321 },
+            "sign": { "user": "p1", "text": "hi", "time": 77 }
+        }));
+        let RoomObject::Controller(c) = normalize("structure", &s, &ctx()).unwrap() else {
+            panic!("应产出 controller");
+        };
+        assert_eq!(c.upgrade_blocked, Some(1200));
+        assert_eq!(c.safe_mode_cooldown, Some(50_100));
+        assert_eq!(
+            c.reservation,
+            Some(Reservation {
+                user: "p2".into(),
+                end_time: 4321,
+            })
+        );
+        assert_eq!(
+            c.sign,
+            Some(Sign {
+                user: "p1".into(),
+                text: "hi".into(),
+                time: 77,
+            })
+        );
+        // 缺省形态：四新字段全 None
+        let s2 = spec(json!({ "pos": [9, 9], "structureType": "controller" }));
+        let RoomObject::Controller(c2) = normalize("structure", &s2, &ctx()).unwrap() else {
+            panic!()
+        };
+        assert_eq!(
+            (c2.reservation, c2.sign, c2.upgrade_blocked, c2.safe_mode_cooldown),
+            (None, None, None, None)
+        );
+        // 畸形嵌套对象（缺键）→ None（不部分落地）
+        let s3 = spec(json!({
+            "pos": [9, 9], "structureType": "controller",
+            "reservation": { "user": "p2" }
+        }));
+        let RoomObject::Controller(c3) = normalize("structure", &s3, &ctx()).unwrap() else {
+            panic!()
+        };
+        assert_eq!(c3.reservation, None, "缺 endTime 的预约整票丢弃");
+        // creep store 的 ghodium 槽（官方键 "G"）
+        let s4 = spec(json!({
+            "pos": [5, 5], "owner": "p1", "body": ["move"],
+            "store": { "energy": 30, "G": 1200 }
+        }));
+        let RoomObject::Creep(cr) = normalize("creep", &s4, &ctx()).unwrap() else {
+            panic!()
+        };
+        assert_eq!(cr.store.ghodium, 1200);
     }
 
     #[test]

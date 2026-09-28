@@ -17,7 +17,8 @@ use kk_world::ObjId;
 use kk_world::types::BodyKind;
 use serde_json::Value;
 
-/// 动作名（官方 creepActions 全集 + spawn 的 createCreep）。
+/// 动作名（官方 creepActions 全集 + spawn 的 createCreep + controller 的
+/// activateSafeMode）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Action {
     Drop,
@@ -45,6 +46,10 @@ pub enum Action {
     Pull,
     /// spawn 对象的动作（官方 spawns/intents.js 的 M1 子集）。
     CreateCreep,
+    /// controller 对象的动作（官方 processor.js:306-311 分派，intent 白名单
+    /// `activateSafeMode: {}`——system.js:34；语义链见 settle/controller.rs）。
+    /// 与 CreateCreep 同理不在 creepActions 序列（EXECUTION_ORDER）里。
+    ActivateSafeMode,
 }
 
 impl Action {
@@ -74,6 +79,7 @@ impl Action {
             Self::SignController => "signController",
             Self::Pull => "pull",
             Self::CreateCreep => "createCreep",
+            Self::ActivateSafeMode => "activateSafeMode",
         }
     }
 
@@ -103,6 +109,7 @@ impl Action {
             "signController" => Self::SignController,
             "pull" => Self::Pull,
             "createCreep" => Self::CreateCreep,
+            "activateSafeMode" => Self::ActivateSafeMode,
             _ => return None,
         })
     }
@@ -200,6 +207,11 @@ pub struct IntentData {
     pub y: Option<i64>,
     /// createCreep 专属（挂在 spawn 对象上）。
     pub name: Option<String>,
+    /// signController 专属：官方白名单 `sign: 'userString'`（system.js:74），
+    /// 截 100（UTF-16 码元 vs Unicode chars 的差异沿用既有灰区登记）。
+    /// 官方形态缺省与空串同值（userString 的 `value||""` 折叠），signController
+    /// 结算层 `intent.sign ?` 判空——两者都落 None 语义（清除签名）。
+    pub sign: Option<String>,
     pub body: Vec<BodyKind>,
     /// None = 玩家未传（缺省全房扣费）；Some([]) = 显式空列表（官方走
     /// "仅列表扣费"模式——可用 0 → 失败）。presence 由 JSON 键存在性区分
@@ -222,6 +234,7 @@ impl IntentData {
             x: None,
             y: None,
             name: None,
+            sign: None,
             body: Vec::new(),
             energy_structures: None,
             directions: Vec::new(),
@@ -237,6 +250,7 @@ impl IntentData {
             x: None,
             y: None,
             name: None,
+            sign: None,
             body: Vec::new(),
             energy_structures: None,
             directions: Vec::new(),
@@ -464,6 +478,7 @@ pub fn sanitize_object_intent(_action: Action, raw: &Value) -> IntentData {
         x: to_int(f("x")),
         y: to_int(f("y")),
         name: to_user_string(f("name")),
+        sign: to_user_string(f("sign")),
         body: f("body")
             .and_then(Value::as_array)
             .map(|arr| {
@@ -573,6 +588,60 @@ mod from_json_tests {
         });
         let batch = IntentBatch::from_json("p1", &list);
         assert_eq!(batch.users["p1"].room.len(), 2, "未知 room intent 名丢弃");
+    }
+
+    /// B2 controller 族白名单（system.js:34/36/40/46/67/74）：五个 creep 动作
+    /// 只认 id；signController 另有 sign（userString 截 100）；activateSafeMode
+    /// 无字段。白名单外的未知字段丢弃。
+    #[test]
+    fn from_json_controller_family_whitelist() {
+        let creep = "kk0000000000000009";
+        let ctl = "kk0000000000000010";
+        let list = serde_json::json!({
+            creep: {
+                "claimController": { "id": ctl, "unknown": 1 },
+                "reserveController": { "id": ctl },
+                "attackController": { "id": ctl },
+                "generateSafeMode": { "id": ctl },
+                "signController": { "id": ctl, "sign": "x".repeat(150) }
+            },
+            ctl: { "activateSafeMode": { "forged": "field" } }
+        });
+        let batch = IntentBatch::from_json("p1", &list);
+        let user = &batch.users["p1"];
+        let creep = ObjId::parse(creep).unwrap();
+        let ctl_id = ObjId::parse(ctl).unwrap();
+        for action in [
+            Action::ClaimController,
+            Action::ReserveController,
+            Action::AttackController,
+            Action::GenerateSafeMode,
+        ] {
+            assert_eq!(
+                user.objects[&creep][&action].id,
+                Some(ctl_id),
+                "{:?} 白名单只留 id",
+                action.name()
+            );
+        }
+        let sign = &user.objects[&creep][&Action::SignController];
+        assert_eq!(sign.id, Some(ctl_id));
+        assert_eq!(
+            sign.sign.as_ref().map(|s| s.chars().count()),
+            Some(100),
+            "sign 走 userString 截 100"
+        );
+        // controller 对象的 activateSafeMode（system.js:34 空白名单——无字段）
+        let activate = &user.objects[&ctl_id][&Action::ActivateSafeMode];
+        assert_eq!(activate.id, None, "activateSafeMode 无字段");
+        assert_eq!(Action::parse("activateSafeMode"), Some(Action::ActivateSafeMode));
+        assert_eq!(Action::ActivateSafeMode.name(), "activateSafeMode");
+        // 缺省 → None / 显式空串 → Some("")：清洗层保留 presence 区分，
+        // 语义分叉在 signController 结算层（两者都落"清除签名"）
+        let d = sanitize_object_intent(Action::SignController, &serde_json::json!({ "id": ctl }));
+        assert_eq!(d.sign, None, "缺省 sign → None");
+        let d2 = sanitize_object_intent(Action::SignController, &serde_json::json!({ "sign": "" }));
+        assert_eq!(d2.sign, Some(String::new()), "显式空串保留 Some(\"\")");
     }
 }
 

@@ -414,6 +414,10 @@ mod tests {
             downgrade_time: None,
             owner: Some("p1".into()),
             is_power_enabled: false,
+            reservation: None,
+            sign: None,
+            upgrade_blocked: None,
+            safe_mode_cooldown: None,
         };
         let ctx = PlaceCtx {
             time: world.time,
