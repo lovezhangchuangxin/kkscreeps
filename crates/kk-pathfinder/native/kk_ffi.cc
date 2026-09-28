@@ -147,7 +147,14 @@ extern "C" int kk_pf_search(kk_pf_world_pos_t origin, const kk_pf_goal_t* goals,
 
 	std::memset(out_result, 0, sizeof(*out_result));
 	if (ret->IsUndefined()) {
-		out_result->status = 2;
+		if (kk_compat::t_pending_js_exception) {
+			// js_error 路径（官方上抛：pf.cc:44 ReThrow / :33 ThrowError）——
+			// 与同格搜索的合法 undefined（pf.cc:508-510）区分
+			out_result->status = 3;
+			out_result->js_error_message = kk_compat::t_pending_js_error_message;
+		} else {
+			out_result->status = 2;
+		}
 		return 0;
 	}
 	if (ret->type == v8::Value::NUMBER && static_cast<int64_t>(ret->num) == -1) {

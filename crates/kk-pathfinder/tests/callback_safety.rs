@@ -40,15 +40,6 @@ fn path_xy(result: &SearchResult, room: &str) -> Vec<(u32, u32)> {
         .collect()
 }
 
-fn empty_complete() -> SearchResult {
-    SearchResult {
-        path: vec![],
-        ops: 0,
-        cost: 0,
-        incomplete: false,
-    }
-}
-
 // =====================================================================
 // 1. 错误长度矩阵：官方静默忽略（pf.cc:54-57 长度门经真实长度透传触发）
 // =====================================================================
@@ -118,31 +109,38 @@ fn cost_matrix_wrong_length_ignored_at_search() {
 //
 // 官方链路：玩家 cb throw → JS bridge 包装层传播（driver/lib/path-finder.js:120-129）
 // → pf.cc:43-46 TryCatch 捕获 → ReThrow + throw js_error() → pf.cc:563-567
-// 捕获并返回 Undefined → JS bridge 映射 {path:[], ops:0, cost:0, incomplete:false}
-// （driver/lib/path-finder.js:135-136）。我方等价物：panic 在 FFI trampoline 被
-// catch_unwind 拦截 → 返回码 3 → compat 置挂起异常 → 走**同一段官方 pf.cc 代码**。
+// 捕获并返回 Undefined——但官方语义是**异常上抛给玩家**（pf.cc:44 ReThrow 重挂
+// + V8 api 边界挂起异常胜过返回值，JS 层 mod.search() throw；:563 的 Undefined
+// 仅是 C++ 占位返回，driver:135-136 在异常路径不可达——C2 评审 1 的 V8 源码级
+// 取证）。我方等价物：panic 在 FFI trampoline 被 catch_unwind 拦截 → 返回码 3 →
+// compat 置挂起异常 → 走同一段官方 pf.cc 代码 → status 3 → Rust 映射 Err
+// （A4 接线时 prelude op 层 rethrow 原生 JS 异常）。
 // 本测试若 abort 则进程死、测试无法到达断言——能失败即证明没 abort。
 #[test]
-fn room_callback_panic_first_room_maps_to_official_empty() {
+fn room_callback_panic_first_room_maps_to_official_throw() {
     load_plain("W56N0");
-    let result = search_with_room_callback(
+    let err = search_with_room_callback(
         pos("W56N0", 10, 10),
         &[Goal::pos(pos("W56N0", 40, 40))],
         &SearchOptions::default(),
         |_xx, _yy| panic!("player roomCallback exploded"),
     )
-    .unwrap();
-    assert_eq!(result, empty_complete());
+    .unwrap_err();
+    // 官方上抛：回调异常的消息归 JS 原异常（宿主层 None——A4 由 JS rethrow）
+    assert!(
+        matches!(err, kk_pathfinder::Error::JSError(None)),
+        "回调 panic 映射 JSError(None) 上抛: {err:?}"
+    );
 }
 
 // 第二房间才 panic（首房正常返回）：官方 js_error 链与异常发生时刻无关，
 // 任何触达点抛错都汇入 pf.cc:563-567 的同一个 catch → 同一空结果。
 // 布置：E7N0 → E7S0 跨房（房间触达序 = origin 房先、goal 房后）。
 #[test]
-fn room_callback_panic_second_room_maps_to_official_empty() {
+fn room_callback_panic_second_room_maps_to_official_throw() {
     load_plain("W57N0");
     load_plain("W57S0");
-    let result = search_with_room_callback(
+    let err = search_with_room_callback(
         pos("W57N0", 25, 47),
         &[Goal::pos(pos("W57S0", 25, 2))],
         &SearchOptions::default(),
@@ -154,8 +152,11 @@ fn room_callback_panic_second_room_maps_to_official_empty() {
             }
         },
     )
-    .unwrap();
-    assert_eq!(result, empty_complete());
+    .unwrap_err();
+    assert!(
+        matches!(err, kk_pathfinder::Error::JSError(None)),
+        "第二房 panic 同一 js_error 通道: {err:?}"
+    );
 }
 
 // panic 后池完整性：官方 js_error 路径复位 _is_in_use（pf.cc:565），同一实例可
@@ -163,14 +164,15 @@ fn room_callback_panic_second_room_maps_to_official_empty() {
 #[test]
 fn search_works_after_callback_panic() {
     load_plain("W56N0");
-    // 触发 panic 路径
-    let _ = search_with_room_callback(
+    // 触发 panic 路径（官方上抛 → Err）
+    let err = search_with_room_callback(
         pos("W56N0", 10, 10),
         &[Goal::pos(pos("W56N0", 40, 40))],
         &SearchOptions::default(),
         |_xx, _yy| panic!("first: reset instance under js_error"),
     )
-    .unwrap();
+    .unwrap_err();
+    assert!(matches!(err, kk_pathfinder::Error::JSError(None)));
     // 同线程后续搜索正常（挂起异常标志由 kk_ffi.cc 的 ArenaGuard 在 FFI 入口复位）
     let after = search(
         pos("W56N0", 10, 10),

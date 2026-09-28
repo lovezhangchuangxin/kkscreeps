@@ -32,7 +32,6 @@
 #include <cstdint>
 #include <limits>
 
-#include <cstdint>
 #include <cstring>
 #include <deque>
 #include <string>
@@ -169,6 +168,10 @@ inline thread_local Arena* t_arena = nullptr;
 // Nan::ThrowError 的挂起标志（pf.cc:33-34 唯一抛出点，随后立刻 throw js_error
 // 被 pf.cc:563 捕获；TryCatch 理论上永远观察不到，保留标志仅为语义完整）。
 inline thread_local bool t_pending_js_exception = false;
+// 挂起异常的消息（仅 ThrowError 直抛路径有文案，如地形缺失的
+// "Could not load terrain data"；回调异常的消息归 JS 原异常——A4 接线时
+// 由 JS 层直接 rethrow 原异常，ReThrow 路径清空本消息）
+inline thread_local const char* t_pending_js_error_message = nullptr;
 
 } // namespace kk_compat
 
@@ -343,7 +346,10 @@ inline v8::MaybeLocal<v8::Value> Call(v8::Local<v8::Function> fn, v8::Local<v8::
 // Nan::ThrowError("...")（pf.cc:33）：置挂起标志。官方随后 throw js_error，
 // 由 pf.cc:563-567 捕获并返回 Undefined。此外 Nan::Call 的 rc==3（回调异常）也置
 // 此标志——两个异常源汇入官方同一条处理链（pf.cc:43-46 → :563-567）。
-inline void ThrowError(const char* /*message*/) { kk_compat::t_pending_js_exception = true; }
+inline void ThrowError(const char* message) {
+	kk_compat::t_pending_js_exception = true;
+	kk_compat::t_pending_js_error_message = message;
+}
 
 // Nan::TryCatch（pf.cc:38-46）。HasCaught() 观察挂起标志：置位源有二——pf.cc:33 的
 // 地形缺失 ThrowError（随后立刻 throw js_error，本 TryCatch 观察不到）与回调异常
@@ -356,7 +362,13 @@ class TryCatch {
 public:
 	TryCatch() = default;
 	bool HasCaught() const { return kk_compat::t_pending_js_exception; }
-	void ReThrow() const {}
+	void ReThrow() const {
+		// 官方语义（V8 TryCatch::ReThrow）：异常重新挂起待投递——JS 层
+		// mod.search() 表现为 throw（api 边界挂起异常胜过返回值），
+		// driver:135-136 的 undefined 分支在异常路径不可达。
+		// ReThrow 的源是回调异常：消息归 JS 原异常，清空 ThrowError 文案
+		kk_compat::t_pending_js_error_message = nullptr;
+	}
 };
 
 // Nan::TypedArrayContents<uint8_t>（pf.cc:54-56,610）：从 Uint8Array 节点取

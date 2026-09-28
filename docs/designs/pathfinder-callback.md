@@ -19,11 +19,11 @@ A4/A5 的输入，本批不实装。所有官方行为主张均给出 `~/Desktop
 | 5 | 回调触发时序：房间**首次触达**时调用、每房至多一次、首房 = origin 所在房；参数为房名字符串（native 给地图坐标，JS bridge 换算房名） | pf.cc:22-64（触发）、driver/lib/path-finder.js:121-122（换算） |
 | 6 | 返回 false = 封锁该房间 | pf.cc:49-52 |
 | 7 | 返回 undefined / 非 TypedArray / 非 2500 长度 TypedArray = 该房间纯地形（**静默**） | pf.cc:47-58（`length()==2500` 检查在 :55） |
-| 8 | 回调抛错 → 整个 search 返回 `{path:[], ops:0, cost:0, incomplete:false}`（异常被吞，不外抛） | pf.cc:43-46 → pf.cc:563-567 → driver/lib/path-finder.js:135-136 |
+| 8 | 回调抛错 → **异常上抛给玩家**（JS 层 `PathFinder.search()` throw，当 tick 脚本中断） | pf.cc:43-46 ReThrow（TryCatch::ReThrow 重挂）→ pf.cc:563-567 占位 Undefined → V8 api 边界挂起异常胜过返回值（builtins-api.cc）→ driver/engine 两层 JS 无 try/catch 直达玩家（C2 评审 1 的 V8 源码级取证；driver:135-136 的 undefined 分支仅同格搜索可达） |
 | 9 | 回调内可嵌套 `PathFinder.search`（两层；更多层堆分配兜底，官方注释每实例 2.16MB） | driver/native/src/main.cc:9-14 |
 | 10 | CostMatrix：set/get 越界与 deserialize 长度错误全部**静默**（TypedArray 语义，无逐轴 0..50 检查——唯一边界是平铺索引 `xx*50+yy` 与长度） | engine/src/game/path-finder.js:22-32,44-48 |
 | 11 | serialize 产物 = 普通 Array（625 个数字，平台 LE）——玩家 JSON 化进 Memory 的持久化形态 | engine/src/game/path-finder.js:40-42 |
-| 12 | 长时间回调无独立超时：靠驱动层 CPU 限额（isolate 终止经 `IsExecutionTerminating` → search 返回 Undefined → 空 result） | pf.cc:558-561 |
+| 12 | 长时间回调无独立超时：靠驱动层 CPU 限额（isolate 终止经 `IsExecutionTerminating` → search 返回 Undefined——但玩家观察不到返回值：终止异常同样胜出，脚本被终止而非收到空 result） | pf.cc:558-561 |
 
 ## 2. 官方调用链（谁在哪一层）
 
@@ -123,7 +123,7 @@ Err → trampoline 的 rc=3 → 官方异常链（§1 #8）。
 | 回调 panic（宿主 Rust 面） | 官方无 Rust 面 | catch_unwind → rc=3 → 同上；绝不 abort | C2 已实装+锁值 |
 | 回调内嵌套 search | 官方支持两层（main.cc:9-14，第三层起堆分配 2.16MB/实例） | `TerrainLock` 重入读 + kk_ffi.cc 双实例池（复刻 main.cc）；第三层起同样堆分配 | C2 已实装+锁值（两层） |
 | 回调内 load_terrain（宿主 API） | 官方无此面（地形仅启动期载入，driver/lib/path-finder.js:23-46） | `Err(ReentrantTerrainLoad)` | C2 已实装+锁值；差异 §6.1 |
-| 回调超时/CPU 限额 | 官方无独立超时；isolate 终止 → pf.cc:558-561 → Undefined → 空 result | 案 A 下回调跑在 isolate 内，由 kk-runner watchdog 终止；本 crate 无超时面（不臆断） | 设计定案，A4/A5 接线 |
+| 回调超时/CPU 限额 | 官方无独立超时；isolate 终止 → pf.cc:558-561 → Undefined（玩家观察不到返回值，脚本被终止） | 案 A 下回调跑在 isolate 内，由 kk-runner watchdog 终止；本 crate 无超时面（不臆断） | 设计定案，A4/A5 接线 |
 | 回调返回非法类型（数字/字符串等 truthy） | 包装器交出 `ret._bits`=undefined → native 视 undefined → 无矩阵（driver/lib/path-finder.js:125-127） | 案 A 宿主闭包按官方包装器逐字复刻（`ret._bits` 语义：非 CostMatrix 对象取 undefined） | A4 接线时锁值 |
 
 ### 4.4 prelude 包装器（轨 A 实装清单）
@@ -174,14 +174,20 @@ cb = function(cb) {
 允许多次载入（测试/多世界需要），同线程「持读份额再取写份额」必死锁，故回调
 栈内调用返回 Err。玩家面不可达（load_terrain 是宿主 API，不在玩家 JS 面上）。
 
-### 6.2 嵌套搜索的内层回调异常会波及外层
+### 6.2 嵌套搜索的内层回调异常波及外层（官方同形，控制流细节留 A4）
 
-官方 v8 的 TryCatch 有词法作用域：内层 search 捕获自己的异常后外层继续。我方
-compat 层的挂起异常标志是**线程级**（`t_pending_js_exception`，每次 FFI 入口由
-ArenaGuard 复位）：嵌套场景下内层回调 panic 后标志残留为真，外层 pf.cc:43 误判
-异常 → 外层也中止为空结果。方向安全（永不 abort/UB，只可能「多给一个空结果」），
-且仅「嵌套 + 内层回调异常」双条件可达；单层回调（当前唯一玩家面形态）不受影响。
-A4 若暴露嵌套面再评估是否按词法作用域改造 TryCatch。
+官方语义（C2 评审 1 修正原错误前提）：内层回调异常**未被内层吞掉**——pf.cc:44
+ReThrow 重挂后经内层 v8 边界上抛，**穿过玩家外层回调的 JS 帧**（外层回调中内层
+search 之后的代码不执行），再被外层 pf.cc:38-46 的 TryCatch 捕获 → 外层也
+throw。即官方两层都异常终止，与我方标志残留致外层中止**方向一致**。
+
+我方差异（宿主 Rust 层）：内层 search 返回 `Err(JSError(None))` 后，外层回调
+（Rust 闭包）会继续执行剩余代码——官方此处 JS 帧已被异常打断。宿主层闭包可在
+收到内层 Err 时 `panic!` 模拟传播（组合可达官方语义）；A4 接线后回调是 JS，内层
+search 的 op 层 rethrow 原生 JS 异常会自然打断外层回调帧——**A4 后天然一致**。
+线程级标志（`t_pending_js_exception`，ArenaGuard 于 FFI 入口复位）的嵌套残留
+角差（内层异常标志毒化外层——含 pf.cc:33 地形缺失 ThrowError 的同机制路径）
+保持登记：方向安全（永不 abort/UB）。
 
 ### 6.3 CostMatrix 非法值的 JS 数值层归一（预登记，非本 crate 面）
 
@@ -190,13 +196,32 @@ path-finder.js:25 的 `Math.min(Math.max(0, val), 255)` + TypedArray 赋值转�
 kk-pathfinder 的 `u32` API 只做上界钳制。负值/NaN/小数面由 prelude 的 CostMatrix
 类负责（4.4），A4 接线时锁值。
 
+### 6.4 A4 接线注意（评审 P3 预登记）
+
+- **负索引平铺落界内**：官方 `set(-1,55,v)` 平铺 `-50+55=5` 在界内、实际写入
+  `_bits[5]`（engine path-finder.js:25 直接平铺算术，无逐轴 0..50 校验）——
+  prelude 的 CostMatrix.set 复刻清单须「保平铺算术、禁逐轴校验」。
+- **`|0` 归一归属**：官方选项钳制经 `(x|0)||1`（int32 强转）——`plainCost:-3`
+  官方得 1；若 op 通道用 ToUint32 传 -3 得 4294967293 再钳 254 即错。op 签名
+  取 i32 或 prelude 先做 `|0`。
+- **空 goals 两键形态**：官方 engine path-finder.js:60-62 对空 goals 返回
+  `{path:[],ops:0}`（**无** cost/incomplete 两键）——prelude 在调 op 前特判。
+- **deserialize 词值 wrap**：官方 JS 对 >2^32 的词值取 mod 2^32（TypedArray
+  赋值转换），Rust 侧 serde 数值转换是饱和语义——极端输入角差，A4 锁值时归因。
+- **panic=unwind 前提**：catch_unwind 的「绝不 abort 宿主」隐含 workspace 无
+  panic=abort profile——当前成立（root Cargo.toml 无 [profile] 覆盖），若未来
+  设置需重新评估本节承诺。
+- **回调异常的消息归属**：宿主层 `Err(JSError(None))` 不携带文案——A4 的 JS
+  包装层直接 rethrow 原生 JS 异常（保留玩家异常对象与栈）；地形缺失的
+  `JSError(Some("Could not load terrain data"))` 文案照官方。
+
 ## 7. C2 锁值测试索引
 
 | 测试 | 锁定行为 |
 |---|---|
 | `tests/callback_safety.rs::cost_matrix_wrong_length_ignored_at_search` | 非 2500 字节矩阵经官方 pf.cc:54-57 静默忽略（= 基线路径）；2500 字节对照组生效 |
-| `::room_callback_panic_first_room_maps_to_official_empty` | 回调 panic → 官方异常链 → `{path:[],ops:0,cost:0,incomplete:false}`；进程不 abort |
-| `::room_callback_panic_second_room_maps_to_official_empty` | 异常时刻无关性（第二房 panic 同结果） |
+| `::room_callback_panic_first_room_maps_to_official_throw` | 回调 panic → 官方上抛语义 → `Err(JSError(None))`；进程不 abort |
+| `::room_callback_panic_second_room_maps_to_official_throw` | 异常时刻无关性（第二房 panic 同 Err） |
 | `::search_works_after_callback_panic` | panic 后池实例复位（pf.cc:565），后续搜索正常 |
 | `::load_terrain_in_callback_rejected_not_deadlock` | 回调内 load_terrain → `Err(ReentrantTerrainLoad)`；线程+recv_timeout 防挂起；外层搜索正常完成 |
 | `::nested_search_in_callback_works` | 嵌套两层 search 正常（官方 main.cc:9-14 语义） |

@@ -89,6 +89,7 @@ pub(super) type RoomCallback = unsafe extern "C" fn(
 #[repr(C)]
 struct SearchResultRaw {
     status: i32,
+    js_error_message: *const std::os::raw::c_char,
     ops: u32,
     cost: u32,
     incomplete: u32,
@@ -115,15 +116,18 @@ unsafe extern "C" {
 /// 回调 trampoline：把 C 函数指针形态转回 Rust 闭包（按 F 单态化）。
 ///
 /// # Panic 安全（沙箱硬约束：玩家回调不得 abort 宿主）
-/// 闭包调用包在 `catch_unwind` 内——panic 不允许穿越 `extern "C"` 边界
+///
+/// 闭包调用包在 `catch_unwind` 内，panic 不允许穿越 `extern "C"` 边界
 /// （Rust ≥1.81 对 extern "C" unwind 是 abort）。捕获后返回码 3（回调异常），
-/// compat 层据此置 v8 挂起异常，走**官方** roomCallback 抛错的同一条链：
-/// pf.cc:43-46 TryCatch 捕获 → `throw js_error()` → pf.cc:563-567 → search 返回
-/// undefined → `{path:[], ops:0, cost:0, incomplete:false}`
-/// （driver/lib/path-finder.js:135-136）。即：panic 的玩家可见结果与官方
-/// roomCallback throw 完全一致，异常本身被官方链路吞掉（官方同样不外抛）。
-/// panic 载荷在此丢弃；宿主需要日志可自行安装 `panic::set_hook`（hook 在
-/// unwinding 前触发，本层不阻止）。
+/// compat 层据此置 v8 挂起异常，走官方 roomCallback 抛错的同一条链
+/// （pf.cc:43-46 TryCatch 捕获后 ReThrow 并 throw js_error，经 pf.cc:563-567
+/// 返回占位 undefined）。
+///
+/// 官方语义是异常**上抛给玩家**（pf.cc:44 ReThrow 重挂 + V8 api 边界挂起
+/// 异常胜过返回值——C2 评审 1 的 V8 源码级取证；driver 的 undefined 映射
+/// 分支在异常路径不可达）。我方经 status 3 映射 Err，A4 接线时由 prelude
+/// rethrow 原生 JS 异常。panic 载荷在此丢弃；宿主需要日志可自行安装
+/// `panic::set_hook`（hook 在 unwinding 前触发，本层不阻止）。
 ///
 /// # Safety
 /// `user_data` 必须是存活于整次 `kk_pf_search` 调用期的 `&mut F`；闭包返回
@@ -174,6 +178,8 @@ where
 /// 一次 search 的原始结果拷贝（path 已转入 `Vec`，C 内存已释放）。
 pub(super) struct RawOutcome {
     pub status: i32,
+    /// status 3 时的 ThrowError 文案（地形缺失）；回调异常路径 None
+    pub js_error_message: Option<String>,
     pub ops: u32,
     pub cost: u32,
     pub incomplete: bool,
@@ -202,6 +208,7 @@ pub(super) unsafe fn ffi_search(
         .collect();
     let mut raw = SearchResultRaw {
         status: 0,
+        js_error_message: std::ptr::null(),
         ops: 0,
         cost: 0,
         incomplete: 0,
@@ -227,6 +234,16 @@ pub(super) unsafe fn ffi_search(
     }
     let mut outcome = RawOutcome {
         status: raw.status,
+        js_error_message: if raw.js_error_message.is_null() {
+            None
+        } else {
+            // Safety: C 侧文档约定指向 thread_local 存储，立即拷贝
+            Some(
+                unsafe { std::ffi::CStr::from_ptr(raw.js_error_message) }
+                    .to_string_lossy()
+                    .into_owned(),
+            )
+        },
         ops: raw.ops,
         cost: raw.cost,
         incomplete: raw.incomplete != 0,

@@ -18,7 +18,7 @@
 //! - CostMatrix 序列化：`engine/src/game/path-finder.js:40-48`（字节按
 //!   little-endian 重解释为 uint32；标准矩阵 2500 字节 → 625 个 u32，越界/
 //!   长度语义见 [`CostMatrix`]——官方全程静默）；
-//! - 地形 packed bits：`driver/lib/path-finder.js:20-27`（每格 2bit，下标 xx*50+yy）。
+//! - 地形 packed bits：`driver/lib/path-finder.js:29-35`（每格 2bit，下标 xx*50+yy）。
 
 mod ffi;
 
@@ -149,6 +149,13 @@ static TERRAIN_LOCK: TerrainLock = TerrainLock {
 /// 错误类型。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
+    /// native 侧异常路径（pf.cc 的 js_error：地形缺失 ThrowError / 回调异常）。
+    /// 官方语义是异常上抛给玩家（pf.cc:44 ReThrow 重挂 + V8 api 边界挂起异常
+    /// 胜过返回值，JS 层 `mod.search()` throw——:563 的 undefined 仅是 C++ 占位）；
+    /// 宿主层映射 Err，A4 接线时由 prelude op 层 rethrow。
+    /// message 仅 ThrowError 直抛路径有文案（如 "Could not load terrain data"）；
+    /// 回调异常为 None（消息归 JS 原异常，JS 层直接 rethrow）。
+    JSError(Option<String>),
     /// 房间名不合法（对照官方 `Invalid room name`，driver/lib/path-finder.js:8-9）
     InvalidRoomName(String),
     /// 房内坐标越界（0..50，对照 `Invalid room position`，driver/lib/path-finder.js:36-37）
@@ -172,6 +179,8 @@ impl fmt::Display for Error {
                 "load_terrain is not allowed inside a search callback (deadlock guard)"
             ),
             Error::NativeFailure => write!(f, "native pathfinder failure"),
+            Error::JSError(Some(msg)) => write!(f, "native pathfinder threw: {msg}"),
+            Error::JSError(None) => write!(f, "native pathfinder callback threw"),
         }
     }
 }
@@ -536,6 +545,7 @@ fn finish(outcome: Option<ffi::RawOutcome>) -> Result<SearchResult, Error> {
         // native undefined → {path:[], ops:0, cost:0, incomplete:false}
         //（driver/lib/path-finder.js:97-98；触发条件 pf.cc:508-510 同格搜索、
         // pf.cc:563-567 JS 异常路径——含目标方向房间缺地形）
+        Some(raw) if raw.status == 3 => Err(Error::JSError(raw.js_error_message)),
         Some(raw) if raw.status == 2 => Ok(SearchResult::empty(false)),
         // native -1 → {path:[], ops:0, cost:0, incomplete:true}
         //（driver/lib/path-finder.js:99-100；初始房间不可达 pf.cc:515-519）
@@ -612,7 +622,10 @@ pub fn search(
 ///   那会 abort 宿主），按官方 roomCallback throw 的同一条链处置：
 ///   pf.cc:43-46 → pf.cc:563-567 → 返回
 ///   `{path:[], ops:0, cost:0, incomplete:false}`（driver/lib/path-finder.js:135-136）。
-///   异常被官方链路吞掉（官方同样不外抛）；宿主要日志可装 `panic::set_hook`。
+///   官方语义是异常上抛给玩家（pf.cc:44 ReThrow + V8 api 边界挂起异常胜过
+///   返回值——JS 层 throw；:563 的 Undefined 仅是 C++ 占位）——宿主层映射
+///   `Err(Error::JSError(None))`，A4 接线时由 prelude rethrow 原生 JS 异常；
+///   宿主要日志可装 `panic::set_hook`。
 /// - **回调内 [`load_terrain`]**：返回 [`Error::ReentrantTerrainLoad`]（官方无此面，
 ///   我方防死锁，见其文档）——回调可检查该 Err 自行降级，不影响外层搜索继续。
 /// - **嵌套 search**：官方支持的两层递归（官方 main.cc:9-14 双实例池注释；
@@ -847,7 +860,7 @@ mod tests {
         assert_eq!(long.get(49, 49), Some(0));
     }
 
-    // ===== 地形打包（对照 driver/lib/path-finder.js:20-27） =====
+    // ===== 地形打包（对照 driver/lib/path-finder.js:29-35） =====
 
     #[test]
     fn terrain_packing() {

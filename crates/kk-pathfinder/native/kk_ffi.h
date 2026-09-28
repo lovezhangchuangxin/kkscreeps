@@ -52,11 +52,18 @@ typedef int (*kk_pf_room_callback_t)(void* user_data, uint8_t xx, uint8_t yy,
 	const uint8_t** out_matrix, size_t* out_len);
 
 // search 结果。status：0 = 正常对象结果；1 = native 返回 -1（初始房间不可达，
-// pf.cc:515-519）；2 = native 返回 undefined（同格搜索/JS 异常，pf.cc:508-510,563-567）。
+// pf.cc:515-519）；2 = native 返回 undefined 且无挂起异常（同格搜索，
+// pf.cc:508-510——官方映射 driver path-finder.js:135-136 的空结果）；
+// 3 = js_error 路径（pf.cc:33-34 地形缺失 / :43-46 回调异常）——官方语义是
+// 异常上抛给玩家（pf.cc:44 ReThrow 重挂 + api 边界胜过返回值，JS 层 throw；
+// :563-567 的 undefined 仅是 C++ 占位返回），Rust 侧映射 Err 由上层 rethrow。
+// js_error_message：status 3 时指向 ThrowError 的文案（地形缺失），回调异常
+// 路径为 null（消息归 JS 原异常）；指向 thread_local 存储，调用方须立即拷贝。
 // path 为 malloc 分配的 [xx,yy] 对数组，goal→origin 序（native 原序，pf.cc:574-594；
 // JS 侧才做 reverse，driver/lib/path-finder.js:101），用 kk_pf_free_result 释放。
 typedef struct kk_pf_search_result {
 	int32_t status;
+	const char* js_error_message;
 	uint32_t ops;
 	uint32_t cost;
 	uint32_t incomplete;
