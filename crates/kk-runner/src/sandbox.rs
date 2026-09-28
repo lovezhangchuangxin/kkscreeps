@@ -29,15 +29,50 @@ use serde_json::Value;
 
 const LODASH_SRC: &str = include_str!("../assets/lodash-3.10.1.js");
 const CONSTANTS_JSON: &str = include_str!("../assets/constants.json");
-/// prelude 按职责分五个段（共享仪表/Buffer/CJS/memory+世界投影/宿主通道），
-/// 各段独立 IIFE、经 globalThis.__kkp 共享私有状态（末段负责删除）。
-const PRELUDE_SEGMENTS: [(&str, &str); 5] = [
+/// prelude 按职责分段（共享仪表/Buffer/CJS/玩家 API 层/宿主通道），各段独立
+/// IIFE、经 globalThis.__kkp 共享私有状态（末段负责删除）。30_game/ 九段对照
+/// 官方 engine/src/game/ 文件结构（A3a 零行为拆分）：注册表与装配序 →
+/// RoomPosition → Room 面 → Creep → Structure 族 → 工地旗帜 → Resource →
+/// PathFinder 桩 → Game 装配与 tick 生命周期；跨段状态经 __kkp.gw 容器。
+const PRELUDE_SEGMENTS: [(&str, &str); 13] = [
     ("kk-prelude-00-shared", include_str!("prelude/00_shared.js")),
     ("kk-prelude-10-buffer", include_str!("prelude/10_buffer.js")),
     ("kk-prelude-20-cjs", include_str!("prelude/20_cjs.js")),
     (
-        "kk-prelude-30-memory-world",
-        include_str!("prelude/30_memory_world.js"),
+        "kk-prelude-30-game-registry",
+        include_str!("prelude/30_game/_registry.js"),
+    ),
+    (
+        "kk-prelude-30-game-room-position",
+        include_str!("prelude/30_game/room-position.js"),
+    ),
+    (
+        "kk-prelude-30-game-room",
+        include_str!("prelude/30_game/room.js"),
+    ),
+    (
+        "kk-prelude-30-game-creep",
+        include_str!("prelude/30_game/creep.js"),
+    ),
+    (
+        "kk-prelude-30-game-structures",
+        include_str!("prelude/30_game/structures.js"),
+    ),
+    (
+        "kk-prelude-30-game-sites-flags",
+        include_str!("prelude/30_game/sites-flags.js"),
+    ),
+    (
+        "kk-prelude-30-game-resources",
+        include_str!("prelude/30_game/resources.js"),
+    ),
+    (
+        "kk-prelude-30-game-path-finder",
+        include_str!("prelude/30_game/path-finder.js"),
+    ),
+    (
+        "kk-prelude-30-game-game",
+        include_str!("prelude/30_game/game.js"),
     ),
     ("kk-prelude-90-host", include_str!("prelude/90_host.js")),
 ];

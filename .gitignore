@@ -44,3 +44,4 @@ compat/reports/tmp/
 .DS_Store
 *.swp
 *.swo
+bot-check-report.json
