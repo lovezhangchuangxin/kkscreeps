@@ -314,8 +314,10 @@
   // 侧 B2 对无钟房同拒）。
   gw.defineGameObjectProperties(globalThis.StructureController.prototype, gw.rawData, {
     level: (o) => o.level || 0,
-    progress: (o) => o.progress || 0,
-    progressTotal: (o) => o.progressTotal || 0,
+    // 官方 structures.js:180-181：RCL 0 的 progress/progressTotal 与 RCL 8 的
+    // progressTotal 均 undefined（GPT 复审 P2-4 清偿——`|| 0` 折叠了缺省态）
+    progress: (o) => (o.level > 0 ? o.progress : undefined),
+    progressTotal: (o) => (o.level > 0 && o.level < 8 ? o.progressTotal : undefined),
     ticksToDowngrade: (o) => (o.downgradeTime != null ? o.downgradeTime - now() : 0),
     safeMode: (o) => (o.safeMode && o.safeMode > now() ? o.safeMode - now() : 0),
     safeModeAvailable: (o) => o.safeModeAvailable ?? 0,
@@ -331,10 +333,11 @@
           username: o.sign.user,
           text: o.sign.text,
           time: o.sign.time,
-          // 官方第四字段 datetime: new Date(o.sign.datetime)（structures.js:192，
-          // 墙钟落库）——确定性引擎不落盘，合成当前墙钟（灰区表登记口径：
-          // 合成或差异登记，replay 不确定性与官方 Date.now() 同源）
-          datetime: new Date(),
+          // 官方第四字段 datetime: new Date(o.sign.datetime)（structures.js:192）
+          // ——签名结算时落一次墙钟（signController.js:23，GPT 复审灰区纠错
+          // 清偿：从持久值构造，同一签名的两次读取不再漂移；缺省回落当前
+          // 墙钟是手写世界无 datetime 的防御，官方不可达）
+          datetime: o.sign.datetime != null ? new Date(o.sign.datetime) : new Date(),
         }
       : undefined),
     upgradeBlocked: (o) => (o.upgradeBlocked && o.upgradeBlocked > now()

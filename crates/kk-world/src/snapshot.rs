@@ -119,32 +119,15 @@ fn snap_store(store: &kk_schema::room::Store) -> Value {
 /// `storeCapacity`（官方 creep 落库字段，creeps.js carryCapacity/Store 同读），
 /// 两消费面（快照契约 null 形态 vs 世界投影裸数值）由各自包装层定型。
 pub(crate) fn creep_store_capacity_raw(body: &[kk_schema::room::BodyPart]) -> i64 {
-    let mut capacity = 0i64;
-    let mut boost_table: Option<serde_json::Value> = None;
-    for part in body {
-        if part.hits == 0
-            || crate::types::BodyKind::from_code(part.kind) != Some(crate::types::BodyKind::Carry)
-        {
-            continue;
-        }
-        let multiplier = match &part.boost {
-            None => 1,
-            Some(boost) => {
-                if boost_table.is_none() {
-                    boost_table = serde_json::from_str(c::BOOSTS).ok();
-                }
-                boost_table
-                    .as_ref()
-                    .and_then(|t| t.get("carry"))
-                    .and_then(|t| t.get(boost.as_str()))
-                    .and_then(|t| t.get("capacity"))
-                    .and_then(Value::as_i64)
-                    .unwrap_or(1)
-            }
-        };
-        capacity += c::CARRY_CAPACITY * multiplier;
-    }
-    capacity
+    // 官方 _recalc-body.js:21：calcBodyEffectiveness(CARRY,'capacity',...)——
+    // 单源实现（GPT 复审 P1-2 清偿：与移动重量/疲劳恢复/仲裁共用）
+    crate::types::calc_body_effectiveness(
+        body,
+        crate::types::BodyKind::Carry,
+        "carry",
+        "capacity",
+        kk_core::constants::CARRY_CAPACITY,
+    )
 }
 
 /// 快照契约形态：vanilla `storeCapacity || null`（store.js:31 同构）——0（无活跃
@@ -225,6 +208,9 @@ fn snapshot_json(
                     None => Value::Null,
                 },
                 "sign": match &o.sign {
+                    // 契约面只有 owner/text/time（vanilla snapshots.ts:157-161，
+                    // GPT 二轮 P2-4：datetime 不进查询快照——世界投影 Some 带键
+                    // 供 prelude getter 构造）
                     Some(s) => json!({ "owner": s.user, "text": s.text, "time": s.time }),
                     None => Value::Null,
                 },
@@ -307,7 +293,7 @@ fn snapshot_json(
         RoomObject::Energy(o) => json!({
             "kind": "resource", "id": id_str,
             "pos": snap_pos(room, o.x, o.y),
-            "resourceType": if o.resource_type == 0 { "energy" } else { "power" },
+            "resourceType": match o.resource_type { 0 => "energy", 1 => "power", _ => kk_core::constants::RESOURCE_GHODIUM },
             "amount": o.amount,
         }),
         // 透传桶：kind 按透传 type 或 structureType 映射（tombstone/ruin/
@@ -853,6 +839,7 @@ mod tests {
                         user: "p1".into(),
                         text: "hi".into(),
                         time: 80,
+                        datetime: None,
                     }),
                     Some(310),
                     Some(50_010),

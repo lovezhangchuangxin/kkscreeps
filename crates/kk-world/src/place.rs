@@ -296,6 +296,7 @@ fn normalize_structure(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<Roo
                         user: s.get("user")?.as_str()?.to_string(),
                         text: s.get("text")?.as_str()?.to_string(),
                         time: s.get("time")?.as_u64()?,
+                        datetime: s.get("datetime").and_then(|d| d.as_u64()),
                     })
                 }),
                 upgrade_blocked: spec.get("upgradeBlocked").and_then(Value::as_u64),
@@ -404,18 +405,20 @@ fn normalize_flag(spec: &Value, x: u8, y: u8) -> FlagObj {
     }
 }
 
-/// 掉落资源（M1 仅 energy；power/矿物资源 M2 扩展 schema 时支持）。
+/// 掉落资源（0=energy/1=power/2=G——GPT 复审 P1-1 清偿：G 掉落落地；
+/// 其余矿物资源随 schema 扩展放开）。
 fn normalize_resource(spec: &Value, x: u8, y: u8) -> Result<EnergyObj, String> {
-    if let Some(rt) = spec_str(spec, "resourceType")
-        && rt != "energy"
-    {
-        return Err(format!("M1 掉落资源仅支持 energy，得到 {rt:?}"));
-    }
+    let code = match spec_str(spec, "resourceType") {
+        None | Some("energy") => 0,
+        Some("power") => 1,
+        Some(kk_core::constants::RESOURCE_GHODIUM) => 2,
+        Some(other) => return Err(format!("掉落资源仅支持 energy/power/G，得到 {other:?}")),
+    };
     Ok(EnergyObj {
         id: 0,
         x,
         y,
-        resource_type: 0,
+        resource_type: code,
         amount: saturating_u32(spec.get("amount").and_then(Value::as_u64).unwrap_or(0)),
     })
 }
@@ -648,6 +651,7 @@ mod tests {
                 user: "p1".into(),
                 text: "hi".into(),
                 time: 77,
+                datetime: None,
             })
         );
         // 缺省形态：四新字段全 None

@@ -268,7 +268,11 @@ fn rate_of(
     let rate3 = i64::from(pull_of.contains_key(&entry.id));
     // rate4 = moves / weight：weight = 非 move/carry 部件 + 资源重量
     // （movement.js:120-123，weight||1）
-    let moves = BodyKind::count_active(&creep.body, BodyKind::Move) as f64;
+    // movement.js:117-118：仲裁 moves = calcBodyEffectiveness(MOVE,'fatigue',1)
+    // ——强化 MOVE 按 BOOSTS.move.fatigue 乘数计入（GPT 复审 P1-2 清偿）
+    let moves =
+        kk_world::types::calc_body_effectiveness(&creep.body, BodyKind::Move, "move", "fatigue", 1)
+            as f64;
     let weight = move_weight(creep).max(1) as f64;
     Rate {
         object: entry.id,
@@ -296,19 +300,9 @@ pub fn can_move(creep: &CreepObj, old_fatigue: u32, is_pulled: bool) -> bool {
 /// `_.sum(creep.store)`，movement.js:42——评审 P3：ghodium "G" 槽同计，
 /// 我方 schema 仅 energy+ghodium 两槽）
 pub fn resources_weight(creep: &CreepObj) -> usize {
-    let mut total_carry = creep.store.energy as i64 + creep.store.ghodium as i64;
-    let mut weight = 0usize;
-    for part in creep.body.iter().rev() {
-        if total_carry <= 0 {
-            break;
-        }
-        if part.kind != BodyKind::Carry.code() || part.hits == 0 {
-            continue;
-        }
-        total_carry -= total_carry.min(kk_core::constants::CARRY_CAPACITY);
-        weight += 1;
-    }
-    weight
+    // movement.js:41-59：重量按强化后的每部件容量扣减（BOOSTS.carry.capacity
+    // 乘数）——单源实现见 kk_world::types::resources_weight（GPT 复审 P1-2）
+    kk_world::types::resources_weight(&creep.body, &creep.store)
 }
 
 /// 移动体重（movement.js:120-122）：非 move/carry 部件数 + 资源重量。

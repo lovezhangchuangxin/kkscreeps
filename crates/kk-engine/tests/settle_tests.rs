@@ -3724,13 +3724,17 @@ fn sign_controller_sets_and_clears() {
     d.sign = Some("reserved sector".into());
     b.add_object_intent("p1", c, Action::SignController, d);
     f.settle(b);
+    // datetime 是结算时墙钟（不可锁值）——比较业务三元组
     assert_eq!(
-        ctl_of(&f).sign,
-        Some(kk_schema::room::Sign {
-            user: "p1".into(),
-            text: "reserved sector".into(),
-            time: 0,
-        })
+        ctl_of(&f)
+            .sign
+            .as_ref()
+            .map(|s| (s.user.as_str(), s.text.as_str(), s.time)),
+        Some(("p1", "reserved sector", 0)),
+    );
+    assert!(
+        ctl_of(&f).sign.as_ref().unwrap().datetime.is_some(),
+        "签名结算落 datetime"
     );
     // 清除：sign 缺省
     let mut b = IntentBatch::default();
@@ -4265,6 +4269,7 @@ fn unclaim_clears_ownership_and_sets_cooldown() {
             user: "p1".into(),
             text: "hi".into(),
             time: 50,
+            datetime: None,
         });
         t.upgrade_blocked = Some(700);
     });
@@ -4777,4 +4782,335 @@ fn built_structure_born_with_notify_attacked_true() {
             _ => None,
         });
     assert_eq!(ext, Some(Some(true)), "落成 extension 出生即 true");
+}
+
+// ---- GPT 外部复审清偿（m2/a4-review）锁值 ----
+
+#[test]
+fn ghodium_resource_family_settles() {
+    // P1-1：G 资源的 transfer/withdraw/drop 全链结算（官方 transfer.js:8/
+    // withdraw.js:8/drop.js:10 按资源类型结算——此前执行器静默丢弃）
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let st = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Storage(kk_schema::room::StorageObj {
+                id: 0,
+                x: 20,
+                y: 20,
+                hits: 10_000,
+                owner: "p1".into(),
+                store: kk_schema::room::Store::default(),
+                notify_when_attacked: None,
+            }),
+        )
+        .unwrap();
+    // G transfer：creep 40G → storage 20G
+    let c = f.creep("w1", "p1", 21, 20, &[BodyKind::Move, BodyKind::Carry], 0);
+    if let Some(RoomObject::Creep(cc)) = f.world.get_mut(c) {
+        cc.store.ghodium = 40;
+    }
+    let mut b = IntentBatch::default();
+    let mut d = IntentData::bare();
+    d.id = Some(st);
+    d.amount = Some(20);
+    d.resource_type = Some("G".into());
+    b.add_object_intent("p1", c, Action::Transfer, d);
+    f.settle(b);
+    match (f.obj(c), f.obj(st)) {
+        (RoomObject::Creep(cc), RoomObject::Storage(s)) => {
+            assert_eq!(cc.store.ghodium, 20, "creep G 40→20");
+            assert_eq!(s.store.ghodium, 20, "storage G 0→20");
+        }
+        _ => panic!(),
+    }
+    // G withdraw：storage 20 → creep 全量
+    let mut b2 = IntentBatch::default();
+    let mut d2 = IntentData::bare();
+    d2.id = Some(st);
+    d2.amount = Some(20);
+    d2.resource_type = Some("G".into());
+    b2.add_object_intent("p1", c, Action::Withdraw, d2);
+    f.settle(b2);
+    match (f.obj(c), f.obj(st)) {
+        (RoomObject::Creep(cc), RoomObject::Storage(s)) => {
+            assert_eq!(cc.store.ghodium, 40, "withdraw 回满");
+            assert_eq!(s.store.ghodium, 0);
+        }
+        _ => panic!(),
+    }
+    // G drop：掉落为 resource_type=2 的资源堆（同格同资源并堆）
+    let mut b3 = IntentBatch::default();
+    let mut d3 = IntentData::bare();
+    d3.amount = Some(5);
+    d3.resource_type = Some("G".into());
+    b3.add_object_intent("p1", c, Action::Drop, d3);
+    f.settle(b3);
+    let pile = f
+        .world
+        .rooms
+        .get("W1N1")
+        .unwrap()
+        .objects
+        .values()
+        .find_map(|o| match o {
+            RoomObject::Energy(e) if e.resource_type == 2 => Some(e.amount),
+            _ => None,
+        });
+    assert_eq!(
+        pile,
+        Some(4),
+        "G 5 掉落 → 当 tick 衰减 ceil(5/1000)=1 → 4（官方全资源同式）"
+    );
+    assert_eq!(
+        match f.obj(c) {
+            RoomObject::Creep(cc) => cc.store.ghodium,
+            _ => 0,
+        },
+        35
+    );
+}
+
+#[test]
+fn boost_effectiveness_unified() {
+    // P1-2：强化部件统一效能——官方 movement.js:41-59（重量按强化容量扣）与
+    // tick.js:105（恢复按 fatigue 效能）。KH 容量×2 / ZO 疲劳×2
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    // 1 carry(KH) + 2 move(ZO)：携带 80（无强化需 2 carry=weight 2；KH ×2
+    // 容量 100 ⇒ weight 1）+ 1 move 够驱 ⇒ move 后疲劳 = (1+1) - 2×2 = 0
+    let c = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Creep(CreepObj {
+                id: 0,
+                x: 10,
+                y: 10,
+                fatigue: 0,
+                age_time: 9_000,
+                hits: 300,
+                spawning: false,
+                action_log: 0,
+                name: "b1".into(),
+                owner: "p1".into(),
+                body: vec![
+                    kk_schema::room::BodyPart {
+                        kind: BodyKind::Carry.code(),
+                        hits: 100,
+                        boost: Some("KH".into()),
+                    },
+                    kk_schema::room::BodyPart {
+                        kind: BodyKind::Move.code(),
+                        hits: 100,
+                        boost: Some("ZO".into()),
+                    },
+                    kk_schema::room::BodyPart {
+                        kind: BodyKind::Move.code(),
+                        hits: 100,
+                        boost: Some("ZO".into()),
+                    },
+                ],
+                store: kk_schema::room::Store {
+                    energy: 80,
+                    ghodium: 0,
+                },
+            }),
+        )
+        .unwrap();
+    let mut b = IntentBatch::default();
+    let mut d = IntentData::bare();
+    d.direction = Some(3);
+    b.add_object_intent("p1", c, Action::Move, d);
+    f.settle(b);
+    match f.obj(c) {
+        RoomObject::Creep(cc) => {
+            assert_eq!((cc.x, cc.y), (11, 10), "direction 3=RIGHT 落地");
+            assert_eq!(
+                cc.fatigue, 0,
+                "weight=1（KH 容量×2）− 恢复 2×2（ZO 效能×2）= 1−4 → 0"
+            );
+        }
+        _ => panic!(),
+    }
+}
+
+#[test]
+fn sign_settlement_persists_datetime() {
+    // 灰区纠错清偿：官方 signController.js:23 结算时落一次 Date.now() 毫秒
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let ctl = f.controller(0, None);
+    let c = f.creep("w1", "p1", 5, 6, &[BodyKind::Claim], 0);
+    let mut b = IntentBatch::default();
+    let mut d = IntentData::bare();
+    d.id = Some(ctl);
+    d.sign = Some("hello".into());
+    b.add_object_intent("p1", c, Action::SignController, d);
+    f.settle(b);
+    match f.obj(ctl) {
+        RoomObject::Controller(t) => {
+            let s = t.sign.as_ref().expect("签名落库");
+            assert!(
+                s.datetime.is_some(),
+                "datetime 结算时落一次（非 getter 合成）"
+            );
+        }
+        _ => panic!(),
+    }
+}
+
+// ---- GPT 二轮复审清偿锁值 ----
+
+#[test]
+fn boosted_build_two_step_official_values() {
+    // 官方 build.js:67-84 两步：基础量定耗能（energy -= base effect），
+    // 增量数组定进度。GPT 探针值：5 能量单 WORK——LH(×1.5) 进度 7、
+    // XLH2O(×2) 进度 10、能耗均 5
+    for (boost, want_progress) in [("LH", 7), ("XLH2O", 10)] {
+        let mut f = Fixture::new(1, terrain_with(&[]));
+        let site = f
+            .world
+            .insert(
+                "W1N1",
+                RoomObject::ConstructionSite(kk_schema::room::ConstructionSiteObj {
+                    id: 0,
+                    x: 10,
+                    y: 10,
+                    structure_type: "road".into(),
+                    progress: 0,
+                    progress_total: 100,
+                    owner: Some("p1".into()),
+                    name: None,
+                }),
+            )
+            .unwrap();
+        let c = f
+            .world
+            .insert(
+                "W1N1",
+                RoomObject::Creep(CreepObj {
+                    id: 0,
+                    x: 10,
+                    y: 11,
+                    fatigue: 0,
+                    age_time: 9_000,
+                    hits: 100,
+                    spawning: false,
+                    action_log: 0,
+                    name: "w".into(),
+                    owner: "p1".into(),
+                    body: vec![kk_schema::room::BodyPart {
+                        kind: BodyKind::Work.code(),
+                        hits: 100,
+                        boost: Some(boost.into()),
+                    }],
+                    store: kk_schema::room::Store {
+                        energy: 5,
+                        ghodium: 0,
+                    },
+                }),
+            )
+            .unwrap();
+        let _ = site;
+        let mut b = IntentBatch::default();
+        b.add_object_intent("p1", c, Action::Build, IntentData::target(site));
+        f.settle(b);
+        let progress = f
+            .world
+            .rooms
+            .get("W1N1")
+            .unwrap()
+            .objects
+            .get(&site)
+            .map(|o| match o {
+                RoomObject::ConstructionSite(s) => s.progress,
+                _ => 0,
+            })
+            .unwrap_or(0);
+        let energy = match f.obj(c) {
+            RoomObject::Creep(cc) => cc.store.energy,
+            _ => 0,
+        };
+        assert_eq!(progress as i64, want_progress, "{boost} 进度");
+        assert_eq!(energy, 0, "{boost} 能量扣基础量 5");
+    }
+}
+
+#[test]
+fn transfer_mixed_holdings_respect_total_capacity() {
+    // 官方 transfer.js:32：通用容量目标按 calcResources 全槽求和——
+    // 满 energy 的 storage 只能收差额 G（GPT 二轮 P1-2 探针场景）
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let st = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Storage(kk_schema::room::StorageObj {
+                id: 0,
+                x: 20,
+                y: 20,
+                hits: 10_000,
+                owner: "p1".into(),
+                store: kk_schema::room::Store {
+                    energy: 999_990,
+                    ghodium: 0,
+                },
+                notify_when_attacked: None,
+            }),
+        )
+        .unwrap();
+    let c1 = f.creep("w1", "p1", 21, 20, &[BodyKind::Move, BodyKind::Carry], 0);
+    if let Some(RoomObject::Creep(cc)) = f.world.get_mut(c1) {
+        cc.store.ghodium = 20;
+    }
+    // 单笔 20G：余量 1e6-999990=10 ⇒ 只收 10
+    let mut b = IntentBatch::default();
+    let mut d = IntentData::bare();
+    d.id = Some(st);
+    d.amount = Some(20);
+    d.resource_type = Some("G".into());
+    b.add_object_intent("p1", c1, Action::Transfer, d);
+    f.settle(b);
+    match f.obj(st) {
+        RoomObject::Storage(s) => {
+            assert_eq!(s.store.energy, 999_990);
+            assert_eq!(s.store.ghodium, 10, "全槽总量钳制：余量 10 G");
+        }
+        _ => panic!(),
+    }
+    match f.obj(c1) {
+        RoomObject::Creep(cc) => assert_eq!(cc.store.ghodium, 10, "退回未收的 10"),
+        _ => panic!(),
+    }
+}
+
+#[test]
+fn pickup_ghodium_routes_to_ghodium_slot() {
+    // 官方 pickup.js:9/23-28：carry 全槽求和、按堆 resourceType 入槽
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let c = f.creep("w1", "p1", 10, 10, &[BodyKind::Move, BodyKind::Carry], 30);
+    let pile = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Energy(kk_schema::room::EnergyObj {
+                id: 0,
+                x: 10,
+                y: 11,
+                resource_type: 2,
+                amount: 10,
+            }),
+        )
+        .unwrap();
+    let mut b = IntentBatch::default();
+    b.add_object_intent("p1", c, Action::Pickup, IntentData::target(pile));
+    f.settle(b);
+    match f.obj(c) {
+        RoomObject::Creep(cc) => {
+            assert_eq!(cc.store.energy, 30, "energy 槽不动");
+            assert_eq!(cc.store.ghodium, 10, "G 入 ghodium 槽（GPT 二轮 P1-3）");
+        }
+        _ => panic!(),
+    }
+    assert!(f.world.get(pile).is_none(), "堆清零移除");
 }
