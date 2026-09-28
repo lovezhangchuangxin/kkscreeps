@@ -154,7 +154,10 @@ export class EmbedClient {
         // spawn 的健康 child
         if (this.child === child) this.kill();
       }, timeoutMs);
-      waiter.timer.unref?.();
+      // 超时计时器保持 ref：pending RPC 是宿主事件循环的合法兜底句柄——
+      // 独立 Node 脚本（顶层 await，无测试运行器持有句柄）在子进程与管道均
+      // unref 的形态下，循环被掏空会在响应到达前退出（exit 13）。计时器在
+      // dispatch/failAll/超时路径均 clearTimeout，正常结算不挂住进程退出
       stdin.write(JSON.stringify({ id, method, params }) + '\n', (err) => {
         if (err && this.pending.delete(id)) {
           clearTimeout(waiter.timer);

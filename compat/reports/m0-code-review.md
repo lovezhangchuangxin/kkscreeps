@@ -711,3 +711,14 @@ intent+movement（B）、经济+孵化（B+）。5 路评审员逐模块对照�
 灰区同步：safeMode 投影条目更新（剩余值已接，cooldown 仍桩 0）；身份信任条目更新
 （结构性强制）；ratchet.json note 更新（三重门禁）。全量重跑 **274 → 277**
 （+3 全转绿零转红——controller 种子到视图的修复显形），floor 已上调。
+
+## 追记：M1 外部复审第二轮（ChatGPT 复审 HEAD ac992bc，2026-09-28）
+
+前轮 5 条修复全部确认到位（控制器种子经适配器实测返回 [101,2,5001]）；新发现 3 条
+全属实、全部处置：
+
+| # | 级 | 发现 | 处置 |
+|---|---|---|---|
+| 1 | P2 | 棘轮逐用例比较只认 failed：passed→skipped 不计红——"一条转跳过 + 一条转通过"可同时保住 passed 总数与用例总数，三重门禁全数放行（构造报告实测）；基线 git show 失败时静默跳过比较，门禁整体失效 | 修：判定核心抽为纯模块 `ratchet-flips.mjs`（脚本自身有顶层副作用不可 import 测试），基线 passed 在当前**非 passed**（缺失/失败/转跳过）一律计红；基线不可读 ⇒ -1 ⇒ fail closed。单测三场景锁死（含对冲场景） |
+| 2 | P2 | RPC 把子进程/管道/超时计时器全部 unref：独立 Node 脚本（顶层 await，无测试运行器句柄）事件循环被掏空，响应到达前退出（实测 exit 13）；vitest 环境掩盖 | 修：pending RPC 的超时计时器恢复 ref（合法兜底句柄；dispatch/failAll/超时路径均 clearTimeout，不挂正常退出）。回归测试 spawn 全新 node 进程 + 延迟回包假 sidecar 确定性复现独立环境 |
+| 3 | P3 | roadmap M1 段仍写"地板 268/2914"（沿革与 ratchet.json 已是 277） | 修：数字同步 |

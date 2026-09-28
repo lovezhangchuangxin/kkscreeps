@@ -10,6 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { analyzeFlips } from './ratchet-flips.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const ratchetPath = resolve(root, 'compat/reports/ratchet.json');
@@ -42,17 +43,6 @@ function tailSuiteLog(lines = 100) {
   const tail = readFileSync(suiteLogPath, 'utf8').split('\n').slice(-lines).join('\n');
   console.error(`--- 套件日志尾部（${suiteLogPath}，最后 ${lines} 行）---`);
   console.error(tail);
-}
-
-/** 报告 → fullName 到 status 的映射（vitest json reporter 形状）。 */
-function statusesOf(report) {
-  const out = new Map();
-  for (const tr of report.testResults ?? []) {
-    for (const a of tr.assertionResults ?? tr.assertions ?? []) {
-      out.set(a.fullName ?? a.title ?? '', a);
-    }
-  }
-  return out;
 }
 
 // 新鲜度守卫：套件必须真跑过（vitest 有失败用例时 exit 1 属常态——预期失败池
@@ -106,7 +96,10 @@ if (passed < ratchet.floor) {
 // 相对上一入库基线（HEAD 的 kkscreeps.json）任何转红即红；有意行为变化须随全量
 // 重跑更新基线入库并在提交说明归因，疑似偶发先重跑 job 复核（flake 策略）
 const flipsRed = printFlipsAgainstBaseline(report);
-if (flipsRed > 0) {
+if (flipsRed < 0) {
+  console.error('ratchet: 基线不可读 ⇒ 门禁红（fail closed）');
+  gateFailed = true;
+} else if (flipsRed > 0) {
   console.error(`ratchet: 相对上一入库基线转红 ${flipsRed} 条 ⇒ 门禁红`);
   gateFailed = true;
 }
@@ -125,23 +118,13 @@ function printFlipsAgainstBaseline(current) {
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
   });
+  // 基线不可读 ⇒ -1：无法验证逐用例回归时 fail closed，不得静默跳过（跳过
+  // 会让这道门禁整体失效）
   if (shown.status !== 0) {
-    console.error('ratchet: 无法读取上一入库基线（git show 失败），跳过逐用例 diff');
-    return;
+    console.error('ratchet: 无法读取上一入库基线（git show 失败）——逐用例回归不可验证');
+    return -1;
   }
-  const baseline = statusesOf(JSON.parse(shown.stdout));
-  const now = statusesOf(current);
-  const flipsRed = [];
-  let flipsGreen = 0;
-  for (const [name, a] of baseline) {
-    if (a.status !== 'passed') continue;
-    const cur = now.get(name);
-    if (!cur || cur.status === 'failed') flipsRed.push([name, cur]);
-    else if (cur.status === 'passed') continue;
-  }
-  for (const [name, a] of now) {
-    if (a.status === 'passed' && baseline.get(name)?.status !== 'passed') flipsGreen += 1;
-  }
+  const { flipsRed, flipsGreen } = analyzeFlips(JSON.parse(shown.stdout), current);
   console.error(`ratchet: 相对上一基线——转红 ${flipsRed.length} 条，转绿 ${flipsGreen} 条`);
   for (const [name, cur] of flipsRed.slice(0, 10)) {
     const msg = (cur?.failureMessages?.[0] ?? '').split('\n')[0].slice(0, 200);
