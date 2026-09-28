@@ -1,6 +1,7 @@
 //! controller 对象指令（官方 `engine/src/processor.js:306-311` 对 controller
-//! 类型分派 unclaim/activateSafeMode）。B2 落地 activateSafeMode（unclaim 不在
-//! 24 动作清单内，白名单外动作在清洗层已丢弃）。
+//! 类型分派 unclaim/activateSafeMode——unclaim 先序）。B2 落地
+//! activateSafeMode；A4-iii 补 unclaim（B2 时未进 24 动作清单，白名单外
+//! 动作在清洗层丢弃——intent.rs 已补 Action::Unclaim）。
 //!
 //! activateSafeMode 是两步链的**意图半步**：此处只做门槛检查并挂
 //! `_safeModeActivated` 瞬态标记，真正的 safeMode 时钟/消耗/冷却在
@@ -22,14 +23,55 @@ use kk_world::ObjId;
 use super::Working;
 use crate::intent::{Action, IntentData};
 
-/// 官方 processor.js:306-311：controller 对象的 intent 分派（现仅一员）。
+/// 官方 processor.js:306-311：controller 对象的 intent 分派（unclaim 先于
+/// activateSafeMode——同 tick 两者并存时 unclaim 归零后 activateSafeMode 的
+/// `!object.user || !object.level` 再拒，官方同序）。
 pub fn process_controller_intents(
     w: &mut Working,
     id: ObjId,
     actions: &BTreeMap<Action, IntentData>,
 ) {
+    if actions.contains_key(&Action::Unclaim) {
+        intent_unclaim(w, id);
+    }
     if actions.contains_key(&Action::ActivateSafeMode) {
         intent_activate_safe_mode(w, id);
+    }
+}
+
+/// 官方 unclaim.js（processor/intents/controllers/unclaim.js）：主动弃房。
+/// `!object.user || !object.level` 早退后写库：user=null、level=0、progress=0、
+/// downgradeTime=null、safeMode=null、safeModeAvailable=0、冷却
+/// gameTime+SAFE_MODE_COOLDOWN（roomInfo.novice 免冷却路径——我方无新手区，
+/// 恒挂钟）、isPowerEnabled=false。
+///
+/// 与降级归零（controllers/tick.js:52-63）的两处刻意差异（官方原样）：
+/// - **不清 reservation/sign/upgradeBlocked**——unclaim.js 的 bulk update
+///   键表无此三项（降级路径清 upgradeBlocked）；已占房的 reservation 本就
+///   为空（claim 落地即清），sign 跨 unclaim 存续是玩家可观察语义；
+/// - `user = null` 落库哨兵——我方 owner=None + owner_cleared=true（A3b
+///   三态：玩家侧 my === false，区别于从未拥有）。
+///
+/// removeRoomFromUser（:15）由 Engine tick 末 rooms 重建承载（settle/mod.rs
+/// PlayerState 文档）。
+fn intent_unclaim(w: &mut Working, id: ObjId) {
+    let Some(RoomObject::Controller(t)) = w.room.objects.get(&id) else {
+        return;
+    };
+    // :9-12 `!object.user || !object.level`——无主/0 级不可弃
+    if t.owner.is_none() || t.level == 0 {
+        return;
+    }
+    if let Some(RoomObject::Controller(t)) = w.room.objects.get_mut(&id) {
+        t.owner = None;
+        t.owner_cleared = true;
+        t.level = 0;
+        t.progress = 0;
+        t.downgrade_time = None;
+        t.safe_mode = 0;
+        t.safe_mode_available = 0;
+        t.safe_mode_cooldown = Some(w.time + kk_core::constants::SAFE_MODE_COOLDOWN as u64);
+        t.is_power_enabled = false;
     }
 }
 

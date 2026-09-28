@@ -23,7 +23,10 @@
     return m.creeps[name];
   }
 
-  const CREEP_METHODS = ['move', 'moveByPath', 'moveTo', 'harvest', 'build', 'repair', 'dismantle', 'upgradeController', 'attack', 'rangedAttack', 'rangedMassAttack', 'heal', 'rangedHeal', 'claimController', 'reserveController', 'attackController', 'transfer', 'withdraw', 'drop', 'pickup', 'say', 'suicide', 'spawn', 'generateSafeMode', 'pull', 'recycleCreep', 'renewCreep', 'cancelOrder', 'moveHead'];
+  const CREEP_METHODS = ['move', 'moveByPath', 'moveTo', 'harvest', 'build', 'repair', 'dismantle', 'upgradeController', 'attack', 'rangedAttack', 'rangedMassAttack', 'heal', 'rangedHeal', 'transfer', 'withdraw', 'drop', 'pickup', 'say', 'suicide', 'spawn', 'pull', 'recycleCreep', 'renewCreep', 'cancelOrder', 'moveHead'];
+  // A4-iii 换真下架（原桩列表项）：claimController/reserveController/
+  // attackController/generateSafeMode（signController 官方在缺集登记里——本批
+  // 一并换真，不入桩表）
 
   // API 实现用的预置常量（官方 game 层的 C 来自 driver.constants 注入对象，
   // 玩家覆盖全局常量不影响 API 判定——game.js 头部 C = driver.constants 同款）
@@ -50,9 +53,18 @@
     WORK: globalThis.WORK,
     ATTACK: globalThis.ATTACK,
     HEAL: globalThis.HEAL,
+    CLAIM: globalThis.CLAIM,
     ERR_NOT_FOUND: globalThis.ERR_NOT_FOUND,
     ERR_RCL_NOT_ENOUGH: globalThis.ERR_RCL_NOT_ENOUGH,
     ERR_FULL: globalThis.ERR_FULL,
+    ERR_GCL_NOT_ENOUGH: globalThis.ERR_GCL_NOT_ENOUGH,
+    // controller 族（A4-iii）：generateSafeMode 的 ghodium 消耗门 +
+    // claimController 的 GCL 门（calcNeededGcl = GCL_MULTIPLY × (n-1)^GCL_POW，
+    // utils.js:661-663）
+    SAFE_MODE_COST: globalThis.SAFE_MODE_COST,
+    RESOURCE_GHODIUM: globalThis.RESOURCE_GHODIUM,
+    GCL_MULTIPLY: globalThis.GCL_MULTIPLY,
+    GCL_POW: globalThis.GCL_POW,
     OBSTACLE_OBJECT_TYPES: freezeConst(globalThis.OBSTACLE_OBJECT_TYPES),
     CONSTRUCTION_COST: freezeConst(globalThis.CONSTRUCTION_COST),
     CONTROLLER_STRUCTURES: freezeConst(globalThis.CONTROLLER_STRUCTURES),
@@ -110,6 +122,42 @@
     if (!quota) return true;
     const level = Math.min(Math.max(ctl.level || 0, 0), 8);
     return (quota[level] || 0) > 0;
+  }
+
+  // ---- controller 族（A4-iii）的 GCL 门读数 ----
+  // 预置 Math.pow（官方 calcNeededGcl 在引擎闭包内求值——玩家交换 Math 不影响
+  // API 判定，与预置常量 C 表同一原则）
+  const mathPow = Math.pow;
+
+  /** 官方 calcNeededGcl（utils.js:661-663）：GCL_MULTIPLY × (level−1)^GCL_POW。 */
+  function calcNeededGcl(level) {
+    return C.GCL_MULTIPLY * mathPow(level - 1, C.GCL_POW);
+  }
+
+  /** runtimeData.user.gcl（GCL 点数总量）的现状近似：按 Game.gcl 逆变换
+   *  points = GCL_MULTIPLY × (level−1)^GCL_POW + progress（官方 game.js:130-162
+   *  正变换的逆）。Game.gcl 现状硬编码 {level:1,progress:0} → 0 点——真值
+   *  接线归 A3c per-viewer 批；硬编码值下的可观察行为：首房（claimed=0）门
+   *  短路放行，已有房/同 tick 二 claim 时 ERR_GCL_NOT_ENOUGH（登记报告）。
+   *  结算侧 claimController.js:41-43 用 PlayerState 真值复核，本门最坏是说谎
+   *  的返回码 + 0.2 计费（伪实例面既有登记族）。 */
+  function gclPoints() {
+    const g = Game.gcl;
+    return C.GCL_MULTIPLY * mathPow(g.level - 1, C.GCL_POW) + g.progress;
+  }
+
+  /** runtimeData.user.rooms.length 的等价物：查看者已占房数（去重计 controller
+   *  owner 归属房——官方 user.rooms 经 addRoomToUser/removeRoomFromUser 维护的
+   *  正是此集，我方 Engine 每 tick 按世界真值重建的同一定集）。 */
+  function myClaimedRoomCount() {
+    const seen = new Set();
+    for (const o of gw.world.objects || []) {
+      if (o.type === 'structure' && o.structureType === 'controller'
+        && o.owner === gw.viewerName) {
+        seen.add(o.room);
+      }
+    }
+    return seen.size;
   }
 
   // ---------------------------------------------------------------- Creep 原型：字段表
@@ -658,6 +706,117 @@
     if (sumStore(rawSelf) >= rawStoreCapacity(rawSelf)) return C.ERR_FULL; // :578-580
     if (!target.pos.isNearTo(this.pos)) return C.ERR_NOT_IN_RANGE; // :581-583
     gw.intents.set(this.id, 'pickup', { id: target.id }); // :585
+    return C.OK;
+  };
+
+  // ---------------------------------------------------------------- controller 族（A4-iii 换真）
+  /** Creep.claimController：官方 creeps.js:839-887。预检序不重排——
+   *  my/spawning → GCL 门（:845-848，读 rooms+同 tick 已 claim 计数）→
+   *  新手区门（:849-851，N/A——世界无 novice 概念，官方私服 roomInfo.novice=0
+   *  恒不触发）→ 目标（:852-855）→ CLAIM 部件（:856-858）→ shardAccess
+   *  （:859-861，单分片 N/A）→ 邻接（:862-864）→ controller 类型（:865-867）
+   *  → level>0（:868-870）→ 他人预定（:871-873）→ 本房 safeMode（:874-876，
+   *  blockedBySafeMode 同形）→ 计数 +1（:878）→ intents.set（:880-881）。 */
+  globalThis.Creep.prototype.claimController = function claimController(target) {
+    if (!this.my) return C.ERR_NOT_OWNER;
+    if (this.spawning) return C.ERR_BUSY;
+    const controllersClaimed = myClaimedRoomCount() + (gw.controllersClaimedInTick || 0);
+    if (controllersClaimed
+      && (!gclPoints() || gclPoints() < calcNeededGcl(controllersClaimed + 1))) {
+      return C.ERR_GCL_NOT_ENOUGH;
+    }
+    if (!(target && target.id && target instanceof globalThis.Structure)) {
+      return C.ERR_INVALID_TARGET;
+    }
+    if (countActiveParts(this.body, C.CLAIM) === 0) return C.ERR_NO_BODYPART;
+    if (!target.pos.isNearTo(this.pos)) return C.ERR_NOT_IN_RANGE;
+    if (target.structureType !== 'controller') return C.ERR_INVALID_TARGET;
+    if (target.level > 0) return C.ERR_INVALID_TARGET;
+    if (target.reservation && target.reservation.username !== gw.viewerName) {
+      return C.ERR_INVALID_TARGET;
+    }
+    if (blockedBySafeMode(this)) return C.ERR_NO_BODYPART;
+    gw.controllersClaimedInTick = (gw.controllersClaimedInTick || 0) + 1;
+    gw.intents.set(this.id, 'claimController', { id: target.id });
+    return C.OK;
+  };
+
+  /** Creep.attackController：官方 creeps.js:888-926。目标须 StructureController
+   *  实例（:897）；CLAIM 部件（:901——官方 _getActiveBodyparts 复数形，零部件
+   *  同判 NO_BODYPART）；邻接（:905）；原始房（无主无预定）不可攻（:908-910）；
+   *  upgradeBlocked 显式回查原始投影（:911-913——`data(target.id)` 的我方对齐
+   *  gw.rawData，绝对 tick > 当前 tick 判 TIRED）；本房 safeMode（:914-916）；
+   *  EFFECT_INVULNERABILITY 免疫（:917-919，power 体系 N/A）。 */
+  globalThis.Creep.prototype.attackController = function attackController(target) {
+    if (!this.my) return C.ERR_NOT_OWNER;
+    if (this.spawning) return C.ERR_BUSY;
+    if (!(target && target.id && target instanceof globalThis.StructureController)) {
+      return C.ERR_INVALID_TARGET;
+    }
+    if (countActiveParts(this.body, C.CLAIM) === 0) return C.ERR_NO_BODYPART;
+    if (!target.pos.isNearTo(this.pos)) return C.ERR_NOT_IN_RANGE;
+    if (!target.owner && !target.reservation) return C.ERR_INVALID_TARGET;
+    if (gw.rawData(target.id).upgradeBlocked > gw.world.time) return C.ERR_TIRED;
+    if (blockedBySafeMode(this)) return C.ERR_NO_BODYPART;
+    gw.intents.set(this.id, 'attackController', { id: target.id });
+    return C.OK;
+  };
+
+  /** Creep.reserveController：官方 creeps.js:961-1023。目标 Structure 实例
+   *  （:970-973）→ 邻接（:974-976）→ controller 类型（:977-979）→ 已占房不可
+   *  预定（:980-982，房主自己也不行）→ 他人预定不可覆盖（:983-985）→ CLAIM
+   *  部件（:986-988）→ shardAccess（:989-991，N/A）→ intents.set。 */
+  globalThis.Creep.prototype.reserveController = function reserveController(target) {
+    if (!this.my) return C.ERR_NOT_OWNER;
+    if (this.spawning) return C.ERR_BUSY;
+    if (!(target && target.id && target instanceof globalThis.Structure)) {
+      return C.ERR_INVALID_TARGET;
+    }
+    if (!target.pos.isNearTo(this.pos)) return C.ERR_NOT_IN_RANGE;
+    if (target.structureType !== 'controller') return C.ERR_INVALID_TARGET;
+    if (target.owner) return C.ERR_INVALID_TARGET;
+    if (target.reservation && target.reservation.username !== gw.viewerName) {
+      return C.ERR_INVALID_TARGET;
+    }
+    if (countActiveParts(this.body, C.CLAIM) === 0) return C.ERR_NO_BODYPART;
+    gw.intents.set(this.id, 'reserveController', { id: target.id });
+    return C.OK;
+  };
+
+  /** Creep.generateSafeMode：官方 creeps.js:1062-1080。ghodium 消耗门（:1069-
+   *  1071，SAFE_MODE_COST=1000——显式回查原始投影 store，官方 `data(this.id)
+   *  .store` 的对齐；无 store/不足皆 NOT_ENOUGH_RESOURCES，无部件门——BODYPARTS
+   *  无关）→ 目标 StructureController（:1072-1075）→ 邻接（:1076-1078）→
+   *  intents.set。 */
+  globalThis.Creep.prototype.generateSafeMode = function generateSafeMode(target) {
+    if (!this.my) return C.ERR_NOT_OWNER;
+    if (this.spawning) return C.ERR_BUSY;
+    const store = gw.rawData(this.id).store;
+    if (!store || !(store[C.RESOURCE_GHODIUM] >= C.SAFE_MODE_COST)) {
+      return C.ERR_NOT_ENOUGH_RESOURCES;
+    }
+    if (!(target && target.id && target instanceof globalThis.StructureController)) {
+      return C.ERR_INVALID_TARGET;
+    }
+    if (!target.pos.isNearTo(this.pos)) return C.ERR_NOT_IN_RANGE;
+    gw.intents.set(this.id, 'generateSafeMode', { id: target.id });
+    return C.OK;
+  };
+
+  /** Creep.signController：官方 creeps.js:1080-1100——**无 my 门**（他人 creep
+   *  同样可签名，官方原样）。spawning → 目标 Structure 实例（:1083-1086）→
+   *  邻接（:1087-1089）→ controller 类型（:1090-1092）→ intents.set 载荷
+   *  `sign: ""+sign`（:1094——JS 字符串化：undefined → "undefined" 文本落库
+   *  的官方 quirk 原样；清除签名走空串——userString 折叠 + 结算层判空，
+   *  intent.rs 既有登记）。 */
+  globalThis.Creep.prototype.signController = function signController(target, sign) {
+    if (this.spawning) return C.ERR_BUSY;
+    if (!(target && target.id && target instanceof globalThis.Structure)) {
+      return C.ERR_INVALID_TARGET;
+    }
+    if (!target.pos.isNearTo(this.pos)) return C.ERR_NOT_IN_RANGE;
+    if (target.structureType !== 'controller') return C.ERR_INVALID_TARGET;
+    gw.intents.set(this.id, 'signController', { id: target.id, sign: '' + sign });
     return C.OK;
   };
 

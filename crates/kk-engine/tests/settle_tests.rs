@@ -4208,3 +4208,124 @@ fn activate_safe_mode_null_cooldown_at_time_zero_rejects() {
     ));
     assert_eq!(ctl_of(&f).safe_mode, 0, "time=0 + 冷却 None（0>=0）拒");
 }
+
+// ---- A4-iii：unclaim（官方 processor/intents/controllers/unclaim.js）----
+
+#[test]
+fn unclaim_clears_ownership_and_sets_cooldown() {
+    // unclaim.js:15-25：user=null（→ owner_cleared 哨兵）、level=0、progress=0、
+    // downgradeTime=null、safeMode=null、safeModeAvailable=0、冷却
+    // gameTime+SAFE_MODE_COOLDOWN（roomInfo.novice 免冷却路径——我方无新手区
+    // 恒挂钟）、isPowerEnabled=false。**不清 reservation/sign/upgradeBlocked**
+    // （官方 bulk update 键表无此三项——与降级归零路径 tick.js:52-63 的刻意
+    // 差异：sign 跨 unclaim 存续是玩家可观察语义；reservation 由 controllers/
+    // tick 的到期/已占条件另行清除，unclaim 后无主不满足）。removeRoomFromUser
+    // （:15）由 Engine rooms 重建承载（engine_recomputes_player_rooms_after_tick）
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    f.world.time = 100;
+    let ctl = f.controller_full(4, Some("p1"), |t| {
+        t.progress = 12_345;
+        t.safe_mode = 500;
+        t.safe_mode_available = 3;
+        t.downgrade_time = Some(9_000);
+        t.is_power_enabled = true;
+        t.reservation = Some(kk_schema::room::Reservation {
+            user: "p2".into(),
+            end_time: 10_000,
+        });
+        t.sign = Some(kk_schema::room::Sign {
+            user: "p1".into(),
+            text: "hi".into(),
+            time: 50,
+        });
+        t.upgrade_blocked = Some(700);
+    });
+    // 同 tick 追加 activateSafeMode：processor.js:307-309 unclaim 先序——归零
+    // 后 activate 的 `!object.user || !object.level` 再拒（官方同序）
+    let mut b = controller_action("p1", ctl, Action::Unclaim, IntentData::bare());
+    b.add_object_intent("p1", ctl, Action::ActivateSafeMode, IntentData::bare());
+    let events = f.settle(b);
+    assert!(events.is_empty(), "unclaim 无事件（官方处理器不 push）");
+    let t = ctl_of(&f);
+    assert_eq!(t.owner, None);
+    assert!(
+        t.owner_cleared,
+        "官方 user=null 落库哨兵 → 玩家侧 my === false"
+    );
+    assert_eq!(t.level, 0);
+    assert_eq!(t.progress, 0);
+    assert_eq!(
+        t.safe_mode, 0,
+        "同 tick activateSafeMode 被 unclaim 先序压掉"
+    );
+    assert_eq!(t.safe_mode_available, 0);
+    assert_eq!(t.downgrade_time, None);
+    assert_eq!(
+        t.safe_mode_cooldown,
+        Some(100 + 50_000),
+        "冷却 = time + SAFE_MODE_COOLDOWN（无新手区恒挂钟）"
+    );
+    assert!(!t.is_power_enabled);
+    assert_eq!(
+        t.sign.as_ref().map(|s| s.text.as_str()),
+        Some("hi"),
+        "sign 存续"
+    );
+    assert_eq!(
+        t.upgrade_blocked,
+        Some(700),
+        "upgradeBlocked 不清（官方键表无）"
+    );
+    assert_eq!(
+        t.reservation.as_ref().map(|r| r.end_time),
+        Some(10_000),
+        "reservation 存续（未到期且 unclaim 后无主——tick 清除条件不满足）"
+    );
+}
+
+#[test]
+fn unclaim_rejections() {
+    // unclaim.js:9-12 `!object.user || !object.level` 早退（不挂冷却、不置
+    // 哨兵）；分派层（processor.js:248 `object.user && object.user != userId`）
+    // 他人 controller 的 intent 整对象跳过
+    // ① 无主 + 0 级拒
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    f.world.time = 10;
+    let ctl = f.controller(0, None);
+    f.settle(controller_action(
+        "p1",
+        ctl,
+        Action::Unclaim,
+        IntentData::bare(),
+    ));
+    let t = ctl_of(&f);
+    assert!(!t.owner_cleared, "无主：哨兵不置（从未拥有）");
+    assert_eq!(t.safe_mode_cooldown, None, "无主：不挂冷却");
+    // ② 有主但 0 级拒
+    f = Fixture::new(1, terrain_with(&[]));
+    f.world.time = 10;
+    let ctl = f.controller_full(0, Some("p1"), |_| {});
+    f.settle(controller_action(
+        "p1",
+        ctl,
+        Action::Unclaim,
+        IntentData::bare(),
+    ));
+    assert_eq!(ctl_of(&f).safe_mode_cooldown, None, "0 级：不挂冷却");
+    // ③ 他人 controller：分派层丢弃
+    f = Fixture::new(1, terrain_with(&[]));
+    f.world.time = 10;
+    let ctl = f.controller_full(3, Some("p2"), |t| {
+        t.safe_mode_available = 1;
+    });
+    f.settle(controller_action(
+        "p1",
+        ctl,
+        Action::Unclaim,
+        IntentData::bare(),
+    ));
+    let t = ctl_of(&f);
+    assert_eq!(t.owner.as_deref(), Some("p2"), "敌方 intent 分派层丢弃");
+    assert_eq!(t.level, 3);
+    assert_eq!(t.safe_mode_available, 1);
+}
