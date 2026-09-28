@@ -52,6 +52,19 @@ kkscreeps deploy            # 测试通过后经官方 API (/api/user/code) 一�
 
 - **任意 tick 回放**：房间快照双缓冲历史 + 指令日志 = 完整事件溯源（03 报告架构的顺带收益）；
   "我的 creep 为什么往左走" → 取该对象任意 tick 的状态、收到的 intents、结算依据；
+- **断点调试（M2.5 显式子项）**：`kkscreeps sim --debug` 起本地 CDP 服务（deno_inspector_server，
+  随机端口并打印 ws URL），每个玩家/bot 一个独立 DevTools target——Chrome `chrome://inspect`
+  添加 `localhost:<port>`，或直开 `/json/list` 返回的 devtoolsFrontendUrl；VS Code js-debug 按
+  ws URL attach。多 bot 场景各 isolate 独立 target、独立会话，暂停一个 bot 不影响世界推进。
+  **debug 档语义**：该玩家当 tick 豁免看门狗 arm——实测开着看门狗打断点必被掐，且 terminate
+  要到暂停被唤醒后才展开（[inspector-spike 实验 N](../research/notes/spike-deno-inspector.md)）。
+  默认关闭，`--debug` 显式开启（兼容红线"附加能力默认关闭"，同 §3 test 全局先例）；公网服不
+  开放（鉴权与资源占用归 M5 安全加固）。
+  前置依赖（M2-2A 沙箱接入时预留，均为 spike 实证约束，见笔记 §6/§7）：`SandboxConfig` 加
+  debug 档（`RuntimeOptions.inspector: true`）；玩家模块脚本名**绝对路径化**（断点按 URL 绑定，
+  deno_core 只把绝对路径资源名转成 file:// URL，裸名断点永远不命中）；泵事件循环固定
+  `wait_for_inspector: false`（true 会在空闲循环 + WS 会话下销毁主上下文，此后调试全失效）；
+  inspector 开关不改变遮蔽后全局面（实验 O），白名单测试无需豁免；
 - **CPU/内存报告**：每 tick `getUsed()` 曲线、bucket 演化（bucket_sim 同款机制）、
   每 intent 的 0.2 计费明细、内存峰值——帮玩家在本地把 CPU 优化做完再上服；
 - **可选本地 viewer**：`kkscreeps sim watch --port 21026` 起 ws，官方 renderer 连接实时观战
