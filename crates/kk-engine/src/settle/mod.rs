@@ -1,13 +1,13 @@
-//! 单房间结算：官方 `engine/src/processor.js:16-520` 阶段序的忠实子集。
+//! 单房间结算：官方 `engine/src/processor.js` 阶段序的忠实子集（M1 范围）。
 //!
-//! 与官方的三处有意差异（登记灰区，方案 D4）：
-//! 1. 对象迭代序 = BTreeMap id 升序（id 全局单调分配 ⇒ 创建序），官方为 DB 插入序；
-//! 2. bulk 写入改为工作副本直接变更（内存模型），eventLog 照产；
-//! 3. 失败即回退：`settle_room` 返回 Err 时调用方丢弃工作副本、房间保持上一 tick
-//!    状态（官方出错打日志继续）。
+//! 与官方的三处有意差异（方案 D4，登记于 compatibility.md 灰区表）：
+//! 1. 对象迭代按 id 升序——id 由世界单调分配，升序即创建序；官方为 DB 插入序；
+//! 2. 不攒 bulk 批量写，直接改工作副本（内存模型无写放大），eventLog 照常产出；
+//! 3. 结算失败即整体回退：返回 Err 时调用方丢弃工作副本，房间保持上一 tick
+//!    状态（官方是打日志继续）。多房间由 [`Engine::tick`] 两阶段提交保证原子性。
 //!
-//! M1 范围外（结算忽略）：NPC、战斗全家、power、市场、跨房间落地、
-//! Generic 桶对象（透传存放的 tower/rampart/…无规则行为）。
+//! M1 不结算：NPC、战斗全家、power、市场、跨房间落地、Generic 桶对象
+//! （tower/rampart 等透传对象只保证可见，无规则行为）。
 
 pub mod creep;
 pub mod economy;
@@ -95,7 +95,9 @@ impl<'w> Working<'w> {
         let id = *self.next_id;
         *self.next_id = self.next_id.saturating_add(1);
         let (x, y) = object.pos();
-        self.room.insert_with_id(id, object);
+        self.room
+            .insert_with_id(id, object)
+            .expect("结算 id 分配器不得复用已有对象");
         self.index.insert(ObjId(id), (x, y));
         ObjId(id)
     }
@@ -338,7 +340,9 @@ impl Engine {
         }
         let mut events = Vec::new();
         let mut settled: Vec<(String, RoomState)> = Vec::new();
-        let mut next = self.next_id.max(self.world.next_obj_id());
+        let mut next = self
+            .next_id
+            .max(self.world.next_available_obj_id().map_err(SettleError)?);
         let mut players = self.players.clone();
         let room_names: Vec<String> = self.world.rooms.keys().cloned().collect();
         for name in room_names {

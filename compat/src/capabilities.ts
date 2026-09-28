@@ -1,5 +1,6 @@
-// 适配器能力声明（M0 基线）。
-// 全部如实为 false：哑世界没有任何游戏规则能力；随着引擎里程碑推进逐项翻真。
+// 适配器能力声明（M0 基线起，随里程碑逐项翻真）。
+// 声明与实装面严格一致——terrain 已于 M1 步 5（embed 地形通道）翻真，其余
+// 游戏规则能力仍为 false；未实装的接口不冒充（套件据此跳过或标记）。
 // 字段清单与语义对齐 screeps-ok src/adapter.ts 的 AdapterCapabilities（27 项，
 // pin 34a630e 实测；此前误多列 structures/construction 两键，上游不存在）。
 

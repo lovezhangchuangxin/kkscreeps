@@ -1,16 +1,18 @@
 //! Sandbox：一个玩家的 deno_core 沙箱宿主（M0 种子实现）。
 //!
 //! 组装 spike 验证过的全部机制：
-//! - 内存双闸门：`heap_limits` 硬上限 + `near_heap_limit` 回调内优雅 terminate
-//!   （只设上限不设回调会 FatalOOM abort 整个进程——spike negctl 的阴性对照）；
-//! - 看门狗：常驻线程 + 代际守卫，预算硬超时强制掐断，实例跨 tick 复用；
-//! - 执行前 `cancel_terminate_execution()` 清遗留终止标志（双保险）；
+//! - 内存双闸门：`heap_limits` 硬上限 + `near_heap_limit` 回调内 terminate。
+//!   只设上限不设回调，超限会 FatalOOM 直接 abort 整个进程（spike 阴性对照
+//!   验证过，不是猜测）；
+//! - 看门狗：常驻线程 + 代际守卫，预算硬超时强制掐断；实例跨 tick 复用；
+//! - 每次执行前 `cancel_terminate_execution()` 清遗留终止标志（双保险）；
 //! - tokio current-thread 上下文守卫（V8 延迟任务需要）。
 //!
 //! ## LIFO 销毁纪律（V8 硬约束）
 //! 同一进程内多个 isolate 必须按创建的**逆序**销毁，顺序错了进程直接崩溃。
-//! 本类型用全局注册栈在 Drop 时检测违规并告警（测试断言栈为空）；
-//! 正确用法由字段声明顺序结构性保证：`watchdog`（先 join 线程）→ `runtime` → `tokio`。
+//! 本类型用全局注册栈在 Drop 时检测违规并告警（测试断言违规数为零）；正确
+//! 顺序由字段声明序结构性保证：`watchdog`（Drop 先 join 线程）→ `runtime`
+//! → `tokio`。批量顺序由 PlayerThreads 管理。
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
@@ -27,7 +29,7 @@ use crate::watchdog::Watchdog;
 const LODASH_SRC: &str = include_str!("../assets/lodash-3.10.1.js");
 const CONSTANTS_JSON: &str = include_str!("../assets/constants.json");
 /// prelude 按职责分五个段（共享仪表/Buffer/CJS/memory+世界投影/宿主通道），
-/// 各段独立 IIFE、经 globalThis.__kkp 共享私有状态（末段删除）。
+/// 各段独立 IIFE、经 globalThis.__kkp 共享私有状态（末段负责删除）。
 const PRELUDE_SEGMENTS: [(&str, &str); 5] = [
     ("kk-prelude-00-shared", include_str!("prelude/00_shared.js")),
     ("kk-prelude-10-buffer", include_str!("prelude/10_buffer.js")),
@@ -79,12 +81,12 @@ static SEQ: AtomicU64 = AtomicU64::new(0);
 static LIFO_REGISTRY: LazyLock<Mutex<Vec<u64>>> = LazyLock::new(|| Mutex::new(Vec::new()));
 static LIFO_VIOLATIONS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
-/// 进程内 LIFO 销毁纪律的违规次数（测试断言为零——告警不该被无视）。
 /// 当前进程存活的 Sandbox 数（测试用：全部销毁后应归零）。
 pub fn live_sandbox_count() -> usize {
     LIFO_REGISTRY.lock().unwrap().len()
 }
 
+/// LIFO 销毁纪律的违规次数（测试断言为零——告警不该被无视）。
 pub fn lifo_violations() -> usize {
     LIFO_VIOLATIONS.load(Ordering::SeqCst)
 }
@@ -158,10 +160,12 @@ impl Sandbox {
         Ok(sb)
     }
 
-    /// 双闸门之二：接近堆上限回调内 terminate（返回放大后的上限让当前分配完成，
-    /// 随即在中断检查点展开——spike 实验 C 验证的 deno_core 官方测试同款模式）。
-    /// 触发即置诊断标志；放大的上限由 `restore_heap_limit`（硬中断善后）恢复——
-    /// V8 会把回调返回值持久写为新的堆上限，不恢复则"触发 OOM→再触发"可指数级架空配置。
+    /// 内存双闸门之二：接近堆上限时回调内 terminate。
+    ///
+    /// 回调返回值是"临时放大的新上限"——让当前这次分配先完成，中断在随后的
+    /// 检查点展开（deno_core 官方测试同款模式，spike 实验 C 验证）。注意 V8
+    /// 会把返回值**持久写为新堆上限**，不恢复的话"触发 OOM → 上限已放大 →
+    /// 再触发"会指数级架空内存配置——恢复见 restore_heap_limit。
     fn install_near_heap_callback(&mut self) {
         let handle = self.runtime.v8_isolate().thread_safe_handle();
         let shared = self.shared.clone();
@@ -173,8 +177,8 @@ impl Sandbox {
             });
     }
 
-    /// 恢复堆硬上限（仅在 near-heap 触发过后执行：remove 会顺带把上限恢复为参数值，
-    /// re-add 重新武装回调——deno_core 官方测试同款 remove+re-add 模式）。
+    /// 恢复堆硬上限（仅在 near-heap 触发过后执行）：remove 会顺带把上限恢复为
+    /// 参数值，re-add 重新武装回调（deno_core 官方测试同款 remove+re-add 模式）。
     /// 诊断标志保留到下一 begin_tick 复位（"本 tick 是否触发过"语义，测试可观察）。
     fn restore_heap_limit(&mut self) {
         if self.shared.near_heap_fired.load(Ordering::Relaxed) {
@@ -273,28 +277,28 @@ impl Sandbox {
     }
 
     /// tick 结束：Memory 写回 + CPU 结算。
-    /// **看门狗保持武装直到写回完成**（官方：Memory 序列化计入玩家的超时窗口与
-    /// CPU 计费——玩家可经 `Memory.toJSON` 在写回阶段执行任意代码，不能 disarm
-    /// 后再执行玩家可感代码）。
-    /// 返回写回结果 JSON：`{ok:true}` | `{ok:false,error}`（按 screeps-ok 契约归为
-    /// 玩家 runtime 错误）| `{ok:false,terminated:true}`（写回阶段被硬中断，已按
-    /// 整份 tickLimit 善后结算）。Err 仅剩基础设施级故障。
+    ///
+    /// **看门狗保持武装直到写回完成**——玩家可经 `Memory.toJSON` 在写回阶段
+    /// 执行任意代码，不能 disarm 后再执行玩家可感代码（官方把序列化计入玩家
+    /// 的超时窗口与 CPU 计费）。
+    ///
+    /// 返回写回结果 JSON：`{ok:true}` | `{ok:false,error}`（按 screeps-ok 契约
+    /// 归为玩家 runtime 错误）| `{ok:false,terminated:true}`（写回阶段被硬中断，
+    /// 已按整份 tickLimit 善后结算——被中断的 tick 不写回，Memory 保持上一
+    /// tick 存档）。Err 仅剩基础设施级故障。
     pub fn end_tick(&mut self) -> anyhow::Result<serde_json::Value> {
-        // 官方语义：硬超时打断的是**整个 run（含 tick 末序列化）**——被中断的 tick
-        // 不再写回，Memory 保持上一 tick 存档。硬中断后仍执行写回的话，玩家可经
-        // Memory.toJSON 在无看门狗保护的阶段挂死线程
+        // 硬中断后的 Memory 保持上一 tick 的存档。
         if self.terminated_this_tick {
             return Ok(serde_json::json!({
                 "ok": false, "terminated": true,
                 "error": "本 tick 已硬中断，按官方语义跳过 Memory 写回",
             }));
         }
-        // 迟到的看门狗 terminate 标志不得误伤写回（run 恰在 deadline 前完成时）——
-        // 但 cancel 清掉的是**唯一**的超时信号：若该代 terminate 已投递（fired 已
-        // 记录、同代不再重投），随后挂死的写回将没有第二次终止机会。因此 cancel
-        // 后**重新武装到本 tick 的原 deadline**（由 tick_start 重算，与 begin_tick
-        // 无漂移）：正常写回不受影响（旧标志已清），写回挂死由新代兜底——cancel
-        // 的"防误伤"与"写回保持在武装窗口内"两个约束不再矛盾
+        // run 恰在 deadline 前完成时，迟到的 terminate 标志会误伤写回，所以先
+        // cancel。但 cancel 后若直接 disarm，挂死的写回就没有第二次终止机会了。
+        // 因此 cancel 后把看门狗重新武装到本 tick 的原 deadline（由 tick_start
+        // 重算，与 begin_tick 无漂移）：正常写回不受影响（旧标志已清），写回
+        // 挂死由新一代兜底——"防误伤"与"写回保持武装"两个约束兼得
         self.runtime.v8_isolate().cancel_terminate_execution();
         if let Some(t0) = *self.shared.tick_start.lock().unwrap() {
             let deadline = t0 + Duration::from_millis(self.budget.tick_limit().max(1.0) as u64);
@@ -333,11 +337,11 @@ impl Sandbox {
     }
 
     /// 独立 runExpr 通道（无 tick 生命周期）的看门狗编排：清遗留标志 → 武装
-    /// 一个按官方公式现算的窗口（`min(maxPerTick, limit+bucket)`——不能读 stale
-    /// 的 `tick_limit` 字段：新沙箱为 0、tick 过的为残留值）→ 求值 → 双路径
+    /// 一个按官方公式现算的窗口（min(maxPerTick, limit+bucket)——不能读 stale
+    /// 的 tick_limit 字段：新沙箱为 0、tick 过的为残留值）→ 求值 → 双路径
     /// disarm + 清标志（迟到的 terminate 不得残留到下一条命令）。
-    /// 不带 begin/end_tick：无世界注入、**不动预算桶**（该通道的计费归 M2
-    /// intent 通道定型；tick 上下文的善后结算走 `run_expr` 的 Err 路径）。
+    /// 不带 begin/end_tick：无世界注入、**不动预算桶**（该通道计费归 M2 intent
+    /// 通道定型；tick 上下文的善后结算走 run_expr 的 Err 路径）。
     pub fn run_expr_guarded(&mut self, code: &str) -> anyhow::Result<serde_json::Value> {
         let script = serde_json::to_string(code)?; // arm 前完成可失败步骤
         self.clear_terminate_flag();
@@ -357,9 +361,9 @@ impl Sandbox {
         }
     }
 
-    /// 硬中断善后：解除武装、清终止标志、结算（官方语义：扣整份 tickLimit，桶充足
-    /// 不跳帧，负桶由 begin_tick 停跑）、恢复堆上限、清 tick_start。幂等；
-    /// 本 tick 已由善后结算的，end_tick 不再重复结算。
+    /// 硬中断善后：解除武装、清终止标志、结算（官方语义：扣整份 tickLimit，
+    /// 桶充足不跳帧，负桶由 begin_tick 停跑）、恢复堆上限、清 tick_start。
+    /// 幂等；本 tick 已由善后结算的，end_tick 不再重复结算。
     fn after_termination(&mut self) {
         self.watchdog.disarm();
         self.runtime.v8_isolate().cancel_terminate_execution();

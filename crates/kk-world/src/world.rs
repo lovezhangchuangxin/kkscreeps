@@ -1,9 +1,9 @@
-//! typed 世界：房间状态 + 对象表 + id 分配。
+//! typed 世界：房间状态 + 对象表 + 全局 id 分配。
 //!
-//! 对象按 `BTreeMap<ObjId, _>` 存放——id 经 `World::insert` 全局单调分配 ⇒
-//! 迭代序 = 创建序（与官方 roomObjects 的 DB 插入序近似一致，且天然确定，
-//! game-loop.md 关键设计二）。`insert_with_id`（解码/导入）乱序插入时迭代序
-//! 为 id 升序而非插入序。
+//! 对象按 `BTreeMap<ObjId, _>` 存放：`World::insert` 单调分配 id ⇒ 迭代序 =
+//! 创建序，与官方 roomObjects 的 DB 插入序近似一致且天然确定（game-loop.md
+//! 关键设计二、方案 D4-1）。`insert_with_id`（快照解码/导入）乱序插入时迭代序
+//! 为 id 升序而非插入序；`next_obj_id` 保证其后的普通插入不会与已导入对象撞 id。
 
 use std::collections::BTreeMap;
 
@@ -52,10 +52,14 @@ impl RoomState {
         })
     }
 
-    /// 以指定 id 放入（快照解码/导入用）。
-    pub fn insert_with_id(&mut self, id: u64, mut object: RoomObject) {
+    /// 以指定 id 放入（快照解码/导入用）；拒绝覆盖已有对象。
+    pub fn insert_with_id(&mut self, id: u64, mut object: RoomObject) -> Result<(), String> {
+        if self.objects.contains_key(&ObjId(id)) {
+            return Err(format!("对象 id 重复: {}", ObjId(id).as_str()));
+        }
         set_object_id(&mut object, id);
         self.objects.insert(ObjId(id), object);
+        Ok(())
     }
 
     pub fn encode_snapshot(&self, time: u64, seed: u64, next_obj_id: u64) -> RoomSnapshot {
@@ -70,13 +74,20 @@ impl RoomState {
         }
     }
 
-    /// 解码快照（值域防御：地形位与 next_obj_id 一致性）。
+    /// 解码快照，并校验会影响房间索引的对象字段。
     pub fn decode_snapshot(snapshot: &RoomSnapshot) -> Result<Self, String> {
         let terrain = Terrain::from_codes(&snapshot.header.terrain)
             .map_err(|e| format!("快照地形非法: {e}"))?;
         let mut room = Self::new("", terrain);
         for object in &snapshot.objects {
-            room.objects.insert(ObjId(object.id()), object.clone());
+            let id = ObjId(object.id());
+            let (x, y) = object.pos();
+            if x as usize >= kk_core::ROOM_SIZE || y as usize >= kk_core::ROOM_SIZE {
+                return Err(format!("快照对象 {} 坐标越界: ({x},{y})", id.as_str()));
+            }
+            if room.objects.insert(id, object.clone()).is_some() {
+                return Err(format!("快照对象 id 重复: {}", id.as_str()));
+            }
         }
         Ok(room)
     }
@@ -130,13 +141,19 @@ impl World {
 
     /// 放入对象并分配全局唯一 id（对象 id 字段被覆写为分配值）。
     pub fn insert(&mut self, room_name: &str, object: RoomObject) -> Result<ObjId, String> {
-        let room = self
-            .rooms
+        if !self.rooms.contains_key(room_name) {
+            return Err(format!("房间 {room_name} 不存在"));
+        }
+        let (x, y) = object.pos();
+        if x as usize >= kk_core::ROOM_SIZE || y as usize >= kk_core::ROOM_SIZE {
+            return Err(format!("对象坐标越界: ({x},{y})"));
+        }
+        let id = self.next_available_obj_id()?;
+        self.rooms
             .get_mut(room_name)
-            .ok_or_else(|| format!("房间 {room_name} 不存在"))?;
-        let id = self.next_obj_id;
-        self.next_obj_id = self.next_obj_id.saturating_add(1);
-        room.insert_with_id(id, object);
+            .expect("房间已检查存在")
+            .insert_with_id(id, object)?;
+        self.next_obj_id = id + 1;
         Ok(ObjId(id))
     }
 
@@ -146,9 +163,24 @@ impl World {
         self.player_ticks += n;
     }
 
-    /// 当前全局 id 分配器值（快照编码用）。
+    /// 下一个候选 id；直接导入房间对象后也不会回退到已有 id。
     pub fn next_obj_id(&self) -> u64 {
-        self.next_obj_id
+        let max_existing = self
+            .rooms
+            .values()
+            .flat_map(|room| room.objects.keys())
+            .map(|id| id.0)
+            .max();
+        let after_existing = max_existing.map_or(1, |id| id.saturating_add(1));
+        self.next_obj_id.max(after_existing)
+    }
+
+    /// 分配前检查余量；保留 `u64::MAX` 作为耗尽标记。
+    pub fn next_available_obj_id(&self) -> Result<u64, String> {
+        let id = self.next_obj_id();
+        id.checked_add(1)
+            .ok_or_else(|| "对象 id 已耗尽".to_string())?;
+        Ok(id)
     }
 
     /// 抬高 id 分配器（快照解码重建用；只升不降）。
@@ -258,6 +290,55 @@ mod tests {
     }
 
     #[test]
+    fn insert_rejects_invalid_position_and_exhausted_ids() {
+        let mut world = World::new(1);
+        world.register_room("W1N1", Terrain::plains());
+        let mut invalid = energy(1);
+        if let RoomObject::Energy(obj) = &mut invalid {
+            obj.y = 50;
+        }
+        assert!(world.insert("W1N1", invalid).is_err());
+        assert_eq!(world.next_obj_id(), 1);
+
+        world.bump_next_obj_id(u64::MAX);
+        assert!(world.insert("W1N1", energy(1)).is_err());
+        assert!(world.room("W1N1").unwrap().objects.is_empty());
+    }
+
+    #[test]
+    fn insert_after_manual_import_keeps_ids_unique_across_rooms() {
+        let mut world = World::new(1);
+        world.register_room("W1N1", Terrain::plains());
+        world.register_room("W2N2", Terrain::plains());
+        world
+            .room_mut("W1N1")
+            .unwrap()
+            .insert_with_id(1, energy(1))
+            .unwrap();
+        world
+            .room_mut("W2N2")
+            .unwrap()
+            .insert_with_id(5, energy(2))
+            .unwrap();
+
+        assert_eq!(world.next_obj_id(), 6);
+        assert_eq!(world.insert("W1N1", energy(3)).unwrap(), ObjId(6));
+        assert_eq!(world.room("W1N1").unwrap().objects.len(), 2);
+        assert_eq!(world.room("W2N2").unwrap().objects.len(), 1);
+        assert!(
+            world
+                .room_mut("W1N1")
+                .unwrap()
+                .insert_with_id(1, energy(99))
+                .is_err()
+        );
+        assert!(matches!(
+            world.get(ObjId(1)),
+            Some((_, RoomObject::Energy(EnergyObj { amount: 1, .. })))
+        ));
+    }
+
+    #[test]
     fn snapshot_roundtrip_preserves_order_and_ids() {
         let mut world = World::new(42);
         world.register_room("W1N1", Terrain::plains());
@@ -272,7 +353,7 @@ mod tests {
     }
 
     #[test]
-    fn decode_defends_against_stale_next_obj_id_and_bad_terrain() {
+    fn snapshot_restore_recovers_next_id_and_rejects_bad_terrain() {
         // header.next_obj_id 落后于对象表：World 重建侧用 bump 抬高后不复用
         let mut world = World::new(1);
         world.register_room("W1N1", Terrain::plains());
@@ -285,7 +366,8 @@ mod tests {
             world2
                 .room_mut("W1N1")
                 .unwrap()
-                .insert_with_id(object.id(), object.clone());
+                .insert_with_id(object.id(), object.clone())
+                .unwrap();
         }
         let max_id = snap.objects.iter().map(|o| o.id()).max().unwrap_or(0);
         world2.bump_next_obj_id(snap.header.next_obj_id.max(max_id + 1));
@@ -295,5 +377,29 @@ mod tests {
         let mut bad = world.room("W1N1").unwrap().encode_snapshot(0, 0, 3);
         bad.header.terrain[10] = 0xff;
         assert!(RoomState::decode_snapshot(&bad).is_err());
+    }
+
+    #[test]
+    fn decode_rejects_duplicate_ids_and_out_of_bounds_positions() {
+        let mut world = World::new(1);
+        world.register_room("W1N1", Terrain::plains());
+        world.insert("W1N1", energy(1)).unwrap();
+        let mut snapshot = world.room("W1N1").unwrap().encode_snapshot(0, 1, 2);
+        snapshot.objects.push(snapshot.objects[0].clone());
+        assert!(
+            RoomState::decode_snapshot(&snapshot)
+                .unwrap_err()
+                .contains("id 重复")
+        );
+
+        snapshot.objects.pop();
+        if let RoomObject::Energy(obj) = &mut snapshot.objects[0] {
+            obj.x = 50;
+        }
+        assert!(
+            RoomState::decode_snapshot(&snapshot)
+                .unwrap_err()
+                .contains("坐标越界")
+        );
     }
 }

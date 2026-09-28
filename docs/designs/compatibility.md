@@ -65,7 +65,7 @@
 | controller safeMode 族投影（M1 typed world，外部复审清偿） | 世界投影发绝对 tick（safeMode/downgradeTime），prelude 按官方 getter（structures.js:174-186）换算剩余值：safeMode/ticksToDowngrade=绝对−time、safeModeAvailable 透传 | 无值/过期归 0（None→0 归一口径）；safeModeCooldown 仍桩 0（无该状态字段，M2 激活链路时补） |
 | movement 四键完全平手的决胜序（M1 结算，深评登记） | 矩阵登记序 = 对象 id 升序；官方 = 玩家 intent 到达序（processor.js:236 for...in 插入序） | 四键全平时胜者可观察分歧；官方到达序本身依赖 DB 查询序（弱保证），id 序是更强的不变量——顺序敏感用例出现时以此归因（D4-1 的 intent 序侧补充） |
 | sanitize 层未接生产（M1 结算，深评登记） | `sanitize_object_intent` 只有单测消费（M1 唯一 intent 源是 typed 的 ScriptedSandbox，无不可信输入面） | M2 真沙箱 intent 通道定型时在入口接线，否则为死代码 |
-| to_int 的字符串前缀语义（M1 sanitize，深评登记） | 全串 parse 后截断（`"1e3"`→1000、`"12abc"`→Err）；官方 parseInt 前缀截断（`"1e3"`→1、`"12abc"`→12） | 干净数字串两侧一致（主流形态）；差异数值形态 M2 接线时按需对齐 |
+| to_int 的数值域上限（M1 sanitize，代码质量轮清偿） | parseInt 语义已全量仿真（前缀截断 `"12abc"`→12、`"0x10"`→16、`"1e2"`→1、指数形态 Number 取首位 `1e-7`→1）；与官方的剩余差异仅 i64 域外：官方 parseInt 返回大数（如 1e20），我们返回 None（整体拒绝/哨兵） | 差异只在荒谬输入面可达：\|值\|≥~9.2e18（数值路径）、字符串 >2^53 我方比官方更精确（i128 不舍入）、数组元素形态（官方 String([5])="5"→5，我们 None）、空白集边界（U+0085/U+FEFF 两侧 trim 集不同）；M2 intent 通道接线如有对齐需要再议 |
 | userString 截断单位（M1 sanitize，深评登记） | 按 Unicode chars 截 100；官方 substring 按 UTF-16 码元（100 单位 = 50 个 CJK 字符） | ASCII 名字无差异；M2 玩家名/旗名面显形时对齐 |
 | energyAvailable 投影的房主过滤（M1 typed world，深评登记） | 房间合计全部非 off spawn/extension；官方 game.js:325-328 按查看者过滤自家结构 | 单主人测试房等价；多主人房间的 per-owner 视图随 M2 玩家 API 层实现（runPlayer 按 viewer 投影） |
 | directions 显式空数组（M1 结算，深评登记） | `[]` 折为"无限制"（缺省 1..8）；官方存 `[]`（truthy）→ _born-creep 零方向循环、出生坐标 undefined 的病态行为 | 官方自身行为即坏，不作对照基线；JS API 层 `directions: []` 官方就判 ERR_INVALID_ARGS，intent 层不可达 |

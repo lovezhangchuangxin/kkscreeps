@@ -734,3 +734,36 @@ intent+movement（B）、经济+孵化（B+）。5 路评审员逐模块对照�
 
 门禁最终形态（四重）：总数地板 + 逐用例 vs HEAD~1（转跳过同罪、fail closed）+
 总数漂移 + 显式豁免表。
+
+## 追记：M1 代码质量优化轮（ChatGPT 自主优化 + 人工复审裁决，2026-09-28，未提交待审）
+
+ChatGPT 对 HEAD d44f840 做了一轮自主优化（+430/−351，13 文件），人工逐行复审裁决：
+
+**保留的优化（语义逐项核对等价或更优）**：
+- `to_int` 升级为 JS parseInt 全语义仿真（前缀/进制/符号/指数形态边界逐条对照
+  JS String()/parseInt，测试锁定）——顺带清偿"to_int 前缀差异"灰区；
+- directions 相邻去重 → 全局保序去重（对齐官方 `_.uniq`，修复深评轮引入的缺口）；
+- place.rs 饱和转换（store.energy u64→u32 回绕、age_time 溢出）+ 测试；
+- world.rs 防御加固：insert_with_id 拒覆盖、insert 拒越界坐标、快照解码拒重复
+  id/越界坐标、next_obj_id 取分配器与现存最大 id 较大者（手工导入后不复用）、
+  u64::MAX 耗尽标记；
+- embed createShard 校验彻底前置（地形单次解析、重复房间/玩家名拒绝、字符串 rcl
+  拒绝、rooms/players 缺失报错）+ invalid_shard_spec_preserves_previous_world
+  九用例锁状态保持；
+- 等价性清理：mark_off 索引化、born_creep 复用 move_obj、movement 第一轮引用
+  遍历去克隆、死代码清除、run_players 借代替克隆。
+
+**复审发现并修复的问题**：
+1. `"rcl": 3.0`（JSON 浮点形态整数）被拒——JS 语义 3.0===3、vanilla 接受；
+   as_i64 改 as_f64+fract（校验与消费端两处），正向用例锁住；
+2. 灰区表"to_int 前缀差异"条目与代码失同步——改写为剩余差异（i64 域外大数）；
+3. 注释约定被整体更换（证据链文档系统性压缩）——用户裁决恢复证据链风格、
+   措辞重写更清晰；budget 的时钟迁移注记、sandbox 的 FatalOOM 阴性对照与
+   end_tick 双约束等机制知识全部恢复。
+
+**注记（不修）**：insert_new 的 expect（结构性不可达，id 撞号属灾难性不变量
+破坏，panic 优于静默）；next_obj_id 每次 insert 全房扫描 O(N)（M1 量级无感，
+M2 索引/分桶时一并处理）；本审计文档的"后续注释约定"节按用户裁决改写。
+
+验证：fmt/clippy 零告警、Rust 95 通过 2 忽略（+rcl 用例）、compat 10 绿、文档链接过；
+全量棘轮 277 零转红零转绿（人工复审时与修复后各跑一轮）。

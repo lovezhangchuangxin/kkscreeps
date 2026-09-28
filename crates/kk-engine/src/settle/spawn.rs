@@ -4,7 +4,6 @@
 use kk_core::constants as c;
 use kk_schema::room::{CreepObj, RoomObject, SpawningJob};
 use kk_world::ObjId;
-use kk_world::types::BodyKind;
 
 use super::Working;
 use super::movement::{self, offsets_by_direction};
@@ -55,9 +54,8 @@ fn mark_off(
         let db = chebyshev(b.1, (cx, cy));
         da.cmp(&db) // 稳定排序：平手保 id 序（BTreeMap 来源序）
     });
-    let keep: Vec<ObjId> = items.iter().take(allowed).map(|(id, _)| *id).collect();
-    for (id, _) in items.iter() {
-        set_off(w, *id, structure_type, !keep.contains(id));
+    for (index, (id, _)) in items.iter().enumerate() {
+        set_off(w, *id, structure_type, index >= allowed);
     }
 }
 
@@ -127,7 +125,7 @@ pub fn intent_create_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) 
         return;
     }
     let directions: Vec<u8> = data.directions.iter().map(|d| *d as u8).collect();
-    let mut body: Vec<kk_schema::room::BodyPart> = data
+    let body: Vec<kk_schema::room::BodyPart> = data
         .body
         .iter()
         .take(c::MAX_CREEP_SIZE as usize)
@@ -140,7 +138,7 @@ pub fn intent_create_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) 
     if body.is_empty() {
         return;
     }
-    let cost = creep_cost(&data.body[..body.len().min(data.body.len())]);
+    let cost = creep_cost(&data.body[..body.len()]);
     // 扣费（_charge-energy：显式 energyStructures 按序；缺省全房间 spawn→extension）
     if !charge_energy(w, &spawn, cost, &data.energy_structures) {
         return;
@@ -156,12 +154,6 @@ pub fn intent_create_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) 
         });
     }
     // 雏形 creep（create-creep.js:80-98）：占位于 spawn 格、spawning=true
-    let store_capacity = body
-        .iter()
-        .filter(|p| p.kind == BodyKind::Carry.code())
-        .count() as i64
-        * c::CARRY_CAPACITY;
-    let _ = store_capacity;
     w.insert_new(RoomObject::Creep(CreepObj {
         id: 0,
         x: spawn.x,
@@ -173,7 +165,7 @@ pub fn intent_create_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) 
         action_log: 0,
         name,
         owner: spawn.owner.clone(),
-        body: std::mem::take(&mut body),
+        body,
         store: Default::default(),
     }));
 }
@@ -332,12 +324,12 @@ pub fn spawn_tick(w: &mut Working, id: ObjId, energy_available: i64) {
         }
     }
     // 免费能量涓流（spawns/tick.js:44-46）：房内可用不足时 spawn 每 tick +1
-    let (owner, store_energy, rcl_ok) = match w.room.objects.get(&id) {
+    let (store_energy, rcl_ok) = match w.room.objects.get(&id) {
         Some(RoomObject::Spawn(s)) => {
             let rcl_ok = w
                 .controller()
                 .is_some_and(|ctl| ctl.level >= 1 && ctl.owner.as_deref() == Some(&s.owner));
-            (s.owner.clone(), s.store.energy, rcl_ok)
+            (s.store.energy, rcl_ok)
         }
         _ => return,
     };
@@ -355,7 +347,6 @@ pub fn spawn_tick(w: &mut Working, id: ObjId, energy_available: i64) {
     {
         s.store.energy += 1;
     }
-    let _ = owner;
 }
 
 /// 官方 _born-creep.js：八方向找空位出生；被围时踩死第一个敌 creep（spawnstomp）。
@@ -433,12 +424,9 @@ fn born_creep(w: &mut Working, spawn_id: ObjId, job: &SpawningJob) -> bool {
     }
     if let Some((nx, ny)) = occupied_at {
         if let Some(c) = w.creep_mut(chick_id) {
-            c.x = nx;
-            c.y = ny;
             c.spawning = false;
         }
-        let old = w.creep(chick_id).map(|c| (c.x, c.y)).unwrap_or((nx, ny));
-        w.index.apply_move(chick_id, (spawn.x, spawn.y), old);
+        w.move_obj(chick_id, (nx, ny));
         return true;
     }
     // 被围：spawnstomp——除非其他方向有出口（官方 66-79 的"选择性"判定）
@@ -479,14 +467,9 @@ fn born_creep(w: &mut Working, spawn_id: ObjId, job: &SpawningJob) -> bool {
         let (hx, hy) = w.creep(hostile_id).map(|c| (c.x, c.y)).unwrap_or((0, 0));
         super::creep::die_creep(w, hostile_id);
         if let Some(c) = w.creep_mut(chick_id) {
-            c.x = hx;
-            c.y = hy;
             c.spawning = false;
         }
-        if let Some(c) = w.creep(chick_id) {
-            let to = (c.x, c.y);
-            w.index.apply_move(chick_id, (spawn.x, spawn.y), to);
-        }
+        w.move_obj(chick_id, (hx, hy));
         return true;
     }
     false

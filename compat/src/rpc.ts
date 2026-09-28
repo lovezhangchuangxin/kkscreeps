@@ -1,7 +1,8 @@
-// `kkscreeps embed` sidecar 的 JSON-RPC 客户端。
+// `kkscreeps embed` sidecar 的 JSON-RPC 客户端（ADR-010）。
+//
 // 协议定义以 Rust 侧为准（crates/kk-cli/src/embed_main.rs）：一行一条 JSON-RPC。
-// 子进程在模块级单例持有、跨适配器实例复用（screeps-ok 每个测试都会 createAdapter），
-// 进程退出时统一回收。
+// 子进程在模块级单例持有、跨适配器实例复用（screeps-ok 每个测试都会
+// createAdapter）；进程退出时统一回收。
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -63,9 +64,7 @@ export class EmbedClient {
   private pending = new Map<number, PendingWaiter>();
 
   private ensure(): ChildProcess {
-    // 存活判断用 exitCode：被信号杀死（OOM SIGKILL / 外部 kill）时 exitCode 保持 null
-    // 但 exit 回调已把 this.child 置空——不会出现"死子进程被永久复用、RPC 全部
-    // ERR_STREAM_DESTROYED 且永不重启"的状态
+    // exit 回调会清空被信号终止的子进程，下一次调用可重新启动。
     if (this.child && this.child.exitCode === null) return this.child;
     const bin = locateBinary();
     const child = spawn(bin, ['embed'], { stdio: ['pipe', 'pipe', 'inherit'] });
@@ -78,7 +77,7 @@ export class EmbedClient {
     (child.stdin as unknown as Unrefable).unref?.();
     child.on('error', (e) => {
       // 陈旧子进程守卫：超时 kill 后旧 child 的回调可能在重 spawn 之后到达，
-      // 不得误清新 child 与其 pending
+    // 不得误清新 child 与其 pending
       if (this.child !== child) return;
       this.child = null;
       this.failAll(e);
@@ -134,9 +133,9 @@ export class EmbedClient {
     const id = this.nextId++;
     const stdin = child.stdin;
     if (!stdin) throw new Error('子进程 stdin 不可用');
-    // 调用超时（工具链-4 清偿）：sidecar 死锁时 pending 永不结算，会把上游
-    // 测试进程挂死——超时拒绝并 kill 子进程（死锁的 sidecar 不可恢复，下一次
-    // 调用会重新 spawn，即"外部 SIGTERM 可恢复"的内置化）
+    // 调用超时（M0 工具链-4 清偿）：sidecar 死锁时 pending 永不结算，会把上游
+    // 测试进程挂死——超时拒绝并 kill 子进程（死锁不可恢复，下一次调用重新
+    // spawn，即"外部 SIGTERM 可恢复"的内置化）
     const timeoutMs = rpcTimeoutMs();
     return new Promise<T>((resolve, reject) => {
       // timer 在 pending.set 之后赋值：dispatch/failAll 都在异步 IO 回调里，
@@ -149,15 +148,15 @@ export class EmbedClient {
       waiter.timer = setTimeout(() => {
         if (!this.pending.delete(id)) return;
         reject(new Error(`RPC 超时（${timeoutMs}ms）: ${method}`));
-        // 死锁的 sidecar 不可恢复：kill 之，下一次调用重新 spawn。
         // 同一性校验：陈旧 child 上的孤儿 pending 各自超时时，不得误杀已重
-        // spawn 的健康 child
+      // spawn 的健康 child
         if (this.child === child) this.kill();
       }, timeoutMs);
       // 超时计时器保持 ref：pending RPC 是宿主事件循环的合法兜底句柄——
       // 独立 Node 脚本（顶层 await，无测试运行器持有句柄）在子进程与管道均
-      // unref 的形态下，循环被掏空会在响应到达前退出（exit 13）。计时器在
-      // dispatch/failAll/超时路径均 clearTimeout，正常结算不挂住进程退出
+      // unref 的形态下，事件循环会被掏空、进程在响应到达前退出（exit 13）。
+      // 计时器在响应到达（dispatch）、连接死亡（failAll）、stdin 写失败三条
+      // 路径 clearTimeout；超时路径计时器已自行触发。正常结算不挂住进程退出
       stdin.write(JSON.stringify({ id, method, params }) + '\n', (err) => {
         if (err && this.pending.delete(id)) {
           clearTimeout(waiter.timer);
@@ -190,8 +189,8 @@ export function client(): EmbedClient {
     const c = new EmbedClient();
     globalForClient.__kkEmbedClient = c;
     // 进程退出时兜底回收，防止 vitest worker 直接退出留下孤儿进程。
-    // 信号处理：cleanup 后重发信号——注册 SIGTERM/SIGINT 监听会抑制 Node 默认终止
-    // 行为，不重发的话有未决定时器时进程会挂住不退（Ctrl+C / timeout 命令场景）
+    // 信号处理：cleanup 后重发信号——注册 SIGTERM/SIGINT 监听会抑制 Node 默认
+    // 终止行为，不重发的话有未决定定时器时进程会挂住不退（Ctrl+C / CI timeout）
     const cleanup = () => c.kill();
     process.once('exit', cleanup);
     for (const sig of ['SIGTERM', 'SIGINT'] as const) {

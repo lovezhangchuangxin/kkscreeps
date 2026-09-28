@@ -1,14 +1,15 @@
-//! 嵌入式 API：以库形式驱动引擎的接口（ADR-008 第 8 条）。
+//! 嵌入式 API：以库形式驱动引擎（ADR-008 第 8 条）。
 //!
-//! 这组方法与 screeps-ok 适配器契约（`ScreepsOkAdapter`）同构，也和将来 `kkscreeps sim`
-//! 驱动引擎的方式是**同一个接口**——适配器（compat/，经 `kkscreeps embed` sidecar 的
-//! JSON-RPC 传输）与模拟器都调用本模块，一石二鸟。
+//! 方法集与 screeps-ok 适配器契约同构，与将来 `kkscreeps sim` 驱动引擎的方式
+//! 是同一个接口——适配器（compat/，经 `kkscreeps embed` sidecar 的 JSON-RPC，
+//! ADR-010）与模拟器共用本模块，一石二鸟。
 //!
-//! M1 起内部世界是 typed world（`kk_world::World`），`tick`/`runPlayer` 的推进走
-//! 真实结算（`settle_room`，intents 恒空——玩家 intent 收集通道是 M2-2A）。世界
-//! 投影 JSON 保持 M0 契约形状（`world_json`）。
+//! 世界为 kk_world::World（typed）；tick/runPlayer 的推进走真实结算 settle_room
+//! （intents 恒空——玩家 intent 收集通道是 M2-2A，当前玩家代码在真实 deno_core
+//! 沙箱执行但不产出 intent）；世界投影 world_json 保持 M0 契约形状（prelude
+//! 消费面零改动）。
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use kk_core::Terrain;
 use kk_runner::{EvalReport, PlayerThreads, SandboxConfig};
@@ -53,6 +54,93 @@ const CONTROLLER_ONLY_FIELDS: [&str; 6] = [
     "powerEnabled",
 ];
 
+struct RoomSetup<'a> {
+    name: &'a str,
+    terrain: Terrain,
+    spec: &'a Value,
+}
+
+fn room_setups(spec: &Value) -> anyhow::Result<Vec<RoomSetup<'_>>> {
+    let mut setups = Vec::new();
+    let mut seen = BTreeSet::new();
+    let rooms = spec
+        .get("rooms")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow::anyhow!("ShardSpec.rooms 必须是数组"))?;
+    for room in rooms {
+        let name = room
+            .get("name")
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| anyhow::anyhow!("RoomSpec.name 必须是非空字符串"))?;
+        if !seen.insert(name) {
+            anyhow::bail!("重复房间名: {name}");
+        }
+        if room.get("controller").and_then(Value::as_bool) == Some(false) {
+            let set: Vec<&str> = CONTROLLER_ONLY_FIELDS
+                .iter()
+                .copied()
+                .filter(|k| room.get(*k).is_some())
+                .collect();
+            if !set.is_empty() {
+                anyhow::bail!(
+                    "RoomSpec {name}: controller: false takes no {}",
+                    set.join(", ")
+                );
+            }
+        }
+        // rcl 校验（typed level 是 u8，截断会得错值；字符串/非整数/越界拒绝）。
+        // 数值形态须走 as_f64：JSON `3.0` 在 JS 语义里就是整数 3（vanilla 接受），
+        // as_i64 会把浮点形态的整数一并拒掉
+        if let Some(value) = room.get("rcl")
+            && !value
+                .as_f64()
+                .is_some_and(|rcl| rcl.fract() == 0.0 && (0.0..=8.0).contains(&rcl))
+        {
+            anyhow::bail!("RoomSpec {name}: rcl 非法（需 0..=8 整数）: {value}");
+        }
+        let mut terrain = match room.get("terrain") {
+            Some(value) => {
+                Terrain::from_codes(&terrain_codes_from_json(value)?).map_err(anyhow::Error::msg)?
+            }
+            None => Terrain::plains(),
+        };
+        terrain.normalize();
+        setups.push(RoomSetup {
+            name,
+            terrain,
+            spec: room,
+        });
+    }
+    Ok(setups)
+}
+
+/// PlayerSpec 的 gcl/power 影响玩家可见的 Game.gcl/gpl 状态——M1 无规则消费
+/// 面，延后到 M2 规则实装时接上（这里只取 name 注册 handle）。
+fn player_handles(spec: &Value) -> anyhow::Result<Vec<String>> {
+    let mut handles = Vec::new();
+    let mut seen = BTreeSet::new();
+    let players = spec
+        .get("players")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow::anyhow!("ShardSpec.players 必须是数组"))?;
+    for entry in players {
+        let name = match entry {
+            Value::String(name) => name.as_str(),
+            Value::Object(fields) => fields.get("name").and_then(Value::as_str).unwrap_or(""),
+            _ => "",
+        };
+        if name.is_empty() {
+            anyhow::bail!("PlayerSpec.name 必须是非空字符串");
+        }
+        if !seen.insert(name) {
+            anyhow::bail!("重复玩家 handle: {name}");
+        }
+        handles.push(name.to_string());
+    }
+    Ok(handles)
+}
+
 /// JSON 数组 → 地形字节（元素必须是 0..=255 内的整数，不静默丢弃；
 /// 位域合法性由 [`Terrain::from_codes`] 校验）。
 pub fn terrain_codes_from_json(v: &Value) -> anyhow::Result<Vec<u8>> {
@@ -82,47 +170,11 @@ impl EmbedEngine {
         }
     }
 
-    /// 建分片：完全重置世界与玩家沙箱（screeps-ok createShard 契约）。
-    ///
-    /// 默认布局：每个房间平原地形 + (1,1) controller（`controller: false` 除外）；
-    /// owner/rcl 写进 controller 记录。
+    /// 建立新分片。输入校验完成后，重置世界和玩家沙箱。
     pub fn create_shard(&mut self, spec: &Value) -> anyhow::Result<()> {
-        let rooms: Vec<&Value> = spec
-            .get("rooms")
-            .and_then(Value::as_array)
-            .map(|a| a.iter().collect())
-            .unwrap_or_default();
-
-        // 校验先行（契约要求报错且不改状态）：互斥字段 + 地形合法性全部通过，
-        // 之后才回收沙箱、重置世界
-        for room in &rooms {
-            let name = room.get("name").and_then(Value::as_str).unwrap_or_default();
-            if name.is_empty() {
-                continue;
-            }
-            if room.get("controller").and_then(Value::as_bool) == Some(false) {
-                let set: Vec<&str> = CONTROLLER_ONLY_FIELDS
-                    .iter()
-                    .copied()
-                    .filter(|k| room.get(*k).is_some())
-                    .collect();
-                if !set.is_empty() {
-                    anyhow::bail!(
-                        "RoomSpec {name}: controller: false takes no {}",
-                        set.join(", ")
-                    );
-                }
-            }
-            if let Some(t) = room.get("terrain") {
-                Terrain::from_codes(&terrain_codes_from_json(t)?).map_err(anyhow::Error::msg)?;
-            }
-            // rcl 上界与非整数显式拒绝（typed level 是 u8，截断会得错值）
-            if let Some(rcl) = room.get("rcl").and_then(Value::as_f64)
-                && !(rcl.fract() == 0.0 && (0.0..=8.0).contains(&rcl))
-            {
-                anyhow::bail!("RoomSpec {name}: rcl 非法（需 0..=8 整数）: {rcl}");
-            }
-        }
+        // 在回收旧沙箱前完成输入校验，失败时保留现有分片。
+        let rooms = room_setups(spec)?;
+        let handles = player_handles(spec)?;
 
         // 逆序回收旧沙箱（LIFO），再重置世界
         if let Some(p) = &mut self.players {
@@ -133,45 +185,17 @@ impl EmbedEngine {
         self.last_console.clear();
 
         let players = self.players.get_or_insert_with(PlayerThreads::new);
-        if let Some(handles) = spec.get("players").and_then(Value::as_array) {
-            for entry in handles {
-                // screeps-ok 契约：players 为 (string | PlayerSpec)[]，PlayerSpec={name,gcl?,power?}
-                // （adapter.ts:16-19；套件 setup 实际使用对象形式）。取 name 注册 handle；
-                // gcl/power 影响玩家可见的 Game.gcl/gpl 状态，M1 规则实装时接上（哑世界
-                // 阶段写入无处生效，静默吞掉注册则会让 runPlayer 直接找不到玩家）。
-                let handle = match entry {
-                    Value::String(s) => s.clone(),
-                    Value::Object(o) => o
-                        .get("name")
-                        .and_then(Value::as_str)
-                        .unwrap_or_default()
-                        .to_string(),
-                    _ => continue,
-                };
-                if handle.is_empty() {
-                    continue;
-                }
-                self.next_thread_id += 1;
-                let thread_id = self.next_thread_id;
-                players.spawn_player(thread_id, SandboxConfig::default())?;
-                self.handles.insert(handle, thread_id);
-            }
+        for handle in handles {
+            self.next_thread_id += 1;
+            let thread_id = self.next_thread_id;
+            players.spawn_player(thread_id, SandboxConfig::default())?;
+            self.handles.insert(handle, thread_id);
         }
 
-        for room in &rooms {
-            let name = room.get("name").and_then(Value::as_str).unwrap_or_default();
-            if name.is_empty() {
-                continue;
-            }
-            // 默认平原；四角墙由 normalize 统一强制（官方地图生成器不变量）
-            let mut terrain = match room.get("terrain") {
-                Some(t) => {
-                    Terrain::from_codes(&terrain_codes_from_json(t)?).map_err(anyhow::Error::msg)?
-                }
-                None => Terrain::plains(),
-            };
-            terrain.normalize();
-            self.engine.world.register_room(name, terrain);
+        for setup in rooms {
+            let name = setup.name;
+            let room = setup.spec;
+            self.engine.world.register_room(name, setup.terrain);
             let has_controller = room
                 .get("controller")
                 .and_then(Value::as_bool)
@@ -181,9 +205,11 @@ impl EmbedEngine {
                 // 占房缺省 1；占房另种 downgrade/safeMode 族——相对值换绝对
                 // tick（+time+1，warm-up tick 消耗一拍，index.ts:966-993）
                 let owner = room.get("owner").and_then(Value::as_str);
+                // rcl 消费端与校验同口径（as_f64：浮点形态的整数合法）
                 let rcl = room
                     .get("rcl")
-                    .and_then(Value::as_i64)
+                    .and_then(Value::as_f64)
+                    .map(|f| f as i64)
                     .unwrap_or(if owner.is_some() { 1 } else { 0 })
                     .clamp(0, 8);
                 let time = self.engine.world.time;
@@ -271,8 +297,7 @@ impl EmbedEngine {
             .map_err(anyhow::Error::msg)
     }
 
-    /// 执行一个玩家的代码并恰好推进 1 tick（screeps-ok runPlayer 契约）。
-    /// 求值发生在结算前（玩家看见上一 tick 的世界），推进 = 空 intents 的真实结算。
+    /// 先运行玩家代码，再结算一个 tick。玩家看到的是结算前的世界。
     pub fn run_player(&mut self, handle: &str, code: &str) -> anyhow::Result<PlayerRun> {
         let thread_id = *self
             .handles
@@ -284,7 +309,7 @@ impl EmbedEngine {
             .ok_or_else(|| anyhow::anyhow!("分片未创建"))?;
         let world = self.engine.world.world_json();
         let report: EvalReport = players.run_player(thread_id, &world, code)?;
-        let out = self.finish_player_run(handle, report)?;
+        let out = self.finish_player_run(handle, report);
         self.engine.tick().map_err(|e| anyhow::anyhow!("{e}"))?;
         Ok(out)
     }
@@ -308,16 +333,19 @@ impl EmbedEngine {
                 .as_mut()
                 .ok_or_else(|| anyhow::anyhow!("分片未创建"))?;
             // 固定顺序（handle 排序）求值——确定性
-            for (handle, thread_id) in self.handles.clone() {
-                let Some(code) = codes.get(&handle) else {
+            for (handle, thread_id) in &self.handles {
+                let Some(code) = codes.get(handle) else {
                     continue;
                 };
-                reports.insert(handle, players.run_player(thread_id, &world, code)?);
+                reports.insert(
+                    handle.clone(),
+                    players.run_player(*thread_id, &world, code)?,
+                );
             }
         }
         let mut out = BTreeMap::new();
         for (handle, report) in reports {
-            let run = self.finish_player_run(&handle, report)?;
+            let run = self.finish_player_run(&handle, report);
             out.insert(handle, run);
         }
         self.engine.tick().map_err(|e| anyhow::anyhow!("{e}"))?;
@@ -325,7 +353,7 @@ impl EmbedEngine {
     }
 
     /// 求值报告 → PlayerRun（executed 判定 + console 捕获）。
-    fn finish_player_run(&mut self, handle: &str, report: EvalReport) -> anyhow::Result<PlayerRun> {
+    fn finish_player_run(&mut self, handle: &str, report: EvalReport) -> PlayerRun {
         let executed = report
             .expr
             .get("kind")
@@ -339,17 +367,14 @@ impl EmbedEngine {
             .collect::<Vec<_>>();
         self.last_console
             .insert(handle.to_string(), console.clone());
-        Ok(PlayerRun {
+        PlayerRun {
             executed,
             expr: report.expr,
             console,
-        })
+        }
     }
 
-    /// 推进 n tick（每 tick 一次全房间空 intents 结算）。
-    ///
-    /// 结算 Err 时世界整体回退至上一 tick（两阶段提交：全房在克隆副本上结算
-    /// 成功后才写回）——time/能量/id 分配器全部保持，对同一 tick 重试安全。
+    /// 推进 n tick；单次结算失败时保持该 tick 开始前的世界状态。
     pub fn tick(&mut self, count: u64) -> anyhow::Result<()> {
         for _ in 0..count {
             self.engine.tick().map_err(|e| anyhow::anyhow!("{e}"))?;
@@ -401,7 +426,7 @@ impl Drop for EmbedEngine {
 
 #[cfg(test)]
 mod tests {
-    use super::terrain_codes_from_json;
+    use super::{EmbedEngine, terrain_codes_from_json};
     use serde_json::json;
 
     /// 元素级严格性：非整数（小数/字符串/null）、负数、超 255 一律拒绝。
@@ -418,5 +443,53 @@ mod tests {
             );
         }
         assert!(terrain_codes_from_json(&json!("not-array")).is_err());
+    }
+
+    #[test]
+    fn float_form_integer_rcl_is_accepted() {
+        // JSON `3.0` 在 JS 语义里就是整数 3（vanilla 接受）——数值校验走 as_f64，
+        // 只有字符串/非整数/越界才拒
+        let mut engine = EmbedEngine::new();
+        engine
+            .create_shard(&json!({
+                "players": [],
+                "rooms": [{ "name": "W1N1", "rcl": 3.0, "owner": "p1" }],
+            }))
+            .unwrap();
+        let level = engine
+            .engine
+            .world
+            .room("W1N1")
+            .and_then(|r| r.controller())
+            .map(|ctl| ctl.level);
+        assert_eq!(level, Some(3));
+    }
+
+    #[test]
+    fn invalid_shard_spec_preserves_previous_world() {
+        let mut engine = EmbedEngine::new();
+        engine
+            .create_shard(
+                &json!({ "players": [], "rooms": [{ "name": "W1N1", "controller": false }] }),
+            )
+            .unwrap();
+        engine.tick(1).unwrap();
+
+        for invalid in [
+            json!({ "players": [], "rooms": [{ "name": "W2N2", "rcl": "3" }] }),
+            json!({ "players": [], "rooms": [{ "name": "W2N2", "rcl": 3.5 }] }),
+            json!({ "players": [], "rooms": [{ "name": "W2N2" }, { "name": "W2N2" }] }),
+            json!({ "players": ["alice", { "name": "alice" }], "rooms": [] }),
+            json!({}),
+            json!({ "players": [], "rooms": "W2N2" }),
+            json!({ "players": "alice", "rooms": [] }),
+            json!({ "players": [], "rooms": [{}] }),
+            json!({ "players": [{}], "rooms": [] }),
+        ] {
+            assert!(engine.create_shard(&invalid).is_err());
+            assert_eq!(engine.get_game_time(), 1);
+            assert!(engine.engine.world.room("W1N1").is_some());
+            assert!(engine.engine.world.room("W2N2").is_none());
+        }
     }
 }

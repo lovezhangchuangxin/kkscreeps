@@ -1,9 +1,10 @@
 //! place spec（screeps-ok JSON）→ typed 对象的归一化表。
 //!
-//! 初态对照 vanilla 参照适配器的放置实现（`.compat/screeps-ok/adapters/vanilla/
-//! index.ts` placeCreep/placeStructure/placeSite/placeSource/placeFlag）与官方
-//! build.js 的落成分支。**spec 私有字段（boosts/ticksToLive/progressTotal…）不
-//! 泄入对象**——它们在此折算为引擎字段（第四轮"typed placement"登记项的清偿）。
+//! 初态对照 vanilla 参照适配器（screeps-ok `adapters/vanilla/index.ts` 的
+//! placeCreep/placeStructure/placeSite/placeSource/placeFlag）与官方 build.js
+//! 的落成分支。spec 私有字段（boosts/ticksToLive/progressTotal 等）不泄入
+//! 对象——在此折算为引擎字段（M0 第四轮"typed placement"登记项的清偿）；
+//! 结算范围外的类型落 Generic 透传桶，保持 FIND 可见性。
 
 use kk_core::constants as c;
 use kk_schema::room::{
@@ -40,8 +41,8 @@ pub fn normalize(kind: &str, spec: &Value, ctx: &PlaceCtx) -> Result<RoomObject,
     }
 }
 
-/// 未知对象/未知结构类型的透传桶构造：spec 减 pos 全量透传 + 结构化字段。
-fn generic_from_spec(type_name: &str, spec: &Value, x: u8, y: u8) -> GenericObj {
+/// Generic 保留原始字段，但坐标和类型由引擎统一设置。
+fn generic_fields(type_name: &str, spec: &Value) -> serde_json::Map<String, Value> {
     let mut data = serde_json::Map::new();
     if let Some(obj) = spec.as_object() {
         for (k, v) in obj {
@@ -51,13 +52,16 @@ fn generic_from_spec(type_name: &str, spec: &Value, x: u8, y: u8) -> GenericObj 
             data.insert(k.clone(), v.clone());
         }
     }
-    // FIND/wrapObject 消费面按 type 判别——透传必须携带（M0 记录恒有 type）
     data.insert("type".into(), json!(type_name));
+    data
+}
+
+fn generic_from_spec(type_name: &str, spec: &Value, x: u8, y: u8) -> GenericObj {
     GenericObj {
         id: 0,
         x,
         y,
-        data: Value::Object(data).to_string(),
+        data: Value::Object(generic_fields(type_name, spec)).to_string(),
     }
 }
 
@@ -86,16 +90,16 @@ fn spec_str<'a>(spec: &'a Value, key: &str) -> Option<&'a str> {
 
 fn store_energy(spec: &Value) -> Store {
     Store {
-        energy: spec
-            .pointer("/store/energy")
-            .and_then(Value::as_u64)
-            .unwrap_or(0) as u32,
+        energy: saturating_u32(
+            spec.pointer("/store/energy")
+                .and_then(Value::as_u64)
+                .unwrap_or(0),
+        ),
     }
 }
 
-/// vanilla placeCreep：body 全 hits=100、boosts 并入部件、hits=len×100、
-/// ageTime = time + (ticksToLive ?? CREEP_LIFE_TIME)（claim 体走 CLAIM_LIFE）。
-fn normalize_creep(spec: &Value, x: u8, y: u8, _ctx: &PlaceCtx) -> Result<CreepObj, String> {
+/// 放置 creep：合并部件 boost，按显式 TTL 或默认寿命计算到期时间。
+fn normalize_creep(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<CreepObj, String> {
     let body_spec = spec
         .get("body")
         .and_then(Value::as_array)
@@ -128,7 +132,7 @@ fn normalize_creep(spec: &Value, x: u8, y: u8, _ctx: &PlaceCtx) -> Result<CreepO
     }
     let name = spec_str(spec, "name")
         .map(str::to_string)
-        .unwrap_or_else(|| format!("creep_{}", _ctx.name_seq));
+        .unwrap_or_else(|| format!("creep_{}", ctx.name_seq));
     let owner = spec_str(spec, "owner").unwrap_or_default().to_string();
     // vanilla placeCreep（index.ts:1087）：ageTime = gameTime + (ttl ?? LIFE)。
     // 无 claim 特判、无钳制——claim 区分寿命是引擎孵化路径（creeps/tick.js:87-93
@@ -143,7 +147,7 @@ fn normalize_creep(spec: &Value, x: u8, y: u8, _ctx: &PlaceCtx) -> Result<CreepO
         x,
         y,
         fatigue: 0,
-        age_time: _ctx.time + ttl,
+        age_time: ctx.time.saturating_add(ttl),
         hits,
         spawning: false,
         action_log: 0,
@@ -304,20 +308,16 @@ fn normalize_structure(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<Roo
             store: store_energy(spec),
         })),
         _ => {
-            // M1 结算范围外：透传（含 tower/rampart/lab/link/container/
-            // extractor/factory/terminal/nuker/observer/powerSpawn/mineral/…）
-            let mut generic = generic_from_spec("structure", spec, x, y);
-            if let Some(data) = serde_json::from_str::<Value>(&generic.data)
-                .unwrap()
-                .as_object()
-            {
-                let mut map = data.clone();
-                if !map.contains_key("structureType") && !st.is_empty() {
-                    map.insert("structureType".into(), json!(st));
-                }
-                generic.data = Value::Object(map).to_string();
+            let mut data = generic_fields("structure", spec);
+            if !data.contains_key("structureType") && !st.is_empty() {
+                data.insert("structureType".into(), json!(st));
             }
-            Ok(RoomObject::Generic(generic))
+            Ok(RoomObject::Generic(GenericObj {
+                id: 0,
+                x,
+                y,
+                data: Value::Object(data).to_string(),
+            }))
         }
     }
 }
@@ -419,7 +419,7 @@ mod tests {
         assert_eq!(c.body.len(), 3);
         assert_eq!(c.body[0].boost.as_deref(), Some("XUHO2"));
         assert_eq!(c.body[1].boost, None);
-        // vanilla：hits = len×100；ageTime = time + min(ttl, LIFE)
+        // hits 与 TTL 使用放置 spec 的值。
         assert_eq!(c.hits, 300);
         assert_eq!(c.age_time, 600);
         assert_eq!(c.store.energy, 30);
@@ -531,6 +531,18 @@ mod tests {
             panic!()
         };
         assert_eq!(e.amount, 55);
+    }
+
+    #[test]
+    fn oversized_store_energy_saturates_instead_of_wrapping() {
+        let s = json!({
+            "pos": [10, 10], "body": ["carry"],
+            "store": { "energy": u32::MAX as u64 + 1 },
+        });
+        let RoomObject::Creep(creep) = normalize("creep", &s, &ctx()).unwrap() else {
+            panic!("应产出 creep");
+        };
+        assert_eq!(creep.store.energy, u32::MAX);
     }
 
     /// placeStructure 通道（kind=structure）的 spawn 必须归一为 typed Spawn

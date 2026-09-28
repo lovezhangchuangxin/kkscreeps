@@ -1,10 +1,11 @@
 //! 移动仲裁：官方 `engine/src/processor/intents/movement.js` 的完整移植。
 //!
-//! 形态：move intent 只做静态障碍预检后入矩阵（creep 不预检——挤格语义的根基，
-//! move.js:33-37）；`check_impl` 逐目标格裁决（四键排序）+ 级联清链；
-//! `take_move`+落格结算在 creep tick 阶段（creep.rs 的 movement_execute）。
+//! 三段式：move intent 只做静态障碍预检后入矩阵——**creep 不在预检里**
+//! （预检只查静态障碍：OBSTACLE 表扣掉 creep，外加敌方非公开 rampart 特判），
+//! creep 之间的冲突全部交给仲裁阶段，这是官方"挤格子"语义的根基；`check_impl` 逐目标格四键排序裁决胜者 + 级联清链；胜者的落格
+//! 与疲劳结算在 creep tick 阶段（creep.rs 的 movement_execute）。
 //!
-//! 矩阵用 BTreeMap<(x,y), _>（坐标序）；官方为 JS 对象插入序——逐格裁决相互
+//! 矩阵用 BTreeMap<(x,y), _>（坐标序）替代官方 JS 对象插入序：逐格裁决相互
 //! 独立、级联删除幂等，结果与迭代序无关，确定性由坐标序保证（灰区登记）。
 
 use std::collections::BTreeMap;
@@ -84,10 +85,10 @@ impl Movement {
         // ---- 第一轮：逐目标格裁决（movement.js:107-152）----
         let mut new_matrix: BTreeMap<(u8, u8), Vec<RateEntry>> = BTreeMap::new();
         let mut winners = BTreeMap::new();
-        // 官方第一轮循环读原始 matrix（rate1/对穿 100 依赖完整矩阵）——先快照再消费
+        // 官方第一轮循环读原始矩阵：rate1（本格被盯数）与对穿 100 的判定需要
+        // 完整的原始竞争信息，评分期间不得消费——先 take 出来，结果写另一张矩阵
         let original = std::mem::take(&mut self.matrix);
-        let cells: Vec<((u8, u8), Vec<RateEntry>)> = original.clone().into_iter().collect();
-        for (cell, entries) in cells {
+        for (&cell, entries) in &original {
             let winner = if entries.len() > 1 {
                 let mut rates: Vec<Rate> = entries
                     .iter()

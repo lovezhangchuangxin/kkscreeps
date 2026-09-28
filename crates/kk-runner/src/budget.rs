@@ -1,16 +1,18 @@
-//! CPU 预算桶（bucket）经济——官方语义的 Rust 化（spike bucket_sim 实验的移植）。
+//! CPU 预算桶（bucket）经济——官方 driver `make.js` 的 Rust 化（spike
+//! bucket_sim 实验的移植）。
 //!
-//! 官方规则（@screeps/driver make.js:72-83/187/206-212 逐行对照）：
-//! - 回充并入结算：`bucket += limit − used`，封顶 10000、可为负、不落 0；
-//! - `Game.cpu.tickLimit = min(500, limit + bucket)`（结算前口径）；
-//! - **回充前**判定桶为负 → 整 tick 停跑（停跑 tick 照常回充，深负桶钳到 −2×limit
-//!   地板）；桶充足的普通超时不跳帧——官方 skipTicksPenalty 是 runtime 进程硬重置
-//!   专用，与普通超时无关；
+//! 官方规则（make.js:72-83/187/206-212 逐行对照过）：
+//! - 回充并入结算：`bucket += limit − used`，封顶 10000；内部值允许为负
+//!   （不钳到 0，精确 0 也可达）；
+//! - `tickLimit = min(500, limit + bucket)`（结算前口径）；
+//! - 负桶判定在**回充之前** → 整 tick 停跑；停跑的 tick 照常回充，深负桶钳到
+//!   −2×limit 地板（约 2 tick 内恢复）。桶充足时的普通超时**不跳帧**——官方
+//!   skipTicksPenalty 只用于 runtime 进程硬重置，与普通超时无关；
 //! - 硬超时按整份 tickLimit 计费（usedCleanTime≈tickLimit）。
-//! - M0 无 intent 计费（+0.2×intents 项），M2 沙箱补全。
 //!
-//! M0 计时口径为墙钟毫秒（与 bucket_sim 一致）；正式实现换线程 CPU 时钟
-//! （CLOCK_THREAD_CPUTIME_ID，纳秒精度，02 报告已实测），机制不变。
+//! 当前计时口径为墙钟毫秒（与 bucket_sim 一致）；正式实现换线程 CPU 时钟
+//! （CLOCK_THREAD_CPUTIME_ID 纳秒精度，调研 02 报告实测过），机制不变。
+//! intent 计费项（+0.2×intents）随 M2 沙箱补全。
 
 /// 每 tick 回充量（官方默认 CPU limit，单位约等于毫秒）。
 pub const DEFAULT_CPU_LIMIT: f64 = 20.0;
@@ -48,9 +50,9 @@ impl Bucket {
     }
 
     /// 每 tick 开始：给出本 tick 的执行计划。
-    /// 官方语义（make.js:72-83）：**回充前**判定桶为负（cpuAvailable<0）→ 整 tick 停跑，
-    /// 停跑 tick 照常回充且深负桶钳到 −2×limit 地板（约 2 tick 内恢复）；
-    /// 桶非负 → 执行，`tickLimit = min(500, limit + bucket)`（回充在结算时并入）。
+    /// 负桶 → 整 tick 停跑（停跑 tick 照常回充、深负钳到 −2×limit 地板）；
+    /// 桶非负 → 执行，tickLimit = min(max_per_tick, limit + bucket)——回充在
+    /// settle 时并入，这里不重复加。
     pub fn begin_tick(&mut self) -> TickPlan {
         if self.bucket < 0.0 {
             self.bucket = (self.bucket + self.limit).max(-2.0 * self.limit);
@@ -67,7 +69,7 @@ impl Bucket {
         self.tick_limit
     }
 
-    /// 按官方公式现算下一窗口（`min(maxPerTick, limit + bucket)`，make.js:86-89）。
+    /// 按官方公式现算下一窗口（`min(maxPerTick, limit + bucket)`，make.js:85-86）。
     /// 独立 runExpr 通道无 begin_tick，不能读 stale 的 `tick_limit` 字段
     /// （新沙箱为 0、tick 过的沙箱为上一 tick 残留值）。
     pub fn next_tick_limit(&self) -> f64 {
@@ -78,14 +80,14 @@ impl Bucket {
         self.bucket
     }
 
-    /// 正常结算（官方 make.js:193/206-212）：`bucket += limit − ceil(used)`，封顶 cap、
-    /// 可为负、不落 0——官方逐 tick 向上取整，亚毫秒耗时也计 1。
+    /// 正常结算：`bucket += limit − ceil(used)`，封顶 cap、可为负、不落 0。
+    /// 官方逐 tick 向上取整——亚毫秒耗时也计 1。
     pub fn settle(&mut self, used_ms: f64) {
         self.bucket = (self.bucket + self.limit - used_ms.ceil()).min(self.cap);
     }
 
-    /// 硬中断结算（官方 make.js:187+206-212）：超时被沙箱内捕获、按整份 tickLimit 计费，
-    /// 与正常结算同路径回充。桶充足时**不**跳帧，负桶由 `begin_tick` 的停跑规则处理。
+    /// 硬中断结算：超时被沙箱内捕获，按整份 tickLimit 计费（与正常结算同路径
+    /// 回充）。桶充足时不跳帧；负桶由 begin_tick 的停跑规则处理。
     pub fn settle_terminated(&mut self) {
         self.bucket = (self.bucket + self.limit - self.tick_limit.ceil()).min(self.cap);
     }

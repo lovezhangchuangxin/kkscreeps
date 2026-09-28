@@ -1,12 +1,9 @@
-// screeps-ok 适配器（kkscreeps M0）。
+// screeps-ok 适配器（M0 起）。
 //
-// 形态：导出 createAdapter() 的 ESM 模块 + 同目录 parity.json（fixture 约定）。
-// 经 `SCREEPS_OK_ADAPTER=<本文件编译产物>` 接入 screeps-ok 套件；
-// 引擎侧走 `kkscreeps embed` 子进程（stdin/stdout JSON-RPC，ADR-010）。
-//
-// M0 基线：createShard/placeXxx（哑世界精确存取）/runPlayer（真实 deno_core 沙箱，
-// 恰好推进 1 tick）/tick/getObject/findInRoom/getGameTime/captureConsoleLogs/
-// getControllerPos 已实装；游戏规则与 actionLog/raid 类接口未实装（capability 如实声明）。
+// 形态：导出 createAdapter() 的 ESM 模块 + 同目录 parity.json（fixture 约定）；
+// 经 SCREEPS_OK_ADAPTER=<本文件编译产物> 接入 screeps-ok 套件。引擎侧走
+// `kkscreeps embed` 子进程（stdin/stdout JSON-RPC，ADR-010）。capability 如实
+// 声明当前实装面——未实装的接口不冒充（套件据此跳过或标记）。
 
 import { client } from './rpc.js';
 import { capabilities, type AdapterCapabilities } from './capabilities.js';
@@ -15,8 +12,8 @@ import { capabilities, type AdapterCapabilities } from './capabilities.js';
 
 export interface ShardSpec {
   /** 官方契约（adapter.ts:16-19）：玩家可以是字符串 handle 或 PlayerSpec 对象。 */
-  players?: Array<string | { name: string; gcl?: unknown; power?: unknown }>;
-  rooms?: Array<{
+  players: Array<string | { name: string; gcl?: unknown; power?: unknown }>;
+  rooms: Array<{
     name: string;
     rcl?: number;
     owner?: string;

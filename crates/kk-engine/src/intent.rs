@@ -1,13 +1,14 @@
-//! 玩家指令（intent）模型：类型、白名单清洗、同对象冲突裁决。
+//! 玩家指令（intent）模型：输入清洗、同对象覆盖、冲突裁决。
 //!
-//! 官方语义：
-//! - 字段白名单与 transforms：`common/lib/system.js`（number=parseInt 截断、
-//!   bodypart[] 过滤非法部件、userString 截 100、未知字段丢弃）；
-//! - 同对象同名指令后者覆盖前者（game-loop.md"同一种指令只记最后一次"）；
-//! - 冲突裁决优先级图：`engine/src/processor/intents/creeps/intents.js:3-13`
-//!   （动作执行当且仅当其 intent 存在且无更高优先级 intent 存在——被压制
-//!   的动作不执行，玩家 API 早已返回成功）；
-//! - 执行顺序：creepActions 数组（intents.js:15-17）。
+//! 官方语义（本地官方源码 ~/Desktop/projects/sources/screeps/）：
+//! - 字段白名单与 transforms：`common/lib/system.js`——number 字段一律按
+//!   parseInt 截断（见 [`to_int`]）、bodypart[] 过滤非白名单部件、userString
+//!   截 100、白名单外的未知字段丢弃；
+//! - 同对象同名指令后者覆盖前者（只记最后一次）；
+//! - 冲突裁决优先级图：`engine/src/processor/intents/creeps/intents.js`——
+//!   动作执行当且仅当其 intent 存在**且**无更高优先级 intent 存在。被压制的
+//!   动作不执行，但玩家 API 早已返回成功——这是官方语义，不是缺陷；
+//! - 执行顺序：creepActions 数组序（intents.js:15-17）。
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -200,9 +201,10 @@ pub struct IntentData {
     pub name: Option<String>,
     pub body: Vec<BodyKind>,
     pub energy_structures: Vec<ObjId>,
-    /// 官方链路（system.js number[] transform → create-creep.js:27-33）：本字段
-    /// 只承载 parseInt 截断 + 保序去重后的值；无法 parseInt 的元素以 i64::MIN
-    /// 哨兵传递（1..=8 校验在 createCreep 整单拒绝，非过滤）。
+    /// 官方链路分两步：system.js 的 number[] transform 逐元素 parseInt（在此
+    /// 完成，无法解析的元素以 i64::MIN 哨兵传递）；create-creep.js:27 再
+    /// _.uniq 保序全局去重。1..=8 校验在 createCreep 侧整单拒绝（官方语义是
+    /// 拒绝整条指令，不是过滤元素）。
     pub directions: Vec<i64>,
 }
 
@@ -297,20 +299,61 @@ impl IntentBatch {
     }
 }
 
-/// 官方 transforms 的 number 语义（system.js:9）：`parseInt` 截断。
+/// 按 JS `parseInt` 的前缀规则读取 JSON 数字或字符串；超出 i64 的值无效。
+/// `number[]` 也使用这条规则，调用方保留无效值供后续校验。
 fn to_int(v: Option<&Value>) -> Option<i64> {
-    match v {
-        Some(Value::Number(n)) => Some(n.as_f64().unwrap_or(0.0).trunc() as i64),
-        Some(Value::String(s)) => s.trim().parse::<f64>().ok().map(|f| f.trunc() as i64),
-        _ => None,
+    let text = match v? {
+        Value::Number(n) => {
+            let value = n.as_f64()?;
+            if !value.is_finite() {
+                return None;
+            }
+            let magnitude = value.abs();
+            // 非零 JS Number 在这个区间外使用指数形式；parseInt 只读首位数字。
+            if magnitude < 1e-6 || magnitude >= 1e21 {
+                let first = format!("{magnitude:e}").as_bytes()[0] - b'0';
+                return Some(if value.is_sign_negative() {
+                    -(first as i64)
+                } else {
+                    first as i64
+                });
+            }
+            let integer = value.trunc();
+            if !(i64::MIN as f64..9_223_372_036_854_775_808.0).contains(&integer) {
+                return None;
+            }
+            return Some(integer as i64);
+        }
+        Value::String(s) => s.clone(),
+        _ => return None,
+    };
+    let text = text.trim_start();
+    let (negative, digits) = match text.as_bytes().first() {
+        Some(b'-') => (true, &text[1..]),
+        Some(b'+') => (false, &text[1..]),
+        _ => (false, text),
+    };
+    let (radix, digits) = if digits.starts_with("0x") || digits.starts_with("0X") {
+        (16, &digits[2..])
+    } else {
+        (10, digits)
+    };
+    let prefix = digits
+        .bytes()
+        .take_while(|b| (*b as char).is_digit(radix))
+        .count();
+    if prefix == 0 {
+        return None;
     }
+    let value = i128::from_str_radix(&digits[..prefix], radix).ok()?;
+    i64::try_from(if negative { -value } else { value }).ok()
 }
 
 fn to_id(v: Option<&Value>) -> Option<ObjId> {
     v.and_then(Value::as_str).and_then(ObjId::parse)
 }
 
-/// 官方 userString（system.js:13）：`("" + (value||"")).substring(0, 100)`。
+/// 官方 userString（system.js:12）：`("" + (value||"")).substring(0, 100)`。
 fn to_user_string(v: Option<&Value>) -> Option<String> {
     v.map(|x| match x {
         Value::Null => String::new(),
@@ -354,15 +397,12 @@ pub fn sanitize_object_intent(_action: Action, raw: &Value) -> IntentData {
         directions: f("directions")
             .and_then(Value::as_array)
             .map(|arr| {
-                // system.js number[] transform：_.map(parseInt)（2.5→2、数字串转数；
-                // null/未定义经 transform 已折为 undefined ⇒ 本分支不可达），
-                // 随后 create-creep.js:29 _.uniq 保序去重
-                let mut ds: Vec<i64> = arr
-                    .iter()
+                // 无法解析的值仍须进入后续校验，不能静默过滤。
+                let mut seen = BTreeSet::new();
+                arr.iter()
                     .map(|p| to_int(Some(p)).unwrap_or(i64::MIN))
-                    .collect();
-                ds.dedup();
-                ds
+                    .filter(|d| seen.insert(*d))
+                    .collect()
             })
             .unwrap_or_default(),
     }
@@ -448,5 +488,20 @@ mod tests {
         let raw5 = json!({ "directions": [1, "abc"] });
         let d5 = sanitize_object_intent(Action::Suicide, &raw5);
         assert_eq!(d5.directions, vec![1, i64::MIN]);
+        let raw6 = json!({ "directions": [1, 2, 1, "3tail", "0x2"] });
+        let d6 = sanitize_object_intent(Action::CreateCreep, &raw6);
+        assert_eq!(d6.directions, vec![1, 2, 3]);
+        assert_eq!(to_int(Some(&json!("1e2"))), Some(1));
+        assert_eq!(to_int(Some(&json!(-12.7))), Some(-12));
+        assert_eq!(to_int(Some(&json!("-9223372036854775808"))), Some(i64::MIN));
+        assert_eq!(to_int(Some(&json!(1e-6))), Some(0));
+        assert_eq!(to_int(Some(&json!(1e-7))), Some(1));
+        assert_eq!(to_int(Some(&json!(-2e-7))), Some(-2));
+        assert_eq!(to_int(Some(&json!(1e21))), Some(1));
+        assert_eq!(
+            sanitize_object_intent(Action::CreateCreep, &json!({ "directions": [1e-6] }))
+                .directions,
+            vec![0]
+        );
     }
 }

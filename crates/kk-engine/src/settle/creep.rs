@@ -153,18 +153,11 @@ fn intent_harvest(w: &mut Working, id: ObjId, data: &IntentData) {
     if sum > store_cap {
         intent_drop_amount(w, id, sum - store_cap);
     }
-    let (tx, ty) = w
-        .room
-        .objects
-        .get(&target_id)
-        .map(|o| o.pos())
-        .unwrap_or((0, 0));
     w.push_event(
         c::EVENT_HARVEST,
         id,
         serde_json::json!({ "targetId": target_id.as_str(), "amount": amount }),
     );
-    let _ = (tx, ty);
 }
 
 /// 官方 build.js：3 格范围、障碍格拒建、WORK×5、完成落成。
@@ -446,8 +439,8 @@ fn intent_transfer(w: &mut Working, id: ObjId, data: &IntentData) {
     let Some(amount_req) = data.amount else {
         return;
     };
-    let (pos, owner, held) = match w.creep(id) {
-        Some(c) if !c.spawning => ((c.x, c.y), c.owner.clone(), c.store.energy as i64),
+    let (pos, held) = match w.creep(id) {
+        Some(c) if !c.spawning => ((c.x, c.y), c.store.energy as i64),
         _ => return,
     };
     if held < amount_req || amount_req < 0 {
@@ -484,7 +477,6 @@ fn intent_transfer(w: &mut Working, id: ObjId, data: &IntentData) {
     if amount == 0 {
         return;
     }
-    let _ = owner;
     match w.room.objects.get_mut(&target_id) {
         Some(RoomObject::Creep(t)) => t.store.energy += amount as u32,
         Some(RoomObject::Spawn(t)) => t.store.energy += amount as u32,
@@ -632,8 +624,8 @@ pub fn creep_tick(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
     if !w.room.objects.contains_key(&id) {
         return Ok(()); // 结算中被移除（不会发生于 M1 路径，防御）
     }
-    let (pos, spawning, age_time, store_energy) = match w.creep(id) {
-        Some(c) => ((c.x, c.y), c.spawning, c.age_time, c.store.energy),
+    let (spawning, age_time) = match w.creep(id) {
+        Some(c) => (c.spawning, c.age_time),
         None => return Ok(()),
     };
     if !spawning {
@@ -650,7 +642,6 @@ pub fn creep_tick(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
             w.add_fatigue(id, -2 * moves);
         }
     }
-    let _ = (pos, store_energy);
     Ok(())
 }
 
