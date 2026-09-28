@@ -52,9 +52,32 @@
     HEAL: globalThis.HEAL,
     ERR_NOT_FOUND: globalThis.ERR_NOT_FOUND,
     ERR_RCL_NOT_ENOUGH: globalThis.ERR_RCL_NOT_ENOUGH,
+    ERR_FULL: globalThis.ERR_FULL,
     OBSTACLE_OBJECT_TYPES: freezeConst(globalThis.OBSTACLE_OBJECT_TYPES),
     CONSTRUCTION_COST: freezeConst(globalThis.CONSTRUCTION_COST),
     CONTROLLER_STRUCTURES: freezeConst(globalThis.CONTROLLER_STRUCTURES),
+    // 资源族四方法（A4-ii）所需：资源白名单/容量折算表/结构类型常量
+    RESOURCE_ENERGY: globalThis.RESOURCE_ENERGY,
+    RESOURCES_ALL: freezeConst(globalThis.RESOURCES_ALL),
+    CARRY_CAPACITY: globalThis.CARRY_CAPACITY,
+    SPAWN_ENERGY_CAPACITY: globalThis.SPAWN_ENERGY_CAPACITY,
+    EXTENSION_ENERGY_CAPACITY: freezeConst(globalThis.EXTENSION_ENERGY_CAPACITY),
+    STORAGE_CAPACITY: globalThis.STORAGE_CAPACITY,
+    CONTAINER_CAPACITY: globalThis.CONTAINER_CAPACITY,
+    TERMINAL_CAPACITY: globalThis.TERMINAL_CAPACITY,
+    FACTORY_CAPACITY: globalThis.FACTORY_CAPACITY,
+    TOWER_CAPACITY: globalThis.TOWER_CAPACITY,
+    LINK_CAPACITY: globalThis.LINK_CAPACITY,
+    LAB_ENERGY_CAPACITY: globalThis.LAB_ENERGY_CAPACITY,
+    LAB_MINERAL_CAPACITY: globalThis.LAB_MINERAL_CAPACITY,
+    POWER_SPAWN_ENERGY_CAPACITY: globalThis.POWER_SPAWN_ENERGY_CAPACITY,
+    POWER_SPAWN_POWER_CAPACITY: globalThis.POWER_SPAWN_POWER_CAPACITY,
+    NUKER_ENERGY_CAPACITY: globalThis.NUKER_ENERGY_CAPACITY,
+    NUKER_GHODIUM_CAPACITY: globalThis.NUKER_GHODIUM_CAPACITY,
+    PWR_DISRUPT_TERMINAL: globalThis.PWR_DISRUPT_TERMINAL,
+    STRUCTURE_RAMPART: globalThis.STRUCTURE_RAMPART,
+    STRUCTURE_NUKER: globalThis.STRUCTURE_NUKER,
+    STRUCTURE_POWER_BANK: globalThis.STRUCTURE_POWER_BANK,
   };
 
   // 官方 _hasActiveBodypart（game/creeps.js:9-17 的等价物）：hits>0 的指定部件数
@@ -307,6 +330,334 @@
     if (blockedBySafeMode(this)) return C.ERR_NO_BODYPART;
     if (!this.pos.inRangeTo(target.pos, 3)) return C.ERR_NOT_IN_RANGE;
     gw.intents.set(this.id, 'rangedHeal', { id: target.id });
+    return C.OK;
+  };
+
+  // ---------------------------------------------------------------- 资源族四方法（A4-ii 换真）
+  // 官方 creeps.js:404-593（drop:404 / transfer:428 / withdraw:493 / pickup:566）。
+  // 公共面（本块局部助手，其余方法不消费）：
+  //  · register.* 成员判定的投影等价：官方 register 按 tick 初 roomObjects 全集
+  //    建（game.js:269-374；structures 收录键集 = structureTypes 表 :224-247，
+  //    source/mineral 独立注册不进 structures，spawn 同时进 structures+spawns），
+  //    我方 rawById 同源全集（M2A 无视野过滤的既有口径）；
+  //  · utils.capacityForResource/calcResources（官方 utils.js:615-676）：官方读
+  //    runtimeData 的 storeCapacity/storeCapacityResource 键——投影无此二键，
+  //    按官方落成表折算（build.js:120-296 落成分支 + extensions/tick.js:8-17
+  //    每结算 tick 的归一 + _recalc-body.js:23 的 creep body 折算），公式逐字保留；
+  //  · assertTargetObject（官方 game.js:122-126）：预检拒绝分支里对 plain
+  //    object + 24 位 id 的序列化对象抛错——调用位置与返回码次序逐条对照不动。
+
+  // 预置 Math/Array.prototype.includes（A4-ii 评审 2 清偿：缺省钳制与白名单
+  // 判定路径不得经可交换全局——交换 Math 可产负缺省绕 amount<0 前置门、劫持
+  // includes 可放宽资源白名单；结算侧真值复核均兜住，此处为判定门纪律）
+  const __MathMin = Math.min;
+  const __MathMax = Math.max;
+  const __arrayIncludes = Array.prototype.includes;
+
+  /** 官方 structureTypes 键集（game.js:224-247，21 型）+ 'wall' 投影别名
+   *  （classGlobalFor 将 wall/constructedWall 归并 StructureWall——手写世界
+   *  两种拼法等价；官方 raw type 恒为 'constructedWall'）。 */
+  const STRUCTURE_REGISTER_TYPES = new Set(['rampart', 'road', 'extension', 'constructedWall', 'wall',
+    'keeperLair', 'controller', 'link', 'storage', 'tower', 'observer', 'powerBank', 'powerSpawn',
+    'lab', 'extractor', 'terminal', 'container', 'spawn', 'nuker', 'portal', 'factory', 'invaderCore']);
+
+  /** register.structures[id] 的投影等价（官方 game.js:295-299 收录 + :224-247
+   *  键集；spawn 的 raw type 是 'spawn' 单列）。命中返回 raw 投影（官方表存
+   *  wrapper、读 structureType 即 raw.type——我方直读 raw 等价），否则 undefined。 */
+  function structureRegisterEntry(id) {
+    const raw = gw.rawById.get(id);
+    if (!raw) return undefined;
+    if (raw.type === 'spawn') return raw;
+    if (raw.type === 'structure' && STRUCTURE_REGISTER_TYPES.has(raw.structureType)) return raw;
+    return undefined;
+  }
+
+  /** 官方 raw type 的投影等价（Structure.prototype.structureType 读 o.type，
+   *  structures.js:65）：spawn 投影自带 structureType 键，structure 族读
+   *  structureType，其余退 raw.type（仅结构语境消费）。 */
+  function structureKindOf(raw) {
+    return raw.structureType || (raw.type === 'spawn' ? 'spawn' : raw.type);
+  }
+
+  /** 官方 game.js:122-126：Memory 序列化对象（plain object + 24 位字符串 id）
+   *  拒绝——预检拒绝分支的抛错点，文案逐字。 */
+  function assertTargetObject(obj) {
+    if (obj && isPlainObject(obj) && typeof obj.id === 'string' && obj.id.length === 24) {
+      throw new Error("It seems you're trying to use a serialized game object stored in Memory which is not allowed. Please use `Game.getObjectById` to retrieve a live object reference instead.");
+    }
+  }
+  // _.isPlainObject 等价（原型为 Object.prototype 或 null）——经 gw.__Object
+  // 预置引用（玩家交换 globalThis.Object 不影响判定）
+  function isPlainObject(v) {
+    if (typeof v !== 'object' || v === null) return false;
+    const proto = gw.__Object.getPrototypeOf(v);
+    return proto === gw.__Object.prototype || proto === null;
+  }
+
+  /** 官方 creep storeCapacity（_recalc-body.js:23 calcBodyEffectiveness 的无
+   *  boost 形态）：hits>0 的 carry 部件 × CARRY_CAPACITY。投影 body 是
+   *  {type,hits}；手写世界可为字符串（同字段表归一 hits=100）。boost 容量
+   *  加成随 power 批（M1 无 boost 面，两侧一致——执行器 store_capacity 同形）。 */
+  function carryCapacityOf(raw) {
+    let parts = 0;
+    // 索引迭代（A4-ii 评审 2：for...of 经 Array.prototype[Symbol.iterator]
+    // 运行期解析可被同 realm 污染——判定门路径纵深防御）
+    const body = raw.body || [];
+    for (let i = 0; i < body.length; i++) {
+      const part = typeof body[i] === 'string' ? { type: body[i], hits: 100 } : body[i];
+      if (part && part.hits > 0 && part.type === 'carry') parts += 1;
+    }
+    return parts * C.CARRY_CAPACITY;
+  }
+
+  /** 房内 extension 容量（官方 extensions/tick.js:8-17 每结算 tick 归一
+   *  storeCapacityResource.energy = EXTENSION_ENERGY_CAPACITY[rcl]；无
+   *  controller 房保持落成值 0——build.js:134）。 */
+  function extensionCapacityIn(roomName) {
+    let level = null;
+    // 索引迭代（A4-ii 评审 2：A4-iii.1 已修 structures.js 同模式——本处家族
+    // 扫描漏网；迭代器污染可令扫描失明/喂假 level）
+    const objs = gw.world.objects || [];
+    for (let i = 0; i < objs.length; i++) {
+      const o = objs[i];
+      if (o.type === 'structure' && o.structureType === 'controller' && o.room === roomName) {
+        level = o.level || 0;
+        break;
+      }
+    }
+    if (level === null) return 0;
+    return (C.EXTENSION_ENERGY_CAPACITY || {})[level] || 0;
+  }
+
+  /** 官方 raw 的 storeCapacity/storeCapacityResource 落成表（build.js:120-296）
+   *  + creep body 折算。投影直供键（透传桶/手写世界/未来投影补键）优先原样——
+   *  与官方 capacityForResource 直读 raw 键的形态对齐。 */
+  function capacityFields(raw) {
+    if (raw.storeCapacity !== undefined || raw.storeCapacityResource !== undefined) {
+      return { capacity: raw.storeCapacity, perResource: raw.storeCapacityResource };
+    }
+    if (raw.type === 'creep') {
+      return { capacity: carryCapacityOf(raw), perResource: undefined };
+    }
+    switch (structureKindOf(raw)) {
+      case 'spawn': // build.js:124：scr {energy: SPAWN_ENERGY_CAPACITY}
+        return { capacity: undefined,
+          perResource: { energy: raw.energyCapacity || C.SPAWN_ENERGY_CAPACITY } };
+      case 'extension': // build.js:134 落成 0，extensions/tick.js:8-17 按 rcl 归一
+        return { capacity: undefined, perResource: { energy: extensionCapacityIn(raw.room) } };
+      case 'storage': // build.js:155
+        return { capacity: C.STORAGE_CAPACITY, perResource: undefined };
+      case 'container': // build.js:258
+        return { capacity: C.CONTAINER_CAPACITY, perResource: undefined };
+      case 'terminal': // build.js:249
+        return { capacity: C.TERMINAL_CAPACITY, perResource: undefined };
+      case 'factory': // build.js:276
+        return { capacity: C.FACTORY_CAPACITY, perResource: undefined };
+      case 'tower': // build.js:199
+        return { capacity: undefined, perResource: { energy: C.TOWER_CAPACITY } };
+      case 'link': // build.js:144
+        return { capacity: undefined, perResource: { energy: C.LINK_CAPACITY } };
+      case 'lab': // build.js:230-231
+        return { capacity: C.LAB_ENERGY_CAPACITY + C.LAB_MINERAL_CAPACITY,
+          perResource: { energy: C.LAB_ENERGY_CAPACITY } };
+      case 'powerSpawn': // build.js:239
+        return { capacity: undefined,
+          perResource: { energy: C.POWER_SPAWN_ENERGY_CAPACITY, power: C.POWER_SPAWN_POWER_CAPACITY } };
+      case 'nuker': // build.js:265（ptr 变体不建模）
+        return { capacity: undefined,
+          perResource: { energy: C.NUKER_ENERGY_CAPACITY, G: C.NUKER_GHODIUM_CAPACITY } };
+      default: // 其余类型官方无容量键 ⇒ capacityForResource 得 0
+        return { capacity: undefined, perResource: undefined };
+    }
+  }
+
+  /** 官方 utils.js:671-674 capacityForResource 逐字（scr 命中直取；否则
+   *  storeCapacity − sum(scr)，负数钳 0）。 */
+  function capacityForResource(raw, resourceType) {
+    const fields = capacityFields(raw);
+    const perResource = fields.perResource;
+    if (perResource && perResource[resourceType]) return perResource[resourceType];
+    let reserved = 0;
+    if (perResource) {
+      const keys = gw.__Object.keys(perResource);
+      for (let i = 0; i < keys.length; i++) reserved += perResource[keys[i]];
+    }
+    return __MathMax(0, (fields.capacity || 0) - reserved);
+  }
+
+  /** 官方 utils.js:615-620 calcResources 的 store 分支（own 键求和——_.sum
+   *  同为 own 枚举键；无 store 对象的 RESOURCES_ALL 顶字段求和是旧引擎形态，
+   *  投影对象不产生，不可达缺 0）。 */
+  function sumStore(raw) {
+    const store = raw.store;
+    if (!store) return 0;
+    let sum = 0;
+    const keys = gw.__Object.keys(store);
+    for (let i = 0; i < keys.length; i++) sum += store[keys[i]];
+    return sum;
+  }
+
+  /** 官方 data(this.id).storeCapacity 读点（withdraw :544 / pickup :578 的
+   *  actor 面）：creep 恒经 body 折算，投影直供键优先。 */
+  function rawStoreCapacity(raw) {
+    return capacityFields(raw).capacity;
+  }
+
+  /** Creep.drop：官方 creeps.js:404-427——my/spawning 门 → RESOURCES_ALL →
+   *  store 保有（缺省全量）→ intents.set。注意官方**无** amount<0 预检（负数
+   *  放行，执行器 drop.js:15 amount>0 才落地——no-op，官方同形不补门）。 */
+  globalThis.Creep.prototype.drop = function drop(resourceType, amount) {
+    if (!this.my) return C.ERR_NOT_OWNER; // :405-407
+    if (this.spawning) return C.ERR_BUSY; // :408-410
+    if (!__arrayIncludes.call(C.RESOURCES_ALL || [], resourceType)) return C.ERR_INVALID_ARGS; // :411-413
+    if (!gw.rawData(this.id).store || !gw.rawData(this.id).store[resourceType]) {
+      return C.ERR_NOT_ENOUGH_RESOURCES; // :414-416
+    }
+    if (!amount) amount = gw.rawData(this.id).store[resourceType]; // :417-419 缺省全量
+    if (gw.rawData(this.id).store[resourceType] < amount) return C.ERR_NOT_ENOUGH_RESOURCES; // :420-422
+    gw.intents.set(this.id, 'drop', { amount, resourceType }); // :424
+    return C.OK;
+  };
+
+  /** Creep.transfer：官方 creeps.js:428-492——amount<0 / 资源白名单 / 目标族
+   *  判定（五 register 并查 + store/controller 形态 + spawning 目标 + instanceof
+   *  族）/ controller 能量重定向 / 容量门 / 邻接 / 保有 / 缺省钳制，逐条对照。 */
+  globalThis.Creep.prototype.transfer = function transfer(target, resourceType, amount) {
+    if (!this.my) return C.ERR_NOT_OWNER; // :429-431
+    if (this.spawning) return C.ERR_BUSY; // :432-434
+    if (amount < 0) return C.ERR_INVALID_ARGS; // :435-437
+    if (!__arrayIncludes.call(C.RESOURCES_ALL || [], resourceType)) return C.ERR_INVALID_ARGS; // :438-440
+    // 目标门 :441-452。customObjects M2 无（官方 register.customObjects 恒空表
+    // ⇒ 该合取项恒真，省略）。structEntry 裸解引用保留官方求值形态：目标有
+    // store 时 && 短路不解引用；storeless 的 creep/powerCreep 目标官方在此
+    // TypeError（引擎态不可达——creep 恒有 store，手写世界可达，语义对齐）
+    if (!target || !target.id) {
+      assertTargetObject(target);
+      return C.ERR_INVALID_TARGET;
+    }
+    const structEntry = structureRegisterEntry(target.id);
+    const targetRaw = gw.rawById.get(target.id);
+    const inRegisters = structEntry !== undefined
+      || !!targetRaw && (targetRaw.type === 'creep' || targetRaw.type === 'powerCreep');
+    if (!inRegisters
+      || (!gw.rawData(target.id).store && structEntry.structureType !== 'controller')
+      || (target instanceof globalThis.Creep && target.spawning) // :445
+      || !(target instanceof globalThis.StructureSpawn)
+        && !(target instanceof globalThis.Structure)
+        && !(target instanceof globalThis.Creep)
+        && !(target instanceof globalThis.PowerCreep)) {
+      assertTargetObject(target);
+      return C.ERR_INVALID_TARGET;
+    }
+    // :455-457：能量转 controller 重定向 upgradeController（A4-iii 换真前经桩
+    // 返回 OK 无 intent——换真后本分支自动闭合）
+    if (resourceType === C.RESOURCE_ENERGY && structEntry
+      && structureKindOf(structEntry) === 'controller') {
+      return this.upgradeController(target);
+    }
+    const rawTarget = gw.rawData(target.id);
+    if (!capacityForResource(rawTarget, resourceType)) return C.ERR_INVALID_TARGET; // :459-461
+    if (!target.pos.isNearTo(this.pos)) return C.ERR_NOT_IN_RANGE; // :463-465
+    if (!gw.rawData(this.id).store || !gw.rawData(this.id).store[resourceType]) {
+      return C.ERR_NOT_ENOUGH_RESOURCES; // :466-468
+    }
+    // :470-471：scr 目标按资源槽、通用仓按总量（calcResources —— 同 tick 内
+    // wrapper store 求和 === raw store 求和，raw 面等价）
+    const fields = capacityFields(rawTarget);
+    const storedAmount = fields.perResource ? (rawTarget.store[resourceType] || 0) : sumStore(rawTarget);
+    const targetCapacity = capacityForResource(rawTarget, resourceType);
+    if (!rawTarget.store || storedAmount >= targetCapacity) return C.ERR_FULL; // :473-475
+    if (!amount) {
+      amount = __MathMin(gw.rawData(this.id).store[resourceType], targetCapacity - storedAmount); // :477-479
+    }
+    if (gw.rawData(this.id).store[resourceType] < amount) return C.ERR_NOT_ENOUGH_RESOURCES; // :481-483
+    if (amount + storedAmount > targetCapacity) return C.ERR_FULL; // :485-487（显式超容不钳制——拒）
+    gw.intents.set(this.id, 'transfer', { id: target.id, amount, resourceType }); // :489
+    return C.OK;
+  };
+
+  /** Creep.withdraw：官方 creeps.js:493-565——Structure/Tombstone/Ruin + store
+   *  面 → terminal 封锁（M1 无 effects 面）→ 敌 rampart（lookFor 桩恒放行，
+   *  调用形态保留）→ safeMode → nuker/powerBank → 容量/保有 → 邻接 → actor
+   *  空容量 → 缺省/钳制，逐条对照。 */
+  globalThis.Creep.prototype.withdraw = function withdraw(target, resourceType, amount) {
+    if (!this.my) return C.ERR_NOT_OWNER; // :494-496
+    if (this.spawning) return C.ERR_BUSY; // :497-499
+    if (amount < 0) return C.ERR_INVALID_ARGS; // :500-502
+    if (!__arrayIncludes.call(C.RESOURCES_ALL || [], resourceType)) return C.ERR_INVALID_ARGS; // :503-505
+    // 目标门 :507-516：store 面在 data() 读——未知 id 在此抛官方同文案错误
+    // （rawData 的求值点 = 官方第三操作数，早于 assertTargetObject）
+    if (!target || !target.id) {
+      assertTargetObject(target);
+      return C.ERR_INVALID_TARGET;
+    }
+    const rawTarget = gw.rawData(target.id);
+    const structEntry = structureRegisterEntry(target.id);
+    if (!rawTarget.store
+      || ((!structEntry || !(target instanceof globalThis.Structure))
+        && !(target instanceof globalThis.Tombstone)
+        && !(target instanceof globalThis.Ruin))) {
+      assertTargetObject(target);
+      return C.ERR_INVALID_TARGET;
+    }
+    // :518-521：terminal 被 PWR_DISRUPT_TERMINAL 封锁拒（M1 投影无 effects 键
+    // 恒放行；power 批接线后生效——effects 形态按 wrapper 面 {power,
+    // ticksRemaining} 读）
+    if (structureKindOf(rawTarget) === 'terminal') {
+      const effect = (rawTarget.effects || []).find((e) => e && e.power === C.PWR_DISRUPT_TERMINAL);
+      if (effect && effect.ticksRemaining > 0) return C.ERR_INVALID_TARGET;
+    }
+    // :525-527：他人 rampart 护格（lookFor 现桩恒 []——调用形态保留，真面随
+    // room.lookFor 批；执行器侧同缺，双侧一致的现状缺口，登记报告）
+    if (target.my === false
+      && target.pos.lookFor('structure').some(
+        (i) => i.structureType === C.STRUCTURE_RAMPART && !i.my && !i.isPublic)) {
+      return C.ERR_NOT_OWNER;
+    }
+    // :528-530：他人 safeMode 生效期拒（this.room 官方直解引用；引擎态房间恒
+    // 在投影，手写世界缺房时按既有 blockedBySafeMode 同款守卫——登记灰区）
+    const ctl = this.room && this.room.controller;
+    if (ctl && !ctl.my && ctl.safeMode) return C.ERR_NOT_OWNER;
+    // :532-534：nuker/powerBank 不可提取
+    if (structEntry && (structureKindOf(structEntry) === C.STRUCTURE_NUKER
+      || structureKindOf(structEntry) === C.STRUCTURE_POWER_BANK)) {
+      return C.ERR_INVALID_TARGET;
+    }
+    // :536-538：容量 0 且目标无该资源且非 Tombstone 拒
+    if (!capacityForResource(rawTarget, resourceType) && !rawTarget.store[resourceType]
+      && !(target instanceof globalThis.Tombstone)) {
+      return C.ERR_INVALID_TARGET;
+    }
+    if (!target.pos.isNearTo(this.pos)) return C.ERR_NOT_IN_RANGE; // :540-542
+    // :544-545：actor 空容量（storeCapacity − calcResources——raw 面等价）
+    const emptySpace = rawStoreCapacity(gw.rawData(this.id)) - sumStore(gw.rawData(this.id));
+    if (emptySpace <= 0) return C.ERR_FULL; // :546-548
+    if (!amount) amount = __MathMin(emptySpace, rawTarget.store[resourceType]); // :550-552
+    if (amount > emptySpace) return C.ERR_FULL; // :554-556
+    if (!amount || (rawTarget.store[resourceType] || 0) < amount) {
+      return C.ERR_NOT_ENOUGH_RESOURCES; // :558-560
+    }
+    gw.intents.set(this.id, 'withdraw', { id: target.id, amount, resourceType }); // :562
+    return C.OK;
+  };
+
+  /** Creep.pickup：官方 creeps.js:566-593——掉落 Resource 目标（register.energy
+   *  面 = 掉落资源全集）+ actor 空容量 + 邻接（isNearTo ≤1 格）。 */
+  globalThis.Creep.prototype.pickup = function pickup(target) {
+    if (!this.my) return C.ERR_NOT_OWNER; // :568-570
+    if (this.spawning) return C.ERR_BUSY; // :571-573
+    // 目标门 :574-577（register.energy 的投影等价 = raw type 'resource'）
+    const rawTarget = target ? gw.rawById.get(target.id) : undefined;
+    if (!target || !target.id || !rawTarget || rawTarget.type !== 'resource'
+      || !(target instanceof globalThis.Energy)) {
+      assertTargetObject(target);
+      return C.ERR_INVALID_TARGET;
+    }
+    // :579-580：满仓拒（calcResources >= storeCapacity——raw 面等价）
+    const rawSelf = gw.rawData(this.id);
+    if (sumStore(rawSelf) >= rawStoreCapacity(rawSelf)) return C.ERR_FULL; // :578-580
+    if (!target.pos.isNearTo(this.pos)) return C.ERR_NOT_IN_RANGE; // :581-583
+    gw.intents.set(this.id, 'pickup', { id: target.id }); // :585
     return C.OK;
   };
 
