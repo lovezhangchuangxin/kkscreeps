@@ -32,7 +32,6 @@
 #include <cstdint>
 #include <limits>
 
-#include <cstdint>
 #include <cstring>
 #include <deque>
 #include <string>
@@ -64,7 +63,9 @@ public:
 	size_t tarray_len = 0;
 	std::vector<std::pair<std::string, Value*>> props; // OBJECT 属性
 	std::vector<Value*> elems;                          // ARRAY 元素（下标 Set 可增长）
-	int (*fn_ptr)(void*, uint8_t, uint8_t, const uint8_t**) = nullptr; // FUNCTION
+	// FUNCTION：C 回调（契约见 kk_ffi.h 的 kk_pf_room_callback_t）。rc==3（回调异常）
+	// 由 Nan::Call 转译成 v8 挂起异常——官方 JS roomCallback throw 的等价通道。
+	int (*fn_ptr)(void*, uint8_t, uint8_t, const uint8_t**, size_t*) = nullptr;
 	void* fn_user = nullptr;
 
 	bool IsUndefined() const { return type == UNDEFINED; }
@@ -167,6 +168,10 @@ inline thread_local Arena* t_arena = nullptr;
 // Nan::ThrowError 的挂起标志（pf.cc:33-34 唯一抛出点，随后立刻 throw js_error
 // 被 pf.cc:563 捕获；TryCatch 理论上永远观察不到，保留标志仅为语义完整）。
 inline thread_local bool t_pending_js_exception = false;
+// 挂起异常的消息（仅 ThrowError 直抛路径有文案，如地形缺失的
+// "Could not load terrain data"；回调异常的消息归 JS 原异常——A4 接线时
+// 由 JS 层直接 rethrow 原异常，ReThrow 路径清空本消息）
+inline thread_local const char* t_pending_js_error_message = nullptr;
 
 } // namespace kk_compat
 
@@ -306,38 +311,64 @@ inline void Set(v8::Local<v8::Object> obj, uint32_t index, v8::Local<v8::Value> 
 
 // Nan::Call(fn, recv, argc, argv)（pf.cc:42）。fn 必须是 kk_ffi.cc 注入的 FUNCTION
 // 节点：把 (xx, yy) 两个数值实参转交 C 回调，再把返回码包成 undefined/false/Uint8Array
-// ——与官方 JS bridge（driver/lib/path-finder.js:83-92）返回给 native 的形态一致。
+// ——与官方 JS bridge（driver/lib/path-finder.js:120-129）返回给 native 的形态一致。
+// rc==3 = 回调异常（官方 roomCallback throw）：置挂起异常并返回空 MaybeLocal——
+// 对应真实 v8 中回调抛错时 Call 返回空且异常挂起，随后 pf.cc:43-46 的 TryCatch
+// 捕获 → throw js_error() → pf.cc:563-567 → search 返回 Undefined（官方控制流原样）。
 inline v8::MaybeLocal<v8::Value> Call(v8::Local<v8::Function> fn, v8::Local<v8::Object> /*recv*/,
 	int argc, v8::Local<v8::Value> argv[]) {
-	v8::Value* result = kk_compat::t_arena->alloc();
 	if (fn.v != nullptr && fn.v->type == v8::Value::FUNCTION && fn.v->fn_ptr != nullptr && argc >= 2) {
 		uint32_t xx = static_cast<uint32_t>(argv[0].v ? argv[0].v->num : 0);
 		uint32_t yy = static_cast<uint32_t>(argv[1].v ? argv[1].v->num : 0);
 		const uint8_t* matrix = nullptr;
-		int rc = fn.v->fn_ptr(fn.v->fn_user, static_cast<uint8_t>(xx), static_cast<uint8_t>(yy), &matrix);
+		size_t matrix_len = 0;
+		int rc = fn.v->fn_ptr(fn.v->fn_user, static_cast<uint8_t>(xx), static_cast<uint8_t>(yy),
+			&matrix, &matrix_len);
+		if (rc == 3) {
+			kk_compat::t_pending_js_exception = true;
+			return v8::MaybeLocal<v8::Value>(); // 空返回 = JS 抛错（真实 v8 语义）
+		}
+		v8::Value* result = kk_compat::t_arena->alloc();
 		if (rc == 1) {
 			result->type = v8::Value::BOOLEAN;
 			result->b = false;
 		} else if (rc == 2) {
 			result->type = v8::Value::TARRAY;
 			result->tarray_data = matrix;
-			result->tarray_len = 2500;
+			result->tarray_len = matrix_len; // 真实长度：pf.cc:54-57 的 ==2500 检查按官方裁决
 		}
+		return v8::MaybeLocal<v8::Value>(v8::Local<v8::Value>(result));
 	}
+	v8::Value* result = kk_compat::t_arena->alloc();
 	return v8::MaybeLocal<v8::Value>(v8::Local<v8::Value>(result));
 }
 
 // Nan::ThrowError("...")（pf.cc:33）：置挂起标志。官方随后 throw js_error，
-// 由 pf.cc:563-567 捕获并返回 Undefined。
-inline void ThrowError(const char* /*message*/) { kk_compat::t_pending_js_exception = true; }
+// 由 pf.cc:563-567 捕获并返回 Undefined。此外 Nan::Call 的 rc==3（回调异常）也置
+// 此标志——两个异常源汇入官方同一条处理链（pf.cc:43-46 → :563-567）。
+inline void ThrowError(const char* message) {
+	kk_compat::t_pending_js_exception = true;
+	kk_compat::t_pending_js_error_message = message;
+}
 
-// Nan::TryCatch（pf.cc:38-46）。本兼容层的回调不产生 JS 异常，HasCaught() 恒 false；
-// 保留类型以通过编译并维持官方控制流形状。
+// Nan::TryCatch（pf.cc:38-46）。HasCaught() 观察挂起标志：置位源有二——pf.cc:33 的
+// 地形缺失 ThrowError（随后立刻 throw js_error，本 TryCatch 观察不到）与回调异常
+// （Nan::Call rc==3 置位，此处 HasCaught() 为真 → ReThrow → throw js_error，官方
+// 控制流原样）。标志为线程级、由 kk_ffi.cc 的 ArenaGuard 在每次 FFI 入口复位；
+// 已知角差：嵌套 search 的内层回调异常会在内层返回后使标志残留为真，外层
+// pf.cc:43 因此判定异常而中止为空结果——方向安全（永不 abort/UB），见设计文档
+// pathfinder-callback.md 的处置矩阵。
 class TryCatch {
 public:
 	TryCatch() = default;
 	bool HasCaught() const { return kk_compat::t_pending_js_exception; }
-	void ReThrow() const {}
+	void ReThrow() const {
+		// 官方语义（V8 TryCatch::ReThrow）：异常重新挂起待投递——JS 层
+		// mod.search() 表现为 throw（api 边界挂起异常胜过返回值），
+		// driver:135-136 的 undefined 分支在异常路径不可达。
+		// ReThrow 的源是回调异常：消息归 JS 原异常，清空 ThrowError 文案
+		kk_compat::t_pending_js_error_message = nullptr;
+	}
 };
 
 // Nan::TypedArrayContents<uint8_t>（pf.cc:54-56,610）：从 Uint8Array 节点取

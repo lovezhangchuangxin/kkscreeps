@@ -7,6 +7,9 @@
 //!     调用方保证切片存活于调用期——由安全封装以引用传入，编译期即成立；
 //!   - 回调 `user_data` 必须在整次调用内有效且可变借用——安全封装把闭包放在自身
 //!     栈帧上传入，借用检查保证不存在别名；
+//!   - 回调 panic 在 trampoline 内被 `catch_unwind` 拦截（返回码 3），任何 unwind
+//!     都不穿越 `extern "C"` 边界（那会 abort 宿主）——映射语义见
+//!     `room_callback_trampoline` 文档；
 //!   - 回调写出的 `*out_matrix` 指向的 CostMatrix 必须存活到 search 返回
 //!     （pf.cc:54-57 直接引用该缓冲、不拷贝）——安全封装用 `search_with_room_callback`
 //!     的生命周期参数把该约束交给借用检查；
@@ -70,13 +73,23 @@ impl Options {
     }
 }
 
-/// 回调返回码：0=undefined（无矩阵）；1=false（封锁房间）；2=矩阵经 out 提供。
-pub(super) type RoomCallback =
-    unsafe extern "C" fn(user_data: *mut c_void, xx: u8, yy: u8, out_matrix: *mut *const u8) -> i32;
+/// 回调返回码（契约见 kk_ffi.h `kk_pf_room_callback_t`，官方语义源
+/// pf.cc:37-59 + driver/lib/path-finder.js:120-129）：
+/// 0 = undefined（无矩阵）；1 = false（封锁房间）；2 = 矩阵经 out 提供（真实长度
+/// 一并透传，由 pf.cc:54-57 的 `== 2500` 检查按官方静默裁决）；
+/// 3 = 回调异常（官方 roomCallback throw 的等价物，见 trampoline）。
+pub(super) type RoomCallback = unsafe extern "C" fn(
+    user_data: *mut c_void,
+    xx: u8,
+    yy: u8,
+    out_matrix: *mut *const u8,
+    out_len: *mut usize,
+) -> i32;
 
 #[repr(C)]
 struct SearchResultRaw {
     status: i32,
+    js_error_message: *const std::os::raw::c_char,
     ops: u32,
     cost: u32,
     incomplete: u32,
@@ -102,6 +115,20 @@ unsafe extern "C" {
 
 /// 回调 trampoline：把 C 函数指针形态转回 Rust 闭包（按 F 单态化）。
 ///
+/// # Panic 安全（沙箱硬约束：玩家回调不得 abort 宿主）
+///
+/// 闭包调用包在 `catch_unwind` 内，panic 不允许穿越 `extern "C"` 边界
+/// （Rust ≥1.81 对 extern "C" unwind 是 abort）。捕获后返回码 3（回调异常），
+/// compat 层据此置 v8 挂起异常，走官方 roomCallback 抛错的同一条链
+/// （pf.cc:43-46 TryCatch 捕获后 ReThrow 并 throw js_error，经 pf.cc:563-567
+/// 返回占位 undefined）。
+///
+/// 官方语义是异常**上抛给玩家**（pf.cc:44 ReThrow 重挂 + V8 api 边界挂起
+/// 异常胜过返回值——C2 评审 1 的 V8 源码级取证；driver 的 undefined 映射
+/// 分支在异常路径不可达）。我方经 status 3 映射 Err，A4 接线时由 prelude
+/// rethrow 原生 JS 异常。panic 载荷在此丢弃；宿主需要日志可自行安装
+/// `panic::set_hook`（hook 在 unwinding 前触发，本层不阻止）。
+///
 /// # Safety
 /// `user_data` 必须是存活于整次 `kk_pf_search` 调用期的 `&mut F`；闭包返回
 /// `RoomDecision::CostMatrix(m)` 时 `m` 必须存活到 search 返回——两条约束均由
@@ -112,16 +139,29 @@ unsafe extern "C" fn room_callback_trampoline<'a, F>(
     xx: u8,
     yy: u8,
     out_matrix: *mut *const u8,
+    out_len: *mut usize,
 ) -> i32
 where
     F: FnMut(u8, u8) -> RoomDecision<'a>,
 {
+    // Safety: user_data 由 ffi_search 的调用方（search_with_room_callback）以
+    // 本栈帧存活的 &mut F 传入，借用检查保证无别名、存活期覆盖整次调用。
     let callback = unsafe { &mut *(user_data as *mut F) };
-    match callback(xx, yy) {
-        RoomDecision::None => 0,
-        RoomDecision::Blocked => 1,
-        RoomDecision::CostMatrix(matrix) => {
-            unsafe { *out_matrix = matrix.raw().as_ptr() };
+    // AssertUnwindSafe：&mut F 跨 unwind 边界——捕获后本函数立即返回 3，不再
+    // 触碰 callback，观测不到可能的逻辑破坏。
+    let decision =
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| callback(xx, yy)));
+    match decision {
+        Err(_payload) => 3, // 回调异常 → 官方 js_error 链（见函数文档）
+        Ok(RoomDecision::None) => 0,
+        Ok(RoomDecision::Blocked) => 1,
+        Ok(RoomDecision::CostMatrix(matrix)) => {
+            // Safety: out_matrix/out_len 由 compat Nan::Call 传入栈上有效地址
+            //（nan.h Call 局部变量）；写入的指针经 'a 生命周期约束存活到 search 返回。
+            unsafe {
+                *out_matrix = matrix.raw().as_ptr();
+                *out_len = matrix.raw().len();
+            }
             2
         }
     }
@@ -138,6 +178,8 @@ where
 /// 一次 search 的原始结果拷贝（path 已转入 `Vec`，C 内存已释放）。
 pub(super) struct RawOutcome {
     pub status: i32,
+    /// status 3 时的 ThrowError 文案（地形缺失）；回调异常路径 None
+    pub js_error_message: Option<String>,
     pub ops: u32,
     pub cost: u32,
     pub incomplete: bool,
@@ -166,6 +208,7 @@ pub(super) unsafe fn ffi_search(
         .collect();
     let mut raw = SearchResultRaw {
         status: 0,
+        js_error_message: std::ptr::null(),
         ops: 0,
         cost: 0,
         incomplete: 0,
@@ -191,6 +234,16 @@ pub(super) unsafe fn ffi_search(
     }
     let mut outcome = RawOutcome {
         status: raw.status,
+        js_error_message: if raw.js_error_message.is_null() {
+            None
+        } else {
+            // Safety: C 侧文档约定指向 thread_local 存储，立即拷贝
+            Some(
+                unsafe { std::ffi::CStr::from_ptr(raw.js_error_message) }
+                    .to_string_lossy()
+                    .into_owned(),
+            )
+        },
         ops: raw.ops,
         cost: raw.cost,
         incomplete: raw.incomplete != 0,

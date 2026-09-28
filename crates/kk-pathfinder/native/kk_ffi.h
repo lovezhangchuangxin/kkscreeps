@@ -38,20 +38,32 @@ typedef struct kk_pf_options {
 	double heuristic_weight;
 } kk_pf_options_t;
 
-// roomCallback 的 C 形态：官方语义 = JS 回调返回 undefined / false / Uint8Array(2500)
-// （pf.cc:37-59、driver/lib/path-finder.js:83-92）。
+// roomCallback 的 C 形态：官方语义 = JS 回调返回 undefined / false / Uint8Array
+// （pf.cc:37-59、driver/lib/path-finder.js:120-129）。矩阵长度透传：官方 JS bridge
+// 无条件交出 `ret._bits`，长度过滤（== 2500）在 pf.cc:54-57 完成——错误长度静默按
+//「无矩阵」处理。因此本契约不预设 2500，回调须把真实长度写入 *out_len，由官方
+// pf.cc 的长度检查裁决（与官方控制流逐点一致）。
 // 返回：0 = undefined（该房间无 CostMatrix）；1 = false（封锁该房间）；
-//       2 = 通过 *out_matrix 提供 2500 字节（布局 [xx*50 + yy]，CostMatrix._bits）。
+//       2 = 通过 *out_matrix/*out_len 提供矩阵（布局 [xx*50 + yy]，CostMatrix._bits）；
+//       3 = 回调抛异常（官方 roomCallback throw 的等价物：compat 层置挂起异常，
+//            pf.cc:43-46 捕获 → js_error → pf.cc:563-567 → search 返回 undefined）。
 // *out_matrix 指向的存储必须存活到本次 search 返回（pf.cc 直接引用不拷贝）。
 typedef int (*kk_pf_room_callback_t)(void* user_data, uint8_t xx, uint8_t yy,
-	const uint8_t** out_matrix);
+	const uint8_t** out_matrix, size_t* out_len);
 
 // search 结果。status：0 = 正常对象结果；1 = native 返回 -1（初始房间不可达，
-// pf.cc:515-519）；2 = native 返回 undefined（同格搜索/JS 异常，pf.cc:508-510,563-567）。
+// pf.cc:515-519）；2 = native 返回 undefined 且无挂起异常（同格搜索，
+// pf.cc:508-510——官方映射 driver path-finder.js:135-136 的空结果）；
+// 3 = js_error 路径（pf.cc:33-34 地形缺失 / :43-46 回调异常）——官方语义是
+// 异常上抛给玩家（pf.cc:44 ReThrow 重挂 + api 边界胜过返回值，JS 层 throw；
+// :563-567 的 undefined 仅是 C++ 占位返回），Rust 侧映射 Err 由上层 rethrow。
+// js_error_message：status 3 时指向 ThrowError 的文案（地形缺失），回调异常
+// 路径为 null（消息归 JS 原异常）；指向 thread_local 存储，调用方须立即拷贝。
 // path 为 malloc 分配的 [xx,yy] 对数组，goal→origin 序（native 原序，pf.cc:574-594；
 // JS 侧才做 reverse，driver/lib/path-finder.js:101），用 kk_pf_free_result 释放。
 typedef struct kk_pf_search_result {
 	int32_t status;
+	const char* js_error_message;
 	uint32_t ops;
 	uint32_t cost;
 	uint32_t incomplete;

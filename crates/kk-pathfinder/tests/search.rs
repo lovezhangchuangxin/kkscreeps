@@ -469,17 +469,16 @@ fn flee_takes_straight_up() {
 // （pf.cc:31-35 抛出、pf.cc:563-567 捕获、driver/lib/path-finder.js:97-98 映射）。
 // 注：真实服务器地形恒已载入，此用例锁定 JS bridge 映射边界的确定性。
 #[test]
-fn missing_terrain_returns_empty_not_incomplete() {
+fn missing_terrain_throws_not_empty() {
+    // 官方语义（C2 评审 1 取证）：pf.cc:33-34 地形缺失 ThrowError + js_error
+    // ——异常上抛给玩家（"Could not load terrain data"），C++ 返回 Undefined 只是
+    // 占位（V8 api 边界挂起异常胜过返回值）。锁 Err + 官方文案。
     plain_room("W60N0"); // W59N0（+x 方向邻房）不载入
-    let result = do_search(pos("W60N0", 45, 25), &[Goal::pos(pos("W59N0", 25, 25))]);
-    assert_eq!(
-        result,
-        SearchResult {
-            path: vec![],
-            ops: 0,
-            cost: 0,
-            incomplete: false
-        }
+    let err = search(pos("W60N0", 45, 25), &[Goal::pos(pos("W59N0", 25, 25))], &SearchOptions::default())
+        .expect_err("地形缺失官方上抛");
+    assert!(
+        matches!(&err, kk_pathfinder::Error::JSError(Some(m)) if m == "Could not load terrain data"),
+        "地形缺失映射 JSError + 官方文案: {err:?}"
     );
 }
 

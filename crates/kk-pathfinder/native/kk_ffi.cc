@@ -112,7 +112,9 @@ extern "C" int kk_pf_search(kk_pf_world_pos_t origin, const kk_pf_goal_t* goals,
 	}
 
 	// 回调句柄：nullptr → undefined（pf.cc:488-492 据此禁用回调通道）；
-	// 否则注入 C 函数指针 + user_data（Nan::Call 分派，见 compat/nan.h）。
+	// 否则注入 C 函数指针 + user_data（Nan::Call 分派，见 compat/nan.h；返回码
+	// 0/1/2/3 的语义见 kk_ffi.h 的 kk_pf_room_callback_t 注释——3 = 回调异常，
+	// 经 compat 层汇入官方 js_error 处理链 pf.cc:43-46 → :563-567）。
 	v8::Local<v8::Function> room_callback;
 	if (callback != nullptr) {
 		Value* fn = kk_compat::t_arena->alloc();
@@ -145,7 +147,14 @@ extern "C" int kk_pf_search(kk_pf_world_pos_t origin, const kk_pf_goal_t* goals,
 
 	std::memset(out_result, 0, sizeof(*out_result));
 	if (ret->IsUndefined()) {
-		out_result->status = 2;
+		if (kk_compat::t_pending_js_exception) {
+			// js_error 路径（官方上抛：pf.cc:44 ReThrow / :33 ThrowError）——
+			// 与同格搜索的合法 undefined（pf.cc:508-510）区分
+			out_result->status = 3;
+			out_result->js_error_message = kk_compat::t_pending_js_error_message;
+		} else {
+			out_result->status = 2;
+		}
 		return 0;
 	}
 	if (ret->type == v8::Value::NUMBER && static_cast<int64_t>(ret->num) == -1) {

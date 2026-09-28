@@ -141,3 +141,56 @@ fn bench_profile_scenario() {
         elapsed.as_micros() as f64 / searches as f64
     );
 }
+
+/// roomCallback 通道开销（C2 批）：同一场景带/不带回调的粗对比。
+/// 回调返回 `None`（等价官方回调返回非 TypedArray——pf.cc:55 长度门不过，
+/// 房间用纯地形），与无回调的 `search` 逐次对比；两者路径应一致（无矩阵差异），
+/// 差值即 FFI 回调跳板 + arena 值包装的通道开销。
+#[test]
+#[ignore]
+fn bench_callback_overhead() {
+    use kk_pathfinder::{RoomDecision, search_with_room_callback};
+
+    load_sample_terrain();
+    let options = SearchOptions {
+        max_ops: 100000,
+        max_cost: 100000,
+        ..SearchOptions::default()
+    };
+    let origin = WorldPosition::from_room("W5N3", 20, 39).unwrap();
+    let goal = Goal::with_range(WorldPosition::from_room("W8N5", 16, 41).unwrap(), 0);
+    let rounds = 2000u32;
+
+    // 预热 + 一致性断言（无矩阵时回调不得改变结果）
+    let plain = search(origin, &[goal], &options).unwrap();
+    let with_cb = search_with_room_callback(origin, &[goal], &options, |_xx, _yy| {
+        RoomDecision::None
+    })
+    .unwrap();
+    assert_eq!(plain, with_cb, "None 决策不得改变搜索结果");
+
+    let start = Instant::now();
+    for _ in 0..rounds {
+        search(origin, &[goal], &options).unwrap();
+    }
+    let plain_elapsed = start.elapsed();
+
+    let start = Instant::now();
+    let mut callback_invocations = 0u64;
+    for _ in 0..rounds {
+        search_with_room_callback(origin, &[goal], &options, |_xx, _yy| {
+            callback_invocations += 1;
+            RoomDecision::None
+        })
+        .unwrap();
+    }
+    let cb_elapsed = start.elapsed();
+
+    let per_plain = plain_elapsed.as_micros() as f64 / rounds as f64;
+    let per_cb = cb_elapsed.as_micros() as f64 / rounds as f64;
+    println!(
+        "回调开销：无回调 {per_plain:.2} µs/次 vs 带回调 {per_cb:.2} µs/次（差 {:+.2} µs/次，回调 {} 次/搜索）",
+        per_cb - per_plain,
+        callback_invocations / u64::from(rounds)
+    );
+}
