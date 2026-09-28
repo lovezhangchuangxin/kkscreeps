@@ -174,6 +174,9 @@ export class EmbedClient {
       this.child.kill('SIGTERM');
     }
     this.child = null;
+    // 被杀 child 的 exit 事件受同一性守卫直接 return（不 failAll）——幸存
+    // pending 若只等各自超时会以"RPC 超时"误归因，此处按真实死因立即结算
+    this.failAll(new Error('kkscreeps embed sidecar 被 kill（超时处置或进程退出）'));
   }
 }
 

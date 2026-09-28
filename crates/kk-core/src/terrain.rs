@@ -49,8 +49,13 @@ impl Terrain {
         Ok(Self(arr))
     }
 
-    /// 从已验证的字节构造（快照解码等信任源；绕过校验但类型上仍是合法位）。
+    /// 从已验证的字节构造（快照解码等信任源；测试期断言合法位防旁路退化——
+    /// 正式入口 [`Terrain::from_codes`] 拒绝未知位）。
     pub fn from_slice(codes: &[u8; TERRAIN_LEN]) -> Self {
+        debug_assert!(
+            codes.iter().all(|c| c & !KNOWN_MASKS == 0),
+            "from_slice 收到含未知位的地形字节"
+        );
         let mut arr = Box::new([0u8; TERRAIN_LEN]);
         arr.copy_from_slice(codes);
         Self(arr)

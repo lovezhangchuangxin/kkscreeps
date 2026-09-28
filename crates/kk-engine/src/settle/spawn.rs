@@ -115,7 +115,18 @@ pub fn intent_create_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) 
     let Some(RoomObject::Spawn(spawn)) = w.room.objects.get(&spawn_id).cloned() else {
         return;
     };
-    // directions 官方校验已在 sanitize 完成（1..8、去重）
+    // controller 活跃校验（create-creep.js:17 → utils.js:456-506）：owner-less
+    // 恒活；需 controller level≥1 且归本人，超配额时按距 controller 远近判停用
+    if !structure_active_against_controller(w, spawn_id, &spawn) {
+        return;
+    }
+    // directions 校验（官方 create-creep.js:27-33：parseInt→uniq 后任一越界或
+    // 非整数 ⇒ 整单拒绝，而非过滤保留）；sanitize 已做 parseInt 截断与保序去重，
+    // 无法解析的元素以 i64::MIN 哨兵传递——天然落入越界分支
+    if data.directions.iter().any(|d| !(1..=8).contains(d)) {
+        return;
+    }
+    let directions: Vec<u8> = data.directions.iter().map(|d| *d as u8).collect();
     let mut body: Vec<kk_schema::room::BodyPart> = data
         .body
         .iter()
@@ -141,7 +152,7 @@ pub fn intent_create_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) 
             name: name.clone(),
             need_time: need_time as u32,
             spawn_time: w.time + need_time as u64,
-            directions: data.directions.clone(),
+            directions,
         });
     }
     // 雏形 creep（create-creep.js:80-98）：占位于 spawn 格、spawning=true
@@ -244,6 +255,59 @@ fn charge_energy(
     true
 }
 
+/// 官方 utils.checkStructureAgainstController（utils.js:456-506）：结构对其
+/// controller 是否"活跃"。owner-less 恒活；否则需 controller level≥1 且归同主，
+/// 超配额时同型同主对象按距 controller 近者保留（等距者按扫描序——我们的
+/// id 升序序替换官方插入序，D4-1 灰区）。
+fn structure_active_against_controller(
+    w: &Working,
+    spawn_id: ObjId,
+    spawn: &kk_schema::room::SpawnObj,
+) -> bool {
+    if spawn.owner.is_empty() {
+        return true;
+    }
+    let Some(ctl) = w.controller() else {
+        return false;
+    };
+    if ctl.level < 1 || ctl.owner.as_deref() != Some(spawn.owner.as_str()) {
+        return false;
+    }
+    let mut allowed = allowed_count("spawn", ctl.level as i64);
+    if allowed == 0 {
+        return false;
+    }
+    // 该类型满额恒为 1 时无计数路径（官方 [8]===1 短路）；spawn 满额为 3、走距离计数
+    if allowed_count("spawn", 8) == 1 {
+        return true;
+    }
+    let object_dist = chebyshev((spawn.x, spawn.y), (ctl.x, ctl.y));
+    let mut found_self = false;
+    for (id, obj) in &w.room.objects {
+        let RoomObject::Spawn(s) = obj else { continue };
+        if s.owner != spawn.owner {
+            continue;
+        }
+        let dist = chebyshev((s.x, s.y), (ctl.x, ctl.y));
+        if dist < object_dist {
+            allowed -= 1;
+            if allowed == 0 {
+                return false;
+            }
+        } else if !found_self && dist == object_dist {
+            if *id == spawn_id {
+                found_self = true;
+            } else {
+                allowed -= 1;
+                if allowed == 0 {
+                    return false;
+                }
+            }
+        }
+    }
+    true
+}
+
 /// 官方 spawns/tick.js：孵化到点出生 + 免费能量涓流。
 pub fn spawn_tick(w: &mut Working, id: ObjId, energy_available: i64) {
     let Some(RoomObject::Spawn(spawn)) = w.room.objects.get(&id) else {
@@ -333,21 +397,27 @@ fn born_creep(w: &mut Working, spawn_id: ObjId, job: &SpawningJob) -> bool {
             continue;
         }
         let (nx, ny) = (nx as u8, ny as u8);
-        let is_occupied = {
-            let static_obstacle = w.index.at(nx as usize, ny as usize).iter().any(|tid| {
-                match w.room.objects.get(tid) {
-                    Some(RoomObject::Creep(_)) => false,
+        // 官方 checkObstacleFn（_born-creep.js:12-15）：OBSTACLE_OBJECT_TYPES
+        // 成员类型（creep 在表内——友敌皆占位）或 obstacle 结构类型的工地（无
+        // user 过滤，与 movement.js:25-26 的自家限定不同）
+        let static_obstacle =
+            w.index
+                .at(nx as usize, ny as usize)
+                .iter()
+                .any(|tid| match w.room.objects.get(tid) {
+                    Some(RoomObject::ConstructionSite(s)) => {
+                        kk_world::types::is_obstacle_type(&s.structure_type)
+                    }
                     Some(o) => kk_world::types::is_obstacle_type(movement::type_name_of(o)),
                     None => false,
-                }
-            }) || (w.room.terrain.check_mask(
-                nx as usize,
-                ny as usize,
-                kk_core::TERRAIN_MASK_WALL,
-            ) && !movement::has_road(w.room, &w.index, (nx, ny)));
-            let busy = w.movement.is_tile_busy(nx, ny);
-            static_obstacle || busy
-        };
+                })
+                || (w.room.terrain.check_mask(
+                    nx as usize,
+                    ny as usize,
+                    kk_core::TERRAIN_MASK_WALL,
+                ) && !movement::has_road(w.room, &w.index, (nx, ny)));
+        let busy = w.movement.is_tile_busy(nx, ny);
+        let is_occupied = static_obstacle || busy;
         if !is_occupied {
             occupied_at = Some((nx, ny));
             break;
@@ -384,17 +454,23 @@ fn born_creep(w: &mut Working, spawn_id: ObjId, job: &SpawningJob) -> bool {
             continue;
         }
         let (nx, ny) = (nx as u8, ny as u8);
-        let free = !w.index.at(nx as usize, ny as usize).iter().any(|tid| {
-            matches!(w.room.objects.get(tid), Some(RoomObject::Creep(_)))
-                || w.room
-                    .objects
-                    .get(tid)
-                    .is_some_and(|o| kk_world::types::is_obstacle_type(movement::type_name_of(o)))
-        }) && !w.room.terrain.check_mask(
-            nx as usize,
-            ny as usize,
-            kk_core::TERRAIN_MASK_WALL,
-        ) && !w.movement.is_tile_busy(nx, ny);
+        // 与第一轮同一 checkObstacleFn（官方 bail 检查同判据；墙检查无路例外）
+        let free =
+            !w.index
+                .at(nx as usize, ny as usize)
+                .iter()
+                .any(|tid| match w.room.objects.get(tid) {
+                    Some(RoomObject::ConstructionSite(s)) => {
+                        kk_world::types::is_obstacle_type(&s.structure_type)
+                    }
+                    Some(o) => kk_world::types::is_obstacle_type(movement::type_name_of(o)),
+                    None => false,
+                })
+                && !w
+                    .room
+                    .terrain
+                    .check_mask(nx as usize, ny as usize, kk_core::TERRAIN_MASK_WALL)
+                && !w.movement.is_tile_busy(nx, ny);
         if free {
             return false; // 有出口但我们没选它：不 spawnstomp（官方语义）
         }

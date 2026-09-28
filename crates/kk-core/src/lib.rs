@@ -23,7 +23,7 @@ mod tests {
     #[test]
     fn constants_match_official_dump() {
         let dump: serde_json::Value =
-            serde_json::from_str(include_str!("../..//kk-runner/assets/constants.json")).unwrap();
+            serde_json::from_str(include_str!("../../kk-runner/assets/constants.json")).unwrap();
         let obj = dump.as_object().unwrap();
         assert_eq!(obj.len(), 423, "官方 dump 键数");
 

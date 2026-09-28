@@ -19,6 +19,9 @@ impl World {
             let mut entry = serde_json::Map::new();
             entry.insert("name".into(), json!(name));
             entry.insert("terrain".into(), json!(&state.terrain.as_slice()[..]));
+            let (available, capacity) = room_energy(state);
+            entry.insert("energyAvailable".into(), json!(available));
+            entry.insert("energyCapacityAvailable".into(), json!(capacity));
             rooms.insert(name.clone(), Value::Object(entry));
             for (id, object) in &state.objects {
                 objects.push(object_json(name, *id, object, self.time));
@@ -62,7 +65,37 @@ impl World {
     }
 }
 
-/// 对象 → 世界 JSON 记录。
+/// 房间能量面（官方 game.js:325-328：非 off 的 spawn/extension 计入；容量侧
+/// spawn 固定 300、extension 按 RCL 表）。官方按查看者过滤自家结构，M1 单投影
+/// 先按房间合计（灰区登记：多主人房间的 per-owner 视图 M2 玩家 API 层实现）。
+fn room_energy(state: &crate::world::RoomState) -> (i64, i64) {
+    let rcl = state
+        .objects
+        .values()
+        .find_map(|o| match o {
+            RoomObject::Controller(ctl) => Some(ctl.level),
+            _ => None,
+        })
+        .unwrap_or(0);
+    let mut available = 0i64;
+    let mut capacity = 0i64;
+    for o in state.objects.values() {
+        match o {
+            RoomObject::Spawn(s) if !s.off => {
+                available += s.store.energy as i64;
+                capacity += c::SPAWN_ENERGY_CAPACITY;
+            }
+            RoomObject::Extension(e) if !e.off => {
+                available += e.store.energy as i64;
+                capacity += crate::types::extension_energy_capacity(rcl);
+            }
+            _ => {}
+        }
+    }
+    (available, capacity)
+}
+
+/// 对象 → 世界 JSON 记录（字段名 = prelude wrapObject 消费面约定）。
 fn object_json(room: &str, id: crate::world::ObjId, object: &RoomObject, time: u64) -> Value {
     let id_str = id.as_str();
     let mut v = match object {
@@ -95,6 +128,7 @@ fn object_json(room: &str, id: crate::world::ObjId, object: &RoomObject, time: u
                 "progressTotal": controller_progress_total(o.level),
                 "safeMode": o.safe_mode,
                 "safeModeAvailable": o.safe_mode_available,
+                "isPowerEnabled": o.is_power_enabled,
             });
             if let Some(owner) = &o.owner {
                 v["owner"] = json!(owner);
@@ -150,8 +184,7 @@ fn object_json(room: &str, id: crate::world::ObjId, object: &RoomObject, time: u
                 "structureType": o.structure_type,
                 "id": id_str, "room": room, "x": o.x, "y": o.y,
                 "progress": o.progress,
-                "progressTotal": crate::types::construction_cost(&o.structure_type)
-                    .unwrap_or(0),
+                "progressTotal": o.progress_total,
             });
             if let Some(owner) = &o.owner {
                 v["owner"] = json!(owner);
@@ -280,6 +313,7 @@ mod tests {
             progress: 10,
             downgrade_time: None,
             owner: Some("p1".into()),
+            is_power_enabled: false,
         };
         let ctx = PlaceCtx {
             time: world.time,

@@ -200,7 +200,10 @@ pub struct IntentData {
     pub name: Option<String>,
     pub body: Vec<BodyKind>,
     pub energy_structures: Vec<ObjId>,
-    pub directions: Vec<u8>,
+    /// 官方链路（system.js number[] transform → create-creep.js:27-33）：本字段
+    /// 只承载 parseInt 截断 + 保序去重后的值；无法 parseInt 的元素以 i64::MIN
+    /// 哨兵传递（1..=8 校验在 createCreep 整单拒绝，非过滤）。
+    pub directions: Vec<i64>,
 }
 
 impl IntentData {
@@ -351,13 +354,12 @@ pub fn sanitize_object_intent(_action: Action, raw: &Value) -> IntentData {
         directions: f("directions")
             .and_then(Value::as_array)
             .map(|arr| {
-                // 官方校验（create-creep.js:27-33）：1..=8 整数、uniq 保序——
-                // 方向次序决定出生落位，不得重排
-                let mut ds: Vec<u8> = arr
+                // system.js number[] transform：_.map(parseInt)（2.5→2、数字串转数；
+                // null/未定义经 transform 已折为 undefined ⇒ 本分支不可达），
+                // 随后 create-creep.js:29 _.uniq 保序去重
+                let mut ds: Vec<i64> = arr
                     .iter()
-                    .filter_map(|p| p.as_f64())
-                    .filter(|d| *d >= 1.0 && *d <= 8.0 && d.fract() == 0.0)
-                    .map(|d| d as u8)
+                    .map(|p| to_int(Some(p)).unwrap_or(i64::MIN))
                     .collect();
                 ds.dedup();
                 ds
@@ -437,9 +439,14 @@ mod tests {
         let raw3 = json!({ "name": long });
         let d3 = sanitize_object_intent(Action::Say, &raw3);
         assert_eq!(d3.name.unwrap().chars().count(), 100);
-        // directions 越界过滤
+        // directions：parseInt 截断（2.5→2）+ 保序去重；越界值原样传递——
+        // 整单拒绝发生在 createCreep（1..=8 校验），无法 parseInt 的元素以
+        // i64::MIN 哨兵传递（天然落入 1..=8 之外）
         let raw4 = json!({ "directions": [1, 9, 3, 3, 2.5] });
         let d4 = sanitize_object_intent(Action::Suicide, &raw4);
-        assert_eq!(d4.directions, vec![1, 3]);
+        assert_eq!(d4.directions, vec![1, 9, 3, 2]);
+        let raw5 = json!({ "directions": [1, "abc"] });
+        let d5 = sanitize_object_intent(Action::Suicide, &raw5);
+        assert_eq!(d5.directions, vec![1, i64::MIN]);
     }
 }

@@ -517,6 +517,8 @@
           obj.safeModeAvailable = 0;
           obj.safeModeCooldown = 0;
           obj.activationDate = undefined;
+          // 官方 controller.isPowerEnabled（power API 本体 M2+，字段先行透传）
+          obj.isPowerEnabled = o.isPowerEnabled === true;
           for (const m of CONTROLLER_METHODS) obj[m] = mkStubMethod('controller.' + m);
         } else if (o.structureType === 'source') {
           obj.energy = o.energy ?? 3000;
@@ -656,8 +658,10 @@
       const room = {
         name,
         controller,
-        energyAvailable: 0,
-        energyCapacityAvailable: 300,
+        // 官方 game.js:325-328：非 off 的 spawn/extension 计入（spawn 300 固定、
+        // extension 按 RCL 表）——由 Rust 侧 world_json 房间投影携带
+        energyAvailable: r.energyAvailable ?? 0,
+        energyCapacityAvailable: r.energyCapacityAvailable ?? 300,
         storage: undefined,
         terminal: undefined,
         visual: new RoomVisual(name),

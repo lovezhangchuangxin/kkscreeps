@@ -116,11 +116,11 @@ impl EmbedEngine {
             if let Some(t) = room.get("terrain") {
                 Terrain::from_codes(&terrain_codes_from_json(t)?).map_err(anyhow::Error::msg)?;
             }
-            // rcl 上界显式拒绝（typed level 是 u8，超界会被 as 截断成错值）
-            if let Some(rcl) = room.get("rcl").and_then(Value::as_i64)
-                && !(0..=8).contains(&rcl)
+            // rcl 上界与非整数显式拒绝（typed level 是 u8，截断会得错值）
+            if let Some(rcl) = room.get("rcl").and_then(Value::as_f64)
+                && !(rcl.fract() == 0.0 && (0.0..=8.0).contains(&rcl))
             {
-                anyhow::bail!("RoomSpec {name}: rcl 超出 0..=8: {rcl}");
+                anyhow::bail!("RoomSpec {name}: rcl 非法（需 0..=8 整数）: {rcl}");
             }
         }
 
@@ -177,18 +177,58 @@ impl EmbedEngine {
                 .and_then(Value::as_bool)
                 .unwrap_or(true);
             if has_controller {
+                // vanilla 双分支种子（index.ts:904/968）：未占房 rcl 缺省 0、
+                // 占房缺省 1；占房另种 downgrade/safeMode 族——相对值换绝对
+                // tick（+time+1，warm-up tick 消耗一拍，index.ts:966-993）
                 let owner = room.get("owner").and_then(Value::as_str);
-                let rcl = room.get("rcl").and_then(Value::as_i64).unwrap_or(1).max(0);
+                let rcl = room
+                    .get("rcl")
+                    .and_then(Value::as_i64)
+                    .unwrap_or(if owner.is_some() { 1 } else { 0 })
+                    .clamp(0, 8);
+                let time = self.engine.world.time;
                 let mut spec = serde_json::json!({
                     "pos": [1, 1],
                     "structureType": "controller",
-                    "rcl": rcl,
+                    "level": rcl,
+                    "isPowerEnabled": room
+                        .get("powerEnabled")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false),
                 });
                 if let Some(owner) = owner {
                     spec["owner"] = serde_json::json!(owner);
+                    let downgrade_table = kk_core::constants::CONTROLLER_DOWNGRADE;
+                    let default_clock = downgrade_table
+                        .iter()
+                        .find(|(k, _)| *k == rcl.to_string())
+                        .map(|(_, v)| *v)
+                        .unwrap_or(0);
+                    let downgrade_time = match room.get("ticksToDowngrade").and_then(Value::as_i64)
+                    {
+                        Some(t) => Some(time.saturating_add(t.max(0) as u64).saturating_add(1)),
+                        None if rcl > 0 => {
+                            Some(time.saturating_add(default_clock as u64).saturating_add(1))
+                        }
+                        None => None,
+                    };
+                    if let Some(dt) = downgrade_time {
+                        spec["downgradeTime"] = serde_json::json!(dt);
+                    }
+                    if let Some(sm) = room
+                        .get("safeMode")
+                        .and_then(Value::as_i64)
+                        .filter(|v| *v > 0)
+                    {
+                        spec["safeMode"] =
+                            serde_json::json!(time.saturating_add(sm as u64).saturating_add(1));
+                    }
+                    if let Some(avail) = room.get("safeModeAvailable").and_then(Value::as_i64) {
+                        spec["safeModeAvailable"] = serde_json::json!(avail.max(0));
+                    }
                 }
                 let ctx = PlaceCtx {
-                    time: self.engine.world.time,
+                    time,
                     controller: None,
                     name_seq: self.engine.world.next_obj_id() as usize,
                 };
@@ -308,8 +348,8 @@ impl EmbedEngine {
 
     /// 推进 n tick（每 tick 一次全房间空 intents 结算）。
     ///
-    /// 结算 Err 时世界处于混合 tick 态（已结算房间保留新状态、time 不推进）——
-    /// 调用方不得对同一 tick 重试（会对已结算房间二次结算）。
+    /// 结算 Err 时世界整体回退至上一 tick（两阶段提交：全房在克隆副本上结算
+    /// 成功后才写回）——time/能量/id 分配器全部保持，对同一 tick 重试安全。
     pub fn tick(&mut self, count: u64) -> anyhow::Result<()> {
         for _ in 0..count {
             self.engine.tick().map_err(|e| anyhow::anyhow!("{e}"))?;

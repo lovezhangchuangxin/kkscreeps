@@ -12,9 +12,28 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-const ratchet = JSON.parse(readFileSync(resolve(root, 'compat/reports/ratchet.json'), 'utf8'));
+const ratchetPath = resolve(root, 'compat/reports/ratchet.json');
 const reportPath = resolve(root, 'compat/reports/kkscreeps.json');
 const suiteLogPath = '/tmp/kk-run-suite.log';
+
+// 形状校验先行：floor 缺失/非正整数时 `passed < undefined` 恒 false——门禁会
+// 对任何回归静默放行（手工编辑键名错、合并冲突解出合法 JSON 都会走到这里），
+// 必须拒绝运行而非空转
+let ratchet;
+try {
+  ratchet = JSON.parse(readFileSync(ratchetPath, 'utf8'));
+} catch (e) {
+  console.error(`ratchet: 无法读取/解析 ${ratchetPath}: ${e?.message ?? e}——地板文件缺失即门禁失效，拒绝继续`);
+  process.exit(1);
+}
+if (!Number.isInteger(ratchet.floor) || ratchet.floor <= 0) {
+  console.error(`ratchet: ratchet.json 形状非法——需 {floor: 正整数}，实得 ${JSON.stringify(ratchet)}`);
+  process.exit(1);
+}
+if (!Number.isInteger(ratchet.numTotalTests) || ratchet.numTotalTests <= 0) {
+  console.error(`ratchet: ratchet.json 形状非法——需 {numTotalTests: 正整数}，实得 ${JSON.stringify(ratchet)}`);
+  process.exit(1);
+}
 
 function tailSuiteLog(lines = 100) {
   // 套件 --quiet 把 vitest 输出重定向到 /tmp——早崩/解析失败路径上必须把它带回

@@ -65,9 +65,14 @@ impl RoomName {
 
     /// 从官方坐标生成房间名（官方 `getRoomNameFromXY`，utils.js:358-371）。
     ///
-    /// 坐标应为 `parse` 产物或邻近房间的偏移结果（|值| < 10^9）；`i32::MIN`
-    /// 会使 `as_str` 的取负减一溢出 panic（调用方不会自然产生该值，不设防）。
+    /// 坐标应为 `parse` 产物或邻近房间的偏移结果；|值| ≥ 10^9 时生成的名字
+    /// 无法被 `parse` 往返（官方同域），`i32::MIN` 会使 `as_str` 取负减一
+    /// 溢出 panic——两者都非自然产生，测试期断言拦截。
     pub fn from_xy(xx: i32, yy: i32) -> Self {
+        debug_assert!(
+            (xx as i64).abs() < 1_000_000_000 && (yy as i64).abs() < 1_000_000_000,
+            "from_xy 坐标超出可往返域 |v| < 10^9"
+        );
         Self { xx, yy }
     }
 

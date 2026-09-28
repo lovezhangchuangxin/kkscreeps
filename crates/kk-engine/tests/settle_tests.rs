@@ -89,6 +89,7 @@ impl Fixture {
                     progress: 0,
                     downgrade_time: None,
                     owner: owner.map(str::to_string),
+                    is_power_enabled: false,
                 }),
             )
             .unwrap()
@@ -105,6 +106,51 @@ impl Fixture {
                     energy,
                     energy_capacity: 3000,
                     next_regeneration_time: None,
+                }),
+            )
+            .unwrap()
+    }
+
+    fn spawn(&mut self, name: &str, x: u8, y: u8, energy: u32) -> ObjId {
+        self.world
+            .insert(
+                "W1N1",
+                RoomObject::Spawn(SpawnObj {
+                    id: 0,
+                    x,
+                    y,
+                    hits: 5000,
+                    off: false,
+                    name: name.into(),
+                    owner: "p1".into(),
+                    store: kk_schema::room::Store { energy },
+                    spawning: None,
+                }),
+            )
+            .unwrap()
+    }
+
+    fn site(
+        &mut self,
+        x: u8,
+        y: u8,
+        structure_type: &str,
+        progress: u32,
+        progress_total: u32,
+        owner: &str,
+    ) -> ObjId {
+        self.world
+            .insert(
+                "W1N1",
+                RoomObject::ConstructionSite(kk_schema::room::ConstructionSiteObj {
+                    id: 0,
+                    x,
+                    y,
+                    structure_type: structure_type.into(),
+                    progress,
+                    progress_total,
+                    owner: Some(owner.into()),
+                    name: None,
                 }),
             )
             .unwrap()
@@ -368,21 +414,7 @@ fn harvest_overflow_drops() {
 #[test]
 fn build_progress_and_completion() {
     let mut f = Fixture::new(1, terrain_with(&[]));
-    let site = f
-        .world
-        .insert(
-            "W1N1",
-            RoomObject::ConstructionSite(kk_schema::room::ConstructionSiteObj {
-                id: 0,
-                x: 12,
-                y: 10,
-                structure_type: "constructedWall".into(),
-                progress: 0,
-                owner: Some("p1".into()),
-                name: None,
-            }),
-        )
-        .unwrap();
+    let site = f.site(12, 10, "constructedWall", 0, 1, "p1");
     // 1 work → 5/tick（BUILD_POWER=5）；墙成本 1 → 一次完成
     let c = f.creep("w1", "p1", 11, 10, &[BodyKind::Move, BodyKind::Work], 10);
     let mut b = IntentBatch::default();
@@ -760,23 +792,9 @@ fn road_on_swamp_costs_one() {
 
 #[test]
 fn road_on_swamp_costs_more_to_build() {
-    // H6：沼泽上的路 progressTotal ×5（300→1500）
+    // H6：沼泽上的路 progressTotal ×5（300→1500，建工地时定格存值）
     let mut f = Fixture::new(1, terrain_with(&[(12, 10)]));
-    let site = f
-        .world
-        .insert(
-            "W1N1",
-            RoomObject::ConstructionSite(kk_schema::room::ConstructionSiteObj {
-                id: 0,
-                x: 12,
-                y: 10,
-                structure_type: "road".into(),
-                progress: 0,
-                owner: Some("p1".into()),
-                name: None,
-            }),
-        )
-        .unwrap();
+    let site = f.site(12, 10, "road", 0, 1500, "p1");
     let c = f.creep("w1", "p1", 11, 10, &[BodyKind::Move, BodyKind::Work], 10);
     let mut b = IntentBatch::default();
     b.add_object_intent("p1", c, Action::Build, IntentData::target(site));
@@ -792,27 +810,14 @@ fn road_on_swamp_costs_more_to_build() {
 }
 
 #[test]
-fn birth_avoids_stationary_creep() {
-    // H7：出生方向搜索对任何 creep 都算被占
+fn birth_blocked_by_stationary_creep_until_it_leaves() {
+    // 深评 H2：出生占位对任何 creep（友敌皆算）都算被占——'creep' ∈
+    // OBSTACLE_OBJECT_TYPES（_born-creep.js:12-15）；被占时推迟重试、雏形
+    // 留在 spawn 格，让开后才出生。blocker 的逃离方向必须真正可走（远离
+    // spawn），否则测试测不到"被占"阶段
     let mut f = Fixture::new(1, terrain_with(&[]));
     f.controller(3, Some("p1"));
-    let spawn = f
-        .world
-        .insert(
-            "W1N1",
-            RoomObject::Spawn(SpawnObj {
-                id: 0,
-                x: 20,
-                y: 20,
-                hits: 5000,
-                off: false,
-                name: "Spawn1".into(),
-                owner: "p1".into(),
-                store: kk_schema::room::Store { energy: 300 },
-                spawning: None,
-            }),
-        )
-        .unwrap();
+    let spawn = f.spawn("Spawn1", 20, 20, 300);
     // 方向 1 的格 (20,19) 站一个静止 creep
     let blocker = f.creep("blocker", "p1", 20, 19, &[BodyKind::Move], 0);
     let mut b = IntentBatch::default();
@@ -822,12 +827,39 @@ fn birth_avoids_stationary_creep() {
     d.directions = vec![1]; // 只允许方向 1（被 block）
     b.add_object_intent("p1", spawn, Action::CreateCreep, d);
     f.settle(b);
-    // 孵化任务已建；推 6 tick 到出生时刻——方向 1 被 block 且无其他允许方向 → 重试
+    // 推 5 tick 到出生日（spawn_time=6，time>=5 触发）
     for _ in 0..5 {
         f.settle(IntentBatch::default());
     }
-    f.settle(move_intent(blocker, 5)); // blocker 走开
-    f.settle(IntentBatch::default()); // 重试出生
+    let chick = f
+        .world
+        .room("W1N1")
+        .unwrap()
+        .objects
+        .values()
+        .find_map(|o| match o {
+            RoomObject::Creep(c) if c.name == "child" => Some((c.x, c.y, c.spawning)),
+            _ => None,
+        })
+        .expect("雏形存在");
+    assert!(chick.2, "被占：不出世");
+    assert_eq!(
+        (chick.0, chick.1),
+        (20, 20),
+        "雏形留在 spawn 格（不与 blocker 同格）"
+    );
+    match f.obj(spawn) {
+        RoomObject::Spawn(s) => assert_eq!(
+            s.spawning.as_ref().map(|j| j.spawn_time),
+            Some(6),
+            "出生失败推迟一 tick 重试"
+        ),
+        _ => panic!(),
+    }
+    // blocker 真正走开（方向 4 → (21,20)，远离 spawn）；spawn tick 在 blocker
+    // 的 creep tick 之前（id 序）→ 当 tick 仍失败、下一 tick 出生
+    f.settle(move_intent(blocker, 4));
+    f.settle(IntentBatch::default());
     let child = f
         .world
         .room("W1N1")
@@ -837,8 +869,8 @@ fn birth_avoids_stationary_creep() {
         .find_map(|o| match o {
             RoomObject::Creep(c) if c.name == "child" => Some((c.x, c.y, c.spawning)),
             _ => None,
-        });
-    let child = child.expect("出生成功");
+        })
+        .expect("出生成功");
     assert!(!child.2);
     assert_eq!((child.0, child.1), (20, 19), "blocker 让开后出生在方向 1");
 }
@@ -969,6 +1001,7 @@ fn engine_scripted_sandbox_closed_loop() {
                 progress: 0,
                 downgrade_time: None,
                 owner: Some("p1".into()),
+                is_power_enabled: false,
             }),
         )
         .unwrap();
@@ -1083,4 +1116,274 @@ fn engine_scripted_sandbox_closed_loop() {
         .unwrap()
         .0;
     assert!(engine.world.next_obj_id() > max_id, "分配器越过最大 id");
+}
+
+// ---- M1 深度评审回归 ----
+
+#[test]
+fn own_construction_site_blocks_movement() {
+    // 深评 H1：自家 obstacle 结构工地在 check 阶段挡路（movement.js:25-26）——
+    // move 预检不含工地（挤格语义），但仲裁不得放行，否则完工结构落在 creep 头上
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let site = f.site(10, 11, "spawn", 0, 15000, "p1");
+    let c = f.creep("w1", "p1", 10, 10, &[BodyKind::Move], 0);
+    f.settle(move_intent(c, 5)); // → (10,11) 自家 spawn 工地
+    assert_eq!(f.creep_state(c), (10, 10, 0, 0), "自家 obstacle 工地挡路");
+    assert!(f.world.get(site).is_some(), "工地未被动");
+}
+
+#[test]
+fn moving_onto_enemy_site_stomps_it() {
+    // movement.js:224-233：进格踩掉敌方工地（safeMode 门外），退一半工程为
+    // 掉落能量；tick 期插入的 energy 不在阶段 8 键快照内 → 本 tick 不衰减
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let site = f.site(10, 11, "road", 10, 300, "p2");
+    let c = f.creep("w1", "p1", 10, 10, &[BodyKind::Move], 0);
+    f.settle(move_intent(c, 5));
+    assert_eq!(f.creep_state(c).1, 11, "敌方工地可入");
+    assert!(f.world.get(site).is_none(), "工地被踩掉");
+    let dropped = f
+        .world
+        .room("W1N1")
+        .unwrap()
+        .objects
+        .values()
+        .find_map(|o| match o {
+            RoomObject::Energy(e) => Some(e.amount),
+            _ => None,
+        });
+    assert_eq!(dropped, Some(5), "退半工程 10/2=5，本 tick 不衰减");
+}
+
+#[test]
+fn transfer_into_extension_clamps_by_rcl() {
+    // 深评 H3：extension 容量按 EXTENSION_ENERGY_CAPACITY[rcl]（extensions/
+    // tick.js:10-17 归一、transfer.js 经 capacityForResource 钳制）——rcl 3 档 50
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    f.controller(3, Some("p1"));
+    let ext = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Extension(kk_schema::room::ExtensionObj {
+                id: 0,
+                x: 20,
+                y: 20,
+                hits: 1000,
+                off: false,
+                owner: "p1".into(),
+                store: kk_schema::room::Store { energy: 40 },
+            }),
+        )
+        .unwrap();
+    let c = f.creep(
+        "w1",
+        "p1",
+        20,
+        21,
+        &[BodyKind::Move, BodyKind::Carry, BodyKind::Carry],
+        60,
+    );
+    let mut b = IntentBatch::default();
+    let mut d = IntentData::target(ext);
+    d.amount = Some(30);
+    d.resource_type = Some("energy".into());
+    b.add_object_intent("p1", c, Action::Transfer, d);
+    let events = f.settle(b);
+    assert_eq!(events[0]["data"]["amount"], 10, "钳到容量差 50-40");
+    match f.obj(ext) {
+        RoomObject::Extension(e) => assert_eq!(e.store.energy, 50),
+        _ => panic!(),
+    }
+    assert_eq!(f.creep_state(c).3, 50);
+}
+
+#[test]
+fn cascade_removal_clears_chain_on_head_failure() {
+    // movement.js:154-186 级联清链：链尾无 MOVE（canMove 不过）→ 其移动出矩阵，
+    // 沿"要进我原格"递归取消上游——全链原地
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let a = f.creep("a", "p1", 10, 10, &[BodyKind::Move, BodyKind::Carry], 0);
+    let b = f.creep("b", "p1", 11, 10, &[BodyKind::Move, BodyKind::Carry], 0);
+    let c = f.creep("c", "p1", 12, 10, &[BodyKind::Work], 0); // 无 MOVE
+    let mut batch = move_intent(a, 3);
+    let mut d = IntentData::bare();
+    d.direction = Some(3);
+    batch.add_object_intent("p1", b, Action::Move, d);
+    let mut d2 = IntentData::bare();
+    d2.direction = Some(3);
+    batch.add_object_intent("p1", c, Action::Move, d2);
+    f.settle(batch);
+    assert_eq!(
+        f.creep_state(a).0,
+        10,
+        "级联取消：链尾 c 无 MOVE → b、a 全链取消"
+    );
+    assert_eq!(f.creep_state(b).0, 11);
+    assert_eq!(f.creep_state(c).0, 12);
+}
+
+#[test]
+fn edge_entry_zero_fatigue() {
+    // movement.js:242-245：从非边缘进边缘格 fatigue=0（跨房间预备）；常规平原
+    // 应为体重 2×2 − 恢复 2 = 2，此处必须为 0
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let c = f.creep(
+        "w1",
+        "p1",
+        10,
+        1,
+        &[BodyKind::Move, BodyKind::Work, BodyKind::Work],
+        0,
+    );
+    f.settle(move_intent(c, 1)); // TOP → (10,0) 边缘
+    assert_eq!(f.creep_state(c), (10, 0, 0, 0));
+}
+
+#[test]
+fn movement_wears_road() {
+    // movement.js:213：路上移动磨损 nextDecayTime -= ROAD_WEAROUT(1) × body 部件数
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let road = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Road(kk_schema::room::RoadObj {
+                id: 0,
+                x: 10,
+                y: 11,
+                hits: 5000,
+                next_decay_time: 5000,
+            }),
+        )
+        .unwrap();
+    let c = f.creep(
+        "w1",
+        "p1",
+        10,
+        10,
+        &[BodyKind::Move, BodyKind::Work, BodyKind::Carry],
+        0,
+    );
+    f.settle(move_intent(c, 5));
+    match f.obj(road) {
+        RoomObject::Road(r) => assert_eq!(r.next_decay_time, 4997, "3 部件 × ROAD_WEAROUT(1)"),
+        _ => panic!(),
+    }
+}
+
+#[test]
+fn carried_resources_add_move_weight() {
+    // movement.js:41-59 calcResourcesWeight：从 body 尾部数装下携带量所需的
+    // CARRY 部件数，计入移动体重——[move,carry,carry,work] 带 60：weight = 1 + 2
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let c = f.creep(
+        "w1",
+        "p1",
+        10,
+        10,
+        &[
+            BodyKind::Move,
+            BodyKind::Carry,
+            BodyKind::Carry,
+            BodyKind::Work,
+        ],
+        60,
+    );
+    f.settle(move_intent(c, 5)); // plain：3×2 − 2 = 4
+    assert_eq!(f.creep_state(c).2, 4, "满载两 carry 计入体重");
+    // 对照：同 body 空载 → weight 1 → 2 − 2 = 0
+    let c2 = f.creep(
+        "w2",
+        "p1",
+        12,
+        12,
+        &[
+            BodyKind::Move,
+            BodyKind::Carry,
+            BodyKind::Carry,
+            BodyKind::Work,
+        ],
+        0,
+    );
+    f.settle(move_intent(c2, 5));
+    assert_eq!(f.creep_state(c2).2, 0, "空载不计资源重量");
+}
+
+#[test]
+fn build_blocked_by_creep_on_tile() {
+    // build.js:50-59：障碍类型工地格上有 creep（无 safeMode ⇒ 任何 creep）→ 拒建
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let site = f.site(12, 10, "spawn", 0, 15000, "p1");
+    let c = f.creep("w1", "p1", 11, 10, &[BodyKind::Move, BodyKind::Work], 10);
+    let _blocker = f.creep("blocker", "p1", 12, 10, &[BodyKind::Move], 0);
+    let mut b = IntentBatch::default();
+    b.add_object_intent("p1", c, Action::Build, IntentData::target(site));
+    f.settle(b);
+    match f.obj(site) {
+        RoomObject::ConstructionSite(s) => {
+            assert_eq!(s.progress, 0, "格被 creep 占：拒建")
+        }
+        _ => panic!(),
+    }
+    assert_eq!(f.creep_state(c).3, 10, "能量未扣");
+}
+
+#[test]
+fn create_creep_rejected_for_off_spawn() {
+    // create-creep.js:17 checkStructureAgainstController（utils.js:456-506）：
+    // RCL 3 只许 1 个 spawn，距 controller 更远者不活跃——即使能量充足也不得孵化
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    f.controller(3, Some("p1"));
+    let _near = f.spawn("Near", 5, 6, 300);
+    let far = f.spawn("Far", 25, 25, 300);
+    let mut b = IntentBatch::default();
+    let mut d = IntentData::bare();
+    d.name = Some("child".into());
+    d.body = vec![BodyKind::Move, BodyKind::Work];
+    b.add_object_intent("p1", far, Action::CreateCreep, d);
+    f.settle(b);
+    match f.obj(far) {
+        RoomObject::Spawn(s) => {
+            assert!(s.spawning.is_none(), "超配额 spawn 不孵化");
+            assert_eq!(s.store.energy, 300, "未扣费");
+        }
+        _ => panic!(),
+    }
+    match f.obj(_near) {
+        RoomObject::Spawn(s) => assert_eq!(s.store.energy, 300, "Near 同样未被动"),
+        _ => panic!(),
+    }
+    assert!(
+        f.world
+            .room("W1N1")
+            .unwrap()
+            .objects
+            .values()
+            .all(|o| !matches!(o, RoomObject::Creep(c) if c.name == "child")),
+        "无雏形"
+    );
+}
+
+#[test]
+fn drop_rejects_amount_over_holdings() {
+    // drop.js:13：持有不足整条拒绝（官方不部分掉落）
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let c = f.creep("w1", "p1", 10, 10, &[BodyKind::Move, BodyKind::Carry], 20);
+    let mut b = IntentBatch::default();
+    let mut d = IntentData::bare();
+    d.amount = Some(50);
+    d.resource_type = Some("energy".into());
+    b.add_object_intent("p1", c, Action::Drop, d);
+    f.settle(b);
+    assert_eq!(f.creep_state(c).3, 20, "不足额：整条拒绝");
+    assert!(
+        !f.world
+            .room("W1N1")
+            .unwrap()
+            .objects
+            .values()
+            .any(|o| matches!(o, RoomObject::Energy(_))),
+        "无掉落"
+    );
 }

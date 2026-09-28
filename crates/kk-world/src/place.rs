@@ -236,21 +236,32 @@ fn normalize_structure(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<Roo
             }))
         }
         "controller" => {
+            // level 缺省 0（vanilla 未占房分支 `rcl ?? 0`，index.ts:904）；
+            // 占房缺省 1 由 embed createShard 显式传入。safeMode/downgradeTime
+            // 为绝对 tick（vanilla index.ts:971-993：种子相对值 + gameTime + 1）。
             let level = spec
                 .get("level")
                 .or_else(|| spec.get("rcl"))
                 .and_then(Value::as_u64)
-                .unwrap_or(1) as u8;
+                .unwrap_or(0) as u8;
             Ok(RoomObject::Controller(ControllerObj {
                 id: 0,
                 x,
                 y,
                 level,
-                safe_mode: 0,
-                safe_mode_available: 0,
+                safe_mode: spec.get("safeMode").and_then(Value::as_u64).unwrap_or(0),
+                safe_mode_available: saturating_u32(
+                    spec.get("safeModeAvailable")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0),
+                ),
                 progress: spec.get("progress").and_then(Value::as_u64).unwrap_or(0),
-                downgrade_time: None,
+                downgrade_time: spec.get("downgradeTime").and_then(Value::as_u64),
                 owner,
+                is_power_enabled: spec
+                    .get("isPowerEnabled")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
             }))
         }
         "extension" => Ok(RoomObject::Extension(ExtensionObj {
@@ -311,18 +322,24 @@ fn normalize_structure(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<Roo
     }
 }
 
-/// vanilla placeSite：progress 缺省 0；progressTotal 由 CONSTRUCTION_COST 派生。
+/// vanilla placeSite：progress 缺省 0；progressTotal 由 CONSTRUCTION_COST 派生
+/// （vanilla getProgressTotal:1871-1874 为裸成本，不带地形系数——放置路径与
+/// 引擎 intent 建工地（create-construction-site.js:38-48，road 有系数）刻意不同）。
 fn normalize_site(spec: &Value, x: u8, y: u8) -> Result<ConstructionSiteObj, String> {
     let structure_type = spec_str(spec, "structureType")
         .or_else(|| spec_str(spec, "type"))
         .ok_or_else(|| "constructionSite 缺 structureType".to_string())?
         .to_string();
+    let total = crate::types::construction_cost(&structure_type)
+        .ok_or_else(|| format!("constructionSite 类型无 CONSTRUCTION_COST: {structure_type}"))?
+        .max(0);
     Ok(ConstructionSiteObj {
         id: 0,
         x,
         y,
         structure_type,
         progress: saturating_u32(spec.get("progress").and_then(Value::as_u64).unwrap_or(0)),
+        progress_total: saturating_u32(total as u64),
         owner: spec_str(spec, "owner").map(str::to_string),
         name: spec_str(spec, "name").map(str::to_string),
     })
@@ -453,6 +470,7 @@ mod tests {
             progress: 0,
             downgrade_time: None,
             owner: Some("p1".into()),
+            is_power_enabled: false,
         };
         let c2 = PlaceCtx {
             controller: Some(&ctl),

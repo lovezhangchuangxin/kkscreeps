@@ -144,9 +144,7 @@ impl Movement {
             return;
         };
         let object_id = entries[0].id;
-        let Some(entry) = entries.first().copied() else {
-            return;
-        };
+        let entry = entries[0];
         let creep = room.objects.get(&object_id).and_then(|o| match o {
             RoomObject::Creep(c) => Some(c),
             _ => None,
@@ -271,13 +269,15 @@ pub fn check_obstacle_at_xy(
         };
         match obj {
             // 官方 movement.js:22：未获准移动的 creep 即障碍（对穿的另一半——
-            // winner 即将让位所以不挡）；safeMode 下仅房主==移动者且目标同主才豁免
+            // winner 即将让位所以不挡）。safeMode 分支按官方布尔式
+            // `!SM || SM != mover || (SM == mover && mover == target_owner)`：
+            // 自己 safeMode 下敌方 creep 被冻结可穿（不挡）、己方 creep 照挡
             RoomObject::Creep(target) => {
                 let is_winner = movement.winners.contains_key(id);
                 let blocked = !is_winner
                     && match safe_mode_user {
                         None => true,
-                        Some(sm) => sm != mover_owner || target.owner != mover_owner,
+                        Some(sm) => sm != mover_owner || target.owner == mover_owner,
                     };
                 if blocked {
                     return true;
@@ -302,6 +302,13 @@ pub fn check_obstacle_at_xy(
                     continue;
                 }
                 if is_obstacle_type(st) {
+                    return true;
+                }
+            }
+            // 官方 movement.js:25-26：自家 obstacle 结构类型的工地挡路
+            // （move.js 预检无此条，靠 check 兜底——"别把自己关在工地里"）
+            RoomObject::ConstructionSite(s) => {
+                if s.owner.as_deref() == Some(mover_owner) && is_obstacle_type(&s.structure_type) {
                     return true;
                 }
             }

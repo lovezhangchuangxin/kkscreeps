@@ -144,6 +144,8 @@ fn create_construction_site(
     {
         return;
     }
+    // progressTotal 定格存值（官方 create-construction-site.js:38-48：road 在
+    // 沼泽 ×5、墙 ×150；其余类型裸成本）——工地创建后地形再变不改变完成线
     let mut progress_total = cost as u64;
     if structure_type == "road" {
         if w.room
@@ -159,14 +161,13 @@ fn create_construction_site(
             progress_total *= c::CONSTRUCTION_COST_ROAD_WALL_RATIO as u64;
         }
     }
-    let _ = progress_total; // progressTotal 派生自 CONSTRUCTION_COST（投影层），
-    // 官方把地形系数存进 site；M1 派生时同样按地形系数计算（见 world_json 派生 TODO）
     w.insert_new(RoomObject::ConstructionSite(ConstructionSiteObj {
         id: 0,
         x: ux,
         y: uy,
         structure_type: structure_type.to_string(),
         progress: 0,
+        progress_total: progress_total.min(u32::MAX as u64) as u32,
         owner: Some(player.to_string()),
         name: if structure_type == "spawn" {
             name

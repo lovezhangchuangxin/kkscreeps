@@ -45,9 +45,9 @@
 | source/controller 的 None→0 投影（M1 typed world） | `ticksToRegeneration`/`safeMode` 无钟时发 0；官方 getter 与 vanilla 快照为 undefined/null | 0 vs null 仅 getObject 断言面可见；prelude `?? 0` 归一，玩家面等价 |
 | 放置的 owner 宽松接受面（M1 place 归一化） | typed 变体不强制 owner（缺省空串）；vanilla 对 REQUIRING_OWNER 类型与 placeCreep/placeSite/placeFlag 强制 owner 并抛错 | M0 哑世界同宽松；强制化随 M2 玩家 API 层（届时违规放置显形） |
 | source 容量三分支缺 reservation（M1 place 归一化） | ControllerObj 无 reservation 字段，被预定（无主）房间 source 容量判 1500；vanilla 读 user || reservation 判 3000 | 当前放置 spec 无法表达 reservation 不触发；reserveController intent 实装时补字段 |
-| extension 能量容量字段缺失（M1） | ExtensionObj 无 per-RCL 容量（EXTENSION_ENERGY_CAPACITY[rcl] 50..200）；prelude 兜 0 | M1 结算不消费（_calc_spawns 只合计 spawn/extension 存量）；energyAvailable 语义实装时补 |
+| extension 能量容量（M1，深评清偿） | transfer 钳制与 energyAvailable/energyCapacityAvailable 投影均按 `EXTENSION_ENERGY_CAPACITY[rcl]`（extensions/tick.js:10-17）；无 controller 房按 0 拒收（官方 capacityForResource undefined ⇒ 拒） | ExtensionObj 仍无容量字段（结算/投影实时查表）——多资源槽（storeCapacityResource 全量）M2 schema 扩展时一并定型 |
 | 非 energy 掉落资源（M1 place） | 显式拒绝（Err）；vanilla 支持 power/矿物 | M2 扩展 schema 资源种类时放开 |
-| 未知类型工地（M1 place） | 接受、progressTotal 派生 0；vanilla placeSite 对无 CONSTRUCTION_COST 类型抛错 | M0 宽松接受面决策；build 结算按官方 build.js:19-21 拒绝无 cost 目标 |
+| 未知类型工地（M1 place，深评收严） | 无 CONSTRUCTION_COST 的类型 Err（与 vanilla getProgressTotal:1873 抛错对齐；原先宽松接受、progressTotal 派生 0） | build 结算同样拒绝无 cost 目标（build.js:19-21），两侧一致 |
 | creep 放置 ttl 无上限钳制（M1 place） | `time + ttl` 原样（可超 1500）；官方 renew 才有 1500 上限语义（拒绝式非钳制） | 三方评审裁决跟 vanilla 放置语义（index.ts:1087），2026-09-28 |
 | 玩家内 room intents 先于对象 intents（M1 结算） | createConstructionSite/createFlag 全部先于 creep/spawn 对象指令执行 | 官方单层 objects map 中 'room' 键按插入序交错；结果序无关（房间指令与对象指令无共享状态面），登记迭代序差异 |
 | move intent 的 id 形态（M1 结算） | 仅支持 direction 形态；官方 move.js:15-21 还支持"朝相邻 creep 移动"（id 字段） | M2 玩家 API 层补（真沙箱才会产生该形态） |
@@ -56,13 +56,21 @@
 | 踩敌方工地的 safeMode 门（M1 结算） | 未实现（M1 无 safeMode 激活路径） | 官方 movement.js:224 要求 controller 非敌 safeMode；activateSafeMode 实装时补 |
 | 无 controller 房间的建造配额（M1 结算） | 完全跳过配额检查 | 官方按 rcl=0 计（spawn/extension 配额 0 → 拒、road 2500 → 允许）；M1 测试房间恒有 controller |
 | createCreep 空 energyStructures（M1 结算） | `[]` 落回全房间扣费（与缺省同路径） | 官方空数组走显式列表模式（可用 0 → 失败）；根因是 sanitize 后 None/[] 不可区分，M2 intent 通道定型时修 |
-| harvest 0 个 WORK 部件的事件形态（M1 结算） | 推 EVENT_HARVEST(amount=0) | 官方 harvest.js:44 `if(harvestAmount)` 整体跳过；upgrade/build 我们在 effect=0 时跳过（与官方反向）——M2 统一零量事件原则时对齐 |
+| harvest 0 个 WORK 部件的事件形态（M1 结算，深评清偿） | 已对齐官方：`work_power<=0` 整体跳过（harvest.js:44 `if(harvestAmount)` 包住 actionLog+eventLog），不产 amount=0 事件 | API 层不可达（ERR_NO_BODYPART 拦截）；引擎侧零量事件原则已与官方一致 |
 | Engine 沙箱的玩家身份信任（M1） | 按沙箱自报的玩家名合并 intents | M1 沙箱是自家 ScriptedSandbox；M2 真沙箱接入时按注册名强制（防冒名 room intent） |
 | controller 的 hits/hitsMax 投影（M1 typed world） | 不发（prelude 兜 0） | M0 哑世界发 10000 手抄值；官方 getter 直读 DB 字段、vanilla 放置不带 hits → 官方为 undefined。0 vs undefined 是 prelude 残差，M2 玩家 API 层对齐 |
 | typed 变体丢弃 spec 的非 energy 资源与私有时序字段（M1 place） | creep/spawn/extension/storage 的 store 仅保 energy；ticksToDecay/cooldown 等不透传（road 恒 ROAD_DECAY_TIME） | M1 schema 资源单槽；多资源种类随 M2 schema 扩展放开 |
 | 未注册房间放置（M1 embed） | 报错（房间不存在） | M0 哑世界自动建房、vanilla 不校验——显式拒绝优于静默建出无地形房间；screeps-ok 套件先 createShard 后放置，不可达 |
 | 多房间世界 JSON 的 objects 序（M1 typed world） | 房间名序 × 房内 id 升序 | M0 为全局 id 序（单房间等价）；多房间下 Game.creeps 等键插入序可能不同——若出现顺序敏感用例以此归因 |
 | controller safeMode 投影发绝对 tick（M1 typed world） | 玩家面应发剩余值（官方 structures.js:187 getter） | prelude 硬编码 0 不消费、M1 无激活路径（activateSafeMode 是 M2）；激活实装时改 remainingTime 形态（同 spawn.spawning 条目） |
+| movement 四键完全平手的决胜序（M1 结算，深评登记） | 矩阵登记序 = 对象 id 升序；官方 = 玩家 intent 到达序（processor.js:236 for...in 插入序） | 四键全平时胜者可观察分歧；官方到达序本身依赖 DB 查询序（弱保证），id 序是更强的不变量——顺序敏感用例出现时以此归因（D4-1 的 intent 序侧补充） |
+| sanitize 层未接生产（M1 结算，深评登记） | `sanitize_object_intent` 只有单测消费（M1 唯一 intent 源是 typed 的 ScriptedSandbox，无不可信输入面） | M2 真沙箱 intent 通道定型时在入口接线，否则为死代码 |
+| to_int 的字符串前缀语义（M1 sanitize，深评登记） | 全串 parse 后截断（`"1e3"`→1000、`"12abc"`→Err）；官方 parseInt 前缀截断（`"1e3"`→1、`"12abc"`→12） | 干净数字串两侧一致（主流形态）；差异数值形态 M2 接线时按需对齐 |
+| userString 截断单位（M1 sanitize，深评登记） | 按 Unicode chars 截 100；官方 substring 按 UTF-16 码元（100 单位 = 50 个 CJK 字符） | ASCII 名字无差异；M2 玩家名/旗名面显形时对齐 |
+| energyAvailable 投影的房主过滤（M1 typed world，深评登记） | 房间合计全部非 off spawn/extension；官方 game.js:325-328 按查看者过滤自家结构 | 单主人测试房等价；多主人房间的 per-owner 视图随 M2 玩家 API 层实现（runPlayer 按 viewer 投影） |
+| directions 显式空数组（M1 结算，深评登记） | `[]` 折为"无限制"（缺省 1..8）；官方存 `[]`（truthy）→ _born-creep 零方向循环、出生坐标 undefined 的病态行为 | 官方自身行为即坏，不作对照基线；JS API 层 `directions: []` 官方就判 ERR_INVALID_ARGS，intent 层不可达 |
+| build 的"同格 swamp/wall 对象"系数分支（M1 结算，深评登记） | 不查（typed 世界无 swamp/wall 对象类型，地形走 Terrain）；官方 create-construction-site.js:39-44 对同格对象也乘系数 | 当前状态空间不可达；M2 若经 Generic 通道合成此类对象需补判定 |
+| schema v1 内字段追加（M1 kk-schema，深评登记） | ControllerObj 尾部加 `is_power_enabled`、ConstructionSiteObj 中部加 `progress_total`，未 bump SCHEMA_VERSION | 版本冻结纪律保护的是已发布的持久字节流；M1 快照尚无任何落盘数据在流通，v1 内演化无损。首个持久化格式发布（M2 存储）起 bump 纪律生效，升级链挂载点已在 `UPGRADE_CHAIN` 占位 |
 
 ## 四、验收关卡（不做完不算兼容）
 

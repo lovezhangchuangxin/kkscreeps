@@ -73,3 +73,15 @@ pub fn construction_cost(structure_type: &str) -> Option<i64> {
 pub fn is_obstacle_type(type_name: &str) -> bool {
     c::OBSTACLE_OBJECT_TYPES.contains(&type_name)
 }
+
+/// extension 的单结构能量容量（官方 extensions/tick.js:10-17 按 RCL 归一
+/// `storeCapacityResource.energy = EXTENSION_ENERGY_CAPACITY[level] || 0`）。
+/// 表键 0..=8；无 controller 的房查 0 档（官方该情形不归一，M1 按同表取值）。
+pub fn extension_energy_capacity(rcl: u8) -> i64 {
+    let key = rcl.to_string();
+    c::EXTENSION_ENERGY_CAPACITY
+        .iter()
+        .find(|(k, _)| *k == key)
+        .map(|(_, v)| *v)
+        .unwrap_or(0)
+}

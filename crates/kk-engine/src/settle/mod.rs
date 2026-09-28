@@ -283,6 +283,9 @@ pub struct Engine {
     next_id: u64,
     /// 最近一次 tick 的房间事件日志（按房间结算序拼接；M1 测试消费，M2 持久化）。
     pub last_events: Vec<serde_json::Value>,
+    /// 测试钩子：命中名房的结算注入 Err，验证两阶段回退（仅 cfg(test) 可见）。
+    #[cfg(test)]
+    fail_room: Option<String>,
 }
 
 impl Default for Engine {
@@ -300,12 +303,17 @@ impl Engine {
             sandboxes: BTreeMap::new(),
             next_id,
             last_events: Vec::new(),
+            #[cfg(test)]
+            fail_room: None,
         }
     }
 
     /// 推进一个 tick：收集 intents（玩家名序）→ 逐房间（名字序）结算。
-    /// 每房间 clone→结算→写回（失败即回退，ADR-008 第 3 条）；任一房间失败
-    /// 即整体 Err 且世界保持一致（已写回房间保留、当前房间回退、time 不推进）。
+    ///
+    /// 两阶段提交（§6.5）：全部房间先在克隆副本上结算，任一房间 Err 即整体
+    /// 放弃——世界、玩家（gcl）、id 分配器、time 全部保持上一 tick 状态；全部
+    /// 成功才统一写回并推进 time（逐房即写会让先房在下 tick 按同一 time 重放
+    /// 结算——双倍采集）。
     pub fn tick(&mut self) -> Result<(), SettleError> {
         let mut batch = IntentBatch::default();
         {
@@ -320,24 +328,83 @@ impl Engine {
             }
         }
         let mut events = Vec::new();
+        let mut settled: Vec<(String, RoomState)> = Vec::new();
+        let mut next = self.next_id.max(self.world.next_obj_id());
+        let mut players = self.players.clone();
         let room_names: Vec<String> = self.world.rooms.keys().cloned().collect();
         for name in room_names {
+            #[cfg(test)]
+            if self.fail_room.as_deref() == Some(name.as_str()) {
+                return Err(SettleError(format!("故障注入：房间 {name} 结算失败")));
+            }
             let mut room = self.world.rooms.get(&name).expect("房间名来自键集").clone();
-            let mut next = self.next_id.max(self.world.next_obj_id());
-            let mut room_events = settle_room(
-                &mut room,
-                self.world.time,
-                &mut next,
-                &mut self.players,
-                &batch,
-            )?;
-            self.world.rooms.insert(name, room);
-            self.next_id = next;
-            self.world.bump_next_obj_id(next);
+            let mut room_events =
+                settle_room(&mut room, self.world.time, &mut next, &mut players, &batch)?;
+            settled.push((name, room));
             events.append(&mut room_events);
         }
+        for (name, room) in settled {
+            self.world.rooms.insert(name, room);
+        }
+        self.players = players;
+        self.next_id = next;
+        self.world.bump_next_obj_id(next);
         self.last_events = events;
         self.world.advance_ticks(1);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 两阶段回退（§6.5）：后房 Err 时先房的结算不得写回——time/能量/重生钟
+    /// 全部保持上一 tick；故障解除后的首个成功 tick 才统一推进（否则先房会在
+    /// 同一 time 上被重放结算——双倍采集）。
+    #[test]
+    fn engine_tick_rolls_back_all_rooms_on_failure() {
+        let mut world = kk_world::World::new(1);
+        for name in ["W1N1", "W2N2"] {
+            world.register_room(name, kk_core::Terrain::plains());
+            world
+                .insert(
+                    name,
+                    RoomObject::Source(kk_schema::room::SourceObj {
+                        id: 0,
+                        x: 5,
+                        y: 5,
+                        energy: 1000,
+                        energy_capacity: 3000,
+                        next_regeneration_time: None,
+                    }),
+                )
+                .unwrap();
+        }
+        let mut engine = Engine::new(world);
+        engine.fail_room = Some("W2N2".into());
+        assert!(engine.tick().is_err(), "注入房 Err ⇒ 整体 Err");
+        assert_eq!(engine.world.time, 0, "time 不推进");
+        for name in ["W1N1", "W2N2"] {
+            match engine.world.room(name).unwrap().objects.values().next() {
+                Some(RoomObject::Source(s)) => {
+                    assert_eq!(s.energy, 1000, "{name}：能量未被动过");
+                    assert_eq!(s.next_regeneration_time, None, "{name}：重生钟未挂");
+                }
+                _ => panic!("{name}：非 source"),
+            }
+        }
+        // 故障解除后正常推进：两房同一 tick 挂钟（time=0 → 300）
+        engine.fail_room = None;
+        engine.tick().unwrap();
+        assert_eq!(engine.world.time, 1);
+        for name in ["W1N1", "W2N2"] {
+            match engine.world.room(name).unwrap().objects.values().next() {
+                Some(RoomObject::Source(s)) => {
+                    assert_eq!(s.next_regeneration_time, Some(300), "{name}：挂钟")
+                }
+                _ => panic!("{name}：非 source"),
+            }
+        }
     }
 }

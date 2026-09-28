@@ -43,10 +43,16 @@
 > 每步经三方并行评审；架构结论升格 [ADR-011](decisions/ADR-011-engine-skeleton.md)）——kk-core/kk-schema/kk-world
 > typed world/kk-engine 单房间结算（movement 仲裁/资源经济/孵化链）/**embed 通道切真实结算**（screeps-ok
 > 适配器经 settle_room 推进世界，DumbWorld 退役）；**棘轮进 CI（第四 job）**，地板 268/2914
-> （[compat/reports/ratchet.json](../compat/reports/ratchet.json) 唯一真相源；沿革 M0 237 → 步 5 真结算 265 → 步 6 仪表批次 268）。
-> bot 验收：tooangel 房间管线完整执行、overmind 推进到 RoomIntel 全量执行，2000 tick 零中断、
-> 缺失 API 清零，bot-check 退出码机器可判定（0/1/2）。欠账处置终表见
-> [M0 评审台账](../compat/reports/m0-code-review.md) 追记（17 项：14 修 + 3 重登记 M2-2A）。
+> （[compat/reports/ratchet.json](../compat/reports/ratchet.json) 唯一真相源；沿革 M0 237 → 步 5 真结算 265
+> → 步 6 仪表批次 268 → 深评 follow-up 274）。
+> bot 验收：tooangel 房间管线完整执行（M1 期实跑 300 tick）、overmind 推进到 RoomIntel 全量执行
+> （2000 tick 零中断）、缺失 API 清零，bot-check 退出码机器可判定（0/1/2）。欠账处置终表见
+> [M0 评审台账](../compat/reports/m0-code-review.md) 追记（17 项：15 修 + 2 重登记 M2-2A）。
+>
+> **M1 深度评审轮（2026-09-28）**：收官后 5 路 subagent 并行深评，修 4 high + 13 medium + 3 low
+> （movement 工地障碍/出生占位/extension 容量/生成脚本落盘/safeMode 冻结可穿/跨房两阶段提交/
+> directions 整单拒/energyAvailable 投影/controller 种子族/progressTotal 存值等）+ 6 项重登记，
+> 详见台账追记与 [兼容灰区表](designs/compatibility.md)。
 
 ## M2 单机可玩（内部两道关卡）
 

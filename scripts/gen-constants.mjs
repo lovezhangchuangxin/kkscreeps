@@ -111,12 +111,13 @@ for (const [key, value] of Object.entries(data)) {
   out += `pub const ${rustIdent(key)}: ${type} = ${c.value};\n`;
 }
 
-// 生成物过一遍 rustfmt：保证"重新生成"与入库文件零 diff（M3 的 CI 新鲜度
-// 校验前置条件）；rustfmt 不可用时以单行形态落盘并在退出码上显形
+// 先落盘再过 rustfmt：rustfmt 只就地格式化已存在的文件，落盘必须在其之前，
+// 否则重生成不生效；rustfmt 失败时产物已写入但未格式化，退出码显形、本地
+// 补跑后再提交（M3 的 CI 新鲜度校验依赖"重生成与入库文件零 diff"这一性质）
+writeFileSync(output, out);
 const fmt = spawnSync('rustfmt', ['--edition', '2024', output], { stdio: 'inherit' });
-if (fmt.status !== 0) {
-  writeFileSync(output, out);
-  console.error(`rustfmt 不可用（status=${fmt.status}），已写入未格式化产物——本地补跑 rustfmt 后再提交`);
+if (fmt.error || fmt.status !== 0) {
+  console.error(`rustfmt 不可用或失败（status=${fmt.status ?? fmt.error.code}），已写入未格式化产物——本地补跑 rustfmt 后再提交`);
   process.exit(1);
 }
 

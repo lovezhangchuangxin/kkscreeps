@@ -4,7 +4,7 @@
 
 > **给没玩过 Screeps 的读者**：Screeps 是一个"写代码玩游戏"的 MMO——玩家用 JavaScript 编写 AI，控制名为爬爬虫（creep）的单位在分成一个个 50×50 格房间的世界里采集能量、建造、战斗。服务器按固定节拍（tick）推进世界；玩家的代码每 tick 在服务器上运行一次，消耗的"CPU"是一种按 tick 发放、可攒可透支的配额货币（约等于毫秒）。玩家代码不直接改世界，而是下达"指令"（intent），由服务器统一结算。
 
-**当前状态（2026-09-28）：M1（引擎骨架）已完成**——M0 已收官（八轮代码评审、screeps-ok 上游基准独立复现零偏差 vanilla 2897 / xxscreeps 2642、[ADR-010](docs/decisions/ADR-010-screeps-ok-adapter-bridge.md) 一实例一线程原型验证通过）。M1 交付：kk-core/kk-schema/kk-world typed world/kk-engine 单房间结算（movement 仲裁/资源经济/孵化链）、**embed 通道切真实结算**（screeps-ok 适配器经 typed world + settle_room 推进世界）、**通过率棘轮进 CI**（第四 job，地板 268/2914——[compat/reports/ratchet.json](compat/reports/ratchet.json) 唯一真相源；M0 起点为 237；架构结论见 [ADR-011](docs/decisions/ADR-011-engine-skeleton.md)）；tooangel 房间管线完整执行、overmind 推进到 RoomIntel 全量执行（2000 tick 零中断、缺失 API 清零，bot-check 退出码机器可判定）。下一步 M2：真沙箱接引擎与玩家 API 层。
+**当前状态（2026-09-28）：M1（引擎骨架）已完成并经深度评审收口**——M0 已收官（八轮代码评审、screeps-ok 上游基准独立复现零偏差 vanilla 2897 / xxscreeps 2642、[ADR-010](docs/decisions/ADR-010-screeps-ok-adapter-bridge.md) 一实例一线程原型验证通过）。M1 交付：kk-core/kk-schema/kk-world typed world/kk-engine 单房间结算（movement 仲裁/资源经济/孵化链）、**embed 通道切真实结算**（screeps-ok 适配器经 typed world + settle_room 推进世界）、**通过率棘轮进 CI**（第四 job，地板见 [compat/reports/ratchet.json](compat/reports/ratchet.json) 唯一真相源；M0 起点为 237；架构结论见 [ADR-011](docs/decisions/ADR-011-engine-skeleton.md)）；收官后 5 路 subagent 深评修复 4 high + 13 medium + 3 low（详见[台账追记](compat/reports/m0-code-review.md)）。bot 验收：tooangel 房间管线完整执行（300 tick）、overmind 推进到 RoomIntel 全量执行（2000 tick 零中断、缺失 API 清零，bot-check 退出码机器可判定）。下一步 M2：真沙箱接引擎与玩家 API 层。
 
 ## 技术定案摘要
 

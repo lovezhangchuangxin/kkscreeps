@@ -20,8 +20,10 @@ M1（引擎骨架）要交付 kk-core / kk-schema / 单房间结算 / 通过率�
    spec 私有字段折算不泄入；结算范围外类型落 Generic 透传桶保持 FIND 可见性）。
 2. **结算 = 官方 processor.js 阶段序的忠实子集 + 三处有意差异**（方案 D4）：对象迭代序
    用 id 升序（= 创建序，天然确定；官方为 DB 插入序）、bulk 写入改为工作副本直接变更
-   （内存模型）、结算失败即整房回退（官方打日志继续）。每房间 clone→settle→写回，
-   `World::advance_ticks` 是 player_ticks 唯一维护点。
+   （内存模型）、结算失败即整房回退（官方打日志继续）。每房间 clone→settle→写回
+   （深评轮已升级为全房两阶段提交——全部克隆结算成功后统一写回，杜绝部分失败时
+   同 time 重放结算，见"后果与遗留"），`World::advance_ticks` 是 player_ticks
+   唯一维护点。
 3. **intent 通道 = "世界视图进、intent 批出" 的 Sandbox trait**（方案 D5）：M1 只有
    ScriptedSandbox 假实现（固定脚本回放），embed 路径 intents 恒空——玩家 intent 收集
    通道是 M2-2A。intent 层（sanitize 白名单、同对象冲突压制图、幂等覆盖）按官方全图
@@ -47,9 +49,9 @@ M1（引擎骨架）要交付 kk-core / kk-schema / 单房间结算 / 通过率�
 
 - 基线 237 → 268（步 5 embed 切真实结算 +28 全转绿零转红；步 6 仪表批次 +3；逐用例
   归因见 compat/reports/m0-code-review.md 追记）；
-- bot：tooangel 房间管线完整执行（布局→角色→spawn→creep 分发）、overmind 推进到
-  RoomIntel 全量执行，2000 tick 零中断、缺失 API 清零，bot-check 退出码机器可判定
-  （0/1/2）；wasm-bot 10 tick 零中断；
+- bot：tooangel 房间管线完整执行（M1 期实跑 300 tick；2000 tick 证据系 M0 期报告，
+  下里程碑重跑）、overmind 推进到 RoomIntel 全量执行（2000 tick 零中断、缺失 API 清零），
+  bot-check 退出码机器可判定（0/1/2）；wasm-bot 10 tick 零中断；
 - 门禁：fmt/clippy 0 警告、cargo test 全绿（LIFO 零违规）、pnpm run check 全套绿。
 
 ## 后果与遗留
@@ -58,5 +60,10 @@ M1（引擎骨架）要交付 kk-core / kk-schema / 单房间结算 / 通过率�
   M1 起的常设纪律；
 - 灰区按 compatibility.md 灰区表持续登记（步 3/4/5 各一批：迭代序/玩家序/失败回退/
   投影形态等）；
+- **M1 深度评审轮（收官后，2026-09-28）**：5 路 subagent 并行深评修复 4 high + 13 medium + 3 low
+  ——其中两处架构级修正回写本文：决策 2 的"每房间 clone→settle→写回"已升级为
+  **两阶段提交**（全房克隆结算成功后统一写回，杜绝后房失败时先房按同 time 重放结算）；
+  决策 4 的"版本升级函数链"由承诺变为 `UPGRADE_CHAIN` 挂载点占位（v1 起步空链）；
+  详见台账追记；
 - M2 输入已登记：intent 收集通道与真沙箱、独立 runExpr 通道计费口径、tombstone 变体、
   多实例 LIFO、旧对象引用失效语义。

@@ -620,7 +620,7 @@ fetch-depth 1 下 HEAD blob 完整可用；报告 1.7MB 需显式 maxBuffer）�
 
 ## 追记：M1 收官——欠账处置终表（2026-09-28，步 8）
 
-方案 §9 处置表的最终结局（17 项：14 修 + 3 重登记）：
+方案 §9 处置表的最终结局（17 项：15 修 + 2 重登记）：
 
 | # | 登记项 | 结局（提交） |
 |---|---|---|
@@ -645,3 +645,53 @@ fetch-depth 1 下 HEAD blob 完整可用；报告 1.7MB 需显式 maxBuffer）�
 M1 期间新增登记（非 §9 原 17 项）：灰区表步 3/4/5 三批（迭代序/玩家序/失败回退/
 投影形态等，见 docs/designs/compatibility.md）；棘轮运维四项与步 6 已知登记三项
 （见上文追记）。基线终值 **268/2914**（ratchet.json 唯一真相源）。
+
+## 追记：M1 深度质量评审轮（2026-09-28，5 路 subagent 并行对照官方源码）
+
+M1 收官后的全量深评：kk-core/schema（A）、world/embed（A-）、infra/CI/文档（A）、
+intent+movement（B）、经济+孵化（B+）。5 路评审员逐模块对照本地官方源码 file:line
+取证，全部发现经本人复核官方原文后处置。
+
+### 修复（high 4 + medium 13 + low 3；high 与多数 medium 配锁值回归，其余由单测/棘轮间接覆盖）
+
+| # | 级 | 发现 | 处置 |
+|---|---|---|---|
+| 1 | high | movement check 缺"自家 obstacle 工地"障碍分支（movement.js:25-26）——creep 可走进自家工地格，完工结构落在 creep 头上 | 修：check_obstacle_at_xy 增 ConstructionSite 分支；`own_construction_site_blocks_movement` |
+| 2 | high | 出生占位把 creep 当非障碍（_born-creep.js:12-15 creep ∈ OBSTACLE）——双 creep 同格非法态；两路评审员独立发现；步 4 的 H7 测试恰绕开被测行为锁死了 bug | 修：born_creep 两循环 creep/工地均按官方判；改写测试为 `birth_blocked_by_stationary_creep_until_it_leaves`（真覆盖） |
+| 3 | high | transfer 进 extension 容量 i64::MAX/2（kk-core 已有 EXTENSION_ENERGY_CAPACITY 表未用）——可无限灌注、u32 溢出隐患 | 修：按 controller.level 查表（无 controller 拒收）；`transfer_into_extension_clamps_by_rcl` |
+| 4 | high | gen-constants.mjs 成功路径不落盘（writeFileSync 只在 rustfmt 失败分支）——重生成静默失效；沙箱实证 | 修：先写后格式化；重跑两次零 diff 验证幂等 |
+| 5 | med | movement safeMode creep 分支写反：官方"自己 safeMode 下敌方 creep 冻结可穿、己方照挡"，实现恰好相反（潜伏，M1 无激活路径） | 修：按官方布尔式 `!SM ‖ SM≠mover ‖ (SM=mover ∧ mover=target)` 重写 |
+| 6 | med | rampart 落成写 "user" 读 "owner"——build 出的自家 rampart 挡建造者 | 修：complete_construction 统一 "owner" |
+| 7 | med | createCreep 缺 checkStructureAgainstController（create-creep.js:17）——超配额 off spawn 仍可孵化 | 修：utils.js:456-506 全语义（含距离计数路径）；`create_creep_rejected_for_off_spawn` |
+| 8 | med | directions 校验语义反：官方任一越界/非整数整单拒绝，实现过滤保留 | 修：IntentData.directions 改 Vec<i64>（parseInt+保序 uniq，不可解析元素哨兵传递），1..=8 校验移入 createCreep 整单拒 |
+| 9 | med | Engine::tick 跨房原子性破缺：逐房即写，后房 Err 时先房已提交而 time 未推进 → 下 tick 同 time 重放（双倍采集）；且 Err 路径全库不可达、零测试 | 修：两阶段提交（全房克隆结算成功后统一写回）+ cfg(test) 故障注入钩子 + 回退测试 |
+| 10 | med | build 无视目标格 creep（build.js:50-59 blockingCreeps，含 safeMode 敌我分支） | 修：全语义实现；`build_blocked_by_creep_on_tile` |
+| 11 | med | drop 超持钳制部分掉落，官方整条拒绝（drop.js:13） | 修：intent 路径拒绝；`drop_rejects_amount_over_holdings` |
+| 12 | med | harvest 零 WORK 仍产 amount=0 事件（官方 if(harvestAmount) 整体跳过） | 修：work_power<=0 早退（灰区表条目同步清偿） |
+| 13 | med | prelude 投影 energyAvailable 硬编码 0（结算内部算对、玩家侧永 0）+ energyCapacityAvailable 硬编码 300 | 修：world_json 房间投影携带双值（game.js:325-328 非 off spawn/extension 口径），prelude 接真值 |
+| 14 | med | createShard 静默吞 safeMode/safeModeAvailable/ticksToDowngrade/powerEnabled（screeps-ok 契约合法种子、vanilla 全兑现）；未占房 rcl 缺省 1（vanilla 0）；rcl 非整数静默别名 | 修：controller 种子族全兑现（vanilla index.ts:896-993 绝对值换算）；未占房缺省 0；非整数拒绝；schema 增 is_power_enabled |
+| 15 | med | constructionSite progressTotal 投影缺地形系数、结算按当前地形重算（官方建工地时定格存值）——沼泽上路显示 progress>progressTotal 仍未完工 | 修：schema 增 progress_total 存值（place=裸成本对齐 vanilla getProgressTotal、intent 建=成本×系数对齐 create-construction-site.js:38-48）；build/投影读存值 |
+| 16 | med | §10 承诺缺 5 条 movement 用例（级联清链/edge 特例/道路磨损/资源重量/踩工地）——high①② 的存活盲区 | 修：5 条全配（另加 build-creep/off-spawn/extension-cap/drop 四条） |
+| 17 | med | ratchet.mjs 不校验 ratchet.json 形状——floor 键名错时 `passed < undefined` 恒 false，任何回归静默 exit 0 | 修：形状校验先行（floor/numTotalTests 正整数），非法即拒 |
+| 18 | low | movement_execute 两处 expect：对象在 check 与 execute 间消亡（如 spawnstomp）会 panic 绕过 D4-3 回退 | 修：改静默跳过 |
+| 19 | low | Terrain from_slice 旁路无校验、RoomName::from_xy 无可往返域断言、kk-core include_str 双斜杠、schema 魔数注释与 LE 字节序不符（"PSKK"） | 修：debug_assert ×2 + 路径修正 + 注释修正 |
+| 20 | low | rpc.ts kill() 后幸存 pending 等各自超时误归因"RPC 超时"；CI push 无分支过滤双跑四 job | 修：kill 内 failAll 真实死因；push 限 main |
+
+### 重登记（本轮不修，去向明确）
+
+- sanitize 未接生产（M2 intent 通道接线时接，现仅单测消费）；
+- to_int 字符串前缀语义差异（"1e3"→1000 vs 官方 1）、userString chars vs UTF-16；
+- movement 四键完全平手决胜序 = id 序非 intent 到达序（D4-1 补充侧）；
+- energyAvailable 多主人房 per-viewer 过滤（M2 玩家 API 层）；
+- schema v1 内字段追加未 bump 版本（M1 无流通持久字节流；UPGRADE_CHAIN 挂载点占位）；
+- createCreep 空 energyStructures、踩工地 safeMode 门、无 controller 建造配额等（维持原登记）。
+
+### 文档修正
+
+- 台账终表计数笔误：头/roadmap 原写"14 修+3 重登记"，表体实为 15/2（#13、#16 重登记）；
+- "2000 tick 零中断"证据归属修正：M1 期实跑 tooangel 300t（房间管线完整）/ overmind
+  2000t（RoomIntel 全量）——2000t 同时归两 bot 的表述在 README/ADR-011/roadmap 三处修正；
+- tooangel 2000t 证据（m0-bot-missing-api.md）系 M0 期旧报告，下里程碑重跑到 2000t。
+
+基线影响：energyAvailable/progressTotal/controller 种子三处投影变更 → 全量重跑棘轮
+**268 → 274（+6 全转绿零转红）**，floor 已随本轮上调（ratchet.json 沿革）。

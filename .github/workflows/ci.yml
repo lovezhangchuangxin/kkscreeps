@@ -4,7 +4,10 @@ name: CI
 # 仓库尚未推远端时，本地等价命令是 `pnpm run check`（根 package.json）。
 
 on:
+  # push 限 main：PR 分支的 push 与 pull_request 事件会各跑一遍全部 job
+  # （含 ratchet 的 release 构建 + 全量套件），双倍分钟数
   push:
+    branches: [main]
   pull_request:
 
 jobs:

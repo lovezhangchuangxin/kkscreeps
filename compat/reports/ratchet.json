@@ -1,6 +1,6 @@
 {
-  "floor": 268,
+  "floor": 274,
   "numTotalTests": 2914,
   "updated": "2026-09-28",
-  "note": "screeps-ok 通过率地板（方案 D6）：唯一真相源，基线报告 JSON 只是产物。地板只升不降；行为变化收尾时随全量重跑上调并同步 README/roadmap。沿革：M0 收官 237 → 步5 embed 切 typed world+真结算 265 → 步6 看门狗/仪表批次 268。"
+  "note": "screeps-ok 通过率地板（方案 D6）：唯一真相源，基线报告 JSON 只是产物。地板只升不降；行为变化收尾时随全量重跑上调并同步 README/roadmap。沿革：M0 收官 237 → 步5 embed 切 typed world+真结算 265 → 步6 看门狗/仪表批次 268 → 深评 follow-up（energyAvailable/progressTotal/controller 种子投影）274。"
 }

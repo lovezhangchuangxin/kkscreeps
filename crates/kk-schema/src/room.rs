@@ -7,9 +7,11 @@
 
 use crate::{Cursor, Schema, SchemaError};
 
-/// 当前 schema 版本。字段布局变更必须 +1 并补升级函数（见 [`decode_snapshot`]）。
+/// 当前 schema 版本。**首个持久化格式发布（M2 存储）起**，字段布局变更必须
+/// +1 并在 [`UPGRADE_CHAIN`] 补升级函数；发布前的 v1 内演化无损（尚无任何
+/// 落盘字节在流通，灰区表已登记此约定）。
 pub const SCHEMA_VERSION: u16 = 1;
-/// 封套魔数（"KKSP"）。
+/// 封套魔数（LE 落盘字节序为 `50 53 4B 4B` = "PSKK"）。
 pub const SNAPSHOT_MAGIC: u32 = 0x4b4b_5350;
 
 crate::kk_schema! {
@@ -98,6 +100,7 @@ crate::kk_schema! {
         (pub progress: u64)
         (pub downgrade_time: opt u64)
         (pub owner: opt str)
+        (pub is_power_enabled: bool)
     }
 }
 
@@ -163,14 +166,18 @@ crate::kk_schema! {
 }
 
 crate::kk_schema! {
-    /// 工地（progress_total 由 CONSTRUCTION_COST 派生，不入快照；structure_type
-    /// 存官方字符串——M1 结算外类型照常可摆放）。
+    /// 工地（progress_total 为创建时定格的总工程量：放置路径=裸 CONSTRUCTION_COST
+    /// （vanilla getProgressTotal:1871-1874），引擎 intent 建工地=成本×地形系数
+    /// （create-construction-site.js:38-48，仅 road 有系数）——存字段而非派生，
+    /// 避免 setTerrain 后完成线漂移；structure_type 存官方字符串——M1 结算外
+    /// 类型照常可摆放）。
     pub ConstructionSiteObj {
         (pub id: u64)
         (pub x: u8)
         (pub y: u8)
         (pub structure_type: str)
         (pub progress: u32)
+        (pub progress_total: u32)
         (pub owner: opt str)
         (pub name: opt str)
     }
@@ -418,6 +425,24 @@ pub fn encode_snapshot(s: &RoomSnapshot) -> Vec<u8> {
     out
 }
 
+/// 版本升级函数链（方案 D2）：`UPGRADE_CHAIN[n]` 把 v(n+1) 字节升级为 v(n+2)。
+/// 当前 v1 起步无历史版本，链为空；SCHEMA_VERSION +1 时在此追加转换函数，
+/// 旧版本字节即自动"读入升级再解码"。
+type UpgradeFn = fn(Vec<u8>) -> Result<Vec<u8>, SchemaError>;
+const UPGRADE_CHAIN: [UpgradeFn; (SCHEMA_VERSION - 1) as usize] = [];
+
+/// 把 `from` 版本的封套字节（含头）沿升级链推进到当前版本。
+/// 链空时对任何旧版本只能拒绝——机制位置由测试锁定（v0 伪造字节走本路径）。
+fn upgrade_snapshot(from: u16, mut bytes: Vec<u8>) -> Result<Vec<u8>, SchemaError> {
+    if from == 0 || from > SCHEMA_VERSION {
+        return Err(SchemaError::UnsupportedVersion(from));
+    }
+    for step in UPGRADE_CHAIN.iter().skip((from - 1) as usize) {
+        bytes = step(bytes)?;
+    }
+    Ok(bytes)
+}
+
 /// 解码整个快照。旧版本字节先过升级链再到当前版本。
 pub fn decode_snapshot(bytes: &[u8]) -> Result<RoomSnapshot, SchemaError> {
     let mut cur = Cursor::new(bytes);
@@ -427,8 +452,9 @@ pub fn decode_snapshot(bytes: &[u8]) -> Result<RoomSnapshot, SchemaError> {
     }
     let version = u16::decode_from(&mut cur)?;
     if version != SCHEMA_VERSION {
-        // v1 起步：无历史版本可升级
-        return Err(SchemaError::UnsupportedVersion(version));
+        // 旧版本：整封套（含头）过升级链，产出当前版本字节后重解码
+        let upgraded = upgrade_snapshot(version, bytes.to_vec())?;
+        return decode_snapshot(&upgraded);
     }
     let snap = RoomSnapshot::decode_from(&mut cur)?;
     if cur.remaining() != 0 {
@@ -543,6 +569,7 @@ mod tests {
                     progress: 12_345,
                     downgrade_time: None,
                     owner: Some("p1".into()),
+                    is_power_enabled: false,
                 }),
                 RoomObject::Spawn(SpawnObj {
                     id: 4,
@@ -573,6 +600,7 @@ mod tests {
                     y: 31,
                     structure_type: "tower".into(),
                     progress: 120,
+                    progress_total: 5000,
                     owner: Some("p1".into()),
                     name: None,
                 }),
@@ -613,6 +641,15 @@ mod tests {
         assert_eq!(
             decode_snapshot(&old),
             Err(SchemaError::UnsupportedVersion(9))
+        );
+        // 版本 0 走升级链入口（机制位置锁定：链空 ⇒ 拒绝；SCHEMA_VERSION +1 时
+        // 此用例改写为"伪造 v0 字节 → 过链 → 成功解码"）
+        let mut v0 = bytes.clone();
+        v0[4] = 0;
+        v0[5] = 0;
+        assert_eq!(
+            decode_snapshot(&v0),
+            Err(SchemaError::UnsupportedVersion(0))
         );
         // 截断载荷
         assert_eq!(
