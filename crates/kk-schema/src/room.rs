@@ -244,14 +244,74 @@ crate::kk_schema! {
 }
 
 crate::kk_schema! {
-    /// 掉落资源（resource_type 0=energy，其余 M2）。官方无衰减钟字段：
+    /// 掉落资源（resource_type 0=energy/1=power/2=G）。官方无衰减钟字段：
     /// 每 tick `amount -= ceil(amount / ENERGY_DECAY)`（energy/tick.js），≤0 移除。
+    /// B3 起任意资源名经 `resource: opt str` 承载（Some 时 code 无效——墓碑/废墟
+    /// 衰减掉的 boost 矿物等官方按资源名键落地，_create-energy.js:31-36 的
+    /// resourceType 字符串形态）。
     pub EnergyObj {
         (pub id: u64)
         (pub x: u8)
         (pub y: u8)
         (pub resource_type: u8)
         (pub amount: u32)
+        (pub resource: opt str)
+    }
+}
+
+crate::kk_schema! {
+    /// 任意资源量（资源名 + 正量）：墓碑/废墟 store 的额外资源槽（Store 结构
+    /// 的 energy/ghodium 之外——boost 矿物回收、container 全资源承接等）。
+    /// 官方 store 是按资源名键的开放对象（_die.js:35/78 的 bodyResources 与
+    /// object.store 逐键循环），v1 schema 双槽 + 本列表承载全集。
+    pub ResourceStack {
+        (pub resource: str)
+        (pub amount: u32)
+    }
+}
+
+crate::kk_schema! {
+    /// 墓碑（B3）。官方 _die.js:22-34 的持久化面：user/deathTime/decayTime/
+    /// creepId/creepName/creepTicksToLive/creepBody（官方存类型名数组，此处
+    /// 存部件码——kk-world BodyKind 映射）/creepSaying（公开遗言，actionLog
+    /// 位图无文本载荷——恒 None，灰区表登记）/store（energy/G 双槽 +
+    /// store_extra 承载 boost 矿物等其余资源）。
+    pub TombstoneObj {
+        (pub id: u64)
+        (pub x: u8)
+        (pub y: u8)
+        (pub death_time: u64)
+        (pub decay_time: u64)
+        (pub creep_id: opt u64)
+        (pub creep_name: opt str)
+        (pub creep_ticks_to_live: u32)
+        (pub creep_body: vec u8)
+        (pub creep_saying: opt str)
+        (pub owner: opt str)
+        (pub store: Store)
+        (pub store_extra: vec ResourceStack)
+    }
+}
+
+crate::kk_schema! {
+    /// 废墟（B3）。官方 structures/_destroy.js:22-40 的持久化面：
+    /// structure{id,type,hits:0,hitsMax,user}（被摧毁结构的存照——structure_id
+    /// 存原结构 u64 id、投影侧转字符串；hitsMax 无表项的结构官方 undefined →
+    /// None）、destroyTime、decayTime = gameTime + (RUIN_DECAY_STRUCTURES[type]
+    /// || RUIN_DECAY)、user（官方 `if(object.user)` 空串 falsy 不落 → 投影侧
+    /// 同口径）、store（原结构全量承接：_destroy.js:37 `object.store || {}`）。
+    pub RuinObj {
+        (pub id: u64)
+        (pub x: u8)
+        (pub y: u8)
+        (pub structure_id: u64)
+        (pub structure_type: str)
+        (pub structure_hits_max: opt u32)
+        (pub destroy_time: u64)
+        (pub decay_time: u64)
+        (pub owner: opt str)
+        (pub store: Store)
+        (pub store_extra: vec ResourceStack)
     }
 }
 
@@ -294,7 +354,11 @@ pub enum RoomObject {
     Flag(FlagObj),
     Road(RoadObj),
     Storage(StorageObj),
-    /// M1 结算范围外的对象（tower/rampart/lab/tombstone/portal/…）：完整记录
+    /// 墓碑（B3 变体——死亡结算产出，衰减钟驱动）。
+    Tombstone(TombstoneObj),
+    /// 废墟（B3 变体——结构摧毁结算产出，衰减钟驱动）。
+    Ruin(RuinObj),
+    /// M1 结算范围外的对象（tower/rampart/lab/portal/…）：完整记录
     /// 以 JSON 透传存放——保持与 M0 哑世界相同的放置接受面，结算忽略之。
     Generic(GenericObj),
 }
@@ -314,6 +378,8 @@ impl RoomObject {
             Self::Flag(o) => o.id,
             Self::Road(o) => o.id,
             Self::Storage(o) => o.id,
+            Self::Tombstone(o) => o.id,
+            Self::Ruin(o) => o.id,
             Self::Generic(o) => o.id,
         }
     }
@@ -332,6 +398,8 @@ impl RoomObject {
             Self::Flag(o) => (o.x, o.y),
             Self::Road(o) => (o.x, o.y),
             Self::Storage(o) => (o.x, o.y),
+            Self::Tombstone(o) => (o.x, o.y),
+            Self::Ruin(o) => (o.x, o.y),
             Self::Generic(o) => (o.x, o.y),
         }
     }
@@ -382,6 +450,14 @@ impl RoomObject {
                 o.x = x;
                 o.y = y;
             }
+            Self::Tombstone(o) => {
+                o.x = x;
+                o.y = y;
+            }
+            Self::Ruin(o) => {
+                o.x = x;
+                o.y = y;
+            }
             Self::Generic(o) => {
                 o.x = x;
                 o.y = y;
@@ -405,6 +481,8 @@ impl Schema for RoomObject {
             Self::Flag(o) => o.encode_into(out),
             Self::Road(o) => o.encode_into(out),
             Self::Storage(o) => o.encode_into(out),
+            Self::Tombstone(o) => o.encode_into(out),
+            Self::Ruin(o) => o.encode_into(out),
             Self::Generic(o) => o.encode_into(out),
         }
     }
@@ -426,6 +504,8 @@ impl Schema for RoomObject {
             tags::FLAG => Ok(Self::Flag(FlagObj::decode_from(cur)?)),
             tags::ROAD => Ok(Self::Road(RoadObj::decode_from(cur)?)),
             tags::STORAGE => Ok(Self::Storage(StorageObj::decode_from(cur)?)),
+            tags::TOMBSTONE => Ok(Self::Tombstone(TombstoneObj::decode_from(cur)?)),
+            tags::RUIN => Ok(Self::Ruin(RuinObj::decode_from(cur)?)),
             tags::GENERIC => Ok(Self::Generic(GenericObj::decode_from(cur)?)),
             b => Err(SchemaError::InvalidVariantTag(b)),
         }
@@ -447,6 +527,10 @@ pub mod tags {
     pub const ROAD: u8 = 9;
     pub const STORAGE: u8 = 10;
     pub const GENERIC: u8 = 11;
+    /// B3 新增（v1 内演化：追加尾部）。
+    pub const TOMBSTONE: u8 = 12;
+    /// B3 新增（v1 内演化：追加尾部）。
+    pub const RUIN: u8 = 13;
 }
 
 impl RoomObject {
@@ -463,16 +547,24 @@ impl RoomObject {
             Self::Flag(_) => tags::FLAG,
             Self::Road(_) => tags::ROAD,
             Self::Storage(_) => tags::STORAGE,
+            Self::Tombstone(_) => tags::TOMBSTONE,
+            Self::Ruin(_) => tags::RUIN,
             Self::Generic(_) => tags::GENERIC,
         }
     }
 }
 
 crate::kk_schema! {
-    /// 房间快照：头部 + 对象表（对象按 id 升序存放——BTreeMap 迭代序）。
+    /// 房间快照：头部 + 对象表（对象按 id 升序存放——BTreeMap 迭代序）+
+    /// 事件日志缓冲（B3）。官方每 tick 以 saveRoomEventLog 整体覆写房间的
+    /// 事件列表（processor.js:497 → driver/lib/index.js:583-585 的 hset——
+    /// 当前 tick 的事件数组，玩家下一 tick 经 runtimeData.roomEventLog 读到
+    /// 上一 tick 全量）；快照随房携带同口径缓冲（事件 JSON 字符串数组，
+    /// settle 每 tick 整体覆写）。
     pub RoomSnapshot {
         (pub header: RoomHeader)
         (pub objects: vec RoomObject)
+        (pub events: vec str)
     }
 }
 
@@ -673,6 +765,7 @@ mod tests {
                     y: 13,
                     resource_type: 0,
                     amount: 40,
+                    resource: None,
                 }),
                 RoomObject::ConstructionSite(ConstructionSiteObj {
                     id: 6,
@@ -684,6 +777,43 @@ mod tests {
                     owner: Some("p1".into()),
                     name: None,
                 }),
+                RoomObject::Tombstone(TombstoneObj {
+                    id: 8,
+                    x: 20,
+                    y: 21,
+                    death_time: 1233,
+                    decay_time: 1233 + 10 * 5,
+                    creep_id: Some(1),
+                    creep_name: Some("w1".into()),
+                    creep_ticks_to_live: 1,
+                    creep_body: vec![0, 1],
+                    creep_saying: None,
+                    owner: Some("p1".into()),
+                    store: Store {
+                        energy: 37,
+                        ghodium: 0,
+                    },
+                    store_extra: vec![ResourceStack {
+                        resource: "XUHO2".into(),
+                        amount: 5,
+                    }],
+                }),
+                RoomObject::Ruin(RuinObj {
+                    id: 9,
+                    x: 22,
+                    y: 21,
+                    structure_id: 4,
+                    structure_type: "spawn".into(),
+                    structure_hits_max: Some(5000),
+                    destroy_time: 1234,
+                    decay_time: 1234 + 500,
+                    owner: Some("p1".into()),
+                    store: Store {
+                        energy: 300,
+                        ghodium: 0,
+                    },
+                    store_extra: Vec::new(),
+                }),
                 RoomObject::Generic(GenericObj {
                     id: 7,
                     x: 9,
@@ -691,7 +821,43 @@ mod tests {
                     data: r#"{"type":"tombstone","store":{"energy":30}}"#.into(),
                 }),
             ],
+            events: vec![
+                r#"{"event":2,"objectId":"kk0000000000000001","data":{"type":"creep"}}"#.into(),
+            ],
         }
+    }
+
+    /// B3 变体冻结面：tag 值一旦发布不可变（追加尾部）；EnergyObj 命名槽与
+    /// tombstone/ruin 的额外资源列表随载荷往返（sample_snapshot 已覆盖整对象）。
+    #[test]
+    fn b3_variant_tags_and_named_resources_roundtrip() {
+        assert_eq!(tags::TOMBSTONE, 12, "B3 追加尾部（v1 内演化）");
+        assert_eq!(tags::RUIN, 13, "B3 追加尾部（v1 内演化）");
+        let named = EnergyObj {
+            id: 1,
+            x: 2,
+            y: 3,
+            resource_type: 0,
+            amount: 9,
+            resource: Some("XUHO2".into()),
+        };
+        let mut buf = Vec::new();
+        named.encode_into(&mut buf);
+        assert_eq!(
+            EnergyObj::decode_from(&mut crate::Cursor::new(&buf)).unwrap(),
+            named,
+            "命名槽往返（Some 时 code 无效——0 由解码侧忽略）"
+        );
+        let stack = ResourceStack {
+            resource: "LH".into(),
+            amount: 4,
+        };
+        let mut buf = Vec::new();
+        stack.encode_into(&mut buf);
+        assert_eq!(
+            ResourceStack::decode_from(&mut crate::Cursor::new(&buf)).unwrap(),
+            stack
+        );
     }
 
     #[test]

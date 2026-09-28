@@ -1,10 +1,13 @@
-//! 房间级指令：createConstructionSite / createFlag（官方 room/intents.js）。
+//! 房间级指令：createConstructionSite / createFlag / destroyStructure
+//! （官方 room/intents.js 的分派序：removeFlag → createFlag →
+//! createConstructionSite → removeConstructionSite → destroyStructure）。
 
 use super::Working;
 use super::movement::type_name_of;
 use crate::intent::RoomIntent;
 use kk_core::constants as c;
 use kk_schema::room::{ConstructionSiteObj, FlagObj, RoomObject};
+use serde_json::json;
 
 pub fn process_room_intents(w: &mut Working, player: &str, intents: &[RoomIntent]) {
     for intent in intents {
@@ -32,8 +35,52 @@ pub fn process_room_intents(w: &mut Working, player: &str, intents: &[RoomIntent
                     create_flag(w, player, *x, *y, name, *color, *secondary_color);
                 }
             }
+            RoomIntent::DestroyStructure { room, id } => {
+                if room == &w.room.name {
+                    destroy_structure_intent(w, player, *id);
+                }
+            }
         }
     }
+}
+
+/// 官方 room/destroy-structure.js（structure.destroy() 的结算侧，B3）：
+/// 可建类型、controller 归本人、房内无敌方 creep/powerCreep → _destroy
+/// （建废墟）。新手墙分支（:16 `type == WALL && decayTime && !user`）——
+/// 新手墙体系不建模，N/A。
+///
+/// 事件（OSS/套件分歧，登记报告）：OSS 4.3.2 的 destroy-structure.js 与
+/// _destroy.js 均不 push EVENT_OBJECT_DESTROYED（事件只在 _damage.js:51）；
+/// vanilla 与 screeps-ok ROOM-EVENTLOG-027 期望 destroy() 产事件——以套件
+/// 为准，在销毁后补 push（objectId = 被毁结构、data.type = structureType）。
+fn destroy_structure_intent(w: &mut Working, player: &str, id: kk_world::ObjId) {
+    let Some(obj) = w.room.objects.get(&id).cloned() else {
+        return;
+    };
+    // :12：`!object || !C.CONSTRUCTION_COST[object.type]` 拒
+    let type_name = type_name_of(&obj);
+    if kk_world::types::construction_cost(&type_name).is_none() {
+        return;
+    }
+    // :14：`!roomController || roomController.user != userId` 拒
+    let Some(ctl) = w.controller() else {
+        return;
+    };
+    if ctl.owner.as_deref() != Some(player) {
+        return;
+    }
+    // :18：房内存在他人 creep/powerCreep 拒（powerCreep M4 不建模）
+    let enemy_creep = w
+        .room
+        .objects
+        .values()
+        .any(|o| matches!(o, RoomObject::Creep(creep) if creep.owner != player));
+    if enemy_creep {
+        return;
+    }
+    let type_name = type_name.to_string();
+    super::damage::destroy_structure(w, id);
+    w.push_event(c::EVENT_OBJECT_DESTROYED, id, json!({ "type": type_name }));
 }
 
 /// 官方 room/create-construction-site.js：边界、成本存在性、控制器归属、

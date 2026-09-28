@@ -418,6 +418,10 @@ pub fn type_name_of(obj: &RoomObject) -> std::borrow::Cow<'static, str> {
         RoomObject::Flag(_) => "flag".into(),
         RoomObject::Road(_) => "road".into(),
         RoomObject::Storage(_) => "storage".into(),
+        // B3：官方对象 type（_die.js:23 的 tombstone / _destroy.js:23 的 ruin
+        // ——CONSTRUCTION_COST 表外，攻击/修理/建造门天然拒）
+        RoomObject::Tombstone(_) => "tombstone".into(),
+        RoomObject::Ruin(_) => "ruin".into(),
     }
 }
 

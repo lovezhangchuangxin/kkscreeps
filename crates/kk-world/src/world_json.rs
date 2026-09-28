@@ -170,6 +170,8 @@ pub(crate) fn road_hits_max(terrain: &kk_core::Terrain, x: u8, y: u8) -> i64 {
 
 /// 对象归属（视野过滤判定用）：typed 变体直读；Generic 透传解析 data.owner。
 /// 官方 userObjects 按 DB 的 user 字段归集（data.js:103）——与投影面同源。
+/// B3：tombstone/ruin 的 user 同样授房视野（data.js:105-116 只跳过 flag/
+/// constructionSite——死爬虫的墓碑为其主人保住房间视野是官方机制）。
 fn object_owner(object: &RoomObject) -> Option<std::borrow::Cow<'_, str>> {
     match object {
         RoomObject::Creep(o) => Some(o.owner.as_str().into()),
@@ -178,6 +180,8 @@ fn object_owner(object: &RoomObject) -> Option<std::borrow::Cow<'_, str>> {
         RoomObject::Storage(o) => Some(o.owner.as_str().into()),
         RoomObject::Controller(o) => o.owner.as_deref().map(Into::into),
         RoomObject::ConstructionSite(o) => o.owner.as_deref().map(Into::into),
+        RoomObject::Tombstone(o) => o.owner.as_deref().map(Into::into),
+        RoomObject::Ruin(o) => o.owner.as_deref().map(Into::into),
         RoomObject::Generic(o) => serde_json::from_str::<Value>(&o.data).ok().and_then(|v| {
             v.get("owner")
                 .and_then(Value::as_str)
@@ -246,6 +250,34 @@ pub(crate) fn store_json(store: &kk_schema::room::Store) -> Value {
         );
     }
     Value::Object(v)
+}
+
+/// 双槽 + 额外资源列表的全量投影（B3：tombstone/ruin 的 store——energy 恒投影
+/// 的既有口径 + G/额外资源正量键，官方 store 按资源名键的正量暴露面）。
+pub(crate) fn store_with_extra_json(
+    store: &kk_schema::room::Store,
+    extra: &[kk_schema::room::ResourceStack],
+) -> Value {
+    let mut v = match store_json(store) {
+        Value::Object(m) => m,
+        _ => unreachable!("store_json 恒产出对象"),
+    };
+    for stack in extra {
+        if stack.amount > 0 {
+            v.insert(stack.resource.clone(), json!(stack.amount));
+        }
+    }
+    Value::Object(v)
+}
+
+/// 掉落资源的资源名（code 0/1/2 之外经命名槽——EnergyObj 文档）。
+pub(crate) fn energy_resource_name(o: &kk_schema::room::EnergyObj) -> String {
+    match (&o.resource, o.resource_type) {
+        (Some(name), _) => name.clone(),
+        (None, 1) => "power".into(),
+        (None, 2) => kk_core::constants::RESOURCE_GHODIUM.into(),
+        (None, _) => "energy".into(),
+    }
 }
 
 pub(crate) fn object_json(
@@ -450,7 +482,7 @@ pub(crate) fn object_json(
         }
         RoomObject::Energy(o) => json!({
             "type": "resource",
-            "resourceType": match o.resource_type { 0 => "energy", 1 => "power", _ => kk_core::constants::RESOURCE_GHODIUM },
+            "resourceType": energy_resource_name(o),
             "id": id_str, "room": room, "x": o.x, "y": o.y,
             "amount": o.amount,
         }),
@@ -459,6 +491,65 @@ pub(crate) fn object_json(
             "id": id_str, "room": room, "x": o.x, "y": o.y,
             "name": o.name, "color": o.color, "secondaryColor": o.secondary_color,
         }),
+        // B3：官方 DB 形态（_die.js:22-34）——ticksToDecay 为 getter
+        // （tombstones.js:36 `decayTime - runtimeData.time`），与 creep 的
+        // ticksToLive 同款折叠投影；creepBody 投类型名数组（官方存形态）；
+        // creepId 投字符串 id
+        RoomObject::Tombstone(o) => {
+            let mut v = json!({
+                "type": "tombstone",
+                "id": id_str, "room": room, "x": o.x, "y": o.y,
+                "deathTime": o.death_time,
+                "decayTime": o.decay_time,
+                "ticksToDecay": o.decay_time.saturating_sub(time),
+                "creepId": match o.creep_id {
+                    Some(cid) => json!(crate::world::ObjId(cid).as_str()),
+                    None => Value::Null,
+                },
+                "creepName": o.creep_name,
+                "creepTicksToLive": o.creep_ticks_to_live,
+                "creepBody": o.creep_body.iter().filter_map(|code| {
+                    crate::types::BodyKind::from_code(*code).map(crate::types::BodyKind::name)
+                }).collect::<Vec<_>>(),
+                "store": store_with_extra_json(&o.store, &o.store_extra),
+            });
+            if let Some(saying) = &o.creep_saying {
+                v["creepSaying"] = json!(saying);
+            }
+            if let Some(owner) = &o.owner {
+                v["user"] = json!(owner);
+            }
+            v
+        }
+        // B3：官方 DB 形态（structures/_destroy.js:22-40）——structure 存照
+        // {id(字符串), structureType, hits: 0, hitsMax, user}；user 双落
+        // （顶层与 structure 内同值——官方两处同写）
+        RoomObject::Ruin(o) => {
+            let mut structure = json!({
+                "id": crate::world::ObjId(o.structure_id).as_str(),
+                "structureType": o.structure_type,
+                "hits": 0,
+            });
+            if let Some(hits_max) = o.structure_hits_max {
+                structure["hitsMax"] = json!(hits_max);
+            }
+            if let Some(owner) = &o.owner {
+                structure["user"] = json!(owner);
+            }
+            let mut v = json!({
+                "type": "ruin",
+                "id": id_str, "room": room, "x": o.x, "y": o.y,
+                "structure": structure,
+                "destroyTime": o.destroy_time,
+                "decayTime": o.decay_time,
+                "ticksToDecay": o.decay_time.saturating_sub(time),
+                "store": store_with_extra_json(&o.store, &o.store_extra),
+            });
+            if let Some(owner) = &o.owner {
+                v["user"] = json!(owner);
+            }
+            v
+        }
         RoomObject::Generic(o) => {
             // 透传桶：spec 折算 JSON 原样还原 + 结构化字段覆盖
             let mut v: Value = serde_json::from_str(&o.data).unwrap_or(json!({}));
@@ -754,6 +845,111 @@ mod tests {
     /// owner 三态投影锁（官方 controllers/tick.js:56 降级归零 `user = null`
     /// 哨兵）：Some → 字符串；cleared → null（玩家侧 my === false）；
     /// 从未拥有 → 无键（my === undefined）。与 snapshot.rs 同名测试层间对表。
+    /// B3：tombstone/ruin 的世界投影（官方 DB 形态 + getter 折叠的
+    /// ticksToDecay）；墓碑主人保住房间视野（data.js:105-116 只跳过 flag/
+    /// constructionSite——tombstone/ruin 的 user 同样归集）。
+    #[test]
+    fn tombstone_and_ruin_world_projection_and_vision() {
+        let mut world = World::new(42);
+        world.time = 100;
+        let mut terrain = Terrain::plains();
+        terrain.normalize();
+        world.register_room("W1N1", terrain);
+        world.register_room("W2N2", Terrain::plains());
+        let tomb = world
+            .insert(
+                "W1N1",
+                RoomObject::Tombstone(kk_schema::room::TombstoneObj {
+                    id: 0,
+                    x: 10,
+                    y: 11,
+                    death_time: 95,
+                    decay_time: 130,
+                    creep_id: Some(7),
+                    creep_name: Some("w1".into()),
+                    creep_ticks_to_live: 5,
+                    creep_body: vec![0, 1],
+                    creep_saying: None,
+                    owner: Some("p1".into()),
+                    store: kk_schema::room::Store {
+                        energy: 30,
+                        ghodium: 0,
+                    },
+                    store_extra: vec![kk_schema::room::ResourceStack {
+                        resource: "XUHO2".into(),
+                        amount: 6,
+                    }],
+                }),
+            )
+            .unwrap();
+        let ruin = world
+            .insert(
+                "W1N1",
+                RoomObject::Ruin(kk_schema::room::RuinObj {
+                    id: 0,
+                    x: 12,
+                    y: 11,
+                    structure_id: 9,
+                    structure_type: "spawn".into(),
+                    structure_hits_max: Some(5000),
+                    destroy_time: 98,
+                    decay_time: 598,
+                    owner: Some("p1".into()),
+                    store: kk_schema::room::Store {
+                        energy: 300,
+                        ghodium: 4,
+                    },
+                    store_extra: Vec::new(),
+                }),
+            )
+            .unwrap();
+        let j = world.object_json_by_id(tomb).unwrap();
+        assert_eq!(j["type"], "tombstone");
+        assert_eq!(j["user"], "p1");
+        assert_eq!(j["deathTime"], 95);
+        assert_eq!(j["decayTime"], 130);
+        assert_eq!(j["ticksToDecay"], 30, "getter 折叠（decayTime − time）");
+        assert_eq!(j["creepId"], "kk0000000000000007", "u64 转官方字符串 id");
+        assert_eq!(j["creepName"], "w1");
+        assert_eq!(j["creepTicksToLive"], 5);
+        assert_eq!(j["creepBody"], serde_json::json!(["move", "work"]));
+        assert_eq!(j["store"]["energy"], 30);
+        assert_eq!(j["store"]["XUHO2"], 6, "额外资源并入 store 投影");
+        assert!(
+            j.get("creepSaying").is_none(),
+            "无遗言不落键（官方 undefined）"
+        );
+
+        let r = world.object_json_by_id(ruin).unwrap();
+        assert_eq!(r["type"], "ruin");
+        assert_eq!(r["destroyTime"], 98);
+        assert_eq!(r["ticksToDecay"], 498);
+        assert_eq!(r["structure"]["id"], "kk0000000000000009");
+        assert_eq!(r["structure"]["structureType"], "spawn");
+        assert_eq!(
+            r["structure"]["hits"], 0,
+            "存照 hits 恒 0（_destroy.js:29）"
+        );
+        assert_eq!(r["structure"]["hitsMax"], 5000);
+        assert_eq!(r["structure"]["user"], "p1");
+        assert_eq!(r["user"], "p1", "顶层 user 双落（官方两处同写）");
+        assert_eq!(r["store"]["energy"], 300);
+        assert_eq!(r["store"]["G"], 4);
+
+        // FIND 两层
+        assert_eq!(world.find_in_room("W1N1", c::FIND_TOMBSTONES).len(), 1);
+        assert_eq!(world.find_in_room("W1N1", c::FIND_RUINS).len(), 1);
+        assert_eq!(world.find_in_room("W1N1", c::FIND_STRUCTURES).len(), 0);
+
+        // 视野：仅有一枚墓碑的房间对 p1 可见（官方 userObjects 归集含墓碑）
+        let viewer = world.world_json_for_viewer("p1");
+        let rooms = viewer["rooms"].as_object().unwrap();
+        assert!(rooms["W1N1"].get("terrain").is_some(), "墓碑授视野");
+        assert!(rooms["W2N2"].get("terrain").is_some(), "地形面恒在");
+        let visible_objects = viewer["objects"].as_array().unwrap();
+        assert_eq!(visible_objects.len(), 2, "可见房内对象全量（墓碑+废墟）");
+    }
+
     #[test]
     fn controller_owner_three_states() {
         let mk = |owner: Option<&str>, cleared: bool| {

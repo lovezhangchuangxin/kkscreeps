@@ -73,6 +73,69 @@ pub fn energy_tick(w: &mut Working, id: ObjId) {
     }
 }
 
+/// 官方 tombstones/tick.js（B3）：`!decayTime || gameTime >= decayTime-1` 到点
+/// → store 逐资源落地（_create-energy 的容器承接 + 同格并堆，全资源同式）
+/// → 移除墓碑。
+pub fn tombstone_tick(w: &mut Working, id: ObjId) {
+    let Some(RoomObject::Tombstone(o)) = w.room.objects.get(&id) else {
+        return;
+    };
+    let (x, y, decay_time) = (o.x, o.y, o.decay_time);
+    if decay_time != 0 && w.time < decay_time.saturating_sub(1) {
+        return; // 未到点
+    }
+    let Some(RoomObject::Tombstone(o)) = w.room.objects.get(&id).cloned() else {
+        return;
+    };
+    // tick.js:7-11：`_.forEach(object.store, (amount, resourceType) => ...)`
+    // 逐键落地（0 值键官方 forEach 同样跳过——amount>0 在 _create-energy 内）
+    if o.store.energy > 0 {
+        w.create_resource(x, y, o.store.energy as i64, "energy");
+    }
+    if o.store.ghodium > 0 {
+        w.create_resource(
+            x,
+            y,
+            o.store.ghodium as i64,
+            kk_core::constants::RESOURCE_GHODIUM,
+        );
+    }
+    for stack in &o.store_extra {
+        w.create_resource(x, y, stack.amount as i64, &stack.resource);
+    }
+    w.remove_obj(id);
+}
+
+/// 官方 ruins/tick.js（B3）：与 tombstones/tick.js 同形——到点掉落全量
+/// store 并移除废墟。
+pub fn ruin_tick(w: &mut Working, id: ObjId) {
+    let Some(RoomObject::Ruin(o)) = w.room.objects.get(&id) else {
+        return;
+    };
+    let (x, y, decay_time) = (o.x, o.y, o.decay_time);
+    if decay_time != 0 && w.time < decay_time.saturating_sub(1) {
+        return;
+    }
+    let Some(RoomObject::Ruin(o)) = w.room.objects.get(&id).cloned() else {
+        return;
+    };
+    if o.store.energy > 0 {
+        w.create_resource(x, y, o.store.energy as i64, "energy");
+    }
+    if o.store.ghodium > 0 {
+        w.create_resource(
+            x,
+            y,
+            o.store.ghodium as i64,
+            kk_core::constants::RESOURCE_GHODIUM,
+        );
+    }
+    for stack in &o.store_extra {
+        w.create_resource(x, y, stack.amount as i64, &stack.resource);
+    }
+    w.remove_obj(id);
+}
+
 /// 官方 controllers/tick.js（B2 补齐版）：预定过期清除、upgradeBlocked 持久化、
 /// safeMode 激活消费、降级计时链（初始化/升级刷新/降级）。通知
 /// （:45-47/:51 sendNotification）无通知体系——N/A；addRoomToUser（:18）由

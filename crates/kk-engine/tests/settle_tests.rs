@@ -830,8 +830,8 @@ fn renew_creep_guards() {
     }
 }
 
-/// recycleCreep 结算（recycle-creep.js → _die(target, 1.0, false)）：creep
-/// 移除、携带能量满掉落（M1 无墓碑形态——die_creep 既有灰区）；非邻接拒。
+/// recycleCreep 结算（recycle-creep.js:23 → _die(target, 1.0, false)，B3）：
+/// creep 移除、dropRate=1.0 的全额造价回收进墓碑；非邻接拒。
 #[test]
 fn recycle_creep_settles() {
     let mut f = Fixture::new(1, terrain_with(&[]));
@@ -844,22 +844,35 @@ fn recycle_creep_settles() {
     b2.add_object_intent("p1", spawn, Action::RecycleCreep, IntentData::target(far));
     f.settle(b);
     assert!(f.world.get(trash).is_none(), "回收目标移除");
-    // 携带能量掉落原地（_die 的 dropRate 1.0 满掉落）；同 tick 掉落堆随
-    // energy/tick.js 衰减 −ceil(50/1000) → 49
-    let pile = f
+    // 墓碑承接（B3）：dropRate 1.0 + 满寿（fixture 的 age_time 极大 ⇒ lifeRate
+    // 巨大 ⇒ 每件钳 CREEP_PART_MAX_ENERGY=125）⇒ 50 携带 + 125 回收 = 175；
+    // 1 部件 ⇒ ticksToDecay = 5
+    let tomb = f
         .world
         .room("W1N1")
         .unwrap()
         .objects
         .values()
         .find_map(|o| match o {
-            RoomObject::Energy(e) if e.x == 20 && e.y == 21 => Some(e.amount),
+            RoomObject::Tombstone(t) if t.x == 20 && t.y == 21 => Some(t.clone()),
             _ => None,
-        });
+        })
+        .expect("回收死亡产墓碑");
+    assert_eq!(tomb.store.energy, 175, "携带 50 + 造价回收 125");
+    assert_eq!(tomb.creep_id, Some(trash.0), "尸体信息（creepId）");
+    assert_eq!(tomb.creep_name.as_deref(), Some("trash"));
     assert_eq!(
-        pile,
-        Some(49),
-        "满掉落 50 − 当 tick 衰减 1（M1 无墓碑——灰区口径）"
+        tomb.decay_time, 5,
+        "死亡 tick 0 + TOMBSTONE_DECAY_PER_PART × 1 件"
+    );
+    assert!(
+        !f.world
+            .room("W1N1")
+            .unwrap()
+            .objects
+            .values()
+            .any(|o| matches!(o, RoomObject::Energy(e) if e.x == 20 && e.y == 21)),
+        "不直接掉地（墓碑承接）"
     );
     f.settle(b2);
     assert!(f.world.get(far).is_some(), "非邻接不回收");
@@ -1086,6 +1099,7 @@ fn dropped_energy_decays() {
                 y: 3,
                 resource_type: 0,
                 amount: 1000,
+                resource: None,
             }),
         )
         .unwrap();
@@ -1105,6 +1119,7 @@ fn dropped_energy_decays() {
                 y: 4,
                 resource_type: 0,
                 amount: 2,
+                resource: None,
             }),
         )
         .unwrap();
@@ -1149,20 +1164,388 @@ fn creep_dies_at_age_time() {
     // 官方 creeps/tick.js:93：gameTime >= ageTime-1 → time=1 的第二次结算死亡
     f.settle(IntentBatch::default());
     assert!(f.world.get(c).is_some(), "time=0 < age_time-1=1：未死");
-    f.settle(IntentBatch::default());
+    let events = f.settle(IntentBatch::default());
     assert!(f.world.get(c).is_none(), "time=1 >= 1：死亡");
-    let dropped = f
+    // B3（官方 _die.js）：墓碑承接——ticksToLive=1 的 lifeRate=0.2×1/1500，
+    // 造价回收 (50+100)×1.33e-4 → floor 0，store 只含携带 30；2 部件 ⇒ 10 tick
+    let tomb = f
         .world
         .room("W1N1")
         .unwrap()
         .objects
         .values()
         .find_map(|o| match o {
-            RoomObject::Energy(x) => Some(x.amount),
+            RoomObject::Tombstone(t) => Some(t.clone()),
             _ => None,
-        });
-    // 掉落发生在 tick 阶段（键快照已拍）→ 本 tick 不衰减，30 原值
-    assert_eq!(dropped, Some(30), "死亡掉落携带");
+        })
+        .expect("TTL 死亡产墓碑");
+    assert_eq!(tomb.store.energy, 30, "携带进墓碑（回收 floor 0）");
+    assert_eq!(tomb.death_time, 1);
+    assert_eq!(tomb.decay_time, 1 + 10, "2 部件 × TOMBSTONE_DECAY_PER_PART");
+    assert_eq!(tomb.creep_ticks_to_live, 1, "ageTime − gameTime");
+    assert_eq!(
+        tomb.creep_body,
+        vec![BodyKind::Move.code(), BodyKind::Work.code()],
+        "尸体 body 类型码"
+    );
+    // _die.js:97：EVENT_OBJECT_DESTROYED {type: 'creep'}（B3 补齐）
+    assert_eq!(events.len(), 1);
+    assert_eq!(
+        events[0]["event"],
+        kk_core::constants::EVENT_OBJECT_DESTROYED
+    );
+    assert_eq!(events[0]["objectId"], c.as_str());
+    assert_eq!(events[0]["data"]["type"], "creep");
+}
+
+// ---- B3：墓碑/废墟/死亡事件族 ----
+
+/// 墓碑 store 逐资源锁值（_die.js:43-53 的 bodyResources 精确数值）：
+/// boosted 件产出 boost 矿物（LAB_BOOST_MINERAL × lifeRate）+ 能量
+/// （LAB_BOOST_ENERGY × lifeRate），每件能量 min(CREEP_PART_MAX_ENERGY,
+/// cost × lifeRate)；携带 store 全资源并入（第二循环）。
+#[test]
+fn tombstone_body_recovery_and_boost_minerals() {
+    // 自杀路径（suicide.js:14 → _die 缺省 dropRate 0.2）；age_time = 0+1500 ⇒
+    // ticksToLive = 1500、无 CLAIM ⇒ lifeTime 1500、lifeRate = 0.2×1500/1500 = 0.2
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let mut bodylist = body(&[BodyKind::Work, BodyKind::Move]);
+    bodylist[0].boost = Some("XUHO2".into());
+    let c = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Creep(CreepObj {
+                id: 0,
+                x: 10,
+                y: 10,
+                fatigue: 0,
+                age_time: 1500,
+                hits: 200,
+                spawning: false,
+                action_log: 0,
+                name: "w1".into(),
+                owner: "p1".into(),
+                body: bodylist,
+                store: kk_schema::room::Store {
+                    energy: 10,
+                    ghodium: 25,
+                },
+            }),
+        )
+        .unwrap();
+    let mut batch = IntentBatch::default();
+    batch.add_object_intent("p1", c, Action::Suicide, IntentData::bare());
+    f.settle(batch);
+    let tomb = f
+        .world
+        .room("W1N1")
+        .unwrap()
+        .objects
+        .values()
+        .find_map(|o| match o {
+            RoomObject::Tombstone(t) => Some(t.clone()),
+            _ => None,
+        })
+        .expect("suicide 产墓碑");
+    // XUHO2 = 30×0.2 = 6；energy = 20×0.2 + min(125, 100×0.2) + min(125, 50×0.2)
+    // = 4 + 20 + 10 = 34；携带 10 并入同槽 ⇒ 44；G = 携带 25
+    assert_eq!(tomb.store.energy, 44, "回收 34 + 携带 10");
+    assert_eq!(tomb.store.ghodium, 25, "携带 G 并入");
+    assert_eq!(
+        tomb.store_extra,
+        vec![kk_schema::room::ResourceStack {
+            resource: "XUHO2".into(),
+            amount: 6,
+        }],
+        "boost 矿物回收（LAB_BOOST_MINERAL × lifeRate）"
+    );
+    assert_eq!(tomb.creep_ticks_to_live, 1500, "ageTime − gameTime");
+    assert_eq!(tomb.decay_time, 10, "2 部件 × TOMBSTONE_DECAY_PER_PART");
+}
+
+/// 同格 container 先承接（_die.js:36/45-59：container.hits>0 时按
+/// CONTAINER_CAPACITY − 全槽合计 封顶，余量进墓碑——body 回收与携带两段
+/// 各自过 container 门）。
+#[test]
+fn tombstone_container_deposit_first() {
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    // container（Generic 透传）：store.energy=1900 ⇒ 余量 100
+    let container = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Generic(kk_schema::room::GenericObj {
+                id: 0,
+                x: 10,
+                y: 10,
+                data: serde_json::json!({
+                    "type": "structure", "structureType": "container",
+                    "owner": "p1", "hits": 250000,
+                    "store": { "energy": 1900 },
+                })
+                .to_string(),
+            }),
+        )
+        .unwrap();
+    // 满寿自杀（fixture age_time 极大 ⇒ lifeRate 巨大 ⇒ move 件钳 125）：
+    // 第一段回收 125 → container 吃 100 后满，25 进墓碑；
+    // 第二段携带 150 → 余量 0，150 全进墓碑 ⇒ 175
+    let c = f.creep("w1", "p1", 10, 10, &[BodyKind::Move], 150);
+    let mut batch = IntentBatch::default();
+    batch.add_object_intent("p1", c, Action::Suicide, IntentData::bare());
+    f.settle(batch);
+    let tomb = f
+        .world
+        .room("W1N1")
+        .unwrap()
+        .objects
+        .values()
+        .find_map(|o| match o {
+            RoomObject::Tombstone(t) => Some(t.store.energy),
+            _ => None,
+        })
+        .expect("墓碑仍建（余量进槽）");
+    assert_eq!(
+        tomb, 175,
+        "125 回收（container 吃 100）+ 150 携带（余量 0）"
+    );
+    match f.obj(container) {
+        RoomObject::Generic(g) => {
+            let data: serde_json::Value = serde_json::from_str(&g.data).unwrap();
+            assert_eq!(
+                data["store"]["energy"], 2000,
+                "container 吃满 CONTAINER_CAPACITY"
+            );
+        }
+        _ => panic!(),
+    }
+}
+
+/// 墓碑衰减到点（tombstones/tick.js:5-16）：全 store 逐资源落地（同格异资源
+/// 不并堆——_create-energy 按资源名键）、墓碑移除；新掉落不在本轮对象快照，
+/// 当 tick 不衰减。
+#[test]
+fn tombstone_decay_dumps_store_per_resource() {
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let t = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Tombstone(kk_schema::room::TombstoneObj {
+                id: 0,
+                x: 10,
+                y: 10,
+                death_time: 0,
+                decay_time: 1, // time=0 结算：0 >= decay_time-1 = 0 即到点
+                creep_id: None,
+                creep_name: Some("w1".into()),
+                creep_ticks_to_live: 0,
+                creep_body: vec![],
+                creep_saying: None,
+                owner: Some("p1".into()),
+                store: kk_schema::room::Store {
+                    energy: 40,
+                    ghodium: 7,
+                },
+                store_extra: vec![kk_schema::room::ResourceStack {
+                    resource: "XUHO2".into(),
+                    amount: 5,
+                }],
+            }),
+        )
+        .unwrap();
+    f.settle(IntentBatch::default());
+    assert!(f.world.get(t).is_none(), "衰减到点移除");
+    let piles: Vec<(String, u32)> = f
+        .world
+        .room("W1N1")
+        .unwrap()
+        .objects
+        .values()
+        .filter_map(|o| match o {
+            RoomObject::Energy(e) if e.x == 10 && e.y == 10 => Some((
+                kk_engine::settle::energy_resource_name(e).to_string(),
+                e.amount,
+            )),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        piles,
+        vec![
+            ("energy".to_string(), 40),
+            ("G".to_string(), 7),
+            ("XUHO2".to_string(), 5),
+        ],
+        "三资源各成一堆（BTreeMap id 序 = 落地插入序：energy→G→extra）"
+    );
+}
+
+/// 废墟衰减到点（ruins/tick.js）与墓碑同形：全 store 落地 + 移除。
+#[test]
+fn ruin_decay_dumps_store_and_removes() {
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let r = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Ruin(kk_schema::room::RuinObj {
+                id: 0,
+                x: 12,
+                y: 12,
+                structure_id: 99,
+                structure_type: "container".into(),
+                structure_hits_max: Some(250000),
+                destroy_time: 0,
+                decay_time: 1,
+                owner: Some("p1".into()),
+                store: kk_schema::room::Store {
+                    energy: 30,
+                    ghodium: 0,
+                },
+                store_extra: vec![kk_schema::room::ResourceStack {
+                    resource: "LH".into(),
+                    amount: 4,
+                }],
+            }),
+        )
+        .unwrap();
+    f.settle(IntentBatch::default());
+    assert!(f.world.get(r).is_none(), "废墟衰减到点移除");
+    let piles: Vec<(String, u32)> = f
+        .world
+        .room("W1N1")
+        .unwrap()
+        .objects
+        .values()
+        .filter_map(|o| match o {
+            RoomObject::Energy(e) if e.x == 12 && e.y == 12 => Some((
+                kk_engine::settle::energy_resource_name(e).to_string(),
+                e.amount,
+            )),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        piles,
+        vec![("energy".to_string(), 30), ("LH".to_string(), 4)],
+        "能量与 LH 各成一堆（落地插入序）"
+    );
+}
+
+/// structure.destroy() 的 room intent（destroy-structure.js：可建类型 +
+/// controller 归本人 + 房内无敌方 creep）；事件为套件口径（OSS 无 push——
+/// ROOM-EVENTLOG-027 期望有，登记报告）。
+#[test]
+fn destroy_structure_intent_paths() {
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    f.controller(3, Some("p1"));
+    let ext = extension_at(&mut f, 15, 15, 1000, 80);
+    let mut b = IntentBatch::default();
+    b.add_room_intent(
+        "p1",
+        kk_engine::intent::RoomIntent::DestroyStructure {
+            room: "W1N1".into(),
+            id: ext,
+        },
+    );
+    let events = f.settle(b);
+    assert!(f.world.get(ext).is_none(), "自家结构可毁");
+    let ruin = f
+        .world
+        .room("W1N1")
+        .unwrap()
+        .objects
+        .values()
+        .find_map(|o| match o {
+            RoomObject::Ruin(r) => Some(r.clone()),
+            _ => None,
+        })
+        .expect("destroy 产废墟");
+    assert_eq!(ruin.structure_type, "extension");
+    assert_eq!(ruin.store.energy, 80, "store 承接");
+    assert_eq!(events.len(), 1);
+    assert_eq!(
+        events[0]["event"],
+        kk_core::constants::EVENT_OBJECT_DESTROYED
+    );
+    assert_eq!(events[0]["objectId"], ext.as_str());
+    assert_eq!(events[0]["data"]["type"], "extension");
+
+    // 门 1：房内有敌方 creep → 拒（destroy-structure.js:18）
+    let mut f2 = Fixture::new(2, terrain_with(&[]));
+    f2.controller(1, Some("p1"));
+    let ext2 = extension_at(&mut f2, 15, 15, 1000, 0);
+    f2.creep("spy", "p2", 20, 20, &[BodyKind::Move], 0);
+    let mut b2 = IntentBatch::default();
+    b2.add_room_intent(
+        "p1",
+        kk_engine::intent::RoomIntent::DestroyStructure {
+            room: "W1N1".into(),
+            id: ext2,
+        },
+    );
+    f2.settle(b2);
+    assert!(f2.world.get(ext2).is_some(), "敌方 creep 在房拒毁");
+
+    // 门 2：controller 非本人 → 拒（:14）
+    let mut f3 = Fixture::new(3, terrain_with(&[]));
+    f3.controller(1, Some("p2"));
+    let ext3 = extension_at(&mut f3, 15, 15, 1000, 0);
+    let mut b3 = IntentBatch::default();
+    b3.add_room_intent(
+        "p1",
+        kk_engine::intent::RoomIntent::DestroyStructure {
+            room: "W1N1".into(),
+            id: ext3,
+        },
+    );
+    f3.settle(b3);
+    assert!(f3.world.get(ext3).is_some(), "非 controller 主人拒毁");
+
+    // 门 3：非 CONSTRUCTION_COST 类型（source）→ 拒（:12）
+    let mut f4 = Fixture::new(4, terrain_with(&[]));
+    f4.controller(1, Some("p1"));
+    let src4 = f4.source(30, 30, 3000);
+    let mut b4 = IntentBatch::default();
+    b4.add_room_intent(
+        "p1",
+        kk_engine::intent::RoomIntent::DestroyStructure {
+            room: "W1N1".into(),
+            id: src4,
+        },
+    );
+    f4.settle(b4);
+    assert!(
+        f4.world.get(src4).is_some(),
+        "source 无 CONSTRUCTION_COST 拒毁"
+    );
+}
+
+/// 事件缓冲随房持久化（官方 saveRoomEventLog 每 tick 整体覆写——
+/// processor.js:497）：有事件的 tick 落字符串数组、无事件的 tick 清空。
+#[test]
+fn room_events_buffer_overwritten_per_tick() {
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let src = f.source(10, 11, 3000);
+    let c = f.creep("w1", "p1", 10, 10, &[BodyKind::Work, BodyKind::Move], 0);
+    let mut b = IntentBatch::default();
+    b.add_object_intent("p1", c, Action::Harvest, IntentData::target(src));
+    let events = f.settle(b);
+    assert_eq!(events.len(), 1);
+    let stored = f.world.room("W1N1").unwrap().events.clone();
+    assert_eq!(stored.len(), 1, "事件随房落账");
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&stored[0]).unwrap(),
+        events[0],
+        "缓冲是结算事件的序列化原文"
+    );
+    f.settle(IntentBatch::default());
+    assert!(
+        f.world.room("W1N1").unwrap().events.is_empty(),
+        "无事件 tick 覆写为空（官方 hset 整体覆写）"
+    );
 }
 
 // ---- 完整闭环（同 tick 采+升） ----
@@ -2032,6 +2415,7 @@ fn energy_merge_saturates_at_u32_max() {
                 y: 10,
                 resource_type: 0,
                 amount: u32::MAX,
+                resource: None,
             }),
         )
         .unwrap();
@@ -2323,8 +2707,8 @@ fn multiple_attackers_accumulate_damage() {
 }
 
 #[test]
-fn attack_kills_creep_and_drops_store() {
-    // tick.js:134-136：hits 归零 → 暴力死亡，与 TTL 死亡同路径（掉能量、无墓碑）
+fn attack_kills_creep_into_tombstone() {
+    // tick.js:134-136：hits 归零 → 暴力死亡，与 TTL 死亡同路径（B3：墓碑承接）
     let mut f = Fixture::new(1, terrain_with(&[]));
     let mut bodylist = vec![BodyKind::Attack; 40];
     bodylist.push(BodyKind::Move);
@@ -2337,26 +2721,39 @@ fn attack_kills_creep_and_drops_store() {
         &[BodyKind::Tough, BodyKind::Tough],
         40,
     );
-    f.settle(attack_intent(a, b));
+    let events = f.settle(attack_intent(a, b));
     assert!(f.world.get(b).is_none(), "1200 ≥ 200：击杀");
-    // 死亡掉落发生在 tick 阶段（键快照已拍）→ 本 tick 不衰减，40 原值
-    let dropped = f
+    // 墓碑承接（B3）：dropRate 0.2、满寿（fixture age_time 极大 ⇒ lifeRate 巨大
+    // ⇒ 每件钳 125）⇒ 40 携带 + 125×2 回收 = 290；2 部件 ⇒ 10 tick
+    let tomb = f
         .world
         .room("W1N1")
         .unwrap()
         .objects
         .values()
         .find_map(|o| match o {
-            RoomObject::Energy(e) if e.x == 11 && e.y == 10 => Some(e.amount),
+            RoomObject::Tombstone(t) if t.x == 11 && t.y == 10 => Some(t.clone()),
             _ => None,
-        });
-    assert_eq!(dropped, Some(40), "store 掉地为 energy");
+        })
+        .expect("暴亡产墓碑");
+    assert_eq!(tomb.store.energy, 290, "携带 40 + 造价回收 250");
+    assert_eq!(tomb.owner.as_deref(), Some("p2"), "墓碑归死者");
+    assert_eq!(tomb.creep_name.as_deref(), Some("victim"));
+    // 事件序（官方）：intent 相的 EVENT_ATTACK 先（_damage.js:93）、tick 相的
+    // OBJECT_DESTROYED 后（_die.js:97）
+    assert_eq!(events.len(), 2);
+    assert_eq!(events[0]["event"], kk_core::constants::EVENT_ATTACK);
+    assert_eq!(
+        events[1]["event"],
+        kk_core::constants::EVENT_OBJECT_DESTROYED
+    );
+    assert_eq!(events[1]["objectId"], b.as_str());
 }
 
 #[test]
 fn attack_kills_structure_and_spawn_chick() {
     // structures/_destroy.js:9-15：孵化中的 spawn 被毁 → 雏形一并移除；
-    // store 落地为掉落能量（官方进 ruin——B1 偏离登记）；phase 5 落地 → 本 tick 衰减 1
+    // B3：store 进废墟（官方 _destroy.js:37 的 ruin.store = object.store || {}）
     let mut f = Fixture::new(1, terrain_with(&[]));
     f.controller(3, Some("p1"));
     let spawn = f.spawn("Spawn1", 20, 20, 300);
@@ -2383,20 +2780,37 @@ fn attack_kills_structure_and_spawn_chick() {
             .any(|o| matches!(o, RoomObject::Creep(c) if c.name == "child")),
         "雏形随 spawn 一并移除"
     );
-    let dropped = f
+    // B3（官方 _destroy.js）：spawn 击毁产废墟——结构存照 {id, hitsMax,
+    // user} + store 全量承接（300-50 孵化费+1 涓流=251），衰减钟 500 tick
+    let ruin = f
         .world
         .room("W1N1")
         .unwrap()
         .objects
         .values()
         .find_map(|o| match o {
-            RoomObject::Energy(e) if e.x == 20 && e.y == 20 => Some(e.amount),
+            RoomObject::Ruin(r) if r.x == 20 && r.y == 20 => Some(r.clone()),
             _ => None,
-        });
+        })
+        .expect("击毁产废墟");
+    assert_eq!(ruin.structure_type, "spawn");
+    assert_eq!(ruin.structure_id, spawn.0, "存照 id = 原结构 id");
     assert_eq!(
-        dropped,
-        Some(250),
-        "store 落地后当 tick 衰减 ceil(251/1000)=1（300-50 孵化费+1 涓流=251）"
+        ruin.structure_hits_max,
+        Some(kk_core::constants::SPAWN_HITS as u32)
+    );
+    assert_eq!(ruin.owner.as_deref(), Some("p1"));
+    assert_eq!(ruin.destroy_time, 1, "第二个结算 tick");
+    assert_eq!(ruin.decay_time, 1 + 500, "RUIN_DECAY");
+    assert_eq!(ruin.store.energy, 251, "store 全量承接（不再掉地）");
+    assert!(
+        !f.world
+            .room("W1N1")
+            .unwrap()
+            .objects
+            .values()
+            .any(|o| matches!(o, RoomObject::Energy(e) if e.x == 20 && e.y == 20)),
+        "store 不再落地（废墟承接）"
     );
 }
 
@@ -2602,7 +3016,7 @@ fn repair_wall_and_rampart_hits_max() {
 #[test]
 fn dismantle_reflux_and_destroy() {
     // dismantle.js:33-52：amount=min(WORK×50, hits)、回流 floor(amount×0.005)、
-    // 先回流后施伤；击毁时 store 落地（官方进 ruin——B1 偏离登记）
+    // 先回流后施伤；击毁时 store 进废墟（B3——官方 _destroy.js:37）
     let mut f = Fixture::new(1, terrain_with(&[]));
     let dis = f.creep(
         "dis",
@@ -2640,20 +3054,36 @@ fn dismantle_reflux_and_destroy() {
     f.settle(b.clone());
     f.settle(b.clone());
     let events4 = f.settle(b.clone());
-    assert_eq!(events4[0]["data"]["damage"], 250, "amount=min(250,250)");
+    // B3 事件序（官方 _damage.js）：击毁 tick 的 OBJECT_DESTROYED（:51）先于
+    // 主 EVENT_ATTACK（:93）
+    assert_eq!(events4.len(), 2);
+    assert_eq!(
+        events4[0]["event"],
+        kk_core::constants::EVENT_OBJECT_DESTROYED
+    );
+    assert_eq!(events4[0]["data"]["type"], "extension");
+    assert_eq!(events4[1]["data"]["damage"], 250, "amount=min(250,250)");
     assert!(f.world.get(ext).is_none(), "击毁");
     assert_eq!(f.creep_state(dis).3, 4, "四 tick 共回流 4");
-    let dropped = f
+    // B3：store 进废墟（不再掉地衰减）
+    let ruin = f
         .world
         .room("W1N1")
         .unwrap()
         .objects
         .values()
         .find_map(|o| match o {
-            RoomObject::Energy(e) if e.x == 12 && e.y == 10 => Some(e.amount),
+            RoomObject::Ruin(r) if r.x == 12 && r.y == 10 => Some(r.clone()),
             _ => None,
-        });
-    assert_eq!(dropped, Some(199), "store 200 落地后当 tick 衰减 1");
+        })
+        .expect("拆毁产废墟");
+    assert_eq!(ruin.structure_type, "extension");
+    assert_eq!(ruin.store.energy, 200, "store 200 全量承接");
+    assert_eq!(
+        ruin.decay_time,
+        3 + 500,
+        "第 4 个结算 tick（time=3）+ RUIN_DECAY"
+    );
 }
 
 #[test]
@@ -2695,13 +3125,39 @@ fn dismantle_redirects_to_rampart() {
     let mut b2 = IntentBatch::default();
     b2.add_object_intent("p1", dis2, Action::Dismantle, IntentData::target(ext2));
     let events2 = f.settle(b2);
+    // B3 事件序：击毁的 OBJECT_DESTROYED 先于主 EVENT_ATTACK（官方
+    // _damage.js:51/:93）；damage 断言移到 attack 事件上
+    assert_eq!(events2.len(), 2);
     assert_eq!(
-        events2[0]["data"]["damage"], 80,
+        events2[0]["event"],
+        kk_core::constants::EVENT_OBJECT_DESTROYED
+    );
+    assert_eq!(events2[0]["data"]["type"], "rampart");
+    assert_eq!(
+        events2[1]["data"]["damage"], 80,
         "amount=min(100,80) 钳 rampart 血量"
     );
     assert!(f.world.get(rampart2).is_none(), "80-80=0：击毁");
     assert!(f.world.get(ext2).is_some(), "本体未动");
     assert_eq!(f.creep_state(dis2).3, 0, "floor(80×0.005)=0 无回流");
+    // rampart 击毁同样产废墟（Generic 透传结构——存照按 data 面）
+    let ruin = f
+        .world
+        .room("W1N1")
+        .unwrap()
+        .objects
+        .values()
+        .find_map(|o| match o {
+            RoomObject::Ruin(r) if r.x == 12 && r.y == 12 => Some(r.clone()),
+            _ => None,
+        })
+        .expect("rampart 击毁产废墟");
+    assert_eq!(ruin.structure_type, "rampart");
+    assert_eq!(ruin.owner.as_deref(), Some("p2"), "存照主人（data.owner）");
+    // hitsMax 存照：无 controller 的房按 RCL 表无门（官方 ramparts/tick.js:17
+    // 按房主归一——本房无主 ⇒ 表值 0；我们无 controller 时 hitsMax 计算得
+    // None，投影 undefined——B3 报告登记的边缘差异）
+    assert_eq!(ruin.structure_hits_max, None);
 }
 
 #[test]
@@ -4529,15 +4985,16 @@ fn say_intent_sets_action_log_bit() {
 
 #[test]
 fn suicide_intent_kills_creep_same_tick() {
-    // suicide.js：intent 相即 _die——对象当 tick 消亡，携带 energy 落地
-    //（墓碑 M1 灰区：die_creep 形态与 TTL 死亡同路径）
+    // suicide.js：intent 相即 _die——对象当 tick 消亡（B3：墓碑承接 + 死亡事件）
     let mut f = Fixture::new(1, terrain_with(&[]));
     let c = f.creep("w1", "p1", 10, 10, &[BodyKind::Move, BodyKind::Carry], 40);
     let mut batch = IntentBatch::default();
     batch.add_object_intent("p1", c, Action::Suicide, IntentData::bare());
     let events = f.settle(batch);
     assert!(f.world.get(c).is_none(), "suicide 当 tick 死亡");
-    let dropped = f
+    // 墓碑承接（B3）：dropRate 0.2、满寿（fixture age_time 极大 ⇒ lifeRate 巨大
+    // ⇒ 每件钳 125）⇒ 40 携带 + 125×2 回收 = 290；2 部件 ⇒ 10 tick
+    let tomb = f
         .world
         .rooms
         .get("W1N1")
@@ -4545,17 +5002,29 @@ fn suicide_intent_kills_creep_same_tick() {
         .objects
         .values()
         .find_map(|o| match o {
-            RoomObject::Energy(e) => Some(e.amount),
+            RoomObject::Tombstone(t) => Some(t.clone()),
             _ => None,
-        });
-    // 掉落发生在 intent 相（先于阶段 8 的对象 id 快照）——同 tick 即吃
-    // energy/tick 衰减 ceil(40/ENERGY_DECAY)=1（官方 _create-energy 直插
-    // roomObjects，processor.js:342 的 tick 循环覆盖新掉落，同语义）
-    assert_eq!(dropped, Some(39), "携带 40 energy 落地后当 tick 衰减 1");
+        })
+        .expect("suicide 产墓碑");
+    assert_eq!(tomb.store.energy, 290, "携带 40 + 造价回收 250");
     assert!(
-        events.is_empty(),
-        "suicide 无事件（官方 _die 的 EVENT_OBJECT_DESTROYED 未投影——既有灰区）"
+        !f.world
+            .rooms
+            .get("W1N1")
+            .unwrap()
+            .objects
+            .values()
+            .any(|o| matches!(o, RoomObject::Energy(_))),
+        "不直接掉地（墓碑承接）"
     );
+    // _die.js:97：EVENT_OBJECT_DESTROYED（B3 补齐——M1 灰区销账）
+    assert_eq!(events.len(), 1);
+    assert_eq!(
+        events[0]["event"],
+        kk_core::constants::EVENT_OBJECT_DESTROYED
+    );
+    assert_eq!(events[0]["objectId"], c.as_str());
+    assert_eq!(events[0]["data"]["type"], "creep");
 
     // 同 tick 后续 intents 不再作用（对象消亡）——**有意分歧**：官方执行序
     // creepActions 里 upgradeController 排 suicide 之后（intents.js:15-17），
@@ -5099,6 +5568,7 @@ fn pickup_ghodium_routes_to_ghodium_slot() {
                 y: 11,
                 resource_type: 2,
                 amount: 10,
+                resource: None,
             }),
         )
         .unwrap();

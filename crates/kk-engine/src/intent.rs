@@ -323,6 +323,10 @@ pub enum RoomIntent {
         color: i64,
         secondary_color: i64,
     },
+    /// structure.destroy()（B3）：官方白名单 `destroyStructure: {roomName:
+    /// 'string', id: 'string'}`（system.js:20）；结算链 settle/room.rs
+    /// 对照 room/destroy-structure.js。
+    DestroyStructure { room: String, id: ObjId },
 }
 
 /// room 级 intent 参数解析（官方 system.js:116-140 sanitizeUserRoomIntents 的
@@ -345,6 +349,11 @@ fn parse_room_intent(name: &str, raw: &Value) -> Option<RoomIntent> {
             name: to_user_string(f("name"))?,
             color: to_int(f("color")).unwrap_or(0),
             secondary_color: to_int(f("secondaryColor")).unwrap_or(0),
+        }),
+        // system.js:20：`destroyStructure: {roomName: 'string', id: 'string'}`
+        "destroyStructure" => Some(RoomIntent::DestroyStructure {
+            room,
+            id: to_id(f("id"))?,
         }),
         _ => None,
     }

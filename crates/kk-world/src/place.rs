@@ -9,8 +9,8 @@
 use kk_core::constants as c;
 use kk_schema::room::{
     BodyPart, ConstructedWallObj, ConstructionSiteObj, ControllerObj, CreepObj, EnergyObj,
-    ExtensionObj, FlagObj, GenericObj, Reservation, RoadObj, RoomObject, Sign, SourceObj, SpawnObj,
-    StorageObj, Store,
+    ExtensionObj, FlagObj, GenericObj, Reservation, ResourceStack, RoadObj, RoomObject, RuinObj,
+    Sign, SourceObj, SpawnObj, StorageObj, Store, TombstoneObj,
 };
 use serde_json::{Value, json};
 
@@ -26,9 +26,9 @@ pub struct PlaceCtx<'a> {
 }
 
 /// 归一化入口：kind 为 embed 通道的内部类别（creep/structure/spawn/
-/// constructionSite/flag/resource）；spec 为 PlaceSpec JSON。
-/// 未知 kind（tombstone/portal/deposit/keeperLair/invaderCore/powerBank/…）
-/// 落 Generic 透传并携带 `type: kind`——与 M0 哑世界相同的放置接受面。
+/// constructionSite/flag/resource/tombstone/ruin）；spec 为 PlaceSpec JSON。
+/// 未知 kind（portal/deposit/keeperLair/invaderCore/powerBank/…）落 Generic
+/// 透传并携带 `type: kind`——与 M0 哑世界相同的放置接受面。
 pub fn normalize(kind: &str, spec: &Value, ctx: &PlaceCtx) -> Result<RoomObject, String> {
     let (x, y) = read_pos(spec)?;
     match kind {
@@ -38,6 +38,9 @@ pub fn normalize(kind: &str, spec: &Value, ctx: &PlaceCtx) -> Result<RoomObject,
         "constructionSite" => Ok(RoomObject::ConstructionSite(normalize_site(spec, x, y)?)),
         "flag" => Ok(RoomObject::Flag(normalize_flag(spec, x, y))),
         "resource" => Ok(RoomObject::Energy(normalize_resource(spec, x, y)?)),
+        // B3 起进 typed 变体（此前 Generic 透传）——放置面保持官方 DB 形态
+        "tombstone" => Ok(RoomObject::Tombstone(normalize_tombstone(spec, x, y, ctx))),
+        "ruin" => Ok(RoomObject::Ruin(normalize_ruin(spec, x, y, ctx))),
         _ => Ok(RoomObject::Generic(generic_from_spec(kind, spec, x, y))),
     }
 }
@@ -90,20 +93,34 @@ fn spec_str<'a>(spec: &'a Value, key: &str) -> Option<&'a str> {
 }
 
 fn store_energy(spec: &Value) -> Store {
-    Store {
-        energy: saturating_u32(
-            spec.pointer("/store/energy")
-                .and_then(Value::as_u64)
-                .unwrap_or(0),
-        ),
-        // 官方 store 键为资源常量（RESOURCE_GHODIUM = "G"，constants 同名项）；
-        // generateSafeMode 的消耗面经放置通道可预置
-        ghodium: saturating_u32(
-            spec.pointer("/store/G")
-                .and_then(Value::as_u64)
-                .unwrap_or(0),
-        ),
+    let (store, _) = store_with_extra(spec);
+    store
+}
+
+/// 读 spec 的 store 对象为双槽 + 额外资源列表（B3）：energy/G 进 typed 槽，
+/// 其余正量资源（boost 矿物等）进 store_extra——官方 store 是按资源名键的
+/// 开放对象（_die.js:78 逐键循环的全集形态）。
+fn store_with_extra(spec: &Value) -> (Store, Vec<ResourceStack>) {
+    let mut store = Store::default();
+    let mut extra: Vec<ResourceStack> = Vec::new();
+    let Some(map) = spec.get("store").and_then(Value::as_object) else {
+        return (store, extra);
+    };
+    for (resource, value) in map {
+        let amount = saturating_u32(value.as_u64().unwrap_or(0));
+        if amount == 0 {
+            continue;
+        }
+        match resource.as_str() {
+            "energy" => store.energy = amount,
+            kk_core::constants::RESOURCE_GHODIUM => store.ghodium = amount,
+            other => extra.push(ResourceStack {
+                resource: other.to_string(),
+                amount,
+            }),
+        }
     }
+    (store, extra)
 }
 
 /// 放置 creep：合并部件 boost，按显式 TTL 或默认寿命计算到期时间。
@@ -405,14 +422,33 @@ fn normalize_flag(spec: &Value, x: u8, y: u8) -> FlagObj {
     }
 }
 
-/// 掉落资源（0=energy/1=power/2=G——GPT 复审 P1-1 清偿：G 掉落落地；
-/// 其余矿物资源随 schema 扩展放开）。
+/// 掉落资源（0=energy/1=power/2=G；B3 起任意 RESOURCES_ALL 资源名经命名槽
+/// 承载——tombstone/ruin 衰减掉的 boost 矿物等）。
 fn normalize_resource(spec: &Value, x: u8, y: u8) -> Result<EnergyObj, String> {
-    let code = match spec_str(spec, "resourceType") {
-        None | Some("energy") => 0,
-        Some("power") => 1,
+    let resource = match spec_str(spec, "resourceType") {
+        None | Some("energy") => None,
+        Some("power") => {
+            return Ok(EnergyObj {
+                id: 0,
+                x,
+                y,
+                resource_type: 1,
+                amount: saturating_u32(spec.get("amount").and_then(Value::as_u64).unwrap_or(0)),
+                resource: None,
+            });
+        }
+        Some(name) => {
+            // 未知资源名拒绝（RESOURCES_ALL 白名单——官方常量表外的名字
+            // 无游戏语义）
+            if !c::RESOURCES_ALL.contains(&name) {
+                return Err(format!("未知掉落资源类型: {name:?}"));
+            }
+            Some(name.to_string())
+        }
+    };
+    let code = match resource.as_deref() {
         Some(kk_core::constants::RESOURCE_GHODIUM) => 2,
-        Some(other) => return Err(format!("掉落资源仅支持 energy/power/G，得到 {other:?}")),
+        _ => 0,
     };
     Ok(EnergyObj {
         id: 0,
@@ -420,7 +456,106 @@ fn normalize_resource(spec: &Value, x: u8, y: u8) -> Result<EnergyObj, String> {
         y,
         resource_type: code,
         amount: saturating_u32(spec.get("amount").and_then(Value::as_u64).unwrap_or(0)),
+        resource,
     })
+}
+
+/// vanilla placeTombstone（adapters/vanilla/index.ts:1263-1280）：deathTime
+/// 缺省 gameTime、ticksToDecay 缺省 500（decayTime = deathTime + ticksToDecay）、
+/// creepName/store 透传、creepBody 缺省 []、creepTicksToLive 缺省 0、creepId
+/// 缺省 null（官方 DB 字段面见 _die.js:22-34）。
+fn normalize_tombstone(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> TombstoneObj {
+    let death_time = spec
+        .get("deathTime")
+        .and_then(Value::as_u64)
+        .unwrap_or(ctx.time);
+    let ticks_to_decay = spec
+        .get("ticksToDecay")
+        .and_then(Value::as_u64)
+        .unwrap_or(c::RUIN_DECAY as u64);
+    let (store, store_extra) = store_with_extra(spec);
+    TombstoneObj {
+        id: 0,
+        x,
+        y,
+        death_time,
+        decay_time: death_time + ticks_to_decay,
+        creep_id: spec
+            .get("creepId")
+            .and_then(Value::as_str)
+            .and_then(crate::world::ObjId::parse)
+            .map(|id| id.0),
+        creep_name: spec_str(spec, "creepName").map(str::to_string),
+        creep_ticks_to_live: saturating_u32(
+            spec.get("creepTicksToLive")
+                .and_then(Value::as_u64)
+                .unwrap_or(0),
+        ),
+        creep_body: spec
+            .get("creepBody")
+            .and_then(Value::as_array)
+            .map(|parts| {
+                parts
+                    .iter()
+                    .filter_map(|p| p.as_str().and_then(BodyKind::parse))
+                    .map(|k| k.code())
+                    .collect()
+            })
+            .unwrap_or_default(),
+        creep_saying: spec_str(spec, "creepSaying").map(str::to_string),
+        owner: spec
+            .get("user")
+            .or_else(|| spec.get("owner"))
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        store,
+        store_extra,
+    }
+}
+
+/// vanilla placeRuin（adapters/vanilla/index.ts:1286-1313）：structure
+/// {id 缺省自分配、type、hits:0、hitsMax 缺省 0、user 缺省无}、destroyTime
+/// 缺省 gameTime、ticksToDecay 缺省 500、store 缺省 {}。官方引擎侧创建路径
+/// 见 structures/_destroy.js:22-40。
+fn normalize_ruin(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> RuinObj {
+    let destroy_time = spec
+        .get("destroyTime")
+        .and_then(Value::as_u64)
+        .unwrap_or(ctx.time);
+    let ticks_to_decay = spec
+        .get("ticksToDecay")
+        .and_then(Value::as_u64)
+        .unwrap_or(c::RUIN_DECAY as u64);
+    let (store, store_extra) = store_with_extra(spec);
+    RuinObj {
+        id: 0,
+        x,
+        y,
+        structure_id: spec
+            .get("structureId")
+            .and_then(Value::as_str)
+            .and_then(crate::world::ObjId::parse)
+            .map(|id| id.0)
+            .unwrap_or(0),
+        structure_type: spec_str(spec, "structureType")
+            .or_else(|| spec_str(spec, "type"))
+            .unwrap_or_default()
+            .to_string(),
+        structure_hits_max: spec
+            .get("structureHitsMax")
+            .and_then(Value::as_u64)
+            .map(saturating_u32),
+        destroy_time,
+        decay_time: destroy_time + ticks_to_decay,
+        owner: spec
+            .get("structureOwner")
+            .or_else(|| spec.get("owner"))
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string),
+        store,
+        store_extra,
+    }
 }
 
 /// u64 → u32 的饱和转换（放置值超域不改值语义、不静默回绕）。
@@ -688,6 +823,68 @@ mod tests {
         assert_eq!(cr.store.ghodium, 1200);
     }
 
+    /// B3：tombstone/ruin 进 typed 变体（vanilla placeTombstone index.ts:1263-1280 /
+    /// placeRuin :1286-1313 的缺省面）——deathTime/destroyTime 缺省当前 tick、
+    /// ticksToDecay 缺省 500、store 的额外资源进 store_extra。
+    #[test]
+    fn tombstone_and_ruin_placement_defaults() {
+        let s = spec(json!({
+            "pos": [8, 8],
+            "creepName": "w1",
+            "store": { "energy": 30, "XUHO2": 6 },
+            "ticksToDecay": 100,
+        }));
+        let RoomObject::Tombstone(t) = normalize("tombstone", &s, &ctx()).unwrap() else {
+            panic!("tombstone 直通道进 typed 变体");
+        };
+        assert_eq!(t.death_time, 100, "缺省 deathTime = gameTime");
+        assert_eq!(t.decay_time, 200, "deathTime + ticksToDecay");
+        assert_eq!(t.creep_name.as_deref(), Some("w1"));
+        assert_eq!(t.creep_id, None, "vanilla 缺省 null");
+        assert_eq!(t.creep_ticks_to_live, 0);
+        assert_eq!(t.creep_body, Vec::<u8>::new());
+        assert_eq!(t.owner, None, "vanilla 放置不落 user");
+        assert_eq!(t.store.energy, 30);
+        assert_eq!(
+            t.store_extra,
+            vec![ResourceStack {
+                resource: "XUHO2".into(),
+                amount: 6,
+            }],
+            "额外资源进列表槽"
+        );
+        // 全缺省形态
+        let s2 = spec(json!({ "pos": [9, 9], "creepName": "x" }));
+        let RoomObject::Tombstone(t2) = normalize("tombstone", &s2, &ctx()).unwrap() else {
+            panic!()
+        };
+        assert_eq!(t2.decay_time, 100 + 500, "ticksToDecay 缺省 500（vanilla）");
+
+        let r = spec(json!({
+            "pos": [10, 10], "structureType": "spawn", "structureOwner": "p1",
+            "structureId": "kk0000000000000004", "structureHitsMax": 5000,
+            "destroyTime": 90, "ticksToDecay": 50,
+            "store": { "energy": 300 },
+        }));
+        let RoomObject::Ruin(ru) = normalize("ruin", &r, &ctx()).unwrap() else {
+            panic!("ruin 直通道进 typed 变体");
+        };
+        assert_eq!(ru.structure_type, "spawn");
+        assert_eq!(ru.structure_id, 4, "kk id 字符串解析");
+        assert_eq!(ru.structure_hits_max, Some(5000));
+        assert_eq!(ru.owner.as_deref(), Some("p1"));
+        assert_eq!(ru.destroy_time, 90);
+        assert_eq!(ru.decay_time, 140);
+        assert_eq!(ru.store.energy, 300);
+        // structureOwner 缺省（vanilla 无 user 键）
+        let r2 = spec(json!({ "pos": [11, 11], "structureType": "wall" }));
+        let RoomObject::Ruin(ru2) = normalize("ruin", &r2, &ctx()).unwrap() else {
+            panic!()
+        };
+        assert_eq!(ru2.owner, None);
+        assert_eq!(ru2.decay_time, 100 + 500);
+    }
+
     #[test]
     fn unknown_types_go_generic_passthrough() {
         // tower：M1 无结算变体 → Generic 透传（保持放置接受面）
@@ -703,14 +900,15 @@ mod tests {
         // 非法输入拒绝
         let bad = spec(json!({ "pos": [50, 0] }));
         assert!(normalize("creep", &bad, &ctx()).is_err());
-        // 未知类别落 Generic 透传（M0 接受面）且携带 type 字段
-        let s2 = spec(json!({ "pos": [1, 1], "deathTime": 88 }));
-        let RoomObject::Generic(g2) = normalize("tombstone", &s2, &ctx()).unwrap() else {
+        // 未知类别落 Generic 透传（M0 接受面）且携带 type 字段（B3 起
+        // tombstone/ruin 已进 typed 变体，用 deposit 示例）
+        let s2 = spec(json!({ "pos": [1, 1], "decayTime": 88 }));
+        let RoomObject::Generic(g2) = normalize("deposit", &s2, &ctx()).unwrap() else {
             panic!()
         };
         let d2: Value = serde_json::from_str(&g2.data).unwrap();
-        assert_eq!(d2["type"], "tombstone");
-        assert_eq!(d2["deathTime"], 88);
+        assert_eq!(d2["type"], "deposit");
+        assert_eq!(d2["decayTime"], 88);
         // structure 通道的 tower 透传也带 type
         let RoomObject::Generic(g3) = normalize("structure", &s, &ctx()).unwrap() else {
             panic!()
