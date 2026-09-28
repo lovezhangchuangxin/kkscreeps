@@ -4208,3 +4208,182 @@ fn activate_safe_mode_null_cooldown_at_time_zero_rejects() {
     ));
     assert_eq!(ctl_of(&f).safe_mode, 0, "time=0 + 冷却 None（0>=0）拒");
 }
+
+// ---- A4-iii：unclaim（官方 processor/intents/controllers/unclaim.js）----
+
+#[test]
+fn unclaim_clears_ownership_and_sets_cooldown() {
+    // unclaim.js:15-25：user=null（→ owner_cleared 哨兵）、level=0、progress=0、
+    // downgradeTime=null、safeMode=null、safeModeAvailable=0、冷却
+    // gameTime+SAFE_MODE_COOLDOWN（roomInfo.novice 免冷却路径——我方无新手区
+    // 恒挂钟）、isPowerEnabled=false。**不清 reservation/sign/upgradeBlocked**
+    // （官方 bulk update 键表无此三项——与降级归零路径 tick.js:52-63 的刻意
+    // 差异：sign 跨 unclaim 存续是玩家可观察语义；reservation 由 controllers/
+    // tick 的到期/已占条件另行清除，unclaim 后无主不满足）。removeRoomFromUser
+    // （:15）由 Engine rooms 重建承载（engine_recomputes_player_rooms_after_tick）
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    f.world.time = 100;
+    let ctl = f.controller_full(4, Some("p1"), |t| {
+        t.progress = 12_345;
+        t.safe_mode = 500;
+        t.safe_mode_available = 3;
+        t.downgrade_time = Some(9_000);
+        t.is_power_enabled = true;
+        t.reservation = Some(kk_schema::room::Reservation {
+            user: "p2".into(),
+            end_time: 10_000,
+        });
+        t.sign = Some(kk_schema::room::Sign {
+            user: "p1".into(),
+            text: "hi".into(),
+            time: 50,
+        });
+        t.upgrade_blocked = Some(700);
+    });
+    // 同 tick 追加 activateSafeMode：processor.js:307-309 unclaim 先序——归零
+    // 后 activate 的 `!object.user || !object.level` 再拒（官方同序）
+    let mut b = controller_action("p1", ctl, Action::Unclaim, IntentData::bare());
+    b.add_object_intent("p1", ctl, Action::ActivateSafeMode, IntentData::bare());
+    let events = f.settle(b);
+    assert!(events.is_empty(), "unclaim 无事件（官方处理器不 push）");
+    let t = ctl_of(&f);
+    assert_eq!(t.owner, None);
+    assert!(
+        t.owner_cleared,
+        "官方 user=null 落库哨兵 → 玩家侧 my === false"
+    );
+    assert_eq!(t.level, 0);
+    assert_eq!(t.progress, 0);
+    assert_eq!(
+        t.safe_mode, 0,
+        "同 tick activateSafeMode 被 unclaim 先序压掉"
+    );
+    assert_eq!(t.safe_mode_available, 0);
+    assert_eq!(t.downgrade_time, None);
+    assert_eq!(
+        t.safe_mode_cooldown,
+        Some(100 + 50_000),
+        "冷却 = time + SAFE_MODE_COOLDOWN（无新手区恒挂钟）"
+    );
+    assert!(!t.is_power_enabled);
+    assert_eq!(
+        t.sign.as_ref().map(|s| s.text.as_str()),
+        Some("hi"),
+        "sign 存续"
+    );
+    assert_eq!(
+        t.upgrade_blocked,
+        Some(700),
+        "upgradeBlocked 不清（官方键表无）"
+    );
+    assert_eq!(
+        t.reservation.as_ref().map(|r| r.end_time),
+        Some(10_000),
+        "reservation 存续（未到期且 unclaim 后无主——tick 清除条件不满足）"
+    );
+}
+
+#[test]
+fn unclaim_rejections() {
+    // unclaim.js:9-12 `!object.user || !object.level` 早退（不挂冷却、不置
+    // 哨兵）；分派层（processor.js:248 `object.user && object.user != userId`）
+    // 他人 controller 的 intent 整对象跳过
+    // ① 无主 + 0 级拒
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    f.world.time = 10;
+    let ctl = f.controller(0, None);
+    f.settle(controller_action(
+        "p1",
+        ctl,
+        Action::Unclaim,
+        IntentData::bare(),
+    ));
+    let t = ctl_of(&f);
+    assert!(!t.owner_cleared, "无主：哨兵不置（从未拥有）");
+    assert_eq!(t.safe_mode_cooldown, None, "无主：不挂冷却");
+    // ② 有主但 0 级拒
+    f = Fixture::new(1, terrain_with(&[]));
+    f.world.time = 10;
+    let ctl = f.controller_full(0, Some("p1"), |_| {});
+    f.settle(controller_action(
+        "p1",
+        ctl,
+        Action::Unclaim,
+        IntentData::bare(),
+    ));
+    assert_eq!(ctl_of(&f).safe_mode_cooldown, None, "0 级：不挂冷却");
+    // ③ 他人 controller：分派层丢弃
+    f = Fixture::new(1, terrain_with(&[]));
+    f.world.time = 10;
+    let ctl = f.controller_full(3, Some("p2"), |t| {
+        t.safe_mode_available = 1;
+    });
+    f.settle(controller_action(
+        "p1",
+        ctl,
+        Action::Unclaim,
+        IntentData::bare(),
+    ));
+    let t = ctl_of(&f);
+    assert_eq!(t.owner.as_deref(), Some("p2"), "敌方 intent 分派层丢弃");
+    assert_eq!(t.level, 3);
+    assert_eq!(t.safe_mode_available, 1);
+}
+
+#[test]
+fn engine_safemode_gate4_backstop_drops_cross_room_activation() {
+    // 门④可信侧兜底（A4-iii 评审 2 必修锁值）：官方 game 层在 isolated-vm
+    // 可信 realm，门④（任一自家 controller safeMode 生效 → ERR_BUSY，
+    // structures.js:223-225）处理器不复核；我方 prelude 与玩家共享 realm，
+    // 迭代器污染可令门④扫描失明——Engine 层按世界真值兜底：玩家已有生效
+    // 中的 safeMode → 其 ActivateSafeMode intent 全部丢弃（双房 safeMode
+    // 并存是官方不可能态）
+    use kk_engine::Engine;
+    let mut world = World::new(3);
+    let mut t = kk_core::Terrain::plains();
+    t.normalize();
+    world.register_room("W1N1", t.clone());
+    world.register_room("W2N2", t);
+    let mk_ctl = |safe_mode: u64, level: u8| {
+        RoomObject::Controller(kk_schema::room::ControllerObj {
+            id: 0,
+            x: 5,
+            y: 5,
+            level,
+            safe_mode,
+            safe_mode_available: 1,
+            progress: 0,
+            downgrade_time: Some(20_000),
+            owner: Some("p1".into()),
+            owner_cleared: false,
+            is_power_enabled: false,
+            reservation: None,
+            sign: None,
+            upgrade_blocked: None,
+            safe_mode_cooldown: None,
+        })
+    };
+    // W1N1：safeMode 已生效（time=3 起算挂 1000）；W2N2：五门真值可通过
+    let a = world.insert("W1N1", mk_ctl(3 + 1000, 1)).unwrap();
+    let b = world.insert("W2N2", mk_ctl(0, 1)).unwrap();
+    let mut engine = Engine::new(world);
+    // 恶意场景：绕过 prelude 门④直接构造 B 房的 ActivateSafeMode intent
+    //（embed 侧收集器闭包私有本不可达——本测试模拟的就是门④失明的等价批）
+    let mut batch = IntentBatch::default();
+    batch.add_object_intent("p1", b, Action::ActivateSafeMode, IntentData::bare());
+    engine.tick_with_intents(batch).unwrap();
+    let ctl = engine.world.room("W2N2").unwrap().objects.get(&b).unwrap();
+    match ctl {
+        RoomObject::Controller(c) => {
+            assert_eq!(c.safe_mode, 0, "A 房生效中 → B 房激活被 Engine 兜底丢弃");
+            assert_eq!(c.safe_mode_available, 1, "可用数不消耗");
+        }
+        _ => panic!("controller 不见了"),
+    }
+    // 对照：A 房自身的 safeMode 不受影响
+    let ctl_a = engine.world.room("W1N1").unwrap().objects.get(&a).unwrap();
+    match ctl_a {
+        RoomObject::Controller(c) => assert_eq!(c.safe_mode, 3 + 1000),
+        _ => panic!(),
+    }
+}

@@ -81,17 +81,35 @@ fn active_remaining(t: u64, time: u64) -> Value {
     }
 }
 
+/// [`active_remaining`] 的 Option 形态（upgradeBlocked/safeModeCooldown 是
+/// opt u64 挂钟）：官方 getter `o.x && o.x > time ? x - time : undefined`
+/// （structures.js:147/151）——null/undefined/过期统一读 null（契约语义）。
+fn active_remaining_opt(t: Option<u64>, time: u64) -> Value {
+    match t {
+        Some(t) => active_remaining(t, time),
+        None => Value::Null,
+    }
+}
+
 fn snap_pos(room: &str, x: u8, y: u8) -> Value {
     json!({ "x": x, "y": y, "roomName": room })
 }
 
 /// 官方 store getter 只暴露正量资源（vanilla snapStore：amount > 0 才入表）。
-fn snap_store(energy: u32) -> Value {
-    if energy > 0 {
-        json!({ "energy": energy })
-    } else {
-        json!({})
+/// 全资源口径（A4-iii 评审 3 清偿：world_json 已投 ghodium 正量键，查询契约
+/// 面同步——层间一致；M2 世界资源集 = energy/G）
+fn snap_store(store: &kk_schema::room::Store) -> Value {
+    let mut v = serde_json::Map::new();
+    if store.energy > 0 {
+        v.insert("energy".into(), json!(store.energy));
     }
+    if store.ghodium > 0 {
+        v.insert(
+            kk_core::constants::RESOURCE_GHODIUM.into(),
+            json!(store.ghodium),
+        );
+    }
+    Value::Object(v)
 }
 
 /// creep 载荷容量：活跃（hits>0）CARRY 数 × CARRY_CAPACITY，boosted 部件乘
@@ -174,7 +192,7 @@ fn snapshot_json(
             "owner": o.owner,
             "ticksToLive": remaining(o.age_time, time),
             "spawning": o.spawning,
-            "store": snap_store(o.store.energy),
+            "store": snap_store(&o.store),
             "storeCapacity": creep_store_capacity(&o.body),
         }),
         RoomObject::Source(o) => json!({
@@ -193,12 +211,28 @@ fn snapshot_json(
                 "ticksToDowngrade": remaining_opt(o.downgrade_time, time),
                 "safeMode": active_remaining(o.safe_mode, time),
                 "safeModeAvailable": o.safe_mode_available,
-                // schema 无 cooldown/reservation/sign 字段（M2 controller 结算族补），
-                // 契约三字段按 null 形态占位
-                "safeModeCooldown": Value::Null,
+                // B2 schema 字段的查询面清偿（A4-iii）：vanilla snapshots.ts
+                // :151-161——safeModeCooldown 过期/无值读 null、reservation
+                // {owner, ticksToEnd}、sign {owner, text, time}（契约无
+                // datetime 键——墙钟不落盘，灰区表既有登记）。ticksToEnd 的
+                // 饱和钳 0 与 remaining 家族同一既有口径
+                "safeModeCooldown": active_remaining_opt(o.safe_mode_cooldown, time),
+                "reservation": match &o.reservation {
+                    Some(r) => json!({
+                        "owner": r.user,
+                        "ticksToEnd": r.end_time.saturating_sub(time),
+                    }),
+                    None => Value::Null,
+                },
+                "sign": match &o.sign {
+                    Some(s) => json!({ "owner": s.user, "text": s.text, "time": s.time }),
+                    None => Value::Null,
+                },
+                // 官方 getter 有（structures.js:147）而 vanilla ControllerSnapshot
+                // 契约无此键——超额投影（数值消费方为本引擎调试面；契约消费方
+                // 结构校验不受额外键影响），登记灰区表
+                "upgradeBlocked": active_remaining_opt(o.upgrade_blocked, time),
                 "isPowerEnabled": o.is_power_enabled,
-                "reservation": Value::Null,
-                "sign": Value::Null,
             });
             if let Some(owner) = &o.owner {
                 v["owner"] = json!(owner);
@@ -214,7 +248,7 @@ fn snapshot_json(
             "id": id_str, "pos": snap_pos(room, o.x, o.y), "owner": o.owner,
             "hits": o.hits, "hitsMax": c::SPAWN_HITS,
             "name": o.name,
-            "store": snap_store(o.store.energy),
+            "store": snap_store(&o.store),
             // 官方 spawn 落库即带 storeCapacityResource（build.js:117-124），
             // 无资源参数的 getCapacity() 读 null（store.js:28-33；
             // adapter-spec.md:359-360 明文 "null for a store with per-resource
@@ -235,7 +269,7 @@ fn snapshot_json(
             "kind": "structure", "structureType": "extension",
             "id": id_str, "pos": snap_pos(room, o.x, o.y), "owner": o.owner,
             "hits": o.hits, "hitsMax": c::EXTENSION_HITS,
-            "store": snap_store(o.store.energy),
+            "store": snap_store(&o.store),
             // 同 spawn：官方 extension 带 storeCapacityResource（build.js:131-135、
             // extensions/tick.js:11-17 按 RCL 归一），getCapacity() 读 null
             "storeCapacity": Value::Null,
@@ -255,7 +289,7 @@ fn snapshot_json(
             "kind": "structure", "structureType": "storage",
             "id": id_str, "pos": snap_pos(room, o.x, o.y), "owner": o.owner,
             "hits": o.hits, "hitsMax": c::STORAGE_HITS,
-            "store": snap_store(o.store.energy),
+            "store": snap_store(&o.store),
             "storeCapacity": c::STORAGE_CAPACITY,
         }),
         RoomObject::ConstructionSite(o) => {
@@ -363,6 +397,26 @@ mod tests {
             "默认寿命：age_time(=10+1500) − time=10"
         );
         assert!(snap["spawning"].is_boolean());
+
+        // ghodium 正量键（A4-iii 评审 3 清偿：查询契约面与 world_json 同为
+        // 全资源正量口径——层间一致）
+        let gh_creep = normalize(
+            "creep",
+            &serde_json::json!({
+                "pos": [6, 6], "owner": "p1", "body": ["move"],
+                "store": { "energy": 30, "G": 200 },
+            }),
+            &PlaceCtx {
+                time: world.time,
+                controller: None,
+                name_seq: 1,
+            },
+        )
+        .unwrap();
+        let gh_id = world.insert("W1N1", gh_creep).unwrap();
+        let gh_snap = world.object_snapshot_by_id(gh_id).unwrap();
+        assert_eq!(gh_snap["store"]["energy"], 30);
+        assert_eq!(gh_snap["store"]["G"], 200, "ghodium 正量入快照");
 
         let spawn = normalize(
             "structure",
@@ -702,9 +756,6 @@ mod tests {
         );
     }
 
-    /// Store 族容量快照锁（A4-i，与 world_json::store_capacity_projection_family
-    /// 层间对表）：storage 数值容量、spawn/extension 无参容量 null（官方落库带
-    /// storeCapacityResource——build.js:119-137、store.js:28-33）、creep 数值。
     #[test]
     fn snapshot_store_capacity_family() {
         let mut world = world_with_room();
@@ -761,5 +812,85 @@ mod tests {
             snap["storeCapacity"], 100,
             "CARRY×2 × 50（与 world_json 同源）"
         );
+    }
+
+    /// B2 schema 四字段（A4-iii 查询面清偿）的契约形态锁（vanilla
+    /// snapshots.ts:151-161）：safeModeCooldown/upgradeBlocked 过期或无值读
+    /// null、活跃读剩余值；reservation {owner, ticksToEnd}、sign
+    /// {owner, text, time}（契约无 datetime 键）。与 world_json.rs 同名测试
+    /// 层间对表。
+    #[test]
+    fn controller_b2_projection_fields() {
+        let mk = |reservation, sign, blocked, cooldown| {
+            RoomObject::Controller(kk_schema::room::ControllerObj {
+                id: 0,
+                x: 1,
+                y: 1,
+                level: 1,
+                safe_mode: 0,
+                safe_mode_available: 0,
+                progress: 0,
+                downgrade_time: None,
+                owner: Some("p1".into()),
+                owner_cleared: false,
+                is_power_enabled: false,
+                reservation,
+                sign,
+                upgrade_blocked: blocked,
+                safe_mode_cooldown: cooldown,
+            })
+        };
+        let mut world = world_with_room(); // time = 10
+        let full = world
+            .insert(
+                "W1N1",
+                mk(
+                    Some(kk_schema::room::Reservation {
+                        user: "p2".into(),
+                        end_time: 510,
+                    }),
+                    Some(kk_schema::room::Sign {
+                        user: "p1".into(),
+                        text: "hi".into(),
+                        time: 80,
+                    }),
+                    Some(310),
+                    Some(50_010),
+                ),
+            )
+            .unwrap();
+        let expired = world
+            .insert("W1N1", mk(None, None, Some(5), Some(5)))
+            .unwrap();
+        let empty = world.insert("W1N1", mk(None, None, None, None)).unwrap();
+        let snap = world.object_snapshot_by_id(full).unwrap();
+        assert_eq!(
+            snap["reservation"],
+            serde_json::json!({ "owner": "p2", "ticksToEnd": 500 }),
+            "endTime 510 − time 10"
+        );
+        assert_eq!(
+            snap["sign"],
+            serde_json::json!({ "owner": "p1", "text": "hi", "time": 80 })
+        );
+        assert_eq!(snap["upgradeBlocked"], 300, "310 − 10");
+        assert_eq!(snap["safeModeCooldown"], 50_000, "50010 − 10");
+        let e = world.object_snapshot_by_id(expired).unwrap();
+        assert_eq!(e["upgradeBlocked"], serde_json::Value::Null, "过期读 null");
+        assert_eq!(
+            e["safeModeCooldown"],
+            serde_json::Value::Null,
+            "过期读 null"
+        );
+        assert_eq!(
+            e["reservation"],
+            serde_json::Value::Null,
+            "无预定读 null（active_remaining 家族外的对象形态字段）"
+        );
+        let n = world.object_snapshot_by_id(empty).unwrap();
+        assert_eq!(n["reservation"], serde_json::Value::Null);
+        assert_eq!(n["sign"], serde_json::Value::Null);
+        assert_eq!(n["upgradeBlocked"], serde_json::Value::Null);
+        assert_eq!(n["safeModeCooldown"], serde_json::Value::Null);
     }
 }

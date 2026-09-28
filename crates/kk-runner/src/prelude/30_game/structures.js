@@ -69,6 +69,12 @@
     BODYPARTS_ALL: freezeConst(globalThis.BODYPARTS_ALL.slice()),
     BODYPART_COST: freezeConst(__Object.assign({}, globalThis.BODYPART_COST)),
     RESOURCES_ALL: freezeConst(globalThis.RESOURCES_ALL.slice()),
+    // controller 族（A4-iii）：activateSafeMode 门③阈值表与第六门扫描
+    ERR_NOT_ENOUGH_RESOURCES: globalThis.ERR_NOT_ENOUGH_RESOURCES,
+    ERR_TIRED: globalThis.ERR_TIRED,
+    ERR_BUSY: globalThis.ERR_BUSY,
+    CONTROLLER_DOWNGRADE: freezeConst(globalThis.CONTROLLER_DOWNGRADE),
+    CONTROLLER_DOWNGRADE_SAFEMODE_THRESHOLD: globalThis.CONTROLLER_DOWNGRADE_SAFEMODE_THRESHOLD,
   };
 
   // ---------------------------------------------------------------- per-tick 状态
@@ -288,10 +294,14 @@
     ticksToRegeneration: (o) => o.ticksToRegeneration ?? 0,
   });
 
-  // Controller（官方 structures.js:139-174 的现状子集——换算口径保持现状：
-  // downgradeTime/safeMode 绝对存储 − 当前 tick；无值/已过期归 0（None→0
-  // 投影归一，灰区登记口径）；progress/progressTotal 直存；safeModeCooldown
-  // 现状硬编码 0（投影缺字段，A4-iii 随 B2 schema 补投影后换真）
+  // Controller（官方 structures.js:139-174）。A4-iii 投影清偿：reservation/
+  // sign/upgradeBlocked/safeModeCooldown 四 getter 换官方真形态（绝对 tick
+  // 挂钟 → `> time ? 差值 : undefined`；{user,endTime} → {username,
+  // ticksToEnd}——官方 :176-179/:185/:187-197）。ticksToDowngrade/safeMode
+  // 维持既有 None→0 口径（灰区表登记，A3b 只换访问机制）——注意
+  // activateSafeMode 门③ 读 this.ticksToDowngrade 时无钟房 0 < 阈值为真
+  // （官方 undefined < 阈值为假——API 返回码差异，登记报告；终态一致：结算
+  // 侧 B2 对无钟房同拒）。
   gw.defineGameObjectProperties(globalThis.StructureController.prototype, gw.rawData, {
     level: (o) => o.level || 0,
     progress: (o) => o.progress || 0,
@@ -299,9 +309,27 @@
     ticksToDowngrade: (o) => (o.downgradeTime != null ? o.downgradeTime - now() : 0),
     safeMode: (o) => (o.safeMode && o.safeMode > now() ? o.safeMode - now() : 0),
     safeModeAvailable: (o) => o.safeModeAvailable ?? 0,
-    safeModeCooldown: () => 0,
+    safeModeCooldown: (o) => (o.safeModeCooldown && o.safeModeCooldown > now()
+      ? o.safeModeCooldown - now()
+      : undefined),
     isPowerEnabled: (o) => o.isPowerEnabled === true,
-    reservation: () => undefined,
+    reservation: (o) => (o.reservation
+      ? { username: o.reservation.user, ticksToEnd: o.reservation.endTime - now() }
+      : undefined),
+    sign: (o) => (o.sign
+      ? {
+          username: o.sign.user,
+          text: o.sign.text,
+          time: o.sign.time,
+          // 官方第四字段 datetime: new Date(o.sign.datetime)（structures.js:192，
+          // 墙钟落库）——确定性引擎不落盘，合成当前墙钟（灰区表登记口径：
+          // 合成或差异登记，replay 不确定性与官方 Date.now() 同源）
+          datetime: new Date(),
+        }
+      : undefined),
+    upgradeBlocked: (o) => (o.upgradeBlocked && o.upgradeBlocked > now()
+      ? o.upgradeBlocked - now()
+      : undefined),
     activationDate: () => undefined,
   });
 
@@ -556,21 +584,67 @@
   };
 
   // ---------------------------------------------------------------- 原型方法（桩）
-  const CONTROLLER_METHODS = ['activateSafeMode'];
   const STRUCTURE_METHODS = ['destroy', 'setActive', 'notifyWhenAttacked'];
-  // controller（activateSafeMode 官方 structures.js:223-231 六门预检——A4-iii
-  // 换真；桩先挂原型保持实例 own 面干净）
-  for (const m of CONTROLLER_METHODS) {
-    globalThis.StructureController.prototype[m] = gw.mkStubMethod('controller.' + m);
-  }
   // spawn：destroy/setActive/notifyWhenAttacked 保持桩（官方 destroy :79-97/
-  // setActive :103-127/notifyWhenAttacked :89-101——A4-iii 换真）
+  // setActive :103-127/notifyWhenAttacked :89-101——A4-iv 批次换真面）
   for (const m of STRUCTURE_METHODS) {
     globalThis.StructureSpawn.prototype[m] = gw.mkStubMethod('spawn.' + m);
   }
   // 通用结构方法：不挂 Structure 基类原型（controller/source/mineral 现状无
   // 这些方法，挂基类会让它们经原型链继承——语义变化）；else 族按类原型/实例
   // 兜底挂载
+
+  // ---------------------------------------------------------------- controller 真方法（A4-iii）
+  /** StructureController.unclaim：官方 structures.js:200-208——!my 门后记
+   *  intent（结算侧 unclaim.js 清主权，settle/controller.rs）。 */
+  globalThis.StructureController.prototype.unclaim = function unclaim() {
+    if (!this.my) return C.ERR_NOT_OWNER;
+    gw.intents.set(this.id, 'unclaim', {});
+    return C.OK;
+  };
+
+  /** StructureController.activateSafeMode：官方 structures.js:211-234 六门
+   *  全序（预检序不重排）：
+   /*  ① !this.my → ERR_NOT_OWNER（:213）
+   /*  ② safeModeAvailable <= 0 → ERR_NOT_ENOUGH_RESOURCES（:216）
+   *  ③ safeModeCooldown || upgradeBlocked > 0 || ticksToDowngrade <
+   /*    CONTROLLER_DOWNGRADE[level]/2 − THRESHOLD → ERR_TIRED（:219-221）——
+   *    经 getter 通道读（官方 this.xxx）；cooldown/blocked 官方 undefined
+   *    参与比较恒假，我方同（新 getter undefined 形态）；ticksToDowngrade
+   *    无钟 0（None→0 既有口径）→ 0 < 阈值为真，官方 undefined 比较为假
+   *    ——API 返回码差异（登记报告；终态一致：结算侧对无钟房同拒）
+   /*  ④ 第六门：任何自家房 controller safeMode 生效中 → ERR_BUSY（:223-225，
+   *    官方 _.any(register.structures)——我方对注入世界全结构扫描等价）
+   *  ⑤ lastActivateSafeMode 闭包：有则 intents.remove(旧 id,
+   /*    'activateSafeMode')（收集器退费），记录本 id（:227-231）——同 tick
+   *    后开者覆盖先开者；per-tick 重置（beginTick，官方 make 每 tick 新闭包）
+   /*  ⑥ intents.set('activateSafeMode', {})（:233） */
+  globalThis.StructureController.prototype.activateSafeMode = function activateSafeMode() {
+    if (!this.my) return C.ERR_NOT_OWNER;
+    if (this.safeModeAvailable <= 0) return C.ERR_NOT_ENOUGH_RESOURCES;
+    if (this.safeModeCooldown || this.upgradeBlocked > 0
+      || this.ticksToDowngrade < C.CONTROLLER_DOWNGRADE[this.level] / 2
+        - C.CONTROLLER_DOWNGRADE_SAFEMODE_THRESHOLD) {
+      return C.ERR_TIRED;
+    }
+    // 门④扫描用索引迭代：for...of 经 Array.prototype[Symbol.iterator] 运行期
+    // 解析，同 realm 玩家可污染迭代器喂空本门（A4-iii 评审 2 必修）——Engine
+    // 层 tick_with_intents 已按世界真值兜底，此处索引迭代是纵深防御
+    const objs = gw.world.objects || [];
+    for (let i = 0; i < objs.length; i++) {
+      const o = objs[i];
+      if (o.type === 'structure' && o.structureType === 'controller'
+        && o.owner === gw.viewerName && o.safeMode && o.safeMode > now()) {
+        return C.ERR_BUSY;
+      }
+    }
+    if (gw.lastActivateSafeMode) {
+      gw.intents.remove(gw.lastActivateSafeMode, 'activateSafeMode');
+    }
+    gw.lastActivateSafeMode = this.id;
+    gw.intents.set(this.id, 'activateSafeMode', {});
+    return C.OK;
+  };
 
   // ---------------------------------------------------------------- 装配
   // spawn 装配：字段/方法全在原型，own 面只剩 id/pos/room + 静态标记

@@ -62,6 +62,10 @@ pub enum Action {
     /// `activateSafeMode: {}`——system.js:34；语义链见 settle/controller.rs）。
     /// 与 CreateCreep 同理不在 creepActions 序列（EXECUTION_ORDER）里。
     ActivateSafeMode,
+    /// controller 对象的动作（官方 processor.js:307-309 先于 activateSafeMode
+    /// 分派，intent 白名单 `unclaim: {}`——system.js:78；语义链见
+    /// settle/controller.rs）。A4-iii 补（B2 时登记"白名单外动作清洗层丢弃"）。
+    Unclaim,
 }
 
 impl Action {
@@ -96,6 +100,7 @@ impl Action {
             Self::SetSpawnDirections => "setSpawnDirections",
             Self::CancelSpawning => "cancelSpawning",
             Self::ActivateSafeMode => "activateSafeMode",
+            Self::Unclaim => "unclaim",
         }
     }
 
@@ -130,6 +135,7 @@ impl Action {
             "setSpawnDirections" => Self::SetSpawnDirections,
             "cancelSpawning" => Self::CancelSpawning,
             "activateSafeMode" => Self::ActivateSafeMode,
+            "unclaim" => Self::Unclaim,
             _ => return None,
         })
     }
@@ -682,7 +688,10 @@ mod from_json_tests {
                 "generateSafeMode": { "id": ctl },
                 "signController": { "id": ctl, "sign": "x".repeat(150) }
             },
-            ctl: { "activateSafeMode": { "forged": "field" } }
+            ctl: {
+                "activateSafeMode": { "forged": "field" },
+                "unclaim": { "forged": 1 }
+            }
         });
         let batch = IntentBatch::from_json("p1", &list);
         let user = &batch.users["p1"];
@@ -716,6 +725,9 @@ mod from_json_tests {
             Some(Action::ActivateSafeMode)
         );
         assert_eq!(Action::ActivateSafeMode.name(), "activateSafeMode");
+        // unclaim（system.js:78 空白名单——无字段；processor.js:307-309 分派）
+        let unclaim = &user.objects[&ctl_id][&Action::Unclaim];
+        assert_eq!(unclaim.id, None, "unclaim 无字段");
         // 缺省 → None / 显式空串 → Some("")：清洗层保留 presence 区分，
         // 语义分叉在 signController 结算层（两者都落"清除签名"）
         let d = sanitize_object_intent(Action::SignController, &serde_json::json!({ "id": ctl }));

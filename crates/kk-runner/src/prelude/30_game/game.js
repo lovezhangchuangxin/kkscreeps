@@ -374,6 +374,12 @@
         if (o && o.id !== undefined) gw.rawById.set(o.id, o);
       }
       resetIntents(); // 官方每 tick 新建收集器（runtime.js _start 每 tick 执行）
+      // A4-iii per-tick 闭包重置（官方 game 层每 tick 新 make 闭包的等价物）：
+      // activateSafeMode 的 lastActivateSafeMode（structures.js:226——同 tick
+      // 后开者覆盖先开者、跨 tick 不残留）与 claimController 的
+      // controllersClaimedInTick（creeps.js:845——GCL 门的同 tick 已 claim 计数）
+      gw.lastActivateSafeMode = null;
+      gw.controllersClaimedInTick = 0;
       parsedMemory = undefined; // 官方语义：Memory 每 tick 从 RawMemory 懒解析
       // 上一 tick 首访后 Memory 已固化为普通值属性（官方同款），本 tick 重装懒 getter
       __Object.defineProperty(globalThis, 'Memory', {

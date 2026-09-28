@@ -230,7 +230,18 @@ pub(crate) fn object_json(
             // 官方 creeps.js:78 `o.ageTime ? o.ageTime - time : undefined`：
             // 孵化中的雏形不带 ageTime（create-creep.js:80-98 无该字段，出生后
             // 首个 creep tick 赋值——CREEP-SPAWNING-002 锁值）→ 键缺省（prelude
-            // 读 undefined；快照面 remaining(0) 同构 null）
+            // 读 undefined；快照面 remaining(0) 同构 null）。
+            // store：energy 恒投影（既有形状）；ghodium（A4-iii 的
+            // generateSafeMode 消耗面）按正量投影——0 值不出现（官方 store
+            // getter 正量暴露的既有口径，vanilla snapStore 同构）
+            let mut store = serde_json::Map::new();
+            store.insert("energy".into(), json!(o.store.energy));
+            if o.store.ghodium > 0 {
+                store.insert(
+                    kk_core::constants::RESOURCE_GHODIUM.to_string(),
+                    json!(o.store.ghodium),
+                );
+            }
             let mut v = json!({
                 "type": "creep", "id": id_str, "room": room, "x": o.x, "y": o.y,
                 "name": o.name, "owner": o.owner,
@@ -239,7 +250,7 @@ pub(crate) fn object_json(
                 "ageTime": o.age_time,
                 "hits": o.hits,
                 "hitsMax": o.body.len() * 100,
-                "store": { "energy": o.store.energy },
+                "store": Value::Object(store),
                 // 官方 creep 落库带 storeCapacity（_recalc-body：活跃 CARRY ×
                 // CARRY_CAPACITY × boost 乘数）——creeps.js carryCapacity 直读
                 // `o.storeCapacity`、Store.getCapacity() 同源（A4-i Store 族）
@@ -270,6 +281,21 @@ pub(crate) fn object_json(
                 "safeModeAvailable": o.safe_mode_available,
                 "downgradeTime": o.downgrade_time,
                 "isPowerEnabled": o.is_power_enabled,
+                // B2 schema 字段的投影清偿（A4-iii）：绝对 tick / {user,endTime}
+                // 官方 DB 原始形态——prelude getter（structures.js 对照
+                // structures.js:143-169）与快照面（snapshot.rs）各自换算，
+                // None → null（downgradeTime 同形）。sign 无 datetime 键
+                //（墙钟不落盘，灰区表既有登记）
+                "upgradeBlocked": o.upgrade_blocked,
+                "safeModeCooldown": o.safe_mode_cooldown,
+                "reservation": match &o.reservation {
+                    Some(r) => json!({ "user": r.user, "endTime": r.end_time }),
+                    None => Value::Null,
+                },
+                "sign": match &o.sign {
+                    Some(s) => json!({ "user": s.user, "text": s.text, "time": s.time }),
+                    None => Value::Null,
+                },
             });
             if let Some(owner) = &o.owner {
                 v["owner"] = json!(owner);
@@ -646,10 +672,6 @@ mod tests {
         );
     }
 
-    /// Store 族容量投影锁（A4-i）：官方落库形态——spawn/extension 带
-    /// storeCapacityResource（build.js:119-137 + extensions/tick.js:11-17 的
-    /// RCL 归一）、storage 带数值 storeCapacity（build.js:150-156）、creep 带
-    /// storeCapacity（_recalc-body）；off 是 spawnCreep 族 data(id).off 的
     /// 显式回查面；spawning.directions 未指定时官方缺键（undefined）。
     #[test]
     fn store_capacity_projection_family() {
@@ -772,5 +794,77 @@ mod tests {
             spawn_j["spawning"].get("directions").is_none(),
             "空 directions 缺键（官方 Spawning.directions === undefined）"
         );
+    }
+
+    /// B2 schema 四字段（A4-iii 投影清偿）的 prelude 世界投影锁：绝对 tick/
+    /// {user,endTime} 官方 DB 原始形态（prelude getter 换算用），None → null；
+    /// sign 无 datetime 键（墙钟不落盘——灰区表既有登记，getter 侧合成）。
+    /// 与 snapshot.rs 同名测试层间对表（两消费面各自换算、字段单源）。
+    #[test]
+    fn controller_b2_projection_fields() {
+        let mk = |reservation, sign, blocked, cooldown| {
+            RoomObject::Controller(ControllerObj {
+                id: 0,
+                x: 1,
+                y: 1,
+                level: 1,
+                safe_mode: 0,
+                safe_mode_available: 0,
+                progress: 0,
+                downgrade_time: None,
+                owner: Some("p1".into()),
+                owner_cleared: false,
+                is_power_enabled: false,
+                reservation,
+                sign,
+                upgrade_blocked: blocked,
+                safe_mode_cooldown: cooldown,
+            })
+        };
+        let mut world = World::new(42);
+        world.time = 100;
+        let mut terrain = Terrain::plains();
+        terrain.normalize();
+        world.register_room("W1N1", terrain);
+        let full = world
+            .insert(
+                "W1N1",
+                mk(
+                    Some(kk_schema::room::Reservation {
+                        user: "p2".into(),
+                        end_time: 600,
+                    }),
+                    Some(kk_schema::room::Sign {
+                        user: "p1".into(),
+                        text: "hi".into(),
+                        time: 80,
+                    }),
+                    Some(400),
+                    Some(50_500),
+                ),
+            )
+            .unwrap();
+        let empty = world.insert("W1N1", mk(None, None, None, None)).unwrap();
+        let j = world.object_json_by_id(full).unwrap();
+        assert_eq!(
+            j["reservation"],
+            serde_json::json!({ "user": "p2", "endTime": 600 }),
+            "原始 DB 形态（getter 侧换算 ticksToEnd）"
+        );
+        assert_eq!(
+            j["sign"],
+            serde_json::json!({ "user": "p1", "text": "hi", "time": 80 })
+        );
+        assert!(
+            j["sign"].get("datetime").is_none(),
+            "墙钟不落盘不投影（灰区表登记）"
+        );
+        assert_eq!(j["upgradeBlocked"], 400, "绝对 tick 原样");
+        assert_eq!(j["safeModeCooldown"], 50_500, "绝对 tick 原样");
+        let e = world.object_json_by_id(empty).unwrap();
+        assert_eq!(e["reservation"], serde_json::Value::Null);
+        assert_eq!(e["sign"], serde_json::Value::Null);
+        assert_eq!(e["upgradeBlocked"], serde_json::Value::Null);
+        assert_eq!(e["safeModeCooldown"], serde_json::Value::Null);
     }
 }

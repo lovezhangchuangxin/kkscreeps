@@ -399,6 +399,37 @@ impl Engine {
             .next_id
             .max(self.world.next_available_obj_id().map_err(SettleError)?);
         let mut players = self.players.clone();
+        let mut batch = batch;
+        // 门④可信侧兜底（官方 API 层 structures.js:223-225 的等价物——"玩家
+        // 名下任一 controller safeMode 生效中 → 新 activateSafeMode 全拒"）。
+        // 官方 game 层跑在 isolated-vm 可信 realm，处理器无需复核；我方
+        // prelude 与玩家共享 realm，原型迭代器污染可令门④扫描失明（A4-iii
+        // 评审 2 必修）——结算侧唯一无兜底的门，在此按世界真值补齐：玩家
+        // 已有生效中的 safeMode → 该玩家全部 ActivateSafeMode intent 丢弃
+        //（官方 BUSY 拒 = intent 不记；检查时点同官方 API 调用时读上一 tick
+        // 结束态，本 tick 新激活的时钟此刻尚未落库，跨房多开被结构性封死）
+        let time = self.world.time;
+        let mut safemode_holders: Vec<String> = self
+            .world
+            .rooms
+            .values()
+            .flat_map(|r| r.objects.values())
+            .filter_map(|o| match o {
+                RoomObject::Controller(c) if c.safe_mode > time => c.owner.clone(),
+                _ => None,
+            })
+            .collect();
+        safemode_holders.sort_unstable();
+        safemode_holders.dedup();
+        if !safemode_holders.is_empty() {
+            for holder in &safemode_holders {
+                if let Some(intents) = batch.users.get_mut(holder) {
+                    for actions in intents.objects.values_mut() {
+                        actions.remove(&crate::intent::Action::ActivateSafeMode);
+                    }
+                }
+            }
+        }
         let room_names: Vec<String> = self.world.rooms.keys().cloned().collect();
         for name in room_names {
             #[cfg(test)]
