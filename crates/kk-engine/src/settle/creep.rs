@@ -33,6 +33,8 @@ pub fn process_creep_intents(w: &mut Working, id: ObjId, actions: &BTreeMap<Acti
             Action::Attack => intent_attack(w, id, data),
             Action::Repair => intent_repair(w, id, data),
             Action::Dismantle => intent_dismantle(w, id, data),
+            Action::Heal => intent_heal(w, id, data, false),
+            Action::RangedHeal => intent_heal(w, id, data, true),
             // M1 无执行器的动作（战斗/占位/杂项）：压制图已生效，此处静默跳过
             _ => {}
         }
@@ -832,6 +834,73 @@ fn intent_dismantle(w: &mut Working, id: ObjId, data: &IntentData) {
     damage::apply_damage(w, id, target_id, amount, c::EVENT_ATTACK_TYPE_DISMANTLE);
 }
 
+/// 官方 heal.js（ranged=false）/ rangedHeal.js（ranged=true）：射程 1/3、
+/// creep 目标（自愈合法——无自指拒，对照 attack.js:18）、他人 safeMode 拒、
+/// HEAL × HEAL_POWER(12)/RANGED_HEAL_POWER(4) 延迟施加（无能量消耗、无 boost）。
+fn intent_heal(w: &mut Working, id: ObjId, data: &IntentData, ranged: bool) {
+    let Some(target_id) = data.id else { return };
+    // heal.js:10-15 / rangedHeal.js:10-15：spawning 拒；功率 = 活跃 HEAL ×
+    // HEAL_POWER / RANGED_HEAL_POWER
+    let (pos, owner, power) = match w.creep(id) {
+        Some(c) if !c.spawning => (
+            (c.x, c.y),
+            c.owner.clone(),
+            BodyKind::count_active(&c.body, BodyKind::Heal) as i64
+                * if ranged {
+                    c::RANGED_HEAL_POWER
+                } else {
+                    c::HEAL_POWER
+                },
+        ),
+        _ => return,
+    };
+    // heal.js:17-19：目标必须是已出生的 creep（powerCreep 属 M4）；spawning 拒
+    let Some(target) = w.room.objects.get(&target_id).cloned() else {
+        return;
+    };
+    let RoomObject::Creep(t) = &target else {
+        return;
+    };
+    if t.spawning {
+        return;
+    }
+    let (tx, ty) = (t.x, t.y);
+    // heal.js:21-23 射程 1 / rangedHeal.js:21-23 射程 3（Chebyshev）
+    let range = if ranged { 3 } else { 1 };
+    if (tx as i32 - pos.0 as i32).abs() > range || (ty as i32 - pos.1 as i32).abs() > range {
+        return;
+    }
+    // heal.js:25-27：他人 safeMode 拒（与 attack 同形）
+    if blocked_by_safe_mode(w, &owner) {
+        return;
+    }
+    // heal.js:29：延迟施加（_healToApply——伤害通道的对称面，tick.js:126-128
+    // 在死亡判定前回补，同 tick 与伤害互相抵消）
+    *w.heal_to_apply.entry(target_id).or_insert(0) += power;
+    // heal.js:31-32：actionLog heal/rangedHeal（官方两键分立，u8 位图并入
+    // 同一位——见 ACTION_HEAL 注释）+ healed（自愈同体）
+    if let Some(c) = w.creep_mut(id) {
+        set_action_log(&mut c.action_log, ACTION_HEAL);
+    }
+    if let Some(t) = w.creep_mut(target_id) {
+        set_action_log(&mut t.action_log, ACTION_HEALED);
+    }
+    // heal.js:34：事件无条件（0 治疗量也发——引擎层不做部件预检，与 attack 同形）
+    w.push_event(
+        c::EVENT_HEAL,
+        id,
+        serde_json::json!({
+            "targetId": target_id.as_str(),
+            "amount": power,
+            "healType": if ranged {
+                c::EVENT_HEAL_TYPE_RANGED
+            } else {
+                c::EVENT_HEAL_TYPE_MELEE
+            },
+        }),
+    );
+}
+
 /// 官方 creeps/tick.js（M1 子集）：移动落格、TTL 死亡、疲劳恢复。
 pub fn creep_tick(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
     // 移动落格（movement.js execute）
@@ -857,9 +926,10 @@ pub fn creep_tick(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
             w.add_fatigue(id, -2 * moves);
         }
     }
-    // 延迟伤害结算（creeps/tick.js:118-150 在疲劳恢复之后）：hits 归零 → 暴力
-    // 死亡（与 TTL 死亡同路径），否则重排部件分布并处理缩容掉落
-    damage::apply_pending_damage(w, id);
+    // 延迟伤害/治疗结算（creeps/tick.js:118-150 在疲劳恢复之后）：伤害先于
+    // 治疗施加、死亡判定在两者之后——同 tick 等量互相抵消；归零 → 暴力死亡
+    // （与 TTL 死亡同路径），否则重排部件分布并处理缩容掉落
+    damage::apply_pending_hits(w, id);
     Ok(())
 }
 
@@ -961,6 +1031,13 @@ pub const ACTION_ATTACK: u8 = 1 << 3;
 pub const ACTION_ATTACKED: u8 = 1 << 4;
 /// 官方 actionLog.repair（repair.js:53）。
 pub const ACTION_REPAIR: u8 = 1 << 5;
+/// 官方 actionLog.heal（heal.js:31）。rangedHeal.js:31 的官方独立键
+/// `rangedHeal` 在 u8 位图形态下并入本位（位图已满 8 位；远近程的玩家可见
+/// 区分由 EVENT_HEAL 的 healType 字段承载——schema 换正式 actionLog 形态时
+/// 恢复官方双键）。
+pub const ACTION_HEAL: u8 = 1 << 6;
+/// 官方 actionLog.healed（heal.js:32；renew-creep.js:42 也置此键）。
+pub const ACTION_HEALED: u8 = 1 << 7;
 
 pub fn set_action_log(bits: &mut u8, bit: u8) {
     *bits |= bit;
