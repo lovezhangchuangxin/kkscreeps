@@ -442,7 +442,7 @@ pub fn users_dataset(fix: &WorldFixture, round: u64, tier: Tier) -> Dataset {
     }
 }
 
-/// 玩家记录（~230B 小值；字段取官方用户文档的常见子集）。
+/// 玩家记录（~280B 小值；字段取官方用户文档的常见子集）。
 fn user_record(player: &str, index: usize, round: u64) -> String {
     json!({
         "username": player,
@@ -508,10 +508,12 @@ mod tests {
     use super::*;
     use kk_schema::room::decode_snapshot;
 
-    /// 逐字节确定性：同档两次构建完全一致（fixture 锁定的前提）。
+    /// 逐字节确定性：同档两次构建完全一致（fixture 锁定的前提）。t3 双构建
+    /// debug 下约 +16s（测试间并行后套件墙钟 +~8s）——用测试时长换"基准
+    /// 数据集逐字节可复现"的完整锁定。
     #[test]
     fn deterministic_bytes() {
-        for tier in [Tier::T1, Tier::T2] {
+        for tier in [Tier::T1, Tier::T2, Tier::T3] {
             let a = build_world(tier);
             let b = build_world(tier);
             for room in &a.room_names {

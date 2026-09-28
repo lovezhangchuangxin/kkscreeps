@@ -100,7 +100,8 @@ pub struct ScenarioResult {
     pub per_round: Option<RoundStats>,
     /// 基于中位轮的数据吞吐（字节/秒；每操作场景为空）。
     pub bytes_per_sec: Option<f64>,
-    /// 基于每操作均值的操作吞吐（op/s）。
+    /// 每操作场景的操作吞吐（op/s），按 p50 派生——逐条提交样本带 fsync
+    /// 重尾，mean 会被单次离群拉偏。
     pub ops_per_sec: Option<f64>,
     /// 场景末引擎数据文件字节数。
     pub db_file_len: u64,

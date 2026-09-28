@@ -181,6 +181,9 @@ impl Runner<'_> {
     }
 
     /// 批量写场景（检查点形态）：warmup + rounds 轮，每轮一个写事务写全量。
+    /// warmup 轮号从 `rounds` 起排——与计时轮（0..rounds）的数据集**不相交**：
+    /// 同值重写会被 mdbx 判为无脏页事务而 no-op commit（初轮实测教训），
+    /// warmup 与计时首轮同值会把假绿样本混进计时分布。
     fn bulk_write(
         &mut self,
         engine: &mut dyn StorageEngine,
@@ -191,7 +194,7 @@ impl Runner<'_> {
         note: &str,
     ) -> anyhow::Result<()> {
         for w in 0..self.warmup {
-            engine.write_batch(table, &make(w as u64).pairs)?;
+            engine.write_batch(table, &make((self.rounds + w) as u64).pairs)?;
         }
         let mut ms = Vec::with_capacity(self.rounds);
         let mut last = make(0);
@@ -223,7 +226,8 @@ impl Runner<'_> {
         Ok(())
     }
 
-    /// 逐键提交场景：每键独立事务；warmup 轮丢弃、计时轮样本合并。
+    /// 逐键提交场景：每键独立事务；warmup 轮丢弃、计时轮样本合并。warmup
+    /// 轮号同样从 `rounds` 起排（与计时轮数据集不相交，理由见 [`Self::bulk_write`]）。
     fn per_key_txn(
         &mut self,
         engine: &mut dyn StorageEngine,
@@ -234,7 +238,7 @@ impl Runner<'_> {
         note: &str,
     ) -> anyhow::Result<()> {
         for w in 0..self.warmup {
-            engine.write_per_key_txn(table, &make(w as u64).pairs)?;
+            engine.write_per_key_txn(table, &make((self.rounds + w) as u64).pairs)?;
         }
         let mut micros = Vec::new();
         let mut last = make(0);
@@ -256,7 +260,9 @@ impl Runner<'_> {
             latency: Some(ls.clone()),
             per_round: None,
             bytes_per_sec: None,
-            ops_per_sec: Some(1e6 / ls.mean_us.max(f64::EPSILON)),
+            // p50 派生（非 mean）：逐条提交的样本带 fsync 风暴重尾，mean 会被
+            // 单次离群拉偏
+            ops_per_sec: Some(1e6 / ls.p50_us.max(f64::EPSILON)),
             db_file_len: file_len,
             note: Some(note.to_string()),
         });
@@ -264,7 +270,8 @@ impl Runner<'_> {
     }
 
     /// 点读场景：先全量预置（不计时），再逐轮随机抽键（有放回、均匀）。
-    /// 读回字节数与按抽样键算出的期望严格对账（缺键在引擎内即报错）。
+    /// 读回字节总数与按抽样键算出的期望合计对账（合计口径而非逐字节——
+    /// 缺键在引擎内即报错）。
     fn point_read(
         &mut self,
         engine: &mut dyn StorageEngine,
@@ -314,17 +321,17 @@ impl Runner<'_> {
             latency: Some(ls.clone()),
             per_round: None,
             bytes_per_sec: None,
-            ops_per_sec: Some(1e6 / ls.mean_us.max(f64::EPSILON)),
+            ops_per_sec: Some(1e6 / ls.p50_us.max(f64::EPSILON)),
             db_file_len: file_len,
             note: Some(format!(
-                "每键独立只读事务；每轮 {} 键（有放回均匀抽取），读回字节严格对账",
+                "每键独立只读事务；每轮 {} 键（有放回均匀抽取），读回字节总数按抽样期望合计对账",
                 self.read_ops
             )),
         });
         Ok(())
     }
 
-    /// 前缀扫描场景（含条数断言——扫描正确性随基准自验）。
+    /// 前缀扫描场景（每轮条数断言——扫描正确性随基准自验）。
     fn scan(
         &mut self,
         engine: &mut dyn StorageEngine,
@@ -340,20 +347,20 @@ impl Runner<'_> {
             .filter(|(k, _)| k.starts_with(prefix))
             .count();
         let mut ms = Vec::with_capacity(self.rounds);
-        let (mut last_count, mut last_bytes) = (0usize, 0u64);
+        let mut last_bytes = 0u64;
         for r in 0..self.warmup + self.rounds {
             let (elapsed, count, bytes) = engine.scan_prefix(table, prefix)?;
+            // 每轮校验条数（不只看末轮——任何一轮的错误结果都不许进计时）
+            if count != expect_keys {
+                bail!(
+                    "{scenario}/{} 第 {r} 轮扫描条数 {count} != 预期 {expect_keys}",
+                    self.engine_name
+                );
+            }
             if r >= self.warmup {
                 ms.push(elapsed);
-                last_count = count;
                 last_bytes = bytes;
             }
-        }
-        if last_count != expect_keys {
-            bail!(
-                "{scenario}/{} 扫描条数 {last_count} != 预期 {expect_keys}",
-                self.engine_name
-            );
         }
         let rs = round_stats(&ms);
         let file_len = Self::finish(engine)?;
@@ -371,7 +378,7 @@ impl Runner<'_> {
             ops_per_sec: None,
             db_file_len: file_len,
             note: Some(format!(
-                "前缀 {:?}（空 = 全表），命中 {last_count} 键",
+                "前缀 {:?}（空 = 全表），命中 {expect_keys} 键（每轮断言）",
                 String::from_utf8_lossy(prefix)
             )),
         });

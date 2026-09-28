@@ -15,7 +15,7 @@
     ],
     "os": "macos",
     "arch": "aarch64",
-    "generated_at": "2026-09-28T18:51:56Z"
+    "generated_at": "2026-09-28T23:09:23Z"
   },
   "results": [
     {
@@ -29,12 +29,12 @@
       "latency": null,
       "per_round": {
         "rounds": 5,
-        "median_ms": 5.513583,
-        "min_ms": 4.930124999999999,
-        "max_ms": 11.941791
+        "median_ms": 5.190083,
+        "min_ms": 4.5030410000000005,
+        "max_ms": 10.543667
       },
-      "bytes_per_sec": 152655541.77746123,
-      "ops_per_sec": 181.37026322084932,
+      "bytes_per_sec": 162170624.2462789,
+      "ops_per_sec": 192.67514604294385,
       "db_file_len": 4214784,
       "note": "一次检查点 = 一个大事务全量重写（值同长不同内容）"
     },
@@ -48,16 +48,16 @@
       "dataset_bytes": 841679,
       "latency": {
         "count": 500,
-        "mean_us": 4262.159991999996,
-        "p50_us": 4026.167,
-        "p95_us": 5031.542,
-        "p99_us": 7045.1669999999995,
-        "min_us": 3580.958,
-        "max_us": 18419.792
+        "mean_us": 4113.488167999998,
+        "p50_us": 4004.0420000000004,
+        "p95_us": 5174.792,
+        "p99_us": 6063.0,
+        "min_us": 1530.625,
+        "max_us": 8733.25
       },
       "per_round": null,
       "bytes_per_sec": null,
-      "ops_per_sec": 234.62282079438205,
+      "ops_per_sec": 249.7476300198649,
       "db_file_len": 4214784,
       "note": "逐房独立事务（对照批量提交的写放大）"
     },
@@ -71,18 +71,18 @@
       "dataset_bytes": 841679,
       "latency": {
         "count": 2500,
-        "mean_us": 0.4839784000000003,
-        "p50_us": 0.5,
-        "p95_us": 0.541,
-        "p99_us": 0.583,
-        "min_us": 0.41600000000000004,
-        "max_us": 0.625
+        "mean_us": 0.7177064000000065,
+        "p50_us": 0.7080000000000001,
+        "p95_us": 0.791,
+        "p99_us": 0.833,
+        "min_us": 0.625,
+        "max_us": 1.0839999999999999
       },
       "per_round": null,
       "bytes_per_sec": null,
-      "ops_per_sec": 2066207.9134110105,
+      "ops_per_sec": 1412429.3785310732,
       "db_file_len": 4214784,
-      "note": "每键独立只读事务；每轮 500 键（有放回均匀抽取），读回字节严格对账"
+      "note": "每键独立只读事务；每轮 500 键（有放回均匀抽取），读回字节总数按抽样期望合计对账"
     },
     {
       "scenario": "rooms_scan_all",
@@ -95,14 +95,14 @@
       "latency": null,
       "per_round": {
         "rounds": 5,
-        "median_ms": 0.003959,
-        "min_ms": 0.003875,
-        "max_ms": 0.004167
+        "median_ms": 0.005666,
+        "min_ms": 0.005542,
+        "max_ms": 0.006041
       },
-      "bytes_per_sec": 212598888608.2344,
+      "bytes_per_sec": 148549064595.8348,
       "ops_per_sec": null,
       "db_file_len": 4214784,
-      "note": "前缀 \"\"（空 = 全表），命中 100 键"
+      "note": "前缀 \"\"（空 = 全表），命中 100 键（每轮断言）"
     },
     {
       "scenario": "rooms_scan_prefix",
@@ -115,14 +115,14 @@
       "latency": null,
       "per_round": {
         "rounds": 5,
-        "median_ms": 0.001,
-        "min_ms": 0.000958,
-        "max_ms": 0.001166
+        "median_ms": 0.001167,
+        "min_ms": 0.001166,
+        "max_ms": 0.001542
       },
-      "bytes_per_sec": 80372000000.0,
+      "bytes_per_sec": 68870608397.60068,
       "ops_per_sec": null,
       "db_file_len": 4214784,
-      "note": "前缀 \"W1\"（空 = 全表），命中 10 键"
+      "note": "前缀 \"W1\"（空 = 全表），命中 10 键（每轮断言）"
     },
     {
       "scenario": "users_checkpoint_bulk_write",
@@ -135,12 +135,12 @@
       "latency": null,
       "per_round": {
         "rounds": 5,
-        "median_ms": 3.794125,
-        "min_ms": 3.7422079999999998,
-        "max_ms": 4.320209
+        "median_ms": 3.8018330000000002,
+        "min_ms": 3.477333,
+        "max_ms": 4.62375
       },
-      "bytes_per_sec": 7328962.540770269,
-      "ops_per_sec": 263.5653806872467,
+      "bytes_per_sec": 7314103.486397219,
+      "ops_per_sec": 263.03101688054153,
       "db_file_len": 4214784,
       "note": "一次检查点 = 一个大事务重写全部玩家小记录"
     },
@@ -154,18 +154,18 @@
       "dataset_bytes": 27695,
       "latency": {
         "count": 2500,
-        "mean_us": 0.46888319999999956,
-        "p50_us": 0.458,
-        "p95_us": 0.5419999999999999,
-        "p99_us": 0.5840000000000001,
+        "mean_us": 0.5050224000000002,
+        "p50_us": 0.5,
+        "p95_us": 0.583,
+        "p99_us": 0.625,
         "min_us": 0.41600000000000004,
-        "max_us": 0.709
+        "max_us": 7.916
       },
       "per_round": null,
       "bytes_per_sec": null,
-      "ops_per_sec": 2132727.297544465,
+      "ops_per_sec": 2000000.0,
       "db_file_len": 4214784,
-      "note": "每键独立只读事务；每轮 500 键（有放回均匀抽取），读回字节严格对账"
+      "note": "每键独立只读事务；每轮 500 键（有放回均匀抽取），读回字节总数按抽样期望合计对账"
     },
     {
       "scenario": "blobs_bulk_write",
@@ -178,12 +178,12 @@
       "latency": null,
       "per_round": {
         "rounds": 5,
-        "median_ms": 30.6465,
-        "min_ms": 28.794292,
-        "max_ms": 45.342875
+        "median_ms": 16.846166999999998,
+        "min_ms": 15.451334000000001,
+        "max_ms": 42.37025
       },
-      "bytes_per_sec": 395880508.37779194,
-      "ops_per_sec": 32.630153524872334,
+      "bytes_per_sec": 720184716.2028016,
+      "ops_per_sec": 59.360684243484,
       "db_file_len": 67375104,
       "note": "一个事务写全部 Memory blob（百 KB～MB 级）"
     },
@@ -197,16 +197,16 @@
       "dataset_bytes": 12132352,
       "latency": {
         "count": 500,
-        "mean_us": 4140.429118000001,
-        "p50_us": 4027.292,
-        "p95_us": 4847.167,
-        "p99_us": 5560.25,
-        "min_us": 3634.958,
-        "max_us": 19857.25
+        "mean_us": 4016.141107999999,
+        "p50_us": 3993.458,
+        "p95_us": 4975.959,
+        "p99_us": 6061.583,
+        "min_us": 2611.333,
+        "max_us": 8220.583
       },
       "per_round": null,
       "bytes_per_sec": null,
-      "ops_per_sec": 241.52085967433285,
+      "ops_per_sec": 250.40954481053762,
       "db_file_len": 67375104,
       "note": "每 blob 独立事务（逐玩家提交形态）"
     },
@@ -220,18 +220,18 @@
       "dataset_bytes": 12132352,
       "latency": {
         "count": 2500,
-        "mean_us": 0.4673839999999979,
-        "p50_us": 0.459,
-        "p95_us": 0.5,
-        "p99_us": 0.5,
-        "min_us": 0.41600000000000004,
-        "max_us": 0.625
+        "mean_us": 0.7035868000000022,
+        "p50_us": 0.7080000000000001,
+        "p95_us": 0.75,
+        "p99_us": 0.792,
+        "min_us": 0.583,
+        "max_us": 21.208000000000002
       },
       "per_round": null,
       "bytes_per_sec": null,
-      "ops_per_sec": 2139568.320695626,
+      "ops_per_sec": 1412429.3785310732,
       "db_file_len": 67375104,
-      "note": "每键独立只读事务；每轮 500 键（有放回均匀抽取），读回字节严格对账"
+      "note": "每键独立只读事务；每轮 500 键（有放回均匀抽取），读回字节总数按抽样期望合计对账"
     },
     {
       "scenario": "rooms_checkpoint_bulk_write",
@@ -244,12 +244,12 @@
       "latency": null,
       "per_round": {
         "rounds": 5,
-        "median_ms": 0.39845800000000003,
-        "min_ms": 0.396584,
-        "max_ms": 4.570625
+        "median_ms": 0.445166,
+        "min_ms": 0.38387499999999997,
+        "max_ms": 4.7735
       },
-      "bytes_per_sec": 2112340572.9085624,
-      "ops_per_sec": 2509.6747963398902,
+      "bytes_per_sec": 1890708185.2612286,
+      "ops_per_sec": 2246.3530458300947,
       "db_file_len": 8425472,
       "note": "一次检查点 = 一个大事务全量重写（值同长不同内容）"
     },
@@ -263,16 +263,16 @@
       "dataset_bytes": 841679,
       "latency": {
         "count": 500,
-        "mean_us": 12.763990000000003,
-        "p50_us": 11.165999999999999,
-        "p95_us": 17.334,
-        "p99_us": 30.334,
-        "min_us": 9.5,
-        "max_us": 45.209
+        "mean_us": 12.591588000000009,
+        "p50_us": 11.042,
+        "p95_us": 17.791999999999998,
+        "p99_us": 25.584,
+        "min_us": 9.292,
+        "max_us": 40.667
       },
       "per_round": null,
       "bytes_per_sec": null,
-      "ops_per_sec": 78345.4076664115,
+      "ops_per_sec": 90563.30374932078,
       "db_file_len": 8425472,
       "note": "逐房独立事务（对照批量提交的写放大）"
     },
@@ -286,18 +286,18 @@
       "dataset_bytes": 841679,
       "latency": {
         "count": 2500,
-        "mean_us": 0.48003599999999913,
-        "p50_us": 0.459,
-        "p95_us": 0.5419999999999999,
-        "p99_us": 0.625,
+        "mean_us": 0.45061439999999875,
+        "p50_us": 0.458,
+        "p95_us": 0.5,
+        "p99_us": 0.5419999999999999,
         "min_us": 0.375,
-        "max_us": 8.125
+        "max_us": 0.625
       },
       "per_round": null,
       "bytes_per_sec": null,
-      "ops_per_sec": 2083177.0950512083,
+      "ops_per_sec": 2183406.113537118,
       "db_file_len": 8425472,
-      "note": "每键独立只读事务；每轮 500 键（有放回均匀抽取），读回字节严格对账"
+      "note": "每键独立只读事务；每轮 500 键（有放回均匀抽取），读回字节总数按抽样期望合计对账"
     },
     {
       "scenario": "rooms_scan_all",
@@ -310,14 +310,14 @@
       "latency": null,
       "per_round": {
         "rounds": 5,
-        "median_ms": 0.0036669999999999997,
+        "median_ms": 0.003625,
         "min_ms": 0.003583,
-        "max_ms": 0.004292
+        "max_ms": 0.004042
       },
-      "bytes_per_sec": 229527952004.36325,
+      "bytes_per_sec": 232187310344.82758,
       "ops_per_sec": null,
       "db_file_len": 8425472,
-      "note": "前缀 \"\"（空 = 全表），命中 100 键"
+      "note": "前缀 \"\"（空 = 全表），命中 100 键（每轮断言）"
     },
     {
       "scenario": "rooms_scan_prefix",
@@ -330,14 +330,14 @@
       "latency": null,
       "per_round": {
         "rounds": 5,
-        "median_ms": 0.000916,
+        "median_ms": 0.000875,
         "min_ms": 0.000833,
-        "max_ms": 0.001042
+        "max_ms": 0.001166
       },
-      "bytes_per_sec": 87742358078.60262,
+      "bytes_per_sec": 91853714285.7143,
       "ops_per_sec": null,
       "db_file_len": 8425472,
-      "note": "前缀 \"W1\"（空 = 全表），命中 10 键"
+      "note": "前缀 \"W1\"（空 = 全表），命中 10 键（每轮断言）"
     },
     {
       "scenario": "users_checkpoint_bulk_write",
@@ -350,12 +350,12 @@
       "latency": null,
       "per_round": {
         "rounds": 5,
-        "median_ms": 0.038417,
-        "min_ms": 0.0375,
-        "max_ms": 0.043167000000000004
+        "median_ms": 0.041832999999999995,
+        "min_ms": 0.037334,
+        "max_ms": 0.045792
       },
-      "bytes_per_sec": 723820183.7728089,
-      "ops_per_sec": 26030.14290548455,
+      "bytes_per_sec": 664714459.8761743,
+      "ops_per_sec": 23904.572944804342,
       "db_file_len": 8425472,
       "note": "一次检查点 = 一个大事务重写全部玩家小记录"
     },
@@ -369,18 +369,18 @@
       "dataset_bytes": 27695,
       "latency": {
         "count": 2500,
-        "mean_us": 0.43735960000000157,
-        "p50_us": 0.417,
-        "p95_us": 0.459,
-        "p99_us": 0.5,
-        "min_us": 0.33299999999999996,
+        "mean_us": 0.47162519999999875,
+        "p50_us": 0.459,
+        "p95_us": 0.5,
+        "p99_us": 0.5419999999999999,
+        "min_us": 0.41600000000000004,
         "max_us": 0.667
       },
       "per_round": null,
       "bytes_per_sec": null,
-      "ops_per_sec": 2286448.0395537135,
+      "ops_per_sec": 2178649.237472767,
       "db_file_len": 8425472,
-      "note": "每键独立只读事务；每轮 500 键（有放回均匀抽取），读回字节严格对账"
+      "note": "每键独立只读事务；每轮 500 键（有放回均匀抽取），读回字节总数按抽样期望合计对账"
     },
     {
       "scenario": "blobs_bulk_write",
@@ -393,12 +393,12 @@
       "latency": null,
       "per_round": {
         "rounds": 5,
-        "median_ms": 2.7704169999999997,
-        "min_ms": 2.4056669999999998,
-        "max_ms": 6.280958
+        "median_ms": 3.555042,
+        "min_ms": 3.140958,
+        "max_ms": 6.3487919999999995
       },
-      "bytes_per_sec": 4379251210.196877,
-      "ops_per_sec": 360.9564913873977,
+      "bytes_per_sec": 3412716924.3007536,
+      "ops_per_sec": 281.290628915214,
       "db_file_len": 67375104,
       "note": "一个事务写全部 Memory blob（百 KB～MB 级）"
     },
@@ -412,16 +412,16 @@
       "dataset_bytes": 12132352,
       "latency": {
         "count": 500,
-        "mean_us": 39.88642600000001,
-        "p50_us": 27.708,
-        "p95_us": 97.5,
-        "p99_us": 268.083,
-        "min_us": 19.541,
-        "max_us": 767.875
+        "mean_us": 28.252685999999986,
+        "p50_us": 22.0,
+        "p95_us": 34.916999999999994,
+        "p99_us": 232.083,
+        "min_us": 17.75,
+        "max_us": 491.333
       },
       "per_round": null,
       "bytes_per_sec": null,
-      "ops_per_sec": 25071.185871604535,
+      "ops_per_sec": 45454.545454545456,
       "db_file_len": 67375104,
       "note": "每 blob 独立事务（逐玩家提交形态）"
     },
@@ -435,18 +435,18 @@
       "dataset_bytes": 12132352,
       "latency": {
         "count": 2500,
-        "mean_us": 0.4865055999999994,
-        "p50_us": 0.5,
-        "p95_us": 0.541,
-        "p99_us": 0.583,
-        "min_us": 0.41600000000000004,
-        "max_us": 0.7080000000000001
+        "mean_us": 0.47251079999999784,
+        "p50_us": 0.459,
+        "p95_us": 0.5,
+        "p99_us": 0.5419999999999999,
+        "min_us": 0.375,
+        "max_us": 8.0
       },
       "per_round": null,
       "bytes_per_sec": null,
-      "ops_per_sec": 2055474.7982345961,
+      "ops_per_sec": 2178649.237472767,
       "db_file_len": 67375104,
-      "note": "每键独立只读事务；每轮 500 键（有放回均匀抽取），读回字节严格对账"
+      "note": "每键独立只读事务；每轮 500 键（有放回均匀抽取），读回字节总数按抽样期望合计对账"
     },
     {
       "scenario": "rooms_checkpoint_bulk_write",
@@ -459,12 +459,12 @@
       "latency": null,
       "per_round": {
         "rounds": 5,
-        "median_ms": 5.545208000000001,
-        "min_ms": 0.21954200000000001,
-        "max_ms": 8.944749999999999
+        "median_ms": 4.853167,
+        "min_ms": 4.259958,
+        "max_ms": 5.818958
       },
-      "bytes_per_sec": 151784928.53649494,
-      "ops_per_sec": 180.33588640858918,
+      "bytes_per_sec": 173428814.62764418,
+      "ops_per_sec": 206.0510178199102,
       "db_file_len": 67108864,
       "note": "一次检查点 = 一个大事务全量重写（值同长不同内容）"
     },
@@ -478,16 +478,16 @@
       "dataset_bytes": 841679,
       "latency": {
         "count": 500,
-        "mean_us": 3411.915576000002,
-        "p50_us": 3995.375,
-        "p95_us": 5048.6669999999995,
-        "p99_us": 6230.583,
-        "min_us": 31.25,
-        "max_us": 19016.5
+        "mean_us": 3349.4759180000037,
+        "p50_us": 3086.875,
+        "p95_us": 4033.583,
+        "p99_us": 4730.333,
+        "min_us": 2698.25,
+        "max_us": 6294.625
       },
       "per_round": null,
       "bytes_per_sec": null,
-      "ops_per_sec": 293.0904876527928,
+      "ops_per_sec": 323.9522170479854,
       "db_file_len": 67108864,
       "note": "逐房独立事务（对照批量提交的写放大）"
     },
@@ -501,238 +501,23 @@
       "dataset_bytes": 841679,
       "latency": {
         "count": 2500,
-        "mean_us": 1.0417952,
-        "p50_us": 0.916,
-        "p95_us": 1.458,
-        "p99_us": 1.625,
-        "min_us": 0.5840000000000001,
-        "max_us": 15.333
-      },
-      "per_round": null,
-      "bytes_per_sec": null,
-      "ops_per_sec": 959881.558294759,
-      "db_file_len": 67108864,
-      "note": "每键独立只读事务；每轮 500 键（有放回均匀抽取），读回字节严格对账"
-    },
-    {
-      "scenario": "rooms_scan_all",
-      "engine": "libmdbx",
-      "profile": "durable",
-      "table": "rooms",
-      "dataset": "rooms@t3-large-multi",
-      "dataset_keys": 100,
-      "dataset_bytes": 841679,
-      "latency": null,
-      "per_round": {
-        "rounds": 5,
-        "median_ms": 0.043708000000000004,
-        "min_ms": 0.043332999999999997,
-        "max_ms": 0.045084
-      },
-      "bytes_per_sec": 19256863732.0399,
-      "ops_per_sec": null,
-      "db_file_len": 67108864,
-      "note": "前缀 \"\"（空 = 全表），命中 100 键"
-    },
-    {
-      "scenario": "rooms_scan_prefix",
-      "engine": "libmdbx",
-      "profile": "durable",
-      "table": "rooms",
-      "dataset": "rooms@t3-large-multi",
-      "dataset_keys": 100,
-      "dataset_bytes": 841679,
-      "latency": null,
-      "per_round": {
-        "rounds": 5,
-        "median_ms": 0.004167,
-        "min_ms": 0.003917,
-        "max_ms": 0.004834
-      },
-      "bytes_per_sec": 19287736981.041515,
-      "ops_per_sec": null,
-      "db_file_len": 67108864,
-      "note": "前缀 \"W1\"（空 = 全表），命中 10 键"
-    },
-    {
-      "scenario": "users_checkpoint_bulk_write",
-      "engine": "libmdbx",
-      "profile": "durable",
-      "table": "users",
-      "dataset": "users@t3-large-multi",
-      "dataset_keys": 100,
-      "dataset_bytes": 27807,
-      "latency": null,
-      "per_round": {
-        "rounds": 5,
-        "median_ms": 4.703042,
-        "min_ms": 0.080375,
-        "max_ms": 5.335458
-      },
-      "bytes_per_sec": 5912556.171090966,
-      "ops_per_sec": 212.62833714859445,
-      "db_file_len": 67108864,
-      "note": "一次检查点 = 一个大事务重写全部玩家小记录"
-    },
-    {
-      "scenario": "users_point_read",
-      "engine": "libmdbx",
-      "profile": "durable",
-      "table": "users",
-      "dataset": "users@t3-large-multi",
-      "dataset_keys": 100,
-      "dataset_bytes": 27695,
-      "latency": {
-        "count": 2500,
-        "mean_us": 0.5814120000000014,
-        "p50_us": 0.583,
-        "p95_us": 0.6659999999999999,
-        "p99_us": 0.667,
-        "min_us": 0.5,
-        "max_us": 0.792
-      },
-      "per_round": null,
-      "bytes_per_sec": null,
-      "ops_per_sec": 1719950.7406107849,
-      "db_file_len": 67108864,
-      "note": "每键独立只读事务；每轮 500 键（有放回均匀抽取），读回字节严格对账"
-    },
-    {
-      "scenario": "blobs_bulk_write",
-      "engine": "libmdbx",
-      "profile": "durable",
-      "table": "blobs",
-      "dataset": "blobs@t3-large-multi",
-      "dataset_keys": 100,
-      "dataset_bytes": 12132352,
-      "latency": null,
-      "per_round": {
-        "rounds": 5,
-        "median_ms": 25.109333,
-        "min_ms": 1.668583,
-        "max_ms": 27.187541999999997
-      },
-      "bytes_per_sec": 483180974.978507,
-      "ops_per_sec": 39.82582890592912,
-      "db_file_len": 67108864,
-      "note": "一个事务写全部 Memory blob（百 KB～MB 级）"
-    },
-    {
-      "scenario": "blobs_per_key_txn_write",
-      "engine": "libmdbx",
-      "profile": "durable",
-      "table": "blobs",
-      "dataset": "blobs@t3-large-multi",
-      "dataset_keys": 100,
-      "dataset_bytes": 12132352,
-      "latency": {
-        "count": 500,
-        "mean_us": 3617.2167440000007,
-        "p50_us": 3994.458,
-        "p95_us": 5287.541,
-        "p99_us": 15788.333000000002,
-        "min_us": 33.5,
-        "max_us": 33957.833
-      },
-      "per_round": null,
-      "bytes_per_sec": null,
-      "ops_per_sec": 276.4556482988568,
-      "db_file_len": 67108864,
-      "note": "每 blob 独立事务（逐玩家提交形态）"
-    },
-    {
-      "scenario": "blobs_point_read",
-      "engine": "libmdbx",
-      "profile": "durable",
-      "table": "blobs",
-      "dataset": "blobs@t3-large-multi",
-      "dataset_keys": 100,
-      "dataset_bytes": 12132352,
-      "latency": {
-        "count": 2500,
-        "mean_us": 4.819209600000007,
-        "p50_us": 2.166,
-        "p95_us": 3.375,
-        "p99_us": 55.958999999999996,
-        "min_us": 1.708,
-        "max_us": 647.167
-      },
-      "per_round": null,
-      "bytes_per_sec": null,
-      "ops_per_sec": 207502.90670071676,
-      "db_file_len": 67108864,
-      "note": "每键独立只读事务；每轮 500 键（有放回均匀抽取），读回字节严格对账"
-    },
-    {
-      "scenario": "rooms_checkpoint_bulk_write",
-      "engine": "libmdbx",
-      "profile": "relaxed",
-      "table": "rooms",
-      "dataset": "rooms@t3-large-multi",
-      "dataset_keys": 100,
-      "dataset_bytes": 841679,
-      "latency": null,
-      "per_round": {
-        "rounds": 5,
-        "median_ms": 0.34445800000000004,
-        "min_ms": 0.145125,
-        "max_ms": 0.48941700000000005
-      },
-      "bytes_per_sec": 2443488030.4710584,
-      "ops_per_sec": 2903.1115549646106,
-      "db_file_len": 67108864,
-      "note": "一次检查点 = 一个大事务全量重写（值同长不同内容）"
-    },
-    {
-      "scenario": "rooms_per_room_txn_write",
-      "engine": "libmdbx",
-      "profile": "relaxed",
-      "table": "rooms",
-      "dataset": "rooms@t3-large-multi",
-      "dataset_keys": 100,
-      "dataset_bytes": 841679,
-      "latency": {
-        "count": 500,
-        "mean_us": 21.433422000000007,
-        "p50_us": 22.291999999999998,
-        "p95_us": 31.209,
-        "p99_us": 45.458,
-        "min_us": 4.375,
-        "max_us": 413.458
-      },
-      "per_round": null,
-      "bytes_per_sec": null,
-      "ops_per_sec": 46656.10559060516,
-      "db_file_len": 67108864,
-      "note": "逐房独立事务（对照批量提交的写放大）"
-    },
-    {
-      "scenario": "rooms_point_read",
-      "engine": "libmdbx",
-      "profile": "relaxed",
-      "table": "rooms",
-      "dataset": "rooms@t3-large-multi",
-      "dataset_keys": 100,
-      "dataset_bytes": 841679,
-      "latency": {
-        "count": 2500,
-        "mean_us": 0.4348919999999991,
-        "p50_us": 0.41600000000000004,
-        "p95_us": 0.5840000000000001,
-        "p99_us": 0.625,
+        "mean_us": 0.5076771999999999,
+        "p50_us": 0.458,
+        "p95_us": 0.7080000000000001,
+        "p99_us": 0.75,
         "min_us": 0.291,
-        "max_us": 1.042
+        "max_us": 7.125
       },
       "per_round": null,
       "bytes_per_sec": null,
-      "ops_per_sec": 2299421.46555927,
+      "ops_per_sec": 2183406.113537118,
       "db_file_len": 67108864,
-      "note": "每键独立只读事务；每轮 500 键（有放回均匀抽取），读回字节严格对账"
+      "note": "每键独立只读事务；每轮 500 键（有放回均匀抽取），读回字节总数按抽样期望合计对账"
     },
     {
       "scenario": "rooms_scan_all",
       "engine": "libmdbx",
-      "profile": "relaxed",
+      "profile": "durable",
       "table": "rooms",
       "dataset": "rooms@t3-large-multi",
       "dataset_keys": 100,
@@ -740,19 +525,19 @@
       "latency": null,
       "per_round": {
         "rounds": 5,
-        "median_ms": 0.019333,
-        "min_ms": 0.019291,
-        "max_ms": 0.022708
+        "median_ms": 0.031375,
+        "min_ms": 0.024833,
+        "max_ms": 0.08337499999999999
       },
-      "bytes_per_sec": 43535871308.12601,
+      "bytes_per_sec": 26826422310.756973,
       "ops_per_sec": null,
       "db_file_len": 67108864,
-      "note": "前缀 \"\"（空 = 全表），命中 100 键"
+      "note": "前缀 \"\"（空 = 全表），命中 100 键（每轮断言）"
     },
     {
       "scenario": "rooms_scan_prefix",
       "engine": "libmdbx",
-      "profile": "relaxed",
+      "profile": "durable",
       "table": "rooms",
       "dataset": "rooms@t3-large-multi",
       "dataset_keys": 100,
@@ -760,19 +545,19 @@
       "latency": null,
       "per_round": {
         "rounds": 5,
-        "median_ms": 0.0029170000000000003,
-        "min_ms": 0.002833,
-        "max_ms": 0.00325
+        "median_ms": 0.0025830000000000002,
+        "min_ms": 0.002542,
+        "max_ms": 0.003125
       },
-      "bytes_per_sec": 27552965375.38567,
+      "bytes_per_sec": 31115756871.85443,
       "ops_per_sec": null,
       "db_file_len": 67108864,
-      "note": "前缀 \"W1\"（空 = 全表），命中 10 键"
+      "note": "前缀 \"W1\"（空 = 全表），命中 10 键（每轮断言）"
     },
     {
       "scenario": "users_checkpoint_bulk_write",
       "engine": "libmdbx",
-      "profile": "relaxed",
+      "profile": "durable",
       "table": "users",
       "dataset": "users@t3-large-multi",
       "dataset_keys": 100,
@@ -780,37 +565,252 @@
       "latency": null,
       "per_round": {
         "rounds": 5,
-        "median_ms": 0.041041999999999995,
-        "min_ms": 0.019167,
-        "max_ms": 0.053667
+        "median_ms": 3.727625,
+        "min_ms": 3.576375,
+        "max_ms": 4.494833
       },
-      "bytes_per_sec": 677525461.7221383,
-      "ops_per_sec": 24365.284342868283,
+      "bytes_per_sec": 7459709.600617015,
+      "ops_per_sec": 268.26732839274337,
       "db_file_len": 67108864,
       "note": "一次检查点 = 一个大事务重写全部玩家小记录"
     },
     {
       "scenario": "users_point_read",
       "engine": "libmdbx",
-      "profile": "relaxed",
+      "profile": "durable",
       "table": "users",
       "dataset": "users@t3-large-multi",
       "dataset_keys": 100,
       "dataset_bytes": 27695,
       "latency": {
         "count": 2500,
-        "mean_us": 0.29823880000000147,
-        "p50_us": 0.29200000000000004,
-        "p95_us": 0.334,
+        "mean_us": 0.32082760000000105,
+        "p50_us": 0.33299999999999996,
+        "p95_us": 0.375,
         "p99_us": 0.375,
         "min_us": 0.25,
-        "max_us": 0.5
+        "max_us": 0.459
       },
       "per_round": null,
       "bytes_per_sec": null,
-      "ops_per_sec": 3353017.783065098,
+      "ops_per_sec": 3003003.0030030035,
       "db_file_len": 67108864,
-      "note": "每键独立只读事务；每轮 500 键（有放回均匀抽取），读回字节严格对账"
+      "note": "每键独立只读事务；每轮 500 键（有放回均匀抽取），读回字节总数按抽样期望合计对账"
+    },
+    {
+      "scenario": "blobs_bulk_write",
+      "engine": "libmdbx",
+      "profile": "durable",
+      "table": "blobs",
+      "dataset": "blobs@t3-large-multi",
+      "dataset_keys": 100,
+      "dataset_bytes": 12132352,
+      "latency": null,
+      "per_round": {
+        "rounds": 5,
+        "median_ms": 9.542584,
+        "min_ms": 8.692708,
+        "max_ms": 9.870542
+      },
+      "bytes_per_sec": 1271390642.19922,
+      "ops_per_sec": 104.7934186379706,
+      "db_file_len": 67108864,
+      "note": "一个事务写全部 Memory blob（百 KB～MB 级）"
+    },
+    {
+      "scenario": "blobs_per_key_txn_write",
+      "engine": "libmdbx",
+      "profile": "durable",
+      "table": "blobs",
+      "dataset": "blobs@t3-large-multi",
+      "dataset_keys": 100,
+      "dataset_bytes": 12132352,
+      "latency": {
+        "count": 500,
+        "mean_us": 3721.790985999999,
+        "p50_us": 3909.5830000000005,
+        "p95_us": 4192.75,
+        "p99_us": 6182.584,
+        "min_us": 1680.4579999999999,
+        "max_us": 8201.208
+      },
+      "per_round": null,
+      "bytes_per_sec": null,
+      "ops_per_sec": 255.78175472934066,
+      "db_file_len": 67108864,
+      "note": "每 blob 独立事务（逐玩家提交形态）"
+    },
+    {
+      "scenario": "blobs_point_read",
+      "engine": "libmdbx",
+      "profile": "durable",
+      "table": "blobs",
+      "dataset": "blobs@t3-large-multi",
+      "dataset_keys": 100,
+      "dataset_bytes": 12132352,
+      "latency": {
+        "count": 2500,
+        "mean_us": 5.817129600000002,
+        "p50_us": 2.834,
+        "p95_us": 7.1659999999999995,
+        "p99_us": 52.375,
+        "min_us": 1.708,
+        "max_us": 716.875
+      },
+      "per_round": null,
+      "bytes_per_sec": null,
+      "ops_per_sec": 352858.1510232886,
+      "db_file_len": 67108864,
+      "note": "每键独立只读事务；每轮 500 键（有放回均匀抽取），读回字节总数按抽样期望合计对账"
+    },
+    {
+      "scenario": "rooms_checkpoint_bulk_write",
+      "engine": "libmdbx",
+      "profile": "relaxed",
+      "table": "rooms",
+      "dataset": "rooms@t3-large-multi",
+      "dataset_keys": 100,
+      "dataset_bytes": 841679,
+      "latency": null,
+      "per_round": {
+        "rounds": 5,
+        "median_ms": 0.565792,
+        "min_ms": 0.5143329999999999,
+        "max_ms": 0.981834
+      },
+      "bytes_per_sec": 1487612055.3136137,
+      "ops_per_sec": 1767.4339686669307,
+      "db_file_len": 67108864,
+      "note": "一次检查点 = 一个大事务全量重写（值同长不同内容）"
+    },
+    {
+      "scenario": "rooms_per_room_txn_write",
+      "engine": "libmdbx",
+      "profile": "relaxed",
+      "table": "rooms",
+      "dataset": "rooms@t3-large-multi",
+      "dataset_keys": 100,
+      "dataset_bytes": 841679,
+      "latency": {
+        "count": 500,
+        "mean_us": 26.61550800000002,
+        "p50_us": 24.208,
+        "p95_us": 45.458999999999996,
+        "p99_us": 66.708,
+        "min_us": 17.75,
+        "max_us": 100.5
+      },
+      "per_round": null,
+      "bytes_per_sec": null,
+      "ops_per_sec": 41308.65829477859,
+      "db_file_len": 67108864,
+      "note": "逐房独立事务（对照批量提交的写放大）"
+    },
+    {
+      "scenario": "rooms_point_read",
+      "engine": "libmdbx",
+      "profile": "relaxed",
+      "table": "rooms",
+      "dataset": "rooms@t3-large-multi",
+      "dataset_keys": 100,
+      "dataset_bytes": 841679,
+      "latency": {
+        "count": 2500,
+        "mean_us": 0.4261840000000001,
+        "p50_us": 0.375,
+        "p95_us": 0.5840000000000001,
+        "p99_us": 0.6659999999999999,
+        "min_us": 0.25,
+        "max_us": 1.167
+      },
+      "per_round": null,
+      "bytes_per_sec": null,
+      "ops_per_sec": 2666666.6666666665,
+      "db_file_len": 67108864,
+      "note": "每键独立只读事务；每轮 500 键（有放回均匀抽取），读回字节总数按抽样期望合计对账"
+    },
+    {
+      "scenario": "rooms_scan_all",
+      "engine": "libmdbx",
+      "profile": "relaxed",
+      "table": "rooms",
+      "dataset": "rooms@t3-large-multi",
+      "dataset_keys": 100,
+      "dataset_bytes": 841679,
+      "latency": null,
+      "per_round": {
+        "rounds": 5,
+        "median_ms": 0.020874999999999998,
+        "min_ms": 0.020792,
+        "max_ms": 0.021875
+      },
+      "bytes_per_sec": 40319952095.80839,
+      "ops_per_sec": null,
+      "db_file_len": 67108864,
+      "note": "前缀 \"\"（空 = 全表），命中 100 键（每轮断言）"
+    },
+    {
+      "scenario": "rooms_scan_prefix",
+      "engine": "libmdbx",
+      "profile": "relaxed",
+      "table": "rooms",
+      "dataset": "rooms@t3-large-multi",
+      "dataset_keys": 100,
+      "dataset_bytes": 841679,
+      "latency": null,
+      "per_round": {
+        "rounds": 5,
+        "median_ms": 0.0020829999999999998,
+        "min_ms": 0.002,
+        "max_ms": 0.002458
+      },
+      "bytes_per_sec": 38584733557.36919,
+      "ops_per_sec": null,
+      "db_file_len": 67108864,
+      "note": "前缀 \"W1\"（空 = 全表），命中 10 键（每轮断言）"
+    },
+    {
+      "scenario": "users_checkpoint_bulk_write",
+      "engine": "libmdbx",
+      "profile": "relaxed",
+      "table": "users",
+      "dataset": "users@t3-large-multi",
+      "dataset_keys": 100,
+      "dataset_bytes": 27807,
+      "latency": null,
+      "per_round": {
+        "rounds": 5,
+        "median_ms": 0.052291,
+        "min_ms": 0.0385,
+        "max_ms": 0.063458
+      },
+      "bytes_per_sec": 531774110.2675413,
+      "ops_per_sec": 19123.749784857817,
+      "db_file_len": 67108864,
+      "note": "一次检查点 = 一个大事务重写全部玩家小记录"
+    },
+    {
+      "scenario": "users_point_read",
+      "engine": "libmdbx",
+      "profile": "relaxed",
+      "table": "users",
+      "dataset": "users@t3-large-multi",
+      "dataset_keys": 100,
+      "dataset_bytes": 27695,
+      "latency": {
+        "count": 2500,
+        "mean_us": 0.2709592000000032,
+        "p50_us": 0.25,
+        "p95_us": 0.29200000000000004,
+        "p99_us": 0.334,
+        "min_us": 0.167,
+        "max_us": 0.417
+      },
+      "per_round": null,
+      "bytes_per_sec": null,
+      "ops_per_sec": 4000000.0,
+      "db_file_len": 67108864,
+      "note": "每键独立只读事务；每轮 500 键（有放回均匀抽取），读回字节总数按抽样期望合计对账"
     },
     {
       "scenario": "blobs_bulk_write",
@@ -823,12 +823,12 @@
       "latency": null,
       "per_round": {
         "rounds": 5,
-        "median_ms": 4.288583,
-        "min_ms": 1.105583,
-        "max_ms": 7.003958
+        "median_ms": 4.148333,
+        "min_ms": 2.300542,
+        "max_ms": 4.66725
       },
-      "bytes_per_sec": 2828988502.729223,
-      "ops_per_sec": 233.1772522532501,
+      "bytes_per_sec": 2924633099.6089272,
+      "ops_per_sec": 241.06068630459512,
       "db_file_len": 67108864,
       "note": "一个事务写全部 Memory blob（百 KB～MB 级）"
     },
@@ -842,16 +842,16 @@
       "dataset_bytes": 12132352,
       "latency": {
         "count": 500,
-        "mean_us": 84.19333000000005,
-        "p50_us": 30.0,
-        "p95_us": 47.083999999999996,
-        "p99_us": 180.083,
-        "min_us": 7.25,
-        "max_us": 14777.667
+        "mean_us": 85.47716400000003,
+        "p50_us": 29.375,
+        "p95_us": 60.667,
+        "p99_us": 680.4159999999999,
+        "min_us": 22.0,
+        "max_us": 14601.708999999999
       },
       "per_round": null,
       "bytes_per_sec": null,
-      "ops_per_sec": 11877.425444509672,
+      "ops_per_sec": 34042.55319148936,
       "db_file_len": 67108864,
       "note": "每 blob 独立事务（逐玩家提交形态）"
     },
@@ -865,18 +865,18 @@
       "dataset_bytes": 12132352,
       "latency": {
         "count": 2500,
-        "mean_us": 5.863316800000008,
-        "p50_us": 2.5,
-        "p95_us": 4.542,
-        "p99_us": 28.625,
-        "min_us": 1.708,
-        "max_us": 1097.4579999999999
+        "mean_us": 4.2495888000000015,
+        "p50_us": 2.125,
+        "p95_us": 3.292,
+        "p99_us": 24.709,
+        "min_us": 1.25,
+        "max_us": 232.0
       },
       "per_round": null,
       "bytes_per_sec": null,
-      "ops_per_sec": 170551.9306069218,
+      "ops_per_sec": 470588.23529411765,
       "db_file_len": 67108864,
-      "note": "每键独立只读事务；每轮 500 键（有放回均匀抽取），读回字节严格对账"
+      "note": "每键独立只读事务；每轮 500 键（有放回均匀抽取），读回字节总数按抽样期望合计对账"
     }
   ]
 }
