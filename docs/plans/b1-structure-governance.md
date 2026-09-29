@@ -21,7 +21,7 @@
 | crates/kk-world/src/place.rs | 1092 | **拆**（B1-2，建造面单切一刀） |
 | crates/kk-runner/src/prelude/30_game/creep.js | 1043 | **拆**（B1-3，有序段×2） |
 | crates/kk-runner/src/prelude/30_game/structures.js | 968 | **拆**（B1-3；用户点名文件，实测略低于 1000 仍按拍板执行，有序段×2） |
-| crates/kk-engine/tests/settle_tests.rs | 6906 | **拆**（B1-4，mod 子模块×8，连续切分不重排） |
+| crates/kk-engine/tests/settle_tests.rs | 6906 | **拆**（B1-4，mod 子模块连续切块不重排；实测 7 块即满足 <1000/块，无需 8 块） |
 | crates/kk-runner/tests/sandbox_tests.rs | 3328 | **拆**（B1-5，mod 子模块，保顶层唯一 #[test] 串行链） |
 | crates/kk-runtime/tests/embed_tests.rs | 1963 | **拆**（B1-5，同上） |
 | crates/kk-engine/src/settle/mod.rs | 779 | **不拆**：<1000 且内聚（Working/Engine/settle_room 是结算核心同体） |
@@ -156,7 +156,7 @@ structures(5a) → **structures_spawn(5b)** → sites-flags → resources →
 path-finder → game。段总数 13→15；sandbox.rs:36-39「九段」注释与
 _registry.js:4-5 段序注释同步。
 
-### 3.4 B1-4：settle_tests.rs（6906）→ mod 子模块×8（连续切分不重排）
+### 3.4 B1-4：settle_tests.rs（6906）→ mod 子模块（连续切分不重排；实测 7 块）
 
 - root 保留：use 块、`terrain_with`/`body`/`move_intent` 等 helpers（22-305）、
   `Fixture` struct + `impl`、`spawn_with_job`/`chick_of`/`generic_tower`/
@@ -301,3 +301,31 @@ bot 三基线 → ≥3 路 subagent 并行评审（**重点视角=零行为差�
   creep.js 行号锚点陈旧（HEAD 前已陈旧，非本片引入）归文档卫生批。
 - 验证：workspace 268 全绿 / release+棘轮 1405 零转红 / 三基线通过
   （tooangel console error tick=0；overmind 既知缺口形态）；清偿后重验全链。
+
+### B1-4（settle_tests.rs → crate 根 + 7 子模块）——已收口
+
+- 实测（fmt 后终值）：根 479 + movement_spawn_basics 918 / tombstone_ruin_engine 951 /
+  structures_and_attack 940 / combat_heal 958 / controller_safemode 973 /
+  misc_and_notify 930 / minerals_and_boost 749 行，全部 <1000。方案写「×8」
+  为尺寸推算：7 块即满足每块 <1000，且 heal 族测试带（原 :2921-4088 跨
+  1165 行）无论块数必然被切刀劈分——7 块无边界质量损失。
+- 结构：crate 根持 use 块+`#[path]` mod 声明×7+16 个共享 helper+Fixture
+  struct/impl（helpers 从原交织位归位根尾，§3.4 既定）；子模块头部
+  `use super::*;`（根私有项+私有 use 经 glob 对子模块生效，编译零告警
+  佐证）。**集成测试根是 crate root，mod 声明默认解析到 tests/ 平级，
+  故显式 `#[path = "settle_tests/x.rs"]`**（对照 B1-2 place.rs 是 lib 内
+  非根模块走同名子目录解析无需属性）。
+- 对账：三路评审独立重做（项级多重集+行级账本+cargo --list 交叉）全过：
+  142 个 #[test] fn 体逐字节一致、16 helper+Fixture 逐字节一致、7 块对
+  原文测试序是零缝隙零重叠 tiling、同一测试二进制并行/隔离语义零变化
+  （无 static/thread_local；测试名仅增模块前缀，全仓无 --exact 调用者）。
+- 评审 P3 清偿：①初版发射丢 22 处段落横幅注释共 31 行（attachment 遇
+  空行截断所致，含官方对照路径块/_oldHits 证据链/评审溯源标记）——重发
+  为 gap-attachment 语义全数补回，行级账本零意外增删；②本段即 §7 补记；
+  ③×8→×7 订正（§3.4/§1 两处）。
+- 登记（P4）：mod 声明序经 rustfmt reorder_modules 归一为字母序（非原文
+  块序）——libtest 执行序本与声明序无关，无行为影响；heal 族三测试落
+  controller_safemode 块首（连续切块的必然边界，文件名为近似主域）；
+  ghodium_resource_family_settles 落 misc_and_notify 尾。
+- 验证：engine 152 全绿（142 集成+10 单元）/ workspace 268 全绿 /
+  release+棘轮 1405 零转红 / 三基线通过（tooangel console error tick=0）。
