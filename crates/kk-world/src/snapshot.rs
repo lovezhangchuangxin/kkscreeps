@@ -98,8 +98,8 @@ fn snap_pos(room: &str, x: u8, y: u8) -> Value {
 }
 
 /// 官方 store getter 只暴露正量资源（vanilla snapStore：amount > 0 才入表）。
-/// 全资源口径（A4-iii 评审 3 清偿：world_json 已投 ghodium 正量键，查询契约
-/// 面同步——层间一致；M2 世界资源集 = energy/G）
+/// 双槽口径（spawn/extension 专用——无 store_extra）；creep/storage 的全资源
+/// 面走 [`snap_store_extra`]（B4：命名矿物槽并入，层间一致）
 fn snap_store(store: &kk_schema::room::Store) -> Value {
     let mut v = serde_json::Map::new();
     if store.energy > 0 {
@@ -195,7 +195,8 @@ fn snapshot_json(
             "owner": o.owner,
             "ticksToLive": remaining(o.age_time, time),
             "spawning": o.spawning,
-            "store": snap_store(&o.store),
+            // B4：命名矿物槽并入（vanilla snapStore 全资源正量同构）
+            "store": snap_store_extra(&o.store, &o.store_extra),
             "storeCapacity": creep_store_capacity(&o.body),
         }),
         RoomObject::Source(o) => json!({
@@ -295,7 +296,7 @@ fn snapshot_json(
             "kind": "structure", "structureType": "storage",
             "id": id_str, "pos": snap_pos(room, o.x, o.y), "owner": o.owner,
             "hits": o.hits, "hitsMax": c::STORAGE_HITS,
-            "store": snap_store(&o.store),
+            "store": snap_store_extra(&o.store, &o.store_extra),
             "storeCapacity": c::STORAGE_CAPACITY,
         }),
         RoomObject::ConstructionSite(o) => {
@@ -336,12 +337,40 @@ fn snapshot_json(
             "store": snap_store_extra(&o.store, &o.store_extra),
             "ticksToDecay": o.decay_time.saturating_sub(time),
         }),
+        // B4 typed 变体的契约形态（vanilla snapshots.ts:365-373 的
+        // snapshotMineral——七键面：kind/id/pos/mineralType/mineralAmount/
+        // density/ticksToRegeneration）
+        RoomObject::Mineral(o) => json!({
+            "kind": "mineral", "id": id_str,
+            "pos": snap_pos(room, o.x, o.y),
+            "mineralType": o.mineral_type,
+            "mineralAmount": o.mineral_amount,
+            "density": o.density,
+            "ticksToRegeneration": remaining_opt(o.next_regeneration_time, time),
+        }),
+        // B4：vanilla snapshotStructure 的 extractor 分支（...base/...hits +
+        // cooldown 计数器——`obj.cooldown || 0`）；owner 无主读 null
+        //（snapOwner 同构）
+        RoomObject::Extractor(o) => {
+            let mut v = json!({
+                "kind": "structure", "structureType": "extractor",
+                "id": id_str, "pos": snap_pos(room, o.x, o.y),
+                "hits": o.hits, "hitsMax": c::EXTRACTOR_HITS,
+                "cooldown": o.cooldown,
+            });
+            match &o.owner {
+                Some(owner) => v["owner"] = json!(owner),
+                None => {
+                    v["owner"] = Value::Null;
+                }
+            }
+            v
+        }
         // 透传桶：kind 按透传 type 或 structureType 映射（tombstone/ruin/
-        // mineral/deposit 有独立契约 kind——mineral 经适配器 structure 通道
-        // 放置时 type 是 "structure"、structureType 才是 "mineral"，两键都查），
-        // 其余按 structure 兜底（vanilla snapshotStructure 的 default 分支同构
-        // ——只保底 base 字段）。计时字段（decayTime/cooldown 等）不折算
-        // getter 剩余形态——透传桶无该面，随对应能力批（B3/B4）补
+        // deposit 有独立契约 kind——B4 起 mineral/extractor 放置面已 typed，
+        // 映射保留给旧持久化字节与手写 Generic 透传的遗留路径）。其余按
+        // structure 兜底（vanilla snapshotStructure 的 default 分支同构——只
+        // 保底 base 字段）。计时字段不折算 getter 剩余形态——遗留路径无该面
         RoomObject::Generic(o) => {
             let mut v: serde_json::Map<String, Value> = serde_json::from_str::<Value>(&o.data)
                 .ok()
@@ -601,16 +630,19 @@ mod tests {
         );
     }
 
-    /// Generic 透传的 kind 映射：mineral 经 structure 通道放置（适配器真实
-    /// 路径——type=structure、structureType=mineral）与 tombstone 直通道。
+    /// B4：mineral 经 structure 通道放置（适配器真实路径——type=structure、
+    /// structureType=mineral）进 typed 变体——契约七键面（vanilla
+    /// snapshots.ts:365-373 的 snapshotMineral）；tombstone 直通道（B3 起
+    /// typed）与 FIND_MINERALS 命中。
     #[test]
-    fn snapshot_generic_kind_mapping() {
-        let mut world = world_with_room();
+    fn snapshot_mineral_and_tombstone_kind_mapping() {
+        let mut world = world_with_room(); // time = 10
         let mineral = normalize(
             "structure",
             &serde_json::json!({
                 "pos": [12, 12], "structureType": "mineral",
                 "mineralType": "X", "mineralAmount": 2000, "density": 3,
+                "ticksToRegeneration": 90,
             }),
             &PlaceCtx {
                 time: world.time,
@@ -623,13 +655,32 @@ mod tests {
         let snap = world.object_snapshot_by_id(id).unwrap();
         assert_eq!(
             snap["kind"], "mineral",
-            "structure 通道的 mineral 按 structureType 判 kind"
+            "structure 通道的 mineral 进 typed 变体"
         );
-        assert_eq!(snap["structureType"], "mineral");
+        assert_eq!(snap["mineralType"], "X");
+        assert_eq!(snap["mineralAmount"], 2000);
+        assert_eq!(snap["density"], 3);
+        assert_eq!(snap["ticksToRegeneration"], 90, "绝对钟 10+90 − time 10");
+        assert_eq!(
+            snap.as_object().unwrap().len(),
+            7,
+            "契约键面：kind/id/pos/mineralType/mineralAmount/density/ticksToRegeneration"
+        );
+        assert!(
+            snap.get("structureType").is_none(),
+            "mineral 契约无 structureType 键（vanilla snapshotMineral）"
+        );
         assert_eq!(
             world.find_snapshots_in_room("W1N1", c::FIND_MINERALS).len(),
             1,
             "FIND_MINERALS 命中且 kind 正确"
+        );
+        // FIND_STRUCTURES 不含 mineral（官方 game.js:229-251 structureTypes 表）
+        assert_eq!(
+            world
+                .find_snapshots_in_room("W1N1", c::FIND_STRUCTURES)
+                .len(),
+            0
         );
 
         let tombstone = normalize(
@@ -644,10 +695,7 @@ mod tests {
         .unwrap();
         let id = world.insert("W1N1", tombstone).unwrap();
         let snap = world.object_snapshot_by_id(id).unwrap();
-        assert_eq!(
-            snap["kind"], "tombstone",
-            "直通道 tombstone 按透传 type 判 kind"
-        );
+        assert_eq!(snap["kind"], "tombstone", "直通道 tombstone（B3 typed）");
     }
 
     /// 道路 hitsMax 的地形系数（外部复审 P2-4：官方 build.js:172-184 把放大值
@@ -822,6 +870,58 @@ mod tests {
         assert_eq!(snap["kind"], "resource");
         assert_eq!(snap["resourceType"], "XUHO2", "命名槽透出资源名");
         assert_eq!(snap["amount"], 12);
+    }
+
+    /// B4：extractor 契约形态（vanilla snapshotStructure 的 extractor 分支：
+    /// base+hits+cooldown；无主 owner 读 null）+ creep 的命名矿物槽并入
+    /// snapStore 全资源正量口径。
+    #[test]
+    fn extractor_snapshot_and_creep_named_slot() {
+        let mut world = world_with_room();
+        let extractor = world
+            .insert(
+                "W1N1",
+                RoomObject::Extractor(kk_schema::room::ExtractorObj {
+                    id: 0,
+                    x: 8,
+                    y: 8,
+                    hits: 500,
+                    owner: None,
+                    cooldown: 5,
+                    notify_when_attacked: Some(true),
+                }),
+            )
+            .unwrap();
+        let snap = world.object_snapshot_by_id(extractor).unwrap();
+        assert_eq!(snap["kind"], "structure");
+        assert_eq!(snap["structureType"], "extractor");
+        assert_eq!(snap["hits"], 500);
+        assert_eq!(snap["hitsMax"], c::EXTRACTOR_HITS);
+        assert_eq!(snap["cooldown"], 5, "计数器原样（obj.cooldown || 0）");
+        assert_eq!(snap["owner"], serde_json::Value::Null, "无主读 null");
+        assert!(
+            snap.get("notifyWhenAttacked").is_none(),
+            "契约面无该键（vanilla ExtractorSnapshot）"
+        );
+
+        // creep 携带 U：快照 store 全资源正量
+        let c = ctx(&world);
+        let creep = normalize(
+            "creep",
+            &serde_json::json!({
+                "pos": [9, 9], "owner": "p1", "body": ["carry", "move"],
+                "store": { "U": 7 },
+            }),
+            &c,
+        )
+        .unwrap();
+        let creep_id = world.insert("W1N1", creep).unwrap();
+        let snap = world.object_snapshot_by_id(creep_id).unwrap();
+        assert_eq!(
+            snap["store"],
+            serde_json::json!({ "U": 7 }),
+            "命名槽并入正量表"
+        );
     }
 
     #[test]

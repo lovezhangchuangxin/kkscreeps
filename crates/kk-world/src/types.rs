@@ -120,14 +120,44 @@ pub fn calc_body_effectiveness(
     power
 }
 
+/// 官方 calcResources（utils.js 等价物——transfer.js:50/withdraw.js:9/pickup.js:9
+/// 等处的全槽求和）：双槽 + 额外资源列表（B4 起矿物 harvest 产出入命名槽，
+/// 官方 store 按资源名键的开放对象逐键求和同构）。
+pub fn store_total(
+    store: &kk_schema::room::Store,
+    extra: &[kk_schema::room::ResourceStack],
+) -> i64 {
+    (store.energy + store.ghodium) as i64 + extra.iter().map(|s| s.amount as i64).sum::<i64>()
+}
+
+/// 命名资源槽的读取（creep/storage 的多资源面）：energy/G 走双槽，其余查
+/// 额外资源列表（无键 = 0——官方 store[res] undefined 参与数值运算同值）。
+pub fn store_extra_slot(
+    store: &kk_schema::room::Store,
+    extra: &[kk_schema::room::ResourceStack],
+    resource: &str,
+) -> i64 {
+    match resource {
+        "energy" => store.energy as i64,
+        kk_core::constants::RESOURCE_GHODIUM => store.ghodium as i64,
+        other => extra
+            .iter()
+            .find(|s| s.resource == other)
+            .map(|s| s.amount as i64)
+            .unwrap_or(0),
+    }
+}
+
 /// 官方 calcResourcesWeight（movement.js:41-59）：store 全槽求和作为携带量，
 /// 自 body 尾部往前，hits>0 的 CARRY 按 CARRY_CAPACITY × 强化容量乘数逐个
-/// 扣减——装下携带量所需的 CARRY 部件数即重量。
+/// 扣减——装下携带量所需的 CARRY 部件数即重量。B4 起携带量含命名矿物槽
+/// （官方 calcResources 对开放 store 逐键求和的同构）。
 pub fn resources_weight(
     body: &[kk_schema::room::BodyPart],
     store: &kk_schema::room::Store,
+    extra: &[kk_schema::room::ResourceStack],
 ) -> usize {
-    let mut total_carry = (store.energy + store.ghodium) as i64;
+    let mut total_carry = store_total(store, extra);
     let mut weight = 0usize;
     for part in body.iter().rev() {
         if total_carry <= 0 {
@@ -144,6 +174,18 @@ pub fn resources_weight(
         weight += 1;
     }
     weight
+}
+
+/// MINERAL_DENSITY 表查询（constants.js:310-315：1→15000/2→35000/3→70000/
+/// 4→100000）。越界密度得 0（官方 `C.MINERAL_DENSITY[undefined]` → undefined
+/// → falsy——矿量 0 不影响"耗尽重挂钟"的官方行为）。
+pub fn mineral_density(density: u8) -> i64 {
+    let key = density.to_string();
+    c::MINERAL_DENSITY
+        .iter()
+        .find(|(k, _)| *k == key)
+        .map(|(_, v)| *v)
+        .unwrap_or(0)
 }
 
 fn boost_multiplier(
