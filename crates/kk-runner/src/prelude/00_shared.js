@@ -34,8 +34,10 @@
   // get-trap——访问了且拿不到才是确定的缺失）
   const hasProbes = new Map();
   // 'pos'：官方 RoomPosition 无 pos 属性（RoomObject 才有）——bot 的防御性访问
-  // 在官方也得 undefined，不按缺失计；wrapObject 的对象自带真 pos 不受影响
-  const PROBE_IGNORE = new Set(['then', 'constructor', '__proto__', 'prototype', 'inspect', 'toJSON', 'nodeType', 'length', 'name', 'pos']);
+  // 在官方也得 undefined，不按缺失计；wrapObject 的对象自带真 pos 不受影响。
+  // '__packedPos'：isEqualTo 快路径（rooms.js:1579）对任意游戏对象探测该 dunder，
+  // 属宿主内部通道探测非缺失（A5 片 2 评审 P3 清偿）
+  const PROBE_IGNORE = new Set(['then', 'constructor', '__proto__', 'prototype', 'inspect', 'toJSON', 'nodeType', 'length', 'name', 'pos', '__packedPos']);
   function probe(target, basePath) {
     return new Proxy(target, {
       get(t, prop) {

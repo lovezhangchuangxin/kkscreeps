@@ -78,6 +78,20 @@ fn room_setups(spec: &Value) -> anyhow::Result<Vec<RoomSetup<'_>>> {
         if !seen.insert(name) {
             anyhow::bail!("重复房间名: {name}");
         }
+        // 房名域校验（A5 片 2 评审 P2 清偿）：官方 RoomPosition 构造器要求房名
+        // 可解析且 +128 偏移落 0..256（rooms.js:1280-1287）；偏移出界会使
+        // beginTick 宿主装配（wrapObject → new RoomPosition）每 tick 抛错硬中断，
+        // 且 256 恰好 int32 回绕成 sim 别名——embed 边界显式拒绝把静默契约变
+        // 早失败。±127 上界严于构造器的 ±128：拒绝回绕别名域（官方世界不产生）
+        let parsed =
+            kk_core::RoomName::parse(name).map_err(|e| anyhow::anyhow!("RoomSpec {name}: {e}"))?;
+        if !(-128..=127).contains(&parsed.xx) || !(-128..=127).contains(&parsed.yy) {
+            anyhow::bail!(
+                "RoomSpec {name}: 世界界外房间坐标 ({}, {})，须在 ±127 内",
+                parsed.xx,
+                parsed.yy
+            );
+        }
         if room.get("controller").and_then(Value::as_bool) == Some(false) {
             let set: Vec<&str> = CONTROLLER_ONLY_FIELDS
                 .iter()
@@ -517,6 +531,11 @@ mod tests {
             json!({ "players": "alice", "rooms": [] }),
             json!({ "players": [], "rooms": [{}] }),
             json!({ "players": [{}], "rooms": [] }),
+            // 房名域校验（A5 片 2 评审 P2）：世界界外（E128 起 +128 偏移回绕/
+            // E130 越界构造抛错）与不可解析名在 embed 边界显式拒绝
+            json!({ "players": [], "rooms": [{ "name": "E130N0" }] }),
+            json!({ "players": [], "rooms": [{ "name": "E128N0" }] }),
+            json!({ "players": [], "rooms": [{ "name": "middle0" }] }),
         ] {
             assert!(engine.create_shard(&invalid).is_err());
             assert_eq!(engine.get_game_time(), 1);

@@ -70,6 +70,7 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     lifo_registry_drains()?;
     memory_alias_setters()?;
     roomposition_official_semantics()?;
+    roomposition_packedpos_forms()?;
     terrain_look_and_console_semantics()?;
     writeback_watchdog_and_contract()?;
     stub_value_shapes()?;
@@ -413,6 +414,193 @@ fn roomposition_official_semantics() -> anyhow::Result<()> {
     // 数值形态（无 roomName）视为同房间——跨房间换算不触发
     let v = sb.run_expr("new RoomPosition(0,0,'W1N1').getDirectionTo(3,3)")?;
     assert_eq!(v["value"], 4, "数值形态同房间（不换算）");
+    Ok(())
+}
+
+/// A5-core 片 2：RoomPosition packedPos 形态族官方同形（rooms.js:1276-1348/1350-1356/
+/// 1578-1585/1594-1600 + utils.js:34-63 fetchXYArguments）。
+fn roomposition_packedpos_forms() -> anyhow::Result<()> {
+    let mut sb = Sandbox::new(SandboxConfig::default())?;
+    let mut table = ModuleTable::new();
+    table.insert_js("main", "module.exports.loop = function () {};");
+    sb.set_modules(table)?;
+    // terrain 布局同 terrain_look_and_console_semantics：(0,0) wall、(10,0) swamp
+    let mut terrain = vec![0u32; 2500];
+    terrain[0] = 1;
+    terrain[10] = 2;
+    let w = serde_json::json!({
+        "time": 1,
+        "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+        "user": "p1",
+        "rooms": { "W1N1": { "name": "W1N1", "terrain": terrain } },
+        "objects": [
+            { "id": "c1", "type": "creep", "room": "W1N1", "x": 25, "y": 25, "name": "w1",
+              "owner": "p1", "body": ["move", "work"], "store": { "energy": 50 } },
+        ]
+    });
+    tick(&mut sb, &w)?;
+
+    // 构造器唯一 own 字段 __packedPos：非枚举/可写/非配置（官方 :1288-1292）；
+    // 编码 xx<<24|yy<<16|x<<8|y（房间坐标 +128 偏移：W1N1=[-2,-2]→[126,126]）
+    let v = sb.run_expr("new RoomPosition(25,37,'W1N1').__packedPos")?;
+    assert_eq!(
+        v["value"],
+        126i64 << 24 | 126i64 << 16 | 25i64 << 8 | 37,
+        "packed 编码位形"
+    );
+    let v = sb.run_expr(
+        r#"(() => {
+        const p = new RoomPosition(25,37,'W1N1');
+        const d = Object.getOwnPropertyDescriptor(p, '__packedPos');
+        return JSON.stringify({
+            keys: Object.keys(p),
+            enum: d.enumerable, writable: d.writable, configurable: d.configurable,
+        });
+    })()"#,
+    )?;
+    assert_eq!(
+        v["value"], r#"{"keys":[],"enum":false,"writable":true,"configurable":false}"#,
+        "own 形态：仅非枚举可写 __packedPos，无 own x/y/roomName"
+    );
+    // x/y/roomName 是原型 accessor（enumerable、非配置，官方 :1295-1348 defineProperties 缺省）；
+    // 方法挂载序与可枚举性同官方（`=` 赋值，for-in 按定义序全量可见）
+    let v = sb.run_expr(
+        r#"(() => {
+        const d = Object.getOwnPropertyDescriptor(RoomPosition.prototype, 'x');
+        const dy = Object.getOwnPropertyDescriptor(RoomPosition.prototype, 'y');
+        const dr = Object.getOwnPropertyDescriptor(RoomPosition.prototype, 'roomName');
+        const forIn = []; for (const k in new RoomPosition(1,2,'W1N1')) forIn.push(k);
+        return JSON.stringify({
+            xEnum: d.enumerable, xGet: typeof d.get, xSet: typeof d.set, xConf: d.configurable,
+            yEnum: dy.enumerable, rEnum: dr.enumerable,
+            forIn,
+        });
+    })()"#,
+    )?;
+    assert_eq!(
+        v["value"],
+        r#"{"xEnum":true,"xGet":"function","xSet":"function","xConf":false,"yEnum":true,"rEnum":true,"forIn":["x","y","roomName","toJSON","toString","inRangeTo","isNearTo","getDirectionTo","findPathTo","findClosestByPath","findInRange","findClosestByRange","isEqualTo","getRangeTo","look","lookFor","createFlag","createConstructionSite"]}"#,
+        "原型 accessor 形态与 for-in 可见性（官方挂载序）"
+    );
+
+    // 非法构造参：官方文案（:1280-1287）——坐标越界/NaN/非法房间名
+    let v = sb.run_expr(r#"(() => { try { new RoomPosition(50,10,'W1N1'); return 'no'; } catch (e) { return e.message; } })()"#)?;
+    assert_eq!(
+        v["value"], "Invalid arguments in RoomPosition constructor",
+        "x=50 抛官方文案"
+    );
+    let v = sb.run_expr(r#"(() => { try { new RoomPosition(10,NaN,'W1N1'); return 'no'; } catch (e) { return e.message; } })()"#)?;
+    assert_eq!(
+        v["value"], "Invalid arguments in RoomPosition constructor",
+        "NaN 坐标"
+    );
+    let v = sb.run_expr(r#"(() => { try { new RoomPosition(10,10,'E999S9'); return 'no'; } catch (e) { return e.message; } })()"#)?;
+    assert_eq!(
+        v["value"], "Invalid arguments in RoomPosition constructor",
+        "世界界外房间"
+    );
+
+    // sim 特判（:1277 + roomNames[0] 槽）：roomName 往返命中缓存槽
+    let v = sb.run_expr(r#"JSON.stringify([new RoomPosition(25,25,'sim').roomName, new RoomPosition(25,25,'sim').x])"#)?;
+    assert_eq!(v["value"], r#"["sim",25]"#, "sim 特判与缓存槽命中");
+
+    // setter 通道（:1297-1348）：改 x 走字节改写、越界抛 'Invalid coordinate'；
+    // roomName setter 换房不动 x/y、界外抛 'Invalid roomName'
+    let v = sb.run_expr(r#"(() => {
+        const p = new RoomPosition(25,37,'W1N1');
+        p.x = 30;
+        const yErr = (() => { try { p.y = -1; return 'no'; } catch (e) { return e.message; } })();
+        p.roomName = 'E5S5';
+        const rErr = (() => { try { p.roomName = 'E999S9'; return 'no'; } catch (e) { return e.message; } })();
+        return JSON.stringify({ x: p.x, y: p.y, roomName: p.roomName, yErr, rErr });
+    })()"#)?;
+    assert_eq!(
+        v["value"],
+        r#"{"x":30,"y":37,"roomName":"E5S5","yErr":"Invalid coordinate","rErr":"Invalid roomName"}"#,
+        "setter 校验与字节改写"
+    );
+
+    // __packedPos 可写搬运（UNDOC-PACKEDPOS-003 同形）：整体换位后三 getter 随动
+    let v = sb.run_expr(
+        r#"(() => {
+        const src = new RoomPosition(13,41,'E5S5');
+        const dst = new RoomPosition(0,0,'W1N1');
+        dst.__packedPos = src.__packedPos;
+        return JSON.stringify({ x: dst.x, y: dst.y, roomName: dst.roomName });
+    })()"#,
+    )?;
+    assert_eq!(
+        v["value"], r#"{"x":13,"y":41,"roomName":"E5S5"}"#,
+        "packedPos 搬运"
+    );
+
+    // isEqualTo 快路径（:1578-1585）：同 packed 即相等；数值形态兜底仍同房间
+    let v = sb.run_expr(
+        r#"(() => {
+        const a = new RoomPosition(25,37,'W1N1');
+        return JSON.stringify([
+            a.isEqualTo(new RoomPosition(25,37,'W1N1')),
+            a.isEqualTo(new RoomPosition(25,37,'W2N1')),
+            a.isEqualTo(25, 37),
+        ]);
+    })()"#,
+    )?;
+    assert_eq!(v["value"], r#"[true,false,true]"#, "isEqualTo 快路径三形态");
+
+    // toJSON（:1350-1356）：Object.assign 字面量 + this（own 无枚举字段）
+    let v = sb.run_expr(r#"JSON.stringify(new RoomPosition(25,37,'W1N1'))"#)?;
+    assert_eq!(
+        v["value"], r#"{"x":25,"y":37,"roomName":"W1N1"}"#,
+        "toJSON 三键形态"
+    );
+
+    // look() 委托（:1594-1600）：可见房走 room.lookAt(this)；不可见房抛官方文案
+    let v = sb.run_expr(r#"JSON.stringify(new RoomPosition(10,0,'W1N1').look())"#)?;
+    assert_eq!(
+        v["value"], r#"[{"type":"terrain","terrain":"swamp"}]"#,
+        "look 委托 lookAt 桩形态"
+    );
+    let v = sb.run_expr(r#"(() => { try { new RoomPosition(5,5,'W2N1').look(); return 'no'; } catch (e) { return e.message; } })()"#)?;
+    assert_eq!(
+        v["value"], "Could not access room W2N1",
+        "look 不可见房抛错"
+    );
+    // lookFor 非 terrain 分支同样在委托前抛（:1613-1616）
+    let v = sb.run_expr(r#"(() => { try { new RoomPosition(5,5,'W2N1').lookFor(LOOK_CREEPS); return 'no'; } catch (e) { return e.message; } })()"#)?;
+    assert_eq!(
+        v["value"], "Could not access room W2N1",
+        "lookFor 不可见房抛错"
+    );
+
+    // fetchXYArguments 官方语义（utils.js:34-63）：instanceof 判定——裸 {x,y}
+    // 对象非实例 → undefined 三元组（getRangeTo 得 NaN → JSON null、inRangeTo 恒
+    // false、isEqualTo false）；.pos 为实例的 RoomObject 正常解包
+    let v = sb.run_expr(
+        r#"(() => {
+        const p = new RoomPosition(10,10,'W1N1');
+        return JSON.stringify({
+            rangePlain: p.getRangeTo({x: 12, y: 12}),
+            inRangePlain: p.inRangeTo({x: 11, y: 11}, 2),
+            equalPlain: p.isEqualTo({x: 10, y: 10}),
+            viaPosObj: p.getRangeTo({pos: new RoomPosition(12,12,'W1N1')}),
+        });
+    })()"#,
+    )?;
+    assert_eq!(
+        v["value"], r#"{"rangePlain":null,"inRangePlain":false,"equalPlain":false,"viaPosObj":2}"#,
+        "fetchXYArguments instanceof 判定族"
+    );
+
+    // getPositionAt 官方越界返 null（rooms.js:971-976）
+    let v = sb.run_expr(
+        r#"(() => {
+        const oob = Game.rooms['W1N1'].getPositionAt(50,10);
+        const ok = Game.rooms['W1N1'].getPositionAt(10,10);
+        return JSON.stringify([oob, ok instanceof RoomPosition]);
+    })()"#,
+    )?;
+    assert_eq!(v["value"], r#"[null,true]"#, "getPositionAt 越界 null");
+
     Ok(())
 }
 
@@ -1054,15 +1242,13 @@ fn stub_game_projection() -> anyhow::Result<()> {
     );
     let v = sb.run_expr("(new RoomPosition(10,10,'W1N1')).isNearTo(11,11)")?;
     assert_eq!(v["value"], true, "数值形态 isNearTo");
-    let v = sb.run_expr("(new RoomPosition(10,10,'W1N1')).isInRangeTo(12,20,1)")?;
+    let v = sb.run_expr("(new RoomPosition(10,10,'W1N1')).inRangeTo(12,20,1)")?;
     assert_eq!(
         v["value"], false,
         "三参形态 range 取第三参（曾错绑到 y，恒 true）"
     );
-    let v = sb.run_expr("(new RoomPosition(10,10,'W1N1')).isInRangeTo(11,11,1)")?;
-    assert_eq!(v["value"], true, "三参形态在范围内");
     let v = sb.run_expr("(new RoomPosition(10,10,'W1N1')).inRangeTo(11,11,1)")?;
-    assert_eq!(v["value"], true, "inRangeTo 别名受益");
+    assert_eq!(v["value"], true, "三参形态在范围内");
     let v =
         sb.run_expr("(new RoomPosition(10,10,'W1N1')).getRangeTo(new RoomPosition(10,10,'W2N1'))")?;
     assert_eq!(

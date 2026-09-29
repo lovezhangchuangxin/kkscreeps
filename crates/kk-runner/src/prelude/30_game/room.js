@@ -195,7 +195,12 @@
       return raw ? eventLogRaw : eventLogParsed;
     };
     room.createFlag = function () { countStub('room.createFlag'); return 'stub-flag'; };
-    room.getPositionAt = (x, y) => new gw.RoomPosition(x, y, name);
+    // 官方 rooms.js:971-976：越界坐标返 null（构造器抛错前拦截——不依赖
+    // 'Invalid arguments' 通道）
+    room.getPositionAt = (x, y) => {
+      if (x < 0 || x > 49 || y < 0 || y > 49) return null;
+      return new gw.RoomPosition(x, y, name);
+    };
     room.serializePath = () => '';
     room.deserializePath = () => [];
     // 官方 rooms.js:551-571：memory 为 getter/setter（gw.memoryFor 官方同形——
