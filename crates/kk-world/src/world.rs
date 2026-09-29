@@ -62,7 +62,7 @@ impl RoomState {
         if self.objects.contains_key(&ObjId(id)) {
             return Err(format!("对象 id 重复: {}", ObjId(id).as_str()));
         }
-        set_object_id(&mut object, id);
+        object.set_id(id);
         self.objects.insert(ObjId(id), object);
         Ok(())
     }
@@ -97,27 +97,6 @@ impl RoomState {
         }
         room.events = snapshot.events.clone();
         Ok(room)
-    }
-}
-
-fn set_object_id(object: &mut RoomObject, id: u64) {
-    match object {
-        RoomObject::Creep(o) => o.id = id,
-        RoomObject::Source(o) => o.id = id,
-        RoomObject::Controller(o) => o.id = id,
-        RoomObject::Spawn(o) => o.id = id,
-        RoomObject::Extension(o) => o.id = id,
-        RoomObject::ConstructedWall(o) => o.id = id,
-        RoomObject::ConstructionSite(o) => o.id = id,
-        RoomObject::Energy(o) => o.id = id,
-        RoomObject::Flag(o) => o.id = id,
-        RoomObject::Road(o) => o.id = id,
-        RoomObject::Storage(o) => o.id = id,
-        RoomObject::Tombstone(o) => o.id = id,
-        RoomObject::Ruin(o) => o.id = id,
-        RoomObject::Mineral(o) => o.id = id,
-        RoomObject::Extractor(o) => o.id = id,
-        RoomObject::Generic(o) => o.id = id,
     }
 }
 

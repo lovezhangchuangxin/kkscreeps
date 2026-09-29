@@ -383,196 +383,32 @@ kk_schema! {
     }
 }
 
-/// 房间内对象（variant 枚举：tag 前缀 + 载荷）。tag 值见 [`RoomObject::tag`]，
-/// 一旦发布即冻结。
-#[derive(Clone, Debug, PartialEq)]
-pub enum RoomObject {
-    Creep(CreepObj),
-    Source(SourceObj),
-    Controller(ControllerObj),
-    Spawn(SpawnObj),
-    Extension(ExtensionObj),
-    ConstructedWall(ConstructedWallObj),
-    ConstructionSite(ConstructionSiteObj),
-    Energy(EnergyObj),
-    Flag(FlagObj),
-    Road(RoadObj),
-    Storage(StorageObj),
-    /// 墓碑（B3 变体——死亡结算产出，衰减钟驱动）。
-    Tombstone(TombstoneObj),
-    /// 废墟（B3 变体——结构摧毁结算产出，衰减钟驱动）。
-    Ruin(RuinObj),
-    /// 矿物（B4 变体——再生钟驱动，harvest mineral 的目标）。
-    Mineral(MineralObj),
-    /// 提取器（B4 变体——cooldown 计数器驱动，harvest mineral 的门）。
-    Extractor(ExtractorObj),
-    /// M1 结算范围外的对象（tower/rampart/lab/portal/…）：完整记录
-    /// 以 JSON 透传存放——保持与 M0 哑世界相同的放置接受面，结算忽略之。
-    Generic(GenericObj),
-}
-
-impl RoomObject {
-    /// 对象 id（所有变体的首字段）。
-    pub fn id(&self) -> u64 {
-        match self {
-            Self::Creep(o) => o.id,
-            Self::Source(o) => o.id,
-            Self::Controller(o) => o.id,
-            Self::Spawn(o) => o.id,
-            Self::Extension(o) => o.id,
-            Self::ConstructedWall(o) => o.id,
-            Self::ConstructionSite(o) => o.id,
-            Self::Energy(o) => o.id,
-            Self::Flag(o) => o.id,
-            Self::Road(o) => o.id,
-            Self::Storage(o) => o.id,
-            Self::Tombstone(o) => o.id,
-            Self::Ruin(o) => o.id,
-            Self::Mineral(o) => o.id,
-            Self::Extractor(o) => o.id,
-            Self::Generic(o) => o.id,
-        }
-    }
-
-    /// 坐标（所有变体的公共字段）。
-    pub fn pos(&self) -> (u8, u8) {
-        match self {
-            Self::Creep(o) => (o.x, o.y),
-            Self::Source(o) => (o.x, o.y),
-            Self::Controller(o) => (o.x, o.y),
-            Self::Spawn(o) => (o.x, o.y),
-            Self::Extension(o) => (o.x, o.y),
-            Self::ConstructedWall(o) => (o.x, o.y),
-            Self::ConstructionSite(o) => (o.x, o.y),
-            Self::Energy(o) => (o.x, o.y),
-            Self::Flag(o) => (o.x, o.y),
-            Self::Road(o) => (o.x, o.y),
-            Self::Storage(o) => (o.x, o.y),
-            Self::Tombstone(o) => (o.x, o.y),
-            Self::Ruin(o) => (o.x, o.y),
-            Self::Mineral(o) => (o.x, o.y),
-            Self::Extractor(o) => (o.x, o.y),
-            Self::Generic(o) => (o.x, o.y),
-        }
-    }
-
-    pub fn set_pos(&mut self, x: u8, y: u8) {
-        match self {
-            Self::Creep(o) => {
-                o.x = x;
-                o.y = y;
-            }
-            Self::Source(o) => {
-                o.x = x;
-                o.y = y;
-            }
-            Self::Controller(o) => {
-                o.x = x;
-                o.y = y;
-            }
-            Self::Spawn(o) => {
-                o.x = x;
-                o.y = y;
-            }
-            Self::Extension(o) => {
-                o.x = x;
-                o.y = y;
-            }
-            Self::ConstructedWall(o) => {
-                o.x = x;
-                o.y = y;
-            }
-            Self::ConstructionSite(o) => {
-                o.x = x;
-                o.y = y;
-            }
-            Self::Energy(o) => {
-                o.x = x;
-                o.y = y;
-            }
-            Self::Flag(o) => {
-                o.x = x;
-                o.y = y;
-            }
-            Self::Road(o) => {
-                o.x = x;
-                o.y = y;
-            }
-            Self::Storage(o) => {
-                o.x = x;
-                o.y = y;
-            }
-            Self::Tombstone(o) => {
-                o.x = x;
-                o.y = y;
-            }
-            Self::Ruin(o) => {
-                o.x = x;
-                o.y = y;
-            }
-            Self::Mineral(o) => {
-                o.x = x;
-                o.y = y;
-            }
-            Self::Extractor(o) => {
-                o.x = x;
-                o.y = y;
-            }
-            Self::Generic(o) => {
-                o.x = x;
-                o.y = y;
-            }
-        }
-    }
-}
-
-impl Schema for RoomObject {
-    fn encode_into(&self, out: &mut Vec<u8>) {
-        out.push(self.tag());
-        match self {
-            Self::Creep(o) => o.encode_into(out),
-            Self::Source(o) => o.encode_into(out),
-            Self::Controller(o) => o.encode_into(out),
-            Self::Spawn(o) => o.encode_into(out),
-            Self::Extension(o) => o.encode_into(out),
-            Self::ConstructedWall(o) => o.encode_into(out),
-            Self::ConstructionSite(o) => o.encode_into(out),
-            Self::Energy(o) => o.encode_into(out),
-            Self::Flag(o) => o.encode_into(out),
-            Self::Road(o) => o.encode_into(out),
-            Self::Storage(o) => o.encode_into(out),
-            Self::Tombstone(o) => o.encode_into(out),
-            Self::Ruin(o) => o.encode_into(out),
-            Self::Mineral(o) => o.encode_into(out),
-            Self::Extractor(o) => o.encode_into(out),
-            Self::Generic(o) => o.encode_into(out),
-        }
-    }
-
-    fn decode_from(cur: &mut Cursor<'_>) -> Result<Self, SchemaError> {
-        match cur.read_u8()? {
-            tags::CREEP => Ok(Self::Creep(CreepObj::decode_from(cur)?)),
-            tags::SOURCE => Ok(Self::Source(SourceObj::decode_from(cur)?)),
-            tags::CONTROLLER => Ok(Self::Controller(ControllerObj::decode_from(cur)?)),
-            tags::SPAWN => Ok(Self::Spawn(SpawnObj::decode_from(cur)?)),
-            tags::EXTENSION => Ok(Self::Extension(ExtensionObj::decode_from(cur)?)),
-            tags::CONSTRUCTED_WALL => {
-                Ok(Self::ConstructedWall(ConstructedWallObj::decode_from(cur)?))
-            }
-            tags::CONSTRUCTION_SITE => Ok(Self::ConstructionSite(
-                ConstructionSiteObj::decode_from(cur)?,
-            )),
-            tags::ENERGY => Ok(Self::Energy(EnergyObj::decode_from(cur)?)),
-            tags::FLAG => Ok(Self::Flag(FlagObj::decode_from(cur)?)),
-            tags::ROAD => Ok(Self::Road(RoadObj::decode_from(cur)?)),
-            tags::STORAGE => Ok(Self::Storage(StorageObj::decode_from(cur)?)),
-            tags::TOMBSTONE => Ok(Self::Tombstone(TombstoneObj::decode_from(cur)?)),
-            tags::RUIN => Ok(Self::Ruin(RuinObj::decode_from(cur)?)),
-            tags::MINERAL => Ok(Self::Mineral(MineralObj::decode_from(cur)?)),
-            tags::EXTRACTOR => Ok(Self::Extractor(ExtractorObj::decode_from(cur)?)),
-            tags::GENERIC => Ok(Self::Generic(GenericObj::decode_from(cur)?)),
-            b => Err(SchemaError::InvalidVariantTag(b)),
-        }
+crate::kk_room_object! {
+    /// 房间内对象（variant 枚举：tag 前缀 + 载荷）。tag 值见 [`RoomObject::tag`]，
+    /// 一旦发布即冻结。
+    pub enum RoomObject {
+        Creep(CreepObj) = tags::CREEP,
+        Source(SourceObj) = tags::SOURCE,
+        Controller(ControllerObj) = tags::CONTROLLER,
+        Spawn(SpawnObj) = tags::SPAWN,
+        Extension(ExtensionObj) = tags::EXTENSION,
+        ConstructedWall(ConstructedWallObj) = tags::CONSTRUCTED_WALL,
+        ConstructionSite(ConstructionSiteObj) = tags::CONSTRUCTION_SITE,
+        Energy(EnergyObj) = tags::ENERGY,
+        Flag(FlagObj) = tags::FLAG,
+        Road(RoadObj) = tags::ROAD,
+        Storage(StorageObj) = tags::STORAGE,
+        /// 墓碑（B3 变体——死亡结算产出，衰减钟驱动）。
+        Tombstone(TombstoneObj) = tags::TOMBSTONE,
+        /// 废墟（B3 变体——结构摧毁结算产出，衰减钟驱动）。
+        Ruin(RuinObj) = tags::RUIN,
+        /// 矿物（B4 变体——再生钟驱动，harvest mineral 的目标）。
+        Mineral(MineralObj) = tags::MINERAL,
+        /// 提取器（B4 变体——cooldown 计数器驱动，harvest mineral 的门）。
+        Extractor(ExtractorObj) = tags::EXTRACTOR,
+        /// M1 结算范围外的对象（tower/rampart/lab/portal/…）：完整记录
+        /// 以 JSON 透传存放——保持与 M0 哑世界相同的放置接受面，结算忽略之。
+        Generic(GenericObj) = tags::GENERIC,
     }
 }
 
@@ -599,29 +435,6 @@ pub mod tags {
     pub const MINERAL: u8 = 14;
     /// B4 新增（v1 内演化：追加尾部）。
     pub const EXTRACTOR: u8 = 15;
-}
-
-impl RoomObject {
-    fn tag(&self) -> u8 {
-        match self {
-            Self::Creep(_) => tags::CREEP,
-            Self::Source(_) => tags::SOURCE,
-            Self::Controller(_) => tags::CONTROLLER,
-            Self::Spawn(_) => tags::SPAWN,
-            Self::Extension(_) => tags::EXTENSION,
-            Self::ConstructedWall(_) => tags::CONSTRUCTED_WALL,
-            Self::ConstructionSite(_) => tags::CONSTRUCTION_SITE,
-            Self::Energy(_) => tags::ENERGY,
-            Self::Flag(_) => tags::FLAG,
-            Self::Road(_) => tags::ROAD,
-            Self::Storage(_) => tags::STORAGE,
-            Self::Tombstone(_) => tags::TOMBSTONE,
-            Self::Ruin(_) => tags::RUIN,
-            Self::Mineral(_) => tags::MINERAL,
-            Self::Extractor(_) => tags::EXTRACTOR,
-            Self::Generic(_) => tags::GENERIC,
-        }
-    }
 }
 
 crate::kk_schema! {

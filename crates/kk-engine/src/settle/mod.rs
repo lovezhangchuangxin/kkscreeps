@@ -363,34 +363,6 @@ impl<'w> Working<'w> {
     }
 }
 
-/// 对象归属（官方 processor.js:248 的 `object.user` 面）：typed 变体直读；
-/// Generic 透传解析 data.owner。与 world_json 的 object_owner 同语义（那侧
-/// 是投影私有，此处结算侧单源）。B3：tombstone/ruin 官方带 user（_die.js:27 /
-/// _destroy.js:38）——结算面收录（视野归集在 world_json 侧同源）。
-fn object_owner_of(obj: &RoomObject) -> Option<std::borrow::Cow<'_, str>> {
-    match obj {
-        RoomObject::Creep(o) => Some(o.owner.as_str().into()),
-        RoomObject::Spawn(o) => Some(o.owner.as_str().into()),
-        RoomObject::Extension(o) => Some(o.owner.as_str().into()),
-        RoomObject::Storage(o) => Some(o.owner.as_str().into()),
-        RoomObject::Controller(o) => o.owner.as_deref().map(Into::into),
-        RoomObject::ConstructionSite(o) => o.owner.as_deref().map(Into::into),
-        RoomObject::Tombstone(o) => o.owner.as_deref().map(Into::into),
-        RoomObject::Ruin(o) => o.owner.as_deref().map(Into::into),
-        // B4：extractor 官方带 user（build.js:215-219）——归属门与视野归集同源
-        RoomObject::Extractor(o) => o.owner.as_deref().map(Into::into),
-        RoomObject::Generic(o) => serde_json::from_str::<Value>(&o.data).ok().and_then(|v| {
-            v.get("owner")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-                .map(Into::into)
-        }),
-        // wall/road/source/energy/flag 等无主（官方 user undefined——通用段
-        // 的所有权门不拦，中性结构可设标志）
-        _ => None,
-    }
-}
-
 /// 官方 processor.js:313-314 的 notifyWhenAttacked 通用段：intent 存在且对象
 /// 是 CONSTRUCTION_COST 类型（或 creep/powerCreep——后者 M4）→ 落库
 /// `notifyWhenAttacked: !!enabled`。:248 的所有权门（他人对象跳过）内联。
@@ -400,7 +372,7 @@ fn notify_when_attacked(w: &mut Working, player: &str, id: ObjId, data: &IntentD
     let Some(obj) = w.room.objects.get(&id) else {
         return;
     };
-    if object_owner_of(obj).is_some_and(|owner| owner != player) {
+    if kk_world::world_json::object_owner(obj).is_some_and(|owner| owner != player) {
         return; // 官方 :248：他人对象（无主不拦——中性墙/路可设）
     }
     // 官方 :313 门：CONSTRUCTION_COST[object.type] || creep || powerCreep

@@ -191,7 +191,10 @@ pub(crate) fn road_hits_max(terrain: &kk_core::Terrain, x: u8, y: u8) -> i64 {
 /// 官方 userObjects 按 DB 的 user 字段归集（data.js:103）——与投影面同源。
 /// B3：tombstone/ruin 的 user 同样授房视野（data.js:105-116 只跳过 flag/
 /// constructionSite——死爬虫的墓碑为其主人保住房间视野是官方机制）。
-fn object_owner(object: &RoomObject) -> Option<std::borrow::Cow<'_, str>> {
+/// pub（M2B 前置批 P1 单源）：结算侧（kk-engine settle 的所有权门与
+/// notifyWhenAttacked）与投影/视野归集同一归属语义——原 settle 侧
+/// `object_owner_of` 双份拷贝删除，两消费者共此单源。
+pub fn object_owner(object: &RoomObject) -> Option<std::borrow::Cow<'_, str>> {
     match object {
         RoomObject::Creep(o) => Some(o.owner.as_str().into()),
         RoomObject::Spawn(o) => Some(o.owner.as_str().into()),

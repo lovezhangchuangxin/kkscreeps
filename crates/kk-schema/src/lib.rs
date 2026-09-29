@@ -12,8 +12,8 @@
 //! （变长/嵌套字段中断链，其后字段不再产出偏移）——M1 schema 尚未冻结，
 //! 完整偏移面在 M2 共享内存直读定稿时交付。
 //!
-//! 多态对象（`RoomObject` 等 variant 枚举）M1 采用手写 tag 前缀编解码（见 room.rs），
-//! 宏支持随需求出现再评估。
+//! 多态对象（`RoomObject` 等 variant 枚举）M1 起用 [`macro@kk_room_object!`]
+//! 声明宏生成 tag 前缀编解码管道（M2B 前置批落地——新增变体收敛为声明一次）。
 
 /// 二进制读写错误的统一形态。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -350,6 +350,118 @@ macro_rules! kk_schema {
     (@offdone [$($acc:tt)*]) => { $crate::__paste_item! { $($acc)* } };
     (@offdone [$($acc:tt)*] ($fv:vis $f:ident : $($t:tt)*) $($r:tt)*) => {
         kk_schema! { @offdone [$($acc)*] $($r)* }
+    };
+}
+
+/// 声明一个 variant 枚举对象管道：一次变体声明生成机械样板全套——枚举本体
+/// （derive Clone/Debug/PartialEq）、`id`/`set_id`/`pos`/`set_pos` 访问器、
+/// tag 前缀编解码（[`Schema`] 实现 + 未知 tag 拒载）与 `tag()` 反查；
+/// 另附编译期 tag 值互异断言（重复值会让解码分派静默走错臂，必须在编译期拦截）。
+///
+/// tag 常量表**保持手写**（显式数据面）：它是线上契约冻结表，逐条沿革注释
+/// （B3/B4 追加记录）承载于该处；本宏每变体显式声明**完整常量路径**
+/// （`= tags::CREEP` 形态的 `$tag:path` 片段——评审清偿：裸 `tags::` 按调用点
+/// 解析是隐式约定，第二个枚举在别处复用时同名但语义错的模块编译器不会拦；
+/// 逐变体全路径把引用变为编译器锁定的显式契约）。载荷 struct 的首字段必须为
+/// `id: u64`、公共字段 `x: u8`/`y: u8`（schema 声明面纪律，全部 RoomObject
+/// 载荷如此）。
+///
+/// ```ignore
+/// kk_room_object! {
+///     /// 对象枚举。
+///     pub enum MyObject {
+///         Wall(WallObj) = tags::WALL,
+///     }
+/// }
+/// ```
+#[macro_export]
+macro_rules! kk_room_object {
+    (
+        $(#[$meta:meta])*
+        $vis:vis enum $name:ident {
+            $(
+                $(#[$variant_meta:meta])*
+                $variant:ident ( $payload:ty ) = $tag:path
+            ),* $(,)?
+        }
+    ) => {
+        $(#[$meta])*
+        #[derive(Clone, Debug, PartialEq)]
+        $vis enum $name {
+            $(
+                $(#[$variant_meta])*
+                $variant($payload),
+            )*
+        }
+
+        impl $name {
+            /// 对象 id（所有变体的首字段）。
+            pub fn id(&self) -> u64 {
+                match self {
+                    $(Self::$variant(o) => o.id,)*
+                }
+            }
+
+            /// 覆写对象 id（世界分配器/快照导入的写回面；全局唯一由调用方保证）。
+            pub fn set_id(&mut self, id: u64) {
+                match self {
+                    $(Self::$variant(o) => o.id = id,)*
+                }
+            }
+
+            /// 坐标（所有变体的公共字段）。
+            pub fn pos(&self) -> (u8, u8) {
+                match self {
+                    $(Self::$variant(o) => (o.x, o.y),)*
+                }
+            }
+
+            pub fn set_pos(&mut self, x: u8, y: u8) {
+                match self {
+                    $(Self::$variant(o) => {
+                        o.x = x;
+                        o.y = y;
+                    })*
+                }
+            }
+
+            fn tag(&self) -> u8 {
+                match self {
+                    $(Self::$variant(_) => $tag,)*
+                }
+            }
+        }
+
+        impl $crate::Schema for $name {
+            fn encode_into(&self, out: &mut Vec<u8>) {
+                out.push(self.tag());
+                match self {
+                    $(Self::$variant(o) => $crate::Schema::encode_into(o, out),)*
+                }
+            }
+
+            fn decode_from(cur: &mut $crate::Cursor<'_>) -> Result<Self, $crate::SchemaError> {
+                match cur.read_u8()? {
+                    $($tag => Ok(Self::$variant(<$payload>::decode_from(cur)?)),)*
+                    b => Err($crate::SchemaError::InvalidVariantTag(b)),
+                }
+            }
+        }
+
+        // tag 值互异的编译期断言：重复值会让上面的解码 match 静默路由到
+        // 首个匹配臂（编码端无感知）——契约级错误，编译期拦截。
+        const _: () = {
+            let __tags = [$($tag),*];
+            let mut __i = 0;
+            while __i < __tags.len() {
+                let mut __j = __i + 1;
+                while __j < __tags.len() {
+                    assert!(__tags[__i] != __tags[__j], "variant tag 值互异被破坏");
+                    __j += 1;
+                }
+                __i += 1;
+            }
+        };
     };
 }
 
