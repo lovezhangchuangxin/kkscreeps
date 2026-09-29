@@ -21,6 +21,7 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     embed_mineral_direct_channel_impl()?;
     embed_gpt_review_clearance_impl()?;
     a5_memory_module_forms_impl()?;
+    a6_isactive_hits_family_impl()?;
     assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");
     Ok(())
 }
@@ -1517,6 +1518,269 @@ fn a5_memory_module_forms_impl() -> anyhow::Result<()> {
     assert_eq!(
         run.expr["value"], "passed",
         "String 包装对象过 _.isString 门: {:?}",
+        run.expr
+    );
+    Ok(())
+}
+
+/// A6 结构读取面：isActive 官方四门 + 距离计数（utils.js:456-505）、place
+/// 通道 generic 结构 hits/hitsMax 缺省表、build 负 remaining 官方算术
+/// （ROAD-HITS-001 swamp/wall 的 quirk 通道：播种超限 → 负 effect 回钳完成）。
+fn a6_isactive_hits_family_impl() -> anyhow::Result<()> {
+    // ---- isActive：RCL 配额 + Chebyshev 距离计数（controller 在 [1,1]）----
+    let mut e = EmbedEngine::new();
+    e.create_shard(&json!({
+        "players": ["p1"],
+        "rooms": [{ "name": "W1N1", "rcl": 2, "owner": "p1" }],
+    }))?;
+    // 6 个 extension（RCL2 配额 5）沿 y=5 横排：x=2..5 距离同为 4（等距按
+    // 放置序 tie-break），x=6 距离 5，x=7 距离 6——最后一个 inactive
+    let mut ext_ids = Vec::new();
+    for x in 2..=7u8 {
+        ext_ids.push(e.place_object(
+            "W1N1",
+            "structure",
+            &json!({ "pos": [x, 5], "structureType": "extension", "owner": "p1" }),
+        )?);
+    }
+    // tower 在 RCL2（需 RCL3）→ quota[2]=0 → inactive
+    let tower = e.place_object(
+        "W1N1",
+        "structure",
+        &json!({ "pos": [20, 20], "structureType": "tower", "owner": "p1" }),
+    )?;
+    // 无主 road → gate① owner undefined → true
+    let road = e.place_object(
+        "W1N1",
+        "structure",
+        &json!({ "pos": [30, 30], "structureType": "road" }),
+    )?;
+    // owned spawn：CONTROLLER_STRUCTURES['spawn'][2]=1 → true
+    let spawn = e.place_object(
+        "W1N1",
+        "structure",
+        &json!({ "pos": [25, 25], "structureType": "spawn", "owner": "p1",
+            "name": "S1", "store": { "energy": 100 } }),
+    )?;
+    let ids_json = serde_json::to_string(&ext_ids)?;
+    let expr = format!(
+        "const ids = {ids_json};
+         const act = ids.map((id) => Game.getObjectById(id).isActive());
+         [act.join(','), Game.getObjectById({tower:?}).isActive(),
+          Game.getObjectById({road:?}).isActive(), Game.getObjectById({spawn:?}).isActive()]"
+    );
+    let run = e.run_player("p1", &expr)?;
+    let v = &run.expr["value"];
+    assert_eq!(
+        v[0], "true,true,true,true,true,false",
+        "isActive 距离计数：前 5 extension active、最远 1 个 inactive: {v:?}"
+    );
+    assert_eq!(v[1], false, "RCL 不足的 tower inactive: {v:?}");
+    assert_eq!(v[2], true, "无主 road 恒 active: {v:?}");
+    assert_eq!(v[3], true, "owned spawn active: {v:?}");
+
+    // 工地不计入距离配额（官方 compareObj.type='constructionSite' 不匹配
+    // 结构类型）：更近的同类型工地不得挤掉既有结构的 active
+    e.place_object(
+        "W1N1",
+        "constructionSite",
+        &json!({ "pos": [2, 2], "structureType": "extension", "owner": "p1" }),
+    )?;
+    let ids_json2 = serde_json::to_string(&ext_ids)?;
+    let run = e.run_player(
+        "p1",
+        &format!("{ids_json2}.map((id) => Game.getObjectById(id).isActive()).join(',')"),
+    )?;
+    assert_eq!(
+        run.expr["value"], "true,true,true,true,true,false",
+        "工地不参与 isActive 距离计数: {:?}",
+        run.expr
+    );
+
+    // ---- place 通道 generic 结构 hits/hitsMax 缺省（读取面）----
+    let mut e2 = EmbedEngine::new();
+    e2.create_shard(&json!({
+        "players": ["p1"],
+        "rooms": [{ "name": "W1N1", "rcl": 3, "owner": "p1" }],
+    }))?;
+    let tower2 = e2.place_object(
+        "W1N1",
+        "structure",
+        &json!({ "pos": [10, 10], "structureType": "tower", "owner": "p1" }),
+    )?;
+    let rampart = e2.place_object(
+        "W1N1",
+        "structure",
+        &json!({ "pos": [11, 10], "structureType": "rampart", "owner": "p1" }),
+    )?;
+    let link = e2.place_object(
+        "W1N1",
+        "structure",
+        &json!({ "pos": [12, 10], "structureType": "link", "owner": "p1" }),
+    )?;
+    let container = e2.place_object(
+        "W1N1",
+        "structure",
+        &json!({ "pos": [13, 10], "structureType": "container" }),
+    )?;
+    let lab = e2.place_object(
+        "W1N1",
+        "structure",
+        &json!({ "pos": [14, 10], "structureType": "lab", "owner": "p1" }),
+    )?;
+    // 显式 hits 覆盖缺省（vanilla placeStructure 同款）；hitsMax 恒表值
+    let tower_override = e2.place_object(
+        "W1N1",
+        "structure",
+        &json!({ "pos": [15, 10], "structureType": "tower", "owner": "p1", "hits": 999 }),
+    )?;
+    for (id, hits, hits_max) in [
+        (&tower2, 3000, 3000),
+        (&rampart, 1, 300_000_000),
+        (&link, 1000, 1000),
+        (&container, 250_000, 250_000),
+        (&lab, 500, 500),
+        (&tower_override, 999, 3000),
+    ] {
+        let snap = e2.get_object(id).unwrap();
+        assert_eq!(
+            snap["hits"], hits,
+            "generic 结构缺省 hits（{id}）: {snap:?}"
+        );
+        assert_eq!(
+            snap["hitsMax"], hits_max,
+            "generic 结构缺省 hitsMax（{id}）: {snap:?}"
+        );
+    }
+
+    // ---- build 负 remaining 官方算术：progress 播种超 total → 一次 build 完成
+    //（effect 为负：progress 回钳至 total、能量反增——utils 官方 quirk 直通）
+    let mut e3 = EmbedEngine::new();
+    e3.create_shard(&json!({
+        "players": ["p1"],
+        "rooms": [{ "name": "W1N1", "rcl": 2, "owner": "p1" }],
+    }))?;
+    let site = e3.place_object(
+        "W1N1",
+        "constructionSite",
+        &json!({ "pos": [25, 25], "structureType": "road", "owner": "p1", "progress": 1495 }),
+    )?;
+    let builder = e3.place_object(
+        "W1N1",
+        "creep",
+        &json!({ "pos": [25, 26], "owner": "p1", "body": ["work", "carry", "move"],
+            "name": "b1", "store": { "energy": 5 } }),
+    )?;
+    let run = e3.run_player(
+        "p1",
+        &format!("Game.getObjectById({builder:?}).build(Game.getObjectById({site:?}))"),
+    )?;
+    assert_eq!(
+        run.expr["value"], 0,
+        "超限播种工地的 build 返回 OK: {:?}",
+        run.expr
+    );
+    assert!(
+        e3.get_object(&site).is_none(),
+        "工地当 tick 落成移除（负 remaining 回钳完成）"
+    );
+    let structures = e3.find_in_room("W1N1", 107); // FIND_STRUCTURES
+    let road_snap = structures
+        .iter()
+        .find(|s| s["pos"]["x"] == 25 && s["pos"]["y"] == 25)
+        .expect("落成的 road 在 FIND_STRUCTURES");
+    assert_eq!(
+        road_snap["hits"], 5000,
+        "plain 上 road 落成 hits=ROAD_HITS: {road_snap:?}"
+    );
+    let builder_snap = e3.get_object(&builder).unwrap();
+    assert_eq!(
+        builder_snap["store"]["energy"], 1200,
+        "负 effect 能量反增 quirk（官方 5-(-1195)=1200）: {builder_snap:?}"
+    );
+
+    // ---- build effect==0 两分支（评审 3 P2-2：摘除早退后的行为翻转面锁）----
+    // ① progress==total 精确相等：effect=0 → 一次 build 落成、能量不变
+    let mut e4 = EmbedEngine::new();
+    e4.create_shard(&json!({
+        "players": ["p1"],
+        "rooms": [{ "name": "W1N1", "rcl": 2, "owner": "p1" }],
+    }))?;
+    let site4 = e4.place_object(
+        "W1N1",
+        "constructionSite",
+        &json!({ "pos": [20, 20], "structureType": "road", "owner": "p1", "progress": 300 }),
+    )?;
+    let builder4 = e4.place_object(
+        "W1N1",
+        "creep",
+        &json!({ "pos": [20, 21], "owner": "p1", "body": ["work", "carry", "move"],
+            "name": "b4", "store": { "energy": 50 } }),
+    )?;
+    let run = e4.run_player(
+        "p1",
+        &format!("Game.getObjectById({builder4:?}).build(Game.getObjectById({site4:?}))"),
+    )?;
+    assert_eq!(
+        run.expr["value"], 0,
+        "等值工地的 build 返回 OK: {:?}",
+        run.expr
+    );
+    assert!(
+        e4.get_object(&site4).is_none(),
+        "等值工地一次 build 落成（effect=0 完成分支）"
+    );
+    let b4_snap = e4.get_object(&builder4).unwrap();
+    assert_eq!(
+        b4_snap["store"]["energy"], 50,
+        "effect=0 能量不动: {b4_snap:?}"
+    );
+
+    // ② 零 WORK creep 的 build intent（API 层 ERR_NO_BODYPART 拦、结算侧仍
+    // 记 actionLog + 事件 amount 0——官方 build.js 无 WORK 门直通算术）：
+    // 经 settle_external 绕过 API 预检注入，锁结算侧行为
+    let mut e5 = EmbedEngine::new();
+    e5.create_shard(&json!({
+        "players": ["p1"],
+        "rooms": [{ "name": "W1N1", "rcl": 2, "owner": "p1" }],
+    }))?;
+    let site5 = e5.place_object(
+        "W1N1",
+        "constructionSite",
+        &json!({ "pos": [10, 10], "structureType": "road", "owner": "p1", "progress": 0 }),
+    )?;
+    let noWork = e5.place_object(
+        "W1N1",
+        "creep",
+        &json!({ "pos": [10, 11], "owner": "p1", "body": ["move"], "name": "nw",
+            "store": { "energy": 10 } }),
+    )?;
+    let list = json!({ noWork.clone(): { "build": { "id": site5 } } });
+    let batch = kk_engine::intent::IntentBatch::from_json("p1", &list);
+    e5.settle_external(batch)?;
+    // 零 WORK：effect=0——工地不动、能量不动（economy 门 energy>0 已过），
+    // 但 actionLog + EVENT_BUILD(amount 0) 照记（官方无早退门；旧代码静默
+    // return——正向对照防空批假绿：事件必须在场）
+    let site5_snap = e5.get_object(&site5).unwrap();
+    assert_eq!(
+        site5_snap["progress"], 0,
+        "零 WORK build 进度不动: {site5_snap:?}"
+    );
+    let nw_snap = e5.get_object(&noWork).unwrap();
+    assert_eq!(
+        nw_snap["store"]["energy"], 10,
+        "零 WORK build 能量不动: {nw_snap:?}"
+    );
+    let run = e5.run_player(
+        "p1",
+        "Game.rooms['W1N1'].getEventLog().filter((ev) => ev.event === 4).length",
+    )?;
+    // EVENT_BUILD=4；零 WORK 路径的 amount 0 事件照记（官方无早退门的行为
+    // 翻转面锁——本 tick 的 run_player 自身不带 build intent，读的是上轮
+    // settle_external 落库的事件流）
+    assert_eq!(
+        run.expr["value"], 1,
+        "零 WORK build 仍推 EVENT_BUILD(amount 0): {:?}",
         run.expr
     );
     Ok(())

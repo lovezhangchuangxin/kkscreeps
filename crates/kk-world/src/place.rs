@@ -444,6 +444,16 @@ fn normalize_structure(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<Roo
             if !data.contains_key("structureType") && !st.is_empty() {
                 data.insert("structureType".into(), json!(st));
             }
+            // 读取面缺省（A6 hits 族）：generic 结构的初始 hits/hitsMax 对齐
+            // vanilla 适配器 getStructureDefaults（adapters/vanilla/index.ts
+            // :1910-1970 的 hits 部分——只补读取面两键，store/actionLog 等
+            // 归各自能力批）。spec 显式值优先（entry.or_insert：官方
+            // placeStructure 的 spec.hits 覆盖同款；hitsMax 不在 spec 键集、
+            // 恒用表值——vanilla `if (spec.hits !== undefined)` 只覆盖 hits）。
+            if let Some((hits, hits_max)) = generic_structure_hits(st) {
+                data.entry("hits").or_insert(json!(hits));
+                data.entry("hitsMax").or_insert(json!(hits_max));
+            }
             Ok(RoomObject::Generic(GenericObj {
                 id: 0,
                 x,
@@ -452,6 +462,38 @@ fn normalize_structure(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<Roo
             }))
         }
     }
+}
+
+/// generic（非 typed 变体）结构的初始 hits/hitsMax 表——vanilla 适配器
+/// getStructureDefaults 的 hits 部分。typed 变体（spawn/extension/road/
+/// storage/wall/extractor）在各自臂内带常量缺省，不查本表。rampart 的
+/// hitsMax 用 RAMPART_HITS_MAX[8] 上限（vanilla placeStructure 同口径；
+/// 官方 build 路径是建时按 rcl 存库——放置面对齐适配器契约）。
+/// pub：settle 的 build 落成分支（complete_construction generic 臂）共用
+/// 本表——两入口（放置/建造）读取面单源（层间一致纪律）。
+/// powerBank 是刻意偏离 vanilla（其 getStructureDefaults 无此 case、且
+/// placeStructure 拒收；我方 place 通道的 powerBank 走 placeObject 直通道
+/// 可放，缺省取官方 DB 值 POWER_BANK_HITS——common/lib/constants.js:259）。
+pub fn generic_structure_hits(structure_type: &str) -> Option<(i64, i64)> {
+    let max8 = kk_core::constants::RAMPART_HITS_MAX
+        .iter()
+        .find(|(k, _)| *k == "8")
+        .map(|(_, v)| *v)
+        .unwrap_or(0);
+    Some(match structure_type {
+        "tower" => (c::TOWER_HITS, c::TOWER_HITS),
+        "link" => (c::LINK_HITS, c::LINK_HITS_MAX),
+        "container" => (c::CONTAINER_HITS, c::CONTAINER_HITS),
+        "rampart" => (c::RAMPART_HITS, max8),
+        "lab" => (c::LAB_HITS, c::LAB_HITS),
+        "observer" => (c::OBSERVER_HITS, c::OBSERVER_HITS),
+        "terminal" => (c::TERMINAL_HITS, c::TERMINAL_HITS),
+        "powerSpawn" => (c::POWER_SPAWN_HITS, c::POWER_SPAWN_HITS),
+        "nuker" => (c::NUKER_HITS, c::NUKER_HITS),
+        "factory" => (c::FACTORY_HITS, c::FACTORY_HITS),
+        "powerBank" => (c::POWER_BANK_HITS, c::POWER_BANK_HITS),
+        _ => return None,
+    })
 }
 
 /// vanilla placeSite：progress 缺省 0；progressTotal 由 CONSTRUCTION_COST 派生

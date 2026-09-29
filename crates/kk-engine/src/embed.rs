@@ -16,7 +16,7 @@ use kk_runner::{EvalReport, PlayerThreads, SandboxConfig};
 
 use crate::intent::IntentBatch;
 use kk_world::place::{PlaceCtx, normalize};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::settle::Engine;
 
@@ -38,12 +38,57 @@ pub struct EmbedEngine {
     handles: BTreeMap<String, u64>,
     next_thread_id: u64,
     last_console: BTreeMap<String, Vec<String>>,
+    /// 性能观测点（A6）：每 tick 三阶段 + 墙钟采样
+    perf: PerfRecorder,
+}
+
+/// 性能观测点（A6，[performance-acceptance](docs/architecture/performance-acceptance.md)
+/// 「阶段耗时」口径）：run_player/run_players 每 tick 的四路采样——投影
+/// （world_json_for_viewer 每玩家合计）、玩家运行（run_player 合计）、结算
+/// （tick_with_intents）、tick 墙钟。Instant 读表 ~20ns，采样开销可忽略
+/// （文档要求采样开销单独测量——以同负载重复运行的 p50 稳定性自证）。
+/// 采样无上限（32B/tick）：probe/bot-check（≤2000t）规模无碍，长寿命部署
+/// 需 cap（A6 评审 P3 登记，归 B0）；`perf_reset` 提供手动清零。
+/// 正式场景基线（场景 A/C × 3 实现）随 M2B/M5；本观测点是 M2A 的架构验收
+/// 通道（玩家 API → intent → 结算闭环及快照读取路径的阶段耗时）。
+#[derive(Default)]
+struct PerfRecorder {
+    /// 每 tick 的 [project_ms, run_ms, settle_ms, wall_ms]
+    ticks: Vec<[f64; 4]>,
+}
+
+impl PerfRecorder {
+    fn record(&mut self, phases: [f64; 4]) {
+        self.ticks.push(phases);
+    }
+
+    /// 单阶段汇总：count / p50 / p95 / max / total（ms）。
+    fn phase_summary(ticks: &[[f64; 4]], idx: usize) -> Value {
+        let mut v: Vec<f64> = ticks.iter().map(|t| t[idx]).collect();
+        if v.is_empty() {
+            return json!({ "count": 0 });
+        }
+        v.sort_by(|a, b| a.total_cmp(b));
+        let pick = |q: f64| v[(((v.len() - 1) as f64) * q).round() as usize];
+        json!({
+            "count": v.len(),
+            "p50_ms": pick(0.5),
+            "p95_ms": pick(0.95),
+            "max_ms": v[v.len() - 1],
+            "total_ms": v.iter().sum::<f64>(),
+        })
+    }
 }
 
 impl Default for EmbedEngine {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// 纳秒 → 毫秒（观测点采样换算）。
+fn ns_ms(ns: u128) -> f64 {
+    ns as f64 / 1e6
 }
 
 /// `controller: false` 与显式控制器字段互斥（screeps-ok 契约，adapter.ts:45-48）。
@@ -183,6 +228,7 @@ impl EmbedEngine {
             handles: BTreeMap::new(),
             next_thread_id: 0,
             last_console: BTreeMap::new(),
+            perf: PerfRecorder::default(),
         }
     }
 
@@ -199,6 +245,7 @@ impl EmbedEngine {
         self.engine = Engine::default();
         self.handles.clear();
         self.last_console.clear();
+        self.perf = PerfRecorder::default();
 
         let players = self.players.get_or_insert_with(PlayerThreads::new);
         for handle in handles {
@@ -319,6 +366,7 @@ impl EmbedEngine {
             .handles
             .get(handle)
             .ok_or_else(|| anyhow::anyhow!("未知玩家 handle: {handle}"))?;
+        let t0 = std::time::Instant::now();
         let players = self
             .players
             .as_mut()
@@ -326,10 +374,22 @@ impl EmbedEngine {
         // per-viewer 视野裁切（外部复审 P1-3 修复）：注入世界只含该玩家有
         // 对象的房间 + user/gcl 字段（prelude 装配 per-viewer 集合与 Game.gcl）
         let gcl = self.engine.players.get(handle).map(|p| p.gcl).unwrap_or(0);
+        let t_project = std::time::Instant::now();
         let world = self.engine.world.world_json_for_viewer(handle, gcl);
+        let project_ns = t_project.elapsed().as_nanos();
+        let t_run = std::time::Instant::now();
         let report: EvalReport = players.run_player(thread_id, &world, code)?;
+        let run_ns = t_run.elapsed().as_nanos();
+        let t_settle = std::time::Instant::now();
         self.settle_tick_with_reports(std::iter::once((handle, &report)))
             .map_err(|e| anyhow::anyhow!("{e}"))?;
+        let settle_ns = t_settle.elapsed().as_nanos();
+        self.perf.record([
+            ns_ms(project_ns),
+            ns_ms(run_ns),
+            ns_ms(settle_ns),
+            t0.elapsed().as_secs_f64() * 1000.0,
+        ]);
         let out = self.finish_player_run(handle, report);
         Ok(out)
     }
@@ -363,6 +423,9 @@ impl EmbedEngine {
             }
         }
         let mut reports = BTreeMap::new();
+        let mut project_ns = 0u128;
+        let mut run_ns = 0u128;
+        let t0 = std::time::Instant::now();
         {
             let players = self
                 .players
@@ -376,16 +439,26 @@ impl EmbedEngine {
                 };
                 // gcl 点数 = PlayerState 真值（官方 runtimeData.user.gcl）
                 let gcl = self.engine.players.get(handle).map(|p| p.gcl).unwrap_or(0);
+                let t_project = std::time::Instant::now();
                 let world = self.engine.world.world_json_for_viewer(handle, gcl);
-                reports.insert(
-                    handle.clone(),
-                    players.run_player(*thread_id, &world, code)?,
-                );
+                project_ns += t_project.elapsed().as_nanos();
+                let t_run = std::time::Instant::now();
+                let report = players.run_player(*thread_id, &world, code)?;
+                run_ns += t_run.elapsed().as_nanos();
+                reports.insert(handle.clone(), report);
             }
         }
-        let mut out = BTreeMap::new();
+        let t_settle = std::time::Instant::now();
         self.settle_tick_with_reports(reports.iter().map(|(h, r)| (h.as_str(), r)))
             .map_err(|e| anyhow::anyhow!("{e}"))?;
+        let settle_ns = t_settle.elapsed().as_nanos();
+        self.perf.record([
+            ns_ms(project_ns),
+            ns_ms(run_ns),
+            ns_ms(settle_ns),
+            t0.elapsed().as_secs_f64() * 1000.0,
+        ]);
+        let mut out = BTreeMap::new();
         for (handle, report) in reports {
             let run = self.finish_player_run(&handle, report);
             out.insert(handle, run);
@@ -452,6 +525,25 @@ impl EmbedEngine {
 
     pub fn get_controller_pos(&self, room: &str) -> Option<(u64, u64)> {
         self.engine.world.controller_pos(room)
+    }
+
+    /// 性能观测点汇总（阶段耗时 p50/p95/max，ms）——perf-probe 与后续基准
+    /// 的采集出口；ticks 数即采样数。
+    pub fn perf_report(&self) -> Value {
+        json!({
+            "ticks": self.perf.ticks.len(),
+            "phases": {
+                "project": PerfRecorder::phase_summary(&self.perf.ticks, 0),
+                "run": PerfRecorder::phase_summary(&self.perf.ticks, 1),
+                "settle": PerfRecorder::phase_summary(&self.perf.ticks, 2),
+                "wall": PerfRecorder::phase_summary(&self.perf.ticks, 3),
+            },
+        })
+    }
+
+    /// 观测点清零（预热段不计入汇总——perf-probe 的 warmup 用）。
+    pub fn perf_reset(&mut self) {
+        self.perf.ticks.clear();
     }
 
     pub fn teardown(&mut self) {

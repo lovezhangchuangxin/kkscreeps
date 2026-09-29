@@ -131,7 +131,6 @@
     ERR_NO_PATH: globalThis.ERR_NO_PATH,
     OBSTACLE_OBJECT_TYPES: freezeConst(globalThis.OBSTACLE_OBJECT_TYPES),
     CONSTRUCTION_COST: freezeConst(globalThis.CONSTRUCTION_COST),
-    CONTROLLER_STRUCTURES: freezeConst(globalThis.CONTROLLER_STRUCTURES),
     // 资源族四方法（A4-ii）所需：资源白名单/容量折算表/结构类型常量
     RESOURCE_ENERGY: globalThis.RESOURCE_ENERGY,
     RESOURCES_ALL: freezeConst(globalThis.RESOURCES_ALL),
@@ -177,16 +176,8 @@
     return (self.store && self.store.energy) || 0;
   }
 
-  /** 单实例 isActive 近似（官方 utils.js checkStructureAgainstController 的
-   * 单结构面）：无 controller 恒 active；owned 房按 CONTROLLER_STRUCTURES
-   * 该类型在房 rcl 的配额 >0。isActive API 本体随 A4。 */
-  function structureActiveAt(o, ctl) {
-    if (!ctl) return true;
-    const quota = (C.CONTROLLER_STRUCTURES || {})[o.structureType];
-    if (!quota) return true;
-    const level = Math.min(Math.max(ctl.level || 0, 0), 8);
-    return (quota[level] || 0) > 0;
-  }
+  /** A6：extractor 的 active 门已换 Structure.prototype.isActive 真实现
+   *  （官方 creeps.js:380 同款调用；单实例配额近似 structureActiveAt 已删）。 */
 
   // ---- controller 族（A4-iii）的 GCL 门读数 ----
   // 预置 Math.pow 与 Set（官方 calcNeededGcl/定集在引擎闭包内求值——玩家交换
@@ -389,7 +380,7 @@
       }
       if (!extractor) return C.ERR_NOT_FOUND;
       if (extractor.owner && !extractor.my) return C.ERR_NOT_OWNER;
-      if (!structureActiveAt(extractor, this.room && this.room.controller)) {
+      if (!extractor.isActive()) {
         return C.ERR_RCL_NOT_ENOUGH;
       }
       if (extractor.cooldown) return C.ERR_TIRED;

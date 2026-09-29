@@ -1,7 +1,7 @@
 {
-  "bot": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/tooangel/src",
-  "ticks_requested": 300,
-  "ticks_completed": 300,
+  "bot": "compat/fixtures/tooangel/src",
+  "ticks_requested": 2000,
+  "ticks_completed": 2000,
   "ticks_terminated": 0,
   "ticks_skipped_penalty": 0,
   "ticks_with_console_error": 0,
@@ -9,52 +9,52 @@
   "has_probes": {},
   "stub_calls_top": [
     [
-      "RoomPosition.lookFor",
-      1713
-    ],
-    [
       "room.find:103",
-      1200
+      8000
     ],
     [
       "room.find:111",
-      1200
+      8000
     ],
     [
       "room.find:112",
-      903
+      6009
     ],
     [
       "room.find:108",
-      700
+      4668
     ],
     [
       "room.find:102",
-      602
-    ],
-    [
-      "room.find:105",
-      306
+      4008
     ],
     [
       "room.find:107",
-      303
+      2008
+    ],
+    [
+      "room.find:105",
+      2006
     ],
     [
       "Game.cpu.getHeapStatistics",
-      300
+      2000
     ],
     [
       "Game.market.getAllOrders",
-      300
+      2000
     ],
     [
       "RoomPosition.createConstructionSite",
-      300
+      2000
     ],
     [
-      "creep.suicide",
-      300
+      "RawMemory.setActiveSegments",
+      20
+    ],
+    [
+      "room.find:117",
+      15
     ],
     [
       "PathFinder.search",
@@ -65,23 +65,11 @@
       4
     ],
     [
-      "RawMemory.setActiveSegments",
-      3
-    ],
-    [
       "CostMatrix.serialize",
       2
     ],
     [
-      "room.find:117",
-      2
-    ],
-    [
       "CostMatrix.deserialize",
-      1
-    ],
-    [
-      "structure.isActive",
       1
     ]
   ],
@@ -89,11 +77,11 @@
   "console_errors_folded": [
     [
       "[log] # W#N#   harvester#           [room W#N# pos #,#] Creep role not defined for: crp# harvester",
-      300
+      2000
     ],
     [
       "[log] Brain Exception TypeError: RawMemory.setPublicSegments is not a function\n    at checkPlayers (kk_module/diplomacy, <anonymous>:#:#)\n    at module.exports.execute (kk_module/brain_main, <anonymous>:#:#)\n    at runMainLogic (kk_module/main, <anonymous>:#:#)\n    at Object.module.exports.loop (kk_module/main, <anonymous>:#:#)\n    at Object.runLoop (kk-prelude-#-host:#:#)\n    at kk:#:#",
-      3
+      20
     ],
     [
       "[log] # Script reload - Load: # tickLimit: # limit: # Bucket: #",
@@ -113,7 +101,7 @@
     ]
   ],
   "console_head": [
-    "[tick 1][log] 1 Script reload - Load: 6 tickLimit: 500 limit: 20 Bucket: 10000",
+    "[tick 1][log] 1 Script reload - Load: 5 tickLimit: 500 limit: 20 Bucket: 10000",
     "[tick 1][log] 1 W1N1                        Setting misplacedSpawn",
     "[tick 1][log] 1 W1N1                        Setup complete - storing data",
     "[tick 1][log] 1 W1N1                        Setup completed - storing data",

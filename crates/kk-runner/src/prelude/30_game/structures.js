@@ -11,7 +11,8 @@
  *     setDirections/cancel；
  *   · spawnCreep（:1063-1218 全预检序 + 同 tick 幽灵壳）/renewCreep
  *     （:1237-1267）/recycleCreep（:1269-1290）。
- * destroy（A5-lite）/notifyWhenAttacked（A4-iv）已换真；setActive 保持桩。
+ * destroy（A5-lite）/notifyWhenAttacked（A4-iv）已换真；isActive 官方四门
+ * 真化、setActive 幽灵 API 摘除（A6——官方无此方法）。
  *
  * A3b 纪律：字段表挂各类原型（官方 defineGameObjectProperties 挂 prototype
  * 的同构）；getter 经 gw.rawData(this.id) 回查当前 tick 投影；方法体官方
@@ -36,7 +37,7 @@
 (() => {
   'use strict';
 
-  const { reportMissing, countStub } = globalThis.__kkp;
+  const { reportMissing } = globalThis.__kkp;
   const gw = globalThis.__kkp.gw;
   // 预置 lodash（00_shared 装配的同一实例，闭包引用——玩家重绑 globalThis._
   // 不影响本段；官方 API 闭包 require('lodash') 的同构）
@@ -48,6 +49,14 @@
   const __MathCeil = Math.ceil;
   const __MathFloor = Math.floor;
   const __MathMax = Math.max;
+  const __MathAbs = Math.abs;
+  // 数组 push 捕获（isActive 房对象收集经它——官方 _.keys 走私有 lodash，
+  // 不经玩家可交换的 Array.prototype；room.js 装配扫描同款纪律）。经加载期
+  // 捕获的 Reflect.apply 分派：动态 .call 走 Function.prototype.call 原型，
+  // 玩家可换（A6 对抗评审 P2 的家族债之一——本处立 Reflect.apply 标杆，
+  // 其余 .call 面家族式清偿归后续批）
+  const __arrayPush = Array.prototype.push;
+  const __reflectApply = Reflect.apply;
 
   function freezeConst(obj) {
     if (obj && typeof obj === 'object') {
@@ -87,6 +96,8 @@
     ERR_BUSY: globalThis.ERR_BUSY,
     CONTROLLER_DOWNGRADE: freezeConst(globalThis.CONTROLLER_DOWNGRADE),
     CONTROLLER_DOWNGRADE_SAFEMODE_THRESHOLD: globalThis.CONTROLLER_DOWNGRADE_SAFEMODE_THRESHOLD,
+    // isActive 的配额表（官方 utils.js:470 读 driver.constants 同款注入）
+    CONTROLLER_STRUCTURES: freezeConst(globalThis.CONTROLLER_STRUCTURES),
   };
 
   // ---------------------------------------------------------------- per-tick 状态
@@ -280,6 +291,109 @@
     hitsMax: (o) => o.hitsMax ?? 0,
     structureType: (o) => o.structureType,
   });
+
+  // ---------------------------------------------------------------- isActive（A6 真化）
+  /** raw 投影的结构类型键：typed 变体两键齐发（spawn 投影 type:'spawn' +
+   *  structureType:'spawn'）、generic 结构 type:'structure' + structureType
+   *  （官方 DB 的 type 键即结构类型，我方投影归一后的等价读取）。距离扫描
+   *  判据须另加 `compareObj.type === object.type`（官方 utils.js:481-484
+   *  原文）——工地 raw 双键齐备（type:'constructionSite' + structureType）
+   *  但 type 永不等于结构类型，被该判定排除、不计入配额；混合形态
+   *  （手写 raw 用 generic 臂冒充 typed spawn）两形态 type 不同亦不互算
+   *  （放置通道 spawn 恒走 typed 臂，混合形态仅手写世界可达）。 */
+  function structureTypeOf(o) {
+    return o.structureType || o.type;
+  }
+
+  /** 官方 checkStructureAgainstController（utils.js:456-505）逐字：同房同类型
+   *  同主结构按到 controller 的 Chebyshev 距离计数，配额耗尽即 inactive；等距
+   *  时扫描序在 self 之前的算更近（官方 _.keys(roomObjects) 插入序 = 落库序，
+   *  我方 world.objects 数组序 = 放置序，同构）。roomObjects 是本玩家视野内
+   *  的本房对象数组（官方 register.objectsByRoom 同为玩家 runtimeData 面，
+   *  视野外结构不参与计数）。object === compareObj 引用同一性成立：
+   *  rawData(id) 与 world.objects 元素同源（beginTick 直插同引用）。 */
+  function checkStructureAgainstController(object, roomObjects, roomController) {
+    // owner-less objects are always active
+    if (!object.owner) {
+      return true;
+    }
+    // eliminate some other easy cases
+    if (!roomController || roomController.level < 1 || roomController.owner !== object.owner) {
+      return false;
+    }
+    const quota = C.CONTROLLER_STRUCTURES[structureTypeOf(object)];
+
+    let allowedRemaining = quota[roomController.level];
+
+    if (allowedRemaining === 0) {
+      return false;
+    }
+
+    // if only one object ever allowed, this is it
+    if (quota[8] === 1) {
+      return allowedRemaining !== 0;
+    }
+
+    // Scan through the room objects of the same type and count how many are closer.
+    let foundSelf = false;
+    let objectDist = __MathMax(__MathAbs(object.x - roomController.x), __MathAbs(object.y - roomController.y));
+    for (let i = 0; i < roomObjects.length; i++) {
+      const compareObj = roomObjects[i];
+      if (compareObj.type === object.type && structureTypeOf(compareObj) === structureTypeOf(object)
+        && compareObj.owner === object.owner) {
+        let compareDist = __MathMax(__MathAbs(compareObj.x - roomController.x), __MathAbs(compareObj.y - roomController.y));
+
+        if (compareDist < objectDist) {
+          allowedRemaining--;
+          if (allowedRemaining === 0) {
+            return false;
+          }
+        } else if (!foundSelf && compareDist === objectDist) {
+          // Objects of equal distance that are discovered before we scan over the selected object are considered closer
+          if (object === compareObj) {
+            foundSelf = true;
+          } else {
+            allowedRemaining--;
+            if (allowedRemaining === 0) {
+              return false;
+            }
+          }
+        }
+      }
+    }
+
+    return true;
+  }
+
+  /** 官方 Structure.isActive（structures.js:108-119）四门：①无主恒 active
+   *  （this.owner 走 OwnedStructure getter 通道——plain Structure 子类
+   *  （road/wall）原型链无 owner getter 得 undefined，官方同形）②配额表外
+   *  类型恒 active ③无房/无 controller 恒 inactive ④checkStructureAgainst
+   *  Controller 距离计数。房对象收集用索引迭代（Symbol.iterator 污染防御，
+   *  activateSafeMode 门④ 同款纪律）。 */
+  globalThis.Structure.prototype.isActive = function isActive() {
+    if (!this.owner) {
+      return true;
+    }
+    const o = gw.rawData(this.id);
+    if (!C.CONTROLLER_STRUCTURES[structureTypeOf(o)]) {
+      return true;
+    }
+    if (!this.room || !this.room.controller) {
+      return false;
+    }
+    const ctl = gw.rawData(this.room.controller.id);
+    const roomName = o.room;
+    const all = gw.world.objects || [];
+    const roomObjects = [];
+    for (let i = 0; i < all.length; i++) {
+      if (all[i].room === roomName) {
+        __reflectApply(__arrayPush, roomObjects, [all[i]]);
+      }
+    }
+    return checkStructureAgainstController(o, roomObjects, ctl);
+  };
+
 
   // OwnedStructure（官方 structures.js:135-139）：owner 的 undefined 语义
   // （_.isUndefined(o.user) || o.user === null ? undefined——降级归零的
@@ -638,19 +752,12 @@
   };
 
 
-  // ---------------------------------------------------------------- 原型方法（桩）
-  const STRUCTURE_METHODS = ['setActive']; // destroy/notifyWhenAttacked 已换真（上方——
-  // destroy 挂 Structure 基类原型（B3 接线批），spawn/controller/else 族经原型链
-  // 继承；实例级桩循环若再挂 destroy 会遮蔽真方法（坑⑥：桩循环后挂=桩覆盖，
-  // 症状 API 假 OK——本批实证复发）
-  // spawn：setActive 保持桩（官方 setActive :103-127——A4-iv 批次换真面）
-  for (const m of STRUCTURE_METHODS) {
-    globalThis.StructureSpawn.prototype[m] = gw.mkStubMethod('spawn.' + m);
-  }
-  // 通用结构方法（setActive）不挂 Structure 基类原型——controller 经
-  // OwnedStructure→Structure 链会继承；source/mineral 是 RoomObject 直挂
-  //（CLASS_PARENTS，官方同拓扑）不在 Structure 链上、不受影响；else 族按类
-  // 原型/实例兜底挂载
+  // ---------------------------------------------------------------- 原型方法
+  // setActive 桩已摘除（A6）：官方 API 全集无此方法（structures.js:103-127
+  // 实为 destroy/notifyWhenAttacked/isActive 三方法，旧注释误植）——玩家面
+  // 挂官方没有的方法本身就是兼容红线违背。isActive 已在上方 Structure 基类
+  // 原型真化（全结构族经原型链继承）。destroy/notifyWhenAttacked 同在基类
+  // 原型（B3/A4-iv 接线）；不再有实例级桩循环——实例桩会遮蔽真方法（坑⑥）。
 
   // ---------------------------------------------------------------- controller 真方法（A4-iii）
   /** StructureController.unclaim：官方 structures.js:200-208——!my 门后记
@@ -717,15 +824,14 @@
     return C.OK;
   };
 
-  // 其余结构方法只剩 setActive 保持桩（destroy/notifyWhenAttacked 已在
-  // Structure 基类换真——else 族/未知类型经原型链继承，不再挂同名实例桩
-  // 防遮蔽，坑⑥教训）
+  // 其余结构方法无桩残留（destroy/notifyWhenAttacked 已在 Structure 基类换真
+  // ——else 族/未知类型经原型链继承，不再挂实例桩防遮蔽，坑⑥教训）
 
   // ---------------------------------------------------------------- 装配
   // spawn 装配：字段/方法全在原型，own 面只剩 id/pos/room + 静态标记
+  // （isActive 在 Structure 基类原型真化，不再挂实例桩）
   gw.assemblers.spawn = (o, base) => {
     base.isStructure = true;
-    base.isActive = () => { countStub('structure.isActive'); return true; };
     return base;
   };
 
@@ -740,14 +846,7 @@
       road: 'StructureRoad', constructedWall: 'StructureWall', wall: 'StructureWall' }[o.structureType];
     if (!cls) {
       gw.defineGameObjectProperties(base, gw.rawData, ELSE_STRUCTURE_FIELDS);
-      for (const m of STRUCTURE_METHODS) base[m] = gw.mkStubMethod('structure.' + m);
-    } else {
-      for (const m of STRUCTURE_METHODS) {
-        globalThis[cls].prototype[m] = globalThis[cls].prototype[m]
-          || gw.mkStubMethod('structure.' + m);
-      }
     }
-    base.isActive = () => { countStub('structure.isActive'); return true; };
     return base;
   };
 

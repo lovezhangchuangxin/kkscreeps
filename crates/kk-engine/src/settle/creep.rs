@@ -401,13 +401,17 @@ fn intent_build(w: &mut Working, id: ObjId, data: &IntentData) {
         return;
     }
     // progressTotal 为创建时定格的存值（官方 build.js:68 读存的 progressTotal；
-    // 放置路径=裸成本、intent 建工地=成本×地形系数，见 ConstructionSiteObj）
+    // 放置路径=裸成本、intent 建工地=成本×地形系数，见 ConstructionSiteObj）。
+    // remaining 允许为负（官方算术直通：适配器可播种 progress > progressTotal，
+    // 此时 buildEffect 为负——progress 回钳至 total 完成落成、能量反增——
+    // ROAD-HITS-001 swamp/wall 即靠此 quirk 过渡；勿加 saturate/早退门）
     let total = site.progress_total as i64;
-    let remaining = total.saturating_sub(site.progress as i64);
+    let remaining = total - site.progress as i64;
     // 官方两步（build.js:67-84，GPT 二轮复审 P1-1）：基础量（无强化计数 ×
     // BUILD_POWER）定耗能与效果点数 min(power, remaining, energy)；强化效果
     // 按增量数组（降序取前 effect 个、整体 floor、钳 remaining）；能量扣基础
-    // 量、进度加强化量
+    // 量、进度加强化量。官方无 effect<=0 早退门——零 WORK/零剩余路径仍记
+    // actionLog 与事件（amount 0）
     let Some((effect, boosted)) = w.creep(id).map(|c| {
         let base = BodyKind::count_active(&c.body, BodyKind::Work) as i64 * c::BUILD_POWER;
         let effect = base.min(remaining).min(energy);
@@ -424,12 +428,13 @@ fn intent_build(w: &mut Working, id: ObjId, data: &IntentData) {
     }) else {
         return;
     };
-    if effect <= 0 {
-        return;
-    }
     let new_progress = site.progress as i64 + boosted;
     if let Some(c) = w.creep_mut(id) {
-        c.store.energy -= effect as u32;
+        // 官方 `store.energy -= buildEffect`：正 effect 递减（min 含 energy 故
+        // 不透支）、负 effect 递增（播种超限 quirk）；数学上不产生负值，钳 0
+        // 仅防御（A6 对抗评审 P3：energy+|effect| 超 u32 仅宿主 fixture 可达，
+        // saturating 转换防御截断）
+        c.store.energy = u32::try_from((c.store.energy as i64 - effect).max(0)).unwrap_or(u32::MAX);
         set_action_log(&mut c.action_log, ACTION_BUILD);
     }
     let incomplete = new_progress < total;
@@ -438,7 +443,9 @@ fn intent_build(w: &mut Working, id: ObjId, data: &IntentData) {
         id,
         serde_json::json!({
             "targetId": target_id.as_str(),
-            "amount": effect,
+            // 官方事件 amount=boostedEffect（build.js:96——进度点数非耗能量；
+            // 负值合法：超限播种 quirk 下为负）
+            "amount": boosted,
             "structureType": site.structure_type,
             "x": site.x,
             "y": site.y,
@@ -450,7 +457,7 @@ fn intent_build(w: &mut Working, id: ObjId, data: &IntentData) {
             s.progress = new_progress as u32;
         }
     } else {
-        complete_construction(w, target_id, site);
+        complete_construction(w, target_id, site, owner);
     }
 }
 
@@ -459,6 +466,7 @@ fn complete_construction(
     w: &mut Working,
     site_id: ObjId,
     site: kk_schema::room::ConstructionSiteObj,
+    builder_owner: String,
 ) {
     let time = w.time;
     w.remove_obj(site_id);
@@ -544,12 +552,33 @@ fn complete_construction(
         other => {
             // 其余类型（tower/rampart/lab/…）：透传桶落成（官方全字段表 M2 对齐）。
             // owner 键名与放置路径（place 透传 spec）及读取侧（movement 障碍
-            // 判定）统一为 "owner"
+            // 判定）统一为 "owner"。hits/hitsMax 走放置面同源表
+            //（generic_structure_hits——官方 build.js 各类型分支的 hits 部分；
+            // 未知类型缺省 hits:1 与官方兜底一致）；rampart 的 hitsMax 官方
+            // 建时按 controller 归属与 rcl 存库（build.js:161-166——归属比较
+            // 的 object 是**执行 build 的 creep**（非工地主），跨主建造时
+            // 归属一致 → RAMPART_HITS_MAX[rcl]，否则 0）
+            let (hits, hits_max) = kk_world::place::generic_structure_hits(other).unwrap_or((1, 1));
+            let hits_max = if other == "rampart" {
+                match w.controller() {
+                    Some(ctl) if ctl.owner.as_deref() == Some(builder_owner.as_str()) => {
+                        kk_core::constants::RAMPART_HITS_MAX
+                            .iter()
+                            .find(|(k, _)| *k == ctl.level.to_string())
+                            .map(|(_, v)| *v)
+                            .unwrap_or(0)
+                    }
+                    _ => 0,
+                }
+            } else {
+                hits_max
+            };
             let data = serde_json::json!({
                 "type": "structure",
                 "structureType": other,
                 "owner": site.owner,
-                "hits": 1,
+                "hits": hits,
+                "hitsMax": hits_max,
                 // build.js:116：出生即 true
                 "notifyWhenAttacked": true,
             });

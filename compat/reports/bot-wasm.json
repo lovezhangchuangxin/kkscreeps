@@ -1,5 +1,5 @@
 {
-  "bot": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/wasm-bot",
+  "bot": "compat/fixtures/wasm-bot",
   "ticks_requested": 10,
   "ticks_completed": 10,
   "ticks_terminated": 0,

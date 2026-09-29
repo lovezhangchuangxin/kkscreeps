@@ -17,6 +17,7 @@
 | [ADR-009](ADR-009-frontend-stack.md) | 前端栈（Vue3+Vite+TS+pnpm）与单 monorepo、自建渲染器 | 已接受 |
 | [ADR-010](ADR-010-screeps-ok-adapter-bridge.md) | screeps-ok 适配器桥接（sidecar 子进程）与嵌入式 API、M0 哑世界、bot 验收与上游 pin 策略 | 已接受 |
 | [ADR-011](ADR-011-engine-skeleton.md) | 引擎骨架定型：typed world 唯一后端、官方结算序子集、intent 通道 trait、声明宏快照格式、常量生成、通过率棘轮 | 已接受 |
+| [ADR-012](ADR-012-m2a-sandbox-runtime.md) | M2A 架构定型：两条硬约束裁决器、玩家 API 层 prelude 对照移植、intent 链路四段、数据面分期 seam 先行、查询面 Rust 单源、验收口径、性能观测点（A6 收口升格） | 已接受 |
 | [ADR-013](ADR-013-architecture-review-coordinator.md) | 2026-09 架构复审：运行协调层（RunResult 统一提交）、直读 seam 先行节奏、LIFO 每线程纠偏、宿主控制面收口、TickInput 非确定性显式化（ADR-012 由 A6 预留） | 已接受 |
 
 ## 评估过但没有采纳的方案

@@ -7,6 +7,7 @@ use clap::{Parser, Subcommand};
 
 mod bot_check;
 mod embed_main;
+mod perf_probe;
 
 #[derive(Parser)]
 #[command(name = "kkscreeps", about = "Screeps 服务端的 Rust 重写版", version)]
@@ -39,6 +40,21 @@ enum Command {
         #[arg(long, default_value = "bot-check-report.json")]
         report: String,
     },
+    /// 性能观测点实测：EmbedEngine 闭环阶段耗时（投影/玩家运行/结算）——A6
+    PerfProbe {
+        /// 采集 tick 数
+        #[arg(long, default_value_t = 1000)]
+        ticks: u32,
+        /// 预热 tick 数（不计入汇总）
+        #[arg(long, default_value_t = 100)]
+        warmup: u32,
+        /// 玩家数（每玩家独立沙箱 + 自有房）
+        #[arg(long, default_value_t = 2)]
+        players: u32,
+        /// 报告输出路径（JSON）
+        #[arg(long, default_value = "perf-probe.json")]
+        report: String,
+    },
 }
 
 fn main() {
@@ -57,6 +73,14 @@ fn main() {
             report,
         } => {
             std::process::exit(bot_check::run(&path, ticks, &report));
+        }
+        Command::PerfProbe {
+            ticks,
+            warmup,
+            players,
+            report,
+        } => {
+            std::process::exit(perf_probe::run(ticks, warmup, players, &report));
         }
     }
 }
