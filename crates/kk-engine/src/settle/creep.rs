@@ -176,10 +176,12 @@ fn intent_harvest(w: &mut Working, id: ObjId, data: &IntentData) {
 /// 官方 harvest.js source 分支（25-65）：controller 归属/预定门（B2 补
 /// reservation 分支）、WORK×HARVEST_POWER、超容 drop energy。
 fn intent_harvest_source(w: &mut Working, id: ObjId, target_id: ObjId) {
-    let (owner, work_power, held_total, store_cap) = match w.creep(id) {
+    let (owner, work_power, held_energy, held_total, store_cap) = match w.creep(id) {
         Some(c) => (
             c.owner.clone(),
             harvest_power(c),
+            // energy 槽局部持有（写槽用——官方 :43 槽局部入仓）
+            c.store.energy as i64,
             // 全槽和（官方 calcResources 对 store 全键求和——混合持有时
             // energy/G/命名矿物都计入超容判定，B4 评审 3 P1-1）
             kk_world::types::store_total(&c.store, &c.store_extra),
@@ -209,15 +211,22 @@ fn intent_harvest_source(w: &mut Working, id: ObjId, target_id: ObjId) {
     if let Some(RoomObject::Source(s)) = w.room.objects.get_mut(&target_id) {
         s.energy -= amount as u32;
     }
-    // 官方顺序（harvest.js:49-60）：先满额入仓，再对超容部分 drop
-    //（sum 全槽：混合持有下官方按 calcResources 全键和判超容——P1-1 清偿）
+    // 官方顺序（harvest.js:43-60）：energy **槽局部**入仓（:43
+    // store.energy = (store.energy||0)+amount），超容判定用 calcResources
+    // **全槽和**（:50），掉落量 = min(energy 槽持有, sum−cap)（:54）——只掉
+    // 本 tick 产出的 energy，不动其他槽（P1-1 清偿 + 复审 F1 修正：原清偿
+    // 误把全槽和写进 energy 槽 = 混持采 source 复制资源）
     let sum = held_total + amount;
+    let energy_after = held_energy + amount;
     if let Some(c) = w.creep_mut(id) {
-        c.store.energy = sum.min(u32::MAX as i64) as u32;
+        c.store.energy = energy_after.min(u32::MAX as i64) as u32;
         set_action_log(&mut c.action_log, ACTION_HARVEST);
     }
     if sum > store_cap {
-        intent_drop_amount(w, id, sum - store_cap);
+        let drop_amt = energy_after.min(sum - store_cap);
+        if drop_amt > 0 {
+            intent_drop_amount(w, id, drop_amt);
+        }
     }
     w.push_event(
         c::EVENT_HARVEST,

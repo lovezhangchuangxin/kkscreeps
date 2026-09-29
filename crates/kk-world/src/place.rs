@@ -400,10 +400,11 @@ fn normalize_structure(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<Roo
             let next_regen = spec
                 .get("ticksToRegeneration")
                 .and_then(Value::as_u64)
-                // >0 过滤（对齐 source 的既有口径，place.rs:263 同款）：官方
-                // !nextRegenerationTime 把 0 当 falsy 重挂 50000 钟——Some(0)
-                // 会让 mineral_tick 的到点判定永不触发（B4 评审 2 P3-2 清偿）
-                .filter(|t| *t > 0)
+                // 不过滤 0（与 source 的 >0 过滤刻意不同）：vanilla placeMineral
+                // 对 mineral 只判 !== undefined（index.ts:1218-1220）——0 即
+                // Some(time+0)，官方 minerals/tick 的 `time >= nrt-1` 立即成立
+                // = 放置后首 tick 立即再生（复审 F3：原 >0 过滤把它改成 5 万
+                // tick 延迟，方向性引入分歧，已撤）
                 .map(|t| ctx.time.saturating_add(t));
             Ok(RoomObject::Mineral(MineralObj {
                 id: 0,

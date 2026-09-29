@@ -226,33 +226,29 @@ pub fn drop_energy_over_capacity(w: &mut Working, id: ObjId) {
         return;
     }
     let overflow = held - cap;
-    // 官方逐资源序贯掉落：energy → 命名槽（extra 声明序）→ G；每资源
-    // min(存量, 剩余 overflow)
+    // 官方 _drop-resources-without-space 按 RESOURCES_ALL **声明序**逐资源
+    // min(存量, overflow) 掉落（复审 F2 修正：原按 store_extra 插入序——
+    // 多槽部分掉落时 per-resource 分布偏离官方）
     let mut left = overflow;
-    let energy_drop = (store.energy as i64).min(left);
-    if energy_drop > 0 {
-        super::creep::intent_drop_amount(w, id, energy_drop);
-        left -= energy_drop;
-    }
-    for stack in &extra {
+    for r in kk_core::constants::RESOURCES_ALL {
         if left <= 0 {
             break;
         }
-        let d = (stack.amount as i64).min(left);
+        let held_res = if *r == "energy" {
+            store.energy as i64
+        } else if *r == kk_core::constants::RESOURCE_GHODIUM {
+            store.ghodium as i64
+        } else {
+            extra
+                .iter()
+                .find(|s| s.resource == *r)
+                .map(|s| s.amount as i64)
+                .unwrap_or(0)
+        };
+        let d = held_res.min(left);
         if d > 0 {
-            super::creep::intent_drop_amount_res(w, id, &stack.resource, d);
+            super::creep::intent_drop_amount_res(w, id, r, d);
             left -= d;
-        }
-    }
-    if left > 0 {
-        let g_drop = (store.ghodium as i64).min(left);
-        if g_drop > 0 {
-            super::creep::intent_drop_amount_res(
-                w,
-                id,
-                kk_core::constants::RESOURCE_GHODIUM,
-                g_drop,
-            );
         }
     }
 }

@@ -3755,6 +3755,89 @@ fn harvest_mixed_holding_overflow_drops_mined_mineral() {
     );
 }
 
+/// B4 清偿复审 F1 修正锁值：混持（Z:50 占满容量）下采 **source**——官方
+/// harvest.js:43 energy 槽局部入仓、:50 全槽判定、:54 掉
+/// min(energy 持有, sum−cap)——只掉 energy 不动 Z（清偿第一版曾把全槽和写
+/// 进 energy 槽 = 复制资源，实证 energy=50+Z=50）。
+#[test]
+fn harvest_source_mixed_holding_overflow_drops_energy_only() {
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let src = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Source(kk_schema::room::SourceObj {
+                id: 0,
+                x: 10,
+                y: 10,
+                energy: 3000,
+                energy_capacity: 3000,
+                next_regeneration_time: None,
+            }),
+        )
+        .unwrap();
+    // 容量 50 已被 Z 占满
+    let c = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Creep(CreepObj {
+                id: 0,
+                x: 10,
+                y: 11,
+                fatigue: 0,
+                age_time: u64::MAX / 2,
+                hits: 300,
+                spawning: false,
+                action_log: 0,
+                name: "w1".into(),
+                owner: "p1".into(),
+                body: body(&[BodyKind::Work, BodyKind::Work, BodyKind::Carry]),
+                store: kk_schema::room::Store {
+                    energy: 0,
+                    ghodium: 0,
+                },
+                store_extra: vec![kk_schema::room::ResourceStack {
+                    resource: "Z".into(),
+                    amount: 50,
+                }],
+            }),
+        )
+        .unwrap();
+    let mut batch = IntentBatch::default();
+    batch.add_object_intent("p1", c, Action::Harvest, IntentData::target(src));
+    f.settle(batch);
+    match f.obj(c) {
+        RoomObject::Creep(cc) => {
+            assert_eq!(
+                cc.store.energy, 0,
+                "采 4 → 全槽 54>50 → 掉 min(4, 4)=4，energy 归 0"
+            );
+            assert_eq!(
+                cc.store_extra,
+                vec![kk_schema::room::ResourceStack {
+                    resource: "Z".into(),
+                    amount: 50
+                }],
+                "Z 槽不动（只掉本 tick 产出的 energy）"
+            );
+        }
+        _ => panic!(),
+    }
+    // 掉 4 energy 同 tick 衰减 ceil(4/1000)=1 → 堆 3
+    let pile = f
+        .world
+        .room("W1N1")
+        .unwrap()
+        .objects
+        .values()
+        .find_map(|o| match o {
+            RoomObject::Energy(e) if e.x == 10 && e.y == 11 => Some(e.amount),
+            _ => None,
+        });
+    assert_eq!(pile, Some(3), "掉 4 同 tick 衰减 1");
+}
+
 /// B4 评审 3 P2-1 清偿锁值：CARRY 损毁缩容的超容掉落按**全资源序贯**
 /// （官方 _drop-resources-without-space 逐资源 min(存量, overflow)——energy
 /// 先、命名槽次之、G 尾）；tick 相掉落不衰减。

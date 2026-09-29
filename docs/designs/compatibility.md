@@ -153,4 +153,4 @@
 | power 堆的拾取拒绝面（B3 登记；B4 矿物半面清偿） | pickup 对命名矿物堆已放行入 store_extra 命名槽（pickup.js:26-30 开放 store 键——B4 schema 有槽后的正确演进）；power 堆仍拒（无建模槽位，且无 powerBank 产入路径不可达） | 随 power 批放开；锁值 pickup_mineral_pile_into_named_slot_and_power_still_rejected |
 | harvest 超容的全槽判定（B4 评审 3 P1-1 清偿记录） | source/mineral 两分支超容 sum 曾只算部分槽（energy 或 energy+G+本矿种）——混合持有下偏离官方 calcResources 全键和（embed 实证超容不掉落）；已改 store_total 全槽 + amount | 混合持有超容锁值 ×2（harvest 掉矿种/缩容序贯掉落 energy→命名槽→G） |
 | phase 5 掉落出生 tick 衰减（B4 评审 1 勘误：取消登记） | 原登记主张"官方 bulk.insert 不进 roomObjects 故出生 tick 不衰减、与我方有 1/tick 差"——实测 _create-energy.js:51 显式入 roomObjects，官方出生 tick 照样衰减，与我方一致，差异不存在 | 既有锁值（同 tick 衰减 1）本就与官方一致；原"快照提前"清偿提议作废（会引入真分歧） |
-| mineral/extractor 的 place 面约束（B4 清偿记录） | mineralType 白名单（官方六矿种——防放置面外矿名绕内部 drop 的 RESOURCES_ALL）；ticksToRegeneration 的 0 值过滤（官方 falsy 重挂钟） | 放置面为受信通道，白名单是纵深 |
+| mineral/extractor 的 place 面约束（B4 清偿记录） | mineralType 白名单（官方七矿种 H/O/U/K/L/Z/X——防放置面外矿名绕内部 drop 的 RESOURCES_ALL）；ticksToRegeneration 0 值**不**过滤（官方 mineral 只判 !== undefined，0=放置后首 tick 立即再生——复审 F3 撤回原过滤） | 放置面为受信通道，白名单是纵深 |

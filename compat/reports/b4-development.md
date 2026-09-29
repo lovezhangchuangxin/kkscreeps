@@ -123,12 +123,29 @@
   resources（40e+60Z 容量缩 50：energy 40 全掉 + Z 补 10）
 - **P3-1（评审 2）**：store_total 的 u32 域加法改 i64（双 u32::MAX 构造持有
   下 debug panic 不走回退通道）
-- **P3-2（评审 2）**：place 矿物 Some(0) 钟卡死——归一化 `filter(|t| *t > 0)`
-  （官方 falsy 重挂 50000 钟语义）
+- **~~P3-2（评审 2）~~（清偿复审 F3 撤回）**：原"Some(0) 钟卡死"理据不成立
+  ——vanilla placeMineral 对 mineral 只判 `!== undefined`（index.ts:1218-1220），
+  0 → Some(time+0) → 官方 minerals/tick 的 `time >= nrt-1` 立即成立 = 放置后
+  首 tick 立即再生。清偿第一版的 `>0` 过滤把"即时再生"改成 5 万 tick 延迟，
+  方向性引入分歧，**已撤**（source 的 >0 过滤是 source 专属口径）
 - **P3-3（评审 2）**：place mineralType 白名单（MINERAL_MIN_AMOUNT 键集 =
-  官方六矿种——防放置面外矿种名绕过内部 drop 的 RESOURCES_ALL 白名单）
+  官方七矿种——防放置面外矿种名绕过内部 drop 的 RESOURCES_ALL 白名单）
 - **登记项**：withdraw amount==0 事件流差异（官方走完门链 push
   EVENT_TRANSFER{amount:0}，我方静默——B3 既有未登记）；embed 冒烟链沉淀
   为提交内测试（轨 A 接 StructureExtractor 时一并）；container 目标白名单
   补轨 B 后续清单行；MINERAL_DENSITY_PROBABILITY 常量无消费方（mineral_tick
   硬编码阈值同值——单源纪律尾巴）
+
+## 八、清偿复审修正记录（c8b5041 之上）
+
+清偿复审抓到清偿自引入问题（"自己的修复必须被独立复审"纪律再实证）：
+- **F1/P1（清偿自引入）**：source 分支曾把全槽 sum 写进 energy 槽——混持采
+  source 复制资源（实证 energy=50+Z=50/cap50）。修正：energy 槽局部入仓
+  （官方 :43）、全槽判定（:50）、掉 min(energy, sum−cap)（:54）；锁值
+  harvest_source_mixed_holding_overflow_drops_energy_only
+- **F2/P2**：序贯掉落改按 RESOURCES_ALL 声明序（原按 store_extra 插入序
+  ——[Z:60,U:20] 部分掉落分布偏离官方）；doc 注释同步
+- **F3/P3（清偿自引入）**：撤 Some(0) 过滤（理据错误——0=官方立即再生）
+- **F4/P3**：renew 缩容的内联 energy-only 旧形态改调统一全资源函数
+  drop_energy_over_capacity（官方 renew-creep.js:50 同一函数）
+- **F5**：文档措辞（七矿种）
