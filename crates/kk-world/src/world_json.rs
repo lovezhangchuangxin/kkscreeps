@@ -193,6 +193,10 @@ fn object_owner(object: &RoomObject) -> Option<std::borrow::Cow<'_, str>> {
         RoomObject::ConstructionSite(o) => o.owner.as_deref().map(Into::into),
         RoomObject::Tombstone(o) => o.owner.as_deref().map(Into::into),
         RoomObject::Ruin(o) => o.owner.as_deref().map(Into::into),
+        // B4：extractor 官方带 user（build.js:116/:215-219）——有主提取器为
+        // 其主人授房视野（data.js:105-116 的 userObjects 归集）；mineral 无
+        // user 键（官方矿物对象无 user——B3 data.js:105 注释同族）
+        RoomObject::Extractor(o) => o.owner.as_deref().map(Into::into),
         RoomObject::Generic(o) => serde_json::from_str::<Value>(&o.data).ok().and_then(|v| {
             v.get("owner")
                 .and_then(Value::as_str)
@@ -308,8 +312,9 @@ pub(crate) fn object_json(
             // 读 undefined；快照面 remaining(0) 同构 null）。
             // store：energy 恒投影（既有形状）；ghodium（A4-iii 的
             // generateSafeMode 消耗面）按正量投影——0 值不出现（官方 store
-            // getter 正量暴露的既有口径，vanilla snapStore 同构）
-            let store = store_json(&o.store);
+            // getter 正量暴露的既有口径，vanilla snapStore 同构）；B4 起命名
+            // 矿物槽并入（harvest mineral 产出——官方 store 按资源名键开放对象）
+            let store = store_with_extra_json(&o.store, &o.store_extra);
             let mut v = json!({
                 "type": "creep", "id": id_str, "room": room, "x": o.x, "y": o.y,
                 "name": o.name, "owner": o.owner,
@@ -562,6 +567,42 @@ pub(crate) fn object_json(
             });
             if let Some(owner) = &o.owner {
                 v["user"] = json!(owner);
+            }
+            v
+        }
+        // B4：官方 DB 形态（minerals/tick.js 读写的字段面）——与 source 同款
+        // 折叠（ticksToRegeneration = nextRegenerationTime ? n − time : 0；
+        // 官方 getter 无钟为 undefined，prelude 端 ?? 0 兜底——None→0 既有
+        // 口径）。type:"structure" + structureType:"mineral" 保持 FIND 装配面
+        //（matches_find 的 116 臂与官方 game.js:329-345 独立装配分支同构）
+        RoomObject::Mineral(o) => json!({
+            "type": "structure", "structureType": "mineral",
+            "id": id_str, "room": room, "x": o.x, "y": o.y,
+            "mineralType": o.mineral_type,
+            "mineralAmount": o.mineral_amount,
+            "density": o.density,
+            "ticksToRegeneration": match o.next_regeneration_time {
+                Some(t) => t.saturating_sub(time),
+                None => 0,
+            },
+        }),
+        // B4：官方落库形态（build.js:214-220 的 extractor 分支：user/hits/
+        // hitsMax=EXTRACTOR_HITS + 通用 notifyWhenAttacked）——cooldown 为
+        // 计数器（extractors/tick.js 逐 tick 递减；getter `o.cooldown || 0`
+        // structures.js:269）。owner 仅 Some 落键（无主提取器——harvest 的
+        // 无主恒 active 分支 utils.js:457-460）
+        RoomObject::Extractor(o) => {
+            let mut v = json!({
+                "type": "structure", "structureType": "extractor",
+                "id": id_str, "room": room, "x": o.x, "y": o.y,
+                "hits": o.hits, "hitsMax": c::EXTRACTOR_HITS,
+                "cooldown": o.cooldown,
+            });
+            if let Some(owner) = &o.owner {
+                v["owner"] = json!(owner);
+            }
+            if let Some(flag) = o.notify_when_attacked {
+                v["notifyWhenAttacked"] = json!(flag);
             }
             v
         }
@@ -1397,6 +1438,158 @@ mod tests {
         let jn = world.world_json();
         assert_eq!(jn["rooms"]["W1N1"]["energyAvailable"], 300);
         assert_eq!(jn["rooms"]["W1N1"]["energyCapacityAvailable"], 600);
+    }
+
+    /// B4：mineral/extractor 的世界投影（官方 DB 形态 + getter 折叠）与
+    /// FIND/视野面——mineral 不进 FIND_STRUCTURES、extractor 进且带归属；
+    /// 有主 extractor 授房视野（data.js:105-116 的 userObjects 归集）；
+    /// creep 携带命名矿物经 store 投影正量暴露。
+    #[test]
+    fn mineral_and_extractor_projection_and_find() {
+        let mut world = World::new(42);
+        world.time = 100;
+        let mut terrain = Terrain::plains();
+        terrain.normalize();
+        world.register_room("W1N1", terrain);
+        world.register_room("W2N2", Terrain::plains());
+        let mineral = world
+            .insert(
+                "W1N1",
+                RoomObject::Mineral(kk_schema::room::MineralObj {
+                    id: 0,
+                    x: 10,
+                    y: 10,
+                    mineral_type: "U".into(),
+                    mineral_amount: 35_000,
+                    density: 2,
+                    next_regeneration_time: Some(150),
+                }),
+            )
+            .unwrap();
+        let extractor = world
+            .insert(
+                "W1N1",
+                RoomObject::Extractor(kk_schema::room::ExtractorObj {
+                    id: 0,
+                    x: 10,
+                    y: 10,
+                    hits: 400,
+                    owner: Some("p1".into()),
+                    cooldown: 3,
+                    notify_when_attacked: Some(true),
+                }),
+            )
+            .unwrap();
+        let hauler = world
+            .insert(
+                "W1N1",
+                RoomObject::Creep(kk_schema::room::CreepObj {
+                    id: 0,
+                    x: 11,
+                    y: 10,
+                    fatigue: 0,
+                    age_time: 1500,
+                    hits: 100,
+                    spawning: false,
+                    action_log: 0,
+                    name: "w1".into(),
+                    owner: "p1".into(),
+                    body: vec![kk_schema::room::BodyPart {
+                        kind: 2,
+                        hits: 100,
+                        boost: None,
+                    }],
+                    store: kk_schema::room::Store {
+                        energy: 0,
+                        ghodium: 0,
+                    },
+                    store_extra: vec![kk_schema::room::ResourceStack {
+                        resource: "U".into(),
+                        amount: 12,
+                    }],
+                }),
+            )
+            .unwrap();
+
+        let j = world.object_json_by_id(mineral).unwrap();
+        assert_eq!(j["type"], "structure");
+        assert_eq!(
+            j["structureType"], "mineral",
+            "FIND 装配面（game.js:329-345 独立分支）"
+        );
+        assert_eq!(j["mineralType"], "U");
+        assert_eq!(j["mineralAmount"], 35_000);
+        assert_eq!(j["density"], 2);
+        assert_eq!(j["ticksToRegeneration"], 50, "getter 折叠 150−100");
+        // 无钟折叠 0（prelude ?? 0 兜底口径——与 source 同形）
+        if let RoomObject::Mineral(mm) = world.get_mut(mineral).unwrap() {
+            mm.next_regeneration_time = None;
+        }
+        assert_eq!(
+            world.object_json_by_id(mineral).unwrap()["ticksToRegeneration"],
+            0
+        );
+
+        let e = world.object_json_by_id(extractor).unwrap();
+        assert_eq!(e["structureType"], "extractor");
+        assert_eq!(e["hits"], 400);
+        assert_eq!(e["hitsMax"], c::EXTRACTOR_HITS, "build.js:218 hitsMax");
+        assert_eq!(e["cooldown"], 3, "计数器原样（getter o.cooldown || 0）");
+        assert_eq!(e["owner"], "p1");
+        assert_eq!(e["notifyWhenAttacked"], true);
+
+        // FIND：mineral 只进 FIND_MINERALS；extractor 进 FIND_STRUCTURES 且按
+        // 归属进 MY_*（116 臂的两键判定）
+        assert_eq!(world.find_in_room("W1N1", c::FIND_MINERALS, None).len(), 1);
+        assert_eq!(
+            world.find_in_room("W1N1", c::FIND_STRUCTURES, None).len(),
+            1
+        );
+        assert_eq!(
+            world
+                .find_in_room("W1N1", c::FIND_MY_STRUCTURES, Some("p1"))
+                .len(),
+            1,
+            "extractor 归 p1"
+        );
+        assert_eq!(
+            world
+                .find_in_room("W1N1", c::FIND_MY_STRUCTURES, Some("p2"))
+                .len(),
+            0
+        );
+
+        // creep 的命名矿物正量投影（store getter 全资源口径）
+        let h = world.object_json_by_id(hauler).unwrap();
+        assert_eq!(h["store"]["U"], 12);
+        assert_eq!(h["store"]["energy"], 0, "energy 恒投影（既有形状）");
+
+        // 视野：仅有一枚有主 extractor 的房间对其主人可见
+        let viewer = world.world_json_for_viewer("p1", 0);
+        let rooms = viewer["rooms"].as_object().unwrap();
+        assert!(
+            rooms["W1N1"].get("terrain").is_some(),
+            "extractor 主人保住视野"
+        );
+        assert!(rooms["W2N2"].get("terrain").is_some(), "地形面恒在");
+
+        // 无主 extractor：owner 缺键（投影无 owner ⇒ my undefined）
+        let neutral = world
+            .insert(
+                "W2N2",
+                RoomObject::Extractor(kk_schema::room::ExtractorObj {
+                    id: 0,
+                    x: 5,
+                    y: 5,
+                    hits: 500,
+                    owner: None,
+                    cooldown: 0,
+                    notify_when_attacked: None,
+                }),
+            )
+            .unwrap();
+        let ne = world.object_json_by_id(neutral).unwrap();
+        assert!(ne.get("owner").is_none(), "无主不落 owner 键");
     }
 
     /// A3c：world.gcl 投影（官方 runtimeData.user.gcl 点数直存——换算在

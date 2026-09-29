@@ -258,6 +258,123 @@ fn controller_levels(level: u8) -> i64 {
         .unwrap_or(0)
 }
 
+/// 官方 minerals/tick.js（B4）：`!mineralAmount` 时挂 50000 tick 再生钟
+/// （:10-13），到点（`gameTime >= nextRegenerationTime-1`，:14-18）按
+/// **旧** density 查 MINERAL_DENSITY 回填矿量并清钟；LOW/ULTRA 密度或
+/// 随机 < MINERAL_DENSITY_CHANGE(0.05) 时轮转 density（:19-34——官方
+/// Math.random 抽 MINERAL_DENSITY_PROBABILITY 阈值 {1:0.1, 2:0.5, 3:0.9,
+/// 4:1.0}，do-while 拒绝与旧值相同）。
+///
+/// 随机源：官方是 Math.random（真随机、不可复现——灰区表既有登记口径）。
+/// 结算确定性（replay）用无状态种子链：SplitMix64 以 hash(房名, 对象 id,
+/// tick) 播种——同 replay 同 tick 同对象必得同序列，跨对象/跨 tick 互不
+/// 相关。PWR_REGEN_MINERAL 效果段（:39-47）随 power 批（M2 无 effects 面）。
+pub fn mineral_tick(w: &mut Working, id: ObjId) {
+    let Some(RoomObject::Mineral(m)) = w.room.objects.get(&id) else {
+        return;
+    };
+    let (density, amount, next_regen) = (m.density, m.mineral_amount, m.next_regeneration_time);
+    if amount != 0 {
+        return; // 官方 `!object.mineralAmount` 门：有矿量时整段跳过
+    }
+    // :10-13：首见耗尽挂钟（gameTime + MINERAL_REGEN_TIME）
+    let next_regen = match next_regen {
+        None => {
+            let t = w.time + c::MINERAL_REGEN_TIME as u64;
+            if let Some(RoomObject::Mineral(m)) = w.room.objects.get_mut(&id) {
+                m.next_regeneration_time = Some(t);
+            }
+            t
+        }
+        Some(t) => t,
+    };
+    if w.time < next_regen.saturating_sub(1) {
+        return; // 未到点
+    }
+    // :15-18：矿量按旧 density 回填（update 对象字面量先于 density 轮转求值）
+    let mut rng = MineralRng::new(&w.room.name, id, w.time);
+    let new_amount = kk_world::types::mineral_density(density);
+    // :19-34：密度轮转——LOW(1)/ULTRA(4) 强制、其余 5% 概率；do-while 拒绝同值
+    let rotate = density == c::DENSITY_LOW as u8
+        || density == c::DENSITY_ULTRA as u8
+        || rng.next_f64() < c::MINERAL_DENSITY_CHANGE;
+    let new_density = if rotate {
+        loop {
+            let r = rng.next_f64();
+            let picked = if r <= 0.1 {
+                1
+            } else if r <= 0.5 {
+                2
+            } else if r <= 0.9 {
+                3
+            } else {
+                4
+            };
+            if picked != density {
+                break picked;
+            }
+        }
+    } else {
+        density
+    };
+    if let Some(RoomObject::Mineral(m)) = w.room.objects.get_mut(&id) {
+        m.next_regeneration_time = None;
+        m.mineral_amount = new_amount.max(0) as u32;
+        m.density = new_density;
+    }
+}
+
+/// 官方 extractors/tick.js（B4）：cooldown 计数器逐 tick 递减（:9-19——
+/// `cooldown--` 且钳 0；cooldown 为 0/undefined 时不动）；harvest 同 tick 写
+/// 的瞬态 `_cooldown`（harvest.js:108）在此持久化（:21-25——先递减后覆盖，
+/// 官方同序）。递减不可能触底为负（u64 饱和 = 官方 `if(cooldown < 0)` 钳 0）。
+pub fn extractor_tick(w: &mut Working, id: ObjId) {
+    let cooldown = match w.room.objects.get(&id) {
+        Some(RoomObject::Extractor(e)) => e.cooldown,
+        _ => return,
+    };
+    if cooldown > 0 {
+        let next = cooldown - 1;
+        if let Some(RoomObject::Extractor(e)) = w.room.objects.get_mut(&id) {
+            e.cooldown = next;
+        }
+    }
+    if let Some(pending) = w.extractor_cooldown_pending.remove(&id)
+        && let Some(RoomObject::Extractor(e)) = w.room.objects.get_mut(&id)
+    {
+        e.cooldown = pending;
+    }
+}
+
+/// 矿物密度轮转的无状态确定性随机源（官方 Math.random 的 replay 确定性
+/// 替身——见 [`mineral_tick`] 文档；SplitMix64：ocaml/llvm 系标准混合器）。
+struct MineralRng(u64);
+
+impl MineralRng {
+    fn new(room: &str, id: ObjId, time: u64) -> Self {
+        // FNV-1a 播种（房名）× 对象 id / tick 混合——同房同对象同 tick 必同
+        let mut h = 0xcbf2_9ce4_8422_2325u64;
+        for b in room.as_bytes() {
+            h ^= u64::from(*b);
+            h = h.wrapping_mul(0x1000_0000_01b3);
+        }
+        Self(
+            h ^ id.0.wrapping_mul(0x9e37_79b9_7f4a_7c15) ^ time.wrapping_mul(0xbf58_476d_1ce4_e5b9),
+        )
+    }
+
+    /// [0, 1) 均匀浮点（53 位尾数——Math.random 同域）
+    fn next_f64(&mut self) -> f64 {
+        // SplitMix64 步进
+        self.0 = self.0.wrapping_add(0x9e37_79b9_7f4a_7c15);
+        let mut z = self.0;
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        z ^= z >> 31;
+        (z >> 11) as f64 / (1u64 << 53) as f64
+    }
+}
+
 pub fn controller_downgrade(level: u8) -> u64 {
     let key = level.to_string();
     kk_core::constants::CONTROLLER_DOWNGRADE

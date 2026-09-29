@@ -207,14 +207,49 @@ pub fn distribute_hits(body: &mut [BodyPart], mut hits: i64) {
     }
 }
 
-/// 官方 _drop-resources-without-space.js（M1 energy-only 单资源形态）：
-/// 持有超容 → 掉出差额（走 drop 的落地路径）。
+/// 官方 _drop-resources-without-space.js（creeps/tick.js:141-143 缩容/拆解
+/// 路径）：按 RESOURCES_ALL 序逐资源 `min(store[res], calcResources−cap)`
+/// 掉落（B4 评审 3 P2-1 清偿——原 M1 单 energy 形态在命名矿物槽下偏离：
+/// 官方掉矿物、我方留在 creep 身上超容）。键序 = RESOURCES_ALL 声明序
+///（energy 先、矿物族、G 尾——资源族稳定序）。
 pub fn drop_energy_over_capacity(w: &mut Working, id: ObjId) {
-    let Some(creep) = w.creep(id) else { return };
-    let cap = super::creep::store_capacity(creep);
-    let held = creep.store.energy as i64;
-    if held > cap {
-        super::creep::intent_drop_amount(w, id, held - cap);
+    let (cap, held, store, extra) = match w.creep(id) {
+        Some(c) => (
+            super::creep::store_capacity(c),
+            kk_world::types::store_total(&c.store, &c.store_extra),
+            c.store.clone(),
+            c.store_extra.clone(),
+        ),
+        None => return,
+    };
+    if held <= cap {
+        return;
+    }
+    let overflow = held - cap;
+    // 官方 _drop-resources-without-space 按 RESOURCES_ALL **声明序**逐资源
+    // min(存量, overflow) 掉落（复审 F2 修正：原按 store_extra 插入序——
+    // 多槽部分掉落时 per-resource 分布偏离官方）
+    let mut left = overflow;
+    for r in kk_core::constants::RESOURCES_ALL {
+        if left <= 0 {
+            break;
+        }
+        let held_res = if *r == "energy" {
+            store.energy as i64
+        } else if *r == kk_core::constants::RESOURCE_GHODIUM {
+            store.ghodium as i64
+        } else {
+            extra
+                .iter()
+                .find(|s| s.resource == *r)
+                .map(|s| s.amount as i64)
+                .unwrap_or(0)
+        };
+        let d = held_res.min(left);
+        if d > 0 {
+            super::creep::intent_drop_amount_res(w, id, r, d);
+            left -= d;
+        }
     }
 }
 
@@ -229,6 +264,9 @@ pub fn object_hits(obj: &RoomObject) -> i64 {
         RoomObject::ConstructedWall(o) => o.hits as i64,
         RoomObject::Road(o) => o.hits as i64,
         RoomObject::Storage(o) => o.hits as i64,
+        // B4：extractor 有 hits（build.js:217）；mineral 无 hits 概念（官方
+        // 矿物对象无 hits 键——落入 _ => 0 拒攻）
+        RoomObject::Extractor(o) => o.hits as i64,
         RoomObject::Generic(o) => {
             let data: serde_json::Value = serde_json::from_str(&o.data).unwrap_or_default();
             data.get("hits").and_then(|v| v.as_i64()).unwrap_or(0)
@@ -263,6 +301,8 @@ pub fn structure_hits_max(w: &Working, obj: &RoomObject) -> Option<i64> {
             hits
         }
         RoomObject::Storage(_) => c::STORAGE_HITS,
+        // B4：官方 build.js:218 的 extractor 落成 hitsMax = EXTRACTOR_HITS
+        RoomObject::Extractor(_) => c::EXTRACTOR_HITS,
         RoomObject::Generic(o) => {
             let data: serde_json::Value = serde_json::from_str(&o.data).unwrap_or_default();
             let structure_type = data.get("structureType").and_then(|v| v.as_str())?;
@@ -314,6 +354,7 @@ pub fn set_structure_hits(w: &mut Working, id: ObjId, hits: i64) {
         Some(RoomObject::ConstructedWall(o)) => o.hits = hits,
         Some(RoomObject::Road(o)) => o.hits = hits,
         Some(RoomObject::Storage(o)) => o.hits = hits,
+        Some(RoomObject::Extractor(o)) => o.hits = hits,
         Some(RoomObject::Generic(o)) => {
             let mut data: serde_json::Value = serde_json::from_str(&o.data).unwrap_or_default();
             data["hits"] = json!(hits);
@@ -414,7 +455,12 @@ fn structure_store(
     match obj {
         RoomObject::Spawn(o) => store = o.store.clone(),
         RoomObject::Extension(o) => store = o.store.clone(),
-        RoomObject::Storage(o) => store = o.store.clone(),
+        // B4：storage 可持命名矿物——废墟承接全量 store（_destroy.js:37 的
+        // `object.store || {}` 开放对象语义）
+        RoomObject::Storage(o) => {
+            store = o.store.clone();
+            extra = o.store_extra.clone();
+        }
         RoomObject::Generic(o) => {
             let data: serde_json::Value = serde_json::from_str(&o.data).unwrap_or_default();
             if let Some(map) = data

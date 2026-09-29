@@ -9,8 +9,8 @@
 use kk_core::constants as c;
 use kk_schema::room::{
     BodyPart, ConstructedWallObj, ConstructionSiteObj, ControllerObj, CreepObj, EnergyObj,
-    ExtensionObj, FlagObj, GenericObj, Reservation, ResourceStack, RoadObj, RoomObject, RuinObj,
-    Sign, SourceObj, SpawnObj, StorageObj, Store, TombstoneObj,
+    ExtensionObj, ExtractorObj, FlagObj, GenericObj, MineralObj, Reservation, ResourceStack,
+    RoadObj, RoomObject, RuinObj, Sign, SourceObj, SpawnObj, StorageObj, Store, TombstoneObj,
 };
 use serde_json::{Value, json};
 
@@ -123,6 +123,12 @@ fn store_with_extra(spec: &Value) -> (Store, Vec<ResourceStack>) {
     (store, extra)
 }
 
+/// [`store_with_extra`] 的额外资源列表单取（B4：creep/storage 的命名槽——
+/// energy/G 之外的正量资源，与 tombstone/ruin 同口径）。
+fn store_extra_of(spec: &Value) -> Vec<ResourceStack> {
+    store_with_extra(spec).1
+}
+
 /// 放置 creep：合并部件 boost，按显式 TTL 或默认寿命计算到期时间。
 fn normalize_creep(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<CreepObj, String> {
     let body_spec = spec
@@ -180,6 +186,7 @@ fn normalize_creep(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<CreepOb
         owner,
         body,
         store: store_energy(spec),
+        store_extra: store_extra_of(spec),
     })
 }
 
@@ -361,6 +368,65 @@ fn normalize_structure(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<Roo
                 .unwrap_or(c::STORAGE_HITS as u32),
             owner: owner.unwrap_or_default(),
             store: store_energy(spec),
+            notify_when_attacked: spec.get("notifyWhenAttacked").and_then(Value::as_bool),
+            store_extra: store_extra_of(spec),
+        })),
+        // B4：mineral 进 typed 变体（vanilla placeMineral，index.ts:1209-1221：
+        // mineralType 必填、mineralAmount 缺省 MINERAL_DENSITY[density]、density
+        // 缺省 DENSITY_HIGH(3)、ticksToRegeneration 给定时挂绝对钟——与 source
+        // 的 >0 过滤不同，vanilla 对 mineral 只判 !== undefined）
+        "mineral" => {
+            // 白名单 = MINERAL_MIN_AMOUNT 键集（官方六矿种 H/O/U/K/L/Z/X——
+            // 放置面外的矿种名会让内部超容 drop 绕过官方 RESOURCES_ALL
+            // 白名单直接落地（B4 评审 2 P3-3 清偿：放置面收口）
+            let mineral_type = spec_str(spec, "mineralType")
+                .filter(|t| {
+                    kk_core::constants::MINERAL_MIN_AMOUNT
+                        .iter()
+                        .any(|(k, _)| k == t)
+                })
+                .ok_or_else(|| "mineral 缺 mineralType 或非官方矿种".to_string())?
+                .to_string();
+            let density = spec
+                .get("density")
+                .and_then(Value::as_u64)
+                .unwrap_or(c::DENSITY_HIGH as u64)
+                .min(u8::MAX as u64) as u8;
+            let mineral_amount = spec
+                .get("mineralAmount")
+                .and_then(Value::as_u64)
+                .map(saturating_u32)
+                .unwrap_or(saturating_u32(crate::types::mineral_density(density) as u64));
+            let next_regen = spec
+                .get("ticksToRegeneration")
+                .and_then(Value::as_u64)
+                // 不过滤 0（与 source 的 >0 过滤刻意不同）：vanilla placeMineral
+                // 对 mineral 只判 !== undefined（index.ts:1218-1220）——0 即
+                // Some(time+0)，官方 minerals/tick 的 `time >= nrt-1` 立即成立
+                // = 放置后首 tick 立即再生（复审 F3：原 >0 过滤把它改成 5 万
+                // tick 延迟，方向性引入分歧，已撤）
+                .map(|t| ctx.time.saturating_add(t));
+            Ok(RoomObject::Mineral(MineralObj {
+                id: 0,
+                x,
+                y,
+                mineral_type,
+                mineral_amount,
+                density,
+                next_regeneration_time: next_regen,
+            }))
+        }
+        // B4：extractor 进 typed 变体（vanilla placeStructure 对 extractor 的
+        // cooldown 计数器形态，index.ts:1147-1151；hits 缺省 EXTRACTOR_HITS）
+        "extractor" => Ok(RoomObject::Extractor(ExtractorObj {
+            id: 0,
+            x,
+            y,
+            hits: hits_override
+                .map(saturating_u32)
+                .unwrap_or(c::EXTRACTOR_HITS as u32),
+            owner,
+            cooldown: spec.get("cooldown").and_then(Value::as_u64).unwrap_or(0),
             notify_when_attacked: spec.get("notifyWhenAttacked").and_then(Value::as_bool),
         })),
         _ => {
@@ -883,6 +949,60 @@ mod tests {
         };
         assert_eq!(ru2.owner, None);
         assert_eq!(ru2.decay_time, 100 + 500);
+    }
+
+    /// B4：mineral/extractor 的放置缺省面（vanilla placeMineral index.ts:1209-1221 /
+    /// placeStructure 的 extractor cooldown 计数器形态 :1147-1151）。
+    #[test]
+    fn mineral_and_extractor_placement_defaults() {
+        // mineral：density 缺省 DENSITY_HIGH(3)、amount 缺省 MINERAL_DENSITY[3]
+        let s = spec(json!({
+            "pos": [10, 10], "structureType": "mineral", "mineralType": "X",
+        }));
+        let RoomObject::Mineral(m) = normalize("structure", &s, &ctx()).unwrap() else {
+            panic!("structure 通道的 mineral 进 typed 变体");
+        };
+        assert_eq!(m.mineral_type, "X");
+        assert_eq!(m.density, 3);
+        assert_eq!(m.mineral_amount, 70_000, "MINERAL_DENSITY[DENSITY_HIGH]");
+        assert_eq!(m.next_regeneration_time, None);
+        // 显式 density/amount + ticksToRegeneration 绝对钟（vanilla 只判
+        // !== undefined——无 source 的 >0 过滤）
+        let s2 = spec(json!({
+            "pos": [10, 10], "structureType": "mineral", "mineralType": "U",
+            "density": 1, "mineralAmount": 123, "ticksToRegeneration": 45,
+        }));
+        let RoomObject::Mineral(m2) = normalize("structure", &s2, &ctx()).unwrap() else {
+            panic!()
+        };
+        assert_eq!(m2.density, 1);
+        assert_eq!(m2.mineral_amount, 123);
+        assert_eq!(
+            m2.next_regeneration_time,
+            Some(100 + 45),
+            "gameTime + ticks"
+        );
+        // 缺 mineralType 拒（vanilla 的 MineralSpec 必填字段）
+        let bad = spec(json!({ "pos": [10, 10], "structureType": "mineral" }));
+        assert!(normalize("structure", &bad, &ctx()).is_err());
+
+        // extractor：hits 缺省 EXTRACTOR_HITS、cooldown 透传、owner 可缺省
+        let e = spec(json!({
+            "pos": [10, 10], "structureType": "extractor", "owner": "p1", "cooldown": 4,
+        }));
+        let RoomObject::Extractor(ex) = normalize("structure", &e, &ctx()).unwrap() else {
+            panic!("structure 通道的 extractor 进 typed 变体");
+        };
+        assert_eq!(ex.hits, c::EXTRACTOR_HITS as u32);
+        assert_eq!(ex.owner.as_deref(), Some("p1"));
+        assert_eq!(ex.cooldown, 4);
+        let e2 = spec(json!({ "pos": [10, 10], "structureType": "extractor", "hits": 111 }));
+        let RoomObject::Extractor(ex2) = normalize("structure", &e2, &ctx()).unwrap() else {
+            panic!()
+        };
+        assert_eq!(ex2.hits, 111);
+        assert_eq!(ex2.owner, None, "无主 extractor（harvest 无主放行分支）");
+        assert_eq!(ex2.cooldown, 0);
     }
 
     #[test]

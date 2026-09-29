@@ -98,6 +98,10 @@ pub struct Working<'w> {
     /// activateSafeMode.js:24 写、controllers/tick.js:25-31 在 controller tick
     /// 消费——两文件间的瞬态通道）。
     pub safe_mode_activated: BTreeSet<ObjId>,
+    /// 本 tick 的提取器冷却瞬态（官方 `extractor._cooldown`，harvest.js:108
+    /// 写、extractors/tick.js:21-25 同 tick 持久化为 cooldown 计数器——
+    /// B4 的两文件瞬态通道，与 upgrade_block_pending 同族）。
+    pub extractor_cooldown_pending: BTreeMap<ObjId, u64>,
     pub movement: movement::Movement,
 }
 
@@ -344,6 +348,8 @@ fn object_owner_of(obj: &RoomObject) -> Option<std::borrow::Cow<'_, str>> {
         RoomObject::ConstructionSite(o) => o.owner.as_deref().map(Into::into),
         RoomObject::Tombstone(o) => o.owner.as_deref().map(Into::into),
         RoomObject::Ruin(o) => o.owner.as_deref().map(Into::into),
+        // B4：extractor 官方带 user（build.js:215-219）——归属门与视野归集同源
+        RoomObject::Extractor(o) => o.owner.as_deref().map(Into::into),
         RoomObject::Generic(o) => serde_json::from_str::<Value>(&o.data).ok().and_then(|v| {
             v.get("owner")
                 .and_then(Value::as_str)
@@ -383,6 +389,8 @@ fn notify_when_attacked(w: &mut Working, player: &str, id: ObjId, data: &IntentD
         Some(RoomObject::Storage(o)) => o.notify_when_attacked = Some(enabled),
         Some(RoomObject::ConstructedWall(o)) => o.notify_when_attacked = Some(enabled),
         Some(RoomObject::Road(o)) => o.notify_when_attacked = Some(enabled),
+        // B4：extractor 在 CONSTRUCTION_COST（5）——官方 :313 类型门收录
+        Some(RoomObject::Extractor(o)) => o.notify_when_attacked = Some(enabled),
         Some(RoomObject::Generic(o)) => {
             // 透传桶：标志写进 data JSON（投影层原样还原，prelude 的
             // rawData(id).notifyWhenAttacked 读到）
@@ -434,6 +442,7 @@ pub fn settle_room(
         heal_to_apply: BTreeMap::new(),
         upgrade_block_pending: BTreeMap::new(),
         safe_mode_activated: BTreeSet::new(),
+        extractor_cooldown_pending: BTreeMap::new(),
         movement: movement::Movement::new(),
     };
 
@@ -499,6 +508,10 @@ pub fn settle_room(
             Some(RoomObject::Controller(_)) => economy::controller_tick(&mut w, id),
             Some(RoomObject::Tombstone(_)) => economy::tombstone_tick(&mut w, id),
             Some(RoomObject::Ruin(_)) => economy::ruin_tick(&mut w, id),
+            // B4：minerals/tick.js（processor.js:356-357）与 extractors/tick.js
+            //（processor.js:380-381）的 phase 8 分派
+            Some(RoomObject::Mineral(_)) => economy::mineral_tick(&mut w, id),
+            Some(RoomObject::Extractor(_)) => economy::extractor_tick(&mut w, id),
             _ => {}
         }
     }

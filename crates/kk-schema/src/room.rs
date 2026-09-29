@@ -83,6 +83,10 @@ crate::kk_schema! {
         (pub owner: str)
         (pub body: vec BodyPart)
         (pub store: Store)
+        // B4 多资源槽：矿物 harvest 产出等命名资源（官方 store 按资源名键的
+        // 开放对象——harvest.js:95 `store: {[target.mineralType]: ...}`）。
+        // 追加尾部（v1 内演化，冻结纪律同 ResourceStack 的既有约定）
+        (pub store_extra: vec ResourceStack)
     }
 }
 
@@ -214,6 +218,9 @@ crate::kk_schema! {
 crate::kk_schema! {
     /// 仓库（hits 上限 STORAGE_HITS）。
     /// A4-iv 补 notify_when_attacked（同 SpawnObj 注释）。
+    /// B4 补 store_extra：官方 storage 是通用商店（数值 storeCapacity，transfer
+    /// 的 capacityForResource 走 max(0, capacity−Σscr) 全槽共用——utils.js:671-675），
+    /// 任意资源可入；矿物等命名资源经列表槽承载（与 creep 同口径）。
     pub StorageObj {
         (pub id: u64)
         (pub x: u8)
@@ -222,6 +229,7 @@ crate::kk_schema! {
         (pub owner: str)
         (pub store: Store)
         (pub notify_when_attacked: opt bool)
+        (pub store_extra: vec ResourceStack)
     }
 }
 
@@ -316,6 +324,43 @@ crate::kk_schema! {
 }
 
 crate::kk_schema! {
+    /// 矿物（B4）。官方持久化面（minerals/tick.js 读写的字段）：
+    /// mineralType（基础矿物名 H/O/U/K/L/Z/X——harvest 产出的 store 键）、
+    /// mineralAmount、density（1..=4，DENSITY_* 常量）、nextRegenerationTime
+    /// （再生钟绝对 tick：None = 未挂钟——minerals/tick.js:10-13 首见耗尽才挂、
+    /// :14-18 到点清 null 并按 MINERAL_DENSITY[density] 回填）。
+    /// getter 面（game/minerals.js:35-40）：ticksToRegeneration =
+    /// `nextRegenerationTime ? n − time : undefined`（投影层折叠）。
+    pub MineralObj {
+        (pub id: u64)
+        (pub x: u8)
+        (pub y: u8)
+        (pub mineral_type: str)
+        (pub mineral_amount: u32)
+        (pub density: u8)
+        (pub next_regeneration_time: opt u64)
+    }
+}
+
+crate::kk_schema! {
+    /// 提取器（B4）。官方持久化面：user（可无主——harvest.js:78 敌主拒、
+    /// checkStructureAgainstController 的无主恒 active 分支 utils.js:457-460）、
+    /// hits（EXTRACTOR_HITS，build.js:214-220 落成）、cooldown（计数器形态：
+    /// harvest.js:108 写瞬态 `_cooldown`、extractors/tick.js:21-25 同 tick 持久化
+    /// 并逐 tick 递减——0 = 无冷却，官方 undefined || 0 同值）、
+    /// notifyWhenAttacked（build.js:111-117 出生即 true）。
+    pub ExtractorObj {
+        (pub id: u64)
+        (pub x: u8)
+        (pub y: u8)
+        (pub hits: u32)
+        (pub owner: opt str)
+        (pub cooldown: u64)
+        (pub notify_when_attacked: opt bool)
+    }
+}
+
+crate::kk_schema! {
     /// M1 结算范围外对象的透传桶：完整记录以 JSON 存放（含 type 与
     /// structureType 等玩家可见字段），结算忽略、投影还原。
     pub GenericObj {
@@ -358,6 +403,10 @@ pub enum RoomObject {
     Tombstone(TombstoneObj),
     /// 废墟（B3 变体——结构摧毁结算产出，衰减钟驱动）。
     Ruin(RuinObj),
+    /// 矿物（B4 变体——再生钟驱动，harvest mineral 的目标）。
+    Mineral(MineralObj),
+    /// 提取器（B4 变体——cooldown 计数器驱动，harvest mineral 的门）。
+    Extractor(ExtractorObj),
     /// M1 结算范围外的对象（tower/rampart/lab/portal/…）：完整记录
     /// 以 JSON 透传存放——保持与 M0 哑世界相同的放置接受面，结算忽略之。
     Generic(GenericObj),
@@ -380,6 +429,8 @@ impl RoomObject {
             Self::Storage(o) => o.id,
             Self::Tombstone(o) => o.id,
             Self::Ruin(o) => o.id,
+            Self::Mineral(o) => o.id,
+            Self::Extractor(o) => o.id,
             Self::Generic(o) => o.id,
         }
     }
@@ -400,6 +451,8 @@ impl RoomObject {
             Self::Storage(o) => (o.x, o.y),
             Self::Tombstone(o) => (o.x, o.y),
             Self::Ruin(o) => (o.x, o.y),
+            Self::Mineral(o) => (o.x, o.y),
+            Self::Extractor(o) => (o.x, o.y),
             Self::Generic(o) => (o.x, o.y),
         }
     }
@@ -458,6 +511,14 @@ impl RoomObject {
                 o.x = x;
                 o.y = y;
             }
+            Self::Mineral(o) => {
+                o.x = x;
+                o.y = y;
+            }
+            Self::Extractor(o) => {
+                o.x = x;
+                o.y = y;
+            }
             Self::Generic(o) => {
                 o.x = x;
                 o.y = y;
@@ -483,6 +544,8 @@ impl Schema for RoomObject {
             Self::Storage(o) => o.encode_into(out),
             Self::Tombstone(o) => o.encode_into(out),
             Self::Ruin(o) => o.encode_into(out),
+            Self::Mineral(o) => o.encode_into(out),
+            Self::Extractor(o) => o.encode_into(out),
             Self::Generic(o) => o.encode_into(out),
         }
     }
@@ -506,6 +569,8 @@ impl Schema for RoomObject {
             tags::STORAGE => Ok(Self::Storage(StorageObj::decode_from(cur)?)),
             tags::TOMBSTONE => Ok(Self::Tombstone(TombstoneObj::decode_from(cur)?)),
             tags::RUIN => Ok(Self::Ruin(RuinObj::decode_from(cur)?)),
+            tags::MINERAL => Ok(Self::Mineral(MineralObj::decode_from(cur)?)),
+            tags::EXTRACTOR => Ok(Self::Extractor(ExtractorObj::decode_from(cur)?)),
             tags::GENERIC => Ok(Self::Generic(GenericObj::decode_from(cur)?)),
             b => Err(SchemaError::InvalidVariantTag(b)),
         }
@@ -531,6 +596,10 @@ pub mod tags {
     pub const TOMBSTONE: u8 = 12;
     /// B3 新增（v1 内演化：追加尾部）。
     pub const RUIN: u8 = 13;
+    /// B4 新增（v1 内演化：追加尾部）。
+    pub const MINERAL: u8 = 14;
+    /// B4 新增（v1 内演化：追加尾部）。
+    pub const EXTRACTOR: u8 = 15;
 }
 
 impl RoomObject {
@@ -549,6 +618,8 @@ impl RoomObject {
             Self::Storage(_) => tags::STORAGE,
             Self::Tombstone(_) => tags::TOMBSTONE,
             Self::Ruin(_) => tags::RUIN,
+            Self::Mineral(_) => tags::MINERAL,
+            Self::Extractor(_) => tags::EXTRACTOR,
             Self::Generic(_) => tags::GENERIC,
         }
     }
@@ -705,6 +776,11 @@ mod tests {
                         energy: 37,
                         ghodium: 1000,
                     },
+                    // B4：creep 携带的命名矿物（harvest mineral 产出入槽）
+                    store_extra: vec![ResourceStack {
+                        resource: "U".into(),
+                        amount: 12,
+                    }],
                 }),
                 RoomObject::Source(SourceObj {
                     id: 2,
@@ -814,6 +890,24 @@ mod tests {
                     },
                     store_extra: Vec::new(),
                 }),
+                RoomObject::Mineral(MineralObj {
+                    id: 10,
+                    x: 40,
+                    y: 40,
+                    mineral_type: "U".into(),
+                    mineral_amount: 35_000,
+                    density: 2,
+                    next_regeneration_time: None,
+                }),
+                RoomObject::Extractor(ExtractorObj {
+                    id: 11,
+                    x: 40,
+                    y: 40,
+                    hits: 500,
+                    owner: Some("p1".into()),
+                    cooldown: 3,
+                    notify_when_attacked: Some(true),
+                }),
                 RoomObject::Generic(GenericObj {
                     id: 7,
                     x: 9,
@@ -857,6 +951,45 @@ mod tests {
         assert_eq!(
             ResourceStack::decode_from(&mut crate::Cursor::new(&buf)).unwrap(),
             stack
+        );
+    }
+
+    /// B4 变体冻结面：tag 14/15 追加尾部（v1 内演化）；MineralObj/ExtractorObj
+    /// 与 creep/storage 的 store_extra 随载荷往返（sample_snapshot 覆盖整对象）。
+    #[test]
+    fn b4_variant_tags_and_multislot_roundtrip() {
+        assert_eq!(tags::MINERAL, 14, "B4 追加尾部（v1 内演化）");
+        assert_eq!(tags::EXTRACTOR, 15, "B4 追加尾部（v1 内演化）");
+        let mineral = MineralObj {
+            id: 1,
+            x: 10,
+            y: 11,
+            mineral_type: "Z".into(),
+            mineral_amount: 70_000,
+            density: 3,
+            next_regeneration_time: Some(50_100),
+        };
+        let mut buf = Vec::new();
+        mineral.encode_into(&mut buf);
+        assert_eq!(
+            MineralObj::decode_from(&mut crate::Cursor::new(&buf)).unwrap(),
+            mineral
+        );
+        let extractor = ExtractorObj {
+            id: 2,
+            x: 10,
+            y: 11,
+            hits: 500,
+            owner: None,
+            cooldown: 5,
+            notify_when_attacked: None,
+        };
+        let mut buf = Vec::new();
+        extractor.encode_into(&mut buf);
+        assert_eq!(
+            ExtractorObj::decode_from(&mut crate::Cursor::new(&buf)).unwrap(),
+            extractor,
+            "无主提取器（官方无 user 键 ⇒ harvest 的无主恒 active 分支）"
         );
     }
 

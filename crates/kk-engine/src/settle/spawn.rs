@@ -7,7 +7,7 @@ use kk_world::ObjId;
 use kk_world::types::BodyKind;
 
 use super::Working;
-use super::creep::{ACTION_HEALED, body_parts_kinds, set_action_log, store_capacity};
+use super::creep::{ACTION_HEALED, body_parts_kinds, set_action_log};
 use super::movement::{self, offsets_by_direction};
 use crate::intent::{IntentData, creep_cost};
 
@@ -188,6 +188,8 @@ pub fn intent_create_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) 
         owner: spawn.owner.clone(),
         body,
         store: Default::default(),
+        // 雏形出生恒空仓（孵化中不可 transfer/harvest——无进矿路径）
+        store_extra: Vec::new(),
     }));
 }
 
@@ -248,32 +250,15 @@ pub fn intent_renew_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) {
         set_action_log(&mut creep.action_log, ACTION_HEALED);
     }
     // 官方 :45-53：boost 部件清除（_recalc-body 容量收缩）+
-    // _drop-resources-without-space（RESOURCES_ALL 序、energy 先）。
-    // ghodium 溢出无 M1 掉落形态（EnergyObj 仅 energy/power——灰区登记）
+    // _drop-resources-without-space（全资源序贯——复审 F4 清偿：原内联
+    // energy-only 形态在 G/命名矿物槽下偏离，统一走 damage 的全资源版）
     if target.body.iter().any(|p| p.boost.is_some()) {
-        let (x, y) = (target.x, target.y);
         if let Some(creep) = w.creep_mut(target_id) {
             for p in creep.body.iter_mut() {
                 p.boost = None;
             }
         }
-        let capacity = w.creep(target_id).map(store_capacity).unwrap_or(0);
-        let energy = w
-            .creep(target_id)
-            .map(|c| c.store.energy as i64)
-            .unwrap_or(0);
-        let ghodium = w
-            .creep(target_id)
-            .map(|c| c.store.ghodium as i64)
-            .unwrap_or(0);
-        let excess = (energy + ghodium - capacity).max(0);
-        let take_energy = excess.min(energy);
-        if take_energy > 0 {
-            w.create_energy(x, y, take_energy);
-            if let Some(creep) = w.creep_mut(target_id) {
-                creep.store.energy -= take_energy as u32;
-            }
-        }
+        super::damage::drop_energy_over_capacity(w, target_id);
     }
 }
 
