@@ -115,6 +115,8 @@ fn set_object_id(object: &mut RoomObject, id: u64) {
         RoomObject::Storage(o) => o.id = id,
         RoomObject::Tombstone(o) => o.id = id,
         RoomObject::Ruin(o) => o.id = id,
+        RoomObject::Mineral(o) => o.id = id,
+        RoomObject::Extractor(o) => o.id = id,
         RoomObject::Generic(o) => o.id = id,
     }
 }
