@@ -411,6 +411,21 @@
     store: (o) => gw.makeStore(o),
   });
 
+  // 官方 structures.js:865-885：spawn.memory 独立 getter/setter（非本人 undefined/
+  // 抛错；gw.memoryFor 官方同形——含 'undefined' 病态检查与非对象分支）
+  Object.defineProperty(globalThis.StructureSpawn.prototype, 'memory', {
+    get() {
+      if (!this.my) return undefined;
+      return gw.memoryFor('spawns', this.name);
+    },
+    set(value) {
+      if (!this.my) {
+        throw new Error("Could not set other player's spawn memory");
+      }
+      gw.setMemoryFor('spawns', this.name, value, 'spawn');
+    },
+  });
+
   // StructureExtension（官方 structures.js:253-255）
   gw.defineGameObjectProperties(globalThis.StructureExtension.prototype, gw.rawData, {
     energy: (o) => (o.store && o.store.energy) || 0,
@@ -495,6 +510,8 @@
       return C.OK;
     }
     createdCreepNames.push(name);
+    // 官方 create-creep.js:31-35：`Memory.creeps[name] = opts.memory || ... || {}`
+    // （读 globals.Memory 懒触发；非对象 Memory.creeps 时官方 _.isObject 门跳过）
     const memory = gw.ensureMemory();
     if (memory.creeps === undefined) {
       memory.creeps = {};

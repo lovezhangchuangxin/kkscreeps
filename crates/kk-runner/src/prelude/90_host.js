@@ -37,7 +37,7 @@
   }
 
   const { missing, hasProbes, stubCalls } = globalThis.__kkp;
-  const { require: requireFn, moduleCache, lodash: _ } = globalThis.__kkp.cjs;
+  const { resetForNewModules } = globalThis.__kkp.cjs;
   const { beginTick, writeBackMemory, intentsPayload } = globalThis.__kkp.memoryWorld;
 
   globalThis.__kk = {
@@ -50,7 +50,7 @@
     runLoop() {
       let out;
       try {
-        const main = requireFn('main');
+        const main = globalThis.require('main');
         if (main && typeof main.loop === 'function') {
           main.loop();
           out = nullEnv({ ok: true });
@@ -171,10 +171,11 @@
         return '{"ok":false,"error":"endTick 序列化失败"}';
       }
     },
-    /** 清空 require 缓存（玩家代码更新/换模块表时）。lodash 预置保留。 */
+    /** 模块表替换：官方 timestamp 变更路径（game.js:507-512）——整体重绑
+     * require + 重建缓存对象（而非逐键 delete：玩家冻结 require.cache 时
+     * delete 会抛 TypeError 打挂 set_modules，重绑新对象天然免疫）。 */
     resetModules() {
-      for (const k of hostObject.keys(moduleCache)) delete moduleCache[k];
-      moduleCache.lodash = { exports: _ };
+      resetForNewModules();
     },
     drainMissing() {
       // 两桶：missing（get-trap 确定缺失）+ hasProbes（has-trap 低置信，可能是否定式探测）

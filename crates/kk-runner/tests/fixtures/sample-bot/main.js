@@ -1,4 +1,4 @@
-// 样例 bot：多模块 CommonJS + 循环依赖 + 子目录 + lodash 使用。
+// 样例 bot：多模块 CommonJS + 子目录 + lodash 使用（官方语义下模块图不允许顶层循环——真循环锁值对见 cycle_a/cycle_b）。
 // 供 kk-runner 集成测试与 bot-check 冒烟使用。
 
 module.exports.loop = function () {

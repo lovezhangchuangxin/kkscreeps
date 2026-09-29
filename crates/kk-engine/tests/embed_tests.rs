@@ -20,6 +20,7 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     embed_move_misc_family_impl()?;
     embed_mineral_direct_channel_impl()?;
     embed_gpt_review_clearance_impl()?;
+    a5_memory_module_forms_impl()?;
     assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");
     Ok(())
 }
@@ -497,9 +498,15 @@ fn embed_run_player_contract_impl() -> anyhow::Result<()> {
         "tick 末序列化失败按契约归 runtime"
     );
 
-    // 正常路径不受影响（含上一 tick 的坏 Memory 已被保留、不炸后续）
+    // 官方 _parsed 生命周期（评审 P1 纠偏后定案）：RawMemory 对象每 tick 重建
+    // （runtime.js:102 是 _start 局部变量、make.js:160 每 tick 重调）——毒
+    // _parsed 单 tick 生效；下一 tick 不访问 Memory 时无 _parsed → 写回跳过、
+    // tick 成功，毒 raw 原样保留
     let run = e.run_player("p1", "1")?;
-    assert_eq!(run.expr["value"], 1);
+    assert_eq!(
+        run.expr["value"], 1,
+        "毒 _parsed 单 tick（下 tick 无保存、成功）"
+    );
 
     // ② 死循环：已开始执行 → runtime（而非 executed:false 的基础设施错误）
     let run = e.run_player("p1", "while (true) {}")?;
@@ -1288,6 +1295,229 @@ fn embed_gpt_review_clearance_impl() -> anyhow::Result<()> {
     assert!(
         !raw.contains("hacked"),
         "P1-5：raw 不得被解析数组改写污染: {raw}"
+    );
+    Ok(())
+}
+/// A5-core 片 1 行为探针：Memory/RawMemory/模块系统/Game 可写性的官方形态
+/// （对照 screeps-ok UNDOC-MEMHACK 族与官方 game.js/runtime.js 逐条）。
+fn a5_memory_module_forms_impl() -> anyhow::Result<()> {
+    let mut e = EmbedEngine::new();
+    e.create_shard(&json!({
+        "players": ["p1"],
+        "rooms": [{ "name": "W1N1", "rcl": 1, "owner": "p1" }],
+    }))?;
+
+    // ① Memory 描述符生命周期（MEMHACK-001/012）：tick 起 getter 无 setter 可
+    // 配置；首访翻转为值属性
+    let run = e.run_player(
+        "p1",
+        r#"(() => {
+        const d0 = Object.getOwnPropertyDescriptor(globalThis, 'Memory');
+        void Memory;
+        const d1 = Object.getOwnPropertyDescriptor(globalThis, 'Memory');
+        return {
+            startGetter: typeof d0.get === 'function' && d0.set === undefined && d0.configurable,
+            afterValue: 'value' in d1 && d1.get === undefined && d1.configurable && d1.enumerable,
+        };
+    })()"#,
+    )?;
+    assert_eq!(
+        run.expr["value"]["startGetter"], true,
+        "tick 起 getter 形态: {:?}",
+        run.expr
+    );
+    assert_eq!(
+        run.expr["value"]["afterValue"], true,
+        "首访固化值属性: {:?}",
+        run.expr
+    );
+
+    // ② RawMemory._parsed 身份与 set 失效（MEMHACK-004/007 尾拍）：首访后
+    // _parsed === Memory 引用；set 即删 _parsed → 写回跳过、下一 tick 从新 raw 重解析
+    let run = e.run_player(
+        "p1",
+        r#"(() => { Memory.keep = 1; return RawMemory._parsed === Memory; })()"#,
+    )?;
+    assert_eq!(
+        run.expr["value"], true,
+        "_parsed 与 Memory 同引用: {:?}",
+        run.expr
+    );
+    let run = e.run_player("p1", r#"(() => { void Memory; Memory.mut = 'x'; RawMemory.set('{"fromSet":true}'); return 'ok'; })()"#)?;
+    assert_eq!(run.expr["value"], "ok");
+    let run = e.run_player(
+        "p1",
+        r#"({ raw: RawMemory.get(), mut: Memory.mut, fromSet: Memory.fromSet })"#,
+    )?;
+    assert_eq!(
+        run.expr["value"]["raw"], r#"{"fromSet":true}"#,
+        "set 后写回未覆写: {:?}",
+        run.expr
+    );
+    assert_eq!(
+        run.expr["value"]["mut"],
+        serde_json::Value::Null,
+        "陈旧 mutation 未落 raw"
+    );
+    assert_eq!(
+        run.expr["value"]["fromSet"], true,
+        "下一 tick 从新 raw 重解析"
+    );
+
+    // ③ 解析失败 → Memory null、raw 保留、写回跳过（官方 game.js:479-487）
+    let run = e.run_player("p1", r#"RawMemory.set('{broken'); 'set-ok'"#)?;
+    assert_eq!(run.expr["value"], "set-ok");
+    let run = e.run_player("p1", r#"({ m: Memory === null, raw: RawMemory.get() })"#)?;
+    assert_eq!(
+        run.expr["value"]["m"], true,
+        "解析失败 Memory=null: {:?}",
+        run.expr
+    );
+    assert_eq!(
+        run.expr["value"]["raw"], "{broken",
+        "毒 raw 原样保留（不写回）"
+    );
+
+    // ④ RawMemory.set 双门消息形态（官方 runtime.js:110-114）
+    let run = e.run_player(
+        "p1",
+        r#"try { RawMemory.set(5); 'no-throw' } catch (e) { e.message }"#,
+    )?;
+    assert_eq!(
+        run.expr["value"], "Raw memory value is not a string",
+        "非字符串门: {:?}",
+        run.expr
+    );
+    let run = e.run_player(
+        "p1",
+        r#"try { RawMemory.set('x'.repeat(2*1024*1024+1)); 'no-throw' } catch (e) { e.message }"#,
+    )?;
+    assert_eq!(
+        run.expr["value"], "Raw memory length exceeded 2 MB limit",
+        "2MB 门: {:?}",
+        run.expr
+    );
+
+    // ⑤ delete+assign 绕过解析（MEMHACK-003）与 Game 可写性（官方平赋值）
+    let run = e.run_player(
+        "p1",
+        r#"(() => {
+        delete globalThis.Memory;
+        globalThis.Memory = { injected: true };
+        const before = Memory.injected;
+        Game = { hacked: true };
+        return { injected: before, gameHacked: Game.hacked === true };
+    })()"#,
+    )?;
+    assert_eq!(
+        run.expr["value"]["injected"], true,
+        "delete+assign 绕过: {:?}",
+        run.expr
+    );
+    assert_eq!(
+        run.expr["value"]["gameHacked"], true,
+        "Game 平赋值可写: {:?}",
+        run.expr
+    );
+    let run = e.run_player("p1", r#"({ g: Game.hacked === undefined, t: Game.time })"#)?;
+    assert_eq!(
+        run.expr["value"]["g"], true,
+        "下一 tick Game 重装: {:?}",
+        run.expr
+    );
+
+    // ⑥ spawn.memory 官方形态（structures.js:865-885，本批新增）
+    let spawn_id = e.place_object(
+        "W1N1",
+        "structure",
+        &json!({ "pos": [20, 20], "structureType": "spawn", "owner": "p1" }),
+    )?;
+    let spawn_json = serde_json::to_string(&spawn_id)?;
+    let run = e.run_player(
+        "p1",
+        &format!(
+            r#"(() => {{
+        RawMemory.set('{{}}'); // ③ 毒化后的 raw 在此洗净（同 tick 重解析生效）
+        const s = Game.getObjectById({spawn_json});
+        s.memory.job = 'harvest';
+        return {{ job: s.memory.job, inMem: Memory.spawns[s.name].job }};
+    }})()"#
+        ),
+    )?;
+    assert_eq!(
+        run.expr["value"]["job"], "harvest",
+        "spawn.memory 读写: {:?}",
+        run.expr
+    );
+    assert_eq!(
+        run.expr["value"]["inMem"], "harvest",
+        "spawn.memory 落 Memory.spawns: {:?}",
+        run.expr
+    );
+
+    // ⑦ 盲区补锁（评审 3 清单）：RawMemory 每 tick 新建（对象身份）；require
+    // 负向（.js 补全/ ../ 均不存在→Unknown module 原名）；非对象 JSON 原样
+    // 保留（Memory === '5'）；顶层 __proto__=null（hasOwnProperty 不可用）；
+    // String 包装对象过 _.isString 门
+    let run = e.run_player("p1", r#"globalThis.__rm = RawMemory; 'captured'"#)?;
+    assert_eq!(run.expr["value"], "captured");
+    let run = e.run_player(
+        "p1",
+        r#"({ fresh: RawMemory !== globalThis.__rm, raw: RawMemory.get() })"#,
+    )?;
+    assert_eq!(
+        run.expr["value"]["fresh"], true,
+        "RawMemory 每 tick 新建: {:?}",
+        run.expr
+    );
+    assert!(
+        run.expr["value"]["raw"]
+            .as_str()
+            .is_some_and(|r| r.contains("spawns")),
+        "raw 字符串本体跨 tick 持久（⑥ 的正常写回已洗净 ③ 的毒 raw）: {:?}",
+        run.expr
+    );
+    let run = e.run_player(
+        "p1",
+        r#"try { require('nope.js'); 'no-throw' } catch (err) { err.message }"#,
+    )?;
+    assert_eq!(
+        run.expr["value"], "Unknown module 'nope.js'",
+        "无 .js 补全（官方 :553）: {:?}",
+        run.expr
+    );
+    let run = e.run_player(
+        "p1",
+        r#"try { require('../x'); 'no-throw' } catch (err) { err.message }"#,
+    )?;
+    assert_eq!(
+        run.expr["value"], "Unknown module '../x'",
+        "无 ../ 解析: {:?}",
+        run.expr
+    );
+    let run = e.run_player("p1", r#"RawMemory.set('"5"'); Memory === '5'"#)?;
+    assert_eq!(
+        run.expr["value"], true,
+        "合法 JSON 非对象值原样保留: {:?}",
+        run.expr
+    );
+    let run = e.run_player(
+        "p1",
+        r#"RawMemory.set('{"a":1}'); void Memory.a; try { Memory.hasOwnProperty('a'); 'callable' } catch (err) { 'throws' }"#,
+    )?;
+    assert_eq!(
+        run.expr["value"], "throws",
+        "顶层 __proto__=null（hasOwnProperty 不可用）: {:?}",
+        run.expr
+    );
+    let run = e.run_player(
+        "p1",
+        r#"try { RawMemory.set(new String('x')); 'passed' } catch (err) { err.message }"#,
+    )?;
+    assert_eq!(
+        run.expr["value"], "passed",
+        "String 包装对象过 _.isString 门: {:?}",
+        run.expr
     );
     Ok(())
 }

@@ -85,71 +85,139 @@
   gw.sanitizedStringify = sanitizedStringify;
 
   // ---------------------------------------------------------------- RawMemory / Memory
-  // 官方语义：RawMemory 是 2MB 上限的原生存档字符串；Memory 是懒解析 getter，
-  // 首次访问 JSON.parse(RawMemory.get())，tick 末写回。
+  // 官方语义（driver/lib/runtime/runtime.js:102-137 + engine/src/game/game.js:479-500）：
+  // RawMemory 是 null 原型对象（get/set/segments 等均为不可配置 value 描述符），
+  // 2MB 门只在 set；Memory 是每 tick 重装的懒 getter，首访用**可污染的全局
+  // JSON.parse** 解析（官方 bundle 跑在玩家 realm，同形）、成功对象顶层
+  // `__proto__ = null`、失败置 null 且不写回；写回读 `RawMemory._parsed`
+  // （玩家可见可删——删掉即跳过保存，memhack 011）、用**预置** stringify
+  // （官方 systemFunctions.JSON.stringify，runtime.js:246——parse 可污染与
+  // 写回预置的不对称是官方原样）。
 
   const RAW_MEMORY_LIMIT = 2 * 1024 * 1024;
   let rawMemoryData = '';
-  let parsedMemory;
-  const RawMemory = {
-    get() { return rawMemoryData; },
-    set(value) {
-      const s = String(value);
-      if (s.length > RAW_MEMORY_LIMIT) {
-        throw new Error('RawMemory 超出 2MB 上限');
-      }
-      rawMemoryData = s;
-    },
-    segments: __Object.create(null),
-    setActiveSegments() { countStub('RawMemory.setActiveSegments'); return 0; },
-    getActiveSegments() { countStub('RawMemory.getActiveSegments'); return []; },
-    getSegment() { countStub('RawMemory.getSegment'); return ''; },
-    setSegment() { countStub('RawMemory.setSegment'); return 0; },
-    interShardSegment: null,
-    setInterShardMemory() { countStub('RawMemory.setInterShardMemory'); return 0; },
-    getInterShardMemory() { countStub('RawMemory.getInterShardMemory'); return ''; },
-  };
+  // 官方 runtime.js:102 rawMemory 是 _start 函数体局部变量、make.js:160 每 tick
+  // 重调——对象每 tick 新建，`_parsed` 生命周期严格单 tick（毒 parse 不跨 tick
+  // 残留；评审 P1 纠偏：此前持久对象导致写回失败后下一 tick 持续报错，非官方
+  // 同形）。字符串本体 rawMemoryData 跨 tick 持久（官方 data.userMemory.data）
+  let RawMemory;
+  // segments 持久后端（官方 data.userMemory 侧的 data.memorySegments——
+  // runtime.js:193-196 每 tick 拷入新对象、:250-266 tick 尾回收写回后端；
+  // 官方写回校验 ≤10 个/0-99/字符串——归 2B-9 segments 真实现批）
+  let segmentsBackend = __Object.create(null);
+  function makeRawMemory() {
+    const segs = __Object.create(null);
+    const entries = __objectEntries(segmentsBackend);
+    for (let i = 0; i < entries.length; i++) segs[entries[i][0]] = entries[i][1];
+    return __Object.create(null, {
+      get: {
+        value() { return rawMemoryData; },
+      },
+      set: {
+        value(v) {
+          // 官方 runtime.js:110 用私有 lodash 的 _.isString（String 包装对象也
+          // 过门）；此处用捕获的 lodash 同域
+          if (!lodash.isString(v)) {
+            throw new Error('Raw memory value is not a string');
+          }
+          if (v.length > RAW_MEMORY_LIMIT) {
+            throw new Error('Raw memory length exceeded 2 MB limit');
+          }
+          // 官方 runtime.js:116-118：带 _parsed 门——set 即失效本 tick 的解析
+          // 缓存，否则 tick 末写回会用陈旧 parse 覆写玩家刚 set 的 raw
+          if (this._parsed) delete this._parsed;
+          rawMemoryData = v;
+        },
+      },
+      segments: { value: segs },
+      interShardSegment: { value: '', writable: true },
+      // segments/foreign 族官方为真实现，归属 2B-9 批；桩面维持 countStub 仪表
+      // （descriptor 表内条目必须是 {value: fn}——裸函数会被当作无 value 的
+      // 描述符，属性塌成 undefined，RAWMEMORY-004/005 曾因此转红）
+      setActiveSegments: { value() { countStub('RawMemory.setActiveSegments'); return 0; } },
+      getActiveSegments: { value() { countStub('RawMemory.getActiveSegments'); return []; } },
+      getSegment: { value() { countStub('RawMemory.getSegment'); return ''; } },
+      setSegment: { value() { countStub('RawMemory.setSegment'); return 0; } },
+      setInterShardMemory: { value() { countStub('RawMemory.setInterShardMemory'); return 0; } },
+      getInterShardMemory: { value() { countStub('RawMemory.getInterShardMemory'); return ''; } },
+    });
+  }
+  RawMemory = makeRawMemory();
   globalThis.RawMemory = RawMemory;
 
   function ensureMemory() {
-    if (parsedMemory === undefined) {
-      try {
-        // 预置 parse（对抗评审建议：裸 JSON.parse 在玩家 tick 内懒解析时经
-        // 可交换的全局——兑现"预置 parse 全链"的 P2 修复宣称）
-        parsedMemory = rawMemoryData ? __jsonParse(rawMemoryData) : {};
-      } catch (e) {
-        console.error('Memory 解析失败，重置为空对象: ' + e.message);
-        parsedMemory = {};
-      }
-      if (parsedMemory === null || typeof parsedMemory !== 'object') parsedMemory = {};
+    // 官方 game.js:479-497：无条件重解析（玩家预置 _parsed 会被覆盖，memhack
+    // 005）；解析用全局 JSON.parse——官方 bundle 在玩家 realm 内同形（自害面，
+    // 与世界注入的预置 parse 不同源，见段首注释）
+    let parsed;
+    try {
+      parsed = JSON.parse(rawMemoryData || '{}');
+      if (parsed !== null && typeof parsed === 'object') parsed.__proto__ = null;
+    } catch (e) {
+      parsed = null;
     }
-    // 官方 game.js:492-495：首次访问后把自己重定义为值属性——注意官方**没有**
-    // 写 writable（默认 false）：Memory 首访后是只读的，`Memory = {...}` 官方会
-    // 静默失败（严格模式抛错）。对齐官方描述符，不自行放宽
+    RawMemory._parsed = parsed;
+    // 官方 game.js:492-495：首访后固化为值属性——官方**没写** writable（默认
+    // false）：`Memory = {...}` 官方静默失败（严格模式抛错）；descriptor 与
+    // 值（含 null/原始值原样保留）均官方同形
     __Object.defineProperty(globalThis, 'Memory', {
       configurable: true,
       enumerable: true,
-      value: parsedMemory,
+      value: parsed,
     });
-    return parsedMemory;
+    return parsed;
   }
   gw.ensureMemory = ensureMemory;
+
+  // per-object memory 的官方形态（creeps.js:95-119 / rooms.js:551 / flags.js:31 /
+  // structures.js:865-885）：每次访问**重读** `Memory.<subKey>[name]`（"tick 内
+  // 钉住"是 Memory 本身首访固化的涌现，不在对象上缓存）；undefined 与字符串
+  // 'undefined'（遗留病态）都落默认 {}；非对象返回 undefined（getter）/抛错
+  // （setter）；Memory 为 null 时 `m[subKey]` 抛 TypeError 原样传播（官方
+  // sloppy 同样抛）。判定用捕获语义的 _.isObject 同域（object/function 且非
+  // null）——官方读全局 `_` 可污染，此处为登记过的加固分歧
+  function isObjectLike(v) {
+    return v !== null && (typeof v === 'object' || typeof v === 'function');
+  }
+  gw.memoryFor = function memoryFor(subKey, name) {
+    const m = globalThis.Memory; // 懒触发；null → 下一行抛 TypeError（官方同形）
+    let sub = m[subKey];
+    if (sub === undefined || sub === 'undefined') {
+      if (isObjectLike(m)) m[subKey] = {}; // Memory 为原始值时官方 sloppy 赋值静默无效
+      sub = m[subKey];
+    }
+    if (!isObjectLike(sub)) return undefined;
+    return (sub[name] = sub[name] || {});
+  };
+  gw.setMemoryFor = function setMemoryFor(subKey, name, value, label) {
+    const m = globalThis.Memory;
+    let sub = m[subKey];
+    if (sub === undefined || sub === 'undefined') {
+      if (isObjectLike(m)) m[subKey] = {};
+      sub = m[subKey];
+    }
+    if (!isObjectLike(sub)) throw new Error('Could not set ' + label + ' memory');
+    sub[name] = value;
+  };
+
   function writeBackMemory() {
+    // segments tick 尾回收（官方 runtime.js:250-266 把 rawMemory.segments 写回
+    // 后端；校验归 2B-9——此处先无条件持引用，下 tick 拷入新对象）
+    segmentsBackend = RawMemory.segments;
     // 返回 {ok} | {ok:false,error}：screeps-ok 契约（adapter-spec:229）把 tick 末
     // 序列化失败归为 runPlayer 的 runtime 错误——不能只在 console 里报完就算成功。
     // 玩家侧写回错误（不可序列化 / Memory.toJSON 返回非字符串等）一律走这里，
-    // 绝不抛出——抛出会被宿主误判为硬中断并按整份 tickLimit 计费
-    if (parsedMemory === undefined) return nullEnv({ ok: true });
+    // 绝不抛出——抛出会被宿主误判为硬中断并按整份 tickLimit 计费。
+    // 官方 runtime.js:245-248：读 `RawMemory._parsed`（玩家可见可删，删掉即跳过
+    // 保存）；写回**无 2MB 门**（超限只拦 set）；序列化用预置 stringify
+    const parsed = RawMemory._parsed;
+    if (!parsed) return nullEnv({ ok: true });
     try {
-      const s = __jsonStringify(parsedMemory);
+      const s = __jsonStringify(parsed);
       if (typeof s !== 'string') {
         // Memory.toJSON 返回非字符串时 stringify 得 undefined——玩家侧写回失败
-        console.error('Memory 写回失败（toJSON 返回非字符串），保留上一 tick 存档');
+        // （官方顶层 throw、无玩家 console 行：错误只在 run 结局信封可见）
         return nullEnv({ ok: false, error: 'Memory.toJSON 返回了非字符串' });
-      }
-      if (s.length > RAW_MEMORY_LIMIT) {
-        console.error('Memory 写回超过 2MB 上限，保留上一 tick 存档');
-        return nullEnv({ ok: false, error: 'Memory 写回超过 2MB 上限' });
       }
       rawMemoryData = s;
       return nullEnv({ ok: true });
@@ -157,7 +225,6 @@
       // 玩家异常对象的 message 可是污染 getter（抛错逃逸会被宿主误判硬中断）
       let why;
       try { why = String((e && e.message) || e); } catch (_) { why = 'unprintable player error'; }
-      console.error('Memory 写回失败（不可序列化），保留上一 tick 存档: ' + why);
       return nullEnv({ ok: false, error: 'Memory 不可序列化: ' + why });
     }
   }
@@ -171,7 +238,10 @@
 
   // ---------------------------------------------------------------- Game 装配
 
-  const { probe } = globalThis.__kkp;
+  const { probe, lodash } = globalThis.__kkp;
+  // cjs 钩子必须加载期捕获（__kkp 在 90_host 末段删除——运行期延迟查找是
+  // A3a 坑① 的固定形态）
+  const { ensureRequire, setCurrentUser } = globalThis.__kkp.cjs;
 
   function buildGame() {
     gw.objectsById = new __Map();
@@ -343,10 +413,10 @@
   let gameInstance = null;
   function refreshGame() {
     gameInstance = buildGame();
-    __Object.defineProperty(globalThis, 'Game', {
-      configurable: true,
-      get: () => gameInstance,
-    });
+    // 官方 game.js:502 `globals.Game = makeGameObject(...)`：每 tick 平赋值——
+    // 可写数据属性，玩家 tick 内覆盖自担、下 tick 重装（Game 可写性跟官方，
+    // UNDOC-GLOBAL-001 族）。内部 API 路径仍走 gw.currentGame() 闭包通道
+    globalThis.Game = gameInstance;
   }
   refreshGame();
   // 官方 API 内部经闭包 globals 对象读 Game/Memory（structures.js:1073
@@ -438,10 +508,20 @@
       // controllersClaimedInTick（creeps.js:845——GCL 门的同 tick 已 claim 计数）
       gw.lastActivateSafeMode = null;
       gw.controllersClaimedInTick = 0;
-      parsedMemory = undefined; // 官方语义：Memory 每 tick 从 RawMemory 懒解析
-      // 上一 tick 首访后 Memory 已固化为普通值属性（官方同款），本 tick 重装懒 getter
+      // 官方每 tick init（runtime.js:471-484 / make.js:160 等价物）：RawMemory
+      // **重建**（官方 rawMemory 是 _start 局部变量每 tick 新建——_parsed 单
+      // tick 生命周期；玩家可删可换全局绑定，每 tick 恢复）、Memory 重装懒
+      // getter（上一 tick 首访后已固化为值属性，configurable 允许覆盖）。
+      // 解析缓存只存当 tick RawMemory._parsed（set/delete 均失效它），无闭包旁路
+      RawMemory = makeRawMemory();
+      globalThis.RawMemory = RawMemory;
+      // 官方 game.js:504-512：require 每 tick 重绑四条件判定（缺失/timestamp
+      // 变/main 非对象/main.loop 非函数 → 整体重绑）；moduleObject.user 注入
+      ensureRequire();
+      setCurrentUser(gw.viewerName);
       __Object.defineProperty(globalThis, 'Memory', {
         configurable: true,
+        enumerable: true,
         get() { return ensureMemory(); },
       });
       gw.terrainByRoom = {};

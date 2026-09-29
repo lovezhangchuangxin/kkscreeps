@@ -14,13 +14,6 @@
 
   const gw = globalThis.__kkp.gw;
 
-  function flagMemoryFor(name) {
-    const m = gw.ensureMemory();
-    if (!m.flags) m.flags = {};
-    if (!m.flags[name]) m.flags[name] = {};
-    return m.flags[name];
-  }
-
   // ---------------------------------------------------------------- 工地：原型字段表
   // 官方 construction-sites.js:38-46（我方投影字段直存；name/owner 缺省语义
   // 保持现状——匿名工地 name undefined）
@@ -41,14 +34,14 @@
   // 官方 flags.js:25-30：构造器赋值 name/color/secondaryColor（值属性，不走
   // defineGameObjectProperties，也无 toJSON——stringify 直接枚举 own 面）。
   // 装配期定格（不回查——官方同款值属性）
+  // 官方 flags.js:31-53：memory 为 getter/setter（gw.memoryFor 官方同形——
+  // 含 'undefined' 病态检查与非对象分支）
   Object.defineProperty(globalThis.Flag.prototype, 'memory', {
     get() {
-      return flagMemoryFor(this.name);
+      return gw.memoryFor('flags', this.name);
     },
     set(value) {
-      const m = gw.ensureMemory();
-      if (!m.flags) m.flags = {};
-      m.flags[this.name] = value;
+      gw.setMemoryFor('flags', this.name, value, 'flag');
     },
   });
 

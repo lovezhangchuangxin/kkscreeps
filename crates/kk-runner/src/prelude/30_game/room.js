@@ -198,19 +198,15 @@
     room.getPositionAt = (x, y) => new gw.RoomPosition(x, y, name);
     room.serializePath = () => '';
     room.deserializePath = () => [];
+    // 官方 rooms.js:551-571：memory 为 getter/setter（gw.memoryFor 官方同形——
+    // 含 'undefined' 病态检查与非对象分支），tooangel 等 bot 直接对 room.memory 赋值
     __Object.defineProperty(room, 'memory', {
       configurable: true,
       get() {
-        const m = gw.ensureMemory();
-        if (!m.rooms) m.rooms = {};
-        if (!m.rooms[name]) m.rooms[name] = {};
-        return m.rooms[name];
+        return gw.memoryFor('rooms', name);
       },
-      // 官方 rooms.js:551 同时定义 setter——tooangel 等 bot 直接对 room.memory 赋值
       set(v) {
-        const m = gw.ensureMemory();
-        if (!m.rooms) m.rooms = {};
-        m.rooms[name] = v;
+        gw.setMemoryFor('rooms', name, v, 'room');
       },
     });
     if (__RoomCtor && __RoomCtor.prototype) {

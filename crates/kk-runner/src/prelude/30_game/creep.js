@@ -18,13 +18,6 @@
 
   const gw = globalThis.__kkp.gw;
 
-  function creepMemoryFor(name) {
-    const m = gw.ensureMemory();
-    if (!m.creeps) m.creeps = {};
-    if (!m.creeps[name]) m.creeps[name] = {};
-    return m.creeps[name];
-  }
-
   const CREEP_METHODS = ['move', 'moveByPath', 'moveTo', 'harvest', 'build', 'repair', 'dismantle', 'upgradeController', 'attack', 'rangedAttack', 'rangedMassAttack', 'heal', 'rangedHeal', 'transfer', 'withdraw', 'drop', 'pickup', 'say', 'suicide', 'spawn', 'pull', 'recycleCreep', 'renewCreep', 'cancelOrder', 'moveHead'];
   // A4-iii 换真下架（原桩列表项）：claimController/reserveController/
   // attackController/generateSafeMode（signController 官方在缺集登记里——本批
@@ -256,19 +249,18 @@
   });
 
   // 官方 creeps.js:94-120：memory 是独立 getter/setter（不走 _${name} 缓存），
-  // 非本人 creep 读 undefined、写抛错
+  // 每次访问重读 `Memory.creeps[name]`（gw.memoryFor 官方同形——含 'undefined'
+  // 字符串病态检查与非对象分支），非本人 creep 读 undefined、写抛错
   Object.defineProperty(globalThis.Creep.prototype, 'memory', {
     get() {
       if (this.id && !this.my) return undefined;
-      return creepMemoryFor(this.name);
+      return gw.memoryFor('creeps', this.name);
     },
     set(value) {
       if (this.id && !this.my) {
         throw new Error("Could not set other player's creep memory");
       }
-      const m = gw.ensureMemory();
-      if (!m.creeps) m.creeps = {};
-      m.creeps[this.name] = value;
+      gw.setMemoryFor('creeps', this.name, value, 'creep');
     },
   });
 

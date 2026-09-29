@@ -63,7 +63,7 @@
 其字节布局与负载数字须经过原型和行为测试后冻结。
 
 - **2A 沙箱运行时 + 玩家 API 核心**（进行中，方案 [m2-playable.md](plans/m2-playable.md)，三轨并行——A 沙箱/API、B 引擎结算、C pathfinder/存储；A1 查询面契约快照 277→374、A2+B1/B1.1 intent 通道与动作方法族 374→592、A2.1 外部复审修复（安全网收口）592→648、A3a prelude 30_game/ 零行为拆分（棘轮零翻转）与自审清偿（toJSON null-proto 结构位/工地不授视野/spawn 入 structures/预置 parse 全链）648→649，全程零转红）：deno_core 沙箱正式接入（一实例一线程、预算桶、内存双闸门、快照、遮蔽内部函数——全部按 [sandbox.md](architecture/sandbox.md)）；玩家 API 先做核心（Game/Room/Creep/基础指令/Memory）。
-  - 关卡：screeps-ok 通过率 ≥40%（D4 现实校准，"过半"落在 2B API 补全批出口；2026-09-29 地板已达 1310/2914=44.96%，数字以 [ratchet.json](../compat/reports/ratchet.json) 为唯一真相源；待 A5-core+A6 收口）。
+  - 关卡：screeps-ok 通过率 ≥40%（D4 现实校准，"过半"落在 2B API 补全批出口；2026-09-29 地板已达 1323/2914=45.40%（A5-core 片 1 Memory/模块形态批 +13），数字以 [ratchet.json](../compat/reports/ratchet.json) 为唯一真相源；待 A5 剩余片+A6 收口）。
 - **B0 正确性清偿批**（2026-09-29 架构复审裁决，[ADR-013](decisions/ADR-013-architecture-review-coordinator.md)、方案 [b0-runtime-coordinator.md](plans/b0-runtime-coordinator.md)；A6 关段后立即执行）：运行协调层与部分提交修复（RunResult 统一类型、世界与玩家持久状态同一提交点，embed 编排移出 kk-engine）、LIFO 每线程纠偏（空闲回收支持任意实例）、墙钟入 TickInput（重放确定性）、`__kk` 宿主面收进 Rust 私有句柄。
   - 关卡：复审复现场景全部转为回归测试且全绿（部分提交/LIFO 乱序销毁/重放一致性）；棘轮零转红（或转红逐字豁免并归因）。
 - **M2B 前置批**（B0 之后、2B 扩面之前，[ADR-013](decisions/ADR-013-architecture-review-coordinator.md) 决策 2）：seam 三件套（世界注入来源接口化 + 地形按世界版本缓存 + 不可变房间版本句柄）、投影/编解码样板宏化（新增对象类型 7 处同步点收敛）、双房双玩家最小实弹验证 tick 契约合并规则（临时 ID/依赖集合/乱序完成不变性）。

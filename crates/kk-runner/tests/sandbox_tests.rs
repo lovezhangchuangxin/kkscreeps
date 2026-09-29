@@ -603,12 +603,13 @@ fn prelude_basics() -> anyhow::Result<()> {
 
     let v = sb.run_expr("require('lodash') === _")?;
     assert_eq!(v["value"], true, "require('lodash') 命中预置");
-    // require('lodash') 在缓存查询前短路，唯一可观察形态是 require.cache——
-    // 该形状同时是 resetModules 重建产物的直接校验面
-    let v = sb.run_expr("require.cache.lodash && require.cache.lodash.exports === _")?;
+    // require('lodash') 走缓存预置命中——官方形态：require.cache 值为 exports
+    // 本体（非 {exports} 包装，game.js:510/583）；该形状同时是 resetModules
+    // 重建产物的直接校验面
+    let v = sb.run_expr("require.cache.lodash === _")?;
     assert_eq!(
         v["value"], true,
-        "require.cache 的 lodash 预置存在且为同一对象"
+        "require.cache 的 lodash 预置存在且为 exports 本体"
     );
 
     // ---- Buffer 垫片语义（对齐官方 Node 行为） ----
@@ -741,6 +742,7 @@ fn is_allowed_global(name: &str) -> bool {
         "Float64Array",
         "WebAssembly",
         "console",
+        "global",
     ];
     const ENV_NAMES: &[&str] = &[
         // prelude 注入
@@ -823,21 +825,32 @@ fn cjs_and_loop() -> anyhow::Result<()> {
         assert_eq!(v["value"], expected_tick, "loop 每 tick 执行一次");
     }
 
-    // ---- 循环依赖半成品 exports 语义（官方 game.js / Node 同款核心语义） ----
-    // 断言一：循环点读半成品属性 → undefined（role_harvester 的 role 赋值在 require('utils') 之后）
-    let v = sb.run_expr("require('utils').roleSeenDuringCycle === undefined")?;
-    assert_eq!(
-        v["value"], true,
-        "循环点读到的是半成品 exports（属性尚未赋值）"
+    // ---- 循环依赖官方语义（A5 对齐，game.js:565/:590-592）：真循环首 require
+    // 即抛 Circular reference（占坑 -1）；此前我方为 Node 半成品导出语义已清偿 ----
+    // cycle_a → cycle_b → cycle_a：第二次命中占坑 → 抛 Circular reference to
+    // module 'cycle_a'，失败沿栈级联删缓存（:578-581 逐层）
+    let v = sb.run_expr("require('cycle_a')")?;
+    assert_eq!(v["ok"], false, "真循环 require 抛错: {v:?}");
+    let txt = v.to_string();
+    assert!(
+        txt.contains("Circular reference to module 'cycle_a'"),
+        "官方消息形态: {txt}"
     );
-    // 断言二：循环点持有的对象引用在模块完成后可见后续赋值——若加载器在循环点
-    // 返回新空对象（另一种破坏形态），lateProbe 不是同一引用，此断言能抓住
-    let v = sb.run_expr("require('utils').lateProbe.role")?;
+    let v = sb.run_expr("('cycle_a' in require.cache) || ('cycle_b' in require.cache)")?;
     assert_eq!(
-        v["value"], "harvester",
-        "循环点持有的引用在模块完成后可见后续赋值（同一对象）"
+        v["value"], false,
+        "循环失败的模块沿栈级联删缓存（不留 -1 占坑）"
     );
 
+    // ---- require.cache 官方形态：值为 exports 本体（game.js:510/583，
+    // 非 {exports} 包装）；'./' 前缀归一（:553，无 ../ 解析与 .js 补全） ----
+    let v = sb.run_expr(
+        "require('role_harvester') === require.cache.role_harvester && require('./role_harvester') === require.cache.role_harvester",
+    )?;
+    assert_eq!(
+        v["value"], true,
+        "缓存值为 exports 本体且 './' 前缀归一到同名"
+    );
     let v = sb.run_expr("JSON.stringify(require('role_harvester'))")?;
     let role = v["value"].as_str().unwrap_or_default();
     assert!(
@@ -901,10 +914,8 @@ fn cjs_and_loop() -> anyhow::Result<()> {
     assert_eq!(wb["ok"], false, "写回失败按玩家侧错误回传而非 Err: {wb}");
     let lines = sb.drain_console();
     assert!(
-        lines
-            .iter()
-            .any(|l| l.level == "error" && l.text.contains("Memory 写回失败")),
-        "写回失败打 console: {lines:?}"
+        lines.is_empty(),
+        "官方写回失败无玩家 console 行（runtime.js:246 顶层 throw，错误只在 run 结局信封）: {lines:?}"
     );
     let out = tick(&mut sb, &w)?;
     assert!(matches!(out, TickOutcome::Completed { .. }));
