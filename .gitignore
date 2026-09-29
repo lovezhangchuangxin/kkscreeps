@@ -45,3 +45,4 @@ compat/reports/tmp/
 *.swp
 *.swo
 bot-check-report.json
+.workbuddy/
