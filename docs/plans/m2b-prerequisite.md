@@ -58,7 +58,9 @@ owner 三态（world_json.rs:393 vs snapshot.rs:244，两份手写、注释互�
 ### 1.4 两文件现状
 
 world_json.rs 1617 = 码 ~770 + 测 850；snapshot.rs 1106 = 码 ~400 + 测 706。
-B1 留给本批：宏化/单源后须双双 <1000。
+B1 留给本批：宏化/单源后须双双 <1000。（P4 复核补录：spikes/ 实验目录
+非产品源码，不在 <1000 验收口径——inspector-spike main.rs 1394 行为
+HEAD 既有，B1 §1 的「其余全仓」表述未含此排除，系口径笔误。）
 
 ## 2. 范围定夺
 
@@ -332,6 +334,38 @@ workspace 268 / 棘轮 / 三基线）。rustfmt 对宏内代码不重排（发�
   实测，见 §5）；`[`RoomObject::tag`]` doc 链接指向私有方法系 HEAD 既有
   状况（rustdoc 警告集前后逐条相同）；ratchet「豁免条目未命中」噪音为
   先前批次遗留（归棘轮清理项）。
+
+### P4（投影 helper 单源化 + 两文件测试拆出 <1000）——已收口
+
+- 实测：三对真重复单源化——store 家族（store_positive_entries 正量键集
+  + apply_store_extra 共核，world_json 侧包装层显式补 energy 恒投影键；
+  snap_store/snap_store_extra 改消费）、controller_progress_total_opt
+  （Option 共核，快照 Null/世界 0 各自折叠）、controller_owner_value
+  （三态 Some/Null/None，两侧手写 if/else-if 与互指注释消灭）。测试拆出
+  world_json/tests.rs（920）/snapshot/tests.rs（707），源文件 847/390——
+  B1 留置的两文件 <1000 达成，全仓产品源码无 >1000。
+- 评审三路全 PASS 零 P0/P1：等价性逐输入类推演（store 四输入类键集值
+  逐一相同 + serde_json 无 preserve_order 键序恒字典序、progress 的
+  level=0 表无 "0" 键疑点排除、owner (Some,true) 态生产不可达且优先序
+  一致）；测试拆分 token 级 SHA256 双双一致。
+- 评审清偿：结算侧 controller_levels 两份查表拷贝收编（评审 3 勘测盲区
+  ——economy.rs/creep controller.rs 与共核逐字符同构，CONTROLLER_LEVELS
+  表仅含 "1".."7" 故无守卫旧版与 opt 折叠全域等价；pub 化共核消费）；
+  三组输入类锁定测试（(E=0,G>0) 组装序重组面/零量 extra 栈排除/
+  progress 0-2-8 级两投影折叠——评审 1 P2 ×3）；tests.rs 头注释口径
+  订正（token 流一致 + rustfmt 缩进/合行机械重排——非逐字节，评审 2
+  P1-1）；本段与 §1.4 补录。
+- 验证：workspace 276 全绿 / clippy 零告警 / release+棘轮 1405 零转红 /
+  三基线通过（tooangel console error tick=0）。
+- perf：与 P3 基准持平（0.103/0.153/0.010/0.416 vs 0.101/0.152/0.010/
+  0.413——纯函数边界重划，评审逻辑核验通过）。
+- 登记（评审 3 确认的刻意分歧，非漏网）：snap_pos vs world_json 尾部
+  pos 组装（输入域/覆盖面不同）、remaining 家族 vs 内联时间折叠（两契约
+  折叠形态系统性不同，各臂注释钉官方出处）；source/mineral 与 tombstone/
+  ruin 的同构内联（3 行 ×2）抽象成本高于收益；kk-runtime embed 测试一处
+  注释与断言不符（:605 声称 8 级 progressTotal 读 null 但无断言——归文档
+  卫生）；B1 §1 的 room.rs 行数陈旧（1116→现 929）系后续批演化的文档
+  漂移，备查。
 
 ### P3（地形按版本缓存：紧凑载荷 + rev 戳 + 双侧缓存）——已收口
 
