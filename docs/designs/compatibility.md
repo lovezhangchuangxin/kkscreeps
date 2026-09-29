@@ -58,7 +58,7 @@
 | 未知类型工地（M1 place，深评收严） | 无 CONSTRUCTION_COST 的类型 Err（与 vanilla getProgressTotal:1873 抛错对齐；原先宽松接受、progressTotal 派生 0） | build 结算同样拒绝无 cost 目标（build.js:19-21），两侧一致 |
 | creep 放置 ttl 无上限钳制（M1 place） | `time + ttl` 原样（可超 1500）；官方 renew 才有 1500 上限语义（拒绝式非钳制） | 三方评审裁决跟 vanilla 放置语义（index.ts:1087），2026-09-28 |
 | 玩家内 room intents 先于对象 intents（M1 结算） | createConstructionSite/createFlag 全部先于 creep/spawn 对象指令执行 | 官方单层 objects map 中 'room' 键按插入序交错；结果序无关（房间指令与对象指令无共享状态面），登记迭代序差异 |
-| move intent 的 id 形态（M1 结算登记；A4-iv 核对时确认已清偿） | intent_move 双形态（direction/id）与 prelude move 的朝相邻 creep 形态均已实装（creep.js move :137-141 / creep.rs intent_move :86-103） | 登记条目滞后未销——A4-iv 的 pull 位移依赖该形态（被拉 creep 记 `move(拉者)`），embed/settle 锁值测试已钉死 |
+| move intent 的 id 形态（M1 结算登记；A4-iv 核对时确认已清偿） | intent_move 双形态（direction/id）与 prelude move 的朝相邻 creep 形态均已实装（creep.js move :137-141 / B1 拆分后 settle/creep/movement.rs intent_move） | 登记条目滞后未销——A4-iv 的 pull 位移依赖该形态（被拉 creep 记 `move(拉者)`），embed/settle 锁值测试已钉死 |
 | creep 死亡事件与墓碑（M1 结算） | 无 EVENT_OBJECT_DESTROYED、无墓碑（资源直接掉地已另登记） | 随墓碑变体（M2 schema 升级）一并补事件 |
 | spawn/extension 的 off 标记生效时序（M1 结算） | `_calc_spawns` 直接改工作副本 → 同 tick 即时生效 | 官方经 bulk.update 延迟落库 → 同 tick 读到旧值；仅配额翻转 tick 可观测（多一个 spawn 被计费的窗口） |
 | 踩敌方工地的 safeMode 门（M1 结算） | 未实现（M1 无 safeMode 激活路径） | 官方 movement.js:224 要求 controller 非敌 safeMode；activateSafeMode 实装时补 |
