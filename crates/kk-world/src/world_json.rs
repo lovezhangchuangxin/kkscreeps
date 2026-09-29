@@ -62,6 +62,17 @@ impl World {
                 let (available, capacity) = room_energy(state, user);
                 entry.insert("energyAvailable".into(), json!(available));
                 entry.insert("energyCapacityAvailable".into(), json!(capacity));
+                // 房间事件日志（官方 runtimeData.roomEventLog 按可见房注入——
+                // data.js:141/:219；B3 的 RoomState.events 落账面，prelude
+                // room.getEventLog() 消费）。仅可见房注入（房内观测面）
+                if !state.events.is_empty() {
+                    let events: Vec<Value> = state
+                        .events
+                        .iter()
+                        .filter_map(|e| serde_json::from_str(e).ok())
+                        .collect();
+                    entry.insert("events".into(), json!(events));
+                }
             }
             // 不可见房条目只保地形（Game.map 面全量地形，灰区登记口径）——
             // 房间聚合（energy 等）不注入，防未来任何读 rooms[n].energy* 的

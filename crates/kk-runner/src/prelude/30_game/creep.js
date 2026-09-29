@@ -920,6 +920,31 @@
    /*  （:970-973）→ 邻接（:974-976）→ controller 类型（:977-979）→ 已占房不可
    *  预定（:980-982，房主自己也不行）→ 他人预定不可覆盖（:983-985）→ CLAIM
    *  部件（:986-988）→ shardAccess（:989-991，N/A）→ intents.set。 */
+  /** Creep.upgradeController：官方 creeps.js:922-964 十门全序（A5-lite 接线
+   *  批换真——A4-iii 漏网项，执行器 GPT boost 批已完善两步算法）：
+   *  ①!my→NOT_OWNER ②spawning→BUSY ③无活跃 WORK→NO_BODYPART ④shardAccess
+   *  门（官方 hosted 面，我方不可达——跳过） ⑤!carry.energy→
+   *  NOT_ENOUGH_RESOURCES ⑥target 无效/非 StructureController→
+   *  INVALID_TARGET ⑦upgradeBlocked 相对值>0→INVALID_TARGET（getter 相对
+   *  形态与官方 `upgradeBlocked > 0` 同口径） ⑧!inRangeTo(3)→NOT_IN_RANGE
+   *  ⑨!target.my→NOT_OWNER ⑩!level||!owner→INVALID_TARGET → intent。 */
+  globalThis.Creep.prototype.upgradeController = function upgradeController(target) {
+    if (!this.my) return C.ERR_NOT_OWNER;
+    if (this.spawning) return C.ERR_BUSY;
+    if (countActiveParts(this.body, C.WORK) === 0) return C.ERR_NO_BODYPART;
+    if (!this.carry.energy) return C.ERR_NOT_ENOUGH_RESOURCES;
+    if (!target || !target.id
+      || !(target instanceof globalThis.StructureController)) {
+      return C.ERR_INVALID_TARGET;
+    }
+    if (target.upgradeBlocked && target.upgradeBlocked > 0) return C.ERR_INVALID_TARGET;
+    if (!target.pos.inRangeTo(this.pos, 3)) return C.ERR_NOT_IN_RANGE;
+    if (!target.my) return C.ERR_NOT_OWNER;
+    if (!target.level || !target.owner) return C.ERR_INVALID_TARGET;
+    gw.intents.set(this.id, 'upgradeController', { id: target.id });
+    return C.OK;
+  };
+
   globalThis.Creep.prototype.reserveController = function reserveController(target) {
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;

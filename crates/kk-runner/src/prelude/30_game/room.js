@@ -20,6 +20,7 @@
   const __Object = Object;
   const __RoomCtor = globalThis.Room;
   const __mapGet = Map.prototype.get;
+  const __jsonStringify = JSON.stringify;
 
   // ---------------------------------------------------------------- Terrain
   // 官方 rooms.js:1223-1241 Room.Terrain 逐字移植：闭包式对象（非 class），
@@ -149,6 +150,12 @@
         else if (type === 114 /* FIND_MY_CONSTRUCTION_SITES */ && !neutral && o.type === 'constructionSite' && o.owner === gw.viewerName) out.push(w);
         else if (type === 115 /* FIND_HOSTILE_CONSTRUCTION_SITES */ && !neutral && o.type === 'constructionSite' && typeof o.owner === 'string' && o.owner !== gw.viewerName) out.push(w);
         else if (type === 116 /* FIND_MINERALS */ && o.type === 'structure' && o.structureType === 'mineral') out.push(w);
+        // B3 接线批：官方 game.js:345-360 装配墓碑/废墟/deposit 全族（119/122
+        // 当前无对象恒空，臂在保持与 Rust matches_find 同构）
+        else if (type === 118 /* FIND_TOMBSTONES */ && o.type === 'tombstone') out.push(w);
+        else if (type === 119 /* FIND_POWER_CREEPS */ && o.type === 'powerCreep') out.push(w);
+        else if (type === 122 /* FIND_DEPOSITS */ && o.type === 'deposit') out.push(w);
+        else if (type === 123 /* FIND_RUINS */ && o.type === 'ruin') out.push(w);
       }
       // 官方 rooms.js:648-654：opts.filter（函数或 lodash 对象谓词）经
       // _.filter 应用——bot 生态最常用的 find 形态
@@ -175,6 +182,13 @@
     };
     room.getTerrain = function () { return new Terrain(name); };
     room.createConstructionSite = function () { countStub('room.createConstructionSite'); return 0; };
+    // 官方 rooms.js:573-583：raw=true 返回 JSON 字符串（持久化形态）、否则
+    // 解析数组——我方投影 events 恒数组，raw 分支经预置 stringify（宿主数据
+    // 编码不经可换全局——与 intents 出口同纪律）。B3 落账 events 上一 tick 覆写
+    room.getEventLog = function (raw) {
+      const ev = (r && r.events) || [];
+      return raw ? __jsonStringify(ev) : ev;
+    };
     room.createFlag = function () { countStub('room.createFlag'); return 'stub-flag'; };
     room.getPositionAt = (x, y) => new gw.RoomPosition(x, y, name);
     room.serializePath = () => '';

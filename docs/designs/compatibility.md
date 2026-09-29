@@ -146,3 +146,6 @@
 | placeRuin 缺省面（B3 评审 3-7 登记） | hitsMax 缺省 None（投影缺键/undefined）vs vanilla placeRuin 的 0；structureId 解析失败 .unwrap_or(0) 投影 kk0000000000000000 | RuinSnapshot 契约无 hitsMax 键，套件不测；vanilla 对齐择一随轨 A 接线批 |
 | Generic 透传臂的 tombstone/ruin 无 ticksToDecay 折叠（B3 评审 3-8 登记） | snapshot.rs Generic 臂对 data.type=tombstone/ruin 映射 kind 但不折叠时间键（typed 臂才有）——产出非契约七键形状 | 遗留路径可达性：旧持久化（tag 11）与 structure 通道 structureType:"tombstone" 落 Generic；放置面已 typed，随轨 A 接线批收口或届时删除透传映射 |
 | 命名资源堆的拾取拒绝面（B3 评审 2/3 清偿记录） | M2 双槽 schema 下 pickup 对命名矿物堆（衰减落地产物）拒绝——官方入开放 store 对应键（pickup.js:26-30）；power 同口径 | 随 power/矿物槽 schema 扩展放开；pickup_rejects_named_mineral_pile 锁值 |
+| else 族结构实例级桩与基类真方法的覆盖序（A5-lite 清偿记录，坑⑥复发实证） | STRUCTURE_METHODS 实例级桩循环曾在 Structure.prototype.destroy 换真后继续遮蔽（症状：API 假 OK 零 intent——room intent 通道静默死）；修法=桩列表移除已换真方法 | destroy/notifyWhenAttacked 已换真走基类原型；后续结构方法换真同查此点 |
+| room 级意图的 JS 侧计费（A5-lite 补） | pushByName 原不计费（Rust take_endtick_intents 按元素兜底结算）——玩家可见 Game.cpu.getUsed 的 intents.cpu 缺 room 级；已补按元素 0.2（make.js:100-106 同口径） | 显示面与结算面现同口径 |
+| upgradeController 的 shardAccess 门（A5-lite 登记） | 官方 creeps.js:931-933 有 runtimeData.user.shardAccess===false → ERR_ACCESS_DENIED 门（hosted 面态控制）；我方无 shardAccess 概念不可达 | 单机/私服语义下恒过；如 M2B 引入 shard 访问控制再接 |
