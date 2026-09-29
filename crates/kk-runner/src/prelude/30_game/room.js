@@ -59,6 +59,30 @@
   globalThis.Room.Terrain = Terrain;
   gw.Terrain = Terrain;
 
+  // 官方 utils.js:555-575 serializePath 逐字（Room 静态形态，rooms.js:528-530）：
+  // 非数组抛 'path is not an array'、空数组 ''、首元素负坐标抛 'path
+  // coordinates cannot be negative'、两位零填充起点 + 逐元素 direction 拼接。
+  // deserializePath 静态在 creep.js 挂（实现段在那，加载序 creep 后于 room）
+  function serializePath(path) {
+    if (!_.isArray(path)) {
+      throw new Error('path is not an array');
+    }
+    let result = '';
+    if (!path.length) {
+      return result;
+    }
+    if (path[0].x < 0 || path[0].y < 0) {
+      throw new Error('path coordinates cannot be negative');
+    }
+    result += path[0].x > 9 ? path[0].x : '0' + path[0].x;
+    result += path[0].y > 9 ? path[0].y : '0' + path[0].y;
+    for (let i = 0; i < path.length; i++) {
+      result += path[i].direction;
+    }
+    return result;
+  }
+  globalThis.Room.serializePath = serializePath;
+
   // 地形单词（look 面）：swamp 先判、wall 后覆盖（rooms.js:663-671）。
   // 无地形数据的房间（玩家自造未注册房间名）自然 TypeError——与官方
   // _lookSpatialRegister 直读 staticTerrainData[id]（rooms.js:665）的行为一致；
@@ -166,8 +190,70 @@
       visual: new RoomVisual(name),
       mode: 'world',
     };
+    // findCache（官方 rooms.js:585-598 的 register.findCache 出口臂子集——
+    // makeRoom 每 tick 重建，闭包内对象即天然 per-tick）：方向臂缓存**未滤**
+    // 结果（官方 :641 缓存在尾滤前）；FIND_EXIT 缓存**已滤** concat（子臂先
+    // 各自过 opts.filter——官方 :592-598 陈旧 filter 烘焙 quirk 原样保留）；
+    // 命中/未命中统一经尾部两分支产**新数组**（官方 :648-655——filter 新
+    // 数组或 _.clone 浅拷，元素同实例、本体从不暴露）。对象臂的官方装配期
+    // findCacheFn 预填充面我方未移植（每调用新鲜扫描，纯性能差，登记灰区）
+    const findCache = {};
     room.find = function (type, opts) {
       countStub('room.find:' + type);
+      // 官方 rooms.js:592-601：FIND_EXIT = 四向臂 concat（官方序
+      // TOP/BOTTOM/RIGHT/LEFT），子臂各自应用 opts（含 filter）；缓存后
+      // 提前 return _.clone（不走通用尾滤——陈旧 filter 语义在此形成）
+      if (type === 10 /* FIND_EXIT */) {
+        if (findCache[10] !== undefined) {
+          // 官方命中汇入通用尾（rooms.js:587-588→:648-655）：当次 filter
+          // 作用于烘焙缓存（交集），无 filter 走 _.clone 新数组
+          if (opts && opts.filter) return _.filter(findCache[10], opts.filter);
+          return _.clone(findCache[10]);
+        }
+        const r = this.find(1, opts).concat(this.find(5, opts))
+          .concat(this.find(3, opts)).concat(this.find(7, opts));
+        findCache[10] = r;
+        return _.clone(r);
+      }
+      // 官方 rooms.js:602-641：四向臂由地形 wall 位计算——沿边 50 格，
+      // 非 wall 者经 getPositionAt 产出（top: (key,0)、bottom: (key,49)、
+      // left: (0,key)、right: (49,key)）。terrain flat 数组行主序 y*50+x
+      // （非转置）；未滤结果入缓存，命中走通用尾滤
+      if (type === 1 || type === 3 || type === 5 || type === 7) {
+        if (findCache[type] !== undefined) {
+          if (opts && opts.filter) return _.filter(findCache[type], opts.filter);
+          return _.clone(findCache[type]);
+        }
+        const terrain = gw.terrainByRoom[name];
+        const exits = [];
+        for (let i = 0; i < 50; i++) {
+          let x = 0, y = 0;
+          if (type === 7 || type === 3) {
+            y = i;
+          } else {
+            x = i;
+          }
+          if (type === 3) {
+            x = 49;
+          }
+          if (type === 5) {
+            y = 49;
+          }
+          exits.push(!(terrain[y * 50 + x] & TERRAIN_MASK_WALL));
+        }
+        const out = [];
+        for (let key = 0; key < exits.length; key++) {
+          if (exits[key]) {
+            if (type === 1) out.push(this.getPositionAt(key, 0));
+            if (type === 5) out.push(this.getPositionAt(key, 49));
+            if (type === 7) out.push(this.getPositionAt(0, key));
+            if (type === 3) out.push(this.getPositionAt(49, key));
+          }
+        }
+        findCache[type] = out;
+        if (opts && opts.filter) return _.filter(out, opts.filter);
+        return _.clone(out);
+      }
       const out = [];
       // 索引迭代（装配批纪律）：for...of 经可交换的 Symbol.iterator。
       // 裸 run（viewerName=null，无 user 的注入面）= 视角中立面：与 Rust
@@ -406,8 +492,6 @@
       if (x < 0 || x > 49 || y < 0 || y > 49) return null;
       return new gw.RoomPosition(x, y, name);
     };
-    room.serializePath = () => '';
-    room.deserializePath = () => [];
     // 官方 rooms.js:551-571：memory 为 getter/setter（gw.memoryFor 官方同形——
     // 含 'undefined' 病态检查与非对象分支），tooangel 等 bot 直接对 room.memory 赋值
     __Object.defineProperty(room, 'memory', {

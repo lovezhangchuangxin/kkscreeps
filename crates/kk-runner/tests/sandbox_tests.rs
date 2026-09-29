@@ -72,6 +72,7 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     roomposition_official_semantics()?;
     roomposition_packedpos_forms()?;
     roomlook_family_forms()?;
+    roomfind_exits_and_path_codec_forms()?;
     terrain_look_and_console_semantics()?;
     writeback_watchdog_and_contract()?;
     stub_value_shapes()?;
@@ -767,6 +768,157 @@ fn roomlook_family_forms() -> anyhow::Result<()> {
     assert_eq!(
         v["value"], r#"[1,"looker","neighbor"]"#,
         "RoomPosition.lookFor 委托真化"
+    );
+
+    Ok(())
+}
+
+/// A5-core 片 3b：find 出口臂（rooms.js:592-644——地形 wall 位计算）+
+/// serializePath/deserializePath Room 静态化（:528-534 + utils.js:555-609）。
+fn roomfind_exits_and_path_codec_forms() -> anyhow::Result<()> {
+    let mut sb = Sandbox::new(SandboxConfig::default())?;
+    let mut table = ModuleTable::new();
+    table.insert_js("main", "module.exports.loop = function () {};");
+    sb.set_modules(table)?;
+    // 地形：四角 wall + top 边 (10,0) 墙 + left 边 (0,10) 墙，其余 plain——
+    // 覆盖「角格恒墙、边中段可走」的出口计算面
+    let mut terrain = vec![0u32; 2500];
+    terrain[0] = 1; // (0,0) wall
+    terrain[49] = 1; // (49,0) wall
+    terrain[2450] = 1; // (0,49) wall
+    terrain[2499] = 1; // (49,49) wall
+    terrain[10] = 1; // (10,0) wall——top 边中段墙
+    terrain[10 * 50] = 1; // (0,10) wall——left 边中段墙
+    let w = serde_json::json!({
+        "time": 1,
+        "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+        "user": "p1",
+        "rooms": { "W1N1": { "name": "W1N1", "terrain": terrain } },
+        "objects": [
+            { "id": "c1", "type": "creep", "room": "W1N1", "x": 25, "y": 25, "name": "w1",
+              "owner": "p1", "body": ["move", "work"], "store": { "energy": 50 } },
+        ]
+    });
+    tick(&mut sb, &w)?;
+
+    // 四向臂：位置实例/房名/坐标形态——top 边 = y0 且跳过 (0,0)/(49,0)/(10,0) 三墙
+    let v = sb.run_expr(
+        r#"(() => {
+            const top = Game.rooms['W1N1'].find(FIND_EXIT_TOP);
+            return JSON.stringify([
+                top.length,
+                top.every(p => p instanceof RoomPosition && p.roomName === 'W1N1' && p.y === 0),
+                top.some(p => p.x === 10),
+                top[0].x, top[1].x,
+            ]);
+        })()"#,
+    )?;
+    assert_eq!(
+        v["value"], r#"[47,true,false,1,2]"#,
+        "FIND_EXIT_TOP 墙位过滤与形态"
+    );
+    let v = sb.run_expr(
+        r#"(() => {
+            const left = Game.rooms['W1N1'].find(FIND_EXIT_LEFT);
+            return JSON.stringify([
+                left.length,
+                left.every(p => p.x === 0),
+                left.some(p => p.y === 10),
+            ]);
+        })()"#,
+    )?;
+    assert_eq!(v["value"], r#"[47,true,false]"#, "FIND_EXIT_LEFT 同构");
+    // right/bottom 边各含两角墙（角墙属其所贴的每条边——四角各计入两边）
+    let v = sb.run_expr(
+        r#"(() => {
+            const right = Game.rooms['W1N1'].find(FIND_EXIT_RIGHT);
+            const bottom = Game.rooms['W1N1'].find(FIND_EXIT_BOTTOM);
+            return JSON.stringify([right.length, bottom.length,
+                right.every(p => p.x === 49), bottom.every(p => p.y === 49)]);
+        })()"#,
+    )?;
+    assert_eq!(
+        v["value"], r#"[48,48,true,true]"#,
+        "right/bottom 各含两角墙"
+    );
+    // FIND_EXIT = 四向并集（官方 concat 序 TOP/BOTTOM/RIGHT/LEFT），无重复
+    let v = sb.run_expr(
+        r#"(() => {
+            const all = Game.rooms['W1N1'].find(FIND_EXIT);
+            const keys = all.map(p => p.x + ',' + p.y);
+            return JSON.stringify([all.length, new Set(keys).size,
+                all.every(p => p.x === 0 || p.x === 49 || p.y === 0 || p.y === 49)]);
+        })()"#,
+    )?;
+    assert_eq!(
+        v["value"], r#"[190,190,true]"#,
+        "FIND_EXIT 并集 47+48+48+47（角墙只在其各自边排除）"
+    );
+    // opts.filter 应用（官方出口臂同样过 filter 尾）
+    let v =
+        sb.run_expr("Game.rooms['W1N1'].find(FIND_EXIT_TOP, { filter: (p) => p.x < 5 }).length")?;
+    assert_eq!(
+        v["value"], 4,
+        "出口臂 opts.filter（x<5 恰 1..4 四格——0 是墙）"
+    );
+
+    // serializePath/deserializePath：Room 静态（非实例方法）+ 往返
+    let v = sb.run_expr(
+        r#"(() => {
+            const path = Room.deserializePath('10253347');
+            const round = Room.serializePath(path);
+            return JSON.stringify([
+                typeof Room.serializePath, typeof Room.deserializePath,
+                typeof Game.rooms['W1N1'].serializePath,
+                JSON.stringify(path),
+                round,
+            ]);
+        })()"#,
+    )?;
+    assert_eq!(
+        v["value"],
+        r#"["function","function","undefined","[{\"x\":10,\"y\":25,\"dx\":1,\"dy\":0,\"direction\":3},{\"x\":11,\"y\":25,\"dx\":1,\"dy\":0,\"direction\":3},{\"x\":12,\"y\":26,\"dx\":1,\"dy\":1,\"direction\":4},{\"x\":11,\"y\":26,\"dx\":-1,\"dy\":0,\"direction\":7}]","10253347"]"#,
+        "路径编解码往返 + 静态形态（实例无此方法）"
+    );
+    // serializePath 官方校验文案
+    let v = sb.run_expr(
+        r#"(() => { try { Room.serializePath('not-array'); return 'no'; } catch (e) { return e.message; } })()"#,
+    )?;
+    assert_eq!(
+        v["value"], "path is not an array",
+        "serializePath 非数组文案"
+    );
+    let v = sb.run_expr("Room.serializePath([])")?;
+    assert_eq!(v["value"], "", "空路径 ''");
+
+    // findCache 官方怪癖（rooms.js:585-598/:641-654，评审 P2/P3 清偿后锁定）：
+    // 新 tick 隔离缓存——① 同 tick 重复调用返回同一缓存数组引用；② FIND_EXIT
+    // 首调携带 filter 时烘焙进缓存，后继无 filter 调用返回陈旧滤过集
+    let w2 = serde_json::json!({
+        "time": 2,
+        "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+        "user": "p1",
+        "rooms": { "W1N1": { "name": "W1N1", "terrain": terrain } },
+        "objects": [
+            { "id": "c1", "type": "creep", "room": "W1N1", "x": 25, "y": 25, "name": "w1",
+              "owner": "p1", "body": ["move", "work"], "store": { "energy": 50 } },
+        ]
+    });
+    tick(&mut sb, &w2)?;
+    let v = sb.run_expr(
+        r#"(() => {
+            const room = Game.rooms['W1N1'];
+            const a = room.find(FIND_EXIT_TOP);
+            const b = room.find(FIND_EXIT_TOP);
+            const filtered = room.find(FIND_EXIT, { filter: (p) => p.y === 0 });
+            const after = room.find(FIND_EXIT);
+            const refiltered = room.find(FIND_EXIT, { filter: (p) => p.x === 1 });
+            return JSON.stringify([a === b, a[0] === b[0], filtered.length, after.length, refiltered.length]);
+        })()"#,
+    )?;
+    assert_eq!(
+        v["value"], r#"[false,true,47,47,1]"#,
+        "findCache 官方形态：数组每次新拷（a!==b）、元素同实例（a[0]===b[0]）、首调 filter 烘焙进缓存（after=47 陈旧集）、命中再滤取交集（x===1 恰 1 条）"
     );
 
     Ok(())

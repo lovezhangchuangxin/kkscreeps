@@ -2,7 +2,9 @@
 //!
 //! 字段名与 prelude wrapObject 的消费面对齐；这也是 embed findInRoom 的
 //! Rust 侧查询面（matches_find 与 prelude room.find 是同一 FIND 语义的两层，
-//! 行为必须一致——M0 第七轮"层间一致"教训）。
+//! 行为必须一致——M0 第七轮"层间一致"教训）。出口常量（1/3/5/7/10）是
+//! JS 层独有面：出口是 terrain 派生位置非对象，embed 契约快照（带 id 形状）
+//! 装不下，matches_find 对其返空是既定口径（A5 片 3b 评审 P3 登记）。
 
 use kk_core::constants as c;
 use kk_schema::room::RoomObject;

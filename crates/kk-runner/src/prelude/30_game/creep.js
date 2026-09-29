@@ -68,13 +68,14 @@
     }
     const result = [];
     if (!path.length) return result;
-    let x = parseInt(path.substring(0, 2), 10);
-    let y = parseInt(path.substring(2, 4), 10);
+    // 官方 parseInt 无进制参（'0x' 头病态串 NaN 抛错同官方，片 3b 评审 P3 清偿）
+    let x = parseInt(path.substring(0, 2));
+    let y = parseInt(path.substring(2, 4));
     if (Number.isNaN(x) || Number.isNaN(y)) {
       throw new Error('`path` is not a valid serialized path string');
     }
     for (let i = 4; i < path.length; i++) {
-      const direction = parseInt(path.charAt(i), 10);
+      const direction = parseInt(path.charAt(i));
       const offs = OFFSETS_BY_DIRECTION[direction];
       if (!offs) {
         throw new Error('`path` is not a valid serialized path string');
@@ -86,6 +87,8 @@
     return result;
   }
   gw.deserializePath = deserializePath;
+  // 官方 rooms.js:532-534：deserializePath 是 Room 静态（实现在本段故在此挂）
+  globalThis.Room.deserializePath = deserializePath;
 
   // API 实现用的预置常量（官方 game 层的 C 来自 driver.constants 注入对象，
   // 玩家覆盖全局常量不影响 API 判定——game.js 头部 C = driver.constants 同款）
