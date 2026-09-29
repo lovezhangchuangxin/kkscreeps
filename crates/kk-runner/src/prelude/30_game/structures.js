@@ -11,7 +11,7 @@
  *     setDirections/cancel；
  *   · spawnCreep（:1063-1218 全预检序 + 同 tick 幽灵壳）/renewCreep
  *     （:1237-1267）/recycleCreep（:1269-1290）。
- * destroy/setActive/notifyWhenAttacked 保持桩（A4-iii/后续批次换真）。
+ * destroy（A5-lite）/notifyWhenAttacked（A4-iv）已换真；setActive 保持桩。
  *
  * A3b 纪律：字段表挂各类原型（官方 defineGameObjectProperties 挂 prototype
  * 的同构）；getter 经 gw.rawData(this.id) 回查当前 tick 投影；方法体官方
@@ -620,17 +620,6 @@
     return C.OK;
   };
 
-  /** StructureSpawn.notifyWhenAttacked 覆盖版（官方 structures.js:1220-1233）：
-   *  与基类版的差异——无 `!this.room` 门、无 controller 归属分支（spawn 恒有
-   *  主，my 判定即足）。 */
-  globalThis.StructureSpawn.prototype.notifyWhenAttacked = function notifyWhenAttacked(enabled) {
-    if (!this.my) return C.ERR_NOT_OWNER;
-    if (typeof enabled !== 'boolean') return C.ERR_INVALID_ARGS;
-    if (enabled !== gw.rawData(this.id).notifyWhenAttacked) {
-      gw.intents.set(this.id, 'notifyWhenAttacked', { enabled });
-    }
-    return C.OK;
-  };
 
   // ---------------------------------------------------------------- 原型方法（桩）
   const STRUCTURE_METHODS = ['setActive']; // destroy/notifyWhenAttacked 已换真（上方——
@@ -697,26 +686,6 @@
     return C.OK;
   };
 
-  /** Structure.notifyWhenAttacked 基类版（官方 structures.js:89-101）：
-   *  无房 INVALID_TARGET；非己结构（my === false——undefined 中性结构放行）
-   *  或房 controller 归他人 → NOT_OWNER；非布尔参数 INVALID_ARGS；与当前
-   *  存值不同才记 intent（官方 `!=`——undefined 与任何布尔不等，首调恒记）。
-   *  挂 Structure 基类原型（官方同位）：controller 经 OwnedStructure 继承链
-   *  同样持有本方法（官方语义即如此——其 intent 在 processor 层因 controller
-   *  不在 CONSTRUCTION_COST 而空转）；source/mineral 官方不 extends Structure，
-   *  我方原型链同构（RoomObject 直挂）不受影响。 */
-  globalThis.Structure.prototype.notifyWhenAttacked = function notifyWhenAttacked(enabled) {
-    if (!this.room) return C.ERR_INVALID_TARGET;
-    const ctl = this.room.controller;
-    if (this.my === false || (ctl && ctl.owner && !ctl.my)) {
-      return C.ERR_NOT_OWNER;
-    }
-    if (typeof enabled !== 'boolean') return C.ERR_INVALID_ARGS;
-    if (enabled !== gw.rawData(this.id).notifyWhenAttacked) {
-      gw.intents.set(this.id, 'notifyWhenAttacked', { enabled });
-    }
-    return C.OK;
-  };
 
   /** StructureSpawn.notifyWhenAttacked 覆盖版（官方 structures.js:1220-1233）：
    *  与基类版的差异——无 `!this.room` 门、无 controller 归属分支（spawn 恒有
@@ -730,9 +699,9 @@
     return C.OK;
   };
 
-  // 其余结构方法（destroy/setActive）保持桩：按类原型挂载（else 族的类原型
-  // + 未知类型实例兜底——notifyWhenAttacked 已在 Structure 基类换真，类原型
-  // 不再挂同名桩防遮蔽）
+  // 其余结构方法只剩 setActive 保持桩（destroy/notifyWhenAttacked 已在
+  // Structure 基类换真——else 族/未知类型经原型链继承，不再挂同名实例桩
+  // 防遮蔽，坑⑥教训）
 
   // ---------------------------------------------------------------- 装配
   // spawn 装配：字段/方法全在原型，own 面只剩 id/pos/room + 静态标记
@@ -790,17 +759,26 @@
   // Creep.prototype 原型链（官方 new Creep + defineProperties 覆盖同构）
   function tombstoneCreepProxy(o) {
     const proxy = {};
+    const carryCap = (o.creepBody || []).reduce((n, t) => n + (t === 'carry' ? C.CARRY_CAPACITY : 0), 0);
     const defs = {
       id: { enumerable: true, get: () => o.creepId },
       name: { enumerable: true, get: () => o.creepName },
+      // 官方 RoomObject.call(this, x, y, room) 挂 pos/room（tombstones.js:47-48，
+      // 评审 2 P2-1 清偿——bot 生态读 dead creep 位置）
+      pos: { enumerable: true, get: () => new gw.RoomPosition(o.x, o.y, o.room) },
+      room: { enumerable: true, get: () => (gw.currentGame() ? gw.currentGame().rooms[o.room] : undefined) },
       spawning: { enumerable: true, get: () => false },
       my: { enumerable: true, get: () => o.user === gw.viewerName },
       body: { enumerable: true, get: () => (o.creepBody || []).map((t) => ({ type: t, hits: 0 })) },
       owner: { enumerable: true, get: () => (o.user === undefined || o.user === null ? undefined : { username: o.user }) },
       ticksToLive: { enumerable: true, get: () => o.creepTicksToLive },
-      carryCapacity: { enumerable: true, get: () => (o.creepBody || []).reduce((n, t) => n + (t === 'carry' ? C.CARRY_CAPACITY : 0), 0) },
-      carry: { enumerable: true, get: () => gw.makeStore(o) },
-      store: { enumerable: true, get: () => gw.makeStore(o) },
+      carryCapacity: { enumerable: true, get: () => carryCap },
+      // 官方上游 quirk（tombstones.js:63-65 的 carry/store 走 _storeGetter 无参
+      // 回退 `{store:{}, storeCapacity: this.carryCapacity}` → 恒空 Store 且容量
+      // =carryCapacity——死 creep 的 store 不透传（墓碑的 store 才是资源面）。
+      // 评审 1 P3-B：原实现给真库存=与官方双反，quirk 原样对齐）
+      carry: { enumerable: true, get: () => gw.makeStore({ store: {}, storeCapacity: carryCap }) },
+      store: { enumerable: true, get: () => gw.makeStore({ store: {}, storeCapacity: carryCap }) },
       fatigue: { enumerable: true, get: () => 0 },
       hits: { enumerable: true, get: () => 0 },
       hitsMax: { enumerable: true, get: () => (o.creepBody || []).length * 100 },
@@ -815,8 +793,8 @@
     deathTime: (o) => o.deathTime,
     ticksToDecay: (o) => o.ticksToDecay, // 投影已折叠（官方 getter 是 decayTime−time 的等价值）
     store: (o) => gw.makeStore(o),
-    carry: (o) => gw.makeStore(o),
-    carryCapacity: (o) => (o.creepBody || []).reduce((n, t) => n + (t === 'carry' ? C.CARRY_CAPACITY : 0), 0),
+    // 官方 Tombstone 原型无 carry/carryCapacity（tombstones.js 字段表）——
+    // 评审 1 P3-A 清偿：它们只在 creep 代理上；多挂会让枚举面多出两键
     creep: (o) => (o.creepId ? tombstoneCreepProxy(o) : undefined),
   });
 

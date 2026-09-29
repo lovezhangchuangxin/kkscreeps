@@ -82,6 +82,7 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     viewer_meta_semantics_impl()?;
     claim_gate_gcl_behavior_impl()?;
     redirect_upgrade_positive_impl()?;
+    destroy_room_intent_channel()?;
     // LIFO 零违规断言在**全部**场景之后——中段断言会让其后场景的违规漏网
     assert_eq!(kk_runner::lifo_violations(), 0, "全流程 LIFO 纪律零违规");
     Ok(())
@@ -2590,7 +2591,8 @@ fn move_misc_family_prelude_forms_impl() -> anyhow::Result<()> {
 /// A5-lite（B3 接线批）：Structure.destroy 的 room intent 通道全链——桩循环
 /// 曾遮蔽基类真方法（坑⑥复发，症状假 OK 零 intent）；通道打通后 intentsList
 /// 形态与官方 room 级数组通道一致（from_json "room" 分支同形），计费含 room 级。
-#[test]
+/// 评审 1 P2-I：**不得独立 #[test]**——sandbox 单测试不变量（LIFO 全局栈在
+/// 并行测试线程下假记违规，实测 5 跑 2 挂）；并入 m0_sandbox_suite 顺序调用。
 fn destroy_room_intent_channel() -> anyhow::Result<()> {
     let mut sb = Sandbox::new(SandboxConfig::default())?;
     let w = json!({
