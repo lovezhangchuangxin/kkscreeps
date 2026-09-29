@@ -630,9 +630,10 @@
   for (const m of STRUCTURE_METHODS) {
     globalThis.StructureSpawn.prototype[m] = gw.mkStubMethod('spawn.' + m);
   }
-  // 通用结构方法：不挂 Structure 基类原型（controller/source/mineral 现状无
-  // 这些方法，挂基类会让它们经原型链继承——语义变化）；else 族按类原型/实例
-  // 兜底挂载
+  // 通用结构方法（setActive）不挂 Structure 基类原型——controller 经
+  // OwnedStructure→Structure 链会继承；source/mineral 是 RoomObject 直挂
+  //（CLASS_PARENTS，官方同拓扑）不在 Structure 链上、不受影响；else 族按类
+  // 原型/实例兜底挂载
 
   // ---------------------------------------------------------------- controller 真方法（A4-iii）
   /** StructureController.unclaim：官方 structures.js:200-208——!my 门后记
@@ -760,12 +761,15 @@
   function tombstoneCreepProxy(o) {
     const proxy = {};
     const carryCap = (o.creepBody || []).reduce((n, t) => n + (t === 'carry' ? C.CARRY_CAPACITY : 0), 0);
+    // pos 构造期定格为闭包引用（官方 RoomObject.call 的 own 数据属性同构——
+    // 身份比较稳定；清偿复审 P3-R1）
+    const posInstance = new gw.RoomPosition(o.x, o.y, o.room);
     const defs = {
       id: { enumerable: true, get: () => o.creepId },
       name: { enumerable: true, get: () => o.creepName },
       // 官方 RoomObject.call(this, x, y, room) 挂 pos/room（tombstones.js:47-48，
       // 评审 2 P2-1 清偿——bot 生态读 dead creep 位置）
-      pos: { enumerable: true, get: () => new gw.RoomPosition(o.x, o.y, o.room) },
+      pos: { enumerable: true, get: () => posInstance },
       room: { enumerable: true, get: () => (gw.currentGame() ? gw.currentGame().rooms[o.room] : undefined) },
       spawning: { enumerable: true, get: () => false },
       my: { enumerable: true, get: () => o.user === gw.viewerName },
