@@ -1495,8 +1495,7 @@ fn intent_sign_controller(w: &mut Working, id: ObjId, data: &IntentData) {
     };
     // :23-28：`intent.sign ? {user, text: intent.sign, time: gameTime,
     // datetime: Date.now()} : null`——userString 清洗下缺省与空串同为 ""
-    // （falsy），都落清除。官方第四字段 datetime 为墙钟，确定性引擎不落盘
-    //（schema Sign 文档；投影层合成——轨 A 接线）
+    //（falsy），都落清除
     let sign = data
         .sign
         .as_ref()
@@ -1506,13 +1505,10 @@ fn intent_sign_controller(w: &mut Working, id: ObjId, data: &IntentData) {
             text: text.clone(),
             time: w.time,
             // 官方 signController.js:23：datetime 落一次 Date.now() 毫秒墙钟
-            //（确定性引擎的墙钟面与官方同源——replay 不确定性官方同样存在）
-            datetime: Some(
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_millis() as u64)
-                    .unwrap_or(0),
-            ),
+            //（玩家可见的墙钟语义不变）。确定性重放经 TickInput 注入：首跑
+            // 取实际值、重放用记录值（ADR-013 决策 5）——官方自身无此通道，
+            // replay 不确定性是官方既有行为
+            datetime: Some(w.now_ms),
         });
     if let Some(RoomObject::Controller(t)) = w.room.objects.get_mut(&target_id) {
         t.sign = sign;

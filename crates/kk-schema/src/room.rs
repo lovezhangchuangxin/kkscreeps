@@ -114,11 +114,10 @@ crate::kk_schema! {
 
 crate::kk_schema! {
     /// controller 签名（官方 DB 形态 `{user, text, time, datetime}`：
-    /// signController.js:23-28）。第四字段 `datetime` 为墙钟 Date.now()——
-    /// 确定性引擎不落盘（投影层按玩家可见形状合成，轨 A 接线；灰区登记）。
-    /// Sign.datetime（官方第四字段——signController.js:23 的 Date.now() 毫秒
-    /// 墙钟，签名结算时落一次；GPT 复审灰区纠错清偿：getter 从持久值构造，
-    /// 不再每次读取合成当前墙钟漂移）。
+    /// signController.js:23-28）。第四字段 `datetime` 为墙钟（官方
+    /// Date.now() 毫秒，签名结算时落一次；GPT 复审灰区纠错清偿：getter 从
+    /// 持久值构造，不再每次读取合成当前墙钟漂移）。确定性重放经 TickInput
+    /// 注入墙钟（ADR-013：首跑取实际值、重放用记录值）。
     pub Sign {
         (pub user: str)
         (pub text: str)

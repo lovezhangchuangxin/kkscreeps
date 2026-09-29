@@ -258,11 +258,27 @@ impl Fixture {
     }
 
     fn settle(&mut self, batch: IntentBatch) -> Vec<Value> {
+        // 测试工作台默认注入固定墙钟：结算可复现（个别用例显式改 now_ms 锁
+        // 墙钟语义——重放一致性测试在同输入下逐字节一致）
+        self.settle_with_input(
+            batch,
+            kk_engine::settle::TickInput {
+                now_ms: 1_700_000_000_000,
+            },
+        )
+    }
+
+    fn settle_with_input(
+        &mut self,
+        batch: IntentBatch,
+        input: kk_engine::settle::TickInput,
+    ) -> Vec<Value> {
         let mut next = self.world.next_obj_id();
         let mut room = self.world.rooms.get_mut("W1N1").unwrap().clone();
         let events = settle_room(
             &mut room,
             self.world.time,
+            input.now_ms,
             &mut next,
             &mut self.players,
             &batch,
@@ -4857,7 +4873,9 @@ fn sign_controller_sets_and_clears() {
     d.sign = Some("reserved sector".into());
     b.add_object_intent("p1", c, Action::SignController, d);
     f.settle(b);
-    // datetime 是结算时墙钟（不可锁值）——比较业务三元组
+    // datetime 经 fixture 固定墙钟已可锁值（同 tick 多签共享同一 now_ms——
+    // 官方逐签 Date.now() 的 ms 粒度下几乎恒同值，灰区登记）；此处比较业务
+    // 三元组与 datetime 齐备性
     assert_eq!(
         ctl_of(&f)
             .sign
@@ -4895,6 +4913,122 @@ fn sign_controller_sets_and_clears() {
     b4.add_object_intent("p1", far, Action::SignController, d4);
     f.settle(b4);
     assert_eq!(ctl_of(&f).sign, None, "非邻接拒");
+}
+
+/// ADR-013 决策 5 的重放一致性回归：同初始世界 + 同 intents + 同 TickInput
+/// 两次结算产物逐字节一致（含 signController 的 datetime 落盘——原
+/// `SystemTime::now` 内联读取是结算链的唯一非确定性源，两次执行必然不同）；
+/// 不同 TickInput 只改 datetime（玩家可见的墙钟语义不变）。
+#[test]
+fn tick_input_replay_consistency() {
+    fn run_once(now_ms: u64) -> (String, (String, String, u64, Option<u64>)) {
+        let mut f = Fixture::new(1, terrain_with(&[]));
+        let ctl = f.controller(2, Some("p2"));
+        let c = f.creep("w1", "p1", 5, 6, &[BodyKind::Move], 0);
+        let mut b = IntentBatch::default();
+        let mut d = IntentData::target(ctl);
+        d.sign = Some("replayable".into());
+        b.add_object_intent("p1", c, Action::SignController, d);
+        f.settle_with_input(b, kk_engine::settle::TickInput { now_ms });
+        let s = ctl_of(&f).sign.as_ref().unwrap();
+        let sign = (s.user.clone(), s.text.clone(), s.time, s.datetime);
+        let world = serde_json::to_string(&f.world.world_json_for_viewer("p1", 0)).unwrap();
+        (world, sign)
+    }
+    let (world_a, sign_a) = run_once(1_750_000_000_000);
+    let (world_b, sign_b) = run_once(1_750_000_000_000);
+    assert_eq!(world_a, world_b, "同输入两次结算的世界投影逐字节一致");
+    assert_eq!(sign_a, sign_b, "sign 落盘逐字节一致");
+    assert_eq!(sign_a.3, Some(1_750_000_000_000), "datetime = 注入墙钟");
+    let (world_c, sign_c) = run_once(1_750_000_123_456);
+    assert_eq!(
+        sign_c.3,
+        Some(1_750_000_123_456),
+        "墙钟输入可变（首跑实际值形态）"
+    );
+    assert_ne!(world_a, world_c, "datetime 落盘进世界投影");
+}
+
+/// [`kk_engine::settle::Engine::tick_with_intents_with_input`] 的引擎级重放
+/// （B0-2 对抗评审 P2-2 清偿）：上面 Fixture 版直调 settle_room 绕过了
+/// Engine 层的房间循环/共享 next_id/intent 按房过滤——本测试经引擎入口
+/// 双房各签一个 controller，同 TickInput 双跑的世界投影逐字节一致。
+#[test]
+fn tick_input_replay_consistency_engine_level() {
+    use kk_engine::settle::TickInput;
+    fn run_once(now_ms: u64) -> String {
+        let mut world = World::new(7);
+        world.register_room("W1N1", kk_core::Terrain::plains());
+        world.register_room("E2N2", kk_core::Terrain::plains());
+        let mut batch = IntentBatch::default();
+        for name in ["W1N1", "E2N2"] {
+            let ctl = world
+                .insert(
+                    name,
+                    RoomObject::Controller(kk_schema::room::ControllerObj {
+                        id: 0,
+                        x: 5,
+                        y: 5,
+                        level: 2,
+                        safe_mode: 0,
+                        safe_mode_available: 0,
+                        progress: 0,
+                        downgrade_time: None,
+                        owner: Some("p2".into()),
+                        owner_cleared: false,
+                        is_power_enabled: false,
+                        reservation: None,
+                        sign: None,
+                        upgrade_blocked: None,
+                        safe_mode_cooldown: None,
+                    }),
+                )
+                .unwrap();
+            let creep_id = world
+                .insert(
+                    name,
+                    RoomObject::Creep(CreepObj {
+                        id: 0,
+                        x: 5,
+                        y: 6,
+                        fatigue: 0,
+                        age_time: u64::MAX / 2,
+                        hits: 100,
+                        spawning: false,
+                        action_log: 0,
+                        name: format!("w-{name}"),
+                        owner: "p1".into(),
+                        body: body(&[BodyKind::Move]),
+                        store: kk_schema::room::Store {
+                            energy: 0,
+                            ghodium: 0,
+                        },
+                        store_extra: Vec::new(),
+                    }),
+                )
+                .unwrap();
+            let mut d = IntentData::target(ctl);
+            d.sign = Some(format!("replay {name}"));
+            batch.add_object_intent("p1", creep_id, Action::SignController, d);
+        }
+        let mut engine = kk_engine::settle::Engine::new(world);
+        engine.players.insert(
+            "p1".to_string(),
+            PlayerState {
+                gcl: 1,
+                rooms: BTreeSet::new(),
+            },
+        );
+        engine
+            .tick_with_intents_with_input(batch, TickInput { now_ms })
+            .unwrap();
+        serde_json::to_string(&engine.world.world_json_for_viewer("p1", 0)).unwrap()
+    }
+    let a = run_once(1_750_000_000_000);
+    let b = run_once(1_750_000_000_000);
+    assert_eq!(a, b, "引擎级同输入双跑世界投影逐字节一致（双房+签名）");
+    let c = run_once(1_750_000_999_999);
+    assert_ne!(a, c, "不同墙钟输入产生不同投影");
 }
 
 #[test]

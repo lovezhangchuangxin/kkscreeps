@@ -365,8 +365,9 @@ pub(crate) fn object_json(
                 // B2 schema 字段的投影清偿（A4-iii）：绝对 tick / {user,endTime}
                 // 官方 DB 原始形态——prelude getter（structures.js 对照
                 // structures.js:143-169）与快照面（snapshot.rs）各自换算，
-                // None → null（downgradeTime 同形）。sign 无 datetime 键
-                //（墙钟不落盘，灰区表既有登记）
+                // None → null（downgradeTime 同形）。sign 的 datetime 键
+                // Some 时带（结算落的墙钟毫秒，经 TickInput 注入——ADR-013
+                // 决策 5）、None 缺键（见下方 sign 分支）
                 "upgradeBlocked": o.upgrade_blocked,
                 "safeModeCooldown": o.safe_mode_cooldown,
                 "reservation": match &o.reservation {

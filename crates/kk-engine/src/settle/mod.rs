@@ -70,11 +70,37 @@ pub struct PlayerState {
     pub rooms: BTreeSet<String>,
 }
 
+/// 一轮结算的非确定性输入（ADR-013 决策 5）：墙钟等外部输入显式注入——
+/// 首次执行取实际值（[`TickInput::now`]，经 [`Engine::tick_with_intents`]
+/// 的默认路径），重放用记录值（[`Engine::tick_with_intents_with_input`]）。
+/// signController 的 `datetime` 落盘面由此获得重放确定性；玩家可见的墙钟
+/// 语义不变（官方 signController.js:23 落一次 Date.now() 毫秒）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TickInput {
+    /// Unix 毫秒墙钟。
+    pub now_ms: u64,
+}
+
+impl TickInput {
+    /// 首次执行的默认构造：取当前系统墙钟（时钟回拨异常时取 0，与原
+    /// `SystemTime::now` 内联形态同口径）。
+    pub fn now() -> Self {
+        Self {
+            now_ms: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0),
+        }
+    }
+}
+
 /// 结算工作上下文：房间工作副本 + 索引 + per-tick 瞬态。
 pub struct Working<'w> {
     pub room: &'w mut RoomState,
     pub index: RoomIndex,
     pub time: u64,
+    /// 本轮结算的墙钟输入（signController datetime 落盘面；ADR-013）。
+    pub now_ms: u64,
     pub next_id: &'w mut u64,
     pub players: &'w mut BTreeMap<String, PlayerState>,
     pub events: Vec<Value>,
@@ -419,10 +445,12 @@ pub fn energy_resource_name(o: &kk_schema::room::EnergyObj) -> &str {
 
 /// 结算一个房间（processor.js processRoom 的 M1 子集）。
 ///
-/// 工作副本由调用方 clone（失败即回退的载体）；`batch` 只取指向本房间的部分。
+/// 工作副本由调用方 clone（失败即回退的载体）；`batch` 只取指向本房间的部分；
+/// `now_ms` 是本轮结算的墙钟输入（[`TickInput`]）。
 pub fn settle_room(
     room: &mut RoomState,
     time: u64,
+    now_ms: u64,
     next_id: &mut u64,
     players: &mut BTreeMap<String, PlayerState>,
     batch: &IntentBatch,
@@ -432,6 +460,7 @@ pub fn settle_room(
         room,
         index,
         time,
+        now_ms,
         next_id,
         players,
         events: Vec::new(),
@@ -589,7 +618,21 @@ impl Engine {
     /// intentsList 清洗而来；假沙箱 [`Engine::tick`] 与本入口共用同一条
     /// settle_room 链——tick 契约场景 1 的"同一结算入口"）。身份边界由调用方
     /// 保证（EmbedEngine 按注册 handle 逐玩家构造，冒名面结构上不存在）。
+    ///
+    /// 首跑默认路径：墙钟输入取 [`TickInput::now`] 实际值（落盘后即本轮记录值）；
+    /// 重放/一致性测试走 [`Engine::tick_with_intents_with_input`] 注入记录值。
     pub fn tick_with_intents(&mut self, batch: IntentBatch) -> Result<(), SettleError> {
+        self.tick_with_intents_with_input(batch, TickInput::now())
+    }
+
+    /// [`Engine::tick_with_intents`] 的重放形态：非确定性输入（墙钟）由调用方
+    /// 显式注入——同初始世界 + 同 intents + 同 `TickInput` 的两次结算产物
+    /// 逐字节一致（ADR-013 决策 5 的验收面）。
+    pub fn tick_with_intents_with_input(
+        &mut self,
+        batch: IntentBatch,
+        input: TickInput,
+    ) -> Result<(), SettleError> {
         let mut events = Vec::new();
         let mut settled: Vec<(String, RoomState)> = Vec::new();
         let mut next = self
@@ -634,8 +677,14 @@ impl Engine {
                 return Err(SettleError(format!("故障注入：房间 {name} 结算失败")));
             }
             let mut room = self.world.rooms.get(&name).expect("房间名来自键集").clone();
-            let mut room_events =
-                settle_room(&mut room, self.world.time, &mut next, &mut players, &batch)?;
+            let mut room_events = settle_room(
+                &mut room,
+                self.world.time,
+                input.now_ms,
+                &mut next,
+                &mut players,
+                &batch,
+            )?;
             settled.push((name, room));
             events.append(&mut room_events);
         }

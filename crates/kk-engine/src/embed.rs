@@ -238,7 +238,8 @@ impl EmbedEngine {
         let rooms = room_setups(spec)?;
         let handles = player_handles(spec)?;
 
-        // 逆序回收旧沙箱（LIFO），再重置世界
+        // 逆序回收旧沙箱（稳妥起见的 teardown 默认——LIFO 是每线程约束，
+        // shutdown_all 的创建逆序是防御性保守，ADR-013），再重置世界
         if let Some(p) = &mut self.players {
             p.shutdown_all();
         }
@@ -398,6 +399,8 @@ impl EmbedEngine {
     /// （M2A-A2 通道闭合：真实玩家代码 → intents → sanitize → settle_room →
     /// 下一 tick 世界可见）。身份边界：batch 按注册 handle 逐玩家构造，冒名面
     /// 结构上不存在。硬中断/停跑玩家的 intents 为 Null（from_json 收空批）。
+    /// 墙钟输入显式经 [`TickInput::now`]（首跑记录实际值；重放路径由调用方
+    /// 注入记录值——ADR-013 决策 5）。
     fn settle_tick_with_reports<'a, I>(&mut self, reports: I) -> Result<(), crate::SettleError>
     where
         I: IntoIterator<Item = (&'a str, &'a EvalReport)>,
@@ -408,7 +411,8 @@ impl EmbedEngine {
                 batch.extend_from(IntentBatch::from_json(handle, &Value::Object(list.clone())));
             }
         }
-        self.engine.tick_with_intents(batch)
+        self.engine
+            .tick_with_intents_with_input(batch, crate::settle::TickInput::now())
     }
 
     /// 多玩家对同一状态求值后合计推进 1 tick（runPlayers 契约）。
