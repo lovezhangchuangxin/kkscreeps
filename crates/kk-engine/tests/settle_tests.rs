@@ -1890,13 +1890,9 @@ fn destroy_structure_intent_paths() {
         .expect("destroy 产废墟");
     assert_eq!(ruin.structure_type, "extension");
     assert_eq!(ruin.store.energy, 80, "store 承接");
-    assert_eq!(events.len(), 1);
-    assert_eq!(
-        events[0]["event"],
-        kk_core::constants::EVENT_OBJECT_DESTROYED
-    );
-    assert_eq!(events[0]["objectId"], ext.as_str());
-    assert_eq!(events[0]["data"]["type"], "extension");
+    // 官方 destroy-structure.js 无事件（GPT 复审 P1-4 清偿——套件 parity.json
+    // 自认 vanilla 不产、expected 是文档推断；事件只在 _damage/_die 路径）
+    assert_eq!(events.len(), 0, "destroy 不产事件（对齐官方）");
 
     // 门 1：房内有敌方 creep → 拒（destroy-structure.js:18）
     let mut f2 = Fixture::new(2, terrain_with(&[]));

@@ -19,6 +19,7 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     embed_resource_family_impl()?;
     embed_move_misc_family_impl()?;
     embed_mineral_direct_channel_impl()?;
+    embed_gpt_review_clearance_impl()?;
     assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");
     Ok(())
 }
@@ -1173,6 +1174,120 @@ fn embed_mineral_direct_channel_impl() -> anyhow::Result<()> {
         structures,
         vec!["controller".to_string(), "extractor".to_string()],
         "extractor 进 FIND_STRUCTURES（mineral 不进）"
+    );
+    Ok(())
+}
+
+/// GPT 外部复审（74c16d5..d5de6ad）五条 P1 的清偿行为探针：P1-1 可见房/
+/// P1-2 tombstone·ruin 提取/P1-3 冷却预检/P1-5 raw 事件日志不可污染
+/// （P1-4 destroy 无事件由 settle 测试 destroy_structure_intent_paths 锁定）。
+fn embed_gpt_review_clearance_impl() -> anyhow::Result<()> {
+    let mut e = EmbedEngine::new();
+    e.create_shard(&serde_json::json!({
+        "players": ["p1"],
+        "rooms": [{ "name": "W1N1", "rcl": 3, "owner": "p1", "controller": true }],
+    }))?;
+    // P1-1：无 controller 房只放己方墓碑——官方 data.js:103-116 按用户对象
+    // 归集（只排除 flag/工地），房必须在 Game.rooms
+    e.create_shard(&serde_json::json!({
+        "players": ["p1"],
+        "rooms": [
+            { "name": "W1N1", "rcl": 3, "owner": "p1" },
+            { "name": "W2N2", "controller": false },
+        ],
+    }))?;
+    let tomb = e.place_object(
+        "W2N2",
+        "tombstone",
+        &serde_json::json!({
+            "pos": [10, 10], "store": { "energy": 40 }, "ticksToDecay": 50,
+            "creepName": "dead", "creepBody": ["carry"], "user": "p1",
+        }),
+    )?;
+    let run = e.run_player(
+        "p1",
+        "Game.rooms['W2N2'] ? Game.rooms['W2N2'].name : 'MISSING'",
+    )?;
+    assert_eq!(
+        run.expr["value"], "W2N2",
+        "P1-1：仅剩己方墓碑的房必须在 Game.rooms"
+    );
+
+    // P1-2：withdraw 从墓碑提取（官方 creeps.js:507-515 接受 Tombstone 目标）
+    let c = e.place_object(
+        "W2N2",
+        "creep",
+        &serde_json::json!({
+            "pos": [10, 11], "owner": "p1", "body": ["carry"], "name": "w1",
+            "store": { "energy": 0 },
+        }),
+    )?;
+    let run = e.run_player(
+        "p1",
+        &format!(
+            "Game.getObjectById({:?}).withdraw(Game.getObjectById({:?}), RESOURCE_ENERGY, 10)",
+            c, tomb
+        ),
+    )?;
+    assert_eq!(run.expr["value"], 0, "P1-2：withdraw 墓碑返回 OK");
+    let run = e.run_player("p1", &format!("Game.getObjectById({:?}).store.energy", c))?;
+    assert_eq!(run.expr["value"], 10, "P1-2：提取 10 落袋（原静默丢弃）");
+    let snap = e.get_object(&tomb).unwrap();
+    assert_eq!(snap["store"]["energy"], 30, "P1-2：墓碑扣 10");
+
+    // P1-3：extractor cooldown 预检（官方 structures.js:268 getter + creeps.js:383
+    // 非 0 冷却 → ERR_TIRED=-6）
+    e.create_shard(&serde_json::json!({
+        "players": ["p1"],
+        "rooms": [{ "name": "W3N3", "rcl": 6, "owner": "p1" }],
+    }))?;
+    let m = e.place_object(
+        "W3N3",
+        "mineral",
+        &serde_json::json!({
+            "pos": [10, 10], "mineralType": "U", "density": 3,
+        }),
+    )?;
+    e.place_object(
+        "W3N3",
+        "extractor",
+        &serde_json::json!({
+            "pos": [10, 10], "owner": "p1", "cooldown": 5,
+        }),
+    )?;
+    let c3 = e.place_object(
+        "W3N3",
+        "creep",
+        &serde_json::json!({
+            "pos": [10, 11], "owner": "p1", "body": ["work", "carry"], "name": "m1",
+        }),
+    )?;
+    let run = e.run_player(
+        "p1",
+        &format!(
+            "Game.getObjectById({:?}).harvest(Game.getObjectById({:?}))",
+            c3, m
+        ),
+    )?;
+    assert_eq!(
+        run.expr["value"], -11,
+        "P1-3：冷却期 harvest → ERR_TIRED=-11（原假 OK）"
+    );
+    let snap = e.get_object(&m).unwrap();
+    assert_eq!(snap["mineralAmount"], 70_000, "P1-3：矿量不动");
+
+    // P1-5：修改非 raw 解析数组不得污染 raw 字符串（官方 rooms.js:573-583
+    // raw 返回持久化原始串）
+    let run = e.run_player(
+        "p1",
+        "(()=>{ const log = Game.rooms['W3N3'].getEventLog(); \
+         if (log.length > 0) { log[0].data = { hacked: true }; } \
+         return Game.rooms['W3N3'].getEventLog(true); })()",
+    )?;
+    let raw = run.expr["value"].as_str().unwrap_or("");
+    assert!(
+        !raw.contains("hacked"),
+        "P1-5：raw 不得被解析数组改写污染: {raw}"
     );
     Ok(())
 }

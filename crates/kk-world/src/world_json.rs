@@ -102,6 +102,11 @@ impl World {
                 ));
             }
         }
+        // 可见房显式传递（官方 data.js:103-116 服务端归集 runtimeData.rooms
+        // ——JS 不从对象字段重算；GPT 复审 P1-1 清偿：原 prelude 用 o.owner
+        // 推断，tombstone/ruin 投影键是 user → 仅剩己方墓碑/废墟时房从
+        // Game.rooms 消失）。BTreeSet 迭代=确定性序
+        let visible_rooms: Vec<&String> = visible.iter().copied().collect();
         json!({
             "time": self.time,
             // cpu 为占位基准值（默认配置下与预算真值相等）：真值由沙箱注入点
@@ -110,6 +115,7 @@ impl World {
             "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
             "user": user,
             "gcl": viewer.map(|(_, g)| g).unwrap_or(0),
+            "visibleRooms": visible_rooms,
             "rooms": Value::Object(rooms),
             "objects": objects,
         })

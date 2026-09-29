@@ -794,13 +794,23 @@ fn intent_withdraw(w: &mut Working, id: ObjId, data: &IntentData) {
     if amount < 0 {
         return;
     }
-    // 可提取对象：有 store 的结构（spawn/extension/storage——B3 范围）；source
-    // 只能 harvest、掉落资源只能 pickup（官方引擎层无 source/energy 的
-    // withdraw 路径）。storage 的命名矿物槽一并可提（官方开放 store）
+    // 可提取对象：有 store 的结构（spawn/extension/storage）+ Tombstone/Ruin
+    //（官方预检 creeps.js:507-515 显式接受两类目标，withdraw.js:21 按目标
+    // store 扣账——GPT 复审 P1-2 清偿：原仅三结构，tombstone/ruin 提取
+    // API 返回 OK 结算静默丢弃）；source 只能 harvest、掉落资源只能 pickup
+    //（官方引擎层无 source/energy 的 withdraw 路径）。命名矿物槽一并可提
     let (t_pos, t_amount) = match w.room.objects.get(&target_id) {
         Some(RoomObject::Spawn(t)) => ((t.x, t.y), store_slot(&t.store, resource)),
         Some(RoomObject::Extension(t)) => ((t.x, t.y), store_slot(&t.store, resource)),
         Some(RoomObject::Storage(t)) => (
+            (t.x, t.y),
+            kk_world::types::store_extra_slot(&t.store, &t.store_extra, resource),
+        ),
+        Some(RoomObject::Tombstone(t)) => (
+            (t.x, t.y),
+            kk_world::types::store_extra_slot(&t.store, &t.store_extra, resource),
+        ),
+        Some(RoomObject::Ruin(t)) => (
             (t.x, t.y),
             kk_world::types::store_extra_slot(&t.store, &t.store_extra, resource),
         ),
@@ -819,6 +829,10 @@ fn intent_withdraw(w: &mut Working, id: ObjId, data: &IntentData) {
         Some(RoomObject::Storage(t)) => {
             slots_sub(&mut t.store, &mut t.store_extra, resource, amount)
         }
+        Some(RoomObject::Tombstone(t)) => {
+            slots_sub(&mut t.store, &mut t.store_extra, resource, amount)
+        }
+        Some(RoomObject::Ruin(t)) => slots_sub(&mut t.store, &mut t.store_extra, resource, amount),
         _ => return,
     }
     if let Some(c) = w.creep_mut(id) {

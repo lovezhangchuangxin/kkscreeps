@@ -215,12 +215,25 @@
     // P2：自家工地经 world 破例导出进 objects 后，此处若不排除会把工地所在
     // 房带回 Game.rooms，"工地不授视野"在房间存在性层被击穿）；工地全集经
     // Game.constructionSites 收录（官方 data.js:103 + game.js:366-374），两语义正交
+    // 可见房用 Rust 显式传递的集合（GPT 复审 P1-1 清偿：官方 data.js:103-116
+    // 服务端归集 runtimeData.rooms，JS 不从对象字段重算——原 o.owner 推断
+    // 会漏投影键为 user 的墓碑/废墟，仅剩它们时整房从 Game.rooms 消失）。
+    // 键缺失（手写测试世界不经 world_json 生成）回退对象推断——推断分支
+    // 同时认 owner/user 两键（tombstone/ruin 投影是 user）
     const visibleRooms = new __Set();
-    for (let i = 0; i < worldObjs.length; i++) {
-      const o = worldObjs[i];
-      // 官方 data.js:113-116 归集跳过表：工地不授房视野
-      if (o.owner === gw.viewerName && o.type !== 'constructionSite') {
-        __setAdd.call(visibleRooms, o.room);
+    const visibleList = gw.world.visibleRooms;
+    if (visibleList !== undefined && visibleList !== null) {
+      for (let i = 0; i < visibleList.length; i++) {
+        __setAdd.call(visibleRooms, visibleList[i]);
+      }
+    } else {
+      for (let i = 0; i < worldObjs.length; i++) {
+        const o = worldObjs[i];
+        // 归集跳过表（data.js:113-116）：flag/工地不授房视野
+        const own = o.owner !== undefined ? o.owner : o.user;
+        if (own === gw.viewerName && o.type !== 'constructionSite') {
+          __setAdd.call(visibleRooms, o.room);
+        }
       }
     }
     const rooms = {};

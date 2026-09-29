@@ -834,4 +834,11 @@
   // 字段全在类原型——装配只透传壳
   gw.assemblers.tombstone = (o, base) => base;
   gw.assemblers.ruin = (o, base) => base;
+
+  // StructureExtractor.cooldown（GPT 复审 P1-3 清偿——B4 轨 A 待接第 1 条
+  // 提前：官方 structures.js:268 `o.cooldown || 0`；缺它时 harvest 预检读
+  // undefined → 冷却期 API 假 OK（结算拒、矿量不动——返回码与终态双错）
+  gw.defineGameObjectProperties(globalThis.StructureExtractor.prototype, gw.rawData, {
+    cooldown: (o) => o.cooldown || 0,
+  });
 })();

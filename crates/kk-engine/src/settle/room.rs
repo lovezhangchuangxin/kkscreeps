@@ -7,7 +7,6 @@ use super::movement::type_name_of;
 use crate::intent::RoomIntent;
 use kk_core::constants as c;
 use kk_schema::room::{ConstructionSiteObj, FlagObj, RoomObject};
-use serde_json::json;
 
 pub fn process_room_intents(w: &mut Working, player: &str, intents: &[RoomIntent]) {
     for intent in intents {
@@ -78,9 +77,14 @@ fn destroy_structure_intent(w: &mut Working, player: &str, id: kk_world::ObjId) 
     if enemy_creep {
         return;
     }
-    let type_name = type_name.to_string();
+    // 事件（GPT 复审 P1-4 清偿——B3 曾按套件口径补 push，新证据推翻）：
+    // OSS destroy-structure.js 全文无 eventLog.push（事件只在 _damage.js:51
+    // 与 _die.js:97）；**套件自己的 vanilla parity.json:10-12 承认 stable
+    // vanilla（官方引擎）不产事件**，其 expected 是从 API 文档语义推断的
+    // canonical claim——按硬约束①对齐官方移除。ROOM-EVENTLOG-027 转 red
+    // 经 ratchet-allow.json 显式豁免留痕
+    let _ = type_name;
     super::damage::destroy_structure(w, id);
-    w.push_event(c::EVENT_OBJECT_DESTROYED, id, json!({ "type": type_name }));
 }
 
 /// 官方 room/create-construction-site.js：边界、成本存在性、控制器归属、
