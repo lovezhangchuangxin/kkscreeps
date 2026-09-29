@@ -41,6 +41,16 @@ pub fn normalize(kind: &str, spec: &Value, ctx: &PlaceCtx) -> Result<RoomObject,
         // B3 起进 typed 变体（此前 Generic 透传）——放置面保持官方 DB 形态
         "tombstone" => Ok(RoomObject::Tombstone(normalize_tombstone(spec, x, y, ctx))),
         "ruin" => Ok(RoomObject::Ruin(normalize_ruin(spec, x, y, ctx))),
+        // B4 直通道（B4 评审 3 P3-1 登记——typed 分支原只在 structure 通道，
+        // 裸 kind 落 Generic 透传致 FIND 失配）：复用 normalize_structure 的
+        // structureType 分派（白名单/缺省逻辑单源）
+        "mineral" | "extractor" => {
+            let mut s = spec.clone();
+            if let Some(m) = s.as_object_mut() {
+                m.insert("structureType".into(), serde_json::json!(kind));
+            }
+            normalize_structure(&s, x, y, ctx)
+        }
         _ => Ok(RoomObject::Generic(generic_from_spec(kind, spec, x, y))),
     }
 }

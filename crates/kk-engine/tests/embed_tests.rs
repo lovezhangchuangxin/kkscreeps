@@ -18,6 +18,7 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     embed_spawn_family_chain_impl()?;
     embed_resource_family_impl()?;
     embed_move_misc_family_impl()?;
+    embed_mineral_direct_channel_impl()?;
     assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");
     Ok(())
 }
@@ -1126,5 +1127,52 @@ fn embed_move_misc_family_impl() -> anyhow::Result<()> {
     );
     assert!(e.find_in_room("W1N1", 106).is_empty(), "不直接掉地");
     e.teardown();
+    Ok(())
+}
+
+/// B4 合入冒烟锁值：embed place mineral/extractor 直通道（裸 kind——原落
+/// Generic 透传致 FIND 失配，B4 评审 3 P3-1 登记项清偿）与玩家面
+/// FIND_MINERALS/FIND_STRUCTURES 命中。并入主套件（embed 单测试不变量——
+/// 独立 #[test] 会留 LIFO 违规，A5-lite P2-I 同款教训）。
+fn embed_mineral_direct_channel_impl() -> anyhow::Result<()> {
+    let mut e = EmbedEngine::new();
+    e.create_shard(&serde_json::json!({
+        "players": ["p1"],
+        "rooms": [{ "name": "W1N1", "rcl": 6, "owner": "p1" }],
+    }))
+    .unwrap();
+    let id = e
+        .place_object(
+            "W1N1",
+            "mineral",
+            &serde_json::json!({ "pos": [10, 10], "mineralType": "U", "density": 3 }),
+        )
+        .unwrap();
+    let snap = e.get_object(&id).expect("getObject");
+    assert_eq!(snap["kind"], "mineral");
+    assert_eq!(snap["mineralType"], "U");
+    assert_eq!(
+        e.find_in_room("W1N1", 116).len(),
+        1,
+        "FIND_MINERALS 契约面命中"
+    );
+    let ex = e
+        .place_object(
+            "W1N1",
+            "extractor",
+            &serde_json::json!({ "pos": [10, 10], "owner": "p1" }),
+        )
+        .unwrap();
+    assert_eq!(e.get_object(&ex).unwrap()["structureType"], "extractor");
+    let structures: Vec<String> = e
+        .find_in_room("W1N1", 107)
+        .iter()
+        .filter_map(|v| v["structureType"].as_str().map(str::to_string))
+        .collect();
+    assert_eq!(
+        structures,
+        vec!["controller".to_string(), "extractor".to_string()],
+        "extractor 进 FIND_STRUCTURES（mineral 不进）"
+    );
     Ok(())
 }
