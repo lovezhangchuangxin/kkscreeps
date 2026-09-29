@@ -794,6 +794,7 @@ fn embed_intent_channel_impl() -> anyhow::Result<()> {
                     part(kk_world::types::BodyKind::Carry),
                 ],
                 store: Default::default(),
+                store_extra: Vec::new(),
             }),
         )
         .unwrap();
