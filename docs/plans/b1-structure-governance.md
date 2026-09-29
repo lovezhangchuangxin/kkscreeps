@@ -253,3 +253,25 @@ bot 三基线 → ≥3 路 subagent 并行评审（**重点视角=零行为差�
   setPublicSegments/stub-flag 既知缺口基线形态）。
 - 旧路径注释残留（embed_tests.rs:411/998 → 归 B1-5；settle/movement.rs:6、
   settle/mod.rs:13/15 历史叙事注释 → 不动）。
+
+### B1-2（place.rs → place.rs + place/place_structure.rs）——已收口
+
+- 实测：place.rs 814 / place_structure.rs 302 行，全部 <1000。原 1092 = 683 源码 +
+  409 内嵌 tests；搬移块 = 原文 239-520 连续段（normalize_structure 十臂分派 +
+  generic_structure_hits 十二臂缺省表 + normalize_site）282 行。
+- 对账：19 顶层项零缺失零重复；搬移块唯一差异 = 两签名 pub(super) 前缀 +
+  normalize_structure 前缀变长触发 rustfmt 签名换行+尾逗号（B1-1 §7 先例同类
+  机械后果）；调度器 normalize 与内嵌 tests 逐字节不动（tests 仅伴生补
+  `use kk_schema::room::{Reservation, Sign};` 一行——类型原经顶层 use 引入，
+  随搬移修剪后测试体需就地导入）。
+- 可见性：normalize_structure/normalize_site pub(super)（恰为调度器调用面）；
+  generic_structure_hits 保持 pub 经 place.rs `pub use` 保
+  `kk_world::place::generic_structure_hits` 路径（唯一树外消费者 =
+  kk-engine settle/creep/build.rs:228）。
+- 验证：kk-world 40 测试全绿 / workspace 31 套件全绿 / release+棘轮 1405 零
+  转红 / 三基线通过（tooangel console error tick=0；overmind 既知缺口形态）。
+- 实得四路评审全 PASS（评审 2 一路通知丢失后重派补位，原路结果随后亦回）零整改；
+  LOW 登记：place.rs+place/ 平行文件风格与仓库既有 mod.rs 风格（settle/、
+  settle/creep/）并存——§3.2 既定命名，功能无损，后续新增模块须放 place/*.rs
+  且不得引入 place/mod.rs（E0761）。P3：embed_tests.rs:608 旧路径注释归 B1-5
+  （与 B1-1 登记的 :411/:998 同文件同类）；本段即评审 3 要求的执行记录补记。
