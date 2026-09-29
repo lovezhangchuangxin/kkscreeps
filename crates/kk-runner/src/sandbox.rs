@@ -8,14 +8,17 @@
 //! - 每次执行前 `cancel_terminate_execution()` 清遗留终止标志（双保险）；
 //! - tokio current-thread 上下文守卫（V8 延迟任务需要）。
 //!
-//! ## LIFO 销毁纪律（V8 硬约束）
-//! 同一进程内多个 isolate 必须按创建的**逆序**销毁，顺序错了进程直接崩溃。
-//! 本类型用全局注册栈在 Drop 时检测违规并告警（测试断言违规数为零）；正确
+//! ## LIFO 销毁纪律（每线程，ADR-013 纠偏）
+//! rusty_v8 的 isolate Enter/Exit 是**线程局部**栈：同一线程内叠多个实例须按
+//! 创建逆序销毁（原 spike 实测正序 drop 直接 abort），**跨线程没有全局逆序
+//! 要求**（探针实证：两线程各持实例乱序销毁，V8 不崩、存活实例正常执行）。
+//! 本类型用线程局部序栈在 Drop 时检测违规并告警（测试断言违规数为零）；正确
 //! 顺序由字段声明序结构性保证：`watchdog`（Drop 先 join 线程）→ `runtime`
-//! → `tokio`。批量顺序由 PlayerThreads 管理。
+//! → `tokio`。批量顺序由 PlayerThreads 管理（`shutdown_all` 默认仍按创建
+//! 逆序，稳妥；`evict_idle` 允许任意实例回收）。
 
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
 use deno_core::v8;
@@ -111,18 +114,24 @@ pub enum TickOutcome {
     Terminated,
 }
 
-// ---------------------------------------------------------------- LIFO 注册栈
+// ---------------------------------------------------------------- LIFO 纪律（每线程）
 
 static SEQ: AtomicU64 = AtomicU64::new(0);
-static LIFO_REGISTRY: LazyLock<Mutex<Vec<u64>>> = LazyLock::new(|| Mutex::new(Vec::new()));
+static LIVE_COUNT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static LIFO_VIOLATIONS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+// 本线程存活实例的创建序栈。ADR-013：rusty_v8 的 Enter/Exit 是线程局部栈，
+// isolate 销毁的逆序约束只在本线程内成立——跨线程乱序销毁合法，不做全局
+// 断言（原全局注册栈会把"逐出前面空闲玩家"误报为违规）。
+thread_local! {
+    static THREAD_ORDER: std::cell::RefCell<Vec<u64>> = const { std::cell::RefCell::new(Vec::new()) };
+}
 
 /// 当前进程存活的 Sandbox 数（测试用：全部销毁后应归零）。
 pub fn live_sandbox_count() -> usize {
-    LIFO_REGISTRY.lock().unwrap().len()
+    LIVE_COUNT.load(Ordering::SeqCst)
 }
 
-/// LIFO 销毁纪律的违规次数（测试断言为零——告警不该被无视）。
+/// 线程内 LIFO 销毁纪律的违规次数（测试断言为零——告警不该被无视）。
 pub fn lifo_violations() -> usize {
     LIFO_VIOLATIONS.load(Ordering::SeqCst)
 }
@@ -179,8 +188,6 @@ impl Sandbox {
         }
 
         let seq = SEQ.fetch_add(1, Ordering::SeqCst);
-        LIFO_REGISTRY.lock().unwrap().push(seq);
-
         let mut sb = Self {
             watchdog,
             runtime,
@@ -199,6 +206,11 @@ impl Sandbox {
             pending_intents: None,
         };
         sb.install_near_heap_callback();
+        // 记账（线程序栈压栈 + 存活计数）必须在所有可失败步骤之后、返回前——
+        // 更早压栈时 new 的 `?` 早退会留下"已记账但无实例"的幻影条目，同线程
+        // 后续 drop 会假报违规
+        THREAD_ORDER.with(|s| s.borrow_mut().push(seq));
+        LIVE_COUNT.fetch_add(1, Ordering::SeqCst);
         Ok(sb)
     }
 
@@ -579,19 +591,23 @@ impl Sandbox {
 
 impl Drop for Sandbox {
     fn drop(&mut self) {
-        let mut registry = LIFO_REGISTRY.lock().unwrap();
-        if registry.last() != Some(&self.seq) {
-            // V8 硬约束被违反——不 panic（Drop 里不能），大声告警并把自己从栈里摘除。
-            eprintln!(
-                "kk-runner: 销毁顺序违反 LIFO（seq={}，栈顶={:?}）。V8 要求 isolate 按创建逆序销毁！",
-                self.seq,
-                registry.last()
-            );
-            LIFO_VIOLATIONS.fetch_add(1, Ordering::SeqCst);
-            registry.retain(|s| *s != self.seq);
-        } else {
-            registry.pop();
-        }
+        LIVE_COUNT.fetch_sub(1, Ordering::SeqCst);
+        THREAD_ORDER.with(|stack| {
+            let mut stack = stack.borrow_mut();
+            if stack.last() != Some(&self.seq) {
+                // 线程内 LIFO 违规（rusty_v8 Enter/Exit 线程局部栈要求逆序）——
+                // 不 panic（Drop 里不能），大声告警并把自己从栈里摘除
+                eprintln!(
+                    "kk-runner: 线程内销毁顺序违反 LIFO（seq={}，栈顶={:?}）。V8 的 isolate Enter/Exit 栈是线程局部的，同线程多实例必须按创建逆序销毁！",
+                    self.seq,
+                    stack.last()
+                );
+                LIFO_VIOLATIONS.fetch_add(1, Ordering::SeqCst);
+                stack.retain(|s| *s != self.seq);
+            } else {
+                stack.pop();
+            }
+        });
     }
 }
 

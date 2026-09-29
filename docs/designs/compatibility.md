@@ -178,3 +178,5 @@
 | count_active 不认 _oldHits（A6 评审 1 批外登记） | 官方 build.js:67 部件活性接受 `hits>0 || _oldHits>0`（本 tick 恢复的部件）；我方只认 hits>0 | M1 未建模 _oldHits（部件损伤恢复的中间态字段），正常结算序下不可达；随战斗族批建模时补 |
 | 目标格存在另一工地即拒建（A6 评审 1 批外登记） | 我方 intent_build 对同格任何其余工地 return；官方 build.js:31-60 仅对同类型已落成结构与障碍类型对象拒 | 同格双工地仅播种世界可达（createConstructionSite 前置检查难造）；随工地建链补 |
 | PerfRecorder 无界采样（A6 评审 2/3 P3 登记） | EmbedEngine 每 tick 追加 32B 采样无上限——probe/bot-check（≤2000t）规模无碍 | 长寿命部署（serve）前需 cap/开关；`perf_reset` 已提供手动清零；归 B0 运行协调层 |
+| evict_idle 串行同步 join（B0-1 对抗评审 P2 登记） | 全表回收逐个 send+join，最坏（逐出 N 个 × 500ms 在飞余量 + V8 teardown 数百 ms）串行累加阻塞唯一所有者线程——其他玩家表现为整轮 tick 延迟；今天无生产调用方（仅测试），shutdown_all 同款形态（既有） | 归 B0-4/5 协调层设计：空闲回收改后台 join/分批回收（协调器是未来 evict 调用方）；玩家可控放大因子见下条 |
+| near-heap 放大上限在"触发但正常完成"路径不恢复（B0-1 对抗评审 P2 登记，先在问题） | 回调返回 limit×2 被 V8 持久写为新上限；restore_heap_limit 只挂 after_termination/run_expr_guarded Err 路径——玩家刻意逼近堆上限触发回调后正常完成 tick → 沙箱终身 512MB ceiling（teardown 成本翻倍，放大上条的 join DoS） | 随 B0-3（WP4 宿主面收口，本就重构 sandbox.rs 执行路径）在 end_tick/run_loop Ok 路径补 restore；探针锁定"触发后下一 tick 堆上限回配置值" |

@@ -6,7 +6,8 @@ use kk_engine::EmbedEngine;
 
 #[test]
 fn embed_engine_suite() -> anyhow::Result<()> {
-    // 场景必须串行（同进程多 isolate 的 LIFO 销毁纪律；并行会互相干扰销毁顺序）
+    // 场景必须串行（真沙箱场景经 PlayerThreads 各占线程；进程级终局计数器
+    // 断言要求不并行污染——单测试串行不变量沿用 sandbox_tests 惯例）
     embed_engine_roundtrip_impl()?;
     embed_run_player_contract_impl()?;
     embed_create_shard_validation_impl()?;

@@ -4,10 +4,12 @@
 //! 模型：每玩家一个专属线程，线程阻塞在命令通道上即"挂起"（park，常驻开销 KB 级）；
 //! V8 实例沿用官方的 3 分钟空闲销毁（官方 user-vm.js 同款），重建实测 <1ms（快照后）。
 //!
-//! 销毁纪律：V8 要求 isolate 按创建逆序（LIFO）销毁。`spawn_player` 会等待实例
-//! 创建完成的回执再返回，使"注册顺序 = 创建顺序"确定化；`shutdown_all` 按逆序
-//! 回收全部线程。**不要在 registry 存活期间手动 drop 单个线程**——用 `evict_idle`
-//! （它按逆序从栈顶弹出）。
+//! 销毁纪律（ADR-013 纠偏：每线程）：rusty_v8 的 isolate Enter/Exit 是线程
+//! 局部栈，同线程内多实例须按创建逆序销毁；**跨线程没有全局逆序要求**（探针
+//! 实证乱序销毁不崩）。`spawn_player` 会等待实例创建完成的回执再返回，使
+//! "注册顺序 = 创建顺序"确定化；`shutdown_all` 默认仍按创建逆序回收全部线程
+//! （稳妥）；`evict_idle` 解除栈顶限制、支持回收**任意**空闲实例（一玩家一
+//! 线程模型下每线程恰一个 isolate，天然满足线程内约束）。
 
 use std::sync::mpsc;
 use std::thread::JoinHandle;
@@ -130,7 +132,8 @@ impl PlayerThreads {
                         Cmd::Shutdown => break,
                     }
                 }
-                // 通道断开或 Shutdown：sandbox 在此 drop（LIFO 顺序由 shutdown_all/evict 保证）
+                // 通道断开或 Shutdown：sandbox 在此 drop（一玩家一线程恰一个
+                // isolate，线程内 LIFO 天然满足；跨线程销毁顺序无要求）
             })?;
         ready_rx
             .recv()
@@ -225,15 +228,28 @@ impl PlayerThreads {
             .map_err(|_| anyhow::anyhow!("玩家 {id} 线程无响应"))?
     }
 
-    /// 逐出空闲超过 `idle` 的玩家（逆序从栈顶弹出，保持 LIFO）。
-    /// 返回被逐出的玩家 id 列表。官方语义：V8 实例 3 分钟空闲销毁，线程按需重建。
+    /// 逐出空闲超过 `idle` 的玩家（全表扫描，任意实例——不限栈顶：LIFO 是
+    /// 每线程约束，跨线程销毁顺序无要求，后创建的活跃玩家不得挡住前面空闲
+    /// 玩家的回收）。返回被逐出的玩家 id 列表（按注册表序）。官方语义：V8
+    /// 实例 3 分钟空闲销毁，线程按需重建。
+    ///
+    /// 两段式：先按同一时刻快照判定候选集，再逐个回收——逐出者的 join
+    ///（V8 teardown 可达数百 ms）不得推进后续候选者的时钟（饥饿下会把
+    /// 刚活跃的邻居一并挤出）。
     pub fn evict_idle(&mut self, idle: Duration) -> Vec<u64> {
+        let now = Instant::now();
+        let candidates: Vec<u64> = self
+            .players
+            .iter()
+            .filter(|p| now.saturating_duration_since(p.last_command) >= idle)
+            .map(|p| p.id)
+            .collect();
         let mut evicted = Vec::new();
-        while let Some(p) = self.players.last() {
-            if p.last_command.elapsed() < idle {
-                break;
-            }
-            let mut p = self.players.pop().expect("checked last");
+        for id in candidates {
+            let Some(pos) = self.players.iter().position(|p| p.id == id) else {
+                continue;
+            };
+            let mut p = self.players.remove(pos);
             let _ = p.tx.send(Cmd::Shutdown);
             if let Some(j) = p.join.take() {
                 let _ = j.join();

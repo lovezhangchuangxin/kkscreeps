@@ -1,7 +1,8 @@
 //! kk-runner 种子运行时的集成测试。
 //!
-//! 所有沙箱场景放在**一个测试函数**里顺序执行：V8 isolate 的 LIFO 销毁纪律在
-//! 并行测试下会互相干扰（全局注册栈），串行既保证确定性也便于定位。
+//! 所有沙箱场景放在**一个测试函数**里顺序执行：进程级计数器
+//! （live_sandbox_count/lifo_violations 终局断言）在并行测试下会互相污染，
+//! 串行既保证确定性也便于定位（V8 单测试串行不变量沿此惯例保留）。
 
 use std::path::PathBuf;
 
@@ -1782,15 +1783,16 @@ fn wasm_binary_module() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// LIFO 注册栈：正常逆序销毁后全局栈清空。
+/// LIFO 线程序栈：同线程叠多实例时按声明逆序销毁（每线程纪律，ADR-013），
+/// 存活计数回基线。
 fn lifo_registry_drains() -> anyhow::Result<()> {
     let before = live_sandbox_count();
     {
         let _a = Sandbox::new(SandboxConfig::default())?;
         let _b = Sandbox::new(SandboxConfig::default())?;
-        // 作用域结束按声明逆序 drop（_b 先于 _a）——恰好是 LIFO
+        // 作用域结束按声明逆序 drop（_b 先于 _a）——恰好是线程内 LIFO
     }
-    assert_eq!(live_sandbox_count(), before, "销毁后注册栈回到基线");
+    assert_eq!(live_sandbox_count(), before, "销毁后存活计数回到基线");
     Ok(())
 }
 
@@ -3108,8 +3110,8 @@ fn move_misc_family_prelude_forms_impl() -> anyhow::Result<()> {
 /// A5-lite（B3 接线批）：Structure.destroy 的 room intent 通道全链——桩循环
 /// 曾遮蔽基类真方法（坑⑥复发，症状假 OK 零 intent）；通道打通后 intentsList
 /// 形态与官方 room 级数组通道一致（from_json "room" 分支同形），计费含 room 级。
-/// 评审 1 P2-I：**不得独立 #[test]**——sandbox 单测试不变量（LIFO 全局栈在
-/// 并行测试线程下假记违规，实测 5 跑 2 挂）；并入 m0_sandbox_suite 顺序调用。
+/// 评审 1 P2-I：**不得独立 #[test]**——sandbox 单测试串行不变量（终局计数器
+/// 断言被并行测试污染，实测 5 跑 2 挂）；并入 m0_sandbox_suite 顺序调用。
 fn destroy_room_intent_channel() -> anyhow::Result<()> {
     let mut sb = Sandbox::new(SandboxConfig::default())?;
     let w = json!({

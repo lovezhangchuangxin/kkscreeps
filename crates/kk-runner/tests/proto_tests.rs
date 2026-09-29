@@ -1,7 +1,8 @@
 //! 一实例一线程承载原型的集成测试（M0）。
 //!
-//! 与 sandbox_tests 同理：全部场景放在一个测试函数里串行执行，
-//! 保证 V8 isolate 的 LIFO 销毁纪律不被并行测试打乱。
+//! 与 sandbox_tests 同理：全部场景放在一个测试函数里串行执行——进程级
+//! 计数器（live_sandbox_count/lifo_violations）的终局断言要求场景间不并行
+//! 污染，串行也保证确定性、便于定位。
 
 use std::time::{Duration, Instant};
 
@@ -49,6 +50,7 @@ fn world() -> serde_json::Value {
 fn m0_thread_model_suite() -> anyhow::Result<()> {
     multi_player_ticks()?;
     idle_eviction_and_rebuild()?;
+    out_of_order_eviction()?;
     crash_isolation()?;
     lifo_shutdown_clean()?;
     run_expr_watchdog()?;
@@ -143,6 +145,47 @@ fn idle_eviction_and_rebuild() -> anyhow::Result<()> {
         "实例重建 <1.5s（实测 {rebuild_ms}ms，M0 无快照；M2 快照后 <1ms）"
     );
     pool.shutdown_all();
+    Ok(())
+}
+
+/// 乱序销毁压力测试（ADR-013 复现场景转回归）：中间实例被逐出（对更晚创建
+/// 的实例构成乱序销毁）+ 存活实例正常执行 + 干净退出 + 每线程 LIFO 零违规。
+/// 跨线程乱序销毁合法（V8 Enter/Exit 线程局部栈）；本测试同时锁定
+/// `evict_idle` 的全表回收语义——后创建的活跃玩家（C）不得挡住前面空闲
+/// 玩家（B）的回收（原栈顶限制缺陷）。
+fn out_of_order_eviction() -> anyhow::Result<()> {
+    let mut pool = PlayerThreads::new();
+    pool.spawn_player(1, config())?;
+    pool.spawn_player(2, config())?;
+    pool.spawn_player(3, config())?;
+    // B 保持空闲：A/C 的 last_command 在 sleep 后刷新，B 仍是 spawn 时刻。
+    // sleep 300ms/阈值 150ms 给宿主线程停顿留 ~145ms 余量（CI 高负载下
+    // run_expr 返回到 evict 检查之间被调度停顿不得把 A/C 一并逐出）
+    std::thread::sleep(Duration::from_millis(300));
+    assert_eq!(pool.run_expr(1, "1 + 1")?["value"], 2);
+    assert_eq!(pool.run_expr(3, "1 + 1")?["value"], 2);
+
+    let evicted = pool.evict_idle(Duration::from_millis(150));
+    assert_eq!(
+        evicted,
+        vec![2],
+        "只有中间空闲的 B 被逐出（全表扫描，非栈顶）"
+    );
+    assert_eq!(pool.len(), 2, "活跃的 A/C 不受影响");
+    assert_eq!(live_sandbox_count(), 2, "B 的 isolate 已销毁");
+
+    // 乱序销毁后存活实例正常求值
+    assert_eq!(pool.run_expr(1, "2 + 2")?["value"], 4, "A 在乱序销毁后正常");
+    assert_eq!(pool.run_expr(3, "2 + 2")?["value"], 4, "C 在乱序销毁后正常");
+
+    // 全表回收（剩余全部空闲）后干净退出；每线程纪律零违规
+    assert_eq!(pool.evict_idle(Duration::ZERO).len(), 2, "剩余实例全表回收");
+    assert_eq!(live_sandbox_count(), 0, "全部 isolate 销毁");
+    assert_eq!(
+        kk_runner::lifo_violations(),
+        0,
+        "每线程 LIFO 纪律零违规（跨线程乱序不计违规）"
+    );
     Ok(())
 }
 
