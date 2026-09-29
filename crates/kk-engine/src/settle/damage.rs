@@ -229,6 +229,9 @@ pub fn object_hits(obj: &RoomObject) -> i64 {
         RoomObject::ConstructedWall(o) => o.hits as i64,
         RoomObject::Road(o) => o.hits as i64,
         RoomObject::Storage(o) => o.hits as i64,
+        // B4：extractor 有 hits（build.js:217）；mineral 无 hits 概念（官方
+        // 矿物对象无 hits 键——落入 _ => 0 拒攻）
+        RoomObject::Extractor(o) => o.hits as i64,
         RoomObject::Generic(o) => {
             let data: serde_json::Value = serde_json::from_str(&o.data).unwrap_or_default();
             data.get("hits").and_then(|v| v.as_i64()).unwrap_or(0)
@@ -263,6 +266,8 @@ pub fn structure_hits_max(w: &Working, obj: &RoomObject) -> Option<i64> {
             hits
         }
         RoomObject::Storage(_) => c::STORAGE_HITS,
+        // B4：官方 build.js:218 的 extractor 落成 hitsMax = EXTRACTOR_HITS
+        RoomObject::Extractor(_) => c::EXTRACTOR_HITS,
         RoomObject::Generic(o) => {
             let data: serde_json::Value = serde_json::from_str(&o.data).unwrap_or_default();
             let structure_type = data.get("structureType").and_then(|v| v.as_str())?;
@@ -314,6 +319,7 @@ pub fn set_structure_hits(w: &mut Working, id: ObjId, hits: i64) {
         Some(RoomObject::ConstructedWall(o)) => o.hits = hits,
         Some(RoomObject::Road(o)) => o.hits = hits,
         Some(RoomObject::Storage(o)) => o.hits = hits,
+        Some(RoomObject::Extractor(o)) => o.hits = hits,
         Some(RoomObject::Generic(o)) => {
             let mut data: serde_json::Value = serde_json::from_str(&o.data).unwrap_or_default();
             data["hits"] = json!(hits);
@@ -414,7 +420,12 @@ fn structure_store(
     match obj {
         RoomObject::Spawn(o) => store = o.store.clone(),
         RoomObject::Extension(o) => store = o.store.clone(),
-        RoomObject::Storage(o) => store = o.store.clone(),
+        // B4：storage 可持命名矿物——废墟承接全量 store（_destroy.js:37 的
+        // `object.store || {}` 开放对象语义）
+        RoomObject::Storage(o) => {
+            store = o.store.clone();
+            extra = o.store_extra.clone();
+        }
         RoomObject::Generic(o) => {
             let data: serde_json::Value = serde_json::from_str(&o.data).unwrap_or_default();
             if let Some(map) = data

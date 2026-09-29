@@ -188,6 +188,8 @@ pub fn intent_create_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) 
         owner: spawn.owner.clone(),
         body,
         store: Default::default(),
+        // 雏形出生恒空仓（孵化中不可 transfer/harvest——无进矿路径）
+        store_extra: Vec::new(),
     }));
 }
 

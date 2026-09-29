@@ -150,13 +150,34 @@ fn intent_move(w: &mut Working, id: ObjId, data: &IntentData) {
     w.movement.add(id, (x as u8, y as u8), dx, dy);
 }
 
-/// 官方 harvest.js source 分支（29-70）：邻接、controller 归属/预定门（B2 补
-/// reservation 分支）、WORK×2。
+/// 官方 harvest.js：目标类型分派（source :25-65 / mineral :67-112——B4 补；
+/// deposit :114-139 随对应能力批）。公共预检（:10-23）：spawning 拒、目标
+/// 存在、Chebyshev 邻接（先于类型分支）。
 fn intent_harvest(w: &mut Working, id: ObjId, data: &IntentData) {
     let Some(target_id) = data.id else { return };
-    let (creep_pos, owner, work_power, store_energy, store_cap) = match w.creep(id) {
+    if w.creep(id).is_none_or(|c| c.spawning) {
+        return;
+    }
+    let Some(target) = w.room.objects.get(&target_id).cloned() else {
+        return;
+    };
+    let creep_pos = w.creep(id).map(|c| (c.x, c.y)).unwrap_or((0, 0));
+    let (tx, ty) = target.pos();
+    if (tx as i32 - creep_pos.0 as i32).abs() > 1 || (ty as i32 - creep_pos.1 as i32).abs() > 1 {
+        return;
+    }
+    match target {
+        RoomObject::Source(_) => intent_harvest_source(w, id, target_id),
+        RoomObject::Mineral(_) => intent_harvest_mineral(w, id, target_id),
+        _ => {}
+    }
+}
+
+/// 官方 harvest.js source 分支（25-65）：controller 归属/预定门（B2 补
+/// reservation 分支）、WORK×HARVEST_POWER、超容 drop energy。
+fn intent_harvest_source(w: &mut Working, id: ObjId, target_id: ObjId) {
+    let (owner, work_power, store_energy, store_cap) = match w.creep(id) {
         Some(c) => (
-            (c.x, c.y),
             c.owner.clone(),
             harvest_power(c),
             c.store.energy as i64,
@@ -164,19 +185,6 @@ fn intent_harvest(w: &mut Working, id: ObjId, data: &IntentData) {
         ),
         None => return,
     };
-    if w.creep(id).is_some_and(|c| c.spawning) {
-        return;
-    }
-    // 目标必须是同格邻接的 source
-    let target_ok = matches!(w.room.objects.get(&target_id), Some(RoomObject::Source(_)))
-        && w.room.objects.get(&target_id).is_some_and(|o| {
-            let (tx, ty) = o.pos();
-            (tx as i32 - creep_pos.0 as i32).abs() <= 1
-                && (ty as i32 - creep_pos.1 as i32).abs() <= 1
-        });
-    if !target_ok {
-        return;
-    }
     // 官方 harvest.js:31-34：controller 归他人**或被他人预定**拒——
     // `roomController.user && user != object.user ||
     //  roomController.reservation && reservation.user != object.user`
@@ -213,6 +221,117 @@ fn intent_harvest(w: &mut Working, id: ObjId, data: &IntentData) {
         id,
         serde_json::json!({ "targetId": target_id.as_str(), "amount": amount }),
     );
+}
+
+/// 官方 harvest.js mineral 分支（67-112，B4）：矿量门（:69-71）、矿物同格
+/// extractor 存在性（:73-77）、extractor 敌主拒/无主放行（:78-80）、
+/// checkStructureAgainstController（:81-83——RCL 门，extractor 需 6 级）、
+/// cooldown 拒（:84-86）、WORK×HARVEST_MINERAL_POWER（:88）、产出入矿种
+/// 命名槽（:95）、超容按矿种 drop（:97-104）、extractor._cooldown=5（:108）。
+/// 注意官方 mineral 分支**无** source 分支的 controller 归属/预定门（:31-34）。
+fn intent_harvest_mineral(w: &mut Working, id: ObjId, target_id: ObjId) {
+    let (owner, body, store_cap) = match w.creep(id) {
+        Some(c) => (c.owner.clone(), c.body.clone(), store_capacity(c)),
+        None => return,
+    };
+    let Some(RoomObject::Mineral(m)) = w.room.objects.get(&target_id).cloned() else {
+        return;
+    };
+    // :69-71：矿量为 0 整条丢弃
+    if m.mineral_amount == 0 {
+        return;
+    }
+    // :73-77：矿物同格的 extractor（_.find 按坐标——index.at 同语义）
+    let extractor_id = w
+        .index
+        .at(m.x as usize, m.y as usize)
+        .iter()
+        .copied()
+        .find(|eid| matches!(w.room.objects.get(eid), Some(RoomObject::Extractor(_))));
+    let Some(extractor_id) = extractor_id else {
+        return;
+    };
+    let (ex_owner, ex_cooldown) = match w.room.objects.get(&extractor_id) {
+        Some(RoomObject::Extractor(e)) => (e.owner.clone(), e.cooldown),
+        _ => return,
+    };
+    // :78-80：敌主 extractor 拒（无主/自家放行）
+    if ex_owner.as_deref().is_some_and(|u| u != owner) {
+        return;
+    }
+    // :81-83：RCL 门（官方 utils.js:456-495 的 extractor 面——无主恒 active；
+    // 有主须 controller level>=1 同主且配额非零；extractor 的 quota[8]===1
+    // 走"唯一配额即本尊"分支，距离计数分支对该类型不可达 ⇒ RCL>=6 才 active）
+    if !extractor_active(w, &ex_owner) {
+        return;
+    }
+    // :84-86：冷却中拒
+    if ex_cooldown != 0 {
+        return;
+    }
+    // :88：HARVEST_MINERAL_POWER（1/WORK——boost 的 harvest 效果同一 BOOSTS 表）
+    let work_power = kk_world::types::calc_body_effectiveness(
+        &body,
+        BodyKind::Work,
+        "work",
+        "harvest",
+        c::HARVEST_MINERAL_POWER,
+    );
+    // :90 `if (harvestAmount)`：零功率整体跳过（不扣减、无 actionLog/事件）
+    if work_power <= 0 {
+        return;
+    }
+    let amount = (m.mineral_amount as i64).min(work_power);
+    // :94：扣矿物本体
+    if let Some(RoomObject::Mineral(t)) = w.room.objects.get_mut(&target_id) {
+        t.mineral_amount -= amount as u32;
+    }
+    // :95：产出入矿种命名槽（bulk.update 的 _.merge 先改内存对象——:97 的
+    // calcResources 读到含新产出的全槽和）；:97-104 超容按矿种 drop
+    let (held_energy, held_ghodium, held_mineral) = match w.creep(id) {
+        Some(c) => (
+            c.store.energy as i64,
+            c.store.ghodium as i64,
+            kk_world::types::store_extra_slot(&c.store, &c.store_extra, &m.mineral_type),
+        ),
+        None => return,
+    };
+    let sum = held_energy + held_ghodium + held_mineral + amount;
+    if let Some(c) = w.creep_mut(id) {
+        slots_add(&mut c.store, &mut c.store_extra, &m.mineral_type, amount);
+        set_action_log(&mut c.action_log, ACTION_HARVEST);
+    }
+    if sum > store_cap {
+        intent_drop_amount_res(w, id, &m.mineral_type, sum - store_cap);
+    }
+    // :108：extractor._cooldown 瞬态（同 tick 的 extractor tick 持久化）
+    w.extractor_cooldown_pending
+        .insert(extractor_id, c::EXTRACTOR_COOLDOWN as u64);
+    // :110：官方事件 amount 是**未钳制**的 harvestAmount（source 分支 :63 是
+    // 钳后 amount——两分支的官方 quirk，原样保留）
+    w.push_event(
+        c::EVENT_HARVEST,
+        id,
+        serde_json::json!({ "targetId": target_id.as_str(), "amount": work_power }),
+    );
+}
+
+/// 官方 checkStructureAgainstController（utils.js:456-495）的 extractor 面
+/// （harvest.js:81 的门）：无主恒 active（:457-460）；有主须 controller
+/// level>=1 且同主（:463-465）且 CONTROLLER_STRUCTURES.extractor[level]
+/// 配额非零（:467-471——RCL<6 为 0）。:474-476 的 quota[8]===1 提前返回
+/// 分支使距离计数段（:478-495）对 extractor 不可达。
+fn extractor_active(w: &Working, ex_owner: &Option<String>) -> bool {
+    let Some(owner) = ex_owner.as_deref() else {
+        return true;
+    };
+    let Some(ctl) = w.controller() else {
+        return false;
+    };
+    if ctl.level < 1 || ctl.owner.as_deref() != Some(owner) {
+        return false;
+    }
+    super::controller_allowed("extractor", ctl.level as i64) > 0
 }
 
 /// 官方 build.js：3 格范围、障碍格拒建、WORK×5、完成落成。
@@ -398,6 +517,19 @@ fn complete_construction(
             owner: site.owner.unwrap_or_default(),
             store: Default::default(),
             notify_when_attacked: Some(true),
+            store_extra: Vec::new(),
+        }),
+        // 官方 build.js:214-220 的 extractor 分支：user/hits=EXTRACTOR_HITS/
+        // hitsMax=EXTRACTOR_HITS（+ :111-117 出生即 notifyWhenAttacked）；
+        // cooldown 出生无键（undefined——首次 harvest 后才出现）
+        "extractor" => RoomObject::Extractor(kk_schema::room::ExtractorObj {
+            id: 0,
+            x: site.x,
+            y: site.y,
+            hits: c::EXTRACTOR_HITS as u32,
+            owner: site.owner,
+            cooldown: 0,
+            notify_when_attacked: Some(true),
         }),
         other => {
             // 其余类型（tower/rampart/lab/…）：透传桶落成（官方全字段表 M2 对齐）。
@@ -535,18 +667,21 @@ fn intent_upgrade_controller(w: &mut Working, id: ObjId, data: &IntentData) {
     );
 }
 
-/// 官方 transfer.js：白名单资源、邻接、容量双形态（M1 单资源槽=总量一致）。
+/// 官方 transfer.js：RESOURCES_ALL 白名单（:8-11）、邻接、容量双形态
+/// （B4 起命名矿物槽经 creep/storage 的 store_extra 承载）。
 fn intent_transfer(w: &mut Working, id: ObjId, data: &IntentData) {
-    // 官方 transfer.js:8 白名单资源结算——我方 schema 现两资源槽（energy/G）
+    // 官方 transfer.js:8-11：`_.contains(C.RESOURCES_ALL, resourceType)` 白名单
+    // + 持有不足/负数拒（官方白名单含 power——power 无进 creep 的建模路径，
+    // 放行面与官方逐字一致、不可达性由 pickup 门保证，见 intent_pickup）
     let resource = data.resource_type.as_deref().unwrap_or("");
-    if !matches!(resource, "energy" | "G") {
+    if !c::RESOURCES_ALL.contains(&resource) {
         return;
     }
     let Some(amount_req) = data.amount else {
         return;
     };
     let (pos, held) = match w.creep(id) {
-        Some(c) if !c.spawning => ((c.x, c.y), store_slot(&c.store, resource)),
+        Some(c) if !c.spawning => ((c.x, c.y), creep_slot(c, resource)),
         _ => return,
     };
     if held < amount_req || amount_req < 0 {
@@ -561,16 +696,16 @@ fn intent_transfer(w: &mut Working, id: ObjId, data: &IntentData) {
             .map(|ctl| kk_world::types::extension_energy_capacity(ctl.level))
             .unwrap_or(0)
     };
-    // 容量按资源分岔（官方 utils.capacityForResource）：通用仓（creep/
-    // storage）两资源共用数值容量；per-resource 商店（spawn/extension 的
-    // scr.energy）对 G 得 0 ⇒ `!targetCapacity` 拒（同官方 scr 缺键路径）
+    // 容量按资源分岔（官方 utils.capacityForResource，utils.js:671-675）：
+    // 通用仓（creep/storage）数值容量全槽共用；per-resource 商店（spawn/
+    // extension 的 scr.energy）对非 energy 得 0 ⇒ `!targetCapacity` 拒
     let per_resource_cap = |base: i64| if resource == "energy" { base } else { 0 };
     let (target_cap, t_pos, t_stored) = match w.room.objects.get(&target_id) {
         Some(RoomObject::Creep(t)) if !t.spawning => (
             store_capacity(t),
             (t.x, t.y),
             // 官方 transfer.js:32：通用容量目标按 calcResources 全槽求和
-            (t.store.energy + t.store.ghodium) as i64,
+            kk_world::types::store_total(&t.store, &t.store_extra),
         ),
         Some(RoomObject::Spawn(t)) => (
             per_resource_cap(c::SPAWN_ENERGY_CAPACITY),
@@ -586,7 +721,7 @@ fn intent_transfer(w: &mut Working, id: ObjId, data: &IntentData) {
             c::STORAGE_CAPACITY,
             (t.x, t.y),
             // 同 creep：全槽求和（GPT 二轮复审 P1-2/评审交叉确认）
-            (t.store.energy + t.store.ghodium) as i64,
+            kk_world::types::store_total(&t.store, &t.store_extra),
         ),
         _ => return,
     };
@@ -604,14 +739,16 @@ fn intent_transfer(w: &mut Working, id: ObjId, data: &IntentData) {
         return;
     }
     match w.room.objects.get_mut(&target_id) {
-        Some(RoomObject::Creep(t)) => store_slot_add(&mut t.store, resource, amount),
+        Some(RoomObject::Creep(t)) => slots_add(&mut t.store, &mut t.store_extra, resource, amount),
         Some(RoomObject::Spawn(t)) => store_slot_add(&mut t.store, resource, amount),
         Some(RoomObject::Extension(t)) => store_slot_add(&mut t.store, resource, amount),
-        Some(RoomObject::Storage(t)) => store_slot_add(&mut t.store, resource, amount),
+        Some(RoomObject::Storage(t)) => {
+            slots_add(&mut t.store, &mut t.store_extra, resource, amount)
+        }
         _ => return,
     }
     if let Some(c) = w.creep_mut(id) {
-        store_slot_sub(&mut c.store, resource, amount);
+        slots_sub(&mut c.store, &mut c.store_extra, resource, amount);
     }
     w.push_event(
         c::EVENT_TRANSFER,
@@ -620,20 +757,22 @@ fn intent_transfer(w: &mut Working, id: ObjId, data: &IntentData) {
     );
 }
 
-/// 官方 withdraw.js：邻接、空容量、safeMode/rampart 保护（M1 无 rampart 变体）。
+/// 官方 withdraw.js：RESOURCES_ALL 白名单、空容量、safeMode/rampart 保护
+/// （rampart 变体随对应批；目标白名单 spawn/extension/storage——B3 登记，
+/// tombstone/ruin 目标随轨 B 后续）。
 fn intent_withdraw(w: &mut Working, id: ObjId, data: &IntentData) {
-    // 官方 withdraw.js:8 白名单资源（我方两槽 energy/G）
+    // 官方 withdraw.js:8-11：`_.contains(C.RESOURCES_ALL, resourceType)` 白名单
     let resource = data.resource_type.as_deref().unwrap_or("energy");
-    if !matches!(resource, "energy" | "G") {
+    if !c::RESOURCES_ALL.contains(&resource) {
         return;
     }
     let Some(target_id) = data.id else { return };
-    // actor 的空容量按 store 全槽求和（官方 calcResources）——两资源共用
+    // actor 的空容量按 store 全槽求和（官方 calcResources）——含命名矿物槽
     let (pos, cap, held) = match w.creep(id) {
         Some(c) if !c.spawning && store_capacity(c) > 0 => (
             (c.x, c.y),
             store_capacity(c),
-            (c.store.energy + c.store.ghodium) as i64,
+            kk_world::types::store_total(&c.store, &c.store_extra),
         ),
         _ => return,
     };
@@ -645,12 +784,16 @@ fn intent_withdraw(w: &mut Working, id: ObjId, data: &IntentData) {
     if amount < 0 {
         return;
     }
-    // 可提取对象：有 store 的结构（spawn/extension/storage）；source 只能
-    // harvest、掉落资源只能 pickup（官方引擎层无 source/energy 的 withdraw 路径）
+    // 可提取对象：有 store 的结构（spawn/extension/storage——B3 范围）；source
+    // 只能 harvest、掉落资源只能 pickup（官方引擎层无 source/energy 的
+    // withdraw 路径）。storage 的命名矿物槽一并可提（官方开放 store）
     let (t_pos, t_amount) = match w.room.objects.get(&target_id) {
         Some(RoomObject::Spawn(t)) => ((t.x, t.y), store_slot(&t.store, resource)),
         Some(RoomObject::Extension(t)) => ((t.x, t.y), store_slot(&t.store, resource)),
-        Some(RoomObject::Storage(t)) => ((t.x, t.y), store_slot(&t.store, resource)),
+        Some(RoomObject::Storage(t)) => (
+            (t.x, t.y),
+            kk_world::types::store_extra_slot(&t.store, &t.store_extra, resource),
+        ),
         _ => return,
     };
     if (t_pos.0 as i32 - pos.0 as i32).abs() > 1 || (t_pos.1 as i32 - pos.1 as i32).abs() > 1 {
@@ -663,11 +806,13 @@ fn intent_withdraw(w: &mut Working, id: ObjId, data: &IntentData) {
     match w.room.objects.get_mut(&target_id) {
         Some(RoomObject::Spawn(t)) => store_slot_sub(&mut t.store, resource, amount),
         Some(RoomObject::Extension(t)) => store_slot_sub(&mut t.store, resource, amount),
-        Some(RoomObject::Storage(t)) => store_slot_sub(&mut t.store, resource, amount),
+        Some(RoomObject::Storage(t)) => {
+            slots_sub(&mut t.store, &mut t.store_extra, resource, amount)
+        }
         _ => return,
     }
     if let Some(c) = w.creep_mut(id) {
-        store_slot_add(&mut c.store, resource, amount);
+        slots_add(&mut c.store, &mut c.store_extra, resource, amount);
     }
     // 官方 withdraw 的 EVENT_TRANSFER 反向（objectId=target, data.targetId=object）
     w.push_event(
@@ -677,13 +822,13 @@ fn intent_withdraw(w: &mut Working, id: ObjId, data: &IntentData) {
     );
 }
 
-/// 官方 drop.js：amount>0 落地为同格 energy；持有不足整条拒绝（:13
+/// 官方 drop.js：amount>0 落地为同格资源堆；持有不足整条拒绝（:13
 /// `!(store[resourceType] >= intent.amount)` ⇒ return，不钳制部分掉落）。
 fn intent_drop(w: &mut Working, id: ObjId, data: &IntentData) {
-    // 官方 drop.js:10 白名单资源（我方两槽 energy/G——掉落对象 resource_type
-    // 编码 0=energy/1=power/2=G）
+    // 官方 drop.js:10：`_.contains(C.RESOURCES_ALL, resourceType)` 白名单
+    //（B4 起命名矿物可掉——creep 的 store_extra 槽；掉落对象经命名槽承载）
     let resource = data.resource_type.as_deref().unwrap_or("energy");
-    if !matches!(resource, "energy" | "G") {
+    if !c::RESOURCES_ALL.contains(&resource) {
         return;
     }
     let Some(amount) = data.amount else { return };
@@ -691,7 +836,7 @@ fn intent_drop(w: &mut Working, id: ObjId, data: &IntentData) {
         return;
     }
     if w.creep(id)
-        .is_none_or(|c| c.spawning || store_slot(&c.store, resource) < amount)
+        .is_none_or(|c| c.spawning || creep_slot(c, resource) < amount)
     {
         return;
     }
@@ -704,12 +849,13 @@ pub(super) fn intent_drop_amount(w: &mut Working, id: ObjId, amount: i64) {
     intent_drop_amount_res(w, id, "energy", amount);
 }
 
-/// 官方 drop.js 落地路径（_create-energy 同格插入）——资源参数化
-/// （GPT 复审 P1-1：G 掉落为 resource_type=2 的资源对象；衰减对全资源
-/// 同式（官方 energy/tick.js:12 按 resourceType 键通用））。
+/// 官方 drop.js 落地路径（:24 `_create-energy(amount, resourceType)`——
+/// 同格 container 先承接 + 同格同资源并堆，B3 的 create_resource 全量同式；
+/// 衰减对全资源同式（官方 energy/tick.js:12 按 resourceType 键通用）。
+/// B4 起资源参数化到任意 RESOURCES_ALL 名（命名矿物掉落为命名堆）。
 fn intent_drop_amount_res(w: &mut Working, id: ObjId, resource: &str, amount: i64) {
     let (pos, held) = match w.creep(id) {
-        Some(c) if !c.spawning => ((c.x, c.y), store_slot(&c.store, resource)),
+        Some(c) if !c.spawning => ((c.x, c.y), creep_slot(c, resource)),
         _ => return,
     };
     // 钳制仅服务内部调用方（harvest 超容路径已保证 held ≥ amount）
@@ -718,25 +864,21 @@ fn intent_drop_amount_res(w: &mut Working, id: ObjId, resource: &str, amount: i6
         return;
     }
     if let Some(c) = w.creep_mut(id) {
-        store_slot_sub(&mut c.store, resource, amount);
+        slots_sub(&mut c.store, &mut c.store_extra, resource, amount);
     }
-    let res_code = match resource {
-        "G" => 2,
-        _ => 0,
-    };
-    w.create_energy_typed(pos.0, pos.1, amount, res_code);
+    w.create_resource(pos.0, pos.1, amount, resource);
 }
 
 /// 官方 pickup.js：邻接 energy、余量钳制、目标清零移除。
 fn intent_pickup(w: &mut Working, id: ObjId, data: &IntentData) {
     let Some(target_id) = data.id else { return };
-    // 官方 pickup.js:9：carry = calcResources(object)（全槽求和）——两资源
-    // 共用数值容量（GPT 二轮复审 P1-3）
+    // 官方 pickup.js:9：carry = calcResources(object)（全槽求和）——含命名
+    // 矿物槽（GPT 二轮复审 P1-3 的全资源口径，B4 落地）
     let (pos, cap, held) = match w.creep(id) {
         Some(c) if !c.spawning => (
             (c.x, c.y),
             store_capacity(c),
-            (c.store.energy + c.store.ghodium) as i64,
+            kk_world::types::store_total(&c.store, &c.store_extra),
         ),
         _ => return,
     };
@@ -746,15 +888,13 @@ fn intent_pickup(w: &mut Working, id: ObjId, data: &IntentData) {
     let Some(RoomObject::Energy(target)) = w.room.objects.get(&target_id) else {
         return;
     };
-    // 官方 pickup.js:23-30：按堆的 resourceType 入开放 store 对应键——M2 双槽
-    // schema 只放 energy/G，其余（power、B3 起衰减落地的命名矿物堆——
-    // code 恒 0 + resource:Some(name)，只看 code 会把矿物洗白成能量）一律拒拾
-    //（B3 评审 2/3 交叉实证；随 power/矿物槽扩展放开）。判定走
+    // 官方 pickup.js:23-30：按堆的 resourceType 入开放 store 对应键——B4 起
+    // 命名矿物堆放行入槽（B3 的"矿物堆拒拾"登记随本批清偿）；power 堆维持
+    // 拒绝（power 无建模槽位，随 power 批放开——B3 登记口径不变）。判定走
     // energy_resource_name 单源——code 与命名槽双态都折算后再放行
     let slot_resource = match super::energy_resource_name(target) {
-        "energy" => "energy",
-        "G" => "G",
-        _ => return,
+        "power" => return,
+        name => name.to_string(),
     };
     let (tx, ty, amount) = (target.x, target.y, target.amount as i64);
     if (tx as i32 - pos.0 as i32).abs() > 1 || (ty as i32 - pos.1 as i32).abs() > 1 {
@@ -776,7 +916,7 @@ fn intent_pickup(w: &mut Working, id: ObjId, data: &IntentData) {
         w.remove_obj(target_id);
     }
     if let Some(c) = w.creep_mut(id) {
-        store_slot_add(&mut c.store, slot_resource, amount);
+        slots_add(&mut c.store, &mut c.store_extra, &slot_resource, amount);
     }
 }
 
@@ -1607,7 +1747,7 @@ pub fn die_creep(w: &mut Working, id: ObjId) {
 
 pub fn die_creep_with_rate(w: &mut Working, id: ObjId, drop_rate: f64) {
     let Some(c) = w.creep(id) else { return };
-    let (x, y, owner, name, age_time, body, store) = (
+    let (x, y, owner, name, age_time, body, store, store_extra) = (
         c.x,
         c.y,
         c.owner.clone(),
@@ -1615,6 +1755,7 @@ pub fn die_creep_with_rate(w: &mut Working, id: ObjId, drop_rate: f64) {
         c.age_time,
         c.body.clone(),
         c.store.clone(),
+        c.store_extra.clone(),
     );
     let time = w.time;
     // _die.js:10-11：先移除本体
@@ -1672,7 +1813,8 @@ pub fn die_creep_with_rate(w: &mut Working, id: ObjId, drop_rate: f64) {
         for (res, amount) in minerals {
             tomb.add(w, x, y, &res, amount.floor() as i64);
         }
-        // :78-91 第二循环（object.store 携带资源——双槽 schema 的全集）
+        // :78-91 第二循环（object.store 携带资源——官方开放 store 逐键循环；
+        // B4 起含命名矿物槽的全集）
         tomb.add(w, x, y, "energy", store.energy as i64);
         tomb.add(
             w,
@@ -1681,6 +1823,9 @@ pub fn die_creep_with_rate(w: &mut Working, id: ObjId, drop_rate: f64) {
             kk_core::constants::RESOURCE_GHODIUM,
             store.ghodium as i64,
         );
+        for stack in &store_extra {
+            tomb.add(w, x, y, &stack.resource, stack.amount as i64);
+        }
     }
 
     // _die.js:22-34/93：墓碑落库。creepSaying 官方取 actionLog.say 的公开
@@ -1822,6 +1967,71 @@ fn store_slot_add(store: &mut kk_schema::room::Store, resource: &str, amount: i6
         "energy" => store.energy = store.energy.saturating_add(amount as u32),
         "G" => store.ghodium = store.ghodium.saturating_add(amount as u32),
         _ => {}
+    }
+}
+
+// ---- B4 多资源槽（creep/storage 的命名资源面：双槽 + store_extra 列表）----
+// 官方 store 是按资源名键的开放对象（harvest.js:95/transfer.js:45 的
+// `store[resourceType]` 任意键读写）；energy/G 走双槽字段，其余并入列表。
+
+/// 读槽（无键 = 0——官方 store[res] 的 undefined 参与数值运算同值）。
+fn creep_slot(c: &kk_schema::room::CreepObj, resource: &str) -> i64 {
+    kk_world::types::store_extra_slot(&c.store, &c.store_extra, resource)
+}
+
+/// 写槽（加）：无键现场建（官方 `(store[res] || 0) + amount` 同式；饱和加
+/// 是放置面可造超域堆的既有口径）。
+fn slots_add(
+    store: &mut kk_schema::room::Store,
+    extra: &mut Vec<kk_schema::room::ResourceStack>,
+    resource: &str,
+    amount: i64,
+) {
+    if amount <= 0 {
+        return;
+    }
+    match resource {
+        "energy" => store.energy = store.energy.saturating_add(amount as u32),
+        kk_core::constants::RESOURCE_GHODIUM => {
+            store.ghodium = store.ghodium.saturating_add(amount as u32)
+        }
+        other => {
+            if let Some(slot) = extra.iter_mut().find(|s| s.resource == other) {
+                slot.amount = slot
+                    .amount
+                    .saturating_add(u32::try_from(amount).unwrap_or(u32::MAX));
+            } else {
+                extra.push(kk_schema::room::ResourceStack {
+                    resource: other.to_string(),
+                    amount: u32::try_from(amount).unwrap_or(u32::MAX),
+                });
+            }
+        }
+    }
+}
+
+/// 写槽（减）：饱和减（调用方已保证持有足额——官方直接减）。
+fn slots_sub(
+    store: &mut kk_schema::room::Store,
+    extra: &mut [kk_schema::room::ResourceStack],
+    resource: &str,
+    amount: i64,
+) {
+    if amount <= 0 {
+        return;
+    }
+    match resource {
+        "energy" => store.energy = store.energy.saturating_sub(amount as u32),
+        kk_core::constants::RESOURCE_GHODIUM => {
+            store.ghodium = store.ghodium.saturating_sub(amount as u32)
+        }
+        other => {
+            if let Some(slot) = extra.iter_mut().find(|s| s.resource == other) {
+                slot.amount = slot
+                    .amount
+                    .saturating_sub(u32::try_from(amount).unwrap_or(u32::MAX));
+            }
+        }
     }
 }
 

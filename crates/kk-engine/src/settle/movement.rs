@@ -297,12 +297,12 @@ pub fn can_move(creep: &CreepObj, old_fatigue: u32, is_pulled: bool) -> bool {
 
 /// 官方 calcResourcesWeight（movement.js:41-59）：从 body 尾部数起，
 /// 装下当前携带量所需的 CARRY 部件数。携带量是 store 全槽求和（官方
-/// `_.sum(creep.store)`，movement.js:42——评审 P3：ghodium "G" 槽同计，
-/// 我方 schema 仅 energy+ghodium 两槽）
+/// `_.sum(creep.store)`，movement.js:42——评审 P3：ghodium "G" 槽同计；
+/// B4 起命名矿物槽并入——官方开放 store 逐键求和的同构）
 pub fn resources_weight(creep: &CreepObj) -> usize {
     // movement.js:41-59：重量按强化后的每部件容量扣减（BOOSTS.carry.capacity
     // 乘数）——单源实现见 kk_world::types::resources_weight（GPT 复审 P1-2）
-    kk_world::types::resources_weight(&creep.body, &creep.store)
+    kk_world::types::resources_weight(&creep.body, &creep.store, &creep.store_extra)
 }
 
 /// 移动体重（movement.js:120-122）：非 move/carry 部件数 + 资源重量。
@@ -422,6 +422,11 @@ pub fn type_name_of(obj: &RoomObject) -> std::borrow::Cow<'static, str> {
         // ——CONSTRUCTION_COST 表外，攻击/修理/建造门天然拒）
         RoomObject::Tombstone(_) => "tombstone".into(),
         RoomObject::Ruin(_) => "ruin".into(),
+        // B4：官方对象 type（minerals/tick.js 的 mineral / build.js:214 的
+        // extractor——mineral 无 hits 攻击门天然拒；extractor 非
+        // OBSTACLE_OBJECT_TYPES，通行性由 is_obstacle_type("extractor")=false 保持）
+        RoomObject::Mineral(_) => "mineral".into(),
+        RoomObject::Extractor(_) => "extractor".into(),
     }
 }
 
