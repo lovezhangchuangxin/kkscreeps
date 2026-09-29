@@ -487,6 +487,11 @@
     setRawMemoryHost(data) {
       rawMemoryData = data;
     },
+    /** 宿主私有通道：rawMemoryData 当前值（endTick 信封的 rawMemory 候选——
+     *  B0-5 统一提交点：协调器在世界结算成功后写入玩家持久状态）。 */
+    rawMemoryDataHost() {
+      return rawMemoryData;
+    },
     /** 每 tick 注入世界快照（宿主经私有句柄以字符串参数传入——下方双分支
      *  兼容 string/对象两种形态）并重建 Game。 */
     beginTick(worldJson, cpuMeta) {

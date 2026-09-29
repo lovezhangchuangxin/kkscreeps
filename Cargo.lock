@@ -945,6 +945,7 @@ dependencies = [
  "clap",
  "kk-engine",
  "kk-runner",
+ "kk-runtime",
  "kk-world",
  "serde_json",
  "tokio",
@@ -963,7 +964,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "kk-core",
- "kk-runner",
  "kk-schema",
  "kk-world",
  "serde",
@@ -994,8 +994,11 @@ name = "kk-runtime"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "kk-core",
  "kk-engine",
  "kk-runner",
+ "kk-schema",
+ "kk-world",
  "serde_json",
 ]
 

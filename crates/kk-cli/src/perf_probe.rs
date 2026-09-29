@@ -10,7 +10,7 @@
 
 use std::collections::BTreeMap;
 
-use kk_engine::EmbedEngine;
+use kk_runtime::EmbedEngine;
 use serde_json::{Value, json};
 
 /// 负载玩家代码：真实 API 面（装配 + find + spawn + 动作 intent 预检）。

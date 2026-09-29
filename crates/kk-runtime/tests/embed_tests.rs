@@ -2,7 +2,7 @@
 
 use serde_json::json;
 
-use kk_engine::EmbedEngine;
+use kk_runtime::EmbedEngine;
 
 #[test]
 fn embed_engine_suite() -> anyhow::Result<()> {
@@ -11,6 +11,9 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     embed_engine_roundtrip_impl()?;
     embed_run_player_contract_impl()?;
     embed_create_shard_validation_impl()?;
+    embed_shard_input_strictness_impl()?;
+    b05_partial_commit_inject_failure_impl()?;
+    b05_partial_commit_settle_failure_impl()?;
     embed_real_settlement_impl()?;
     embed_run_players_shared_snapshot_impl()?;
     embed_snapshot_contract_impl()?;
@@ -1783,6 +1786,178 @@ fn a6_isactive_hits_family_impl() -> anyhow::Result<()> {
         run.expr["value"], 1,
         "零 WORK build 仍推 EVENT_BUILD(amount 0): {:?}",
         run.expr
+    );
+    Ok(())
+}
+
+/// 原 kk-engine embed.rs mod tests 随迁（B0-5 移库）：元素级严格性、浮点
+/// 整数 rcl、非法 spec 保世界。
+fn embed_shard_input_strictness_impl() -> anyhow::Result<()> {
+    use kk_runtime::embed::terrain_codes_from_json;
+    use serde_json::json;
+    // 元素级严格性：非整数（小数/字符串/null）、负数、超 255 一律拒绝
+    assert_eq!(
+        terrain_codes_from_json(&json!([0, 1, 2, 3])).unwrap(),
+        vec![0, 1, 2, 3]
+    );
+    for bad in [json!(1.5), json!("1"), json!(null), json!(-1), json!(256)] {
+        assert!(
+            terrain_codes_from_json(&json!([bad])).is_err(),
+            "元素 {bad} 必须被拒绝"
+        );
+    }
+    assert!(terrain_codes_from_json(&json!("not-array")).is_err());
+
+    // JSON `3.0` 在 JS 语义里就是整数 3（vanilla 接受）——经玩家 API 面读回
+    let mut engine = EmbedEngine::new();
+    engine.create_shard(&json!({
+        "players": ["p1"],
+        "rooms": [{ "name": "W1N1", "rcl": 3.0, "owner": "p1" }],
+    }))?;
+    let run = engine.run_player("p1", "Game.rooms['W1N1'].controller.level")?;
+    assert_eq!(run.expr["value"], 3, "浮点整数 rcl: {:?}", run.expr);
+
+    // 非法 spec 保留既有世界（上一行 run_player 已把 time 推到 1）
+    for invalid in [
+        json!({ "players": [], "rooms": [{ "name": "W2N2", "rcl": "3" }] }),
+        json!({ "players": [], "rooms": [{ "name": "W2N2", "rcl": 3.5 }] }),
+        json!({ "players": [], "rooms": [{ "name": "W2N2" }, { "name": "W2N2" }] }),
+        json!({ "players": ["alice", { "name": "alice" }], "rooms": [] }),
+        json!({}),
+        json!({ "players": [], "rooms": "W2N2" }),
+        json!({ "players": "alice", "rooms": [] }),
+        json!({ "players": [], "rooms": [{}] }),
+        json!({ "players": [{}], "rooms": [] }),
+        json!({ "players": [], "rooms": [{ "name": "E130N0" }] }),
+        json!({ "players": [], "rooms": [{ "name": "E128N0" }] }),
+        json!({ "players": [], "rooms": [{ "name": "middle0" }] }),
+    ] {
+        assert!(engine.create_shard(&invalid).is_err());
+        assert_eq!(engine.get_game_time(), 1);
+    }
+    Ok(())
+}
+
+/// ADR-013 复现场景①（部分提交三连之一）：p2 把 Game 搞成不可重定义 →
+/// p2 世界注入失败——**玩家级失败玩家级恢复**（不冒泡整轮 Err）；轮次照常
+/// 推进，p1 的 Memory 候选照常提交。
+fn b05_partial_commit_inject_failure_impl() -> anyhow::Result<()> {
+    use serde_json::json;
+    use std::collections::BTreeMap;
+    let mut e = EmbedEngine::new();
+    e.create_shard(&json!({
+        "players": ["p1", "p2"],
+        "rooms": [{ "name": "W1N1", "rcl": 3, "owner": "p1" }],
+    }))?;
+    // 轮 A（武装轮）：p2 冻结 Game 的可重定义性——毒化当轮不生效（装配已过），
+    // 影响下一轮 beginTick 的 Game 重装（GPT 复现序列的两 tick 形态）
+    let mut codes = BTreeMap::new();
+    codes.insert(
+        "p1".to_string(),
+        "Memory.n = (Memory.n || 0) + 1; 'ok'".to_string(),
+    );
+    codes.insert(
+        "p2".to_string(),
+        r#"(() => { Object.defineProperty(globalThis, 'Game', { configurable: false, writable: false }); return 'armed'; })()"#
+            .to_string(),
+    );
+    let runs = e.run_players(&codes)?;
+    assert!(runs["p1"].executed, "武装轮 p1 正常");
+    assert!(runs["p2"].executed, "武装轮 p2 正常（毒化下一轮生效）");
+    // 轮 B（毒化生效轮）：p2 世界注入失败——**玩家级失败玩家级恢复**（不冒泡
+    // 整轮 Err）；轮次照常推进，p1 的 Memory 候选照常提交
+    let mut codes = BTreeMap::new();
+    codes.insert(
+        "p1".to_string(),
+        "Memory.n = (Memory.n || 0) + 1; 'ok'".to_string(),
+    );
+    codes.insert("p2".to_string(), "'innocent'".to_string());
+    let runs = e.run_players(&codes)?;
+    assert!(runs["p1"].executed, "p1 不受邻居注入失败影响");
+    assert!(!runs["p2"].executed, "注入失败 executed=false");
+    assert_eq!(
+        runs["p2"].expr["kind"], "inject_failed",
+        "注入失败 kind: {:?}",
+        runs["p2"].expr
+    );
+    // 世界照常推进 + p1 Memory 已提交（下一轮读回验证：两轮 +1 = 2）
+    let time_after = e.get_game_time();
+    let run = e.run_player("p1", "Memory.n")?;
+    assert_eq!(run.expr["value"], 2, "p1 Memory 候选已提交且可读回");
+    assert_eq!(e.get_game_time(), time_after + 1, "毒化轮与验证轮各推进 1");
+    Ok(())
+}
+
+/// ADR-013 复现场景②③（部分提交三连之二/三）：世界结算失败轮——先执行
+/// 玩家的 Memory/世界版本全部不变；重试**不重跑玩家代码**（执行次数=1），
+/// 只消费已缓存候选重试结算。
+fn b05_partial_commit_settle_failure_impl() -> anyhow::Result<()> {
+    use serde_json::json;
+    let mut e = EmbedEngine::new();
+    e.create_shard(&json!({
+        "players": ["p1"],
+        "rooms": [{ "name": "W1N1", "rcl": 3, "owner": "p1" }],
+    }))?;
+    // 建立基线：n=1 已提交
+    e.run_player("p1", "Memory.n = (Memory.n || 0) + 1; 'ok'")?;
+    let time_before = e.get_game_time();
+    assert_eq!(time_before, 1);
+
+    // 注入结算失败 + 增量（若玩家重跑会变成 3——执行次数取证）
+    e.fail_next_settle_for_test();
+    let err = e
+        .run_player(
+            "p1",
+            "Memory.n = Memory.n + 1; Memory.exec = (Memory.exec || 0) + 1; console.log('RUN'); 'ok'",
+        )
+        .unwrap_err();
+    assert!(err.to_string().contains("故障注入"), "结算失败: {err}");
+    assert!(e.has_pending_round(), "候选已缓存");
+
+    // ①失败轮不动：世界时间不变、Memory 候选未提交（下一轮注入的仍是旧值——
+    // 但注意下一轮就是重试轮，不重跑玩家；用 discard 后的新轮验证旧值）
+    assert_eq!(e.get_game_time(), time_before, "失败轮世界时间不动");
+
+    // ③重试：同参数再调——**不重跑玩家**（RUN 行恰好一次：缓存投影原样返回，
+    // 执行次数=1），结算消费缓存候选成功、n 提交为 2
+    let run = e.run_player("p1", "Memory.n")?;
+    let run_count = run.console.iter().filter(|l| l.contains("RUN")).count();
+    assert_eq!(run_count, 1, "重试不重跑玩家（RUN 恰一次）");
+    assert_eq!(e.get_game_time(), time_before + 1, "重试轮成功推进");
+    assert!(!e.has_pending_round(), "提交后缓存清空");
+    // 提交验证：新一轮读回 n=2（缓存候选 1+1）；exec 计数=1 锁死「执行次数
+    // 恰一次」——即使假想的「协调器缓存 codes 重跑原代码」回归也会推高 exec
+    //（B0-5 评审 P2 清偿：console 计数与 Memory 计数双取证）
+    let run = e.run_player("p1", "({ n: Memory.n, exec: Memory.exec })")?;
+    assert_eq!(run.expr["value"]["n"], 2, "缓存候选（n=2）在重试轮提交");
+    assert_eq!(
+        run.expr["value"]["exec"], 1,
+        "玩家代码执行次数恰一次（exec 计数）"
+    );
+
+    // ④discard 臂（B0-5 评审 P2 清偿）：失败轮可显式丢弃——丢弃后世界仍停
+    // 在失败前、无 pending；新一轮全量重跑、pending 闸门解除。取证：失败轮 B
+    // 的 exec+1 随候选**被丢弃**（不提交），新一轮 code 重跑（exec+100 提交）
+    // → 读回 101（若 B 轮候选被误提交则是 102——两臂可区分）
+    e.fail_next_settle_for_test();
+    assert!(
+        e.run_player("p1", "Memory.exec = Memory.exec + 1; 'x'")
+            .is_err()
+    );
+    assert!(e.has_pending_round());
+    // pending 闸门：变异/推进被拒（B0-5 评审 P1 清偿的锁定）
+    assert!(
+        e.place_object("W1N1", "flag", &json!({ "pos": [10, 10], "name": "f" }))
+            .is_err()
+    );
+    assert!(e.tick(1).is_err(), "pending 轮 tick 被拒");
+    e.discard_pending_round();
+    assert!(!e.has_pending_round(), "丢弃后无 pending");
+    assert_eq!(e.get_game_time(), time_before + 2, "丢弃不推进世界");
+    let run = e.run_player("p1", "Memory.exec = Memory.exec + 100; Memory.exec")?;
+    assert_eq!(
+        run.expr["value"], 101,
+        "丢弃后新一轮全量重跑（B 轮的 +1 已被丢弃，新一轮 +100 提交）"
     );
     Ok(())
 }

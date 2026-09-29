@@ -46,7 +46,7 @@
 
   const { missing, hasProbes, stubCalls } = globalThis.__kkp;
   const { resetForNewModules } = globalThis.__kkp.cjs;
-  const { beginTick, writeBackMemory, intentsPayload, setRawMemoryHost } = globalThis.__kkp.memoryWorld;
+  const { beginTick, writeBackMemory, intentsPayload, setRawMemoryHost, rawMemoryDataHost } = globalThis.__kkp.memoryWorld;
 
   globalThis.__kkp.host = {
     /** 每 tick 注入世界快照并重建 Game。cpuMeta：宿主预算真值（Rust 侧
@@ -175,6 +175,17 @@
         if (typeof out.error === 'string') out.error = clipHostError(out.error);
         out.intentsList = payload ? payload.list : null;
         out.intentsCpu = payload ? payload.cpu : 0;
+        // RawMemory 候选（B0-5 统一提交点）：仅写回成功（ok:true）且值是原始
+        // string 时携带——协调器在世界结算成功后写入玩家持久状态；失败轮不携带
+        //（沙箱内 rawMemoryData 保持旧值，官方「写回失败 Memory 保持上一 tick 存档」
+        // 同义）。typeof 门（B0-5 对抗评审清偿）：RawMemory.set 收 String 包装对象
+        //（官方 lodash.isString 同款过门），包装对象经污染的 String.prototype.toJSON
+        // 可在信封序列化时伪造巨串（实测 3MB 绕 2MB set 门）——原始 string 的
+        // 序列化不查 toJSON（ECMA-262 25.5.2.3），typeof 门即免疫
+        if (out.ok === true) {
+          const rm = rawMemoryDataHost();
+          if (typeof rm === 'string') out.rawMemory = rm;
+        }
       }
       // 编码守卫（与 writeBackMemory 同构，自审 P2-3）：载荷携带抛错 getter 等
       // 病态形态时 stringify 抛错不得逃逸——逃逸会被宿主判硬中断并误计费。

@@ -45,3 +45,29 @@ B0-5 收官关卡（ADR-013 复现场景全转回归且绿）：①部分提交�
 - **kk-runtime 骨架**（B0-4 已交付）：crate 依赖 kk-engine+kk-runner；`PlayerExecutor` 执行器抽象 + `ThreadExecutor`（包装 PlayerThreads 通道，EvalReport→RunResult；失败分类 B0-4 保守：run_player Err 一律 InfraFailure——**InjectFailed 拆分推迟至 B0-5**（proto.rs 通道把 begin_tick 注入失败从 Err 改为玩家级报告时接线））。
 - **契约承载边界（前瞻登记，B0-4 评审 P2）**：IntentBatch 现按玩家分组（objects 键 ObjId + room 列表）——tick 契约的「按房间分组指令」可经 world 反查推导（ObjId 不内嵌房名），「全局指令」（市场/power/跨房）尚无承载类别；跨房移动（2B）/市场落地时 IntentBatch 须扩类别或契约改写。
 - **统一提交点（片 5）**：end_tick 不再即时 `budget.settle`（产出 cpu_billed 候选）；Memory 写回产物上提为 raw_memory 候选；begin_tick 从 PlayerState.raw_memory 注入（官方每 tick 从 DB 恢复同构）；协调器提交点一次切换世界+玩家持久状态。**B0-5 接线注意项（评审登记）**：①InjectFailed → PlayerRun 投影必须 executed=false（代码未执行——adapter 的 mapRunResult 在 executed=true 时读 kind，inject_failed 越出 syntax|runtime|serialization 三分类会抛不识别的 RunPlayerError；executed=false 走普通 Error 路径反而兼容）；②InfraFailure 的 expr 是 Null——不得误投影为 executed=true（mapRunResult 读 expr.ok 直接 TypeError）；③InfraFailure 错误串可携带玩家污染文本（beginTick 异常经全局污染）——协调器日志/RPC 按不可信内容对待；④PlayerThreads::set_raw_memory 通道（B0-4 开）无测试覆盖，B0-5 首批补 ThreadExecutor 往返测试。
+
+## 5. 片 5（WP1b 统一提交点）实现规格（B0-4 后定稿）
+
+**候选化改造（kk-runner）**：
+- `Sandbox` 增 `pending_bill: Option<f64>`（end_tick Ok 路径写入 `used+0.2×billed`；after_termination 写整份 tickLimit——**settle/settle_terminated 全部不再即时落桶**）与 `pending_raw_memory`（endTick 信封新键 `rawMemory`=writeBackMemory 成功后的 rawMemoryData 快照；game.js memoryWorld 导出 rawMemoryData getter 给 90_host）。
+- 新通道 `settle_bill(id)`（应用暂存→桶）/`discard_bill(id)`（丢弃）——协调器提交点二选一。begin_tick 开头若发现未处置暂存→丢弃（不变量：begin 前必无暂存）。
+- `EvalReport` 加 `cpu_billed_ms: Option<f64>`、`raw_memory: Option<String>`；proto.rs 的 run_eval_tick 对 begin_tick Err 改产 `kind:"inject_failed"` 报告（玩家级——mpsc 失联仍是 Err=infra）。
+- **每 tick 注入**：ThreadExecutor.execute 前 `set_raw_memory(player, PlayerState.raw_memory)`（官方 make.js 每 tick 从存档恢复同构；世界回退→PlayerState 不更新→下轮注入旧值，泄漏消灭）。
+
+**协调器（kk-runtime）**：
+- EmbedEngine 整体迁入 kk-runtime（含 terrain_codes_from_json/PlayerRun——对外 JSON-RPC 形状不变；embed_tests.rs 随迁 kk-runtime/tests 保串行链——**配套随行非 B1 治理性搬移**）；kk-engine 删 embed.rs+Cargo 删 kk-runner 依赖（验收关卡 3）；kk-cli 改依赖 kk-runtime。
+- run_players 改统一提交点：①逐玩家注入+执行→RunResult（InfraFailure→整轮 Err 停顿；InjectFailed→玩家级继续）②tick_with_intents_with_input ③成功→提交（PlayerState.raw_memory=候选 + settle_bill 各玩家 + console/last_console 发布）④失败→整轮 Err，候选**缓存**于协调器（last_pending）——**下一次 run_players 不重跑玩家、只重试结算**（ADR-013 复现①③验收）；成功轮清缓存。
+- cfg(test) 故障注入钩子 `fail_next_settle`（部分提交三连的场景②）。
+- 部分提交三连回归（kk-runtime/tests）：①注入失败轮玩家级恢复（p2 毒化 Game→InjectFailed，轮次继续，p1 Memory 照常提交）②结算失败轮全量不变（p1 Memory.n/世界 time 不动；重试轮执行次数=1——console 计数器取证）③重试只消费缓存（不重跑玩家代码）。
+
+**WP5 文档回写清单**：tick-contract 状态注（单机协调器已落地条目）、sandbox.md 对应条目、ADR-013 四项标注落实状态、灰区表 :170 整 tick 原子回退销账、b0-runtime-coordinator.md §3 WP1 形态回写（run(&WorldView,&RunSpec)/四形态）、overall.md 过渡边删除、roadmap/沿革、记忆 B0 收口更新。
+
+**验收**：ADR-013 三复现场景全绿 + `cargo tree -p kk-engine` 无 kk-runner/deno_core + 棘轮零转红 + bot 三基线 + perf-probe 同口径对比 perf-a6.md（投影/运行/结算/墙钟 p50 劣化 >20% 需归因）+ `pnpm run check`。
+
+## 6. 片 5 评审清偿与实现偏差回注（B0-5 收口）
+
+- **实现偏差（良性与实现一致）**：①Sandbox 未加 `pending_raw_memory` 字段——候选只经 endTick 信封→RunResult 携带（沙箱内 rawMemoryData 即隐式持有者，每 tick 注入覆盖使 Rust 侧槽位无必要）；②`EvalReport.bucket_after` 语义漂移为**结算前**口径（候选未落桶；bot-check 通道在 run_one_tick 内即时提交后另读——行为不变）。
+- **评审 P1 清偿**：pending 状态机闸门——`tick`/`settle_external`/`place_object`/`set_terrain` 在失败轮缓存存在时显式拒绝（no_pending_round）；重试轮键集守卫（请求缓存外玩家 bail，防 runs.remove panic 与「panic 前已提交」事故）。
+- **评审 P2 清偿**：inject_failed 计费如实携带（防免费毒化挂机的整份 tickLimit 候选进报告——报告与落桶一致）；endTick 的 rawMemory 候选加 typeof string 门（String 包装对象经污染 String.prototype.toJSON 的 3MB 伪造面关闭）；run_one_tick 的 begin_tick Err 前补 settle_bill（bot 通道丢账）；场景③取证强化（console+Memory.exec 双计数）；discard 臂测试（与重试臂形成两臂对照：丢弃轮的 exec+1 不提交）。
+- **性能口径**：vs perf-a6 基线（run -52.8%/wall -29.3%）是 B0-1..5 四片的累计效应（宿主句柄化贡献为主）；**本片自身相对父提交（3f08003）实测 +7.9% wall / 各相 +5~15%**（settle +1.42µs 为 batch_from_results 结算窗口内克隆的真成本、占 wall 0.23%）——均低于 20% 关卡。
+- **停顿口径登记**：InfraFailure 的 Err 是建议性停顿信号（embed 层不阻止立即重调）——恢复策略归调用方；停顿轮已执行玩家候选滞留沙箱、下一次 begin_tick 防御丢弃（漏计而非双计）。

@@ -9,6 +9,7 @@ workspace = true
 
 [dependencies]
 kk-engine = { workspace = true }
+kk-runtime = { workspace = true }
 kk-runner = { workspace = true }
 kk-world = { workspace = true }
 clap = { workspace = true }

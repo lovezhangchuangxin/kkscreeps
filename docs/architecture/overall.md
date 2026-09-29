@@ -50,11 +50,9 @@ kkscreeps/
 ```
 kk-cli ──→ kk-backend ──→ kk-engine ──→ kk-world ──→ kk-schema ──→ kk-core
               │               │            │
-              │               ├──→ kk-runner（沙箱，deno_core 只在此与 kk-runtime）
-              │               │      【现状过渡边：embed 编排还在 kk-engine，B0-5 移交 kk-runtime 后删除】
               │               └──→ kk-pathfinder
-              ├──→ kk-runtime ──→ kk-runner
-              │        └──→ kk-engine（运行协调层，ADR-013；B0-4 起步）
+              ├──→ kk-runtime ──→ kk-engine（运行协调层，ADR-013；B0-5 起承接 embed 编排与统一提交点）
+              │        └──→ kk-runner（沙箱，deno_core 只在此与 kk-runtime）
               └──────────→ kk-storage
 ```
 

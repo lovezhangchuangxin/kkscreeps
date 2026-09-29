@@ -1,6 +1,10 @@
 # B0 运行协调层与正确性清偿批方案
 
-> 状态：**已确认**（2026-09-29，四项裁决经用户拍板，[ADR-013](../decisions/ADR-013-architecture-review-coordinator.md)）。
+> 状态：**已确认**（2026-09-29，四项裁决经用户拍板，[ADR-013](../decisions/ADR-013-architecture-review-coordinator.md)）；
+> **B0 批已执行完毕（2026-09-29，切片执行与实现偏差见 [b0-slices.md](b0-slices.md)）**——
+> 验收关卡 1-4 全部达成（复现场景三组回归全绿、workspace/clippy 全绿、
+> kk-engine 零 kk-runner 依赖、棘轮零转红、bot 三基线绿、perf-probe 同口径
+> 四相无显著劣化且 run 相 -52.8%）。
 > 排期：**A6 关段之后执行**——此前依次为在飞清偿提交收口（棘轮+bot+地板+push）→ A5-core → A6 原范围关段（2A 关卡达成）。
 > 硬约束与 [m2-playable.md](m2-playable.md) 头注相同：①玩家侧体验与官方一致；②玩家不可越狱；在此之上按性能与确定性最优设计。
 > 依据：[ADR-013](../decisions/ADR-013-architecture-review-coordinator.md)、[tick 契约](../architecture/tick-contract.md)、

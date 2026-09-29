@@ -12,12 +12,15 @@
 //!
 //! B0-4（本片）交付类型与执行器骨架；统一提交点与 embed 编排迁移随 B0-5。
 
+pub mod embed;
+
 use std::collections::BTreeMap;
 
 use kk_engine::intent::IntentBatch;
 
 // 统一执行类型的消费面 re-export（D2：kk-cli/适配器经 kk-runtime 取型，
 // 不必直接依赖 kk-engine 的 sandbox 模块）
+pub use embed::{EmbedEngine, PlayerRun};
 pub use kk_engine::{RunOutcome, RunResult, RunSpec, Sandbox as EngineSandbox};
 use serde_json::Value;
 
@@ -38,9 +41,9 @@ pub trait PlayerExecutor {
 /// 失败分类（B0-4 现状，B0-5 随 proto.rs 通道分类细化）：
 /// - `run_player` Ok → [`RunOutcome::Executed`] / [`RunOutcome::Terminated`]
 ///   （按 expr.kind 判定，与 PlayerRun.executed 同口径）；
-/// - `run_player` Err → [`RunOutcome::InfraFailure`]（保守：线程失联与
-///   注入失败暂同归此类；B0-5 把注入失败拆为玩家级 InjectFailed——玩家把
-///   环境搞坏不冒泡整轮）。
+/// - `run_player` Ok 且 expr.kind=="inject_failed" → [`RunOutcome::InjectFailed`]
+///   （玩家把环境搞坏——玩家级，不冒泡整轮；B0-5 起实装）；
+/// - `run_player` Err → [`RunOutcome::InfraFailure`]（线程失联等基础设施故障）。
 pub struct ThreadExecutor {
     pool: kk_runner::PlayerThreads,
     /// 玩家 handle → 线程 id（BTreeMap：固定遍历序）。
@@ -86,6 +89,24 @@ impl ThreadExecutor {
             .get(player)
             .ok_or_else(|| anyhow::anyhow!("未知玩家 {player}"))?;
         self.pool.set_raw_memory(id, data)
+    }
+
+    /// 提交玩家的计费候选（统一提交点：世界结算成功后——计费落桶）。
+    pub fn settle_bill(&mut self, player: &str) -> anyhow::Result<()> {
+        let id = *self
+            .handles
+            .get(player)
+            .ok_or_else(|| anyhow::anyhow!("未知玩家 {player}"))?;
+        self.pool.settle_bill(id)
+    }
+
+    /// 丢弃玩家的计费候选（结算失败回退——玩家桶不扣）。
+    pub fn discard_bill(&mut self, player: &str) -> anyhow::Result<()> {
+        let id = *self
+            .handles
+            .get(player)
+            .ok_or_else(|| anyhow::anyhow!("未知玩家 {player}"))?;
+        self.pool.discard_bill(id)
     }
 
     pub fn len(&self) -> usize {
@@ -135,9 +156,11 @@ impl PlayerExecutor for ThreadExecutor {
 /// from_json 按玩家键——冒名面结构上不存在）、结局分类、PlayerRun 投影的
 /// 数据源（expr/console 原样携带）。
 fn eval_report_to_run_result(player: &str, report: kk_runner::EvalReport) -> RunResult {
-    // PlayerRun.executed 同口径（embed.rs finish_player_run）：kind != terminated
+    // 结局分类：停跑（代码未执行）= Terminated；注入失败（玩家把环境搞坏，
+    // B0-5 玩家级）= InjectFailed；软异常 runtime = Executed（错误经 expr 携带）
     let outcome = match report.expr.get("kind").and_then(Value::as_str) {
         Some("terminated") => RunOutcome::Terminated,
+        Some("inject_failed") => RunOutcome::InjectFailed,
         _ => RunOutcome::Executed,
     };
     let intents = match report.intents.as_object() {
@@ -149,9 +172,10 @@ fn eval_report_to_run_result(player: &str, report: kk_runner::EvalReport) -> Run
         outcome,
         intents,
         expr: report.expr,
-        // 候选字段 B0-5 接线（end_tick 候选化后产出实际值）
-        cpu_billed_ms: None,
-        raw_memory: None,
+        // 候选（B0-5 统一提交点）：end_tick 产出的计费与 RawMemory 由协调器
+        // 在世界结算成功后提交
+        cpu_billed_ms: report.cpu_billed_ms,
+        raw_memory: report.raw_memory,
         console: report.console.iter().map(|l| l.text.clone()).collect(),
     }
 }
@@ -239,6 +263,8 @@ mod tests {
             }],
             bucket_after: 1.0,
             intents: serde_json::Value::Null,
+            cpu_billed_ms: None,
+            raw_memory: None,
         };
         let r = eval_report_to_run_result("p1", mk("terminated"));
         assert_eq!(r.outcome, RunOutcome::Terminated);

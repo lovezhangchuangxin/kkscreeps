@@ -10,7 +10,7 @@ use std::io::{BufRead, Write};
 
 use serde_json::{Value, json};
 
-use kk_engine::EmbedEngine;
+use kk_runtime::EmbedEngine;
 
 pub fn run() -> i32 {
     let mut engine = EmbedEngine::new();
@@ -72,7 +72,7 @@ fn handle_line(engine: &mut EmbedEngine, line: &str) -> anyhow::Result<Value> {
             let terrain_value = params
                 .get("terrain")
                 .ok_or_else(|| anyhow::anyhow!("缺少 terrain 数组"))?;
-            let terrain = kk_engine::embed::terrain_codes_from_json(terrain_value)?;
+            let terrain = kk_runtime::embed::terrain_codes_from_json(terrain_value)?;
             engine.set_terrain(room, terrain)?;
             json!({ "done": true })
         }
@@ -137,7 +137,7 @@ fn handle_line(engine: &mut EmbedEngine, line: &str) -> anyhow::Result<Value> {
     Ok(result)
 }
 
-fn player_run_json(run: &kk_engine::PlayerRun) -> Value {
+fn player_run_json(run: &kk_runtime::PlayerRun) -> Value {
     json!({
         "executed": run.executed,
         "expr": run.expr,

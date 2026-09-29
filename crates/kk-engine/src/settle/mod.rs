@@ -68,6 +68,9 @@ impl std::fmt::Display for SettleError {
 pub struct PlayerState {
     pub gcl: i64,
     pub rooms: BTreeSet<String>,
+    /// 玩家持久 RawMemory（B0-5 统一提交点：玩家执行产出候选、世界结算成功
+    /// 后在此提交；下一 tick 注入沙箱——官方每 tick 从存档恢复同构）。
+    pub raw_memory: String,
 }
 
 /// 一轮结算的非确定性输入（ADR-013 决策 5）：墙钟等外部输入显式注入——

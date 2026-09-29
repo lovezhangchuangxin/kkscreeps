@@ -44,8 +44,11 @@ fn tick(sb: &mut Sandbox, w: &serde_json::Value) -> anyhow::Result<TickOutcome> 
         TickPlan::SkipPenalty => Ok(TickOutcome::Terminated), // 调用方语境下都算"没跑成"
         TickPlan::Run { .. } => {
             let mut out = sb.run_loop()?;
-            // end_tick 自带结算（含写回耗时，官方口径）；写回阶段被硬中断 → Terminated
+            // end_tick 产出计费候选（B0-5 统一提交点）；本 helper 模拟单机无回退
+            // 的协调器——立即提交（含写回耗时，官方口径）；写回阶段被硬中断 →
+            // Terminated（候选由善后产出，同样提交）
             let wb = sb.end_tick()?;
+            sb.settle_bill();
             if wb.get("terminated").and_then(serde_json::Value::as_bool) == Some(true) {
                 out = TickOutcome::Terminated;
             }
@@ -1866,9 +1869,18 @@ fn intent_channel_prelude_forms_impl() -> anyhow::Result<()> {
             let end = sb.end_tick()?;
             assert_eq!(end["terminated"], true, "硬中断");
             assert!(sb.take_intents().is_none(), "硬中断 intents 丢弃");
+            // 计费候选化（B0-5 统一提交点）：end_tick 后桶未动（候选暂存），
+            // settle_bill 提交后按整份 tickLimit 扣
+            assert_eq!(sb.bucket(), bucket_before, "候选未提交前桶不动");
+            assert!(
+                sb.pending_bill().is_some_and(|b| b >= 470.0),
+                "整份计费候选（{:?}）",
+                sb.pending_bill()
+            );
+            sb.settle_bill();
             assert!(
                 bucket_before - sb.bucket() >= 470.0,
-                "整份计费（{} → {}）",
+                "提交后整份计费（{} → {}）",
                 bucket_before,
                 sb.bucket()
             );

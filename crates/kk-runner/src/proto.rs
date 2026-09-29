@@ -42,18 +42,31 @@ pub struct TickReport {
 /// 一次"玩家代码求值 tick"的报告（screeps-ok runPlayer 通道）。
 #[derive(Debug)]
 pub struct EvalReport {
-    /// runExpr 的结果 JSON：`{ok, value?} | {ok:false, kind, error}`。
+    /// runExpr 的结果 JSON：`{ok, value?} | {ok:false, kind, error}`——注入
+    /// 失败（玩家把环境搞坏）为 `{ok:false, kind:"inject_failed"}`（玩家级）。
     pub expr: Value,
     pub console: Vec<LogLine>,
     pub bucket_after: f64,
     /// endTick 带出的本 tick intentsList（Null = 无/硬中断丢弃）。
     pub intents: Value,
+    /// CPU 计费候选（B0-5 统一提交点：end_tick/善后产出、不再即时落桶——
+    /// 协调器结算成功后 settle_bill 提交；None = 跳帧（未执行不计费）。注入
+    /// 失败携带整份 tickLimit 候选（防免费毒化挂机，见 run_eval_tick）。
+    /// bucket_after 是**结算前**口径（候选未落桶；bot-check 通道在 run_one_tick
+    /// 内即时提交后另读）。
+    pub cpu_billed_ms: Option<f64>,
+    /// RawMemory 候选（写回成功时的 rawMemoryData 快照；None = 写回失败/未达）。
+    pub raw_memory: Option<String>,
 }
 
 enum Cmd {
     SetModules(ModuleTable, mpsc::Sender<anyhow::Result<()>>),
     /// 注入 RawMemory 初值（tick 边界——协调层提交点统一驱动的通道面）。
     SetRawMemory(String, mpsc::Sender<anyhow::Result<()>>),
+    /// 提交计费候选（统一提交点的成功臂）。
+    SettleBill(mpsc::Sender<anyhow::Result<()>>),
+    /// 丢弃计费候选（统一提交点的失败/回退臂）。
+    DiscardBill(mpsc::Sender<anyhow::Result<()>>),
     Tick {
         world: Value,
         ack: mpsc::Sender<anyhow::Result<TickReport>>,
@@ -123,6 +136,14 @@ impl PlayerThreads {
                         Cmd::SetRawMemory(data, ack) => {
                             let _ = ack.send(sandbox.set_raw_memory(&data));
                         }
+                        Cmd::SettleBill(ack) => {
+                            sandbox.settle_bill();
+                            let _ = ack.send(Ok(()));
+                        }
+                        Cmd::DiscardBill(ack) => {
+                            sandbox.discard_bill();
+                            let _ = ack.send(Ok(()));
+                        }
                         Cmd::Tick { world, ack } => {
                             let _ = ack.send(run_one_tick(&mut sandbox, &world));
                         }
@@ -175,6 +196,26 @@ impl PlayerThreads {
         let p = self.player_mut(id)?;
         let (ack_tx, ack_rx) = mpsc::channel();
         p.send(Cmd::SetRawMemory(data.to_string(), ack_tx));
+        ack_rx
+            .recv()
+            .map_err(|_| anyhow::anyhow!("玩家 {id} 线程无响应"))?
+    }
+
+    /// 提交玩家的计费候选（B0-5 统一提交点：世界结算成功后调用——计费落桶）。
+    pub fn settle_bill(&mut self, id: u64) -> anyhow::Result<()> {
+        let p = self.player_mut(id)?;
+        let (ack_tx, ack_rx) = mpsc::channel();
+        p.send(Cmd::SettleBill(ack_tx));
+        ack_rx
+            .recv()
+            .map_err(|_| anyhow::anyhow!("玩家 {id} 线程无响应"))?
+    }
+
+    /// 丢弃玩家的计费候选（世界结算失败回退——玩家桶不扣）。
+    pub fn discard_bill(&mut self, id: u64) -> anyhow::Result<()> {
+        let p = self.player_mut(id)?;
+        let (ack_tx, ack_rx) = mpsc::channel();
+        p.send(Cmd::DiscardBill(ack_tx));
         ack_rx
             .recv()
             .map_err(|_| anyhow::anyhow!("玩家 {id} 线程无响应"))?
@@ -306,7 +347,16 @@ impl Drop for PlayerThreads {
 }
 
 fn run_one_tick(sandbox: &mut Sandbox, world: &Value) -> anyhow::Result<TickReport> {
-    match sandbox.begin_tick(world)? {
+    // 注入阶段失败（Err）经善后已写整份计费候选——本通道无提交点概念，
+    // 立即提交保持旧「即时结算」行为（B0-5 评审 P2 清偿：否则该轮丢账）
+    let plan = match sandbox.begin_tick(world) {
+        Ok(plan) => plan,
+        Err(e) => {
+            sandbox.settle_bill();
+            return Err(e);
+        }
+    };
+    match plan {
         // 跳帧 tick（桶为负透支，官方 cpuAvailable<0 停跑语义）：不执行玩家代码。
         // TickReport.plan 携带 SkipPenalty 供消费方（bot_check 等）与真实硬中断区分；
         // outcome 有意映射为 Terminated（runPlayer 的 executed=false 契约依赖它）。
@@ -328,9 +378,12 @@ fn run_one_tick(sandbox: &mut Sandbox, world: &Value) -> anyhow::Result<TickRepo
                 TickOutcome::Completed { .. } => sandbox.cpu_used_ms(),
                 TickOutcome::Terminated => 0.0,
             };
-            // end_tick 自带结算（含写回耗时）；写回阶段被硬中断（如玩家经
-            // Memory.toJSON 挂死写回）→ 本 tick 记 Terminated
+            // end_tick 产出计费候选（统一提交点语义）；bot-check 通道（Cmd::Tick）
+            // 无世界回退概念——立即提交，保持「结算含写回耗时」的原行为。
+            // 写回阶段被硬中断（如玩家经 Memory.toJSON 挂死写回）→ 本 tick 记
+            // Terminated（候选由 after_termination 产出，同样在此提交）
             let writeback = sandbox.end_tick()?;
+            sandbox.settle_bill();
             let intents = sandbox.take_intents().unwrap_or(Value::Null);
             if writeback.get("terminated").and_then(Value::as_bool) == Some(true) {
                 outcome = TickOutcome::Terminated;
@@ -360,9 +413,33 @@ fn run_one_tick(sandbox: &mut Sandbox, world: &Value) -> anyhow::Result<TickRepo
     }
 }
 
-/// runPlayer 通道：世界注入 → 表达式求值（真实沙箱）→ Memory 写回与结算。
+/// runPlayer 通道：世界注入 → 表达式求值（真实沙箱）→ Memory 写回与候选结算。
 fn run_eval_tick(sandbox: &mut Sandbox, world: &Value, code: &str) -> anyhow::Result<EvalReport> {
-    match sandbox.begin_tick(world)? {
+    // 注入失败分类（B0-5，ADR-013 复现场景①）：玩家把环境搞坏（如 defineProperty
+    // Game 冲突）使 beginTick 失败——**玩家级失败**（不冒泡整轮 Err；协调器
+    // 记 InjectFailed 结局、轮次继续），mpsc 层故障仍走 Err=基础设施
+    let plan = match sandbox.begin_tick(world) {
+        Ok(plan) => plan,
+        Err(e) => {
+            // 计费如实携带（B0-5 评审 P2 清偿）：注入失败走 after_termination
+            // 善后——计费候选=整份 tickLimit（防「免费毒化挂机」：玩家每轮
+            // 毒化世界注入即失败，若不收费可无限白嫖 CPU 窗口的装配工作）。
+            // 报告与实际落桶一致，杜绝「报告 None、桶实扣」的口径分歧
+            let bill = sandbox.pending_bill();
+            return Ok(EvalReport {
+                expr: serde_json::json!({
+                    "ok": false, "kind": "inject_failed",
+                    "error": format!("世界注入失败: {e}"),
+                }),
+                console: sandbox.drain_console(),
+                bucket_after: sandbox.bucket(),
+                intents: Value::Null,
+                cpu_billed_ms: bill,
+                raw_memory: None,
+            });
+        }
+    };
+    match plan {
         TickPlan::SkipPenalty => Ok(EvalReport {
             // 负桶停跑：代码根本没执行——契约规定这是适配器的普通基础设施错误
             //（"未执行 ≠ undefined"），不是 RunPlayerError
@@ -372,6 +449,8 @@ fn run_eval_tick(sandbox: &mut Sandbox, world: &Value, code: &str) -> anyhow::Re
             console: sandbox.drain_console(),
             bucket_after: sandbox.bucket(),
             intents: Value::Null,
+            cpu_billed_ms: None,
+            raw_memory: None,
         }),
         TickPlan::Run { .. } => {
             let mut expr = sandbox.run_expr(code)?;
@@ -400,6 +479,13 @@ fn run_eval_tick(sandbox: &mut Sandbox, world: &Value, code: &str) -> anyhow::Re
                 console: sandbox.drain_console(),
                 bucket_after: sandbox.bucket(),
                 intents,
+                // 候选带出（B0-5 统一提交点）：计费与 RawMemory 都由协调器在
+                // 世界结算成功后提交（settle_bill/PlayerState），失败轮丢弃
+                cpu_billed_ms: sandbox.pending_bill(),
+                raw_memory: writeback
+                    .get("rawMemory")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned),
             })
         }
     }

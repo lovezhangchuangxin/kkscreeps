@@ -162,6 +162,12 @@ pub struct Sandbox {
     /// 整轮丢弃，make.js:279-294）；EmbedEngine 经 take_intents 消费后转
     /// IntentBatch 进结算。
     pending_intents: Option<Value>,
+    /// 本 tick 的 CPU 计费**候选**（B0-5 统一提交点：不再即时落桶——end_tick
+    /// Ok 路径写 `used+0.2×intents`，硬中断善后写整份 tickLimit）。协调器在
+    /// 世界结算成功后经 settle_bill 提交、失败经 discard_bill 丢弃——消灭
+    /// 「世界回退但玩家桶已扣」的部分提交泄漏（ADR-013 复现①的 CPU 面）。
+    /// 不变量：begin_tick 开头必无未处置候选（有则丢弃——防御）。
+    pending_bill: Option<f64>,
 }
 
 impl Sandbox {
@@ -217,6 +223,7 @@ impl Sandbox {
             terminated_this_tick: false,
             last_loop_error: None,
             pending_intents: None,
+            pending_bill: None,
         };
         sb.install_near_heap_callback();
         // 记账（线程序栈压栈 + 存活计数）必须在所有可失败步骤之后、返回前——
@@ -300,6 +307,9 @@ impl Sandbox {
 
     /// tick 开始：预算结算 + 世界注入。返回 SkipPenalty 时本 tick 不执行玩家代码。
     pub fn begin_tick(&mut self, world: &serde_json::Value) -> anyhow::Result<TickPlan> {
+        // 统一提交点不变量（B0-5）：上一轮的计费候选必须已被协调器处置
+        //（settle_bill/discard_bill）——残留说明调用方漏处置，丢弃并继续
+        self.pending_bill = None;
         match self.budget.begin_tick() {
             // 停跑 tick 不执行任何代码——stale intents 一并清置（不变量：
             // 任何 tick 边界不留上一轮未消费的 intents；该分支报告 intents 恒 Null）
@@ -434,7 +444,9 @@ impl Sandbox {
                     intents
                 };
                 self.pending_intents = intents;
-                self.budget.settle(self.cpu_used_ms() + 0.2 * billed as f64); // 含写回耗时（官方口径）
+                // 计费候选化（B0-5 统一提交点）：不再即时落桶——含写回耗时
+                //（官方口径），协调器结算成功后经 settle_bill 提交
+                self.pending_bill = Some(self.cpu_used_ms() + 0.2 * billed as f64);
                 // near-heap 触发后正常完成的 tick 也要恢复堆上限（B0-1 评审
                 // 登记：此前只在硬中断路径恢复，"触发但正常完成"会使沙箱终身
                 // 保持放大后的 512MB ceiling——teardown 成本翻倍、逐出风暴放大）
@@ -504,6 +516,24 @@ impl Sandbox {
         self.pending_intents.take()
     }
 
+    /// 当前计费候选的只读视图（EvalReport 带出给协调器/测试）。
+    pub fn pending_bill(&self) -> Option<f64> {
+        self.pending_bill
+    }
+
+    /// 提交本 tick 的计费候选（协调器统一提交点：世界结算成功后调用）。
+    /// 无候选（未执行/跳帧）为 no-op。
+    pub fn settle_bill(&mut self) {
+        if let Some(bill) = self.pending_bill.take() {
+            self.budget.settle(bill);
+        }
+    }
+
+    /// 丢弃本 tick 的计费候选（世界结算失败回退——玩家桶不扣）。
+    pub fn discard_bill(&mut self) {
+        self.pending_bill = None;
+    }
+
     /// 求值一段玩家表达式（screeps-ok 适配器的 runPlayer 通道），恰好占用一个 tick 的
     /// 执行语义由调用方（engine/embed）负责编排。
     pub fn run_expr(&mut self, code: &str) -> anyhow::Result<serde_json::Value> {
@@ -562,7 +592,8 @@ impl Sandbox {
         self.watchdog.disarm();
         self.runtime.v8_isolate().cancel_terminate_execution();
         if !self.terminated_this_tick {
-            self.budget.settle_terminated();
+            // 硬中断计费同样候选化（B0-5）：整份 tickLimit 的账在提交点落桶
+            self.pending_bill = Some(self.budget.tick_limit().ceil());
             self.terminated_this_tick = true;
         }
         self.restore_heap_limit();
