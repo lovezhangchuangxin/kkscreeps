@@ -1,0 +1,299 @@
+# F2 渲染器批：@kkscreeps/renderer 实现方案
+
+> 状态：**方案草案（待用户拍板）**。基准 HEAD=e7adf47，分支 `f2-renderer`，
+> worktree `.worktrees/renderer/`（主树留给引擎批会话，两线隔离）。
+> 依据：用户 2026-09-30 指示——实现 `@kkscreeps/renderer`，**视觉与官方一致**；
+> 不复用官方老栈（PixiJS 7 + 自研表达式引擎），用**最新 PixiJS + 更好架构**，
+> 优化渲染性能，易扩展易维护。架构既定决策见 [ADR-009](../decisions/ADR-009-frontend-stack.md)
+> 与 [frontend.md §四](../architecture/frontend.md)（本批是它的首个实装）。
+> 官方渲染器逐文件拆解底账：[renderer-official-analysis.md](../research/notes/renderer-official-analysis.md)
+> （下称〔官拆〕；关键常量已主会话抽查复核）。
+
+## 0. 目标与总原则
+
+- **视觉对官方**：同一状态数据下与官方客户端观感一致——资产同源（官方 SVG，
+  ISC 许可）+ z 序同构 + 动效语义同构（时序分数/色表/规格逐项复刻，〔官拆〕
+  为准）。**凡是刻意分歧或无法取证处，登记灰区表，不静默**（沿用兼容灰区纪律）。
+- **架构现代化**：纯 TS 库、框架无关、数据驱动（渲染规格=静态表）；Pixi 对象
+  绝不进公共 API（ADR-009 第 4 条）。
+- **性能预算前置**：官方已知坑（destroy/rebuild 风暴、每文本挂全局 ticker、
+  光束逐帧重画、无限动画不休眠，〔官拆〕§10）逐条设对策；指标见 §5，每片出口
+  跑性能冒烟，验收以 harness 实测为准。
+- **零引擎侵入**：引擎侧只新增只读 exporter（新文件），不改 `world_json.rs`/
+  `snapshot.rs`（M2B 前置批宏化正押这两文件）等任何既有文件；引擎缺口登记
+  回主序列（§8），不在本批顺手改。
+- **每片独立走完整批次循环**（实现 → 测试绿 → harness 人工验收 → ≥3 路
+  subagent 评审 → 清偿复审 → 单一归因提交，subject ≤350）。
+
+## 1. 调研结论（2026-09-30）
+
+### 1.1 官方渲染器（PixiJS 7.4.2 + @pixi/layers 2.0）
+
+〔官拆〕全文。承重结论：
+
+1. **z 序是静态表不是动态排序**：全局 5 层
+   `terrain → wallGraffiti → objects → lighting → effects`，objects 层内每类型
+   固定 zIndex（-1 road … 18 constructionSite，全表见〔官拆〕§2）——我方可
+   预建固定层容器，**零每帧排序**。
+2. **rampart 是顶层罩不是底层**：私有 rampart 画成整片色区路由到 effects 层
+   α0.4 ADD，永远盖在 creep/结构上（最易做错的一条）。
+3. **terrain 是合并 path + 烘焙**：wall/swamp/rampart 各生成连通轮廓合并的
+   SVG path（外凸圆角 r50），烘焙 RenderTexture + md5 门控；plain 是底色+
+   噪声平铺。**不是逐格贴图、无变体、无坐标 hash**。
+4. **creep body 环算法**（常量已复核）：合并同类型部件 hits → 升序排 →
+   非 move 自头顶向两侧对称展开、move 自正下展开，弧长 ∝ hits；掉血=弧短、
+   死亡=弧消失；无 tint 无闪烁。
+5. **动效全由 actionLog 驱动**，时序全是 tick 时长分数（1/4-3/4、0.6 tick、
+   0.2/0.8 tick）；**无结构血条、无伤害/治疗浮动数字**（全仓 grep 裁决）。
+6. **RoomVisual 不在开源渲染器内**（闭源客户端壳绘制）——只能黑盒对齐。
+7. 光照=lighting 层 MULTIPLY(0x808080 环境) + display 事件 SCREEN 混合。
+
+### 1.2 PixiJS 选型（实现期锁死）
+
+- **v8 最新稳定（当前 8.19.x）**：WebGPU 优先 + WebGL 自动回退；对本批关键
+  的能力——`RenderGroup`（容器整体 GPU 单元）/`container.bake()`（静态子树
+  预变换）/`cullable/cullableChildren/cullArea`（视锥剔除）/重写版 Graphics
+  （RoomVisual 与程序绘制）/BitmapText/混合模式（ADD/MULTIPLY/SCREEN，官方
+  光照复刻需要）。来源：pixijs.com v8 官方指南（render-groups/performance-tips/
+  v8 migration）。
+- 依赖最小面：`pixi.js` 单包；不引入 @pixi/layers 等价物（v8 原生 sortableChildren
+  + 静态层表已足够，见 §2）。
+- 工具链：Node 24（本机 v24.11.0）/pnpm 12 workspace（已就绪）。
+
+### 1.3 我方数据面（引擎现状，零侵入消费）
+
+- `World::world_json()` / `world_json_for_viewer()`（`kk-world/src/world_json.rs`）
+  已产出官方形状 JSON：`{time, user, gcl, visibleRooms, rooms:{name:{name,
+  terrain:[2500 码], energyAvailable…, events[]}}, objects:[官方 camelCase 字段]}`
+  ——**这就是夹具的现成原料**。
+- terrain 编码同官方：2500 字节位掩码 wall=1/swamp=2/lava=4（`kk-core/terrain.rs`）。
+- 对象面：`RoomObject` 15 typed 变体 + Generic 透传桶（tower/rampart/lab 等
+  2B 前在 `data` JSON 里带 structureType 与官方字段——渲染器解析 data 即可全量
+  渲染，2B 转正后零改动）。
+- **动效驱动缺口**：`CreepObj.action_log` 现为 u16 位图（M1 压缩，仅 harvest/
+  build/upgrade/reserve 四位，无坐标无战斗动作，room.rs:76 注释明言 M2 换官方
+  13 键形态）；但 `RoomState.events`（官方 EVENT 形状，含目标 id）已在投影。
+  → **v0 动效走事件面驱动**（EVENT_ATTACK/HEAL/… + id→坐标解析），actionLog
+  完整形态落位后作为第二通道接入（契约双通道设计，§3）。
+
+### 1.4 资产与许可
+
+- 官方 SVG×117 + 程序底纹 PNG×9（`metadata/images/`），**ISC 许可**（LICENSE.txt
+  已核）——vendor 进仓 `packages/renderer/assets/svg/`，随附 LICENSE 原文。
+- Roboto 字体（官方文字常量 Roboto 55/60px）单独 vendor（Apache-2.0）。
+
+## 2. 架构设计
+
+### 2.1 包内布局（frontend.md §四 的落地细化）
+
+```
+packages/renderer/
+├── src/
+│   ├── core/       renderer 生命周期、ticker、viewport（平移/缩放至光标/钳边/拾取）、层栈
+│   ├── scenes/     room.ts（50×50 房间场景装配）；worldmap.ts 占位（M4）
+│   ├── objects/    registry.ts（类型→渲染描述符）+ 各类型实现 + creep/bodyRing.ts
+│   ├── feed/       RoomFeed 适配：snapshot 按 id 对账→场景增量；delta 应用；事件→动效映射
+│   ├── assets/     atlas 清单与加载、多分辨率（@1x/@2x）
+│   ├── anim/       tick 时钟与插值、tween 池、效果播放器、进度条/气泡/徽标
+│   └── index.ts    createRenderer 公共 API（R6 冻结）
+├── assets/svg/     官方 SVG vendor + LICENSE（生成物 atlas 入 assets/）
+├── scripts/        build-assets.mjs（SVG→atlas）+ check-assets-fresh.mjs（CI 新鲜度）
+├── dev/            回放 harness（Vite 页面，不进库构建）
+├── fixtures/       exporter 产物 + 手工边界夹具（提交入库）
+└── test/           Vitest（feed 对账/differ、body 排布、z 表、visual 映射纯逻辑）
+packages/shared/src/feed.ts   RoomFeed 契约 v0（§3）
+```
+
+数据流单向：
+`夹具/网络投影(RoomSnapshot/RoomDelta) → feed 对账器(id 索引+池) → 场景图(固定层栈)
+ → Pixi v8 渲染`；动画时钟独立于数据到达（tick 时长可配置；数据断流动画照跑，
+对齐官方〔官拆〕§7）。
+
+### 2.2 层栈（对官方 5 层的同构复刻，零每帧排序）
+
+预建固定层容器（等价官方 pixi-layers 路由的静态化）：
+
+```
+terrain(烘焙纹理,RenderGroup) → ground(road 连通绘制) → objects(每类型固定 zIndex
+子容器,静态) → lighting(离屏纹理合成:0x808080 环境光 MULTIPLY + 亮斑 SCREEN)
+→ effects(动效/文字/rampart 罩) → hud(harness 交互辅助,不属渲染器)
+```
+
+- objects 层 zIndex 子容器按〔官拆〕§2 全表建槽（类型→槽映射在 registry 表）。
+- **lighting pass**：离屏 RenderTexture（环境光灰底 + glow 亮斑 ADD）→ 以
+  MULTIPLY 合成回主场景，再叠 SCREEN 亮斑——复刻官方 PassThroughFilter 语义；
+  WebGPU 下若滤镜能力缺口则降级"仅 ADD 亮斑、无全局压暗"并登记灰区。
+- rampart：整片连通色区（own `#105010/#44ff44`、enemy `#501010/#ff4444`）挂
+  effects 层 α0.4 ADD——顶层罩，不进 objects 层。
+
+### 2.3 数据驱动渲染规格（保留官方 metadata 思想，去掉运行时表达式引擎）
+
+- 每对象类型一个**渲染描述符**（TS 静态表）：`{ zIndex 槽位, 纹理键(按状态/
+  等级/变体), 程序部件(圆/弧/条/文字)声明, 动效声明(事件键→播放器+时序分数),
+  差量键(哪些字段变化才重绘) }`。**表在编译期存在，无运行时求值**——官方
+  "90% 视觉规格是数据"的可维护性 + 零表达式引擎开销。
+- 新增对象类型 = 加一个描述符文件 + 注册（2B 转正 tower/lab 等、M4 新类型
+  都走这条路）；服务端注入渲染元数据扩展点保留（描述符可被运行时补丁表覆盖）。
+- 差量更新对齐官方 `props` 思想但实现为**字段级脏标记**（描述符声明关注的
+  字段集，对账器只 diff 这些字段，命中才调用该部件重绘）。
+
+### 2.4 性能对策（逐坑对应官方〔官拆〕§10）
+
+| 官方的坑 | 我方对策 |
+|---|---|
+| processor 重跑 destroy/rebuild（无池） | 对象视图池（按类型，id 对账复用；dispose 仅在房卸载） |
+| 每文本挂 Ticker.shared + 每帧 getBounds | 文本事件驱动更新（内容/缩放档变化才重绘）；zoom 档位化重排 |
+| 光束逐帧 Graphics 重画 | 束贴图预生成（构建期烘几条束变体）→ scale/rotation 变换复用 |
+| 无限动画不休眠 | 常驻动画（炮塔自转/source 呼吸）统一由动画调度器按可见性/zoom 档降频或挂起 |
+| 运行时生成 SVG data-URI | 全部资产构建期栅格化入 atlas；terrain path 烘焙带 md5 门控缓存（同官方） |
+| 每帧 Layer 排序 | 静态层槽（§2.2），零排序 |
+
+terrain：官方路径合并算法移植（连通轮廓+外凸圆角）→ 一次性烘 2048² 纹理 +
+噪声层；swamp 滚动噪声用 TilingSprite 偏移（GPU 侧，无重绘）。
+
+### 2.5 动效系统
+
+- 事件映射表：`EVENT_ATTACK/HEAL/REPAIR/BUILD/HARVEST/…`（官方 EVENT 常量）
+  + 目标 id→坐标解析 → 效果播放器（咬合突进/双层光束/罩/扇形波），时序与
+  色表逐项取〔官拆〕§4 数值。
+- 第二通道（actionLog 完整形态落位后）：官方 13 键 actionLog 直接驱动（契约
+  预留 `RoomDelta.actionLogs`，v0 不产出）。
+- say 气泡：契约预留 `RoomDelta.says` 通道（引擎暂无 say 事件面——登记 §8）；
+  v0 夹具手工注入演示；视觉规格按〔官拆〕§3。
+
+## 3. 契约 v0（@kkscreeps/shared 新增 `feed.ts`；渲染器只对契约编程）
+
+```ts
+/** 地形：2500 位掩码码（wall=1/swamp=2/lava=4），同 kk-core/terrain.rs。 */
+interface TerrainData { codes: number[] }          // Uint8Array 亦可（序列化面 number[]）
+
+/** 房间快照（首帧/切房全量）。字段=world_json objects 的官方 camelCase 子集。 */
+interface RoomSnapshot {
+  time: number; room: string;
+  terrain: TerrainData;                            // 快照携带地形（烘焙门控键）
+  objects: RoomObjectState[];                      // id/type/x/y + 类型字段（typed 15 类 + Generic.data）
+  energyAvailable?: number; energyCapacityAvailable?: number;
+}
+
+/** 增量（每 tick 推送）；v0 由 harness/夹具 differ 生成，M3 网络投影同形替换。 */
+interface RoomDelta {
+  time: number; room: string;
+  upsert: RoomObjectState[]; removedIds: string[];
+  events?: RoomEvent[];      // 官方 EVENT 形状（动效第一通道）
+  actionLogs?: ...;          // 预留：官方 13 键形态（第二通道，v0 不产出）
+  says?: SayEntry[];         // 预留：说话通道（引擎缺口登记 §8）
+}
+
+/** 玩家绘制（RoomVisual API 的序列化形；样式黑盒对齐官方，灰区表盯梢）。 */
+type RoomVisual = LineV | CircleV | RectV | PolyV | TextV;   // 各含 {x,y,样式的官方字段}
+
+/** RoomFeed：与后端变更集同构的输入接口（frontend.md §四）。 */
+interface RoomFeed {
+  setTerrain(room: string, t: TerrainData): void;
+  applySnapshot(s: RoomSnapshot): void;
+  applyDelta(d: RoomDelta): void;
+  setVisuals(room: string, v: RoomVisual[]): void;
+}
+```
+
+- 夹具格式 = `{ room, ticks: [RoomSnapshot, RoomDelta, …] }`（首快照+增量链）；
+  exporter 直接从 world_json 逐 tick 产出，harness differ 负责快照→增量。
+- 对象 id：夹具内 `string`（world_json u64 序列化）；坐标 50×50 网格。
+- 契约版本化注释头（v0 未冻结，M3 投影落地时校准——feed 层薄适配隔离漂移）。
+
+## 4. 资产管线与夹具产出
+
+- **vendor**：`assets/svg/`（官方 117 SVG + 9 PNG，ISC LICENSE 随附）+ Roboto
+  woff2（Apache-2.0 NOTICE）。
+- **build-assets.mjs**：`@resvg/resvg-js`（prebuilt napi，无构建脚本，pnpm
+  allowBuilds 纪律无扰）栅格化 @1x/@2x → `maxrects-packer` 打包 → Pixi Assets
+  兼容 atlas JSON + PNG 入 `assets/`（**生成物入库**，和常量管线同一纪律）。
+- **check-assets-fresh.mjs**：源 SVG/字体 hash 清单 vs 产物 hash，CI 新鲜度
+  （挂 renderer 包 test 前，根 `pnpm run check` 自动拾取）。
+- **夹具 exporter**：kk-cli 新增只读子命令（新文件，main 分发表一行）：脚本
+  世界（settle_tests Fixture 同款摆法：全平原/标准房/沼泽墙混合/密集边界四张）
+  跑 N tick 逐 tick 落 world_json → harness differ 转 `{snapshot, deltas[]}`
+  JSON 入 `fixtures/`。**零 V8 依赖、确定性、只读公开 API**。
+
+## 5. 性能设计与指标（提案，待用户确认后冻结为验收）
+
+对策见 §2.4。指标（harness perf 模式实测记录归档 `docs/research/notes/`）：
+
+| 指标 | 目标 | 场景 |
+|---|---|---|
+| 帧率 | 60fps（帧预算 16.6ms，渲染 ≤8ms） | 1080p、满配房：300 对象/50 creep/100 visual/地形全类型 |
+| 对账延迟 | 单 tick snapshot 对账 <2ms | 同上场景（id 索引+池复用） |
+| 内存稳态 | 10k tick 回放无增长（池稳态，无累积分配） | 标准房 2000 tick 循环 |
+| 启动 | atlas 预生成下 <1s 到首帧 | 含 WebGPU 初始化 |
+
+开发机基线：本机（Apple Silicon）+ Chrome；WebGL 回退路径同场景跑通（数字
+记录、不设门）。LOD/世界地图缩略（远景降细节）本批只留接口不实现（M4 地图场景一并做）。
+
+## 6. 视觉对齐清单（验收口径）
+
+对齐项=〔官拆〕§2-§7 的全部规格数值，验收方式：harness 对同一夹具渲染截图
+vs 官方客户端（demo 模式喂同状态）人工比对 + 关键常量的单测断言（body 环/
+z 表/色表/字体常量直接测代码常量）。逐片勾项，收口时全绿或进灰区表。
+
+**灰区表（初始条目，收口时逐条销账或保留）**：
+
+| # | 项 | 缘由 | 处置 |
+|---|---|---|---|
+| G1 | RoomVisual 样式映射 | 官方闭源壳绘制，开源渲染器无代码 | 黑盒对齐官方文档/截图，逐原语登记 |
+| G2 | lighting 全局压暗 | v8 WebGPU 滤镜面若有缺口 | 实现真 pass；缺口时降级仅 ADD 亮斑并登记 |
+| G3 | 徽标图源 | 官方远程拉 screeps.com，我方无此端点 | v0 纯色圆退化（官方失败退化路径同款），M3 自托管 |
+| G4 | say/浮动文字数据通道 | 引擎无 say 事件面（§8） | 契约预留，夹具手工注入演示 |
+| G5 | NPC/power/portal 家族动效 | 引擎无此对象（invaderCore/powerCreep/nuke） | 描述符+实现落位，夹具合成，观战待引擎批次 |
+| G6 | tickDuration 缺省 | 官方闭源壳传入值不可知 | 契约参数化，harness 默认 1000ms |
+| G7 | 字体渲染微差 | 栅格化/抗锯齿与官方 canvas 差异 | 截图比对，可接受即冻结 |
+
+## 7. 切片划分（每片走完整批次循环）
+
+| 片 | 内容 | 出口验收 |
+|---|---|---|
+| R0 | 脚手架与资产管线：包配置（TS strict/Vitest）、vendor SVG+字体+LICENSE、build-assets/check-fresh、dev harness 骨架（空舞台+相机+HUD）、CI 接线 | atlas 产出+新鲜度校验绿；harness 显示底色房 |
+| R1 | 契约与夹具：shared feed.ts v0、kk-cli exporter 子命令、四张夹具、harness 回放控制（播放/暂停/单步/调速/切房）+ differ | 夹具入库；回放可驱动空场景状态机 |
+| R2 | core+terrain：viewport 完整（缩放至光标/钳边/拾取接口）、path 合并烘焙（wall/swamp/plain/噪声/swamp 滚动）、层栈+lighting 骨架、出口渲染 | 四张夹具地形与官方观感一致（截图比对） |
+| R3 | 静态对象全家：registry+描述符框架、15 typed+Generic（data 解析 tower/rampart/lab/link/terminal/…）、z 表、进度条/填充量/cooldown 全规格、rampart 顶罩、road 连通 | 满配夹具静态帧对齐官方；差量键单测 |
+| R4 | creep 与运动：body 环（合并/升序/双向展开/色表）、移动插值+朝向、受击罩/死亡淡出/资源圆/名字、tough/NPC | 50 部件 creep 群夹具观感一致；插值单测 |
+| R5 | 动效系统：事件→效果映射全表（咬合/光束束贴图/罩/扇形波/孵化弧/降级闪/safemode/nuke）、say 气泡（合成通道）、常驻动画调度器 | 事件夹具逐动效人工验收；时序分数单测 |
+| R6 | RoomVisual+交互+API 冻结：五原语映射（黑盒对齐）、拾取回调/悬停高亮、createRenderer 公共面定型+类型导出 | 官方 visual 用例集观感比对；API d.ts 评审 |
+| R7 | 性能与收口：perf 模式实测+归档、内存 soak、文档回写（frontend.md 现状节/roadmap M3 渲染器项勾选）、灰区表清理 | §5 指标达标或降级登记；≥3 路评审收口 |
+
+## 8. 引擎侧缺口登记（回主序列处置，本批不动引擎既有文件）
+
+1. **actionLog 官方 13 键形态**（坐标+战斗动作；现 u16 位图）——room.rs:76
+   注释本就排期 M2 schema 升级；落位后渲染器接第二通道（契约已预留）。
+2. **say 事件面**（公开说话需进房间投影）——建议随 actionLog 升级一并。
+3. **RoomVisual 收集下发通道**——M3 投影面（kk-backend），渲染器先行消费契约。
+4. **2B 对象转正**（Generic→typed）后投影自动变全，渲染器零改动验收。
+
+## 9. 风险与坑
+
+- **WebGPU 滤镜/混合面缺口**（G2）：harness 首屏显示当前后端；降级路径先行。
+- **SVG 栅格化保真**（滤镜/发光在 resvg 与浏览器渲染差）：R0 逐张比对登记。
+- **pnpm allowBuilds 纪律**：resvg-js 是 prebuilt napi（无构建脚本）预计免审批；
+  若实际触发审批则评估换 sharp 前先问用户。
+- **与引擎批并发**：只在 worktree 提交；不碰 crates 既有文件；exporter 只读
+  公开 API。主序列（M2B 宏化押 world_json/snapshot）与本批唯一共享点是**读取**
+  其输出形状——契约 v0 若随 M2B 演进，feed 薄适配层吸收。
+- **夹具确定性**：exporter 世界必须无墙钟/随机源（TickInput 纪律同源）；断言
+  两次导出逐字节一致。
+- 工具坑沿用：zsh `===` 分隔符 glob、commit subject ≤350、跑套件显式 cd。
+
+## 10. 与既有验收体系的隔离
+
+- 前端验收（Vitest/类型检查/harness 截图/perf 模式）与引擎验收（棘轮/bot/
+  逐字节对账）零交集；根 `pnpm run check` 的 `pnpm -r run test` 自动拾取
+  renderer 包测试，无 Rust 侧任何门槛变化。
+- 本批不产生 screeps-ok/棘轮影响（纯前端）；不改 Cargo 依赖。
+
+## 11. 待用户拍板的决策点
+
+1. **性能指标数值**（§5 表：60fps/对账 2ms/10k tick 稳态/<1s 首帧）是否认可冻结。
+2. **lighting 保真路线**（§2.2：真 pass 优先、缺口降级登记）是否认可。
+3. **徽标 v0 纯色圆退化**（G3，M3 自托管后再接真徽标）是否认可。
+4. **exporter 落点**（kk-cli 新增只读子命令）是否认可。
+5. 切片粒度（R0-R7，每片独立评审提交）是否符合预期，或需要更细/更粗。
+
+## 12. 执行记录（随批追加）
