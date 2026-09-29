@@ -329,3 +329,31 @@ bot 三基线 → ≥3 路 subagent 并行评审（**重点视角=零行为差�
   ghodium_resource_family_settles 落 misc_and_notify 尾。
 - 验证：engine 152 全绿（142 集成+10 单元）/ workspace 268 全绿 /
   release+棘轮 1405 零转红 / 三基线通过（tooangel console error tick=0）。
+
+### B1-5（sandbox_tests.rs + embed_tests.rs → 根+子模块保串行链）——已收口
+
+- 实测：sandbox_tests 根 255 + prelude_and_room_forms 837 / watchdog_and_memory
+  838 / store_spawn_and_viewer 670 / resource_host_and_nearheap 759（34 impl）；
+  embed_tests 根 43 + embed_roundtrip_contract 689 / embed_channels_and_families
+  663 / embed_strictness_and_partial_commit 593（18 impl）。全部 <1000。
+- 串行链不变量（评审 1 双重口径实证）：两根各恰 1 个顶层 #[test]
+  （m0_sandbox_suite/embed_engine_suite），七子全 0（其余 #[test] 字样全在
+  注释内）；每 target `-- --list` 恰 1 条；链体（含尾 LIFO 断言注释行）与
+  HEAD 逐字节相同；「不得独立 #[test]」纪律注释×3 随体搬移。V8 计数器
+  （live_sandbox_count/lifo_violations）在 lib 内未触碰，进程级语义零变化。
+- 对账：52 个 impl fn（34+18）剥除 pub(super) 前缀后逐字节相等、零缺失
+  零重复；5 helper（fixtures_dir/world/load_sample_bot/tick/is_allowed_global）
+  留根逐字节不动——评审 2 事实修正：真跨块共享仅 world/tick，其余三项留根
+  属一致性选择（is_allowed_global 为套件级白名单概念位）。
+- 评审 P3 清偿：chunk 命名与内容不相称（源序连续切块的必然）——5 文件改名
+  名实相符（prelude_and_room_forms/store_spawn_and_viewer/
+  resource_host_and_nearheap/embed_channels_and_families/
+  embed_strictness_and_partial_commit）；本段即 §7 补记。
+- 登记：源序连续切块致链调用序 ≠ 块内源序（链体不动故无影响）；根 glob
+  私有绑定使子模块理论上可互调 sibling 块 fn——实测零跨块调用，当前调用面
+  恰=根串行链（评审 2 观察）。
+- B1-1/2/3 登记的 embed_tests 旧路径注释（:411/:998/:608）随块迁至
+  embed_strictness_and_partial_commit.rs（a5/a6 块）与 embed_channels_and_
+  families.rs，内容原样（纯搬移纪律），行号已无效但溯源语义仍在。
+- 验证：两 crate 套件真跑全绿（m0 1.74s/embed 0.89s，LIFO 零违规断言过）/
+  workspace 268 全绿 / release+棘轮 1405 零转红 / 三基线通过。
