@@ -371,6 +371,10 @@
         __Object.setPrototypeOf(data, null);
         list[id][name] = list[id][name] || [];
         list[id][name].push(data);
+        // 官方 room/global 级按元素数计费（make.js:100-106；免费表 say/pull
+        // 是对象级语义）——Rust 侧 take_endtick_intents 同口径兜底，此处计入
+        // 玩家可见的 getUsed（intents.cpu 显示面）
+        cpu += 0.2;
       },
       remove(id, name) {
         if (list[id] && list[id][name] !== undefined) {

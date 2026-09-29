@@ -81,6 +81,8 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     resource_family_prelude_matrix_impl()?;
     viewer_meta_semantics_impl()?;
     claim_gate_gcl_behavior_impl()?;
+    redirect_upgrade_positive_impl()?;
+    destroy_room_intent_channel()?;
     // LIFO 零违规断言在**全部**场景之后——中段断言会让其后场景的违规漏网
     assert_eq!(kk_runner::lifo_violations(), 0, "全流程 LIFO 纪律零违规");
     Ok(())
@@ -1981,6 +1983,32 @@ fn viewer_meta_semantics_impl() -> anyhow::Result<()> {
 /// 行为级锁——gcl 0+已占 1 房 → ERR_GCL_NOT_ENOUGH；gcl 1e6（=calcNeededGcl(2)
 /// 的 2 房需求点）→ 放行记 intent（官方 creeps.js:849-851 读
 /// runtimeData.user.gcl；本批前硬编码 Game.gcl 使该门恒 0 点）。
+/// A5-lite（upgradeController 换真）：transfer(控制器, 能量) 重定向正路径
+/// ——WORK+能量 creep 邻接自家 controller，十门全过返回 OK。
+fn redirect_upgrade_positive_impl() -> anyhow::Result<()> {
+    let mut sb = Sandbox::new(SandboxConfig::default())?;
+    let w = json!({
+        "time": 1,
+        "user": "p1",
+        "rooms": { "W1N1": { "name": "W1N1" } },
+        "objects": [
+            { "id": "k1", "type": "structure", "structureType": "controller",
+              "room": "W1N1", "x": 10, "y": 10, "level": 1, "owner": "p1" },
+            { "id": "kk1", "type": "creep", "room": "W1N1", "x": 10, "y": 11,
+              "name": "w1", "owner": "p1", "body": ["work", "carry"],
+              "store": { "energy": 30 }, "spawning": false },
+        ],
+    });
+    sb.begin_tick(&w)?;
+    let v =
+        sb.run_expr("Game.creeps['w1'].transfer(Game.rooms['W1N1'].controller, RESOURCE_ENERGY)")?;
+    assert_eq!(v["value"], 0, "重定向十门全过 → OK");
+    // 直调同路径
+    let v = sb.run_expr("Game.creeps['w1'].upgradeController(Game.rooms['W1N1'].controller)")?;
+    assert_eq!(v["value"], 0, "直调 upgradeController → OK");
+    Ok(())
+}
+
 fn claim_gate_gcl_behavior_impl() -> anyhow::Result<()> {
     let mk_world = |gcl: i64| {
         json!({
@@ -2149,11 +2177,13 @@ fn resource_family_prelude_matrix_impl() -> anyhow::Result<()> {
                 "Game.creeps['w1'].transfer({id: 'short'}, RESOURCE_ENERGY)",
                 -7
             );
-            // controller+能量重定向 upgradeController（:449-451；A4-iii 换真前经
-            // 桩返回 OK——本断言锁重定向形态而非 upgrade 语义）
+            // controller+能量重定向 upgradeController（:449-451）——A5-lite 起
+            // upgradeController 是真十门：夹具 w1 纯 carry 无 WORK → 门③
+            // ERR_NO_BODYPART（-12 本身证明重定向进了真方法预检链；桩时代
+            // 的假 OK 断言已废）。正路径见 redirect_upgrade_positive_impl
             ck!(
                 "Game.creeps['w1'].transfer(Game.getObjectById('k1'), RESOURCE_ENERGY)",
-                0
+                -12
             );
             // 非能量进 controller：容量 0 → INVALID_TARGET
             ck!(
@@ -2555,5 +2585,45 @@ fn move_misc_family_prelude_forms_impl() -> anyhow::Result<()> {
         }
         _ => panic!("应正常执行"),
     }
+    Ok(())
+}
+
+/// A5-lite（B3 接线批）：Structure.destroy 的 room intent 通道全链——桩循环
+/// 曾遮蔽基类真方法（坑⑥复发，症状假 OK 零 intent）；通道打通后 intentsList
+/// 形态与官方 room 级数组通道一致（from_json "room" 分支同形），计费含 room 级。
+/// 评审 1 P2-I：**不得独立 #[test]**——sandbox 单测试不变量（LIFO 全局栈在
+/// 并行测试线程下假记违规，实测 5 跑 2 挂）；并入 m0_sandbox_suite 顺序调用。
+fn destroy_room_intent_channel() -> anyhow::Result<()> {
+    let mut sb = Sandbox::new(SandboxConfig::default())?;
+    let w = json!({
+        "time": 1,
+        "user": "p1",
+        "rooms": { "W1N1": { "name": "W1N1" } },
+        "objects": [
+            { "id": "k1", "type": "structure", "structureType": "controller",
+              "room": "W1N1", "x": 10, "y": 10, "level": 1, "owner": "p1" },
+            { "id": "c1", "type": "structure", "structureType": "container",
+              "room": "W1N1", "x": 20, "y": 20, "owner": "p1", "hits": 1000 },
+            { "id": "w1", "type": "creep", "room": "W1N1", "x": 20, "y": 21,
+              "name": "worker", "owner": "p1", "body": ["move"], "spawning": false },
+        ],
+    });
+    sb.begin_tick(&w)?;
+    let v = sb.run_expr(
+        "Game.rooms['W1N1'].find(FIND_STRUCTURES).find(s=>s.structureType==='container').destroy()",
+    )?;
+    assert_eq!(v["value"], 0, "destroy 记 intent 返回 OK");
+    let v = sb.run_expr("Game.creeps['worker'].move(1)")?;
+    assert_eq!(v["value"], 0, "move 对照组（对象级通道）");
+    let v = sb.end_tick()?;
+    assert_eq!(v["ok"], true, "写回成功: {v:?}");
+    let intents = sb.take_intents().expect("intents 带出");
+    assert_eq!(
+        intents["room"]["destroyStructure"][0]["roomName"], "W1N1",
+        "room 级数组通道形态（官方 pushByName('room', ...) 同构）"
+    );
+    assert_eq!(intents["room"]["destroyStructure"][0]["id"], "c1");
+    // room 级计费并入（make.js:100-106 按元素）：move 0.2 + destroy 0.2
+    assert_eq!(v["intentsCpu"], 0.4, "room 级意图计入玩家可见计费");
     Ok(())
 }

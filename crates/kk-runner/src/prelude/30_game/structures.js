@@ -11,7 +11,7 @@
  *     setDirections/cancel；
  *   · spawnCreep（:1063-1218 全预检序 + 同 tick 幽灵壳）/renewCreep
  *     （:1237-1267）/recycleCreep（:1269-1290）。
- * destroy/setActive/notifyWhenAttacked 保持桩（A4-iii/后续批次换真）。
+ * destroy（A5-lite）/notifyWhenAttacked（A4-iv）已换真；setActive 保持桩。
  *
  * A3b 纪律：字段表挂各类原型（官方 defineGameObjectProperties 挂 prototype
  * 的同构）；getter 经 gw.rawData(this.id) 回查当前 tick 投影；方法体官方
@@ -73,6 +73,8 @@
     CREEP_SPAWN_TIME: globalThis.CREEP_SPAWN_TIME,
     SPAWN_RENEW_RATIO: globalThis.SPAWN_RENEW_RATIO,
     CARRY_CAPACITY: globalThis.CARRY_CAPACITY,
+    FIND_HOSTILE_CREEPS: globalThis.FIND_HOSTILE_CREEPS,
+    FIND_HOSTILE_POWER_CREEPS: globalThis.FIND_HOSTILE_POWER_CREEPS,
     CARRY: globalThis.CARRY,
     CLAIM: globalThis.CLAIM,
     // 私有冻结副本（数组 slice / 对象浅拷）——玩家改写全局常量面板不影响判定
@@ -618,28 +620,20 @@
     return C.OK;
   };
 
-  /** StructureSpawn.notifyWhenAttacked 覆盖版（官方 structures.js:1220-1233）：
-   *  与基类版的差异——无 `!this.room` 门、无 controller 归属分支（spawn 恒有
-   *  主，my 判定即足）。 */
-  globalThis.StructureSpawn.prototype.notifyWhenAttacked = function notifyWhenAttacked(enabled) {
-    if (!this.my) return C.ERR_NOT_OWNER;
-    if (typeof enabled !== 'boolean') return C.ERR_INVALID_ARGS;
-    if (enabled !== gw.rawData(this.id).notifyWhenAttacked) {
-      gw.intents.set(this.id, 'notifyWhenAttacked', { enabled });
-    }
-    return C.OK;
-  };
 
   // ---------------------------------------------------------------- 原型方法（桩）
-  const STRUCTURE_METHODS = ['destroy', 'setActive']; // notifyWhenAttacked 已换真（上方）
-  // spawn：destroy/setActive/notifyWhenAttacked 保持桩（官方 destroy :79-97/
-  // setActive :103-127/notifyWhenAttacked :89-101——A4-iv 批次换真面）
+  const STRUCTURE_METHODS = ['setActive']; // destroy/notifyWhenAttacked 已换真（上方——
+  // destroy 挂 Structure 基类原型（B3 接线批），spawn/controller/else 族经原型链
+  // 继承；实例级桩循环若再挂 destroy 会遮蔽真方法（坑⑥：桩循环后挂=桩覆盖，
+  // 症状 API 假 OK——本批实证复发）
+  // spawn：setActive 保持桩（官方 setActive :103-127——A4-iv 批次换真面）
   for (const m of STRUCTURE_METHODS) {
     globalThis.StructureSpawn.prototype[m] = gw.mkStubMethod('spawn.' + m);
   }
-  // 通用结构方法：不挂 Structure 基类原型（controller/source/mineral 现状无
-  // 这些方法，挂基类会让它们经原型链继承——语义变化）；else 族按类原型/实例
-  // 兜底挂载
+  // 通用结构方法（setActive）不挂 Structure 基类原型——controller 经
+  // OwnedStructure→Structure 链会继承；source/mineral 是 RoomObject 直挂
+  //（CLASS_PARENTS，官方同拓扑）不在 Structure 链上、不受影响；else 族按类
+  // 原型/实例兜底挂载
 
   // ---------------------------------------------------------------- controller 真方法（A4-iii）
   /** StructureController.unclaim：官方 structures.js:200-208——!my 门后记
@@ -693,26 +687,6 @@
     return C.OK;
   };
 
-  /** Structure.notifyWhenAttacked 基类版（官方 structures.js:89-101）：
-   *  无房 INVALID_TARGET；非己结构（my === false——undefined 中性结构放行）
-   *  或房 controller 归他人 → NOT_OWNER；非布尔参数 INVALID_ARGS；与当前
-   *  存值不同才记 intent（官方 `!=`——undefined 与任何布尔不等，首调恒记）。
-   *  挂 Structure 基类原型（官方同位）：controller 经 OwnedStructure 继承链
-   *  同样持有本方法（官方语义即如此——其 intent 在 processor 层因 controller
-   *  不在 CONSTRUCTION_COST 而空转）；source/mineral 官方不 extends Structure，
-   *  我方原型链同构（RoomObject 直挂）不受影响。 */
-  globalThis.Structure.prototype.notifyWhenAttacked = function notifyWhenAttacked(enabled) {
-    if (!this.room) return C.ERR_INVALID_TARGET;
-    const ctl = this.room.controller;
-    if (this.my === false || (ctl && ctl.owner && !ctl.my)) {
-      return C.ERR_NOT_OWNER;
-    }
-    if (typeof enabled !== 'boolean') return C.ERR_INVALID_ARGS;
-    if (enabled !== gw.rawData(this.id).notifyWhenAttacked) {
-      gw.intents.set(this.id, 'notifyWhenAttacked', { enabled });
-    }
-    return C.OK;
-  };
 
   /** StructureSpawn.notifyWhenAttacked 覆盖版（官方 structures.js:1220-1233）：
    *  与基类版的差异——无 `!this.room` 门、无 controller 归属分支（spawn 恒有
@@ -726,9 +700,9 @@
     return C.OK;
   };
 
-  // 其余结构方法（destroy/setActive）保持桩：按类原型挂载（else 族的类原型
-  // + 未知类型实例兜底——notifyWhenAttacked 已在 Structure 基类换真，类原型
-  // 不再挂同名桩防遮蔽）
+  // 其余结构方法只剩 setActive 保持桩（destroy/notifyWhenAttacked 已在
+  // Structure 基类换真——else 族/未知类型经原型链继承，不再挂同名实例桩
+  // 防遮蔽，坑⑥教训）
 
   // ---------------------------------------------------------------- 装配
   // spawn 装配：字段/方法全在原型，own 面只剩 id/pos/room + 静态标记
@@ -759,4 +733,105 @@
     base.isActive = () => { countStub('structure.isActive'); return true; };
     return base;
   };
+
+  // ---------------------------------------------------------------- Structure.destroy（B3 接线批换真）
+  // 官方 structures.js:72-86：!room → INVALID_TARGET；controller 非我 →
+  // NOT_OWNER；房内敌方 creep/powerCreep → BUSY（API 层门——引擎侧
+  // destroy-structure.js 四门对等，官方两层同判）；记 room 级 intent
+  //（pushByName 数组通道，from_json "room" 分支同形）。挂基类原型：
+  // controller/source/mineral 经原型链继承是官方同形（官方即挂在
+  // Structure.prototype）
+  globalThis.Structure.prototype.destroy = function destroy() {
+    if (!this.room) return C.ERR_INVALID_TARGET;
+    if (!this.room.controller || !this.room.controller.my) return C.ERR_NOT_OWNER;
+    if (this.room.find(C.FIND_HOSTILE_CREEPS).length > 0
+      || this.room.find(C.FIND_HOSTILE_POWER_CREEPS).length > 0) {
+      return C.ERR_BUSY;
+    }
+    gw.intents.pushByName('room', 'destroyStructure', { roomName: this.room.name, id: this.id });
+    return C.OK;
+  };
+
+  // ---------------------------------------------------------------- Tombstone/Ruin 类接线（B3 接线批）
+  // 官方 tombstones.js:41-135 / ruins.js:38-70 的 getter 族——投影（B3
+  // world_json）已是官方 DB 形态（绝对 tick / 折叠 ticksToDecay / 正量 store
+  // / structure 存照 type 键），字段表直读投影。
+  // creep 代理对象（tombstones.js:47-135）：普通对象 + own getter +
+  // Creep.prototype 原型链（官方 new Creep + defineProperties 覆盖同构）
+  function tombstoneCreepProxy(o) {
+    const proxy = {};
+    const carryCap = (o.creepBody || []).reduce((n, t) => n + (t === 'carry' ? C.CARRY_CAPACITY : 0), 0);
+    // pos 构造期定格为闭包引用（官方 RoomObject.call 的 own 数据属性同构——
+    // 身份比较稳定；清偿复审 P3-R1）
+    const posInstance = new gw.RoomPosition(o.x, o.y, o.room);
+    const defs = {
+      id: { enumerable: true, get: () => o.creepId },
+      name: { enumerable: true, get: () => o.creepName },
+      // 官方 RoomObject.call(this, x, y, room) 挂 pos/room（tombstones.js:47-48，
+      // 评审 2 P2-1 清偿——bot 生态读 dead creep 位置）
+      pos: { enumerable: true, get: () => posInstance },
+      room: { enumerable: true, get: () => (gw.currentGame() ? gw.currentGame().rooms[o.room] : undefined) },
+      spawning: { enumerable: true, get: () => false },
+      my: { enumerable: true, get: () => o.user === gw.viewerName },
+      body: { enumerable: true, get: () => (o.creepBody || []).map((t) => ({ type: t, hits: 0 })) },
+      owner: { enumerable: true, get: () => (o.user === undefined || o.user === null ? undefined : { username: o.user }) },
+      ticksToLive: { enumerable: true, get: () => o.creepTicksToLive },
+      carryCapacity: { enumerable: true, get: () => carryCap },
+      // 官方上游 quirk（tombstones.js:63-65 的 carry/store 走 _storeGetter 无参
+      // 回退 `{store:{}, storeCapacity: this.carryCapacity}` → 恒空 Store 且容量
+      // =carryCapacity——死 creep 的 store 不透传（墓碑的 store 才是资源面）。
+      // 评审 1 P3-B：原实现给真库存=与官方双反，quirk 原样对齐）
+      carry: { enumerable: true, get: () => gw.makeStore({ store: {}, storeCapacity: carryCap }) },
+      store: { enumerable: true, get: () => gw.makeStore({ store: {}, storeCapacity: carryCap }) },
+      fatigue: { enumerable: true, get: () => 0 },
+      hits: { enumerable: true, get: () => 0 },
+      hitsMax: { enumerable: true, get: () => (o.creepBody || []).length * 100 },
+      saying: { enumerable: true, get: () => o.creepSaying },
+    };
+    for (const k of __Object.keys(defs)) __Object.defineProperty(proxy, k, defs[k]);
+    __Object.setPrototypeOf(proxy, globalThis.Creep.prototype);
+    return proxy;
+  }
+
+  gw.defineGameObjectProperties(globalThis.Tombstone.prototype, gw.rawData, {
+    deathTime: (o) => o.deathTime,
+    ticksToDecay: (o) => o.ticksToDecay, // 投影已折叠（官方 getter 是 decayTime−time 的等价值）
+    store: (o) => gw.makeStore(o),
+    // 官方 Tombstone 原型无 carry/carryCapacity（tombstones.js 字段表）——
+    // 评审 1 P3-A 清偿：它们只在 creep 代理上；多挂会让枚举面多出两键
+    creep: (o) => (o.creepId ? tombstoneCreepProxy(o) : undefined),
+  });
+
+  // structure 代理对象（ruins.js:43-68）：user 有 → OwnedStructure 形（owner/my
+  // getter），无 → Structure 形。structureType 读存照 type 键（官方 getter 写
+  // o.structureType 但 DB 键在 structure.type——vanilla snapshots.ts:394 同构）
+  function ruinStructureProxy(o) {
+    const st = o.structure || {};
+    const proxy = {};
+    const defs = {
+      id: { enumerable: true, get: () => st.id },
+      hits: { enumerable: true, get: () => st.hits },
+      hitsMax: { enumerable: true, get: () => st.hitsMax },
+      structureType: { enumerable: true, get: () => st.type },
+    };
+    if (st.user) {
+      defs.owner = { enumerable: true, get: () => ({ username: st.user }) };
+      defs.my = { enumerable: true, get: () => st.user === gw.viewerName };
+    }
+    for (const k of __Object.keys(defs)) __Object.defineProperty(proxy, k, defs[k]);
+    __Object.setPrototypeOf(proxy, st.user ? globalThis.OwnedStructure.prototype : globalThis.Structure.prototype);
+    return proxy;
+  }
+
+  gw.defineGameObjectProperties(globalThis.Ruin.prototype, gw.rawData, {
+    structureType: (o) => (o.structure && o.structure.type),
+    destroyTime: (o) => o.destroyTime,
+    ticksToDecay: (o) => o.ticksToDecay, // 投影已折叠
+    store: (o) => gw.makeStore(o),
+    structure: (o) => ruinStructureProxy(o),
+  });
+
+  // 字段全在类原型——装配只透传壳
+  gw.assemblers.tombstone = (o, base) => base;
+  gw.assemblers.ruin = (o, base) => base;
 })();
