@@ -20,7 +20,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use kk_core::Terrain;
 use serde_json::{Value, json};
 
-use crate::{PlayerExecutor, ThreadExecutor};
+use crate::{PlayerExecutor, ThreadExecutor, WorldSource};
 use kk_engine::intent::IntentBatch;
 use kk_engine::{RunOutcome, RunResult, RunSpec, TickInput};
 use kk_world::place::{PlaceCtx, normalize};
@@ -472,6 +472,23 @@ impl EmbedEngine {
         let mut project_ns = 0u128;
         let mut run_ns = 0u128;
         let handles = registered.clone();
+        // 版本绑定（M2B 前置批 P2，snapshot 契约「同一 tick 内所有 getter
+        // 绑定同一版本」纪律）：本轮全部玩家读同一已提交版本——循环期间
+        // 世界不得变异（结算在循环后），debug 断言守护
+        let bound_generation = self.engine.world.generation();
+        // 世界读取统一经 seam（WorldSource，ADR-013 决策 2）——M2B 新
+        // getter 的登记面
+        let source: &dyn WorldSource = &self.engine.world;
+        // 代际绊线（评审 3 P2-2 清偿）：正常尾之外的两条轮中止路径
+        //（注入失败 `?` / InfraFailure bail）同样守护——世界在玩家执行期间
+        // 结构上不可变，断言是把该不变量钉死的绊线而非空转
+        let assert_bound = || {
+            debug_assert_eq!(
+                source.generation(),
+                bound_generation,
+                "玩家执行期间世界代际不得变动（同一 tick 绑定同一版本）"
+            );
+        };
         // 固定顺序（handle 排序）求值——确定性；各玩家看同一已提交世界的
         // 自家视野（官方 runtimeData.get(userId) 同构）
         for handle in handles {
@@ -484,7 +501,7 @@ impl EmbedEngine {
                 .ok_or_else(|| anyhow::anyhow!("分片未创建"))?;
             // ①注入：每 tick 从已提交的 PlayerState.raw_memory 恢复（官方
             // make.js 每 tick 从存档恢复同构——世界回退轮注入的仍是旧值）
-            players.set_raw_memory(
+            let inject = players.set_raw_memory(
                 &handle,
                 &self
                     .engine
@@ -492,21 +509,25 @@ impl EmbedEngine {
                     .get(&handle)
                     .map(|p| p.raw_memory.clone())
                     .unwrap_or_default(),
-            )?;
+            );
+            assert_bound();
+            inject?;
             // per-viewer 投影（gcl 点数 = PlayerState 真值，官方 runtimeData.user.gcl）
             let gcl = self.engine.players.get(&handle).map(|p| p.gcl).unwrap_or(0);
             let t_project = std::time::Instant::now();
-            let world = self.engine.world.world_json_for_viewer(&handle, gcl);
+            let world = source.world_json_for_viewer(&handle, gcl);
             project_ns += t_project.elapsed().as_nanos();
             let t_run = std::time::Instant::now();
             let result = players.execute(&world, &RunSpec::new(&handle, code));
             run_ns += t_run.elapsed().as_nanos();
             // 基础设施故障 → 整轮停顿（Err；不缓存候选——停顿轮的局部结果作废）
             if let RunOutcome::InfraFailure(err) = &result.outcome {
+                assert_bound();
                 anyhow::bail!("基础设施故障（玩家 {handle}）: {err}");
             }
             results.insert(handle, result);
         }
+        assert_bound();
         Ok((results, run_ns, project_ns))
     }
 
@@ -594,16 +615,16 @@ impl EmbedEngine {
     /// 对象快照：screeps-ok 契约形状（kind 族 + 玩家 getter 值，snapshot.rs；
     /// flag 不在查询面契约内 → None）。
     pub fn get_object(&self, id: &str) -> Option<Value> {
-        kk_world::ObjId::parse(id).and_then(|id| self.engine.world.object_snapshot_by_id(id))
+        self.source().object_snapshot(id)
     }
 
     /// 房间 FIND 查询：契约快照形状（过滤复用 matches_find 单源语义）。
     pub fn find_in_room(&self, room: &str, find_const: i64) -> Vec<Value> {
-        self.engine.world.find_snapshots_in_room(room, find_const)
+        self.source().find_in_room(room, find_const)
     }
 
     pub fn get_game_time(&self) -> u64 {
-        self.engine.world.time
+        self.source().game_time()
     }
 
     pub fn capture_console_logs(&self, handle: &str) -> Vec<String> {
@@ -611,7 +632,13 @@ impl EmbedEngine {
     }
 
     pub fn get_controller_pos(&self, room: &str) -> Option<(u64, u64)> {
-        self.engine.world.controller_pos(room)
+        self.source().controller_pos(room)
+    }
+
+    /// 世界读取面（seam——WorldSource 的动态分发位；M2B 新 getter 一律经此，
+    /// 不直连 kk_world::World）。
+    fn source(&self) -> &dyn WorldSource {
+        &self.engine.world
     }
 
     /// 性能观测点汇总（阶段耗时 p50/p95/max，ms）。

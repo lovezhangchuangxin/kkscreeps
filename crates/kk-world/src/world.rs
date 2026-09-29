@@ -100,6 +100,18 @@ impl RoomState {
     }
 }
 
+/// 已提交房间版本的不可变句柄（M2B 前置批 P2，ADR-013 决策 2）：
+/// `tick`（世界时序）+ `generation`（内容代际）共同标识一个已提交版本；
+/// 读取方在同一 tick 内绑定同一版本（snapshot 契约纪律——embed 的玩家执行
+/// 循环以 debug 断言守护）。列式/零拷贝时代，此句柄外延为携带字节长度与
+/// 共享存活句柄的 SnapshotHandle（snapshot 契约的完整形态）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RoomVersionHandle {
+    pub room: String,
+    pub tick: u64,
+    pub generation: u64,
+}
+
 /// 世界（M1：房间集合 + 全局时间；玩家分片语义在 embed 层）。
 #[derive(Debug, Clone)]
 pub struct World {
@@ -110,6 +122,17 @@ pub struct World {
     pub rooms: BTreeMap<String, RoomState>,
     /// 全局 id 分配器（跨房间唯一；快照每房 header 存同一全局值）。
     next_obj_id: u64,
+    /// 世界内容代际（M2B 前置批 P2，ADR-013 决策 2）：任何已提交内容变更
+    /// 单调递增——投影缓存失效键与 [`RoomVersionHandle`] 的内容分量。
+    /// bump 点 = 全部内容可变面（insert/remove/set_terrain/register_room/
+    /// advance_ticks + room_mut/get_mut 保守覆盖）；kk-engine 提交尾直接
+    /// 写回 `rooms` 字段后必经 advance_ticks，代际随之递增。结算失败路径
+    /// 不 bump（世界未变）。
+    generation: u64,
+    /// 地形纪元：仅地形**实际替换**时递增（register_room 新房 / set_terrain）
+    /// ——地形缓存的失效键（M2B 前置批 P3 消费）。地形首玩家 tick 后不可变，
+    /// 正常运行恒定；纪元变更 ⇒ 全部房间的地形缓存作废。
+    terrain_epoch: u64,
 }
 
 impl Default for World {
@@ -126,6 +149,8 @@ impl World {
             player_ticks: 0,
             rooms: BTreeMap::new(),
             next_obj_id: 1,
+            generation: 0,
+            terrain_epoch: 0,
         }
     }
 
@@ -144,13 +169,18 @@ impl World {
             .expect("房间已检查存在")
             .insert_with_id(id, object)?;
         self.next_obj_id = id + 1;
+        self.generation += 1;
         Ok(ObjId(id))
     }
 
     /// 推进时间（player_ticks 的唯一维护点——setTerrain 守卫依赖它）。
+    /// 同时递增内容代际：投影的时钟折叠面（ticksToRegeneration 等）读
+    /// `time`，tick 推进即投影内容变化，缓存必须失效；kk-engine 的结算
+    /// 提交尾（直接写回 rooms 后）以本方法收束，代际随之覆盖。
     pub fn advance_ticks(&mut self, n: u64) {
         self.time += n;
         self.player_ticks += n;
+        self.generation += 1;
     }
 
     /// 下一个候选 id；直接导入房间对象后也不会回退到已有 id。
@@ -178,15 +208,22 @@ impl World {
         self.next_obj_id = self.next_obj_id.max(v);
     }
 
+    /// 整体重置（新世界——代际/纪元随之归零重数）。**约束（评审 1 P2-2
+    /// 钉子）**：版本键缓存（generation/terrain_epoch 的消费方，P3/P5）必须
+    /// 驻 World 内（随体重置、结构性免疫跨分片 (room, epoch) 陈旧命中）；
+    /// 若未来缓存外移，须引入分片级基偏移防撞键。
     pub fn reset(&mut self) {
         *self = Self::new(self.seed);
     }
 
     pub fn register_room(&mut self, name: impl Into<String>, terrain: Terrain) {
         let name = name.into();
-        self.rooms
-            .entry(name.clone())
-            .or_insert_with(|| RoomState::new(name, terrain));
+        if !self.rooms.contains_key(&name) {
+            self.rooms
+                .insert(name.clone(), RoomState::new(name, terrain));
+            self.generation += 1;
+            self.terrain_epoch += 1;
+        }
     }
 
     /// 设置地形（校验与四角墙由 Terrain 构造保证；player_ticks>0 拒绝）。
@@ -199,6 +236,8 @@ impl World {
             .get_mut(room)
             .ok_or_else(|| format!("房间 {room} 不存在"))?;
         state.terrain = terrain;
+        self.generation += 1;
+        self.terrain_epoch += 1;
         Ok(())
     }
 
@@ -207,6 +246,7 @@ impl World {
     }
 
     pub fn room_mut(&mut self, name: &str) -> Option<&mut RoomState> {
+        self.generation += 1; // 保守失效：可变访问即视为内容可能变更
         self.rooms.get_mut(name)
     }
 
@@ -221,6 +261,7 @@ impl World {
     }
 
     pub fn get_mut(&mut self, id: ObjId) -> Option<&mut RoomObject> {
+        self.generation += 1; // 保守失效（同 room_mut）
         for state in self.rooms.values_mut() {
             if let Some(o) = state.objects.get_mut(&id) {
                 return Some(o);
@@ -232,10 +273,40 @@ impl World {
     pub fn remove(&mut self, id: ObjId) -> Option<RoomObject> {
         for state in self.rooms.values_mut() {
             if let Some(o) = state.objects.remove(&id) {
+                self.generation += 1;
                 return Some(o);
             }
         }
         None
+    }
+
+    /// 当前世界内容代际（见字段注释）。
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    /// 当前地形纪元（见字段注释）。
+    pub fn terrain_epoch(&self) -> u64 {
+        self.terrain_epoch
+    }
+
+    /// 显式递增代际（防御面：绕过 World 方法直接写 `rooms` 字段的调用位——
+    /// 正常路径由各方法内置 bump 覆盖，本方法供此类调用方显式声明提交）。
+    pub fn bump_generation(&mut self) {
+        self.generation += 1;
+    }
+
+    /// 房间版本句柄（tick 定时序、generation 定内容——「同一 tick 内所有
+    /// getter 绑定同一版本」纪律的绑定物）。
+    pub fn room_version(&self, room: &str) -> Option<RoomVersionHandle> {
+        self.rooms.get(room)?;
+        Some(RoomVersionHandle {
+            // 用 map key 而非 state.name：快照解码路径产出 name="" 的房
+            //（RoomState::new("")），key 才是权威房间名（评审 F-1）
+            room: room.to_string(),
+            tick: self.time,
+            generation: self.generation,
+        })
     }
 }
 
@@ -253,6 +324,52 @@ mod tests {
             amount,
             resource: None,
         })
+    }
+
+    #[test]
+    fn generation_bumps_on_content_changes() {
+        let mut world = World::new(1);
+        assert_eq!((world.generation(), world.terrain_epoch()), (0, 0));
+        world.register_room("W1N1", Terrain::plains());
+        let after_room = world.generation();
+        assert_eq!((after_room, world.terrain_epoch()), (1, 1));
+        // 已存在房重注册：不替换地形，不 bump
+        world.register_room("W1N1", Terrain::plains());
+        assert_eq!((world.generation(), world.terrain_epoch()), (1, 1));
+        world.insert("W1N1", energy(1)).unwrap();
+        assert_eq!(world.generation(), 2);
+        assert_eq!(world.terrain_epoch(), 1, "对象变更不动地形纪元");
+        // tick 推进（结算提交位）：时钟折叠面变化 ⇒ 代际必须失效
+        world.advance_ticks(1);
+        let after_tick = world.generation();
+        assert_eq!(after_tick, 3);
+        // player_ticks>0 后 set_terrain 拒绝（不 bump）
+        assert!(world.set_terrain("W1N1", Terrain::plains()).is_err());
+        assert_eq!((world.generation(), world.terrain_epoch()), (after_tick, 1));
+        // 句柄 = tick + generation 的快照
+        let handle = world.room_version("W1N1").unwrap();
+        assert_eq!(
+            handle,
+            RoomVersionHandle {
+                room: "W1N1".into(),
+                tick: 1,
+                generation: 3
+            }
+        );
+        assert!(world.room_version("nope").is_none());
+        // set_terrain 成功路径 / remove / get_mut / room_mut 的 bump 面
+        //（评审 1 P2-1 清偿：逐面钉死，删除任一 bump 即红）
+        let mut fresh = World::new(2);
+        fresh.register_room("E1S1", Terrain::plains());
+        fresh.set_terrain("E1S1", Terrain::plains()).unwrap();
+        assert_eq!((fresh.generation(), fresh.terrain_epoch()), (2, 2));
+        let id = fresh.insert("E1S1", energy(1)).unwrap();
+        fresh.remove(id);
+        assert_eq!(fresh.generation(), 4, "insert→remove 净 +2");
+        let _ = fresh.get_mut(id);
+        assert_eq!(fresh.generation(), 5, "get_mut 保守 +1（对象已删仍计）");
+        fresh.room_mut("E1S1");
+        assert_eq!(fresh.generation(), 6, "room_mut 保守 +1");
     }
 
     #[test]

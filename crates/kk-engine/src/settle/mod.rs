@@ -703,6 +703,23 @@ mod tests {
     /// 两阶段回退（§6.5）：后房 Err 时先房的结算不得写回——time/能量/重生钟
     /// 全部保持上一 tick；故障解除后的首个成功 tick 才统一推进（否则先房会在
     /// 同一 time 上被重放结算——双倍采集）。
+    /// M2B 前置批 P2：一次成功 tick ⇒ 世界内容代际恰 +1（提交尾 rooms 直写
+    /// 经 advance_ticks 收束——P3/P5 投影缓存正确性依赖的不变量）；失败
+    /// tick ⇒ +0（世界未变，两阶段回退）。
+    #[test]
+    fn engine_tick_bumps_generation_exactly_once() {
+        let mut world = kk_world::World::new(1);
+        world.register_room("W1N1", kk_core::Terrain::plains());
+        let base = world.generation();
+        let mut engine = Engine::new(world);
+        engine.tick_with_intents(IntentBatch::default()).unwrap();
+        assert_eq!(engine.world.generation(), base + 1, "一次成功 tick 恰 +1");
+        engine.fail_room = Some("W1N1".into());
+        let before = engine.world.generation();
+        assert!(engine.tick_with_intents(IntentBatch::default()).is_err());
+        assert_eq!(engine.world.generation(), before, "失败 tick 不 bump");
+    }
+
     #[test]
     fn engine_tick_rolls_back_all_rooms_on_failure() {
         let mut world = kk_world::World::new(1);

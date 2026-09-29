@@ -13,4 +13,4 @@ pub mod world;
 pub mod world_json;
 
 pub use index::RoomIndex;
-pub use world::{ObjId, RoomState, World};
+pub use world::{ObjId, RoomState, RoomVersionHandle, World};

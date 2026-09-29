@@ -128,12 +128,18 @@ execute_players/get_object/find_in_room/controller_pos/get_game_time 全部
 
 ### 3.2 世界版本与不可变句柄
 
-- `World.generation: u64`（私有 + `pub fn generation()`）——**提交点**递增：
-  `World::insert` / `set_terrain` / `register_room`（新房）三方法内置 +
-  `pub fn bump_generation()` 供 kk-engine 提交尾调用（engine 直接写回
-  `world.rooms`，绕过 World 方法——settle/mod.rs:698-722 提交尾在
-  `advance_ticks` 旁显式调用；评审须 grep 全部 `&mut world` 面核对无遗漏）。
-  结算失败路径不 bump（世界未变）。
+- `World.generation: u64`（私有 + `pub fn generation()`）——**提交点**递增。
+  实现机制（P2 实现期定夺，评审 1/3 核实健全——较本节原稿「engine 提交尾
+  显式调 bump_generation」更优：消灭位序耦合，任何 advance_ticks 调用方
+  天然覆盖）：bump 烧进 `World::insert` / `set_terrain` / `register_room`
+  （新房）/ `remove` / **`advance_ticks`**（时钟折叠面是投影输入，tick 推进
+  即投影变化；kk-engine 提交尾直接写回 `world.rooms` 后必经 advance_ticks
+  收束——两调用点之间无投影机会）+ `room_mut`/`get_mut` 保守覆盖（可变
+  访问即失效，过度失效方向安全；现生产调用面为零）。`pub fn
+  bump_generation()` 保留为防御面 API（当前零调用——pub `rooms`/`time`
+  字段直写的唯一阀门）。结算失败路径不 bump（世界未变）。
+  评审专项（§6-4）已执行：grep 全部世界可变面，非测试直写 `rooms` 仅
+  settle 提交尾一处（经 advance_ticks 覆盖）。
 - `World.terrain_epoch: u64`——仅 `set_terrain` / `register_room` **实际
   替换地形**时递增（`entry().or_insert_with` 对已存在房不替换则不 bump）。
 - `RoomVersionHandle { pub room: String, pub tick: u64, pub generation: u64 }`
@@ -324,6 +330,40 @@ workspace 268 / 棘轮 / 三基线）。rustfmt 对宏内代码不重排（发�
   实测，见 §5）；`[`RoomObject::tag`]` doc 链接指向私有方法系 HEAD 既有
   状况（rustdoc 警告集前后逐条相同）；ratchet「豁免条目未命中」噪音为
   先前批次遗留（归棘轮清理项）。
+
+### P2（seam：WorldSource + 世界版本面 + Terrain Arc 化）——已收口
+
+- 实测：kk-runtime 新模块 world_source.rs（`WorldSource` trait 八方法 +
+  `impl WorldSource for kk_world::World`，UFCS 消歧固有同名方法）；
+  embed.rs 五读取面改经 seam（execute_players 投影 + 四 getter）+ 玩家
+  循环代际绊线（debug 断言经 `assert_bound` 闭包覆盖正常尾与两条轮中止
+  路径——注入失败 `?` / InfraFailure bail）；World 增 generation/
+  terrain_epoch（bump 机制见 §3.2 订正）+ RoomVersionHandle + room_version
+  （map key 权威——快照解码产出 name="" 的房，评审 F-1）；Terrain 内表示
+  Box→Arc（normalize/as_mut_slice 经 Arc::get_mut，共享态 fail-fast）；
+  snapshot-contract.md 头部加现状标注（typed 层代际已起步、字节形态仍是
+  目标设计——复审持续纪律的目标/已实现分层）。
+- 评审三路全 PASS 零 P0/P1（seam 形状与 bump 完备性 / Arc panic 可达性
+  穷举证明生产不可达 / embed 行为等价逐点）。清偿：断言闭包覆盖两条中止
+  路径；world 测试补 set_terrain 成功/remove/get_mut/room_mut 逐面 bump
+  钉；engine 级「一次成功 tick ⇒ generation 恰 +1、失败 +0」测试；
+  seam 委托等价测试（&dyn vs 固有逐值）；terrain 共享态 #[should_panic]
+  契约测试 ×2 + Weak 注释；room_version 用 map key；模块 doc「全部读取
+  面」收窄为「沙箱/玩家面」（宿主建片/放置写面不在范畴）；契约标注措辞
+  精确化；§3.2 机制订正（本段随附）。
+- 验证：workspace 273 全绿 / clippy 零告警 / release+棘轮 1405 零转红 /
+  三基线通过（tooangel console error tick=0）。
+- perf（A/B）：P2 vs 工作基线 project 0.178(+1%) / run 0.264(+3%) /
+  settle 0.010(+4%) / wall 0.604(+2%)——全部噪声内（预期零变化达成；
+  Arc 化的结算克隆节省在 settle 相 <1% 量级内不可分辨）。
+- 登记：`World::reset` 归零计数器的跨分片撞键防御 = 「版本键缓存必须驻
+  World 内」钉子（reset doc + 本段；P3/P5 实现以此为前提）；pub
+  `rooms`/`time` 字段直写是结构性敞口（bench fixtures 直写 time 构造期
+  无害），bump_generation 是唯一阀门；未来结算内若引入地形变异将命中
+  Arc 共享态 fail-fast（设计意图，评审 2 P2-1 纪律登记）；embed 建片/
+  放置路径直读 world.time 与 seam 双轨并存（非玩家面，收窄后 doc 已如实）。
+
+
 
 
 ## 8. 附录：新增对象类型同步点全表（2026-09-30 勘测，M2B 扩面登记资产）

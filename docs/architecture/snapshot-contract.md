@@ -4,6 +4,14 @@
 > 的 M1 实现是 `BTreeMap` typed world 加可编码的 schema v1，尚未把该字节格式
 > 作为沙箱共享视图。本文定义必须满足的格式与生命周期不变量。首个持久化版本
 > 发布前，可调整 M1 的 v1 布局；发布后必须按版本升级。
+>
+> **现状标注（2026-09-30，M2B 前置批 P2）**：代际概念的 typed 层已起步——
+> `World.generation`（内容代际，提交点递增、可变访问保守失效）/
+> `terrain_epoch`（地形失效键）/
+> `RoomVersionHandle`（tick+generation 句柄，embed 玩家循环以 debug 断言绑定）
+> 已落地（kk-world world.rs、kk-runtime world_source.rs 的 WorldSource seam）；
+> 下文「不可变字节 + SnapshotHandle」的字节形态与双缓冲仍是**目标设计**，
+> 由端到端测量决定（ADR-013 决策 2）。
 
 ## 一个版本、两种使用方式
 

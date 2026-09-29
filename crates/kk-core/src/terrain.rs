@@ -20,13 +20,18 @@ pub const TERRAIN_LEN: usize = ROOM_SIZE * ROOM_SIZE;
 /// 一个房间的地形。构造即校验（长度必须 2500、值域仅含已知位——非整数输入
 /// 在 embed 边界层拒绝，字节层只能看到合法位），四角墙不变量（官方地图生成器
 /// 不变量，所有正规地图成立）经 [`Terrain::normalize`] 强制。
+/// 内表示 `Arc`（M2B 前置批 P2）：地形在首玩家 tick 后不可变，但每 tick 随
+/// `RoomState` 克隆进结算工作副本——引用计数克隆停止每房每 tick 拷贝 2500
+/// 字节。`normalize`/`as_mut_slice` 需独占访问（`Arc::get_mut`；共享或
+/// 存在 Weak 引用时返 None ⇒ panic——fail-fast 而非静默写穿；正式路径只在
+/// 构造期独占态调用，仓库现无 Weak）。
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Terrain(Box<[u8; TERRAIN_LEN]>);
+pub struct Terrain(std::sync::Arc<[u8; TERRAIN_LEN]>);
 
 impl Terrain {
     /// 全平原地形。
     pub fn plains() -> Self {
-        Self(Box::new([0; TERRAIN_LEN]))
+        Self(std::sync::Arc::new([0; TERRAIN_LEN]))
     }
 
     /// 从官方数组形态构造（embed `setTerrain` 的 `number[]`）。
@@ -44,9 +49,9 @@ impl Terrain {
                 codes[i]
             ));
         }
-        let mut arr = Box::new([0u8; TERRAIN_LEN]);
+        let mut arr = [0u8; TERRAIN_LEN];
         arr.copy_from_slice(codes);
-        Ok(Self(arr))
+        Ok(Self(std::sync::Arc::new(arr)))
     }
 
     /// 从已验证的字节构造（快照解码等信任源；测试期断言合法位防旁路退化——
@@ -56,9 +61,9 @@ impl Terrain {
             codes.iter().all(|c| c & !KNOWN_MASKS == 0),
             "from_slice 收到含未知位的地形字节"
         );
-        let mut arr = Box::new([0u8; TERRAIN_LEN]);
+        let mut arr = [0u8; TERRAIN_LEN];
         arr.copy_from_slice(codes);
-        Self(arr)
+        Self(std::sync::Arc::new(arr))
     }
 
     /// 官方字符串形态解码（官方 DB 历史存数字串；`checkTerrain` 的
@@ -78,10 +83,12 @@ impl Terrain {
     /// 四角强制为墙（官方地图生成器不变量——正规地图的 (0,0)/(49,0)/(0,49)/(49,49) 恒为墙）。
     pub fn normalize(&mut self) {
         let idx = |x: usize, y: usize| y * ROOM_SIZE + x;
-        self.0[idx(0, 0)] |= TERRAIN_MASK_WALL;
-        self.0[idx(ROOM_SIZE - 1, 0)] |= TERRAIN_MASK_WALL;
-        self.0[idx(0, ROOM_SIZE - 1)] |= TERRAIN_MASK_WALL;
-        self.0[idx(ROOM_SIZE - 1, ROOM_SIZE - 1)] |= TERRAIN_MASK_WALL;
+        let arr = std::sync::Arc::get_mut(&mut self.0)
+            .expect("地形归一化要求独占引用（正式路径只在构造期调用）");
+        arr[idx(0, 0)] |= TERRAIN_MASK_WALL;
+        arr[idx(ROOM_SIZE - 1, 0)] |= TERRAIN_MASK_WALL;
+        arr[idx(0, ROOM_SIZE - 1)] |= TERRAIN_MASK_WALL;
+        arr[idx(ROOM_SIZE - 1, ROOM_SIZE - 1)] |= TERRAIN_MASK_WALL;
     }
 
     /// 读取一格的原始位码（越界坐标 panic——结算层坐标已被钳制）。
@@ -120,13 +127,35 @@ impl Terrain {
 
     /// 可变访问（测试/地图构造用；值域约束由调用方自负——正式路径走 from_codes）。
     pub fn as_mut_slice(&mut self) -> &mut [u8; TERRAIN_LEN] {
-        &mut self.0
+        std::sync::Arc::get_mut(&mut self.0).expect("可变访问要求独占引用")
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 共享态（Arc 计数 >1）下的变异请求 fail-fast（M2B P2 的显式契约面，
+    /// 而非 Box 时代的静默写穿）。
+    #[test]
+    #[should_panic(expected = "独占")]
+    fn normalize_on_shared_terrain_panics() {
+        let t = Terrain::plains();
+        let holder = t.clone();
+        let mut t = t;
+        t.normalize();
+        drop(holder);
+    }
+
+    #[test]
+    #[should_panic(expected = "独占")]
+    fn as_mut_slice_on_shared_terrain_panics() {
+        let t = Terrain::plains();
+        let holder = t.clone();
+        let mut t = t;
+        let _ = t.as_mut_slice();
+        drop(holder);
+    }
 
     #[test]
     fn validates_length_and_bits() {
@@ -145,7 +174,7 @@ mod tests {
     #[test]
     fn corner_walls_and_lookup() {
         let mut t = Terrain::plains();
-        t.0[7 * 50 + 7] = TERRAIN_MASK_SWAMP;
+        t.as_mut_slice()[7 * 50 + 7] = TERRAIN_MASK_SWAMP;
         t.normalize();
         assert!(t.is_wall(0, 0) && t.is_wall(49, 0) && t.is_wall(0, 49) && t.is_wall(49, 49));
         assert!(t.is_swamp(7, 7));
@@ -153,7 +182,7 @@ mod tests {
         assert_eq!(t.terrain_name(1, 1), "plain");
         assert_eq!(t.terrain_name(0, 0), "wall");
         // normalize 用 |=：原有位保留
-        t.0[0] = TERRAIN_MASK_SWAMP;
+        t.as_mut_slice()[0] = TERRAIN_MASK_SWAMP;
         t.normalize();
         assert_eq!(t.0[0], TERRAIN_MASK_SWAMP | TERRAIN_MASK_WALL);
     }

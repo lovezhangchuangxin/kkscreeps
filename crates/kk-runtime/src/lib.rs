@@ -13,6 +13,7 @@
 //! B0-4（本片）交付类型与执行器骨架；统一提交点与 embed 编排迁移随 B0-5。
 
 pub mod embed;
+pub mod world_source;
 
 use std::collections::BTreeMap;
 
@@ -23,6 +24,7 @@ use kk_engine::intent::IntentBatch;
 pub use embed::{EmbedEngine, PlayerRun};
 pub use kk_engine::{RunOutcome, RunResult, RunSpec, Sandbox as EngineSandbox};
 use serde_json::Value;
+pub use world_source::WorldSource;
 
 /// 玩家执行器的协调层抽象（真/假沙箱同接口）：一次执行 = 一名玩家一轮的
 /// 候选 RunResult。实现方负责世界投影的生成与身份清洗（intents 归注册玩家）。
