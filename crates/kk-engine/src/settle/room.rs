@@ -83,7 +83,6 @@ fn destroy_structure_intent(w: &mut Working, player: &str, id: kk_world::ObjId) 
     // vanilla（官方引擎）不产事件**，其 expected 是从 API 文档语义推断的
     // canonical claim——按硬约束①对齐官方移除。ROOM-EVENTLOG-027 转 red
     // 经 ratchet-allow.json 显式豁免留痕
-    let _ = type_name;
     super::damage::destroy_structure(w, id);
 }
 

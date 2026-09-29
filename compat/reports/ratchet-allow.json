@@ -1,6 +1,6 @@
 {
   "allow": [
-    "16-room-mechanics/16.6-eventlog.test.ts > 16.6 room eventlog > ROOM-EVENTLOG-027 Structure.destroy emits EVENT_OBJECT_DESTROYED with structureType"
+    "room.getEventLog() ROOM-EVENTLOG-027 Structure.destroy emits EVENT_OBJECT_DESTROYED with structureType"
   ],
   "note": "逐用例门禁的显式豁免（外部复审第三轮落地）：条目为用例 fullName，尾缀 * 为前缀匹配。仅用于有意的行为变化——新增条目须与行为变更同提交并在提交说明/台账归因（豁免即公开）；命中用例转绿后应清理条目（门禁对未命中条目打陈旧警告）。基线取 HEAD~1：同提交把代码与重跑报告一起入库的回归不再自我洗白。｜ROOM-EVENTLOG-027 豁免归因（2026-09-29 GPT 复审 P1-4）：官方 destroy-structure.js 全文无事件（事件只在 _damage.js:51/_die.js:97），套件 vanilla parity.json:10-12 自认 stable vanilla 不产、其 expected 为 API 文档语义推断——按硬约束①对齐官方移除补事件（B3 曾按套件口径实现，新证据推翻原裁示）。"
 }
