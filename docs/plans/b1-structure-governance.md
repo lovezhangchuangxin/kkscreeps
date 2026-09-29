@@ -176,11 +176,12 @@ _registry.js:4-5 段序注释同步。
   `embed_engine_suite`）——V8 单测试串行纪律（ADR-013 线程局部销毁序 +
   进程级终局计数器不可并行污染），破坏会出现假违规 flake（历史实测 5 跑 2 挂）；
 - root 保留：helpers（sandbox：fixtures_dir/world/load_sample_bot/tick/
-  is_allowed_global；embed 同构 helpers）、唯一 #[test] 链函数、mod 声明 +
+  is_allowed_global 五件——真跨块共享仅 world/tick，其余为一致性留根；
+  embed 原文件除套件外无 helper）、唯一 #[test] 链函数、mod 声明 +
   `use m1::*; …`；
 - 其余 impl fn 按原顺序连续切块到子模块（sandbox ×4 ≈800/块、embed ×3 ≈620/
   块），每块 `use super::*;` 头 + 被 root 链调用的 fn 加 `pub(super)`；
-  **链函数体逐字节不动**（链内调用序 = 原 impl fn 声明序不变）；
+  **链函数体逐字节不动**（链内调用序原样——原文中链调用序本≠声明序，两者都保持不变）；
 - 搬移的 impl fn 上方 doc 注释（含「不得独立 #[test]」纪律注释）随体搬移。
 
 ## 4. 零行为证明口径（评审与自查共用）
@@ -352,8 +353,13 @@ bot 三基线 → ≥3 路 subagent 并行评审（**重点视角=零行为差�
 - 登记：源序连续切块致链调用序 ≠ 块内源序（链体不动故无影响）；根 glob
   私有绑定使子模块理论上可互调 sibling 块 fn——实测零跨块调用，当前调用面
   恰=根串行链（评审 2 观察）。
-- B1-1/2/3 登记的 embed_tests 旧路径注释（:411/:998/:608）随块迁至
-  embed_strictness_and_partial_commit.rs（a5/a6 块）与 embed_channels_and_
-  families.rs，内容原样（纯搬移纪律），行号已无效但溯源语义仍在。
+- B1-1/2/3 登记的 embed_tests 旧路径注释随块迁内容原样（纯搬移纪律），新锚点：
+  embed_roundtrip_contract.rs:384（原 :411，指 settle/creep.rs 的 gcl 强化——现
+  真路径 settle/creep/controller.rs）、embed_channels_and_families.rs:286（原
+  :998，extension_cap——现 settle/creep/store.rs）、embed_roundtrip_contract.rs:581
+  （原 :608，place.rs 预挂钟——现 place/place_structure.rs）；评审 3 F4 判定
+  sandbox_tests 内 structures.js 行号锚点为官方上游源锚点（编号空间 >968），
+  B1-3 拆分未使其失效，与 compatibility.md:42/:61 同归文档卫生批。mod 声明序
+  经 rustfmt reorder_modules 归一字母序（B1-4 同款登记，无行为影响）。
 - 验证：两 crate 套件真跑全绿（m0 1.74s/embed 0.89s，LIFO 零违规断言过）/
   workspace 268 全绿 / release+棘轮 1405 零转红 / 三基线通过。
