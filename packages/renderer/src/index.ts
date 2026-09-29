@@ -9,6 +9,7 @@ import { CameraController } from './core/camera.js';
 import { initKernel, type Backend, type Kernel } from './core/renderer.js';
 import { fitRect } from './core/camera-math.js';
 import { loadAtlas, type LoadedAtlas } from './assets/atlas.js';
+import { FeedStore, type FeedView } from './feed/room-feed.js';
 import {
   DEFAULT_CELL_SIZE,
   ROOM_SIZE,
@@ -19,6 +20,7 @@ export type { Backend } from './core/renderer.js';
 export type { CameraState } from './core/camera-math.js';
 export { fitRect } from './core/camera-math.js';
 export { DEFAULT_CELL_SIZE, ROOM_SIZE } from './scenes/room.js';
+export type { FeedView, RoomSummary } from './feed/room-feed.js';
 
 export interface CreateRendererOptions {
   /** 渲染画布挂载容器（尺寸即视口尺寸）。 */
@@ -49,6 +51,8 @@ export interface RendererHandle {
   getStats(): RendererStats;
   /** 将相机适配到整个房间（留边）。 */
   fitRoom(): void;
+  /** RoomFeed 输入口（契约 @kkscreeps/shared/feed + 只读摘要；R1 起回放/网络共用）。 */
+  readonly feed: FeedView;
   destroy(): Promise<void>;
 }
 
@@ -90,6 +94,8 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
   };
   fitRoom();
 
+  const feed = new FeedStore();
+
   return {
     getStats(): RendererStats {
       return {
@@ -100,6 +106,7 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
       };
     },
     fitRoom,
+    feed,
     async destroy() {
       camera.detach();
       await kernel.destroy();

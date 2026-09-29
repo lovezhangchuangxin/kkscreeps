@@ -359,3 +359,59 @@ z 表/色表/字体常量直接测代码常量）。逐片勾项，收口时全�
   PNG 产物绑定构建机 zlib 版本（跨机重建会触发 freshness 强制重建，纪律自洽）；
   官方 mineral 符号字体声明为 `'Roboto, serif'`（R3 注意）；pnpm-lock.yaml 为
   与主树共享的根文件（本批 +千行依赖条目），与引擎批合流时留意冲突面。
+- 2026-09-30：**R1 契约与夹具完成**。shared 包实装：feed.ts 契约 v0（形状按
+  e7adf47 world_json 投影取证——主键是 `id` 非 `_id`、结构类 type:"structure"+
+  structureType 二级类型、事件 `{"event","objectId","data"}`；typed 字段经索引
+  签名透传，R3 描述符收窄；运行时守卫 isSnapshot/isDelta/isRoomEvent；TS 源
+  直发包，零运行时依赖）；kk-cli 新增 `export-fixtures` 只读子命令（新文件
+  export_fixtures.rs + main 分发表一行 + **kk-cli Cargo.toml 增 kk-core/
+  kk-schema 两行 workspace 依赖**——超出"新文件+分发表一行"字面范围的点，
+  因构建对象面必需，特此登记）；四张脚本世界夹具（plains/standard/swamp-walls/
+  dense-edge，settle_tests Fixture 同款摆法，固定 seed+固定 TickInput 墙钟
+  注入 ADR-013 决策 5，空意图零 V8 推进 30 tick），两次导出逐字节一致实测；
+  differ（src/feed/differ.ts，world_json ticks→snapshot/deltas，纯函数零运行时
+  依赖，node 原生 TS 直跑）+ scripts/build-fixtures.mjs 生成入库（每夹具 1 快照
+  +30 增量，全部非空——aging/decay/spawning 自然差量）；renderer feed 状态机
+  （FeedStore：快照置换/增量对账/缺房与时间回退 fail-fast）+ RendererHandle.feed
+  公共面扩展（非破坏性，冻结前）；harness 回放控制（1-4 切夹具/空格/./+-
+  调速/F），浏览器实测全过（播放/暂停/单步/2×/4×/末尾 end 态不越界/切夹具
+  重置）。验收：shared 4 测+renderer 36 测绿；cargo clippy -p kk-cli 零告警、
+  cargo test -p kk-cli 5 测绿（确定性+时间序）；compat 套件不受影响（本片
+  构建的 target/debug/kkscreeps 使其 e2e 两例由 skip 转 pass，属正向）。
+  实施决策：① exporter 不注入玩家 intents（R1 静态世界+自然差量足够；运动/
+  战斗夹具随 R4/R5 在同一文件扩展）；② 契约不改写 world_json 字段名（id/room
+  直通，M3 投影对齐时统一再议 _id 映射）；③ 夹具 31 条全量入库（~184KB 总量，
+  可接受）；④ differ 的对象变化判定用 JSON 序列化比较（夹具工具口径；渲染
+  运行时字段级脏标记在描述符层互不替代）。
+- 2026-09-30（同日）：**R1 评审清偿**。3 路评审零阻塞、12 建议全清偿：
+  ① 夹具数据（评审 A）：swamp-walls 四格路改到经地形码核实的真沼泽格且
+  hits=hitsMax=25000（原先 1/4 在沼泽且 3 格 hits>hitsMax 引擎不可达态）；
+  standard 孵化任务自洽（need_time=10≡spawnTime−0）并补同格同名孵化雏形
+  （t10 实测出生：任务清+spawning=false 出生面——R3/R5 孵化动态取材）；
+  Generic tower/rampart data 按官方渲染消费面补键（user 归属键、塔
+  storeCapacityResource、rampart isPublic，owner 为 kk 投影口径冗余键，R3
+  登记 user/owner 映射）。② 契约文档（评审 A/B）：取证头掉落资源更正为
+  type:"resource"（原误写 "energy"）、structureType 单向蕴含说明（spawn/
+  constructionSite 也带）、pos 投影附带字段登记、EVENT 码与官方 1..12 相等
+  的实测结论写入注释。③ feed 公共面（评审 B）：FeedStore 退为实现细节，
+  新增 FeedView 接口（RoomFeed+summary/objects/terrain 读面），
+  RendererHandle.feed 与导出面均用接口。④ harness（评审 B/C）：回放末态
+  stopTimer（不留空转 interval）、stepGuarded 兜底（fail-fast 抛错→停机+
+  HUD 报错行，不留异常循环）、F 文案改"视角复位"并注明重按数字键重放。
+  ⑤ 工具（评审 B/C）：build-fixtures 无条件增量 cargo build（防过期二进制
+  静默产陈旧夹具）、非空增量计数哨兵修正（原恒真）、spawn error 打印、
+  readdirSync 归顶部导入。⑥ 登记项：M1 路磨损语义=被踩才衰减（movement.rs
+  next_decay_time 递减），空意图夹具无路 decay/移除动态——留待 R4 运动意图
+  夹具；四张夹具零 events（EVENT 通道现仅合成单测覆盖，R5 补战斗/事件夹具）；
+  applySnapshot 保留 visuals 的 R6 拍板点（时间回退残留 + 房卸载 API 缺位）；
+  shared 内部引用 `./feed.js` 后缀在 node 直跑下不做 .js→.ts 重映射（现仅
+  type-only import 故安全，R7 文档回写记一笔）；"两次导出逐字节一致"Rust
+  测试覆盖 5 tick、30 tick 全量由本会话手跑两次 diff 实证。清偿后全链复绿
+  （shared 4+renderer 36+kk-cli 5 测；clippy 零告警）。三路清偿复审全过，
+  尾巴随手清：§12 补记三条——plains 无 controller 时 source 容量 t1 被
+  KEEPER 规则归一 3000→4000（引擎 faithful 行为，读夹具勿误判 bug）；
+  isSnapshot 守卫暂不校验 objects 数组（v0 最小集，M3 网络入口收紧点）；
+  契约 time 为 number（夹具 0..30 无碍，真实 shard tick ~1e7 距 2^53 三个
+  数量级，M3 接 u64 time 在 feed 适配层留精度备注）。Generic「data 透传」
+  措辞更正为「data 投影期解析展开」（实测夹具无嵌套 data 键）；
+  dev/main.ts 头注 F 文案同步。

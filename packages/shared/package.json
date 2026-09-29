@@ -2,8 +2,18 @@
   "name": "@kkscreeps/shared",
   "version": "0.0.0",
   "private": true,
-  "description": "游戏常量（从 kk-core 生成，单一事实来源）+ 网络协议类型。占位包，M3 起实装。设计见 docs/architecture/frontend.md。",
+  "type": "module",
+  "description": "游戏常量（从 kk-core 生成，单一事实来源）+ 网络协议类型 + RoomFeed 契约。设计见 docs/architecture/frontend.md。",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
-    "test": "node --test"
+    "typecheck": "tsc --noEmit",
+    "test": "pnpm run typecheck && vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.0",
+    "typescript": "~7.0.2",
+    "vitest": "^5.0.2"
   }
 }

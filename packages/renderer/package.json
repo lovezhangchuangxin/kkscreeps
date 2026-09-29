@@ -11,6 +11,7 @@
     "test": "node scripts/check-assets-fresh.mjs && pnpm run typecheck && vitest run"
   },
   "dependencies": {
+    "@kkscreeps/shared": "workspace:*",
     "pixi.js": "~8.21.0"
   },
   "devDependencies": {
