@@ -990,6 +990,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "kk-runtime"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "kk-engine",
+ "kk-runner",
+ "serde_json",
+]
+
+[[package]]
 name = "kk-schema"
 version = "0.1.0"
 dependencies = [

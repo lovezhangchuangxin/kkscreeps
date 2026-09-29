@@ -52,6 +52,8 @@ pub struct EvalReport {
 
 enum Cmd {
     SetModules(ModuleTable, mpsc::Sender<anyhow::Result<()>>),
+    /// 注入 RawMemory 初值（tick 边界——协调层提交点统一驱动的通道面）。
+    SetRawMemory(String, mpsc::Sender<anyhow::Result<()>>),
     Tick {
         world: Value,
         ack: mpsc::Sender<anyhow::Result<TickReport>>,
@@ -118,6 +120,9 @@ impl PlayerThreads {
                         Cmd::SetModules(table, ack) => {
                             let _ = ack.send(sandbox.set_modules(table));
                         }
+                        Cmd::SetRawMemory(data, ack) => {
+                            let _ = ack.send(sandbox.set_raw_memory(&data));
+                        }
                         Cmd::Tick { world, ack } => {
                             let _ = ack.send(run_one_tick(&mut sandbox, &world));
                         }
@@ -159,6 +164,17 @@ impl PlayerThreads {
         let p = self.player_mut(id)?;
         let (ack_tx, ack_rx) = mpsc::channel();
         p.send(Cmd::SetModules(table, ack_tx));
+        ack_rx
+            .recv()
+            .map_err(|_| anyhow::anyhow!("玩家 {id} 线程无响应"))?
+    }
+
+    /// 注入玩家 RawMemory 初值（tick 边界；Sandbox::set_raw_memory 的私有
+    /// 句柄通道——协调层提交点统一驱动的接入面）。
+    pub fn set_raw_memory(&mut self, id: u64, data: &str) -> anyhow::Result<()> {
+        let p = self.player_mut(id)?;
+        let (ack_tx, ack_rx) = mpsc::channel();
+        p.send(Cmd::SetRawMemory(data.to_string(), ack_tx));
         ack_rx
             .recv()
             .map_err(|_| anyhow::anyhow!("玩家 {id} 线程无响应"))?

@@ -18,6 +18,7 @@ kk-schema = { path = "crates/kk-schema" }
 kk-world = { path = "crates/kk-world" }
 kk-engine = { path = "crates/kk-engine" }
 kk-runner = { path = "crates/kk-runner" }
+kk-runtime = { path = "crates/kk-runtime" }
 kk-storage = { path = "crates/kk-storage" }
 kk-pathfinder = { path = "crates/kk-pathfinder" }
 kk-backend = { path = "crates/kk-backend" }

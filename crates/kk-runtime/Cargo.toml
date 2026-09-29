@@ -1,0 +1,14 @@
+[package]
+name = "kk-runtime"
+description = "运行协调层：玩家执行编排、RunResult 统一提交点、真/假沙箱统一执行接口（ADR-013 决策 1）"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+kk-engine = { workspace = true }
+kk-runner = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }

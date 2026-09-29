@@ -10,5 +10,5 @@ pub mod sandbox;
 pub mod settle;
 
 pub use embed::{EmbedEngine, PlayerRun};
-pub use sandbox::{Sandbox, ScriptedSandbox, WorldView};
+pub use sandbox::{RunOutcome, RunResult, RunSpec, Sandbox, ScriptedSandbox, WorldView};
 pub use settle::{Engine, PlayerState, SettleError, TickInput, settle_room};

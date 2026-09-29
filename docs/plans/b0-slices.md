@@ -37,3 +37,11 @@
 每片：`cargo test --workspace` 全绿 → 显式 cd 主仓 `cargo build --release` 后 `node compat/scripts/ratchet.mjs` 零未豁免转红 → bot 三基线（tooangel 2000t console 零错人工确认 + overmind 2000t + wasm 10t）→ ≥3 路 subagent 并行评审（官方语义对照/对抗安全/回归兼容）→ 逐条清偿+复审 → 灰区表/沿革回写 → `pnpm run check` → 单一归因提交并 push。
 
 B0-5 收官关卡（ADR-013 复现场景全转回归且绿）：①部分提交三连（注入失败轮先执行玩家 Memory/CPU/世界版本不变；结算失败重试不重跑玩家代码；玩家结局不中止整轮）②LIFO 乱序销毁 ③重放一致性。性能：perf-probe 同口径对比 compat/reports/perf-a6.md（2 玩家 p50 0.813ms/tick 基线），重构不得显著劣化（各相 p50 劣化 >20% 需归因）。
+
+## 4. 片 4（WP1a）接口设计定稿（随 B0-4 实现收敛修订）
+
+- **类型落点**：`RunOutcome`（**四形态** Executed/Terminated/InjectFailed/InfraFailure——玩家软异常不单列：经 expr 携带（与 PlayerRun.executed 的 `kind!="terminated"` 口径一致）；InfraFailure 是唯一非玩家结局，协调器见此转整轮停顿）、`RunResult`（player/outcome/intents: IntentBatch（已按注册玩家清洗）/expr/cpu_billed_ms 候选/raw_memory 候选/console）、`RunSpec`（player+code）全部定义在 kk-engine（Sandbox trait 旁，零 deno_core 依赖）；kk-runtime `pub use` re-export。
+- **Sandbox trait 演进**：`collect_intents(&WorldView, &str) -> IntentBatch` → `run(&WorldView, &RunSpec) -> RunResult`。投影由实现方自行从 WorldView 生成（假沙箱零投影开销；真沙箱内部 world_json_for_viewer）。ScriptedSandbox 同接口迁移，Engine::tick 适配（行为不变 + **结局门**：仅 Executed 的 intents 进结算批）。真路径执行器在 kk-runtime 的 `PlayerExecutor`/`ThreadExecutor` 面（Sandbox 真实现/桥接形态随 B0-5 落定）。
+- **kk-runtime 骨架**（B0-4 已交付）：crate 依赖 kk-engine+kk-runner；`PlayerExecutor` 执行器抽象 + `ThreadExecutor`（包装 PlayerThreads 通道，EvalReport→RunResult；失败分类 B0-4 保守：run_player Err 一律 InfraFailure——**InjectFailed 拆分推迟至 B0-5**（proto.rs 通道把 begin_tick 注入失败从 Err 改为玩家级报告时接线））。
+- **契约承载边界（前瞻登记，B0-4 评审 P2）**：IntentBatch 现按玩家分组（objects 键 ObjId + room 列表）——tick 契约的「按房间分组指令」可经 world 反查推导（ObjId 不内嵌房名），「全局指令」（市场/power/跨房）尚无承载类别；跨房移动（2B）/市场落地时 IntentBatch 须扩类别或契约改写。
+- **统一提交点（片 5）**：end_tick 不再即时 `budget.settle`（产出 cpu_billed 候选）；Memory 写回产物上提为 raw_memory 候选；begin_tick 从 PlayerState.raw_memory 注入（官方每 tick 从 DB 恢复同构）；协调器提交点一次切换世界+玩家持久状态。**B0-5 接线注意项（评审登记）**：①InjectFailed → PlayerRun 投影必须 executed=false（代码未执行——adapter 的 mapRunResult 在 executed=true 时读 kind，inject_failed 越出 syntax|runtime|serialization 三分类会抛不识别的 RunPlayerError；executed=false 走普通 Error 路径反而兼容）；②InfraFailure 的 expr 是 Null——不得误投影为 executed=true（mapRunResult 读 expr.ok 直接 TypeError）；③InfraFailure 错误串可携带玩家污染文本（beginTick 异常经全局污染）——协调器日志/RPC 按不可信内容对待；④PlayerThreads::set_raw_memory 通道（B0-4 开）无测试覆盖，B0-5 首批补 ThreadExecutor 往返测试。

@@ -25,6 +25,7 @@ kkscreeps/
 │   ├── kk-world       世界模型：房间快照的内存表示、空间索引、对象类型定义
 │   ├── kk-engine      游戏循环：意图执行、移动仲裁、战斗、能量、市场结算
 │   ├── kk-runner      玩家代码沙箱：deno_core 封装、CPU/内存限制、模块加载
+│   ├── kk-runtime     运行协调层：玩家执行编排、RunResult 统一提交点（ADR-013；B0 起步）
 │   ├── kk-storage     存储：内存缓存 + 定期写盘；跨机部署时的 Redis 等后端
 │   ├── kk-pathfinder  寻路：复用官方 C++ 源码（保证路径逐点一致）
 │   ├── kk-backend     网络层：HTTP 接口 + WebSocket 推送（兼容官方协议）
@@ -49,8 +50,11 @@ kkscreeps/
 ```
 kk-cli ──→ kk-backend ──→ kk-engine ──→ kk-world ──→ kk-schema ──→ kk-core
               │               │            │
-              │               └──→ kk-runner（沙箱）
+              │               ├──→ kk-runner（沙箱，deno_core 只在此与 kk-runtime）
+              │               │      【现状过渡边：embed 编排还在 kk-engine，B0-5 移交 kk-runtime 后删除】
               │               └──→ kk-pathfinder
+              ├──→ kk-runtime ──→ kk-runner
+              │        └──→ kk-engine（运行协调层，ADR-013；B0-4 起步）
               └──────────→ kk-storage
 ```
 

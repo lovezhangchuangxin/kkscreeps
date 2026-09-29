@@ -597,16 +597,20 @@ impl Engine {
         {
             let view = crate::sandbox::WorldView { world: &self.world };
             for (player, sandbox) in &mut self.sandboxes {
-                let part = sandbox.collect_intents(&view, player);
-                for (p, intents) in part.users {
-                    // 身份边界：intent 只归本沙箱注册的玩家（结算按玩家键判所有权，
-                    // 冒名键直接丢弃——真沙箱接入后这是防跨玩家操作的硬不变量）
-                    if p != *player {
-                        continue;
-                    }
-                    let entry = batch.users.entry(p).or_default();
-                    entry.objects.extend(intents.objects);
-                    entry.room.extend(intents.room);
+                let mut result =
+                    sandbox.run(&view, &crate::sandbox::RunSpec::new(player.clone(), ""));
+                // 结局门（B0-4 评审清偿）：只有正常执行的 intents 进结算批——
+                // Terminated（硬中断/停跑丢弃 intents 的真路径语义在消费侧
+                // 兜底）、InfraFailure（基础设施故障不静默当作空意图正常轮）。
+                if !matches!(result.outcome, crate::sandbox::RunOutcome::Executed) {
+                    continue;
+                }
+                // 身份边界：intent 只归本沙箱注册的玩家（结算按玩家键判所有权，
+                // 冒名键直接丢弃——真沙箱接入后这是防跨玩家操作的硬不变量）
+                if let Some(intents) = result.intents.users.get_mut(player) {
+                    let entry = batch.users.entry(player.clone()).or_default();
+                    entry.objects.extend(std::mem::take(&mut intents.objects));
+                    entry.room.extend(std::mem::take(&mut intents.room));
                 }
             }
         }
