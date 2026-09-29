@@ -1,6 +1,7 @@
 # M2B 前置批：seam 三件套 + 投影/编解码宏化方案
 
-> 状态：方案定稿（2026-09-30，基准 HEAD=ef43f4a）。依据：[ADR-013](../decisions/ADR-013-architecture-review-coordinator.md)
+> 状态：已收口（2026-09-30 五片全部落地，逐片记录见 §7；基准 HEAD=ef43f4a）。
+> 依据：[ADR-013](../decisions/ADR-013-architecture-review-coordinator.md)
 > 决策 2（性能第二形态「seam 先行」）；切片纪律沿用 [b0-slices.md](b0-slices.md) §3
 > 统一验收口径（B1 同款），本批增补 perf-probe 同口径对比（§5）。
 
@@ -43,7 +44,7 @@ project p50 0.164ms / wall 0.813ms（投影 ≈ 墙钟 20%）；4 玩家 project
 原始编辑点 **30 处 / 7 层**；其中**机械齐一**（臂臂同构、宏化零语义风险）的
 只有 kk-schema 枚举管道 8 块（enum 本体 / id / pos / set_pos / encode /
 decode+兜底 / tags 模块 / tag()，各 16 臂逐臂同构，room.rs:389-625）+
-world.rs `set_object_id`（第 17 块，:103-122）。其余每处承载各自契约或官方
+world.rs `set_object_id`（§8 表 #10）。其余每处承载各自契约或官方
 语义（归一化缺省面、两投影各自契约形状、FIND 语义、prelude 装配），不属
 机械样板。
 
@@ -227,13 +228,20 @@ workspace 268 / 棘轮 / 三基线）。rustfmt 对宏内代码不重排（发�
 事实：`object_json` 与 viewer 无关（viewer 只影响可见房集合/房间聚合/自家
 工地破例——world_json_impl :61-105 的过滤全部发生在投影**之外**）。故按
 `(generation, room)` 缓存 `Vec<(ObjId, Value)>`（World 内 RefCell，与地形
-缓存同构同键族），per-viewer 组装时过滤+clone。N 玩家：投影计算 N 次 →
+缓存同键族（代际/纪元）但失效粒度不同（对象缓存单键整代作废、地形缓存按房含纪元）），per-viewer 组装时过滤+clone。N 玩家：投影计算 N 次 →
 1 次 + (N−1) 次 Value 克隆。
 
 **去留判据（本批核心验收的实测面）**：`--players 2` 下 project p50 改善
 ≥10% 且无其他相 p50 劣化 >20% 则保留；否则整体回退并在 §7 登记（Value 克隆
 与重建同阶则该缓存无益——这正是「列式由测量决定」的又一数据点）。
 `--players 4` 补测一次作缩放证据（非门禁）。
+
+**实测结论（2026-09-30）：回退**——project 相 **+106%**（0.102→0.210，
+三跑稳定；4 玩家 0.215→0.590 为 2.7 倍劣化）。归因=读侧局部性与表示
+成本（clone 追逐分散堆上 Value 树+工作集翻倍，vs json! 从连续 typed
+载荷直构；两者堆分配同阶——收口评审订正，详见 §7 P5），Value 级共享
+结构性不回本；共享收益须换表示（列式/rev 键控载荷旁路/引用可共享
+结构）方可兑现——归测量批（与 §3.3 Level 2 登记同向）。
 
 ## 4. 切片
 
@@ -293,7 +301,8 @@ workspace 268 / 棘轮 / 三基线）。rustfmt 对宏内代码不重排（发�
    失败路径不 bump。
 5. **RefCell 缓存**：World 的 Debug/Clone 派生随体；单线程持用前提在注释
    钉死；缓存键 = (epoch|generation) 失效正确性由 P3/P5 各自测试锁
-   （改地形后注入必须变、place 后对象缓存必须失效——各写正向测试）。
+   （改地形后注入必须变——P3 有正向测试钉；place 后对象缓存必须失效——
+   P5 原有正向测试已随回退消失，未来重启对象缓存时须重写）。
 6. **JS 预检门/层间测试**：P3 的 JS 侧改动须有 Rust 孪生重验（world_json
    形态测试 + sandbox_tests 断言同步），不得只改 JS。
 7. **线上契约冻结**：tags 常量名+值逐字保持（宏化不改任何 tag 值——
@@ -306,6 +315,9 @@ workspace 268 / 棘轮 / 三基线）。rustfmt 对宏内代码不重排（发�
    改动（P3）在 main 落地后 F2 合并期对齐 exporter 消费。
 
 ## 7. 切片执行记录
+
+> 段序=收口整理序（新片在上）；执行与提交序为 P1→P2→P3→P4→P5
+> （P5 实测回退无代码入库）。
 
 ### P1（kk_room_object! 枚举管道宏 + object_owner 单源）——已收口
 
@@ -335,15 +347,42 @@ workspace 268 / 棘轮 / 三基线）。rustfmt 对宏内代码不重排（发�
   状况（rustdoc 警告集前后逐条相同）；ratchet「豁免条目未命中」噪音为
   先前批次遗留（归棘轮清理项）。
 
+### P5（按代际的对象投影共享缓存）——实测回退（按预登记判据）
+
+- 实现（已完整落地并跑通全测）：World.object_projection_cache
+  （RefCell<(generation, BTreeMap<room, Vec<(ObjId, Value)>>)>，单键代际
+  作废）；world_json_impl 逐房 get-or-build，per-viewer 组装 zip 对齐
+  clone；失效测试（place 后新对象必现 / tick 后时间折叠面重折）过。
+- **实测（判据触发回退）**：2 玩家 project 0.102→0.210/0.209/0.211
+  （**+105~107%**）、wall +25%；4 玩家 project 0.215→0.590（2.7 倍）。
+  run/settle 相零变化（确认效应隔离在投影内）。三跑稳定非机器态
+  （金丝雀 settle 相三跑同为 0.010）。
+- 归因（收口评审 1 订正：原记「分配成本≫」在 serde_json 实现层面不成立
+  ——json! 构造与 Value::clone 堆分配同阶，见 macros.rs 展开）：真实机制
+  是**读侧局部性与表示成本**——clone 追逐缓存驻留的分散堆上 Value 树
+  （指针追逐/cache miss）且工作集翻倍，而 json! 从连续 typed 载荷直构；
+  外加组装双重结构（缓存形状→最终形状）。Value 级共享结构性不回本；
+  兑现共享收益须换共享友好表示（列式布局=连续布局恰好同时治局部性/
+  rev 键控载荷旁路/引用可共享结构）——「列式由测量决定」的直接数据点
+  （注意：勿据此走 arena-Value 等仍含树遍历克隆的路线）。
+- 处置：整体回退（git checkout 三文件，44 测试回基线集；回退后 perf
+  精确复原 0.103/0.154/0.010/0.413）。无代码入库；本段与 §3.5 结论
+  即该片的交付（判据预登记在先，负结果照登）。
+
 ### P4（投影 helper 单源化 + 两文件测试拆出 <1000）——已收口
 
 - 实测：三对真重复单源化——store 家族（store_positive_entries 正量键集
   + apply_store_extra 共核，world_json 侧包装层显式补 energy 恒投影键；
   snap_store/snap_store_extra 改消费）、controller_progress_total_opt
   （Option 共核，快照 Null/世界 0 各自折叠）、controller_owner_value
-  （三态 Some/Null/None，两侧手写 if/else-if 与互指注释消灭）。测试拆出
-  world_json/tests.rs（920）/snapshot/tests.rs（707），源文件 847/390——
-  B1 留置的两文件 <1000 达成，全仓产品源码无 >1000。
+  （三态 Some/Null/None，两侧手写 if/else-if 与互指注释消灭）。测试拆出子模块
+  （源文件 847/392）；world_json 侧拆出后又经收口终审再拆——P4 清偿
+  补入的锁定测试使单文件长到 1030 行（>1000，且 §7 原记 920 为拆分
+  时点数字未随清偿回更——终审 P1 抓到），再拆为 tests.rs（46，共享
+  helper/uses）+ tests/terrain_and_projection_forms.rs（293）+
+  tests/viewer_semantics_and_families.rs（705）；snapshot/tests.rs
+  821（清偿测试补入后仍 <1000）。B1 留置的两源文件 <1000 达成；测试
+  文件同口径无 >1000。
 - 评审三路全 PASS 零 P0/P1：等价性逐输入类推演（store 四输入类键集值
   逐一相同 + serde_json 无 preserve_order 键序恒字典序、progress 的
   level=0 表无 "0" 键疑点排除、owner (Some,true) 态生产不可达且优先序
@@ -381,6 +420,8 @@ workspace 268 / 棘轮 / 三基线）。rustfmt 对宏内代码不重排（发�
   checkTerrain 的 instanceof 分支）——解码产物与官方同型；Terrain.get/
   getRawBuffer/getTerrainAt/lookFor(LOOK_TERRAIN) 逐项官方对照一致
   （评审 3 三处源码抽查）。
+- 验证：workspace 274 全绿 / clippy 零告警 / release+棘轮 1405 零转红
+  （清偿前后各一跑）/ 三基线通过（tooangel console error tick=0 两跑）。
 - 评审三路全 PASS 零代码缺陷。清偿：b64ToBytes 非法字符 throw；embed 级
   端到端值断言（terrain_compact_protocol_e2e——getTerrainAt/get/
   getRawBuffer 全链闭环，补 producer/consumer 之外的组合链缺口）；探针
@@ -400,8 +441,7 @@ workspace 268 / 棘轮 / 三基线）。rustfmt 对宏内代码不重排（发�
 - **Level 2 判定：不做，登记**。Level 1 后地形残成本 = 每 tick 每玩家
   每房 3.3KB 字符串三段传输拷贝（Value::String 构造→to_string→JS parse），
   相对 run 相主导（玩家代码执行）已非主项；Level 2 的 per-player last_sent
-  跨侧状态复杂度暂不回本。彻底解法是列式时代的 rev 键控载荷旁路通道
-  （载荷不随每 tick JSON 往返）——与 F-6 登记对称归测量批。
+  跨侧状态复杂度暂不回本。——与 P5 段「兑现共享须换表示」登记同向归测量批。
 - 登记：JS 侧 terrainCache 防跨世界 (room, rev) 撞键 = create_shard 同时
   重建沙箱+世界（约定性而非结构性——与 P2 的 Rust 侧「缓存驻 World」
   钉子对称；evict_idle 无生产调用面）；terrain_epoch 对 settle 直写回/

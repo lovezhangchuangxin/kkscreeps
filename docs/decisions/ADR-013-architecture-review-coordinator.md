@@ -4,8 +4,13 @@
 - **状态**：已接受（四项裁决经用户拍板）；**B0 批已全部落实（2026-09-29）**——
   裁决 1 运行协调层（kk-runtime crate + RunResult 统一提交点，部分提交三连
   回归全绿）、裁决 3 LIFO 每线程（乱序销毁压力测试）、裁决 4 宿主面收口
-  （`__kk` 私有句柄化）、裁决 5 TickInput（重放一致性回归）；裁决 2 seam
-  归 M2B 前置批不变
+  （`__kk` 私有句柄化）、裁决 5 TickInput（重放一致性回归）；**裁决 2 seam
+  已随 M2B 前置批落实（2026-09-30，[方案](../plans/m2b-prerequisite.md)）**：
+  WorldSource seam + 世界版本面（generation/terrain_epoch/RoomVersionHandle，
+  snapshot 契约加现状标注）+ 地形按版本缓存（紧凑载荷，project 相 −42% 实测）
+  + 投影/编解码宏化；列式布局与零拷贝冻结仍由端到端测量决定（对象投影
+  Value 级共享实测负结果回退登记——共享收益须换表示）；决策 6 批构成中
+  的双房双玩家实弹验证另出方案（M2B 扩面前），不在该批
 
 > 编号说明：ADR-012 由 A6 的 M2A 架构结论升格预留（[m2-playable.md](../plans/m2-playable.md) 头注），
 > 本 ADR 因架构复审先行创建，编号跳过 012 在所难免。该预留位已于 A6 收口时补齐
