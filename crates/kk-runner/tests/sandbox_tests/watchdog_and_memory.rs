@@ -3,6 +3,62 @@
 
 use super::*;
 
+/// 紧凑地形协议（M2B 前置批 P3 真路径形态）：terrain 值 = {rev, payload(b64)}
+/// ——rev 命中跨 tick 复用解码产物、rev 变更必须重解码（行为探针：若 JS 侧
+/// 忽略 rev，第二 tick 会读到陈旧字节）。payload 为手搓 b64：全零 2500 字节
+/// = "A"×3334+"=="；byte0=wall（[1,0,0] 组）= "AQAA"+"A"×3330+"=="。
+pub(super) fn terrain_compact_protocol_form() -> anyhow::Result<()> {
+    let mut sb = Sandbox::new(SandboxConfig::default())?;
+    let mut table = ModuleTable::new();
+    table.insert_js("main", "module.exports.loop = function () {};");
+    sb.set_modules(table)?;
+    let anchor = serde_json::json!([
+        { "id": "c9", "type": "creep", "room": "W1N1", "x": 30, "y": 30, "name": "anchor",
+          "owner": "p1", "body": ["move"], "store": { "energy": 0 } }
+    ]);
+    let w1 = serde_json::json!({
+        "time": 1,
+        "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+        "user": "p1",
+        "rooms": { "W1N1": { "name": "W1N1",
+            "terrain": { "rev": 1, "payload": format!("AQAA{}==", "A".repeat(3330)) } } },
+        "objects": anchor
+    });
+    tick(&mut sb, &w1)?;
+    let v = sb.run_expr("Game.map.getRoomTerrain('W1N1').get(0,0)")?;
+    assert_eq!(v["value"], 1, "紧凑形态 byte0=wall 解码正确");
+    let v = sb.run_expr("Game.map.getRoomTerrain('W1N1').get(1,0)")?;
+    assert_eq!(v["value"], 0, "其余字节 plain");
+    let v = sb.run_expr("Game.map.getTerrainAt(0,0,'W1N1')")?;
+    assert_eq!(v["value"], "wall");
+    let v = sb.run_expr(
+        "(() => { const b = Game.map.getRoomTerrain('W1N1').getRawBuffer(); return b.length + ':' + b[0] + ':' + b[2499]; })()",
+    )?;
+    assert_eq!(
+        v["value"], "2500:1:0",
+        "getRawBuffer 拷 2500 字节（Uint8Array 形态）"
+    );
+
+    // 同 rev 第二 tick：缓存复用路径（值不变）；rev 递增 + 新载荷：必须重解码
+    tick(&mut sb, &w1)?;
+    let v = sb.run_expr("Game.map.getRoomTerrain('W1N1').get(0,0)")?;
+    assert_eq!(v["value"], 1, "同 rev 复用解码产物");
+    let w2 = serde_json::json!({
+        "time": 2,
+        "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+        "user": "p1",
+        "rooms": { "W1N1": { "name": "W1N1",
+            "terrain": { "rev": 2, "payload": format!("{}==", "A".repeat(3334)) } } },
+        "objects": anchor
+    });
+    tick(&mut sb, &w2)?;
+    let v = sb.run_expr("Game.map.getRoomTerrain('W1N1').get(0,0)")?;
+    assert_eq!(v["value"], 0, "rev 递增后重解码（无陈旧命中）");
+    let v = sb.run_expr("Game.map.getTerrainAt(0,0,'W1N1')")?;
+    assert_eq!(v["value"], "plain");
+    Ok(())
+}
+
 /// M1 步 5 的 prelude 配套：Terrain 对象（rooms.js:1223-1241）、look 面 terrain
 /// 项、room.controller undefined、console 官方格式化（console.js:16-22）。
 pub(super) fn terrain_look_and_console_semantics() -> anyhow::Result<()> {

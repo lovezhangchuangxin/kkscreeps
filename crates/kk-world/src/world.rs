@@ -5,7 +5,9 @@
 //! 关键设计二、方案 D4-1）。`insert_with_id`（快照解码/导入）乱序插入时迭代序
 //! 为 id 升序而非插入序；`next_obj_id` 保证其后的普通插入不会与已导入对象撞 id。
 
+use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use kk_core::Terrain;
 use kk_schema::room::{RoomHeader, RoomObject, RoomSnapshot};
@@ -133,6 +135,11 @@ pub struct World {
     /// ——地形缓存的失效键（M2B 前置批 P3 消费）。地形首玩家 tick 后不可变，
     /// 正常运行恒定；纪元变更 ⇒ 全部房间的地形缓存作废。
     terrain_epoch: u64,
+    /// 地形投影缓存（P3）：房名 → (纪元, b64 载荷)。键含纪元 ⇒ 纪元递增
+    /// 后旧条目自然失配重编码（全房作废——事件一次性，方向保守安全）。
+    /// `RefCell` 前提：World 单线程持用（embed 主线程投影；无跨线程读取面，
+    /// P2 评审已核）。随 World Clone/reset 复制/重置——缓存键纪元防陈旧命中。
+    pub(crate) terrain_cache: RefCell<BTreeMap<String, (u64, Arc<str>)>>,
 }
 
 impl Default for World {
@@ -151,6 +158,7 @@ impl World {
             next_obj_id: 1,
             generation: 0,
             terrain_epoch: 0,
+            terrain_cache: RefCell::new(BTreeMap::new()),
         }
     }
 
@@ -245,6 +253,9 @@ impl World {
         self.rooms.get(name)
     }
 
+    /// **禁写 `terrain` 字段**（P3 钉子，评审 2 P2-1）：纪元不随本方法的
+    /// 可变访问递增——绕过 `set_terrain` 改地形会让投影的地形缓存供陈旧
+    /// 载荷（当前生产调用面为零，测试亦不写地形）。
     pub fn room_mut(&mut self, name: &str) -> Option<&mut RoomState> {
         self.generation += 1; // 保守失效：可变访问即视为内容可能变更
         self.rooms.get_mut(name)

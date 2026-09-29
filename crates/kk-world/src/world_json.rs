@@ -6,6 +6,8 @@
 //! JS 层独有面：出口是 terrain 派生位置非对象，embed 契约快照（带 id 形状）
 //! 装不下，matches_find 对其返空是既定口径（A5 片 3b 评审 P3 登记）。
 
+use std::sync::Arc;
+
 use kk_core::constants as c;
 use kk_schema::room::RoomObject;
 use serde_json::{Value, json};
@@ -55,7 +57,7 @@ impl World {
         for (name, state) in &self.rooms {
             let mut entry = serde_json::Map::new();
             entry.insert("name".into(), json!(name));
-            entry.insert("terrain".into(), json!(&state.terrain.as_slice()[..]));
+            entry.insert("terrain".into(), self.terrain_json(name, state));
             // RCL（extension 的 storeCapacityResource 归一与房间聚合共用）
             let rcl = room_rcl(state);
             if visible.contains(name) {
@@ -123,6 +125,30 @@ impl World {
         })
     }
 
+    /// 地形注入（M2B 前置批 P3：按纪元缓存的紧凑载荷）。
+    ///
+    /// `rooms[name].terrain` 值 = `{"rev": <terrain_epoch>, "payload":
+    /// "<base64(2500B)>"}`——prelude 按 rev 命中跨 tick 复用解码产物，未命中
+    /// 解码 b64；旧 2500 元素数字数组形态不再由真路径产出（宿主手搓注入的
+    /// 夹具路径仍被 prelude 接受，game.js 双形态收）。旧形态每 tick 每玩家
+    /// 每房重建 2500 元素 Value 数组（~80KB Vec 缓冲）+ 序列化 ~5.0KB +
+    /// JS 解析 2500 个数字 token；新形态 b64 ~3.3KB 一个字符串 token、
+    /// Rust 侧纪元内零重编码、JS 侧纪元内零重解码（P3 实测 project 相
+    /// −42% / run 相 −40%，方案 §7）。
+    fn terrain_json(&self, name: &str, state: &crate::world::RoomState) -> Value {
+        let epoch = self.terrain_epoch();
+        let mut cache = self.terrain_cache.borrow_mut();
+        let payload = match cache.get(name) {
+            Some((cached_epoch, b64)) if *cached_epoch == epoch => b64.clone(),
+            _ => {
+                let b64: Arc<str> = Arc::from(base64_encode(state.terrain.as_slice()).as_str());
+                cache.insert(name.to_string(), (epoch, b64.clone()));
+                b64
+            }
+        };
+        json!({ "rev": epoch, "payload": payload.as_ref() })
+    }
+
     /// 按 FIND 常量过滤房间内对象（embed findInRoom 的后端）。
     /// `viewer`：玩家面归属语义（MY_*/HOSTILE_*）；None = 视角中立面。
     pub fn find_in_room(
@@ -171,6 +197,35 @@ impl World {
             room_rcl(state),
         ))
     }
+}
+
+/// 标准字母表 base64（含 '=' 填充）——地形紧凑载荷的编码面（P3）。无新
+/// 依赖的自包含实现；解码侧在 prelude（game.js 的 b64ToBytes）与测试孪生。
+pub(crate) fn base64_encode(data: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    for chunk in data.chunks(3) {
+        let b = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
+        let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
+        out.push(ALPHABET[(n >> 18) as usize & 0x3f] as char);
+        out.push(ALPHABET[(n >> 12) as usize & 0x3f] as char);
+        // 尾组不足 3 字节：剩余字节仍全量编码，缺位以 '=' 填充
+        out.push(if chunk.len() > 1 {
+            ALPHABET[(n >> 6) as usize & 0x3f] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            ALPHABET[n as usize & 0x3f] as char
+        } else {
+            '='
+        });
+    }
+    out
 }
 
 /// 道路 hitsMax 的地形系数（官方 build.js:172-184：落成时把放大值同时写入
@@ -774,7 +829,77 @@ mod tests {
     use kk_core::Terrain;
     use kk_schema::room::ControllerObj;
 
-    /// 投影形状与 M0 契约对表：rooms 带 terrain 数组、对象字段名对齐
+    /// 测试孪生 base64 解码器（与 prelude game.js 的 b64ToBytes 同语义；
+    /// 编码器是产品面，解码器只存在于消费侧——Rust 测试承担 JS 侧的对表）。
+    fn test_b64_decode(s: &str) -> Vec<u8> {
+        fn val(c: u8) -> u8 {
+            match c {
+                b'A'..=b'Z' => c - b'A',
+                b'a'..=b'z' => c - b'a' + 26,
+                b'0'..=b'9' => c - b'0' + 52,
+                b'+' => 62,
+                b'/' => 63,
+                _ => panic!("非法 base64 字符: {}", c as char),
+            }
+        }
+        let bytes = s.as_bytes();
+        assert_eq!(bytes.len() % 4, 0, "b64 长度须为 4 的倍数");
+        let mut out = Vec::with_capacity(bytes.len() / 4 * 3);
+        for chunk in bytes.chunks(4) {
+            let pad = chunk.iter().filter(|&&c| c == b'=').count();
+            let n = (u32::from(val(chunk[0])) << 18)
+                | (u32::from(val(chunk[1])) << 12)
+                | (u32::from(if pad > 1 { 0 } else { val(chunk[2]) }) << 6)
+                | u32::from(if pad > 0 { 0 } else { val(chunk[3]) });
+            out.push((n >> 16) as u8);
+            if pad < 2 {
+                out.push((n >> 8) as u8);
+            }
+            if pad < 1 {
+                out.push(n as u8);
+            }
+        }
+        out
+    }
+
+    /// 地形缓存行为（P3）：纪元内载荷确定（多次投影一致）；纪元递增后
+    /// 载荷随新地形重编码（无陈旧命中）。
+    #[test]
+    fn terrain_payload_cache_epoch_invalidation() {
+        let mut world = World::new(1);
+        let mut t = Terrain::plains();
+        t.normalize();
+        world.register_room("W1N1", t);
+        let first = world.world_json()["rooms"]["W1N1"]["terrain"]["payload"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        // 稳态：同纪元多次投影，载荷逐字节一致（缓存命中路径）
+        assert_eq!(
+            world.world_json()["rooms"]["W1N1"]["terrain"]["payload"]
+                .as_str()
+                .unwrap(),
+            first
+        );
+        // set_terrain（player_ticks==0 允许）⇒ 纪元递增 ⇒ 新载荷
+        let mut t2 = Terrain::plains();
+        t2.normalize();
+        t2.as_mut_slice()[100] = kk_core::TERRAIN_MASK_WALL;
+        world.set_terrain("W1N1", t2).unwrap();
+        let second = world.world_json()["rooms"]["W1N1"]["terrain"]["payload"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert_ne!(first, second, "纪元递增后必须重编码");
+        let decoded = test_b64_decode(&second);
+        assert_eq!(decoded[100], kk_core::TERRAIN_MASK_WALL, "新载荷反映新地形");
+        assert_eq!(
+            world.world_json()["rooms"]["W1N1"]["terrain"]["rev"],
+            world.terrain_epoch()
+        );
+    }
+
+    /// 投影形状与 M0 契约对表：rooms 带 terrain 紧凑载荷、对象字段名对齐
     /// prelude wrapObject、FIND 过滤两层一致、pos 组装。
     #[test]
     fn projection_shape_and_find() {
@@ -836,9 +961,15 @@ mod tests {
         let j = world.world_json();
         assert_eq!(j["time"], 55);
         assert_eq!(j["rooms"]["W1N1"]["name"], "W1N1");
+        // 地形紧凑协议（P3）：{rev, payload(b64)}；rev = 当前纪元，
+        // payload 解回 2500 字节与 typed 地形逐字节一致（Rust 孪生——
+        // JS 侧 b64ToBytes 解码器的对表责任由本测试承担）
+        let terrain_json = &j["rooms"]["W1N1"]["terrain"];
+        assert_eq!(terrain_json["rev"], world.terrain_epoch());
+        let decoded = test_b64_decode(terrain_json["payload"].as_str().unwrap());
         assert_eq!(
-            j["rooms"]["W1N1"]["terrain"].as_array().unwrap().len(),
-            2500
+            decoded.as_slice(),
+            world.room("W1N1").unwrap().terrain.as_slice()
         );
 
         // FIND 两层：104 按 energy>0（源 3000 满）

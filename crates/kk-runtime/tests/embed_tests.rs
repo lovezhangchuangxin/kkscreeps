@@ -35,6 +35,7 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     embed_resource_family_impl()?;
     embed_move_misc_family_impl()?;
     embed_mineral_direct_channel_impl()?;
+    terrain_compact_protocol_e2e_impl()?;
     embed_gpt_review_clearance_impl()?;
     a5_memory_module_forms_impl()?;
     a6_isactive_hits_family_impl()?;

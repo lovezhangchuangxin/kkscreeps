@@ -277,9 +277,11 @@ workspace 268 / 棘轮 / 三基线）。rustfmt 对宏内代码不重排（发�
 1. **地形协议改动的锁步面**（P3，改前逐处 grep）：prelude game.js:543-548
    （重建点）、room.js:43-57 Terrain（get/getRawBuffer——Uint8Array 索引
    兼容已核）、game.js:392-402 getTerrainAt、room.js:91-98 terrainWordAt/
-   look 面、bot_check.rs:246-258 home_world 夹具（手搓注入形态，须同改）、
-   world_json.rs 测试「地形面恒在」断言（:1019 一带）、sandbox/embed 测试
-   中读 terrain 数组形态的断言（实现期 grep `terrain` 全测试面）。
+   look 面、bot_check.rs:246-258 home_world 夹具、world_json.rs 测试
+   「地形面恒在」断言（:1019 一带）、sandbox/embed 测试中读 terrain 数组
+   形态的断言（实现期 grep `terrain` 全测试面）。**P3 实现期定夺**：夹具
+   不改——prelude 双形态收（对象=真路径 / 数组=宿主手搓夹具路径，
+   game.js 两分支均有测试锁定），bot_check 与 sandbox 数组夹具原样保留。
 2. **prelude 消费面 grep 纪律**：改字段名/形态先 grep prelude 全消费面
    （防错坑清单既有条目，本批 P3 是最高频触点）。
 3. **宏化反「统一抽象」**：只收机械齐一样板；单源化逐处先读两侧契约；
@@ -330,6 +332,49 @@ workspace 268 / 棘轮 / 三基线）。rustfmt 对宏内代码不重排（发�
   实测，见 §5）；`[`RoomObject::tag`]` doc 链接指向私有方法系 HEAD 既有
   状况（rustdoc 警告集前后逐条相同）；ratchet「豁免条目未命中」噪音为
   先前批次遗留（归棘轮清理项）。
+
+### P3（地形按版本缓存：紧凑载荷 + rev 戳 + 双侧缓存）——已收口
+
+- 实测：注入协议 `rooms[name].terrain` 从 2500 元素数字数组 →
+  `{"rev": <terrain_epoch>, "payload": "<base64 2500B>"}`（~5.0KB →
+  ~3.3KB）。Rust 侧 World.terrain_cache（RefCell<BTreeMap<String,
+  (u64, Arc<str>)>>，键含纪元）缓存 b64——纪元内零重编码；自包含
+  base64_encode（无新依赖）。JS 侧 game.js 加载期 b64 反查表 + b64ToBytes
+  （非法字符 fail-fast，评审清偿）+ gw.terrainCache 跨 tick 复用解码产物
+  （rev 命中零解码）；beginTick 双形态收（对象=真路径 / 数组=宿主手搓
+  夹具路径——bot_check/sandbox 数组夹具原样保留，实现期定夺见 §6-1）。
+- 玩家可见零变化：官方引擎内部地形本就是 Uint8Array 形态（utils.js:333
+  checkTerrain 的 instanceof 分支）——解码产物与官方同型；Terrain.get/
+  getRawBuffer/getTerrainAt/lookFor(LOOK_TERRAIN) 逐项官方对照一致
+  （评审 3 三处源码抽查）。
+- 评审三路全 PASS 零代码缺陷。清偿：b64ToBytes 非法字符 throw；embed 级
+  端到端值断言（terrain_compact_protocol_e2e——getTerrainAt/get/
+  getRawBuffer 全链闭环，补 producer/consumer 之外的组合链缺口）；探针
+  尾部多余 end_tick 删除；归因数字订正（~5.0KB 非 7.5KB——2500 单数字
+  +2499 逗号；「Value::Number 分配」实为 ~80KB Vec 缓冲）；room_mut 文档
+  钉子（禁写 terrain——纪元不随可变访问递增）；本段与 §6-1 订正。
+- perf（A/B 消融，对 ef43f4a 工作基线）：project 0.176→0.102（**−42%**）、
+  run 0.255→0.152（**−40%**）、settle 0.010（−2%，未动结算=噪声）、wall
+  0.592→0.412（**−30%**）；两跑稳定；对父树 4f59c8b 实测口径为
+  −43%/−42%/−32%（结论不变）。归因：project=地形 Value 数组重建消失
+  （~80KB Vec 缓冲/房/玩家/tick）；run=JSON.parse 地形部分 2500 数字
+  token → 1 字符串 token + 稳态零解码；三相咬合（节省 0.177ms vs wall
+  节省 0.180ms，差 2%）。4 玩家缩放同向（project 0.215 vs perf-a6 0.517）。
+  测量学注记：清偿后曾出现一次全相劣化离群跑（settle +28%——P3 未动
+  结算，该相即机器负载金丝雀），复跑两遍精确复现正测数字；单跑离群
+  以「未动相劣化」为号甄别。
+- **Level 2 判定：不做，登记**。Level 1 后地形残成本 = 每 tick 每玩家
+  每房 3.3KB 字符串三段传输拷贝（Value::String 构造→to_string→JS parse），
+  相对 run 相主导（玩家代码执行）已非主项；Level 2 的 per-player last_sent
+  跨侧状态复杂度暂不回本。彻底解法是列式时代的 rev 键控载荷旁路通道
+  （载荷不随每 tick JSON 往返）——与 F-6 登记对称归测量批。
+- 登记：JS 侧 terrainCache 防跨世界 (room, rev) 撞键 = create_shard 同时
+  重建沙箱+世界（约定性而非结构性——与 P2 的 Rust 侧「缓存驻 World」
+  钉子对称；evict_idle 无生产调用面）；terrain_epoch 对 settle 直写回/
+  room_mut 无绊线（当前结构性不可达——settle 对地形全只读、Arc fail-fast
+  兜底）；terrainCache 普通对象的原型链病态键（房名宿主可控，与既有
+  terrainByRoom 同款模式非回归）；b64 畸形输入两侧语义未锁定（Rust 孪生
+  panic vs JS throw 后的形态差异——不可达路径）。
 
 ### P2（seam：WorldSource + 世界版本面 + Terrain Arc 化）——已收口
 

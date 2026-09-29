@@ -46,6 +46,7 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     roomlook_family_forms()?;
     roomfind_exits_and_path_codec_forms()?;
     terrain_look_and_console_semantics()?;
+    terrain_compact_protocol_form()?;
     writeback_watchdog_and_contract()?;
     stub_value_shapes()?;
     official_string_and_error_shapes()?;

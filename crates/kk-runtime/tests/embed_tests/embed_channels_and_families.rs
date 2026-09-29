@@ -591,3 +591,34 @@ pub(super) fn embed_gpt_review_clearance_impl() -> anyhow::Result<()> {
     );
     Ok(())
 }
+
+/// 紧凑地形协议端到端（M2B 前置批 P3 评审清偿）：真路径（投影 b64 载荷 →
+/// prelude beginTick 解码 → terrainByRoom）的地形值断言——producer 形态
+/// （world_json 测试）与 consumer 夹具探针（sandbox_tests）之外的全链闭环。
+pub(super) fn terrain_compact_protocol_e2e_impl() -> anyhow::Result<()> {
+    let mut terrain_codes = vec![0u32; 2500];
+    terrain_codes[5 * 50 + 5] = 2; // (5,5) swamp（normalize 只强制四角墙）
+    let mut e = EmbedEngine::new();
+    e.create_shard(&json!({
+        "players": ["p1"],
+        "rooms": [{ "name": "W1N1", "rcl": 1, "owner": "p1", "terrain": terrain_codes }],
+    }))?;
+    e.place_object(
+        "W1N1",
+        "creep",
+        &json!({ "pos": [10, 10], "owner": "p1", "body": ["move"], "name": "anchor" }),
+    )?;
+    let run = e.run_player("p1", "Game.map.getTerrainAt(5,5,'W1N1')")?;
+    assert_eq!(run.expr["value"], "swamp", "紧凑载荷端到端解码值");
+    let run = e.run_player("p1", "Game.map.getRoomTerrain('W1N1').get(5,5)")?;
+    assert_eq!(run.expr["value"], 2, "Terrain.get 位码");
+    let run = e.run_player(
+        "p1",
+        "Game.map.getRoomTerrain('W1N1').getRawBuffer().length",
+    )?;
+    assert_eq!(run.expr["value"], 2500);
+    let run = e.run_player("p1", "Game.map.getTerrainAt(4,5,'W1N1')")?;
+    assert_eq!(run.expr["value"], "plain", "非沼泽格 plain");
+    e.teardown();
+    Ok(())
+}

@@ -52,6 +52,46 @@
   gw.nullEnv = nullEnv;
   gw.__Object = __Object;
 
+  // 地形紧凑载荷解码器（M2B 前置批 P3）：注入协议的 terrain 值为
+  // {rev, payload(base64 2500B)}——宿主侧按纪元缓存（地形首玩家 tick 后
+  // 不可变，稳态零解码）。解码器为自包含实现（无 atob 依赖：V8 裸环境
+  // 不保证宿主扩展）；反查表加载期构建一次。与 Rust 侧 world_json.rs
+  // base64_encode 对表（Rust 测试 test_b64_decode 孪生锁定）。
+  const B64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  const b64Rev = new Uint8Array(128).fill(255);
+  for (let i = 0; i < 64; i++) b64Rev[B64_ALPHABET.charCodeAt(i)] = i;
+  function b64ToBytes(s) {
+    if (s.length % 4 !== 0) throw new Error('bad base64 length: ' + s.length);
+    // 非法字符 fail-fast（评审清偿）：静默产垃圾字节会让宿主 bug 以错误
+    // 地形扩散——抛错即响亮失败（真路径 Rust 恒发合法串，此为防御纵深）
+    const rev = (ch) => {
+      const v = b64Rev[ch & 127];
+      if (v === 255) throw new Error('bad base64 char: ' + String.fromCharCode(ch));
+      return v;
+    };
+    let len = (s.length >> 2) * 3;
+    if (s.charCodeAt(s.length - 1) === 61) len--;
+    if (s.charCodeAt(s.length - 2) === 61) len--;
+    const out = new Uint8Array(len);
+    let o = 0;
+    for (let i = 0; i < s.length; i += 4) {
+      const a = rev(s.charCodeAt(i));
+      const b = rev(s.charCodeAt(i + 1));
+      const cCh = s.charCodeAt(i + 2);
+      const dCh = s.charCodeAt(i + 3);
+      const c = cCh === 61 ? 0 : rev(cCh);
+      const d = dCh === 61 ? 0 : rev(dCh);
+      out[o++] = (a << 2) | (b >> 4);
+      if (o < len) out[o++] = (b << 4) | (c >> 2);
+      if (o < len) out[o++] = ((c & 3) << 6) | d;
+    }
+    return out;
+  }
+  gw.b64ToBytes = b64ToBytes;
+  // 地形解码缓存（跨 tick）：rev 命中复用 Uint8Array。沙箱与分片同寿命
+  // （create_shard 重建沙箱 ⇒ 缓存自然归空），无跨分片陈旧面
+  gw.terrainCache = {};
+
   // 出口净化序列化（对抗评审 P1/P2 的根本闸）：序列化窗口内摘除两个根原型的
   // toJSON（含数组——stringify 对数组自身也查 toJSON，pushByName 数组通道同
   // 面潜伏）——官方出口是 ExternalCopy 结构拷贝，任何玩家 toJSON 都不参与
@@ -543,8 +583,21 @@
       gw.terrainByRoom = {};
       const terrainEntries = __objectEntries(gw.world.rooms || {});
       for (let i = 0; i < terrainEntries.length; i++) {
-        const r = terrainEntries[i][1];
-        if (__Array.isArray(r.terrain)) gw.terrainByRoom[terrainEntries[i][0]] = r.terrain;
+        const roomName = terrainEntries[i][0];
+        const t = terrainEntries[i][1].terrain;
+        if (t && typeof t === 'object' && typeof t.payload === 'string') {
+          // 紧凑协议（P3 真路径）：rev 命中跨 tick 复用解码产物（地形首玩家
+          // tick 后不可变，稳态零解码）；未命中解码 b64 → 2500 字节索引兼容
+          const cached = gw.terrainCache[roomName];
+          if (!cached || cached.rev !== t.rev) {
+            gw.terrainCache[roomName] = { rev: t.rev, bytes: gw.b64ToBytes(t.payload) };
+          }
+          gw.terrainByRoom[roomName] = gw.terrainCache[roomName].bytes;
+        } else if (__Array.isArray(t)) {
+          // 旧数组形态（宿主手搓注入的夹具路径——bot_check 桩世界等；真
+          // 路径已不产出），原样接收
+          gw.terrainByRoom[roomName] = t;
+        }
       }
       // per-tick 重置钩（官方 game/structures.js make 每 tick 重置
       // createdCreepNames:29 的等价物——spawn 族的同 tick 同名拒名单）
