@@ -2,7 +2,8 @@
  *
  * 执行顺序（由 sandbox.rs 保证）：
  *   lodash 资产脚本 → 常量平铺脚本 → prelude 00_shared → 10_buffer → 20_cjs
- *   → 30_game/ 九段（玩家 API 层，对照官方 game/ 文件结构）→ 90_host
+ *   → 30_game/ 十一段（玩家 API 层，对照官方 game/ 文件结构；B1 拆分后
+ *     creep/structures 各含资源族/spawn 族子段）→ 90_host
  *   （末段遮蔽 globalThis.Deno 并删除 __kkp）。
  *
  * 各段独立 IIFE、零全局词法绑定；段间共享只经 globalThis.__kkp（私有上下文，

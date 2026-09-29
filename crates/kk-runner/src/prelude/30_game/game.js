@@ -519,7 +519,7 @@
       }
       resetIntents(); // 官方每 tick 新建收集器（runtime.js _start 每 tick 执行）
       // A4-iii per-tick 闭包重置（官方 game 层每 tick 新 make 闭包的等价物）：
-      // activateSafeMode 的 lastActivateSafeMode（structures.js:226——同 tick
+      // activateSafeMode 的 lastActivateSafeMode（B1 拆分后在 structures_spawn.js——同 tick
       // 后开者覆盖先开者、跨 tick 不残留）与 claimController 的
       // controllersClaimedInTick（creeps.js:845——GCL 门的同 tick 已 claim 计数）
       gw.lastActivateSafeMode = null;

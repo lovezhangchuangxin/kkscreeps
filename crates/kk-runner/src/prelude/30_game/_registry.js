@@ -1,8 +1,10 @@
 /* kk-runner prelude · 30_game 段 1：注册表与装配序（对照官方 engine/src/game/game.js:50-438）。
  *
- * 30_game/ 各文件对照官方 game/ 文件结构组织（A3a 零行为拆分，纯移动）：
- *   _registry → room-position → room → creep → structures → sites-flags
- *   → resources → path-finder → game（buildGame 装配 + tick 生命周期）
+ * 30_game/ 各文件对照官方 game/ 文件结构组织（A3a 零行为拆分 + B1 结构治理
+ * 批 creep/structures 各拆资源族/spawn 族两段）：
+ *   _registry → room-position → room → creep → creep-resources → structures
+ *   → structures-spawn → sites-flags → resources → path-finder → game
+ *   （buildGame 装配 + tick 生命周期）
  * 各文件独立 IIFE；跨文件共享状态经 __kkp.gw（game-world 容器：世界投影、
  * viewer、intents 收集器引用、类型装配注册表），90_host 执行完删除 __kkp。
  *

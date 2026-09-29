@@ -33,11 +33,13 @@ use serde_json::Value;
 const LODASH_SRC: &str = include_str!("../assets/lodash-3.10.1.js");
 const CONSTANTS_JSON: &str = include_str!("../assets/constants.json");
 /// prelude 按职责分段（共享仪表/Buffer/CJS/玩家 API 层/宿主通道），各段独立
-/// IIFE、经 globalThis.__kkp 共享私有状态（末段负责删除）。30_game/ 九段对照
-/// 官方 engine/src/game/ 文件结构（A3a 零行为拆分）：注册表与装配序 →
-/// RoomPosition → Room 面 → Creep → Structure 族 → 工地旗帜 → Resource →
-/// PathFinder 桩 → Game 装配与 tick 生命周期；跨段状态经 __kkp.gw 容器。
-const PRELUDE_SEGMENTS: [(&str, &str); 13] = [
+/// IIFE、经 globalThis.__kkp 共享私有状态（末段负责删除）。30_game/ 十一段
+/// 对照官方 engine/src/game 文件结构（A3a 零行为拆分 + B1 结构治理批
+/// creep/structures 各拆资源族/spawn 族两段）：注册表与装配序 →
+/// RoomPosition → Room 面 → Creep → Creep 资源族 → Structure 族 → Structure
+/// spawn 族 → 工地旗帜 → Resource → PathFinder 桩 → Game 装配与 tick
+/// 生命周期；跨段状态经 __kkp.gw 容器。
+const PRELUDE_SEGMENTS: [(&str, &str); 15] = [
     ("kk-prelude-00-shared", include_str!("prelude/00_shared.js")),
     ("kk-prelude-10-buffer", include_str!("prelude/10_buffer.js")),
     ("kk-prelude-20-cjs", include_str!("prelude/20_cjs.js")),
@@ -58,8 +60,16 @@ const PRELUDE_SEGMENTS: [(&str, &str); 13] = [
         include_str!("prelude/30_game/creep.js"),
     ),
     (
+        "kk-prelude-30-game-creep-resources",
+        include_str!("prelude/30_game/creep_resources.js"),
+    ),
+    (
         "kk-prelude-30-game-structures",
         include_str!("prelude/30_game/structures.js"),
+    ),
+    (
+        "kk-prelude-30-game-structures-spawn",
+        include_str!("prelude/30_game/structures_spawn.js"),
     ),
     (
         "kk-prelude-30-game-sites-flags",

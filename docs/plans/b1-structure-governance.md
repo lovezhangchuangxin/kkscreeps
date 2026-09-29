@@ -115,35 +115,41 @@
 
 **creep.js（段 4）→ creep.js（4a）+ creep_resources.js（4b，新段插注册表
 creep 条目之后）**：
-- 4a 收编（原 1-523 行）：段头、CREEP_METHODS、OFFSETS_BY_DIRECTION、
-  isObjectLike、fetchXYArguments、deserializePath（含 gw/Room 静态挂载）、
-  freezeConst+C、countActiveParts、blockedBySafeMode、carriedEnergy、
-  mathPow/__Set、calcNeededGcl、gclPoints、myClaimedRoomCount、字段表+memory
-  getter、动作方法族（move/moveByPath/moveTo/harvest/build/repair/dismantle/
-  upgradeController/attack/ranged*/heal/rangedHeal/say/suicide…261-523 段全部）；
+- 4a 收编（原 1-523 行）：段头、OFFSETS_BY_DIRECTION、isObjectLike、
+  fetchXYArguments、deserializePath（含 gw/Room 静态挂载）、freezeConst+C、
+  countActiveParts、blockedBySafeMode、carriedEnergy、字段表+memory getter、
+  动作方法族（move/moveByPath/moveTo/harvest/build/repair/dismantle/
+  upgradeController/attack/ranged*/heal/rangedHeal，原 261-523 段全部；
+  say/suicide/pull 三定义在原 524-1042 段故随 4b）；
 - 4b 收编（原 524-1043 行）：资源族四方法（transfer/withdraw/drop/pickup 及
   其段内捕获与 capacity helpers 524-852）、controller 族（claim/reserve/
   attackController/signController/generateSafeMode 853-1038）、CREEP_METHODS
   残余桩循环（1033）与 creep 装配（1039）；
-- **跨段共享**（定义点 gw.X 桥）：C 表（4b 用到的键集——实现时以 grep 实测
-  键清单落进映射注释）、`countActiveParts`（若 4b 用到；同前实测）；
-  calcNeededGcl/gclPoints/myClaimedRoomCount 整体随 controller 族落 4b；
+- **跨段共享**（定义点 gw.X 桥、消费段头 const 绑定同一对象——调用点保持
+  裸名逐字节不动）：C 表整对象桥（`gw.__creepC`，零重复捕获、对象同一性
+  精确保持）、`countActiveParts`、`blockedBySafeMode`；CREEP_METHODS 表、
+  mathPow/__Set 捕获、calcNeededGcl/gclPoints/myClaimedRoomCount 整体随
+  controller 族落 4b；
 - 4b 头部重新捕获 `const gw = globalThis.__kkp.gw;`；段名
   `kk-prelude-30-game-creep-resources`。
 
 **structures.js（段 5）→ structures.js（5a）+ structures_spawn.js（5b，插
 structures 条目之后）**：
-- 5a 收编（原 1-469 行）：预置捕获、freezeConst+C、per-tick 状态、deprecated、
-  assertTargetObject、isKnownCreep、sumValues、capacityForResource、Store 类、
-  makeStore、calcCreepCost、calcEnergyAvailable、structureTypeOf、
-  checkStructureAgainstController、now、原型字段表、isActive（A6 真化段）；
+- 5a 收编（原 1-469 行）：预置捕获、freezeConst+C、sumValues、
+  capacityForResource、Store 类、makeStore（既有 gw.makeStore 导出不动）、
+  structureTypeOf、checkStructureAgainstController、now、原型字段表、
+  isActive（A6 真化段）；deprecated/assertTargetObject/isKnownCreep/
+  calcCreepCost/calcEnergyAvailable 与 per-tick 状态（createdCreepNames/
+  deprecatedShown+perTickReset 钩子）实测用户全在 5b——整体随 5b（闭包自洽
+  零桥）；
 - 5b 收编（原 470-968 行）：Spawning 类、StructureSpawn 字段表、spawn 方法族、
   notifyWhenAttacked、原型方法、controller 真方法、装配、Structure.destroy、
   Tombstone/Ruin 接线；`createdCreepNames`/`deprecatedShown` 闭包与
   `gw.perTickReset` 钩子注册**随 5b**（用户全在 5b：spawnCreep 586/626、
   deprecated 调用面实现时核实，若 5a 也有调用则 deprecated 经 gw 桥）；
-- 跨段共享：C 键集、makeStore、capacityForResource、checkStructureAgainstController、
-  now、deprecated（按实测调用面 gw 桥）。
+- 跨段共享：C 表整对象桥（`gw.__structuresC`）、now（`gw.now`）、Store
+  （既有 `gw.Store`）、makeStore（既有 `gw.makeStore` 调用形零改动）；
+  capacityForResource/checkStructureAgainstController 实测 5b 零使用不桥。
 
 **注册表序**（新序，相对序不变）：… → creep(4a) → **creep_resources(4b)** →
 structures(5a) → **structures_spawn(5b)** → sites-flags → resources →
@@ -275,3 +281,23 @@ bot 三基线 → ≥3 路 subagent 并行评审（**重点视角=零行为差�
   settle/creep/）并存——§3.2 既定命名，功能无损，后续新增模块须放 place/*.rs
   且不得引入 place/mod.rs（E0761）。P3：embed_tests.rs:608 旧路径注释归 B1-5
   （与 B1-1 登记的 :411/:998 同文件同类）；本段即评审 3 要求的执行记录补记。
+
+### B1-3（prelude creep.js/structures.js 各拆 2 段）——已收口
+
+- 实测：creep.js 486 / creep_resources.js 582 / structures.js 405 /
+  structures_spawn.js 593 行，全部 <1000；PRELUDE_SEGMENTS 13→15（新段插
+  creep/structures 之后，旧序不变）。
+- 对账（三路评审各自独立重做均 PASS）：多重集全行记账（旧文件每行恰出现一
+  次，新文件全部行 = 搬移行 + 白名单桥/头/IIFE 包装/空行）+ 搬移区 SHA-256
+  哈希逐一比对 + 序保持对齐；perTickReset 钩子全 prelude 恰一次（5b:27）；
+  gw 桥五个新键全库恰写一次（4a/5a）恰读一次（4b/5b）。
+- 桥清单：gw.__creepC/gw.countActiveParts/gw.blockedBySafeMode（4a→4b）、
+  gw.__structuresC/gw.now（5a→5b，另 Store 走既有 gw.Store、makeStore 走既有
+  调用形）；消费段头 const 绑定同一对象——调用点保持裸名逐字节不动。
+- 评审清偿（全 P3/P4 级，零 P0-P2）：§3.3 四处清单/桥文字订正（本段随附）；
+  5a 死捕获 _/__MathCeil/__MathFloor 删除（消费方全迁 5b 的机械后果）；
+  game.js:522 与 00_shared.js:5 失效注释路径/段数更新；sandbox.rs 注释措辞
+  去冗；4a/5a 段头枚举补全。既有登记：designs/compatibility.md:42/:61 的
+  creep.js 行号锚点陈旧（HEAD 前已陈旧，非本片引入）归文档卫生批。
+- 验证：workspace 268 全绿 / release+棘轮 1405 零转红 / 三基线通过
+  （tooangel console error tick=0；overmind 既知缺口形态）；清偿后重验全链。
