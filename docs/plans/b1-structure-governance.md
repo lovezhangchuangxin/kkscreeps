@@ -25,7 +25,7 @@
 | crates/kk-runner/tests/sandbox_tests.rs | 3328 | **拆**（B1-5，mod 子模块，保顶层唯一 #[test] 串行链） |
 | crates/kk-runtime/tests/embed_tests.rs | 1963 | **拆**（B1-5，同上） |
 | crates/kk-engine/src/settle/mod.rs | 779 | **不拆**：<1000 且内聚（Working/Engine/settle_room 是结算核心同体） |
-| crates/kk-schema/src/room.rs | 1116 | **范围外登记**：>1000 但不在用户拍板清单；schema 声明面（struct/enum 长表），拆分收益存疑——B1 收口时随其他遗留一并回用户决策 |
+| crates/kk-schema/src/room.rs | 1116 | **已裁决不拆**（2026-09-30 用户决策）：纯 `kk_schema!` 声明面字段字典（无逻辑、按对象名跳转导航、官方 file:line 考据注释互相引用、同一 SCHEMA_VERSION 格式演进单点），长≠复杂；M2 存储批演进后如仍超线再议 |
 | crates/kk-world/src/world_json.rs / snapshot.rs | 1617 / 1106 | 不动（归 M2B 前置批宏化，用户既定决策） |
 | crates/kk-runner/assets/lodash-3.10.1.js | 12351 | 不拆（资产，用户既定决策） |
 | compat/fixtures/**（overmind-dist/tooangel 等） | — | 不动（外部 bot 生态夹具，非我方源码） |
