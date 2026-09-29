@@ -306,3 +306,56 @@ z 表/色表/字体常量直接测代码常量）。逐片勾项，收口时全�
 ## 12. 执行记录（随批追加）
 
 - 2026-09-30：方案定稿（本节首条）；R0 起实施由新会话在 worktree 接手。
+- 2026-09-30：**R0 脚手架与资产管线完成**。包配置（TS strict+noUncheckedIndexedAccess/
+  Vitest 5/tsc --noEmit）；vendor 117 SVG+9 PNG+ISC LICENSE+Roboto woff2×2（来源
+  README 登记出处）；build-assets.mjs（resvg 栅格化 @1x/@2x→maxrects 2048² 打包
+  →每页 spritesheet JSON+PNG，@1x 1 页/@2x 2 页，重跑逐字节一致已验证）；
+  check-assets-fresh.mjs（正例/篡改/多文件三路验证）挂 test 链最前；src 骨架
+  （createRenderer/相机与相机数学纯函数/底色房/atlas 加载，公共面零 Pixi 类型）；
+  dev harness（底色房+相机+HUD）。出口验收：18 测全绿、类型检查过、`pnpm -r run
+  test` 自动拾取、harness 截图底色房显示 ✓（WebGPU 60fps；WebGL 回退路径渲染
+  一致——后台面板 RAF 节流致 fps 采样读 1，R7 perf 模式出真数）。
+  **实施期漂移/决策登记**：① pixi.js 取 8.21.0（方案"当前 8.19.x"为写作时观察，
+  按 §1.2「v8 最新稳定」拍板意图取当前最新）；② Roboto 许可实为 OFL-1.1（方案
+  §1.4 写 Apache-2.0 是旧版 Roboto 时代观察；fontsource 5.3.0 现行分发即 OFL-1.1，
+  许可原文随附）；③ ~~栅格化尺寸=SVG 内在 viewBox 尺寸（与官方采样一致，7 个小写
+  `viewbox` 文件构建期归一化、vendor 源不动；密度覆盖表 RASTER_OVERRIDE 预留）；
+  @2x 恰为 @1x 整 2 倍~~（**已废弃，前提错误**——正确策略见下方清偿记录①：
+  浏览器语义 width/height 属性优先，viewBox 仅兜底；RASTER_OVERRIDE 覆盖表保留）；④ 9 张程序底纹 PNG 不进 atlas（TilingSprite/mask 需独立
+  纹理），运行时直读 assets/svg/；⑤ 页 PNG 用 node 内置 zlib 手写编码器合成
+  （resvg 出 RGBA 原始像素，零新原生依赖）；⑥ createRenderer 增加 `preference`
+  选项（webgpu/webgl，§5 双后端记数用，harness `?backend=webgl` 切换）。
+  评审：3 路 subagent 并行（官方规格/契约面/性能对策）。
+- 2026-09-30（同日）：**R0 评审清偿**。2 阻塞+5 建议+若干备忘，逐条处置并经
+  实测复核：
+  ① **[阻塞·评审A] 栅格化采样策略改为浏览器语义**——评审实测发现官方渲染器
+  经浏览器解码 SVG，内在尺寸取 width/height 属性（80/117 带属性，60 个属性与
+  viewBox 分歧——宽或高任一不等 ±0.01 容差，如 factory 属性 200 vs viewBox
+  41.2；含 8 个单引号属性文件与
+  1 个 px 单位文件 extension-border200），且小写 `viewbox`（严格 XML 被忽略）
+  有语义；主会话复算证实。修复：intrinsicSize 属性优先（单双引号+px 单位均
+  认）→ viewBox 兜底，删除 viewbox 归一化（resvg 原生即严格 XML=浏览器语义），
+  manifest 记录实际渲染尺寸；atlas 重生成（@1x 1 页/@2x 3 页），目检通过，
+  重跑逐字节一致复验通过。最终取径 80 属性+37 viewBox+0 兜底，评审 A 独立
+  复算 117/117 逐文件一致。原 §12③「与官方采样一致」的前提（viewBox 优先）系
+  错误断言，以本条更正。评审 A 清偿复审通过（附两条尾巴已顺手清：px 单位
+  正则与计数勘误——分歧数以本会话可复现口径 60 为准，评审初数 57 与复审数
+  66 均系不同引号/口径下的中间值）。
+  ② **[阻塞·评审B] atlas.ts 直通纹理路径 `../svg/`→`svg/`**（与自身路径契约
+  矛盾，harness 根基址掩盖）。
+  ③ [建议] createRenderer 失败路径 try/catch→kernel.destroy() 再抛（不再泄漏
+  canvas/ticker/监听）；destroy 幂等化；级联销毁改 `app.destroy(true,{children:
+  true})`（v8 语义：不动 Assets 共享纹理）；删 destroy 中 removeChild 死代码。
+  ④ [建议] renderer.width 注释纠错（v8 中与 screen 同为逻辑像素，非"物理像素
+  语义"）；typecheck 接入 test 链（check:assets && typecheck && vitest）；
+  harness resize 改 rAF 延迟 fit（ResizePlugin rAF 时序竞态）；endDrag 加
+  hasPointerCapture 守卫；deltaMode 换算加注释；manifest fetch 查 response.ok；
+  atlas 页与直通纹理并行加载；@types/node 显式 devDep。
+  ⑤ 测试补强（评审A建议）：单测重解析源文件断言 manifest 栅格尺寸一致
+  （策略漂移单测层现形）、wOF2 魔数、许可内容（ISC/OFL）断言。19 测全绿。
+  ⑥ 登记项（后续片处置）：STANDALONE 纹理 resolution=1 语义（R2 TilingSprite
+  需显式 scale）；camera.state getter 暂无使用方（R2 拾取复核）；package.json
+  exports/files 字段 R6 冻结时补；「场景无脏挂起 ticker」R2+ 层栈静态化后评估；
+  PNG 产物绑定构建机 zlib 版本（跨机重建会触发 freshness 强制重建，纪律自洽）；
+  官方 mineral 符号字体声明为 `'Roboto, serif'`（R3 注意）；pnpm-lock.yaml 为
+  与主树共享的根文件（本批 +千行依赖条目），与引擎批合流时留意冲突面。

@@ -2,8 +2,23 @@
   "name": "@kkscreeps/renderer",
   "version": "0.0.0",
   "private": true,
-  "description": "PixiJS 渲染引擎（框架无关、数据驱动、RoomFeed 输入接口同构后端变更集）。占位包，M3 起实装。设计见 docs/architecture/frontend.md。",
+  "type": "module",
+  "description": "PixiJS 渲染引擎（框架无关、数据驱动、RoomFeed 输入接口同构后端变更集）。设计见 docs/architecture/frontend.md 与 docs/plans/f2-renderer.md。",
   "scripts": {
-    "test": "node --test"
+    "build:assets": "node scripts/build-assets.mjs",
+    "check:assets": "node scripts/check-assets-fresh.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/check-assets-fresh.mjs && pnpm run typecheck && vitest run"
+  },
+  "dependencies": {
+    "pixi.js": "~8.21.0"
+  },
+  "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "@types/node": "^24.19.0",
+    "maxrects-packer": "^2.7.3",
+    "typescript": "~7.0.2",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.2"
   }
 }

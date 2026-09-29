@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>kkscreeps renderer · dev harness</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #050505;
+      }
+      #stage {
+        width: 100%;
+        height: 100%;
+      }
+      #hud {
+        position: fixed;
+        top: 8px;
+        left: 8px;
+        z-index: 10;
+        font: 12px/1.6 ui-monospace, Menlo, monospace;
+        color: #cfcfcf;
+        background: rgba(0, 0, 0, 0.55);
+        border: 1px solid #333;
+        border-radius: 6px;
+        padding: 6px 10px;
+        pointer-events: none;
+        white-space: pre;
+      }
+      #hud .err {
+        color: #ff6b6b;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <div id="hud">初始化…</div>
+    <script>
+      // harness 硬化：运行时错误直显 HUD（模块加载失败时不至于黑屏无线索）。
+      (() => {
+        const hud = document.getElementById('hud');
+        const show = (msg) => {
+          const line = document.createElement('div');
+          line.className = 'err';
+          line.textContent = '✗ ' + msg;
+          hud.appendChild(line);
+        };
+        window.addEventListener('error', (e) => show(e.message));
+        window.addEventListener('unhandledrejection', (e) => show(String(e.reason && e.reason.stack ? e.reason.stack : e.reason)));
+      })();
+    </script>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
