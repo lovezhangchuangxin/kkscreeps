@@ -127,7 +127,11 @@ pub fn store_total(
     store: &kk_schema::room::Store,
     extra: &[kk_schema::room::ResourceStack],
 ) -> i64 {
-    (store.energy + store.ghodium) as i64 + extra.iter().map(|s| s.amount as i64).sum::<i64>()
+    // i64 域加法：u32 域相加在放置面伪造的双 u32::MAX 持有下 debug 溢出
+    // panic（B4 评审 2 P3-1——panic 不走 SettleError 回退通道）
+    (store.energy as i64)
+        + (store.ghodium as i64)
+        + extra.iter().map(|s| s.amount as i64).sum::<i64>()
 }
 
 /// 命名资源槽的读取（creep/storage 的多资源面）：energy/G 走双槽，其余查

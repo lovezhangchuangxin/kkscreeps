@@ -76,7 +76,7 @@
 ## 三、灰区登记提案（回写归主会话）
 
 1. **mineral 密度轮转的随机源**——官方 Math.random()（真随机、不可复现；灰区表"非确定性源"既有口径）。本批用无状态 SplitMix64（hash(房名,对象id,tick) 播种）保证 replay 确定性；与官方的分布差异只在低 53 位均匀性（概率映射阈值同表），玩家不可区分"是否真随机"。若未来官方 replay 需逐值对齐，此处换种子源即可（单点：MineralRng::new）。
-2. **phase 5 掉落在出生 tick 衰减（既有，非本批引入）**——官方 `bulk.insert` 不进内存 roomObjects，phase 8 的 forEach 不见 intent 期新掉落堆 ⇒ 官方出生 tick 不衰减；我方 phase 8 ids 快照在 phase 5 后收集 ⇒ 出生 tick 衰减 ceil(amount/1000)（amount=1 的堆直接蒸发）。既有锁值测试（harvest_overflow_drops"同 tick 衰减 1"）已把该差异钉为预期。本批新测试沿用该口径。**与官方有 1/tick·堆 的可观察差**——清偿方向：phase 8 ids 快照改为与官方 lodash 键快照同语义（settle 开始时收集）。本批未动（会翻转既有锁值，独立小批处理）。
+2. **~~phase 5 掉落出生 tick 衰减~~（评审 1 勘误：本条原官方侧分析方向搞反，作废）**——实测 `bulk.insert` 虽只入队，但掉落堆的唯一 intent 期创建路径 `_create-energy.js:50-51` 在 insert 后**显式执行 `roomObjects[obj._id] = obj`**——掉落堆 phase 5 即入内存 map，processor.js:342 的 lodash 键快照（forEach 调用时收集）**会**对其跑 energy/tick.js 衰减。即**官方出生 tick 照样衰减 ceil(amount/1000)，与我方（ids 快照 phase 5 后收集）行为一致，"1/tick·堆 可观察差"不存在**——既有锁值（"同 tick 衰减 1"）本就与官方一致。**绝不可按原提议"快照提前"清偿**（会引入 intent 期新堆当 tick 不衰减的真实分歧）。其余 intent 期 bulk.insert（tombstone/ruin/结构落成）确不入 roomObjects，但我方对其跑 phase 8 均为长 fuse no-op，无可观察差。
 3. **transfer/withdraw/drop 白名单含 power 名义**——本批执行器白名单与官方逐字一致（RESOURCES_ALL 含 "power"）；power 无任何进 creep store 的建模路径（pickup 拒 power 堆——B3 登记、harvest 不产、结构 store 无 power 槽），故放行面不可达。唯一的 pickup power 拒绝是既有登记（随 power 批放开）。
 4. **mineral 分支无 source 的 controller 归属/预定门**——官方 harvest.js:31-34 的门只在 source 分支；mineral 分支只查 extractor 自身归属与 RCL。敌主房里采自有 extractor 不被房主身份拦（extractor 归属门已足够）。非分歧、防误抄登记。
 5. **mineral 再生事件的 amount quirk**——harvest mineral 事件 amount=harvestAmount（未钳制），矿量余 1/功率 2 时事件报 2、实采 1（source 分支报钳后值）。官方 quirk 已复刻并锁值（见测试 2）。
@@ -104,3 +104,31 @@
 - **slots 键留 0 不删**：官方 store[res]=0 落库同构；消费面（投影/快照/calcResources 族）全走正量/求和口径，0 键无行为面。若未来 schema 换正式开放 store 形态时一并收口。
 - **phase 8 ids 快照语义**（灰区 2）是本批测试口径的依赖——若清偿该差异，本批 4/5 号测试的"当 tick 衰减 1"断言需随转（转红即提示）。
 - 棘轮影响：mineral/extractor 旧放置路径（Generic 透传）→ typed 后 FIND/快照形状变化——快照契约七键比透传更窄（透传曾带 structureType 键），screeps-ok 契约面以七键为准（vanilla snapshotMineral 同构），预期棘轮不转红（本批 CI 全绿；全量棘轮回归归主会话门禁）。
+
+## 七、三路评审清偿记录
+
+三路结论：评审 1（官方语义）可合入——零 P1，P2 = 灰区 2 官方侧结论反转
+（已按勘误更正上文，原清偿提议作废）；评审 2（Rust/schema）可合入——
+6×P3；评审 3（契约测试）需修复后合入——P1-1 + P2-1。全部清偿：
+
+- **P1-1（评审 3，embed 实证）**：harvest 两分支超容 sum 缺全槽口径——混合
+  持有（Z:50）下采 U/energy，官方 calcResources 全 store 键和判超容，我方
+  只算部分和 → 超容终态偏离（不掉落）。清偿：两分支改
+  `store_total(&store, &store_extra) + amount`；锁值
+  harvest_mixed_holding_overflow_drops_mined_mineral（掉 2U 同 tick 衰减 1 →
+  堆 1；Z/energy 槽不动；U 键留 0 官方同构）
+- **P2-1（评审 3）**：缩容/拆解超容掉落从 energy 单资源改为官方
+  _drop-resources-without-space 的全资源序贯形态（energy → 命名槽声明序 →
+  G，每资源 min(存量, overflow)）；锁值 carry_death_drops_overflow_mixed_
+  resources（40e+60Z 容量缩 50：energy 40 全掉 + Z 补 10）
+- **P3-1（评审 2）**：store_total 的 u32 域加法改 i64（双 u32::MAX 构造持有
+  下 debug panic 不走回退通道）
+- **P3-2（评审 2）**：place 矿物 Some(0) 钟卡死——归一化 `filter(|t| *t > 0)`
+  （官方 falsy 重挂 50000 钟语义）
+- **P3-3（评审 2）**：place mineralType 白名单（MINERAL_MIN_AMOUNT 键集 =
+  官方六矿种——防放置面外矿种名绕过内部 drop 的 RESOURCES_ALL 白名单）
+- **登记项**：withdraw amount==0 事件流差异（官方走完门链 push
+  EVENT_TRANSFER{amount:0}，我方静默——B3 既有未登记）；embed 冒烟链沉淀
+  为提交内测试（轨 A 接 StructureExtractor 时一并）；container 目标白名单
+  补轨 B 后续清单行；MINERAL_DENSITY_PROBABILITY 常量无消费方（mineral_tick
+  硬编码阈值同值——单源纪律尾巴）

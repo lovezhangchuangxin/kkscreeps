@@ -207,14 +207,53 @@ pub fn distribute_hits(body: &mut [BodyPart], mut hits: i64) {
     }
 }
 
-/// 官方 _drop-resources-without-space.js（M1 energy-only 单资源形态）：
-/// 持有超容 → 掉出差额（走 drop 的落地路径）。
+/// 官方 _drop-resources-without-space.js（creeps/tick.js:141-143 缩容/拆解
+/// 路径）：按 RESOURCES_ALL 序逐资源 `min(store[res], calcResources−cap)`
+/// 掉落（B4 评审 3 P2-1 清偿——原 M1 单 energy 形态在命名矿物槽下偏离：
+/// 官方掉矿物、我方留在 creep 身上超容）。键序 = RESOURCES_ALL 声明序
+///（energy 先、矿物族、G 尾——资源族稳定序）。
 pub fn drop_energy_over_capacity(w: &mut Working, id: ObjId) {
-    let Some(creep) = w.creep(id) else { return };
-    let cap = super::creep::store_capacity(creep);
-    let held = creep.store.energy as i64;
-    if held > cap {
-        super::creep::intent_drop_amount(w, id, held - cap);
+    let (cap, held, store, extra) = match w.creep(id) {
+        Some(c) => (
+            super::creep::store_capacity(c),
+            kk_world::types::store_total(&c.store, &c.store_extra),
+            c.store.clone(),
+            c.store_extra.clone(),
+        ),
+        None => return,
+    };
+    if held <= cap {
+        return;
+    }
+    let overflow = held - cap;
+    // 官方逐资源序贯掉落：energy → 命名槽（extra 声明序）→ G；每资源
+    // min(存量, 剩余 overflow)
+    let mut left = overflow;
+    let energy_drop = (store.energy as i64).min(left);
+    if energy_drop > 0 {
+        super::creep::intent_drop_amount(w, id, energy_drop);
+        left -= energy_drop;
+    }
+    for stack in &extra {
+        if left <= 0 {
+            break;
+        }
+        let d = (stack.amount as i64).min(left);
+        if d > 0 {
+            super::creep::intent_drop_amount_res(w, id, &stack.resource, d);
+            left -= d;
+        }
+    }
+    if left > 0 {
+        let g_drop = (store.ghodium as i64).min(left);
+        if g_drop > 0 {
+            super::creep::intent_drop_amount_res(
+                w,
+                id,
+                kk_core::constants::RESOURCE_GHODIUM,
+                g_drop,
+            );
+        }
     }
 }
 

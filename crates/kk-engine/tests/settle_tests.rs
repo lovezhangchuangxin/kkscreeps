@@ -3672,6 +3672,159 @@ fn carry_death_drops_overflow_energy() {
     assert_eq!(dropped, Some(30), "超容 80-50 掉地（tick 阶段不衰减）");
 }
 
+/// B4 评审 3 P1-1 清偿锁值：harvest 超容判定按**全槽和**（官方 calcResources
+/// 全 store 键）——混合持有（Z:50 占满容量）下采 U，超容部分按矿种掉落，
+/// energy/Z 槽不动。
+#[test]
+fn harvest_mixed_holding_overflow_drops_mined_mineral() {
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    f.controller(6, Some("p1"));
+    let m = f.mineral(10, 10, "U", 70_000, 3, None);
+    f.extractor(10, 10, Some("p1"), 0);
+    // 容量 50 已被 Z 占满（命名槽）
+    let c = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Creep(CreepObj {
+                id: 0,
+                x: 10,
+                y: 11,
+                fatigue: 0,
+                age_time: u64::MAX / 2,
+                hits: 300,
+                spawning: false,
+                action_log: 0,
+                name: "w1".into(),
+                owner: "p1".into(),
+                body: body(&[BodyKind::Work, BodyKind::Work, BodyKind::Carry]),
+                store: kk_schema::room::Store {
+                    energy: 0,
+                    ghodium: 0,
+                },
+                store_extra: vec![kk_schema::room::ResourceStack {
+                    resource: "Z".into(),
+                    amount: 50,
+                }],
+            }),
+        )
+        .unwrap();
+    let mut batch = IntentBatch::default();
+    batch.add_object_intent("p1", c, Action::Harvest, IntentData::target(m));
+    f.settle(batch);
+    // 全槽 sum = 50(Z)+2(U 产出)=52 > 50 → 掉 2 U（intent 相掉落同 tick 衰减
+    // ceil(2/1000)=1 → 堆 1）；Z 槽不动、energy 不动
+    match f.obj(c) {
+        RoomObject::Creep(cc) => {
+            assert_eq!(cc.store.energy, 0, "energy 槽不动（只掉本 tick 产出资源）");
+            assert_eq!(
+                cc.store_extra,
+                vec![
+                    kk_schema::room::ResourceStack {
+                        resource: "Z".into(),
+                        amount: 50
+                    },
+                    kk_schema::room::ResourceStack {
+                        resource: "U".into(),
+                        amount: 0
+                    },
+                ],
+                "Z 槽不动；U 产出全掉但键留 0（官方 store[U]=0 落库同构）"
+            );
+        }
+        _ => panic!(),
+    }
+    let u_pile = f
+        .world
+        .room("W1N1")
+        .unwrap()
+        .objects
+        .values()
+        .find_map(|o| match o {
+            RoomObject::Energy(e)
+                if e.x == 10 && e.y == 11 && e.resource.as_deref() == Some("U") =>
+            {
+                Some(e.amount)
+            }
+            _ => None,
+        });
+    assert_eq!(
+        u_pile,
+        Some(1),
+        "掉 2 U 同 tick 衰减 1 → 堆 1（官方出生 tick 衰减一致）"
+    );
+}
+
+/// B4 评审 3 P2-1 清偿锁值：CARRY 损毁缩容的超容掉落按**全资源序贯**
+/// （官方 _drop-resources-without-space 逐资源 min(存量, overflow)——energy
+/// 先、命名槽次之、G 尾）；tick 相掉落不衰减。
+#[test]
+fn carry_death_drops_overflow_mixed_resources() {
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let a = f.creep("atk", "p1", 10, 10, &[BodyKind::Attack; 4], 0);
+    let b = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Creep(CreepObj {
+                id: 0,
+                x: 11,
+                y: 10,
+                fatigue: 0,
+                age_time: u64::MAX / 2,
+                hits: 200,
+                spawning: false,
+                action_log: 0,
+                name: "haul".into(),
+                owner: "p2".into(),
+                body: body(&[BodyKind::Carry, BodyKind::Carry]),
+                store: kk_schema::room::Store {
+                    energy: 40,
+                    ghodium: 0,
+                },
+                store_extra: vec![kk_schema::room::ResourceStack {
+                    resource: "Z".into(),
+                    amount: 60,
+                }],
+            }),
+        )
+        .unwrap();
+    f.settle(attack_intent(a, b));
+    // 容量 100→50（毁一 carry）；总持有 40e+60Z=100 > 50 → 掉 50：
+    // energy 40 全掉 → Z 补 10 → creep 留 Z 50
+    assert_eq!(f.creep_state(b).3, 0, "energy 全掉");
+    let piles: Vec<(String, u32)> = f
+        .world
+        .room("W1N1")
+        .unwrap()
+        .objects
+        .values()
+        .filter_map(|o| match o {
+            RoomObject::Energy(e) if e.x == 11 && e.y == 10 => Some((
+                kk_engine::settle::energy_resource_name(e).to_string(),
+                e.amount,
+            )),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        piles,
+        vec![("energy".to_string(), 40), ("Z".to_string(), 10)],
+        "序贯掉落 energy 先 Z 补足（tick 相不衰减）"
+    );
+    match f.obj(b) {
+        RoomObject::Creep(cc) => assert_eq!(
+            cc.store_extra,
+            vec![kk_schema::room::ResourceStack {
+                resource: "Z".into(),
+                amount: 50
+            }],
+            "Z 留 50"
+        ),
+        _ => panic!(),
+    }
+}
+
 #[test]
 fn attack_target_validation_rejections() {
     // attack.js 各前置门：自指（:18）、射程（:21-23）、spawning 目标（:24-26）、

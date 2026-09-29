@@ -176,11 +176,13 @@ fn intent_harvest(w: &mut Working, id: ObjId, data: &IntentData) {
 /// 官方 harvest.js source 分支（25-65）：controller 归属/预定门（B2 补
 /// reservation 分支）、WORK×HARVEST_POWER、超容 drop energy。
 fn intent_harvest_source(w: &mut Working, id: ObjId, target_id: ObjId) {
-    let (owner, work_power, store_energy, store_cap) = match w.creep(id) {
+    let (owner, work_power, held_total, store_cap) = match w.creep(id) {
         Some(c) => (
             c.owner.clone(),
             harvest_power(c),
-            c.store.energy as i64,
+            // 全槽和（官方 calcResources 对 store 全键求和——混合持有时
+            // energy/G/命名矿物都计入超容判定，B4 评审 3 P1-1）
+            kk_world::types::store_total(&c.store, &c.store_extra),
             store_capacity(c),
         ),
         None => return,
@@ -208,7 +210,8 @@ fn intent_harvest_source(w: &mut Working, id: ObjId, target_id: ObjId) {
         s.energy -= amount as u32;
     }
     // 官方顺序（harvest.js:49-60）：先满额入仓，再对超容部分 drop
-    let sum = store_energy + amount;
+    //（sum 全槽：混合持有下官方按 calcResources 全键和判超容——P1-1 清偿）
+    let sum = held_total + amount;
     if let Some(c) = w.creep_mut(id) {
         c.store.energy = sum.min(u32::MAX as i64) as u32;
         set_action_log(&mut c.action_log, ACTION_HARVEST);
@@ -288,15 +291,13 @@ fn intent_harvest_mineral(w: &mut Working, id: ObjId, target_id: ObjId) {
     }
     // :95：产出入矿种命名槽（bulk.update 的 _.merge 先改内存对象——:97 的
     // calcResources 读到含新产出的全槽和）；:97-104 超容按矿种 drop
-    let (held_energy, held_ghodium, held_mineral) = match w.creep(id) {
-        Some(c) => (
-            c.store.energy as i64,
-            c.store.ghodium as i64,
-            kk_world::types::store_extra_slot(&c.store, &c.store_extra, &m.mineral_type),
-        ),
+    let held_total = match w.creep(id) {
+        Some(c) => kk_world::types::store_total(&c.store, &c.store_extra),
         None => return,
     };
-    let sum = held_energy + held_ghodium + held_mineral + amount;
+    // sum 全槽 + 新产出（官方 calcResources 含 _.merge 后的全部键——本矿种
+    // 旧持有已在 store_total 内；混合持有超容按矿种 drop，P1-1 清偿）
+    let sum = held_total + amount;
     if let Some(c) = w.creep_mut(id) {
         slots_add(&mut c.store, &mut c.store_extra, &m.mineral_type, amount);
         set_action_log(&mut c.action_log, ACTION_HARVEST);
@@ -853,7 +854,7 @@ pub(super) fn intent_drop_amount(w: &mut Working, id: ObjId, amount: i64) {
 /// 同格 container 先承接 + 同格同资源并堆，B3 的 create_resource 全量同式；
 /// 衰减对全资源同式（官方 energy/tick.js:12 按 resourceType 键通用）。
 /// B4 起资源参数化到任意 RESOURCES_ALL 名（命名矿物掉落为命名堆）。
-fn intent_drop_amount_res(w: &mut Working, id: ObjId, resource: &str, amount: i64) {
+pub(super) fn intent_drop_amount_res(w: &mut Working, id: ObjId, resource: &str, amount: i64) {
     let (pos, held) = match w.creep(id) {
         Some(c) if !c.spawning => ((c.x, c.y), creep_slot(c, resource)),
         _ => return,

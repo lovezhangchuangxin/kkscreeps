@@ -376,8 +376,16 @@ fn normalize_structure(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<Roo
         // 缺省 DENSITY_HIGH(3)、ticksToRegeneration 给定时挂绝对钟——与 source
         // 的 >0 过滤不同，vanilla 对 mineral 只判 !== undefined）
         "mineral" => {
+            // 白名单 = MINERAL_MIN_AMOUNT 键集（官方六矿种 H/O/U/K/L/Z/X——
+            // 放置面外的矿种名会让内部超容 drop 绕过官方 RESOURCES_ALL
+            // 白名单直接落地（B4 评审 2 P3-3 清偿：放置面收口）
             let mineral_type = spec_str(spec, "mineralType")
-                .ok_or_else(|| "mineral 缺 mineralType".to_string())?
+                .filter(|t| {
+                    kk_core::constants::MINERAL_MIN_AMOUNT
+                        .iter()
+                        .any(|(k, _)| k == t)
+                })
+                .ok_or_else(|| "mineral 缺 mineralType 或非官方矿种".to_string())?
                 .to_string();
             let density = spec
                 .get("density")
@@ -392,6 +400,10 @@ fn normalize_structure(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<Roo
             let next_regen = spec
                 .get("ticksToRegeneration")
                 .and_then(Value::as_u64)
+                // >0 过滤（对齐 source 的既有口径，place.rs:263 同款）：官方
+                // !nextRegenerationTime 把 0 当 falsy 重挂 50000 钟——Some(0)
+                // 会让 mineral_tick 的到点判定永不触发（B4 评审 2 P3-2 清偿）
+                .filter(|t| *t > 0)
                 .map(|t| ctx.time.saturating_add(t));
             Ok(RoomObject::Mineral(MineralObj {
                 id: 0,

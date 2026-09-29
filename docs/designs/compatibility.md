@@ -149,3 +149,8 @@
 | else 族结构实例级桩与基类真方法的覆盖序（A5-lite 清偿记录，坑⑥复发实证） | STRUCTURE_METHODS 实例级桩循环曾在 Structure.prototype.destroy 换真后继续遮蔽（症状：API 假 OK 零 intent——room intent 通道静默死）；修法=桩列表移除已换真方法 | destroy/notifyWhenAttacked 已换真走基类原型；后续结构方法换真同查此点 |
 | room 级意图的 JS 侧计费（A5-lite 补） | pushByName 原不计费（Rust take_endtick_intents 按元素兜底结算）——玩家可见 Game.cpu.getUsed 的 intents.cpu 缺 room 级；已补按元素 0.2（make.js:100-106 同口径） | 显示面与结算面现同口径 |
 | upgradeController 的 shardAccess 门（A5-lite 登记） | 官方 creeps.js:931-933 有 runtimeData.user.shardAccess===false → ERR_ACCESS_DENIED 门（hosted 面态控制）；我方无 shardAccess 概念不可达 | 单机/私服语义下恒过；如 M2B 引入 shard 访问控制再接 |
+| SplitMix64 替代 Math.random 的密度轮转（B4 登记） | 官方 tick.js:20/23 用 Math.random（不可复现）；我方无状态 SplitMix64（FNV(房名)×id×time 播种，[0,1) 53 位尾数与 Math.random 同域） | replay 确定性由构造保证；单点可换（MineralRng::new/next_f64 两处）；正式服务器若需对齐官方分布再议 |
+| power 堆的拾取拒绝面（B3 登记；B4 矿物半面清偿） | pickup 对命名矿物堆已放行入 store_extra 命名槽（pickup.js:26-30 开放 store 键——B4 schema 有槽后的正确演进）；power 堆仍拒（无建模槽位，且无 powerBank 产入路径不可达） | 随 power 批放开；锁值 pickup_mineral_pile_into_named_slot_and_power_still_rejected |
+| harvest 超容的全槽判定（B4 评审 3 P1-1 清偿记录） | source/mineral 两分支超容 sum 曾只算部分槽（energy 或 energy+G+本矿种）——混合持有下偏离官方 calcResources 全键和（embed 实证超容不掉落）；已改 store_total 全槽 + amount | 混合持有超容锁值 ×2（harvest 掉矿种/缩容序贯掉落 energy→命名槽→G） |
+| phase 5 掉落出生 tick 衰减（B4 评审 1 勘误：取消登记） | 原登记主张"官方 bulk.insert 不进 roomObjects 故出生 tick 不衰减、与我方有 1/tick 差"——实测 _create-energy.js:51 显式入 roomObjects，官方出生 tick 照样衰减，与我方一致，差异不存在 | 既有锁值（同 tick 衰减 1）本就与官方一致；原"快照提前"清偿提议作废（会引入真分歧） |
+| mineral/extractor 的 place 面约束（B4 清偿记录） | mineralType 白名单（官方六矿种——防放置面外矿名绕内部 drop 的 RESOURCES_ALL）；ticksToRegeneration 的 0 值过滤（官方 falsy 重挂钟） | 放置面为受信通道，白名单是纵深 |
