@@ -33,6 +33,9 @@ const PADDING = 2;
 /** 个别资产栅格化尺寸覆盖（键=去扩展名，值=@1x 目标宽）。空表=全按内在尺寸。 */
 const RASTER_OVERRIDE = {};
 
+/** 出口条：SVG 构建期独立栅格化（TilingSprite 需可 wrap 独立纹理，不进 atlas）。 */
+const EXIT_STANDALONE = ['exit-top', 'exit-bottom', 'exit-left', 'exit-right'];
+
 const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
 // 尺寸取整：@1x = ceil(内在尺寸)，@2x 恰为 @1x 的整 2 倍（倍率不变量，单测断言）。
 const ceilPx = (n) => Math.ceil(n);
@@ -173,11 +176,25 @@ function main() {
   }
 
   rmSync(outDir, { recursive: true, force: true });
-  mkdirSync(outDir, { recursive: true });
+  mkdirSync(join(outDir, 'standalone'), { recursive: true });
 
   const manifest = { format: 1, sources, atlas: {} };
+  const svgByName = new Map(svgFiles.map((f) => [f.replace(/\.svg$/, ''), f]));
   for (const scale of [1, 2]) {
     const pagesRects = packFrames(byScale[scale]);
+    // 出口条独立纹理（@1x/@2x 与 atlas 同档）
+    const standalone = [];
+    for (const name of EXIT_STANDALONE) {
+      const file = svgByName.get(name);
+      if (!file) throw new Error(`出口条源缺失: ${name}`);
+      const svgText = readFileSync(join(svgDir, file), 'utf8');
+      const intrinsic = intrinsicSize(svgText, name);
+      const { pixels, width, height } = renderRgba(svgText, scale, intrinsic);
+      const png = encodePng(pixels, width, height);
+      const pngName = `standalone/${name}-${scale}x.png`;
+      writeFileSync(join(outDir, pngName), png);
+      standalone.push({ name, file: pngName, sha256: sha256(png), width, height });
+    }
     const pageEntries = pagesRects.map((rects, pageIdx) => {
       const pagePixels = Buffer.alloc(BIN_SIZE * BIN_SIZE * 4);
       const frames = {};
@@ -223,6 +240,7 @@ function main() {
     manifest.atlas[String(scale)] = {
       pages: pageEntries.map(({ page, png, json }) => ({ page, png, json })),
       frames: Object.fromEntries(pageEntries.flatMap((p) => Object.entries(p.frames).map(([k, v]) => [k, v]))),
+      standalone,
     };
   }
 

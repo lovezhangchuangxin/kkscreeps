@@ -46,9 +46,22 @@ export interface FeedView extends RoomFeed {
 
 export class FeedStore implements FeedView {
   private readonly rooms = new Map<string, RoomState>();
+  private readonly listeners = new Set<(room: string) => void>();
+
+  /** 状态变更订阅（快照/增量/地形注入后触发；返回退订函数）。
+   * 渲染器内部接线用（feed→scene），非契约面。 */
+  onChange(listener: (room: string) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  private notify(room: string): void {
+    for (const listener of this.listeners) listener(room);
+  }
 
   setTerrain(room: string, terrain: TerrainData): void {
     this.room(room).terrain = terrain;
+    this.notify(room);
   }
 
   applySnapshot(snapshot: RoomSnapshot): void {
@@ -58,6 +71,7 @@ export class FeedStore implements FeedView {
       objectsById: new Map(snapshot.objects.map((o) => [o.id, o])),
       visuals: this.rooms.get(snapshot.room)?.visuals ?? [],
     });
+    this.notify(snapshot.room);
   }
 
   applyDelta(delta: RoomDelta): void {
@@ -69,6 +83,7 @@ export class FeedStore implements FeedView {
     state.time = delta.time;
     for (const o of delta.upsert) state.objectsById.set(o.id, o);
     for (const id of delta.removedIds) state.objectsById.delete(id);
+    this.notify(delta.room);
   }
 
   setVisuals(room: string, visuals: RoomVisual[]): void {

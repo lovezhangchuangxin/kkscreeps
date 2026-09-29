@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  clampToRect,
   clampZoom,
   fitRect,
   panBy,
@@ -74,6 +75,27 @@ describe('zoomAtScreenPoint', () => {
     expect(next.x).toBeCloseTo(CAM.x);
     expect(next.y).toBeCloseTo(CAM.y);
     expect(next.zoom).toBeCloseTo(CAM.zoom * 2);
+  });
+});
+
+describe('clampToRect（R2 钳边）', () => {
+  it('视野小于矩形：钳在矩形内（越界拖拽被钉边）', () => {
+    const cam: CameraState = { x: 9000, y: -5000, zoom: 1 }; // 视口 1280×720
+    const next = clampToRect(cam, 1280, 720, -50, -50, 4950, 4950);
+    expect(next.x).toBe(4950 - 640); // 右缘贴 max
+    expect(next.y).toBe(-50 + 360); // 上缘贴 min
+  });
+
+  it('视野大于矩形：轴心锁定矩形中心（缩小态居中）', () => {
+    const cam: CameraState = { x: 9000, y: -5000, zoom: 0.05 }; // 视野 25600×14400 ≫ 5000
+    const next = clampToRect(cam, 1280, 720, -50, -50, 4950, 4950);
+    expect(next.x).toBeCloseTo(2450);
+    expect(next.y).toBeCloseTo(2450);
+  });
+
+  it('矩形内自由平移不受影响', () => {
+    const cam: CameraState = { x: 2450, y: 2450, zoom: 1 };
+    expect(clampToRect(cam, 1280, 720, -50, -50, 4950, 4950)).toEqual(cam);
   });
 });
 

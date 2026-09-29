@@ -20,6 +20,8 @@ const renderer = await createRenderer({
   // ?backend=webgl 强制回退路径（§5：WebGL 同场景跑通记数不设门）
   preference: new URLSearchParams(window.location.search).get('backend') === 'webgl' ? 'webgl' : 'webgpu',
 });
+// dev 调试句柄（harness 专用，不属公共 API）
+(window as unknown as Record<string, unknown>).__renderer = renderer;
 
 // 夹具装载：入库 JSON 经 shared 守卫校验（防夹具与契约漂移）
 const rawFixtures: Record<string, unknown> = {
@@ -148,8 +150,8 @@ function renderHud(): void {
   const summary = renderer.feed.summary(f.room);
   const state = index >= f.ticks.length ? 'end' : playing ? '▶' : '⏸';
   const lines = [
-    `kkscreeps renderer · dev harness (R1)`,
-    `backend : ${s.backend}   fps: ${s.fps}   zoom: ${(s.zoom * 100).toFixed(0)}%   atlas: ${s.atlasFrames}f`,
+    `kkscreeps renderer · dev harness (R2)`,
+    `backend : ${s.backend}   fps: ${s.fps}   zoom: ${(s.zoom * 100).toFixed(0)}%   atlas: ${s.atlasFrames}f   lighting: ${s.lighting}`,
     `replay  : [${current}] ${index}/${f.ticks.length} ${state} ${SPEEDS[speedIdx]}×`,
     `room    : ${f.room} time=${summary?.time ?? '-'} objects=${summary?.objects ?? '-'} visuals=${summary?.visuals ?? 0}`,
     `controls: 1-4 夹具（重按=重放） · 空格 播放/暂停 · . 单步 · +/- 调速 · F 视角复位`,

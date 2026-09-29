@@ -5,6 +5,7 @@
 import type { Container } from 'pixi.js';
 import {
   type CameraState,
+  clampToRect,
   MAX_ZOOM,
   MIN_ZOOM,
   panBy,
@@ -15,18 +16,27 @@ export interface CameraOptions {
   minZoom?: number;
   maxZoom?: number;
   initial?: CameraState;
+  /** 钳边世界矩形（视野不得越出；R2 完整视口）。 */
+  bounds?: { minX: number; minY: number; maxX: number; maxY: number };
 }
 
 export class CameraController {
   private cam: CameraState;
   private readonly minZoom: number;
   private readonly maxZoom: number;
+  private bounds: { minX: number; minY: number; maxX: number; maxY: number } | null;
   private readonly stage: Container;
   private readonly getViewSize: () => { width: number; height: number };
   private canvas: HTMLCanvasElement | null = null;
   private dragging = false;
   private lastSx = 0;
   private lastSy = 0;
+
+  private clamp(cam: CameraState): CameraState {
+    if (!this.bounds) return cam;
+    const { width, height } = this.getViewSize();
+    return clampToRect(cam, width, height, this.bounds.minX, this.bounds.minY, this.bounds.maxX, this.bounds.maxY);
+  }
 
   private readonly onWheel = (e: WheelEvent) => {
     e.preventDefault();
@@ -38,7 +48,7 @@ export class CameraController {
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
     const factor = Math.exp(-delta * 0.0015);
-    this.cam = zoomAtScreenPoint(this.cam, width, height, sx, sy, factor, this.minZoom, this.maxZoom);
+    this.cam = this.clamp(zoomAtScreenPoint(this.cam, width, height, sx, sy, factor, this.minZoom, this.maxZoom));
     this.apply();
   };
   private readonly onPointerDown = (e: PointerEvent) => {
@@ -50,7 +60,7 @@ export class CameraController {
   };
   private readonly onPointerMove = (e: PointerEvent) => {
     if (!this.dragging) return;
-    this.cam = panBy(this.cam, e.clientX - this.lastSx, e.clientY - this.lastSy);
+    this.cam = this.clamp(panBy(this.cam, e.clientX - this.lastSx, e.clientY - this.lastSy));
     this.lastSx = e.clientX;
     this.lastSy = e.clientY;
     this.apply();
@@ -69,7 +79,15 @@ export class CameraController {
     this.getViewSize = getViewSize;
     this.minZoom = options.minZoom ?? MIN_ZOOM;
     this.maxZoom = options.maxZoom ?? MAX_ZOOM;
-    this.cam = options.initial ?? { x: 0, y: 0, zoom: 1 };
+    this.bounds = options.bounds ?? null;
+    this.cam = this.clamp(options.initial ?? { x: 0, y: 0, zoom: 1 });
+  }
+
+  /** 设置/更新钳边矩形（随视口 resize 由持有方重申）。 */
+  setBounds(bounds: { minX: number; minY: number; maxX: number; maxY: number }): void {
+    this.bounds = bounds;
+    this.cam = this.clamp(this.cam);
+    this.apply();
   }
 
   /** 接管 canvas 的相机输入。 */
@@ -108,7 +126,7 @@ export class CameraController {
 
   /** 相机状态直接置位（如 harness 的 fit 按钮走 fitRect 后调这里）。 */
   setState(next: CameraState): void {
-    this.cam = { ...next };
+    this.cam = this.clamp({ ...next });
     this.apply();
   }
 

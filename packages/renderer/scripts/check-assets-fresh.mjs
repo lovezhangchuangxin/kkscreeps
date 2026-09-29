@@ -62,6 +62,16 @@ function main() {
         }
       }
     }
+    for (const standalone of manifest.atlas[scale].standalone ?? []) {
+      const abs = join(pkgRoot, 'assets', 'atlas', standalone.file);
+      if (!existsSync(abs)) {
+        problems.push(`standalone 产物缺失: ${standalone.file}`);
+        continue;
+      }
+      if (sha256(readFileSync(abs)) !== standalone.sha256) {
+        problems.push(`standalone 产物过期: ${standalone.file}（源变更后需重跑 pnpm run build:assets）`);
+      }
+    }
   }
 
   if (problems.length > 0) {

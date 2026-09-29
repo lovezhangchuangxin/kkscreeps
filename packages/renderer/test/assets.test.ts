@@ -9,7 +9,7 @@ const pkgRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const manifest = JSON.parse(readFileSync(join(pkgRoot, 'assets', 'manifest.json'), 'utf8')) as {
   format: number;
   sources: Array<{ path: string; sha256: string; bytes: number; rasterWidth?: number; rasterHeight?: number; sizeFrom?: string }>;
-  atlas: Record<string, { pages: Array<{ page: number; png: { file: string; sha256: string }; json: { file: string; sha256: string } }>; frames: Record<string, { page: number; x: number; y: number; w: number; h: number }> }>;
+  atlas: Record<string, { pages: Array<{ page: number; png: { file: string; sha256: string }; json: { file: string; sha256: string } }>; frames: Record<string, { page: number; x: number; y: number; w: number; h: number }>; standalone?: Array<{ name: string; file: string; sha256: string; width: number; height: number }> }>;
 };
 
 const BIN = 2048;
@@ -146,6 +146,21 @@ describe('atlas 几何', () => {
         expect(sheet.meta.scale).toBe(scale);
         expect(sheet.meta.size).toEqual({ w: BIN, h: BIN });
         expect(Object.keys(sheet.frames).length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('出口条独立纹理（standalone）：四边 × 双档在盘且为合法 PNG（sha256 由 check-assets-fresh 承担）', () => {
+    for (const scale of ['1', '2']) {
+      const standalone = manifest.atlas[scale]!.standalone;
+      expect(standalone?.map((s) => s.name).sort()).toEqual(
+        ['exit-bottom', 'exit-left', 'exit-right', 'exit-top'],
+      );
+      for (const entry of standalone!) {
+        const abs = join(pkgRoot, 'assets', 'atlas', entry.file);
+        expect(existsSync(abs), entry.file).toBe(true);
+        const header = readFileSync(abs).subarray(0, 24);
+        expect([...header.subarray(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
       }
     }
   });

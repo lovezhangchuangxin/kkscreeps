@@ -241,7 +241,7 @@ z 表/色表/字体常量直接测代码常量）。逐片勾项，收口时全�
 | # | 项 | 缘由 | 处置 |
 |---|---|---|---|
 | G1 | RoomVisual 样式映射 | 官方闭源壳绘制，开源渲染器无代码 | 黑盒对齐官方文档/截图，逐原语登记 |
-| G2 | lighting 全局压暗 | v8 WebGPU 滤镜面若有缺口 | 实现真 pass；缺口时降级仅 ADD 亮斑并登记 |
+| G2 | lighting 全局压暗 | v8 WebGPU 滤镜面若有缺口 | 真离屏 pass 已实现（世界对齐 RT + MULTIPLY 输出），WebGPU/WebGL 双后端 harness 实测 `lighting: real`；降级路径在位未触发——R7 收口时销账或保留按 G2 定义复核 |
 | G3 | 徽标图源 | 官方远程拉 screeps.com，我方无此端点 | v0 纯色圆退化（官方失败退化路径同款），M3 自托管 |
 | G4 | say/浮动文字数据通道 | 引擎无 say 事件面（§8） | 契约预留，夹具手工注入演示 |
 | G5 | NPC/power/portal 家族动效 | 引擎无此对象（invaderCore/powerCreep/nuke） | 描述符+实现落位，夹具合成，观战待引擎批次 |
@@ -415,3 +415,78 @@ z 表/色表/字体常量直接测代码常量）。逐片勾项，收口时全�
   数量级，M3 接 u64 time 在 feed 适配层留精度备注）。Generic「data 透传」
   措辞更正为「data 投影期解析展开」（实测夹具无嵌套 data 键）；
   dev/main.ts 头注 F 文案同步。
+- 2026-09-30：**R2 core+terrain 完成**。path 合并算法移植（src/core/path-merge.ts，
+  官方 pathHelper.js 逐行忠实移植）——**保真性硬证据：官方原版 stub-md5 直跑
+  对照 12 用例（单格/横竖条/2×2/对角×diagConnect/L形/十字/整行）逐字节一致**；
+  官方 quirks 保真（2×2 正方块拆双子路径、十字拆三子路径、N=4 下 (0,0) 底角
+  圆弧）。地形烘焙（src/scenes/terrain.ts）：合并 path → Path2D → canvas 2D
+  烘焙 2048² → 纹理——**实施决策：canvas Path2D 替代官方运行时 SVG data-URI**
+  （§2.4 坑规避：无异步 img 解码，hash 门控重绘）；SVG 语义映射 paint-order:
+  stroke=先描后填、BlurFilter 黑影=canvas filter blur（G7 盯梢）、官方
+  tileScale=8×sizeRatio 的 canvas 等价式。层栈落地（terrain→ground→objects→
+  lighting display→effects 静态五层）；lighting 真离屏 pass（G2：内容容器
+  离屏渲 RT、MULTIPLY 精灵回场景、世界对齐仅 dirty 重渲——官方 filterArea
+  屏幕对齐的等价语义，pan/zoom 零成本）；viewport 完整（钳边两态实测：缩小
+  态居中锁定/放大态贴边钉住；pickAt 几何拾取接口）；exit-* 独立栅格化产物
+  （standalone/、manifest 新段、TilingSprite wrap 需求）；feed→scene 接线
+  （FeedStore.onChange → setTerrain hash 门控重建）。实测：四夹具地形截图
+  （plain 底纹/边界墙圆角/swamp 合并轮廓+滚纹噪声+散点/dense-edge 出口缺口
+  +箭头纹理+墙簇）、WebGPU+WebGL 双后端 `lighting: real` 60fps。修复：切房
+  空集清理 bug（无沼泽房残留旧沼泽精灵——hash 门控把空集当未变跳过）。
+  实施决策登记：① 重建门控哈希用 FNV-1a 替代官方 md5（缓存键语义等价，
+  哈希值不出现在视觉面）；② exit 条不进 atlas（独立纹理 wrap 需求）→
+  **清偿期更正**：exit 在 atlas 帧表保留（打包面完整性/单测口径），standalone
+  为额外栅格化双份，32-64² 量级 VRAM 可忽略；
+  ③ 拾取 R2 仅几何换算（对象命中 R3 描述符）；④ lighting RT 世界对齐
+  （非官方屏幕对齐 filterArea）；⑤ swamp 滚动时基=ticker 帧数（60fps 基准，
+  deltaMS/16.667）。验收：51 测绿（path-merge 11/camera 13 含钳边/assets 10
+  含 standalone/differ 5/room-feed 5/fixtures 7）。
+- 2026-09-30（同日）：**R2 评审清偿**。3 路评审 7 阻塞+8 建议，全清偿：
+  ① [阻塞·A] lighting 离屏 RT 缩放缺失（content 世界尺度恒等变换渲 2048² RT
+  → 成员裁剪在世界 [0,2048]² 且放大 2.44×，155+ 面墙无光影）——渲染前临时
+  content.scale.set(renderSize/view)；复验四边墙光影全幅。
+  ② [阻塞·A] wall bump 空间换算错（drawScale 混用 user/device 空间=8 vs 正确
+  8×sizeRatio；循环上界误写 renderSize 只铺 41% 画布）——修为 8×sizeRatio+
+  上界 view，推导入注释。
+  ③ [阻塞·A] pickAt 半格系统性错位——官方几何实为**格中心 (x*cell,y*cell)、
+  范围 ±cell/2**（对象锚点 x*CELL 与地形 path 经 -cell/2 精灵偏移后同相位，
+  _all.metadata.js:12 取证），Math.floor(world/cell) 改 Math.round；
+  room.ts 头注几何描述同步更正（原注释把 path 空间当世界空间）。
+  ④ [阻塞·A→撤回] exit 条 @2x 渲染半尺寸——**评审 A 复审撤回误报**（v8
+  TilingSprite setUvs 用 texture.frame.width 计算节距：@2x 64×(100/64)=100 与
+  官方 32×(100/32)=100 覆盖恒等，几何与 resolution 无关，@2x 仅纹素更密）；
+  清偿期的 source.resolution 设置属无效代码已撤销，注释改真实语义。
+  ⑤ [阻塞·B/C] 共享纹理误毁双案：clearSwampSprites 无差别 destroy(texture)
+  连杀共享 noise2 源（切出沼泽再切回即渲染损坏）+ TerrainStage.destroy 连杀
+  Texture.WHITE/atlas 共享源——分类销毁（共享纹理只拆树；烘焙私有 canvas
+  纹理才带 texture 销毁）。
+  ⑥ [阻塞·B] RendererHandle.feed 类型回归（R2 重写 index.ts 时退回实现类
+  FeedStore）——修回 FeedView 接口。
+  ⑦ 实证新 bug（C6 备忘预言）：清场先毁 mask（overlay）后毁 masked（noise）
+  时 v8 MaskFilter 读 null.destroyed 直接抛错打断渲染帧（往返 swamp→plains
+  全黑复现）——清场先摘 mask 再销毁。
+  ⑧ [建议] setTerrain 返回 wallRebuilt，RoomScene 仅重建时 markDirty（每 tick
+  增量不再触发 2048² 离屏重渲）；floor 层序照官方（mask 先 ground 后）；
+  lighting degraded catch 补 console.warn 留痕；lighting.destroy 补 texture
+  销毁对称；白罩烘一次共享（省 1/6 烘焙面）；白罩/亮填描边入 spec 表。
+  ⑨ [建议·A6→G8] swamp 白罩层序照抄官方 zIndex 序致 v8 color-mask 失效
+  （二分实验定位：层序因素、共享纹理无辜）——取 base→罩→noise 功能正确序，
+  新灰区条目 G8；[A7] 官方 lighting 三档（normal/low/disabled）仅实现 normal
+  登记为 R7 收口项；[S2] §12 决策②措辞更正：exit 在 atlas 帧表保留（打包面
+  完整性），standalone 为额外栅格化双份（32-64² 量级可忽略）。
+  清偿后：51 测绿+typecheck+文档链接过；harness 复验（墙光影全幅/swamp 往返
+  swamp→plains→swamp 零错误零黑屏/mask 剪裁正常/lighting real 双后端）。
+- 2026-09-30（同日）：**R2 清偿复审二轮**。B 路全过；A/C 各抓到清偿期新引入
+  回归与一项误报，二轮清偿：
+  ① [新阻塞·A/C 共识] clearSwampSprites 清偿时把原 `.filter()` 快照迭代改成
+  活数组 for...of——destroy→removeFromParent 同步 splice 跳格（pixi 实类复现，
+  每轮残留 ov0+n0：持已毁共享纹理留树+噪声摘罩裸奔）——修回快照迭代。
+  ② [G8 二轮定案] 一轮的「官方 zIndex 序致 mask 失效」系跳格 bug 污染的观察
+  （stale 噪声满房裸奔同形）；修复后官方层序 mask 剪裁完全正常——层序回归
+  官方保真，灰区 G8 销账（观察-污染-更正全程记录本条）。
+  ③ [A4 撤回] exit @2x「半尺寸」系评审 A 误报（frame×tileScale 覆盖恒等），
+  其撤销已复核；清偿注释错误断言（「texture.width 已是 32」）更正为真实语义。
+  ④ [A/C vs B 矛盾裁定] 共享 overlayTexture 双 destroy 安全性——主会话 pixi
+  实类实测：二次 destroy 经 _source null 守卫为 no-op（事件只发一次），B/C
+  正确，无需所有权标记。
+  ⑤ M2 用例名更正（hash 断言由 freshness 承担）。

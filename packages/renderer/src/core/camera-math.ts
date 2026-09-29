@@ -91,3 +91,23 @@ export function fitRect(
   );
   return { x: x + width / 2, y: y + height / 2, zoom };
 }
+
+/**
+ * 钳边：视野矩形不得越出世界矩形（R2 完整视口，方案 §7）。
+ * 视口宽/高超过矩形时轴心锁定矩形中心（缩小态居中，不跟随平移）。
+ */
+export function clampToRect(
+  cam: CameraState,
+  viewWidth: number,
+  viewHeight: number,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+): CameraState {
+  const halfW = viewWidth / 2 / cam.zoom;
+  const halfH = viewHeight / 2 / cam.zoom;
+  const cx = halfW * 2 >= maxX - minX ? (minX + maxX) / 2 : Math.min(maxX - halfW, Math.max(minX + halfW, cam.x));
+  const cy = halfH * 2 >= maxY - minY ? (minY + maxY) / 2 : Math.min(maxY - halfH, Math.max(minY + halfH, cam.y));
+  return { ...cam, x: cx, y: cy };
+}

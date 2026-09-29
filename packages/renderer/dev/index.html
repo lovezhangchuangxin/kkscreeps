@@ -44,12 +44,13 @@
       (() => {
         const hud = document.getElementById('hud');
         const show = (msg) => {
+          (window.__hudErrors = window.__hudErrors ?? []).push(String(msg));
           const line = document.createElement('div');
           line.className = 'err';
           line.textContent = '✗ ' + msg;
           hud.appendChild(line);
         };
-        window.addEventListener('error', (e) => show(e.message));
+        window.addEventListener('error', (e) => show(e.message + ' @' + (e.filename ?? '') + ':' + e.lineno));
         window.addEventListener('unhandledrejection', (e) => show(String(e.reason && e.reason.stack ? e.reason.stack : e.reason)));
       })();
     </script>
