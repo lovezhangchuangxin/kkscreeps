@@ -66,8 +66,10 @@
    getter 回查 + per-viewer 装配），动作方法族全量的 API 面与已就绪执行器端到端；
 3. **查询面契约投影修复**（D5）：embed getObject/findInRoom 对齐 screeps-ok 快照契约（kind 族）；
 4. **Memory 正式化**：官方解析三细节、超限信号、cpu 真值回写、模块包装形态拍板；
-5. **多实例与生命周期收口**：LIFO 进程级所有者 / evict_idle 逐出设计（欠账 #13）、旧对象引用
-   失效语义（薄壳 getter 化）；
+5. **多实例与生命周期收口**：evict_idle 逐出设计与旧对象引用失效语义（薄壳 getter 化）——
+   原"LIFO 进程级所有者"设计前提已于 2026-09-29 证伪并纠偏为每线程纪律
+   （[ADR-013](../decisions/ADR-013-architecture-review-coordinator.md) 决策 3），该项整体移交
+   B0 批 WP2 执行；
 6. **性能观测点**：阶段耗时打点（玩家运行/世界投影构建/结算），小规模负载一次实测记录。
 
 **验收关卡**（roadmap 原文"screeps-ok 通过率过半（内部目标，随 2A 实际基线校准）"）——
@@ -201,6 +203,13 @@ tick 投影表"（对照官方 `data(id)` 闭包回查 runtimeData，engine/src/
 
 **备选（不推荐）**：M2A 就做四段布局原型——会把 schema 冻结、快照验收与 API 层移植搅在同一步；
 四段布局的字节常量按契约须"依据官方可导入的最大房间与内存基准确定"，本身依赖 M2B 的基准。
+
+> **追记（2026-09-29，[ADR-013](../decisions/ADR-013-architecture-review-coordinator.md) 决策 2）**：
+> D3 的方向不变，时间线细化为 **seam 先行**——M2B API 大扩面（~150→340 方法）**之前**先落地
+> 三件：世界注入来源接口化、地形按世界版本缓存、不可变房间版本句柄；M2B 新命名空间的 getter
+> 写在 seam 抽象之上（第一后端可仍为 JSON 形态）。四段布局与零拷贝冻结仍按本决策的备选理由
+> 留待端到端测量。动机：扩面后再切直读，prelude 改写面积翻倍；seam 先行使"不在旧形态上继续
+> 盖楼"与"不过早冻结布局"同时成立。批次定位于 B0 之后的 M2B 前置批。
 
 ### D4（需确认）：先 2A 后 2B；2A 关卡现实校准为"出口 ≥40% + 过半落在 2B API 补全批出口"
 
@@ -346,7 +355,7 @@ driver/lib/runtime/data.js:200-261）。
 | 1 | intent 收集通道（ADR-011 M2 输入） | **修**（2A 批 2，D1） |
 | 2 | sanitize 未接生产（深评登记） | **修**（2A 批 2 接线） |
 | 3 | runExpr 独立通道计费口径（步 6 登记） | **修**（2A 批 2，D1 计费定型） |
-| 4 | 多实例 LIFO/evict_idle（第四轮，重登记 M2-2A） | **修**（2A 批 6：进程级所有者统一创建/回收序 + 非栈顶逐出策略） |
+| 4 | 多实例 LIFO/evict_idle（第四轮，重登记 M2-2A） | **修**（移交 B0 WP2：LIFO 前提已纠偏为每线程——ADR-013 决策 3，非栈顶任意逐出） |
 | 5 | 旧对象引用失效语义（第四轮登记 M2） | **修**（2A 批 3：薄壳 getter 化 + 27.12 锁定用例） |
 | 6 | move intent 的 id 形态（灰区） | **修**（2A 批 4：move API 双形态对照 creeps.js:132-141） |
 | 7 | createCreep 空 energyStructures（灰区） | **修**（2A 批 2：编码 presence） |
@@ -487,7 +496,7 @@ Rust 正确性 / 测试锁值充分性；轨 C 视角：官方对照 / unsafe �
   say/suicide 执行器 + spawning 投影形态 + controller hits + 无 controller 配额 + flag 懒 memory；
 - **A5 Room/RoomPosition/Memory/模块形态**：find/look*/getTerrain/packedPos/fetchXY 对照 +
   Memory 三细节 + 超限信号 + 循环 require/模块包装/Game 可写性跟官方 + require.cache 形态；
-- **A6 收尾**：结构读取面（isActive/hits 族）+ 多实例 LIFO/evict_idle 设计 + tooangel 2000t
+- **A6 收尾**：结构读取面（isActive/hits 族）+ 多实例 LIFO/evict_idle 设计（已移交 B0 WP2，前提纠偏见 ADR-013）+ tooangel 2000t
   重跑 + 性能观测点埋设 + 小规模负载实测记录 + ADR-012 + 棘轮地板上调 + 灰区表/架构文档回写。
 
 **轨 B（引擎结算面，ScriptedSandbox 单测验证，不依赖真沙箱）**：

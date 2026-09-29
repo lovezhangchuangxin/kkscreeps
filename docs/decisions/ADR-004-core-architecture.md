@@ -23,6 +23,8 @@
 4. **分层存储**：热数据全部在内存，每约 2 分钟把变化的房间快照写盘（嵌入式单文件键值库），对照官方"每 10 秒整库重写"是数量级差异；跨机器扩展通过统一存储接口接 Redis 等，引擎不感知；
 5. **指令在沙箱内收集、tick 末一次性传出**（二进制编码）：官方与 xxscreeps 两个实现都是这个形态，计费和幂等规则直接照搬。
 
+> **追记（2026-09-29）**：决策 5 的"二进制编码"在 M2A 以 JSON 通道落地（[m2-playable D1](../plans/m2-playable.md)，endTick 信封 JSON + 白名单清洗）；二进制化随 M2B 的 intent 通道与快照直读批兑现（[ADR-013](ADR-013-architecture-review-coordinator.md) 决策 2 的 seam 节奏）。方向不变，时间线显式化。
+
 ## 证据
 
 - [架构深挖报告](../research/03-architecture-optimizations.md)（file:line 级热点清单、实测数字、P0 清单）

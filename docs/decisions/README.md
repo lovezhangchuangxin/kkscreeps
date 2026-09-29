@@ -17,6 +17,7 @@
 | [ADR-009](ADR-009-frontend-stack.md) | 前端栈（Vue3+Vite+TS+pnpm）与单 monorepo、自建渲染器 | 已接受 |
 | [ADR-010](ADR-010-screeps-ok-adapter-bridge.md) | screeps-ok 适配器桥接（sidecar 子进程）与嵌入式 API、M0 哑世界、bot 验收与上游 pin 策略 | 已接受 |
 | [ADR-011](ADR-011-engine-skeleton.md) | 引擎骨架定型：typed world 唯一后端、官方结算序子集、intent 通道 trait、声明宏快照格式、常量生成、通过率棘轮 | 已接受 |
+| [ADR-013](ADR-013-architecture-review-coordinator.md) | 2026-09 架构复审：运行协调层（RunResult 统一提交）、直读 seam 先行节奏、LIFO 每线程纠偏、宿主控制面收口、TickInput 非确定性显式化（ADR-012 由 A6 预留） | 已接受 |
 
 ## 评估过但没有采纳的方案
 
@@ -29,3 +30,6 @@
 | isolated-vm + Node 独立伴生进程（过渡方案） | deno_core 的全部风险点已实测关闭，不需要过渡形态 | [游戏功能验证报告](../research/04-game-api-feasibility.md) |
 | 自己实现寻路算法 | 即使结果"同样最优"，路径的细节选择（先走哪条同长度的路）可能和官方不同，玩家会观察到差异 | [兼容性红线](../designs/compatibility.md) |
 | 复用官方渲染器代码（01 报告原建议） | 技术栈老旧（旧版 PixiJS + 自研表达式引擎），自建渲染器但复用其美术 SVG 资产与数据驱动设计思想 | [ADR-009](ADR-009-frontend-stack.md) |
+| 世界模型整体改 ECS（2026-09 复审再裁决） | Screeps 对象异构、强类型、每房几百个、迭代序必须确定——`BTreeMap<ObjId, RoomObject>` + 格子索引够用；ECS 的 archetype 收益未证明且破坏"typed 即 schema 类型"单真源 | [架构复审笔记](../research/notes/architecture-review-2026-09.md) |
+| 微服务化 / 每房常驻 Actor / 完整事件溯源（同上） | 当前阶段成本高；统一提交与跨房语义仍需协调，换存储接口不解决分布式执行语义；重放需求用 tick 输入日志 + 检查点即可覆盖 | 同上 |
+| 立即冻结零拷贝列式快照布局（同上） | 偏早：应先验证完整读写链路、生命周期与端到端收益，再按 snapshot 契约的冻结前验收条款冻结；但 seam（世界来源接口化/地形缓存/不可变房间版本句柄）须先行，避免 M2B API 扩面按旧形态翻倍 | [ADR-013](ADR-013-architecture-review-coordinator.md) |
