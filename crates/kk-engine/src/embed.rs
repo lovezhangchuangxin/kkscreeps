@@ -47,8 +47,8 @@ pub struct EmbedEngine {
 /// （world_json_for_viewer 每玩家合计）、玩家运行（run_player 合计）、结算
 /// （tick_with_intents）、tick 墙钟。Instant 读表 ~20ns，采样开销可忽略
 /// （文档要求采样开销单独测量——以同负载重复运行的 p50 稳定性自证）。
-/// 采样无上限（32B/tick）：probe/bot-check（≤2000t）规模无碍，长寿命部署
-/// 需 cap（A6 评审 P3 登记，归 B0）；`perf_reset` 提供手动清零。
+/// 采样有 cap（B0 收口，A6 评审 P3 登记销账）：满 cap 后丢弃新样本（窗口
+/// 保留最早段），`perf_reset` 清零重开——长寿命部署不再无界增长。
 /// 正式场景基线（场景 A/C × 3 实现）随 M2B/M5；本观测点是 M2A 的架构验收
 /// 通道（玩家 API → intent → 结算闭环及快照读取路径的阶段耗时）。
 #[derive(Default)]
@@ -57,9 +57,15 @@ struct PerfRecorder {
     ticks: Vec<[f64; 4]>,
 }
 
+/// 采样窗口上限（32B/tick × 50k ≈ 1.6MB——probe/bot-check（≤2000t）远用不满，
+/// 长寿命部署的内存上界）。
+const PERF_MAX_SAMPLES: usize = 50_000;
+
 impl PerfRecorder {
     fn record(&mut self, phases: [f64; 4]) {
-        self.ticks.push(phases);
+        if self.ticks.len() < PERF_MAX_SAMPLES {
+            self.ticks.push(phases);
+        }
     }
 
     /// 单阶段汇总：count / p50 / p95 / max / total（ms）。

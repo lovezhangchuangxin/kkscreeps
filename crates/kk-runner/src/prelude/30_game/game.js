@@ -32,6 +32,9 @@
   const __mapSet = Map.prototype.set;
   const __setAdd = Set.prototype.add;
   const __setHas = Set.prototype.has;
+  // Reflect.apply 加载期捕获（B0 WP4 .call 家族清偿：.call 动态分派走可
+  // 交换的 Function.prototype.call——玩家可换，A6 对抗评审 P2 登记的家族债）
+  const __reflectApply = Reflect.apply;
   const __objectEntries = Object.entries;
   const mathPow = Math.pow;
   const mathFloor = Math.floor;
@@ -256,7 +259,7 @@
       const o = worldObjs[i];
       const w = gw.wrapObject(o, gw.world.time);
       w.room = undefined;
-      __mapSet.call(gw.objectsById, o.id, w);
+      __reflectApply(__mapSet, gw.objectsById, [o.id, w]);
       const mine = o.owner === gw.viewerName;
       if (o.type === 'creep') {
         // 官方 game.js:273-280：Game.creeps 只收本人 creep
@@ -294,7 +297,7 @@
     const visibleList = gw.world.visibleRooms;
     if (visibleList !== undefined && visibleList !== null) {
       for (let i = 0; i < visibleList.length; i++) {
-        __setAdd.call(visibleRooms, visibleList[i]);
+        __reflectApply(__setAdd, visibleRooms, [visibleList[i]]);
       }
     } else {
       for (let i = 0; i < worldObjs.length; i++) {
@@ -302,7 +305,7 @@
         // 归集跳过表（data.js:113-116）：flag/工地不授房视野
         const own = o.owner !== undefined ? o.owner : o.user;
         if (own === gw.viewerName && o.type !== 'constructionSite') {
-          __setAdd.call(visibleRooms, o.room);
+          __reflectApply(__setAdd, visibleRooms, [o.room]);
         }
       }
     }
@@ -310,14 +313,14 @@
     const roomEntries = __objectEntries(gw.world.rooms || {});
     for (let i = 0; i < roomEntries.length; i++) {
       const name = roomEntries[i][0];
-      if (gw.viewerName !== null && !__setHas.call(visibleRooms, name)) continue;
+      if (gw.viewerName !== null && !__reflectApply(__setHas, visibleRooms, [name])) continue;
       rooms[name] = gw.makeRoom(name, roomEntries[i][1]);
     }
     // 回填对象上的 room 引用：rawById 直查替代数组 .find（O(N²)→O(N)，
     // 官方 byRoom 索引同构；.find 经可交换原型，装配路径不得经——A3c 装配批）
     for (let i = 0; i < worldObjs.length; i++) {
       const o = worldObjs[i];
-      const w = __mapGet.call(gw.objectsById, o.id);
+      const w = __reflectApply(__mapGet, gw.objectsById, [o.id]);
       if (w && rooms[o.room]) w.room = rooms[o.room];
     }
 
@@ -371,7 +374,7 @@
         getHistory: () => [],
       },
       getObjectById(id) {
-        return __mapGet.call(gw.objectsById, id) || null;
+        return __reflectApply(__mapGet, gw.objectsById, [id]) || null;
       },
       notify() { countStub('Game.notify'); },
       map: {
@@ -477,7 +480,15 @@
   }
 
   globalThis.__kkp.memoryWorld = {
-    /** 每 tick 注入世界快照（宿主以 JSON 字面量内嵌，此处已是对象）并重建 Game。 */
+    /** 宿主私有通道：注入 RawMemory 初值（官方每 tick 从存档恢复，make.js:160
+     *  一带）。写闭包 rawMemoryData——不经 globalThis.RawMemory 查找（玩家
+     *  换掉全局绑定后旧路径会执行伪造 set，A5-core 对抗评审 P3b），下一次
+     *  beginTick 重建 RawMemory 时即生效（_parsed 单 tick 生命周期，无旁路）。 */
+    setRawMemoryHost(data) {
+      rawMemoryData = data;
+    },
+    /** 每 tick 注入世界快照（宿主经私有句柄以字符串参数传入——下方双分支
+     *  兼容 string/对象两种形态）并重建 Game。 */
     beginTick(worldJson, cpuMeta) {
       // 世界解码走预置 parse（官方 runtime.js:207 对宿主数据用
       // systemFunctions.JSON.parse 同款）：全局 parse 玩家可覆写，可伪造
@@ -499,7 +510,7 @@
       const tickObjs = gw.world.objects || [];
       for (let i = 0; i < tickObjs.length; i++) {
         const o = tickObjs[i];
-        if (o && o.id !== undefined) __mapSet.call(gw.rawById, o.id, o);
+        if (o && o.id !== undefined) __reflectApply(__mapSet, gw.rawById, [o.id, o]);
       }
       resetIntents(); // 官方每 tick 新建收集器（runtime.js _start 每 tick 执行）
       // A4-iii per-tick 闭包重置（官方 game 层每 tick 新 make 闭包的等价物）：

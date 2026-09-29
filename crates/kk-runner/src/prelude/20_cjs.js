@@ -12,7 +12,7 @@
  *   globalThis）；require/global/`_` 从全局取（它们本就是全局）；
  * - 官方 game.js:504-512 每 tick 重绑判定：require 缺失 ∨ userCodeTimestamp 变 ∨
  *   cache.main 非对象 ∨ cache.main.loop 非函数 → 重绑 require 并**整体重建缓存
- *   对象**（{lodash:_}）。我方等价物：模块表替换（set_modules→__kk.resetModules）
+ *   对象**（{lodash:_}）。我方等价物：模块表替换（set_modules→宿主私有句柄 resetModules）
  *   bump codeStamp；beginTick 经 ensureRequire() 跑同款四条件判定。整体重建
  *   （而非逐键 delete）同时免疫玩家冻结 require.cache（对抗评审 P2）。
  */
@@ -106,7 +106,7 @@
       globalThis.require = makeRequire();
     }
   }
-  /** 模块表替换（set_modules→__kk.resetModules）：官方 timestamp 变更路径——
+  /** 模块表替换（set_modules→宿主私有句柄 resetModules）：官方 timestamp 变更路径——
    *  bump stamp 并立即重绑重建缓存。 */
   function resetForNewModules() {
     globalThis.require = makeRequire();

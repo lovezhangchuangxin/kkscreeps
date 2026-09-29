@@ -1,11 +1,12 @@
 /* kk-runner 桩环境 prelude · 段 4（末段）：宿主通道 + 遮蔽。
  *
- * __kk 是宿主驱动的 tick 通道（beginTick/runLoop/runExpr/endTick/仪表排干），
- * 冻结后不可枚举不可改写。已知残余：冻结防不住玩家直接调用 __kk.drainMissing()
- * 抢先清空仪表，根治需宿主侧闭包/独立 op——M2 玩家 API 层重写，已登记
- * compatibility.md 灰区表。
- * 本段末尾遮蔽 deno_core 内部面并删除 __kkp（段间私有上下文）——此后玩家代码
- * 才开始执行。
+ * 宿主 tick 通道（beginTick/runLoop/runExpr/endTick/resetModules/setRawMemory/
+ * 仪表排干）注册进 `__kkp.host` 私有容器——**不上玩家全局**（B0 WP4 宿主面
+ * 收口，ADR-013 决策 4）：Rust 侧在 prelude 装配完成后立即捕获私有
+ * v8::Global 函数句柄，随后删除 __kkp。玩家全局零宿主通道——官方玩家侧
+ * 本就没有宿主 tick 函数（runtime 在 driver 进程），原 `globalThis.__kk`
+ * 冻结仍可调用的面（清自己指令/伪造世界注入/抢先排空仪表）就此消灭。
+ * 本段末尾遮蔽 deno_core 内部面；__kkp 的删除由 Rust 在句柄捕获后执行。
  */
 (() => {
   'use strict';
@@ -25,12 +26,19 @@
   const nullEnv = gw.nullEnv;
   const safeStringify = gw.sanitizedStringify;
   const hostObject = gw.__Object;
+  // 宿主信封 error 串的字节闸（A5-core 对抗评审 P3a，B0 补闸）：error 串拼
+  // 玩家可控 message/stack（大小无闸），而 console 闸门不覆盖信封——出口处
+  // 截断，防 exec_json 出口的跨边界放大（16K 码元诊断余量充足）
+  const HOST_ERROR_MAX = 16 * 1024;
+  function clipHostError(s) {
+    return s.length > HOST_ERROR_MAX ? s.slice(0, HOST_ERROR_MAX) + '…[截断]' : s;
+  }
   // 玩家异常对象的消息拼接安全化：e.message/stack 可是污染 getter（抛错逃逸
   // 会被宿主误判硬中断并错误计费）——不可打印错误降级为占位文本
   function safeErrorText(e, preferStack) {
     try {
       const m = preferStack ? (e && e.stack) || e : (e && e.message) || e;
-      return String(m);
+      return clipHostError(String(m));
     } catch (_) {
       return 'unprintable player error';
     }
@@ -38,9 +46,9 @@
 
   const { missing, hasProbes, stubCalls } = globalThis.__kkp;
   const { resetForNewModules } = globalThis.__kkp.cjs;
-  const { beginTick, writeBackMemory, intentsPayload } = globalThis.__kkp.memoryWorld;
+  const { beginTick, writeBackMemory, intentsPayload, setRawMemoryHost } = globalThis.__kkp.memoryWorld;
 
-  globalThis.__kk = {
+  globalThis.__kkp.host = {
     /** 每 tick 注入世界快照并重建 Game。cpuMeta：宿主预算真值（Rust 侧
      * begin_tick 第二参数——避免整世界深拷贝覆写三键，JS 侧合并覆盖占位基准）。 */
     beginTick(worldJson, cpuMeta) {
@@ -55,7 +63,7 @@
           main.loop();
           out = nullEnv({ ok: true });
         } else {
-          // 官方 game.js:555-563 run()：`if(isObject && isFunction(loop)) {...}` 无
+          // 官方 engine/src/game/game.js:517-548 run()：`if(isObject && isFunction(loop)) {...}` 无
           // else——未导出 loop() 的 main 静默跳过，不是玩家错误（不打 console、
           // 不计入错误统计；bot-check 的 errored_ticks 口径据此）
           out = nullEnv({ ok: true });
@@ -107,7 +115,9 @@
         } else if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
           const ctor = v.constructor;
           if (ctor !== Object && ctor !== undefined) {
-            const ctorName = (ctor && typeof ctor === 'object' && ctor.name) || 'non-plain';
+            // ctor.name 可是污染 getter 的任意长串——过闸（B0-3 评审 P2 清偿）
+            const rawName = (ctor && typeof ctor === 'object' && ctor.name) || 'non-plain';
+            const ctorName = clipHostError(String(rawName));
             serErr = 'Return value is a ' + ctorName + ' object, not a plain JSON value';
           }
         }
@@ -158,6 +168,11 @@
       }
       const payload = intentsPayload();
       if (typeof out === 'object' && out !== null) {
+        // error 键统一过闸（B0-3 评审 P1 清偿）：safeErrorText 只覆盖本段拼的
+        // 三处，writeBackMemory 内部 catch（game.js 'Memory 不可序列化: '+why）
+        // 与未来路径的 error 串在此兜底截断——实测 2MB message 可经 toJSON 抛错
+        // 注入（16K 码元上限，防 exec_json 出口跨边界放大）
+        if (typeof out.error === 'string') out.error = clipHostError(out.error);
         out.intentsList = payload ? payload.list : null;
         out.intentsCpu = payload ? payload.cpu : 0;
       }
@@ -172,10 +187,16 @@
       }
     },
     /** 模块表替换：官方 timestamp 变更路径（game.js:507-512）——整体重绑
-     * require + 重建缓存对象（而非逐键 delete：玩家冻结 require.cache 时
-     * delete 会抛 TypeError 打挂 set_modules，重绑新对象天然免疫）。 */
+     *  require + 重建缓存对象（而非逐键 delete：玩家冻结 require.cache 时
+     *  delete 会抛 TypeError 打挂 set_modules，重绑新对象天然免疫）。 */
     resetModules() {
       resetForNewModules();
+    },
+    /** 宿主私有通道：注入 RawMemory 初值（写闭包 rawMemoryData，不经
+     *  globalThis.RawMemory——玩家换掉全局绑定后旧路径执行伪造 set，
+     *  A5-core 对抗评审 P3b；随 B0 WP4 收口根治）。 */
+    setRawMemory(data) {
+      setRawMemoryHost(data);
     },
     drainMissing() {
       // 两桶：missing（get-trap 确定缺失）+ hasProbes（has-trap 低置信，可能是否定式探测）
@@ -194,10 +215,8 @@
       return safeStringify(out);
     },
   };
-  // __kk 不可枚举（玩家代码不应该把它当 API 面）且整体冻结——防止玩家覆盖
-  // drainMissing 造假验收仪表、把 beginTick/runLoop 换成抛错函数劫持宿主通道。
-  Object.freeze(globalThis.__kk);
-  Object.defineProperty(globalThis, '__kk', { enumerable: false, writable: false, configurable: false });
+  // 宿主通道不上玩家全局（B0 WP4）：__kkp.host 由 Rust 侧捕获句柄，
+  // 随后整个 __kkp 连同 host 引用被删除——玩家零宿主控制面
 
   // ---------------------------------------------------------------- 遮蔽 deno_core 内部面
   // deno_core 的内部函数集合默认对玩家可见——ADR-002 纪律。
@@ -210,5 +229,6 @@
   // 残留全局，测试会显形。
   delete globalThis.Deno;
   delete globalThis.__bootstrap;
-  delete globalThis.__kkp;
+  // __kkp 的删除不在本段：Rust 侧先从 __kkp.host 捕获私有函数句柄，捕获
+  // 完成后执行清理脚本删除 __kkp（先删会把宿主通道一起埋掉）
 })();

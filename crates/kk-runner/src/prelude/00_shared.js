@@ -20,6 +20,12 @@
     throw new Error('kk-runner prelude: op 不可达（extension 未注册？）');
   }
 
+  // 捕获内建的加载期快照（A3c 坑①：全局/原型属性玩家可换）。.call 动态分派
+  // 走可交换的 Function.prototype.call——家族式迁 Reflect.apply 加载期捕获
+  //（B0 WP4，A6 对抗评审 P2 登记；structures.js isActive 立的标杆同形态）
+  const __reflectApply = Reflect.apply;
+  const __arrayMap = Array.prototype.map;
+
   // ---------------------------------------------------------------- 缺失 API 探测
   // M0 环境验收的核心仪表：记录"玩家代码访问了但桩环境没有"的路径（含次数）。
   // get trap 覆盖属性访问/解构（GetV），has trap 覆盖 `in` 检查——`hasOwnProperty`/
@@ -78,11 +84,11 @@
   // falsy 分支官方用调用时全局 stringify（console.js:25 逐字）——玩家覆写全局
   // 影响自家 console 渲染是官方行为，保持一致
   function fmtArgs(args) {
-    return Array.prototype.map.call(args, (i) => {
+    return __reflectApply(__arrayMap, args, [(i) => {
       if (i && i.toString) return i.toString();
       if (typeof i === 'undefined') return 'undefined';
       return JSON.stringify(i);
-    }).join(' ');
+    }]).join(' ');
   }
   const mkLevel = (level) =>
     function (...args) {

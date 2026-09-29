@@ -1750,13 +1750,13 @@ fn a6_isactive_hits_family_impl() -> anyhow::Result<()> {
         "constructionSite",
         &json!({ "pos": [10, 10], "structureType": "road", "owner": "p1", "progress": 0 }),
     )?;
-    let noWork = e5.place_object(
+    let no_work = e5.place_object(
         "W1N1",
         "creep",
         &json!({ "pos": [10, 11], "owner": "p1", "body": ["move"], "name": "nw",
             "store": { "energy": 10 } }),
     )?;
-    let list = json!({ noWork.clone(): { "build": { "id": site5 } } });
+    let list = json!({ no_work.clone(): { "build": { "id": site5 } } });
     let batch = kk_engine::intent::IntentBatch::from_json("p1", &list);
     e5.settle_external(batch)?;
     // 零 WORK：effect=0——工地不动、能量不动（economy 门 energy>0 已过），
@@ -1767,7 +1767,7 @@ fn a6_isactive_hits_family_impl() -> anyhow::Result<()> {
         site5_snap["progress"], 0,
         "零 WORK build 进度不动: {site5_snap:?}"
     );
-    let nw_snap = e5.get_object(&noWork).unwrap();
+    let nw_snap = e5.get_object(&no_work).unwrap();
     assert_eq!(
         nw_snap["store"]["energy"], 10,
         "零 WORK build 能量不动: {nw_snap:?}"

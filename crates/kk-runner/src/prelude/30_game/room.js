@@ -20,6 +20,7 @@
   const __Object = Object;
   const __RoomCtor = globalThis.Room;
   const __mapGet = Map.prototype.get;
+  const __reflectApply = Reflect.apply;
   const __jsonStringify = JSON.stringify;
   const __jsonParse = JSON.parse;
   // 装配路径 push（A5 片 3a 评审 P1 清偿）：look 索引构建在 beginTick 宿主
@@ -148,7 +149,7 @@
       const o = worldObjs[i];
       if (o.room !== name) continue;
       if (o.type === 'structure' && o.structureType === 'controller') {
-        controller = __mapGet.call(gw.objectsById, o.id);
+        controller = __reflectApply(__mapGet, gw.objectsById, [o.id]);
       }
       // look 类型归类（官方装配分支同构：source/mineral 独立臂、spawn/controller
       // 属 structure、dropped resource 落 energy 臂）
@@ -168,14 +169,14 @@
       else if (o.type === 'powerCreep') t = 'powerCreep';
       else if (o.type === 'deposit') t = 'deposit';
       if (t === null) continue;
-      const w = __mapGet.call(gw.objectsById, o.id);
+      const w = __reflectApply(__mapGet, gw.objectsById, [o.id]);
       if (!w) continue;
       lookReg[t][o.id] = w;
       const index = o.x * 50 + o.y;
       if (lookSpatial[t][index] === undefined) {
         lookSpatial[t][index] = [w];
       } else {
-        __arrayPush.call(lookSpatial[t][index], w);
+        __reflectApply(__arrayPush, lookSpatial[t][index], [w]);
       }
     }
     const room = {
@@ -263,7 +264,7 @@
       for (let i = 0; i < worldObjs.length; i++) {
         const o = worldObjs[i];
         if (o.room !== name) continue;
-        const w = __mapGet.call(gw.objectsById, o.id);
+        const w = __reflectApply(__mapGet, gw.objectsById, [o.id]);
         if (!w) continue;
         const isStruct = o.type === 'structure' || o.type === 'spawn';
         // 官方 findCacheFn 表（game.js:17-29）viewer 相关 10 臂：FIND_CREEPS

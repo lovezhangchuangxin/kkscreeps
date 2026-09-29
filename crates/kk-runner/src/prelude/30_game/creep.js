@@ -541,6 +541,7 @@
   const __MathMin = Math.min;
   const __MathMax = Math.max;
   const __arrayIncludes = Array.prototype.includes;
+  const __reflectApply = Reflect.apply;
 
   /** 官方 structureTypes 键集（game.js:224-247，21 型）+ 'wall' 投影别名
    *  （classGlobalFor 将 wall/constructedWall 归并 StructureWall——手写世界
@@ -697,7 +698,7 @@
   globalThis.Creep.prototype.drop = function drop(resourceType, amount) {
     if (!this.my) return C.ERR_NOT_OWNER; // :405-407
     if (this.spawning) return C.ERR_BUSY; // :408-410
-    if (!__arrayIncludes.call(C.RESOURCES_ALL || [], resourceType)) return C.ERR_INVALID_ARGS; // :411-413
+    if (!__reflectApply(__arrayIncludes, C.RESOURCES_ALL || [], [resourceType])) return C.ERR_INVALID_ARGS; // :411-413
     if (!gw.rawData(this.id).store || !gw.rawData(this.id).store[resourceType]) {
       return C.ERR_NOT_ENOUGH_RESOURCES; // :414-416
     }
@@ -714,7 +715,7 @@
     if (!this.my) return C.ERR_NOT_OWNER; // :429-431
     if (this.spawning) return C.ERR_BUSY; // :432-434
     if (amount < 0) return C.ERR_INVALID_ARGS; // :435-437
-    if (!__arrayIncludes.call(C.RESOURCES_ALL || [], resourceType)) return C.ERR_INVALID_ARGS; // :438-440
+    if (!__reflectApply(__arrayIncludes, C.RESOURCES_ALL || [], [resourceType])) return C.ERR_INVALID_ARGS; // :438-440
     // 目标门 :441-452。customObjects M2 无（官方 register.customObjects 恒空表
     // ⇒ 该合取项恒真，省略）。structEntry 裸解引用保留官方求值形态：目标有
     // store 时 && 短路不解引用；storeless 的 creep/powerCreep 目标官方在此
@@ -772,7 +773,7 @@
     if (!this.my) return C.ERR_NOT_OWNER; // :494-496
     if (this.spawning) return C.ERR_BUSY; // :497-499
     if (amount < 0) return C.ERR_INVALID_ARGS; // :500-502
-    if (!__arrayIncludes.call(C.RESOURCES_ALL || [], resourceType)) return C.ERR_INVALID_ARGS; // :503-505
+    if (!__reflectApply(__arrayIncludes, C.RESOURCES_ALL || [], [resourceType])) return C.ERR_INVALID_ARGS; // :503-505
     // 目标门 :507-516：store 面在 data() 读——未知 id 在此抛官方同文案错误
     // （rawData 的求值点 = 官方第三操作数，早于 assertTargetObject）
     if (!target || !target.id) {

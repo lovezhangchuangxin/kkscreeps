@@ -44,10 +44,12 @@
   // 对象消亡（id 不在当前 tick 投影）时抛 runtime error——STALERECV-001
   // 语义的抛错点。文案与官方逐字（"Could not find an object with ID "+id）。
   // mapGet 预置捕获（A3c 装配批）：全部壳 getter/判定门的回查承重面，不得经
-  // 可交换的 Map.prototype.get
+  // 可交换的 Map.prototype.get。Reflect.apply 加载期捕获（B0 WP4 .call 家族
+  // 清偿——.call 分派走可交换的 Function.prototype.call）
   const __mapGet = Map.prototype.get;
+  const __reflectApply = Reflect.apply;
   gw.rawData = function rawData(id) {
-    const o = __mapGet.call(gw.rawById, id);
+    const o = __reflectApply(__mapGet, gw.rawById, [id]);
     if (o === undefined) {
       throw new Error('Could not find an object with ID ' + id);
     }

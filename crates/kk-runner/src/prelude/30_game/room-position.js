@@ -25,6 +25,7 @@
   const __parseInt = parseInt;
   const __substr = String.prototype.substr;
   const __charAt = String.prototype.charAt;
+  const __reflectApply = Reflect.apply;
   const __Error = Error;
   // 方向/look 常量加载期捕获：官方经闭包 C.RIGHT 免疫玩家覆写（utils.js:70-99），
   // 捕获平铺常量同形（常量段在 prelude 前安装，sandbox.rs 注入序）
@@ -92,13 +93,13 @@
   // parseInt 认前缀数字、W/w 与 N/n 取负减一、其余方向字母当 E/S；与 kk-core
   // RoomName 的强类型构造校验是两层：embed 边界拒非法名，玩家面对齐官方行为）
   function roomNameToXY(name) {
-    let xx = __parseInt(__substr.call(name, 1), 10);
+    let xx = __parseInt(__reflectApply(__substr, name, [1]), 10);
     let verticalPos = 2;
     if (xx >= 100) verticalPos = 4;
     else if (xx >= 10) verticalPos = 3;
-    let yy = __parseInt(__substr.call(name, verticalPos + 1), 10);
-    if (__charAt.call(name, 0) === 'W' || __charAt.call(name, 0) === 'w') xx = -xx - 1;
-    if (__charAt.call(name, verticalPos) === 'N' || __charAt.call(name, verticalPos) === 'n') yy = -yy - 1;
+    let yy = __parseInt(__reflectApply(__substr, name, [verticalPos + 1]), 10);
+    if (__reflectApply(__charAt, name, [0]) === 'W' || __reflectApply(__charAt, name, [0]) === 'w') xx = -xx - 1;
+    if (__reflectApply(__charAt, name, [verticalPos]) === 'N' || __reflectApply(__charAt, name, [verticalPos]) === 'n') yy = -yy - 1;
     return [xx, yy];
   }
 

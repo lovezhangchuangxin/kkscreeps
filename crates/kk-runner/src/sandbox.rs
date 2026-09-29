@@ -137,10 +137,15 @@ pub fn lifo_violations() -> usize {
 }
 
 pub struct Sandbox {
-    // 字段声明顺序 = Drop 顺序：先 join 看门狗线程，再销毁 JsRuntime，最后拆 tokio。
+    // 字段声明顺序 = Drop 顺序：先 join 看门狗线程，再销毁 JsRuntime，最后拆
+    // tokio。host（v8::Global 句柄）在 isolate 销毁后才 drop——v8 150 对已销毁
+    // isolate 的 Global drop 是显式安全 no-op（handle.rs "Globals may be dropped
+    // after their host isolate is disposed"）。
     watchdog: Watchdog,
     runtime: JsRuntime,
     tokio: tokio::runtime::Runtime,
+    /// 宿主通道私有句柄（生命周期经此驱动，玩家全局零宿主通道——B0 WP4）。
+    host: HostFns,
     seq: u64,
     budget: Bucket,
     shared: SharedRef,
@@ -174,24 +179,32 @@ impl Sandbox {
         });
 
         let shared: SharedRef = Arc::new(Shared::default());
-        runtime.op_state().borrow_mut().put(ModuleTable::new());
-        runtime.op_state().borrow_mut().put(shared.clone());
+        let host = {
+            let _guard = tokio.enter();
+            runtime.op_state().borrow_mut().put(ModuleTable::new());
+            runtime.op_state().borrow_mut().put(shared.clone());
+
+            // 注入顺序：lodash（结果放 __kkLodash）→ 常量平铺 → prelude 各段
+            //（末段把宿主通道注册进 __kkp.host 而不上全局）→ 捕获私有句柄 →
+            // 删除 __kkp（此后玩家全局零宿主通道与段间私有上下文）。
+            runtime.execute_script("kk-lodash", lodash_script())?;
+            runtime.execute_script("kk-constants", constants_script())?;
+            for (name, src) in PRELUDE_SEGMENTS {
+                runtime.execute_script(name, src.to_string())?;
+            }
+            let host = HostFns::capture(&mut runtime)?;
+            runtime.execute_script("kk-host-unlink", "delete globalThis.__kkp".to_string())?;
+            host
+        };
 
         let watchdog = Watchdog::spawn(runtime.v8_isolate().thread_safe_handle());
-
-        // 注入顺序：lodash（结果放 __kkLodash）→ 常量平铺 → prelude 各段
-        // （首段捕获 op、末段遮蔽 Deno 并删除 __kkp）。
-        runtime.execute_script("kk-lodash", lodash_script())?;
-        runtime.execute_script("kk-constants", constants_script())?;
-        for (name, src) in PRELUDE_SEGMENTS {
-            runtime.execute_script(name, src.to_string())?;
-        }
 
         let seq = SEQ.fetch_add(1, Ordering::SeqCst);
         let mut sb = Self {
             watchdog,
             runtime,
             tokio,
+            host,
             seq,
             budget: Bucket::new(
                 config.cpu_limit,
@@ -249,19 +262,31 @@ impl Sandbox {
             state.borrow_mut().put(table);
         }
         // 失败也清掉可能遗留的终止标志，沙箱不留"中毒"状态（tick 外路径不结算预算）
-        self.exec_script("globalThis.__kk.resetModules()")
-            .inspect_err(|_| self.clear_terminate_flag())?;
+        call_host_unit(
+            &self.tokio,
+            &mut self.runtime,
+            &self.host.reset_modules,
+            &[],
+        )
+        .inspect_err(|_| self.clear_terminate_flag())?;
         Ok(())
     }
 
-    /// 注入玩家的 RawMemory 初值（官方：每 tick 从存档恢复）。
+    /// 注入玩家的 RawMemory 初值（官方：每 tick 从存档恢复）。私有句柄通道：
+    /// 写 prelude 闭包 rawMemoryData，不经 globalThis.RawMemory 查找（玩家
+    /// 换掉全局绑定后旧路径会执行伪造 set——A5-core 对抗评审 P3b，随本收口根治）。
+    ///
+    /// 时序约束：只准在 **begin_tick 之前**（tick 边界）调用——mid-tick 注入
+    /// 不失效已物化的 `RawMemory._parsed`，随后的写回会用陈旧 `_parsed` 覆写
+    /// 注入数据（官方 driver 同样只 pre-tick 注入，make.js:160）。
     pub fn set_raw_memory(&mut self, data: &str) -> anyhow::Result<()> {
-        let script = format!(
-            "(function(){{ const s = {}; globalThis.RawMemory.set(s); }})()",
-            serde_json::to_string(data)?
-        );
-        self.exec_script(script)
-            .inspect_err(|_| self.clear_terminate_flag())?;
+        call_host_unit(
+            &self.tokio,
+            &mut self.runtime,
+            &self.host.set_raw_memory,
+            &[data.to_string()],
+        )
+        .inspect_err(|_| self.clear_terminate_flag())?;
         Ok(())
     }
 
@@ -307,12 +332,20 @@ impl Sandbox {
                 self.watchdog.arm(deadline);
                 *self.shared.tick_start.lock().unwrap() = Some(Instant::now());
                 self.shared.reset_console_gate();
+                // 先恢复（幂等）再清标志：tick-外通道（drain/set_*/runExpr 裸调）
+                // 触发 near-heap 放大后标志会残留到此处——直接 store(false) 会把
+                // 放大静默遗忘成永久 512MB ceiling（B0-3 对抗评审 P2-1 清偿）
+                self.restore_heap_limit();
                 self.shared.near_heap_fired.store(false, Ordering::Relaxed);
                 // beginTick 世界注入也在武装窗口内，硬中断（看门狗/near-heap）同样可能
-                // 打在它身上——失败必须走统一的硬中断善后，不留"中毒"状态
-                self.exec_script(format!(
-                    "globalThis.__kk.beginTick({world_json}, {cpu_json})"
-                ))
+                // 打在它身上——失败必须走统一的硬中断善后，不留"中毒"状态。
+                // 参数经私有句柄以 v8 值传递（非脚本拼接，无转义面）
+                call_host_unit(
+                    &self.tokio,
+                    &mut self.runtime,
+                    &self.host.begin_tick,
+                    &[world_json, cpu_json],
+                )
                 .inspect_err(|_| self.after_termination())?;
                 Ok(TickPlan::Run {
                     tick_limit: self.budget.tick_limit(),
@@ -325,7 +358,7 @@ impl Sandbox {
     /// "执行到入口"≠"玩家代码无异常"：玩家逻辑错误由 runLoop 内部捕获，
     /// 经 `take_last_loop_error` 暴露（报告/验收统计据此区分）。
     pub fn run_loop(&mut self) -> anyhow::Result<TickOutcome> {
-        let result = self.exec_json("globalThis.__kk.runLoop()");
+        let result = call_host_json(&self.tokio, &mut self.runtime, &self.host.run_loop, &[]);
         match result {
             Ok(v) => {
                 self.last_loop_error = match v.get("ok").and_then(serde_json::Value::as_bool) {
@@ -381,7 +414,7 @@ impl Sandbox {
             let deadline = t0 + Duration::from_millis(self.budget.tick_limit().max(1.0) as u64);
             self.watchdog.arm(deadline);
         }
-        let exec = self.exec_json("globalThis.__kk.endTick()");
+        let exec = call_host_json(&self.tokio, &mut self.runtime, &self.host.end_tick, &[]);
         match exec {
             Ok(v) => {
                 self.watchdog.disarm();
@@ -402,6 +435,10 @@ impl Sandbox {
                 };
                 self.pending_intents = intents;
                 self.budget.settle(self.cpu_used_ms() + 0.2 * billed as f64); // 含写回耗时（官方口径）
+                // near-heap 触发后正常完成的 tick 也要恢复堆上限（B0-1 评审
+                // 登记：此前只在硬中断路径恢复，"触发但正常完成"会使沙箱终身
+                // 保持放大后的 512MB ceiling——teardown 成本翻倍、逐出风暴放大）
+                self.restore_heap_limit();
                 *self.shared.tick_start.lock().unwrap() = None;
                 Ok(v)
             }
@@ -470,8 +507,12 @@ impl Sandbox {
     /// 求值一段玩家表达式（screeps-ok 适配器的 runPlayer 通道），恰好占用一个 tick 的
     /// 执行语义由调用方（engine/embed）负责编排。
     pub fn run_expr(&mut self, code: &str) -> anyhow::Result<serde_json::Value> {
-        let script = serde_json::to_string(code)?;
-        match self.exec_json(format!("globalThis.__kk.runExpr({script})")) {
+        match call_host_json(
+            &self.tokio,
+            &mut self.runtime,
+            &self.host.run_expr,
+            &[code.to_string()],
+        ) {
             Ok(v) => Ok(v),
             Err(_) => {
                 self.after_termination();
@@ -487,16 +528,25 @@ impl Sandbox {
     /// 不带 begin/end_tick：无世界注入、**不动预算桶**（该通道计费归 M2 intent
     /// 通道定型；tick 上下文的善后结算走 run_expr 的 Err 路径）。
     pub fn run_expr_guarded(&mut self, code: &str) -> anyhow::Result<serde_json::Value> {
-        let script = serde_json::to_string(code)?; // arm 前完成可失败步骤
+        // arm 前完成可失败步骤（句柄通道参数为值传递，无脚本构造步骤）
         self.clear_terminate_flag();
         let window = self.budget.next_tick_limit().max(1.0);
         self.watchdog
             .arm(Instant::now() + Duration::from_millis(window as u64));
-        let out = self.exec_json(format!("globalThis.__kk.runExpr({script})"));
+        let out = call_host_json(
+            &self.tokio,
+            &mut self.runtime,
+            &self.host.run_expr,
+            &[code.to_string()],
+        );
         self.watchdog.disarm();
         self.runtime.v8_isolate().cancel_terminate_execution();
         match out {
-            Ok(v) => Ok(v),
+            Ok(v) => {
+                // 独立通道同样遵守"触发即恢复"（stale 标志下为幂等 no-op）
+                self.restore_heap_limit();
+                Ok(v)
+            }
             Err(_) => {
                 // 独立通道被掐断：恢复堆上限即可，不动桶、不碰 tick 生命周期状态
                 self.restore_heap_limit();
@@ -519,9 +569,12 @@ impl Sandbox {
         *self.shared.tick_start.lock().unwrap() = None;
     }
 
-    /// tick 外路径（set_modules/set_raw_memory 等）失败的轻量善后：只清终止标志。
+    /// tick 外路径（set_modules/set_raw_memory/drain 等）失败的轻量善后：清
+    /// 终止标志 + 恢复堆上限（near-heap 恰在这些调用内触发时，放大 ceiling
+    /// 不得残留——B0-3 对抗评审 P2-1；restore 对未触发为幂等 no-op）。
     fn clear_terminate_flag(&mut self) {
         self.runtime.v8_isolate().cancel_terminate_execution();
+        self.restore_heap_limit();
     }
 
     /// 看门狗句柄（测试驱动真实看门狗线程的代际守卫用）。
@@ -558,35 +611,160 @@ impl Sandbox {
     }
 
     pub fn drain_missing_api(&mut self) -> anyhow::Result<serde_json::Value> {
-        self.exec_json("globalThis.__kk.drainMissing()")
-            .inspect_err(|_| self.clear_terminate_flag())
+        let out = call_host_json(
+            &self.tokio,
+            &mut self.runtime,
+            &self.host.drain_missing,
+            &[],
+        );
+        // drain 在无看门狗窗口执行且产物大 JSON（missing 键玩家可控）——
+        // near-heap 可能在此触发放大，Ok/Err 双路径恢复（幂等；Err 被调用方
+        // unwrap_or 吞掉的场景由 Ok 路径覆盖，B0-3 对抗评审 P2-1）
+        self.restore_heap_limit();
+        out.inspect_err(|_| self.clear_terminate_flag())
     }
 
     pub fn drain_stub_calls(&mut self) -> anyhow::Result<serde_json::Value> {
-        self.exec_json("globalThis.__kk.drainStubCalls()")
-            .inspect_err(|_| self.clear_terminate_flag())
+        let out = call_host_json(
+            &self.tokio,
+            &mut self.runtime,
+            &self.host.drain_stub_calls,
+            &[],
+        );
+        self.restore_heap_limit();
+        out.inspect_err(|_| self.clear_terminate_flag())
     }
+}
 
-    fn exec_script(&mut self, code: impl Into<String>) -> anyhow::Result<()> {
-        let _guard = self.tokio.enter();
-        self.runtime
-            .execute_script("kk", code.into())
-            .map(|_| ())
-            .map_err(|e| anyhow::anyhow!("execute_script: {e}"))
-    }
+// ---------------------------------------------------------------- 宿主通道私有句柄
 
-    /// 执行脚本并把返回值（JSON 字符串）解析为 Value。
-    fn exec_json(&mut self, code: impl Into<String>) -> anyhow::Result<serde_json::Value> {
-        let _guard = self.tokio.enter();
-        let global = self
-            .runtime
-            .execute_script("kk", code.into())
-            .map_err(|e| anyhow::anyhow!("execute_script: {e}"))?;
-        deno_core::scope!(scope, self.runtime);
-        let local = v8::Local::new(scope, global);
-        let text = local.to_rust_string_lossy(scope);
-        Ok(serde_json::from_str(&text)?)
+/// 宿主 tick 通道的私有函数句柄（B0 WP4，ADR-013 决策 4）：prelude 末段把
+/// 生命周期函数注册进 `__kkp.host`，本结构在装配完成后逐个捕获
+/// `v8::Global`，随后宿主删除 `__kkp`——玩家全局零宿主通道（官方玩家侧
+/// 无宿主 tick 函数，runtime 在 driver 进程），冻结防不住调用的面就此消灭。
+struct HostFns {
+    begin_tick: v8::Global<v8::Function>,
+    run_loop: v8::Global<v8::Function>,
+    run_expr: v8::Global<v8::Function>,
+    end_tick: v8::Global<v8::Function>,
+    reset_modules: v8::Global<v8::Function>,
+    set_raw_memory: v8::Global<v8::Function>,
+    drain_missing: v8::Global<v8::Function>,
+    drain_stub_calls: v8::Global<v8::Function>,
+}
+
+impl HostFns {
+    /// 从 `__kkp.host` 捕获全部句柄（prelude 装配后、`__kkp` 删除前）。
+    fn capture(runtime: &mut JsRuntime) -> anyhow::Result<Self> {
+        // 局部捕获宏：host 对象按键取函数 → 校验为函数 → 提升为全局句柄
+        //（失败直接从 capture 早退——宏在函数体内展开）
+        macro_rules! grab {
+            ($scope:expr, $host:expr, $key:literal) => {{
+                let key = match v8::String::new_from_utf8(
+                    $scope,
+                    $key.as_bytes(),
+                    v8::NewStringType::Normal,
+                ) {
+                    Some(k) => k,
+                    None => return Err(anyhow::anyhow!("键名构造失败")),
+                };
+                let f = match $host.get($scope, key.into()) {
+                    Some(f) => f,
+                    None => return Err(anyhow::anyhow!("prelude 宿主容器缺 {}", $key)),
+                };
+                let f = match v8::Local::<v8::Function>::try_from(f) {
+                    Ok(f) => f,
+                    Err(_) => return Err(anyhow::anyhow!("prelude 宿主容器 {} 非函数", $key)),
+                };
+                v8::Global::new($scope, f)
+            }};
+        }
+        deno_core::scope!(scope, runtime);
+        let global = scope.get_current_context().global(scope);
+        let name = v8::String::new_from_utf8(scope, b"__kkp", v8::NewStringType::Normal)
+            .ok_or_else(|| anyhow::anyhow!("键名构造失败"))?;
+        let kkp = global
+            .get(scope, name.into())
+            .ok_or_else(|| anyhow::anyhow!("prelude 未注册 __kkp"))?;
+        let kkp =
+            v8::Local::<v8::Object>::try_from(kkp).map_err(|_| anyhow::anyhow!("__kkp 非对象"))?;
+        let host_key = v8::String::new_from_utf8(scope, b"host", v8::NewStringType::Normal)
+            .ok_or_else(|| anyhow::anyhow!("键名构造失败"))?;
+        let host = kkp
+            .get(scope, host_key.into())
+            .ok_or_else(|| anyhow::anyhow!("prelude 未注册 __kkp.host"))?;
+        let host = v8::Local::<v8::Object>::try_from(host)
+            .map_err(|_| anyhow::anyhow!("__kkp.host 非对象"))?;
+        Ok(Self {
+            begin_tick: grab!(scope, host, "beginTick"),
+            run_loop: grab!(scope, host, "runLoop"),
+            run_expr: grab!(scope, host, "runExpr"),
+            end_tick: grab!(scope, host, "endTick"),
+            reset_modules: grab!(scope, host, "resetModules"),
+            set_raw_memory: grab!(scope, host, "setRawMemory"),
+            drain_missing: grab!(scope, host, "drainMissing"),
+            drain_stub_calls: grab!(scope, host, "drainStubCalls"),
+        })
     }
+}
+
+/// 经私有句柄调用宿主通道函数（字符串参数），返回结果的 JSON 解析。
+/// 参数以 v8 值传递（非脚本拼接——无转义面）；调用失败（JS 异常/硬中断）
+/// 携带异常文本返回 Err，语义与原 execute_script 通道一致。
+fn call_host_json(
+    tokio: &tokio::runtime::Runtime,
+    runtime: &mut JsRuntime,
+    f: &v8::Global<v8::Function>,
+    args: &[String],
+) -> anyhow::Result<serde_json::Value> {
+    let text = call_host_string(tokio, runtime, f, args)?;
+    Ok(serde_json::from_str(&text)?)
+}
+
+/// [`call_host_json`] 的无返回值形态（只关心成功/失败）。
+fn call_host_unit(
+    tokio: &tokio::runtime::Runtime,
+    runtime: &mut JsRuntime,
+    f: &v8::Global<v8::Function>,
+    args: &[String],
+) -> anyhow::Result<()> {
+    call_host_string(tokio, runtime, f, args).map(|_| ())
+}
+
+fn call_host_string(
+    tokio: &tokio::runtime::Runtime,
+    runtime: &mut JsRuntime,
+    f: &v8::Global<v8::Function>,
+    args: &[String],
+) -> anyhow::Result<String> {
+    let _guard = tokio.enter();
+    deno_core::scope!(scope, runtime);
+    // TryCatch 域：调用抛异常/被 terminate 时在此取异常文本（deno_core
+    // scoped_call_with_args 同款模式）
+    v8::tc_scope!(let scope, scope);
+    let func = f.open(scope);
+    let recv: v8::Local<v8::Value> = v8::undefined(scope).into();
+    let mut argv = Vec::with_capacity(args.len());
+    for a in args {
+        let s = v8::String::new_from_utf8(scope, a.as_bytes(), v8::NewStringType::Normal)
+            .ok_or_else(|| anyhow::anyhow!("宿主通道参数构造失败（超长）"))?;
+        argv.push(s.into());
+    }
+    let result = match func.call(scope, recv, &argv) {
+        Some(v) => v,
+        None => {
+            let msg = if scope.is_execution_terminating() {
+                "硬中断（terminate）".to_string()
+            } else {
+                scope
+                    .exception()
+                    .map(|e| e.to_rust_string_lossy(scope))
+                    .unwrap_or_else(|| "无异常对象".into())
+            };
+            return Err(anyhow::anyhow!("宿主通道调用失败: {msg}"));
+        }
+    };
+    Ok(result.to_rust_string_lossy(scope))
 }
 
 impl Drop for Sandbox {

@@ -87,6 +87,9 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     claim_gate_gcl_behavior_impl()?;
     redirect_upgrade_positive_impl()?;
     destroy_room_intent_channel()?;
+    host_face_closed()?;
+    strict_frame_hides_host_functions()?;
+    nearheap_trigger_then_restore_invariant()?;
     // LIFO 零违规断言在**全部**场景之后——中段断言会让其后场景的违规漏网
     assert_eq!(kk_runner::lifo_violations(), 0, "全流程 LIFO 纪律零违规");
     Ok(())
@@ -1170,9 +1173,12 @@ fn prelude_basics() -> anyhow::Result<()> {
         "ops 未定义（prelude 闭包不可达）: {v:?}"
     );
 
-    // __kk 整体冻结：玩家不可覆盖验收仪表/宿主 tick 通道
-    let v = sb.run_expr("Object.isFrozen(globalThis.__kk)")?;
-    assert_eq!(v["value"], true, "__kk 冻结（防仪表造假/通道劫持）");
+    // __kk 宿主通道已收口（B0 WP4）：玩家全局不存在该属性（原「冻结但可调用」
+    // 断言改判存在性——注意 isFrozen 对非对象在本 realm 恒真，无鉴别力）
+    let v = sb.run_expr("typeof globalThis.__kk")?;
+    assert_eq!(v["value"], "undefined", "__kk 不在玩家全局（零宿主通道）");
+    let v = sb.run_expr("typeof globalThis.__kkp")?;
+    assert_eq!(v["value"], "undefined", "__kkp 段间上下文已删除");
 
     let v = sb.run_expr("6 * 7")?;
     assert_eq!(v["value"], 42, "遮蔽后运行时健康");
@@ -1261,7 +1267,6 @@ fn is_allowed_global(name: &str) -> bool {
         "Game",
         "Memory",
         "RawMemory",
-        "__kk",
         // deno_core 注入（V8 内建微任务调度，无内部面可达）
         "queueMicrotask",
         // 官方游戏类（GAME_CLASS_NAMES + 独立类 + 两个别名）
@@ -3144,5 +3149,168 @@ fn destroy_room_intent_channel() -> anyhow::Result<()> {
     assert_eq!(intents["room"]["destroyStructure"][0]["id"], "c1");
     // room 级计费并入（make.js:100-106 按元素）：move 0.2 + destroy 0.2
     assert_eq!(v["intentsCpu"], 0.4, "room 级意图计入玩家可见计费");
+    Ok(())
+}
+
+/// B0 WP4 宿主面收口（ADR-013 决策 4）：玩家全局零宿主通道——GPT 复现序列
+/// （直调 __kk.beginTick 伪造世界 / 抢先 drainMissing 清仪表 / 清自己刚发的
+/// intents）不再可达；宿主生命周期经 Rust 私有 v8::Global 句柄驱动。
+/// 含 set_raw_memory 私有通道的正反两面（灰区 :172 销账）：注入走闭包
+/// rawMemoryData，玩家换掉 globalThis.RawMemory 后伪造 set 不被执行。
+fn host_face_closed() -> anyhow::Result<()> {
+    let mut sb = Sandbox::new(SandboxConfig::default())?;
+    // ①玩家全局零宿主通道（typeof 判存在性——isFrozen 对非对象在本 realm
+    //   恒真、无鉴别力，探针实测）
+    for name in ["__kk", "__kkp"] {
+        let v = sb.run_expr(&format!("typeof globalThis.{name}"))?;
+        assert_eq!(v["value"], "undefined", "{name} 不在玩家全局");
+    }
+    // ②私有通道注入的正向：set_raw_memory → 下一 tick RawMemory.get() 读回
+    sb.set_raw_memory("{\"hostFace\": 7}")?;
+    let w = json!({
+        "time": 1,
+        "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+        "user": "p1",
+        "rooms": { "W1N1": { "name": "W1N1" } },
+        "objects": []
+    });
+    match sb.begin_tick(&w)? {
+        TickPlan::Run { .. } => {}
+        plan => panic!("begin_tick 应为 Run：{plan:?}"),
+    }
+    let v = sb.run_expr("RawMemory.get()")?;
+    assert_eq!(v["value"], "{\"hostFace\": 7}", "私有通道注入生效");
+    // ③伪造面不可达：玩家把 globalThis.RawMemory 换成带探针的伪造对象，
+    //   tick 外宿主注入不得执行伪造 set（旧路径经全局查找 RawMemory.set）
+    sb.end_tick()?;
+    sb.run_expr(
+        "globalThis.__fakeSetCalls = 0; \
+         globalThis.RawMemory = { set: function (s) { globalThis.__fakeSetCalls++; } }; \
+         'armed'",
+    )?;
+    sb.set_raw_memory("{\"hostFace\": 8}")?;
+    let v = sb.run_expr("globalThis.__fakeSetCalls")?;
+    assert_eq!(v["value"], 0, "伪造 RawMemory.set 未被宿主触发");
+    // 私有通道注入仍生效（绕过伪造对象直达闭包）
+    sb.set_raw_memory("{\"hostFace\": 9}")?;
+    // ④宿主通道经私有句柄照常工作（世界注入/写回）
+    match sb.begin_tick(&w)? {
+        TickPlan::Run { .. } => {}
+        plan => panic!("第二次 begin_tick 应为 Run：{plan:?}"),
+    }
+    let v = sb.run_expr("RawMemory.get()")?;
+    assert_eq!(
+        v["value"], "{\"hostFace\": 9}",
+        "伪造面存在时私有注入照常生效"
+    );
+    let out = sb.end_tick()?;
+    assert_eq!(out["ok"], true, "私有句柄驱动的 endTick 正常");
+    Ok(())
+}
+
+/// B0-3 评审 G1 锁：宿主帧零引用依赖 prelude 各段 'use strict'——V8 对
+/// strict 帧的 CallSite.getFunction() 返回 undefined（玩家自己的 sloppy 帧
+/// 正常透出）。玩家经 Error.prepareStackTrace 能捕到宿主**帧名**（runLoop
+/// 等）但拿不到函数本体——若未来某 prelude 段丢掉 'use strict'，此防线会
+/// 静默重开 prepareStackTrace 窃取向量，在此显形。
+fn strict_frame_hides_host_functions() -> anyhow::Result<()> {
+    let mut sb = Sandbox::new(SandboxConfig::default())?;
+    let mut table = ModuleTable::new();
+    table.insert_js(
+        "main",
+        r#"
+module.exports.loop = function () {
+  Error.prepareStackTrace = function (e, frames) {
+    globalThis.__frames = frames.map(function (f) {
+      const fn = f.getFunction();
+      return (f.getFunctionName() || '?') + ':' + (fn === undefined ? 'hidden' : 'leaked');
+    });
+  };
+  new Error().stack;
+};"#,
+    );
+    sb.set_modules(table)?;
+    let w = json!({
+        "time": 1,
+        "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+        "user": "p1",
+        "rooms": { "W1N1": { "name": "W1N1" } },
+        "objects": []
+    });
+    match sb.begin_tick(&w)? {
+        TickPlan::Run { .. } => {}
+        plan => panic!("begin_tick 应为 Run：{plan:?}"),
+    }
+    match sb.run_loop()? {
+        TickOutcome::Completed { .. } => {}
+        _ => panic!("探针 loop 应正常完成"),
+    }
+    sb.end_tick()?;
+    let v = sb.run_expr("globalThis.__frames.join('|')")?;
+    let frames = v["value"].as_str().unwrap_or("").to_string();
+    assert!(
+        frames.contains("runLoop:hidden"),
+        "runLoop 宿主帧存在且函数本体被隐藏（实测帧表: {frames}）"
+    );
+    // 玩家自己的 sloppy 帧透出函数本体是预期（对照组）；宿主帧名（prelude
+    // strict IIFE 内）一个都不许 leaked
+    for host in [
+        "runLoop",
+        "writeBackMemory",
+        "endTick",
+        "runExpr",
+        "stringify",
+    ] {
+        assert!(
+            !frames.contains(&format!("{host}:leaked")),
+            "宿主帧 {host} 不得透出函数本体（实测帧表: {frames}）"
+        );
+    }
+    Ok(())
+}
+
+/// near-heap 触发后的恢复不变量（B0-1 登记、B0-3 补 Ok 路径清偿的锁定）：
+/// 无论触发落在哪条路径（硬中断善后 / end_tick Ok / tick-外 drain / 下一次
+/// begin_tick 前置 restore），堆上限必须回到配置值且沙箱继续可服务——
+/// 「触发但正常完成」不再永久保持放大后的 ceiling。
+fn nearheap_trigger_then_restore_invariant() -> anyhow::Result<()> {
+    let cfg = SandboxConfig {
+        heap_limit_bytes: 48 * 1024 * 1024,
+        ..SandboxConfig::default()
+    };
+    let mut sb = Sandbox::new(cfg.clone())?;
+    let w = json!({
+        "time": 1,
+        "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+        "user": "p1",
+        "rooms": { "W1N1": { "name": "W1N1" } },
+        "objects": []
+    });
+    match sb.begin_tick(&w)? {
+        TickPlan::Run { .. } => {}
+        plan => panic!("begin_tick 应为 Run：{plan:?}"),
+    }
+    // 大分配逼近堆上限：near-heap 回调触发（terminate + 上限放大 limit×2）
+    let v = sb.run_expr(
+        r#"(function(){ const a = []; for (let i = 0; i < 64; i++) a.push(new Array(1024*1024).fill('x')); return 'done'; })()"#,
+    )?;
+    // 触发与否取决于 GC 时机——两条出口（done/terminated）都必须恢复
+    let out = sb.end_tick()?;
+    assert!(
+        out.get("ok").and_then(serde_json::Value::as_bool) == Some(true)
+            || out.get("terminated").and_then(serde_json::Value::as_bool) == Some(true),
+        "end_tick 两条合法出口之一: {out:?}"
+    );
+    // 恢复不变量：不得停留在放大值 96MB（48×2，回调返回值）。实测常见
+    // 72MB（48×1.5——V8 heap 增长因子在 remove 恢复后的残留，随触发时
+    // current_limit 波动）；容差 80MB 区分「已恢复」与「永久放大」两态
+    assert!(
+        sb.heap_size_limit_bytes() <= 80 * 1024 * 1024,
+        "触发后堆上限不得停留在放大 ceiling（实测 {} 字节；expr 出口: {v:?}）",
+        sb.heap_size_limit_bytes()
+    );
+    // 沙箱继续可服务（复用不受放大残留影响）
+    let v = sb.run_expr("1 + 1")?;
+    assert_eq!(v["value"], 2, "触发后沙箱继续可服务");
     Ok(())
 }
