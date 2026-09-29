@@ -858,4 +858,12 @@
   gw.defineGameObjectProperties(globalThis.StructureExtractor.prototype, gw.rawData, {
     cooldown: (o) => o.cooldown || 0,
   });
+
+  // StructureRampart.isPublic（A5 片 3a 评审 P2 清偿——官方 structures.js:648
+  // `!!o.isPublic`）：withdraw 敌 rampart 门（creep.js）随本片 lookFor 真化
+  // 可观测，包装缺键时恒 undefined——isPublic:true 的公开敌方 rampart 官方
+  // 放行、我方误拒。缺省 false 两侧同形（Rust 结算侧已读原始 isPublic）
+  gw.defineGameObjectProperties(globalThis.StructureRampart.prototype, gw.rawData, {
+    isPublic: (o) => !!o.isPublic,
+  });
 })();

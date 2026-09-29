@@ -329,9 +329,9 @@
   };
 
   // 官方 :1602-1620：terrain 分支直接读静态地形返回单词数组；其余 look 类型
-  // 走 room.lookForAt（M1 桩，片 3 真化）——房间缺失在委托前抛错（:1613-1616）
+  // 走 room.lookForAt（A5 片 3a 真化）——房间缺失在委托前抛错（:1613-1616）
   RoomPosition.prototype.lookFor = function (type) {
-    if (type === LOOK_TERRAIN) {
+    if (type == LOOK_TERRAIN) {
       return [gw.terrainWordAt(this.roomName, this.x, this.y)];
     }
     // 内部取房走 gw.currentGame() 闭包通道（评审 P2 清偿，同 findInRange）
@@ -339,7 +339,7 @@
     if (!room) {
       throw new __Error('Could not access room ' + this.roomName);
     }
-    countStub('RoomPosition.lookFor'); return [];
+    return room.lookForAt(type, this);
   };
 
   // 桩（真化移出 A5，归 A6/2B-9）：官方 :1622-1628
@@ -355,4 +355,7 @@
   // 内部装配面走捕获引用（与拆分前单闭包绑定等价）：玩家覆写 globalThis.RoomPosition
   // 不影响 wrapObject/makeRoom/PathFinder 桩内部的构造
   gw.RoomPosition = RoomPosition;
+  // 共享解析器（A5 片 3a）：Room.lookAt/lookForAt 官方同用 utils.fetchXYArguments
+  //（rooms.js:769/:799）——gw 注册供 room.js 消费（官方 globals 闭包同构）
+  gw.fetchXYArguments = fetchXYArguments;
 })();

@@ -10,7 +10,7 @@
 (() => {
   'use strict';
 
-  const { countStub, probe } = globalThis.__kkp;
+  const { countStub, probe, lodash: _ } = globalThis.__kkp;
   const gw = globalThis.__kkp.gw;
 
   // 预置捕获（A3c 装配批，同 game.js 原则）：makeRoom 每 tick 装配，Object
@@ -22,6 +22,16 @@
   const __mapGet = Map.prototype.get;
   const __jsonStringify = JSON.stringify;
   const __jsonParse = JSON.parse;
+  // 装配路径 push（A5 片 3a 评审 P1 清偿）：look 索引构建在 beginTick 宿主
+  // 装配路径执行，玩家可换的 Array.prototype.push 一旦被下毒即断管装配——
+  // 加载期捕获（__mapSet/__arrayIncludes 同批先例）
+  const __arrayPush = Array.prototype.push;
+  // 常量加载期捕获（片 3a 评审 P2 清偿，官方闭包 C 免疫玩家覆写）：
+  // ERR_INVALID_ARGS（lookForAt 未知类型返码）、TERRAIN_MASK_*（terrainWordAt
+  // 自本片起为全部 look 面 terrain 判定的承重路径）
+  const ERR_INVALID_ARGS = globalThis.ERR_INVALID_ARGS;
+  const TERRAIN_MASK_WALL = globalThis.TERRAIN_MASK_WALL;
+  const TERRAIN_MASK_SWAMP = globalThis.TERRAIN_MASK_SWAMP;
 
   // ---------------------------------------------------------------- Terrain
   // 官方 rooms.js:1223-1241 Room.Terrain 逐字移植：闭包式对象（非 class），
@@ -92,10 +102,56 @@
     // 无 controller 房间的官方投影是 undefined（非 null）
     let controller;
     const worldObjs = gw.world.objects || [];
+    // look 索引（A5 片 3a，官方 game.js:38-47 addObjectToRegister +
+    // rooms.js:485-513 lookTypeRegisters/lookTypeSpatialRegisters 映射）：
+    // type → (id→对象)/(稀疏数组)，索引官方转置公式 x*50+y（读写两侧同式，
+    // 官方原样）；energy/resource 双键同指（rooms.js:487-488/:501-502——
+    // lookAt 固定序里同格资源产出两条 {type:'energy'} 与 {type:'resource'}）。
+    // 与 controller 扫描合并单趟（评审 P3-2：每房每 tick 一趟全量扫描）
+    const lookReg = {
+      creep: {}, source: {}, mineral: {}, deposit: {}, structure: {}, flag: {},
+      constructionSite: {}, tombstone: {}, ruin: {}, nuke: {}, powerCreep: {},
+    };
+    lookReg.energy = {};
+    lookReg.resource = lookReg.energy;
+    const lookSpatial = {
+      creep: [], source: [], mineral: [], deposit: [], structure: [], flag: [],
+      constructionSite: [], tombstone: [], ruin: [], nuke: [], powerCreep: [],
+    };
+    lookSpatial.energy = [];
+    lookSpatial.resource = lookSpatial.energy;
     for (let i = 0; i < worldObjs.length; i++) {
       const o = worldObjs[i];
-      if (o.room === name && o.type === 'structure' && o.structureType === 'controller') {
+      if (o.room !== name) continue;
+      if (o.type === 'structure' && o.structureType === 'controller') {
         controller = __mapGet.call(gw.objectsById, o.id);
+      }
+      // look 类型归类（官方装配分支同构：source/mineral 独立臂、spawn/controller
+      // 属 structure、dropped resource 落 energy 臂）
+      let t = null;
+      if (o.type === 'creep') t = 'creep';
+      else if (o.type === 'resource') t = 'energy';
+      else if (o.type === 'structure') {
+        if (o.structureType === 'source') t = 'source';
+        else if (o.structureType === 'mineral') t = 'mineral';
+        else t = 'structure';
+      } else if (o.type === 'spawn') t = 'structure';
+      else if (o.type === 'flag') t = 'flag';
+      else if (o.type === 'constructionSite') t = 'constructionSite';
+      else if (o.type === 'tombstone') t = 'tombstone';
+      else if (o.type === 'ruin') t = 'ruin';
+      else if (o.type === 'nuke') t = 'nuke';
+      else if (o.type === 'powerCreep') t = 'powerCreep';
+      else if (o.type === 'deposit') t = 'deposit';
+      if (t === null) continue;
+      const w = __mapGet.call(gw.objectsById, o.id);
+      if (!w) continue;
+      lookReg[t][o.id] = w;
+      const index = o.x * 50 + o.y;
+      if (lookSpatial[t][index] === undefined) {
+        lookSpatial[t][index] = [w];
+      } else {
+        __arrayPush.call(lookSpatial[t][index], w);
       }
     }
     const room = {
@@ -163,23 +219,172 @@
       if (opts && opts.filter) return _.filter(out, opts.filter);
       return out;
     };
-    // 地形 look 面（官方 rooms.js:659-679/798-830）：lookAt 恒含 terrain 项
-    // （对象形态）；lookForAt(LOOK_TERRAIN) 是单词数组（官方 :681 `return [result]`）；
-    // 其余 look 类型 M1 桩
-    function unpackXY(firstArg, secondArg) {
-      if (firstArg && typeof firstArg === 'object') return [firstArg.x, firstArg.y];
-      return [firstArg, secondArg];
-    }
-    room.lookAt = function (x, y) {
-      [x, y] = unpackXY(x, y);
-      return [{ type: 'terrain', terrain: terrainWordAt(name, x, y) }];
-    };
-    room.lookForAt = function (type, x, y) {
-      if (type === LOOK_TERRAIN) {
-        [x, y] = unpackXY(x, y);
-        return [terrainWordAt(name, x, y)];
+    // 官方 rooms.js:659-707 _lookSpatialRegister 逐字：terrain 分支读静态地形
+    //（越界索引落 flat 数组外 → undefined 掩码得 'plain'，官方怪癖保留；无地形
+    // 房间自然 TypeError 同构）；非 terrain 越界抛官方文案；outArray 形态产出
+    // {type,[type]:obj}（lookAtArea asArray 加 x/y），否则 [单词]/_.clone(数组)/[]
+    function _lookSpatialRegister(typeName, x, y, outArray, withCoords) {
+      let item;
+      if (typeName == 'terrain') {
+        const word = terrainWordAt(name, x, y);
+        if (outArray) {
+          item = { type: 'terrain', terrain: word };
+          if (withCoords) {
+            item.x = x;
+            item.y = y;
+          }
+          outArray.push(item);
+          return;
+        }
+        return [word];
       }
-      countStub('room.lookForAt'); return [];
+      if (x < 0 || y < 0 || x > 49 || y > 49) {
+        throw new Error('look coords are out of bounds');
+      }
+      const typeResult = lookSpatial[typeName][x * 50 + y];
+      if (typeResult) {
+        if (outArray) {
+          typeResult.forEach((i) => {
+            item = { type: typeName };
+            item[typeName] = i;
+            if (withCoords) {
+              item.x = x;
+              item.y = y;
+            }
+            outArray.push(item);
+          });
+          return;
+        }
+        return _.clone(typeResult);
+      }
+      return [];
+    }
+
+    // 官方 rooms.js:709-764 _lookAreaMixedRegister 逐字：寄存器键数 < 面积 →
+    // 按对象（checkInside 官方运算优先级原样）；否则逐格 spatial（asArray 带
+    // withCoords）。未知 type 在键数比较处 keys.length 自然 TypeError——官方
+    // lookForAtArea 无 ERR_INVALID_ARGS 门（与 lookForAt 不对称，原样保留）
+    function _lookAreaMixedRegister(type, top, left, bottom, right, withType, asArray, result) {
+      const typeRegister = lookReg[type];
+      const keys = typeRegister && Object.keys(typeRegister);
+      if (type != 'terrain' && keys.length < (bottom - top + 1) * (right - left + 1)) {
+        const checkInside = (i) => {
+          return (!i.pos && i.roomName == name || i.pos && i.pos.roomName == name)
+            && i.pos && i.pos.y >= top && i.pos.y <= bottom && i.pos.x >= left && i.pos.x <= right
+            || !i.pos && i.y >= top && i.y <= bottom && i.x >= left && i.x <= right;
+        };
+        let item;
+        keys.forEach((key) => {
+          const obj = typeRegister[key];
+          if (checkInside(obj)) {
+            if (withType) {
+              item = { type: type };
+              item[type] = obj;
+              if (asArray) {
+                result.push({ x: obj.x || obj.pos.x, y: obj.y || obj.pos.y, type: type, [type]: obj });
+              } else {
+                result[obj.y || obj.pos.y][obj.x || obj.pos.x].push(item);
+              }
+            } else {
+              if (asArray) {
+                result.push({ x: obj.x || obj.pos.x, y: obj.y || obj.pos.y, [type]: obj });
+              } else {
+                result[obj.y || obj.pos.y][obj.x || obj.pos.x] = result[obj.y || obj.pos.y][obj.x || obj.pos.x] || [];
+                result[obj.y || obj.pos.y][obj.x || obj.pos.x].push(obj);
+              }
+            }
+          }
+        });
+      } else {
+        for (let y = top; y <= bottom; y++) {
+          for (let x = left; x <= right; x++) {
+            if (asArray) {
+              _lookSpatialRegister(type, x, y, result, true);
+            } else {
+              if (result[y][x]) {
+                _lookSpatialRegister(type, x, y, result[y][x]);
+              } else {
+                result[y][x] = _lookSpatialRegister(type, x, y, undefined);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 官方 rooms.js:768-796 lookAt 逐字：官方固定序 14 类型（creep→energy→
+    // resource→source→mineral→deposit→structure→flag→constructionSite→
+    // terrain 第 10 位→nuke→tombstone→ruin→powerCreep）；官方 customObjectPrototypes
+    // 扩展钩我方引擎无自定义原型面，不接入
+    room.lookAt = function (firstArg, secondArg) {
+      const xy = gw.fetchXYArguments(firstArg, secondArg);
+      const x = xy[0], y = xy[1];
+      const result = [];
+      _lookSpatialRegister('creep', x, y, result);
+      _lookSpatialRegister('energy', x, y, result);
+      _lookSpatialRegister('resource', x, y, result);
+      _lookSpatialRegister('source', x, y, result);
+      _lookSpatialRegister('mineral', x, y, result);
+      _lookSpatialRegister('deposit', x, y, result);
+      _lookSpatialRegister('structure', x, y, result);
+      _lookSpatialRegister('flag', x, y, result);
+      _lookSpatialRegister('constructionSite', x, y, result);
+      _lookSpatialRegister('terrain', x, y, result);
+      _lookSpatialRegister('nuke', x, y, result);
+      _lookSpatialRegister('tombstone', x, y, result);
+      _lookSpatialRegister('ruin', x, y, result);
+      _lookSpatialRegister('powerCreep', x, y, result);
+      return result;
+    };
+    // 官方 rooms.js:798-806 lookForAt 逐字：未知类型（非 terrain 且不在
+    // spatial 寄存器键集）返 ERR_INVALID_ARGS；terrain 走 [单词]
+    room.lookForAt = function (type, firstArg, secondArg) {
+      const xy = gw.fetchXYArguments(firstArg, secondArg);
+      const x = xy[0], y = xy[1];
+      if (type != 'terrain' && !(type in lookSpatial)) {
+        return ERR_INVALID_ARGS;
+      }
+      return _lookSpatialRegister(type, x, y);
+    };
+    // 官方 rooms.js:808-845 lookAtArea 逐字：非 asArray 预填稠密格阵 []，
+    // asArray 得 [{x,y,type,[type]:obj}]（terrain 项带坐标）
+    room.lookAtArea = function (top, left, bottom, right, asArray) {
+      const result = asArray ? [] : {};
+      if (!asArray) {
+        for (let y = top; y <= bottom; y++) {
+          result[y] = {};
+          for (let x = left; x <= right; x++) {
+            result[y][x] = [];
+          }
+        }
+      }
+      _lookAreaMixedRegister('creep', top, left, bottom, right, true, asArray, result);
+      _lookAreaMixedRegister('energy', top, left, bottom, right, true, asArray, result);
+      _lookAreaMixedRegister('resource', top, left, bottom, right, true, asArray, result);
+      _lookAreaMixedRegister('source', top, left, bottom, right, true, asArray, result);
+      _lookAreaMixedRegister('mineral', top, left, bottom, right, true, asArray, result);
+      _lookAreaMixedRegister('deposit', top, left, bottom, right, true, asArray, result);
+      _lookAreaMixedRegister('structure', top, left, bottom, right, true, asArray, result);
+      _lookAreaMixedRegister('flag', top, left, bottom, right, true, asArray, result);
+      _lookAreaMixedRegister('constructionSite', top, left, bottom, right, true, asArray, result);
+      _lookAreaMixedRegister('terrain', top, left, bottom, right, true, asArray, result);
+      _lookAreaMixedRegister('nuke', top, left, bottom, right, true, asArray, result);
+      _lookAreaMixedRegister('tombstone', top, left, bottom, right, true, asArray, result);
+      _lookAreaMixedRegister('ruin', top, left, bottom, right, true, asArray, result);
+      _lookAreaMixedRegister('powerCreep', top, left, bottom, right, true, asArray, result);
+      return result;
+    };
+    // 官方 rooms.js:847-860 lookForAtArea 逐字：非 asArray 只预填行对象（格
+    // 惰性建——sparse map 原始对象无 type 包裹），asArray 得 [{x,y,[type]:obj}]
+    room.lookForAtArea = function (type, top, left, bottom, right, asArray) {
+      const result = asArray ? [] : {};
+      if (!asArray) {
+        for (let y = top; y <= bottom; y++) {
+          result[y] = {};
+        }
+      }
+      _lookAreaMixedRegister(type, top, left, bottom, right, false, asArray, result);
+      return result;
     };
     room.getTerrain = function () { return new Terrain(name); };
     room.createConstructionSite = function () { countStub('room.createConstructionSite'); return 0; };

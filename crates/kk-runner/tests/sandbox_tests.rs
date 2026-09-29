@@ -71,6 +71,7 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     memory_alias_setters()?;
     roomposition_official_semantics()?;
     roomposition_packedpos_forms()?;
+    roomlook_family_forms()?;
     terrain_look_and_console_semantics()?;
     writeback_watchdog_and_contract()?;
     stub_value_shapes()?;
@@ -554,11 +555,11 @@ fn roomposition_packedpos_forms() -> anyhow::Result<()> {
         "toJSON 三键形态"
     );
 
-    // look() 委托（:1594-1600）：可见房走 room.lookAt(this)；不可见房抛官方文案
+    // look() 委托（:1594-1600）：可见房走 room.lookAt(this)（片 3a 起真化，本格仅 terrain）；不可见房抛官方文案
     let v = sb.run_expr(r#"JSON.stringify(new RoomPosition(10,0,'W1N1').look())"#)?;
     assert_eq!(
         v["value"], r#"[{"type":"terrain","terrain":"swamp"}]"#,
-        "look 委托 lookAt 桩形态"
+        "look 委托 lookAt（该格仅 terrain）"
     );
     let v = sb.run_expr(r#"(() => { try { new RoomPosition(5,5,'W2N1').look(); return 'no'; } catch (e) { return e.message; } })()"#)?;
     assert_eq!(
@@ -600,6 +601,173 @@ fn roomposition_packedpos_forms() -> anyhow::Result<()> {
     })()"#,
     )?;
     assert_eq!(v["value"], r#"[null,true]"#, "getPositionAt 越界 null");
+
+    Ok(())
+}
+
+/// A5-core 片 3a：Room look 家族真化（lookAt 固定序 14 类型 / lookForAt 双形态与
+/// ERR_INVALID_ARGS / lookAtArea·lookForAtArea asArray 两形态 / energy·resource
+/// 双键同指 / 越界官方怪癖——rooms.js:659-860 逐字）。
+fn roomlook_family_forms() -> anyhow::Result<()> {
+    let mut sb = Sandbox::new(SandboxConfig::default())?;
+    let mut table = ModuleTable::new();
+    table.insert_js("main", "module.exports.loop = function () {};");
+    sb.set_modules(table)?;
+    let mut terrain = vec![0u32; 2500];
+    terrain[0] = 1; // (0,0) wall
+    let w = serde_json::json!({
+        "time": 1,
+        "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+        "user": "p1",
+        "rooms": { "W1N1": { "name": "W1N1", "terrain": terrain } },
+        "objects": [
+            { "id": "c1", "type": "creep", "room": "W1N1", "x": 25, "y": 25, "name": "looker",
+              "owner": "p1", "body": ["move"], "store": { "energy": 0 } },
+            { "id": "c2", "type": "creep", "room": "W1N1", "x": 24, "y": 24, "name": "neighbor",
+              "owner": "p1", "body": ["move"], "store": { "energy": 0 } },
+            { "id": "r1", "type": "resource", "room": "W1N1", "x": 25, "y": 25,
+              "resourceType": "energy", "amount": 100 },
+            { "id": "rd1", "type": "structure", "structureType": "road", "room": "W1N1",
+              "x": 25, "y": 25 },
+        ]
+    });
+    tick(&mut sb, &w)?;
+
+    // lookAt 固定序：creep→energy→resource→structure→terrain（本格对象集）
+    let v = sb.run_expr("JSON.stringify(Game.rooms['W1N1'].lookAt(25, 25).map(i => i.type))")?;
+    assert_eq!(
+        v["value"], r#"["creep","energy","resource","structure","terrain"]"#,
+        "lookAt 官方固定序"
+    );
+    // 包裹形态恰 {type,[type]:obj}（无 x/y——那是 lookAtArea asArray 专属）
+    let v = sb.run_expr(
+        r#"JSON.stringify(Game.rooms['W1N1'].lookAt(25, 25).map(i => Object.keys(i).sort()))"#,
+    )?;
+    assert_eq!(
+        v["value"],
+        r#"[["creep","type"],["energy","type"],["resource","type"],["structure","type"],["terrain","type"]]"#,
+        "lookAt 包裹键形态"
+    );
+
+    // 双键同指：energy/resource 同一 Resource 实例（rooms.js:487-488）
+    let v = sb.run_expr(
+        r#"(() => {
+            const room = Game.rooms['W1N1'];
+            const e = room.lookForAt(LOOK_ENERGY, 25, 25);
+            const r = room.lookForAt(LOOK_RESOURCES, 25, 25);
+            return JSON.stringify([e.length, r.length, e[0].id === r[0].id, e[0].resourceType]);
+        })()"#,
+    )?;
+    assert_eq!(
+        v["value"], r#"[1,1,true,"energy"]"#,
+        "energy/resource 双键同指"
+    );
+
+    // lookForAt：未知类型 ERR_INVALID_ARGS；空寄存器 []；terrain 单词数组
+    let v = sb.run_expr("Game.rooms['W1N1'].lookForAt('CREEPS', 25, 25)")?;
+    assert_eq!(v["value"], -10, "未知 look 类型 ERR_INVALID_ARGS");
+    let v = sb.run_expr("Game.rooms['W1N1'].lookForAt(LOOK_NUKES, 25, 25).length")?;
+    assert_eq!(v["value"], 0, "空寄存器返 []");
+    let v = sb.run_expr("JSON.stringify(Game.rooms['W1N1'].lookForAt(LOOK_TERRAIN, 0, 0))")?;
+    assert_eq!(v["value"], r#"["wall"]"#, "terrain 单词数组");
+
+    // 越界：非 terrain 抛官方文案（lookAt 首臂即 creep——同样抛）；terrain 分支
+    // 读 flat 数组越界索引得 undefined → 'plain'（官方怪癖保留）
+    let v = sb.run_expr(
+        r#"(() => { try { Game.rooms['W1N1'].lookForAt('creep', 60, 60); return 'no'; } catch (e) { return e.message; } })()"#,
+    )?;
+    assert_eq!(
+        v["value"], "look coords are out of bounds",
+        "非 terrain 越界抛错"
+    );
+    let v = sb.run_expr(
+        r#"(() => { try { Game.rooms['W1N1'].lookAt(60, 60); return 'no'; } catch (e) { return e.message; } })()"#,
+    )?;
+    assert_eq!(
+        v["value"], "look coords are out of bounds",
+        "lookAt 越界同抛"
+    );
+    let v = sb.run_expr("JSON.stringify(Game.rooms['W1N1'].lookForAt(LOOK_TERRAIN, 60, 60))")?;
+    assert_eq!(
+        v["value"], r#"["plain"]"#,
+        "terrain 越界落 flat 数组外 → plain（官方怪癖）"
+    );
+
+    // lookAtArea asArray=false：稠密格阵，每格含 terrain 项；坐标系 [y][x]
+    let v = sb.run_expr(
+        r#"(() => {
+            const area = Game.rooms['W1N1'].lookAtArea(23, 23, 26, 26, false);
+            return JSON.stringify({
+                dense: [23,24,25,26].every(y => [23,24,25,26].every(x => Array.isArray(area[y] && area[y][x]))),
+                cell2323: area[23][23].map(i => i.type),
+                cell2424: area[24][24].map(i => i.type).sort(),
+                cell2525: area[25][25].map(i => i.type).sort(),
+            });
+        })()"#,
+    )?;
+    assert_eq!(
+        v["value"],
+        r#"{"dense":true,"cell2323":["terrain"],"cell2424":["creep","terrain"],"cell2525":["creep","energy","resource","structure","terrain"]}"#,
+        "lookAtArea 稠密形态（含逐格 terrain）"
+    );
+    // lookAtArea asArray=true：条目带 x/y
+    let v = sb.run_expr(
+        r#"(() => {
+            const arr = Game.rooms['W1N1'].lookAtArea(23, 23, 26, 26, true);
+            const creepEntry = arr.find(i => i.type === 'creep');
+            return JSON.stringify([creepEntry.x, creepEntry.y, Object.keys(creepEntry).sort()]);
+        })()"#,
+    )?;
+    assert_eq!(
+        v["value"], r#"[25,25,["creep","type","x","y"]]"#,
+        "lookAtArea asArray 条目带坐标"
+    );
+
+    // lookForAtArea asArray=false：行对象惰性格（稀疏）、裸对象无 type 包裹
+    let v = sb.run_expr(
+        r#"(() => {
+            const area = Game.rooms['W1N1'].lookForAtArea(LOOK_CREEPS, 23, 23, 26, 26, false);
+            return JSON.stringify({
+                row23type: typeof area[23],
+                cell2323: typeof area[23][24],
+                cell2424: Array.isArray(area[24] && area[24][24]) && area[24][24].length,
+                rawName: area[24] && area[24][24] && area[24][24][0] && area[24][24][0].name,
+                wrapped: area[24] && area[24][24] && area[24][24][0] && ('type' in area[24][24][0]),
+            });
+        })()"#,
+    )?;
+    assert_eq!(
+        v["value"],
+        r#"{"row23type":"object","cell2323":"undefined","cell2424":1,"rawName":"neighbor","wrapped":false}"#,
+        "lookForAtArea 稀疏裸对象形态"
+    );
+    // lookForAtArea asArray=true：{x,y,[type]} 无 type 键
+    let v = sb.run_expr(
+        r#"(() => {
+            const arr = Game.rooms['W1N1'].lookForAtArea(LOOK_CREEPS, 23, 23, 26, 26, true);
+            return JSON.stringify(arr.map(i => [i.x, i.y, Object.keys(i).sort()]));
+        })()"#,
+    )?;
+    assert_eq!(
+        v["value"], r#"[[25,25,["creep","x","y"]],[24,24,["creep","x","y"]]]"#,
+        "lookForAtArea asArray 条目形态"
+    );
+    // lookForAtArea 未知类型：官方无 ERR 门，keys.length 自然 TypeError
+    let v = sb.run_expr("Game.rooms['W1N1'].lookForAtArea('bogus', 23, 23, 26, 26, true)")?;
+    assert_eq!(v["ok"], false, "未知类型 TypeError（官方同形）: {v:?}");
+
+    // RoomPosition.lookFor 委托：非 terrain 走 room.lookForAt（片 3a 真化）
+    let v = sb.run_expr(
+        r#"(() => {
+            const a = new RoomPosition(25, 25, 'W1N1').lookFor(LOOK_CREEPS);
+            const b = new RoomPosition(24, 24, 'W1N1').lookFor('creep');
+            return JSON.stringify([a.length, a[0].name, b[0].name]);
+        })()"#,
+    )?;
+    assert_eq!(
+        v["value"], r#"[1,"looker","neighbor"]"#,
+        "RoomPosition.lookFor 委托真化"
+    );
 
     Ok(())
 }

@@ -771,8 +771,8 @@
   };
 
   /** Creep.withdraw：官方 creeps.js:493-565——Structure/Tombstone/Ruin + store
-   *  面 → terminal 封锁（M1 无 effects 面）→ 敌 rampart（lookFor 桩恒放行，
-   *  调用形态保留）→ safeMode → nuker/powerBank → 容量/保有 → 邻接 → actor
+   *  面 → terminal 封锁（M1 无 effects 面）→ 敌 rampart（A5 片 3a 起 lookFor
+   *  真化、门实际生效）→ safeMode → nuker/powerBank → 容量/保有 → 邻接 → actor
    *  空容量 → 缺省/钳制，逐条对照。 */
   globalThis.Creep.prototype.withdraw = function withdraw(target, resourceType, amount) {
     if (!this.my) return C.ERR_NOT_OWNER; // :494-496
@@ -801,8 +801,8 @@
       const effect = (rawTarget.effects || []).find((e) => e && e.power === C.PWR_DISRUPT_TERMINAL);
       if (effect && effect.ticksRemaining > 0) return C.ERR_INVALID_TARGET;
     }
-    // :525-527：他人 rampart 护格（lookFor 现桩恒 []——调用形态保留，真面随
-    // room.lookFor 批；执行器侧同缺，双侧一致的现状缺口，登记报告）
+    // :525-527：他人 rampart 护格（A5 片 3a 起 lookFor 真化——门实际生效；
+    // isPublic getter 同批补齐（structures.js），执行器侧 Rust 已读原始值）
     if (target.my === false
       && target.pos.lookFor('structure').some(
         (i) => i.structureType === C.STRUCTURE_RAMPART && !i.my && !i.isPublic)) {
