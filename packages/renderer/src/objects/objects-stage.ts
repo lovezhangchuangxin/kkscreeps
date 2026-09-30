@@ -303,8 +303,13 @@ export class ObjectsStage {
         if (view && HIT_COVER_TYPES.has(view.typeKey)) this.triggerCover(view, hit.attacked && hit.healed
           ? CREEP_SPEC.cover.colors.both : hit.attacked ? CREEP_SPEC.cover.colors.attack : CREEP_SPEC.cover.colors.heal);
       }
-      this.effects.play(resolution.commands.filter(c => c.action !== 'say' || !c.private
-        || this.player !== null && ownerOf(wanted.get(c.sourceId)!) === this.player));
+      this.effects.play(resolution.commands.filter(c => {
+        if (c.action !== 'say' || !c.private) return true;
+        // No local identity: private speech is invisible (official isPublic||isOwner).
+        if (this.player === null) return false;
+        const state = wanted.get(c.sourceId) ?? this.previous.get(c.sourceId);
+        return state !== undefined && ownerOf(state) === this.player;
+      }));
       for (const previous of this.previous.values()) {
         if (previous.type !== 'nuke' || typeof previous.landTime !== 'number' || previous.landTime <= this.previousTime || previous.landTime > time) continue;
         const target = point(previous); if (target) this.effects.nukeBlast(target);
@@ -483,7 +488,7 @@ export class ObjectsStage {
           angle,
           this.tickDurationMS * 0.2,
         );
-        this.tweens.run(view.rotateTween);
+        this.tweens.run(view.rotateTween, () => { view.rotateTween = undefined; });
       }
     }
   }

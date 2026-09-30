@@ -223,7 +223,7 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
           zoom: camera.zoom,
           atlasFrames: atlas?.frames.size ?? 0,
           lighting: room.lighting.isDegraded ? 'degraded' : 'real',
-          effects: room.objects?.effects.stats ?? { active: 0, nodes: 0, privateTexts: 0, skipped: 0 },
+          effects: room.objects?.effects.stats ?? { active: 0, nodes: 0, texts: 0, skipped: 0 },
           ambient: room.objects?.ambient.stats ?? { active: 0, awake: 0, sleeping: 0 },
           lightingPass: room.lighting.stats,
         };

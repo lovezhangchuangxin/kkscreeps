@@ -149,7 +149,8 @@ export class AmbientScheduler {
         const p = Math.min(1, age / this.tick); c.sample(p < 0.2 ? p / 0.2 : (1 - p) / 0.8);
       }, once);
     }
-    if (type === 'constructionSite' || type === 's:invaderCore') add('progress', (c, age) => c.sample(blink(age, 0.8, 0.3, 1000, 1000) / 0.8));
+    // Official blinking lives only in constructionSite.metadata; the invaderCore TTL ring is static.
+    if (type === 'constructionSite') add('progress', (c, age) => c.sample(blink(age, 0.8, 0.3, 1000, 1000) / 0.8));
     if (type === 's:constructedWall' && number(state.hits) === 1 && number(state.hitsMax) > 1) add('flash', (c, age) => c.sample(blink(age, 0, 1, 300, 1500)));
     if (type === 's:powerSpawn') add('glowPulse', (c, age) => {
       const p = Math.min(1, age / this.tick), v = p < 0.2 ? p / 0.2 : (1 - p) / 0.8;

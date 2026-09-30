@@ -41,6 +41,11 @@ describe('action input semantics', () => {
     expect(r.commands[0]).toMatchObject({ target: { x: 15, y: 16 } });
     expect(r.commands[1]).toMatchObject({ target: { x: 12, y: 11 } });
   });
+  it('actionLog sources resolve through the previous index like events do', () => {
+    const r = resolveActions({ current: new Map([[source.id, source]]), previous: new Map([[target.id, target]]),
+      actionLogs: [{ id: 'b', actionLog: { rangedAttack: { targetId: 'a' } } }] });
+    expect(r.commands[0]).toMatchObject({ action: 'rangedAttack', sourceId: 'b', target: { x: 10, y: 10 } });
+  });
   it('missing coordinates skip diagnostics, never invent a zero endpoint', () => {
     expect(run([{ event: 5, objectId: 'a', data: { targetId: 'ghost' } }])).toMatchObject({ commands: [], skipped: 1 });
     const r = resolveActions({ current: new Map([[source.id, source]]), previous: new Map(), actionLogs: [42, { id: 'a', actionLog: { repair: { x: NaN, y: 0 } } }] });

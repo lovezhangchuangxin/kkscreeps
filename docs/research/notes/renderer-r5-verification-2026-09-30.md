@@ -2,7 +2,7 @@
 
 2026-09-30；工作目录 `.worktrees/renderer`，实现基线 `0c09f85`，方案提交 `4ca02d5`。
 官方对照固定为本机 screeps/renderer `a2db4a7`；依赖 PixiJS 8.21.0。
-本次为单代理源码复核、实现和人工验证，未执行上位方案中的三路 subagent 评审。
+本次为单代理源码复核、实现和人工验证；上位方案要求的三路 subagent 收口评审已由主会话于同日补齐并清偿，见文末「三路评审与清偿」。
 
 ## 实现边界
 
@@ -32,7 +32,7 @@ say 私有灰气泡仅本玩家可见，公开红气泡可见；同对象新消�
 | tower/link/lab/power、say、nuke、claim/controller 额外动作 | effects/lifecycle 合成 | actionLog 为 renderer 适配，不能解释引擎 u16 位图 |
 
 引擎既有结算和投影未改动；只扩展 `kk-cli/export_fixtures.rs` 的只读夹具场景。
-PWR 16–18 图标名称在官方 processor 中存在，但本次官方 vendor 未提供对应图片；19 也无图标映射。束仍播放，缺图标计 skipped，不造替代资产。
+PWR 16–18 图标名称在官方 processor 中存在；对应 SVG（`operate-power`/`fortify`/`operate-controller`）已自 R0 起从官方 `metadata/images/` 拷贝入库并进 atlas，实测正常渲染、不计 skipped。仅 PWR 19+ 无常量与图标映射：束仍播放，缺图标计 skipped，不造替代资产。（三路评审勘误：原稿「官方 vendor 未提供对应图片」与实测矛盾——三件 SVG 自 R0 在库，探针实测 16–18 渲染且 skipped=0。）
 
 ## 验证中修复的缺陷
 
@@ -91,5 +91,20 @@ R7 的 300 对象/50 creep/100 visual、snapshot <2ms、首帧 <1s、10k tick �
 - 属性竞争处理：tower 发射完成后恢复空闲旋转；对同一附属动作通道覆盖旧实例，沿用 R4 的重触发取消语义。
 - G2/R7：地形销毁的 BindGroup warning 已用临时创建堆栈跟踪。样本均来自 Pixi `generateTextureBatchBindGroup → GpuBatchAdaptor.execute → BatcherPipe` 缓存。
   Pixi onResourceChange 在资源销毁时清空对应绑定并 warning，尚未观察自有播放器悬挂引用；不屏蔽日志、不修改依赖私有缓存。正式缓存/内存销账留 R7。
+
+- 评审补充登记（2026-09-30）：invaderCore TTL 环为静态（官方 `invaderCore.metadata.js` siteProgress 无 actions，仅 `constructionSite.metadata.js` 有 blinking——评审后已修正实现）；`_all.metadata` hasEffect 的 flare3 红色循环顶罩（官方对带活跃 power 效果的目标挂载，含 2π/1s 自转）未实现，留待后续切片；spawn 孵化脉冲按 spawning 状态启停（官方 once+shouldRun 首启后不停，属官方 quirk 的有意偏离）；填充量补间白名单宽于官方（官方仅 link 能量与 spawn/powerSpawn resourceCircle 走补间，我方含 creep 资源圆/tower 能量条/source 能量矩形，观感更平滑）；say 气泡无像素对齐（官方逐 tick alignPositionToPixels，亚像素抖动属观感级）；目标侧工作罩 owner=来源对象（来源中途删除即取消罩，§5.3「取消其绑定动画」的解读，R6 契约文档化）。
+
+## 三路评审与清偿（2026-09-30，主会话补门禁）
+
+上位方案 §7 要求的收口评审由主会话三路 subagent 补齐（官方规格保真 / 契约与生命周期 / 测试夹具与验证报告实测复核）。本记录经三路逐条复核：自动检查全部复跑通过（renderer 256 测、shared 4、kk-cli 7、clippy/fmt、Vite 构建、文档链接、27 个生成文件重生哈希逐字节一致、篡改 SVG 负向测试新鲜度即红）；artifact 目录 46 件与 HUD 采样点逐一核对相符，压力数字与文本证据逐字一致（毫秒值无头不可复跑，标注为机制属实）。
+
+**阻塞 2 项已清偿**：
+
+1. tower 治疗事件（EVENT_HEAL+healType=2 归一为 rangedHeal）只画束，缺瞄准旋转/flare1/光照脉冲——effects-stage tower() 触发条件补 `'rangedHeal'`（官方 tower.metadata shotAnim=attack‖heal‖repair），新增测试锁定。
+2. 本记录「输入能力」PWR 16–18 表述与实测矛盾（已在原节勘误；`f2-renderer.md` G5 行同步订正）。代码实测行为优于原稿声明，无需改动。
+
+**建议处置**：已改 8 项——invaderCore TTL 环去闪烁（ambient 测试锁定）、actionLog 通道补 previous 索引回退（与事件通道对齐，测试锁定）、私有 say 隐私过滤改显式判空（前态来源不再依赖非空断言）、bite 缺失 actor 计 skipped（moving/同格仍为官方抑制不计）、诊断统计 `privateTexts`→`texts`（公开气泡也计入，R6 冻结诊断面前正名）、beginMove rotateTween 补 onEnd 清空、exporter 确定性测试对齐入库 30 tick 全长、harness HUD 增 canvas 分辨率行。登记不实现 5 项（见上节「评审补充登记」）。R4 语义回归核查：快照重建/id↔typeKey 漂移防御/fade 底 α 乘法/'visible' boolean/夹具 id 空间全部保留或合理演变（motion 门控收窄为 HIT_COVER_TYPES 六类=官方 creepActions 声明域，评审对照确认）。
+
+**复审与返工（主会话逐行复审清偿增量）**：发现清偿自身引入一处隐私回归——私有 say 过滤改写时把「无本玩家身份（player=null，`localPlayerId` 缺省即如此）」分支错为放行，任何 owner 的私语都会渲染（清偿前逻辑与官方 `isPublic||isOwner` 语义一致为全滤）。已修正（player=null 一律滤私有）并加测试锁定：player=null 场景断言私有全滤、公开照播；测试以 `CanvasTextMetrics.measureText` 桩适配无 canvas 环境。清偿+复审终态 renderer 260 测+kk-cli 7 测+fmt/clippy 绿。
 
 下一阶段 R6：RoomVisual、活动房间隔离、拾取/悬停、字体及资源契约、去掉公共诊断 Pixi 字段、库构建和 d.ts/API 冻结。

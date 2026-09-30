@@ -99,6 +99,16 @@ describe('property ownership and ambient phase', () => {
     scheduler.sync('c', 's:controller', { id: 'c', type: 'structure' }, 0, new Map([['status', status]]), () => ({ x: 0, y: 0 }));
     scheduler.update(500); expect(sample).not.toHaveBeenCalled(); expect(scheduler.stats.active).toBe(0); scheduler.reset();
   });
+  it('construction site rings blink while the invaderCore TTL ring stays static', () => {
+    const scheduler = new AmbientScheduler(1000), siteRing = part(), coreRing = part();
+    scheduler.sync('t', 'constructionSite', { id: 't', type: 'constructionSite', structureType: 'extension' }, 0,
+      new Map([['progress', siteRing]]), () => ({ x: 0, y: 0 }));
+    scheduler.sync('i', 's:invaderCore', { id: 'i', type: 'structure', structureType: 'invaderCore' }, 0,
+      new Map([['progress', coreRing]]), () => ({ x: 0, y: 0 }));
+    scheduler.update(300);
+    expect(siteRing.node.alpha).toBeCloseTo(0.8125); expect(coreRing.node.alpha).toBe(1);
+    expect(scheduler.stats.active).toBe(1); scheduler.reset();
+  });
   it('value interpolation clamps after one received tick, holds draining bars, and never interpolates tint', () => {
     let sample: PartValues = {};
     const tween = new ValueTween({ energyH: 40, hasEnergy: true, tint: 0xff0000 }, { energyH: 0, hasEnergy: false, tint: 0x00ff00 }, ['energyH'], 1000, v => { sample = v; });

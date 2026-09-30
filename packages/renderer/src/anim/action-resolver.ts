@@ -118,7 +118,7 @@ export function resolveActions(input: ActionInput): Resolution {
     const entry = record(raw);
     const log = record(entry?.actionLog);
     if (typeof entry?.id !== 'string' || !log) { skipped++; continue; }
-    const state = input.current.get(entry.id);
+    const state = input.current.get(entry.id) ?? input.previous.get(entry.id);
     const source = point(state);
     if (!state || !source) { skipped++; continue; }
     if (log.attacked === true || log.healed === true) hit(state.id, log.attacked === true, log.healed === true);

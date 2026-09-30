@@ -1044,10 +1044,16 @@ mod tests {
             };
             let (wa, ha) = build_world();
             let (wb, hb) = build_world();
-            let la = render_fixture(wa, ha, spec.script, 5);
-            let lb = render_fixture(wb, hb, spec.script, 5);
+            // 30 tick = build-fixtures.mjs 默认导出长度，确定性检查覆盖入库全长。
+            let la = render_fixture(wa, ha, spec.script, 30);
+            let lb = render_fixture(wb, hb, spec.script, 30);
             assert_eq!(la, lb, "夹具 {} 两次导出应逐字节一致", spec.name);
-            assert_eq!(la.len(), 6, "夹具 {} 应为 tick0+5 tick 共 6 条", spec.name);
+            assert_eq!(
+                la.len(),
+                31,
+                "夹具 {} 应为 tick0+30 tick 共 31 条",
+                spec.name
+            );
         }
     }
 

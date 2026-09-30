@@ -244,7 +244,7 @@ z 表/色表/字体常量直接测代码常量）。逐片勾项，收口时全�
 | G2 | lighting 全局压暗 | v8 WebGPU 滤镜面若有缺口 | 真离屏 pass 已实现（世界对齐 RT + MULTIPLY 输出），WebGPU/WebGL 双后端 harness 实测 `lighting: real`；降级路径在位未触发——R7 收口时销账或保留按 G2 定义复核 |
 | G3 | 徽标图源 | 官方远程拉 screeps.com，我方无此端点 | v0 纯色圆退化（官方失败退化路径同款），M3 自托管 |
 | G4 | say/浮动文字数据通道 | 引擎无 say 事件面（§8） | R5 say/says 已接通并验证隐私与寿命；合成取材，真实输入仍待引擎 |
-| G5 | 动效输入与扩展家族 | 动作位图、对象/结算处理器缺口 | R5 全家族合成可运行；真实 actions 已覆盖六类事件。远攻/群攻在此分支无结算处理器，lab/power/say/nuke 仍待真实输入；PWR 16–18 缺图，19 无官方图标映射 |
+| G5 | 动效输入与扩展家族 | 动作位图、对象/结算处理器缺口 | R5 全家族合成可运行；真实 actions 已覆盖六类事件。远攻/群攻在此分支无结算处理器，lab/power/say/nuke 仍待真实输入；PWR 16–18 图标可用（SVG 自 R0 vendor 自官方 metadata/images，评审实测渲染正常），19+ 无官方图标映射计 skipped |
 | G6 | tickDuration 缺省 | 官方闭源壳传入值不可知 | 契约参数化，harness 默认 1000ms |
 | G7 | 字体/构建期效果采样微差 | 栅格化/抗锯齿及预模糊近似 | R5 官方固定帧人工对照；束端部裁切、核弹四档 blur、固定种子 flicker/初始角已登记，未宣称逐像素一致 |
 | G8 | ~~swamp 白罩层序~~ | ~~官方 zIndex 序下 v8 mask 失效~~ | **R2 二轮销账**（跳格 bug 污染的观察，修复后官方层序 mask 正常） |
@@ -744,3 +744,5 @@ R5 实施细化与结果见 [R5 动效系统实施方案](f2-renderer-r5.md) 和
 - 2026-09-30：**R5 动效系统实现与验证完成（含灰区）**。输入贯通 events/actionLogs/says，事件及子类型常量统一到 shared 并对 Rust 数值校验；纯解析层维护目标前态/显式坐标/controller 唯一目标及双通道去重。独立 EffectsStage/AmbientScheduler 在单一动画时钟上实现动作全家族、常驻、observer/deposit、填充补间、say 和 nuke；Position/PropertyChannels 避免位移和 alpha 抢写，房间级效果完成回收、快照取消、跨层 dirty 和私有文字精确释放。
   真实 actions 夹具增加六类事件及工地完工边界；effects/lifecycle/pressure 显式合成。发现本分支 rangedAttack/rangedMassAttack 没有结算处理器，登记 G5，未扩大修改引擎。验证修复：缺帧 Container 被按 Sprite 更新的崩溃；lighting EMPTY→RT 后实际输出尺寸失控（v8 setSize 不保留纹理更换前目标尺寸）；ADD/EaseOutQuad/reaction glow/say 轮廓与隐私；harness seek 历史动作叠积。
   renderer 256 测+shared 4 测+exporter 4 测、类型检查/新鲜度/确定性重生/构建/文档检查通过。WebGPU/WebGL 固定动作关键帧与回收、核爆、长帧、回放倍率及压力重播验证；官方 UMD 同数据参考对照。1080p/M4/50 creep/4× 的 objects CPU p95 为 0.5/0.6ms，lighting 提交 p95 两后端 0.5ms；非 GPU 完整预算，R7 未完成。BindGroup warning 创建栈指向 Pixi 批次纹理缓存，资源销毁会清空绑定，无自有悬挂引用证据，保留 R7。单代理完成三方面复核，未执行三路 subagent 评审。详细方法、证据和近似见验证记录；下一阶段 R6。
+
+- 2026-09-30：**R5 三路评审与清偿收口**。主会话三路 subagent 补齐 §7 收口评审（官方规格保真/契约与生命周期/测试夹具与验证报告实测复核）：自动检查全部复跑通过（27 生成文件重生哈希一致、artifact 46 件与 HUD 采样对上、压力数字逐字一致），R4 语义零回归（motion 门控收窄为 HIT_COVER_TYPES 六类=官方 creepActions 声明域）。**阻塞 2 项清偿**：tower 治疗事件（rangedHeal）补瞄准/flare/光照脉冲（一行修+测试）；验证记录 PWR 16–18 表述勘误（实测可渲染，G5 行同步订正）。**建议落地 8 项**：invaderCore TTL 环去闪烁（官方仅 constructionSite 有 blinking）、actionLog 通道补 previous 回退、私有 say 显式判空、bite 缺失计 skipped、诊断统计 privateTexts→texts、rotateTween 补 onEnd、exporter 确定性测试对齐 30 tick 入库全长、HUD 增 canvas 分辨率行。**差异登记 5 项**：flare3（_all hasEffect power 顶罩）未实现、孵化 once 语义有意偏离官方 quirk、填充补间白名单宽于官方、say 无像素对齐、目标侧工作罩 owner=来源的取消语义。**主会话逐行复审清偿增量**：发现并修复清偿引入的一处隐私回归（player=null 即 `localPlayerId` 缺省时私有 say 被错误放行，已改回全滤并加测试锁定，详见验证记录「复审与返工」）。终态 renderer 260 测+kk-cli 7 测+fmt/clippy/文档链接绿；R5 关账，下一阶段 R6。

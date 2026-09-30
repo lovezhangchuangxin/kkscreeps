@@ -21,14 +21,14 @@ interface Player {
   sample(progress: number): void;
   dispose(): void;
 }
-export interface EffectsStats { active: number; nodes: number; privateTexts: number; skipped: number }
+export interface EffectsStats { active: number; nodes: number; texts: number; skipped: number }
 export type TextMeasure = (message: string, text: Text) => number;
 
 export class EffectsStage {
   readonly root = new Container({ label: 'finite-effects' });
   private readonly players = new Set<Player>();
   private readonly lights = new Set<Container>();
-  private privateTexts = 0;
+  private texts = 0;
   private skipped = 0;
   constructor(private readonly assets: JoinAssets, private readonly lighting: LightingPass,
     private readonly cell: number, private readonly tick: number,
@@ -39,7 +39,7 @@ export class EffectsStage {
     let nodes = this.lights.size;
     const count = (n: Container) => { nodes++; for (const child of n.children) count(child); };
     for (const n of this.root.children) count(n);
-    return { active: this.players.size, nodes, privateTexts: this.privateTexts, skipped: this.skipped };
+    return { active: this.players.size, nodes, texts: this.texts, skipped: this.skipped };
   }
   recordSkipped(count: number): void { this.skipped += count; }
   play(commands: readonly EffectCommand[]): void {
@@ -97,7 +97,7 @@ export class EffectsStage {
       const delay = c.action === 'build' || c.action === 'repair' || c.action === 'upgradeController' || core ? S.workDelay : 0;
       this.cover(c, color, delay);
     }
-    if (tower && (c.action === 'attack' || c.action === 'rangedAttack' || c.action === 'heal' || c.action === 'repair')) this.tower(c);
+    if (tower && (c.action === 'attack' || c.action === 'rangedAttack' || c.action === 'heal' || c.action === 'rangedHeal' || c.action === 'repair')) this.tower(c);
     if (c.action === 'power' && c.powerId !== undefined) this.powerIcon(c);
   }
   private beam(c: TargetCommand, color: number, width: number, blur: number, fraction: number): void {
@@ -121,7 +121,9 @@ export class EffectsStage {
   }
   private bite(c: TargetCommand): void {
     const binding = this.actor(c.sourceId);
-    if (!binding || binding.moving || c.source.x === c.target.x && c.source.y === c.target.y) return;
+    if (!binding) { this.skipped++; return; }
+    // Moving and same-cell actors are official suppressions (posChanged gate), not missing data.
+    if (binding.moving || c.source.x === c.target.x && c.source.y === c.target.y) return;
     const x = Math.sign(c.target.x - c.source.x) * S.bitePenetration;
     const y = Math.sign(c.target.y - c.source.y) * S.bitePenetration;
     binding.turn(angleBetween(c.source, c.target), Math.max(this.tick / 5, 400));
@@ -191,10 +193,10 @@ export class EffectsStage {
       .arc(left + r, bottom - r, r, Math.PI / 2, Math.PI).lineTo(left, top + r)
       .arc(left + r, top + r, r, Math.PI, Math.PI * 1.5).closePath()
       .fill(bg).stroke({ width: S.say.strokeWidth, color: 0x000000 });
-    root.addChild(shape, text); this.root.addChild(root); this.privateTexts++;
+    root.addChild(shape, text); this.root.addChild(root); this.texts++;
     this.run(this.tick, () => {
       const binding = this.actor(c.sourceId); if (binding) root.position.set(binding.position.x, binding.position.y);
-    }, () => { text.destroy({ style: true, texture: true, textureSource: true }); root.destroy({ children: true }); this.privateTexts--; }, c.sourceId, 'say');
+    }, () => { text.destroy({ style: true, texture: true, textureSource: true }); root.destroy({ children: true }); this.texts--; }, c.sourceId, 'say');
   }
   private powerIcon(c: TargetCommand): void {
     const name = POWER_ICONS[c.powerId!];

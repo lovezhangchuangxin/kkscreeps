@@ -54,7 +54,9 @@ describe('finite effect lifetime and keyframes', () => {
   it('moving actors skip the lunge while their target work cover still plays', () => {
     const s = setup(); s.actors.set('a', { ...s.actors.get('a')!, moving: true });
     s.effects.play([command('harvest')]); expect(s.offset).not.toHaveBeenCalled();
-    expect(s.effects.root.getChildByLabel('target-cover-harvest')).not.toBeNull(); s.effects.destroy();
+    expect(s.effects.root.getChildByLabel('target-cover-harvest')).not.toBeNull();
+    s.effects.play([command('attack', { sourceId: 'gone' })]);
+    expect(s.effects.stats.skipped).toBe(1); s.effects.destroy();
   });
   it('owner removal cancels attached effects; captured room beam endpoints survive', () => {
     const { effects, actors, lightingRoot } = setup(); effects.play([command('build')]);
@@ -71,13 +73,21 @@ describe('finite effect lifetime and keyframes', () => {
     s.effects.update(100); expect(flare.alpha).toBeCloseTo(0.2); expect(s.towerGlow).toHaveBeenLastCalledWith(2);
     s.effects.update(300); expect(flare.destroyed).toBe(true); expect(s.towerGlow).toHaveBeenLastCalledWith(1); s.effects.destroy();
   });
+  it('tower ranged heal also aims, flares and pulses beside its wide heal beam', () => {
+    const s = setup(); s.effects.play([command('rangedHeal', { sourceType: 's:tower' })]);
+    expect(s.towerAim).toHaveBeenCalledWith(-Math.PI / 2);
+    expect(s.offset).not.toHaveBeenCalled();
+    expect(s.effects.root.getChildByLabel('beam-rangedHeal')).not.toBeNull();
+    const flare = s.effects.root.getChildByLabel('tower-shot-flare')!;
+    s.effects.update(100); expect(flare.alpha).toBeCloseTo(0.2); expect(s.towerGlow).toHaveBeenLastCalledWith(2); s.effects.destroy();
+  });
   it('say is measured once, follows the actor, replacement/reset disposes private text', () => {
     const s = setup(); const say: EffectCommand = { action: 'say', sourceId: 'a', message: 'hello', private: true, origin: 'say' };
     s.effects.play([say]); const bubble = s.effects.root.getChildByLabel('say-bubble')!;
     const text = bubble.children[1]!;
     s.node.x = 1100; s.effects.update(50); expect(bubble.x).toBe(1100); expect(s.measure).toHaveBeenCalledTimes(1);
-    s.effects.play([{ ...say, message: 'new' }]); expect(text.destroyed).toBe(true); expect(s.effects.stats.privateTexts).toBe(1);
-    s.effects.reset(); expect(s.effects.stats).toMatchObject({ active: 0, privateTexts: 0, nodes: 0 }); s.effects.destroy();
+    s.effects.play([{ ...say, message: 'new' }]); expect(text.destroyed).toBe(true); expect(s.effects.stats.texts).toBe(1);
+    s.effects.reset(); expect(s.effects.stats).toMatchObject({ active: 0, texts: 0, nodes: 0 }); s.effects.destroy();
   });
   it('reaction pairs share a single flash, and power has a short beam plus delayed icon', () => {
     const s = setup(); s.effects.play([command('runReaction', { sourceType: 's:lab', source: { x: 8, y: 8 } }), command('runReaction', { sourceType: 's:lab', source: { x: 9, y: 9 } }), command('power', { powerId: 3 })]);
@@ -90,7 +100,7 @@ describe('finite effect lifetime and keyframes', () => {
   it('failed speech measurement releases its private text and records a skipped effect', () => {
     const s = setup(); s.measure.mockImplementationOnce(() => { throw new Error('font measurement'); });
     s.effects.play([{ action: 'say', sourceId: 'a', message: 'hello', private: true, origin: 'say' }]);
-    expect(s.effects.stats).toMatchObject({ nodes: 0, active: 0, privateTexts: 0, skipped: 1 }); s.effects.destroy();
+    expect(s.effects.stats).toMatchObject({ nodes: 0, active: 0, texts: 0, skipped: 1 }); s.effects.destroy();
   });
   it('short ticks cannot fit the fixed 300ms power-icon delay, so no invalid zero-length icon phase is created', () => {
     const s = setup(200); s.effects.play([command('power', { powerId: 3 })]);

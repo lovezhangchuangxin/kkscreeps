@@ -217,12 +217,13 @@ function renderHud(): void {
   const f = fixture();
   const summary = renderer.feed.summary(f.room);
   const state = index >= f.ticks.length ? 'end' : playing ? '▶' : '⏸';
+  const canvas = stageHost.querySelector('canvas');
   const lines = [
     `kkscreeps renderer · dev harness (R5)`,
-    `backend : ${s.backend}   fps: ${s.fps}   zoom: ${(s.zoom * 100).toFixed(0)}%   atlas: ${s.atlasFrames}f   lighting: ${s.lighting}`,
+    `backend : ${s.backend}   fps: ${s.fps}   zoom: ${(s.zoom * 100).toFixed(0)}%   atlas: ${s.atlasFrames}f   lighting: ${s.lighting}${canvas ? `   canvas: ${canvas.width}×${canvas.height}` : ''}`,
     `replay  : [${current}] ${index}/${f.ticks.length} ${state} ${SPEEDS[speedIdx]}×   player: ${params.get('player') ?? 'p1'}`,
     `room    : ${f.room} time=${summary?.time ?? '-'} objects=${summary?.objects ?? '-'} visuals=${summary?.visuals ?? 0}`,
-    `effects : active=${s.effects.active} nodes=${s.effects.nodes} texts=${s.effects.privateTexts} skipped=${s.effects.skipped} · ambient=${s.ambient.awake}/${s.ambient.active} sleeping=${s.ambient.sleeping} sample=${sampleElapsed}ms`,
+    `effects : active=${s.effects.active} nodes=${s.effects.nodes} texts=${s.effects.texts} skipped=${s.effects.skipped} · ambient=${s.ambient.awake}/${s.ambient.active} sleeping=${s.ambient.sleeping} sample=${sampleElapsed}ms`,
     `controls: 1-9 / 0 压力 · 空格 播放/暂停（动画同步） · . 下一 tick · → 动画 +50ms · +/- 调速 · F 视角复位`,
   ];
   if (replayError) lines.push(`ERROR   : ${replayError}`);

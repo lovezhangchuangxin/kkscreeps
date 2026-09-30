@@ -1,4 +1,4 @@
-import { Container, Texture } from 'pixi.js';
+import { CanvasTextMetrics, Container, Texture } from 'pixi.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ObjectsStage } from '../src/objects/objects-stage.js';
 import type { LightingPass } from '../src/core/lighting.js';
@@ -9,12 +9,12 @@ import actions from '../fixtures/actions.json';
 interface Internals { views: Map<string, { root: Container; cover?: Container; parts: Map<string, { node: Container }> }>; dying: Map<string, unknown> }
 function inspect(stage: ObjectsStage): Internals { return stage as unknown as Internals; }
 const stages: ObjectsStage[] = [];
-function setup() {
+function setup(player: string | null = 'p1') {
   const content = new Container(), dirty = vi.fn();
   const lighting = { content, addMember: (n: Container) => content.addChild(n), removeMember: (n: Container) => content.removeChild(n), markDirty: dirty } as unknown as LightingPass;
   const frames = new Map(['cover', 'link-energy', 'nuke', 'fx-nuke-blur', 'fx-nuke-pulse-0', 'fx-nuke-pulse-1', 'fx-nuke-pulse-2', 'fx-nuke-pulse-3',
     'fx-beam-12', 'fx-beam-18', 'fx-beam-12-blur-5', 'fx-beam-18-blur-5'].map(n => [n, Texture.WHITE]));
-  const stage = new ObjectsStage({ cell: 100, lighting, assets: { frames, glow: Texture.WHITE, creepMask: null }, player: 'p1', objectsLayer: new Container(), tickDurationMS: 1000 });
+  const stage = new ObjectsStage({ cell: 100, lighting, assets: { frames, glow: Texture.WHITE, creepMask: null }, player, objectsLayer: new Container(), tickDurationMS: 1000 });
   stages.push(stage); return { stage, content, dirty };
 }
 const creep = (id: string, x: number, y: number): RoomObjectState => ({ id, type: 'creep', x, y, user: 'p1', body: [{ type: 'attack', hits: 100 }, { type: 'move', hits: 100 }], spawning: false });
@@ -24,7 +24,18 @@ describe('feed-to-object effects integration', () => {
     const { stage } = setup(); const enemy = { ...creep('enemy', 10, 10), user: 'p2' };
     stage.apply([enemy], 0, [], 'snapshot');
     stage.apply([enemy], 1, [], 'delta', { says: [{ id: 'enemy', message: 'private', private: true }] });
-    expect(stage.effects.stats.privateTexts).toBe(0); expect(stage.effects.stats.active).toBe(0);
+    expect(stage.effects.stats.texts).toBe(0); expect(stage.effects.stats.active).toBe(0);
+  });
+  it('with no local player identity, private speech stays invisible while public renders', () => {
+    // Node has no 2D canvas: stub measurement so the public bubble can actually play.
+    vi.spyOn(CanvasTextMetrics, 'measureText').mockImplementation(() => ({ width: 180 }) as CanvasTextMetrics);
+    const { stage } = setup(null); const own = creep('own', 10, 10); const enemy = { ...creep('enemy', 12, 10), user: 'p2' };
+    stage.apply([own, enemy], 0, [], 'snapshot');
+    stage.apply([own, enemy], 1, [], 'delta', { says: [
+      { id: 'own', message: 'mine', private: true }, { id: 'enemy', message: 'theirs', private: true }, { id: 'enemy', message: 'loud', private: false },
+    ] });
+    expect(stage.effects.stats.texts).toBe(1);
+    vi.mocked(CanvasTextMetrics.measureText).mockRestore();
   });
   it('real ranged heal and completed build resolve from a removed site; snapshot cancels all finite instances', () => {
     const { stage, content } = setup();
