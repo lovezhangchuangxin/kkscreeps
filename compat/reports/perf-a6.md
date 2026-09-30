@@ -1,5 +1,16 @@
 # A6 性能观测点首次实测记录（小规模负载）
 
+> **口径注记（2026-09-30，双房批片 1 夹具修复）**：本表数字为**空转夹具**
+> 产物——B0-6 外部评审复现并经本仓探针证实：当时的夹具布局（creep
+> (24..26,26)/source(10,10)(40,40)/controller(1,1)）全部动作超距，harvest/
+> upgrade 全被 API 预检拒绝、零 intent——上表「负载形态」的「孵化至 6 只
+> 后维持 harvest/upgrade 循环」自述不成立（spawn 雁流下种群可达 6，但
+> 全部动作空转）。数字仅作 A6 时点的**架构观测点形态**留档（project 相
+> 仍有效——投影构建与动作无关；run 相为无 intent 的脚本执行；settle 相
+> 为零 intent 结算）。夹具已修复（对象摆进作用距离+出生 directions 控制
+> +负载自检），当日新基线与 A/B 归因见
+> [双房批方案 §7](../../docs/plans/dual-room-live-fire.md)。
+
 - **日期**：2026-09-29
 - **工具**：`kkscreeps perf-probe`（A6 交付；驱动 EmbedEngine 完整闭环——per-viewer
   world_json 投影 → deno_core 真沙箱执行玩家代码 → intent 清洗 → settle 结算）

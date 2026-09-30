@@ -1,0 +1,247 @@
+# 双房双玩家实弹验证批（dual-room live-fire）
+
+> 状态：**草案——待用户确认后开工**。
+> 定位：2026-09-29 架构复审定义三件之一（M2B 前置批时脱钩另出方案，见
+> m2b-prerequisite 修订记录），**M2B 扩面（~150→340 方法）之前的最后一道实弹
+> 关卡**。核心交付=测试与夹具；引擎行为面预期零改动（除测试旋钮与经拍板的
+> 可选小片）。
+
+## 0. 背景与目标
+
+在真实全链路（EmbedEngine：per-viewer 投影 → 真实 V8 沙箱玩家代码 → intent
+清洗 → 多房结算 → 统一提交）上验证：
+
+1. **跨房 tick 合并规则**（[tick 契约](../architecture/tick-contract.md)验收
+   场景 2 的三形态 + 顺序不变性）；
+2. **真实玩法验收**（场景 1 的多房形态：成功动作断言、共享资源与竞争）；
+3. **结算失败恢复的双房行为**（场景 3 的多房形态——B0-6 刚修完的三件事在
+   双房双玩家下的表现）；
+4. 搭车：**perf-probe 夹具空转修复**（B0-6 登记项，先行动作——本批 perf
+   工作基线以修复后夹具为准）。
+
+## 1. 现状勘测（关键代码事实，2026-09-30 于 0edbe5c）
+
+- **协调器**（kk-runtime/src/embed.rs `run_players`:398）：执行序 =
+  `players()` 返回序（注册序，实现期核实保真）；结果收集进
+  `BTreeMap<handle, RunResult>`（handle 排序）；意图合并
+  `batch_from_results` 按 handle 序；`settle_world` →
+  `engine.tick_with_intents_with_input(batch, input)`。
+- **投影可见性**（kk-world world_json.rs `world_json_for_viewer`:31）：查看者
+  **有对象的房即可见**（flag/工地不授视野，官方 data.js 视野归集对齐）；
+  不可见房仅地形。→ 一玩家在两房各摆对象即双房可见；两玩家在同房各有对象
+  即共享房互见。`Game.rooms` 断言与跨房 room 级 intent（createFlag 等）自然
+  可达。
+- **结算**（kk-engine settle/mod.rs `tick_with_intents_with_input`:610）：
+  **两阶段提交**——逐房（房名序，BTreeMap keys）在**克隆副本**上结算，任一
+  房 Err 整体放弃（世界/gcl/id 分配器/time 全保旧）；全部成功统一写回并
+  time+1。同 tick 跨房隔离是结构性的（每房克隆自已提交态）。
+- **意图批**（kk-engine intent.rs:364-373）：`IntentBatch{users:
+  BTreeMap<玩家, UserIntents>}`；对象级意图按 ObjId（全局唯一）自然分房
+  路由，房级意图（createFlag 等）带 roomName 显式路由。
+- **失败注入面**：`EmbedEngine::fail_next_settle_for_test`（整轮，embed.rs:686）
+  已有；`Engine::fail_room`（房级，settle/mod.rs:541 私有字段）仅 crate 内
+  单测可达——embed 集成测试做房级注入需新增测试旋钮（片 3）。
+- **既有覆盖盘点（本批不重复做）**：
+  - `embed_run_players_shared_snapshot_impl`：两玩家一房、同一快照、合计 +1；
+  - b05/b06 embed 链：失败回退/被拒重试守卫/TickInput 复用——**单房形态**；
+  - 引擎级 `fail_room` 两阶段回退单测（settle/mod.rs:717/743）——假沙箱/
+    纯结算层；
+  - ADR-013 决策 5 重放一致性（引擎级双房：同初始世界+同 intents+同
+    TickInput 逐字节一致）。
+  - **空缺（本批交付）**：双房双玩家**真沙箱全链**零覆盖；共享资源竞争零
+    覆盖；玩家执行顺序不变性零覆盖；perf 夹具空转。
+- **ratchet-allow 现存 1 条豁免**：inter-room creep transition（用例现红 =
+    跨房移动过渡能力缺口，结算侧无出口过渡逻辑——movement.rs 全文无
+    transition）。**本批不触及（见 §5），豁免保留**。
+
+## 2. 切片规格
+
+### 片 1：perf-probe 夹具真实化 + 负载自检（先行——建立本批 perf 基线）
+
+- **现状**（B0-6 实测复现）：creep(24..26,26) / source(10,10)(40,40) /
+  controller(1,1，create_shard 硬编码 embed.rs:304) 全超动作距离
+  （harvest≤1、upgrade≤3）且脚本无移动 → harvest/upgrade 全部
+  ERR_NOT_IN_RANGE（API 预检拒绝、零 intent）、能量与进度零变化；夹具自述
+  「harvest/upgrade 走已就绪执行器」不成立。
+- **修法（对象摆进距离内；零引擎改动）**：controller 保持 (1,1) 不动，
+  source/creep/spawn 迁至其邻域。约束：每 creep 到某 source Chebyshev ≤1
+  且到 controller ≤3——脚本按 store 分支（有能→upgrade、空→harvest），
+  两条臂都在程内才有稳态 intent 流。spawn 迁近使新孵 creep 出生即工作。
+  坐标实现期定并写入夹具注释。**备选（脚本加 moveTo）不取**：引入寻路
+  负载与移动结算噪声，破坏基线可比性（旧夹具本就无移动维度）。
+- **负载自检（防再空转，B0-6 指控的结构性防复发）**：采集循环后经公共
+  读取面（find_in_room/get_object）断言真负载发生——controller progress
+  增量 >0 且至少一 source 能量低于初始容量；不满足则非零退出并显式报错。
+  report JSON 增补负载计数（progress_delta / source_energy_delta）供 A/B
+  归因留痕。
+- **同日 A/B 重取**：旧夹具 HEAD vs 新夹具各 ≥2 跑（**非回归门禁**——负载
+  变了数字必然动，记录用）；新工作基线（2 玩家为主，加 4 玩家缩放点）记入
+  §7。预期：settle 相上升（真 intent 结算）、run 相或微升（intent 序列化）、
+  project 相不变（对象数与形状不变仅坐标）——project 若动必须归因。
+
+### 片 2：跨房合并三形态实弹（验收场景 2）
+
+新测试文件 `crates/kk-runtime/tests/embed_tests/dual_room_live_fire.rs`
+（子模块 0 `#[test]`、`*_impl` 经 glob 进根链追加调用——串行链不变量）。
+每场景独立 EmbedEngine、teardown 必达（失败路径也不泄漏线程）。
+
+- **场景 A「一玩家影响两房」**：p1 于 W0N1（own，rcl4：source+
+  controller 邻域 creep→upgrade 臂）与 W1N1（野房：source 邻域 creep→
+  harvest 臂）。脚本返回 `Object.keys(Game.rooms)` 断言双房可见；结算后
+  W0N1 progress 增、W1N1 source 减/creep store 增、time +1；p1 的
+  RawMemory 恰提交一次。同一 RunResult 携带两房对象级意图即跨房合并
+  路径（~~跨房 room 级 intent（createFlag）~~——**实现期勘误**：
+  createFlag/createConstructionSite 在 prelude 均为 countStub（room.js:477/
+  489），room 级 intent 无玩家可达 API 面，该子项撤销、登记归 API 扩面）。
+  野房夹具一律 `controller: false` 且 source 摆 4000/4000——野房容量逐
+  tick 归一（有 controller 的野房→NEUTRAL 1500 且钳 energy、无
+  controller→KEEPER 4000；economy.rs source_tick），摆同值免归一差。
+- **场景 B「两玩家影响一房」**：p1/p2 各有私房 + 双方 creep 共处共享房
+  SHARED，**采同一 source**（资源竞争）。断言：source 扣减 = 两玩家采集和
+  （意图按玩家名序处理，期望值按该序手推）；两 creep store 各自增加；两
+  玩家脚本均见 SHARED。
+- **场景 C「无关房先完成」**：B 布局 + p3 独居房名序更后的远房。断言：p3
+  房终态与「单独跑 p3 的同参世界」逐值一致（同 tick 跨房隔离的结构性保证
+  钉成 embed 级回归）；p1/p2 终态与无 p3 时一致。
+- **「打乱玩家完成顺序结果不变」**：同世界两引擎、同 codes 各跑同 tick 数 →
+  逐值断言终态一致（各房 source 能量/creep store/controller progress/
+  time/两玩家 memory）。执行序经 **test-only 执行序旋钮**打乱——**实现期
+  勘误**：`players()` 返回 `handles.keys()`，handles 为 `BTreeMap`（lib.rs:52）
+  →注册序天然被排序吸收，注册排列不构成自由度；fallback 旋钮（预登记项）
+  转正：`EmbedEngine::set_execution_order_for_test(order)` 只改
+  execute_players 循环序（投影+执行完成序），结果收集/意图合并/结算序不动。
+- **多 tick 稳态**（约 50 tick，场景 A/B 世界）：progress 累计=期望斜率、
+  能量守恒恒等式（窗口内 Δsource + Δspawn 存量 = 采集量 = 升级消耗 +
+  store 增量；期望从 kk-core 常量与实测 store 推导，不硬编码未核实的
+  regen 语义——夹具 source 起始满容量且窗口内不采空则无 regen 项）、无
+  意外对象增生。
+- **串行参考口径（本批）**：现单线程协调器的既定序（玩家名序执行 + 意图
+  handle 序合并 + 房名序结算）**即**串行参考；本批钉「结果不依赖可打乱的
+  自由度（执行序/注册序/建房序）」+「语义正确（守恒核算）」，作为将来
+  并行化批（D_t/RoomPatch 落地时）的对齐基线。
+
+### 片 3：真实玩法验收 + 失败恢复双房化（验收场景 1/3 的多房形态）
+
+- **成功动作断言（双房上下文）**：采集量（source −2×work/creep/tick、
+  store 对应增加）；资源变化（spawn 能量 −200 孵化）；controller 进度
+  （upgrade +1×work/tick）；**对象生命周期**——孵化链（spawnCreep →
+  spawning → 新 creep 出现于世界，FIND_CREEPS 计数增长）+ 建造链
+  （工地经夹具摆放（`place_object kind="constructionSite"`——实现期
+  勘误：createConstructionSite API 为 stub，见 §2 场景 A 勘误）→ build
+  推进 → complete_construction 转正为结构；Action::Build 已在清洗白名单
+  intent.rs:88）。creep 死亡/tombstone 生命周期不覆盖（无短 ticksToLive
+  触发面，战斗归后批，登记）。
+- **结算失败恢复（双房双玩家全链）**：新增 test-only 旋钮
+  `EmbedEngine::fail_next_settle_room_for_test(room)`（委托 Engine::fail_room
+  经方法开放；一次性语义与 fail_next_settle 对齐）。流程：正常跑数 tick →
+  注入次轮房级失败 → `run_players` 返回 Err：**两房终态均不变**（含未失败
+  的那房——两阶段提交跨房回退的 embed 全链形态；引擎级已有单测，此处为
+  真沙箱全链）→ 两玩家 memory/桶不变 → 重试 `run_players`（同 codes，
+  计数代码 `globalThis.n` 防重跑）→ 两房一并提交、执行恰一次。
+- **B0-6 三件事的双房行为**：①被拒重试不销毁缓存（双玩家键集形态）②
+  TickInput 复用（失败轮→重试，双房下世界两处一并推进不双跑）——各一条
+  增量回归；③停跑回充候选化的 embed 层驱动需 SandboxConfig 旋钮 =
+  **可选片 O3**，未纳入则维持既有三层测试（budget 单测/sandbox 链/proto
+  链）覆盖并沿用 B0-6 登记口径。
+
+## 3. 验证矩阵（每片完整批次循环）
+
+写规格 → 实现 → workspace 全绿 / release 重建后棘轮 1405 零未豁免转红 /
+bot 三基线（tooangel console 零错须人工确认）/ perf 同口径 A/B 消融（片 1
+起以新夹具基线） / 视批次（本批交付即测试：新测试全绿且断言口径可归因）/
+≥3 路 subagent 并行评审 → 逐条清偿 + 清偿复审 → 沿革回写（roadmap 批次
+条目 + 本方案 §7）→ pnpm run check → 单一归因提交（subject ≤350 字符且
+冒号前 ≤48 字）并 push。
+
+## 4. 可选小片（**待拍板**）
+
+- **O1 ObjId→Room 索引**：现状 `next_obj_id()` 每次 insert 全世界扫 max
+  （world.rs:181-190；`tick_with_intents` 每 tick 亦扫——mod.rs:619）、
+  `get/remove` 逐房查（world.rs:265/284）。方案：World 内维护
+  `ObjId→房名` 索引 + max 游标（insert_with_id/remove/快照解码全维护面；
+  **快照字节形态不变**——索引运行时重建，reset 归零防撞键同地形缓存钉子）；
+  get/remove/next_obj_id 全 O(1)。现状 2-4 房收益小，价值=O() 形状先行于
+  M2B/2B 增长 + 结算路径去每 tick 全扫。量级：小片。
+- **O2 领域语义模块归属**：controller_progress_total_opt/store 家族 helper
+  从投影模块（snapshot.rs/world_json.rs）移 kk-world 领域模块，纯搬移零
+  行为（B1 纪律）。**建议缓行**：随 M2B 扩面首片搭车（新增 ~190 getter 时
+  一次性归属到位，免两次搬）。
+- **O3 embed 层停跑回归锁**：EmbedEngine 的 SandboxConfig 测试旋钮
+  （create_shard 硬编码 default → 可注入），驱动负桶停跑走 embed 全链，
+  断言 commit_players 结局盲语义（Terminated 玩家回充候选不丢）——清偿
+  B0-6 评 2 P2-1 登记的残余风险。量级：小片。
+
+推荐：**O1、O3 纳入，O2 缓行**——按拍板执行。
+
+## 5. 不做清单
+
+- **跨房移动过渡不实现**（creep 出口格→邻房出现）：移动族后续批
+  （movement.rs 无 transition，豁免条目归因明确）；本批场景**不依赖跨房
+  移动**（夹具直接两房各摆对象），ratchet-allow 现 1 条豁免**保留**（用例
+  红 = 能力缺口如实呈现，转绿销账归移动族批）。
+- 并行调度 / D_t 依赖集合推导 / RoomPatch / 空闲房活跃条件参与：tick 契约
+  目标态，本批只钉现串行实现的确定性基线（现状：全部房每 tick 无条件参与
+  结算）。
+- typed FIND / seam 收窄 / InfraFailure 持久故障态 / proto recv 超时：既有
+  决策与登记排期维持（后两者 M3 前）。
+- 战斗/死亡生命周期（tombstone/ruin）、市场、power：后批。
+- 不动 packages/、不碰 .worktrees/renderer/（并行前端线隔离）；不改
+  snapshot 契约字节形态（schema v1 冻结）。
+
+## 6. 风险与工具链钉子
+
+- `players()` 注册序保真需实现期核实（fallback：test-only 执行序旋钮）。
+- 竞争期望值按「玩家名序意图处理」手推；不对照官方 MMO 真并发（那是
+  并行化批的验收面）。
+- 新 V8 测试并入 embed_tests 串行链（根唯一 #[test]、子模块全 0）；多
+  EmbedEngine 各占线程，串行链内天然安全，teardown 必达（含断言失败路径
+  ——防线程泄漏污染后续链测试）。
+- perf 基线同日重取（测量学纪律：绝对值不跨会话）；单跑离群以「未动相
+  劣化」甄别（settle 相金丝雀）。
+- 通用防错坑按项目记忆清单：python 插测试锚点须含 `#[test]` 属性行 /
+  ratchet 跑完 `git checkout -- compat/reports/kkscreeps.json` / cargo fmt
+  reorder_modules 登记 / zsh `===X===` glob 坑 / Bash cwd 显式 cd 回主仓 /
+  ratchet 前显式 release 重建。
+
+## 7. 执行记录
+
+### 片 1（perf 夹具真实化 + 负载自检）——已收口
+
+- **落地**：对象迁入作用距离（controller(1,1) 硬编码不动；source
+  (2,2)/(1,3)、spawn(3,3)、放置 creep (2,1)/(1,2)/(3,1)；脚本
+  spawnCreep 加 `directions:[TOP, LEFT]` 控制出生落位 (3,2)/(2,3)——
+  第三只兜底落 (4,2) 程外如实注记）；布局常量单源 + 距离预算微测
+  `fixture_distance_budget`（占位互斥/首源=FIND_SOURCES[0] 取序耦合一并
+  锁死）；负载自检双臂口径——progress 增量>0 硬失败（B0-6 空转形态的
+  主判）+ 采集证据双边界采样（窗口 ≥100 且两边界全满容量才判死：单边界
+  落 source 300-tick 再生回填点会假红，双边界同时命中缩小 ~300 倍）；
+  `--ticks 0` 显式拒绝；报告 workload 字段（progress_delta/双边界能量）。
+  kk-cli 新增 kk-core workspace 依赖（FIND 常量；既有传递依赖显式化，
+  评审 3 判「更轻替代不成立」）。
+- **评审三路（正确性/负载方法学/工程面）**：P1×3、P2×6。清偿：评 1 P1-1
+  出生位注释失实（born_creep 取 spawn 首个空闲邻格而非 spawn 位——原注释
+  「出生即工作」不成立）→ directions 控制落位+注释如实+微测锁预算；评 2
+  F2a/评 3 P1-1 同源自检假红（模式 A 短窗口首采未启、模式 B regen 回填点
+  重合——评 3 三组实测复现）→ 双臂重设计（上述），三组参数复验全转绿；
+  评 2 F1 project +4% 非噪声（**事件通道激活**：旧夹具零事件、新夹具每房
+  每 tick ~5-6 条 harvest/upgrade 事件注入 per-viewer 投影）→ 本段归因；
+  评 2 F3 字段名（双边界能量入报告）；评 2 F4 source 放置序耦合注释钉死；
+  评 3 P2-1 提交态产物脱节 → compat/reports/perf-probe.json 重生成；评 3
+  P2-2 perf-a6.md/performance-acceptance.md 口径注记补齐。**评审间矛盾实
+  测复核**：评 2 称 spawn 有 +1/tick 雁流（spawn.rs:494-517）、评 3 称只
+  孵 1 只——实测评 2 对（雁流在，种群 t≈309 达 6）。登记不修：自检单房
+  抽样（各房同构）、部分退化盲区（工作 creep 部分超距自检仍绿——微测+
+  注释双保险）、TTL 死亡分段 ≥~1500 tick（M2B 长窗注记）、refill 刀刃
+  双边界理论残余。
+- **同日 A/B（2 玩家 p50，旧空转 → 新真负载）**：project 0.102-0.103 →
+  0.124-0.125（+21%：事件通道激活+工作 creep 3→5）、run 0.143-0.148 →
+  0.208-0.211（+44%：intent 序列化）、settle 0.009 → 0.032（3.6×：真
+  intent 结算）、wall 0.398-0.409 → 0.463-0.476（+16%）。4 玩家：
+  0.222/0.352/0.019/0.903 → 0.266/0.469/0.064/1.035。**本批工作基线
+  （M2B 扩面 perf 对照）=2p 0.124/0.209/0.032/0.467**（提交态产物
+  perf-probe.json 同数字；三跑稳定、settle 金丝雀形态健康）。负载计数：
+  progress 3328/1000t、source 2836→2366。
+- **验证**：workspace 全绿（kk-cli +1 微测）/ clippy 零告警 / release+
+  棘轮 1405 零未豁免转红 / bot 三基线（tooangel console error tick=0、
+  overmind-dist 2000 错 tick=既知形态、wasm-bot 零错；skipped_penalty
+  全 0）/ 假红三参数复验转绿。

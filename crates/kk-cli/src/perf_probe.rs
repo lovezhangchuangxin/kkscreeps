@@ -4,22 +4,39 @@
 //!
 //! 驱动 EmbedEngine 的完整闭环（per-viewer 投影 → 真实沙箱玩家代码 → intent
 //! 清洗 → 结算），玩家代码走真实 API 面（find/spawnCreep/harvest/
-//! upgradeController）。产出：各阶段 p50/p95/max 表 + JSON 报告。
+//! upgradeController）。产出：各阶段 p50/p95/max 表 + JSON 报告 +
+//! 工作负载自检（空转形态非零退出，B0-6 登记项的结构性防复发）。
 //! 这是 M2A 的架构验收通道；正式场景基线（场景 A/C × 3 实现 × ≥5 次独立
 //! 运行）随 M2B 基准批次，本工具届时复用同一观测点。
+//!
+//! 窗口语义注记（长跑分段，登记）：初始 creep 的 ageTime=放置时刻+1500
+//!（place 缺省，CREEP_LIFE_TIME）——`warmup+ticks` 超 ~1500 后窗中出现
+//! TTL 死亡分段（墓碑结算/种群回落/spawn 重孵）；M2B 正式口径（预热 ≥500
+//! + 采集 ≥3000）跑长窗时须注记该段或届时夹具摆长 ttl creep（place 支持）。
 
 use std::collections::BTreeMap;
 
 use kk_runtime::EmbedEngine;
 use serde_json::{Value, json};
 
+/// 夹具布局（与距离预算微测 `fixture_distance_budget` 共用单源）。
+/// controller 由 create_shard 硬编码在 (1,1)（embed.rs）；**source 放置序
+/// 即 `FIND_SOURCES[0]` 的取序**（放置序=ObjId 升序=world JSON objects 数组
+/// 序）——首源 (2,2) 是被采集的源，勿重排放置数组。出生落位语义见
+/// tests::BORN_TILES。
+const SOURCES: [(u8, u8); 2] = [(2, 2), (1, 3)];
+const SPAWN: (u8, u8) = (3, 3);
+/// 放置的 3 只工作 creep（两臂都在程内：到首源 ≤1 且到 controller ≤3）。
+const CREEPS: [(u8, u8); 3] = [(2, 1), (1, 2), (3, 1)];
+
 /// 负载玩家代码：真实 API 面（装配 + find + spawn + 动作 intent 预检）。
 /// spawn 上限 6 只防种群爆炸；harvest/upgrade 走已就绪执行器。
+/// directions [TOP, LEFT] 控制出生落位到 BORN_TILES（见布局注释）。
 fn player_code() -> String {
     r#"
 const spawn = Game.spawns && Object.values(Game.spawns)[0];
 if (spawn && !spawn.spawning && Object.keys(Game.creeps).length < 6) {
-  spawn.spawnCreep(['work', 'carry', 'move'], 'w' + Game.time + '_' + spawn.name, {});
+  spawn.spawnCreep(['work', 'carry', 'move'], 'w' + Game.time + '_' + spawn.name, {directions: [TOP, LEFT]});
 }
 for (const name in Game.creeps) {
   const c = Game.creeps[name];
@@ -41,6 +58,40 @@ fn room_name(i: u32) -> String {
     format!("W{i}N1")
 }
 
+/// 工作负载观测（经公共读取面，不旁窥内部状态；只采样首房——多玩家下
+/// 各房脚本与坐标同构，抽样自检）：controller 进度、source 最低能量、
+/// 是否全部满容量。
+struct SourceObs {
+    energy_min: i64,
+    all_at_capacity: bool,
+}
+
+fn workload_probe(e: &EmbedEngine, room: &str) -> anyhow::Result<(i64, SourceObs)> {
+    let progress = e
+        .find_in_room(room, kk_core::constants::FIND_STRUCTURES)
+        .iter()
+        .find(|o| o.get("structureType").and_then(Value::as_str) == Some("controller"))
+        .and_then(|o| o.get("progress").and_then(Value::as_i64))
+        .ok_or_else(|| anyhow::anyhow!("房间 {room} 未找到 controller"))?;
+    let sources: Vec<(i64, i64)> = e
+        .find_in_room(room, kk_core::constants::FIND_SOURCES)
+        .iter()
+        .filter_map(|o| {
+            let energy = o.get("energy").and_then(Value::as_i64)?;
+            let cap = o.get("energyCapacity").and_then(Value::as_i64)?;
+            Some((energy, cap))
+        })
+        .collect();
+    if sources.is_empty() {
+        anyhow::bail!("房间 {room} 未找到 source");
+    }
+    let obs = SourceObs {
+        energy_min: sources.iter().map(|(e, _)| *e).min().unwrap(),
+        all_at_capacity: sources.iter().all(|(e, c)| e >= c),
+    };
+    Ok((progress, obs))
+}
+
 pub fn run(ticks: u32, warmup: u32, players: u32, report_path: &str) -> i32 {
     match run_inner(ticks, warmup, players, report_path) {
         Ok(()) => 0,
@@ -52,6 +103,9 @@ pub fn run(ticks: u32, warmup: u32, players: u32, report_path: &str) -> i32 {
 }
 
 fn run_inner(ticks: u32, warmup: u32, players: u32, report_path: &str) -> anyhow::Result<()> {
+    if ticks == 0 {
+        anyhow::bail!("采集窗口为 0（--ticks 须 ≥1；纯预热跑不是合法用法）");
+    }
     let players = players.clamp(1, 8);
     let handles: Vec<String> = (0..players).map(|i| format!("p{}", i + 1)).collect();
     let rooms: Vec<Value> = (0..players)
@@ -65,11 +119,14 @@ fn run_inner(ticks: u32, warmup: u32, players: u32, report_path: &str) -> anyhow
     }))?;
 
     // 每房负载：2 source + 1 spawn + 3 creep（约 400 对象的 B 场景缩比——
-    // 观测点验收的是阶段形态非绝对量级）
+    // 观测点验收的是阶段形态非绝对量级）。距离预算与出生落位语义见布局
+    // 常量注释与 fixture_distance_budget 微测（B0-6 夹具空转清偿：注释
+    // 曾自述「出生即工作」与引擎出生语义不符，评审 1 P1——现 directions
+    // 控制落位、注释如实）。
     for i in 0..players {
         let room = room_name(i);
         let owner = format!("p{}", i + 1);
-        for (x, y) in [(10u8, 10u8), (40, 40)] {
+        for &(x, y) in &SOURCES {
             e.place_object(
                 &room,
                 "structure",
@@ -77,18 +134,19 @@ fn run_inner(ticks: u32, warmup: u32, players: u32, report_path: &str) -> anyhow
                     "energy": 3000, "energyCapacity": 3000 }),
             )?;
         }
+        let (sx, sy) = SPAWN;
         e.place_object(
             &room,
             "structure",
-            &json!({ "pos": [25, 25], "structureType": "spawn",
+            &json!({ "pos": [sx, sy], "structureType": "spawn",
                 "owner": owner, "name": format!("Spawn{}", i + 1),
                 "store": { "energy": 300 } }),
         )?;
-        for c in 0..3u8 {
+        for &(x, y) in &CREEPS {
             e.place_object(
                 &room,
                 "creep",
-                &json!({ "pos": [24 + c, 26], "name": format!("w{}_{c}", i + 1),
+                &json!({ "pos": [x, y], "name": format!("w{}_{x}_{y}", i + 1),
                     "owner": owner, "body": ["work", "carry", "move"],
                     "store": { "energy": 50 } }),
             )?;
@@ -106,9 +164,39 @@ fn run_inner(ticks: u32, warmup: u32, players: u32, report_path: &str) -> anyhow
     for _ in 0..warmup {
         e.run_players(&codes)?;
     }
+    // 工作负载基线（采集前）：progress 增量与 source 采空证据的对照起点
+    let (progress_before, obs_before) = workload_probe(&e, &room_name(0))?;
     e.perf_reset();
     for _ in 0..ticks {
         e.run_players(&codes)?;
+    }
+
+    // 工作负载自检（B0-6 登记项清偿）：断言真负载发生，空转形态（动作全
+    // 被 API 预检拒绝、零 intent）非零退出，防夹具再退化成「自述真实、
+    // 实际空转」。双臂口径（评审 2 F2/评审 3 P1-1 清偿）：
+    // - progress 增量 >0：upgrade 臂存活的主判（B0-6 空转形态 progress 恒 0）；
+    // - 采集证据：窗口足够长（首采在初始存量耗尽后 ~tick 51 起，双边界
+    //   采样取或）且两边界全满容量才判死——单边界落在 source 300-tick
+    //   再生回填点（回填即满容量）会假红，双边界同时命中缩小 ~300 倍；
+    //   短窗口（<100 tick）采集臂尚未启动，跳过该断言。
+    let (progress_after, obs_after) = workload_probe(&e, &room_name(0))?;
+    let progress_delta = progress_after - progress_before;
+    let window_long_enough = warmup + ticks >= 100;
+    if progress_delta <= 0 {
+        anyhow::bail!(
+            "工作负载自检失败：upgrade 臂空转（progress 增量 {progress_delta}、\
+             source 最低能量采集前 {} → 采集后 {}）——动作未产生 intent，\
+             检查距离预算注释与脚本分支",
+            obs_before.energy_min,
+            obs_after.energy_min
+        );
+    }
+    if window_long_enough && obs_before.all_at_capacity && obs_after.all_at_capacity {
+        anyhow::bail!(
+            "工作负载自检失败：采集臂无证据（窗口 {} tick 内两边界 source 均\
+             满容量，首采应于 ~tick 51 发生）——检查 harvest 分支与源放置序",
+            warmup + ticks
+        );
     }
 
     let report = json!({
@@ -116,6 +204,11 @@ fn run_inner(ticks: u32, warmup: u32, players: u32, report_path: &str) -> anyhow
         "players": players,
         "ticks": ticks,
         "warmup": warmup,
+        "workload": {
+            "progress_delta": progress_delta,
+            "source_energy_min_before": obs_before.energy_min,
+            "source_energy_min_after": obs_after.energy_min,
+        },
         "phases": e.perf_report(),
     });
     std::fs::write(report_path, serde_json::to_string_pretty(&report)?)?;
@@ -147,4 +240,48 @@ fn run_inner(ticks: u32, warmup: u32, players: u32, report_path: &str) -> anyhow
         .unwrap_or(0);
     println!("  采样 tick 数：{ticks_seen}");
     Ok(())
+}
+
+/// 距离预算微测：放置位与出生位逐点锁预算（harvest ≤1 到某源、upgrade ≤3
+/// 到 controller）、占位互斥（出生落位取首个空闲方向格，被占即失效）、
+/// 被采集源=放置首源（FIND_SOURCES[0] 取序耦合）。
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// controller 由 create_shard 硬编码（embed.rs），夹具只依赖不摆放。
+    const CONTROLLER: (u8, u8) = (1, 1);
+    /// 出生落位：spawnCreep `directions:[TOP, LEFT]`（player_code）→ 首个
+    /// 空闲方向格（spawn.rs born_creep 按给定序取首空）——(3,2)/(2,3) 两格
+    /// 都在程内；第三只孵出时两格已占，兜底全 8 向扫描落 (4,2) 族（程外、
+    /// 无动作 intent，仅投影/结算宽度——如实口径，负载由 3 放置 + 2 出生
+    /// 工作 creep 承载）。
+    const BORN_TILES: [(u8, u8); 2] = [(3, 2), (2, 3)];
+
+    fn chebyshev(a: (u8, u8), b: (u8, u8)) -> u32 {
+        u32::from(a.0.abs_diff(b.0)).max(u32::from(a.1.abs_diff(b.1)))
+    }
+
+    #[test]
+    fn fixture_distance_budget() {
+        let working = CREEPS.iter().chain(BORN_TILES.iter());
+        for &pos in working {
+            assert!(
+                SOURCES.iter().any(|&s| chebyshev(pos, s) <= 1),
+                "creep {pos:?} 到全部源超采集距离（需 ≤1）"
+            );
+            assert!(
+                chebyshev(pos, CONTROLLER) <= 3,
+                "creep {pos:?} 到 controller 超升级距离（需 ≤3）"
+            );
+        }
+        for &c in &CREEPS {
+            for &b in &BORN_TILES {
+                assert_ne!(c, b, "出生位 {b:?} 被放置位 {c:?} 占据");
+            }
+            assert_ne!(c, SPAWN, "放置位不得占 spawn 位");
+        }
+        assert_ne!(SOURCES[0], BORN_TILES[0], "首源被出生位占据");
+        assert_eq!(SOURCES[0], (2, 2), "放置首源即 FIND_SOURCES[0]（被采集源）");
+    }
 }

@@ -2,7 +2,9 @@
 
 > **状态：测量方案，基线与目标尚待实测。** M2A 已交付性能观测点（EmbedEngine
 > 四相阶段打点 + `kkscreeps perf-probe` 可重复工具）与首次小规模实测记录
->（[compat/reports/perf-a6.md](../../compat/reports/perf-a6.md)）——阶段耗时
+>（[compat/reports/perf-a6.md](../../compat/reports/perf-a6.md)——**注记
+> 2026-09-30**：该记录为空转夹具产物，口径注记见其头部；修复后工具带负载
+> 自检，空转形态非零退出）——阶段耗时
 > 口径在本仓已有落点；本页的场景基线（A/C × 3 实现 × ≥5 次独立运行）仍待
 > M2B 基准批次。调研报告中的单点加速比是选型证据；
 > README 所述 CPU/内存约降至官方的 1/5～1/10 是项目目标。只有同负载的端到端

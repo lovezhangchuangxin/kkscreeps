@@ -8,6 +8,7 @@ edition.workspace = true
 workspace = true
 
 [dependencies]
+kk-core = { workspace = true }
 kk-engine = { workspace = true }
 kk-runtime = { workspace = true }
 kk-runner = { workspace = true }
