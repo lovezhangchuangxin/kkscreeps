@@ -155,3 +155,11 @@ console 零错人工确认 + overmind-dist + wasm-bot）/ perf 同口径 A/B 消
 | 评 3 P2-2 TickInput 测试时序余量 | 已清偿（加预热轮）；NTP 回拨 >50ms 的假红窗口为墙钟域取证固有取舍，登记 |
 | 评 3 P2-4 空 codes/子集/连续被拒边界无测试 | 登记不修（既有语义非本批引入；子集语义已补注释） |
 | 评 3 P2-5 tick() helper Skip 臂今日不可达 | 保留（一致性改动；负桶 fixture 已由 b06/proto 用例建立，helper 后续触达即生效） |
+
+**清偿复审（同日，单路 subagent 复核清偿增量）**：P1/P2 清偿逐项忠实落实（含杀伤
+力与 workspace 全绿的独立复现——复审方在 /tmp 干净副本删 Skip 臂 settle_bill 重
+演变红）、登记不修项三项事实依据抽查全部成立（settle_terminated 零生产调用方、
+create_shard 硬编码 default 配置、桶配置全整数且 settle 取 ceil）、三路评审共识
+无集体误读、清偿增量未破坏串行链/LIFO/销毁纪律。**发现一处清偿自身引入的注释
+失实**（子集句「仅返回所请求子集的回执」——实际返回全量缓存玩家回执），已随
+复审更正提交。判定：清偿成立，免除外部复审。
