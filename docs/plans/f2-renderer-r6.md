@@ -166,13 +166,14 @@ dash/dotted 具体节奏、非基础 web 色形态。
   是标注面，官方观感恒在对象/特效之上；不受 lighting 压暗。z 序黑盒推断
   登记 G1）。R5 的 finite-effects 重挂顶仍在 effects 层内，不受影响。
 - **纯逻辑半件**（可无 Pixi 直测）：每原语一个映射函数——官方样式默认值
-  应用、颜色解析（#rgb/#rrggbb/#rrggbbaa + `transparent`；其余 CSS 形态
-  文档未载，退 #ffffff 并登记 G1）、几何换算（游戏坐标×cell）、lineStyle
+  应用、颜色解析（hex 四形态、CSS 命名色、rgb(a)/hsl(a)、`transparent`；
+  未支持的非基础 web 色形态退字段默认并登记 G1）、几何换算（游戏坐标×cell）、lineStyle
   分段参数化（dashed/dotted 沿路径切段；圆弧参数化；节奏常量入 spec 表，
   官方不可考证处登记 G1）。
 - **pixi 半件**：Graphics（line/rect/circle/poly）+ Text 组合（text 底衬
   backgroundColor 圆角矩形 Graphics + 文本；v8 Text 无原生背景）。对齐/锚点：
-  text align=锚点 x 语义、垂直取中锚（观感校准，G1 登记）。
+  text align=锚点 x 语义；背景启用时垂直居中，无背景取底边近似基线
+  （近似偏差登记 G1）。
 - **重建策略**：`setVisuals` 全量重建（typical ≤100 条，R7 预算场景）+
   Text 精确销毁纪律（style/textureSource，R3 清偿⑤同款）；同引用短路
   （数组引用未变零成本）。每 tick 全量重建的帧成本登记为 R7 测量点。
@@ -344,8 +345,8 @@ visuals 全量替换、离房事件不补播、say 隐私过滤（player=null �
   A-J4 测试锚记 R7 加固项。
 - **外部复审仲裁清偿 `83088f2`**（GPT 外部报告，主会话仓库源逐条仲裁）：
   **官方默认值取证对象错误成立**（§3.1 勘误注）——radius 0.15/strokeWidth
-  0.1/text font 分形态/padding 0.3/opacity 1.0 全面改判；web 颜色全集（命
-  名色 148+9/rgb(a)/hsl(a)）；poly 开放描边；文字垂直锚官方明载（背景
+  0.1/text font 分形态/padding 0.3/opacity 1.0 全面改判；基础 web 颜色（命
+  名色 148 键/rgb(a)/hsl(a)）；poly 开放描边；文字垂直锚官方明载（背景
   middle/默认基线）；有限几何双防御（**MAX_DASH_SEGMENTS=4096 截断——
   hypot(1e308,1e308) 有限会使切段 OOM，比报告所指死循环更深一层，实测坐
   实**）；悬停失效机制（数据/切房/相机变化重估）；指针手势纪律
@@ -362,7 +363,7 @@ visuals 全量替换、离房事件不补播、say 隐私过滤（player=null �
   升级官方明载契约（§3），G1 黑盒面收窄至：文字无背景时基线的底边近似、
   端帽形状、dash 节奏、font 缺省 0.8、非基础 web 色。上位方案灰区表 G1/G7
   更新、G13 新增（悬停高亮环非官方形态）。
-- **二波复审终裁（PASS，11/11 核销）**：复审员独立经 GitHub contents API 重取
+- **二波增量复审记录（当时 PASS，后续完整复审发现 B1–B5，见下）**：复审员独立经 GitHub contents API 重取
   权威源逐行核对（radius 0.15=L150、strokeWidth 0.1 三处、opacity 1.0、
   padding 0.3、font 四形态、any web format 十处措辞、polyline、背景垂直居中、
   坐标语义），与主会话仲裁完全一致；NAMED_COLORS 程序化对照 68 标准值零错
@@ -370,4 +371,24 @@ visuals 全量替换、离房事件不补播、say 隐私过滤（player=null �
   追加压测（off 相位天文段/超大 strokeWidth/零长段）全部 <1ms 有界返回。四
   项 P3 残留：feed.ts CircleV 注释默认值残留、83088f2 提交信息 green/aqua 表
   述失准（aqua 仅单测）、命名色键数措辞、手势三边界无行为级测试——前两者与
-  措辞随手勘正（收口提交），**手势行为测试记 R7 加固**。
+  措辞随手勘正（收口提交），**手势行为测试当时记 R7 加固，本轮 B2/B3 已补齐**。
+
+- **完整二次外部复审清偿（B1–B5）**：既有默认值/双后端主用例验证通过，
+  但定向探针发现基础 CSS token 解析、悬停状态重估、相机多指/capture、文字
+  stroke alpha 与字体部分失败重试五项残留；原 PASS 不代表这些边界已覆盖。
+  - B1：完整解析带符号/前导小数点/指数的数字、HSL deg/grad/rad/turn 单位，
+    transparent 大小写/空白归一；非法颜色不再误匹配命名色原型或 hex。
+  - B2/B3：离开清除光标坐标，所有重估入口统一冻结手势；释放后恢复当前
+    悬停；相机只接管主键主指并匹配 pointerId，cancel/lostcapture/leave
+    与卸载统一结束捕获。
+  - B4：Text fill/stroke 分别携带颜色 alpha，Text.alpha 仅承担共同 opacity；
+    背景保持独立 alpha。补真实 Pixi Text 样式及 middle 背景几何断言。
+  - B5：任一规格失败或构造/add/load 同步异常均回滚本次全部 FontFace；
+    fallback 可重试且不累积已成功 face，全部成功仍缓存复用。
+  - 夹具默认宽标签改为 0.1，小圆标签靠近样例，缩短 styled 文案以免遮挡；
+    保留 53 条及五原语全缺省案例。
+  - 验证：renderer 350 测（+28）+资产新鲜度/typecheck/ESM+d.ts 构建及
+    公共面 7 文件闭包守卫通过；kk-cli 7 测通过；文档链接检查通过。浏览器
+    WebGPU/WebGL 均 visuals=53/fonts=loaded/lighting=real；原生点击命中
+    (14,10) kk0000000000000002，拖拽后悬停恢复至 (21,20) 且 pick 不变。
+    多指/capture 与字体失败路径以行为回归验证，未宣称浏览器真实多指测试。

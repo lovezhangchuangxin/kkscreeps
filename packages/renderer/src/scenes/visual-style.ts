@@ -89,31 +89,50 @@ function hslToRgb(h: number, s: number, l: number): number {
   return (byte(r) << 16) | (byte(g) << 8) | byte(b);
 }
 
-/** 从函数色串提取数值元组（逗号或空格分隔，支持 `/ α` 与 `%`）。 */
-function fnColorParams(value: string): number[] | null {
-  const inner = /^\w+\(([^)]*)\)$/.exec(value.trim())?.[1];
-  if (inner === undefined) return null;
-  const parts = inner.split('/');
-  const rgbPart = parts[0] ?? '';
-  const alphaPart = parts[1];
-  const nums = rgbPart.match(/-?\d+(?:\.\d+)?%?/g);
-  if (nums === null || nums.length < 3) return null;
-  const parse = (t: string, max: number): number =>
-    t.endsWith('%') ? (parseFloat(t) / 100) * max : parseFloat(t);
-  const out = [parse(nums[0]!, 255), parse(nums[1]!, 255), parse(nums[2]!, 255)];
-  const a = alphaPart !== undefined ? alphaPart.trim() : (nums[3] ?? '1');
-  out.push(parse(a.trim(), 1));
-  return out;
+/** CSS 数字允许前导小数点、符号和指数；按完整 token 解析，避免丢失单位。 */
+const CSS_NUMBER = '[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:e[+-]?\\d+)?';
+const CHANNEL = new RegExp(`^(${CSS_NUMBER})(%?)$`);
+const HUE = new RegExp(`^(${CSS_NUMBER})(deg|grad|rad|turn)?$`);
+const clamp = (n: number, max = 1): number => Math.min(max, Math.max(0, n));
+
+function channel(token: string, max: number): number | null {
+  const match = CHANNEL.exec(token);
+  if (!match) return null;
+  const n = Number(match[1]);
+  return Number.isFinite(n) ? clamp(match[2] ? n / 100 * max : n, max) : null;
+}
+
+/** 旧逗号语法或现代空格 + / alpha；拒绝缺项、混合分隔与尾随垃圾。 */
+function fnColorParams(inner: string): { channels: string[]; alpha: number; legacy: boolean } | null {
+  const legacy = inner.includes(',');
+  let channels: string[];
+  let alphaToken: string;
+  if (legacy) {
+    if (inner.includes('/')) return null;
+    const parts = inner.split(',').map((t) => t.trim());
+    if (parts.length !== 3 && parts.length !== 4) return null;
+    channels = parts.slice(0, 3);
+    alphaToken = parts[3] ?? '1';
+  } else {
+    const parts = inner.split('/');
+    if (parts.length > 2) return null;
+    channels = parts[0]!.trim().split(/\s+/);
+    if (channels.length !== 3) return null;
+    alphaToken = parts[1]?.trim() ?? '1';
+  }
+  const alpha = channel(alphaToken, 1);
+  return alpha === null ? null : { channels, alpha, legacy };
 }
 
 /** 官方 any web format 颜色解析：'transparent'/#hex×4/rgb(a)/hsl(a)/命名色 →
  * 颜色；其余（系统色等）→ null（调用方退该字段默认，G1 登记）。 */
 export function parseColor(value: string): ResolvedColor | null {
-  if (value === 'transparent') return { color: 0, alpha: 0 };
   const lower = value.trim().toLowerCase();
+  if (lower === 'transparent') return { color: 0, alpha: 0 };
   // #rgb/#rgba/#rrggbb/#rrggbbaa
   if (lower.startsWith('#')) {
     const hex = lower.slice(1);
+    if (!/^[0-9a-f]+$/.test(hex)) return null;
     const byte = (i: number): number => parseInt(hex.slice(i, i + 2), 16);
     switch (hex.length) {
       case 3: {
@@ -138,36 +157,28 @@ export function parseColor(value: string): ResolvedColor | null {
         return null;
     }
   }
-  const named = NAMED_COLORS[lower];
-  if (named !== undefined) return { color: named, alpha: 1 };
-  if (lower.startsWith('rgb')) {
-    const p = fnColorParams(lower);
-    if (p === null) return null;
-    const alpha = Number.isFinite(p[3]) ? Math.min(1, Math.max(0, p[3]!)) : 1;
-    const r = Math.min(255, Math.max(0, p[0]!));
-    const g = Math.min(255, Math.max(0, p[1]!));
-    const b = Math.min(255, Math.max(0, p[2]!));
-    return { color: (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(b), alpha };
+  if (Object.hasOwn(NAMED_COLORS, lower)) return { color: NAMED_COLORS[lower]!, alpha: 1 };
+  const fn = /^(rgba?|hsla?)\((.*)\)$/s.exec(lower);
+  if (!fn) return null;
+  const p = fnColorParams(fn[2]!);
+  if (!p) return null;
+  const [a, b, c] = p.channels as [string, string, string];
+  if (fn[1]!.startsWith('rgb')) {
+    // 旧逗号 RGB 的三个通道须同为数字或百分比；现代语法允许混用。
+    if (p.legacy && new Set(p.channels.map((t) => t.endsWith('%'))).size > 1) return null;
+    const rgb = p.channels.map((t) => channel(t, 255));
+    if (rgb.some((n) => n === null)) return null;
+    return { color: (Math.round(rgb[0]!) << 16) | (Math.round(rgb[1]!) << 8) | Math.round(rgb[2]!), alpha: p.alpha };
   }
-  if (lower.startsWith('hsl')) {
-    // hsl 专属解析：h=度数（不标尺化），s/l 百分比→0..1（现代语法数字形式
-    // ≤1 视为比值）
-    const inner = /^\w+\(([^)]*)\)$/.exec(lower)?.[1];
-    if (inner === undefined) return null;
-    const parts = inner.split('/');
-    const nums = (parts[0] ?? '').match(/-?\d+(?:\.\d+)?%?/g);
-    if (nums === null || nums.length < 3) return null;
-    const ch = (t: string): number => parseFloat(t);
-    const ratio = (t: string): number => (t.endsWith('%') ? parseFloat(t) / 100 : Math.min(1, Math.max(0, parseFloat(t))));
-    const alphaText = parts[1] !== undefined ? parts[1].trim() : (nums[3] ?? '1');
-    const alpha = Math.min(1, Math.max(0, alphaText.endsWith('%') ? parseFloat(alphaText) / 100 : parseFloat(alphaText)));
-    const h = ch(nums[0]!);
-    const s = ratio(nums[1]!);
-    const l = ratio(nums[2]!);
-    if (![h, s, l].every(Number.isFinite)) return null;
-    return { color: hslToRgb(h, s, l), alpha: Number.isFinite(alpha) ? alpha : 1 };
-  }
-  return null;
+  const hue = HUE.exec(a);
+  if (!hue || (p.legacy && (!b.endsWith('%') || !c.endsWith('%')))) return null;
+  const units: Record<string, number> = { deg: 1, grad: 0.9, rad: 180 / Math.PI, turn: 360 };
+  const h = Number(hue[1]) * (units[hue[2] ?? 'deg']!);
+  // HSL 的 s/l 数字与百分比都以 100 为满量程（CSS Color 4）。
+  const s = channel(b.endsWith('%') ? b : `${b}%`, 1);
+  const l = channel(c.endsWith('%') ? c : `${c}%`, 1);
+  if (!Number.isFinite(h) || s === null || l === null) return null;
+  return { color: hslToRgb(h, s, l), alpha: p.alpha };
 }
 
 /** undefined/非有限/负数 → 缺省（渲染端防御脏数据，G11 同精神）。 */

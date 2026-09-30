@@ -766,7 +766,7 @@ R5 实施细化与结果见 [R5 动效系统实施方案](f2-renderer-r5.md) 和
   screeps/docs 仓库 api/source/RoomVisual.md 实为 radius 0.15/strokeWidth
   0.1/text font 分形态/padding 0.3/opacity 1.0（MapVisual.md 考古坐实来源；
   **纪律沉淀：官方文档取证走 GitHub 仓库源，不用整页站点锚点抓取**——r6 方案
-  §3.1 勘误注）。同批清偿：颜色 any web format 全集（命名色 148+9/rgb(a)/
+  §3.1 勘误注）。同批清偿：基础 web 颜色（命名色 148 键/rgb(a)/
   hsl(a)）、poly 折线开放描边、文字垂直锚官方明载（背景 middle/默认基线，底边
   近似登记 G1）、有限几何双防御（MAX_DASH_SEGMENTS=4096——实测 hypot(1e308,
   1e308) 有限致切段 OOM 比报告所指死循环更深）、悬停失效机制（数据/切房/相机
@@ -780,3 +780,9 @@ R5 实施细化与结果见 [R5 动效系统实施方案](f2-renderer-r5.md) 和
   双后端 53 条用例新默认值观感逐原语核对、多房 Tab 隔离（ambient 随房 13→3）、
   悬停/拾取/advanceAnimation 实测；R7 性能预算/内存 soak 未做不宣称。下一片
   R7（性能与收口）。
+
+- 2026-09-30：**R6 完整二次外部复审清偿**。上一轮默认值仲裁成立，双后端
+  主用例观感通过；后续定向复审发现 B1–B5 边界残留：CSS 数字/角度 token、
+  离开与拖拽状态的悬停重估、相机多指/capture 状态、文字描边 alpha、字体
+  部分失败重试资源累积。本轮逐项修复并补行为回归；详见 r6 方案 §8 末项。
+  原增量复审 PASS 不覆盖这些边界，收口须以本轮验证结果为准。

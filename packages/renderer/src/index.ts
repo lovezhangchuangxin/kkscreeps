@@ -332,24 +332,24 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
     /** 数据/房间/相机变化后的悬停重估（评审 GPT-P2#5：命中契约要求对象/房
      * 变化即触发，不能只等 pointermove）。 */
     const reevaluateHover = (): void => {
-      if (lastClient === null) return;
+      if (lastClient === null || pressedPointerId !== null) return;
       const rect = canvasEl.getBoundingClientRect();
       const result = pickFromScreen(lastClient.x - rect.left, lastClient.y - rect.top);
       fireHover(result.cell === null ? null : result);
     };
     const onPointerDown = (e: PointerEvent): void => {
-      if (e.button !== 0 || pressedPointerId !== null) return;
+      if (e.button !== 0 || e.isPrimary === false || pressedPointerId !== null) return;
+      lastClient = { x: e.clientX, y: e.clientY };
       pressedPointerId = e.pointerId;
       pressedStart = { x: e.clientX, y: e.clientY };
       pressedMaxDisp = 0;
     };
     const onPointerMove = (e: PointerEvent): void => {
+      if (e.isPrimary === false || (pressedPointerId !== null && e.pointerId !== pressedPointerId)) return;
       lastClient = { x: e.clientX, y: e.clientY };
       if (pressedPointerId !== null) {
-        if (e.pointerId === pressedPointerId) {
-          pressedMaxDisp = Math.max(pressedMaxDisp, Math.hypot(e.clientX - pressedStart.x, e.clientY - pressedStart.y));
-        }
-        return; // 手势期间悬停冻结
+        pressedMaxDisp = Math.max(pressedMaxDisp, Math.hypot(e.clientX - pressedStart.x, e.clientY - pressedStart.y));
+        return; // 手势期间所有重估入口统一冻结
       }
       const rect = canvasEl.getBoundingClientRect();
       const result = pickFromScreen(e.clientX - rect.left, e.clientY - rect.top);
@@ -359,20 +359,29 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
       if (e.pointerId !== pressedPointerId) return; // 非按下指针的释放不触发
       const disp = Math.max(pressedMaxDisp, Math.hypot(e.clientX - pressedStart.x, e.clientY - pressedStart.y));
       pressedPointerId = null;
+      lastClient = { x: e.clientX, y: e.clientY };
+      reevaluateHover();
       if (disp > PICK_SLOP_PX) return; // 手势期最大位移（非端点距离）判定拖拽
       const rect = canvasEl.getBoundingClientRect();
       const result = pickFromScreen(e.clientX - rect.left, e.clientY - rect.top);
       for (const listener of pickListeners) listener(result);
     };
     const onPointerCancel = (e: PointerEvent): void => {
-      if (e.pointerId === pressedPointerId) pressedPointerId = null;
+      if (e.pointerId !== pressedPointerId) return;
+      pressedPointerId = null;
+      lastClient = null;
+      fireHover(null);
     };
     const onLostPointerCapture = (e: PointerEvent): void => {
       // capture 丢失后按压态即失效，悬停不再被抑制（评审 GPT-P2#6）
-      if (e.pointerId === pressedPointerId) pressedPointerId = null;
-    };
-    const onPointerLeave = (): void => {
+      if (e.pointerId !== pressedPointerId) return;
       pressedPointerId = null;
+      reevaluateHover();
+    };
+    const onPointerLeave = (e: PointerEvent): void => {
+      if (e.isPrimary === false || (pressedPointerId !== null && e.pointerId !== pressedPointerId)) return;
+      pressedPointerId = null;
+      lastClient = null;
       fireHover(null);
     };
 

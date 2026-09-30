@@ -18,12 +18,13 @@ function makeKernel() {
     off: vi.fn((_event: string, listener: () => void) => { listeners.delete(listener); }),
   };
   const domListeners = new Map<string, Set<(e: Partial<PointerEvent>) => void>>();
+  const capturedPointers = new Set<number>();
   const canvas = {
     style: {},
     getBoundingClientRect: vi.fn(() => ({ left: 0, top: 0 })),
-    setPointerCapture: vi.fn(),
-    releasePointerCapture: vi.fn(),
-    hasPointerCapture: vi.fn(() => false),
+    setPointerCapture: vi.fn((id: number) => { capturedPointers.add(id); }),
+    releasePointerCapture: vi.fn((id: number) => { capturedPointers.delete(id); }),
+    hasPointerCapture: vi.fn((id: number) => capturedPointers.has(id)),
     addEventListener: vi.fn((event: string, listener: (e: Partial<PointerEvent>) => void) => {
       let set = domListeners.get(event);
       if (!set) { set = new Set(); domListeners.set(event, set); }
@@ -35,7 +36,7 @@ function makeKernel() {
   };
   /** 合成派发 DOM 指针事件（拾取/悬停测试）。 */
   const firePointer = (event: string, e: Partial<PointerEvent>): void => {
-    for (const listener of [...(domListeners.get(event) ?? [])]) listener(e);
+    for (const listener of [...(domListeners.get(event) ?? [])]) listener({ pointerId: 1, isPrimary: true, ...e });
   };
   const destroy = vi.fn(async () => { ticker.destroy(); stage.destroy({ children: true }); });
   const kernel: Kernel = { stage, backend: 'webgl', destroy,
@@ -109,8 +110,8 @@ describe('公共句柄生命周期与真实 ticker 接线', () => {
     const handle = await mounted();
     await Promise.all([handle.destroy(), handle.destroy()]);
     expect(runtime.destroy).toHaveBeenCalledTimes(1);
-    // 相机 6（wheel/pointer×4/contextmenu）+ 拾取悬停 6（pointer×5+lostpointercapture）
-    expect(runtime.canvas.removeEventListener).toHaveBeenCalledTimes(12);
+    // 相机 8（含 lostpointercapture/pointerleave）+ 拾取悬停 6（pointer×5+lostpointercapture）
+    expect(runtime.canvas.removeEventListener).toHaveBeenCalledTimes(14);
     expect(runtime.listeners.size).toBe(0);
     expect(bitmaps.every((bitmap) => bitmap.close.mock.calls.length === 1)).toBe(true);
     // feed 可作为数据仓库继续使用，不能再调用已销毁场景。
@@ -122,8 +123,8 @@ describe('公共句柄生命周期与真实 ticker 接线', () => {
     vi.stubGlobal('fetch', async () => { throw new Error('offline'); });
     await expect(mounted()).rejects.toThrow('offline');
     expect(runtime.destroy).toHaveBeenCalledTimes(1);
-    // 失败发生在拾取监听装配之前：仅相机 6 监听
-    expect(runtime.canvas.removeEventListener).toHaveBeenCalledTimes(6);
+    // 失败发生在拾取监听装配之前：仅相机 8 监听
+    expect(runtime.canvas.removeEventListener).toHaveBeenCalledTimes(8);
   });
 
   it('资产成功后装配失败也释放资产与场景', async () => {
@@ -220,7 +221,7 @@ describe('R6：活动房间 / visuals / 拾取悬停 / 字体 / advanceAnimation
     // 销毁后 DOM 监听摘除：合成事件不再触达任何回调
     await handle.destroy();
     expect(() => runtime.firePointer('pointermove', { button: 0, clientX: 700, clientY: 400 })).not.toThrow();
-    expect(runtime.canvas.removeEventListener).toHaveBeenCalledTimes(12);
+    expect(runtime.canvas.removeEventListener).toHaveBeenCalledTimes(14);
   });
 
   it('悬停失效机制：切房/数据变化即重估回调（评审 GPT-P2#5，不依赖 pointermove）', async () => {
@@ -247,6 +248,78 @@ describe('R6：活动房间 / visuals / 拾取悬停 / 字体 / advanceAnimation
     expect(runtime.stage.getChildByLabel('layer-hover', true)!.children.length).toBe(0);
   });
 
+  it('离开后 feed/切房/相机变化不复活悬停', async () => {
+    mockAssetIO(); const h = await mounted(); const terrain = { codes: new Array(2500).fill(0) };
+    h.feed.applySnapshot({ room: 'A', time: 0, terrain, objects: [creep(10)] });
+    h.feed.applySnapshot({ room: 'B', time: 0, terrain, objects: [creep(10)] });
+    h.setCameraState({ x: 1000, y: 1000, zoom: 1 });
+    const hover = vi.fn(); h.onHover(hover);
+    runtime.firePointer('pointermove', { clientX: 400, clientY: 400 });
+    runtime.firePointer('pointerleave', {});
+    expect(hover).toHaveBeenLastCalledWith(null);
+    h.feed.applyDelta({ room: 'A', time: 1, upsert: [], removedIds: ['c'] });
+    h.setActiveRoom('B'); h.setCameraState({ x: 1100, y: 1000, zoom: 1 }); h.advanceAnimation(1);
+    expect(hover).toHaveBeenCalledTimes(2);
+    expect(runtime.stage.getChildByLabel('layer-hover', true)!.children).toHaveLength(0);
+  });
+  it('手势期所有重估冻结，释放后恢复当前悬停且不触发拖拽 pick', async () => {
+    mockAssetIO(); const h = await mounted();
+    h.feed.applySnapshot({ room: 'A', time: 0, terrain: { codes: new Array(2500).fill(0) }, objects: [creep(10)] });
+    h.setCameraState({ x: 1000, y: 1000, zoom: 1 });
+    const hover = vi.fn(), pick = vi.fn(); h.onHover(hover); h.onPick(pick);
+    runtime.firePointer('pointermove', { clientX: 400, clientY: 400 });
+    runtime.firePointer('pointerdown', { button: 0, clientX: 400, clientY: 400 });
+    runtime.firePointer('pointermove', { clientX: 500, clientY: 400 });
+    h.feed.applyDelta({ room: 'A', time: 1, upsert: [], removedIds: ['c'] });
+    h.setCameraState({ x: 2000, y: 1000, zoom: 1 }); h.advanceAnimation(1);
+    expect(hover).toHaveBeenCalledTimes(1);
+    runtime.firePointer('pointerup', { clientX: 500, clientY: 400 });
+    expect(hover).toHaveBeenLastCalledWith(expect.objectContaining({ cell: { x: 21, y: 10 }, room: 'A' }));
+    expect(pick).not.toHaveBeenCalled();
+  });
+  it('多指不串扰，capture 丢失后空手不拖动，拖回原点不点击', async () => {
+    mockAssetIO(); const h = await mounted(); h.setCameraState({ x: 1000, y: 1000, zoom: 1 });
+    const pick = vi.fn(); h.onPick(pick);
+    runtime.firePointer('pointerdown', { button: 0, clientX: 400, clientY: 400 });
+    runtime.firePointer('pointerdown', { pointerId: 2, isPrimary: false, button: 0, clientX: 700, clientY: 400 });
+    runtime.firePointer('pointermove', { pointerId: 2, isPrimary: false, clientX: 700, clientY: 400 });
+    runtime.firePointer('pointercancel', { pointerId: 2, isPrimary: false });
+    // 不同输入设备可能各自 isPrimary=true，仍必须匹配 pointerId。
+    runtime.firePointer('pointermove', { pointerId: 2, clientX: 700, clientY: 400 });
+    runtime.firePointer('pointerup', { pointerId: 2, clientX: 700, clientY: 400 });
+    runtime.firePointer('lostpointercapture', { pointerId: 2 });
+    expect(h.pickAt(400, 400).world.x).toBe(1000);
+    runtime.firePointer('pointermove', { clientX: 450, clientY: 400 });
+    expect(h.pickAt(400, 400).world.x).toBe(950);
+    runtime.firePointer('lostpointercapture', {});
+    runtime.firePointer('pointermove', { buttons: 0, clientX: 600, clientY: 400 });
+    runtime.firePointer('pointerup', { clientX: 400, clientY: 400 });
+    expect(h.pickAt(400, 400).world.x).toBe(950);
+    expect(pick).not.toHaveBeenCalled();
+    runtime.firePointer('pointerdown', { button: 0, clientX: 400, clientY: 400 });
+    runtime.firePointer('pointermove', { clientX: 410, clientY: 400 });
+    runtime.firePointer('pointermove', { clientX: 400, clientY: 400 });
+    runtime.firePointer('pointerup', { clientX: 400, clientY: 400 });
+    expect(pick).not.toHaveBeenCalled();
+  });
+  it('主指取消后不点击、不复活悬停；销毁释放仍持有的 capture', async () => {
+    mockAssetIO(); const h = await mounted();
+    h.feed.applySnapshot({ room: 'A', time: 0, terrain: { codes: new Array(2500).fill(0) }, objects: [] });
+    h.setCameraState({ x: 1000, y: 1000, zoom: 1 });
+    const hover = vi.fn(), pick = vi.fn(); h.onHover(hover); h.onPick(pick);
+    runtime.firePointer('pointermove', { clientX: 400, clientY: 400 });
+    runtime.firePointer('pointerdown', { button: 0, clientX: 400, clientY: 400 });
+    runtime.firePointer('pointercancel', {});
+    h.feed.applyDelta({ room: 'A', time: 1, upsert: [creep(10)], removedIds: [] });
+    runtime.firePointer('pointerup', { clientX: 400, clientY: 400 });
+    expect(hover).toHaveBeenCalledTimes(2);
+    expect(hover).toHaveBeenLastCalledWith(null);
+    expect(pick).not.toHaveBeenCalled();
+    runtime.firePointer('pointerdown', { button: 0, clientX: 400, clientY: 400 });
+    expect(runtime.canvas.hasPointerCapture(1)).toBe(true);
+    await h.destroy();
+    expect(runtime.canvas.hasPointerCapture(1)).toBe(false);
+  });
   it('无地形房切房以素地码重建（评审 B-B2：spy 锚接线；墙残留观感留 harness）', async () => {
     mockAssetIO();
     // node 无 canvas——墙烘焙不可达；全零地形走 hash 门控零烘焙路径

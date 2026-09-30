@@ -7,7 +7,7 @@ import { VisualStage } from '../src/scenes/visual-stage.js';
 // node 无 canvas——CanvasTextMetrics 桩（R5 say 气泡测试同款）。
 
 function measureStub(): void {
-  vi.spyOn(CanvasTextMetrics, 'measureText').mockImplementation(() => ({ width: 180 }) as CanvasTextMetrics);
+  vi.spyOn(CanvasTextMetrics, 'measureText').mockImplementation(() => ({ width: 180, height: 100 }) as CanvasTextMetrics);
 }
 
 let stage: VisualStage;
@@ -73,6 +73,19 @@ describe('VisualStage', () => {
     expect(container.children.length).toBe(2); // bg Graphics + Text
   });
 
+  it('透明填充保留独立描边 alpha，背景 middle 几何对称', () => {
+    stage.setVisuals([{ type: 'text', x: 1, y: 1, text: 'x', style: {
+      color: 'transparent', stroke: '#ff000080', backgroundColor: '#00000080', opacity: 0.5,
+    } }]);
+    const container = stage.root.children[0]!;
+    const text = container.children[1] as Text;
+    expect(text.alpha).toBe(0.5);
+    expect(text.style._fill!.alpha).toBe(0);
+    expect(text.style._stroke!.alpha).toBeCloseTo(128 / 255);
+    const bg = container.children[0]!;
+    expect(bg.getBounds().y).toBeCloseTo(20);
+    expect(bg.getBounds().height).toBeCloseTo(160);
+  });
   it('重建时旧 Text 以四标志精确销毁（评审 C建议8：canvas 私有源纪律锚）', () => {
     const spy = vi.spyOn(Text.prototype, 'destroy');
     try {

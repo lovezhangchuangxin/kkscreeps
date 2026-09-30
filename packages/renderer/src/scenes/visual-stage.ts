@@ -191,11 +191,11 @@ export class VisualStage {
           fontWeight: r.fontWeight,
           fontStyle: r.fontStyle,
           fontVariant: r.fontVariant,
-          fill: r.color.color,
+          fill: { color: r.color.color, alpha: r.color.alpha },
           align: r.align,
           // v8 text stroke 样式对象；join=round 防 miter 尖刺（canvas 观感近似）
           ...(r.stroke !== null && r.stroke.alpha > 0 && r.strokePx > 0
-            ? { stroke: { color: r.stroke.color, width: r.strokePx, join: 'round' as const } }
+            ? { stroke: { color: r.stroke.color, alpha: r.stroke.alpha, width: r.strokePx, join: 'round' as const } }
             : {}),
         },
       });
@@ -215,8 +215,8 @@ export class VisualStage {
         container.addChild(bg);
       }
       container.addChild(text);
-      // 文字色 α×opacity 只作用于 Text 本体（容器不再承载 α）
-      text.alpha = r.color.alpha * r.opacity;
+      // 填充/描边各自承担颜色 alpha；Text 只承担共同 opacity。
+      text.alpha = r.opacity;
       container.position.set(visual.x * this.cell, visual.y * this.cell);
     } catch {
       // 降级：半成品精确销毁（text 私有 canvas 源四标志），整批不中断

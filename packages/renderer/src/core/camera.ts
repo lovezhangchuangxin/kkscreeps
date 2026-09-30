@@ -28,7 +28,7 @@ export class CameraController {
   private readonly stage: Container;
   private readonly getViewSize: () => { width: number; height: number };
   private canvas: HTMLCanvasElement | null = null;
-  private dragging = false;
+  private draggingPointerId: number | null = null;
   private lastSx = 0;
   private lastSy = 0;
   private viewWidth = -1;
@@ -54,22 +54,23 @@ export class CameraController {
     this.apply();
   };
   private readonly onPointerDown = (e: PointerEvent) => {
-    this.dragging = true;
+    if (e.button !== 0 || e.isPrimary === false || this.draggingPointerId !== null) return;
+    this.draggingPointerId = e.pointerId;
     this.lastSx = e.clientX;
     this.lastSy = e.clientY;
     this.canvas!.setPointerCapture(e.pointerId);
     this.canvas!.style.cursor = 'grabbing';
   };
   private readonly onPointerMove = (e: PointerEvent) => {
-    if (!this.dragging) return;
+    if (this.draggingPointerId === null || e.pointerId !== this.draggingPointerId) return;
     this.cam = this.clamp(panBy(this.cam, e.clientX - this.lastSx, e.clientY - this.lastSy));
     this.lastSx = e.clientX;
     this.lastSy = e.clientY;
     this.apply();
   };
   private readonly endDrag = (e: PointerEvent) => {
-    if (!this.dragging) return;
-    this.dragging = false;
+    if (this.draggingPointerId === null || e.pointerId !== this.draggingPointerId) return;
+    this.draggingPointerId = null;
     // pointercancel 路径浏览器可能已隐式释放捕获，先查再放
     if (this.canvas!.hasPointerCapture(e.pointerId)) this.canvas!.releasePointerCapture(e.pointerId);
     this.canvas!.style.cursor = 'grab';
@@ -100,6 +101,8 @@ export class CameraController {
     canvas.addEventListener('pointermove', this.onPointerMove);
     canvas.addEventListener('pointerup', this.endDrag);
     canvas.addEventListener('pointercancel', this.endDrag);
+    canvas.addEventListener('lostpointercapture', this.endDrag);
+    canvas.addEventListener('pointerleave', this.endDrag);
     canvas.addEventListener('contextmenu', this.onContextMenu);
     canvas.style.cursor = 'grab';
     this.apply();
@@ -113,6 +116,11 @@ export class CameraController {
     canvas.removeEventListener('pointermove', this.onPointerMove);
     canvas.removeEventListener('pointerup', this.endDrag);
     canvas.removeEventListener('pointercancel', this.endDrag);
+    canvas.removeEventListener('lostpointercapture', this.endDrag);
+    canvas.removeEventListener('pointerleave', this.endDrag);
+    const pointerId = this.draggingPointerId;
+    this.draggingPointerId = null;
+    if (pointerId !== null && canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId);
     canvas.removeEventListener('contextmenu', this.onContextMenu);
     canvas.style.cursor = '';
     this.canvas = null;

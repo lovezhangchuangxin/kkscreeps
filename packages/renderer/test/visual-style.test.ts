@@ -47,6 +47,25 @@ describe('parseColor（官方 any web format）', () => {
     expect(parseColor('hsl(120 100% 50% / 0.5)')).toEqual({ color: 0x00ff00, alpha: 0.5 });
     expect(parseColor('hsl(240, 100%, 50%)')).toEqual({ color: 0x0000ff, alpha: 1 });
   });
+  it.each([
+    ['rgba(255,0,0,.5)', 0xff0000, 0.5],
+    ['rgb(255\n0\n0 / .5)', 0xff0000, 0.5],
+    ['rgba(255,0,0,+.5)', 0xff0000, 0.5],
+    ['rgb(100% 0 0 / 5e-1)', 0xff0000, 0.5],
+    ['hsl(.5turn,100%,50%)', 0x00ffff, 1],
+    ['hsl(100grad,100%,50%)', 0x80ff00, 1],
+    ['hsl(180deg 100 50)', 0x00ffff, 1],
+    ['hsl(3.141592653589793rad 100% 50% / .5)', 0x00ffff, 0.5],
+    ['hsla(120,100%,50%,.5)', 0x00ff00, 0.5],
+    ['hsl(-.5turn 100% 50%)', 0x00ffff, 1],
+    [' TRANSPARENT ', 0, 0],
+  ])('完整 CSS token：%s', (input, color, alpha) => {
+    expect(parseColor(input)).toEqual({ color, alpha });
+  });
+  it.each(['rgbx(255,0,0)', 'rgb(255,0,0,junk)', 'rgb(1 2 3 garbage)',
+    'rgb(1,2,3 / .5)', 'hsl(1foo,100%,50%)', '#ggg', 'constructor', 'toString'])('非法颜色不误命中：%s', (input) => {
+    expect(parseColor(input)).toBeNull();
+  });
   it('系统色等非基础形态 → null（G1 退默认）', () => {
     expect(parseColor('inherit')).toBeNull();
     expect(parseColor('rgb(1, 2)')).toBeNull();

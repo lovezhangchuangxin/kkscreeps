@@ -2,7 +2,7 @@
  * Roboto 预载（G7 契约：字体加载责任在库——R6 D5 拍板）。库自建 FontFace
  * 挂 document.fonts（宿主页面无需 @font-face）；同一 baseUrl 只加载一次
  * （模块级缓存，多实例不重复下载）。allSettled 非阻塞失败语义：任一规格
- * 失败 → 'fallback'（回退字体渲染，失败 face 自 document.fonts 摘除），
+ * 失败 → 'fallback'（回退字体渲染，本次所有 face 自 document.fonts 摘除），
  * 不抛错不阻塞首帧。
  *
  * 三规格 = 库内文字件实际使用面单源：badge 82 bold（objects/specs.ts:69）、
@@ -38,25 +38,30 @@ export function ensureFonts(baseUrl: string): Promise<FontStatus> {
 }
 
 async function load(root: string): Promise<FontStatus> {
+  const owned: FontFace[] = [];
+  let fontSet: FontFaceSet | null = null;
+  let loaded = false;
   try {
     if (typeof document === 'undefined' || !('fonts' in document)) return 'fallback';
-    const faces = FONT_SPECS.map((spec) => {
+    fontSet = document.fonts;
+    const pending: Promise<boolean>[] = [];
+    for (const spec of FONT_SPECS) {
       const url = new URL(`fonts/roboto-latin-${spec.weight}-normal.woff2`, root).href;
       const face = new FontFace(FONT_FAMILY, `url(${url})`, { weight: spec.weight });
-      document.fonts.add(face);
-      return face.load().then(
-        () => true,
-        () => {
-          document.fonts.delete(face);
-          return false;
-        },
-      );
-    });
-    const results = await Promise.all(faces);
-    return results.every(Boolean) ? 'loaded' : 'fallback';
+      owned.push(face); // add/load 同步异常也须回滚本次所有 face
+      fontSet.add(face);
+      pending.push(face.load().then(() => true, () => false));
+    }
+    loaded = (await Promise.all(pending)).every(Boolean);
+    return loaded ? 'loaded' : 'fallback';
   } catch {
-    // 永不 reject（评审 GPT-P2#9）：构造异常等同加载失败——走 fallback
-    // 路径（缓存随之清除，可重试），调用方 await 不会跳出统一回滚
+    // 永不 reject：构造/add/load 异常等同加载失败，可重试。
     return 'fallback';
+  } finally {
+    if (!loaded && fontSet) {
+      for (const face of owned) {
+        try { fontSet.delete(face); } catch { /* 清理异常也不得 reject；继续清理其他 face */ }
+      }
+    }
   }
 }

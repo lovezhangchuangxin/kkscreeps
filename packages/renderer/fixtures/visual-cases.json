@@ -32,7 +32,7 @@
     { "type": "text", "x": 12, "y": 28.8, "text": "poly fill magenta(named)", "style": { "align": "left", "font": 1 } },
 
     { "type": "rect", "x": 20, "y": 24, "w": 4, "h": 3, "style": { "fill": "transparent", "stroke": "#00ffff", "lineStyle": "dotted" } },
-    { "type": "text", "x": 20, "y": 27.8, "text": "rect 默认宽(0.5) dotted 离散回归", "style": { "align": "left", "font": 1 } },
+    { "type": "text", "x": 20, "y": 27.8, "text": "rect 默认宽(0.1) dotted 离散回归", "style": { "align": "left", "font": 1 } },
     { "type": "circle", "x": 44, "y": 44, "style": { "radius": 3, "fill": "transparent", "stroke": "#ff00ff", "lineStyle": "dashed" } },
     { "type": "text", "x": 44, "y": 48, "text": "circle 默认宽 dashed", "style": { "font": 0.8 } },
 
@@ -41,7 +41,7 @@
 
     { "type": "text", "x": 30, "y": 1.8, "text": "C. circle（默认 r0.15 填白 / 填色 / dotted 描边）", "style": { "align": "left", "font": 1.2, "opacity": 0.9 } },
     { "type": "circle", "x": 38, "y": 12 },
-    { "type": "text", "x": 38, "y": 22.5, "text": "circle default r0.15", "style": { "font": 1 } },
+    { "type": "text", "x": 38, "y": 14, "text": "circle default r0.15", "style": { "font": 1 } },
     { "type": "circle", "x": 30, "y": 30, "style": { "radius": 5, "fill": "#ff0000", "opacity": 0.4 } },
     { "type": "text", "x": 30, "y": 30, "text": "r5 fill", "style": { "font": 1 } },
     { "type": "circle", "x": 41, "y": 30, "style": { "radius": 4, "fill": "transparent", "stroke": "#00ffff", "lineStyle": "dotted", "strokeWidth": 0.15, "opacity": 0.9 } },
@@ -49,7 +49,7 @@
 
     { "type": "text", "x": 20, "y": 32.8, "text": "E. text（默认 font 0.8 op1 / 背景描边 / 对齐锚点）", "style": { "align": "left", "font": 1.2, "opacity": 0.9 } },
     { "type": "text", "x": 22, "y": 42, "text": "default 0.8" },
-    { "type": "text", "x": 38, "y": 40, "text": "styled bg/stroke", "style": { "font": 4, "backgroundColor": "#000000", "backgroundPadding": 1, "color": "#00ff00", "stroke": "#ffffff", "strokeWidth": 0.08, "opacity": 0.9 } },
+    { "type": "text", "x": 35, "y": 39, "text": "styled", "style": { "font": 4, "backgroundColor": "#000000", "backgroundPadding": 1, "color": "#00ff00", "stroke": "#ffffff", "strokeWidth": 0.08, "opacity": 0.9 } },
     { "type": "circle", "x": 20, "y": 46, "style": { "radius": 0.3, "fill": "#ffff00", "opacity": 1 } },
     { "type": "text", "x": 20, "y": 46, "text": "L", "style": { "align": "left", "font": 2, "color": "#ffffff", "opacity": 1 } },
     { "type": "text", "x": 20, "y": 46, "text": "C", "style": { "font": 2, "color": "#00ffff", "opacity": 1 } },
