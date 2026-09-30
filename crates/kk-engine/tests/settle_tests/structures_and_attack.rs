@@ -187,6 +187,9 @@ fn engine_scripted_sandbox_closed_loop() {
                 ],
                 store: Default::default(),
                 store_extra: Vec::new(),
+                say_message: None,
+                say_public: None,
+                notify_when_attacked: None,
             }),
         )
         .unwrap();
@@ -660,6 +663,9 @@ fn sandbox_intents_bound_to_registered_player() {
                 body: body(&[BodyKind::Move]),
                 store: Default::default(),
                 store_extra: Vec::new(),
+                say_message: None,
+                say_public: None,
+                notify_when_attacked: None,
             }),
         )
         .unwrap();

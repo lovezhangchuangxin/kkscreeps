@@ -385,6 +385,9 @@ fn notify_when_attacked(w: &mut Working, player: &str, id: ObjId, data: &IntentD
     }
     let enabled = data.enabled.unwrap_or(false); // 官方 !!intent.enabled
     match w.room.objects.get_mut(&id) {
+        // M2B 扩面 P1：creep 同门（官方 :313 类型门显式收录 creep——processor
+        // 通用段先于类型分派，对所有对象类型生效）
+        Some(RoomObject::Creep(o)) => o.notify_when_attacked = Some(enabled),
         Some(RoomObject::Spawn(o)) => o.notify_when_attacked = Some(enabled),
         Some(RoomObject::Extension(o)) => o.notify_when_attacked = Some(enabled),
         Some(RoomObject::Storage(o)) => o.notify_when_attacked = Some(enabled),
@@ -399,9 +402,8 @@ fn notify_when_attacked(w: &mut Working, player: &str, id: ObjId, data: &IntentD
             v["notifyWhenAttacked"] = Value::Bool(enabled);
             o.data = v.to_string();
         }
-        // creep：官方经 bulk.update 同样落库（出生即 true，create-creep.js:93）
-        // ——CreepObj 无该字段且 API 面不暴露（Creep 无 notifyWhenAttacked
-        // 方法），通知面未接线前不可观测，灰区登记
+        // creep 臂已在上方（M2B 扩面 P1——字段+API 面齐）；其余类型（工地/
+        // 旗/controller/source 等）不在官方 :313 类型门内
         _ => {}
     }
 }
@@ -451,9 +453,12 @@ pub fn settle_room(
     };
 
     // 阶段 1 预扫描（processor.js:43-171 的 M1 子集）：actionLog 每 tick 重置
+    //（M2B 扩面 P1 起含 say 文本载荷两字段——官方 actionLog 整对象每 tick 重建）
     for creep in w.room.objects.values_mut() {
         if let RoomObject::Creep(c) = creep {
             c.action_log = 0;
+            c.say_message = None;
+            c.say_public = None;
         }
     }
 

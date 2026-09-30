@@ -605,6 +605,9 @@ fn mineral_and_extractor_projection_and_find() {
                     resource: "U".into(),
                     amount: 12,
                 }],
+                say_message: None,
+                say_public: None,
+                notify_when_attacked: None,
             }),
         )
         .unwrap();

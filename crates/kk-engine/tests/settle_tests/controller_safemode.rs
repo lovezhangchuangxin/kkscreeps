@@ -29,6 +29,9 @@ fn heal_target_validation_rejections() {
                 body: body(&[BodyKind::Move]),
                 store: Default::default(),
                 store_extra: Vec::new(),
+                say_message: None,
+                say_public: None,
+                notify_when_attacked: None,
             }),
         )
         .unwrap();
@@ -698,6 +701,9 @@ fn tick_input_replay_consistency_engine_level() {
                             ghodium: 0,
                         },
                         store_extra: Vec::new(),
+                        say_message: None,
+                        say_public: None,
+                        notify_when_attacked: None,
                     }),
                 )
                 .unwrap();

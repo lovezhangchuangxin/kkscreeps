@@ -1,9 +1,11 @@
-/* kk-runner prelude · 30_game 段 4b：Creep 资源族四方法与 controller 族
- * （对照官方 engine/src/game/creeps.js:404-593 与 A4-iii controller 族）。
+/* kk-runner prelude · 30_game 段 4b：Creep 资源族/controller 族/杂项族
+ * （对照官方 engine/src/game/creeps.js:404-593/996-1015 与 A4-iii controller 族）。
  * B1 结构治理批自段 4（creep.js）纯搬移；段间共享经 gw 桥——4a 定义点的
  * C 表/countActiveParts/blockedBySafeMode 在此绑定同一对象/函数，调用点
- * 保持裸名（与拆分前逐字节一致）。CREEP_METHODS 残余桩循环与 creep 装配
- * 在本段尾部（须在全部真方法安装后执行）。
+ * 保持裸名（与拆分前逐字节一致）。creep 装配在本段尾部（须在全部真方法
+ * 安装后执行）。M2B 扩面 P1：notifyWhenAttacked 转真 + CREEP_METHODS
+ * 残余桩表摘除（官方 29 方法至此全真——表内非官方残留 spawn/recycleCreep/
+ * renewCreep/moveHead 一并清除，玩家可见面收缩回官方集）。
  */
 (() => {
   'use strict';
@@ -13,11 +15,6 @@
   const C = gw.__creepC;
   const countActiveParts = gw.countActiveParts;
   const blockedBySafeMode = gw.blockedBySafeMode;
-
-  const CREEP_METHODS = ['move', 'moveByPath', 'moveTo', 'harvest', 'build', 'repair', 'dismantle', 'upgradeController', 'attack', 'rangedAttack', 'rangedMassAttack', 'heal', 'rangedHeal', 'transfer', 'withdraw', 'drop', 'pickup', 'say', 'suicide', 'spawn', 'pull', 'recycleCreep', 'renewCreep', 'cancelOrder', 'moveHead'];
-  // A4-iii 换真下架（原桩列表项）：claimController/reserveController/
-  // attackController/generateSafeMode（signController 官方在缺集登记里——本批
-  // 一并换真，不入桩表）
 
   // ---- controller 族（A4-iii）的 GCL 门读数 ----
   // 预置 Math.pow 与 Set（官方 calcNeededGcl/定集在引擎闭包内求值——玩家交换
@@ -568,12 +565,19 @@
     return C.OK;
   };
 
-  // 未换真的方法保持桩（stub_calls 计数，A4 批次清偿）——挂原型与真方法同层
-  for (const m of CREEP_METHODS) {
-    if (!(m in globalThis.Creep.prototype)) {
-      globalThis.Creep.prototype[m] = gw.mkStubMethod('creep.' + m);
+  /** 官方 notifyWhenAttacked（creeps.js:996-1015）：布尔门 + 新鲜读判重
+   * （data.notifyWhenAttacked——投影缺省 undefined 时 JS 宽松不等使任何
+   * enabled 都过门记 intent，与官方同形）。结算通用段对 creep 生效
+   * （processor.js:313）。 */
+  globalThis.Creep.prototype.notifyWhenAttacked = function notifyWhenAttacked(enabled) {
+    if (!this.my) return C.ERR_NOT_OWNER;
+    if (this.spawning) return C.ERR_BUSY;
+    if (typeof enabled !== 'boolean') return C.ERR_INVALID_ARGS;
+    if (enabled !== gw.rawData(this.id).notifyWhenAttacked) {
+      gw.intents.set(this.id, 'notifyWhenAttacked', { enabled });
     }
-  }
+    return C.OK;
+  };
 
   // ---------------------------------------------------------------- creep 装配
   // A3b：字段/方法全在 Creep.prototype，装配只确认壳进 objectsById（wrapObject

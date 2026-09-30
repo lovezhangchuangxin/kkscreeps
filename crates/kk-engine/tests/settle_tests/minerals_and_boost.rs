@@ -78,6 +78,9 @@ fn boosted_build_two_step_official_values() {
                         ghodium: 0,
                     },
                     store_extra: Vec::new(),
+                    say_message: None,
+                    say_public: None,
+                    notify_when_attacked: None,
                 }),
             )
             .unwrap();

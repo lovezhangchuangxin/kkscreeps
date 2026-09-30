@@ -34,7 +34,10 @@ use crate::settle::spawn;
 use crate::settle::{controller_allowed, energy_resource_name};
 
 use build::intent_build;
-use combat::{intent_attack, intent_dismantle, intent_heal, intent_repair};
+use combat::{
+    intent_attack, intent_dismantle, intent_heal, intent_ranged_attack, intent_ranged_mass_attack,
+    intent_repair,
+};
 use controller::{
     intent_attack_controller, intent_claim_controller, intent_generate_safe_mode,
     intent_reserve_controller, intent_sign_controller, intent_upgrade_controller,
@@ -78,7 +81,10 @@ pub fn process_creep_intents(w: &mut Working, id: ObjId, actions: &BTreeMap<Acti
             Action::Say => intent_say(w, id, data),
             Action::Suicide => intent_suicide(w, id),
             Action::Pull => intent_pull(w, id, data),
-            // M1 无执行器的动作（战斗/占位/杂项）：压制图已生效，此处静默跳过
+            // M2B 扩面 P1：远程攻击族（rangedAttack.js / rangedMassAttack.js）
+            Action::RangedAttack => intent_ranged_attack(w, id, data),
+            Action::RangedMassAttack => intent_ranged_mass_attack(w, id),
+            // M1 无执行器的动作（占位/杂项）：压制图已生效，此处静默跳过
             _ => {}
         }
     }
@@ -114,9 +120,17 @@ pub const ACTION_HEALED: u8 = 1 << 7;
 /// 已满 8 位，B2 起 action_log 拓宽为 u16，本键落在 bit8。
 pub const ACTION_RESERVE: u16 = 1 << 8;
 
-/// 官方 actionLog.say（say.js:18-21）。官方键是带 message(截 10)/isPublic 的
-/// 对象——位图只落事件位，文本载荷不可承载（intent_say 注释的灰区口径）。
+/// 官方 actionLog.say（say.js:18-21）。位图落事件位；文本载荷自 M2B 扩面
+/// P1 起由 CreepObj.say_message/say_public 承载（官方形态恢复，投影侧消费）。
 pub const ACTION_SAY: u16 = 1 << 9;
+
+/// 官方 actionLog.rangedAttack（_damage.js:66-71，键含 {x,y} 坐标——位图
+/// 无载荷，事件位同口径）。M2B 扩面 P1。
+pub const ACTION_RANGED_ATTACK: u16 = 1 << 10;
+
+/// 官方 actionLog.rangedMassAttack（rangedMassAttack.js:58——处理器尾部落键，
+/// 与 _damage 无关）。M2B 扩面 P1。
+pub const ACTION_RANGED_MASS: u16 = 1 << 11;
 
 pub fn set_action_log(bits: &mut u16, bit: impl Into<u16>) {
     *bits |= bit.into();

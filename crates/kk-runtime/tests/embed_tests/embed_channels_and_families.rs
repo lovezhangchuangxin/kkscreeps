@@ -97,6 +97,9 @@ pub(super) fn embed_intent_channel_impl() -> anyhow::Result<()> {
                 ],
                 store: Default::default(),
                 store_extra: Vec::new(),
+                say_message: None,
+                say_public: None,
+                notify_when_attacked: None,
             }),
         )
         .unwrap();

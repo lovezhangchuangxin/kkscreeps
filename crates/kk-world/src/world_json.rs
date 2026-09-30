@@ -357,6 +357,16 @@ pub(crate) fn object_json(
             if o.age_time != 0 {
                 v["ticksToLive"] = json!(o.age_time.saturating_sub(time));
             }
+            // say 载荷（M2B 扩面 P1）：官方 actionLog.say 的等价读取面——
+            // prelude saying getter 按 owner/isPublic 折叠（creeps.js:84-92）；
+            // notifyWhenAttacked：API 判重门读（creeps.js:1008）
+            if let Some(m) = &o.say_message {
+                v["say"] = json!(m);
+                v["sayPublic"] = json!(o.say_public.unwrap_or(false));
+            }
+            if let Some(f) = o.notify_when_attacked {
+                v["notifyWhenAttacked"] = json!(f);
+            }
             v
         }
         RoomObject::Source(o) => json!({

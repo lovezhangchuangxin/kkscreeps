@@ -190,6 +190,9 @@ pub fn intent_create_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) 
         store: Default::default(),
         // 雏形出生恒空仓（孵化中不可 transfer/harvest——无进矿路径）
         store_extra: Vec::new(),
+        say_message: None,
+        say_public: None,
+        notify_when_attacked: Some(true), // 官方出生即 true（spawns/create-creep.js:93——评审 1 P2-2 清偿：判重门首调免费对齐）
     }));
 }
 

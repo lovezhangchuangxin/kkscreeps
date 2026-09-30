@@ -19,7 +19,7 @@ use kk_world::types::BodyKind;
 use serde_json::json;
 
 use super::Working;
-use super::creep::{ACTION_ATTACK, ACTION_ATTACKED, set_action_log};
+use super::creep::{ACTION_ATTACK, ACTION_ATTACKED, ACTION_RANGED_ATTACK, set_action_log};
 use super::movement::type_name_of;
 
 /// 官方 `_damage.js`（B1 无 boost/power 子集）：伤害施加统一入口。
@@ -96,6 +96,13 @@ pub fn apply_damage(
         && let Some(a) = w.creep_mut(attacker)
     {
         set_action_log(&mut a.action_log, ACTION_ATTACK);
+    }
+    // _damage.js:66-71：RANGED 落官方独立键 rangedAttack（M2B 扩面 P1——
+    // RANGED_MASS 不经 _damage，其键在自身处理器尾部落）
+    if attack_type == c::EVENT_ATTACK_TYPE_RANGED
+        && let Some(a) = w.creep_mut(attacker)
+    {
+        set_action_log(&mut a.action_log, ACTION_RANGED_ATTACK);
     }
     // _damage.js:73-75：目标侧 `attacked`（官方有 actionLog 的对象还有 tower/lab/
     // link——M1 透传桶无该面，仅 creep）

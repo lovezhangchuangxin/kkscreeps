@@ -11,6 +11,7 @@ use crate::intent::IntentData;
 use crate::settle::Working;
 use crate::settle::damage;
 use crate::settle::movement;
+use crate::settle::movement::type_name_of;
 
 /// 官方 attack.js（近战）：邻接、有 hits 的目标、他人 safeMode 拒、目标格
 /// rampart 重定向、ATTACK 部件数 × ATTACK_POWER（无 boost）。
@@ -210,6 +211,143 @@ pub(super) fn intent_dismantle(w: &mut Working, id: ObjId, data: &IntentData) {
     // dismantle.js:47-50：回流后超容立即掉落
     damage::drop_energy_over_capacity(w, id);
     damage::apply_damage(w, id, target_id, amount, c::EVENT_ATTACK_TYPE_DISMANTLE);
+}
+
+/// 官方 rangedAttack.js（M2B 扩面 P1）：目标存在非自、box 射程 3、孵化中
+/// 目标拒、无 hits 拒、他人 safeMode 拒、**rampart 重定向**（目标格有 rampart
+/// 则伤害改打 rampart——与 mass 的跳过语义相反）、功率 = 活跃 RANGED_ATTACK ×
+/// RANGED_ATTACK_POWER（10），走 apply_damage（延迟伤害/反击仅近战/事件）。
+/// invulnerability 效果门（PWR_FORTIFY/EFFECT_INVULNERABILITY）属 power 体系
+/// （M4 不建模）。注意官方无功率 0 早退（与 mass 不同）——0 伤害事件也发。
+pub(super) fn intent_ranged_attack(w: &mut Working, id: ObjId, data: &IntentData) {
+    let Some(target_id) = data.id else { return };
+    // rangedAttack.js:17-20：目标存在且非自身
+    if target_id == id {
+        return;
+    }
+    let Some((pos, owner, body)) = w
+        .creep(id)
+        .filter(|c| !c.spawning)
+        .map(|c| ((c.x, c.y), c.owner.clone(), c.body.clone()))
+    else {
+        return;
+    };
+    // :21-23：box 射程 3（|dx| 与 |dy| 各 ≤3——与 Chebyshev ≤3 同域）
+    let Some(target) = w.room.objects.get(&target_id).cloned() else {
+        return;
+    };
+    let (tx, ty) = (target.pos().0, target.pos().1);
+    if (tx as i32 - pos.0 as i32).abs() > 3 || (ty as i32 - pos.1 as i32).abs() > 3 {
+        return;
+    }
+    // :24-26：孵化中 creep 目标拒；:27-28 无 hits 拒
+    if let RoomObject::Creep(t) = &target
+        && t.spawning
+    {
+        return;
+    }
+    if damage::object_hits(&target) <= 0 {
+        return;
+    }
+    // :30-31：他人 safeMode 拒
+    if blocked_by_safe_mode(w, &owner) {
+        return;
+    }
+    // :33-35：rampart 重定向（目标即 rampart 时找到的就是自身，同形）
+    let target_id = damage::rampart_at(w, (tx, ty)).unwrap_or(target_id);
+    // rangedAttack.js:39：calcBodyEffectiveness(body, RANGED_ATTACK,
+    // 'rangedAttack', POWER)——part_key=BOOSTS 顶层键 'ranged_attack'
+    //（评审 2 P1-1 清偿：初版误传 'rangedAttack' 令 boost 静默 ×1）
+    let attack_power = kk_world::types::calc_body_effectiveness(
+        &body,
+        BodyKind::RangedAttack,
+        "ranged_attack",
+        "rangedAttack",
+        c::RANGED_ATTACK_POWER,
+    );
+    damage::apply_damage(w, id, target_id, attack_power, c::EVENT_ATTACK_TYPE_RANGED);
+}
+
+/// 官方 rangedMassAttack.js（M2B 扩面 P1）：功率 0 早退、他人 safeMode 拒、
+/// 目标 = 房内全部**有主**对象（+powerBank）中属他人者且在 ±3 box 内；逐目标
+/// ——非 rampart 且格上有 rampart 则**跳过**（不重定向）、无 hits/孵化中拒、
+/// 距离衰减 {1:×1, 2:×0.4, 3:×0.1}（Chebyshev 距离，round 取整）——走
+/// apply_damage。actionLog.rangedMassAttack 在处理器尾部置键（功率 >0 即置，
+/// 零目标也置）。invulnerability 效果门属 power（M4）。
+pub(super) fn intent_ranged_mass_attack(w: &mut Working, id: ObjId) {
+    let Some((pos, owner, body)) = w
+        .creep(id)
+        .filter(|c| !c.spawning)
+        .map(|c| ((c.x, c.y), c.owner.clone(), c.body.clone()))
+    else {
+        return;
+    };
+    // rangedMassAttack.js:17：part_key 同 'ranged_attack'（BOOSTS 表
+    // KO/KHO2/XKHO2 的 rangedMassAttack 键 ×2/3/4——评审 2 P1-1 清偿同源）
+    let attack_power = kk_world::types::calc_body_effectiveness(
+        &body,
+        BodyKind::RangedAttack,
+        "ranged_attack",
+        "rangedMassAttack",
+        c::RANGED_ATTACK_POWER,
+    );
+    // rangedMassAttack.js:19-21：功率 0 早退（含无 RANGED_ATTACK 部件）
+    if attack_power == 0 {
+        return;
+    }
+    // :22-23：他人 safeMode 拒
+    if blocked_by_safe_mode(w, &owner) {
+        return;
+    }
+    // :26-32：目标收集——有主（user 字段存在）或 powerBank、属他人、±3 box
+    let mut targets: Vec<(ObjId, u8, u8)> = Vec::new();
+    for (tid, obj) in w.room.objects.iter() {
+        let owned = kk_world::domain::object_owner(obj);
+        let is_target = owned.as_deref().is_some_and(|u| u != owner.as_str())
+            || type_name_of(obj) == "powerBank";
+        if !is_target {
+            continue;
+        }
+        let (ox, oy) = obj.pos();
+        if (ox as i32 - pos.0 as i32).abs() <= 3 && (oy as i32 - pos.1 as i32).abs() <= 3 {
+            targets.push((*tid, ox, oy));
+        }
+    }
+    // :32：距离衰减表（:53 Math.round——IEEE double 同型运算）
+    let distance_rate = |d: i32| -> f64 {
+        match d {
+            0 | 1 => 1.0,
+            2 => 0.4,
+            _ => 0.1,
+        }
+    };
+    for (tid, ox, oy) in targets {
+        let obj = w.room.objects.get(&tid).cloned();
+        let Some(obj) = obj else { continue };
+        // :38-39：非 rampart 且格上有 rampart → 跳过（不重定向）
+        let is_rampart = type_name_of(&obj) == "rampart";
+        if !is_rampart && damage::rampart_at(w, (ox, oy)).is_some() {
+            continue;
+        }
+        // :41-42：无 hits 拒；:44-45：孵化中 creep 拒
+        if damage::object_hits(&obj) <= 0 {
+            continue;
+        }
+        if let RoomObject::Creep(t) = &obj
+            && t.spawning
+        {
+            continue;
+        }
+        let distance = (ox as i32 - pos.0 as i32)
+            .abs()
+            .max((oy as i32 - pos.1 as i32).abs());
+        let dmg = (attack_power as f64 * distance_rate(distance)).round() as i64;
+        damage::apply_damage(w, id, tid, dmg, c::EVENT_ATTACK_TYPE_RANGED_MASS);
+    }
+    // :58：actionLog.rangedMassAttack（处理器尾部落键——0 目标也置）
+    if let Some(a) = w.creep_mut(id) {
+        super::set_action_log(&mut a.action_log, super::ACTION_RANGED_MASS);
+    }
 }
 
 /// 官方 heal.js（ranged=false）/ rangedHeal.js（ranged=true）：射程 1/3、

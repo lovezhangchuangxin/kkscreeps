@@ -13,6 +13,8 @@ use serde_json::Value;
 // 集成测试根（crate root）的 mod 声明解析到 tests/ 平级，故显式 #[path]
 #[path = "settle_tests/combat_heal.rs"]
 mod combat_heal;
+#[path = "settle_tests/combat_ranged.rs"]
+mod combat_ranged;
 #[path = "settle_tests/controller_safemode.rs"]
 mod controller_safemode;
 #[path = "settle_tests/minerals_and_boost.rs"]
@@ -87,6 +89,9 @@ impl Fixture {
                     body: body(kinds),
                     store: kk_schema::room::Store { energy, ghodium: 0 },
                     store_extra: Vec::new(),
+                    say_message: None,
+                    say_public: None,
+                    notify_when_attacked: None,
                 }),
             )
             .unwrap()

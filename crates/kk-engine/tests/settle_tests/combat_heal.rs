@@ -428,6 +428,9 @@ fn harvest_mixed_holding_overflow_drops_mined_mineral() {
                     resource: "Z".into(),
                     amount: 50,
                 }],
+                say_message: None,
+                say_public: None,
+                notify_when_attacked: None,
             }),
         )
         .unwrap();
@@ -523,6 +526,9 @@ fn harvest_source_mixed_holding_overflow_drops_energy_only() {
                     resource: "Z".into(),
                     amount: 50,
                 }],
+                say_message: None,
+                say_public: None,
+                notify_when_attacked: None,
             }),
         )
         .unwrap();
@@ -591,6 +597,9 @@ fn carry_death_drops_overflow_mixed_resources() {
                     resource: "Z".into(),
                     amount: 60,
                 }],
+                say_message: None,
+                say_public: None,
+                notify_when_attacked: None,
             }),
         )
         .unwrap();
@@ -657,6 +666,9 @@ fn attack_target_validation_rejections() {
                 body: body(&[BodyKind::Move]),
                 store: Default::default(),
                 store_extra: Vec::new(),
+                say_message: None,
+                say_public: None,
+                notify_when_attacked: None,
             }),
         )
         .unwrap();

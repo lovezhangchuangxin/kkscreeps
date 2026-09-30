@@ -38,6 +38,9 @@ fn tombstone_body_recovery_and_boost_minerals() {
                     ghodium: 25,
                 },
                 store_extra: Vec::new(),
+                say_message: None,
+                say_public: None,
+                notify_when_attacked: None,
             }),
         )
         .unwrap();
@@ -372,6 +375,9 @@ fn tombstone_container_cross_resource_competition() {
                     ghodium: 0,
                 },
                 store_extra: Vec::new(),
+                say_message: None,
+                say_public: None,
+                notify_when_attacked: None,
             }),
         )
         .unwrap();
@@ -532,6 +538,9 @@ fn claim_body_life_time_denominator() {
                     ghodium: 0,
                 },
                 store_extra: Vec::new(),
+                say_message: None,
+                say_public: None,
+                notify_when_attacked: None,
             }),
         )
         .unwrap();

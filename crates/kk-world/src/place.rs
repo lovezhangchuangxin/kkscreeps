@@ -201,6 +201,9 @@ fn normalize_creep(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<CreepOb
         body,
         store: store_energy(spec),
         store_extra: store_extra_of(spec),
+        say_message: None,
+        say_public: None,
+        notify_when_attacked: None,
     })
 }
 

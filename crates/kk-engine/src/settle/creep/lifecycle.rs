@@ -12,21 +12,36 @@ use crate::settle::Working;
 
 // ---- A4-iv：移动杂项族执行器（官方 processor/intents/creeps/ 同名文件） ----
 
-/// 官方 say.js：spawning 拒后落 actionLog.say。官方键携带 message（截 10）与
-/// isPublic——u16 位图只落事件位（ACTION_SAY），文本载荷不可承载：prelude 的
-/// `saying` getter 读不到消息文本（恒 undefined），与 healType 的 B1.1 登记
-/// 同口径（schema 换正式 actionLog 形态时恢复）。message 的 isString 门
-///（say.js:14-16）：清洗层 userString 后官方恒字符串（缺省折叠 ""），我方
-/// None 按 "" 对齐。
+/// 官方 say.js：spinning 拒后落 actionLog.say = {message（截 10 个 UTF-16
+/// 码元——JS substring 语义）, isPublic}。M2B 扩面 P1 起文本载荷由
+/// CreepObj.say_message/say_public 承载（v1 内演化）——prelude 的 `saying`
+/// getter 恢复官方真值（此前恒 undefined 的灰区登记销账）。message 的
+/// isString 门（say.js:14-16）：清洗层 userString 后官方恒字符串（缺省折叠
+/// ""），我方 None 按 "" 对齐。**截断分歧登记**：JS substring(0,10) 可劈开
+/// 代理对留下孤立代理项（无效 UTF-16），Rust String 不可承载——from_utf16_lossy
+/// 折叠为 U+FFFD 替换符（仅 4 字节 CJK 表意扩展面可观测）。
 pub(super) fn intent_say(w: &mut Working, id: ObjId, data: &IntentData) {
     if w.creep(id).is_none_or(|c| c.spawning) {
         return;
     }
-    let _message = data.message.as_deref().unwrap_or("");
-    let _is_public = data.is_public.unwrap_or(false);
+    let message = utf16_truncate(data.message.as_deref().unwrap_or(""), 10);
+    let is_public = data.is_public.unwrap_or(false);
     if let Some(c) = w.creep_mut(id) {
         set_action_log(&mut c.action_log, ACTION_SAY);
+        c.say_message = Some(message);
+        c.say_public = Some(is_public);
     }
+}
+
+/// JS String.prototype.substring(0, n) 的 UTF-16 码元语义（say.js:18）。
+/// 已在界内时零拷贝返回；越界截断经 from_utf16_lossy（孤立代理项折叠
+/// U+FFFD——见 intent_say 注释的分歧登记）。
+fn utf16_truncate(s: &str, units: usize) -> String {
+    if s.encode_utf16().count() <= units {
+        return s.to_string();
+    }
+    let cut: Vec<u16> = s.encode_utf16().take(units).collect();
+    String::from_utf16_lossy(&cut)
 }
 
 /// 官方 suicide.js：intent 相即死（_die.js，dropRate=CREEP_CORPSE_RATE、
@@ -89,7 +104,7 @@ pub fn die_creep(w: &mut Working, id: ObjId) {
 
 pub fn die_creep_with_rate(w: &mut Working, id: ObjId, drop_rate: f64) {
     let Some(c) = w.creep(id) else { return };
-    let (x, y, owner, name, age_time, body, store, store_extra) = (
+    let (x, y, owner, name, age_time, body, store, store_extra, creep_saying) = (
         c.x,
         c.y,
         c.owner.clone(),
@@ -98,6 +113,12 @@ pub fn die_creep_with_rate(w: &mut Working, id: ObjId, drop_rate: f64) {
         c.body.clone(),
         c.store.clone(),
         c.store_extra.clone(),
+        // _die.js:33：actionLog.say 的公开遗言（isPublic ? message : undefined）
+        if c.say_public == Some(true) {
+            c.say_message.clone()
+        } else {
+            None
+        },
     );
     let time = w.time;
     // _die.js:10-11：先移除本体
@@ -170,8 +191,8 @@ pub fn die_creep_with_rate(w: &mut Working, id: ObjId, drop_rate: f64) {
         }
     }
 
-    // _die.js:22-34/93：墓碑落库。creepSaying 官方取 actionLog.say 的公开
-    // 遗言——位图 action_log 无文本载荷，恒 None（灰区表既有 say 登记的延伸）
+    // _die.js:22-34/93：墓碑落库（creepSaying 公开遗言见上方解构注释——
+    // M2B 扩面 P1 前恒 None 的登记销账）
     w.insert_new(RoomObject::Tombstone(kk_schema::room::TombstoneObj {
         id: 0,
         x,
@@ -182,7 +203,7 @@ pub fn die_creep_with_rate(w: &mut Working, id: ObjId, drop_rate: f64) {
         creep_name: Some(name),
         creep_ticks_to_live: ticks_to_live.min(u32::MAX as u64) as u32,
         creep_body: body.iter().map(|p| p.kind).collect(),
-        creep_saying: None,
+        creep_saying,
         owner: Some(owner),
         store: tomb.store,
         store_extra: tomb.extra,

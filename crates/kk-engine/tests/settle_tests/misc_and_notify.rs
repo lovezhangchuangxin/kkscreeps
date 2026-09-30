@@ -190,6 +190,9 @@ fn engine_recomputes_player_rooms_after_tick() {
                 body: body(&[BodyKind::Claim]),
                 store: Default::default(),
                 store_extra: Vec::new(),
+                say_message: None,
+                say_public: None,
+                notify_when_attacked: None,
             }),
         )
         .unwrap();
@@ -529,6 +532,9 @@ fn say_intent_sets_action_log_bit() {
                 body: body(&[BodyKind::Move]),
                 store: kk_schema::room::Store::default(),
                 store_extra: Vec::new(),
+                say_message: None,
+                say_public: None,
+                notify_when_attacked: None,
             }),
         )
         .unwrap();
@@ -953,6 +959,9 @@ fn boost_effectiveness_unified() {
                     ghodium: 0,
                 },
                 store_extra: Vec::new(),
+                say_message: None,
+                say_public: None,
+                notify_when_attacked: None,
             }),
         )
         .unwrap();

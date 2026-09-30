@@ -97,7 +97,7 @@
 | move/moveTo/moveByPath/harvest/drop/transfer/withdraw/pickup/build/repair/upgradeController/suicide/say/signController/pull/cancelOrder | creeps.js:126-588/813-838/977-1028/1050+ | ✅（moveTo 直线桩维持，登记） | — |
 | attack/dismantle/heal/rangedHeal | creeps.js:593-733 | ✅（B1） | — |
 | claimController/attackController/reserveController/generateSafeMode | creeps.js:839-910 | ✅（B2） | — |
-| **rangedAttack / rangedMassAttack** | creeps.js:626-677 | 🪑 countStub | **P1 转真**：执行器已在（Action 枚举 intent.rs:36-37 + B1 hits 模型）——纯 prelude 预检面（射程 3/部件门/目标 instanceof 族） |
+| **rangedAttack / rangedMassAttack** | creeps.js:626-677 | 🪑 countStub | **P1 转真**（**前提勘正（P0 期盘点误判）**：Action 枚举虽在但 settle 分派走 `_ => {}` 静默跳过臂——B1 只做了近战族，ranged 执行器随 P1 新写：rangedAttack.js/rangedMassAttack.js 逐行对照 + apply_damage 复用；盘点表原「执行器已在」系把 intent 通道当成了执行器） |
 | **getActiveBodyparts** | creeps.js:589-592 | ⬜（无此面） | **P1 补面**（body 折叠，官方同形） |
 | **notifyWhenAttacked** | creeps.js:996-1015 | ⬜ | **P1 补面**（Action::NotifyWhenAttacked 已在——Structure 版真实现有，Creep 版对照移植） |
 | CREEP_METHODS 残余桩表 | — | 表含 **非官方面**（spawn/recycleCreep/renewCreep/moveHead 挂在 Creep 原型上） | **P1 清理**：桩表收敛到官方 29 方法口径，非官方面摘除（玩家可见面收缩——棘轮+bot 三基线盯） |
@@ -326,6 +326,55 @@ tower/link 复用其投影/折叠模式）。P6 收尾。**每片一个完整批
    仅剩 commit_room/register_room/room_mut，各有其 bump 纪律）。
 
 ## 8. 执行记录（随片回写）
+
+### P1（Creep 尾巴：ranged 族 + getActiveBodyparts + notifyWhenAttacked + saying + 桩表清理）——已收口
+
+- **落地**（含执行器——见 §1.5 前提勘正）：①intent_ranged_attack /
+  intent_ranged_mass_attack（combat.rs，rangedAttack.js / rangedMassAttack.js
+  逐行对照：重检序/box 射程 3/rampart 单体重定向 vs mass 跳过/距离衰减
+  ×1/×0.4/×0.1 round/功率 0 早退仅 mass/尾部 actionLog 位）+ damage.rs 的
+  ACTION_RANGED_ATTACK 位（_damage.js:66-71）+ u16 位图 bit10/11；
+  ②prelude 四 API 面（rangedAttack/rangedMassAttack/getActiveBodyparts
+  （官方尾扫 break 语义）/notifyWhenAttacked（宽松不等判重））；
+  ③saying 真化——CreepObj 尾部追加 say_message/say_public/
+  notify_when_attacked 三字段（v1 内演化，B3/B4 先例），say.js 截 10 UTF-16
+  码元（from_utf16_lossy 折叠孤立代理项为 U+FFFD——分歧登记）、per-tick 随
+  action_log 重置、墓碑公开遗言（_die.js:33）承接、出生即
+  notify_when_attacked: Some(true)（spawns/create-creep.js:93）；④投影三键
+  （say/sayPublic 成对、notifyWhenAttacked）+ prelude saying getter 三态折叠
+  （creeps.js:84-92）；⑤CREEP_METHODS 残余桩表摘除——官方 29 方法全真，
+  非官方残留面（spawn/recycleCreep/renewCreep/moveHead）清除。
+- **评审三路（官方语义/Rust 正确性/测试与工程面）两 PASS 一 FAIL**：
+  **P1-1（评审 2，成立，当日修复）**——calc_body_effectiveness 的 part_key
+  误传 'rangedAttack'/'rangedMassAttack'（应 BOOSTS 顶层键 'ranged_attack'）
+  → boost 静默 ×1；评审 1 与评审 2 此项结论**互相矛盾**，清偿复审实读
+  types.rs 查表链 + kk-core BOOSTS 表独立判定评审 2 正确（教训又一例：
+  多路评审同一处会得出相反结论，矛盾主张必须实测取证）；修复 + XKHO2 ×4
+  锁定测试。清偿：powerBank 反击（POWER_BANK_HIT_BACK ×0.5）未建模经 mass
+  新近可达——compatibility.md 登记（归 power/SK 生态前置批，含 i64 分数
+  承载语义）；出生默认值 Some(true)（评审 1 P2-2）；settle/mod.rs 陈旧注释
+  （「Creep 无 notifyWhenAttacked 方法」已被本片证伪）+ compatibility.md
+  两行销账（say 文本载荷/creep notify 落库——后者「官方只在结构类暴露」
+  系事实错误一并勘正）；注释官方行号系统性勘正（初版按记忆引行号整体漂移，
+  两轮共 ~20 处对 ~/Desktop/projects/sources 实树归一）；测试补强四项
+  （box 边界 (13,13)/(14,10)、反击判别 victim 带 ATTACK、零目标有功率位照置
+  /零功率不置、boost 乘数锁定）。
+- **验证**：workspace 291 绿（+8：引擎 7+boost 1，embed 3 场景入串行链）/
+  clippy 0 / fmt 过 / release+棘轮 **1405→1454（+49 转绿零未豁免转红）**
+  ——49 条逐条归因全落 ranged（COMBAT-RANGED/RMA/EVENTLOG-015/016/
+  INTENT 族）/getActiveBodyparts（BODYPART-003/STALERECV-002）/saying
+  （CREEP-SAY-001~003/TOMBSTONE-018）族，3 条经 instrument 间接转绿（评审 3
+  独立复核）；地板上调 ratchet.json + README 同步（49.90%）+ **1454 报告
+  随批入库**（A6 地板变动批先例——评审 3 P1：不入库则 49 条新绿下批失去
+  逐用例转红臂保护）；bot 三基线（tooangel console error tick=0 人工确认、
+  overmind 既知形态、wasm、skipped_penalty 全 0）；perf 四相持平
+  （0.122/0.205/0.032/0.456 两跑 + 清偿后 0.127/0.211/0.032/0.472——
+  settle 金丝雀 0.032 全程稳定）。
+- **登记**：prelude 目标活性检查省略（register 成员检查——in-tick 世界冻结
+  下不可达，attack/heal 既有同形口径）；mass 全房扫描每 Generic 双 JSON
+  解析（perf 观察项，四相持平已验）；round-vs-trunc 在 attackPower 恒为
+  10 倍数域内不可观测（代码审查锁定）；powerBank 反击缺口（上行清偿条）；
+  INVALID_TARGET API 面由外部 COMBAT-RANGED-005 转绿兜底（内部 e2e 未单列）。
 
 ### P0（O2 领域模块归属 + pub rooms/time 收敛 + 方案入库）——已收口
 

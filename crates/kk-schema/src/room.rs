@@ -87,6 +87,14 @@ crate::kk_schema! {
         // 开放对象——harvest.js:95 `store: {[target.mineralType]: ...}`）。
         // 追加尾部（v1 内演化，冻结纪律同 ResourceStack 的既有约定）
         (pub store_extra: vec ResourceStack)
+        // M2B 扩面 P1（v1 内演化，尾部追加）：say 文本载荷（官方 actionLog.say
+        // 的 {message(截 10 UTF-16 单元), isPublic}——位图不可承载文本，
+        // say.js:18-21；per-tick 随 action_log 重置）+ notifyWhenAttacked 持久
+        // 标志（官方 processor.js:313 通用段对 creep 同样生效，creeps.js:1008
+        // 读 data.notifyWhenAttacked 判重——结构族同名字段先例）。
+        (pub say_message: opt str)
+        (pub say_public: opt bool)
+        (pub notify_when_attacked: opt bool)
     }
 }
 
@@ -593,6 +601,9 @@ mod tests {
                         resource: "U".into(),
                         amount: 12,
                     }],
+                    say_message: None,
+                    say_public: None,
+                    notify_when_attacked: None,
                 }),
                 RoomObject::Source(SourceObj {
                     id: 2,

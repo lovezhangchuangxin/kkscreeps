@@ -112,6 +112,8 @@
     MOVE: globalThis.MOVE,
     WORK: globalThis.WORK,
     ATTACK: globalThis.ATTACK,
+    // M2B 扩面 P1：ranged 族的部件门（rangedAttack/rangedMassAttack）
+    RANGED_ATTACK: globalThis.RANGED_ATTACK,
     HEAL: globalThis.HEAL,
     CLAIM: globalThis.CLAIM,
     ERR_NOT_FOUND: globalThis.ERR_NOT_FOUND,
@@ -201,7 +203,13 @@
     fatigue: (o) => o.fatigue || 0,
     hits: (o) => o.hits ?? 0,
     hitsMax: (o) => o.hitsMax ?? 0,
-    saying: () => undefined,
+    // M2B 扩面 P1 真化（官方 creeps.js:84-92）：本人恒见消息；他人仅
+    // isPublic 见——载荷由投影 say/sayPublic 携带（say.js 截 10 已在结算侧落）
+    saying: (o) => {
+      if (o.say == null) return undefined;
+      if (o.owner === gw.viewerName) return o.say;
+      return o.sayPublic ? o.say : undefined;
+    },
   });
 
   // 官方 creeps.js:94-120：memory 是独立 getter/setter（不走 _${name} 缓存），
@@ -459,6 +467,53 @@
     if (!target.pos.isNearTo(this.pos)) return C.ERR_NOT_IN_RANGE;
     if (blockedBySafeMode(this)) return C.ERR_NO_BODYPART;
     gw.intents.set(this.id, 'heal', { id: target.id, x: target.pos.x, y: target.pos.y });
+    return C.OK;
+  };
+
+  /** 官方 getActiveBodyparts（creeps.js:589-592 → 私有 _getActiveBodyparts
+   *  :9-18）：从 body 尾部向前计数，**遇首个 hits≤0 部件即断**（死亡分布保证
+   *  损毁件成前缀——与 countActiveParts 的全量计数在不变量下等价；夹具手搓
+   *  的洞形 body 上本 API 保持官方 break 语义）。 */
+  globalThis.Creep.prototype.getActiveBodyparts = function getActiveBodyparts(type) {
+    let count = 0;
+    const body = this.body || [];
+    for (let i = body.length - 1; i >= 0; i--) {
+      if (body[i].hits <= 0) break;
+      if (body[i].type === type) count += 1;
+    }
+    return count;
+  };
+
+  /** 官方 rangedAttack（creeps.js:626-657）：RANGED_ATTACK 部件 + 3 格 +
+   *  目标族（Creep/PowerCreep/Spawn/Structure——PowerCreep 归 M4，instanceof
+   *  链保持官方形）+ safeMode 门（敌房 safeMode 下 NO_BODYPART 官方口径）；
+   *  invulnerability 效果门（:649-652）属 power 体系不建模。执行器
+   *  rangedAttack.js：rampart 重定向在结算侧。 */
+  globalThis.Creep.prototype.rangedAttack = function rangedAttack(target) {
+    if (!this.my) return C.ERR_NOT_OWNER;
+    if (this.spawning) return C.ERR_BUSY;
+    if (countActiveParts(this.body, C.RANGED_ATTACK) === 0) return C.ERR_NO_BODYPART;
+    if (blockedBySafeMode(this)) return C.ERR_NO_BODYPART;
+    const okTarget = target && target.id
+      && (target instanceof globalThis.Creep
+        || target instanceof globalThis.PowerCreep
+        || target instanceof globalThis.StructureSpawn
+        || target instanceof globalThis.Structure);
+    if (!okTarget) return C.ERR_INVALID_TARGET;
+    if (!this.pos.inRangeTo(target, 3)) return C.ERR_NOT_IN_RANGE;
+    gw.intents.set(this.id, 'rangedAttack', { id: target.id });
+    return C.OK;
+  };
+
+  /** 官方 rangedMassAttack（creeps.js:658-677）：无目标——RANGED_ATTACK 部件
+   *  + safeMode 门后即记 intent；目标收集/距离衰减/rampart 跳过全在结算侧
+   *  （rangedMassAttack.js）。 */
+  globalThis.Creep.prototype.rangedMassAttack = function rangedMassAttack() {
+    if (!this.my) return C.ERR_NOT_OWNER;
+    if (this.spawning) return C.ERR_BUSY;
+    if (countActiveParts(this.body, C.RANGED_ATTACK) === 0) return C.ERR_NO_BODYPART;
+    if (blockedBySafeMode(this)) return C.ERR_NO_BODYPART;
+    gw.intents.set(this.id, 'rangedMassAttack', {});
     return C.OK;
   };
 
