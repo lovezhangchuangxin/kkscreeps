@@ -4,6 +4,7 @@
 use kk_core::constants as c;
 use kk_schema::room::RoomObject;
 use kk_world::ObjId;
+use serde_json::{Value, json};
 
 use super::Working;
 
@@ -76,6 +77,177 @@ pub fn energy_tick(w: &mut Working, id: ObjId) {
 /// 官方 tombstones/tick.js（B3）：`!decayTime || gameTime >= decayTime-1` 到点
 /// → store 逐资源落地（_create-energy 的容器承接 + 同格并堆，全资源同式）
 /// → 移除墓碑。
+/// roads/tick.js（processor.js:369，M2B 扩面 P4）：每 ROAD_DECAY_TIME 掉
+/// ROAD_DECAY_AMOUNT hits——沼泽格 ×CONSTRUCTION_COST_ROAD_SWAMP_RATIO、
+/// 墙格 ×WALL_RATIO（官方另有同格 swamp/wall 对象的兼容分支，我方世界无
+/// 此对象形态走地形位）；≤0 移除，否则重挂钟。门 `!nextDecayTime ||
+/// gameTime >= nextDecayTime-1` 官方原文。
+pub fn road_decay_tick(w: &mut Working, id: ObjId) {
+    let Some(RoomObject::Road(o)) = w.room.objects.get(&id) else {
+        return;
+    };
+    let (x, y, next) = (o.x, o.y, o.next_decay_time);
+    if next != 0 && w.time < next.saturating_sub(1) {
+        return; // 未到点
+    }
+    let Some(RoomObject::Road(o)) = w.room.objects.get(&id) else {
+        return;
+    };
+    let mut decay = kk_core::constants::ROAD_DECAY_AMOUNT;
+    if w.room
+        .terrain
+        .check_mask(x as usize, y as usize, kk_core::TERRAIN_MASK_SWAMP)
+    {
+        decay *= kk_core::constants::CONSTRUCTION_COST_ROAD_SWAMP_RATIO;
+    }
+    if w.room
+        .terrain
+        .check_mask(x as usize, y as usize, kk_core::TERRAIN_MASK_WALL)
+    {
+        decay *= kk_core::constants::CONSTRUCTION_COST_ROAD_WALL_RATIO;
+    }
+    let hits = o.hits as i64 - decay;
+    if hits <= 0 {
+        w.remove_obj(id);
+    } else if let Some(RoomObject::Road(o)) = w.room.objects.get_mut(&id) {
+        o.hits = hits as u32;
+        o.next_decay_time = w.time + kk_core::constants::ROAD_DECAY_TIME as u64;
+    }
+}
+
+/// containers/tick.js + ramparts/tick.js（processor.js:365/:389，M2B 扩面
+/// P4）：Generic 透传桶的衰减钟结算。container 每
+/// CONTAINER_DECAY_TIME_OWNED（有主房 ctl.level>0）/CONTAINER_DECAY_TIME
+/// 掉 CONTAINER_DECAY（5000）hits——≤0 时全量正量 store 逐键落地后移除；
+/// rampart 每 RAMPART_DECAY_TIME 掉 RAMPART_DECAY_AMOUNT、且 hitsMax 随
+/// 房主 rcl 同步（**同步在衰减门之外、每 tick 执行**，见函数体内注释）。官方
+/// `object.user != '2'` 的 NPC 例外我方无该 id 形态，主人匹配
+/// controller.user 即同步。PWR_SHIELD 分支 N/A（power 体系 M4）。
+pub fn generic_decay_tick(w: &mut Working, id: ObjId) {
+    let Some(RoomObject::Generic(g)) = w.room.objects.get(&id) else {
+        return;
+    };
+    let mut v: Value = serde_json::from_str(&g.data).unwrap_or_default();
+    let st = v
+        .get("structureType")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let (x, y) = (g.x, g.y);
+    let next = v.get("nextDecayTime").and_then(Value::as_u64).unwrap_or(0);
+    if st != "container" && st != "rampart" {
+        return;
+    }
+    // rampart：hitsMax 随房主 rcl 同步——官方在**衰减钟门之外、每 tick 执行**
+    // （ramparts/tick.js:19-24 位于 :26 的 `nextDecayTime` 门之前）。放进门后
+    // 会让 rcl 变化要等下一个衰减窗（rampart 最长 100 tick）才生效，读面
+    // hitsMax 滞后（repair 上限由 damage.rs 现算，不受影响；但机器人按
+    // hitsMax 规划会读到错值）。官方 `RAMPART_HITS_MAX[level] || 0` 是**精确
+    // 查表**（与 damage.rs::structure_hits_max 同式），非「向下取最近键」；
+    // 无 controller 时整段跳过（官方 `roomController &&` 前置）。同步须立即
+    // 写回——门未过时后面会 return，走不到统一写回点。
+    if st == "rampart" {
+        let target = w.controller().map(|ctl| {
+            if v.get("owner").and_then(Value::as_str) == ctl.owner.as_deref() {
+                let key = ctl.level.to_string();
+                kk_core::constants::RAMPART_HITS_MAX
+                    .iter()
+                    .find(|(k, _)| *k == key)
+                    .map(|(_, v)| *v)
+                    .unwrap_or(0)
+            } else {
+                0
+            }
+        });
+        if let Some(hits_max) = target
+            && hits_max != v.get("hitsMax").and_then(Value::as_i64).unwrap_or(0)
+        {
+            v["hitsMax"] = json!(hits_max);
+            if let Some(RoomObject::Generic(g)) = w.room.objects.get_mut(&id) {
+                g.data = v.to_string();
+            }
+        }
+    }
+    if next != 0 && w.time < next.saturating_sub(1) {
+        return; // 未到点（官方 `!nextDecayTime || gameTime >= nextDecayTime-1`）
+    }
+    let decay = if st == "container" {
+        kk_core::constants::CONTAINER_DECAY
+    } else {
+        kk_core::constants::RAMPART_DECAY_AMOUNT
+    };
+    let hits = v.get("hits").and_then(Value::as_i64).unwrap_or(0) - decay;
+    if hits <= 0 {
+        // 官方次序：hits 先减后落地——死亡容器的 hits≤0 使 _create-energy
+        // 的同格承接门（hits>0）拒收，掉落成堆（先写回再落地）
+        if let Some(RoomObject::Generic(g)) = w.room.objects.get_mut(&id) {
+            v["hits"] = json!(hits);
+            g.data = v.to_string();
+        }
+        // container 死亡：全量正量 store 逐键落地（rampart 无 store 官方同判）
+        if st == "container" {
+            let keys: Vec<(String, i64)> = v
+                .get("store")
+                .and_then(Value::as_object)
+                .map(|m| {
+                    m.iter()
+                        .filter_map(|(k, amount)| {
+                            amount.as_i64().filter(|a| *a > 0).map(|a| (k.clone(), a))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            for (resource, amount) in keys {
+                if resource == "energy" {
+                    w.create_energy(x, y, amount);
+                } else {
+                    w.create_resource(x, y, amount, &resource);
+                }
+            }
+        }
+        w.remove_obj(id);
+        return;
+    }
+    v["hits"] = json!(hits);
+    let window = if st == "container" {
+        match w.controller() {
+            Some(ctl) if ctl.level > 0 => kk_core::constants::CONTAINER_DECAY_TIME_OWNED,
+            _ => kk_core::constants::CONTAINER_DECAY_TIME,
+        }
+    } else {
+        kk_core::constants::RAMPART_DECAY_TIME
+    };
+    v["nextDecayTime"] = json!(w.time + window as u64);
+    if let Some(RoomObject::Generic(g)) = w.room.objects.get_mut(&id) {
+        g.data = v.to_string();
+    }
+}
+
+/// 官方 links/tick.js（processor.js:378，M2B 扩面 P4）：link 的 cooldown 是
+/// **每 tick 递减计数器** `o.cooldown`（getter `(o) => o.cooldown || 0` 直读），
+/// 与 lab/terminal/nuker/factory 的 `cooldownTime` 时间戳折算形态**不同**
+///（vanilla `index.ts:1145-1158` 明文两形态）。官方 `cooldown > 0` 才递减并
+/// 钳 0；缺键/0 时整段不动（`undefined > 0` 为假）。
+///
+/// 官方同段另有 actionLog 的持久化分支（`bulk.update(object, {actionLog})`），
+/// 我方 Generic 结构无 actionLog 面——与 [`extractor_tick`] 同口径跳过。
+pub fn link_cooldown_tick(w: &mut Working, id: ObjId) {
+    let Some(RoomObject::Generic(g)) = w.room.objects.get(&id) else {
+        return;
+    };
+    let Ok(mut v) = serde_json::from_str::<Value>(&g.data) else {
+        return;
+    };
+    let cd = v.get("cooldown").and_then(Value::as_u64).unwrap_or(0);
+    if cd == 0 {
+        return;
+    }
+    v["cooldown"] = json!(cd - 1);
+    if let Some(RoomObject::Generic(g)) = w.room.objects.get_mut(&id) {
+        g.data = v.to_string();
+    }
+}
+
 pub fn tombstone_tick(w: &mut Working, id: ObjId) {
     let Some(RoomObject::Tombstone(o)) = w.room.objects.get(&id) else {
         return;

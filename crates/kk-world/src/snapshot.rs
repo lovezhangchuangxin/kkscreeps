@@ -366,6 +366,23 @@ fn snapshot_json(
             v.insert("kind".into(), json!(kind));
             v.insert("id".into(), json!(id_str));
             v.insert("pos".into(), snap_pos(room, o.x, o.y));
+            // M2B 扩面 P4：绝对挂钟折叠为官方 getter 等价差值（容器/壁垒
+            // 衰减钟、link/lab/factory 冷却钟——放置面写入的绝对形态在快照
+            // 契约面折算；官方 vanilla snapshotObject 同折）。nextDecayTime
+            // 用 remaining 家族（`t ? t-time : undefined`——0 falsy 跳过），
+            // cooldownTime 官方 getter 是 `t && t>time ? t-time : 0`（到点
+            // 后读 0 非 undefined）
+            if let Some(t) = v.get("nextDecayTime").and_then(Value::as_u64) {
+                v.insert("ticksToDecay".into(), remaining(t, time));
+                v.remove("nextDecayTime");
+            }
+            if let Some(t) = v.get("cooldownTime").and_then(Value::as_u64) {
+                v.insert(
+                    "cooldown".into(),
+                    if t > time { json!(t - time) } else { json!(0) },
+                );
+                v.remove("cooldownTime");
+            }
             Value::Object(v)
         }
         // flag 不在查询面契约内（vanilla snapshotObject 无 flag 分支）——

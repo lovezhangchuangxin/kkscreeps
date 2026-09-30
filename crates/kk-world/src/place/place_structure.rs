@@ -148,7 +148,13 @@ pub(super) fn normalize_structure(
             hits: hits_override
                 .map(saturating_u32)
                 .unwrap_or(c::ROAD_HITS as u32),
-            next_decay_time: ctx.time + c::ROAD_DECAY_TIME as u64,
+            // M2B P4：spec.ticksToDecay 覆写（适配器 setup 契约——衰减钟
+            // 绝对形态，官方 getter/快照折算差值）；缺省 ROAD_DECAY_TIME
+            next_decay_time: ctx.time
+                + spec
+                    .get("ticksToDecay")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(c::ROAD_DECAY_TIME as u64),
             notify_when_attacked: spec.get("notifyWhenAttacked").and_then(Value::as_bool),
         })),
         "storage" => Ok(RoomObject::Storage(StorageObj {
@@ -226,6 +232,75 @@ pub(super) fn normalize_structure(
             if !data.contains_key("structureType") && !st.is_empty() {
                 data.insert("structureType".into(), json!(st));
             }
+            // M2B 扩面 P4：衰减钟缺省/覆写 + cooldown 覆写（适配器 setup
+            // 契约）——绝对挂钟形态（nextDecayTime/cooldownTime），官方
+            // getter/快照面折算差值。缺省对齐官方放置语义：container 在
+            // 有主房 CONTAINER_DECAY_TIME_OWNED、野房 CONTAINER_DECAY_TIME
+            //（containers/tick.js 的重置窗同款）；rampart 恒
+            // RAMPART_DECAY_TIME。generic_fields 原样拷贝的相对键
+            // ticksToDecay/cooldown 转折算后移除（不留双形态）
+            let decay_default: Option<u64> = match st {
+                "container" => Some(match ctx.controller {
+                    Some(ctl) if ctl.level > 0 => c::CONTAINER_DECAY_TIME_OWNED,
+                    _ => c::CONTAINER_DECAY_TIME,
+                } as u64),
+                "rampart" => Some(c::RAMPART_DECAY_TIME as u64),
+                _ => None,
+            };
+            let ttd = spec
+                .get("ticksToDecay")
+                .and_then(Value::as_u64)
+                .or(decay_default);
+            if let Some(v) = ttd {
+                data.insert("nextDecayTime".into(), json!(ctx.time + v));
+            }
+            data.remove("ticksToDecay");
+            // 平面 storeCapacity 与 per-resource storeCapacityResource 成对落
+            // （官方 getStructureDefaults 同表值；spec 显式值优先）。平面容量
+            // 缺失会让 prelude 的 storeCapacity getter 恒读 undefined；
+            // per-resource 缺失会让 `store.getCapacity()` 与 lab/powerSpawn/
+            // nuker 的 *Capacity getter 读错值（见 built_store_capacity_resource）。
+            if let Some(cap) = built_store_capacity(st) {
+                data.entry("storeCapacity").or_insert(json!(cap));
+            }
+            if let Some(res) = built_store_capacity_resource(st) {
+                data.entry("storeCapacityResource").or_insert(res);
+            }
+            // lab 特例（vanilla placeStructure index.ts:1122-1128）：spec.store
+            // 带矿物时，给 storeCapacityResource 补缺失矿物的
+            // LAB_MINERAL_CAPACITY——**槽绑定语义的玩家可观测面**：填充后
+            // Σsrc 含已存矿物，未存矿物的 getCapacity 走回退式
+            // `max(0, flat 5000−Σ5000)`=0（官方 null，槽已绑定）；不填则错读
+            // max(0,5000−2000)=3000（槽未绑定）。已存矿物本身的读数两条路
+            // 径同值 3000（表定义使然）。spec 显式给的 per-resource 键不覆盖
+            // （vanilla `!attrs.storeCapacityResource[res]` 同式——只补
+            // falsy/缺失键）。vanilla 同段还写 DB 键 mineralType——官方读取
+            // 面是 store 派生 getter（structures.js:305），DB 键为死数据，不写。
+            if st == "lab"
+                && let Some(spec_store) = spec.get("store").and_then(Value::as_object)
+                && let Some(cap) = data
+                    .get_mut("storeCapacityResource")
+                    .and_then(Value::as_object_mut)
+            {
+                for res in spec_store.keys() {
+                    if res != "energy" && cap.get(res).is_none() {
+                        cap.insert(res.clone(), json!(c::LAB_MINERAL_CAPACITY));
+                    }
+                }
+            }
+            // cooldown：官方两形态（vanilla index.ts:1145-1158 明文）——link/
+            // extractor 存每 tick 递减计数器 `o.cooldown`（getter 直读），
+            // lab/terminal/nuker/factory 存未来时间戳 `o.cooldownTime`（getter
+            // 折算）。用错字段则运行期 getter 静默取不到值。generic_fields
+            // 原样拷贝的相对键先移除，再按类型落对形态。
+            data.remove("cooldown");
+            if let Some(cd) = spec.get("cooldown").and_then(Value::as_u64) {
+                if st == "lab" || st == "terminal" || st == "nuker" || st == "factory" {
+                    data.insert("cooldownTime".into(), json!(ctx.time + cd));
+                } else {
+                    data.insert("cooldown".into(), json!(cd));
+                }
+            }
             // 读取面缺省（A6 hits 族）：generic 结构的初始 hits/hitsMax 对齐
             // vanilla 适配器 getStructureDefaults（adapters/vanilla/index.ts
             // :1910-1970 的 hits 部分——只补读取面两键，store/actionLog 等
@@ -276,6 +351,85 @@ pub fn generic_structure_hits(structure_type: &str) -> Option<(i64, i64)> {
         "powerBank" => (c::POWER_BANK_HITS, c::POWER_BANK_HITS),
         _ => return None,
     })
+}
+
+/// 建造落成入口的衰减钟（官方 build.js:161-168 rampart / :255-263 container）。
+/// 与放置面口径**刻意不同**：官方 build 对 container 直接给
+/// CONTAINER_DECAY_TIME，不判所在房是否 owned（首次衰减后由
+/// containers/tick.js 按 owned 重挂）；rampart 恒 RAMPART_DECAY_TIME。
+/// 落成缺钟的后果见 `kk_engine::settle::economy::generic_decay_tick`——
+/// `nextDecayTime` 缺失（0）被判为「已到点」，rampart（hits=RAMPART_HITS=1）
+/// 会在落成同一 tick 被 RAMPART_DECAY_AMOUNT=300 打光移除。
+pub fn built_decay_clock(structure_type: &str, time: u64) -> Option<u64> {
+    match structure_type {
+        "container" => Some(time + c::CONTAINER_DECAY_TIME as u64),
+        "rampart" => Some(time + c::RAMPART_DECAY_TIME as u64),
+        _ => None,
+    }
+}
+
+/// 平面 storeCapacity。表值取自 vanilla 适配器 `getStructureDefaults`
+///（placement 面权威口径，`index.ts:1908-1979`）——官方 build.js 落成面是
+/// 本表子集（build.js 对 **link/tower 只落 storeCapacityResource 不落平面容量**），
+/// 那处差异不可观测：`Store.getCapacity()` 无参是
+/// `storeCapacityResource ? null : storeCapacity || null`（store.js:31），
+/// 两键并存时恒 null，与只落 resource 同值（链接/塔的 `storeCapacity`
+/// 平坦 getter 官方本就没有）。故两入口共用本表单源，不做两表复制。
+/// 与 [`built_store_capacity_resource`] **必须成对落**：只落平面不落
+/// per-resource 会把 `getCapacity()` 由官方的 null 变成数值（P4 清偿复审
+/// P2-1 即此形态）。
+pub fn built_store_capacity(structure_type: &str) -> Option<i64> {
+    Some(match structure_type {
+        "container" => c::CONTAINER_CAPACITY,
+        "factory" => c::FACTORY_CAPACITY,
+        "terminal" => c::TERMINAL_CAPACITY,
+        "lab" => c::LAB_ENERGY_CAPACITY + c::LAB_MINERAL_CAPACITY,
+        "powerSpawn" => c::POWER_SPAWN_ENERGY_CAPACITY + c::POWER_SPAWN_POWER_CAPACITY,
+        "nuker" => c::NUKER_ENERGY_CAPACITY + c::NUKER_GHODIUM_CAPACITY,
+        "link" => c::LINK_CAPACITY,
+        "tower" => c::TOWER_CAPACITY,
+        _ => return None,
+    })
+}
+
+/// per-resource 容量（官方 `getStructureDefaults` / build.js 的
+/// `storeCapacityResource`）。**必须与平面 storeCapacity 成对出现**：`Store.
+/// getCapacity()`（无参）是 `storeCapacityResource ? null : storeCapacity` 的
+/// 三元（store.js:31）——只落平面容量会让 getCapacity() 由官方的 null
+/// 变成数值；lab/powerSpawn/nuker/tower/link 的 `energyCapacity`（及
+/// `powerCapacity`/`ghodiumCapacity`）getter 也直读本键，缺失即恒 0。
+pub fn built_store_capacity_resource(structure_type: &str) -> Option<Value> {
+    Some(match structure_type {
+        "lab" => json!({ "energy": c::LAB_ENERGY_CAPACITY }),
+        "powerSpawn" => json!({
+            "energy": c::POWER_SPAWN_ENERGY_CAPACITY,
+            "power": c::POWER_SPAWN_POWER_CAPACITY,
+        }),
+        "nuker" => json!({
+            "energy": c::NUKER_ENERGY_CAPACITY,
+            "G": c::NUKER_GHODIUM_CAPACITY,
+        }),
+        "link" => json!({ "energy": c::LINK_CAPACITY }),
+        "tower" => json!({ "energy": c::TOWER_CAPACITY }),
+        _ => return None,
+    })
+}
+
+/// 建造落成入口的冷却钟（官方 build.js:272 nuker 的
+/// `cooldownTime: gameTime + (config.ptr ? 100 : C.NUKER_COOLDOWN)`）。
+/// `config.ptr` 是官方 PTR 测试服的 100 tick 特例，正式服恒 NUKER_COOLDOWN
+/// （=100000），我方不模拟 PTR。
+///
+/// **只对 nuker 给值**：官方 build.js 对 link/lab/factory 写的是计数器形态
+/// `cooldown: 0`，但那三类的读取面分别是 `o.cooldown || 0`（link）与
+/// `cooldownTime` 折算（lab/factory，structures.js:310/:1431）——link 的
+/// `cooldown: 0` 与缺键同读 0，lab/factory 写计数器键本就读不到，故三者在
+/// 读取面上「缺键 ≡ 官方落值」，不落键即可。
+pub fn built_cooldown_time(structure_type: &str, time: u64) -> Option<u64> {
+    match structure_type {
+        "nuker" => Some(time + c::NUKER_COOLDOWN as u64),
+        _ => None,
+    }
 }
 
 /// vanilla placeSite：progress 缺省 0；progressTotal 由 CONSTRUCTION_COST 派生

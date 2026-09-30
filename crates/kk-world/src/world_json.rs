@@ -542,12 +542,21 @@ pub(crate) fn object_json(
             }
             v
         }
-        RoomObject::Energy(o) => json!({
-            "type": "resource",
-            "resourceType": energy_resource_name(o),
-            "id": id_str, "room": room, "x": o.x, "y": o.y,
-            "amount": o.amount,
-        }),
+        RoomObject::Energy(o) => {
+            let mut v = json!({
+                "type": "resource",
+                "resourceType": energy_resource_name(o),
+                "id": id_str, "room": room, "x": o.x, "y": o.y,
+                "amount": o.amount,
+            });
+            // M2B 扩面 P4：energy 堆补 amount 别名键（官方 DB 形态 energy:N
+            // ——resources.js:36 的 o.energy 读取面；非 energy 资源无此键
+            //=undefined 官方同形）
+            if v["resourceType"] == json!("energy") {
+                v["energy"] = json!(o.amount);
+            }
+            v
+        }
         // M2B 扩面 P2：owner 键（Some 才落——per-viewer 过滤在
         // world_json_impl 的对象循环，None=无主旗全局可见兜底）
         RoomObject::Flag(o) => {

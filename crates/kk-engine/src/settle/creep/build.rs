@@ -240,7 +240,7 @@ fn complete_construction(
             } else {
                 hits_max
             };
-            let data = serde_json::json!({
+            let mut data = serde_json::json!({
                 "type": "structure",
                 "structureType": other,
                 "owner": site.owner,
@@ -249,6 +249,40 @@ fn complete_construction(
                 // build.js:116：出生即 true
                 "notifyWhenAttacked": true,
             });
+            // 容量/衰减钟/冷却钟由放置面同源函数给出（官方 build.js:167
+            // rampart nextDecayTime / :261 container / :230 lab storeCapacity /
+            // :249 terminal / :258 container / :280 factory / :272 nuker
+            // cooldownTime）——两入口读取面单源。漏钟的后果：phase 8 把
+            // nextDecayTime 缺失（0）判为「已到点」，落成 rampart
+            //（hits=RAMPART_HITS=1）在本 tick 即被 RAMPART_DECAY_AMOUNT=300
+            // 打光移除；container 首 tick 误掉 CONTAINER_DECAY=5000。落成对象
+            // 在 phase 8 的 id 快照之内（build 阶段早于 phase 8），所以不是
+            //「下一 tick」而是本 tick。
+            // 平面容量与 per-resource 容量**成对落**（只落平面会让
+            // `Store.getCapacity()` 由官方 null 变成数值；只落 per-resource
+            // 会让 energyCapacity getter 读右值而 storeCapacity getter 读
+            // undefined）——两键同表值，见 built_store_capacity*。
+            if let Some(cap) = kk_world::place::built_store_capacity(other) {
+                data["storeCapacity"] = serde_json::json!(cap);
+            }
+            if let Some(res) = kk_world::place::built_store_capacity_resource(other) {
+                data["storeCapacityResource"] = res;
+            }
+            if let Some(clock) = kk_world::place::built_decay_clock(other, time) {
+                data["nextDecayTime"] = serde_json::json!(clock);
+            }
+            // nuker 落成即带 cooldownTime（官方 build.js:272——lab/factory/link
+            // 的 `cooldown: 0` 不落：link 的 getter 读 `cooldown||0`、lab/factory
+            // 的 getter 读 cooldownTime，缺键与 0 在读取面等价，见
+            // built_cooldown_time 文档）。
+            if let Some(cd) = kk_world::place::built_cooldown_time(other, time) {
+                data["cooldownTime"] = serde_json::json!(cd);
+            }
+            // 官方 build.js 对各 owned 结构还落 `store: {energy: 0}`。此处刻意
+            // 不落：Store 构造器吃 `object.store || {}`（prelude structures.js:135
+            // ＝官方 store.js:21），而 0 值键被构造函数过滤——缺 store 与
+            // `{energy: 0}` 在 getUsedCapacity/getFreeCapacity/Store 三函数族上
+            // 同值（落成结构出生恒空仓）。
             RoomObject::Generic(kk_schema::room::GenericObj {
                 id: 0,
                 x: site.x,

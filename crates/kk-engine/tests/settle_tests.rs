@@ -21,6 +21,8 @@ mod controller_safemode;
 mod m2b_creation_family;
 #[path = "settle_tests/m2b_notify_family.rs"]
 mod m2b_notify_family;
+#[path = "settle_tests/m2b_structure_decay_family.rs"]
+mod m2b_structure_decay_family;
 #[path = "settle_tests/minerals_and_boost.rs"]
 mod minerals_and_boost;
 #[path = "settle_tests/misc_and_notify.rs"]
@@ -434,6 +436,10 @@ fn generic_structure(
                     "structureType": structure_type,
                     "owner": owner,
                     "hits": hits,
+                    // M2B P4：衰减钟（官方 DB 不变量——container/rampart 恒带
+                    // 绝对 nextDecayTime；缺钟官方立即衰减。夹具给远钟使
+                    // 非衰减用例不受相位 8 衰减影响）
+                    "nextDecayTime": 1_000_000,
                 })
                 .to_string(),
             }),

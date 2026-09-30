@@ -9,8 +9,10 @@
 
   const gw = globalThis.__kkp.gw;
 
-  // 官方表：resourceType（缺省 energy）+ amount。energy 字段现状未暴露
-  // （官方 `o.energy` 对非 energy 资源也是 undefined——暴露面随 A4 补）
+  // 官方表：resourceType（缺省 energy）+ amount。M2B 扩面 P4：`energy` 别名
+  // （官方 resources.js:36 `o.energy`）已真化，挂在 structures_spawn.js 的
+  // Resource 段——energy 堆投影带 `energy=amount`、非 energy 堆无该键
+  // （=undefined，官方同形）
   gw.defineGameObjectProperties(globalThis.Resource.prototype, gw.rawData, {
     resourceType: (o) => o.resourceType || 'energy',
     amount: (o) => o.amount || 0,

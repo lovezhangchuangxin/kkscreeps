@@ -17,7 +17,10 @@ use crate::types::BodyKind;
 
 mod place_structure;
 
-pub use place_structure::generic_structure_hits;
+pub use place_structure::{
+    built_cooldown_time, built_decay_clock, built_store_capacity, built_store_capacity_resource,
+    generic_structure_hits,
+};
 use place_structure::{normalize_site, normalize_structure};
 
 /// 归一化上下文：放置依赖的世界状态（控制器归属决定 source 容量等）。
@@ -239,7 +242,16 @@ fn normalize_spawn(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<SpawnOb
         owner,
         store,
         spawning: None,
-        notify_when_attacked: spec.get("notifyWhenAttacked").and_then(Value::as_bool),
+        // 官方 getStructureDefaults('spawn') 缺省 notifyWhenAttacked:true
+        //（vanilla index.ts:1919；引擎 build.js:116 对新建结构同）——显式
+        // 给了才覆盖。缺省的后果：玩家对放置的 spawn 调
+        // notifyWhenAttacked(true) 会**多记一条 intent**（官方 `true != true`
+        // 不记，structures.js:1220 差分门）
+        notify_when_attacked: Some(
+            spec.get("notifyWhenAttacked")
+                .and_then(Value::as_bool)
+                .unwrap_or(true),
+        ),
     })
 }
 

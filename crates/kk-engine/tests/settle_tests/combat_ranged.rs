@@ -49,6 +49,8 @@ fn rampart(f: &mut Fixture, x: u8, y: u8, hits: i64) -> ObjId {
                 data: serde_json::json!({
                     "type": "structure", "structureType": "rampart",
                     "hits": hits, "hitsMax": hits,
+                    // M2B P4：衰减钟（官方 DB 不变量；缺钟=官方立即衰减）
+                    "nextDecayTime": 1_000_000,
                 })
                 .to_string(),
             }),

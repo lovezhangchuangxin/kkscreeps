@@ -537,6 +537,17 @@ pub fn settle_room(
             //（processor.js:380-381）的 phase 8 分派
             Some(RoomObject::Mineral(_)) => economy::mineral_tick(&mut w, id),
             Some(RoomObject::Extractor(_)) => economy::extractor_tick(&mut w, id),
+            // M2B 扩面 P4：结构衰减三件（官方 processor.js:365 rampart/
+            // :369 road/:389 container 的 phase 8 分派；rampart 与 container
+            // 走 Generic 透传桶）+ link 冷却计数器递减（:378 links/tick.js）。
+            // 官方按 `object.type == '<t>'` 分派——我方 Generic 的 `type` 恒
+            // "structure"，结构类型在 `structureType` 键（投影约定），故按后者取。
+            Some(RoomObject::Road(_)) => economy::road_decay_tick(&mut w, id),
+            Some(RoomObject::Generic(g)) => match generic_structure_type(&g.data).as_deref() {
+                Some("container" | "rampart") => economy::generic_decay_tick(&mut w, id),
+                Some("link") => economy::link_cooldown_tick(&mut w, id),
+                _ => {}
+            },
             _ => {}
         }
     }
@@ -547,6 +558,17 @@ pub fn settle_room(
     w.room.events = w.events.iter().map(Value::to_string).collect();
 
     Ok(w.events)
+}
+
+/// Generic 透传桶的 `structureType`（phase 8 分派用；缺键/畸形 JSON → None）。
+/// 官方 DB 的结构 `type` 即结构类型，我方 Generic 的 `type` 恒 "structure"、
+/// 真实类型在 `structureType` 键（与 world_json 投影、place/建造两入口同约定）。
+fn generic_structure_type(data: &str) -> Option<String> {
+    serde_json::from_str::<Value>(data)
+        .ok()?
+        .get("structureType")
+        .and_then(Value::as_str)
+        .map(str::to_string)
 }
 
 /// 引擎：世界 + 玩家状态 + 每玩家沙箱，按固定序推进 tick。

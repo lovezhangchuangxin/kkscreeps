@@ -327,6 +327,141 @@ tower/link 复用其投影/折叠模式）。P6 收尾。**每片一个完整批
 
 ## 8. 执行记录（随片回写）
 
+### P4（结构读取面：setup 契约 + 衰减结算三件 + Generic 折叠 getter 族 + Resource.energy）——已收口
+
+- **落地**：①place 通道（place_structure.rs）——Generic 臂收
+  ticksToDecay/cooldown 相对值折算绝对钟（nextDecayTime/cooldownTime
+  =time+N；缺省窗对齐官方 tick.js 重置窗：container 有主房 500/野房
+  100、rampart 100）、road 臂 spec 覆写、container/factory 平面
+  storeCapacity 缺省（官方 DB 形态）；②快照（snapshot.rs Generic 臂）
+  ——绝对钟折叠差值（remaining 家族/cooldown `>time?差:0`），绝对键
+  移除；③prelude（structures_spawn.js）——11 类静态折叠 getter 表
+  （container store/storeCapacity/ticksToDecay、rampart 衰减钟、
+  link/terminal/lab/factory cooldown、lab 矿物双 getter、powerSpawn/
+  nuker 能量族、portal destination 双形态/keeperLair/powerBank/
+  invaderCore、road/wall ticksToDecay）+Spawning 经 gw 桥复用+
+  Resource.energy 别名；④投影（world_json.rs）——energy 堆补
+  energy=amount 别名键；⑤结算（economy.rs）——衰减三件
+  （roads/containers/ramparts tick.js 逐字：地形系数窗/rampart hitsMax
+  rcl 同步/容器死亡 hits 先减后落地——同格承接门拒收官方次序）。
+- **偏差登记（compatibility.md）**：ContainerObj typed 变体以
+  Generic+绝对钟交付（官方 DB 同形——typed 化无玩家可见差异，P5
+  tower/link 评估同镜头）；domain 折叠函数单消费者不迁移。
+- **实现期取证**：M1 期夹具缺衰减钟（官方 DB 不变量：container/
+  rampart 恒带钟——缺钟=官方立即衰减）曾致 5 处回归，按不变量补钟；
+  死亡掉落与同格承接的次序依赖（hits 先减使承接门拒收）；getObjectById
+  对不可见房恒 null（野房容器默认值走快照通道断言）。
+- **验证**：workspace 305 绿（+6：引擎衰减三件；embed 1 场景——setup
+  契约/折叠 getter/死亡落地全链）/clippy 0/fmt 过/release+棘轮
+  **1593→1626（+33：实现批 +20、复审修复 +5、清偿修复 +5、主线复核补
+  +3[STORE-BIND-002 H/O/G]，零未豁免转红）**——setup 契约 7（覆写×3/默认×3
+  /link cooldown）/衰减结算 10（CONTAINER×3/ROAD×5/RAMPART×2）/
+  STORE-OPEN×2/SHAPE-RESOURCE-001；地板上调 1626+README 55.80%+报告随批
+  入库；bot 三基线（tooangel console 零错/overmind 既知形态复验——
+  衰减面零新增错误/wasm/skipped_penalty 全 0，三判定通过）；perf 四相
+  持平（两跑 0.127/0.228/0.033/0.496、0.126/0.222/0.032/0.488——对
+  P3 日内 0.125-0.126/0.220-0.222/0.031-0.032/0.483-0.484；settle
+  金丝雀 0.032 稳——phase 8 衰减分派对 container/rampart 增一次
+  Generic data JSON 解析，当前量级噪声内）。
+- **提交前多路独立复审（官方语义对照 / 测试判别力 / 跨层键名一致性）修复 4 项**：
+  ①**建造落成入口漏建钟**——官方 build.js 落成即挂 nextDecayTime（rampart
+  :167、container :261）并写平面 storeCapacity；初版只覆盖放置入口，而
+  phase 8 把缺钟（nextDecayTime=0）判为「已到点」，建成 rampart
+  （hits=RAMPART_HITS=1）在**落成同一 tick** 被 300 打光移除、container
+  首 tick 误掉 5000。修复：build 落成臂复用
+  `kk_world::place::{built_decay_clock, built_store_capacity}`（两入口单源）。
+  ②**rampart 的 hitsMax 同步位置**——官方在衰减钟门**之外**每 tick 执行
+  （ramparts/tick.js:19-24 在 :26 的门之前），初版放进门内 → rcl 变化要等
+  下一个衰减窗才生效；同时改回官方精确查表（原「向下取最近键」与
+  damage.rs 自查不一致）。③**link 的 cooldown 形态**——官方两形态
+  （vanilla index.ts:1145-1158）：link/extractor 用每 tick 计数器
+  `o.cooldown`（getter 直读），lab/terminal/nuker/factory 才用 `cooldownTime`
+  折算；初版对 link 也折 cooldownTime（注释误套 lab 式）。④**wall 撤除官方
+  不存在的 ticksToDecay**（官方 structures.js:839-841 只挂 ticksToLive），
+  road 补官方 decayTime 兜底分支。
+  **验证**：守卫测试 +4（建造建钟 rampart/container、hitsMax 门外同步、
+  road 重挂钟）+ container 落地断言强化为逐键校量（原仅校「存在一个堆」）；
+  变异实验（把 hitsMax 同步移回门内）确认唯一转红的是新守卫——该分歧点
+  此前无任何测试覆盖。workspace 绿（0 failed）——**数口径勘误**：本轮复核
+  以 `cargo test --workspace | grep '^test result:'` 逐行求和实测，加本轮
+  4 条新守卫前为 **306**（原记 309 未复现，按实测更正）。
+- **清偿复审（对上述修复自身的独立复核）修复 3 项 + 补 1 项**：
+  ⑤**容量平面/per-resource 未成对**——`Store.getCapacity()` 无参是
+  `storeCapacityResource ? null : storeCapacity || null`（store.js:31），
+  上轮只给 lab/container/terminal/factory/powerSpawn/nuker 补了平面
+  `storeCapacity`，lab 的 `getCapacity()` 遂由官方 null 变 5000。修复：
+  新增 `built_store_capacity_resource`（lab/powerSpawn/nuker/link/tower），
+  放置与建造**两入口成对落**；平面表补 link/tower 对齐 vanilla
+  `getStructureDefaults` 权威表（官方 build.js 是它的子集，差异不可观测）。
+  ⑥**装配兜底遮蔽 energyCapacity 的取数**——实例级 `ELSE_STRUCTURE_FIELDS`
+  会遮蔽 `StructureLab/PowerSpawn/Nuker/Link/Tower.prototype` 的同名 getter，
+  且原读**原始键** `o.energyCapacity`（官方 DB 从无该键）→ 该五类的
+  `energyCapacity` 恒 0（官方 lab 2000/link 800/tower 1000/powerSpawn 100/
+  nuker 300000）。方案 §4 P4 行本已声明 PowerSpawn 的 `energyCapacity`
+  交付，修前该声明并不成立。修复：兜底改读官方口径
+  `storeCapacityResource.energy`（无平面回退分支）。⑦**link 冷却无结算面**
+  ——place 面已按计数器形态落键，但 phase 8 无递减（官方 processor.js:378
+  `links/tick.js`）；旧 e2e 只在放置同 tick 读一次（恒 7），恰把「不递减」
+  读成预期值。修复：`economy::link_cooldown_tick` + phase 8 分派（Generic
+  按 `structureType` 取，官方按 `type` 取——我方透传桶 `type` 恒 "structure"）。
+  补 1 项：build 落成臂补 `storeCapacityResource` 与 nuker 的 `cooldownTime`
+  （官方 build.js:269-272）；官方另落的 `store:{energy:0}` 与 link/lab/factory
+  的 `cooldown:0` 经核对**读取面等价**，不落并写明理由。
+  **验证**：新增守卫 5 条（settle 4：lab 容量对、nuker 冷却钟、link 递减、
+  link 钳 0；e2e 3 条断言并入既有场景）＋**四条变异实验逐条确认杀伤力**
+  （兜底取数回退 → 0 vs 2000；link 分派摘除 → 7 vs 5/6；per-resource 摘除
+  → null vs 2000 与 5000 vs null）。workspace **310 绿 / 0 failed**；棘轮
+  **+5 转绿 1618→1623、转红 0**。**读数勘误**：本批初记「计数不变、维持
+  1618」——系陈旧 release 二进制所致（棘轮前置 `cargo build --release -p
+  kk-cli` 未随批重建，`compat/scripts/run-suite.sh` 头注已明列）；第三轮
+  复核以逐条消融实证（装配兜底/link 分派 2 项占 +1、容量成对落与 build
+  臂占 +4），并以二进制 md5 核对构建确实随代码更新。
+- **bot 三基线复跑（本轮补做，含一处基线陈旧发现）**：`compat/reports/`
+  三条基线最后一次入库分别是 **tooangel/wasm 停在 A6（2026-09-29）、
+  overmind 停在 P2**——即 P1/P3/P4 各批记录里的「三基线通过」用的是
+  **未入库的本地跑**（默认 report 路径 `bot-check-report.json` 未跟踪），
+  入库基线因此陈旧三轮。本轮按基线口径重跑并刷新入库：
+  tooangel（`fixtures/tooangel/src` 2000t）**2000/0 中断/0 跳过罚/0 console
+  错误/缺失 {}**；overmind（`fixtures/overmind-dist` 2000t）2000/0/0/**2000
+  console 错误——归一化比对与旧基线集的**错误类型集全等**（唯一条数 10=10，
+  首条仍是已知的 `RawMemory.setPublicSegments is not a function` ×2000，归
+  P6），无新增错误类型**/缺失 {}；wasm（`fixtures/wasm-bot` 10t）10/0/0/0
+  错误/缺失 {}。三判定（中断/缺失/跳过罚）全过。
+  - **轨迹位移的消融归因**：刷新后 tooangel 的 `stub_calls_top` 相对陈旧
+    基线整体位移（`PathFinder.search` 10000 登顶、room.find 行号集改变）。
+    做消融（回退本轮两条 bot 可见改动——`ELSE_STRUCTURE_FIELDS.energyCapacity`
+    取数与 link 冷却分派）后重跑，`stub_calls_top` 与错误集**全等**
+    （唯一差异是首行 `Load: 5/6` 的模块加载计数噪声）→ **位移归因于 A6→P4
+    的累计引擎变化，与本轮清偿修复无关**。
+  - **残留登记**：入库 bot 基线自 A6 起实则未随批刷新（P1/P3/P4 三轮），
+    属「验收声明与入库证据脱节」——建议把三基线刷新纳入各批收尾清单。
+- **perf 观测点复跑**（`perf-probe --ticks 1000 --warmup 100 --players 2`）：
+  四相 p50 project 0.1254→**0.1244**、run 0.2087→**0.2099**、settle
+  0.0322→**0.0309**、wall 0.4665→**0.4610** ms——**持平**（对照入库基线
+  `compat/reports/perf-probe.json`，B0-6 口径）。负载自检三项
+  （progress_delta 3328 / source_energy_min 2836→2366）**完全相同**，
+  即夹具行为无漂移；phase 8 新增的 link 分派只对 link 对象多一次
+  `structureType` 取值（原 P4 版的 match guard 已对每个 Generic 解析一次
+  data JSON，本轮的 `settle::generic_structure_type` 抽取不增成本）。
+- **主线复核补（对外部评审报告的逐条复核，新发现 1 项并修复）**：
+  **lab 矿物槽的容量绑定**——vanilla placeStructure :1122-1128 对
+  spec.store 带矿物的 lab 给 storeCapacityResource 补缺失矿物
+  LAB_MINERAL_CAPACITY。不补则未存矿物的 `getCapacity` 错读 3000（官方
+  0→null，**槽绑定语义的玩家可观测面**）。修复：place 面 lab 臂填充。
+  **勘误记录**：初判「填充与回退式恒等、仅 DB 形态保真」——恒等只对
+  已存矿物成立（flat 5000−energy 2000=3000 表定义使然），槽绑定面经
+  消融实测纠正（禁用填充重跑棘轮：1626→1623，差 3 条即
+  STORE-BIND-002 H/O/G）。守卫：e2e 双锚（玩家面 `getCapacity('O')`=null
+  + 快照 storeCapacityResource 含 U/L 键集），变异实验双锚各自转红。
+  **主线复核实测**（修复后终值）：workspace **310 绿**/clippy 0/fmt 净；
+  release 重建后棘轮 **1626（+3 转绿、转红 0）**，地板 1623→**1626
+  （55.80%）**；bot 三基线复跑三判定全过（tooangel 2000t 0 错误/
+  overmind 形态集与基线全等 10=10/wasm 干净——tooangel 有一条 A6 基线
+  没有的**日志**形态 `Executing room failed…lookFor`，系 bot 自身
+  `getAdjacentPosition` 出界返 false 的 catch 日志非 console error，且
+  bot 夹具无 lab（填充机械不可达），归 A6→P4 累计位移同外部报告消融
+  结论）；perf 四相 0.125/0.217/0.031/0.480 持平。
+
 ### P3（Game.map 族 + Game.notify 全局通道 + cpu 三面）——已收口
 
 - **落地**：①map 族真化（game.js map 段 IIFE——官方 map.js:11-268 逐方法

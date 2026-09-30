@@ -30,11 +30,11 @@
     ],
     [
       "PathFinder.search",
-      8020
+      8001
     ],
     [
       "room.find:105",
-      6056
+      6054
     ],
     [
       "room.find:114",
@@ -61,16 +61,12 @@
       1999
     ],
     [
-      "Game.cpu.getHeapStatistics",
-      250
-    ],
-    [
       "Game.market.getAllOrders",
       76
     ],
     [
       "room.find:107",
-      39
+      40
     ],
     [
       "room.find:116",
@@ -413,12 +409,12 @@
       1999
     ],
     [
-      "[log] <font color='yellow'>ALERT  </font> <font color='gray'>#</font> RoomPlanner for <a href=\"#!/room/shard#/W#N#\">W#N#</a> is still active! Close to save CPU.",
-      80
+      "[log] <font color='green'>INFO   </font> <font color='gray'>#</font> <a href=\"#!/room/shard#/W#N#\">[undefined>mine]</a>: building container at <a href=\"#!/room/shard#/W#N#\">[W#N#, #, #]</a>",
+      133
     ],
     [
-      "[log] <font color='yellow'>ALERT  </font> <font color='gray'>#</font> Version migration from #.#.# -> #.#.# (part #) completed successfully.",
-      4
+      "[log] <font color='orange'>WARNING</font> <font color='gray'>#</font> Last resort container position calculation for <a href=\"#!/room/shard#/W#N#\">[undefined>mine]</a>!",
+      133
     ]
   ],
   "console_head": [
@@ -433,10 +429,10 @@
     "[tick 1][log] <font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.5.1 -> 0.5.2 completed successfully.",
     "[tick 1][log] <font color='yellow'>ALERT  </font> <font color='gray'>1</font> Codebase updated or global reset. Type \"help\" for a list of console commands.\n                ‣ Version:        Overmind v0.5.2\n                ‣ Checksum:       0x34e6838c39d\n                ‣ Assimilated:    No (clearance code: null) [WIP]\n                ‣ Operating mode: automatic",
     "[tick 1][log] <font color='yellow'>ALERT  </font> <font color='gray'>1</font> Creating harvest directive at <a href=\"#!/room/shard0/W1N1\">[W1N1, 15, 15]</a>!",
-    "[tick 1][log] <font color='red'>ERROR  </font> <font color='gray'>1</font> Could not find colony match for harvest:4d2d21 in W1N1!Try setting memory.maxPathLength and memory.maxLinearRange.",
-    "[tick 1][log] <font color='yellow'>ALERT  </font> <font color='gray'>1</font> Could not get colony for directive <a href=\"#!/room/shard0/W1N1\">[harvest:4d2d21]</a>; exceptions present this tick, so won't remove",
+    "[tick 1][log] <font color='red'>ERROR  </font> <font color='gray'>1</font> Could not find colony match for harvest:5c4696 in W1N1!Try setting memory.maxPathLength and memory.maxLinearRange.",
+    "[tick 1][log] <font color='yellow'>ALERT  </font> <font color='gray'>1</font> Could not get colony for directive <a href=\"#!/room/shard0/W1N1\">[harvest:5c4696]</a>; exceptions present this tick, so won't remove",
     "[tick 1][log] <font color='orange'>WARNING</font> <font color='gray'>1</font> Exceptions present this tick! Rebuilding Overmind object in next tick.",
-    "[tick 1][log] <font color='#d65156'>FATAL  </font> <font color='gray'>1</font> <font color='#d65156'>Caught unhandled exception instantiating colony W1N1: \nTypeError: Cannot read properties of undefined (reading 'harvest:4d2d21')</font>",
+    "[tick 1][log] <font color='#d65156'>FATAL  </font> <font color='gray'>1</font> <font color='#d65156'>Caught unhandled exception instantiating colony W1N1: \nTypeError: Cannot read properties of undefined (reading 'harvest:5c4696')</font>",
     "[tick 1][log] <font color='#d65156'>FATAL  </font> <font color='gray'>1</font> <font color='#d65156'>Caught unhandled exception at ()=>Segmenter[_0x3f52('0x4f')](): \nTypeError\nTypeError: RawMemory.setPublicSegments is not a function\n    at Segmenter.run (kk_module/main, <anonymous>:1369:19)\n    at eval (kk_module/main, <anonymous>:24047:7862)\n    at _Overmind.try (kk_module/main, <anonymous>:24047:2482)\n    at _Overmind.postRun (kk_module/main, <anonymous>:24047:7831)\n    at main (kk_module/main, <anonymous>:24304:14)\n    at Object.wrap (kk_module/main, <anonymous>:971:16)\n    at Object.loop (kk_module/main, <anonymous>:24308:21)\n    at runLoop (kk-prelude-90-host:63:16): RawMemory.setPublicSegments is not a function</font>",
     "[tick 1][error] Caught unhandled exception instantiating colony W1N1: \nTypeError\nCaught unhandled exception at ()=>Segmenter[_0x3f52('0x4f')](): \nTypeError\nTypeError: RawMemory.setPublicSegments is not a function\n    at Segmenter.run (kk_module/main, <anonymous>:1369:19)\n    at eval (kk_module/main, <anonymous>:24047:7862)\n    at _Overmind.try (kk_module/main, <anonymous>:24047:2482)\n    at _Overmind.postRun (kk_module/main, <anonymous>:24047:7831)\n    at main (kk_module/main, <anonymous>:24304:14)\n    at Object.wrap (kk_module/main, <anonymous>:971:16)\n    at Object.loop (kk_module/main, <anonymous>:24308:21)\n    at runLoop (kk-prelude-90-host:63:16)",
     "[tick 2][log] <font color='yellow'>ALERT  </font> <font color='gray'>2</font> Creating harvest directive at <a href=\"#!/room/shard0/W1N1\">[W1N1, 15, 15]</a>!",
