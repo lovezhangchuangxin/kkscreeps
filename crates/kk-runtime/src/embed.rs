@@ -61,6 +61,9 @@ pub struct EmbedEngine {
     /// 测试钩子：下一次世界结算注入 Err（部分提交三连回归的场景②）。
     /// #[doc(hidden)]：仅集成测试消费，生产面不可达（误置最多导致一轮 Err）。
     fail_next_settle: bool,
+    /// 测试钩子（双房批）：下一次结算在指定房注入 Err 后自清（一次性）——
+    /// embed 全链形态的两阶段跨房回退验收（tick 契约场景 3）。
+    fail_next_settle_room: Option<String>,
     /// 测试旋钮（双房批）：玩家执行顺序覆盖——None=注册玩家集的 handle
     /// 排序序（handles 为 BTreeMap，注册序天然被排序吸收）。只改
     /// execute_players 的循环序（投影+执行完成序），结果收集/意图合并/
@@ -260,6 +263,7 @@ impl EmbedEngine {
             last_console: BTreeMap::new(),
             perf: PerfRecorder::default(),
             fail_next_settle: false,
+            fail_next_settle_room: None,
             execution_order_for_test: None,
             last_execution_order: None,
         }
@@ -477,9 +481,20 @@ impl EmbedEngine {
             self.fail_next_settle = false;
             anyhow::bail!("故障注入：世界结算失败（测试钩子）");
         }
-        self.engine
+        // 房级注入（双房批）：一次性——取用即清，无论成败都在结算后解除
+        // Engine 侧的持续注入（防泄漏到后续轮）
+        let fail_room = self.fail_next_settle_room.take();
+        if fail_room.is_some() {
+            self.engine.set_fail_room_for_test(fail_room.clone());
+        }
+        let settled = self
+            .engine
             .tick_with_intents_with_input(batch, input)
-            .map_err(|e| anyhow::anyhow!("{e}"))
+            .map_err(|e| anyhow::anyhow!("{e}"));
+        if fail_room.is_some() {
+            self.engine.set_fail_room_for_test(None);
+        }
+        settled
     }
 
     /// ①②逐玩家：注入 PlayerState.raw_memory → per-viewer 投影 → 执行 →
@@ -713,6 +728,16 @@ impl EmbedEngine {
     #[doc(hidden)]
     pub fn fail_next_settle_for_test(&mut self) {
         self.fail_next_settle = true;
+    }
+
+    /// 测试钩子（双房批）：下一次结算在指定房注入 Err（一次性，自清）——
+    /// 验收场景 3 的 embed 全链形态：先结算房（名序在前）的良好结果也须
+    /// 随整体回退丢弃。顺延语义：若本轮被 `fail_next_settle` 整轮注入或
+    /// 结算前置失败吞掉（未达 settle_world），房间钩子留存至下一次实际
+    /// 结算（不丢失、不泄漏 engine 侧——评 2 P2-1 清偿）。
+    #[doc(hidden)]
+    pub fn fail_next_settle_room_for_test(&mut self, room: &str) {
+        self.fail_next_settle_room = Some(room.to_string());
     }
 
     /// 测试旋钮（双房批）：覆盖玩家执行顺序（须为注册玩家集的排列，

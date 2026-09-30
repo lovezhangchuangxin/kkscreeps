@@ -289,3 +289,37 @@ bot 三基线（tooangel console 零错须人工确认）/ perf 同口径 A/B �
   形态、skipped_penalty 全 0）/ perf 同口径 A/B 噪声级（0.124/0.204/
   0.032/0.458 vs 基线 0.124/0.209/0.032/0.467——旋钮 Option 判别零
   开销）/ 守恒恒等式杀伤力抽查（期望改 1 即红、复原即绿）。
+
+### 片 3（玩法验收 + 失败恢复双房化）——已收口
+
+- **落地**：Engine fail_room 去 #[cfg(test)] + `set_fail_room_for_test`
+  （pub #[doc(hidden)]，持续语义；embed 包装一次性）；EmbedEngine
+  `fail_next_settle_room_for_test`（take→set→settle→无条件 clear，顺延
+  语义文档化）。三测试：①生命周期（孵化链：spawnCreep 扣费 200 →
+  needTime 9 → 出生落位 directions [TOP] 首空格 (3,2)+spawning=false；
+  建造链：夹具工地（API 为 stub）progress 2990+BUILD_POWER 5×2 →
+  extension 转正；spawn 能量 111..=112=300−200+涓流 11~12）②房级失败
+  恢复（W2N1 名序在后注入 → **先结算房 W1N1 良好结果随整体回退**（两
+  阶段跨房提交的 embed 全链取证）→ 世界/时间保旧 → 重试零执行两房
+  一并提交 → globalThis/Memory 双通道 [2,2] → **discard 臂**：失败轮
+  候选丢弃后 Memory 恒 2、globalThis=3——memory 失败时点保旧的双房
+  断言）③B0-6 双房变体（被拒重试：pending {p1,p2} 请求含注册但缺席
+  的 p3 → bail 缓存幸存——较 b06 单房 ghost 未注册形态的实质增量；
+  TickInput 复用：signController datetime 三段判窗与单房版同构）。
+- **评审三路（失败恢复语义/引擎改动面/验收映射）**：P0×0、P1×2、
+  P2×12。P1 清偿：①「两玩家 memory 全保旧」注释失实（探针不可区分
+  提交时点）→ 补 discard 臂真断言+注释如实；②方案「无短 ticksToLive
+  触发面」登记理由失实（place 支持 ticksToLive 播种）→ 勘正为「范围
+  归后批」。P2 清偿：born1 补 spawning=false 断言（雏形计数弱断言消
+  误导）；spawn 能量区间收紧 111..=112；旋钮顺延语义 doc；「③」消歧。
+  登记不修：console 半边（capture_console_logs 失败轮结构性不更新——
+  可选补强）；bucket 断言面（归 O3 SandboxConfig 旋钮合并）；datetime
+  NTP 假红窗口（承接 b0-6 §4 登记口径）；名序第一房注入臂（独有杀伤
+  力≈0，后房臂已双层覆盖）；结算 panic 窗口的 engine 侧清零不达（理论
+  残余）；fail_room 常驻 release 的 24B+每房每 tick Option 比较（噪声
+  级，有意权衡避免 feature 分叉生产二进制）。
+- **验证**：workspace 全绿 / clippy 零告警 / release+棘轮 1405 零未豁免
+  转红 / 三基线（tooangel console error tick=0、overmind/wasm 既知形态、
+  skipped_penalty 全 0）/ perf 同口径 A/B 噪声级（0.124/0.210/0.032/
+  0.467 vs 基线 0.124/0.209/0.032/0.467）/ 房级回退断言杀伤力抽查（期望
+  改 p0+1 即红、复原即绿——真实值 p0=回退成立）。

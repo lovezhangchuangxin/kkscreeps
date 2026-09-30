@@ -49,6 +49,9 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     dual_c_unrelated_room_independent_impl()?;
     dual_execution_order_invariance_impl()?;
     dual_multi_tick_conservation_impl()?;
+    dual_lifecycle_spawn_and_construction_impl()?;
+    dual_room_failure_recovery_impl()?;
+    dual_b06_variants_impl()?;
     assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");
     Ok(())
 }

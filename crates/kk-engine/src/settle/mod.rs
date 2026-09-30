@@ -536,8 +536,8 @@ pub struct Engine {
     next_id: u64,
     /// 最近一次 tick 的房间事件日志（按房间结算序拼接；M1 测试消费，M2 持久化）。
     pub last_events: Vec<serde_json::Value>,
-    /// 测试钩子：命中名房的结算注入 Err，验证两阶段回退（仅 cfg(test) 可见）。
-    #[cfg(test)]
+    /// 测试钩子：命中名房的结算注入 Err，验证两阶段回退（双房批起对
+    /// embed 集成测试开放——经 set_fail_room_for_test；生产不得触碰）。
     fail_room: Option<String>,
 }
 
@@ -556,9 +556,16 @@ impl Engine {
             sandboxes: BTreeMap::new(),
             next_id,
             last_events: Vec::new(),
-            #[cfg(test)]
             fail_room: None,
         }
+    }
+
+    /// 测试面（双房批，#[doc(hidden)]）：注入/解除指定房的结算失败——
+    /// 持续语义（命中即 Err，直至清 None），调用方管理清零。embed 级
+    /// 一次性语义由 EmbedEngine::fail_next_settle_room_for_test 包装。
+    #[doc(hidden)]
+    pub fn set_fail_room_for_test(&mut self, room: Option<String>) {
+        self.fail_room = room;
     }
 
     /// 推进一个 tick：收集 intents（玩家名序）→ 逐房间（名字序）结算。
@@ -651,7 +658,6 @@ impl Engine {
         }
         let room_names: Vec<String> = self.world.rooms.keys().cloned().collect();
         for name in room_names {
-            #[cfg(test)]
             if self.fail_room.as_deref() == Some(name.as_str()) {
                 return Err(SettleError(format!("故障注入：房间 {name} 结算失败")));
             }
