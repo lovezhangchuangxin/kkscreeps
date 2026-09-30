@@ -5,21 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>kkscreeps renderer · dev harness</title>
     <style>
-      /* Roboto（OFL-1.1，R0 vendor）：文字件（spawn 名 55/标志 82）渲染前提。
-       * 库本身不负责字体装载（消费者页面职责——R6 API 冻结时写集成文档）。
-       * 路径经 vite publicDir（=assets/）以根提供。 */
-      @font-face {
-        font-family: 'Roboto';
-        font-style: normal;
-        font-weight: 400;
-        src: url('/fonts/roboto-latin-400-normal.woff2') format('woff2');
-      }
-      @font-face {
-        font-family: 'Roboto';
-        font-style: normal;
-        font-weight: 700;
-        src: url('/fonts/roboto-latin-700-normal.woff2') format('woff2');
-      }
+      /* Roboto（OFL-1.1，R0 vendor）装载责任在库（R6 D5/G7）：库自建 FontFace
+       * 预载三规格（fontsBaseUrl 寻址 /fonts/，vite publicDir=assets/），
+       * 页面不再声明 @font-face；状态见 HUD fonts=loaded/fallback。 */
       html,
       body {
         margin: 0;

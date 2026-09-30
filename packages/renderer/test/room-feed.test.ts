@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FeedStore } from '../src/feed/room-feed.js';
+import type { FeedChange } from '../src/feed/room-feed.js';
 import type { RoomDelta, RoomSnapshot } from '@kkscreeps/shared';
 
 // feed 状态机：快照置换 / 增量对账 / fail-fast 语义 / 读取面。
@@ -54,14 +55,32 @@ describe('FeedStore', () => {
     expect(() => feed.applyDelta(delta(1, [], []))).not.toThrow();
   });
 
-  it('setTerrain/setVisuals 可先于快照（自动建房），快照保留 visuals', () => {
+  it('setTerrain/setVisuals 可先于快照（自动建房）；快照清空 visuals（R6 D2）', () => {
     const feed = new FeedStore();
     feed.setTerrain('W1N1', { codes: [1] });
     expect(feed.terrain('W1N1')).toEqual({ codes: [1] });
     feed.setVisuals('W1N1', [{ type: 'circle', x: 1, y: 1 }]);
     feed.applySnapshot(snapshot);
-    expect(feed.summary('W1N1')!.visuals).toBe(1);
+    expect(feed.summary('W1N1')!.visuals).toBe(0);
+    expect(feed.visuals('W1N1')).toEqual([]);
     expect(feed.terrain('W1N1')).toEqual({ codes: [1, 2, 0] }); // 快照地形覆盖
+  });
+
+  it('setVisuals 全量替换并通知；增量通知 visuals 仓库原引用稳定（场景端引用短路依据）', () => {
+    const feed = new FeedStore();
+    feed.applySnapshot(snapshot);
+    const seen: FeedChange[] = [];
+    feed.onChange((_room, c) => seen.push(c));
+    feed.setVisuals('W1N1', [{ type: 'circle', x: 1, y: 1 }]);
+    feed.applyDelta(delta(1, [], []));
+    feed.setVisuals('W1N1', []);
+    expect(seen).toHaveLength(3);
+    expect(seen[0]!.visuals).toEqual([{ type: 'circle', x: 1, y: 1 }]);
+    expect(seen[1]!.visuals).toBe(seen[0]!.visuals); // 增量通知 visuals 引用不变
+    expect(seen[2]!.visuals).toEqual([]);
+    expect(seen[2]!.events).toEqual([]);
+    expect(feed.roomNames()).toEqual(['W1N1']);
+    expect(feed.visuals('E9S9')).toEqual([]);
   });
 
   it('summary 对未知房间返回 undefined', () => {

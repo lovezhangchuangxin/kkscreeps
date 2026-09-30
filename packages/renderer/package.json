@@ -8,7 +8,8 @@
     "build:assets": "node scripts/build-assets.mjs",
     "check:assets": "node scripts/check-assets-fresh.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node scripts/check-assets-fresh.mjs && pnpm run typecheck && vitest run"
+    "test": "node scripts/check-assets-fresh.mjs && pnpm run typecheck && vitest run && pnpm run build",
+    "build": "node scripts/build-lib.mjs"
   },
   "dependencies": {
     "@kkscreeps/shared": "workspace:*",
@@ -21,5 +22,17 @@
     "typescript": "~7.0.2",
     "vite": "^8.3.1",
     "vitest": "^5.0.2"
-  }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "assets"
+  ]
 }

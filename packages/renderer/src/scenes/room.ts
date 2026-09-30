@@ -12,14 +12,15 @@
  * constructedWall，terrain.js:264-266）——对象侧变更经 applyObjects 返回值
  * 触发重烘焙（terrain 内部 hash 门控，未变零成本）。
  */
-import { Container } from 'pixi.js';
+import { Container, Graphics } from 'pixi.js';
 import { LightingPass } from '../core/lighting.js';
-import type { ActionLogEntry, SayEntry, RoomEvent, RoomObjectState } from '@kkscreeps/shared';
+import type { ActionLogEntry, RoomEvent, RoomObjectState, RoomVisual, SayEntry } from '@kkscreeps/shared';
 import type { Viewport } from '../anim/ambient-scheduler.js';
 import { DEFAULT_CELL_SIZE, ROOM_SIZE } from './terrain-geometry.js';
 import { TERRAIN_SPEC } from '../core/terrain-spec.js';
 import { TerrainStage, type TerrainTextures } from './terrain.js';
 import { ObjectsStage } from '../objects/objects-stage.js';
+import { VisualStage } from './visual-stage.js';
 import type { JoinAssets } from '../objects/joins-naturals.js';
 
 export { DEFAULT_CELL_SIZE, ROOM_SIZE } from './terrain-geometry.js';
@@ -47,6 +48,11 @@ export class RoomScene {
   readonly terrain: TerrainStage;
   /** 对象舞台（无装配时为 null——纯地形模式）。 */
   readonly objects: ObjectsStage | null;
+  /** RoomVisual 舞台（root 顶、effects 之上——标注面不受 lighting 压暗，G1）。 */
+  readonly visuals: VisualStage;
+  /** 悬停高亮环挂点（visuals 之上——交互辅助，非官方形态 G13）。 */
+  private readonly hoverRoot: Container;
+  private hoverCell: { x: number; y: number } | null = null;
   /** 世界尺寸（ROOM_SIZE×cell）。 */
   readonly view: number;
   readonly cellSize: number;
@@ -70,8 +76,13 @@ export class RoomScene {
     const lightingDisplay = new Container({ label: 'layer-lighting' });
     lightingDisplay.addChild(this.lighting.display);
     const effects = new Container({ label: 'layer-effects' });
-    this.root.addChild(terrain, ground, objectsLayer, lightingDisplay, effects);
+    const visualsStage = new VisualStage(cellSize);
+    visualsStage.root.label = 'layer-visuals';
+    const hoverRoot = new Container({ label: 'layer-hover' });
+    this.root.addChild(terrain, ground, objectsLayer, lightingDisplay, effects, visualsStage.root, hoverRoot);
     this.layers = { terrain, ground, objects: objectsLayer, lightingDisplay, effects };
+    this.visuals = visualsStage;
+    this.hoverRoot = hoverRoot;
 
     if (objects) {
       const stage = new ObjectsStage({
@@ -111,6 +122,25 @@ export class RoomScene {
     if (this.objects.apply(objects, time, events, kind, input)) this.syncWalls();
   }
 
+  /** RoomVisual 全量替换（VisualStage 内引用短路——同引用零成本）。 */
+  setVisuals(visuals: readonly RoomVisual[]): void {
+    this.visuals.setVisuals(visuals);
+  }
+
+  /** 悬停高亮环（格中心 ±cell/2 白描边；同格幂等，null 清除）。
+   * 交互辅助面，非官方形态（官方为 hover 信息卡），登记 G13。 */
+  setHighlight(cell: { x: number; y: number } | null): void {
+    if (cell === null && this.hoverCell === null) return;
+    if (cell !== null && this.hoverCell !== null && cell.x === this.hoverCell.x && cell.y === this.hoverCell.y) return;
+    this.hoverCell = cell;
+    this.hoverRoot.removeChildren().forEach((child) => child.destroy({ children: true }));
+    if (cell === null) return;
+    const ring = new Graphics();
+    ring.circle(cell.x * this.cellSize, cell.y * this.cellSize, this.cellSize / 2)
+      .stroke({ width: 2, color: 0xffffff, alpha: 0.6, cap: 'round', join: 'round' });
+    this.hoverRoot.addChild(ring);
+  }
+
   /** 墙烘焙格集 = 地形码 ∪ constructedWall 格。双引用门控（C-S1）：地形码与
    * extras 引用均未变时直接短路（extras 引用由 ObjectsStage integerSetEquals
    * 稳定化）——含 constructedWall 房间的每 tick 增量零拷贝零 FNV。 */
@@ -126,17 +156,32 @@ export class RoomScene {
     if (wallRebuilt) this.lighting.markDirty();
   }
 
+  /** 最近一帧各阶段 CPU 耗时 ms（普通数据诊断；R5 `?smoke=1` 方法学同源——
+   * objects 段只含 ObjectsStage.update（terrain 滚动沿 R5 口径不计），
+   * lighting 段=离屏 pass。onFrameTiming 的数据源）。 */
+  lastStageMs = { objectsMs: 0, lightingMs: 0 };
+
   /** ticker 驱动（elapsedMS=未经 ticker 截断的真实帧时间）：swamp 滚动 + lighting 离屏按需重渲
    * + 对象运动 tween（R4——数据断流动画照跑）。 */
   update(elapsedMS: number, renderer: Parameters<LightingPass['update']>[0], viewport?: Viewport): void {
-    if (elapsedMS > 0) this.terrain.update(elapsedMS / TERRAIN_SPEC.frameBaseMs);
+    const timed = elapsedMS > 0;
+    if (timed) this.terrain.update(elapsedMS / TERRAIN_SPEC.frameBaseMs);
+    const t1 = timed ? performance.now() : 0;
     // objects 先于 lighting：运动 tween 的 markDirty 同帧进 RT 重渲
     //（消一帧滞后，评审 C建议4）
-    if (elapsedMS > 0) this.objects?.update(elapsedMS, viewport);
+    if (timed) this.objects?.update(elapsedMS, viewport);
+    const t2 = timed ? performance.now() : 0;
     this.lighting.update(renderer, this.terrain.renderSize, this.view);
+    const t3 = timed ? performance.now() : 0;
+    if (timed) {
+      this.lastStageMs.objectsMs = t2 - t1;
+      this.lastStageMs.lightingMs = t3 - t2;
+    }
   }
 
   destroy(): void {
+    // Text 私有源先精确销毁（VisualStage），再整树兜底（objects-stage 同序）
+    this.visuals.destroy();
     this.objects?.destroy();
     this.lighting.destroy();
     this.terrain.destroy();

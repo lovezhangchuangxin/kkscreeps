@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Container, Ticker } from 'pixi.js';
+import type { RoomVisual } from '@kkscreeps/shared';
 import { createRenderer, type RendererHandle } from '../src/index.js';
 import { initKernel, type Kernel } from '../src/core/renderer.js';
 import { mockAssetIO } from './asset-mocks.js';
@@ -15,11 +16,30 @@ function makeKernel() {
     on: vi.fn((_event: string, listener: () => void) => { listeners.add(listener); }),
     off: vi.fn((_event: string, listener: () => void) => { listeners.delete(listener); }),
   };
-  const canvas = { style: {}, addEventListener: vi.fn(), removeEventListener: vi.fn() };
+  const domListeners = new Map<string, Set<(e: Partial<PointerEvent>) => void>>();
+  const canvas = {
+    style: {},
+    getBoundingClientRect: vi.fn(() => ({ left: 0, top: 0 })),
+    setPointerCapture: vi.fn(),
+    releasePointerCapture: vi.fn(),
+    hasPointerCapture: vi.fn(() => false),
+    addEventListener: vi.fn((event: string, listener: (e: Partial<PointerEvent>) => void) => {
+      let set = domListeners.get(event);
+      if (!set) { set = new Set(); domListeners.set(event, set); }
+      set.add(listener);
+    }),
+    removeEventListener: vi.fn((event: string, listener: (e: Partial<PointerEvent>) => void) => {
+      domListeners.get(event)?.delete(listener);
+    }),
+  };
+  /** 合成派发 DOM 指针事件（拾取/悬停测试）。 */
+  const firePointer = (event: string, e: Partial<PointerEvent>): void => {
+    for (const listener of [...(domListeners.get(event) ?? [])]) listener(e);
+  };
   const destroy = vi.fn(async () => { ticker.destroy(); stage.destroy({ children: true }); });
   const kernel: Kernel = { stage, backend: 'webgl', destroy,
     app: { stage, ticker, renderer, canvas } as unknown as Kernel['app'] };
-  return { kernel, ticker, renderer, canvas, listeners, destroy, stage };
+  return { kernel, ticker, renderer, canvas, listeners, destroy, stage, domListeners, firePointer };
 }
 
 const handles: RendererHandle[] = [];
@@ -88,7 +108,8 @@ describe('公共句柄生命周期与真实 ticker 接线', () => {
     const handle = await mounted();
     await Promise.all([handle.destroy(), handle.destroy()]);
     expect(runtime.destroy).toHaveBeenCalledTimes(1);
-    expect(runtime.canvas.removeEventListener).toHaveBeenCalledTimes(6);
+    // 相机 6（wheel/pointer×4/contextmenu）+ 拾取悬停 5（pointer×5）
+    expect(runtime.canvas.removeEventListener).toHaveBeenCalledTimes(11);
     expect(runtime.listeners.size).toBe(0);
     expect(bitmaps.every((bitmap) => bitmap.close.mock.calls.length === 1)).toBe(true);
     // feed 可作为数据仓库继续使用，不能再调用已销毁场景。
@@ -100,6 +121,7 @@ describe('公共句柄生命周期与真实 ticker 接线', () => {
     vi.stubGlobal('fetch', async () => { throw new Error('offline'); });
     await expect(mounted()).rejects.toThrow('offline');
     expect(runtime.destroy).toHaveBeenCalledTimes(1);
+    // 失败发生在拾取监听装配之前：仅相机 6 监听
     expect(runtime.canvas.removeEventListener).toHaveBeenCalledTimes(6);
   });
 
@@ -110,5 +132,124 @@ describe('公共句柄生命周期与真实 ticker 接线', () => {
     expect(runtime.destroy).toHaveBeenCalledTimes(1);
     expect(runtime.stage.destroyed).toBe(true);
     expect(bitmaps.every((bitmap) => bitmap.close.mock.calls.length === 1)).toBe(true);
+  });
+});
+
+describe('R6：活动房间 / visuals / 拾取悬停 / 字体 / advanceAnimation', () => {
+  it('首个快照自动激活；非活动房变更零渲染触达；切房快照语义重建', async () => {
+    mockAssetIO();
+    const handle = await mounted();
+    const terrain = { codes: new Array(2500).fill(0) };
+    handle.feed.applySnapshot({ room: 'W0N0', time: 0, terrain, objects: [creep(10)] });
+    expect(handle.activeRoom).toBe('W0N0');
+    expect(runtime.stage.getChildByLabel('obj-c', true)).toBeDefined();
+    // 非活动房：对象与 visuals 只进仓库，场景零触达
+    handle.feed.applySnapshot({ room: 'W1N1', time: 0, terrain, objects: [{ id: 'bo', type: 'creep', x: 3, y: 3, user: 'p1', body: [{ type: 'work', hits: 100 }] }] });
+    expect(runtime.stage.getChildByLabel('obj-bo', true)).toBeNull();
+    handle.feed.setVisuals('W1N1', [{ type: 'circle', x: 3, y: 3 }]);
+    expect(handle.getStats().visuals).toBe(0);
+    expect(handle.feed.visuals('W1N1')).toHaveLength(1); // 数据面照收
+    // 切房=该房当前状态重建
+    handle.setActiveRoom('W1N1');
+    expect(handle.activeRoom).toBe('W1N1');
+    expect(runtime.stage.getChildByLabel('obj-c', true)).toBeNull();
+    expect(runtime.stage.getChildByLabel('obj-bo', true)).toBeDefined();
+    expect(handle.getStats().visuals).toBe(1);
+    // 未知房 fail-fast；切回原房 visuals 随仓库恢复
+    expect(() => handle.setActiveRoom('Z9Z9')).toThrow('未知房间');
+    handle.setActiveRoom('W0N0');
+    expect(runtime.stage.getChildByLabel('obj-c', true)).toBeDefined();
+    expect(handle.getStats().visuals).toBe(0);
+  });
+
+  it('setVisuals 同引用短路：增量通知不重建 visuals 层', async () => {
+    mockAssetIO();
+    const handle = await mounted();
+    handle.feed.applySnapshot({ room: 'W0N0', time: 0, terrain: { codes: new Array(2500).fill(0) }, objects: [] });
+    const visuals: RoomVisual[] = [{ type: 'rect', x: 1, y: 1, w: 1, h: 1, style: { fill: 'transparent', stroke: '#ffffff' } }];
+    handle.feed.setVisuals('W0N0', visuals);
+    expect(handle.getStats().visuals).toBe(1);
+    handle.feed.applyDelta({ room: 'W0N0', time: 1, upsert: [], removedIds: [] });
+    expect(handle.getStats().visuals).toBe(1);
+  });
+
+  it('onPick/onHover：命中回调、变化触发、拖拽抑制、退订与销毁清理', async () => {
+    mockAssetIO();
+    const handle = await mounted();
+    handle.feed.applySnapshot({ room: 'W0N0', time: 0, terrain: { codes: new Array(2500).fill(0) }, objects: [creep(10)] });
+    handle.setCameraState({ x: 1000, y: 1000, zoom: 1 }); // 屏幕中心 (400,400)=格 (10,10)
+    const picks: string[] = [];
+    const unsub = handle.onPick((r) => picks.push(`${r.cell?.x},${r.cell?.y}:${r.objectId ?? '-'}`));
+    const hovers: Array<string | null> = [];
+    handle.onHover((r) => hovers.push(r === null ? null : `${r.cell?.x},${r.cell?.y}:${r.objectId ?? '-'}`));
+    runtime.firePointer('pointermove', { button: 0, clientX: 400, clientY: 400 });
+    runtime.firePointer('pointermove', { button: 0, clientX: 400, clientY: 400 });
+    expect(hovers).toEqual(['10,10:c']); // 同格同对象不重复触发
+    runtime.firePointer('pointermove', { button: 0, clientX: 700, clientY: 400 });
+    expect(hovers).toEqual(['10,10:c', '13,10:-']);
+    runtime.firePointer('pointerleave', {});
+    expect(hovers[hovers.length - 1]).toBeNull();
+    // 拖拽抑制：位移 >4px 不触发 pick（合成事件流同时真实驱动相机平移）
+    runtime.firePointer('pointerdown', { button: 0, clientX: 400, clientY: 400 });
+    runtime.firePointer('pointermove', { button: 0, clientX: 500, clientY: 400 });
+    runtime.firePointer('pointerup', { button: 0, clientX: 500, clientY: 400 });
+    expect(picks).toEqual([]);
+    handle.setCameraState({ x: 1000, y: 1000, zoom: 1 }); // 复位拖拽平移
+    // 点击（位移 ≤4px）触发 pick
+    runtime.firePointer('pointerdown', { button: 0, clientX: 400, clientY: 400 });
+    runtime.firePointer('pointerup', { button: 0, clientX: 402, clientY: 403 });
+    expect(picks).toEqual(['10,10:c']);
+    unsub();
+    runtime.firePointer('pointerdown', { button: 0, clientX: 400, clientY: 400 });
+    runtime.firePointer('pointerup', { button: 0, clientX: 400, clientY: 400 });
+    expect(picks).toEqual(['10,10:c']); // 退订后不再触发
+    // 销毁后 DOM 监听摘除：合成事件不再触达任何回调
+    await handle.destroy();
+    expect(() => runtime.firePointer('pointermove', { button: 0, clientX: 700, clientY: 400 })).not.toThrow();
+    expect(runtime.canvas.removeEventListener).toHaveBeenCalledTimes(11);
+  });
+
+  it('advanceAnimation 与 ticker 同路径推进（不受 playbackRate 暂停影响），onFrameTiming 收到计时', async () => {
+    const timings: Array<{ objectsMs: number; lightingMs: number }> = [];
+    mockAssetIO();
+    const handle = await createRenderer({
+      container: {} as HTMLElement,
+      atlasBaseUrl: 'https://renderer.invalid/',
+      onFrameTiming: (t) => timings.push(t),
+    });
+    handles.push(handle);
+    handle.feed.applySnapshot({ room: 'W0N0', time: 0, terrain: { codes: new Array(2500).fill(0) }, objects: [creep(10)] });
+    handle.feed.applyDelta({ room: 'W0N0', time: 1, upsert: [creep(11)], removedIds: [] });
+    runtime.ticker.lastTime = 0;
+    handle.setPlaybackRate(0);
+    runtime.ticker.update(500);
+    const root = runtime.stage.getChildByLabel('obj-c', true)!;
+    expect(root.x).toBe(1000); // 暂停中 ticker 不推进
+    handle.advanceAnimation(500);
+    expect(root.x).toBe(1050); // 手动推进同路径
+    handle.advanceAnimation(-1);
+    handle.advanceAnimation(Number.NaN);
+    expect(root.x).toBe(1050); // 宽松入参按 0
+    expect(timings.length).toBeGreaterThan(0);
+    expect(timings.every((t) => Number.isFinite(t.objectsMs) && Number.isFinite(t.lightingMs))).toBe(true);
+  });
+
+  it('fonts 契约：缺省 unset', async () => {
+    mockAssetIO();
+    const handle = await mounted();
+    expect(handle.getStats().fonts).toBe('unset');
+  });
+
+  it('fonts 契约：node 环境配置后 fallback（无 DOM 字体面）', async () => {
+    mockAssetIO();
+    const second = makeKernel();
+    vi.mocked(initKernel).mockResolvedValue(second.kernel);
+    const withFonts = await createRenderer({
+      container: {} as HTMLElement,
+      atlasBaseUrl: 'https://renderer.invalid/',
+      fontsBaseUrl: 'https://renderer.invalid/',
+    });
+    handles.push(withFonts);
+    expect(withFonts.getStats().fonts).toBe('fallback');
   });
 });

@@ -35,10 +35,12 @@ export interface RoomSummary {
 }
 
 /**
- * 单次应用记录（场景对账输入；R4 起携带事件面——动效第一通道）。快照应用
- * events 恒空（契约快照无事件字段）；setTerrain 触发的通知同样空（防重放）。
- * kind 区分快照/增量：快照清除瞬态并即时同步位置，同 id/type 可复用视图。
- * 跨快照跳变不得做移动补间，防止切夹具/重放产生幻影移动。
+ * 单次应用记录（场景对账输入；R4 起携带事件面——动效第一通道，R6 起
+ * visuals 全量替换面）。快照应用 events 恒空（契约快照无事件字段）且
+ * visuals 清空（快照=新 tick 状态起点，官方每 tick 全量下发——R6 D2 拍板）；
+ * setTerrain 触发的通知同样空（防重放）。kind 区分快照/增量：快照清除瞬态
+ * 并即时同步位置，同 id/type 可复用视图。跨快照跳变不得做移动补间，防止
+ * 切夹具/重放产生幻影移动。
  */
 export interface FeedChange {
   /** 房间对象快照（数组副本，与 FeedView.objects 同款——元素勿深改，评审 B建议7）。 */
@@ -48,6 +50,9 @@ export interface FeedChange {
   kind: 'snapshot' | 'delta';
   actionLogs: ActionLogEntry[];
   says: SayEntry[];
+  /** 该房当前全量 visuals（**仓库原引用**——跨增量保持不变，setVisuals 才
+   * 换新引用；消费方勿改动，场景端以引用相等做重建短路）。 */
+  visuals: RoomVisual[];
 }
 
 /**
@@ -61,6 +66,10 @@ export interface FeedView extends RoomFeed {
   objects(room: string): RoomObjectState[];
   /** 房间地形；未设置返回 undefined。 */
   terrain(room: string): TerrainData | undefined;
+  /** 房间当前 visuals（数组副本；元素勿深改）。 */
+  visuals(room: string): RoomVisual[];
+  /** 已知房间名（插入序）。 */
+  roomNames(): string[];
 }
 
 export class FeedStore implements FeedView {
@@ -84,6 +93,8 @@ export class FeedStore implements FeedView {
       kind,
       actionLogs,
       says,
+      // 仓库原引用：跨增量保持不变（场景端引用相等短路，见 FeedChange.visuals 注）
+      visuals: state.visuals,
     };
     for (const listener of this.listeners) listener(room, change);
   }
@@ -100,7 +111,9 @@ export class FeedStore implements FeedView {
       time: snapshot.time,
       terrain: snapshot.terrain,
       objectsById: new Map(snapshot.objects.map((o) => [o.id, o])),
-      visuals: this.rooms.get(snapshot.room)?.visuals ?? [],
+      // R6 D2 拍板：快照清空 visuals（快照=新 tick 状态起点，官方每 tick
+      // 全量下发；防陈旧残留——R1 登记的保留旧行为就此销账）
+      visuals: [],
     });
     this.notify(snapshot.room, [], 'snapshot');
   }
@@ -117,8 +130,10 @@ export class FeedStore implements FeedView {
     this.notify(delta.room, delta.events ?? [], 'delta', delta.actionLogs ?? [], delta.says ?? []);
   }
 
+  /** 玩家绘制全量替换（官方 RoomVisual 每 tick 全量下发语义）并通知场景。 */
   setVisuals(room: string, visuals: RoomVisual[]): void {
     this.room(room).visuals = [...visuals];
+    this.notify(room, [], 'delta');
   }
 
   /** 房间摘要；房间不存在返回 undefined。 */
@@ -142,6 +157,16 @@ export class FeedStore implements FeedView {
   /** 房间地形；未设置返回 undefined。 */
   terrain(room: string): TerrainData | undefined {
     return this.rooms.get(room)?.terrain;
+  }
+
+  /** 房间当前 visuals（数组副本；元素勿深改）。 */
+  visuals(room: string): RoomVisual[] {
+    return [...(this.rooms.get(room)?.visuals ?? [])];
+  }
+
+  /** 已知房间名（插入序）。 */
+  roomNames(): string[] {
+    return [...this.rooms.keys()];
   }
 
   private room(name: string): RoomState {

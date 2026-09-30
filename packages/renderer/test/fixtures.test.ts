@@ -2,24 +2,26 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { isDelta, isSnapshot, type FixtureFile, type RoomDelta } from '@kkscreeps/shared';
+import { isDelta, isRoomVisual, isSnapshot, type FixtureFile, type RoomDelta } from '@kkscreeps/shared';
 
 // 入库夹具的契约一致性：真实与合成夹具形状、时序、单调时间轴、地形常量长度。
+// visual-cases.json 是独立夹具族（R6 G1 合成用例集，非 FixtureFile——专属校验）。
 
 const pkgRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const fixturesDir = join(pkgRoot, 'fixtures');
 
 const names = readdirSync(fixturesDir).filter((f) => f.endsWith('.json')).sort();
+const replayNames = names.filter((n) => n !== 'visual-cases.json');
 
 /** exporter 产物（R1 纪律：31 tick 全量入库）；showcase 为 R3 手工合成夹具。 */
 const EXPORTER_FIXTURES = ['actions.json', 'creeps.json', 'dense-edge.json', 'plains.json', 'standard.json', 'swamp-walls.json'];
 
 describe('入库夹具', () => {
-  it('六张真实夹具与四张合成夹具齐全', () => {
-    expect(names).toEqual([...EXPORTER_FIXTURES, 'showcase.json', 'effects.json', 'lifecycle.json', 'pressure.json'].sort());
+  it('六张真实夹具、四张合成回放夹具与 visual 用例集齐全', () => {
+    expect(names).toEqual([...EXPORTER_FIXTURES, 'showcase.json', 'effects.json', 'lifecycle.json', 'pressure.json', 'visual-cases.json'].sort());
   });
 
-  for (const name of names) {
+  for (const name of replayNames) {
     it(`${name}：首快照 + 增量链，时间单调，地形 2500 码`, () => {
       const fixture = JSON.parse(readFileSync(join(fixturesDir, name), 'utf8')) as FixtureFile;
       expect(isSnapshot(fixture.ticks[0])).toBe(true);
@@ -42,6 +44,30 @@ describe('入库夹具', () => {
       }
     });
   }
+
+  it('visual-cases.json：G1 用例集——五原语×默认值/样式矩阵，origin 声明合成', () => {
+    const f = JSON.parse(readFileSync(join(fixturesDir, 'visual-cases.json'), 'utf8')) as {
+      room: string;
+      origin: string;
+      visuals: unknown[];
+    };
+    expect(f.origin).toContain('合成');
+    expect(f.room).toBe('W8N8');
+    expect(f.visuals.length).toBeGreaterThanOrEqual(20);
+    expect(f.visuals.every((v) => isRoomVisual(v))).toBe(true);
+    const typed = f.visuals as Array<{ type: string; style?: unknown; x: number; y: number }>;
+    // 五原语齐全，且每原语的「官方全缺省」样例在集
+    for (const t of ['line', 'rect', 'circle', 'poly', 'text']) {
+      expect(typed.some((v) => v.type === t), `缺原语 ${t}`).toBe(true);
+      expect(typed.some((v) => v.type === t && v.style === undefined), `缺 ${t} 默认样例`).toBe(true);
+    }
+    const styles = typed.map((v) => v.style ?? {}) as Array<Record<string, unknown>>;
+    expect(styles.some((s) => s.lineStyle === 'dashed')).toBe(true);
+    expect(styles.some((s) => s.lineStyle === 'dotted')).toBe(true);
+    expect(styles.some((s) => s.fill === 'transparent')).toBe(true);
+    // 浮点相位（单格框 idiom：x/y 带半格偏移）
+    expect(typed.some((v) => v.type === 'rect' && !Number.isInteger(v.x))).toBe(true);
+  });
 
   it('standard 夹具覆盖静态对象全家（R3 主夹具的类型面）', () => {
     const standard = JSON.parse(readFileSync(join(fixturesDir, 'standard.json'), 'utf8')) as FixtureFile;
