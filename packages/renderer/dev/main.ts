@@ -1,26 +1,37 @@
 /**
- * dev harness（R1）：底色房 + 相机 + HUD + 回放夹具驱动（方案 §7 R1 出口）。
- * 回放控制：1-4 切夹具（重按=重放） · 空格 播放/暂停 · . 单步 · +/- 调速 ·
- * F 视角复位。HUD 属 harness 交互辅助，不属渲染器（方案 §2.2）。
- * R3 起对象渲染接场景图——本片回放驱动的是 feed 状态机（HUD 显示状态面）。
+ * dev harness（R1 建，R3 扩）：回放夹具驱动对象渲染（回放控制 1-5 切夹具/
+ * 空格/./+/-/F）。?player=<id> 切本玩家视角（缺省 p1；?player=x 全敌对色），
+ * ?backend=webgl 强制回退路径。HUD 属 harness 交互辅助，不属渲染器（§2.2）。
  */
 import { isDelta, isSnapshot, type FixtureFile } from '@kkscreeps/shared';
 import { createRenderer } from '../src/index.js';
 import denseEdge from '../fixtures/dense-edge.json';
 import plains from '../fixtures/plains.json';
+import showcase from '../fixtures/showcase.json';
 import standard from '../fixtures/standard.json';
 import swampWalls from '../fixtures/swamp-walls.json';
 
 const stageHost = document.getElementById('stage') as HTMLElement;
 const hud = document.getElementById('hud') as HTMLElement;
 
+// 文字件（spawn 名/mineral 符号）需 Roboto 先于首帧就绪（缺省回退字体即
+// G7 基线漂移）；加载失败不阻塞（allSettled——回退观感属 G7 盯梢面）。
+await Promise.allSettled([
+  document.fonts.load('55px Roboto'),
+  document.fonts.load('bold 82px Roboto'),
+]);
+
+const params = new URLSearchParams(window.location.search);
 const renderer = await createRenderer({
   container: stageHost,
   atlasBaseUrl: new URL('/', window.location.href).href,
   // ?backend=webgl 强制回退路径（§5：WebGL 同场景跑通记数不设门）
-  preference: new URLSearchParams(window.location.search).get('backend') === 'webgl' ? 'webgl' : 'webgpu',
+  preference: params.get('backend') === 'webgl' ? 'webgl' : 'webgpu',
+  // 本玩家视角（G9：userOwnerColor 色板 own 判定）
+  localPlayerId: params.get('player') ?? 'p1',
 });
-// dev 调试句柄（harness 专用，不属公共 API）
+// dev 调试句柄（harness 专用，不属公共 API；__room 由 index.ts 以运行时
+// 附加字段提供——诊断场景树用，R6 冻结时随公共面裁定去留）
 (window as unknown as Record<string, unknown>).__renderer = renderer;
 
 // 夹具装载：入库 JSON 经 shared 守卫校验（防夹具与契约漂移）
@@ -29,6 +40,7 @@ const rawFixtures: Record<string, unknown> = {
   standard,
   'swamp-walls': swampWalls,
   'dense-edge': denseEdge,
+  showcase,
 };
 const fixtures = new Map<string, FixtureFile>();
 for (const [key, value] of Object.entries(rawFixtures)) {
@@ -140,6 +152,15 @@ window.addEventListener('keydown', (e) => {
 // pixi ResizePlugin 的 resize 是 rAF 延迟生效——同步 fitRoom 会读到旧视口尺寸，
 // 排到同帧之后执行（rAF 回调按注册序，ResizePlugin 先注册）。
 window.addEventListener('resize', () => requestAnimationFrame(() => renderer.fitRoom()));
+// ?view=<x>,<y>,<zoom>（世界坐标/缩放）：截图钉住相机——注册在 fitRoom 监听
+// 之后，同帧 rAF 后执行覆盖 fit（harness 专用，不属渲染器公共面）。
+const viewParam = params.get('view');
+if (viewParam) {
+  const [vx, vy, vz] = viewParam.split(',').map(Number);
+  const applyPinned = () => renderer.setCameraState({ x: vx!, y: vy!, zoom: vz! });
+  requestAnimationFrame(() => requestAnimationFrame(applyPinned));
+  window.addEventListener('resize', () => requestAnimationFrame(applyPinned));
+}
 renderer.fitRoom();
 loadFixture(current);
 
@@ -150,11 +171,11 @@ function renderHud(): void {
   const summary = renderer.feed.summary(f.room);
   const state = index >= f.ticks.length ? 'end' : playing ? '▶' : '⏸';
   const lines = [
-    `kkscreeps renderer · dev harness (R2)`,
+    `kkscreeps renderer · dev harness (R3)`,
     `backend : ${s.backend}   fps: ${s.fps}   zoom: ${(s.zoom * 100).toFixed(0)}%   atlas: ${s.atlasFrames}f   lighting: ${s.lighting}`,
-    `replay  : [${current}] ${index}/${f.ticks.length} ${state} ${SPEEDS[speedIdx]}×`,
+    `replay  : [${current}] ${index}/${f.ticks.length} ${state} ${SPEEDS[speedIdx]}×   player: ${params.get('player') ?? 'p1'}`,
     `room    : ${f.room} time=${summary?.time ?? '-'} objects=${summary?.objects ?? '-'} visuals=${summary?.visuals ?? 0}`,
-    `controls: 1-4 夹具（重按=重放） · 空格 播放/暂停 · . 单步 · +/- 调速 · F 视角复位`,
+    `controls: 1-5 夹具（重按=重放） · 空格 播放/暂停 · . 单步 · +/- 调速 · F 视角复位`,
   ];
   if (replayError) lines.push(`ERROR   : ${replayError}`);
   hud.innerHTML = lines.map((l) => `<div>${l}</div>`).join('');

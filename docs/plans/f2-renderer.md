@@ -244,9 +244,13 @@ z 表/色表/字体常量直接测代码常量）。逐片勾项，收口时全�
 | G2 | lighting 全局压暗 | v8 WebGPU 滤镜面若有缺口 | 真离屏 pass 已实现（世界对齐 RT + MULTIPLY 输出），WebGPU/WebGL 双后端 harness 实测 `lighting: real`；降级路径在位未触发——R7 收口时销账或保留按 G2 定义复核 |
 | G3 | 徽标图源 | 官方远程拉 screeps.com，我方无此端点 | v0 纯色圆退化（官方失败退化路径同款），M3 自托管 |
 | G4 | say/浮动文字数据通道 | 引擎无 say 事件面（§8） | 契约预留，夹具手工注入演示 |
-| G5 | NPC/power/portal 家族动效 | 引擎无此对象（invaderCore/powerCreep/nuke） | 描述符+实现落位，夹具合成，观战待引擎批次 |
+| G5 | NPC/power/portal 家族动效 | 引擎无此对象（invaderCore/powerCreep/nuke） | R3 已落描述符+实现+合成夹具（showcase）；残留=观战取材待引擎批次，销账随 R5 动效与引擎侧对象落地 |
 | G6 | tickDuration 缺省 | 官方闭源壳传入值不可知 | 契约参数化，harness 默认 1000ms |
 | G7 | 字体渲染微差 | 栅格化/抗锯齿与官方 canvas 差异 | 截图比对，可接受即冻结 |
+| G8 | ~~swamp 白罩层序~~ | ~~官方 zIndex 序下 v8 mask 失效~~ | **R2 二轮销账**（跳格 bug 污染的观察，修复后官方层序 mask 正常） |
+| G9 | 用户色数据源 | 契约 v0 无 users 映射（引擎不投影用户色），官方 playerColor=users[user].color | R3 起 v0 采用官方 demo 同款 **userOwnerColor 模式色板**（own 0x8fbb93/#8fbb93、enemy 0xFF7777/#FF7777、未知 0xBBBBBB/#ffffff）；**rampart 私有顶罩**=own #105010/#44ff44、enemy #501010/#ff4444（terrain.js userOwnerColor 分支），**rampart 公有精灵**=playerColor 色板（rampart.metadata.js:5-7 的 userOwnerColor 分支——评审 A-B5 勘误）；本玩家=createRenderer `localPlayerId`。M3 契约落 users 映射后切换官方远程用户色路径并销账 |
+| G10 | factory 官方优先级 bug（两处） | factory.metadata.js **:46** `store['power']||0 + store['energy']||0` ⇒ `power || (0+energy) || 0`（powerHeight）；**:175-176** `energy||0 + power||0 < total` ⇒ `energy || power || (0<total)`（hasOther——total>0 恒 true 白条恒显）。container 同形表达式无此 bug（括号齐全） | R3 **保真复刻**两处官方行为（评审 A-B4 补登记 ：176）；官方上游修复后随动 |
+| G11 | mineral 未知类型退灰对 | 官方 `COLORS[mineralType]` 未类型即崩（TypeError） | R3 防御性退 O 灰对（engine 不可达态，仅脏数据触发）；官方修复语义后随动 |
 
 ## 7. 切片划分（每片走完整批次循环）
 
@@ -490,3 +494,104 @@ z 表/色表/字体常量直接测代码常量）。逐片勾项，收口时全�
   实类实测：二次 destroy 经 _source null 守卫为 no-op（事件只发一次），B/C
   正确，无需所有权标记。
   ⑤ M2 用例名更正（hash 断言由 freshness 承担）。
+- 2026-09-30：**R3 静态对象全家完成**。架构三段：**纯逻辑半件**（part-decl.ts
+  契约/PartEnv/valuesEqual 值相等门控；z-table.ts 31 项 zIndex 全表+类型键推导；
+  player-color.ts G9 色板；specs.ts 全类型规格常量表 file:line 取证；
+  parts-naturals/structures.ts 28 组部件声明（id/keys/values 纯函数）——
+  Vitest 零 pixi 直采）× **pixi 半件**（joins-naturals/structures.ts 按 partId
+  的 create/apply；draw-helpers.ts 官方 object.js/sprite.js/circle.js/
+  siteProgress.js 语义→v8 映射：width/height=scale、sprite 默认 anchor .5、
+  pivot 除以 scale、blendMode 1=ADD、lighting 成员 SCREEN）× **registry 装配**
+  （registry.ts：PART_DECL_TABLE×joins×Z_TABLE×PART_LAYERS 构建期强校验——
+  join 缺件/层键漂移即抛错）。ObjectsStage 对账器：id 索引视图池（移除拆树、
+  快照迭代纪律）、部件懒创建+值相等门控（比官方 props 深比较更强：键不变值变
+  亦捕获；keys 保留为单测审计面）、slot/lighting/effects 三层路由。附属绘制：
+  road 连通（road.js 四向几何移植，ground 层，格集变化全量重绘）、rampart
+  私有顶罩（terrain.js:183-247 按 user 分组合并 path 烘焙，fill×0.3/stroke 25
+  → G9 色板，α0.4 ADD 挂 effects 首位）、constructedWall 格并入墙烘焙（官方
+  wall path 过滤含 constructedWall——TerrainStage 增格集并集入参，extras 引用
+  相等门控零成本）。
+  **实施决策**：① lighting 成员所有权二分（addMember owned 默认/共享纹理成员
+  只 detach）——对象 glow 持共享 standalone 纹理，clearMembers 误毁即 R2 评审⑤
+  同族事故，LightingPass.destroy 改先清 owned 再无纹理拆树；② 填充条官方
+  pivot.y=高语义经 object.js 除以 scale 推导=锚点底边等价（anchor(0.5,1)）；
+  ③ tower rotatable+能量条并件（官方条为炮塔子件随炮转，跨件挂载并入一件，
+  anchor(.5,0)+pivot(0,32/scale) 官方混合语义照抄）；④ blink 模板 R3 冻结于
+  可见相位（max(from,to)），R5 接管时序（constructionSite 0.8/controller 状态圈
+  0.4/红闪 0.2/_isDisabled 0.5）；⑤ extractor cooldown 自转、塔自转、observer
+  眼游走、portal/keeperLair 呼吸波、glow flicker 全部 R5（静态帧=规格初相）；
+  ⑥ spawn 名字 v0 只显示己方（官方 showMyNames/showEnemyNames 门控的 demo
+  配置同款），开关面 R6；⑦ flag 名字文字 R6（showFlagsNames 门控）；
+  ⑧ creep/powerCreep R4、nuke R5——registry 未注册类型告警一次跳过不崩溃；
+  ⑨ spawn.resourceScale 官方无 min 钳制（link/extension 有）逐件保真；
+  ⑩ resourceCircle 契约消费 `state[resourceType] ?? state.amount`（kk 投影
+  amount 键，R1 登记的差异消费面）；ownerOf=user??owner（R1 登记的映射点）。
+  **官拆勘误**：§2「全部文字在 effects 层」对 mineral 符号不成立——源码 text
+  处理器无 layer 字段（mineral.metadata.js:78-95），随 objects 层 z=2 槽位。
+  **合成夹具**：showcase.json（40 对象/26 类型：G5 家族+双私有顶罩组+公有
+  rampart+敌我双色+NPC 塔+_isDisabled+flag），scripts/build-showcase-fixture.mjs
+  确定性生成入库；fixtures.test 扩展（exporter 四张 31-tick 纪律与 showcase
+  3-tick 分治+类型覆盖断言）。**公共面新增（冻结前，R6 评审）**：
+  CreateRendererOptions.localPlayerId、RendererHandle.setCameraState（纯数据）、
+  handle.__room 运行时诊断字段；harness `?view=x,y,zoom` 钉住相机（截图纪律：
+  标签激活触发 resize→fitRoom 复位——R0 登记的竞态族，钉住监听注册序在
+  fitRoom 之后同帧覆盖）、`?player=` 切视角、@font-face Roboto（vite
+  publicDir=/，字体 URL /fonts/——首版误写 /assets/fonts/ 触发 SPA fallback
+  返回 HTML 致字体 error，已修）。验收：122 测绿（z 表 8/玩家色 5/规格值函数
+  46/差量门控 3/既有 60）+tsc+harness 六夹具×双后端（WebGPU/WebGL 均
+  `lighting: real` 60fps）截图逐项核对（z 序/双色/顶罩合并轮廓/条形堆叠/
+  扇形进度/罗盘等级环/冷却闪/文字 Roboto 绿字黑描边/路连通对角四边形/
+  并墙暗块+光影）。清偿记录见下条。
+- 2026-09-30（同日）：**R3 评审清偿**。3 路评审（A 官方规格/B 契约 API/C 性能
+  v8）：A 7 阻塞、B 零阻塞 7 建议、C 1 阻塞 8 建议。阻塞断言先经主会话实测
+  复核（官方常量表在 demo/node_modules @screeps/common@2.15.5 实读取证）：
+  ① [阻塞·A] terminal 容量 3000→**300000**、invaderCore decayTicks 50000→
+  **75000**（constants.js:332/:849；specs 注释同正）。
+  ② [阻塞·A] factory 补 internalBorder 件（rectangle 50² 0x555555，
+  factory.metadata.js:161-170——首版漏件）。
+  ③ [阻塞·A] factory hasOther 优先级 quirk 保真（:175-176 `energy||power||
+  (0<total)` ⇒ total>0 恒 true）——并入 G10 行（:46 与 :176 两处）。
+  ④ [阻塞·A] rampart 公有精灵 tint 改 playerColor 色板（rampart.metadata.js:5-7
+  userOwnerColor 分支；原误用顶罩的 0x44ff44/0xff4444 非 uOC 分支）——G9 行
+  勘误补记。
+  ⑤ [阻塞·A] tower NPC 塔无能量条（官方 when: isNotNpc，tower.metadata.js:8,144
+  ——values npc→height 0 + apply 双保险）。
+  ⑥ [阻塞·A] 掉落资源 lighting 圆改资源色——官方 payload tint:0xFFFFFF 被
+  resourceCircle.js:50-56 重建 payload 静默丢弃，运行时实为资源色（quirk
+  登记 specs 注释；我方保真运行时行为）。
+  ⑦ [阻塞·C] lighting 值驱动成员不置脏→2048² RT 陈旧：reconcileParts 对
+  lighting 层成员值变化/隐藏显式 markDirty（官方每帧渲染层的 dirty 门控等价
+  物）；防退化配套=radiusLighting 整数量化（唯一连续量，亚像素变化被值门控
+  压制，防逐 tick 离屏重渲）。
+  ⑧ [建议·A] _isDisabled 公共件扩全表（官方 _all 前置合并全部类型，
+  World.js:36-53）；controller enemy 圈双份叠加（官方 :85-116 两份同参
+  processor）；controller ring 有效色 0x000000（circle.js 只认 `stroke` 键、
+  payload strokeColor 不被读取的官方 quirk，specs 注释登记）；siteProgress
+  扇形补同色 1px 描边（siteProgress.js:42）；extension border 档改精确相等
+  判定（:37,48,59 无匹配档无边框件；size 阈值判定不变）；spawn badge G9
+  随动注释；CONTROLLER_LEVELS 删 index 8（官方表只到 7）。
+  ⑨ [建议·B] keys 声明改"审计待官方 metadata 入库后补测"（原注释失实）；
+  __room defineProperty 不可枚举+destroy 置空（防 spread 拖树/悬挂引用，R6
+  裁定去留不变）；localPlayerId 补 R6 标注；resourcesTotal/store 读数加
+  num 守卫（防脏值字符串拼接）；LIGHTING_MEMBER_BLEND 单源 specs；
+  rampartGroups 排序 localeCompare→码点比较（夹具确定性）；测试死代码清理。
+  ⑩ [建议·C] syncWalls 双引用门控（地形码+extras 引用均未变短路——含
+  constructedWall 房间每 tick 零拷贝零 FNV）；destroyView 对 Text 精确销毁
+  （style/texture/textureSource——v8 需显式标志，否则等 GCSystem 60s 兜底）；
+  renderSize 单源 TERRAIN_SPEC；badge 色单源 SPAWN_BADGE_COLOR；tower 枪体
+  Sprite 子件改 Container 包裹（v8 Sprite allowChildren=false deprecation，
+  R5 自转旋转容器）；.name→.label 与 getChildByLabel 统一（v8 deprecation
+  别名）；'screen' 字面量单源；60fps 帧基准常量 frameBaseMs 单源。
+  ⑪ [登记] §2.4"dispose 仅在房卸载"措辞修订：现语义=id 对账复用+成员变更
+  才拆树（同类型 detached 池待 R7 perf 实测后定）；apply 不校验 id↔typeKey
+  漂移（契约稳定假设，M3 防御点）；顶罩 2048² 全幅 VRAM 按 user 组线性
+  （bbox 裁剪留 R7）；resourcesTotal 分母 `||1` 与 SOURCE_ENERGY_SIZE 等就地
+  常量的边界口径=公式级常量入 specs、表达式内防御性单位量可就地命名。
+  清偿后：122 测绿+tsc+全链回归绿；harness 复验（factory 内衬/条序、
+  extension 边框、terminal、nuker、controller 状态圈、showcase 全景）。
+  **清偿复审**：28/29 项核销正确；抓到一处清偿引入的真回归——tower gunWrap
+  pivot 双重除缩放（wrap scale=1 时 net 偏移应为 world 32 直值，且条几何
+  应为官方局部空间×scaleY）——修复（pivot 直值+bar 四参数×scaleY）后定点
+  复试 **pass**（123 测绿，量化复核 gun top −32/条满高 59.9/条宽 80.8 全回
+  官方值）；另顺手清：lighting 成员位移路径补 markDirty（R4 运动前置防御）、
+  rotatable 块注释残留、terminal 300000 常量测试锚。

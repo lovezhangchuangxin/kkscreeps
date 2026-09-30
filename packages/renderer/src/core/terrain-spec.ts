@@ -57,4 +57,6 @@ export const TERRAIN_SPEC = {
   },
   /** 烘焙画布边长（官方 RENDER_SIZE，demo worldConfigs）。 */
   renderSize: 2048,
+  /** 渲染循环帧基准（60fps；swamp 滚动时基/ ticker delta 换算共用——C-S8 单源）。 */
+  frameBaseMs: 1000 / 60,
 } as const;

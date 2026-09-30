@@ -23,6 +23,9 @@ export class LightingPass {
   private rt: RenderTexture | null = null;
   private dirty = true;
   private degraded = false;
+  /** 带私有纹理的成员（清场时可带纹理销毁；R3：对象 glow 持共享纹理，
+   * 只 detach——两类成员分开跟踪，防共享源误毁〔R2 评审⑤同族〕）。 */
+  private readonly ownedMembers = new Set<Container>();
 
   constructor(view: number, cell: number) {
     const half = cell / 2;
@@ -40,17 +43,29 @@ export class LightingPass {
     this.display.visible = false;
   }
 
-  /** 加入明暗件（世界坐标）。blend 由调用方按 TERRAIN_SPEC.wall.*InLayerBlend 设置。 */
-  addMember(member: Container): void {
+  /** 加入明暗件（世界坐标）。blend 由调用方按 TERRAIN_SPEC.wall.*InLayerBlend
+   * 或 LIGHTING_MEMBER_BLEND 设置。owned=true（烘焙私有纹理成员——地形件）：
+   * clearMembers 时带纹理销毁；owned=false（对象 glow，共享纹理）：仅由
+   * removeMember detach，纹理归 atlas 所有。 */
+  addMember(member: Container, owned = true): void {
     this.content.addChild(member);
+    if (owned) this.ownedMembers.add(member);
     this.dirty = true;
   }
 
-  /** 清空全部成员（地形重建时；ambient 由 LightingPass 自持不在此列）。 */
+  /** 移除成员（不销毁纹理——调用方决定节点销毁方式）。 */
+  removeMember(member: Container): void {
+    this.ownedMembers.delete(member);
+    if (member.parent === this.content) this.content.removeChild(member);
+    this.dirty = true;
+  }
+
+  /** 清空带私有纹理的成员（地形重建时；对象 glow 不在此列）。 */
   clearMembers(): void {
-    while (this.content.children.length > 1) {
-      const child = this.content.removeChildAt(this.content.children.length - 1)!;
-      child.destroy({ children: true, texture: true, textureSource: true });
+    for (const member of [...this.ownedMembers]) {
+      if (member.parent === this.content) this.content.removeChild(member);
+      member.destroy({ children: true, texture: true, textureSource: true });
+      this.ownedMembers.delete(member);
     }
     this.dirty = true;
   }
@@ -93,9 +108,11 @@ export class LightingPass {
   }
 
   destroy(): void {
-    // 成员纹理均为烘焙私有（canvas 产物），显式回收（评审 S3：与 clearMembers 对称）
+    // 先清带私有纹理的成员（对象 glow 已由 ObjectsStage.destroy detach；
+    // ambient 为无纹理 Graphics——content 不带 texture 销毁，防共享源误毁）
+    this.clearMembers();
     this.rt?.destroy(true);
-    this.content.destroy({ children: true, texture: true, textureSource: true });
+    this.content.destroy({ children: true });
     this.display.destroy();
   }
 }

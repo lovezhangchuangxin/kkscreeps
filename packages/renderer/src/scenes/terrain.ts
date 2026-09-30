@@ -10,6 +10,7 @@
  * 官方 BlurFilter 黑影 = canvas filter blur（σ 语义近似，灰区表 G7 盯梢）。
  */
 import { Container, Sprite, Texture, TilingSprite } from 'pixi.js';
+import { bakeCanvas, textureFromBaked } from '../core/bake.js';
 import { mergedOutlinePath } from '../core/path-merge.js';
 import { TERRAIN_SPEC } from '../core/terrain-spec.js';
 import type { LightingPass } from '../core/lighting.js';
@@ -24,22 +25,6 @@ export interface TerrainTextures {
   'exit-bottom': { texture: Texture };
   'exit-left': { texture: Texture };
   'exit-right': { texture: Texture };
-}
-
-function bakeCanvas(
-  path: string,
-  view: number,
-  renderSize: number,
-  paint: (ctx: CanvasRenderingContext2D, path2d: Path2D) => void,
-): HTMLCanvasElement {
-  const canvas = document.createElement('canvas');
-  canvas.width = renderSize;
-  canvas.height = renderSize;
-  const ctx = canvas.getContext('2d')!;
-  ctx.scale(renderSize / view, renderSize / view);
-  const path2d = new Path2D(path);
-  paint(ctx, path2d);
-  return canvas;
 }
 
 export class TerrainStage {
@@ -148,7 +133,7 @@ export class TerrainStage {
     const spec = TERRAIN_SPEC.swamp;
     const half = this.cell / 2;
     // 双白罩同一形状——烘一次共享纹理（评审 C4：省 1/6 烘焙面）
-    const overlayTexture = Texture.from(
+    const overlayTexture = textureFromBaked(
       bakeCanvas(merged.path, this.view, this.renderSize, (ctx, p) => {
         ctx.fillStyle = spec.overlayFill;
         ctx.fill(p);
@@ -168,7 +153,7 @@ export class TerrainStage {
     });
 
     const base = new Sprite(
-      Texture.from(
+      textureFromBaked(
         bakeCanvas(merged.path, this.view, this.renderSize, (ctx, p) => {
           // paint-order:stroke——描边在下
           ctx.lineWidth = spec.strokeWidth;
@@ -272,7 +257,7 @@ export class TerrainStage {
       }
       ctx.restore();
     });
-    const wall = new Sprite(Texture.from(wallCanvas));
+    const wall = new Sprite(textureFromBaked(wallCanvas));
     wall.label = 'terrain-wall';
     wall.position.set(-half, -half);
     wall.setSize(this.view, this.view);
@@ -285,7 +270,7 @@ export class TerrainStage {
       ctx.fillStyle = spec.shadowFill;
       ctx.fill(p);
     });
-    const shadow = new Sprite(Texture.from(shadowCanvas));
+    const shadow = new Sprite(textureFromBaked(shadowCanvas));
     shadow.label = 'lighting-wall-shadow';
     shadow.position.set(-half, -half);
     shadow.setSize(this.view, this.view);
@@ -300,7 +285,7 @@ export class TerrainStage {
       ctx.fillStyle = spec.lightFill;
       ctx.fill(p);
     });
-    const lightFill = new Sprite(Texture.from(lightCanvas));
+    const lightFill = new Sprite(textureFromBaked(lightCanvas));
     lightFill.label = 'lighting-wall-fill';
     lightFill.position.set(-half, -half);
     lightFill.setSize(this.view, this.view);

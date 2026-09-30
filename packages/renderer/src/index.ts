@@ -11,6 +11,7 @@ import { initKernel, type Backend, type Kernel } from './core/renderer.js';
 import { fitRect, screenToWorld, type CameraState } from './core/camera-math.js';
 import { loadAtlas, type LoadedAtlas } from './assets/atlas.js';
 import { FeedStore, type FeedView } from './feed/room-feed.js';
+import { TERRAIN_SPEC } from './core/terrain-spec.js';
 import { DEFAULT_CELL_SIZE, ROOM_SIZE, RoomScene } from './scenes/room.js';
 import type { TerrainTextures } from './scenes/terrain.js';
 
@@ -29,11 +30,17 @@ export interface CreateRendererOptions {
   backgroundColor?: number;
   /**
    * atlas 基目录 URL（assets/，尾随 /）。缺省时以白色占位纹理建场景
-   * （无资产管线也能显示几何——R2 起地形烘焙需真纹理，harness 恒传）。
+   * （无资产管线也能显示几何——对象层缺帧降级隐藏，地形照常烘焙）。
    */
   atlasBaseUrl?: string;
   /** 渲染后端偏好，默认 webgpu（不可用时 pixi 自动回退 webgl）。 */
   preference?: 'webgpu' | 'webgl';
+  /**
+   * 本玩家 id（userOwnerColor 色板的 own 判定——G9：契约 v0 无 users 映射，
+   * 玩家色走官方 demo 同款 userOwnerColor 模式）。缺省 null=无本玩家视角
+   * （全敌对色）。**非最终契约面，R6 API 冻结时评审去留。**
+   */
+  localPlayerId?: string;
 }
 
 export interface RendererStats {
@@ -59,6 +66,9 @@ export interface RendererHandle {
   getStats(): RendererStats;
   /** 将相机适配到房间可视矩形（floor：自 -cell/2 起的 view² ）。 */
   fitRoom(): void;
+  /** 相机状态直设（世界锚点+缩放；纯数据入参）。回放器/截图工具用——
+   * 非最终契约面，R6 API 冻结时评审去留。 */
+  setCameraState(state: { x: number; y: number; zoom: number }): void;
   /** RoomFeed 输入口（契约 @kkscreeps/shared/feed + 只读摘要；R1 起回放/网络共用）。 */
   readonly feed: FeedView;
   /** 拾取接口（屏幕坐标 → 世界/格坐标；对象命中 R3）。
@@ -128,18 +138,34 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
       } satisfies TerrainTextures)
     : placeholderTextures();
 
-  const room = new RoomScene(textures, cellSize);
+  // 对象舞台资产（R3）：atlas 帧 + glow 独立纹理；无 atlas 时对象层缺帧降级。
+  const objectsSetup = atlas
+    ? {
+        assets: {
+          frames: atlas.frames,
+          glow: atlas.standalone.get('glow')?.texture ?? null,
+        },
+        player: options.localPlayerId ?? null,
+      }
+    : undefined;
+
+  const room = new RoomScene(textures, cellSize, objectsSetup);
   kernel.stage.addChild(room.root);
 
   const feed = new FeedStore();
-  // feed→scene 接线：快照携带地形即重建（hash 门控在 TerrainStage 内）。
+  // feed→scene 接线：快照携带地形即重建（hash 门控在 TerrainStage 内）；
+  // 对象列表逐变更对账（R3——constructedWall 格集变化在 applyObjects 内
+  // 返回并触发墙重烘焙）。
   feed.onChange((roomKey) => {
     const terrain = feed.terrain(roomKey);
     if (terrain) room.setTerrain(terrain.codes);
+    const summary = feed.summary(roomKey);
+    room.applyObjects(feed.objects(roomKey), summary?.time ?? 0);
   });
 
   const onTick = (ticker: { deltaMS: number }): void => {
-    room.update(ticker.deltaMS / 16.6667, kernel.app.renderer);
+    // 60fps 帧基准（C-S8 单源 TERRAIN_SPEC.frameBaseMs）
+    room.update(ticker.deltaMS / TERRAIN_SPEC.frameBaseMs, kernel.app.renderer);
   };
   kernel.app.ticker.add(onTick);
 
@@ -151,7 +177,7 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
   };
   fitRoom();
 
-  return {
+  const handle: RendererHandle = {
     getStats(): RendererStats {
       return {
         backend: kernel.backend,
@@ -162,6 +188,9 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
       };
     },
     fitRoom,
+    setCameraState(state: { x: number; y: number; zoom: number }): void {
+      camera.setState(state);
+    },
     feed,
     pickAt(screenX: number, screenY: number): PickResult {
       const { width, height } = viewSize();
@@ -178,6 +207,16 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
       camera.detach();
       room.destroy();
       await kernel.destroy();
+      (handle as unknown as { __room?: RoomScene }).__room = undefined;
     },
   };
+  // dev/harness 诊断附加字段（B-S2 风险缓释：不可枚举防 spread 拖走场景树、
+  // destroy 置空防悬挂引用；活 pixi 树进运行时公共面的取舍 R6 冻结时裁定）
+  Object.defineProperty(handle, '__room', {
+    value: room,
+    enumerable: false,
+    writable: true,
+    configurable: false,
+  });
+  return handle;
 }
