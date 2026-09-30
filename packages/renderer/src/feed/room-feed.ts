@@ -8,6 +8,8 @@
  */
 import type {
   RoomDelta,
+  ActionLogEntry,
+  SayEntry,
   RoomEvent,
   RoomFeed,
   RoomObjectState,
@@ -44,6 +46,8 @@ export interface FeedChange {
   time: number;
   events: RoomEvent[];
   kind: 'snapshot' | 'delta';
+  actionLogs: ActionLogEntry[];
+  says: SayEntry[];
 }
 
 /**
@@ -70,7 +74,7 @@ export class FeedStore implements FeedView {
     return () => this.listeners.delete(listener);
   }
 
-  private notify(room: string, events: RoomEvent[], kind: FeedChange['kind']): void {
+  private notify(room: string, events: RoomEvent[], kind: FeedChange['kind'], actionLogs: ActionLogEntry[] = [], says: SayEntry[] = []): void {
     const state = this.rooms.get(room);
     if (!state) return;
     const change: FeedChange = {
@@ -78,6 +82,8 @@ export class FeedStore implements FeedView {
       time: state.time,
       events,
       kind,
+      actionLogs,
+      says,
     };
     for (const listener of this.listeners) listener(room, change);
   }
@@ -108,7 +114,7 @@ export class FeedStore implements FeedView {
     state.time = delta.time;
     for (const o of delta.upsert) state.objectsById.set(o.id, o);
     for (const id of delta.removedIds) state.objectsById.delete(id);
-    this.notify(delta.room, delta.events ?? [], 'delta');
+    this.notify(delta.room, delta.events ?? [], 'delta', delta.actionLogs ?? [], delta.says ?? []);
   }
 
   setVisuals(room: string, visuals: RoomVisual[]): void {

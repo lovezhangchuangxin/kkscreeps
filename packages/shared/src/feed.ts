@@ -76,8 +76,41 @@ export interface SayEntry {
   /** 说话者对象 id。 */
   id: string;
   message: string;
-  /** 私有（官方 say 私有为浅灰气泡、公开为红）。 */
+  /** 私有（浅灰，仅本玩家对象可见；公开为红）。 */
   private: boolean;
+}
+
+/** Explicit renderer adapter, not the engine's compressed u16 action bitmap.
+ * Coordinates are room cells. Optional targetId associates a coordinate with a view.
+ * Malformed entries received from untyped transports are ignored by the resolver. */
+export interface ActionTarget {
+  x: number;
+  y: number;
+  targetId?: string;
+}
+export interface ActionLogEntry {
+  id: string;
+  actionLog: {
+    attack?: ActionTarget;
+    rangedAttack?: ActionTarget;
+    heal?: ActionTarget;
+    rangedHeal?: ActionTarget;
+    harvest?: ActionTarget;
+    build?: ActionTarget;
+    repair?: ActionTarget;
+    upgradeController?: ActionTarget;
+    reserveController?: ActionTarget;
+    attackController?: ActionTarget;
+    claimController?: ActionTarget;
+    transferEnergy?: ActionTarget;
+    power?: ActionTarget & { powerId?: number };
+    runReaction?: { x1: number; y1: number; x2: number; y2: number };
+    reverseReaction?: { x1: number; y1: number; x2: number; y2: number };
+    rangedMassAttack?: boolean;
+    attacked?: boolean;
+    healed?: boolean;
+    say?: { message: string; isPublic: boolean };
+  };
 }
 
 /** 增量（每 tick 推送）。 */
@@ -88,8 +121,8 @@ export interface RoomDelta {
   removedIds: string[];
   /** 官方 EVENT 形状（动效第一通道）。 */
   events?: RoomEvent[];
-  /** 预留：官方 13 键 actionLog 形态（第二通道，v0 不产出——引擎缺口 §8.1）。 */
-  actionLogs?: unknown[];
+  /** 明确形状的动作适配通道；引擎 u16 位图不能直接填入。 */
+  actionLogs?: ActionLogEntry[];
   /** 预留：说话通道（引擎缺口 §8.2，G4）。 */
   says?: SayEntry[];
 }

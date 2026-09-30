@@ -39,6 +39,7 @@ function main() {
   for (const [dir, exts] of [
     ['svg', ['.svg', '.png']],
     ['fonts', ['.woff2']],
+    ['effects', ['.svg']],
   ]) {
     const absDir = join(pkgRoot, 'assets', dir);
     const actual = existsSync(absDir)

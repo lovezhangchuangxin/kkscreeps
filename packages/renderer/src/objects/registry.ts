@@ -42,6 +42,7 @@ import {
   joinDisabled,
 } from './joins-structures.js';
 import { Z_TABLE } from './z-table.js';
+import { joinNuke } from './joins-nuke.js';
 
 /** 装配后的对象描述符（pixi 侧消费）。 */
 export interface RegisteredDescriptor {
@@ -85,6 +86,7 @@ export function buildRegistry(assets: JoinAssets): Map<string, RegisteredDescrip
     flag: joinFlag(assets),
     creep: joinCreep(assets),
     powerCreep: joinPowerCreep(assets),
+    nuke: joinNuke(assets),
   };
   const disabledJoin = joinDisabled();
 

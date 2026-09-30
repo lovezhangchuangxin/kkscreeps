@@ -22,9 +22,11 @@ describe('场景坐标与状态边界', () => {
     const points = [-cell / 2, 0, view / 2, view - cell / 2];
     let transform = new Matrix();
     pass.update({ render: (options) => { transform = options.transform!.clone(); } }, 2048, view);
+    expect([pass.display.width, pass.display.height]).toEqual([view, view]);
+    expect(pass.display.scale.x).toBeCloseTo(view / 2048);
     for (const coordinate of points) {
-      expect(pass.display.x + (transform.a * coordinate + transform.tx) * view / 2048).toBeCloseTo(coordinate);
-      expect(pass.display.y + (transform.d * coordinate + transform.ty) * view / 2048).toBeCloseTo(coordinate);
+      expect(pass.display.x + (transform.a * coordinate + transform.tx) * pass.display.scale.x).toBeCloseTo(coordinate);
+      expect(pass.display.y + (transform.d * coordinate + transform.ty) * pass.display.scale.y).toBeCloseTo(coordinate);
     }
     expect(transform.a * points[0]! + transform.tx).toBeCloseTo(0);
     expect(transform.a * points[3]! + transform.tx).toBeCloseTo(2048);

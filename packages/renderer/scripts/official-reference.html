@@ -1,0 +1,30 @@
+<!doctype html><meta charset="utf-8"><title>Official R5 reference a2db4a7</title>
+<style>@font-face{font-family:Roboto;src:url('/assets/fonts/roboto-latin-400-normal.woff2')}@font-face{font-family:Roboto;font-weight:700;src:url('/assets/fonts/roboto-latin-700-normal.woff2')}body{margin:0;background:#050505;color:#ddd;font:12px monospace}#hud{position:absolute;z-index:2;top:12px;left:12px;background:#111b;padding:8px}canvas{display:block}</style>
+<div id="hud">Loading official reference…</div><div id="stage"></div>
+<script src="renderer.js"></script><script src="metadata.js"></script>
+<script type="module">
+const hud=document.querySelector('#hud');
+try {
+ await Promise.all([document.fonts.load('60px Roboto'),document.fonts.load('bold 82px Roboto')]);
+ const params=new URLSearchParams(location.search), file=params.get('fixture')||'effects',tick=Number(params.get('tick')||1),sample=Number(params.get('sample')||450);
+ const [resourceMap,fixture]=await Promise.all([fetch('resources.json').then(r=>r.json()),fetch('/fixtures/'+file+'.json').then(r=>r.json())]);
+ const metadata=window.RENDERER_METADATA.default||window.RENDERER_METADATA;
+ GameRenderer.compileMetadata(metadata);
+ const g=new GameRenderer({autoStart:false,autoFocus:false,size:{width:innerWidth,height:innerHeight},backgroundColor:0x050505,worldConfigs:{ATTACK_PENETRATION:10,CELL_SIZE:100,RENDER_SIZE:{width:2048,height:2048},VIEW_BOX:5000,ROOM_SIZE:50,BADGE_URL:'/assets/svg/cover.svg?user=%1',metadata,gameData:{player:'p1',showMyNames:{spawns:true,creeps:true},showEnemyNames:{spawns:false,creeps:false},showCreepSpeech:true,showFlagsNames:true,swampTexture:'static'},lighting:'normal',userOwnerColor:true,userFlagColor:true},resourceMap});
+ await g.init(document.querySelector('#stage')); g.app.stop();
+ const objects=new Map(),snapshot=fixture.ticks[0]; snapshot.objects.forEach(o=>objects.set(o.id,o));
+ const terrain=[];snapshot.terrain.codes.forEach((code,i)=>{if(code&1)terrain.push({type:'wall',x:i%50,y:Math.floor(i/50)});if(code&2)terrain.push({type:'swamp',x:i%50,y:Math.floor(i/50)});});
+ await g.setTerrain(terrain);
+ const apply=(entry)=>{
+  const logs=new Map((entry.actionLogs||[]).map(l=>[l.id,{...l.actionLog}]));
+  for(const s of entry.says||[])logs.set(s.id,{...(logs.get(s.id)||{}),say:{message:s.message,isPublic:!s.private}});
+  const states=[...objects.values()].map(o=>{const actionLog={...(logs.get(o.id)||{})};if(actionLog.power)actionLog.power={...actionLog.power,id:actionLog.power.powerId};return {store:{},storeCapacityResource:{},effects:{},...o,_id:o.id,type:o.type==='structure'?o.structureType:o.type,user:o.user||o.owner,actionLog,rangedMassAttack:!!actionLog.rangedMassAttack};});
+  g.applyState({objects:states,gameTime:entry.time,users:{p1:{username:'p1'},p2:{username:'p2'}}},1);g.actionManager.update(0);
+ };
+ apply(snapshot);
+ for(let i=1;i<=tick&&i<fixture.ticks.length;i++){const d=fixture.ticks[i];for(const id of d.removedIds)objects.delete(id);for(const o of d.upsert)objects.set(o.id,o);if(i>1)g.actionManager.update(1);apply(d);}
+ const view=(params.get('view')||'2500,2475,0.13').split(',').map(Number);g.app.stage.pivot.set(0,0);g.zoomLevel=view[2];g.app.stage.position.set(innerWidth/2-view[0]*view[2],innerHeight/2-view[1]*view[2]);
+ for(let ms=0;ms<sample;ms+=5)g.actionManager.update(Math.min(5,sample-ms)/1000);
+ g.app.render();hud.textContent='Official a2db4a7 · '+file+' tick='+tick+' sample='+sample+'ms · cell=100 td=1000ms · view='+view.join(',');
+}catch(e){hud.textContent='ERROR '+e.stack;console.error(e);}
+</script>

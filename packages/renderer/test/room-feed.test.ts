@@ -70,6 +70,15 @@ describe('FeedStore', () => {
     expect(feed.objects('E9S9')).toEqual([]);
     expect(feed.terrain('E9S9')).toBeUndefined();
   });
+  it('only deltas propagate actionLogs/says; snapshots and terrain changes never replay them', () => {
+    const feed = new FeedStore();
+    const seen: Array<[number, number]> = [];
+    feed.onChange((_room, c) => seen.push([c.actionLogs.length, c.says.length]));
+    feed.applySnapshot(snapshot);
+    feed.applyDelta({ ...delta(1, [], []), actionLogs: [{ id: 'a', actionLog: { rangedAttack: { x: 2, y: 2 } } }], says: [{ id: 'a', message: 'hi', private: false }] });
+    feed.setTerrain('W1N1', { codes: [0] }); feed.applySnapshot(snapshot);
+    expect(seen).toEqual([[0, 0], [1, 1], [0, 0], [0, 0]]);
+  });
 
   it('onChange 携带变更记录：快照/地形空事件，增量透传 events（R4 罩通道）', () => {
     const feed = new FeedStore();

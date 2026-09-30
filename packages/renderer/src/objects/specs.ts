@@ -530,8 +530,7 @@ export const POWER_CREEP_SPEC = {
 // 落点说明：shared 常量生成管线（feed.ts:57 申明）落地前的渲染器本地替身，
 // R5 扩全表时随管线统一处置（R4 评审 B建议1）。 ----
 
-export const EVENT_ATTACK = 1;
-export const EVENT_HEAL = 6;
+export { EVENT_ATTACK, EVENT_HEAL } from '@kkscreeps/shared';
 
 // ---- tick 时长缺省（G6：官方闭源壳传入值不可知——契约参数化；index.ts 与
 // ObjectsStageOptions 注释单源引用，R4 评审 B建议5） ----

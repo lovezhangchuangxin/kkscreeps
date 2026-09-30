@@ -18,18 +18,24 @@
  *   constructedWall 格并入墙烘焙。
  */
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
-import type { RoomEvent, RoomObjectState } from '@kkscreeps/shared';
+import type { ActionLogEntry, SayEntry, RoomEvent, RoomObjectState } from '@kkscreeps/shared';
 import { bakeCanvas, textureFromBaked } from '../core/bake.js';
 import type { LightingPass } from '../core/lighting.js';
 import { mergedOutlinePath } from '../core/path-merge.js';
 import { AlphaKeyframesTween, AlphaTween, MoveTween, RotateTween, TweenManager, type Tween } from '../anim/tweens.js';
 import type { PartEnv, PartValues } from './part-decl.js';
-import { valuesEqual } from './part-decl.js';
+import { ownerOf, valuesEqual } from './part-decl.js';
 import { OverlayGroup } from './overlay-group.js';
+import { EffectsStage, type ActorBinding } from '../anim/effects-stage.js';
+import { AmbientScheduler, type Viewport } from '../anim/ambient-scheduler.js';
+import { PositionChannels, PropertyChannels } from '../anim/property-channels.js';
+import { resolveActions, point } from '../anim/action-resolver.js';
+import { HIT_COVER_TYPES } from '../anim/effect-specs.js';
+import { ValueTween, continuousKeys } from '../anim/value-tween.js';
 import { MOTION_TYPE_KEYS, controllerSummary } from './parts-creeps.js';
 import { buildRegistry, type RegisteredDescriptor } from './registry.js';
 import type { JoinAssets } from './joins-naturals.js';
-import { CREEP_SPEC, EVENT_ATTACK, EVENT_HEAL, ROAD_SPEC } from './specs.js';
+import { CREEP_SPEC, ROAD_SPEC } from './specs.js';
 import { TERRAIN_SPEC } from '../core/terrain-spec.js';
 import { roadNodes } from './road-geometry.js';
 import { rampartGroupHash, rampartGroups, ROOM_GRID, type RampartGroup } from './rampart-groups.js';
@@ -52,15 +58,20 @@ export interface ObjectsStageOptions {
 interface PartEntry {
   node: Container;
   prev: PartValues | null;
+  sampled: PartValues | null;
+  channels: PropertyChannels;
+  tween?: Tween;
 }
 
 interface ObjectView {
+  readonly id: string;
   readonly typeKey: string;
   readonly root: Container;
   readonly parts: Map<string, PartEntry>;
   /** 世界坐标 overlay 件（lighting/effects 层部件 + 受击罩）——运动/淡出时
    * 逐帧随 root 位移与 alpha 同步。 */
   readonly overlays: OverlayGroup;
+  readonly position: PositionChannels;
   x: number;
   y: number;
   /** 运动类型（MOTION_TYPE_KEYS）——位移走插值、移除走淡出。 */
@@ -88,22 +99,16 @@ function calculateAngle(x0: number, y0: number, x: number, y: number): number {
   return angle;
 }
 
-/** 事件 data.targetId 读取（EVENT_ATTACK/HEAL 的 data 形状）。 */
-function eventTargetId(event: RoomEvent): string | null {
-  const data = event.data;
-  if (typeof data === 'object' && data !== null) {
-    const target = (data as Record<string, unknown>).targetId;
-    if (typeof target === 'string') return target;
-  }
-  return null;
-}
-
 export class ObjectsStage {
   /** ground 层子容器：road 连通。 */
   readonly roadRoot = new Container({ label: 'objects-road' });
   /** effects 层子容器：rampart 顶罩（先）+ 对象 effects 部件（后）。 */
   readonly coverRoot = new Container({ label: 'objects-cover' });
   readonly effectsRoot = new Container({ label: 'objects-effects' });
+  readonly effects: EffectsStage;
+  readonly ambient: AmbientScheduler;
+  private previous = new Map<string, RoomObjectState>();
+  private previousTime = 0;
 
   private readonly cell: number;
   private readonly view: number;
@@ -141,6 +146,9 @@ export class ObjectsStage {
     this.objectsLayer = options.objectsLayer;
     this.assets = options.assets;
     this.registry = buildRegistry(options.assets);
+    this.ambient = new AmbientScheduler(this.tickDurationMS);
+    this.effects = new EffectsStage(this.assets, this.lighting, this.cell, this.tickDurationMS, id => this.actorBinding(id));
+    this.effectsRoot.addChild(this.effects.root);
   }
 
   private env(time: number, controller: PartEnv['controller']): PartEnv {
@@ -176,8 +184,11 @@ export class ObjectsStage {
     time: number,
     events: readonly RoomEvent[] = [],
     kind: 'snapshot' | 'delta' = 'delta',
+    input: { actionLogs?: readonly ActionLogEntry[]; says?: readonly SayEntry[] } = {},
   ): boolean {
     if (kind === 'snapshot') {
+      this.effects.reset();
+      this.ambient.reset();
       for (const view of [...this.dying.values()]) this.destroyView(view);
       this.dying.clear();
       for (const view of this.views.values()) this.resetTransientState(view);
@@ -212,6 +223,8 @@ export class ObjectsStage {
     // 移除（快照迭代——destroy 同步 splice 活数组会跳格，R2 复审 N1 纪律）
     for (const [id, view] of [...this.views]) {
       if (!wanted.has(id)) {
+        this.effects.cancelOwner(id);
+        this.ambient.remove(id);
         if (view.motion && kind !== 'snapshot') {
           // 官方 disappearProcessor：FadeOut(tickDuration/2) 后销毁——
           // 移出 views 进 dying 托管
@@ -250,11 +263,14 @@ export class ObjectsStage {
         const root = new Container({ label: `obj-${id}` });
         root.position.set(x, y);
         this.slotFor(typeKey, desc.z).addChild(root);
+        const overlays = new OverlayGroup(this.lighting);
         view = {
+          id,
           typeKey,
           root,
           parts: new Map(),
-          overlays: new OverlayGroup(this.lighting),
+          overlays,
+          position: new PositionChannels(x, y, (px, py) => { root.position.set(px, py); overlays.moveTo(px, py); }),
           x,
           y,
           motion: MOTION_TYPE_KEYS.has(typeKey),
@@ -271,14 +287,31 @@ export class ObjectsStage {
           // tickDuration) + RotateTo(0.2 tick)；start=当前渲染位（中途重定位）
           this.beginMove(view, x, y, prevGameX, prevGameY);
         } else {
-          view.root.position.set(x, y);
-          view.overlays.moveTo(x, y);
+          view.position.setBase(x, y);
         }
       }
       this.reconcileParts(view, desc, state, env);
+      const binding = view;
+      this.ambient.sync(id, typeKey, state, time, view.parts, () => binding.root.position);
     }
 
-    this.applyCoverEvents(events);
+    if (kind !== 'snapshot') {
+      const resolution = resolveActions({ current: wanted, previous: this.previous, events, ...input });
+      this.effects.recordSkipped(resolution.skipped);
+      for (const hit of resolution.hits) {
+        const view = this.views.get(hit.targetId);
+        if (view && HIT_COVER_TYPES.has(view.typeKey)) this.triggerCover(view, hit.attacked && hit.healed
+          ? CREEP_SPEC.cover.colors.both : hit.attacked ? CREEP_SPEC.cover.colors.attack : CREEP_SPEC.cover.colors.heal);
+      }
+      this.effects.play(resolution.commands.filter(c => c.action !== 'say' || !c.private
+        || this.player !== null && ownerOf(wanted.get(c.sourceId)!) === this.player));
+      for (const previous of this.previous.values()) {
+        if (previous.type !== 'nuke' || typeof previous.landTime !== 'number' || previous.landTime <= this.previousTime || previous.landTime > time) continue;
+        const target = point(previous); if (target) this.effects.nukeBlast(target);
+      }
+    }
+    this.previous = wanted;
+    this.previousTime = time;
     return wallsChanged;
   }
 
@@ -293,6 +326,8 @@ export class ObjectsStage {
       let entry = view.parts.get(decl.id);
       if (values === null) {
         if (entry) {
+          if (entry.tween) this.tweens.cancel(entry.tween);
+          entry.tween = undefined;
           // lighting 成员被隐藏也是内容变化——RT 需重渲（C-B1）
           if (entry.node.parent === this.lighting.content && entry.node.visible) {
             this.lighting.markDirty();
@@ -319,12 +354,29 @@ export class ObjectsStage {
           }
           view.overlays.add(node, layer === 'lighting');
         }
-        entry = { node, prev: null };
+        entry = { node, prev: null, sampled: null, channels: new PropertyChannels(node,
+          () => { if (node.parent === this.lighting.content) this.lighting.markDirty(); }) };
         view.parts.set(decl.id, entry);
       }
       if (!valuesEqual(entry.prev, values)) {
-        entry.node.visible = true;
-        desc.renderers.get(decl.id)!.apply(values, entry.node, env);
+        if (entry.tween) this.tweens.cancel(entry.tween);
+        const part = entry;
+        const write = (sample: PartValues) => {
+          part.channels.restore();
+          part.node.visible = true;
+          desc.renderers.get(decl.id)!.apply(sample, part.node, env);
+          part.channels.capture();
+          part.sampled = sample;
+          if (part.node.parent === this.lighting.content) this.lighting.markDirty();
+        };
+        const keys = continuousKeys(view.typeKey, decl.id);
+        const from = entry.sampled;
+        const interpolate = entry.prev !== null && from !== null && keys.some(k => typeof from[k] === 'number' && typeof values[k] === 'number' && from[k] !== values[k]);
+        if (interpolate) {
+          entry.tween = new ValueTween(from!, values, keys, this.tickDurationMS, write);
+          this.tweens.run(entry.tween, () => { part.tween = undefined; });
+          entry.tween.update(0);
+        } else { entry.tween = undefined; write(values); }
         entry.prev = values;
         // lighting 成员在树内的可见性/几何变化不影响 membership——必须显式
         // 置脏离屏 RT（C-B1：官方每帧渲染层恒新鲜，我方 dirty 门控等价物）
@@ -336,6 +388,8 @@ export class ObjectsStage {
   }
 
   private destroyView(view: ObjectView): void {
+    this.effects.cancelOwner(view.id);
+    this.ambient.remove(view.id);
     // 活动 tween 全部摘除（官方 cancelAction 语义——不 finish 不留悬空回调）
     this.cancelViewTweens(view);
     for (const entry of [...view.parts.values()]) {
@@ -363,8 +417,32 @@ export class ObjectsStage {
   //      cover + disappearProcessor 的编排层） ----
 
   /** ticker 驱动（真实帧时间——数据断流动画照跑，〔官拆〕§7）。 */
-  update(deltaMS: number): void {
+  update(deltaMS: number, viewport?: Viewport): void {
+    if (deltaMS <= 0) return;
     this.tweens.update(deltaMS);
+    this.ambient.update(deltaMS, viewport);
+    this.effects.update(deltaMS);
+  }
+
+  private actorBinding(id: string): ActorBinding | undefined {
+    const view = this.views.get(id); if (!view) return undefined;
+    return {
+      get position() { return view.root.position; },
+      get moving() { return view.moveTween !== undefined; },
+      offset: (x, y) => view.position.setOffset(x, y),
+      turn: (angle, duration) => {
+        const main = view.parts.get('main'); if (!main) return;
+        if (view.rotateTween) this.tweens.cancel(view.rotateTween);
+        view.lastRotation = angle;
+        view.rotateTween = new RotateTween(r => main.channels.setRotation(r), main.node.rotation, angle, duration);
+        this.tweens.run(view.rotateTween, () => { view.rotateTween = undefined; });
+      },
+      towerAim: angle => {
+        const gun = view.parts.get('rotatable')?.node.getChildByLabel('gun');
+        if (gun) this.ambient.aim(id, angle, gun);
+      },
+      towerGlow: factor => view.parts.get('glowBig')?.channels.sample(factor),
+    };
   }
 
   /** 位置变化 → 移动插值 + 朝向（官方 Ease(MoveTo, EASE_IN_OUT_QUAD) +
@@ -377,18 +455,19 @@ export class ObjectsStage {
     prevGameY: number,
   ): void {
     if (view.moveTween) this.tweens.cancel(view.moveTween);
+    this.effects.cancelOwner(view.id, 'bite');
+    const base = view.position.base;
     view.moveTween = new MoveTween(
       (px, py) => {
-        view.root.position.set(px, py);
-        view.overlays.moveTo(px, py);
+        view.position.setBase(px, py);
       },
-      view.root.x,
-      view.root.y,
+      base.x,
+      base.y,
       toX,
       toY,
       this.tickDurationMS,
     );
-    this.tweens.run(view.moveTween);
+    this.tweens.run(view.moveTween, () => { view.moveTween = undefined; });
 
     const angle = calculateAngle(prevGameX, prevGameY, toX / this.cell, toY / this.cell);
     if (angle !== view.lastRotation) {
@@ -398,7 +477,7 @@ export class ObjectsStage {
         if (view.rotateTween) this.tweens.cancel(view.rotateTween);
         view.rotateTween = new RotateTween(
           (r) => {
-            main.rotation = r;
+            view.parts.get('main')!.channels.setRotation(r);
           },
           main.rotation,
           angle,
@@ -406,35 +485,6 @@ export class ObjectsStage {
         );
         this.tweens.run(view.rotateTween);
       }
-    }
-  }
-
-  /** 事件面 → 受击罩（EVENT_ATTACK/HEAL + data.targetId；同时受击+受疗=黄）。
-   * 官方 childCoverSprite：cover.svg ADD、tint、α0→0.5@1/4→0@1 tick。 */
-  private applyCoverEvents(events: readonly RoomEvent[]): void {
-    const hits = new Map<string, { attacked: boolean; healed: boolean }>();
-    for (const event of events) {
-      if (event.event !== EVENT_ATTACK && event.event !== EVENT_HEAL) continue;
-      const targetId = eventTargetId(event);
-      if (!targetId) continue;
-      const hit = hits.get(targetId) ?? { attacked: false, healed: false };
-      if (event.event === EVENT_ATTACK) hit.attacked = true;
-      else hit.healed = true;
-      hits.set(targetId, hit);
-    }
-    for (const [targetId, hit] of hits) {
-      const view = this.views.get(targetId);
-      // 官方 cover 出自 creepActions processor，仅 creep/powerCreep/tower/
-      // lab/link/invaderCore 声明（creep.metadata.js:179 等）——R4 按 motion
-      // 集合门控（R5 光束落位时随表扩）；rampart/墙/spawn 承伤不闪罩
-      // （R4 评审 A-B1/B建议3）
-      if (!view || !view.motion) continue;
-      const tint = hit.attacked && hit.healed
-        ? CREEP_SPEC.cover.colors.both
-        : hit.attacked
-          ? CREEP_SPEC.cover.colors.attack
-          : CREEP_SPEC.cover.colors.heal;
-      this.triggerCover(view, tint);
     }
   }
 
@@ -483,6 +533,10 @@ export class ObjectsStage {
     this.dying.set(id, view);
     if (view.fadeTween) this.tweens.cancel(view.fadeTween);
     if (view.coverTween) this.tweens.cancel(view.coverTween);
+    for (const entry of view.parts.values()) {
+      if (entry.tween) this.tweens.cancel(entry.tween);
+      entry.tween = undefined;
+    }
     const fadeOverlays = view.overlays.captureFade();
     view.fadeTween = new AlphaTween(
       (a) => {
@@ -521,13 +575,15 @@ export class ObjectsStage {
       view.cover = undefined;
     }
     view.root.alpha = 1;
+    view.position.setOffset(0, 0);
     view.lastRotation = 0;
     const main = view.parts.get('main')?.node;
-    if (main) main.rotation = 0;
-    for (const entry of view.parts.values()) entry.prev = null;
+    if (main) view.parts.get('main')!.channels.setRotation(0);
+    for (const entry of view.parts.values()) { entry.channels.reset(); entry.prev = null; entry.tween = undefined; }
   }
 
   private cancelViewTweens(view: ObjectView): void {
+    for (const entry of view.parts.values()) if (entry.tween) this.tweens.cancel(entry.tween);
     if (view.moveTween) this.tweens.cancel(view.moveTween);
     if (view.rotateTween) this.tweens.cancel(view.rotateTween);
     if (view.fadeTween) this.tweens.cancel(view.fadeTween);
@@ -617,6 +673,9 @@ export class ObjectsStage {
   }
 
   destroy(): void {
+    this.effects.destroy();
+    this.ambient.reset();
+    this.previous.clear();
     for (const view of [...this.dying.values()]) this.destroyView(view);
     this.dying.clear();
     for (const view of [...this.views.values()]) this.destroyView(view);

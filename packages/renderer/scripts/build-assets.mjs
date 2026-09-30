@@ -24,6 +24,7 @@ import { MaxRectsPacker } from 'maxrects-packer';
 
 const pkgRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const svgDir = join(pkgRoot, 'assets', 'svg');
+const effectsDir = join(pkgRoot, 'assets', 'effects');
 const outDir = join(pkgRoot, 'assets', 'atlas');
 const manifestPath = join(pkgRoot, 'assets', 'manifest.json');
 
@@ -139,11 +140,13 @@ function main() {
     : [];
   if (svgFiles.length === 0) throw new Error('assets/svg/ 下没有 SVG');
 
+  const effectFiles = readdirSync(effectsDir).filter(f => f.endsWith('.svg')).sort();
+  const rasterFiles = [...svgFiles.map(file => ({ file, dir: 'svg' })), ...effectFiles.map(file => ({ file, dir: 'effects' }))];
   const sources = [];
   const byScale = { 1: [], 2: [] };
-  for (const file of svgFiles) {
+  for (const { file, dir } of rasterFiles) {
     const name = file.replace(/\.svg$/, '');
-    const buf = readFileSync(join(svgDir, file));
+    const buf = readFileSync(join(pkgRoot, 'assets', dir, file));
     const text = buf.toString('utf8');
     let size = intrinsicSize(text, name);
     if (RASTER_OVERRIDE[name] != null) {
@@ -158,7 +161,7 @@ function main() {
     byScale[1].push({ name, ...rendered1 });
     byScale[2].push({ name, ...rendered2 });
     sources.push({
-      path: `svg/${file}`,
+      path: `${dir}/${file}`,
       sha256: sha256(buf),
       bytes: buf.length,
       rasterWidth: rendered1.width,
@@ -247,7 +250,7 @@ function main() {
   writeFileSync(manifestPath, JSON.stringify(manifest));
 
   const summary = Object.fromEntries([1, 2].map((s) => [`${s}x`, manifest.atlas[String(s)].pages.length]));
-  console.log(`✓ 栅格化 ${svgFiles.length} SVG → atlas ${JSON.stringify(summary)} 页（${pngFiles.length} PNG 与 ${fontFiles.length} 字体为直通资产，记入 manifest）`);
+  console.log(`✓ 栅格化 ${svgFiles.length} 官方 SVG + ${effectFiles.length} 效果 SVG → atlas ${JSON.stringify(summary)} 页（${pngFiles.length} PNG 与 ${fontFiles.length} 字体为直通资产，记入 manifest）`);
   console.log(`✓ manifest.json：${sources.length} 源条目，确定性生成可重跑比对`);
 }
 

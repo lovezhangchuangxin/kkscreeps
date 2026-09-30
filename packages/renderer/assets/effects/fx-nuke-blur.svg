@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="276" height="276" viewBox="-8 -8 276 276"><defs><filter id="b" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="2"/></filter></defs><g filter="url(#b)"><g transform="translate(130,130)">
+        <ellipse cx="0" cy="0" rx="26" ry="26" fill="#f66" fill-opacity="0.7"/>
+
+        <path d="M 0 -130 V -65 M 0 130 V 65 M 130 0 H 65 M -130 0 H -65 Z" stroke="#f66"
+              stroke-opacity="0.7" stroke-width="20"/>
+    </g>
+</g></svg>

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { isDelta, isSnapshot, type FixtureFile, type RoomDelta } from '@kkscreeps/shared';
 
-// 入库夹具的契约一致性：四张夹具形状、时序、单调时间轴、地形常量长度。
+// 入库夹具的契约一致性：真实与合成夹具形状、时序、单调时间轴、地形常量长度。
 
 const pkgRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const fixturesDir = join(pkgRoot, 'fixtures');
@@ -12,11 +12,11 @@ const fixturesDir = join(pkgRoot, 'fixtures');
 const names = readdirSync(fixturesDir).filter((f) => f.endsWith('.json')).sort();
 
 /** exporter 产物（R1 纪律：31 tick 全量入库）；showcase 为 R3 手工合成夹具。 */
-const EXPORTER_FIXTURES = ['creeps.json', 'dense-edge.json', 'plains.json', 'standard.json', 'swamp-walls.json'];
+const EXPORTER_FIXTURES = ['actions.json', 'creeps.json', 'dense-edge.json', 'plains.json', 'standard.json', 'swamp-walls.json'];
 
 describe('入库夹具', () => {
-  it('exporter 五张夹具齐全（plains/standard/swamp-walls/dense-edge/creeps）+ showcase 合成', () => {
-    expect(names).toEqual([...EXPORTER_FIXTURES, 'showcase.json'].sort());
+  it('六张真实夹具与四张合成夹具齐全', () => {
+    expect(names).toEqual([...EXPORTER_FIXTURES, 'showcase.json', 'effects.json', 'lifecycle.json', 'pressure.json'].sort());
   });
 
   for (const name of names) {
@@ -38,7 +38,7 @@ describe('入库夹具', () => {
       // 每个增量至少动一处（aging/decay/spawning 的自然差量）——空链即坏回放
       // （showcase 的增量是合成值变化，同纪律适用）
       for (const d of fixture.ticks.slice(1)) {
-        if (isDelta(d)) expect(d.upsert.length + d.removedIds.length).toBeGreaterThan(0);
+        if (isDelta(d)) expect(d.upsert.length + d.removedIds.length + (d.events?.length ?? 0) + (d.actionLogs?.length ?? 0) + (d.says?.length ?? 0)).toBeGreaterThan(0);
       }
     });
   }
@@ -141,5 +141,22 @@ describe('入库夹具', () => {
     expect(events.some((e) => e.event === 1)).toBe(true); // EVENT_ATTACK
     expect(events.some((e) => e.event === 6)).toBe(true); // EVENT_HEAL
     expect(deltas.some((d) => d.removedIds.length > 0)).toBe(true); // 死亡
+  });
+  it('actions is real engine output: ranged heal, work, melee and completed-site coordinates', () => {
+    const f = JSON.parse(readFileSync(join(fixturesDir, 'actions.json'), 'utf8')) as FixtureFile;
+    const first = f.ticks[1]!;
+    const events = (first as RoomDelta).events!;
+    expect(new Set(events.map(e => e.event))).toEqual(new Set([1, 4, 5, 6, 7, 9]));
+    expect(events.find(e => e.event === 6)?.data).toMatchObject({ healType: 2 });
+    const build = events.find(e => e.event === 4)!.data as { targetId: string; x: number; y: number; incomplete: boolean };
+    expect(build).toMatchObject({ x: 14, y: 17, incomplete: false });
+    expect((first as RoomDelta).removedIds).toContain(build.targetId);
+  });
+  it('synthetic galleries declare provenance and pressure has exactly 50 creeps', () => {
+    for (const name of ['effects', 'lifecycle', 'pressure']) {
+      const f = JSON.parse(readFileSync(join(fixturesDir, `${name}.json`), 'utf8'));
+      expect(f.provenance).toContain('synthetic');
+      if (name === 'pressure') expect(f.ticks[0].objects).toHaveLength(50);
+    }
   });
 });

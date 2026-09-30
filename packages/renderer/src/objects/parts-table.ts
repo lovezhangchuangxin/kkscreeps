@@ -5,6 +5,7 @@
  * 按 partId 挂渲染半件，join 不全在 registry 构建期抛错。
  */
 import type { PartDecl } from './part-decl.js';
+import { PARTS_NUKE } from './parts-nuke.js';
 import { PARTS_CREEP, PARTS_POWER_CREEP } from './parts-creeps.js';
 import {
   PARTS_CONTAINER,
@@ -79,6 +80,7 @@ export const PART_DECL_TABLE: Readonly<Record<string, readonly PartDecl[]>> = {
   flag: withDisabled(PARTS_FLAG),
   creep: withDisabled(PARTS_CREEP),
   powerCreep: withDisabled(PARTS_POWER_CREEP),
+  nuke: withDisabled(PARTS_NUKE),
 };
 
 /** 部件表内 id 唯一性校验（registry 构建期调用）。 */
@@ -148,6 +150,10 @@ export const PART_LAYERS: Readonly<Record<string, 'lighting' | 'effects'>> = {
   'powerCreep.name': 'effects',
   'flag.primary': 'effects',
   'flag.secondary': 'effects',
+  'nuke.marker': 'effects',
+  'nuke.circle': 'effects',
+  'nuke.pulse': 'effects',
+  'nuke.glow': 'lighting',
   // _isDisabled 公共件（全部 withDisabled 类型）
   ...Object.keys(PART_DECL_TABLE)
     .filter((k) => PART_DECL_TABLE[k]!.some((p) => p.id === 'disabled'))

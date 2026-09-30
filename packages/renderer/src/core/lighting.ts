@@ -22,6 +22,8 @@ export class LightingPass {
   readonly display: Sprite;
   private rt: RenderTexture | null = null;
   private dirty = true;
+  private invalidations = 0;
+  private renders = 0;
   private degraded = false;
   private readonly half: number;
   private readonly renderTransform = new Matrix();
@@ -53,14 +55,14 @@ export class LightingPass {
   addMember(member: Container, owned = true): void {
     this.content.addChild(member);
     if (owned) this.ownedMembers.add(member);
-    this.dirty = true;
+    this.markDirty();
   }
 
   /** 移除成员（不销毁纹理——调用方决定节点销毁方式）。 */
   removeMember(member: Container): void {
     this.ownedMembers.delete(member);
     if (member.parent === this.content) this.content.removeChild(member);
-    this.dirty = true;
+    this.markDirty();
   }
 
   /** 清空带私有纹理的成员（地形重建时；对象 glow 不在此列）。 */
@@ -70,10 +72,11 @@ export class LightingPass {
       member.destroy({ children: true, texture: true, textureSource: true });
       this.ownedMembers.delete(member);
     }
-    this.dirty = true;
+    this.markDirty();
   }
 
   markDirty(): void {
+    this.invalidations++;
     this.dirty = true;
   }
 
@@ -87,12 +90,16 @@ export class LightingPass {
         this.rt?.destroy(true);
         this.rt = RenderTexture.create({ width: renderSize, height: renderSize });
         this.display.texture = this.rt;
+        // Sprite.setSize() does not retain a requested width across texture
+        // replacement in v8. Re-normalize after EMPTY → RenderTexture.
+        this.display.setSize(view, view);
       }
       // RT 原点对应房间左上角 (-half,-half)，输出精灵以同一原点还原。
       // 显式 render transform 不改动成员容器的局部变换。
       const scale = renderSize / view;
       this.renderTransform.set(scale, 0, 0, scale, this.half * scale, this.half * scale);
       renderer.render({ container: this.content, target: this.rt, clear: true, transform: this.renderTransform });
+      this.renders++;
       this.display.visible = true;
       this.dirty = false;
     } catch (e) {
@@ -106,6 +113,10 @@ export class LightingPass {
 
   get isDegraded(): boolean {
     return this.degraded;
+  }
+  get stats(): { invalidations: number; renders: number; members: number; privateSources: number } {
+    return { invalidations: this.invalidations, renders: this.renders, members: this.content.children.length,
+      privateSources: this.ownedMembers.size + (this.rt ? 1 : 0) };
   }
 
   destroy(): void {

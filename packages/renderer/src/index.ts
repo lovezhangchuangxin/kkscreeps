@@ -13,6 +13,8 @@ import { loadAtlas, type LoadedAtlas } from './assets/atlas.js';
 import { FeedStore, type FeedView } from './feed/room-feed.js';
 import { DEFAULT_TICK_DURATION_MS } from './objects/specs.js';
 import { AnimationClock } from './anim/clock.js';
+import type { EffectsStats } from './anim/effects-stage.js';
+import type { AmbientStats } from './anim/ambient-scheduler.js';
 import { DEFAULT_CELL_SIZE, ROOM_SIZE, RoomScene } from './scenes/room.js';
 import type { TerrainTextures } from './scenes/terrain.js';
 
@@ -58,6 +60,9 @@ export interface RendererStats {
   atlasFrames: number;
   /** lighting 真离屏 pass 状态（G2：degraded=无全局压暗降级）。 */
   lighting: 'real' | 'degraded';
+  effects: EffectsStats;
+  ambient: AmbientStats;
+  lightingPass: { invalidations: number; renders: number; members: number; privateSources: number };
 }
 
 /** 拾取结果（R2 接口：几何换算；对象命中随 R3 描述符落位）。 */
@@ -160,7 +165,7 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
     const objectsSetup = atlas
       ? {
           assets: {
-            frames: atlas.frames,
+            frames: new Map([...atlas.frames, ...[...atlas.standalone].map(([key, value]) => [key, value.texture] as const)]),
             glow: atlas.standalone.get('glow')?.texture ?? null,
             creepMask: atlas.standalone.get('creep-mask')?.texture ?? null,
           },
@@ -180,14 +185,19 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
     const unsubscribe = feed.onChange((roomKey, change) => {
       const terrain = feed.terrain(roomKey);
       if (terrain) room.setTerrain(terrain.codes);
-      room.applyObjects(change.objects, change.time, change.events, change.kind);
+      room.applyObjects(change.objects, change.time, change.events, change.kind, change);
     });
 
     const onResize = () => camera.syncViewport();
     const onTick = (ticker: { elapsedMS: number }): void => {
       camera.syncViewport();
       // deltaMS 有 minFPS 截断且受 speed 缩放；动作必须按实际经过时间推进。
-      room.update(clock.advance(ticker.elapsedMS), kernel.app.renderer);
+      const { width, height } = viewSize();
+      const cam = camera.state;
+      room.update(clock.advance(ticker.elapsedMS), kernel.app.renderer, {
+        minX: cam.x - width / cam.zoom / 2, minY: cam.y - height / cam.zoom / 2,
+        maxX: cam.x + width / cam.zoom / 2, maxY: cam.y + height / cam.zoom / 2,
+      });
     };
     kernel.app.renderer.on('resize', onResize);
     kernel.app.ticker.add(onTick);
@@ -213,6 +223,9 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
           zoom: camera.zoom,
           atlasFrames: atlas?.frames.size ?? 0,
           lighting: room.lighting.isDegraded ? 'degraded' : 'real',
+          effects: room.objects?.effects.stats ?? { active: 0, nodes: 0, privateTexts: 0, skipped: 0 },
+          ambient: room.objects?.ambient.stats ?? { active: 0, awake: 0, sleeping: 0 },
+          lightingPass: room.lighting.stats,
         };
       },
       fitRoom,

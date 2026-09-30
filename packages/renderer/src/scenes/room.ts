@@ -14,7 +14,8 @@
  */
 import { Container } from 'pixi.js';
 import { LightingPass } from '../core/lighting.js';
-import type { RoomEvent, RoomObjectState } from '@kkscreeps/shared';
+import type { ActionLogEntry, SayEntry, RoomEvent, RoomObjectState } from '@kkscreeps/shared';
+import type { Viewport } from '../anim/ambient-scheduler.js';
 import { DEFAULT_CELL_SIZE, ROOM_SIZE } from './terrain-geometry.js';
 import { TERRAIN_SPEC } from '../core/terrain-spec.js';
 import { TerrainStage, type TerrainTextures } from './terrain.js';
@@ -104,9 +105,10 @@ export class RoomScene {
     time: number,
     events: readonly RoomEvent[] = [],
     kind: 'snapshot' | 'delta' = 'delta',
+    input: { actionLogs?: readonly ActionLogEntry[]; says?: readonly SayEntry[] } = {},
   ): void {
     if (!this.objects) return;
-    if (this.objects.apply(objects, time, events, kind)) this.syncWalls();
+    if (this.objects.apply(objects, time, events, kind, input)) this.syncWalls();
   }
 
   /** 墙烘焙格集 = 地形码 ∪ constructedWall 格。双引用门控（C-S1）：地形码与
@@ -126,11 +128,11 @@ export class RoomScene {
 
   /** ticker 驱动（elapsedMS=未经 ticker 截断的真实帧时间）：swamp 滚动 + lighting 离屏按需重渲
    * + 对象运动 tween（R4——数据断流动画照跑）。 */
-  update(elapsedMS: number, renderer: Parameters<LightingPass['update']>[0]): void {
+  update(elapsedMS: number, renderer: Parameters<LightingPass['update']>[0], viewport?: Viewport): void {
     if (elapsedMS > 0) this.terrain.update(elapsedMS / TERRAIN_SPEC.frameBaseMs);
     // objects 先于 lighting：运动 tween 的 markDirty 同帧进 RT 重渲
     //（消一帧滞后，评审 C建议4）
-    if (elapsedMS > 0) this.objects?.update(elapsedMS);
+    if (elapsedMS > 0) this.objects?.update(elapsedMS, viewport);
     this.lighting.update(renderer, this.terrain.renderSize, this.view);
   }
 

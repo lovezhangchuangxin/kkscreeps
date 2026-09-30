@@ -63,6 +63,12 @@ const FIXTURES: &[FixtureSpec] = &[
         build: build_creeps,
         script: Some(creep_tick_script),
     },
+    FixtureSpec {
+        name: "actions",
+        seed: 6,
+        build: build_actions,
+        script: Some(action_tick_script),
+    },
 ];
 
 fn body(kinds: &[BodyKind]) -> Vec<kk_schema::room::BodyPart> {
@@ -295,6 +301,143 @@ fn terrain_with(walls: &[(usize, usize)], swamps: &[(usize, usize)]) -> kk_core:
     }
     t.normalize();
     t
+}
+
+/// R5 real event chain. Public intent API only; includes a completed site that
+/// disappears from the current index and ranged healing. RangedAttack/MassAttack
+/// currently have no settle handlers on this branch; those use a synthetic gallery.
+fn build_actions(world: &mut World) -> BTreeMap<String, ObjId> {
+    const ROOM: &str = "W6N6";
+    world
+        .register_room(ROOM, kk_core::Terrain::plains())
+        .unwrap();
+    let mut handles = BTreeMap::new();
+    let mut put = |name: &str, object| {
+        handles.insert(name.to_string(), world.insert(ROOM, object).unwrap());
+    };
+    for (name, x, y, kinds, energy) in [
+        ("attacker", 9, 10, vec![BodyKind::Attack, BodyKind::Move], 0),
+        (
+            "ranged-healer",
+            8,
+            13,
+            vec![BodyKind::Heal, BodyKind::Move],
+            0,
+        ),
+        (
+            "harvester",
+            14,
+            10,
+            vec![BodyKind::Work, BodyKind::Carry, BodyKind::Move],
+            0,
+        ),
+        (
+            "builder",
+            13,
+            16,
+            vec![BodyKind::Work, BodyKind::Carry, BodyKind::Move],
+            50,
+        ),
+        (
+            "repairer",
+            20,
+            15,
+            vec![BodyKind::Work, BodyKind::Carry, BodyKind::Move],
+            50,
+        ),
+        (
+            "upgrader",
+            29,
+            24,
+            vec![BodyKind::Work, BodyKind::Carry, BodyKind::Move],
+            50,
+        ),
+    ] {
+        put(name, creep_with_energy(name, "p1", x, y, &kinds, energy));
+    }
+    let tank_body = vec![BodyKind::Tough; 20];
+    for (name, x, y, owner) in [
+        ("ranged-target", 10, 10, "p2"),
+        ("heal-target", 10, 13, "p1"),
+    ] {
+        put(name, creep(name, owner, x, y, &tank_body));
+    }
+    put(
+        "source",
+        RoomObject::Source(kk_schema::room::SourceObj {
+            id: 0,
+            x: 15,
+            y: 10,
+            energy: 3000,
+            energy_capacity: 3000,
+            next_regeneration_time: None,
+        }),
+    );
+    put(
+        "site",
+        RoomObject::ConstructionSite(ConstructionSiteObj {
+            id: 0,
+            x: 14,
+            y: 17,
+            structure_type: "extension".into(),
+            progress: 2995,
+            progress_total: 3000,
+            owner: Some("p1".into()),
+            name: None,
+        }),
+    );
+    put(
+        "road",
+        RoomObject::Road(RoadObj {
+            id: 0,
+            x: 21,
+            y: 16,
+            hits: 1,
+            next_decay_time: 5000,
+            notify_when_attacked: None,
+        }),
+    );
+    put(
+        "controller",
+        RoomObject::Controller(ControllerObj {
+            id: 0,
+            x: 30,
+            y: 24,
+            level: 5,
+            safe_mode: 0,
+            safe_mode_available: 0,
+            progress: 1200,
+            downgrade_time: None,
+            owner: Some("p1".into()),
+            owner_cleared: false,
+            is_power_enabled: false,
+            reservation: None,
+            sign: None,
+            upgrade_blocked: None,
+            safe_mode_cooldown: None,
+        }),
+    );
+    handles
+}
+
+fn action_tick_script(_tick: u32, handles: &BTreeMap<String, ObjId>) -> IntentBatch {
+    let mut batch = IntentBatch::default();
+    for (source, action, target) in [
+        ("attacker", Action::Attack, "ranged-target"),
+        ("ranged-healer", Action::RangedHeal, "heal-target"),
+        ("harvester", Action::Harvest, "source"),
+        ("builder", Action::Build, "site"),
+        ("repairer", Action::Repair, "road"),
+        ("upgrader", Action::UpgradeController, "controller"),
+    ] {
+        batch.add_object_intent(
+            "p1",
+            handles[source],
+            action,
+            IntentData::target(handles[target]),
+        );
+    }
+    batch
 }
 
 /// 全平原：地形零特殊格 + 最小对象面——R2 plain/噪声渲染的基线夹具。
@@ -922,6 +1065,32 @@ mod tests {
             })
             .collect();
         assert_eq!(times, vec![0, 1, 2, 3], "time 应逐 tick +1");
+    }
+
+    #[test]
+    fn actions_真实事件及完工目标坐标() {
+        let mut world = World::new(6);
+        let handles = build_actions(&mut world);
+        let site = format!("kk{:016x}", handles["site"].0);
+        let lines = render_fixture(world, handles, Some(action_tick_script), 1);
+        let v: serde_json::Value = serde_json::from_str(&lines[1]).unwrap();
+        let events = v["world"]["rooms"]["W6N6"]["events"].as_array().unwrap();
+        for code in [1, 4, 5, 6, 7, 9] {
+            assert!(events.iter().any(|e| e["event"] == code), "缺少事件 {code}");
+        }
+        let build = events.iter().find(|e| e["event"] == 4).unwrap();
+        assert_eq!(build["data"]["x"], 14);
+        assert_eq!(build["data"]["y"], 17);
+        assert_eq!(build["data"]["incomplete"], false);
+        assert!(
+            v["world"]["objects"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|o| o["id"] != site)
+        );
+        let heal = events.iter().find(|e| e["event"] == 6).unwrap();
+        assert_eq!(heal["data"]["healType"], 2);
     }
 
     /// R4 运动夹具行为面：意图注入后走位者位移、victimA 死亡移除、

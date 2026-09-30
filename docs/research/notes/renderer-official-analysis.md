@@ -209,3 +209,11 @@ A-S1 勘误）；朝向旋转 0.2 tick。动画按**真实帧时间**更新（`A
 - **要避开的坑**：destroy/rebuild 风暴（池化）、每文本全局 ticker+每帧
   getBounds（事件驱动）、光束逐帧重画（预生成可拉伸束贴图）、无限动画不暂停、
   运行时生成 SVG data-URI（启动烘焙缓存）。
+
+## R5 实施复核补记（2026-09-30）
+
+官方 a2db4a7 的 Ease 默认 easeOutQuad：spawn 上升、群攻波 scale/alpha 和落地 nuke scale/flash 均需采用；nuke 呼吸显式 easeInOutQuad。
+creepActions 的清晰束与 blur 束都在 effects/ADD，lab reactionLight 是 glow 150×150（不是 lab-mineral），say 尾部是圆角轮廓的一部分。
+我方明确 actionLog 适配额外支持 attackController/claimController 的咬合/罩，而官方 creepActions 未读取这两键；断流 say 有限寿命、已消失 nuke 前态爆炸、固定种子常驻初相与构建期 blur 近似见 [R5 验证记录](renderer-r5-verification-2026-09-30.md)。
+
+此前 lighting 的 real 状态仅表示 pass 提交成功，不能代替输出几何验收。R5 实际参考帧暴露 EMPTY→RT 纹理更换后 v8 Sprite.setSize 尺寸不保持，已修复并以真实 scale 加强回归；此前观感已对齐的结论以本次固定参考帧结果为准。

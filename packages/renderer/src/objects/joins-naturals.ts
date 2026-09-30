@@ -45,15 +45,11 @@ function sprite(
   height: number | undefined,
   setup?: (s: Sprite) => void,
 ): Container {
-  const s = assets.frames.get(name)
-    ? (() => {
-        const sp = new Sprite(assets.frames.get(name)!);
-        sp.anchor.set(0.5, 0.5);
-        setSpriteSize(sp, width, height);
-        return sp;
-      })()
-    : new Container(); // 缺帧降级：空件（无 atlas 占位模式）
-  setup?.(s as Sprite);
+  // Missing frames retain the Sprite update contract, transparently.
+  const s = new Sprite(assets.frames.get(name) ?? Texture.EMPTY);
+  s.anchor.set(0.5, 0.5);
+  setSpriteSize(s, width, height);
+  setup?.(s);
   return s;
 }
 

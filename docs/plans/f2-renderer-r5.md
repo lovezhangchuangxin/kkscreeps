@@ -1,7 +1,8 @@
 # F2 R5：动效系统实施方案
 
-> 状态：待实施，2026-09-30。实现基线 `f2-renderer@0c09f85`，工作目录
-> `.worktrees/renderer/`。本次制定方案，不开始功能实现。
+> 状态：已实现并验证（含已登记灰区），2026-09-30。实现基线 `f2-renderer@0c09f85`，工作目录
+> `.worktrees/renderer/`。详见 [实施与验证记录](../research/notes/renderer-r5-verification-2026-09-30.md)。
+> 下文保留实施时方案；真实远攻/群攻输入受分支引擎缺口限制，已明确登记。
 >
 > 上位方案：[F2 渲染器批](f2-renderer.md)；架构现状：[frontend.md](../architecture/frontend.md)；
 > 视觉底账：[官方渲染器拆解](../research/notes/renderer-official-analysis.md)。

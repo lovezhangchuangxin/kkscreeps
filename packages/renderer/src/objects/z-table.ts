@@ -22,6 +22,8 @@ export const Z_TABLE: Record<string, number> = {
   's:extractor': 0,
   /** flag.metadata.js 无 zIndex → ||0（GameObject.js:28）。 */
   flag: 0,
+  /** nuke.metadata.js has no zIndex. All visual parts route to effects/lighting. */
+  nuke: 0,
   /** energy.metadata.js:19（掉落资源，我方 type:"resource"）。 */
   resource: 1,
   /** deposit.metadata.js:124 */

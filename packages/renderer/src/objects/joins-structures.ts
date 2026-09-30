@@ -53,8 +53,9 @@ function sprite(
   height: number | undefined,
   setup?: (s: Sprite) => void,
 ): Container {
-  const tex = assets.frames.get(name);
-  if (!tex) return new Container();
+  // Keep the Sprite contract even when a frame is missing: joins also update
+  // anchor/size/texture later. Texture.EMPTY is transparent and shared.
+  const tex = assets.frames.get(name) ?? Texture.EMPTY;
   const sp = new Sprite(tex);
   sp.anchor.set(0.5, 0.5);
   setSpriteSize(sp, width, height);
@@ -559,7 +560,7 @@ export function joinTower(assets: JoinAssets): PartJoin {
         // 官方 pivot 净效果=32 world px（object.js:88-90 已把 payload pivot 除以
         // scale 换算进纹理系再乘回）——wrap scale=1，直接用 world 值（清偿复审 R1）
         gunWrap.pivot.set(0, TOWER_SPEC.rotatable.pivotY);
-        gunWrap.rotation = 0; // R3 静态冻结（官方 RotateTo 随机/自转 R5）
+        // Rotation belongs to the animation channel, not the energy-bar join.
         const bar = gunWrap.getChildByLabel('bar') as Graphics;
         redraw(bar);
         // 官方条画在 rotatable 精灵局部空间（×scaleY 才是世界尺寸）——

@@ -73,7 +73,7 @@ describe('atlas 几何', () => {
   it('1x/2x 各有帧表，帧数一致且覆盖全部 SVG', () => {
     const svgNames = manifest.sources
       .filter((s) => s.path.endsWith('.svg'))
-      .map((s) => s.path.replace('svg/', '').replace('.svg', ''))
+      .map((s) => s.path.split('/').at(-1)!.replace('.svg', ''))
       .sort();
     for (const scale of ['1', '2']) {
       expect(Object.keys(manifest.atlas[scale]!.frames).sort()).toEqual(svgNames);
@@ -111,7 +111,7 @@ describe('atlas 几何', () => {
     const raster = Object.fromEntries(
       manifest.sources
         .filter((s) => s.rasterWidth != null && s.rasterHeight != null)
-        .map((s) => [s.path.replace('svg/', '').replace('.svg', ''), s as typeof s & { rasterWidth: number; rasterHeight: number }]),
+        .map((s) => [s.path.split('/').at(-1)!.replace('.svg', ''), s as typeof s & { rasterWidth: number; rasterHeight: number }]),
     );
     for (const [name, f1] of Object.entries(manifest.atlas['1']!.frames)) {
       const r = raster[name]!;

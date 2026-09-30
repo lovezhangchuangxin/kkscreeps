@@ -243,10 +243,10 @@ z 表/色表/字体常量直接测代码常量）。逐片勾项，收口时全�
 | G1 | RoomVisual 样式映射 | 官方闭源壳绘制，开源渲染器无代码 | 黑盒对齐官方文档/截图，逐原语登记 |
 | G2 | lighting 全局压暗 | v8 WebGPU 滤镜面若有缺口 | 真离屏 pass 已实现（世界对齐 RT + MULTIPLY 输出），WebGPU/WebGL 双后端 harness 实测 `lighting: real`；降级路径在位未触发——R7 收口时销账或保留按 G2 定义复核 |
 | G3 | 徽标图源 | 官方远程拉 screeps.com，我方无此端点 | v0 纯色圆退化（官方失败退化路径同款），M3 自托管 |
-| G4 | say/浮动文字数据通道 | 引擎无 say 事件面（§8） | 契约预留，夹具手工注入演示 |
-| G5 | NPC/power/portal 家族动效 | 引擎无此对象（invaderCore/powerCreep/nuke） | R3 已落描述符+实现+合成夹具（showcase）；残留=观战取材待引擎批次，销账随 R5 动效与引擎侧对象落地 |
+| G4 | say/浮动文字数据通道 | 引擎无 say 事件面（§8） | R5 say/says 已接通并验证隐私与寿命；合成取材，真实输入仍待引擎 |
+| G5 | 动效输入与扩展家族 | 动作位图、对象/结算处理器缺口 | R5 全家族合成可运行；真实 actions 已覆盖六类事件。远攻/群攻在此分支无结算处理器，lab/power/say/nuke 仍待真实输入；PWR 16–18 缺图，19 无官方图标映射 |
 | G6 | tickDuration 缺省 | 官方闭源壳传入值不可知 | 契约参数化，harness 默认 1000ms |
-| G7 | 字体渲染微差 | 栅格化/抗锯齿与官方 canvas 差异 | 截图比对，可接受即冻结 |
+| G7 | 字体/构建期效果采样微差 | 栅格化/抗锯齿及预模糊近似 | R5 官方固定帧人工对照；束端部裁切、核弹四档 blur、固定种子 flicker/初始角已登记，未宣称逐像素一致 |
 | G8 | ~~swamp 白罩层序~~ | ~~官方 zIndex 序下 v8 mask 失效~~ | **R2 二轮销账**（跳格 bug 污染的观察，修复后官方层序 mask 正常） |
 | G9 | 用户色数据源 | 契约 v0 无 users 映射（引擎不投影用户色），官方 playerColor=users[user].color | R3 起 v0 采用官方 demo 同款 **userOwnerColor 模式色板**（own 0x8fbb93/#8fbb93、enemy 0xFF7777/#FF7777、未知 0xBBBBBB/#ffffff）；**rampart 私有顶罩**=own #105010/#44ff44、enemy #501010/#ff4444（terrain.js userOwnerColor 分支），**rampart 公有精灵**=playerColor 色板（rampart.metadata.js:5-7 的 userOwnerColor 分支——评审 A-B5 勘误）；本玩家=createRenderer `localPlayerId`。M3 契约落 users 映射后切换官方远程用户色路径并销账 |
 | G10 | factory 官方优先级 bug（两处） | factory.metadata.js **:46** `store['power']||0 + store['energy']||0` ⇒ `power || (0+energy) || 0`（powerHeight）；**:175-176** `energy||0 + power||0 < total` ⇒ `energy || power || (0<total)`（hasOther——total>0 恒 true 白条恒显）。container 同形表达式无此 bug（括号齐全） | R3 **保真复刻**两处官方行为（评审 A-B4 补登记 ：176）；官方上游修复后随动 |
@@ -266,7 +266,7 @@ z 表/色表/字体常量直接测代码常量）。逐片勾项，收口时全�
 | R6 | RoomVisual+交互+API 冻结：五原语映射（黑盒对齐）、拾取回调/悬停高亮、createRenderer 公共面定型+类型导出 | 官方 visual 用例集观感比对；API d.ts 评审 |
 | R7 | 性能与收口：perf 模式实测+归档、内存 soak、文档回写（frontend.md 现状节/roadmap M3 渲染器项勾选）、灰区表清理 | §5 指标达标或降级登记；≥3 路评审收口 |
 
-R4 后的下一阶段实施细化见 [R5 动效系统实施方案](f2-renderer-r5.md)。R5 仍是
+R5 实施细化与结果见 [R5 动效系统实施方案](f2-renderer-r5.md) 和 [验证记录](../research/notes/renderer-r5-verification-2026-09-30.md)。R5 仍是
 一个整体切片；文档中的六步为内部实现顺序，不改变 R0–R7 划分。
 
 ## 8. 引擎侧缺口登记（回主序列处置，本批不动引擎既有文件）
@@ -740,3 +740,7 @@ R4 后的下一阶段实施细化见 [R5 动效系统实施方案](f2-renderer-r
   地形切换仍有 Pixi BindGroup「纹理销毁时仍被 shader 绑定」warning，未观察
   到渲染中断，保留 R7 跟踪；未执行性能预算/10k tick 内存 soak，不据此声称
   R7 验收完成。本次为单代理修复验证，未补做三路 subagent 评审。
+
+- 2026-09-30：**R5 动效系统实现与验证完成（含灰区）**。输入贯通 events/actionLogs/says，事件及子类型常量统一到 shared 并对 Rust 数值校验；纯解析层维护目标前态/显式坐标/controller 唯一目标及双通道去重。独立 EffectsStage/AmbientScheduler 在单一动画时钟上实现动作全家族、常驻、observer/deposit、填充补间、say 和 nuke；Position/PropertyChannels 避免位移和 alpha 抢写，房间级效果完成回收、快照取消、跨层 dirty 和私有文字精确释放。
+  真实 actions 夹具增加六类事件及工地完工边界；effects/lifecycle/pressure 显式合成。发现本分支 rangedAttack/rangedMassAttack 没有结算处理器，登记 G5，未扩大修改引擎。验证修复：缺帧 Container 被按 Sprite 更新的崩溃；lighting EMPTY→RT 后实际输出尺寸失控（v8 setSize 不保留纹理更换前目标尺寸）；ADD/EaseOutQuad/reaction glow/say 轮廓与隐私；harness seek 历史动作叠积。
+  renderer 256 测+shared 4 测+exporter 4 测、类型检查/新鲜度/确定性重生/构建/文档检查通过。WebGPU/WebGL 固定动作关键帧与回收、核爆、长帧、回放倍率及压力重播验证；官方 UMD 同数据参考对照。1080p/M4/50 creep/4× 的 objects CPU p95 为 0.5/0.6ms，lighting 提交 p95 两后端 0.5ms；非 GPU 完整预算，R7 未完成。BindGroup warning 创建栈指向 Pixi 批次纹理缓存，资源销毁会清空绑定，无自有悬挂引用证据，保留 R7。单代理完成三方面复核，未执行三路 subagent 评审。详细方法、证据和近似见验证记录；下一阶段 R6。

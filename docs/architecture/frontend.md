@@ -56,7 +56,9 @@ interface RoomFeed {
 
 ### 当前实现与运行时边界（F2 R0–R4）
 
-房间地形、静态对象、creep 运动/旋转/受击罩/死亡淡出已实现，具体规格与偏差见 [F2 方案](../plans/f2-renderer.md)。R5 完整动效、R6 RoomVisual/交互/API 冻结和 R7 性能验收尚未完成；上述世界地图、对象池及 Vue 集成仍为目标设计。
+房间地形、静态对象、creep 运动及 R5 动效系统已实现，具体规格与偏差见 [F2 方案](../plans/f2-renderer.md) 和 [R5 验证记录](../research/notes/renderer-r5-verification-2026-09-30.md)。R6 RoomVisual/交互/API 冻结和 R7 性能验收尚未完成；上述世界地图、对象池及 Vue 集成仍为目标设计。
+
+现有动画路径为 RoomFeed → 纯 ActionResolver → EffectsStage（有限效果）/AmbientScheduler（常驻），仅由 AnimationClock 推进。ObjectsStage 保留对象对账与前后索引，通过窄 ActorBinding 绑定动作；PropertyChannels/PositionChannels 合成基础状态与动画，OverlayGroup 负责跨层跟随、淡出和 lighting 置脏。actionLogs 是明确形状的 renderer 适配通道，不能接收引擎压缩位图；缺少真实输入的家族继续用标注来源的合成夹具。
 
 - **资产所有权**：`LoadedAtlas.dispose()` 释放本次加载的独立 Texture/TextureSource 与 ImageBitmap；spritesheet 页按 URL 共用租约，最后一个 renderer 释放时通过 Pixi Assets 卸载。加载失败等待在途任务结束后统一回滚。renderer 先拆场景，再销毁内核，最后释放资产；重复销毁共用同一个 Promise，并取消 feed、ticker、resize 与 DOM 输入订阅。
 - **跨层同步**：`OverlayGroup` 集中管理同一对象在 lighting/effects 层的部件位移、父级淡出与 lighting dirty。join 仍负责部件自身的 alpha/visible。`values === null` 表示停用并使上次值失效，重新激活必须应用一次。
