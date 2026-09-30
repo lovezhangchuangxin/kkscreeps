@@ -255,6 +255,14 @@ pub(super) fn normalize_structure(
                 data.insert("nextDecayTime".into(), json!(ctx.time + v));
             }
             data.remove("ticksToDecay");
+            // rampart 的 isPublic 缺省 false（vanilla getStructureDefaults
+            // rampart 分支带 isPublic: false——放置面权威表；P4 曾登记快照
+            // 契约面 isPublic 缺口，本行清偿）。建造面官方 build.js 的
+            // rampart 分支不写该键（DB 无键、getter !!undefined 同读
+            // false）——两入口玩家面同读，各自保持官方/权威表形态
+            if st == "rampart" {
+                data.entry("isPublic").or_insert(json!(false));
+            }
             // 平面 storeCapacity 与 per-resource storeCapacityResource 成对落
             // （官方 getStructureDefaults 同表值；spec 显式值优先）。平面容量
             // 缺失会让 prelude 的 storeCapacity getter 恒读 undefined；

@@ -23,6 +23,7 @@ pub mod economy;
 pub mod movement;
 pub mod room;
 pub mod spawn;
+pub mod structures;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -31,6 +32,22 @@ use kk_world::{ObjId, RoomIndex, RoomState};
 use serde_json::{Value, json};
 
 use crate::intent::{Action, IntentBatch, IntentData};
+
+/// 官方 utils.js:458-465 前奏（checkStructureAgainstController 的头三段，
+/// M2B 扩面 P5 抽取共用）：调用方先做「无主恒 active」短路，本函数返回
+/// None = controller 缺失 / level<1 / 异主（inactive）；Some = 通过的
+/// controller（供配额段使用）。towers/links 全量版（structures.rs）与
+/// extractor 特化（creep/harvest.rs）共用单源。
+pub(crate) fn structure_rcl_prologue<'a>(
+    w: &'a Working,
+    owner: &str,
+) -> Option<&'a kk_schema::room::ControllerObj> {
+    let ctl = w.controller()?;
+    if ctl.level < 1 || ctl.owner.as_deref() != Some(owner) {
+        return None;
+    }
+    Some(ctl)
+}
 
 /// RCL 配额查询（CONTROLLER_STRUCTURES，嵌套 JSON 常量解析一次）。
 /// 返回该结构类型在给定 RCL 的允许数量（无条目 = 0）。
@@ -508,6 +525,16 @@ pub fn settle_room(
                     if o.owner.as_deref().is_none_or(|u| u == player.as_str()) =>
                 {
                     controller::process_controller_intents(&mut w, *obj_id, actions);
+                }
+                // Generic 结构对象（tower/link/rampart 等，M2B 扩面 P5）：
+                // 官方 :248 所有权门 `object.user && object.user != userId`
+                // ——有主不符跳过，**无主不跳**（与 controller 臂同款判定）。
+                // 官方按 `object.type` 路由到 towers/links/ramparts 的
+                // intents.js（:251-269）；我方 Generic 的 `type` 恒
+                // "structure"，真实类型在 `structureType` 键——门与路由都在
+                // 处理器内做（单次 data 解析）
+                Some(RoomObject::Generic(_)) => {
+                    structures::process_structure_intents(&mut w, *obj_id, player, actions);
                 }
                 _ => continue,
             }

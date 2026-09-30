@@ -194,15 +194,13 @@ fn intent_harvest_mineral(w: &mut Working, id: ObjId, target_id: ObjId) {
 /// 配额非零（:467-471——RCL<6 为 0）。:474-476 的 quota[8]===1 提前返回
 /// 分支使距离计数段（:478-495）对 extractor 不可达。
 fn extractor_active(w: &Working, ex_owner: &Option<String>) -> bool {
+    // :458-465 前奏与 towers/links 全量版共用单源（M2B 扩面 P5 抽取）
     let Some(owner) = ex_owner.as_deref() else {
         return true;
     };
-    let Some(ctl) = w.controller() else {
+    let Some(ctl) = crate::settle::structure_rcl_prologue(w, owner) else {
         return false;
     };
-    if ctl.level < 1 || ctl.owner.as_deref() != Some(owner) {
-        return false;
-    }
     super::controller_allowed("extractor", ctl.level as i64) > 0
 }
 

@@ -24,8 +24,9 @@ use super::movement::type_name_of;
 
 /// 官方 `_damage.js`（B1 无 boost/power 子集）：伤害施加统一入口。
 ///
-/// `attacker` 恒为 creep（B1 调用方只有 creep 近战/拆解；官方 tower/nuke 走同
-/// 函数但属后续批次）。action_type 取 `EVENT_ATTACK_TYPE_*`。
+/// `attacker` 在 B1 只有 creep（近战/拆解）；M2B 扩面 P5 起 tower（Generic
+/// 透传桶）走同函数——官方 _damage 的 attacker 面本就任意（tower/nuke 同
+/// 路）。action_type 取 `EVENT_ATTACK_TYPE_*`。
 pub fn apply_damage(
     w: &mut Working,
     attacker: ObjId,
@@ -41,9 +42,22 @@ pub fn apply_damage(
     if object_hits(&target) <= 0 {
         return;
     }
-    let (attacker_pos, attacker_owner) = match w.creep(attacker) {
-        Some(creep) => ((creep.x, creep.y), creep.owner.clone()),
-        None => return,
+    // 攻击者位置/归属：creep 或 Generic 结构（M2B P5 tower）——反击与
+    // actionLog 只对 creep 攻击者发生（官方近战反击门 attackType==MELEE +
+    // 目标 creep；tower 恒 RANGED）
+    let (attacker_pos, attacker_owner) = match w.room.objects.get(&attacker) {
+        Some(RoomObject::Creep(o)) => ((o.x, o.y), o.owner.clone()),
+        Some(RoomObject::Generic(g)) => {
+            let data: serde_json::Value = serde_json::from_str(&g.data).unwrap_or_default();
+            (
+                (g.x, g.y),
+                data.get("owner")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
+            )
+        }
+        _ => return,
     };
 
     // 伤害施加（_damage.js:16-33）

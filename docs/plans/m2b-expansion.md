@@ -327,6 +327,113 @@ tower/link 复用其投影/折叠模式）。P6 收尾。**每片一个完整批
 
 ## 8. 执行记录（随片回写）
 
+### P5（结构动作族：tower 三动作 + link.transferEnergy + rampart.setPublic + spawn deprecated 对）——已收口待评审清偿
+
+- **范围与官方基准**（逐文件实读 ~/Desktop/projects/sources/screeps/）：
+  towers/attack.js、heal.js、repair.js、intents.js、tick.js；
+  links/transfer.js、intents.js；ramparts/set-public.js；
+  game/structures.js Tower.attack/heal/repair（:764-812）、Link.transferEnergy
+  （:488-531）、Rampart.setPublic（:652-657）、Spawn.canCreateCreep/createCreep
+  （:898-1051）；processor.js:227-330 分派序；utils.js checkStructureAgainstController
+  （:456-505）；game/names.js（createCreep 自动名）。
+- **关键勘误（对 §4 表）**：①官方**无 TOWER_COOLDOWN**（常量表无此键、
+  towers/tick.js 只持久化 actionLog 不递减）——塔限速=TOWER_ENERGY_COST 能量 +
+  intents.js:3-8 的 **else-if 单动作序（heal>repair>attack）**；②§4「距离无损」
+  勘正：transfer 损耗 `ceil(amount×LINK_LOSS_RATIO 0.03)` 恒发生 + 冷却
+  `+=LINK_COOLDOWN(1)×本格坐标 Chebyshev 距离`，且 API 面**同房限定**
+  （跨房 ERR_NOT_IN_RANGE，structures.js:526-528）。
+- **形态决策（P4 镜头延续）**：tower/link 继续 Generic 透传（结算写面=
+  data JSON 字段级写回，link 冷却递减先例已在；TowerObj/LinkObj typed 化
+  无玩家可见收益，偏差登记更新）。
+- **通道**：复用 Action::Attack/Heal/Repair/Transfer（官方白名单同形
+  {id,x,y}/{id,amount,resourceType}，按对象类型路由到不同执行器=官方
+  processor.js 同构）；新增 Action::SetPublic（{isPublic:boolean}，
+  system.js:72）。settle 阶段 5 加 Generic 分派臂（所有权门=官方
+  `object.user && != userId` 跳过——**无主对象不跳**，官方同形）。
+- **tower 三执行器**：attack=官方守卫链（塔+store/目标在/spawning creep 拒/
+  hits>0/能量≥10）→ rampart 同格重定向（复用 rampart_at）→ 距离衰减
+  （power 600/400/800、optimal 5、falloff 20/0.75、range 钳 20、floor）→
+  apply_damage（推广为 creep/Generic 攻击者双形态——creep 目标延迟
+  damage_to_apply/结构目标立即+击毁废墟；P1 模型复用）→ 扣 10 能量。
+  heal=creep 目标+延迟 heal_to_apply（同 tick 阶段 8 落地=官方
+  creeps/tick.js:125-127 序）+EVENT_HEAL(healType=RANGED)；repair=
+  CONSTRUCTION_COST 门（可修结构）+hits<hitsMax+EVENT_REPAIR。
+  actionLog/受击通知/sendAttackingNotification 维持 P1/P4 登记（无驱动管线，
+  Generic 透传写 actionLog 会泄漏到玩家投影面——官方剥离，我方不写=玩家面
+  等价）。
+- **link transfer 执行器**：守卫链（link/store.energy≥amount/amount≥0/
+  目标是 link/源 cooldown>0 拒/**checkStructureAgainstController（Rust 移植
+  :456-505——含同类型更近者配额计数与等距先扫到算更近的 id 序并列规则）**/
+  目标无容量键或满仓拒）→ amount 钳目标余量 → 双侧记账+3% 损耗 →
+  cooldown += 距离 → EVENT_TRANSFER。amount=0 官方奇行保留（仍挂冷却）。
+- **rampart.setPublic**：执行器 `isPublic: !!intent`（Generic data 写回）；
+  放置面补 rampart isPublic:false 缺省（vanilla getStructureDefaults——
+  同时清偿 P4 登记的快照契约面 isPublic 缺口）。
+- **spawn deprecated 对**：canCreateCreep=官方 :898-929 独立预检序（!my→
+  BUSY→body 校验→room.energyAvailable→off（raw 回查）→NAME_EXISTS→
+  名长>100）；createCreep=:932-1051（memory 移位参/预检透传/names.js
+  自动名 100+100 名池逐字移植/Memory.creeps 显式写/幽灵壳/spawning 同 tick
+  Game.creeps/intents.set 'createCreep' {name,body}/**返回 name**）。
+- **验收**：settle 家族（衰减公式三分支/重定向/延迟序/else-if 单动作/
+  transfer 全链/setPublic）+embed e2e（API 错误码全表/跨房/自动名/
+  同 tick 读回）+五重验证+三路评审。
+- **落地补记（实现与规格的差异/勘正）**：
+  ①**tower API 的 RCL 门用 `!this.isActive()`**（官方直调
+  checkStructureAgainstController）——四门逐门等价（无主/表外/无房无
+  controller/距离计数），野房无 controller 分支官方 `data(undefined.id)`
+  抛错不可达、我方走 ③ 门返 RCL 错（合意外延）；②**结构 API 目标门补
+  register 存活判定**（isKnownStructure/isKnownCreep——陈旧壳拒绝，
+  UNDOC-STALEARG 面；首跑棘轮 3 条转红即此，补后归零）；③**spawnPair
+  Memory 懒触发勘正**：原 spawnCreep/createCreep 直调 gw.ensureMemory()
+  强制重解析+重固化，把玩家同 tick 早先的 Memory 写入清掉——官方读
+  globals.Memory（getter 首访解析后固化为值属性，同 tick 后续读写同一
+  对象）；改 `globalThis.Memory` 后 e2e 锁定「Memory.creeps.X 同 tick 可见」；
+  ④spawnGhostCreep 抽取共用（spawnCreep 原内联块=createCreep 壳，逐字段
+  同形）；⑤rampart isPublic:false 放置面缺省（P4 快照契约缺口清偿）。
+- **实现期取证沉淀**：同名 intent 后写覆盖先写（官方 intents.set 同语义
+  ——同 tick 两座 spawn 各自提交互不干扰、同对象同名覆盖）；RCL 配额在
+  测试世界构建时的干扰（rcl5 spawn 配额 1——第二座 spawn 的 createCreep
+  被 isActive 结算门拒，测试世界须 rcl7）；link 冷却挂钟当 tick 即被
+  phase 8 递减（官方 intent 期挂钟→phase 8 减的净效果——e2e 冷却净读按
+  结算 tick 数推算）；**f64 衰减公式官方 JS 是减法赋值、我方一次性表达式
+  ——逐点数值核对（600×0.75×k/15 全整数族）无分歧**。
+- **验证**：workspace **322 绿**（+12 settle 家族——含清偿补 3 测）/clippy 0/fmt 净；release
+  重建后棘轮 **1742、转红 0**——**口径勘正（评审 1/3 双报）：本批真实增量
+  =HEAD→工作树 +116**（地板 1626→1742），棘轮门禁自身的「转绿 149」是
+  HEAD~1（P3 地板 1593）→工作树口径（含 P4 已提交的 +33）；本批 +116 分布
+  StructureLink 57/StructureTower 46/StructureRampart 5+8（PROTECT 族与
+  intent 序）/Tower 5/SAFEMODE-COMBAT/STRUCTURE-ACTIVE-002/ROOM-EVENTLOG-002
+  等（Store 9/adapter 7/Road 5/Container 3 经实证全在 HEAD 已绿——属 P4
+  交付面，评审 3 逐条抽查归因干净）；**首跑 3 条转红（UNDOC-STALEARG
+  tower 三条——目标存活判定缺失）当轮修复归零**；地板 1626→**1742
+  （59.78%）**；
+  bot 三基线（tooangel 2000t 0 错误/overmind 形态集与基线全等 10=10/
+  wasm 干净——中断 0 跳过罚 0 缺失 {}）；perf 四相 0.127/0.222/0.032/
+  0.487 持平（对照 P4 收口 0.125/0.217/0.031/0.480——phase 5 新增 Generic
+  分派与 check_structure_against_controller 仅在结构 intent 提交时触达）。
+
+- **三路评审（官方语义对照/Rust 正确性/测试与归因）均 PASS with conditions，
+  零 P0；清偿当日完成**：
+  ①**link 自指转移收敛**（评审 2 P1-1，行为修复）——官方三步序对同一引用
+  净收敛 E−ceil(3%)、我方独立写回覆写为 E−amount；`target_id==id` 分支按
+  官方序收敛 + 测试 `link_transfer_self_target_converges`（397/冷却 0）；
+  ②**reject_gates 三拒因断言空转修复**（评审 3 P1）——双根因：Fixture
+  controller 只 insert 不替换 + Working::controller() 按 ObjId 升序取首个
+  → 同 Fixture 二次 f.controller 形成 rcl4 阴影（配额门接盘全部拒因）；
+  且满仓用例源能量 0 在能量门即拒。重写：rcl4/rcl8 分 Fixture + 三个拒因
+  各自独占（目标满门全仓库首次获得结算层判别覆盖）；
+  ③补三测：repair 钳 hitsMax/满血拒（评审 3 P2-2——全仓库首次覆盖）、
+  heal>repair else-if 半边（P2-3，in-repo 补；全序另由 compat
+  TOWER-INTENT-002 外部锁定）、pending_order 注释勘正（纯顺序反转数值
+  同 100——真实判别面是「伤害-治疗间夹死亡判定」形态，评审 3 P2-1）；
+  ④四登记：creep 战斗族 UNDOC-STALEARG 剩余面（isKnown* 提共享 helper 归
+  后续批）、tower 自指判等方向（我方保守拒绝）、roomInfo.lastPvpTime 并入
+  通知跳过行、isKnownStructure 域注释（source/mineral 靠 instanceof 合取
+  排除）；⑤**代码健康**：checkStructureAgainstController 前奏三行与
+  extractor_active 抽 `structure_rcl_prologue` 单源（评审 2 P2-2）、
+  spawnCreep 注释归属勘正（Memory 写在 API 层 structures.js 非结算层，
+  P3-N1）；⑥plan 棘轮口径勘正（+116/+149 双基线写清）。
+
 ### P4（结构读取面：setup 契约 + 衰减结算三件 + Generic 折叠 getter 族 + Resource.energy）——已收口
 
 - **落地**：①place 通道（place_structure.rs）——Generic 臂收

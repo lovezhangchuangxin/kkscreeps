@@ -21,6 +21,8 @@ mod controller_safemode;
 mod m2b_creation_family;
 #[path = "settle_tests/m2b_notify_family.rs"]
 mod m2b_notify_family;
+#[path = "settle_tests/m2b_structure_actions_family.rs"]
+mod m2b_structure_actions_family;
 #[path = "settle_tests/m2b_structure_decay_family.rs"]
 mod m2b_structure_decay_family;
 #[path = "settle_tests/minerals_and_boost.rs"]

@@ -69,6 +69,11 @@ pub enum Action {
     /// 分派，intent 白名单 `unclaim: {}`——system.js:78；语义链见
     /// settle/controller.rs）。A4-iii 补（B2 时登记"白名单外动作清洗层丢弃"）。
     Unclaim,
+    /// rampart 对象的动作（官方 processor.js:266-269 分派，白名单
+    /// `setPublic: {isPublic: 'boolean'}`——system.js:72；执行器
+    /// ramparts/set-public.js 仅 `isPublic: !!intent.isPublic` 写回）。
+    /// M2B 扩面 P5。
+    SetPublic,
 }
 
 impl Action {
@@ -105,6 +110,7 @@ impl Action {
             Self::CancelSpawning => "cancelSpawning",
             Self::ActivateSafeMode => "activateSafeMode",
             Self::Unclaim => "unclaim",
+            Self::SetPublic => "setPublic",
         }
     }
 
@@ -141,6 +147,7 @@ impl Action {
             "cancelSpawning" => Self::CancelSpawning,
             "activateSafeMode" => Self::ActivateSafeMode,
             "unclaim" => Self::Unclaim,
+            "setPublic" => Self::SetPublic,
             _ => return None,
         })
     }

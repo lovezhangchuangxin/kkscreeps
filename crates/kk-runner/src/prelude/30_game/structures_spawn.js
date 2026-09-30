@@ -58,6 +58,21 @@
     return !!o && o.type === 'creep';
   }
 
+  /** 官方 register.structures[target.id] 判定的等价物：raw 投影里存在且是
+   *  结构面（M2B 扩面 P5——tower/link 目标门的存活判定；陈旧壳 id 不在本
+   *  tick raw → 拒，官方 UNDOC-STALEARG 面：API 不得对已消亡对象的缓存壳
+   *  返回 OK）。
+   *  **域注意（评审 2 P2-3）**：≠ register.structures 精确域——source/mineral
+   *  的 raw type 亦为 'structure'（world_json 归一），本判定对它们过收；
+   *  四个调用点（attack/heal/repair/transferEnergy）全部以 instanceof
+   *  Structure/Creep 合取，Source/Mineral 原型链不含 Structure（_registry
+   *  CLASS_PARENTS）→ 最终同 ERR_INVALID_TARGET。**单独复用本函数时必须
+   *  自带 instanceof 或补 structureType 排除**。 */
+  function isKnownStructure(id) {
+    const o = id == null ? undefined : gw.rawById.get(id);
+    return !!o && (o.type === 'structure' || o.type === 'spawn');
+  }
+
   // ---------------------------------------------------------------- 官方工具
   /** 官方 utils.calcCreepCost（utils.js:114-123）：BODYPART_COST 求和，
    *  白名单外部件 throw（spawnCreep 已过 BODYPARTS_ALL 预检，不可达）。 */
@@ -216,6 +231,44 @@
    *  ⑦spawning（显式回查）→BUSY ⑧off（显式回查）→RCL ⑨body 校验
    *  ⑩energyAvailable<cost→NOT_ENOUGH_ENERGY ⑪dryRun→OK ⑫名单+Memory
    *  ⑬幽灵壳 ⑭intent ⑮OK。 */
+  /** 同 tick 幽灵壳（官方 structures.js:1132-1213）：new Creep()（无 id）+
+   *  RoomObject.call（room/pos）+ 十三字段 enumerable getter——官方逐字段对照
+   *  （name/spawning:true/my:true/body:{type,hits:100}/owner/
+   *  ticksToLive:CREEP_LIFE_TIME/carryCapacity/carry:{energy:0}/
+   *  store:new Store({store:{energy:0}})/fatigue:0/hits/hitsMax/saying:
+   *  undefined）。spawnCreep（M2A）与 createCreep（M2B 扩面 P5）共用。 */
+  function spawnGhostCreep(name, body, spawn) {
+    const ghost = __Object.create(globalThis.Creep.prototype);
+    ghost.room = spawn.room;
+    ghost.pos = new gw.RoomPosition(spawn.pos.x, spawn.pos.y, spawn.pos.roomName);
+    __Object.defineProperties(ghost, {
+      name: { enumerable: true, get() { return name; } },
+      spawning: { enumerable: true, get() { return true; } },
+      my: { enumerable: true, get() { return true; } },
+      body: {
+        enumerable: true,
+        get() {
+          return _.map(body, (type) => ({ type, hits: 100 }));
+        },
+      },
+      owner: { enumerable: true, get() { return { username: gw.viewerName }; } },
+      ticksToLive: { enumerable: true, get() { return C.CREEP_LIFE_TIME; } },
+      carryCapacity: {
+        enumerable: true,
+        get() {
+          return _.reduce(body, (result, type) => (result += type === C.CARRY ? C.CARRY_CAPACITY : 0), 0);
+        },
+      },
+      carry: { enumerable: true, get() { return { energy: 0 }; } },
+      store: { enumerable: true, get() { return new Store({ store: { energy: 0 } }); } },
+      fatigue: { enumerable: true, get() { return 0; } },
+      hits: { enumerable: true, get() { return body.length * 100; } },
+      hitsMax: { enumerable: true, get() { return body.length * 100; } },
+      saying: { enumerable: true, get() { return undefined; } },
+    });
+    gw.currentGame().creeps[name] = ghost;
+  }
+
   globalThis.StructureSpawn.prototype.spawnCreep = function spawnCreep(body, name, options) {
     if (options === undefined) options = {};
     if (!name || !_.isObject(options)) {
@@ -266,51 +319,128 @@
       return C.OK;
     }
     createdCreepNames.push(name);
-    // 官方 create-creep.js:31-35：`Memory.creeps[name] = opts.memory || ... || {}`
-    // （读 globals.Memory 懒触发；非对象 Memory.creeps 时官方 _.isObject 门跳过）
-    const memory = gw.ensureMemory();
+    // 官方 structures.js:1122-1130（spawnCreep）/ :976-984（createCreep）：
+    // `Memory.creeps[name] = opts.memory || ... || {}`——写在 API 层（结算层
+    // create-creep.js 无 Memory 写）。读 globals.Memory 懒触发。
+    // **不能直调 ensureMemory**——它会强制重解析
+    // 并重固化，把玩家同 tick 早先对 Memory 的写入清掉；官方 getter 首访
+    // 解析后固化为值属性，同 tick 后续读写同一对象。M2B 扩面 P5 勘正：
+    // 原直调致 `Memory.x=1; spawnCreep(...); Memory.x` 丢写——官方保留）
+    const memory = globalThis.Memory;
     if (memory.creeps === undefined) {
       memory.creeps = {};
     }
     if (_.isObject(memory.creeps)) {
       memory.creeps[name] = options.memory || memory.creeps[name] || {};
     }
-    // 同 tick 幽灵壳（官方 :1132-1213）：new Creep()（无 id）+ RoomObject.call
-    // （room/pos）+ 十三字段 enumerable getter——官方逐字段对照（name/spawning:
-    // true/my:true/body:{type,hits:100}/owner/ticksToLive:CREEP_LIFE_TIME/
-    // carryCapacity/carry:{energy:0}/store:new Store({store:{energy:0}})/
-    // fatigue:0/hits/hitsMax/saying:undefined）
-    const ghost = __Object.create(globalThis.Creep.prototype);
-    ghost.room = this.room;
-    ghost.pos = new gw.RoomPosition(this.pos.x, this.pos.y, this.pos.roomName);
-    __Object.defineProperties(ghost, {
-      name: { enumerable: true, get() { return name; } },
-      spawning: { enumerable: true, get() { return true; } },
-      my: { enumerable: true, get() { return true; } },
-      body: {
-        enumerable: true,
-        get() {
-          return _.map(body, (type) => ({ type, hits: 100 }));
-        },
-      },
-      owner: { enumerable: true, get() { return { username: gw.viewerName }; } },
-      ticksToLive: { enumerable: true, get() { return C.CREEP_LIFE_TIME; } },
-      carryCapacity: {
-        enumerable: true,
-        get() {
-          return _.reduce(body, (result, type) => (result += type === C.CARRY ? C.CARRY_CAPACITY : 0), 0);
-        },
-      },
-      carry: { enumerable: true, get() { return { energy: 0 }; } },
-      store: { enumerable: true, get() { return new Store({ store: { energy: 0 } }); } },
-      fatigue: { enumerable: true, get() { return 0; } },
-      hits: { enumerable: true, get() { return body.length * 100; } },
-      hitsMax: { enumerable: true, get() { return body.length * 100; } },
-      saying: { enumerable: true, get() { return undefined; } },
-    });
-    gw.currentGame().creeps[name] = ghost;
+    // 同 tick 幽灵壳（官方 :1132-1213）——spawnCreep/createCreep 共用
+    //（官方两 API 的壳逐字段同形，见 spawnGhostCreep）
+    spawnGhostCreep(name, body, this);
     gw.intents.set(this.id, 'createCreep', { name, body, energyStructures, directions });
     return C.OK;
+  };
+
+  // ---------------------------------------------------------------- canCreateCreep/createCreep（M2B 扩面 P5）
+  // 官方 game/names.js 逐字（100+100 名池 + getUniqueName 重试：4 次后双名
+  // 拼接；Math.random 官方同源不可测——只锁「不与现存/本 tick 已用重名」）
+  const boyNames = ['Jackson', 'Aiden', 'Liam', 'Lucas', 'Noah', 'Mason', 'Jayden', 'Ethan', 'Jacob', 'Jack', 'Caden', 'Logan', 'Benjamin', 'Michael', 'Caleb', 'Ryan', 'Alexander', 'Elijah', 'James', 'William', 'Oliver', 'Connor', 'Matthew', 'Daniel', 'Luke', 'Brayden', 'Jayce', 'Henry', 'Carter', 'Dylan', 'Gabriel', 'Joshua', 'Nicholas', 'Isaac', 'Owen', 'Nathan', 'Grayson', 'Eli', 'Landon', 'Andrew', 'Max', 'Samuel', 'Gavin', 'Wyatt', 'Christian', 'Hunter', 'Cameron', 'Evan', 'Charlie', 'David', 'Sebastian', 'Joseph', 'Dominic', 'Anthony', 'Colton', 'John', 'Tyler', 'Zachary', 'Thomas', 'Julian', 'Levi', 'Adam', 'Isaiah', 'Alex', 'Aaron', 'Parker', 'Cooper', 'Miles', 'Chase', 'Muhammad', 'Christopher', 'Blake', 'Austin', 'Jordan', 'Leo', 'Jonathan', 'Adrian', 'Colin', 'Hudson', 'Ian', 'Xavier', 'Camden', 'Tristan', 'Carson', 'Jason', 'Nolan', 'Riley', 'Lincoln', 'Brody', 'Bentley', 'Nathaniel', 'Josiah', 'Declan', 'Jake', 'Asher', 'Jeremiah', 'Cole', 'Mateo', 'Micah', 'Elliot'];
+  const girlNames = ['Sophia', 'Emma', 'Olivia', 'Isabella', 'Mia', 'Ava', 'Lily', 'Zoe', 'Emily', 'Chloe', 'Layla', 'Madison', 'Madelyn', 'Abigail', 'Aubrey', 'Charlotte', 'Amelia', 'Ella', 'Kaylee', 'Avery', 'Aaliyah', 'Hailey', 'Hannah', 'Addison', 'Riley', 'Harper', 'Aria', 'Arianna', 'Mackenzie', 'Lila', 'Evelyn', 'Adalyn', 'Grace', 'Brooklyn', 'Ellie', 'Anna', 'Kaitlyn', 'Isabelle', 'Sophie', 'Scarlett', 'Natalie', 'Leah', 'Sarah', 'Nora', 'Mila', 'Elizabeth', 'Lillian', 'Kylie', 'Audrey', 'Lucy', 'Maya', 'Annabelle', 'Makayla', 'Gabriella', 'Elena', 'Victoria', 'Claire', 'Savannah', 'Peyton', 'Maria', 'Alaina', 'Kennedy', 'Stella', 'Liliana', 'Allison', 'Samantha', 'Keira', 'Alyssa', 'Reagan', 'Molly', 'Alexandra', 'Violet', 'Charlie', 'Julia', 'Sadie', 'Ruby', 'Eva', 'Alice', 'Eliana', 'Taylor', 'Callie', 'Penelope', 'Camilla', 'Bailey', 'Kaelyn', 'Alexis', 'Kayla', 'Katherine', 'Sydney', 'Lauren', 'Jasmine', 'London', 'Bella', 'Adeline', 'Caroline', 'Vivian', 'Juliana', 'Gianna', 'Skyler', 'Jordyn'];
+  function getUniqueName(checkExistingFn) {
+    let c = 0, name, exists;
+    do {
+      const list = Math.random() > 0.5 ? boyNames : girlNames;
+      name = list[Math.floor(Math.random() * list.length)];
+      if (c > 3) {
+        name += list[Math.floor(Math.random() * list.length)];
+      }
+      c++;
+      exists = checkExistingFn(name);
+    } while (exists);
+    return name;
+  }
+
+  /** 官方 canCreateCreep（structures.js:898-929，deprecated 对的判定半）：
+   *  预检序与 spawnCreep **不同**（官方独立函数）——!my → spawning（raw
+   *  回查）→ body 校验 → room.energyAvailable（无 energyStructures 面第
+   *  六参不存在）→ off（raw 回查）→ NAME_EXISTS → 名长>100。 */
+  globalThis.StructureSpawn.prototype.canCreateCreep = function canCreateCreep(body, name) {
+    if (!this.my) {
+      return C.ERR_NOT_OWNER;
+    }
+    if (gw.rawData(this.id).spawning) {
+      return C.ERR_BUSY;
+    }
+    if (!body || !_.isArray(body) || body.length === 0 || body.length > C.MAX_CREEP_SIZE) {
+      return C.ERR_INVALID_ARGS;
+    }
+    for (let i = 0; i < body.length; i++) {
+      if (!_.contains(C.BODYPARTS_ALL, body[i])) {
+        return C.ERR_INVALID_ARGS;
+      }
+    }
+    if (this.room.energyAvailable < calcCreepCost(body)) {
+      return C.ERR_NOT_ENOUGH_ENERGY;
+    }
+    if (gw.rawData(this.id).off) {
+      return C.ERR_RCL_NOT_ENOUGH;
+    }
+    if (name) {
+      name = name.toString();
+      if (gw.currentGame().creeps[name] || createdCreepNames.indexOf(name) !== -1) {
+        return C.ERR_NAME_EXISTS;
+      }
+      if (name.length > 100) {
+        return C.ERR_INVALID_ARGS;
+      }
+    }
+    return C.OK;
+  };
+
+  /** 官方 createCreep（structures.js:932-1051，deprecated）：memory 移位参 →
+   *  canCreateCreep 透传 → 自动名（names.js）→ Memory.creeps 显式写（与
+   *  spawnCreep 的 `opts.memory || 旧值 || {}` 不同：**显式 creepMemory 覆盖
+   *  旧值**，:976-982）→ 幽灵壳 → intent（无 energyStructures/directions
+   *  面）→ **返回 name**（错误时返回错误码）。 */
+  globalThis.StructureSpawn.prototype.createCreep = function createCreep(body, name, creepMemory) {
+    if (_.isObject(name) && _.isUndefined(creepMemory)) {
+      creepMemory = name;
+      name = undefined;
+    }
+    const canResult = this.canCreateCreep(body, name);
+    if (canResult !== C.OK) {
+      return canResult;
+    }
+    if (!name) {
+      // 官方 :956-959：可见 creep 里同主同名 + 本 tick 已用名都算存在
+      const spawnOwner = gw.rawData(this.id).owner;
+      name = getUniqueName((i) => {
+        const all = gw.world.objects || [];
+        for (let k = 0; k < all.length; k++) {
+          const o = all[k];
+          if (o.type === 'creep' && o.owner === spawnOwner && o.name === i) {
+            return true;
+          }
+        }
+        return createdCreepNames.indexOf(i) !== -1;
+      });
+    }
+    createdCreepNames.push(name);
+    // 同 spawnCreep 的懒触发口径（官方 :969-982 读 globals.Memory——首访
+    // 固化后同 tick 读写同一对象，见 spawnCreep 内勘正注）
+    const memory = globalThis.Memory;
+    if (_.isUndefined(memory.creeps)) {
+      memory.creeps = {};
+    }
+    if (_.isObject(memory.creeps)) {
+      if (!_.isUndefined(creepMemory)) {
+        memory.creeps[name] = creepMemory;
+      } else {
+        memory.creeps[name] = memory.creeps[name] || {};
+      }
+    }
+    spawnGhostCreep(name, body, this);
+    gw.intents.set(this.id, 'createCreep', { name, body });
+    return name;
   };
 
   /** 官方 renewCreep（structures.js:1237-1267）：busy → target 校验（含
@@ -735,4 +865,164 @@
   gw.defineGameObjectProperties(globalThis.Resource.prototype, gw.rawData, {
     energy: (o) => o.energy,
   });
+
+  // ---------------------------------------------------------------- M2B 扩面 P5：结构动作族 API
+  /** tower 三 API 的共同门（官方 structures.js:764-834 每方法同两段）：
+   *  能量（`!store || store.energy < TOWER_ENERGY_COST`）+ RCL。RCL 门官方
+   *  直接调 utils.checkStructureAgainstController——对在 CONTROLLER_STRUCTURES
+   *  表内且房内有 controller 的结构，`!this.isActive()` 与其逐门等价
+   *  （isActive 四门：①!owner→active ≡ 官方 :458-460；②表外类型→active
+   *  对 tower 不可达；③无房/无 controller→inactive ≡ 官方 :463-464 的
+   *  !roomController→false；④即 checkStructureAgainstController 本体）。
+   *  官方对无 controller 的房会 `data(undefined.id)` 抛错——官方世界每房
+   *  有 controller 不可达，我方野房夹具可达，走 isActive 的 ③ 门返
+   *  ERR_RCL_NOT_ENOUGH（官方不可达分支的合意外延，注释记录）。 */
+  function towerCommonGates(tower) {
+    const o = gw.rawData(tower.id);
+    if (!o.store || o.store.energy < C.TOWER_ENERGY_COST) {
+      return C.ERR_NOT_ENOUGH_ENERGY;
+    }
+    if (!tower.isActive()) {
+      return C.ERR_RCL_NOT_ENOUGH;
+    }
+    return C.OK;
+  }
+
+  /** 官方 Tower.attack（structures.js:764-787）：!my → 目标门（creep/
+   *  powerCreep/structure 三 register + instanceof；register 判定以
+   *  instanceof 等价——我方游戏对象只能经装配获得，与 creep.attack 的
+   *  P1 口径一致）→ 能量 → RCL → intent {id}。官方无距离门（20 格 falloff
+   *  底 150 仍执行）；**无 TOWER_COOLDOWN 常量**（限速=能量+每 tick 单动作
+   *  else-if，towers/intents.js:3-8）。 */
+  globalThis.StructureTower.prototype.attack = function attack(target) {
+    if (!this.my) {
+      return C.ERR_NOT_OWNER;
+    }
+    const okTarget = target && target.id
+      && (isKnownCreep(target.id) || isKnownStructure(target.id))
+      && (target instanceof globalThis.Creep
+        || target instanceof globalThis.StructureSpawn
+        || target instanceof globalThis.Structure);
+    if (!okTarget) {
+      assertTargetObject(target);
+      return C.ERR_INVALID_TARGET;
+    }
+    const gate = towerCommonGates(this);
+    if (gate !== C.OK) {
+      return gate;
+    }
+    gw.intents.set(this.id, 'attack', { id: target.id });
+    return C.OK;
+  };
+
+  /** 官方 Tower.heal（:789-810）：目标限 creep/powerCreep（M2 无 powerCreep）。 */
+  globalThis.StructureTower.prototype.heal = function heal(target) {
+    if (!this.my) {
+      return C.ERR_NOT_OWNER;
+    }
+    if (!(target && target.id && isKnownCreep(target.id)
+      && target instanceof globalThis.Creep)) {
+      assertTargetObject(target);
+      return C.ERR_INVALID_TARGET;
+    }
+    const gate = towerCommonGates(this);
+    if (gate !== C.OK) {
+      return gate;
+    }
+    gw.intents.set(this.id, 'heal', { id: target.id });
+    return C.OK;
+  };
+
+  /** 官方 Tower.repair（:812-834）：目标限 structure register + instanceof。 */
+  globalThis.StructureTower.prototype.repair = function repair(target) {
+    if (!this.my) {
+      return C.ERR_NOT_OWNER;
+    }
+    const okTarget = target && target.id
+      && isKnownStructure(target.id)
+      && (target instanceof globalThis.Structure || target instanceof globalThis.StructureSpawn);
+    if (!okTarget) {
+      assertTargetObject(target);
+      return C.ERR_INVALID_TARGET;
+    }
+    const gate = towerCommonGates(this);
+    if (gate !== C.OK) {
+      return gate;
+    }
+    gw.intents.set(this.id, 'repair', { id: target.id });
+    return C.OK;
+  };
+
+  /** 官方 Link.transferEnergy（structures.js:488-531）十二步逐字：
+   *  ①amount<0→INVALID_ARGS ②目标门（structure register+instanceof+非
+   *  自身+structureType==link）→INVALID_TARGET ③!target.my→NOT_OWNER
+   *  ④源是敌方 link（my===false 精确比较）且站 rampart→NOT_OWNER（官方
+   *  奇行 :503-505）⑤源冷却→TIRED ⑥无 controller→RCL ⑦RCL 配额
+   *  （isActive 等价，见 towerCommonGates 注）⑧无能量→NOT_ENOUGH_ENERGY
+   *  ⑨amount 缺省=min(源能量, 目标余量) ⑩源能量<amount→NOT_ENOUGH_ENERGY
+   *  ⑪目标无容量键/满→FULL ⑫跨房→NOT_IN_RANGE（**同房限定**——官方
+   *  :526-528；结算层的本格坐标距离即全语义）。 */
+  globalThis.StructureLink.prototype.transferEnergy = function transferEnergy(target, amount) {
+    if (amount < 0) {
+      return C.ERR_INVALID_ARGS;
+    }
+    if (!target || !target.id
+      || !isKnownStructure(target.id)
+      || !(target instanceof globalThis.Structure)
+      || target === this
+      || target.structureType !== C.STRUCTURE_LINK) {
+      assertTargetObject(target);
+      return C.ERR_INVALID_TARGET;
+    }
+    if (!target.my) {
+      return C.ERR_NOT_OWNER;
+    }
+    if (this.my === false
+      && _.any(this.pos.lookFor(C.LOOK_STRUCTURES), (i) => i.structureType === C.STRUCTURE_RAMPART)) {
+      return C.ERR_NOT_OWNER;
+    }
+    if (this.cooldown > 0) {
+      return C.ERR_TIRED;
+    }
+    if (!this.room.controller) {
+      return C.ERR_RCL_NOT_ENOUGH;
+    }
+    if (!this.isActive()) {
+      return C.ERR_RCL_NOT_ENOUGH;
+    }
+    const o = gw.rawData(this.id);
+    if (!o.store || !o.store.energy) {
+      return C.ERR_NOT_ENOUGH_ENERGY;
+    }
+    if (!amount) {
+      const t = gw.rawData(target.id);
+      amount = Math.min(
+        o.store.energy,
+        t.storeCapacityResource ? t.storeCapacityResource.energy - t.store.energy : 0,
+      );
+    }
+    if (this.energy < amount) {
+      return C.ERR_NOT_ENOUGH_ENERGY;
+    }
+    const t = gw.rawData(target.id);
+    if (!t.storeCapacityResource || !t.storeCapacityResource.energy
+      || t.store.energy + amount > t.storeCapacityResource.energy) {
+      return C.ERR_FULL;
+    }
+    if (target.pos.roomName !== this.pos.roomName) {
+      return C.ERR_NOT_IN_RANGE;
+    }
+    gw.intents.set(this.id, 'transfer', { id: target.id, amount, resourceType: 'energy' });
+    return C.OK;
+  };
+
+  /** 官方 Rampart.setPublic（structures.js:652-657）：!my → intent
+   *  {isPublic: !!isPublic}——结算 ramparts/set-public.js 同式写回。 */
+  globalThis.StructureRampart.prototype.setPublic = function setPublic(isPublic) {
+    if (!this.my) {
+      return C.ERR_NOT_OWNER;
+    }
+    gw.intents.set(this.id, 'setPublic', { isPublic: !!isPublic });
+    return C.OK;
+  };
 })();

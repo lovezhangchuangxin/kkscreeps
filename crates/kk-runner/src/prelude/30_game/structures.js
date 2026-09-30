@@ -92,6 +92,12 @@
     BODYPARTS_ALL: freezeConst(globalThis.BODYPARTS_ALL.slice()),
     BODYPART_COST: freezeConst(__Object.assign({}, globalThis.BODYPART_COST)),
     RESOURCES_ALL: freezeConst(globalThis.RESOURCES_ALL.slice()),
+    // 结构动作族（M2B 扩面 P5）：tower 能量门 / link 目标类型判 / 敌方
+    // link 站 rampart 奇行的 lookFor 面
+    TOWER_ENERGY_COST: globalThis.TOWER_ENERGY_COST,
+    STRUCTURE_LINK: globalThis.STRUCTURE_LINK,
+    STRUCTURE_RAMPART: globalThis.STRUCTURE_RAMPART,
+    LOOK_STRUCTURES: globalThis.LOOK_STRUCTURES,
     // controller 族（A4-iii）：activateSafeMode 门③阈值表与第六门扫描
     ERR_NOT_ENOUGH_RESOURCES: globalThis.ERR_NOT_ENOUGH_RESOURCES,
     ERR_TIRED: globalThis.ERR_TIRED,
