@@ -53,7 +53,7 @@ describe('入库夹具', () => {
     };
     expect(f.origin).toContain('合成');
     expect(f.room).toBe('W8N8');
-    expect(f.visuals.length).toBeGreaterThanOrEqual(20);
+    expect(f.visuals.length).toBe(51);
     expect(f.visuals.every((v) => isRoomVisual(v))).toBe(true);
     const typed = f.visuals as Array<{ type: string; style?: unknown; x: number; y: number }>;
     // 五原语齐全，且每原语的「官方全缺省」样例在集
@@ -65,6 +65,13 @@ describe('入库夹具', () => {
     expect(styles.some((s) => s.lineStyle === 'dashed')).toBe(true);
     expect(styles.some((s) => s.lineStyle === 'dotted')).toBe(true);
     expect(styles.some((s) => s.fill === 'transparent')).toBe(true);
+    // 线型退化回归锚（评审 A-B1）：形状原语必须有用例覆盖默认 strokeWidth 的
+    // dashed/dotted（否则 dash 宽度联动被假阴性）
+    expect(styles.some((s) => s.lineStyle === 'dotted' && s.strokeWidth === undefined)).toBe(true);
+    expect(styles.some((s) => s.lineStyle === 'dashed' && s.strokeWidth === undefined)).toBe(true);
+    // α 通道与小字型变体（评审 A-J3 矩阵增量）
+    expect(styles.some((s) => typeof s.color === 'string' && (s.color as string).length === 9)).toBe(true);
+    expect(styles.some((s) => s.fontVariant === 'small-caps')).toBe(true);
     // 浮点相位（单格框 idiom：x/y 带半格偏移）
     expect(typed.some((v) => v.type === 'rect' && !Number.isInteger(v.x))).toBe(true);
   });

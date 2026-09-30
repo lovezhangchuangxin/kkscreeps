@@ -59,10 +59,19 @@ function clamp01(value: number | undefined, fallback: number): number {
   return Math.min(1, Math.max(0, value));
 }
 
-/** 颜色字段解析（未给/不支持 → fallback 色、α=1；'transparent' → α=0）。 */
+/** 颜色字段解析（默认有色字段：未给/不支持 → fallback 色、α=1；
+ * 'transparent' → α=0）。 */
 function colorOr(value: string | undefined, fallback: number): ResolvedColor {
   if (value === undefined) return { color: fallback, alpha: 1 };
   return parseColor(value) ?? { color: fallback, alpha: 1 };
+}
+
+/** 「默认=无该层」字段的颜色解析（poly.fill、rect/circle.stroke、
+ * text.stroke/backgroundColor）：未给**或不支持色串** → null（层保持关——
+ * G1 回退口径「退该字段默认色」对这些字段即无层；评审 A-J1）。 */
+function colorOrOff(value: string | undefined): ResolvedColor | null {
+  if (value === undefined) return null;
+  return parseColor(value);
 }
 
 export type DashKind = 'solid' | 'dashed' | 'dotted';
@@ -104,7 +113,7 @@ export interface ShapeResolved {
 export function resolveRect(style: VisualStyle | undefined, cell: number): ShapeResolved {
   return {
     fill: style?.fill === undefined ? { color: 0xffffff, alpha: 1 } : colorOr(style.fill, 0xffffff),
-    stroke: style?.stroke === undefined ? null : colorOr(style.stroke, 0xffffff),
+    stroke: colorOrOff(style?.stroke),
     strokePx: numOr(style?.strokeWidth, 0.5) * cell,
     opacity: clamp01(style?.opacity, 0.5),
     dash: dashOf(style),
@@ -122,7 +131,7 @@ export function resolveCircle(style: VisualStyle | undefined, cell: number): Sha
 /** poly：fill 无 / stroke #ffffff / strokeWidth 0.5 / opacity 0.5。 */
 export function resolvePoly(style: VisualStyle | undefined, cell: number): ShapeResolved {
   return {
-    fill: style?.fill === undefined ? null : colorOr(style.fill, 0xffffff),
+    fill: colorOrOff(style?.fill),
     stroke: style?.stroke === undefined ? { color: 0xffffff, alpha: 1 } : colorOr(style.stroke, 0xffffff),
     strokePx: numOr(style?.strokeWidth, 0.5) * cell,
     opacity: clamp01(style?.opacity, 0.5),
@@ -160,9 +169,9 @@ export function resolveText(style: VisualStyle | undefined, cell: number): TextR
     fontFamily: typeof style?.fontFamily === 'string' && style.fontFamily !== '' ? style.fontFamily : 'sans-serif',
     fontStyle: fontStyle === 'italic' || fontStyle === 'oblique' ? fontStyle : 'normal',
     fontVariant: fontVariant === 'small-caps' ? 'small-caps' : 'normal',
-    stroke: style?.stroke === undefined ? null : colorOr(style.stroke, 0xffffff),
+    stroke: colorOrOff(style?.stroke),
     strokePx: numOr(style?.strokeWidth, 0.15) * cell,
-    background: style?.backgroundColor === undefined ? null : colorOr(style.backgroundColor, 0xffffff),
+    background: colorOrOff(style?.backgroundColor),
     paddingPx: numOr(style?.backgroundPadding, 2) * cell,
     align: align === 'left' || align === 'right' ? align : 'center',
   };
@@ -175,15 +184,18 @@ export interface Pt {
   y: number;
 }
 
-/** 节奏（游戏坐标）：dashed=0.5 划/0.25 空；dotted=0.05 点（round 端帽成圆点）/0.3 空。 */
+/** 节奏（游戏坐标，G1 登记自定）：dashed=0.5 划/0.25 空；dotted=0.05 点
+ * （round 端帽成圆点）/0.3 空。**间隙宽度感知**（评审 A-B1）：round 端帽使
+ * 每段视觉长 = on + widthPx，off < width+最小隙即粘连成实线——off 取
+ * max(offCell×cell, widthPx + 0.1×cell)（最小隙 0.1 格）。 */
 export const DASH_PATTERN = { dashed: { on: 0.5, off: 0.25 }, dotted: { on: 0.05, off: 0.3 } } as const;
 
-/** 沿折线按 [on,off] 节切段（像素坐标入参）——输出各 on 段端点对。
- * 实线不走此路径（原生 stroke）。 */
-export function dashSegments(points: readonly Pt[], kind: 'dashed' | 'dotted', cell: number): Array<[Pt, Pt]> {
+/** 沿折线按 [on,off] 节切段（像素坐标入参；widthPx=描边宽，间隙宽度感知）——
+ * 输出各 on 段端点对。实线不走此路径（原生 stroke）。 */
+export function dashSegments(points: readonly Pt[], kind: 'dashed' | 'dotted', cell: number, widthPx = 0): Array<[Pt, Pt]> {
   const { on: onCell, off: offCell } = DASH_PATTERN[kind];
   const on = onCell * cell;
-  const off = offCell * cell;
+  const off = Math.max(offCell * cell, widthPx + 0.1 * cell);
   const out: Array<[Pt, Pt]> = [];
   let drawing = true;
   let remain = on;

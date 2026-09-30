@@ -3,6 +3,9 @@ import type { LightingPass } from '../core/lighting.js';
 import type { JoinAssets } from '../objects/joins-naturals.js';
 import type { EffectCommand, Point, TargetCommand } from './action-resolver.js';
 import { angleBetween, beamWindow, coverAlpha, EFFECT_COLORS as C, EFFECT_SPEC as S, POWER_ICONS } from './effect-specs.js';
+import type { EffectsStats } from './effect-stats.js';
+
+export type { EffectsStats };
 
 /** Internal view port; effects never own or destroy object parts. */
 export interface ActorBinding {
@@ -21,7 +24,6 @@ interface Player {
   sample(progress: number): void;
   dispose(): void;
 }
-export interface EffectsStats { active: number; nodes: number; texts: number; skipped: number }
 export type TextMeasure = (message: string, text: Text) => number;
 
 export class EffectsStage {

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Container, Ticker } from 'pixi.js';
 import type { RoomVisual } from '@kkscreeps/shared';
 import { createRenderer, type RendererHandle } from '../src/index.js';
+import { RoomScene } from '../src/scenes/room.js';
 import { initKernel, type Kernel } from '../src/core/renderer.js';
 import { mockAssetIO } from './asset-mocks.js';
 
@@ -162,7 +163,7 @@ describe('R6：活动房间 / visuals / 拾取悬停 / 字体 / advanceAnimation
     expect(handle.getStats().visuals).toBe(0);
   });
 
-  it('setVisuals 同引用短路：增量通知不重建 visuals 层', async () => {
+  it('visuals 跨增量存续（getStats 口径；短路细锚在 room-feed/visual-stage 单测）', async () => {
     mockAssetIO();
     const handle = await mounted();
     handle.feed.applySnapshot({ room: 'W0N0', time: 0, terrain: { codes: new Array(2500).fill(0) }, objects: [] });
@@ -185,16 +186,26 @@ describe('R6：活动房间 / visuals / 拾取悬停 / 字体 / advanceAnimation
     runtime.firePointer('pointermove', { button: 0, clientX: 400, clientY: 400 });
     runtime.firePointer('pointermove', { button: 0, clientX: 400, clientY: 400 });
     expect(hovers).toEqual(['10,10:c']); // 同格同对象不重复触发
+    // 高亮环随悬停出现/清除（评审 C建议6：G13 高亮环覆盖）
+    const hoverLayer = () => runtime.stage.getChildByLabel('layer-hover', true)!.children.length;
+    expect(hoverLayer()).toBe(1);
     runtime.firePointer('pointermove', { button: 0, clientX: 700, clientY: 400 });
     expect(hovers).toEqual(['10,10:c', '13,10:-']);
     runtime.firePointer('pointerleave', {});
     expect(hovers[hovers.length - 1]).toBeNull();
-    // 拖拽抑制：位移 >4px 不触发 pick（合成事件流同时真实驱动相机平移）
+    expect(hoverLayer()).toBe(0);
+    // 拖拽抑制：位移 >4px 不触发 pick（合成事件流同时真实驱动相机平移）；
+    // 拖拽中的悬停同样冻结（评审 C建议4：hover 抑制断言）
     runtime.firePointer('pointerdown', { button: 0, clientX: 400, clientY: 400 });
     runtime.firePointer('pointermove', { button: 0, clientX: 500, clientY: 400 });
+    expect(hovers.length).toBe(3);
     runtime.firePointer('pointerup', { button: 0, clientX: 500, clientY: 400 });
     expect(picks).toEqual([]);
     handle.setCameraState({ x: 1000, y: 1000, zoom: 1 }); // 复位拖拽平移
+    // 点击判定阈值钉定（评审 C建议5）：5px > PICK_SLOP_PX=4 不触发
+    runtime.firePointer('pointerdown', { button: 0, clientX: 400, clientY: 400 });
+    runtime.firePointer('pointerup', { button: 0, clientX: 405, clientY: 400 });
+    expect(picks).toEqual([]);
     // 点击（位移 ≤4px）触发 pick
     runtime.firePointer('pointerdown', { button: 0, clientX: 400, clientY: 400 });
     runtime.firePointer('pointerup', { button: 0, clientX: 402, clientY: 403 });
@@ -207,6 +218,48 @@ describe('R6：活动房间 / visuals / 拾取悬停 / 字体 / advanceAnimation
     await handle.destroy();
     expect(() => runtime.firePointer('pointermove', { button: 0, clientX: 700, clientY: 400 })).not.toThrow();
     expect(runtime.canvas.removeEventListener).toHaveBeenCalledTimes(11);
+  });
+
+  it('无地形房切房以素地码重建（评审 B-B2：spy 锚接线；墙残留观感留 harness）', async () => {
+    mockAssetIO();
+    // node 无 canvas——墙烘焙不可达；全零地形走 hash 门控零烘焙路径
+    const spy = vi.spyOn(RoomScene.prototype, 'setTerrain');
+    try {
+      const handle = await mounted();
+      handle.feed.applySnapshot({ room: 'W0N0', time: 0, terrain: { codes: new Array(2500).fill(0) }, objects: [] });
+      expect(spy).toHaveBeenCalledTimes(1); // 快照注入
+      handle.feed.setVisuals('W9N9', [{ type: 'circle', x: 5, y: 5 }]); // 无地形房（惰性建）
+      handle.setActiveRoom('W9N9');
+      expect(spy).toHaveBeenCalledTimes(2); // 修复前此处跳过 → 上一房地形残留
+      const codes = spy.mock.calls[1]![0] as number[];
+      expect(codes.length).toBe(2500);
+      expect(codes.every((c) => c === 0)).toBe(true);
+      expect(handle.getStats().visuals).toBe(1);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('销毁后场景面方法 no-op、feed 数据面可用（评审 B-B5）', async () => {
+    mockAssetIO();
+    const handle = await mounted();
+    handle.feed.applySnapshot({ room: 'W0N0', time: 0, terrain: { codes: new Array(2500).fill(0) }, objects: [creep(10)] });
+    await handle.destroy();
+    expect(() => {
+      handle.setActiveRoom('W0N0');
+      handle.fitRoom();
+      handle.setCameraState({ x: 0, y: 0, zoom: 1 });
+      handle.setPlaybackRate(1);
+      handle.advanceAnimation(100);
+      const unsubPick = handle.onPick(() => {});
+      unsubPick();
+      const unsubHover = handle.onHover(() => {});
+      unsubHover();
+    }).not.toThrow();
+    const stats = handle.getStats();
+    expect(stats).toMatchObject({ fps: 0, visuals: 0, atlasFrames: 0 });
+    expect(handle.pickAt(400, 400)).toEqual({ world: { x: 0, y: 0 }, cell: null });
+    expect(() => handle.feed.applyDelta({ room: 'W0N0', time: 1, upsert: [], removedIds: [] })).not.toThrow();
   });
 
   it('advanceAnimation 与 ticker 同路径推进（不受 playbackRate 暂停影响），onFrameTiming 收到计时', async () => {

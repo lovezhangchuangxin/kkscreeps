@@ -4,9 +4,10 @@ import type { RoomObjectState } from '@kkscreeps/shared';
 import type { PartValues } from '../objects/part-decl.js';
 import { PropertyChannels } from './property-channels.js';
 import { EFFECT_SPEC } from './effect-specs.js';
+import type { AmbientStats } from './effect-stats.js';
 
 export interface Viewport { minX: number; minY: number; maxX: number; maxY: number }
-export interface AmbientStats { active: number; awake: number; sleeping: number }
+export type { AmbientStats };
 export interface AmbientPart { readonly node: Container; readonly channels: PropertyChannels; readonly prev: PartValues | null }
 interface Sample {
   readonly key: string;

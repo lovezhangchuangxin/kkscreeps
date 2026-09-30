@@ -11,6 +11,8 @@
     { "type": "text", "x": 4, "y": 9, "text": "line dotted #00f", "style": { "align": "left", "fontSize": 1 } },
     { "type": "line", "points": [{ "x": 4, "y": 10 }, { "x": 13, "y": 10 }], "style": { "width": 0.5, "color": "#ffff00", "opacity": 0.8 } },
     { "type": "text", "x": 4, "y": 11, "text": "line w.5 #ff0", "style": { "align": "left", "fontSize": 1 } },
+    { "type": "line", "points": [{ "x": 4, "y": 12 }, { "x": 13, "y": 12 }], "style": { "width": 0.3, "color": "#ff880080", "opacity": 1 } },
+    { "type": "text", "x": 4, "y": 12.9, "text": "line #rrggbbaa a=0.5", "style": { "align": "left", "fontSize": 1 } },
 
     { "type": "text", "x": 4, "y": 13.8, "text": "B. rect（默认填白 / 透明+dashed 描边 / 填色+描边 / 单格框 idiom）", "style": { "align": "left", "fontSize": 1.2, "opacity": 0.9 } },
     { "type": "rect", "x": 4, "y": 15, "w": 4, "h": 3 },
@@ -28,6 +30,14 @@
     { "type": "text", "x": 4, "y": 28.8, "text": "poly default(stroke)", "style": { "align": "left", "fontSize": 1 } },
     { "type": "poly", "points": [{ "x": 12, "y": 24 }, { "x": 17, "y": 24 }, { "x": 14.5, "y": 28 }], "style": { "fill": "#ff00ff", "opacity": 0.35, "stroke": "#ffffff", "strokeWidth": 0.1 } },
     { "type": "text", "x": 12, "y": 28.8, "text": "poly fill+stroke", "style": { "align": "left", "fontSize": 1 } },
+
+    { "type": "rect", "x": 20, "y": 24, "w": 4, "h": 3, "style": { "fill": "transparent", "stroke": "#00ffff", "lineStyle": "dotted" } },
+    { "type": "text", "x": 20, "y": 27.8, "text": "rect 默认宽(0.5) dotted 离散回归", "style": { "align": "left", "fontSize": 1 } },
+    { "type": "circle", "x": 44, "y": 44, "style": { "radius": 3, "fill": "transparent", "stroke": "#ff00ff", "lineStyle": "dashed" } },
+    { "type": "text", "x": 44, "y": 48, "text": "circle 默认宽 dashed", "style": { "fontSize": 0.8 } },
+
+    { "type": "text", "x": 4, "y": 31, "text": "Small Caps Italic", "style": { "fontSize": 2, "fontVariant": "small-caps", "fontStyle": "italic", "align": "left", "opacity": 0.9 } },
+    { "type": "text", "x": 20, "y": 31, "text": "line1\nline2", "style": { "fontSize": 1.5, "align": "center", "color": "#88ccff", "opacity": 0.9 } },
 
     { "type": "text", "x": 30, "y": 1.8, "text": "C. circle（默认 r10 填白 / 填色 / dotted 描边）", "style": { "align": "left", "fontSize": 1.2, "opacity": 0.9 } },
     { "type": "circle", "x": 38, "y": 12 },

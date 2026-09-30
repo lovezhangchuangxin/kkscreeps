@@ -112,7 +112,7 @@ export class VisualStage {
       return;
     }
     const path = closed ? [...points, points[0]!] : [...points];
-    for (const [a, b] of dashSegments(path, shape.dash, this.cell)) {
+    for (const [a, b] of dashSegments(path, shape.dash, this.cell, widthPx)) {
       g.moveTo(a.x, a.y).lineTo(b.x, b.y);
     }
     g.stroke(style);
@@ -125,7 +125,7 @@ export class VisualStage {
       g.moveTo(points[0]!.x, points[0]!.y);
       g.lineTo(points[1]!.x, points[1]!.y);
     } else {
-      for (const [a, b] of dashSegments(points, resolved.dash, this.cell)) g.moveTo(a.x, a.y).lineTo(b.x, b.y);
+      for (const [a, b] of dashSegments(points, resolved.dash, this.cell, resolved.widthPx)) g.moveTo(a.x, a.y).lineTo(b.x, b.y);
     }
     g.stroke({ color: resolved.color.color, alpha: resolved.color.alpha * resolved.opacity, width: resolved.widthPx, ...STROKE_CAP });
     return this.add(g);
@@ -205,11 +205,13 @@ export class VisualStage {
         const bg = new Graphics();
         const pad = r.paddingPx;
         bg.roundRect(-ax * text.width - pad, -text.height - pad, text.width + pad * 2, text.height + pad * 2, Math.min(pad, text.height / 2));
-        bg.fill({ color: r.background.color, alpha: r.background.alpha });
+        // 背景独立承担 background α×opacity（评审 A-J4：color α 不应淡化背景）
+        bg.fill({ color: r.background.color, alpha: r.background.alpha * r.opacity });
         container.addChild(bg);
       }
       container.addChild(text);
-      container.alpha = r.color.alpha * r.opacity;
+      // 文字色 α×opacity 只作用于 Text 本体（容器不再承载 α）
+      text.alpha = r.color.alpha * r.opacity;
       container.position.set(visual.x * this.cell, visual.y * this.cell);
     } catch {
       // 降级：半成品精确销毁（text 私有 canvas 源四标志），整批不中断

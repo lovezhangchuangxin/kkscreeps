@@ -53,12 +53,14 @@ describe('resolveLine（width 0.1 / color #ffffff / opacity 0.5）', () => {
 
 describe('resolveRect（fill #ffffff / stroke 无 / strokeWidth 0.5）', () => {
   const cell = 100;
-  it('全缺省=填充无描边（与 poly 不对称）', () => {
-    const r = resolveRect(undefined, cell);
-    expect(r.fill).toEqual({ color: 0xffffff, alpha: 1 });
-    expect(r.stroke).toBeNull();
-    expect(r.strokePx).toBe(50);
-    expect(r.opacity).toBe(0.5);
+  it('全缺省=填充无描边（与 poly 不对称）——全形断言', () => {
+    expect(resolveRect(undefined, cell)).toEqual({
+      fill: { color: 0xffffff, alpha: 1 },
+      stroke: null,
+      strokePx: 50,
+      opacity: 0.5,
+      dash: 'solid',
+    });
   });
   it('transparent 填充 → α0；显式描边生效', () => {
     const r = resolveRect({ fill: 'transparent', stroke: '#105010', strokeWidth: 0.25 } as VisualStyle, cell);
@@ -66,18 +68,22 @@ describe('resolveRect（fill #ffffff / stroke 无 / strokeWidth 0.5）', () => {
     expect(r.stroke).toEqual({ color: 0x105010, alpha: 1 });
     expect(r.strokePx).toBe(25);
   });
-  it('不支持的颜色形态退该字段默认色（G1）', () => {
-    const r = resolveRect({ fill: 'blue' } as VisualStyle, cell);
-    expect(r.fill).toEqual({ color: 0xffffff, alpha: 1 });
+  it('不支持的颜色形态：默认有色字段退默认色；默认无层字段保持无层（评审 A-J1）', () => {
+    expect(resolveRect({ fill: 'blue' } as VisualStyle, cell).fill).toEqual({ color: 0xffffff, alpha: 1 });
+    expect(resolveRect({ stroke: 'blue' } as VisualStyle, cell).stroke).toBeNull();
   });
 });
 
 describe('resolveCircle（radius 10 / fill #ffffff / stroke 无）', () => {
-  it('全缺省=官方默认值', () => {
-    const r = resolveCircle(undefined, 100);
-    expect(r.radiusPx).toBe(1000);
-    expect(r.fill).toEqual({ color: 0xffffff, alpha: 1 });
-    expect(r.stroke).toBeNull();
+  it('全缺省=官方默认值——全形断言', () => {
+    expect(resolveCircle(undefined, 100)).toEqual({
+      fill: { color: 0xffffff, alpha: 1 },
+      stroke: null,
+      strokePx: 50,
+      opacity: 0.5,
+      dash: 'solid',
+      radiusPx: 1000,
+    });
   });
   it('负半径退默认', () => {
     expect(resolveCircle({ radius: -1 } as VisualStyle, 100).radiusPx).toBe(1000);
@@ -85,11 +91,17 @@ describe('resolveCircle（radius 10 / fill #ffffff / stroke 无）', () => {
 });
 
 describe('resolvePoly（fill 无 / stroke #ffffff / strokeWidth 0.5）', () => {
-  it('全缺省=描边无填充（与 rect/circle 不对称）', () => {
-    const r = resolvePoly(undefined, 100);
-    expect(r.fill).toBeNull();
-    expect(r.stroke).toEqual({ color: 0xffffff, alpha: 1 });
-    expect(r.strokePx).toBe(50);
+  it('全缺省=描边无填充（与 rect/circle 不对称）——全形断言', () => {
+    expect(resolvePoly(undefined, 100)).toEqual({
+      fill: null,
+      stroke: { color: 0xffffff, alpha: 1 },
+      strokePx: 50,
+      opacity: 0.5,
+      dash: 'solid',
+    });
+  });
+  it('默认无层字段收到不支持色串保持无层（评审 A-J1）', () => {
+    expect(resolvePoly({ fill: 'blue' } as VisualStyle, 100).fill).toBeNull();
   });
 });
 
@@ -111,7 +123,21 @@ describe('resolveText（sans-serif / fontSize 10 / strokeWidth 0.15 / padding 2 
       align: 'center',
     });
   });
-  it('字段子集校验：非法枚举退默认', () => {
+  it('合法枚举透传（评审 A-J2：italic/oblique/small-caps/left/right）', () => {
+    const r = resolveText({
+      fontStyle: 'italic',
+      fontVariant: 'small-caps',
+      align: 'right',
+      fontFamily: 'Roboto',
+    }, cell);
+    expect(r.fontStyle).toBe('italic');
+    expect(r.fontVariant).toBe('small-caps');
+    expect(r.align).toBe('right');
+    expect(r.fontFamily).toBe('Roboto');
+    expect(resolveText({ fontStyle: 'oblique', align: 'left' } as VisualStyle, cell).fontStyle).toBe('oblique');
+    expect(resolveText({ align: 'left' } as VisualStyle, cell).align).toBe('left');
+  });
+  it('字段子集校验：非法枚举退默认；默认无层字段不支持色串保持无层（A-J1）', () => {
     const r = resolveText({
       fontStyle: 'bold' as VisualStyle['fontStyle'],
       fontVariant: 'caps' as VisualStyle['fontVariant'],
@@ -122,6 +148,9 @@ describe('resolveText（sans-serif / fontSize 10 / strokeWidth 0.15 / padding 2 
     expect(r.fontVariant).toBe('normal');
     expect(r.align).toBe('center');
     expect(r.fontFamily).toBe('Roboto');
+    const dirty = resolveText({ stroke: 'blue', backgroundColor: 'blue' } as VisualStyle, cell);
+    expect(dirty.stroke).toBeNull();
+    expect(dirty.background).toBeNull();
   });
 });
 
@@ -152,6 +181,17 @@ describe('dashSegments（节奏 G1 登记自定：dashed 0.5/0.25 · dotted 0.05
     const cell = 100;
     const segs = dashSegments([{ x: 0, y: 0 }, { x: 1000, y: 0 }], 'dotted', cell);
     expect(segs[0]![1]!.x - segs[0]![0]!.x).toBeCloseTo(DASH_PATTERN.dotted.on * cell);
+  });
+  it('间隙宽度感知（评审 A-B1）：默认宽 0.5 下 off ≥ width+0.1 格，点/划离散', () => {
+    const cell = 100;
+    const w = 0.5 * cell; // rect/circle/poly 默认 strokeWidth
+    const dotted = dashSegments([{ x: 0, y: 0 }, { x: 4000, y: 0 }], 'dotted', cell, w);
+    expect(dotted[1]![0]!.x - dotted[0]![1]!.x).toBe(w + 0.1 * cell); // 间隙 60px > 0
+    const dashed = dashSegments([{ x: 0, y: 0 }, { x: 4000, y: 0 }], 'dashed', cell, w);
+    expect(dashed[1]![0]!.x - dashed[0]![1]!.x).toBe(w + 0.1 * cell); // 60px（原 25px 会粘连）
+    // 细线（line 默认 0.1）沿用文档节奏：off = max(offCell, width+0.1格) = offCell
+    const thin = dashSegments([{ x: 0, y: 0 }, { x: 4000, y: 0 }], 'dashed', cell, 0.1 * cell);
+    expect(thin[1]![0]!.x - thin[0]![1]!.x).toBe(DASH_PATTERN.dashed.off * cell);
   });
   it('circlePoints 首尾闭合、半径正确', () => {
     const pts = circlePoints(100, 200, 50);

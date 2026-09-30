@@ -17,6 +17,16 @@ describe('ensureFonts', () => {
     await expect(a).resolves.toBe('fallback');
   });
 
+  it('fallback 不驻留缓存：在途共享、落定后重建实例可重试（评审 B-B1）', async () => {
+    const a = ensureFonts('https://retry.invalid/');
+    const b = ensureFonts('https://retry.invalid/');
+    expect(b).toBe(a); // 在途共享
+    await expect(a).resolves.toBe('fallback');
+    const c = ensureFonts('https://retry.invalid/');
+    expect(c).not.toBe(a); // 落定 fallback → 缓存已清 → 新 Promise（可重试）
+    await expect(c).resolves.toBe('fallback');
+  });
+
   it('规格表=库内文字件实际使用面（badge 82bold / say 60 / 名字 55）', () => {
     expect(FONT_FAMILY).toBe('Roboto');
     expect(FONT_SPECS).toEqual([

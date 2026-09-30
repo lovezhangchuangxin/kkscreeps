@@ -17,10 +17,11 @@ describe('resolvePickObject', () => {
     expect(resolvePickObject({ x: 5, y: 5 }, objects)).toBe('tower');
   });
 
-  it('z 平手取 id 码点序（确定性）', () => {
+  it('z 平手取 id 码点序（三对象钉死：非列表序/非后到优先）', () => {
     const objects = [
-      { id: 'b', type: 'creep', x: 1, y: 1 },
+      { id: 'c', type: 'creep', x: 1, y: 1 },
       { id: 'a', type: 'creep', x: 1, y: 1 },
+      { id: 'b', type: 'creep', x: 1, y: 1 },
     ];
     expect(resolvePickObject({ x: 1, y: 1 }, objects)).toBe('a');
   });

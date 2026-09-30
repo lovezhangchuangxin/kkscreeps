@@ -16,7 +16,8 @@
  */
 import { Texture } from 'pixi.js';
 import { CameraController } from './core/camera.js';
-import { initKernel, type Backend, type Kernel } from './core/renderer.js';
+import { initKernel, type Kernel } from './core/renderer.js';
+import type { Backend } from './core/backend.js';
 import { fitRect, screenToWorld, type CameraState } from './core/camera-math.js';
 import { loadAtlas, type LoadedAtlas } from './assets/atlas.js';
 import { ensureFonts, type FontStatus } from './assets/fonts.js';
@@ -25,15 +26,15 @@ import { FeedStore, type FeedView } from './feed/room-feed.js';
 import { resolvePickObject } from './feed/pick.js';
 import { DEFAULT_TICK_DURATION_MS } from './objects/specs.js';
 import { AnimationClock } from './anim/clock.js';
-import type { EffectsStats } from './anim/effects-stage.js';
-import type { AmbientStats } from './anim/ambient-scheduler.js';
+import type { EffectsStats, AmbientStats } from './anim/effect-stats.js';
 import { DEFAULT_CELL_SIZE, ROOM_SIZE, RoomScene } from './scenes/room.js';
 import type { TerrainTextures } from './scenes/terrain.js';
 
-export type { Backend } from './core/renderer.js';
+export type { Backend } from './core/backend.js';
 export type { CameraState } from './core/camera-math.js';
 export { fitRect, screenToWorld } from './core/camera-math.js';
-export { DEFAULT_CELL_SIZE, ROOM_SIZE } from './scenes/room.js';
+// 常量从零 pixi 的 terrain-geometry 再出口（room.d.ts 携 pixi 引用——评审 B-B3）
+export { DEFAULT_CELL_SIZE, ROOM_SIZE } from './scenes/terrain-geometry.js';
 export type { FeedView, RoomSummary } from './feed/room-feed.js';
 export type { FontStatus } from './assets/fonts.js';
 
@@ -99,7 +100,7 @@ export interface RendererStats {
 export interface PickResult {
   /** 世界像素坐标。 */
   world: { x: number; y: number };
-  /** 格坐标（0..49；出房为 null）。 */
+  /** 格坐标（0..49；出房为 null）。±cell/2 归格（格中心相位，Math.round）。 */
   cell: { x: number; y: number } | null;
   /** 命中对象 id（该格 z 序最高者，平手取 id 码点序；无对象/出房为
    * undefined）。按对象**数据格**命中——移动中 creep 以其目标格计，非插值
@@ -121,19 +122,22 @@ export interface RendererHandle {
   setPlaybackRate(rate: number): void;
   /** 手动推进场景动画 ms（与 ticker 同一场景更新路径，可叠加）：回放 seek、
    * 定帧截图与黄金帧回归用。注入动画时间本身，**不受 setPlaybackRate 影响**
-   * （暂停态下仍可推进）；负数/非有限值按 0 处理。0 无操作。 */
+   * （暂停态下仍可推进）；负数/非有限值按 0 处理。0 不推进动画时间（仍执行
+   * 一次帧路径）。 */
   advanceAnimation(ms: number): void;
   /** 当前活动房间；首个 applySnapshot 自动激活，此后经 setActiveRoom 切换。 */
   readonly activeRoom: string | null;
   /**
    * 切换活动房间（该房须已有 feed 数据，未知房抛错——fail-fast 同 feed 纪律）。
    * 非活动房的快照/增量/setVisuals 只进数据仓库，零渲染写入；切房=该房当前
-   * 仓库状态快照语义重建；**离房期间的事件不补播**（见文件头运行时语义）。
+   * 仓库状态快照语义重建（无地形房清为素地）；**离房期间的事件不补播**
+   * （见文件头运行时语义）。
    */
   setActiveRoom(room: string): void;
   /** RoomFeed 输入口（契约 @kkscreeps/shared/feed + 只读摘要；回放/网络共用）。 */
   readonly feed: FeedView;
-  /** 拾取接口（屏幕坐标 → 世界/格/对象；几何与命中语义见 PickResult）。 */
+  /** 拾取接口（**canvas 局部** CSS 像素坐标——非 client 坐标，页面事件需先
+   * 扣除 getBoundingClientRect；几何与命中语义见 PickResult）。 */
   pickAt(screenX: number, screenY: number): PickResult;
   /**
    * 点击拾取回调（多订阅；返回退订函数）。主键点击且位移 ≤4px（非拖拽）时
@@ -145,6 +149,12 @@ export interface RendererHandle {
    * 画布/房间外回调 null；拖拽中抑制。
    */
   onHover(listener: (result: PickResult | null) => void): () => void;
+  /**
+   * 幂等销毁（重复调用共用同一卸载 Promise）。释放全部 DOM 输入监听、
+   * ticker/resize/feed 订阅、拾取回调与资产租约；销毁后场景面方法
+   * （相机/拾取/活动房/advanceAnimation/getStats）为 no-op，
+   * **feed 数据面继续可用**（纯数据仓库）。
+   */
   destroy(): Promise<void>;
 }
 
@@ -190,7 +200,10 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
   let destroyScene: (() => void) | undefined;
   let disconnect: (() => void) | undefined;
   let disposal: Promise<void> | undefined;
+  // 销毁后场景面设防（评审 B-B5）：拆树后 Pixi 对象不可再触达
+  let destroyed = false;
   const dispose = (): Promise<void> => disposal ??= (async () => {
+    destroyed = true;
     disconnect?.();
     camera.detach();
     try {
@@ -255,7 +268,8 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
         },
         rebuild: (name) => {
           const terrain = feed.terrain(name);
-          if (terrain) room.setTerrain(terrain.codes);
+          // 无地形房切房清为素地，防上一房地形/墙残留（评审 B-B2）
+          room.setTerrain(terrain ? terrain.codes : new Array(ROOM_SIZE * ROOM_SIZE).fill(0));
           room.applyObjects(feed.objects(name), feed.summary(name)?.time ?? 0, [], 'snapshot');
           room.setVisuals(feed.visuals(name));
         },
@@ -371,6 +385,7 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
     camera.setBounds(floorRect);
 
     const fitRoom = () => {
+      if (destroyed) return; // 评审 B-B5：销毁后场景面 no-op
       const { width, height } = viewSize();
       camera.setState(fitRect(floorRect.minX, floorRect.minY, view, view, width, height));
     };
@@ -378,6 +393,16 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
 
     const handle: RendererHandle = {
       getStats(): RendererStats {
+        // 销毁后 Pixi ticker/场景不可触达——返回归零形状（评审 B-B5）
+        if (destroyed) {
+          return {
+            backend: kernel.backend, fps: 0, zoom: 0, atlasFrames: 0,
+            lighting: 'real', visuals: 0, fonts: fontStatus,
+            effects: { active: 0, nodes: 0, texts: 0, skipped: 0 },
+            ambient: { active: 0, awake: 0, sleeping: 0 },
+            lightingPass: { invalidations: 0, renders: 0, members: 0, privateSources: 0 },
+          };
+        }
         return {
           backend: kernel.backend,
           fps: Math.round(kernel.app.ticker.FPS),
@@ -393,12 +418,15 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
       },
       fitRoom,
       setCameraState(state: { x: number; y: number; zoom: number }): void {
+        if (destroyed) return;
         camera.setState(state);
       },
       setPlaybackRate(rate: number): void {
+        if (destroyed) return;
         clock.setRate(rate);
       },
       advanceAnimation(ms: number): void {
+        if (destroyed) return;
         // 负数/非有限值按 0 处理（诊断面宽松入参，不抛错打断截图脚本）
         advanceFrame(typeof ms === 'number' && Number.isFinite(ms) && ms > 0 ? ms : 0, false);
       },
@@ -406,17 +434,21 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
         return activeRoomCtrl.activeRoom;
       },
       setActiveRoom(name: string): void {
+        if (destroyed) return;
         activeRoomCtrl.setActive(name);
       },
       feed,
       pickAt(screenX: number, screenY: number): PickResult {
+        if (destroyed) return { world: { x: 0, y: 0 }, cell: null };
         return pickFromScreen(screenX, screenY);
       },
       onPick(listener: (result: PickResult) => void): () => void {
+        if (destroyed) return () => {};
         pickListeners.add(listener);
         return () => pickListeners.delete(listener);
       },
       onHover(listener: (result: PickResult | null) => void): () => void {
+        if (destroyed) return () => {};
         hoverListeners.add(listener);
         return () => hoverListeners.delete(listener);
       },

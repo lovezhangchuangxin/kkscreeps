@@ -106,11 +106,13 @@ function fixture(): FixtureFile {
 }
 
 function applyEntry(): void {
+  if (current === VISUALS_KEY) return; // 静态用例集无回放链（评审 C建议1：空格定时器兜底）
   const f = fixture();
   if (index >= f.ticks.length) {
     playing = false;
     renderer.setPlaybackRate(0);
     stopTimer(); // 末态清定时器（评审 C 建议 1：不留空转僵尸 interval）
+    syncSecondary(); // 主回放末态联动副回放（评审 C建议2：防失控漂移）
     return;
   }
   const entry = f.ticks[index]!;

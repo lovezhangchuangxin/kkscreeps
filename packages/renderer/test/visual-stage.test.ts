@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CanvasTextMetrics } from 'pixi.js';
+import { CanvasTextMetrics, Text } from 'pixi.js';
 import type { RoomVisual } from '@kkscreeps/shared';
 import { VisualStage } from '../src/scenes/visual-stage.js';
 
@@ -71,6 +71,19 @@ describe('VisualStage', () => {
     stage.setVisuals([{ type: 'text', x: 5, y: 5, text: 'x', style: { backgroundColor: '#000000' } }]);
     const container = stage.root.children[0]!;
     expect(container.children.length).toBe(2); // bg Graphics + Text
+  });
+
+  it('重建时旧 Text 以四标志精确销毁（评审 C建议8：canvas 私有源纪律锚）', () => {
+    const spy = vi.spyOn(Text.prototype, 'destroy');
+    try {
+      stage.setVisuals([{ type: 'text', x: 1, y: 1, text: 'a' }]);
+      stage.setVisuals([{ type: 'text', x: 1, y: 1, text: 'b' }]);
+      expect(spy).toHaveBeenCalledWith(
+        expect.objectContaining({ style: true, texture: true, textureSource: true }),
+      );
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('destroy 清空子树（可重复）', () => {

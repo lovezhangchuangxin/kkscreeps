@@ -26,10 +26,13 @@ export function ensureFonts(baseUrl: string): Promise<FontStatus> {
   const root = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
   let pending = cache.get(root);
   if (pending === undefined) {
-    pending = load(root);
+    // fallback 不驻留缓存（评审 B-B1：resolve 路径也要清，否则「失败重试」
+    // 是死代码）——网络恢复后重建 renderer 可重新加载
+    pending = load(root).then((status) => {
+      if (status === 'fallback') cache.delete(root);
+      return status;
+    });
     cache.set(root, pending);
-    // 失败不缓存：下次（如网络恢复后重建 renderer）可重试
-    pending.catch(() => cache.delete(root));
   }
   return pending;
 }

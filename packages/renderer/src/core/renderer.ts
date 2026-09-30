@@ -3,8 +3,9 @@
  * Pixi 对象只在本包内部存在——公共面见 index.ts（ADR-009 第 4 条）。
  */
 import { Application, Container } from 'pixi.js';
+import type { Backend } from './backend.js';
 
-export type Backend = 'webgpu' | 'webgl';
+export type { Backend };
 
 export interface KernelOptions {
   container: HTMLElement;
