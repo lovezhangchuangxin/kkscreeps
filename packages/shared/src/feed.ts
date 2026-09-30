@@ -129,51 +129,59 @@ export interface RoomDelta {
 
 /**
  * 玩家绘制（RoomVisual API 的序列化形）。样式字段与默认值对齐官方 API 文档
- * docs.screeps.com/api/#RoomVisual（2026-09-30 两路独立取证一致；官方闭源壳
- * 在渲染端应用默认值——engine `src/game/rooms.js:1146-1218` 只透传玩家原样
- * style 对象，故该文档默认值表即壳行为唯一权威记录），灰区表 G1 盯梢。
+ * **仓库源** screeps/docs `api/source/RoomVisual.md`（2026-09-30 二轮取证勘正：
+ * docs.screeps.com 整页锚点抓取会命中同页 Game.map.visual 的表——radius 10/
+ * strokeWidth 0.5 系其值；仓库源权威值 circle radius 0.15、形状 strokeWidth
+ * 0.1、text font 分形态/padding 0.3/opacity 1.0。外部复审 GPT-P1 坐实，
+ * engine `src/game/rooms.js:1146-1218` 只透传玩家原样 style，默认值由渲染端
+ * 应用=我方同位），灰区表 G1 盯梢。
  * 字段名与官方 1:1——玩家按官方文档写的 style 对象可直传；各原语只消费
  * 自己的字段子集，且**默认值逐原语不对称**（映射层逐原语应用，渲染端同位）：
  *   line:   width 0.1 · color #ffffff · opacity 0.5 · lineStyle undefined(实线)
- *   rect:   fill #ffffff · opacity 0.5 · stroke undefined(无) · strokeWidth 0.5
- *   circle: radius 10 · fill #ffffff · opacity 0.5 · stroke undefined · strokeWidth 0.5
- *   poly:   fill undefined(无填) · stroke #ffffff · strokeWidth 0.5 · opacity 0.5
- *   text:   color #ffffff · fontFamily sans-serif · fontSize 10（游戏坐标）·
- *           strokeWidth 0.15 · backgroundColor undefined · backgroundPadding 2 ·
- *           align center · opacity 0.5
- * 长度/坐标单位均为游戏坐标（1 格=1 单位，渲染端 ×cellSize 转像素）。
- * 颜色格式：#rgb/#rrggbb/#rrggbbaa 或 'transparent'（其余 CSS 形态官方未载，
- * 渲染端退该字段默认色并登记 G1）。lineStyle 仅除 text 外可声明
- * （undefined=实线，'dashed'|'dotted'）。
+ *   rect:   fill #ffffff · opacity 0.5 · stroke undefined(无) · strokeWidth 0.1
+ *   circle: radius 0.15 · fill #ffffff · opacity 0.5 · stroke undefined · strokeWidth 0.1
+ *   poly:   fill undefined(无填) · stroke #ffffff · strokeWidth 0.1 · opacity 0.5
+ *   text:   color #ffffff · font 0.8（官方未载缺省，我方取官方示例值，G1）·
+ *           stroke undefined · strokeWidth 0.15 · backgroundColor undefined ·
+ *           backgroundPadding 0.3 · align center · opacity 1.0
+ * 长度/坐标单位均为游戏坐标（1 格=1 单位，渲染端 ×cellSize 转像素）。官方
+ * 明载：全部坐标以格中心计（(10,10)=该格 creep 中心）、浮点合法、rect 的
+ * x/y 为左上角点、text 的 x/y 为基线点、背景启用时文字垂直居中（默认基线）。
+ * 颜色格式：官方为 **any web format**——本契约支持 #rgb/#rgba/#rrggbb/
+ * #rrggbbaa、rgb()/rgba()、hsl()/hsla()、CSS 命名色全表、'transparent'
+ * （渲染端解析；残余系统色等退该字段默认并登记 G1）。lineStyle 仅除 text 外
+ * 可声明（undefined=实线，'dashed'|'dotted'）。
  */
 export interface VisualStyle {
   /** 线宽（游戏坐标；line 默认 0.1）。 */
   width?: number;
-  /** 线色（line）与文字色（text）；默认 #ffffff。 */
+  /** 线色（line）与文字色（text）；any web format，默认 #ffffff。 */
   color?: string;
   /** 填充色：rect/circle 默认 #ffffff，poly 默认无填充。 */
   fill?: string;
   /** 描边色：poly 默认 #ffffff，rect/circle/text 默认无描边。 */
   stroke?: string;
-  /** 描边宽（游戏坐标）：形状默认 0.5，text 默认 0.15。 */
+  /** 描边宽（游戏坐标）：形状默认 0.1，text 默认 0.15。 */
   strokeWidth?: number;
-  /** 不透明度：全原语默认 0.5。 */
+  /** 不透明度：形状默认 0.5，text 默认 1.0。 */
   opacity?: number;
   /** 线型：undefined=实线。 */
   lineStyle?: 'dashed' | 'dotted';
-  /** circle 半径（游戏坐标，默认 10）。 */
+  /** circle 半径（游戏坐标，默认 0.15）。 */
   radius?: number;
-  /** 文字族（默认 sans-serif）。 */
-  fontFamily?: string;
-  /** 文字号（游戏坐标，默认 10）。 */
-  fontSize?: number;
-  /** 文字风格。 */
-  fontStyle?: 'normal' | 'italic' | 'oblique';
-  /** 文字变体。 */
-  fontVariant?: 'normal' | 'small-caps';
-  /** 文字背景色（默认无背景）。 */
+  /**
+   * text 字体（官方 font 字段，number|string）：
+   *   0.7 —— 游戏坐标相对尺寸；
+   *   '20px' —— 绝对像素；
+   *   '0.7 serif' / 'bold italic 1.5 Times New Roman' —— CSS 字体串
+   *   （style/variant/weight 前缀 + 尺寸 + 族）。
+   * 官方未载缺省值——渲染端取 0.8 游戏坐标（官方示例值，G1 登记）。
+   */
+  font?: number | string;
+  /** 文字背景色（默认无背景）。**背景启用时文字垂直居中**（官方明载；
+   * 默认按基线点定位）。 */
   backgroundColor?: string;
-  /** 文字背景内边距（游戏坐标，默认 2）。 */
+  /** 文字背景内边距（游戏坐标，默认 0.3）。 */
   backgroundPadding?: number;
   /** 文字对齐（默认 center）。 */
   align?: 'left' | 'center' | 'right';
@@ -215,37 +223,38 @@ export interface TextV {
 export type RoomVisual = LineV | CircleV | RectV | PolyV | TextV;
 
 /** 结构最小守卫（isSnapshot/isDelta 同纪律——只验形状不验值域；样式由渲染
- * 端映射层防御性处理）。 */
+ * 端映射层防御性处理）。几何坐标须有限值：Infinity/NaN 会使下游几何/分段
+ * 路径失控（外部复审 GPT-P1：dashSegments 对无限段长死循环）。 */
 export function isRoomVisual(value: unknown): value is RoomVisual {
   if (typeof value !== 'object' || value === null) return false;
   const v = value as RoomVisual;
+  const num = (n: unknown): boolean => typeof n === 'number' && Number.isFinite(n);
   const isPoint = (p: unknown): boolean =>
-    typeof p === 'object' && p !== null &&
-    typeof (p as { x: unknown }).x === 'number' &&
-    typeof (p as { y: unknown }).y === 'number';
+    typeof p === 'object' && p !== null && num((p as { x: unknown }).x) && num((p as { y: unknown }).y);
   switch (v.type) {
     case 'line':
       return Array.isArray(v.points) && v.points.length === 2 && v.points.every(isPoint);
     case 'circle':
-      return typeof v.x === 'number' && typeof v.y === 'number';
+      return num(v.x) && num(v.y);
     case 'rect':
-      return typeof v.x === 'number' && typeof v.y === 'number' &&
-        typeof v.w === 'number' && typeof v.h === 'number';
+      return num(v.x) && num(v.y) && num(v.w) && num(v.h);
     case 'poly':
       return Array.isArray(v.points) && v.points.length >= 1 && v.points.every(isPoint);
     case 'text':
-      return typeof v.x === 'number' && typeof v.y === 'number' && typeof v.text === 'string';
+      return num(v.x) && num(v.y) && typeof v.text === 'string';
     default:
       return false;
   }
 }
 
-/** RoomFeed：与后端变更集同构的输入接口（渲染器只对契约编程）。 */
+/** RoomFeed：与后端变更集同构的输入接口（渲染器只对契约编程）。
+ * 顺序契约（备忘）：**先 applySnapshot 后 setVisuals**——快照清空该房
+ * visuals（每 tick 全量下发语义），先 setVisuals 会被随后的快照丢弃。 */
 export interface RoomFeed {
   setTerrain(room: string, terrain: TerrainData): void;
   applySnapshot(snapshot: RoomSnapshot): void;
   applyDelta(delta: RoomDelta): void;
-  setVisuals(room: string, visuals: RoomVisual[]): void;
+  setVisuals(room: string, visuals: readonly RoomVisual[]): void;
 }
 
 /** 回放夹具：首快照 + 增量链（方案 §3；ticks[0] 恒为快照，其余为增量）。 */

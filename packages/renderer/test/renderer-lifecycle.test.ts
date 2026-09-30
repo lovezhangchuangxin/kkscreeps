@@ -109,8 +109,8 @@ describe('公共句柄生命周期与真实 ticker 接线', () => {
     const handle = await mounted();
     await Promise.all([handle.destroy(), handle.destroy()]);
     expect(runtime.destroy).toHaveBeenCalledTimes(1);
-    // 相机 6（wheel/pointer×4/contextmenu）+ 拾取悬停 5（pointer×5）
-    expect(runtime.canvas.removeEventListener).toHaveBeenCalledTimes(11);
+    // 相机 6（wheel/pointer×4/contextmenu）+ 拾取悬停 6（pointer×5+lostpointercapture）
+    expect(runtime.canvas.removeEventListener).toHaveBeenCalledTimes(12);
     expect(runtime.listeners.size).toBe(0);
     expect(bitmaps.every((bitmap) => bitmap.close.mock.calls.length === 1)).toBe(true);
     // feed 可作为数据仓库继续使用，不能再调用已销毁场景。
@@ -181,6 +181,8 @@ describe('R6：活动房间 / visuals / 拾取悬停 / 字体 / advanceAnimation
     handle.setCameraState({ x: 1000, y: 1000, zoom: 1 }); // 屏幕中心 (400,400)=格 (10,10)
     const picks: string[] = [];
     const unsub = handle.onPick((r) => picks.push(`${r.cell?.x},${r.cell?.y}:${r.objectId ?? '-'}`));
+    const pickRooms: Array<string | undefined> = [];
+    handle.onPick((r) => pickRooms.push(r.room));
     const hovers: Array<string | null> = [];
     handle.onHover((r) => hovers.push(r === null ? null : `${r.cell?.x},${r.cell?.y}:${r.objectId ?? '-'}`));
     runtime.firePointer('pointermove', { button: 0, clientX: 400, clientY: 400 });
@@ -210,6 +212,7 @@ describe('R6：活动房间 / visuals / 拾取悬停 / 字体 / advanceAnimation
     runtime.firePointer('pointerdown', { button: 0, clientX: 400, clientY: 400 });
     runtime.firePointer('pointerup', { button: 0, clientX: 402, clientY: 403 });
     expect(picks).toEqual(['10,10:c']);
+    expect(pickRooms).toEqual(['W0N0']); // PickResult.room 携带活动房（评审 GPT 设计异议清偿）
     unsub();
     runtime.firePointer('pointerdown', { button: 0, clientX: 400, clientY: 400 });
     runtime.firePointer('pointerup', { button: 0, clientX: 400, clientY: 400 });
@@ -217,7 +220,31 @@ describe('R6：活动房间 / visuals / 拾取悬停 / 字体 / advanceAnimation
     // 销毁后 DOM 监听摘除：合成事件不再触达任何回调
     await handle.destroy();
     expect(() => runtime.firePointer('pointermove', { button: 0, clientX: 700, clientY: 400 })).not.toThrow();
-    expect(runtime.canvas.removeEventListener).toHaveBeenCalledTimes(11);
+    expect(runtime.canvas.removeEventListener).toHaveBeenCalledTimes(12);
+  });
+
+  it('悬停失效机制：切房/数据变化即重估回调（评审 GPT-P2#5，不依赖 pointermove）', async () => {
+    mockAssetIO();
+    const handle = await mounted();
+    const terrain = { codes: new Array(2500).fill(0) };
+    handle.feed.applySnapshot({ room: 'W0N0', time: 0, terrain, objects: [creep(10)] });
+    handle.setCameraState({ x: 1000, y: 1000, zoom: 1 });
+    runtime.ticker.update(16); // 相机状态进帧路径
+    const hovers: Array<string | null> = [];
+    handle.onHover((r) => hovers.push(r === null ? null : `${r.room}:${r.objectId ?? '-'}`));
+    runtime.firePointer('pointermove', { button: 0, clientX: 400, clientY: 400 });
+    expect(hovers).toEqual(['W0N0:c']);
+    // 切到空房（光标未动）→ 重估以新房事实触发：同格无对象 → room 更新、objectId 清空
+    handle.feed.applySnapshot({ room: 'W9N9', time: 0, terrain, objects: [] });
+    handle.setActiveRoom('W9N9');
+    expect(hovers[hovers.length - 1]).toBe('W9N9:-');
+    // 数据变化：对象移入悬停格 → 重估携带新命中
+    handle.feed.applyDelta({ room: 'W9N9', time: 1, upsert: [creep(10)], removedIds: [] });
+    expect(hovers[hovers.length - 1]).toBe('W9N9:c');
+    // 切房到无光标格语义（房间外）→ null：移光标出房验证
+    runtime.firePointer('pointerleave', {});
+    expect(hovers[hovers.length - 1]).toBeNull();
+    expect(runtime.stage.getChildByLabel('layer-hover', true)!.children.length).toBe(0);
   });
 
   it('无地形房切房以素地码重建（评审 B-B2：spy 锚接线；墙残留观感留 harness）', async () => {
@@ -280,9 +307,12 @@ describe('R6：活动房间 / visuals / 拾取悬停 / 字体 / advanceAnimation
     expect(root.x).toBe(1000); // 暂停中 ticker 不推进
     handle.advanceAnimation(500);
     expect(root.x).toBe(1050); // 手动推进同路径
+    const timingsBefore = timings.length;
+    handle.advanceAnimation(0);
     handle.advanceAnimation(-1);
     handle.advanceAnimation(Number.NaN);
-    expect(root.x).toBe(1050); // 宽松入参按 0
+    expect(root.x).toBe(1050); // 不推进
+    expect(timings.length).toBe(timingsBefore); // 零推进真 no-op：不触发计时回调（评审 GPT-P2#10）
     expect(timings.length).toBeGreaterThan(0);
     expect(timings.every((t) => Number.isFinite(t.objectsMs) && Number.isFinite(t.lightingMs))).toBe(true);
   });

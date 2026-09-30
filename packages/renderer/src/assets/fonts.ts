@@ -38,19 +38,25 @@ export function ensureFonts(baseUrl: string): Promise<FontStatus> {
 }
 
 async function load(root: string): Promise<FontStatus> {
-  if (typeof document === 'undefined' || !('fonts' in document)) return 'fallback';
-  const faces = FONT_SPECS.map((spec) => {
-    const url = new URL(`fonts/roboto-latin-${spec.weight}-normal.woff2`, root).href;
-    const face = new FontFace(FONT_FAMILY, `url(${url})`, { weight: spec.weight });
-    document.fonts.add(face);
-    return face.load().then(
-      () => true,
-      () => {
-        document.fonts.delete(face);
-        return false;
-      },
-    );
-  });
-  const results = await Promise.all(faces);
-  return results.every(Boolean) ? 'loaded' : 'fallback';
+  try {
+    if (typeof document === 'undefined' || !('fonts' in document)) return 'fallback';
+    const faces = FONT_SPECS.map((spec) => {
+      const url = new URL(`fonts/roboto-latin-${spec.weight}-normal.woff2`, root).href;
+      const face = new FontFace(FONT_FAMILY, `url(${url})`, { weight: spec.weight });
+      document.fonts.add(face);
+      return face.load().then(
+        () => true,
+        () => {
+          document.fonts.delete(face);
+          return false;
+        },
+      );
+    });
+    const results = await Promise.all(faces);
+    return results.every(Boolean) ? 'loaded' : 'fallback';
+  } catch {
+    // 永不 reject（评审 GPT-P2#9）：构造异常等同加载失败——走 fallback
+    // 路径（缓存随之清除，可重试），调用方 await 不会跳出统一回滚
+    return 'fallback';
+  }
 }

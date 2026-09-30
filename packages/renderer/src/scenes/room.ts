@@ -166,17 +166,17 @@ export class RoomScene {
   update(elapsedMS: number, renderer: Parameters<LightingPass['update']>[0], viewport?: Viewport): void {
     const timed = elapsedMS > 0;
     if (timed) this.terrain.update(elapsedMS / TERRAIN_SPEC.frameBaseMs);
-    const t1 = timed ? performance.now() : 0;
+    const t1 = performance.now();
     // objects 先于 lighting：运动 tween 的 markDirty 同帧进 RT 重渲
     //（消一帧滞后，评审 C建议4）
     if (timed) this.objects?.update(elapsedMS, viewport);
-    const t2 = timed ? performance.now() : 0;
+    const t2 = performance.now();
     this.lighting.update(renderer, this.terrain.renderSize, this.view);
-    const t3 = timed ? performance.now() : 0;
-    if (timed) {
-      this.lastStageMs.objectsMs = t2 - t1;
-      this.lastStageMs.lightingMs = t3 - t2;
-    }
+    const t3 = performance.now();
+    // 每帧刷新计时（评审 GPT-P2#10）：暂停/零推进帧 objects 计 0、lighting
+    // 计实际——防 onFrameTiming 上报陈旧样本误导 R7
+    this.lastStageMs.objectsMs = timed ? t2 - t1 : 0;
+    this.lastStageMs.lightingMs = t3 - t2;
   }
 
   destroy(): void {

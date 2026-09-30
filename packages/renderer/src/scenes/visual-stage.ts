@@ -171,9 +171,10 @@ export class VisualStage {
     if (pts.length < 1) return this.add(new Graphics());
     const g = new Graphics();
     if (pts.length >= 3 && r.fill !== null && r.fill.alpha > 0) {
+      // canvas 语义：开放路径填充按闭合区域计（官方 poly=折线）
       g.poly(pts).fill({ color: r.fill.color, alpha: r.fill.alpha * r.opacity });
     }
-    if (pts.length >= 2) this.strokePath(g, pts, r, r.strokePx, true);
+    if (pts.length >= 2) this.strokePath(g, pts, r, r.strokePx, false); // 折线开放描边（评审 GPT-P1#3）
     return this.add(g);
   }
 
@@ -187,24 +188,28 @@ export class VisualStage {
         style: {
           fontFamily: r.fontFamily,
           fontSize: r.fontSizePx,
-          fill: r.color.color,
-          align: r.align,
+          fontWeight: r.fontWeight,
           fontStyle: r.fontStyle,
           fontVariant: r.fontVariant,
+          fill: r.color.color,
+          align: r.align,
           // v8 text stroke 样式对象；join=round 防 miter 尖刺（canvas 观感近似）
           ...(r.stroke !== null && r.stroke.alpha > 0 && r.strokePx > 0
             ? { stroke: { color: r.stroke.color, width: r.strokePx, join: 'round' as const } }
             : {}),
         },
       });
-      // 官方 align 锚点语义（canvas textAlign）：锚 x=left 0/center .5/right 1；
-      // 垂直取底边（近似 canvas textBaseline=alphabetic，G1 登记）。
+      // 官方契约：x/y 为基线点，align 锚 x=left 0/center .5/right 1（canvas
+      // textAlign 语义）；背景启用时垂直居中（官方明载），无背景取文本框底边
+      // 近似基线（≈基线+descender——G1 登记，待字体实测校准）。
       const ax = r.align === 'left' ? 0 : r.align === 'right' ? 1 : 0.5;
-      text.anchor.set(ax, 1);
+      const ay = r.verticalMiddle ? 0.5 : 1;
+      text.anchor.set(ax, ay);
       if (r.background !== null && r.background.alpha > 0) {
         const bg = new Graphics();
         const pad = r.paddingPx;
-        bg.roundRect(-ax * text.width - pad, -text.height - pad, text.width + pad * 2, text.height + pad * 2, Math.min(pad, text.height / 2));
+        const topLocal = -ay * text.height;
+        bg.roundRect(-ax * text.width - pad, topLocal - pad, text.width + pad * 2, text.height + pad * 2, Math.min(pad, text.height / 2));
         // 背景独立承担 background α×opacity（评审 A-J4：color α 不应淡化背景）
         bg.fill({ color: r.background.color, alpha: r.background.alpha * r.opacity });
         container.addChild(bg);

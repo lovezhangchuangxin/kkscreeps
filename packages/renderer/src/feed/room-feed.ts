@@ -51,8 +51,8 @@ export interface FeedChange {
   actionLogs: ActionLogEntry[];
   says: SayEntry[];
   /** 该房当前全量 visuals（**仓库原引用**——跨增量保持不变，setVisuals 才
-   * 换新引用；消费方勿改动，场景端以引用相等做重建短路）。 */
-  visuals: RoomVisual[];
+   * 换新引用；readonly=消费方不得改动，场景端以引用相等做重建短路）。 */
+  visuals: readonly RoomVisual[];
 }
 
 /**
@@ -66,8 +66,8 @@ export interface FeedView extends RoomFeed {
   objects(room: string): RoomObjectState[];
   /** 房间地形；未设置返回 undefined。 */
   terrain(room: string): TerrainData | undefined;
-  /** 房间当前 visuals（数组副本；元素勿深改）。 */
-  visuals(room: string): RoomVisual[];
+  /** 房间当前 visuals（数组副本；readonly=元素勿深改）。 */
+  visuals(room: string): readonly RoomVisual[];
   /** 已知房间名（插入序）。 */
   roomNames(): string[];
 }
@@ -131,7 +131,7 @@ export class FeedStore implements FeedView {
   }
 
   /** 玩家绘制全量替换（官方 RoomVisual 每 tick 全量下发语义）并通知场景。 */
-  setVisuals(room: string, visuals: RoomVisual[]): void {
+  setVisuals(room: string, visuals: readonly RoomVisual[]): void {
     this.room(room).visuals = [...visuals];
     this.notify(room, [], 'delta');
   }
@@ -159,8 +159,8 @@ export class FeedStore implements FeedView {
     return this.rooms.get(room)?.terrain;
   }
 
-  /** 房间当前 visuals（数组副本；元素勿深改）。 */
-  visuals(room: string): RoomVisual[] {
+  /** 房间当前 visuals（数组副本；readonly=元素勿深改）。 */
+  visuals(room: string): readonly RoomVisual[] {
     return [...(this.rooms.get(room)?.visuals ?? [])];
   }
 

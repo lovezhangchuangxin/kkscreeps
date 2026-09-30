@@ -29,7 +29,8 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    }
+    },
+    "./assets/*": "./assets/*"
   },
   "files": [
     "dist",

@@ -102,10 +102,12 @@ export interface PickResult {
   world: { x: number; y: number };
   /** 格坐标（0..49；出房为 null）。±cell/2 归格（格中心相位，Math.round）。 */
   cell: { x: number; y: number } | null;
-  /** 命中对象 id（该格 z 序最高者，平手取 id 码点序；无对象/出房为
-   * undefined）。按对象**数据格**命中——移动中 creep 以其目标格计，非插值
-   * 渲染位。 */
+  /** 命中对象 id（该格 z 序最高者，平手取 id 字典序——JS 字符串 `<` 即
+   * UTF-16 码元序；无对象/出房为 undefined）。按对象**数据格**命中——移动中
+   * creep 以其目标格计，非插值渲染位。 */
   objectId?: string;
+  /** 拾取时的活动房间（异步消费方区分跨房结果的依据；无活动房为 undefined）。 */
+  room?: string;
 }
 
 /**
@@ -122,8 +124,8 @@ export interface RendererHandle {
   setPlaybackRate(rate: number): void;
   /** 手动推进场景动画 ms（与 ticker 同一场景更新路径，可叠加）：回放 seek、
    * 定帧截图与黄金帧回归用。注入动画时间本身，**不受 setPlaybackRate 影响**
-   * （暂停态下仍可推进）；负数/非有限值按 0 处理。0 不推进动画时间（仍执行
-   * 一次帧路径）。 */
+   * （暂停态下仍可推进）；0 或非有限值无操作（不打帧路径、不触发
+   * onFrameTiming）。 */
   advanceAnimation(ms: number): void;
   /** 当前活动房间；首个 applySnapshot 自动激活，此后经 setActiveRoom 切换。 */
   readonly activeRoom: string | null;
@@ -140,13 +142,17 @@ export interface RendererHandle {
    * 扣除 getBoundingClientRect；几何与命中语义见 PickResult）。 */
   pickAt(screenX: number, screenY: number): PickResult;
   /**
-   * 点击拾取回调（多订阅；返回退订函数）。主键点击且位移 ≤4px（非拖拽）时
-   * 触发；点在房间外时 cell=null/objectId 缺省仍回调（消费方自行过滤）。
+   * 点击拾取回调（多订阅；返回退订函数）。主键点击且**手势期最大位移** ≤4px
+   * （非拖拽）时触发；点在房间外时 cell=null/objectId 缺省仍回调（消费方
+   * 自行过滤）。政策：同一 listener 重复订阅去重（Set 语义）；监听器抛错会
+   * 中断本次后续派发（不隔离，调用方自行容错）。
    */
   onPick(listener: (result: PickResult) => void): () => void;
   /**
-   * 悬停回调（多订阅；返回退订函数）。悬停格或命中对象变化时触发；离开
-   * 画布/房间外回调 null；拖拽中抑制。
+   * 悬停回调（多订阅；返回退订函数）。悬停格/命中对象/活动房变化时触发；
+   * **数据与切房变化同样重估**（活动房 feed 变更、setActiveRoom、相机移动——
+   * 不只依赖 pointermove）；离开画布/房间外回调 null；拖拽中冻结。政策同
+   * onPick（Set 去重、异常不隔离）。
    */
   onHover(listener: (result: PickResult | null) => void): () => void;
   /**
@@ -180,13 +186,12 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
   const cellSize = options.cellSize ?? DEFAULT_CELL_SIZE;
   // 字体与内核初始化并行；两者都就绪才建场景（字体失败不阻塞——G7）
   const fontsPending = options.fontsBaseUrl !== undefined ? ensureFonts(options.fontsBaseUrl) : null;
+  let fontStatus: FontStatus = 'unset';
   const kernel: Kernel = await initKernel({
     container: options.container,
     backgroundColor: options.backgroundColor ?? 0x050505,
     preference: options.preference ?? 'webgpu',
   });
-  let fontStatus: FontStatus = 'unset';
-  if (fontsPending) fontStatus = await fontsPending;
 
   // 视口尺寸取 CSS 逻辑像素（v8 renderer.screen；renderer.width 同为逻辑像素，
   // 但 screen 语义显式）。
@@ -214,6 +219,8 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
   })();
 
   try {
+    // 字体等待纳入统一回滚路径（评审 GPT-P2#9：构造异常时 kernel 须释放）
+    if (fontsPending) fontStatus = await fontsPending;
     camera.attach(kernel.app.canvas);
     if (options.atlasBaseUrl) {
       atlas = await loadAtlas(options.atlasBaseUrl, kernel.app.renderer.resolution);
@@ -265,6 +272,7 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
           if (terrain) room.setTerrain(terrain.codes);
           room.applyObjects(change.objects, change.time, change.events, change.kind, change);
           room.setVisuals(change.visuals);
+          reevaluateHover(); // 活动房数据变化 → 命中可能变化（评审 GPT-P2#5）
         },
         rebuild: (name) => {
           const terrain = feed.terrain(name);
@@ -272,6 +280,7 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
           room.setTerrain(terrain ? terrain.codes : new Array(ROOM_SIZE * ROOM_SIZE).fill(0));
           room.applyObjects(feed.objects(name), feed.summary(name)?.time ?? 0, [], 'snapshot');
           room.setVisuals(feed.visuals(name));
+          reevaluateHover();
         },
       },
       (name) => feed.summary(name) !== undefined,
@@ -296,57 +305,89 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
       const objectId = cell !== null && current !== null
         ? resolvePickObject(cell, feed.objects(current))
         : undefined;
-      return { world, cell, objectId };
+      return { world, cell, objectId, room: current ?? undefined };
     };
 
     const canvasEl = kernel.app.canvas;
-    let pressedClient: { x: number; y: number } | null = null;
+    // 手势状态（评审 GPT-P2#6）：记录按下指针 id 与手势期最大位移——多指不
+    // 串扰、拖出再拖回不触发、capture 丢失即复位
+    let pressedPointerId: number | null = null;
+    let pressedStart: { x: number; y: number } = { x: 0, y: 0 };
+    let pressedMaxDisp = 0;
+    let lastClient: { x: number; y: number } | null = null;
     let lastHover: PickResult | null = null;
     const fireHover = (result: PickResult | null): void => {
       const changed = (result === null) !== (lastHover === null) ||
         (result !== null && lastHover !== null && (
           result.cell?.x !== lastHover.cell?.x ||
           result.cell?.y !== lastHover.cell?.y ||
-          result.objectId !== lastHover.objectId
+          result.objectId !== lastHover.objectId ||
+          result.room !== lastHover.room
         ));
       lastHover = result;
       if (!changed) return;
       room.setHighlight(result?.cell ?? null);
       for (const listener of hoverListeners) listener(result);
     };
+    /** 数据/房间/相机变化后的悬停重估（评审 GPT-P2#5：命中契约要求对象/房
+     * 变化即触发，不能只等 pointermove）。 */
+    const reevaluateHover = (): void => {
+      if (lastClient === null) return;
+      const rect = canvasEl.getBoundingClientRect();
+      const result = pickFromScreen(lastClient.x - rect.left, lastClient.y - rect.top);
+      fireHover(result.cell === null ? null : result);
+    };
     const onPointerDown = (e: PointerEvent): void => {
-      if (e.button !== 0) return;
-      pressedClient = { x: e.clientX, y: e.clientY };
+      if (e.button !== 0 || pressedPointerId !== null) return;
+      pressedPointerId = e.pointerId;
+      pressedStart = { x: e.clientX, y: e.clientY };
+      pressedMaxDisp = 0;
     };
     const onPointerMove = (e: PointerEvent): void => {
-      if (pressedClient !== null) return; // 拖拽中抑制悬停
+      lastClient = { x: e.clientX, y: e.clientY };
+      if (pressedPointerId !== null) {
+        if (e.pointerId === pressedPointerId) {
+          pressedMaxDisp = Math.max(pressedMaxDisp, Math.hypot(e.clientX - pressedStart.x, e.clientY - pressedStart.y));
+        }
+        return; // 手势期间悬停冻结
+      }
       const rect = canvasEl.getBoundingClientRect();
       const result = pickFromScreen(e.clientX - rect.left, e.clientY - rect.top);
       fireHover(result.cell === null ? null : result);
     };
     const onPointerUp = (e: PointerEvent): void => {
-      if (e.button !== 0) return; // 非主键释放不改按压态、不触发拾取
-      const start = pressedClient;
-      pressedClient = null;
-      if (start === null) return;
-      if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > PICK_SLOP_PX) return;
+      if (e.pointerId !== pressedPointerId) return; // 非按下指针的释放不触发
+      const disp = Math.max(pressedMaxDisp, Math.hypot(e.clientX - pressedStart.x, e.clientY - pressedStart.y));
+      pressedPointerId = null;
+      if (disp > PICK_SLOP_PX) return; // 手势期最大位移（非端点距离）判定拖拽
       const rect = canvasEl.getBoundingClientRect();
       const result = pickFromScreen(e.clientX - rect.left, e.clientY - rect.top);
       for (const listener of pickListeners) listener(result);
     };
-    const onPointerCancel = (): void => {
-      pressedClient = null;
+    const onPointerCancel = (e: PointerEvent): void => {
+      if (e.pointerId === pressedPointerId) pressedPointerId = null;
+    };
+    const onLostPointerCapture = (e: PointerEvent): void => {
+      // capture 丢失后按压态即失效，悬停不再被抑制（评审 GPT-P2#6）
+      if (e.pointerId === pressedPointerId) pressedPointerId = null;
     };
     const onPointerLeave = (): void => {
-      pressedClient = null;
+      pressedPointerId = null;
       fireHover(null);
     };
 
     // ---- 帧循环：唯一时间入口（AnimationClock）；计时诊断普通数据面 ----
     // scaled=false 为手动定帧推进（advanceAnimation）——注入的是动画时间
     // 本身，不经倍率（暂停态下 seek/截图/黄金帧仍可用；语义见 TSDoc）。
+    let lastCamState: CameraState | null = null;
     const advanceFrame = (elapsedMS: number, scaled = true): void => {
       camera.syncViewport();
+      // 相机变化改变光标下的世界点 → 悬停重估（评审 GPT-P2#5；引用比较——
+      // camera-math 全部返回新对象）
+      if (camera.state !== lastCamState) {
+        lastCamState = camera.state;
+        reevaluateHover();
+      }
       // deltaMS 有 minFPS 截断且受 speed 缩放；动作必须按实际经过时间推进。
       const { width, height } = viewSize();
       const cam = camera.state;
@@ -368,6 +409,7 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
     canvasEl.addEventListener('pointermove', onPointerMove);
     canvasEl.addEventListener('pointerup', onPointerUp);
     canvasEl.addEventListener('pointercancel', onPointerCancel);
+    canvasEl.addEventListener('lostpointercapture', onLostPointerCapture);
     canvasEl.addEventListener('pointerleave', onPointerLeave);
     disconnect = () => {
       unsubscribe();
@@ -377,6 +419,7 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
       canvasEl.removeEventListener('pointermove', onPointerMove);
       canvasEl.removeEventListener('pointerup', onPointerUp);
       canvasEl.removeEventListener('pointercancel', onPointerCancel);
+      canvasEl.removeEventListener('lostpointercapture', onLostPointerCapture);
       canvasEl.removeEventListener('pointerleave', onPointerLeave);
       pickListeners.clear();
       hoverListeners.clear();
@@ -427,8 +470,9 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
       },
       advanceAnimation(ms: number): void {
         if (destroyed) return;
-        // 负数/非有限值按 0 处理（诊断面宽松入参，不抛错打断截图脚本）
-        advanceFrame(typeof ms === 'number' && Number.isFinite(ms) && ms > 0 ? ms : 0, false);
+        // 0/负数/非有限值无操作（评审 GPT-P2#10：不打帧路径、不触发计时回调）
+        if (typeof ms !== 'number' || !Number.isFinite(ms) || ms <= 0) return;
+        advanceFrame(ms, false);
       },
       get activeRoom(): string | null {
         return activeRoomCtrl.activeRoom;
