@@ -83,7 +83,7 @@
 | getTerrain | rooms.js:1134-1137 | ✅ | — |
 | **createFlag / createConstructionSite** | rooms.js:978-1027 / :1029-1097 | 🪑 countStub | **P2 转真**：预检（配额/覆盖/RCL/房名）+ room 级 intent——通道与结算执行器已交付（m2-playable 4.3 勘正口径）；返回官方 name/id 形态 |
 | findPath | rooms.js:863-970（寻路） | ⬜（无此面） | **P2 直线桩**（findPathTo 同款退化形态——有可调用面不冒充寻路，灰区表既有登记延续；真语义归 FFI 批） |
-| findExitTo | rooms.js:1130-1132（map.findExit 转发） | ⬜ | **P2 真化**（依赖 P3 map 族，官方同形转发） |
+| findExitTo | rooms.js:1130-1132（map.findExit 转发） | ⬜ | **P3 真化**（勘正：P2 盘点误排——依赖 P3 map 族先行，官方同形转发；见 §8 P2 记录） |
 | serializePath/deserializePath（静态） | rooms.js:528-530 | ✅ | — |
 | Room.Terrain get/getRawBuffer | rooms.js:1223-1241 | ✅（b64 紧凑协议） | — |
 | RoomVisual 9 面 | rooms.js:1138-1220 | 🪫 Proxy 桩 | **P6 真化**（收集面官方同形：链式返回 this、getSize/export/import 真值；ops 收集后经 endTick visual 通道带出——消费归 F2，登记） |
@@ -137,8 +137,8 @@
 
 | 命名空间 | 状态/处置 |
 |---|---|
-| ConstructionSite（6 getter ✅ + remove 🪑） | **P2 转真**（Action::RemoveSite 对象级 intent + 结算摘除） |
-| Flag（name/color/secondaryColor/memory ✅；remove/setPosition/setColor 🪫） | **P2 转真**（对象级 intent + 结算——FlagObj 直改） |
+| ConstructionSite（6 getter ✅ + remove 🪑） | **P2 转真**（~~对象级~~ **room 级** intent——勘正：官方 construction-sites.js:50-62 走 pushByName('room','removeConstructionSite')，非对象级 Action；RoomIntent::RemoveConstructionSite + 结算摘除+退款） |
+| Flag（name/color/secondaryColor/memory ✅；remove/setPosition/setColor 🪫） | **P2 转真**（~~对象级~~ **room 级** intent——勘正同上：flags.js:57-91 三方法均 pushByName('room', 'removeFlag'/'createFlag') 组合；RoomIntent::RemoveFlag + FlagObj 尾追 owner） |
 | CostMatrix set/get/clone ✅；serialize/deserialize 🪑 | **P6 真化**（纯 JS 位打包，官方 :40-48 同形；为 FFI 批备好输入形态） |
 | PathFinder.search/use | 维持桩（FFI 批）；use 官方 deprecated |
 | RawMemory get/set/activate ✅；segments 4 面 🪑（setActiveSegments/getActiveSegments/getSegment/setSegment） | **P6 真化**（官方 runtime.js:122-135/193/250-267：≤10 活跃段/100KB 上限/endTick 带出+宿主持久+下 tick 注入；prelude segmentsBackend 已备） |
@@ -247,7 +247,7 @@ getSize 常量、export 序列化/import 还原。真化=收集语义+endTick vi
 |---|---|---|---|
 | P0 | O2 领域模块归属 + pub rooms 收敛（§2）+ 方案入库 | kk-world（domain/ 新模块、world.rs、snapshot.rs/world_json.rs 搬移）、settle/mod.rs、storage-bench、sandbox.rs | 小（纯结构） |
 | P1 | Creep 尾巴：rangedAttack/rangedMassAttack/getActiveBodyparts/notifyWhenAttacked 转真 + saying 真化 + CREEP_METHODS 桩表清理 | prelude/creep.js/creep_resources.js + saying 投影字段（world_json） | 小 |
-| P2 | 创建族与 RoomPosition/Room 尾巴：createFlag/createConstructionSite 四面转真 + Flag.remove/setPosition/setColor + ConstructionSite.remove + findClosestByRange + findExitTo + findPath 直线桩 + room.storage/terminal 回填 + Room.toJSON | prelude/room.js/room-position.js/sites-flags.js + intent.rs（对象级 3 新 Action + 白名单）+ settle 执行器 4 小面 | 中 |
+| P2 | 创建族与 RoomPosition/Room 尾巴：createFlag/createConstructionSite 四面转真 + Flag.remove/setPosition/setColor + ConstructionSite.remove + findClosestByRange + findPath 直线桩 + room.storage/terminal 回填 + Room.toJSON（findExitTo 顺延 P3——map 依赖，见 §8） | prelude/room.js/room-position.js/sites-flags.js + intent.rs（**room 级** 2 新 RoomIntent + 白名单——§1.7 勘正）+ settle 执行器（createFlag 挂主/removeFlag 域内删/removeConstructionSite 门+退款 + 组序排序） | 中 |
 | P3 | Game.map 族（describeExits/findRoute/findExit/getRoomStatus/isRoomAvailable/getRoomLinearDistance）+ Game.notify + cpu.getHeapStatistics/halt + cpuLimit | prelude/game.js/room.js（map 段）+ ops.rs 两 op + intent global 通道 + PlayerState.notifications | 中 |
 | P4 | 结构读取面：ContainerObj typed 变体（含衰减结算）+ Generic 静态折叠 getter 族（Lab/Terminal/PowerSpawn/Nuker/Factory/Portal/KeeperLair/PowerBank/InvaderCore/Road.ticksToDecay）+ Resource.energy + 折叠函数归 domain 模块 | schema/room.rs、place、两投影、settle、prelude/structures*.js | 中大 |
 | P5 | 结构动作族：TowerObj/LinkObj typed 变体 + tower.attack/heal/repair + link.transferEnergy + rampart.setPublic + spawn.canCreateCreep/createCreep | schema、place、settle（towers/links 执行器+冷却/耗能）、两投影、prelude | 大 |
@@ -326,6 +326,83 @@ tower/link 复用其投影/折叠模式）。P6 收尾。**每片一个完整批
    仅剩 commit_room/register_room/room_mut，各有其 bump 纪律）。
 
 ## 8. 执行记录（随片回写）
+
+### P2（创建族：createFlag/createConstructionSite 四面 + Flag/Site 增删改 + findClosestByRange + findPath 桩 + storage/terminal 回填 + toJSON）——已收口
+
+- **落地**：①schema——FlagObj 尾追 owner（v1 内演化；官方 flags 按玩家
+  私有——data.js:140 `rooms.flags` 按 user 全局查询，两玩家可同名旗）；
+  ②intent.rs——RoomIntent::RemoveFlag{name}/RemoveConstructionSite{id}
+  （**room 级**——§1.7 勘正：官方三文件全走 pushByName('room',…)）+
+  parse 白名单；③settle/room.rs——组序稳定排序（room_intent_rank 五序
+  对齐 room/intents.js:9-36，销账 compatibility.md「执行序」登记）+
+  remove_flag（按 owner 域内删+$VLINE$/$TILDE$ 转义）+
+  remove_construction_site（所有权门 site.owner∨controller.owner +
+  progress>1 退 floor(progress/2) 能量）+ create_flag 挂主；④prelude——
+  room.createFlag/createConstructionSite 全预检面（fetchXY/边界/FLAGS_LIMIT/
+  色白名单/名自增/COST 门/RCL 配额/对象地形双占位/总量帽，utils.js:128-190/
+  338-354 适配原始投影形态）、RoomPosition 两面委托、Flag.remove/
+  setPosition/setColor 与 ConstructionSite.remove（组合 intent）、
+  findClosestByRange 真化（room.find+getRangeTo 严格 <，官方 :1546-1576）、
+  findPath 直线退化桩（:863-970 形态面）、room.toJSON（:540-549）、
+  storage/terminal 回填；⑤投影——他人旗滤除+旗 owner 键。
+- **评审三路（官方语义/Rust+JS 正确性/测试与归因）三 PASS 带条件，清偿
+  当日完成**：**P1-1（评审 1，成立）**——createFlag 缺官方 :1022 本地
+  Game.flags[name]=new Flag(...) 装配（同 tick 旗不可读，注释先行谎称已有）
+  → 补 wrapObject 合成壳（name/color/secondaryColor 定格、无 id——官方旗
+  无 getObjectById 面）+ e2e 同 tick 读锁。**P2 共识五项**——①不可见房
+  自家旗蒸发（官方旗 user 全局集合 vs 我方 !room_visible 全裁）→
+  object_owner 补 Flag 臂 + 破例导出（与工地同款两语义正交）+ 视野归集
+  过滤显式跳过 Flag（data.js:113-116——加臂后必须，原「无 owner 天然不授」
+  失效）+ game.js 兜底分支同款跳过 + e2e 双断言锁（旗存活+房不进
+  Game.rooms）；②findPath 缺 toPos.roomName 门（:904-906）→ 补齐；
+  ③裸全局常量 19 个（FLAGS_LIMIT/COLORS_ALL/CONSTRUCTION_COST/TOP 族/
+  ERR 族——官方闭包 C 免疫玩家覆写）→ 加载期捕获；④extractor 互斥过用
+  （官方 :178-181 在互斥前提前返回——我方循环内互斥先杀）+ 引擎缺矿物门
+  与免墙检 → prelude continue 跳过+引擎 has_mineral 门+`!=extractor` 免墙；
+  ⑤角格边界优先序（官方 :132-135 顺序 if——y 边后写胜出；我方三元链
+  x 边优先）→ 两侧改顺序赋值逐字复刻。**P1-1（评审 3，主张
+  不成立——清偿复审以棘轮实证纠偏）**——评审 3 主张「+170 归因错误、
+  应为 121（1575−1454）」：其前提拿 P1 地板当基线，而棘轮基线取
+  HEAD~1=P0 提交（报告 1405）——**初记 +170 本就是对的 flips 计数**
+  （1405+170=1575 恰合）；清偿期曾据评审 3 误改 note 为 +121，棘轮
+  复跑（转绿 173）实证后纠正。教训：归因数字以门禁自身 flips 计数
+  为准，评审的算术主张同样要走实测取证（「复核评审共识本身」纪律
+  的又一实例）。**其余**：spawn 名域跨房
+  自家工地（roomObjs 单房 → Game.constructionSites 全房，官方
+  register.constructionSites 域；敌方 spawn 分量缺失登记 compatibility.md）；
+  dispatch-order 测试勘正（原异名 new/old 任何序都绿不锁序——改同名单名
+  重建=真序敏感杀伤线）；陈注释四处（room.js:667 谎称装配/sites-flags A4
+  桩块/setPosition 越界主张不实——官方仅 undefined 拦截，越界结算静默丢/
+  world_json 「flag 无 owner」）；compatibility.md 两销账（Game.flags 成员
+  资格/room intent 执行序）+ 七新登记（findPath 桩/findClosestByRange 平价/
+  敌 spawn 名分量/引擎旗名单房域/转义不还原/双删退款形态/无主旗兜底）；
+  findExitTo 顺延 P3 归档（map 依赖）；overmind 基线形态复取证（stub-flag
+  错误消失，仅剩 setPublicSegments ×2000——P6 消失）。
+- **验证**：workspace 297 绿（+6：引擎 6=旗主域/按主域删/换色移位组合/
+  退款/所有权门/组序；embed 3 场景入串行链——创建+双观察者私有性/门与
+  helpers/回填）/clippy 0/fmt 过/release+棘轮——实现批 **1405→1575
+  （+170 转绿零未豁免转红）**+清偿批 **1575→1578（+3：FLAG-001/002/003
+  =本地 Game.flags 装配族）**，合计对 HEAD~1 基线 **+173 转绿**、64 工地
+  族/21 旗族/13 toJSON/8 旧路桩收 ripple/4 roomposition 族（评审 3 复核
+  家族分布）；ratchet-allow 惰性条目清理（inter-room transition 自 P0
+  基线吸收后恒不命中，用例保持 failed 属既定缺口）；**「过半」达成（
+  1578/2914=54.15%）**；地板上调 ratchet.json+README 同步+报告随批入库
+  （A6 先例）；
+  bot 三基线（tooangel console error tick=0 人工确认/overmind 形态复取证
+  归档——stub-flag 错误消失、colony 初始化深入浮出鸭子类型探针噪声
+  （旗 .ref/spawn.storeCapacity，官方亦无此面）→ probe 增类级定向免计
+  PROBE_IGNORE_SCOPED 保验收口径、missing_api 归零/wasm/skipped_penalty
+  全 0，三判定均通过）；perf 四相当日 A/B 持平（两跑 0.125/0.210/0.031/
+  0.467、0.125/0.212/0.032/0.471——对基线 0.124/0.209/0.032/0.467，
+  settle 金丝雀稳定；一次整机抬升离群经复跑甄别为机器态）。
+- **清偿复审（复核评审共识本身，独立官方实读+复跑）**：13 项 12 PASS
+  +1 PARTIAL——PARTIAL 即本地旗壳 .room 恒 undefined（官方 RoomObject.call
+  rooms.js:1651 挂 Room 实例）→ 当日一行修复+e2e shellroom 锁；行号漂移
+  三处勘正（utils.js 四条 if :132-135/extractor 对象分支 :178-181/spawn
+  名域 :1048·:1084-1087）；旗类缺 RoomObject.prototype 中间层（先在面，
+  M0 桩类期）登记 compatibility.md 随类层级批次；**评3「+170 应为 121」
+  主张经基线取证（ratchet.mjs:136 HEAD~1=30f6c2d 报告 1405）确认不成立**。
+  复审独立复跑：297 绿/clippy 0/fmt 过。
 
 ### P1（Creep 尾巴：ranged 族 + getActiveBodyparts + notifyWhenAttacked + saying + 桩表清理）——已收口
 

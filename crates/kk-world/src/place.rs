@@ -261,6 +261,8 @@ fn normalize_flag(spec: &Value, x: u8, y: u8) -> FlagObj {
             .and_then(Value::as_u64)
             .unwrap_or(color as u64)
             .min(u8::MAX as u64) as u8,
+        // M2B 扩面 P2：owner（缺省 None=无主旗——投影按全局可见兜底）
+        owner: spec_str(spec, "owner").map(str::to_string),
     }
 }
 

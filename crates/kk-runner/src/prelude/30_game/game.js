@@ -342,9 +342,10 @@
     } else {
       for (let i = 0; i < worldObjs.length; i++) {
         const o = worldObjs[i];
-        // 归集跳过表（data.js:113-116）：flag/工地不授房视野
+        // 归集跳过表（data.js:113-116）：flag/工地不授房视野（M2B P2 清偿：
+        // 旗有 owner 后此回退分支须显式跳过——主路径 Rust 侧过滤同款）
         const own = o.owner !== undefined ? o.owner : o.user;
-        if (own === gw.viewerName && o.type !== 'constructionSite') {
+        if (own === gw.viewerName && o.type !== 'constructionSite' && o.type !== 'flag') {
           __reflectApply(__setAdd, visibleRooms, [o.room]);
         }
       }
@@ -564,6 +565,12 @@
       // controllersClaimedInTick（creeps.js:845——GCL 门的同 tick 已 claim 计数）
       gw.lastActivateSafeMode = null;
       gw.controllersClaimedInTick = 0;
+      // M2B 扩面 P2：创建族 per-tick 计数（官方 game 层闭包每 tick 新建的
+      // 等价物——rooms.js 的 createdFlagNames/createdConstructionSites/
+      // createdSpawnNames，:1015/:1037-1043/:1078-1087 消费）
+      gw.createdFlagNames = new __Set();
+      gw.createdConstructionSites = 0;
+      gw.createdSpawnNames = new __Set();
       // 官方每 tick init（runtime.js:471-484 / make.js:160 等价物）：RawMemory
       // **重建**（官方 rawMemory 是 _start 局部变量每 tick 新建——_parsed 单
       // tick 生命周期；玩家可删可换全局绑定，每 tick 恢复）、Memory 重装懒

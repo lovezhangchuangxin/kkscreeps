@@ -47,10 +47,24 @@
   // 此二属性（RoomObject 只有 pos），look 区域扫描的 obj.x||obj.pos.x 官方逐字
   // 回退式（rooms.js:728）与玩家防御性访问在官方同为 undefined（片 3a 评审 P3）
   const PROBE_IGNORE = new Set(['then', 'constructor', '__proto__', 'prototype', 'inspect', 'toJSON', 'nodeType', 'length', 'name', 'pos', '__packedPos', 'x', 'y']);
+  // 类级定向免计（M2B 扩面 P2 清偿）：bot 鸭子类型探测触及「官方亦无此面」
+  // 的成员——语义上双侧 undefined 非 API 缺口，不应进验收 missing 桶。
+  // overmind 两例：旗 .ref 特性探测（官方 flags.js 无 ref 面）；spawn 读
+  // storeCapacity（官方仅 container/storage/terminal/tombstone 有，
+  // structures.js:157/:692/:710——spawn 表无，我方同构）。
+  // 取 basePath 的类前缀（'Flag:harvest:001cef' → 'Flag'；无 ':name' 后缀的
+  // 标签原样），类名不含 ':'。只作用于 get-trap（验收桶）；has-trap 低置信
+  // 桶不参与验收，免计无必要
+  const PROBE_IGNORE_SCOPED = new Set(['Flag.ref', 'StructureSpawn.storeCapacity']);
+  const classOfLabel = (basePath) => {
+    const i = basePath.indexOf(':');
+    return i === -1 ? basePath : basePath.slice(0, i);
+  };
   function probe(target, basePath) {
     return new Proxy(target, {
       get(t, prop) {
-        if (typeof prop === 'string' && !(prop in t) && !PROBE_IGNORE.has(prop)) {
+        if (typeof prop === 'string' && !(prop in t) && !PROBE_IGNORE.has(prop)
+          && !PROBE_IGNORE_SCOPED.has(classOfLabel(basePath) + '.' + prop)) {
           reportMissing(basePath + '.' + prop);
         }
         return t[prop];

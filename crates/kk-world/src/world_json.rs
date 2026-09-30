@@ -44,8 +44,10 @@ impl World {
                         // 官方视野归集（driver/lib/runtime/data.js:113-116）显式
                         // 跳过 flag 与 constructionSite——工地不授房视野（自审
                         // P2：工地授视野与官方相反，且 A4 接线 createConstructionSite
-                        // 后变成玩家可自主触发的持续视野）。flag 无 owner 天然不授
-                        !matches!(o, RoomObject::ConstructionSite(_))
+                        // 后变成玩家可自主触发的持续视野）。M2B P2 清偿：旗有
+                        // owner 后必须显式跳过（原「无 owner 天然不授」失效）——
+                        // 旗同样不授房视野
+                        !matches!(o, RoomObject::ConstructionSite(_) | RoomObject::Flag(_))
                             && crate::domain::object_owner(o).as_deref() == Some(user)
                     })
                 })
@@ -84,16 +86,28 @@ impl World {
             rooms.insert(name.clone(), Value::Object(entry));
             let room_visible = visible.contains(name);
             for (id, object) in &state.objects {
+                // M2B 扩面 P2：旗按玩家私有（官方 flags 是 per-user 集合，
+                // runtimeData 只注入查看者自己的旗——data.js flags 面；他人/
+                // 无主旗不进该查看者的投影。None 面=内部全量消费不受滤）
+                if let Some(viewer) = user
+                    && let RoomObject::Flag(f) = object
+                    && f.owner.as_deref().is_some_and(|o| o != viewer)
+                {
+                    continue;
+                }
                 if !room_visible {
-                    // 自家工地破例导出：官方按 user 全量拉自家对象
-                    //（data.js:103），Game.constructionSites 收全部自家工地含
-                    // 不可见房（game.js:366-374）——工地不授视野（可见性判定）
-                    // 与工地全集进 Game.constructionSites（装配面）是两个正交
-                    // 官方语义，裁掉工地视野后此破例使全集仍成立
-                    let own_site = matches!(object, RoomObject::ConstructionSite(_))
-                        && crate::domain::object_owner(object).as_deref()
-                            == Some(user.unwrap_or(""));
-                    if !own_site {
+                    // 自家私有集合破例导出（三路评审 P2 清偿，工地先例）：
+                    // 官方按 user 全量拉自家对象（data.js:103）——工地全集进
+                    // Game.constructionSites 含不可见房（game.js:366-374）；
+                    // 旗全集进 Game.flags（data.js:140 `rooms.flags` 按 user
+                    // 全局查询，不按房圈定）。两语义与「不授视野」（data.js:
+                    // 113-116 跳过表）正交——破例导出不等于授视野
+                    let own_private = matches!(
+                        object,
+                        RoomObject::ConstructionSite(_) | RoomObject::Flag(_)
+                    ) && crate::domain::object_owner(object).as_deref()
+                        == Some(user.unwrap_or(""));
+                    if !own_private {
                         continue;
                     }
                 }
@@ -534,11 +548,19 @@ pub(crate) fn object_json(
             "id": id_str, "room": room, "x": o.x, "y": o.y,
             "amount": o.amount,
         }),
-        RoomObject::Flag(o) => json!({
-            "type": "flag",
-            "id": id_str, "room": room, "x": o.x, "y": o.y,
-            "name": o.name, "color": o.color, "secondaryColor": o.secondary_color,
-        }),
+        // M2B 扩面 P2：owner 键（Some 才落——per-viewer 过滤在
+        // world_json_impl 的对象循环，None=无主旗全局可见兜底）
+        RoomObject::Flag(o) => {
+            let mut v = json!({
+                "type": "flag",
+                "id": id_str, "room": room, "x": o.x, "y": o.y,
+                "name": o.name, "color": o.color, "secondaryColor": o.secondary_color,
+            });
+            if let Some(owner) = &o.owner {
+                v["owner"] = json!(owner);
+            }
+            v
+        }
         // B3：官方 DB 形态（_die.js:22-34）——ticksToDecay 为 getter
         // （tombstones.js:36 `decayTime - runtimeData.time`），与 creep 的
         // ticksToLive 同款折叠投影；creepBody 投类型名数组（官方存形态）；

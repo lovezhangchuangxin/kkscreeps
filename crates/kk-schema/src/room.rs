@@ -381,6 +381,10 @@ crate::kk_schema! {
 kk_schema! {
     /// 旗帜。官方 flag 是独立集合（processor.js:22 bulkFlags，不参与 roomObjects
     /// 循环）；M1 折进 RoomObject 变体是故意简化，投影层注意官方形状差异。
+    /// M2B 扩面 P2（v1 内演化，尾部追加）：owner——官方 flags 按玩家私有
+    /// （flags 集合带 user；Game.flags/find(FIND_FLAGS)/look 均只见自家，
+    /// removeFlag 只删自家同名旗——两玩家可各有同名旗）。None=旧夹具/无主
+    /// 旗（投影按全局可见兜底，与 M1 行为兼容）。
     pub FlagObj {
         (pub id: u64)
         (pub x: u8)
@@ -388,6 +392,7 @@ kk_schema! {
         (pub name: str)
         (pub color: u8)
         (pub secondary_color: u8)
+        (pub owner: opt str)
     }
 }
 

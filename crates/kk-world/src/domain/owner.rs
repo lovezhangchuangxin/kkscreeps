@@ -19,6 +19,10 @@ pub fn object_owner(object: &RoomObject) -> Option<std::borrow::Cow<'_, str>> {
         RoomObject::Storage(o) => Some(o.owner.as_str().into()),
         RoomObject::Controller(o) => o.owner.as_deref().map(Into::into),
         RoomObject::ConstructionSite(o) => o.owner.as_deref().map(Into::into),
+        // M2B 扩面 P2 清偿：旗归属——消费面是旗私有投影（world_json 他人旗
+        // 过滤+不可见房自家旗破例）；视野归集侧官方跳过表不含旗
+        //（data.js:113-116），归集过滤须显式跳过 Flag 不授房视野
+        RoomObject::Flag(o) => o.owner.as_deref().map(Into::into),
         RoomObject::Tombstone(o) => o.owner.as_deref().map(Into::into),
         RoomObject::Ruin(o) => o.owner.as_deref().map(Into::into),
         // B4：extractor 官方带 user（build.js:116/:215-219）——有主提取器为

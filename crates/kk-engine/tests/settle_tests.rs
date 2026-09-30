@@ -17,6 +17,8 @@ mod combat_heal;
 mod combat_ranged;
 #[path = "settle_tests/controller_safemode.rs"]
 mod controller_safemode;
+#[path = "settle_tests/m2b_creation_family.rs"]
+mod m2b_creation_family;
 #[path = "settle_tests/minerals_and_boost.rs"]
 mod minerals_and_boost;
 #[path = "settle_tests/misc_and_notify.rs"]

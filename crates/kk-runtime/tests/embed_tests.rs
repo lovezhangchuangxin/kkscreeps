@@ -12,6 +12,8 @@ mod embed_channels_and_families;
 mod embed_roundtrip_contract;
 #[path = "embed_tests/embed_strictness_and_partial_commit.rs"]
 mod embed_strictness_and_partial_commit;
+#[path = "embed_tests/m2b_creation_family.rs"]
+mod m2b_creation_family;
 #[path = "embed_tests/m2b_creep_tails.rs"]
 mod m2b_creep_tails;
 #[path = "embed_tests/stop_run_regression.rs"]
@@ -22,6 +24,7 @@ use dual_room_live_fire::*;
 use embed_channels_and_families::*;
 use embed_roundtrip_contract::*;
 use embed_strictness_and_partial_commit::*;
+use m2b_creation_family::*;
 use m2b_creep_tails::*;
 use stop_run_regression::*;
 
@@ -61,6 +64,9 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     stop_run_commit_blind_impl()?;
     stop_run_failure_and_discard_impl()?;
     stop_run_floor_window_impl()?;
+    m2b_create_flag_and_site_e2e_impl()?;
+    m2b_creation_gates_and_helpers_e2e_impl()?;
+    m2b_storage_terminal_backfill_e2e_impl()?;
     m2b_ranged_attack_e2e_impl()?;
     m2b_saying_visibility_e2e_impl()?;
     m2b_notify_when_attacked_creep_e2e_impl()?;

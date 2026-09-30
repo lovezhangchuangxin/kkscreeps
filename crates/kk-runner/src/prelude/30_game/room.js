@@ -33,6 +33,28 @@
   const ERR_INVALID_ARGS = globalThis.ERR_INVALID_ARGS;
   const TERRAIN_MASK_WALL = globalThis.TERRAIN_MASK_WALL;
   const TERRAIN_MASK_SWAMP = globalThis.TERRAIN_MASK_SWAMP;
+  // 创建族/findPath 消费的常量加载期捕获（M2B 扩面 P2 清偿，官方闭包 C
+  // 免疫玩家覆写——sites-flags.js 同款纪律）
+  const C_CONTROLLER_STRUCTURES = globalThis.CONTROLLER_STRUCTURES;
+  const C_CONSTRUCTION_COST = globalThis.CONSTRUCTION_COST;
+  const C_MAX_CONSTRUCTION_SITES = globalThis.MAX_CONSTRUCTION_SITES;
+  const C_FLAGS_LIMIT = globalThis.FLAGS_LIMIT;
+  const C_COLORS_ALL = globalThis.COLORS_ALL;
+  const C_COLOR_WHITE = globalThis.COLOR_WHITE;
+  const C_ERR_NOT_OWNER = globalThis.ERR_NOT_OWNER;
+  const C_ERR_RCL_NOT_ENOUGH = globalThis.ERR_RCL_NOT_ENOUGH;
+  const C_ERR_INVALID_TARGET = globalThis.ERR_INVALID_TARGET;
+  const C_ERR_FULL = globalThis.ERR_FULL;
+  const C_ERR_NAME_EXISTS = globalThis.ERR_NAME_EXISTS;
+  const C_OK = globalThis.OK;
+  const C_TOP = globalThis.TOP;
+  const C_TOP_LEFT = globalThis.TOP_LEFT;
+  const C_TOP_RIGHT = globalThis.TOP_RIGHT;
+  const C_BOTTOM = globalThis.BOTTOM;
+  const C_BOTTOM_LEFT = globalThis.BOTTOM_LEFT;
+  const C_BOTTOM_RIGHT = globalThis.BOTTOM_RIGHT;
+  const C_LEFT = globalThis.LEFT;
+  const C_RIGHT = globalThis.RIGHT;
 
   // ---------------------------------------------------------------- Terrain
   // 官方 rooms.js:1223-1241 Room.Terrain 逐字移植：闭包式对象（非 class），
@@ -143,13 +165,25 @@
       creep: [], source: [], mineral: [], deposit: [], structure: [], flag: [],
       constructionSite: [], tombstone: [], ruin: [], nuke: [], powerCreep: [],
     };
+    // 本房 raw 投影对象（M2B 扩面 P2：createConstructionSite 的配额/占位
+    // 预检面——checkControllerAvailability/checkConstructionSite 消费）+
+    // storage/terminal 回填（官方 game.js:330+ buildGame 装配期挂结构实例）
+    const roomObjs = [];
+    let storageObj, terminalObj;
     lookSpatial.energy = [];
     lookSpatial.resource = lookSpatial.energy;
     for (let i = 0; i < worldObjs.length; i++) {
       const o = worldObjs[i];
       if (o.room !== name) continue;
+      roomObjs.push(o);
       if (o.type === 'structure' && o.structureType === 'controller') {
         controller = __reflectApply(__mapGet, gw.objectsById, [o.id]);
+      }
+      if (o.type === 'structure' && o.structureType === 'storage') {
+        storageObj = __reflectApply(__mapGet, gw.objectsById, [o.id]);
+      }
+      if (o.type === 'structure' && o.structureType === 'terminal') {
+        terminalObj = __reflectApply(__mapGet, gw.objectsById, [o.id]);
       }
       // look 类型归类（官方装配分支同构：source/mineral 独立臂、spawn/controller
       // 属 structure、dropped resource 落 energy 臂）
@@ -186,8 +220,9 @@
       // extension 按 RCL 表）——由 Rust 侧 world_json 房间投影携带
       energyAvailable: r.energyAvailable ?? 0,
       energyCapacityAvailable: r.energyCapacityAvailable ?? 300,
-      storage: undefined,
-      terminal: undefined,
+      // 官方 game.js:330+：storage/terminal 为结构实例（无则 undefined）
+      storage: storageObj,
+      terminal: terminalObj,
       visual: new RoomVisual(name),
       mode: 'world',
     };
@@ -474,7 +509,189 @@
       return result;
     };
     room.getTerrain = function () { return new Terrain(name); };
-    room.createConstructionSite = function () { countStub('room.createConstructionSite'); return 0; };
+    // ---- M2B 扩面 P2：创建族预检 helper（官方 utils.js 对照移植，对象面按
+    // 我方 raw 投影形状适配：官方 i.type 即结构类型，我方结构/孵化位经
+    // structureType 键）----
+    /** 官方 rooms.js:1048/:1084-1087 spawn 名查域：register.spawns（官方全量含
+     *  他人——我方 Game.spawns 仅自家，他人 spawn 名撞车灰区登记
+     *  compatibility.md）+ register.constructionSites（自家工地全房——
+     *  Game.constructionSites 同域；M2B P2 清偿：原 roomObjs 单房检查漏
+     *  跨房自家工地）。 */
+    function spawnNameTaken(name) {
+      return Object.values(gw.currentGame().spawns).some((s) => s.name === name)
+        || Object.values(gw.currentGame().constructionSites).some(
+          (o) => o.structureType === 'spawn' && o.name === name,
+        );
+    }
+    /** 官方 utils.js:338-354 checkControllerAvailability：现存同类型（含
+     *  工地）< CONTROLLER_STRUCTURES[type][rcl]（rcl：有主 controller 的
+     *  level，无主/无 controller 为 0——官方 (user||owner) 真值门的等价物）。
+     *  表缺类型/配额 undefined → NaN 比较恒 false，官方同形。 */
+    function checkControllerAvailability(structureType, room) {
+      const controller = room.controller;
+      let rcl = 0;
+      if (controller && controller.level && controller.owner) rcl = controller.level;
+      let cnt = 0;
+      for (const o of roomObjs) {
+        if (o.structureType === structureType
+          && (o.type === 'structure' || o.type === 'spawn' || o.type === 'constructionSite')) {
+          cnt++;
+        }
+      }
+      const quota = C_CONTROLLER_STRUCTURES[structureType];
+      return cnt < (quota ? quota[rcl] : undefined);
+    }
+    /** 官方 utils.js:173-190 checkConstructionSite 的对象分支：同类型占位/
+     *  任意工地占位拒；extractor 需矿物且无既有 extractor（官方在互斥检查
+     *  前提前返回——M2B P2 清偿：extractor 不受造价对象互斥约束）；非
+     *  rampart/road 的造价对象互斥；0/49 边界全类型拒（官方分支尾部同款）。 */
+    function checkConstructionSiteObjects(structureType, x, y) {
+      const typeOf = (o) => ((o.type === 'structure' || o.type === 'spawn') && o.structureType)
+        ? o.structureType : o.type;
+      let hasMineral = false;
+      let hasExtractor = false;
+      const isExtractor = structureType === 'extractor';
+      for (const o of roomObjs) {
+        if (o.x !== x || o.y !== y) continue;
+        const t = typeOf(o);
+        if (t === structureType) return false;
+        if (o.type === 'constructionSite') return false;
+        if (t === 'mineral') hasMineral = true;
+        if (t === 'extractor') hasExtractor = true;
+        if (isExtractor) continue;
+        if (structureType !== 'rampart' && structureType !== 'road'
+          && t !== 'rampart' && t !== 'road' && C_CONSTRUCTION_COST[t]) {
+          return false;
+        }
+      }
+      if (isExtractor) return hasMineral && !hasExtractor;
+      if (x <= 0 || y <= 0 || x >= 49 || y >= 49) return false;
+      return true;
+    }
+    /** 官方 utils.js:128-152 checkConstructionSite 的地形分支
+     *  （staticTerrainData 调用形态）：非 road/container 的 1/48 位要求相邻
+     *  边界三格全墙（官方顺序 if——角格 y 边后写胜出，M2B P2 清偿对齐）；
+     *  extractor 恒过；非 road 不可建墙上。 */
+    function checkConstructionSiteTerrain(structureType, x, y) {
+      const terrain = gw.terrainByRoom[name];
+      if (!terrain) return false;
+      const isWall = (tx, ty) => (terrain[ty * 50 + tx] & TERRAIN_MASK_WALL) !== 0;
+      if (structureType !== 'road' && structureType !== 'container'
+        && (x === 1 || x === 48 || y === 1 || y === 48)) {
+        // 官方 :132-135 顺序赋值：x==1 → x==48 → y==1 → y==48 依次覆写，
+        // 角格（1,1 等）y 边分支最终胜出——逐字复刻（原三元链 x 边优先）
+        let border;
+        if (x === 1) border = [[0, y - 1], [0, y], [0, y + 1]];
+        if (x === 48) border = [[49, y - 1], [49, y], [49, y + 1]];
+        if (y === 1) border = [[x - 1, 0], [x, 0], [x + 1, 0]];
+        if (y === 48) border = [[x - 1, 49], [x, 49], [x + 1, 49]];
+        for (let i = 0; i < border.length; i++) {
+          if (!isWall(border[i][0], border[i][1])) return false;
+        }
+      }
+      if (structureType === 'extractor') return true;
+      if (structureType !== 'road' && isWall(x, y)) return false;
+      return true;
+    }
+    /** 官方 rooms.js:540-549 toJSON：for-in 枚举（含原型可枚举法——stringify
+     *  时函数值自然丢弃）+ 跳过 _ 前缀与五键。 */
+    room.toJSON = function () {
+      const result = {};
+      for (const i in this) {
+        if (i[0] === '_' || i === 'toJSON' || i === 'toString'
+          || i === 'controller' || i === 'storage' || i === 'terminal') {
+          continue;
+        }
+        result[i] = this[i];
+      }
+      return result;
+    };
+    /** 官方 rooms.js:863-970 findPath 的直线退化桩（M2B 扩面 P2——A* 真语义
+     *  归 FFI 批，与 moveTo/findPathTo 同口径灰区登记；serialize 形态官方
+     *  :968-970）。异房 fromPos/toPos 官方 :901-906 均返 []/'' 原样（toPos
+     *  门为三路评审 P2 清偿补齐）。 */
+    room.findPath = function (fromPos, toPos, opts) {
+      opts = opts || {};
+      if (!fromPos || fromPos.roomName !== name) return opts.serialize ? '' : [];
+      if (!toPos || toPos.roomName !== name) return opts.serialize ? '' : [];
+      const path = [];
+      let x = fromPos.x;
+      let y = fromPos.y;
+      while ((x !== toPos.x || y !== toPos.y) && path.length < 100) {
+        const dx = Math.sign(toPos.x - x);
+        const dy = Math.sign(toPos.y - y);
+        x += dx;
+        y += dy;
+        const direction = dx < 0
+          ? (dy < 0 ? C_TOP_LEFT : dy > 0 ? C_BOTTOM_LEFT : C_LEFT)
+          : dx > 0
+            ? (dy < 0 ? C_TOP_RIGHT : dy > 0 ? C_BOTTOM_RIGHT : C_RIGHT)
+            : (dy < 0 ? C_TOP : C_BOTTOM);
+        path.push({ x, y, dx, dy, direction });
+      }
+      return opts.serialize ? serializePath(path) : path;
+    };
+    /** 官方 createConstructionSite（rooms.js:1029-1097，M2B 扩面 P2 转真——
+     *  intent 通道与结算执行器自双房批前已在，此处补 API 预检面）。
+     *  预检序：fetchXY/边界 → CONSTRUCTION_COST 门 → spawn 名三查 → 敌主
+     *  controller 拒 → 他人 reservation 拒 → RCL 配额 → 对象/地形双占位检查
+     *  → 总量帽 → spawn 名自增 → intent → OK。 */
+    room.createConstructionSite = function (firstArg, secondArg, structureType, name) {
+      const xy = gw.fetchXYArguments(firstArg, secondArg);
+      const x = xy[0], y = xy[1];
+      if (x === undefined || y === undefined || x < 0 || x > 49 || y < 0 || y > 49) {
+        return ERR_INVALID_ARGS;
+      }
+      if (typeof secondArg === 'string' && structureType === undefined) {
+        structureType = secondArg;
+      }
+      if (!C_CONSTRUCTION_COST[structureType]) return ERR_INVALID_ARGS;
+      if (structureType === 'spawn' && typeof name === 'string') {
+        if (name.length > 100) return ERR_INVALID_ARGS;
+        if (gw.createdSpawnNames.has(name)) return ERR_INVALID_ARGS;
+        if (spawnNameTaken(name)) {
+          return ERR_INVALID_ARGS;
+        }
+      }
+      if (this.controller && this.controller.level > 0 && !this.controller.my) {
+        return C_ERR_NOT_OWNER;
+      }
+      if (this.controller && this.controller.reservation
+        && this.controller.reservation.username !== gw.viewerName) {
+        return C_ERR_NOT_OWNER;
+      }
+      if (!checkControllerAvailability(structureType, this)) {
+        return C_ERR_RCL_NOT_ENOUGH;
+      }
+      if (!checkConstructionSiteObjects(structureType, x, y)
+        || !checkConstructionSiteTerrain(structureType, x, y)) {
+        return C_ERR_INVALID_TARGET;
+      }
+      // 官方 rooms.js:1071-1073：自家工地总数 + 本 tick 已建数 < 帽（官方
+      // 分开数是快照不随建增长；我方投影即本 tick 状态，两者合流同值）
+      const ownSiteCount = Object.keys(gw.currentGame().constructionSites).length;
+      if (ownSiteCount + gw.createdConstructionSites >= C_MAX_CONSTRUCTION_SITES) {
+        return C_ERR_FULL;
+      }
+      const intent = { x, y, structureType };
+      if (structureType === 'spawn') {
+        if (typeof name !== 'string') {
+          let cnt = 1;
+          do {
+            name = 'Spawn' + cnt;
+            cnt++;
+          } while (spawnNameTaken(name) || gw.createdSpawnNames.has(name));
+        }
+        gw.createdSpawnNames.add(name);
+        intent.name = name;
+      }
+      // 官方 :1075 `const roomName = ""+this.name`——闭包参数 name 已被
+      // spawn 名遮蔽，经 this.name 取房名
+      intent.roomName = this.name;
+      gw.createdConstructionSites++;
+      gw.intents.pushByName('room', 'createConstructionSite', intent);
+      return C_OK;
+    };
     // 官方 rooms.js:573-583：raw=true 返回**持久化原始字符串**（不可变——
     // 玩家改非 raw 拿到的解析数组不得反向改写 raw 输出，GPT 复审 P1-5 清偿：
     // 原实现 raw 分支即时序列化同一可变数组，改 data.amount 会污染 raw）；
@@ -486,7 +703,61 @@
     room.getEventLog = function (raw) {
       return raw ? eventLogRaw : eventLogParsed;
     };
-    room.createFlag = function () { countStub('room.createFlag'); return 'stub-flag'; };
+    /** 官方 createFlag（rooms.js:978-1027，P2 转真）：fetchXY/边界 →
+     *  FLAGS_LIMIT → 颜色白名单（缺省 COLOR_WHITE/secondary=color）→ 名自增
+     *  'Flag1..' → 重名（register.flags + 本 tick 已建）→ 长度 ≤100 →
+     *  本地 Game.flags 装配 + intent → 返回名。 */
+    room.createFlag = function (firstArg, secondArg, name, color, secondaryColor) {
+      const xy = gw.fetchXYArguments(firstArg, secondArg);
+      let x = xy[0], y = xy[1];
+      if (x === undefined || y === undefined || x < 0 || x > 49 || y < 0 || y > 49) {
+        return ERR_INVALID_ARGS;
+      }
+      if (Object.keys(gw.currentGame().flags).length >= C_FLAGS_LIMIT) {
+        return C_ERR_FULL;
+      }
+      if (firstArg !== null && typeof firstArg === 'object') {
+        secondaryColor = color;
+        color = name;
+        name = secondArg;
+      }
+      if (!color) color = C_COLOR_WHITE;
+      if (!secondaryColor) secondaryColor = color;
+      if (!C_COLORS_ALL.includes(color)) return ERR_INVALID_ARGS;
+      if (!C_COLORS_ALL.includes(secondaryColor)) return ERR_INVALID_ARGS;
+      if (!name) {
+        let cnt = 1;
+        do {
+          name = 'Flag' + cnt;
+          cnt++;
+        } while (gw.currentGame().flags[name] !== undefined || gw.createdFlagNames.has(name));
+      }
+      if (gw.currentGame().flags[name] !== undefined || gw.createdFlagNames.has(name)) {
+        return C_ERR_NAME_EXISTS;
+      }
+      if (name.length > 100) return ERR_INVALID_ARGS;
+      gw.createdFlagNames.add(name);
+      // 官方 :1019-1022：roomName 经 this.name（闭包 name 已被旗名遮蔽）+
+      // 本地 Game.flags[name] = new Flag(...)——同 tick 立即可用（三路评审
+      // P1 清偿：原实现只记 intent，同 tick Game.flags 读不到新旗）。旗壳经
+      // wrapObject+flag 装配器同构（name/color/secondaryColor 构造定格、
+      // delete base.id——官方旗无 id 面；官方虽以 'flag_'+name 键入 _objects
+      // 索引（game.js:403）但 flag.id 恒 undefined，玩家无文档化路径取键——
+      // 行为面等价）；不入 objectsById，下一 tick 由世界投影重建
+      const roomName = this.name;
+      const shell = gw.wrapObject(
+        { type: 'flag', id: undefined, room: roomName, x, y, name, color, secondaryColor },
+        gw.world.time,
+      );
+      // 清偿复审 P3：官方经 RoomObject.call（rooms.js:1651）挂 Room 实例——
+      // 本地壳须同步回填（buildGame 的回填循环不覆盖 createFlag 装配的壳）
+      shell.room = this;
+      gw.currentGame().flags[name] = shell;
+      gw.intents.pushByName('room', 'createFlag', {
+        roomName, x, y, name, color, secondaryColor,
+      });
+      return name;
+    };
     // 官方 rooms.js:971-976：越界坐标返 null（构造器抛错前拦截——不依赖
     // 'Invalid arguments' 通道）
     room.getPositionAt = (x, y) => {

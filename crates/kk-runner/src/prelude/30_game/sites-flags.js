@@ -13,6 +13,11 @@
   'use strict';
 
   const gw = globalThis.__kkp.gw;
+  // P2 增删改的返回码/色表（官方裸全局同源）
+  const C_ERR_NOT_OWNER = globalThis.ERR_NOT_OWNER;
+  const C_ERR_INVALID_TARGET = globalThis.ERR_INVALID_TARGET;
+  const C_ERR_INVALID_ARGS = globalThis.ERR_INVALID_ARGS;
+  const COLORS_ALL = globalThis.COLORS_ALL;
 
   // ---------------------------------------------------------------- 工地：原型字段表
   // 官方 construction-sites.js:38-46（我方投影字段直存；name/owner 缺省语义
@@ -25,10 +30,20 @@
     owner: (o) => (o.owner !== undefined ? { username: o.owner } : undefined),
     my: (o) => (o.owner === undefined ? undefined : o.owner === gw.viewerName),
   });
-  // remove 官方 construction-sites.js:50-62（A4 换真——桩保持计数语义，
-  // 不加消亡回查：官方方法体经 getter 访问触发回查，桩无字段访问故不抛，
-  // 逐方法对齐留给换真批次）
-  globalThis.ConstructionSite.prototype.remove = gw.mkStubMethod('constructionSite.remove');
+  // 官方 construction-sites.js:50-62（M2B 扩面 P2 转真）：非本人且房主非
+  // 本人 → NOT_OWNER；room 级 removeConstructionSite intent（progress>1 时
+  // 结算退 floor(progress/2) 能量掉落）
+  globalThis.ConstructionSite.prototype.remove = function remove() {
+    // 官方 :56-58 逐字：!my（含 undefined——无主工地同拒）且房主非本人
+    if (this.my !== true
+      && !(this.room && this.room.controller && this.room.controller.my)) {
+      return C_ERR_NOT_OWNER;
+    }
+    gw.intents.pushByName('room', 'removeConstructionSite', {
+      roomName: gw.rawData(this.id).room, id: this.id,
+    });
+    return 0;
+  };
 
   // ---------------------------------------------------------------- Flag：own 定格 + memory
   // 官方 flags.js:25-30：构造器赋值 name/color/secondaryColor（值属性，不走
@@ -45,9 +60,55 @@
     },
   });
 
-  globalThis.Flag.prototype.remove = gw.mkStubMethod('flag.remove');
-  globalThis.Flag.prototype.setPosition = gw.mkStubMethod('flag.setPosition');
-  globalThis.Flag.prototype.setColor = gw.mkStubMethod('flag.setColor');
+  // 官方 flags.js:58-91（M2B 扩面 P2 转真）：三方法均 room 级 intent 组合
+  //——remove=removeFlag；setPosition=removeFlag+createFlag（同 tick 组序
+  // removeFlag→createFlag 官方分派）；setColor 同组合带新色。
+  globalThis.Flag.prototype.remove = function remove() {
+    gw.intents.pushByName('room', 'removeFlag', {
+      roomName: this.pos.roomName, name: this.name,
+    });
+    return 0;
+  };
+  // 官方 flags.js:63-75：仅 undefined 拦截、无越界预检（勘正：原注释称
+  // 越界折 ERR_INVALID_TARGET 不实——fetchXYArguments 不查边界）——越界
+  // 坐标 intent 照记，结算 createFlag 0..49 门静默丢 → removeFlag 已生效=
+  // 旗净消亡，官方同形
+  globalThis.Flag.prototype.setPosition = function setPosition(firstArg, secondArg) {
+    const xy = gw.fetchXYArguments(firstArg, secondArg);
+    const x = xy[0];
+    const y = xy[1];
+    const roomName = xy[2] || this.pos.roomName;
+    if (x === undefined || y === undefined) {
+      return C_ERR_INVALID_TARGET;
+    }
+    gw.intents.pushByName('room', 'removeFlag', {
+      roomName: this.pos.roomName, name: this.name,
+    });
+    gw.intents.pushByName('room', 'createFlag', {
+      roomName, x, y, name: this.name,
+      color: this.color, secondaryColor: this.secondaryColor,
+    });
+    return 0;
+  };
+  // 官方 flags.js:76-90：色白名单（secondary 缺省=color）→ removeFlag+
+  // createFlag 同位重建
+  globalThis.Flag.prototype.setColor = function setColor(color, secondaryColor) {
+    if (!COLORS_ALL.includes(color)) {
+      return C_ERR_INVALID_ARGS;
+    }
+    secondaryColor = secondaryColor || color;
+    if (!COLORS_ALL.includes(secondaryColor)) {
+      return C_ERR_INVALID_ARGS;
+    }
+    gw.intents.pushByName('room', 'removeFlag', {
+      roomName: this.pos.roomName, name: this.name,
+    });
+    gw.intents.pushByName('room', 'createFlag', {
+      roomName: this.pos.roomName, x: this.pos.x, y: this.pos.y,
+      name: this.name, color, secondaryColor,
+    });
+    return 0;
+  };
 
   // ---------------------------------------------------------------- 装配
   gw.assemblers.constructionSite = (o, base) => base;

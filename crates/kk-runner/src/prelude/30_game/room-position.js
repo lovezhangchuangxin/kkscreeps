@@ -297,7 +297,32 @@
   };
 
   // 桩（真化归 pathfinder 批）：官方 :1546-1576
-  RoomPosition.prototype.findClosestByRange = function () { countStub('RoomPosition.findClosestByRange'); return null; };
+  // 官方 rooms.js:1546-1576（M2B 扩面 P2 转真）：内部 room.find（复用 tick
+  // 内 findCache）+ getRangeTo 打擂取最近（严格小于才换——并列取首个，
+  // 官方 forEach 序同构）；无目标返 null
+  RoomPosition.prototype.findClosestByRange = function (type, opts) {
+    const room = gw.currentGame().rooms[this.roomName];
+    if (!room) {
+      throw new Error('Could not access room ' + this.roomName);
+    }
+    const o = { filter: opts && opts.filter };
+    let objects = [];
+    if (typeof type === 'number') {
+      objects = room.find(type, o);
+    } else if (Array.isArray(type)) {
+      objects = o.filter ? type.filter(o.filter) : type;
+    }
+    let closest = null;
+    let minRange = Infinity;
+    for (let i = 0; i < objects.length; i++) {
+      const range = this.getRangeTo(objects[i]);
+      if (range < minRange) {
+        minRange = range;
+        closest = objects[i];
+      }
+    }
+    return closest;
+  };
 
   // 官方 :1578-1585 逐字：目标带 __packedPos 走快路径（字节位比较，同 packed
   // 即相等——不同写法的同房间同坐标也命中）；否则 fetchXY 兜底（宽松 == 比较）
@@ -344,10 +369,24 @@
   };
 
   // 桩（真化移出 A5，归 A6/2B-9）：官方 :1622-1628
-  RoomPosition.prototype.createFlag = function () { countStub('RoomPosition.createFlag'); return 'stub-flag'; };
+  // 官方 rooms.js:1622-1628：转发 room.createFlag（pos 形态）
+  RoomPosition.prototype.createFlag = function (name, color, secondaryColor) {
+    const room = gw.currentGame().rooms[this.roomName];
+    if (!room) {
+      throw new Error('Could not access room ' + this.roomName);
+    }
+    return room.createFlag(this, name, color, secondaryColor);
+  };
 
   // 桩（真化移出 A5，归 A6/2B-9）：官方 :1630-1636
-  RoomPosition.prototype.createConstructionSite = function () { countStub('RoomPosition.createConstructionSite'); return 0; };
+  // 官方 rooms.js:1630-1636：转发 room.createConstructionSite（坐标形态）
+  RoomPosition.prototype.createConstructionSite = function (structureType, name) {
+    const room = gw.currentGame().rooms[this.roomName];
+    if (!room) {
+      throw new Error('Could not access room ' + this.roomName);
+    }
+    return room.createConstructionSite(this.x, this.y, structureType, name);
+  };
 
   // 官方 rooms.js:1638 同为非可写 defineProperty（清偿复审 P3-N1）
   Object.defineProperty(globalThis, 'RoomPosition', {

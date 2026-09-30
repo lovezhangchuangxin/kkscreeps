@@ -327,6 +327,14 @@ pub enum RoomIntent {
     /// 'string', id: 'string'}`（system.js:20）；结算链 settle/room.rs
     /// 对照 room/destroy-structure.js。
     DestroyStructure { room: String, id: ObjId },
+    /// flag.remove/setPosition/setColor（M2B 扩面 P2）：官方均为 room 级
+    /// removeFlag+createFlag 组合（flags.js:59-90）；结算对照 room/remove-flag.js
+    /// （按玩家旗名删——只删自家）。
+    RemoveFlag { room: String, name: String },
+    /// constructionSite.remove()（P2）：官方 room 级 `removeConstructionSite:
+    /// {roomName, id}`；结算对照 room/remove-construction-site.js（所有权门 +
+    /// progress/2 退能量掉落）。
+    RemoveConstructionSite { room: String, id: ObjId },
 }
 
 /// room 级 intent 参数解析（官方 system.js:116-140 sanitizeUserRoomIntents 的
@@ -352,6 +360,17 @@ fn parse_room_intent(name: &str, raw: &Value) -> Option<RoomIntent> {
         }),
         // system.js:20：`destroyStructure: {roomName: 'string', id: 'string'}`
         "destroyStructure" => Some(RoomIntent::DestroyStructure {
+            room,
+            id: to_id(f("id"))?,
+        }),
+        // P2：`removeFlag: {roomName: 'string', name: 'userString'}` /
+        // `removeConstructionSite: {roomName: 'string', id: 'string'}`
+        // （flags.js:59-64 / construction-sites.js:56 的官方 intent 形态）
+        "removeFlag" => Some(RoomIntent::RemoveFlag {
+            room,
+            name: to_user_string(f("name"))?,
+        }),
+        "removeConstructionSite" => Some(RoomIntent::RemoveConstructionSite {
             room,
             id: to_id(f("id"))?,
         }),
