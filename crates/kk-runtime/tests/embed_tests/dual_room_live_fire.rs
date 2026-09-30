@@ -447,9 +447,15 @@ pub(super) fn dual_c_unrelated_room_independent_impl() -> anyhow::Result<()> {
 
 /// 顺序不变性（验收场景 2 后半）：B 世界以测试旋钮打乱执行序（p2 先于
 /// p1 投影+执行）——终态逐值与名序执行一致（意图合并序固定=handle 序、
-/// 结算序固定=房名序；打乱的只有玩家完成序）。
+/// 结算序固定=房名序；打乱的只有玩家完成序——b 引擎建房数组序也同步
+/// 打乱作第二自由度，但 rooms BTreeMap 使其语义惰性）。**双臂**（外部复审 P1
+/// 清偿）：充裕臂的可交换负载证明粗粒度一致；**稀缺臂**（source=2 只够
+/// 一人）才是完成序敏感负载——若协调器按完成顺序处理意图，反序引擎将
+/// 得 (p1,p2)=(0,2)，断言即红。memory 用玩家区分标记（交叉错接可辨）。
 pub(super) fn dual_execution_order_invariance_impl() -> anyhow::Result<()> {
     const TICKS: u64 = 3;
+
+    // ── 充裕臂 ──
     let mut a = EmbedEngine::new();
     a.create_shard(&json!({
         "players": ["p1", "p2"],
@@ -488,23 +494,30 @@ pub(super) fn dual_execution_order_invariance_impl() -> anyhow::Result<()> {
                 "body": ["work", "carry", "move"], "store": { "energy": 0 } }),
         )?;
     }
-    // b：打乱执行序（p2 先于 p1）——建房序也同步打乱（双自由度）
     b.set_execution_order_for_test(Some(vec!["p2".to_string(), "p1".to_string()]));
 
+    // 玩家区分标记（外部复审 P1 清偿：交叉错接可辨——两玩家 memory 值不同）
     let mut codes = BTreeMap::new();
-    for p in ["p1", "p2"] {
-        codes.insert(p.to_string(), HARVEST_CODE.to_string());
+    for (p, tag) in [("p1", "A"), ("p2", "B")] {
+        codes.insert(
+            p.to_string(),
+            format!(
+                "Memory.tag = '{tag}'; const c = Game.creeps[Object.keys(Game.creeps)[0]]; \
+                 if (c.store.getFreeCapacity() > 0) {{ const s = c.room.find(FIND_SOURCES)[0]; \
+                 if (s) c.harvest(s); }} 'run'"
+            ),
+        );
     }
     for _ in 0..TICKS {
         a.run_players(&codes)?;
         b.run_players(&codes)?;
     }
-    // 旋钮生效取证（评审 3 P1-3 清偿）：结果面序无关是被测性质，接线回归
-    // 须由 last_execution_order 观测——两引擎实际迭代序各自符合注入
+    // 旋钮生效取证：观测门控后（复审 P2-2 清偿——默认路径零分配、旋钮
+    // 启用才记录）默认引擎 a 返回 None、旋钮引擎 b 返回注入序
     assert_eq!(
         a.last_execution_order_for_test(),
-        Some(["p1".to_string(), "p2".to_string()].as_slice()),
-        "a 引擎默认序=handle 排序"
+        None,
+        "a 未启用观测（默认路径零分配不记录）"
     );
     assert_eq!(
         b.last_execution_order_for_test(),
@@ -528,8 +541,6 @@ pub(super) fn dual_execution_order_invariance_impl() -> anyhow::Result<()> {
         "双方 creep 终态序不变"
     );
     assert_eq!(a.get_game_time(), b.get_game_time(), "时间序不变");
-    // own 房 controller progress 与两玩家 memory（评审 3 P1-1 清偿——方案
-    // 明列的逐值断言面）：本夹具下 progress 平凡为 0、memory 为末轮 Game.time
     for room in ["W1N1", "E1N1"] {
         assert_eq!(
             controller_progress(&a, room),
@@ -538,19 +549,90 @@ pub(super) fn dual_execution_order_invariance_impl() -> anyhow::Result<()> {
         );
     }
     let mut probe = BTreeMap::new();
-    probe.insert("p1".to_string(), "JSON.stringify(Memory.mark)".to_string());
-    probe.insert("p2".to_string(), "JSON.stringify(Memory.mark)".to_string());
+    probe.insert("p1".to_string(), "Memory.tag".to_string());
+    probe.insert("p2".to_string(), "Memory.tag".to_string());
     let ma = a.run_players(&probe)?;
     let mb = b.run_players(&probe)?;
-    for p in ["p1", "p2"] {
-        assert_eq!(
-            ma[p].expr["value"], mb[p].expr["value"],
-            "{p} 的 memory 终态序不变"
-        );
-    }
-
+    assert_eq!(
+        (
+            ma["p1"].expr["value"].as_str(),
+            ma["p2"].expr["value"].as_str()
+        ),
+        (Some("A"), Some("B")),
+        "a memory 标记玩家区分"
+    );
+    assert_eq!(
+        (
+            mb["p1"].expr["value"].as_str(),
+            mb["p2"].expr["value"].as_str()
+        ),
+        (Some("A"), Some("B")),
+        "b memory 标记序不变（交叉错接可辨）"
+    );
     a.teardown();
     b.teardown();
+
+    // ── 稀缺臂（复审 P1 清偿）：source=2 只够一人——完成序敏感负载 ──
+    // 意图合并序固定=玩家名序：无论执行完成序如何，p1（名序在先）足额、
+    // p2 颗粒无收。若按完成顺序处理意图，反序引擎将得 (0,2)，断言即红
+    let mut c = EmbedEngine::new();
+    c.create_shard(&json!({
+        "players": ["p1", "p2"],
+        "rooms": [
+            { "name": "W1N1", "rcl": 1, "owner": "p1" },
+            { "name": "E1N1", "rcl": 1, "owner": "p2" },
+            { "name": "W2N1", "controller": false },
+        ],
+    }))?;
+    let mut d = EmbedEngine::new();
+    d.create_shard(&json!({
+        "players": ["p1", "p2"],
+        "rooms": [
+            { "name": "W1N1", "rcl": 1, "owner": "p1" },
+            { "name": "E1N1", "rcl": 1, "owner": "p2" },
+            { "name": "W2N1", "controller": false },
+        ],
+    }))?;
+    for e in [&mut c, &mut d] {
+        e.place_object(
+            "W2N1",
+            "structure",
+            &json!({ "pos": [2, 2], "structureType": "source",
+                "energy": 2, "energyCapacity": 4000 }),
+        )?;
+        e.place_object(
+            "W2N1",
+            "creep",
+            &json!({ "pos": [2, 3], "name": "c_p1", "owner": "p1",
+                "body": ["work", "carry", "move"], "store": { "energy": 0 } }),
+        )?;
+        e.place_object(
+            "W2N1",
+            "creep",
+            &json!({ "pos": [1, 2], "name": "c_p2", "owner": "p2",
+                "body": ["work", "carry", "move"], "store": { "energy": 0 } }),
+        )?;
+    }
+    d.set_execution_order_for_test(Some(vec!["p2".to_string(), "p1".to_string()]));
+    let mut scodes = BTreeMap::new();
+    for p in ["p1", "p2"] {
+        scodes.insert(p.to_string(), HARVEST_CODE.to_string());
+    }
+    c.run_players(&scodes)?;
+    d.run_players(&scodes)?;
+    for e in [&c, &d] {
+        assert_eq!(
+            (
+                creep_energy_by_owner(e, "W2N1", "p1"),
+                creep_energy_by_owner(e, "W2N1", "p2")
+            ),
+            (2, 0),
+            "稀缺下名序合并（p1 足额 p2 无收）——执行完成序不改变处理序"
+        );
+        assert_eq!(source_energy(e, "W2N1"), 0, "稀缺 source 采尽");
+    }
+    c.teardown();
+    d.teardown();
     Ok(())
 }
 
@@ -670,111 +752,148 @@ pub(super) fn dual_multi_tick_conservation_impl() -> anyhow::Result<()> {
             + (creep_energy_by_owner(&b, "W2N1", "p2") - bst_p2_0),
         "B 竞争世界守恒：Δsource = Δstore_p1 + Δstore_p2"
     );
+    // 正锚（外部复审 P2 清偿——恒等式对整臂空转恒真，须独立锚定采集
+    // 真实发生）：两人各满仓 50（carry 容量），总采集恰 100、末段停采
+    assert_eq!(
+        creep_energy_by_owner(&b, "W2N1", "p1"),
+        50,
+        "p1 满仓（替换脚本为空转会得 0——空转即红）"
+    );
+    assert_eq!(creep_energy_by_owner(&b, "W2N1", "p2"), 50, "p2 满仓");
+    assert_eq!(
+        bs0 - source_energy(&b, "W2N1"),
+        100,
+        "总采集恰 100（25 tick × 2 人 × 2）"
+    );
     assert_eq!(b.get_game_time(), TICKS, "B 世界时间恰推进 50");
     b.teardown();
     Ok(())
 }
 
-/// 对象生命周期（片 3）：孵化链（spawnCreep → spawning → 新 creep 出生
-/// 于 directions 落位）+ 建造链（夹具摆工地（API 为 stub，见 §5 登记）→
-/// build 推进 → complete_construction 转正为结构）。
+/// 对象生命周期（片 3，**双房两联装**——外部复审 P1 清偿：原单房实现
+/// 与方案「双房上下文」承诺不符）：p1 同时在 W0N1 与 W1N1 各持
+/// spawn+builder+工地——同轮跨房孵化/建造，分别断言生命周期、资源变化，
+/// 并断言两房新对象 id 全局唯一（跨房 id 分配器语义）。
 pub(super) fn dual_lifecycle_spawn_and_construction_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
         "players": ["p1"],
-        "rooms": [{ "name": "W0N1", "rcl": 4, "owner": "p1" }],
+        "rooms": [
+            { "name": "W0N1", "rcl": 4, "owner": "p1" },
+            { "name": "W1N1", "rcl": 4, "owner": "p1" },
+        ],
     }))?;
-    e.place_object(
-        "W0N1",
-        "structure",
-        &json!({ "pos": [3, 3], "structureType": "spawn",
-            "owner": "p1", "name": "S1", "store": { "energy": 300 } }),
-    )?;
-    e.place_object(
-        "W0N1",
-        "creep",
-        &json!({ "pos": [2, 3], "name": "builder", "owner": "p1",
-            "body": ["work", "carry", "move"], "store": { "energy": 20 } }),
-    )?;
-    // 工地：预置 progress 2990（总量 3000）——两个 build tick 即转正
-    //（API 建造面为 stub，工地经夹具摆放）
-    e.place_object(
-        "W0N1",
-        "constructionSite",
-        &json!({ "pos": [1, 2], "structureType": "extension",
-            "owner": "p1", "progress": 2990 }),
-    )?;
+    // 两房同构负载：spawn(3,3) + builder(3,2)（压住 TOP 格——出生判别力
+    // 面，R1-P2-2 清偿：directions [LEFT] 应落 (2,3)；directions 被静默
+    // 丢弃时缺省序首空格为 (4,2)，断言即红）+ 工地(1,2 progress 2990)
+    for room in ["W0N1", "W1N1"] {
+        e.place_object(
+            room,
+            "structure",
+            &json!({ "pos": [3, 3], "structureType": "spawn",
+                "owner": "p1", "name": format!("S_{room}"), "store": { "energy": 300 } }),
+        )?;
+        e.place_object(
+            room,
+            "creep",
+            &json!({ "pos": [3, 2], "name": format!("builder_{room}"), "owner": "p1",
+                "body": ["work", "carry", "move"], "store": { "energy": 20 } }),
+        )?;
+        // 工地：预置 progress 2990（总量 3000）——两个 build tick 即转正
+        //（API 建造面为 stub，见 §5 登记）
+        e.place_object(
+            room,
+            "constructionSite",
+            &json!({ "pos": [1, 2], "structureType": "extension",
+                "owner": "p1", "progress": 2990 }),
+        )?;
+    }
 
     const CODE: &str = r#"
-const spawn = Object.values(Game.spawns)[0];
-if (spawn && !spawn.spawning && Object.keys(Game.creeps).length < 2) {
-  spawn.spawnCreep(['work', 'carry', 'move'], 'born1', {directions: [TOP, LEFT]});
-}
-for (const name in Game.creeps) {
-  const c = Game.creeps[name];
-  const site = c.room.find(FIND_CONSTRUCTION_SITES)[0];
-  if (site && c.store.energy >= 5) c.build(site);
+for (const roomName of Object.keys(Game.rooms).sort()) {
+  const room = Game.rooms[roomName];
+  const spawn = Object.values(room.find(FIND_MY_SPAWNS))[0];
+  if (spawn && !spawn.spawning && !Game.creeps['born_' + roomName]) {
+    spawn.spawnCreep(['work', 'carry', 'move'], 'born_' + roomName, {directions: [LEFT]});
+  }
+  for (const site of room.find(FIND_CONSTRUCTION_SITES)) {
+    for (const name in Game.creeps) {
+      const c = Game.creeps[name];
+      if (c.room.name === roomName && c.store.energy >= 5) c.build(site);
+    }
+  }
 }
 'lifecycle'
 "#;
     let codes = codes_for("p1", CODE);
-    // 建造链：2 tick 后工地转正（progress 2990 + 5×2 = 3000）
+    // 建造链：2 tick 后两房工地均转正
     for _ in 0..2 {
         e.run_players(&codes)?;
     }
-    assert_eq!(
-        e.find_in_room("W0N1", FIND_CONSTRUCTION_SITES).len(),
-        0,
-        "工地已消费"
-    );
-    let extensions = e
-        .find_in_room("W0N1", FIND_STRUCTURES)
-        .iter()
-        .filter(|o| o.get("structureType").and_then(Value::as_str) == Some("extension"))
-        .count();
-    assert_eq!(extensions, 1, "extension 转正出现（complete_construction）");
-    assert_eq!(
-        creep_energy_by_owner(&e, "W0N1", "p1"),
-        10,
-        "builder 耗 2×5 建造能量"
-    );
+    for room in ["W0N1", "W1N1"] {
+        assert_eq!(
+            e.find_in_room(room, FIND_CONSTRUCTION_SITES).len(),
+            0,
+            "{room} 工地已消费"
+        );
+        let extensions = e
+            .find_in_room(room, FIND_STRUCTURES)
+            .iter()
+            .filter(|o| o.get("structureType").and_then(Value::as_str) == Some("extension"))
+            .count();
+        assert_eq!(extensions, 1, "{room} extension 转正出现");
+        assert_eq!(
+            creep_energy_by_owner(&e, room, "p1"),
+            10,
+            "{room} builder 耗 2×5 建造能量"
+        );
+    }
 
-    // 孵化链：needTime=CREEP_SPAWN_TIME(3)×3 部件=9 tick，第 12 tick 前
-    // 必出生；出生落位 directions 首空格 (3,2)
+    // 孵化链：needTime=9，第 12 tick 前两房各出生一只
     for _ in 0..10 {
         e.run_players(&codes)?;
     }
-    let creeps = e.find_in_room("W0N1", FIND_CREEPS);
-    assert_eq!(creeps.len(), 2, "新 creep 出生（spawning → 世界对象）");
-    let born = creeps
-        .iter()
-        .find(|o| o.get("name").and_then(Value::as_str) == Some("born1"))
-        .expect("born1 在世界中");
-    assert_eq!(
-        (
-            born.pointer("/pos/x").and_then(Value::as_i64),
-            born.pointer("/pos/y").and_then(Value::as_i64)
-        ),
-        (Some(3), Some(2)),
-        "出生落位 directions [TOP] 首空格 (3,2)"
-    );
-    assert_eq!(
-        born.get("spawning"),
-        Some(&Value::Bool(false)),
-        "出生完成（雏形期 spawning=true 不构成出生——评 1 P2-1 清偿）"
-    );
-    // 孵化资源变化：spawn 300 − 200 孵化 + 涓流（+1/tick，<容量时）——
-    // 区间断言免逐 tick 记账（FIND_MY_SPAWNS 需 viewer 上下文，走
-    // FIND_STRUCTURES 过滤）
-    let spawn_energy: i64 = e
-        .find_in_room("W0N1", FIND_STRUCTURES)
-        .iter()
-        .filter(|o| o.get("structureType").and_then(Value::as_str) == Some("spawn"))
-        .filter_map(|o| o.pointer("/store/energy").and_then(Value::as_i64))
-        .sum();
-    assert!(
-        (111..=112).contains(&spawn_energy),
-        "spawn 能量 300−200+涓流 11~12 次（实测 {spawn_energy}；下界 111 容 phase 重排）"
+    let mut born_ids = Vec::new();
+    for room in ["W0N1", "W1N1"] {
+        let creeps = e.find_in_room(room, FIND_CREEPS);
+        assert_eq!(creeps.len(), 2, "{room} 新 creep 出生");
+        let born = creeps
+            .iter()
+            .find(|o| {
+                o.get("name")
+                    .and_then(Value::as_str)
+                    .is_some_and(|n| n.starts_with("born_"))
+            })
+            .unwrap_or_else(|| panic!("{room} 出生 creep 在世界中"));
+        assert_eq!(
+            (
+                born.pointer("/pos/x").and_then(Value::as_i64),
+                born.pointer("/pos/y").and_then(Value::as_i64)
+            ),
+            (Some(2), Some(3)),
+            "{room} 出生落位 directions [LEFT]——TOP 被 builder 压住，可判别（缺省序将落 (4,2)）"
+        );
+        assert_eq!(
+            born.get("spawning"),
+            Some(&Value::Bool(false)),
+            "{room} 出生完成"
+        );
+        born_ids.push(born["id"].as_str().expect("id 字符串").to_string());
+        let spawn_energy: i64 = e
+            .find_in_room(room, FIND_STRUCTURES)
+            .iter()
+            .filter(|o| o.get("structureType").and_then(Value::as_str) == Some("spawn"))
+            .filter_map(|o| o.pointer("/store/energy").and_then(Value::as_i64))
+            .sum();
+        assert!(
+            (111..=112).contains(&spawn_energy),
+            "{room} spawn 能量 300−200+涓流（实测 {spawn_energy}）"
+        );
+    }
+    // 跨房 id 全局唯一（同轮跨房创建的出生 creep id 互异）
+    assert_ne!(
+        born_ids[0], born_ids[1],
+        "两房新对象 id 全局唯一（跨房 id 分配器）"
     );
 
     e.teardown();

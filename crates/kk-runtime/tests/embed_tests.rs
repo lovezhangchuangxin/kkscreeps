@@ -57,6 +57,7 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     dual_b06_variants_impl()?;
     stop_run_commit_blind_impl()?;
     stop_run_failure_and_discard_impl()?;
+    stop_run_floor_window_impl()?;
     assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");
     Ok(())
 }

@@ -5,9 +5,11 @@
 //! 驱动面：`set_sandbox_config_for_test`（create_shard 前注入
 //! `initial_bucket` 负值）；断言面：`player_bucket_for_test`（桶只活在
 //! 沙箱线程内，经 Cmd::Bucket 通道读出——读取的是已落桶权威值，不含
-//! pending 候选）。官方停跑数值口径（make.js 72-83）：负桶 begin_tick
-//! 即 Skip、回充 `(bucket+limit).max(−2×limit) − bucket`、深负钳
-//! −2×limit 地板；默认 limit=20（cpu_limit）。
+//! pending 候选）。官方停跑数值口径（make.js:77）：负桶 begin_tick
+//! 即 Skip、回充**先按原桶严格比较** `bucket < −2×limit ? −2×limit :
+//! bucket+limit`（双房批外部复审 P0 勘误：原 `(bucket+limit).max(−2×
+//! limit)`「先加再钳」在 [−3×limit,−2×limit) 窗与官方分歧）；默认
+//! limit=20（cpu_limit）。
 
 use std::collections::BTreeMap;
 
@@ -135,6 +137,42 @@ pub(super) fn stop_run_failure_and_discard_impl() -> anyhow::Result<()> {
         -20.0,
         "成功轮候选并入（−40 → −20）"
     );
+
+    e.teardown();
+    Ok(())
+}
+
+/// 复审 P0 的 embed 级边界取证：窗口桶（−41 ∈ [−3×limit, −2×limit)）
+/// 提交后钳回地板 −40（官方），旧错误式将得 −21——embed 全链数值锁。
+pub(super) fn stop_run_floor_window_impl() -> anyhow::Result<()> {
+    let mut e = EmbedEngine::new();
+    let cfg = kk_runner::SandboxConfig {
+        initial_bucket: -41.0,
+        ..Default::default()
+    };
+    e.set_sandbox_config_for_test("p1", cfg);
+    e.create_shard(&json!({
+        "players": ["p1"],
+        "rooms": [{ "name": "W1N1", "rcl": 1, "owner": "p1" }],
+    }))?;
+    let mut codes = BTreeMap::new();
+    codes.insert("p1".to_string(), "'x'".to_string());
+
+    // 轮 1：−41 破地板 → 官方钳回 −40（旧式 −21）
+    let runs = e.run_players(&codes)?;
+    assert!(!runs["p1"].executed, "负桶停跑");
+    assert_eq!(
+        e.player_bucket_for_test("p1")?,
+        -40.0,
+        "窗口桶钳回 −2×limit 地板（旧式为 −21）"
+    );
+    // 轮 2/3：−40 → −20 → 0 → 恢复执行（tickLimit=20）
+    e.run_players(&codes)?;
+    assert_eq!(e.player_bucket_for_test("p1")?, -20.0);
+    e.run_players(&codes)?;
+    assert_eq!(e.player_bucket_for_test("p1")?, 0.0);
+    let runs = e.run_players(&codes)?;
+    assert!(runs["p1"].executed, "回正恢复执行");
 
     e.teardown();
     Ok(())

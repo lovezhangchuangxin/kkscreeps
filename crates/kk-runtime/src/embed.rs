@@ -71,7 +71,10 @@ pub struct EmbedEngine {
     /// 的自由度来源。
     execution_order_for_test: Option<Vec<String>>,
     /// 上一次 execute_players 实际迭代的玩家序（旋钮生效取证面——评审 3
-    /// P1-3 清偿：结果面序无关是被测性质，接线回归须由此观测）。
+    /// P1-3 清偿：结果面序无关是被测性质，接线回归须由此观测）。**观测
+    /// 门控**（外部复审 P2-2 清偿）：仅旋钮启用时记录——记录面零分配
+    ///（曾默认每轮 clone 玩家名 Vec/String；registered 自身的每轮 clone
+    /// 为 HEAD 既有，不属本旋钮）。
     last_execution_order: Option<Vec<String>>,
     /// 测试旋钮（O3）：按玩家的沙箱配置覆盖——create_shard 的 spawn 消费
     /// （缺省 default），分片建立后清空（一次性，防泄漏到后续分片）。
@@ -289,27 +292,25 @@ impl EmbedEngine {
         self.pending = None;
         self.last_console.clear();
         self.perf = PerfRecorder::default();
+        // 全部测试旋钮随分片重建清零（R1-P2-7 清偿——此前仅执行序旋钮，
+        // 失败/房级失败/观测记录跨分片留存）
         self.execution_order_for_test = None;
+        self.last_execution_order = None;
+        self.fail_next_settle = false;
+        self.fail_next_settle_room = None;
 
         let players = self.players.get_or_insert_with(ThreadExecutor::new);
+        // 整表取走（R1-P2-6 清偿）：spawn 中途 `?` 早退也不残留——残留
+        // 条目会被下一次 create_shard 静默消费，违「一次性」纪律
+        let configs = std::mem::take(&mut self.sandbox_configs_for_test);
         for handle in handles {
-            let config = self
-                .sandbox_configs_for_test
-                .get(&handle)
-                .cloned()
-                .unwrap_or_default();
+            let config = configs.get(&handle).cloned().unwrap_or_default();
             players.spawn(&handle, config)?;
-            self.sandbox_configs_for_test.remove(&handle);
             // 玩家持久状态条目随分片建立（B0-5 统一提交点：RawMemory 候选的
             // 提交位与注入源——缺省 gcl 0/raw_memory 空，与旧的 get().unwrap_or
             // 缺省口径一致）
             self.engine.players.entry(handle.clone()).or_default();
         }
-        // 旋钮一次性消费完毕：残留（未注册玩家条目）清空，防跨分片静默
-        // 复用（评审 1 P2-1 清偿——与 execution_order_for_test 的分片重置
-        // 同纪律）
-        self.sandbox_configs_for_test.clear();
-
         for setup in rooms {
             let name = setup.name;
             let room = setup.spec;
@@ -562,13 +563,12 @@ impl EmbedEngine {
                 let mut sorted = order.clone();
                 sorted.sort();
                 assert_eq!(sorted, registered, "执行序覆盖必须是注册玩家集的排列");
+                // 观测门控（外部复审 P2-2 清偿）：默认生产路径零分配——
+                // 只有旋钮启用（测试观测）才记录实际迭代序
                 self.last_execution_order = Some(order.clone());
                 order.clone()
             }
-            None => {
-                self.last_execution_order = Some(registered.clone());
-                handles
-            }
+            None => handles,
         };
         for handle in handles {
             let Some(code) = codes.get(&handle) else {
@@ -765,7 +765,8 @@ impl EmbedEngine {
     }
 
     /// 上一次 execute_players 实际迭代的玩家序（旋钮生效取证面；重试轮
-    /// 不重新执行玩家 → 不更新）。
+    /// 不重新执行玩家 → 不更新）。仅旋钮启用轮更新——禁用/重建分片后
+    /// 保留旧记录（create_shard 显式清零）。
     #[doc(hidden)]
     pub fn last_execution_order_for_test(&self) -> Option<&[String]> {
         self.last_execution_order.as_deref()

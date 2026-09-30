@@ -50,7 +50,12 @@ harvest/upgrade 全部 ERR_NOT_IN_RANGE（API 预检拒绝、不产生 intent）
 
 - `Bucket::begin_tick` 负桶分支不再即时落桶；新增纯函数 `skip_recharge()`
   （官方公式 `(bucket+limit).max(−2×limit) − bucket`，make.js:72-83 钳地板
-  语义不变）与 `apply_recharge()`（提交点并入，重算增量防陈旧候选）。
+  语义不变；**勘误（2026-09-30 双房批外部复审 P0）**：此式与官方
+  make.js:77「先按原桶严格比较 −2×limit 再选支」不等价——(−3×limit,
+  −2×limit) 开窗（limit=20：−59..−41）内官方钳回 −40 而此式得
+  bucket+limit；已改按原桶比较分支，见 budget.rs 现行实现与双房批方案
+  §7「外部复审清偿（第二轮）」）与 `apply_recharge()`（提交点并入，
+  重算增量防陈旧候选）。
 - `Sandbox` 新增 `pending_recharge: Option<f64>`，与 `pending_bill` 同生命
   周期：begin_tick SkipPenalty 分支暂存候选；`settle_bill` 同点并入；
   `discard_bill` 一并丢弃；begin_tick 开头防御清残留（同 B0-5 不变量）。

@@ -117,7 +117,8 @@ pub struct RoomVersionHandle {
 /// 对象目录（O1，双房批）：id → 房名定位，按内容代际懒重建（同
 /// terrain_cache 的版本键纪律）。服务 [`World::get`]/[`World::get_mut`]/
 /// [`World::remove`] 的房名定位：每代际首次触达全量重建一次（N 次
-/// BTreeMap 插入 + 每房一次 String clone），之后本代际内 O(log N) 查找；
+/// BTreeMap 插入 + **每唯一 id 一次**房名 String 分配——分配按对象数
+/// 计非房数，评审 P2 勘正），之后本代际内 O(log N) 查找；
 /// insert 增量续档。**收益量级勘定（评审 3 F4 实测）**：小规模首房命中
 /// 旧逐房扫描常数更低（4 房 1000 对象命中 1.17-1.24× 慢）；40 房命中
 /// 4.3× 快、miss 面 23× 快——收益随房数/未命中增长，现状 2-4 房为形状
@@ -139,6 +140,10 @@ pub struct World {
     pub seed: u64,
     /// 已经过玩家 tick（setTerrain 只允许在 0 时调用——screeps-ok 契约）。
     pub player_ticks: u64,
+    /// **硬纪律（O1 后果升级，评审 P2-8 挑战登记口径）**：直写本字段而不
+    /// bump 代际，对象目录/`max_id_cache` 将供陈旧定位——get 误报 None、
+    /// remove 静默失败（较投影缓存陈旧更重）。直写后必经 advance_ticks
+    ///（结算提交尾现状即如此，见 generation 字段注释）。收敛归 M2B。
     pub rooms: BTreeMap<String, RoomState>,
     /// 全局 id 分配器（跨房间唯一；快照每房 header 存同一全局值）。
     next_obj_id: u64,
@@ -217,6 +222,10 @@ impl World {
                 dir.rooms.insert(ObjId(id), room_name.to_string());
                 dir.generation = self.generation;
             }
+            // max 侧守卫当前恒真（评审 P2-3 实测注记）：入口
+            // next_available_obj_id→max_obj_id 已把 m.0 刷到本代际——
+            // 守卫是对未来调用序变化的防御；「陈旧则跳过」的真纪律在
+            // 目录侧守卫
             let mut m = self.max_id_cache.borrow_mut();
             if m.0 + 1 == self.generation {
                 *m = (self.generation, m.1.max(id));
@@ -301,8 +310,9 @@ impl World {
         self.rooms.get_mut(name)
     }
 
-    /// 跨房间取对象（M1 主要服务于 embed getObject）。经对象目录 O(1)
-    ///（O1，双房批；原逐房扫描）。
+    /// 跨房间取对象（M1 主要服务于 embed getObject）。经对象目录三次
+    /// O(log N) BTreeMap 查找（id→房名→房态→对象；O1，双房批——原逐房线性扫描；外部
+    /// 复审 P2 勘正：非 O(1)，暖缓存后 BTreeMap 双跳对数查找）。
     pub fn get(&self, id: ObjId) -> Option<(&str, &RoomObject)> {
         let dir = self.obj_dir();
         let name = dir.rooms.get(&id)?;
@@ -355,8 +365,10 @@ impl World {
         self.max_id_cache.borrow().1
     }
 
-    /// 对象目录触达（懒重建——代际键失效；重建 O(N log N)+每房一次
-    /// String clone，每代际至多一次；之后本代际内查找 O(log N)）。
+    /// 对象目录触达（懒重建——代际键失效；重建 O(N log N)+**每唯一 id
+    /// 一次房名 String 分配**（外部复审 P2 勘正：非「每房一次」——分配
+    /// 探针实测单房 1000 对象首触达 1000 次房名分配/共 1167 次；同代际
+    /// 第二次查询零分配），每代际至多一次；之后本代际内查找 O(log N)。
     /// get/get_mut/remove 消费——结算热路径（next_available）不经此
     ///（走分体 max 缓存的零分配扫描）。
     fn obj_dir(&self) -> std::cell::Ref<'_, ObjDir> {

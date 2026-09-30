@@ -68,10 +68,21 @@ impl Bucket {
         }
     }
 
-    /// 停跑轮回充增量（官方公式 `(bucket+limit).max(−2×limit) − bucket`，
-    /// make.js:72-83 的钳地板语义）——纯函数不落桶，提交点并入。
+    /// 停跑轮回充增量（官方公式 make.js:77——**先按原桶严格比较 −2×limit，
+    /// 再选钳地板或加 limit**：`bucket < −2×limit ? −2×limit : bucket+limit`）
+    /// ——纯函数不落桶，提交点并入。勘误（双房批外部复审 P0）：原实现
+    /// `(bucket+limit).max(−2×limit)` 是「先加再钳」，在 (−3×limit,
+    /// −2×limit) 开窗（limit=20 时 −59..−41；−60 边界点两式合流）与官方
+    /// 分歧——原桶已破地板者
+    /// 应钳回 −2×limit，而非加 limit 后恰好悬在地板上；深负与 ≥−2×limit
+    /// 两区两式合流，故既有测试（−2000/−580/−40）未暴露窗口。
     pub fn skip_recharge(&self) -> f64 {
-        (self.bucket + self.limit).max(-2.0 * self.limit) - self.bucket
+        let target = if self.bucket < -2.0 * self.limit {
+            -2.0 * self.limit
+        } else {
+            self.bucket + self.limit
+        };
+        target - self.bucket
     }
 
     /// 并入停跑轮回充（统一提交点）。提交时重算增量：staging 与提交之间桶
@@ -148,6 +159,40 @@ mod tests {
         assert!(
             matches!(b.begin_tick(), TickPlan::Run { tick_limit: 40.0 }),
             "桶充足时硬中断不触发跳帧（官方 cpuAvailable 语义）"
+        );
+    }
+
+    /// 外部复审 P0 边界窗（(−3×limit, −2×limit) 开窗 = −59..−41）：官方语义
+    /// 原桶破地板 → 钳回 −2×limit（增量大），而非「先加再钳」的 bucket+limit。
+    #[test]
+    fn skip_recharge_floor_window_official_values() {
+        for (before, after) in [
+            (-41.0, -40.0),   // 窗口内：官方钳 −40（旧错误式得 −21）
+            (-50.0, -40.0),   // （旧式 −30）
+            (-59.0, -40.0),   // （旧式 −39）
+            (-60.0, -40.0),   // 开窗下界 −60：两式合流（开窗不含该点）
+            (-40.0, -20.0),   // 地板上：不钳、加 limit
+            (-2000.0, -40.0), // 深负：两式合流
+        ] {
+            let b = Bucket::new(20.0, 10_000.0, 500.0, before);
+            assert_eq!(
+                b.skip_recharge(),
+                after - before,
+                "原桶 {before} → 目标 {after}"
+            );
+        }
+        // 窗口轨迹：−41 → −40 → −20 → 0（恢复轮 tickLimit=20）
+        let mut b = Bucket::new(20.0, 10_000.0, 500.0, -41.0);
+        assert!(matches!(b.begin_tick(), TickPlan::SkipPenalty));
+        b.apply_recharge();
+        assert_eq!(b.bucket(), -40.0, "窗口内首轮回充钳回地板");
+        b.apply_recharge();
+        assert_eq!(b.bucket(), -20.0);
+        b.apply_recharge();
+        assert_eq!(b.bucket(), 0.0);
+        assert!(
+            matches!(b.begin_tick(), TickPlan::Run { tick_limit: 20.0 }),
+            "恢复轮 tickLimit=20（旧式轨迹 −41→−21→−1→19：恢复轮桶 19/tickLimit 39——可分辨）"
         );
     }
 

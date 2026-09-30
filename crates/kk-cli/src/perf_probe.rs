@@ -252,10 +252,12 @@ mod tests {
     /// controller 由 create_shard 硬编码（embed.rs），夹具只依赖不摆放。
     const CONTROLLER: (u8, u8) = (1, 1);
     /// 出生落位：spawnCreep `directions:[TOP, LEFT]`（player_code）→ 首个
-    /// 空闲方向格（spawn.rs born_creep 按给定序取首空）——(3,2)/(2,3) 两格
-    /// 都在程内；第三只孵出时两格已占，兜底全 8 向扫描落 (4,2) 族（程外、
-    /// 无动作 intent，仅投影/结算宽度——如实口径，负载由 3 放置 + 2 出生
-    /// 工作 creep 承载）。
+    /// 空闲方向格——(3,2)/(2,3) 两格都在程内。第三只孵出（spawn 雁流后）
+    /// 时两格已占：二次扫描在 directions 外找到空位 → born_creep 判「有
+    /// 出口但未选」逐 tick 顺延（spawn.rs 不 spawnstomp 重试语义）→
+    /// **永不完成出生**，雏形滞留 spawn 格 (3,3)（程内，spawning=true
+    /// 无动作）——实际负载=3 放置+2 出生共 5 只工作 creep（第一轮外部
+    /// 复审 P2-1 勘正：旧注「兜底落 (4,2) 程外」的路径在本夹具不可达）。
     const BORN_TILES: [(u8, u8); 2] = [(3, 2), (2, 3)];
 
     fn chebyshev(a: (u8, u8), b: (u8, u8)) -> u32 {
