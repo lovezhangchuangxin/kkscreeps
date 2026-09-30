@@ -67,6 +67,8 @@ enum Cmd {
     SettleBill(mpsc::Sender<anyhow::Result<()>>),
     /// 丢弃计费候选（统一提交点的失败/回退臂）。
     DiscardBill(mpsc::Sender<anyhow::Result<()>>),
+    /// 读玩家桶当前值（O3 embed 停跑回归锁的断言读取面）。
+    Bucket(mpsc::Sender<anyhow::Result<f64>>),
     Tick {
         world: Value,
         ack: mpsc::Sender<anyhow::Result<TickReport>>,
@@ -144,6 +146,9 @@ impl PlayerThreads {
                             sandbox.discard_bill();
                             let _ = ack.send(Ok(()));
                         }
+                        Cmd::Bucket(ack) => {
+                            let _ = ack.send(Ok(sandbox.bucket()));
+                        }
                         Cmd::Tick { world, ack } => {
                             let _ = ack.send(run_one_tick(&mut sandbox, &world));
                         }
@@ -216,6 +221,17 @@ impl PlayerThreads {
         let p = self.player_mut(id)?;
         let (ack_tx, ack_rx) = mpsc::channel();
         p.send(Cmd::DiscardBill(ack_tx));
+        ack_rx
+            .recv()
+            .map_err(|_| anyhow::anyhow!("玩家 {id} 线程无响应"))?
+    }
+
+    /// 读玩家桶当前值（测试断言面——桶只活在沙箱线程内，经通道读出）。
+    #[doc(hidden)]
+    pub fn bucket(&mut self, id: u64) -> anyhow::Result<f64> {
+        let p = self.player_mut(id)?;
+        let (ack_tx, ack_rx) = mpsc::channel();
+        p.send(Cmd::Bucket(ack_tx));
         ack_rx
             .recv()
             .map_err(|_| anyhow::anyhow!("玩家 {id} 线程无响应"))?

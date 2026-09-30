@@ -12,12 +12,15 @@ mod embed_channels_and_families;
 mod embed_roundtrip_contract;
 #[path = "embed_tests/embed_strictness_and_partial_commit.rs"]
 mod embed_strictness_and_partial_commit;
+#[path = "embed_tests/stop_run_regression.rs"]
+mod stop_run_regression;
 
 // 串行链不变量：顶层唯一 #[test]；子模块 impl 经 glob 进根作用域，链体逐字节不动
 use dual_room_live_fire::*;
 use embed_channels_and_families::*;
 use embed_roundtrip_contract::*;
 use embed_strictness_and_partial_commit::*;
+use stop_run_regression::*;
 
 #[test]
 fn embed_engine_suite() -> anyhow::Result<()> {
@@ -52,6 +55,8 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     dual_lifecycle_spawn_and_construction_impl()?;
     dual_room_failure_recovery_impl()?;
     dual_b06_variants_impl()?;
+    stop_run_commit_blind_impl()?;
+    stop_run_failure_and_discard_impl()?;
     assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");
     Ok(())
 }

@@ -111,6 +111,16 @@ impl ThreadExecutor {
         self.pool.discard_bill(id)
     }
 
+    /// 读玩家桶当前值（测试断言面——O3 embed 停跑回归锁消费）。
+    #[doc(hidden)]
+    pub fn bucket(&mut self, player: &str) -> anyhow::Result<f64> {
+        let id = *self
+            .handles
+            .get(player)
+            .ok_or_else(|| anyhow::anyhow!("未知玩家 {player}"))?;
+        self.pool.bucket(id)
+    }
+
     pub fn len(&self) -> usize {
         self.handles.len()
     }

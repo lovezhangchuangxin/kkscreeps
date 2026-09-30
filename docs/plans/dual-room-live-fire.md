@@ -357,3 +357,38 @@ bot 三基线（tooangel console 零错须人工确认）/ perf 同口径 A/B �
 - **验证**：workspace 全绿（kk-world 47+1 测）/ clippy 零告警 / release+
   棘轮 1405 零未豁免转红 / 三基线（tooangel console error tick=0、
   overmind/wasm 既知形态、skipped_penalty 全 0）/ perf 四相持平。
+
+### O3（embed 层停跑回归锁）——已收口
+
+- **落地**：驱动面=`set_sandbox_config_for_test`（按玩家 SandboxConfig
+  覆盖，create_shard spawn 消费+分片建立后清空——评 1/评 2 P2-1 清偿
+  补循环后 clear）；锁面=新测试 stop_run_regression.rs 两场景（①双玩家
+  混合轮：p1 正常/p2 深负停跑同轮 commit 结局盲处置——−40 断言对「加
+  结局过滤丢回充」可分辨（回归世界=−2000）；桶轨迹 −2000→−40→−20→0
+  →第四轮恢复执行；②失败/重试/丢弃/新轮四臂：失败桶不动 → **重试臂**
+  （评 3 P2-2 清偿——不丢弃直接重试缓存轮，首跑暂存候选经 commit 并入
+  −40；Err 路径若被加误 discard 善后则此断言红）→ 丢弃臂桶不动 → 新轮
+  −20）。
+- **桶读取面增量（方案未提的实现期必要增量，评 3 P2-1 点名）**：
+  Cmd::Bucket 通道（proto.rs，与 SettleBill 同模式）+
+  ThreadExecutor::bucket + player_bucket_for_test（#[doc(hidden)] 全
+  覆盖）约 25 行——结构必要性：EvalReport.bucket_after 为提交前口径、
+  桶权威值驻沙箱线程，无此读取面则「−40 落桶」在 embed 层不可观测。
+- **B0-6 销账判定**：b0-6 方案 §4 评 2 P2-1 登记的残余风险（未来给
+  commit_players 遍历加结局过滤会静默丢回充）**本片清偿**——登记括号
+  「测试旋钮或结局盲断言」二选一落地为双件（驱动面+锁面，评 3 判超
+  清偿良性）；B0-6 处置表为时点记录不回改（先例：片 1 perf 夹具项同
+  款处理），销账落点=本节+roadmap 批条目。片 3 §7「bucket 断言面归
+  O3 合并」登记同步兑现。
+- **评审三路（停跑语义/通道工程/验收映射）**：P0×0、P1×0、P2×5、
+  P3×3。清偿：循环后 clear（两评审同报）；重试臂补测；bucket()
+  doc(hidden) 一致性；模块 doc 补「不含 pending 候选」读取口径。
+  登记不修：数值字面（与 budget 单测同口径——cpu_limit 变更 budget
+  先红）；recv 无超时（继承 sandbox.md 全命令登记口径，Bucket 臂挂死
+  面更窄）；防御清残留 no-op 措辞（随重试臂重构已消）。
+- **验证**：workspace 全绿 / clippy 零告警 / release+棘轮 1405 零未豁免
+  转红 / 三基线（tooangel console error tick=0、overmind/wasm 既知形态、
+  skipped_penalty 全 0）/ perf 四相同口径持平（首轮 wall +7% 为机器
+  负载离群，复跑两轮 0.123/0.202/0.031/0.456 噪声级——金丝雀判别）/
+  结局盲断言杀伤力抽查（期望改 −2000 即红、真实值 −40=回充确经提交
+  点并入）。

@@ -73,6 +73,10 @@ pub struct EmbedEngine {
     /// 上一次 execute_players 实际迭代的玩家序（旋钮生效取证面——评审 3
     /// P1-3 清偿：结果面序无关是被测性质，接线回归须由此观测）。
     last_execution_order: Option<Vec<String>>,
+    /// 测试旋钮（O3）：按玩家的沙箱配置覆盖——create_shard 的 spawn 消费
+    /// （缺省 default），分片建立后清空（一次性，防泄漏到后续分片）。
+    /// 消费面：停跑回归锁（initial_bucket 负值驱动 SkipPenalty 全链）。
+    sandbox_configs_for_test: BTreeMap<String, kk_runner::SandboxConfig>,
 }
 
 /// 性能观测点（A6，[performance-acceptance](docs/architecture/performance-acceptance.md)
@@ -266,6 +270,7 @@ impl EmbedEngine {
             fail_next_settle_room: None,
             execution_order_for_test: None,
             last_execution_order: None,
+            sandbox_configs_for_test: BTreeMap::new(),
         }
     }
 
@@ -288,12 +293,22 @@ impl EmbedEngine {
 
         let players = self.players.get_or_insert_with(ThreadExecutor::new);
         for handle in handles {
-            players.spawn(&handle, kk_runner::SandboxConfig::default())?;
+            let config = self
+                .sandbox_configs_for_test
+                .get(&handle)
+                .cloned()
+                .unwrap_or_default();
+            players.spawn(&handle, config)?;
+            self.sandbox_configs_for_test.remove(&handle);
             // 玩家持久状态条目随分片建立（B0-5 统一提交点：RawMemory 候选的
             // 提交位与注入源——缺省 gcl 0/raw_memory 空，与旧的 get().unwrap_or
             // 缺省口径一致）
             self.engine.players.entry(handle.clone()).or_default();
         }
+        // 旋钮一次性消费完毕：残留（未注册玩家条目）清空，防跨分片静默
+        // 复用（评审 1 P2-1 清偿——与 execution_order_for_test 的分片重置
+        // 同纪律）
+        self.sandbox_configs_for_test.clear();
 
         for setup in rooms {
             let name = setup.name;
@@ -754,6 +769,25 @@ impl EmbedEngine {
     #[doc(hidden)]
     pub fn last_execution_order_for_test(&self) -> Option<&[String]> {
         self.last_execution_order.as_deref()
+    }
+
+    /// 测试旋钮（O3）：按玩家覆盖沙箱配置——**须在 create_shard 之前
+    /// 设置**（spawn 时消费，缺省 default；分片建立后清空）。停跑回归锁
+    /// 经 `initial_bucket` 负值驱动 SkipPenalty 全链。
+    #[doc(hidden)]
+    pub fn set_sandbox_config_for_test(&mut self, player: &str, config: kk_runner::SandboxConfig) {
+        self.sandbox_configs_for_test
+            .insert(player.to_string(), config);
+    }
+
+    /// 读玩家桶当前值（测试断言面——O3；生产无消费方，桶权威值驻沙箱）。
+    #[doc(hidden)]
+    pub fn player_bucket_for_test(&mut self, player: &str) -> anyhow::Result<f64> {
+        let players = self
+            .players
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("分片未创建"))?;
+        players.bucket(player)
     }
 
     /// 是否存在未提交的失败轮候选（部分提交三连回归的断言面）。
