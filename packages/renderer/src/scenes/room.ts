@@ -98,7 +98,7 @@ export class RoomScene {
   }
 
   /** 对象列表对账（feed.onChange 驱动）；constructedWall 格集变化时重烘焙墙。
-   * events=本 tick 房间事件（R4：攻击/治疗罩）；kind='snapshot' 全量重建。 */
+   * events=本 tick 房间事件（R4：攻击/治疗罩）；kind='snapshot' 清瞬态并即时同步。 */
   applyObjects(
     objects: readonly RoomObjectState[],
     time: number,
@@ -124,13 +124,13 @@ export class RoomScene {
     if (wallRebuilt) this.lighting.markDirty();
   }
 
-  /** ticker 驱动（deltaMS=真实帧时间）：swamp 滚动 + lighting 离屏按需重渲
+  /** ticker 驱动（elapsedMS=未经 ticker 截断的真实帧时间）：swamp 滚动 + lighting 离屏按需重渲
    * + 对象运动 tween（R4——数据断流动画照跑）。 */
-  update(deltaMS: number, renderer: Parameters<LightingPass['update']>[0]): void {
-    this.terrain.update(deltaMS / TERRAIN_SPEC.frameBaseMs);
+  update(elapsedMS: number, renderer: Parameters<LightingPass['update']>[0]): void {
+    if (elapsedMS > 0) this.terrain.update(elapsedMS / TERRAIN_SPEC.frameBaseMs);
     // objects 先于 lighting：运动 tween 的 markDirty 同帧进 RT 重渲
     //（消一帧滞后，评审 C建议4）
-    this.objects?.update(deltaMS);
+    if (elapsedMS > 0) this.objects?.update(elapsedMS);
     this.lighting.update(renderer, this.terrain.renderSize, this.view);
   }
 

@@ -54,6 +54,16 @@ interface RoomFeed {
 
 资源管线负责纹理图集、分辨率版本和缓存；在引入官方资产前保留授权出处。
 
+### 当前实现与运行时边界（F2 R0–R4）
+
+房间地形、静态对象、creep 运动/旋转/受击罩/死亡淡出已实现，具体规格与偏差见 [F2 方案](../plans/f2-renderer.md)。R5 完整动效、R6 RoomVisual/交互/API 冻结和 R7 性能验收尚未完成；上述世界地图、对象池及 Vue 集成仍为目标设计。
+
+- **资产所有权**：`LoadedAtlas.dispose()` 释放本次加载的独立 Texture/TextureSource 与 ImageBitmap；spritesheet 页按 URL 共用租约，最后一个 renderer 释放时通过 Pixi Assets 卸载。加载失败等待在途任务结束后统一回滚。renderer 先拆场景，再销毁内核，最后释放资产；重复销毁共用同一个 Promise，并取消 feed、ticker、resize 与 DOM 输入订阅。
+- **跨层同步**：`OverlayGroup` 集中管理同一对象在 lighting/effects 层的部件位移、父级淡出与 lighting dirty。join 仍负责部件自身的 alpha/visible。`values === null` 表示停用并使上次值失效，重新激活必须应用一次。
+- **动画时间**：`AnimationClock` 使用 ticker 未截断的 `elapsedMS`，所有场景动画经过同一倍率入口；逻辑 tick 时间用于状态求值。`setPlaybackRate(rate)` 保留当前动画进度，0 暂停，回放器负责同步数据推送速率；此 API 随 R6 评审冻结。
+- **快照与节点寿命**：快照取消旧 tween、清除死亡队列/受击罩/朝向状态、即时同步位置，并复用同 id/type 节点；缺失项立即销毁。增量仍使用运动插值与死亡淡出。
+- **视口与坐标**：内核用 ResizeObserver 观察容器；相机在 renderer resize 时重新钳边并同步投影，绘制与拾取共用相同视口。lighting 显式把世界矩形 `[-cell/2, view-cell/2]²` 映射到 RT，再由输出精灵还原，避免半格偏移。
+
 ## 应用与分发
 
 目标界面包含房间与对象详情、世界地图、表达式控制台、模块/分支管理、Memory 树、市场、账号和设置；回放需有历史数据与时间轴。认证、连接、订阅和编辑状态由应用管理，渲染内部状态留在渲染器。

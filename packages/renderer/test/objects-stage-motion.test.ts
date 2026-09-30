@@ -1,10 +1,10 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Container, Texture } from 'pixi.js';
 import { ObjectsStage } from '../src/objects/objects-stage.js';
 import type { LightingPass } from '../src/core/lighting.js';
 import type { RoomObjectState } from '@kkscreeps/shared';
 
-// R4 运动系统对账行为：快照重建/位移插值/事件罩/死亡淡出（pixi Container
+// R4 运动系统对账行为：快照重置/位移插值/事件罩/死亡淡出（pixi Container
 // 数学在 node 可跑——无 GPU 依赖；lighting 用桩）。
 
 function mockLighting(): LightingPass {
@@ -64,6 +64,96 @@ describe('ObjectsStage 运动/快照/事件/淡出（R4）', () => {
       tickDurationMS: 1000,
     });
   });
+  afterEach(() => stage.destroy());
+
+  it('停用部件恢复时即使值相同也重新显示', () => {
+    stage.apply([creep('a', 10, 10, { _isDisabled: true })], 0);
+    const node = internals(stage).views.get('a')!.parts.get('disabled')!.node;
+    stage.apply([creep('a', 10, 10, { _isDisabled: false })], 1);
+    expect(node.visible).toBe(false);
+    stage.apply([creep('a', 10, 10, { _isDisabled: true })], 2);
+    expect(internals(stage).views.get('a')!.parts.get('disabled')!.node).toBe(node);
+    expect(node.visible).toBe(true);
+  });
+
+  it('lighting 部件从停用恢复，重新显示并触发 RT dirty', () => {
+    const lighting = mockLighting();
+    const dirty = vi.spyOn(lighting, 'markDirty');
+    const s = new ObjectsStage({ cell: 100, lighting, objectsLayer: new Container(),
+      assets: { frames: new Map(), glow: Texture.WHITE, creepMask: null }, player: 'p1', tickDurationMS: 1000 });
+    s.apply([creep('a', 10, 10)], 0);
+    const glow = internals(s).views.get('a')!.parts.get('glow')!.node;
+    s.apply([creep('a', 10, 10, { spawning: true })], 1);
+    expect(glow.visible).toBe(false);
+    dirty.mockClear();
+    s.apply([creep('a', 10, 10)], 2);
+    expect(glow.visible).toBe(true);
+    expect(dirty).toHaveBeenCalled();
+    s.destroy();
+  });
+
+  it('快照复用节点并清除罩/旋转/移动，缺失对象立即销毁', () => {
+    stage.apply([creep('a', 10, 10), creep('b', 20, 20)], 0, [], 'snapshot');
+    const a = internals(stage).views.get('a')!;
+    const b = internals(stage).views.get('b')!;
+    const main = a.parts.get('main')!.node;
+    stage.apply([creep('a', 10, 11), creep('b', 20, 20)], 1,
+      [{ event: 1, objectId: 'b', data: { targetId: 'a' } }]);
+    stage.update(100);
+    const cover = a.cover!;
+    expect(main.rotation).not.toBe(0);
+    stage.apply([creep('a', 10, 11)], 0, [], 'snapshot');
+    expect(internals(stage).views.get('a')).toBe(a);
+    expect(a.parts.get('main')!.node).toBe(main);
+    expect([a.root.x, a.root.y, main.rotation, a.root.alpha]).toEqual([1000, 1100, 0, 1]);
+    expect(a.cover).toBeUndefined();
+    expect(cover.destroyed).toBe(true);
+    expect(b.root.destroyed).toBe(true);
+    expect(internals(stage).dying.size).toBe(0);
+    stage.update(2000);
+    expect([a.root.x, a.root.y, main.rotation]).toEqual([1000, 1100, 0]);
+  });
+
+  it('快照清死亡队列，同 id 不同类型仍重建', () => {
+    stage.apply([creep('a', 10, 10), creep('b', 20, 20)], 0, [], 'snapshot');
+    const a = internals(stage).views.get('a')!;
+    stage.apply([creep('b', 20, 20)], 1);
+    stage.update(100);
+    const b = internals(stage).views.get('b')!;
+    stage.apply([{ id: 'b', type: 'structure', structureType: 'constructedWall', x: 20, y: 20 }], 0, [], 'snapshot');
+    expect(a.root.destroyed).toBe(true);
+    expect(b.root.destroyed).toBe(true);
+    expect(internals(stage).dying.size).toBe(0);
+    expect(internals(stage).views.get('b')!.root).not.toBe(b.root);
+  });
+
+  it('运动与死亡期间跨层 glow/罩和 root 同步', () => {
+    stage.apply([creep('a', 10, 10)], 0, [], 'snapshot');
+    stage.apply([creep('a', 11, 10)], 1, [{ event: 1, objectId: 'x', data: { targetId: 'a' } }]);
+    const view = internals(stage).views.get('a')!;
+    stage.update(225);
+    const glow = view.parts.get('glow')!.node;
+    expect([glow.x, glow.y]).toEqual([view.root.x, view.root.y]);
+    expect([view.cover!.x, view.cover!.y]).toEqual([view.root.x, view.root.y]);
+    const base = view.cover!.alpha;
+    stage.apply([], 2);
+    stage.update(250);
+    expect(view.root.alpha).toBe(0.5);
+    expect(view.cover!.alpha).toBeCloseTo(base * 0.5);
+    expect([glow.x, glow.y]).toEqual([view.root.x, view.root.y]);
+  });
+
+  it('受击罩播放期间 safemode 改变，透明度跟随当前 main', () => {
+    const enemy = creep('e', 10, 10, { user: 'p2' });
+    stage.apply([enemy], 0, [], 'snapshot');
+    stage.apply([enemy], 1, [{ event: 1, objectId: 'x', data: { targetId: 'e' } }]);
+    stage.update(100);
+    const view = internals(stage).views.get('e')!;
+    stage.apply([enemy, { id: 'ctl', type: 'structure', structureType: 'controller',
+      x: 40, y: 40, owner: 'p1', safeMode: 100 }], 2);
+    stage.update(125);
+    expect(view.cover!.alpha).toBeCloseTo(0.25); // 罩峰值 0.5 × safemode 0.5
+  });
 
   it('增量位移：root 不瞬移，update 推进插值至目标', () => {
     stage.apply([creep('a', 10, 10)], 0, [], 'snapshot');
@@ -79,7 +169,7 @@ describe('ObjectsStage 运动/快照/事件/淡出（R4）', () => {
     expect(view.root.x).toBe(1100);
   });
 
-  it('快照重建：同 id 不同坐标瞬移到位、不播插值（跨快照跳变不做补间）', () => {
+  it('快照重置：同 id 不同坐标瞬移到位、不播插值（跨快照跳变不做补间）', () => {
     stage.apply([creep('a', 10, 10)], 0, [], 'snapshot');
     stage.update(100);
     stage.apply([creep('a', 40, 40)], 5, [], 'snapshot');

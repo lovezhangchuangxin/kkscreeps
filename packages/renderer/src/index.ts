@@ -12,6 +12,7 @@ import { fitRect, screenToWorld, type CameraState } from './core/camera-math.js'
 import { loadAtlas, type LoadedAtlas } from './assets/atlas.js';
 import { FeedStore, type FeedView } from './feed/room-feed.js';
 import { DEFAULT_TICK_DURATION_MS } from './objects/specs.js';
+import { AnimationClock } from './anim/clock.js';
 import { DEFAULT_CELL_SIZE, ROOM_SIZE, RoomScene } from './scenes/room.js';
 import type { TerrainTextures } from './scenes/terrain.js';
 
@@ -74,6 +75,9 @@ export interface RendererHandle {
   /** 相机状态直设（世界锚点+缩放；纯数据入参）。回放器/截图工具用——
    * 非最终契约面，R6 API 冻结时评审去留。 */
   setCameraState(state: { x: number; y: number; zoom: number }): void;
+  /** 场景动画回放倍率，默认 1；0 暂停。调用方同步调整 RoomFeed 推送速率。
+   * 保留当前动画进度。非最终契约面，R6 冻结时评审。 */
+  setPlaybackRate(rate: number): void;
   /** RoomFeed 输入口（契约 @kkscreeps/shared/feed + 只读摘要；R1 起回放/网络共用）。 */
   readonly feed: FeedView;
   /** 拾取接口（屏幕坐标 → 世界/格坐标；对象命中 R3）。
@@ -112,118 +116,141 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
     height: kernel.app.renderer.screen.height,
   });
   const camera = new CameraController(kernel.stage, viewSize);
-  camera.attach(kernel.app.canvas);
-
+  const clock = new AnimationClock();
   let atlas: LoadedAtlas | null = null;
+  let destroyScene: (() => void) | undefined;
+  let disconnect: (() => void) | undefined;
+  let disposal: Promise<void> | undefined;
+  const dispose = (): Promise<void> => disposal ??= (async () => {
+    disconnect?.();
+    camera.detach();
+    try {
+      destroyScene?.();
+    } finally {
+      try { await kernel.destroy(); } finally { await atlas?.dispose(); }
+    }
+  })();
+
   try {
+    camera.attach(kernel.app.canvas);
     if (options.atlasBaseUrl) {
       atlas = await loadAtlas(options.atlasBaseUrl, kernel.app.renderer.resolution);
     }
-  } catch (e) {
-    // 资产加载失败：内核已起（canvas 入 DOM、ticker/监听存活），先清理再抛。
-    await kernel.destroy();
-    throw e;
-  }
 
-  const view = ROOM_SIZE * cellSize;
-  const half = cellSize / 2;
-  // 官方几何：floor 自 -cell/2 起（半格边距带为出口条）
-  const floorRect = { minX: -half, minY: -half, maxX: -half + view, maxY: -half + view };
+    const view = ROOM_SIZE * cellSize;
+    const half = cellSize / 2;
+    // 官方几何：floor 自 -cell/2 起（半格边距带为出口条）
+    const floorRect = { minX: -half, minY: -half, maxX: -half + view, maxY: -half + view };
 
-  const textures = atlas
-    ? ({
-        ground: atlas.standalone.get('ground')!,
-        'ground-mask': atlas.standalone.get('ground-mask')!,
-        noise1: atlas.standalone.get('noise1')!,
-        noise2: atlas.standalone.get('noise2')!,
-        'exit-top': atlas.standalone.get('exit-top')!,
-        'exit-bottom': atlas.standalone.get('exit-bottom')!,
-        'exit-left': atlas.standalone.get('exit-left')!,
-        'exit-right': atlas.standalone.get('exit-right')!,
-      } satisfies TerrainTextures)
-    : placeholderTextures();
+    const textures = atlas
+      ? ({
+          ground: atlas.standalone.get('ground')!,
+          'ground-mask': atlas.standalone.get('ground-mask')!,
+          noise1: atlas.standalone.get('noise1')!,
+          noise2: atlas.standalone.get('noise2')!,
+          'exit-top': atlas.standalone.get('exit-top')!,
+          'exit-bottom': atlas.standalone.get('exit-bottom')!,
+          'exit-left': atlas.standalone.get('exit-left')!,
+          'exit-right': atlas.standalone.get('exit-right')!,
+        } satisfies TerrainTextures)
+      : placeholderTextures();
 
-  // 对象舞台资产（R3）：atlas 帧 + glow/creep-mask 独立纹理；无 atlas 时对象
-  // 层缺帧降级。
-  const objectsSetup = atlas
-    ? {
-        assets: {
-          frames: atlas.frames,
-          glow: atlas.standalone.get('glow')?.texture ?? null,
-          creepMask: atlas.standalone.get('creep-mask')?.texture ?? null,
-        },
-        player: options.localPlayerId ?? null,
-        tickDurationMS: options.tickDurationMs ?? DEFAULT_TICK_DURATION_MS,
-      }
-    : undefined;
+    // 对象舞台资产（R3）：atlas 帧 + glow/creep-mask 独立纹理；无 atlas 时对象
+    // 层缺帧降级。
+    const objectsSetup = atlas
+      ? {
+          assets: {
+            frames: atlas.frames,
+            glow: atlas.standalone.get('glow')?.texture ?? null,
+            creepMask: atlas.standalone.get('creep-mask')?.texture ?? null,
+          },
+          player: options.localPlayerId ?? null,
+          tickDurationMS: options.tickDurationMs ?? DEFAULT_TICK_DURATION_MS,
+        }
+      : undefined;
 
-  const room = new RoomScene(textures, cellSize, objectsSetup);
-  kernel.stage.addChild(room.root);
+    const room = new RoomScene(textures, cellSize, objectsSetup);
+    destroyScene = () => room.destroy();
+    kernel.stage.addChild(room.root);
 
-  const feed = new FeedStore();
-  // feed→scene 接线：快照携带地形即重建（hash 门控在 TerrainStage 内）；
-  // 对象列表逐变更对账（constructedWall 格集变化在 applyObjects 内返回并
-  // 触发墙重烘焙）；事件面随变更记录下发（R4 攻击/治疗罩，R5 扩全表）。
-  feed.onChange((roomKey, change) => {
-    const terrain = feed.terrain(roomKey);
-    if (terrain) room.setTerrain(terrain.codes);
-    room.applyObjects(change.objects, change.time, change.events, change.kind);
-  });
+    const feed = new FeedStore();
+    // feed→scene 接线：快照携带地形即重建（hash 门控在 TerrainStage 内）；
+    // 对象列表逐变更对账（constructedWall 格集变化在 applyObjects 内返回并
+    // 触发墙重烘焙）；事件面随变更记录下发（R4 攻击/治疗罩，R5 扩全表）。
+    const unsubscribe = feed.onChange((roomKey, change) => {
+      const terrain = feed.terrain(roomKey);
+      if (terrain) room.setTerrain(terrain.codes);
+      room.applyObjects(change.objects, change.time, change.events, change.kind);
+    });
 
-  const onTick = (ticker: { deltaMS: number }): void => {
-    // 真实帧时间直通（swamp 滚动按 60fps 帧基准换算在 RoomScene 内）
-    room.update(ticker.deltaMS, kernel.app.renderer);
-  };
-  kernel.app.ticker.add(onTick);
-
-  camera.setBounds(floorRect);
-
-  const fitRoom = () => {
-    const { width, height } = viewSize();
-    camera.setState(fitRect(floorRect.minX, floorRect.minY, view, view, width, height));
-  };
-  fitRoom();
-
-  const handle: RendererHandle = {
-    getStats(): RendererStats {
-      return {
-        backend: kernel.backend,
-        fps: Math.round(kernel.app.ticker.FPS),
-        zoom: camera.zoom,
-        atlasFrames: atlas?.frames.size ?? 0,
-        lighting: room.lighting.isDegraded ? 'degraded' : 'real',
-      };
-    },
-    fitRoom,
-    setCameraState(state: { x: number; y: number; zoom: number }): void {
-      camera.setState(state);
-    },
-    feed,
-    pickAt(screenX: number, screenY: number): PickResult {
-      const { width, height } = viewSize();
-      const cam: CameraState = camera.state;
-      const world = screenToWorld(cam, width, height, screenX, screenY);
-      // 格中心 (x*cell, y*cell)（评审 A3：±cell/2 范围归本格，非 [x*cell,(x+1)*cell)）
-      const cx = Math.round(world.x / cellSize);
-      const cy = Math.round(world.y / cellSize);
-      const inside = cx >= 0 && cy >= 0 && cx < ROOM_SIZE && cy < ROOM_SIZE;
-      return { world, cell: inside ? { x: cx, y: cy } : null };
-    },
-    async destroy() {
+    const onResize = () => camera.syncViewport();
+    const onTick = (ticker: { elapsedMS: number }): void => {
+      camera.syncViewport();
+      // deltaMS 有 minFPS 截断且受 speed 缩放；动作必须按实际经过时间推进。
+      room.update(clock.advance(ticker.elapsedMS), kernel.app.renderer);
+    };
+    kernel.app.renderer.on('resize', onResize);
+    kernel.app.ticker.add(onTick);
+    disconnect = () => {
+      unsubscribe();
       kernel.app.ticker.remove(onTick);
-      camera.detach();
-      room.destroy();
-      await kernel.destroy();
-      (handle as unknown as { __room?: RoomScene }).__room = undefined;
-    },
-  };
-  // dev/harness 诊断附加字段（B-S2 风险缓释：不可枚举防 spread 拖走场景树、
-  // destroy 置空防悬挂引用；活 pixi 树进运行时公共面的取舍 R6 冻结时裁定）
-  Object.defineProperty(handle, '__room', {
-    value: room,
-    enumerable: false,
-    writable: true,
-    configurable: false,
-  });
-  return handle;
+      kernel.app.renderer.off('resize', onResize);
+    };
+
+    camera.setBounds(floorRect);
+
+    const fitRoom = () => {
+      const { width, height } = viewSize();
+      camera.setState(fitRect(floorRect.minX, floorRect.minY, view, view, width, height));
+    };
+    fitRoom();
+
+    const handle: RendererHandle = {
+      getStats(): RendererStats {
+        return {
+          backend: kernel.backend,
+          fps: Math.round(kernel.app.ticker.FPS),
+          zoom: camera.zoom,
+          atlasFrames: atlas?.frames.size ?? 0,
+          lighting: room.lighting.isDegraded ? 'degraded' : 'real',
+        };
+      },
+      fitRoom,
+      setCameraState(state: { x: number; y: number; zoom: number }): void {
+        camera.setState(state);
+      },
+      setPlaybackRate(rate: number): void {
+        clock.setRate(rate);
+      },
+      feed,
+      pickAt(screenX: number, screenY: number): PickResult {
+        camera.syncViewport();
+        const { width, height } = viewSize();
+        const cam: CameraState = camera.state;
+        const world = screenToWorld(cam, width, height, screenX, screenY);
+        // 格中心 (x*cell, y*cell)（评审 A3：±cell/2 范围归本格，非 [x*cell,(x+1)*cell)）
+        const cx = Math.round(world.x / cellSize);
+        const cy = Math.round(world.y / cellSize);
+        const inside = cx >= 0 && cy >= 0 && cx < ROOM_SIZE && cy < ROOM_SIZE;
+        return { world, cell: inside ? { x: cx, y: cy } : null };
+      },
+      async destroy() {
+        (handle as unknown as { __room?: RoomScene }).__room = undefined;
+        await dispose();
+      },
+    };
+    // dev/harness 诊断附加字段（B-S2 风险缓释：不可枚举防 spread 拖走场景树、
+    // destroy 置空防悬挂引用；活 pixi 树进运行时公共面的取舍 R6 冻结时裁定）
+    Object.defineProperty(handle, '__room', {
+      value: room,
+      enumerable: false,
+      writable: true,
+      configurable: false,
+    });
+    return handle;
+  } catch (error) {
+    // 所有初始化阶段共用销毁路径，回滚已创建的节点、监听和资产。
+    try { await dispose(); } catch { /* 保留原始初始化错误。 */ }
+    throw error;
+  }
 }

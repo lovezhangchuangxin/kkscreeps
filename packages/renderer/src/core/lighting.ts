@@ -12,7 +12,7 @@
  * 降级路径（G2 登记）：离屏渲染不可用时 display 隐藏（仅无全局压暗，亮斑
  * 类成员若有则走场景直加 ADD——R2 仅地形件，降级即无 lighting）。
  */
-import { Container, Graphics, RenderTexture, Sprite, Texture } from 'pixi.js';
+import { Container, Graphics, Matrix, RenderTexture, Sprite, Texture } from 'pixi.js';
 import { TERRAIN_SPEC } from './terrain-spec.js';
 
 export class LightingPass {
@@ -23,12 +23,15 @@ export class LightingPass {
   private rt: RenderTexture | null = null;
   private dirty = true;
   private degraded = false;
+  private readonly half: number;
+  private readonly renderTransform = new Matrix();
   /** 带私有纹理的成员（清场时可带纹理销毁；R3：对象 glow 持共享纹理，
    * 只 detach——两类成员分开跟踪，防共享源误毁〔R2 评审⑤同族〕）。 */
   private readonly ownedMembers = new Set<Container>();
 
   constructor(view: number, cell: number) {
     const half = cell / 2;
+    this.half = half;
     const ambient = new Graphics()
       .rect(-half, -half, view, view)
       .fill({ color: TERRAIN_SPEC.lighting.ambient, alpha: TERRAIN_SPEC.lighting.ambientAlpha });
@@ -77,7 +80,7 @@ export class LightingPass {
   /** 确保 RT 与渲染器匹配并按需重渲（ticker 驱动；dirty 才有成本）。
    * 内容为世界尺度，渲进 renderSize² RT 前按 view/renderSize 缩放（评审 A1：
    * 缩放缺失会把成员裁剪到世界 [0,renderSize]² 并放大 view/renderSize 倍）。 */
-  update(renderer: { render(options: { container: Container; target: RenderTexture; clear?: boolean }): void }, renderSize: number, view: number): void {
+  update(renderer: { render(options: { container: Container; target: RenderTexture; clear?: boolean; transform?: Matrix }): void }, renderSize: number, view: number): void {
     if (this.degraded || !this.dirty) return;
     try {
       if (!this.rt || this.rt.width !== renderSize || this.rt.height !== renderSize) {
@@ -85,13 +88,11 @@ export class LightingPass {
         this.rt = RenderTexture.create({ width: renderSize, height: renderSize });
         this.display.texture = this.rt;
       }
-      const previousScale = this.content.scale.x;
-      this.content.scale.set(renderSize / view);
-      try {
-        renderer.render({ container: this.content, target: this.rt, clear: true });
-      } finally {
-        this.content.scale.set(previousScale);
-      }
+      // RT 原点对应房间左上角 (-half,-half)，输出精灵以同一原点还原。
+      // 显式 render transform 不改动成员容器的局部变换。
+      const scale = renderSize / view;
+      this.renderTransform.set(scale, 0, 0, scale, this.half * scale, this.half * scale);
+      renderer.render({ container: this.content, target: this.rt, clear: true, transform: this.renderTransform });
       this.display.visible = true;
       this.dirty = false;
     } catch (e) {

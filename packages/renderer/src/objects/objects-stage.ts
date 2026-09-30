@@ -25,6 +25,7 @@ import { mergedOutlinePath } from '../core/path-merge.js';
 import { AlphaKeyframesTween, AlphaTween, MoveTween, RotateTween, TweenManager, type Tween } from '../anim/tweens.js';
 import type { PartEnv, PartValues } from './part-decl.js';
 import { valuesEqual } from './part-decl.js';
+import { OverlayGroup } from './overlay-group.js';
 import { MOTION_TYPE_KEYS, controllerSummary } from './parts-creeps.js';
 import { buildRegistry, type RegisteredDescriptor } from './registry.js';
 import type { JoinAssets } from './joins-naturals.js';
@@ -59,9 +60,7 @@ interface ObjectView {
   readonly parts: Map<string, PartEntry>;
   /** 世界坐标 overlay 件（lighting/effects 层部件 + 受击罩）——运动/淡出时
    * 逐帧随 root 位移与 alpha 同步。 */
-  readonly overlays: Container[];
-  /** 是否有 lighting 层 overlay（运动/淡出期间 RT 需逐帧 markDirty）。 */
-  hasLightingOverlay: boolean;
+  readonly overlays: OverlayGroup;
   x: number;
   y: number;
   /** 运动类型（MOTION_TYPE_KEYS）——位移走插值、移除走淡出。 */
@@ -169,8 +168,8 @@ export class ObjectsStage {
    * 对账入口（feed.onChange 驱动）。返回 constructedWall 格集是否变化
    * （变化时 RoomScene 需把 wallExtras 并入墙烘焙重烧）。events=本 tick 房间
    * 事件（动效第一通道；R4 消费攻击/治疗罩，R5 扩全表）。kind='snapshot'
-   * 时全量重建视图（快照=全量置换语义：跨快照的位置跳变不得做移动补间、
-   * 淡出/罩等瞬态一并清场——切夹具/重放的幻影移动与旋转棘轮根因）。
+   * 时清除瞬态并即时同步坐标，复用同 id/type 节点；缺失项立即拆除。
+   * 快照重置语义与节点寿命分开，避免重放/重同步时全量拆树。
    */
   apply(
     objects: readonly RoomObjectState[],
@@ -181,8 +180,7 @@ export class ObjectsStage {
     if (kind === 'snapshot') {
       for (const view of [...this.dying.values()]) this.destroyView(view);
       this.dying.clear();
-      for (const view of [...this.views.values()]) this.destroyView(view);
-      this.views.clear();
+      for (const view of this.views.values()) this.resetTransientState(view);
     }
     const extras = new Set<number>();
     for (const o of objects) {
@@ -214,7 +212,7 @@ export class ObjectsStage {
     // 移除（快照迭代——destroy 同步 splice 活数组会跳格，R2 复审 N1 纪律）
     for (const [id, view] of [...this.views]) {
       if (!wanted.has(id)) {
-        if (view.motion) {
+        if (view.motion && kind !== 'snapshot') {
           // 官方 disappearProcessor：FadeOut(tickDuration/2) 后销毁——
           // 移出 views 进 dying 托管
           this.beginFade(id, view);
@@ -256,34 +254,25 @@ export class ObjectsStage {
           typeKey,
           root,
           parts: new Map(),
-          overlays: [],
-          hasLightingOverlay: false,
+          overlays: new OverlayGroup(this.lighting),
           x,
           y,
           motion: MOTION_TYPE_KEYS.has(typeKey),
           lastRotation: 0,
         };
         this.views.set(id, view);
-      } else if (view.x !== x || view.y !== y) {
+      } else if (kind === 'snapshot' || view.x !== x || view.y !== y) {
         const prevGameX = view.x / this.cell;
         const prevGameY = view.y / this.cell;
         view.x = x;
         view.y = y;
-        if (view.motion) {
+        if (view.motion && kind !== 'snapshot') {
           // 官方 actions.moveTo/rotateTo：位置变化 → MoveTo(easeInOutQuad,
           // tickDuration) + RotateTo(0.2 tick)；start=当前渲染位（中途重定位）
           this.beginMove(view, x, y, prevGameX, prevGameY);
         } else {
           view.root.position.set(x, y);
-          let movedLighting = false;
-          for (const entry of view.parts.values()) {
-            if (entry.node.parent !== view.root) {
-              entry.node.position.set(x, y);
-              if (entry.node.parent === this.lighting.content) movedLighting = true;
-            }
-          }
-          // lighting 成员位移不换 membership——RT 需重渲（清偿复审 R2）
-          if (movedLighting) this.lighting.markDirty();
+          view.overlays.moveTo(x, y);
         }
       }
       this.reconcileParts(view, desc, state, env);
@@ -309,6 +298,8 @@ export class ObjectsStage {
             this.lighting.markDirty();
           }
           entry.node.visible = false;
+          // null 是部件停用，复活必须重应用（包含 values.visible 的自管件）。
+          entry.prev = null;
         }
         continue;
       }
@@ -323,16 +314,16 @@ export class ObjectsStage {
           node.position.copyFrom(view.root.position);
           if (layer === 'lighting') {
             this.lighting.addMember(node, false);
-            view.hasLightingOverlay = true;
           } else {
             this.effectsRoot.addChild(node);
           }
-          view.overlays.push(node);
+          view.overlays.add(node, layer === 'lighting');
         }
         entry = { node, prev: null };
         view.parts.set(decl.id, entry);
       }
       if (!valuesEqual(entry.prev, values)) {
+        entry.node.visible = true;
         desc.renderers.get(decl.id)!.apply(values, entry.node, env);
         entry.prev = values;
         // lighting 成员在树内的可见性/几何变化不影响 membership——必须显式
@@ -360,6 +351,7 @@ export class ObjectsStage {
       }
     }
     view.parts.clear();
+    view.overlays.clear();
     if (view.cover) {
       view.cover.destroy({ children: true });
       view.cover = undefined;
@@ -388,9 +380,7 @@ export class ObjectsStage {
     view.moveTween = new MoveTween(
       (px, py) => {
         view.root.position.set(px, py);
-        for (const overlay of view.overlays) overlay.position.set(px, py);
-        // lighting 成员位移不换 membership——RT 逐帧重渲（运动期间）
-        if (view.hasLightingOverlay) this.lighting.markDirty();
+        view.overlays.moveTo(px, py);
       },
       view.root.x,
       view.root.y,
@@ -460,18 +450,18 @@ export class ObjectsStage {
       node.position.copyFrom(view.root.position);
       this.effectsRoot.addChild(node);
       view.cover = node;
-      view.overlays.push(node);
+      view.overlays.add(node);
     }
     const cover = view.cover;
     cover.tint = tint;
     // 官方 childCover 是 mainContainer 子件（creepActions.js:74）——随其
     // safemode α 暗化；我方罩是 effects 层独立节点（cover.svg 纯圆、不随
     // main 旋转零观感差），以 main 当前 α 作乘数传导（R4 评审 A-B3/S3）
-    const dim = view.parts.get('main')?.node.alpha ?? 1;
     if (view.coverTween) this.tweens.cancel(view.coverTween);
     view.coverTween = new AlphaKeyframesTween(
       (a) => {
-        cover.alpha = a * dim;
+        // main 的 safemode 状态可能在罩播放期间改变，按当前值传导。
+        cover.alpha = a * (view.parts.get('main')?.node.alpha ?? 1);
       },
       [
         [CREEP_SPEC.cover.fadeIn, CREEP_SPEC.cover.alpha],
@@ -493,21 +483,11 @@ export class ObjectsStage {
     this.dying.set(id, view);
     if (view.fadeTween) this.tweens.cancel(view.fadeTween);
     if (view.coverTween) this.tweens.cancel(view.coverTween);
-    const setters = [
-      (a: number) => {
-        view.root.alpha = a; // root α 恒 1（safemode 在 main 节点）——官方 FadeOut 同位
-      },
-      ...view.overlays.map((overlay) => {
-        const base = overlay.alpha;
-        return (a: number) => {
-          overlay.alpha = base * a;
-        };
-      }),
-    ];
+    const fadeOverlays = view.overlays.captureFade();
     view.fadeTween = new AlphaTween(
       (a) => {
-        for (const set of setters) set(a);
-        if (view.hasLightingOverlay) this.lighting.markDirty();
+        view.root.alpha = a;
+        fadeOverlays(a);
       },
       view.root.alpha,
       0,
@@ -529,6 +509,22 @@ export class ObjectsStage {
         this.destroyView(view);
       }
     }
+  }
+
+  /** 快照清瞬态、保留同 id/type 的节点；坐标跳转在对账阶段即时应用。 */
+  private resetTransientState(view: ObjectView): void {
+    this.cancelViewTweens(view);
+    view.moveTween = view.rotateTween = view.fadeTween = view.coverTween = undefined;
+    if (view.cover) {
+      view.overlays.remove(view.cover);
+      view.cover.destroy({ children: true });
+      view.cover = undefined;
+    }
+    view.root.alpha = 1;
+    view.lastRotation = 0;
+    const main = view.parts.get('main')?.node;
+    if (main) main.rotation = 0;
+    for (const entry of view.parts.values()) entry.prev = null;
   }
 
   private cancelViewTweens(view: ObjectView): void {

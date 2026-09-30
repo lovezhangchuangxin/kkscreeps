@@ -50,13 +50,63 @@ export interface LoadedAtlas {
   frames: Map<string, Texture>;
   /** 独立纹理（直通 PNG + 出口条），键=资产名。 */
   standalone: Map<string, StandaloneTexture>;
+  /** 场景拆卸后释放资产；共享页在最后一个持有者释放时卸载。可重复调用。 */
+  dispose(): Promise<void>;
+}
+
+interface SheetEntry {
+  users: number;
+  ready: Promise<Spritesheet>;
+  unloading?: Promise<void>;
+}
+
+// Assets 缓存跨 Application 共享；页租约防一个 renderer 销毁另一个的帧源。
+const sheets = new Map<string, SheetEntry>();
+
+async function acquireSheet(url: string): Promise<{ sheet: Spritesheet; release(): Promise<void> }> {
+  let entry = sheets.get(url);
+  while (entry?.unloading) {
+    await entry.unloading;
+    entry = sheets.get(url);
+  }
+  if (!entry) {
+    entry = { users: 0, ready: Assets.load<Spritesheet>(url) };
+    sheets.set(url, entry);
+  }
+  const held = entry;
+  held.users++;
+  let sheet: Spritesheet;
+  try {
+    sheet = await held.ready;
+  } catch (error) {
+    if (--held.users === 0) sheets.delete(url);
+    throw error;
+  }
+  let released = false;
+  return {
+    sheet,
+    async release() {
+      if (released) return;
+      released = true;
+      if (--held.users !== 0) return;
+      // 保留卸载中的条目，让并发重挂载等待卸载完成后重新加载。
+      held.unloading = Assets.unload(url).finally(() => { sheets.delete(url); });
+      await held.unloading;
+    },
+  };
 }
 
 async function loadBitmapTexture(url: URL): Promise<StandaloneTexture> {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`独立纹理加载失败: HTTP ${response.status} ${url.href}`);
   const bitmap = await createImageBitmap(await response.blob());
-  return { texture: Texture.from(bitmap), bitmap };
+  try {
+    // 私有纹理不进入 Pixi 全局资源缓存，寿命只由 LoadedAtlas 管理。
+    return { texture: Texture.from(bitmap, true), bitmap };
+  } catch (error) {
+    bitmap.close();
+    throw error;
+  }
 }
 
 /**
@@ -74,20 +124,30 @@ export async function loadAtlas(baseUrl: string, pixelRatio: number): Promise<Lo
   const scale = pixelRatio > 1 ? '2' : '1';
   const frames = new Map<string, Texture>();
   const standalone = new Map<string, StandaloneTexture>();
+  const releases: Array<() => Promise<void>> = [];
+  let disposal: Promise<void> | undefined;
+  const dispose = (): Promise<void> => disposal ??= (async () => {
+    for (const { texture, bitmap } of standalone.values()) {
+      texture.destroy(true);
+      bitmap.close();
+    }
+    standalone.clear();
+    frames.clear();
+    const results = await Promise.allSettled(releases.splice(0).map((release) => release()));
+    const failure = results.find((result) => result.status === 'rejected');
+    if (failure?.status === 'rejected') throw failure.reason;
+  })();
 
   const atlas = manifest.atlas[scale];
   if (!atlas) throw new Error(`manifest 缺 ${scale}x atlas`);
   // 页间并行加载（§5 首帧预算）；页内帧纹理由 spritesheet 一次给出。
-  await Promise.all(
-    atlas.pages.map(async (page) => {
-      const sheet = await Assets.load<Spritesheet>(new URL(`atlas/${page.json.file}`, baseUrl).href);
-      for (const [name, tex] of Object.entries(sheet.textures)) {
-        frames.set(name, tex);
-      }
-    }),
-  );
-
-  const jobs: Array<Promise<void>> = [];
+  const jobs: Array<Promise<void>> = atlas.pages.map(async (page) => {
+    const { sheet, release } = await acquireSheet(new URL(`atlas/${page.json.file}`, baseUrl).href);
+    releases.push(release);
+    for (const [name, tex] of Object.entries(sheet.textures)) {
+      frames.set(name, tex);
+    }
+  });
   for (const name of STANDALONE_TEXTURES) {
     jobs.push(
       loadBitmapTexture(new URL(`svg/${name}.png`, baseUrl)).then((t) => {
@@ -102,7 +162,12 @@ export async function loadAtlas(baseUrl: string, pixelRatio: number): Promise<Lo
       }),
     );
   }
-  await Promise.all(jobs);
-
-  return { frames, standalone };
+  // 失败也等所有在途加载落定，再统一回滚；避免 Promise.all 提前拒绝后泄漏。
+  const results = await Promise.allSettled(jobs);
+  const failure = results.find((result) => result.status === 'rejected');
+  if (failure?.status === 'rejected') {
+    try { await dispose(); } catch { /* 保留原始加载错误。 */ }
+    throw failure.reason;
+  }
+  return { frames, standalone, dispose };
 }

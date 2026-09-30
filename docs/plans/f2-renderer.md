@@ -712,3 +712,28 @@ z 表/色表/字体常量直接测代码常量）。逐片勾项，收口时全�
   （冒烟断言经真实全链驱动、旧缺陷在此必挂的承重锚认定；alpha 键扩散的
   值域纯净性确认；淡出乘法化/微缓存的契约面无影响确认）。**三路清偿复审
   全部通过，R4 收口。**
+- 2026-09-30（同日）：**R4 后稳定性修复与架构整理**（R5 尚未开始）。独立审查
+  确认的 7 项问题已修复：① renderer 销毁时释放独立纹理/源/位图，spritesheet
+  页改按 URL 租约共享、最后一个持有者卸载；并发加载失败等待在途任务落定再
+  回滚，初始化失败与重复 destroy 共用释放路径；② lighting 显式 render Matrix
+  加半格平移，使 RT 原点对应世界 (-cell/2,-cell/2)，不修改 content 局部变换；
+  ③ 动画输入改用未经 minFPS 截断的 ticker.elapsedMS；④ 部件 null 停用使 prev
+  失效，恢复时重新 apply 与置脏 lighting；⑤ link 能量按 50px×比例设尺寸，
+  不再覆盖原始纹理尺寸归一化；⑥ ResizeObserver 观察容器、renderer resize
+  同步相机钳边/投影，拾取使用同一视口；⑦ 空墙/空沼泽同样先做 hash 门控，
+  防等价空地形重复清场/RT 重渲。
+  架构整理：`OverlayGroup` 集中位移/淡出/lighting dirty；快照清除瞬态而复用
+  同 id/type 节点（修订 R4「快照全量重建」实施决策，保留位置即时跳转语义）；
+  `AnimationClock` 统一场景时间，公共面增加 `setPlaybackRate(rate)`（0 暂停、
+  默认 1、R6 冻结时评审），harness 倍率同步作用于推送和动画。顺带修复罩动画
+  中途 safemode 改变时仍使用触发时透明度的问题。销毁同时取消 feed 订阅，
+  防已销毁场景被保留句柄重新触达。
+  验证：新增 23 项回归（共享页双实例/卸载中重挂载/失败回滚/重复销毁、公共
+  ticker 长帧与变速暂停、坐标边缘对齐、resize 钳边与拾取、隐藏恢复、快照
+  节点身份/瞬态清理/类型变化、跨层随动与 safemode），renderer 206 测+tsc+
+  资产新鲜度绿，shared 4 测绿，Vite harness 生产构建通过。WebGPU/WebGL
+  人工验证 showcase、地形切换、快照重放，WebGPU creep 4× 回放到末态，
+  900×600 视口保持缩放/世界锚点，双后端 lighting: real、无 error 日志。
+  地形切换仍有 Pixi BindGroup「纹理销毁时仍被 shader 绑定」warning，未观察
+  到渲染中断，保留 R7 跟踪；未执行性能预算/10k tick 内存 soak，不据此声称
+  R7 验收完成。本次为单代理修复验证，未补做三路 subagent 评审。

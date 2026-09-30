@@ -129,6 +129,7 @@ function stepOnce(): void {
 
 function cycleSpeed(): void {
   speedIdx = (speedIdx + 1) % SPEEDS.length;
+  renderer.setPlaybackRate(SPEEDS[speedIdx]!);
   if (playing) setPlaying(true);
   else renderHud();
 }
@@ -143,6 +144,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.key === '+' || e.key === '=') cycleSpeed();
   else if (e.key === '-' || e.key === '_') {
     speedIdx = (speedIdx + SPEEDS.length - 1) % SPEEDS.length;
+    renderer.setPlaybackRate(SPEEDS[speedIdx]!);
     if (playing) setPlaying(true);
     else renderHud();
   } else {
@@ -151,17 +153,13 @@ window.addEventListener('keydown', (e) => {
     if (i >= 0 && i < keys.length) loadFixture(keys[i]!);
   }
 });
-// pixi ResizePlugin 的 resize 是 rAF 延迟生效——同步 fitRoom 会读到旧视口尺寸，
-// 排到同帧之后执行（rAF 回调按注册序，ResizePlugin 先注册）。
-window.addEventListener('resize', () => requestAnimationFrame(() => renderer.fitRoom()));
-// ?view=<x>,<y>,<zoom>（世界坐标/缩放）：截图钉住相机——注册在 fitRoom 监听
-// 之后，同帧 rAF 后执行覆盖 fit（harness 专用，不属渲染器公共面）。
+// resize 由 renderer 内部同步，保留世界锚点/缩放；F 显式适配整个房间。
+// ?view=<x>,<y>,<zoom>（世界坐标/缩放）：截图钉住初始相机。
 const viewParam = params.get('view');
 if (viewParam) {
   const [vx, vy, vz] = viewParam.split(',').map(Number);
   const applyPinned = () => renderer.setCameraState({ x: vx!, y: vy!, zoom: vz! });
   requestAnimationFrame(() => requestAnimationFrame(applyPinned));
-  window.addEventListener('resize', () => requestAnimationFrame(applyPinned));
 }
 renderer.fitRoom();
 loadFixture(current);

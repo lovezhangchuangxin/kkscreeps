@@ -31,6 +31,8 @@ export class CameraController {
   private dragging = false;
   private lastSx = 0;
   private lastSy = 0;
+  private viewWidth = -1;
+  private viewHeight = -1;
 
   private clamp(cam: CameraState): CameraState {
     if (!this.bounds) return cam;
@@ -83,7 +85,7 @@ export class CameraController {
     this.cam = this.clamp(options.initial ?? { x: 0, y: 0, zoom: 1 });
   }
 
-  /** 设置/更新钳边矩形（随视口 resize 由持有方重申）。 */
+  /** 设置/更新钳边矩形。 */
   setBounds(bounds: { minX: number; minY: number; maxX: number; maxY: number }): void {
     this.bounds = bounds;
     this.cam = this.clamp(this.cam);
@@ -130,9 +132,19 @@ export class CameraController {
     this.apply();
   }
 
+  /** 视口变化时重新钳边和投影；保持世界锚点与当前缩放。 */
+  syncViewport(): void {
+    const { width, height } = this.getViewSize();
+    if (width === this.viewWidth && height === this.viewHeight) return;
+    this.cam = this.clamp(this.cam);
+    this.apply();
+  }
+
   /** cam → stage 变换：world (x,y) 落在视口中心。 */
   apply(): void {
     const { width, height } = this.getViewSize();
+    this.viewWidth = width;
+    this.viewHeight = height;
     this.stage.scale.set(this.cam.zoom);
     this.stage.position.set(width / 2 - this.cam.x * this.cam.zoom, height / 2 - this.cam.y * this.cam.zoom);
   }

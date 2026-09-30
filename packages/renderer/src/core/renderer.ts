@@ -38,6 +38,9 @@ export async function initKernel(options: KernelOptions): Promise<Kernel> {
     autoDensity: true,
   });
   options.container.appendChild(app.canvas);
+  // Pixi ResizePlugin 只监听 window.resize；侧栏/父布局变化由容器观察补齐。
+  const observer = new ResizeObserver(() => app.resize());
+  observer.observe(options.container);
 
   const stage = app.stage;
   let destroyed = false;
@@ -48,6 +51,7 @@ export async function initKernel(options: KernelOptions): Promise<Kernel> {
     async destroy() {
       if (destroyed) return;
       destroyed = true;
+      observer.disconnect();
       // children 级联拆场景子树；texture 缺省 false——Assets 共享纹理不在此销毁
       // （v8 语义）；Graphics GPU 缓冲由 renderer 拆卸时经 graphicsContextSystem 释放。
       app.destroy(true, { children: true });

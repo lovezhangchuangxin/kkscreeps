@@ -122,6 +122,7 @@ export class TerrainStage {
 
   private rebuildSwamp(codes: ArrayLike<number>): void {
     const merged = mergedOutlinePath(codes, (c) => (c & 2) !== 0, { cell: this.cell }, this.swampHash);
+    if (merged.hash === this.swampHash) return;
     this.swampHash = merged.hash;
     if (merged.count === 0) {
       this.clearSwampSprites();
@@ -214,6 +215,7 @@ export class TerrainStage {
 
   private rebuildWall(codes: ArrayLike<number>): boolean {
     const merged = mergedOutlinePath(codes, (c) => (c & 1) !== 0, { cell: this.cell }, this.wallHash);
+    if (merged.hash === this.wallHash) return false;
     this.wallHash = merged.hash;
     if (merged.count === 0) {
       this.clearWallSprites();

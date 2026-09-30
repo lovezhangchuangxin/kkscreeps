@@ -403,7 +403,7 @@ export function joinLink(assets: JoinAssets): PartJoin {
     energy: {
       create: () => sprite(assets, 'link-energy', LINK_SPEC.energySize, LINK_SPEC.energySize),
       apply: (v, node) => {
-        node.scale.set(vNum(v, 'scale'));
+        (node as Sprite).setSize(LINK_SPEC.energySize * vNum(v, 'scale'));
       },
     },
     glowBase: {
