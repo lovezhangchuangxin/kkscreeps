@@ -67,7 +67,7 @@ export class EffectsStage {
     for (const p of this.players) if (p.owner === owner && (channel === undefined || p.channel === channel)) this.remove(p);
   }
   reset(): void { for (const p of this.players) this.remove(p); this.skipped = 0; }
-  destroy(): void { this.reset(); this.root.destroy({ children: true }); }
+  destroy(): void { this.reset(); this.root.destroy({ children: true, context: true }); }
   private remove(p: Player): void { if (this.players.delete(p)) p.dispose(); }
   private run(duration: number, sample: Player['sample'], dispose: Player['dispose'], owner?: string, channel?: string): void {
     if (owner && channel) this.cancelOwner(owner, channel);
@@ -119,7 +119,7 @@ export class EffectsStage {
       crisp.x = soft.x = length * a;
       crisp.width = soft.width = Math.max(0.001, length * (b - a));
       root.visible = b > a;
-    }, () => root.destroy({ children: true }));
+    }, () => root.destroy({ children: true, context: true }));
   }
   private bite(c: TargetCommand): void {
     const binding = this.actor(c.sourceId);
@@ -146,7 +146,7 @@ export class EffectsStage {
     this.run(this.tick * S.coverDuration, p => {
       const a = coverAlpha(p, delay / S.coverDuration); root.alpha = a;
       if (glow && glow.alpha !== a * 0.5) { glow.alpha = a * 0.5; this.lighting.markDirty(); }
-    }, () => { if (glow) { this.lighting.removeMember(glow); this.lights.delete(glow); glow.destroy(); } root.destroy({ children: true }); }, c.sourceId, `cover-${c.action}`);
+    }, () => { if (glow) { this.lighting.removeMember(glow); this.lights.delete(glow); glow.destroy(); } root.destroy({ children: true, context: true }); }, c.sourceId, `cover-${c.action}`);
   }
   private wave(c: Extract<EffectCommand, { action: 'rangedMassAttack' }>): void {
     const root = new Graphics({ label: 'ranged-mass-wave' }).circle(0, 0, S.waveRadius).fill(S.waveColor);
@@ -198,7 +198,7 @@ export class EffectsStage {
     root.addChild(shape, text); this.root.addChild(root); this.texts++;
     this.run(this.tick, () => {
       const binding = this.actor(c.sourceId); if (binding) root.position.set(binding.position.x, binding.position.y);
-    }, () => { text.destroy({ style: true, texture: true, textureSource: true }); root.destroy({ children: true }); this.texts--; }, c.sourceId, 'say');
+    }, () => { text.destroy({ style: true, texture: true, textureSource: true }); root.destroy({ children: true, context: true }); this.texts--; }, c.sourceId, 'say');
   }
   private powerIcon(c: TargetCommand): void {
     const name = POWER_ICONS[c.powerId!];
@@ -225,6 +225,6 @@ export class EffectsStage {
     this.run(this.tick, t => {
       const ease = 1 - (1 - t) ** 2; flash.alpha = 0.7 * (1 - ease);
       if (glow) { glow.setSize(1 + (glow.texture.width * 20 - 1) * ease); glow.alpha = 1 - t; }
-    }, () => root.destroy({ children: true }));
+    }, () => root.destroy({ children: true, context: true }));
   }
 }

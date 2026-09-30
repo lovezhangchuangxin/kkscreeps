@@ -62,13 +62,14 @@ export class VisualStage {
   destroy(): void {
     this.clear();
     this.current = null;
-    this.root.destroy({ children: true });
+    this.root.destroy({ children: true, context: true });
   }
 
   private clear(): void {
+    // Pixi v8 的非空 destroy options 需 context:true；所有 Graphics 均独立持有。
     for (const entry of this.entries) {
       entry.text?.destroy({ style: true, texture: true, textureSource: true });
-      entry.container.destroy({ children: true });
+      entry.container.destroy({ children: true, context: true });
     }
     this.entries.length = 0;
     this.applied = 0;
@@ -221,7 +222,7 @@ export class VisualStage {
     } catch {
       // 降级：半成品精确销毁（text 私有 canvas 源四标志），整批不中断
       text?.destroy({ style: true, texture: true, textureSource: true });
-      container.destroy({ children: true });
+      container.destroy({ children: true, context: true });
       return false;
     }
     this.root.addChild(container);

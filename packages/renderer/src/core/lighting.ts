@@ -69,7 +69,7 @@ export class LightingPass {
   clearMembers(): void {
     for (const member of [...this.ownedMembers]) {
       if (member.parent === this.content) this.content.removeChild(member);
-      member.destroy({ children: true, texture: true, textureSource: true });
+      member.destroy({ children: true, context: true, texture: true, textureSource: true });
       this.ownedMembers.delete(member);
     }
     this.markDirty();
@@ -124,7 +124,7 @@ export class LightingPass {
     // ambient 为无纹理 Graphics——content 不带 texture 销毁，防共享源误毁）
     this.clearMembers();
     this.rt?.destroy(true);
-    this.content.destroy({ children: true });
+    this.content.destroy({ children: true, context: true });
     this.display.destroy();
   }
 }

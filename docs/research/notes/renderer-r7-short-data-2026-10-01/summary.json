@@ -1,0 +1,297 @@
+{
+  "percentile": "nearest rank ceil(p*n)-1; median for p50",
+  "cpu": {
+    "cpu-before": {
+      "snapshotMs": {
+        "p50": 1.9000000059604645,
+        "p95": 2.6000000089406967,
+        "max": 2.8999999910593033,
+        "samples": 40
+      },
+      "visualMs": {
+        "p50": 1.1000000089406967,
+        "p95": 1.5999999940395355,
+        "max": 1.9000000059604645,
+        "samples": 40
+      },
+      "combinedApplyMs": {
+        "p50": 3.0,
+        "p95": 4.200000002980232,
+        "max": 4.5,
+        "samples": 40
+      },
+      "cpuRenderMs": {
+        "p50": 5.100000001490116,
+        "p95": 7,
+        "max": 9.699999988079071,
+        "samples": 40
+      },
+      "raf_cpuRenderMs": {
+        "p50": 2.9500000029802322,
+        "p95": 6.399999991059303,
+        "max": 8.5,
+        "samples": 180
+      },
+      "raf_fullCpuMs": {
+        "p50": 3.0,
+        "p95": 10.700000002980232,
+        "max": 14.700000002980232,
+        "samples": 180
+      }
+    },
+    "cpu-after-gate": {
+      "snapshotMs": {
+        "p50": 1.8999999985098839,
+        "p95": 2.699999988079071,
+        "max": 3.2000000029802322,
+        "samples": 40
+      },
+      "visualMs": {
+        "p50": 0.5,
+        "p95": 0.7999999970197678,
+        "max": 0.800000011920929,
+        "samples": 40
+      },
+      "combinedApplyMs": {
+        "p50": 2.399999998509884,
+        "p95": 3.5,
+        "max": 4,
+        "samples": 40
+      },
+      "cpuRenderMs": {
+        "p50": 5.0999999940395355,
+        "p95": 7.100000008940697,
+        "max": 14,
+        "samples": 40
+      },
+      "raf_cpuRenderMs": {
+        "p50": 3.2000000029802322,
+        "p95": 4.4000000059604645,
+        "max": 5.5,
+        "samples": 180
+      },
+      "raf_fullCpuMs": {
+        "p50": 3.2999999970197678,
+        "p95": 6.5999999940395355,
+        "max": 9.799999997019768,
+        "samples": 180
+      }
+    }
+  },
+  "official": {
+    "webgpu": {
+      "elapsedMs": 3482.9000000059605,
+      "applyMs": {
+        "p50": 1.1000000089406967,
+        "p95": 1.5,
+        "max": 3.300000011920929,
+        "samples": 99
+      },
+      "startup": 104.5,
+      "final": {
+        "views": 191,
+        "dying": 0,
+        "tweens": 0,
+        "overlays": 198,
+        "lighting": {
+          "invalidations": 18031,
+          "renders": 1486,
+          "members": 200,
+          "privateSources": 3
+        },
+        "effects": {
+          "active": 0,
+          "nodes": 0,
+          "texts": 0,
+          "skipped": 0
+        },
+        "ambient": {
+          "active": 23,
+          "awake": 23,
+          "sleeping": 0
+        },
+        "textures": 148,
+        "sources": 34,
+        "estimatedSourceBytes": 146797244,
+        "coverSources": 1,
+        "estimatedCoverBytes": 8348340,
+        "gpuManagedTextures": 31,
+        "gpuManagedTextureSlots": 31,
+        "gpuManagedTextureNullSlots": 0,
+        "pools": {
+          "Matrix": {
+            "free": 0,
+            "used": 0,
+            "size": 0
+          },
+          "Bounds": {
+            "free": 1,
+            "used": 0,
+            "size": 1
+          },
+          "RenderGroup": {
+            "free": 0,
+            "used": 2,
+            "size": 2
+          },
+          "AlphaMask": {
+            "free": 0,
+            "used": 2,
+            "size": 2
+          },
+          "BatchableGraphics": {
+            "free": 48,
+            "used": 857,
+            "size": 905
+          },
+          "AlphaMaskEffect": {
+            "free": 2,
+            "used": 0,
+            "size": 2
+          },
+          "GraphicsContextRenderData": {
+            "free": 0,
+            "used": 3,
+            "size": 3
+          }
+        },
+        "graphicsContexts": 298,
+        "graphicsContextSlots": 759,
+        "canvasTextActive": 1,
+        "bindGroups": 111,
+        "nullSlots": 0,
+        "destroyedSlots": 0,
+        "sourceChanges": 0,
+        "destroyedResourceChanges": 0,
+        "profiling": false,
+        "frames": 1486,
+        "viewsCreated": 0,
+        "viewsDestroyed": 0,
+        "gateEvaluated": 0,
+        "gateNull": 0,
+        "gateEqual": 0,
+        "gateChanged": 0,
+        "gateWrites": 0,
+        "animatedWrites": 0,
+        "partCounts": {},
+        "tweenCreated": 0,
+        "tweenEnded": 0,
+        "tweenCancelled": 0,
+        "tweenActive": 0,
+        "tweenPending": 0,
+        "feedRooms": 1,
+        "feedObjects": 312,
+        "feedPoolLeases": null,
+        "atlasFrameRefs": 127,
+        "standaloneLeases": 13
+      }
+    },
+    "webgl": {
+      "elapsedMs": 16378.199999988079,
+      "applyMs": {
+        "p50": 2.0999999940395355,
+        "p95": 2.8999999910593033,
+        "max": 3.5,
+        "samples": 99
+      },
+      "startup": 2311.4000000059605,
+      "final": {
+        "views": 191,
+        "dying": 0,
+        "tweens": 0,
+        "overlays": 198,
+        "lighting": {
+          "invalidations": 18031,
+          "renders": 1486,
+          "members": 200,
+          "privateSources": 3
+        },
+        "effects": {
+          "active": 0,
+          "nodes": 0,
+          "texts": 0,
+          "skipped": 0
+        },
+        "ambient": {
+          "active": 23,
+          "awake": 23,
+          "sleeping": 0
+        },
+        "textures": 148,
+        "sources": 32,
+        "estimatedSourceBytes": 134308540,
+        "coverSources": 1,
+        "estimatedCoverBytes": 8348340,
+        "gpuManagedTextures": 29,
+        "gpuManagedTextureSlots": 29,
+        "gpuManagedTextureNullSlots": 0,
+        "pools": {
+          "Matrix": {
+            "free": 0,
+            "used": 0,
+            "size": 0
+          },
+          "Bounds": {
+            "free": 1,
+            "used": 0,
+            "size": 1
+          },
+          "RenderGroup": {
+            "free": 0,
+            "used": 2,
+            "size": 2
+          },
+          "AlphaMask": {
+            "free": 0,
+            "used": 2,
+            "size": 2
+          },
+          "BatchableGraphics": {
+            "free": 48,
+            "used": 857,
+            "size": 905
+          },
+          "AlphaMaskEffect": {
+            "free": 2,
+            "used": 0,
+            "size": 2
+          },
+          "GraphicsContextRenderData": {
+            "free": 0,
+            "used": 3,
+            "size": 3
+          }
+        },
+        "graphicsContexts": 298,
+        "graphicsContextSlots": 759,
+        "canvasTextActive": 1,
+        "bindGroups": 14,
+        "nullSlots": 0,
+        "destroyedSlots": 0,
+        "sourceChanges": 0,
+        "destroyedResourceChanges": 0,
+        "profiling": false,
+        "frames": 1486,
+        "viewsCreated": 0,
+        "viewsDestroyed": 0,
+        "gateEvaluated": 0,
+        "gateNull": 0,
+        "gateEqual": 0,
+        "gateChanged": 0,
+        "gateWrites": 0,
+        "animatedWrites": 0,
+        "partCounts": {},
+        "tweenCreated": 0,
+        "tweenEnded": 0,
+        "tweenCancelled": 0,
+        "tweenActive": 0,
+        "tweenPending": 0,
+        "feedRooms": 1,
+        "feedObjects": 312,
+        "feedPoolLeases": null,
+        "atlasFrameRefs": 127,
+        "standaloneLeases": 13
+      }
+    }
+  }
+}

@@ -59,3 +59,17 @@ export function rampartGroupHash(group: RampartGroup): string {
   }
   return (hash >>> 0).toString(16).padStart(8, '0');
 }
+
+/** Full-room pixel bounds, including stroke/AA; room-edge clipping stays identical. */
+export function rampartRasterBounds(cells: readonly number[], cell: number, view: number, renderSize: number, strokeWidth: number) {
+  const scale = renderSize / view;
+  cells = cells.filter(i => Number.isInteger(i) && i >= 0 && i < ROOM_GRID * ROOM_GRID);
+  if (cells.length === 0) return { x: 0, y: 0, width: 1, height: 1 };
+  const xs = cells.map(i => i % ROOM_GRID), ys = cells.map(i => Math.floor(i / ROOM_GRID));
+  const margin = strokeWidth * scale / 2 + 1;
+  const x = Math.max(0, Math.floor(Math.min(...xs) * cell * scale - margin));
+  const y = Math.max(0, Math.floor(Math.min(...ys) * cell * scale - margin));
+  const right = Math.min(renderSize, Math.ceil((Math.max(...xs) + 1) * cell * scale + margin));
+  const bottom = Math.min(renderSize, Math.ceil((Math.max(...ys) + 1) * cell * scale + margin));
+  return { x, y, width: Math.max(1, right - x), height: Math.max(1, bottom - y) };
+}

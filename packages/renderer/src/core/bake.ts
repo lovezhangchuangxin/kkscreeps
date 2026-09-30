@@ -9,12 +9,16 @@ export function bakeCanvas(
   view: number,
   renderSize: number,
   paint: (ctx: CanvasRenderingContext2D, path2d: Path2D) => void,
+  region = { x: 0, y: 0, width: renderSize, height: renderSize },
+  reuse?: HTMLCanvasElement,
 ): HTMLCanvasElement {
-  const canvas = document.createElement('canvas');
-  canvas.width = renderSize;
-  canvas.height = renderSize;
+  const canvas = reuse ?? document.createElement('canvas');
+  // Assigning dimensions resets pixels and all 2D state, also for same-size reuse.
+  canvas.width = region.width;
+  canvas.height = region.height;
   const ctx = canvas.getContext('2d')!;
-  ctx.scale(renderSize / view, renderSize / view);
+  // Integer raster offset preserves the original full-room sampling phase.
+  ctx.setTransform(renderSize / view, 0, 0, renderSize / view, -region.x, -region.y);
   const path2d = new Path2D(path);
   paint(ctx, path2d);
   return canvas;
@@ -22,5 +26,5 @@ export function bakeCanvas(
 
 /** 烘焙产物转纹理（私有 canvas 纹理——销毁时可带 texture/textureSource）。 */
 export function textureFromBaked(canvas: HTMLCanvasElement): Texture {
-  return Texture.from(canvas);
+  return Texture.from(canvas, true);
 }

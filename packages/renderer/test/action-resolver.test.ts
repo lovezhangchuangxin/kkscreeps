@@ -51,6 +51,17 @@ describe('action input semantics', () => {
     const r = resolveActions({ current: new Map([[source.id, source]]), previous: new Map(), actionLogs: [42, { id: 'a', actionLog: { repair: { x: NaN, y: 0 } } }] });
     expect(r).toMatchObject({ commands: [], skipped: 2 });
   });
+  it('official null action sentinels mean no action; other malformed values still count', () => {
+    const current = new Map([[source.id, source]]);
+    const log = Object.fromEntries(['attack', 'rangedAttack', 'heal', 'rangedHeal', 'harvest', 'build', 'repair',
+      'upgradeController', 'reserveController', 'attackController', 'claimController', 'transferEnergy', 'power',
+      'runReaction', 'reverseReaction', 'say'].map(action => [action, null]));
+    const input = { current, previous: current, actionLogs: [{ id: source.id, actionLog: log }] };
+    expect(resolveActions(input)).toEqual({ commands: [], hits: [], skipped: 0 });
+    expect(resolveActions({ ...input, actionLogs: [{ id: source.id, actionLog: { ...log,
+      attack: false, heal: 0, repair: [], runReaction: {}, harvest: { x: 12, y: 11 } } }] }))
+      .toMatchObject({ commands: [{ action: 'harvest', target: { x: 12, y: 11 } }], skipped: 4 });
+  });
   it('explicit logs override the same event, different actions on the same pair survive', () => {
     const current = new Map([source, target].map(s => [s.id, s]));
     const r = resolveActions({ current, previous: current,

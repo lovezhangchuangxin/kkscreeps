@@ -133,7 +133,7 @@ export class RoomScene {
     if (cell === null && this.hoverCell === null) return;
     if (cell !== null && this.hoverCell !== null && cell.x === this.hoverCell.x && cell.y === this.hoverCell.y) return;
     this.hoverCell = cell;
-    this.hoverRoot.removeChildren().forEach((child) => child.destroy({ children: true }));
+    this.hoverRoot.removeChildren().forEach((child) => child.destroy({ children: true, context: true }));
     if (cell === null) return;
     const ring = new Graphics();
     ring.circle(cell.x * this.cellSize, cell.y * this.cellSize, this.cellSize / 2)
@@ -185,7 +185,7 @@ export class RoomScene {
     this.objects?.destroy();
     this.lighting.destroy();
     this.terrain.destroy();
-    this.root.destroy({ children: true });
+    this.root.destroy({ children: true, context: true });
   }
 }
 

@@ -311,6 +311,6 @@ export class TerrainStage {
     // （评审 B3：Texture.WHITE/atlas standalone 是进程级共享源）
     this.clearSwampSprites();
     this.clearWallSprites();
-    this.root.destroy({ children: true });
+    this.root.destroy({ children: true, context: true });
   }
 }

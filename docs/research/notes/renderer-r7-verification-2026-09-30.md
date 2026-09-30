@@ -70,3 +70,85 @@ WebGPU 标准链首次预热 1000 tick 后，双次 `HeapProfiler.collectGarbage
 - shared 以仅 src 的临时配置在 `/tmp/r7-shared-build` 生成 JS+d.ts；不改变 shared 的源码出口形态。
 - 资产和全部真实/合成夹具再生后 173 个文件 SHA-256 全一致（含新满配夹具）；引擎源码未改。
 - 三路 subagent 评审尚未启动；最终四文档回写、灰区拍板、收口提交尚未执行。
+
+## 阶段修复与优化（821a02f 后；尚未收口）
+
+- 用户要求的首轮证据提交：`821a02f`；随后把所有拥有自有 Graphics 的级联销毁补为 `context:true`。
+  共享 atlas/standalone 的 texture 销毁规则不变。真实 context 回归通过，renderer 362 测全绿，shared 4 测全绿。
+- 同标准回放预热 1000 tick 后 GC 堆中位数 31,234,620 bytes；正式试跑 1000 tick 后 35,126,084 bytes。
+  对照旧预热约 2.57GB，证明主要累积链已切断；此试跑不能替代 10k。
+  试跑 reset 错指非活动房的问题已修正，旧试跑 baselineReset 明确标无效，完整重跑会验证空房基线。
+- rampart 顶罩裁剪由实测驱动：固定 40 私有格、1/4/16/40 用户组，修复 context 后整房烘焙
+  场景的 source 纹素估算分别为 163.41/211.41/403.41/787.41MiB；裁剪后
+  148.82/152.63/155.23/147.86MiB。此列含 Pixi 中间纹理池，最终另记纯顶罩 bytes；不称实际 VRAM。
+  保留原合并 path、描边、像素采样栅格及边界裁切，只裁透明空间。32 个浏览器 raster 比较
+  （cell=64/100，1024/2048，四角/连通/分离格）逐通道零差异。
+- 同输入 600 帧 GPU 跨度 p95：裁剪前 14.025ms、后 14.549ms；完整 CPU p95 4.3/4.4ms。
+  不据此声称帧耗时改善。保留裁剪的理由是明确的纹素/重烘焙成本下降；冻结 ≤8ms 仍未销账。
+  此比较用初版夹具，两边一致；正式矩阵使用增强敌我/掉血、通行移动格、长动作束和动态几何的最终夹具。
+- sampler 增补：实际 backend/adapter、source/fixture SHA、预热原始帧、device-loss/visibility 标记；
+  标准回放绝对 deadline 含 spawning/effects，压力链含 dying/say/work/rampart 用户切换与 terrain 更新。
+  每 tick 输入后及动画子步采集有限播放器/dying/overlays 峰值；GC checkpoint 附 0.001ms 排空浮点尾量。
+  空房复位作用于实际活动房。分项探针仅在 profile=1，原生预算使用 profile=0。
+
+
+## 2026-10-01 交接状态（用户要求停止开发并交给其他 AI）
+
+代码修复/优化仍未提交；HEAD=`821a02f`，不是 R7 收口。用户已确认 G1–G13 整表，见
+[灰区终裁记录](renderer-r7-gray-decisions-2026-09-30.md)。此前“尚无最终灰区授权”是历史阶段状态，现已完成。
+三路 subagent 评审尚未启动。已归档当前完整原始输出，交接入口见
+[R7 交接提示词](../../plans/f2-renderer-r7-handoff-2026-10-01.md)。
+
+### 已完成完整链与首轮矩阵
+
+WebGPU 标准 soak：1000 tick 预热 + 正式 10000 tick、每 tick 15 次真实动画/绘制提交，
+GPU 完成后采样；0.001ms checkpoint 排空、双 JS GC、五个 heap 样本取中位；100 tick 未 GC 窗口另存。
+源为 standard.json 30 增量的确定性 2000-tick 拼接周期，5 周期；不是引擎原产 2000 条输入。
+最终原始记录：[standard 10k](renderer-r7-data-2026-09-30/final-r7-final-wg-standard-soak.json)。
+
+| 正式 tick | heap median MiB | live Graphics contexts | managed context slots（含 null） |
+|---|---:|---:|---:|
+| 0 | 54.51 | 148 | 100781 |
+| 1000 | 56.58 | 148 | 65148 |
+| 2000 | 58.06 | 148 | 30648 |
+| 3000 | 61.06 | 148 | 130648 |
+| 4000 | 53.96 | 148 | 99648 |
+| 5000 | 53.30 | 148 | 69248 |
+| 6000 | 50.38 | 148 | 42948 |
+| 7000 | 51.06 | 148 | 28049 |
+| 8000 | 52.84 | 148 | 448 |
+| 9000 | 67.51 | 149 | 100528 |
+| 10000 | 69.48 | 149 | 99749 |
+
+BindGroups 全程125、null slots16、destroyed slots0；sources73、source纹素估算114474608bytes全程一致。
+空房复位 views/dying/tweens/overlays/finite active/nodes/texts 全0，lighting members=1/privateSources=1；
+destroy 后上述及 Graphics/owned lighting/atlas leases 全0，剩余2个全局 WHITE/EMPTY 源共8bytes。
+feed 仓库可独立继续使用，仍有非活动满配房300对象；无 feed 池，租约 N/A，不把仓库驻留误称GPU泄漏。
+**不能宣称内存无增长**：终点比起点高14.97MiB；中途有回落，但末段抬升尚待归因/追加诊断。
+Pixi GCManagedHash unload 后置 null，默认周期清表；slots 不是 live resources。不能只凭这个解释掉全部 heap 差距。
+标准链没有触发 dying/finite；压力10k是验证它们的必需补项，尚未执行。
+
+正式增强夹具第一轮（各1800有效帧+120预热，profile=0，visible=true/deviceLost=false/errors=0）：
+
+| 场景 | CPU render p95/max ms | RAF interval p95/max ms | objects p95 / lighting p95 ms |
+|---|---|---|---|
+| WebGPU F0 4× | 4.1 / 8.0 | 17.4 / 17.8 | 0.2 / 0.2 |
+| WebGPU F1 1× | 4.3 / 5.7 | 17.4 / 17.8 | 0.3 / 0.3 |
+| WebGPU F1 4× | 4.3 / 10.1 | 17.5 / 17.8 | 0.3 / 0.3 |
+
+同首轮串行完成上界 p95=12.4ms/max=19.1ms；原生 GPU pass 跨度 p95=13.6315ms/max=17.8258ms，
+仍不能销账 ≤8ms。cold 首帧两次161.9/144.9ms；不是已完成三轮首帧结论。
+当前还缺第二/三轮、全部正式 WebGL、F2/F3/H/R/P8最终组及三条 soak。
+原始输出以数据目录 `final-*.json` 保存；没有生成或伪装未完成的 F0-r2 RAF 文件。
+
+交接时 CDP9227连接已拒绝，尝试停采没有执行到页面；矩阵没有继续产生新文件。
+后继须先查端口/进程，重新启动独立Chrome/Vite，不假定旧采样仍在进行。
+最新自动检查：renderer362/shared4/kk-cli7、tsc、renderer构建/10文件闭包守卫、fmt/clippy通过。
+交接整理补完临时副本的 assets/真实fixture/showcase/effects/perf全链，再生173文件SHA全部一致；工作树生成物未被副本验证改写。
+
+## 2026-10-01短测阶段补充
+
+上述“三路评审尚未启动”等为旧阶段时间点。现在已完成实际三路评审与清偿复审，
+Graphics修复通过；新增门控/顶罩source复用/真实回放/null诊断，renderer369测全绿。
+用户要求暂缓新增长测；最终收口仍未完成。最新方法、原始数据、限制与截图统一见
+[短窗口与真实回放报告](renderer-r7-short-verification-2026-10-01.md)，不以它覆盖历史失败/长测证据。

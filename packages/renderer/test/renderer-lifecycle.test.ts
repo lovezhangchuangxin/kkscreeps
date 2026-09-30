@@ -138,6 +138,53 @@ describe('公共句柄生命周期与真实 ticker 接线', () => {
 });
 
 describe('R6：活动房间 / visuals / 拾取悬停 / 字体 / advanceAnimation', () => {
+  it('同 tick visuals/terrain 不重复对账、不打断移动；同时间快照仍即时同步', async () => {
+    mockAssetIO(); const h = await mounted();
+    const spy = vi.spyOn(RoomScene.prototype, 'applyObjects');
+    const terrain = { codes: new Array(2500).fill(0) };
+    h.feed.applySnapshot({ room: 'A', time: 0, terrain, objects: [creep(10)] });
+    h.feed.applyDelta({ room: 'A', time: 1, upsert: [creep(11)], removedIds: [] });
+    h.advanceAnimation(500);
+    expect(runtime.stage.getChildByLabel('obj-c', true)!.x).toBe(1050);
+    h.feed.setVisuals('A', [{ type: 'circle', x: 5, y: 5 }]);
+    h.feed.setTerrain('A', terrain);
+    expect(spy).toHaveBeenCalledTimes(2);
+    h.advanceAnimation(500);
+    expect(runtime.stage.getChildByLabel('obj-c', true)!.x).toBe(1100);
+    h.feed.applySnapshot({ room: 'A', time: 1, terrain, objects: [creep(3)] });
+    expect(spy).toHaveBeenCalledTimes(3);
+    expect(runtime.stage.getChildByLabel('obj-c', true)!.x).toBe(300);
+    expect(h.getStats().visuals).toBe(0);
+  });
+
+  it('同时间 A→B→A 均重建；对象对账失败后同时间通知可以恢复', async () => {
+    mockAssetIO(); const h = await mounted();
+    const terrain = { codes: new Array(2500).fill(0) };
+    h.feed.applySnapshot({ room: 'A', time: 0, terrain, objects: [creep(10)] });
+    h.feed.applySnapshot({ room: 'B', time: 0, terrain, objects: [creep(3)] });
+    h.setActiveRoom('B');
+    expect(runtime.stage.getChildByLabel('obj-c', true)!.x).toBe(300);
+    h.setActiveRoom('A');
+    expect(runtime.stage.getChildByLabel('obj-c', true)!.x).toBe(1000);
+    const spy = vi.spyOn(RoomScene.prototype, 'applyObjects');
+    spy.mockImplementationOnce(() => { throw new Error('retry object apply'); });
+    expect(() => h.feed.applyDelta({ room: 'A', time: 1, upsert: [creep(11)], removedIds: [] })).toThrow('retry object apply');
+    h.feed.setVisuals('A', []);
+    expect(spy).toHaveBeenCalledTimes(2);
+    h.advanceAnimation(1000);
+    expect(runtime.stage.getChildByLabel('obj-c', true)!.x).toBe(1100);
+  });
+
+  it('同时间快照的地形阶段失败也失效旧对象标记', async () => {
+    mockAssetIO(); const h = await mounted();
+    const terrain = { codes: new Array(2500).fill(0) };
+    h.feed.applySnapshot({ room: 'A', time: 0, terrain, objects: [creep(10)] });
+    vi.spyOn(RoomScene.prototype, 'setTerrain').mockImplementationOnce(() => { throw new Error('retry terrain'); });
+    expect(() => h.feed.applySnapshot({ room: 'A', time: 0, terrain, objects: [creep(3)] })).toThrow('retry terrain');
+    h.feed.setVisuals('A', []);
+    expect(runtime.stage.getChildByLabel('obj-c', true)!.x).toBe(300);
+  });
+
   it('首个快照自动激活；非活动房变更零渲染触达；切房快照语义重建', async () => {
     mockAssetIO();
     const handle = await mounted();

@@ -123,7 +123,8 @@ export function resolveActions(input: ActionInput): Resolution {
     if (!state || !source) { skipped++; continue; }
     if (log.attacked === true || log.healed === true) hit(state.id, log.attacked === true, log.healed === true);
     for (const action of TARGET_ACTIONS) {
-      if (log[action] === undefined) continue;
+      // Official replay null is the absence sentinel, not a malformed action.
+      if (log[action] === undefined || log[action] === null) continue;
       const data = record(log[action]);
       const resolved = data && targetFor(data, false);
       if (!resolved) { skipped++; continue; }
@@ -132,7 +133,8 @@ export function resolveActions(input: ActionInput): Resolution {
     }
     if (log.rangedMassAttack === true) add({ action: 'rangedMassAttack', sourceId: state.id, source, origin: 'actionLog' });
     for (const action of ['runReaction', 'reverseReaction'] as const) {
-      if (log[action] === undefined) continue;
+      // Official replay null is the absence sentinel, not a malformed action.
+      if (log[action] === undefined || log[action] === null) continue;
       const r = record(log[action]);
       const a = point({ x: r?.x1, y: r?.y1 });
       const b = point({ x: r?.x2, y: r?.y2 });

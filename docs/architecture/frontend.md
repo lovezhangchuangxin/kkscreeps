@@ -1,6 +1,6 @@
 # 前端架构
 
-本文定义 Web 客户端及可复用前端库的目标方案。当前 `apps/game`、`packages/shared`、`renderer`、`api` 和 `editor` 只有包声明与占位测试，没有 Vue 应用、渲染器、网络客户端或类型生成管线。技术选择依据见 [ADR-009](../decisions/ADR-009-frontend-stack.md)。
+本文定义 Web 客户端及可复用前端库的目标方案。`shared` 与 `renderer` 已实装（见下文"当前实现与运行时边界"一节）；`apps/game`、`api` 和 `editor` 仍只有包声明与占位测试，没有 Vue 应用、网络客户端或类型生成管线。技术选择依据见 [ADR-009](../decisions/ADR-009-frontend-stack.md)。
 
 ## 功能与技术选择
 
@@ -13,7 +13,7 @@
 | 工程 | 现有 pnpm workspace；依赖版本在实际引入时锁定 |
 | 编辑器 | Monaco，按需加载；仍需测量模块、网络和初始化成本 |
 | 渲染 | PixiJS，具体版本与 WebGL/WebGPU 支持范围在实现时验证 |
-| 测试 | 目标采用 Vitest 和按需的 Playwright；当前占位测试使用 node:test |
+| 测试 | Vitest（renderer/shared 已采用）和按需的 Playwright；其余占位包仍用 node:test |
 
 客户端实现自建，目标接口对照官方 HTTP 和 sockjs 协议。协议兼容尚未实装，不能假定社区工具现在已经能连接。官方 SVG 等资源的复用须先核对具体资产的许可证及分发条件；渲染代码不直接复用官方实现。
 
@@ -39,14 +39,14 @@
 
 Pixi 实例由渲染器管理，Vue/Pinia 保存应用数据与控制状态；避免深度代理大型图形对象。地形纹理缓存、对象池、视口剔除和缩放分级是候选优化，须测量收益及内存占用。
 
-目标输入接口如下，类型仅用于说明职责，尚未实现：
+输入接口如下，已在 shared 与 renderer 实装：
 
 ```ts
 interface RoomFeed {
   setTerrain(room: string, terrain: TerrainData): void;
   applySnapshot(state: RoomSnapshot): void;
   applyDelta(delta: RoomDelta): void;
-  setVisuals(visuals: RoomVisual[]): void;
+  setVisuals(room: string, visuals: RoomVisual[]): void;
 }
 ```
 
@@ -54,15 +54,15 @@ interface RoomFeed {
 
 资源管线负责纹理图集、分辨率版本和缓存；在引入官方资产前保留授权出处。
 
-### 当前实现与运行时边界（F2 R0–R4）
+### 当前实现与运行时边界（F2 R0–R6完成，R7验收中）
 
-房间地形、静态对象、creep 运动及 R5 动效系统已实现，具体规格与偏差见 [F2 方案](../plans/f2-renderer.md) 和 [R5 验证记录](../research/notes/renderer-r5-verification-2026-09-30.md)。R6 RoomVisual/交互/API 冻结和 R7 性能验收尚未完成；上述世界地图、对象池及 Vue 集成仍为目标设计。
+房间地形、静态对象、creep 运动及 R5 动效系统已实现，具体规格与偏差见 [F2 方案](../plans/f2-renderer.md) 和 [R5 验证记录](../research/notes/renderer-r5-verification-2026-09-30.md)。R6 RoomVisual/交互/API 已冻结。R7 已新增300对象/50creep/100visual合成夹具、加固公共类型闭包守卫，并修复 Graphics context 释放与裁剪 rampart 顶罩；完整性能验收与压力长测仍待完成；短测阶段实际三路评审清偿复审已通过。首轮GPU时间与10k heap差距如实见 [R7验证记录](../research/notes/renderer-r7-verification-2026-09-30.md)，接手入口见 [R7交接](../plans/f2-renderer-r7-handoff-2026-10-01.md)。上述世界地图、detached对象池及Vue集成仍为目标设计。
 
 现有动画路径为 RoomFeed → 纯 ActionResolver → EffectsStage（有限效果）/AmbientScheduler（常驻），仅由 AnimationClock 推进。ObjectsStage 保留对象对账与前后索引，通过窄 ActorBinding 绑定动作；PropertyChannels/PositionChannels 合成基础状态与动画，OverlayGroup 负责跨层跟随、淡出和 lighting 置脏。actionLogs 是明确形状的 renderer 适配通道，不能接收引擎压缩位图；缺少真实输入的家族继续用标注来源的合成夹具。
 
-- **资产所有权**：`LoadedAtlas.dispose()` 释放本次加载的独立 Texture/TextureSource 与 ImageBitmap；spritesheet 页按 URL 共用租约，最后一个 renderer 释放时通过 Pixi Assets 卸载。加载失败等待在途任务结束后统一回滚。renderer 先拆场景，再销毁内核，最后释放资产；重复销毁共用同一个 Promise，并取消 feed、ticker、resize 与 DOM 输入订阅。
+- **资产所有权**：`LoadedAtlas.dispose()` 释放本次加载的独立 Texture/TextureSource 与 ImageBitmap；spritesheet 页按 URL 共用租约，最后一个 renderer 释放时通过 Pixi Assets 卸载。加载失败等待在途任务结束后统一回滚。renderer 先拆场景，再销毁内核，最后释放资产；重复销毁共用同一个 Promise，并取消 feed、ticker、resize 与 DOM 输入订阅。自有 Graphics 的级联销毁显式带 context=true，避免非空 options 跳过 context 释放；共享 atlas 纹理仍由资产租约释放。
 - **跨层同步**：`OverlayGroup` 集中管理同一对象在 lighting/effects 层的部件位移、父级淡出与 lighting dirty。join 仍负责部件自身的 alpha/visible。`values === null` 表示停用并使上次值失效，重新激活必须应用一次。
-- **动画时间**：`AnimationClock` 使用 ticker 未截断的 `elapsedMS`，所有场景动画经过同一倍率入口；逻辑 tick 时间用于状态求值。`setPlaybackRate(rate)` 保留当前动画进度，0 暂停，回放器负责同步数据推送速率；此 API 随 R6 评审冻结。
+- **动画时间**：`AnimationClock` 使用 ticker 未截断的 `elapsedMS`，所有场景动画经过同一倍率入口；逻辑 tick 时间用于状态求值。`setPlaybackRate(rate)` 保留当前动画进度，0 暂停，回放器负责同步数据推送速率；此 API 已随 R6 评审冻结。
 - **快照与节点寿命**：快照取消旧 tween、清除死亡队列/受击罩/朝向状态、即时同步位置，并复用同 id/type 节点；缺失项立即销毁。增量仍使用运动插值与死亡淡出。
 - **视口与坐标**：内核用 ResizeObserver 观察容器；相机在 renderer resize 时重新钳边并同步投影，绘制与拾取共用相同视口。lighting 显式把世界矩形 `[-cell/2, view-cell/2]²` 映射到 RT，再由输出精灵还原，避免半格偏移。
 
@@ -85,3 +85,13 @@ interface RoomFeed {
 先验证连接、房间观战、对象详情和代码/控制台操作，再扩展地图、市场和回放。验收须包含重连与漏包、视野变化、版本不匹配、大房间渲染和编辑器加载成本。
 
 范围与任务安排见[路线图](../roadmap.md)。本页定义目标职责，不以占位包测试通过证明前端功能完成。
+
+### 2026-10-01 renderer 短测与真实场景阶段
+
+R7接续阶段已修复 Graphics context精确释放，私有rampart顶罩裁剪并复用source，
+同tick visual/terrain通知跳过重复对象对账，官方null动作哨兵不再计非法动作。
+新增用户本地官方demo的E54S13完整100tick回放（原player/2500ms），独立oracle核对
+通过，WebGPU/WebGL均lighting=real。renderer369/shared4/kk-cli7测通过。
+短窗口证据支持局部CPU/资源churn收益，Pixi缓存槽仍有增长；不能宣称长期稳态。
+完整环境、数据、视觉限制和评审见[R7短测报告](../research/notes/renderer-r7-short-verification-2026-10-01.md)。
+原§5指标与R7最终收口继续挂账；按用户要求暂缓新的长时间测试。

@@ -20,11 +20,14 @@ import effects from '../fixtures/effects.json';
 import lifecycle from '../fixtures/lifecycle.json';
 import pressure from '../fixtures/pressure.json';
 import visualCases from '../fixtures/visual-cases.json';
+import officialRoom from '../fixtures/official-room.json';
 
 const stageHost = document.getElementById('stage') as HTMLElement;
 const hud = document.getElementById('hud') as HTMLElement;
 
 const params = new URLSearchParams(window.location.search);
+const TICK_MS = params.get('fixture') === 'official-room' ? officialRoom.provenance.tickDurationMs : 1000;
+const localPlayer = params.get('player') ?? (params.get('fixture') === 'official-room' ? officialRoom.provenance.originalPlayer : 'p1');
 const multi = params.has('multi');
 // ?smoke=1 仅计实际场景更新与 lighting 提交的 CPU 时间（onFrameTiming，
 // R5 方法学同源）；不冒充 GPU 耗时。
@@ -39,7 +42,8 @@ const renderer = await createRenderer({
   // ?backend=webgl 强制回退路径（§5：WebGL 同场景跑通记数不设门）
   preference: params.get('backend') === 'webgl' ? 'webgl' : 'webgpu',
   // 本玩家视角（G9：userOwnerColor 色板 own 判定）
-  localPlayerId: params.get('player') ?? 'p1',
+  localPlayerId: localPlayer,
+  tickDurationMs: TICK_MS,
   ...(params.has('smoke')
     ? {
         onFrameTiming: (t: { objectsMs: number; lightingMs: number }) => {
@@ -66,6 +70,7 @@ const rawFixtures: Record<string, unknown> = {
   effects,
   lifecycle,
   pressure,
+  'official-room': officialRoom,
 };
 const fixtures = new Map<string, FixtureFile>();
 for (const [key, value] of Object.entries(rawFixtures)) {
@@ -89,7 +94,6 @@ const visualApply = (): void => {
 };
 
 // ---- 回放状态机（G6：tickDuration 缺省 1000ms，契约参数化）----
-const TICK_MS = 1000;
 const SPEEDS = [0.5, 1, 2, 4] as const;
 let current = params.get('fixture') ?? 'standard';
 let index = 0;
@@ -304,7 +308,7 @@ function renderHud(): void {
     `backend : ${s.backend}   fps: ${s.fps}   zoom: ${(s.zoom * 100).toFixed(0)}%   atlas: ${s.atlasFrames}f   lighting: ${s.lighting}${canvas ? `   canvas: ${canvas.width}×${canvas.height}` : ''}`,
     `fonts   : ${s.fonts}   visuals: ${s.visuals}   effects: active=${s.effects.active} nodes=${s.effects.nodes} texts=${s.effects.texts} skipped=${s.effects.skipped}`,
     `ambient : awake=${s.ambient.awake}/${s.ambient.active} sleeping=${s.ambient.sleeping}   sample=${sampleElapsed}ms`,
-    `replay  : [${current}] ${index}/${total} ${state} ${SPEEDS[speedIdx]}×   player: ${params.get('player') ?? 'p1'}`,
+    `replay  : [${current}] ${index}/${total} ${state} ${SPEEDS[speedIdx]}×   player: ${localPlayer}`,
     `active  : ${activeRoom ?? '-'} time=${summary?.time ?? '-'} objects=${summary?.objects ?? '-'} rooms=${renderer.feed.roomNames().length}${multi ? ` · secondary[${SECONDARY_KEY}]=${secondaryIndex}` : ''}`,
     `cursor  : hover=${hoverText}   pick=${pickText}`,
     `controls: 1-9/0/v 夹具 · 空格 播放 · . 下一 tick · → 动画+50ms · +/- 调速 · F 复位 · Tab 切活动房`,

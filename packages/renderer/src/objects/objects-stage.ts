@@ -38,7 +38,7 @@ import type { JoinAssets } from './joins-naturals.js';
 import { CREEP_SPEC, ROAD_SPEC } from './specs.js';
 import { TERRAIN_SPEC } from '../core/terrain-spec.js';
 import { roadNodes } from './road-geometry.js';
-import { rampartGroupHash, rampartGroups, ROOM_GRID, type RampartGroup } from './rampart-groups.js';
+import { rampartGroupHash, rampartGroups, rampartRasterBounds, ROOM_GRID, type RampartGroup } from './rampart-groups.js';
 import { RAMPART_COVER_SPEC } from './specs.js';
 import { ROOM_SIZE } from '../scenes/terrain-geometry.js';
 import { resolveTypeKey } from './z-table.js';
@@ -408,18 +408,18 @@ export class ObjectsStage {
       // 标志，否则等 GCSystem 60s 兜底）；其余共享 atlas/standalone 纹理
       // 绝不带 texture 销毁（R2 评审⑤纪律）
       if (node instanceof Text) {
-        node.destroy({ children: true, style: true, texture: true, textureSource: true });
+        node.destroy({ children: true, context: true, style: true, texture: true, textureSource: true });
       } else {
-        node.destroy({ children: true });
+        node.destroy({ children: true, context: true });
       }
     }
     view.parts.clear();
     view.overlays.clear();
     if (view.cover) {
-      view.cover.destroy({ children: true });
+      view.cover.destroy({ children: true, context: true });
       view.cover = undefined;
     }
-    view.root.destroy({ children: true });
+    view.root.destroy({ children: true, context: true });
   }
 
   // ---- 运动/受击罩/死亡淡出（R4；官方 actions.moveTo 族 + creepActions
@@ -580,7 +580,7 @@ export class ObjectsStage {
     view.moveTween = view.rotateTween = view.fadeTween = view.coverTween = undefined;
     if (view.cover) {
       view.overlays.remove(view.cover);
-      view.cover.destroy({ children: true });
+      view.cover.destroy({ children: true, context: true });
       view.cover = undefined;
     }
     view.root.alpha = 1;
@@ -606,7 +606,7 @@ export class ObjectsStage {
     const key = nodes.map((n) => `${n.x},${n.y}`).join(';');
     if (key === this.roadKey) return;
     this.roadKey = key;
-    for (const child of [...this.roadRoot.children]) child.destroy({ children: true });
+    for (const child of [...this.roadRoot.children]) child.destroy({ children: true, context: true });
 
     const r = ROAD_SPEC.radiusFactor * this.cell;
     const rb = r * SIN_45;
@@ -643,39 +643,51 @@ export class ObjectsStage {
       seen.add(key);
       const hash = rampartGroupHash(group);
       if (this.coverHashes.get(key) === hash) continue;
+      const child = this.coverRoot.getChildByLabel(`cover-${key}`);
+      const old = child instanceof Sprite ? child : undefined;
+      const baked = this.bakeCover(group, old);
       this.coverHashes.set(key, hash);
-      const old = this.coverRoot.getChildByLabel(`cover-${key}`);
-      const baked = this.bakeCover(group);
-      if (old) old.destroy({ children: true, texture: true, textureSource: true });
+      // Preserve the prior changed-group append order while retaining private source UID.
+      old?.removeFromParent();
       this.coverRoot.addChild(baked);
     }
     for (const key of [...this.coverHashes.keys()]) {
       if (!seen.has(key)) {
         this.coverHashes.delete(key);
         const old = this.coverRoot.getChildByLabel(`cover-${key}`);
-        if (old) old.destroy({ children: true, texture: true, textureSource: true });
+        if (old) old.destroy({ children: true, context: true, texture: true, textureSource: true });
       }
     }
   }
 
-  private bakeCover(group: RampartGroup): Sprite {
+  private bakeCover(group: RampartGroup, previous?: Sprite): Sprite {
     const codes = new Uint8Array(ROOM_GRID * ROOM_GRID);
     for (const idx of group.cells) codes[idx] = 1;
-    // 顶罩每次组变化即重建（hash 门控防重复）；首参 hash 不复用（重建走 compare 外层）
+    // 顶罩组变化时重画已有私有 canvas/source；hash 门控防重复。
     const merged = mergedOutlinePath(codes, (c) => c !== 0, { cell: this.cell });
     const half = this.cell / 2;
     // paint-order:stroke——描边在下（外半环可见），官方 stroke-width 25
+    const region = rampartRasterBounds(group.cells, this.cell, this.view, this.renderSize, RAMPART_COVER_SPEC.strokeWidth);
     const canvas = bakeCanvas(merged.path ?? '', this.view, this.renderSize, (ctx, p) => {
       ctx.lineWidth = RAMPART_COVER_SPEC.strokeWidth;
       ctx.strokeStyle = cssColor(group.stroke);
       ctx.stroke(p);
       ctx.fillStyle = cssColor(group.fill);
       ctx.fill(p);
-    });
-    const sprite = new Sprite(textureFromBaked(canvas));
+    }, region, previous?.texture.source.resource as HTMLCanvasElement | undefined);
+    let sprite = previous;
+    if (sprite) {
+      sprite.texture.source.update();
+      sprite.texture.update();
+    } else {
+      const texture = textureFromBaked(canvas);
+      texture.dynamic = true; // Sprite observes frame-size updates when crop bounds change.
+      sprite = new Sprite(texture);
+    }
     sprite.label = `cover-${group.user ?? ''}`;
-    sprite.position.set(-half, -half);
-    sprite.setSize(this.view, this.view);
+    const scale = this.view / this.renderSize;
+    sprite.position.set(region.x * scale - half, region.y * scale - half);
+    sprite.setSize(region.width * scale, region.height * scale);
     sprite.alpha = RAMPART_COVER_SPEC.alpha;
     sprite.blendMode = RAMPART_COVER_SPEC.blend;
     return sprite;
@@ -689,12 +701,12 @@ export class ObjectsStage {
     this.dying.clear();
     for (const view of [...this.views.values()]) this.destroyView(view);
     this.views.clear();
-    for (const slot of [...this.slots.values()]) slot.destroy({ children: true });
+    for (const slot of [...this.slots.values()]) slot.destroy({ children: true, context: true });
     this.slots.clear();
-    for (const child of [...this.roadRoot.children]) child.destroy({ children: true });
+    for (const child of [...this.roadRoot.children]) child.destroy({ children: true, context: true });
     // 顶罩为烘焙私有 canvas 纹理——可带纹理销毁
     for (const child of [...this.coverRoot.children]) {
-      child.destroy({ children: true, texture: true, textureSource: true });
+      child.destroy({ children: true, context: true, texture: true, textureSource: true });
     }
     this.coverHashes.clear();
   }

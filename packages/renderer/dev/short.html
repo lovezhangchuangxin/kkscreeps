@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>Renderer 短窗口诊断</title>
+<style>html,body{margin:0;background:#050505;color:#ddd;font:12px monospace}#room{width:1920px;height:1080px}#panel{position:fixed;z-index:10;top:8px;left:8px;background:#111e;padding:12px;max-width:700px}button{margin:8px 8px 0 0}#result{max-height:160px;overflow:auto;white-space:pre-wrap}</style>
+</head><body><div id="room"></div><div id="panel"><span id="status">初始化</span><br>
+<button disabled id="cpu">短窗口 CPU 对账（40 快照＋180 帧）</button>
+<button disabled id="memory">短窗口资源检查（100 预热＋100 tick）</button>
+<button disabled id="parity">顶罩复用 GPU 像素一致性</button>
+<button disabled id="official">官方完整回放（100 tick）</button>
+<button disabled id="destroy">销毁检查（完成后刷新）</button>
+<pre id="result">短测不能证明 10k tick 无增长。JS heap 无强制 GC，纹素字节为估算。</pre></div>
+<script type="module" src="/short.ts"></script></body></html>

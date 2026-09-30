@@ -240,13 +240,13 @@ z 表/色表/字体常量直接测代码常量）。逐片勾项，收口时全�
 
 | # | 项 | 缘由 | 处置 |
 |---|---|---|---|
-| G1 | RoomVisual 样式映射 | 官方闭源壳绘制，开源渲染器无代码 | **R6 落地**（五原语+官方 any web 颜色+font 分形态；权威源 screeps/docs 仓库 `api/source/RoomVisual.md`，默认值逐值单测锚——初版取证误用 docs.screeps.com 整页抓取命中 Game.map.visual 表，外部复审坐实后勘正，勘误注见 r6 方案 §3.1）。剩余黑盒面收窄为：文字无背景时基线的底边近似（官方=基线点，偏差≈descender 待字体实测）、线端帽形状、dash/dotted 节奏（宽度感知自定）、text font 缺省 0.8（官方未载，取官方示例值）、非基础 web 色形态 |
-| G2 | lighting 全局压暗 | v8 WebGPU 滤镜面若有缺口 | 真离屏 pass 已实现（世界对齐 RT + MULTIPLY 输出），WebGPU/WebGL 双后端 harness 实测 `lighting: real`；降级路径在位未触发——R7 收口时销账或保留按 G2 定义复核 |
+| G1 | RoomVisual 样式映射 | 官方闭源壳绘制，开源渲染器无代码 | **R6 落地**（五原语+官方 any web 颜色+font 分形态；权威源 screeps/docs 仓库 `api/source/RoomVisual.md`，默认值逐值单测锚——初版取证误用 docs.screeps.com 整页抓取命中 Game.map.visual 表，外部复审坐实后勘正，勘误注见 r6 方案 §3.1）。剩余黑盒面收窄为：文字无背景时基线的底边近似（官方=基线点，偏差≈descender 待字体实测）、线端帽形状、dash/dotted 节奏（宽度感知自定）、text font 缺省 0.8（官方未载，取官方示例值）、非基础 web 色形态；**R7用户确认四类保留**：文字基线/默认font、端帽、dash、非基础色 |
+| G2 | lighting 全局压暗 | v8 WebGPU 滤镜面若有缺口 | 真离屏 pass 已实现（世界对齐 RT + MULTIPLY 输出），WebGPU/WebGL 双后端 harness 实测 `lighting: real`；**R7用户确认按定义销账**：历史全局压暗缺口已补；防御降级路径仍在位且未触发，不能称验证过降级。normal质量档/性能差距另记 |
 | G3 | 徽标图源 | 官方远程拉 screeps.com，我方无此端点 | v0 纯色圆退化（官方失败退化路径同款），M3 自托管 |
 | G4 | say/浮动文字数据通道 | 引擎无 say 事件面（§8） | R5 say/says 已接通并验证隐私与寿命；合成取材，真实输入仍待引擎 |
-| G5 | 动效输入与扩展家族 | 动作位图、对象/结算处理器缺口 | R5 全家族合成可运行；真实 actions 已覆盖六类事件。远攻/群攻在此分支无结算处理器，lab/power/say/nuke 仍待真实输入；PWR 16–18 图标可用（SVG 自 R0 vendor 自官方 metadata/images，评审实测渲染正常），19+ 无官方图标映射计 skipped |
+| G5 | 动效输入与扩展家族 | 动作位图、对象/结算处理器缺口 | R5 全家族合成可运行；真实 actions 已覆盖六类事件。远攻/群攻在此分支无结算处理器，lab/power/say/nuke 仍待真实输入；PWR 16–18 图标可用（SVG 自 R0 vendor 自官方 metadata/images，评审实测渲染正常），19+ 无官方图标映射计 skipped；**R7用户确认继续分项挂账**：flare3_all.hasEffect未实现与lava独立视觉缺位是renderer自身缺口，不能全部归因引擎 |
 | G6 | tickDuration 缺省 | 官方闭源壳传入值不可知 | **R6 冻结**：tickDurationMs 契约参数化（缺省 1000，G6），TSDoc 明载「仅动画时序参数，不驱动数据推送」；setPlaybackRate 冻结（动画时钟倍率、保留进度、推送节奏归调用方） |
-| G7 | 字体/构建期效果采样微差 | 栅格化/抗锯齿及预模糊近似 | **R6 字体责任落库**：fontsBaseUrl 库内 FontFace 预载三规格（55/60/82bold），失败回退可经 getStats().fonts 三态验证（loaded/fallback/unset）；harness 已去 @font-face。构建期采样微差登记不变：束端部裁切、核弹四档 blur、固定种子 flicker/初始角 |
+| G7 | 字体/构建期效果采样微差 | 栅格化/抗锯齿及预模糊近似 | **R6 字体责任落库**：fontsBaseUrl 库内 FontFace 预载三规格（55/60/82bold），失败回退可经 getStats().fonts 三态验证（loaded/fallback/unset）；harness 已去 @font-face。**R7用户确认字体责任销账，采样微差保留**：束端部裁切、核弹四档 blur、固定种子 flicker/初始角 |
 | G8 | ~~swamp 白罩层序~~ | ~~官方 zIndex 序下 v8 mask 失效~~ | **R2 二轮销账**（跳格 bug 污染的观察，修复后官方层序 mask 正常） |
 | G9 | 用户色数据源 | 契约 v0 无 users 映射（引擎不投影用户色），官方 playerColor=users[user].color | R3 起 v0 采用官方 demo 同款 **userOwnerColor 模式色板**（own 0x8fbb93/#8fbb93、enemy 0xFF7777/#FF7777、未知 0xBBBBBB/#ffffff）；**rampart 私有顶罩**=own #105010/#44ff44、enemy #501010/#ff4444（terrain.js userOwnerColor 分支），**rampart 公有精灵**=playerColor 色板（rampart.metadata.js:5-7 的 userOwnerColor 分支——评审 A-B5 勘误）；本玩家=createRenderer `localPlayerId`。M3 契约落 users 映射后切换官方远程用户色路径并销账 |
 | G10 | factory 官方优先级 bug（两处） | factory.metadata.js **:46** `store['power']||0 + store['energy']||0` ⇒ `power || (0+energy) || 0`（powerHeight）；**:175-176** `energy||0 + power||0 < total` ⇒ `energy || power || (0<total)`（hasOther——total>0 恒 true 白条恒显）。container 同形表达式无此 bug（括号齐全） | R3 **保真复刻**两处官方行为（评审 A-B4 补登记 ：176）；官方上游修复后随动 |
@@ -786,3 +786,24 @@ R5 实施细化与结果见 [R5 动效系统实施方案](f2-renderer-r5.md) 和
   离开与拖拽状态的悬停重估、相机多指/capture 状态、文字描边 alpha、字体
   部分失败重试资源累积。本轮逐项修复并补行为回归；详见 r6 方案 §8 末项。
   原增量复审 PASS 不覆盖这些边界，收口须以本轮验证结果为准。
+
+
+- 2026-10-01：**R7阶段修复与交接，尚未收口**。已批准方案`b0a5dd1`，按用户要求阶段提交
+  `821a02f`保存工具/首轮数据/真实Graphics失败回归；随后工作树修复自有context释放、
+  有实测依据的rampart bbox裁剪（32个raster用例零差异；纹素节省，不宣称GPU帧提速），renderer362/shared4/kk-cli7与构建守卫通过。
+  WebGPU标准10k完整执行，但heap终点较起点+14.97MiB尚未证无增长；首轮GPUpass跨度p95=13.6315ms仍未销账≤8ms。
+  用户已批准冻结阈值下如实登记差距与后续选项，并确认G1–G13整表终裁。
+  旧交接时三轮矩阵/正式WebGL/压力10k/八点齐数/三路评审/终态文档及收口提交仍需完成；本次阶段评审与文档更新见后续条目，
+  见 [R7验证记录](../research/notes/renderer-r7-verification-2026-09-30.md)、[灰区确认](../research/notes/renderer-r7-gray-decisions-2026-09-30.md)
+  与 [交接提示词](f2-renderer-r7-handoff-2026-10-01.md)。正常lighting和R6冻结公共API不变；主树/引擎未改。
+
+### §12 R7追加执行记录：2026-10-01短测与真实回放阶段
+
+用户新授权暂缓长时间测试、不再等待方向询问；开展短测驱动修复及官方真实场景。
+完成Graphics context释放、顶罩bbox及同组source复用、同tick对象对账门控、
+官方null动作哨兵诊断修正；E54S13本地官方回放100tick双后端跑通、独立oracle匹配。
+renderer369/shared4/kk-cli7测、两包tsc/构建、fmt/clippy、175资产夹具再生一致，
+三路实际评审清偿复审。环境/数值/截图/方法详见[短测报告](../research/notes/renderer-r7-short-verification-2026-10-01.md)。
+R7为阶段提交，§5冻结阈值不变，快照仍有≥2ms、GPU≤8ms未新销账，
+缓存槽增长与长期稳态仍未解决；不勾选最终收口，不以真实场景替代300/50/100验收。
+既有用户确认灰区表终态继续有效，未新增装饰/world/API/引擎改动。

@@ -1,5 +1,5 @@
 /** Internal perf-build bridge. This module is eliminated from the normal library. */
-import { BindGroup, Container, Texture, TextureSource } from 'pixi.js';
+import { BigPool, BindGroup, Container, Texture, TextureSource } from 'pixi.js';
 import type { RendererHandle } from '../index.js';
 import type { Kernel } from '../core/renderer.js';
 import type { LoadedAtlas } from '../assets/atlas.js';
@@ -30,8 +30,10 @@ export interface PerfProbe {
   kernel: Kernel;
   frame(): Record<string, number>;
   takeApply(): Record<string, number>[];
+  takeFeed(): Runtime[];
   counts(): Runtime;
   motion(): Runtime[];
+  activity(): Record<string, number>;
   gpuDone(): Promise<void>;
   stop(): void;
   render(): void;
@@ -48,6 +50,7 @@ export function attachPerf(handle: RendererHandle, kernel: Kernel, room: RoomSce
   let applyParts: Record<string, number> = {}, applies: Record<string, number>[] = [];
   let gateEvaluated = 0, gateNull = 0, gateWrites = 0, gateEqual = 0, gateChanged = 0, animatedWrites = 0;
   let inApply = false, tweenCreated = 0, tweenEnded = 0, tweenCancelled = 0;
+  let feedRows: Runtime[] = [], feedParts: Record<string, number> | null = null;
   let frames = 0, viewsCreated = 0, viewsDestroyed = 0;
   const nodeIDs = new WeakMap<object, number>(); let nextNode = 0;
   const partCounts: Record<string, { evaluations: number; equal: number; changed: number; null: number; writes: number }> = {};
@@ -66,8 +69,16 @@ export function attachPerf(handle: RendererHandle, kernel: Kernel, room: RoomSce
         else { gateChanged++; count.changed++; }
         return value;
       }); }
-      for (const renderer of descriptor.renderers.values()) if (!instrumented.has(renderer)) { instrumented.add(renderer); wrap(renderer, 'apply', (old, args) => { gateWrites++; if (!inApply) animatedWrites++; return old(...args); }); }
+      for (const [partID, renderer] of descriptor.renderers) if (!instrumented.has(renderer)) { instrumented.add(renderer); wrap(renderer, 'apply', (old, args) => {
+        gateWrites++; if (!inApply) animatedWrites++;
+        const key = `${descriptor.typeKey.startsWith('s:') ? descriptor.typeKey.slice(2) : descriptor.typeKey}/${partID}`;
+        (partCounts[key] ??= { evaluations: 0, equal: 0, changed: 0, null: 0, writes: 0 }).writes++;
+        return old(...args);
+      }); }
     }
+    for (const [target, key] of [[stage.ambient, 'sync'], [stage.effects, 'play']] as const) wrap(target, key, (old, args) => {
+      const t = performance.now(); try { return old(...args); } finally { applyParts[`$${key}`] = (applyParts[`$${key}`] ?? 0) + performance.now() - t; }
+    });
     for (const key of ['syncRoad', 'syncRampartCover', 'reconcileParts', 'resetTransientState', 'destroyView', 'beginMove']) wrap(stage, key, (old, args) => {
       const t = performance.now(); try { return old(...args); } finally { applyParts[key] = (applyParts[key] ?? 0) + performance.now() - t; }
     });
@@ -85,6 +96,16 @@ export function attachPerf(handle: RendererHandle, kernel: Kernel, room: RoomSce
     wrap(stage.tweens, 'run', (old, args) => { const size = stage.tweens.size; const done = args[1]; const result = old(args[0], () => { tweenEnded++; done?.(); }); tweenCreated += Math.max(0, stage.tweens.size - size); return result; });
     wrap(stage.tweens, 'cancel', (old, args) => { const size = stage.tweens.size; const result = old(...args); tweenCancelled += Math.max(0, size - stage.tweens.size); return result; });
     wrap(stage.tweens, 'update', (old, args) => { tweenSize = stage.tweens.size; const t = performance.now(); try { return old(...args); } finally { tweenMs = performance.now() - t; } });
+  }
+  if (profiling) {
+    for (const key of ['setTerrain', 'applyObjects', 'setVisuals', 'setHover']) wrap(room as unknown as Runtime, key, (old, args) => {
+      const t = performance.now(); try { return old(...args); } finally { if (feedParts) feedParts[key] = (feedParts[key] ?? 0) + performance.now() - t; }
+    });
+    wrap(feed as unknown as Runtime, 'notify', (old, args) => { const t = performance.now(); try { return old(...args); } finally { if (feedParts) feedParts.notifyMs = (feedParts.notifyMs ?? 0) + performance.now() - t; } });
+    for (const key of ['applySnapshot', 'applyDelta', 'setVisuals', 'setTerrain']) wrap(feed as unknown as Runtime, key, (old, args) => {
+      feedParts = {}; const parts = feedParts, t = performance.now();
+      try { return old(...args); } finally { const totalMs = performance.now() - t; feedRows.push({ operation: key, totalMs, mapOrCopyMs: totalMs - (parts.notifyMs ?? 0), ...parts }); feedParts = null; }
+    });
   }
   wrap(room as unknown as Runtime, 'update', (old, args) => {
     frames++;
@@ -119,6 +140,7 @@ export function attachPerf(handle: RendererHandle, kernel: Kernel, room: RoomSce
   const probe: PerfProbe = {
     kernel,
     frame: () => ({ sceneMs, mainMs, cpuRenderMs: sceneMs + mainMs, objectsMs: room.lastStageMs.objectsMs, lightingMs: room.lastStageMs.lightingMs, tweenMs, tweenSize }),
+    takeFeed: () => { const records = feedRows; feedRows = []; return records; },
     takeApply: () => { const records = applies; applies = []; return records; },
     counts: () => {
       const textures = new Set<Texture>(), sources = new Set<TextureSource>();
@@ -153,7 +175,11 @@ export function attachPerf(handle: RendererHandle, kernel: Kernel, room: RoomSce
       return { views: stage?.views.size ?? 0, dying: stage?.dying.size ?? 0, tweens: stage?.tweens.size ?? 0, overlays,
         lighting: { invalidations: lighting.invalidations, renders: lighting.renders, members: lighting.content.children?.length ?? 0, privateSources: lighting.ownedMembers.size + Number(!!lighting.rt && !lighting.rt.destroyed) }, effects: room.objects?.effects.stats, ambient: room.objects?.ambient.stats,
         textures: textures.size, sources: liveSources, estimatedSourceBytes: sourceBytes,
+        coverSources: stage?.coverRoot.children.length ?? 0, estimatedCoverBytes: (stage?.coverRoot.children ?? []).reduce((n: number, sprite: Runtime) => n + sprite.texture.source.pixelWidth * sprite.texture.source.pixelHeight * 4, 0),
         gpuManagedTextures: managedSources.filter(Boolean).length,
+        gpuManagedTextureSlots: managedSources.length,
+        gpuManagedTextureNullSlots: managedSources.filter(source => source === null).length,
+        pools: BigPool.stats(),
         graphicsContexts: Object.values(renderer.graphicsContext?._managedContexts?.items ?? {}).filter(Boolean).length,
         graphicsContextSlots: Object.keys(renderer.graphicsContext?._managedContexts?.items ?? {}).length,
         canvasTextActive: Object.values(renderer.canvasText?._activeTextures ?? {}).filter(Boolean).length,
@@ -163,6 +189,11 @@ export function attachPerf(handle: RendererHandle, kernel: Kernel, room: RoomSce
         feedRooms: feed.roomNames().length, feedObjects: feed.roomNames().reduce((n, name) => n + (feed.summary(name)?.objects ?? 0), 0),
         feedPoolLeases: null, atlasFrameRefs: atlas?.frames.size ?? 0, standaloneLeases: atlas?.standalone.size ?? 0,
       };
+    },
+    activity: () => {
+      let overlays = 0; if (stage) for (const view of [...stage.views.values(), ...stage.dying.values()]) overlays += view.overlays.members.size;
+      const effects = room.objects?.effects.stats;
+      return { dying: stage?.dying.size ?? 0, overlays, tweens: stage?.tweens.size ?? 0, finiteActive: effects?.active ?? 0, finiteNodes: effects?.nodes ?? 0, finiteTexts: effects?.texts ?? 0 };
     },
     motion: () => stage ? [...stage.views.values()].filter((v: Runtime) => v.motion).map((view: Runtime) => {
       if (!nodeIDs.has(view.root)) nodeIDs.set(view.root, ++nextNode);

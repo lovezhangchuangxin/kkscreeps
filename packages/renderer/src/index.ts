@@ -263,22 +263,42 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
     kernel.stage.addChild(room.root);
 
     const feed = new FeedStore();
+    // FeedStore only advances object state through snapshot or strictly increasing
+    // delta time. Same-room/same-time terrain/visual notifications need no object
+    // reconciliation. Commit this marker only after a successful object apply.
+    let appliedObjectsRoom: string | null = null;
+    let appliedObjectsTime: number | undefined;
+    let pendingObjectSnapshot = false;
     // 活动房间编排（R6 D3）：非活动房变更只进 FeedStore（零渲染写入）；切房
     // 快照语义重建。visuals 同引用短路——增量通知零重建成本。
     const activeRoomCtrl = new ActiveRoomController(
       {
         apply: (name, change) => {
+          // A same-time snapshot can replace objects. Invalidate before terrain
+          // work as well, so a partial failure remains retryable on the next notify.
+          if (change.kind === 'snapshot') { appliedObjectsRoom = null; pendingObjectSnapshot = true; }
           const terrain = feed.terrain(name);
           if (terrain) room.setTerrain(terrain.codes);
-          room.applyObjects(change.objects, change.time, change.events, change.kind, change);
+          if (appliedObjectsRoom !== name || appliedObjectsTime !== change.time) {
+            room.applyObjects(change.objects, change.time, change.events, pendingObjectSnapshot ? 'snapshot' : change.kind, change);
+            appliedObjectsRoom = name;
+            appliedObjectsTime = change.time;
+            pendingObjectSnapshot = false;
+          }
           room.setVisuals(change.visuals);
           reevaluateHover(); // 活动房数据变化 → 命中可能变化（评审 GPT-P2#5）
         },
         rebuild: (name) => {
+          appliedObjectsRoom = null;
+          pendingObjectSnapshot = true;
           const terrain = feed.terrain(name);
           // 无地形房切房清为素地，防上一房地形/墙残留（评审 B-B2）
           room.setTerrain(terrain ? terrain.codes : new Array(ROOM_SIZE * ROOM_SIZE).fill(0));
-          room.applyObjects(feed.objects(name), feed.summary(name)?.time ?? 0, [], 'snapshot');
+          const time = feed.summary(name)?.time ?? 0;
+          room.applyObjects(feed.objects(name), time, [], 'snapshot');
+          appliedObjectsRoom = name;
+          appliedObjectsTime = time;
+          pendingObjectSnapshot = false;
           room.setVisuals(feed.visuals(name));
           reevaluateHover();
         },

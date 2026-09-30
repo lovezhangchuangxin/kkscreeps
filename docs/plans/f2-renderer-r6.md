@@ -392,3 +392,13 @@ visuals 全量替换、离房事件不补播、say 隐私过滤（player=null �
     WebGPU/WebGL 均 visuals=53/fonts=loaded/lighting=real；原生点击命中
     (14,10) kk0000000000000002，拖拽后悬停恢复至 (21,20) 且 pick 不变。
     多指/capture 与字体失败路径以行为回归验证，未宣称浏览器真实多指测试。
+
+
+- **2026-10-01 R7交接指针**：R6终态仍为350测基线，D1–D7不重开。
+  R7阶段提交`821a02f`后修复Graphics context释放并裁剪rampart顶罩，工作树renderer362测通过；
+  灰区G1–G13已由用户整表确认。正式预算/内存结论、完整三轮双后端及三路评审尚未收口，
+  见 [R7验证记录](../research/notes/renderer-r7-verification-2026-09-30.md) 与 [交接提示词](f2-renderer-r7-handoff-2026-10-01.md)。
+
+R7后续指针（2026-10-01）：[短窗口优化与真实回放](../research/notes/renderer-r7-short-verification-2026-10-01.md)
+已按用户追加授权完成短测/生命周期修复/真实100tick场景，三路评审清偿复审。
+R6 D1–D7与冻结API未重开；正常光照不扩档，长期验收暂缓且未冒称R7最终完成。

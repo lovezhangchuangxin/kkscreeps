@@ -54,8 +54,8 @@ export async function initKernel(options: KernelOptions): Promise<Kernel> {
       destroyed = true;
       observer.disconnect();
       // children 级联拆场景子树；texture 缺省 false——Assets 共享纹理不在此销毁
-      // （v8 语义）；Graphics GPU 缓冲由 renderer 拆卸时经 graphicsContextSystem 释放。
-      app.destroy(true, { children: true });
+      // （v8 语义）；自有 Graphics context 需显式释放，options 非空不会默认销毁。
+      app.destroy(true, { children: true, context: true });
     },
   };
   return kernel;
