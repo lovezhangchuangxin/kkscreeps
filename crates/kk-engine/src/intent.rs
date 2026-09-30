@@ -383,6 +383,18 @@ fn parse_room_intent(name: &str, raw: &Value) -> Option<RoomIntent> {
 pub struct UserIntents {
     pub objects: BTreeMap<ObjId, BTreeMap<Action, IntentData>>,
     pub room: Vec<RoomIntent>,
+    /// Game.notify（M2B 扩面 P3）：官方全局 intent 通道（runtime.js:78-86
+    /// `intents.push('notify', ...)`——list 顶层按动作名键的数组，非对象 id
+    /// 路由）。清洗 schema：`notify: {message: 'userText', groupInterval:
+    /// 'number'}`（common/lib/system.js:17）
+    pub notify: Vec<NotifyIntent>,
+}
+
+/// 一条玩家通知意图（Game.notify）。
+#[derive(Debug, Clone, PartialEq)]
+pub struct NotifyIntent {
+    pub message: String,
+    pub group_interval: Option<i64>,
 }
 
 /// 一 tick 的全部玩家指令（玩家名排序——结算序确定性，方案 D5）。
@@ -406,6 +418,23 @@ impl IntentBatch {
             return batch;
         };
         for (obj_key, actions) in objects {
+            if obj_key == "notify" {
+                // 全局通道（官方 utils.js storeIntents :411-414 的 notify 分支：
+                // sanitizeUserIntents 白名单清洗）：message userText、
+                // groupInterval number；缺省 message 容空串（官方 userText
+                // 对 undefined 的强转语义近似——落库面非玩家可观测）
+                let Some(items) = actions.as_array() else {
+                    continue;
+                };
+                let entry = batch.users.entry(player.to_string()).or_default();
+                for item in items {
+                    entry.notify.push(NotifyIntent {
+                        message: to_user_text(item.get("message")),
+                        group_interval: to_int(item.get("groupInterval")),
+                    });
+                }
+                continue;
+            }
             if obj_key == "room" {
                 // room 级：pushByName('room', name, data) 的数组形态
                 // （runtime.js:80-90；room/intents.js 逐条消费）
@@ -463,6 +492,7 @@ impl IntentBatch {
             let entry = self.users.entry(player).or_default();
             entry.objects.extend(intents.objects);
             entry.room.extend(intents.room);
+            entry.notify.extend(intents.notify);
         }
     }
 
@@ -544,6 +574,55 @@ fn to_bool(v: Option<&Value>) -> Option<bool> {
 }
 
 /// 官方 userString（system.js:12）：`("" + (value||"")).substring(0, 100)`。
+/// 官方 userText 清洗（common/lib/system.js:13）：`("" + (value||""))`
+/// .substring(0, 1000)——falsy 原语归空串、数组 join(",")、对象
+/// "[object Object]" 的 JS ToString 语义（评审 1 P1-1 清偿：notify message
+/// 原误走 userString(100) 帽）。浮点指数形与 JS 数字字面量的格式差异
+/// 登记兼容性.md
+fn js_value_falsy(x: &Value) -> bool {
+    match x {
+        Value::Null => true,
+        Value::Bool(b) => !*b,
+        Value::Number(n) => n.as_f64() == Some(0.0),
+        Value::String(s) => s.is_empty(),
+        _ => false,
+    }
+}
+
+/// JS Array.prototype.toString = join(",")（嵌套递归展平；元素强转是**普通
+/// ToString**——join 只对 null/undefined 产空串，0/"false" 等照常字符串化，
+/// 元素对象 → "[object Object]"。清偿复审阻断项修复：原实现把顶层
+/// `value||""` 的 falsy 折叠误用到 join 元素上）
+fn js_array_to_string(items: &[Value]) -> String {
+    items
+        .iter()
+        .map(|it| match it {
+            Value::Null => String::new(),
+            Value::String(s2) => s2.clone(),
+            Value::Bool(_) | Value::Number(_) => it.to_string(),
+            Value::Array(nested) => js_array_to_string(nested),
+            _ => "[object Object]".to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+/// 官方 userText 清洗（common/lib/system.js:13）：`("" + (value||""))`
+/// .substring(0, 1000)——falsy 原语归空串、数组 join、对象
+/// "[object Object]" 的 JS ToString 语义（评审 1 P1-1 清偿：notify message
+/// 原误走 userString(100) 帽）。浮点指数形与 JS 数字字面量的格式差异
+/// 登记兼容性.md
+fn to_user_text(v: Option<&Value>) -> String {
+    match v {
+        None | Some(Value::Null) => String::new(),
+        Some(x) if js_value_falsy(x) => String::new(),
+        Some(Value::String(s)) => s.chars().take(1000).collect(),
+        Some(x @ (Value::Bool(_) | Value::Number(_))) => x.to_string().chars().take(1000).collect(),
+        Some(Value::Array(items)) => js_array_to_string(items).chars().take(1000).collect(),
+        Some(Value::Object(_)) => "[object Object]".to_string(),
+    }
+}
+
 fn to_user_string(v: Option<&Value>) -> Option<String> {
     v.map(|x| match x {
         Value::Null => String::new(),

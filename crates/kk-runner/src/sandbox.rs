@@ -205,6 +205,12 @@ impl Sandbox {
             let _guard = tokio.enter();
             runtime.op_state().borrow_mut().put(ModuleTable::new());
             runtime.op_state().borrow_mut().put(shared.clone());
+            // Game.cpu.halt 的 terminate 通道（M2B P3）：op 内同线程经句柄
+            // 投递终止标志（与看门狗/near-heap 同一 IsolateHandle 形态）
+            runtime
+                .op_state()
+                .borrow_mut()
+                .put(runtime.v8_isolate().thread_safe_handle());
 
             // 注入顺序：lodash（结果放 __kkLodash）→ 常量平铺 → prelude 各段
             //（末段把宿主通道注册进 __kkp.host 而不上全局）→ 捕获私有句柄 →
@@ -350,12 +356,32 @@ impl Sandbox {
                 // beginTick 第二参数在 JS 侧合并（world_json.rs 的 cpu 键是占位
                 // 基准，被此真值覆盖）——避免每 tick 深拷贝整个世界（含每房
                 // 2500 元素地形数组）只为覆写三键（评审 3 P3-2 清偿）
-                let cpu_json = serde_json::json!({
-                    "limit": self.budget.limit,
-                    "tickLimit": self.budget.tick_limit(),
-                    "bucket": self.budget.bucket(),
-                })
-                .to_string();
+                let cpu_json = {
+                    // Game.cpu.getHeapStatistics（M2B P3）：begin_tick 时点在
+                    // 控制线程采样真 V8 统计（官方 ivm getHeapStatisticsSync
+                    // 同位——调用时实时 vs 快照时点差异登记）；键面 snake_case
+                    //（overmind/tooangel 消费形）；externally_allocated_size
+                    // 是 ivm 外部分配追踪面，我方无通道恒 0（登记）
+                    let hs = self.runtime.v8_isolate().get_heap_statistics();
+                    serde_json::json!({
+                        "limit": self.budget.limit,
+                        "tickLimit": self.budget.tick_limit(),
+                        "bucket": self.budget.bucket(),
+                        "heap": {
+                            "total_heap_size": hs.total_heap_size(),
+                            "total_heap_size_executable": hs.total_heap_size_executable(),
+                            "total_physical_size": hs.total_physical_size(),
+                            "total_available_size": hs.total_available_size(),
+                            "used_heap_size": hs.used_heap_size(),
+                            "heap_size_limit": hs.heap_size_limit(),
+                            "malloced_memory": hs.malloced_memory(),
+                            "peak_malloced_memory": hs.peak_malloced_memory(),
+                            "does_zap_garbage": hs.does_zap_garbage() as u32,
+                            "externally_allocated_size": 0,
+                        },
+                    })
+                    .to_string()
+                };
                 // world 序列化在 arm 之前完成：arm 之后的任何失败路径都必须 disarm
                 // （序列化 Value 理论不可达失败，防御性保证不变量成立）
                 let world_json = serde_json::to_string(world)?;
@@ -369,6 +395,7 @@ impl Sandbox {
                 // 放大静默遗忘成永久 512MB ceiling（B0-3 对抗评审 P2-1 清偿）
                 self.restore_heap_limit();
                 self.shared.near_heap_fired.store(false, Ordering::Relaxed);
+                self.shared.halt_requested.store(false, Ordering::Relaxed);
                 // beginTick 世界注入也在武装窗口内，硬中断（看门狗/near-heap）同样可能
                 // 打在它身上——失败必须走统一的硬中断善后，不留"中毒"状态。
                 // 参数经私有句柄以 v8 值传递（非脚本拼接，无转义面）
@@ -403,11 +430,38 @@ impl Sandbox {
                 Ok(TickOutcome::Completed { used_ms: 0.0 })
             }
             Err(_) => {
-                // execute_script 失败且非玩家逻辑错误（runLoop 内部已 try/catch）≈ 硬中断
-                self.after_termination();
+                // execute_script 失败且非玩家逻辑错误（runLoop 内部已 try/catch）≈ 硬中断。
+                // Game.cpu.halt（玩家主动停跑）分叉：官方 make.js:280-284
+                // 抛出 CPU halted 跳过 :194-212 整个计费块=零计费（评审 1
+                // P1-3 实证——原「计费不可直读」登记失实，勘正）
+                if self.shared.halt_requested.load(Ordering::Acquire) {
+                    self.after_halt();
+                } else {
+                    self.after_termination();
+                }
                 Ok(TickOutcome::Terminated)
             }
         }
+    }
+
+    /// Game.cpu.halt 的善后（M2B P3）：与 after_termination 同构（disarm/
+    /// cancel 终止标志/清 tick_start/恢复堆上限/Memory 不写回——官方
+    /// isolate 硬停后 outMessage 不再产出，intents 与写回同弃），唯计费
+    /// **丢弃**——官方 make.js:280-284 的抛出先于 :194-212 计费块，
+    /// lastUsedCpu/cpuAvailable 均不动（零计费）；官方 runner.js:26-28
+    /// 对该结局 sendConsoleError("CPU halted")——同款补错误行（halt 前
+    /// console 行的存活是架构差异：我方逐行即时推送 vs 官方随 outMessage
+    /// 整体丢弃，登记 compatibility.md）
+    fn after_halt(&mut self) {
+        self.watchdog.disarm();
+        self.runtime.v8_isolate().cancel_terminate_execution();
+        if !self.terminated_this_tick {
+            self.pending_bill = None;
+            self.terminated_this_tick = true;
+            self.shared.push_console_line("error", "CPU halted");
+        }
+        self.restore_heap_limit();
+        *self.shared.tick_start.lock().unwrap() = None;
     }
 
     /// 取走上一次 runLoop 捕获的玩家逻辑错误（None = 正常完成或硬中断）。
@@ -479,9 +533,14 @@ impl Sandbox {
             Err(_) => {
                 // 写回阶段被硬中断（如玩家经 Memory.toJSON 挂死写回）：统一善后
                 // （disarm、清标志、按整份 tickLimit 结算、恢复堆上限）；
-                // 本轮 intents 丢弃（官方语义）
+                // 本轮 intents 丢弃（官方语义）。写回内 Game.cpu.halt 同分叉
+                // 零计费（评审 2 P2-2 清偿：三通道口径统一）
                 self.pending_intents = None;
-                self.after_termination();
+                if self.shared.halt_requested.load(Ordering::Acquire) {
+                    self.after_halt();
+                } else {
+                    self.after_termination();
+                }
                 Ok(
                     serde_json::json!({ "ok": false, "terminated": true, "error": "写回阶段硬中断" }),
                 )
@@ -505,12 +564,20 @@ impl Sandbox {
         //（room/global）按元素数计；排除 say/pull
         let count_billed = |map: &serde_json::Map<String, Value>| {
             map.values()
-                .filter_map(|a| a.as_object())
-                .map(|a| {
-                    a.iter()
-                        .filter(|(k, _)| !free.contains(&k.as_str()))
-                        .map(|(_, v)| v.as_array().map_or(1, Vec::len))
-                        .sum::<usize>()
+                .map(|a| match a {
+                    // 顶层数组通道（notify——push 全局形态）：官方 make.js:98-107
+                    // intentsCount 对数组 for-in 逐元素 +1（索引串不中免费表）
+                    Value::Array(items) => items.len(),
+                    a => a
+                        .as_object()
+                        .map(|inner| {
+                            inner
+                                .iter()
+                                .filter(|(k, _)| !free.contains(&k.as_str()))
+                                .map(|(_, v)| v.as_array().map_or(1, Vec::len))
+                                .sum::<usize>()
+                        })
+                        .unwrap_or(0),
                 })
                 .sum::<usize>()
         };
@@ -583,7 +650,13 @@ impl Sandbox {
         ) {
             Ok(v) => Ok(v),
             Err(_) => {
-                self.after_termination();
+                // Game.cpu.halt 在表达式通道触发（评审 2 P2-2 清偿：原实现
+                // 无分叉按整份罚）：零计费善后（官方 CPU halted 跳过计费块）
+                if self.shared.halt_requested.load(Ordering::Acquire) {
+                    self.after_halt();
+                } else {
+                    self.after_termination();
+                }
                 Ok(serde_json::json!({ "ok": false, "kind": "terminated", "error": "硬中断" }))
             }
         }

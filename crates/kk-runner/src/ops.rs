@@ -35,6 +35,9 @@ pub struct Shared {
     pub tick_start: Mutex<Option<Instant>>,
     /// 近堆回调是否触发过（诊断用）。
     pub near_heap_fired: AtomicBool,
+    /// 玩家本 tick 是否已 Game.cpu.halt（M2B 扩面 P3）：run_loop 据此分叉
+    /// after_halt（实际用量计费）与 after_termination（整份计费）
+    pub halt_requested: AtomicBool,
     /// 本 tick 已收 console 行数 / 累计字节（闸门计数，begin_tick 重置）。
     console_lines: AtomicU64,
     console_bytes: AtomicU64,
@@ -120,6 +123,20 @@ fn op_kk_console(state: &mut OpState, #[string] level: &str, #[string] text: &st
     shared.push_console_line(level, text);
 }
 
+/// Game.cpu.halt（M2B 扩面 P3）：官方 user-vm.js:68-70 `_halt` 置
+/// didHaltByUserRequest + isolate **dispose**（硬停）。我方：置 halt 标志 +
+/// terminate（沙箱长寿命不销毁，登记差异——官方下一 tick 重建 VM，我方
+/// cancel 后复用）；terminate 同线程调用=设终止标志，控制返回 JS 即抛
+/// 终止异常（官方 halt 后玩家代码不可达，同语义）
+#[op2(fast)]
+fn op_kk_cpu_halt(state: &mut OpState) {
+    let shared = state.borrow::<SharedRef>().clone();
+    shared.halt_requested.store(true, Ordering::Release);
+    state
+        .borrow::<deno_core::v8::IsolateHandle>()
+        .terminate_execution();
+}
+
 #[op2(fast)]
 fn op_kk_get_used(state: &mut OpState) -> f64 {
     let shared = state.borrow::<SharedRef>().clone();
@@ -136,6 +153,7 @@ extension!(
         op_kk_module_load_js,
         op_kk_module_load_binary,
         op_kk_console,
+        op_kk_cpu_halt,
         op_kk_get_used,
     ]
 );

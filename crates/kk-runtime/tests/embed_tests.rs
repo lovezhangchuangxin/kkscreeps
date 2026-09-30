@@ -16,6 +16,8 @@ mod embed_strictness_and_partial_commit;
 mod m2b_creation_family;
 #[path = "embed_tests/m2b_creep_tails.rs"]
 mod m2b_creep_tails;
+#[path = "embed_tests/m2b_map_notify_cpu_family.rs"]
+mod m2b_map_notify_cpu_family;
 #[path = "embed_tests/stop_run_regression.rs"]
 mod stop_run_regression;
 
@@ -26,6 +28,7 @@ use embed_roundtrip_contract::*;
 use embed_strictness_and_partial_commit::*;
 use m2b_creation_family::*;
 use m2b_creep_tails::*;
+use m2b_map_notify_cpu_family::*;
 use stop_run_regression::*;
 
 #[test]
@@ -70,6 +73,9 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     m2b_ranged_attack_e2e_impl()?;
     m2b_saying_visibility_e2e_impl()?;
     m2b_notify_when_attacked_creep_e2e_impl()?;
+    m2b_map_family_e2e_impl()?;
+    m2b_map_multihop_e2e_impl()?;
+    m2b_notify_and_cpu_e2e_impl()?;
     assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");
     Ok(())
 }

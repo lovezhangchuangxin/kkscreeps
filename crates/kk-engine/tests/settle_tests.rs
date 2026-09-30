@@ -3,7 +3,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use kk_engine::intent::{Action, IntentBatch, IntentData};
+use kk_engine::intent::{Action, IntentBatch, IntentData, NotifyIntent};
 use kk_engine::settle::{PlayerState, settle_room};
 use kk_schema::room::{CreepObj, RoomObject, SpawnObj};
 use kk_world::types::BodyKind;
@@ -19,6 +19,8 @@ mod combat_ranged;
 mod controller_safemode;
 #[path = "settle_tests/m2b_creation_family.rs"]
 mod m2b_creation_family;
+#[path = "settle_tests/m2b_notify_family.rs"]
+mod m2b_notify_family;
 #[path = "settle_tests/minerals_and_boost.rs"]
 mod minerals_and_boost;
 #[path = "settle_tests/misc_and_notify.rs"]

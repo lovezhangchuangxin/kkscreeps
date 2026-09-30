@@ -128,5 +128,8 @@
 
   // ---------------------------------------------------------------- 段间私有上下文
   // 90_host 执行完删除本属性；各段在自身加载时捕获所需引用进闭包。
-  globalThis.__kkp = { ops, probe, reportMissing, PROBE_IGNORE, missing, hasProbes, stubCalls, countStub, lodash: _ };
+  globalThis.__kkp = { ops, probe, reportMissing, PROBE_IGNORE, missing, hasProbes, stubCalls, countStub, lodash: _,
+    // M2B 扩面 P3：Game.cpu.halt 宿主通道（各段加载期捕获引用；官方 _halt
+    // 是 ivm 引用注入 user-vm.js:68-70——同位等价物）
+    cpuHalt: () => ops.op_kk_cpu_halt() };
 })();

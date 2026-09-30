@@ -6,6 +6,7 @@
  * game.js:273-345 collections）、refreshGame 与 __kkp.memoryWorld 导出
  * （beginTick/writeBackMemory/intentsPayload——90_host 宿主通道消费）。
  * 依赖：gw 全容器（_registry）、makeRoom/Terrain/terrainWordAt（room 段）、
+ * roomNameToXY/getRoomNameFromXY（room-position 段——map 族房名算术）、
  * wrapObject（_registry 段）、各类型 assembler（已注册）。
  */
 (() => {
@@ -38,6 +39,26 @@
   const __objectEntries = Object.entries;
   const mathPow = Math.pow;
   const mathFloor = Math.floor;
+  // M2B 扩面 P3：map/notify/cpu 族常量加载期捕获（官方闭包 C 同款）+
+  // halt 宿主通道（00_shared 暴露，ops.op_kk_cpu_halt——官方 _halt 是 ivm
+  // 引用注入 user-vm.js:68-70，同位等价物）
+  const cpuHalt = globalThis.__kkp.cpuHalt;
+  const C_TOP = globalThis.TOP;
+  const C_BOTTOM = globalThis.BOTTOM;
+  const C_LEFT = globalThis.LEFT;
+  const C_RIGHT = globalThis.RIGHT;
+  const C_FIND_EXIT_TOP = globalThis.FIND_EXIT_TOP;
+  const C_FIND_EXIT_RIGHT = globalThis.FIND_EXIT_RIGHT;
+  const C_FIND_EXIT_BOTTOM = globalThis.FIND_EXIT_BOTTOM;
+  const C_FIND_EXIT_LEFT = globalThis.FIND_EXIT_LEFT;
+  const C_ERR_NO_PATH = globalThis.ERR_NO_PATH;
+  const C_ERR_INVALID_ARGS = globalThis.ERR_INVALID_ARGS;
+  const C_ERR_FULL = globalThis.ERR_FULL;
+  const C_OK = globalThis.OK;
+  // getTerrainAt 的位码（官方 map.js:255-258 经闭包 C——搬入 game 段后
+  // 须本段捕获；room.js 段的捕获不跨段）
+  const C_TERRAIN_MASK_WALL = globalThis.TERRAIN_MASK_WALL;
+  const C_TERRAIN_MASK_SWAMP = globalThis.TERRAIN_MASK_SWAMP;
   const GCL_MULTIPLY = globalThis.GCL_MULTIPLY;
   const GCL_POW = globalThis.GCL_POW;
 
@@ -365,7 +386,15 @@
       if (w && rooms[o.room]) w.room = rooms[o.room];
     }
 
-    const cpu = gw.world.cpu || { limit: 20, tickLimit: 500, bucket: 10000 };
+    const cpu = gw.world.cpu || {
+      limit: 20, tickLimit: 500, bucket: 10000,
+      // 裸 run（无宿主 cpu 注入）的堆面兜底：全零形态（套件路径恒经
+      // begin_tick 注入真值——sandbox 侧采样）
+      heap: { total_heap_size: 0, total_heap_size_executable: 0, total_physical_size: 0,
+        total_available_size: 0, used_heap_size: 0, heap_size_limit: 0,
+        malloced_memory: 0, peak_malloced_memory: 0, does_zap_garbage: 0,
+        externally_allocated_size: 0 },
+    };
     // Game.gcl 真值（官方 game.js:130-163 点数正变换）：world.gcl = 官方
     // runtimeData.user.gcl 点数（PlayerState 投影）；缺省 0 点 = 1 级满配
     // progressTotal（Math.pow 精确浮点，与官方逐位一致——勿取整）
@@ -375,6 +404,8 @@
     const game = {
       time: gw.world.time,
       shard: { name: 'shard0', type: 'normal', ptr: false },
+      // 官方 game.js:145：cpuLimit = runtimeData.cpu（tick 窗口同值）
+      cpuLimit: cpu.tickLimit,
       cpu: {
         limit: cpu.limit,
         tickLimit: cpu.tickLimit,
@@ -382,8 +413,17 @@
         shardLimits: { shard0: cpu.limit },
         // 官方口径：真实耗时 + intents.cpu（虚拟计费，runtime.js:202-204）
         getUsed: () => ops.op_kk_get_used() + (gw.intents ? gw.intents.cpu : 0),
-        getHeapStatistics: () => { countStub('Game.cpu.getHeapStatistics'); return { total_heap_size: 0, used_heap_size: 0, heap_size_limit: 0, externally_allocated_size: 0, physical_total: 0, malloced_memory: 0, peak_malloced_memory: 0, does_zap_garbage: 0, number_of_native_contexts: 1, number_of_detached_contexts: 0 }; },
-        halt: () => { countStub('Game.cpu.halt'); },
+        // 官方 game.js:153-155：宿主注入（ivm getHeapStatisticsSync——
+        // snake_case 键面，overmind/tooangel 均按此消费）。我方=begin_tick
+        // 时点在宿主控制线程采样的真 V8 统计（deno_core v8_isolate），
+        // 非调用时实时（登记：快照时点差异）；每次调用返回浅拷贝（官方
+        // 每次新建对象）。externally_allocated_size=ivm 外部分配追踪面，
+        // 我方无对应通道恒 0（登记）
+        getHeapStatistics: () => ({ ...cpu.heap }),
+        // 官方 user-vm.js:68-70：_halt 置 didHaltByUserRequest + isolate
+        // dispose（硬停不可捕获）；我方 terminate 同为硬停（登记：沙箱
+        // 长寿命不销毁，计费按实际用量）
+        halt: cpuHalt,
         setShardLimits: () => 0,
         generatePixel: () => { countStub('Game.cpu.generatePixel'); return -9; },
         unlock: () => -4,
@@ -417,31 +457,306 @@
       getObjectById(id) {
         return __reflectApply(__mapGet, gw.objectsById, [id]) || null;
       },
-      notify() { countStub('Game.notify'); },
-      map: {
-        getWorldSize: () => 1,
-        getRoomLinearDistance: () => 0,
-        getRoomStatus: () => ({ status: 'normal', timestamp: null }),
-        describeExits: () => ({}),
-        findExit: () => -1,
-        findRoute: () => [],
-        // 官方 map.js:262-264：getRoomTerrain 返回 Room.Terrain 实例
-        getRoomTerrain: (roomName) => new (gw.Terrain)(roomName),
-        // 官方 map.js:235-258：返回 'wall'|'swamp'|'plain'（完整词，非缩写）；
-        // 越界或无地形数据 → undefined。M0 世界仅在 createShard/setTerrain 提供
-        // 地形时可用（bit 语义同官方 TERRAIN_MASK_*）
-        getTerrainAt(x, y, roomName) {
-          if (x && typeof x === 'object') { y = x.y; roomName = x.roomName; x = x.x; }
-          if (x < 0 || x > 49 || y < 0 || y > 49) return undefined;
-          const terrain = gw.terrainByRoom[roomName];
-          if (!terrain) return undefined;
-          const t = terrain[y * 50 + x];
-          if (t === undefined || t === null) return undefined;
-          if (t & TERRAIN_MASK_WALL) return 'wall';
-          if (t & TERRAIN_MASK_SWAMP) return 'swamp';
-          return 'plain';
-        },
+      // 官方 game.js:174-180：全局 notify intent（maxLen 20——每 tick 上限，
+      // runtime.js:78-86 push 通道；满返 ERR_FULL）。落库面=玩家通知记录
+      //（官方 users.notifications；我方 PlayerState.notifications），游戏内
+      // 不可观测（官方同——邮件通知）
+      notify(message, groupInterval) {
+        if (gw.intents.push('notify', { message, groupInterval }, 20)) {
+          return C_OK;
+        }
+        return C_ERR_FULL;
       },
+      map: (() => {
+        // ---------------------------------------------------------------- M2B 扩面 P3：map 族真化
+        // 官方 map.js:11-268 逐方法对照。数据源=投影 rooms 键集（世界全房
+        // 表——不可见房也携 terrain-only 条目；官方 mapGrid gridData 同位）。
+        // 差异登记（compatibility.md）：①出口推导——官方逐房 t/b/l/r 标记
+        //（可单边封闭/closed 房），我方在场房恒四向全开（单机全图无封闭房
+        // 概念；off-world 返 null 对齐 gridItem 缺失）；②novice/respawn/closed
+        // 状态无数据源（getRoomStatus 恒走 normal/closed 两臂，roomStatus
+        // 能力面随后续批）；③getWorldSize 维持 1（登记面）。玩家调用时点的
+        // Math/Number 裸用=官方同形（官方 map.js 同在玩家 realm 裸用）
+        const worldRooms = gw.world.rooms || {};
+        const ROOM_NAME_RE = /^(W|E)\d+(N|S)\d+$/;
+        const ROUTE_RE = /(W|E)\d+(N|S)\d+$/;
+        // 官方 map.js:9 kRouteGrid=30：A* 搜索网格半径（originX=fromX+30，
+        // 60×60 索引界外即不可达）
+        const K_ROUTE_GRID = 30;
+        const GRID_W = K_ROUTE_GRID * 2;
+        function describeExitsImpl(roomName) {
+          if (!ROOM_NAME_RE.test(roomName)
+            || !Object.prototype.hasOwnProperty.call(worldRooms, roomName)) {
+            return null;
+          }
+          const xy = gw.roomNameToXY(roomName);
+          // 官方 :26-40 四向标记门（我方恒开——见上登记）；键序 t/b/l/r 官方同
+          const exits = {};
+          exits[C_TOP] = gw.getRoomNameFromXY(xy[0], xy[1] - 1);
+          exits[C_BOTTOM] = gw.getRoomNameFromXY(xy[0], xy[1] + 1);
+          exits[C_LEFT] = gw.getRoomNameFromXY(xy[0] - 1, xy[1]);
+          exits[C_RIGHT] = gw.getRoomNameFromXY(xy[0] + 1, xy[1]);
+          return exits;
+        }
+          // 官方 path-utils.js:5-122 Heap/OpenClosed 逐字移植（评审 1 P2-1
+          // 清偿：自写二叉堆+惰性删除在并列 fcost 的弹出序与官方分岔——
+          // 实测 8/11 tie 案例返回房间序列不同（成本/步数同），玩家经
+          // findRoute 返回值可直接观测；Heap 冒泡 `<=` 即换/pop `>=` 下沉/
+          // update 线性扫 decrease-key 三处序敏感语义逐字保留）
+          class OpenClosed {
+            constructor(size) {
+              this.list = new Uint8Array(size);
+              this.marker = 1;
+            }
+            clear() {
+              if (this.marker >= 253) {
+                this.list = new Uint8Array(this.list.length);
+                this.marker = 1;
+              } else {
+                this.marker += 2;
+              }
+            }
+            isOpen(index) {
+              return this.list[index] === this.marker;
+            }
+            isClosed(index) {
+              return this.list[index] === this.marker + 1;
+            }
+            open(index) {
+              this.list[index] = this.marker;
+            }
+            close(index) {
+              this.list[index] = this.marker + 1;
+            }
+          }
+          class Heap {
+            constructor(size, ctor) {
+              this.priorities = new (ctor || Uint16Array)(size + 1);
+              this.heap = new Uint16Array(size + 1);
+              this.size_ = 0;
+            }
+            minPriority() {
+              return this.priorities[this.heap[1]];
+            }
+            min() {
+              return this.heap[1];
+            }
+            size() {
+              return this.size_;
+            }
+            priority(index) {
+              return this.priorities[index];
+            }
+            pop() {
+              this.heap[1] = this.heap[this.size_];
+              --this.size_;
+              let vv = 1;
+              do {
+                let uu = vv;
+                if ((uu << 1) + 1 <= this.size_) {
+                  if (this.priorities[this.heap[uu]] >= this.priorities[this.heap[uu << 1]]) {
+                    vv = uu << 1;
+                  }
+                  if (this.priorities[this.heap[vv]] >= this.priorities[this.heap[(uu << 1) + 1]]) {
+                    vv = (uu << 1) + 1;
+                  }
+                } else if (uu << 1 <= this.size_) {
+                  if (this.priorities[this.heap[uu]] >= this.priorities[this.heap[uu << 1]]) {
+                    vv = uu << 1;
+                  }
+                }
+                if (uu !== vv) {
+                  let tmp = this.heap[uu];
+                  this.heap[uu] = this.heap[vv];
+                  this.heap[vv] = tmp;
+                } else {
+                  return;
+                }
+              } while (true);
+            }
+            push(index, priority) {
+              this.priorities[index] = priority;
+              let ii = ++this.size_;
+              this.heap[ii] = index;
+              this.bubbleUp(ii);
+            }
+            update(index, priority) {
+              for (let ii = this.size_; ii > 0; --ii) {
+                if (this.heap[ii] === index) {
+                  this.priorities[index] = priority;
+                  this.bubbleUp(ii);
+                  return;
+                }
+              }
+            }
+            bubbleUp(ii) {
+              while (ii !== 1) {
+                if (this.priorities[this.heap[ii]] <= this.priorities[this.heap[ii >>> 1]]) {
+                  let tmp = this.heap[ii];
+                  this.heap[ii] = this.heap[ii >>> 1];
+                  this.heap[ii = ii >>> 1] = tmp;
+                } else {
+                  return;
+                }
+              }
+            }
+            clear() {
+              this.size_ = 0;
+            }
+          }
+          // 官方 map.js:13-15 模块级复用形态（同 run 内多次 findRoute 共享，
+          // clear() 重置）——IIFE 闭包级同位
+          let heap, openClosed, parents;
+          function findRouteImpl(fromRoom, toRoom, opts) {
+            if (fromRoom && typeof fromRoom === 'object') fromRoom = fromRoom.name;
+            if (toRoom && typeof toRoom === 'object') toRoom = toRoom.name;
+            if (fromRoom === toRoom) return [];
+            if (!ROUTE_RE.test(fromRoom) || !ROUTE_RE.test(toRoom)) return C_ERR_NO_PATH;
+            const fromXY = gw.roomNameToXY(fromRoom);
+            const toXY = gw.roomNameToXY(toRoom);
+            const fromX = fromXY[0], fromY = fromXY[1];
+            const toX2 = toXY[0], toY2 = toXY[1];
+            // 官方 :126-128：同名异写（同坐标不同房名）→ []
+            if (fromX === toX2 && fromY === toY2) return [];
+            const originX = fromX + K_ROUTE_GRID;
+            const originY = fromY + K_ROUTE_GRID;
+            // 官方 :48-59 索引形态（含界外 undefined 哨兵）
+            function xyToIndex(xx, yy) {
+              const ox = originX - xx;
+              const oy = originY - yy;
+              if (ox < 0 || ox >= GRID_W || oy < 0 || oy >= GRID_W) return undefined;
+              return ox * GRID_W + oy;
+            }
+            function indexToXY(index) {
+              return [originX - Math.floor(index / GRID_W), originY - index % GRID_W];
+            }
+            function heuristic(xx, yy) {
+              return Math.abs(xx - toX2) + Math.abs(yy - toY2);
+            }
+            if (heap) {
+              heap.clear();
+              openClosed.clear();
+            } else {
+              heap = new Heap(GRID_W * GRID_W, Float64Array);
+              openClosed = new OpenClosed(GRID_W * GRID_W);
+            }
+            if (!parents) {
+              parents = new Uint16Array(GRID_W * GRID_W);
+            }
+            const fromIndex = xyToIndex(fromX, fromY);
+            heap.push(fromIndex, heuristic(fromX, fromY));
+            const routeCallback = (opts && opts.routeCallback) || function () { return 1; };
+            // 官方 :134-194 Astar 主循环逐字（含 cost `Number(cb(...)) || 1`
+            // 的 0→1 归一、Infinity 剪枝、decrease-key 更新序）
+            while (heap.size()) {
+              const index = heap.min();
+              const fcost = heap.minPriority();
+              heap.pop();
+              openClosed.close(index);
+              const xy = indexToXY(index);
+              const hcost = heuristic(xy[0], xy[1]);
+              const gcost = fcost - hcost;
+              if (hcost === 0) {
+                const route = [];
+                let cur = index;
+                while (cur !== fromIndex) {
+                  const cxy = indexToXY(cur);
+                  cur = parents[cur];
+                  const pxy = indexToXY(cur);
+                  let dir;
+                  if (pxy[0] < cxy[0]) dir = C_FIND_EXIT_RIGHT;
+                  else if (pxy[0] > cxy[0]) dir = C_FIND_EXIT_LEFT;
+                  else if (pxy[1] < cxy[1]) dir = C_FIND_EXIT_BOTTOM;
+                  else dir = C_FIND_EXIT_TOP;
+                  route.push({ exit: dir, room: gw.getRoomNameFromXY(cxy[0], cxy[1]) });
+                }
+                route.reverse();
+                return route;
+              }
+              const fromRoomName = gw.getRoomNameFromXY(xy[0], xy[1]);
+              const exits = describeExitsImpl(fromRoomName);
+              for (let dir in exits) {
+                const roomName = exits[dir];
+                const nxy = gw.roomNameToXY(roomName);
+                const neighborIndex = xyToIndex(nxy[0], nxy[1]);
+                if (neighborIndex === undefined || openClosed.isClosed(neighborIndex)) continue;
+                const cost = Number(routeCallback(roomName, fromRoomName)) || 1;
+                if (cost === Infinity) continue;
+                const nf = gcost + heuristic(nxy[0], nxy[1]) + cost;
+                if (openClosed.isOpen(neighborIndex)) {
+                  if (heap.priority(neighborIndex) > nf) {
+                    heap.update(neighborIndex, nf);
+                    parents[neighborIndex] = index;
+                  }
+                } else {
+                  heap.push(neighborIndex, nf);
+                  openClosed.open(neighborIndex);
+                  parents[neighborIndex] = index;
+                }
+              }
+            }
+          return C_ERR_NO_PATH;
+        }
+        return {
+          getWorldSize: () => 1,
+          // 官方 utils.js:644-658 calcRoomsDistance：Chebyshev max(|dx|,|dy|)
+          //（连续形按 worldSize 环绕——我方 worldSize 登记面恒 1，环绕臂
+          // 形态保留）；无房名正则门（垃圾输入 NaN 透传，官方同形）
+          getRoomLinearDistance(roomName1, roomName2, continuous) {
+            const a = gw.roomNameToXY(roomName1);
+            const b = gw.roomNameToXY(roomName2);
+            let dx = Math.abs(b[0] - a[0]);
+            let dy = Math.abs(b[1] - a[1]);
+            if (continuous) {
+              const worldSize = 1;
+              dx = Math.min(worldSize - dx, dx);
+              dy = Math.min(worldSize - dy, dy);
+            }
+            return Math.max(dx, dy);
+          },
+          // 官方 map.js:204-233：novice/respawn/closed 三态无数据源跳过
+          //（登记）；在场房 normal、合法名 off-world closed、非法名 undefined
+          //（正则对非字符串的 .test 强转语义官方同形）；官方 runtimeData
+          // 无 roomStatusData 时抛错——我方恒有数据面不抛（登记）
+          getRoomStatus(roomName) {
+            if (!ROOM_NAME_RE.test(roomName)) return undefined;
+            if (Object.prototype.hasOwnProperty.call(worldRooms, roomName)) {
+              return { status: 'normal', timestamp: null };
+            }
+            return { status: 'closed', timestamp: null };
+          },
+          describeExits: describeExitsImpl,
+          findRoute: findRouteImpl,
+          findExit(fromRoom, toRoom, opts) {
+            const route = findRouteImpl(fromRoom, toRoom, opts);
+            if (!Array.isArray(route)) return route;
+            if (!route.length) return C_ERR_INVALID_ARGS;
+            return route[0].exit;
+          },
+          // 官方 map.js:207-213（deprecated）：在场房 true（accessibleRooms
+          // =世界全房表）；官方 register.deprecated 提示不仿真（登记）
+          isRoomAvailable(roomName) {
+            if (!ROOM_NAME_RE.test(roomName)) return false;
+            return Object.prototype.hasOwnProperty.call(worldRooms, roomName);
+          },
+          // 官方 map.js:262-264：getRoomTerrain 返回 Room.Terrain 实例
+          getRoomTerrain: (roomName) => new (gw.Terrain)(roomName),
+          // 官方 map.js:235-258：返回 'wall'|'swamp'|'plain'（完整词，非缩写）；
+          // 越界或无地形数据 → undefined。M0 世界仅在 createShard/setTerrain 提供
+          // 地形时可用（bit 语义同官方 TERRAIN_MASK_*）
+          getTerrainAt(x, y, roomName) {
+            if (x && typeof x === 'object') { y = x.y; roomName = x.roomName; x = x.x; }
+            if (x < 0 || x > 49 || y < 0 || y > 49) return undefined;
+            const terrain = gw.terrainByRoom[roomName];
+            if (!terrain) return undefined;
+            const t = terrain[y * 50 + x];
+            if (t === undefined || t === null) return undefined;
+            if (t & C_TERRAIN_MASK_WALL) return 'wall';
+            if (t & C_TERRAIN_MASK_SWAMP) return 'swamp';
+            return 'plain';
+          },
+        };
+        })(),
     };
     game.cpu = probe(game.cpu, 'Game.cpu');
     game.market = probe(game.market, 'Game.market');
@@ -492,6 +807,18 @@
         // 数组元素经出口净化窗口兜底（sanitizedStringify）
         __Object.setPrototypeOf(data, null);
         list[id][name] = data;
+      },
+      // 全局 intent 通道（官方 runtime.js:78-86 逐字）：list 顶层按动作名
+      // 键的数组（非对象 id 路由）；maxLen 上限返 false（Game.notify 20——
+      // 每 tick 上限，beginTick 重建 list 即重置）
+      push(name, data, maxLen) {
+        list[name] = list[name] || [];
+        if (maxLen && list[name].length >= maxLen) {
+          return false;
+        }
+        list[name].push(data);
+        cpu += 0.2;
+        return true;
       },
       pushByName(id, name, data) {
         list[id] = list[id] || __Object.create(null);

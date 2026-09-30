@@ -718,6 +718,7 @@ fn tick_input_replay_consistency_engine_level() {
                 gcl: 1,
                 rooms: BTreeSet::new(),
                 raw_memory: String::new(),
+                notifications: Vec::new(),
             },
         );
         engine

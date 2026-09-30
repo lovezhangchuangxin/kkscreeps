@@ -758,6 +758,10 @@
       });
       return name;
     };
+    // 官方 rooms.js:1128-1131：map.findExit 转发（无 opts 参——两参形态）
+    room.findExitTo = function (target) {
+      return gw.currentGame().map.findExit(name, target);
+    };
     // 官方 rooms.js:971-976：越界坐标返 null（构造器抛错前拦截——不依赖
     // 'Invalid arguments' 通道）
     room.getPositionAt = (x, y) => {

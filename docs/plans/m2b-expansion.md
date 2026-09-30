@@ -327,6 +327,76 @@ tower/link 复用其投影/折叠模式）。P6 收尾。**每片一个完整批
 
 ## 8. 执行记录（随片回写）
 
+### P3（Game.map 族 + Game.notify 全局通道 + cpu 三面）——已收口
+
+- **落地**：①map 族真化（game.js map 段 IIFE——官方 map.js:11-268 逐方法
+  对照）：describeExits（在场房四向全开——官方 mapGrid t/b/l/r 标记的
+  单机近似，邻房可不在世界、off-world 返 null；键=方向常量 1/3/5/7）/
+  findRoute（A* 逐字：kRouteGrid=30 搜索界、启发式曼哈顿、cost
+  `Number(cb(...)) || 1` 的 0→1 归一、Infinity 剪枝、route 回溯四向
+  判别；堆=二叉堆+惰性删除替代官方 Heap 类 decrease-key——行为等价）/
+  findExit/findExitTo（rooms.js:1128-1131 两参转发）/getRoomStatus
+  （normal/closed 两臂+非法名 undefined——正则 .test 强转语义；三态
+  数据源缺登记）/isRoomAvailable（deprecated 提示不仿真）/getRoomLinear
+  Distance（utils.js calcRoomsDistance Chebyshev 逐字）；roomNameToXY/
+  getRoomNameFromXY 经 gw 桥导出（段序：room-position 先于 game）；
+  常量 13 个加载期捕获。②notify 全链：prelude intents.push 全局通道
+  （官方 runtime.js:78-86 逐字——list 顶层按动作名键、maxLen 帽、0.2
+  计费）+ Game.notify（maxLen 20，game.js:174-180）+ intent.rs 顶层
+  'notify' 键解析（清洗 schema common/lib/system.js:17：message
+  userText/groupInterval number）+ settle 落账 PlayerState.notifications
+  （房循环外每玩家恰一次；有界 100 drop-oldest）。③cpu 三面：cpuLimit
+  （=tickLimit，game.js:145）/getHeapStatistics（begin_tick 控制线程
+  采样真 V8 统计经 cpu_json 注入——snake_case 键面 overmind/tooangel
+  消费形实证；externally_allocated_size 恒 0 登记）/halt（op_kk_cpu_
+  halt：置 halt_requested+terminate——官方 user-vm.js:68-70 isolate
+  dispose 的长寿命沙箱等价；run_loop 据标志分叉 after_halt=实际用量
+  计费，硬停其余面与 terminate 同构）。
+- **实现期取证**：W 房坐标向中心递减（W1N1 东邻 W0N1——e2e 首版预期
+  写反即被抓）；JSON 序列化自然丢 undefined 键（notify 无参调用落库
+  容空串）；deno_core v8 重导出可达（v8_isolate().get_heap_statistics()
+  返回值式 API——HeapStatistics::default()+&mut 参数形态不存在）。
+- **验证**：workspace 299 绿（+2：引擎 notify 解析/落账帽；embed 2 场景
+  入串行链——map 族全表/notify 帽+落账+cpu 三面+halt 硬停后沙箱复用）/
+  clippy 0/fmt 过/release+棘轮 **1578→1593（+15 转绿零未豁免转红）**
+  ——MAP 族 10/GAME-NOTIFY 2/CPU-HEAP-001/ROOM-API-002/适配器 setup
+  涟漪（default rooms all four exits open）；地板上调 ratchet.json+README
+  （54.67%）+报告随批入库；bot 三基线（tooangel console 零错/overmind 既知形态复验——halt 路径
+  未触及零新增错误/wasm/skipped_penalty 全 0，三判定通过）；perf 四相
+  持平（两跑 0.126/0.220/0.032/0.484、0.126/0.222/0.032/0.483——对
+  P2 日内 0.125/0.210-0.212/0.031-0.032/0.467-0.471，run 相 +4.8% 在
+  当日噪声带内、settle 金丝雀稳定；begin_tick 新增 heap 采样为控制
+  线程单次 v8 调用、buildGame map IIFE 闭包构建为亚微秒级）。
+- **评审三路（官方语义/Rust+JS 正确性/测试与工程）1 FAIL 2 PASS 带条件，
+  清偿当日完成**：**P1-1（评1）** notify message 误走 userString(100) 帽
+  （官方 userText(1000)，common/lib/system.js:13）→ to_user_text 新助手
+  （官方 `("" + (value||"")).substring(0,1000)` 强转语义：falsy 归空/数组
+  join/对象 [object Object]）。**P1-2（三路共识）** count_billed 漏顶层数组
+  通道（notify 权威账零计费——显示面与落账口径分裂，官方 make.js:98-107
+  对数组逐元素计）→ 补 Value::Array 分支。**P1-3（评1）** halt「实际用量
+  计费」与登记「官方不可直读」双失实——官方 make.js:280-284 抛出**先于**
+  :194-212 计费块=**零计费**，runner.js:26-28 补 "CPU halted" console
+  错误行 → after_halt 改候选丢弃（pending_bill=None）+三通道统一分叉
+  （run_loop/run_expr/end_tick 写回——评2 P2-2）+错误行同款+e2e 桶零
+  变动断言。**P2-1（评1）** A* 自写堆在并列 fcost 的弹出序与官方分岔
+  （实测 8/11 tie 案例房间序列不同——玩家可观测）→ 换 path-utils.js
+  Heap/OpenClosed **逐字移植**（冒泡 `<=` 即换/pop `>=`/update 线性扫三处
+  序敏感语义），多跳 tie 序（西行先）+真实绕行（封锁官方首选）+kRouteGrid
+  界外三把 e2e 锁。**其余**：Engine::tick 假沙箱合并点补 notify take（评3
+  P2-2）；embed.rs doc/hidden 归位（评2/3）；game.js 段补 TERRAIN_MASK_*
+  捕获（getTerrainAt 官方走闭包 C）+依赖行；测试注释 3+20 勘正；compat
+  六登记改写/新增九行（halt 改写/A* 降级勘正/userText/getWorldSize/
+  deprecated 提示/heap 相位补注/奇异输入）。
+- **清偿复审（复核评审共识本身）**：P1-2/P1-3/P2-1 及其余全部实证
+  通过——**官方零计费取证链独立实读成立**（user-vm dispose→make.js
+  :280-284 抛出先于 :194-212 计费块→runner.js:26-28 错误行）、**A\*
+  tie 序独立追溯吻合**（W2N1 后入堆经 `<=` 冒泡登顶先弹=西行先——
+  e2e 锁的正是该序敏感语义）。**唯一阻断项（当日修复）**：js_array_
+  to_string 元素强转把顶层 falsy 折叠误用到 join 元素（[42]→
+  "[object Object]" 应为 "42"）→ 元素分支改普通 ToString+三条数组
+  消息断言锁定。nit 三条登记（UTF-16 帽/halt 末语句竞态/findExitTo
+  经 currentGame().map 的硬化不一致）。
+
 ### P2（创建族：createFlag/createConstructionSite 四面 + Flag/Site 增删改 + findClosestByRange + findPath 桩 + storage/terminal 回填 + toJSON）——已收口
 
 - **落地**：①schema——FlagObj 尾追 owner（v1 内演化；官方 flags 按玩家

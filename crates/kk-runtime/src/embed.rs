@@ -781,6 +781,19 @@ impl EmbedEngine {
             .insert(player.to_string(), config);
     }
 
+    /// 玩家通知落账的测试面（M2B 扩面 P3：Game.notify → PlayerState.notifications）。
+    #[doc(hidden)]
+    pub fn player_notifications_for_test(
+        &self,
+        player: &str,
+    ) -> &[kk_engine::settle::NotifyRecord] {
+        self.engine
+            .players
+            .get(player)
+            .map(|p| p.notifications.as_slice())
+            .unwrap_or(&[])
+    }
+
     /// 读玩家桶当前值（测试断言面——O3；生产无消费方，桶权威值驻沙箱）。
     #[doc(hidden)]
     pub fn player_bucket_for_test(&mut self, player: &str) -> anyhow::Result<f64> {

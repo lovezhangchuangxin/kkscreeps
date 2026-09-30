@@ -395,6 +395,11 @@
   // 内部装配面走捕获引用（与拆分前单闭包绑定等价）：玩家覆写 globalThis.RoomPosition
   // 不影响 wrapObject/makeRoom/PathFinder 桩内部的构造
   gw.RoomPosition = RoomPosition;
+  // M2B 扩面 P3：map 族消费（game.js map 段——官方 map.js 经 utils 直调）。
+  // 段序：room-position 先于 game 执行，游戏装配期（buildGame）引用点在
+  // 全部段加载之后，闭包经 gw 桥恒可达
+  gw.roomNameToXY = roomNameToXY;
+  gw.getRoomNameFromXY = getRoomNameFromXY;
   // 共享解析器（A5 片 3a）：Room.lookAt/lookForAt 官方同用 utils.fetchXYArguments
   //（rooms.js:769/:799）——gw 注册供 room.js 消费（官方 globals 闭包同构）
   gw.fetchXYArguments = fetchXYArguments;

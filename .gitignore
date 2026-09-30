@@ -46,3 +46,4 @@ compat/reports/tmp/
 *.swo
 bot-check-report.json
 .workbuddy/
+perf-probe.json

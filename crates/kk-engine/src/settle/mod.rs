@@ -71,7 +71,23 @@ pub struct PlayerState {
     /// 玩家持久 RawMemory（B0-5 统一提交点：玩家执行产出候选、世界结算成功
     /// 后在此提交；下一 tick 注入沙箱——官方每 tick 从存档恢复同构）。
     pub raw_memory: String,
+    /// Game.notify 落库（M2B 扩面 P3）：官方 persist 到 users.notifications
+    /// 集合（邮件通知，游戏内不可观测）；有界保留最近 100 条（官方集合
+    /// 自然增长，登记差异）
+    pub notifications: Vec<NotifyRecord>,
 }
+
+/// 一条已落账的玩家通知（tick = 落账时的世界时间）。
+#[derive(Debug, Clone, PartialEq)]
+pub struct NotifyRecord {
+    pub message: String,
+    pub group_interval: Option<i64>,
+    pub tick: u64,
+}
+
+/// PlayerState.notifications 的容量（官方 users.notifications 集合自然
+/// 增长，我方有界——登记差异）。
+const NOTIFY_RECORD_CAP: usize = 100;
 
 /// 一轮结算的非确定性输入（ADR-013 决策 5）：墙钟等外部输入显式注入——
 /// 首次执行取实际值（[`TickInput::now`]，经 [`Engine::tick_with_intents`]
@@ -598,6 +614,9 @@ impl Engine {
                     let entry = batch.users.entry(player.clone()).or_default();
                     entry.objects.extend(std::mem::take(&mut intents.objects));
                     entry.room.extend(std::mem::take(&mut intents.room));
+                    // 全局通道（notify）同取（评审 3 P2-2：两处合一点只更其一
+                    //——extend_from 已对齐，此处漏则假沙箱路径 notify 静默丢）
+                    entry.notify.extend(std::mem::take(&mut intents.notify));
                 }
             }
         }
@@ -680,6 +699,26 @@ impl Engine {
         }
         for (name, room) in settled {
             self.world.commit_room(name, room);
+        }
+        // Game.notify 落库（M2B 扩面 P3，全局通道）：与房结算正交——房循环
+        // 外每玩家恰一次；官方 groupInterval 是发送端聚合提示（送达面不在
+        // 引擎），原样保留
+        for (player, intents) in &batch.users {
+            if intents.notify.is_empty() {
+                continue;
+            }
+            let state = players.entry(player.clone()).or_default();
+            for n in &intents.notify {
+                state.notifications.push(NotifyRecord {
+                    message: n.message.clone(),
+                    group_interval: n.group_interval,
+                    tick: time,
+                });
+            }
+            let len = state.notifications.len();
+            if len > NOTIFY_RECORD_CAP {
+                state.notifications.drain(0..len - NOTIFY_RECORD_CAP);
+            }
         }
         // user.rooms 重建（官方不动点，见 PlayerState 文档）：claimController
         // 的 addRoomToUser（claimController.js:55）与每 tick 已占房重加
