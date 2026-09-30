@@ -315,6 +315,10 @@ export class ObjectsStage {
         const target = point(previous); if (target) this.effects.nukeBlast(target);
       }
     }
+    // 官方 effects 层插入序：displayName（名字 overlay）先于一次性效果创建，
+    // say 气泡/光束等盖在名字上。overlay 件创建时追加在 finite-effects 根之后，
+    // 故每次对账末尾把根重挂到顶（对既有子节点 addChild=移到末尾，零排序）。
+    this.effectsRoot.addChild(this.effects.root);
     this.previous = wanted;
     this.previousTime = time;
     return wallsChanged;

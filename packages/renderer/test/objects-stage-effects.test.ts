@@ -26,6 +26,16 @@ describe('feed-to-object effects integration', () => {
     stage.apply([enemy], 1, [], 'delta', { says: [{ id: 'enemy', message: 'private', private: true }] });
     expect(stage.effects.stats.texts).toBe(0); expect(stage.effects.stats.active).toBe(0);
   });
+  it('finite effects (say/beams) render above name overlays, matching the official effects-layer insertion order', () => {
+    vi.spyOn(CanvasTextMetrics, 'measureText').mockImplementation(() => ({ width: 180 }) as CanvasTextMetrics);
+    const { stage } = setup(); const speaker = { ...creep('c1', 10, 10), name: 'Hero' };
+    stage.apply([speaker], 0, [], 'snapshot');
+    const nameIdx = stage.effectsRoot.getChildIndex(inspect(stage).views.get('c1')!.parts.get('name')!.node);
+    expect(nameIdx).toBeGreaterThanOrEqual(0);
+    stage.apply([speaker], 1, [], 'delta', { says: [{ id: 'c1', message: 'hi', private: false }] });
+    expect(stage.effectsRoot.getChildIndex(stage.effects.root)).toBeGreaterThan(nameIdx);
+    vi.mocked(CanvasTextMetrics.measureText).mockRestore();
+  });
   it('with no local player identity, private speech stays invisible while public renders', () => {
     // Node has no 2D canvas: stub measurement so the public bubble can actually play.
     vi.spyOn(CanvasTextMetrics, 'measureText').mockImplementation(() => ({ width: 180 }) as CanvasTextMetrics);

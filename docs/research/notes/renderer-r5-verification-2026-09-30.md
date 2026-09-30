@@ -105,6 +105,8 @@ R7 的 300 对象/50 creep/100 visual、snapshot <2ms、首帧 <1s、10k tick �
 
 **建议处置**：已改 8 项——invaderCore TTL 环去闪烁（ambient 测试锁定）、actionLog 通道补 previous 索引回退（与事件通道对齐，测试锁定）、私有 say 隐私过滤改显式判空（前态来源不再依赖非空断言）、bite 缺失 actor 计 skipped（moving/同格仍为官方抑制不计）、诊断统计 `privateTexts`→`texts`（公开气泡也计入，R6 冻结诊断面前正名）、beginMove rotateTween 补 onEnd 清空、exporter 确定性测试对齐入库 30 tick 全长、harness HUD 增 canvas 分辨率行。登记不实现 5 项（见上节「评审补充登记」）。R4 语义回归核查：快照重建/id↔typeKey 漂移防御/fade 底 α 乘法/'visible' boolean/夹具 id 空间全部保留或合理演变（motion 门控收窄为 HIT_COVER_TYPES 六类=官方 creepActions 声明域，评审对照确认）。
 
-**复审与返工（主会话逐行复审清偿增量）**：发现清偿自身引入一处隐私回归——私有 say 过滤改写时把「无本玩家身份（player=null，`localPlayerId` 缺省即如此）」分支错为放行，任何 owner 的私语都会渲染（清偿前逻辑与官方 `isPublic||isOwner` 语义一致为全滤）。已修正（player=null 一律滤私有）并加测试锁定：player=null 场景断言私有全滤、公开照播；测试以 `CanvasTextMetrics.measureText` 桩适配无 canvas 环境。清偿+复审终态 renderer 260 测+kk-cli 7 测+fmt/clippy 绿。
+**复审与返工（主会话逐行复审清偿增量）**：发现清偿自身引入一处隐私回归——私有 say 过滤改写时把「无本玩家身份（player=null，`localPlayerId` 缺省即如此）」分支错为放行，任何 owner 的私语都会渲染（清偿前逻辑与官方 `isPublic||isOwner` 语义一致为全滤）。已修正（player=null 一律滤私有）并加测试锁定：player=null 场景断言私有全滤、公开照播；测试以 `CanvasTextMetrics.measureText` 桩适配无 canvas 环境。
+
+**层序修复（用户实测发现，2026-09-30）**：名字 overlay 盖住 say 气泡，与官方相反。官方依据：`creep.metadata.js` 处理器序 `creepActions`→`displayName`→`say` 且名字/气泡同在 effects 层、同 zIndex 稳定排序保插入序——气泡创建晚于名字，官方是气泡盖名字（名字 once 创建、say 说话时才插入）。我方根因：finite-effects 根容器在 ObjectsStage 构造期先挂入 effectsRoot，名字部件（`creep.name` 等，PART_LAYERS→effects）在首次对账时追加，插入序 rendered 名字在上。修复：每次 apply 末尾把 finite-effects 根重挂到 effectsRoot 顶（对既有子节点 addChild=移末尾，零排序，符合固定层栈纪律）；结果序=名字/常驻 overlay < 受击罩 < 光束/say/波/核爆（受击罩在名字上亦符合官方首次动作晚于创建的常见表现）。层序测试锁定并以 stash 负向验证（无修复即红）；WebGPU harness effects tick1@450ms 截图确认气泡盖住 melee 名字（ranged 名字正常显示对照）。清偿+层序修复终态 renderer 261 测。
 
 下一阶段 R6：RoomVisual、活动房间隔离、拾取/悬停、字体及资源契约、去掉公共诊断 Pixi 字段、库构建和 d.ts/API 冻结。
