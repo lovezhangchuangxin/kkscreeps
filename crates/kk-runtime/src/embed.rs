@@ -38,12 +38,23 @@ pub struct PlayerRun {
     pub console: Vec<String>,
 }
 
+/// 上轮世界结算失败的候选缓存（重试只重结算，玩家代码不再执行——提交成功
+/// 即清空）。输入钉子（B0-6，ADR-013 决策 5）：缓存轮固定**首次尝试**的
+/// TickInput，重试复用记录值（「重放用记录值」），不再重采样墙钟——
+/// signController datetime 等落盘值在重试后与首次尝试一致。
+struct PendingRound {
+    /// 各玩家候选运行结果（intents/RawMemory/计费候选/console）。
+    results: BTreeMap<String, RunResult>,
+    /// 首次尝试使用的结算输入（墙钟）。
+    input: TickInput,
+}
+
 pub struct EmbedEngine {
     players: Option<ThreadExecutor>,
     engine: Engine,
     /// 上轮世界结算失败的候选缓存（重试只重结算，玩家代码不再执行——
     /// 提交成功即清空）。
-    pending: Option<BTreeMap<String, RunResult>>,
+    pending: Option<PendingRound>,
     last_console: BTreeMap<String, Vec<String>>,
     /// 性能观测点（A6）：每 tick 三阶段 + 墙钟采样
     perf: PerfRecorder,
@@ -392,23 +403,32 @@ impl EmbedEngine {
         // 重试语义：上轮结算失败的候选缓存直接重试结算（玩家代码不再执行）。
         // 键集守卫（B0-5 评审 P1 清偿）：请求了缓存轮之外的玩家说明调用方意图
         // 是新一轮（或缓存的玩家集已不匹配）——显式拒绝，防 runs.remove 的
-        // panic 与「panic 前缓存轮已提交却无回执」的事故形态
-        let (results, run_ns, project_ns) = match self.pending.take() {
-            Some(cached) => {
-                for handle in codes.keys() {
-                    if !cached.contains_key(handle) {
-                        anyhow::bail!(
-                            "上轮结算失败的重试轮不含玩家 {handle}（先经 run_players 重试缓存轮，或 discard_pending_round 丢弃后开新一轮）"
-                        );
-                    }
+        // panic 与「panic 前缓存轮已提交却无回执」的事故形态（子集请求合法：
+        // 重试以缓存轮为原子单位——结算消费并提交全部缓存玩家，仅返回所请求
+        // 子集的回执）。
+        // 校验先于取用（B0-6，外部评审清偿）：被拒的请求不得销毁缓存——
+        // 原实现 take 后 bail，缓存随之丢失，原请求重试会重跑玩家代码
+        //（tick 契约「不得为重试再次运行玩家代码」的违例）
+        if let Some(pending) = &self.pending {
+            for handle in codes.keys() {
+                if !pending.results.contains_key(handle) {
+                    anyhow::bail!(
+                        "上轮结算失败的重试轮不含玩家 {handle}（先经 run_players 重试缓存轮，或 discard_pending_round 丢弃后开新一轮）"
+                    );
                 }
-                (cached, 0u128, 0u128)
             }
-            None => self.execute_players(codes)?,
+        }
+        let (results, run_ns, project_ns, input) = match self.pending.take() {
+            Some(pending) => (pending.results, 0u128, 0u128, pending.input),
+            None => {
+                let (results, run_ns, project_ns) = self.execute_players(codes)?;
+                (results, run_ns, project_ns, TickInput::now())
+            }
         };
-        // ④世界结算（墙钟输入显式经 TickInput——首跑取实际值，ADR-013 决策 5）
+        // ④世界结算（墙钟输入显式经 TickInput——首跑取实际值、失败轮随候选
+        // 缓存、重试复用记录值，ADR-013 决策 5 + B0-6）
         let t_settle = std::time::Instant::now();
-        let settled = self.settle_world(Self::batch_from_results(&results));
+        let settled = self.settle_world(Self::batch_from_results(&results), input);
         match settled {
             Ok(()) => {
                 let settle_ns = t_settle.elapsed().as_nanos();
@@ -432,20 +452,21 @@ impl EmbedEngine {
             Err(e) => {
                 // 整轮回退：候选缓存（重试只重结算）、玩家持久状态与世界版本
                 // 全部保持上一 tick（部分提交泄漏消灭——ADR-013 复现①）
-                self.pending = Some(results);
+                self.pending = Some(PendingRound { results, input });
                 Err(e)
             }
         }
     }
 
-    /// 世界结算入口（含测试故障注入钩子）。
-    fn settle_world(&mut self, batch: IntentBatch) -> anyhow::Result<()> {
+    /// 世界结算入口（含测试故障注入钩子）。`input` 由调用方携带：首跑取
+    /// 实际值、重试复用失败轮缓存的记录值（B0-6，ADR-013 决策 5）。
+    fn settle_world(&mut self, batch: IntentBatch, input: TickInput) -> anyhow::Result<()> {
         if self.fail_next_settle {
             self.fail_next_settle = false;
             anyhow::bail!("故障注入：世界结算失败（测试钩子）");
         }
         self.engine
-            .tick_with_intents_with_input(batch, TickInput::now())
+            .tick_with_intents_with_input(batch, input)
             .map_err(|e| anyhow::anyhow!("{e}"))
     }
 
@@ -554,7 +575,8 @@ impl EmbedEngine {
             for handle in results.keys() {
                 // 提交失败（线程失联）不再回滚本轮——世界已切换，计费丢失
                 // 记为桶账误差（低危，evict 重建即重置）。同族口径：基础设施
-                // 故障停顿轮（execute_players 的 InfraFailure bail）已执行玩家
+                // 故障停顿轮（execute_players 的注入失败 `?` 与 InfraFailure
+                // bail）已执行玩家
                 // 的候选滞留沙箱、由下一次 begin_tick 防御丢弃——漏计而非双计，
                 // 与「停顿轮局部结果作废」语义一致（B0-5 评审登记）
                 let _ = players.settle_bill(handle);
@@ -676,7 +698,7 @@ impl EmbedEngine {
         if let Some(pending) = self.pending.take()
             && let Some(players) = &mut self.players
         {
-            for handle in pending.keys() {
+            for handle in pending.results.keys() {
                 let _ = players.discard_bill(handle);
             }
         }

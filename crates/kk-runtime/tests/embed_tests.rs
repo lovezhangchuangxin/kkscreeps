@@ -26,6 +26,8 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     embed_shard_input_strictness_impl()?;
     b05_partial_commit_inject_failure_impl()?;
     b05_partial_commit_settle_failure_impl()?;
+    b06_rejected_retry_preserves_pending_impl()?;
+    b06_retry_reuses_recorded_tick_input_impl()?;
     embed_real_settlement_impl()?;
     embed_run_players_shared_snapshot_impl()?;
     embed_snapshot_contract_impl()?;

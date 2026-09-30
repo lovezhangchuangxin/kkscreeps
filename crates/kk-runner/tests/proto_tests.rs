@@ -52,8 +52,79 @@ fn m0_thread_model_suite() -> anyhow::Result<()> {
     idle_eviction_and_rebuild()?;
     out_of_order_eviction()?;
     crash_isolation()?;
+    skip_penalty_recharge_channel()?;
     lifo_shutdown_clean()?;
     run_expr_watchdog()?;
+    Ok(())
+}
+
+/// B0-6（外部评审清偿·停跑回充候选化）两通道停跑臂的通道级锁（评审 3 P1-1
+/// 清偿）：Cmd::Tick 通道（run_one_tick，bot-check 同款）在 SkipPenalty 臂
+/// **即时 settle_bill**——bucket_after 为并入后的值（删掉那行本测试必红）；
+/// Cmd::RunPlayer 通道不结算、候选留协调器（cpu_billed_ms=None、
+/// bucket_after=提交前值），settle_bill 提交点恰并入一次。
+fn skip_penalty_recharge_channel() -> anyhow::Result<()> {
+    let skip_cfg = || SandboxConfig {
+        heap_limit_bytes: 64 * 1024 * 1024,
+        initial_bucket: -40.0,
+        ..SandboxConfig::default()
+    };
+    let mut pool = PlayerThreads::new();
+    // 通道 A（Cmd::Tick）：停跑轮即时提交，bucket_after 与原即时落桶口径逐位
+    // 一致（-40 → 报告 -20），intents 恒 Null
+    pool.spawn_player(1, skip_cfg())?;
+    let r = pool.tick(1, &world())?;
+    assert!(
+        matches!(r.plan, TickPlan::SkipPenalty),
+        "负桶停跑：{:?}",
+        r.plan
+    );
+    assert_eq!(
+        r.bucket_after, -20.0,
+        "Tick 通道停跑轮即时并入回充（bucket_after=提交后值）"
+    );
+    assert!(r.intents.is_null(), "停跑轮不产出 intents");
+
+    // 通道 B（Cmd::RunPlayer）：候选留协调器——kind=terminated、无计费候选、
+    // bucket_after=提交前口径（-40，回充未并入）
+    pool.spawn_player(2, skip_cfg())?;
+    let rep = pool.run_player(2, &world(), "'never-runs'")?;
+    assert_eq!(
+        rep.expr["kind"], "terminated",
+        "停跑轮 expr 形态：{:?}",
+        rep.expr
+    );
+    assert_eq!(rep.cpu_billed_ms, None, "停跑轮无计费候选");
+    assert_eq!(
+        rep.bucket_after, -40.0,
+        "RunPlayer 通道 bucket_after=提交前口径（回充候选未并入）"
+    );
+    // 协调器提交臂：settle_bill 恰并入一次——随后 tick 应报告 −20 回充后再
+    // 一轮到 0（若候选未被提交，bucket 仍 −40 → 报告 −20）
+    pool.settle_bill(2)?;
+    let r = pool.tick(2, &world())?;
+    assert!(matches!(r.plan, TickPlan::SkipPenalty));
+    assert_eq!(
+        r.bucket_after, 0.0,
+        "RunPlayer 候选经 settle_bill 提交（−40→−20）后本轮再回充到 0"
+    );
+    let r = pool.tick(2, &world())?;
+    assert!(
+        matches!(r.plan, TickPlan::Run { .. }),
+        "回正后恢复执行：{:?}",
+        r.plan
+    );
+
+    // 协调器回退臂（Cmd::DiscardBill）：候选丢弃后桶零痕迹——后续停跑轮照常
+    // 即时并入（精确的丢弃语义由 sandbox 级 b06 用例锁定，此处锁通道连通）
+    pool.spawn_player(3, skip_cfg())?;
+    let rep = pool.run_player(3, &world(), "'x'")?;
+    assert_eq!(rep.expr["kind"], "terminated");
+    pool.discard_bill(3)?;
+    let r = pool.tick(3, &world())?;
+    assert!(matches!(r.plan, TickPlan::SkipPenalty));
+    assert_eq!(r.bucket_after, -20.0, "丢弃后新一轮照常一次回充");
+    pool.shutdown_all();
     Ok(())
 }
 

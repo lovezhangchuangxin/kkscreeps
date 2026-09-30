@@ -178,6 +178,12 @@ pub struct Sandbox {
     /// 「世界回退但玩家桶已扣」的部分提交泄漏（ADR-013 复现①的 CPU 面）。
     /// 不变量：begin_tick 开头必无未处置候选（有则丢弃——防御）。
     pending_bill: Option<f64>,
+    /// 停跑轮回充候选（B0-6 统一提交点）：begin_tick 负桶分支的回充增量暂存
+    /// 于此、不即时落桶——原实现即时落桶绕过提交点，世界结算失败/丢弃轮玩家
+    /// 桶仍前进（外部评审清偿）。提交点随 settle_bill 并入
+    /// （budget.apply_recharge）、discard_bill 一并丢弃。不变量与 pending_bill
+    /// 同规：begin_tick 开头必无未处置候选（有则丢弃——防御）。
+    pending_recharge: Option<f64>,
 }
 
 impl Sandbox {
@@ -234,6 +240,7 @@ impl Sandbox {
             last_loop_error: None,
             pending_intents: None,
             pending_bill: None,
+            pending_recharge: None,
         };
         sb.install_near_heap_callback();
         // 记账（线程序栈压栈 + 存活计数）必须在所有可失败步骤之后、返回前——
@@ -319,12 +326,17 @@ impl Sandbox {
     pub fn begin_tick(&mut self, world: &serde_json::Value) -> anyhow::Result<TickPlan> {
         // 统一提交点不变量（B0-5）：上一轮的计费候选必须已被协调器处置
         //（settle_bill/discard_bill）——残留说明调用方漏处置，丢弃并继续
+        //（停跑回充候选同规，B0-6）
         self.pending_bill = None;
+        self.pending_recharge = None;
         match self.budget.begin_tick() {
             // 停跑 tick 不执行任何代码——stale intents 一并清置（不变量：
-            // 任何 tick 边界不留上一轮未消费的 intents；该分支报告 intents 恒 Null）
+            // 任何 tick 边界不留上一轮未消费的 intents；该分支报告 intents
+            // 恒 Null）。回充候选化（B0-6）：增量暂存、统一提交点并入——
+            // 不即时落桶（世界结算失败/丢弃轮玩家桶与世界版本同回退）
             TickPlan::SkipPenalty => {
                 self.pending_intents = None;
+                self.pending_recharge = Some(self.budget.skip_recharge());
                 Ok(TickPlan::SkipPenalty)
             }
             TickPlan::Run { .. } => {
@@ -531,17 +543,33 @@ impl Sandbox {
         self.pending_bill
     }
 
+    /// 当前停跑轮回充候选的只读视图（测试/诊断面，B0-6）。
+    pub fn pending_recharge(&self) -> Option<f64> {
+        self.pending_recharge
+    }
+
     /// 提交本 tick 的计费候选（协调器统一提交点：世界结算成功后调用）。
-    /// 无候选（未执行/跳帧）为 no-op。
+    /// 无候选（未执行/跳帧）为 no-op。停跑轮回充候选同点并入（B0-6）。
     pub fn settle_bill(&mut self) {
+        // 互斥不变量（评审 2 P2-3 清偿）：两类候选分属 Skip/Run 分支、
+        // begin_tick 开头双清——同轮共存即结构破坏，同点并入会双计 limit
+        debug_assert!(
+            self.pending_bill.is_none() || self.pending_recharge.is_none(),
+            "计费候选与停跑回充候选不得同轮共存（Skip/Run 分支互斥）"
+        );
         if let Some(bill) = self.pending_bill.take() {
             self.budget.settle(bill);
         }
+        if self.pending_recharge.take().is_some() {
+            self.budget.apply_recharge();
+        }
     }
 
-    /// 丢弃本 tick 的计费候选（世界结算失败回退——玩家桶不扣）。
+    /// 丢弃本 tick 的计费候选（世界结算失败回退——玩家桶不扣）。停跑轮回充
+    /// 候选一并丢弃（B0-6）：失败轮世界不推进，桶不前进。
     pub fn discard_bill(&mut self) {
         self.pending_bill = None;
+        self.pending_recharge = None;
     }
 
     /// 求值一段玩家表达式（screeps-ok 适配器的 runPlayer 通道），恰好占用一个 tick 的

@@ -360,17 +360,22 @@ fn run_one_tick(sandbox: &mut Sandbox, world: &Value) -> anyhow::Result<TickRepo
         // 跳帧 tick（桶为负透支，官方 cpuAvailable<0 停跑语义）：不执行玩家代码。
         // TickReport.plan 携带 SkipPenalty 供消费方（bot_check 等）与真实硬中断区分；
         // outcome 有意映射为 Terminated（runPlayer 的 executed=false 契约依赖它）。
-        plan @ TickPlan::SkipPenalty => Ok(TickReport {
-            outcome: TickOutcome::Terminated,
-            plan,
-            used_ms: 0.0,
-            player_error: None,
-            console: sandbox.drain_console(),
-            missing_api: sandbox.drain_missing_api().unwrap_or(serde_json::json!({})),
-            stub_calls: sandbox.drain_stub_calls().unwrap_or(serde_json::json!({})),
-            bucket_after: sandbox.bucket(),
-            intents: Value::Null,
-        }),
+        // 停跑轮回充已候选化（B0-6）——本通道无提交点概念，与 Run 臂的
+        // 「立即提交」口径一致在此并入，否则停跑轮回血丢失
+        plan @ TickPlan::SkipPenalty => {
+            sandbox.settle_bill();
+            Ok(TickReport {
+                outcome: TickOutcome::Terminated,
+                plan,
+                used_ms: 0.0,
+                player_error: None,
+                console: sandbox.drain_console(),
+                missing_api: sandbox.drain_missing_api().unwrap_or(serde_json::json!({})),
+                stub_calls: sandbox.drain_stub_calls().unwrap_or(serde_json::json!({})),
+                bucket_after: sandbox.bucket(),
+                intents: Value::Null,
+            })
+        }
         plan @ TickPlan::Run { .. } => {
             let mut outcome = sandbox.run_loop()?;
             let player_error = sandbox.take_last_loop_error();
@@ -442,7 +447,9 @@ fn run_eval_tick(sandbox: &mut Sandbox, world: &Value, code: &str) -> anyhow::Re
     match plan {
         TickPlan::SkipPenalty => Ok(EvalReport {
             // 负桶停跑：代码根本没执行——契约规定这是适配器的普通基础设施错误
-            //（"未执行 ≠ undefined"），不是 RunPlayerError
+            //（"未执行 ≠ undefined"），不是 RunPlayerError。
+            // 回充候选留协调器处置（B0-6 统一提交点）；bucket_after 为提交前
+            // 口径（与 Run 轮计费候选同口径——原停跑轮是唯一即时落桶的例外）
             expr: serde_json::json!({
                 "ok": false, "kind": "terminated", "error": "本 tick 停跑（桶透支为负，玩家代码未执行）",
             }),

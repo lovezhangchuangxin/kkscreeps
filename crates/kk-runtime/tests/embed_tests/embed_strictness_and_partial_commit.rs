@@ -661,3 +661,121 @@ pub(super) fn b05_partial_commit_settle_failure_impl() -> anyhow::Result<()> {
     );
     Ok(())
 }
+
+/// B0-6（外部评审清偿·重试缓存销毁）：被拒的重试请求不得销毁失败轮缓存——
+/// 键集校验先于 take。原实现 take 后 bail，缓存随之中毁：错误请求 → pending
+/// 丢失 → 原请求重试**重跑玩家代码**（探针：globalThis.n=2 而世界仅 +1 tick），
+/// 违 tick 契约「不得为重试再次运行玩家代码」+ 验收场景 3「执行次数=1」。
+pub(super) fn b06_rejected_retry_preserves_pending_impl() -> anyhow::Result<()> {
+    use serde_json::json;
+    use std::collections::BTreeMap;
+    let mut e = EmbedEngine::new();
+    e.create_shard(&json!({
+        "players": ["p1"],
+        "rooms": [{ "name": "W1N1", "rcl": 3, "owner": "p1" }],
+    }))?;
+    e.run_player("p1", "'warmup'")?;
+    assert_eq!(e.get_game_time(), 1);
+
+    // 轮 A：结算失败 + 计数代码（globalThis 跨 tick 持久——V8 全局不随世界
+    // 回滚，执行次数的取证通道；b05 注入失败场景的 defineProperty 已证该通道）
+    let counter = "globalThis.n = (globalThis.n || 0) + 1; globalThis.n";
+    e.fail_next_settle_for_test();
+    let err = e.run_player("p1", counter).unwrap_err();
+    assert!(err.to_string().contains("故障注入"), "{err}");
+    assert!(e.has_pending_round(), "失败轮候选已缓存");
+    assert_eq!(e.get_game_time(), 1, "失败轮世界不动");
+
+    // 轮 B：重试请求携带缓存轮之外的玩家 → 拒绝，但缓存必须幸存
+    let mut wrong: BTreeMap<String, String> = BTreeMap::new();
+    wrong.insert("p1".to_string(), counter.to_string());
+    wrong.insert("ghost".to_string(), "'x'".to_string());
+    let err2 = e.run_players(&wrong).unwrap_err();
+    assert!(err2.to_string().contains("不含玩家 ghost"), "{err2}");
+    assert!(
+        e.has_pending_round(),
+        "被拒的请求不得销毁缓存（B0-6：校验先于 take）"
+    );
+
+    // 轮 C：原请求重试 → 消费缓存（返回执行 1 的 expr），玩家代码不再执行。
+    // 请求 code 故意用计数代码本身：旧 bug 形态（缓存被销毁）下此处会**重跑
+    // 计数**——expr=2、终检 n=2，双断言都是杀伤线（评审 3 P2-1 清偿）
+    let run = e.run_player("p1", counter)?;
+    assert_eq!(
+        run.expr["value"], 1,
+        "重试轮返回缓存候选的 expr（执行 1 的 n=1）；旧 bug 形态下重跑计数得 2: {:?}",
+        run.expr
+    );
+    assert!(!e.has_pending_round(), "重试成功后缓存清空");
+    assert_eq!(e.get_game_time(), 2, "warmup 1 + 重试轮推进 1");
+    // 执行次数终检：globalThis.n 仍为 1（V8 全局跨执行持久、不随世界回滚——
+    // b05 注入失败场景的 defineProperty 已锁该通道）
+    let run = e.run_player("p1", "globalThis.n")?;
+    assert_eq!(
+        run.expr["value"], 1,
+        "玩家代码执行次数恰一次（tick 契约验收场景 3；旧 bug 形态下 n=2）"
+    );
+    Ok(())
+}
+
+/// B0-6（外部评审清偿·TickInput 钉子）：失败轮缓存的结算输入在重试复用——
+/// signController 的 datetime 落**首次尝试**的墙钟（ADR-013 决策 5「重放用
+/// 记录值」），不再随重试重采样（原实现 settle_world 每次取 TickInput::now）。
+pub(super) fn b06_retry_reuses_recorded_tick_input_impl() -> anyhow::Result<()> {
+    use serde_json::json;
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+    let now_ms = || {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64
+    };
+    let mut e = EmbedEngine::new();
+    e.create_shard(&json!({
+        "players": ["p1"],
+        "rooms": [{ "name": "W1N1", "rcl": 3, "owner": "p1" }],
+    }))?;
+    // signer creep 贴着 controller(1,1)（signController 邻接门，creeps.js:1087）
+    e.place_object(
+        "W1N1",
+        "creep",
+        &json!({ "pos": [2, 1], "name": "signer", "owner": "p1",
+            "body": ["move"], "store": { "energy": 0 } }),
+    )?;
+    let sign_code = "Game.creeps['signer'].signController(Game.rooms['W1N1'].controller, 'b06')";
+    // 预热一轮：把首跑的沙箱装配耗时挡在 datetime 判窗外（评审 3 P2-2 清偿
+    // ——first_attempt_ms 与 TickInput::now() 的间隙=首轮执行耗时）
+    e.run_player("p1", "'warmup'")?;
+
+    // 轮 A：签名 intent + 结算失败 → 缓存轮记录首次尝试的 TickInput
+    let first_attempt_ms = now_ms();
+    e.fail_next_settle_for_test();
+    let err = e.run_player("p1", sign_code).unwrap_err();
+    assert!(err.to_string().contains("故障注入"), "{err}");
+    // 隔开两批墙钟：若重试重采样，datetime ≥ 重试起点（与记录值差 ≥ sleep 间隔）
+    std::thread::sleep(Duration::from_millis(150));
+    let retry_started_ms = now_ms();
+    let run = e.run_player("p1", "'retry'")?;
+    assert_eq!(
+        run.expr["value"], 0,
+        "重试轮消费缓存候选（signController 返回 OK）: {:?}",
+        run.expr
+    );
+
+    // datetime 读回（prelude 按官方形态转 ISO 串——new Date().getTime() 还原
+    // 毫秒）：应为首次尝试的记录值（显著早于重试起点），而非重试时刻
+    let run = e.run_player(
+        "p1",
+        "new Date(Game.rooms['W1N1'].controller.sign.datetime).getTime()",
+    )?;
+    let dt = run.expr["value"].as_u64().expect("datetime 为毫秒整数");
+    assert!(
+        dt < retry_started_ms.saturating_sub(100),
+        "datetime 用首次尝试的记录值（dt={dt} 应早于重试起点 {retry_started_ms}；重采样则不早于它）"
+    );
+    assert!(
+        dt >= first_attempt_ms.saturating_sub(1_000),
+        "datetime 合理性：不早于首轮起点附近（{first_attempt_ms}）"
+    );
+    Ok(())
+}

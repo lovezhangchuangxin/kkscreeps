@@ -39,6 +39,7 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     watchdog_hard_terminate_and_reuse()?;
     watchdog_late_expiry_does_not_kill_next_tick()?;
     memory_gate_terminates_and_reuses()?;
+    b06_skip_recharge_candidate_impl()?;
     lifo_registry_drains()?;
     memory_alias_setters()?;
     roomposition_official_semantics()?;
@@ -98,7 +99,12 @@ fn load_sample_bot(sb: &mut Sandbox) -> anyhow::Result<()> {
 
 fn tick(sb: &mut Sandbox, w: &serde_json::Value) -> anyhow::Result<TickOutcome> {
     match sb.begin_tick(w)? {
-        TickPlan::SkipPenalty => Ok(TickOutcome::Terminated), // 调用方语境下都算"没跑成"
+        // 调用方语境下都算"没跑成"；停跑轮回充候选同点即时提交（B0-6——
+        // 本 helper 模拟无回退的协调器，与 Run 臂的「立即提交」口径一致）
+        TickPlan::SkipPenalty => {
+            sb.settle_bill();
+            Ok(TickOutcome::Terminated)
+        }
         TickPlan::Run { .. } => {
             let mut out = sb.run_loop()?;
             // end_tick 产出计费候选（B0-5 统一提交点）；本 helper 模拟单机无回退

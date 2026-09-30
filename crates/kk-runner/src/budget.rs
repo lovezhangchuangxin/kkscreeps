@@ -6,8 +6,9 @@
 //!   （不钳到 0，精确 0 也可达）；
 //! - `tickLimit = min(500, limit + bucket)`（结算前口径）；
 //! - 负桶判定在**回充之前** → 整 tick 停跑；停跑的 tick 照常回充，深负桶钳到
-//!   −2×limit 地板（约 2 tick 内恢复）。桶充足时的普通超时**不跳帧**——官方
-//!   skipTicksPenalty 只用于 runtime 进程硬重置，与普通超时无关；
+//!   −2×limit 地板（约 2 tick 内恢复）——回充**候选化**（B0-6）：增量不在
+//!   begin_tick 即时落桶，统一提交点并入（见 [`Bucket::skip_recharge`]）。桶充足时的
+//!   普通超时**不跳帧**——官方 skipTicksPenalty 只用于 runtime 进程硬重置，与普通超时无关；
 //! - 硬超时按整份 tickLimit 计费（usedCleanTime≈tickLimit）。
 //!
 //! 当前计时口径为墙钟毫秒（与 bucket_sim 一致）；正式实现换线程 CPU 时钟
@@ -50,18 +51,34 @@ impl Bucket {
     }
 
     /// 每 tick 开始：给出本 tick 的执行计划。
-    /// 负桶 → 整 tick 停跑（停跑 tick 照常回充、深负钳到 −2×limit 地板）；
+    /// 负桶 → 整 tick 停跑（停跑 tick 照常回充、深负钳到 −2×limit 地板——
+    /// 官方语义不变）；回充**候选化**（B0-6 统一提交点）：不在此即时落桶，
+    /// 增量经 [`Self::skip_recharge`] 现算、由沙箱暂存为候选，统一提交点经
+    /// [`Self::apply_recharge`] 并入——世界结算失败/丢弃轮回充随候选丢弃，
+    /// 玩家桶与世界版本同进退（原实现即时落桶绕过提交点，外部评审清偿）。
     /// 桶非负 → 执行，tickLimit = min(max_per_tick, limit + bucket)——回充在
     /// settle 时并入，这里不重复加。
     pub fn begin_tick(&mut self) -> TickPlan {
         if self.bucket < 0.0 {
-            self.bucket = (self.bucket + self.limit).max(-2.0 * self.limit);
             return TickPlan::SkipPenalty;
         }
         self.tick_limit = self.max_per_tick.min(self.bucket + self.limit);
         TickPlan::Run {
             tick_limit: self.tick_limit,
         }
+    }
+
+    /// 停跑轮回充增量（官方公式 `(bucket+limit).max(−2×limit) − bucket`，
+    /// make.js:72-83 的钳地板语义）——纯函数不落桶，提交点并入。
+    pub fn skip_recharge(&self) -> f64 {
+        (self.bucket + self.limit).max(-2.0 * self.limit) - self.bucket
+    }
+
+    /// 并入停跑轮回充（统一提交点）。提交时重算增量：staging 与提交之间桶
+    /// 结构上无写入（停跑轮不执行代码、无其他结算路径），重算即 staging 时
+    /// 的原值——防御陈旧候选的口径。
+    pub fn apply_recharge(&mut self) {
+        self.bucket += self.skip_recharge();
     }
 
     /// 本 tick 预算，即玩家读到的 `Game.cpu.tickLimit`。
@@ -136,14 +153,20 @@ mod tests {
 
     #[test]
     fn negative_bucket_skips_until_recharged() {
-        // 官方语义（make.js:72-83）：回充前判定负桶即整 tick 停跑；停跑 tick 照常回充
+        // 官方语义（make.js:72-83）：回充前判定负桶即整 tick 停跑；停跑 tick 照常
+        // 回充（B0-6 候选化：begin_tick 不即时落桶，增量经 skip_recharge/
+        // apply_recharge 在统一提交点并入——官方数值口径不变）
         let mut b = Bucket::new(20.0, 10_000.0, 500.0, 0.0);
         assert!(matches!(b.begin_tick(), TickPlan::Run { tick_limit: 20.0 }));
         b.settle(60.0); // 0 + 20 − 60 = −40（结算并入回充）
         assert_eq!(b.bucket(), -40.0);
         assert!(matches!(b.begin_tick(), TickPlan::SkipPenalty), "负桶停跑");
-        assert_eq!(b.bucket(), -20.0, "停跑 tick 照常回充");
+        assert_eq!(b.bucket(), -40.0, "停跑轮回充不即时落桶（候选化）");
+        assert_eq!(b.skip_recharge(), 20.0, "回充增量 = limit");
+        b.apply_recharge(); // 模拟统一提交点 settle_bill 并入
+        assert_eq!(b.bucket(), -20.0, "停跑 tick 照常回充（提交点并入）");
         assert!(matches!(b.begin_tick(), TickPlan::SkipPenalty), "-20 仍停");
+        b.apply_recharge();
         assert_eq!(b.bucket(), 0.0);
         assert!(
             matches!(b.begin_tick(), TickPlan::Run { tick_limit: 20.0 }),
@@ -169,10 +192,19 @@ mod tests {
         b.settle(600.0); // 0 + 20 − 600 = −580
         assert_eq!(b.bucket(), -580.0);
         assert!(matches!(b.begin_tick(), TickPlan::SkipPenalty));
+        assert_eq!(b.bucket(), -580.0, "深负同样不即时落桶");
+        assert_eq!(
+            b.skip_recharge(),
+            540.0,
+            "深负钳到 −2×limit 地板（目标 −40）"
+        );
+        b.apply_recharge();
         assert_eq!(b.bucket(), -40.0, "深负钳到 −2×limit 地板");
         assert!(matches!(b.begin_tick(), TickPlan::SkipPenalty));
+        b.apply_recharge();
         assert_eq!(b.bucket(), -20.0);
         assert!(matches!(b.begin_tick(), TickPlan::SkipPenalty));
+        b.apply_recharge();
         assert_eq!(b.bucket(), 0.0);
         assert!(matches!(b.begin_tick(), TickPlan::Run { tick_limit: 20.0 }));
     }

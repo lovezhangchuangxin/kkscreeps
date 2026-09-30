@@ -892,3 +892,68 @@ pub(super) fn intent_channel_prelude_forms_impl() -> anyhow::Result<()> {
     }
     Ok(())
 }
+
+/// B0-6（外部评审清偿·停跑回血候选化）：begin_tick 负桶分支不再即时落桶——
+/// 增量暂存为候选，settle_bill 提交点并入、discard_bill 丢弃；官方停跑数值
+/// 口径不变（−40→−20→0，深负钳 −2×limit 地板）。原实现即时落桶绕过统一
+/// 提交点：世界结算失败/丢弃轮玩家桶仍前进（探针：-40 → begin → -20、
+/// discard 后仍 -20）。
+pub(super) fn b06_skip_recharge_candidate_impl() -> anyhow::Result<()> {
+    let mut sb = Sandbox::new(SandboxConfig {
+        initial_bucket: -40.0,
+        ..SandboxConfig::default()
+    })?;
+    let w = world();
+    // 停跑轮回充不即时落桶：桶仍 −40、候选 = 官方公式增量 20
+    match sb.begin_tick(&w)? {
+        TickPlan::SkipPenalty => {}
+        plan => panic!("负桶应停跑：{plan:?}"),
+    }
+    assert_eq!(sb.bucket(), -40.0, "回充未即时落桶（候选化）");
+    assert_eq!(sb.pending_recharge(), Some(20.0), "候选 = −40 + limit");
+    // discard 臂（世界结算失败回退）：候选丢弃、桶零痕迹
+    sb.discard_bill();
+    assert_eq!(sb.pending_recharge(), None);
+    assert_eq!(
+        sb.bucket(),
+        -40.0,
+        "丢弃轮回血回退（原实现此处已 −20——绕过统一提交点）"
+    );
+    // settle 臂：提交点并入 → −20；再两轮回正、恢复 Run
+    match sb.begin_tick(&w)? {
+        TickPlan::SkipPenalty => {}
+        plan => panic!("仍负应停跑：{plan:?}"),
+    }
+    sb.settle_bill();
+    assert_eq!(sb.bucket(), -20.0, "提交点并入回充");
+    match sb.begin_tick(&w)? {
+        TickPlan::SkipPenalty => {}
+        plan => panic!("−20 仍应停跑：{plan:?}"),
+    }
+    sb.settle_bill();
+    assert_eq!(sb.bucket(), 0.0);
+    match sb.begin_tick(&w)? {
+        TickPlan::Run { tick_limit } => assert_eq!(tick_limit, 20.0),
+        plan => panic!("回正后应恢复执行：{plan:?}"),
+    }
+    sb.end_tick()?; // 测试语境下本 tick 未执行玩家代码（结算量级可忽略）
+    sb.settle_bill();
+
+    // 深负钳地板：−580 → 候选 540（目标 −40，make.js:77 的 −2×limit 地板）
+    let mut sb2 = Sandbox::new(SandboxConfig {
+        initial_bucket: -580.0,
+        ..SandboxConfig::default()
+    })?;
+    match sb2.begin_tick(&w)? {
+        TickPlan::SkipPenalty => {}
+        plan => panic!("深负应停跑：{plan:?}"),
+    }
+    assert_eq!(
+        sb2.pending_recharge(),
+        Some(540.0),
+        "深负钳到 −2×limit 地板"
+    );
+    sb2.settle_bill();
+    assert_eq!(sb2.bucket(), -40.0);
+    Ok(())
+}
