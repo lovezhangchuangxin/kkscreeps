@@ -240,18 +240,19 @@ z 表/色表/字体常量直接测代码常量）。逐片勾项，收口时全�
 
 | # | 项 | 缘由 | 处置 |
 |---|---|---|---|
-| G1 | RoomVisual 样式映射 | 官方闭源壳绘制，开源渲染器无代码 | 黑盒对齐官方文档/截图，逐原语登记 |
+| G1 | RoomVisual 样式映射 | 官方闭源壳绘制，开源渲染器无代码 | **R6 落地**（五原语+官方 any web 颜色+font 分形态；权威源 screeps/docs 仓库 `api/source/RoomVisual.md`，默认值逐值单测锚——初版取证误用 docs.screeps.com 整页抓取命中 Game.map.visual 表，外部复审坐实后勘正，勘误注见 r6 方案 §3.1）。剩余黑盒面收窄为：文字无背景时基线的底边近似（官方=基线点，偏差≈descender 待字体实测）、线端帽形状、dash/dotted 节奏（宽度感知自定）、text font 缺省 0.8（官方未载，取官方示例值）、非基础 web 色形态 |
 | G2 | lighting 全局压暗 | v8 WebGPU 滤镜面若有缺口 | 真离屏 pass 已实现（世界对齐 RT + MULTIPLY 输出），WebGPU/WebGL 双后端 harness 实测 `lighting: real`；降级路径在位未触发——R7 收口时销账或保留按 G2 定义复核 |
 | G3 | 徽标图源 | 官方远程拉 screeps.com，我方无此端点 | v0 纯色圆退化（官方失败退化路径同款），M3 自托管 |
 | G4 | say/浮动文字数据通道 | 引擎无 say 事件面（§8） | R5 say/says 已接通并验证隐私与寿命；合成取材，真实输入仍待引擎 |
 | G5 | 动效输入与扩展家族 | 动作位图、对象/结算处理器缺口 | R5 全家族合成可运行；真实 actions 已覆盖六类事件。远攻/群攻在此分支无结算处理器，lab/power/say/nuke 仍待真实输入；PWR 16–18 图标可用（SVG 自 R0 vendor 自官方 metadata/images，评审实测渲染正常），19+ 无官方图标映射计 skipped |
-| G6 | tickDuration 缺省 | 官方闭源壳传入值不可知 | 契约参数化，harness 默认 1000ms |
-| G7 | 字体/构建期效果采样微差 | 栅格化/抗锯齿及预模糊近似 | R5 官方固定帧人工对照；束端部裁切、核弹四档 blur、固定种子 flicker/初始角已登记，未宣称逐像素一致 |
+| G6 | tickDuration 缺省 | 官方闭源壳传入值不可知 | **R6 冻结**：tickDurationMs 契约参数化（缺省 1000，G6），TSDoc 明载「仅动画时序参数，不驱动数据推送」；setPlaybackRate 冻结（动画时钟倍率、保留进度、推送节奏归调用方） |
+| G7 | 字体/构建期效果采样微差 | 栅格化/抗锯齿及预模糊近似 | **R6 字体责任落库**：fontsBaseUrl 库内 FontFace 预载三规格（55/60/82bold），失败回退可经 getStats().fonts 三态验证（loaded/fallback/unset）；harness 已去 @font-face。构建期采样微差登记不变：束端部裁切、核弹四档 blur、固定种子 flicker/初始角 |
 | G8 | ~~swamp 白罩层序~~ | ~~官方 zIndex 序下 v8 mask 失效~~ | **R2 二轮销账**（跳格 bug 污染的观察，修复后官方层序 mask 正常） |
 | G9 | 用户色数据源 | 契约 v0 无 users 映射（引擎不投影用户色），官方 playerColor=users[user].color | R3 起 v0 采用官方 demo 同款 **userOwnerColor 模式色板**（own 0x8fbb93/#8fbb93、enemy 0xFF7777/#FF7777、未知 0xBBBBBB/#ffffff）；**rampart 私有顶罩**=own #105010/#44ff44、enemy #501010/#ff4444（terrain.js userOwnerColor 分支），**rampart 公有精灵**=playerColor 色板（rampart.metadata.js:5-7 的 userOwnerColor 分支——评审 A-B5 勘误）；本玩家=createRenderer `localPlayerId`。M3 契约落 users 映射后切换官方远程用户色路径并销账 |
 | G10 | factory 官方优先级 bug（两处） | factory.metadata.js **:46** `store['power']||0 + store['energy']||0` ⇒ `power || (0+energy) || 0`（powerHeight）；**:175-176** `energy||0 + power||0 < total` ⇒ `energy || power || (0<total)`（hasOther——total>0 恒 true 白条恒显）。container 同形表达式无此 bug（括号齐全） | R3 **保真复刻**两处官方行为（评审 A-B4 补登记 ：176）；官方上游修复后随动 |
 | G11 | mineral 未知类型退灰对 | 官方 `COLORS[mineralType]` 未类型即崩（TypeError） | R3 防御性退 O 灰对（engine 不可达态，仅脏数据触发）；官方修复语义后随动 |
 | G12 | creep 白资源圆 when 表达式 | 官方 creep.metadata.js:140 `store['energy']\|\|0 + store['power']\|\|0 < resourcesTotal` 因 \|\| 优先级解析为 `store.energy\|\|store.power\|\|(0<total)` ⇒ resourcesTotal>0 恒真（意图应为 energy+power<total） | R4 保真运行时行为=resourcesTotal>0 即显示白圆（specs.ts CREEP_SPEC 注释登记）；官方上游修复后随动 |
+| G13 | 悬停高亮环形态 | 官方悬停是信息卡（闭源壳），无高亮环形态可对 | R6 交互辅助面：白描边圆环随悬停格（room.setHighlight），非官方形态——观感自定，登记不宣称对齐；官方信息卡不在渲染器范围（客户端应用层） |
 
 ## 7. 切片划分（每片走完整批次循环）
 
@@ -746,3 +747,36 @@ R5 实施细化与结果见 [R5 动效系统实施方案](f2-renderer-r5.md) 和
   renderer 256 测+shared 4 测+exporter 4 测、类型检查/新鲜度/确定性重生/构建/文档检查通过。WebGPU/WebGL 固定动作关键帧与回收、核爆、长帧、回放倍率及压力重播验证；官方 UMD 同数据参考对照。1080p/M4/50 creep/4× 的 objects CPU p95 为 0.5/0.6ms，lighting 提交 p95 两后端 0.5ms；非 GPU 完整预算，R7 未完成。BindGroup warning 创建栈指向 Pixi 批次纹理缓存，资源销毁会清空绑定，无自有悬挂引用证据，保留 R7。单代理完成三方面复核，未执行三路 subagent 评审。详细方法、证据和近似见验证记录；下一阶段 R6。
 
 - 2026-09-30：**R5 三路评审与清偿收口**。主会话三路 subagent 补齐 §7 收口评审（官方规格保真/契约与生命周期/测试夹具与验证报告实测复核）：自动检查全部复跑通过（27 生成文件重生哈希一致、artifact 46 件与 HUD 采样对上、压力数字逐字一致），R4 语义零回归（motion 门控收窄为 HIT_COVER_TYPES 六类=官方 creepActions 声明域）。**阻塞 2 项清偿**：tower 治疗事件（rangedHeal）补瞄准/flare/光照脉冲（一行修+测试）；验证记录 PWR 16–18 表述勘误（实测可渲染，G5 行同步订正）。**建议落地 8 项**：invaderCore TTL 环去闪烁（官方仅 constructionSite 有 blinking）、actionLog 通道补 previous 回退、私有 say 显式判空、bite 缺失计 skipped、诊断统计 privateTexts→texts、rotateTween 补 onEnd、exporter 确定性测试对齐 30 tick 入库全长、HUD 增 canvas 分辨率行。**差异登记 5 项**：flare3（_all hasEffect power 顶罩）未实现、孵化 once 语义有意偏离官方 quirk、填充补间白名单宽于官方、say 无像素对齐、目标侧工作罩 owner=来源的取消语义。**主会话逐行复审清偿增量**：发现并修复清偿引入的一处隐私回归（player=null 即 `localPlayerId` 缺省时私有 say 被错误放行，已改回全滤并加测试锁定，详见验证记录「复审与返工」）。**用户实测再发现层序偏差并修复**：名字 overlay 盖住 say 气泡与官方相反（官方 effects 层插入序=气泡盖名字）——apply 末尾重挂 finite-effects 根到顶，层序测试+stash 负向验证+harness 截图确认（详见验证记录「层序修复」）。终态 renderer 261 测+kk-cli 7 测+fmt/clippy/文档链接绿；R5 关账，下一阶段 R6。
+- 2026-09-30：**R6 RoomVisual+交互+API 冻结完成（含两轮评审与外部复审仲裁）**。
+  实施方案 [f2-renderer-r6.md](f2-renderer-r6.md)（§7 决策点 D1–D7 用户拍板全按
+  建议）。实现 `a7af796`：五原语渲染（shared VisualStyle 官方名 1:1+isRoomVisual
+  守卫、纯逻辑 visual-style/pixi visual-stage 两半件、同引用短路全量重建、Text
+  四标志精确销毁）；FeedStore.setVisuals 补通知+FeedChange.visuals 原引用+快照
+  清空（D2）+FeedView.visuals/roomNames；活动房间 ActiveRoomController（D3，非
+  活动房零渲染写入/切房快照语义重建/离房事件不补播）+harness ?multi=1 八房常驻
+  双回放；拾取/悬停（D4，PickResult objectId 数据面命中 z 序优先、onPick/onHover
+  多订阅、高亮环）；fontsBaseUrl 库内 FontFace 预载+getStats().fonts 三态（D5，
+  G7 字体责任落库）；__room 移除+advanceAnimation/onFrameTiming（D6）；vite lib
+  ESM+tsc d.ts+「公共面 import 闭包零 pixi」守卫（D7）。三路评审（A 官方规格/
+  B 契约生命周期/C 测试实测）清偿 `4aa2a81`：1 阻塞（dash 间隙宽度感知——round
+  端帽默认宽粘连、夹具假阴性）+18 建议全清，二轮复审 13/13 核销通过（守卫盲区
+  三处+A-J4 锚记 R7 加固）。**外部复审（GPT）仲裁清偿 `83088f2`**：官方默认值
+  取证对象错误成立——docs.screeps.com 整页锚点抓取四次（主会话×2/评审 A/C 各
+  ×1）集体命中同页 Game.map.visual 表（radius 10/strokeWidth 0.5），权威源
+  screeps/docs 仓库 api/source/RoomVisual.md 实为 radius 0.15/strokeWidth
+  0.1/text font 分形态/padding 0.3/opacity 1.0（MapVisual.md 考古坐实来源；
+  **纪律沉淀：官方文档取证走 GitHub 仓库源，不用整页站点锚点抓取**——r6 方案
+  §3.1 勘误注）。同批清偿：颜色 any web format 全集（命名色 148+9/rgb(a)/
+  hsl(a)）、poly 折线开放描边、文字垂直锚官方明载（背景 middle/默认基线，底边
+  近似登记 G1）、有限几何双防御（MAX_DASH_SEGMENTS=4096——实测 hypot(1e308,
+  1e308) 有限致切段 OOM 比报告所指死循环更深）、悬停失效机制（数据/切房/相机
+  变化重估）、指针手势纪律（pointerId/最大位移/lostpointercapture）、fonts 永
+  不 reject、零推进真 no-op+计时每帧刷新、PickResult.room/readonly/./assets/*
+  导出/回调政策 TSDoc；报告三项与首轮清偿重叠（已在 4aa2a81）。R5 移交契约语
+  义（目标罩 owner=来源取消、visuals 全量替换、离房不补播、say 隐私等）随冻结
+  面落 d.ts TSDoc。**灰区表更新：G1 落地收窄+G7 字体责任+G13 新增（高亮环）+
+  G6 冻结**。验证终态：renderer 322 测（+61）+shared 4+kk-cli 7 绿；tsc/闭包
+  守卫构建（公共面 7 文件零 pixi）/文档链接/资产重生哈希一致/两包构建；浏览器
+  双后端 53 条用例新默认值观感逐原语核对、多房 Tab 隔离（ambient 随房 13→3）、
+  悬停/拾取/advanceAnimation 实测；R7 性能预算/内存 soak 未做不宣称。下一片
+  R7（性能与收口）。

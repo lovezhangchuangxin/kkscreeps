@@ -1,13 +1,17 @@
 # F2 R6：RoomVisual + 交互 + 公共 API 冻结实施方案
 
-> 状态：**待拍板**（§6 七个决策点，用户拍板后实施）。
+> 状态：**已实现并收口**（2026-09-30。决策点 D1–D7 用户拍板全按建议；实现
+> `a7af796` → 三路评审清偿 `4aa2a81` → 外部复审仲裁清偿 `83088f2`，收口记录
+> 见上位方案 §12 与本文件 §8；权威源取证勘误见 §3.1 勘误注）。
 > 上位方案：[F2 渲染器批](f2-renderer.md)（§7 R6 行）；前序：[R5 方案](f2-renderer-r5.md)
 > 与 [R5 验证记录](../research/notes/renderer-r5-verification-2026-09-30.md)；架构现状：
 > [frontend.md](../architecture/frontend.md)；视觉底账：[官方渲染器拆解](../research/notes/renderer-official-analysis.md)。
 > 基线：`f2-renderer@1e3b50c`（renderer 261 测 + shared 4 测 + kk-cli 7 测全绿）。
 > 官方对照：本机 screeps/renderer `a2db4a7`（RoomVisual 不在其内，〔官拆〕§1.6/G1）；
-> 官方 API 文档 docs.screeps.com/api/#RoomVisual（2026-09-30 两路独立取证一致）；
-> 官方 engine 序列化形：本机 screeps/engine `src/game/rooms.js:1146-1218`。
+> 官方 API 文档权威源 **screeps/docs 仓库 `api/source/RoomVisual.md`**（2026-09-30
+> 二轮取证勘正——docs.screeps.com 整页锚点抓取会命中同页 Game.map.visual 的
+> 表，见 §3.1 勘误注）；官方 engine 序列化形：本机 screeps/engine
+> `src/game/rooms.js:1146-1218`。
 
 ## 1. 交付什么
 
@@ -98,19 +102,30 @@ R6 收三类能力并冻结公共 API：
 
 ## 3. 官方契约取证（G1 黑盒锚）
 
-### 3.1 官方 API 文档（docs.screeps.com/api/#RoomVisual，两路独立抓取一致）
+### 3.1 官方 API 文档（权威源 screeps/docs 仓库 `api/source/RoomVisual.md`）
 
-| 原语 | 签名 | 样式字段与默认值 |
+> **勘误注（2026-09-30 二轮取证，外部复审坐实）**：本节初稿值（circle radius
+> 10、形状 strokeWidth 0.5、text fontFamily/fontSize 分字段、padding 2、
+> opacity 0.5）系 **docs.screeps.com 整页锚点抓取命中同页 Game.map.visual
+> 表**所致——四次「独立」WebFetch（主会话×2、评审 A/C 各×1）共享同一失效
+> 机制，构成集体误读；MapVisual.md 考古（radius 10/strokeWidth 0.5 吻合）
+> 坐实来源。下表为仓库源权威值，实现/测试/夹具已按此清偿（`83088f2`）。
+> **纪律沉淀：官方文档取证必须走仓库源（GitHub contents API），不用整页
+> 站点锚点抓取。**
+
+| 原语 | 签名 | 样式字段与默认值（仓库源权威值） |
 |---|---|---|
-| line | `line(x1,y1,x2,y2,[style])` | `width` **0.1**、`color` #ffffff、`opacity` 0.5、`lineStyle` undefined(实线)/dashed/dotted |
-| rect | `rect(x,y,w,h,[style])` | `fill` **#ffffff**、`opacity` 0.5、`stroke` undefined(无)、`strokeWidth` 0.5、`lineStyle` |
-| circle | `circle(x,y,[style])` | `radius` **10**、`fill` **#ffffff**、`opacity` 0.5、`stroke` undefined、`strokeWidth` 0.5、`lineStyle` |
-| poly | `poly(points,[style])` | `fill` **undefined(无填)**、`stroke` **#ffffff**、`opacity` 0.5、`strokeWidth` 0.5、`lineStyle` |
-| text | `text(text,x,y,[style])` | `color` #ffffff、`fontFamily` **sans-serif**、`fontSize` **10（游戏坐标）**、`fontStyle`(normal/italic/oblique)、`fontVariant`(normal/small-caps)、`stroke` undefined、`strokeWidth` **0.15**、`backgroundColor` undefined、`backgroundPadding` **2**、`align` **center**(center/left/right)、`opacity` 0.5 |
+| line | `line(x1,y1,x2,y2,[style])` | `width` **0.1**、`color` #ffffff（**any web format**）、`opacity` 0.5、`lineStyle` undefined(实线)/dashed/dotted |
+| rect | `rect(x,y,w,h,[style])`（x/y=左上角点） | `fill` **#ffffff**、`opacity` 0.5、`stroke` undefined(无)、`strokeWidth` **0.1**、`lineStyle` |
+| circle | `circle(x,y,[style])` | `radius` **0.15**、`fill` **#ffffff**、`opacity` 0.5、`stroke` undefined、`strokeWidth` **0.1**、`lineStyle` |
+| poly | `poly(points,[style])`（**折线**——描边开放） | `fill` **undefined(无填)**、`stroke` **#ffffff**、`opacity` 0.5、`strokeWidth` **0.1**、`lineStyle` |
+| text | `text(text,x,y,[style])`（x/y=**基线点**） | `color` #ffffff（any web format）、`font` **number\|string 四形态**（`0.7` 游戏坐标 / `'20px'` 绝对像素 / `'0.7 serif'` / `'bold italic 1.5 Times New Roman'`；缺省官方未载——我方取 0.8 官方示例值，G1）、`stroke` undefined、`strokeWidth` **0.15**、`backgroundColor` undefined（**启用时文字垂直居中，默认基线**）、`backgroundPadding` **0.3**、`align` center、`opacity` **1.0** |
 
-另有 `clear()`、`getSize()`（≤1000KB 限额）、`export()/import()`。注意四原语
-默认值不对称（line 无 fill 概念、poly 默认描边不填充、rect/circle 默认填充
-不描边）——映射层逐原语应用，不共享一张默认表。
+另有 `clear()`、`getSize()`（≤500KB 限额——初稿写 1000KB 系旧版记忆，仓库
+源为准）、`export()/import()`。四原语默认值不对称（line 无 fill 概念、poly
+默认描边不填充、rect/circle 默认填充不描边）——映射层逐原语应用，不共享一
+张默认表。颜色官方为 **any web format**（命名色合法，文档示例 green/aqua），
+不得登记灰区。
 
 ### 3.2 官方 engine 序列化形（screeps/engine `src/game/rooms.js:1150-1199`）
 
@@ -119,13 +134,15 @@ R6 收三类能力并冻结公共 API：
 §3.1 默认值表就是壳行为的唯一权威记录，映射层在**我方渲染端**应用默认值
 （与官方壳同位），单测逐值断言。
 
-### 3.3 坐标相位（黑盒推断，登记 G1）
+### 3.3 坐标相位（官方明载契约，非黑盒推断）
 
-官方习惯用法 `rect(x-0.5, y-0.5, 1, 1)` 高亮单格（社区通用 idiom）⇒ visual
-整数坐标 (x,y) 即**格中心**，与我方对象锚点/世界空间同相位：pixel = 游戏
-坐标 × cellSize（`rect` 的 x/y 是左上角点，同坐标系）。文字锚点（center 的
-基线行为）、line 端帽形状、dash/dotted 的具体节奏文档未载——按观感校准并
-逐项登记 G1，不宣称源码级保真。
+仓库源明载：*All draw coordinates are measured in game coordinates and
+centered to tile centers, i.e. (10,10) will point to the center of the creep
+at x:10; y:10. Fractional coordinates are allowed.*——visual 坐标即格中心、
+浮点合法；rect 的 x/y 明载为左上角点；text 的 x/y 明载为基线点。与我方对象
+锚点/世界空间同相位：pixel = 游戏坐标 × cellSize。仍属 G1 的黑盒面收窄为：
+文字垂直基线的像素近似（无背景取文本框底边≈基线+descender）、线端帽形状、
+dash/dotted 具体节奏、非基础 web 色形态。
 
 ## 4. 模块与契约设计
 
@@ -308,3 +325,49 @@ visuals 全量替换、离房事件不补播、say 隐私过滤（player=null �
 - **pnpm-lock 共享根文件**（R0 登记）：本片零新依赖，预期无冲突面。
 - 引擎/kk-cli 零改动；主树不动，全部工作在 worktree 提交；一片一笔，
   subject「前缀：描述」冒号前 ≤48 字符、全长 ≤350。
+
+## 8. 执行记录（收口，2026-09-30）
+
+- **实现 `a7af796`**：D1–D7 全落地（24 文件 +1794/-141）。契约重排（官方名
+  1:1）+isRoomVisual 守卫；FeedStore.setVisuals 补通知/FeedChange.visuals
+  原引用/快照清空（D2）/FeedView.visuals·roomNames；VisualStage 两半件
+  （纯逻辑解析+pixi 渲染，同引用短路全量重建、Text 四标志精确销毁）；活动
+  房 ActiveRoomController（D3）+harness ?multi=1；拾取/悬停（D4）数据面命
+  中（z 序优先）；fontsBaseUrl 库内 FontFace（D5）+getStats().fonts 三态；
+  __room 移除+advanceAnimation/onFrameTiming（D6）；vite lib+d.ts 闭包守卫
+  （D7）；visual-cases 用例集。
+- **三路评审清偿 `4aa2a81`**（评审 A 官方规格/B 契约生命周期/C 测试实测）：
+  A 1 阻塞（dash 间隙宽度感知——round 端帽致默认宽粘连，夹具假阴性）+18
+  建议全清（colorOrOff/全形断言/text α 分层/fonts 重试/无地形房素地重建/
+  Backend·Stats 抽零 pixi 模块+守卫升级 import 闭包遍历/TSDoc 三处/销毁设
+  防/harness 两处/测试锚七处）。二轮复审 13/13 核销通过，守卫盲区三处与
+  A-J4 测试锚记 R7 加固项。
+- **外部复审仲裁清偿 `83088f2`**（GPT 外部报告，主会话仓库源逐条仲裁）：
+  **官方默认值取证对象错误成立**（§3.1 勘误注）——radius 0.15/strokeWidth
+  0.1/text font 分形态/padding 0.3/opacity 1.0 全面改判；web 颜色全集（命
+  名色 148+9/rgb(a)/hsl(a)）；poly 开放描边；文字垂直锚官方明载（背景
+  middle/默认基线）；有限几何双防御（**MAX_DASH_SEGMENTS=4096 截断——
+  hypot(1e308,1e308) 有限会使切段 OOM，比报告所指死循环更深一层，实测坐
+  实**）；悬停失效机制（数据/切房/相机变化重估）；指针手势纪律
+  （pointerId/最大位移/lostpointercapture）；fonts 永不 reject+await 入回
+  滚；零推进真 no-op+计时每帧刷新；PickResult.room/readonly 契约/
+  ./assets/* 导出/政策 TSDoc。GPT 报告三项与 4aa2a81 重叠（无地形房、fonts
+  缓存、d.ts 守卫）系首轮已清。二波增量复审（独立 agent）结论见收口提交。
+- **验证终态**：renderer 322 测（基线 261 → +61）+shared 4+kk-cli 7 绿；
+  tsc/闭包守卫构建（公共面 7 文件零 pixi）/文档链接/资产重生哈希一致/两包
+  构建过；浏览器双后端（WebGPU/WebGL lighting real、fonts loaded、60fps）
+  visual 用例集 53 条新默认值观感逐原语核对、?multi=1 八房常驻双回放 Tab
+  隔离、悬停环+拾取 objectId+advanceAnimation 实测。
+- **灰区收窄**：坐标相位/默认值/颜色格式/文字垂直锚规则/背景 padding 均
+  升级官方明载契约（§3），G1 黑盒面收窄至：文字无背景时基线的底边近似、
+  端帽形状、dash 节奏、font 缺省 0.8、非基础 web 色。上位方案灰区表 G1/G7
+  更新、G13 新增（悬停高亮环非官方形态）。
+- **二波复审终裁（PASS，11/11 核销）**：复审员独立经 GitHub contents API 重取
+  权威源逐行核对（radius 0.15=L150、strokeWidth 0.1 三处、opacity 1.0、
+  padding 0.3、font 四形态、any web format 十处措辞、polyline、背景垂直居中、
+  坐标语义），与主会话仲裁完全一致；NAMED_COLORS 程序化对照 68 标准值零错
+  配（恰 148 键=CSS Color 4 总数）；hypot(1e308,1e308) 有限性独立推演成立，
+  追加压测（off 相位天文段/超大 strokeWidth/零长段）全部 <1ms 有界返回。四
+  项 P3 残留：feed.ts CircleV 注释默认值残留、83088f2 提交信息 green/aqua 表
+  述失准（aqua 仅单测）、命名色键数措辞、手势三边界无行为级测试——前两者与
+  措辞随手勘正（收口提交），**手势行为测试记 R7 加固**。

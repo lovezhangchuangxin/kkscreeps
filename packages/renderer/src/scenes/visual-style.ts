@@ -25,7 +25,8 @@ export interface ResolvedColor {
   alpha: number;
 }
 
-/** CSS 命名色全表（含 grey 系别名；CSS3/Color4 标准 148+9 键）。 */
+/** CSS 命名色全表：恰 148 键（CSS Color 4 规范命名色总数，内含 9 组 grey 系
+ * 别名对——复审程序化对照 68 标准值零错配）。 */
 export const NAMED_COLORS: Readonly<Record<string, number>> = {
   aliceblue: 0xf0f8ff, antiquewhite: 0xfaebd7, aqua: 0x00ffff, aquamarine: 0x7fffd4,
   azure: 0xf0ffff, beige: 0xf5f5dc, bisque: 0xffe4c4, black: 0x000000,

@@ -196,7 +196,7 @@ export interface CircleV {
   type: 'circle';
   x: number;
   y: number;
-  /** 半径在 style.radius（游戏坐标，默认 10——官方 circle(x,y,style) 同形）。 */
+  /** 半径在 style.radius（游戏坐标，默认 0.15——官方 circle(x,y,style) 同形）。 */
   style?: VisualStyle;
 }
 export interface RectV {
