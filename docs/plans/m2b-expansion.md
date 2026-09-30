@@ -1,7 +1,7 @@
 # M2B 扩面批：玩家 API ~150→~230（官方全量 340 的可达子集）
 
-> 状态：**已确认（2026-09-30 用户批准开批）**——P0 已收口（见 §8）；
-> P1-P6 待续。批次方向决策归用户，批内切片节奏自主。
+> 状态：**已收口（2026-09-30 开批，2026-10-01 P0-P6 全部完成，见 §8）**。
+> 批次方向决策归用户，批内切片节奏自主。
 > 定位：ADR-013 决策 2 的 M2B 扩面本体。前置批（seam 三件套，ef43f4a 五片）与
 > 双房实弹批（外部复审两轮清偿，0b83f1d）均已收口——**本批是扩面前的全部前置
 > 关卡走完后的第一扩面批**。已授权序列：本批 → 2B。
@@ -326,6 +326,101 @@ tower/link 复用其投影/折叠模式）。P6 收尾。**每片一个完整批
    仅剩 commit_room/register_room/room_mut，各有其 bump 纪律）。
 
 ## 8. 执行记录（随片回写）
+
+### P6（收尾：RawMemory segments + RoomVisual/MapVisual + CostMatrix + creep 存活门清偿）——已收口（含三路评审清偿）
+
+- **范围与官方基准**：driver/lib/runtime/runtime.js:122-200（segments 五
+  API）+ runtime.js:250-269（tick 尾回收校验；评审 2 勘正——初记
+  make.js，该处实为 publicSegments env.set）；game/console.js:57-108
+  （visual 存储四函数）；game/rooms.js:1144-1218（RoomVisual）、map.js:
+  275-374（MapVisual）；game/path-finder.js:18-47（CostMatrix）；套件
+  25-memory/31-visuals/COSTMATRIX 族。
+- **CostMatrix 真化**：原桩三处全非官方——索引反置（y*50+x，官方
+  **x*50+y**）、serialize 返回 {bits:2500}（官方是 **Uint32 视图 625 元素
+  普通数组**）、无 clone/set 钳 0..255/公开 _bits 面。逐字重写
+  （path-finder.js）；COSTMATRIX-003/004/005/007/008 + UNDOC-_bits 三条转绿。
+- **RawMemory segments 全链**：①prelude 五 API 逐字（ setActiveSegments
+  的 10 段/id 0-99/非数组 **throw**（官方文案）；setActiveForeignSegment
+  (null) 清除；未知名不 throw 下 tick 无交付）；②**后端在协调器
+  PlayerState**（segments 全量 100 槽 + active_request/public_ids/
+  default_public/foreign_request 跨 tick 持久——官方 db 持久
+  （users.activeSegments 等）的等价物；**官方 runtime 闭包每 tick 重置**
+  （make 侧每 tick 重跑 _start）、「闭包同形」为评审 2 P2-2 勘误的
+  失实前提）；
+  ③管线：宿主新通道 setMemoryState（raw+窗口+foreign，与 set_raw_memory
+  同时序约束）注入、endTick 信封 segmentsOut（窗口写回+四请求**全量带出**）
+  带出、commit 合并；④tick 尾校验（≤10 槽/0-99/字符串/≤100KB）违例整轮
+  runtime error（官方 make throw 同义）；⑤foreign 授权解析每 tick 重跑
+  ——显式 id 须在公开集；**默认段同样须在公开集内（FOREIGN-008：残留
+  default 不构成授权——实现期抓到的真 bug，探针取证后修）**；⑥未写过的
+  请求槽物化空串（RAWMEMORY-003「请求即出现」）；⑦publicSegments 空列表
+  no-op（官方 truthy-check 弃空 quirk，FOREIGN-008 注释实证）；⑧五个
+  非官方桩面（getActiveSegments/getSegment/setSegment/setInterShardMemory/
+  getInterShardMemory）撤除（官方无此面，bot 实测零消费）。
+- **Visuals**：visual 存储（console.js:57-108 逐字——每玩家按房名累积
+  JSON 行字符串；map 1000KB/房 500KB 超限 throw 官方文案）落 prelude
+  gw 桥（room.js）；**每 tick 重置**（官方后端每 tick getVisual drain 同
+  语义——绘制只活在当 tick）；RoomVisual 六方法逐字（坐标/位置双形、
+  poly 位置数组归一、import 字符串原样）；MapVisual 惰性单例（世界坐标
+  RoomPosition 强制+房名 n/n1/n2、style 缺省 {}）；sharedBuffer=存储键
+  共享（同房两实例天然同缓冲）。console.addVisual 玩家面不挂（官方
+  fakeConsole 有——套件不消费，登记）。
+- **creep 战斗族存活门清偿（P5 登记-销账勘误）**：P5 评审曾登记「官方
+  套件无 UNDOC-STALEARG creep 面用例」——**误**：套件有五条
+  （creepAttackCreep/creepRangedAttack/creepHeal/creepRangedHeal/
+  creepRepair）。P6 顺手清偿：isKnownCreep/isKnownStructure 提 gw 桥
+  （structures_spawn.js 定义、creep.js 五 API 接线——官方 creeps.js:607/
+  :640/:689/:717/:748 的 register 判定同形）。
+- **验收与验证**：e2e 守卫（segments 激活/写回/10 段/越界/100KB±1/
+  foreign 撤回-清除-未知名-未写槽（全矩阵主体在套件层 FOREIGN 族）/
+  visuals 记账-sharedBuffer-房 500KB 上限-clear（map 1000KB 在套件层
+  VISUAL-SIZE-004）/CostMatrix 往返-clone-钳-_bits）；workspace **322 绿**/
+  clippy 0/fmt 净；棘轮 **1774（P6 累计 +32：segments 13/visuals 8/
+  CostMatrix 6/creep 存活门 5）、转红 0**；地板 1742→**1774（60.88%，
+  破六成）**；bot 三基线重跑（**overmind setPublicSegments 形态消失——
+  P3 起的 2000 错/tick 基线归零**，tooangel 形态 4→3，均零新增形态）；
+  perf 复跑（首轮 bots 后机器态偏高，冷却回落；工件随批刷新入库）。
+- **三路评审与清偿（全 PASS with conditions 零 P0，当日清偿）**：
+  评审 1（官方语义）/评审 2（Rust 正确性）/评审 3（测试与归因）。
+  **P1 三项**：①setActiveSegments([]) 清空（1/2 同报——原 emit 带
+  length 门成 no-op；官方 runtime.js:287 无守卫 emit、[] truthy 经
+  make 侧 $set 清库；**与 public 的 [] no-op 是两个官方形状**——public
+  经 join(',') 变空串才被 truthy-check 弃）改 `!== null` 门+e2e 锁定；
+  ②tick 尾三文案逐字化（`"X" is not a valid memory segment ID`/
+  `Memory segment #X is not a string`/`Memory segment #X has exceeded
+  100 KB length limit`——runtime.js:259/262/265，grep 实证后改）；
+  ③overmind 剩余错误归因勘正（评审 3 五帧栈对齐 bundle——
+  DirectiveHarvest.create 的 log.debug 读 `Memory.flags[result]`，col 76
+  是计算键非 lookFor 调用；overmind bundle 无 Memory.flags 初始化、
+  首 tick 空 Memory 必抛，**官方服务器大概率同形**——不归 room-look 批，
+  台账两处已改）。**P2 顺手修四项**：foreignSegment 未写公开槽 data=
+  null（官方 hget 缺失 null——与活动槽 `|| ""` 刻意不对称）+e2e；
+  CostMatrix.set 去多余 return this（官方无返回值）；commit_segments
+  的 as u8 截断防御（0..=99 门——畸形值截断成 0 会静默污染 0 号槽）；
+  四处「官方闭包同形」失实注释勘正（game.js/settle mod.rs/embed.rs——
+  P1① 的根源正是该错误类推，评审 2 P2-2）。**P2 登记不修**：校验顺序
+  quirk（官方先 >10 再逐 id）、中途 throw 前缀残留 quirk、falsy-0 官方
+  bug 形态刻意保留（id 0 正常交付）、foreign 默认段解析时点（官方 API
+  调用 tick 钉死不重解析）、MapVisual 跨 tick 身份、assertTargetObject
+  五处既有面（随后续批）、powerCreeps 臂（M4）、username 无界。均落
+  compatibility.md。清偿后全门禁复跑：workspace 322 绿/clippy 0/fmt 净/
+  棘轮 1774 零转红（+32 归因不变——修复零用例位移）/三基线与 perf 以
+  清偿后二进制重跑刷新入库。
+- **收尾插曲（夹具完整性事故，当日恢复）**：清偿后重刷 tooangel 基线
+  发现 2000 tick 全错 `Unknown module 'main'`——排查：夹具是未跟踪的
+  TooAngel/screeps clone（HEAD 87645a0，clone 本身 git status 干净）+
+  **根目录 src/*.js 扁平拷贝**（90 文件，screeps 官方部署形态——require
+  扁平命名空间，`./require` 解析为模块名 `require` 而非 `src/require`；
+  图根 shim `require('./src/main')` 方案因此不可行），扁平拷贝被会话外
+  进程（评审期）删除且**未跟踪文件不进 git status** 故静默。恢复
+  `cp src/*.js .` 后 30 tick 冒烟（stub 流/两条 console 形态对上）→
+  2000t 全量：0 错/0 中断/形态 3 与旧基线逐字全等。夹具根留
+  KKScreeps-FIXTURE-NOTE.md（恢复命令+形态说明）。**教训登记**：
+  compat/fixtures/ 整目录未跟踪是单点风险（overmind-dist/wasm 同理），
+  基线异常先查夹具完整性；评审/外部进程动过机器后未跟踪工件须核验。
+  另登记（清偿复审 P2-1）：tooangel 基线存在**非确定性噪声底**（bot 侧
+  Math.random/CPU 桶——两次重跑可有 ±2 个偶发形态/主形态计数 1999↔2000/
+  stub 计数 ±4 漂移），基线 diff 判定按「典型形态集+计数容差」口径，不逐字。
 
 ### P5（结构动作族：tower 三动作 + link.transferEnergy + rampart.setPublic + spawn deprecated 对）——已收口待评审清偿
 

@@ -46,7 +46,8 @@
 
   const { missing, hasProbes, stubCalls } = globalThis.__kkp;
   const { resetForNewModules } = globalThis.__kkp.cjs;
-  const { beginTick, writeBackMemory, intentsPayload, setRawMemoryHost, rawMemoryDataHost } = globalThis.__kkp.memoryWorld;
+  const { beginTick, writeBackMemory, intentsPayload, setRawMemoryHost, rawMemoryDataHost,
+    setSegmentsWindowHost, setForeignSegmentHost, segmentsOutHost } = globalThis.__kkp.memoryWorld;
 
   globalThis.__kkp.host = {
     /** 每 tick 注入世界快照并重建 Game。cpuMeta：宿主预算真值（Rust 侧
@@ -185,6 +186,11 @@
         if (out.ok === true) {
           const rm = rawMemoryDataHost();
           if (typeof rm === 'string') out.rawMemory = rm;
+          // M2B 扩面 P6：segments 信封（窗口写回+四请求——官方 outMessage 的
+          // memorySegments/activeSegments/publicSegments/defaultPublicSegment/
+          // activeForeignSegment 同批带出；null 原型对象过净化窗口）
+          const so = segmentsOutHost();
+          if (so !== null && so !== undefined) out.segmentsOut = so;
         }
       }
       // 编码守卫（与 writeBackMemory 同构，自审 P2-3）：载荷携带抛错 getter 等
@@ -208,6 +214,13 @@
      *  A5-core 对抗评审 P3b；随 B0 WP4 收口根治）。 */
     setRawMemory(data) {
       setRawMemoryHost(data);
+    },
+    /** 宿主私有通道（P6）：一次性注入 raw + segments 窗口 + foreignSegment
+     *  （tick 边界——与 setRawMemory 同时序约束）。 */
+    setMemoryState(data, segmentsJson, foreignJson) {
+      setRawMemoryHost(data);
+      setSegmentsWindowHost(segmentsJson);
+      setForeignSegmentHost(foreignJson);
     },
     drainMissing() {
       // 两桶：missing（get-trap 确定缺失）+ hasProbes（has-trap 低置信，可能是否定式探测）

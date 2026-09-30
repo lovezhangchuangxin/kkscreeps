@@ -93,6 +93,22 @@ impl ThreadExecutor {
         self.pool.set_raw_memory(id, data)
     }
 
+    /// 注入玩家记忆全量态（M2B 扩面 P6）：raw + segments 活动窗口 + foreign。
+    pub fn set_memory_state(
+        &mut self,
+        player: &str,
+        raw: &str,
+        segments_json: &str,
+        foreign_json: &str,
+    ) -> anyhow::Result<()> {
+        let id = *self
+            .handles
+            .get(player)
+            .ok_or_else(|| anyhow::anyhow!("未知玩家 {player}"))?;
+        self.pool
+            .set_memory_state(id, raw, segments_json, foreign_json)
+    }
+
     /// 提交玩家的计费候选（统一提交点：世界结算成功后——计费落桶）。
     pub fn settle_bill(&mut self, player: &str) -> anyhow::Result<()> {
         let id = *self
@@ -188,6 +204,7 @@ fn eval_report_to_run_result(player: &str, report: kk_runner::EvalReport) -> Run
         // 在世界结算成功后提交
         cpu_billed_ms: report.cpu_billed_ms,
         raw_memory: report.raw_memory,
+        segments_out: report.segments_out,
         console: report.console.iter().map(|l| l.text.clone()).collect(),
     }
 }
@@ -212,6 +229,7 @@ mod tests {
                 expr: self.expr.clone(),
                 cpu_billed_ms: None,
                 raw_memory: None,
+                segments_out: None,
                 console: Vec::new(),
             }
         }
@@ -277,6 +295,7 @@ mod tests {
             intents: serde_json::Value::Null,
             cpu_billed_ms: None,
             raw_memory: None,
+            segments_out: None,
         };
         let r = eval_report_to_run_result("p1", mk("terminated"));
         assert_eq!(r.outcome, RunOutcome::Terminated);

@@ -1,5 +1,5 @@
 {
-  "bot": "compat/fixtures/tooangel/src",
+  "bot": "compat/fixtures/tooangel",
   "ticks_requested": 2000,
   "ticks_completed": 2000,
   "ticks_terminated": 0,
@@ -51,14 +51,6 @@
     [
       "room.find:7",
       21
-    ],
-    [
-      "RawMemory.setActiveSegments",
-      20
-    ],
-    [
-      "CostMatrix.deserialize",
-      1
     ]
   ],
   "console_errors_head": [],
@@ -66,10 +58,6 @@
     [
       "[log] # W#N#                        Executing room failed: W#N# TypeError: offsetPosition.lookFor is not a function TypeError: offsetPosition.lookFor is not a function\n    at Proxy.Room.perturbPath (kk_module/prototype_room_memory, <anonymous>:#:#)\n    at Proxy.Room.setMemoryPath (kk_module/prototype_room_memory, <anonymous>:#:#)\n    at Proxy.Room.getPath (kk_module/prototype_room_routing, <anonymous>:#:#)\n    at Proxy.eval (kk_module/prototype_room_init, <anonymous>:#:#)\n    at Proxy.Room.stepExecute (kk_module/prototype_room_init, <anonymous>:#:#)\n    at Proxy.Room.setup (kk_module/prototype_room_init, <anonymous>:#:#)\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:#:#)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:#:#)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:#:#)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:#:#)",
       2000
-    ],
-    [
-      "[log] Brain Exception TypeError: RawMemory.setPublicSegments is not a function\n    at checkPlayers (kk_module/diplomacy, <anonymous>:#:#)\n    at module.exports.execute (kk_module/brain_main, <anonymous>:#:#)\n    at runMainLogic (kk_module/main, <anonymous>:#:#)\n    at Object.module.exports.loop (kk_module/main, <anonymous>:#:#)\n    at runLoop (kk-prelude-#-host:#:#)",
-      20
     ],
     [
       "[log] # memory                      Deleting W#N# from memory, no myRoom {\"setup\":{\"steps\":{\"cleanupMemory\":true,\"updatePosition\":true,\"costMatrixSetMineralPath\":true}},\"routing\":{},\"lastSeen\":#}",
@@ -81,7 +69,7 @@
     ]
   ],
   "console_head": [
-    "[tick 1][log] 1 Script reload - Load: 8 tickLimit: 500 limit: 20 Bucket: 10000",
+    "[tick 1][log] 1 Script reload - Load: 5 tickLimit: 500 limit: 20 Bucket: 10000",
     "[tick 1][log] 1 W1N1                        Executing room failed: W1N1 TypeError: offsetPosition.lookFor is not a function TypeError: offsetPosition.lookFor is not a function\n    at Proxy.Room.perturbPath (kk_module/prototype_room_memory, <anonymous>:169:26)\n    at Proxy.Room.setMemoryPath (kk_module/prototype_room_memory, <anonymous>:129:17)\n    at Proxy.Room.getPath (kk_module/prototype_room_routing, <anonymous>:261:10)\n    at Proxy.eval (kk_module/prototype_room_init, <anonymous>:309:25)\n    at Proxy.Room.stepExecute (kk_module/prototype_room_init, <anonymous>:445:20)\n    at Proxy.Room.setup (kk_module/prototype_room_init, <anonymous>:508:13)\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:90:10)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)",
     "[tick 2][log] 2 W1N1                        Executing room failed: W1N1 TypeError: offsetPosition.lookFor is not a function TypeError: offsetPosition.lookFor is not a function\n    at Proxy.Room.perturbPath (kk_module/prototype_room_memory, <anonymous>:169:26)\n    at Proxy.Room.setMemoryPath (kk_module/prototype_room_memory, <anonymous>:129:17)\n    at Proxy.Room.getPath (kk_module/prototype_room_routing, <anonymous>:261:10)\n    at Proxy.eval (kk_module/prototype_room_init, <anonymous>:309:25)\n    at Proxy.Room.stepExecute (kk_module/prototype_room_init, <anonymous>:445:20)\n    at Proxy.Room.setup (kk_module/prototype_room_init, <anonymous>:508:13)\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:90:10)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)",
     "[tick 3][log] 3 W1N1                        Executing room failed: W1N1 TypeError: offsetPosition.lookFor is not a function TypeError: offsetPosition.lookFor is not a function\n    at Proxy.Room.perturbPath (kk_module/prototype_room_memory, <anonymous>:169:26)\n    at Proxy.Room.setMemoryPath (kk_module/prototype_room_memory, <anonymous>:129:17)\n    at Proxy.Room.getPath (kk_module/prototype_room_routing, <anonymous>:261:10)\n    at Proxy.eval (kk_module/prototype_room_init, <anonymous>:309:25)\n    at Proxy.Room.stepExecute (kk_module/prototype_room_init, <anonymous>:445:20)\n    at Proxy.Room.setup (kk_module/prototype_room_init, <anonymous>:508:13)\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:90:10)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)",

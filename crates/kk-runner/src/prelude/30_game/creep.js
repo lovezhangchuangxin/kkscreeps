@@ -378,7 +378,10 @@
     if (this.spawning) return C.ERR_BUSY;
     if (countActiveParts(this.body, C.ATTACK) === 0) return C.ERR_NO_BODYPART;
     if (blockedBySafeMode(this)) return C.ERR_NO_BODYPART;
+    // 官方 creeps.js:607：register 存活判定（陈旧壳拒绝——UNDOC-STALEARG 面，
+    // M2B P6 清偿：isKnown* 经 gw 桥与结构 API 单源）
     const okTarget = target && target.id
+      && (gw.isKnownCreep(target.id) || gw.isKnownStructure(target.id))
       && (target instanceof globalThis.Creep
         || target instanceof globalThis.StructureSpawn
         || target instanceof globalThis.Structure);
@@ -433,6 +436,7 @@
     if (countActiveParts(this.body, C.WORK) === 0) return C.ERR_NO_BODYPART;
     if (!carriedEnergy(this)) return C.ERR_NOT_ENOUGH_RESOURCES;
     const okTarget = target && target.id
+      && gw.isKnownStructure(target.id)
       && (target instanceof globalThis.Structure || target instanceof globalThis.StructureSpawn);
     if (!okTarget) return C.ERR_INVALID_TARGET;
     if (!this.pos.inRangeTo(target.pos, 3)) return C.ERR_NOT_IN_RANGE;
@@ -461,7 +465,8 @@
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;
     if (countActiveParts(this.body, C.HEAL) === 0) return C.ERR_NO_BODYPART;
-    if (!(target && target.id && target instanceof globalThis.Creep)) {
+    if (!(target && target.id && gw.isKnownCreep(target.id)
+      && target instanceof globalThis.Creep)) {
       return C.ERR_INVALID_TARGET;
     }
     if (!target.pos.isNearTo(this.pos)) return C.ERR_NOT_IN_RANGE;
@@ -495,6 +500,7 @@
     if (countActiveParts(this.body, C.RANGED_ATTACK) === 0) return C.ERR_NO_BODYPART;
     if (blockedBySafeMode(this)) return C.ERR_NO_BODYPART;
     const okTarget = target && target.id
+      && (gw.isKnownCreep(target.id) || gw.isKnownStructure(target.id))
       && (target instanceof globalThis.Creep
         || target instanceof globalThis.PowerCreep
         || target instanceof globalThis.StructureSpawn
@@ -529,7 +535,8 @@
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;
     if (countActiveParts(this.body, C.HEAL) === 0) return C.ERR_NO_BODYPART;
-    if (!(target && target.id && target instanceof globalThis.Creep)) {
+    if (!(target && target.id && gw.isKnownCreep(target.id)
+      && target instanceof globalThis.Creep)) {
       return C.ERR_INVALID_TARGET;
     }
     if (blockedBySafeMode(this)) return C.ERR_NO_BODYPART;

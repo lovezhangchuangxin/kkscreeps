@@ -716,9 +716,7 @@ fn tick_input_replay_consistency_engine_level() {
             "p1".to_string(),
             PlayerState {
                 gcl: 1,
-                rooms: BTreeSet::new(),
-                raw_memory: String::new(),
-                notifications: Vec::new(),
+                ..Default::default()
             },
         );
         engine

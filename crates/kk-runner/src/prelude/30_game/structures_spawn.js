@@ -72,6 +72,10 @@
     const o = id == null ? undefined : gw.rawById.get(id);
     return !!o && (o.type === 'structure' || o.type === 'spawn');
   }
+  // gw 桥（M2B P6）：creep 战斗族五 API 的同款存活判定（UNDOC-STALEARG 剩余
+  // 面清偿——官方 creeps.js:607/:640/:689/:717/:748 的 register 判定）
+  gw.isKnownCreep = isKnownCreep;
+  gw.isKnownStructure = isKnownStructure;
 
   // ---------------------------------------------------------------- 官方工具
   /** 官方 utils.calcCreepCost（utils.js:114-123）：BODYPART_COST 求和，

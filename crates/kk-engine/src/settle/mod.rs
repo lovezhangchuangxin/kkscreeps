@@ -92,6 +92,21 @@ pub struct PlayerState {
     /// 集合（邮件通知，游戏内不可观测）；有界保留最近 100 条（官方集合
     /// 自然增长，登记差异）
     pub notifications: Vec<NotifyRecord>,
+    /// RawMemory segments 全量存储（M2B 扩面 P6：官方 users.memorySegments
+    /// 的 100 槽服务端存储；窗口写回在此合并）。有界：槽数 ≤100（id 0..99）、
+    /// 每槽 ≤100KB（写回校验在 prelude tick 尾——官方 runtime.js:250-269 同位）
+    pub segments: BTreeMap<u8, String>,
+    /// 最近一次 setActiveSegments 请求（跨 tick 保持。官方闭包每 tick 重置、
+    /// 持久在 users.activeSegments——本字段即官方 db 侧的等价物；空集=已请求
+    /// 清空窗口，下一 tick 解算为空。评审 2 P2-2 勘正：非「官方闭包同形」）
+    pub active_request: Vec<u8>,
+    /// setPublicSegments（空列表官方 truthy-check 丢弃——no-op quirk 保持）
+    pub public_ids: Vec<u8>,
+    /// setDefaultPublicSegment（None = 未设/已清）
+    pub default_public: Option<u8>,
+    /// setActiveForeignSegment 请求（None = 未设/已清；Some((username, id?))
+    /// ——id 缺省走发布者 defaultPublic；每 tick 重新解析授权——撤回即时生效）
+    pub foreign_request: Option<(String, Option<u8>)>,
 }
 
 /// 一条已落账的玩家通知（tick = 落账时的世界时间）。

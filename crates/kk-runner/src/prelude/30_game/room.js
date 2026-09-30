@@ -119,24 +119,91 @@
   }
   gw.terrainWordAt = terrainWordAt;
 
-  // ---------------------------------------------------------------- RoomVisual 桩
+  // ---------------------------------------------------------------- RoomVisual（M2B 扩面 P6 真化）
+  // 官方 visual 存储（game/console.js:11 模块级 visual[id]、:57-108 四函数逐字）：
+  // 每玩家**按房名**累积字符串（`JSON.stringify(data)+"\n"` 追加；import 走
+  // 字符串原样）。sizeLimit：map 1000KB / 房 500KB——超限 **throw**（官方
+  // 文案逐字）。生命周期：官方后端每 tick getVisual drain（console.js:110-114
+  // 整表取走）——即绘制只活在当 tick；我方 beginTick 重置（gw.visualReset，
+  // game.js 段调）同语义。**sharedBuffer 语义**（VISUAL-ROOM-001）：缓冲在
+  // store 的房名键上——同房两个实例天然共享一个缓冲。
+  const visualStore = __Object.create(null);
+  gw.addVisual = function addVisual(roomName, data) {
+    roomName = roomName || '';
+    if (!data) {
+      return;
+    }
+    const sizeLimit = roomName === 'map' ? 1000 : 500;
+    const dataString = typeof data === 'string' ? data : __jsonStringify(data) + '\n';
+    if ((visualStore[roomName] || '').length + dataString.length > sizeLimit * 1024) {
+      if (roomName === 'map') {
+        throw new Error('MapVisual size has exceeded ' + sizeLimit + ' KB limit');
+      }
+      throw new Error('RoomVisual size in room ' + roomName + ' has exceeded ' + sizeLimit + ' KB limit');
+    }
+    visualStore[roomName] = (visualStore[roomName] || '') + dataString;
+  };
+  gw.getVisualSize = function getVisualSize(roomName) {
+    roomName = roomName || '';
+    return visualStore[roomName] ? visualStore[roomName].length : 0;
+  };
+  gw.clearVisual = function clearVisual(roomName) {
+    visualStore[roomName || ''] = '';
+  };
+  gw.getVisual = function getVisual(roomName) {
+    return visualStore[roomName || ''];
+  };
+  gw.visualReset = function visualReset() {
+    for (const k in visualStore) delete visualStore[k];
+  };
 
+  // 官方 RoomVisual（rooms.js:1144-1218）逐字：六绘制方法（坐标/位置双形）+
+  // getSize/clear/export/import，全部经 console.addVisual 族路由（我方 gw 桥）。
   class RoomVisual {
     constructor(roomName) { this.roomName = roomName; }
-  }
-  // 绘制方法全部 no-op：用 Proxy 原型惰性生成（class 的 prototype 不可写，故借普通函数桥接）
-  const visualBridge = function VisualBridge() {};
-  visualBridge.prototype = new Proxy({}, {
-    get(t, prop) {
-      if (prop in t) return t[prop];
-      // 官方 rooms.js:1157：绘制方法返回 this（链式调用是官方文档承诺的行为）
-      if (typeof prop === 'string') {
-        return function () { countStub('RoomVisual.' + prop); return this; };
+    circle(x, y, style) {
+      if (typeof x === 'object') {
+        style = y; y = x.y; x = x.x;
       }
-      return undefined;
-    },
-  });
-  Object.setPrototypeOf(RoomVisual.prototype, visualBridge.prototype);
+      gw.addVisual(this.roomName, { t: 'c', x, y, s: style });
+      return this;
+    }
+    line(x1, y1, x2, y2, style) {
+      if (typeof x1 === 'object' && typeof y1 === 'object') {
+        style = x2;
+        x2 = y1.x; y2 = y1.y;
+        y1 = x1.y; x1 = x1.x;
+      }
+      gw.addVisual(this.roomName, { t: 'l', x1, y1, x2, y2, s: style });
+      return this;
+    }
+    rect(x, y, w, h, style) {
+      if (typeof x === 'object') {
+        style = h; h = w; w = y;
+        y = x.y; x = x.x;
+      }
+      gw.addVisual(this.roomName, { t: 'r', x, y, w, h, s: style });
+      return this;
+    }
+    poly(points, style) {
+      if (Array.isArray(points) && points.some(Boolean)) {
+        points = points.map((i) => (i.x !== undefined ? [i.x, i.y] : i));
+        gw.addVisual(this.roomName, { t: 'p', points, s: style });
+      }
+      return this;
+    }
+    text(text, x, y, style) {
+      if (typeof x === 'object') {
+        style = y; y = x.y; x = x.x;
+      }
+      gw.addVisual(this.roomName, { t: 't', text, x, y, s: style });
+      return this;
+    }
+    getSize() { return gw.getVisualSize(this.roomName); }
+    clear() { gw.clearVisual(this.roomName); return this; }
+    export() { return gw.getVisual(this.roomName); }
+    import(data) { gw.addVisual(this.roomName, '' + data); return this; }
+  }
   // 官方 rooms.js:1220 同为非可写 defineProperty（清偿复审 P3-N1）
   Object.defineProperty(globalThis, 'RoomVisual', {
     enumerable: true, value: RoomVisual,

@@ -69,6 +69,9 @@ pub struct RunResult {
     pub cpu_billed_ms: Option<f64>,
     /// RawMemory 候选（Memory 写回产物；None = 本轮未产出/写回失败）。
     pub raw_memory: Option<String>,
+    /// segments 信封候选（M2B 扩面 P6：{writes,active?,public?,defaultPublic?,
+    /// foreign?}——窗口写回+四请求快照；None = 写回失败/未达）。
+    pub segments_out: Option<serde_json::Value>,
     /// 本次执行期间的控制台输出。
     pub console: Vec<String>,
 }
@@ -85,6 +88,7 @@ impl RunResult {
             }),
             cpu_billed_ms: None,
             raw_memory: None,
+            segments_out: None,
             console: Vec::new(),
         }
     }
@@ -98,6 +102,7 @@ impl RunResult {
             expr: serde_json::Value::Null,
             cpu_billed_ms: None,
             raw_memory: None,
+            segments_out: None,
             console: Vec::new(),
         }
     }
@@ -142,6 +147,7 @@ impl Sandbox for ScriptedSandbox {
             expr: serde_json::json!({ "ok": true }),
             cpu_billed_ms: None,
             raw_memory: None,
+            segments_out: None,
             console: Vec::new(),
         }
     }

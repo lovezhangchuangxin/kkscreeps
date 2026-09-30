@@ -11,13 +11,36 @@
   const { countStub } = globalThis.__kkp;
   const gw = globalThis.__kkp.gw;
 
+  // 官方 CostMatrix（path-finder.js:18-47）逐字：_bits 是公开 own 面
+  //（Uint8Array(2500)，索引 **x*50+y**——UNDOC-COSTMATRIX 面）；set 钳
+  // 0..255（|0 强转）；clone 复制位图；serialize 把 2500 字节 buffer 按
+  // Uint32 视图切成 **625 元素普通数组**（官方 `Array.prototype.slice.apply(
+  // new Uint32Array(this._bits.buffer))` 的打包怪形——四格一组小端序）；
+  // deserialize 经 Uint32Array(data).buffer 还原（不走构造器——Object.create
+  // 直接挂 _bits）。M2B 扩面 P6 真化（原桩索引反置+{bits} 形态全非官方）。
   class CostMatrix {
     constructor() { this._bits = new Uint8Array(2500); }
-    set(x, y, v) { this._bits[y * 50 + x] = v; return this; }
-    get(x, y) { return this._bits[y * 50 + x]; }
-    copy() { const c = new CostMatrix(); c._bits.set(this._bits); return c; }
-    serialize() { countStub('CostMatrix.serialize'); return { bits: Array.from(this._bits) }; }
-    static deserialize() { countStub('CostMatrix.deserialize'); return new CostMatrix(); }
+    set(xx, yy, val) {
+      xx = xx | 0; yy = yy | 0;
+      this._bits[xx * 50 + yy] = Math.min(Math.max(0, val), 255);
+    }
+    get(xx, yy) {
+      xx = xx | 0; yy = yy | 0;
+      return this._bits[xx * 50 + yy];
+    }
+    clone() {
+      const newMatrix = new CostMatrix();
+      newMatrix._bits = new Uint8Array(this._bits);
+      return newMatrix;
+    }
+    serialize() {
+      return Array.prototype.slice.apply(new Uint32Array(this._bits.buffer));
+    }
+    static deserialize(data) {
+      const instance = Object.create(CostMatrix.prototype);
+      instance._bits = new Uint8Array(new Uint32Array(data).buffer);
+      return instance;
+    }
   }
   function straightPath(from, to, range) {
     // 官方 path-finder.js：search 返回的 path 元素是 **RoomPosition 实例**（绝对

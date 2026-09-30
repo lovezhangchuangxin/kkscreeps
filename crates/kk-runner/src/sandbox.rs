@@ -320,6 +320,29 @@ impl Sandbox {
         Ok(())
     }
 
+    /// 注入玩家记忆全量态（M2B 扩面 P6）：RawMemory 初值 + segments 活动窗口
+    /// （[[id,str],...] JSON）+ foreignSegment（'null' 表示无）。与
+    /// set_raw_memory 同时序约束（仅 begin_tick 之前的 tick 边界）。
+    pub fn set_memory_state(
+        &mut self,
+        raw: &str,
+        segments_json: &str,
+        foreign_json: &str,
+    ) -> anyhow::Result<()> {
+        call_host_unit(
+            &self.tokio,
+            &mut self.runtime,
+            &self.host.set_memory_state,
+            &[
+                raw.to_string(),
+                segments_json.to_string(),
+                foreign_json.to_string(),
+            ],
+        )
+        .inspect_err(|_| self.clear_terminate_flag())?;
+        Ok(())
+    }
+
     pub fn bucket(&self) -> f64 {
         self.budget.bucket()
     }
@@ -791,6 +814,7 @@ struct HostFns {
     end_tick: v8::Global<v8::Function>,
     reset_modules: v8::Global<v8::Function>,
     set_raw_memory: v8::Global<v8::Function>,
+    set_memory_state: v8::Global<v8::Function>,
     drain_missing: v8::Global<v8::Function>,
     drain_stub_calls: v8::Global<v8::Function>,
 }
@@ -844,6 +868,7 @@ impl HostFns {
             end_tick: grab!(scope, host, "endTick"),
             reset_modules: grab!(scope, host, "resetModules"),
             set_raw_memory: grab!(scope, host, "setRawMemory"),
+            set_memory_state: grab!(scope, host, "setMemoryState"),
             drain_missing: grab!(scope, host, "drainMissing"),
             drain_stub_calls: grab!(scope, host, "drainStubCalls"),
         })

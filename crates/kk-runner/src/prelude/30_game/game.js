@@ -165,15 +165,49 @@
   // 残留；评审 P1 纠偏：此前持久对象导致写回失败后下一 tick 持续报错，非官方
   // 同形）。字符串本体 rawMemoryData 跨 tick 持久（官方 data.userMemory.data）
   let RawMemory;
-  // segments 持久后端（官方 data.userMemory 侧的 data.memorySegments——
-  // runtime.js:193-196 每 tick 拷入新对象、:250-266 tick 尾回收写回后端；
-  // 官方写回校验 ≤10 个/0-99/字符串——归 2B-9 segments 真实现批）
-  let segmentsBackend = __Object.create(null);
+  // M2B 扩面 P6：segments 全链（官方 runtime.js:122-200 API + runtime.js:250-269
+  // tick 尾回收）。**后端在协调器 PlayerState**（全量 100 槽存储+请求面）——
+  // prelude 只持有本 tick 注入的**活动窗口**（≤10 槽，宿主 setMemoryState 通道
+  // 注入，官方 data.memorySegments 同位）与 foreignSegment（官方
+  // data.foreignMemorySegment）。四请求闭包变量跨 tick 持久——官方闭包其实
+  // **每 tick 重置**（make 侧每 tick 重跑 _start，runtime.js 顶部 let 全部归
+  // undefined），持久化全靠 db（users.activeSegments 等）+「本 tick 调用过才
+  // emit」双要素；我方闭包持久 + 引擎 PlayerState 兜底 = 官方 db 兜底的等价
+  // 落点（评审 2 P2-2 勘正：勿按「官方闭包持久」类推新语义——emit 门形状
+  // 才是权威：active 无条件带出（[] 清空）、public 经 join(',') 空串被
+  // truthy-check 弃（[] no-op），两者形状不同）；tick 尾经 writeBackMemory
+  // 的 segmentsOut 信封带出
+  let segmentsWindow = __Object.create(null);
+  let foreignSegmentData;
+  let activeSegmentsReq = null;
+  let publicSegmentsReq = null;
+  let defaultPublicSegmentReq;
+  let foreignSegmentReq;
+  /** 官方 setActiveSegments 等四 API 的 id 校验公共段（runtime.js:130-184：
+   * `_.isArray` 门 + parseInt + NaN/越界 0..99 → throw——**throw 非 return**，
+   * 玩家侧 runtime error 同 tick 可 catch）。 */
+  function parseSegmentIds(ids) {
+    if (!lodash.isArray(ids)) {
+      throw new Error('"' + ids + '" is not an array');
+    }
+    const out = [];
+    for (let i = 0; i < ids.length; i++) {
+      const id = parseInt(ids[i]);
+      if (isNaN(id) || id > 99 || id < 0) {
+        throw new Error('"' + ids[i] + '" is not a valid segment ID');
+      }
+      out.push(id);
+    }
+    return out;
+  }
+
   function makeRawMemory() {
+    // 官方 runtime.js:192-199：每 tick 把 data.memorySegments 拷入新建
+    // null 原型对象（注入窗口的内容快照——玩家写它、tick 尾回收）
     const segs = __Object.create(null);
-    const entries = __objectEntries(segmentsBackend);
+    const entries = __objectEntries(segmentsWindow);
     for (let i = 0; i < entries.length; i++) segs[entries[i][0]] = entries[i][1];
-    return __Object.create(null, {
+    const props = {
       get: {
         value() { return rawMemoryData; },
       },
@@ -195,19 +229,71 @@
       },
       segments: { value: segs },
       interShardSegment: { value: '', writable: true },
-      // segments/foreign 族官方为真实现，归属 2B-9 批；桩面维持 countStub 仪表
-      // （descriptor 表内条目必须是 {value: fn}——裸函数会被当作无 value 的
-      // 描述符，属性塌成 undefined，RAWMEMORY-004/005 曾因此转红）
-      setActiveSegments: { value() { countStub('RawMemory.setActiveSegments'); return 0; } },
-      getActiveSegments: { value() { countStub('RawMemory.getActiveSegments'); return []; } },
-      getSegment: { value() { countStub('RawMemory.getSegment'); return ''; } },
-      setSegment: { value() { countStub('RawMemory.setSegment'); return 0; } },
-      setInterShardMemory: { value() { countStub('RawMemory.setInterShardMemory'); return 0; } },
-      getInterShardMemory: { value() { countStub('RawMemory.getInterShardMemory'); return ''; } },
-    });
+      // 官方 runtime.js:129-148（M2B 扩面 P6 真化——原 countStub 桩面摘除；
+      // 官方 RawMemory 无 getActiveSegments/getSegment/setSegment/
+      // setInterShardMemory/getInterShardMemory 面——bot 实测零消费后撤）
+      setActiveSegments: {
+        value(ids) {
+          const parsed = parseSegmentIds(ids);
+          if (parsed.length > 10) {
+            throw new Error('Only 10 memory segments can be active at the same time');
+          }
+          activeSegmentsReq = parsed;
+        },
+      },
+      setPublicSegments: {
+        value(ids) {
+          publicSegmentsReq = parseSegmentIds(ids);
+        },
+      },
+      setDefaultPublicSegment: {
+        value(id) {
+          if (id !== null) {
+            id = parseInt(id);
+            if (isNaN(id) || id > 99 || id < 0) {
+              throw new Error('"' + id + '" is not a valid segment ID');
+            }
+          }
+          defaultPublicSegmentReq = id;
+        },
+      },
+      setActiveForeignSegment: {
+        value(username, id) {
+          if (username === null) {
+            foreignSegmentReq = null;
+            return;
+          }
+          if (id !== undefined) {
+            id = parseInt(id);
+            if (isNaN(id) || id > 99 || id < 0) {
+              throw new Error('"' + id + '" is not a valid segment ID');
+            }
+          }
+          foreignSegmentReq = { username, id };
+        },
+      },
+    };
+    // 官方 runtime.js:200-205：foreignSegment 属性只在 data.foreignMemorySegment
+    // 存在时出现（null 原型对象 {username,id,data} 的浅拷贝）；未请求/未授权
+    // /未知名 → 整个属性 undefined
+    if (foreignSegmentData !== undefined) {
+      const fs = __Object.create(null);
+      const fEntries = __objectEntries(foreignSegmentData);
+      for (let i = 0; i < fEntries.length; i++) fs[fEntries[i][0]] = fEntries[i][1];
+      props.foreignSegment = { value: fs };
+    }
+    return __Object.create(null, props);
   }
   RawMemory = makeRawMemory();
   globalThis.RawMemory = RawMemory;
+
+  function safeSegErrorText(e) {
+    try {
+      return String((e && e.message) || e).slice(0, 200);
+    } catch (_) {
+      return 'unprintable segment error';
+    }
+  }
 
   function ensureMemory() {
     // 官方 game.js:479-497：无条件重解析（玩家预置 _parsed 会被覆盖，memhack
@@ -264,10 +350,81 @@
     sub[name] = value;
   };
 
+  /** 宿主注入通道（setMemoryState）：本 tick 的活动窗口内容与 foreignSegment
+   * （官方 data.memorySegments / data.foreignMemorySegment 同位——begin_tick
+   * 之前注入，协调器从 PlayerState 解算）。 */
+  function setSegmentsWindowHost(entriesJson) {
+    segmentsWindow = __Object.create(null);
+    const entries = __jsonParse(entriesJson);
+    if (lodash.isArray(entries)) {
+      for (let i = 0; i < entries.length; i++) {
+        segmentsWindow['' + entries[i][0]] = entries[i][1];
+      }
+    }
+  }
+  function setForeignSegmentHost(fsJson) {
+    const v = __jsonParse(fsJson);
+    foreignSegmentData = v === null || v === undefined ? undefined : v;
+  }
+
+  /** tick 尾 segments 信封（官方 runtime.js:250-292 + outMessage 四请求字段）：
+   * 窗口写回（校验 ≤10 槽/0-99/字符串/≤100KB——违例按官方 throw 同义走
+   * {ok:false} 整 tick 失败）+ 四请求闭包值**全量带出**（官方每 tick emit
+   * 同形；publicSegments 空列表丢弃——官方 truthy-check 弃空串 quirk，
+   * suite FOREIGN-008 注释实证）。 */
+  let segmentsOutStash;
+  function buildSegmentsOut() {
+    const entries = __objectEntries(RawMemory.segments);
+    if (entries.length > 10) {
+      throw new Error('Cannot save more than 10 memory segments on the same tick');
+    }
+    const writes = [];
+    for (let i = 0; i < entries.length; i++) {
+      const key = entries[i][0];
+      const id = parseInt(key);
+      const value = entries[i][1];
+      if (isNaN(id) || id > 99 || id < 0) {
+        throw new Error('"' + key + '" is not a valid memory segment ID');
+      }
+      if (typeof value !== 'string') {
+        throw new Error('Memory segment #' + key + ' is not a string');
+      }
+      if (value.length > 100 * 1024) {
+        throw new Error('Memory segment #' + key + ' has exceeded 100 KB length limit');
+      }
+      writes.push([id, value]);
+    }
+    const out = __Object.create(null);
+    out.writes = writes;
+    // active 无条件带出（null=本 tick 未调；[] 是合法的清空请求——官方
+    // runtime.js:287 无守卫，[] truthy 经 make 侧 $set 清库；评审 1/2 P1 清偿）
+    if (activeSegmentsReq !== null) out.active = activeSegmentsReq;
+    // public 的 [] 是 no-op（官方 join(',') 得 '' 被 truthy-check 弃——与
+    // active 的 [] 清空是两个不同的官方形状，勿合并）
+    if (publicSegmentsReq && publicSegmentsReq.length) out.public = publicSegmentsReq;
+    if (defaultPublicSegmentReq !== undefined) {
+      out.defaultPublic = defaultPublicSegmentReq === null ? null : defaultPublicSegmentReq;
+    }
+    if (foreignSegmentReq !== undefined) {
+      out.foreign = foreignSegmentReq === null ? null : {
+        username: foreignSegmentReq.username,
+        id: foreignSegmentReq.id === undefined ? null : foreignSegmentReq.id,
+      };
+    }
+    return out;
+  }
+
   function writeBackMemory() {
-    // segments tick 尾回收（官方 runtime.js:250-266 把 rawMemory.segments 写回
-    // 后端；校验归 2B-9——此处先无条件持引用，下 tick 拷入新对象）
-    segmentsBackend = RawMemory.segments;
+    // segments tick 尾回收（官方 runtime.js:250-269 校验+打包）：
+    // 在 try 外先行——违例 throw 与官方 make throw 同义（整 tick 写回失败）。
+    // 记忆写回成功（out.ok）时随信封带出；失败轮与 Memory 同弃（官方 run 的
+    // outMessage 整体丢失同构）
+    segmentsOutStash = null;
+    try {
+      segmentsOutStash = buildSegmentsOut();
+    } catch (e) {
+      return nullEnv({ ok: false, error: 'Segment 写回失败: ' + safeSegErrorText(e) });
+    }
     // 返回 {ok} | {ok:false,error}：screeps-ok 契约（adapter-spec:229）把 tick 末
     // 序列化失败归为 runPlayer 的 runtime 错误——不能只在 console 里报完就算成功。
     // 玩家侧写回错误（不可序列化 / Memory.toJSON 返回非字符串等）一律走这里，
@@ -468,6 +625,9 @@
         return C_ERR_FULL;
       },
       map: (() => {
+        // M2B 扩面 P6：MapVisual 惰性单例（官方 map.js:16 `let _visual`——
+        // 数据在 gw.addVisual 的 store（每 tick 重置），对象身份仅当 tick 稳定）
+        let _mapVisual;
         // ---------------------------------------------------------------- M2B 扩面 P3：map 族真化
         // 官方 map.js:11-268 逐方法对照。数据源=投影 rooms 键集（世界全房
         // 表——不可见房也携 terrain-only 条目；官方 mapGrid gridData 同位）。
@@ -741,6 +901,77 @@
           },
           // 官方 map.js:262-264：getRoomTerrain 返回 Room.Terrain 实例
           getRoomTerrain: (roomName) => new (gw.Terrain)(roomName),
+          // 官方 map.js:275-374（M2B 扩面 P6）：visual 惰性 getter——MapVisual
+          // 全套（世界坐标：RoomPosition 强制 + 各点携房名 n/n1/n2；style
+          // 缺省 {}；绘制经 addVisual("map",...)——map 桶 1000KB 上限）
+          get visual() {
+            if (!_mapVisual) {
+              _mapVisual = {};
+              Object.defineProperties(_mapVisual, {
+                circle: { value: function (pos, style) {
+                  if (!(pos instanceof globalThis.RoomPosition)) {
+                    throw new Error('Invalid pos, RoomPosition expected');
+                  }
+                  gw.addVisual('map', { t: 'c', x: pos.x, y: pos.y, n: pos.roomName, s: style || {} });
+                  return this;
+                } },
+                line: { value: function (pos1, pos2, style) {
+                  if (!(pos1 instanceof globalThis.RoomPosition)) {
+                    throw new Error('Invalid pos1, RoomPosition expected');
+                  }
+                  if (!(pos2 instanceof globalThis.RoomPosition)) {
+                    throw new Error('Invalid pos2, RoomPosition expected');
+                  }
+                  gw.addVisual('map', {
+                    t: 'l',
+                    x1: pos1.x, y1: pos1.y, n1: pos1.roomName,
+                    x2: pos2.x, y2: pos2.y, n2: pos2.roomName,
+                    s: style || {},
+                  });
+                  return this;
+                } },
+                rect: { value: function (pos, w, h, style) {
+                  if (!(pos instanceof globalThis.RoomPosition)) {
+                    throw new Error('Invalid pos, RoomPosition expected');
+                  }
+                  gw.addVisual('map', { t: 'r', x: pos.x, y: pos.y, n: pos.roomName, w, h, s: style || {} });
+                  return this;
+                } },
+                poly: { value: function (points, style) {
+                  if (Array.isArray(points) && points.some(Boolean)) {
+                    points = points.map((i) => {
+                      const p = i.pos || i;
+                      return { x: p.x, y: p.y, n: p.roomName };
+                    });
+                    gw.addVisual('map', { t: 'p', points, s: style || {} });
+                  }
+                  return this;
+                } },
+                text: { value: function (text, pos, style) {
+                  if (!(pos instanceof globalThis.RoomPosition)) {
+                    throw new Error('Invalid pos , RoomPosition expected');
+                  }
+                  gw.addVisual('map', { t: 't', text, x: pos.x, y: pos.y, n: pos.roomName, s: style || {} });
+                  return this;
+                } },
+                clear: { value: function () {
+                  gw.clearVisual('map');
+                  return this;
+                } },
+                getSize: { value: function () {
+                  return gw.getVisualSize('map');
+                } },
+                export: { value: function () {
+                  return gw.getVisual('map');
+                } },
+                import: { value: function (data) {
+                  gw.addVisual('map', '' + data);
+                  return this;
+                } },
+              });
+            }
+            return _mapVisual;
+          },
           // 官方 map.js:235-258：返回 'wall'|'swamp'|'plain'（完整词，非缩写）；
           // 越界或无地形数据 → undefined。M0 世界仅在 createShard/setTerrain 提供
           // 地形时可用（bit 语义同官方 TERRAIN_MASK_*）
@@ -860,6 +1091,18 @@
     rawMemoryDataHost() {
       return rawMemoryData;
     },
+    /** 宿主私有通道（M2B 扩面 P6）：注入本 tick 的 segments 活动窗口（官方
+     *  data.memorySegments——协调器从 PlayerState 按 active_request 解算；
+     *  beginTick 重建 RawMemory 时拷入）。 */
+    setSegmentsWindowHost,
+    /** 宿主私有通道（P6）：注入本 tick 的 foreignSegment（官方
+     *  data.foreignMemorySegment——null 串表示无）。 */
+    setForeignSegmentHost,
+    /** 宿主私有通道（P6）：tick 尾 segments 信封（writeBackMemory 成功打包的
+     *  写回+四请求快照；endTick 随 rawMemory 一并带出——失败轮为 null）。 */
+    segmentsOutHost() {
+      return segmentsOutStash;
+    },
     /** 每 tick 注入世界快照（宿主经私有句柄以字符串参数传入——下方双分支
      *  兼容 string/对象两种形态）并重建 Game。 */
     beginTick(worldJson, cpuMeta) {
@@ -915,6 +1158,9 @@
         get() { return ensureMemory(); },
       });
       gw.terrainByRoom = {};
+      // M2B 扩面 P6：visual 存储每 tick 重置（官方后端每 tick getVisual drain
+      // 同语义——绘制只活在当 tick）
+      if (gw.visualReset) gw.visualReset();
       const terrainEntries = __objectEntries(gw.world.rooms || {});
       for (let i = 0; i < terrainEntries.length; i++) {
         const roomName = terrainEntries[i][0];

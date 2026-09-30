@@ -12,6 +12,8 @@ mod embed_channels_and_families;
 mod embed_roundtrip_contract;
 #[path = "embed_tests/embed_strictness_and_partial_commit.rs"]
 mod embed_strictness_and_partial_commit;
+#[path = "embed_tests/m2b_closing_family.rs"]
+mod m2b_closing_family;
 #[path = "embed_tests/m2b_creation_family.rs"]
 mod m2b_creation_family;
 #[path = "embed_tests/m2b_creep_tails.rs"]
@@ -30,6 +32,7 @@ use dual_room_live_fire::*;
 use embed_channels_and_families::*;
 use embed_roundtrip_contract::*;
 use embed_strictness_and_partial_commit::*;
+use m2b_closing_family::*;
 use m2b_creation_family::*;
 use m2b_creep_tails::*;
 use m2b_map_notify_cpu_family::*;
@@ -85,6 +88,7 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     m2b_structure_readfaces_e2e_impl()?;
     m2b_structure_defaults_probe_impl()?;
     m2b_structure_actions_e2e_impl()?;
+    m2b_closing_e2e_impl()?;
     assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");
     Ok(())
 }

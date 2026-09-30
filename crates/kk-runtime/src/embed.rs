@@ -574,20 +574,38 @@ impl EmbedEngine {
             let Some(code) = codes.get(&handle) else {
                 continue;
             };
+            // P6 注入解算先行（resolve_foreign_segment 借 self——须在 players
+            // 可变借用之前完成）
+            let state = self.engine.players.get(&handle);
+            let raw_mem = state.map(|p| p.raw_memory.clone()).unwrap_or_default();
+            let segments_json = match state {
+                Some(p) if !p.active_request.is_empty() => serde_json::to_string(
+                    &p.active_request
+                        .iter()
+                        .map(|id| (*id, p.segments.get(id).cloned().unwrap_or_default()))
+                        .collect::<Vec<(u8, String)>>(),
+                )
+                .unwrap_or_else(|_| "[]".into()),
+                _ => "[]".into(),
+            };
+            let foreign_json = self
+                .resolve_foreign_segment(&handle)
+                .unwrap_or(serde_json::Value::Null);
             let players = self
                 .players
                 .as_mut()
                 .ok_or_else(|| anyhow::anyhow!("分片未创建"))?;
             // ①注入：每 tick 从已提交的 PlayerState.raw_memory 恢复（官方
-            // make.js 每 tick 从存档恢复同构——世界回退轮注入的仍是旧值）
-            let inject = players.set_raw_memory(
+            // make.js 每 tick 从存档恢复同构——世界回退轮注入的仍是旧值）；
+            // M2B 扩面 P6：segments 活动窗口（按 active_request 从全量存储
+            // 解算，未写过的槽物化空串——suite RAWMEMORY-003「请求即出现」）
+            // 与 foreignSegment（每 tick 按当前授权重新解析——FOREIGN-008
+            // 撤回下 tick 生效）一并注入
+            let inject = players.set_memory_state(
                 &handle,
-                &self
-                    .engine
-                    .players
-                    .get(&handle)
-                    .map(|p| p.raw_memory.clone())
-                    .unwrap_or_default(),
+                &raw_mem,
+                &segments_json,
+                &foreign_json.to_string(),
             );
             assert_bound();
             inject?;
@@ -620,6 +638,89 @@ impl EmbedEngine {
         batch
     }
 
+    /// 解算某玩家的 foreignSegment（M2B 扩面 P6，官方 driver 后端的等价物）：
+    /// 请求 None → 无；发布者不存在（含 NPC 名）→ 无（FOREIGN-007 优雅失败）；
+    /// id 显式 → 须在发布者 public_ids（FOREIGN-009）；id 缺省 → 发布者
+    /// default_public（FOREIGN-004）；授权不过 → 无。命中给
+    /// {username, id, data}——未写过的槽 data 为 **null**（官方 data.js:258
+    /// hget 缺失即 null，与活动槽 :251 的 `|| ""` 刻意不对称；评审 1 P2-3/评审
+    /// 2 P2-1 清偿）。
+    fn resolve_foreign_segment(&self, reader: &str) -> Option<serde_json::Value> {
+        let req = self.engine.players.get(reader)?.foreign_request.clone()?;
+        let (username, id_opt) = req;
+        let publisher = self.engine.players.get(&username)?;
+        let id = match id_opt {
+            Some(id) => {
+                if !publisher.public_ids.contains(&id) {
+                    return None;
+                }
+                id
+            }
+            // 默认段同样须在公开集内（FOREIGN-008：撤回公开集即断供——
+            // defaultPublic 残留不构成授权）
+            None => {
+                let id = publisher.default_public?;
+                if !publisher.public_ids.contains(&id) {
+                    return None;
+                }
+                id
+            }
+        };
+        Some(serde_json::json!({
+            "username": username,
+            "id": id,
+            "data": publisher
+                .segments
+                .get(&id)
+                .map(|s| serde_json::Value::String(s.clone()))
+                .unwrap_or(serde_json::Value::Null),
+        }))
+    }
+
+    /// 提交 segments 信封（P6）：窗口写回合并进全量存储 + 四请求落 PlayerState
+    /// （缺省键 = 本 tick 未调 → 保持旧值。官方对照：runtime 闭包每 tick 重置、
+    /// 持久化在 db——「未调不 emit → make 侧不动 db」与我方「缺省键保持」等价；
+    /// 评审 2 P2-2 勘正，勿按「官方闭包持久」类推）。`as u8` 前先过 0..=99 门
+    /// （prelude 已校验，此处纯防御——畸形值截断成 0 会静默污染 0 号槽）。
+    fn commit_segments(&mut self, handle: &str, out: &serde_json::Value) {
+        let Some(state) = self.engine.players.get_mut(handle) else {
+            return;
+        };
+        let seg_id = |v: &serde_json::Value| -> Option<u8> {
+            let n = v.as_u64()?;
+            (n <= 99).then_some(n as u8)
+        };
+        if let Some(writes) = out.get("writes").and_then(|v| v.as_array()) {
+            for pair in writes {
+                let (Some(id), Some(val)) = (
+                    pair.get(0).and_then(&seg_id),
+                    pair.get(1).and_then(|v| v.as_str()),
+                ) else {
+                    continue; // prelude 已校验；此处防御畸形（不可信输入纪律）
+                };
+                state.segments.insert(id, val.to_string());
+            }
+        }
+        if let Some(active) = out.get("active").and_then(|v| v.as_array()) {
+            state.active_request = active.iter().filter_map(seg_id).collect();
+        }
+        if let Some(public) = out.get("public").and_then(|v| v.as_array()) {
+            state.public_ids = public.iter().filter_map(seg_id).collect();
+        }
+        if let Some(dp) = out.get("defaultPublic") {
+            state.default_public = dp.as_u64().and_then(|n| (n <= 99).then_some(n as u8));
+        }
+        if let Some(foreign) = out.get("foreign") {
+            state.foreign_request = match foreign {
+                serde_json::Value::Null => None,
+                v => v
+                    .get("username")
+                    .and_then(|u| u.as_str())
+                    .map(|username| (username.to_string(), v.get("id").and_then(seg_id))),
+            };
+        }
+    }
+
     /// ⑤提交：玩家持久状态一次切换（RawMemory 候选 + 计费候选落桶）。
     fn commit_players(&mut self, results: &BTreeMap<String, RunResult>) {
         for (handle, result) in results {
@@ -627,6 +728,10 @@ impl EmbedEngine {
                 && let Some(raw) = &result.raw_memory
             {
                 state.raw_memory = raw.clone();
+            }
+            // P6：segments 信封候选（写回成功轮才携带——失败轮与 Memory 同弃）
+            if let Some(segments) = &result.segments_out {
+                self.commit_segments(handle, segments);
             }
         }
         if let Some(players) = &mut self.players {

@@ -57,12 +57,16 @@ pub struct EvalReport {
     pub cpu_billed_ms: Option<f64>,
     /// RawMemory 候选（写回成功时的 rawMemoryData 快照；None = 写回失败/未达）。
     pub raw_memory: Option<String>,
+    /// segments 信封候选（P6：窗口写回+四请求；None = 写回失败/未达）。
+    pub segments_out: Option<Value>,
 }
 
 enum Cmd {
     SetModules(ModuleTable, mpsc::Sender<anyhow::Result<()>>),
     /// 注入 RawMemory 初值（tick 边界——协调层提交点统一驱动的通道面）。
     SetRawMemory(String, mpsc::Sender<anyhow::Result<()>>),
+    /// 注入记忆全量态（P6）：raw + segments 窗口 JSON + foreignSegment JSON。
+    SetMemoryState(String, String, String, mpsc::Sender<anyhow::Result<()>>),
     /// 提交计费候选（统一提交点的成功臂）。
     SettleBill(mpsc::Sender<anyhow::Result<()>>),
     /// 丢弃计费候选（统一提交点的失败/回退臂）。
@@ -138,6 +142,9 @@ impl PlayerThreads {
                         Cmd::SetRawMemory(data, ack) => {
                             let _ = ack.send(sandbox.set_raw_memory(&data));
                         }
+                        Cmd::SetMemoryState(raw, segs, foreign, ack) => {
+                            let _ = ack.send(sandbox.set_memory_state(&raw, &segs, &foreign));
+                        }
                         Cmd::SettleBill(ack) => {
                             sandbox.settle_bill();
                             let _ = ack.send(Ok(()));
@@ -201,6 +208,27 @@ impl PlayerThreads {
         let p = self.player_mut(id)?;
         let (ack_tx, ack_rx) = mpsc::channel();
         p.send(Cmd::SetRawMemory(data.to_string(), ack_tx));
+        ack_rx
+            .recv()
+            .map_err(|_| anyhow::anyhow!("玩家 {id} 线程无响应"))?
+    }
+
+    /// 注入记忆全量态（P6；Sandbox::set_memory_state 的池接入面）。
+    pub fn set_memory_state(
+        &mut self,
+        id: u64,
+        raw: &str,
+        segments_json: &str,
+        foreign_json: &str,
+    ) -> anyhow::Result<()> {
+        let p = self.player_mut(id)?;
+        let (ack_tx, ack_rx) = mpsc::channel();
+        p.send(Cmd::SetMemoryState(
+            raw.to_string(),
+            segments_json.to_string(),
+            foreign_json.to_string(),
+            ack_tx,
+        ));
         ack_rx
             .recv()
             .map_err(|_| anyhow::anyhow!("玩家 {id} 线程无响应"))?
@@ -457,6 +485,7 @@ fn run_eval_tick(sandbox: &mut Sandbox, world: &Value, code: &str) -> anyhow::Re
                 intents: Value::Null,
                 cpu_billed_ms: bill,
                 raw_memory: None,
+                segments_out: None,
             });
         }
     };
@@ -474,6 +503,7 @@ fn run_eval_tick(sandbox: &mut Sandbox, world: &Value, code: &str) -> anyhow::Re
             intents: Value::Null,
             cpu_billed_ms: None,
             raw_memory: None,
+            segments_out: None,
         }),
         TickPlan::Run { .. } => {
             let mut expr = sandbox.run_expr(code)?;
@@ -505,6 +535,7 @@ fn run_eval_tick(sandbox: &mut Sandbox, world: &Value, code: &str) -> anyhow::Re
                 // 候选带出（B0-5 统一提交点）：计费与 RawMemory 都由协调器在
                 // 世界结算成功后提交（settle_bill/PlayerState），失败轮丢弃
                 cpu_billed_ms: sandbox.pending_bill(),
+                segments_out: writeback.get("segmentsOut").cloned(),
                 raw_memory: writeback
                     .get("rawMemory")
                     .and_then(Value::as_str)
