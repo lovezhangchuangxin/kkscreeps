@@ -192,7 +192,7 @@ fn engine_scripted_sandbox_closed_loop() {
         .unwrap();
 
     // 每 tick：采 + 升（脚本是按当前 tick 注入的静态批）
-    // 脚本按当前 world.time 匹配：Engine 首 tick 的 time=0，覆盖 0..10
+    // 脚本按当前 world.time() 匹配：Engine 首 tick 的 time=0，覆盖 0..10
     let mut sandbox = kk_engine::ScriptedSandbox::new();
     let mut batch = IntentBatch::default();
     batch.add_object_intent("p1", creep, Action::Harvest, IntentData::target(src));

@@ -136,7 +136,7 @@ impl Sandbox for ScriptedSandbox {
             outcome: RunOutcome::Executed,
             intents: self
                 .script
-                .get(&view.world.time)
+                .get(&view.world.time())
                 .cloned()
                 .unwrap_or_default(),
             expr: serde_json::json!({ "ok": true }),
@@ -156,7 +156,7 @@ mod tests {
     #[test]
     fn replays_by_tick() {
         let mut world = kk_world::World::new(1);
-        world.time = 5;
+        world.set_time_for_test(5);
         {
             let view = WorldView { world: &world };
             let mut sb = ScriptedSandbox::new();
@@ -172,7 +172,7 @@ mod tests {
             assert_eq!(got.intents, batch);
             assert_eq!(got.outcome, RunOutcome::Executed);
         }
-        world.time = 6;
+        world.set_time_for_test(6);
         let view = WorldView { world: &world };
         assert!(
             ScriptedSandbox::new()

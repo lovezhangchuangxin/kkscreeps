@@ -416,7 +416,7 @@ pub(super) fn intent_generate_safe_mode(w: &mut Working, id: ObjId, data: &Inten
 }
 
 fn controller_levels(level: u8) -> u64 {
-    kk_world::snapshot::controller_progress_total_opt(level).unwrap_or(0) as u64
+    kk_world::domain::controller_progress_total_opt(level).unwrap_or(0) as u64
 }
 
 fn controller_downgrade(level: u8) -> u64 {

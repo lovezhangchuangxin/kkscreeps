@@ -422,8 +422,8 @@ pub(super) fn destroy_structure(w: &mut Working, id: ObjId) {
         .unwrap_or(c::RUIN_DECAY) as u64;
     let hits_max = structure_hits_max(w, obj).map(|v| v.clamp(0, u32::MAX as i64) as u32);
     // :37-38：user 仅真值落（官方 `if(object.user)`——空串 falsy）；
-    // 归属语义与投影/视野面共 kk_world::world_json::object_owner 单源（P1）
-    let owner = kk_world::world_json::object_owner(obj)
+    // 归属语义与投影/视野面共 kk_world::domain::object_owner 单源（P1）
+    let owner = kk_world::domain::object_owner(obj)
         .filter(|o| !o.is_empty())
         .map(|o| o.into_owned());
     // :40：store = object.store || {}（全量承接——双槽 + 额外资源）

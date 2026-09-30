@@ -101,7 +101,7 @@ fn snap_pos(room: &str, x: u8, y: u8) -> Value {
 /// 双槽口径（spawn/extension 专用——无 store_extra）；creep/storage 的全资源
 /// 面走 [`snap_store_extra`]（B4：命名矿物槽并入，层间一致）
 fn snap_store(store: &kk_schema::room::Store) -> Value {
-    Value::Object(crate::world_json::store_positive_entries(store))
+    Value::Object(crate::domain::store_positive_entries(store))
 }
 
 /// [`snap_store`] 的双槽 + 额外资源列表形态（B3：tombstone/ruin 的全资源
@@ -110,8 +110,8 @@ fn snap_store_extra(
     store: &kk_schema::room::Store,
     extra: &[kk_schema::room::ResourceStack],
 ) -> Value {
-    let mut v = crate::world_json::store_positive_entries(store);
-    crate::world_json::apply_store_extra(&mut v, extra);
+    let mut v = crate::domain::store_positive_entries(store);
+    crate::domain::apply_store_extra(&mut v, extra);
     Value::Object(v)
 }
 
@@ -146,28 +146,14 @@ fn creep_store_capacity(body: &[kk_schema::room::BodyPart]) -> Value {
 
 /// 官方 progressTotal：1..7 级查 CONTROLLER_LEVELS；0 级与 8 级为 null
 /// （vanilla：`level > 0 && level < 8 ? LEVELS[level] : null`——level 8 无进度条）。
-/// 与 world_json 的 prelude 投影（0 兜底）不同形，属两消费面各自契约。
+/// 与 world_json 的 prelude 投影（0 兜底）不同形，属两消费面各自契约
+///（共核 `crate::domain::controller_progress_total_opt`——M2B 扩面 P0 起
+/// 领域模块单源）。
 fn controller_progress_total(level: u8) -> Value {
-    match controller_progress_total_opt(level) {
+    match crate::domain::controller_progress_total_opt(level) {
         Some(v) => json!(v),
         None => Value::Null,
     }
-}
-
-/// [`controller_progress_total`] 的共核（M2B P4 单源）：1..7 级查
-/// CONTROLLER_LEVELS；0/8 级无进度条。消费侧各自折叠——快照 Null 兜底
-///（契约面）、世界投影 0 兜底（prelude 数值面）、结算侧 upgrade 量 0 兜底
-///（economy/creep controller 的 controller_levels——评审 3 P2-1 勘测盲区
-/// 收编：表仅含 "1".."7"，旧结算版无守卫但 miss→0 与 opt 折叠全域等价）。
-pub fn controller_progress_total_opt(level: u8) -> Option<i64> {
-    if level == 0 || level >= 8 {
-        return None;
-    }
-    let key = level.to_string();
-    c::CONTROLLER_LEVELS
-        .iter()
-        .find(|(k, _)| *k == key)
-        .map(|(_, v)| *v)
 }
 
 /// typed 对象 → 契约快照（逐组对照 vanilla snapshots.ts）。
@@ -236,7 +222,7 @@ fn snapshot_json(
                 "isPowerEnabled": o.is_power_enabled,
             });
             // 归属三态（与 world_json 同形——controller_owner_value 单源）
-            if let Some(val) = crate::world_json::controller_owner_value(o) {
+            if let Some(val) = crate::domain::controller_owner_value(o) {
                 v["owner"] = val;
             }
             v

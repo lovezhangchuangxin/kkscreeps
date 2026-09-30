@@ -76,7 +76,7 @@ impl WorldSource for kk_world::World {
     }
 
     fn game_time(&self) -> u64 {
-        self.time
+        kk_world::World::time(self)
     }
 }
 
@@ -94,13 +94,13 @@ mod tests {
         let source: &dyn WorldSource = &world;
         assert_eq!(source.generation(), world.generation());
         assert_eq!(source.terrain_epoch(), world.terrain_epoch());
-        assert_eq!(source.game_time(), world.time);
+        assert_eq!(source.game_time(), world.time());
         assert_eq!(
             source.room_version("W1N1").unwrap(),
             world.room_version("W1N1").unwrap()
         );
         assert!(source.room_version("nope").is_none());
-        assert_eq!(source.world_json_for_viewer("p", 0)["time"], world.time);
+        assert_eq!(source.world_json_for_viewer("p", 0)["time"], world.time());
         assert!(source.object_snapshot("zz").is_none());
         assert!(source.find_in_room("W1N1", 1).is_empty());
     }

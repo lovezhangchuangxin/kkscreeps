@@ -372,7 +372,7 @@ fn notify_when_attacked(w: &mut Working, player: &str, id: ObjId, data: &IntentD
     let Some(obj) = w.room.objects.get(&id) else {
         return;
     };
-    if kk_world::world_json::object_owner(obj).is_some_and(|owner| owner != player) {
+    if kk_world::domain::object_owner(obj).is_some_and(|owner| owner != player) {
         return; // 官方 :248：他人对象（无主不拦——中性墙/路可设）
     }
     // 官方 :313 门：CONSTRUCTION_COST[object.type] || creep || powerCreep
@@ -634,10 +634,10 @@ impl Engine {
         // 已有生效中的 safeMode → 该玩家全部 ActivateSafeMode intent 丢弃
         //（官方 BUSY 拒 = intent 不记；检查时点同官方 API 调用时读上一 tick
         // 结束态，本 tick 新激活的时钟此刻尚未落库，跨房多开被结构性封死）
-        let time = self.world.time;
+        let time = self.world.time();
         let mut safemode_holders: Vec<String> = self
             .world
-            .rooms
+            .rooms()
             .values()
             .flat_map(|r| r.objects.values())
             .filter_map(|o| match o {
@@ -656,15 +656,15 @@ impl Engine {
                 }
             }
         }
-        let room_names: Vec<String> = self.world.rooms.keys().cloned().collect();
+        let room_names: Vec<String> = self.world.rooms().keys().cloned().collect();
         for name in room_names {
             if self.fail_room.as_deref() == Some(name.as_str()) {
                 return Err(SettleError(format!("故障注入：房间 {name} 结算失败")));
             }
-            let mut room = self.world.rooms.get(&name).expect("房间名来自键集").clone();
+            let mut room = self.world.room(&name).expect("房间名来自键集").clone();
             let mut room_events = settle_room(
                 &mut room,
-                self.world.time,
+                self.world.time(),
                 input.now_ms,
                 &mut next,
                 &mut players,
@@ -674,7 +674,7 @@ impl Engine {
             events.append(&mut room_events);
         }
         for (name, room) in settled {
-            self.world.rooms.insert(name, room);
+            self.world.commit_room(name, room);
         }
         // user.rooms 重建（官方不动点，见 PlayerState 文档）：claimController
         // 的 addRoomToUser（claimController.js:55）与每 tick 已占房重加
@@ -684,7 +684,7 @@ impl Engine {
         for state in players.values_mut() {
             state.rooms.clear();
         }
-        for room in self.world.rooms.values() {
+        for room in self.world.rooms().values() {
             if let Some(owner) = room.objects.values().find_map(|o| match o {
                 RoomObject::Controller(c) => c.owner.clone(),
                 _ => None,
@@ -748,7 +748,7 @@ mod tests {
         let mut engine = Engine::new(world);
         engine.fail_room = Some("W2N2".into());
         assert!(engine.tick().is_err(), "注入房 Err ⇒ 整体 Err");
-        assert_eq!(engine.world.time, 0, "time 不推进");
+        assert_eq!(engine.world.time(), 0, "time 不推进");
         for name in ["W1N1", "W2N2"] {
             match engine.world.room(name).unwrap().objects.values().next() {
                 Some(RoomObject::Source(s)) => {
@@ -761,7 +761,7 @@ mod tests {
         // 故障解除后正常推进：两房同一 tick 挂钟（time=0 → 300）
         engine.fail_room = None;
         engine.tick().unwrap();
-        assert_eq!(engine.world.time, 1);
+        assert_eq!(engine.world.time(), 1);
         for name in ["W1N1", "W2N2"] {
             match engine.world.room(name).unwrap().objects.values().next() {
                 Some(RoomObject::Source(s)) => {

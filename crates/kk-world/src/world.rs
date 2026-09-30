@@ -136,24 +136,32 @@ struct ObjDir {
 /// 世界（M1：房间集合 + 全局时间；玩家分片语义在 embed 层）。
 #[derive(Debug, Clone)]
 pub struct World {
-    pub time: u64,
+    /// 世界时间（M2B 扩面 P0 收敛：pub(crate)——外部读取经 [`World::time`]，
+    /// 推进经 [`World::advance_ticks`]，跨 crate 测试/夹具摆钟经
+    /// [`World::set_time_for_test`]；crate 内测试仍直写（pub(crate) 放行，
+    /// 构造期无害口径）。直写不 bump 代际的旧纪律不变，跨 crate 面由
+    /// 可见性收口强制。
+    pub(crate) time: u64,
     pub seed: u64,
     /// 已经过玩家 tick（setTerrain 只允许在 0 时调用——screeps-ok 契约）。
     pub player_ticks: u64,
     /// **硬纪律（O1 后果升级，评审 P2-8 挑战登记口径）**：直写本字段而不
     /// bump 代际，对象目录/`max_id_cache` 将供陈旧定位——get 误报 None、
-    /// remove 静默失败（较投影缓存陈旧更重）。直写后必经 advance_ticks
-    ///（结算提交尾现状即如此，见 generation 字段注释）。收敛归 M2B。
-    pub rooms: BTreeMap<String, RoomState>,
+    /// remove 静默失败（较投影缓存陈旧更重）。**M2B 扩面 P0 已收敛
+    /// pub(crate)**（双房批 P2-8/O1 双登记的兑现）：外部读经
+    /// [`World::rooms`]/[`World::room`]，整房写回经 [`World::commit_room`]
+    ///（代际纪律——调用方必经 advance_ticks——见 [`World::commit_room`]）。
+    pub(crate) rooms: BTreeMap<String, RoomState>,
     /// 全局 id 分配器（跨房间唯一；快照每房 header 存同一全局值）。
     next_obj_id: u64,
     /// 世界内容代际（M2B 前置批 P2，ADR-013 决策 2）：任何已提交内容变更
     /// 单调递增——投影缓存失效键、对象目录/`max_id_cache` 的失效键
     ///（O1，双房批）与 [`RoomVersionHandle`] 的内容分量。
     /// bump 点 = 全部内容可变面（insert/remove/set_terrain/register_room/
-    /// advance_ticks + room_mut/get_mut 保守覆盖）；kk-engine 提交尾直接
-    /// 写回 `rooms` 字段后必经 advance_ticks，代际随之递增。结算失败路径
-    /// 不 bump（世界未变）。
+    /// advance_ticks + room_mut/get_mut 保守覆盖）；kk-engine 提交尾经
+    /// [`World::commit_room`] 整房写回后必经 advance_ticks，代际随之递增
+    ///（commit_room 自身不 bump——「一次成功 tick ⇒ 恰 +1」由 advance_ticks
+    /// 单点承载）。结算失败路径不 bump（世界未变）。
     generation: u64,
     /// 地形纪元：仅地形**实际替换**时递增（register_room 新房 / set_terrain）
     /// ——地形缓存的失效键（M2B 前置批 P3 消费）。地形首玩家 tick 后不可变，
@@ -237,7 +245,7 @@ impl World {
     /// 推进时间（player_ticks 的唯一维护点——setTerrain 守卫依赖它）。
     /// 同时递增内容代际：投影的时钟折叠面（ticksToRegeneration 等）读
     /// `time`，tick 推进即投影内容变化，缓存必须失效；kk-engine 的结算
-    /// 提交尾（直接写回 rooms 后）以本方法收束，代际随之覆盖。
+    /// 提交尾（经 commit_room 整房写回后）以本方法收束，代际随之覆盖。
     pub fn advance_ticks(&mut self, n: u64) {
         self.time += n;
         self.player_ticks += n;
@@ -300,6 +308,35 @@ impl World {
 
     pub fn room(&self, name: &str) -> Option<&RoomState> {
         self.rooms.get(name)
+    }
+
+    /// 只读全房视图（P0 收敛读取面：keys/values/迭代消费走此——
+    /// `rooms` 字段 pub(crate) 后的外部访问口）。
+    pub fn rooms(&self) -> &BTreeMap<String, RoomState> {
+        &self.rooms
+    }
+
+    /// 当前世界时间（P0 收敛读取面；推进经 [`Self::advance_ticks`]）。
+    pub fn time(&self) -> u64 {
+        self.time
+    }
+
+    /// 结算提交尾的整房写回口（P0 收敛：外部唯一整房替换写路径——
+    /// 就地内容变更走 room_mut，自带保守 bump）。
+    /// **代际不在此 bump**——调用方（结算提交尾）必经
+    /// [`Self::advance_ticks`] 收束，「一次成功 tick ⇒ generation 恰 +1」
+    /// 的既有不变量（engine 级测试锁定）由 advance_ticks 单点承载；
+    /// 失败回退路径不调用本方法（世界未变）。
+    pub fn commit_room(&mut self, name: String, state: RoomState) {
+        self.rooms.insert(name, state);
+    }
+
+    /// 测试/夹具的构造期摆钟（P0 收敛：语义与旧 pub 直写逐点一致——不动
+    /// player_ticks/generation，构造期无害系 P2 前置批登记口径）。
+    /// #[doc(hidden)] 测试旋钮先例：`set_fail_room_for_test` 等。
+    #[doc(hidden)]
+    pub fn set_time_for_test(&mut self, t: u64) {
+        self.time = t;
     }
 
     /// **禁写 `terrain` 字段**（P3 钉子，评审 2 P2-1）：纪元不随本方法的
@@ -399,8 +436,9 @@ impl World {
         self.terrain_epoch
     }
 
-    /// 显式递增代际（防御面：绕过 World 方法直接写 `rooms` 字段的调用位——
-    /// 正常路径由各方法内置 bump 覆盖，本方法供此类调用方显式声明提交）。
+    /// 显式递增代际（防御面：绕过 World 方法写 rooms 内容的调用位——
+    /// P0 pub(crate) 收敛后跨 crate 已结构性封死，仅剩 crate 内直写；正常
+    /// 路径由各方法内置 bump 覆盖，本方法供此类调用方显式声明提交）。
     pub fn bump_generation(&mut self) {
         self.generation += 1;
     }
@@ -568,18 +606,34 @@ mod tests {
         }
     }
 
-    /// O1 目录：结算式提交（直接写 rooms 字段 + advance_ticks 收束）后
+    /// set_time_for_test 负向语义（M2B 扩面 P0 评 3 P2-1 清偿）：与旧 pub
+    /// 直写逐点等价——不动 generation/player_ticks（若有人令其顺带 bump 或
+    /// 拨 player_ticks 翻转 set_terrain 守卫，此测试红）。
+    #[test]
+    fn set_time_for_test_touches_only_time() {
+        let mut world = World::new(1);
+        world.register_room("W1N1", Terrain::plains());
+        let g0 = world.generation();
+        let pt0 = world.player_ticks;
+        world.set_time_for_test(5);
+        assert_eq!(world.time(), 5);
+        assert_eq!(world.generation(), g0, "摆钟不 bump 代际");
+        assert_eq!(world.player_ticks, pt0, "摆钟不动 player_ticks");
+    }
+
+    /// O1 目录：结算式提交（经 commit_room 整房写回 + advance_ticks 收束）后
     /// 目录经代际 bump 懒重建吸收新对象——generation 不变量的消费面。
     #[test]
     fn obj_dir_rebuilds_after_settle_style_commit() {
         let mut world = World::new(1);
         world.register_room("W1N1", Terrain::plains());
         let a = world.insert("W1N1", energy(1)).unwrap();
-        // 模拟结算提交尾：直接替换 rooms 内容（不经 World 方法）
+        // 模拟结算提交尾：commit_room 整房写回（自身不 bump——与真实提交尾
+        // 同语义），代际由 advance_ticks 承载
         let mut room = RoomState::new("W1N1", Terrain::plains());
         room.insert_with_id(a.0, energy(2)).unwrap();
         room.insert_with_id(777, energy(3)).unwrap();
-        world.rooms.insert("W1N1".to_string(), room);
+        world.commit_room("W1N1".to_string(), room);
         world.advance_ticks(1);
         // bump 后首次触达重建 → 新对象可见
         assert!(world.get(ObjId(777)).is_some(), "提交尾新对象经目录可见");

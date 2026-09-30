@@ -790,7 +790,7 @@ fn activate_safe_mode_full_chain() {
     // 数值比较中是 0 >= 0 → 拒（JS null 强制转换角落，行为已由
     // activate_safe_mode_rejections 的 cooldown 用例锁住）
     let mut f = Fixture::new(1, terrain_with(&[]));
-    f.world.time = 10;
+    f.world.set_time_for_test(10);
     let ctl = f.controller_full(1, Some("p1"), |t| {
         t.safe_mode_available = 1;
         t.downgrade_time = Some(10 + 20_001); // 健康窗：>= time + 20000/2 − 5000
@@ -817,7 +817,7 @@ fn activate_safe_mode_rejections() {
     // activateSafeMode.js 逐门：无 available（:11）、冷却中（:14）、
     // upgradeBlocked（:17）、降级危险窗（:20）、无主/0 级（:8）
     fn base(f: &mut Fixture, tweak: &dyn Fn(&mut kk_schema::room::ControllerObj)) -> ObjId {
-        f.world.time = 10;
+        f.world.set_time_for_test(10);
         f.controller_full(1, Some("p1"), |t| {
             t.safe_mode_available = 1;
             t.downgrade_time = Some(10 + 20_001);
@@ -904,7 +904,7 @@ fn same_tick_attack_cancels_safe_mode_activation() {
     // 官方同序语义：attackController 的 _upgradeBlocked 被 tick.js:20-23 先
     // 持久化、:25 激活门读到它 → 激活取消（available 不减、safeMode 不挂）
     let mut f = Fixture::new(1, terrain_with(&[]));
-    f.world.time = 10;
+    f.world.set_time_for_test(10);
     let ctl = f.controller_full(1, Some("p1"), |t| {
         t.safe_mode_available = 1;
         t.downgrade_time = Some(10 + 20_001);

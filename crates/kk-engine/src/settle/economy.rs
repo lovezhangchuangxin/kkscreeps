@@ -250,7 +250,7 @@ pub fn controller_tick(w: &mut Working, id: ObjId) {
 }
 
 fn controller_levels(level: u8) -> i64 {
-    kk_world::snapshot::controller_progress_total_opt(level).unwrap_or(0)
+    kk_world::domain::controller_progress_total_opt(level).unwrap_or(0)
 }
 
 /// 官方 minerals/tick.js（B4）：`!mineralAmount` 时挂 50000 tick 再生钟

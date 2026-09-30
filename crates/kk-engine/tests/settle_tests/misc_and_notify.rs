@@ -227,7 +227,7 @@ fn activate_safe_mode_owner_gate_at_dispatch() {
     // processor.js:248：`object.user && object.user != userId` → 整对象 intent
     // 跳过——敌人对他人 controller 发 activateSafeMode 在分派层丢弃
     let mut f = Fixture::new(1, terrain_with(&[]));
-    f.world.time = 10;
+    f.world.set_time_for_test(10);
     let ctl = f.controller_full(1, Some("p2"), |t| {
         t.safe_mode_available = 1;
         t.downgrade_time = Some(10 + 20_001);
@@ -253,7 +253,7 @@ fn activate_safe_mode_null_cooldown_at_time_zero_rejects() {
         t.safe_mode_available = 1;
         t.downgrade_time = Some(20_001);
     });
-    assert_eq!(f.world.time, 0);
+    assert_eq!(f.world.time(), 0);
     f.settle(controller_action(
         "p1",
         ctl,
@@ -276,7 +276,7 @@ fn unclaim_clears_ownership_and_sets_cooldown() {
     // tick 的到期/已占条件另行清除，unclaim 后无主不满足）。removeRoomFromUser
     // （:15）由 Engine rooms 重建承载（engine_recomputes_player_rooms_after_tick）
     let mut f = Fixture::new(1, terrain_with(&[]));
-    f.world.time = 100;
+    f.world.set_time_for_test(100);
     let ctl = f.controller_full(4, Some("p1"), |t| {
         t.progress = 12_345;
         t.safe_mode = 500;
@@ -345,7 +345,7 @@ fn unclaim_rejections() {
     // 他人 controller 的 intent 整对象跳过
     // ① 无主 + 0 级拒
     let mut f = Fixture::new(1, terrain_with(&[]));
-    f.world.time = 10;
+    f.world.set_time_for_test(10);
     let ctl = f.controller(0, None);
     f.settle(controller_action(
         "p1",
@@ -358,7 +358,7 @@ fn unclaim_rejections() {
     assert_eq!(t.safe_mode_cooldown, None, "无主：不挂冷却");
     // ② 有主但 0 级拒
     f = Fixture::new(1, terrain_with(&[]));
-    f.world.time = 10;
+    f.world.set_time_for_test(10);
     let ctl = f.controller_full(0, Some("p1"), |_| {});
     f.settle(controller_action(
         "p1",
@@ -369,7 +369,7 @@ fn unclaim_rejections() {
     assert_eq!(ctl_of(&f).safe_mode_cooldown, None, "0 级：不挂冷却");
     // ③ 他人 controller：分派层丢弃
     f = Fixture::new(1, terrain_with(&[]));
-    f.world.time = 10;
+    f.world.set_time_for_test(10);
     let ctl = f.controller_full(3, Some("p2"), |t| {
         t.safe_mode_available = 1;
     });
@@ -564,7 +564,7 @@ fn suicide_intent_kills_creep_same_tick() {
     // ⇒ 每件钳 125）⇒ 40 携带 + 125×2 回收 = 290；2 部件 ⇒ 10 tick
     let tomb = f
         .world
-        .rooms
+        .rooms()
         .get("W1N1")
         .unwrap()
         .objects
@@ -577,7 +577,7 @@ fn suicide_intent_kills_creep_same_tick() {
     assert_eq!(tomb.store.energy, 290, "携带 40 + 造价回收 250");
     assert!(
         !f.world
-            .rooms
+            .rooms()
             .get("W1N1")
             .unwrap()
             .objects
@@ -628,8 +628,7 @@ fn pull_pair_moves_fatigue_free_creep() {
     let b = f.creep("B", "p1", 11, 10, &[BodyKind::Work], 0); // 被拉（无 MOVE）
     if let RoomObject::Creep(cc) = f
         .world
-        .rooms
-        .get_mut("W1N1")
+        .room_mut("W1N1")
         .unwrap()
         .objects
         .get_mut(&b)
@@ -809,7 +808,7 @@ fn built_structure_born_with_notify_attacked_true() {
     f.settle(batch);
     let ext = f
         .world
-        .rooms
+        .rooms()
         .get("W1N1")
         .unwrap()
         .objects
@@ -887,7 +886,7 @@ fn ghodium_resource_family_settles() {
     f.settle(b3);
     let pile = f
         .world
-        .rooms
+        .rooms()
         .get("W1N1")
         .unwrap()
         .objects

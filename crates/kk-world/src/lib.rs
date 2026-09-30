@@ -5,6 +5,7 @@
 //! M2A 起 embed 查询面（getObject/findInRoom）改出 screeps-ok 契约快照
 //! （snapshot 模块，"玩家 getter 值"形态——两消费面各自契约、显式对表）。
 
+pub mod domain;
 pub mod index;
 pub mod place;
 pub mod snapshot;

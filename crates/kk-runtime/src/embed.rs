@@ -331,7 +331,7 @@ impl EmbedEngine {
                     .map(|f| f as i64)
                     .unwrap_or(if owner.is_some() { 1 } else { 0 })
                     .clamp(0, 8);
-                let time = self.engine.world.time;
+                let time = self.engine.world.time();
                 let mut spec = serde_json::json!({
                     "pos": [1, 1],
                     "structureType": "controller",
@@ -395,7 +395,7 @@ impl EmbedEngine {
         // 无名稳定名序号用 id 分配器（单调不减）——对象会随结算消亡，
         // 可回退的计数（如对象总数）会让 mid-run 摆放重名
         let ctx = PlaceCtx {
-            time: self.engine.world.time,
+            time: self.engine.world.time(),
             controller: self.engine.world.room(room).and_then(|r| r.controller()),
             name_seq: self.engine.world.next_obj_id() as usize,
         };

@@ -46,7 +46,7 @@ impl World {
                         // P2：工地授视野与官方相反，且 A4 接线 createConstructionSite
                         // 后变成玩家可自主触发的持续视野）。flag 无 owner 天然不授
                         !matches!(o, RoomObject::ConstructionSite(_))
-                            && object_owner(o).as_deref() == Some(user)
+                            && crate::domain::object_owner(o).as_deref() == Some(user)
                     })
                 })
                 .map(|(name, _)| name)
@@ -91,7 +91,8 @@ impl World {
                     // 与工地全集进 Game.constructionSites（装配面）是两个正交
                     // 官方语义，裁掉工地视野后此破例使全集仍成立
                     let own_site = matches!(object, RoomObject::ConstructionSite(_))
-                        && object_owner(object).as_deref() == Some(user.unwrap_or(""));
+                        && crate::domain::object_owner(object).as_deref()
+                            == Some(user.unwrap_or(""));
                     if !own_site {
                         continue;
                     }
@@ -242,37 +243,6 @@ pub(crate) fn road_hits_max(terrain: &kk_core::Terrain, x: u8, y: u8) -> i64 {
     hits
 }
 
-/// 对象归属（视野过滤判定用）：typed 变体直读；Generic 透传解析 data.owner。
-/// 官方 userObjects 按 DB 的 user 字段归集（data.js:103）——与投影面同源。
-/// B3：tombstone/ruin 的 user 同样授房视野（data.js:105-116 只跳过 flag/
-/// constructionSite——死爬虫的墓碑为其主人保住房间视野是官方机制）。
-/// pub（M2B 前置批 P1 单源）：结算侧（kk-engine settle 的所有权门与
-/// notifyWhenAttacked）与投影/视野归集同一归属语义——原 settle 侧
-/// `object_owner_of` 双份拷贝删除，两消费者共此单源。
-pub fn object_owner(object: &RoomObject) -> Option<std::borrow::Cow<'_, str>> {
-    match object {
-        RoomObject::Creep(o) => Some(o.owner.as_str().into()),
-        RoomObject::Spawn(o) => Some(o.owner.as_str().into()),
-        RoomObject::Extension(o) => Some(o.owner.as_str().into()),
-        RoomObject::Storage(o) => Some(o.owner.as_str().into()),
-        RoomObject::Controller(o) => o.owner.as_deref().map(Into::into),
-        RoomObject::ConstructionSite(o) => o.owner.as_deref().map(Into::into),
-        RoomObject::Tombstone(o) => o.owner.as_deref().map(Into::into),
-        RoomObject::Ruin(o) => o.owner.as_deref().map(Into::into),
-        // B4：extractor 官方带 user（build.js:116/:215-219）——有主提取器为
-        // 其主人授房视野（data.js:105-116 的 userObjects 归集）；mineral 无
-        // user 键（官方矿物对象无 user——B3 data.js:105 注释同族）
-        RoomObject::Extractor(o) => o.owner.as_deref().map(Into::into),
-        RoomObject::Generic(o) => serde_json::from_str::<Value>(&o.data).ok().and_then(|v| {
-            v.get("owner")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-                .map(Into::into)
-        }),
-        _ => None,
-    }
-}
-
 /// 房间 RCL（无 controller 为 0）：extension 的 storeCapacityResource 归一
 /// （官方 extensions/tick.js:11-17 每 tick 按 EXTENSION_ENERGY_CAPACITY[rcl]
 /// 重写）与房间能量聚合共用。pub(crate)：snapshot.rs 查询面过滤复用。
@@ -305,7 +275,7 @@ fn room_energy(state: &crate::world::RoomState, viewer: Option<&str>) -> (i64, i
             ),
             _ => continue,
         };
-        if viewer.is_none_or(|v| object_owner(o).as_deref() == Some(v)) {
+        if viewer.is_none_or(|v| crate::domain::object_owner(o).as_deref() == Some(v)) {
             available += energy;
             capacity += cap;
         }
@@ -313,48 +283,11 @@ fn room_energy(state: &crate::world::RoomState, viewer: Option<&str>) -> (i64, i
     (available, capacity)
 }
 
-/// 对象 → 世界 JSON 记录（字段名 = prelude wrapObject 消费面约定）。
-/// pub(crate)：snapshot.rs 的查询面过滤复用同源投影（FIND 语义单源）。
-/// `rcl`：extension 的 storeCapacityResource.energy 归一（官方 extensions/
-/// tick.js:11-17 每 tick 按房 RCL 查表重写——投影期直存等价）。
-#[allow(clippy::too_many_arguments)]
-/// store 双槽的正量键集（官方 store getter 只暴露正量资源——vanilla
-/// snapStore amount>0 才入表；store.js:19-25 按资源名键构造）。两投影共此
-/// 核心（M2B P4 单源）；世界投影再无条件补 energy 键（M0 契约恒投影）。
-pub(crate) fn store_positive_entries(
-    store: &kk_schema::room::Store,
-) -> serde_json::Map<String, Value> {
-    let mut v = serde_json::Map::new();
-    if store.energy > 0 {
-        v.insert("energy".into(), json!(store.energy));
-    }
-    if store.ghodium > 0 {
-        v.insert(
-            kk_core::constants::RESOURCE_GHODIUM.into(),
-            json!(store.ghodium),
-        );
-    }
-    v
-}
-
-/// 额外资源栈的正量并入（B3：tombstone/ruin/creep 的 store_extra——boost
-/// 矿物等命名槽，amount>0 才入表）。两投影同 loop 共源（M2B P4）。
-pub(crate) fn apply_store_extra(
-    v: &mut serde_json::Map<String, Value>,
-    extra: &[kk_schema::room::ResourceStack],
-) {
-    for stack in extra {
-        if stack.amount > 0 {
-            v.insert(stack.resource.clone(), json!(stack.amount));
-        }
-    }
-}
-
 /// store 两槽的全资源正量投影（官方 store.js:19-25 按资源名键构造、正量
 /// 才暴露——GPT 复审 P2-3：spawn/extension/storage 与 creep 共用同口径，
 /// 两投影面单源）。energy 恒投影是既有形状（M0 契约）。
 pub(crate) fn store_json(store: &kk_schema::room::Store) -> Value {
-    let mut v = store_positive_entries(store);
+    let mut v = crate::domain::store_positive_entries(store);
     v.insert("energy".into(), json!(store.energy));
     Value::Object(v)
 }
@@ -365,9 +298,9 @@ pub(crate) fn store_with_extra_json(
     store: &kk_schema::room::Store,
     extra: &[kk_schema::room::ResourceStack],
 ) -> Value {
-    let mut v = store_positive_entries(store);
+    let mut v = crate::domain::store_positive_entries(store);
     v.insert("energy".into(), json!(store.energy));
-    apply_store_extra(&mut v, extra);
+    crate::domain::apply_store_extra(&mut v, extra);
     Value::Object(v)
 }
 
@@ -381,6 +314,11 @@ pub(crate) fn energy_resource_name(o: &kk_schema::room::EnergyObj) -> String {
     }
 }
 
+/// 对象 → 世界 JSON 记录（字段名 = prelude wrapObject 消费面约定）。
+/// pub(crate)：snapshot.rs 的查询面过滤复用同源投影（FIND 语义单源）。
+/// `rcl`：extension 的 storeCapacityResource.energy 归一（官方 extensions/
+/// tick.js:11-17 每 tick 按房 RCL 查表重写——投影期直存等价）。
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn object_json(
     room: &str,
     id: crate::world::ObjId,
@@ -469,7 +407,7 @@ pub(crate) fn object_json(
                 },
             });
             // 归属三态（与 snapshot 同形——controller_owner_value 单源）
-            if let Some(val) = controller_owner_value(o) {
+            if let Some(val) = crate::domain::controller_owner_value(o) {
                 v["owner"] = val;
             }
             v
@@ -746,19 +684,7 @@ fn spawn_spawning_json(o: &kk_schema::room::SpawnObj) -> Value {
 
 /// 官方 progressTotal：1..7 级查 CONTROLLER_LEVELS，8 级为 0。
 fn controller_progress_total(level: u8) -> i64 {
-    crate::snapshot::controller_progress_total_opt(level).unwrap_or(0)
-}
-
-/// controller 归属三态投影：`Some` → owner 键；降级归零哨兵 → Null（官方
-/// controllers/tick.js:56 `user = null`，玩家侧 my === false）；从未拥有 →
-/// 不落键（my undefined）。两投影同形——原两侧手写互指「同步（层间一致）」
-/// 的单源化（M2B P4）。
-pub(crate) fn controller_owner_value(o: &kk_schema::room::ControllerObj) -> Option<Value> {
-    match (&o.owner, o.owner_cleared) {
-        (Some(owner), _) => Some(json!(owner)),
-        (None, true) => Some(Value::Null),
-        (None, false) => None,
-    }
+    crate::domain::controller_progress_total_opt(level).unwrap_or(0)
 }
 
 fn obj_str<'a>(o: &'a Value, key: &str) -> &'a str {

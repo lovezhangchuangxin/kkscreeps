@@ -290,10 +290,10 @@ impl Fixture {
         input: kk_engine::settle::TickInput,
     ) -> Vec<Value> {
         let mut next = self.world.next_obj_id();
-        let mut room = self.world.rooms.get_mut("W1N1").unwrap().clone();
+        let mut room = self.world.room("W1N1").unwrap().clone();
         let events = settle_room(
             &mut room,
-            self.world.time,
+            self.world.time(),
             input.now_ms,
             &mut next,
             &mut self.players,
@@ -301,7 +301,7 @@ impl Fixture {
         )
         .unwrap();
         let name = room.name.clone();
-        self.world.rooms.insert(name, room);
+        self.world.commit_room(name, room);
         self.world.bump_next_obj_id(next);
         self.world.advance_ticks(1);
         events

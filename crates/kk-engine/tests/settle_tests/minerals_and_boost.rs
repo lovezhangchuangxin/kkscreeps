@@ -87,7 +87,7 @@ fn boosted_build_two_step_official_values() {
         f.settle(b);
         let progress = f
             .world
-            .rooms
+            .rooms()
             .get("W1N1")
             .unwrap()
             .objects
@@ -206,7 +206,7 @@ fn mineral_regeneration_clock_and_density_rotation() {
         _ => panic!(),
     }
     // 把钟拨近（等价很久以前挂的钟——避免 5 万 tick）：MODERATE(2) 起步
-    let t = f.world.time;
+    let t = f.world.time();
     if let Some(RoomObject::Mineral(mm)) = f.world.get_mut(m) {
         mm.next_regeneration_time = Some(t + 2); // time 1 → 3
     }
@@ -233,7 +233,7 @@ fn mineral_regeneration_clock_and_density_rotation() {
     let mut f2 = Fixture::new(7, terrain_with(&[]));
     let m2 = f2.mineral(10, 10, "U", 0, 2, None);
     f2.settle(IntentBatch::default());
-    let t = f2.world.time;
+    let t = f2.world.time();
     if let Some(RoomObject::Mineral(mm)) = f2.world.get_mut(m2) {
         mm.next_regeneration_time = Some(t + 2);
     }
@@ -250,7 +250,7 @@ fn mineral_regeneration_clock_and_density_rotation() {
     let mut f3 = Fixture::new(1, terrain_with(&[]));
     let m3 = f3.mineral(12, 12, "K", 0, 1, None);
     f3.settle(IntentBatch::default());
-    let t = f3.world.time;
+    let t = f3.world.time();
     if let Some(RoomObject::Mineral(mm)) = f3.world.get_mut(m3) {
         mm.next_regeneration_time = Some(t + 1);
     }

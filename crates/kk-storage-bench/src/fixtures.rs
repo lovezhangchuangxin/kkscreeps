@@ -118,7 +118,7 @@ pub struct WorldFixture {
 /// 建世界：房间内容经 place::normalize 放置（embed 同一归一化入口）。
 pub fn build_world(tier: Tier) -> WorldFixture {
     let mut world = kk_world::world::World::new(0xC3C3);
-    world.time = BASE_TIME;
+    world.set_time_for_test(BASE_TIME);
     for i in 0..tier.rooms() {
         let name = room_name(i);
         let mut rng = SeededRng::new(seed_for("room", i as u64));
@@ -145,7 +145,7 @@ impl WorldFixture {
     /// 某时刻的房间快照字节（正式封套编码；检查点重写用不同 time 得到
     /// 同长度不同内容的值——写路径上引擎无法省略真实重写）。
     pub fn room_bytes(&self, room: &str, time: u64) -> Vec<u8> {
-        let state = &self.world.rooms[room];
+        let state = self.world.room(room).expect("夹具房已注册");
         kk_schema::room::encode_snapshot(&state.encode_snapshot(
             time,
             self.world.seed,
@@ -205,16 +205,16 @@ fn pos_json(p: (u8, u8)) -> Value {
 /// 放一个对象（spec → normalize → insert；ctx 借用与插入按作用域交替，
 /// 与 kk-world 既有测试同一形态）。
 fn place(world: &mut kk_world::world::World, room: &str, kind: &str, spec: Value) {
-    let time = world.time;
+    let time = world.time();
     let ctx_place = |w: &kk_world::world::World, spec: &Value| {
-        let controller = w.rooms[room].controller().cloned();
+        let controller = w.room(room).expect("夹具房已注册").controller().cloned();
         kk_world::place::normalize(
             kind,
             spec,
             &kk_world::place::PlaceCtx {
                 time,
                 controller: controller.as_ref(),
-                name_seq: w.rooms[room].objects.len(),
+                name_seq: w.room(room).expect("夹具房已注册").objects.len(),
             },
         )
     };
@@ -250,7 +250,7 @@ fn build_room(
         json!({
             "pos": pos_json(pos.next()), "structureType": "controller", "rcl": rcl,
             "owner": owner, "progress": rng.below(8_000_000),
-            "downgradeTime": world.time + 20_000 + u64::from(rng.below(30_000)),
+            "downgradeTime": world.time() + 20_000 + u64::from(rng.below(30_000)),
         }),
     );
     // source ×2（官方固定两处）
