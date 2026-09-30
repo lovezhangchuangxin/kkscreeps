@@ -114,6 +114,24 @@ pub struct RoomVersionHandle {
     pub generation: u64,
 }
 
+/// 对象目录（O1，双房批）：id → 房名定位，按内容代际懒重建（同
+/// terrain_cache 的版本键纪律）。服务 [`World::get`]/[`World::get_mut`]/
+/// [`World::remove`] 的房名定位：每代际首次触达全量重建一次（N 次
+/// BTreeMap 插入 + 每房一次 String clone），之后本代际内 O(log N) 查找；
+/// insert 增量续档。**收益量级勘定（评审 3 F4 实测）**：小规模首房命中
+/// 旧逐房扫描常数更低（4 房 1000 对象命中 1.17-1.24× 慢）；40 房命中
+/// 4.3× 快、miss 面 23× 快——收益随房数/未命中增长，现状 2-4 房为形状
+/// 先行。[`World::next_obj_id`] 的 max 走分体的 `max_id_cache`（零分配
+/// 键扫描——结算每 tick 的 next_available 路径，与原扫描同价），不经
+/// 本目录。正确性前提 = generation 的既有不变量（全部内容可变面 bump；
+/// 结算提交尾直接写 rooms 后必经 advance_ticks——见 generation 字段
+/// 注释）。
+#[derive(Debug, Clone, Default)]
+struct ObjDir {
+    generation: u64,
+    rooms: BTreeMap<ObjId, String>,
+}
+
 /// 世界（M1：房间集合 + 全局时间；玩家分片语义在 embed 层）。
 #[derive(Debug, Clone)]
 pub struct World {
@@ -125,7 +143,8 @@ pub struct World {
     /// 全局 id 分配器（跨房间唯一；快照每房 header 存同一全局值）。
     next_obj_id: u64,
     /// 世界内容代际（M2B 前置批 P2，ADR-013 决策 2）：任何已提交内容变更
-    /// 单调递增——投影缓存失效键与 [`RoomVersionHandle`] 的内容分量。
+    /// 单调递增——投影缓存失效键、对象目录/`max_id_cache` 的失效键
+    ///（O1，双房批）与 [`RoomVersionHandle`] 的内容分量。
     /// bump 点 = 全部内容可变面（insert/remove/set_terrain/register_room/
     /// advance_ticks + room_mut/get_mut 保守覆盖）；kk-engine 提交尾直接
     /// 写回 `rooms` 字段后必经 advance_ticks，代际随之递增。结算失败路径
@@ -140,6 +159,15 @@ pub struct World {
     /// `RefCell` 前提：World 单线程持用（embed 主线程投影；无跨线程读取面，
     /// P2 评审已核）。随 World Clone/reset 复制/重置——缓存键纪元防陈旧命中。
     pub(crate) terrain_cache: RefCell<BTreeMap<String, (u64, Arc<str>)>>,
+    /// 对象目录缓存（O1）：见 [`ObjDir`]。RefCell 前提同 terrain_cache
+    ///（World 单线程持用）；随 Clone 复制、new/reset 归零——代际键防陈旧
+    /// 命中。
+    obj_dir: RefCell<ObjDir>,
+    /// max id 游标缓存（O1）：代际键 (generation, max)——next_obj_id 消费。
+    /// 与目录分体：重建=纯键扫描零分配（与原全房扫描同价），不付目录
+    /// map 的分配成本（结算每 tick 的 next_available 在此路径上——实测
+    /// 每代际全量建目录令 settle 相 +6%，分体后复原）。
+    max_id_cache: RefCell<(u64, u64)>,
 }
 
 impl Default for World {
@@ -159,6 +187,8 @@ impl World {
             generation: 0,
             terrain_epoch: 0,
             terrain_cache: RefCell::new(BTreeMap::new()),
+            obj_dir: RefCell::new(ObjDir::default()),
+            max_id_cache: RefCell::new((0, 0)),
         }
     }
 
@@ -178,6 +208,20 @@ impl World {
             .insert_with_id(id, object)?;
         self.next_obj_id = id + 1;
         self.generation += 1;
+        // 目录增量续档（O1）：目录在上一代际仍新鲜时直接带入本代际
+        //（连续 insert 每次免全量重建——夹具摆 N 对象 O(N²) → O(N log N)）；
+        // 目录已陈旧则留给下次触达懒重建
+        {
+            let mut dir = self.obj_dir.borrow_mut();
+            if dir.generation + 1 == self.generation {
+                dir.rooms.insert(ObjId(id), room_name.to_string());
+                dir.generation = self.generation;
+            }
+            let mut m = self.max_id_cache.borrow_mut();
+            if m.0 + 1 == self.generation {
+                *m = (self.generation, m.1.max(id));
+            }
+        }
         Ok(ObjId(id))
     }
 
@@ -191,15 +235,11 @@ impl World {
         self.generation += 1;
     }
 
-    /// 下一个候选 id；直接导入房间对象后也不会回退到已有 id。
+    /// 下一个候选 id；直接导入房间对象后也不会回退到已有 id。max 取自
+    /// `max_id_cache` 游标缓存（O1，双房批；原每次调用全房扫描——insert
+    /// 路径每摆一对象扫一次全房，storage-bench T3 夹具实测 55× 提速）。
     pub fn next_obj_id(&self) -> u64 {
-        let max_existing = self
-            .rooms
-            .values()
-            .flat_map(|room| room.objects.keys())
-            .map(|id| id.0)
-            .max();
-        let after_existing = max_existing.map_or(1, |id| id.saturating_add(1));
+        let after_existing = self.max_obj_id().saturating_add(1).max(1);
         self.next_obj_id.max(after_existing)
     }
 
@@ -261,39 +301,85 @@ impl World {
         self.rooms.get_mut(name)
     }
 
-    /// 跨房间取对象（M1 主要服务于 embed getObject）。
+    /// 跨房间取对象（M1 主要服务于 embed getObject）。经对象目录 O(1)
+    ///（O1，双房批；原逐房扫描）。
     pub fn get(&self, id: ObjId) -> Option<(&str, &RoomObject)> {
-        for state in self.rooms.values() {
-            if let Some(o) = state.objects.get(&id) {
-                return Some((&state.name, o));
-            }
-        }
-        None
+        let dir = self.obj_dir();
+        let name = dir.rooms.get(&id)?;
+        let state = self.rooms.get(name)?;
+        state.objects.get(&id).map(|o| (state.name.as_str(), o))
     }
 
     pub fn get_mut(&mut self, id: ObjId) -> Option<&mut RoomObject> {
-        self.generation += 1; // 保守失效（同 room_mut）
-        for state in self.rooms.values_mut() {
-            if let Some(o) = state.objects.get_mut(&id) {
-                return Some(o);
-            }
-        }
-        None
+        // 先经目录定位房名（只读、Ref 语句内结束借用）**再** bump——若
+        // 先 bump 则目录必为新一代际首触达、每次全量重建，O(1) 落空
+        //（评审 2 P2-2 清偿）；bump 语义不变：id 不存在仍计 +1（保守失效
+        // 同 room_mut，generation_bumps 测试锁定）
+        let name = self.obj_dir().rooms.get(&id).cloned();
+        self.generation += 1;
+        let name = name?;
+        self.rooms.get_mut(&name)?.objects.get_mut(&id)
     }
 
     pub fn remove(&mut self, id: ObjId) -> Option<RoomObject> {
-        for state in self.rooms.values_mut() {
-            if let Some(o) = state.objects.remove(&id) {
-                self.generation += 1;
-                return Some(o);
-            }
+        let name = self.obj_dir().rooms.get(&id).cloned()?;
+        let removed = self.rooms.get_mut(&name)?.objects.remove(&id);
+        if removed.is_some() {
+            self.generation += 1;
         }
-        None
+        removed
     }
 
     /// 当前世界内容代际（见字段注释）。
     pub fn generation(&self) -> u64 {
         self.generation
+    }
+
+    /// max id 触达（懒重建——代际键失效；重建=纯键扫描零分配，与原
+    /// next_obj_id 的扫描同价；本代际内后续 O(1)）。
+    fn max_obj_id(&self) -> u64 {
+        {
+            let mut m = self.max_id_cache.borrow_mut();
+            if m.0 != self.generation {
+                *m = (
+                    self.generation,
+                    self.rooms
+                        .values()
+                        .flat_map(|room| room.objects.keys())
+                        .map(|id| id.0)
+                        .max()
+                        .unwrap_or(0),
+                );
+            }
+        }
+        self.max_id_cache.borrow().1
+    }
+
+    /// 对象目录触达（懒重建——代际键失效；重建 O(N log N)+每房一次
+    /// String clone，每代际至多一次；之后本代际内查找 O(log N)）。
+    /// get/get_mut/remove 消费——结算热路径（next_available）不经此
+    ///（走分体 max 缓存的零分配扫描）。
+    fn obj_dir(&self) -> std::cell::Ref<'_, ObjDir> {
+        {
+            let mut dir = self.obj_dir.borrow_mut();
+            if dir.generation != self.generation {
+                // 值用 map key（F-1 key 权威裁决：快照解码可产出
+                // name="" 的房——state.name 非权威）；同 id 跨房并存
+                //（违反全局唯一不变量）时首房胜——与原 values() 扫描
+                // 同构（评审 1 P2-1/P2-2 清偿）
+                let mut rooms: BTreeMap<ObjId, String> = BTreeMap::new();
+                for (key, state) in &self.rooms {
+                    for &id in state.objects.keys() {
+                        rooms.entry(id).or_insert_with(|| key.clone());
+                    }
+                }
+                *dir = ObjDir {
+                    generation: self.generation,
+                    rooms,
+                };
+            }
+        }
+        self.obj_dir.borrow()
     }
 
     /// 当前地形纪元（见字段注释）。
@@ -422,6 +508,141 @@ mod tests {
         world.bump_next_obj_id(u64::MAX);
         assert!(world.insert("W1N1", energy(1)).is_err());
         assert!(world.room("W1N1").unwrap().objects.is_empty());
+    }
+
+    /// O1 目录：get/remove/next_obj_id 经目录 O(1) 且与原全房扫描语义
+    /// 等价（混合来源：insert 分配 + room_mut 手工导入高 id）。
+    #[test]
+    fn obj_dir_lookup_remove_and_next_id_equivalence() {
+        let mut world = World::new(1);
+        for name in ["W1N1", "W2N2", "E3S3"] {
+            world.register_room(name, Terrain::plains());
+        }
+        let a = world.insert("W1N1", energy(10)).unwrap();
+        let b = world.insert("W2N2", energy(20)).unwrap();
+        // 手工导入（room_mut → 代际 bump → 目录重建吸收）
+        world
+            .room_mut("E3S3")
+            .unwrap()
+            .insert_with_id(900, energy(30))
+            .unwrap();
+        // 目录新鲜度断言：手工导入后未触达 → 下次触达重建
+        for (id, room, amount) in [(a, "W1N1", 10), (b, "W2N2", 20), (ObjId(900), "E3S3", 30)] {
+            let (name, obj) = world.get(id).unwrap();
+            assert_eq!(name, room, "目录定位 {id:?}");
+            match obj {
+                RoomObject::Energy(e) => assert_eq!(e.amount, amount),
+                _ => panic!("非 energy"),
+            }
+        }
+        assert_eq!(world.next_obj_id(), 901, "手工导入高 id 抬升候选");
+        // 移除后目录失效（remove bump）→ get None；max 重算不含已移除
+        assert!(world.remove(ObjId(900)).is_some());
+        assert!(world.get(ObjId(900)).is_none());
+        // 移除 max 对象后候选回落——与原全房扫描语义逐位一致（游标只
+        // 保证其分配过的 id 不复用；手工导入的 900 已不存在）
+        assert_eq!(
+            world.next_obj_id(),
+            3,
+            "移除导入 max 后候选回落（扫描同构）"
+        );
+        // get_mut 经目录定位
+        if let RoomObject::Energy(e) = world.get_mut(b).unwrap() {
+            e.amount = 25;
+        }
+        match world.get(b).unwrap().1 {
+            RoomObject::Energy(e) => assert_eq!(e.amount, 25),
+            _ => panic!("非 energy"),
+        }
+    }
+
+    /// O1 目录：结算式提交（直接写 rooms 字段 + advance_ticks 收束）后
+    /// 目录经代际 bump 懒重建吸收新对象——generation 不变量的消费面。
+    #[test]
+    fn obj_dir_rebuilds_after_settle_style_commit() {
+        let mut world = World::new(1);
+        world.register_room("W1N1", Terrain::plains());
+        let a = world.insert("W1N1", energy(1)).unwrap();
+        // 模拟结算提交尾：直接替换 rooms 内容（不经 World 方法）
+        let mut room = RoomState::new("W1N1", Terrain::plains());
+        room.insert_with_id(a.0, energy(2)).unwrap();
+        room.insert_with_id(777, energy(3)).unwrap();
+        world.rooms.insert("W1N1".to_string(), room);
+        world.advance_ticks(1);
+        // bump 后首次触达重建 → 新对象可见
+        assert!(world.get(ObjId(777)).is_some(), "提交尾新对象经目录可见");
+        assert_eq!(world.next_obj_id(), 778);
+    }
+
+    /// O1 增量续档（分体双属性）：max 缓存在连续 insert 下始终增量保持
+    ///（next_obj_id 路径零重建零分配）；目录（id→房名 map）在首次
+    /// get/remove 触达后增量保持（纯 insert 序列不触达目录——其惰性重建
+    /// 留给首个读侧消费者，一次付清）。
+    #[test]
+    fn obj_dir_eager_maintenance_on_consecutive_inserts() {
+        let mut world = World::new(1);
+        world.register_room("W1N1", Terrain::plains());
+        for i in 0..50 {
+            let id = world.insert("W1N1", energy(i)).unwrap();
+            // max 缓存增量续档：每次 insert 后保持新鲜
+            assert_eq!(
+                *world.max_id_cache.borrow(),
+                (world.generation, (i + 1) as u64),
+                "第 {i} 次 insert 后 max 缓存新鲜"
+            );
+            if i == 0 {
+                // 目录首次触达（读侧消费者出现）
+                assert!(world.get(id).is_some());
+            }
+            // 目录增量续档：触达后保持新鲜
+            assert_eq!(
+                world.obj_dir.borrow().generation,
+                world.generation,
+                "第 {i} 次 insert 后目录新鲜"
+            );
+        }
+        assert_eq!(world.obj_dir.borrow().rooms.len(), 50);
+    }
+
+    /// O1 续档守卫杀伤线（评审 2 P1-1 清偿）：致陈旧操作（remove/手工
+    /// 导入）与 insert 之间**无刷新读**——insert 见陈旧必须跳过续档，
+    /// 下次触达懒重建同时吸收两侧；守卫若被弱化（无条件续档），缓存带
+    /// 缺失增量标记新鲜 → next_obj_id 偏低 → 撞 id，本测试即红
+    ///（变异实验：删守卫全套件仍绿——零覆盖缺口由本测试封堵）。
+    #[test]
+    fn obj_dir_guard_skips_extension_when_stale() {
+        // 形态一：remove 致陈旧 → insert → 触达
+        let mut world = World::new(1);
+        world.register_room("W1N1", Terrain::plains());
+        let _ = world.next_obj_id(); // 暖缓存（稳态）
+        let a = world.insert("W1N1", energy(1)).unwrap();
+        assert!(world.remove(a).is_some()); // bump，两缓存陈旧
+        let b = world.insert("W1N1", energy(2)).unwrap(); // 不得续档
+        assert_eq!(b.0, 2, "游标分配");
+        assert_eq!(
+            world.next_obj_id(),
+            3,
+            "重建吸收 remove（不残留 a 的 max=1 作 2）"
+        );
+        assert!(world.get(a).is_none());
+        assert!(world.get(b).is_some());
+
+        // 形态二：room_mut 手工导入高 id 致陈旧 → insert → 触达
+        let mut world = World::new(1);
+        world.register_room("W1N1", Terrain::plains());
+        let _ = world.next_obj_id(); // 暖缓存
+        let c = world.insert("W1N1", energy(1)).unwrap();
+        world
+            .room_mut("W1N1")
+            .unwrap()
+            .insert_with_id(900, energy(9))
+            .unwrap(); // bump，缓存陈旧
+        let d = world.insert("W1N1", energy(2)).unwrap(); // 不得续档
+        assert_eq!(d.0, 901, "分配必须看到导入的 900（重建吸收）");
+        assert_eq!(world.next_obj_id(), 902);
+        assert!(world.get(ObjId(900)).is_some());
+        assert!(world.get(c).is_some());
+        assert!(world.get(d).is_some());
     }
 
     #[test]

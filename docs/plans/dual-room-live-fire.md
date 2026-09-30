@@ -156,12 +156,13 @@ bot 三基线（tooangel console 零错须人工确认）/ perf 同口径 A/B �
 ## 4. 可选小片（**待拍板**）
 
 - **O1 ObjId→Room 索引**：现状 `next_obj_id()` 每次 insert 全世界扫 max
-  （world.rs:181-190；`tick_with_intents` 每 tick 亦扫——mod.rs:619）、
-  `get/remove` 逐房查（world.rs:265/284）。方案：World 内维护
-  `ObjId→房名` 索引 + max 游标（insert_with_id/remove/快照解码全维护面；
-  **快照字节形态不变**——索引运行时重建，reset 归零防撞键同地形缓存钉子）；
-  get/remove/next_obj_id 全 O(1)。现状 2-4 房收益小，价值=O() 形状先行于
-  M2B/2B 增长 + 结算路径去每 tick 全扫。量级：小片。
+  （world.rs；`tick_with_intents` 每 tick 亦扫）、`get/remove` 逐房查。
+  方案（**落地口径——实现期订正，见 §7**）：generation 代际懒重建目录
+  + insert 增量续档（非逐可变面维护——复用既有代际不变量兜底；快照
+  字节形态不变、reset 归零）；max 走分体零分配扫描缓存（结算每 tick
+  路径与原同价）；读侧 O(log N)。现状 2-4 房收益小（小规模首房命中
+  常数反转），价值=insert 序列 O(N²)→O(N log N)（storage-bench T3 实测
+  55×）+ O() 形状先行于 M2B/2B 增长。量级：小片。
 - **O2 领域语义模块归属**：controller_progress_total_opt/store 家族 helper
   从投影模块（snapshot.rs/world_json.rs）移 kk-world 领域模块，纯搬移零
   行为（B1 纪律）。**建议缓行**：随 M2B 扩面首片搭车（新增 ~190 getter 时
@@ -323,3 +324,36 @@ bot 三基线（tooangel console 零错须人工确认）/ perf 同口径 A/B �
   skipped_penalty 全 0）/ perf 同口径 A/B 噪声级（0.124/0.210/0.032/
   0.467 vs 基线 0.124/0.209/0.032/0.467）/ 房级回退断言杀伤力抽查（期望
   改 p0+1 即红、复原即绿——真实值 p0=回退成立）。
+
+### O1（World 对象目录——代际懒重建）——已收口
+
+- **落地形态（较方案原描述的实现期订正）**：非逐可变面维护，改为
+  **generation 代际懒重建**——①`ObjDir{id→房名}`（get/get_mut/remove
+  房名定位；每代际首触达重建一次、之后 O(log N)；insert 增量续档；
+  值用 map key+or_insert 首房胜——对齐 F-1 key 权威与原扫描同构）；
+  ②`max_id_cache`（next_obj_id 的分体零分配键扫描缓存——结算每 tick
+  的 next_available 路径与原扫描同价）。快照字节形态不变、reset 归零、
+  Clone 深拷贝独立。
+- **实测**：insert 序列 O(N²)→O(N log N)——评审 3 独立微基准（防 LLVM
+  死存储消除后）500/1000/2000/4000 对象 3.0/4.7/10.6/22.9× 提速；
+  storage-bench T3 夹具（~18282 insert）16.95s→0.31s ≈ **55×**（评审 2
+  A/B 实测）；perf-probe 四相持平（0.124/0.209/0.032/0.465）。
+- **实现期自抓回归（评审启动后、评审 3 F2 交叉证实）**：首版单一目录
+  让 next_available 每 tick 全量重建（每对象 String clone）——settle 相
+  +6% 两跑复现；max/目录分体后复原 0.032（评审 3 微基准：分体前形状
+  @1000 对象 90×/tick 劣化于增长方向——分体即其建议修法，本批已落）。
+- **评审三路（目录正确性/消费方兼容/性能实证+O3 侦察）**：P0×0、
+  P1×1、P2×10。P1 清偿（评 2）：续档守卫零覆盖（变异实验：删守卫全套
+  仍绿）→ 补 `obj_dir_guard_skips_extension_when_stale` 双形态杀伤线
+  （删守卫复验即红、复原即绿）。P2 清偿：重建值改 map key（评 1/评 3
+  同报——F-1 纪律对齐）+ or_insert 首房胜；get_mut 先读目录再 bump
+  （O(1) 落实，bump 语义不变）；三处注释漂移（分体后措辞）+ O() 精度
+  （O(log N)/重建真实成本/小规模常数反转注记——评 3 F3/F4）；generation
+  字段注释补目录消费面；fixtures.rs「t3 +16s」旁证按 55× 实测更正
+  （评 2 P2-4）。方案 §4 口径订正（评 3 F6）。登记不修：目录 String
+  churn（每房一次 clone 已缓和；Arc<str> 化归后续优化）；pub rooms 危害
+  面扩大（文档化防御，收 pub(crate) 归后续批）；Clone 无生产调用面
+  （3 行测试可钉，暂不加）。
+- **验证**：workspace 全绿（kk-world 47+1 测）/ clippy 零告警 / release+
+  棘轮 1405 零未豁免转红 / 三基线（tooangel console error tick=0、
+  overmind/wasm 既知形态、skipped_penalty 全 0）/ perf 四相持平。

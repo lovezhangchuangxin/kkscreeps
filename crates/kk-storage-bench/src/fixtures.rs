@@ -509,8 +509,9 @@ mod tests {
     use kk_schema::room::decode_snapshot;
 
     /// 逐字节确定性：同档两次构建完全一致（fixture 锁定的前提）。t3 双构建
-    /// debug 下约 +16s（测试间并行后套件墙钟 +~8s）——用测试时长换"基准
-    /// 数据集逐字节可复现"的完整锁定。
+    /// 曾在 debug 下约 +16s（insert 全房扫描 O(N²)——World 对象目录 O1
+    /// 落地后实测 ~0.3s，≈55×；见 world.rs ObjDir 注释），套件墙钟影响
+    /// 已可忽略——"基准数据集逐字节可复现"的完整锁定不再以时长为代价。
     #[test]
     fn deterministic_bytes() {
         for tier in [Tier::T1, Tier::T2, Tier::T3] {
