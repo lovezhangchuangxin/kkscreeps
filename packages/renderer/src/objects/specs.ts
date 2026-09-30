@@ -433,3 +433,107 @@ export const FLAG_SPEC = {
     10: 0xffffff,
   } as Record<number, number>,
 } as const;
+
+// ---- creep（creep.metadata.js + creepBuildBody.js + creepActions.js） ----
+
+export const CREEP_SPEC = {
+  /** body 环（creepBuildBody.js:7-12 逐常量）。 */
+  ring: {
+    maxParts: 50,
+    /** ANGLE_SHIFT = −π/2（12 点钟起点）。 */
+    angleShift: -Math.PI / 2,
+    /** PART_ANGLE = 2π/50/2——每 100 hits 的弧长。 */
+    partAngle: (2 * Math.PI) / 50 / 2,
+    maxPartHits: 100,
+    radius: 50,
+    lineWidth: 18,
+    /** 色表（creepBuildBody.js:13-43）。carry 色值存在但被过滤不画
+     * （:108-109）；order 字段是死代码——排序按合并 hits 升序（:121-129）。 */
+    colors: {
+      move: 0xaab7c5,
+      work: 0xfde574,
+      carry: 0x666666,
+      attack: 0xf72e41,
+      ranged_attack: 0x7fa7e5,
+      heal: 0x56cf5e,
+      claim: 0xb99cfb,
+    } as Record<string, number>,
+  },
+  /** 层叠（creep.metadata.js:88-176）：黑圆 r50(0x202020)→body 环→黑圆
+   * r32(0x000000)→徽标 r26→资源圆。 */
+  outerCircle: { color: 0x202020, radius: 50 },
+  innerCircle: { color: 0x000000, radius: 32 },
+  /** 徽标（userBadge :117-125 userOwnerColor 分支 payload 色 0x222222；
+   * G3 无 badgeUrl——官方失败退化路径=纯色圆）。 */
+  badge: { radius: 26, color: 0x222222 },
+  /** 中心资源圆（:137-166）：r=min(1,total|energy|power/storeCapacity)×20。
+   * 白圆 when 表达式 `store['energy']||0 + store['power']||0 < resourcesTotal`
+   * 系官方 || 优先级 bug（:140）——解析为 `store.energy||store.power||(0<total)`
+   * ⇒ 资源>0 恒真（灰区 G12）；保真运行时行为=resourcesTotal>0 即显示。 */
+  resourceRadius: 20,
+  resourceColors: { total: 0xffffff, power: 0xf41f33, energy: 0xffe56d },
+  /** 任一 tough 存活→中心 tough.svg 120×120（creepBuildBody.js:62-71,154-156）。 */
+  tough: { size: 120 },
+  /** NPC（user '2'/'3'）整只 creep-npc.svg 100×100（:168-177）。 */
+  npc: { size: 100 },
+  mask: { width: 100, height: 100, alpha: 1 },
+  glow: { width: 400, height: 400, alpha: 0.2 },
+  /** NPC glow（:201-213）——注意 400 大 glow 无 when 门（shouldRun 仅
+   * !spawning），NPC 两只 glow 并存（官方 once 语义下的实际运行时行为）。 */
+  npcGlow: { width: 100, height: 100, alpha: 0.5 },
+  /** 敌方 safemode 期间整只 α0.5（calculations.safeMode :49-62；AlphaTo
+   * 时长 0=瞬时）。 */
+  safeModeAlpha: 0.5,
+  name: {
+    fontSize: 55,
+    fontFamily: 'Roboto, sans-serif',
+    strokeColor: '#111111',
+    strokeThickness: 15,
+    anchorY: 1.7,
+  },
+  /** 受击罩（creepActions.js:26-78,149-171,299-306）：cover.svg ADD、
+   * α0→0.5→0 关键帧（createChildCoverSpriteAction :163-171 的 /4、3/4 分数）；
+   * 色表 :13-24。**时长系数 0.9**：三处 call-site（:300/:303/:305）传
+   * tickDuration*0.9——峰值在 0.225td、总长 0.9td（R4 评审 A-B2 勘误，
+   * 〔官拆〕§3 的 "1/4 tick" 系漏看 call-site 系数）。 */
+  cover: {
+    alpha: 0.5,
+    fadeIn: 0.25,
+    fadeOut: 0.75,
+    durationScale: 0.9,
+    colors: { attack: 0xff3333, heal: 0x2ce328, both: 0xffff33 },
+  },
+} as const;
+
+// ---- powerCreep（powerCreep.metadata.js；引擎 G5 家族——合成夹具取材） ----
+
+export const POWER_CREEP_SPEC = {
+  spriteSize: 180,
+  /** tint 0xcc3d3e（:93）；纹理=className-lvl{min(4,ceil(level/6))}（:41-44）。
+   * :46-48 的 texture-light 计算（className-lvl4）是死代码——lighting 精灵
+   * 实际用 texture 计算（:143），保真运行时行为。 */
+  spriteTint: 0xcc3d3e,
+  badge: { radius: 26, color: 0x222222 },
+  glow: { width: 400, height: 400, alpha: 1, tint: 0xff5555 },
+  name: {
+    fontSize: 55,
+    fontFamily: 'Roboto, sans-serif',
+    strokeColor: '#111111',
+    strokeThickness: 15,
+    anchorY: 1.7,
+  },
+  safeModeAlpha: 0.5,
+} as const;
+
+// ---- 房间事件码（kk-core/constants.rs:502-514，与官方 constants.js 实测逐项
+// 相等——R1 §12；R4 只消费攻击/治疗，R5 动效系统扩全表）。
+// 落点说明：shared 常量生成管线（feed.ts:57 申明）落地前的渲染器本地替身，
+// R5 扩全表时随管线统一处置（R4 评审 B建议1）。 ----
+
+export const EVENT_ATTACK = 1;
+export const EVENT_HEAL = 6;
+
+// ---- tick 时长缺省（G6：官方闭源壳传入值不可知——契约参数化；index.ts 与
+// ObjectsStageOptions 注释单源引用，R4 评审 B建议5） ----
+
+export const DEFAULT_TICK_DURATION_MS = 1000;

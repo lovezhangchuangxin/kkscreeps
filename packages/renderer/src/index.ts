@@ -11,7 +11,7 @@ import { initKernel, type Backend, type Kernel } from './core/renderer.js';
 import { fitRect, screenToWorld, type CameraState } from './core/camera-math.js';
 import { loadAtlas, type LoadedAtlas } from './assets/atlas.js';
 import { FeedStore, type FeedView } from './feed/room-feed.js';
-import { TERRAIN_SPEC } from './core/terrain-spec.js';
+import { DEFAULT_TICK_DURATION_MS } from './objects/specs.js';
 import { DEFAULT_CELL_SIZE, ROOM_SIZE, RoomScene } from './scenes/room.js';
 import type { TerrainTextures } from './scenes/terrain.js';
 
@@ -41,6 +41,11 @@ export interface CreateRendererOptions {
    * （全敌对色）。**非最终契约面，R6 API 冻结时评审去留。**
    */
   localPlayerId?: string;
+  /**
+   * tick 时长 ms（运动插值/受击罩/死亡淡出时序；G6 契约参数化，缺省 1000，
+   * 官方 demo 慢放同参）。**非最终契约面，R6 API 冻结时评审去留。**
+   */
+  tickDurationMs?: number;
 }
 
 export interface RendererStats {
@@ -138,14 +143,17 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
       } satisfies TerrainTextures)
     : placeholderTextures();
 
-  // 对象舞台资产（R3）：atlas 帧 + glow 独立纹理；无 atlas 时对象层缺帧降级。
+  // 对象舞台资产（R3）：atlas 帧 + glow/creep-mask 独立纹理；无 atlas 时对象
+  // 层缺帧降级。
   const objectsSetup = atlas
     ? {
         assets: {
           frames: atlas.frames,
           glow: atlas.standalone.get('glow')?.texture ?? null,
+          creepMask: atlas.standalone.get('creep-mask')?.texture ?? null,
         },
         player: options.localPlayerId ?? null,
+        tickDurationMS: options.tickDurationMs ?? DEFAULT_TICK_DURATION_MS,
       }
     : undefined;
 
@@ -154,18 +162,17 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
 
   const feed = new FeedStore();
   // feed→scene 接线：快照携带地形即重建（hash 门控在 TerrainStage 内）；
-  // 对象列表逐变更对账（R3——constructedWall 格集变化在 applyObjects 内
-  // 返回并触发墙重烘焙）。
-  feed.onChange((roomKey) => {
+  // 对象列表逐变更对账（constructedWall 格集变化在 applyObjects 内返回并
+  // 触发墙重烘焙）；事件面随变更记录下发（R4 攻击/治疗罩，R5 扩全表）。
+  feed.onChange((roomKey, change) => {
     const terrain = feed.terrain(roomKey);
     if (terrain) room.setTerrain(terrain.codes);
-    const summary = feed.summary(roomKey);
-    room.applyObjects(feed.objects(roomKey), summary?.time ?? 0);
+    room.applyObjects(change.objects, change.time, change.events, change.kind);
   });
 
   const onTick = (ticker: { deltaMS: number }): void => {
-    // 60fps 帧基准（C-S8 单源 TERRAIN_SPEC.frameBaseMs）
-    room.update(ticker.deltaMS / TERRAIN_SPEC.frameBaseMs, kernel.app.renderer);
+    // 真实帧时间直通（swamp 滚动按 60fps 帧基准换算在 RoomScene 内）
+    room.update(ticker.deltaMS, kernel.app.renderer);
   };
   kernel.app.ticker.add(onTick);
 

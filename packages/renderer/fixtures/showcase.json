@@ -3097,7 +3097,7 @@
      "level": 2,
      "progress": 20000,
      "progressTotal": 45000,
-     "safeMode": 0,
+     "safeMode": 1000,
      "safeModeAvailable": 1,
      "downgradeTime": null,
      "isPowerEnabled": false,
@@ -3127,6 +3127,941 @@
       "ticksToEnd": 5000
      },
      "sign": null
+    },
+    {
+     "type": "creep",
+     "id": "sc0041",
+     "room": "W0C0",
+     "x": 10,
+     "y": 32,
+     "name": "ring-work50",
+     "user": "p1",
+     "owner": "p1",
+     "body": [
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      }
+     ],
+     "hits": 5000,
+     "spawning": false,
+     "fatigue": 0
+    },
+    {
+     "type": "creep",
+     "id": "sc0042",
+     "room": "W0C0",
+     "x": 13,
+     "y": 32,
+     "name": "ring-move50",
+     "user": "p1",
+     "owner": "p1",
+     "body": [
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      }
+     ],
+     "hits": 5000,
+     "spawning": false,
+     "fatigue": 0
+    },
+    {
+     "type": "creep",
+     "id": "sc0043",
+     "room": "W0C0",
+     "x": 16,
+     "y": 32,
+     "name": "ring-mixed",
+     "user": "p1",
+     "owner": "p1",
+     "body": [
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "attack",
+       "hits": 100
+      },
+      {
+       "type": "attack",
+       "hits": 100
+      },
+      {
+       "type": "ranged_attack",
+       "hits": 100
+      },
+      {
+       "type": "heal",
+       "hits": 100
+      },
+      {
+       "type": "claim",
+       "hits": 100
+      },
+      {
+       "type": "carry",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      }
+     ],
+     "hits": 1700,
+     "spawning": false,
+     "fatigue": 0
+    },
+    {
+     "type": "creep",
+     "id": "sc0044",
+     "room": "W0C0",
+     "x": 19,
+     "y": 32,
+     "name": "ring-damaged",
+     "user": "p1",
+     "owner": "p1",
+     "body": [
+      {
+       "type": "work",
+       "hits": 40
+      },
+      {
+       "type": "work",
+       "hits": 70
+      },
+      {
+       "type": "attack",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 90
+      },
+      {
+       "type": "move",
+       "hits": 90
+      }
+     ],
+     "hits": 390,
+     "spawning": false,
+     "fatigue": 0
+    },
+    {
+     "type": "creep",
+     "id": "sc0045",
+     "room": "W0C0",
+     "x": 22,
+     "y": 32,
+     "name": "ring-tough",
+     "user": "p1",
+     "owner": "p1",
+     "body": [
+      {
+       "type": "tough",
+       "hits": 100
+      },
+      {
+       "type": "tough",
+       "hits": 100
+      },
+      {
+       "type": "tough",
+       "hits": 100
+      },
+      {
+       "type": "heal",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      }
+     ],
+     "hits": 600,
+     "spawning": false,
+     "fatigue": 0
+    },
+    {
+     "type": "creep",
+     "id": "sc0046",
+     "room": "W0C0",
+     "x": 25,
+     "y": 32,
+     "name": "ring-tough-dead",
+     "user": "p1",
+     "owner": "p1",
+     "body": [
+      {
+       "type": "tough",
+       "hits": 0
+      },
+      {
+       "type": "tough",
+       "hits": 0
+      },
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      }
+     ],
+     "hits": 200,
+     "spawning": false,
+     "fatigue": 0
+    },
+    {
+     "type": "creep",
+     "id": "sc0047",
+     "room": "W0C0",
+     "x": 28,
+     "y": 32,
+     "name": "npc-keeper",
+     "user": "3",
+     "owner": "3",
+     "body": [
+      {
+       "type": "attack",
+       "hits": 100
+      },
+      {
+       "type": "attack",
+       "hits": 100
+      },
+      {
+       "type": "attack",
+       "hits": 100
+      },
+      {
+       "type": "attack",
+       "hits": 100
+      },
+      {
+       "type": "attack",
+       "hits": 100
+      }
+     ],
+     "hits": 500,
+     "spawning": false,
+     "fatigue": 0
+    },
+    {
+     "type": "creep",
+     "id": "sc0048",
+     "room": "W0C0",
+     "x": 31,
+     "y": 32,
+     "name": "spawner-creep",
+     "user": "p1",
+     "owner": "p1",
+     "body": [
+      {
+       "type": "work",
+       "hits": 100
+      },
+      {
+       "type": "work",
+       "hits": 100
+      }
+     ],
+     "hits": 200,
+     "spawning": true,
+     "fatigue": 0
+    },
+    {
+     "type": "creep",
+     "id": "sc0049",
+     "room": "W0C0",
+     "x": 10,
+     "y": 36,
+     "name": "carry-energy",
+     "user": "p1",
+     "owner": "p1",
+     "body": [
+      {
+       "type": "carry",
+       "hits": 100
+      },
+      {
+       "type": "carry",
+       "hits": 100
+      },
+      {
+       "type": "carry",
+       "hits": 100
+      },
+      {
+       "type": "carry",
+       "hits": 100
+      },
+      {
+       "type": "carry",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      }
+     ],
+     "hits": 1000,
+     "spawning": false,
+     "fatigue": 0,
+     "store": {
+      "energy": 400
+     },
+     "storeCapacity": 800
+    },
+    {
+     "type": "creep",
+     "id": "sc0050",
+     "room": "W0C0",
+     "x": 13,
+     "y": 36,
+     "name": "carry-rings",
+     "user": "p1",
+     "owner": "p1",
+     "body": [
+      {
+       "type": "carry",
+       "hits": 100
+      },
+      {
+       "type": "carry",
+       "hits": 100
+      },
+      {
+       "type": "carry",
+       "hits": 100
+      },
+      {
+       "type": "carry",
+       "hits": 100
+      },
+      {
+       "type": "carry",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      }
+     ],
+     "hits": 1000,
+     "spawning": false,
+     "fatigue": 0,
+     "store": {
+      "energy": 100,
+      "power": 100,
+      "H": 600
+     },
+     "storeCapacity": 800
+    },
+    {
+     "type": "creep",
+     "id": "sc0051",
+     "room": "W0C0",
+     "x": 16,
+     "y": 36,
+     "name": "carry-mixed",
+     "user": "p1",
+     "owner": "p1",
+     "body": [
+      {
+       "type": "carry",
+       "hits": 100
+      },
+      {
+       "type": "carry",
+       "hits": 100
+      },
+      {
+       "type": "carry",
+       "hits": 100
+      },
+      {
+       "type": "carry",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      }
+     ],
+     "hits": 800,
+     "spawning": false,
+     "fatigue": 0,
+     "store": {
+      "energy": 50,
+      "power": 50,
+      "H": 100
+     },
+     "storeCapacity": 400
+    },
+    {
+     "type": "creep",
+     "id": "sc0052",
+     "room": "W0C0",
+     "x": 10,
+     "y": 40,
+     "name": "enemy-dim",
+     "user": "p2",
+     "owner": "p2",
+     "body": [
+      {
+       "type": "attack",
+       "hits": 100
+      },
+      {
+       "type": "attack",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      }
+     ],
+     "hits": 400,
+     "spawning": false,
+     "fatigue": 0
+    },
+    {
+     "type": "powerCreep",
+     "id": "sc0053",
+     "room": "W0C0",
+     "x": 13,
+     "y": 40,
+     "name": "pc-operator",
+     "user": "p1",
+     "owner": "p1",
+     "className": "operator",
+     "level": 12
+    },
+    {
+     "type": "powerCreep",
+     "id": "sc0054",
+     "room": "W0C0",
+     "x": 16,
+     "y": 40,
+     "name": "pc-executor",
+     "user": "p2",
+     "owner": "p2",
+     "className": "executor",
+     "level": 30
+    },
+    {
+     "type": "creep",
+     "id": "sc0055",
+     "room": "W0C0",
+     "x": 19,
+     "y": 40,
+     "name": "friendly-bright",
+     "user": "p1",
+     "owner": "p1",
+     "body": [
+      {
+       "type": "heal",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      },
+      {
+       "type": "move",
+       "hits": 100
+      }
+     ],
+     "hits": 400,
+     "spawning": false,
+     "fatigue": 0
     }
    ]
   },

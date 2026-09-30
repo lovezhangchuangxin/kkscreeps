@@ -10,15 +10,17 @@
 //! 确定性（方案 §9）：固定 seed + 固定 [`TickInput`] 墙钟注入（ADR-013 决策 5）
 //! + 结算全程 BTreeMap 序 + 无时间戳——两次导出逐字节一致（本模块测试断言）。
 
+use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::Path;
 
-use kk_engine::intent::IntentBatch;
+use kk_engine::intent::{Action, IntentBatch, IntentData};
 use kk_engine::settle::{Engine, TickInput};
 use kk_schema::room::{
     ConstructionSiteObj, ControllerObj, CreepObj, EnergyObj, ExtensionObj, GenericObj, MineralObj,
     RoadObj, RoomObject, SpawnObj, StorageObj, Store, TombstoneObj,
 };
+use kk_world::ObjId;
 use kk_world::World;
 use kk_world::types::BodyKind;
 
@@ -27,14 +29,40 @@ use kk_world::types::BodyKind;
 const FIXED_NOW_MS: u64 = 1_700_000_000_000;
 
 /// 世界构建器（settle_tests Fixture 同款摆法的脚本摆放函数）。
-type WorldBuilder = fn(&mut World);
+/// 返回需要意图脚本驱动的对象句柄（名 → id；静态夹具返回空表）。
+type WorldBuilder = fn(&mut World) -> BTreeMap<String, ObjId>;
 
-/// 夹具清单：名（=输出文件名/前端夹具键）、seed、世界构建器。
-const FIXTURES: &[(&str, u64, WorldBuilder)] = &[
-    ("plains", 1, build_plains),
-    ("standard", 2, build_standard),
-    ("swamp-walls", 3, build_swamp_walls),
-    ("dense-edge", 4, build_dense_edge),
+/// 逐 tick 意图脚本（运动/战斗夹具——R1 §12 决策①登记的本文件扩展点）。
+type IntentScript = fn(tick: u32, handles: &BTreeMap<String, ObjId>) -> IntentBatch;
+
+/// 夹具清单：名（=输出文件名/前端夹具键）、seed、世界构建器、意图脚本。
+struct FixtureSpec {
+    name: &'static str,
+    seed: u64,
+    build: WorldBuilder,
+    script: Option<IntentScript>,
+}
+
+const fn fixture(name: &'static str, seed: u64, build: WorldBuilder) -> FixtureSpec {
+    FixtureSpec {
+        name,
+        seed,
+        build,
+        script: None,
+    }
+}
+
+const FIXTURES: &[FixtureSpec] = &[
+    fixture("plains", 1, build_plains),
+    fixture("standard", 2, build_standard),
+    fixture("swamp-walls", 3, build_swamp_walls),
+    fixture("dense-edge", 4, build_dense_edge),
+    FixtureSpec {
+        name: "creeps",
+        seed: 5,
+        build: build_creeps,
+        script: Some(creep_tick_script),
+    },
 ];
 
 fn body(kinds: &[BodyKind]) -> Vec<kk_schema::room::BodyPart> {
@@ -49,6 +77,17 @@ fn body(kinds: &[BodyKind]) -> Vec<kk_schema::room::BodyPart> {
 }
 
 fn creep(name: &str, owner: &str, x: u8, y: u8, kinds: &[BodyKind]) -> RoomObject {
+    creep_with_energy(name, owner, x, y, kinds, 0)
+}
+
+fn creep_with_energy(
+    name: &str,
+    owner: &str,
+    x: u8,
+    y: u8,
+    kinds: &[BodyKind],
+    energy: u32,
+) -> RoomObject {
     RoomObject::Creep(CreepObj {
         id: 0,
         x,
@@ -61,15 +100,189 @@ fn creep(name: &str, owner: &str, x: u8, y: u8, kinds: &[BodyKind]) -> RoomObjec
         name: name.into(),
         owner: owner.into(),
         body: body(kinds),
-        store: Store {
-            energy: 0,
-            ghodium: 0,
-        },
+        store: Store { energy, ghodium: 0 },
         store_extra: Vec::new(),
         notify_when_attacked: None,
         say_message: None,
         say_public: None,
     })
+}
+
+/// R4 运动与战斗夹具（房间 W5N5 全平原）：移动/朝向插值、受击罩三色、
+/// 死亡淡出的实弹取材。布局（互不相扰的两组舞台）：
+///   - 走位者×2（p1，move×4）：右/下/左/上循环——方向逐 tick 变化（朝向
+///     旋转取材）；两组相位错开。
+///   - 近战组：attacker(p1 [attack,move]) 每 tick 咬 victimA(p2 [move]，100
+///     hits，ATTACK_POWER=30 → 第 4 tick 死亡——removedIds→死亡淡出)。
+///   - 双向组：attacker2 咬 victimB(p2 [tough,tough,move]，300 hits) 且
+///     healer2 每 tick 治 victimB → 同 tick attacked+healed=黄罩。
+///   - 治疗组：healer(p1 [heal,move]，储能) 每 tick 治 tank(p1 [tough,move])
+///     → 纯绿罩（heal.js:34 事件无条件，满血也发）。
+///
+/// 意图对死亡目标的续发由结算链静默拒（room.rs resolve else-return）。
+fn build_creeps(world: &mut World) -> BTreeMap<String, ObjId> {
+    world
+        .register_room("W5N5", kk_core::Terrain::plains())
+        .unwrap();
+    let mut handles = BTreeMap::new();
+    let put =
+        |world: &mut World, handles: &mut BTreeMap<String, ObjId>, name: &str, o: RoomObject| {
+            let id = world.insert("W5N5", o).unwrap();
+            handles.insert(name.to_string(), id);
+        };
+    put(
+        world,
+        &mut handles,
+        "walker1",
+        creep(
+            "walker1",
+            "p1",
+            10,
+            10,
+            &[
+                BodyKind::Move,
+                BodyKind::Move,
+                BodyKind::Move,
+                BodyKind::Move,
+            ],
+        ),
+    );
+    put(
+        world,
+        &mut handles,
+        "walker2",
+        creep(
+            "walker2",
+            "p1",
+            14,
+            10,
+            &[
+                BodyKind::Move,
+                BodyKind::Move,
+                BodyKind::Move,
+                BodyKind::Move,
+            ],
+        ),
+    );
+    put(
+        world,
+        &mut handles,
+        "attacker",
+        creep(
+            "attacker",
+            "p1",
+            20,
+            20,
+            &[BodyKind::Attack, BodyKind::Move],
+        ),
+    );
+    put(
+        world,
+        &mut handles,
+        "victimA",
+        creep("victimA", "p2", 20, 21, &[BodyKind::Move]),
+    );
+    put(
+        world,
+        &mut handles,
+        "attacker2",
+        creep(
+            "attacker2",
+            "p1",
+            23,
+            20,
+            &[BodyKind::Attack, BodyKind::Move],
+        ),
+    );
+    put(
+        world,
+        &mut handles,
+        "victimB",
+        creep(
+            "victimB",
+            "p2",
+            22,
+            20,
+            &[BodyKind::Tough, BodyKind::Tough, BodyKind::Move],
+        ),
+    );
+    put(
+        world,
+        &mut handles,
+        "healer",
+        creep_with_energy(
+            "healer",
+            "p1",
+            25,
+            25,
+            &[BodyKind::Heal, BodyKind::Move],
+            1000,
+        ),
+    );
+    put(
+        world,
+        &mut handles,
+        "tank",
+        creep("tank", "p1", 25, 26, &[BodyKind::Tough, BodyKind::Move]),
+    );
+    put(
+        world,
+        &mut handles,
+        "healer2",
+        creep_with_energy(
+            "healer2",
+            "p1",
+            22,
+            21,
+            &[BodyKind::Heal, BodyKind::Move],
+            1000,
+        ),
+    );
+    handles
+}
+
+/// 逐 tick 意图脚本：走位循环 + 战斗/治疗。方向钟面（constants.rs TOP=1 顺
+/// 时针到 TOP_LEFT=8）：3=右、5=下、7=左、1=上（movement.rs offsets）。
+fn creep_tick_script(tick: u32, handles: &BTreeMap<String, ObjId>) -> IntentBatch {
+    let mut batch = IntentBatch::default();
+    let id = |name: &str| -> ObjId {
+        *handles
+            .get(name)
+            .unwrap_or_else(|| panic!("意图脚本句柄缺失: {name}"))
+    };
+    const LOOP1: [u8; 4] = [3, 5, 7, 1];
+    const LOOP2: [u8; 4] = [5, 7, 1, 3];
+    let phase = (tick as usize) % 4;
+    for (name, loop_) in [("walker1", &LOOP1), ("walker2", &LOOP2)] {
+        let mut data = IntentData::bare();
+        data.direction = Some(loop_[phase]);
+        batch.add_object_intent("p1", id(name), Action::Move, data);
+    }
+    batch.add_object_intent(
+        "p1",
+        id("attacker"),
+        Action::Attack,
+        IntentData::target(id("victimA")),
+    );
+    batch.add_object_intent(
+        "p1",
+        id("attacker2"),
+        Action::Attack,
+        IntentData::target(id("victimB")),
+    );
+    batch.add_object_intent(
+        "p1",
+        id("healer"),
+        Action::Heal,
+        IntentData::target(id("tank")),
+    );
+    batch.add_object_intent(
+        "p1",
+        id("healer2"),
+        Action::Heal,
+        IntentData::target(id("victimB")),
+    );
+    batch
 }
 
 fn terrain_with(walls: &[(usize, usize)], swamps: &[(usize, usize)]) -> kk_core::Terrain {
@@ -85,7 +298,7 @@ fn terrain_with(walls: &[(usize, usize)], swamps: &[(usize, usize)]) -> kk_core:
 }
 
 /// 全平原：地形零特殊格 + 最小对象面——R2 plain/噪声渲染的基线夹具。
-fn build_plains(world: &mut World) {
+fn build_plains(world: &mut World) -> BTreeMap<String, ObjId> {
     world
         .register_room("W1N1", kk_core::Terrain::plains())
         .unwrap();
@@ -134,11 +347,12 @@ fn build_plains(world: &mut World) {
             ),
         )
         .unwrap();
+    BTreeMap::new()
 }
 
 /// 标准房：controller/spawn/extension/storage/source/mineral/extractor/路/
 /// 工地/墙/塔与城墙（Generic 透传）——R3 静态对象全家的主夹具。
-fn build_standard(world: &mut World) {
+fn build_standard(world: &mut World) -> BTreeMap<String, ObjId> {
     let walls: Vec<(usize, usize)> = (0..50)
         .flat_map(|i| [(i, 0usize), (i, 49usize), (0usize, i), (49usize, i)])
         .collect();
@@ -388,11 +602,12 @@ fn build_standard(world: &mut World) {
             &[BodyKind::Work, BodyKind::Carry, BodyKind::Move],
         ),
     );
+    BTreeMap::new()
 }
 
 /// 沼泽墙混合：内陆沼泽斑块 + 沼泽上的路（hitsMax 地形系数）+ 边界墙——
 /// R2 swamp 路径合并/滚动噪声与 R3 路系数的夹具。
-fn build_swamp_walls(world: &mut World) {
+fn build_swamp_walls(world: &mut World) -> BTreeMap<String, ObjId> {
     let mut walls = Vec::new();
     for i in 0..50 {
         walls.extend([(i, 0usize), (i, 49usize), (0usize, i), (49usize, i)]);
@@ -472,11 +687,12 @@ fn build_swamp_walls(world: &mut World) {
             ),
         )
         .unwrap();
+    BTreeMap::new()
 }
 
 /// 密集边界：四边墙留 2 格出口（官方 exit 形态）+ 中心密集对象群 + 边缘散点
 /// （掉落资源/墓碑）——R2 出口贴边与 R3/R4 群体渲染的夹具。
-fn build_dense_edge(world: &mut World) {
+fn build_dense_edge(world: &mut World) -> BTreeMap<String, ObjId> {
     let mut walls = Vec::new();
     for i in 0..50 {
         // 出口缺口：top/bottom x=24,25；left/right y=24,25
@@ -618,11 +834,17 @@ fn build_dense_edge(world: &mut World) {
             ),
         );
     }
+    BTreeMap::new()
 }
 
 /// 单夹具导出为 JSONL 行（tick 0 初始态 + 每 tick 推进后各一条）。
 /// IO 与渲染分离：确定性测试直接对比本函数两次输出。
-fn render_fixture(world: World, ticks: u32) -> Vec<String> {
+fn render_fixture(
+    world: World,
+    handles: BTreeMap<String, ObjId>,
+    script: Option<IntentScript>,
+    ticks: u32,
+) -> Vec<String> {
     let mut engine = Engine::new(world);
     let mut lines = Vec::with_capacity(ticks as usize + 1);
     let mut emit = |tick: u32, world: &World| {
@@ -634,14 +856,15 @@ fn render_fixture(world: World, ticks: u32) -> Vec<String> {
     };
     emit(0, engine.world());
     for t in 1..=ticks {
+        let batch = script.map(|f| f(t, &handles)).unwrap_or_default();
         engine
             .tick_with_intents_with_input(
-                IntentBatch::default(),
+                batch,
                 TickInput {
                     now_ms: FIXED_NOW_MS,
                 },
             )
-            .expect("夹具世界空意图结算不应失败");
+            .expect("夹具世界结算不应失败（空意图或静态脚本）");
         emit(t, engine.world());
     }
     lines
@@ -650,11 +873,11 @@ fn render_fixture(world: World, ticks: u32) -> Vec<String> {
 /// 导出全部夹具到目录（每夹具一个 `<名>.jsonl`）。返回成功写出的文件数。
 pub fn run(out_dir: &str, ticks: u32) -> i32 {
     std::fs::create_dir_all(out_dir).unwrap_or_else(|e| panic!("创建输出目录 {out_dir} 失败: {e}"));
-    for (name, seed, build) in FIXTURES {
-        let mut world = World::new(*seed);
-        build(&mut world);
-        let lines = render_fixture(world, ticks);
-        let path = Path::new(out_dir).join(format!("{name}.jsonl"));
+    for spec in FIXTURES {
+        let mut world = World::new(spec.seed);
+        let handles = (spec.build)(&mut world);
+        let lines = render_fixture(world, handles, spec.script, ticks);
+        let path = Path::new(out_dir).join(format!("{}.jsonl", spec.name));
         std::fs::write(&path, lines.join("\n") + "\n")
             .unwrap_or_else(|e| panic!("写入 {} 失败: {e}", path.display()));
         println!("✓ {} ({} ticks)", path.display(), ticks);
@@ -670,16 +893,18 @@ mod tests {
     /// 确定性（方案 §9）：同 seed 同 TickInput 两次导出逐字节一致。
     #[test]
     fn 导出确定性_两次逐字节一致() {
-        for (name, seed, build) in FIXTURES {
+        for spec in FIXTURES {
             let build_world = || {
-                let mut w = World::new(*seed);
-                build(&mut w);
-                w
+                let mut w = World::new(spec.seed);
+                let handles = (spec.build)(&mut w);
+                (w, handles)
             };
-            let la = render_fixture(build_world(), 5);
-            let lb = render_fixture(build_world(), 5);
-            assert_eq!(la, lb, "夹具 {name} 两次导出应逐字节一致");
-            assert_eq!(la.len(), 6, "夹具 {name} 应为 tick0+5 tick 共 6 条");
+            let (wa, ha) = build_world();
+            let (wb, hb) = build_world();
+            let la = render_fixture(wa, ha, spec.script, 5);
+            let lb = render_fixture(wb, hb, spec.script, 5);
+            assert_eq!(la, lb, "夹具 {} 两次导出应逐字节一致", spec.name);
+            assert_eq!(la.len(), 6, "夹具 {} 应为 tick0+5 tick 共 6 条", spec.name);
         }
     }
 
@@ -687,8 +912,8 @@ mod tests {
     #[test]
     fn 导出时间序单调推进() {
         let mut world = World::new(1);
-        build_plains(&mut world);
-        let lines = render_fixture(world, 3);
+        let handles = build_plains(&mut world);
+        let lines = render_fixture(world, handles, None, 3);
         let times: Vec<u64> = lines
             .iter()
             .map(|l| {
@@ -697,5 +922,46 @@ mod tests {
             })
             .collect();
         assert_eq!(times, vec![0, 1, 2, 3], "time 应逐 tick +1");
+    }
+
+    /// R4 运动夹具行为面：意图注入后走位者位移、victimA 死亡移除、
+    /// 攻击/治疗事件入投影——渲染端运动/受击罩/死亡淡出的数据依据。
+    #[test]
+    fn creeps_夹具_位移_死亡_事件() {
+        let mut world = World::new(5);
+        let handles = build_creeps(&mut world);
+        let lines = render_fixture(world, handles, Some(creep_tick_script), 10);
+        let parse = |i: usize| -> serde_json::Value { serde_json::from_str(&lines[i]).unwrap() };
+        let obj_at = |v: &serde_json::Value, name: &str| -> Option<serde_json::Value> {
+            v["world"]["objects"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|o| o["name"] == name)
+                .cloned()
+        };
+        // 走位者 tick1 各进一格（walker1 方向 5=下、walker2 方向 7=左——
+        // phase=tick%4 的首步）
+        let w0 = obj_at(&parse(0), "walker1").unwrap();
+        let w1 = obj_at(&parse(1), "walker1").unwrap();
+        assert_eq!((w0["x"].as_i64(), w0["y"].as_i64()), (Some(10), Some(10)));
+        assert_eq!((w1["x"].as_i64(), w1["y"].as_i64()), (Some(10), Some(11)));
+        let v2 = obj_at(&parse(1), "walker2").unwrap();
+        assert_eq!((v2["x"].as_i64(), v2["y"].as_i64()), (Some(13), Some(10)));
+        // victimA tick0 在场、前 5 tick 内死亡移除（30×4≥100 hits）
+        assert!(obj_at(&parse(0), "victimA").is_some());
+        let died = (1..=10)
+            .find(|t| obj_at(&parse(*t), "victimA").is_none())
+            .unwrap_or_else(|| panic!("victimA 应在夹具期间死亡移除"));
+        assert!(died <= 5, "victimA 应在前 5 tick 内死亡，实际 tick {died}");
+        // 攻击/治疗事件进投影（EVENT_ATTACK=1 / EVENT_HEAL=6）
+        let has_event = |v: &serde_json::Value, code: i64| {
+            v["world"]["rooms"]["W5N5"]["events"]
+                .as_array()
+                .map(|evs| evs.iter().any(|e| e["event"].as_i64() == Some(code)))
+                .unwrap_or(false)
+        };
+        assert!(has_event(&parse(1), 1), "tick1 应有 EVENT_ATTACK");
+        assert!(has_event(&parse(1), 6), "tick1 应有 EVENT_HEAL");
     }
 }

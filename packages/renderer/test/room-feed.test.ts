@@ -70,4 +70,26 @@ describe('FeedStore', () => {
     expect(feed.objects('E9S9')).toEqual([]);
     expect(feed.terrain('E9S9')).toBeUndefined();
   });
+
+  it('onChange 携带变更记录：快照/地形空事件，增量透传 events（R4 罩通道）', () => {
+    const feed = new FeedStore();
+    const seen: Array<{ room: string; time: number; objects: number; events: number; kind: string }> = [];
+    feed.onChange((room, change) => {
+      seen.push({ room, time: change.time, objects: change.objects.length, events: change.events.length, kind: change.kind });
+    });
+    feed.setTerrain('W1N1', { codes: [1] });
+    feed.applySnapshot(snapshot);
+    feed.applyDelta({
+      time: 1,
+      room: 'W1N1',
+      upsert: [],
+      removedIds: [],
+      events: [{ event: 1, objectId: 'atk', data: { targetId: 'a', damage: 30 } }],
+    });
+    expect(seen).toEqual([
+      { room: 'W1N1', time: 0, objects: 0, events: 0, kind: 'delta' },
+      { room: 'W1N1', time: 0, objects: 2, events: 0, kind: 'snapshot' },
+      { room: 'W1N1', time: 1, objects: 2, events: 1, kind: 'delta' },
+    ]);
+  });
 });

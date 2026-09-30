@@ -25,6 +25,13 @@ export interface PartEnv {
   readonly player: string | null;
   /** own 判定（playerColor 色板分支用；player===null 时恒 false）。 */
   readonly isOwn: (user: string | null | undefined) => boolean;
+  /**
+   * 房间 controller 摘要（官方 stateExtra.controller——creep safemode 判定
+   * 读它：safeMode>gameTime && controller.user!==user → α0.5，creep.metadata
+   * .js:49-62）。房间无 controller=null。首个 controller（官方 objects.find
+   * 同语义）由 ObjectsStage 每次 apply 扫描供给。
+   */
+  readonly controller: { readonly user: string | null; readonly safeModeUntil: number } | null;
 }
 
 /**

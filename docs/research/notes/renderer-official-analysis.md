@@ -94,8 +94,10 @@ lighting 层挂 MULTIPLY 的 PassThroughFilter + 0x808080 环境光矩形，disp
   ranged `0x7fa7e5`、heal `0x56cf5e`、claim `0xb99cfb`、carry `0x666666`（不画）。
   任一 tough 存活 → 中心 `tough.svg` 120×120；NPC（user '2'/'3'）整只换 `creep-npc.svg`。
 - 朝向：`RotateTo(移动方向, tickDuration*0.2)`。受击：`actionLog.attacked/healed`
-  → `cover.svg` ADD 罩 tint 红 `0xFF3333`/绿 `0x2ce328`/黄 `0xFFFF33`，0.25 tick
-  淡入 0.75 tick 淡出（`engine/src/lib/processors/creepActions.js:149-171,299-306`）。
+  → `cover.svg` ADD 罩 tint 红 `0xFF3333`/绿 `0x2ce328`/黄 `0xFFFF33`，0.225 tick
+  达峰（α0.5）、总长 0.9 tick（call-site 传 `tickDuration*0.9`，函数内再 /4、
+  3/4——`creepActions.js:149-171,299-306`；本行旧文 "0.25/0.75 tick" 系漏看
+  call-site 系数，2026-09-30 R4 评审 A-B2 勘误）。
   死亡：`FadeOut(tickDuration/2)` 后销毁（`engine/src/lib/processors/disappear.js`）。
   敌方 safemode 期间整只 alpha 0.5（`creep.metadata.js:49-62`）。
 - say 气泡（`engine/src/lib/processors/say.js`）：圆角矩形 r30+三角尾、黑描边 8px；
@@ -167,8 +169,10 @@ lighting 层挂 MULTIPLY 的 PassThroughFilter + 0x808080 环境光矩形，disp
 ## 7. 移动插值
 
 creep：`MoveTo` + EASE_IN_OUT_QUAD，时长 = `tickDuration`（demo 慢放 2.5s，
-`demo/src/components/Canvas.jsx:9`）；新动作 cancel 旧的（`moveTo.js:38-41`）；
-朝向旋转 0.2 tick。动画按**真实帧时间**更新（`ActionManager.update` 用
+`demo/src/components/Canvas.jsx:9`）；位移重触发走 `finishActions` 吸附旧终点
+再起新段（`GameObject.js:139-146`、`World.js:322-327`——本行旧文 "cancel
+（moveTo.js:38-41）" 系无 metadata 引用的死 processor，2026-09-30 R4 评审
+A-S1 勘误）；朝向旋转 0.2 tick。动画按**真实帧时间**更新（`ActionManager.update` 用
 `Date.now()` 差值），tick 断流动画照跑；500ms 渲染看门狗（`GameRenderer.js:159-164`）。
 
 ## 8. RoomVisual：未能取证

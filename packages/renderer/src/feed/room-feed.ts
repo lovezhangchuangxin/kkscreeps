@@ -8,6 +8,7 @@
  */
 import type {
   RoomDelta,
+  RoomEvent,
   RoomFeed,
   RoomObjectState,
   RoomSnapshot,
@@ -32,6 +33,20 @@ export interface RoomSummary {
 }
 
 /**
+ * 单次应用记录（场景对账输入；R4 起携带事件面——动效第一通道）。快照应用
+ * events 恒空（契约快照无事件字段）；setTerrain 触发的通知同样空（防重放）。
+ * kind 区分快照/增量：快照=全量置换语义，场景侧应重建视图（跨快照的位置
+ * 跳变不得做移动补间——切夹具/重放的幻影移动根因）。
+ */
+export interface FeedChange {
+  /** 房间对象快照（数组副本，与 FeedView.objects 同款——元素勿深改，评审 B建议7）。 */
+  objects: RoomObjectState[];
+  time: number;
+  events: RoomEvent[];
+  kind: 'snapshot' | 'delta';
+}
+
+/**
  * feed 公共面：RoomFeed 契约 + 只读摘要（评审 B 建议 2——消费方对接口编程，
  * FeedStore 是实现细节）。普通数据类，无 Pixi 依赖（ADR-009）。
  */
@@ -46,22 +61,32 @@ export interface FeedView extends RoomFeed {
 
 export class FeedStore implements FeedView {
   private readonly rooms = new Map<string, RoomState>();
-  private readonly listeners = new Set<(room: string) => void>();
+  private readonly listeners = new Set<(room: string, change: FeedChange) => void>();
 
   /** 状态变更订阅（快照/增量/地形注入后触发；返回退订函数）。
    * 渲染器内部接线用（feed→scene），非契约面。 */
-  onChange(listener: (room: string) => void): () => void {
+  onChange(listener: (room: string, change: FeedChange) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
 
-  private notify(room: string): void {
-    for (const listener of this.listeners) listener(room);
+  private notify(room: string, events: RoomEvent[], kind: FeedChange['kind']): void {
+    const state = this.rooms.get(room);
+    if (!state) return;
+    const change: FeedChange = {
+      objects: [...state.objectsById.values()],
+      time: state.time,
+      events,
+      kind,
+    };
+    for (const listener of this.listeners) listener(room, change);
   }
 
   setTerrain(room: string, terrain: TerrainData): void {
     this.room(room).terrain = terrain;
-    this.notify(room);
+    // kind='delta'：地形注入非对象变更（复用增量语义——场景侧 valuesEqual
+    // 门控为 no-op；不引入第三 kind，评审 B建议4）
+    this.notify(room, [], 'delta');
   }
 
   applySnapshot(snapshot: RoomSnapshot): void {
@@ -71,7 +96,7 @@ export class FeedStore implements FeedView {
       objectsById: new Map(snapshot.objects.map((o) => [o.id, o])),
       visuals: this.rooms.get(snapshot.room)?.visuals ?? [],
     });
-    this.notify(snapshot.room);
+    this.notify(snapshot.room, [], 'snapshot');
   }
 
   applyDelta(delta: RoomDelta): void {
@@ -83,7 +108,7 @@ export class FeedStore implements FeedView {
     state.time = delta.time;
     for (const o of delta.upsert) state.objectsById.set(o.id, o);
     for (const id of delta.removedIds) state.objectsById.delete(id);
-    this.notify(delta.room);
+    this.notify(delta.room, delta.events ?? [], 'delta');
   }
 
   setVisuals(room: string, visuals: RoomVisual[]): void {

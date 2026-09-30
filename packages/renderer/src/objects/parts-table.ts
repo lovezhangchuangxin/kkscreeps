@@ -5,6 +5,7 @@
  * 按 partId 挂渲染半件，join 不全在 registry 构建期抛错。
  */
 import type { PartDecl } from './part-decl.js';
+import { PARTS_CREEP, PARTS_POWER_CREEP } from './parts-creeps.js';
 import {
   PARTS_CONTAINER,
   PARTS_DEPOSIT,
@@ -44,9 +45,9 @@ function withDisabled(parts: PartDecl[]): PartDecl[] {
 }
 
 /** typeKey（resolveTypeKey）→ 部件表。官方 _all 公共件合并到**全部**对象类型
- * （engine/src/lib/World.js:36-53 前置合并；评审 A-S1）——disabled 件全表追加。
- * creep/powerCreep/road/s:road 不在本表：creep/powerCreep R4、road 走 ground
- * 层连通绘制、s:road 同 road。 */
+ * （engine/src/lib/World.js:36-53 前置合并；评审 A-S1）——disabled 件全表追加
+ * （creep/powerCreep 同受 _all 合并）。road/s:road 不在本表（road 走 ground
+ * 层连通绘制）。 */
 export const PART_DECL_TABLE: Readonly<Record<string, readonly PartDecl[]>> = {
   's:source': withDisabled(PARTS_SOURCE),
   's:mineral': withDisabled(PARTS_MINERAL),
@@ -76,6 +77,8 @@ export const PART_DECL_TABLE: Readonly<Record<string, readonly PartDecl[]>> = {
   's:rampart': withDisabled(PARTS_RAMPART),
   's:invaderCore': withDisabled(PARTS_INVADER_CORE),
   flag: withDisabled(PARTS_FLAG),
+  creep: withDisabled(PARTS_CREEP),
+  powerCreep: withDisabled(PARTS_POWER_CREEP),
 };
 
 /** 部件表内 id 唯一性校验（registry 构建期调用）。 */
@@ -136,6 +139,13 @@ export const PART_LAYERS: Readonly<Record<string, 'lighting' | 'effects'>> = {
   's:rampart.public': 'effects',
   's:invaderCore.glowBase': 'lighting',
   's:invaderCore.glowBig': 'lighting',
+  'creep.mask': 'lighting',
+  'creep.glow': 'lighting',
+  'creep.glowNpc': 'lighting',
+  'creep.name': 'effects',
+  'powerCreep.light': 'lighting',
+  'powerCreep.glow': 'lighting',
+  'powerCreep.name': 'effects',
   'flag.primary': 'effects',
   'flag.secondary': 'effects',
   // _isDisabled 公共件（全部 withDisabled 类型）

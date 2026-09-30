@@ -5,6 +5,7 @@
  */
 import { isDelta, isSnapshot, type FixtureFile } from '@kkscreeps/shared';
 import { createRenderer } from '../src/index.js';
+import creeps from '../fixtures/creeps.json';
 import denseEdge from '../fixtures/dense-edge.json';
 import plains from '../fixtures/plains.json';
 import showcase from '../fixtures/showcase.json';
@@ -40,6 +41,7 @@ const rawFixtures: Record<string, unknown> = {
   standard,
   'swamp-walls': swampWalls,
   'dense-edge': denseEdge,
+  creeps,
   showcase,
 };
 const fixtures = new Map<string, FixtureFile>();
@@ -171,11 +173,11 @@ function renderHud(): void {
   const summary = renderer.feed.summary(f.room);
   const state = index >= f.ticks.length ? 'end' : playing ? '▶' : '⏸';
   const lines = [
-    `kkscreeps renderer · dev harness (R3)`,
+    `kkscreeps renderer · dev harness (R4)`,
     `backend : ${s.backend}   fps: ${s.fps}   zoom: ${(s.zoom * 100).toFixed(0)}%   atlas: ${s.atlasFrames}f   lighting: ${s.lighting}`,
     `replay  : [${current}] ${index}/${f.ticks.length} ${state} ${SPEEDS[speedIdx]}×   player: ${params.get('player') ?? 'p1'}`,
     `room    : ${f.room} time=${summary?.time ?? '-'} objects=${summary?.objects ?? '-'} visuals=${summary?.visuals ?? 0}`,
-    `controls: 1-5 夹具（重按=重放） · 空格 播放/暂停 · . 单步 · +/- 调速 · F 视角复位`,
+    `controls: 1-6 夹具（重按=重放） · 空格 播放/暂停 · . 单步 · +/- 调速 · F 视角复位`,
   ];
   if (replayError) lines.push(`ERROR   : ${replayError}`);
   hud.innerHTML = lines.map((l) => `<div>${l}</div>`).join('');

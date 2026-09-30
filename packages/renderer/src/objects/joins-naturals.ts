@@ -28,10 +28,12 @@ import {
   vStr,
 } from './draw-helpers.js';
 
-/** join 构建上下文（atlas 帧 + glow 独立纹理；缺帧降级隐藏）。 */
+/** join 构建上下文（atlas 帧 + glow/creep-mask 独立纹理；缺帧降级隐藏）。 */
 export interface JoinAssets {
   readonly frames: ReadonlyMap<string, Texture>;
   readonly glow: Texture | null;
+  /** creep-mask.png（creep lighting 成员——独立可 wrap 纹理，非 atlas 帧）。 */
+  readonly creepMask: Texture | null;
 }
 
 export type PartJoin = Record<string, PartRenderer>;

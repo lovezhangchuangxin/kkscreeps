@@ -61,11 +61,9 @@ describe('resolveTypeKey', () => {
 });
 
 describe('PART_DECL_TABLE', () => {
-  it('键集 = Z_TABLE 键集 − road/creep/powerCreep', () => {
+  it('键集 = Z_TABLE 键集 − s:road（creep/powerCreep R4 落位）', () => {
     const expected = new Set(Object.keys(Z_TABLE));
     expected.delete('s:road');
-    expected.delete('creep');
-    expected.delete('powerCreep');
     expect(new Set(Object.keys(PART_DECL_TABLE))).toEqual(expected);
   });
 

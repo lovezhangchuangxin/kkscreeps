@@ -14,8 +14,9 @@
  */
 import { Container } from 'pixi.js';
 import { LightingPass } from '../core/lighting.js';
-import type { RoomObjectState } from '@kkscreeps/shared';
+import type { RoomEvent, RoomObjectState } from '@kkscreeps/shared';
 import { DEFAULT_CELL_SIZE, ROOM_SIZE } from './terrain-geometry.js';
+import { TERRAIN_SPEC } from '../core/terrain-spec.js';
 import { TerrainStage, type TerrainTextures } from './terrain.js';
 import { ObjectsStage } from '../objects/objects-stage.js';
 import type { JoinAssets } from '../objects/joins-naturals.js';
@@ -27,6 +28,8 @@ export interface ObjectsSetup {
   readonly assets: JoinAssets;
   /** 本玩家 id（userOwnerColor 色板 own 判定）。 */
   readonly player: string | null;
+  /** tick 时长 ms（运动插值/受击罩/死亡淡出时序；G6 缺省 1000）。 */
+  readonly tickDurationMS: number;
 }
 
 export class RoomScene {
@@ -75,6 +78,7 @@ export class RoomScene {
         lighting: this.lighting,
         assets: objects.assets,
         player: objects.player,
+        tickDurationMS: objects.tickDurationMS,
         objectsLayer,
       });
       ground.addChild(stage.roadRoot);
@@ -93,10 +97,16 @@ export class RoomScene {
     this.syncWalls();
   }
 
-  /** 对象列表对账（feed.onChange 驱动）；constructedWall 格集变化时重烘焙墙。 */
-  applyObjects(objects: readonly RoomObjectState[], time: number): void {
+  /** 对象列表对账（feed.onChange 驱动）；constructedWall 格集变化时重烘焙墙。
+   * events=本 tick 房间事件（R4：攻击/治疗罩）；kind='snapshot' 全量重建。 */
+  applyObjects(
+    objects: readonly RoomObjectState[],
+    time: number,
+    events: readonly RoomEvent[] = [],
+    kind: 'snapshot' | 'delta' = 'delta',
+  ): void {
     if (!this.objects) return;
-    if (this.objects.apply(objects, time)) this.syncWalls();
+    if (this.objects.apply(objects, time, events, kind)) this.syncWalls();
   }
 
   /** 墙烘焙格集 = 地形码 ∪ constructedWall 格。双引用门控（C-S1）：地形码与
@@ -114,9 +124,13 @@ export class RoomScene {
     if (wallRebuilt) this.lighting.markDirty();
   }
 
-  /** ticker 驱动：swamp 滚动 + lighting 离屏按需重渲。 */
-  update(framesDelta: number, renderer: Parameters<LightingPass['update']>[0]): void {
-    this.terrain.update(framesDelta);
+  /** ticker 驱动（deltaMS=真实帧时间）：swamp 滚动 + lighting 离屏按需重渲
+   * + 对象运动 tween（R4——数据断流动画照跑）。 */
+  update(deltaMS: number, renderer: Parameters<LightingPass['update']>[0]): void {
+    this.terrain.update(deltaMS / TERRAIN_SPEC.frameBaseMs);
+    // objects 先于 lighting：运动 tween 的 markDirty 同帧进 RT 重渲
+    //（消一帧滞后，评审 C建议4）
+    this.objects?.update(deltaMS);
     this.lighting.update(renderer, this.terrain.renderSize, this.view);
   }
 

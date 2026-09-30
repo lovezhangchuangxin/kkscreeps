@@ -251,6 +251,7 @@ z 表/色表/字体常量直接测代码常量）。逐片勾项，收口时全�
 | G9 | 用户色数据源 | 契约 v0 无 users 映射（引擎不投影用户色），官方 playerColor=users[user].color | R3 起 v0 采用官方 demo 同款 **userOwnerColor 模式色板**（own 0x8fbb93/#8fbb93、enemy 0xFF7777/#FF7777、未知 0xBBBBBB/#ffffff）；**rampart 私有顶罩**=own #105010/#44ff44、enemy #501010/#ff4444（terrain.js userOwnerColor 分支），**rampart 公有精灵**=playerColor 色板（rampart.metadata.js:5-7 的 userOwnerColor 分支——评审 A-B5 勘误）；本玩家=createRenderer `localPlayerId`。M3 契约落 users 映射后切换官方远程用户色路径并销账 |
 | G10 | factory 官方优先级 bug（两处） | factory.metadata.js **:46** `store['power']||0 + store['energy']||0` ⇒ `power || (0+energy) || 0`（powerHeight）；**:175-176** `energy||0 + power||0 < total` ⇒ `energy || power || (0<total)`（hasOther——total>0 恒 true 白条恒显）。container 同形表达式无此 bug（括号齐全） | R3 **保真复刻**两处官方行为（评审 A-B4 补登记 ：176）；官方上游修复后随动 |
 | G11 | mineral 未知类型退灰对 | 官方 `COLORS[mineralType]` 未类型即崩（TypeError） | R3 防御性退 O 灰对（engine 不可达态，仅脏数据触发）；官方修复语义后随动 |
+| G12 | creep 白资源圆 when 表达式 | 官方 creep.metadata.js:140 `store['energy']\|\|0 + store['power']\|\|0 < resourcesTotal` 因 \|\| 优先级解析为 `store.energy\|\|store.power\|\|(0<total)` ⇒ resourcesTotal>0 恒真（意图应为 energy+power<total） | R4 保真运行时行为=resourcesTotal>0 即显示白圆（specs.ts CREEP_SPEC 注释登记）；官方上游修复后随动 |
 
 ## 7. 切片划分（每片走完整批次循环）
 
@@ -595,3 +596,119 @@ z 表/色表/字体常量直接测代码常量）。逐片勾项，收口时全�
   复试 **pass**（123 测绿，量化复核 gun top −32/条满高 59.9/条宽 80.8 全回
   官方值）；另顺手清：lighting 成员位移路径补 markDirty（R4 运动前置防御）、
   rotatable 块注释残留、terminal 300000 常量测试锚。
+- 2026-09-30：**R4 creep 与运动完成**。四段落地：**纯逻辑半件**（body-ring.ts
+  creepBuildBody.js 逐行移植——过滤 tough/carry/hits≤0、同类型合并、升序、
+  非 move 自头顶/move 自正下双向镜像展开、弧长=PART_ANGLE×hits/100，常量
+  入 CREEP_SPEC.ring；anim/tweens.ts 官方动效语义的解析式等价——Ease(MoveTo)
+  ≡ lerp(start,target,easeInOutQuad(t/T))、RotateTo 最短角线性 0.2 tick、
+  FadeOut 线性、罩关键帧 0→0.5@1/4→0@1、TweenManager 按真实帧时间推进
+  〔数据断流动画照跑〕、cancel 不 finish 不触发 onEnd）× **声明/pixi 半件**
+  （parts-creeps.ts：main 收敛黑圆/body环/徽标/资源圆三层/tough/NPC——
+  官方全部是 mainContainer 子件随其旋转；mask/glow/glowNpc lighting 层、
+  name effects 层；白圆 when 表达式 || 优先级 quirk 登记 G12；资源圆半径
+  cap=0→min 钳 1 官方 Infinity 同语义；powerCreep 全件〔className-lvlN
+  纹理 tint 0xcc3d3e、lighting 同纹理、红 glow、texture-light 死代码登记〕；
+  joins-creeps.ts 逐段 arc→stroke——v8 GraphicsContext.stroke 每次克隆活动
+  路径开新路径已源码取证）× **运动系统**（ObjectsStage 内置 tween 编排：
+  位移 easeInOutQuad 插值 tickDuration、朝向最短角 0.2 tick、同向移动不重
+  触发〔官方 rotation calc props 门控等价〕、overlay 件〔lighting/effects〕
+  逐帧随动+markDirty、EVENT_ATTACK/HEAL→data.targetId→三色罩〔同 tick
+  攻+疗=黄〕、死亡 FadeOut(tickDuration/2) 后销毁〔dying 表托管+id 复用
+  防御〕）× **事件通道**（FeedStore.onChange 携 FeedChange{objects,time,
+  events,kind}——快照 kind 驱动场景全量重建）。**实施决策**：① 快照语义=
+  全量重建（跨快照位置跳变不得做补间——切夹具/重放的幻影移动+旋转棘轮
+  根因，验收期实测抓出后修复）；② id↔typeKey 漂移防御提前落位（R3 §12 ⑪
+  的 M3 防御点——各夹具世界 id 空间独立都从 1 起编，同 id 撞不同类型必须
+  拆树重建，实测 storage 部件叠 creep 后修复）；③ creep/powerCreep 同受
+  _all 合并（disabled 件追加，World.js:36-53 前置合并语义）；④ PartEnv 增
+  controller 摘要（safemode α 判定需跨对象状态，ObjectsStage 每 apply 扫描
+  首个 controller〔官方 objects.find 同语义〕）；⑤ tickDurationMs 入
+  CreateRendererOptions（G6 契约参数化，R6 评审去留标注）；⑥ 名字沿 R3
+  spawn 先例只显示己方；⑦ 罩/淡出对 lighting 成员逐帧 markDirty（RT 陈旧
+  防御沿 R3 C-B1 模式）。**夹具**：exporter 新增 creeps（R1 §12 决策①登记的
+  本文件扩展点——意图脚本走位×2/近战×2/治疗×2，victimA 第 4 tick 死亡=
+  removedIds→淡出取材、victimB 攻+疗同 tick=黄罩取材、tank 纯绿罩；意图对
+  死亡目标续发由结算链静默拒；Rust 测试断言位移/死亡/事件面，两次导出
+  逐字节一致）；showcase 扩 creep 形态谱系 15 件（50 部件满环×2/混色/掉血/
+  tough 存活+全灭/NPC/孵化/资源圆三层/敌我 powerCreep/safemode 联动——
+  (5,5) controller safeMode 1000：状态圈转橙+p2 creep α0.5 为官方行为）。
+  **验收**：179 测绿（body-ring 14/tweens 17/creep-values 18/motion 对账 6/
+  既有 124）+tsc+`pnpm -r run test` 全链绿+kk-cli cargo test/clippy 零告警；
+  harness 截图逐项核对（环谱系/资源圆三层/powerCreep 红 glow/safemode 变暗/
+  三色罩/淡出两帧递减/插值中段位置+move 弧随向旋转〔连拍取证〕），WebGPU+
+  WebGL 双后端 `lighting: real` 56-63fps。清偿记录见下条。
+- 2026-09-30（同日）：**R4 评审清偿**。3 路评审（A 官方规格/B 契约 API/
+  C 性能 v8）：A 3 阻塞+5 建议、B 1 阻塞+7 建议、C 零阻塞+6 建议+R7 测量
+  点清单。逐条处置：
+  ① [阻塞·A-B1/B建议3] 受击罩类型门——官方 cover 出自 creepActions，仅
+  creep/powerCreep/tower/lab/link/invaderCore 声明；我方原对任意 view 命中
+  即挂罩（rampart 承伤会红闪）。修：applyCoverEvents 按 view.motion 门控
+  （R5 光束落位时随表扩）。
+  ② [阻塞·A-B2] 罩时序 ×0.9——官方三处 call-site（creepActions.js:300/
+  303/305）传 tickDuration*0.9，峰值 0.225td、总长 0.9td；〔官拆〕§3 的
+  "1/4 tick" 系漏看 call-site 系数。修：CREEP_SPEC.cover.durationScale=0.9
+  +triggerCover 时长乘子+specs 注释勘误+测试锚（225/675ms）。
+  ③ [阻塞·A-B3] safemode α 传导——官方 mask/glow/NPC glow/childCover 均
+  是 mainContainer 子件随其 α 暗化；我方独立 overlay 恒 α1。修：mask/glow/
+  glowNpc/powerCreep light+glow 的 values 带 alpha 键（safeModeAlpha 值），
+  join apply 写 holder.alpha；罩以 main 当前 α 作乘数。
+  ④ [阻塞·B-B1] powerCreep light 件永不可见——值面发 `visible: 1`
+  （number）而 vBool 判 `=== true`，join 层恒隐藏且被测试锚固化。修：值面
+  改 boolean（全库 'visible' 键约定）+锚更正+join 层冒烟断言（motion 测试
+  powerCreep light/glow visible=true——补 join 半件无直接测试的盲区）。
+  ⑤ [建议·A-S1] 运动重触发引证更正并登记偏差：官方 metadata.actions 重
+  触发=finishActions 吸附旧终点再起新段（GameObject.js:139-146）；原引证
+  moveTo.js:38-41 系无 metadata 引用的死 processor。我方 cancel 保当前位
+  平滑续走，登记为有意偏差（影响仅限动画中途新位移）——tweens.ts 头注+
+  beginMove 注释+本条。
+  ⑥ [建议·A-S2] 官方运行时 z 序振荡 quirk 登记：creepBuildBody/circle 重
+  跑 destroy+尾部 addChild（object.js:39-43,112-114）——掉血后弧环+tough
+  跳到资源圆上、store 变化翻回；我方固定声明序=官方"掉血后"稳态——joins
+  头注登记。
+  ⑦ [建议·A-S3] 罩挂点/重触发差异登记：官方 childCover 挂 mainContainer
+  （随转）+重触发叠加不取消（creepActions.js:80-83 TODO）；我方 effects 层
+  独立节点（cover.svg 纯圆→不随转零观感）+重触发取消——triggerCover 注释。
+  ⑧ [建议·B] EVENT 常量落点登记（shared 生成管线落地前的本地替身，R5 随
+  管线处置）；Rust victimA 断言化简（去恒真冗余）；setTerrain kind='delta'
+  语义注释；tickDurationMS 缺省 1000 单源 DEFAULT_TICK_DURATION_MS；
+  controllerSummary 调用点成本注释；FeedChange.objects 拷贝语义注释。
+  ⑨ [建议·C] TweenManager.update 免快照迭代（Map 迭代容忍迭代中 delete+
+  守卫，省每帧 ~100 项数组分配）；resolveTypeKey 微缓存（(type,structureType)
+  键空间有限，消每 tick 每 structure 拼串）；RoomScene.update 换序（objects
+  先于 lighting——运动置脏同帧进 RT，消一帧滞后）；TweenManager cancel 清
+  pending（防补录复活）；arc→stroke 的 getLastPoint NaN 前导 quirk 注释
+  （实测 benign 勿"修复"）。
+  ⑩ [不采纳·C建议3] syncRoad 键串每 tick 拼接——量级小（路格数少且 hash
+  门控在外层），维持现状。
+  ⑪ R7 perf 测量点清单（评审 C 8 条：lighting RT 重渲耗时/dirty 比例、
+  apply 对账分项、双后端帧率基线含 50 creep 全移对比、TweenManager 规模、
+  快照重建单帧尖峰、值门控触发计数、10k tick 内存曲线含 dying/overlays、
+  大步进 deltaMS 恢复）——随 R5 记录移交。
+  清偿后：180 测绿（+1 powerCreep light 冒烟）+tsc+全链回归绿+kk-cli cargo
+  test/clippy 零告警。清偿复审见下条。
+- 2026-09-30（同日）：**R4 清偿复审（二轮）**。评审 A 回复审：B1/B2 核销、
+  S1-S4 登记全核销、B/C 并行项全核销无回归；B3 核销但抓到清偿引入的轻量
+  新回归——**淡出×safemode 亮度跳变**（beginFade 对 overlay 绝对写 α，敌方
+  safemode 视图〔mask/glow 已暗化至 0.5〕死亡首帧跳亮回 ≈1 再衰减；官方=
+  层级 α 连乘）。二轮清偿：① fade setter 改**捕捉各 overlay 底 α 作乘法**
+  （root 恒 1 绝对写——官方 FadeOut 同位），罩 tween 于淡出开始时取消（一并
+  消 coverTween/fadeTween 对 cover.alpha 的末写者冲突，罩冻结当前 α 随淡出
+  衰减）；② 补评审 A 要求的两条回归锚——罩类型门（constructedWall 承伤
+  不挂罩）与 safemode 死亡不跳亮（motion 测试 +2）；③ 底账勘误随手清——
+  〔官拆〕§3 罩时序（0.225td 达峰/0.9td 总长）与 §7 重触发（finishActions）
+  两处旧文更正，防后续评审再被绊。清偿后 182 测绿+tsc。
+- 2026-09-30（同日）：**R4 清偿复审（C 路）+ 尾清**。评审 C 复审：五条采纳
+  项+一条不采纳登记全核销、A/B 清偿性能面无新影响（特别论证 safemode α
+  传导被值门控拦截——常态零 pixi 写，边界跨越 tick 恰 1 次 RT 重渲）、R7
+  移交完整、**零新阻塞**；两条建议级遗留就地清：① resolveTypeKey 缓存键
+  改用 state 自有 structureType 串（首版 `s|${x}` 模板串作键仍逐次分配，
+  未达成宣称——二轮更正后命中路径零分配）；② 补「迭代内 run→同帧 cancel
+  →不经 pending 复活」测试锚（tweens.test +1）。B 路复审因提供方配额受限
+  两次中断、重发中；其阻塞项 B-B1 的修复已经 A（"顺带修了 visible:1→
+  boolean"）与 C（"永隐藏真 bug 已修为 boolean+冒烟锚，处置正确"）两路
+  复审交叉核销。清偿后 183 测绿+tsc+全链回归绿。
+- 2026-09-30（同日）：**R4 清偿复审（B 路，第三次重发后返回）**：B-B1 及
+  七条建议全部核销、清偿未引入契约/公共面回归、无新阻塞——B 路复审通过
+  （冒烟断言经真实全链驱动、旧缺陷在此必挂的承重锚认定；alpha 键扩散的
+  值域纯净性确认；淡出乘法化/微缓存的契约面无影响确认）。**三路清偿复审
+  全部通过，R4 收口。**

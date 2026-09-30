@@ -81,9 +81,22 @@ export const Z_TABLE: Record<string, number> = {
  * 投影形态（shared/feed.ts 头注）：结构类 type:"structure"+structureType 二级；
  * spawn/constructionSite 自带 structureType 但 type 不是 "structure"。
  */
+/** structureType → typeKey 微缓存（键=state 自有串，命中零分配；键空间
+ * ≤ 契约 structureType 组合表——评审 C建议2 及二轮更正：首版以 `s|${x}`
+ * 模板串作键仍逐次分配，未达成宣称）。 */
+const typeKeyCache = new Map<string, string>();
+
 export function resolveTypeKey(state: RoomObjectState): string {
   const { type } = state;
-  if (type === 'structure') return `s:${strType(state.structureType)}`;
+  if (type === 'structure') {
+    const structureType = strType(state.structureType);
+    let resolved = typeKeyCache.get(structureType);
+    if (resolved === undefined) {
+      resolved = `s:${structureType}`;
+      typeKeyCache.set(structureType, resolved);
+    }
+    return resolved;
+  }
   return strType(type);
 }
 

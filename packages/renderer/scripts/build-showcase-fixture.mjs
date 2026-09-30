@@ -22,6 +22,20 @@ function structure(type, x, y, fields) {
   return { type: 'structure', structureType: type, id: id(), room: 'W0C0', x, y, ...fields };
 }
 
+function creep(name, user, x, y, body, fields) {
+  return {
+    type: 'creep', id: id(), room: 'W0C0', x, y, name, user, owner: user,
+    body: body.map(([type, hits]) => ({ type, hits })),
+    hits: body.reduce((sum, [, h]) => sum + h, 0),
+    spawning: false, fatigue: 0,
+    ...fields,
+  };
+}
+
+function bp(type, n, hits = 100) {
+  return Array.from({ length: n }, () => [type, hits]);
+}
+
 const objects = [
   // ---- 己方（p1）大宗结构群（左上象限） ----
   structure('extension', 8, 8, { user: 'p1', owner: 'p1', store: { energy: 50 }, storeCapacityResource: { energy: 50 }, hits: 1000, hitsMax: 1000 }),
@@ -68,9 +82,41 @@ const objects = [
   { type: 'spawn', structureType: 'spawn', id: id(), room: 'W0C0', x: 28, y: 18, name: 'EnemySpawn', user: 'p2', owner: 'p2', store: { energy: 90 }, energy: 90, energyCapacity: 300, storeCapacityResource: { energy: 300 }, off: false, hits: 5000, hitsMax: 5000 },
 
   // ---- controller（等级环+进度扇形） ----
-  structure('controller', 5, 5, { user: 'p1', owner: 'p1', level: 2, progress: 20000, progressTotal: 45000, safeMode: 0, safeModeAvailable: 1, downgradeTime: null, isPowerEnabled: false, upgradeBlocked: null, safeModeCooldown: null, reservation: null, sign: null }),
+  // safeMode 1000（R4）：controller 状态圈转 safemode 橙 + 全部 p2 creep/powerCreep
+  // α0.5（官方 calculations.safeMode——controller.user!==user）——safemode 演示区。
+  structure('controller', 5, 5, { user: 'p1', owner: 'p1', level: 2, progress: 20000, progressTotal: 45000, safeMode: 1000, safeModeAvailable: 1, downgradeTime: null, isPowerEnabled: false, upgradeBlocked: null, safeModeCooldown: null, reservation: null, sign: null }),
   // 敌方预定 controller（红状态圈）
   structure('controller', 40, 40, { user: 'p2', owner: 'p2', level: 3, progress: 0, progressTotal: 135000, safeMode: 0, downgradeTime: null, isPowerEnabled: false, upgradeBlocked: null, reservation: { user: 'p2', ticksToEnd: 5000 }, sign: null }),
+
+  // ---- creep 展示区（R4：body 环形态谱系，下半场 y 32..40） ----
+  // 满环 50 work（前向铺满两侧各 π）
+  creep('ring-work50', 'p1', 10, 32, bp('work', 50)),
+  // 满环 50 move（自正下铺满——backSide）
+  creep('ring-move50', 'p1', 13, 32, bp('move', 50)),
+  // 混色环：合并升序 ranged100→heal100→claim100→attack200→work300→move800
+  // （carry 在列但被过滤——creepBuildBody.js:108-109）
+  creep('ring-mixed', 'p1', 16, 32, [...bp('work', 3), ...bp('attack', 2), ...bp('ranged_attack', 1), ...bp('heal', 1), ...bp('claim', 1), ...bp('carry', 1), ...bp('move', 8)]),
+  // 掉血环：部分部件 hits<100 → 弧短
+  creep('ring-damaged', 'p1', 19, 32, [...bp('work', 1, 40), ...bp('work', 1, 70), ...bp('attack', 1, 100), ...bp('move', 2, 90)]),
+  // tough 家族：中心 tough.svg + heal 弧
+  creep('ring-tough', 'p1', 22, 32, [...bp('tough', 3), ...bp('heal', 1), ...bp('move', 2)]),
+  // tough 全灭：无 tough 贴图（creepBuildBody.js:154-156 hits>0 门）
+  creep('ring-tough-dead', 'p1', 25, 32, [...bp('tough', 2, 0), ...bp('work', 2)]),
+  // NPC（user 3）：整只 creep-npc.svg；受 safemode 联动 α0.5（官方 calc 不排 NPC）
+  creep('npc-keeper', '3', 28, 32, bp('attack', 5)),
+  // 孵化中：无名字无 mask/glow（body 环照画——官方无 spawning 门）
+  creep('spawner-creep', 'p1', 31, 32, bp('work', 2), { spawning: true }),
+  // 资源圆三层（白 total→红 power→黄 energy）：
+  creep('carry-energy', 'p1', 10, 36, [...bp('carry', 5), ...bp('move', 5)], { store: { energy: 400 }, storeCapacity: 800 }),
+  creep('carry-rings', 'p1', 13, 36, [...bp('carry', 5), ...bp('move', 5)], { store: { energy: 100, power: 100, H: 600 }, storeCapacity: 800 }),
+  creep('carry-mixed', 'p1', 16, 36, [...bp('carry', 4), ...bp('move', 4)], { store: { energy: 50, power: 50, H: 100 }, storeCapacity: 400 }),
+  // 敌方 creep：safemode 期间 α0.5
+  creep('enemy-dim', 'p2', 10, 40, [...bp('attack', 2), ...bp('move', 2)]),
+  // powerCreep（G5 家族）：className-lvl 纹理 + 红 glow + 名字
+  { type: 'powerCreep', id: id(), room: 'W0C0', x: 13, y: 40, name: 'pc-operator', user: 'p1', owner: 'p1', className: 'operator', level: 12 },
+  { type: 'powerCreep', id: id(), room: 'W0C0', x: 16, y: 40, name: 'pc-executor', user: 'p2', owner: 'p2', className: 'executor', level: 30 },
+  // 己方对照（不受 safemode 变暗）
+  creep('friendly-bright', 'p1', 19, 40, [...bp('heal', 1), ...bp('move', 3)]),
 ];
 
 // ---- 增量链：lab 冷却启动 → lab 矿物清空（值变化驱动重应用的两步取材） ----

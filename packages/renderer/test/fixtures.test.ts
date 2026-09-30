@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { isDelta, isSnapshot, type FixtureFile } from '@kkscreeps/shared';
+import { isDelta, isSnapshot, type FixtureFile, type RoomDelta } from '@kkscreeps/shared';
 
 // 入库夹具的契约一致性：四张夹具形状、时序、单调时间轴、地形常量长度。
 
@@ -12,10 +12,10 @@ const fixturesDir = join(pkgRoot, 'fixtures');
 const names = readdirSync(fixturesDir).filter((f) => f.endsWith('.json')).sort();
 
 /** exporter 产物（R1 纪律：31 tick 全量入库）；showcase 为 R3 手工合成夹具。 */
-const EXPORTER_FIXTURES = ['dense-edge.json', 'plains.json', 'standard.json', 'swamp-walls.json'];
+const EXPORTER_FIXTURES = ['creeps.json', 'dense-edge.json', 'plains.json', 'standard.json', 'swamp-walls.json'];
 
 describe('入库夹具', () => {
-  it('exporter 四张夹具齐全（plains/standard/swamp-walls/dense-edge）+ showcase 合成', () => {
+  it('exporter 五张夹具齐全（plains/standard/swamp-walls/dense-edge/creeps）+ showcase 合成', () => {
     expect(names).toEqual([...EXPORTER_FIXTURES, 'showcase.json'].sort());
   });
 
@@ -103,5 +103,43 @@ describe('入库夹具', () => {
     expect(types.has('tower'));
     const towers = showcase.ticks[0]!.objects.filter((o) => o.structureType === 'tower');
     expect(towers.some((o) => o.user === '3')).toBe(true);
+  });
+
+  it('showcase 夹具覆盖 creep 形态谱系与 powerCreep（R4）', () => {
+    const showcase = JSON.parse(readFileSync(join(fixturesDir, 'showcase.json'), 'utf8')) as FixtureFile;
+    const objects = showcase.ticks[0]!.objects;
+    const creeps = objects.filter((o) => o.type === 'creep');
+    expect(creeps.length).toBeGreaterThanOrEqual(12);
+    const names = new Set(creeps.map((o) => o.name));
+    // body 环形态：50 部件满环×2/混色/掉血/tough 存活+tough 全灭/NPC/孵化
+    for (const expected of ['ring-work50', 'ring-move50', 'ring-mixed', 'ring-damaged', 'ring-tough', 'ring-tough-dead', 'npc-keeper', 'spawner-creep']) {
+      expect(names.has(expected), `缺 creep ${expected}`).toBe(true);
+    }
+    // 资源圆三层 + NPC + powerCreep 双方
+    expect(creeps.some((o) => Array.isArray(o.store) === false && typeof o.storeCapacity === 'number')).toBe(true);
+    const powerCreeps = objects.filter((o) => o.type === 'powerCreep');
+    expect(powerCreeps.map((o) => o.className).sort()).toEqual(['executor', 'operator']);
+    // safemode 联动：p1 controller safeMode>0（p2 creep 变暗 + 状态圈转橙）
+    const controllers = objects.filter((o) => o.structureType === 'controller');
+    expect(controllers.some((c) => typeof c.safeMode === 'number' && c.safeMode > 0)).toBe(true);
+  });
+
+  it('creeps 夹具覆盖运动/战斗事件面（R4 实弹夹具）', () => {
+    const creeps = JSON.parse(readFileSync(join(fixturesDir, 'creeps.json'), 'utf8')) as FixtureFile;
+    const deltas = creeps.ticks.slice(1).filter((t): t is RoomDelta => !isSnapshot(t));
+    // 走位：部分增量 upsert creep 且坐标 ≠ 快照同 id 坐标
+    const snapshot = creeps.ticks[0];
+    if (isSnapshot(snapshot)) {
+      const moved = deltas.some((d) => d.upsert.some((o) => {
+        const before = snapshot.objects.find((s) => s.id === o.id);
+        return before && o.type === 'creep' && (o.x !== before.x || o.y !== before.y);
+      }));
+      expect(moved).toBe(true);
+    }
+    // 战斗/治疗事件面（罩 + 死亡淡出的数据依据）
+    const events = deltas.flatMap((d) => d.events ?? []);
+    expect(events.some((e) => e.event === 1)).toBe(true); // EVENT_ATTACK
+    expect(events.some((e) => e.event === 6)).toBe(true); // EVENT_HEAL
+    expect(deltas.some((d) => d.removedIds.length > 0)).toBe(true); // 死亡
   });
 });

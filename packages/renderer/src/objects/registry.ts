@@ -18,6 +18,7 @@ import {
   type JoinAssets,
   type PartJoin,
 } from './joins-naturals.js';
+import { joinCreep, joinPowerCreep } from './joins-creeps.js';
 import {
   joinConstructedWall,
   joinConstructionSite,
@@ -82,6 +83,8 @@ export function buildRegistry(assets: JoinAssets): Map<string, RegisteredDescrip
     's:rampart': joinRampart(assets),
     's:invaderCore': joinInvaderCore(assets),
     flag: joinFlag(assets),
+    creep: joinCreep(assets),
+    powerCreep: joinPowerCreep(assets),
   };
   const disabledJoin = joinDisabled();
 

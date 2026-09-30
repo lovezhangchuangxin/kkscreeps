@@ -53,7 +53,7 @@ import type { RoomObjectState } from '@kkscreeps/shared';
 // 规格值函数：官方 metadata 计算式的逐项断言（file:line 见各断言注释）。
 
 function env(time = 0, player: string | null = 'p1'): PartEnv {
-  return { cell: 100, time, player, isOwn: (u) => u !== null && u === player };
+  return { cell: 100, time, player, isOwn: (u) => u !== null && u === player, controller: null };
 }
 
 function run(parts: { id: string; values: (s: RoomObjectState, e: PartEnv) => PartValues | null }[], id: string, s: RoomObjectState, e: PartEnv): PartValues | null {
