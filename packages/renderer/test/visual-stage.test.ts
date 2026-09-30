@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CanvasTextMetrics, Text } from 'pixi.js';
+import { CanvasTextMetrics, Graphics, Text } from 'pixi.js';
 import type { RoomVisual } from '@kkscreeps/shared';
 import { VisualStage } from '../src/scenes/visual-stage.js';
 
@@ -53,6 +53,17 @@ describe('VisualStage', () => {
     stage.setVisuals([]);
     expect(stage.count).toBe(0);
     expect(stage.root.children.length).toBe(0);
+  });
+
+  it('替换与销毁释放五原语和文字背景的真实 Graphics context', () => {
+    stage.setVisuals(visuals);
+    const contexts = stage.root.children.flatMap(node => node instanceof Graphics
+      ? [node.context] : node.children.filter((c): c is Graphics => c instanceof Graphics).map(c => c.context));
+    expect(contexts).toHaveLength(5);
+    stage.setVisuals([visuals[0]!]);
+    expect(contexts.every(context => context.destroyed)).toBe(true);
+    const last = (stage.root.children[0] as Graphics).context;
+    stage.destroy(); expect(last.destroyed).toBe(true);
   });
 
   it('无效条目降级跳过不崩溃（guard 拦截；NaN 半径走防御默认渲染）', () => {

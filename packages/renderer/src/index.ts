@@ -509,6 +509,11 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
         await dispose();
       },
     };
+    // R7 instrumentation is internal and removed by Vite in ordinary builds.
+    if ((import.meta as ImportMeta & { env: { MODE: string } }).env.MODE === 'perf') {
+      const { attachPerf } = await import('./perf/probe.js');
+      attachPerf(handle, kernel, room, feed, atlas);
+    }
     return handle;
   } catch (error) {
     // 所有初始化阶段共用销毁路径，回滚已创建的节点、监听和资产。

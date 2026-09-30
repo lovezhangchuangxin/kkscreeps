@@ -17,8 +17,8 @@ const replayNames = names.filter((n) => n !== 'visual-cases.json');
 const EXPORTER_FIXTURES = ['actions.json', 'creeps.json', 'dense-edge.json', 'plains.json', 'standard.json', 'swamp-walls.json'];
 
 describe('入库夹具', () => {
-  it('六张真实夹具、四张合成回放夹具与 visual 用例集齐全', () => {
-    expect(names).toEqual([...EXPORTER_FIXTURES, 'showcase.json', 'effects.json', 'lifecycle.json', 'pressure.json', 'visual-cases.json'].sort());
+  it('六张真实夹具、五张合成回放夹具与 visual 用例集齐全', () => {
+    expect(names).toEqual([...EXPORTER_FIXTURES, 'showcase.json', 'effects.json', 'lifecycle.json', 'pressure.json', 'perf-full-room.json', 'visual-cases.json'].sort());
   });
 
   for (const name of replayNames) {
