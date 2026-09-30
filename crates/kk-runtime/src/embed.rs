@@ -61,6 +61,15 @@ pub struct EmbedEngine {
     /// 测试钩子：下一次世界结算注入 Err（部分提交三连回归的场景②）。
     /// #[doc(hidden)]：仅集成测试消费，生产面不可达（误置最多导致一轮 Err）。
     fail_next_settle: bool,
+    /// 测试旋钮（双房批）：玩家执行顺序覆盖——None=注册玩家集的 handle
+    /// 排序序（handles 为 BTreeMap，注册序天然被排序吸收）。只改
+    /// execute_players 的循环序（投影+执行完成序），结果收集/意图合并/
+    /// 结算序不动——「打乱玩家完成顺序结果不变」验收（tick 契约场景 2）
+    /// 的自由度来源。
+    execution_order_for_test: Option<Vec<String>>,
+    /// 上一次 execute_players 实际迭代的玩家序（旋钮生效取证面——评审 3
+    /// P1-3 清偿：结果面序无关是被测性质，接线回归须由此观测）。
+    last_execution_order: Option<Vec<String>>,
 }
 
 /// 性能观测点（A6，[performance-acceptance](docs/architecture/performance-acceptance.md)
@@ -251,6 +260,8 @@ impl EmbedEngine {
             last_console: BTreeMap::new(),
             perf: PerfRecorder::default(),
             fail_next_settle: false,
+            execution_order_for_test: None,
+            last_execution_order: None,
         }
     }
 
@@ -269,6 +280,7 @@ impl EmbedEngine {
         self.pending = None;
         self.last_console.clear();
         self.perf = PerfRecorder::default();
+        self.execution_order_for_test = None;
 
         let players = self.players.get_or_insert_with(ThreadExecutor::new);
         for handle in handles {
@@ -511,7 +523,23 @@ impl EmbedEngine {
             );
         };
         // 固定顺序（handle 排序）求值——确定性；各玩家看同一已提交世界的
-        // 自家视野（官方 runtimeData.get(userId) 同构）
+        // 自家视野（官方 runtimeData.get(userId) 同构）。测试旋钮可覆盖
+        // 执行序（双房批：打乱完成序的验收自由度）。排列校验用无条件
+        // assert（评审 2 F1 清偿）：只在 Some 臂内，生产路径（None）不进，
+        // 零开销；release 下误置畸形序从「静默漏跑/双跑」变早失败
+        let handles = match &self.execution_order_for_test {
+            Some(order) => {
+                let mut sorted = order.clone();
+                sorted.sort();
+                assert_eq!(sorted, registered, "执行序覆盖必须是注册玩家集的排列");
+                self.last_execution_order = Some(order.clone());
+                order.clone()
+            }
+            None => {
+                self.last_execution_order = Some(registered.clone());
+                handles
+            }
+        };
         for handle in handles {
             let Some(code) = codes.get(&handle) else {
                 continue;
@@ -685,6 +713,22 @@ impl EmbedEngine {
     #[doc(hidden)]
     pub fn fail_next_settle_for_test(&mut self) {
         self.fail_next_settle = true;
+    }
+
+    /// 测试旋钮（双房批）：覆盖玩家执行顺序（须为注册玩家集的排列，
+    /// assert 钉死——release 亦生效）。只改 execute_players 的循环序，
+    /// 结果收集/意图合并/结算序不动——「打乱玩家完成顺序结果不变」验收
+    /// 的自由度来源。传 `None` 恢复默认（handle 排序序）。
+    #[doc(hidden)]
+    pub fn set_execution_order_for_test(&mut self, order: Option<Vec<String>>) {
+        self.execution_order_for_test = order;
+    }
+
+    /// 上一次 execute_players 实际迭代的玩家序（旋钮生效取证面；重试轮
+    /// 不重新执行玩家 → 不更新）。
+    #[doc(hidden)]
+    pub fn last_execution_order_for_test(&self) -> Option<&[String]> {
+        self.last_execution_order.as_deref()
     }
 
     /// 是否存在未提交的失败轮候选（部分提交三连回归的断言面）。

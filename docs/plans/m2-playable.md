@@ -310,7 +310,7 @@ driver/lib/runtime/data.js:200-261）。
 | 批 | API 面（预检+计费+intent push） | 结算执行器 | 状态 |
 |---|---|---|---|
 | 2A 批 2（通道样例） | move（direction 形态）/harvest | 同左（已有） | 端到端闭环 |
-| 2A 批 4 | Creep 全部 28 方法 + spawn 族（spawnCreep/canCreateCreep/renew/recycle API）+ room 级 createConstructionSite/createFlag | transfer/withdraw/drop/pickup/build/upgradeController + createCreep + room 级 2 个 + say/suicide（顺手，结算小）；move 补 id 形态（朝相邻 creep，清偿灰区） | API 全量；attack/heal/ranged\*/repair/dismantle/claim/reserve/sign/attackController/generateSafeMode/pull 的执行器留 2B |
+| 2A 批 4 | Creep 全部 28 方法 + spawn 族（spawnCreep/canCreateCreep/renew/recycle API）+ room 级 createConstructionSite/createFlag | transfer/withdraw/drop/pickup/build/upgradeController + createCreep + room 级 2 个 + say/suicide（顺手，结算小）；move 补 id 形态（朝相邻 creep，清偿灰区） | API 全量；attack/heal/ranged\*/repair/dismantle/claim/reserve/sign/attackController/generateSafeMode/pull 的执行器留 2B。**勘正（2026-09-30 双房批复核）**：room 级 createConstructionSite/createFlag 的 intent 通道与结算执行器已交付，但玩家 API 面实为 countStub（room.js:477/489，自 A3a 拆分起即 stub）——本行「API 面」栏对这两项超前宣称，真实现归 M2B API 扩面 |
 | 2A 拓展批（可选，D4 变体 B） | — | claim/reserve/sign/attackController/generateSafeMode + repair/dismantle + 近战 attack（hits 模型同根） | 决策点后定 |
 | 2B | tower/link/observer/lab 族 | 战斗全家 + pull + 结构动作 + mineral + tombstone | — |
 

@@ -175,6 +175,10 @@ bot 三基线（tooangel console 零错须人工确认）/ perf 同口径 A/B �
 
 ## 5. 不做清单
 
+- **跨房 room 级 intent 不覆盖**：createFlag/createConstructionSite 玩家
+  API 面为 countStub（room.js:477/489——双房批实测取证；m2-playable 4.3
+  的「已交付」表述已勘正：交付的是 intent 通道+结算执行器，API 面归
+  M2B 扩面）——「一玩家影响两房」由对象级意图（两房各摆 creep）承载。
 - **跨房移动过渡不实现**（creep 出口格→邻房出现）：移动族后续批
   （movement.rs 无 transition，豁免条目归因明确）；本批场景**不依赖跨房
   移动**（夹具直接两房各摆对象），ratchet-allow 现 1 条豁免**保留**（用例
@@ -190,7 +194,7 @@ bot 三基线（tooangel console 零错须人工确认）/ perf 同口径 A/B �
 
 ## 6. 风险与工具链钉子
 
-- `players()` 注册序保真需实现期核实（fallback：test-only 执行序旋钮）。
+- `players()` 已核实返回 BTreeMap 键序（注册序被排序吸收）——执行序自由度经测试旋钮（§2 已更新为转正口径）。
 - 竞争期望值按「玩家名序意图处理」手推；不对照官方 MMO 真并发（那是
   并行化批的验收面）。
 - 新 V8 测试并入 embed_tests 串行链（根唯一 #[test]、子模块全 0）；多
@@ -245,3 +249,43 @@ bot 三基线（tooangel console 零错须人工确认）/ perf 同口径 A/B �
   棘轮 1405 零未豁免转红 / bot 三基线（tooangel console error tick=0、
   overmind-dist 2000 错 tick=既知形态、wasm-bot 零错；skipped_penalty
   全 0）/ 假红三参数复验转绿。
+
+### 片 2（跨房合并三形态实弹）——已收口
+
+- **落地**：新测试文件 embed_tests/dual_room_live_fire.rs（子模块 0
+  #[test]、根链追加五连调用）+ 执行序测试旋钮
+  （`execution_order_for_test`/`set_execution_order_for_test`——只改
+  execute_players 循环序，结果收集/意图合并/结算序不动；生产 None 路径
+  与 HEAD 逐行为等价，评审 2 逐点证明）。五场景：A 一玩家两房（双臂
+  数值断言+双房可见性+memory 提交恰一次+time）；B 两玩家一房（竞争
+  source 双份扣减+**稀缺变体** source=2——玩家名序杀伤线：p1 足额
+  p2 颗粒无收）；C 无关房双向（E9N9 字典序先结算+W9N9 后结算，各与
+  单独跑逐值一致+SHARED 不受远房影响）；顺序不变性（旋钮打乱执行序
+  +建房序打乱——终态逐值一致：source/creep/time/own 房 progress/两玩家
+  memory 五面）；多 tick 守恒（A 世界 Δsource+Δstore+Δprogress=0 精确
+  恒等+B 竞争世界 Δsource=Δstore_p1+Δstore_p2，50 tick=满仓停采分界
+  两倍窗）。
+- **实现期实测取证**：满仓继续 harvest 的超容部分按官方语义掉落
+  （harvest.js:43-60）且小堆每 tick 衰减 ceil(amount/1000)——守恒式
+  曾差 −50/−25 两轮定位为掉落与衰减项，非引擎缺陷（引擎级
+  combat_heal.rs 已锁该路径）；脚本改满仓即停保持恒等式无缺项。
+- **评审三路（场景语义/协调器影响面/测试方法论）**：P0×0、P1×4、
+  P2×11。P1 清偿：①顺序不变性断言面补 memory+own 房 progress（方案
+  明列子项）②场景 C 结算序注释失实（E9N9 实为先结算——恰合「无关房
+  先完成」，注释与方案反向）+补 W9N9 后置取向双向覆盖 ③旋钮生效取证
+  面（`last_execution_order_for_test` 记录实际迭代序，测试断言注入序
+  生效——空转通过面消除）④竞争稀缺路径变体（source=2 名序杀伤线）。
+  P2 清偿：场景 A/bworld 补 time 断言；HARVEST_CODE 补 memory+满仓门；
+  FIND 常量改 kk_core 引用；守恒扩 B 世界；排列校验 debug_assert 改
+  无条件 assert（Some 臂内零生产开销，release 误置从静默变早失败）；
+  §5 补跨房 room 级 intent 条目+§6 players() 已核实+m2-playable 4.3
+  「room 级 API 已交付」超前宣称勘正（实况：intent 通道+执行器已交付、
+  API 面 countStub——git 史证实自 A3a 起即 stub）。登记不修：魔数期望
+  值保留字面+注释依据（引用常量反损可读性）；场景 C 事件流面（跨房
+  事件路由）不比——getEventLog 面归后续批；50 tick 窗口选型依据已入
+  注释。
+- **验证**：workspace 全绿 / clippy 零告警 / release+棘轮 1405 零未豁免
+  转红 / 三基线（tooangel console error tick=0、overmind/wasm 既知
+  形态、skipped_penalty 全 0）/ perf 同口径 A/B 噪声级（0.124/0.204/
+  0.032/0.458 vs 基线 0.124/0.209/0.032/0.467——旋钮 Option 判别零
+  开销）/ 守恒恒等式杀伤力抽查（期望改 1 即红、复原即绿）。

@@ -4,6 +4,8 @@ use serde_json::json;
 
 use kk_runtime::EmbedEngine;
 
+#[path = "embed_tests/dual_room_live_fire.rs"]
+mod dual_room_live_fire;
 #[path = "embed_tests/embed_channels_and_families.rs"]
 mod embed_channels_and_families;
 #[path = "embed_tests/embed_roundtrip_contract.rs"]
@@ -12,6 +14,7 @@ mod embed_roundtrip_contract;
 mod embed_strictness_and_partial_commit;
 
 // 串行链不变量：顶层唯一 #[test]；子模块 impl 经 glob 进根作用域，链体逐字节不动
+use dual_room_live_fire::*;
 use embed_channels_and_families::*;
 use embed_roundtrip_contract::*;
 use embed_strictness_and_partial_commit::*;
@@ -41,6 +44,11 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     embed_gpt_review_clearance_impl()?;
     a5_memory_module_forms_impl()?;
     a6_isactive_hits_family_impl()?;
+    dual_a_one_player_two_rooms_impl()?;
+    dual_b_two_players_one_room_impl()?;
+    dual_c_unrelated_room_independent_impl()?;
+    dual_execution_order_invariance_impl()?;
+    dual_multi_tick_conservation_impl()?;
     assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");
     Ok(())
 }
