@@ -745,6 +745,7 @@ impl Engine {
                     // 全局通道（notify）同取（评审 3 P2-2：两处合一点只更其一
                     //——extend_from 已对齐，此处漏则假沙箱路径 notify 静默丢）
                     entry.notify.extend(std::mem::take(&mut intents.notify));
+                    entry.market.extend(std::mem::take(&mut intents.market));
                 }
             }
         }
@@ -925,6 +926,8 @@ impl Engine {
                 return Err(SettleError(format!("故障注入：房间 {name} 结算失败")));
             }
             let mut room = self.world.room(&name).expect("房间名来自键集").clone();
+            // 二进制房间快照不保存房名；结算指令按世界目录中的名称匹配。
+            room.name.clone_from(&name);
             let mut room_events = settle_room(
                 &mut room,
                 cand.time,
@@ -1046,6 +1049,64 @@ impl Engine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scripted_tick_keeps_market_intents_bound_to_registered_player() {
+        let mut engine = Engine::default();
+        engine.players.entry("p1".into()).or_default().money = 10_000_000;
+        engine.players.entry("p2".into()).or_default().money = 10_000_000;
+        let mut batch = IntentBatch::default();
+        for player in ["p1", "p2"] {
+            batch.users.entry(player.into()).or_default().market.push(
+                crate::intent::MarketIntent::CreateOrder {
+                    order_type: Some("sell".into()),
+                    resource_type: Some("token".into()),
+                    price_milli: Some(1000),
+                    total_amount: Some(100),
+                    room_name: None,
+                },
+            );
+        }
+        let mut sandbox = crate::sandbox::ScriptedSandbox::new();
+        sandbox.at(0, batch);
+        engine.sandboxes.insert("p1".into(), Box::new(sandbox));
+        engine.tick().unwrap();
+        assert_eq!(engine.market.orders.len(), 1);
+        assert_eq!(engine.market.orders["mkt1"].user, "p1");
+        assert_eq!(engine.players["p1"].money, 9_995_000);
+        assert_eq!(engine.players["p2"].money, 10_000_000);
+    }
+
+    #[test]
+    fn restored_room_uses_directory_name_during_settlement() {
+        let mut world = kk_world::World::new(1);
+        world.register_room("W1N1", kk_core::Terrain::plains());
+        let room = world.room("W1N1").unwrap().clone();
+        let restored = RoomState::decode_snapshot(&room.encode_snapshot(0, 1, 0)).unwrap();
+        assert!(restored.name.is_empty());
+        world.commit_room("W1N1".into(), restored);
+        let mut engine = Engine::new(world);
+        let mut batch = IntentBatch::default();
+        batch.add_room_intent(
+            "p1",
+            crate::intent::RoomIntent::CreateFlag {
+                room: "W1N1".into(),
+                x: 10,
+                y: 10,
+                name: "restored".into(),
+                color: 1,
+                secondary_color: 1,
+            },
+        );
+        engine.tick_with_intents(batch).unwrap();
+        let room = engine.world.room("W1N1").unwrap();
+        assert_eq!(room.name, "W1N1");
+        assert!(
+            room.objects
+                .values()
+                .any(|o| matches!(o, RoomObject::Flag(f) if f.name == "restored"))
+        );
+    }
 
     /// 两阶段回退（§6.5）：后房 Err 时先房的结算不得写回——time/能量/重生钟
     /// 全部保持上一 tick；故障解除后的首个成功 tick 才统一推进（否则先房会在

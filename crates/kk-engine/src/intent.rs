@@ -601,7 +601,9 @@ impl IntentBatch {
     pub fn extend_from(&mut self, other: IntentBatch) {
         for (player, intents) in other.users {
             let entry = self.users.entry(player).or_default();
-            entry.objects.extend(intents.objects);
+            for (id, actions) in intents.objects {
+                entry.objects.entry(id).or_default().extend(actions);
+            }
             entry.room.extend(intents.room);
             entry.notify.extend(intents.notify);
             entry.market.extend(intents.market);
@@ -1100,6 +1102,23 @@ mod from_json_tests {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn extend_from_preserves_other_actions() {
+        let id = ObjId(1);
+        let mut first = IntentBatch::default();
+        first.add_object_intent("p1", id, Action::Move, IntentData::bare());
+        first.add_object_intent("p1", id, Action::Harvest, IntentData::target(ObjId(2)));
+        let mut second = IntentBatch::default();
+        second.add_object_intent("p1", id, Action::Move, IntentData::target(ObjId(3)));
+        second.add_object_intent("p1", id, Action::Say, IntentData::bare());
+        first.extend_from(second);
+        let actions = &first.users["p1"].objects[&id];
+        assert_eq!(actions.len(), 3);
+        assert_eq!(actions[&Action::Move].id, Some(ObjId(3)));
+        assert_eq!(actions[&Action::Harvest].id, Some(ObjId(2)));
+        assert!(actions.contains_key(&Action::Say));
+    }
 
     #[test]
     fn priority_graph_matches_official() {
