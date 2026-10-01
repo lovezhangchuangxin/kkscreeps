@@ -1,24 +1,16 @@
-//! # kk-pathfinder
+//! 使用 Screeps 的 C++ 寻路算法，提供房间坐标、地形、代价矩阵和同步搜索接口。
 //!
-//! 寻路：FFI 直接复用官方 C++ 源码（`native/pf.cc` / `native/pf.h`，官方
-//! `driver/native/src/` 的原样拷贝，sha256 一致），保证路径**逐点一致**——包括
-//! 堆内平局裁决（tie-breaking）——不自行实现算法（ADR-004）。
+//! `native/pf.cc` 与 `native/pf.h` 保留上游源码；本项目维护的 Nan 兼容层和 C ABI
+//! 负责构造输入、调用 Rust 回调及转换结果。复用算法保留其方向枚举和堆的平局
+//! 规则，但不表示 Rust API 与 JavaScript 的所有输入转换、异常行为都相同。
 //!
-//! 分层：
-//! - `native/compat/nan.h`：最小 Nan/v8 兼容层（自有文件），让官方源码零改动编译；
-//! - `native/kk_ffi.cc`：C ABI 包装，只做数据搬运与结果分类，不含寻路逻辑；
-//! - [`ffi`] 模块：unsafe 绑定集中地（安全性说明见模块文档）；
-//! - 本文件的公开 API：官方 JS 调用面的 Rust 等价物。
+//! 地形在进程内全局共享，搜索持有读锁，载入地形持有写锁。回调可同步嵌套搜索，
+//! 回调返回的矩阵须存活到搜索结束；指针生命周期与释放责任见 ffi.rs。
 //!
-//! 官方调用面对照（本 crate 等价于 driver 层的 `driver.pathFinder.search`，
-//! 经 driver/lib/runtime/runtime-driver.js:124-125 注入引擎）：
-//! - 参数形态：`driver/lib/path-finder.js:62-95`（origin/goals 世界坐标、九个选项）；
-//! - 返回形态：`driver/lib/path-finder.js:96-102`（path/ops/cost/incomplete 及
-//!   undefined / -1 两种特殊返回的映射）；
-//! - CostMatrix 序列化：`engine/src/game/path-finder.js:40-48`（字节按
-//!   little-endian 重解释为 uint32；标准矩阵 2500 字节 → 625 个 u32，越界/
-//!   长度语义见 [`CostMatrix`]——官方全程静默）；
-//! - 地形 packed bits：`driver/lib/path-finder.js:29-35`（每格 2bit，下标 xx*50+yy）。
+//! 来源：Screeps driver cf63d8adf902663e2ebddd7f8c5b7baa425dc928 的
+//! `native/src/pf.cc`、`native/src/pf.h`、`native/src/main.cc` 和 `lib/path-finder.js`；
+//! CostMatrix 对照 Screeps engine a90d26fc9eb943147799e65d0bf9d4d0d79a2722 的
+//! `src/game/path-finder.js`。下文的 driver/engine 路径相对这两个仓库。
 
 mod ffi;
 
@@ -26,29 +18,20 @@ use std::cell::Cell;
 use std::fmt;
 use std::sync::{Condvar, Mutex, MutexGuard, PoisonError};
 
-/// 格值：平原（terrain 数组取值 0..=3；0=plain、1=wall、2=swamp，3 亦按障碍处理
-/// ——pf.h:351 look_table 初值全 obstacle，pf.cc:495-496 只覆写 0/2 两项）。
+/// 平原的两位地形码；1 为墙，2 为沼泽，3 也按障碍处理。
+/// 来源：native/pf.cc 的 look 与 search（只为 `look_table[0]`、`look_table[2]` 设置可通行代价）。
 pub const TERRAIN_PLAIN: u8 = 0;
 pub const TERRAIN_WALL: u8 = 1;
 pub const TERRAIN_SWAMP: u8 = 2;
 
-/// 地形全局表的并发守卫。官方形态：地形在进程启动时一次性载入、之后只读
-/// （driver/lib/path-finder.js:23-46 的 init）；本 crate 允许多次 `load_terrain`
-/// （测试需要），用「**读可重入**的读写锁」把写入与搜索串行化，避免 C++ 静态表
-/// （pf.h:359）的数据竞争。
+/// 保护 C++ 静态地形表，允许同线程递归持读锁。
+/// 每线程的最外层搜索计为一个读者，内层搜索只增加 READ_DEPTH；写者等待全部
+/// 读者退出。因此等待中的写者不会阻塞回调里的嵌套搜索。
 ///
-/// 为什么不用 `std::sync::RwLock`：官方明确支持**嵌套 search**（roomCallback 内再
-/// search，官方注释见 driver/native/src/main.cc:9-14 的双实例池——"recursive calls
-/// to the path finder are useful"，我方 kk_ffi.cc 等价复刻）。同线程递归读在 std
-/// RwLock 上可能死锁（有写者排队时，Rust 文档明示 may deadlock；POSIX 递归 rdlock
-/// 也只在无等待写者时保证成功）。本锁让同线程重入读只增加线程本地深度、绝不阻塞，
-/// 写者与全部读者互斥。
-///
-/// 死锁 impossibility 论证：读重入不碰全局状态（本线程已持有读份额，写者无法
-/// 激活）；`write` 等待条件 `writer || readers > 0` 中的 readers 包含全部线程的
-/// 活跃搜索，而读者只在 read()/Drop 的极小临界区内竞争同一互斥锁——无环形等待。
-/// 「同线程持读调写」的必死锁形态在 [`load_terrain`] 入口被提前拒绝
-/// （[`Error::ReentrantTerrainLoad`]），锁本身不会遇到。
+/// 本锁只用于 TERRAIN_LOCK：线程本地深度不区分锁实例。
+/// load_terrain 拒绝本线程持读锁时再申请写锁；调用方仍须避免在回调中等待
+/// 另一个正在载入地形的线程，否则会形成跨线程等待环。
+/// 新读者不让位于等待中的写者，持续搜索可能推迟地形更新。
 struct TerrainLock {
     state: Mutex<TerrainLockState>,
     readers_done: Condvar,
@@ -59,24 +42,17 @@ struct TerrainLockState {
     writer: bool,
 }
 
-// 本线程当前持有的读份额深度（0 = 未在搜索中）。既是重入读的快路径，也是
-// load_terrain 的重入检测器——回调只可能在搜索栈内执行（pf.cc:37-59 的回调
-// 触发点全部位于 search 调用栈内），故 depth > 0 ⇔ 本线程处于回调可达窗口。
+// 本线程尚未结束的搜索层数；只在从 0 到 1、从 1 到 0 时修改全局读者数。
 thread_local! {
     static READ_DEPTH: Cell<usize> = const { Cell::new(0) };
 }
 
 impl TerrainLock {
-    /// 获取读份额（可重入：同线程再次 read 只增加深度）。
     fn read(&'static self) -> TerrainReadGuard<'static> {
         let depth = READ_DEPTH.with(Cell::get);
         if depth == 0 {
             let mut state = recover(&self.state);
             while state.writer {
-                // Safety-of-lock: wait 返回可能因他线程 panic 持锁而 Poison——
-                // 本锁临界区只做计数运算、不含可 panic 的用户代码（回调 panic 在
-                // ffi.rs trampoline 的 catch_unwind 处被拦，unwind 到不了这里），
-                // 恢复锁数据即可继续。
                 state = self
                     .readers_done
                     .wait(state)
@@ -88,7 +64,7 @@ impl TerrainLock {
         TerrainReadGuard { lock: self }
     }
 
-    /// 获取写份额（调用前提：本线程 READ_DEPTH == 0，由 [`load_terrain`] 保证）。
+    // 调用前须确认 READ_DEPTH == 0；否则写锁会等待本线程自己的读锁。
     fn write(&'static self) -> TerrainWriteGuard<'static> {
         let mut state = recover(&self.state);
         while state.writer || state.readers > 0 {
@@ -102,7 +78,7 @@ impl TerrainLock {
     }
 }
 
-/// 恢复中毒的互斥锁（临界区无用户代码，见 TerrainLock::read 的论证）。
+// 临界区只维护计数与标志，不运行用户回调；中毒时继续使用受保护的状态。
 fn recover<'a, T>(mutex: &'a Mutex<T>) -> MutexGuard<'a, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
@@ -137,7 +113,6 @@ impl Drop for TerrainWriteGuard<'_> {
     }
 }
 
-/// 地形全局表锁（见 [`TerrainLock`]）。
 static TERRAIN_LOCK: TerrainLock = TerrainLock {
     state: Mutex::new(TerrainLockState {
         readers: 0,
@@ -149,23 +124,16 @@ static TERRAIN_LOCK: TerrainLock = TerrainLock {
 /// 错误类型。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
-    /// native 侧异常路径（pf.cc 的 js_error：地形缺失 ThrowError / 回调异常）。
-    /// 官方语义是异常上抛给玩家（pf.cc:44 ReThrow 重挂 + V8 api 边界挂起异常
-    /// 胜过返回值，JS 层 `mod.search()` throw——:563 的 undefined 仅是 C++ 占位）；
-    /// 宿主层映射 Err，A4 接线时由 prelude op 层 rethrow。
-    /// message 仅 ThrowError 直抛路径有文案（如 "Could not load terrain data"）；
-    /// 回调异常为 None（消息归 JS 原异常，JS 层直接 rethrow）。
+    /// C++ 搜索报告的错误。缺少地形时携带消息；Rust 回调 panic 时为 None。
+    /// 调用方负责将错误转换成自己的异常或处理结果，本 crate 不向 JS 自动抛错。
     JSError(Option<String>),
-    /// 房间名不合法（对照官方 `Invalid room name`，driver/lib/path-finder.js:8-9）
+    /// 名字格式不符，或房间超出 W127N127 到 E127S127 的坐标范围。
     InvalidRoomName(String),
-    /// 房内坐标越界（0..50，对照 `Invalid room position`，driver/lib/path-finder.js:36-37）
+    /// 房内 x 或 y 不在 0..50 内。
     InvalidPosition { x: u32, y: u32 },
-    /// 在搜索（含回调）栈内重入 [`load_terrain`]。**官方无此面**：官方地形只在
-    /// 启动期载入（driver/lib/path-finder.js:23-46），搜索期不存在载入口，故无
-    /// 官方语义可循；我方为防同线程「持读份额再取写份额」的必死锁而拒绝
-    /// （差异登记：docs/designs/pathfinder-callback.md）。
+    /// 当前线程的搜索尚未结束时尝试载入地形；拒绝从读锁升级到写锁，避免死锁。
     ReentrantTerrainLoad,
-    /// C++ 侧异常逃逸或内存不足（正常输入不可达，见 kk_ffi.cc 的兜底说明）
+    /// C ABI 返回失败，包括 C++ 异常、内存分配失败或结果结构不符合约定。
     NativeFailure,
 }
 
@@ -187,16 +155,13 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-/// 解析房间名 → 世界网格坐标（map position）。
-///
-/// 对照 `parseRoomName`（driver/lib/path-finder.js:6-19）：形如
-/// `/^([WE])([0-9]+)([NS])([0-9]+)$/`；`rx = 127 + (W ? -n : n+1)`，
-/// `ry = 127 + (N ? -n : n+1)`，越界（>255）报错。与 JS `Number()` 一致，
-/// 接受前导零（"E01N0" == "E1N0"）。
+/// 将大写房间名转换成 0..=255 的地图房间坐标，前导零可接受。
+/// W0/N0 对应 127，E0/S0 对应 128；格式不符或任一方向数字大于 127 返回 None。
+/// 此坐标与 kk-core 的有符号房间坐标不同，不能直接混用。
+/// 来源：driver/lib/path-finder.js 的 parseRoomName。
 pub fn parse_room_name(room_name: &str) -> Option<(u8, u8)> {
     let bytes = room_name.as_bytes();
     let parse_axis = |digits: &[u8]| -> Option<u32> {
-        // `[0-9]+`；u32 溢出按越界处理（JS 中同样落入范围检查失败）
         if digits.is_empty() {
             return None;
         }
@@ -214,7 +179,7 @@ pub fn parse_room_name(room_name: &str) -> Option<(u8, u8)> {
     };
     let ns_pos = bytes.iter().position(|&b| b == b'N' || b == b'S')?;
     if ns_pos == 0 {
-        return None; // 缺 [WE] 段（如 "N0"），避免 1..0 反向切片
+        return None; // 保证下面的 1..ns_pos 切片顺序有效。
     }
     let h_num = parse_axis(&bytes[1..ns_pos])?;
     let v_num = parse_axis(&bytes[ns_pos + 1..])?;
@@ -234,7 +199,8 @@ pub fn parse_room_name(room_name: &str) -> Option<(u8, u8)> {
     Some((rx as u8, ry as u8))
 }
 
-/// 世界网格坐标 → 房间名。对照 `generateRoomName`（driver/lib/path-finder.js:23-27）。
+/// 将地图房间坐标转换成规范大写名字，不保留输入名字的前导零。
+/// 来源：driver/lib/path-finder.js 的 generateRoomName。
 pub fn generate_room_name(xx: u8, yy: u8) -> String {
     let horizontal = if xx <= 127 {
         format!("W{}", 127 - i32::from(xx))
@@ -249,8 +215,9 @@ pub fn generate_room_name(xx: u8, yy: u8) -> String {
     format!("{horizontal}{vertical}")
 }
 
-/// 世界连续平面坐标（对照 pf.h:59-81 `world_position_t`；JS 侧换算见
-/// driver/lib/path-finder.js:34-44 `toWorldPosition`：`xx = x + offset.xx * 50`）。
+/// 连续世界格子坐标，每轴有效范围为 0..12800。
+/// 房内坐标加地图房间坐标乘 50 得到此值；字段公开，直接构造不执行范围检查。
+/// 通常使用 [`Self::from_room`] 构造。来源：driver/lib/path-finder.js 的 toWorldPosition。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WorldPosition {
     pub xx: u32,
@@ -258,7 +225,10 @@ pub struct WorldPosition {
 }
 
 impl WorldPosition {
-    /// 房间名 + 房内坐标 → 世界坐标。x/y 必须 < 50（driver/lib/path-finder.js:35-37）。
+    /// 从房间名和房内坐标构造世界格子坐标。
+    ///
+    /// # Errors
+    /// x/y 越界返回 InvalidPosition；名字或地图范围不合法返回 InvalidRoomName。
     pub fn from_room(room_name: &str, x: u32, y: u32) -> Result<Self, Error> {
         if x >= 50 || y >= 50 {
             return Err(Error::InvalidPosition { x, y });
@@ -271,24 +241,23 @@ impl WorldPosition {
         })
     }
 
-    /// 所在房间名（driver/lib/path-finder.js:21-27 `fromWorldPosition`）。
+    /// 返回所在房间名；直接构造的越界坐标不会在此校验，房间编号会截为 u8。
     pub fn room_name(&self) -> String {
         generate_room_name((self.xx / 50) as u8, (self.yy / 50) as u8)
     }
 
-    /// 房内 x（`wp[0] % 50`，driver/lib/path-finder.js:17-19）。
     pub fn x(&self) -> u32 {
         self.xx % 50
     }
 
-    /// 房内 y（`wp[1] % 50`）。
     pub fn y(&self) -> u32 {
         self.yy % 50
     }
 }
 
-/// 寻路目标：位置 + range（Chebyshev 距离域；`goal.range` 见
-/// driver/lib/path-finder.js:74-80，heuristic 语义 pf.cc:126-148）。
+/// 目标位置与允许的切比雪夫距离（横纵差的较大值）。
+/// 普通搜索到任一目标的距离 <= range 即完成；flee 搜索须对每个目标都达到
+/// 距离 >= range。来源：native/pf.cc 的 heuristic。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Goal {
     pub pos: WorldPosition,
@@ -296,7 +265,7 @@ pub struct Goal {
 }
 
 impl Goal {
-    /// range = 0 的目标（官方对 `{x,y,roomName}` 形态的默认，path-finder.js:71-73）。
+    /// 构造必须到达指定格子的目标（range 为 0）。
     pub fn pos(pos: WorldPosition) -> Self {
         Goal { pos, range: 0 }
     }
@@ -306,21 +275,25 @@ impl Goal {
     }
 }
 
-/// 搜索选项。`Default` 与选项钳制均对照 driver/lib/path-finder.js:90-96：
-/// `plainCost: min(254, max(1, x||1))`、`swampCost: … x||5`、
-/// `heuristicWeight: min(9, max(1, x||1.2))`、`maxOps: max(1, x||2000)`、
-/// `maxCost: max(1, x||0xffffffff)`、`maxRooms: min(64, max(1, x||16))`。
-///
-/// 注：官方 `PathFinder.search` 选项没有 roadCost——道路不是地形，其代价通过
-/// roomCallback 返回的 CostMatrix 表达（官方引擎在 JS 侧生成矩阵，玩家侧同理）。
+/// 搜索预算和移动代价，调用搜索时按范围限制，无须预先调整字段。
+/// 默认值见 Default 实现。道路不是单独的地形码，其代价通过 CostMatrix 提供。
+/// 整数使用 Rust 的 u32 输入，不执行 JS 的有符号 int32 强制转换。
+/// 来源：driver/lib/path-finder.js 的 search 选项处理。
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SearchOptions {
+    /// 平原移动代价，限制为 1..=254；0 使用默认值 1。
     pub plain_cost: u32,
+    /// 沼泽移动代价，限制为 1..=254；0 使用默认值 5。
     pub swamp_cost: u32,
+    /// 启发式权重，限制为 1..=9；0/NaN 使用 1.2，高于 1 时不保证最短路径。
     pub heuristic_weight: f64,
+    /// 主搜索循环的展开次数预算；0 使用 2000，不限制回调的运行时间。
     pub max_ops: u32,
+    /// 累计移动代价的搜索阈值；0 使用 u32::MAX，不作为返回 cost 的硬上限。
     pub max_cost: u32,
+    /// 可纳入搜索的房间数，限制为 1..=64；0 使用 16。
     pub max_rooms: u32,
+    /// 从所有目标的 range 范围中撤离，而非接近任一目标。
     pub flee: bool,
 }
 
@@ -339,8 +312,7 @@ impl Default for SearchOptions {
 }
 
 impl SearchOptions {
-    /// 按 JS 语义钳制（`x || default` 的 0/NaN 回退 + min/max 夹逼，
-    /// driver/lib/path-finder.js:90-96）。
+    // 先应用零值/NaN 缺省，再限制范围；不能先将零值 clamp 成 1。
     fn clamped(&self) -> SearchOptions {
         let or = |v: u32, d: u32| if v == 0 { d } else { v };
         let hw = if self.heuristic_weight == 0.0 || self.heuristic_weight.is_nan() {
@@ -360,31 +332,28 @@ impl SearchOptions {
     }
 }
 
-/// roomCallback 的返回决策（对照官方 JS bridge 给 native 的返回形态，
-/// driver/lib/path-finder.js:114-131 → pf.cc:47-58）。
+/// 搜索首次触达一个可载入房间时，回调为该房间选择地形或代价矩阵。
+/// 来源：native/pf.cc 的 room_index_from_pos。
 pub enum RoomDecision<'a> {
-    /// 返回 undefined / 非 TypedArray：该房间用纯地形（pf.cc:55 长度检查不过 →
-    /// cost_matrix 保持 null）。
+    /// 使用已载入地形的代价。
     None,
-    /// 返回 false：封锁该房间（pf.cc:49-52 blocked_rooms）。
+    /// 不允许搜索进入该房间。
     Blocked,
-    /// 返回 CostMatrix：**引用必须存活到 search 返回**（pf.cc 直接引用该缓冲，
-    /// 不拷贝）；布局 `[xx*50 + yy]`（path-finder.js:25），255 (0xff) 表示该格
-    /// 不可通行（pf.cc:115-116）。长度按实际透传：**非 2500 字节的矩阵被官方
-    /// 代码静默按 [`RoomDecision::None`] 处理**（pf.cc:54-57 的
-    /// `length() == 2500` 检查——与官方 JS bridge 无条件交出 `ret._bits` 后由
-    /// native 裁决一致，driver/lib/path-finder.js:125-127）。
+    /// 借用矩阵直到搜索返回，C++ 不复制字节。
+    /// 非 2500 字节的矩阵按 None 处理，由 native/pf.cc 的长度检查决定。
     CostMatrix(&'a CostMatrix),
 }
 
-/// 搜索结果（对照 driver/lib/path-finder.js:96-102 的返回对象）。
+/// 搜索结果；未完成时仍可能包含一段向目标接近的路径。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchResult {
-    /// 路径（**origin→goal 序**；native 产出为 goal→origin 序，JS 侧 reverse，
-    /// driver/lib/path-finder.js:101，本层等价处理）。
+    /// 从起点向结果终点排列的步进位置，不包含起点，终点不一定是目标格。
     pub path: Vec<WorldPosition>,
+    /// 主搜索循环的展开次数，不计首次 A* 展开或回调耗时。
     pub ops: u32,
+    /// C++ 返回的累计移动代价，不是路径步数或 CPU 时间。
     pub cost: u32,
+    /// 是否尚未达到目标条件；不表示发生错误。
     pub incomplete: bool,
 }
 
@@ -399,31 +368,14 @@ impl SearchResult {
     }
 }
 
-/// 2D 代价矩阵（对照 engine/src/game/path-finder.js:18-48 的 CostMatrix）。
+/// 按列排列的格子代价，索引为 x * 50 + y，与 kk-core 地形的行顺序不同。
+/// 0 使用地形代价；1..=254 覆盖地形代价（包括墙格）；255 为不可通行。
+/// 来源：engine/src/game/path-finder.js 的 CostMatrix，native/pf.cc 的 look。
 ///
-/// 内存布局 `[xx*50 + yy]`（`this._bits[xx * 50 + yy]`，path-finder.js:25）；
-/// 255 = 不可通行（pf.cc:115-116）。
-///
-/// 越界/非法值语义**对齐官方 TypedArray 静默行为**（官方 JS 层从不因索引或长度
-/// 抛错）。关键取证：官方**没有逐轴 0..50 检查**——唯一的边界是平铺索引
-/// `xx*50+yy` 与 `_bits` 长度的比较（engine/src/game/path-finder.js:23-25,29-31
-/// 直接下标访问 TypedArray）：
-/// - [`set`](CostMatrix::set)：平铺索引 ≥ 矩阵长度 = 无操作（TypedArray 越界写
-///   被忽略；负索引经 JS 层 `xx|0` 得负平铺值同为越界——本 API 的 usize 无负值
-///   形态）。注意 (0,50) 这类平铺仍 < 长度的坐标是**合法写入**（与 (1,0) 别名
-///   同一字节——列主序布局的固有重叠，官方同样如此）；
-/// - [`get`](CostMatrix::get)：平铺索引越界 = `None`（TypedArray 越界读返回
-///   `undefined`）；
-/// - [`deserialize`](CostMatrix::deserialize)：接受**任意**长度（官方无长度校验，
-///   engine/src/game/path-finder.js:44-48 直接重解释 buffer）。错误长度的矩阵
-///   交给 search 使用时，由官方代码的 `length() == 2500` 检查静默按「无矩阵」
-///   处理（pf.cc:54-57，对应官方 JS bridge 无条件透传 `ret._bits`——
-///   driver/lib/path-finder.js:125-127）；本 crate 经回调把真实长度透传，由
-///   未改动的官方代码裁决，控制流与官方一致。
-///
-/// 长度不变量：恒为 4 的倍数（`new()` = 2500；`deserialize` = `data.len()*4`——
-/// 官方 `_bits` 的两个来源 `new Uint8Array(2500)` 与 `new Uint32Array(...).buffer`
-/// 同为 4 的倍数）。
+/// 为保留上游下标行为，set/get 只检查平铺索引，不逐轴检查 0..50。
+/// 因而 (0, 50) 与 (1, 0) 访问同一字节；索引溢出或越出实际缓冲才算越界。
+/// deserialize 可生成非标准长度，只有 2500 字节的矩阵会在搜索中生效。
+/// new 与 deserialize 都保证长度为 4 的倍数，serialize 可完整按小端 u32 分组。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CostMatrix(Vec<u8>);
 
@@ -438,35 +390,26 @@ impl CostMatrix {
         CostMatrix(vec![0u8; 2500])
     }
 
-    /// 写入代价。**平铺索引（`x*50+y`）≥ 矩阵长度时静默无操作**（官方
-    /// TypedArray 越界写被忽略，engine/src/game/path-finder.js:22-26；无逐轴
-    /// 0..50 检查——见类型文档）；界内钳制 0..=255
-    /// （`Math.min(Math.max(0, val), 255)`，同出处——JS 的负值/NaN/小数归一
-    /// （分别 → 0/0/截断）发生在 JS 数值层，本 API 的 `u32` 只需上界钳制）。
-    /// 索引用 checked 运算：官方 JS 的 `xx*50+yy` 在 float64 上算出任意大值后
-    /// 一律按越界静默丢弃——溢出的 usize 同映射为越界，不 panic。
+    /// 写入代价，上限限制为 255；平铺索引越界或计算溢出时不修改矩阵。
+    /// Rust 输入不表示 JS 的负数、NaN 或小数，相关转换须在 JS 接口层完成。
     pub fn set(&mut self, x: usize, y: usize, val: u32) {
         let Some(idx) = x.checked_mul(50).and_then(|v| v.checked_add(y)) else {
-            return; // 官方：越界写静默
+            return;
         };
         if idx >= self.0.len() {
-            return; // 官方：越界写静默
+            return;
         }
         self.0[idx] = val.min(255) as u8;
     }
 
-    /// 读取代价。**平铺索引越界返回 `None`**（官方返回 `undefined`，
-    /// engine/src/game/path-finder.js:28-32；索引运算同 [`set`](CostMatrix::set)
-    /// 用 checked——溢出即越界）。
+    /// 按平铺索引读取代价；越界或计算溢出返回 None，边界规则见类型文档。
     pub fn get(&self, x: usize, y: usize) -> Option<u32> {
         let idx = x.checked_mul(50).and_then(|v| v.checked_add(y))?;
         self.0.get(idx).map(|&b| u32::from(b))
     }
 
-    /// 序列化：字节按 little-endian 重解释为 uint32 数组
-    /// （`Array.prototype.slice.apply(new Uint32Array(this._bits.buffer))`，
-    /// path-finder.js:40-42；官方平台均为 LE，此处显式 LE 保证跨平台逐字节一致）。
-    /// 长度随矩阵实际字节数（官方同样按实际 `_bits` 长度产出）。
+    /// 每四字节按小端编码为一个 u32；标准矩阵得到 625 个值。
+    /// 这对应上游 CostMatrix.serialize 在小端平台的输出，不改变实际长度。
     pub fn serialize(&self) -> Vec<u32> {
         self.0
             .as_chunks::<4>()
@@ -476,9 +419,8 @@ impl CostMatrix {
             .collect()
     }
 
-    /// 反序列化（`new Uint8Array(new Uint32Array(data).buffer)`，path-finder.js:44-48）。
-    /// **任意长度均成功**（官方无长度校验；错误长度在 search 侧被 pf.cc:54-57
-    /// 静默忽略——见类型文档）。字节序与 serialize 对称：显式 LE。
+    /// 按小端展开每个 u32，接受空数组或非 625 个元素的数组。
+    /// 非标准长度矩阵仍可读取和再序列化，但搜索会忽略它。
     pub fn deserialize(data: &[u32]) -> Self {
         let mut bits = Vec::with_capacity(data.len() * 4);
         for word in data {
@@ -492,13 +434,10 @@ impl CostMatrix {
     }
 }
 
-/// 把 50×50 地形格打包成官方 625 字节 packed bits。
-///
-/// 输入 `tiles[y][x]`（行主序，与官方 `room.terrain` 字符串下标 `[yy*50 + xx]`
-/// 一致，driver/lib/path-finder.js:21-22）；打包公式对照 :23：
-/// `pack[ii/4] = pack[ii/4] & ~(0x03 << ii%4*2) | bit << ii%4*2`，其中 `ii = xx*50 + yy`。
-/// 格值取 [`TERRAIN_PLAIN`]/[`TERRAIN_WALL`]/[`TERRAIN_SWAMP`]（>3 的值按官方
-/// 位搬运语义截取低 2 位）。
+/// 将行顺序的 `tiles[y][x]` 转为寻路器按列存储的 625 字节地形。
+/// 每格占两位，列顺序索引 i = x * 50 + y，存入 bits[i/4] 的第 (i%4)*2 位。
+/// 输入应使用 0..=3 的地形码，本实现对更大值只保留低两位。
+/// 来源：driver/lib/path-finder.js 的 init；低两位截取是本封装的输入处理。
 pub fn pack_terrain(tiles: &[[u8; 50]; 50]) -> [u8; 625] {
     let mut bits = [0u8; 625];
     for (yy, row) in tiles.iter().enumerate() {
@@ -511,18 +450,14 @@ pub fn pack_terrain(tiles: &[[u8; 50]; 50]) -> [u8; 625] {
     bits
 }
 
-/// 载入一个房间的地形（可多次调用、不同房间；对照官方启动期 `loadTerrain`，
-/// driver/lib/path-finder.js:23-46）。
+/// 将一个房间的地形复制到进程共享的 C++ 地形表，影响之后的所有搜索。
+/// 同名房间重复载入会覆盖表项；上游分配的旧缓冲不会释放，宜在搜索前统一加载。
+/// 来源：native/pf.cc 的 load_terrain。写锁等待正在执行的搜索结束。
 ///
-/// 全局副作用：写入 C++ 静态地形表（pf.h:359）；与并发 search 用全局锁串行化。
-/// 对同一房间重复载入会覆盖（旧 625 字节不回收——与官方多次 loadTerrain 行为
-/// 一致，pf.cc:605-613）。
-///
-/// **重入拒绝**：在本线程的搜索调用栈内（即 roomCallback 内——回调只可能在该
-/// 栈内执行，pf.cc:37-59）调用本函数返回
-/// [`Error::ReentrantTerrainLoad`]。官方无此面（地形仅启动期载入，见
-/// [`Error::ReentrantTerrainLoad`] 文档）；不拒绝则同线程「持读份额再取写份额」
-/// 必死锁。其他线程并发调用不受影响（写份额等待该线程搜索结束）。
+/// # Errors
+/// 名字不合法、当前线程尚在搜索中，或 C ABI 失败时返回错误。
+/// 同线程回调内载入返回 ReentrantTerrainLoad。回调若等待另一线程载入完成，
+/// 仍会相互等待；应在搜索外协调更新。
 pub fn load_terrain(room_name: &str, bits: &[u8; 625]) -> Result<(), Error> {
     let (xx, yy) =
         parse_room_name(room_name).ok_or_else(|| Error::InvalidRoomName(room_name.to_owned()))?;
@@ -530,29 +465,22 @@ pub fn load_terrain(room_name: &str, bits: &[u8; 625]) -> Result<(), Error> {
         return Err(Error::ReentrantTerrainLoad);
     }
     let _guard = TERRAIN_LOCK.write();
-    // Safety: 写锁持有期内无并发 kk_pf_* 调用；bits 在调用期内有效
+    // SAFETY: 写锁排除其他搜索或载入；固定长度 bits 在同步调用期间存活。
     if !unsafe { ffi::ffi_load_terrain(xx, yy, bits) } {
         return Err(Error::NativeFailure);
     }
     Ok(())
 }
 
-/// 共同的收尾：native 三种返回 → 官方 JS bridge 的返回对象
-/// （driver/lib/path-finder.js:96-102）。
+// 状态码来自 native/kk_ffi.h；异常与正常的空结果必须分开处理。
 fn finish(outcome: Option<ffi::RawOutcome>) -> Result<SearchResult, Error> {
     match outcome {
         None => Err(Error::NativeFailure),
-        // native undefined → {path:[], ops:0, cost:0, incomplete:false}
-        //（driver/lib/path-finder.js:97-98；触发条件 pf.cc:508-510 同格搜索、
-        // pf.cc:563-567 JS 异常路径——含目标方向房间缺地形）
         Some(raw) if raw.status == 3 => Err(Error::JSError(raw.js_error_message)),
         Some(raw) if raw.status == 2 => Ok(SearchResult::empty(false)),
-        // native -1 → {path:[], ops:0, cost:0, incomplete:true}
-        //（driver/lib/path-finder.js:99-100；初始房间不可达 pf.cc:515-519）
         Some(raw) if raw.status == 1 => Ok(SearchResult::empty(true)),
         Some(raw) => {
-            // reverse：native 为 goal→origin 序（pf.cc:574-594），JS 侧
-            // `ret.path.map(fromWorldPosition).reverse()`（driver/lib/path-finder.js:101）
+            // C++ 从终点反向重建，公开结果按行走顺序排列。
             let mut path: Vec<WorldPosition> = raw
                 .path
                 .iter()
@@ -569,17 +497,18 @@ fn finish(outcome: Option<ffi::RawOutcome>) -> Result<SearchResult, Error> {
     }
 }
 
-/// 无 roomCallback 的搜索（官方 `options.roomCallback` 缺省形态，
-/// driver/lib/path-finder.js:82-92 → pf.cc:488-492 room_callback=null）。
+/// 使用已载入的地形搜索，选项在进入 C++ 前按 SearchOptions 的规则调整。
+/// 空目标列表直接返回完整的空 SearchResult，不读取地形。
+/// 正常搜索须预先载入可能触达的房间；位置宜用 WorldPosition::from_room 构造。
+///
+/// # Errors
+/// 触达未载入地形的房间时返回 JSError；C ABI 失败时返回 NativeFailure。
 pub fn search(
     origin: WorldPosition,
     goals: &[Goal],
     options: &SearchOptions,
 ) -> Result<SearchResult, Error> {
-    // 空 goals 早退：game 层 `PathFinder.search` 对空 goal 返回 {path:[], ops:0}
-    // （engine/src/game/path-finder.js:60-62）；driver 层无此检查，但空 goals 会让
-    // native 白烧满 max_ops（heuristic 恒为 max 永不命中），安全层提前返回，
-    // 玩家可见行为一致。
+    // C++ 没有空目标早退；此处避免无目标时消耗整个搜索预算。
     if goals.is_empty() {
         return Ok(SearchResult::empty(false));
     }
@@ -598,7 +527,7 @@ pub fn search(
         .map(|g| (g.pos.xx, g.pos.yy, g.range))
         .collect();
     let _terrain = TERRAIN_LOCK.read();
-    // Safety: goals 切片与选项存活于调用期；读锁防并发写地形；无回调
+    // SAFETY: 输入在同步调用期间有效；读锁防止地形被替换；没有回调指针。
     let outcome = unsafe {
         ffi::ffi_search(
             (origin.xx, origin.yy),
@@ -611,25 +540,19 @@ pub fn search(
     finish(outcome)
 }
 
-/// 带 roomCallback 的搜索。回调收 (地图 xx, 地图 yy)——对照官方 native 回调签名
-/// `function(xx, yy)`（pf.cc:40-42）；JS bridge 才把地图坐标换算成房名交给玩家
-/// （driver/lib/path-finder.js:120-122），本层直接给地图坐标，房名可用
-/// [`generate_room_name`] 还原。
+/// 搜索首次触达一个已加载地形的房间时同步调用回调，每房间至多一次。
+/// 回调参数是 0..=255 的地图房间坐标，可用 generate_room_name 转成名字。
+/// C++ 借用返回的矩阵直到搜索结束，生命周期参数要求矩阵在此期间有效。
 ///
-/// 回调在搜索按需触达房间时被调用（每房间至多一次，pf.cc:22-64；首房为
-/// origin 所在房间）。回调异常语义：
-/// - **回调 panic**：被 FFI 边界的 `catch_unwind` 拦截（绝不穿越 extern "C"——
-///   那会 abort 宿主），按官方 roomCallback throw 的同一条链处置：
-///   pf.cc:43-46 → pf.cc:563-567 → 返回
-///   `{path:[], ops:0, cost:0, incomplete:false}`（driver/lib/path-finder.js:135-136）。
-///   官方语义是异常上抛给玩家（pf.cc:44 ReThrow + V8 api 边界挂起异常胜过
-///   返回值——JS 层 throw；:563 的 Undefined 仅是 C++ 占位）——宿主层映射
-///   `Err(Error::JSError(None))`，A4 接线时由 prelude rethrow 原生 JS 异常；
-///   宿主要日志可装 `panic::set_hook`。
-/// - **回调内 [`load_terrain`]**：返回 [`Error::ReentrantTerrainLoad`]（官方无此面，
-///   我方防死锁，见其文档）——回调可检查该 Err 自行降级，不影响外层搜索继续。
-/// - **嵌套 search**：官方支持的两层递归（官方 main.cc:9-14 双实例池注释；
-///   我方 kk_ffi.cc 等价复刻 + [`TerrainLock`] 重入读），回调内可直接再 search。
+/// 回调可嵌套搜索：每线程缓存两个 C++ 实例，更多层临时分配实例，返回时释放。
+/// 回调可处理内层搜索错误后继续，也可 panic 使外层返回错误。
+/// 本 crate 不限制回调运行时间；max_ops 只限制搜索循环。
+///
+/// # Errors
+/// 缺少地形或 C ABI 失败时与 search 相同。采用 panic=unwind 且普通 panic
+/// 载荷析构不再次 panic 时，回调 panic 被捕获并返回 JSError(None)，不保留载荷。
+/// panic=abort 或 panic hook 主动终止进程不在此捕获范围内。
+/// 回调内 load_terrain 返回 ReentrantTerrainLoad，回调可自行处理该错误。
 pub fn search_with_room_callback<'a, F>(
     origin: WorldPosition,
     goals: &[Goal],
@@ -659,11 +582,10 @@ where
     let tramp = ffi::trampoline::<'a, F>();
     let user_data = (&mut callback) as *mut F as *mut std::ffi::c_void;
     let _terrain = TERRAIN_LOCK.read();
-    // Safety: 闭包位于本栈帧（存活至调用结束）；其返回的 CostMatrix 引用只能
-    // 溯源到闭包外层的所有者（FnMut Output 无法借用 &mut self），借用存活于整次
-    // 调用；goals 切片调用期内有效；读锁防并发写（重入读不阻塞，见 TerrainLock）。
-    // 回调 panic 在 trampoline 的 catch_unwind 处被拦（ffi.rs），unwind 不会穿越
-    // extern "C" 边界到达本注释所在的调用帧
+    // SAFETY: user_data 指向本栈帧的 callback，同步调用结束前不会移动或释放。
+    // FnMut 的输出不能借用本次 &mut self，返回的矩阵借用须来自可覆盖整次搜索的
+    // 外部存储；goals 同样存活至返回。读锁防止并发替换地形。
+    // trampoline 在 C ABI 内捕获可展开的回调 panic；约束见 ffi.rs。
     let outcome = unsafe {
         ffi::ffi_search(
             (origin.xx, origin.yy),
@@ -679,8 +601,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // ===== 房名换算（对照 driver/lib/path-finder.js:6-27） =====
 
     #[test]
     fn room_name_parse() {
@@ -732,8 +652,7 @@ mod tests {
         );
     }
 
-    // ===== 选项钳制（对照 driver/lib/path-finder.js:90-96） =====
-
+    // 零值先应用缺省，再限制范围，避免 max_ops=0 被误改成 1。
     #[test]
     fn options_clamping() {
         let d = SearchOptions::default().clamped();
@@ -773,8 +692,6 @@ mod tests {
         assert_eq!(o2.heuristic_weight, 9.0);
     }
 
-    // ===== CostMatrix（对照 engine/src/game/path-finder.js:18-48） =====
-
     #[test]
     fn cost_matrix_set_get_clamp() {
         let mut m = CostMatrix::new();
@@ -785,15 +702,7 @@ mod tests {
         assert_eq!(m.get(5, 5), Some(255));
     }
 
-    // 越界语义对齐官方 TypedArray 静默行为（engine/src/game/path-finder.js:22-32）。
-    // 关键取证：官方**没有逐轴 0..50 检查**——唯一的门是平铺索引 `xx*50+yy` 与
-    // TypedArray 长度的比较（:23-25 直接 `_bits[xx*50+yy] = v`）。故：
-    // - 平铺索引 ≥ 长度（如 (50,0)、(49,50) 均 = 2500）：set 静默无操作、
-    //   get 返回 undefined → None（TypedArray 越界访问语义）；
-    // - (0,50) 的平铺索引 = 50 < 2500：**合法写入**（与 (1,0) 别名同一字节——
-    //   列主序布局的固有重叠，官方同样如此）；
-    // - 极大索引在官方 JS（float64 乘法）中同样得出越界大数 → 静默；本 API 用
-    //   checked 运算防 usize 溢出 panic，语义同为越界。
+    // 只检查平铺索引：(0,50) 与 (1,0) 是同一字节，不能改成逐轴拒绝。
     #[test]
     fn cost_matrix_out_of_range_silent() {
         let mut m = CostMatrix::new();
@@ -818,6 +727,7 @@ mod tests {
         );
     }
 
+    // 选取不同 word 的最高字节，检查列顺序索引与小端打包，而不只检查往返。
     #[test]
     fn cost_matrix_serialize_bytes() {
         // 逐字节对齐：_bits[xx*50+yy]（path-finder.js:25），serialize = LE u32
@@ -834,10 +744,7 @@ mod tests {
         assert_eq!(CostMatrix::deserialize(&s), m);
     }
 
-    // 官方 deserialize 对任意长度静默接受（path-finder.js:44-48 直接重解释
-    // buffer）；错误长度矩阵的 get/serialize 按**实际**字节工作，交给 search
-    // 使用时被 pf.cc:54-57 静默按「无矩阵」处理（集成测试
-    // tests/callback_safety.rs::cost_matrix_wrong_length_ignored_at_search 锁定）。
+    // 非标准长度也保留实际数据；是否用于搜索由 C++ 的长度检查决定。
     #[test]
     fn cost_matrix_deserialize_any_length_silent() {
         // 空数据 → 0 字节矩阵：get 恒 None、serialize 为空（官方
@@ -863,8 +770,6 @@ mod tests {
         assert_eq!(long.get(0, 0), Some(1));
         assert_eq!(long.get(49, 49), Some(0));
     }
-
-    // ===== 地形打包（对照 driver/lib/path-finder.js:29-35） =====
 
     #[test]
     fn terrain_packing() {

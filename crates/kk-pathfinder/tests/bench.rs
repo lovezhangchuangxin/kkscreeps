@@ -1,8 +1,8 @@
-//! 简单基准（手动计时，不引 criterion）。运行方式：
+//! 手动计时的寻路基准：
 //! `cargo test -p kk-pathfinder --release --test bench -- --ignored --nocapture`
 //!
-//! 场景对照官方 profile.js（driver/native/profile.js:62-103）：
-//! 官方在同一硬件量级下用该场景做 PGO 校验（checksum 11843305）。
+//! 地形和位置沿用 driver/native/profile.js，来源版本见 src/lib.rs。
+//! 吞吐场景不封锁房间，因此不等于 official_golden.rs 的校验和场景。
 
 use std::time::Instant;
 
@@ -47,8 +47,7 @@ const POSITIONS: &[(&str, u32, u32)] = &[
     ("W3N7", 44, 32),
 ];
 
-/// 单次 search 量级（短程）：同房直线 ~5 步。
-/// 注：debug 档约 28µs/次，release 档实测约 2µs/次——口径以运行档位为准。
+/// 同房短程搜索，初始化和预热不计入测量。
 #[test]
 #[ignore]
 fn bench_short_search() {
@@ -142,10 +141,8 @@ fn bench_profile_scenario() {
     );
 }
 
-/// roomCallback 通道开销（C2 批）：同一场景带/不带回调的粗对比。
-/// 回调返回 `None`（等价官方回调返回非 TypedArray——pf.cc:55 长度门不过，
-/// 房间用纯地形），与无回调的 `search` 逐次对比；两者路径应一致（无矩阵差异），
-/// 差值即 FFI 回调跳板 + arena 值包装的通道开销。
+/// 比较同一路径的有无回调搜索，回调只返回 None。
+/// 差值包含函数跳板与值包装，也包含计时噪声，不能仅凭此值拆分各阶段成本。
 #[test]
 #[ignore]
 fn bench_callback_overhead() {

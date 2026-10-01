@@ -1,34 +1,15 @@
-// kk-pathfinder 自有文件（非官方拷贝）：官方 pf.cc/pf.h 的最小 Nan/v8 兼容层。
-//
-// 结论：官方寻路算法本体（pf.cc 的 A* / JPS / 堆序 / tie-breaking）不依赖 JS 引擎，
-// 只依赖 v8 的四个原语——值表示、属性读写、数值转换、回调调用。本头文件用
-// 「线程局部 arena 中的值节点」实现这四个原语，使官方源码零改动编译，路径结果
-// （含堆内平局裁决）与官方逐点一致。
-//
-// 证据链：
-// - pf.cc/pf.h 引用的 v8/Nan 符号清单：Local<Value/Object/Array/Function/String/Boolean>、
-//   MaybeLocal/Maybe、Nan::{To,Get,Set,New,Call,Undefined,ThrowError,TryCatch,
-//   TypedArrayContents}、v8::Isolate::GetCurrent()->IsExecutionTerminating()（全部出处
-//   见各实现处注释）；这些符号在算法路径上只做数据搬运，不影响搜索顺序。
-// - 搜索顺序（决定路径与 tie-breaking）完全由 pf.cc 自身的 heap_t::pop/bubble_up
-//   （pf.h:273-330）与方向枚举（pf.h:69、pf.cc:152-153）决定，本兼容层不参与。
-//
-// 值模型与生命周期（unsafe 边界设计说明）：
-// - v8::Value = arena（std::deque）分配的带标签节点；arena 由 FFI 入口
-//   （kk_ffi.cc 的 ArenaGuard）安装到 thread_local，一次 FFI 调用结束时销毁。
-// - v8::Local<T> 是非拥有句柄（裸指针视图），节点存活期覆盖 Local 的使用期——
-//   与官方 HandleScope 语义等价：pf.cc 中所有 Local 均不逃逸出单次
-//   search/load_terrain 调用（room_data_handles 也只在该调用栈内存活，pf.cc:486-487）。
-// - Nan::Call 不进入 JS 引擎：Function 节点持有 C 函数指针 + user_data（由
-//   kk_ffi.cc 注入），对应官方 roomCallback 通道（pf.cc:37-59）。
-// - v8::Isolate::IsExecutionTerminating 恒为 false：官方用它响应 isolate 硬终止，
-//   本环境无 JS 引擎可终止；搜索上界由 max_ops 保证（与官方一致，pf.cc:499,526）。
+// 提供 pf.cc/pf.h 使用的 Nan/v8 接口子集，不嵌入 JavaScript 引擎。
+// 值节点由当前 FFI 调用的 Arena 分配；Local 只是非拥有指针，不能在调用结束后使用。
+// 嵌套调用切换 Arena 并在返回时恢复，外层节点仍存活。TypedArray 节点借用 Rust
+// 缓冲，矩阵保持有效到搜索结束，地形只需有效到载入结束。
+// 函数节点通过 C 回调取房间决策；异常状态由 kk_ffi.cc 的 ArenaGuard 按调用层保存。
+// IsExecutionTerminating 恒为 false，本层没有执行超时；max_ops 不限制回调耗时。
+// 来源版本见 src/lib.rs；这里只覆盖上游寻路源码实际使用的值操作，不实现完整 V8 语义。
 
 #ifndef KK_PATHFINDER_COMPAT_NAN_H_
 #define KK_PATHFINDER_COMPAT_NAN_H_
 
-// libstdc++（Linux）不传递包含 <limits>/<cstdint>——真实 nan.h 经 v8 头提供；
-// pf.h/pf.cc 直接使用 std::numeric_limits/uint*_t，兼容层须先行包含（官方文件不动）
+// pf.h/pf.cc 使用这些类型却经 nan.h 获得声明，兼容层须提供对应头文件。
 #include <cstdint>
 #include <limits>
 
@@ -40,8 +21,7 @@
 
 namespace v8 {
 
-// 带标签值节点。类型层次（String/Object/Array/...）仅用于 Local<T> 的静态转换，
-// 运行时行为全部由 type 决定——与 v8「一切皆 Value」一致。
+// 值的行为由 type 标签决定；本层的句柄类型只服务上游接口的编译要求。
 class Value {
 public:
 	enum type_t {
@@ -63,15 +43,13 @@ public:
 	size_t tarray_len = 0;
 	std::vector<std::pair<std::string, Value*>> props; // OBJECT 属性
 	std::vector<Value*> elems;                          // ARRAY 元素（下标 Set 可增长）
-	// FUNCTION：C 回调（契约见 kk_ffi.h 的 kk_pf_room_callback_t）。rc==3（回调异常）
-	// 由 Nan::Call 转译成 v8 挂起异常——官方 JS roomCallback throw 的等价通道。
+	// FUNCTION 借用回调上下文，返回码约定见 kk_ffi.h。
 	int (*fn_ptr)(void*, uint8_t, uint8_t, const uint8_t**, size_t*) = nullptr;
 	void* fn_user = nullptr;
 
 	bool IsUndefined() const { return type == UNDEFINED; }
 	bool IsBoolean() const { return type == BOOLEAN; }
 	bool IsFalse() const { return type == BOOLEAN && !b; }
-	// v8::Array::Length（pf.cc:480,607 经 ->Length() 使用）
 	uint32_t Length() const { return static_cast<uint32_t>(elems.size()); }
 
 	Value* get_prop(const char* key) const {
@@ -99,7 +77,7 @@ public:
 	bool IsExecutionTerminating() const { return false; }
 };
 
-// 非拥有句柄。S* 可转换 T* 时允许 Local<S> → Local<T>（v8 的层次上转）。
+// 非拥有句柄；模板转换限制为声明的类型继承关系，生命周期由 ArenaGuard 管理。
 template <class T>
 class Local {
 public:
@@ -114,7 +92,7 @@ public:
 	T* operator->() const { return static_cast<T*>(v); }
 	T& operator*() const { return *static_cast<T*>(v); }
 
-	// v8::Local<T>::Cast——官方 pf.cc:42 使用 Local<Object>::Cast(Undefined())
+	// 上游将 Undefined 转作回调接收者；Cast 只改变句柄类型，不创建对象。
 	template <class S>
 	static Local<T> Cast(const Local<S>& other) {
 		Local<T> ret;
@@ -155,7 +133,7 @@ public:
 
 namespace kk_compat {
 
-// 一次 FFI 调用存活期的值 arena。deque 保证节点地址稳定。
+// deque 在追加节点时保持既有节点地址稳定，已有 Local 指针无需更新。
 struct Arena {
 	std::deque<v8::Value> nodes;
 	v8::Value* alloc() {
@@ -165,28 +143,20 @@ struct Arena {
 };
 
 inline thread_local Arena* t_arena = nullptr;
-// Nan::ThrowError 的挂起标志（pf.cc:33-34 唯一抛出点，随后立刻 throw js_error
-// 被 pf.cc:563 捕获；TryCatch 理论上永远观察不到，保留标志仅为语义完整）。
+// 只表示当前 FFI 调用的异常；嵌套返回时恢复外层状态，不能残留内层错误。
 inline thread_local bool t_pending_js_exception = false;
-// 挂起异常的消息（仅 ThrowError 直抛路径有文案，如地形缺失的
-// "Could not load terrain data"；回调异常的消息归 JS 原异常——A4 接线时
-// 由 JS 层直接 rethrow 原异常，ReThrow 路径清空本消息）
+// ThrowError 的消息指针；回调异常没有文本，ReThrow 会清空此值。
 inline thread_local const char* t_pending_js_error_message = nullptr;
 
 } // namespace kk_compat
 
 namespace Nan {
 
-// 官方 Nan 把 MaybeLocal/Maybe 暴露在 Nan:: 命名空间（pf.cc:42 使用
-// `Nan::MaybeLocal<v8::Value>`），此处做别名转回 v8::
 template <class T>
 using MaybeLocal = v8::MaybeLocal<T>;
 template <class T>
 using Maybe = v8::Maybe<T>;
 
-// ===== New =====
-
-// Nan::New("xx") → MaybeLocal<String>（pf.h:36、pf.cc:40,609 等经 .ToLocalChecked() 用）
 inline v8::MaybeLocal<v8::String> New(const char* s) {
 	v8::Value* node = kk_compat::t_arena->alloc();
 	node->type = v8::Value::STRING;
@@ -194,7 +164,6 @@ inline v8::MaybeLocal<v8::String> New(const char* s) {
 	return v8::MaybeLocal<v8::String>(v8::Local<v8::String>(node));
 }
 
-// Nan::New(整数) → Local<Value>（Number）。pf.cc 中实参为 uint8_t/uint32_t/int32_t。
 template <class T, class = std::enable_if_t<std::is_integral_v<T>>>
 inline v8::Local<v8::Value> New(T n) {
 	v8::Value* node = kk_compat::t_arena->alloc();
@@ -203,10 +172,9 @@ inline v8::Local<v8::Value> New(T n) {
 	return v8::Local<v8::Value>(node);
 }
 
-// Nan::New<v8::Array>(len)（pf.cc:481,570,575,586）、New<v8::Object>()（pf.cc:595）、
-// New<v8::Boolean>(b)（pf.cc:599）——按标签分派。
 template <class T>
 struct NewTag {};
+// 上游创建数组后按下标 Set，或直接返回空数组；初始长度不用于独立读取。
 inline v8::Local<v8::Array> NewImpl(NewTag<v8::Array>, int /*length*/) {
 	v8::Value* node = kk_compat::t_arena->alloc();
 	node->type = v8::Value::ARRAY;
@@ -228,12 +196,9 @@ inline auto New(Args&&... args) -> decltype(NewImpl(NewTag<T>{}, std::forward<Ar
 	return NewImpl(NewTag<T>{}, std::forward<Args>(args)...);
 }
 
-// Nan::Undefined()（pf.cc:42,509,566 等）。返回 Local<Value>，可被 Cast 成任意句柄。
 inline v8::Local<v8::Value> Undefined() {
 	return v8::Local<v8::Value>(kk_compat::t_arena->alloc());
 }
-
-// ===== To =====
 
 namespace impl {
 template <class T>
@@ -241,13 +206,11 @@ struct Tag {};
 } // namespace impl
 
 inline v8::MaybeLocal<v8::Object> ToDispatch(v8::Local<v8::Value> v, impl::Tag<v8::Object>) {
-	// Nan::To<v8::Object>(val).ToLocalChecked()（pf.h:35,78-80,243）
 	v8::Value* node = v.v ? v.v : kk_compat::t_arena->alloc();
 	return v8::MaybeLocal<v8::Object>(v8::Local<v8::Object>(node));
 }
 inline v8::Maybe<uint32_t> ToDispatch(v8::Local<v8::Value> v, impl::Tag<uint32_t>) {
-	// Nan::To<uint32_t>(val).FromJust()（pf.h:36-37,79-80,244）。值均由本层以
-	// double 精确承载 u32，static_cast 语义与 JS ToUint32 在该值域一致。
+	// 输入均为包装层创建的 u32 数值；不实现一般 JS 值的 ToUint32 转换。
 	uint32_t n = v.v ? static_cast<uint32_t>(v.v->num) : 0;
 	return v8::Maybe<uint32_t>(n);
 }
@@ -256,9 +219,6 @@ inline auto To(v8::Local<v8::Value> v) -> decltype(ToDispatch(v, impl::Tag<T>{})
 	return ToDispatch(v, impl::Tag<T>{});
 }
 
-// ===== Get / Set =====
-
-// Nan::Get(obj, "key")（pf.h:36-37,79-80,244-245、pf.cc:608-610）
 inline v8::MaybeLocal<v8::Value> Get(v8::Local<v8::Object> obj, v8::Local<v8::Value> key) {
 	v8::Value* found = nullptr;
 	if (obj.v != nullptr && key.v != nullptr) {
@@ -270,7 +230,6 @@ inline v8::MaybeLocal<v8::Value> Get(v8::Local<v8::Object> obj, v8::Local<v8::Va
 	return v8::MaybeLocal<v8::Value>(v8::Local<v8::Value>(found));
 }
 
-// Nan::Get(array, index)（pf.cc:480-481,607-608）
 inline v8::MaybeLocal<v8::Value> Get(v8::Local<v8::Object> obj, uint32_t index) {
 	v8::Value* found = nullptr;
 	if (obj.v != nullptr && index < obj.v->elems.size()) {
@@ -282,7 +241,6 @@ inline v8::MaybeLocal<v8::Value> Get(v8::Local<v8::Object> obj, uint32_t index) 
 	return v8::MaybeLocal<v8::Value>(v8::Local<v8::Value>(found));
 }
 
-// Nan::Set(obj, "key", value)（pf.cc:596-599）
 inline void Set(v8::Local<v8::Object> obj, v8::Local<v8::Value> key, v8::Local<v8::Value> val) {
 	if (obj.v == nullptr || key.v == nullptr) {
 		return;
@@ -296,7 +254,6 @@ inline void Set(v8::Local<v8::Object> obj, v8::Local<v8::Value> key, v8::Local<v
 	obj.v->props.emplace_back(key.v->str, val.v);
 }
 
-// Nan::Set(array, index, value)（pf.cc:578,588）——按下标可增长（v8 数组语义）
 inline void Set(v8::Local<v8::Object> obj, uint32_t index, v8::Local<v8::Value> val) {
 	if (obj.v == nullptr) {
 		return;
@@ -307,14 +264,9 @@ inline void Set(v8::Local<v8::Object> obj, uint32_t index, v8::Local<v8::Value> 
 	obj.v->elems[index] = val.v;
 }
 
-// ===== Call / 异常 =====
-
-// Nan::Call(fn, recv, argc, argv)（pf.cc:42）。fn 必须是 kk_ffi.cc 注入的 FUNCTION
-// 节点：把 (xx, yy) 两个数值实参转交 C 回调，再把返回码包成 undefined/false/Uint8Array
-// ——与官方 JS bridge（driver/lib/path-finder.js:120-129）返回给 native 的形态一致。
-// rc==3 = 回调异常（官方 roomCallback throw）：置挂起异常并返回空 MaybeLocal——
-// 对应真实 v8 中回调抛错时 Call 返回空且异常挂起，随后 pf.cc:43-46 的 TryCatch
-// 捕获 → throw js_error() → pf.cc:563-567 → search 返回 Undefined（官方控制流原样）。
+// pf.cc 同步提供两个地图坐标。返回码 3 同时置异常标志和空 MaybeLocal，
+// 使 pf.cc 的 TryCatch 中止本次搜索；0/1/2 分别转换为 Undefined/false/字节数组。
+// 矩阵只借用指针并传递真实长度，不在此复制或检查 2500 字节。
 inline v8::MaybeLocal<v8::Value> Call(v8::Local<v8::Function> fn, v8::Local<v8::Object> /*recv*/,
 	int argc, v8::Local<v8::Value> argv[]) {
 	if (fn.v != nullptr && fn.v->type == v8::Value::FUNCTION && fn.v->fn_ptr != nullptr && argc >= 2) {
@@ -335,7 +287,7 @@ inline v8::MaybeLocal<v8::Value> Call(v8::Local<v8::Function> fn, v8::Local<v8::
 		} else if (rc == 2) {
 			result->type = v8::Value::TARRAY;
 			result->tarray_data = matrix;
-			result->tarray_len = matrix_len; // 真实长度：pf.cc:54-57 的 ==2500 检查按官方裁决
+			result->tarray_len = matrix_len; // pf.cc 再检查是否为 2500 字节
 		}
 		return v8::MaybeLocal<v8::Value>(v8::Local<v8::Value>(result));
 	}
@@ -343,36 +295,26 @@ inline v8::MaybeLocal<v8::Value> Call(v8::Local<v8::Function> fn, v8::Local<v8::
 	return v8::MaybeLocal<v8::Value>(v8::Local<v8::Value>(result));
 }
 
-// Nan::ThrowError("...")（pf.cc:33）：置挂起标志。官方随后 throw js_error，
-// 由 pf.cc:563-567 捕获并返回 Undefined。此外 Nan::Call 的 rc==3（回调异常）也置
-// 此标志——两个异常源汇入官方同一条处理链（pf.cc:43-46 → :563-567）。
+// 地形缺失时，pf.cc 先设置消息，再抛出它自己的 js_error 中止搜索。
 inline void ThrowError(const char* message) {
 	kk_compat::t_pending_js_exception = true;
 	kk_compat::t_pending_js_error_message = message;
 }
 
-// Nan::TryCatch（pf.cc:38-46）。HasCaught() 观察挂起标志：置位源有二——pf.cc:33 的
-// 地形缺失 ThrowError（随后立刻 throw js_error，本 TryCatch 观察不到）与回调异常
-// （Nan::Call rc==3 置位，此处 HasCaught() 为真 → ReThrow → throw js_error，官方
-// 控制流原样）。标志为线程级、由 kk_ffi.cc 的 ArenaGuard 在每次 FFI 入口复位；
-// 已知角差：嵌套 search 的内层回调异常会在内层返回后使标志残留为真，外层
-// pf.cc:43 因此判定异常而中止为空结果——方向安全（永不 abort/UB），见设计文档
-// pathfinder-callback.md 的处置矩阵。
+// pf.cc 在调用房间回调后检查此标志，并通过 ReThrow 保持错误状态。
+// 当前层由 ArenaGuard 隔离；内层返回错误不会被误判为当前回调抛错。
 class TryCatch {
 public:
 	TryCatch() = default;
 	bool HasCaught() const { return kk_compat::t_pending_js_exception; }
 	void ReThrow() const {
-		// 官方语义（V8 TryCatch::ReThrow）：异常重新挂起待投递——JS 层
-		// mod.search() 表现为 throw（api 边界挂起异常胜过返回值），
-		// driver:135-136 的 undefined 分支在异常路径不可达。
-		// ReThrow 的源是回调异常：消息归 JS 原异常，清空 ThrowError 文案
+		// 回调异常没有 ThrowError 的文本，不能沿用此前其他错误的消息。
 		kk_compat::t_pending_js_error_message = nullptr;
 	}
 };
 
-// Nan::TypedArrayContents<uint8_t>（pf.cc:54-56,610）：从 Uint8Array 节点取
-// (数据指针, 长度)。*tac 返回 T*。
+// 上游只以 uint8_t 读取字节。本层借用缓冲，不拥有或延长其生命周期；
+// 尽管接口返回 T*，pf.cc 只读矩阵和地形字节。
 template <class T>
 class TypedArrayContents {
 public:

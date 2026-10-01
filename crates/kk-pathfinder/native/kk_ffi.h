@@ -1,9 +1,6 @@
-// kk-pathfinder 自有文件（非官方拷贝）：官方 pf.cc 的 C ABI 包装声明。
-// Rust 绑定见 src/ffi.rs；参数形态对照官方 JS 调用面：
-// - search 实参 ↔ driver/lib/path-finder.js:134（mod.search(origin, goals, cb,
-//   plainCost, swampCost, maxRooms, maxOps, maxCost, flee, heuristicWeight)）；
-// - origin/goals 的世界坐标形态 ↔ driver/lib/path-finder.js:34-44（toWorldPosition）；
-// - 地形加载 ↔ driver/lib/path-finder.js:12-30 + pf.cc:605-613（loadTerrain）。
+// Screeps 寻路器的 C ABI；与 src/ffi.rs 的 repr(C) 结构体保持字段顺序、宽度一致。
+// 来源版本见 src/lib.rs；算法保留在 pf.cc/pf.h，本接口负责数据转换和状态分类。
+// 入口自身不加地形锁：调用方须让载入与所有搜索互斥；多个搜索可并发或嵌套。
 #ifndef KK_PATHFINDER_FFI_H_
 #define KK_PATHFINDER_FFI_H_
 
@@ -14,53 +11,45 @@
 extern "C" {
 #endif
 
-// 世界连续平面坐标（pf.h:59-81 world_position_t；JS 侧换算见 path-finder.js:34-44）
+// 连续世界格子坐标：房内坐标 + 地图房间坐标 * 50。
 typedef struct kk_pf_world_pos {
 	uint32_t xx;
 	uint32_t yy;
 } kk_pf_world_pos_t;
 
-// goal：世界坐标 + range（pf.h:238-247 goal_t；range 语义 = Chebyshev 距离域）
+// range 使用切比雪夫距离，普通搜索接近任一目标，flee 搜索离开全部目标范围。
 typedef struct kk_pf_goal {
 	uint32_t xx;
 	uint32_t yy;
 	uint32_t range;
 } kk_pf_goal_t;
 
-// 选项（钳制在 Rust 侧完成后传入；对照 driver/lib/path-finder.js:64-70）
+// 数值范围由 Rust 调用层调整，C ABI 不重新检查；尤其 max_rooms 必须在 1..=64。
 typedef struct kk_pf_options {
 	uint32_t plain_cost;
 	uint32_t swamp_cost;
 	uint32_t max_ops;
 	uint32_t max_cost;
-	uint32_t max_rooms; // 1..=64（C++ 侧为 uint8_t，pf.cc:462）
+	uint32_t max_rooms; // 传给 C++ 时转为 uint8_t
 	uint32_t flee;      // 0/1
 	double heuristic_weight;
 } kk_pf_options_t;
 
-// roomCallback 的 C 形态：官方语义 = JS 回调返回 undefined / false / Uint8Array
-// （pf.cc:37-59、driver/lib/path-finder.js:120-129）。矩阵长度透传：官方 JS bridge
-// 无条件交出 `ret._bits`，长度过滤（== 2500）在 pf.cc:54-57 完成——错误长度静默按
-//「无矩阵」处理。因此本契约不预设 2500，回调须把真实长度写入 *out_len，由官方
-// pf.cc 的长度检查裁决（与官方控制流逐点一致）。
-// 返回：0 = undefined（该房间无 CostMatrix）；1 = false（封锁该房间）；
-//       2 = 通过 *out_matrix/*out_len 提供矩阵（布局 [xx*50 + yy]，CostMatrix._bits）；
-//       3 = 回调抛异常（官方 roomCallback throw 的等价物：compat 层置挂起异常，
-//            pf.cc:43-46 捕获 → js_error → pf.cc:563-567 → search 返回 undefined）。
-// *out_matrix 指向的存储必须存活到本次 search 返回（pf.cc 直接引用不拷贝）。
+// 同步回调，参数是地图房间坐标。返回码：0=只用地形，1=封锁房间，
+// 2=通过 out_matrix/out_len 借用矩阵，3=回调异常。
+// 返回 2 时必须写入真实长度，只有 2500 字节的矩阵会由 pf.cc 接受。
+// 缓冲只读、不复制，须存活到整次 search 返回；user_data 同样须持续有效。
+// 回调不能让异常越过 C ABI；Rust trampoline 负责捕获可展开的 panic。
+// 来源：pf.cc 的 room_index_from_pos，以及 compat/nan.h 的 Call。
 typedef int (*kk_pf_room_callback_t)(void* user_data, uint8_t xx, uint8_t yy,
 	const uint8_t** out_matrix, size_t* out_len);
 
-// search 结果。status：0 = 正常对象结果；1 = native 返回 -1（初始房间不可达，
-// pf.cc:515-519）；2 = native 返回 undefined 且无挂起异常（同格搜索，
-// pf.cc:508-510——官方映射 driver path-finder.js:135-136 的空结果）；
-// 3 = js_error 路径（pf.cc:33-34 地形缺失 / :43-46 回调异常）——官方语义是
-// 异常上抛给玩家（pf.cc:44 ReThrow 重挂 + api 边界胜过返回值，JS 层 throw；
-// :563-567 的 undefined 仅是 C++ 占位返回），Rust 侧映射 Err 由上层 rethrow。
-// js_error_message：status 3 时指向 ThrowError 的文案（地形缺失），回调异常
-// 路径为 null（消息归 JS 原异常）；指向 thread_local 存储，调用方须立即拷贝。
-// path 为 malloc 分配的 [xx,yy] 对数组，goal→origin 序（native 原序，pf.cc:574-594；
-// JS 侧才做 reverse，driver/lib/path-finder.js:101），用 kk_pf_free_result 释放。
+// status：0=搜索结果，1=初始房间被封锁，2=已在目标范围内的空结果，3=搜索错误。
+// 状态 1 的 Rust 结果 incomplete=true，状态 2 为 false；状态 3 转为 Err。
+// js_error_message 为可选 NUL 结尾消息，调用方应立即复制；回调异常通常为 null。
+// path 是 malloc 分配的 xx/yy 对，从结果终点向起点排列，不包含起点。
+// 即使 path_len=0 也可能分配路径内存，成功调用后须调用 kk_pf_free_result。
+// 来源：pf.cc 的 search；结果顺序转换见 driver/lib/path-finder.js 的 search。
 typedef struct kk_pf_search_result {
 	int32_t status;
 	const char* js_error_message;
@@ -71,17 +60,19 @@ typedef struct kk_pf_search_result {
 	uint32_t* path;
 } kk_pf_search_result_t;
 
-// 返回 0 = 成功（细节看 out_result）；非 0 = C++ 异常逃逸（理论不可达）或内存不足。
+// options/out_result 必须有效，非空 goals 须指向 goals_len 个元素。
+// 返回 0 时 out_result 有效（包含 status 3 的搜索错误）；非零表示包装层失败，
+// 包括构造输入、运行算法或转换结果期间的 C++ 异常，此时应丢弃 out_result。
 int kk_pf_search(kk_pf_world_pos_t origin, const kk_pf_goal_t* goals, size_t goals_len,
 	kk_pf_room_callback_t callback, void* callback_user_data, const kk_pf_options_t* options,
 	kk_pf_search_result_t* out_result);
 
+// 释放成功调用的路径分配并将指针清空；允许 result 或 path 为 null。
 void kk_pf_free_result(kk_pf_search_result_t* result);
 
-// 载入一个房间的地形（625 字节 packed bits；格式与 driver/lib/path-finder.js:20-27
-// 一致）。bits 仅在本调用期内被读取（pf.cc:606-612 内部 memcpy 走自有分配）。
-// 可多次调用（不同房间）；对同一房间重复调用会用新数据覆盖（与官方多次
-// loadTerrain 行为一致，旧数据不回收——官方同样如此，见 pf.cc:605-613）。
+// bits_625 指向 625 个字节，按列顺序每格两位；调用期间有效即可，pf.cc 会复制。
+// 同一房间再次载入会覆盖表项，但上游不回收旧缓冲。返回 0 表示载入成功，
+// 非零表示空指针或 C++ 异常。载入期间不能有其他载入或搜索。
 int kk_pf_load_terrain(uint8_t map_xx, uint8_t map_yy, const uint8_t* bits_625);
 
 #ifdef __cplusplus

@@ -1,6 +1,6 @@
 [package]
 name = "kk-pathfinder"
-description = "寻路：FFI 复用官方 C++ 源码，保证路径逐点一致"
+description = "寻路：复用 Screeps C++ 算法，提供 Rust 接口与回调"
 version.workspace = true
 edition.workspace = true
 
@@ -8,7 +8,7 @@ edition.workspace = true
 workspace = true
 
 [build-dependencies]
-# 官方 binding.gyp 用 node-gyp 编译 pf.cc；此处用 cc crate 等价编译（c++20 + 异常开启）
+# 编译 native/kk_ffi.cc 与 native/pf.cc，并链接到 Rust 库。
 cc = "1"
 
 [dependencies]

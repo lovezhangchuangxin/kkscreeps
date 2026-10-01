@@ -1,24 +1,13 @@
-//! C ABI 绑定：本 crate 的 unsafe 集中地（其余模块均为安全代码）。
+//! Rust 与 native/kk_ffi.h 的 C ABI 绑定，集中管理裸指针、回调和结果释放。
 //!
-//! # 安全性说明（对照 native/kk_ffi.h）
+//! 输入切片与闭包指针只在同步调用期间使用。矩阵由 C++ 直接借用，必须持续到
+//! 搜索返回；地形则在载入时复制。lib.rs 的读写锁防止搜索期间替换全局地形。
+//! C++ 输出的路径由 malloc 分配，这里复制到 Vec 后调用 kk_pf_free_result。
 //!
-//! - `kk_pf_search`：
-//!   - `goals` 指针仅在调用期内被读取（C++ 侧逐元素构造成 arena 节点后不再引用），
-//!     调用方保证切片存活于调用期——由安全封装以引用传入，编译期即成立；
-//!   - 回调 `user_data` 必须在整次调用内有效且可变借用——安全封装把闭包放在自身
-//!     栈帧上传入，借用检查保证不存在别名；
-//!   - 回调 panic 在 trampoline 内被 `catch_unwind` 拦截（返回码 3），任何 unwind
-//!     都不穿越 `extern "C"` 边界（那会 abort 宿主）——映射语义见
-//!     `room_callback_trampoline` 文档；
-//!   - 回调写出的 `*out_matrix` 指向的 CostMatrix 必须存活到 search 返回
-//!     （pf.cc:54-57 直接引用该缓冲、不拷贝）——安全封装用 `search_with_room_callback`
-//!     的生命周期参数把该约束交给借用检查；
-//!   - 返回的 `result.path` 是 C 侧 malloc 分配的数组，安全封装拷贝进 `Vec` 后
-//!     立即 `kk_pf_free_result`，无泄漏、无悬垂。
-//! - `kk_pf_load_terrain`：`bits` 仅在调用期内读取（pf.cc:606-612 内部 memcpy 到
-//!   自有分配后不再引用调用方缓冲）。
-//! - 地形是 C++ 侧静态全局（pf.h:359），`load_terrain` 与 `search` 的并发访问由
-//!   lib.rs 的全局读写锁串行化（对照官方：地形在进程启动时一次性载入，之后只读）。
+//! Rust 回调通过 trampoline 捕获可展开的 panic，转成返回码 3。此机制依赖
+//! panic=unwind；不捕获进程主动终止，也不保证 panic 载荷析构再次 panic 时恢复。
+//! C++ 的两个入口用完整函数的 try/catch 将分配或其他异常转为非零返回码。
+//! C ABI 状态与生命周期约定以 native/kk_ffi.h 为准。
 
 use std::ffi::c_void;
 
@@ -73,11 +62,8 @@ impl Options {
     }
 }
 
-/// 回调返回码（契约见 kk_ffi.h `kk_pf_room_callback_t`，官方语义源
-/// pf.cc:37-59 + driver/lib/path-finder.js:120-129）：
-/// 0 = undefined（无矩阵）；1 = false（封锁房间）；2 = 矩阵经 out 提供（真实长度
-/// 一并透传，由 pf.cc:54-57 的 `== 2500` 检查按官方静默裁决）；
-/// 3 = 回调异常（官方 roomCallback throw 的等价物，见 trampoline）。
+// 返回码见 native/kk_ffi.h。矩阵指针和真实长度通过两个输出参数传回，
+// 2500 字节的长度判断由 native/pf.cc 的 room_index_from_pos 完成。
 pub(super) type RoomCallback = unsafe extern "C" fn(
     user_data: *mut c_void,
     xx: u8,
@@ -113,27 +99,13 @@ unsafe extern "C" {
     fn kk_pf_load_terrain(map_xx: u8, map_yy: u8, bits: *const u8) -> i32;
 }
 
-/// 回调 trampoline：把 C 函数指针形态转回 Rust 闭包（按 F 单态化）。
-///
-/// # Panic 安全（沙箱硬约束：玩家回调不得 abort 宿主）
-///
-/// 闭包调用包在 `catch_unwind` 内，panic 不允许穿越 `extern "C"` 边界
-/// （Rust ≥1.81 对 extern "C" unwind 是 abort）。捕获后返回码 3（回调异常），
-/// compat 层据此置 v8 挂起异常，走官方 roomCallback 抛错的同一条链
-/// （pf.cc:43-46 TryCatch 捕获后 ReThrow 并 throw js_error，经 pf.cc:563-567
-/// 返回占位 undefined）。
-///
-/// 官方语义是异常**上抛给玩家**（pf.cc:44 ReThrow 重挂 + V8 api 边界挂起
-/// 异常胜过返回值——C2 评审 1 的 V8 源码级取证；driver 的 undefined 映射
-/// 分支在异常路径不可达）。我方经 status 3 映射 Err，A4 接线时由 prelude
-/// rethrow 原生 JS 异常。panic 载荷在此丢弃；宿主需要日志可自行安装
-/// `panic::set_hook`（hook 在 unwinding 前触发，本层不阻止）。
+/// 将 C 回调转回具体类型的 Rust 闭包，捕获可展开的 panic 后返回码 3。
+/// panic hook 仍会运行；捕获的载荷在这里丢弃，不带回错误消息。
 ///
 /// # Safety
-/// `user_data` 必须是存活于整次 `kk_pf_search` 调用期的 `&mut F`；闭包返回
-/// `RoomDecision::CostMatrix(m)` 时 `m` 必须存活到 search 返回——两条约束均由
-/// `search_with_room_callback` 的签名与调用结构静态保证（闭包与其引用的
-/// CostMatrix 都在调用方栈帧或更外层存活）。
+/// user_data 须指向本次 ffi_search 期间有效、可独占借用的 F；调用不能并发或
+/// 重入同一个 F。out_matrix/out_len 须为可写且不相互重叠的有效输出地址。
+/// 返回矩阵时，其字节须保持不变并存活至整次搜索返回。
 unsafe extern "C" fn room_callback_trampoline<'a, F>(
     user_data: *mut c_void,
     xx: u8,
@@ -144,19 +116,19 @@ unsafe extern "C" fn room_callback_trampoline<'a, F>(
 where
     F: FnMut(u8, u8) -> RoomDecision<'a>,
 {
-    // Safety: user_data 由 ffi_search 的调用方（search_with_room_callback）以
-    // 本栈帧存活的 &mut F 传入，借用检查保证无别名、存活期覆盖整次调用。
+    // SAFETY: search_with_room_callback 传入本次调用的 &mut F，C++ 同步串行调用它。
+    // 嵌套搜索使用另一个调用帧和回调指针，不重入当前 F。
     let callback = unsafe { &mut *(user_data as *mut F) };
-    // AssertUnwindSafe：&mut F 跨 unwind 边界——捕获后本函数立即返回 3，不再
-    // 触碰 callback，观测不到可能的逻辑破坏。
+    // 闭包可能在 panic 前修改捕获的状态；捕获只阻止跨 ABI 展开，不回滚副作用。
+    // 返回 3 后 C++ 停止本次搜索，不再调用这个闭包。
     let decision = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| callback(xx, yy)));
     match decision {
-        Err(_payload) => 3, // 回调异常 → 官方 js_error 链（见函数文档）
+        Err(_payload) => 3,
         Ok(RoomDecision::None) => 0,
         Ok(RoomDecision::Blocked) => 1,
         Ok(RoomDecision::CostMatrix(matrix)) => {
-            // Safety: out_matrix/out_len 由 compat Nan::Call 传入栈上有效地址
-            //（nan.h Call 局部变量）；写入的指针经 'a 生命周期约束存活到 search 返回。
+            // SAFETY: native/compat/nan.h 的 Call 提供两个栈上输出地址；
+            // matrix 的 'a 借用覆盖搜索调用，写出的缓冲指针不会提前失效。
             unsafe {
                 *out_matrix = matrix.raw().as_ptr();
                 *out_len = matrix.raw().len();
@@ -166,7 +138,6 @@ where
     }
 }
 
-/// 取 F 对应的 trampoline 函数指针（生命周期参数在单态化后擦除，仅用于约束检查）。
 pub(super) fn trampoline<'a, F>() -> RoomCallback
 where
     F: FnMut(u8, u8) -> RoomDecision<'a>,
@@ -174,22 +145,22 @@ where
     room_callback_trampoline::<'a, F>
 }
 
-/// 一次 search 的原始结果拷贝（path 已转入 `Vec`，C 内存已释放）。
+/// 已转为 Rust 所有权的 C++ 结果，路径内存不再依赖 C++ 分配。
 pub(super) struct RawOutcome {
     pub status: i32,
-    /// status 3 时的 ThrowError 文案（地形缺失）；回调异常路径 None
+    /// 状态 3 的可选消息，返回后立即复制；回调 panic 不提供消息。
     pub js_error_message: Option<String>,
     pub ops: u32,
     pub cost: u32,
     pub incomplete: bool,
-    /// native 原序（goal→origin），安全层负责 reverse（driver/lib/path-finder.js:101）
+    /// 从结果终点向起点排列，lib.rs 的 finish 再反转。
     pub path: Vec<(u32, u32)>,
 }
 
-/// # Safety（调用方 = 本 crate 安全层，约束已静态满足）
-/// - `goals` 切片调用期内有效；
-/// - `user_data`（非空时）指向的闭包及其返回的 CostMatrix 引用存活至调用返回；
-/// - 调用期间无并发 `kk_pf_load_terrain`（安全层以地形读锁保证）。
+/// # Safety
+/// callback 非空时，user_data 必须符合对应 RoomCallback 的指针和独占调用约定。
+/// 回调产出的矩阵须保持不变并存活至返回。调用期间不能并发载入地形；
+/// lib.rs 的搜索读锁负责排除地形写入，同线程嵌套搜索允许。
 pub(super) unsafe fn ffi_search(
     origin: (u32, u32),
     goals: &[(u32, u32, u32)],
@@ -214,6 +185,7 @@ pub(super) unsafe fn ffi_search(
         path_len: 0,
         path: std::ptr::null_mut(),
     };
+    // SAFETY: c_goals、options、raw 均在本栈帧存活；回调约束由调用方满足。
     let rc = unsafe {
         kk_pf_search(
             WorldPos {
@@ -236,7 +208,7 @@ pub(super) unsafe fn ffi_search(
         js_error_message: if raw.js_error_message.is_null() {
             None
         } else {
-            // Safety: C 侧文档约定指向 thread_local 存储，立即拷贝
+            // SAFETY: C ABI 提供有效的 NUL 结尾消息，下一次调用前立即复制。
             Some(
                 unsafe { std::ffi::CStr::from_ptr(raw.js_error_message) }
                     .to_string_lossy()
@@ -248,10 +220,10 @@ pub(super) unsafe fn ffi_search(
         incomplete: raw.incomplete != 0,
         path: Vec::new(),
     };
-    // path 在 path_len==0 时可能为哑指针：长度为 0 时不解引用
+    // 空路径也可能有 malloc 分配；不构造零长度裸切片，但仍在末尾释放。
     if raw.path_len > 0 && !raw.path.is_null() {
         let len = raw.path_len as usize * 2;
-        // Safety: C 侧保证 path 指向 path_len*2 个 u32 的 malloc 分配
+        // SAFETY: C ABI 保证非空路径含 path_len 对 u32，按此长度借用后复制。
         let slice = unsafe { std::slice::from_raw_parts(raw.path, len) };
         outcome.path = slice
             .as_chunks::<2>()
@@ -260,14 +232,16 @@ pub(super) unsafe fn ffi_search(
             .map(|&[xx, yy]| (xx, yy))
             .collect();
     }
+    // SAFETY: raw 来自成功的 kk_pf_search，尚未释放；复制后的 Rust 数据不引用它。
     unsafe { kk_pf_free_result(&mut raw) };
     Some(outcome)
 }
 
-/// 载入一个房间的地形。`bits` 仅调用期内读取。
+/// 同步复制一个房间的 625 字节地形。
 ///
 /// # Safety
-/// 调用期间不得并发调用其他 kk_pf_* 入口（安全层以全局写锁保证）。
+/// 调用期间不得并发搜索或载入地形；lib.rs 的全局写锁满足此条件。
 pub(super) unsafe fn ffi_load_terrain(map_xx: u8, map_yy: u8, bits: &[u8; 625]) -> bool {
+    // SAFETY: bits 含 625 字节且调用期间存活；全局地形的互斥由调用方保证。
     unsafe { kk_pf_load_terrain(map_xx, map_yy, bits.as_ptr()) == 0 }
 }

@@ -50,9 +50,9 @@ C2 批实装（均配锁值测试，见 §7）：
 1. **回调契约扩展**（`kk_ffi.h kk_pf_room_callback_t`）：返回码 0/1/2/3；`2` 经
    `out_matrix`+`out_len` 交出矩阵**真实长度**——错误长度由未改动的官方 pf.cc:54-57
    静默裁决（与官方 JS bridge 无条件透传 `_bits` 一致），我们的代码不做长度判断。
-2. **回调 panic catch_unwind**（`ffi.rs` trampoline）：panic → 返回码 3 → compat 层
-   置 v8 挂起异常 → **官方 pf.cc 自己的**异常链处理（pf.cc:43-46 → :563-567）→ 空
-   result。unwind 永不穿越 extern "C"（Rust ≥1.81 那是 abort）。
+2. **回调 panic catch_unwind**（`ffi.rs` trampoline）：可展开的普通回调 panic →
+   返回码 3 → compat 层置本次调用的异常标志 → pf.cc 异常处理 → C ABI status 3 →
+   Rust `Err(JSError(None))`。此捕获依赖 panic=unwind，且载荷析构不能再次 panic。
 3. **CostMatrix 官方静默语义**（`lib.rs`）：变长 `Vec<u8>` 底座（长度恒为 4 的倍数）；
    set 平铺越界 = 无操作、get 越界 = `None`（↔ undefined）、deserialize 任意长度恒
    成功、索引 checked 运算（官方 float64 大索引同判越界，不 panic）。
@@ -119,8 +119,8 @@ Err → trampoline 的 rc=3 → 官方异常链（§1 #8）。
 | 回调返回 false | pf.cc:49-52 封房 | `RoomDecision::Blocked` | C2 已实装+锁值 |
 | 返回 undefined/非 TypedArray | pf.cc:47,55 → 无矩阵 | `RoomDecision::None` | C2 已实装+锁值 |
 | 返回非 2500 长度矩阵 | pf.cc:54-57 静默忽略 | 长度透传，**官方代码**裁决 | C2 已实装+锁值 |
-| 回调 throw（JS） | §1 #8 链 → 空 result incomplete:false | 案 A：v8 异常 → rc=3 → 同一段官方 pf.cc 异常链 | 链路 C2 已实装（panic 面）；JS 面 A4 接 |
-| 回调 panic（宿主 Rust 面） | 官方无 Rust 面 | catch_unwind → rc=3 → 同上；绝不 abort | C2 已实装+锁值 |
+| 回调 throw（JS） | §1 #8 链 → 抛异常，Undefined 是 C++ 占位返回 | 案 A：v8 异常 → rc=3 → 同一段官方 pf.cc 异常链 | 链路 C2 已实装（panic 面）；JS 面 A4 接 |
+| 回调 panic（宿主 Rust 面） | 官方无 Rust 面 | panic=unwind 且载荷析构不再次 panic 时，catch_unwind → rc=3 → Rust Err | C2 已实装+锁值 |
 | 回调内嵌套 search | 官方支持两层（main.cc:9-14，第三层起堆分配 2.16MB/实例） | `TerrainLock` 重入读 + kk_ffi.cc 双实例池（复刻 main.cc）；第三层起同样堆分配 | C2 已实装+锁值（两层） |
 | 回调内 load_terrain（宿主 API） | 官方无此面（地形仅启动期载入，driver/lib/path-finder.js:23-46） | `Err(ReentrantTerrainLoad)` | C2 已实装+锁值；差异 §6.1 |
 | 回调超时/CPU 限额 | 官方无独立超时；isolate 终止 → pf.cc:558-561 → Undefined（玩家观察不到返回值，脚本被终止） | 案 A 下回调跑在 isolate 内，由 kk-runner watchdog 终止；本 crate 无超时面（不臆断） | 设计定案，A4/A5 接线 |
@@ -174,20 +174,17 @@ cb = function(cb) {
 允许多次载入（测试/多世界需要），同线程「持读份额再取写份额」必死锁，故回调
 栈内调用返回 Err。玩家面不可达（load_terrain 是宿主 API，不在玩家 JS 面上）。
 
-### 6.2 嵌套搜索的内层回调异常波及外层（官方同形，控制流细节留 A4）
+### 6.2 嵌套搜索的异常隔离
 
-官方语义（C2 评审 1 修正原错误前提）：内层回调异常**未被内层吞掉**——pf.cc:44
-ReThrow 重挂后经内层 v8 边界上抛，**穿过玩家外层回调的 JS 帧**（外层回调中内层
-search 之后的代码不执行），再被外层 pf.cc:38-46 的 TryCatch 捕获 → 外层也
-throw。即官方两层都异常终止，与我方标志残留致外层中止**方向一致**。
+每次 C ABI 调用拥有独立的值存储和异常状态。`ArenaGuard` 在入口保存外层的
+`arena`、异常标志和消息，创建本层状态；返回时恢复外层。
 
-我方差异（宿主 Rust 层）：内层 search 返回 `Err(JSError(None))` 后，外层回调
-（Rust 闭包）会继续执行剩余代码——官方此处 JS 帧已被异常打断。宿主层闭包可在
-收到内层 Err 时 `panic!` 模拟传播（组合可达官方语义）；A4 接线后回调是 JS，内层
-search 的 op 层 rethrow 原生 JS 异常会自然打断外层回调帧——**A4 后天然一致**。
-线程级标志（`t_pending_js_exception`，ArenaGuard 于 FFI 入口复位）的嵌套残留
-角差（内层异常标志毒化外层——含 pf.cc:33 地形缺失 ThrowError 的同机制路径）
-保持登记：方向安全（永不 abort/UB）。
+内层搜索返回 `Err` 后，Rust 回调可以处理该错误并返回房间决策，外层继续搜索。
+如需传播错误，回调可主动 panic，使外层返回 `Err(JSError(None))`。本 crate 不自动
+将 Rust 错误转换成 JavaScript 异常；JS 接口层须自行实现抛出或捕获。
+
+测试 `crates/kk-pathfinder/tests/reentrancy.rs` 分别覆盖内层回调 panic 和地形缺失被
+处理后外层继续，并检查超过两份缓存实例的四层嵌套搜索。
 
 ### 6.3 CostMatrix 非法值的 JS 数值层归一（预登记，非本 crate 面）
 

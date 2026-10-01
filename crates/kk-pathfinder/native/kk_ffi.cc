@@ -1,17 +1,5 @@
-// kk-pathfinder 自有文件（非官方拷贝）：把官方 pf.cc 挂到 C ABI 上。
-//
-// 结论：本文件只做「数据搬运 + 结果分类」，不含任何寻路逻辑；算法与 tie-breaking
-// 全部发生在未改动的官方 pf.cc 内。
-//
-// 对照证据：
-// - path_finder_t 实例管理 ↔ 官方 main.cc:11-27（thread_local 双实例池 +
-//   is_in_use 守卫 + 兜底堆分配；新实例零初始化由 C++ 静态零初始化/值初始化保证，
-//   reverse_room_table 必须 initially-zero，pf.cc:23,470-472 依赖这一点）；
-// - search 参数对象构造形态 ↔ driver/lib/path-finder.js:44-101（origin {xx,yy}、
-//   goals [{range,pos:{xx,yy}}]、回调、九个标量选项）；
-// - 结果分类 ↔ driver/lib/path-finder.js:96-102（undefined→空+incomplete:false、
-//   -1→空+incomplete:true、对象→path/ops/cost/incomplete）。
-
+// 构造 pf.cc 所需的值对象，管理搜索实例，并将结果转换为 C ABI。
+// 上游算法与平局规则在 pf.cc/pf.h；本文件的来源版本见 src/lib.rs。
 #include "kk_ffi.h"
 
 #include <array>
@@ -30,7 +18,8 @@ namespace {
 
 using v8::Value;
 
-// ===== 值 arena（一次 FFI 调用的存活期） =====
+// 每层 FFI 调用有自己的值存储和异常状态。嵌套调用结束后恢复外层，
+// 内层错误已由 Rust 回调处理时，不得继续污染外层的 TryCatch。
 
 class ArenaGuard {
 public:
@@ -65,8 +54,9 @@ v8::Local<v8::Object> make_pos_object(uint32_t xx, uint32_t yy) {
 	return pos;
 }
 
-// 官方 main.cc:11-27 的实例获取方式：thread_local 池 + is_in_use + 兜底。
-// 递归 search（roomCallback 内再触发寻路）时官方同样靠双实例池支持两层深度。
+// 缓存两份零初始化的实例；超过两层时由调用方临时分配新实例。
+// reverse_room_table 初始须为 0，pf.cc 的 room_index_from_pos 将 0 视为未加载。
+// 来源：上游 driver/native/src/main.cc 的 search。
 screeps::path_finder_t* acquire_path_finder() {
 	static thread_local std::array<screeps::path_finder_t, 2> pool;
 	for (auto& ii : pool) {
@@ -79,17 +69,16 @@ screeps::path_finder_t* acquire_path_finder() {
 
 } // namespace
 
-// pf.h:217 静态成员的定义（官方在 main.cc:27-29 于 namespace screeps 内给出，
-// 此处等价提供——非匿名命名空间，保证外部链接符号与 pf.cc 引用一致）
+// pf.h 声明的共享零矩阵；上游在 main.cc 中定义，这里提供同名外部链接符号。
 uint8_t screeps::room_info_t::cost_matrix0[2500] = { 0 };
 
+// 函数级 try 覆盖 arena、输入值构造和地形复制，不能只捕获算法调用。
 extern "C" int kk_pf_load_terrain(uint8_t map_xx, uint8_t map_yy, const uint8_t* bits_625) try {
 	if (bits_625 == nullptr) {
 		return -1;
 	}
 	ArenaGuard guard;
-	// loadTerrain([{ room: {xx,yy}, bits: Uint8Array(625) }]），形态对照
-	// driver/lib/path-finder.js:12-30（init）与 pf.cc:605-613（load_terrain）。
+	// pf.cc 的 load_terrain 接收房间信息数组，即使只载入一个房间也须包装成数组。
 	v8::Local<v8::Array> rooms = Nan::New<v8::Array>(1);
 	v8::Local<v8::Object> info = Nan::New<v8::Object>();
 	Nan::Set(info, Nan::New("room").ToLocalChecked(), make_pos_object(map_xx, map_yy));
@@ -105,6 +94,7 @@ extern "C" int kk_pf_load_terrain(uint8_t map_xx, uint8_t map_yy, const uint8_t*
 	return -1;
 }
 
+// 完整入口捕获所有 C++ 异常，防止分配失败穿过 Rust 的 extern "C" 调用。
 extern "C" int kk_pf_search(kk_pf_world_pos_t origin, const kk_pf_goal_t* goals, size_t goals_len,
 	kk_pf_room_callback_t callback, void* callback_user_data, const kk_pf_options_t* options,
 	kk_pf_search_result_t* out_result) try {
@@ -113,7 +103,6 @@ extern "C" int kk_pf_search(kk_pf_world_pos_t origin, const kk_pf_goal_t* goals,
 	}
 	ArenaGuard guard;
 
-	// goals：[{ range, pos: {xx,yy} }]（pf.h:238-247 goal_t 从该形态构造）
 	v8::Local<v8::Array> goals_js = Nan::New<v8::Array>(static_cast<int>(goals_len));
 	for (size_t ii = 0; ii < goals_len; ++ii) {
 		v8::Local<v8::Object> goal = Nan::New<v8::Object>();
@@ -122,10 +111,7 @@ extern "C" int kk_pf_search(kk_pf_world_pos_t origin, const kk_pf_goal_t* goals,
 		Nan::Set(goals_js, static_cast<uint32_t>(ii), goal);
 	}
 
-	// 回调句柄：nullptr → undefined（pf.cc:488-492 据此禁用回调通道）；
-	// 否则注入 C 函数指针 + user_data（Nan::Call 分派，见 compat/nan.h；返回码
-	// 0/1/2/3 的语义见 kk_ffi.h 的 kk_pf_room_callback_t 注释——3 = 回调异常，
-	// 经 compat 层汇入官方 js_error 处理链 pf.cc:43-46 → :563-567）。
+	// pf.cc 用 Undefined 关闭回调；有回调时由 compat/nan.h 的 Call 调用函数指针。
 	v8::Local<v8::Function> room_callback;
 	if (callback != nullptr) {
 		Value* fn = kk_compat::t_arena->alloc();
@@ -150,17 +136,15 @@ extern "C" int kk_pf_search(kk_pf_world_pos_t origin, const kk_pf_goal_t* goals,
 			options->plain_cost, options->swamp_cost, static_cast<uint8_t>(options->max_rooms),
 			options->max_ops, options->max_cost, options->flee != 0, options->heuristic_weight);
 	} catch (...) {
-		// pf.cc 仅两条异常路径：js_error（已在其内部捕获，pf.cc:563）与
-		// index_from_pos / heap 满的 runtime_error（pf.cc:70,303——正常输入下
-		// 不可达，所有 push 均有 obstacle 前置过滤）。兜底防异常穿越 C ABI。
+		// 搜索可能在异常发生时保留 is_in_use；避免将未清理的池实例用于后续搜索。
+		// 输入构造和结果转换的异常由函数最外层 catch 一并拦截。
 		return -1;
 	}
 
 	std::memset(out_result, 0, sizeof(*out_result));
 	if (ret->IsUndefined()) {
 		if (kk_compat::t_pending_js_exception) {
-			// js_error 路径（官方上抛：pf.cc:44 ReThrow / :33 ThrowError）——
-			// 与同格搜索的合法 undefined（pf.cc:508-510）区分
+			// Undefined 既可表示到达目标，也可表示异常，须检查本层异常状态。
 			out_result->status = 3;
 			out_result->js_error_message = kk_compat::t_pending_js_error_message;
 		} else {
@@ -173,7 +157,6 @@ extern "C" int kk_pf_search(kk_pf_world_pos_t origin, const kk_pf_goal_t* goals,
 		return 0;
 	}
 
-	// { path: [[xx,yy]...], ops, cost, incomplete }（pf.cc:595-599）
 	Value* path = ret->get_prop("path");
 	Value* ops = ret->get_prop("ops");
 	Value* cost = ret->get_prop("cost");

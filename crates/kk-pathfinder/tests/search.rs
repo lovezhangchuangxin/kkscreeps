@@ -1,8 +1,3 @@
-//! search 行为测试：期望值全部由官方 pf.cc 语义手工推导（推导写在各用例注释），
-//! 并由 tests/official_golden.rs 的官方校验和背书（编译产物 == 官方算法）。
-//!
-//! 并行纪律：每个用例使用独立房间（全局地形表共享，见 lib.rs 的锁说明）。
-
 use kk_pathfinder::{
     CostMatrix, Goal, RoomDecision, SearchOptions, SearchResult, TERRAIN_PLAIN, TERRAIN_SWAMP,
     TERRAIN_WALL, WorldPosition, generate_room_name, load_terrain, pack_terrain, search,
@@ -13,7 +8,6 @@ fn pos(room: &str, x: u32, y: u32) -> WorldPosition {
     WorldPosition::from_room(room, x, y).unwrap()
 }
 
-/// 结果路径 → 房内坐标序（限定单房用例；跨房用例单独断言）。
 fn path_xy(result: &SearchResult, room: &str) -> Vec<(u32, u32)> {
     result
         .path
@@ -37,24 +31,7 @@ fn do_search(origin: WorldPosition, goals: &[Goal]) -> SearchResult {
     search(origin, goals, &SearchOptions::default()).unwrap()
 }
 
-// =====================================================================
-// 1. 无障碍直线（E0N0）
-// =====================================================================
-//
-// 期望推导（官方默认选项：plain=1、swamp=5、hw=1.2、maxOps=2000）：
-// - origin (25,25) → goal (25,30)（range 0）。astar 首 expands 8 邻居
-//   （pf.cc:523、152-189），f = 1 + trunc(h*1.2)：(24,26)/(25,26)/(26,26) 均为
-//   h=4 → f=5 的三方平局；(25,24)/(26,24)/(24,24) f=8，(26,25)/(24,25) f=7。
-// - 堆平局裁决（pf.h:301-330）：insert 用 bubble_up，比较为 `<=`——后插入的等价
-//   节点会上浮越过先插入者。astar 按 TOP..TOP_LEFT 枚举（pf.h:69），BOTTOM_LEFT
-//   (24,26) 第 6 个插入 → 平局链的最上方 → 首个出堆。
-// - (24,26) 的 jps（斜向左下，pf.cc:304-437）因左侧墙面... 无墙，纯地形均匀：
-//   jump_x 沿行扫到房间边（h 在该行永不为 0），jump_y 到 (24,30)（h=1），
-//   对角 jump 到 (23,27)。出堆序 (24,26)→(23,27)→(25,26)：各耗 1 op。
-// - (25,26)（直向下方）的 jps：jump_y 从 (25,27) 直扫到 (25,30)（heuristic==0
-//   中断，pf.cc:227-228），一步入堆 f=5。
-// - 第 4 次出堆 (25,30) → h=0 收束（pf.cc:539-543）。
-// ⇒ 路径 = 直列 [(25,26)..(25,30)]，cost = 5，ops = 3（3 次 jps 展开）。
+// ops 只计主循环的 JPS 展开，不计初始 A* 或到达目标时的出堆。
 #[test]
 fn straight_line_no_obstacle() {
     plain_room("E0N0");
@@ -68,23 +45,8 @@ fn straight_line_no_obstacle() {
     assert!(!result.incomplete);
 }
 
-// =====================================================================
-// 2. 绕墙 tie-breaking（E1N0）：两侧等价路径，官方取左侧
-// =====================================================================
-//
-// 布置：origin (25,25)、goal (25,27)、墙 (25,26)。两条等价最优路径：
-// [(24,26),(25,27)] 与 [(26,26),(25,27)]，均 cost 2——官方取**左侧**。
-//
-// 期望推导：
-// - astar 7 个可通行邻居（BOTTOM 是墙）。BOTTOM_RIGHT (26,26) 第 4 个插入、
-//   BOTTOM_LEFT (24,26) 第 5 个插入，f 均 = 1 + trunc(1*1.2) = 2。
-// - 堆 insert/bubble_up 的 `<=` 比较（pf.h:322-330）使**后插入的等价节点**
-//   上浮到堆顶：5 个插入后堆顶 = (24,26)（左侧）——这是方向枚举序
-//   （pf.h:69 TOP..TOP_LEFT）× 堆平局规则共同决定的确定性偏置。
-// - jps((24,26))（dx=-1, dy=1）：look((25,26)) = 墙 ≠ cost → 触发 forced
-//   neighbor 规则（pf.cc:415-417），对 (25,27) 做对角 jump：jump_xy 首检
-//   heuristic((25,27)) == 0 → 立即返回（pf.cc:259）→ (25,27) 以 g=2 入堆。
-// - 下一轮出堆 (25,27) → h=0 收束 ⇒ 路径 [(24,26),(25,27)]，cost 2，ops 1。
+// 左右绕墙代价相同，方向插入顺序与 heap_t::bubble_up 的 <= 比较决定取左。
+// 来源：native/pf.h 的 direction_t、heap_t；native/pf.cc 的 astar。
 #[test]
 fn wall_detour_tie_breaking_takes_left() {
     let mut tiles = [[TERRAIN_PLAIN; 50]; 50];
@@ -97,20 +59,7 @@ fn wall_detour_tie_breaking_takes_left() {
     assert!(!result.incomplete);
 }
 
-// =====================================================================
-// 3. range > 0 的目标域（E2N0）
-// =====================================================================
-//
-// 期望推导：origin (10,10) → goal (20,20) range 3。heuristic = Chebyshev 距离
-// 减 range（pf.cc:137-146），h==0 即到达 ⇒ 终点在距离恰为 3 的格上。
-// - astar 邻居中 (11,11) 是唯一最低 f（h = 9-3 = 6 → f = 1+7 = 8；直向邻居
-//   h=7 → f=9）→ 先出堆。
-// - 均匀场上对角 jump_xy 的正交跳检查立即中断（pf.cc:263-276：两侧 jump_x/
-//   jump_y 均非空 → break），对角只能逐格推进；直向 jump 可长跳但 h 沿途不为
-//   0（range 域边界不在直线上）。
-// - 对角节点 (11,11)...(16,16) 依次出堆（每段一次 jps 展开），(17,17)（h=0，
-//   heuristic 中断处，pf.cc:259）出堆即收束 ⇒ 7 步纯对角，cost 7，
-//   ops 6（6 次展开；收束轮不展开）。
+// 到目标的切比雪夫距离不大于 range 即完成，路径不必走到目标格。
 #[test]
 fn range_goal_domain() {
     plain_room("E2N0");
@@ -131,9 +80,7 @@ fn range_goal_domain() {
     assert_eq!(dist, 3);
 }
 
-// origin 已在目标域内：heuristic(origin)==0 → native 返回 undefined →
-// {path:[], ops:0, cost:0, incomplete:false}（pf.cc:506-510 +
-// driver/lib/path-finder.js:97-98）
+// 起点已满足目标条件时不展开搜索，返回已完成的空路径。
 #[test]
 fn range_goal_already_in_range() {
     plain_room("E2N0");
@@ -152,7 +99,6 @@ fn range_goal_already_in_range() {
     );
 }
 
-// 空 goals：game 层早退形态（engine/src/game/path-finder.js:60-62）
 #[test]
 fn empty_goals() {
     plain_room("E2N0");
@@ -168,22 +114,7 @@ fn empty_goals() {
     );
 }
 
-// =====================================================================
-// 4. CostMatrix 抬高某格后路径改变（E3N0，经 roomCallback 注入）
-// =====================================================================
-//
-// 布置：origin (10,25) → goal (14,25)。矩阵把 (12,25) 抬到 3（其余 0 = 用地形）。
-//
-// 期望推导：
-// - 无矩阵基线：直列 [(11,25),(12,25),(13,25),(14,25)]，cost 4（同用例 1 的
-//   直线模式：astar 三方平局 (11,24)/(11,25)/(11,26) 中后插入的 (11,26) 先出堆，
-//   其对角/横向 jump 均被更高 f 压制，(11,25) 的 jump_x 直达 goal 行）。
-// - 有矩阵：(12,25) 代价 3 → 直列 cost = 1+3+1+1 = 6；绕行阶梯 cost 4
-//   （对角步只计落格代价）。jps 在 (12,26) 处 jump_x 因 prev_cost_u =
-//   look((12,25)) = 3 ≠ cost 触发横向中断（pf.cc:203-208），随后 (12,26) 的
-//   直行 forced 规则（look((12,25)) ≠ cost，pf.cc:425-427）推入 (13,25)，
-//   (13,25) 的 jump_x 首检 h==0 直达 (14,25) ⇒ 下侧阶梯
-//   [(11,26),(12,26),(13,25),(14,25)]，cost 4。
+// 把直线路径中间格设为较高代价，确认矩阵改变路径而不是仅被读取。
 #[test]
 fn cost_matrix_changes_path() {
     // 平原基线地形；矩阵差异经 roomCallback 注入（不重载地形）
@@ -219,11 +150,7 @@ fn cost_matrix_changes_path() {
     assert!(!path.contains(&(12, 25)));
 }
 
-// roomCallback 返回 false 封锁目标房间（pf.cc:49-52）——goal 房间被封锁后
-// 初始方向可达的房间全部不可入，搜索返回 incomplete（maxOps 耗尽路径）。
-// 本用例只验证「封锁后不再可达」的单房间形态：封锁唯一房间 →
-// origin 房间也被封锁 → native 返回 -1 → incomplete:true（pf.cc:515-519 +
-// driver/lib/path-finder.js:99-100）。
+// 起点房间被回调封锁时，native 返回 -1；Rust 转为未完成的空结果。
 #[test]
 fn room_callback_block_returns_incomplete() {
     load_room("E3N0", [[TERRAIN_PLAIN; 50]; 50]);
@@ -245,16 +172,7 @@ fn room_callback_block_returns_incomplete() {
     );
 }
 
-// =====================================================================
-// 5. 对角线规则（E4N0）：允许贴角对角穿行（Screeps 语义，无角落限制）
-// =====================================================================
-//
-// 布置：墙 (20,24) 与 (21,25)，origin (20,25)、goal (21,24)——两墙互为正交
-// 相邻，goal 在其对角象限。多数网格寻路器禁止「穿角」，官方允许（对角步只计
-// 落格代价与可通行性，pf.cc:183 look(neighbor)）。
-//
-// 期望推导：astar 推 (21,24)（TOP_RIGHT 方向）时 h=0 → f=1 全场最低，首轮
-// 出堆即收束（无 jps 展开）⇒ 路径 [(21,24)]，cost 1，ops 0。
+// Screeps 只检查对角落格能否通行，不要求旁边两个正交格都可通行。
 #[test]
 fn diagonal_corner_cutting_allowed() {
     let mut tiles = [[TERRAIN_PLAIN; 50]; 50];
@@ -267,10 +185,6 @@ fn diagonal_corner_cutting_allowed() {
     assert_eq!(result.ops, 0);
 }
 
-// 对角目标走纯对角线（E5N0，平原）：(10,10) → (13,13) ⇒ [(11,11),(12,12),(13,13)]
-// cost 3。推导同用例 3（无 range）：对角邻居 f 唯一最低（h=2 → f=1+2=3 <
-// 直向 f=1+2=3？——直向 (11,10) h=3 → f=1+3=4，对角 (11,11) h=2 → f=3 唯一低），
-// jump_xy 扫到 (13,13) h=0 中断。
 #[test]
 fn diagonal_goal_straight_diagonal() {
     plain_room("E5N0");
@@ -279,14 +193,7 @@ fn diagonal_goal_straight_diagonal() {
     assert_eq!(result.cost, 3);
 }
 
-// =====================================================================
-// 6. plain/swamp 代价选项（E6N0，强制走廊）
-// =====================================================================
-//
-// 布置：x=11 整列除 (11,10) 外全墙；(11,10) 为沼泽。origin (10,10)、
-// goal (12,10)——墙列强制路径必经 (11,10)，最优路径唯一：
-// [(11,10),(12,10)]。cost = swamp_cost + plain_cost（进 (11,10) 计沼泽、
-// 进 (12,10) 计平原，pf.cc:106-123 look 按落格地形取 look_table）。
+// 墙列仅留一个沼泽入口，强制路径依次支付沼泽和平原代价。
 #[test]
 fn plain_and_swamp_costs() {
     let mut tiles = [[TERRAIN_PLAIN; 50]; 50];
@@ -337,19 +244,8 @@ fn plain_and_swamp_costs() {
     assert_eq!(r.cost, 6);
 }
 
-// =====================================================================
-// 7. 跨房寻路（E7N0 + E7S0）：直线穿房境
-// =====================================================================
-//
-// origin (25,47)@E7N0 → goal (25,2)@E7S0（E7N0 的 y=49 与 E7S0 的 y=0 相接）。
-//
-// 期望推导：Chebyshev 度量下最优路径**不唯一**——对角步与直步同价（均计落格
-// 代价），凡单调向下的 5 步阶梯（dy=5、dx 净位移 0）cost 均 = 5；实际形状由
-// 官方堆序裁决（astar 方向枚举 + bubble_up `<=` 平局规则，见用例 1/2 的机制
-// 注释）。本用例锁定的阶梯形状记录自官方算法运行结果（由官方校验和测试
-// tests/official_golden.rs 背书）。
-// 关键断言：房境处**无跨界斜跳**——(23,49)@N0 → (23,0)@S0 为直落，对照
-// astar 的 portal 过滤规则（pf.cc:168-180：边缘格的纵向邻居若 x 有偏移则丢弃）。
+// 等代价路径的具体形状由堆序决定；房境处只能直跨，不能斜跨。
+// 来源：native/pf.cc 的 astar（portal 邻居过滤）。
 #[test]
 fn cross_room_straight() {
     plain_room("E7N0");
@@ -374,15 +270,7 @@ fn cross_room_straight() {
     assert!(!result.incomplete);
 }
 
-// =====================================================================
-// 8. 目标不可达：incomplete 语义（W62N0）
-// =====================================================================
-//
-// goal (30,30) 被一圈墙（Chebyshev 距离 1）围死；房间四周再围整圈墙（x/y 边界
-// 全墙），使搜索无法越出已载入的房间（否则触达未载房间会走 js_error →
-// undefined 映射，见用例 10）。堆耗尽后 min_node 为最接近目标者（h ≥ 2，墙外）
-// ⇒ incomplete=true、路径非空且逐步合法、末端距 goal 的 Chebyshev 距离 == 2、
-// cost == 路径逐步代价和（pf.cc:544-548,599）。
+// 房间外圈补墙，防止搜索缺少地形的邻房；只观察目标被围住后的未完成路径。
 #[test]
 fn unreachable_goal_incomplete() {
     let mut tiles = [[TERRAIN_PLAIN; 50]; 50];
@@ -424,23 +312,8 @@ fn unreachable_goal_incomplete() {
     assert_eq!(result.cost, result.path.len() as u32);
 }
 
-// =====================================================================
-// 9. flee（E9N0）
-// =====================================================================
-//
-// origin (25,25)、goal (25,25) range 10、flee=true：求距目标 ≥ 10 的位置
-// （heuristic 的 flee 分支 pf.cc:127-135）。
-//
-// 期望推导：
-// - astar 的 8 个邻居 f 全平局（f = 1 + trunc(9*1.2) = 11）；bubble_up 的 `<=`
-//   使后插入者越过先插入者上浮（pf.h:322-330），第 8 个插入的 TOP_LEFT (24,24)
-//   （方向序 pf.h:69）位于堆顶 → 首轮出堆。
-// - jps((24,24))（dx=-1,dy=-1）push 三个节点：x 直跳 → (15,24)（h=0 中断，
-//   pf.cc:196-199）；y 直跳 → (24,15)（同）；对角 jump_xy 因均匀场的正交跳
-//   检查**立即中断**（pf.cc:271-276）只推 (23,23)（f=11）。
-// - 两个 f=10 节点按 push 序入堆：(15,24) 先、(24,15) 后 → 后者经 `<=` 平局
-//   上浮到堆顶 → 第二轮出堆，h=0 收束 ⇒ **正上方直列**，cost 10，ops 1
-//   （仅 (24,24) 被展开）。
+// flee 须达到 range 距离，直跳与斜跳的堆顺序决定本场景的终点。
+// 来源：native/pf.cc 的 heuristic、jump_x/jump_y/jump_xy；native/pf.h 的 heap_t。
 #[test]
 fn flee_takes_straight_up() {
     plain_room("E9N0");
@@ -460,19 +333,9 @@ fn flee_takes_straight_up() {
     assert!(!result.incomplete);
 }
 
-// =====================================================================
-// 10. 目标方向房间缺地形（W60N0 已载、W59N0 未载）
-// =====================================================================
-//
-// 官方行为：进入未载入地形的房间时 native 抛 js_error → 内部捕获 → 返回
-// undefined → {path:[], ops:0, cost:0, incomplete:false}
-// （pf.cc:31-35 抛出、pf.cc:563-567 捕获、driver/lib/path-finder.js:97-98 映射）。
-// 注：真实服务器地形恒已载入，此用例锁定 JS bridge 映射边界的确定性。
+// W59N0 不载入；触达它应返回带消息的错误，不能当作正常空路径。
 #[test]
 fn missing_terrain_throws_not_empty() {
-    // 官方语义（C2 评审 1 取证）：pf.cc:33-34 地形缺失 ThrowError + js_error
-    // ——异常上抛给玩家（"Could not load terrain data"），C++ 返回 Undefined 只是
-    // 占位（V8 api 边界挂起异常胜过返回值）。锁 Err + 官方文案。
     plain_room("W60N0"); // W59N0（+x 方向邻房）不载入
     let err = search(
         pos("W60N0", 45, 25),
@@ -486,12 +349,8 @@ fn missing_terrain_throws_not_empty() {
     );
 }
 
-// =====================================================================
-// 11. 回调每房至多触发一次 + 地图坐标正确（W58N0）
-// =====================================================================
-//
-// pf.cc:22-64：房间首次触达时经回调取矩阵（reverse_room_table 命中则不再调）。
-// 单房搜索应恰好回调 1 次，参数为该房的地图坐标（parseRoomName 的 xx/yy）。
+// 房间在本次搜索中首次触达时调回调，缓存命中后不重复调用。
+// 来源：native/pf.cc 的 room_index_from_pos。
 #[test]
 fn room_callback_invoked_once_per_room() {
     plain_room("W58N0");

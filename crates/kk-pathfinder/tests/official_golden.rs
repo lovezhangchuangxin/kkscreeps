@@ -1,25 +1,10 @@
-//! 金标测试：用官方仓库的基准素材锁「与官方逐点一致」。
+//! 重放上游 driver/native/profile.js 的 24 个位置，两两搜索五轮并比较校验和。
+//! 来源版本见 src/lib.rs；fixtures/sample-terrain.bin 含 143 个房间的压缩地形。
+//! 校验和累计路径长度和 ops，只检查聚合量，不能发现等长异形路径的变化。
 //!
-//! 素材：`driver/native/sample-terrain.js`（143 个真实房间的地形）+
-//! `driver/native/profile.js` 的全对搜索场景与其校验和 **11843305**
-//! （profile.js:102，官方以此校验路径长度与 ops 的总量）。注意 checksum 只锁
-//! 聚合量——等长异形路径 + 相同 ops 的 tie-breaking 翻转不会被察觉；逐点一致
-//! 的真正保证是结构性的（pf.cc 逐字节官方 + compat 层不触碰值语义），checksum
-//! 是经验性旁证。
-//!
-//! 场景逐点对照 profile.js：
-//! - 24 个出发点（profile.js 的 RoomPosition 列表）两两互搜（跳过自身），
-//!   重复 5 轮；
-//! - `range = ii % 3`（ii 为出发点下标）；选项 `1, 5, 16, 100000, 100000, 0,
-//!   1.2`（profile.js:90-93，即 plain=1/swamp=5/maxRooms=16/maxOps=100000/
-//!   maxCost=100000/flee=false/hw=1.2）；
-//! - 回调语义复刻 profile.js:86-89——注意官方脚本有一处笔误
-//!   `costMatrix = ii % 11`（应为 `costMatrix[ii] = ...`，profile.js:41-46），
-//!   导致回调实际返回标量 2 而非 TypedArray：native 侧 TypedArrayContents
-//!   长度检查（pf.cc:55）不过 → 等价于「无矩阵」。本测试用 `None` 复刻该行为
-//!   （`false` 封锁分支保留：`jj % 5 == 0 && ii % 2 == 0` 时 `Blocked`）；
-//! - checksum += path.len() + ops（profile.js:99-102，ret 恒真值对象；native -1
-//!   时 path/ops 按 0 计——driver 映射后同为 0）。
+//! profile.js 构造矩阵时将 costMatrix 变量赋为标量，而非更新数组元素，因此回调
+//! 最终等价于无矩阵；这里保留该实际行为以重现 11843305，不修正上游测试意图。
+//! origin_blocked_pair 为真时仍封锁房间，与原脚本的 false 返回一致。
 
 use kk_pathfinder::{
     Goal, RoomDecision, SearchOptions, WorldPosition, load_terrain, search_with_room_callback,
@@ -39,7 +24,7 @@ fn load_sample_terrain() {
     }
 }
 
-/// profile.js:62-85 的 21 个位置（roomName, x, y）。
+// driver/native/profile.js 的位置列表，顺序影响 range 和封锁条件。
 const POSITIONS: &[(&str, u32, u32)] = &[
     ("W5N3", 20, 39),
     ("W5N4", 31, 20),
@@ -74,8 +59,6 @@ fn official_profile_checksum() {
         .iter()
         .map(|&(room, x, y)| WorldPosition::from_room(room, x, y).unwrap())
         .collect();
-    // profile.js:75：plain=1, swamp=5, maxRooms=16, maxOps=100000, maxCost=100000,
-    // flee=false, heuristicWeight=1.2
     let options = SearchOptions {
         max_ops: 100000,
         max_cost: 100000,
@@ -104,6 +87,5 @@ fn official_profile_checksum() {
             }
         }
     }
-    // profile.js:96-99：官方校验和
     assert_eq!(checksum, 11843305, "与官方 profile.js 校验和不一致");
 }

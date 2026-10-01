@@ -1,17 +1,3 @@
-//! 回调安全与静默语义测试（C2 批锁值）：
-//!
-//! 1. CostMatrix 错误长度在 search 侧被**官方代码**静默按「无矩阵」处理
-//!    （长度经回调真实透传，pf.cc:54-57 裁决——与官方 JS bridge 无条件交出
-//!    `ret._bits` 一致，driver/lib/path-finder.js:125-127）；
-//! 2. 回调 panic 映射到官方 roomCallback throw 的同一条链：
-//!    pf.cc:43-46 → pf.cc:563-567 → `{path:[], ops:0, cost:0, incomplete:false}`
-//!    （driver/lib/path-finder.js:135-136），进程不 abort；
-//! 3. 回调内 load_terrain 得 [`Error::ReentrantTerrainLoad`] 而非死锁
-//!    （官方无此面，我方防死锁——带线程+超时保护，回退为死锁时测试报错而非挂起）；
-//! 4. 嵌套 search 工作（官方 main.cc:9-14 双实例池 + TerrainLock 重入读）。
-//!
-//! 并行纪律：每个用例使用独立房间（全局地形表共享，见 lib.rs 的锁说明）。
-
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
@@ -40,16 +26,8 @@ fn path_xy(result: &SearchResult, room: &str) -> Vec<(u32, u32)> {
         .collect()
 }
 
-// =====================================================================
-// 1. 错误长度矩阵：官方静默忽略（pf.cc:54-57 长度门经真实长度透传触发）
-// =====================================================================
-//
-// 场景复用 tests/search.rs::cost_matrix_changes_path 的布置：E3N0 平原，
-// origin (10,25) → goal (14,25)，矩阵把 (12,25)（字节 625）抬到 3。
-// - deserialize 自 625 词（2500 字节）：矩阵生效 → 绕行阶梯（对照组）；
-// - deserialize 自 624 词（2496 字节，(12,25) 字节 625 仍在界内可读！）：
-//   官方 pf.cc:54-57 长度检查不过 → cost_matrix = null → **纯地形基线直列**。
-//   这正是官方 JS bridge 的行为：错误长度的 _bits 照样交给 native、照样被忽略。
+// 2496 字节矩阵仍能读到被改的格子，但搜索只接受 2500 字节。
+// 先用完整矩阵确认路径变化，再用短矩阵检查回到无矩阵的基线路径。
 #[test]
 fn cost_matrix_wrong_length_ignored_at_search() {
     load_plain("E3N0");
@@ -111,19 +89,7 @@ fn cost_matrix_wrong_length_ignored_at_search() {
     assert_eq!(r.cost, 4);
 }
 
-// =====================================================================
-// 2. 回调 panic：官方 roomCallback throw 语义 + 进程不 abort
-// =====================================================================
-//
-// 官方链路：玩家 cb throw → JS bridge 包装层传播（driver/lib/path-finder.js:120-129）
-// → pf.cc:43-46 TryCatch 捕获 → ReThrow + throw js_error() → pf.cc:563-567
-// 捕获并返回 Undefined——但官方语义是**异常上抛给玩家**（pf.cc:44 ReThrow 重挂
-// + V8 api 边界挂起异常胜过返回值，JS 层 mod.search() throw；:563 的 Undefined
-// 仅是 C++ 占位返回，driver:135-136 在异常路径不可达——C2 评审 1 的 V8 源码级
-// 取证）。我方等价物：panic 在 FFI trampoline 被 catch_unwind 拦截 → 返回码 3 →
-// compat 置挂起异常 → 走同一段官方 pf.cc 代码 → status 3 → Rust 映射 Err
-// （A4 接线时 prelude op 层 rethrow 原生 JS 异常）。
-// 本测试若 abort 则进程死、测试无法到达断言——能失败即证明没 abort。
+// 首房回调 panic 应返回 JSError(None)，不能变成正常空结果。
 #[test]
 fn room_callback_panic_first_room_maps_to_official_throw() {
     load_plain("W56N0");
@@ -134,16 +100,13 @@ fn room_callback_panic_first_room_maps_to_official_throw() {
         |_xx, _yy| panic!("player roomCallback exploded"),
     )
     .unwrap_err();
-    // 官方上抛：回调异常的消息归 JS 原异常（宿主层 None——A4 由 JS rethrow）
     assert!(
         matches!(err, kk_pathfinder::Error::JSError(None)),
         "回调 panic 映射 JSError(None) 上抛: {err:?}"
     );
 }
 
-// 第二房间才 panic（首房正常返回）：官方 js_error 链与异常发生时刻无关，
-// 任何触达点抛错都汇入 pf.cc:563-567 的同一个 catch → 同一空结果。
-// 布置：E7N0 → E7S0 跨房（房间触达序 = origin 房先、goal 房后）。
+// 首房正常、跨房后 panic，也应终止整次搜索并返回错误。
 #[test]
 fn room_callback_panic_second_room_maps_to_official_throw() {
     load_plain("W57N0");
@@ -167,8 +130,7 @@ fn room_callback_panic_second_room_maps_to_official_throw() {
     );
 }
 
-// panic 后池完整性：官方 js_error 路径复位 _is_in_use（pf.cc:565），同一实例可
-// 继续服务后续搜索。锁值：panic 之后的普通 search 结果正常。
+// 同线程发生回调错误后，实例池和本层异常状态仍须允许后续搜索。
 #[test]
 fn search_works_after_callback_panic() {
     load_plain("W56N0");
@@ -181,7 +143,6 @@ fn search_works_after_callback_panic() {
     )
     .unwrap_err();
     assert!(matches!(err, kk_pathfinder::Error::JSError(None)));
-    // 同线程后续搜索正常（挂起异常标志由 kk_ffi.cc 的 ArenaGuard 在 FFI 入口复位）
     let after = search(
         pos("W56N0", 10, 10),
         &[Goal::pos(pos("W56N0", 20, 20))],
@@ -192,19 +153,8 @@ fn search_works_after_callback_panic() {
     assert!(!after.incomplete);
 }
 
-// =====================================================================
-// 3. 回调内 load_terrain：重入拒绝（防死锁），带挂起保护
-// =====================================================================
-//
-// 死锁机理（修复前）：search 持地形读份额 → 回调内 load_terrain 取写份额 →
-// 写要等全部读者退出，而唯一读者正是本线程自己的栈帧 → 必死锁。
-// 修复后：READ_DEPTH 线程本地深度检测 → Err(ReentrantTerrainLoad)。
-// 官方无此面：官方地形只在启动期载入（driver/lib/path-finder.js:23-46），
-// 搜索期不存在载入口——无官方语义可循，按防死锁拒绝（差异登记设计文档）。
-//
-// 挂起保护（macOS 无 timeout 命令）：搜索线程内经 channel 回报；主测试线程
-// recv_timeout 限时等待——若实现回退为死锁，此处超时报错而不是测试进程挂死
-// （泄漏的挂起工作线程随进程退出回收）。
+// 回调持读锁时不能申请地形写锁。用 channel 超时检测阻塞，
+// 错误处理后外层搜索仍应完成。
 #[test]
 fn load_terrain_in_callback_rejected_not_deadlock() {
     load_plain("W55N0");
@@ -236,10 +186,9 @@ fn load_terrain_in_callback_rejected_not_deadlock() {
     assert!(!incomplete);
 }
 
-// 非回调路径的 load_terrain 不受影响（重入检测只拦本线程搜索栈内的调用）。
 #[test]
 fn load_terrain_outside_callback_still_works() {
-    load_plain("W53N0"); // 拿不到锁的场合不存在——顺序调用必然成功
+    load_plain("W53N0");
     let result = search(
         pos("W53N0", 10, 10),
         &[Goal::pos(pos("W53N0", 20, 20))],
@@ -249,14 +198,7 @@ fn load_terrain_outside_callback_still_works() {
     assert!(!result.path.is_empty());
 }
 
-// =====================================================================
-// 4. 嵌套 search：官方支持的两层递归
-// =====================================================================
-//
-// 官方注释明示双实例池为递归 search 而设（driver/native/src/main.cc:9-14
-// "recursive calls to the path finder are useful"）；我方 kk_ffi.cc 等价复刻，
-// TerrainLock 的重入读保证同线程嵌套不阻塞。锁值：回调内的内层搜索与外层
-// 结果均正常。
+// 内外层搜索同时存活，须使用不同的 C++ 实例，并复用本线程的地形读锁。
 #[test]
 fn nested_search_in_callback_works() {
     load_plain("W52N0"); // 外层
