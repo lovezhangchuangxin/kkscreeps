@@ -37,6 +37,7 @@
   // 交换的 Function.prototype.call——玩家可换，A6 对抗评审 P2 登记的家族债）
   const __reflectApply = Reflect.apply;
   const __objectEntries = Object.entries;
+  const __objectKeys = Object.keys;
   const mathPow = Math.pow;
   const mathFloor = Math.floor;
   // M2B 扩面 P3：map/notify/cpu 族常量加载期捕获（官方闭包 C 同款）+
@@ -273,16 +274,19 @@
         },
       },
     };
-    // 官方 runtime.js:200-205：foreignSegment 属性只在 data.foreignMemorySegment
-    // 存在时出现（null 原型对象 {username,id,data} 的浅拷贝）；未请求/未授权
-    // /未知名 → 整个属性 undefined
+    // 官方 runtime.js:196-199：foreignSegment 属性只在 data.foreignMemorySegment
+    // 存在时出现（null 原型对象 {username,id,data} 的浅拷贝），且在**建对象
+    // 之后普通赋值**挂载——writable/enumerable/configurable 三 true（props
+    // 描述符挂载三 false 与官方描述符面相异，外部复审 P2 清偿）；未请求/
+    // 未授权/未知名 → 整个属性 undefined
+    const rm = __Object.create(null, props);
     if (foreignSegmentData !== undefined) {
       const fs = __Object.create(null);
       const fEntries = __objectEntries(foreignSegmentData);
       for (let i = 0; i < fEntries.length; i++) fs[fEntries[i][0]] = fEntries[i][1];
-      props.foreignSegment = { value: fs };
+      rm.foreignSegment = fs;
     }
-    return __Object.create(null, props);
+    return rm;
   }
   RawMemory = makeRawMemory();
   globalThis.RawMemory = RawMemory;
@@ -374,25 +378,31 @@
    * suite FOREIGN-008 注释实证）。 */
   let segmentsOutStash;
   function buildSegmentsOut() {
-    const entries = __objectEntries(RawMemory.segments);
-    if (entries.length > 10) {
-      throw new Error('Cannot save more than 10 memory segments on the same tick');
-    }
+    // 官方 runtime.js:250-269 惰性序（外部复审 P2-3 清偿）：先 Object.keys
+    // （不触发 getter）+ 数量门，再逐 key **三次读**（typeof/长度/终值）——
+    // getter 调用次数、入库值（末次读）与异常优先级（数量超限先于任何
+    // getter 执行）与官方逐位同形。Object.entries 快照会先读全部值（getter
+    // 提前执行+首值入库+11 个抛错 getter 时 getter 异常先于数量门）——已弃。
+    const segs = RawMemory.segments;
+    const segmentKeys = __objectKeys(segs);
     const writes = [];
-    for (let i = 0; i < entries.length; i++) {
-      const key = entries[i][0];
-      const id = parseInt(key);
-      const value = entries[i][1];
-      if (isNaN(id) || id > 99 || id < 0) {
-        throw new Error('"' + key + '" is not a valid memory segment ID');
+    if (segmentKeys.length > 0) {
+      if (segmentKeys.length > 10) {
+        throw new Error('Cannot save more than 10 memory segments on the same tick');
       }
-      if (typeof value !== 'string') {
-        throw new Error('Memory segment #' + key + ' is not a string');
+      for (let i = 0; i < segmentKeys.length; i++) {
+        const id = parseInt(segmentKeys[i]);
+        if (isNaN(id) || id > 99 || id < 0) {
+          throw new Error('"' + segmentKeys[i] + '" is not a valid memory segment ID');
+        }
+        if (typeof segs[segmentKeys[i]] !== 'string') {
+          throw new Error('Memory segment #' + segmentKeys[i] + ' is not a string');
+        }
+        if (segs[segmentKeys[i]].length > 100 * 1024) {
+          throw new Error('Memory segment #' + segmentKeys[i] + ' has exceeded 100 KB length limit');
+        }
+        writes.push([id, '' + segs[segmentKeys[i]]]);
       }
-      if (value.length > 100 * 1024) {
-        throw new Error('Memory segment #' + key + ' has exceeded 100 KB length limit');
-      }
-      writes.push([id, value]);
     }
     const out = __Object.create(null);
     out.writes = writes;
@@ -415,39 +425,47 @@
   }
 
   function writeBackMemory() {
-    // segments tick 尾回收（官方 runtime.js:250-269 校验+打包）：
-    // 在 try 外先行——违例 throw 与官方 make throw 同义（整 tick 写回失败）。
-    // 记忆写回成功（out.ok）时随信封带出；失败轮与 Memory 同弃（官方 run 的
-    // outMessage 整体丢失同构）
+    // 官方 runtime.js 执行序（外部复审 P1 清偿）：先 :246-248 序列化 Memory
+    // （stringify 跑玩家 toJSON 回调——回调内的 segments 写与四请求**对本
+    // tick 生效**），再 :250-269 回收校验 segments，请求最后随信封带出。
+    // `_parsed` 门只支配 Memory 保存——官方段回收与请求带出**不受该门支配**
+    // （玩家删 _parsed 仍保存段与请求；我方原 `!parsed` 早退连请求一起丢，
+    // 同族缺陷一并清偿）。任一步失败整轮回退（官方 throw 于 outMessage
+    // 填充中途、段/请求/Memory 俱失——同形）。
+    // 返回 {ok} | {ok:false,error}：screeps-ok 契约（adapter-spec:229）把 tick 末
+    // 序列化失败归为 runPlayer 的 runtime 错误；玩家侧写回错误（不可序列化 /
+    // Memory.toJSON 返回非字符串等）一律走这里，绝不抛出——抛出会被宿主误判
+    // 为硬中断并按整份 tickLimit 计费。
     segmentsOutStash = null;
+    // ① Memory 序列化（官方 :246-248：读 `RawMemory._parsed`——玩家可见可删，
+    // 删掉即跳过保存；写回无 2MB 门（超限只拦 set）；序列化用预置 stringify）
+    let memoryPending = null;
+    const parsed = RawMemory._parsed;
+    if (parsed) {
+      try {
+        const s = __jsonStringify(parsed);
+        if (typeof s !== 'string') {
+          // Memory.toJSON 返回非字符串时 stringify 得 undefined——玩家侧写回失败
+          // （官方顶层 throw、无玩家 console 行：错误只在 run 结局信封可见）
+          return nullEnv({ ok: false, error: 'Memory.toJSON 返回了非字符串' });
+        }
+        memoryPending = s;
+      } catch (e) {
+        // 玩家异常对象的 message 可是污染 getter（抛错逃逸会被宿主误判硬中断）
+        let why;
+        try { why = String((e && e.message) || e); } catch (_) { why = 'unprintable player error'; }
+        return nullEnv({ ok: false, error: 'Memory 不可序列化: ' + why });
+      }
+    }
+    // ② segments tick 尾回收（官方 :250-269——在 Memory 序列化**之后**；违例
+    // throw 与官方同义：整 tick 写回失败，已算好的 Memory 候选一并丢弃）
     try {
       segmentsOutStash = buildSegmentsOut();
     } catch (e) {
       return nullEnv({ ok: false, error: 'Segment 写回失败: ' + safeSegErrorText(e) });
     }
-    // 返回 {ok} | {ok:false,error}：screeps-ok 契约（adapter-spec:229）把 tick 末
-    // 序列化失败归为 runPlayer 的 runtime 错误——不能只在 console 里报完就算成功。
-    // 玩家侧写回错误（不可序列化 / Memory.toJSON 返回非字符串等）一律走这里，
-    // 绝不抛出——抛出会被宿主误判为硬中断并按整份 tickLimit 计费。
-    // 官方 runtime.js:245-248：读 `RawMemory._parsed`（玩家可见可删，删掉即跳过
-    // 保存）；写回**无 2MB 门**（超限只拦 set）；序列化用预置 stringify
-    const parsed = RawMemory._parsed;
-    if (!parsed) return nullEnv({ ok: true });
-    try {
-      const s = __jsonStringify(parsed);
-      if (typeof s !== 'string') {
-        // Memory.toJSON 返回非字符串时 stringify 得 undefined——玩家侧写回失败
-        // （官方顶层 throw、无玩家 console 行：错误只在 run 结局信封可见）
-        return nullEnv({ ok: false, error: 'Memory.toJSON 返回了非字符串' });
-      }
-      rawMemoryData = s;
-      return nullEnv({ ok: true });
-    } catch (e) {
-      // 玩家异常对象的 message 可是污染 getter（抛错逃逸会被宿主误判硬中断）
-      let why;
-      try { why = String((e && e.message) || e); } catch (_) { why = 'unprintable player error'; }
-      return nullEnv({ ok: false, error: 'Memory 不可序列化: ' + why });
-    }
+    if (memoryPending !== null) rawMemoryData = memoryPending;
+    return nullEnv({ ok: true });
   }
   // Memory 作为懒 getter（官方语义：访问才解析）。官方 game.js:470-473 两处
   // defineProperty 均 enumerable: true（初始 getter 与首访固化后的 value 属性）

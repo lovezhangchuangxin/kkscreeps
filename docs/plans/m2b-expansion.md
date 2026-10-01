@@ -421,6 +421,27 @@ tower/link 复用其投影/折叠模式）。P6 收尾。**每片一个完整批
   另登记（清偿复审 P2-1）：tooangel 基线存在**非确定性噪声底**（bot 侧
   Math.random/CPU 桶——两次重跑可有 ±2 个偶发形态/主形态计数 1999↔2000/
   stub 计数 ±4 漂移），基线 diff 判定按「典型形态集+计数容差」口径，不逐字。
+- **外部复审（第三道门，对 8928de8）P1×1/P2×2 全成立、当日清偿**：
+  ①**P1 tick 尾执行序**：原 writeBackMemory 先打包 segments 再序列化
+  Memory——`Memory.toJSON` 回调内的段写/四请求对本 tick 不可见（段内容
+  永久丢失+请求晚一轮）、回调内超限写段绕过校验**假成功**；且 `!parsed`
+  早退连四请求一起丢（官方段回收与请求带出**不受 _parsed 门支配**）。
+  官方序 runtime.js:246-248（stringify 先跑 toJSON 回调）→ :250-269（段
+  回收）→ :287（请求）。修复：Memory 序列化先行、段回收恒跑、Memory
+  候选在段校验通过后才落 rawMemoryData（任一步失败整轮回退=官方
+  outMessage 中途 throw 同形）。②**P2 惰性读序**：Object.entries 快照
+  →官方 keys 先+数量门+逐 key **三次读**（typeof/长度/终值 ""+）——
+  getter 调用次数、末次读入库、数量门优先级均为玩家可观测。③**P2
+  foreignSegment 描述符**：props 描述符挂载三 false → 官方 :198 建对象
+  后普通赋值三 true（严格赋值/枚举/复制/删除面）。e2e 五锚（toJSON
+  写段+请求同轮生效/回调内超限整轮失败/getter first→later 存 later/
+  11 抛 getter 报数量门/描述符三 true+严格赋值成功——对修复前实现全部
+  必败）。外部并静态核对 F 项（闭包持久等价性）三路径门成立。
+  **教训登记：内部四路评审共同盲区=跨子系统执行时序+属性描述符/
+  accessor 语义**——既有测试只覆盖普通赋值与独立 API 调用；后续批次
+  评审视角清单应加「回调内再操作（toJSON/getter）」与「描述符面」
+  两个镜头。清偿后全门禁复跑：workspace 322 绿/棘轮 1774 零转红
+  （+32 归因不变）/三基线全等/perf p50 持平。
 
 ### P5（结构动作族：tower 三动作 + link.transferEnergy + rampart.setPublic + spawn deprecated 对）——已收口待评审清偿
 

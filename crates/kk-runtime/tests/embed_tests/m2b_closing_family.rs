@@ -95,6 +95,84 @@ pub(super) fn m2b_closing_e2e_impl() -> anyhow::Result<()> {
         "空数组清空窗口（下 tick segments 为空对象）"
     );
 
+    // toJSON 回调内的段写+请求同轮生效（外部复审 P1 清偿：官方 runtime.js
+    // :246-248 先序列化 Memory——stringify 跑 toJSON 回调，段回收 :250 在后；
+    // 修复前段打包先行 → 段内容永久丢失+请求晚一轮）
+    e.run_player(
+        "p1",
+        r#"Memory.toJSON = function () {
+             RawMemory.segments[7] = 'from-memory';
+             RawMemory.setActiveSegments([7]);
+             return { saved: true };
+           };
+           'sent'"#,
+    )?;
+    let run = e.run_player(
+        "p1",
+        r#"[ RawMemory.segments[7], RawMemory.get().indexOf('saved') !== -1 ]"#,
+    )?;
+    assert_eq!(
+        run.expr["value"],
+        json!(["from-memory", true]),
+        "toJSON 回调写段+请求同轮生效、Memory 已保存"
+    );
+
+    // toJSON 回调内的超限段 → 整轮失败（修复前：段已打包、违例不可见 → 假成功）
+    let run = e.run_player(
+        "p1",
+        r#"Memory.toJSON = function () {
+             RawMemory.segments[8] = 'x'.repeat(100 * 1024 + 1);
+             return {};
+           };
+           'sent'"#,
+    )?;
+    assert_eq!(
+        run.expr["ok"],
+        json!(false),
+        "toJSON 内超限写段 tick 尾校验仍拦截（官方序下回调写先于段回收）"
+    );
+
+    // 段 getter 惰性三次读（外部复审 P2-3 清偿：官方逐 key typeof/长度/终值
+    // 三读——末次读入库；Object.entries 快照会取首值）
+    e.run_player(
+        "p1",
+        r#"RawMemory.setActiveSegments([5]);
+           let n = 0;
+           Object.defineProperty(RawMemory.segments, '5', {
+             enumerable: true, configurable: true,
+             get() { return n++ === 0 ? 'first' : 'later'; },
+           });
+           'sent'"#,
+    )?;
+    let run = e.run_player("p1", r#"[ RawMemory.segments[5] ]"#)?;
+    assert_eq!(
+        run.expr["value"][0],
+        json!("later"),
+        "入库值=末次读（官方三读序；快照实现会存 first）"
+    );
+
+    // 11 个抛错 getter：数量门先于任何 getter 执行（官方 keys 先+数量门；
+    // 快照实现 getter 异常先抛）
+    let run = e.run_player(
+        "p1",
+        r#"RawMemory.setActiveSegments([0,1,2,3,4,5,6,7,8,9]);
+           for (let i = 0; i < 11; i++) {
+             Object.defineProperty(RawMemory.segments, '' + i, {
+               enumerable: true, configurable: true,
+               get() { throw new Error('getter-first'); },
+             });
+           }
+           'sent'"#,
+    )?;
+    assert_eq!(run.expr["ok"], json!(false), "11 段违例整轮失败");
+    assert!(
+        run.expr["error"]
+            .as_str()
+            .is_some_and(|s| s.contains("Cannot save more than 10")),
+        "数量门优先（快照实现会先报 getter-first）：{}",
+        run.expr["error"]
+    );
+
     // ---- foreign：发布/默认回退/显式 id 未授权/撤回/清除/未知名
     e.run_player(
         "p2",
@@ -155,6 +233,26 @@ pub(super) fn m2b_closing_e2e_impl() -> anyhow::Result<()> {
     )?;
     assert_eq!(run.expr["value"][0], json!(true), "未写过公开槽 data=null");
     assert_eq!(run.expr["value"][1], json!(3), "显式 id 交付");
+
+    // foreignSegment 描述符三 true（外部复审 P2 清偿：官方 runtime.js:198 建对象
+    // 后普通赋值——props 描述符挂载三 false 相异；严格赋值官方合法）
+    let run = e.run_player(
+        "p1",
+        r#"[ (() => { const d = Object.getOwnPropertyDescriptor(RawMemory, 'foreignSegment');
+                   return d ? [d.writable, d.enumerable, d.configurable] : 'absent'; })(),
+             (() => { 'use strict'; try { RawMemory.foreignSegment = 1; return 'assigned'; }
+                   catch (e) { return 'threw'; } })() ]"#,
+    )?;
+    assert_eq!(
+        run.expr["value"][0],
+        json!([true, true, true]),
+        "foreignSegment 普通赋值挂载（官方描述符面）"
+    );
+    assert_eq!(
+        run.expr["value"][1],
+        json!("assigned"),
+        "严格模式赋值不抛（官方同形）"
+    );
 
     // ---- visuals：绘制记账/尺寸/sharedBuffer/上限拒绝（VISUAL 族）
     let run = e.run_player(
