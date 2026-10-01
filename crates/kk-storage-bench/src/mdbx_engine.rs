@@ -136,7 +136,7 @@ impl StorageEngine for MdbxEngine {
     }
 
     fn flush(&self) -> anyhow::Result<()> {
-        self.db.sync(false)?;
+        self.db.sync(true)?;
         Ok(())
     }
 
@@ -148,5 +148,34 @@ impl StorageEngine for MdbxEngine {
         let path = self.data_path.clone();
         drop(self);
         Ok(fs::metadata(path)?.len())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn flush_syncs_relaxed_commits() {
+        let dir = std::env::temp_dir().join(format!(
+            "kk-storage-bench-flush-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let mut engine = MdbxEngine::open(&dir, DurabilityProfile::Relaxed).unwrap();
+        engine.db.sync(true).unwrap();
+        engine
+            .write_batch(TableKind::Rooms, &[(b"W0N0".to_vec(), vec![42; 8192])])
+            .unwrap();
+        engine.flush().unwrap();
+        // 强制同步若仍执行了写盘，说明 flush 留下了未同步的提交。
+        let already_synced = engine.db.sync(true).unwrap();
+        drop(engine);
+        fs::remove_dir_all(dir).unwrap();
+        assert!(already_synced, "flush 后仍有待同步的数据");
     }
 }
