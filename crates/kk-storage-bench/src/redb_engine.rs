@@ -1,10 +1,8 @@
-//! redb 4.x 实现（feature `redb`，纯 Rust 单文件 B+树，MIT OR Apache-2.0）。
+//! redb 存储实现，写事务按 [`DurabilityProfile`] 选择持久化方式。
 //!
-//! 口径要点：
-//! - 写事务按档位设 durability（见 [`crate::engine::DurabilityProfile`] 映射表）；
-//! - 点读每键独立 `begin_read`（含 MVCC 注册开销——与 mdbx 实现同口径）；
-//! - `flush` 用一个空 Immediate 事务（redb 文档：Durability::None 的提交由
-//!   其后第一个 Immediate 提交冲刷）。
+//! 点读只借用值并统计长度，扫描也不复制键值或解码快照。
+//! `flush` 用空 Immediate 事务同步此前的提交。
+//! 来源：Cargo.lock 锁定版本的 redb `transactions.rs::Durability`。
 
 use std::fs;
 use std::path::Path;
@@ -14,7 +12,6 @@ use redb::{Database, Durability, ReadableDatabase, TableDefinition};
 
 use crate::engine::{DurabilityProfile, StorageEngine, TableKind, prefix_upper};
 
-/// 字节表定义（键值都是 `&[u8]`——kk-storage 的房间名/快照字节直存形态）。
 fn table_def(table: TableKind) -> TableDefinition<'static, &'static [u8], &'static [u8]> {
     match table {
         TableKind::Rooms => TableDefinition::new("rooms"),
@@ -23,6 +20,7 @@ fn table_def(table: TableKind) -> TableDefinition<'static, &'static [u8], &'stat
     }
 }
 
+/// 键和值均为字节串的 redb 数据库，数据文件名为 `data.redb`。
 pub struct RedbEngine {
     db: Database,
     path: std::path::PathBuf,
@@ -30,6 +28,7 @@ pub struct RedbEngine {
 }
 
 impl RedbEngine {
+    /// 在目录内创建或打开数据库；表由首次写事务创建。
     pub fn open(dir: &Path, profile: DurabilityProfile) -> anyhow::Result<Self> {
         fs::create_dir_all(dir)?;
         let path = dir.join("data.redb");

@@ -1,13 +1,9 @@
-//! libmdbx 0.9 绑定实现（feature `libmdbx`；C++ 库经 mdbx-sys cc/bindgen 构建，
-//! 仓储层为 OpenLDAP 许可）。构建失败时的降级路径：不开该 feature 即可
-//! （workspace 其余构建完全不受影响）。
+//! libmdbx 存储实现，使用 `NoWriteMap`，写入通过文件 I/O 完成。
 //!
-//! 口径要点：
-//! - 目录形态打开（`<dir>/data.mdb` + `lock.mdb`），几何上限 4 GiB；
-//! - 三张命名表在 open 时一次建好（mdbx 命名表须先存在，只读事务才能 open）；
-//! - 点读每键独立 `begin_ro_txn`（与 redb 实现同口径）；
-//! - `NoWriteMap`（缓冲文件 IO 而非 mmap 直写——与 redb 的写路径更可比；
-//!   WriteMap 变体留作后续变奏）。
+//! 目录内的数据文件为 `mdbx.dat`，容量上限为 4 GiB，打开时创建三张命名表。
+//! 点读复制值，扫描复制键和值；这些分配与复制包含在计时内。
+//! 来源：Cargo.lock 锁定版本的 libmdbx `database.rs::NoWriteMap`、
+//! `codec.rs::Decodable<Vec<u8>>` 和 mdbx-sys `mdbx.h::MDBX_DATANAME`。
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -19,12 +15,14 @@ use libmdbx::{
 
 use crate::engine::{DurabilityProfile, StorageEngine, TableKind};
 
+/// 持有 libmdbx 数据库及其数据文件路径。
 pub struct MdbxEngine {
     db: Database<NoWriteMap>,
     data_path: PathBuf,
 }
 
 impl MdbxEngine {
+    /// 创建或打开目录内的数据库，并在一个写事务中创建缺失的基准表。
     pub fn open(dir: &Path, profile: DurabilityProfile) -> anyhow::Result<Self> {
         fs::create_dir_all(dir)?;
         let options = DatabaseOptions {
@@ -40,13 +38,12 @@ impl MdbxEngine {
             ..DatabaseOptions::default()
         };
         let db = Database::<NoWriteMap>::open_with_options(dir, options)?;
-        // 命名表一次建好
+        // 只读事务不能创建表，因此在运行读场景之前建好。
         let txn = db.begin_rw_txn()?;
         for name in [TableKind::Rooms, TableKind::Users, TableKind::Blobs] {
             txn.create_table(Some(name.name()), TableFlags::empty())?;
         }
         txn.commit()?;
-        // libmdbx 0.14 目录形态的默认文件名：数据 mdbx.dat、锁 mdbx.lck
         Ok(Self {
             db,
             data_path: dir.join("mdbx.dat"),
@@ -136,6 +133,8 @@ impl StorageEngine for MdbxEngine {
     }
 
     fn flush(&self) -> anyhow::Result<()> {
+        // false 只检查同步阈值，未配置阈值时可能不写盘；flush 要求强制同步。
+        // 来源：mdbx-sys mdbx.h::mdbx_env_sync_ex 的 force 参数。
         self.db.sync(true)?;
         Ok(())
     }

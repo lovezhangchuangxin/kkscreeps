@@ -1,6 +1,6 @@
 [package]
 name = "kk-storage-bench"
-description = "存储选型基准（M2-C3）：redb vs libmdbx 微基准骨架 + 场景夹具。非正式选型，正式选型待 2A 后真实负载（ADR-008 第 7 条）"
+description = "使用合成房间快照、玩家记录和大字节块比较 redb 与 libmdbx 的存储基准"
 version.workspace = true
 edition.workspace = true
 
@@ -15,9 +15,8 @@ anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 
-# 候选引擎一律 feature gate（default = []）——CI 的 workspace 构建（test/clippy/
-# fmt）不拉这两个依赖：redb 纯 Rust 但体积可观，libmdbx 走 cc/bindgen 的 C++
-# 构建。基准本机跑法：cargo run -p kk-storage-bench --release --features redb,libmdbx -- --json 报告.json
+# 引擎为可选依赖，默认构建不编译存储引擎，仍可检查接口、夹具和统计代码。
+# 启用 libmdbx 需要原生编译工具及 bindgen 使用的 libclang。运行命令见 crate 文档。
 redb = { workspace = true, optional = true }
 libmdbx = { workspace = true, optional = true }
 

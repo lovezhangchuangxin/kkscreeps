@@ -1,10 +1,7 @@
-//! bin `kk-storage-bench`：微基准编排——固定 seed 夹具 → 双引擎 × 双持久化
-//! 档位 × 场景矩阵 → 机器可读 JSON + 人读摘要。
+//! 运行固定种子数据集上的存储基准，输出摘要和 JSON 报告。
 //!
-//! **非正式选型**（ADR-008 第 7 条）：本工具只建立可重复的测量方法学与初轮
-//! 本机数字，正式选型待 2A 落地后用真实负载跑。
-//!
-//! 用法（引擎依赖须显式开 feature）：
+//! 场景依次执行，每个引擎和持久化档位共用一个数据库，场景之间不重建数据库。
+//! 结果反映这组顺序访问下的耗时与文件大小，不代表冷缓存或真实玩家负载。
 //!
 //! ```text
 //! cargo run -p kk-storage-bench --release --features redb,libmdbx -- \
@@ -27,7 +24,6 @@ use kk_storage_bench::harness::{
     BenchReport, ReportMeta, ScenarioResult, latency_stats, round_stats,
 };
 
-/// 命令行配置（手动解析——基准工具不引 clap，依赖面保持最小）。
 struct Config {
     tier: Tier,
     rounds: usize,
@@ -162,8 +158,8 @@ fn now_iso() -> String {
     )
 }
 
-/// 单引擎 × 单档位的场景运行器：一组场景共写一份引擎数据目录（互不干扰的
-/// 表），每个场景产出一条 [`ScenarioResult`]。
+/// 为一个引擎及持久化档位运行场景，每个场景追加一条结果。
+/// 同表的后续场景覆盖已有键；文件分配和缓存状态会延续到下一场景。
 struct Runner<'a> {
     engine_name: String,
     profile: DurabilityProfile,
@@ -180,10 +176,8 @@ impl Runner<'_> {
         self.results.push(result);
     }
 
-    /// 批量写场景（检查点形态）：warmup + rounds 轮，每轮一个写事务写全量。
-    /// warmup 轮号从 `rounds` 起排——与计时轮（0..rounds）的数据集**不相交**：
-    /// 同值重写会被 mdbx 判为无脏页事务而 no-op commit（初轮实测教训），
-    /// warmup 与计时首轮同值会把假绿样本混进计时分布。
+    /// 每轮用一个事务写完整数据集，数据生成和最终同步不计时。
+    /// 预热轮号从 `rounds` 起，计时轮号从 0 起，避免预热后首轮重写相同值。
     fn bulk_write(
         &mut self,
         engine: &mut dyn StorageEngine,
@@ -226,8 +220,8 @@ impl Runner<'_> {
         Ok(())
     }
 
-    /// 逐键提交场景：每键独立事务；warmup 轮丢弃、计时轮样本合并。warmup
-    /// 轮号同样从 `rounds` 起排（与计时轮数据集不相交，理由见 [`Self::bulk_write`]）。
+    /// 每键一个写事务，合并计时轮的操作样本；预热样本丢弃。
+    /// 预热轮号的选择与 [`Self::bulk_write`] 相同。
     fn per_key_txn(
         &mut self,
         engine: &mut dyn StorageEngine,
@@ -260,8 +254,6 @@ impl Runner<'_> {
             latency: Some(ls.clone()),
             per_round: None,
             bytes_per_sec: None,
-            // p50 派生（非 mean）：逐条提交的样本带 fsync 风暴重尾，mean 会被
-            // 单次离群拉偏
             ops_per_sec: Some(1e6 / ls.p50_us.max(f64::EPSILON)),
             db_file_len: file_len,
             note: Some(note.to_string()),
@@ -269,9 +261,8 @@ impl Runner<'_> {
         Ok(())
     }
 
-    /// 点读场景：先全量预置（不计时），再逐轮随机抽键（有放回、均匀）。
-    /// 读回字节总数与按抽样键算出的期望合计对账（合计口径而非逐字节——
-    /// 缺键在引擎内即报错）。
+    /// 预置数据后，每轮有放回地均匀抽键，预置和抽样不计时。
+    /// 只校验读回的值字节总数，不比较内容；缺键由引擎返回错误。
     fn point_read(
         &mut self,
         engine: &mut dyn StorageEngine,
@@ -331,7 +322,7 @@ impl Runner<'_> {
         Ok(())
     }
 
-    /// 前缀扫描场景（每轮条数断言——扫描正确性随基准自验）。
+    /// 预置后扫描前缀，每轮检查命中条数，不比较键值内容或字节总数。
     fn scan(
         &mut self,
         engine: &mut dyn StorageEngine,
@@ -350,7 +341,6 @@ impl Runner<'_> {
         let mut last_bytes = 0u64;
         for r in 0..self.warmup + self.rounds {
             let (elapsed, count, bytes) = engine.scan_prefix(table, prefix)?;
-            // 每轮校验条数（不只看末轮——任何一轮的错误结果都不许进计时）
             if count != expect_keys {
                 bail!(
                     "{scenario}/{} 第 {r} 轮扫描条数 {count} != 预期 {expect_keys}",
@@ -385,7 +375,7 @@ impl Runner<'_> {
         Ok(())
     }
 
-    /// 冲刷 + 记录文件体积（文件体积是选型判据之一）。
+    /// 在计时结束后同步提交，再读取整个数据库文件的逻辑大小。
     fn finish(engine: &dyn StorageEngine) -> anyhow::Result<u64> {
         engine.flush()?;
         engine.file_len()
@@ -437,7 +427,6 @@ fn main() -> anyhow::Result<()> {
             .join(",")
     );
 
-    // 夹具（一次构建、全场景复用；逐字节确定性由 fixtures 测试锁定）
     let fix = fixtures::build_world(cfg.tier);
     print_fixture_stats(&fix);
     let rooms_ds = fixtures::rooms_dataset(&fix, 0, cfg.tier);
@@ -552,7 +541,6 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
-    // 人类可读摘要（初轮本机量级；正式对比以 JSON 报告为准）
     println!("\n== 摘要（场景 | 引擎@档位 | 指标）==");
     for r in &results {
         let metric = if let Some(per_round) = &r.per_round {
@@ -605,7 +593,6 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// 夹具统计：房间快照尺寸分布（min/中位/max）与总量。
 fn print_fixture_stats(fix: &WorldFixture) {
     let mut lens: Vec<usize> = fix
         .room_names

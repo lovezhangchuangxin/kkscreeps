@@ -69,20 +69,26 @@ cargo run -p kk-storage-bench --release --features redb,libmdbx -- \
 | blobs_per_key_txn_write | 每 blob 独立事务（逐玩家提交） | 每对微秒 |
 | blobs_point_read | 大 value 点读（百 KB～MB） | 每读微秒 |
 
-读路径正确性自验：点读按抽样键对账读回**字节总数**（合计口径，非逐字节；
-缺键在引擎内即报错），扫描**每轮**断言命中条数——基准数字不会来自错误结果。
+读路径自验：点读按抽样键校验读回**字节总数**，缺键在引擎内报错；扫描每轮
+检查命中条数。这些检查不验证键值内容逐字节相同，也不能证明全部读取行为正确。
+
+两引擎每键都开启独立只读事务，但复制行为不同：redb 借用值并取长度，libmdbx
+点读将值复制为 `Vec<u8>`，扫描则复制键和值。复制、分配和事务结束均包含在计时内，
+两者都不解码房间快照。因此读延迟包含包装实现的差异，不能单独归因于数据库引擎。
 
 ### 2.2 持久化档位映射（重要：语义不完全对齐）
 
 | 档位 | redb | libmdbx | 备注 |
 |---|---|---|---|
 | durable | `Durability::Immediate`（commit 返回即落盘） | `SyncMode::Durable`（commit 即 fsync） | 语义基本对齐 |
-| relaxed | `Durability::None`（不主动写盘，**下一次** Immediate commit 才冲刷） | `SyncMode::SafeNoSync`（异步冲刷、保库完整性、可能丢最近提交） | **语义不对齐**：redb None 攒得更狠，跨引擎只作量级参考 |
+| relaxed | `Durability::None`（不主动写盘，**下一次** Immediate commit 才冲刷） | `SyncMode::SafeNoSync`（提交省略同步、保留已同步版本，可能丢未同步提交） | **语义不对齐**：redb None 攒得更狠，跨引擎只作量级参考 |
 
 redb 4.x 的公共 Durability 只剩 None/Immediate（Eventual 已移除【文档】），
 两引擎的"relaxed"不可能完全对齐——这个差异本身进入选型判据（§5）。
-基准末尾统一补一次显式落盘（redb 空 Immediate 事务 / mdbx `sync()`）再测
-文件体积，保证体积数字可比。
+每个场景末尾在计时外强制同步（redb 空 Immediate 事务 / libmdbx `sync(true)`），
+再读取数据文件的逻辑大小。libmdbx 的 `sync(false)` 仅检查同步阈值，不能替代强制同步；
+来源为锁定版本 mdbx-sys 的 `mdbx.h::mdbx_env_sync_ex`。
+场景共用数据库，文件大小包含此前场景的数据和引擎已分配空间，不是单场景新增量。
 
 ### 2.3 跑法
 
@@ -181,8 +187,8 @@ t3（100 房/100 玩家）关键数字【实测】：
 3. **大 value 有区分度**：blobs 批量写 durable mdbx 占优（初轮快 ~20%、
    复跑 9.54 vs 16.85 ms 快 ~43%——绝对值跨运行漂移，方向一致），且 blob
    点读形态分化（redb p50 0.7µs / p99 0.8µs vs mdbx 2.8µs / p99 52.4µs）
-   ——redb 大值读延迟更稳，mdbx 的 p99 尾部（页面间接层）值得在真实负载
-   下复核【实测】；
+   ——这些数字比较的是当前包装实现：redb 只借用值取长度，mdbx 还复制值。
+   未统一读取工作量前，不能据此断言引擎自身的延迟稳定性或解释 p99 的原因；
 4. **relaxed 档**：redb 逐条提交更快（11 vs 24µs）、批量也更快（3.56 vs
    4.15ms）；但两边 relaxed 语义不对齐（§2.2），只作量级参考【实测】；
 5. **文件体积**：两者最终体积几乎相同（67.4 vs 67.1 MB）；mdbx 按几何
@@ -209,6 +215,7 @@ t3（100 房/100 玩家）关键数字【实测】：
 
 ## 6. 风险与局限登记
 
+- 读取复制行为不同：redb 借用，libmdbx 复制；当前结果不能单独比较引擎的读取性能；
 - 单机 APFS + 无 root 清缓存：绝对值偏乐观，durable 档与 Linux ext4 不可比；
 - relaxed 档两引擎语义不对齐（§2.2），不能作淘汰依据；
 - 夹具是"形态逼近"不是"真实负载"：房间快照尺寸分布按官方数据面参数化

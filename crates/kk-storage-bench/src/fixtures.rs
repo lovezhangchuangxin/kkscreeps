@@ -1,18 +1,9 @@
-//! 场景夹具：三档规模的世界快照数据，作为存储基准的负载输入。
+//! 为存储基准生成固定种子的合成数据。
 //!
-//! 复用优先（M2 方案 §9「基准 fixture 锁定」的地基）：
-//! - 房间内容经 [`kk_world::place::normalize`] 放置（与 embed 通道同一归一化
-//!   入口），再经 [`kk_world::world::RoomState::encode_snapshot`] +
-//!   [`kk_schema::room::encode_snapshot`] 编码——**字节形态与未来 kk-storage
-//!   落盘的房间快照同源**（magic + version 封套），不是合成随机字节；
-//! - 随机性全部来自 [`kk_core::rng::SeededRng`]（结算同款 PCG32），
-//!   任意档位可从常量复现到逐字节；
-//! - 玩家记录与大 value（Memory blob）按官方数据面形态生成（小 JSON 记录 /
-//!   百 KB～MB 级 blob；官方 Memory 上限 2MB，xxscreeps 实测常见存档
-//!   ~100KB）。
-//!
-//! 规模档对齐 performance-acceptance.md 的场景表：t1 ≈ 场景 B（单房热点），
-//! t3 ≈ 场景 A/C 的房间数（100 房），t2 为中间档。
+//! 房间对象经 [`kk_world::place::normalize`] 构造，再用 kk-schema 的二进制
+//! 房间快照格式编码。玩家记录是小 JSON 值，大字节块模拟 Memory 的大小与
+//! 局部修改；它们不是从真实玩家存档采样得到的负载。
+//! 数据集构造在计时前完成，相同档位和轮次可重现相同字节。
 
 use kk_core::rng::SeededRng;
 use kk_core::{TERRAIN_MASK_SWAMP, Terrain};
@@ -20,20 +11,18 @@ use serde_json::{Value, json};
 
 use crate::engine::TableKind;
 
-/// 世界基准时间（任意固定值——远离 0，让各挂钟字段非零，贴近中期存档）。
+/// 构造对象时使用的固定世界时间，让绝对时间字段不从 0 起算。
 pub const BASE_TIME: u64 = 1_234_567;
 
-/// 房间成熟度：决定对象数量与 creep 身体规模。对象数对照官方满配房
-/// （60 extension、全墙、路网、50 部件 creep ×N——xxscreeps 公布的满配房
-/// 数十 KB）。
+/// 合成房间的三种对象组合，决定对象数量和 creep 身体大小。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Maturity {
-    /// 新落地：controller rcl1 + spawn + 少量 creep（数百字节级快照）。
+    /// RCL 1、一个 spawn、两个 creep，另有道路和资源等对象。
     Young,
-    /// 中期：rcl4、10 extension、storage、部分墙与路（数 KB 级）。
+    /// RCL 4、10 个 extension、storage，另有墙、道路和六个 creep。
     Mid,
-    /// 满配：rcl8、60 extension、3 spawn、180 墙、150 路、20 creep
-    /// （其中半数 50 部件满身体——数十 KB 级）。
+    /// RCL 8、60 个 extension、三个 spawn、180 面墙、150 条道路和 20 个 creep，
+    /// 其中一半有 50 个身体部件。
     Mature,
 }
 
@@ -44,7 +33,7 @@ pub enum Tier {
     T1,
     /// 小多房（12 房：满配/中期/新落地各 4、20 玩家）。
     T2,
-    /// 较大多房（100 房：34/33/33、100 玩家——场景 A/C 的房间数）。
+    /// 100 房：满配 34 房、中期和新落地各 33 房，100 玩家。
     T3,
 }
 
@@ -83,8 +72,8 @@ impl Tier {
     }
 }
 
-/// 房间名（索引 → 名）：两位坐标保证字典序 = 数字序，前缀扫描语义干净。
-/// `W0N0..W9N9` 共 100 个。
+/// 生成房间名；夹具使用索引 0..100，得到 `W0N0` 至 `W9N9`。
+/// 此范围内两个坐标各占一位，字典序与索引顺序相同；更大索引没有此保证。
 pub fn room_name(index: usize) -> String {
     format!("W{}N{}", index / 10, index % 10)
 }
@@ -98,9 +87,9 @@ fn maturity_of(index: usize) -> Maturity {
     }
 }
 
-/// 确定性种子（域分隔：同索引不同用途不同序列）。
+/// 混合用途字符串和索引，为房间、blob 内容与头部修改分别生成稳定种子。
 fn seed_for(domain: &str, index: u64) -> u64 {
-    let mut h = 0xcbf2_9ce4_8422_2325; // FNV-1a
+    let mut h = 0xcbf2_9ce4_8422_2325;
     for b in domain.as_bytes().iter().chain(std::iter::once(&0x2f)) {
         h ^= u64::from(*b);
         h = h.wrapping_mul(0x1000_0000_01b3);
@@ -108,14 +97,14 @@ fn seed_for(domain: &str, index: u64) -> u64 {
     h ^ index.wrapping_mul(0x9e37_79b9_7f4a_7c15)
 }
 
-/// 建好的世界夹具（typed 世界 + 玩家名单）。
+/// 合成世界及其房间、玩家名单。
 pub struct WorldFixture {
     pub world: kk_world::world::World,
     pub room_names: Vec<String>,
     pub players: Vec<String>,
 }
 
-/// 建世界：房间内容经 place::normalize 放置（embed 同一归一化入口）。
+/// 按规模档构造世界，相同档位使用相同种子和对象插入顺序。
 pub fn build_world(tier: Tier) -> WorldFixture {
     let mut world = kk_world::world::World::new(0xC3C3);
     world.set_time_for_test(BASE_TIME);
@@ -142,8 +131,11 @@ pub fn build_world(tier: Tier) -> WorldFixture {
 }
 
 impl WorldFixture {
-    /// 某时刻的房间快照字节（正式封套编码；检查点重写用不同 time 得到
-    /// 同长度不同内容的值——写路径上引擎无法省略真实重写）。
+    /// 编码指定房间的二进制快照，仅将快照头的时间替换为 `time`。
+    /// 不推进世界或结算对象；改变头部时间可产生同长度、不同内容的写入值。
+    ///
+    /// # Panics
+    /// 房间未注册时 panic。
     pub fn room_bytes(&self, room: &str, time: u64) -> Vec<u8> {
         let state = self.world.room(room).expect("夹具房已注册");
         kk_schema::room::encode_snapshot(&state.encode_snapshot(
@@ -153,7 +145,7 @@ impl WorldFixture {
         ))
     }
 
-    /// 房间名作键。
+    /// 按名单顺序返回房间名的 UTF-8 字节键。
     pub fn room_keys(&self) -> Vec<Vec<u8>> {
         self.room_names
             .iter()
@@ -175,7 +167,7 @@ fn gen_terrain(rng: &mut SeededRng) -> Terrain {
     terrain
 }
 
-/// 位置分配器：内部 46×46 网格线性走位（2..=47），确定性且分散。
+/// 在房间内部的 46×46 网格按行分配坐标（2..=47），超过 2116 个位置后循环。
 struct PosGen {
     seq: u32,
 }
@@ -192,18 +184,14 @@ impl PosGen {
     }
 }
 
-/// creep 身体（部件循环到目标数；满配 50 = 官方上限）。
 fn body_spec(parts: &[&str], count: usize) -> Vec<Value> {
     (0..count).map(|i| json!(parts[i % parts.len()])).collect()
 }
 
-/// 位置 spec（`pos: [x, y]`——tuple 不能直接进 json!，经数组值转一道）。
 fn pos_json(p: (u8, u8)) -> Value {
     json!([p.0, p.1])
 }
 
-/// 放一个对象（spec → normalize → insert；ctx 借用与插入按作用域交替，
-/// 与 kk-world 既有测试同一形态）。
 fn place(world: &mut kk_world::world::World, room: &str, kind: &str, spec: Value) {
     let time = world.time();
     let ctx_place = |w: &kk_world::world::World, spec: &Value| {
@@ -224,7 +212,6 @@ fn place(world: &mut kk_world::world::World, room: &str, kind: &str, spec: Value
         .unwrap_or_else(|e| panic!("夹具放置失败 ({room}/{kind}): {e}"));
 }
 
-/// 按成熟度铺一个房间。
 fn build_room(
     world: &mut kk_world::world::World,
     room: &str,
@@ -242,7 +229,7 @@ fn build_room(
     let owner = format!("p{:04}", index % player_count);
     let mut pos = PosGen::new();
 
-    // controller 先落（后续放置的 PlaceCtx 依赖它——source 容量按归属分支）
+    // 先放控制器，让后续 source 的容量能按控制器归属和等级确定。
     place(
         world,
         room,
@@ -253,7 +240,7 @@ fn build_room(
             "downgradeTime": world.time() + 20_000 + u64::from(rng.below(30_000)),
         }),
     );
-    // source ×2（官方固定两处）
+    // 本夹具固定放两个 source。
     for _ in 0..2 {
         place(
             world,
@@ -262,7 +249,6 @@ fn build_room(
             json!({ "pos": pos_json(pos.next()), "structureType": "source" }),
         );
     }
-    // spawn
     for s in 0..n_spawn {
         place(
             world,
@@ -274,7 +260,6 @@ fn build_room(
             }),
         );
     }
-    // extension
     for _ in 0..n_ext {
         place(
             world,
@@ -286,7 +271,6 @@ fn build_room(
             }),
         );
     }
-    // storage（中期起）
     if rcl >= 4 {
         place(
             world,
@@ -298,7 +282,7 @@ fn build_room(
             }),
         );
     }
-    // 路（0 载荷结构，测大量小对象的编码与键值开销）
+    // 增加大量字段较少的对象，改变房间快照的对象数量与字节大小。
     for _ in 0..n_road {
         place(
             world,
@@ -307,7 +291,7 @@ fn build_room(
             json!({ "pos": pos_json(pos.next()), "structureType": "road" }),
         );
     }
-    // 墙（hits 随机——现实中从 1 到 300M 连续分布）
+
     for _ in 0..n_wall {
         place(
             world,
@@ -319,7 +303,6 @@ fn build_room(
             }),
         );
     }
-    // creep（满配房半数 50 部件满身体）
     for c in 0..n_creep {
         let (count, parts) = if maturity == Maturity::Mature && c % 2 == 0 {
             (50usize, &["work", "carry", "move", "heal"][..])
@@ -343,7 +326,6 @@ fn build_room(
             }),
         );
     }
-    // flag
     for f in 0..n_flag {
         place(
             world,
@@ -352,7 +334,6 @@ fn build_room(
             json!({ "pos": pos_json(pos.next()), "name": format!("flag{f}") }),
         );
     }
-    // 工地
     for _ in 0..n_site {
         place(
             world,
@@ -364,7 +345,6 @@ fn build_room(
             }),
         );
     }
-    // 掉落能量
     for _ in 0..n_res {
         place(
             world,
@@ -373,7 +353,7 @@ fn build_room(
             json!({ "pos": pos_json(pos.next()), "resourceType": "energy", "amount": rng.below(2_000) }),
         );
     }
-    // 透传桶（mineral/tombstone——schema 未定型类型的真实存量形态）
+    // 中期房增加 mineral，满配房另加 tombstone。两者均由 normalize 构造。
     for g in 0..n_generic {
         if g == 0 {
             place(
@@ -396,7 +376,7 @@ fn build_room(
     }
 }
 
-/// 一份键值数据集（场景负载的最小单元）。
+/// 一个场景写入的键值数据集。
 pub struct Dataset {
     pub name: String,
     pub table: TableKind,
@@ -404,12 +384,14 @@ pub struct Dataset {
 }
 
 impl Dataset {
+    /// 值的字节总数，不含键、表信息或数据库页开销。
     pub fn total_bytes(&self) -> u64 {
         self.pairs.iter().map(|(_, v)| v.len() as u64).sum()
     }
 }
 
-/// 房间快照数据集（键 = 房间名，值 = 该时刻的快照字节）。
+/// 房间快照数据集，键为房间名；每轮把快照头的时间增加 128 tick，不结算对象。
+/// 房间数量由 `fix` 决定，`tier` 只用于报告中的数据集名称。
 pub fn rooms_dataset(fix: &WorldFixture, round: u64, tier: Tier) -> Dataset {
     let time = BASE_TIME + round * 128; // 每轮时间推进：值变化、长度不变
     Dataset {
@@ -423,7 +405,8 @@ pub fn rooms_dataset(fix: &WorldFixture, round: u64, tier: Tier) -> Dataset {
     }
 }
 
-/// 玩家常驻记录数据集：小 JSON 值（cpu 桶/计数器随轮变化——检查点每轮重写）。
+/// 玩家小 JSON 记录；键为 `u:<玩家名>`，计数器随轮次变化，长度不保证固定。
+/// 玩家数量由 `fix` 决定，`tier` 只用于报告中的数据集名称。
 pub fn users_dataset(fix: &WorldFixture, round: u64, tier: Tier) -> Dataset {
     Dataset {
         name: format!("users@{}", tier.name()),
@@ -442,7 +425,6 @@ pub fn users_dataset(fix: &WorldFixture, round: u64, tier: Tier) -> Dataset {
     }
 }
 
-/// 玩家记录（~280B 小值；字段取官方用户文档的常见子集）。
 fn user_record(player: &str, index: usize, round: u64) -> String {
     json!({
         "username": player,
@@ -459,13 +441,12 @@ fn user_record(player: &str, index: usize, round: u64) -> String {
     .to_string()
 }
 
-/// 大 value 数据集：每玩家一条 Memory blob（每 5 名一条 1MB 至多 2 条，其余
-/// 100KB——百 KB 常态 + MB 级尾部的真实分布）。
+/// 每玩家生成一个字节块：索引 4 和 9 使用 1 MiB，其余使用 100 KiB。
+/// 内容是伪随机字节，不是有效的 Memory JSON，也不是实测的玩家数据分布。
 ///
-/// `round` 扮演"玩家每 tick 只改 Memory 的一小部分"的**局部变更**：每个 blob
-/// 头部 4KB 用轮次相关字节重写。增量修改之外也避免同值重写被引擎判为无脏页
-/// 事务而跳过落盘（初轮实测 mdbx 会把同值提交优化成 ~30µs 的 no-op commit，
-/// 假绿数字）。
+/// 每轮只改变前 4 KiB，其余内容保持不变，但引擎仍收到完整值。
+/// 局部修改用于模拟修改集中在一小部分字节的负载，并避免连续写入相同值。
+/// 玩家数量由 `fix` 决定，`tier` 只用于报告中的数据集名称。
 pub fn blobs_dataset(fix: &WorldFixture, tier: Tier, round: u64) -> Dataset {
     let mut pairs = Vec::new();
     let mut big_left = 2usize;
@@ -492,8 +473,7 @@ pub fn blobs_dataset(fix: &WorldFixture, tier: Tier, round: u64) -> Dataset {
     }
 }
 
-/// 确定性伪随机字节（最坏情形：不可压缩。两引擎都不做压缩，内容只影响
-/// 页缓存命中差异，伪随机避免同类页被去重的假象）。
+/// 按 RNG 序列生成指定长度的字节，每个 u32 按小端展开，末尾截到 `len`。
 pub fn random_bytes(rng: &mut SeededRng, len: usize) -> Vec<u8> {
     let mut out = Vec::with_capacity(len);
     while out.len() < len {
@@ -508,10 +488,7 @@ mod tests {
     use super::*;
     use kk_schema::room::decode_snapshot;
 
-    /// 逐字节确定性：同档两次构建完全一致（fixture 锁定的前提）。t3 双构建
-    /// 曾在 debug 下约 +16s（insert 全房扫描 O(N²)——World 对象目录 O1
-    /// 落地后实测 ~0.3s，≈55×；见 world.rs ObjDir 注释），套件墙钟影响
-    /// 已可忽略——"基准数据集逐字节可复现"的完整锁定不再以时长为代价。
+    // 三档各构造两次，比较每个房间在固定时间下的快照字节。
     #[test]
     fn deterministic_bytes() {
         for tier in [Tier::T1, Tier::T2, Tier::T3] {
@@ -523,7 +500,7 @@ mod tests {
         }
     }
 
-    /// 快照可解码（真实封套而非随机字节）且对象数符合成熟度。
+    // 解码快照并检查时间和对象数下限，不锁定完整对象字段。
     #[test]
     fn snapshots_decode_and_shapes() {
         let fix = build_world(Tier::T2);
@@ -544,7 +521,7 @@ mod tests {
         }
     }
 
-    /// 规模档形状与值尺寸量级（宽松界——防档位漂移，不锁具体字节）。
+    // 尺寸使用宽松范围，允许 schema 演化；另检查修改头部时间不改变长度。
     #[test]
     fn tier_shapes_and_sizes() {
         let t1 = build_world(Tier::T1);
@@ -577,7 +554,6 @@ mod tests {
         assert_ne!(a, b);
     }
 
-    /// 玩家记录与 blob 的尺寸形态。
     #[test]
     fn user_and_blob_sizes() {
         let fix = build_world(Tier::T2);
@@ -604,7 +580,6 @@ mod tests {
         assert_eq!(blobs.pairs[0].1[4096..], blobs_r1.pairs[0].1[4096..]);
     }
 
-    /// 键序：房间名字典序 = 数字序（前缀扫描的语义前提）。
     #[test]
     fn room_key_order() {
         let names: Vec<String> = (0..100).map(room_name).collect();
