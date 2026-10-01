@@ -1,8 +1,4 @@
-//! M2B 扩面 P1：远程攻击族执行器（rangedAttack.js / rangedMassAttack.js）、
-//! say 文本载荷（say.js:18-21 + per-tick 重置 + 墓碑公开遗言 _die.js:33）、
-//! creep 的 notifyWhenAttacked 通用段（processor.js:313）。
-//! 官方对照：engine/src/processor/intents/creeps/{rangedAttack,rangedMassAttack,
-//! say}.js、intents/_damage.js:66-71（actionLog.rangedAttack）。
+//! 测试远程单体与群体攻击、say 文本重置，以及受袭通知标志。
 
 use super::*;
 
@@ -37,7 +33,7 @@ fn say_intent(creep: ObjId, message: &str, is_public: bool) -> IntentBatch {
     b
 }
 
-/// 无主 rampart 夹具（Generic 透传——P5 升 typed 前的放置面形态）。
+/// 插入无主 Generic rampart。
 fn rampart(f: &mut Fixture, x: u8, y: u8, hits: i64) -> ObjId {
     f.world
         .insert(
@@ -49,7 +45,7 @@ fn rampart(f: &mut Fixture, x: u8, y: u8, hits: i64) -> ObjId {
                 data: serde_json::json!({
                     "type": "structure", "structureType": "rampart",
                     "hits": hits, "hitsMax": hits,
-                    // M2B P4：衰减钟（官方 DB 不变量；缺钟=官方立即衰减）
+                    // 远期时钟防止本例的 rampart 被周期衰减移除。
                     "nextDecayTime": 1_000_000,
                 })
                 .to_string(),
@@ -259,9 +255,8 @@ fn ranged_mass_attack_zero_power_and_safemode() {
 
 #[test]
 fn ranged_attack_boost_multiplier() {
-    // BOOSTS['ranged_attack'][XKHO2].rangedAttack = 4（constants 表）——
-    // 评审 2 P1-1 清偿的锁定测试：part_key 错键（'rangedAttack'）会静默
-    // 回落 ×1，此断言红。
+    // XKHO2 的 rangedAttack 倍率为 4，查表身体类型必须使用 ranged_attack。
+    // 类型键误写为 rangedAttack 会查不到 boost，退回未强化功率。
     let mut f = Fixture::new(1, terrain_with(&[]));
     let atk = f.creep("atk", "p1", 10, 10, &[BodyKind::RangedAttack], 0);
     if let Some(RoomObject::Creep(c)) = f.world.get_mut(atk) {
@@ -278,9 +273,8 @@ fn ranged_attack_boost_multiplier() {
 
 #[test]
 fn say_payload_truncation_reset_and_tombstone() {
-    // say.js:18-21：message 截 10（UTF-16 码元）+ isPublic 落库；每 tick 随
-    // actionLog 重置（processor 每_tick 重建）；死亡公开遗言进墓碑
-    //（_die.js:33——私有/无遗言恒 None）。
+    // Say 截取 10 个 UTF-16 码元，消息和公开标志随每轮 action log 重置。
+    // 死亡时只将公开遗言转入墓碑。来源：上游 creeps/say.js 和 creeps/_die.js。
     let mut f = Fixture::new(1, terrain_with(&[]));
     let talker = f.creep("t", "p1", 10, 10, &[BodyKind::Move], 0);
 
@@ -340,8 +334,8 @@ fn say_payload_truncation_reset_and_tombstone() {
 
 #[test]
 fn notify_when_attacked_settles_on_creep() {
-    // processor.js:313-314 通用段对 creep 生效（M2B 扩面 P1 前无字段——
-    // 结构族同名字段先例）；持久标志不随 tick 重置。
+    // NotifyWhenAttacked 是跨 tick 保留的标志，不随 action log 重置。
+    // 来源：上游 engine/src/processor.js 的对象通知意图处理。
     let mut f = Fixture::new(1, terrain_with(&[]));
     let c = f.creep("c", "p1", 10, 10, &[BodyKind::Move], 0);
 

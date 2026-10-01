@@ -1,13 +1,8 @@
-//! 引擎 tick 的显式阶段与运行状态机（A1 批，mod-plane-batches / 06 §2.2）。
+//! 记录 tick 的五个阶段和运行状态。
 //!
-//! 一次 tick 拆为五个可注入故障的段边界：**prepare → settle → market →
-//! validate → publish**。驱动（[`Engine::tick_with_intents_with_input`](crate::settle::Engine)）
-//! 经 [`StageCursor`] 推进并记录段位；任一段失败 → [`RunState::NeedsRecovery`]，
-//! 全部权威状态（世界/玩家/市场）保持上一 tick。
-//!
-//! 演进锚点：A2 已落地——市场为真候选（settle_market 写候选、publish 一次
-//! 生效，A1 快照桥撤销）；A3 把 [`TickCandidates`]/[`SettledRooms`] 的
-//! 所有权形态演进为 OwnedTickTxn。
+//! 准备、房间结算、市场结算和校验都操作候选；发布阶段将候选写回内存。
+//! 返回 Err 时保留已提交的世界、玩家和市场状态。这不覆盖 panic、进程崩溃
+//! 或磁盘持久化，指令与墙钟输入的重试缓存由调用方管理。
 
 use std::collections::BTreeMap;
 
@@ -18,18 +13,18 @@ use crate::settle::PlayerState;
 use crate::settle::SettleError;
 use kk_world::RoomState;
 
-/// 段边界（故障注入与状态机记录的最小单位）。
+/// 一次 tick 的处理阶段，也是故障注入和错误报告的边界。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TickStage {
-    /// 输入规整：id 基线、玩家候选克隆、safeMode 门④、房间名序。
+    /// 复制玩家状态，确定对象 ID 起点和房间顺序，并复核安全模式指令。
     Prepare,
-    /// 逐房候选结算（clone → settle_room → 收集；内部另有 per-room 注入面）。
+    /// 按房名顺序复制并结算房间。
     Settle,
-    /// 市场全局阶段（官方 main.js global 阶段镜像，运行在房间候选之上）。
+    /// 使用结算后的房间候选执行全局市场规则。
     Market,
-    /// 候选结构校验（tripwire：房间覆盖/id 单调/玩家键不减）。
+    /// 检查房间覆盖与顺序、对象 ID 游标及玩家键。
     Validate,
-    /// 一次发布：房间候选写回 + notify/user.rooms 落账 + id/事件/时间推进。
+    /// 写回候选，保存通知，重建玩家房间集合，再推进时间与世界版本。
     Publish,
 }
 
@@ -45,10 +40,9 @@ impl TickStage {
     }
 }
 
-/// 引擎运行状态机（A1）。`Ready`/`Committed` 同为「可开新一轮」的净态；
-/// `Running`/`Prepared` 是单次调用内的瞬态（同步引擎下不跨调用存在——
-/// 跨调用见到即为状态机接线 bug，驱动显式拒绝）；段失败落
-/// `NeedsRecovery` 后世界保持失败轮的上一 tick 原样。
+/// 引擎的运行状态。Ready 和 Committed 可以开始下一轮。
+/// Running、Prepared 仅在同步结算调用中使用；若 panic 后残留，后续推进被拒绝。
+/// NeedsRecovery 允许世界时间和版本未改变时再次结算，或显式放弃恢复。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RunState {
     Ready,
@@ -56,16 +50,17 @@ pub enum RunState {
     Committed {
         tick: u64,
     },
-    /// prepare→validate 的候选构建域（调用内瞬态）。
+    /// 正在构造和处理候选，tick 是本次结算前的世界时间。
     Running {
         tick: u64,
     },
-    /// 候选完成且通过校验、publish 之前（调用内瞬态）。
+    /// 候选已通过校验，尚未写回世界。
     Prepared {
         tick: u64,
     },
-    /// 某段失败：世界保持在 `tick`/`generation` 记录的上一 tick 原样——
-    /// 只放行「世界未被外部变异」的重试（同候选重结算）或显式放弃恢复。
+    /// 结算返回错误后的状态，记录当时世界时间、版本和失败阶段。
+    /// 此状态不保存指令或 TickInput，也不检查玩家、市场是否被外部修改；
+    /// 重试时调用方须重新提供相同输入并保持这些状态不变。
     NeedsRecovery {
         tick: u64,
         generation: u64,
@@ -74,10 +69,8 @@ pub enum RunState {
     },
 }
 
-/// prepare 段产物：候选构建域的全部拥有数据（A3 OwnedTickTxn 的前身——
-/// players/next_id 从引擎共享借用改为随候选流动；市场域 A2 起为引擎侧
-/// 真候选——staged_body 局部 clone、经 publish_tick 参数一次换入，
-/// 并入统一候选容器随 A3/A4）。
+/// 准备阶段产生的输入、玩家副本及对象 ID 游标。
+/// 房间和市场副本分别由后续阶段创建，直到发布前都不写回引擎。
 pub(crate) struct TickCandidates {
     pub(crate) time: u64,
     pub(crate) room_names: Vec<String>,
@@ -86,16 +79,13 @@ pub(crate) struct TickCandidates {
     pub(crate) batch: IntentBatch,
 }
 
-/// settle 段产物：房间候选与事件日志（房间名序）。
+/// 按房名顺序保存结算后的房间副本与事件。
 pub(crate) struct SettledRooms {
     pub(crate) rooms: Vec<(String, RoomState)>,
     pub(crate) events: Vec<Value>,
 }
 
-/// 段游标：记录当前段位；段入口检查故障注入。
-/// A2 起市场为真候选（`settle_market` 写入候选 MarketState、publish 一次
-/// 生效），A1 的快照桥及其恢复逻辑已撤销——失败轮的市场不可回退写入
-/// 结构上不存在。
+/// 记录当前阶段，并在进入指定阶段时注入错误。
 pub(crate) struct StageCursor {
     fail: Option<TickStage>,
     stage: TickStage,
@@ -109,8 +99,7 @@ impl StageCursor {
         }
     }
 
-    /// 进入段：先记段位再查注入——注入 Err 的段位也已记录（NeedsRecovery
-    /// 报告的 stage 即「失败发生在进入该段时」，世界在该段入口前未变异）。
+    /// 先记录阶段再检查故障注入，使错误报告包含尚未执行的失败阶段。
     pub(crate) fn enter(&mut self, stage: TickStage) -> Result<(), SettleError> {
         self.stage = stage;
         if self.fail == Some(stage) {

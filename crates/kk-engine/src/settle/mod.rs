@@ -1,20 +1,8 @@
-//! 单房间结算：官方 `engine/src/processor.js` 阶段序的忠实子集（M1 范围）。
+//! 房间规则结算与世界 tick 的协调。
 //!
-//! 与官方的三处有意差异（方案 D4，登记于 compatibility.md 灰区表）：
-//! 1. 对象迭代按 id 升序——id 由世界单调分配，升序即创建序；官方为 DB 插入序；
-//! 2. 不攒 bulk 批量写，直接改工作副本（内存模型无写放大），eventLog 照常产出；
-//! 3. 结算失败即整体回退：返回 Err 时调用方丢弃工作副本，房间保持上一 tick
-//!    状态（官方是打日志继续）。多房间由 [`Engine::tick`] 两阶段提交保证原子性。
-//!
-//! M1 不结算：NPC、战斗全家、power、市场、跨房间落地、Generic 桶对象
-//! （tower/rampart 等透传对象只保证可见，无规则行为）。
-//! B1 起 hits 模型落地：近战 attack/repair/dismantle 已结算（damage.rs），
-//! ranged/heal/boost 仍不在范围。
-//! B2 起 controller 结算族落地（creep.rs 五执行器 + controller.rs 的
-//! activateSafeMode + economy.rs 的 controllers/tick 补齐）。
-//! B3 起 death/decay 族落地（creep.rs 的 _die 全量——墓碑承接 + 死亡事件；
-//! damage.rs 的 _destroy 全量——废墟承接；economy.rs 的 tombstones/ruins
-//! tick；room.rs 的 destroyStructure；mod.rs 的 _create-energy 容器承接）。
+//! 房间先处理指令，再仲裁移动，最后按对象 ID 执行 tick 规则。
+//! Engine 在副本中结算所有房间和市场，校验成功后统一写回内存并推进
+//! 时间；直接调用 settle_room 则由调用方负责副本和失败处理。
 
 pub mod controller;
 pub mod creep;
@@ -37,11 +25,9 @@ use serde_json::{Value, json};
 
 use crate::intent::{Action, IntentBatch, IntentData};
 
-/// 官方 utils.js:458-465 前奏（checkStructureAgainstController 的头三段，
-/// M2B 扩面 P5 抽取共用）：调用方先做「无主恒 active」短路，本函数返回
-/// None = controller 缺失 / level<1 / 异主（inactive）；Some = 通过的
-/// controller（供配额段使用）。towers/links 全量版（structures.rs）与
-/// extractor 特化（creep/harvest.rs）共用单源。
+/// 检查控制器是否存在、等级是否至少为 1，以及是否属于结构的主人。
+/// 无主结构是否启用由调用方决定；本函数不检查结构数量配额。
+/// 来源：上游 engine/src/utils.js 的 checkStructureAgainstController。
 pub(crate) fn structure_rcl_prologue<'a>(
     w: &'a Working,
     owner: &str,
@@ -53,8 +39,7 @@ pub(crate) fn structure_rcl_prologue<'a>(
     Some(ctl)
 }
 
-/// RCL 配额查询（CONTROLLER_STRUCTURES，嵌套 JSON 常量解析一次）。
-/// 返回该结构类型在给定 RCL 的允许数量（无条目 = 0）。
+/// 查询给定 RCL 允许的结构数量；未知类型或等级返回 0。
 pub fn controller_allowed(structure_type: &str, rcl: i64) -> i64 {
     use std::sync::OnceLock;
     static TABLE: OnceLock<serde_json::Value> = OnceLock::new();
@@ -65,7 +50,7 @@ pub fn controller_allowed(structure_type: &str, rcl: i64) -> i64 {
     table[structure_type][rcl.to_string()].as_i64().unwrap_or(0)
 }
 
-/// 结算失败（调用方丢弃工作副本）。
+/// 规则结算错误。Engine 丢弃候选；直接调用 settle_room 的调用方须自行丢弃副本。
 #[derive(Debug)]
 pub struct SettleError(pub String);
 
@@ -75,55 +60,42 @@ impl std::fmt::Display for SettleError {
     }
 }
 
-/// 玩家状态（M1 仅 gcl；持久化 M2）。
+/// 跨 tick 保留的玩家内存状态。
 ///
-/// `rooms` 是官方 `user.rooms` 等价物（driver/lib/index.js:542-547
-/// addRoomToUser 的 addToSet 集合）：claimController 的 GCL 门读
-/// `user.rooms.length`（claimController.js:34-35）。维护时序对齐官方——
-/// addRoomToUser 的 bulk addToSet **不**改内存对象（bulk.js:101-107，仅入队
-/// DB 操作，tick 末落盘），故结算期读到的永远是上一 tick 的定集；本引擎由
-/// [`Engine::tick_with_intents`] 在全部房间结算完成后按世界真值重建（与官方
-/// 每 tick controllers/tick.js:18 对已占房重加 + unclaim/降级路径移除的
-/// 不动点一致），同 tick 的后序 claim 不会看到先序 claim 的新房——官方同形。
+/// rooms 在全部房间结算后按控制器所有权重建；结算期间仍是上一 tick 的集合。
+/// 因此同 tick 的后一次 claim 看不到前一次新占的房间。
+/// 来源：上游 engine/src/processor/intents/creeps/claimController.js
+/// 与 driver/lib/index.js 的 addRoomToUser（排队写入，未修改运行中的用户对象）。
 #[derive(Debug, Default, Clone)]
 pub struct PlayerState {
+    /// 累计 GCL 进度，不是玩家 API 显示的 GCL 等级。
     pub gcl: i64,
     pub rooms: BTreeSet<String>,
-    /// 玩家持久 RawMemory（B0-5 统一提交点：玩家执行产出候选、世界结算成功
-    /// 后在此提交；下一 tick 注入沙箱——官方每 tick 从存档恢复同构）。
+    /// 玩家 RawMemory。kk-runtime 在世界提交后写入，下一次执行时注入。
     pub raw_memory: String,
-    /// Game.notify 落库（M2B 扩面 P3）：官方 persist 到 users.notifications
-    /// 集合（邮件通知，游戏内不可观测）；有界保留最近 100 条（官方集合
-    /// 自然增长，登记差异）
+    /// Game.notify 的内存记录，跨 tick 保留最近 100 条；这里不发送邮件。
     pub notifications: Vec<NotifyRecord>,
-    /// RawMemory segments 全量存储（M2B 扩面 P6：官方 users.memorySegments
-    /// 的 100 槽服务端存储；窗口写回在此合并）。有界：槽数 ≤100（id 0..99）、
-    /// 每槽 ≤100KB（写回校验在 prelude tick 尾——官方 runtime.js:250-269 同位）
+    /// RawMemory 段内容。执行器限制 ID 为 0..=99，每段最多 100×1024 个
+    /// UTF-16 码元（JavaScript 字符串 length）。Map 不自行校验，窗口合并由 kk-runtime 完成。
     pub segments: BTreeMap<u8, String>,
-    /// 最近一次 setActiveSegments 请求（跨 tick 保持。官方闭包每 tick 重置、
-    /// 持久在 users.activeSegments——本字段即官方 db 侧的等价物；空集=已请求
-    /// 清空窗口，下一 tick 解算为空。评审 2 P2-2 勘正：非「官方闭包同形」）
+    /// 最近一次 setActiveSegments 请求，跨 tick 保留；空集表示空活动窗口。
     pub active_request: Vec<u8>,
-    /// setPublicSegments（空列表官方 truthy-check 丢弃——no-op quirk 保持）
+    /// 公开段 ID。正常执行通道不提交空列表，已有公开列表因而保留。
+    /// 直接由宿主修改此字段不会经过该请求规则。
     pub public_ids: Vec<u8>,
-    /// setDefaultPublicSegment（None = 未设/已清）
+    /// 默认公开段 ID；None 表示未设置或已清除。
     pub default_public: Option<u8>,
-    /// setActiveForeignSegment 请求（None = 未设/已清；Some((username, id?))
-    /// ——id 缺省走发布者 defaultPublic；每 tick 重新解析授权——撤回即时生效）
+    /// 外部段请求：发布者与可选 ID；省略 ID 时使用其默认公开段。
+    /// kk-runtime 每轮按当前公开列表重新授权，撤回公开后停止提供数据。
     pub foreign_request: Option<(String, Option<u8>)>,
-    /// 玩家 credits（2B 批）：**整数毫 credits**（官方 users.money 形态——
-    /// `Game.market.credits` getter ÷1000，market.js:196-201）。种子 10M
-    /// credits=10_000_000_000 毫（vanilla adapter index.ts:950 同款——
-    /// 套件 INITIAL_CREDITS 锚）。
+    /// 余额，单位千分之一 credit；玩家 API 读取时除以 1000。
+    /// Default 的余额为 0，初始资金由调用方设置。
     pub money: i64,
-    /// intershard 资源持有（2B 批）：官方 users.resources（INTERSHARD_RESOURCES
-    /// 划转面——directDeals 结算消费，global-intents/market.js:420-435）。
-    /// 缺省空：token/pixel 等来源面（generatePixel/unlock）归 MMO 订阅批，
-    /// 本批只承载 deal 划转，不伪造来源。
+    /// token、pixel 等跨 shard 资源余额，供市场成交划转；缺省为空。
     pub resources: BTreeMap<String, i64>,
 }
 
-/// 一条已落账的玩家通知（tick = 落账时的世界时间）。
+/// 一条已提交的内存通知；tick 是处理指令时的世界时间。
 #[derive(Debug, Clone, PartialEq)]
 pub struct NotifyRecord {
     pub message: String,
@@ -131,15 +103,12 @@ pub struct NotifyRecord {
     pub tick: u64,
 }
 
-/// PlayerState.notifications 的容量（官方 users.notifications 集合自然
-/// 增长，我方有界——登记差异）。
+/// 内存通知最多保留最近 100 条。
 const NOTIFY_RECORD_CAP: usize = 100;
 
-/// 一轮结算的非确定性输入（ADR-013 决策 5）：墙钟等外部输入显式注入——
-/// 首次执行取实际值（[`TickInput::now`]，经 [`Engine::tick_with_intents`]
-/// 的默认路径），重放用记录值（[`Engine::tick_with_intents_with_input`]）。
-/// signController 的 `datetime` 落盘面由此获得重放确定性；玩家可见的墙钟
-/// 语义不变（官方 signController.js:23 落一次 Date.now() 毫秒）。
+/// 本轮结算的外部输入；控制器签名与市场订单时间使用此墙钟。
+/// 重试或重放须复用首次尝试的值，由调用方保存并注入。
+/// 来源：ADR-013 的非确定性输入约定。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TickInput {
     /// Unix 毫秒墙钟。
@@ -147,8 +116,7 @@ pub struct TickInput {
 }
 
 impl TickInput {
-    /// 首次执行的默认构造：取当前系统墙钟（时钟回拨异常时取 0，与原
-    /// `SystemTime::now` 内联形态同口径）。
+    /// 读取当前 Unix 时间；系统时间早于 Unix 纪元时返回 0。
     pub fn now() -> Self {
         Self {
             now_ms: std::time::SystemTime::now()
@@ -159,39 +127,32 @@ impl TickInput {
     }
 }
 
-/// 结算工作上下文：房间工作副本 + 索引 + per-tick 瞬态。
+/// 单房间结算上下文：房间副本、位置索引、候选玩家与共享 ID 游标，
+/// 以及本轮的事件、伤害与移动记录。直接调用者须提供工作副本。
 pub struct Working<'w> {
     pub room: &'w mut RoomState,
     pub index: RoomIndex,
     pub time: u64,
-    /// 本轮结算的墙钟输入（signController datetime 落盘面；ADR-013）。
+    /// Unix 毫秒墙钟，来自本轮 TickInput。
     pub now_ms: u64,
     pub next_id: &'w mut u64,
     pub players: &'w mut BTreeMap<String, PlayerState>,
     pub events: Vec<Value>,
-    /// move 时刻的 fatigue（官方 _oldFatigue，canMove 判定用）。
+    /// 处理 move 时记录的疲劳，供移动仲裁判断是否能移动。
     pub old_fatigue: BTreeMap<ObjId, u32>,
-    /// 本 tick 疲劳累加器（官方 _fatigue；结算结束回写 creep.fatigue）。
+    /// 本轮疲劳累加值；保留负值用于拉拽传递，写回对象时取 max(0, 值)。
     pub tick_fatigue: BTreeMap<ObjId, i64>,
-    /// 本 tick controller 升级量（官方 _upgraded）。
+    /// 本轮各控制器的累计升级量，用于限制 RCL 8 的升级。
     pub upgraded: BTreeMap<ObjId, i64>,
-    /// 本 tick 对 creep 的待施加伤害（官方 `_damageToApply`，_damage.js:20——
-    /// intent 期累加、creep 自己的 tick 结算；对象移除时一并清理）。
+    /// 指令阶段累计的 creep 伤害，在该 creep 的 tick 阶段施加。
     pub damage_to_apply: BTreeMap<ObjId, i64>,
-    /// 本 tick 对 creep 的待施加治疗（官方 `_healToApply`，heal.js:29——
-    /// 伤害通道的对称面，tick.js:126-128 在死亡判定前施加）。
+    /// 待施加的治疗量，与伤害一起在 creep 死亡判断前处理。
     pub heal_to_apply: BTreeMap<ObjId, i64>,
-    /// 本 tick controller 的升级封锁钟（官方 `target._upgradeBlocked`，
-    /// attackController.js:48 写、controllers/tick.js:20-23 持久化后清除）。
-    /// 值为绝对 tick（gameTime + CONTROLLER_ATTACK_BLOCKED_UPGRADE）。
+    /// attackController 设置的升级封锁到期 tick，由 controller tick 写回对象。
     pub upgrade_block_pending: BTreeMap<ObjId, u64>,
-    /// 本 tick 的 safeMode 激活标记（官方 `object._safeModeActivated`，
-    /// activateSafeMode.js:24 写、controllers/tick.js:25-31 在 controller tick
-    /// 消费——两文件间的瞬态通道）。
+    /// 本轮激活安全模式的控制器，controller tick 据此处理时钟。
     pub safe_mode_activated: BTreeSet<ObjId>,
-    /// 本 tick 的提取器冷却瞬态（官方 `extractor._cooldown`，harvest.js:108
-    /// 写、extractors/tick.js:21-25 同 tick 持久化为 cooldown 计数器——
-    /// B4 的两文件瞬态通道，与 upgrade_block_pending 同族）。
+    /// 采矿时设置的提取器冷却，由 extractor tick 写回冷却计数。
     pub extractor_cooldown_pending: BTreeMap<ObjId, u64>,
     pub movement: movement::Movement,
 }
@@ -218,7 +179,8 @@ impl<'w> Working<'w> {
         })
     }
 
-    /// 结算中创建新对象（build 落成/掉落/孵化）：全局 id + 索引登记。
+    /// 使用共享游标创建对象，并登记位置索引。
+    /// 调用方须保证游标不与已有 ID 冲突；游标饱和后无法继续可靠分配。
     pub fn insert_new(&mut self, object: RoomObject) -> ObjId {
         let id = *self.next_id;
         *self.next_id = self.next_id.saturating_add(1);
@@ -230,7 +192,7 @@ impl<'w> Working<'w> {
         ObjId(id)
     }
 
-    /// 删除对象（含索引）。
+    /// 删除对象及位置索引，同时清理它的疲劳、待伤害和待治疗记录。
     pub fn remove_obj(&mut self, id: ObjId) -> Option<RoomObject> {
         let obj = self.room.objects.remove(&id)?;
         let (x, y) = obj.pos();
@@ -251,11 +213,11 @@ impl<'w> Working<'w> {
         }
     }
 
-    /// 官方 _add-fatigue（_add-fatigue.js:24-27 的拉拽归链）：负贡献先消自身
-    /// 疲劳，剩余部分沿被拉链（`object._pulled`）上溯到链首拉者施加——被拉
-    /// creep 的移动疲劳记在拉者头上（拉拽官方语义）；持久值 = max(0, 累加器)。
+    /// 累加疲劳，沿拉拽链传到链首。
+    /// 负贡献先抵消本体已有疲劳，剩余部分才传给拉者；对象上只保存非负值。
+    /// 来源：上游 engine/src/processor/intents/creeps/_add-fatigue.js。
     pub fn add_fatigue(&mut self, id: ObjId, mut d: i64) {
-        // 官方 _add-fatigue.js:5：累加器首触达时以持久 fatigue 播种
+        // 第一次累加时以对象现有疲劳为起点。
         let mut acc = match self.tick_fatigue.get(&id) {
             Some(v) => *v,
             None => self.creep(id).map(|c| c.fatigue as i64).unwrap_or(0),
@@ -272,7 +234,7 @@ impl<'w> Working<'w> {
                 return;
             }
         }
-        // 拉拽归链（官方 while 循环）：链上拉者消亡即断链（!!roomObjects 守卫）
+        // 链上的拉者不存在时停止向上查找。
         let head = self.movement.head_puller(self.room, id);
         let mut acc = match self.tick_fatigue.get(&head) {
             Some(v) => *v,
@@ -285,13 +247,12 @@ impl<'w> Working<'w> {
         }
     }
 
-    /// 掉落资源落地（官方 _create-energy：同格同资源叠加；容器承接 B3 补齐）。
+    /// 在指定位置放下 energy：先填充存活容器，再合并同资源掉落堆。
     pub fn create_energy(&mut self, x: u8, y: u8, amount: i64) {
         self.create_energy_typed(x, y, amount, 0);
     }
 
-    /// 资源参数化落地（resource_type 编码 0=energy/1=power/2=G——GPT 复审
-    /// P1-1：官方 _create-energy 按资源类型键同格叠加，同格异资源不并堆）。
+    /// 按旧资源编码放下资源：1 为 power，2 为 G，其余为 energy。
     pub fn create_energy_typed(&mut self, x: u8, y: u8, amount: i64, res_code: u8) {
         let name = match res_code {
             1 => "power",
@@ -301,10 +262,9 @@ impl<'w> Working<'w> {
         self.create_resource(x, y, amount, name);
     }
 
-    /// 官方 _create-energy.js（B3 全量形态）：任意资源名落地——同格 container
-    /// （hits>0）先承接（容量 = CONTAINER_CAPACITY − 全槽合计，:17-27），余量
-    /// 同格同资源并堆（:29-42）。tombstone/ruin 衰减掉落的 boost 矿物等经
-    /// 命名槽承载（EnergyObj.resource）。
+    /// 放下任意命名资源；非正量不处理。
+    /// 同格存活容器先接收，按全部资源合计计算余量；剩余与同格同名堆合并。
+    /// 来源：上游 engine/src/processor/intents/_create-energy.js。
     pub fn create_resource(&mut self, x: u8, y: u8, amount: i64, resource: &str) {
         if amount <= 0 {
             return;
@@ -322,8 +282,7 @@ impl<'w> Working<'w> {
         match existing {
             Some(id) => {
                 if let Some(RoomObject::Energy(e)) = self.room.objects.get_mut(&id) {
-                    // 饱和合并：放置面可造 u32::MAX 堆（官方 JS 数值无此界），
-                    // 裸加法在 debug 溢出 panic、release 回绕后衰减清堆丢数据
+                    // 数量存储为 u32，超出范围时饱和，避免溢出回绕。
                     e.amount = e
                         .amount
                         .saturating_add(u32::try_from(amount).unwrap_or(u32::MAX));
@@ -346,10 +305,8 @@ impl<'w> Working<'w> {
         }
     }
 
-    /// 官方 _create-energy.js:17-27 的容器承接分支：同格 container（hits>0）
-    /// 先收，容量余量 = CONTAINER_CAPACITY − 全槽合计（calcResources）；返回
-    /// 未承接的余量。container 在 typed 世界是 Generic 透传（结算范围外类型），
-    /// store 读写走 data JSON。
+    /// 放入同格第一个存活容器，返回未放入的数量。
+    /// 容器使用 Generic.data 的 JSON store，容量按全部资源之和计算。
     fn deposit_into_container(&mut self, x: u8, y: u8, resource: &str, amount: i64) -> i64 {
         let container = self
             .index
@@ -370,9 +327,7 @@ impl<'w> Working<'w> {
             return amount;
         };
         let mut data: Value = serde_json::from_str(&g.data).unwrap_or_default();
-        // 读侧折零与 filter_map 跳过在和式中恒等（本行是口径统一）——真正的
-        // 行为修复在下方写入侧：taken 已扣减而不入槽也不退回 = 资源静默灭失
-        //（B3 评审 2 P3-2 + 清偿复审 P3-1 归因勘误）
+        // 非整数槽位按 0 计入容量，写入槽位时同样按 0 处理。
         let total_before = data
             .pointer("/store")
             .and_then(Value::as_object)
@@ -383,8 +338,7 @@ impl<'w> Working<'w> {
         if taken <= 0 {
             return amount;
         }
-        // 官方 `container.store = container.store || {}`（:19-20）：缺 store
-        // 键的 container 现场建空对象后承接
+        // 缺少 store 时创建空对象；JSON 或 store 类型错误时，保留全部掉落量。
         let Some(obj) = data.as_object_mut() else {
             return amount;
         };
@@ -399,7 +353,7 @@ impl<'w> Working<'w> {
         amount - taken
     }
 
-    /// 阶段 6 入口：movement 仲裁（字段分裂借用——矩阵可变、世界只读）。
+    /// 在指令处理后仲裁移动冲突，使用此时生效的安全模式主人。
     pub fn check_movement(&mut self) {
         let safe_mode_user: Option<String> = self.controller().and_then(|ctl| {
             if ctl.safe_mode > self.time {
@@ -425,54 +379,42 @@ impl<'w> Working<'w> {
     }
 }
 
-/// 官方 processor.js:313-314 的 notifyWhenAttacked 通用段：intent 存在且对象
-/// 是 CONSTRUCTION_COST 类型（或 creep/powerCreep——后者 M4）→ 落库
-/// `notifyWhenAttacked: !!enabled`。:248 的所有权门（他人对象跳过）内联。
-/// 消费面是伤害通知（_damage.js:76 / towers/attack.js:63——M2 通知面未接线，
-/// 本批只持久化标志，通知发送灰区登记）。
+/// 更新 creep 和可建造结构的受袭通知开关，拒绝修改他人对象。
+/// 这里只保存标志，不发送受袭通知。
+/// 来源：上游 engine/src/processor.js 的 notifyWhenAttacked 通用处理。
 fn notify_when_attacked(w: &mut Working, player: &str, id: ObjId, data: &IntentData) {
     let Some(obj) = w.room.objects.get(&id) else {
         return;
     };
     if kk_world::domain::object_owner(obj).is_some_and(|owner| owner != player) {
-        return; // 官方 :248：他人对象（无主不拦——中性墙/路可设）
+        return; // 拒绝他人对象；无主结构不在此拦截。
     }
-    // 官方 :313 门：CONSTRUCTION_COST[object.type] || creep || powerCreep
-    //（controller/source/工地/旗等不在表内——API 面也只在结构类暴露，此处
-    // 是清洗层允许伪造 intent 后的兜底）
+    // 控制器、资源源、工地和旗帜不接受此开关；无主可建造结构可以接受。
     let type_gated = matches!(obj, RoomObject::Creep(_))
         || kk_world::types::construction_cost(&movement::type_name_of(obj)).is_some();
     if !type_gated {
         return;
     }
-    let enabled = data.enabled.unwrap_or(false); // 官方 !!intent.enabled
+    let enabled = data.enabled.unwrap_or(false);
     match w.room.objects.get_mut(&id) {
-        // M2B 扩面 P1：creep 同门（官方 :313 类型门显式收录 creep——processor
-        // 通用段先于类型分派，对所有对象类型生效）
         Some(RoomObject::Creep(o)) => o.notify_when_attacked = Some(enabled),
         Some(RoomObject::Spawn(o)) => o.notify_when_attacked = Some(enabled),
         Some(RoomObject::Extension(o)) => o.notify_when_attacked = Some(enabled),
         Some(RoomObject::Storage(o)) => o.notify_when_attacked = Some(enabled),
         Some(RoomObject::ConstructedWall(o)) => o.notify_when_attacked = Some(enabled),
         Some(RoomObject::Road(o)) => o.notify_when_attacked = Some(enabled),
-        // B4：extractor 在 CONSTRUCTION_COST（5）——官方 :313 类型门收录
         Some(RoomObject::Extractor(o)) => o.notify_when_attacked = Some(enabled),
         Some(RoomObject::Generic(o)) => {
-            // 透传桶：标志写进 data JSON（投影层原样还原，prelude 的
-            // rawData(id).notifyWhenAttacked 读到）
+            // Generic 将标志保存在 JSON 中，供世界投影读取。
             let mut v: Value = serde_json::from_str(&o.data).unwrap_or_default();
             v["notifyWhenAttacked"] = Value::Bool(enabled);
             o.data = v.to_string();
         }
-        // creep 臂已在上方（M2B 扩面 P1——字段+API 面齐）；其余类型（工地/
-        // 旗/controller/source 等）不在官方 :313 类型门内
         _ => {}
     }
 }
 
-/// EnergyObj 的资源名（code 0/energy、1/power、2/G 之外经命名槽——与
-/// kk-world 投影侧的 world_json::energy_resource_name 同语义；跨 crate 不能
-/// 复用 pub(crate)，此处为结算侧单源）。pub：settle_tests 锁值断言消费。
+/// 读取掉落资源名：命名字段优先，否则按旧编码 1=power、2=G、其余=energy。
 pub fn energy_resource_name(o: &kk_schema::room::EnergyObj) -> &str {
     match (&o.resource, o.resource_type) {
         (Some(name), _) => name.as_str(),
@@ -482,10 +424,12 @@ pub fn energy_resource_name(o: &kk_schema::room::EnergyObj) -> &str {
     }
 }
 
-/// 结算一个房间（processor.js processRoom 的 M1 子集）。
+/// 原地结算房间，返回事件并替换 room.events。
 ///
-/// 工作副本由调用方 clone（失败即回退的载体）；`batch` 只取指向本房间的部分；
-/// `now_ms` 是本轮结算的墙钟输入（[`TickInput`]）。
+/// 本函数不创建副本，也不回滚 room、players 和 next_id。调用方须提供
+/// 候选，返回 Err 后丢弃整个候选。Engine 负责跨房间的提交边界。
+/// room.name 须为世界目录中的房名，用于筛选房间级指令；time 是结算前
+/// 的绝对 tick，now_ms 是 Unix 毫秒墙钟。对象级指令仅处理本房间存在的 ID。
 pub fn settle_room(
     room: &mut RoomState,
     time: u64,
@@ -514,8 +458,7 @@ pub fn settle_room(
         movement: movement::Movement::new(),
     };
 
-    // 阶段 1 预扫描（processor.js:43-171 的 M1 子集）：actionLog 每 tick 重置
-    //（M2B 扩面 P1 起含 say 文本载荷两字段——官方 actionLog 整对象每 tick 重建）
+    // 先清空动作记录和说话载荷，避免上一轮内容继续可见。
     for creep in w.room.objects.values_mut() {
         if let RoomObject::Creep(c) = creep {
             c.action_log = 0;
@@ -524,20 +467,18 @@ pub fn settle_room(
         }
     }
 
-    // 阶段 3：_calc_spawns（processor.js:221-223）——off 标记与 energyAvailable 初算
+    // 处理指令前，按控制器配额计算 spawn/extension 是否启用。
     spawn::calc_spawns(&mut w);
 
-    // 阶段 5：玩家 intents（官方 :227-322；玩家序 = BTreeMap 名字序）
+    // 玩家按名字排序，先处理房间指令，再按对象 ID 处理对象动作。
     for (player, intents) in &batch.users {
         room::process_room_intents(&mut w, player, &intents.room);
         for (obj_id, actions) in &intents.objects {
-            // notifyWhenAttacked 通用段（官方 processor.js:313-314——各类型
-            // intent 处理器之外的对象级通用段，对任何对象类型生效；纯标志写
-            // 与类型处理器无交互，前置执行等价）
+            // 通知开关是对象通用指令，在类型分派前处理。
             if let Some(data) = actions.get(&Action::NotifyWhenAttacked) {
                 notify_when_attacked(&mut w, player, *obj_id, data);
             }
-            // 官方 :248：对象不存在或所有权不符 → 跳过；按对象类型分派
+            // Creep 和 spawn 须属于当前玩家；controller 另允许无主对象进入处理器。
             match w.room.objects.get(obj_id) {
                 Some(RoomObject::Creep(o)) if o.owner == *player => {
                     creep::process_creep_intents(&mut w, *obj_id, actions);
@@ -545,23 +486,12 @@ pub fn settle_room(
                 Some(RoomObject::Spawn(o)) if o.owner == *player => {
                     spawn::process_spawn_intents(&mut w, *obj_id, actions);
                 }
-                // controller 对象：官方 :248 的所有权门是 `object.user &&
-                // object.user != userId`——他人 controller 的 intent 跳过；
-                // 无主 controller 不拦（activateSafeMode 处理器自身 :8
-                // `!object.user || !object.level` 再拒）， :306-311 分派
-                // unclaim/activateSafeMode
                 Some(RoomObject::Controller(o))
                     if o.owner.as_deref().is_none_or(|u| u == player.as_str()) =>
                 {
                     controller::process_controller_intents(&mut w, *obj_id, actions);
                 }
-                // Generic 结构对象（tower/link/rampart 等，M2B 扩面 P5）：
-                // 官方 :248 所有权门 `object.user && object.user != userId`
-                // ——有主不符跳过，**无主不跳**（与 controller 臂同款判定）。
-                // 官方按 `object.type` 路由到 towers/links/ramparts 的
-                // intents.js（:251-269）；我方 Generic 的 `type` 恒
-                // "structure"，真实类型在 `structureType` 键——门与路由都在
-                // 处理器内做（单次 data 解析）
+                // 真实类型在 structureType 中，处理器再检查结构类型和所有权。
                 Some(RoomObject::Generic(_)) => {
                     structures::process_structure_intents(&mut w, *obj_id, player, actions);
                 }
@@ -570,15 +500,14 @@ pub fn settle_room(
         }
     }
 
-    // 阶段 6：movement.check（processor.js:324）
+    // 所有 move/pull 登记完成后，再统一仲裁目的格冲突。
     w.check_movement();
 
-    // 阶段 7：energyAvailable 重算（processor.js:326——spawn/extension 非 off 的存量）
+    // 按指令处理后的存量重算可用能量，供 spawn tick 的低能量补给判断。
     let _energy_available = spawn::energy_available(&w);
 
-    // 阶段 8：逐对象 tick（官方 :342-483 的 M1 类型集；新插入对象不入本轮——
-    // 官方 lodash forEach 键快照同语义）。B3 补 tombstone/ruin（官方
-    // processor.js:379-382 的两行分派——衰减到点掉落全量 store 并移除）
+    // 此时固定 ID 列表：指令阶段创建的对象参加 tick，
+    // 逐对象 tick 中新建的对象不参加这一轮。对象按 ID 升序处理。
     let ids: Vec<ObjId> = w.room.objects.keys().copied().collect();
     for id in ids {
         match w.room.objects.get(&id) {
@@ -589,20 +518,12 @@ pub fn settle_room(
             Some(RoomObject::Controller(_)) => economy::controller_tick(&mut w, id),
             Some(RoomObject::Tombstone(_)) => economy::tombstone_tick(&mut w, id),
             Some(RoomObject::Ruin(_)) => economy::ruin_tick(&mut w, id),
-            // B4：minerals/tick.js（processor.js:356-357）与 extractors/tick.js
-            //（processor.js:380-381）的 phase 8 分派
             Some(RoomObject::Mineral(_)) => economy::mineral_tick(&mut w, id),
             Some(RoomObject::Extractor(_)) => economy::extractor_tick(&mut w, id),
-            // M2B 扩面 P4：结构衰减三件（官方 processor.js:365 rampart/
-            // :369 road/:389 container 的 phase 8 分派；rampart 与 container
-            // 走 Generic 透传桶）+ link 冷却计数器递减（:378 links/tick.js）。
-            // 官方按 `object.type == '<t>'` 分派——我方 Generic 的 `type` 恒
-            // "structure"，结构类型在 `structureType` 键（投影约定），故按后者取。
             Some(RoomObject::Road(_)) => economy::road_decay_tick(&mut w, id),
             Some(RoomObject::Generic(g)) => match generic_structure_type(&g.data).as_deref() {
                 Some("container" | "rampart") => economy::generic_decay_tick(&mut w, id),
                 Some("link") => economy::link_cooldown_tick(&mut w, id),
-                // terminal/tick.js（2B 批 P1）：storeCapacity 按 RCL 归一
                 Some("terminal") => economy::terminal_capacity_tick(&mut w, id),
                 _ => {}
             },
@@ -610,17 +531,13 @@ pub fn settle_room(
         }
     }
 
-    // 官方 saveRoomEventLog（processor.js:497 → driver/lib/index.js:583-585 的
-    // hset 整体覆写）：本 tick 事件数组随房持久化（快照 events 缓冲——玩家
-    // 下一 tick 的 room.getEventLog 读到本 tick 全量）
+    // 整体替换本轮事件，下一轮玩家执行时由 room.getEventLog 读取。
     w.room.events = w.events.iter().map(Value::to_string).collect();
 
     Ok(w.events)
 }
 
-/// Generic 透传桶的 `structureType`（phase 8 分派用；缺键/畸形 JSON → None）。
-/// 官方 DB 的结构 `type` 即结构类型，我方 Generic 的 `type` 恒 "structure"、
-/// 真实类型在 `structureType` 键（与 world_json 投影、place/建造两入口同约定）。
+/// 读取 Generic 的结构类型；缺失、类型错误或 JSON 无效时返回 None。
 fn generic_structure_type(data: &str) -> Option<String> {
     serde_json::from_str::<Value>(data)
         .ok()?
@@ -629,26 +546,25 @@ fn generic_structure_type(data: &str) -> Option<String> {
         .map(str::to_string)
 }
 
-/// 引擎：世界 + 玩家状态 + 每玩家沙箱，按固定序推进 tick。
+/// 按固定顺序结算世界、玩家和市场的内存状态。
+///
+/// 房间、玩家和市场先在副本中处理，所有返回 Result 的检查通过后才发布。
+/// 这是同步内存提交，不保证 panic、进程崩溃或磁盘写入时的原子性。
+/// 沙箱执行和内部状态不在结算副本内；失败重试的输入缓存由调用方负责。
 pub struct Engine {
     pub world: kk_world::World,
     pub players: BTreeMap<String, PlayerState>,
     pub sandboxes: BTreeMap<String, Box<dyn crate::sandbox::Sandbox>>,
-    /// 市场域态（2B 批 P0）：订单簿 + 交易流水——官方 market.orders/
-    /// transactions 两 DB 集合的引擎态等价物（跨房世界级但非 kk-world
-    /// 世界态，快照契约不动）。
+    /// 跨房间订单簿和交易记录，不在 kk-world 的二进制房间快照中。
     pub market: market::MarketState,
     next_id: u64,
-    /// 最近一次 tick 的房间事件日志（按房间结算序拼接；M1 测试消费，M2 持久化）。
+    /// 最近成功 tick 的事件，按房间结算顺序拼接；失败不覆盖。
     pub last_events: Vec<serde_json::Value>,
-    /// 测试钩子：命中名房的结算注入 Err，验证两阶段回退（双房批起对
-    /// embed 集成测试开放——经 set_fail_room_for_test；生产不得触碰）。
+    /// 持续生效的房间故障注入，由调用方显式解除。
     fail_room: Option<String>,
-    /// 运行状态机（A1 批）：Ready/Committed=净态；NeedsRecovery=段失败后
-    /// 待重试/放弃（世界保持上一 tick，期间拒绝外部变异后的推进）。
+    /// 失败后记录恢复状态；世界版本检查不能检测玩家或市场的直接修改。
     run_state: stages::RunState,
-    /// 测试钩子（A1）：指定段的**入口**注入 Err（持续语义，同 fail_room——
-    /// 调用方管理清零；embed 级一次性包装 fail_next_settle_stage_for_test）。
+    /// 持续生效的阶段入口故障注入。
     fail_stage: Option<TickStage>,
 }
 
@@ -674,30 +590,27 @@ impl Engine {
         }
     }
 
-    /// 测试面（双房批，#[doc(hidden)]）：注入/解除指定房的结算失败——
-    /// 持续语义（命中即 Err，直至清 None），调用方管理清零。embed 级
-    /// 一次性语义由 EmbedEngine::fail_next_settle_room_for_test 包装。
+    /// 结算指定房间前返回错误，传 None 解除。
+    /// 公开方法只隐藏文档，发布版本仍可调用；并非一次性故障。
     #[doc(hidden)]
     pub fn set_fail_room_for_test(&mut self, room: Option<String>) {
         self.fail_room = room;
     }
 
-    /// 当前运行状态（A1 批状态机观测面）。
+    /// 读取当前结算状态。
     pub fn run_state(&self) -> &RunState {
         &self.run_state
     }
 
-    /// 测试钩子（A1）：指定段入口注入 Err（持续语义——命中即 Err 直至清
-    /// None；embed 一次性语义由 EmbedEngine::fail_next_settle_stage_for_test
-    /// 包装）。注入在段入口生效：该段尚未变异任何权威状态。
+    /// 进入指定阶段前返回错误，传 None 解除。
+    /// 公开方法只隐藏文档，发布版本仍可调用。
     #[doc(hidden)]
     pub fn set_fail_stage_for_test(&mut self, stage: Option<TickStage>) {
         self.fail_stage = stage;
     }
 
-    /// 显式放弃恢复（embed 的 discard_pending_round 同步面）：仅当处于
-    /// NeedsRecovery 且世界仍保持失败轮原样时回到 Ready——以当前已提交
-    /// 状态为新基线。
+    /// 将 NeedsRecovery 改回 Ready，放弃恢复。
+    /// 仅允许世界时间和版本未变；不删除调用方保存的运行结果。
     pub fn abandon_recovery(&mut self) -> Result<(), String> {
         match &self.run_state {
             RunState::NeedsRecovery {
@@ -717,12 +630,11 @@ impl Engine {
         }
     }
 
-    /// 推进一个 tick：收集 intents（玩家名序）→ 逐房间（名字序）结算。
+    /// 调用注册沙箱收集指令，再推进一个 tick。
     ///
-    /// 两阶段提交（§6.5）：全部房间先在克隆副本上结算，任一房间 Err 即整体
-    /// 放弃——世界、玩家（gcl）、id 分配器、time 全部保持上一 tick 状态；全部
-    /// 成功才统一写回并推进 time（逐房即写会让先房在下 tick 按同一 time 重放
-    /// 结算——双倍采集）。
+    /// 只收集 Executed 且属于注册玩家的指令，其余结果被忽略。
+    /// 不提交 Memory、segments 或 CPU 候选；完整执行流程由 kk-runtime 协调。
+    /// 重试本方法会再次调用沙箱，不复用上次执行结果。
     pub fn tick(&mut self) -> Result<(), SettleError> {
         let mut batch = IntentBatch::default();
         {
@@ -730,20 +642,15 @@ impl Engine {
             for (player, sandbox) in &mut self.sandboxes {
                 let mut result =
                     sandbox.run(&view, &crate::sandbox::RunSpec::new(player.clone(), ""));
-                // 结局门（B0-4 评审清偿）：只有正常执行的 intents 进结算批——
-                // Terminated（硬中断/停跑丢弃 intents 的真路径语义在消费侧
-                // 兜底）、InfraFailure（基础设施故障不静默当作空意图正常轮）。
+                // 此简化入口忽略所有非 Executed 结果，包括基础设施故障。
                 if !matches!(result.outcome, crate::sandbox::RunOutcome::Executed) {
                     continue;
                 }
-                // 身份边界：intent 只归本沙箱注册的玩家（结算按玩家键判所有权，
-                // 冒名键直接丢弃——真沙箱接入后这是防跨玩家操作的硬不变量）
+                // 只取注册玩家的键，防止沙箱伪造其他玩家的指令。
                 if let Some(intents) = result.intents.users.get_mut(player) {
                     let entry = batch.users.entry(player.clone()).or_default();
                     entry.objects.extend(std::mem::take(&mut intents.objects));
                     entry.room.extend(std::mem::take(&mut intents.room));
-                    // 全局通道（notify）同取（评审 3 P2-2：两处合一点只更其一
-                    //——extend_from 已对齐，此处漏则假沙箱路径 notify 静默丢）
                     entry.notify.extend(std::mem::take(&mut intents.notify));
                     entry.market.extend(std::mem::take(&mut intents.market));
                 }
@@ -752,33 +659,25 @@ impl Engine {
         self.tick_with_intents(batch)
     }
 
-    /// 以外部构造的 intent 批推进一个 tick——**embed 真沙箱通道的结算入口**
-    /// （M2A-A2：batch 由 [`crate::intent::IntentBatch::from_json`] 从沙箱
-    /// intentsList 清洗而来；假沙箱 [`Engine::tick`] 与本入口共用同一条
-    /// settle_room 链——tick 契约场景 1 的"同一结算入口"）。身份边界由调用方
-    /// 保证（EmbedEngine 按注册 handle 逐玩家构造，冒名面结构上不存在）。
-    ///
-    /// 首跑默认路径：墙钟输入取 [`TickInput::now`] 实际值（落盘后即本轮记录值）；
-    /// 重放/一致性测试走 [`Engine::tick_with_intents_with_input`] 注入记录值。
+    /// 结算调用方提供的指令，并读取当前墙钟。
+    /// 调用方负责清洗与身份绑定；此处不执行沙箱或提交玩家 Memory。
+    /// 重试需固定墙钟时使用 tick_with_intents_with_input。
     pub fn tick_with_intents(&mut self, batch: IntentBatch) -> Result<(), SettleError> {
         self.tick_with_intents_with_input(batch, TickInput::now())
     }
 
-    /// [`Engine::tick_with_intents`] 的重放形态：非确定性输入（墙钟）由调用方
-    /// 显式注入——同初始世界 + 同 intents + 同 `TickInput` 的两次结算产物
-    /// 逐字节一致（ADR-013 决策 5 的验收面）。
+    /// 使用指定指令和外部时间推进一个 tick。
     ///
-    /// A1 批起为分段驱动（stages.rs）：prepare → settle → market → validate
-    /// → publish，段入口可注入故障；失败落 [`RunState::NeedsRecovery`] 并
-    /// 保持全部权威状态（世界/玩家/市场——市场为 A2 真候选）在上一 tick。
+    /// 返回 Err 时世界、玩家、市场、ID 游标和 last_events 保持提交前状态，
+    /// 并记录 NeedsRecovery。重试须重新提供相同 batch 和 TickInput，且不可
+    /// 直接修改玩家或市场；引擎只检查世界时间和版本是否改变。
+    /// 不捕获 panic，发布中的 panic 不享有上述回滚保证。
     pub fn tick_with_intents_with_input(
         &mut self,
         batch: IntentBatch,
         input: TickInput,
     ) -> Result<(), SettleError> {
-        // 状态机门（A1）：NeedsRecovery 只放行「世界保持失败轮原样」的重试
-        //（同候选重结算）；期间任何外部变异（房间/地形/对象增删均 bump 代际）
-        // 都会使旧候选重结算到已变世界——先显式恢复或放弃，否则拒绝推进
+        // 失败后仅在世界时间和版本未变时放行；输入是否相同由调用方保证。
         match &self.run_state {
             RunState::Ready | RunState::Committed { .. } => {}
             RunState::NeedsRecovery {
@@ -792,8 +691,7 @@ impl Engine {
                     )));
                 }
             }
-            // 同步引擎内单调用瞬态——跨调用见到即状态机接线 bug（panic 中断
-            // 的半成品轮：世界可能已部分推进，拒绝继续是唯一安全选择）
+            // 同步调用结束后若残留这些状态，可能由 panic 中断导致；拒绝继续。
             RunState::Running { .. } | RunState::Prepared { .. } => {
                 return Err(SettleError(
                     "状态机接线错误：Running/Prepared 不得跨调用存在".into(),
@@ -813,9 +711,7 @@ impl Engine {
                 Ok(())
             }
             Err(e) => {
-                // A2 起市场为真候选：失败轮的市场写入只存在于被丢弃的候选，
-                // 无需恢复（A1 快照桥已撤销）——世界/玩家/市场全部保持上一
-                // tick 由候选纪律结构性保证
+                // 丢弃候选并记录失败阶段，不缓存指令或墙钟。
                 self.run_state = RunState::NeedsRecovery {
                     tick: self.world.time(),
                     generation: self.world.generation(),
@@ -827,10 +723,7 @@ impl Engine {
         }
     }
 
-    /// 分段主体（A1/A2）：prepare → settle → market → validate → publish。
-    /// 失败返回时由调用方（状态机驱动）落账 NeedsRecovery——本函数自身
-    /// 不写 run_state（Prepared 观察点除外）；各段产物均为候选，publish
-    /// 前不写任何权威状态。
+    /// 按准备、房间、市场、校验、发布的顺序处理候选。
     fn staged_body(
         &mut self,
         cursor: &mut stages::StageCursor,
@@ -842,11 +735,7 @@ impl Engine {
         cursor.enter(TickStage::Settle)?;
         let mut settled = self.settle_rooms_stage(&mut cand, input)?;
         cursor.enter(TickStage::Market)?;
-        // 市场真候选（A2）：settle_market 不可失败（官方 global 无 throw 路径
-        // 的镜像语义），写入**候选市场态**——self.market 在 publish 前结构上
-        // 不可变，失败轮不存在需要恢复的市场写入（A1 快照桥随之撤销）。
-        // 成本注记：每 tick 一次 MarketState 克隆（订单簿 + ≤上限流水）作为
-        // 候选本体；当前订单簿规模下可忽略（bot/套件负载无订单）
+        // 市场读取本轮房间候选并修改市场副本，后续阶段失败时一并丢弃。
         let mut market_cand = self.market.clone();
         market::settle_market(
             &mut settled.rooms,
@@ -858,28 +747,22 @@ impl Engine {
         );
         cursor.enter(TickStage::Validate)?;
         self.validate_stage(&cand, &settled)?;
-        // 候选完成且通过校验——publish 前的持久观察点
         self.run_state = RunState::Prepared { tick: cand.time };
         cursor.enter(TickStage::Publish)?;
         self.publish_tick(cand, settled, market_cand);
         Ok(())
     }
 
-    /// prepare 段：输入规整与候选域构建（不产生任何权威状态变异）。
+    /// 构造玩家副本和 ID 起点，并复核安全模式指令。
     fn prepare_tick(&mut self, batch: IntentBatch) -> Result<stages::TickCandidates, SettleError> {
         let next = self
             .next_id
             .max(self.world.next_available_obj_id().map_err(SettleError)?);
         let players = self.players.clone();
         let mut batch = batch;
-        // 门④可信侧兜底（官方 API 层 structures.js:223-225 的等价物——"玩家
-        // 名下任一 controller safeMode 生效中 → 新 activateSafeMode 全拒"）。
-        // 官方 game 层跑在 isolated-vm 可信 realm，处理器无需复核；我方
-        // prelude 与玩家共享 realm，原型迭代器污染可令门④扫描失明（A4-iii
-        // 评审 2 必修）——结算侧唯一无兜底的门，在此按世界真值补齐：玩家
-        // 已有生效中的 safeMode → 该玩家全部 ActivateSafeMode intent 丢弃
-        //（官方 BUSY 拒 = intent 不记；检查时点同官方 API 调用时读上一 tick
-        // 结束态，本 tick 新激活的时钟此刻尚未落库，跨房多开被结构性封死）
+        // 按已提交世界复核：玩家已有生效的安全模式时，丢弃其新的激活指令。
+        // 不依赖 JavaScript 的扫描结果，也不计入本轮尚未生效的激活。
+        // 来源：上游 engine/src/game/structures.js 的 StructureController.activateSafeMode。
         let time = self.world.time();
         let mut safemode_holders: Vec<String> = self
             .world
@@ -912,8 +795,7 @@ impl Engine {
         })
     }
 
-    /// settle 段：逐房两阶段候选结算（clone → settle_room → 收集；全部
-    /// 成功前不写回——§6.5）。
+    /// 按房名结算副本，共用候选玩家与 ID 游标；任一房间失败均不写回。
     fn settle_rooms_stage(
         &mut self,
         cand: &mut stages::TickCandidates,
@@ -942,16 +824,13 @@ impl Engine {
         Ok(stages::SettledRooms { rooms, events })
     }
 
-    /// validate 段（A1）：候选结构 tripwire——违例形态只可能来自引擎 bug
-    ///（正常路径结构上不可能触达），失败等同段故障进入 NeedsRecovery。
-    /// 读写纪律：只读（世界与候选均不变异）。
+    /// 只读检查候选房间覆盖、ID 游标和玩家键，失败进入 NeedsRecovery。
     fn validate_stage(
         &self,
         cand: &stages::TickCandidates,
         settled: &stages::SettledRooms,
     ) -> Result<(), SettleError> {
-        // ① 房间候选覆盖：settle 段按名序逐房 push——名字序列与候选房间集
-        // 必须逐位一致（缺房/错序 = settle 段装配 bug）
+        // 房间数和顺序均须与准备阶段一致，集合相等不能验证顺序。
         if settled.rooms.len() != cand.room_names.len()
             || settled
                 .rooms
@@ -965,8 +844,7 @@ impl Engine {
                 settled.rooms.len()
             )));
         }
-        // ② id 分配单调：候选 next 不得低于入口基线（引擎侧与世界侧取大；
-        // 世界在候选构建期间不变异，重算即入口值）
+        // 游标不得低于入口的 ID 起点，避免后续创建对象复用旧 ID。
         let base = self
             .next_id
             .max(self.world.next_available_obj_id().map_err(SettleError)?);
@@ -976,34 +854,27 @@ impl Engine {
                 cand.next
             )));
         }
-        // ③ 玩家候选键不减：结算只会新增（notify 落账的 or_default），不得丢键
+        // 候选可以增加玩家，不能删除已提交的玩家。
         if let Some(missing) = self.players.keys().find(|k| !cand.players.contains_key(*k)) {
             return Err(SettleError(format!("玩家候选丢键：{missing}")));
         }
         Ok(())
     }
 
-    /// publish 段：一次发布（不可失败——各步均为内存写回，失败只可能来自
-    /// 注入钩子且钩子在段入口先行）。
+    /// 将已校验候选写回内存；不返回 Result，也不捕获 panic。
+    /// World::commit_room 不递增版本。全部房间写回后须先推进时间，再允许
+    /// 查询世界，使目录和投影缓存一起失效。
     fn publish_tick(
         &mut self,
         mut cand: stages::TickCandidates,
         mut settled: stages::SettledRooms,
         market_cand: market::MarketState,
     ) {
-        // 市场全局阶段（2B 批 P1 → A2 真候选）：官方 main.js:63-65 的 global
-        // 阶段在房间结算全部完成后运行（processor/global.js:48-49）——settle
-        // 在 staged_body 的 Market 段对候选先行（读到的都是本 tick 结算后
-        // 状态，官方 commit1 后读 db 的因果序等价），此处随 publish 一次
-        // 生效（settle_market 不可失败——官方 global 无 throw 路径镜像，
-        // 逐 intent 静默跳过同构）
         self.market = market_cand;
         for (name, room) in settled.rooms.drain(..) {
             self.world.commit_room(name, room);
         }
-        // Game.notify 落库（M2B 扩面 P3，全局通道）：与房结算正交——房循环
-        // 外每玩家恰一次；官方 groupInterval 是发送端聚合提示（送达面不在
-        // 引擎），原样保留
+        // 通知在房间循环外每玩家处理一次；groupInterval 仅保存，不用于聚合或发送。
         for (player, intents) in &cand.batch.users {
             if intents.notify.is_empty() {
                 continue;
@@ -1021,11 +892,7 @@ impl Engine {
                 state.notifications.drain(0..len - NOTIFY_RECORD_CAP);
             }
         }
-        // user.rooms 重建（官方不动点，见 PlayerState 文档）：claimController
-        // 的 addRoomToUser（claimController.js:55）与每 tick 已占房重加
-        // （controllers/tick.js:18）经 bulk addToSet 在 tick 末落盘——等价于
-        // 结算完成后按世界真值（各房 controller.owner）重建集合；unclaim/降级
-        // 到 0 的 removeRoomFromUser（unclaim.js:15 / tick.js:53）同被覆盖。
+        // 重建 rooms，使占领、放弃和控制器降级后的房间集合在下一轮生效。
         for state in cand.players.values_mut() {
             state.rooms.clear();
         }
@@ -1108,12 +975,7 @@ mod tests {
         );
     }
 
-    /// 两阶段回退（§6.5）：后房 Err 时先房的结算不得写回——time/能量/重生钟
-    /// 全部保持上一 tick；故障解除后的首个成功 tick 才统一推进（否则先房会在
-    /// 同一 time 上被重放结算——双倍采集）。
-    /// M2B 前置批 P2：一次成功 tick ⇒ 世界内容代际恰 +1（提交尾 rooms 直写
-    /// 经 advance_ticks 收束——P3/P5 投影缓存正确性依赖的不变量）；失败
-    /// tick ⇒ +0（世界未变，两阶段回退）。
+    /// 成功 tick 的全部房间写回只使世界版本递增一次；失败不递增。
     #[test]
     fn engine_tick_bumps_generation_exactly_once() {
         let mut world = kk_world::World::new(1);
@@ -1128,6 +990,7 @@ mod tests {
         assert_eq!(engine.world.generation(), before, "失败 tick 不 bump");
     }
 
+    // 后一个房间失败时，前一个房间的资源和再生时钟也不能写回。
     #[test]
     fn engine_tick_rolls_back_all_rooms_on_failure() {
         let mut world = kk_world::World::new(1);
@@ -1174,8 +1037,7 @@ mod tests {
         }
     }
 
-    /// A1 状态机：Ready → Running →（段）→ Prepared → Committed 的净态观察
-    /// + NeedsRecovery 的重试/放弃两条出路 + 外部变异门。
+    /// 成功后可继续推进；失败后可重试或放弃，世界已修改时两者均被拒绝。
     #[test]
     fn stage_machine_transitions_recovery_and_mutation_gate() {
         let mut world = kk_world::World::new(1);
@@ -1215,7 +1077,7 @@ mod tests {
         assert_eq!(engine.run_state(), &RunState::Ready);
         engine.tick_with_intents(IntentBatch::default()).unwrap();
         assert_eq!(engine.world.time(), 3);
-        // 外部变异门：NeedsRecovery 后世界被变异 ⇒ 重试与放弃都被拒
+        // 失败后修改世界，使版本检查拒绝重试和放弃恢复。
         engine.set_fail_stage_for_test(Some(TickStage::Publish));
         assert!(engine.tick_with_intents(IntentBatch::default()).is_err());
         engine.set_fail_stage_for_test(None);
@@ -1235,11 +1097,8 @@ mod tests {
         assert!(engine.abandon_recovery().is_err(), "变异后放弃恢复同样被拒");
     }
 
-    /// A1/A2 判据：任一段入口注入失败 ⇒ 世界/玩家/市场全部保持上一 tick。
-    /// 市场域判别力自证：同 fixture 无注入的成功轮确实消费订单（过期退款
-    /// 变异订单簿与 money，MARKET-ORDER-009 尾段），注入轮的不变断言才有
-    /// 杀伤力；Validate/Publish 注入发生在 settle_market **之后**，市场域
-    /// 不变由 A2 真候选纪律结构性兑现（self.market 在 publish 前不可变）。
+    /// 逐个阶段注入错误，检查世界、玩家资金和市场仍是提交前状态。
+    /// 成功对照会使订单过期并退款，因此后两个阶段的失败能检验市场副本隔离。
     #[test]
     fn stage_injection_keeps_world_and_market_at_previous_tick() {
         let make = || {
@@ -1260,13 +1119,12 @@ mod tests {
                 total_amount: 100,
                 room_name: Some("W1N1".to_string()),
                 created: 0,
-                // createdTimestamp+30d 过期：真实墙钟（TickInput::now）下
-                // 上古时间戳必过期——退款变异 players.money + 订单簿
+                // 时间戳为 0，在当前墙钟下已超过 30 天，会触发移除和退款。
                 created_timestamp: 0,
             });
             engine
         };
-        // 判别力自证：无注入成功轮——订单被过期退款消费、money 入账
+        // 先确认无故障时会移除订单并退款，避免对未执行的规则只断言状态不变。
         let mut probe = make();
         probe.tick_with_intents(IntentBatch::default()).unwrap();
         assert!(
@@ -1311,9 +1169,7 @@ mod tests {
                     RunState::NeedsRecovery { stage: s, .. } if *s == stage),
                 "{stage:?}: NeedsRecovery 记录失败段"
             );
-            // 世界未变异 ⇒ 重试放行；注入解除后同候选重试成功 → Committed；
-            // 闭环：回退后重试恰一次消费订单（无双退款/双移除——候选丢弃 +
-            // TickInput 钉死 ⇒ 重放同结果的显式断言）
+            // 解除注入后重新结算：订单移除且退款生效。此入口会重新读取墙钟。
             engine.set_fail_stage_for_test(None);
             engine.tick_with_intents(IntentBatch::default()).unwrap();
             assert!(
@@ -1331,13 +1187,9 @@ mod tests {
         }
     }
 
-    /// A2 判据③强化（评审 R3 P1①/R2-6 清偿）：含 createOrder intent 的失败轮
-    /// ——①失败后 `self.market` 与失败前**整态**相等（PartialEq 覆盖私有计数器
-    /// next_order_seq/next_transaction_id：自定义 Clone 漏拷计数器/引擎侧直改
-    /// 只动计数器的形态由整态比较拦截，抽样断言拦不住）；②重试恰一次建单、
-    /// 订单 id 与首次尝试一致（"mkt1"——失败轮未消耗序号）、扣费恰一次
-    ///（重试不双扣）。夹具走 intershard 资源（token——免 terminal 归属门，
-    /// market.rs 官方 :119-121 镜像），费门仅需玩家 money。
+    /// 市场建单后注入失败，完整市场状态（含私有计数器）与资金均保持不变。
+    /// 重试只建一张 mkt1 并扣一次费；下一轮建单使用 mkt2。
+    /// 使用 token 订单免去 terminal 条件，集中检验建单、序号和扣费的提交时点。
     #[test]
     fn market_candidacy_counter_snapshot_and_retry_id_stability() {
         let mut world = kk_world::World::new(1);
@@ -1361,7 +1213,7 @@ mod tests {
                 room_name: None,
             });
         let before = engine.market.clone();
-        // Market 段建单落候选 → Validate 注入失败：committed 整态保持
+        // 建单之后、发布之前注入失败，检查候选没有改动已提交状态。
         engine.set_fail_stage_for_test(Some(TickStage::Validate));
         assert!(engine.tick_with_intents(batch.clone()).is_err());
         assert_eq!(
@@ -1382,7 +1234,7 @@ mod tests {
             SEED - FEE,
             "重试恰一次扣费（双扣形态为 SEED−2×FEE）"
         );
-        // 计数器单调前进的活证据：第二次建单拿 mkt2（非回绕/重用）
+        // 第二次建单继续递增序号，不能重用 mkt1。
         let mut second = IntentBatch::default();
         second
             .users
@@ -1403,8 +1255,7 @@ mod tests {
         );
     }
 
-    /// validate 段 tripwire（A1）：正常路径结构上不可达——以篡改候选证明
-    /// 三道闸（房间覆盖/id 单调/玩家键不减）各自有判别力。
+    /// 分别破坏房间覆盖、顺序、ID 游标和玩家集合，验证各项候选校验会拒绝。
     #[test]
     fn validate_stage_tripwires_discriminate() {
         let mut world = kk_world::World::new(1);
@@ -1461,7 +1312,7 @@ mod tests {
             .validate_stage(&mk_cand(engine.next_id), &settled_short)
             .unwrap_err();
         assert!(err.to_string().contains("覆盖"), "{err}");
-        // ①b 错序（zip 逐位比较——若被改成集合比较，此臂红）
+        // 调换房间顺序也应拒绝；只比较集合会漏掉这个错误。
         let settled_swapped = stages::SettledRooms {
             rooms: vec![
                 (

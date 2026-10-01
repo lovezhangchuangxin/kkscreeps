@@ -1,10 +1,4 @@
-//! M2B 扩面 P3：Game.notify 全局 intent 通道（引擎面）。
-//! 官方对照：runtime.js:78-86（intents.push 全局通道——list 顶层按动作名
-//! 键的数组，非对象 id 路由）、common/lib/system.js:17（清洗 schema
-//! `notify: {message: 'userText', groupInterval: 'number'}`）、
-//! utils.js storeIntents :411-414（notify 分支）。
-//! 落账面 = PlayerState.notifications（官方 users.notifications 集合——
-//! 邮件通知，游戏内不可观测）；房循环外每玩家恰一次（tick_with_intents）。
+//! 测试通知指令清洗，以及 PlayerState 内存通知列表的跨 tick 保留和容量限制。
 
 use super::*;
 use serde_json::json;
@@ -45,8 +39,7 @@ fn notify_intent_from_json_parses_and_sanitizes() {
                 message: String::new(),
                 group_interval: None
             },
-            // 数组消息 join(",")——元素普通 ToString（0/false 照常字符串化、
-            // null 空槽→空串；清偿复审阻断项锁定）
+            // 数组消息以逗号连接，0/false 转为字符串，null 对应空串。
             NotifyIntent {
                 message: "1,2".into(),
                 group_interval: None

@@ -1,8 +1,6 @@
-//! 2B 批 P1：terminal send 全链（房间相 stow → 全局阶段 executeTransfer）。
+//! 通过 Engine 验证跨房发送、市场订单和成交。
 //!
-//! 走 `Engine::tick_with_intents` 全路径（含 settle_market 挂点——与
-//! Fixture::settle 的单房直调不同，这里测的是官方 main.js「房间结算→
-//! global 阶段」的完整同 tick 链）。
+//! 测试包含房间动作结算与随后的全局市场处理，统一使用固定墙钟。
 
 use kk_engine::intent::{Action, IntentBatch, IntentData};
 use kk_engine::{Engine, MarketState};
@@ -14,9 +12,7 @@ fn terrain_plain() -> kk_core::Terrain {
     kk_core::Terrain::plains()
 }
 
-/// 测试工作台墙钟（评审 3 F-G：created_timestamp 与 TickInput::now_ms 两个
-/// 关注点共用——不一致时订单被当 1970/2.7 年旧物过期，缺键 panic 响亮但
-/// 共享常量消除地雷；裸 tick_with_intents 缺省真实墙钟仍是坑，plan §7 登记）
+/// 订单创建时间与 TickInput 共用固定 Unix 毫秒墙钟，避免订单意外过期。
 const BENCH_NOW_MS: u64 = 1_700_000_000_000;
 
 /// 世界 + 双房各一个 terminal（owner/store 可定制；cooldown_time 缺省 0）。
@@ -65,8 +61,7 @@ impl MarketFixture {
             .unwrap()
     }
 
-    /// 房间相 stow 的等价物：直接在 terminal data 写 send 字段（API→intent→
-    /// structures.rs 执行器的上游由 embed e2e 与 013 矩阵覆盖）。
+    /// 直接保存 send 请求以单独测试全局处理；绕过 API 清洗与房间执行器。
     fn stow_send(&mut self, id: ObjId, target: &str, rt: &str, amount: i64) {
         let Some(RoomObject::Generic(g)) = self.engine.world.get_mut(id) else {
             panic!("terminal 不存在");
@@ -105,8 +100,7 @@ impl MarketFixture {
         self.engine.tick_with_intents(batch).unwrap();
     }
 
-    /// 无 intent 推进一 tick（消费已 stow 的 send——模拟「intent 在上一轮
-    /// 已 stow、本轮 global 阶段执行」的分离观察口；正常链路里两者同 tick）。
+    /// 用空批次推进 Engine，消费预先保存的 send 请求。正常调用中保存与消费在同 tick。
     fn tick(&mut self) {
         self.engine
             .tick_with_intents(IntentBatch::default())
@@ -141,8 +135,7 @@ fn place_order(
         total_amount: total,
         room_name: Some(room.into()),
         created: engine.world.time(),
-        // 测试工作台墙钟（与 Fixture::settle 同值）——0 会被过期门当 1970
-        // 首拍移除
+        // 使用固定创建墙钟，与 market_tick 的 TickInput 相同。
         created_timestamp: BENCH_NOW_MS,
     });
     id
@@ -157,8 +150,7 @@ fn market_tick(engine: &mut Engine, player: &str, intents: Vec<kk_engine::Market
         .or_default()
         .market
         .extend(intents);
-    // 固定墙钟（Fixture::settle 同值）——真实墙钟会让 1.7e12 时间戳的订单
-    // 立刻过期（差 ~1041 天）
+    // 传入固定墙钟，避免系统时间改变订单是否过期。
     engine
         .tick_with_intents_with_input(
             batch,
@@ -169,8 +161,7 @@ fn market_tick(engine: &mut Engine, player: &str, intents: Vec<kk_engine::Market
         .unwrap();
 }
 
-/// MARKET-DEAL 族回归锁：**买卖定向**（2B 批 P2 勘误——初版 SELL 侧
-/// seller/buyer 写反导致四红）+ 三重钳 + money 划转 + 交易 order 附带。
+/// Sell 订单方提供资源，deal 发起者付款；验证数量限制、资金与交易订单字段。
 #[test]
 fn deal_sell_direction_transfer_and_money() {
     let mut f = MarketFixture::new();
@@ -194,8 +185,7 @@ fn deal_sell_direction_transfer_and_money() {
             target_room_name: Some("W1N1".into()),
         }],
     );
-    // 官方 :391-396 deal 成功挂目标 terminal 冷却（评审 3 F-C：原零锁——
-    // 删 write_cooldown 全链不红）
+    // 成交成功后目标 terminal 的冷却截止 tick 为成交 tick 加 TERMINAL_COOLDOWN。
     assert_eq!(
         f.data_of(t1).pointer("/cooldownTime"),
         Some(&json!(t_deal + 10)),
@@ -225,10 +215,8 @@ fn deal_sell_direction_transfer_and_money() {
     );
 }
 
-/// changeOrderPrice 的 _skip：同 tick 改价后的 deal 跳过该订单（官方 :180）。
-/// owner=p1 名字序先于 dealer p2——p1 的改价段先跑、skip 置位后 p2 才收集
-/// deal（评审 1 F5：原夹具 dealer 无钱，绿在买方 money 钳而非 _skip；现
-/// dealer 资金充足，若 skip 失效旧价 2500×100 成交即露馅）。
+/// 同 tick 改价使订单跳过成交。让 owner p1 在 dealer p2 前处理，并给买家足额资金，
+/// 避免交易实际被资金不足拦住，掩盖改价跳过规则失效。
 #[test]
 fn change_price_skips_same_tick_deals() {
     let mut f = MarketFixture::new();
@@ -275,9 +263,8 @@ fn change_price_skips_same_tick_deals() {
     );
 }
 
-/// 费门活值读（官方 bulk.inc 立改内存对象 bulk.js:90-97——同 tick 后笔
-/// 见前笔扣费；评审 1 F1/评审 2 F1：循环头快照会让 Σfee>credits 全额扣款
-/// 把 money 打负）。money 恰够单笔 fee：首笔建单、次笔拒、money 不为负。
+/// 玩家余额只够一笔创建费，两条同 tick 创建请求应只成功一条。
+/// 每笔费用检查须读取扣除前笔费用后的余额，不能沿用循环开始时的快照。
 #[test]
 fn fee_gate_reads_live_money_same_tick() {
     let mut f = MarketFixture::new();
@@ -303,9 +290,8 @@ fn fee_gate_reads_live_money_same_tick() {
     );
 }
 
-/// 生命周期尾段只见 tick 前存量（官方 getInterRoom 快照；本 tick createOrder
-/// 的订单延迟到 bulk.execute 落库——创建 tick 恒 active=false/amount=0，
-/// 下一 tick 才进尾段同步；评审 1 F2/评审 2 F2：遍历全集会提前一拍）。
+/// 新创建订单本轮不进入生命周期同步，保持 inactive 和 amount=0。
+/// 下一 tick 才根据库存激活。来源：上游 global-intents/market.js 的订单快照。
 #[test]
 fn same_tick_created_order_not_lifecycle_synced() {
     let mut f = MarketFixture::new();
@@ -332,9 +318,7 @@ fn same_tick_created_order_not_lifecycle_synced() {
     assert_eq!(order.amount, 1000, "SELL amount=min(可用,remaining)");
 }
 
-/// 负改价拒（官方 :175 `!newPrice || newPrice <= 0`——评审 1 F3/评审 2 F2：
-/// 仅拒 ==0 会落负价反转 deal 资金流向）且不置 _skip（官方先于 skip 段
-/// return）——同 tick deal 照常按旧价成交。
+/// 负改价被拒绝，不改变价格，也不标记跳过成交，同 tick deal 仍按旧价执行。
 #[test]
 fn negative_price_change_rejected_no_skip() {
     let mut f = MarketFixture::new();
@@ -376,9 +360,8 @@ fn negative_price_change_rejected_no_skip() {
     );
 }
 
-/// 分节序（官方 createOrder→changeOrderPrice→extendOrder→cancelOrder→deal；
-/// 评审 1 F4/评审 2 F3）：同玩家「提价+取消」——官方先按原 remaining 收
-/// 提价费再取消；单趟声明序（cancel 先行）会把费算成 0 吞掉。
+/// 即使先提交取消，结算仍应先收提价费，再取消订单。
+/// 费用按原剩余量计算；先清零剩余量会漏收费。
 #[test]
 fn change_then_cancel_same_tick_charges_fee_on_original_remaining() {
     let mut f = MarketFixture::new();
@@ -451,9 +434,8 @@ fn deal_money_clamp_partial_fill() {
     let t1 = f.terminal("W1N1", "p1", json!({"energy": 100000}));
     let _t2 = f.terminal("W5N1", "p2", json!({"energy": 100000, "H": 1000}));
     let oid = place_order(&mut f.engine, "p2", "sell", "H", 2500, 1000, "W5N1");
-    // p1 只有 304000 毫 → 304000/2500=121.6——**非整除钉 floor**（评审 3 F-D：
-    // 300000/2500=120 整除下 round/ceil 同值无判别力；round/ceil 均得 122）；
-    // p2 条目（seller 收款面——get_mut 不建条目，官方 db 用户恒在）
+    // 304000/2500=121.6，向下取整应为 121，round/ceil 会得到 122。
+    // 使用非整除金额，才能验证取整方向；同时登记卖家用于资金入账。
     f.engine.players.entry("p1".into()).or_default().money = 304000;
     f.engine.players.entry("p2".into()).or_default();
     market_tick(&mut f.engine, "p1", vec![]);
@@ -510,8 +492,7 @@ fn order_expiry_refunds_and_removes() {
     assert_eq!(f.engine.players["p2"].money, before + 75000);
 }
 
-/// intershard directDeals：resources+money 直接划转（玩家面无来源不可达——
-/// 内部锁语义）。
+/// 直接向玩家资源字段注入 token，验证 intershard 的资金与资源划转。
 #[test]
 fn intershard_direct_deal_transfers_resources_and_money() {
     let mut f = MarketFixture::new();
@@ -656,8 +637,7 @@ fn send_to_room_without_user_terminal_consumes_without_transfer() {
 #[test]
 fn send_on_cooldown_consumes_without_transfer() {
     let mut f = MarketFixture::new();
-    // from 带 H 资源：使冷却门成为唯一拦截（评审 3 判别力清偿——原夹具
-    // 无 H，资源复验门会兜底拒绝，冷却门删除时测试仍绿=零判别力）
+    // 发送方持有足量 H，只让 cooldown 阻止转移，避免库存不足掩盖冷却检查失效。
     let from = f.terminal_full(
         "W1N1",
         "p1",
@@ -665,8 +645,8 @@ fn send_on_cooldown_consumes_without_transfer() {
         1_000_000,
     );
     let _to = f.terminal("W5N1", "p2", json!({"energy": 500}));
-    // 冷却中的 terminal 房间相即拒（send.js 无 cooldown 复验——API 相已拒），
-    // 此处直接 stow 模拟直注路径：global 相的冷却门仍须独立成立
+    // 直接保存 send 请求绕过 API 冷却检查，单独验证全局阶段仍检查冷却。
+    // 房间 terminal_send 执行器本身不检查 cooldownTime。
     f.stow_send(from, "W5N1", "H", 100);
     f.tick();
 
@@ -748,8 +728,7 @@ fn send_clamps_to_receiver_free_space() {
     let mut f = MarketFixture::new();
     let from = f.terminal("W1N1", "p1", json!({"energy": 100000, "H": 1000}));
     let to = f.terminal("W5N1", "p2", json!({"energy": 500, "H": 299000}));
-    // 目标空间 = 300000 − (500+299000) = 500（夹具两段冗余覆写已坍缩——
-    // 评审 3 P2：构造参数即终态）
+    // 目标空余容量为 300000-(500+299000)=500。
     f.send_intent("p1", from, "W5N1", "H", 1000);
 
     let td = f.data_of(to);
@@ -769,9 +748,8 @@ fn send_clamps_to_receiver_free_space() {
     assert_eq!(market(&f).transactions[0].amount, 500, "交易记钳后量");
 }
 
-/// 评审 2 P1-1 清偿：全局相能量门（fee=from 侧）——同 tick 并行消耗窗口的
-/// 唯一保护层（API 门读 intent 时点快照）。stow 充足资源但 energy=cost−1 →
-/// 无转移/无冷却/无交易（能量门变异在此测试下必炸）。
+/// 直接保存资源足额、energy=cost-1 的请求，验证全局阶段仍拒绝费用不足。
+/// 房间动作可能已消耗能量，所以不能只依赖提交意图时的检查。
 #[test]
 fn send_global_phase_energy_gate_rejects() {
     let mut f = MarketFixture::new();
@@ -789,8 +767,7 @@ fn send_global_phase_energy_gate_rejects() {
     assert_eq!(market(&f).transactions.len(), 0);
 }
 
-/// energy 型 send：`energy < amount + cost` 分支（评审 3 缺口——8 测试原全用
-/// H）。range=4、amount=1000：cost=125 → 恰好 energy=1125 成功 / 1124 拒。
+/// 发送 energy 时须同时持有 amount 和 cost，本例 1125 恰好成功，1124 拒绝。
 #[test]
 fn send_energy_type_amount_plus_cost_branch() {
     let mut f = MarketFixture::new();
@@ -821,7 +798,7 @@ fn send_energy_type_amount_plus_cost_branch() {
     assert_eq!(f2.data_of(from2).pointer("/cooldownTime"), Some(&json!(0)));
 }
 
-/// 官方 :91 description 的 `<`→`&lt;` 全量转义（评审 3 缺口——两侧原零断言）。
+/// 交易 description 中每个 < 都替换为 &lt;。来源：上游 global-intents/market.js。
 #[test]
 fn send_description_lt_escaping_in_transaction() {
     let mut f = MarketFixture::new();
@@ -848,9 +825,8 @@ fn send_description_lt_escaping_in_transaction() {
     );
 }
 
-/// terminal/tick.js：storeCapacity 按 RCL 归一——无 controller 保持原值；
-/// 同主 RCL 5（配额 0）归 0；**异主 controller**（p2 主控下 p1 的 terminal）
-/// 归 0（评审 2 P2-3 清偿：owner 等值门原零判别——docstring 与夹具不符勘正）。
+/// Terminal 无控制器时保留容量；同主 RCL 5 无配额或异主时容量归 0，
+/// 同主 RCL 8 时容量恢复为 300000。
 #[test]
 fn terminal_store_capacity_normalizes_by_rcl() {
     let mut f = MarketFixture::new();

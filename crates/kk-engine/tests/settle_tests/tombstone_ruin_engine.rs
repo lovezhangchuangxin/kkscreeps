@@ -1,10 +1,6 @@
-//! B1 结构治理批自 settle_tests.rs 连续切块（不重排；原段落横幅注释随块
-//! 保留；Fixture/helpers 经 `use super::*` 从 crate 根取用——142 个
-//! #[test] 计数与原文序不变）。
+//! 测试死亡资源回收、墓碑和废墟衰减，以及移动冲突与出生阻挡。
 
 use super::*;
-
-// ---- B3：墓碑/废墟/死亡事件族 ----
 
 /// 墓碑 store 逐资源锁值（_die.js:43-53 的 bodyResources 精确数值）：
 /// boosted 件产出 boost 矿物（LAB_BOOST_MINERAL × lifeRate）+ 能量
@@ -244,10 +240,7 @@ fn ruin_decay_dumps_store_and_removes() {
     );
 }
 
-/// B3 评审 2/3 P1 曾锁"命名矿物堆拒拾"（双槽 schema 期）；B4 多资源槽清偿：
-/// pickup.js:26-30 按堆 resourceType 入开放 store 对应键——XUHO2 堆拾入
-/// 命名槽（store_extra），不再洗白进 energy；power 堆维持拒绝（power 无
-/// 建模槽位，随 power 批放开——B3 登记口径不变）。
+/// 矿物堆拾取到命名资源槽，不混入 energy；当前拾取执行器仍拒绝 power 堆。
 #[test]
 fn pickup_mineral_pile_into_named_slot_and_power_still_rejected() {
     let mut f = Fixture::new(1, terrain_with(&[]));
@@ -315,9 +308,8 @@ fn pickup_mineral_pile_into_named_slot_and_power_still_rejected() {
     }
 }
 
-/// B3 评审 3-2 锁值：container 余量的**跨资源竞争序**（官方 bodyResources 键
-/// 序 = energy 先、矿物按 body 首现序——_die.js:38-76 两段循环间容量是活的）。
-/// headroom=10 只够吃部分 energy：energy 先入 container、矿物全进墓碑。
+/// 容器只剩 10 容量，身体回收的 energy 先存入，矿物因容器已满进入墓碑。
+/// 验证跨资源共享容量和更新顺序。来源：上游 creeps/_die.js 的 bodyResources 循环。
 #[test]
 fn tombstone_container_cross_resource_competition() {
     let mut f = Fixture::new(1, terrain_with(&[]));
@@ -420,9 +412,7 @@ fn tombstone_container_cross_resource_competition() {
     }
 }
 
-/// B3 评审 3-3 锁值：引擎产废墟对混合 store（Generic 开放资源面）的承接全链
-/// ——container(energy+XUHO2) 击毁 → ruin.store 承接（含 store_extra）→
-/// 衰减落地两堆。
+/// 击毁含 energy 和 XUHO2 的容器，资源先进入废墟，再在衰减时形成两种掉落堆。
 #[test]
 fn ruin_inherits_mixed_store_and_dumps_on_decay() {
     let mut f = Fixture::new(1, terrain_with(&[]));
@@ -500,9 +490,8 @@ fn ruin_inherits_mixed_store_and_dumps_on_decay() {
     );
 }
 
-/// B3 评审 3-4 锁值：CLAIM 部件的寿命分母（CREEP_CLAIM_LIFE_TIME=600——
-/// _.any 不看 hits）。ttl=600 自杀 → lifeRate=0.2×600/600=0.2：回收
-/// min(125,50×0.2)+min(125,600×0.2)=10+120=130（错分母 1500 会得 4+48=52）。
+/// 任何 CLAIM 件都使回收寿命分母为 600，包括损毁件。
+/// 本例回收 (50+600)*0.2=130，误用分母 1500 则得到 52。
 #[test]
 fn claim_body_life_time_denominator() {
     let mut f = Fixture::new(1, terrain_with(&[]));
@@ -561,8 +550,7 @@ fn claim_body_life_time_denominator() {
     assert_eq!(tomb, 130, "CLAIM 分母 600：(50+600)×0.2");
 }
 
-/// B3 评审 3-6 边界：!decayTime（放置面 0）立即到点——官方
-/// tombstones/ruins/tick.js:9 `!object.decayTime || ...` 的 falsy 分支。
+/// 衰减截止 tick 为 0 时立即触发。来源：上游 tombstones/tick.js。
 #[test]
 fn tombstone_zero_decay_time_dumps_immediately() {
     let mut f = Fixture::new(1, terrain_with(&[]));
@@ -606,9 +594,8 @@ fn tombstone_zero_decay_time_dumps_immediately() {
     assert_eq!(energy, 12);
 }
 
-/// structure.destroy() 的 room intent（destroy-structure.js：可建类型 +
-/// controller 归本人 + 房内无敌方 creep）；事件为套件口径（OSS 无 push——
-/// ROOM-EVENTLOG-027 期望有，登记报告）。
+/// 房主可在没有敌方 creep 的房间销毁可建造结构；库存进入废墟，不生成事件。
+/// 来源：上游 room/destroy-structure.js。ROOM-EVENTLOG-027 的套件预期与此上游行为不同。
 #[test]
 fn destroy_structure_intent_paths() {
     let mut f = Fixture::new(1, terrain_with(&[]));
@@ -637,8 +624,7 @@ fn destroy_structure_intent_paths() {
         .expect("destroy 产废墟");
     assert_eq!(ruin.structure_type, "extension");
     assert_eq!(ruin.store.energy, 80, "store 承接");
-    // 官方 destroy-structure.js 无事件（GPT 复审 P1-4 清偿——套件 parity.json
-    // 自认 vanilla 不产、expected 是文档推断；事件只在 _damage/_die 路径）
+    // 主动 destroy 不生成事件；攻击击毁与 creep 死亡事件由各自入口生成。
     assert_eq!(events.len(), 0, "destroy 不产事件（对齐官方）");
 
     // 门 1：房内有敌方 creep → 拒（destroy-structure.js:18）
@@ -716,12 +702,10 @@ fn room_events_buffer_overwritten_per_tick() {
     );
 }
 
-// ---- 完整闭环（同 tick 采+升） ----
-
 #[test]
 fn engine_closed_loop_harvest_and_upgrade() {
-    // source 与 controller 相邻放置：worker 每 tick 同时采 4、升 4
-    // （upgradeController 不在 harvest 的压制表——官方同 tick 双动作）
+    // 本例两 WORK 每 tick 采集 4、升级 2，净持有增加 2。
+    // 两动作不互斥，验证连续结算后的进度、能量和 GCL。
     let mut f = Fixture::new(9, terrain_with(&[]));
     let ctl = f.controller(1, Some("p1"));
     f.source(6, 6, 3000);
@@ -771,11 +755,9 @@ fn engine_closed_loop_harvest_and_upgrade() {
     assert_eq!(f.players["p1"].gcl, 20);
 }
 
-// ---- 评审回归测试（每条 high 修复一条锁） ----
-
 #[test]
 fn stationary_creep_blocks_movement() {
-    // H1：非获准移动的 creep 是障碍（对穿的另一半）
+    // 未获准移动的 creep 占据原格，阻止其他 creep 移入。
     let mut f = Fixture::new(1, terrain_with(&[]));
     let _still = f.creep("still", "p1", 11, 10, &[BodyKind::Move], 0);
     let mover = f.creep("mover", "p1", 10, 10, &[BodyKind::Move], 0);
@@ -785,7 +767,7 @@ fn stationary_creep_blocks_movement() {
 
 #[test]
 fn swap_with_third_contender_rates() {
-    // H2：对穿者受压优先（rate1=100）——A↔B 对穿时，抢 A 目标格的 C 应被 A 压制
+    // A 与 B 对穿时，A 的目标格还有竞争者 C，A 的 rate1=100，优先于 C。
     let mut f = Fixture::new(1, terrain_with(&[]));
     let a = f.creep("a", "p1", 10, 10, &[BodyKind::Move], 0);
     let b = f.creep("b", "p1", 11, 10, &[BodyKind::Move], 0);
@@ -806,7 +788,7 @@ fn swap_with_third_contender_rates() {
 
 #[test]
 fn lighter_creep_wins_contested_cell() {
-    // H3：rate4 = moves/体重——轻 creep 压过重 creep（平手 rate1 时）
+    // 前面评分平手时比较 MOVE 功率/重量，较轻的 creep 获准移动。
     let mut f = Fixture::new(1, terrain_with(&[]));
     let heavy = f.creep(
         "heavy",
@@ -833,7 +815,7 @@ fn lighter_creep_wins_contested_cell() {
 
 #[test]
 fn road_on_swamp_costs_one() {
-    // H5：路上的沼泽按路走（rate 1 而非 10）
+    // 沼泽上有道路时使用道路疲劳率 1，覆盖沼泽率 10。
     let mut f = Fixture::new(1, terrain_with(&[(10, 11)]));
     f.world
         .insert(
@@ -856,7 +838,8 @@ fn road_on_swamp_costs_one() {
 
 #[test]
 fn road_on_swamp_costs_more_to_build() {
-    // H6：沼泽上的路 progressTotal ×5（300→1500，建工地时定格存值）
+    // 本例直接放置 progress_total=1500 的道路工地，验证建造使用保存的总进度。
+    // 不覆盖工地创建时的沼泽倍率计算。
     let mut f = Fixture::new(1, terrain_with(&[(12, 10)]));
     let site = f.site(12, 10, "road", 0, 1500, "p1");
     let c = f.creep("w1", "p1", 11, 10, &[BodyKind::Move, BodyKind::Work], 10);
@@ -875,10 +858,8 @@ fn road_on_swamp_costs_more_to_build() {
 
 #[test]
 fn birth_blocked_by_stationary_creep_until_it_leaves() {
-    // 深评 H2：出生占位对任何 creep（友敌皆算）都算被占——'creep' ∈
-    // OBSTACLE_OBJECT_TYPES（_born-creep.js:12-15）；被占时推迟重试、雏形
-    // 留在 spawn 格，让开后才出生。blocker 的逃离方向必须真正可走（远离
-    // spawn），否则测试测不到"被占"阶段
+    // 指定出生格有静止 creep 时延期，移走后出生。
+    // 阻挡者的移走方向须远离 spawn，避免逃离动作本身被阻挡而无法验证解除占位。
     let mut f = Fixture::new(1, terrain_with(&[]));
     f.controller(3, Some("p1"));
     let spawn = f.spawn("Spawn1", 20, 20, 300);
@@ -941,7 +922,7 @@ fn birth_blocked_by_stationary_creep_until_it_leaves() {
 
 #[test]
 fn fatigue_recovers_from_persisted_value() {
-    // H4：累加器从持久 fatigue 播种——静止恢复每 tick -2×MOVE
+    // 疲劳从已保存的值继续递减，静止 tick 不得直接清零。
     let mut f = Fixture::new(1, terrain_with(&[(10, 11), (10, 12)]));
     // 3 work + 1 move：沼泽移动 fatigue = 3×10 - 2 = 28
     let c = f.creep(

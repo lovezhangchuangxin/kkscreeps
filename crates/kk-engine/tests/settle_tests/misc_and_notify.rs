@@ -1,14 +1,11 @@
-//! B1 结构治理批自 settle_tests.rs 连续切块（不重排；原段落横幅注释随块
-//! 保留；Fixture/helpers 经 `use super::*` 从 crate 根取用——142 个
-//! #[test] 计数与原文序不变）。
+//! 测试预定房间、取消占领、安全模式跨房限制、拉拽、通知与资源强化。
 
 use super::*;
 
 #[test]
 fn source_capacity_3000_under_reservation() {
-    // sources/tick.js:46-49：`user || reservation` → SOURCE_ENERGY_CAPACITY
-    //(3000)；无主无预定 → 1500（B2 清偿项）。预约未过期 → 两种 tick 次序下
-    // 都存活，断言与对象 id 序无关
+    // Source 在有房主或有效预定时容量为 3000，无主且无预定时为 1500。
+    // 本例预定远未到期，避免对象 tick 顺序影响预定是否存在。
     let mut f = Fixture::new(1, terrain_with(&[]));
     f.controller_full(0, None, |t| {
         t.reservation = Some(kk_schema::room::Reservation {
@@ -48,7 +45,7 @@ fn source_capacity_3000_under_reservation() {
 
 #[test]
 fn harvest_rejected_under_foreign_reservation() {
-    // harvest.js:31-34：controller 被他人预定 → harvest 拒（B2 补的分支）
+    // 他人预定房间中的采集被拒绝，自己的预定允许采集。来源：上游 creeps/harvest.js。
     let mut f = Fixture::new(1, terrain_with(&[]));
     f.controller_full(0, None, |t| {
         t.reservation = Some(kk_schema::room::Reservation {
@@ -92,8 +89,8 @@ fn harvest_rejected_under_foreign_reservation() {
 
 #[test]
 fn downgrade_sets_safe_mode_cooldown() {
-    // controllers/tick.js:64-69：降一级也清 available 并挂冷却（M1 只做了
-    // available 清零，B2 补冷却）
+    // 控制器降级会清零安全模式可用数并设置冷却。
+    // 来源：上游 controllers/tick.js 的降级处理。
     let mut f = Fixture::new(1, terrain_with(&[]));
     let ctl = f.controller_full(2, Some("p1"), |t| {
         t.safe_mode_available = 2;
@@ -117,10 +114,8 @@ fn downgrade_sets_safe_mode_cooldown() {
 
 #[test]
 fn engine_recomputes_player_rooms_after_tick() {
-    // user.rooms 不动点（claimController.js:34-35 的 GCL 读数 +
-    // driver addRoomToUser/removeRoomFromUser 的等价承载）：Engine 每 tick 后
-    // 按世界真值重建——同 tick 内读数保持上一 tick 定集（官方 bulk addToSet
-    // 不改内存对象，bulk.js:101-107）
+    // Engine 在发布本轮世界后重建玩家房间集合；同轮 claim 仍读取旧集合。
+    // 来源：上游 creeps/claimController.js 与 driver/lib/bulk.js 的 addToSet。
     use kk_engine::Engine;
     let mut world = World::new(3);
     let mut t = kk_core::Terrain::plains();
@@ -266,8 +261,6 @@ fn activate_safe_mode_null_cooldown_at_time_zero_rejects() {
     assert_eq!(ctl_of(&f).safe_mode, 0, "time=0 + 冷却 None（0>=0）拒");
 }
 
-// ---- A4-iii：unclaim（官方 processor/intents/controllers/unclaim.js）----
-
 #[test]
 fn unclaim_clears_ownership_and_sets_cooldown() {
     // unclaim.js:15-25：user=null（→ owner_cleared 哨兵）、level=0、progress=0、
@@ -390,12 +383,8 @@ fn unclaim_rejections() {
 
 #[test]
 fn engine_safemode_gate4_backstop_drops_cross_room_activation() {
-    // 门④可信侧兜底（A4-iii 评审 2 必修锁值）：官方 game 层在 isolated-vm
-    // 可信 realm，门④（任一自家 controller safeMode 生效 → ERR_BUSY，
-    // structures.js:223-225）处理器不复核；我方 prelude 与玩家共享 realm，
-    // 迭代器污染可令门④扫描失明——Engine 层按世界真值兜底：玩家已有生效
-    // 中的 safeMode → 其 ActivateSafeMode intent 全部丢弃（双房 safeMode
-    // 并存是官方不可能态）
+    // 玩家已有生效的安全模式时，Engine 根据世界对象拒绝其其他房间的激活指令。
+    // 直接构造指令绕过 prelude 检查，验证 Rust 结算仍执行这项跨房限制。
     use kk_engine::Engine;
     let mut world = World::new(3);
     let mut t = kk_core::Terrain::plains();
@@ -421,12 +410,11 @@ fn engine_safemode_gate4_backstop_drops_cross_room_activation() {
             safe_mode_cooldown: None,
         })
     };
-    // W1N1：safeMode 已生效（time=3 起算挂 1000）；W2N2：五门真值可通过
+    // W1N1 已有安全模式，W2N2 的本地激活条件满足，只测试跨房限制。
     let a = world.insert("W1N1", mk_ctl(3 + 1000, 1)).unwrap();
     let b = world.insert("W2N2", mk_ctl(0, 1)).unwrap();
     let mut engine = Engine::new(world);
-    // 恶意场景：绕过 prelude 门④直接构造 B 房的 ActivateSafeMode intent
-    //（embed 侧收集器闭包私有本不可达——本测试模拟的就是门④失明的等价批）
+    // 直接构造 W2N2 的激活指令，不依赖 prelude 的预检。
     let mut batch = IntentBatch::default();
     batch.add_object_intent("p1", b, Action::ActivateSafeMode, IntentData::bare());
     engine.tick_with_intents(batch).unwrap();
@@ -445,8 +433,6 @@ fn engine_safemode_gate4_backstop_drops_cross_room_activation() {
         _ => panic!(),
     }
 }
-
-// ---- A4-iv：移动杂项族（say/suicide/pull/notifyWhenAttacked） ----
 
 #[test]
 fn say_intent_sets_action_log_bit() {
@@ -478,7 +464,7 @@ fn say_intent_sets_action_log_bit() {
         f.world.get(c).is_some(),
         f.world.get(b1).is_some()
     );
-    // 官方 say 键带 message(截 10)/isPublic——位图只落事件位（灰区登记）
+    // 这里检查 say 动作位；消息载荷、公开性和重置由 combat_ranged 的测试覆盖。
     assert_eq!(action_log(&f, c), 1 << 9, "say 落 ACTION_SAY 位");
     assert_eq!(
         action_log(&f, b1),
@@ -486,10 +472,7 @@ fn say_intent_sets_action_log_bit() {
         "缺省 message（None ≙ 官方 \"\"）同落位"
     );
 
-    // spawning creep：处理器拒（无 actionLog）。A4-i 的孵化模型并入后，孤立
-    // 的 spawning 雏形会在 tick 相被孤儿移除——本例给它配同格带匹配任务
-    // （name "sp1"）的 spawn：intent 相 say 拒先于 tick 相的孵化处理，断言
-    // 窗口内 s 恒在
+    // Say 的孵化拒绝用例需要匹配的 spawn 任务，防止 creep 因孤儿清理而消失。
     let mut f2 = Fixture::new(1, terrain_with(&[]));
     let spawn_id = f2
         .world
@@ -559,15 +542,15 @@ fn say_intent_sets_action_log_bit() {
 
 #[test]
 fn suicide_intent_kills_creep_same_tick() {
-    // suicide.js：intent 相即 _die——对象当 tick 消亡（B3：墓碑承接 + 死亡事件）
+    // 自杀意图立即移除 creep，生成墓碑和死亡事件。来源：上游 creeps/suicide.js。
     let mut f = Fixture::new(1, terrain_with(&[]));
     let c = f.creep("w1", "p1", 10, 10, &[BodyKind::Move, BodyKind::Carry], 40);
     let mut batch = IntentBatch::default();
     batch.add_object_intent("p1", c, Action::Suicide, IntentData::bare());
     let events = f.settle(batch);
     assert!(f.world.get(c).is_none(), "suicide 当 tick 死亡");
-    // 墓碑承接（B3）：dropRate 0.2、满寿（fixture age_time 极大 ⇒ lifeRate 巨大
-    // ⇒ 每件钳 125）⇒ 40 携带 + 125×2 回收 = 290；2 部件 ⇒ 10 tick
+    // 夹具 age_time 极大，回收量按每件上限 125 钳制；携带 40 加两件回收 250
+    // 得到墓碑 energy=290，两件身体对应 10 tick 衰减期限。
     let tomb = f
         .world
         .rooms()
@@ -591,7 +574,7 @@ fn suicide_intent_kills_creep_same_tick() {
             .any(|o| matches!(o, RoomObject::Energy(_))),
         "不直接掉地（墓碑承接）"
     );
-    // _die.js:97：EVENT_OBJECT_DESTROYED（B3 补齐——M1 灰区销账）
+    // 死亡事件类型为 EVENT_OBJECT_DESTROYED，来源：上游 creeps/_die.js。
     assert_eq!(events.len(), 1);
     assert_eq!(
         events[0]["event"],
@@ -600,13 +583,8 @@ fn suicide_intent_kills_creep_same_tick() {
     assert_eq!(events[0]["objectId"], c.as_str());
     assert_eq!(events[0]["data"]["type"], "creep");
 
-    // 同 tick 后续 intents 不再作用（对象消亡）——**有意分歧**：官方执行序
-    // creepActions 里 upgradeController 排 suicide 之后（intents.js:15-17），
-    // 但官方处理器持死引用快照继续执行、对其他对象的效果落地（processor.js:241/
-    // _die.js:12-13 不清引用、upgradeController.js 无存活复检——同 tick 官方
-    // 升级照常生效）；我方对象消亡即跳过（A4-iv 评审 1/3 双确认，compatibility.md
-    // 登记为有意分歧：处理器持 pre-death 快照侵入面大、真实 bot 罕见）——本断言
-    // 锁的是我方登记后的分歧行为，非官方语义
+    // 本实现删除对象后跳过其余动作，因此 suicide 后的 upgradeController 不生效。
+    // 上游处理器持有死亡前对象引用，仍可能执行后续升级；这是保留的行为差异。
     let mut f2 = Fixture::new(2, terrain_with(&[]));
     let ctl = f2.controller(1, Some("p1"));
     let c2 = f2.creep("w2", "p1", 6, 6, &[BodyKind::Move, BodyKind::Work], 100);
@@ -745,7 +723,8 @@ fn pull_cycle_chain_rejected() {
 
 #[test]
 fn notify_when_attacked_intent_sets_flag() {
-    // processor.js:313-314：CONSTRUCTION_COST 类型 + 所有权门 → 落库
+    // 只有可建造结构且通过归属检查时才保存通知标志。
+    // 来源：上游 engine/src/processor.js 的 notifyWhenAttacked 处理。
     let mut f = Fixture::new(1, terrain_with(&[]));
     let sp = f.spawn("S1", 20, 20, 300);
     let rd = f.road_at(21, 20);
@@ -826,12 +805,9 @@ fn built_structure_born_with_notify_attacked_true() {
     assert_eq!(ext, Some(Some(true)), "落成 extension 出生即 true");
 }
 
-// ---- GPT 外部复审清偿（m2/a4-review）锁值 ----
-
 #[test]
 fn ghodium_resource_family_settles() {
-    // P1-1：G 资源的 transfer/withdraw/drop 全链结算（官方 transfer.js:8/
-    // withdraw.js:8/drop.js:10 按资源类型结算——此前执行器静默丢弃）
+    // 依次验证 G 的转移、提取和掉落，使用 ghodium 固定槽，不混入 energy。
     let mut f = Fixture::new(1, terrain_with(&[]));
     let st = f
         .world
@@ -917,8 +893,7 @@ fn ghodium_resource_family_settles() {
 
 #[test]
 fn boost_effectiveness_unified() {
-    // P1-2：强化部件统一效能——官方 movement.js:41-59（重量按强化容量扣）与
-    // tick.js:105（恢复按 fatigue 效能）。KH 容量×2 / ZO 疲劳×2
+    // KH 使 CARRY 容量加倍，ZO 使 MOVE 疲劳恢复加倍；重量与恢复都须计入 boost。
     let mut f = Fixture::new(1, terrain_with(&[]));
     // 1 carry(KH) + 2 move(ZO)：携带 80（无强化需 2 carry=weight 2；KH ×2
     // 容量 100 ⇒ weight 1）+ 1 move 够驱 ⇒ move 后疲劳 = (1+1) - 2×2 = 0

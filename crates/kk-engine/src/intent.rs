@@ -1,14 +1,9 @@
-//! 玩家指令（intent）模型：输入清洗、同对象覆盖、冲突裁决。
+//! 解析玩家指令，保留同名动作的最后一次调用，并定义 creep 动作的压制关系。
 //!
-//! 官方语义（本地官方源码 ~/Desktop/projects/sources/screeps/）：
-//! - 字段白名单与 transforms：`common/lib/system.js`——number 字段一律按
-//!   parseInt 截断（见 [`to_int`]）、bodypart[] 过滤非白名单部件、userString
-//!   截 100、白名单外的未知字段丢弃；
-//! - 同对象同名指令后者覆盖前者（只记最后一次）；
-//! - 冲突裁决优先级图：`engine/src/processor/intents/creeps/intents.js`——
-//!   动作执行当且仅当其 intent 存在**且**无更高优先级 intent 存在。被压制的
-//!   动作不执行，但玩家 API 早已返回成功——这是官方语义，不是缺陷；
-//! - 执行顺序：creepActions 数组序（intents.js:15-17）。
+//! 清洗器将输入绑定到调用方给定的玩家名；它不验证对象存在或所有权。
+//! 数字按 parseInt 前缀规则转换，未知动作被丢弃。对象载荷采用已知字段的
+//! 并集，具体动作的合法性仍由执行器检查。来源参考：上游 common/lib/system.js
+//! 及 engine/src/processor/intents/creeps/intents.js。
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -17,8 +12,7 @@ use kk_world::ObjId;
 use kk_world::types::BodyKind;
 use serde_json::Value;
 
-/// 动作名（官方 creepActions 全集 + spawn 的 createCreep + controller 的
-/// activateSafeMode）。
+/// 引擎可识别的对象级动作。Creep、spawn、controller 和结构使用各自的执行器。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Action {
     Drop,
@@ -44,41 +38,19 @@ pub enum Action {
     GenerateSafeMode,
     SignController,
     Pull,
-    /// 结构（及 creep——API 面只在结构类暴露）的通知开关（官方挂在
-    /// processor.js:313-314 的对象级通用段，不在 creepActions 序列）。
+    /// 对象级通知开关，由 settle_room 在类型分派前处理。
     NotifyWhenAttacked,
-    /// spawn 对象的动作（官方 spawns/intents.js:3-24 的分派序）。
+    /// spawn 的创建指令，不属于 creep 执行序列。
     CreateCreep,
-    /// renewCreep（白名单 `{id: 'string'}`，system.js:62；结算链见
-    /// settle/spawn.rs intent_renew_creep——对照 spawns/renew-creep.js）。
     RenewCreep,
-    /// recycleCreep（白名单 `{id: 'string'}`，system.js:60；
-    /// spawns/recycle-creep.js）。
     RecycleCreep,
-    /// setSpawnDirections（白名单 `{directions: 'number[]'}`，system.js:73；
-    /// spawns/set-spawn-directions.js）。
     SetSpawnDirections,
-    /// cancelSpawning（空白名单 `{}`，system.js:39；
-    /// spawns/cancel-spawning.js）。
     CancelSpawning,
-    /// controller 对象的动作（官方 processor.js:306-311 分派，intent 白名单
-    /// `activateSafeMode: {}`——system.js:34；语义链见 settle/controller.rs）。
-    /// 与 CreateCreep 同理不在 creepActions 序列（EXECUTION_ORDER）里。
+    /// controller 的激活安全模式指令，不属于 creep 执行序列。
     ActivateSafeMode,
-    /// controller 对象的动作（官方 processor.js:307-309 先于 activateSafeMode
-    /// 分派，intent 白名单 `unclaim: {}`——system.js:78；语义链见
-    /// settle/controller.rs）。A4-iii 补（B2 时登记"白名单外动作清洗层丢弃"）。
     Unclaim,
-    /// rampart 对象的动作（官方 processor.js:266-269 分派，白名单
-    /// `setPublic: {isPublic: 'boolean'}`——system.js:72；执行器
-    /// ramparts/set-public.js 仅 `isPublic: !!intent.isPublic` 写回）。
-    /// M2B 扩面 P5。
     SetPublic,
-    /// terminal 对象的动作（官方 processor.js:272-275 分派，白名单
-    /// `send: {targetRoomName: 'string', resourceType: 'string',
-    /// amount: 'number', description: 'userString'}`——system.js:69）。
-    /// 房间相执行器（terminal/send.js）**只校验并落 `object.send` 字段**，
-    /// 跨房转移在全局阶段执行（global-intents/market.js:71-95——2B 批 P1）。
+    /// 房间阶段校验并保存 terminal 发送请求，跨房资源划转在市场阶段执行。
     Send,
 }
 
@@ -160,7 +132,8 @@ impl Action {
         })
     }
 
-    /// 官方 priorities 图（intents.js:3-13）：返回能压制本动作的高优先级动作集。
+    /// 返回会压制本动作的指令。判断只看指令是否存在，不看其执行是否成功。
+    /// 来源：上游 engine/src/processor/intents/creeps/intents.js 的 priorities。
     fn suppressed_by(self) -> &'static [Action] {
         match self {
             Self::RangedHeal => &[Self::Heal],
@@ -207,17 +180,15 @@ impl Action {
         }
     }
 
-    /// checkPriorities（intents.js:21-23）：动作存在且未被更高优先级动作压制。
+    /// 动作存在，且没有压制它的指令时才执行。
+    /// 玩家 API 返回 OK 只表示指令已记录，不保证最终被执行。
     pub fn executes(present: &BTreeSet<Action>, action: Action) -> bool {
         present.contains(&action) && !action.suppressed_by().iter().any(|a| present.contains(a))
     }
 }
 
-/// 官方执行顺序（creepActions，intents.js:15-17）。CreateCreep/RenewCreep/
-/// RecycleCreep/SetSpawnDirections/CancelSpawning 是 spawn 对象的动作
-/// （spawns/intents.js:3-24 按 createCreep→renewCreep→recycleCreep→
-/// setSpawnDirections→cancelSpawning 的序分派），不在 creep 序列里、由
-/// settle/spawn.rs 的 spawn 分派单独执行。
+/// Creep 动作执行顺序。类型专属动作另由对应处理器分派。
+/// 来源：上游 engine/src/processor/intents/creeps/intents.js 的 creepActions。
 pub const EXECUTION_ORDER: [Action; 23] = [
     Action::Drop,
     Action::Transfer,
@@ -244,45 +215,37 @@ pub const EXECUTION_ORDER: [Action; 23] = [
     Action::Pull,
 ];
 
-/// 单条对象级指令的载荷（M1 所需字段；字段名对齐官方白名单）。
+/// 对象指令载荷。字段为已识别动作的并集，执行器仅读取对应动作所需的字段。
 #[derive(Debug, Clone, PartialEq)]
 pub struct IntentData {
-    /// move 的 direction / 各动作的 target id（官方字段 id）。
+    /// 目标对象 ID；move 可用相邻 creep 的位置确定方向。
     pub id: Option<ObjId>,
     pub direction: Option<u8>,
     pub amount: Option<i64>,
     pub resource_type: Option<String>,
     pub x: Option<i64>,
     pub y: Option<i64>,
-    /// createCreep 专属（挂在 spawn 对象上）。
+    /// 创建 creep 时的名称。
     pub name: Option<String>,
-    /// say 专属（system.js:68 `message: 'userString'`——截 100；官方 transform
-    /// 对缺省折叠为 ""，我方 None 由执行器按 "" 对齐）。
+    /// say 文本，最多 100 个 Unicode 字符；缺失时执行器使用空串。
     pub message: Option<String>,
-    /// say 专属（`isPublic: 'boolean'`——!!value）。
+    /// say 或 setPublic 的公开标志，按 JavaScript 真值规则转换。
     pub is_public: Option<bool>,
-    /// notifyWhenAttacked 专属（system.js:51 `enabled: 'boolean'`——!!value）。
+    /// notifyWhenAttacked 的开关，按 JavaScript 真值规则转换。
     pub enabled: Option<bool>,
-    /// signController 专属：官方白名单 `sign: 'userString'`（system.js:74），
-    /// 截 100（UTF-16 码元 vs Unicode chars 的差异沿用既有灰区登记）。
-    /// 官方形态缺省与空串同值（userString 的 `value||""` 折叠），signController
-    /// 结算层 `intent.sign ?` 判空——两者都落 None 语义（清除签名）。
+    /// 控制器签名，最多 100 个 Unicode 字符；缺失与空串均表示清除签名。
+    /// 截断单位不同于上游 userString 的 UTF-16 码元。
     pub sign: Option<String>,
     pub body: Vec<BodyKind>,
-    /// None = 玩家未传（缺省全房扣费）；Some([]) = 显式空列表（官方走
-    /// "仅列表扣费"模式——可用 0 → 失败）。presence 由 JSON 键存在性区分
-    /// （官方 system.js transforms 不区分，语义分叉在 create-creep.js:19-24）。
+    /// None 表示使用房间内默认能量结构；Some(空列表) 表示显式列表，
+    /// 可用能量为 0。不能把空列表改为缺省值。
     pub energy_structures: Option<Vec<ObjId>>,
-    /// 官方链路分两步：system.js 的 number[] transform 逐元素 parseInt（在此
-    /// 完成，无法解析的元素以 i64::MIN 哨兵传递）；create-creep.js:27 再
-    /// _.uniq 保序全局去重。1..=8 校验在 createCreep 侧整单拒绝（官方语义是
-    /// 拒绝整条指令，不是过滤元素）。
+    /// 方向列表：逐项按 parseInt 转换，再保序去重；无效值用 i64::MIN 保留。
+    /// 执行器校验 1..=8，发现无效值时拒绝整条指令，不能在此过滤掉。
     pub directions: Vec<i64>,
-    /// send（terminal）专属：官方白名单 `send: {targetRoomName: 'string',
-    /// resourceType: 'string', amount: 'number', description: 'userString'}`
-    /// （common/lib/system.js:69）——targetRoomName 严格串（沿用
-    /// resource_type 的 as_str 口径）；description userString 截 100。
+    /// terminal.send 的目标房名，只接收 JSON 字符串。
     pub target_room_name: Option<String>,
+    /// terminal.send 的描述，最多 100 个 Unicode 字符。
     pub description: Option<String>,
 }
 
@@ -348,22 +311,24 @@ pub enum RoomIntent {
         color: i64,
         secondary_color: i64,
     },
-    /// structure.destroy()（B3）：官方白名单 `destroyStructure: {roomName:
-    /// 'string', id: 'string'}`（system.js:20）；结算链 settle/room.rs
-    /// 对照 room/destroy-structure.js。
-    DestroyStructure { room: String, id: ObjId },
-    /// flag.remove/setPosition/setColor（M2B 扩面 P2）：官方均为 room 级
-    /// removeFlag+createFlag 组合（flags.js:59-90）；结算对照 room/remove-flag.js
-    /// （按玩家旗名删——只删自家）。
-    RemoveFlag { room: String, name: String },
-    /// constructionSite.remove()（P2）：官方 room 级 `removeConstructionSite:
-    /// {roomName, id}`；结算对照 room/remove-construction-site.js（所有权门 +
-    /// progress/2 退能量掉落）。
-    RemoveConstructionSite { room: String, id: ObjId },
+    DestroyStructure {
+        room: String,
+        id: ObjId,
+    },
+    /// flag.setPosition/setColor 也通过删除和重建旗帜实现。
+    RemoveFlag {
+        room: String,
+        name: String,
+    },
+    /// 删除工地，结算器检查所有权并退还 progress/2 的掉落能量。
+    RemoveConstructionSite {
+        room: String,
+        id: ObjId,
+    },
 }
 
-/// room 级 intent 参数解析（官方 system.js:116-140 sanitizeUserRoomIntents 的
-/// 字段面 + room/intents.js 消费字段；坐标/颜色走 parseInt，名称走 userString）。
+/// 解析房间级动作。必需的房名、坐标或 ID 无效时丢弃整条；
+/// 颜色缺失按 0 处理，名称经长度限制。
 fn parse_room_intent(name: &str, raw: &Value) -> Option<RoomIntent> {
     let f = |k: &str| raw.get(k);
     let room = f("roomName").and_then(Value::as_str)?.to_string();
@@ -383,14 +348,10 @@ fn parse_room_intent(name: &str, raw: &Value) -> Option<RoomIntent> {
             color: to_int(f("color")).unwrap_or(0),
             secondary_color: to_int(f("secondaryColor")).unwrap_or(0),
         }),
-        // system.js:20：`destroyStructure: {roomName: 'string', id: 'string'}`
         "destroyStructure" => Some(RoomIntent::DestroyStructure {
             room,
             id: to_id(f("id"))?,
         }),
-        // P2：`removeFlag: {roomName: 'string', name: 'userString'}` /
-        // `removeConstructionSite: {roomName: 'string', id: 'string'}`
-        // （flags.js:59-64 / construction-sites.js:56 的官方 intent 形态）
         "removeFlag" => Some(RoomIntent::RemoveFlag {
             room,
             name: to_user_string(f("name"))?,
@@ -403,21 +364,14 @@ fn parse_room_intent(name: &str, raw: &Value) -> Option<RoomIntent> {
     }
 }
 
-/// 单玩家的指令集：对象级（对象 → 动作 → 载荷，同名覆盖）+ 房间级列表。
+/// 单玩家的对象、房间、通知与市场指令。对象动作同名覆盖，列表指令保留顺序。
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct UserIntents {
     pub objects: BTreeMap<ObjId, BTreeMap<Action, IntentData>>,
     pub room: Vec<RoomIntent>,
-    /// Game.notify（M2B 扩面 P3）：官方全局 intent 通道（runtime.js:78-86
-    /// `intents.push('notify', ...)`——list 顶层按动作名键的数组，非对象 id
-    /// 路由）。清洗 schema：`notify: {message: 'userText', groupInterval:
-    /// 'number'}`（common/lib/system.js:17 notify 行）
+    /// Game.notify 的全局列表，每条在 tick 发布时记录一次。
     pub notify: Vec<NotifyIntent>,
-    /// Game.market 全局 intent 族（2B 批）：官方 `intents.pushByName('global',
-    /// …)` 容器（runtime.js:82-90）→ storeIntents 的 global 分支
-    /// （engine/src/utils.js:421-424）→ sanitizeUserIntents 白名单（五个
-    /// 市场键，common/lib/system.js:23-29）。maxLen 门（deal 10 /
-    /// cancelOrder·changeOrderPrice·extendOrder 50）在 prelude 发射层。
+    /// Game.market 的全局列表，由市场阶段按动作类别处理。
     pub market: Vec<MarketIntent>,
 }
 
@@ -428,48 +382,34 @@ pub struct NotifyIntent {
     pub group_interval: Option<i64>,
 }
 
-/// 一条全局市场意图（Game.market 五动作，清洗后形态）。
+/// 市场动作及其清洗后的载荷。价格以千分之一 credit 表示。
 ///
-/// 字段全 Option：官方 sanitizeIntent 对白名单字段**无条件物化**（缺键 →
-/// string transform 得 "undefined" / number transform 得 NaN）——我方 None
-/// ≙ 官方 "undefined"/NaN。净等价性**逐字段**成立但路径各异（评审 1 勘误
-/// 泛化声明）：多数字段经下游 falsy 门/查表 miss 净跳过；
-/// **CreateOrder.order_type 例外**——官方处理器
-/// `type: intent.type == ORDER_SELL ? SELL : BUY`（global-intents/market.js:139）
-/// 把物化串默认落为合法 ORDER_BUY，等价性纯靠 prelude 不可达（game 侧
-/// `type != BUY && != SELL → ERR_INVALID_ARGS` market.js:75 先于 push）——
-/// **P2 处理器落地时 order_type=None 必须直接拒绝，不得默认 buy/sell**；
-/// Deal.amount 的 NaN 首门是比较门（`amount <= 0` 对 NaN 假——market.js:272），
-/// 净跳过由下游 terminalsByRoom miss / `!(amount > 0)` 兜底，处理器注释勿引
-/// 用「falsy 首门」。（登记：官方 intershard 订单 roomName 落 "undefined"
-/// 字面串、我方 None，未测面。）
+/// 缺失或无法转换的字段保留为 None，由市场处理器拒绝或忽略。
+/// CreateOrder 的 order_type=None 必须拒绝，不能默认为 buy。上游
+/// common/lib/system.js 会把缺失字符串物化为 "undefined"，并把无效数字
+/// 转成 NaN；这里用 Option 表示缺失，不能据此认为内部格式完全一致。
 #[derive(Debug, Clone, PartialEq)]
 pub enum MarketIntent {
-    /// `createOrder: {type:'string', resourceType:'string', price:'price',
-    /// totalAmount:'number', roomName:'string'}`（common/lib/system.js:25）。
     CreateOrder {
-        /// P2 处理器契约：None/非 buy|sell 值直接拒（见枚举文档）。
+        /// 仅接受 buy 或 sell，None 由处理器拒绝。
         order_type: Option<String>,
         resource_type: Option<String>,
-        /// 官方 price transform：credits 浮点 → **整数毫 credits**。
+        /// 价格，单位千分之一 credit。
         price_milli: Option<i64>,
         total_amount: Option<i64>,
         room_name: Option<String>,
     },
-    /// `cancelOrder: {orderId: 'string'}`（system.js:24）。
-    CancelOrder { order_id: Option<String> },
-    /// `changeOrderPrice: {orderId:'string', newPrice:'price'}`（system.js:26）。
+    CancelOrder {
+        order_id: Option<String>,
+    },
     ChangeOrderPrice {
         order_id: Option<String>,
         new_price_milli: Option<i64>,
     },
-    /// `extendOrder: {orderId:'string', addAmount:'number'}`（system.js:32）。
     ExtendOrder {
         order_id: Option<String>,
         add_amount: Option<i64>,
     },
-    /// `deal: {orderId:'string', amount:'number', targetRoomName:'string'}
-    /// （system.js:27）。
     Deal {
         order_id: Option<String>,
         amount: Option<i64>,
@@ -477,21 +417,18 @@ pub enum MarketIntent {
     },
 }
 
-/// 一 tick 的全部玩家指令（玩家名排序——结算序确定性，方案 D5）。
+/// 本轮各玩家的指令，按玩家名字排序以固定结算顺序。
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct IntentBatch {
     pub users: BTreeMap<String, UserIntents>,
 }
 
 impl IntentBatch {
-    /// 沙箱传出的 intentsList（官方形态：`{对象id: {动作名: 参数}}`，room 级
-    /// 挂 'room' 键数组）→ 清洗后的 IntentBatch。**生产清洗入口**（M2A-A2
-    /// 接线）：对照官方链路——沙箱传出原始 list（runtime.js:271-296），宿主
-    /// 进程逐字段白名单清洗（utils.js:405-436 storeIntents → system.js）。
-    /// 不可信输入纪律：未知动作名丢弃（sanitize 白名单语义）、对象 id 不可
-    /// 解析丢弃（官方 utils.js:427-429 同款）、参数只保留白名单字段。
-    /// 身份边界：全部归 `player`（调用方保证 = 沙箱注册键；settle 侧另有
-    /// 结构性复核）。
+    /// 将沙箱 intentsList 解析为指定玩家的指令。
+    ///
+    /// 识别对象 ID 及 room、notify、global 容器，丢弃未知动作或格式错误的容器。
+    /// 全部条目绑定 player，不读取输入自报的玩家名；调用方必须提供注册身份。
+    /// 这里只解析和转换字段，目标存在、所有权、距离与资源数量由结算器检查。
     pub fn from_json(player: &str, list: &Value) -> IntentBatch {
         let mut batch = IntentBatch::default();
         let Some(objects) = list.as_object() else {
@@ -499,10 +436,7 @@ impl IntentBatch {
         };
         for (obj_key, actions) in objects {
             if obj_key == "notify" {
-                // 全局通道（官方 utils.js storeIntents :411-414 的 notify 分支：
-                // sanitizeUserIntents 白名单清洗）：message userText、
-                // groupInterval number；缺省 message 容空串（官方 userText
-                // 对 undefined 的强转语义近似——落库面非玩家可观测）
+                // 通知为顶层数组；文本最多 1000 个字符，间隔按整数转换。
                 let Some(items) = actions.as_array() else {
                     continue;
                 };
@@ -516,13 +450,8 @@ impl IntentBatch {
                 continue;
             }
             if obj_key == "global" {
-                // 全局市场通道（官方 storeIntents utils.js:421-424 的 global 分支）：
-                // 容器形态 {动作名: [载荷…]}（runtime.js:82-90 pushByName
-                // ('global',…)）。迭代序=官方 sanitizeUserIntents 的
-                // `for(name in intentTypes)` **声明序**（common/lib/system.js
-                // :23-29 的五市场键子集——非 JSON 键序；跨动作序对结算不可
-                // 观测——market 处理器按分节序消费，此处固定序保确定性）；
-                // 同动作数组保持 push 序。白名单外丢弃（intentTypes 键集语义）
+                // 按固定动作顺序解析，保留同动作数组的顺序，不依赖输入的 JSON 键序。
+                // 来源：上游 common/lib/system.js 的 intentTypes 声明顺序。
                 static MARKET_INTENT_ORDER: [&str; 5] = [
                     "cancelOrder",
                     "changeOrderPrice",
@@ -547,8 +476,7 @@ impl IntentBatch {
                 continue;
             }
             if obj_key == "room" {
-                // room 级：pushByName('room', name, data) 的数组形态
-                // （runtime.js:80-90；room/intents.js 逐条消费）
+                // 房间指令按动作名分组，每个动作对应一个数组。
                 let Some(actions) = actions.as_object() else {
                     continue;
                 };
@@ -565,7 +493,7 @@ impl IntentBatch {
                 continue;
             }
             let Some(obj) = ObjId::parse(obj_key) else {
-                continue; // 官方 utils.js:427-429：反查不到的对象丢弃
+                continue; // ID 格式错误时丢弃；此处不查询对象是否存在。
             };
             let Some(actions) = actions.as_object() else {
                 continue;
@@ -597,7 +525,8 @@ impl IntentBatch {
             .insert(action, data);
     }
 
-    /// 合并另一批（同玩家键合并 objects/room；后写覆盖同名动作——幂等语义）。
+    /// 合并另一批：同对象只覆盖同名动作，保留其他动作；
+    /// 房间、通知和市场列表追加。因此重复合并会重复列表指令，并非幂等。
     pub fn extend_from(&mut self, other: IntentBatch) {
         for (player, intents) in other.users {
             let entry = self.users.entry(player).or_default();
@@ -673,10 +602,9 @@ fn to_id(v: Option<&Value>) -> Option<ObjId> {
     v.and_then(Value::as_str).and_then(ObjId::parse)
 }
 
-/// 官方 boolean transform（system.js:8 `value => !!value`）：JS 真值表——
-/// null/false/0/-0/NaN/'' 假，其余真（NaN 不出现在严格 JSON）。缺键 None
-/// （与官方 transform 后的显式 false 区分——say/notifyWhenAttacked 结算层
-/// 均按 falsy 折叠，None ≙ undefined）。
+/// 按 JavaScript 真值转换；空数组、空对象和非空串（包括 "false"）均为真。
+/// 缺失保留 None，null、false、0 和空串为假。
+/// 来源：上游 common/lib/system.js 的 boolean transform。
 fn to_bool(v: Option<&Value>) -> Option<bool> {
     v.map(|x| match x {
         Value::Null => false,
@@ -687,12 +615,7 @@ fn to_bool(v: Option<&Value>) -> Option<bool> {
     })
 }
 
-/// 官方 userString（system.js:12）：`("" + (value||"")).substring(0, 100)`。
-/// 官方 userText 清洗（common/lib/system.js:13）：`("" + (value||""))`
-/// .substring(0, 1000)——falsy 原语归空串、数组 join(",")、对象
-/// "[object Object]" 的 JS ToString 语义（评审 1 P1-1 清偿：notify message
-/// 原误走 userString(100) 帽）。浮点指数形与 JS 数字字面量的格式差异
-/// 登记兼容性.md
+/// 检查 JSON 值的 JavaScript 假值规则，用于通知文本的 value || ""。
 fn js_value_falsy(x: &Value) -> bool {
     match x {
         Value::Null => true,
@@ -703,10 +626,9 @@ fn js_value_falsy(x: &Value) -> bool {
     }
 }
 
-/// JS Array.prototype.toString = join(",")（嵌套递归展平；元素强转是**普通
-/// ToString**——join 只对 null/undefined 产空串，0/"false" 等照常字符串化，
-/// 元素对象 → "[object Object]"。清偿复审阻断项修复：原实现把顶层
-/// `value||""` 的 falsy 折叠误用到 join 元素上）
+/// 模拟数组 join(",")：嵌套数组递归字符串化，null 为空，
+/// 0 与 false 保留为字符串，对象变为 "[object Object]"。
+/// 顶层文本的假值折叠不能应用到数组元素。
 fn js_array_to_string(items: &[Value]) -> String {
     items
         .iter()
@@ -721,11 +643,9 @@ fn js_array_to_string(items: &[Value]) -> String {
         .join(",")
 }
 
-/// 官方 userText 清洗（common/lib/system.js:13）：`("" + (value||""))`
-/// .substring(0, 1000)——falsy 原语归空串、数组 join、对象
-/// "[object Object]" 的 JS ToString 语义（评审 1 P1-1 清偿：notify message
-/// 原误走 userString(100) 帽）。浮点指数形与 JS 数字字面量的格式差异
-/// 登记兼容性.md
+/// 通知文本转换，最多 1000 个 Unicode 字符。假值归空串，数组用 join，
+/// 对象用 "[object Object]"。上游 common/lib/system.js 的 userText 使用
+/// UTF-16 码元截断；数字的字符串格式也可能不同。
 fn to_user_text(v: Option<&Value>) -> String {
     match v {
         None | Some(Value::Null) => String::new(),
@@ -737,6 +657,9 @@ fn to_user_text(v: Option<&Value>) -> String {
     }
 }
 
+// 保留缺失为 None，null 为空串，其余非字符串使用 JSON 字符串化，
+// 最多 100 个 Unicode 字符。此处没有完整模拟上游 userString 的假值
+// 折叠、数组 join 或 UTF-16 截断，不能与 to_user_text 互换。
 fn to_user_string(v: Option<&Value>) -> Option<String> {
     v.map(|x| match x {
         Value::Null => String::new(),
@@ -746,13 +669,9 @@ fn to_user_string(v: Option<&Value>) -> Option<String> {
     .map(|s| s.chars().take(100).collect())
 }
 
-/// 官方 string transform（common/lib/system.js:5 `value => "" + value`，**无长度帽**）：
-/// 市场意图的 type/resourceType/roomName/orderId/targetRoomName 面。缺键 →
-/// None（官方物化 "undefined" 串——消费端查表 miss/`!intent.x` falsy 门
-/// 等价，见 MarketIntent 文档）。数值 ToString 浮点格式差异沿用既有登记；
-/// 数组/对象面官方 JS ToString（join(",")/"[object Object]"）vs serde
-/// `to_string()`（"[1,2]"/"{...}"）分歧——经官方门查表 miss 不可达，登记
-/// （评审 2 P2-3；既有 js_array_to_string 可在需要时复用）。
+/// 市场字符串字段：字符串原样保留，其余使用 JSON 字符串化，缺失为 None。
+/// 与上游 common/lib/system.js 的 string transform 不同，数组和对象
+/// 不会使用 JavaScript ToString，缺失也不会生成 "undefined"。
 fn to_plain_string(v: Option<&Value>) -> Option<String> {
     v.map(|x| match x {
         Value::String(s) => s.clone(),
@@ -760,35 +679,18 @@ fn to_plain_string(v: Option<&Value>) -> Option<String> {
     })
 }
 
-/// 官方 price transform（common/lib/system.js:8
-/// `parseInt((1000 * value).toFixed(0))`）：玩家 credits 浮点 → **整数毫
-/// credits**。Rust 等价 `(1000.0*x).round()`：toFixed(0) 取最近邻、恰半时
-/// 取大 n（ECMA-262 Number.prototype.toFixed 步骤 9——与 round() 远零半舍
-/// 同向，评审 1 node 实测 0.0005→1/−0.0025→−3 双侧吻合）；乘积的 f64
-/// 双侧同算。套件价格域（≤3 位小数）乘积为精确整数、无舍入发生。
+/// 将 credit 价格转成千分之一 credit，乘以 1000 后四舍五入。
+/// 来源：上游 common/lib/system.js 的 price transform。
 ///
-/// **分歧域三处（清偿复审 P1-a 裁决后的最终口径）**：
-/// ①JS ToNumber 分歧串（"0x10"=16/""=0 等）→ 我方 parse 失败 None——
-///   **真不可达**：game 侧 parseFloat 先于 push（market.js:78）把任何输入
-///   变 number（parseFloat("0x10")=0 被 `!price` 门拒），字符串不达 transform；
-/// ②milli ∈ [2^63, 1e21) → 我方 None——**表示域强制**（官方 toFixed 产全
-///   数字串得 >i64 的精确大整；玩家可达——remaining=0 订单的 changeOrderPrice
-///   费恒 0 放行任意 newPrice，清偿复审取证 market.js:163-168——但
-///   MarketOrder.price 为 i64 无法承载，登记已知偏差：该域官方改价生效、
-///   我方 None→处理器跳过改价不生效，套件零覆盖）；
-/// ③|milli| ≥ 1e21 → **保真实现官方怪癖**：toFixed 溢出固定点域走
-///   ToString 指数形 "2.5e+21"，parseInt 读首位数字即停 → ±首位（同
-///   remaining=0 洞玩家可达——node 实测 t(1e18)=1/t(2.5e18)=2/t(−1e18)=−1；
-///   与 to_int 的指数首位先例 :613-619 同型）。
-/// 非有限值（NaN/Inf）→ None ≙ 官方 NaN（下游 `!intent.price` falsy 门等价；
-/// 官方 (Infinity).toFixed(0) 抛 RangeError 属 runner 崩溃怪癖，我方安全拒绝）。
+/// 绝对值至少 1e21 时按指数表示只取首位数字，保留 parseInt 的特殊结果。
+/// 较小但超出 i64 的值和非有限值返回 None；与上游的大整数表示存在差异。
+/// 字符串仅用 Rust 浮点解析，不完整模拟 JavaScript ToNumber。
 fn to_price_milli(v: Option<&Value>) -> Option<i64> {
     let x = match v? {
         Value::Number(n) => n.as_f64()?,
         Value::String(s) => s.trim().parse::<f64>().ok()?,
         Value::Bool(b) => i64::from(*b) as f64,
-        // null（JS 1000*null=0）与对象/数组不可达：prelude createOrder 已
-        // parseFloat 门（game/market.js:78 parseFloat、:80 `!price` 拒）
+        // 此转换只接收数字、可解析字符串和布尔值，null 不按 JavaScript 的 0 处理。
         _ => return None,
     };
     let milli = 1000.0 * x;
@@ -796,8 +698,7 @@ fn to_price_milli(v: Option<&Value>) -> Option<i64> {
         return None;
     }
     if milli.abs() >= 1e21 {
-        // 域③官方怪癖：指数形首尾——String(milli) 指数形（Rust {:e} 同为
-        // 最短往返表示），parseInt 读到 '.'/'e' 即停 → 首位数字（带号）
+        // 上游 toFixed 在此范围输出指数形式，parseInt 到小数点或 e 就停止。
         let text = format!("{:e}", milli);
         let digits: String = text
             .trim_start_matches('-')
@@ -813,11 +714,7 @@ fn to_price_milli(v: Option<&Value>) -> Option<i64> {
     Some(milli.round() as i64)
 }
 
-/// 'global' 容器逐条清洗（sanitizeUserIntents 的市场键子集，
-/// common/lib/system.js:23-29 intentTypes 五市场键；其余键丢弃——官方
-/// 'global' 容器还承载 power-creep 六键（createPowerCreep 等，:26/:28-33，
-/// 归 M4 power 批进驻本分支；官方 global 阶段 power 处理器**先于** market，
-/// processor/global.js:41-49））。
+/// 解析 global 容器中的五种市场动作；其余全局动作不在此处理。
 fn parse_market_intent(name: &str, item: &Value) -> Option<MarketIntent> {
     match name {
         "createOrder" => Some(MarketIntent::CreateOrder {
@@ -847,8 +744,11 @@ fn parse_market_intent(name: &str, item: &Value) -> Option<MarketIntent> {
     }
 }
 
-/// 从官方 intent JSON 白名单清洗（system.js intentTypes 对应项）。
-/// 未知动作名返回 None；字段缺失按官方 transforms 得 undefined（Rust 侧 None）。
+/// 转换对象载荷中已知字段，忽略未知字段；缺失值通常保留为 None。
+///
+/// 当前读取所有动作字段的并集，不根据 action 分别执行上游白名单。
+/// 它不验证对象类型或动作参数是否合法；执行器须只读取自己的字段并校验。
+/// 来源参考：上游 common/lib/system.js 的 intentTypes 和 transforms。
 pub fn sanitize_object_intent(_action: Action, raw: &Value) -> IntentData {
     let f = |k: &str| raw.get(k);
     IntentData {
@@ -897,7 +797,7 @@ pub fn sanitize_object_intent(_action: Action, raw: &Value) -> IntentData {
     }
 }
 
-/// 官方 calcCreepCost（utils.js）：部件成本合计（部件已过白名单过滤）。
+/// 合计已解析身体部件的成本。
 pub fn creep_cost(body: &[BodyKind]) -> i64 {
     body.iter()
         .map(|p| {
@@ -915,8 +815,7 @@ pub fn creep_cost(body: &[BodyKind]) -> i64 {
 mod from_json_tests {
     use super::*;
 
-    /// 生产清洗入口的对抗面：伪造对象 id / 未知动作名 / 畸形参数 / 'room'
-    /// 键伪造（数组形态检查）——全部 fail-closed 丢弃，白名单内条目存活。
+    /// 无效对象键、未知动作和错误容器格式被丢弃，合法 move 保留。
     #[test]
     fn from_json_adversarial_inputs() {
         let list = serde_json::json!({
@@ -935,8 +834,7 @@ mod from_json_tests {
         assert!(user.room.is_empty(), "'room' 键非对象丢弃");
     }
 
-    /// createCreep 经通道往返（评审 F1：parse 曾缺此臂——静默黑洞）+ presence：
-    /// 缺键 None / 空数组 Some([])（显式列表模式）。
+    /// 缺失能量结构列表与显式空列表必须保持区别，创建执行器据此选择扣费方式。
     #[test]
     fn from_json_create_creep_roundtrip_and_presence() {
         let list = serde_json::json!({
@@ -980,9 +878,8 @@ mod from_json_tests {
         assert_eq!(batch.users["p1"].room.len(), 2, "未知 room intent 名丢弃");
     }
 
-    /// A4-i spawn 族白名单（system.js:39/60/62/73）：renewCreep/recycleCreep
-    /// 只认 id、setSpawnDirections 的 number[]、cancelSpawning 空载荷；四者
-    /// 都不在 EXECUTION_ORDER（spawns/intents.js 的 spawn 分派序）里。
+    /// 解析 spawn 动作、转换并去重方向；这些动作不属于 creep 执行序列。
+    /// 这里仅检查给定输入的结果，不证明按动作分别执行了字段白名单。
     #[test]
     fn from_json_spawn_family_whitelist() {
         let spawn = "kk0000000000000021";
@@ -1034,9 +931,7 @@ mod from_json_tests {
         }
     }
 
-    /// B2 controller 族白名单（system.js:34/36/40/46/67/74）：五个 creep 动作
-    /// 只认 id；signController 另有 sign（userString 截 100）；activateSafeMode
-    /// 无字段。白名单外的未知字段丢弃。
+    /// 解析控制器相关动作，签名截为 100 个字符，未知字段不进入载荷。
     #[test]
     fn from_json_controller_family_whitelist() {
         let creep = "kk0000000000000009";
@@ -1122,7 +1017,7 @@ mod tests {
 
     #[test]
     fn priority_graph_matches_official() {
-        // intents.js:3-13 抽样：harvest 被 attack..heal 全家压制；move 无压制
+        // heal 的存在足以压制 harvest；其余压制关系定义于 suppressed_by。
         let mut present = BTreeSet::new();
         present.insert(Action::Harvest);
         assert!(Action::executes(&present, Action::Harvest));
@@ -1132,7 +1027,7 @@ mod tests {
             "heal 压制 harvest"
         );
         assert!(Action::executes(&present, Action::Heal));
-        // repair 压制 build（官方 priorities：build 的压制表含 repair）；attack 压制 build
+        // repair 压制 build，build 压制 attack；压制不取决于执行成功与否。
         let p2 = BTreeSet::from([Action::Build, Action::Repair]);
         assert!(!Action::executes(&p2, Action::Build));
         assert!(Action::executes(&p2, Action::Repair));
@@ -1199,9 +1094,8 @@ mod tests {
     }
 }
 
-/// A4-iv 清偿（评审 3 建议）：say/pull/notifyWhenAttacked 的载荷清洗面
-/// 白名单臂 + to_bool 真值表（JS `!!value` 语义）+ EXECUTION_ORDER 的
-/// suicide/say/pull 位次锁（官方 creepActions intents.js:15-17）。
+/// 检查 say、pull 和通知开关的载荷，以及 creep 执行顺序。
+/// 字符串 "false" 在 JavaScript 真值规则下为 true。
 #[test]
 fn from_json_misc_family_whitelist_and_order() {
     let creep = "kk0000000000000011";
@@ -1249,8 +1143,7 @@ fn from_json_misc_family_whitelist_and_order() {
     assert!(pos(Action::Suicide) < pos(Action::Pull));
 }
 
-/// 2B 批 P0：'global' 市场容器清洗（白名单五键 + price 毫变换 + 缺键 None
-/// ≙ 官方 "undefined"/NaN）。
+/// 检查市场容器、价格单位、缺失字段及批合并。
 #[cfg(test)]
 mod market_tests {
     use super::*;
@@ -1340,8 +1233,7 @@ mod market_tests {
             Some(3250),
             "JS 乘法字符串强转（1000*\"3.25\"）"
         );
-        // 负价/零/布尔：官方通道不可达（game 侧 `!price || price <= 0` 门拒），
-        // 清洗层按 toFixed/round 远零半舍同向保留（−0.5→"−500"、true→1000）
+        // 清洗层保留零与负价，并转换布尔值；是否允许成交由 API 和结算器检查。
         assert_eq!(case(json!(-0.5)), Some(-500));
         assert_eq!(
             case(json!(-0.0025)),
@@ -1354,12 +1246,7 @@ mod market_tests {
             "0 是合法毫值——`!price` 门在 API 层"
         );
         assert_eq!(case(json!(true)), Some(1000), "JS 1000*true");
-        // 分歧域终口径（清偿复审 P1-a 后，登记于 to_price_milli 文档）：
-        // ①ToNumber 分歧串（"0x10" 官方 16000）——真不可达（parseFloat 门）
-        //   钉 None；②[2^63,1e21) 表示域强制——钉 None；③≥1e21 指数形
-        //   首位怪癖——**保真实现**（node 实测 t(1e18)=1/t(2.5e18)=2/
-        //   t(−1e18)=−1；玩家可达路径=remaining=0 订单 changeOrderPrice
-        //   费恒 0 放行任意 newPrice）
+        // 十六进制串与超出 i64 的固定点值返回 None；达到指数表示范围后取首位数字。
         assert_eq!(case(json!("0x10")), None, "域①真不可达（parseFloat 门）");
         assert_eq!(
             case(json!(1e18)),
@@ -1431,7 +1318,7 @@ mod market_tests {
         let mut merged = a;
         merged.extend_from(b);
         assert_eq!(merged.users["p1"].market.len(), 2);
-        // 序也锚定（评审 3：len 断言对错排无判别力）
+        // 数量相等仍可能错排，还须检查合并后的顺序。
         assert_eq!(
             merged.users["p1"]
                 .market

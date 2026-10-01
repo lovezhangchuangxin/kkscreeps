@@ -1,6 +1,4 @@
-//! B1 结构治理批自 settle_tests.rs 连续切块（不重排；原段落横幅注释随块
-//! 保留；Fixture/helpers 经 `use super::*` 从 crate 根取用——142 个
-//! #[test] 计数与原文序不变）。
+//! 测试近战、修理、拆解与治疗，以及伤后身体效能和携带容量变化。
 
 use super::*;
 
@@ -25,7 +23,7 @@ fn safe_mode_blocks_hostile_attack_and_dismantle() {
             }),
         )
         .unwrap();
-    // 手动挂 safeMode（激活链属 B2）
+    // 直接设置控制器的安全模式，单独验证攻击和拆解的结算检查。
     if let Some(RoomObject::Controller(t)) = f.world.get_mut(ctl) {
         t.safe_mode = 1000;
     }
@@ -164,8 +162,8 @@ fn repair_wall_and_rampart_hits_max() {
 
 #[test]
 fn dismantle_reflux_and_destroy() {
-    // dismantle.js:33-52：amount=min(WORK×50, hits)、回流 floor(amount×0.005)、
-    // 先回流后施伤；击毁时 store 进废墟（B3——官方 _destroy.js:37）
+    // 拆解量取 WORK 功率与目标耐久的较小值，先回收能量再施加伤害。
+    // 击毁后原结构库存进入废墟。来源：上游 creeps/dismantle.js 和 structures/_destroy.js。
     let mut f = Fixture::new(1, terrain_with(&[]));
     let dis = f.creep(
         "dis",
@@ -203,8 +201,7 @@ fn dismantle_reflux_and_destroy() {
     f.settle(b.clone());
     f.settle(b.clone());
     let events4 = f.settle(b.clone());
-    // B3 事件序（官方 _damage.js）：击毁 tick 的 OBJECT_DESTROYED（:51）先于
-    // 主 EVENT_ATTACK（:93）
+    // 结构击毁事件先于主攻击事件。来源：上游 intents/_damage.js。
     assert_eq!(events4.len(), 2);
     assert_eq!(
         events4[0]["event"],
@@ -214,7 +211,7 @@ fn dismantle_reflux_and_destroy() {
     assert_eq!(events4[1]["data"]["damage"], 250, "amount=min(250,250)");
     assert!(f.world.get(ext).is_none(), "击毁");
     assert_eq!(f.creep_state(dis).3, 4, "四 tick 共回流 4");
-    // B3：store 进废墟（不再掉地衰减）
+    // 原结构库存进入废墟，不作为地面资源参与衰减。
     let ruin = f
         .world
         .room("W1N1")
@@ -274,8 +271,7 @@ fn dismantle_redirects_to_rampart() {
     let mut b2 = IntentBatch::default();
     b2.add_object_intent("p1", dis2, Action::Dismantle, IntentData::target(ext2));
     let events2 = f.settle(b2);
-    // B3 事件序：击毁的 OBJECT_DESTROYED 先于主 EVENT_ATTACK（官方
-    // _damage.js:51/:93）；damage 断言移到 attack 事件上
+    // 先产生结构击毁事件，再产生拆解攻击事件；damage 从攻击事件读取。
     assert_eq!(events2.len(), 2);
     assert_eq!(
         events2[0]["event"],
@@ -287,8 +283,7 @@ fn dismantle_redirects_to_rampart() {
         "amount=min(100,80) 钳 rampart 血量"
     );
     assert!(f.world.get(rampart2).is_none(), "80-80=0：击毁");
-    // B3 评审 3-9：房事件缓冲（RoomState.events——getEventLog 的落账面）与
-    // 返回序一致（DESTROYED 先于 ATTACK）
+    // 房间 events 保存的事件与返回事件顺序一致，均为 DESTROYED 在 ATTACK 前。
     let buffered: Vec<serde_json::Value> = f
         .world
         .room("W1N1")
@@ -319,9 +314,8 @@ fn dismantle_redirects_to_rampart() {
         .expect("rampart 击毁产废墟");
     assert_eq!(ruin.structure_type, "rampart");
     assert_eq!(ruin.owner.as_deref(), Some("p2"), "存照主人（data.owner）");
-    // hitsMax 存照：无 controller 的房按 RCL 表无门（官方 ramparts/tick.js:17
-    // 按房主归一——本房无主 ⇒ 表值 0；我们无 controller 时 hitsMax 计算得
-    // None，投影 undefined——B3 报告登记的边缘差异）
+    // 本房没有 controller，废墟中的 structure_hits_max 为 None。
+    // 上游 rampart 按房主与 RCL 计算上限，本实现保留这一无控制器情况的差异。
     assert_eq!(ruin.structure_hits_max, None);
 }
 
@@ -394,9 +388,8 @@ fn carry_death_drops_overflow_energy() {
     assert_eq!(dropped, Some(30), "超容 80-50 掉地（tick 阶段不衰减）");
 }
 
-/// B4 评审 3 P1-1 清偿锁值：harvest 超容判定按**全槽和**（官方 calcResources
-/// 全 store 键）——混合持有（Z:50 占满容量）下采 U，超容部分按矿种掉落，
-/// energy/Z 槽不动。
+/// 命名矿物 Z 已占满容量，采得的 U 因超容掉落，energy 和 Z 不变。
+/// 来源：上游 creeps/harvest.js 的 calcResources 与矿物 drop 分支。
 #[test]
 fn harvest_mixed_holding_overflow_drops_mined_mineral() {
     let mut f = Fixture::new(1, terrain_with(&[]));
@@ -480,10 +473,8 @@ fn harvest_mixed_holding_overflow_drops_mined_mineral() {
     );
 }
 
-/// B4 清偿复审 F1 修正锁值：混持（Z:50 占满容量）下采 **source**——官方
-/// harvest.js:43 energy 槽局部入仓、:50 全槽判定、:54 掉
-/// min(energy 持有, sum−cap)——只掉 energy 不动 Z（清偿第一版曾把全槽和写
-/// 进 energy 槽 = 复制资源，实证 energy=50+Z=50）。
+/// Z 已占满容量，source 采集只增加 energy 槽；按全仓超容量掉落 energy。
+/// 不能将全仓总量写入 energy 槽，否则会复制已持有的矿物。
 #[test]
 fn harvest_source_mixed_holding_overflow_drops_energy_only() {
     let mut f = Fixture::new(1, terrain_with(&[]));
@@ -566,9 +557,8 @@ fn harvest_source_mixed_holding_overflow_drops_energy_only() {
     assert_eq!(pile, Some(3), "掉 4 同 tick 衰减 1");
 }
 
-/// B4 评审 3 P2-1 清偿锁值：CARRY 损毁缩容的超容掉落按**全资源序贯**
-/// （官方 _drop-resources-without-space 逐资源 min(存量, overflow)——energy
-/// 先、命名槽次之、G 尾）；tick 相掉落不衰减。
+/// CARRY 损毁后按 RESOURCES_ALL 顺序掉落全部资源中的超量部分。
+/// 本例先掉 energy，再掉 Z；对象 tick 中产生的掉落堆本轮不衰减。
 #[test]
 fn carry_death_drops_overflow_mixed_resources() {
     let mut f = Fixture::new(1, terrain_with(&[]));
@@ -705,10 +695,8 @@ fn zero_power_attack_still_logs() {
     assert_eq!(log_b, kk_engine::settle::creep::ACTION_ATTACKED as u16);
 }
 
-// ---- B1 复审阻塞项追证：官方 _oldHits 是不可观测死机制，损毁部件下一 tick 失效 ----
-// 证据链见 damage.rs distribute_hits 注释：recalcBody 冻结 _oldHits 后紧随的
-// bulk.update 经 removeHidden 原位剥离（活对象与落库载荷同时失去），下一 tick
-// 功率计数恒为 hits>0。以下两用例锁该可观测语义。
+// 损毁部件下一 tick 不再贡献功率；上游瞬态 _oldHits 的处理见
+// settle/damage.rs::distribute_hits 的说明。
 
 #[test]
 fn destroyed_attack_part_loses_power_next_tick() {

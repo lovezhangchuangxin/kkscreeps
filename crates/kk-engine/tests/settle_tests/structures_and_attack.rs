@@ -1,6 +1,4 @@
-//! B1 结构治理批自 settle_tests.rs 连续切块（不重排；原段落横幅注释随块
-//! 保留；Fixture/helpers 经 `use super::*` 从 crate 根取用——142 个
-//! #[test] 计数与原文序不变）。
+//! 测试结构阻挡与配额、资源转移、近战事件顺序，以及 Engine 的沙箱指令归属。
 
 use super::*;
 
@@ -89,7 +87,7 @@ fn controller_downgrade_chain() {
 
 #[test]
 fn engine_scripted_sandbox_closed_loop() {
-    // ScriptedSandbox 经 Engine 驱动的多 tick 闭环（方案 §10）
+    // 通过 ScriptedSandbox 与 Engine 推进多 tick，验证指令采集和房间结算的衔接。
     let mut world = World::new(9);
     let mut t = kk_core::Terrain::plains();
     t.normalize();
@@ -233,12 +231,10 @@ fn engine_scripted_sandbox_closed_loop() {
     assert!(engine.world.next_obj_id() > max_id, "分配器越过最大 id");
 }
 
-// ---- M1 深度评审回归 ----
-
 #[test]
 fn own_construction_site_blocks_movement() {
-    // 深评 H1：自家 obstacle 结构工地在 check 阶段挡路（movement.js:25-26）——
-    // move 预检不含工地（挤格语义），但仲裁不得放行，否则完工结构落在 creep 头上
+    // 自家障碍工地在移动仲裁时挡路，而非请求预检时。
+    // 来源：上游 intents/movement.js 的 checkObstacleAtXY。
     let mut f = Fixture::new(1, terrain_with(&[]));
     let site = f.site(10, 11, "spawn", 0, 15000, "p1");
     let c = f.creep("w1", "p1", 10, 10, &[BodyKind::Move], 0);
@@ -272,8 +268,8 @@ fn moving_onto_enemy_site_stomps_it() {
 
 #[test]
 fn transfer_into_extension_clamps_by_rcl() {
-    // 深评 H3：extension 容量按 EXTENSION_ENERGY_CAPACITY[rcl]（extensions/
-    // tick.js:10-17 归一、transfer.js 经 capacityForResource 钳制）——rcl 3 档 50
+    // Extension 的能量容量按 RCL 计算，本例 RCL 3 为 50。
+    // 来源：上游 extensions/tick.js 和 creeps/transfer.js。
     let mut f = Fixture::new(1, terrain_with(&[]));
     f.controller(3, Some("p1"));
     let ext = f
@@ -510,8 +506,8 @@ fn drop_rejects_amount_over_holdings() {
 
 #[test]
 fn placed_tower_blocks_birth() {
-    // 官方 checkObstacleFn 吃真实类型名（'tower' ∈ OBSTACLE_OBJECT_TYPES）——
-    // Generic 透传桶不得报成 "structure"（不在表内 → 原实现可在 tower 格出生）
+    // Generic tower 必须按 structureType 识别为障碍；固定返回 structure 会漏掉塔。
+    // 来源：上游 spawns/_born-creep.js 的 checkObstacleFn。
     let mut f = Fixture::new(1, terrain_with(&[]));
     f.controller(3, Some("p1"));
     let spawn = f.spawn("Spawn1", 20, 20, 300);
@@ -544,8 +540,8 @@ fn placed_tower_blocks_birth() {
 
 #[test]
 fn tower_counts_toward_controller_quota() {
-    // utils.checkControllerAvailability 按真实结构类型数现存对象——
-    // Generic tower 必须计入配额（原实现报 "structure" 永不计入 → 可超配额建塔）
+    // Generic tower 须计入当前结构数量，RCL 3 已有一座时不再允许建塔。
+    // 来源：上游 utils.js::checkControllerAvailability。
     let mk_intent = |b: &mut IntentBatch| {
         b.add_room_intent(
             "p1",
@@ -842,7 +838,7 @@ fn multiple_attackers_accumulate_damage() {
 
 #[test]
 fn attack_kills_creep_into_tombstone() {
-    // tick.js:134-136：hits 归零 → 暴力死亡，与 TTL 死亡同路径（B3：墓碑承接）
+    // 伤害结算后 hits 归零时死亡，资源进入墓碑；与 TTL 死亡使用同一回收入口。
     let mut f = Fixture::new(1, terrain_with(&[]));
     let mut bodylist = vec![BodyKind::Attack; 40];
     bodylist.push(BodyKind::Move);
@@ -857,8 +853,8 @@ fn attack_kills_creep_into_tombstone() {
     );
     let events = f.settle(attack_intent(a, b));
     assert!(f.world.get(b).is_none(), "1200 ≥ 200：击杀");
-    // 墓碑承接（B3）：dropRate 0.2、满寿（fixture age_time 极大 ⇒ lifeRate 巨大
-    // ⇒ 每件钳 125）⇒ 40 携带 + 125×2 回收 = 290；2 部件 ⇒ 10 tick
+    // 夹具寿命极长，每件回收钳到 125；携带 40 加两件回收得到墓碑 energy=290。
+    // 两件身体对应 10 tick 衰减期限。
     let tomb = f
         .world
         .room("W1N1")
@@ -887,7 +883,7 @@ fn attack_kills_creep_into_tombstone() {
 #[test]
 fn attack_kills_structure_and_spawn_chick() {
     // structures/_destroy.js:9-15：孵化中的 spawn 被毁 → 雏形一并移除；
-    // B3：store 进废墟（官方 _destroy.js:37 的 ruin.store = object.store || {}）
+    // Spawn 的库存进入废墟。来源：上游 structures/_destroy.js。
     let mut f = Fixture::new(1, terrain_with(&[]));
     f.controller(3, Some("p1"));
     let spawn = f.spawn("Spawn1", 20, 20, 300);
@@ -914,8 +910,8 @@ fn attack_kills_structure_and_spawn_chick() {
             .any(|o| matches!(o, RoomObject::Creep(c) if c.name == "child")),
         "雏形随 spawn 一并移除"
     );
-    // B3（官方 _destroy.js）：spawn 击毁产废墟——结构存照 {id, hitsMax,
-    // user} + store 全量承接（300-50 孵化费+1 涓流=251），衰减钟 500 tick
+    // 击毁 spawn 产生废墟，并保存结构信息与库存。
+    // 300 初始能量减 50 孵化费，再加前一轮免费能量 1，库存为 251；衰减期限为 500 tick。
     let ruin = f
         .world
         .room("W1N1")

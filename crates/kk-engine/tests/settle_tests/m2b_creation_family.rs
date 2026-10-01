@@ -1,9 +1,4 @@
-//! M2B 扩面 P2：创建族结算面——createFlag（旗归属/同主重名）、removeFlag
-//! （按玩家删）、setPosition/setColor 组合（removeFlag+createFlag 同 tick）、
-//! removeConstructionSite（所有权门 + progress/2 退能量掉落）、room intent
-//! 组序（removeFlag 先于 createFlag）。
-//! 官方对照：processor/intents/room/{create-flag,remove-flag,
-//! remove-construction-site}.js、room/intents.js 分派序。
+//! 测试旗帜归属、同轮移位改色、工地移除退款及房间动作执行顺序。
 
 use super::*;
 
@@ -49,7 +44,7 @@ fn flag_by_name(f: &Fixture, name: &str) -> Option<(ObjId, Option<String>)> {
 
 #[test]
 fn create_flag_owns_and_scopes_uniqueness() {
-    // create-flag.js:11-14：重名按玩家判——两玩家可各有同名旗；owner 落库
+    // 同房间内旗帜名称按主人区分，两名玩家可各有同名旗。归属保存在内存对象。
     let mut f = Fixture::new(1, terrain_with(&[]));
     f.settle(create_flag_intent("p1", 10, 10, "home", 10));
     let (_, owner) = flag_by_name(&f, "home").expect("p1 旗落库");
@@ -247,8 +242,8 @@ fn remove_construction_site_refunds_half_progress() {
 
 #[test]
 fn remove_construction_site_ownership_gates() {
-    // :6：site.user ∨ 房 controller.user——他人工地在自家房可删；他人工地
-    // 他人房拒（静默）
+    // 工地主人或房主可移除工地；无主房的他人工地拒绝。
+    // 来源：上游 room/remove-construction-site.js。
     let mut f = Fixture::new(1, terrain_with(&[]));
     let enemy_site = f
         .world
@@ -294,10 +289,8 @@ fn remove_construction_site_ownership_gates() {
 
 #[test]
 fn room_intent_dispatch_order_remove_before_create() {
-    // room/intents.js 组序：同名 removeFlag+createFlag 无论 push 序如何，
-    // remove 先处理。同名单名重建是序敏感杀伤线：若 create 先处理则同名
-    // 占位拒、随后 remove 删净 → 旗消亡（勘正：原测试用异名 new/old——任何
-    // 处理序都绿，不锁定组序；三路评审 P3 清偿改同名单名）
+    // 故意先提交同名 create，再提交 remove，结算仍应先删后建。
+    // 必须使用同名旗：异名旗无论处理顺序如何都能通过，不能验证排序。
     let mut f = Fixture::new(1, terrain_with(&[]));
     f.settle(create_flag_intent("p1", 10, 10, "flag", 10));
 

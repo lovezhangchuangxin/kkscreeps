@@ -1,25 +1,21 @@
-//! 沙箱抽象（ADR-008 第 5 条；B0 WP1 演进为统一执行接口）。
+//! 沙箱接口与玩家运行结果类型。
 //!
-//! 本 trait 的实现当前只有测试假实现（ScriptedSandbox 按脚本回放固定指令，
-//! 经 [`Engine::tick`](crate::settle::Engine::tick) 驱动）；真执行器在
-//! kk-runtime（`PlayerExecutor` 面，per-viewer 世界投影进出）——Sandbox 的
-//! 真实现/桥接随 B0-5 协调器接线落定。引擎不依赖 deno_core，单元测试
-//! 不必拖着真 V8 跑。
+//! ScriptedSandbox 为引擎测试回放指令；实际 JavaScript 执行位于
+//! kk-runtime，并直接使用这里的结果类型。该接口不依赖 V8。
 
 use std::collections::BTreeMap;
 
 use crate::intent::IntentBatch;
 
-/// 结算前的世界只读视图（M1 最小面：整个 typed 世界；沙箱按需读房间）。
+/// 结算前的只读世界。按玩家可见范围构造沙箱数据是执行器的责任。
 pub struct WorldView<'a> {
     pub world: &'a kk_world::World,
 }
 
-/// 一次玩家执行的输入（代码 + 身份；世界投影由实现方按需从 [`WorldView`]
-/// 生成——假沙箱零投影开销，真沙箱内部 world_json_for_viewer）。
+/// 一次执行的玩家身份和代码。测试沙箱忽略代码。
 pub struct RunSpec {
     pub player: String,
-    /// 玩家代码（screeps-ok runPlayer 通道；假沙箱忽略）。
+    /// 玩家代码。
     pub code: String,
 }
 
@@ -32,52 +28,54 @@ impl RunSpec {
     }
 }
 
-/// 玩家运行结局（tick 契约「状态与可见性」：玩家结局与基础设施故障必须
-/// 分类——前者依官方语义产出结果、不中止整个 tick；后者走 shard 停顿）。
+/// 一次玩家执行的结果分类。
+/// kk-runtime 的协调器允许玩家级失败继续结算，基础设施故障则返回错误。
 #[derive(Debug, Clone, PartialEq)]
 pub enum RunOutcome {
-    /// 正常执行完毕（玩家逻辑自身的错误由 expr/console 携带）。
+    /// 执行器完成本次调用；玩家代码异常仍可记录在 expr 或 console 中。
     Executed,
-    /// 硬中断/停跑（计费已按官方语义结算）。
+    /// 执行被硬中断或因预算不足而跳过；计费候选由执行器提供。
     Terminated,
-    /// 世界注入失败（玩家把环境搞坏——玩家级失败，不冒泡整轮；B0-5 接线）。
+    /// 无法注入本轮世界数据，未执行玩家代码。
     InjectFailed,
-    /// 基础设施故障（线程失联/协议损坏）——协调器转整轮停顿（Err）。
+    /// 执行线程或通信协议等基础设施发生故障。
     InfraFailure(String),
 }
 
 impl RunOutcome {
-    /// 是否为有定义的玩家结局（协调器继续本轮；InfraFailure 停顿）。
+    /// 是否属于玩家级结果；基础设施故障返回 false。
     pub fn is_player_outcome(&self) -> bool {
         !matches!(self, RunOutcome::InfraFailure(_))
     }
 }
 
-/// 一次玩家执行的候选结果（tick 契约「状态与可见性」的最小形态）：**无持久
-/// 副作用**——世界与玩家持久状态（RawMemory/CPU 桶）在协调器统一提交点一次
-/// 切换；候选字段（cpu_billed_ms/raw_memory）由提交点消费，B0-5 接线生产。
+/// 一次执行产生的指令、输出与玩家状态候选。
+///
+/// 此结构不自行提交状态。kk-runtime 在世界结算成功后写回 Memory、segments
+/// 并提交 CPU 计费；玩家 JavaScript 的全局变量等沙箱内部变化不在此事务内。
+/// 直接调用 Engine::tick 只收集 Executed 的指令，不消费其余字段。
 #[derive(Debug, Clone)]
 pub struct RunResult {
-    /// 玩家身份（执行器按注册身份填；结算侧仍做冒名过滤）。
+    /// 执行器提供的玩家身份；调用方仍须按注册身份绑定指令。
     pub player: String,
     pub outcome: RunOutcome,
-    /// 该玩家的意图批（已按玩家身份清洗；空批 = 无意图/硬中断丢弃）。
+    /// 经身份绑定的指令批；未执行或中断时通常为空。
     pub intents: IntentBatch,
     /// runExpr 结果 JSON（screeps-ok 通道：`{ok, value?} | {ok:false, kind, error}`）。
     pub expr: serde_json::Value,
-    /// CPU 计费候选（end_tick 产出的 used+intents 计费；None = 本轮未产出）。
+    /// 本轮 CPU 计费候选，单位毫秒；None 表示没有产出。
     pub cpu_billed_ms: Option<f64>,
-    /// RawMemory 候选（Memory 写回产物；None = 本轮未产出/写回失败）。
+    /// 本轮 RawMemory 写回候选；None 表示未产出或写回失败。
     pub raw_memory: Option<String>,
-    /// segments 信封候选（M2B 扩面 P6：{writes,active?,public?,defaultPublic?,
-    /// foreign?}——窗口写回+四请求快照；None = 写回失败/未达）。
+    /// 段写回与请求：`{writes, active?, public?, defaultPublic?, foreign?}`。
+    /// None 表示没有产出；请求的校验和提交由 kk-runtime 完成。
     pub segments_out: Option<serde_json::Value>,
     /// 本次执行期间的控制台输出。
     pub console: Vec<String>,
 }
 
 impl RunResult {
-    /// 注入失败的占位构造（执行器在生产侧无法完成注入时；B0-5 接线）。
+    /// 构造注入失败结果：指令为空，Memory、segments 和 CPU 候选均缺失。
     pub fn inject_failed(player: impl Into<String>, error: impl Into<String>) -> Self {
         Self {
             player: player.into(),
@@ -93,7 +91,7 @@ impl RunResult {
         }
     }
 
-    /// 基础设施故障占位构造（线程失联等；协调器见此转整轮停顿）。
+    /// 构造基础设施故障结果，携带原因且不产出玩家状态候选。
     pub fn infra_failure(player: impl Into<String>, error: impl Into<String>) -> Self {
         Self {
             player: player.into(),
@@ -108,14 +106,15 @@ impl RunResult {
     }
 }
 
-/// 玩家代码沙箱的统一执行接口（B0 WP1，ADR-013 决策 1）：视图进、候选
-/// RunResult 出。实现方负责把「玩家看到的」与「玩家想做的」隔离：视图只读，
-/// 产出的 intent 一律视为不可信（结算前过白名单清洗）。
+/// 接收只读世界与执行参数，返回候选结果。
+/// 实现可以改变自身的沙箱状态；只读视图不代表执行没有副作用。
+/// 玩家指令须先清洗并绑定注册身份，再交给结算器。
 pub trait Sandbox: Send {
     fn run(&mut self, view: &WorldView<'_>, spec: &RunSpec) -> RunResult;
 }
 
-/// 固定指令脚本假实现（同接口）：按 tick 序回放固定意图批。
+/// 按世界时间返回预设指令的测试沙箱，不执行代码。
+/// 脚本按 tick 索引，不按玩家区分；Engine::tick 只取注册玩家的指令。
 #[derive(Debug, Default)]
 pub struct ScriptedSandbox {
     /// 脚本表：tick → 该 tick 注入的批（缺 tick 为空批）。

@@ -1,13 +1,9 @@
-//! M2B 扩面 P5：结构动作族结算。
-//! 官方对照：towers/{intents,attack,heal,repair}.js（else-if 单动作序、
-//! 距离衰减 600/400/800@5 格与 150/100/200@≥20 格、rampart 同格重定向、
-//! 延迟伤害/治疗序）、links/transfer.js（3% 损耗、冷却=距离×1、RCL 配额
-//! 门、满仓截断）、ramparts/set-public.js。
+//! 测试塔的距离功率和动作优先级、link 转移损耗与限制，以及 rampart 公开标志。
 
 use super::*;
 use serde_json::json;
 
-/// 插入任意 data 的 Generic 结构（P4 place 面形态：绝对衰减钟 + 容量对）。
+/// 插入指定 JSON 数据的 Generic 结构。
 fn place_generic(f: &mut Fixture, x: u8, y: u8, body: serde_json::Value) -> ObjId {
     f.world
         .insert(
@@ -51,10 +47,7 @@ fn link(f: &mut Fixture, x: u8, y: u8, energy: i64, cooldown: i64) -> ObjId {
     )
 }
 
-/// 夹具隐性耦合登记（评审 3 P2-5）：generic_decay_tick 的 rampart hitsMax
-/// 同步在衰减钟门之外**每 tick 执行**（官方同形）——放置后 p1 房内 rampart
-/// 的 hitsMax 会在首个 settle tick 被改写为 RAMPART_HITS_MAX[rcl]、异主/野房
-/// rampart 归 0。当前断言均不读 hitsMax 故无碍；扩断言时须先过一遍此面。
+/// 读取当前 Generic 数据；rampart 的 hitsMax 会在每轮结算按房主和 RCL 同步。
 fn data_of(f: &Fixture, id: ObjId) -> Value {
     match f.world.get(id).map(|(_, o)| o) {
         Some(RoomObject::Generic(g)) => serde_json::from_str(&g.data).unwrap(),
@@ -130,13 +123,8 @@ fn tower_attack_rampart_redirect() {
     );
 }
 
-/// heal.js:27 延迟治疗 + creeps/tick.js:118-128「伤害与治疗合并结算、死亡
-/// 判定在其后」——两座塔同 tick 对同一 creep 一 heal 一 attack：净
-/// 300−600+400=100 >0 存活。**判别面说明（评审 3 勘正）**：纯顺序反转
-/// （先治后伤）数值同 100（300+400−600，且 700<hitsMax 800 不触钳）——本测
-/// 的真实判别力在「伤害与治疗之间夹死亡判定」的形态：若未来重构把
-/// apply_pending_hits 拆成「先施伤→判死→再施治」，−300 中途判死即转红
-/// （当前实现为官方同形单表达式 `old−damage+heal`，damage.rs:178）。
+/// 同 tick 受到 600 伤害并治疗 400，目标初始 hits=300，最终 hits=100，仍应存活。
+/// 本例能区分提前判死；因不触及 hitsMax，不能区分先伤后治与先治后伤。
 #[test]
 fn tower_heal_and_attack_pending_order() {
     let mut f = Fixture::new(1, terrain_with(&[]));
@@ -245,8 +233,8 @@ fn tower_repair_clamps_and_gates() {
     );
 }
 
-/// links/transfer.js 全链：3% 损耗（ceil）、冷却=Chebyshev 距离×1、
-/// 满仓截断；下 tick 起 cooldown 由 link_cooldown_tick 递减（P4 面）。
+/// 验证 link 的 3% 损耗、按距离增加冷却和目标余量限制。
+/// 意图设置冷却后，对象 tick 在同轮减 1。来源：上游 links/transfer.js 和 links/tick.js。
 #[test]
 fn link_transfer_math_cooldown_and_clamp() {
     let mut f = Fixture::new(1, terrain_with(&[]));
@@ -283,7 +271,7 @@ fn link_transfer_math_cooldown_and_clamp() {
         Some(&json!(97)),
         "100−ceil(100×0.03)=97"
     );
-    // P4 面回勾：下 tick 再递减
+    // 下一 tick 继续递减冷却。
     f.settle(IntentBatch::default());
     assert_eq!(data_of(&f, l1)["cooldown"], json!(8));
 
@@ -343,12 +331,8 @@ fn link_transfer_reject_gates() {
         "RCL 配额 0 整单拒"
     );
 
-    // 三个拒因各自独占承重（评审 3 P1 修复重写）：**与 rcl4 段分 Fixture**——
-    // Fixture 的 controller 只 insert 不替换、Working::controller() 按 ObjId
-    // 升序取首个，同 Fixture 二次 f.controller 会形成双 controller 阴影使
-    // 后续全部读 rcl4（原版本因此三拒因断言全部空转）。
-    // ①源冷却中：源有能量、目标空非满、rcl8 配额 6 四座全 active → 唯一拒因
-    //   =cooldown>0
+    // 其他拒绝条件使用新的 Fixture，避免两个 controller 同房时始终读取第一个。
+    // 每种情况都满足其余条件，使拒绝结果能够归因于被测检查。
     let mut f = Fixture::new(1, terrain_with(&[]));
     f.controller(8, Some("p1"));
     let src_cd = link(&mut f, 10, 30, 400, 5);
@@ -367,8 +351,7 @@ fn link_transfer_reject_gates() {
         "冷却拒：不叠加（仅 phase 8 常规递减 5→4）"
     );
 
-    // ②目标满仓：源有能量且非冷却 → 唯一拒因=target_total==cap（原版本源
-    //   能量 0 在能量门即拒，此门从未承重）
+    // 目标已满，源有足量能量且不在冷却，只验证目标容量检查。
     let src_ok = link(&mut f, 10, 40, 400, 0);
     let dst_full = link(&mut f, 20, 40, 800, 0);
     transfer(&mut f, src_ok, dst_full, 100);
@@ -381,8 +364,7 @@ fn link_transfer_reject_gates() {
         data_of(&f, dst_full).pointer("/store/energy"),
         Some(&json!(800))
     );
-    // **判别锚（变异实验实证）**：等值门提前返回**不挂冷却**——若摘除该门，
-    // clamp 路径收敛 amount=0（能量两侧同不动）但冷却 += 距离，此断言转红
+    // 只检查能量不变无法区分满仓拒绝和数量钳到 0；必须再检查没有增加冷却。
     assert_eq!(
         data_of(&f, src_ok)["cooldown"],
         json!(0),
@@ -486,10 +468,8 @@ fn structure_intent_ownership_gate() {
     );
 }
 
-/// 自指转移（陈旧壳可达——API 门 `target === this` 引用比较放行同 id）：
-/// 官方三步序对同一引用收敛 → 净 `E − ceil(amount×3%)`、冷却 += 1×0。
-/// 评审 2 P1-1 清偿：原实现 target/source 独立写回，自指时 source 侧把
-/// 增量覆写回 `E − amount`。
+/// 同一 link 自转移只损失 ceil(amount*0.03) 能量，距离为 0，不增加冷却。
+/// 分别写回源、目标旧快照会覆盖接收量，错误地扣除全部 amount。
 #[test]
 fn link_transfer_self_target_converges() {
     let mut f = Fixture::new(1, terrain_with(&[]));
@@ -509,8 +489,7 @@ fn link_transfer_self_target_converges() {
     );
 }
 
-/// repair 的钳制与满血拒（评审 3 P2-2 补——全仓库此前无判别覆盖）：低
-/// hitsMax 目标（link 1000）近满回补钳顶；满血目标整单拒（能量不动）。
+/// 接近满血时修复量钳到 hitsMax，已满血时不再扣能量。
 #[test]
 fn tower_repair_clamps_to_hitsmax_and_rejects_full() {
     let mut f = Fixture::new(1, terrain_with(&[]));
@@ -539,8 +518,7 @@ fn tower_repair_clamps_to_hitsmax_and_rejects_full() {
     );
 }
 
-/// towers/intents.js else-if 序的 heal>repair 半边（评审 3 P2-3 补——
-/// in-repo 此前只锁 heal>attack）。
+/// 同时提交 heal 和 repair，只执行 heal；墙耐久必须不变。
 #[test]
 fn tower_single_action_heal_beats_repair() {
     let mut f = Fixture::new(1, terrain_with(&[]));

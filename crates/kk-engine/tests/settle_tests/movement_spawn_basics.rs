@@ -1,10 +1,6 @@
-//! B1 结构治理批自 settle_tests.rs 连续切块（不重排；原段落横幅注释随块
-//! 保留；Fixture/helpers 经 `use super::*` 从 crate 根取用——142 个
-//! #[test] 计数与原文序不变）。
+//! 测试移动疲劳、采集建造升级、孵化任务、续命回收及寿命到期。
 
 use super::*;
-
-// ---- 移动 ----
 
 #[test]
 fn move_fatigue_by_terrain() {
@@ -90,8 +86,6 @@ fn static_obstacle_blocks_move_intent() {
     f.settle(move_intent(c, 3)); // RIGHT → 墙
     assert_eq!(f.creep_state(c), (10, 10, 0, 0), "墙格不可入");
 }
-
-// ---- 采集 ----
 
 #[test]
 fn harvest_amount_and_events() {
@@ -219,8 +213,6 @@ fn harvest_overflow_drops() {
     assert_eq!(dropped, Some(13), "超容 64-50=14 掉地且同 tick 衰减 1");
 }
 
-// ---- 建造 ----
-
 #[test]
 fn build_progress_and_completion() {
     let mut f = Fixture::new(1, terrain_with(&[]));
@@ -250,8 +242,6 @@ fn build_progress_and_completion() {
     assert_eq!(wall.hits, 1, "官方落成墙 hits=WALL_HITS(1)");
     assert_eq!(f.creep_state(c).3, 9, "耗 1 能量");
 }
-
-// ---- 升级 ----
 
 #[test]
 fn upgrade_progress_and_gcl() {
@@ -290,8 +280,6 @@ fn controller_levelup_cycle() {
         _ => panic!(),
     }
 }
-
-// ---- 孵化 ----
 
 #[test]
 fn spawn_creep_cycle() {
@@ -392,7 +380,7 @@ fn renew_creep_settles() {
         &[BodyKind::Work, BodyKind::Carry, BodyKind::Move],
         0,
     );
-    // Fixture::creep 的 age_time 是 u64::MAX/2（寿命尽）——改到 time+100
+    // Fixture 默认寿命截止值为 u64::MAX/2，改为 time+100 以允许 renew。
     if let RoomObject::Creep(c) = f
         .world
         .room_mut("W1N1")
@@ -509,9 +497,7 @@ fn renew_creep_guards() {
     }
     let mut b = IntentBatch::default();
     b.add_object_intent("p1", spawn, Action::RenewCreep, IntentData::target(far));
-    // near 也拒：energyAvailable 面为 0（该 fixture 无 controller——spawn 同时
-    // 被 calc_spawns 标 off，可观察结果与官方 energyAvailable 0 < cost=20 一致；
-    // 评审 3 O2：归因注释按实际机制写）
+    // 本夹具没有控制器，spawn 被标记 off，可用能量为 0，renew 无法扣款。
     b.add_object_intent("p1", spawn, Action::RenewCreep, IntentData::target(near));
     f.settle(b);
     for id in [far, near] {
@@ -576,8 +562,7 @@ fn renew_creep_guards() {
     }
 }
 
-/// recycleCreep 结算（recycle-creep.js:23 → _die(target, 1.0, false)，B3）：
-/// creep 移除、dropRate=1.0 的全额造价回收进墓碑；非邻接拒。
+/// 回收使用 dropRate=1.0，资源进入墓碑；非邻接目标被拒绝。
 #[test]
 fn recycle_creep_settles() {
     let mut f = Fixture::new(1, terrain_with(&[]));
@@ -590,9 +575,8 @@ fn recycle_creep_settles() {
     b2.add_object_intent("p1", spawn, Action::RecycleCreep, IntentData::target(far));
     f.settle(b);
     assert!(f.world.get(trash).is_none(), "回收目标移除");
-    // 墓碑承接（B3）：dropRate 1.0 + 满寿（fixture 的 age_time 极大 ⇒ lifeRate
-    // 巨大 ⇒ 每件钳 CREEP_PART_MAX_ENERGY=125）⇒ 50 携带 + 125 回收 = 175；
-    // 1 部件 ⇒ ticksToDecay = 5
+    // 夹具寿命极长，每件回收量钳到 125；携带 50 加单件回收得到墓碑 energy=175。
+    // 单件身体对应 5 tick 衰减期限。
     let tomb = f
         .world
         .room("W1N1")
@@ -722,10 +706,9 @@ fn cancel_spawning_settles() {
     assert!(f.world.get(spawn).is_some());
 }
 
-/// 雏形寿命模型（官方 create-creep.js:80-98 **不带 ageTime** + creeps/tick.js
-/// :88-91 出生后首触赋值——CREEP-SPAWNING-002 的 ticksToLive undefined 根基）：
-/// 孵化中 age_time=0；出生 tick 赋 time+1500（CLAIM 部件 600）；spawn 消亡的
-/// 孵化中雏形被 creep tick 移除（tick.js:16-19）。
+/// 孵化 creep 的 age_time 初值为 0，出生后首次进入寿命分支时初始化。
+/// 本例 spawn 先于 creep 执行 tick，所以出生同轮即初始化；其他对象顺序可能推迟一轮。
+/// 任意 CLAIM 件使用 600 tick 寿命，否则为 1500；失去 spawn 的孵化对象被清理。
 #[test]
 fn chick_age_time_model() {
     // ① [move] 雏形：孵化中 0，出生 tick（time 2）赋 2+1500
@@ -817,8 +800,6 @@ fn chick_age_time_model() {
     );
 }
 
-// ---- 掉落能量衰减 ----
-
 #[test]
 fn dropped_energy_decays() {
     let mut f = Fixture::new(1, terrain_with(&[]));
@@ -865,8 +846,6 @@ fn dropped_energy_decays() {
     );
 }
 
-// ---- TTL 死亡 ----
-
 #[test]
 fn creep_dies_at_age_time() {
     let mut f = Fixture::new(1, terrain_with(&[]));
@@ -903,8 +882,8 @@ fn creep_dies_at_age_time() {
     assert!(f.world.get(c).is_some(), "time=0 < age_time-1=1：未死");
     let events = f.settle(IntentBatch::default());
     assert!(f.world.get(c).is_none(), "time=1 >= 1：死亡");
-    // B3（官方 _die.js）：墓碑承接——ticksToLive=1 的 lifeRate=0.2×1/1500，
-    // 造价回收 (50+100)×1.33e-4 → floor 0，store 只含携带 30；2 部件 ⇒ 10 tick
+    // TTL 到期时剩余寿命为 1，身体造价回收向下取整为 0，墓碑只保留携带能量 30。
+    // 两件身体对应 10 tick 衰减期限。
     let tomb = f
         .world
         .room("W1N1")
@@ -925,7 +904,7 @@ fn creep_dies_at_age_time() {
         vec![BodyKind::Move.code(), BodyKind::Work.code()],
         "尸体 body 类型码"
     );
-    // _die.js:97：EVENT_OBJECT_DESTROYED {type: 'creep'}（B3 补齐）
+    // 死亡产生 EVENT_OBJECT_DESTROYED，data.type 为 creep。来源：上游 creeps/_die.js。
     assert_eq!(events.len(), 1);
     assert_eq!(
         events[0]["event"],

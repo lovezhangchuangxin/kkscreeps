@@ -1,5 +1,6 @@
-//! 单房间结算集成测试：固定指令脚本驱动，逐项对照官方数值
-//! （常量值与官方 file:line 见各断言注释）。
+//! 单房间结算测试的共享夹具和动作构造工具。
+//!
+//! Fixture 直接调用 settle_room；跨房市场和世界发布行为由使用 Engine 的测试验证。
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -111,9 +112,7 @@ impl Fixture {
         self.controller_full(level, owner, |_| {})
     }
 
-    /// controller 全字段形态：level/owner 之外的持久化面（reservation/sign/
-    /// upgrade_blocked/safe_mode_cooldown/downgrade_time/safe_mode…）经闭包
-    /// 定制（B2 controller 族测试的公共入口）。
+    /// 通过闭包设置控制器的预定、签名、封锁和安全模式等字段。
     fn controller_full(
         &mut self,
         level: u8,
@@ -205,7 +204,7 @@ impl Fixture {
             .unwrap()
     }
 
-    /// 中性路（A4-iv notifyWhenAttacked 的无主结构用例）。
+    /// 插入无主道路。
     fn road_at(&mut self, x: u8, y: u8) -> ObjId {
         self.world
             .insert(
@@ -222,7 +221,7 @@ impl Fixture {
             .unwrap()
     }
 
-    /// B4：矿物（density 1..=4；next_regen None = 未挂钟）。
+    /// 插入矿物；density 范围为 1..=4，None 表示尚未设置再生时钟。
     fn mineral(
         &mut self,
         x: u8,
@@ -248,7 +247,7 @@ impl Fixture {
             .unwrap()
     }
 
-    /// B4：提取器（hits 缺省 EXTRACTOR_HITS）。
+    /// 插入提取器，cooldown 是剩余 tick 数。
     fn extractor(&mut self, x: u8, y: u8, owner: Option<&str>, cooldown: u64) -> ObjId {
         self.world
             .insert(
@@ -266,7 +265,7 @@ impl Fixture {
             .unwrap()
     }
 
-    /// B4：携带命名矿物的 creep（store_extra 直填——harvest 产出的等价终态）。
+    /// 插入携带命名矿物的 p1 creep。
     #[allow(clippy::too_many_arguments)]
     fn creep_with_mineral(
         &mut self,
@@ -289,8 +288,7 @@ impl Fixture {
     }
 
     fn settle(&mut self, batch: IntentBatch) -> Vec<Value> {
-        // 测试工作台默认注入固定墙钟：结算可复现（个别用例显式改 now_ms 锁
-        // 墙钟语义——重放一致性测试在同输入下逐字节一致）
+        // 固定默认墙钟，使签名和重放结果可复现；需要其他时间的测试显式传入 TickInput。
         self.settle_with_input(
             batch,
             kk_engine::settle::TickInput {
@@ -342,9 +340,6 @@ fn move_intent(creep: ObjId, direction: u8) -> IntentBatch {
     b
 }
 
-// ---- A4-i：spawn 方法族结算（renewCreep/recycleCreep/setSpawnDirections/
-// cancelSpawning——官方 processor/intents/spawns/ 逐条对照）----
-
 /// 带孵化任务/定制的 spawn 插入（Fixture::spawn 的 spawning 定制形态）。
 fn spawn_with_job(
     f: &mut Fixture,
@@ -385,8 +380,6 @@ fn chick_of(f: &Fixture, name: &str) -> ObjId {
         .unwrap()
 }
 
-// ---- 外部复审（ChatGPT）回归：Generic 透传结构的类型名解析 ----
-
 fn generic_tower(x: u8, y: u8) -> RoomObject {
     RoomObject::Generic(kk_schema::room::GenericObj {
         id: 0,
@@ -395,10 +388,6 @@ fn generic_tower(x: u8, y: u8) -> RoomObject {
         data: r#"{"type":"structure","structureType":"tower","owner":"p1","hits":1}"#.into(),
     })
 }
-
-// ---- B1：hits 模型 + attack/repair/dismantle ----
-// 官方对照：engine/src/processor/intents/creeps/{attack,repair,dismantle}.js、
-// _damage.js、creeps/tick.js（_applyDamage/_recalc-body）、structures/_destroy.js。
 
 /// 直插 extension（可自定义 hits/store——Fixture.spawn 只造 spawn）。
 fn extension_at(f: &mut Fixture, x: u8, y: u8, hits: u32, energy: u32) -> ObjId {
@@ -440,9 +429,8 @@ fn generic_structure(
                     "structureType": structure_type,
                     "owner": owner,
                     "hits": hits,
-                    // M2B P4：衰减钟（官方 DB 不变量——container/rampart 恒带
-                    // 绝对 nextDecayTime；缺钟官方立即衰减。夹具给远钟使
-                    // 非衰减用例不受相位 8 衰减影响）
+                    // 给 container/rampart 设置远期衰减时钟，避免测试其他动作时结构提前消失。
+                    // 0 时钟会立即触发衰减，因此不能省略。
                     "nextDecayTime": 1_000_000,
                 })
                 .to_string(),
@@ -469,10 +457,6 @@ fn creep_parts(f: &Fixture, id: ObjId) -> (u32, Vec<u32>) {
     }
 }
 
-// ---- B1.1：heal / rangedHeal 执行器 ----
-// 官方对照：engine/src/processor/intents/creeps/{heal,rangedHeal}.js、
-// creeps/tick.js:118-136（_healToApply 施加点：伤害先、治疗后、死亡判定最后）。
-
 fn heal_intent(healer: ObjId, target: ObjId) -> IntentBatch {
     let mut b = IntentBatch::default();
     b.add_object_intent("p1", healer, Action::Heal, IntentData::target(target));
@@ -484,9 +468,6 @@ fn ranged_heal_intent(healer: ObjId, target: ObjId) -> IntentBatch {
     b.add_object_intent("p1", healer, Action::RangedHeal, IntentData::target(target));
     b
 }
-
-// ---- B2：controller 结算族（claim / reserve / attack / sign / generateSafeMode
-// / activateSafeMode 激活链 / 踩工地 safeMode 门 / source 容量 reservation 分支）----
 
 fn ctl_of(f: &Fixture) -> &kk_schema::room::ControllerObj {
     f.world

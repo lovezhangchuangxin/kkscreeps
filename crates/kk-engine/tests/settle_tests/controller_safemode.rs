@@ -1,6 +1,4 @@
-//! B1 结构治理批自 settle_tests.rs 连续切块（不重排；原段落横幅注释随块
-//! 保留；Fixture/helpers 经 `use super::*` 从 crate 根取用——142 个
-//! #[test] 计数与原文序不变）。
+//! 测试控制器占领、预定、攻击、签名和安全模式，并验证墙钟输入的重放行为。
 
 use super::*;
 
@@ -152,8 +150,8 @@ fn claim_controller_gcl_gate() {
 
 #[test]
 fn claim_controller_own_room_rejected() {
-    // claimController.js:26-28：level > 0 拒——自己已拥有的房再 claim 同路
-    //（分支评审 3 补测：既有测试只锁他人房形态）
+    // 已占领房间即使属于自己也拒绝再次 claim，不重置等级。
+    // 来源：上游 creeps/claimController.js 的 level 检查。
     let mut f = Fixture::new(1, terrain_with(&[]));
     let ctl = f.controller(1, Some("p1"));
     let c = f.creep("w1", "p1", 5, 6, &[BodyKind::Claim], 0);
@@ -205,9 +203,8 @@ fn claim_controller_gcl_reads_last_tick_set() {
 
 #[test]
 fn attack_controller_zero_claim_rejected() {
-    // attackController.js:34/:42：effect 为 0（无存活 CLAIM）整票拒——
-    // 无削减、无封锁、无事件（评审 3 补测：若删掉 effect==0 守卫，
-    // upgrade_blocked 断言抓回）
+    // 没有存活 CLAIM 时不得削减期限、设置封锁或生成事件。
+    // 仅检查期限不变不足以验证拒绝，必须同时检查 upgrade_blocked。
     let mut f = Fixture::new(1, terrain_with(&[]));
     let ctl = f.controller_full(1, Some("p2"), |t| {
         t.downgrade_time = Some(20_000);
@@ -221,9 +218,8 @@ fn attack_controller_zero_claim_rejected() {
 
 #[test]
 fn attack_controller_reservation_drain_below_zero_cleared_same_tick() {
-    // 预约削减穿透 0：官方 endTime − effect 得负数入内存、同 tick 被
-    // controllers/tick 预定清除分支消解（清除条件在 0/负数下同真）——
-    // 我方 u64 饱和 0，终态等价（评审 3 补测：锁"削穿即清除"官方可观察值）
+    // 预定期限扣至 0 后，同 tick 的 controller tick 将其清除。
+    // 本实现以 u64 饱和到 0，上游可暂存负期限；这里验证最终清除结果。
     let mut f = Fixture::new(1, terrain_with(&[]));
     let ctl = f.controller_full(0, None, |t| {
         t.reservation = Some(kk_schema::room::Reservation {
@@ -502,9 +498,8 @@ fn attack_controller_null_downgrade_time_loses_room_next_tick() {
 
 #[test]
 fn downgrade_then_claim_resets_owner_sentinel() {
-    // owner 三态往返锁：降级归零（cleared=true）→ 重新 claim（cleared=false）。
-    // 防未来 claim 路径漏复位导致落库态长期不一致（投影 Some 分支优先，
-    // 漏复位属潜伏态——owner_cleared 断言是唯一可见面）
+    // 降级归零后 owner_cleared=true，重新 claim 须复位为 false。
+    // Some owner 的投影会掩盖未复位问题，所以直接检查内部标志。
     let mut f = Fixture::new(1, terrain_with(&[]));
     let ctl = f.controller_full(1, Some("p2"), |t| {
         t.downgrade_time = None; // 当 tick即归零（同上 quirk）
@@ -570,9 +565,7 @@ fn sign_controller_sets_and_clears() {
     d.sign = Some("reserved sector".into());
     b.add_object_intent("p1", c, Action::SignController, d);
     f.settle(b);
-    // datetime 经 fixture 固定墙钟已可锁值（同 tick 多签共享同一 now_ms——
-    // 官方逐签 Date.now() 的 ms 粒度下几乎恒同值，灰区登记）；此处比较业务
-    // 三元组与 datetime 齐备性
+    // 检查签名三项业务字段和 datetime 存在性；具体墙钟值由重放测试检查。
     assert_eq!(
         ctl_of(&f)
             .sign
@@ -612,10 +605,8 @@ fn sign_controller_sets_and_clears() {
     assert_eq!(ctl_of(&f).sign, None, "非邻接拒");
 }
 
-/// ADR-013 决策 5 的重放一致性回归：同初始世界 + 同 intents + 同 TickInput
-/// 两次结算产物逐字节一致（含 signController 的 datetime 落盘——原
-/// `SystemTime::now` 内联读取是结算链的唯一非确定性源，两次执行必然不同）；
-/// 不同 TickInput 只改 datetime（玩家可见的墙钟语义不变）。
+/// 同一初始世界、指令与 TickInput 两次结算应得到相同世界投影和签名。
+/// 改变 now_ms 应改变签名的 datetime。设计依据：ADR-013 的外部输入重放约束。
 #[test]
 fn tick_input_replay_consistency() {
     fn run_once(now_ms: u64) -> (String, (String, String, u64, Option<u64>)) {
@@ -646,10 +637,8 @@ fn tick_input_replay_consistency() {
     assert_ne!(world_a, world_c, "datetime 落盘进世界投影");
 }
 
-/// [`kk_engine::settle::Engine::tick_with_intents_with_input`] 的引擎级重放
-/// （B0-2 对抗评审 P2-2 清偿）：上面 Fixture 版直调 settle_room 绕过了
-/// Engine 层的房间循环/共享 next_id/intent 按房过滤——本测试经引擎入口
-/// 双房各签一个 controller，同 TickInput 双跑的世界投影逐字节一致。
+/// 通过 Engine 在两房分别签名，验证相同输入产生相同投影。
+/// 与直接调用 settle_room 的测试相比，这里还覆盖房间循环和按房过滤。
 #[test]
 fn tick_input_replay_consistency_engine_level() {
     use kk_engine::settle::TickInput;
@@ -733,8 +722,8 @@ fn tick_input_replay_consistency_engine_level() {
 
 #[test]
 fn sign_text_truncated_to_100_chars() {
-    // system.js:74 `sign: 'userString'` → 截 100（UTF-16 码元 vs Unicode
-    // chars 的差异沿用既有灰区登记——BMP 文本两者等值）
+    // 通过指令清洗入口截取签名，限长单位为 UTF-16 码元。
+    // 本例使用 BMP 文本，码元数与字符数相同。
     let mut f = Fixture::new(1, terrain_with(&[]));
     let ctl = f.controller(0, None);
     let c = f.creep("w1", "p1", 5, 6, &[BodyKind::Move], 0);
@@ -927,7 +916,8 @@ fn same_tick_attack_cancels_safe_mode_activation() {
 #[test]
 fn enemy_stomp_blocked_under_safe_mode() {
     // movement.js:224：`!roomController || controller.user === mover ||
-    // !(safeMode > gameTime)` 才允许踩敌方工地——B2 补齐的门（灰区清偿项）
+    // 房主安全模式生效时，敌方 creep 移入工地格也不能踩掉工地。
+    // 来源：上游 intents/movement.js 的敌方工地移除条件。
     let mut f = Fixture::new(1, terrain_with(&[]));
     let ctl = f.controller_full(1, Some("p2"), |t| {
         t.safe_mode = 1000;

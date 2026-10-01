@@ -1,12 +1,10 @@
-//! B1 结构治理批自 settle_tests.rs 连续切块（不重排；原段落横幅注释随块
-//! 保留；Fixture/helpers 经 `use super::*` 从 crate 根取用——142 个
-//! #[test] 计数与原文序不变）。
+//! 测试矿物再生与采集、强化建造、命名资源槽和携带量对移动的影响。
 
 use super::*;
 
 #[test]
 fn sign_settlement_persists_datetime() {
-    // 灰区纠错清偿：官方 signController.js:23 结算时落一次 Date.now() 毫秒
+    // 签名 datetime 在结算时保存，单位为 Unix 毫秒，不由查询 getter 临时生成。
     let mut f = Fixture::new(1, terrain_with(&[]));
     let ctl = f.controller(0, None);
     let c = f.creep("w1", "p1", 5, 6, &[BodyKind::Claim], 0);
@@ -28,13 +26,10 @@ fn sign_settlement_persists_datetime() {
     }
 }
 
-// ---- GPT 二轮复审清偿锁值 ----
-
 #[test]
 fn boosted_build_two_step_official_values() {
-    // 官方 build.js:67-84 两步：基础量定耗能（energy -= base effect），
-    // 增量数组定进度。GPT 探针值：5 能量单 WORK——LH(×1.5) 进度 7、
-    // XLH2O(×2) 进度 10、能耗均 5
+    // 强化建造分开计算能耗与进度：单 WORK 使用 5 能量，
+    // LH 倍率 1.5 得 7 进度，XLH2O 倍率 2 得 10 进度。来源：上游 creeps/build.js。
     for (boost, want_progress) in [("LH", 7), ("XLH2O", 10)] {
         let mut f = Fixture::new(1, terrain_with(&[]));
         let site = f
@@ -111,8 +106,8 @@ fn boosted_build_two_step_official_values() {
 
 #[test]
 fn transfer_mixed_holdings_respect_total_capacity() {
-    // 官方 transfer.js:32：通用容量目标按 calcResources 全槽求和——
-    // 满 energy 的 storage 只能收差额 G（GPT 二轮 P1-2 探针场景）
+    // 共享容量按全资源总量计算；storage 的 energy 占用也限制 G 接收量。
+    // 来源：上游 creeps/transfer.js 的 calcResources。
     let mut f = Fixture::new(1, terrain_with(&[]));
     let st = f
         .world
@@ -189,8 +184,6 @@ fn pickup_ghodium_routes_to_ghodium_slot() {
     }
     assert!(f.world.get(pile).is_none(), "堆清零移除");
 }
-
-// ---- B4：mineral/extractor + 多资源槽 ----
 
 /// minerals/tick.js:8-18：矿量耗尽首见挂钟 gameTime+MINERAL_REGEN_TIME；
 /// 到点（gameTime >= next-1）按**旧** density 查 MINERAL_DENSITY 回填并清钟。
@@ -476,7 +469,7 @@ fn harvest_mineral_overflow_drops_named_pile() {
         }
         _ => panic!(),
     }
-    // 掉落为命名堆（同格 (10,11)）；当 tick 不衰减（新掉落下 tick 起衰减）
+    // 采集意图阶段掉落 2 U，对象 tick 阶段衰减 1，最终堆量为 1。
     let pile = f
         .world
         .room("W1N1")
@@ -495,8 +488,8 @@ fn harvest_mineral_overflow_drops_named_pile() {
 }
 
 /// 多资源槽消费面闭环：creep 携 U → transfer 入 storage 命名槽（通用商店
-/// capacityForResource 的 max(0, cap−Σscr)）→ transfer 到 spawn 被拒
-/// （per-resource 商店 scr.energy 之外得 0）→ withdraw 取回 → drop 落命名堆。
+/// 命名资源 U 可转入共享仓 storage、提取回来并掉落；
+/// spawn 的按资源容量只允许 energy，所以拒绝 U。
 #[test]
 fn mineral_multislot_transfer_storage_and_drop_chain() {
     let mut f = Fixture::new(1, terrain_with(&[]));
@@ -659,8 +652,8 @@ fn movement_weight_counts_named_minerals() {
     assert_eq!(f.creep_state(c2).2, 0);
 }
 
-/// 死亡携带面：creep 携 U 死亡 → 墓碑 store_extra 承接（_die.js:78-91 的
-/// 逐键循环——B4 起含命名矿物槽）。
+/// 携带的命名矿物在死亡时进入墓碑的 store_extra。
+/// 来源：上游 creeps/_die.js 的携带资源回收循环。
 #[test]
 fn creep_death_carries_named_minerals_to_tombstone() {
     let mut f = Fixture::new(1, terrain_with(&[]));

@@ -1,16 +1,10 @@
-//! M2B 扩面 P4：结构衰减三件（roads/containers/ramparts tick.js 结算）。
-//! 官方对照：processor.js:365/:369/:389 的 phase 8 分派；
-//! ramparts/tick.js（hitsMax 随房主 rcl 同步 + 300/100 衰减）；
-//! roads/tick.js（100/1000 衰减、沼泽 ×5/墙 ×150 地形系数）；
-//! containers/tick.js（5000/窗衰减——有主房窗 500/野房 100、死亡全量
-//! store 落地、重挂钟）。
+//! 测试道路、容器和 rampart 衰减，以及新建结构的容量和初始时钟。
 
 use super::*;
 
 #[test]
 fn container_decay_drops_store_and_dies() {
-    // 有主房：窗 CONTAINER_DECAY_TIME_OWNED=500；一次衰减掉 CONTAINER_DECAY
-    //=5000 ≥ 任何初始 hits → 死亡路径 + store 落地
+    // 本例初始耐久为 5000，一次 CONTAINER_DECAY=5000 恰好使容器消失。
     let mut f = Fixture::new(1, terrain_with(&[]));
     let id = f
         .world
@@ -138,13 +132,8 @@ fn road_decay_terrain_ratios() {
     }
 }
 
-// ---- 建造落成入口的衰减钟（官方 build.js:161-168 rampart / :255-263 container）----
-//
-// P4 引入 phase 8 衰减后，建造入口若不建钟，`nextDecayTime` 缺失会被判据
-// `next != 0 && time < next-1` 放行（next==0 视为「已到点」）——建成
-// rampart（hits=RAMPART_HITS=1）下一 tick 即被 RAMPART_DECAY_AMOUNT=300
-// 打出负值移除，建成 container 首 tick 误掉 CONTAINER_DECAY=5000。官方
-// 落成即挂钟（rampart 100 / container CONTAINER_DECAY_TIME）。
+// 新建结构必须带初始衰减时钟；0 时钟立即触发衰减，会让新 rampart 消失，
+// 或让新 container 提前损失耐久。来源：上游 creeps/build.js。
 
 /// 取房间内某 structureType 的 Generic 对象 data（解析后）。
 fn generic_data(f: &Fixture, structure_type: &str) -> Option<Value> {
@@ -231,9 +220,8 @@ fn built_container_gets_capacity_and_decay_clock() {
 
 #[test]
 fn rampart_hitsmax_syncs_before_decay_window() {
-    // 官方 ramparts/tick.js:19-24：hitsMax 同步在衰减钟门**之外**、每 tick
-    // 执行。本用例给远钟（未到点）→ hits 不动，但 hitsMax 必须当 tick 归一；
-    // 若同步被放进门内（本轮修掉的回归形态），hitsMax 会停在 5000。
+    // 将衰减时钟设在远期，验证未衰减时仍同步 hitsMax。
+    // 如果同步放在到期检查之后，hits 不变但 hitsMax 会错误地停在旧值 5000。
     let mut f = Fixture::new(1, terrain_with(&[]));
     f.controller(3, Some("p1"));
     f.world
@@ -297,12 +285,9 @@ fn road_decay_rearms_clock() {
     }
 }
 
-// ---- 建造落成入口的容量对 / 冷却钟（官方 build.js:222-233 lab / :265-274 nuker）----
-
-/// 官方 build.js 对 lab 落**成对**的两键：平面 `storeCapacity`（energy+mineral
-/// 合计 3000，build.js:230）与 per-resource `storeCapacityResource.energy`
-///（LAB_ENERGY_CAPACITY=2000，:231）。只落平面会让 `Store.getCapacity()` 由
-/// 官方 null 变 3000；只落 per-resource 会让 `energyCapacity` getter 读 0。
+/// Lab 同时保存总容量与按资源能量容量；缺任一项会改变玩家 Store 的返回值。
+/// 数值来自 LAB_ENERGY_CAPACITY 和 LAB_MINERAL_CAPACITY，分别为 2000 和 3000。
+/// 来源：上游 creeps/build.js 的 lab 初始化。
 #[test]
 fn built_lab_gets_paired_capacity() {
     let mut f = Fixture::new(1, terrain_with(&[]));
@@ -370,12 +355,6 @@ fn built_nuker_gets_cooldown_time() {
     );
 }
 
-// ---- link 的 cooldown 计数器递减（官方 processor.js:378 links/tick.js）----
-//
-// link 与 lab/terminal/nuker/factory 的冷却**形态不同**（vanilla
-// index.ts:1145-1158 明文）：link 存每 tick 递减计数器 `o.cooldown`，getter
-// 直读 `o.cooldown || 0`。不实现递减则放置时写的冷却永不归零。
-
 /// 插入一个 Generic link（放置面形态：structureType=link + 计数器 cooldown）。
 fn insert_link(f: &mut Fixture, cooldown: u64) -> ObjId {
     f.world
@@ -418,7 +397,7 @@ fn link_cooldown_decrements_each_tick() {
 
 #[test]
 fn link_cooldown_stops_at_zero() {
-    // 官方：`if(object.cooldown > 0)` 才减，且减后钳 0——0 不再下降（不为负）。
+    // Cooldown 为 0 时不再递减，不写负数。来源：上游 links/tick.js。
     let mut f = Fixture::new(1, terrain_with(&[]));
     insert_link(&mut f, 1);
     f.settle(IntentBatch::default());

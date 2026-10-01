@@ -1,5 +1,4 @@
-//! 孵化链路：_calc_spawns、能量扣费（_charge-energy）、createCreep、
-//! spawn tick 与出生（spawns/tick.js + _born-creep.js）。
+//! 结算 spawn 动作、出生任务和免费能量，并按控制器配额标记可用能量结构。
 
 use kk_core::constants as c;
 use kk_schema::room::{CreepObj, RoomObject, SpawningJob};
@@ -11,8 +10,8 @@ use super::creep::{ACTION_HEALED, body_parts_kinds, set_action_log};
 use super::movement::{self, offsets_by_direction};
 use crate::intent::{IntentData, creep_cost};
 
-/// 官方 _calc_spawns.js：spawn/extension 超出 RCL 配额时，距 controller 最远者
-/// 标 off（Chebyshev 距离，稳定排序保序）。
+/// 按控制器配额标记超额 spawn/extension 为 off，优先保留离控制器近的对象。
+/// 等距时按 ObjId 顺序保留；这一标记阶段不按主人筛选。
 pub fn calc_spawns(w: &mut Working) {
     let controller = w.controller().cloned();
     let rcl = controller.as_ref().map(|c| c.level).unwrap_or(0) as i64;
@@ -49,7 +48,6 @@ fn mark_off(
         }
         return;
     }
-    // 官方：按距 controller 升序保留前 allowed（comparatorDistance = Chebyshev）
     let (cx, cy) = ctl_pos.unwrap_or((25, 25));
     items.sort_by(|a, b| {
         let da = chebyshev(a.1, (cx, cy));
@@ -75,7 +73,7 @@ fn set_off(w: &mut Working, id: ObjId, structure_type: &str, off: bool) {
     }
 }
 
-/// 官方 processor.js:326：非 off 的 spawn/extension 存量合计。
+/// 合计本房间非 off 的 spawn/extension 能量，供出生阶段的免费能量判断使用。
 pub fn energy_available(w: &Working) -> i64 {
     w.room
         .objects
@@ -93,10 +91,8 @@ pub fn energy_available(w: &Working) -> i64 {
         .sum()
 }
 
-/// 官方 spawns/intents.js:3-24 的分派序：createCreep → renewCreep →
-/// recycleCreep → setSpawnDirections → cancelSpawning（同对象可并存多个
-/// 动作——前者改状态后后者按新状态裁决，如 createCreep 置 spawning 后
-/// renewCreep 的 object.spawning 门拒）。
+/// 依次执行 create、renew、recycle、setSpawnDirections、cancelSpawning，
+/// 后续动作会看到前面动作已经修改的状态。
 pub fn process_spawn_intents(
     w: &mut Working,
     spawn_id: ObjId,
@@ -120,9 +116,9 @@ pub fn process_spawn_intents(
     }
 }
 
-/// 官方 spawns/intents.js → create-creep.js：校验、扣费、建孵化任务与雏形 creep。
+/// 取身体前 50 件计算费用，先验证资金足额再扣款，创建同格孵化 creep 和任务。
+/// 此处不检查名称唯一性；任务耗时为身体件数乘 CREEP_SPAWN_TIME。
 pub fn intent_create_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) {
-    // 孵化中拒（create-creep.js:14-16）
     if let Some(RoomObject::Spawn(s)) = w.room.objects.get(&spawn_id)
         && s.spawning.is_some()
     {
@@ -131,14 +127,9 @@ pub fn intent_create_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) 
     let Some(RoomObject::Spawn(spawn)) = w.room.objects.get(&spawn_id).cloned() else {
         return;
     };
-    // controller 活跃校验（create-creep.js:17 → utils.js:456-506）：owner-less
-    // 恒活；需 controller level≥1 且归本人，超配额时按距 controller 远近判停用
     if !structure_active_against_controller(w, spawn_id, &spawn) {
         return;
     }
-    // directions 校验（官方 create-creep.js:27-33：parseInt→uniq 后任一越界或
-    // 非整数 ⇒ 整单拒绝，而非过滤保留）；sanitize 已做 parseInt 截断与保序去重，
-    // 无法解析的元素以 i64::MIN 哨兵传递——天然落入越界分支
     if data.directions.iter().any(|d| !(1..=8).contains(d)) {
         return;
     }
@@ -157,7 +148,6 @@ pub fn intent_create_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) 
         return;
     }
     let cost = creep_cost(&data.body[..body.len()]);
-    // 扣费（_charge-energy：显式 energyStructures 按序；缺省全房间 spawn→extension）
     if !charge_energy(w, &spawn, cost, data.energy_structures.as_deref()) {
         return;
     }
@@ -171,10 +161,6 @@ pub fn intent_create_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) 
             directions,
         });
     }
-    // 雏形 creep（create-creep.js:80-98）：占位于 spawn 格、spawning=true。
-    // 官方**不带 ageTime**——孵化中 ticksToLive 读 undefined（creeps.js:78 的
-    // `o.ageTime ? … : undefined`），寿命在出生后首个 creep tick 赋值
-    // （creeps/tick.js:88-91；CREEP-SPAWNING-002 锁值）；0 即官方 falsy 未设位
     w.insert_new(RoomObject::Creep(CreepObj {
         id: 0,
         x: spawn.x,
@@ -188,30 +174,22 @@ pub fn intent_create_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) 
         owner: spawn.owner.clone(),
         body,
         store: Default::default(),
-        // 雏形出生恒空仓（孵化中不可 transfer/harvest——无进矿路径）
         store_extra: Vec::new(),
         say_message: None,
         say_public: None,
-        notify_when_attacked: Some(true), // 官方出生即 true（spawns/create-creep.js:93——评审 1 P2-2 清偿：判重门首调免费对齐）
+        notify_when_attacked: Some(true),
     }));
 }
 
-/// 官方 spawns/renew-creep.js：结算层全额复核（不信任 API 层预检）——
-/// 孵化中拒、同主非孵化 creep、Chebyshev ≤1 邻接、CLAIM 部件拒、满寿拒
-/// （`ageTime + effect > gameTime + CREEP_LIFE_TIME`，effect = floor(
-/// SPAWN_RENEW_RATIO·CREEP_LIFE_TIME/CREEP_SPAWN_TIME/body.length)）、
-/// 全房扣费（_charge-energy 的 energyStructures=undefined → oldEnergyHandling）、
-/// ageTime += effect + actionLog.healed；boost 部件清除后容量收缩、溢出掉落。
-/// `stats.inc('energyCreeps')` 无 M1 统计面（跳过，同登记口径）。
+/// 为相邻同主的已出生 creep 延长寿命；spawn 必须空闲，身体中不能有 CLAIM。
+/// 扣款后清除全部 boost，缩小 CARRY 容量时掉落超量资源。
 pub fn intent_renew_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) {
-    // 官方 :12-14：孵化中拒（先于 target 校验）
     let Some(RoomObject::Spawn(spawn)) = w.room.objects.get(&spawn_id).cloned() else {
         return;
     };
     if spawn.spawning.is_some() {
         return;
     }
-    // 官方 :16-21：目标存在、creep、同主、非孵化、邻接、无 CLAIM
     let Some(target_id) = data.id else { return };
     let Some(RoomObject::Creep(target)) = w.room.objects.get(&target_id).cloned() else {
         return;
@@ -230,7 +208,6 @@ pub fn intent_renew_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) {
     {
         return;
     }
-    // 官方 :25-28：满寿拒（effect = floor(1.2·1500/3/len) = floor(600/len)）
     let effect = ((c::SPAWN_RENEW_RATIO * c::CREEP_LIFE_TIME as f64)
         / c::CREEP_SPAWN_TIME as f64
         / target.body.len() as f64)
@@ -238,8 +215,6 @@ pub fn intent_renew_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) {
     if target.age_time.saturating_add(effect.max(0) as u64) > w.time + c::CREEP_LIFE_TIME as u64 {
         return;
     }
-    // 官方 :30-35：cost = ceil(SPAWN_RENEW_RATIO·calcCreepCost/CREEP_SPAWN_TIME/
-    // body.length)，全房扣费（同主非 off 的 spawn→extension，距本 spawn 升序）
     let cost = ((c::SPAWN_RENEW_RATIO * creep_cost(&body_parts_kinds(&target.body)) as f64)
         / c::CREEP_SPAWN_TIME as f64
         / target.body.len() as f64)
@@ -247,14 +222,10 @@ pub fn intent_renew_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) {
     if !charge_energy(w, &spawn, cost, None) {
         return;
     }
-    // 官方 :42-43：actionLog.healed + bulk.inc(target, 'ageTime', effect)
     if let Some(creep) = w.creep_mut(target_id) {
         creep.age_time = creep.age_time.saturating_add(effect.max(0) as u64);
         set_action_log(&mut creep.action_log, ACTION_HEALED);
     }
-    // 官方 :45-53：boost 部件清除（_recalc-body 容量收缩）+
-    // _drop-resources-without-space（全资源序贯——复审 F4 清偿：原内联
-    // energy-only 形态在 G/命名矿物槽下偏离，统一走 damage 的全资源版）
     if target.body.iter().any(|p| p.boost.is_some()) {
         if let Some(creep) = w.creep_mut(target_id) {
             for p in creep.body.iter_mut() {
@@ -265,10 +236,7 @@ pub fn intent_renew_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) {
     }
 }
 
-/// 官方 spawns/recycle-creep.js：目标复核（同主非孵化 creep + 邻接——
-/// **无** CLAIM 条件、**无** object.spawning 门，与 renew 的差异面）后
-/// `_die(target, 1.0, false)`——dropRate=1.0 的全额造价回收（B3 起墓碑承接
-/// 链区分 TTL/暴亡/suicide 的 0.2 缺省）。
+/// 回收相邻同主的已出生 creep；允许 spawn 正在孵化，也允许 CLAIM 身体。
 pub fn intent_recycle_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) {
     let Some(RoomObject::Spawn(spawn)) = w.room.objects.get(&spawn_id).cloned() else {
         return;
@@ -284,14 +252,10 @@ pub fn intent_recycle_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData)
     {
         return;
     }
-    // recycle-creep.js:23 的 dropRate=1.0
     super::creep::die_creep_with_rate(w, target_id, 1.0);
 }
 
-/// 官方 spawns/set-spawn-directions.js：孵化任务存在时整组替换 directions。
-/// sanitize 已做 parseInt 截断与保序去重（number[] transform）；此处按官方
-/// `_.any(越界/非整)` 复核后替换——任一非法元素整单忽略（非过滤）。
-/// 空列表官方静默忽略（`directions.length > 0` 门）。
+/// 只修改现有任务，方向列表必须非空且每项都在 1..=8。
 pub fn intent_set_spawn_directions(w: &mut Working, spawn_id: ObjId, data: &IntentData) {
     if data.directions.is_empty() {
         return;
@@ -307,11 +271,7 @@ pub fn intent_set_spawn_directions(w: &mut Working, spawn_id: ObjId, data: &Inte
     }
 }
 
-/// 官方 spawns/cancel-spawning.js：移除孵化中的雏形 creep（同名、spawn 格）+
-/// 清孵化任务。官方 `_.find` 找不到时 `spawningCreep._id` 直接 TypeError
-/// 崩 tick——雏形与任务由 create-creep 同笔创建、不变式内不可达，我方按
-/// 防御形态跳过移除仅清任务（不崩 tick——D4 结算失败即整房回退的代价面，
-/// 灰区登记）。注意官方是裸 bulk.remove（非 _die：无掉落无事件）。
+/// 移除同格、同名且仍在孵化的 creep 并清除任务，不创建墓碑或事件。
 pub fn intent_cancel_spawning(w: &mut Working, spawn_id: ObjId) {
     let Some(RoomObject::Spawn(spawn)) = w.room.objects.get(&spawn_id).cloned() else {
         return;
@@ -339,16 +299,15 @@ pub fn intent_cancel_spawning(w: &mut Working, spawn_id: ObjId) {
     }
 }
 
-/// 官方 _charge-energy.js：返回是否足额扣毕。
+/// 先检查所有候选能量总量，再按顺序扣款，资金不足时不扣任何能量。
+/// 显式列表去重后按给定顺序使用；默认先使用按距离排序的 spawn，再使用 extension。
+/// 两种结构分别排序，不按距离混排；Some 空列表与未指定列表的含义不同。
 fn charge_energy(
     w: &mut Working,
     spawn: &kk_schema::room::SpawnObj,
     mut cost: i64,
     explicit: Option<&[ObjId]>,
 ) -> bool {
-    // 候选结构（官方 _charge-energy + create-creep.js:19-24）：Some(列表) 走
-    // 显式模式（按序、过滤合法——**空列表也是显式模式**，可用 0 → 失败）；
-    // None 才是缺省全房间 spawn（距本 spawn 升序）→ extension
     let mut candidates: Vec<ObjId> = Vec::new();
     if let Some(explicit) = explicit {
         for id in explicit {
@@ -418,10 +377,6 @@ fn charge_energy(
     true
 }
 
-/// 官方 utils.checkStructureAgainstController（utils.js:456-506）：结构对其
-/// controller 是否"活跃"。owner-less 恒活；否则需 controller level≥1 且归同主，
-/// 超配额时同型同主对象按距 controller 近者保留（等距者按扫描序——我们的
-/// id 升序序替换官方插入序，D4-1 灰区）。
 fn structure_active_against_controller(
     w: &Working,
     spawn_id: ObjId,
@@ -440,7 +395,6 @@ fn structure_active_against_controller(
     if allowed == 0 {
         return false;
     }
-    // 该类型满额恒为 1 时无计数路径（官方 [8]===1 短路）；spawn 满额为 3、走距离计数
     if allowed_count("spawn", 8) == 1 {
         return true;
     }
@@ -471,12 +425,12 @@ fn structure_active_against_controller(
     true
 }
 
-/// 官方 spawns/tick.js：孵化到点出生 + 免费能量涓流。
+/// 任务到 spawn_time-1 尝试出生，失败则推迟到下一 tick 重试。
+/// 免费能量判断使用全房动作结算后的固定合计值，不随逐个 spawn 增加能量而更新。
 pub fn spawn_tick(w: &mut Working, id: ObjId, energy_available: i64) {
     let Some(RoomObject::Spawn(spawn)) = w.room.objects.get(&id) else {
         return;
     };
-    // 到点出生判定
     if let Some(job) = &spawn.spawning
         && w.time >= job.spawn_time.saturating_sub(1)
     {
@@ -487,14 +441,12 @@ pub fn spawn_tick(w: &mut Working, id: ObjId, energy_available: i64) {
                 s.spawning = None;
             }
         } else if let Some(RoomObject::Spawn(s)) = w.room.objects.get_mut(&id) {
-            // 官方：出生失败推迟一 tick 重试（spawns/tick.js:23-26）
             s.spawning = Some(SpawningJob {
                 spawn_time: 1 + w.time,
                 ..job
             });
         }
     }
-    // 免费能量涓流（spawns/tick.js:44-46）：房内可用不足时 spawn 每 tick +1
     let (store_energy, rcl_ok) = match w.room.objects.get(&id) {
         Some(RoomObject::Spawn(s)) => {
             let rcl_ok = w
@@ -504,7 +456,6 @@ pub fn spawn_tick(w: &mut Working, id: ObjId, energy_available: i64) {
         }
         _ => return,
     };
-    // 官方涓流前置（spawns/tick.js:31-46）：spawn 不超额（!off）才涓流
     let not_off = w
         .room
         .objects
@@ -520,9 +471,10 @@ pub fn spawn_tick(w: &mut Working, id: ObjId, energy_available: i64) {
     }
 }
 
-/// 官方 _born-creep.js：八方向找空位出生；被围时踩死第一个敌 creep（spawnstomp）。
-/// 入参取（雏形名, 出生方向序）而非整个任务——creep 侧出生路径
-/// （creeps/tick.js:20-24：spawn 任务已清/换名时的对偶出生）任务可不存在。
+/// 按指定方向寻找出生格；未指定时按 1..=8。缺失对应孵化 creep 时返回成功，
+/// 使调用方清除任务。指定方向没有空位但其他方向有出口时延期，只有完全被围
+/// 且指定方向存在敌方 creep 时才踩死第一个敌人。
+/// 来源：上游 engine/src/processor/intents/spawns/_born-creep.js。
 pub(crate) fn born_creep(
     w: &mut Working,
     spawn_id: ObjId,
@@ -532,7 +484,6 @@ pub(crate) fn born_creep(
     let Some(RoomObject::Spawn(spawn)) = w.room.objects.get(&spawn_id).cloned() else {
         return false;
     };
-    // 找到对应雏形 creep（同名、同格、spawning）
     let chick = w
         .room
         .objects
@@ -545,10 +496,8 @@ pub(crate) fn born_creep(
         })
         .map(|(id, _)| *id);
     let Some(chick_id) = chick else {
-        // 雏形不存在：清任务（官方 spawn 被移除时 creep 自清；此处反向防御）
         return true;
     };
-    // 方向序列：任务指定或 1..8
     let mut directions: Vec<u8> = if job_directions.is_empty() {
         (1..=8).collect()
     } else {
@@ -566,9 +515,8 @@ pub(crate) fn born_creep(
             continue;
         }
         let (nx, ny) = (nx as u8, ny as u8);
-        // 官方 checkObstacleFn（_born-creep.js:12-15）：OBSTACLE_OBJECT_TYPES
-        // 成员类型（creep 在表内——友敌皆占位）或 obstacle 结构类型的工地（无
-        // user 过滤，与 movement.js:25-26 的自家限定不同）
+        // 出生检查把任何 creep 和任何主人的障碍工地视为占位，
+        // 与普通移动仅检查自家障碍工地的规则不同；路可以覆盖墙地形。
         let static_obstacle =
             w.index
                 .at(nx as usize, ny as usize)
@@ -607,7 +555,6 @@ pub(crate) fn born_creep(
         w.move_obj(chick_id, (nx, ny));
         return true;
     }
-    // 被围：spawnstomp——除非其他方向有出口（官方 66-79 的"选择性"判定）
     let other: Vec<u8> = (1..=8).filter(|d| !directions.contains(d)).collect();
     directions.extend(other);
     for d in directions {
@@ -620,7 +567,7 @@ pub(crate) fn born_creep(
             continue;
         }
         let (nx, ny) = (nx as u8, ny as u8);
-        // 与第一轮同一 checkObstacleFn（官方 bail 检查同判据；墙检查无路例外）
+        // 检查其他出口时直接拒绝墙地形，不使用前一轮的道路例外。
         let free =
             !w.index
                 .at(nx as usize, ny as usize)

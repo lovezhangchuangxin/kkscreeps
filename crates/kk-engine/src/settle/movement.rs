@@ -1,12 +1,7 @@
-//! 移动仲裁：官方 `engine/src/processor/intents/movement.js` 的完整移植。
+//! 仲裁房间内移动冲突，先选目的格胜者，再取消被阻塞的移动链。
 //!
-//! 三段式：move intent 只做静态障碍预检后入矩阵——**creep 不在预检里**
-//! （预检只查静态障碍：OBSTACLE 表扣掉 creep，外加敌方非公开 rampart 特判），
-//! creep 之间的冲突全部交给仲裁阶段，这是官方"挤格子"语义的根基；`check_impl` 逐目标格四键排序裁决胜者 + 级联清链；胜者的落格
-//! 与疲劳结算在 creep tick 阶段（creep.rs 的 movement_execute）。
-//!
-//! 矩阵用 BTreeMap<(x,y), _>（坐标序）替代官方 JS 对象插入序：逐格裁决相互
-//! 独立、级联删除幂等，结果与迭代序无关，确定性由坐标序保证（灰区登记）。
+//! 请求登记不把 creep 当静态障碍，仲裁才考虑它是否获准让位。
+//! 使用坐标排序的矩阵和稳定的竞争者排序，实际位移由 creep tick 完成。
 
 use std::collections::BTreeMap;
 
@@ -15,7 +10,7 @@ use kk_schema::room::{CreepObj, RoomObject};
 use kk_world::types::{BodyKind, is_obstacle_type};
 use kk_world::{ObjId, RoomIndex, RoomState};
 
-/// 官方四键（movement.js:124-136）。
+/// 冲突评分，依次按原格被请求数量、被拉、拉者、MOVE 功率/重量降序比较。
 #[derive(Debug, Clone)]
 struct Rate {
     object: ObjId,
@@ -26,16 +21,12 @@ struct Rate {
     rate4: f64,
 }
 
+/// 本轮移动请求、获准目的格与拉拽关系；不直接改变对象坐标。
 #[derive(Default, Debug)]
 pub struct Movement {
-    /// 目标格 → 竞争者（登记序）。
     matrix: BTreeMap<(u8, u8), Vec<RateEntry>>,
-    /// 获准移动者 → 目标格。
     winners: BTreeMap<ObjId, (u8, u8)>,
-    /// 官方 `object._pull`（拉者 → 被拉者，pull.js 经 addPulling 配对）——
-    /// per-tick 瞬态（官方内存字段不入库，tick 末随工作副本消亡）。
     pull_of: BTreeMap<ObjId, ObjId>,
-    /// 官方 `object._pulled`（被拉者 → 拉者，_pull 的反向索引）。
     pulled_by: BTreeMap<ObjId, ObjId>,
 }
 
@@ -50,7 +41,7 @@ impl Movement {
         Self::default()
     }
 
-    /// 官方 add（movement.js:84-98）：坐标钳 0..49。
+    /// 登记移动请求，目标钳在房间内 0..=49；不检查地形、疲劳或身体。
     pub fn add(&mut self, id: ObjId, origin: (u8, u8), dx: i32, dy: i32) {
         let to = (
             (origin.0 as i32 + dx).clamp(0, 49) as u8,
@@ -66,13 +57,11 @@ impl Movement {
         self.matrix.contains_key(&(x, y))
     }
 
-    /// 被拉标记（canMove 的 `_pulled` 分支与疲劳归链的判定源）。
     pub fn is_pulled(&self, id: ObjId) -> bool {
         self.pulled_by.contains_key(&id)
     }
 
-    /// 疲劳归链（官方 _add-fatigue.js:24-27 的 while 循环）：沿 `_pulled`
-    /// 上溯到链首拉者；链上拉者消亡即断（!!roomObjects 守卫）。
+    /// 沿被拉关系找链首，拉者已从房间移除时断链。
     pub fn head_puller(&self, room: &RoomState, id: ObjId) -> ObjId {
         let mut cur = id;
         while let Some(&puller) = self.pulled_by.get(&cur)
@@ -83,10 +72,7 @@ impl Movement {
         cur
     }
 
-    /// 官方 movement.addPulling（movement.js:69-75）：环链检查后配对
-    /// `_pull`/`_pulled`。checkRecursiveTarget 从 target 沿 `_pull` 链下溯，
-    /// 回到拉者即环（链上对象消亡视为断链——官方 `!!roomObjects[t._pull]`
-    /// 同款）；自拉（target == 拉者）天然命中环拒绝。
+    /// 拒绝自拉及循环链，再登记双向拉拽关系；配对一致性在仲裁时复核。
     pub fn add_pulling(&mut self, room: &RoomState, puller: ObjId, target: ObjId) {
         let mut t = target;
         loop {
@@ -102,12 +88,11 @@ impl Movement {
         self.pulled_by.insert(target, puller);
     }
 
-    /// 本轮获准的目标格（creep 落格结算用；消费即不移除——官方 objects 映射同寿）。
+    /// 读取获准的目标格，不消费记录；名字中的 take 不表示移除。
     pub fn take_move(&self, id: ObjId) -> Option<(u8, u8)> {
         self.winners.get(&id).copied()
     }
 
-    /// 调试探针。
     pub fn debug_matrix(&self) -> Vec<((u8, u8), Vec<ObjId>)> {
         self.matrix
             .iter()
@@ -115,7 +100,8 @@ impl Movement {
             .collect()
     }
 
-    /// 官方 check（movement.js:104-187）。
+    /// 先逐目标格选胜者，再沿阻塞链取消移动。
+    /// 来源：上游 engine/src/processor/intents/movement.js 的 check。
     pub fn check_impl(
         &mut self,
         room: &RoomState,
@@ -123,11 +109,9 @@ impl Movement {
         old_fatigue: &BTreeMap<ObjId, u32>,
         safe_mode_user: Option<&str>,
     ) {
-        // ---- 第一轮：逐目标格裁决（movement.js:107-152）----
         let mut new_matrix: BTreeMap<(u8, u8), Vec<RateEntry>> = BTreeMap::new();
         let mut winners = BTreeMap::new();
-        // 官方第一轮循环读原始矩阵：rate1（本格被盯数）与对穿 100 的判定需要
-        // 完整的原始竞争信息，评分期间不得消费——先 take 出来，结果写另一张矩阵
+        // 评分必须读取完整的原始请求矩阵，不能边选胜者边删除竞争信息。
         let original = std::mem::take(&mut self.matrix);
         for (&cell, entries) in &original {
             let winner = if entries.len() > 1 {
@@ -135,8 +119,7 @@ impl Movement {
                     .iter()
                     .map(|e| rate_of(&original, room, &self.pulled_by, &self.pull_of, *e, cell))
                     .collect();
-                // 官方 sort（movement.js:139）：四键降序；V8 稳定排序 ⇒ 平手保登记序，
-                // sort_by 稳定性同语义
+                // 四项降序，完全平手保持登记顺序；不可改成不稳定排序。
                 rates.sort_by(|a, b| {
                     b.rate1
                         .cmp(&a.rate1)
@@ -161,19 +144,17 @@ impl Movement {
         self.matrix = new_matrix;
         self.winners = winners;
 
-        // ---- 第二轮：级联清链（movement.js:167-186）----
         let keys: Vec<(u8, u8)> = self.matrix.keys().copied().collect();
         for key in keys {
             self.remove_from_matrix(room, index, old_fatigue, safe_mode_user, key);
         }
     }
 
-    /// 仲裁结果访问（测试用）。
     pub fn winners(&self) -> &BTreeMap<ObjId, (u8, u8)> {
         &self.winners
     }
 
-    /// 官方 removeFromMatrix（movement.js:154-165）：删格 + 沿"对象原格也是目标格"级联。
+    /// 取消不能移动或目的格被占的请求，并递归检查其原格上的其他请求。
     fn remove_from_matrix(
         &mut self,
         room: &RoomState,
@@ -187,10 +168,8 @@ impl Movement {
         };
         let object_id = entries[0].id;
         let entry = entries[0];
-        // 官方 movement.js:176-180：被拉对象的配对校验——拉者仍拉我（_pull
-        // 回指）**且**我的 move 目标格是拉者的当前格（被拉 creep 须 move(拉者)
-        // 挤进拉者让出的位置），否则解除配对（随后按常规 canMove/障碍判定）。
-        // 拉者对象消亡则保持配对（官方外层 !!roomObjects[object._pulled] 守卫）
+        // 拉者须仍指向被拉者，被拉者须移动到拉者的当前格，否则解除配对。
+        // 拉者已移除时跳过这项复核，保留现有标记。
         if let Some(&puller) = self.pulled_by.get(&object_id)
             && let Some(puller_obj) = room.objects.get(&puller)
         {
@@ -205,7 +184,6 @@ impl Movement {
             RoomObject::Creep(c) => Some(c),
             _ => None,
         });
-        // canMove 或目标格静态障碍不过 → 移除（官方 :183-186）
         let movable = creep.is_some_and(|c| {
             can_move(
                 c,
@@ -224,7 +202,6 @@ impl Movement {
         if !movable || obstacle {
             self.matrix.remove(&key);
             self.winners.remove(&object_id);
-            // 级联：对象原格若也是目标格（有人在往那走），递归移除
             if self.matrix.contains_key(&entry.origin) {
                 self.remove_from_matrix(room, index, old_fatigue, safe_mode_user, entry.origin);
             }
@@ -232,7 +209,8 @@ impl Movement {
     }
 }
 
-/// 官方 rates 计算（movement.js:116-137）：读原始矩阵（第一轮期间矩阵不变）。
+/// 用完整请求矩阵评分。原格请求中包含站在目标格的竞争者时，对穿评分为 100；
+/// MOVE 功率包含 boost，重量至少取 1 以避免除零。
 fn rate_of(
     original: &BTreeMap<(u8, u8), Vec<RateEntry>>,
     room: &RoomState,
@@ -251,8 +229,6 @@ fn rate_of(
             rate4: 0.0,
         };
     };
-    // rate1（affectedCnt）：本格被多少竞争者当作原格盯上；对穿者（站在目标格
-    // 的竞争者）=100
     let mut rate1 = original
         .get(&entry.origin)
         .map(|v| v.len() as i64)
@@ -263,13 +239,8 @@ fn rate_of(
     {
         rate1 = 100;
     }
-    // rate2/rate3（movement.js:133-134）：被拉/在拉——挤格裁决的 tie-breaker
     let rate2 = i64::from(pulled_by.contains_key(&entry.id));
     let rate3 = i64::from(pull_of.contains_key(&entry.id));
-    // rate4 = moves / weight：weight = 非 move/carry 部件 + 资源重量
-    // （movement.js:120-123，weight||1）
-    // movement.js:117-118：仲裁 moves = calcBodyEffectiveness(MOVE,'fatigue',1)
-    // ——强化 MOVE 按 BOOSTS.move.fatigue 乘数计入（GPT 复审 P1-2 清偿）
     let moves =
         kk_world::types::calc_body_effectiveness(&creep.body, BodyKind::Move, "move", "fatigue", 1)
             as f64;
@@ -285,27 +256,20 @@ fn rate_of(
 }
 
 fn movers_at(m: &RateEntry, cell: (u8, u8)) -> bool {
-    // 官方 _.any(matrix[key], {x,y})：竞争者的当前坐标 == 目标格（对穿）
     m.origin == cell
 }
 
-/// 官方 canMove（movement.js:11-14）：被拉对象免疲劳/MOVE 检查（拉拽语义
-/// 的核心——被拉 creep 可以没有 MOVE 部件或带疲劳）。
+/// 被拉对象免除疲劳和 MOVE 检查；其他对象须旧疲劳为 0 且有存活 MOVE。
 pub fn can_move(creep: &CreepObj, old_fatigue: u32, is_pulled: bool) -> bool {
     is_pulled || (old_fatigue == 0 && BodyKind::count_active(&creep.body, BodyKind::Move) > 0)
 }
 
-/// 官方 calcResourcesWeight（movement.js:41-59）：从 body 尾部数起，
-/// 装下当前携带量所需的 CARRY 部件数。携带量是 store 全槽求和（官方
-/// `_.sum(creep.store)`，movement.js:42——评审 P3：ghodium "G" 槽同计；
-/// B4 起命名矿物槽并入——官方开放 store 逐键求和的同构）
+/// 按全资源携带量，从身体尾部计算需要的存活 CARRY 数，包含容量 boost。
 pub fn resources_weight(creep: &CreepObj) -> usize {
-    // movement.js:41-59：重量按强化后的每部件容量扣减（BOOSTS.carry.capacity
-    // 乘数）——单源实现见 kk_world::types::resources_weight（GPT 复审 P1-2）
     kk_world::types::resources_weight(&creep.body, &creep.store, &creep.store_extra)
 }
 
-/// 移动体重（movement.js:120-122）：非 move/carry 部件数 + 资源重量。
+/// 非 MOVE/CARRY 的部件数（包括损毁件），加上实际负载占用的 CARRY 数。
 pub fn move_weight(creep: &CreepObj) -> usize {
     creep
         .body
@@ -315,7 +279,9 @@ pub fn move_weight(creep: &CreepObj) -> usize {
         + resources_weight(creep)
 }
 
-/// 官方 checkObstacleAtXY（movement.js:16-39）。
+/// 检查仲裁阶段的障碍。获准移走的 creep 不阻挡；房主安全模式下可穿过
+/// 敌方 creep，但仍被己方未移动的 creep 阻挡。自家障碍工地、私有敌方
+/// rampart 和无路的墙地形也阻挡。
 pub fn check_obstacle_at_xy(
     room: &RoomState,
     index: &RoomIndex,
@@ -329,10 +295,6 @@ pub fn check_obstacle_at_xy(
             continue;
         };
         match obj {
-            // 官方 movement.js:22：未获准移动的 creep 即障碍（对穿的另一半——
-            // winner 即将让位所以不挡）。safeMode 分支按官方布尔式
-            // `!SM || SM != mover || (SM == mover && mover == target_owner)`：
-            // 自己 safeMode 下敌方 creep 被冻结可穿（不挡）、己方 creep 照挡
             RoomObject::Creep(target) => {
                 let is_winner = movement.winners.contains_key(id);
                 let blocked = !is_winner
@@ -344,7 +306,6 @@ pub fn check_obstacle_at_xy(
                     return true;
                 }
             }
-            // rampart：非公开且非本家（M1 无 rampart 变体，经 Generic 检查 isPublic）
             RoomObject::Generic(o) => {
                 let data: serde_json::Value = serde_json::from_str(&o.data).unwrap_or_default();
                 let st = data
@@ -366,22 +327,18 @@ pub fn check_obstacle_at_xy(
                     return true;
                 }
             }
-            // 官方 movement.js:25-26：自家 obstacle 结构类型的工地挡路
-            // （move.js 预检无此条，靠 check 兜底——"别把自己关在工地里"）
             RoomObject::ConstructionSite(s) => {
                 if s.owner.as_deref() == Some(mover_owner) && is_obstacle_type(&s.structure_type) {
                     return true;
                 }
             }
             other => {
-                // 类型化对象按官方类型名判障碍（source/controller/spawn/extension/wall/storage）
                 if is_obstacle_type(&type_name_of(other)) {
                     return true;
                 }
             }
         }
     }
-    // 地形墙且无路（movement.js:37）
     if room
         .terrain
         .check_mask(at.0 as usize, at.1 as usize, TERRAIN_MASK_WALL)
@@ -392,10 +349,8 @@ pub fn check_obstacle_at_xy(
     false
 }
 
-/// 类型化对象的官方 type 名；Generic 透传桶（tower/lab/…）按 data 的
-/// structureType 报告——官方 OBSTACLE 障碍、RCL 配额、工地共置判定都吃
-/// 真实类型名（"structure" 不是官方类型，恒不在 OBSTACLE 表内）。
-/// rampart 的公开性特判不在本函数（movement 预检/仲裁各有专门分支）。
+/// 读取游戏对象类型名；Generic 必须使用 structureType，而不是固定的 type=structure。
+/// JSON 无效或字段缺失时返回空串，公开性和所有权由调用方另查。
 pub fn type_name_of(obj: &RoomObject) -> std::borrow::Cow<'static, str> {
     match obj {
         RoomObject::Generic(o) => {
@@ -418,13 +373,8 @@ pub fn type_name_of(obj: &RoomObject) -> std::borrow::Cow<'static, str> {
         RoomObject::Flag(_) => "flag".into(),
         RoomObject::Road(_) => "road".into(),
         RoomObject::Storage(_) => "storage".into(),
-        // B3：官方对象 type（_die.js:23 的 tombstone / _destroy.js:23 的 ruin
-        // ——CONSTRUCTION_COST 表外，攻击/修理/建造门天然拒）
         RoomObject::Tombstone(_) => "tombstone".into(),
         RoomObject::Ruin(_) => "ruin".into(),
-        // B4：官方对象 type（minerals/tick.js 的 mineral / build.js:214 的
-        // extractor——mineral 无 hits 攻击门天然拒；extractor 非
-        // OBSTACLE_OBJECT_TYPES，通行性由 is_obstacle_type("extractor")=false 保持）
         RoomObject::Mineral(_) => "mineral".into(),
         RoomObject::Extractor(_) => "extractor".into(),
     }
@@ -437,7 +387,6 @@ pub fn has_road(room: &RoomState, index: &RoomIndex, at: (u8, u8)) -> bool {
         .any(|id| matches!(room.objects.get(id), Some(RoomObject::Road(_))))
 }
 
-/// 官方 getOffsetsByDirection（utils.js）：1..8 → (dx, dy)。
 pub fn offsets_by_direction(direction: u8) -> Option<(i32, i32)> {
     Some(match direction {
         1 => (0, -1),

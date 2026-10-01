@@ -1,6 +1,4 @@
-//! 房间级指令：createConstructionSite / createFlag / destroyStructure
-//! （官方 room/intents.js 的分派序：removeFlag → createFlag →
-//! createConstructionSite → removeConstructionSite → destroyStructure）。
+//! 结算房间级工地、旗帜创建和移除，以及房主主动销毁结构。
 
 use super::Working;
 use super::movement::type_name_of;
@@ -9,9 +7,9 @@ use kk_core::constants as c;
 use kk_schema::room::{ConstructionSiteObj, FlagObj, RoomObject};
 use kk_world::ObjId;
 
+/// 按 removeFlag、createFlag、createConstructionSite、removeConstructionSite、destroyStructure
+/// 的顺序执行；同种动作保持提交顺序，只处理当前房间的意图。
 pub fn process_room_intents(w: &mut Working, player: &str, intents: &[RoomIntent]) {
-    // 官方 room/intents.js 按名分组固定序处理（头注）；我方 Vec 为 push 序，
-    // 稳定排序对齐组序（同组内保持 push 序——官方 forEach 数组序同构）
     let mut ordered: Vec<&RoomIntent> = intents.iter().collect();
     ordered.sort_by_key(|i| room_intent_rank(i));
     for intent in ordered {
@@ -58,9 +56,6 @@ pub fn process_room_intents(w: &mut Working, player: &str, intents: &[RoomIntent
     }
 }
 
-/// 官方 room/intents.js 的组处理序（头注）：removeFlag → createFlag →
-/// createConstructionSite → removeConstructionSite → destroyStructure
-/// （genEnergy 不在我方面）。
 fn room_intent_rank(i: &RoomIntent) -> u8 {
     match i {
         RoomIntent::RemoveFlag { .. } => 0,
@@ -71,32 +66,23 @@ fn room_intent_rank(i: &RoomIntent) -> u8 {
     }
 }
 
-/// 官方 room/destroy-structure.js（structure.destroy() 的结算侧，B3）：
-/// 可建类型、controller 归本人、房内无敌方 creep/powerCreep → _destroy
-/// （建废墟）。新手墙分支（:16 `type == WALL && decayTime && !user`）——
-/// 新手墙体系不建模，N/A。
-///
-/// 事件（OSS/套件分歧，登记报告）：OSS 4.3.2 的 destroy-structure.js 与
-/// _destroy.js 均不 push EVENT_OBJECT_DESTROYED（事件只在 _damage.js:51）；
-/// vanilla 与 screeps-ok ROOM-EVENTLOG-027 期望 destroy() 产事件——以套件
-/// 为准，在销毁后补 push（objectId = 被毁结构、data.type = structureType）。
+/// 房主可销毁可建造结构，但房内有敌方 creep 时拒绝，包括孵化中的 creep。
+/// 销毁入口负责废墟和资源转移，此动作不发摧毁事件。
+/// 来源：上游 engine/src/processor/intents/room/destroy-structure.js。
 fn destroy_structure_intent(w: &mut Working, player: &str, id: kk_world::ObjId) {
     let Some(obj) = w.room.objects.get(&id).cloned() else {
         return;
     };
-    // :12：`!object || !C.CONSTRUCTION_COST[object.type]` 拒
     let type_name = type_name_of(&obj);
     if kk_world::types::construction_cost(&type_name).is_none() {
         return;
     }
-    // :14：`!roomController || roomController.user != userId` 拒
     let Some(ctl) = w.controller() else {
         return;
     };
     if ctl.owner.as_deref() != Some(player) {
         return;
     }
-    // :18：房内存在他人 creep/powerCreep 拒（powerCreep M4 不建模）
     let enemy_creep = w
         .room
         .objects
@@ -105,17 +91,11 @@ fn destroy_structure_intent(w: &mut Working, player: &str, id: kk_world::ObjId) 
     if enemy_creep {
         return;
     }
-    // 事件（GPT 复审 P1-4 清偿——B3 曾按套件口径补 push，新证据推翻）：
-    // OSS destroy-structure.js 全文无 eventLog.push（事件只在 _damage.js:51
-    // 与 _die.js:97）；**套件自己的 vanilla parity.json:10-12 承认 stable
-    // vanilla（官方引擎）不产事件**，其 expected 是从 API 文档语义推断的
-    // canonical claim——按硬约束①对齐官方移除。ROOM-EVENTLOG-027 转 red
-    // 经 ratchet-allow.json 显式豁免留痕
     super::damage::destroy_structure(w, id);
 }
 
-/// 官方 room/create-construction-site.js：边界、成本存在性、控制器归属、
-/// RCL 配额、对象/地形双重检查；路费按地形系数。
+/// 检查类型、坐标、RCL 配额和格内兼容性，再创建进度为 0 的工地。
+/// 当前数量上限只统计本房间中该玩家的工地；此处没有预定房间的归属检查。
 fn create_construction_site(
     w: &mut Working,
     player: &str,
@@ -130,10 +110,6 @@ fn create_construction_site(
     let Some(cost) = kk_world::types::construction_cost(structure_type) else {
         return;
     };
-    // 总量帽（纵深，非官方结算语义）：官方 MAX_CONSTRUCTION_SITES=100 的检查
-    // 在 game 层（rooms.js:1071-1073，按玩家全对象计数 + 本 tick 已建数——官方
-    // 分开数是因其快照不随建增长）；我们的工作副本即时插入，现存数已覆盖
-    // 本 tick 新建。按（玩家,房间）近似（跨房总量随多房引擎，灰区登记）
     let existing_sites = w
         .room
         .objects
@@ -145,12 +121,10 @@ fn create_construction_site(
     if existing_sites >= c::MAX_CONSTRUCTION_SITES as usize {
         return;
     }
-    // 官方 W/E 房间分支：控制器非本人/非本预约拒 + RCL 配额
     if let Some(ctl) = w.controller() {
         if ctl.owner.as_deref().is_some_and(|u| u != player) {
             return;
         }
-        // checkControllerAvailability（utils.js:340-354）：现存同类型（含工地）< 配额
         let rcl = ctl.level as i64;
         let existing = w
             .room
@@ -167,9 +141,6 @@ fn create_construction_site(
         }
     }
     let (ux, uy) = (x as u8, y as u8);
-    // 对象面检查（checkConstructionSite objects 分支）：extractor 在互斥
-    // 检查前提前返回（官方 utils.js:178-181——需同格矿物且无既有 extractor，
-    // 不受造价对象互斥约束；M2B P2 清偿补齐矿物门）
     let is_extractor = structure_type == "extractor";
     let (mut has_mineral, mut has_extractor) = (false, false);
     for tid in w.index.at(ux as usize, uy as usize) {
@@ -189,7 +160,6 @@ fn create_construction_site(
                 if is_extractor {
                     continue;
                 }
-                // 非 rampart/road 的成本对象互斥
                 if structure_type != "rampart"
                     && structure_type != "road"
                     && tn != "rampart"
@@ -202,19 +172,15 @@ fn create_construction_site(
             None => {}
         }
     }
-    // 官方 :178-181：extractor → 矿物在场且无既有 extractor（has_extractor
-    // 与同类型拦截语义重复，官方两查并存——逐字保留）
     if is_extractor && !(has_mineral && !has_extractor) {
         return;
     }
-    // 地形面检查（checkConstructionSite terrain 分支）：
-    // 非 road/container 的 1/48 边界格要求相邻边界三格全墙（官方 :132-135
-    // 顺序赋值——角格 y 边后写胜出，M2B P2 清偿对齐）；extractor 恒过
-    //（官方 :149-150 免墙检）；非 road 不可建墙上
     if structure_type != "road"
         && structure_type != "container"
         && (x == 1 || x == 48 || y == 1 || y == 48)
     {
+        // 四角同时命中 x/y 条件时，后面的 y 检查覆盖 x，只检查对应横边三格。
+        // 不改成两边都检查；来源：上游 utils.js::checkConstructionSite。
         let mut border: Option<[(usize, usize); 3]> = None;
         if x == 1 {
             border = Some([
@@ -264,8 +230,7 @@ fn create_construction_site(
     {
         return;
     }
-    // progressTotal 定格存值（官方 create-construction-site.js:38-48：road 在
-    // 沼泽 ×5、墙 ×150；其余类型裸成本）——工地创建后地形再变不改变完成线
+    // 道路地形倍率在创建工地时计入总进度，后续建造读取保存值。
     let mut progress_total = cost as u64;
     if structure_type == "road" {
         if w.room
@@ -297,7 +262,8 @@ fn create_construction_site(
     }));
 }
 
-/// 官方 room/create-flag.js：重名拒、颜色白名单、边界。
+/// 保存本房间的玩家旗帜，名称中的 | 和 ~ 分别编码为 $VLINE$ 和 $TILDE$。
+/// 重复名称检查限于当前房间，不是全世界。
 fn create_flag(
     w: &mut Working,
     player: &str,
@@ -308,8 +274,6 @@ fn create_flag(
     secondary_color: i64,
 ) {
     let name = name.replace('|', "$VLINE$").replace('~', "$TILDE$");
-    // 官方 create-flag.js:11-14：重名判**按玩家**（flags 私有集合 per-user——
-    // 两玩家可各有同名旗）
     if w.room.objects.values().any(|o| match o {
         RoomObject::Flag(f) => f.name == name && f.owner.as_deref() == Some(player),
         _ => false,
@@ -330,13 +294,11 @@ fn create_flag(
         name,
         color: color as u8,
         secondary_color: secondary_color as u8,
-        // M2B 扩面 P2：官方 flags 集合带 user（旗按玩家私有）
         owner: Some(player.to_string()),
     }));
 }
 
-/// 官方 room/remove-flag.js：按**玩家**旗名删（flags 集合按 user 定位、名不
-/// 在其集合内静默返回——他人同名旗不可删、不存在不可删）。
+/// 按同一名称编码移除当前玩家的旗帜。
 fn remove_flag(w: &mut Working, player: &str, name: &str) {
     let name = name.replace('|', "$VLINE$").replace('~', "$TILDE$");
     let target = w.room.objects.values().find_map(|o| match o {
@@ -348,9 +310,8 @@ fn remove_flag(w: &mut Working, player: &str, name: &str) {
     }
 }
 
-/// 官方 room/remove-construction-site.js：对象存在且为工地；所有权门
-///（site.user == player ∨ 房 controller.user == player，:6）；移除 +
-/// progress>1 时 `floor(progress/2)` 能量掉落在原格（:8-10）。
+/// 工地主人或房主可移除工地；进度大于 1 时返还一半进度对应的能量，
+/// 同格容器优先接收，剩余量进入掉落堆。
 fn remove_construction_site(w: &mut Working, player: &str, id: ObjId) {
     let Some(obj) = w.room.objects.get(&id).cloned() else {
         return;
