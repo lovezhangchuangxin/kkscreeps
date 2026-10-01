@@ -95,3 +95,8 @@ R7接续阶段已修复 Graphics context精确释放，私有rampart顶罩裁剪
 短窗口证据支持局部CPU/资源churn收益，Pixi缓存槽仍有增长；不能宣称长期稳态。
 完整环境、数据、视觉限制和评审见[R7短测报告](../research/notes/renderer-r7-short-verification-2026-10-01.md)。
 原§5指标与R7最终收口继续挂账；按用户要求暂缓新的长时间测试。
+
+2026-10-01 放大黑屏已修复：沼泽噪声采用自有、按当前视口裁剪的 MaskFilter，
+避免 v8 自动 mask 随整房放大申请超限纹理；双后端各70个短GPU案例及生命周期回归通过。
+根因、原版v7差异与全部RGBA差值见[缩放修复记录](../research/notes/renderer-zoom-verification-2026-10-01.md)。
+此修复不替代R7性能/内存最终验收。

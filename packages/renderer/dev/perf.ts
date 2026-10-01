@@ -278,3 +278,14 @@ const api = { startup, cropParity, coverReuseParity, officialReplay, hoverMove, 
 declare global { interface Window { r7: typeof api; } }
 window.r7 = api;
 void (full.visuals as RoomVisual[]); // fixture type checked alongside the dynamic replacement generator.
+if (query.has('zoom')) {
+  const result = document.createElement('pre'); result.id = 'zoom-result';
+  Object.assign(result.style, { position: 'fixed', inset: '30px 4px 4px', overflow: 'auto', color: 'white', background: '#111' });
+  document.body.append(result);
+  try {
+    if (!officialMode) throw new Error('Zoom regression requires fixture=official-room');
+    const { verifyZoom } = await import('./zoom-verification.js');
+    result.textContent = JSON.stringify(await verifyZoom(handle, probe, official.ticks[0]! as RoomSnapshot), null, 2);
+    status.textContent = 'Zoom GPU regression complete';
+  } catch (error) { result.textContent = String(error); status.textContent = 'Zoom GPU regression failed'; }
+}

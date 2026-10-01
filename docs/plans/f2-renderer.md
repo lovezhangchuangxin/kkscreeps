@@ -799,6 +799,11 @@ R5 实施细化与结果见 [R5 动效系统实施方案](f2-renderer-r5.md) 和
 
 ### §12 R7追加执行记录：2026-10-01短测与真实回放阶段
 
+后续放大黑屏修复（2026-10-01）：v8自动沼泽精灵mask关闭viewport裁剪，放大后全房滤波输入超出设备纹理限额。
+现以自有MaskFilter开启视口裁剪并显式释放；实际双后端短GPU各70案例、原始RGBA对照与三次重建检查通过，
+详见[缩放修复记录](../research/notes/renderer-zoom-verification-2026-10-01.md)。renderer370/shared4/kk-cli7，
+不改冻结公共面、normal光照、灰区终裁或长测暂缓状态。
+
 用户新授权暂缓长时间测试、不再等待方向询问；开展短测驱动修复及官方真实场景。
 完成Graphics context释放、顶罩bbox及同组source复用、同tick对象对账门控、
 官方null动作哨兵诊断修正；E54S13本地官方回放100tick双后端跑通、独立oracle匹配。

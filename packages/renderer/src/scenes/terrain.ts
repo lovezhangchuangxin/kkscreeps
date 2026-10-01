@@ -9,7 +9,7 @@
  * SVG 语义映射：paint-order:stroke = 先描边后填充；ADD = canvas 'lighter'；
  * 官方 BlurFilter 黑影 = canvas filter blur（σ 语义近似，灰区表 G7 盯梢）。
  */
-import { Container, Sprite, Texture, TilingSprite } from 'pixi.js';
+import { Container, MaskFilter, Sprite, Texture, TilingSprite } from 'pixi.js';
 import { bakeCanvas, textureFromBaked } from '../core/bake.js';
 import { mergedOutlinePath } from '../core/path-merge.js';
 import { TERRAIN_SPEC } from '../core/terrain-spec.js';
@@ -36,6 +36,7 @@ export class TerrainStage {
   private wallHash: string | undefined;
   private swampHash: string | undefined;
   private swampNoise: TilingSprite[] = [];
+  private swampMasks: MaskFilter[] = [];
 
   constructor(
     private readonly textures: TerrainTextures,
@@ -183,18 +184,30 @@ export class TerrainStage {
       noise.blendMode = spec.noiseBlend;
       noise.alpha = spec.noiseAlpha;
       noise.tint = spec.noiseTint;
-      noise.mask = masks[i]!;
+      const mask = masks[i]!;
+      // Pixi's automatic sprite mask disables viewport clipping. A full-room
+      // mask then requests 32768² filter targets at zoom=2 / DPR=2. These two
+      // filters have no offscreen consumers or padding, so only visible pixels
+      // are needed. Keep the same red-channel mask shader and hidden overlay.
+      mask.renderable = false;
+      mask.measurable = false;
+      const filter = new MaskFilter({ sprite: mask, channel: 'red', inverse: false,
+        resolution: 'inherit', antialias: 'inherit' });
+      // The constructor overrides this option; set the public property after it.
+      filter.clipToViewport = true;
+      noise.filters = [filter];
+      this.swampMasks.push(filter);
       this.root.addChild(noise);
       this.swampNoise.push(noise);
     });
   }
 
   private clearSwampSprites(): void {
-    // 先摘 mask 再销毁（评审 C6 预言的脆弱点实证：v8 MaskFilter 在 mask 精灵
-    // 已毁/纹理置空后于渲染期读 null.destroyed 直接抛错且打断渲染帧）
-    for (const child of this.root.children) {
-      if (child.label.includes('swamp-noise')) child.mask = null;
-    }
+    // Detach and destroy our filters before their mask textures. Container
+    // destruction does not own filters; release TextureMatrix subscriptions too.
+    for (const noise of this.swampNoise) noise.filters = null;
+    for (const filter of this.swampMasks) filter.destroy();
+    this.swampMasks = [];
     // 快照迭代（评审 A/C 复审 N1：destroy→removeFromParent 会 splice 活数组，
     // 直接 for...of 跳格——每轮残留 mask 已摘的噪声与持已毁纹理的白罩）
     for (const child of [...this.root.children]) {

@@ -1,0 +1,25 @@
+{
+  "date": "2026-10-01T02:29:45.497140+00:00",
+  "baseline": "9a0662e",
+  "hardware": {
+    "chip": "Apple M4",
+    "model": "Mac16,12",
+    "ramBytes": 25769803776,
+    "os": "macOS 15.7.3 (24G419)"
+  },
+  "scene": {
+    "fixture": "official-room.json",
+    "room": "E54S13",
+    "tick": 24242100,
+    "objects": 312,
+    "creeps": 11,
+    "visuals": 0
+  },
+  "sampling": "Stopped ticker; fixed phase GPU RGBA via explicit RenderTexture; 4 safe old/new pairs and hidden-noise positive controls; 70 fixed viewport/camera cases; 3 terrain reset cycles; no soak or frame-budget measurement",
+  "sha256": {
+    "packages/renderer/src/scenes/terrain.ts": "985bb3e34c3ef78482d32caeeea58af1dfa57f04e523a83c9556aa2d74369390",
+    "packages/renderer/dev/zoom-verification.ts": "901f59da988bd816cedfab5027e5583a1be0ec38bca0f09ea1cc863e218f3ec8",
+    "packages/renderer/dev/perf.ts": "24adf49192db18fb35899c2abb8a368ec6c7b63b39b97a99a3904a68246f5e48",
+    "packages/renderer/fixtures/official-room.json": "0584ce0e357cba94b355a654086220ea8efbbf61f141a0707ed1b9d5b86fa9bb"
+  }
+}

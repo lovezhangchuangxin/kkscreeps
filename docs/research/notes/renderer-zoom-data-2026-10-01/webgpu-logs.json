@@ -1,0 +1,266 @@
+[
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSource' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:30.736Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSampler' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:30.736Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSource' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:30.969Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSampler' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:30.969Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSource' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:31.165Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSampler' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:31.166Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSource' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:31.472Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSampler' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:31.472Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSource' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.039Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSampler' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.039Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSource' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.415Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSource' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.415Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSampler' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.415Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSampler' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.415Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSource' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.415Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSource' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.415Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSampler' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.416Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSampler' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.416Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSource' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.416Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSampler' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.416Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSource' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.416Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSampler' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.416Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSource' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.417Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSampler' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.417Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSource' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.471Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSampler' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.472Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSource' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.472Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSampler' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.473Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSource' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.473Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSampler' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.473Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSource' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.473Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSampler' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.474Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSource' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.474Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSampler' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.474Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSource' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.539Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSampler' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.539Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSource' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.539Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSampler' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.539Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSource' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.539Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSampler' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.539Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSource' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.540Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSampler' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.540Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSource' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.540Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  },
+  {
+    "level": "warn",
+    "message": "PixiJS Warning:  [BindGroup] a 'textureSampler' was destroyed while still bound to a shader. Remove it from the shader before destroying it.",
+    "timestamp": "2026-10-01T02:25:32.540Z",
+    "url": "http://127.0.0.1:5175/@vite/client"
+  }
+]

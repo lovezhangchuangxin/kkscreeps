@@ -91,6 +91,7 @@ D6 首片已允许 link transfer 的 JS 处理链正常拒绝一次动作；后�
 
 - [x] F2 R0–R6 房间观战、RoomVisual、交互及公共API冻结；
 - [ ] F2 R7 性能/内存验收与整体收口：阶段生命周期修复、顶罩裁剪/复用、同tick门控、真实回放与三路清偿复审已完成；用户暂缓长时间测试，完整矩阵、压力soak及冻结指标最终验收待办，见 [短测报告](research/notes/renderer-r7-short-verification-2026-10-01.md)。
+  放大黑屏已修复并通过双后端短GPU回归，见[缩放记录](research/notes/renderer-zoom-verification-2026-10-01.md)；该修复不代替最终性能/内存验收。
 
 ## M4 完整玩法与扩展
 

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Container, Matrix, Texture, TextureSource } from 'pixi.js';
+import { Container, DOMAdapter, MaskFilter, Matrix, Texture, TextureSource } from 'pixi.js';
 import { LightingPass } from '../src/core/lighting.js';
 import { CameraController } from '../src/core/camera.js';
 import { screenToWorld } from '../src/core/camera-math.js';
@@ -77,5 +77,50 @@ describe('场景坐标与状态边界', () => {
       expect(node.height).toBeCloseTo(50 * scale);
     }
     node.destroy(); texture.destroy(true);
+  });
+
+  it('沼泽遮罩裁剪到当前视口，重建与销毁先释放滤镜再释放私有纹理', () => {
+    // Node has no GL context; only shader precision probing needs a canvas here.
+    vi.spyOn(DOMAdapter.get(), 'createCanvas').mockReturnValue({ getContext: () => null } as unknown as HTMLCanvasElement);
+    const lighting = { clearMembers: vi.fn(), addMember: vi.fn() } as unknown as LightingPass;
+    const textures = Object.fromEntries(['ground', 'ground-mask', 'noise1', 'noise2',
+      'exit-top', 'exit-bottom', 'exit-left', 'exit-right'].map((key) => [key, { texture: Texture.WHITE }])) as unknown as TerrainTextures;
+    const sharedNoise = new Texture({ source: new TextureSource({ width: 16, height: 16 }) });
+    textures.noise2 = { texture: sharedNoise };
+    const stage = new TerrainStage(textures, lighting, 5000, 100);
+    const codes = new Uint8Array(2500); codes[510] = 2;
+    stage.setTerrain(codes);
+    const noises = stage.root.children.filter((child) => child.label.includes('swamp-noise'));
+    expect(noises).toHaveLength(2);
+    const filters = noises.map((noise) => noise.filters![0] as MaskFilter);
+    for (const filter of filters) {
+      expect(filter).toBeInstanceOf(MaskFilter);
+      expect(filter.clipToViewport).toBe(true);
+      expect([filter.channel, filter.inverse, filter.resolution, filter.antialias]).toEqual(['red', false, 'inherit', 'inherit']);
+      expect(filter.sprite.renderable).toBe(false);
+      expect(filter.sprite.measurable).toBe(false);
+      const originalDestroy = filter.destroy.bind(filter);
+      vi.spyOn(filter, 'destroy').mockImplementation(() => {
+        expect(noises.every((noise) => noise.filters === null)).toBe(true);
+        expect(filter.sprite.texture.destroyed).toBe(false);
+        originalDestroy();
+      });
+    }
+    stage.setTerrain(codes.slice());
+    for (const filter of filters) expect(filter.destroy).not.toHaveBeenCalled();
+    stage.setTerrain(new Uint8Array(2500));
+    for (const filter of filters) {
+      expect(filter.destroy).toHaveBeenCalledOnce();
+      expect(filter.resources).toBeNull();
+    }
+    expect(stage.root.children.every((child) => !child.label.startsWith('terrain-swamp'))).toBe(true);
+    expect(sharedNoise.destroyed).toBe(false);
+    stage.setTerrain(codes);
+    const rebuilt = stage.root.children.filter((child) => child.label.includes('swamp-noise'))
+      .map((noise) => noise.filters![0]!);
+    stage.destroy();
+    expect(rebuilt.every((filter) => filter.resources === null)).toBe(true);
+    expect(sharedNoise.destroyed).toBe(false);
+    sharedNoise.destroy(true);
   });
 });

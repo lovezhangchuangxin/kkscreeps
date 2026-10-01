@@ -402,3 +402,6 @@ visuals 全量替换、离房事件不补播、say 隐私过滤（player=null �
 R7后续指针（2026-10-01）：[短窗口优化与真实回放](../research/notes/renderer-r7-short-verification-2026-10-01.md)
 已按用户追加授权完成短测/生命周期修复/真实100tick场景，三路评审清偿复审。
 R6 D1–D7与冻结API未重开；正常光照不扩档，长期验收暂缓且未冒称R7最终完成。
+
+后续[放大黑屏修复](../research/notes/renderer-zoom-verification-2026-10-01.md)已通过双后端短GPU回归；
+沼泽MaskFilter按视口裁剪并自行释放，R6冻结决策与公共API不变。
