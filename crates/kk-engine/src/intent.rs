@@ -393,8 +393,14 @@ pub struct UserIntents {
     /// Game.notify（M2B 扩面 P3）：官方全局 intent 通道（runtime.js:78-86
     /// `intents.push('notify', ...)`——list 顶层按动作名键的数组，非对象 id
     /// 路由）。清洗 schema：`notify: {message: 'userText', groupInterval:
-    /// 'number'}`（common/lib/system.js:17）
+    /// 'number'}`（common/lib/system.js:17 notify 行）
     pub notify: Vec<NotifyIntent>,
+    /// Game.market 全局 intent 族（2B 批）：官方 `intents.pushByName('global',
+    /// …)` 容器（runtime.js:82-90）→ storeIntents 的 global 分支
+    /// （engine/src/utils.js:421-424）→ sanitizeUserIntents 白名单（五个
+    /// 市场键，common/lib/system.js:23-29）。maxLen 门（deal 10 /
+    /// cancelOrder·changeOrderPrice·extendOrder 50）在 prelude 发射层。
+    pub market: Vec<MarketIntent>,
 }
 
 /// 一条玩家通知意图（Game.notify）。
@@ -402,6 +408,55 @@ pub struct UserIntents {
 pub struct NotifyIntent {
     pub message: String,
     pub group_interval: Option<i64>,
+}
+
+/// 一条全局市场意图（Game.market 五动作，清洗后形态）。
+///
+/// 字段全 Option：官方 sanitizeIntent 对白名单字段**无条件物化**（缺键 →
+/// string transform 得 "undefined" / number transform 得 NaN）——我方 None
+/// ≙ 官方 "undefined"/NaN。净等价性**逐字段**成立但路径各异（评审 1 勘误
+/// 泛化声明）：多数字段经下游 falsy 门/查表 miss 净跳过；
+/// **CreateOrder.order_type 例外**——官方处理器
+/// `type: intent.type == ORDER_SELL ? SELL : BUY`（global-intents/market.js:139）
+/// 把物化串默认落为合法 ORDER_BUY，等价性纯靠 prelude 不可达（game 侧
+/// `type != BUY && != SELL → ERR_INVALID_ARGS` market.js:75 先于 push）——
+/// **P2 处理器落地时 order_type=None 必须直接拒绝，不得默认 buy/sell**；
+/// Deal.amount 的 NaN 首门是比较门（`amount <= 0` 对 NaN 假——market.js:272），
+/// 净跳过由下游 terminalsByRoom miss / `!(amount > 0)` 兜底，处理器注释勿引
+/// 用「falsy 首门」。（登记：官方 intershard 订单 roomName 落 "undefined"
+/// 字面串、我方 None，未测面。）
+#[derive(Debug, Clone, PartialEq)]
+pub enum MarketIntent {
+    /// `createOrder: {type:'string', resourceType:'string', price:'price',
+    /// totalAmount:'number', roomName:'string'}`（common/lib/system.js:25）。
+    CreateOrder {
+        /// P2 处理器契约：None/非 buy|sell 值直接拒（见枚举文档）。
+        order_type: Option<String>,
+        resource_type: Option<String>,
+        /// 官方 price transform：credits 浮点 → **整数毫 credits**。
+        price_milli: Option<i64>,
+        total_amount: Option<i64>,
+        room_name: Option<String>,
+    },
+    /// `cancelOrder: {orderId: 'string'}`（system.js:24）。
+    CancelOrder { order_id: Option<String> },
+    /// `changeOrderPrice: {orderId:'string', newPrice:'price'}`（system.js:26）。
+    ChangeOrderPrice {
+        order_id: Option<String>,
+        new_price_milli: Option<i64>,
+    },
+    /// `extendOrder: {orderId:'string', addAmount:'number'}`（system.js:32）。
+    ExtendOrder {
+        order_id: Option<String>,
+        add_amount: Option<i64>,
+    },
+    /// `deal: {orderId:'string', amount:'number', targetRoomName:'string'}
+    /// （system.js:27）。
+    Deal {
+        order_id: Option<String>,
+        amount: Option<i64>,
+        target_room_name: Option<String>,
+    },
 }
 
 /// 一 tick 的全部玩家指令（玩家名排序——结算序确定性，方案 D5）。
@@ -439,6 +494,37 @@ impl IntentBatch {
                         message: to_user_text(item.get("message")),
                         group_interval: to_int(item.get("groupInterval")),
                     });
+                }
+                continue;
+            }
+            if obj_key == "global" {
+                // 全局市场通道（官方 storeIntents utils.js:421-424 的 global 分支）：
+                // 容器形态 {动作名: [载荷…]}（runtime.js:82-90 pushByName
+                // ('global',…)）。迭代序=官方 sanitizeUserIntents 的
+                // `for(name in intentTypes)` **声明序**（common/lib/system.js
+                // :23-29 的五市场键子集——非 JSON 键序；跨动作序对结算不可
+                // 观测——market 处理器按分节序消费，此处固定序保确定性）；
+                // 同动作数组保持 push 序。白名单外丢弃（intentTypes 键集语义）
+                static MARKET_INTENT_ORDER: [&str; 5] = [
+                    "cancelOrder",
+                    "changeOrderPrice",
+                    "createOrder",
+                    "deal",
+                    "extendOrder",
+                ];
+                let Some(actions) = actions.as_object() else {
+                    continue;
+                };
+                let entry = batch.users.entry(player.to_string()).or_default();
+                for name in MARKET_INTENT_ORDER {
+                    let Some(items) = actions.get(name).and_then(Value::as_array) else {
+                        continue;
+                    };
+                    for item in items {
+                        if let Some(intent) = parse_market_intent(name, item) {
+                            entry.market.push(intent);
+                        }
+                    }
                 }
                 continue;
             }
@@ -500,6 +586,7 @@ impl IntentBatch {
             entry.objects.extend(intents.objects);
             entry.room.extend(intents.room);
             entry.notify.extend(intents.notify);
+            entry.market.extend(intents.market);
         }
     }
 
@@ -637,6 +724,107 @@ fn to_user_string(v: Option<&Value>) -> Option<String> {
         other => other.to_string(),
     })
     .map(|s| s.chars().take(100).collect())
+}
+
+/// 官方 string transform（common/lib/system.js:5 `value => "" + value`，**无长度帽**）：
+/// 市场意图的 type/resourceType/roomName/orderId/targetRoomName 面。缺键 →
+/// None（官方物化 "undefined" 串——消费端查表 miss/`!intent.x` falsy 门
+/// 等价，见 MarketIntent 文档）。数值 ToString 浮点格式差异沿用既有登记；
+/// 数组/对象面官方 JS ToString（join(",")/"[object Object]"）vs serde
+/// `to_string()`（"[1,2]"/"{...}"）分歧——经官方门查表 miss 不可达，登记
+/// （评审 2 P2-3；既有 js_array_to_string 可在需要时复用）。
+fn to_plain_string(v: Option<&Value>) -> Option<String> {
+    v.map(|x| match x {
+        Value::String(s) => s.clone(),
+        other => other.to_string(),
+    })
+}
+
+/// 官方 price transform（common/lib/system.js:8
+/// `parseInt((1000 * value).toFixed(0))`）：玩家 credits 浮点 → **整数毫
+/// credits**。Rust 等价 `(1000.0*x).round()`：toFixed(0) 取最近邻、恰半时
+/// 取大 n（ECMA-262 Number.prototype.toFixed 步骤 9——与 round() 远零半舍
+/// 同向，评审 1 node 实测 0.0005→1/−0.0025→−3 双侧吻合）；乘积的 f64
+/// 双侧同算。套件价格域（≤3 位小数）乘积为精确整数、无舍入发生。
+///
+/// **分歧域三处（清偿复审 P1-a 裁决后的最终口径）**：
+/// ①JS ToNumber 分歧串（"0x10"=16/""=0 等）→ 我方 parse 失败 None——
+///   **真不可达**：game 侧 parseFloat 先于 push（market.js:78）把任何输入
+///   变 number（parseFloat("0x10")=0 被 `!price` 门拒），字符串不达 transform；
+/// ②milli ∈ [2^63, 1e21) → 我方 None——**表示域强制**（官方 toFixed 产全
+///   数字串得 >i64 的精确大整；玩家可达——remaining=0 订单的 changeOrderPrice
+///   费恒 0 放行任意 newPrice，清偿复审取证 market.js:163-168——但
+///   MarketOrder.price 为 i64 无法承载，登记已知偏差：该域官方改价生效、
+///   我方 None→处理器跳过改价不生效，套件零覆盖）；
+/// ③|milli| ≥ 1e21 → **保真实现官方怪癖**：toFixed 溢出固定点域走
+///   ToString 指数形 "2.5e+21"，parseInt 读首位数字即停 → ±首位（同
+///   remaining=0 洞玩家可达——node 实测 t(1e18)=1/t(2.5e18)=2/t(−1e18)=−1；
+///   与 to_int 的指数首位先例 :613-619 同型）。
+/// 非有限值（NaN/Inf）→ None ≙ 官方 NaN（下游 `!intent.price` falsy 门等价；
+/// 官方 (Infinity).toFixed(0) 抛 RangeError 属 runner 崩溃怪癖，我方安全拒绝）。
+fn to_price_milli(v: Option<&Value>) -> Option<i64> {
+    let x = match v? {
+        Value::Number(n) => n.as_f64()?,
+        Value::String(s) => s.trim().parse::<f64>().ok()?,
+        Value::Bool(b) => i64::from(*b) as f64,
+        // null（JS 1000*null=0）与对象/数组不可达：prelude createOrder 已
+        // parseFloat 门（game/market.js:78 parseFloat、:80 `!price` 拒）
+        _ => return None,
+    };
+    let milli = 1000.0 * x;
+    if !milli.is_finite() {
+        return None;
+    }
+    if milli.abs() >= 1e21 {
+        // 域③官方怪癖：指数形首尾——String(milli) 指数形（Rust {:e} 同为
+        // 最短往返表示），parseInt 读到 '.'/'e' 即停 → 首位数字（带号）
+        let text = format!("{:e}", milli);
+        let digits: String = text
+            .trim_start_matches('-')
+            .chars()
+            .take_while(|c| c.is_ascii_digit())
+            .collect();
+        let first: i64 = digits.parse().unwrap_or(0);
+        return Some(if milli < 0.0 { -first } else { first });
+    }
+    if !(i64::MIN as f64..9_223_372_036_854_775_808.0).contains(&milli) {
+        return None; // 域②：表示域强制（见文档）
+    }
+    Some(milli.round() as i64)
+}
+
+/// 'global' 容器逐条清洗（sanitizeUserIntents 的市场键子集，
+/// common/lib/system.js:23-29 intentTypes 五市场键；其余键丢弃——官方
+/// 'global' 容器还承载 power-creep 六键（createPowerCreep 等，:26/:28-33，
+/// 归 M4 power 批进驻本分支；官方 global 阶段 power 处理器**先于** market，
+/// processor/global.js:41-49））。
+fn parse_market_intent(name: &str, item: &Value) -> Option<MarketIntent> {
+    match name {
+        "createOrder" => Some(MarketIntent::CreateOrder {
+            order_type: to_plain_string(item.get("type")),
+            resource_type: to_plain_string(item.get("resourceType")),
+            price_milli: to_price_milli(item.get("price")),
+            total_amount: to_int(item.get("totalAmount")),
+            room_name: to_plain_string(item.get("roomName")),
+        }),
+        "cancelOrder" => Some(MarketIntent::CancelOrder {
+            order_id: to_plain_string(item.get("orderId")),
+        }),
+        "changeOrderPrice" => Some(MarketIntent::ChangeOrderPrice {
+            order_id: to_plain_string(item.get("orderId")),
+            new_price_milli: to_price_milli(item.get("newPrice")),
+        }),
+        "extendOrder" => Some(MarketIntent::ExtendOrder {
+            order_id: to_plain_string(item.get("orderId")),
+            add_amount: to_int(item.get("addAmount")),
+        }),
+        "deal" => Some(MarketIntent::Deal {
+            order_id: to_plain_string(item.get("orderId")),
+            amount: to_int(item.get("amount")),
+            target_room_name: to_plain_string(item.get("targetRoomName")),
+        }),
+        _ => None,
+    }
 }
 
 /// 从官方 intent JSON 白名单清洗（system.js intentTypes 对应项）。
@@ -1018,4 +1206,201 @@ fn from_json_misc_family_whitelist_and_order() {
     assert!(pos(Action::Harvest) < pos(Action::Say));
     assert!(pos(Action::Say) < pos(Action::Suicide));
     assert!(pos(Action::Suicide) < pos(Action::Pull));
+}
+
+/// 2B 批 P0：'global' 市场容器清洗（白名单五键 + price 毫变换 + 缺键 None
+/// ≙ 官方 "undefined"/NaN）。
+#[cfg(test)]
+mod market_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn global_container_parses_all_five_actions() {
+        let list = json!({
+            "global": {
+                "createOrder": [
+                    {"type": "sell", "resourceType": "H", "price": 2.5,
+                     "totalAmount": "100", "roomName": "W1N1"}
+                ],
+                "cancelOrder": [{"orderId": "mkt3"}],
+                "changeOrderPrice": [{"orderId": "mkt3", "newPrice": 0.75}],
+                "extendOrder": [{"orderId": "mkt3", "addAmount": 50}],
+                "deal": [{"orderId": "mkt3", "amount": 10, "targetRoomName": "W1N1"}]
+            }
+        });
+        let batch = IntentBatch::from_json("p1", &list);
+        let m = &batch.users["p1"].market;
+        assert_eq!(m.len(), 5);
+        // 迭代序 = 官方 intentTypes 声明序（system.js:23-29）：
+        // cancelOrder → changeOrderPrice → createOrder → deal → extendOrder
+        assert_eq!(
+            m[0],
+            MarketIntent::CancelOrder {
+                order_id: Some("mkt3".into())
+            }
+        );
+        assert_eq!(
+            m[1],
+            MarketIntent::ChangeOrderPrice {
+                order_id: Some("mkt3".into()),
+                new_price_milli: Some(750),
+            }
+        );
+        assert_eq!(
+            m[2],
+            MarketIntent::CreateOrder {
+                order_type: Some("sell".into()),
+                resource_type: Some("H".into()),
+                price_milli: Some(2500),
+                total_amount: Some(100),
+                room_name: Some("W1N1".into()),
+            },
+            "totalAmount 字符串走 JS parseInt 前缀规则（\"100\" → 100）"
+        );
+        assert_eq!(
+            m[3],
+            MarketIntent::Deal {
+                order_id: Some("mkt3".into()),
+                amount: Some(10),
+                target_room_name: Some("W1N1".into()),
+            }
+        );
+        assert_eq!(
+            m[4],
+            MarketIntent::ExtendOrder {
+                order_id: Some("mkt3".into()),
+                add_amount: Some(50),
+            }
+        );
+    }
+
+    #[test]
+    fn price_transform_milli_and_edges() {
+        let mk = |price: Value| {
+            let list =
+                json!({"global": {"changeOrderPrice": [{"orderId": "x", "newPrice": price}]}});
+            IntentBatch::from_json("p1", &list).users["p1"]
+                .market
+                .clone()
+        };
+        let case = |price: Value| match mk(price).remove(0) {
+            MarketIntent::ChangeOrderPrice {
+                new_price_milli, ..
+            } => new_price_milli,
+            _ => unreachable!(),
+        };
+        assert_eq!(case(json!(2)), Some(2000));
+        assert_eq!(case(json!(0.5)), Some(500));
+        assert_eq!(case(json!(0.75)), Some(750));
+        assert_eq!(case(json!(1.4999)), Some(1500), "toFixed 最近邻");
+        assert_eq!(
+            case(json!("3.25")),
+            Some(3250),
+            "JS 乘法字符串强转（1000*\"3.25\"）"
+        );
+        // 负价/零/布尔：官方通道不可达（game 侧 `!price || price <= 0` 门拒），
+        // 清洗层按 toFixed/round 远零半舍同向保留（−0.5→"−500"、true→1000）
+        assert_eq!(case(json!(-0.5)), Some(-500));
+        assert_eq!(
+            case(json!(-0.0025)),
+            Some(-3),
+            "负恰半远零（node 实测对齐）"
+        );
+        assert_eq!(
+            case(json!(0)),
+            Some(0),
+            "0 是合法毫值——`!price` 门在 API 层"
+        );
+        assert_eq!(case(json!(true)), Some(1000), "JS 1000*true");
+        // 分歧域终口径（清偿复审 P1-a 后，登记于 to_price_milli 文档）：
+        // ①ToNumber 分歧串（"0x10" 官方 16000）——真不可达（parseFloat 门）
+        //   钉 None；②[2^63,1e21) 表示域强制——钉 None；③≥1e21 指数形
+        //   首位怪癖——**保真实现**（node 实测 t(1e18)=1/t(2.5e18)=2/
+        //   t(−1e18)=−1；玩家可达路径=remaining=0 订单 changeOrderPrice
+        //   费恒 0 放行任意 newPrice）
+        assert_eq!(case(json!("0x10")), None, "域①真不可达（parseFloat 门）");
+        assert_eq!(
+            case(json!(1e18)),
+            Some(1),
+            "域③指数形首位（milli=1e21，node 实测官方=1）"
+        );
+        assert_eq!(case(json!(2.5e18)), Some(2), "域③ 2.5e21→首位 2");
+        assert_eq!(case(json!(-1e18)), Some(-1), "域③负向 −1e21→−1");
+        assert_eq!(
+            case(json!(1e16)),
+            None,
+            "域②milli=1e19∈[2^63,1e21) 表示域强制（官方精确 1e19）"
+        );
+        assert_eq!(
+            case(json!(-1e19)),
+            Some(-1),
+            "域③负向 −1e22 指数形首位 −1（负向下界对称守卫=域②内才 None）"
+        );
+        assert_eq!(case(json!(-1e16)), None, "域②负向 milli=−1e19 表示域强制");
+        assert_eq!(case(Value::Null), None, "不可达路径按 falsy 折叠");
+        // 缺键 → None（官方 NaN）
+        let list = json!({"global": {"changeOrderPrice": [{"orderId": "x"}]}});
+        match IntentBatch::from_json("p1", &list)
+            .users
+            .get_mut("p1")
+            .unwrap()
+            .market
+            .remove(0)
+        {
+            MarketIntent::ChangeOrderPrice {
+                new_price_milli, ..
+            } => assert_eq!(new_price_milli, None),
+            _ => unreachable!(),
+        }
+    }
+
+    #[test]
+    fn global_unknown_action_dropped_and_missing_fields_none() {
+        let list = json!({
+            "global": {
+                "generatePixel": [{}],
+                "deal": [{}]
+            }
+        });
+        let batch = IntentBatch::from_json("p1", &list);
+        let m = &batch.users["p1"].market;
+        assert_eq!(m.len(), 1, "白名单外动作丢弃");
+        assert_eq!(
+            m[0],
+            MarketIntent::Deal {
+                order_id: None,
+                amount: None,
+                target_room_name: None,
+            },
+            "缺键全 None（官方物化 undefined/NaN——falsy 门等价）"
+        );
+    }
+
+    #[test]
+    fn extend_from_merges_market_vecs() {
+        let a = IntentBatch::from_json(
+            "p1",
+            &json!({"global": {"cancelOrder": [{"orderId": "mkt1"}]}}),
+        );
+        let b = IntentBatch::from_json(
+            "p1",
+            &json!({"global": {"cancelOrder": [{"orderId": "mkt2"}]}}),
+        );
+        let mut merged = a;
+        merged.extend_from(b);
+        assert_eq!(merged.users["p1"].market.len(), 2);
+        // 序也锚定（评审 3：len 断言对错排无判别力）
+        assert_eq!(
+            merged.users["p1"]
+                .market
+                .iter()
+                .map(|i| match i {
+                    MarketIntent::CancelOrder { order_id } => order_id.clone(),
+                    _ => unreachable!(),
+                })
+                .collect::<Vec<_>>(),
+            vec![Some("mkt1".into()), Some("mkt2".into())]
+        );
+    }
 }

@@ -20,6 +20,7 @@ pub mod controller;
 pub mod creep;
 pub mod damage;
 pub mod economy;
+pub mod market;
 pub mod movement;
 pub mod room;
 pub mod spawn;
@@ -107,6 +108,16 @@ pub struct PlayerState {
     /// setActiveForeignSegment 请求（None = 未设/已清；Some((username, id?))
     /// ——id 缺省走发布者 defaultPublic；每 tick 重新解析授权——撤回即时生效）
     pub foreign_request: Option<(String, Option<u8>)>,
+    /// 玩家 credits（2B 批）：**整数毫 credits**（官方 users.money 形态——
+    /// `Game.market.credits` getter ÷1000，market.js:196-201）。种子 10M
+    /// credits=10_000_000_000 毫（vanilla adapter index.ts:950 同款——
+    /// 套件 INITIAL_CREDITS 锚）。
+    pub money: i64,
+    /// intershard 资源持有（2B 批）：官方 users.resources（INTERSHARD_RESOURCES
+    /// 划转面——directDeals 结算消费，global-intents/market.js:420-435）。
+    /// 缺省空：token/pixel 等来源面（generatePixel/unlock）归 MMO 订阅批，
+    /// 本批只承载 deal 划转，不伪造来源。
+    pub resources: BTreeMap<String, i64>,
 }
 
 /// 一条已落账的玩家通知（tick = 落账时的世界时间）。
@@ -618,6 +629,10 @@ pub struct Engine {
     pub world: kk_world::World,
     pub players: BTreeMap<String, PlayerState>,
     pub sandboxes: BTreeMap<String, Box<dyn crate::sandbox::Sandbox>>,
+    /// 市场域态（2B 批 P0）：订单簿 + 交易流水——官方 market.orders/
+    /// transactions 两 DB 集合的引擎态等价物（跨房世界级但非 kk-world
+    /// 世界态，快照契约不动）。
+    pub market: market::MarketState,
     next_id: u64,
     /// 最近一次 tick 的房间事件日志（按房间结算序拼接；M1 测试消费，M2 持久化）。
     pub last_events: Vec<serde_json::Value>,
@@ -639,6 +654,7 @@ impl Engine {
             world,
             players: BTreeMap::new(),
             sandboxes: BTreeMap::new(),
+            market: market::MarketState::default(),
             next_id,
             last_events: Vec::new(),
             fail_room: None,

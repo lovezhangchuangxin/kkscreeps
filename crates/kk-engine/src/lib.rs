@@ -8,5 +8,7 @@ pub mod intent;
 pub mod sandbox;
 pub mod settle;
 
+pub use intent::MarketIntent;
 pub use sandbox::{RunOutcome, RunResult, RunSpec, Sandbox, ScriptedSandbox, WorldView};
+pub use settle::market::{MarketOrder, MarketState, Transaction};
 pub use settle::{Engine, PlayerState, SettleError, TickInput, settle_room};
