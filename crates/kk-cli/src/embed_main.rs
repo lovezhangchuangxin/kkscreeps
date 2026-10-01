@@ -96,8 +96,13 @@ fn handle_line(engine: &mut EmbedEngine, line: &str) -> anyhow::Result<Value> {
                 .ok_or_else(|| anyhow::anyhow!("缺少 codes 映射"))?;
             let map: std::collections::BTreeMap<String, String> = codes
                 .iter()
-                .map(|(k, v)| (k.clone(), v.as_str().unwrap_or_default().to_string()))
-                .collect();
+                .map(|(handle, value)| {
+                    value
+                        .as_str()
+                        .map(|code| (handle.clone(), code.to_string()))
+                        .ok_or_else(|| anyhow::anyhow!("玩家 {handle} 的 code 必须是字符串"))
+                })
+                .collect::<anyhow::Result<_>>()?;
             let runs = engine.run_players(&map)?;
             let mut out = serde_json::Map::new();
             for (handle, run) in runs {

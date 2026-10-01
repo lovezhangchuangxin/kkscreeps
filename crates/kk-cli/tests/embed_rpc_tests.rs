@@ -22,7 +22,7 @@ fn spawn_embed() -> std::process::Child {
 fn embed_rpc_roundtrip() -> anyhow::Result<()> {
     let mut child = spawn_embed();
     let mut stdin = child.stdin.take().expect("stdin");
-    // 依次发送：正常调用、未知方法、非法 JSON、缺 method 字段
+    // 发送正常调用、非法请求和非法代码，确认请求错误不推进世界。
     let requests = [
         r#"{"id":1,"method":"createShard","params":{"players":["p1"],"rooms":[{"name":"W1N1","rcl":1,"owner":"p1"}]}}"#
             .to_string(),
@@ -30,6 +30,9 @@ fn embed_rpc_roundtrip() -> anyhow::Result<()> {
         r#"{"id":3,"method":"nopeMethod","params":{}}"#.to_string(),
         "{invalid json".to_string(),
         r#"{"id":5,"params":{}}"#.to_string(),
+        r#"{"id":6,"method":"runPlayers","params":{"codes":{"p1":42}}}"#.to_string(),
+        r#"{"id":7,"method":"runPlayers","params":{"codes":{"p1":null}}}"#.to_string(),
+        r#"{"id":8,"method":"getGameTime","params":{}}"#.to_string(),
     ];
     // 所有路径都保证 wait（不留 zombie）；写失败也要等子进程退出后再返回错误
     let mut write_err = None;
@@ -76,6 +79,22 @@ fn embed_rpc_roundtrip() -> anyhow::Result<()> {
     let resp: Value = serde_json::from_str(lines.next().expect("第 5 条响应"))?;
     assert_eq!(resp["id"], 5);
     assert_eq!(resp["ok"], false);
+
+    for id in [6, 7] {
+        let resp: Value = serde_json::from_str(lines.next().expect("非法代码的响应"))?;
+        assert_eq!(resp["id"], id);
+        assert_eq!(resp["ok"], false, "非字符串代码必须被拒绝: {resp}");
+        assert!(
+            resp["error"]
+                .as_str()
+                .is_some_and(|e| e.contains("p1") && e.contains("字符串")),
+            "错误应指出玩家及代码类型要求: {resp}"
+        );
+    }
+    let resp: Value = serde_json::from_str(lines.next().expect("拒绝非法代码后的时间响应"))?;
+    assert_eq!(resp["id"], 8);
+    assert_eq!(resp["ok"], true);
+    assert_eq!(resp["result"], 0, "非法代码不得执行或推进世界");
 
     assert!(lines.next().is_none(), "无多余输出");
     Ok(())
