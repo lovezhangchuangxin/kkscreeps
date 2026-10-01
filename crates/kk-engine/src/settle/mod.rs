@@ -785,7 +785,14 @@ impl Engine {
         // 后读 db 的因果序等价），且失败原子性与「一次成功 tick ⇒ generation
         // 恰 +1」双不变量原样保持（settle_market 不可失败——官方 global 无
         // throw 路径，逐 intent 静默跳过同构）
-        market::settle_market(&mut settled, &mut players, &mut self.market, &batch, time);
+        market::settle_market(
+            &mut settled,
+            &mut players,
+            &mut self.market,
+            &batch,
+            time,
+            input.now_ms,
+        );
         for (name, room) in settled {
             self.world.commit_room(name, room);
         }

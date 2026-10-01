@@ -308,8 +308,11 @@ impl EmbedEngine {
             players.spawn(&handle, config)?;
             // 玩家持久状态条目随分片建立（B0-5 统一提交点：RawMemory 候选的
             // 提交位与注入源——缺省 gcl 0/raw_memory 空，与旧的 get().unwrap_or
-            // 缺省口径一致）
-            self.engine.players.entry(handle.clone()).or_default();
+            // 缺省口径一致）。money 种子 10M credits（毫）= vanilla adapter
+            // index.ts:950 的用户创建种子（套件 INITIAL_CREDITS 锚）——种子
+            // 落在 embed 边界=官方 adapter 边界同位（引擎侧 PlayerState 缺省
+            // 0 与官方引擎不种子同构）
+            self.engine.players.entry(handle.clone()).or_default().money = 10_000_000_000;
         }
         for setup in rooms {
             let name = setup.name;
@@ -406,6 +409,72 @@ impl EmbedEngine {
             .insert(room, object)
             .map_err(anyhow::Error::msg)?;
         Ok(id.as_str())
+    }
+
+    /// 注入市场订单（2B 批 P2，vanilla adapter index.ts:1415-1434 的形状）：
+    /// `{owner, type, resourceType, price, totalAmount, roomName?,
+    /// createdTimestamp?, active?, created?}` → 订单簿。price 入参为
+    /// **credits**（×1000 落毫——与 sanitize 层同向）；amount 缺省 0、
+    /// remainingAmount=totalAmount、active 缺省 true、created 缺省当前
+    /// gameTime、createdTimestamp 缺省墙钟。
+    pub fn place_market_order(&mut self, spec: &Value) -> anyhow::Result<String> {
+        self.no_pending_round("placeMarketOrder")?;
+        let owner = spec
+            .get("owner")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow::anyhow!("MarketOrderSpec.owner 必须是字符串"))?
+            .to_string();
+        let order_type = spec
+            .get("type")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow::anyhow!("MarketOrderSpec.type 必须是 'buy'/'sell'"))?
+            .to_string();
+        if order_type != "buy" && order_type != "sell" {
+            anyhow::bail!("MarketOrderSpec.type 非法: {order_type}");
+        }
+        let resource_type = spec
+            .get("resourceType")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow::anyhow!("MarketOrderSpec.resourceType 必须是字符串"))?
+            .to_string();
+        let price = spec
+            .get("price")
+            .and_then(Value::as_f64)
+            .ok_or_else(|| anyhow::anyhow!("MarketOrderSpec.price 必须是数字"))?;
+        let total_amount = spec
+            .get("totalAmount")
+            .and_then(Value::as_i64)
+            .ok_or_else(|| anyhow::anyhow!("MarketOrderSpec.totalAmount 必须是整数"))?;
+        let id = self.engine.market.next_order_id();
+        self.engine.market.insert_order(kk_engine::MarketOrder {
+            id: id.clone(),
+            user: owner,
+            active: spec.get("active").and_then(Value::as_bool).unwrap_or(true),
+            order_type,
+            resource_type,
+            price: (price * 1000.0).round() as i64,
+            amount: 0,
+            remaining_amount: total_amount,
+            total_amount,
+            room_name: spec
+                .get("roomName")
+                .and_then(Value::as_str)
+                .map(str::to_string),
+            created: spec
+                .get("created")
+                .and_then(Value::as_u64)
+                .unwrap_or(self.engine.world.time()),
+            created_timestamp: spec
+                .get("createdTimestamp")
+                .and_then(Value::as_u64)
+                .unwrap_or(
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_millis() as u64)
+                        .unwrap_or(0),
+                ),
+        });
+        Ok(id)
     }
 
     pub fn set_terrain(&mut self, room: &str, terrain: Vec<u8>) -> anyhow::Result<()> {
@@ -989,11 +1058,73 @@ fn market_view(engine: &kk_engine::settle::Engine, viewer: &str) -> Value {
             })
             .collect()
     }
+    // 订单簿投影（2B 批 P2，官方 data.js:20-38/:227/:51-75）：
+    // - orders：active 全量分桶 {all:{id:…}, [rt]:{id:…}}（跨玩家缓存——
+    //   每 viewer 重复构建，登记【订单量小，perf 后评估】）——**毫价原值**
+    //   （÷1000 在 prelude _getOrders/getOrderById/orders getter 视图层，
+    //   官方同位；deal API 也读毫价原值——官方 runtimeData.market.orders.all
+    //   同为 db 原值）
+    // - my_orders：find({user}) 全量（含 inactive）毫价原值
+    // - history：官方引擎内恒空——'all' 恒 [] 数组、资源键不存在（driver
+    //   getCachedMarketHistory :60 的 {all:[]} 初始化形态逐字）
+    let mut orders_all = serde_json::Map::new();
+    let mut by_rt: BTreeMap<String, serde_json::Map<String, serde_json::Value>> = BTreeMap::new();
+    for order in engine.market.orders.values().filter(|o| o.active) {
+        let v = order_projection(order);
+        by_rt
+            .entry(order.resource_type.clone())
+            .or_default()
+            .insert(order.id.clone(), v.clone());
+        orders_all.insert(order.id.clone(), v);
+    }
+    let mut orders = serde_json::Map::new();
+    orders.insert("all".into(), Value::Object(orders_all));
+    for (rt, m) in by_rt {
+        orders.insert(rt, Value::Object(m));
+    }
+    let my_orders: Vec<Value> = engine
+        .market
+        .orders
+        .values()
+        .filter(|o| o.user == viewer)
+        .map(order_projection)
+        .collect();
+    // intershard 资源持有（官方 runtimeData.user.resources——deal API 的
+    // intershard 资源面门 market.js:118 读）
+    let mut resources = serde_json::Map::new();
+    if let Some(p) = engine.players.get(viewer) {
+        for (k, v) in &p.resources {
+            resources.insert(k.clone(), json!(v));
+        }
+    }
     json!({
         "money_milli": engine.players.get(viewer).map(|p| p.money).unwrap_or(0),
+        "resources": Value::Object(resources),
         "transactions": {
             "outgoing": tx_list(engine, viewer, true),
             "incoming": tx_list(engine, viewer, false),
         },
+        "orders": Value::Object(orders),
+        "my_orders": my_orders,
+        "history": { "all": [] },
+    })
+}
+
+/// 订单的投影形态（db 原值：毫价；created/createdTimestamp 绝对值；
+/// user=玩家名键制【官方 user _id，视图层不暴露——myOrders getter 删 user】）。
+fn order_projection(o: &kk_engine::MarketOrder) -> Value {
+    json!({
+        "id": o.id,
+        "user": o.user,
+        "active": o.active,
+        "type": o.order_type,
+        "resourceType": o.resource_type,
+        "price": o.price,
+        "amount": o.amount,
+        "remainingAmount": o.remaining_amount,
+        "totalAmount": o.total_amount,
+        "roomName": o.room_name,
+        "created": o.created,
+        "createdTimestamp": o.created_timestamp,
     })
 }

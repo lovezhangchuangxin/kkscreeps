@@ -122,7 +122,11 @@ pub(super) fn m2b2_terminal_send_e2e_impl() -> anyhow::Result<()> {
     assert_eq!(v[10], json!(500), "amount");
     assert_eq!(v[11], json!("ok&lt;desc"), "description `<` 转义");
     assert_eq!(v[12], json!(0), "p1 无入向");
-    assert_eq!(v[13], json!(0), "credits 缺省 0（P2 种子前）");
+    assert_eq!(
+        v[13],
+        json!(10_000_000),
+        "credits=种子 10M（P2 createShard 落地——vanilla adapter 同位）"
+    );
 
     // p2 视角：incoming 1 笔 + 送达量（fee=from：接收方能量不动）
     let run = e.run_player(
@@ -139,5 +143,106 @@ pub(super) fn m2b2_terminal_send_e2e_impl() -> anyhow::Result<()> {
     assert_eq!(v[2], json!(1), "入向 1 笔");
     assert_eq!(v[3], json!(500), "amount");
     assert_eq!(v[4], json!(0), "p2 无出向");
+    Ok(())
+}
+
+/// P2 e2e：Game.market 描述符镜头（SHAPE-GAME-007 只锁 dataProps 键集——
+/// 四 getter 的三标志/严格赋值面由本测试锁定：P6 评审镜头②的落点）+
+/// createOrder→订单生命周期→deal→交易 order 附带全链。
+pub(super) fn m2b2_market_book_e2e_impl() -> anyhow::Result<()> {
+    let mut e = EmbedEngine::new();
+    e.create_shard(&json!({
+        "players": ["p1", "p2"],
+        "rooms": [{ "name": "W1N1", "rcl": 6, "owner": "p1" },
+                  { "name": "W5N1", "rcl": 6, "owner": "p2" }],
+    }))?;
+    let _t1 = e.place_object(
+        "W1N1",
+        "structure",
+        &json!({ "pos": [25, 25], "structureType": "terminal", "owner": "p1",
+                      "store": {"energy": 100000} }),
+    )?;
+    let _t2 = e.place_object(
+        "W5N1",
+        "structure",
+        &json!({ "pos": [25, 25], "structureType": "terminal", "owner": "p2",
+                      "store": {"energy": 100000, "H": 1000} }),
+    )?;
+    let oid = serde_json::to_string(&e.place_market_order(&json!({
+        "owner": "p2", "type": "sell", "resourceType": "H",
+        "price": 2.5, "totalAmount": 1000, "roomName": "W5N1", "active": true,
+    }))?)?;
+    e.tick(1)?;
+
+    // ---- 描述符镜头：四 getter enumerable+get-only+不可配置；方法字面量
+    // 三 true；严格赋值 getter 抛 TypeError
+    let run = e.run_player(
+        "p1",
+        r#"[ ...['credits','incomingTransactions','outgoingTransactions','orders'].map(k => {
+              const d = Object.getOwnPropertyDescriptor(Game.market, k);
+              return d && d.enumerable === true && d.get !== undefined
+                && d.set === undefined && d.configurable === false;
+            }),
+            Object.getOwnPropertyDescriptor(Game.market, 'createOrder').writable === true,
+            Object.getOwnPropertyDescriptor(Game.market, 'createOrder').configurable === true,
+            Object.getOwnPropertyDescriptor(Game.market, 'calcTransactionCost').enumerable === true,
+            (() => { 'use strict';
+                     try { Game.market.credits = 5; return false; }
+                     catch (err) { return err instanceof TypeError; } })() ]"#,
+    )?;
+    let v = &run.expr["value"];
+    for i in 0..4 {
+        assert_eq!(
+            v[i],
+            json!(true),
+            "getter {i} 描述符 enumerable+get-only+不可配置"
+        );
+    }
+    assert_eq!(v[4], json!(true), "方法字面量 writable");
+    assert_eq!(
+        v[5],
+        json!(true),
+        "方法字面量 configurable（清偿复审 nit 补）"
+    );
+    assert_eq!(v[6], json!(true), "方法字面量 enumerable");
+    assert_eq!(v[7], json!(true), "严格赋值 getter 抛 TypeError");
+
+    // ---- createOrder→deal 全链（p1 建买单收 H；p2 的卖单在簿）
+    let run = e.run_player(
+        "p1",
+        &format!(
+            r#"[ Game.market.credits,
+                 Game.market.createOrder('buy', 'H', 3, 100, 'W1N1'),
+                 Game.market.deal({oid}, 100, 'W1N1') ]"#
+        ),
+    )?;
+    let v = &run.expr["value"];
+    assert_eq!(v[0], json!(10_000_000), "种子 10M credits");
+    assert_eq!(v[1], json!(0), "createOrder OK");
+    assert_eq!(v[2], json!(0), "deal OK");
+
+    e.tick(1)?;
+    let run = e.run_player(
+        "p1",
+        r#"[ Game.rooms['W1N1'].terminal.store.H,
+             Game.market.orders && Object.keys(Game.market.orders).length,
+             Game.market.incomingTransactions.length,
+             Game.market.incomingTransactions[0].order,
+             Game.market.outgoingTransactions.length,
+             Game.market.credits ]"#,
+    )?;
+    let v = &run.expr["value"];
+    assert_eq!(v[0], json!(100), "买入 H 100 送达");
+    assert_eq!(v[1], json!(1), "自己的买单 1 张");
+    assert_eq!(v[2], json!(1), "入向交易");
+    assert_eq!(
+        v[3],
+        json!({"id": oid.trim_matches('"'), "type": "sell", "price": 2.5}),
+        "order 附带 id/type/price÷1000"
+    );
+    assert_eq!(v[4], json!(0), "无出向");
+    // credits：10M − createOrder fee ceil(3000×100×0.05)=15000毫=15 − dealCost
+    // 100×2500毫=250000毫=250 → 9999735
+    assert_eq!(v[5], json!(9_999_735), "fee+dealCost 双扣");
     Ok(())
 }

@@ -67,6 +67,13 @@ fn handle_line(engine: &mut EmbedEngine, line: &str) -> anyhow::Result<Value> {
             let id = engine.place_object(room, kind, &spec)?;
             json!({ "id": id })
         }
+        // 2B 批 P2：市场订单注入（官方 adapter 契约 placeMarketOrder——
+        // vanilla adapter index.ts:1415 形状）
+        "placeMarketOrder" => {
+            let spec = params.get("spec").cloned().unwrap_or_else(|| json!({}));
+            let id = engine.place_market_order(&spec)?;
+            json!({ "id": id })
+        }
         "setTerrain" => {
             let room = s(&params, "room")?;
             let terrain_value = params

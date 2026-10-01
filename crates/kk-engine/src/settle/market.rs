@@ -14,13 +14,13 @@
 //! P0 只落类型与容量纪律；P1 进驻 terminal send 消费链（executeTransfer）
 //! ；订单簿生命周期/deal 随 P2 进驻本模块。
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use kk_core::constants as c;
 use kk_schema::room::RoomObject;
 use kk_world::{ObjId, RoomState};
 
-use crate::intent::IntentBatch;
+use crate::intent::{IntentBatch, MarketIntent};
 use crate::settle::PlayerState;
 
 /// 官方 `/^(W|E)\d+(N|S)\d+$/`（terminal/send.js:7-9 与 structures.js:720
@@ -131,6 +131,9 @@ pub struct Transaction {
 /// 世界级市场态（Engine 持有）。
 #[derive(Debug, Default, Clone)]
 pub struct MarketState {
+    /// 键序=BTreeMap 字典序（"mkt10"<"mkt9"，N≥10 后与官方 db/ObjectId
+    /// 插入序错位）——影响 getAllOrders 返回序/my_orders 迭代序等**纯序面**
+    ///（套件无序断言；逻辑面各消费点按 id 直查不依赖序——评审 2 F4 登记）
     pub orders: BTreeMap<String, MarketOrder>,
     pub transactions: VecDeque<Transaction>,
     next_order_seq: u64,
@@ -217,10 +220,10 @@ pub fn settle_market(
     rooms: &mut [(String, RoomState)],
     players: &mut BTreeMap<String, PlayerState>,
     market: &mut MarketState,
-    _batch: &IntentBatch,
+    batch: &IntentBatch,
     time: u64,
+    now_ms: u64,
 ) {
-    let _ = players; // P2 消费（money/resources）；P1 仅 send 链
     // ---- pass 1：收集全部 terminal 的 send 载荷并**无条件清字段**
     //（官方 :71-75 `_.filter(terminals, i => !!i.send)` 后先
     // `bulk.update(terminal, {send: null})` 再做任何 return——冷却/无目标
@@ -280,6 +283,717 @@ pub fn settle_market(
     // terminal send 的执行序差异登记【套件单 tick 单 send 不区分】）
     for s in sends {
         execute_send(rooms, market, time, s);
+    }
+    // ---- P2：订单簿（官方 :104-589——send 消费先行同官方段序）
+    process_market_intents(rooms, players, market, batch, time, now_ms);
+}
+
+/// 订单簿全生命周期（2B 批 P2，官方 global-intents/market.js:104-589）。
+///
+/// **快照语义**（官方 getInterRoom 在 global 阶段开始前取 `orders` 数组，
+/// 本 tick 内 createOrder 插入的订单不在其中——intent 的订单 id 引用与
+/// 生命周期尾段都只见**tick 前存量**；我方以 `pre_tick_ids` 集合等价实现）。
+/// 分节消费序=官方段序（createOrder→changeOrderPrice→extendOrder→
+/// cancelOrder→deal 收集）——MarketIntent Vec 的清洗序不可用于消费
+///（P0 登记「消费者须分节遍历」）。
+#[allow(clippy::too_many_arguments)]
+fn process_market_intents(
+    rooms: &mut [(String, RoomState)],
+    players: &mut BTreeMap<String, PlayerState>,
+    market: &mut MarketState,
+    batch: &IntentBatch,
+    time: u64,
+    now_ms: u64,
+) {
+    let pre_tick_ids: BTreeSet<String> = market.orders.keys().cloned().collect();
+    // changeOrderPrice 置 _skip（同 tick 后续 deal 跳过该订单——官方 :180）
+    let mut skip: BTreeSet<String> = BTreeSet::new();
+    // cancelOrder 置 _cancelled（生命周期尾段移除——官方 :260）
+    let mut cancelled: BTreeSet<String> = BTreeSet::new();
+    // deal 收集（官方 :265-285；terminalDeals 在全部玩家分节后统一处理）
+    let mut terminal_deals: Vec<(
+        String, /*player*/
+        String, /*order*/
+        i64,
+        String, /*room*/
+    )> = Vec::new();
+    let mut direct_deals: Vec<(String, String, i64)> = Vec::new();
+
+    for (player, intents) in &batch.users {
+        // 官方 :104-107 userIntents.forEach——玩家序官方=db 插入序，我方
+        // =BTreeMap 名字序（确定性；登记差异）
+        // 分节消费（官方段序 createOrder(:109)→changeOrderPrice(:168)→
+        // extendOrder(:215)→cancelOrder(:256)→deal(:265)；段内=注册序，
+        // 各段 intents 数组官方=push 序）。sort_by_key 稳定排序=按段稳定
+        // 划分——同玩家「先改价后取消」官方按原 remaining 收提价费再取消
+        //（评审 2 F3/评审 1 F4：单趟声明序会先 cancel 清 remaining 吞费）
+        fn section_rank(i: &MarketIntent) -> u8 {
+            match i {
+                MarketIntent::CreateOrder { .. } => 0,
+                MarketIntent::ChangeOrderPrice { .. } => 1,
+                MarketIntent::ExtendOrder { .. } => 2,
+                MarketIntent::CancelOrder { .. } => 3,
+                MarketIntent::Deal { .. } => 4,
+            }
+        }
+        let mut ordered: Vec<&MarketIntent> = intents.market.iter().collect();
+        ordered.sort_by_key(|i| section_rank(i));
+        for intent in ordered {
+            match intent {
+                MarketIntent::CreateOrder {
+                    order_type,
+                    resource_type,
+                    price_milli,
+                    total_amount,
+                    room_name,
+                } => {
+                    // 官方 :112-125 复验（清洗后毫价/整量；None≙NaN falsy 拒）
+                    let (Some(price), Some(total)) = (*price_milli, *total_amount) else {
+                        continue;
+                    };
+                    if price == 0 || total == 0 {
+                        continue;
+                    }
+                    let Some(rt) = resource_type.as_deref() else {
+                        continue;
+                    };
+                    if !c::RESOURCES_ALL.contains(&rt) && !c::INTERSHARD_RESOURCES.contains(&rt) {
+                        continue;
+                    }
+                    // P2 处理器契约（P0 评审 1 P2-1）：order_type=None 直接拒
+                    //——官方 :139 物化串默认落 ORDER_BUY，等价性纯靠 prelude
+                    // type 门不可达（勿仿官方默认）
+                    let Some(otype) = order_type.as_deref() else {
+                        continue;
+                    };
+                    if otype != c::ORDER_BUY && otype != c::ORDER_SELL {
+                        continue;
+                    }
+                    let intershard = c::INTERSHARD_RESOURCES.contains(&rt);
+                    // 官方 :119-121 terminal 归属门（intershard 免）
+                    if !intershard {
+                        let Some(rn) = room_name.as_deref() else {
+                            continue;
+                        };
+                        if !room_has_terminal_of(rooms, rn, player) {
+                            continue;
+                        }
+                    }
+                    if price <= 0 || total <= 0 {
+                        continue;
+                    }
+                    // 官方 :127-131 fee=ceil(毫price×total×FEE)——f64 ceil
+                    //（官方 JS number 同算；毫级整数域精确）
+                    let fee = (price as f64 * total as f64 * c::MARKET_FEE).ceil() as i64;
+                    // 费门逐 intent 读活值（官方 user.money 每条重读+bulk.inc
+                    // 立改内存对象 bulk.js:90-97——同 tick 前笔扣费对后笔可见；
+                    // 循环头快照会让 Σfee>credits 时全额扣款把 money 打负）
+                    if players.get(player).map_or(0, |p| p.money) < fee {
+                        continue;
+                    }
+                    let money = &mut players.entry(player.clone()).or_default().money;
+                    *money -= fee;
+                    let id = market.next_order_id();
+                    market.insert_order(MarketOrder {
+                        id: id.clone(),
+                        user: player.clone(),
+                        active: false,
+                        // 官方 :139 `type == SELL ? SELL : BUY`（此处已过
+                        // 双值门，直取）
+                        order_type: otype.to_string(),
+                        resource_type: rt.to_string(),
+                        price,
+                        amount: 0,
+                        remaining_amount: total,
+                        total_amount: total,
+                        room_name: room_name.clone().filter(|_| !intershard),
+                        created: time,
+                        created_timestamp: now_ms,
+                    });
+                }
+                MarketIntent::ChangeOrderPrice {
+                    order_id,
+                    new_price_milli,
+                } => {
+                    // 官方 :170-175 订单存在+归属（快照外 id=miss 拒）
+                    let Some(oid) = order_id.as_deref() else {
+                        continue;
+                    };
+                    if !pre_tick_ids.contains(oid) {
+                        continue;
+                    }
+                    let Some(order) = market.orders.get(oid) else {
+                        continue;
+                    };
+                    if order.user != *player {
+                        continue;
+                    }
+                    let Some(new_price) = *new_price_milli else {
+                        continue;
+                    };
+                    // 官方 :175 `!newPrice || newPrice <= 0`——负价同拒
+                    //（评审 2 F2/评审 1 F3：仅拒 ==0 会让负毫价落库反转
+                    // deal 资金流向；prelude 正数门外裸 intent 域可达）
+                    if new_price <= 0 {
+                        continue;
+                    }
+                    let old_price = order.price;
+                    if new_price != old_price {
+                        skip.insert(oid.to_string());
+                    }
+                    // 官方 :183-190 提价差额费（降/平价免费）——费门读活值
+                    if new_price > old_price {
+                        let fee = ((new_price - old_price) as f64
+                            * order.remaining_amount as f64
+                            * c::MARKET_FEE)
+                            .ceil() as i64;
+                        if players.get(player).map_or(0, |p| p.money) < fee {
+                            continue;
+                        }
+                        players.entry(player.clone()).or_default().money -= fee;
+                    }
+                    if let Some(order) = market.orders.get_mut(oid) {
+                        order.price = new_price;
+                    }
+                }
+                MarketIntent::ExtendOrder {
+                    order_id,
+                    add_amount,
+                } => {
+                    let Some(oid) = order_id.as_deref() else {
+                        continue;
+                    };
+                    if !pre_tick_ids.contains(oid) {
+                        continue;
+                    }
+                    let Some(order) = market.orders.get(oid) else {
+                        continue;
+                    };
+                    if order.user != *player {
+                        continue;
+                    }
+                    let Some(add) = *add_amount else {
+                        continue;
+                    };
+                    if add <= 0 {
+                        continue;
+                    }
+                    let fee = (order.price as f64 * add as f64 * c::MARKET_FEE).ceil() as i64;
+                    // 费门读活值（同 createOrder 注——官方逐 intent 重读）
+                    if players.get(player).map_or(0, |p| p.money) < fee {
+                        continue;
+                    }
+                    players.entry(player.clone()).or_default().money -= fee;
+                    // 官方 :250-251 remaining/total 双加
+                    if let Some(order) = market.orders.get_mut(oid) {
+                        order.remaining_amount += add;
+                        order.total_amount += add;
+                    }
+                }
+                MarketIntent::CancelOrder { order_id } => {
+                    let Some(oid) = order_id.as_deref() else {
+                        continue;
+                    };
+                    if !pre_tick_ids.contains(oid) {
+                        continue;
+                    }
+                    if market.orders.get(oid).is_some_and(|o| o.user == *player) {
+                        if let Some(order) = market.orders.get_mut(oid) {
+                            order.remaining_amount = 0;
+                        }
+                        cancelled.insert(oid.to_string());
+                    }
+                }
+                MarketIntent::Deal {
+                    order_id,
+                    amount,
+                    target_room_name,
+                } => {
+                    // 官方 :269-274：订单存在（快照）且非 _skip；`amount <= 0`
+                    // 拒——NaN 过比较门（我方 None 恒拒，P0 登记）
+                    let Some(oid) = order_id.as_deref() else {
+                        continue;
+                    };
+                    if !pre_tick_ids.contains(oid) || skip.contains(oid) {
+                        continue;
+                    }
+                    let Some(order) = market.orders.get(oid) else {
+                        continue;
+                    };
+                    let Some(amount) = *amount else {
+                        continue;
+                    };
+                    if amount <= 0 {
+                        continue;
+                    }
+                    if c::INTERSHARD_RESOURCES.contains(&order.resource_type.as_str()) {
+                        direct_deals.push((player.clone(), oid.to_string(), amount));
+                        continue;
+                    }
+                    // 官方 :279-280 目标房 terminal 归属复验
+                    let Some(target) = target_room_name.as_deref() else {
+                        continue;
+                    };
+                    if !room_has_terminal_of(rooms, target, player) {
+                        continue;
+                    }
+                    terminal_deals.push((
+                        player.clone(),
+                        oid.to_string(),
+                        amount,
+                        target.to_string(),
+                    ));
+                }
+            }
+        }
+    }
+
+    // ---- terminalDeals（官方 :289-398：按目标房→订单房距离升序）
+    terminal_deals.sort_by_key(|(_, oid, _, target)| {
+        let room = market
+            .orders
+            .get(oid)
+            .and_then(|o| o.room_name.clone())
+            .unwrap_or_default();
+        calc_rooms_distance(target, &room).unwrap_or(i64::MAX)
+    });
+    for (dealer, oid, deal_amount, target_room) in terminal_deals {
+        execute_terminal_deal(
+            rooms,
+            players,
+            market,
+            time,
+            &dealer,
+            &oid,
+            deal_amount,
+            &target_room,
+        );
+    }
+
+    // ---- directDeals（官方 :400-495 intershard——官方 _.shuffle 非确定，
+    // 我方稳定序，登记差异；玩家面不可达【INTERSHARD_RESOURCES 无来源】）
+    for (dealer, oid, deal_amount) in direct_deals {
+        execute_direct_deal(players, market, &dealer, &oid, deal_amount);
+    }
+
+    // ---- 生命周期尾段（官方 :497-589——**只见 tick 前存量**：尾段遍历的是
+    // getInterRoom 快照 orders 数组，本 tick createOrder 插入延迟到 :591-599
+    // bulk.execute 落库——新订单创建 tick 恒 active=false/amount=0，下一
+    // tick 才进尾段同步（评审 1 F2/评审 2 F2：遍历全集会提前一拍同步）
+    order_lifecycle(rooms, players, market, &cancelled, &pre_tick_ids, now_ms);
+}
+
+/// 房内归属玩家的 terminal 存在性（官方 `terminalsByRoom[room].user ==
+/// user` 归属门——createOrder :119-121 / deal 收集 :279-280）。
+fn room_has_terminal_of(rooms: &[(String, RoomState)], room: &str, player: &str) -> bool {
+    let Some((_, state)) = rooms.iter().find(|(n, _)| n == room) else {
+        return false;
+    };
+    for obj in state.objects.values() {
+        let RoomObject::Generic(g) = obj else {
+            continue;
+        };
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(&g.data) else {
+            continue;
+        };
+        if v.get("structureType").and_then(|s| s.as_str()) != Some("terminal") {
+            continue;
+        }
+        // 同房多 terminal 官方 indexBy 末者胜、我方首个（既有登记）——归属
+        // 门语义下首个非属即整门 false（官方末者非属同 false；同房混主为
+        // 夹具态不可达）
+        return v.get("owner").and_then(|s| s.as_str()) == Some(player);
+    }
+    false
+}
+
+/// 官方 terminalDeals 单条（:291-398）。
+#[allow(clippy::too_many_arguments)]
+fn execute_terminal_deal(
+    rooms: &mut [(String, RoomState)],
+    players: &mut BTreeMap<String, PlayerState>,
+    market: &mut MarketState,
+    time: u64,
+    dealer: &str,
+    oid: &str,
+    deal_amount: i64,
+    target_room: &str,
+) {
+    // 官方 :292-299 双 terminal 存在（订单房 terminal=terminalsByRoom 任意
+    // 首个；目标房 terminal=dealer 的——收集段已验归属）。无主 terminal 官方
+    // 走 `if(seller.user)` NPC 分支（:316-337，含无买家钱凭空入账怪癖）；
+    // 我方 find_user_terminal 要求有主→整单中断——方向保守（更安全），
+    // execute_transfer P1 已登记同族，评审 2 F7 登记本分支
+    let Some(order_room) = market.orders.get(oid).and_then(|o| o.room_name.clone()) else {
+        return;
+    };
+    let Some((order_room_idx, order_terminal)) = find_user_terminal(rooms, &order_room) else {
+        return;
+    };
+    let Some((target_idx, target_terminal)) = find_user_terminal(rooms, target_room) else {
+        return;
+    };
+    // 官方 :300-302 目标 terminal 冷却门
+    if read_terminal_data(rooms, target_idx, target_terminal)
+        .and_then(|v| v.get("cooldownTime").and_then(|t| t.as_i64()))
+        .is_some_and(|t| t > time as i64)
+    {
+        return;
+    }
+    let (order_type, rt, price_milli, remaining) = {
+        let Some(o) = market.orders.get(oid) else {
+            return;
+        };
+        (
+            o.order_type.clone(),
+            o.resource_type.clone(),
+            o.price,
+            o.remaining_amount,
+        )
+    };
+    // 官方 :306-313 买卖定向：SELL——dealer 是买家（buyer=targetTerminal、
+    // seller=orderTerminal）；BUY——dealer 是卖家（seller=targetTerminal、
+    // buyer=orderTerminal）。【勘误：初版写反——SELL 侧 seller 误取 dealer
+    // terminal，无库存钳 0 静默不成交，MARKET-DEAL 族四红根因】
+    let (seller, buyer) = if order_type == c::ORDER_SELL {
+        (
+            (order_room_idx, order_terminal),
+            (target_idx, target_terminal),
+        )
+    } else {
+        (
+            (target_idx, target_terminal),
+            (order_room_idx, order_terminal),
+        )
+    };
+    // 官方 :315-326 三重钳：deal 量 → seller 资源 → buyer 空间
+    let mut amount = deal_amount.min(remaining.max(0));
+    let seller_data = read_terminal_data(rooms, seller.0, seller.1);
+    let seller_owner = seller_data
+        .as_ref()
+        .and_then(|v| v.get("owner"))
+        .and_then(|s| s.as_str())
+        .map(str::to_string);
+    if let Some(sd) = &seller_data
+        && seller_owner.is_some()
+    {
+        let have = sd
+            .pointer(&format!("/store/{rt}"))
+            .and_then(|s| s.as_i64())
+            .unwrap_or(0);
+        amount = amount.min(have);
+    }
+    let buyer_data = read_terminal_data(rooms, buyer.0, buyer.1);
+    let buyer_owner = buyer_data
+        .as_ref()
+        .and_then(|v| v.get("owner"))
+        .and_then(|s| s.as_str())
+        .map(str::to_string);
+    if let Some(bd) = &buyer_data
+        && buyer_owner.is_some()
+    {
+        let total: i64 = bd
+            .get("store")
+            .and_then(|s| s.as_object())
+            .map(|m| m.values().filter_map(|v| v.as_i64()).sum())
+            .unwrap_or(0);
+        let cap = bd
+            .get("storeCapacity")
+            .and_then(|s| s.as_i64())
+            .unwrap_or(0);
+        amount = amount.min((cap - total).max(0));
+    }
+    if !(amount > 0) {
+        return;
+    }
+    // 官方 :328-337 buyer money 钳链（dealCost=毫×量；floor 除法回推量）：
+    // buyer=SELL 型的 dealer / BUY 型的订单主（usersById[buyer.user].money）
+    let mut deal_cost = amount.checked_mul(price_milli).unwrap_or(i64::MAX / 2);
+    if buyer_owner.is_some() {
+        let buyer_user = if order_type == c::ORDER_SELL {
+            dealer.to_string()
+        } else {
+            market
+                .orders
+                .get(oid)
+                .map(|o| o.user.clone())
+                .unwrap_or_default()
+        };
+        let buyer_money = players.get(&buyer_user).map(|p| p.money).unwrap_or(0);
+        deal_cost = deal_cost.min(buyer_money);
+        amount = if price_milli > 0 {
+            deal_cost / price_milli
+        } else {
+            0
+        };
+        deal_cost = amount.checked_mul(price_milli).unwrap_or(i64::MAX / 2);
+        if amount == 0 {
+            return;
+        }
+    }
+    // 官方 :339-343 executeTransfer（fee=目标 terminal=dealer 侧）+ order 附带
+    let order_payload = serde_json::json!({
+        "id": oid,
+        "type": order_type,
+        "price": price_milli as f64 / 1000.0,
+    });
+    let ok = execute_transfer(
+        rooms,
+        seller,
+        buyer,
+        &rt,
+        amount,
+        FeeSide::To,
+        None,
+        Some(order_payload),
+        market,
+        time,
+    );
+    if !ok {
+        return;
+    }
+    // 官方 :345-386 双向 money（seller += dealCost；buyer −= dealCost——毫）
+    if let Some(so) = &seller_owner
+        && let Some(state) = players.get_mut(so)
+    {
+        // 饱和加（评审 2 F5：deal_cost 钳后 ≤buyer money<i64 域，防御注入域）
+        state.money = state.money.saturating_add(deal_cost);
+    }
+    if let Some(bo) = &buyer_owner
+        && let Some(state) = players.get_mut(bo)
+    {
+        state.money -= deal_cost;
+    }
+    // 官方 :387-390 订单 amount/remaining 双减
+    if let Some(order) = market.orders.get_mut(oid) {
+        order.amount -= amount;
+        order.remaining_amount -= amount;
+    }
+    // 官方 :391-396 目标 terminal 冷却
+    write_cooldown(
+        rooms,
+        target_idx,
+        target_terminal,
+        time + c::TERMINAL_COOLDOWN as u64,
+    );
+}
+
+/// 官方 directDeals 单条（intershard，:402-495）——玩家 resources+money
+/// 直接划转（无 terminal）。
+fn execute_direct_deal(
+    players: &mut BTreeMap<String, PlayerState>,
+    market: &mut MarketState,
+    dealer: &str,
+    oid: &str,
+    deal_amount: i64,
+) {
+    let Some(order) = market.orders.get(oid) else {
+        return;
+    };
+    let (order_type, rt, price_milli) = (
+        order.order_type.clone(),
+        order.resource_type.clone(),
+        order.price,
+    );
+    let order_user = order.user.clone();
+    // 官方 :407-414 买卖定向（用户对用户）
+    let (seller, buyer) = if order_type == c::ORDER_SELL {
+        (order_user.clone(), dealer.to_string())
+    } else {
+        (dealer.to_string(), order_user.clone())
+    };
+    // 官方 :416-418 缺一拒
+    if !players.contains_key(&seller) || !players.contains_key(&buyer) {
+        return;
+    }
+    // 官方 :423 四重量钳
+    let order_amount = market.orders.get(oid).map(|o| o.amount).unwrap_or(0);
+    let order_remaining = market
+        .orders
+        .get(oid)
+        .map(|o| o.remaining_amount)
+        .unwrap_or(0);
+    let seller_have = players
+        .get(&seller)
+        .map(|p| p.resources.get(&rt).copied().unwrap_or(0))
+        .unwrap_or(0);
+    let amount = deal_amount
+        .min(order_amount)
+        .min(order_remaining)
+        .min(seller_have);
+    if amount <= 0 {
+        return;
+    }
+    let deal_cost = amount.checked_mul(price_milli).unwrap_or(i64::MAX / 2);
+    // 官方 :430-432 `buyer.user && (!buyer.money || buyer.money < dealCost)` 拒
+    let buyer_money = players.get(&buyer).map(|p| p.money).unwrap_or(0);
+    if buyer_money < deal_cost {
+        return;
+    }
+    // 官方 :434-436 seller += money、resources −=（:436 原地同步）
+    let seller_state = players.get_mut(&seller).unwrap();
+    seller_state.money = seller_state.money.saturating_add(deal_cost);
+    *seller_state.resources.entry(rt.clone()).or_insert(0) -= amount;
+    // 官方 :464-465 buyer −= money、resources +=
+    let buyer_state = players.get_mut(&buyer).unwrap();
+    buyer_state.money -= deal_cost;
+    *buyer_state.resources.entry(rt.clone()).or_insert(0) += amount;
+    // 官方 :481-483 订单 amount/remaining 双减
+    if let Some(order) = market.orders.get_mut(oid) {
+        order.amount -= amount;
+        order.remaining_amount -= amount;
+    }
+}
+
+/// 订单生命周期尾段（官方 :497-589——只见 tick 前存量 `pre_tick_ids`；
+/// `cancelled` 集=_cancelled 标记）。
+fn order_lifecycle(
+    rooms: &[(String, RoomState)],
+    players: &mut BTreeMap<String, PlayerState>,
+    market: &mut MarketState,
+    cancelled: &BTreeSet<String>,
+    pre_tick_ids: &BTreeSet<String>,
+    now_ms: u64,
+) {
+    let ids: Vec<String> = market
+        .orders
+        .keys()
+        .filter(|id| pre_tick_ids.contains(*id))
+        .cloned()
+        .collect();
+    for id in ids {
+        // 头部快照取值落本地（避免跨 get_mut 的长借用）
+        let Some(o) = market.orders.get(&id) else {
+            continue;
+        };
+        let (order_user, otype, rt, room_name, created_ts) = (
+            o.user.clone(),
+            o.order_type.clone(),
+            o.resource_type.clone(),
+            o.room_name.clone(),
+            o.created_timestamp,
+        );
+        // 官方 :502-505 _cancelled → 移除
+        if cancelled.contains(&id) {
+            market.remove_order(&id);
+            continue;
+        }
+        // 官方 :507-534 过期（墙钟 createdTimestamp+30d）→ 退 remaining×毫price
+        // ×FEE（官方不 ceil——f64 毫；我方 i64 截断，登记亚毫精度差异）→ 移除
+        if now_ms.saturating_sub(created_ts) > c::MARKET_ORDER_LIFE_TIME as u64 {
+            let (remaining, price) = {
+                let Some(o) = market.orders.get(&id) else {
+                    continue;
+                };
+                (o.remaining_amount, o.price)
+            };
+            let refund = (remaining as f64 * price as f64 * c::MARKET_FEE) as i64;
+            if refund > 0
+                && let Some(state) = players.get_mut(&order_user)
+            {
+                state.money = state.money.saturating_add(refund);
+            }
+            market.remove_order(&id);
+            continue;
+        }
+        // 官方 :536-538 无主订单跳过同步（我方订单恒有主——防御分支）
+        let intershard = c::INTERSHARD_RESOURCES.contains(&rt.as_str());
+        // 官方 SELL 同步（:542-567）：可用=min(资源, remaining)
+        if otype == c::ORDER_SELL {
+            let remaining = market
+                .orders
+                .get(&id)
+                .map(|o| o.remaining_amount)
+                .unwrap_or(0);
+            let available = if intershard {
+                players
+                    .get(&order_user)
+                    .map(|p| p.resources.get(&rt).copied().unwrap_or(0))
+                    .unwrap_or(0)
+            } else {
+                // 官方 :546 `terminal && terminal.user == order.user ? store[rt] : 0`
+                match room_name.as_deref() {
+                    Some(rn) if room_has_terminal_of(rooms, rn, &order_user) => {
+                        find_user_terminal(rooms, rn)
+                            .and_then(|(ri, tid)| {
+                                read_terminal_data(rooms, ri, tid).and_then(|v| {
+                                    v.pointer(&format!("/store/{rt}")).and_then(|s| s.as_i64())
+                                })
+                            })
+                            .unwrap_or(0)
+                    }
+                    _ => 0,
+                }
+            };
+            let available = available.min(remaining).max(0);
+            let Some(order) = market.orders.get_mut(&id) else {
+                continue;
+            };
+            if order.active {
+                if available <= 0 {
+                    order.active = false;
+                    order.amount = 0;
+                } else if order.amount != available {
+                    order.amount = available;
+                }
+            } else if available > 0 {
+                order.active = true;
+                order.amount = available;
+            }
+        }
+        // 官方 BUY 同步（:569-587）：newAmount=min(floor(money/price),
+        // remaining, terminal 空间)；newActive=isOwner && newAmount>0
+        if otype == c::ORDER_BUY {
+            let (price, remaining) = {
+                let Some(o) = market.orders.get(&id) else {
+                    continue;
+                };
+                (o.price, o.remaining_amount)
+            };
+            let money = players.get(&order_user).map(|p| p.money).unwrap_or(0);
+            let terminal = room_name
+                .as_deref()
+                .and_then(|rn| find_user_terminal(rooms, rn));
+            // 官方 isOwner（:572-573）：intershard 或房内归属 terminal
+            let is_owner = intershard
+                || room_name
+                    .as_deref()
+                    .is_some_and(|rn| room_has_terminal_of(rooms, rn, &order_user));
+            // price=0 注入订单分歧（评审 2 F6 登记）：官方 floor(money/0)
+            // =Infinity→newAmount=min(Inf,remaining,space)=有限值→active；
+            // 我方 else 0→inactive。仅 place_market_order 注入域可达
+            //（createOrder/changeOrderPrice 处理器双门 0 拒）——deal 面两侧
+            // 同收敛（官方 0/0=NaN→!amount 拒 ↔ 我方 amount=0 return）
+            let mut new_amount = if price > 0 { money / price } else { 0 }.min(remaining);
+            // 官方 :576-580 terminal 有主时的空间钳
+            if let Some((ri, tid)) = terminal {
+                let td = read_terminal_data(rooms, ri, tid);
+                let has_user = td
+                    .as_ref()
+                    .map(|v| v.get("owner").and_then(|s| s.as_str()).is_some())
+                    .unwrap_or(false);
+                if has_user {
+                    let total: i64 = td
+                        .as_ref()
+                        .and_then(|v| v.get("store").and_then(|s| s.as_object()))
+                        .map(|m| m.values().filter_map(|x| x.as_i64()).sum())
+                        .unwrap_or(0);
+                    let cap = td
+                        .as_ref()
+                        .and_then(|v| v.get("storeCapacity").and_then(|s| s.as_i64()))
+                        .unwrap_or(0);
+                    new_amount = new_amount.min((cap - total).max(0));
+                }
+            }
+            let new_active = is_owner && new_amount > 0;
+            let Some(order) = market.orders.get_mut(&id) else {
+                continue;
+            };
+            if order.amount != new_amount || order.active != new_active {
+                order.amount = new_amount;
+                order.active = new_active;
+            }
+        }
     }
 }
 

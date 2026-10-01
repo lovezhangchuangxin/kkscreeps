@@ -62,6 +62,17 @@
   const C_TERRAIN_MASK_SWAMP = globalThis.TERRAIN_MASK_SWAMP;
   const GCL_MULTIPLY = globalThis.GCL_MULTIPLY;
   const GCL_POW = globalThis.GCL_POW;
+  // 2B 批 P2：市场族常量加载期捕获（官方 market.js 闭包 C 同款）
+  const C_MARKET_FEE = globalThis.MARKET_FEE;
+  const C_MARKET_MAX_ORDERS = globalThis.MARKET_MAX_ORDERS;
+  const C_ORDER_BUY = globalThis.ORDER_BUY;
+  const C_ORDER_SELL = globalThis.ORDER_SELL;
+  const C_INTERSHARD_RESOURCES = globalThis.INTERSHARD_RESOURCES;
+  const C_RESOURCES_ALL = globalThis.RESOURCES_ALL;
+  const C_RESOURCE_ENERGY_NAME = globalThis.RESOURCE_ENERGY;
+  const C_ERR_NOT_OWNER = globalThis.ERR_NOT_OWNER;
+  const C_ERR_TIRED_MKT = globalThis.ERR_TIRED;
+  const C_ERR_NOT_ENOUGH_RESOURCES = globalThis.ERR_NOT_ENOUGH_RESOURCES;
 
   // null 原型信封（官方 runtime.js:214 `outMessage = systemFunctions.Object.create(null)`
   // 同款）：宿主消息对象不得携带 Object.prototype——继承的 toJSON 会让预置
@@ -497,6 +508,7 @@
     const txView = view.transactions || {};
     let _incoming;
     let _outgoing;
+    let _orders;
     // 官方 :205-233：transactionId=""+_id（投影 id 已为串）、sender/
     // recipient→{username} 或缺键（undefined 序列化丢键——两侧同形）
     function mapTransactions(list) {
@@ -516,6 +528,41 @@
         return out;
       });
     }
+    // 订单簿原始投影（毫价——÷1000 在视图层，官方 _getOrders/orders getter
+    ///deal API 的单位分工同位：deal 读 raw 毫价、视图读 credits）
+    const ordersView = view.orders || {};
+    const myOrdersRaw = view.my_orders || [];
+    const historyView = view.history || { all: [] };
+    // 官方 make 闭包缓存（market.js:10-11——每 tick 对象重建=每 tick 首读
+    // 快照；P6 惰性缓存同款纪律）
+    const cachedOrders = {};
+    const cachedHistory = {};
+    let ordersCreatedDuringTick = 0;
+    // 官方 :13-27 _getOrders：falsy→'all'；非法资源名 {} 不缓存；深拷贝+
+    // price÷1000
+    function _getOrders(resourceType) {
+      if (!resourceType) resourceType = 'all';
+      if (!cachedOrders[resourceType]) {
+        if (resourceType !== 'all' && !lodash.contains(C_RESOURCES_ALL, resourceType)
+          && !lodash.contains(C_INTERSHARD_RESOURCES, resourceType)) {
+          return {};
+        }
+        const raw = ordersView[resourceType] || {};
+        const copy = __jsonParse(__jsonStringify(raw));
+        for (const i in copy) {
+          copy[i].price /= 1000;
+        }
+        cachedOrders[resourceType] = copy;
+      }
+      return cachedOrders[resourceType];
+    }
+    // 官方 deal API 的 terminal 门（:126 `_.find(userObjects, {type:'terminal',
+    // room})`——自家 terminal；room.terminal 快捷面首个【同房多 terminal 官方
+    // any() 任一、我方首个+my 过滤，混主夹具态登记】）
+    function myTerminalIn(roomName) {
+      const room = Game.rooms[roomName];
+      return room && room.terminal && room.terminal.my ? gw.rawData(room.terminal.id) : null;
+    }
     const market = {
       // 官方 :31-34：calcRoomsDistance(continuous) + calcTerminalEnergyCost
       //（utils.js:644-659）=ceil(amount×(1−e^(−range/30)))。**不环绕**：
@@ -531,15 +578,170 @@
         const dy = Math.abs(xy2[1] - xy1[1]);
         return Math.ceil(amount * (1 - Math.exp(-Math.max(dx, dy) / 30)));
       },
-      // 以下七方法 P2 真化（桩返回 ERR_INVALID_ARGS 族与官方拒形态就近）
-      getAllOrders: () => { countStub('Game.market.getAllOrders'); return []; },
-      getHistory: () => { countStub('Game.market.getHistory'); return {}; },
-      getOrderById: () => { countStub('Game.market.getOrderById'); return null; },
-      createOrder: () => C_ERR_INVALID_ARGS,
-      cancelOrder: () => C_ERR_INVALID_ARGS,
-      deal: () => C_ERR_INVALID_ARGS,
-      changeOrderPrice: () => C_ERR_INVALID_ARGS,
-      extendOrder: () => C_ERR_INVALID_ARGS,
+      // 官方 :36-39：_getOrders 快照 + lodash.filter（filter 缺省=全量）
+      getAllOrders(filter) {
+        const orders = _getOrders(filter && filter.resourceType);
+        return lodash.filter(orders, filter);
+      },
+      // 官方 :41-53：非法资源名 {}；'all'→[]（driver 恒空初始化）；
+      // 合法资源无数据 {} **对象非数组**（MARKET-QUERY-006 官方同红的根源）
+      getHistory(resourceType) {
+        if (!resourceType) resourceType = 'all';
+        if (!cachedHistory[resourceType]) {
+          if (resourceType !== 'all' && !lodash.contains(C_RESOURCES_ALL, resourceType)
+            && !lodash.contains(C_INTERSHARD_RESOURCES, resourceType)) {
+            return {};
+          }
+          cachedHistory[resourceType] = __jsonParse(__jsonStringify(historyView[resourceType] || {}));
+        }
+        return cachedHistory[resourceType];
+      },
+      // 官方 :55-66：先自己的（this.orders 已 ÷1000）→ 公共 active 池（÷1000）
+      //→ null。this.orders 触发 orders getter 惰性缓存（官方同形）
+      getOrderById(id) {
+        if (this.orders[id]) {
+          return __jsonParse(__jsonStringify(this.orders[id]));
+        }
+        const order = ordersView.all[id];
+        if (order) {
+          const result = __jsonParse(__jsonStringify(order));
+          result.price /= 1000;
+          return result;
+        }
+        return null;
+      },
+      // 官方 :68-98：对象/参数双形 → 资源门 → type 门 → parseFloat/parseInt →
+      // 正数门 → fee>credits 门（credits 单位）→ terminal 门（intershard 免）
+      //→ 数量门（size(orders)+本 tick 已建 ≥300）→ pushByName 无 maxLen
+      createOrder(type, resourceType, price, totalAmount, roomName) {
+        if (typeof type === 'object' && type !== null) {
+          ({ type, resourceType, price, totalAmount, roomName } = type);
+        }
+        if (!lodash.contains(C_RESOURCES_ALL, resourceType)
+          && !lodash.contains(C_INTERSHARD_RESOURCES, resourceType)) {
+          return C_ERR_INVALID_ARGS;
+        }
+        if (type !== C_ORDER_BUY && type !== C_ORDER_SELL) {
+          return C_ERR_INVALID_ARGS;
+        }
+        price = parseFloat(price);
+        totalAmount = parseInt(totalAmount);
+        if (!price || price <= 0 || !totalAmount) {
+          return C_ERR_INVALID_ARGS;
+        }
+        if (price * totalAmount * C_MARKET_FEE > this.credits) {
+          return C_ERR_NOT_ENOUGH_RESOURCES;
+        }
+        if (!lodash.contains(C_INTERSHARD_RESOURCES, resourceType)
+          && (!roomName || !myTerminalIn(roomName))) {
+          return C_ERR_NOT_OWNER;
+        }
+        if (lodash.size(this.orders) + ordersCreatedDuringTick >= C_MARKET_MAX_ORDERS) {
+          return C_ERR_FULL;
+        }
+        ordersCreatedDuringTick++;
+        gw.intents.pushByName('global', 'createOrder', {
+          type, resourceType, price, totalAmount, roomName,
+        });
+        return C_OK;
+      },
+      // 官方 :100-106：自己的订单门 → pushByName(50)（返回值忽略恒 OK）
+      cancelOrder(orderId) {
+        if (!this.orders[orderId]) {
+          return C_ERR_INVALID_ARGS;
+        }
+        gw.intents.pushByName('global', 'cancelOrder', { orderId }, 50);
+        return C_OK;
+      },
+      // 官方 :108-153：公共 active 池 **raw 毫价**；intershard 资源面门 /
+      // 自家 terminal 门（transferCost=calcTransactionCost）+ 能量面门 +
+      // 冷却门 + BUY 资源面门 + SELL money 门（毫×量 vs 毫）→ pushByName(10)
+      // 满 ERR_FULL
+      deal(orderId, amount, targetRoomName) {
+        const order = ordersView.all[orderId];
+        if (!order) {
+          return C_ERR_INVALID_ARGS;
+        }
+        amount = parseInt(amount);
+        if (!amount || amount < 0) {
+          return C_ERR_INVALID_ARGS;
+        }
+        if (lodash.contains(C_INTERSHARD_RESOURCES, order.resourceType)) {
+          if (order.type === C_ORDER_BUY
+            && ((gw.world.market && gw.world.market.resources
+              ? gw.world.market.resources[order.resourceType] : 0) || 0) < amount) {
+            return C_ERR_NOT_ENOUGH_RESOURCES;
+          }
+        } else {
+          if (!targetRoomName) {
+            return C_ERR_INVALID_ARGS;
+          }
+          const t = myTerminalIn(targetRoomName);
+          const transferCost = this.calcTransactionCost(amount, targetRoomName, order.roomName);
+          if (!t) {
+            return C_ERR_NOT_OWNER;
+          }
+          // 官方 `terminal.store[energy] < transferCost`（缺键 undefined<x
+          // =false 过门）；我方 `||0` 缺键拒——收紧侧，terminal store 恒含
+          // energy 键（DB 不变量）下不可达，评审 2 F8 登记（Rust 侧
+          // execute_transfer P5 已登记同型）
+          if (!t.store || (t.store[C_RESOURCE_ENERGY_NAME] || 0) < transferCost) {
+            return C_ERR_NOT_ENOUGH_RESOURCES;
+          }
+          if (t.cooldownTime > gw.world.time) {
+            return C_ERR_TIRED_MKT;
+          }
+          if (order.type === C_ORDER_BUY) {
+            if ((order.resourceType !== C_RESOURCE_ENERGY_NAME
+              && (!t.store[order.resourceType] || t.store[order.resourceType] < amount))
+              || (order.resourceType === C_RESOURCE_ENERGY_NAME
+                && t.store[C_RESOURCE_ENERGY_NAME] < amount + transferCost)) {
+              return C_ERR_NOT_ENOUGH_RESOURCES;
+            }
+          }
+        }
+        if (order.type === C_ORDER_SELL && (view.money_milli || 0) < amount * order.price) {
+          return C_ERR_NOT_ENOUGH_RESOURCES;
+        }
+        if (!gw.intents.pushByName('global', 'deal', { orderId, targetRoomName, amount }, 10)) {
+          return C_ERR_FULL;
+        }
+        return C_OK;
+      },
+      // 官方 :155-172：自己的订单 + parseFloat + 提价差额费（credits 单位，
+      // order.price 为视图 credits 价）→ pushByName(50)
+      changeOrderPrice(orderId, newPrice) {
+        const order = this.orders[orderId];
+        if (!order) {
+          return C_ERR_INVALID_ARGS;
+        }
+        newPrice = parseFloat(newPrice);
+        if (!newPrice || newPrice <= 0) {
+          return C_ERR_INVALID_ARGS;
+        }
+        if (newPrice > order.price
+          && (newPrice - order.price) * order.remainingAmount * C_MARKET_FEE > this.credits) {
+          return C_ERR_NOT_ENOUGH_RESOURCES;
+        }
+        gw.intents.pushByName('global', 'changeOrderPrice', { orderId, newPrice }, 50);
+        return C_OK;
+      },
+      // 官方 :174-191：自己的订单 + parseInt + fee 门 → pushByName(50)
+      extendOrder(orderId, addAmount) {
+        const order = this.orders[orderId];
+        if (!order) {
+          return C_ERR_INVALID_ARGS;
+        }
+        addAmount = parseInt(addAmount);
+        if (!addAmount || addAmount <= 0) {
+          return C_ERR_INVALID_ARGS;
+        }
+        if (order.price * addAmount * C_MARKET_FEE > this.credits) {
+          return C_ERR_NOT_ENOUGH_RESOURCES;
+        }
+        gw.intents.pushByName('global', 'extendOrder', { orderId, addAmount }, 50);
+        return C_OK;
+      },
     };
     __Object.defineProperties(market, {
       // 官方 :196-201：`(user.money||0)/1000`——毫 credits ÷1000（注入面给
@@ -562,11 +764,21 @@
           return _outgoing;
         },
       },
-      // 官方 :235-249：myOrders map（id 串化/删 _id·user/price÷1000/
-      // indexBy('id')）——P2 真化；空对象缺省
+      // 官方 :235-249：myOrders map——id 串化（投影已串）、删 user、
+      // price÷1000、indexBy('id')；惰性闭包缓存（官方 _orders）
       orders: {
         enumerable: true,
-        get() { return view.orders || {}; },
+        get() {
+          if (!_orders) {
+            _orders = lodash.indexBy(myOrdersRaw.map((i) => {
+              const o = __jsonParse(__jsonStringify(i));
+              delete o.user;
+              o.price /= 1000;
+              return o;
+            }), 'id');
+          }
+          return _orders;
+        },
       },
     });
     return market;
@@ -963,8 +1175,14 @@
             const b = gw.roomNameToXY(roomName2);
             let dx = Math.abs(b[0] - a[0]);
             let dy = Math.abs(b[1] - a[1]);
+            // 2B 批 P2 勘正：continuous 环绕经 getWorldSize()（官方 map.js 同位
+            // min(size−d,d)）——我方单机世界**不环绕**（getWorldSize=1 登记面；
+            // 原 worldSize=1 字面套环绕公式会把邻房距离折成 0——MARKET-
+            // QUERY-001 红），与 Rust settle/market.rs calc_rooms_distance/
+            // calcTransactionCost 三处同判（liveWorldSize 能力键 false，
+            // TERMINAL-SEND-015 wrap 计费维持 skip）
             if (continuous) {
-              const worldSize = 1;
+              const worldSize = Infinity;
               dx = Math.min(worldSize - dx, dx);
               dy = Math.min(worldSize - dy, dy);
             }
@@ -1147,15 +1365,21 @@
         cpu += 0.2;
         return true;
       },
-      pushByName(id, name, data) {
+      pushByName(id, name, data, maxLen) {
         list[id] = list[id] || __Object.create(null);
         __Object.setPrototypeOf(data, null);
         list[id][name] = list[id][name] || [];
+        // 官方 runtime.js:86-88 maxLen 门：满返 false（market deal 10 /
+        // cancelOrder·changeOrderPrice·extendOrder 50——2B 批 P2 消费）
+        if (maxLen && list[id][name].length >= maxLen) {
+          return false;
+        }
         list[id][name].push(data);
         // 官方 room/global 级按元素数计费（make.js:100-106；免费表 say/pull
         // 是对象级语义）——Rust 侧 take_endtick_intents 同口径兜底，此处计入
         // 玩家可见的 getUsed（intents.cpu 显示面）
         cpu += 0.2;
+        return true;
       },
       remove(id, name) {
         if (list[id] && list[id][name] !== undefined) {

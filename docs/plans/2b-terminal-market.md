@@ -1,6 +1,6 @@
 # 2B 批：terminal / market（订单簿 + 跨房资源转移 + credits）
 
-> 状态：**方案已定稿（2026-10-01，用户全权授权直接开批）**。
+> 状态：**批已收口（2026-10-01，P0-P2 三片全部完成；地板 1774→1852/2914=63.55%）**。
 > 批次方向决策归用户；批内切片节奏自主（同 M2B 扩面先例）。
 > 定位：M2B 扩面批（0702235，地板 1774/2914=60.88%）之后授权序列下一站。
 > 依据：[m2b-expansion](m2b-expansion.md) §1.3/§6（market 整体推 2B 的登记）、
@@ -268,9 +268,11 @@ terminal/marketBasics/market/terminalSend 均 false，compat/src/capabilities.ts
 - P0 片棘轮**零变化**是设计约束（无玩家面变化）——若有翻转即实现泄漏，
   回查。
 - 新 kkscreeps.json 报告随批入库（地板变动批先例）；三基线刷新（P6 后
-  形态：overmind withErr=1 / tooangel 3 形态 / wasm 干净——**send/市场面
-  bot 不消费**，预期形态不变，变化须归因）；perf 同日 A/B（bots 后冷却
-  复跑）。
+  形态：overmind withErr=1 / tooangel 3 形态 / wasm 干净——**P2 实测勘误
+  本行初稿「send/市场面 bot 不消费」的市场面半句：tooangel 每 tick 消费
+  Game.market.getAllOrders**（P1 桩探针 `getAllOrders: 2000` 在 P2 撤桩后
+  消失、真面接手 console 零错——良性，收口已归因）；perf 同日 A/B
+  （bots 后冷却复跑）。
 
 ## 5. 验证矩阵（每片完整批次循环，不可裁剪）
 
@@ -337,9 +339,85 @@ terminal/marketBasics/market/terminalSend 均 false，compat/src/capabilities.ts
    zsh `===` / ratchet 前 release 重建 / 跑完 kkscreeps.json 入库 /
    commit subject 限制 / V8 测试并入串行链不开新根 / 官方注释行号 grep
    实树取号。
+9. **测试墙钟耦合（P2 评审 3 F-G 登记）**：市场订单 created_timestamp 与
+   `TickInput::now_ms` 两关注点共用 BENCH_NOW_MS=1.7e12 常量；裸
+   `tick_with_intents` 缺省真实墙钟（settle/mod.rs:151）——任何
+   place_order+裸 tick 组合会把订单当 2.7 年旧物静默过期（失败形态响亮
+   但触发前不可见）。后续批市场测试一律走 market_tick/固定 input 助手。
 
 ## 8. 执行记录（随片回写）
-### P1（终端片：terminal send 全链 + transactions 注入）——已收口（含三路评审清偿）
+### P2（市场片：订单簿全生命周期 + Game.market 真化）——已收口（含三路评审清偿+清偿复审）
+
+- **交付**：settle/market.rs process_market_intents（**分节消费**官方段序
+  createOrder→changeOrderPrice→extendOrder→cancelOrder→deal 收集——稳定
+  划分保段内注册序；跨玩家序=名字序↔db 插入序已登记）+execute_terminal_deal
+  （**买卖定向 SELL→seller=订单房/buyer=目标房**——初版写反致 DEAL 族四红，
+  实测勘正；三重钳+money 钳链 deal_cost=min(毫×量,buyer money)→floor 回推）
+  +execute_direct_deal（intershard 资源+钱直转）+order_lifecycle（**只见
+  tick 前存量** pre_tick_ids 过滤——官方尾段遍历 getInterRoom 快照，同 tick
+  建单延迟落库下一拍才同步；_cancelled 移除/过期退 remaining×毫price×FEE
+  截断 i64【亚毫登记】/SELL active·amount 同步/BUY newAmount 三取 min）；
+  intent.rs MarketIntent 五变体+to_price_milli（≥1e21 指数首位 quirk；
+  [2^63,1e21) 表示强制 None 登记可达偏差）；prelude makeMarket 真化（9 方法
+  全门+四 getter Object.defineProperties {enumerable,get}——严格赋值抛
+  TypeError/方法字面量三 true/orders 惰性 indexBy 同 tick 同对象/
+  cachedOrders 原型继承键官方怪癖保留；getHistory {} 形态官方同红保真）；
+  embed money 种子 10M 毫（vanilla adapter 同位）+market_view（orders 分组
+  原始毫价/my_orders 含 inactive/history {all:[]}）+placeMarketOrder RPC+
+  adapter；capability market/marketBasics 翻 true；countStub 市场桩撤除
+  （getAllOrders 真面接手——tooangel 每 tick 消费，console 零错）。
+- **实测**：workspace 353 绿（settle m2b2 族 22 测）；棘轮 **1828→1852
+  （+78 绿零未豁免转红，155=154+1）**——转绿分布【评审 3 勘正原 73+2+3
+  分解】：市场族 69（TERMINAL-SEND 47+MARKET-ORDER 10+MARKET-DEAL 5+
+  MARKET-QUERY 6+SHAPE-GAME-007 1）+terminal 邻接 7+INTENT-LIMIT 2；
+  新红恰 1=MARKET-QUERY-006 **官方同红**（vanilla.json failed 实证——
+  getHistory 非法资源返 {} 非数组，套件期望数组；note 落 ratchet-allow
+  不入 allow[]——skip→failed 不触发翻转门，入内成永惰性条目）。三基线
+  与 P1 形态逐字一致（tooangel 3 形态/overmind withErr=1 Memory.flags
+  随机后缀/wasm 干净；唯一增量=getAllOrders 桩探针消失，§4 勘误归因）；
+  perf 同日 A/B：project +6~8%（market_view 每_viewer 投影新字段——空
+  orders 态 ≈3µs/Viewer 分配上限附近归因 plausible；**非空态 O(订单×
+  Viewer) 缩放登记待评估**），run/settle 持平，wall ≤+3%，workload 锚
+  3328/2836/2366 逐字节一致。
+- **三路评审（官方语义+镜头①/Rust+镜头②/测试与归因）**：评 1 判 FAIL、
+  评 2/3 PASS with conditions——**镜头①再立功**（费门活值/尾段快照/段序
+  三项全是跨子系统时序）；镜头②描述符零瑕疵（四 getter 三标志+闭包缓存
+  逐位对照官方 market.js:194-250）。清偿清单（每项官方源 grep 实证后修）：
+  ①**费门活值读**（评 1 F1 P0=评 2 F1：官方 user.money 逐 intent 重读+
+  bulk.inc 立改内存 bulk.js:90-97，我方循环头快照会让 Σfee>credits 全额
+  扣款打负 money——改逐门 get 活值+测试 money 恰够单笔时次笔拒且不为负）；
+  ②**尾段快照过滤**（评 1 F2=评 2 F2=评 3 F-B：遍历全集使同 tick 建单提前
+  一拍进公共池——pre_tick_ids 过滤+新测「创建 tick active=false/amount=0、
+  下一拍同步」；原 same_tick_invisible 测试注释「尾段也不跑」与实现相反
+  一并勘正）；③**负改价门 `<=0`**（评 1 F3=评 2 F2：仅拒 ==0 会落负价反转
+  deal 资金流向；负改价不置 _skip 官方先于 skip 段 return——deal 按旧价照常
+  成交新测锁定）；④**分节消费**（评 1 F4=评 2 F3：单趟声明序 cancel 先行
+  把「提价+取消」的费算成 0 吞掉——sort_by_key 稳定划分按官方段序，新测
+  fee=50000 按 remaining=1000 收取；评 2 F3b「跨玩家全局分节」主张过强，
+  官方外层 userIntents.forEach 按用户循环——跨用户可见性由用户序定，我方
+  按官方结构同构实现）；⑤**_skip 测试判别力**（评 1 F5=评 3 F-A：原夹具
+  dealer money=0 绿在 money 钳、且名字序 dealer 先于 owner 令 skip 不可达
+  ——夹具对调 owner/dealer+dealer 注资+无扣款断言，变异存活归零）；
+  ⑥饱和加三处（评 2 F5：注入域巨价 refund/deal_cost 溢出 panic/回绕）；
+  ⑦deal 后目标 terminal 冷却断言（评 3 F-C 原零锁——删 write_cooldown
+  全链不红）；⑧floor 非整除例 304000/2500=121（评 3 F-D：原整除例
+  round/ceil 同值无判别）；⑨墙钟常量 BENCH_NOW_MS 抽取（评 3 F-G）。
+  **变异取证**：①③④及尾段过滤四变异全部击杀对应新测，复原后 203 绿。
+  登记项（评 2）：orders BTreeMap 字典序 vs 官方插入序（纯序面 "mkt10"<
+  "mkt9"，逻辑面按 id 直查不依赖）/price=0 注入订单 BUY 激活分歧（官方
+  money/0=Infinity→active；deal 面两侧同收敛）/无主 terminal NPC 分支
+  （官方 if(seller.user) 含无买家钱凭空入账怪癖，我方整单中断保守侧）/
+  game.js deal 能量门缺键 `||0` 收紧（store 恒含 energy 键不可达）——
+  四项注释登记+灰区表收编；ExtendOrder/CancelOrder 引擎臂外部独锁与
+  intershard 拒因三闸无锁（评 3 F-E）登记灰区表。
+- **清偿后全门禁复跑**：workspace 353 绿/clippy 0/棘轮 **1852/155/907
+  零用例位移**（四项行为修复零套件位移——官方对齐修复与套件无交集的
+  再证）/三基线全等/perf 持平（project 0.0809/run 0.1686/settle 0.0200/
+  wall 0.3023——首轮机器态偏高回落）。**评审 3 流程事故登记**：其对测试
+  文件 git checkout 抹掉未提交 P2 改动后按自读内容恢复，清偿编辑在其
+  恢复版上干净叠加（22 测+四变异击杀均在叠加后验证）——终态全量门禁
+  覆盖该风险；教训=评审 agent 不得对未提交工作树做 checkout 类破坏性
+  回滚（后续评审 prompt 加禁令）。
 
 - **交付**：Action::Send（白名单 system.js:69）+IntentData target_room_name/
   description；structures.rs terminal 臂房间相执行器（send.js 逐字——只校验

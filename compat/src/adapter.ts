@@ -95,8 +95,11 @@ export class KkscreepsAdapter {
   placeDroppedResource(room: string, spec: PlaceSpec): Promise<string> { return this.place('resource', room, spec); }
   placePowerCreep(room: string, spec: PlaceSpec): Promise<string> { return this.place('powerCreep', room, spec); }
   placeNuke(room: string, spec: PlaceSpec): Promise<string> { return this.place('nuke', room, spec); }
-  placeMarketOrder(_spec: PlaceSpec): Promise<string> {
-    return Promise.reject(new Error('placeMarketOrder 未实装（M0）'));
+  // 2B 批 P2：官方 adapter 契约（MarketOrderSpec——owner/type/resourceType/
+  // price【credits】/totalAmount/roomName?/createdTimestamp?/active?/created?）
+  async placeMarketOrder(spec: PlaceSpec): Promise<string> {
+    const r = await client().call<{ id: string }>('placeMarketOrder', { spec });
+    return r.id;
   }
   placeObject<T extends string>(room: string, type: T, spec: PlaceSpec): Promise<string> {
     return this.place(type, room, spec);
