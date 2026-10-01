@@ -1,41 +1,44 @@
-//! 地形：50×50 平面字节数组 + 官方 `TERRAIN_MASK_*` 位语义。
+//! 单房间的 50×50 地形，按行保存为字节数组。
 //!
-//! 官方读取语义（`engine/src/utils.js:333-337 checkTerrain`）：
-//! `code = terrain[y*50+x]; (code & mask) > 0`。
-//! 合法位：wall=1 / swamp=2 / lava=4（lava 仅官方地图生成器产出，编解码同样接受）。
+//! 每格使用 wall=1、swamp=2、lava=4 的位掩码，可以组合；索引为 `y * 50 + x`。
+//! 构造与补齐四角墙是两个操作，构造函数不会自动调用 [`Terrain::normalize`]。
+//! 来源：Screeps engine `src/utils.js:333-335` 的 `checkTerrain`，以及 common
+//! `lib/constants.js` 的 `TERRAIN_MASK_*` 定义。Rust 读取接口额外检查每轴边界。
 
-/// 墙位掩码（官方 TERRAIN_MASK_WALL）。
+/// 墙地形位；与上游 `TERRAIN_MASK_WALL` 对应。
 pub const TERRAIN_MASK_WALL: u8 = 1;
-/// 沼泽位掩码（官方 TERRAIN_MASK_SWAMP）。
+/// 沼泽地形位；与上游 `TERRAIN_MASK_SWAMP` 对应。
 pub const TERRAIN_MASK_SWAMP: u8 = 2;
-/// 熔岩位掩码（官方 TERRAIN_MASK_LAVA）。
+/// 熔岩地形位；与上游 `TERRAIN_MASK_LAVA` 对应，不单独决定地形名称。
 pub const TERRAIN_MASK_LAVA: u8 = 4;
 
 /// 全部合法位的并集；之外的位值视为非法输入。
 const KNOWN_MASKS: u8 = TERRAIN_MASK_WALL | TERRAIN_MASK_SWAMP | TERRAIN_MASK_LAVA;
 
+/// 房间每轴的格子数，有效坐标为 0..ROOM_SIZE。
 pub const ROOM_SIZE: usize = 50;
+/// 一个房间的地形字节数，每格一个字节。
 pub const TERRAIN_LEN: usize = ROOM_SIZE * ROOM_SIZE;
 
-/// 一个房间的地形。构造即校验（长度必须 2500、值域仅含已知位——非整数输入
-/// 在 embed 边界层拒绝，字节层只能看到合法位），四角墙不变量（官方地图生成器
-/// 不变量，所有正规地图成立）经 [`Terrain::normalize`] 强制。
-/// 内表示 `Arc`（M2B 前置批 P2）：地形在首玩家 tick 后不可变，但每 tick 随
-/// `RoomState` 克隆进结算工作副本——引用计数克隆停止每房每 tick 拷贝 2500
-/// 字节。`normalize`/`as_mut_slice` 需独占访问（`Arc::get_mut`；共享或
-/// 存在 Weak 引用时返 None ⇒ panic——fail-fast 而非静默写穿；正式路径只在
-/// 构造期独占态调用，仓库现无 Weak）。
+/// 一个房间的地形，以 Arc 共享固定长度的字节数组。
+///
+/// 克隆只共享数组，不复制 2500 字节。修改要求独占底层 Arc；持有其他克隆时，
+/// [`Self::normalize`] 和 [`Self::as_mut_slice`] 会 panic，不会复制或修改共享数据。
+/// 地图应在共享前完成构造。是否允许在游戏运行中替换地形由世界层控制，
+/// 本类型不跟踪 tick，也不保证四角已经补墙或位码始终有效。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Terrain(std::sync::Arc<[u8; TERRAIN_LEN]>);
 
 impl Terrain {
-    /// 全平原地形。
+    /// 创建所有位码为 0 的地形，包括四角；需要四角墙时另调 [`Self::normalize`]。
     pub fn plains() -> Self {
         Self(std::sync::Arc::new([0; TERRAIN_LEN]))
     }
 
-    /// 从官方数组形态构造（embed `setTerrain` 的 `number[]`）。
-    /// 校验失败返回 Err（不改任何状态——调用方契约依赖"拒绝且无副作用"）。
+    /// 校验并复制按行排列的地形字节，保留原位码，不自动补四角墙。
+    ///
+    /// # Errors
+    /// 长度不等于 [`TERRAIN_LEN`]，或任一格包含 wall/swamp/lava 之外的位时返回错误。
     pub fn from_codes(codes: &[u8]) -> Result<Self, String> {
         if codes.len() != TERRAIN_LEN {
             return Err(format!(
@@ -54,8 +57,11 @@ impl Terrain {
         Ok(Self(std::sync::Arc::new(arr)))
     }
 
-    /// 从已验证的字节构造（快照解码等信任源；测试期断言合法位防旁路退化——
-    /// 正式入口 [`Terrain::from_codes`] 拒绝未知位）。
+    /// 复制固定长度、由调用方保证位码合法的数组，不自动补四角墙。
+    /// 未验证的输入应使用 [`Self::from_codes`]；本方法不提供运行期校验错误。
+    ///
+    /// # Panics
+    /// 开启调试断言时，未知位会触发 panic；关闭调试断言后不检查位码。
     pub fn from_slice(codes: &[u8; TERRAIN_LEN]) -> Self {
         debug_assert!(
             codes.iter().all(|c| c & !KNOWN_MASKS == 0),
@@ -66,8 +72,12 @@ impl Terrain {
         Self(std::sync::Arc::new(arr))
     }
 
-    /// 官方字符串形态解码（官方 DB 历史存数字串；`checkTerrain` 的
-    /// `terrain.charAt(y*50+x)` 分支）：每字符一个数字。
+    /// 解码按行排列的数字字符串，每个 ASCII 字符对应一格地形。
+    /// 格式对应上游 `checkTerrain` 的字符串读取分支，不自动补四角墙。
+    ///
+    /// # Errors
+    /// 字符不是 ASCII 数字、长度不是 2500，或数字含未知位时返回错误；
+    /// 因此合法字符为 0..=7，8 和 9 虽是数字也不能作为地形位码。
     pub fn from_digit_string(s: &str) -> Result<Self, String> {
         let codes: Result<Vec<u8>, _> = s
             .chars()
@@ -80,36 +90,52 @@ impl Terrain {
         Self::from_codes(&codes?)
     }
 
-    /// 四角强制为墙（官方地图生成器不变量——正规地图的 (0,0)/(49,0)/(0,49)/(49,49) 恒为墙）。
+    /// 给四角添加墙位，保留这些格子原有的其他位；其余格子不变。
+    /// 世界创建和地形设置入口用此方法补齐地图边界要求，重复调用结果不变。
+    ///
+    /// # Panics
+    /// 底层 Arc 不满足独占修改条件时 panic，包括还有其他 Terrain 克隆的情况。
     pub fn normalize(&mut self) {
         let idx = |x: usize, y: usize| y * ROOM_SIZE + x;
-        let arr = std::sync::Arc::get_mut(&mut self.0)
-            .expect("地形归一化要求独占引用（正式路径只在构造期调用）");
+        let arr = std::sync::Arc::get_mut(&mut self.0).expect("地形归一化要求独占引用");
         arr[idx(0, 0)] |= TERRAIN_MASK_WALL;
         arr[idx(ROOM_SIZE - 1, 0)] |= TERRAIN_MASK_WALL;
         arr[idx(0, ROOM_SIZE - 1)] |= TERRAIN_MASK_WALL;
         arr[idx(ROOM_SIZE - 1, ROOM_SIZE - 1)] |= TERRAIN_MASK_WALL;
     }
 
-    /// 读取一格的原始位码（越界坐标 panic——结算层坐标已被钳制）。
+    /// 读取一格的原始位码，按 `y * ROOM_SIZE + x` 定位。
+    ///
+    /// # Panics
+    /// x 或 y 不在 0..ROOM_SIZE 内时 panic；越界 x 不得被解释为下一行的格子。
     pub fn get(&self, x: usize, y: usize) -> u8 {
+        assert!(
+            x < ROOM_SIZE && y < ROOM_SIZE,
+            "地形坐标越界: ({x}, {y})，每轴必须小于 {ROOM_SIZE}"
+        );
         self.0[y * ROOM_SIZE + x]
     }
 
-    /// 官方 `checkTerrain` 语义：`(code & mask) > 0`。
+    /// 判断格子是否包含 mask 中的任一位；组合掩码不是要求全部位都存在。
+    /// 掩码为 0 时返回 false，坐标边界要求与 [`Self::get`] 相同。
+    /// 位判断对应上游 `src/utils.js` 的 `checkTerrain`。
     pub fn check_mask(&self, x: usize, y: usize, mask: u8) -> bool {
         self.get(x, y) & mask > 0
     }
 
+    /// 判断墙位是否存在，坐标边界要求与 [`Self::get`] 相同。
     pub fn is_wall(&self, x: usize, y: usize) -> bool {
         self.check_mask(x, y, TERRAIN_MASK_WALL)
     }
 
+    /// 判断沼泽位是否存在；墙和沼泽位可以同时为真。
+    /// 坐标边界要求与 [`Self::get`] 相同。
     pub fn is_swamp(&self, x: usize, y: usize) -> bool {
         self.check_mask(x, y, TERRAIN_MASK_SWAMP)
     }
 
-    /// 玩家 API 形态的名字（官方 `getTerrainAt`：wall 优先、swamp 次之、其余 plain）。
+    /// 返回地形名称：wall 优先于 swamp，其余返回 plain，包括单独的 lava 位。
+    /// 坐标边界要求与 [`Self::get`] 相同。
     pub fn terrain_name(&self, x: usize, y: usize) -> &'static str {
         let c = self.get(x, y);
         if c & TERRAIN_MASK_WALL != 0 {
@@ -121,11 +147,16 @@ impl Terrain {
         }
     }
 
+    /// 借用按行排列的完整数组，不复制地形数据。
     pub fn as_slice(&self) -> &[u8; TERRAIN_LEN] {
         &self.0
     }
 
-    /// 可变访问（测试/地图构造用；值域约束由调用方自负——正式路径走 from_codes）。
+    /// 独占借用完整数组，用于地图构造或测试；写入值不经过校验。
+    /// 调用方负责保持位码合法，并在需要时重新补齐四角墙。
+    ///
+    /// # Panics
+    /// 底层 Arc 不满足独占修改条件时 panic；不会自动复制共享数组。
     pub fn as_mut_slice(&mut self) -> &mut [u8; TERRAIN_LEN] {
         std::sync::Arc::get_mut(&mut self.0).expect("可变访问要求独占引用")
     }
@@ -135,8 +166,7 @@ impl Terrain {
 mod tests {
     use super::*;
 
-    /// 共享态（Arc 计数 >1）下的变异请求 fail-fast（M2B P2 的显式契约面，
-    /// 而非 Box 时代的静默写穿）。
+    /// 还有其他克隆时，补墙操作必须拒绝修改共享数组。
     #[test]
     #[should_panic(expected = "独占")]
     fn normalize_on_shared_terrain_panics() {
@@ -172,6 +202,22 @@ mod tests {
     }
 
     #[test]
+    fn constructors_preserve_codes_and_masks_match_any_bit() {
+        let mut codes = [0; TERRAIN_LEN];
+        codes[1] = TERRAIN_MASK_LAVA;
+        codes[2] = TERRAIN_MASK_WALL | TERRAIN_MASK_SWAMP | TERRAIN_MASK_LAVA;
+        let t = Terrain::from_codes(&codes).unwrap();
+        assert_eq!(t.get(0, 0), 0, "构造不会自动补四角墙");
+        assert_eq!(t.terrain_name(1, 0), "plain", "lava 位不单独改变名称");
+        assert_eq!(t.terrain_name(2, 0), "wall", "墙位优先于沼泽位");
+        assert!(t.is_swamp(2, 0), "名称为 wall 不意味着沼泽位被清除");
+        assert!(t.check_mask(1, 0, TERRAIN_MASK_WALL | TERRAIN_MASK_LAVA));
+        assert!(!t.check_mask(1, 0, 0));
+        assert!(Terrain::from_digit_string(&"8".repeat(TERRAIN_LEN)).is_err());
+        assert!(Terrain::from_digit_string(&"１".repeat(TERRAIN_LEN)).is_err());
+    }
+
+    #[test]
     fn corner_walls_and_lookup() {
         let mut t = Terrain::plains();
         t.as_mut_slice()[7 * 50 + 7] = TERRAIN_MASK_SWAMP;
@@ -196,5 +242,22 @@ mod tests {
         let s: String = t.as_slice().iter().map(|c| (b'0' + c) as char).collect();
         assert_eq!(Terrain::from_digit_string(&s).unwrap(), t);
         assert!(Terrain::from_digit_string("9x").is_err());
+    }
+
+    #[test]
+    fn rejects_coordinates_outside_each_axis() {
+        let t = Terrain::plains();
+        for (x, y) in [
+            (ROOM_SIZE, 0),
+            (ROOM_SIZE * 2, 0),
+            (0, ROOM_SIZE),
+            (usize::MAX, 1),
+            (ROOM_SIZE, usize::MAX),
+        ] {
+            assert!(
+                std::panic::catch_unwind(|| t.get(x, y)).is_err(),
+                "越界坐标 ({x}, {y}) 必须被拒绝，不能读取另一格"
+            );
+        }
     }
 }

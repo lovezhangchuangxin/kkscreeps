@@ -1,27 +1,34 @@
-//! 房间名编解码：官方 `engine/src/utils.js:358-390` 的逐字移植。
+//! 房间名与带方向的整数坐标转换。
 //!
-//! 官方坐标语义：W/N 方向取负并减一（W0 ↔ x=-1），E/S 方向即非负坐标本身。
+//! W/N 方向为负并减一：W0/N0 对应 -1；E0/S0 对应 0。
+//! 解析沿用上游按水平数值定位垂直方向的算法，但额外检查方向与数值长度。
+//! 它不是完整的房间名格式校验，也不限制房间是否位于实际世界范围内。
+//! 来源：Screeps engine `src/utils.js` 的 `roomNameToXY`、`getRoomNameFromXY`
+//! （核对版本 a90d26fc9eb943147799e65d0bf9d4d0d79a2722）。
 
 use std::fmt;
 
-/// 房间名（已验证合法）。合法形态：`[WE]\d+[NS]\d+`（大小写混认，与官方
-/// `parseInt`/`charAt` 行为一致——官方解析对 `[we]`/`[ns]` 同样接受）。
+/// 房间的水平和垂直坐标，使用 W/N 为负、E/S 非负的表示。
+/// 字段公开且可直接构造，因此本类型不保证原始名字格式或世界范围已验证。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RoomName {
-    /// 官方水平坐标：W 方向为负（W0 = -1），E 方向非负。
+    /// 水平房间坐标，W0 = -1，E0 = 0；不是房间内的格子坐标。
     pub xx: i32,
-    /// 官方垂直坐标：N 方向为负（N0 = -1），S 方向非负。
+    /// 垂直房间坐标，N0 = -1，S0 = 0；不是房间内的格子坐标。
     pub yy: i32,
 }
 
 impl RoomName {
-    /// 解析房间名；非法名（NaN、缺方向位、乱序）返回 Err。
+    /// 解析房间名，返回带方向的整数坐标。
     ///
-    /// 移植官方 `roomNameToXY`（utils.js:374-390）：
-    /// - `parseInt(name.substr(1))`：从头方向位之后取前导数字（遇非数字停）；
-    /// - 水平数值决定垂直方向位的位置（≥100 → 4，≥10 → 3，否则 2）；
-    /// - `parseInt(name.substr(verticalPos + 1))` 取垂直数值；
-    /// - W/N 把对应值取负再减一。
+    /// 方向字母大小写均可。数值按十进制前缀读取，垂直数值可带符号和
+    /// 前导空白，尾部非数字不参与解析，例如 `E1N-5` 得到 `(1, 4)`。
+    /// 垂直方向的位置由水平数值决定，不是搜索 N/S 字母：规范名字的水平
+    /// 数字须为一至三位且没有多余前导零，否则可能被拒绝。
+    ///
+    /// # Errors
+    /// 方向位不是 W/E 或 N/S、数值前缀缺失或任一数值超过九位数字时返回错误。
+    /// 本函数不保证全串符合 `[WE][0-9]+[NS][0-9]+`，也不检查世界坐标范围。
     pub fn parse(name: &str) -> Result<Self, String> {
         let bytes = name.as_bytes();
         if bytes.len() < 3 {
@@ -31,9 +38,10 @@ impl RoomName {
         if !matches!(horizontal_dir, b'W' | b'w' | b'E' | b'e') {
             return Err(format!("房间名水平方向位非法: {name:?}"));
         }
-        // 官方 parseInt(name.substr(1))：跳过前导空白、取前导数字
+        // 首字节已确认是 ASCII 方向字母，因此从字节 1 切片不会截断 UTF-8。
         let xx =
             parse_leading_int(&name[1..]).ok_or_else(|| format!("房间名水平数值缺失: {name:?}"))?;
+        // 上游按数值大小确定方向位置，而不是按原字符串的数字长度。
         let vertical_pos = if xx >= 100 {
             4
         } else if xx >= 10 {
@@ -41,7 +49,7 @@ impl RoomName {
         } else {
             2
         };
-        // 官方 substr(verticalPos + 1) 可能越界（substr 宽松出界得空串 → NaN）
+        // 固定位置可能越界或落在 UTF-8 字符中间，按缺少数值处理，不让切片 panic。
         let rest = name.get(vertical_pos as usize + 1..).unwrap_or("");
         let vertical_dir = *bytes
             .get(vertical_pos as usize)
@@ -63,28 +71,33 @@ impl RoomName {
         })
     }
 
-    /// 从官方坐标生成房间名（官方 `getRoomNameFromXY`，utils.js:358-371）。
+    /// 用水平和垂直坐标构造值，不执行名字解析或世界范围检查。
     ///
-    /// 坐标应为 `parse` 产物或邻近房间的偏移结果；|值| ≥ 10^9 时生成的名字
-    /// 无法被 `parse` 往返（官方同域），`i32::MIN` 会使 `as_str` 取负减一
-    /// 溢出 panic——两者都非自然产生，测试期断言拦截。
+    /// 生成的规范名字要能被 [`Self::parse`] 读回，水平坐标须在 -1000..=999，
+    /// 垂直坐标须在 -1_000_000_000..=999_999_999；否则不保证往返。
+    ///
+    /// # Panics
+    /// 开启调试断言时，任一坐标的绝对值达到 10^9 会触发构造范围检查。
+    /// 该检查仅限制极端数值，不保证名字能够往返；关闭调试断言后不执行。
     pub fn from_xy(xx: i32, yy: i32) -> Self {
         debug_assert!(
             (xx as i64).abs() < 1_000_000_000 && (yy as i64).abs() < 1_000_000_000,
-            "from_xy 坐标超出可往返域 |v| < 10^9"
+            "from_xy 坐标超出调试构造范围 |v| < 10^9"
         );
         Self { xx, yy }
     }
 
-    /// 房间名字符串（官方形态，大写方向位）。
+    /// 生成大写方向、不带前导零的房间名，支持全部 i32 坐标。
+    /// 生成成功不代表 [`Self::parse`] 能读回；其水平定位和数字长度仍有限制。
     pub fn as_str(&self) -> String {
         let x = if self.xx < 0 {
-            format!("W{}", -self.xx - 1)
+            // 先加一再取负，避免对 i32::MIN 直接取负溢出。
+            format!("W{}", -(self.xx + 1))
         } else {
             format!("E{}", self.xx)
         };
         let y = if self.yy < 0 {
-            format!("N{}", -self.yy - 1)
+            format!("N{}", -(self.yy + 1))
         } else {
             format!("S{}", self.yy)
         };
@@ -92,8 +105,9 @@ impl RoomName {
     }
 }
 
-/// 官方 `parseInt` 语义的子集：跳过前导空白、可选符号、取前导十进制数字。
-/// 空串/无数字 → None（对应 parseInt 的 NaN）。
+/// 读取可选符号后的 ASCII 十进制前缀，尾部非数字不参与解析。
+/// 无数字或数字多于九位时返回 None；前导空白使用 Rust `trim_start` 的字符集。
+/// 这是受限的整数读取器，不实现 JavaScript parseInt 的全部空白或数值范围规则。
 fn parse_leading_int(s: &str) -> Option<i32> {
     let t = s.trim_start();
     let bytes = t.as_bytes();
@@ -106,9 +120,7 @@ fn parse_leading_int(s: &str) -> Option<i32> {
         i += 1;
     }
     if i == start || bytes[start..i].len() > 9 {
-        // 无数字或超 9 位：≥4 位水平数在官方的 verticalPos 定位（≤4）即落在数字
-        // 位上得到 NaN 垃圾，同为"不可用"；9 位上限防 i32 溢出（parse 产物供
-        // 偏移运算）。Unicode 数字（官方 parseInt 接受）同样拒绝——登记灰区
+        // 九位上限同时约束水平、垂直数值，留出取负减一等坐标运算的空间。
         return None;
     }
     let magnitude: i32 = t[start..i].parse().ok()?;
@@ -172,17 +184,55 @@ mod tests {
         }
     }
 
-    /// 与官方宽松解析的有意差异（compatibility.md 灰区登记）：官方对方向位
-    /// 只判 W/w 与 N/n、其余一律当 E/S，因此 "X1N1"→[1,-2]、"E1X1"→[1,1]、
-    /// "W-100N5"→[99,0]（符号消费后方向位落在数字上）；官方 parseInt 还接受
-    /// Unicode 数字（"E١N1"）。官方这些输入得到合法或错误坐标，我们一律 Err
-    /// ——强类型构造即校验，不产出"静默别名到其他房间"的坐标。
+    /// 拒绝非法方向、错位方向和过大的数值，避免上游宽松方向判断产生别名。
+    /// 非 ASCII 数字两侧都无法作为十进制数字解析，不属于兼容性差异。
     #[test]
-    fn strict_rejects_official_loose_forms() {
+    fn rejects_invalid_directions_and_numbers() {
         for bad in ["X1N1", "E1X1", "W-100N5", "E١N1", "E2147483648N1"] {
-            assert!(RoomName::parse(bad).is_err(), "应拒绝官方宽松形态: {bad:?}");
+            assert!(
+                RoomName::parse(bad).is_err(),
+                "应拒绝不可解析房间名: {bad:?}"
+            );
         }
-        // 对照：垂直数值的负号是官方我方一致的合法形态（parseInt 认 -）
+        // 垂直负数仍按前缀整数读取，再应用 N 方向的取负减一。
         assert_eq!(RoomName::parse("E1N-5").unwrap(), RoomName { xx: 1, yy: 4 });
+    }
+
+    #[test]
+    fn formats_full_i32_coordinate_range() {
+        let room = RoomName {
+            xx: i32::MIN,
+            yy: i32::MIN,
+        };
+        assert_eq!(room.as_str(), "W2147483647N2147483647");
+        assert_eq!(room.to_string(), "W2147483647N2147483647");
+        let room = RoomName {
+            xx: i32::MAX,
+            yy: i32::MAX,
+        };
+        assert_eq!(room.as_str(), "E2147483647S2147483647");
+    }
+
+    #[test]
+    fn parsing_limits_and_prefixes() {
+        for name in ["E1S2extra", "E1S+2", "E1S 2"] {
+            assert_eq!(RoomName::parse(name).unwrap(), RoomName { xx: 1, yy: 2 });
+        }
+        assert_eq!(
+            RoomName::parse("E999N999999999").unwrap(),
+            RoomName {
+                xx: 999,
+                yy: -1_000_000_000,
+            }
+        );
+        for name in ["E001N1", "E1000N5", "E1N1000000000", "E1N１２"] {
+            assert!(RoomName::parse(name).is_err(), "解析限制: {name}");
+        }
+        for room in [
+            RoomName::from_xy(-1000, 999_999_999),
+            RoomName::from_xy(999, -999_999_999),
+        ] {
+            assert_eq!(RoomName::parse(&room.as_str()).unwrap(), room);
+        }
     }
 }

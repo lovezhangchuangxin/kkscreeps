@@ -1,7 +1,9 @@
-//! 基础数据层：游戏数值表、房间名编解码、地形编解码、带种子的随机数。
+//! 游戏基础数据：常量、房间坐标、地形和确定性伪随机数。
 //!
-//! 数值表由官方常量 dump 生成（`scripts/gen-constants.mjs`），不手抄。
-//! 设计见 docs/architecture/overall.md 与 docs/plans/m1-engine-skeleton.md。
+//! [`constants`] 由 `scripts/gen-constants.mjs` 根据上游常量数据生成。
+//! [`RoomName`] 使用带方向的房间坐标，不负责限制世界大小；
+//! [`Terrain`] 保存单房间的地形位码；[`SeededRng`] 提供可重复的随机序列。
+//! 本 crate 不执行游戏结算，也不管理世界状态或磁盘存储。
 
 pub mod constants;
 pub mod rng;
@@ -18,8 +20,8 @@ pub use terrain::{
 mod tests {
     use super::constants as c;
 
-    /// 生成物与官方常量 dump 的逐键一致性抽查：键总数 + M1 消费全集的值
-    /// + 嵌套 JSON 常量可解析回原值（全量逐键断言由生成脚本自校验承担）。
+    /// 检查常量数据的键数、生成文件的键完整性、部分关键值和嵌套 JSON。
+    /// 这不是全部常量值的逐键比较；生成器自校验也只检查键是否存在。
     #[test]
     fn constants_match_official_dump() {
         let dump: serde_json::Value =
@@ -27,7 +29,7 @@ mod tests {
         let obj = dump.as_object().unwrap();
         assert_eq!(obj.len(), 423, "官方 dump 键数");
 
-        // M1 结算消费全集（对照官方 constants.js 的关键值）
+        // 关键游戏数值的固定期望，用于发现常量变化。
         assert_eq!(c::HARVEST_POWER, 2);
         assert_eq!(c::BUILD_POWER, 5);
         assert_eq!(c::UPGRADE_CONTROLLER_POWER, 1);
@@ -50,7 +52,7 @@ mod tests {
         assert_eq!(c::TERRAIN_MASK_SWAMP, 2);
         assert_eq!(c::TERRAIN_MASK_LAVA, 4);
 
-        // 键存在性：生成物必须含 dump 的每个键（按生成规则命名）
+        // 每个源键都必须有对应声明；数字开头的键按生成规则加下划线。
         let written = include_str!("constants.rs");
         for key in obj.keys() {
             let ident = if key.starts_with(|ch: char| ch.is_ascii_digit()) {
