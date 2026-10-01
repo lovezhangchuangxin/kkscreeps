@@ -83,6 +83,9 @@ impl ThreadExecutor {
 
     /// 启动玩家线程并注册（等待创建回执——注册序 = 创建序）。
     pub fn spawn(&mut self, player: &str, config: kk_runner::SandboxConfig) -> anyhow::Result<()> {
+        if self.handles.contains_key(player) {
+            anyhow::bail!("玩家 {player} 已注册");
+        }
         self.next_id += 1;
         let id = self.next_id;
         self.pool.spawn_player(id, config)?;
@@ -379,10 +382,25 @@ mod tests {
             "rooms": { "W1N1": { "name": "W1N1" } },
             "objects": []
         });
-        let r = ex.execute(&world, &RunSpec::new("p1", "1 + 1"), RunEpoch::default());
+        let r = ex.execute(
+            &world,
+            &RunSpec::new("p1", "globalThis.registration = 42; 1 + 1"),
+            RunEpoch::default(),
+        );
         assert_eq!(r.outcome, RunOutcome::Executed, "简单表达式正常执行");
         assert_eq!(r.expr["value"], 2);
         assert!(r.intents.users.is_empty());
+        assert!(
+            ex.spawn("p1", kk_runner::SandboxConfig::default()).is_err(),
+            "重复注册不得替换现有玩家或多建线程"
+        );
+        assert_eq!(ex.len(), 1);
+        let r = ex.execute(
+            &world,
+            &RunSpec::new("p1", "globalThis.registration"),
+            RunEpoch::default(),
+        );
+        assert_eq!(r.expr["value"], 42, "重复注册失败后保留原沙箱");
         // 未知玩家：协调层错误（非 RunOutcome 形态的兜底——infra 分类）
         let r = ex.execute(&world, &RunSpec::new("ghost", ""), RunEpoch::default());
         assert!(!r.outcome.is_player_outcome(), "未注册玩家按 infra 兜底");
