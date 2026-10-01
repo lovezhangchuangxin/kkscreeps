@@ -51,7 +51,9 @@ pub(super) fn intent_build(w: &mut Working, id: ObjId, data: &IntentData) {
                 if name == "constructionSite" {
                     continue;
                 }
-                if site_is_obstacle && kk_world::types::is_obstacle_type(name.as_ref()) {
+                if name == site.structure_type
+                    || (site_is_obstacle && kk_world::types::is_obstacle_type(name.as_ref()))
+                {
                     return;
                 }
             }

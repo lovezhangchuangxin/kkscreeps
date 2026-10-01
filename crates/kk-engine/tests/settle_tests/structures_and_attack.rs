@@ -988,3 +988,88 @@ fn rampart_redirects_attack_until_broken() {
         _ => panic!(),
     }
 }
+
+#[test]
+fn build_rejects_existing_same_type_even_when_walkable() {
+    for existing_type in ["road", "container"] {
+        let mut f = Fixture::new(1, terrain_with(&[]));
+        if existing_type == "road" {
+            f.road_at(10, 10);
+        } else {
+            generic_structure(&mut f, 10, 10, "container", "p1", 1000);
+        }
+        let site = f.site(10, 10, "road", 0, 5, "p1");
+        let actor = f.creep(
+            "builder",
+            "p1",
+            11,
+            10,
+            &[BodyKind::Work, BodyKind::Carry],
+            5,
+        );
+        let mut batch = IntentBatch::default();
+        batch.add_object_intent("p1", actor, Action::Build, IntentData::target(site));
+        let events = f.settle(batch);
+        if existing_type == "road" {
+            assert!(f.world.get(site).is_some(), "同类型结构存在时保留工地");
+            assert_eq!(f.creep_state(actor).3, 5);
+            assert!(
+                !events
+                    .iter()
+                    .any(|e| e["event"] == kk_core::constants::EVENT_BUILD)
+            );
+        } else {
+            assert!(f.world.get(site).is_none(), "道路可与容器同格");
+            assert_eq!(f.creep_state(actor).3, 0);
+            assert!(
+                events
+                    .iter()
+                    .any(|e| e["event"] == kk_core::constants::EVENT_BUILD)
+            );
+        }
+    }
+}
+
+#[test]
+fn withdraw_respects_private_rampart_and_safe_mode() {
+    for (target_owner, rampart_public, room_owner, safe_mode, allowed) in [
+        ("p2", false, "p1", 0, false),
+        ("p2", true, "p1", 0, true),
+        ("p1", false, "p1", 0, true),
+        ("p1", true, "p2", 10, false),
+        ("p1", true, "p2", 0, true),
+        ("p1", true, "p1", 10, true),
+    ] {
+        let mut f = Fixture::new(1, terrain_with(&[]));
+        f.controller_full(8, Some(room_owner), |ctl| ctl.safe_mode = safe_mode);
+        let target = f.spawn("target", 10, 10, 100);
+        if let Some(RoomObject::Spawn(s)) = f.world.get_mut(target) {
+            s.owner = target_owner.into();
+        }
+        let rampart = generic_structure(&mut f, 10, 10, "rampart", "p2", 1000);
+        if let Some(RoomObject::Generic(g)) = f.world.get_mut(rampart) {
+            let mut v: Value = serde_json::from_str(&g.data).unwrap();
+            v["isPublic"] = serde_json::json!(rampart_public);
+            g.data = v.to_string();
+        }
+        let actor = f.creep("hauler", "p1", 11, 10, &[BodyKind::Carry], 0);
+        let mut data = IntentData::target(target);
+        data.amount = Some(10);
+        data.resource_type = Some("energy".into());
+        let mut batch = IntentBatch::default();
+        batch.add_object_intent("p1", actor, Action::Withdraw, data);
+        let events = f.settle(batch);
+        assert_eq!(
+            f.creep_state(actor).3,
+            if allowed { 10 } else { 0 },
+            "target_owner={target_owner}, public={rampart_public}, room_owner={room_owner}, safe_mode={safe_mode}"
+        );
+        assert_eq!(
+            events
+                .iter()
+                .filter(|e| e["event"] == kk_core::constants::EVENT_TRANSFER)
+                .count(),
+            usize::from(allowed)
+        );
+    }
+}

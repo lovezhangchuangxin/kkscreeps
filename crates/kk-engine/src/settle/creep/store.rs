@@ -113,14 +113,20 @@ pub(super) fn intent_withdraw(w: &mut Working, id: ObjId, data: &IntentData) {
     }
     let Some(target_id) = data.id else { return };
     // actor 的空容量按 store 全槽求和（官方 calcResources）——含命名矿物槽
-    let (pos, cap, held) = match w.creep(id) {
+    let (pos, owner, cap, held) = match w.creep(id) {
         Some(c) if !c.spawning && store_capacity(c) > 0 => (
             (c.x, c.y),
+            c.owner.clone(),
             store_capacity(c),
             kk_world::types::store_total(&c.store, &c.store_extra),
         ),
         _ => return,
     };
+    if w.controller()
+        .is_some_and(|ctl| ctl.owner.as_deref() != Some(owner.as_str()) && ctl.safe_mode > w.time)
+    {
+        return;
+    }
     let empty_space = cap - held;
     let Some(amount_req) = data.amount else {
         return;
@@ -151,6 +157,25 @@ pub(super) fn intent_withdraw(w: &mut Working, id: ObjId, data: &IntentData) {
         ),
         _ => return,
     };
+    let target = &w.room.objects[&target_id];
+    if kk_world::domain::object_owner(target).as_deref() != Some(owner.as_str())
+        && w.index
+            .at(t_pos.0 as usize, t_pos.1 as usize)
+            .iter()
+            .any(|tid| {
+                let Some(RoomObject::Generic(g)) = w.room.objects.get(tid) else {
+                    return false;
+                };
+                let Ok(v) = serde_json::from_str::<serde_json::Value>(&g.data) else {
+                    return false;
+                };
+                v["structureType"].as_str() == Some("rampart")
+                    && v["owner"].as_str() != Some(owner.as_str())
+                    && !v["isPublic"].as_bool().unwrap_or(false)
+            })
+    {
+        return;
+    }
     if (t_pos.0 as i32 - pos.0 as i32).abs() > 1 || (t_pos.1 as i32 - pos.1 as i32).abs() > 1 {
         return;
     }
