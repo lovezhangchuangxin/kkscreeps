@@ -1,10 +1,14 @@
-//! `kkscreeps bot-check` 子命令：bot 环境兼容性验收。
+//! 在固定世界数据中加载 bot 模块，并通过玩家沙箱反复调用入口。
 //!
-//! 在桩环境（deno_core + CJS 加载器 + lodash 预置 + stub Game）下加载真实社区 bot，
-//! 跑 N 个 tick 的 loop 循环，产出：运行结局统计、console 错误流（含重复行折叠）、
-//! 缺失 API 清单（get-trap 确定 missing + has-trap 低置信探测两桶）、桩方法调用统计。
-//! 退出码机器可判定：0 通过 / 1 基础设施失败 / 2 验收未通过（硬中断、未跑完——
-//! 跳帧也算未跑完、确定缺失 API 非零）；console 错误属登记项口径不硬判。
+//! 世界每轮只更新时间；玩家意图不送入引擎结算，不能用本工具验证采集、移动等
+//! 行为是否改变世界。Memory 和 JavaScript 全局变量仍在沙箱中跨轮保留。
+//!
+//! 退出码为 0（通过）、1（模块加载、通信或报告写入失败）、2（硬中断、
+//! 未完成全部请求 tick 或记录到缺失 API）。玩家逻辑错误只记录，不影响通过判定；
+//! Completed 也可能包含玩家异常，或 main 没有导出 loop 的情况。
+//!
+//! 缺失 API 统计只覆盖代理记录的访问，并排除预设忽略项；属性枚举不会触发该检测。
+//! 报告另列 in 运算符探测和计数器记录的方法调用，不能据此证明所有 API 都兼容。
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -15,13 +19,9 @@ use kk_runner::{ModuleTable, PlayerThreads, RunEpoch, SandboxConfig, TickOutcome
 
 const PLAYER: u64 = 0;
 
-/// 验收口径（外部复审 P2-6 限定）：本工具证明 bot 在沙箱底座上的**模块加载、
-/// loop 执行、API 面/运行时存活性**（零硬中断/零缺失）；其 intents 不进引擎
-/// 结算（静态夹具世界，无 Engine）——世界状态变化的验收随 A6 的统一驱动
-///（EmbedEngine tick 驱动注册玩家）落地。
+/// 运行检查并写入 JSON 报告，返回进程退出码；判定条件见本模块说明。
 pub fn run(path: &str, ticks: u32, report_path: &str) -> i32 {
     match run_inner(path, ticks, report_path) {
-        // 退出码：0 = 验收通过；1 = 基础设施失败；2 = 验收未通过（中断/缺失/未跑完）
         Ok(true) => 0,
         Ok(false) => 2,
         Err(e) => {
@@ -47,10 +47,8 @@ fn run_inner(path: &str, ticks: u32, report_path: &str) -> anyhow::Result<bool> 
     pool.spawn_player(PLAYER, SandboxConfig::default())?;
     pool.set_modules(PLAYER, table)?;
 
-    // tick 0 播种 `Memory.creeps = {}`（begin→expr→end 原子序，写回 RawMemory）。
-    // 夹具世界预置了 creep，而真实新服首 tick 无 creep——bot（tooangel）的角色
-    // 检查直接读 Memory.creeps（该对象由 creep.memory 访问或既有存档创建），
-    // 常态服务器上恒存在；播种把夹具对齐"bot 已运行过"的常态
+    // 夹具初始就有 creep，因此先建立 Memory.creeps，避免 bot 的角色检查
+    // 因缺少记录容器报错。这一轮只准备 Memory，不纳入后面的 tick 统计。
     pool.run_player(
         PLAYER,
         &home_world(0),
@@ -75,15 +73,14 @@ fn run_inner(path: &str, ticks: u32, report_path: &str) -> anyhow::Result<bool> 
     for t in 1..=ticks {
         let world = home_world(t);
         let report = pool.tick(PLAYER, &world)?;
-        // 按 plan 区分真实硬中断与跳帧 tick（跳帧的 outcome 也是 Terminated——
-        // runPlayer 的 executed=false 契约；统计上混计会把一次硬中断记成两次）
+        // 跳帧和执行后的硬中断都报告 Terminated，必须结合 plan 分开计数。
         match (&report.outcome, &report.plan) {
             (TickOutcome::Completed { .. }, _) => completed += 1,
             (TickOutcome::Terminated, TickPlan::SkipPenalty) => skipped_penalty += 1,
             (TickOutcome::Terminated, TickPlan::Run { .. }) => terminated += 1,
         }
-        // 玩家 loop 逻辑错误（bot 常自行 try/catch 后用 console.log 记录，
-        // 只看 error 级会漏——player_error 是更可靠的信号）
+        // Completed 只表示宿主入口返回；玩家异常和 Memory 写回失败须看 player_error。
+        // bot 自行捕获并用 console.log 记录的异常不计入 errored_ticks。
         if report.player_error.is_some() || report.console.iter().any(|l| l.level == "error") {
             errored_ticks += 1;
         }
@@ -95,8 +92,8 @@ fn run_inner(path: &str, ticks: u32, report_path: &str) -> anyhow::Result<bool> 
                 .entry(format!("[loop] {}", normalize_line(err)))
                 .or_insert(0) += 1;
         }
-        // 重复行折叠（数字归一）：bot 自捕获异常逐 tick 重打——多为 log/error 级，
-        // 折叠覆盖全部级别且不受 head 截幅影响（head 只限量原文留存）
+        // 归一化计数覆盖所有日志级别，不受原文保存数量限制。
+        // console_errors_folded 因而也包含 log 等级的行，便于查看 bot 自行捕获的异常。
         for line in report.console {
             if line.level == "error" && console_errors.len() < 300 {
                 console_errors.push(format!("[tick {t}] {}", line.text));
@@ -108,8 +105,8 @@ fn run_inner(path: &str, ticks: u32, report_path: &str) -> anyhow::Result<bool> 
                 console_head.push(format!("[tick {t}][{}] {}", line.level, line.text));
             }
         }
-        // 仪表两桶：missing（get-trap 确定缺失）计验收；hasProbes（has-trap 低置信，
-        // 可能是否定式能力探测）仅随报告留存
+        // 直接访问不存在的属性计入 missing；in 检查可能只是能力探测，
+        // hasProbes 单独报告，不参与通过判定。
         merge_counts(&mut missing_api, &report.missing_api["missing"]);
         merge_counts(&mut has_probes, &report.missing_api["hasProbes"]);
         merge_counts(&mut stub_calls, &report.stub_calls);
@@ -182,10 +179,8 @@ fn run_inner(path: &str, ticks: u32, report_path: &str) -> anyhow::Result<bool> 
     Ok(verdict == Verdict::Pass)
 }
 
-/// 机器可判定验收（测试-4 清偿）。硬判三项：硬中断（官方不可恢复事故）、
-/// 未跑完（completed < ticks——跳帧也算：该 tick 玩家代码未执行即覆盖不完整，
-/// 失败消息明示跳帧数供归因）、确定缺失 API 非空。console 错误不硬判
-/// （bot 自捕获异常属登记项口径，人工裁量——overmind 每 tick 1 条即此类）。
+/// 是否存在硬中断、未完成的 tick 或记录到的缺失 API。
+/// 玩家错误和普通日志不参与该判定，详见模块说明。
 #[derive(Debug, PartialEq)]
 enum Verdict {
     Pass,
@@ -237,7 +232,8 @@ fn top(map: &BTreeMap<String, u64>, n: usize) -> Vec<(String, u64)> {
     v
 }
 
-/// 重复行归一：连续数字段替换为 #（tick 号、坐标、计数等），同源错误可折叠计数。
+/// 把连续 ASCII 数字替换为 #，将仅 tick、坐标或数量不同的日志合并计数。
+/// 这也会合并数字不同的对象名，因此分组用于诊断，不能代替原始日志。
 fn normalize_line(line: &str) -> String {
     let mut out = String::with_capacity(line.len());
     let mut in_digits = false;
@@ -255,8 +251,8 @@ fn normalize_line(line: &str) -> String {
     out
 }
 
-/// 地形全平原——Terrain 面（getTerrain/lookFor(LOOK_TERRAIN)）经世界 JSON 的
-/// rooms[].terrain 生效，tooangel 布局阶段依赖它。
+/// 构造固定房间和对象，每轮只改变 time。地形为 2500 个平原格，
+/// 玩家 API 从 rooms 的 terrain 字段读取；CPU 占位字段由沙箱实际预算覆盖。
 fn home_world(t: u32) -> Value {
     let plains: Vec<u8> = vec![0; 2500];
     json!({
@@ -286,7 +282,7 @@ fn home_world(t: u32) -> Value {
 mod tests {
     use super::{Verdict, normalize_line, verdict};
 
-    /// 判定口径锁定：跳帧也算未跑完（覆盖不完整）；console 错误不在判定面。
+    /// 跳帧导致完成数量不足，硬中断和记录到的缺失 API 各自使判定失败。
     #[test]
     fn verdict_thresholds() {
         assert_eq!(verdict(0, 100, 0, 100, 0), Verdict::Pass);

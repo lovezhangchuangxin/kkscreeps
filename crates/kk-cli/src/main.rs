@@ -1,7 +1,5 @@
-//! `kkscreeps` 命令行入口——一个二进制，多种运行方式（docs/architecture/overall.md）。
-//!
-//! M0 交付的子命令：`embed`（screeps-ok 适配器的 sidecar 服务）、`bot-check`（bot 环境验收）。
-//! 其余子命令为占位，随各自里程碑实装。
+//! 解析命令行参数并分派到嵌入式服务、bot 检查或性能采集工具。
+//! serve、sim、test、import 当前只保留命令入口，调用时返回退出码 2。
 
 use clap::{Parser, Subcommand};
 
@@ -18,19 +16,19 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// 运行完整游戏服务器（游戏循环 + 网络接口）——M3
+    /// 运行游戏服务器（尚未实现）
     Serve,
-    /// 本地模拟与集成测试（无网络、内存即存储）——M2.5
+    /// 运行本地模拟（尚未实现）
     Sim,
-    /// 断言测试套件（退出码供 CI 使用）——M2.5
+    /// 运行断言测试套件（尚未实现）
     Test,
-    /// 导入官方世界数据等运维工具——M4
+    /// 导入世界数据（尚未实现）
     Import,
-    /// screeps-ok 适配器的 sidecar：stdin/stdout 上的一行一条 JSON-RPC——M0
+    /// 通过 stdin/stdout 提供逐行 JSON 的嵌入式调用服务
     Embed,
-    /// bot 环境兼容性验收：桩环境下加载 bot 跑 N 个 tick，产出缺失 API 清单——M0
+    /// 在固定世界中运行 bot，输出 API 访问和错误统计
     BotCheck {
-        /// bot 模块目录（含 main.js 或构建产物）
+        /// bot 模块目录（支持 .js 和 .wasm 文件）
         #[arg(long)]
         path: String,
         /// 要跑的 tick 数
@@ -40,7 +38,7 @@ enum Command {
         #[arg(long, default_value = "bot-check-report.json")]
         report: String,
     },
-    /// 性能观测点实测：EmbedEngine 闭环阶段耗时（投影/玩家运行/结算）——A6
+    /// 运行采集、升级和孵化负载，统计投影、执行、结算与整轮耗时
     PerfProbe {
         /// 采集 tick 数
         #[arg(long, default_value_t = 1000)]
@@ -48,7 +46,7 @@ enum Command {
         /// 预热 tick 数（不计入汇总）
         #[arg(long, default_value_t = 100)]
         warmup: u32,
-        /// 玩家数（每玩家独立沙箱 + 自有房）
+        /// 玩家数；每玩家独立房间，小于 1 按 1 运行，大于 8 按 8 运行
         #[arg(long, default_value_t = 2)]
         players: u32,
         /// 报告输出路径（JSON）

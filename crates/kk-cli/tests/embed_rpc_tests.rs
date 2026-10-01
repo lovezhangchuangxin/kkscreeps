@@ -1,7 +1,4 @@
-//! `kkscreeps embed` 传输层的最小 JSON-RPC 往返测试（管道驱动）。
-//!
-//! 覆盖 embed_main.rs 的方法分派、rpc_id 回退（非法请求也带回原 id 的错误响应）
-//! 与 EOF 退出语义——此前该层只靠 CI 上恒 skip 的 smoke 测试覆盖。
+//! 用子进程管道验证逐行 JSON 协议：方法分派、请求错误、id 回传及 EOF 退出。
 
 use std::io::Write;
 use std::process::{Command, Stdio};
@@ -34,7 +31,7 @@ fn embed_rpc_roundtrip() -> anyhow::Result<()> {
         r#"{"id":7,"method":"runPlayers","params":{"codes":{"p1":null}}}"#.to_string(),
         r#"{"id":8,"method":"getGameTime","params":{}}"#.to_string(),
     ];
-    // 所有路径都保证 wait（不留 zombie）；写失败也要等子进程退出后再返回错误
+    // 写入失败也先关闭 stdin 并等待子进程退出，避免直接返回留下未回收的进程。
     let mut write_err = None;
     for req in &requests {
         if let Err(e) = writeln!(stdin, "{req}") {

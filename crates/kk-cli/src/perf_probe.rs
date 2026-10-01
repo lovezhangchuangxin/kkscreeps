@@ -1,37 +1,27 @@
-//! `kkscreeps perf-probe` 子命令：M2A 性能观测点的小规模负载实测（A6 交付，
-//! [performance-acceptance](../../docs/architecture/performance-acceptance.md)
-//! 「阶段耗时」口径）。
+//! 驱动 EmbedEngine 运行多玩家负载，采集各阶段耗时并输出 JSON 报告。
 //!
-//! 驱动 EmbedEngine 的完整闭环（per-viewer 投影 → 真实沙箱玩家代码 → intent
-//! 清洗 → 结算），玩家代码走真实 API 面（find/spawnCreep/harvest/
-//! upgradeController）。产出：各阶段 p50/p95/max 表 + JSON 报告 +
-//! 工作负载自检（空转形态非零退出，B0-6 登记项的结构性防复发）。
-//! 这是 M2A 的架构验收通道；正式场景基线（场景 A/C × 3 实现 × ≥5 次独立
-//! 运行）随 M2B 基准批次，本工具届时复用同一观测点。
+//! 每玩家拥有独立房间，使用玩家 API 孵化、采集和升级。预热后清空耗时样本，
+//! 报告投影、执行、结算和整次调用的统计，定义沿用 kk-runtime::EmbedEngine。
+//! 最多记录 50,000 个采集样本，后续 tick 仍运行但不加入耗时统计。
+//! 负载自检只检查首房的控制器进度和 source 能量；通过不代表每房均得到验证。
 //!
-//! 窗口语义注记（长跑分段，登记）：初始 creep 的 ageTime=放置时刻+1500
-//!（place 缺省，CREEP_LIFE_TIME）——`warmup+ticks` 超 ~1500 后窗中出现
-//! TTL 死亡分段（墓碑结算/种群回落/spawn 重孵）；M2B 正式口径（预热 ≥500
-//! + 采集 ≥3000）跑长窗时须注记该段或届时夹具摆长 ttl creep（place 支持）。
+//! 初始 creep 寿命为 1500 tick。预热与采集合计超过其寿命时，会发生死亡、
+//! 墓碑衰减和重新孵化，长窗口的工作负载不能视为始终不变。
 
 use std::collections::BTreeMap;
 
 use kk_runtime::EmbedEngine;
 use serde_json::{Value, json};
 
-/// 夹具布局（与距离预算微测 `fixture_distance_budget` 共用单源）。
-/// controller 由 create_shard 硬编码在 (1,1)（embed.rs）；**source 放置序
-/// 即 `FIND_SOURCES[0]` 的取序**（放置序=ObjId 升序=world JSON objects 数组
-/// 序）——首源 (2,2) 是被采集的源，勿重排放置数组。出生落位语义见
-/// tests::BORN_TILES。
+/// 按此顺序摆放 source，玩家脚本固定采集 `FIND_SOURCES[0]`。
+/// 同房对象按 ID 升序投影，因此首源必须保留在 (2,2)。
 const SOURCES: [(u8, u8); 2] = [(2, 2), (1, 3)];
 const SPAWN: (u8, u8) = (3, 3);
-/// 放置的 3 只工作 creep（两臂都在程内：到首源 ≤1 且到 controller ≤3）。
+/// 初始 creep 坐标，距首源不超过 1、距控制器不超过 3。
 const CREEPS: [(u8, u8); 3] = [(2, 1), (1, 2), (3, 1)];
 
-/// 负载玩家代码：真实 API 面（装配 + find + spawn + 动作 intent 预检）。
-/// spawn 上限 6 只防种群爆炸；harvest/upgrade 走已就绪执行器。
-/// directions [TOP, LEFT] 控制出生落位到 BORN_TILES（见布局注释）。
+/// 有能量时升级，空仓时采集首源；少于 6 个 creep 且 spawn 空闲时请求孵化。
+/// 只选择 TOP、LEFT 出生，确保成功出生的 creep 仍在采集和升级范围内。
 fn player_code() -> String {
     r#"
 const spawn = Game.spawns && Object.values(Game.spawns)[0];
@@ -52,15 +42,12 @@ Game.time
     .to_string()
 }
 
-/// 房名按玩家序横排（W{i}N1）——单房每玩家，避免跨房视野交互（场景 C 的
-/// 共享房变体随 M2B 基准 fixture 锁定）。
+/// 每名玩家单独使用一个房间，避免共享对象产生玩家间竞争。
 fn room_name(i: u32) -> String {
     format!("W{i}N1")
 }
 
-/// 工作负载观测（经公共读取面，不旁窥内部状态；只采样首房——多玩家下
-/// 各房脚本与坐标同构，抽样自检）：controller 进度、source 最低能量、
-/// 是否全部满容量。
+/// 一个房间在采样时的 source 最低能量，以及是否全部达到容量。
 struct SourceObs {
     energy_min: i64,
     all_at_capacity: bool,
@@ -118,11 +105,8 @@ fn run_inner(ticks: u32, warmup: u32, players: u32, report_path: &str) -> anyhow
         "rooms": rooms,
     }))?;
 
-    // 每房负载：2 source + 1 spawn + 3 creep（约 400 对象的 B 场景缩比——
-    // 观测点验收的是阶段形态非绝对量级）。距离预算与出生落位语义见布局
-    // 常量注释与 fixture_distance_budget 微测（B0-6 夹具空转清偿：注释
-    // 曾自述「出生即工作」与引擎出生语义不符，评审 1 P1——现 directions
-    // 控制落位、注释如实）。
+    // 初始放置 3 个工作 creep，指定出生格还能容纳 2 个。
+    // 出口被占用时孵化会等待；初始 creep 死亡后出口才可能再次可用。
     for i in 0..players {
         let room = room_name(i);
         let owner = format!("p{}", i + 1);
@@ -164,7 +148,7 @@ fn run_inner(ticks: u32, warmup: u32, players: u32, report_path: &str) -> anyhow
     for _ in 0..warmup {
         e.run_players(&codes)?;
     }
-    // 工作负载基线（采集前）：progress 增量与 source 采空证据的对照起点
+    // 在采集窗口前读取首房状态，并清空预热耗时样本。
     let (progress_before, obs_before) = workload_probe(&e, &room_name(0))?;
     let mut harvest_observed = !obs_before.all_at_capacity;
     e.perf_reset();
@@ -242,22 +226,16 @@ fn run_inner(ticks: u32, warmup: u32, players: u32, report_path: &str) -> anyhow
     Ok(())
 }
 
-/// 距离预算微测：放置位与出生位逐点锁预算（harvest ≤1 到某源、upgrade ≤3
-/// 到 controller）、占位互斥（出生落位取首个空闲方向格，被占即失效）、
-/// 被采集源=放置首源（FIND_SOURCES[0] 取序耦合）。
+/// 检查负载布局，以及 source 再生不会使正常采集被误判。
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// controller 由 create_shard 硬编码（embed.rs），夹具只依赖不摆放。
+    /// create_shard 默认控制器坐标；本夹具使用该默认值。
     const CONTROLLER: (u8, u8) = (1, 1);
-    /// 出生落位：spawnCreep `directions:[TOP, LEFT]`（player_code）→ 首个
-    /// 空闲方向格——(3,2)/(2,3) 两格都在程内。第三只孵出（spawn 雁流后）
-    /// 时两格已占：二次扫描在 directions 外找到空位 → born_creep 判「有
-    /// 出口但未选」逐 tick 顺延（spawn.rs 不 spawnstomp 重试语义）→
-    /// **永不完成出生**，雏形滞留 spawn 格 (3,3)（程内，spawning=true
-    /// 无动作）——实际负载=3 放置+2 出生共 5 只工作 creep（第一轮外部
-    /// 复审 P2-1 勘正：旧注「兜底落 (4,2) 程外」的路径在本夹具不可达）。
+    /// TOP、LEFT 对应的出生格。两格都在动作范围内，且不与初始 creep 重叠。
+    /// 两格都被占用时，孵化会逐 tick 等待，不能改为使用范围外的其他出口；
+    /// 等待持续到所选出口释放，长窗口中初始 creep 死亡后可能继续出生。
     const BORN_TILES: [(u8, u8); 2] = [(3, 2), (2, 3)];
 
     fn chebyshev(a: (u8, u8), b: (u8, u8)) -> u32 {

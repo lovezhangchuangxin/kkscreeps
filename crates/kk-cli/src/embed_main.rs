@@ -1,10 +1,12 @@
-//! `kkscreeps embed` 子命令：嵌入式 API 的 stdio 传输层（M0）。
+//! 通过 stdin/stdout 提供 kk-runtime::EmbedEngine 的逐行 JSON 调用协议。
 //!
-//! screeps-ok 的 TS 适配器（compat/）spawn 本命令，在 stdin/stdout 上以
-//! "一行一条 JSON-RPC" 通信：请求 `{"id":n,"method":"...","params":{...}}`，
-//! 响应 `{"id":n,"ok":true,"result":...}` 或 `{"id":n,"ok":false,"error":"..."}`。
-//! EOF 即退出。方法集与 kk-engine::EmbedEngine（嵌入式 API）一一对应——
-//! 该接口同时是 `kkscreeps sim` 的驱动接口（ADR-008 第 8 条）。
+//! 请求格式为 `{"id":n,"method":"...","params":{...}}`；响应为
+//! `{"id":n,"ok":true,"result":...}` 或 `{"id":n,"ok":false,"error":"..."}`。
+//! 请求串行处理，每条响应立即刷新 stdout。空行忽略；缺少 id 或 JSON 无法解析时，
+//! 响应 id 为 null。方法调用出错后仍可处理后续请求。
+//!
+//! 关闭 stdin、读取失败或写出失败时回收玩家线程并退出。teardown 只重置引擎，
+//! 不结束进程。此协议使用自定义 ok/error 字段，不采用标准 JSON-RPC 2.0 消息格式。
 
 use std::io::{BufRead, Write};
 
@@ -28,7 +30,7 @@ pub fn run() -> i32 {
             Err(e) => json!({ "id": rpc_id(&line), "ok": false, "error": e.to_string() }),
         };
         if writeln!(out, "{resp}").and_then(|_| out.flush()).is_err() {
-            break; // 父进程已退出
+            break; // 输出管道不可用时停止服务，随后回收沙箱。
         }
     }
     engine.teardown();
@@ -67,8 +69,6 @@ fn handle_line(engine: &mut EmbedEngine, line: &str) -> anyhow::Result<Value> {
             let id = engine.place_object(room, kind, &spec)?;
             json!({ "id": id })
         }
-        // 2B 批 P2：市场订单注入（官方 adapter 契约 placeMarketOrder——
-        // vanilla adapter index.ts:1415 形状）
         "placeMarketOrder" => {
             let spec = params.get("spec").cloned().unwrap_or_else(|| json!({}));
             let id = engine.place_market_order(&spec)?;
@@ -140,7 +140,7 @@ fn handle_line(engine: &mut EmbedEngine, line: &str) -> anyhow::Result<Value> {
             }
         }
         "teardown" => {
-            // 只重置（世界+沙箱回收），进程保留复用；真正退出靠父进程关 stdin（EOF）
+            // 只重置世界和沙箱，保留进程供下一次 createShard 使用。
             engine.teardown();
             json!({ "done": true })
         }

@@ -1,6 +1,6 @@
 [package]
 name = "kk-cli"
-description = "kkscreeps 命令行入口：组装引擎、沙箱、存储与网络模块"
+description = "嵌入式调用服务、bot 检查与性能采集的命令行工具"
 version.workspace = true
 edition.workspace = true
 
