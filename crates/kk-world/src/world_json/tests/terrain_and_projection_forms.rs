@@ -3,6 +3,41 @@
 
 use super::*;
 
+#[test]
+fn storage_named_resources_reach_all_projections() {
+    let mut world = World::new(1);
+    world.register_room("W1N1", Terrain::plains());
+    let storage = normalize(
+        "structure",
+        &json!({
+            "pos": [10, 10], "structureType": "storage", "owner": "p1",
+            "store": { "energy": 0, "G": 5, "U": 12, "XUHO2": 6, "Z": 0 },
+        }),
+        &PlaceCtx {
+            time: 0,
+            controller: None,
+            name_seq: 0,
+        },
+    )
+    .unwrap();
+    let id = world.insert("W1N1", storage).unwrap();
+    let expected = json!({ "energy": 0, "G": 5, "U": 12, "XUHO2": 6 });
+    assert_eq!(world.object_json_by_id(id).unwrap()["store"], expected);
+    assert_eq!(world.world_json()["objects"][0]["store"], expected);
+    assert_eq!(
+        world.world_json_for_viewer("p1", 0)["objects"][0]["store"],
+        expected
+    );
+    assert_eq!(
+        world.find_in_room("W1N1", c::FIND_STRUCTURES, None)[0].1["store"],
+        expected
+    );
+    assert_eq!(
+        world.object_snapshot_by_id(id).unwrap()["store"],
+        json!({ "G": 5, "U": 12, "XUHO2": 6 })
+    );
+}
+
 /// 地形缓存行为（P3）：纪元内载荷确定（多次投影一致）；纪元递增后
 /// 载荷随新地形重编码（无陈旧命中）。
 #[test]

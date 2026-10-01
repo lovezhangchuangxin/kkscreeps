@@ -513,7 +513,7 @@ pub(crate) fn object_json(
             "type": "structure", "structureType": "storage",
             "id": id_str, "room": room, "x": o.x, "y": o.y,
             "owner": o.owner,
-            "store": store_json(&o.store),
+            "store": store_with_extra_json(&o.store, &o.store_extra),
             // 官方 storage 落库带数值 storeCapacity（build.js:150-156）、无
             // storeCapacityResource——Store.getCapacity() 读数值（A4-i Store 族）
             "storeCapacity": c::STORAGE_CAPACITY,
