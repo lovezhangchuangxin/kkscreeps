@@ -166,22 +166,23 @@ fn run_inner(ticks: u32, warmup: u32, players: u32, report_path: &str) -> anyhow
     }
     // 工作负载基线（采集前）：progress 增量与 source 采空证据的对照起点
     let (progress_before, obs_before) = workload_probe(&e, &room_name(0))?;
+    let mut harvest_observed = !obs_before.all_at_capacity;
     e.perf_reset();
     for _ in 0..ticks {
         e.run_players(&codes)?;
+        if !harvest_observed {
+            let (_, obs) = workload_probe(&e, &room_name(0))?;
+            harvest_observed = !obs.all_at_capacity;
+        }
     }
 
-    // 工作负载自检（B0-6 登记项清偿）：断言真负载发生，空转形态（动作全
-    // 被 API 预检拒绝、零 intent）非零退出，防夹具再退化成「自述真实、
-    // 实际空转」。双臂口径（评审 2 F2/评审 3 P1-1 清偿）：
-    // - progress 增量 >0：upgrade 臂存活的主判（B0-6 空转形态 progress 恒 0）；
-    // - 采集证据：窗口足够长（首采在初始存量耗尽后 ~tick 51 起，双边界
-    //   采样取或）且两边界全满容量才判死——单边界落在 source 300-tick
-    //   再生回填点（回填即满容量）会假红，双边界同时命中缩小 ~300 倍；
-    //   短窗口（<100 tick）采集臂尚未启动，跳过该断言。
+    // 只检查首房：控制器进度须增加；合计至少 100 tick 时，还须观察到 source 未满。
+    // 检查采集期间的状态，不能只看两个边界：source 再生可使它们同时满容量。
+    // 一旦观察到未满便停止额外查询；查询在 run_players 的耗时样本之外。
     let (progress_after, obs_after) = workload_probe(&e, &room_name(0))?;
     let progress_delta = progress_after - progress_before;
-    let window_long_enough = warmup + ticks >= 100;
+    let elapsed_ticks = u64::from(warmup) + u64::from(ticks);
+    let window_long_enough = elapsed_ticks >= 100;
     if progress_delta <= 0 {
         anyhow::bail!(
             "工作负载自检失败：upgrade 臂空转（progress 增量 {progress_delta}、\
@@ -191,11 +192,10 @@ fn run_inner(ticks: u32, warmup: u32, players: u32, report_path: &str) -> anyhow
             obs_after.energy_min
         );
     }
-    if window_long_enough && obs_before.all_at_capacity && obs_after.all_at_capacity {
+    if window_long_enough && !harvest_observed {
         anyhow::bail!(
-            "工作负载自检失败：采集臂无证据（窗口 {} tick 内两边界 source 均\
-             满容量，首采应于 ~tick 51 发生）——检查 harvest 分支与源放置序",
-            warmup + ticks
+            "工作负载自检失败：未观察到采集（预热与采集合计 {elapsed_ticks} tick，\
+             采集期间首房 source 始终满容量）——检查 harvest 分支与源放置序"
         );
     }
 
@@ -262,6 +262,23 @@ mod tests {
 
     fn chebyshev(a: (u8, u8), b: (u8, u8)) -> u32 {
         u32::from(a.0.abs_diff(b.0)).max(u32::from(a.1.abs_diff(b.1)))
+    }
+
+    /// 第 309 tick 的再生使首尾 source 都满容量；中途实际采集仍应使自检通过。
+    #[test]
+    fn source_regeneration_does_not_hide_harvesting() -> anyhow::Result<()> {
+        let path = std::env::temp_dir().join(format!(
+            "kkscreeps-perf-regeneration-{}.json",
+            std::process::id()
+        ));
+        run_inner(309, 0, 1, &path.to_string_lossy())?;
+        let report: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
+        std::fs::remove_file(path)?;
+        assert!(report["workload"]["progress_delta"].as_i64().unwrap() > 0);
+        assert_eq!(report["workload"]["source_energy_min_before"], 3000);
+        assert_eq!(report["workload"]["source_energy_min_after"], 3000);
+        assert_eq!(report["phases"]["ticks"], 309);
+        Ok(())
     }
 
     #[test]
