@@ -405,3 +405,7 @@ R6 D1–D7与冻结API未重开；正常光照不扩档，长期验收暂缓且�
 
 后续[放大黑屏修复](../research/notes/renderer-zoom-verification-2026-10-01.md)已通过双后端短GPU回归；
 沼泽MaskFilter按视口裁剪并自行释放，R6冻结决策与公共API不变。
+
+其后[RoomVisual缓存复核](../research/notes/renderer-visual-reuse-verification-2026-10-01.md)
+保留全量替换语义、绝对坐标与既有样式；双后端各8项GPU对照零差异。
+R6冻结面仍未重开，完整R7性能/内存验收继续按用户暂缓长测挂账。

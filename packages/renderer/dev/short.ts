@@ -39,6 +39,28 @@ document.querySelector('#memory')?.addEventListener('click', () => void run('sho
   return { warmupTicks: 100, measuredTicks: 100, stepsPerTick: 15, matchingEndpointPhase: 'tick 100 and 200 = pressure phase 0', windows, reset, afterReset: await sample() };
 }));
 document.querySelector('#parity')?.addEventListener('click', () => void run('cover-reuse-parity', () => window.r7.coverReuseParity()));
+document.querySelector('#visual')?.addEventListener('click', () => void run('visual-fingerprint', () => window.r7.visualFingerprint()));
+document.querySelector('#visualBench')?.addEventListener('click', () => void run('visual-benchmark', () => window.r7.visualBenchmark()));
+document.querySelector('#visualMiss')?.addEventListener('click', () => void run('visual-miss-benchmark', () => window.r7.visualBenchmark(true)));
+document.querySelector('#recovery')?.addEventListener('click', () => void run('delta-recovery', () => window.r7.recovery()));
+document.querySelector('#matrix')?.addEventListener('click', () => void run('short-matrix', async () => ({
+  static: await window.r7.frames(false, 1, 90, 30),
+  moving1x: await window.r7.frames(true, 1, 90, 30),
+  moving4x: await window.r7.frames(true, 4, 90, 30),
+  hover: await window.r7.hover(1000), hoverMove: await window.r7.hoverMove(200),
+})));
+document.querySelector('#gpu')?.addEventListener('click', () => void run('short-gpu', async () => ({
+  serial: await window.r7.serial(60, 20),
+  timestamps: new URLSearchParams(location.search).get('gpu') === 'timestamp' ? await window.r7.timestamps(60, 20) : null,
+})));
+document.querySelector('#repeat')?.addEventListener('click', () => void run('short-cpu-repeat', async () => {
+  const trials = [];
+  for (let i = 0; i < 3; i++) trials.push({ trial: i + 1, snapshots: await window.r7.snapshots(40), frames: await window.r7.frames(true, 4, 180, 30) });
+  return { trials };
+}));
+document.querySelector('#rebuild')?.addEventListener('click', () => void run('short-rebuild', async () => ({
+  rekey: await window.r7.snapshots(30, true), terrain: await window.r7.snapshots(30, false, true),
+})));
 
 document.querySelector('#official')!.addEventListener('click', () => {
   const url = new URL(location.href);

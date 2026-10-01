@@ -88,9 +88,11 @@ export function attachPerf(handle: RendererHandle, kernel: Kernel, room: RoomSce
       inApply = true;
       try { return old(...args); } finally {
         inApply = false;
-        viewsCreated += [...stage.views.values(), ...stage.dying.values()].filter((view: Runtime) => !previousRoots.has(view.root)).length;
-        viewsDestroyed += [...previousRoots].filter((root: Runtime) => root.destroyed).length;
-        applies.push({ ...applyParts, totalMs: performance.now() - t, gateEvaluated: gateEvaluated - evaluated, gateWrites: gateWrites - writes, gateNull: gateNull - nulls, snapshot: Number(args[3] === 'snapshot') });
+        const created = [...stage.views.values(), ...stage.dying.values()].filter((view: Runtime) => !previousRoots.has(view.root)).length;
+        const destroyed = [...previousRoots].filter((root: Runtime) => root.destroyed).length;
+        viewsCreated += created; viewsDestroyed += destroyed;
+        applies.push({ ...applyParts, totalMs: performance.now() - t, viewsCreated: created, viewsDestroyed: destroyed,
+          gateEvaluated: gateEvaluated - evaluated, gateWrites: gateWrites - writes, gateNull: gateNull - nulls, snapshot: Number(args[3] === 'snapshot') });
       }
     });
     wrap(stage.tweens, 'run', (old, args) => { const size = stage.tweens.size; const done = args[1]; const result = old(args[0], () => { tweenEnded++; done?.(); }); tweenCreated += Math.max(0, stage.tweens.size - size); return result; });
@@ -184,7 +186,9 @@ export function attachPerf(handle: RendererHandle, kernel: Kernel, room: RoomSce
         graphicsContextSlots: Object.keys(renderer.graphicsContext?._managedContexts?.items ?? {}).length,
         canvasTextActive: Object.values(renderer.canvasText?._activeTextures ?? {}).filter(Boolean).length,
         bindGroups: liveGroups, nullSlots, destroyedSlots, sourceChanges, destroyedResourceChanges,
-        profiling, frames, viewsCreated, viewsDestroyed, gateEvaluated, gateNull, gateEqual, gateChanged, gateWrites, animatedWrites, partCounts,
+        profiling, frames, viewsCreated, viewsDestroyed, gateEvaluated, gateNull, gateEqual, gateChanged, gateWrites, animatedWrites,
+        // Checkpoints must retain their sampled values, not the mutable counters.
+        partCounts: Object.fromEntries(Object.entries(partCounts).map(([key, value]) => [key, { ...value }])),
         tweenCreated, tweenEnded, tweenCancelled, tweenActive: stage?.tweens.active.size ?? 0, tweenPending: stage?.tweens.pending.length ?? 0,
         feedRooms: feed.roomNames().length, feedObjects: feed.roomNames().reduce((n, name) => n + (feed.summary(name)?.objects ?? 0), 0),
         feedPoolLeases: null, atlasFrameRefs: atlas?.frames.size ?? 0, standaloneLeases: atlas?.standalone.size ?? 0,

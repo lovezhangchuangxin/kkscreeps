@@ -35,13 +35,13 @@ describe('VisualStage', () => {
     expect(stage.root.children.length).toBe(5);
   });
 
-  it('同引用零成本短路；新引用全量重建（节点重建不累积）', () => {
+  it('同引用短路；新引用复用同类节点且不累积', () => {
     stage.setVisuals(visuals);
     const firstBefore = stage.root.children[0];
     stage.setVisuals(visuals);
     expect(stage.root.children[0]).toBe(firstBefore); // 引用相同 → 不重建
     stage.setVisuals([...visuals]);
-    expect(stage.root.children[0]).not.toBe(firstBefore); // 新引用 → 重建
+    expect(stage.root.children[0]).toBe(firstBefore); // 新引用 → 全量重绘，节点复用
     expect(stage.root.children.length).toBe(5);
   });
 
@@ -61,7 +61,8 @@ describe('VisualStage', () => {
       ? [node.context] : node.children.filter((c): c is Graphics => c instanceof Graphics).map(c => c.context));
     expect(contexts).toHaveLength(5);
     stage.setVisuals([visuals[0]!]);
-    expect(contexts.every(context => context.destroyed)).toBe(true);
+    expect(contexts[0]!.destroyed).toBe(false);
+    expect(contexts.slice(1).every(context => context.destroyed)).toBe(true);
     const last = (stage.root.children[0] as Graphics).context;
     stage.destroy(); expect(last.destroyed).toBe(true);
   });
@@ -97,17 +98,117 @@ describe('VisualStage', () => {
     expect(bg.getBounds().y).toBeCloseTo(20);
     expect(bg.getBounds().height).toBeCloseTo(160);
   });
-  it('重建时旧 Text 以四标志精确销毁（评审 C建议8：canvas 私有源纪律锚）', () => {
+  it('复用 Text 更新内容，移除时以四标志精确销毁', () => {
     const spy = vi.spyOn(Text.prototype, 'destroy');
     try {
       stage.setVisuals([{ type: 'text', x: 1, y: 1, text: 'a' }]);
+      const text = stage.root.children[0]!.children[0] as Text;
       stage.setVisuals([{ type: 'text', x: 1, y: 1, text: 'b' }]);
+      expect(stage.root.children[0]!.children[0]).toBe(text);
+      expect(text.text).toBe('b');
+      expect(spy).not.toHaveBeenCalled();
+      stage.setVisuals([]);
       expect(spy).toHaveBeenCalledWith(
         expect.objectContaining({ style: true, texture: true, textureSource: true }),
       );
     } finally {
       spy.mockRestore();
     }
+  });
+
+  it('无效槽位不挪用后续节点；变类与缩短按身份销毁', () => {
+    stage.setVisuals(visuals);
+    const old = [...stage.root.children];
+    const dirty = [{ type: 'banana' }, visuals[1], visuals[0]] as unknown as RoomVisual[];
+    stage.setVisuals(dirty);
+    expect(stage.root.children[0]).toBe(old[1]);
+    expect(stage.root.children[1]).not.toBe(old[2]);
+    expect(old[0]!.destroyed).toBe(true);
+    expect(old[2]!.destroyed).toBe(true);
+    expect(stage.count).toBe(2);
+    stage.setVisuals([visuals[2]!, visuals[1]!]);
+    expect(stage.root.children[1]).toBe(old[1]);
+    expect(stage.count).toBe(2);
+  });
+
+  it('复用 Graphics 清除旧路径；新数组中同一原语被修改仍重绘', () => {
+    const circle: RoomVisual = { type: 'circle', x: 3, y: 4, style: { radius: 1 } };
+    stage.setVisuals([circle]);
+    const node = stage.root.children[0] as Graphics, context = node.context;
+    circle.x = 30;
+    stage.setVisuals([circle]);
+    expect(stage.root.children[0]).toBe(node);
+    expect(node.context).not.toBe(context);
+    expect(node.getBounds().x).toBeCloseTo(2900);
+    stage.setVisuals([{ ...circle, style: { fill: 'transparent', stroke: 'transparent' } }]);
+    expect(node.context.instructions).toHaveLength(0);
+  });
+
+  it('两份几何缓存命中与逐出仍保持画面位置；所有context随节点销毁', () => {
+    const a: RoomVisual = { type: 'circle', x: 1, y: 2, style: { radius: 1 } };
+    stage.setVisuals([a]);
+    const node = stage.root.children[0] as Graphics, c0 = node.context;
+    stage.setVisuals([{ ...a, x: 2 }]); const c1 = node.context;
+    stage.setVisuals([a]); expect(node.context).toBe(c0);
+    expect(node.getBounds().x).toBeCloseTo(0);
+    stage.setVisuals([{ ...a, x: 3 }]); expect(node.context).toBe(c1);
+    expect(node.getBounds().x).toBeCloseTo(200);
+    stage.setVisuals([{ ...a, x: 4 }]); expect(node.context).toBe(c0);
+    expect(node.getBounds().x).toBeCloseTo(300);
+    stage.setVisuals([]);
+    expect(c0.destroyed).toBe(true); expect(c1.destroyed).toBe(true);
+  });
+
+  it('连续不同几何只持有两份context，绘制失败也释放当前与备用', () => {
+    const contexts = new Set<Graphics['context']>();
+    for (let x = 0; x < 40; x++) {
+      stage.setVisuals([{ type: 'circle', x, y: 1 }]);
+      contexts.add((stage.root.children[0] as Graphics).context);
+    }
+    expect(contexts.size).toBe(2);
+    const paint = vi.spyOn(Graphics.prototype, 'fill').mockImplementationOnce(() => { throw new Error('bad paint'); });
+    try {
+      stage.setVisuals([{ type: 'circle', x: 41, y: 1 }]);
+      expect(stage.count).toBe(0);
+      expect([...contexts].every(context => context.destroyed)).toBe(true);
+    } finally { paint.mockRestore(); }
+    stage.setVisuals([{ type: 'circle', x: 42, y: 1 }]);
+    expect(stage.count).toBe(1);
+    expect((stage.root.children[0] as Graphics).context.destroyed).toBe(false);
+  });
+
+  it('文字样式/背景开关回落默认；同样式不重建 TextStyle', () => {
+    const a: RoomVisual = { type: 'text', x: 5, y: 5, text: 'a', style: { stroke: '#ff0000', backgroundColor: '#000000', align: 'left', opacity: 0.2 } };
+    stage.setVisuals([a]);
+    const container = stage.root.children[0]!, bg = container.children[0] as Graphics;
+    const bgContext = bg.context, text = container.children[1] as Text, style = text.style;
+    const styleDestroy = vi.spyOn(style, 'destroy');
+    stage.setVisuals([{ ...a, text: 'b' }]);
+    expect(text.style).toBe(style);
+    expect(container.children[0]).toBe(bg);
+    stage.setVisuals([{ ...a, style: {} }]);
+    expect(container.children).toEqual([text]);
+    expect(bgContext.destroyed).toBe(true);
+    expect(styleDestroy).toHaveBeenCalledOnce();
+    expect(text.style._stroke).toBeNull();
+    expect(text.anchor.x).toBe(0.5); expect(text.anchor.y).toBe(1);
+    expect(text.alpha).toBe(1);
+    stage.setVisuals([a]);
+    expect(container.children).toHaveLength(2);
+    expect(container.children[1]).toBe(text);
+    expect(container.children[0]).not.toBe(bg);
+  });
+
+  it('复用文字测量失败释放旧节点和背景；下一批能恢复', () => {
+    stage.setVisuals([visuals[4]!]);
+    const old = stage.root.children[0]!, text = old.children[1] as Text;
+    vi.mocked(CanvasTextMetrics.measureText).mockImplementationOnce(() => { throw new Error('bad measure'); });
+    stage.setVisuals([{ ...visuals[4]!, text: 'force remeasure' } as RoomVisual, visuals[0]!]);
+    expect(old.destroyed).toBe(true); expect(text.destroyed).toBe(true);
+    expect(stage.count).toBe(1);
+    stage.setVisuals([visuals[4]!]);
+    expect(stage.count).toBe(1);
+    expect(stage.root.children[0]!.children).toHaveLength(2);
   });
 
   it('destroy 清空子树（可重复）', () => {

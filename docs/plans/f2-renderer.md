@@ -812,3 +812,9 @@ renderer369/shared4/kk-cli7测、两包tsc/构建、fmt/clippy、175资产夹具
 R7为阶段提交，§5冻结阈值不变，快照仍有≥2ms、GPU≤8ms未新销账，
 缓存槽增长与长期稳态仍未解决；不勾选最终收口，不以真实场景替代300/50/100验收。
 既有用户确认灰区表终态继续有效，未新增装饰/world/API/引擎改动。
+
+2026-10-01 接续：黑屏修复提交`e7e30db`后，按短数据优化RoomVisual槽位与自有两份绝对坐标
+几何缓存、文字背景门控；保留失败/无收益尝试数据、双后端限定场景RGBA零差异。
+perf-only checkpoint计数改为采样拷贝，补足短测与重建GPU完成上界。
+过程、差距、生命周期与评审见[RoomVisual短测复核](../research/notes/renderer-visual-reuse-verification-2026-10-01.md)。
+§5门限和G1–G13既定确认不改，正式矩阵/ticker长帧/10k与最终R7收口仍待办。

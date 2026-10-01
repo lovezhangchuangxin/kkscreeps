@@ -407,3 +407,16 @@ G1–G13最终表经用户确认；三路评审清偿复审完成；单一R7收�
 
 本阶段实现/数据/三路清偿复审/自验见[2026-10-01短测报告](../research/notes/renderer-r7-short-verification-2026-10-01.md)。
 369+4+7测试通过，175文件生成链一致；真实回放与预算夹具分开，短测结果不替代§9收口定义。
+
+### 2026-10-01 放大黑屏提交后的 RoomVisual 优化
+
+黑屏修复已提交 `e7e30db`。用户继续授权 renderer 性能/内存开发且保持暂缓长测。
+本轮针对实测每tick100个Graphics context UID新增，按槽位复用节点，
+使用最多两份私有绝对坐标几何context LRU与文字背景值门控；删除/变类即时释放，
+不引入detached对象池或公共API。单纯clear复用的提交回归保留记录，
+局部坐标平移因RGBA差异已撤回；最终方案只在已有短数据支持的范围保留。
+还修复perf checkpoint嵌套计数的可变引用，补GPU完成上界、快照创建/销毁数和短测入口。
+
+原阈值、gray终裁、normal光照不变。全房GPU与快照长尾、完整三轮矩阵、
+真实ticker stall及10k稳态仍不可用短窗口替代；状态见
+[RoomVisual短测记录](../research/notes/renderer-visual-reuse-verification-2026-10-01.md)。

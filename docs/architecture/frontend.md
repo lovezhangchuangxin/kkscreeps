@@ -100,3 +100,9 @@ R7接续阶段已修复 Graphics context精确释放，私有rampart顶罩裁剪
 避免 v8 自动 mask 随整房放大申请超限纹理；双后端各70个短GPU案例及生命周期回归通过。
 根因、原版v7差异与全部RGBA差值见[缩放修复记录](../research/notes/renderer-zoom-verification-2026-10-01.md)。
 此修复不替代R7性能/内存最终验收。
+
+RoomVisual后续按输入槽位复用同类节点，形状保留最多两份自有绝对坐标context，
+文字与背景按内容/解析样式/几何更新；删除和变类仍立即释放。
+短测减少Graphics缓存槽位新增，交替几何有CPU/提交收益，持续变化输入另行登记；
+不扩大为所有输入或全房GPU已达标，详见
+[RoomVisual复核](../research/notes/renderer-visual-reuse-verification-2026-10-01.md)。

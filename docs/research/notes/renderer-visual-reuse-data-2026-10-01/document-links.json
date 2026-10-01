@@ -1,0 +1,12 @@
+{
+  "markdownFiles": 86,
+  "localLinks": 357,
+  "bad": [],
+  "nonLinkCandidates": [
+    {
+      "file": "compat/reports/b3-development.md",
+      "candidate": "powerBank 10"
+    }
+  ],
+  "method": "Tracked repo Markdown plus new report inline links outside fenced blocks; bare space-containing expressions are not CommonMark links; target existence only, not network/heading-anchor validation"
+}

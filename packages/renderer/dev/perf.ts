@@ -6,7 +6,8 @@ import { mergedOutlinePath } from '../src/core/path-merge.js';
 import { rampartGroups, rampartRasterBounds } from '../src/objects/rampart-groups.js';
 import { RAMPART_COVER_SPEC } from '../src/objects/specs.js';
 import { textureFromBaked } from '../src/core/bake.js';
-import { Sprite } from 'pixi.js';
+import { Rectangle, RenderTexture, Sprite } from 'pixi.js';
+import { VisualStage } from '../src/scenes/visual-stage.js';
 import { fullDelta, fullVisuals } from '../src/perf/fixture.js';
 import { enableTimestampFeature, makeTimestampTimer } from '../src/perf/gpu-timer.js';
 import full from '../fixtures/perf-full-room.json';
@@ -25,6 +26,9 @@ let timing = { objectsMs: 0, lightingMs: 0 };
 const handle = await createRenderer({ container: document.querySelector<HTMLElement>('#room')!, atlasBaseUrl: new URL('/', location.href).href, fontsBaseUrl: new URL('/', location.href).href, preference: requested, localPlayerId: officialMode ? official.provenance.originalPlayer : 'r7-local', tickDurationMs: officialMode ? 2500 : 1000, onFrameTiming: value => { timing = value; } });
 const probe = getPerf(handle);
 probe.stop();
+// Short diagnostics can pin physical 1080p without changing the public API or
+// the browser's DPR. Record the actual resolution and atlas choice separately.
+if (query.get('resolution') === '1') probe.kernel.app.renderer.resize(handleContainer().clientWidth, handleContainer().clientHeight, 1);
 const initializedMs = performance.now() - started;
 const raf = () => new Promise<number>(resolve => requestAnimationFrame(resolve));
 let activeRoom = base.room;
@@ -112,8 +116,12 @@ async function snapshots(samples: number, rekey = false, terrain = false) {
       terrain: terrain ? { codes: base.terrain.codes.map((c, n) => n === 1 ? i % 2 : c) } : base.terrain };
     await probe.gpuDone(); const t = performance.now(); handle.feed.applySnapshot(snapshot); const snapshotMs = performance.now() - t;
     const v = performance.now(); handle.feed.setVisuals(base.room, fullVisuals(i)); const visualMs = performance.now() - v;
+    const frameStart = performance.now();
     handle.advanceAnimation(0.001); probe.render(); const frame = probe.frame(); await probe.gpuDone();
-    records.push({ i, snapshotMs, visualMs, combinedApplyMs: snapshotMs + visualMs, feed: probe.takeFeed(), ...frame, apply: probe.takeApply() });
+    const completed = performance.now();
+    records.push({ i, snapshotMs, visualMs, combinedApplyMs: snapshotMs + visualMs,
+      frameCompletionUpperMs: completed - frameStart, applyAndFrameCompletionUpperMs: completed - t,
+      feed: probe.takeFeed(), ...frame, apply: probe.takeApply() });
   }
   return { kind: 'snapshots', rekey, terrain, records, counts: probe.counts() };
 }
@@ -274,7 +282,54 @@ async function officialReplay() {
   }
   return { room: official.room, player: official.provenance.originalPlayer, tickDurationMs: 2500, ticks: official.ticks.length, stepsPerTick: 15, syntheticVisuals: 0, startupScene: 'official recording initial snapshot with 0 synthetic visuals', records, final: probe.counts(), reset: await clear() };
 }
-const api = { startup, cropParity, coverReuseParity, officialReplay, hoverMove, frames, serial, timestamps, snapshots, hover, ramparts, initSoak, soakChunk, recovery, clear, drainCheckpoint: async () => { handle.advanceAnimation(0.001); probe.render(); await probe.gpuDone(); return probe.counts(); }, counts: () => probe.counts(), destroy: async () => { await handle.destroy(); return probe.counts(); }, gpuDone: probe.gpuDone };
+async function visualFingerprint() {
+  const stage = new VisualStage(640 / 50);
+  const text: RoomVisual = { type: 'text', x: 10, y: 10, text: 'Room 中文', style: { color: 'transparent', stroke: '#ff000080', backgroundColor: '#00000080', opacity: 0.5 } };
+  const cases: readonly RoomVisual[][] = [fullVisuals(0), fullVisuals(1), fullVisuals(2),
+    [text], [{ ...text, text: 'reset', style: {} }], [text],
+    [{ type: 'rect', x: 10, y: 10, w: 3, h: 2, style: { fill: 'transparent', stroke: '#ffffff', lineStyle: 'dashed' } }], []];
+  const records = [];
+  try {
+    for (const [index, visuals] of cases.entries()) {
+      stage.setVisuals(visuals);
+      const readback = probe.kernel.app.renderer.extract.pixels({ target: stage.root, frame: new Rectangle(0, 0, 640, 640), resolution: 1 });
+      const bytes = Uint8Array.from(readback.pixels);
+      const digest = await crypto.subtle.digest('SHA-256', bytes);
+      const compressed = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
+      let encoded = ''; for (const byte of compressed) encoded += String.fromCharCode(byte);
+      records.push({ index, count: stage.count, width: readback.width, height: readback.height,
+        nonzeroChannels: bytes.reduce((n, b) => n + Number(b !== 0), 0),
+        rgbaGzipBase64: btoa(encoded),
+        sha256: [...new Uint8Array(digest)].map(n => n.toString(16).padStart(2, '0')).join('') });
+    }
+    return { method: 'isolated VisualStage, 640x640 RGBA GPU readback; same ordered replacement inputs before/after optimization', records };
+  } finally { stage.destroy(); await probe.gpuDone(); }
+}
+async function visualBenchmark(unique = false) {
+  const records = [];
+  // ABBA order limits monotonic warm-up/order effects; each arm owns its stage.
+  for (const rebuild of [true, false, false, true]) {
+    const stage = new VisualStage(640 / 50), target = RenderTexture.create({ width: 640, height: 640, resolution: 1 });
+    try {
+      for (let i = -20; i < 60; i++) {
+        await probe.gpuDone(); const visuals = fullVisuals(i + 20);
+        if (unique) for (const visual of visuals) {
+          const offset = (i + 20) * 0.071;
+          if (visual.type === 'line' || visual.type === 'poly') visual.points = visual.points.map(point => ({ x: point.x + offset, y: point.y }));
+          else visual.x += offset;
+        }
+        const started = performance.now();
+        if (rebuild) stage.setVisuals([]);
+        stage.setVisuals(visuals); const updated = performance.now();
+        probe.kernel.app.renderer.render({ container: stage.root, target, clear: true });
+        const submitted = performance.now(); await probe.gpuDone();
+        if (i >= 0) records.push({ rebuild, i, updateMs: updated - started, renderSubmitMs: submitted - updated, completionUpperMs: performance.now() - started });
+      }
+    } finally { stage.destroy(); target.destroy(true); await probe.gpuDone(); }
+  }
+  return { unique, method: 'ABBA 4 arms; each 20 warm-up + 60 samples; isolated 100 visuals into 640x640 RT; rebuild arm clears all entries before replacement; completion includes GPU wait', records };
+}
+const api = { startup, visualBenchmark, visualFingerprint, cropParity, coverReuseParity, officialReplay, hoverMove, frames, serial, timestamps, snapshots, hover, ramparts, initSoak, soakChunk, recovery, clear, drainCheckpoint: async () => { handle.advanceAnimation(0.001); probe.render(); await probe.gpuDone(); return probe.counts(); }, counts: () => probe.counts(), destroy: async () => { await handle.destroy(); return probe.counts(); }, gpuDone: probe.gpuDone };
 declare global { interface Window { r7: typeof api; } }
 window.r7 = api;
 void (full.visuals as RoomVisual[]); // fixture type checked alongside the dynamic replacement generator.

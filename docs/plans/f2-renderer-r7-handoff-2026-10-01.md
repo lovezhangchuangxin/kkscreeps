@@ -1,5 +1,13 @@
 # F2 R7 交接提示词（2026-10-01）
 
+> 当前有效入口：黑屏修复已提交`e7e30db`；随后继续RoomVisual性能/内存优化，
+> 见[新复核报告](../research/notes/renderer-visual-reuse-verification-2026-10-01.md)。
+> 用户恢复额度并授权自主开发，仍暂缓长时间测试。原gray整表已确认，normal/API/R6不重开。
+> 下文更早的HEAD/红测/未提交状态均为历史快照，不能覆盖本段或重新启动10k。
+> 本轮renderer376/shared4/kk-cli7全绿；两份context缓存减少短窗UID槽位新增，代价+80活context。
+> 双后端各8项限定场景RGBA零差异；GL完成上界恶化如实挂账，不能称双后端GPU整体提速。
+> 最终R7仍需完整性能矩阵、快照长尾/整房GPU差距分析、真实ticker长帧与长期内存稳态。
+
 > 最新追加：房间放大黑屏已修复，根因为v8自动沼泽mask未裁剪viewport而申请超限滤波纹理。
 > 自有MaskFilter开启视口裁剪，双后端各70个短GPUcase与释放回归通过；renderer370/shared4/kk-cli7。
 > 实测和源码证据见[缩放修复记录](../research/notes/renderer-zoom-verification-2026-10-01.md)。
