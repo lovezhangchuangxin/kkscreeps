@@ -1,6 +1,6 @@
 [package]
 name = "kk-backend"
-description = "网络层：HTTP 接口 + WebSocket 推送（兼容官方协议）"
+description = "网络服务模块的预留位置，尚无 HTTP 或 WebSocket 服务实现"
 version.workspace = true
 edition.workspace = true
 

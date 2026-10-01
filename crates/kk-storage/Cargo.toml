@@ -1,6 +1,6 @@
 [package]
 name = "kk-storage"
-description = "存储：内存缓存 + 定期写盘；跨机部署时的 Redis 等后端"
+description = "持久化存储模块的预留位置，尚无存储接口或后端实现"
 version.workspace = true
 edition.workspace = true
 
