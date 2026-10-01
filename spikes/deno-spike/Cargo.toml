@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 build = "build.rs"
 
+# Keep this evidence project independent of the parent production workspace.
+[workspace]
+
 [dependencies]
 deno_core = "0.412.0"
 deno_error = "0.7"

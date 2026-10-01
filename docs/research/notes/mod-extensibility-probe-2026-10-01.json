@@ -1,0 +1,71 @@
+{
+  "source_commit": "f89a5ea7ffe8b2aa6b93f6756588234cc810f2af",
+  "binary": "/Users/keqing/Desktop/projects/games/kkscreeps/target/debug/kkscreeps",
+  "scope": "disposable in-memory embed shard; no installed mod",
+  "initial_raw_object": {
+    "counter": 7,
+    "owner": "p1",
+    "type": "myobject",
+    "kind": "structure",
+    "id": "kk0000000000000002",
+    "pos": {
+      "x": 20,
+      "y": 20,
+      "roomName": "W1N1"
+    }
+  },
+  "initial_raw_structure": {
+    "structureType": "myfactory",
+    "counter": 9,
+    "owner": "p1",
+    "hits": 200,
+    "type": "structure",
+    "kind": "structure",
+    "id": "kk0000000000000003",
+    "pos": {
+      "x": 21,
+      "y": 20,
+      "roomName": "W1N1"
+    }
+  },
+  "player_surface": {
+    "executed": true,
+    "expr": {
+      "ok": true,
+      "value": {
+        "object": {
+          "exists": true,
+          "counterType": "undefined",
+          "constructor": "Object"
+        },
+        "structure": {
+          "exists": true,
+          "counterType": "undefined",
+          "constructor": "Structure"
+        },
+        "customFind": {
+          "ok": true,
+          "count": 0
+        },
+        "internalRegistryType": "undefined",
+        "customClassType": "undefined",
+        "customCollectionType": "undefined"
+      }
+    },
+    "console": []
+  },
+  "host_custom_find": [],
+  "elapsed_ticks": 6,
+  "raw_object_after_ticks": {
+    "counter": 7,
+    "owner": "p1",
+    "type": "myobject",
+    "kind": "structure",
+    "id": "kk0000000000000002",
+    "pos": {
+      "x": 20,
+      "y": 20,
+      "roomName": "W1N1"
+    }
+  }
+}

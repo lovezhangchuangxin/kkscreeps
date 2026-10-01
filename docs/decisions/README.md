@@ -12,13 +12,14 @@
 | [ADR-004](ADR-004-core-architecture.md) | 核心架构定型：房间快照 + 流水线 + 索引 + 分层存储 | 已接受 |
 | [ADR-005](ADR-005-dev-kit.md) | 开发套件与服务器共用同一个引擎二进制 | 已接受 |
 | [ADR-006](ADR-006-screeps-ok-ci.md) | screeps-ok 行为测试套件进 CI 作为验收关卡 | 已接受 |
-| [ADR-007](ADR-007-mod-system.md) | mod 系统自建，不兼容官方 mod 生态 | 已接受 |
+| [ADR-007](ADR-007-mod-system.md) | JS mod 系统自建，不要求代码兼容，追求同类功能扩展能力 | 已接受（2026-10-01 需求修订） |
 | [ADR-008](ADR-008-runtime-model.md) | 运行时执行模型与资源管理（线程三层次/同步+并行/事务性结算/速率保护等八项） | 已接受 |
 | [ADR-009](ADR-009-frontend-stack.md) | 前端栈（Vue3+Vite+TS+pnpm）与单 monorepo、自建渲染器 | 已接受 |
 | [ADR-010](ADR-010-screeps-ok-adapter-bridge.md) | screeps-ok 适配器桥接（sidecar 子进程）与嵌入式 API、M0 哑世界、bot 验收与上游 pin 策略 | 已接受 |
 | [ADR-011](ADR-011-engine-skeleton.md) | 引擎骨架定型：typed world 唯一后端、官方结算序子集、intent 通道 trait、声明宏快照格式、常量生成、通过率棘轮 | 已接受 |
 | [ADR-012](ADR-012-m2a-sandbox-runtime.md) | M2A 架构定型：两条硬约束裁决器、玩家 API 层 prelude 对照移植、intent 链路四段、数据面分期 seam 先行、查询面 Rust 单源、验收口径、性能观测点（A6 收口升格） | 已接受 |
 | [ADR-013](ADR-013-architecture-review-coordinator.md) | 2026-09 架构复审：运行协调层（RunResult 统一提交）、直读 seam 先行节奏、LIFO 每线程纠偏、宿主控制面收口、TickInput 非确定性显式化（ADR-012 由 A6 预留） | 已接受 |
+| [ADR-014](ADR-014-contribution-plane.md) | 贡献平面架构定型：六原则（启动冻结/vanilla 同契约/冷热双轨 slot/三平面+投影一步设计/全域 TickTxn/零差异+显式发布）、四项拍板、封闭分派评审门禁、批次 A–G 调整 | 已接受 |
 
 ## 评估过但没有采纳的方案
 

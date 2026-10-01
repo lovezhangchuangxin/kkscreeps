@@ -1,0 +1,612 @@
+{
+  "date": "2026-10-01",
+  "source_commit": "f89a5ea7ffe8b2aa6b93f6756588234cc810f2af",
+  "fixture_sha256": {
+    "js_mod_host.rs": "841fd825db7000ce6020306eafb6f00d14882b7410bbf3074edd00849309da80",
+    "js_mod_host.js": "113e889448b245e9f6945bc1afd78023bb58a65007ab12c779d517be3add9f9f"
+  },
+  "binary_sha256": "673413f973058523700f8caecd45758f33317ccc91cc0a33ee138f871428a4bc",
+  "platform": "macOS-15.7.3-arm64-arm-64bit",
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+  "summary_median_of_run_medians_us": {
+    "1": {
+      "field_ops": 0.06709,
+      "serde_batch": 0.17375
+    },
+    "100": {
+      "field_ops": 2.05125,
+      "serde_batch": 2.29083
+    },
+    "1000": {
+      "field_ops": 11.507920000000002,
+      "serde_batch": 20.5475
+    }
+  },
+  "release_runs": [
+    {
+      "deno_core": "0.412.0",
+      "profile": "release",
+      "checks": {
+        "replace": true,
+        "native_next_with_nested_js_ops": true,
+        "nested_callback_error": true,
+        "candidate_rollback": true,
+        "heap_requires_reset": true,
+        "invalid_value_rejected": true,
+        "registration_freeze": true,
+        "js_loop_terminated": true,
+        "runtime_rebuilt": true
+      },
+      "limits": "synthetic f64 vector; not engine integration, schemas, storage, quotas, or crash isolation; wall-time timings",
+      "timings": {
+        "1": {
+          "field_ops": {
+            "median_us_per_pass": 0.11042,
+            "samples_us": [
+              0.10917,
+              0.11041000000000001,
+              0.11042,
+              0.11541,
+              0.19791999999999998
+            ],
+            "ops_per_pass": 2,
+            "elements_updated": 1
+          },
+          "serde_batch": {
+            "median_us_per_pass": 0.53333,
+            "samples_us": [
+              0.38417,
+              0.44290999999999997,
+              0.53333,
+              1.24167,
+              1.40042
+            ],
+            "ops_per_pass": 2,
+            "elements_updated": 1
+          }
+        },
+        "100": {
+          "field_ops": {
+            "median_us_per_pass": 3.95,
+            "samples_us": [
+              3.80541,
+              3.9304200000000002,
+              3.95,
+              4.03041,
+              4.205
+            ],
+            "ops_per_pass": 200,
+            "elements_updated": 100
+          },
+          "serde_batch": {
+            "median_us_per_pass": 3.3754199999999996,
+            "samples_us": [
+              3.22958,
+              3.2375,
+              3.3754199999999996,
+              3.53916,
+              5.79333
+            ],
+            "ops_per_pass": 2,
+            "elements_updated": 100
+          }
+        },
+        "1000": {
+          "field_ops": {
+            "median_us_per_pass": 15.371659999999999,
+            "samples_us": [
+              15.18625,
+              15.314169999999999,
+              15.371659999999999,
+              15.925419999999999,
+              17.34666
+            ],
+            "ops_per_pass": 2000,
+            "elements_updated": 1000
+          },
+          "serde_batch": {
+            "median_us_per_pass": 21.805829999999997,
+            "samples_us": [
+              21.099170000000004,
+              21.2625,
+              21.805829999999997,
+              22.2025,
+              22.53958
+            ],
+            "ops_per_pass": 2,
+            "elements_updated": 1000
+          }
+        }
+      }
+    },
+    {
+      "deno_core": "0.412.0",
+      "profile": "release",
+      "checks": {
+        "replace": true,
+        "native_next_with_nested_js_ops": true,
+        "nested_callback_error": true,
+        "candidate_rollback": true,
+        "heap_requires_reset": true,
+        "invalid_value_rejected": true,
+        "registration_freeze": true,
+        "js_loop_terminated": true,
+        "runtime_rebuilt": true
+      },
+      "limits": "synthetic f64 vector; not engine integration, schemas, storage, quotas, or crash isolation; wall-time timings",
+      "timings": {
+        "1": {
+          "field_ops": {
+            "median_us_per_pass": 0.06709,
+            "samples_us": [
+              0.06541999999999999,
+              0.06666,
+              0.06709,
+              0.0675,
+              0.11334
+            ],
+            "ops_per_pass": 2,
+            "elements_updated": 1
+          },
+          "serde_batch": {
+            "median_us_per_pass": 0.17375,
+            "samples_us": [
+              0.14042,
+              0.16083999999999998,
+              0.17375,
+              0.19959,
+              0.29
+            ],
+            "ops_per_pass": 2,
+            "elements_updated": 1
+          }
+        },
+        "100": {
+          "field_ops": {
+            "median_us_per_pass": 2.15292,
+            "samples_us": [
+              1.06542,
+              1.15625,
+              2.15292,
+              2.5354200000000002,
+              2.55542
+            ],
+            "ops_per_pass": 200,
+            "elements_updated": 100
+          },
+          "serde_batch": {
+            "median_us_per_pass": 2.29083,
+            "samples_us": [
+              2.225,
+              2.28083,
+              2.29083,
+              2.4862499999999996,
+              3.46375
+            ],
+            "ops_per_pass": 2,
+            "elements_updated": 100
+          }
+        },
+        "1000": {
+          "field_ops": {
+            "median_us_per_pass": 11.45125,
+            "samples_us": [
+              11.400419999999999,
+              11.4075,
+              11.45125,
+              11.49,
+              13.8625
+            ],
+            "ops_per_pass": 2000,
+            "elements_updated": 1000
+          },
+          "serde_batch": {
+            "median_us_per_pass": 20.485,
+            "samples_us": [
+              20.15,
+              20.3975,
+              20.485,
+              20.643329999999995,
+              23.17
+            ],
+            "ops_per_pass": 2,
+            "elements_updated": 1000
+          }
+        }
+      }
+    },
+    {
+      "deno_core": "0.412.0",
+      "profile": "release",
+      "checks": {
+        "replace": true,
+        "native_next_with_nested_js_ops": true,
+        "nested_callback_error": true,
+        "candidate_rollback": true,
+        "heap_requires_reset": true,
+        "invalid_value_rejected": true,
+        "registration_freeze": true,
+        "js_loop_terminated": true,
+        "runtime_rebuilt": true
+      },
+      "limits": "synthetic f64 vector; not engine integration, schemas, storage, quotas, or crash isolation; wall-time timings",
+      "timings": {
+        "1": {
+          "field_ops": {
+            "median_us_per_pass": 0.06832999999999999,
+            "samples_us": [
+              0.06541999999999999,
+              0.06625,
+              0.06832999999999999,
+              0.07084,
+              0.15792
+            ],
+            "ops_per_pass": 2,
+            "elements_updated": 1
+          },
+          "serde_batch": {
+            "median_us_per_pass": 0.15625,
+            "samples_us": [
+              0.13042,
+              0.15333,
+              0.15625,
+              0.16583000000000003,
+              0.20958000000000002
+            ],
+            "ops_per_pass": 2,
+            "elements_updated": 1
+          }
+        },
+        "100": {
+          "field_ops": {
+            "median_us_per_pass": 2.05125,
+            "samples_us": [
+              1.22084,
+              1.31709,
+              2.05125,
+              2.51459,
+              2.6479200000000005
+            ],
+            "ops_per_pass": 200,
+            "elements_updated": 100
+          },
+          "serde_batch": {
+            "median_us_per_pass": 2.38,
+            "samples_us": [
+              2.2375,
+              2.27792,
+              2.38,
+              2.41875,
+              3.44209
+            ],
+            "ops_per_pass": 2,
+            "elements_updated": 100
+          }
+        },
+        "1000": {
+          "field_ops": {
+            "median_us_per_pass": 12.691670000000002,
+            "samples_us": [
+              12.5525,
+              12.68209,
+              12.691670000000002,
+              12.717080000000001,
+              12.88583
+            ],
+            "ops_per_pass": 2000,
+            "elements_updated": 1000
+          },
+          "serde_batch": {
+            "median_us_per_pass": 20.5475,
+            "samples_us": [
+              20.39583,
+              20.492919999999998,
+              20.5475,
+              20.803330000000003,
+              21.10375
+            ],
+            "ops_per_pass": 2,
+            "elements_updated": 1000
+          }
+        }
+      }
+    },
+    {
+      "deno_core": "0.412.0",
+      "profile": "release",
+      "checks": {
+        "replace": true,
+        "native_next_with_nested_js_ops": true,
+        "nested_callback_error": true,
+        "candidate_rollback": true,
+        "heap_requires_reset": true,
+        "invalid_value_rejected": true,
+        "registration_freeze": true,
+        "js_loop_terminated": true,
+        "runtime_rebuilt": true
+      },
+      "limits": "synthetic f64 vector; not engine integration, schemas, storage, quotas, or crash isolation; wall-time timings",
+      "timings": {
+        "1": {
+          "field_ops": {
+            "median_us_per_pass": 0.06666,
+            "samples_us": [
+              0.06458,
+              0.06583,
+              0.06666,
+              0.06875,
+              0.11542
+            ],
+            "ops_per_pass": 2,
+            "elements_updated": 1
+          },
+          "serde_batch": {
+            "median_us_per_pass": 0.17125,
+            "samples_us": [
+              0.14041,
+              0.16666,
+              0.17125,
+              0.18125,
+              0.22583000000000003
+            ],
+            "ops_per_pass": 2,
+            "elements_updated": 1
+          }
+        },
+        "100": {
+          "field_ops": {
+            "median_us_per_pass": 1.76625,
+            "samples_us": [
+              1.30167,
+              1.44959,
+              1.76625,
+              3.0370800000000004,
+              3.7154100000000003
+            ],
+            "ops_per_pass": 200,
+            "elements_updated": 100
+          },
+          "serde_batch": {
+            "median_us_per_pass": 2.15625,
+            "samples_us": [
+              2.05167,
+              2.1175,
+              2.15625,
+              2.34542,
+              3.59875
+            ],
+            "ops_per_pass": 2,
+            "elements_updated": 100
+          }
+        },
+        "1000": {
+          "field_ops": {
+            "median_us_per_pass": 11.507920000000002,
+            "samples_us": [
+              11.445839999999999,
+              11.465,
+              11.507920000000002,
+              11.619169999999999,
+              11.68083
+            ],
+            "ops_per_pass": 2000,
+            "elements_updated": 1000
+          },
+          "serde_batch": {
+            "median_us_per_pass": 20.60542,
+            "samples_us": [
+              20.38916,
+              20.5325,
+              20.60542,
+              20.69917,
+              21.485419999999998
+            ],
+            "ops_per_pass": 2,
+            "elements_updated": 1000
+          }
+        }
+      }
+    },
+    {
+      "deno_core": "0.412.0",
+      "profile": "release",
+      "checks": {
+        "replace": true,
+        "native_next_with_nested_js_ops": true,
+        "nested_callback_error": true,
+        "candidate_rollback": true,
+        "heap_requires_reset": true,
+        "invalid_value_rejected": true,
+        "registration_freeze": true,
+        "js_loop_terminated": true,
+        "runtime_rebuilt": true
+      },
+      "limits": "synthetic f64 vector; not engine integration, schemas, storage, quotas, or crash isolation; wall-time timings",
+      "timings": {
+        "1": {
+          "field_ops": {
+            "median_us_per_pass": 0.06667,
+            "samples_us": [
+              0.06459000000000001,
+              0.06625,
+              0.06667,
+              0.06875,
+              0.11541
+            ],
+            "ops_per_pass": 2,
+            "elements_updated": 1
+          },
+          "serde_batch": {
+            "median_us_per_pass": 0.19875,
+            "samples_us": [
+              0.15666,
+              0.16917000000000001,
+              0.19875,
+              0.21792,
+              0.30042
+            ],
+            "ops_per_pass": 2,
+            "elements_updated": 1
+          }
+        },
+        "100": {
+          "field_ops": {
+            "median_us_per_pass": 1.73791,
+            "samples_us": [
+              1.14625,
+              1.2387499999999998,
+              1.73791,
+              2.42625,
+              2.50958
+            ],
+            "ops_per_pass": 200,
+            "elements_updated": 100
+          },
+          "serde_batch": {
+            "median_us_per_pass": 2.24292,
+            "samples_us": [
+              2.14166,
+              2.23083,
+              2.24292,
+              2.38292,
+              3.7779200000000004
+            ],
+            "ops_per_pass": 2,
+            "elements_updated": 100
+          }
+        },
+        "1000": {
+          "field_ops": {
+            "median_us_per_pass": 11.45584,
+            "samples_us": [
+              11.28958,
+              11.40958,
+              11.45584,
+              12.294579999999998,
+              13.274579999999998
+            ],
+            "ops_per_pass": 2000,
+            "elements_updated": 1000
+          },
+          "serde_batch": {
+            "median_us_per_pass": 20.489160000000002,
+            "samples_us": [
+              19.94084,
+              20.21917,
+              20.489160000000002,
+              20.509170000000005,
+              22.0075
+            ],
+            "ops_per_pass": 2,
+            "elements_updated": 1000
+          }
+        }
+      }
+    }
+  ],
+  "debug_run": {
+    "deno_core": "0.412.0",
+    "profile": "debug",
+    "checks": {
+      "replace": true,
+      "native_next_with_nested_js_ops": true,
+      "nested_callback_error": true,
+      "candidate_rollback": true,
+      "heap_requires_reset": true,
+      "invalid_value_rejected": true,
+      "registration_freeze": true,
+      "js_loop_terminated": true,
+      "runtime_rebuilt": true
+    },
+    "limits": "synthetic f64 vector; not engine integration, schemas, storage, quotas, or crash isolation; wall-time timings",
+    "timings": {
+      "1": {
+        "field_ops": {
+          "median_us_per_pass": 0.545,
+          "samples_us": [
+            0.54458,
+            0.54459,
+            0.545,
+            0.56375,
+            0.64125
+          ],
+          "ops_per_pass": 2,
+          "elements_updated": 1
+        },
+        "serde_batch": {
+          "median_us_per_pass": 1.14625,
+          "samples_us": [
+            1.13875,
+            1.14458,
+            1.14625,
+            1.17834,
+            1.22125
+          ],
+          "ops_per_pass": 2,
+          "elements_updated": 1
+        }
+      },
+      "100": {
+        "field_ops": {
+          "median_us_per_pass": 28.46875,
+          "samples_us": [
+            27.096659999999996,
+            27.585840000000005,
+            28.46875,
+            28.629589999999997,
+            29.85125
+          ],
+          "ops_per_pass": 200,
+          "elements_updated": 100
+        },
+        "serde_batch": {
+          "median_us_per_pass": 15.830419999999998,
+          "samples_us": [
+            14.725420000000002,
+            14.742090000000001,
+            15.830419999999998,
+            16.05916,
+            16.744590000000002
+          ],
+          "ops_per_pass": 2,
+          "elements_updated": 100
+        }
+      },
+      "1000": {
+        "field_ops": {
+          "median_us_per_pass": 255.07833000000002,
+          "samples_us": [
+            250.81916999999999,
+            254.97625,
+            255.07833000000002,
+            255.2875,
+            257.49584
+          ],
+          "ops_per_pass": 2000,
+          "elements_updated": 1000
+        },
+        "serde_batch": {
+          "median_us_per_pass": 136.23917,
+          "samples_us": [
+            132.82875,
+            134.715,
+            136.23917,
+            137.12166,
+            137.80667
+          ],
+          "ops_per_pass": 2,
+          "elements_updated": 1000
+        }
+      }
+    }
+  },
+  "limitations": [
+    "Rust-owned synthetic f64 vector, no real RoomState, game handlers or per-viewer security",
+    "100 passes/sample; 5 warmup samples + 5 measured samples/mode/count within each process",
+    "5 independent release processes, one debug process; no cross-process benchmark contention",
+    "serde_v8 batch copies all values; not typed buffers, shared memory, sparse patch or lazy access",
+    "direct same-thread ops; no thread/channel IPC; timings are wall time",
+    "timeout test interrupts a pure JS loop only, not a blocking native op or process crash",
+    "candidate rollback and runtime reset explicitly performed by the probe host"
+  ]
+}

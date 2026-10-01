@@ -1,0 +1,700 @@
+{
+  "purpose": "exploratory current-build scaling; not official comparison or acceptance",
+  "date": "2026-10-01",
+  "source_commit": "f89a5ea7ffe8b2aa6b93f6756588234cc810f2af",
+  "binary_sha256": "09b0f46aea62cb8d282e9e28f07d1e70b87456213c0bc7cb15be8891d32a5d94",
+  "platform": "macOS-15.7.3-arm64-arm-64bit",
+  "machine": "arm64",
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+  "build": "release, default Cargo features",
+  "repetitions": 3,
+  "warmup": 500,
+  "ticks": 800,
+  "limitations": [
+    "1-8 players, one independent small room per player; no shared-room workload",
+    "phase timers are wall time, not process CPU time or allocation measurements",
+    "no official/xxscreeps baseline; no 100-player acceptance or mod overhead measurement",
+    "3 runs and 800 samples do not meet the formal >=5 runs / >=3000 samples requirement",
+    "sampling ends at tick 1300; later TTL/population changes are outside this window"
+  ],
+  "summary": {
+    "1": {
+      "project": {
+        "median_of_run_p50_ms": 0.060375,
+        "run_p95_ms": [
+          0.070958,
+          0.071875,
+          0.071041
+        ]
+      },
+      "run": {
+        "median_of_run_p50_ms": 0.099666,
+        "run_p95_ms": [
+          0.120292,
+          0.119708,
+          0.121333
+        ]
+      },
+      "settle": {
+        "median_of_run_p50_ms": 0.0155,
+        "run_p95_ms": [
+          0.018875,
+          0.018875,
+          0.019042
+        ]
+      },
+      "wall": {
+        "median_of_run_p50_ms": 0.239375,
+        "run_p95_ms": [
+          0.265208,
+          0.27675,
+          0.272542
+        ]
+      }
+    },
+    "2": {
+      "project": {
+        "median_of_run_p50_ms": 0.123083,
+        "run_p95_ms": [
+          0.140834,
+          0.140041,
+          0.140333
+        ]
+      },
+      "run": {
+        "median_of_run_p50_ms": 0.209874,
+        "run_p95_ms": [
+          0.253249,
+          0.255292,
+          0.254958
+        ]
+      },
+      "settle": {
+        "median_of_run_p50_ms": 0.028875,
+        "run_p95_ms": [
+          0.035583,
+          0.035416,
+          0.035875
+        ]
+      },
+      "wall": {
+        "median_of_run_p50_ms": 0.486875,
+        "run_p95_ms": [
+          0.5499590000000001,
+          0.562917,
+          0.551459
+        ]
+      }
+    },
+    "4": {
+      "project": {
+        "median_of_run_p50_ms": 0.260166,
+        "run_p95_ms": [
+          0.277624,
+          0.287043,
+          0.285959
+        ]
+      },
+      "run": {
+        "median_of_run_p50_ms": 0.455709,
+        "run_p95_ms": [
+          0.870125,
+          0.91246,
+          0.894457
+        ]
+      },
+      "settle": {
+        "median_of_run_p50_ms": 0.057125,
+        "run_p95_ms": [
+          0.068125,
+          0.068333,
+          0.068625
+        ]
+      },
+      "wall": {
+        "median_of_run_p50_ms": 1.041417,
+        "run_p95_ms": [
+          1.4295,
+          1.511542,
+          1.487125
+        ]
+      }
+    },
+    "8": {
+      "project": {
+        "median_of_run_p50_ms": 0.540625,
+        "run_p95_ms": [
+          0.598709,
+          0.578167,
+          0.596168
+        ]
+      },
+      "run": {
+        "median_of_run_p50_ms": 1.026834,
+        "run_p95_ms": [
+          1.6305,
+          1.757919,
+          1.720792
+        ]
+      },
+      "settle": {
+        "median_of_run_p50_ms": 0.111666,
+        "run_p95_ms": [
+          0.138291,
+          0.133583,
+          0.133417
+        ]
+      },
+      "wall": {
+        "median_of_run_p50_ms": 2.265,
+        "run_p95_ms": [
+          2.903667,
+          3.037625,
+          3.001334
+        ]
+      }
+    }
+  },
+  "runs": [
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 1,
+      "ticks": 800,
+      "warmup": 500,
+      "workload": {
+        "progress_delta": 2666,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2698
+      },
+      "phases": {
+        "ticks": 800,
+        "phases": {
+          "project": {
+            "count": 800,
+            "p50_ms": 0.0575,
+            "p95_ms": 0.070958,
+            "max_ms": 0.088208,
+            "total_ms": 47.204152000000065
+          },
+          "run": {
+            "count": 800,
+            "p50_ms": 0.093083,
+            "p95_ms": 0.120292,
+            "max_ms": 0.845459,
+            "total_ms": 83.17927399999998
+          },
+          "settle": {
+            "count": 800,
+            "p50_ms": 0.014375,
+            "p95_ms": 0.018875,
+            "max_ms": 0.036875,
+            "total_ms": 11.947497999999996
+          },
+          "wall": {
+            "count": 800,
+            "p50_ms": 0.2125,
+            "p95_ms": 0.265208,
+            "max_ms": 0.9940000000000001,
+            "total_ms": 182.12662399999988
+          }
+        }
+      },
+      "repetition": 1
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 2,
+      "ticks": 800,
+      "warmup": 500,
+      "workload": {
+        "progress_delta": 2666,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2698
+      },
+      "phases": {
+        "ticks": 800,
+        "phases": {
+          "project": {
+            "count": 800,
+            "p50_ms": 0.121417,
+            "p95_ms": 0.140834,
+            "max_ms": 0.184834,
+            "total_ms": 98.490382
+          },
+          "run": {
+            "count": 800,
+            "p50_ms": 0.198374,
+            "p95_ms": 0.253249,
+            "max_ms": 0.869209,
+            "total_ms": 175.87868799999995
+          },
+          "settle": {
+            "count": 800,
+            "p50_ms": 0.02825,
+            "p95_ms": 0.035583,
+            "max_ms": 0.052875,
+            "total_ms": 23.310903999999972
+          },
+          "wall": {
+            "count": 800,
+            "p50_ms": 0.464292,
+            "p95_ms": 0.5499590000000001,
+            "max_ms": 1.1512499999999999,
+            "total_ms": 388.238551
+          }
+        }
+      },
+      "repetition": 1
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 4,
+      "ticks": 800,
+      "warmup": 500,
+      "workload": {
+        "progress_delta": 2666,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2698
+      },
+      "phases": {
+        "ticks": 800,
+        "phases": {
+          "project": {
+            "count": 800,
+            "p50_ms": 0.249917,
+            "p95_ms": 0.277624,
+            "max_ms": 0.3525,
+            "total_ms": 201.83245100000008
+          },
+          "run": {
+            "count": 800,
+            "p50_ms": 0.431625,
+            "p95_ms": 0.870125,
+            "max_ms": 1.576584,
+            "total_ms": 379.9435140000001
+          },
+          "settle": {
+            "count": 800,
+            "p50_ms": 0.055416,
+            "p95_ms": 0.068125,
+            "max_ms": 0.122875,
+            "total_ms": 45.64816999999997
+          },
+          "wall": {
+            "count": 800,
+            "p50_ms": 0.985625,
+            "p95_ms": 1.4295,
+            "max_ms": 2.1914170000000004,
+            "total_ms": 822.6942040000004
+          }
+        }
+      },
+      "repetition": 1
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 8,
+      "ticks": 800,
+      "warmup": 500,
+      "workload": {
+        "progress_delta": 2666,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2698
+      },
+      "phases": {
+        "ticks": 800,
+        "phases": {
+          "project": {
+            "count": 800,
+            "p50_ms": 0.540625,
+            "p95_ms": 0.598709,
+            "max_ms": 0.979749,
+            "total_ms": 437.7118460000001
+          },
+          "run": {
+            "count": 800,
+            "p50_ms": 1.015041,
+            "p95_ms": 1.6305,
+            "max_ms": 3.247625,
+            "total_ms": 904.5851179999999
+          },
+          "settle": {
+            "count": 800,
+            "p50_ms": 0.111167,
+            "p95_ms": 0.138291,
+            "max_ms": 0.314,
+            "total_ms": 91.57104599999995
+          },
+          "wall": {
+            "count": 800,
+            "p50_ms": 2.261958,
+            "p95_ms": 2.903667,
+            "max_ms": 4.6754999999999995,
+            "total_ms": 1894.7330789999996
+          }
+        }
+      },
+      "repetition": 1
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 1,
+      "ticks": 800,
+      "warmup": 500,
+      "workload": {
+        "progress_delta": 2666,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2698
+      },
+      "phases": {
+        "ticks": 800,
+        "phases": {
+          "project": {
+            "count": 800,
+            "p50_ms": 0.060375,
+            "p95_ms": 0.071875,
+            "max_ms": 0.092041,
+            "total_ms": 49.28634099999997
+          },
+          "run": {
+            "count": 800,
+            "p50_ms": 0.099666,
+            "p95_ms": 0.119708,
+            "max_ms": 0.826375,
+            "total_ms": 86.72719399999998
+          },
+          "settle": {
+            "count": 800,
+            "p50_ms": 0.0155,
+            "p95_ms": 0.018875,
+            "max_ms": 0.026,
+            "total_ms": 12.512250000000016
+          },
+          "wall": {
+            "count": 800,
+            "p50_ms": 0.243708,
+            "p95_ms": 0.27675,
+            "max_ms": 0.9921249999999999,
+            "total_ms": 201.3508109999999
+          }
+        }
+      },
+      "repetition": 2
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 2,
+      "ticks": 800,
+      "warmup": 500,
+      "workload": {
+        "progress_delta": 2666,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2698
+      },
+      "phases": {
+        "ticks": 800,
+        "phases": {
+          "project": {
+            "count": 800,
+            "p50_ms": 0.123083,
+            "p95_ms": 0.140041,
+            "max_ms": 0.162333,
+            "total_ms": 99.649646
+          },
+          "run": {
+            "count": 800,
+            "p50_ms": 0.209874,
+            "p95_ms": 0.255292,
+            "max_ms": 0.903124,
+            "total_ms": 181.27463899999978
+          },
+          "settle": {
+            "count": 800,
+            "p50_ms": 0.028875,
+            "p95_ms": 0.035416,
+            "max_ms": 0.0625,
+            "total_ms": 23.917504
+          },
+          "wall": {
+            "count": 800,
+            "p50_ms": 0.486875,
+            "p95_ms": 0.562917,
+            "max_ms": 1.225125,
+            "total_ms": 401.8352150000001
+          }
+        }
+      },
+      "repetition": 2
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 4,
+      "ticks": 800,
+      "warmup": 500,
+      "workload": {
+        "progress_delta": 2666,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2698
+      },
+      "phases": {
+        "ticks": 800,
+        "phases": {
+          "project": {
+            "count": 800,
+            "p50_ms": 0.260166,
+            "p95_ms": 0.287043,
+            "max_ms": 0.753708,
+            "total_ms": 211.6169570000003
+          },
+          "run": {
+            "count": 800,
+            "p50_ms": 0.455709,
+            "p95_ms": 0.91246,
+            "max_ms": 1.708332,
+            "total_ms": 402.8374669999999
+          },
+          "settle": {
+            "count": 800,
+            "p50_ms": 0.057125,
+            "p95_ms": 0.068333,
+            "max_ms": 0.209667,
+            "total_ms": 46.803275000000006
+          },
+          "wall": {
+            "count": 800,
+            "p50_ms": 1.041417,
+            "p95_ms": 1.511542,
+            "max_ms": 3.038458,
+            "total_ms": 871.6851319999997
+          }
+        }
+      },
+      "repetition": 2
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 8,
+      "ticks": 800,
+      "warmup": 500,
+      "workload": {
+        "progress_delta": 2666,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2698
+      },
+      "phases": {
+        "ticks": 800,
+        "phases": {
+          "project": {
+            "count": 800,
+            "p50_ms": 0.540166,
+            "p95_ms": 0.578167,
+            "max_ms": 1.528707,
+            "total_ms": 436.0154909999997
+          },
+          "run": {
+            "count": 800,
+            "p50_ms": 1.026834,
+            "p95_ms": 1.757919,
+            "max_ms": 4.05875,
+            "total_ms": 909.933363
+          },
+          "settle": {
+            "count": 800,
+            "p50_ms": 0.111666,
+            "p95_ms": 0.133583,
+            "max_ms": 0.470333,
+            "total_ms": 91.6268719999999
+          },
+          "wall": {
+            "count": 800,
+            "p50_ms": 2.265,
+            "p95_ms": 3.037625,
+            "max_ms": 6.537,
+            "total_ms": 1898.793475000001
+          }
+        }
+      },
+      "repetition": 2
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 1,
+      "ticks": 800,
+      "warmup": 500,
+      "workload": {
+        "progress_delta": 2666,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2698
+      },
+      "phases": {
+        "ticks": 800,
+        "phases": {
+          "project": {
+            "count": 800,
+            "p50_ms": 0.061375,
+            "p95_ms": 0.071041,
+            "max_ms": 0.112542,
+            "total_ms": 49.46963999999998
+          },
+          "run": {
+            "count": 800,
+            "p50_ms": 0.103667,
+            "p95_ms": 0.121333,
+            "max_ms": 0.67075,
+            "total_ms": 89.33028000000002
+          },
+          "settle": {
+            "count": 800,
+            "p50_ms": 0.015791,
+            "p95_ms": 0.019042,
+            "max_ms": 0.036041,
+            "total_ms": 12.814802000000022
+          },
+          "wall": {
+            "count": 800,
+            "p50_ms": 0.239375,
+            "p95_ms": 0.272542,
+            "max_ms": 0.8153750000000001,
+            "total_ms": 198.22808800000016
+          }
+        }
+      },
+      "repetition": 3
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 2,
+      "ticks": 800,
+      "warmup": 500,
+      "workload": {
+        "progress_delta": 2666,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2698
+      },
+      "phases": {
+        "ticks": 800,
+        "phases": {
+          "project": {
+            "count": 800,
+            "p50_ms": 0.125708,
+            "p95_ms": 0.140333,
+            "max_ms": 0.181084,
+            "total_ms": 101.57136300000008
+          },
+          "run": {
+            "count": 800,
+            "p50_ms": 0.211667,
+            "p95_ms": 0.254958,
+            "max_ms": 1.111916,
+            "total_ms": 184.02431999999993
+          },
+          "settle": {
+            "count": 800,
+            "p50_ms": 0.030209,
+            "p95_ms": 0.035875,
+            "max_ms": 0.068208,
+            "total_ms": 24.486398999999984
+          },
+          "wall": {
+            "count": 800,
+            "p50_ms": 0.486916,
+            "p95_ms": 0.551459,
+            "max_ms": 1.418667,
+            "total_ms": 404.07371000000023
+          }
+        }
+      },
+      "repetition": 3
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 4,
+      "ticks": 800,
+      "warmup": 500,
+      "workload": {
+        "progress_delta": 2666,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2698
+      },
+      "phases": {
+        "ticks": 800,
+        "phases": {
+          "project": {
+            "count": 800,
+            "p50_ms": 0.263957,
+            "p95_ms": 0.285959,
+            "max_ms": 0.36575,
+            "total_ms": 212.42478899999978
+          },
+          "run": {
+            "count": 800,
+            "p50_ms": 0.463501,
+            "p95_ms": 0.894457,
+            "max_ms": 1.559125,
+            "total_ms": 403.32003100000014
+          },
+          "settle": {
+            "count": 800,
+            "p50_ms": 0.059667,
+            "p95_ms": 0.068625,
+            "max_ms": 0.126125,
+            "total_ms": 48.066132999999994
+          },
+          "wall": {
+            "count": 800,
+            "p50_ms": 1.057334,
+            "p95_ms": 1.487125,
+            "max_ms": 2.213375,
+            "total_ms": 877.4495029999999
+          }
+        }
+      },
+      "repetition": 3
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 8,
+      "ticks": 800,
+      "warmup": 500,
+      "workload": {
+        "progress_delta": 2666,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2698
+      },
+      "phases": {
+        "ticks": 800,
+        "phases": {
+          "project": {
+            "count": 800,
+            "p50_ms": 0.542376,
+            "p95_ms": 0.596168,
+            "max_ms": 0.859124,
+            "total_ms": 437.0018679999995
+          },
+          "run": {
+            "count": 800,
+            "p50_ms": 1.038375,
+            "p95_ms": 1.720792,
+            "max_ms": 3.6915,
+            "total_ms": 913.6310959999998
+          },
+          "settle": {
+            "count": 800,
+            "p50_ms": 0.115125,
+            "p95_ms": 0.133417,
+            "max_ms": 0.166292,
+            "total_ms": 93.36114899999994
+          },
+          "wall": {
+            "count": 800,
+            "p50_ms": 2.265167,
+            "p95_ms": 3.001334,
+            "max_ms": 5.388792,
+            "total_ms": 1894.237751999997
+          }
+        }
+      },
+      "repetition": 3
+    }
+  ]
+}

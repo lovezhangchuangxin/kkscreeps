@@ -2,7 +2,7 @@
 
 本目录存放三轮调研的完整记录：对官方源码的剖析、对社区重写项目的研究、对各技术方案的实验验证。**这里的结论是决策的依据，不是决策本身**——定案见 [docs/decisions](../decisions/)，落地设计见 [docs/architecture](../architecture/)。
 
-四份主报告对应三轮调研（第一轮 = 01 与 02，第二轮 = 03，第三轮 = 04），层层递进，建议按编号阅读；`notes/` 是报告的原始证据（调研笔记与实验记录），报告中所有关键结论都能回溯到笔记里的出处。
+01–04 对应最初三轮调研（第一轮 = 01 与 02，第二轮 = 03，第三轮 = 04）；05 是当前实现的 Mod 扩展能力专项复查；06 在用户明确 JS-only 后复审整体架构，并以新鲜构建和 JS/native 交互实验提出实施路线。建议按问题选择阅读；`notes/` 是报告的原始证据，报告中关键结论可回溯到出处。
 
 | 报告 | 问题 | 一句话结论 |
 |---|---|---|
@@ -10,6 +10,8 @@
 | [02 沙箱选型](02-sandbox-evaluation.md) | 哪个 JS 引擎能承载玩家代码？ | deno_core（V8）十项硬要求基本全绿且全部实测；QuickJS 有条件可行；Boa 出局 |
 | [03 架构深挖](03-architecture-optimizations.md) | 官方还有哪些可优化的地方？ | 把 01 的收益判断从推理升级为实测锚定（单项最高 80 倍），产出七项架构定型要求 |
 | [04 游戏功能完整性](04-game-api-feasibility.md) | deno_core 能实现游戏的全部功能吗？ | 能；从官方中文文档盘点的全部功能面逐类验证，最后一个高风险缺口（寻路回调）实测关闭 |
+| [05 Mod 扩展能力](05-mod-extensibility-review.md) | 当前架构能达到官方与本地 xxscreeps 的 Mod 扩展能力吗？ | 当前尚未提供完整 Mod 通路；技术方向可保留，需要前移对象、意图、规则替换和事务等扩展契约 |
+| [06 架构与 JS Mod 复审](06-architecture-and-js-mod-review.md) | 整体架构应如何改造，深度玩法能否全部用 JS Mod 实现？ | 保留 Rust/V8/房间模型，补全全域提交、并发派发、开放规则；JS/native 嵌套调用实测可行，完整实现仍待切片 |
 
 ## notes/ 笔记索引
 
@@ -22,6 +24,12 @@
 **功能盘点**（04 报告证据）：[game-api-inventory.md](notes/game-api-inventory.md)（从中文文档站盘点的完整玩家功能面）、[deno-game-impl-mapping.md](notes/deno-game-impl-mapping.md)（功能组到沙箱能力的逐项映射）
 
 **实现复查**（2026-09-28 优化轮证据）：[m0-m1-code-quality-audit.md](m0-m1-code-quality-audit.md)
+
+**Mod 扩展实测**（05 报告证据，2026-10-01）：[复现脚本](notes/mod-extensibility-probe-2026-10-01.py)、[探针结果](notes/mod-extensibility-probe-2026-10-01.json)（临时内存世界的 Generic 管理查询、玩家对象字段与自定义 FIND 观察）
+
+**整体架构与 JS Mod 新实验**（06 报告证据，2026-10-01）：[当前构建性能采集](notes/architecture-perf-probe-2026-10-01.py)、[12 次原始性能结果](notes/architecture-perf-probe-2026-10-01.json)；[JS 宿主采集](notes/js-mod-host-probe-2026-10-01.py)、[5 次 release + debug 结果](notes/js-mod-host-probe-2026-10-01.json)；[Rust 宿主原型](../../spikes/deno-spike/examples/js_mod_host.rs)、[JS 行为原型](../../spikes/deno-spike/examples/js_mod_host.js)。均为研究证据，非生产 Mod 实装或正式性能验收。
+
+**架构再思考复核**（ADR-014 证据，2026-10-01）：[architecture-rethink-2026-10-01.md](notes/architecture-rethink-2026-10-01.md)（对 05/06 断言的双路独立核实、xxscreeps 机制取证要点、定型结论与数字勘误表）
 
 **存储选型基准**（2026-09-29 M2-C3 骨架证据）：[storage-bench.md](notes/storage-bench.md)（redb vs libmdbx 微基准方法学、三档场景夹具、macOS arm64 数字（初轮 + 评审清偿后复跑）与选型判据草案——非正式选型，正式选型待 2A 后真实负载）
 

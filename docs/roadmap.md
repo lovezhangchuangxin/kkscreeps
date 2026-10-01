@@ -91,6 +91,11 @@
 ## M4 完整玩法与扩展
 
 市场、power、跨世界（shard）与跨世界通信、导入官方世界数据、官方地形生成算法移植、mod 系统（[ADR-007](decisions/ADR-007-mod-system.md)）、回放与历史系统 UI（[设计待补](designs/README.md)）、多机部署后端（Redis 等，见 [storage.md](architecture/storage.md)）。
+
+> **2026-10-01 Mod 需求澄清与调研建议**：Mod 作者只写 JS，覆盖同类官方/xxscreeps 功能；不再采用 Rust 作者插件 + 轻量 JS 的方向。完整提案见 [mod-system.md](designs/mod-system.md)，架构、事务与性能证据见 [06](research/06-architecture-and-js-mod-review.md)。调研建议将事务、对象/指令/规则注册和 JS 最小完整链前移至当前扩面/首次存储冻结之前，服务与客户端贡献随 M3 补齐；本注是待实施排序建议，不表示原 M4 项已完成。
+>
+> **2026-10-01 架构定型（[ADR-014](decisions/ADR-014-contribution-plane.md)）**：贡献平面六原则 + 四项拍板（vanilla 同契约 / 投影协议一步设计分步实施 / 首版共同可信玩法 VM / 三方对照 benchmark 与 A 批并行）；批次 A–G 接受并调整（市场入候选进 A、RunJob 并发为并行轨、B 合并投影协议设计）；即刻纪律：新增封闭 enum 分派/硬编码白名单须同时提供具名 slot 或登记豁免。切片计划见 [mod-plane-batches](plans/mod-plane-batches.md)。
+
 **关卡**：全功能对照官方可玩；负载基准（含与官方/xxscreeps 的对照数据采集）。
 
 ## M5 生产化

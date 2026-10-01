@@ -1,6 +1,6 @@
 # 功能设计
 
-本目录存放 kkscreeps 的**功能层设计**：游戏对玩家呈现什么行为、提供什么工具。功能设计的硬约束是[兼容性红线](compatibility.md)——玩家侧体验必须与官方一致。
+本目录存放 kkscreeps 的**功能层设计**：游戏对玩家呈现什么行为、提供什么工具。默认 vanilla 配置的硬约束是[兼容性红线](compatibility.md)——玩家侧体验必须与官方一致。服主明确启用的玩法 Mod 可以改变规则，按 [ADR-007](../decisions/ADR-007-mod-system.md)发布其能力与版本。
 
 ## 文档索引
 
@@ -9,6 +9,7 @@
 | [compatibility.md](compatibility.md) | 兼容性红线：哪些行为必须与官方逐点一致、少量灰色地带的默认决策、验收关卡。注：本篇写于调研期，部分术语沿用调研笔记的叫法（如 blob、intent），与架构文档的正式叫法（房间快照、指令）对照见顶层 README 的术语速查 |
 | [dev-kit.md](dev-kit.md) | 开发套件：玩家本地编写、模拟、集成测试、一键部署的完整闭环 |
 | [pathfinder-callback.md](pathfinder-callback.md) | PathFinder.roomCallback 玩家侧通道：官方回调/异常/静默语义取证、kk-pathfinder 回调契约（M2-C2 已实装）、prelude→op 接线设计与处置矩阵（轨 A A4/A5 输入） |
+| [mod-system.md](mod-system.md) | JS-only Mod 设计提案：完整贡献模型、native 包裹/替换、对象/动作/字段、事务/恢复、玩家 API、存储/网络/客户端及能力验收；架构骨架已由 [ADR-014](../decisions/ADR-014-contribution-plane.md) 定型（带 [ADR-014] 标记为增补），尚未接入生产引擎 |
 
 ## 规划中（待补文档）
 
@@ -16,7 +17,6 @@
 
 - 世界与玩法覆盖清单（对照官方文档盘点出的 340+ 方法/443 常量的实现状态跟踪表）
 - 回放与历史系统（快照回放 + 确定性重演两种形态；协议兼容官方客户端。数据面已由存储层的事件溯源天然支撑，待补接口设计与保留策略。注意：官方私服版的回放本来就是空壳、靠示例 mod 补位，官方 MMO 服才有完整回放）
-- 服务器 mod 系统（自建机制，不做官方 mod 兼容，见 [ADR-007](../decisions/ADR-007-mod-system.md)：Rust 编译期插件 + 运行时 JS mod 两层，API 按本项目架构自由设计；排 M4）
 - 服务器运营功能（账号、代码分支、订阅经济等官方 MMO 功能的范围取舍）
 - 多世界/分片（shard）与跨世界通信的功能设计
 
