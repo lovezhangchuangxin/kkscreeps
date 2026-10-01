@@ -1,19 +1,15 @@
-//! 房间快照的编码格式：声明宏 + 版本升级 + 读写器。
+//! 房间二进制快照的类型声明、顺序读写和版本识别。
 //!
-//! 设计参照 xxscreeps 的 schema 包（声明式 format → 编译期 layout → 二进制读写），
-//! 在 Rust 用 `kk_schema!` 声明宏实现 M1 所需子集：
+//! 字段按声明顺序紧密排列，没有对齐填充。整数为小端编码，bool 为 0 或 1；
+//! String 使用 u32 字节长度加 UTF-8 内容，Vec 使用 u32 元素数量加元素序列，
+//! Option 使用单字节存在标志（0=None，1=Some 后接载荷），定长字节数组直接写入内容。
 //!
-//! - 定长原语（u8/u16/u32/u64/i32/i64/bool）小端内联；
-//! - `str` → u32 长度前缀 + UTF-8 字节；`vec T` → u32 长度前缀 + 元素序列；
-//! - `opt T` → u8 存在标志 + 载荷；`[u8; N]` → 原始字节；
-//! - 具名结构字段 → 递归编码（目标类型需实现 [`Schema`]）。
+//! [`macro@kk_schema!`] 生成结构体和读写实现，并为连续的原始类型字段前缀生成
+//! 编码偏移。偏移相对结构体载荷起点，不是 Rust 内存布局；嵌套或变长字段后
+//! 不再生成偏移，即使嵌套类型自身定长。
 //!
-//! 布局常量：`OFFSET_<field>` 覆盖声明中**原始类型（含 [u8; N]）的连续前缀**
-//! （变长/嵌套字段中断链，其后字段不再产出偏移）——M1 schema 尚未冻结，
-//! 完整偏移面在 M2 共享内存直读定稿时交付。
-//!
-//! 多态对象（`RoomObject` 等 variant 枚举）M1 起用 [`macro@kk_room_object!`]
-//! 声明宏生成 tag 前缀编解码管道（M2B 前置批落地——新增变体收敛为声明一次）。
+//! [`macro@kk_room_object!`] 生成对象枚举、访问器和单字节标签编解码。
+//! [`room`] 提供完整快照的魔数、版本及尾部字节检查；业务字段的合法性由调用方检查。
 
 /// 二进制读写错误的统一形态。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -23,10 +19,10 @@ pub enum SchemaError {
     InvalidBool(u8),
     InvalidOptionTag(u8),
     InvalidVariantTag(u8),
-    /// 编码版本不识别（无可用升级链）。
+    /// 版本为 0、比当前版本更新，或无法升级为当前版本。
     UnsupportedVersion(u16),
     BadMagic(u32),
-    /// 载荷解码结束后仍有剩余字节（拼接/追加损坏）。
+    /// 完整快照解码后剩余的字节数；单个 Schema 值不要求读完整个游标。
     TrailingBytes(usize),
 }
 
@@ -47,7 +43,8 @@ impl std::fmt::Display for SchemaError {
 
 impl std::error::Error for SchemaError {}
 
-/// 顺序读取游标。
+/// 从借用的字节切片顺序读取，不复制底层数据。
+/// 固定长度读取失败时位置不变；组合类型解码失败可能已消费部分字段。
 #[derive(Debug)]
 pub struct Cursor<'a> {
     data: &'a [u8],
@@ -59,10 +56,15 @@ impl<'a> Cursor<'a> {
         Self { data, pos: 0 }
     }
 
+    /// 返回尚未消费的字节数。
     pub fn remaining(&self) -> usize {
         self.data.len() - self.pos
     }
 
+    /// 借用接下来的 n 个字节并推进位置；n 为 0 时返回空切片。
+    ///
+    /// # Errors
+    /// 剩余字节不足时返回 UnexpectedEof，位置保持不变。
     pub fn read_bytes(&mut self, n: usize) -> Result<&'a [u8], SchemaError> {
         if self.remaining() < n {
             return Err(SchemaError::UnexpectedEof);
@@ -109,7 +111,11 @@ impl<'a> Cursor<'a> {
 #[doc(hidden)]
 pub use paste::item as __paste_item;
 
-/// schema 化类型：编码进 Vec、从 Cursor 解码。
+/// 将一个值追加到字节缓冲区，或从当前位置解码一个值。
+///
+/// 解码不要求消费全部输入，也不会在失败时回退游标；完整快照检查见
+/// [`room::decode_snapshot`]。内置字符串和列表用 u32 存长度，编码调用方须
+/// 保证长度能由 u32 表示；解码不设置独立的内存或元素数量上限。
 pub trait Schema: Sized {
     fn encode_into(&self, out: &mut Vec<u8>);
     fn decode_from(cur: &mut Cursor<'_>) -> Result<Self, SchemaError>;
@@ -201,16 +207,20 @@ impl<const N: usize> Schema for [u8; N] {
     }
 }
 
-/// 声明一个 schema 结构体：生成定义（derive Clone/Debug/PartialEq）、
-/// [`Schema`] 实现与原始字段前缀的 `OFFSET_<field>` 常量。
+/// 按声明顺序生成结构体、[`Schema`] 实现和定长前缀的编码偏移常量。
 ///
-/// 字段用括号组声明，类型词汇：`u8..u64/i32/i64/bool`、`str`（String）、
-/// `vec T`（Vec<T>）、`opt T`（Option<T>）、`[u8; N]`、具名结构（该类型自身实现 Schema）。
+/// 每个字段用括号包裹。支持 u8/u16/u32/u64/i32/i64、bool、`str`、`vec T`、`opt T`、
+/// `[u8; N]` 和实现 Schema 的 Rust 类型；`str`、`vec str`、`opt str` 为 String 简写。
+/// 嵌套容器可使用 Rust 类型写法，如 `Vec<Option<u32>>`。
 ///
-/// ```ignore
-/// kk_schema! {
+/// `OFFSET_<field>` 相对本结构体编码起点，只有开头连续的整数、bool 和
+/// 字节数组字段有该常量。具名嵌套类型也会终止偏移生成，不按其内存大小推算。
+///
+/// ```
+/// kk_schema::kk_schema! {
 ///     pub Store { (pub energy: u32) }
 /// }
+/// assert_eq!(Store::OFFSET_energy, 0);
 /// ```
 #[macro_export]
 macro_rules! kk_schema {
@@ -232,7 +242,7 @@ macro_rules! kk_schema {
         }
     };
 
-    // ---- 结构体定义：类型词汇 → Rust 类型（嵌套 item 宏须花括号定界） ----
+    // 累积 Rust 字段后一次生成结构体；item 位置的递归调用使用花括号。
     (@struct $(#[$meta:meta])* $vis:vis $name:ident [$($acc:tt)*]) => {
         #[derive(Clone, Debug, PartialEq)]
         $(#[$meta])*
@@ -295,19 +305,19 @@ macro_rules! kk_schema {
         $crate::kk_schema! { @struct $(#[$meta])* $vis $name [$($acc)* $fv $f: $t,] $($r)* }
     };
 
-    // ---- 编码：全部字段统一走 Schema::encode_into（语句位置） ----
+    // 按声明顺序累积编码语句，各字段委托给自身的 Schema 实现。
     (@enc $self:ident $out:ident [$($acc:tt)*]) => { $($acc)* };
     (@enc $self:ident $out:ident [$($acc:tt)*] ($fv:vis $f:ident : $($t:tt)*) $($r:tt)*) => {
         $crate::kk_schema!(@enc $self $out [$($acc)* $crate::Schema::encode_into(&$self.$f, $out);] $($r)*);
     };
 
-    // ---- 解码：统一走 Schema::decode_from；基臂产出块表达式（尾表达式链，无分号） ----
+    // 先累积字段读取语句，递归终点返回构造 Self 的块表达式。
     (@dec $cur:ident [$($l:tt)*] [$($ids:ident)*]) => { { $($l)* Ok(Self { $($ids),* }) } };
     (@dec $cur:ident [$($l:tt)*] [$($ids:ident)*] ($fv:vis $f:ident : $($t:tt)*) $($r:tt)*) => {
         $crate::kk_schema!(@dec $cur [$($l)* let $f = $crate::Schema::decode_from($cur)?;] [$($ids)* $f] $($r)*)
     };
 
-    // ---- 偏移常量：原始类型连续前缀（变长/嵌套字段之后的字段不产出偏移） ----
+    // 按编码宽度累加偏移，不使用 Rust 的 size_of 或内存对齐。
     (@off [$($sum:tt)*] [$($acc:tt)*]) => { $crate::__paste_item! { $($acc)* } };
     (@off [$($sum:tt)*] [$($acc:tt)*] ($fv:vis $f:ident : u8) $($r:tt)*) => {
         $crate::kk_schema! { @off [$($sum)* + 1] [$($acc)* #[allow(non_upper_case_globals)]
@@ -341,9 +351,7 @@ macro_rules! kk_schema {
         $crate::kk_schema! { @off [$($sum)* + $n] [$($acc)* #[allow(non_upper_case_globals)]
             pub const [<OFFSET_ $f>]: usize = ($($sum)*);] $($r)* }
     };
-    // 变长/嵌套字段：终止偏移链——其后的字段一律不再产出偏移（绝对偏移仅在
-    // 变长字段之前的原始字段上有定义，与模块文档一致）。累积器随 @offdone
-    // 带到终点统一发出
+    // 遇到嵌套或变长字段后停止计算，@offdone 只跳过后续字段并发出已有常量。
     (@off [$($sum:tt)*] [$($acc:tt)*] ($fv:vis $f:ident : $($t:tt)*) $($r:tt)*) => {
         $crate::kk_schema! { @offdone [$($acc)*] $($r)* }
     };
@@ -353,26 +361,25 @@ macro_rules! kk_schema {
     };
 }
 
-/// 声明一个 variant 枚举对象管道：一次变体声明生成机械样板全套——枚举本体
-/// （derive Clone/Debug/PartialEq）、`id`/`set_id`/`pos`/`set_pos` 访问器、
-/// tag 前缀编解码（[`Schema`] 实现 + 未知 tag 拒载）与 `tag()` 反查；
-/// 另附编译期 tag 值互异断言（重复值会让解码分派静默走错臂，必须在编译期拦截）。
+/// 生成对象枚举、id/坐标访问器和单字节标签编解码。
 ///
-/// tag 常量表**保持手写**（显式数据面）：它是线上契约冻结表，逐条沿革注释
-/// （B3/B4 追加记录）承载于该处；本宏每变体显式声明**完整常量路径**
-/// （`= tags::CREEP` 形态的 `$tag:path` 片段——评审清偿：裸 `tags::` 按调用点
-/// 解析是隐式约定，第二个枚举在别处复用时同名但语义错的模块编译器不会拦；
-/// 逐变体全路径把引用变为编译器锁定的显式契约）。载荷 struct 的首字段必须为
-/// `id: u64`、公共字段 `x: u8`/`y: u8`（schema 声明面纪律，全部 RoomObject
-/// 载荷如此）。
+/// 每个变体显式指定 u8 标签常量路径，标签必须互不相同，否则编译失败。
+/// 编码为标签加载荷；解码遇到未知标签返回 InvalidVariantTag。
 ///
-/// ```ignore
-/// kk_room_object! {
-///     /// 对象枚举。
-///     pub enum MyObject {
-///         Wall(WallObj) = tags::WALL,
-///     }
+/// 载荷须实现 [`Schema`]，并提供可访问的 `id: u64`、`x: u8`、`y: u8` 字段。
+/// 宏不要求 id 是编码首字段，也不验证 id 唯一性或坐标范围；这些由调用方负责。
+/// 标签一经用于保存的快照，就属于版本格式，修改必须同时处理旧版本读取。
+///
+/// ```
+/// kk_schema::kk_schema! {
+///     pub WallObj { (pub id: u64) (pub x: u8) (pub y: u8) }
 /// }
+/// mod tags { pub const WALL: u8 = 5; }
+/// kk_schema::kk_room_object! {
+///     pub enum MyObject { Wall(WallObj) = tags::WALL }
+/// }
+/// let wall = MyObject::Wall(WallObj { id: 1, x: 2, y: 3 });
+/// assert_eq!(wall.pos(), (2, 3));
 /// ```
 #[macro_export]
 macro_rules! kk_room_object {
@@ -395,27 +402,28 @@ macro_rules! kk_room_object {
         }
 
         impl $name {
-            /// 对象 id（所有变体的首字段）。
+            /// 返回载荷的对象 id。
             pub fn id(&self) -> u64 {
                 match self {
                     $(Self::$variant(o) => o.id,)*
                 }
             }
 
-            /// 覆写对象 id（世界分配器/快照导入的写回面；全局唯一由调用方保证）。
+            /// 设置对象 id；调用方负责维护世界中的唯一性和索引。
             pub fn set_id(&mut self, id: u64) {
                 match self {
                     $(Self::$variant(o) => o.id = id,)*
                 }
             }
 
-            /// 坐标（所有变体的公共字段）。
+            /// 返回房间内的格子坐标；本访问器不检查范围。
             pub fn pos(&self) -> (u8, u8) {
                 match self {
                     $(Self::$variant(o) => (o.x, o.y),)*
                 }
             }
 
+            /// 设置房间内坐标；不检查范围或同步世界索引。
             pub fn set_pos(&mut self, x: u8, y: u8) {
                 match self {
                     $(Self::$variant(o) => {
@@ -448,8 +456,7 @@ macro_rules! kk_room_object {
             }
         }
 
-        // tag 值互异的编译期断言：重复值会让上面的解码 match 静默路由到
-        // 首个匹配臂（编码端无感知）——契约级错误，编译期拦截。
+        // 重复标签会使解码只命中第一个变体，而编码仍能写出两种载荷；编译期拒绝。
         const _: () = {
             let __tags = [$($tag),*];
             let mut __i = 0;

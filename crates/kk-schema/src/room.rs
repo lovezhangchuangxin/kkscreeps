@@ -1,21 +1,25 @@
-//! M1 房间快照 schema：对象集与编解码封套。
+//! 单房间快照的字段定义和完整二进制编解码。
 //!
-//! 字段集对照官方引擎对象的持久化面（`engine/src/processor` 各 intent 处理器
-//! 读写的字段）；`room` 字段 M1 单房间省略，跨房间（M2+）经版本升级补入。
-//! 枚举值的 str 映射（body part / structure type / 资源名）在 kk-world 定义，
-//! schema 只存原始字节。
+//! 房间名由外层关联，不写入此载荷。字段中的对象 id 为内部 u64；部件码的
+//! 名称映射、资源名解释和玩家可见 JSON 由 kk-world 处理。
+//! 这里保存原始字段，不验证地形位码、对象坐标、资源名或 id 唯一性。
+//! 恢复成可运行房间时，还须经过 kk-world 的 RoomState::decode_snapshot 校验。
+//! 上游字段来源核对 Screeps engine a90d26fc9eb943147799e65d0bf9d4d0d79a2722；
+//! 下文的 engine/src 路径均相对此仓库。
 
 use crate::{Cursor, Schema, SchemaError};
 
-/// 当前 schema 版本。**首个持久化格式发布（M2 存储）起**，字段布局变更必须
-/// +1 并在 [`UPGRADE_CHAIN`] 补升级函数；发布前的 v1 内演化无损（尚无任何
-/// 落盘字节在流通，灰区表已登记此约定）。
+/// 当前快照版本号，写入封套；版本 0 不属于可升级版本。
+/// 字段的增删、顺序、类型或标签变化都会改变二进制格式。需保留旧字节可读性时，
+/// 必须增加版本并提供升级步骤；仅向结构体末尾追加字段也不会自动兼容旧载荷。
 pub const SCHEMA_VERSION: u16 = 1;
-/// 封套魔数（LE 落盘字节序为 `50 53 4B 4B` = "PSKK"）。
+/// 封套的格式标识，小端字节为 `50 53 4B 4B`，即 ASCII "PSKK"。
 pub const SNAPSHOT_MAGIC: u32 = 0x4b4b_5350;
 
 crate::kk_schema! {
-    /// 房间头部（全固定字段）。
+    /// 房间快照头部，所有字段定长，共 2524 字节。
+    /// 时间、种子和下一个对象 id 由编码调用方提供，不从房间对象表推导。
+    /// 地形按行存放，每格一个位码，索引为 y * 50 + x。
     pub RoomHeader {
         (pub time: u64)
         (pub seed: u64)
@@ -25,9 +29,9 @@ crate::kk_schema! {
 }
 
 crate::kk_schema! {
-    /// 携带资源（M1 起 energy；B2 增 ghodium——官方 store 键为资源常量
-    /// `RESOURCE_GHODIUM = "G"`，generateSafeMode 的消耗面；其余资源种类经
-    /// 版本升级扩展）。
+    /// 固定资源槽：energy 与 ghodium，数量以资源单位计。
+    /// ghodium 的玩家可见资源名为 "G"；其他资源通过对象的 store_extra 保存。
+    /// 编码层允许数量为 0，不检查容量或资源列表是否重复。
     pub Store {
         (pub energy: u32)
         (pub ghodium: u32)
@@ -45,7 +49,8 @@ impl Default for Store {
 }
 
 crate::kk_schema! {
-    /// 身体部件（官方形态 {type, hits, boost?}；kind 的 str 映射见 kk-world）。
+    /// 身体部件，kind 是 kk-world::types::BodyKind 的部件码。
+    /// hits 为该部件的生命值，boost 为可选强化资源名；编码层不校验这些值。
     pub BodyPart {
         (pub kind: u8)
         (pub hits: u32)
@@ -54,7 +59,8 @@ crate::kk_schema! {
 }
 
 crate::kk_schema! {
-    /// 孵化任务（官方 spawn.spawning 形态）。
+    /// 孵化任务：need_time 是所需 tick 数，spawn_time 是预计完成的绝对 tick。
+    /// directions 保存允许出生的方向码及其顺序，由孵化结算解释。
     pub SpawningJob {
         (pub name: str)
         (pub need_time: u32)
@@ -64,42 +70,37 @@ crate::kk_schema! {
 }
 
 crate::kk_schema! {
-    /// 爬爬虫。
+    /// 爬爬虫的状态，包括部件、资源、寿命和最近一次结算的动作记录。
+    /// 动作位图记录动作是否发生，不保存上游 actionLog 中的目标坐标。
+    /// 具体位定义见 kk-engine/src/settle/creep/mod.rs 的 ACTION_* 常量。
     pub CreepObj {
         (pub id: u64)
         (pub x: u8)
         (pub y: u8)
         (pub fatigue: u32)
+        // 寿命结束的绝对 tick；0 表示尚未初始化，孵化结束后由结算设置。
         (pub age_time: u64)
         (pub hits: u32)
         (pub spawning: bool)
         (pub action_log: u16)
-        // ↑ 官方 actionLog 是 13 键 {x,y} 对象（processor.js:51-65）；M1 压缩为
-        // 位图：bit0=harvest、bit1=build、bit2=upgradeController。坐标与战斗
-        // 动作（attack/heal/...）M2 以正式形态替换（schema 版本升级）。
-        // B2 起 u8 → u16：8 位已满，reserveController 的官方独立键
-        // `reserveController`（reserveController.js:47）需要第 9 位
         (pub name: str)
         (pub owner: str)
         (pub body: vec BodyPart)
         (pub store: Store)
-        // B4 多资源槽：矿物 harvest 产出等命名资源（官方 store 按资源名键的
-        // 开放对象——harvest.js:95 `store: {[target.mineralType]: ...}`）。
-        // 追加尾部（v1 内演化，冻结纪律同 ResourceStack 的既有约定）
         (pub store_extra: vec ResourceStack)
-        // M2B 扩面 P1（v1 内演化，尾部追加）：say 文本载荷（官方 actionLog.say
-        // 的 {message(截 10 UTF-16 单元), isPublic}——位图不可承载文本，
-        // say.js:18-21；per-tick 随 action_log 重置）+ notifyWhenAttacked 持久
-        // 标志（官方 processor.js:313 通用段对 creep 同样生效，creeps.js:1008
-        // 读 data.notifyWhenAttacked 判重——结构族同名字段先例）。
+        // 结算按 10 个 UTF-16 码元截取说话文本，截断的代理对转成替换字符。
+        // 来源：kk-engine/src/settle/creep/lifecycle.rs 的 intent_say、utf16_truncate。
+        // 文本与公开标志随 action_log 在每次房间结算开始时清空。
         (pub say_message: opt str)
         (pub say_public: opt bool)
+        // 通知标志跨 tick 保留；None 与 Some(false) 不等，含义见 SpawnObj。
         (pub notify_when_attacked: opt bool)
     }
 }
 
 crate::kk_schema! {
-    /// 能量源（重生钟 next_regeneration_time：None = 未挂钟）。
+    /// 能量源。next_regeneration_time 是再生的绝对 tick，None 表示未设置。
+    /// energy 与 energy_capacity 分别为当前能量和可再生到的容量。
     pub SourceObj {
         (pub id: u64)
         (pub x: u8)
@@ -111,9 +112,8 @@ crate::kk_schema! {
 }
 
 crate::kk_schema! {
-    /// controller 预定（官方 DB 形态 `{user, endTime}`：reserveController.js:36-39
-    /// 创建、:49 递增；controllers/tick.js:10-12 到期或房被占时清除）。
-    /// `user` 官方存内部 _id，我方身份模型按玩家名（与 owner 字段同基）。
+    /// 控制器预订。user 在本项目中是玩家名，end_time 是结束的绝对 tick。
+    /// 上游对应 user/endTime（engine/src/processor/intents/creeps/reserveController.js）。
     pub Reservation {
         (pub user: str)
         (pub end_time: u64)
@@ -121,11 +121,9 @@ crate::kk_schema! {
 }
 
 crate::kk_schema! {
-    /// controller 签名（官方 DB 形态 `{user, text, time, datetime}`：
-    /// signController.js:23-28）。第四字段 `datetime` 为墙钟（官方
-    /// Date.now() 毫秒，签名结算时落一次；GPT 复审灰区纠错清偿：getter 从
-    /// 持久值构造，不再每次读取合成当前墙钟漂移）。确定性重放经 TickInput
-    /// 注入墙钟（ADR-013：首跑取实际值、重放用记录值）。
+    /// 控制器签名。time 为签名时的游戏 tick，datetime 为可选 Unix 毫秒时间。
+    /// datetime 来自结算的 TickInput，保存后读取不重新取墙钟；旧夹具可缺省。
+    /// 上游字段来源：engine/src/processor/intents/creeps/signController.js。
     pub Sign {
         (pub user: str)
         (pub text: str)
@@ -135,14 +133,11 @@ crate::kk_schema! {
 }
 
 crate::kk_schema! {
-    /// 控制器（safe_mode 0 = 关闭；downgrade_time None = 未挂钟）。
-    /// B2 补齐官方持久化面：reservation（预定）、sign（签名）、
-    /// upgrade_blocked（attackController 的升级封锁钟，绝对 tick：
-    /// attackController.js:48 / controllers/tick.js:20-23）、
-    /// safe_mode_cooldown（safeMode 冷却钟，绝对 tick：controllers/tick.js:29）。
-    /// A3b 补 owner 三态哨兵（官方降级归零 `user = null`，controllers/tick.js:56）：
-    /// owner_cleared=true 表示曾拥有但已清（投影 owner: null → 玩家侧
-    /// my === false）；false 且 owner None = 从未拥有（投影无键 → my undefined）。
+    /// 控制器状态。safe_mode、downgrade_time、upgrade_blocked 和
+    /// safe_mode_cooldown 都保存绝对 tick，不是剩余时长；safe_mode 为 0 表示关闭。
+    /// 可选时间为 None 表示未设置，玩家可见的剩余时间由投影层计算。
+    /// owner_cleared 区分无主的两种输出：owner 缺失且该位为 true 时输出 null；
+    /// 为 false 时省略 owner 字段。owner 有值时以该值为准。
     pub ControllerObj {
         (pub id: u64)
         (pub x: u8)
@@ -163,10 +158,10 @@ crate::kk_schema! {
 }
 
 crate::kk_schema! {
-    /// 孵化器（hits 上限 SPAWN_HITS；off = RCL 超限停用，_calc_spawns 维护）。
-    /// A4-iv 补 notify_when_attacked（官方 processor.js:313-314 通用段落库；
-    /// 玩家建造的结构出生即 true——build.js:116，放置面缺省 None=官方
-    /// undefined：与任意布尔不等，API 首调恒记 intent）。
+    /// 孵化器的生命值、资源和当前孵化任务。
+    /// off 表示控制器等级允许的数量不足时停用，由孵化结算维护。
+    /// notify_when_attacked 为 None 表示尚无该字段，与 Some(false) 有区别；
+    /// 玩家 API 会据此判断是否需要提交设置指令。新建结构通常写入 Some(true)。
     pub SpawnObj {
         (pub id: u64)
         (pub x: u8)
@@ -182,8 +177,8 @@ crate::kk_schema! {
 }
 
 crate::kk_schema! {
-    /// 扩展（hits 上限 EXTENSION_HITS；off = RCL 超限停用，_calc_spawns 维护）。
-    /// A4-iv 补 notify_when_attacked（同 SpawnObj 注释）。
+    /// 扩展的生命值、所有者和资源。off 与通知标志的含义见 SpawnObj。
+    /// 资源容量由世界与结算层按控制器等级计算，不保存在 Store 中。
     pub ExtensionObj {
         (pub id: u64)
         (pub x: u8)
@@ -197,9 +192,8 @@ crate::kk_schema! {
 }
 
 crate::kk_schema! {
-    /// 建造中的墙（hits 从 1 起步，上限 WALL_HITS_MAX=300M）。
-    /// A4-iv 补 notify_when_attacked（同 SpawnObj 注释——中性结构同样可设，
-    /// 官方基类版 API 对 my===undefined 放行）。
+    /// 建造完成的墙，保存当前生命值；生命值上限由结算层查表。
+    /// 通知标志保留未设置、开启和关闭三种状态，含义见 SpawnObj。
     pub ConstructedWallObj {
         (pub id: u64)
         (pub x: u8)
@@ -210,8 +204,9 @@ crate::kk_schema! {
 }
 
 crate::kk_schema! {
-    /// 道路（decay 到时移除）。
-    /// A4-iv 补 notify_when_attacked（同 SpawnObj 注释）。
+    /// 道路。next_decay_time 保存下一次衰减的绝对 tick，0 表示未设置。
+    /// 到期结算会扣除生命值，降到 0 时才移除道路；未移除时重新设置衰减时间。
+    /// 来源：上游 engine/src/processor/intents/roads/tick.js。
     pub RoadObj {
         (pub id: u64)
         (pub x: u8)
@@ -223,11 +218,9 @@ crate::kk_schema! {
 }
 
 crate::kk_schema! {
-    /// 仓库（hits 上限 STORAGE_HITS）。
-    /// A4-iv 补 notify_when_attacked（同 SpawnObj 注释）。
-    /// B4 补 store_extra：官方 storage 是通用商店（数值 storeCapacity，transfer
-    /// 的 capacityForResource 走 max(0, capacity−Σscr) 全槽共用——utils.js:671-675），
-    /// 任意资源可入；矿物等命名资源经列表槽承载（与 creep 同口径）。
+    /// 仓库，使用固定资源槽和按名称保存的额外资源列表。
+    /// 所有资源共享容量，容量由世界与结算层处理；编码不校验是否超限。
+    /// 通知标志含义见 SpawnObj。
     pub StorageObj {
         (pub id: u64)
         (pub x: u8)
@@ -241,11 +234,11 @@ crate::kk_schema! {
 }
 
 crate::kk_schema! {
-    /// 工地（progress_total 为创建时定格的总工程量：放置路径=裸 CONSTRUCTION_COST
-    /// （vanilla getProgressTotal:1871-1874），引擎 intent 建工地=成本×地形系数
-    /// （create-construction-site.js:38-48，仅 road 有系数）——存字段而非派生，
-    /// 避免 setTerrain 后完成线漂移；structure_type 存官方字符串——M1 结算外
-    /// 类型照常可摆放）。
+    /// 工地。progress_total 保存创建时确定的总工程量，后续不从地形重算。
+    /// 放置入口使用基础建造成本，建造指令创建道路时会乘地形系数。
+    /// structure_type 保存结构类型名称；owner、name 可缺省。
+    /// 来源：kk-world/src/place/place_structure.rs 的 normalize_site，以及
+    /// kk-engine/src/settle/room.rs 的 create_construction_site。
     pub ConstructionSiteObj {
         (pub id: u64)
         (pub x: u8)
@@ -259,11 +252,10 @@ crate::kk_schema! {
 }
 
 crate::kk_schema! {
-    /// 掉落资源（resource_type 0=energy/1=power/2=G）。官方无衰减钟字段：
-    /// 每 tick `amount -= ceil(amount / ENERGY_DECAY)`（energy/tick.js），≤0 移除。
-    /// B3 起任意资源名经 `resource: opt str` 承载（Some 时 code 无效——墓碑/废墟
-    /// 衰减掉的 boost 矿物等官方按资源名键落地，_create-energy.js:31-36 的
-    /// resourceType 字符串形态）。
+    /// 掉落资源。resource 有值时由它确定资源名；否则 resource_type
+    /// 按 0=energy、1=power、2=G 解释，其他码在世界投影中也按 energy 处理。
+    /// 编码保留两个字段，不替调用方选择资源名。amount 为当前数量，衰减按 tick
+    /// 扣除数量，没有独立到期时间；见 kk-engine::settle::economy::energy_tick。
     pub EnergyObj {
         (pub id: u64)
         (pub x: u8)
@@ -275,10 +267,9 @@ crate::kk_schema! {
 }
 
 crate::kk_schema! {
-    /// 任意资源量（资源名 + 正量）：墓碑/废墟 store 的额外资源槽（Store 结构
-    /// 的 energy/ghodium 之外——boost 矿物回收、container 全资源承接等）。
-    /// 官方 store 是按资源名键的开放对象（_die.js:35/78 的 bodyResources 与
-    /// object.store 逐键循环），v1 schema 双槽 + 本列表承载全集。
+    /// 一个资源名和数量，供固定 energy/G 槽之外的资源使用。
+    /// 编码层允许数量为 0、名称重复或与固定槽重叠；构造方负责保持列表一致。
+    /// 投影只输出正量项，重名项会覆盖已有 JSON 键，并不会自动求和。
     pub ResourceStack {
         (pub resource: str)
         (pub amount: u32)
@@ -286,11 +277,11 @@ crate::kk_schema! {
 }
 
 crate::kk_schema! {
-    /// 墓碑（B3）。官方 _die.js:22-34 的持久化面：user/deathTime/decayTime/
-    /// creepId/creepName/creepTicksToLive/creepBody（官方存类型名数组，此处
-    /// 存部件码——kk-world BodyKind 映射）/creepSaying（公开遗言，actionLog
-    /// 位图无文本载荷——恒 None，灰区表登记）/store（energy/G 双槽 +
-    /// store_extra 承载 boost 矿物等其余资源）。
+    /// 墓碑，保存死亡时的对象信息和剩余资源。
+    /// death_time、decay_time 是绝对 tick；creep_ticks_to_live 是死亡时的剩余 tick 数。
+    /// creep_body 保存部件码，creep_saying 保存死亡时的公开遗言，私有或缺失时为 None。
+    /// 来源：上游 engine/src/processor/intents/creeps/_die.js；本项目的资源分槽
+    /// 和部件码由世界层转换为玩家可见格式。
     pub TombstoneObj {
         (pub id: u64)
         (pub x: u8)
@@ -309,12 +300,10 @@ crate::kk_schema! {
 }
 
 crate::kk_schema! {
-    /// 废墟（B3）。官方 structures/_destroy.js:22-40 的持久化面：
-    /// structure{id,type,hits:0,hitsMax,user}（被摧毁结构的存照——structure_id
-    /// 存原结构 u64 id、投影侧转字符串；hitsMax 无表项的结构官方 undefined →
-    /// None）、destroyTime、decayTime = gameTime + (RUIN_DECAY_STRUCTURES[type]
-    /// || RUIN_DECAY)、user（官方 `if(object.user)` 空串 falsy 不落 → 投影侧
-    /// 同口径）、store（原结构全量承接：_destroy.js:37 `object.store || {}`）。
+    /// 废墟，保存被摧毁结构的 id、类型、生命值上限和承接的资源。
+    /// destroy_time、decay_time 为绝对 tick；structure_hits_max 缺省时为 None。
+    /// 原结构 id 与废墟自身 id 不同，玩家可见字符串由世界层生成。
+    /// 来源：上游 engine/src/processor/intents/structures/_destroy.js。
     pub RuinObj {
         (pub id: u64)
         (pub x: u8)
@@ -331,13 +320,9 @@ crate::kk_schema! {
 }
 
 crate::kk_schema! {
-    /// 矿物（B4）。官方持久化面（minerals/tick.js 读写的字段）：
-    /// mineralType（基础矿物名 H/O/U/K/L/Z/X——harvest 产出的 store 键）、
-    /// mineralAmount、density（1..=4，DENSITY_* 常量）、nextRegenerationTime
-    /// （再生钟绝对 tick：None = 未挂钟——minerals/tick.js:10-13 首见耗尽才挂、
-    /// :14-18 到点清 null 并按 MINERAL_DENSITY[density] 回填）。
-    /// getter 面（game/minerals.js:35-40）：ticksToRegeneration =
-    /// `nextRegenerationTime ? n − time : undefined`（投影层折叠）。
+    /// 矿物，保存资源名、存量、密度码和再生时间。
+    /// density 通常为 1..=4，next_regeneration_time 是绝对 tick，None 表示未设置。
+    /// 编码层不校验密度或矿物名称；再生规则见 kk-engine::settle::economy::mineral_tick。
     pub MineralObj {
         (pub id: u64)
         (pub x: u8)
@@ -350,12 +335,10 @@ crate::kk_schema! {
 }
 
 crate::kk_schema! {
-    /// 提取器（B4）。官方持久化面：user（可无主——harvest.js:78 敌主拒、
-    /// checkStructureAgainstController 的无主恒 active 分支 utils.js:457-460）、
-    /// hits（EXTRACTOR_HITS，build.js:214-220 落成）、cooldown（计数器形态：
-    /// harvest.js:108 写瞬态 `_cooldown`、extractors/tick.js:21-25 同 tick 持久化
-    /// 并逐 tick 递减——0 = 无冷却，官方 undefined || 0 同值）、
-    /// notifyWhenAttacked（build.js:111-117 出生即 true）。
+    /// 提取器。cooldown 是剩余 tick 的计数器，结算时递减，0 表示无冷却。
+    /// owner 可缺省；通知标志含义见 SpawnObj。
+    /// 与控制器的冷却字段不同，cooldown 不存绝对 tick。
+    /// 来源：上游 engine/src/processor/intents/extractors/tick.js。
     pub ExtractorObj {
         (pub id: u64)
         (pub x: u8)
@@ -368,8 +351,9 @@ crate::kk_schema! {
 }
 
 crate::kk_schema! {
-    /// M1 结算范围外对象的透传桶：完整记录以 JSON 存放（含 type 与
-    /// structureType 等玩家可见字段），结算忽略、投影还原。
+    /// 以 JSON 字符串保存未定义专用结构体的对象，如 tower、rampart 和 terminal。
+    /// 世界层还原 JSON，结算层按 structureType 选择已实现的规则；不是统一跳过结算。
+    /// JSON 对象投影时以外层 id/x/y 覆盖对应键。编码层不验证 data 是有效 JSON。
     pub GenericObj {
         (pub id: u64)
         (pub x: u8)
@@ -379,12 +363,10 @@ crate::kk_schema! {
 }
 
 kk_schema! {
-    /// 旗帜。官方 flag 是独立集合（processor.js:22 bulkFlags，不参与 roomObjects
-    /// 循环）；M1 折进 RoomObject 变体是故意简化，投影层注意官方形状差异。
-    /// M2B 扩面 P2（v1 内演化，尾部追加）：owner——官方 flags 按玩家私有
-    /// （flags 集合带 user；Game.flags/find(FIND_FLAGS)/look 均只见自家，
-    /// removeFlag 只删自家同名旗——两玩家可各有同名旗）。None=旧夹具/无主
-    /// 旗（投影按全局可见兜底，与 M1 行为兼容）。
+    /// 旗帜在本项目中属于房间对象；上游则使用独立 flags 集合。
+    /// owner 有值时按玩家过滤；None 为无主旗，在本项目查看者投影中仍可见。
+    /// 上游集合来源：engine/src/processor.js 的 processRoom（flags、bulkFlags）。
+    /// 两名玩家可分别拥有同名旗，查找与移除须同时考虑 owner。
     pub FlagObj {
         (pub id: u64)
         (pub x: u8)
@@ -397,8 +379,8 @@ kk_schema! {
 }
 
 crate::kk_room_object! {
-    /// 房间内对象（variant 枚举：tag 前缀 + 载荷）。tag 值见 [`RoomObject::tag`]，
-    /// 一旦发布即冻结。
+    /// 房间对象，编码为单字节标签加对应载荷；标签值见 [`tags`]。
+    /// 访问器和编解码不检查 id 唯一性或坐标范围。
     pub enum RoomObject {
         Creep(CreepObj) = tags::CREEP,
         Source(SourceObj) = tags::SOURCE,
@@ -411,22 +393,21 @@ crate::kk_room_object! {
         Flag(FlagObj) = tags::FLAG,
         Road(RoadObj) = tags::ROAD,
         Storage(StorageObj) = tags::STORAGE,
-        /// 墓碑（B3 变体——死亡结算产出，衰减钟驱动）。
+        /// 墓碑，死亡信息与资源。
         Tombstone(TombstoneObj) = tags::TOMBSTONE,
-        /// 废墟（B3 变体——结构摧毁结算产出，衰减钟驱动）。
+        /// 废墟，被摧毁结构的信息与资源。
         Ruin(RuinObj) = tags::RUIN,
-        /// 矿物（B4 变体——再生钟驱动，harvest mineral 的目标）。
+        /// 矿物，存量与再生时间。
         Mineral(MineralObj) = tags::MINERAL,
-        /// 提取器（B4 变体——cooldown 计数器驱动，harvest mineral 的门）。
+        /// 提取器，采矿所需结构与冷却计数器。
         Extractor(ExtractorObj) = tags::EXTRACTOR,
-        /// M1 结算范围外的对象（tower/rampart/lab/portal/…）：完整记录
-        /// 以 JSON 透传存放——保持与 M0 哑世界相同的放置接受面，结算忽略之。
+        /// 以 JSON 保存的对象，按结构类型参与已实现的结算规则。
         Generic(GenericObj) = tags::GENERIC,
     }
 }
 
-/// variant tag 值（编码首字节）。一旦发布即冻结；新增变体追加尾部、
-/// 改动已有值必须走 schema 版本升级。
+/// 对象编码的首字节标签。已有值不可随枚举顺序重新编号，新增类型使用未占用值。
+/// 修改既有标签会改变格式，须同时处理旧版本读取。
 pub mod tags {
     pub const CREEP: u8 = 0;
     pub const SOURCE: u8 = 1;
@@ -440,23 +421,17 @@ pub mod tags {
     pub const ROAD: u8 = 9;
     pub const STORAGE: u8 = 10;
     pub const GENERIC: u8 = 11;
-    /// B3 新增（v1 内演化：追加尾部）。
     pub const TOMBSTONE: u8 = 12;
-    /// B3 新增（v1 内演化：追加尾部）。
     pub const RUIN: u8 = 13;
-    /// B4 新增（v1 内演化：追加尾部）。
     pub const MINERAL: u8 = 14;
-    /// B4 新增（v1 内演化：追加尾部）。
     pub const EXTRACTOR: u8 = 15;
 }
 
 crate::kk_schema! {
-    /// 房间快照：头部 + 对象表（对象按 id 升序存放——BTreeMap 迭代序）+
-    /// 事件日志缓冲（B3）。官方每 tick 以 saveRoomEventLog 整体覆写房间的
-    /// 事件列表（processor.js:497 → driver/lib/index.js:583-585 的 hset——
-    /// 当前 tick 的事件数组，玩家下一 tick 经 runtimeData.roomEventLog 读到
-    /// 上一 tick 全量）；快照随房携带同口径缓冲（事件 JSON 字符串数组，
-    /// settle 每 tick 整体覆写）。
+    /// 单房间的头部、对象列表和事件记录。
+    /// kk-world 编码时按 id 升序提供对象，本类型本身不排序或拒绝重复 id。
+    /// events 是最近一次房间结算的事件 JSON 字符串，结算每 tick 整体替换；
+    /// 编码不解析 JSON。房间名由快照的外层键关联。
     pub RoomSnapshot {
         (pub header: RoomHeader)
         (pub objects: vec RoomObject)
@@ -464,7 +439,8 @@ crate::kk_schema! {
     }
 }
 
-/// 编码整个快照（封套：magic + version + 载荷）。
+/// 编码完整快照：4 字节小端魔数、2 字节小端版本、RoomSnapshot 载荷。
+/// 仅序列化字段，不校验世界状态，也不执行磁盘写入。
 pub fn encode_snapshot(s: &RoomSnapshot) -> Vec<u8> {
     let mut out = Vec::with_capacity(2600);
     out.extend_from_slice(&SNAPSHOT_MAGIC.to_le_bytes());
@@ -473,14 +449,14 @@ pub fn encode_snapshot(s: &RoomSnapshot) -> Vec<u8> {
     out
 }
 
-/// 版本升级函数链（方案 D2）：`UPGRADE_CHAIN[n]` 把 v(n+1) 字节升级为 v(n+2)。
-/// 当前 v1 起步无历史版本，链为空；SCHEMA_VERSION +1 时在此追加转换函数，
-/// 旧版本字节即自动"读入升级再解码"。
+/// 接收完整封套字节并输出下一版本的完整封套；必须同时更新头部版本号。
 type UpgradeFn = fn(Vec<u8>) -> Result<Vec<u8>, SchemaError>;
+// 第 n 项把版本 n+1 升为 n+2，数组长度保证每个旧版本都有相邻步骤。
+// 当前版本为 1，尚无历史版本转换函数。
 const UPGRADE_CHAIN: [UpgradeFn; (SCHEMA_VERSION - 1) as usize] = [];
 
-/// 把 `from` 版本的封套字节（含头）沿升级链推进到当前版本。
-/// 链空时对任何旧版本只能拒绝——机制位置由测试锁定（v0 伪造字节走本路径）。
+/// 按版本顺序执行升级函数。版本 0 和未来版本始终拒绝，不尝试转换。
+/// 调用方保证 from 与封套头部一致；每一步负责更新载荷和封套版本号。
 fn upgrade_snapshot(from: u16, mut bytes: Vec<u8>) -> Result<Vec<u8>, SchemaError> {
     if from == 0 || from > SCHEMA_VERSION {
         return Err(SchemaError::UnsupportedVersion(from));
@@ -491,7 +467,13 @@ fn upgrade_snapshot(from: u16, mut bytes: Vec<u8>) -> Result<Vec<u8>, SchemaErro
     Ok(bytes)
 }
 
-/// 解码整个快照。旧版本字节先过升级链再到当前版本。
+/// 解码完整快照，先检查魔数和版本，再读取全部载荷。
+/// 当前版本直接解码；可支持的旧版本先转换完整封套再解码。
+/// 返回成功只表示二进制格式有效，不保证对象或地形可用于世界运行。
+///
+/// # Errors
+/// 头部或载荷截断、魔数不符、不支持的版本、非法标志/标签、非 UTF-8 字符串，
+/// 或载荷后仍有额外字节时返回错误。
 pub fn decode_snapshot(bytes: &[u8]) -> Result<RoomSnapshot, SchemaError> {
     let mut cur = Cursor::new(bytes);
     let magic = u32::decode_from(&mut cur)?;
@@ -601,7 +583,7 @@ mod tests {
                         energy: 37,
                         ghodium: 1000,
                     },
-                    // B4：creep 携带的命名矿物（harvest mineral 产出入槽）
+                    // 额外资源列表保存固定 energy/G 槽之外的矿物。
                     store_extra: vec![ResourceStack {
                         resource: "U".into(),
                         amount: 12,
@@ -749,12 +731,11 @@ mod tests {
         }
     }
 
-    /// B3 变体冻结面：tag 值一旦发布不可变（追加尾部）；EnergyObj 命名槽与
-    /// tombstone/ruin 的额外资源列表随载荷往返（sample_snapshot 已覆盖整对象）。
+    /// 检查墓碑/废墟标签的固定值，以及掉落资源名和额外资源项的编码往返。
     #[test]
-    fn b3_variant_tags_and_named_resources_roundtrip() {
-        assert_eq!(tags::TOMBSTONE, 12, "B3 追加尾部（v1 内演化）");
-        assert_eq!(tags::RUIN, 13, "B3 追加尾部（v1 内演化）");
+    fn corpse_tags_and_named_resources_roundtrip() {
+        assert_eq!(tags::TOMBSTONE, 12, "快照中的固定标签值");
+        assert_eq!(tags::RUIN, 13, "快照中的固定标签值");
         let named = EnergyObj {
             id: 1,
             x: 2,
@@ -768,7 +749,7 @@ mod tests {
         assert_eq!(
             EnergyObj::decode_from(&mut crate::Cursor::new(&buf)).unwrap(),
             named,
-            "命名槽往返（Some 时 code 无效——0 由解码侧忽略）"
+            "编码保留资源名与数值码，资源名优先级由世界层解释"
         );
         let stack = ResourceStack {
             resource: "LH".into(),
@@ -782,12 +763,11 @@ mod tests {
         );
     }
 
-    /// B4 变体冻结面：tag 14/15 追加尾部（v1 内演化）；MineralObj/ExtractorObj
-    /// 与 creep/storage 的 store_extra 随载荷往返（sample_snapshot 覆盖整对象）。
+    /// 检查矿物/提取器标签的固定值，以及再生时间和无主提取器的编码往返。
     #[test]
-    fn b4_variant_tags_and_multislot_roundtrip() {
-        assert_eq!(tags::MINERAL, 14, "B4 追加尾部（v1 内演化）");
-        assert_eq!(tags::EXTRACTOR, 15, "B4 追加尾部（v1 内演化）");
+    fn mineral_tags_and_optional_fields_roundtrip() {
+        assert_eq!(tags::MINERAL, 14, "快照中的固定标签值");
+        assert_eq!(tags::EXTRACTOR, 15, "快照中的固定标签值");
         let mineral = MineralObj {
             id: 1,
             x: 10,
@@ -817,7 +797,7 @@ mod tests {
         assert_eq!(
             ExtractorObj::decode_from(&mut crate::Cursor::new(&buf)).unwrap(),
             extractor,
-            "无主提取器（官方无 user 键 ⇒ harvest 的无主恒 active 分支）"
+            "owner 为 None 的提取器应保留全部字段"
         );
     }
 
@@ -849,8 +829,7 @@ mod tests {
             decode_snapshot(&old),
             Err(SchemaError::UnsupportedVersion(9))
         );
-        // 版本 0 走升级链入口（机制位置锁定：链空 ⇒ 拒绝；SCHEMA_VERSION +1 时
-        // 此用例改写为"伪造 v0 字节 → 过链 → 成功解码"）
+        // 版本 0 没有对应格式，即使增加升级步骤也应拒绝。
         let mut v0 = bytes.clone();
         v0[4] = 0;
         v0[5] = 0;
