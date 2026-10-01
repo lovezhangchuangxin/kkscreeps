@@ -1,8 +1,8 @@
-//! A1 批（mod-plane-batches A1 判据）：段边界故障注入的 embed 全链——
+//! A1/A2 批（mod-plane-batches 判据）：段边界故障注入的 embed 全链——
 //! 失败轮世界不动、候选缓存、重试不重跑玩家代码。取 Market/Validate/
-//! Publish 三段（settle_market 之后或入口——市场快照桥本体由引擎级测试
-//! 锁定，本链验证段级注入→恢复态→重试经 embed 全链）。串行链 impl
-//!（顶层唯一 #[test] 在 crate 根）。
+//! Publish 三段（settle_market 之后或入口——市场回退语义由引擎级测试
+//! 锁定，A2 起为真候选的结构性保证，本链验证段级注入→恢复态→重试经
+//! embed 全链）。串行链 impl（顶层唯一 #[test] 在 crate 根）。
 
 use kk_engine::RunState;
 use kk_engine::TickStage;

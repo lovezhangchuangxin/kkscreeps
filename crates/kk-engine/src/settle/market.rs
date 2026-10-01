@@ -129,7 +129,10 @@ pub struct Transaction {
 }
 
 /// 世界级市场态（Engine 持有）。
-#[derive(Debug, Default, Clone)]
+/// PartialEq（A2）：候选纪律断言面——失败轮 `self.market` 与失败前**整态**
+/// 相等（覆盖私有计数器 next_order_seq/next_transaction_id——它们不入
+/// orders/transactions 抽样断言，漏拷/直改只动计数器的形态由此拦截）。
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct MarketState {
     /// 键序=BTreeMap 字典序（"mkt10"<"mkt9"，N≥10 后与官方 db/ObjectId
     /// 插入序错位）——影响 getAllOrders 返回序/my_orders 迭代序等**纯序面**

@@ -3,10 +3,11 @@
 //! 一次 tick 拆为五个可注入故障的段边界：**prepare → settle → market →
 //! validate → publish**。驱动（[`Engine::tick_with_intents_with_input`](crate::settle::Engine)）
 //! 经 [`StageCursor`] 推进并记录段位；任一段失败 → [`RunState::NeedsRecovery`]，
-//! 全部权威状态（世界/玩家候选/市场快照桥）保持上一 tick。
+//! 全部权威状态（世界/玩家/市场）保持上一 tick。
 //!
-//! 演进锚点：A2 把市场改写为真候选后，Market 段的快照桥撤销；A3 把
-//! [`TickCandidates`]/[`SettledRooms`] 的所有权形态演进为 OwnedTickTxn。
+//! 演进锚点：A2 已落地——市场为真候选（settle_market 写候选、publish 一次
+//! 生效，A1 快照桥撤销）；A3 把 [`TickCandidates`]/[`SettledRooms`] 的
+//! 所有权形态演进为 OwnedTickTxn。
 
 use std::collections::BTreeMap;
 
@@ -15,7 +16,6 @@ use serde_json::Value;
 use crate::intent::IntentBatch;
 use crate::settle::PlayerState;
 use crate::settle::SettleError;
-use crate::settle::market::MarketState;
 use kk_world::RoomState;
 
 /// 段边界（故障注入与状态机记录的最小单位）。
@@ -75,8 +75,9 @@ pub enum RunState {
 }
 
 /// prepare 段产物：候选构建域的全部拥有数据（A3 OwnedTickTxn 的前身——
-/// players/next_id 从引擎共享借用改为随候选流动；市场域暂留引擎侧 +
-/// 快照桥，A2 真候选化后并入）。
+/// players/next_id 从引擎共享借用改为随候选流动；市场域 A2 起为引擎侧
+/// 真候选——staged_body 局部 clone、经 publish_tick 参数一次换入，
+/// 并入统一候选容器随 A3/A4）。
 pub(crate) struct TickCandidates {
     pub(crate) time: u64,
     pub(crate) room_names: Vec<String>,
@@ -91,11 +92,13 @@ pub(crate) struct SettledRooms {
     pub(crate) events: Vec<Value>,
 }
 
-/// 段游标：记录当前段位；段入口检查故障注入；Market 段落市场快照。
+/// 段游标：记录当前段位；段入口检查故障注入。
+/// A2 起市场为真候选（`settle_market` 写入候选 MarketState、publish 一次
+/// 生效），A1 的快照桥及其恢复逻辑已撤销——失败轮的市场不可回退写入
+/// 结构上不存在。
 pub(crate) struct StageCursor {
     fail: Option<TickStage>,
     stage: TickStage,
-    pub(crate) market_snapshot: Option<MarketState>,
 }
 
 impl StageCursor {
@@ -103,7 +106,6 @@ impl StageCursor {
         Self {
             fail,
             stage: TickStage::Prepare,
-            market_snapshot: None,
         }
     }
 
@@ -123,17 +125,6 @@ impl StageCursor {
     pub(crate) fn stage(&self) -> TickStage {
         self.stage
     }
-
-    /// 落市场快照（进入 Market 段后、settle_market 前）。A1 候选桥：其后
-    /// 任一段失败由驱动恢复快照——「任一段失败 ⇒ 市场域同样保持上一 tick」；
-    /// A2 真候选化后撤销。
-    pub(crate) fn snapshot_market(&mut self, market: &MarketState) {
-        self.market_snapshot = Some(market.clone());
-    }
-
-    pub(crate) fn take_market_snapshot(&mut self) -> Option<MarketState> {
-        self.market_snapshot.take()
-    }
 }
 
 #[cfg(test)]
@@ -149,10 +140,5 @@ mod tests {
         let err = cursor.enter(TickStage::Market).unwrap_err();
         assert!(err.to_string().contains("market"), "{err}");
         assert_eq!(cursor.stage(), TickStage::Market, "注入段位已记录");
-        // 快照桥：落/取恰一次
-        let market = MarketState::default();
-        cursor.snapshot_market(&market);
-        assert!(cursor.take_market_snapshot().is_some());
-        assert!(cursor.take_market_snapshot().is_none(), "快照取走即清");
     }
 }

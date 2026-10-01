@@ -769,7 +769,7 @@ impl Engine {
     ///
     /// A1 批起为分段驱动（stages.rs）：prepare → settle → market → validate
     /// → publish，段入口可注入故障；失败落 [`RunState::NeedsRecovery`] 并
-    /// 保持全部权威状态（世界/玩家候选/市场快照桥）在上一 tick。
+    /// 保持全部权威状态（世界/玩家/市场——市场为 A2 真候选）在上一 tick。
     pub fn tick_with_intents_with_input(
         &mut self,
         batch: IntentBatch,
@@ -812,11 +812,9 @@ impl Engine {
                 Ok(())
             }
             Err(e) => {
-                // 市场候选桥（A1→A2 过渡）：市场段之后的失败恢复市场快照——
-                // 「任一段失败 ⇒ 全部权威状态保持上一 tick」对市场域同样成立
-                if let Some(snapshot) = cursor.take_market_snapshot() {
-                    self.market = snapshot;
-                }
+                // A2 起市场为真候选：失败轮的市场写入只存在于被丢弃的候选，
+                // 无需恢复（A1 快照桥已撤销）——世界/玩家/市场全部保持上一
+                // tick 由候选纪律结构性保证
                 self.run_state = RunState::NeedsRecovery {
                     tick: self.world.time(),
                     generation: self.world.generation(),
@@ -828,9 +826,10 @@ impl Engine {
         }
     }
 
-    /// 分段主体（A1）：prepare → settle → market → validate → publish。
-    /// 失败返回时由调用方（状态机驱动）负责市场快照恢复与 NeedsRecovery
-    /// 落账——本函数自身不写 run_state（Prepared 观察点除外）。
+    /// 分段主体（A1/A2）：prepare → settle → market → validate → publish。
+    /// 失败返回时由调用方（状态机驱动）落账 NeedsRecovery——本函数自身
+    /// 不写 run_state（Prepared 观察点除外）；各段产物均为候选，publish
+    /// 前不写任何权威状态。
     fn staged_body(
         &mut self,
         cursor: &mut stages::StageCursor,
@@ -842,16 +841,16 @@ impl Engine {
         cursor.enter(TickStage::Settle)?;
         let mut settled = self.settle_rooms_stage(&mut cand, input)?;
         cursor.enter(TickStage::Market)?;
-        // 市场候选桥：settle_market 仍直写 self.market（不可失败——官方
-        // global 无 throw 路径的镜像语义，A2 改真候选），先落快照，其后
-        // 任一段失败由驱动统一恢复。成本注记：快照为每 tick 无条件
-        // MarketState 克隆（订单簿 + ≤上限流水），A2 真候选化时撤销——
-        // 当前订单簿规模下可忽略（bot/套件负载无订单）
-        cursor.snapshot_market(&self.market);
+        // 市场真候选（A2）：settle_market 不可失败（官方 global 无 throw 路径
+        // 的镜像语义），写入**候选市场态**——self.market 在 publish 前结构上
+        // 不可变，失败轮不存在需要恢复的市场写入（A1 快照桥随之撤销）。
+        // 成本注记：每 tick 一次 MarketState 克隆（订单簿 + ≤上限流水）作为
+        // 候选本体；当前订单簿规模下可忽略（bot/套件负载无订单）
+        let mut market_cand = self.market.clone();
         market::settle_market(
             &mut settled.rooms,
             &mut cand.players,
-            &mut self.market,
+            &mut market_cand,
             &cand.batch,
             cand.time,
             input.now_ms,
@@ -861,7 +860,7 @@ impl Engine {
         // 候选完成且通过校验——publish 前的持久观察点
         self.run_state = RunState::Prepared { tick: cand.time };
         cursor.enter(TickStage::Publish)?;
-        self.publish_tick(cand, settled);
+        self.publish_tick(cand, settled, market_cand);
         Ok(())
     }
 
@@ -987,14 +986,15 @@ impl Engine {
         &mut self,
         mut cand: stages::TickCandidates,
         mut settled: stages::SettledRooms,
+        market_cand: market::MarketState,
     ) {
-        // 市场全局阶段（2B 批 P1）：官方 main.js:63-65 的 global 阶段在房间
-        // 结算全部完成后运行（processor/global.js:48-49）——我方在 commit 前
-        // 对已结算工作副本执行：读到的都是本 tick 结算后状态（官方 commit1
-        // 后读 db 的因果序等价），且失败原子性与「一次成功 tick ⇒ generation
-        // 恰 +1」双不变量原样保持（settle_market 不可失败——官方 global 无
-        // throw 路径，逐 intent 静默跳过同构）——已在 staged_body 的 Market
-        // 段先行，此处仅保留发布序注释锚。
+        // 市场全局阶段（2B 批 P1 → A2 真候选）：官方 main.js:63-65 的 global
+        // 阶段在房间结算全部完成后运行（processor/global.js:48-49）——settle
+        // 在 staged_body 的 Market 段对候选先行（读到的都是本 tick 结算后
+        // 状态，官方 commit1 后读 db 的因果序等价），此处随 publish 一次
+        // 生效（settle_market 不可失败——官方 global 无 throw 路径镜像，
+        // 逐 intent 静默跳过同构）
+        self.market = market_cand;
         for (name, room) in settled.rooms.drain(..) {
             self.world.commit_room(name, room);
         }
@@ -1174,11 +1174,11 @@ mod tests {
         assert!(engine.abandon_recovery().is_err(), "变异后放弃恢复同样被拒");
     }
 
-    /// A1 判据：任一段入口注入失败 ⇒ 世界/玩家/市场全部保持上一 tick。
+    /// A1/A2 判据：任一段入口注入失败 ⇒ 世界/玩家/市场全部保持上一 tick。
     /// 市场域判别力自证：同 fixture 无注入的成功轮确实消费订单（过期退款
     /// 变异订单簿与 money，MARKET-ORDER-009 尾段），注入轮的不变断言才有
     /// 杀伤力；Validate/Publish 注入发生在 settle_market **之后**，市场域
-    /// 不变靠快照桥（A1→A2 过渡）兑现。
+    /// 不变由 A2 真候选纪律结构性兑现（self.market 在 publish 前不可变）。
     #[test]
     fn stage_injection_keeps_world_and_market_at_previous_tick() {
         let make = || {
@@ -1238,7 +1238,7 @@ mod tests {
             assert_eq!(
                 engine.market.orders.len(),
                 1,
-                "{stage:?}: 订单簿保持（市场快照桥）"
+                "{stage:?}: 订单簿保持（市场真候选——publish 前不可回退写入不存在）"
             );
             assert!(
                 engine.market.transactions.is_empty(),
@@ -1251,7 +1251,7 @@ mod tests {
                 "{stage:?}: NeedsRecovery 记录失败段"
             );
             // 世界未变异 ⇒ 重试放行；注入解除后同候选重试成功 → Committed；
-            // 闭环：回退后重试恰一次消费订单（无双退款/双移除——快照恢复 +
+            // 闭环：回退后重试恰一次消费订单（无双退款/双移除——候选丢弃 +
             // TickInput 钉死 ⇒ 重放同结果的显式断言）
             engine.set_fail_stage_for_test(None);
             engine.tick_with_intents(IntentBatch::default()).unwrap();
@@ -1268,6 +1268,78 @@ mod tests {
                 "{stage:?}: 重试恰一次退款入账"
             );
         }
+    }
+
+    /// A2 判据③强化（评审 R3 P1①/R2-6 清偿）：含 createOrder intent 的失败轮
+    /// ——①失败后 `self.market` 与失败前**整态**相等（PartialEq 覆盖私有计数器
+    /// next_order_seq/next_transaction_id：自定义 Clone 漏拷计数器/引擎侧直改
+    /// 只动计数器的形态由整态比较拦截，抽样断言拦不住）；②重试恰一次建单、
+    /// 订单 id 与首次尝试一致（"mkt1"——失败轮未消耗序号）、扣费恰一次
+    ///（重试不双扣）。夹具走 intershard 资源（token——免 terminal 归属门，
+    /// market.rs 官方 :119-121 镜像），费门仅需玩家 money。
+    #[test]
+    fn market_candidacy_counter_snapshot_and_retry_id_stability() {
+        let mut world = kk_world::World::new(1);
+        world.register_room("W1N1", kk_core::Terrain::plains());
+        let mut engine = Engine::new(world);
+        const SEED: i64 = 10_000_000;
+        engine.players.entry("p1".to_string()).or_default().money = SEED;
+        // fee = ceil(毫price × total × 0.05) = ceil(1000×100×0.05) = 5000
+        const FEE: i64 = 5000;
+        let mut batch = IntentBatch::default();
+        batch
+            .users
+            .entry("p1".to_string())
+            .or_default()
+            .market
+            .push(crate::intent::MarketIntent::CreateOrder {
+                order_type: Some("sell".to_string()),
+                resource_type: Some("token".to_string()),
+                price_milli: Some(1000),
+                total_amount: Some(100),
+                room_name: None,
+            });
+        let before = engine.market.clone();
+        // Market 段建单落候选 → Validate 注入失败：committed 整态保持
+        engine.set_fail_stage_for_test(Some(TickStage::Validate));
+        assert!(engine.tick_with_intents(batch.clone()).is_err());
+        assert_eq!(
+            engine.market, before,
+            "失败轮 committed 市场整态保持（含私有计数器——seq 不前进）"
+        );
+        assert_eq!(engine.players["p1"].money, SEED, "失败轮扣费不落 committed");
+        // 重试（同 batch）：恰一次建单、id 稳定为首次分配值、扣费恰一次
+        engine.set_fail_stage_for_test(None);
+        engine.tick_with_intents(batch).unwrap();
+        assert_eq!(engine.market.orders.len(), 1, "重试恰一次建单");
+        assert!(
+            engine.market.orders.contains_key("mkt1"),
+            "订单 id 与首次尝试一致（失败轮候选丢弃 ⇒ 序号未消耗）"
+        );
+        assert_eq!(
+            engine.players["p1"].money,
+            SEED - FEE,
+            "重试恰一次扣费（双扣形态为 SEED−2×FEE）"
+        );
+        // 计数器单调前进的活证据：第二次建单拿 mkt2（非回绕/重用）
+        let mut second = IntentBatch::default();
+        second
+            .users
+            .entry("p1".to_string())
+            .or_default()
+            .market
+            .push(crate::intent::MarketIntent::CreateOrder {
+                order_type: Some("sell".to_string()),
+                resource_type: Some("pixel".to_string()),
+                price_milli: Some(1000),
+                total_amount: Some(100),
+                room_name: None,
+            });
+        engine.tick_with_intents(second).unwrap();
+        assert!(
+            engine.market.orders.contains_key("mkt2"),
+            "第二张订单 id=mkt2（序号从 committed 续档，非重用）"
+        );
     }
 
     /// validate 段 tripwire（A1）：正常路径结构上不可达——以篡改候选证明

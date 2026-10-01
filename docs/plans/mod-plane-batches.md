@@ -31,6 +31,8 @@
 - **判据**：段边界注入后世界/玩家/市场一起回滚；现有市场全链测试（2B 批 P0–P2）全绿；「publish 之前不得存在不可回退写入」不变式测试。
 - **依赖**：A1。与 A3 顺序可换（见 A3），实施时按耦合度定。
 
+> **✅ A2 已收口（2026-10-01，本提交）**：`settle_market` 改写候选 `MarketState`（staged_body 的 Market 段每 tick 一次 clone 作候选本体、`publish_tick` 一次换入）——publish 前权威市场结构上不可变，A1 快照桥及其 StageCursor 快照 API 撤销，失败轮无需市场恢复（世界/玩家/市场同保持上一 tick 由候选纪律结构性保证）。判据达成：①五段注入矩阵全绿（订单簿/流水/money 保持 + NeedsRecovery 段位 + 重试恰一次消费）；②2B P0–P2 市场全链零改动全绿；③注入矩阵 + 变异击杀三连（直写+换入/直写+不换入死于探针臂、完全回退无桥死于注入臂）+ 评审清偿补强：`MarketState` derive PartialEq，含 intershard createOrder 的失败轮夹具锁**整态相等**（覆盖私有计数器——直改 committed 只动 seq 的形态由变异击杀验证拦截）与**重试订单 id 稳定**（失败轮序号不消耗，"mkt1"→重试同 id、次单 "mkt2" 续档）。**残留登记**：①恢复门只键控 world (time,generation)，`Engine.market` pub 直改在恢复态不可检测（A1 评审曾预期 A2 候选化缩小此空洞——实际未缩小：候选从被直改的 committed clone 起、直改静默进重试历史；embed 管理面已由 no_open_round 封死生产路径，直改面待 A4 随统一发布点收口）；②候选克隆成本与 A1 快照同形（每 tick 一次、现无订单负载可忽略）——订单负载出现时在 P2 对照 harness 观测。
+
 ### A3 OwnedTickTxn（Working 改造）
 
 - **内容**：`Working<'w>` 的 `players`/`next_id` 共享借用改为拥有数据的候选事务（mod-system §6.2 / 06 §2.1 路线）；结算入口签名迁移；为 mod 宿主 `Rc<RefCell<OwnedTxn>>` 短借用/reentrant 调用铺路。禁 unsafe 指针/lifetime transmute 规避（mod-system §6.2 同款禁令）。**波及面实测（评审核实）**：`w.players` 仅 3 处（creep/controller.rs）、`w.next_id` 仅 `Working::insert_new`、`settle_room` 调用点仅 2 处（引擎 mod.rs + settle_tests 唯一测试助手）；子模块 `&mut Working` 参数在字段访问语法不变的前提下不需逐个改——真实成本在 OwnedTxn 容器设计、Engine 字段所有权与提交路径，而非调用点数量级。因此 A3 也可排在 A2 之前（先容器后市场槽位，冲突面更小）。
