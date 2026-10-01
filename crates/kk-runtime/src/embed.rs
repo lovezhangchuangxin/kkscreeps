@@ -612,7 +612,16 @@ impl EmbedEngine {
             // per-viewer 投影（gcl 点数 = PlayerState 真值，官方 runtimeData.user.gcl）
             let gcl = self.engine.players.get(&handle).map(|p| p.gcl).unwrap_or(0);
             let t_project = std::time::Instant::now();
-            let world = source.world_json_for_viewer(&handle, gcl);
+            let mut world = source.world_json_for_viewer(&handle, gcl);
+            // 市场投影合并（2B 批 P1）：官方 runtimeData.market/transactions
+            //（driver data.js:138-139/:213-218/:243-246——各 100 条/毫
+            // credits）的等价物。引擎态（PlayerState.money/MarketState）在
+            // embed 层并入 world JSON：市场是**投影态**而非沙箱闭包态，不走
+            // V8 host 通道（P0 评审定音——segments 需要通道因其是闭包态）；
+            // gcl 经 world_json_for_viewer 参数注入为同位先例
+            if let Some(obj) = world.as_object_mut() {
+                obj.insert("market".into(), market_view(&self.engine, &handle));
+            }
             project_ns += t_project.elapsed().as_nanos();
             let t_run = std::time::Instant::now();
             let result = players.execute(&world, &RunSpec::new(&handle, code));
@@ -940,4 +949,51 @@ impl Drop for EmbedEngine {
     fn drop(&mut self) {
         self.teardown();
     }
+}
+
+/// per-viewer 市场投影（2B 批 P1）：官方 runtimeData.transactions 的
+/// `findEx({sender|recipient}, {sort:{time:-1}, limit:100})` 双向各 100 条
+///（driver data.js:138-139）+ user.money（毫 credits，game 侧 credits getter
+/// ÷1000 同位）。条目为**原始形态**（id/time/sender/recipient 玩家名键制/
+/// resourceType/amount/from/to/description/order）——官方视图映射
+///（transactionId 串化/sender→{username}）在 prelude getter 首访完成
+///（market.js:205-233 的惰性闭包缓存同构）。
+fn market_view(engine: &kk_engine::settle::Engine, viewer: &str) -> Value {
+    fn tx_list(engine: &kk_engine::settle::Engine, viewer: &str, outgoing: bool) -> Vec<Value> {
+        engine
+            .market
+            .transactions_for(viewer, outgoing, 100)
+            .iter()
+            .map(|t| {
+                let mut v = json!({
+                    "id": t.id.to_string(),
+                    "time": t.time,
+                    "resourceType": t.resource_type,
+                    "amount": t.amount,
+                    "from": t.from,
+                    "to": t.to,
+                });
+                if let Some(d) = &t.description {
+                    v["description"] = json!(d);
+                }
+                if let Some(o) = &t.order {
+                    v["order"] = o.clone();
+                }
+                if let Some(s) = &t.sender {
+                    v["sender"] = json!(s);
+                }
+                if let Some(r) = &t.recipient {
+                    v["recipient"] = json!(r);
+                }
+                v
+            })
+            .collect()
+    }
+    json!({
+        "money_milli": engine.players.get(viewer).map(|p| p.money).unwrap_or(0),
+        "transactions": {
+            "outgoing": tx_list(engine, viewer, true),
+            "incoming": tx_list(engine, viewer, false),
+        },
+    })
 }

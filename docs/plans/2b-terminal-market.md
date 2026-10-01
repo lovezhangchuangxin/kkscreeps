@@ -171,10 +171,10 @@ terminal/marketBasics/market/terminalSend 均 false，compat/src/capabilities.ts
 | MARKET-ORDER 001-009（002 双形态=10 条） | 10 | market | 全无（countStub 桩） | 10 绿 |
 | MARKET-DEAL 001-005 | 5 | market | 全无 | 5 绿 |
 | MARKET-QUERY 001-007 | 7 | market/marketBasics | 全无 | 6 绿；**006 官方同红**（vanilla failed——官方 getHistory 返 {} 对象，套件期望数组）→ 我方对齐官方语义后保持红 + ratchet-allow 豁免归因 |
-| SHAPE-GAME-007 | 1 | marketBasics | market 桩形状（4 getter 缺） | 1 绿（描述符逐字：四 getter enumerable+get-only） |
+| SHAPE-GAME-007 | 1 | marketBasics | market 桩形状（4 getter 缺） | 1 绿（**用例只断言 dataProps 键集**——键集可过；getter 三标志/get-only 严格赋值面 P1 已按官方形态装配但该用例不锁定，P2 e2e 补描述符断言锁） |
 | INTENT-LIMIT 001/002 | 2 | market | MARKET_MAX_ORDERS 常量已在 kk-core；MARKET_MAX_DEALS 不存在（容忍） | 2 绿 |
-| terminal 邻接：CTRL-STRUCTLIMIT-002:terminal×2 / ROOM-STRUCTURE-001:terminal / STRUCTURE-HITS-001:terminal / CONSTRUCTION-COST-001:terminal / STORE-OPEN-001/002:terminal / SHAPE-STRUCT-001:terminal | 8 | terminal | 读取面 P4 已齐（折叠 getter/room.terminal 快捷/place store 面）；缺 terminal/tick storeCapacity RCL 归一与 hits=3000 初始化核对 | 8 绿 |
-| **合计** | **83**（50+10+5+7+1+2+8） | | | **79 绿上限**（83−006 官方红−002/004/015 三键仍 skip） |
+| terminal 邻接：CTRL-STRUCTLIMIT-002:terminal×2 / ROOM-STRUCTURE-001:terminal / STRUCTURE-HITS-001:terminal / CONSTRUCTION-COST-001:terminal / STORE-OPEN-001/002:terminal / SHAPE-STRUCT-001:terminal | 8 | terminal | 读取面 P4 已齐（折叠 getter/room.terminal 快捷/place store 面）；缺 terminal/tick storeCapacity RCL 归一与 hits=3000 初始化核对 | **P1 实收 7 绿**；SHAPE-STRUCT-001:terminal skip→failed 归既有 Object Shape 红家族（装配器 isStructure 实例标记+ELSE_FIELDS 实例级 energy/energyCapacity+原型多键——家族整体归 Object Shape 批，非本片回归） |
+| **合计** | **83**（50+10+5+7+1+2+8） | | | **78 绿上限**（P1 实收修正：79−SHAPE-STRUCT-001:terminal 归家族红；83−006 官方红−002/004/015 三键−terminal 形状族红） |
 
 ## 3. 切片划分（每片一个完整批次循环）
 
@@ -230,9 +230,9 @@ terminal/marketBasics/market/terminalSend 均 false，compat/src/capabilities.ts
   维持桩**（credits 桩恒 0、orders 桩 {}——不发订单无订单簿，桩面无害）。
 - **capability**：`terminal: true` + `terminalSend: true`。
 - 验收锚：TERMINAL-SEND 47 绿（001/003/005-014 含 013 全 36 变体、
-  011 无目标 terminal OK 无转移无冷却、012 送达量断言）；邻接 8 绿
-  （STORE-OPEN 依赖 tick.js 归一；STRUCTURE-HITS-001 依赖 place 面
-  hits 初始化核对=3000）。
+  011 无目标 terminal OK 无转移无冷却、012 送达量断言）；邻接 **7 绿**
+  （STORE-OPEN 依赖 tick.js 归一；STRUCTURE-HITS-001 place 面 hits=3000
+  ✓；SHAPE-STRUCT-001:terminal 归 Object Shape 家族红——P1 实收 +54）。
 
 ### P2 市场片：Game.market 12 面 + 订单簿全生命周期（+24 面）
 
@@ -253,7 +253,10 @@ terminal/marketBasics/market/terminalSend 均 false，compat/src/capabilities.ts
   _getOrders 同位）。
 - 验收锚：MARKET-ORDER 10/DEAL 5/QUERY 6/SHAPE-GAME-007/INTENT-LIMIT 2；
   ratchet-allow 增 MARKET-QUERY-006（vanilla 同红取证归因）。
-- **地板预期**：1774+55+24=**1853/2914=63.59%**（63.588 取尾）。
+- **地板预期**：1774+54（P1 实收）+23（P2：MARKET-ORDER 10+DEAL 5+
+  QUERY 6+SHAPE-GAME-007 1+INTENT-LIMIT 2−002 的 ERR_FULL 双形态中
+  001 计一次等——以实跑为准）≈**1851-1852/2914≈63.5%**（P1 后 1828；
+  精确数以 capability 翻真实跑归因）。
 
 ## 4. 地板目标口径
 
@@ -336,6 +339,73 @@ terminal/marketBasics/market/terminalSend 均 false，compat/src/capabilities.ts
    实树取号。
 
 ## 8. 执行记录（随片回写）
+### P1（终端片：terminal send 全链 + transactions 注入）——已收口（含三路评审清偿）
+
+- **交付**：Action::Send（白名单 system.js:69）+IntentData target_room_name/
+  description；structures.rs terminal 臂房间相执行器（send.js 逐字——只校验
+  落 data.send 字段）；settle/market.rs settle_market 全局阶段（send 消费链
+  market.js:71-95+executeTransfer :15-69——**空串 owner 的 JS falsy 门**
+  【m2b2 测试抓出】：官方 `!terminalsByRoom[x].user` 对空串同 undefined 拒，
+  我方 is_some 误放行→filter(!is_empty) 清偿）；calc_rooms_distance（**不环绕**
+  plain Chebyshev——官方 MMO 经 getWorldSize 环绕，登记差异；liveWorldSize
+  键维持 false）/calc_terminal_energy_cost/is_valid_room_name；挂点=commit
+  循环前对 settled Vec（失败原子性+generation 恰+1 双不变量保住，官方
+  commit1→global 因果序等价）；economy terminal_capacity_tick（tick.js RCL
+  归一）；prelude StructureTerminal.send 九步校验序（013 矩阵 36 变体锁序）
+  +makeMarket 官方形装配（market.js:29-253：9 方法+四 getter 描述符逐字；
+  calcTransactionCost 真化+transactions getter 真化+闭包缓存）；embed
+  market_view per-viewer 投影合并（world JSON market 键——投影态不走 V8
+  host 通道）；capability terminal/terminalSend 翻 true。
+- **实测**：workspace 339 绿；棘轮 **1774→1828（+54 绿零未豁免转红）**——
+  TERMINAL-SEND 47 全绿（002/004 power 双门、015 liveWorldSize 维持 skip）
+  +邻接 7 绿；**SHAPE-STRUCT-001:terminal skip→failed 归既有 Object Shape
+  红家族**（家族 12 条同因【terminal 在内】：装配器 `base.isStructure`
+  实例标记+ELSE_FIELDS 实例级 energy/energyCapacity 兜底+原型链多键——
+  家族整体归 Object Shape 批处理，
+  非本片回归；§4 预告 +55 面勘正为 +54+1 家族红）；三基线形态一致；perf
+  同日 A/B project −0.1%/run −1.0%/**settle +3.9%（+0.0008ms 绝对——市场
+  阶段每 tick 全房 Generic 扫描的预期成本）**/wall −0.6%，确定性锚逐字节一致
+  （progress_delta 3328/source 2366 全等）。
+- **三路评审（官方语义/Rust 正确性/测试与归因）全 PASS with conditions 零 P0**，
+  清偿清单：
+  - 评审 1 P1-1/P1-2：fmt+clippy 硬门（collapsible_if 两处——market.rs 接收方
+    写回/economy.rs capacity 写回塌缩为 let 链）；workspace fmt/clippy 零告警。
+  - 评审 1 P2-1（**玩家可达**）：空串 description 交易记录——官方 :91 falsy
+    无键，我方 Some("") 投影泄漏 → `.filter(!is_empty())` 清偿。
+  - 评审 2 P1-1/评审 3 P1：测试判别力变异存活两处——全局相能量门（补
+    energy=cost−1 拒收测试）与冷却门（夹具补 H 资源使冷却门成唯一拦截）。
+  - 评审 2 P2-2/评审 1 P2-4：terminal_capacity_tick 无主早退偏离官方
+    （官方无 object.user 存在门、`undefined != 0` 写 0）→ 重写为官方语义
+    （Option 相等比较含 None==None 真；storeCapacity 键缺失≠0 写回）+
+    异主/同主 RCL 8 判别用例。
+  - 评审 1 P2-2/评审 2 P2-4：structures.js C 表 RESOURCES_ALL 重复键（后键
+    击穿 A4-i 私有冻结拷贝纪律）删除。
+  - 评审 2 P3-1：pass1 send 收集 filter(is_object) → 官方 `!!i.send` JS
+    truthy 语义（非 false/0/""/null 均收集）。
+  - 评审 3 P1：e2e 最小集（embed 串行链 +m2b2_terminal_send_e2e：九步
+    错误码链/跨 tick TIRED/成功链/transactions 视图映射/description 转义/
+    credits getter——P1 交付面原零覆盖清偿；冷却账 embed 侧 runPlayer=
+    执行+结算+推进一拍，实测对齐）。
+  - 评审 3 P1/评 2 P2-3：归因勘正包——floor 1828、§8 家族计数 13→12、
+    §2/§3 数字协调（79→78 上限）、system.js:80→:69、SHAPE-GAME-007
+    描述符「过度声明」措辞降级（键集可过、三标志 P2 e2e 补锁）、夹具
+    冗余块坍缩、m2b2 宽松析取收紧、capacity docstring 与夹具不符勘正。
+  - 评审 3 P2：run-suite.sh **dist 新鲜度守卫**（src 新于 dist 即重建——
+    陈旧 capability 跑门禁的 P4 同类事故面）；skip→failed 翻转盲区本轮人工
+    差分（153→154 恰 1 条 SHAPE-STRUCT-001:terminal）——flip 语义维持
+    （基线绿保护），解锁面 failed 池差分入收尾清单。
+  - **登记（不清偿）**：无主 from-terminal 全局相复验分歧（官方 `from.user
+    &&` 前置跳过复验可写负 store——裸 intent 注入域可达，prelude+processor
+    双门使玩家面不可达）；room 相负 amount+缺键角落（终态等价中间态差）；
+    交易视图键序/NPC undefined 键形态（P2 deal 链）；Transaction.id 裸十进制
+    串；裸 Math 家族债（send cost 算式——Link.transferEnergy 同族，随家族
+    批统一）；market_view O(1000)×2×玩家扫描（perf 实测包络内，P2 订单簿
+    批评估 per-player 索引）；NaN 因果注释勘正；game.js roomNameToXY 注释
+    勘正（宽松 NaN 不抛）。
+- **验证终态**：workspace **342 绿**（+11 m2b2/+1 e2e 串行链）；棘轮
+  **1828/154/932 零未豁免转红**两轮复跑稳定；三基线与 P6 后形态一致；
+  perf 同日 A/B 四相位噪声级（settle +3.9%=+0.0008ms 市场阶段扫描成本）
+  确定性锚逐字节一致。
 
 ### P0（地基：域态 + intent 全局市场族）——已收口（含三路评审清偿）
 

@@ -74,6 +74,12 @@ pub enum Action {
     /// ramparts/set-public.js 仅 `isPublic: !!intent.isPublic` 写回）。
     /// M2B 扩面 P5。
     SetPublic,
+    /// terminal 对象的动作（官方 processor.js:272-275 分派，白名单
+    /// `send: {targetRoomName: 'string', resourceType: 'string',
+    /// amount: 'number', description: 'userString'}`——system.js:69）。
+    /// 房间相执行器（terminal/send.js）**只校验并落 `object.send` 字段**，
+    /// 跨房转移在全局阶段执行（global-intents/market.js:71-95——2B 批 P1）。
+    Send,
 }
 
 impl Action {
@@ -111,6 +117,7 @@ impl Action {
             Self::ActivateSafeMode => "activateSafeMode",
             Self::Unclaim => "unclaim",
             Self::SetPublic => "setPublic",
+            Self::Send => "send",
         }
     }
 
@@ -148,6 +155,7 @@ impl Action {
             "activateSafeMode" => Self::ActivateSafeMode,
             "unclaim" => Self::Unclaim,
             "setPublic" => Self::SetPublic,
+            "send" => Self::Send,
             _ => return None,
         })
     }
@@ -270,6 +278,12 @@ pub struct IntentData {
     /// _.uniq 保序全局去重。1..=8 校验在 createCreep 侧整单拒绝（官方语义是
     /// 拒绝整条指令，不是过滤元素）。
     pub directions: Vec<i64>,
+    /// send（terminal）专属：官方白名单 `send: {targetRoomName: 'string',
+    /// resourceType: 'string', amount: 'number', description: 'userString'}`
+    /// （common/lib/system.js:69）——targetRoomName 严格串（沿用
+    /// resource_type 的 as_str 口径）；description userString 截 100。
+    pub target_room_name: Option<String>,
+    pub description: Option<String>,
 }
 
 impl IntentData {
@@ -289,6 +303,8 @@ impl IntentData {
             body: Vec::new(),
             energy_structures: None,
             directions: Vec::new(),
+            target_room_name: None,
+            description: None,
         }
     }
 
@@ -308,6 +324,8 @@ impl IntentData {
             body: Vec::new(),
             energy_structures: None,
             directions: Vec::new(),
+            target_room_name: None,
+            description: None,
         }
     }
 }
@@ -870,6 +888,10 @@ pub fn sanitize_object_intent(_action: Action, raw: &Value) -> IntentData {
                     .collect()
             })
             .unwrap_or_default(),
+        target_room_name: f("targetRoomName")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        description: to_user_string(f("description")),
     }
 }
 

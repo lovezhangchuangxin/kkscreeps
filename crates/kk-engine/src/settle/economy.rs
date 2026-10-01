@@ -248,6 +248,47 @@ pub fn link_cooldown_tick(w: &mut Working, id: ObjId) {
     }
 }
 
+/// terminal/tick.js 全 15 行逐字（processor.js 的 phase 8 分派——2B 批 P1）：
+/// `storeCapacity = controller.level > 0 && controller.user == object.user &&
+/// CONTROLLER_STRUCTURES.terminal[level] ? TERMINAL_CAPACITY : 0`，与现值
+/// 不同才写。**无 object.user 存在门**（评审 2 P2-2/评审 1 P2-4 清偿：无主
+/// terminal 在有主 controller 房归 0——官方 `controller.user == undefined`
+/// 为假；owner 比较按官方 == 语义：None≙undefined、空串是与 None 相异的值
+/// 【None==None 真——双方无主的怪癖同形保留】）；storeCapacity 键缺失≙
+/// undefined，`undefined != 0` 为真——want=0 时仍写（清偿：原 unwrap_or(0)
+/// 漏写）。无 controller 房整段跳过=保持原值（官方 `if(roomController)` 门）。
+pub fn terminal_capacity_tick(w: &mut Working, id: ObjId) {
+    let Some(RoomObject::Generic(g)) = w.room.objects.get(&id) else {
+        return;
+    };
+    let Ok(v) = serde_json::from_str::<Value>(&g.data) else {
+        return;
+    };
+    // controller 缺失 → 官方整段跳过（roomController 假门）
+    let Some(ctl) = w.controller() else {
+        return;
+    };
+    let level = ctl.level;
+    let owner_opt = v.get("owner").and_then(Value::as_str);
+    let allowed = crate::settle::controller_allowed("terminal", i64::from(level));
+    let want = if i64::from(level) > 0 && ctl.owner.as_deref() == owner_opt && allowed > 0 {
+        c::TERMINAL_CAPACITY
+    } else {
+        0
+    };
+    // 官方 `storeCapacity != object.storeCapacity`：undefined（None）≠0 为真
+    let current = v.get("storeCapacity").and_then(Value::as_i64);
+    if current != Some(want)
+        && let Some(RoomObject::Generic(g)) = w.room.objects.get_mut(&id)
+    {
+        let Ok(mut v) = serde_json::from_str::<Value>(&g.data) else {
+            return;
+        };
+        v["storeCapacity"] = json!(want);
+        g.data = v.to_string();
+    }
+}
+
 pub fn tombstone_tick(w: &mut Working, id: ObjId) {
     let Some(RoomObject::Tombstone(o)) = w.room.objects.get(&id) else {
         return;

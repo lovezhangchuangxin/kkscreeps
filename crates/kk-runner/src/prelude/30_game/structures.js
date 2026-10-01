@@ -98,6 +98,9 @@
     STRUCTURE_LINK: globalThis.STRUCTURE_LINK,
     STRUCTURE_RAMPART: globalThis.STRUCTURE_RAMPART,
     LOOK_STRUCTURES: globalThis.LOOK_STRUCTURES,
+    // terminal send（2B 批 P1）：能量常量名（RESOURCES_ALL 用上方 A4-i 的
+    // 私有冻结副本——评审 1 P2-2 清偿：重复键会击穿 .slice() 拷贝纪律）
+    RESOURCE_ENERGY: globalThis.RESOURCE_ENERGY,
     // controller 族（A4-iii）：activateSafeMode 门③阈值表与第六门扫描
     ERR_NOT_ENOUGH_RESOURCES: globalThis.ERR_NOT_ENOUGH_RESOURCES,
     ERR_TIRED: globalThis.ERR_TIRED,

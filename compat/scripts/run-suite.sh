@@ -13,6 +13,12 @@ if [ ! -f "$ADAPTER" ]; then
   echo "缺少 ${ADAPTER}——先在 compat/ 下 pnpm install && pnpm run build" >&2
   exit 1
 fi
+# dist 新鲜度守卫（2B 批 P1 评审 3 登记：陈旧 dist 会静默用旧 capability 跑
+# 门禁——P4「陈旧 release 二进制」同类事故）。src 任一文件新于 dist 即重建
+if [ -n "$(find "$ROOT/compat/src" -name '*.ts' -newer "$ADAPTER" 2>/dev/null)" ]; then
+  echo "compat/src 新于 dist——重建适配器（防陈旧 capability 跑门禁）" >&2
+  (cd "$ROOT/compat" && pnpm run build >/dev/null 2>&1) || { echo "重建失败" >&2; exit 1; }
+fi
 if [ ! -d "$ROOT/.compat/screeps-ok/node_modules" ]; then
   echo "缺少 .compat/screeps-ok——先运行 scripts/setup-screeps-ok.sh" >&2
   exit 1

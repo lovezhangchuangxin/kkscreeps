@@ -599,6 +599,8 @@ pub fn settle_room(
             Some(RoomObject::Generic(g)) => match generic_structure_type(&g.data).as_deref() {
                 Some("container" | "rampart") => economy::generic_decay_tick(&mut w, id),
                 Some("link") => economy::link_cooldown_tick(&mut w, id),
+                // terminal/tick.js（2B 批 P1）：storeCapacity 按 RCL 归一
+                Some("terminal") => economy::terminal_capacity_tick(&mut w, id),
                 _ => {}
             },
             _ => {}
@@ -777,6 +779,13 @@ impl Engine {
             settled.push((name, room));
             events.append(&mut room_events);
         }
+        // 市场全局阶段（2B 批 P1）：官方 main.js:63-65 的 global 阶段在房间
+        // 结算全部完成后运行（processor/global.js:48-49）——我方在 commit 前
+        // 对已结算工作副本执行：读到的都是本 tick 结算后状态（官方 commit1
+        // 后读 db 的因果序等价），且失败原子性与「一次成功 tick ⇒ generation
+        // 恰 +1」双不变量原样保持（settle_market 不可失败——官方 global 无
+        // throw 路径，逐 intent 静默跳过同构）
+        market::settle_market(&mut settled, &mut players, &mut self.market, &batch, time);
         for (name, room) in settled {
             self.world.commit_room(name, room);
         }

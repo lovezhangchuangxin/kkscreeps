@@ -482,6 +482,96 @@
   // A3a 坑① 的固定形态）
   const { ensureRequire, setCurrentUser } = globalThis.__kkp.cjs;
 
+  // -------------------------------------------------------------- 2B 批 P1：Game.market 官方形装配
+  // 官方 market.js:29-192 对象字面量（9 方法）+ :194-250 Object.defineProperties
+  // 四 getter（enumerable:true、仅 get——P6 描述符镜头：与字面量方法的
+  // writable/enumerable 三标志相异，dataProps 恰 4 键=SHAPE-GAME-007 锚）。
+  // 数据源=gw.world.market 注入投影（embed 层 per-viewer 合并——P0 评审定音
+  // 「投影态不走 V8 host 通道」）；P1 真 values=transactions（send 链交易）与
+  // calcTransactionCost（纯房名函数）；credits=注入 money_milli÷1000（P2
+  // 种子前恒 0）；orders/getAllOrders 等维持桩（P2 订单簿真化）。getter
+  // 闭包缓存（官方 _incomingTransactions/_outgoingTransactions——每 tick
+  // make 重建=每 tick 首读快照，P6 惰性缓存同款纪律）。
+  function makeMarket() {
+    const view = gw.world.market || {};
+    const txView = view.transactions || {};
+    let _incoming;
+    let _outgoing;
+    // 官方 :205-233：transactionId=""+_id（投影 id 已为串）、sender/
+    // recipient→{username} 或缺键（undefined 序列化丢键——两侧同形）
+    function mapTransactions(list) {
+      return (list || []).map((i) => {
+        const out = {
+          transactionId: '' + i.id,
+          time: i.time,
+          resourceType: i.resourceType,
+          amount: i.amount,
+          from: i.from,
+          to: i.to,
+        };
+        if (i.description !== undefined) out.description = i.description;
+        if (i.order !== undefined) out.order = i.order;
+        if (i.sender !== undefined) out.sender = { username: i.sender };
+        if (i.recipient !== undefined) out.recipient = { username: i.recipient };
+        return out;
+      });
+    }
+    const market = {
+      // 官方 :31-34：calcRoomsDistance(continuous) + calcTerminalEnergyCost
+      //（utils.js:644-659）=ceil(amount×(1−e^(−range/30)))。**不环绕**：
+      // 官方 MMO 经 getWorldSize 环绕取 min(size−d,d)；我方单机世界 plain
+      // Chebyshev（与 Rust settle/market.rs calc_rooms_distance 同判登记，
+      // liveWorldSize 能力键 false）。畸形房名：gw.roomNameToXY 是官方
+      // utils.js:374-390 的宽松逐字移植——畸形名产 NaN 不抛错 → 距离/成本
+      // NaN（number 返回，两侧同函数同形）
+      calcTransactionCost(amount, roomName1, roomName2) {
+        const xy1 = gw.roomNameToXY(roomName1);
+        const xy2 = gw.roomNameToXY(roomName2);
+        const dx = Math.abs(xy2[0] - xy1[0]);
+        const dy = Math.abs(xy2[1] - xy1[1]);
+        return Math.ceil(amount * (1 - Math.exp(-Math.max(dx, dy) / 30)));
+      },
+      // 以下七方法 P2 真化（桩返回 ERR_INVALID_ARGS 族与官方拒形态就近）
+      getAllOrders: () => { countStub('Game.market.getAllOrders'); return []; },
+      getHistory: () => { countStub('Game.market.getHistory'); return {}; },
+      getOrderById: () => { countStub('Game.market.getOrderById'); return null; },
+      createOrder: () => C_ERR_INVALID_ARGS,
+      cancelOrder: () => C_ERR_INVALID_ARGS,
+      deal: () => C_ERR_INVALID_ARGS,
+      changeOrderPrice: () => C_ERR_INVALID_ARGS,
+      extendOrder: () => C_ERR_INVALID_ARGS,
+    };
+    __Object.defineProperties(market, {
+      // 官方 :196-201：`(user.money||0)/1000`——毫 credits ÷1000（注入面给
+      // 毫原值，除法在 getter=官方同位）
+      credits: {
+        enumerable: true,
+        get() { return (view.money_milli || 0) / 1000; },
+      },
+      incomingTransactions: {
+        enumerable: true,
+        get() {
+          if (!_incoming) _incoming = mapTransactions(txView.incoming);
+          return _incoming;
+        },
+      },
+      outgoingTransactions: {
+        enumerable: true,
+        get() {
+          if (!_outgoing) _outgoing = mapTransactions(txView.outgoing);
+          return _outgoing;
+        },
+      },
+      // 官方 :235-249：myOrders map（id 串化/删 _id·user/price÷1000/
+      // indexBy('id')）——P2 真化；空对象缺省
+      orders: {
+        enumerable: true,
+        get() { return view.orders || {}; },
+      },
+    });
+    return market;
+  }
+
   function buildGame() {
     gw.objectsById = new __Map();
     const creeps = {};
@@ -616,19 +706,7 @@
       flags,
       resources,
       rooms,
-      market: {
-        credits: 0,
-        getAllOrders: () => { countStub('Game.market.getAllOrders'); return []; },
-        orders: {},
-        incomingTransactions: [],
-        outgoingTransactions: [],
-        calcTransactionCost: () => 1,
-        createOrder: () => -4,
-        cancelOrder: () => -4,
-        extendOrder: () => -4,
-        deal: () => -4,
-        getHistory: () => [],
-      },
+      market: makeMarket(),
       getObjectById(id) {
         return __reflectApply(__mapGet, gw.objectsById, [id]) || null;
       },

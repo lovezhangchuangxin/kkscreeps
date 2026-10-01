@@ -1029,4 +1029,55 @@
     gw.intents.set(this.id, 'setPublic', { isPublic: !!isPublic });
     return C.OK;
   };
+
+  /** 官方 StructureTerminal.send（structures.js:714-745）九步校验序逐字
+   *  （TERMINAL-SEND-013 的 36 变体矩阵锁的就是此序）——2B 批 P1：
+   *  ①!my→NOT_OWNER ②RCL（官方直调 checkStructureAgainstController——
+   *  terminal 在 CONTROLLER_STRUCTURES 表内，isActive 四门等价【towerCommonGates
+   *  注同款，无 controller 房走③门返 RCL=合意外延】）③房名 regex→INVALID_ARGS
+   *  ④RESOURCES_ALL→INVALID_ARGS ⑤store 保有（`!store || !store[rt] ||
+   *  store[rt] < amount`）→NOT_ENOUGH_RESOURCES ⑥cooldownTime>time→TIRED
+   *  ⑦能量成本（rt≠energy：energy<cost / rt==energy：energy<amount+cost）
+   *  →NOT_ENOUGH_RESOURCES ⑧description（非 string 或 >100）→INVALID_ARGS
+   *  ⑨intents.set(id,'send',{resourceType,amount,targetRoomName,description})。
+   *  **无最小量门**（TERMINAL_MIN_SEND 死常量不消费——TERMINAL-SEND-014 锁
+   *  amount=1 可发）；intent payload 官方键序（send.js 消费 targetRoomName/
+   *  resourceType/amount/description，description 经 userString 帽在清洗层）。 */
+  globalThis.StructureTerminal.prototype.send = function send(resourceType, amount, targetRoomName, description) {
+    if (!this.my) {
+      return C.ERR_NOT_OWNER; // :715-717
+    }
+    if (!this.isActive()) {
+      return C.ERR_RCL_NOT_ENOUGH; // :718-720（isActive 等价见注）
+    }
+    if (!/^(W|E)\d+(N|S)\d+$/.test(targetRoomName)) {
+      return C.ERR_INVALID_ARGS; // :721-723
+    }
+    if (!_.contains(C.RESOURCES_ALL || [], resourceType)) {
+      return C.ERR_INVALID_ARGS; // :724-726
+    }
+    const o = gw.rawData(this.id);
+    if (!o.store || !o.store[resourceType] || o.store[resourceType] < amount) {
+      return C.ERR_NOT_ENOUGH_RESOURCES; // :727-729
+    }
+    if (o.cooldownTime > gw.world.time) {
+      return C.ERR_TIRED; // :730-732
+    }
+    // :733-737 距离/成本——与 Game.market.calcTransactionCost 同式（不环绕
+    // plain Chebyshev 登记；Rust 侧 settle/market.rs calc_rooms_distance 同判）
+    const xy1 = gw.roomNameToXY(this.pos.roomName);
+    const xy2 = gw.roomNameToXY(targetRoomName);
+    const range = Math.max(Math.abs(xy2[0] - xy1[0]), Math.abs(xy2[1] - xy1[1]));
+    const cost = Math.ceil(amount * (1 - Math.exp(-range / 30)));
+    if ((resourceType !== C.RESOURCE_ENERGY && o.store.energy < cost)
+      || (resourceType === C.RESOURCE_ENERGY && o.store.energy < amount + cost)) {
+      return C.ERR_NOT_ENOUGH_RESOURCES; // :738-741
+    }
+    if (description && (!_.isString(description) || description.length > 100)) {
+      return C.ERR_INVALID_ARGS; // :742-744（length 为 UTF-16 码元——清洗层
+      // userString 的 chars() 口径差异为既有登记）
+    }
+    gw.intents.set(this.id, 'send', { resourceType, amount, targetRoomName, description });
+    return C.OK; // :745
+  };
 })();

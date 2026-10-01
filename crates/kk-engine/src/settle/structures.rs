@@ -91,7 +91,84 @@ pub fn process_structure_intents(
                 rampart_set_public(w, id, d);
             }
         }
+        // processor.js:272-275（terminal 段只有 send——2B 批 P1）
+        "terminal" => {
+            if let Some(d) = actions.get(&Action::Send) {
+                terminal_send(w, id, d);
+            }
+        }
         _ => {}
+    }
+}
+
+/// terminal/send.js 全 36 行逐字（房间相——**只校验并落 `object.send` 字段**，
+/// 跨房转移在全局阶段执行 global-intents/market.js:71-95；API 相的
+/// my/RCL/description 门已在 prelude 过，官方房间相不复验）。energy 缺键
+/// 按 0（TowerState 同款 DB 不变量口径——官方 `undefined < cost` 为假放行
+/// 的 JS 奇行不复制）。
+fn terminal_send(w: &mut Working, id: ObjId, d: &IntentData) {
+    let Some(view) = generic_view(w, id) else {
+        return;
+    };
+    if view.structure_type != "terminal" {
+        return;
+    }
+    // :7-9 `/^(W|E)\d+(N|S)\d+$/`（None ≙ undefined 不匹配）
+    let Some(target_room) = d.target_room_name.as_deref() else {
+        return;
+    };
+    if !crate::settle::market::is_valid_room_name(target_room) {
+        return;
+    }
+    // :10-12 RESOURCES_ALL 成员
+    let Some(resource_type) = d.resource_type.as_deref() else {
+        return;
+    };
+    if !c::RESOURCES_ALL.contains(&resource_type) {
+        return;
+    }
+    // :13-15 `!intent.amount || !object.store || !(store[rt] >= amount)`
+    //（缺键 → undefined >= amount 假 → 拒；None ≙ NaN falsy 同拒）
+    let Some(amount) = d.amount else {
+        return;
+    };
+    let store = view.data.get("store");
+    let have = store
+        .and_then(|s| s.get(resource_type))
+        .and_then(Value::as_i64);
+    if store.is_none() || !(have.unwrap_or(0) >= amount) || amount == 0 {
+        return;
+    }
+    // :17-19 距离/成本（环绕差异登记见 market::calc_rooms_distance）
+    let range =
+        crate::settle::market::calc_rooms_distance(&w.room.name, target_room).unwrap_or(i64::MAX);
+    let cost = crate::settle::market::calc_terminal_energy_cost(amount, range);
+    // :21-28 PWR_OPERATE_TERMINAL 折扣归 power 批（结构无 effects 数据，
+    // 分支死码——登记）；:23-28 能量成本门
+    let energy = store
+        .and_then(|s| s.get("energy"))
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
+    let energy_ok = if resource_type == c::RESOURCE_ENERGY {
+        energy >= amount + cost
+    } else {
+        energy >= cost
+    };
+    if !energy_ok {
+        return;
+    }
+    // :30 `bulk.update(object, {send: intent})`——存**已清洗 intent**
+    //（targetRoomName/resourceType/amount/description userString 帽后）
+    if let Some(RoomObject::Generic(g)) = w.room.objects.get_mut(&id)
+        && let Ok(mut v) = serde_json::from_str::<Value>(&g.data)
+    {
+        v["send"] = json!({
+            "targetRoomName": target_room,
+            "resourceType": resource_type,
+            "amount": amount,
+            "description": d.description,
+        });
+        g.data = v.to_string();
     }
 }
 
