@@ -218,17 +218,17 @@ macro_rules! kk_schema {
         $(#[$meta:meta])*
         $vis:vis $name:ident { $($fields:tt)* }
     ) => {
-        kk_schema! { @struct $(#[$meta])* $vis $name [] $($fields)* }
+        $crate::kk_schema! { @struct $(#[$meta])* $vis $name [] $($fields)* }
         impl $crate::Schema for $name {
             fn encode_into(&self, _out: &mut Vec<u8>) {
-                kk_schema!(@enc self _out [] $($fields)*);
+                $crate::kk_schema!(@enc self _out [] $($fields)*);
             }
             fn decode_from(_cur: &mut $crate::Cursor<'_>) -> Result<Self, $crate::SchemaError> {
-                kk_schema!(@dec _cur [] [] $($fields)*)
+                $crate::kk_schema!(@dec _cur [] [] $($fields)*)
             }
         }
         impl $name {
-            kk_schema! { @off [0] [] $($fields)* }
+            $crate::kk_schema! { @off [0] [] $($fields)* }
         }
     };
 
@@ -240,116 +240,116 @@ macro_rules! kk_schema {
     };
     (@struct $(#[$meta:meta])* $vis:vis $name:ident [$($acc:tt)*]
         ($fv:vis $f:ident : u8) $($r:tt)*) => {
-        kk_schema! { @struct $(#[$meta])* $vis $name [$($acc)* $fv $f: u8,] $($r)* }
+        $crate::kk_schema! { @struct $(#[$meta])* $vis $name [$($acc)* $fv $f: u8,] $($r)* }
     };
     (@struct $(#[$meta:meta])* $vis:vis $name:ident [$($acc:tt)*]
         ($fv:vis $f:ident : u16) $($r:tt)*) => {
-        kk_schema! { @struct $(#[$meta])* $vis $name [$($acc)* $fv $f: u16,] $($r)* }
+        $crate::kk_schema! { @struct $(#[$meta])* $vis $name [$($acc)* $fv $f: u16,] $($r)* }
     };
     (@struct $(#[$meta:meta])* $vis:vis $name:ident [$($acc:tt)*]
         ($fv:vis $f:ident : u32) $($r:tt)*) => {
-        kk_schema! { @struct $(#[$meta])* $vis $name [$($acc)* $fv $f: u32,] $($r)* }
+        $crate::kk_schema! { @struct $(#[$meta])* $vis $name [$($acc)* $fv $f: u32,] $($r)* }
     };
     (@struct $(#[$meta:meta])* $vis:vis $name:ident [$($acc:tt)*]
         ($fv:vis $f:ident : u64) $($r:tt)*) => {
-        kk_schema! { @struct $(#[$meta])* $vis $name [$($acc)* $fv $f: u64,] $($r)* }
+        $crate::kk_schema! { @struct $(#[$meta])* $vis $name [$($acc)* $fv $f: u64,] $($r)* }
     };
     (@struct $(#[$meta:meta])* $vis:vis $name:ident [$($acc:tt)*]
         ($fv:vis $f:ident : i32) $($r:tt)*) => {
-        kk_schema! { @struct $(#[$meta])* $vis $name [$($acc)* $fv $f: i32,] $($r)* }
+        $crate::kk_schema! { @struct $(#[$meta])* $vis $name [$($acc)* $fv $f: i32,] $($r)* }
     };
     (@struct $(#[$meta:meta])* $vis:vis $name:ident [$($acc:tt)*]
         ($fv:vis $f:ident : i64) $($r:tt)*) => {
-        kk_schema! { @struct $(#[$meta])* $vis $name [$($acc)* $fv $f: i64,] $($r)* }
+        $crate::kk_schema! { @struct $(#[$meta])* $vis $name [$($acc)* $fv $f: i64,] $($r)* }
     };
     (@struct $(#[$meta:meta])* $vis:vis $name:ident [$($acc:tt)*]
         ($fv:vis $f:ident : bool) $($r:tt)*) => {
-        kk_schema! { @struct $(#[$meta])* $vis $name [$($acc)* $fv $f: bool,] $($r)* }
+        $crate::kk_schema! { @struct $(#[$meta])* $vis $name [$($acc)* $fv $f: bool,] $($r)* }
     };
     (@struct $(#[$meta:meta])* $vis:vis $name:ident [$($acc:tt)*]
         ($fv:vis $f:ident : str) $($r:tt)*) => {
-        kk_schema! { @struct $(#[$meta])* $vis $name [$($acc)* $fv $f: String,] $($r)* }
+        $crate::kk_schema! { @struct $(#[$meta])* $vis $name [$($acc)* $fv $f: String,] $($r)* }
     };
     (@struct $(#[$meta:meta])* $vis:vis $name:ident [$($acc:tt)*]
         ($fv:vis $f:ident : vec str) $($r:tt)*) => {
-        kk_schema! { @struct $(#[$meta])* $vis $name [$($acc)* $fv $f: Vec<String>,] $($r)* }
+        $crate::kk_schema! { @struct $(#[$meta])* $vis $name [$($acc)* $fv $f: Vec<String>,] $($r)* }
     };
     (@struct $(#[$meta:meta])* $vis:vis $name:ident [$($acc:tt)*]
         ($fv:vis $f:ident : vec $t:ty) $($r:tt)*) => {
-        kk_schema! { @struct $(#[$meta])* $vis $name [$($acc)* $fv $f: Vec<$t>,] $($r)* }
+        $crate::kk_schema! { @struct $(#[$meta])* $vis $name [$($acc)* $fv $f: Vec<$t>,] $($r)* }
     };
     (@struct $(#[$meta:meta])* $vis:vis $name:ident [$($acc:tt)*]
         ($fv:vis $f:ident : opt str) $($r:tt)*) => {
-        kk_schema! { @struct $(#[$meta])* $vis $name [$($acc)* $fv $f: Option<String>,] $($r)* }
+        $crate::kk_schema! { @struct $(#[$meta])* $vis $name [$($acc)* $fv $f: Option<String>,] $($r)* }
     };
     (@struct $(#[$meta:meta])* $vis:vis $name:ident [$($acc:tt)*]
         ($fv:vis $f:ident : opt $t:ty) $($r:tt)*) => {
-        kk_schema! { @struct $(#[$meta])* $vis $name [$($acc)* $fv $f: Option<$t>,] $($r)* }
+        $crate::kk_schema! { @struct $(#[$meta])* $vis $name [$($acc)* $fv $f: Option<$t>,] $($r)* }
     };
     (@struct $(#[$meta:meta])* $vis:vis $name:ident [$($acc:tt)*]
         ($fv:vis $f:ident : [u8; $n:literal]) $($r:tt)*) => {
-        kk_schema! { @struct $(#[$meta])* $vis $name [$($acc)* $fv $f: [u8; $n],] $($r)* }
+        $crate::kk_schema! { @struct $(#[$meta])* $vis $name [$($acc)* $fv $f: [u8; $n],] $($r)* }
     };
     (@struct $(#[$meta:meta])* $vis:vis $name:ident [$($acc:tt)*]
         ($fv:vis $f:ident : $t:ty) $($r:tt)*) => {
-        kk_schema! { @struct $(#[$meta])* $vis $name [$($acc)* $fv $f: $t,] $($r)* }
+        $crate::kk_schema! { @struct $(#[$meta])* $vis $name [$($acc)* $fv $f: $t,] $($r)* }
     };
 
     // ---- 编码：全部字段统一走 Schema::encode_into（语句位置） ----
     (@enc $self:ident $out:ident [$($acc:tt)*]) => { $($acc)* };
     (@enc $self:ident $out:ident [$($acc:tt)*] ($fv:vis $f:ident : $($t:tt)*) $($r:tt)*) => {
-        kk_schema!(@enc $self $out [$($acc)* $crate::Schema::encode_into(&$self.$f, $out);] $($r)*);
+        $crate::kk_schema!(@enc $self $out [$($acc)* $crate::Schema::encode_into(&$self.$f, $out);] $($r)*);
     };
 
     // ---- 解码：统一走 Schema::decode_from；基臂产出块表达式（尾表达式链，无分号） ----
     (@dec $cur:ident [$($l:tt)*] [$($ids:ident)*]) => { { $($l)* Ok(Self { $($ids),* }) } };
     (@dec $cur:ident [$($l:tt)*] [$($ids:ident)*] ($fv:vis $f:ident : $($t:tt)*) $($r:tt)*) => {
-        kk_schema!(@dec $cur [$($l)* let $f = $crate::Schema::decode_from($cur)?;] [$($ids)* $f] $($r)*)
+        $crate::kk_schema!(@dec $cur [$($l)* let $f = $crate::Schema::decode_from($cur)?;] [$($ids)* $f] $($r)*)
     };
 
     // ---- 偏移常量：原始类型连续前缀（变长/嵌套字段之后的字段不产出偏移） ----
     (@off [$($sum:tt)*] [$($acc:tt)*]) => { $crate::__paste_item! { $($acc)* } };
     (@off [$($sum:tt)*] [$($acc:tt)*] ($fv:vis $f:ident : u8) $($r:tt)*) => {
-        kk_schema! { @off [$($sum)* + 1] [$($acc)* #[allow(non_upper_case_globals)]
+        $crate::kk_schema! { @off [$($sum)* + 1] [$($acc)* #[allow(non_upper_case_globals)]
             pub const [<OFFSET_ $f>]: usize = ($($sum)*);] $($r)* }
     };
     (@off [$($sum:tt)*] [$($acc:tt)*] ($fv:vis $f:ident : u16) $($r:tt)*) => {
-        kk_schema! { @off [$($sum)* + 2] [$($acc)* #[allow(non_upper_case_globals)]
+        $crate::kk_schema! { @off [$($sum)* + 2] [$($acc)* #[allow(non_upper_case_globals)]
             pub const [<OFFSET_ $f>]: usize = ($($sum)*);] $($r)* }
     };
     (@off [$($sum:tt)*] [$($acc:tt)*] ($fv:vis $f:ident : u32) $($r:tt)*) => {
-        kk_schema! { @off [$($sum)* + 4] [$($acc)* #[allow(non_upper_case_globals)]
+        $crate::kk_schema! { @off [$($sum)* + 4] [$($acc)* #[allow(non_upper_case_globals)]
             pub const [<OFFSET_ $f>]: usize = ($($sum)*);] $($r)* }
     };
     (@off [$($sum:tt)*] [$($acc:tt)*] ($fv:vis $f:ident : u64) $($r:tt)*) => {
-        kk_schema! { @off [$($sum)* + 8] [$($acc)* #[allow(non_upper_case_globals)]
+        $crate::kk_schema! { @off [$($sum)* + 8] [$($acc)* #[allow(non_upper_case_globals)]
             pub const [<OFFSET_ $f>]: usize = ($($sum)*);] $($r)* }
     };
     (@off [$($sum:tt)*] [$($acc:tt)*] ($fv:vis $f:ident : i32) $($r:tt)*) => {
-        kk_schema! { @off [$($sum)* + 4] [$($acc)* #[allow(non_upper_case_globals)]
+        $crate::kk_schema! { @off [$($sum)* + 4] [$($acc)* #[allow(non_upper_case_globals)]
             pub const [<OFFSET_ $f>]: usize = ($($sum)*);] $($r)* }
     };
     (@off [$($sum:tt)*] [$($acc:tt)*] ($fv:vis $f:ident : i64) $($r:tt)*) => {
-        kk_schema! { @off [$($sum)* + 8] [$($acc)* #[allow(non_upper_case_globals)]
+        $crate::kk_schema! { @off [$($sum)* + 8] [$($acc)* #[allow(non_upper_case_globals)]
             pub const [<OFFSET_ $f>]: usize = ($($sum)*);] $($r)* }
     };
     (@off [$($sum:tt)*] [$($acc:tt)*] ($fv:vis $f:ident : bool) $($r:tt)*) => {
-        kk_schema! { @off [$($sum)* + 1] [$($acc)* #[allow(non_upper_case_globals)]
+        $crate::kk_schema! { @off [$($sum)* + 1] [$($acc)* #[allow(non_upper_case_globals)]
             pub const [<OFFSET_ $f>]: usize = ($($sum)*);] $($r)* }
     };
     (@off [$($sum:tt)*] [$($acc:tt)*] ($fv:vis $f:ident : [u8; $n:literal]) $($r:tt)*) => {
-        kk_schema! { @off [$($sum)* + $n] [$($acc)* #[allow(non_upper_case_globals)]
+        $crate::kk_schema! { @off [$($sum)* + $n] [$($acc)* #[allow(non_upper_case_globals)]
             pub const [<OFFSET_ $f>]: usize = ($($sum)*);] $($r)* }
     };
     // 变长/嵌套字段：终止偏移链——其后的字段一律不再产出偏移（绝对偏移仅在
     // 变长字段之前的原始字段上有定义，与模块文档一致）。累积器随 @offdone
     // 带到终点统一发出
     (@off [$($sum:tt)*] [$($acc:tt)*] ($fv:vis $f:ident : $($t:tt)*) $($r:tt)*) => {
-        kk_schema! { @offdone [$($acc)*] $($r)* }
+        $crate::kk_schema! { @offdone [$($acc)*] $($r)* }
     };
     (@offdone [$($acc:tt)*]) => { $crate::__paste_item! { $($acc)* } };
     (@offdone [$($acc:tt)*] ($fv:vis $f:ident : $($t:tt)*) $($r:tt)*) => {
-        kk_schema! { @offdone [$($acc)*] $($r)* }
+        $crate::kk_schema! { @offdone [$($acc)*] $($r)* }
     };
 }
 
@@ -442,7 +442,7 @@ macro_rules! kk_room_object {
 
             fn decode_from(cur: &mut $crate::Cursor<'_>) -> Result<Self, $crate::SchemaError> {
                 match cur.read_u8()? {
-                    $($tag => Ok(Self::$variant(<$payload>::decode_from(cur)?)),)*
+                    $($tag => Ok(Self::$variant(<$payload as $crate::Schema>::decode_from(cur)?)),)*
                     b => Err($crate::SchemaError::InvalidVariantTag(b)),
                 }
             }
