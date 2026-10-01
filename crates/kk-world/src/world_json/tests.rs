@@ -1,7 +1,4 @@
-//! world_json 内嵌测试（M2B 前置批 P4 自 world_json.rs 原位拆出；收口终审
-//! P1 清偿再拆两子模块——清偿补入的锁定测试使单文件超 1000 行）：内容与
-//! 原 mod 块去空白 token 流一致（评审 2 SHA256 对账）；零行为零内容增删。
-//! 段序=源文序连续切块。
+//! 检查地形载荷、对象投影、玩家视野及 FIND 过滤。
 
 use super::*;
 use crate::place::{PlaceCtx, normalize};
@@ -11,8 +8,7 @@ use kk_schema::room::ControllerObj;
 mod terrain_and_projection_forms;
 mod viewer_semantics_and_families;
 
-/// 测试孪生 base64 解码器（与 prelude game.js 的 b64ToBytes 同语义；
-/// 编码器是产品面，解码器只存在于消费侧——Rust 测试承担 JS 侧的对表）。
+/// 解码测试中的地形载荷，用来核对实际地形字节；不能单独证明 JS 解码正确。
 fn test_b64_decode(s: &str) -> Vec<u8> {
     fn val(c: u8) -> u8 {
         match c {

@@ -1,10 +1,10 @@
-//! store 领域语义：正量键集共核（两投影的契约折叠各自定型）。
+//! 构造资源存储的 JSON 字段，只加入数量大于 0 的资源。
+//! 沙箱投影另行补充 energy 字段，即使其值为 0；查询快照不补。
 
 use serde_json::{Value, json};
 
-/// store 双槽的正量键集（官方 store getter 只暴露正量资源——vanilla
-/// snapStore amount>0 才入表；store.js:19-25 按资源名键构造）。两投影共此
-/// 核心（M2B P4 单源）；世界投影再无条件补 energy 键（M0 契约恒投影）。
+/// 将 energy 和 ghodium 中的正量资源写入 JSON 对象。
+/// 查询快照的过滤依据：screeps-ok adapters/vanilla/snapshots.ts 的 snapStore。
 pub(crate) fn store_positive_entries(
     store: &kk_schema::room::Store,
 ) -> serde_json::Map<String, Value> {
@@ -21,8 +21,8 @@ pub(crate) fn store_positive_entries(
     v
 }
 
-/// 额外资源栈的正量并入（B3：tombstone/ruin/creep 的 store_extra——boost
-/// 矿物等命名槽，amount>0 才入表）。两投影同 loop 共源（M2B P4）。
+/// 合并额外资源中的正量条目，同名键覆盖现有值。
+/// 调用方应保证额外资源名唯一，且不与 energy、G 专用字段重复。
 pub(crate) fn apply_store_extra(
     v: &mut serde_json::Map<String, Value>,
     extra: &[kk_schema::room::ResourceStack],

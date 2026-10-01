@@ -1,9 +1,8 @@
-//! typed 世界：房间状态 + 对象表 + 全局 id 分配。
+//! 房间状态、对象表和世界级 ID 分配。
 //!
-//! 对象按 `BTreeMap<ObjId, _>` 存放：`World::insert` 单调分配 id ⇒ 迭代序 =
-//! 创建序，与官方 roomObjects 的 DB 插入序近似一致且天然确定（game-loop.md
-//! 关键设计二、方案 D4-1）。`insert_with_id`（快照解码/导入）乱序插入时迭代序
-//! 为 id 升序而非插入序；`next_obj_id` 保证其后的普通插入不会与已导入对象撞 id。
+//! 房间与对象使用 BTreeMap，遍历顺序由键决定。World::insert 分配的 ID
+//! 单调递增，所以普通插入的对象按创建顺序遍历；导入指定 ID 时则按 ID 排序。
+//! World 的目录和投影缓存依靠 generation、terrain_epoch 失效，修改状态须维护版本。
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -12,17 +11,18 @@ use std::sync::Arc;
 use kk_core::Terrain;
 use kk_schema::room::{RoomHeader, RoomObject, RoomSnapshot};
 
-/// 对象 id（**全世界**单调递增、跨房间唯一——分配器在 World 层；
-/// 玩家可见的字符串形态为 `kk{:016x}`）。
+/// 世界内对象的数字 ID，玩家可见字符串为 kk 加 16 位小写十六进制数。
+/// World 分配的 ID 跨房间唯一；手工导入由调用方保证跨房间不重复。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ObjId(pub u64);
 
 impl ObjId {
-    /// 玩家可见 id（M0 契约：字符串、不透明）。
+    /// 格式化为玩家可见的不透明 ID。
     pub fn as_str(&self) -> String {
         format!("kk{:016x}", self.0)
     }
 
+    /// 解析 kk 前缀后的十六进制数，不要求固定 16 位长度。
     pub fn parse(s: &str) -> Option<Self> {
         let hex = s.strip_prefix("kk")?;
         Some(Self(u64::from_str_radix(hex, 16).ok()?))
@@ -35,9 +35,8 @@ pub struct RoomState {
     pub name: String,
     pub terrain: Terrain,
     pub objects: BTreeMap<ObjId, RoomObject>,
-    /// 房间事件日志缓冲（B3）：最近一个 tick 的事件 JSON 数组——官方
-    /// saveRoomEventLog 每 tick 整体覆写（processor.js:497 → driver/lib/
-    /// index.js:583-585），settle 每 tick 重写本缓冲同口径；快照随房携带。
+    /// 最近一次房间结算产生的事件，每项是一个 JSON 字符串。
+    /// 结算整体替换列表，二进制房间快照同时保存它。
     pub events: Vec<String>,
 }
 
@@ -51,7 +50,7 @@ impl RoomState {
         }
     }
 
-    /// 房间内 controller（place 归一化的上下文）。
+    /// 按对象 ID 顺序返回第一个控制器，用作放置参数的上下文。
     pub fn controller(&self) -> Option<&kk_schema::room::ControllerObj> {
         self.objects.values().find_map(|o| match o {
             RoomObject::Controller(c) => Some(c),
@@ -59,7 +58,8 @@ impl RoomState {
         })
     }
 
-    /// 以指定 id 放入（快照解码/导入用）；拒绝覆盖已有对象。
+    /// 按指定 ID 导入对象，同时覆写对象自身的 ID；房内重复 ID 返回错误。
+    /// 不检查坐标或跨房间 ID 唯一性，也不更新 World 的分配游标。
     pub fn insert_with_id(&mut self, id: u64, mut object: RoomObject) -> Result<(), String> {
         if self.objects.contains_key(&ObjId(id)) {
             return Err(format!("对象 id 重复: {}", ObjId(id).as_str()));
@@ -69,6 +69,8 @@ impl RoomState {
         Ok(())
     }
 
+    /// 复制房间对象、地形和事件，附带调用方提供的世界时间、种子及分配游标。
+    /// 房间名不编码在快照中。
     pub fn encode_snapshot(&self, time: u64, seed: u64, next_obj_id: u64) -> RoomSnapshot {
         RoomSnapshot {
             header: RoomHeader {
@@ -82,7 +84,8 @@ impl RoomState {
         }
     }
 
-    /// 解码快照，并校验会影响房间索引的对象字段。
+    /// 从快照对象和地形重建房间，拒绝非法地形码、越界坐标与房内重复 ID。
+    /// 房间名不在快照中，结果 name 为空；世界时间、种子和分配游标须由调用方恢复。
     pub fn decode_snapshot(snapshot: &RoomSnapshot) -> Result<Self, String> {
         let terrain = Terrain::from_codes(&snapshot.header.terrain)
             .map_err(|e| format!("快照地形非法: {e}"))?;
@@ -102,11 +105,9 @@ impl RoomState {
     }
 }
 
-/// 已提交房间版本的不可变句柄（M2B 前置批 P2，ADR-013 决策 2）：
-/// `tick`（世界时序）+ `generation`（内容代际）共同标识一个已提交版本；
-/// 读取方在同一 tick 内绑定同一版本（snapshot 契约纪律——embed 的玩家执行
-/// 循环以 debug 断言守护）。列式/零拷贝时代，此句柄外延为携带字节长度与
-/// 共享存活句柄的 SnapshotHandle（snapshot 契约的完整形态）。
+/// 标识读取时的房间名、世界时间和内容版本（ADR-013 决策 2）。
+/// 只包含版本元数据，不持有房间数据，也不会阻止世界继续变化。
+/// generation 是整个 World 的版本，其他房间变化也会改变此值。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RoomVersionHandle {
     pub room: String,
@@ -114,72 +115,46 @@ pub struct RoomVersionHandle {
     pub generation: u64,
 }
 
-/// 对象目录（O1，双房批）：id → 房名定位，按内容代际懒重建（同
-/// terrain_cache 的版本键纪律）。服务 [`World::get`]/[`World::get_mut`]/
-/// [`World::remove`] 的房名定位：每代际首次触达全量重建一次（N 次
-/// BTreeMap 插入 + **每唯一 id 一次**房名 String 分配——分配按对象数
-/// 计非房数，评审 P2 勘正），之后本代际内 O(log N) 查找；
-/// insert 增量续档。**收益量级勘定（评审 3 F4 实测）**：小规模首房命中
-/// 旧逐房扫描常数更低（4 房 1000 对象命中 1.17-1.24× 慢）；40 房命中
-/// 4.3× 快、miss 面 23× 快——收益随房数/未命中增长，现状 2-4 房为形状
-/// 先行。[`World::next_obj_id`] 的 max 走分体的 `max_id_cache`（零分配
-/// 键扫描——结算每 tick 的 next_available 路径，与原扫描同价），不经
-/// 本目录。正确性前提 = generation 的既有不变量（全部内容可变面 bump；
-/// 结算提交尾直接写 rooms 后必经 advance_ticks——见 generation 字段
-/// 注释）。
+/// 缓存对象 ID 到世界房间键的映射，供 get、get_mut 和 remove 定位。
+/// generation 不匹配时遍历所有对象重建；每个唯一 ID 保存一份房名字符串。
+/// 目录有效时查找使用 BTreeMap，复杂度为 O(log N)。
 #[derive(Debug, Clone, Default)]
 struct ObjDir {
     generation: u64,
     rooms: BTreeMap<ObjId, String>,
 }
 
-/// 世界（M1：房间集合 + 全局时间；玩家分片语义在 embed 层）。
+/// 保存房间集合、时钟和对象分配状态；玩家沙箱与玩家账户由运行时管理。
 #[derive(Debug, Clone)]
 pub struct World {
-    /// 世界时间（M2B 扩面 P0 收敛：pub(crate)——外部读取经 [`World::time`]，
-    /// 推进经 [`World::advance_ticks`]，跨 crate 测试/夹具摆钟经
-    /// [`World::set_time_for_test`]；crate 内测试仍直写（pub(crate) 放行，
-    /// 构造期无害口径）。直写不 bump 代际的旧纪律不变，跨 crate 面由
-    /// 可见性收口强制。
+    /// 当前绝对 tick，正常推进使用 advance_ticks，以同时维护内容版本。
+    /// 构造测试场景可用 set_time_for_test，但它不会使缓存失效。
     pub(crate) time: u64,
     pub seed: u64,
-    /// 已经过玩家 tick（setTerrain 只允许在 0 时调用——screeps-ok 契约）。
+    /// advance_ticks 累计推进的 tick 数；非零时 set_terrain 拒绝替换地形。
     pub player_ticks: u64,
-    /// **硬纪律（O1 后果升级，评审 P2-8 挑战登记口径）**：直写本字段而不
-    /// bump 代际，对象目录/`max_id_cache` 将供陈旧定位——get 误报 None、
-    /// remove 静默失败（较投影缓存陈旧更重）。**M2B 扩面 P0 已收敛
-    /// pub(crate)**（双房批 P2-8/O1 双登记的兑现）：外部读经
-    /// [`World::rooms`]/[`World::room`]，整房写回经 [`World::commit_room`]
-    ///（代际纪律——调用方必经 advance_ticks——见 [`World::commit_room`]）。
+    /// 按房名保存房间；键是查询和投影使用的房间标识。
+    /// crate 内直接修改对象后须递增 generation，否则对象目录和最大 ID 缓存会陈旧。
+    /// 外部整房替换使用 commit_room，并遵守其批量提交契约。
     pub(crate) rooms: BTreeMap<String, RoomState>,
     /// 全局 id 分配器（跨房间唯一；快照每房 header 存同一全局值）。
     next_obj_id: u64,
-    /// 世界内容代际（M2B 前置批 P2，ADR-013 决策 2）：任何已提交内容变更
-    /// 单调递增——投影缓存失效键、对象目录/`max_id_cache` 的失效键
-    ///（O1，双房批）与 [`RoomVersionHandle`] 的内容分量。
-    /// bump 点 = 全部内容可变面（insert/remove/set_terrain/register_room/
-    /// advance_ticks + room_mut/get_mut 保守覆盖）；kk-engine 提交尾经
-    /// [`World::commit_room`] 整房写回后必经 advance_ticks，代际随之递增
-    ///（commit_room 自身不 bump——「一次成功 tick ⇒ 恰 +1」由 advance_ticks
-    /// 单点承载）。结算失败路径不 bump（世界未变）。
+    /// 世界内容版本，用于查询和缓存失效。
+    /// 插入、成功删除、注册新房、设置地形及推进时间会递增；可变访问保守递增，
+    /// 即使没有找到对象或房间。commit_room 不递增，批量提交由 advance_ticks 收束。
+    /// 引擎失败重试依靠时间和此版本判断世界是否仍与首次尝试相同。
     generation: u64,
-    /// 地形纪元：仅地形**实际替换**时递增（register_room 新房 / set_terrain）
-    /// ——地形缓存的失效键（M2B 前置批 P3 消费）。地形首玩家 tick 后不可变，
-    /// 正常运行恒定；纪元变更 ⇒ 全部房间的地形缓存作废。
+    /// 地形缓存版本，注册新房或成功调用 set_terrain 时递增。
+    /// 即使新旧地形相同，set_terrain 也递增；所有房间的旧缓存条目随之失效。
     terrain_epoch: u64,
-    /// 地形投影缓存（P3）：房名 → (纪元, b64 载荷)。键含纪元 ⇒ 纪元递增
-    /// 后旧条目自然失配重编码（全房作废——事件一次性，方向保守安全）。
-    /// `RefCell` 前提：World 单线程持用（embed 主线程投影；无跨线程读取面，
-    /// P2 评审已核）。随 World Clone/reset 复制/重置——缓存键纪元防陈旧命中。
+    /// 房名 → (terrain_epoch, base64 载荷)。版本相符时复用已编码的地形。
+    /// RefCell 允许只读投影更新缓存，使 World 不能被多线程共享读取（不实现 Sync）。
+    /// Clone 复制缓存，reset 清空缓存，避免重置后的版本号与旧条目相撞。
     pub(crate) terrain_cache: RefCell<BTreeMap<String, (u64, Arc<str>)>>,
-    /// 对象目录缓存（O1）：见 [`ObjDir`]。RefCell 前提同 terrain_cache
-    ///（World 单线程持用）；随 Clone 复制、new/reset 归零——代际键防陈旧
-    /// 命中。
+    /// 按 generation 失效的对象目录；RefCell 的共享访问限制同地形缓存。
     obj_dir: RefCell<ObjDir>,
-    /// max id 游标缓存（O1）：代际键 (generation, max)——next_obj_id 消费。
-    /// 与目录分体：重建=纯键扫描零分配（与原全房扫描同价），不付目录
-    /// map 的分配成本（结算每 tick 的 next_available 在此路径上——实测
-    /// 每代际全量建目录令 settle 相 +6%，分体后复原）。
+    /// (generation, 最大对象 ID)，供分配器使用。
+    /// 与对象目录分开维护：只需扫描数字键，不必为每个对象分配房名字符串。
     max_id_cache: RefCell<(u64, u64)>,
 }
 
@@ -221,19 +196,15 @@ impl World {
             .insert_with_id(id, object)?;
         self.next_obj_id = id + 1;
         self.generation += 1;
-        // 目录增量续档（O1）：目录在上一代际仍新鲜时直接带入本代际
-        //（连续 insert 每次免全量重建——夹具摆 N 对象 O(N²) → O(N log N)）；
-        // 目录已陈旧则留给下次触达懒重建
+        // 仅在目录完整覆盖修改前的版本时增量加入新对象。
+        // 陈旧目录不能只补本次插入就标为有效，否则会漏掉其他尚未吸收的修改。
         {
             let mut dir = self.obj_dir.borrow_mut();
             if dir.generation + 1 == self.generation {
                 dir.rooms.insert(ObjId(id), room_name.to_string());
                 dir.generation = self.generation;
             }
-            // max 侧守卫当前恒真（评审 P2-3 实测注记）：入口
-            // next_available_obj_id→max_obj_id 已把 m.0 刷到本代际——
-            // 守卫是对未来调用序变化的防御；「陈旧则跳过」的真纪律在
-            // 目录侧守卫
+            // 分配前已刷新最大 ID 缓存；同样只把有效的上一版本推进到新版本。
             let mut m = self.max_id_cache.borrow_mut();
             if m.0 + 1 == self.generation {
                 *m = (self.generation, m.1.max(id));
@@ -242,19 +213,17 @@ impl World {
         Ok(ObjId(id))
     }
 
-    /// 推进时间（player_ticks 的唯一维护点——setTerrain 守卫依赖它）。
-    /// 同时递增内容代际：投影的时钟折叠面（ticksToRegeneration 等）读
-    /// `time`，tick 推进即投影内容变化，缓存必须失效；kk-engine 的结算
-    /// 提交尾（经 commit_room 整房写回后）以本方法收束，代际随之覆盖。
+    /// 同时推进 time 和 player_ticks，并递增一次 generation。
+    /// 即使 n=0 也递增版本；相对计时投影及批量写回的房间状态依靠它使缓存失效。
     pub fn advance_ticks(&mut self, n: u64) {
         self.time += n;
         self.player_ticks += n;
         self.generation += 1;
     }
 
-    /// 下一个候选 id；直接导入房间对象后也不会回退到已有 id。max 取自
-    /// `max_id_cache` 游标缓存（O1，双房批；原每次调用全房扫描——insert
-    /// 路径每摆一对象扫一次全房，storage-bench T3 夹具实测 55× 提速）。
+    /// 返回分配游标与当前最大对象 ID 加一中的较大值。
+    /// 最大 ID 按 generation 缓存。手工导入的最大对象被删除后，此候选值可能回落；
+    /// 需要永久保留导入 ID 范围时，调用 bump_next_obj_id 抬高游标。
     pub fn next_obj_id(&self) -> u64 {
         let after_existing = self.max_obj_id().saturating_add(1).max(1);
         self.next_obj_id.max(after_existing)
@@ -273,14 +242,13 @@ impl World {
         self.next_obj_id = self.next_obj_id.max(v);
     }
 
-    /// 整体重置（新世界——代际/纪元随之归零重数）。**约束（评审 1 P2-2
-    /// 钉子）**：版本键缓存（generation/terrain_epoch 的消费方，P3/P5）必须
-    /// 驻 World 内（随体重置、结构性免疫跨分片 (room, epoch) 陈旧命中）；
-    /// 若未来缓存外移，须引入分片级基偏移防撞键。
+    /// 清空世界，保留 seed；时钟、分配游标、版本号及内部缓存全部重置。
+    /// 外部持有的版本标识不能跨 reset 判断内容是否相同，因为版本号可能重新出现。
     pub fn reset(&mut self) {
         *self = Self::new(self.seed);
     }
 
+    /// 注册新房间；房名已存在时忽略传入地形，不修改任何版本。
     pub fn register_room(&mut self, name: impl Into<String>, terrain: Terrain) {
         let name = name.into();
         if !self.rooms.contains_key(&name) {
@@ -291,7 +259,8 @@ impl World {
         }
     }
 
-    /// 设置地形（校验与四角墙由 Terrain 构造保证；player_ticks>0 拒绝）。
+    /// 在 player_ticks=0 时替换已有房间的地形，成功后使地形和内容缓存失效。
+    /// 不自行规范化 Terrain；调用方须在构造时完成地形码校验及必要的边界规范化。
     pub fn set_terrain(&mut self, room: &str, terrain: Terrain) -> Result<(), String> {
         if self.player_ticks > 0 {
             return Err("setTerrain 只允许在第一个玩家 tick 之前调用".into());
@@ -310,49 +279,41 @@ impl World {
         self.rooms.get(name)
     }
 
-    /// 只读全房视图（P0 收敛读取面：keys/values/迭代消费走此——
-    /// `rooms` 字段 pub(crate) 后的外部访问口）。
+    /// 返回按房名排序的只读房间集合。
     pub fn rooms(&self) -> &BTreeMap<String, RoomState> {
         &self.rooms
     }
 
-    /// 当前世界时间（P0 收敛读取面；推进经 [`Self::advance_ticks`]）。
+    /// 当前绝对 tick。
     pub fn time(&self) -> u64 {
         self.time
     }
 
-    /// 结算提交尾的整房写回口（P0 收敛：外部唯一整房替换写路径——
-    /// 就地内容变更走 room_mut，自带保守 bump）。
-    /// **代际不在此 bump**——调用方（结算提交尾）必经
-    /// [`Self::advance_ticks`] 收束，「一次成功 tick ⇒ generation 恰 +1」
-    /// 的既有不变量（engine 级测试锁定）由 advance_ticks 单点承载；
-    /// 失败回退路径不调用本方法（世界未变）。
-    /// A1 起本纪律额外承重：引擎恢复门以 (time, generation) 为「世界未变」
-    /// 判据——绕过 advance_ticks 直用本方法整房替换会在代际不变下骗过恢复
-    /// 门；违约后果已从「投影缓存陈旧」升级为「恢复门失真」。
+    /// 批量提交中的整房替换，不自动递增 generation 或 terrain_epoch。
+    /// 调用方须保证对象 ID 跨房间唯一、坐标合法，且不改变已缓存的地形。
+    /// 写回所有房间后，必须在查询前调用 advance_ticks，使目录和内容缓存失效。
+    /// 引擎只在所有结算检查通过后调用本方法；失败重试也依赖该版本更新顺序。
     pub fn commit_room(&mut self, name: String, state: RoomState) {
         self.rooms.insert(name, state);
     }
 
-    /// 测试/夹具的构造期摆钟（P0 收敛：语义与旧 pub 直写逐点一致——不动
-    /// player_ticks/generation，构造期无害系 P2 前置批登记口径）。
-    /// #[doc(hidden)] 测试旋钮先例：`set_fail_room_for_test` 等。
+    /// 仅设置测试场景的绝对 time，不修改 player_ticks 或 generation。
+    /// 应在建立相关缓存前使用；doc(hidden) 只隐藏文档，不限制外部调用。
     #[doc(hidden)]
     pub fn set_time_for_test(&mut self, t: u64) {
         self.time = t;
     }
 
-    /// **禁写 `terrain` 字段**（P3 钉子，评审 2 P2-1）：纪元不随本方法的
-    /// 可变访问递增——绕过 `set_terrain` 改地形会让投影的地形缓存供陈旧
-    /// 载荷（当前生产调用面为零，测试亦不写地形）。
+    /// 返回可变房间引用，并保守递增 generation，房间不存在时也递增。
+    /// 不递增 terrain_epoch，不能通过该引用修改 terrain，否则地形缓存会陈旧。
+    /// 直接导入对象时，调用方还须检查坐标及跨房间 ID 唯一性。
     pub fn room_mut(&mut self, name: &str) -> Option<&mut RoomState> {
         self.generation += 1; // 保守失效：可变访问即视为内容可能变更
         self.rooms.get_mut(name)
     }
 
-    /// 跨房间取对象（M1 主要服务于 embed getObject）。经对象目录三次
-    /// O(log N) BTreeMap 查找（id→房名→房态→对象；O1，双房批——原逐房线性扫描；外部
-    /// 复审 P2 勘正：非 O(1)，暖缓存后 BTreeMap 双跳对数查找）。
+    /// 根据 ID 返回世界目录中的房名和对象。
+    /// 内容版本变化后的首次目录访问会重建目录；有效目录下使用对数复杂度查找。
     pub fn get(&self, id: ObjId) -> Option<(&str, &RoomObject)> {
         let dir = self.obj_dir();
         let name = dir.rooms.get(&id)?;
@@ -360,11 +321,10 @@ impl World {
         state.objects.get(&id).map(|o| (room_name.as_str(), o))
     }
 
+    /// 获取可变对象并保守使内容缓存失效；不能修改对象 ID，也须保持坐标合法。
     pub fn get_mut(&mut self, id: ObjId) -> Option<&mut RoomObject> {
-        // 先经目录定位房名（只读、Ref 语句内结束借用）**再** bump——若
-        // 先 bump 则目录必为新一代际首触达、每次全量重建，O(1) 落空
-        //（评审 2 P2-2 清偿）；bump 语义不变：id 不存在仍计 +1（保守失效
-        // 同 room_mut，generation_bumps 测试锁定）
+        // 先使用当前版本的目录定位，再使缓存失效。
+        // 提前递增会强制本次定位重建目录；即使 ID 不存在，仍保守递增版本。
         let name = self.obj_dir().rooms.get(&id).cloned();
         self.generation += 1;
         let name = name?;
@@ -380,13 +340,12 @@ impl World {
         removed
     }
 
-    /// 当前世界内容代际（见字段注释）。
+    /// 当前内容版本；可变访问和时间推进也会改变它。
     pub fn generation(&self) -> u64 {
         self.generation
     }
 
-    /// max id 触达（懒重建——代际键失效；重建=纯键扫描零分配，与原
-    /// next_obj_id 的扫描同价；本代际内后续 O(1)）。
+    /// 版本变化后扫描对象键重算最大 ID，同一版本内直接返回缓存。
     fn max_obj_id(&self) -> u64 {
         {
             let mut m = self.max_id_cache.borrow_mut();
@@ -405,20 +364,13 @@ impl World {
         self.max_id_cache.borrow().1
     }
 
-    /// 对象目录触达（懒重建——代际键失效；重建 O(N log N)+**每唯一 id
-    /// 一次房名 String 分配**（外部复审 P2 勘正：非「每房一次」——分配
-    /// 探针实测单房 1000 对象首触达 1000 次房名分配/共 1167 次；同代际
-    /// 第二次查询零分配），每代际至多一次；之后本代际内查找 O(log N)。
-    /// get/get_mut/remove 消费——结算热路径（next_available）不经此
-    ///（走分体 max 缓存的零分配扫描）。
+    /// 版本变化后重建定位表，同一版本内复用。
+    /// 跨房重复 ID 属于非法状态；此处取房名排序最靠前的对象，不进行全局校验。
     fn obj_dir(&self) -> std::cell::Ref<'_, ObjDir> {
         {
             let mut dir = self.obj_dir.borrow_mut();
             if dir.generation != self.generation {
-                // 值用 map key（F-1 key 权威裁决：快照解码可产出
-                // name="" 的房——state.name 非权威）；同 id 跨房并存
-                //（违反全局唯一不变量）时首房胜——与原 values() 扫描
-                // 同构（评审 1 P2-1/P2-2 清偿）
+                // 快照解码出的 state.name 可能为空，定位须使用世界集合的房名键。
                 let mut rooms: BTreeMap<ObjId, String> = BTreeMap::new();
                 for (key, state) in &self.rooms {
                     for &id in state.objects.keys() {
@@ -434,25 +386,22 @@ impl World {
         self.obj_dir.borrow()
     }
 
-    /// 当前地形纪元（见字段注释）。
+    /// 当前地形缓存版本。
     pub fn terrain_epoch(&self) -> u64 {
         self.terrain_epoch
     }
 
-    /// 显式递增代际（防御面：绕过 World 方法写 rooms 内容的调用位——
-    /// P0 pub(crate) 收敛后跨 crate 已结构性封死，仅剩 crate 内直写；正常
-    /// 路径由各方法内置 bump 覆盖，本方法供此类调用方显式声明提交）。
+    /// 显式使对象目录和内容缓存失效，不推进时钟或使地形缓存失效。
+    /// 供绕过通常更新方法的内容修改使用。
     pub fn bump_generation(&mut self) {
         self.generation += 1;
     }
 
-    /// 房间版本句柄（tick 定时序、generation 定内容——「同一 tick 内所有
-    /// getter 绑定同一版本」纪律的绑定物）。
+    /// 获取当前房间的版本标识；房间不存在时返回 None。
     pub fn room_version(&self, room: &str) -> Option<RoomVersionHandle> {
         self.rooms.get(room)?;
         Some(RoomVersionHandle {
-            // 用 map key 而非 state.name：快照解码路径产出 name="" 的房
-            //（RoomState::new("")），key 才是权威房间名（评审 F-1）
+            // 房名取集合的键，避免使用快照解码后尚未设置的 state.name。
             room: room.to_string(),
             tick: self.time,
             generation: self.generation,
@@ -507,8 +456,7 @@ mod tests {
             }
         );
         assert!(world.room_version("nope").is_none());
-        // set_terrain 成功路径 / remove / get_mut / room_mut 的 bump 面
-        //（评审 1 P2-1 清偿：逐面钉死，删除任一 bump 即红）
+        // 分别检查地形更新、删除和可变访问的版本变化。
         let mut fresh = World::new(2);
         fresh.register_room("E1S1", Terrain::plains());
         fresh.set_terrain("E1S1", Terrain::plains()).unwrap();
@@ -563,8 +511,7 @@ mod tests {
         assert!(world.room("W1N1").unwrap().objects.is_empty());
     }
 
-    /// O1 目录：get/remove/next_obj_id 经目录 O(1) 且与原全房扫描语义
-    /// 等价（混合来源：insert 分配 + room_mut 手工导入高 id）。
+    /// 手工导入高 ID 后，查询和分配器须刷新缓存；删除它后候选 ID 可回落。
     #[test]
     fn obj_dir_lookup_remove_and_next_id_equivalence() {
         let mut world = World::new(1);
@@ -592,8 +539,7 @@ mod tests {
         // 移除后目录失效（remove bump）→ get None；max 重算不含已移除
         assert!(world.remove(ObjId(900)).is_some());
         assert!(world.get(ObjId(900)).is_none());
-        // 移除 max 对象后候选回落——与原全房扫描语义逐位一致（游标只
-        // 保证其分配过的 id 不复用；手工导入的 900 已不存在）
+        // 游标只保留普通分配所用的范围；手工导入的 900 被删除后不再抬高候选。
         assert_eq!(
             world.next_obj_id(),
             3,
@@ -609,9 +555,7 @@ mod tests {
         }
     }
 
-    /// set_time_for_test 负向语义（M2B 扩面 P0 评 3 P2-1 清偿）：与旧 pub
-    /// 直写逐点等价——不动 generation/player_ticks（若有人令其顺带 bump 或
-    /// 拨 player_ticks 翻转 set_terrain 守卫，此测试红）。
+    /// 构造场景时设置 time 不改变版本或地形修改的限制条件。
     #[test]
     fn set_time_for_test_touches_only_time() {
         let mut world = World::new(1);
@@ -624,15 +568,13 @@ mod tests {
         assert_eq!(world.player_ticks, pt0, "摆钟不动 player_ticks");
     }
 
-    /// O1 目录：结算式提交（经 commit_room 整房写回 + advance_ticks 收束）后
-    /// 目录经代际 bump 懒重建吸收新对象——generation 不变量的消费面。
+    /// 批量写回后推进时间，目录及最大 ID 缓存须看到新对象。
     #[test]
     fn obj_dir_rebuilds_after_settle_style_commit() {
         let mut world = World::new(1);
         world.register_room("W1N1", Terrain::plains());
         let a = world.insert("W1N1", energy(1)).unwrap();
-        // 模拟结算提交尾：commit_room 整房写回（自身不 bump——与真实提交尾
-        // 同语义），代际由 advance_ticks 承载
+        // 模拟引擎先替换房间，再统一推进时间的提交顺序。
         let mut room = RoomState::new("W1N1", Terrain::plains());
         room.insert_with_id(a.0, energy(2)).unwrap();
         room.insert_with_id(777, energy(3)).unwrap();
@@ -643,10 +585,7 @@ mod tests {
         assert_eq!(world.next_obj_id(), 778);
     }
 
-    /// O1 增量续档（分体双属性）：max 缓存在连续 insert 下始终增量保持
-    ///（next_obj_id 路径零重建零分配）；目录（id→房名 map）在首次
-    /// get/remove 触达后增量保持（纯 insert 序列不触达目录——其惰性重建
-    /// 留给首个读侧消费者，一次付清）。
+    /// 首次查询建立目录后，连续插入须增量维护目录和最大 ID 缓存。
     #[test]
     fn obj_dir_eager_maintenance_on_consecutive_inserts() {
         let mut world = World::new(1);
@@ -673,11 +612,8 @@ mod tests {
         assert_eq!(world.obj_dir.borrow().rooms.len(), 50);
     }
 
-    /// O1 续档守卫杀伤线（评审 2 P1-1 清偿）：致陈旧操作（remove/手工
-    /// 导入）与 insert 之间**无刷新读**——insert 见陈旧必须跳过续档，
-    /// 下次触达懒重建同时吸收两侧；守卫若被弱化（无条件续档），缓存带
-    /// 缺失增量标记新鲜 → next_obj_id 偏低 → 撞 id，本测试即红
-    ///（变异实验：删守卫全套件仍绿——零覆盖缺口由本测试封堵）。
+    /// 陈旧目录不能只补新插入对象就标为有效。
+    /// 删除或导入后立即插入，再检查定位与分配结果，防止丢失未吸收的变更。
     #[test]
     fn obj_dir_guard_skips_extension_when_stale() {
         // 形态一：remove 致陈旧 → insert → 触达

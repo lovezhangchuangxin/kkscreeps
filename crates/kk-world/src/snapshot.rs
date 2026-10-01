@@ -1,12 +1,8 @@
-//! 查询面快照投影：embed `getObject`/`findInRoom` 的 screeps-ok 契约形状。
+//! 为运行时 getObject、findInRoom 生成 screeps-ok 的对象查询快照。
 //!
-//! 与 world_json（prelude 世界投影，M0 契约形状）是**两个消费面**：本投影产出
-//! "玩家 getter 值"形态——契约 `kind` 字段、剩余 tick 数（绝对时间 − time）、
-//! 正量 store（0 值资源不出现）、spawning 的 remainingTime 形态。逐组对照
-//! vanilla 参照实现 screeps-ok/adapters/vanilla/snapshots.ts（其每组字段注明
-//! 官方 game/*.js 出处）；`null` 语义同契约头注（getter 的 undefined 读 null）。
-//! 两投影的字段一致性由 embed_tests 对表断言锁定（M0 第七轮"层间一致"教训：
-//! 同一语义两层实现必须有显式对表）。
+//! 输出使用 kind 分类、剩余 tick 数和只包含正量资源的 store；缺失的 getter
+//! 值通常表示为 null。沙箱的 world_json 使用不同字段和缺省值，不能直接替换。
+//! 契约参考：screeps-ok adapters/vanilla/snapshots.ts。
 
 use kk_core::constants as c;
 use kk_schema::room::RoomObject;
@@ -15,8 +11,8 @@ use serde_json::{Value, json};
 use crate::world::{ObjId, World};
 
 impl World {
-    /// 单对象快照（embed getObject 后端；flag 不在契约 ObjectSnapshot 联合内
-    /// ——vanilla snapshotObject 无 flag 分支，返回 null，同构）。
+    /// 按 ID 查询对象快照，找不到对象或对象是旗时返回 None。
+    /// 旗不属于 screeps-ok 的 ObjectSnapshot 联合（vanilla 的 snapshotObject）。
     pub fn object_snapshot_by_id(&self, id: ObjId) -> Option<Value> {
         let (room, object) = self.get(id)?;
         if matches!(object, RoomObject::Flag(_)) {
@@ -26,11 +22,9 @@ impl World {
         Some(snapshot_json(room, id, object, self.time, terrain))
     }
 
-    /// 按 FIND 常量过滤房间内对象并出快照（embed findInRoom 后端）。
-    /// 过滤复用 world_json::matches_find（FIND 语义单源）；flag 不进快照结果
-    /// （契约查询面的中性选择器不含 flags——vanilla findTypeMap 同构）。
-    /// `viewer=None`：本面是 screeps-ok 视角中立面（find.ts 只支持 9 个中立
-    /// 常量）——MY_*/HOSTILE_* 无视角不可判定返回空，不假装有归属结果。
+    /// 返回房内匹配 FIND 常量的快照，按对象 ID 排序；房间不存在时返回空列表。
+    /// 无玩家视角，MY_*、HOSTILE_* 不匹配；旗和地形派生的出口不在此快照结果中。
+    /// 使用 world_json 的 matches_find 过滤，但返回的是查询快照格式。
     pub fn find_snapshots_in_room(&self, room: &str, find_const: i64) -> Vec<Value> {
         let Some(state) = self.rooms.get(room) else {
             return Vec::new();
@@ -53,11 +47,9 @@ impl World {
     }
 }
 
-/// 官方 getter 的 `t ? t - time : undefined` 形态（vanilla snapshots.ts:54-56；
-/// 契约把 undefined 读作 null）。t=0 视同未设置（JS falsy）。
-/// 注意：与 vanilla 的差异——过期挂钟官方发负数（契约头注 "unclamped"），
-/// 我方 saturating_sub 钳 0；正常路径不可达（钟到点即被结算消费清掉），
-/// 仅缺结算/构造性放置可观察，登记灰区表。
+/// 将非零绝对 tick 转为剩余时间；0 表示未设置，返回 null。
+/// 过期值限制为 0，与 vanilla snapshots.ts 的 remaining 可返回负数不同。
+/// 本函数不判断计时字段是否应由结算清除。
 fn remaining(t: u64, time: u64) -> Value {
     if t != 0 {
         json!(t.saturating_sub(time))
@@ -73,8 +65,8 @@ fn remaining_opt(t: Option<u64>, time: u64) -> Value {
     }
 }
 
-/// 官方 safeMode/cooldown 的 `t && t > time ? t - time : undefined` 形态
-/// （vanilla snapshots.ts:62-64）：过期挂钟也读 null。
+/// 只返回仍有效的剩余 tick 数，到期或未设置时返回 null。
+/// 对应 vanilla snapshots.ts 的 activeRemaining。
 fn active_remaining(t: u64, time: u64) -> Value {
     if t > time {
         json!(t - time)
@@ -83,9 +75,7 @@ fn active_remaining(t: u64, time: u64) -> Value {
     }
 }
 
-/// [`active_remaining`] 的 Option 形态（upgradeBlocked/safeModeCooldown 是
-/// opt u64 挂钟）：官方 getter `o.x && o.x > time ? x - time : undefined`
-/// （structures.js:147/151）——null/undefined/过期统一读 null（契约语义）。
+/// 未设置或已到期的可选时间都返回 null。
 fn active_remaining_opt(t: Option<u64>, time: u64) -> Value {
     match t {
         Some(t) => active_remaining(t, time),
@@ -97,15 +87,13 @@ fn snap_pos(room: &str, x: u8, y: u8) -> Value {
     json!({ "x": x, "y": y, "roomName": room })
 }
 
-/// 官方 store getter 只暴露正量资源（vanilla snapStore：amount > 0 才入表）。
-/// 双槽口径（spawn/extension 专用——无 store_extra）；creep/storage 的全资源
-/// 面走 [`snap_store_extra`]（B4：命名矿物槽并入，层间一致）
+/// 查询快照只包含正量资源，energy=0 时也省略该键。
+/// 来源：screeps-ok adapters/vanilla/snapshots.ts 的 snapStore。
 fn snap_store(store: &kk_schema::room::Store) -> Value {
     Value::Object(crate::domain::store_positive_entries(store))
 }
 
-/// [`snap_store`] 的双槽 + 额外资源列表形态（B3：tombstone/ruin 的全资源
-/// 正量口径——boost 矿物等经 store_extra 承载的资源同入表）。
+/// 查询快照合并额外资源，也只保留正量条目。
 fn snap_store_extra(
     store: &kk_schema::room::Store,
     extra: &[kk_schema::room::ResourceStack],
@@ -115,15 +103,10 @@ fn snap_store_extra(
     Value::Object(v)
 }
 
-/// creep 载荷容量：活跃（hits>0）CARRY 数 × CARRY_CAPACITY，boosted 部件乘
-/// BOOSTS.carry 的 capacity 系数（KH×2/KH2O×3/XKH2O×4——constants.js BOOSTS 表；
-/// hits>0 门对照官方 _recalc-body → calcBodyEffectiveness，utils.js:623-636——
-/// 受损部件不计容量）。pub(crate)：world_json 的 creep 投影同源直存
-/// `storeCapacity`（官方 creep 落库字段，creeps.js carryCapacity/Store 同读），
-/// 两消费面（快照契约 null 形态 vs 世界投影裸数值）由各自包装层定型。
+/// 活跃 CARRY 的总容量，包含 BOOSTS.carry.capacity 的强化乘数。
+/// hits=0 的部件不贡献容量；沙箱投影和查询快照共用此数值计算。
+/// 参考：engine/src/processor/intents/creeps/_recalc-body.js。
 pub(crate) fn creep_store_capacity_raw(body: &[kk_schema::room::BodyPart]) -> i64 {
-    // 官方 _recalc-body.js:21：calcBodyEffectiveness(CARRY,'capacity',...)——
-    // 单源实现（GPT 复审 P1-2 清偿：与移动重量/疲劳恢复/仲裁共用）
     crate::types::calc_body_effectiveness(
         body,
         crate::types::BodyKind::Carry,
@@ -133,8 +116,8 @@ pub(crate) fn creep_store_capacity_raw(body: &[kk_schema::room::BodyPart]) -> i6
     )
 }
 
-/// 快照契约形态：vanilla `storeCapacity || null`（store.js:31 同构）——0（无活跃
-/// CARRY）读 null；带 CARRY 的 creep 恒 number（inspection 用例锁 number）。
+/// 查询快照中，容量为 0 时返回 null；有容量时返回数值。
+/// 对应 vanilla snapshots.ts 的 storeCapacity，不等同于沙箱中的原始 0 值。
 fn creep_store_capacity(body: &[kk_schema::room::BodyPart]) -> Value {
     let capacity = creep_store_capacity_raw(body);
     if capacity > 0 {
@@ -144,11 +127,7 @@ fn creep_store_capacity(body: &[kk_schema::room::BodyPart]) -> Value {
     }
 }
 
-/// 官方 progressTotal：1..7 级查 CONTROLLER_LEVELS；0 级与 8 级为 null
-/// （vanilla：`level > 0 && level < 8 ? LEVELS[level] : null`——level 8 无进度条）。
-/// 与 world_json 的 prelude 投影（0 兜底）不同形，属两消费面各自契约
-///（共核 `crate::domain::controller_progress_total_opt`——M2B 扩面 P0 起
-/// 领域模块单源）。
+/// 将控制器的升级总进度转为查询值，无对应等级时返回 null。
 fn controller_progress_total(level: u8) -> Value {
     match crate::domain::controller_progress_total_opt(level) {
         Some(v) => json!(v),
@@ -156,7 +135,7 @@ fn controller_progress_total(level: u8) -> Value {
     }
 }
 
-/// typed 对象 → 契约快照（逐组对照 vanilla snapshots.ts）。
+/// 将结构化对象转换为查询快照；不修改世界状态。
 fn snapshot_json(
     room: &str,
     id: ObjId,
@@ -175,7 +154,7 @@ fn snapshot_json(
             "owner": o.owner,
             "ticksToLive": remaining(o.age_time, time),
             "spawning": o.spawning,
-            // B4：命名矿物槽并入（vanilla snapStore 全资源正量同构）
+
             "store": snap_store_extra(&o.store, &o.store_extra),
             "storeCapacity": creep_store_capacity(&o.body),
         }),
@@ -195,11 +174,8 @@ fn snapshot_json(
                 "ticksToDowngrade": remaining_opt(o.downgrade_time, time),
                 "safeMode": active_remaining(o.safe_mode, time),
                 "safeModeAvailable": o.safe_mode_available,
-                // B2 schema 字段的查询面清偿（A4-iii）：vanilla snapshots.ts
-                // :151-161——safeModeCooldown 过期/无值读 null、reservation
-                // {owner, ticksToEnd}、sign {owner, text, time}（契约无
-                // datetime 键——墙钟不落盘，灰区表既有登记）。ticksToEnd 的
-                // 饱和钳 0 与 remaining 家族同一既有口径
+                // 预订的 endTime 转为剩余 tick，签名保留世界 time，不包含墙钟 datetime。
+                // 查询字段形状参考 vanilla snapshots.ts 的 snapshotController。
                 "safeModeCooldown": active_remaining_opt(o.safe_mode_cooldown, time),
                 "reservation": match &o.reservation {
                     Some(r) => json!({
@@ -209,19 +185,16 @@ fn snapshot_json(
                     None => Value::Null,
                 },
                 "sign": match &o.sign {
-                    // 契约面只有 owner/text/time（vanilla snapshots.ts:157-161，
-                    // GPT 二轮 P2-4：datetime 不进查询快照——世界投影 Some 带键
-                    // 供 prelude getter 构造）
+
                     Some(s) => json!({ "owner": s.user, "text": s.text, "time": s.time }),
                     None => Value::Null,
                 },
-                // 官方 getter 有（structures.js:147）而 vanilla ControllerSnapshot
-                // 契约无此键——超额投影（数值消费方为本引擎调试面；契约消费方
-                // 结构校验不受额外键影响），登记灰区表
+                // 此查询额外提供 upgradeBlocked；vanilla 的 ControllerSnapshot 不包含该键。
+                // 沙箱原始数据保存绝对 tick，此处则只返回有效的剩余时间。
                 "upgradeBlocked": active_remaining_opt(o.upgrade_blocked, time),
                 "isPowerEnabled": o.is_power_enabled,
             });
-            // 归属三态（与 world_json 同形——controller_owner_value 单源）
+
             if let Some(val) = crate::domain::controller_owner_value(o) {
                 v["owner"] = val;
             }
@@ -233,14 +206,10 @@ fn snapshot_json(
             "hits": o.hits, "hitsMax": c::SPAWN_HITS,
             "name": o.name,
             "store": snap_store(&o.store),
-            // 官方 spawn 落库即带 storeCapacityResource（build.js:117-124），
-            // 无资源参数的 getCapacity() 读 null（store.js:28-33；
-            // adapter-spec.md:359-360 明文 "null for a store with per-resource
-            // limits such as a spawn's"；vanilla 快照同构）——数值容量经
-            // energyCapacityAvailable/结算扣费面消费
+            // spawn 按资源限制容量；无资源参数的 getCapacity() 对应 null。
+            // 参考：vanilla snapshots.ts 的 storeCapacity。
             "storeCapacity": Value::Null,
-            // 官方 Spawning 暴露 remainingTime = spawnTime − time
-            // （structures.js:1302-1310；vanilla snapSpawning 同构）
+            // 孵化查询值使用剩余时间，沙箱原始数据则保留绝对 spawnTime。
             "spawning": match &o.spawning {
                 None => Value::Null,
                 Some(job) => json!({
@@ -254,8 +223,7 @@ fn snapshot_json(
             "id": id_str, "pos": snap_pos(room, o.x, o.y), "owner": o.owner,
             "hits": o.hits, "hitsMax": c::EXTENSION_HITS,
             "store": snap_store(&o.store),
-            // 同 spawn：官方 extension 带 storeCapacityResource（build.js:131-135、
-            // extensions/tick.js:11-17 按 RCL 归一），getCapacity() 读 null
+            // extension 同样按资源限制容量，查询的无参总容量为 null。
             "storeCapacity": Value::Null,
         }),
         RoomObject::ConstructedWall(o) => json!({
@@ -294,10 +262,8 @@ fn snapshot_json(
             "resourceType": crate::world_json::energy_resource_name(o),
             "amount": o.amount,
         }),
-        // B3 typed 变体的契约形态（vanilla snapshots.ts:405-414 / :392-402）：
-        // ticksToDecay 为裸减法（不走 remaining 家族——vanilla 原文
-        // `obj.decayTime - gameTime`，我方 saturating 钳 0 属既有登记口径）、
-        // store 全资源正量
+        // 衰减时间限制为非负值；vanilla snapshotTombstone、snapshotRuin 使用裸减法。
+        // store 仍只保留正量资源。
         RoomObject::Tombstone(o) => json!({
             "kind": "tombstone", "id": id_str,
             "pos": snap_pos(room, o.x, o.y),
@@ -314,9 +280,7 @@ fn snapshot_json(
             "store": snap_store_extra(&o.store, &o.store_extra),
             "ticksToDecay": o.decay_time.saturating_sub(time),
         }),
-        // B4 typed 变体的契约形态（vanilla snapshots.ts:365-373 的
-        // snapshotMineral——七键面：kind/id/pos/mineralType/mineralAmount/
-        // density/ticksToRegeneration）
+
         RoomObject::Mineral(o) => json!({
             "kind": "mineral", "id": id_str,
             "pos": snap_pos(room, o.x, o.y),
@@ -325,9 +289,7 @@ fn snapshot_json(
             "density": o.density,
             "ticksToRegeneration": remaining_opt(o.next_regeneration_time, time),
         }),
-        // B4：vanilla snapshotStructure 的 extractor 分支（...base/...hits +
-        // cooldown 计数器——`obj.cooldown || 0`）；owner 无主读 null
-        //（snapOwner 同构）
+        // extractor 的 cooldown 是剩余 tick 计数，不是绝对截止时间。
         RoomObject::Extractor(o) => {
             let mut v = json!({
                 "kind": "structure", "structureType": "extractor",
@@ -343,11 +305,9 @@ fn snapshot_json(
             }
             v
         }
-        // 透传桶：kind 按透传 type 或 structureType 映射（tombstone/ruin/
-        // deposit 有独立契约 kind——B4 起 mineral/extractor 放置面已 typed，
-        // 映射保留给旧持久化字节与手写 Generic 透传的遗留路径）。其余按
-        // structure 兜底（vanilla snapshotStructure 的 default 分支同构——只
-        // 保底 base 字段）。计时字段不折算 getter 剩余形态——遗留路径无该面
+        // Generic 保留 data 中的字段，按 type 或 structureType 设置 kind，
+        // 再由对象表覆盖 ID 和位置。这里只转换下方列出的计时字段，
+        // 不会为其他类型补齐专用 getter 或缺省值。
         RoomObject::Generic(o) => {
             let mut v: serde_json::Map<String, Value> = serde_json::from_str::<Value>(&o.data)
                 .ok()
@@ -366,12 +326,9 @@ fn snapshot_json(
             v.insert("kind".into(), json!(kind));
             v.insert("id".into(), json!(id_str));
             v.insert("pos".into(), snap_pos(room, o.x, o.y));
-            // M2B 扩面 P4：绝对挂钟折叠为官方 getter 等价差值（容器/壁垒
-            // 衰减钟、link/lab/factory 冷却钟——放置面写入的绝对形态在快照
-            // 契约面折算；官方 vanilla snapshotObject 同折）。nextDecayTime
-            // 用 remaining 家族（`t ? t-time : undefined`——0 falsy 跳过），
-            // cooldownTime 官方 getter 是 `t && t>time ? t-time : 0`（到点
-            // 后读 0 非 undefined）
+            // nextDecayTime 转为 ticksToDecay：未设置读 null，过期限制为 0。
+            // cooldownTime 转为 cooldown：到期或 0 都读 0。
+            // 转换后删除绝对时间键，避免同时暴露两种计时表示。
             if let Some(t) = v.get("nextDecayTime").and_then(Value::as_u64) {
                 v.insert("ticksToDecay".into(), remaining(t, time));
                 v.remove("nextDecayTime");
@@ -385,8 +342,7 @@ fn snapshot_json(
             }
             Value::Object(v)
         }
-        // flag 不在查询面契约内（vanilla snapshotObject 无 flag 分支）——
-        // 调用方（object_snapshot_by_id/find_snapshots_in_room）已前置排除
+        // 两个公开查询入口已经排除旗。
         RoomObject::Flag(_) => Value::Null,
     }
 }

@@ -1,6 +1,4 @@
-//! snapshot 内嵌测试（M2B 前置批 P4 自 snapshot.rs 原位拆出）：内容与
-//! 原 mod 块去空白 token 流一致（评审 2 SHA256 对账）；全局缩进剥层与
-//! 少量 rustfmt 合行为机械重排——零行为零内容增删。
+//! 检查查询快照的类型、计时、资源、容量及缺省值。
 
 use super::*;
 use crate::place::{PlaceCtx, normalize};
@@ -23,11 +21,7 @@ fn ctx(world: &World) -> PlaceCtx<'_> {
     }
 }
 
-/// 契约形状逐类型锁定：kind 映射、null/剩余值形态、正量 store、
-/// storeCapacity number、spawning remainingTime。
-/// P4 单源化的输入类锁定（评审 1 P2 清偿）：(energy=0, G>0)——快照正量
-/// 面无 energy 键；零量 extra 栈不出现；progressTotal 的 0/8 级 Null 兜底
-/// 与 2 级查表值（契约面）。
+/// 快照省略零量资源，保留额外正量资源；控制器 0/8 级总进度返回 null。
 #[test]
 fn snapshot_store_and_progress_edges() {
     let mut world = World::new(1);
@@ -84,7 +78,7 @@ fn snapshot_store_and_progress_edges() {
             }),
         )
         .unwrap();
-    // 快照正量面：E=0 → 无 energy 键（世界投影恒在有——两契约分岔点）
+    // energy=0 不进入查询 store；沙箱原始数据则保留该键。
     let spawn_snap = world.object_snapshot_by_id(spawn).unwrap();
     assert_eq!(
         spawn_snap["store"]["energy"],
@@ -169,8 +163,7 @@ fn snapshot_contract_shapes() {
     );
     assert!(snap["spawning"].is_boolean());
 
-    // ghodium 正量键（A4-iii 评审 3 清偿：查询契约面与 world_json 同为
-    // 全资源正量口径——层间一致）
+    // G 也须出现在查询 store 中，不能只保留 energy。
     let gh_creep = normalize(
         "creep",
         &serde_json::json!({
@@ -203,7 +196,7 @@ fn snapshot_contract_shapes() {
     let snap = world.object_snapshot_by_id(spawn_id).unwrap();
     assert_eq!(snap["kind"], "structure");
     assert_eq!(snap["structureType"], "spawn");
-    // 官方 spawn 带 storeCapacityResource——无参 getCapacity() 读 null
+    // spawn 的查询总容量为 null，因为容量按资源分别限制。
     assert_eq!(snap["storeCapacity"], serde_json::Value::Null);
     assert_eq!(
         snap["spawning"],
@@ -302,8 +295,7 @@ fn snapshot_getter_forms() {
     assert_eq!(sources[0]["kind"], "source");
 }
 
-/// boost 乘数与形态：KH boosted CARRY ×2；无活跃 CARRY 读 null
-/// （vanilla `storeCapacity || null` 同构）；受损部件不计容量。
+/// KH 强化 CARRY 容量翻倍，没有 CARRY 的 creep 查询容量为 null。
 #[test]
 fn snapshot_creep_capacity_boosts_and_null() {
     let mut world = world_with_room();
@@ -346,10 +338,7 @@ fn snapshot_creep_capacity_boosts_and_null() {
     );
 }
 
-/// B4：mineral 经 structure 通道放置（适配器真实路径——type=structure、
-/// structureType=mineral）进 typed 变体——契约七键面（vanilla
-/// snapshots.ts:365-373 的 snapshotMineral）；tombstone 直通道（B3 起
-/// typed）与 FIND_MINERALS 命中。
+/// structure 通道的矿物须使用独立快照 kind，并被 FIND_MINERALS 查询识别。
 #[test]
 fn snapshot_mineral_and_tombstone_kind_mapping() {
     let mut world = world_with_room(); // time = 10
@@ -414,8 +403,7 @@ fn snapshot_mineral_and_tombstone_kind_mapping() {
     assert_eq!(snap["kind"], "tombstone", "直通道 tombstone（B3 typed）");
 }
 
-/// 道路 hitsMax 的地形系数（外部复审 P2-4：官方 build.js:172-184 把放大值
-/// 写进 hits 与 hitsMax；两投影共用 road_hits_max）。
+/// 平原、沼泽、墙地形的道路最大 hits 分别采用对应系数。
 #[test]
 fn road_hits_max_terrain_scaling() {
     let mut world = world_with_room();
@@ -502,12 +490,7 @@ fn flags_not_in_query_plane() {
             .is_empty()
     );
 }
-/// owner 三态投影锁（官方 controllers/tick.js:56 降级归零 `user = null`
-/// 哨兵）：Some → 字符串；cleared → null（玩家侧 my === false）；
-/// 从未拥有 → 无键（my === undefined）。与 snapshot.rs 同名测试层间对表。
-/// B3：typed tombstone/ruin 的查询契约形态（vanilla snapshots.ts:405-414 /
-/// :392-402）——七键面、ticksToDecay 裸减法、store 全资源正量；命名资源
-/// 堆（EnergyObj.resource）经 resourceType 透出。
+/// 墓碑、废墟查询输出衰减剩余时间和正量资源，掉落资源保留显式资源名。
 #[test]
 fn tombstone_and_ruin_snapshot_contract() {
     let mut world = world_with_room(); // time = 10
@@ -588,9 +571,7 @@ fn tombstone_and_ruin_snapshot_contract() {
     assert_eq!(snap["amount"], 12);
 }
 
-/// B4：extractor 契约形态（vanilla snapshotStructure 的 extractor 分支：
-/// base+hits+cooldown；无主 owner 读 null）+ creep 的命名矿物槽并入
-/// snapStore 全资源正量口径。
+/// 无主提取器的快照 owner 为 null，creep 的额外正量矿物进入 store。
 #[test]
 fn extractor_snapshot_and_creep_named_slot() {
     let mut world = world_with_room();
@@ -684,8 +665,7 @@ fn controller_owner_three_states() {
 #[test]
 fn snapshot_store_capacity_family() {
     let mut world = world_with_room();
-    // ctx 借 world（immutable）与 insert（mutable）交替——每个 normalize
-    // 用独立作用域的 ctx，产物 owned 后再 insert
+
     let storage = {
         let c = ctx(&world);
         normalize(
@@ -739,11 +719,7 @@ fn snapshot_store_capacity_family() {
     );
 }
 
-/// B2 schema 四字段（A4-iii 查询面清偿）的契约形态锁（vanilla
-/// snapshots.ts:151-161）：safeModeCooldown/upgradeBlocked 过期或无值读
-/// null、活跃读剩余值；reservation {owner, ticksToEnd}、sign
-/// {owner, text, time}（契约无 datetime 键）。与 world_json.rs 同名测试
-/// 层间对表。
+/// 控制器有效计时转为剩余值，过期或未设置时返回 null；签名不带 datetime。
 #[test]
 fn controller_b2_projection_fields() {
     let mk = |reservation, sign, blocked, cooldown| {

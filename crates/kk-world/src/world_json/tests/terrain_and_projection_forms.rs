@@ -1,5 +1,4 @@
-//! 连续切块 A：地形缓存/单源化输入类锁定/投影形状与 FIND/Generic 桶/墓碑废墟
-//!（自 tests.rs 源文序 43-443 行区段，P4 拆分+终审再拆两段）。
+//! 检查地形缓存更新、资源与控制器投影，以及 Generic 对象查询。
 
 use super::*;
 
@@ -38,8 +37,7 @@ fn storage_named_resources_reach_all_projections() {
     );
 }
 
-/// 地形缓存行为（P3）：纪元内载荷确定（多次投影一致）；纪元递增后
-/// 载荷随新地形重编码（无陈旧命中）。
+/// 同一地形版本重复投影一致，替换地形后载荷和版本都须更新。
 #[test]
 fn terrain_payload_cache_epoch_invalidation() {
     let mut world = World::new(1);
@@ -75,11 +73,7 @@ fn terrain_payload_cache_epoch_invalidation() {
     );
 }
 
-/// 投影形状与 M0 契约对表：rooms 带 terrain 紧凑载荷、对象字段名对齐
-/// prelude wrapObject、FIND 过滤两层一致、pos 组装。
-/// P4 单源化的输入类锁定（评审 1 P2 清偿）：(energy=0, G>0) 的组装序
-/// 重组面（世界投影 energy 恒在 + G 正量）；零量 extra 栈不出现；
-/// progressTotal 的 0/中级/8 级折叠（世界投影 0 兜底）。
+/// 原始沙箱 store 保留 energy=0、过滤额外零量资源，控制器总进度缺省为 0。
 #[test]
 fn store_and_progress_single_source_edges() {
     let mut world = World::new(1);
@@ -246,9 +240,7 @@ fn projection_shape_and_find() {
     let j = world.world_json();
     assert_eq!(j["time"], 55);
     assert_eq!(j["rooms"]["W1N1"]["name"], "W1N1");
-    // 地形紧凑协议（P3）：{rev, payload(b64)}；rev = 当前纪元，
-    // payload 解回 2500 字节与 typed 地形逐字节一致（Rust 孪生——
-    // JS 侧 b64ToBytes 解码器的对表责任由本测试承担）
+    // 地形载荷解码后须与房间的 2500 字节一致，rev 须为当前地形版本。
     let terrain_json = &j["rooms"]["W1N1"]["terrain"];
     assert_eq!(terrain_json["rev"], world.terrain_epoch());
     let decoded = test_b64_decode(terrain_json["payload"].as_str().unwrap());
@@ -283,7 +275,7 @@ fn projection_shape_and_find() {
     assert_eq!(world.controller_pos("W1N1"), Some((1, 1)));
 }
 
-/// tower 等结算范围外对象进 Generic 桶后仍对 FIND_* 可见（M0 接受面）。
+/// Generic tower 仍参与结构查询，专用墓碑参与墓碑查询。
 #[test]
 fn generic_objects_stay_visible_to_find() {
     let mut world = World::new(1);

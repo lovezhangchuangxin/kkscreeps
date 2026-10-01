@@ -1,8 +1,9 @@
-//! 游戏词汇表：官方字符串名 ↔ schema 原始码的映射。
+//! 游戏字符串与快照码值的转换，以及结算和投影共用的资源、容量与强化计算。
 
 use kk_core::constants as c;
 
-/// 身体部件种类（码值 = 官方 BODYPARTS_ALL 顺序）。
+/// 身体部件种类，枚举顺序决定快照中保存的 u8 码值。
+/// 顺序与 kk-core 的 BODYPARTS_ALL 常量表一致；调整时须考虑已有快照。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BodyKind {
     Move,
@@ -52,7 +53,7 @@ impl BodyKind {
         Self::ALL.into_iter().find(|k| k.name() == name)
     }
 
-    /// 官方 calcBodyEffectiveness 的 M1 无 boost 形态：统计活跃部件数 × 基础功率。
+    /// 统计 hits>0 的指定类型部件数，不计算强化乘数或基础功率。
     pub fn count_active(body: &[kk_schema::room::BodyPart], kind: Self) -> usize {
         body.iter()
             .filter(|p| p.hits > 0 && p.kind == kind.code())
@@ -60,8 +61,8 @@ impl BodyKind {
     }
 }
 
-/// 工程进度总量（官方 progressTotal = CONSTRUCTION_COST[structureType]）。
-/// 生成物保持 dump 键序（当前恰好有序），查找不假设有序。
+/// 查询 CONSTRUCTION_COST 中的基础建造成本，未知类型返回 None。
+/// 不包含道路的地形系数；常量表的键无需排序。
 pub fn construction_cost(structure_type: &str) -> Option<i64> {
     c::CONSTRUCTION_COST
         .iter()
@@ -69,14 +70,14 @@ pub fn construction_cost(structure_type: &str) -> Option<i64> {
         .map(|(_, v)| *v)
 }
 
-/// 是否官方 OBSTACLE_OBJECT_TYPES（静态障碍判定用）。
+/// 是否属于 kk-core 的 OBSTACLE_OBJECT_TYPES 静态障碍类型表。
 pub fn is_obstacle_type(type_name: &str) -> bool {
     c::OBSTACLE_OBJECT_TYPES.contains(&type_name)
 }
 
-/// extension 的单结构能量容量（官方 extensions/tick.js:10-17 按 RCL 归一
-/// `storeCapacityResource.energy = EXTENSION_ENERGY_CAPACITY[level] || 0`）。
-/// 表键 0..=8；无 controller 的房查 0 档（官方该情形不归一，M1 按同表取值）。
+/// 按房间控制器等级查询单个 extension 的能量容量，未知等级返回 0。
+/// 无控制器的房间由调用方传入 0。
+/// 来源：engine/src/processor/intents/extensions/tick.js 的容量更新。
 pub fn extension_energy_capacity(rcl: u8) -> i64 {
     let key = rcl.to_string();
     c::EXTENSION_ENERGY_CAPACITY
@@ -86,11 +87,10 @@ pub fn extension_energy_capacity(rcl: u8) -> i64 {
         .unwrap_or(0)
 }
 
-/// 官方 calcBodyEffectiveness（engine/src/utils.js:623-636）的等价物：遍历
-/// body，hits>0 且类型匹配的部件按 base × BOOSTS[type][boost][effect] 乘数
-/// 求和。GPT 复审 P1-2 清偿：容量投影/移动重量/仲裁 moves/疲劳恢复四消费点
-/// 共用（官方 movement.js:41-59 的 weight 用同表的 capacity、:117-118 的
-/// moves 与 creeps/tick.js:105 的恢复用 fatigue）。
+/// 对 hits>0 且类型匹配的部件求和，每个部件贡献 base × 强化乘数。
+/// part_key 与 effect 指定 BOOSTS 表中的部件名和效果名，找不到乘数时使用 1。
+/// 每个部件的浮点结果转换为 i64 后再求和；不使用上游的 _oldHits 字段。
+/// 参考：engine/src/utils.js 的 calcBodyEffectiveness。
 pub fn calc_body_effectiveness(
     body: &[kk_schema::room::BodyPart],
     kind: BodyKind,
@@ -120,22 +120,20 @@ pub fn calc_body_effectiveness(
     power
 }
 
-/// 官方 calcResources（utils.js 等价物——transfer.js:50/withdraw.js:9/pickup.js:9
-/// 等处的全槽求和）：双槽 + 额外资源列表（B4 起矿物 harvest 产出入命名槽，
-/// 官方 store 按资源名键的开放对象逐键求和同构）。
+/// 汇总 energy、G 及额外资源的数量，包括值为 0 的条目。
+/// 额外资源名应唯一且不重复专用字段，否则会被重复计数。
 pub fn store_total(
     store: &kk_schema::room::Store,
     extra: &[kk_schema::room::ResourceStack],
 ) -> i64 {
-    // i64 域加法：u32 域相加在放置面伪造的双 u32::MAX 持有下 debug 溢出
-    // panic（B4 评审 2 P3-1——panic 不走 SettleError 回退通道）
+    // 先扩宽再相加，避免两个合法 u32 存量的和在 u32 中溢出。
     (store.energy as i64)
         + (store.ghodium as i64)
         + extra.iter().map(|s| s.amount as i64).sum::<i64>()
 }
 
-/// 命名资源槽的读取（creep/storage 的多资源面）：energy/G 走双槽，其余查
-/// 额外资源列表（无键 = 0——官方 store[res] undefined 参与数值运算同值）。
+/// 读取资源存量：energy、G 使用专用字段，其余返回首个同名额外条目。
+/// 找不到资源时返回 0。
 pub fn store_extra_slot(
     store: &kk_schema::room::Store,
     extra: &[kk_schema::room::ResourceStack],
@@ -152,10 +150,10 @@ pub fn store_extra_slot(
     }
 }
 
-/// 官方 calcResourcesWeight（movement.js:41-59）：store 全槽求和作为携带量，
-/// 自 body 尾部往前，hits>0 的 CARRY 按 CARRY_CAPACITY × 强化容量乘数逐个
-/// 扣减——装下携带量所需的 CARRY 部件数即重量。B4 起携带量含命名矿物槽
-/// （官方 calcResources 对开放 store 逐键求和的同构）。
+/// 计算承载当前资源所需的活跃 CARRY 部件数，用作移动重量。
+/// 从 body 尾部向前扣除各部件的容量，强化容量也计入；资源量为 0 时重量为 0。
+/// 即使资源超出总容量，返回值也不超过活跃 CARRY 数量。
+/// 参考：engine/src/processor/intents/movement.js 的 calcResourcesWeight。
 pub fn resources_weight(
     body: &[kk_schema::room::BodyPart],
     store: &kk_schema::room::Store,
@@ -180,9 +178,7 @@ pub fn resources_weight(
     weight
 }
 
-/// MINERAL_DENSITY 表查询（constants.js:310-315：1→15000/2→35000/3→70000/
-/// 4→100000）。越界密度得 0（官方 `C.MINERAL_DENSITY[undefined]` → undefined
-/// → falsy——矿量 0 不影响"耗尽重挂钟"的官方行为）。
+/// 查询 MINERAL_DENSITY 常量表；不在表中的密度返回 0。
 pub fn mineral_density(density: u8) -> i64 {
     let key = density.to_string();
     c::MINERAL_DENSITY
@@ -209,12 +205,11 @@ fn boost_multiplier(
         .unwrap_or(1)
 }
 
-/// 官方 build/repair/upgradeController 的强化两步算法（GPT 二轮复审 P1-1
-/// 清偿）：能量与基础量按无强化功率计（count × base），效果按增量数组——
-/// 每强化部件贡献 (multiplier-1) × base 浮点增量，降序排序后取前
-/// effect_points（基础效果点数）个，整体 floor 再钳 cap（官方
-/// build.js:71-81 / repair.js:28-38 / upgradeController.js:51-58——
-/// 官方 build/repair 不走 calcBodyEffectiveness 的直乘路径）。
+/// 计算活跃部件的正强化增量，并按从大到小排序。
+/// 每个部件贡献 (乘数−1) × base，保留浮点值，交给 apply_boost 最后取整。
+/// 建造、修理与升级先确定未强化的效果量和耗能，再应用这些增量，
+/// 不能替换为 calc_body_effectiveness 的直接乘法。
+/// 来源：engine/src/processor/intents/creeps/{build,repair,upgradeController}.js。
 pub fn boost_increments(
     body: &[kk_schema::room::BodyPart],
     kind: BodyKind,
@@ -250,7 +245,9 @@ pub fn boost_increments(
     increments
 }
 
-/// 应用强化增量（官方 slice(0, effect) + floor(effect + sum) + 钳 cap）。
+/// 取前 max(effect_points, 0) 个增量，加到基础效果量后向下取整，再限制到 cap。
+/// increments 应已按降序排列。基础效果或 cap 为负时保留负值，
+/// 以支持放置工地 progress 超过总进度时的结算行为，不额外限制为 0。
 pub fn apply_boost(increments: &[f64], effect_points: i64, cap: i64) -> i64 {
     let n = effect_points.max(0) as usize;
     let sum: f64 = increments.iter().take(n).sum();
@@ -258,7 +255,7 @@ pub fn apply_boost(increments: &[f64], effect_points: i64, cap: i64) -> i64 {
     boosted.min(cap)
 }
 
-/// 一步式（效果点数已在手的调用方——build/repair）。
+/// 为已确定的基础效果量计算强化结果；耗能仍由调用方按未强化效果计算。
 pub fn boosted_effect(
     body: &[kk_schema::room::BodyPart],
     kind: BodyKind,

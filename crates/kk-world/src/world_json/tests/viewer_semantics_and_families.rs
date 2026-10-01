@@ -1,14 +1,8 @@
-//! 连续切块 B：owner 三态/store 容量族/B2 四字段/per-viewer FIND 与能量/矿物
-//! 提取器/GCL（自 tests.rs 源文序 444 行至尾，P4 拆分+终审再拆两段）。
+//! 检查归属、容量、控制器计时、玩家查询与房间能量统计。
 
 use super::*;
 
-/// owner 三态投影锁（官方 controllers/tick.js:56 降级归零 `user = null`
-/// 哨兵）：Some → 字符串；cleared → null（玩家侧 my === false）；
-/// 从未拥有 → 无键（my === undefined）。与 snapshot.rs 同名测试层间对表。
-/// B3：tombstone/ruin 的世界投影（官方 DB 形态 + getter 折叠的
-/// ticksToDecay）；墓碑主人保住房间视野（data.js:105-116 只跳过 flag/
-/// constructionSite——tombstone/ruin 的 user 同样归集）。
+/// 墓碑与废墟使用 user 主人字段，沙箱投影须保留内容并导出所在可见房间的对象。
 #[test]
 fn tombstone_and_ruin_world_projection_and_vision() {
     let mut world = World::new(42);
@@ -97,7 +91,7 @@ fn tombstone_and_ruin_world_projection_and_vision() {
     assert_eq!(r["store"]["energy"], 300);
     assert_eq!(r["store"]["G"], 4);
 
-    // FIND 两层（A3c 起 find_in_room 带 viewer——中立面 None）
+    // 中立查询分别识别墓碑、废墟，不将它们计为结构。
     assert_eq!(
         world.find_in_room("W1N1", c::FIND_TOMBSTONES, None).len(),
         1
@@ -108,7 +102,7 @@ fn tombstone_and_ruin_world_projection_and_vision() {
         0
     );
 
-    // 视野：仅有一枚墓碑的房间对 p1 可见（官方 userObjects 归集含墓碑）
+    // 有主墓碑和废墟使房间可见，其余房间仍提供地形。
     let viewer = world.world_json_for_viewer("p1", 0);
     let rooms = viewer["rooms"].as_object().unwrap();
     assert!(rooms["W1N1"].get("terrain").is_some(), "墓碑授视野");
@@ -161,7 +155,7 @@ fn controller_owner_three_states() {
     );
 }
 
-/// 显式回查面；spawning.directions 未指定时官方缺键（undefined）。
+/// 检查容量字段的两种表示，以及孵化任务未指定 directions 时省略该键。
 #[test]
 fn store_capacity_projection_family() {
     let mut world = World::new(7);
@@ -231,7 +225,7 @@ fn store_capacity_projection_family() {
         "spawn 无数值容量键（官方落库无 storeCapacity）"
     );
     assert_eq!(spawn_j["off"], false, "off 标记投影（data(id).off 回查面）");
-    // 孵化任务 directions 缺键（官方 undefined 语义）
+    // 没有孵化任务时 spawning 为 null。
     assert_eq!(spawn_j["spawning"], serde_json::Value::Null);
 
     let ext_j = world.object_json_by_id(ext_id).unwrap();
@@ -265,7 +259,7 @@ fn store_capacity_projection_family() {
     assert_eq!(spawn_j["spawning"]["needTime"], 6);
     assert_eq!(spawn_j["spawning"]["spawnTime"], 6);
     assert_eq!(spawn_j["spawning"]["directions"], serde_json::json!([3, 5]));
-    // 空 directions = 未指定 → 缺键（官方 undefined）
+    // 未指定 directions 时省略字段。
     if let Some(RoomObject::Spawn(s)) = world.room_mut("W1N1").unwrap().objects.get_mut(&spawn_id) {
         s.spawning = Some(kk_schema::room::SpawningJob {
             name: "child".into(),
@@ -281,9 +275,7 @@ fn store_capacity_projection_family() {
     );
 }
 
-/// B2 schema 四字段（A4-iii 投影清偿）的 prelude 世界投影锁：绝对 tick/
-/// {user,endTime} 官方 DB 原始形态（prelude getter 换算用），None → null；
-/// 与 snapshot.rs 同名测试层间对表（两消费面各自换算、字段单源）。
+/// 沙箱保留控制器绝对计时和预订、签名记录；未设置的可选字段返回 null。
 #[test]
 fn controller_b2_projection_fields() {
     let mk = |reservation, sign, blocked, cooldown| {
@@ -353,9 +345,7 @@ fn controller_b2_projection_fields() {
     assert_eq!(e["safeModeCooldown"], serde_json::Value::Null);
 }
 
-/// A3c：FIND 族 per-viewer 语义锁（官方 findCacheFn 表 game.js:17-28）。
-/// 双主人房：creep（含孵化雏形）/spawn/extension/tower/工地，验证
-/// MY_*/HOSTILE_* 归属分野 + FIND_CREEPS 玩家面滤雏形 + 中立面语义。
+/// 同房多个主人时按 viewer 区分归属；玩家查询排除孵化 creep，中立查询保留。
 #[test]
 fn find_per_viewer_semantics() {
     let mut world = World::new(3);
@@ -438,9 +428,7 @@ fn find_per_viewer_semantics() {
     .unwrap();
     world.insert("W1N1", site1).unwrap();
 
-    // 降级清零 controller（owner:null 哨兵——官方 owner getter 对 null 归
-    // undefined，structures.js:136-138）：MY/HOSTILE 双臂均不进（109 的
-    // `my===false && i.owner` 把它挡在敌对外——评审 3 P3-3 边角锁）
+    // 清除归属的控制器不应进入己方或敌方结构集合。
     let cleared_ctl = RoomObject::Controller(ControllerObj {
         id: 0,
         x: 2,
@@ -495,8 +483,7 @@ fn find_per_viewer_semantics() {
     assert_eq!(count(c::FIND_HOSTILE_STRUCTURES, None), 0);
 }
 
-/// A3c：energyAvailable/CapacityAvailable per-viewer（官方 game.js:324-328
-/// 只累计查看者自家非 off 的 spawn/extension）。双主人房 + off spawn。
+/// 房间能量只统计查看者的非 off spawn；内部全量投影则统计所有主人。
 #[test]
 fn energy_per_viewer_projection() {
     let mut world = World::new(3);
@@ -532,16 +519,13 @@ fn energy_per_viewer_projection() {
     let j2 = world.world_json_for_viewer("p2", 0);
     assert_eq!(j2["rooms"]["W1N1"]["energyAvailable"], 200);
     assert_eq!(j2["rooms"]["W1N1"]["energyCapacityAvailable"], 300);
-    // 全量面（M1 测试/内部消费）：全房聚合
+    // 内部全量投影统计所有非 off spawn。
     let jn = world.world_json();
     assert_eq!(jn["rooms"]["W1N1"]["energyAvailable"], 300);
     assert_eq!(jn["rooms"]["W1N1"]["energyCapacityAvailable"], 600);
 }
 
-/// B4：mineral/extractor 的世界投影（官方 DB 形态 + getter 折叠）与
-/// FIND/视野面——mineral 不进 FIND_STRUCTURES、extractor 进且带归属；
-/// 有主 extractor 授房视野（data.js:105-116 的 userObjects 归集）；
-/// creep 携带命名矿物经 store 投影正量暴露。
+/// 矿物不属于 FIND_STRUCTURES，提取器属于结构；creep 额外资源须进入 store。
 #[test]
 fn mineral_and_extractor_projection_and_find() {
     let mut world = World::new(42);
@@ -693,8 +677,7 @@ fn mineral_and_extractor_projection_and_find() {
     assert!(ne.get("owner").is_none(), "无主不落 owner 键");
 }
 
-/// A3c：world.gcl 投影（官方 runtimeData.user.gcl 点数直存——换算在
-/// prelude，game.js:130-163 正变换的锚点数据）。
+/// 传入的累计 GCL 点数原样投影，等级换算交给 prelude。
 #[test]
 fn gcl_points_projection() {
     let mut world = World::new(1);

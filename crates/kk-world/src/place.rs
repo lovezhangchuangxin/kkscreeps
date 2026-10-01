@@ -1,10 +1,8 @@
-//! place spec（screeps-ok JSON）→ typed 对象的归一化表。
+//! 将嵌入式接口的放置 JSON 转换为房间对象。
 //!
-//! 初态对照 vanilla 参照适配器（screeps-ok `adapters/vanilla/index.ts` 的
-//! placeCreep/placeStructure/placeSite/placeSource/placeFlag）与官方 build.js
-//! 的落成分支。spec 私有字段（boosts/ticksToLive/progressTotal 等）不泄入
-//! 对象——在此折算为引擎字段（M0 第四轮"typed placement"登记项的清偿）；
-//! 结算范围外的类型落 Generic 透传桶，保持 FIND 可见性。
+//! 坐标须在 0..=49 内。结构化对象将 TTL、强化和资源参数转换为引擎字段；
+//! 其余对象使用 Generic 保存 JSON。这是构造测试场景的入口，不替代玩家动作校验。
+//! 初始值参考：screeps-ok adapters/vanilla/index.ts 的各 place 方法。
 
 use kk_core::constants as c;
 use kk_schema::room::{
@@ -23,19 +21,18 @@ pub use place_structure::{
 };
 use place_structure::{normalize_site, normalize_structure};
 
-/// 归一化上下文：放置依赖的世界状态（控制器归属决定 source 容量等）。
+/// 放置时的世界上下文，用于默认容量、到期时间与对象命名。
 pub struct PlaceCtx<'a> {
     pub time: u64,
-    /// 房间内是否已有归属 controller（placeSource 容量三分支，vanilla placeSource）。
+    /// 房内首个控制器；有无控制器和主人决定 source 默认容量。
     pub controller: Option<&'a ControllerObj>,
-    /// 无名 creep/spawn 的稳定名序号（M0 契约：上游 spec 无 name 字段是合法形态）。
+    /// 未指定 creep、spawn 名称时使用的序号；由调用方提供，须避免重名。
     pub name_seq: usize,
 }
 
-/// 归一化入口：kind 为 embed 通道的内部类别（creep/structure/spawn/
-/// constructionSite/flag/resource/tombstone/ruin）；spec 为 PlaceSpec JSON。
-/// 未知 kind（portal/deposit/keeperLair/invaderCore/powerBank/…）落 Generic
-/// 透传并携带 `type: kind`——与 M0 哑世界相同的放置接受面。
+/// 按嵌入式接口的 kind 将 spec 转换为对象，产物 ID 为 0，等待 World 分配。
+/// 坐标来自 `spec.pos=[x,y]`。未知 kind 进入 Generic，并保留 type=kind。
+/// 参数验证按对象类型进行，不检查地形、重叠、配额或主人是否存在。
 pub fn normalize(kind: &str, spec: &Value, ctx: &PlaceCtx) -> Result<RoomObject, String> {
     let (x, y) = read_pos(spec)?;
     match kind {
@@ -45,12 +42,10 @@ pub fn normalize(kind: &str, spec: &Value, ctx: &PlaceCtx) -> Result<RoomObject,
         "constructionSite" => Ok(RoomObject::ConstructionSite(normalize_site(spec, x, y)?)),
         "flag" => Ok(RoomObject::Flag(normalize_flag(spec, x, y))),
         "resource" => Ok(RoomObject::Energy(normalize_resource(spec, x, y)?)),
-        // B3 起进 typed 变体（此前 Generic 透传）——放置面保持官方 DB 形态
+
         "tombstone" => Ok(RoomObject::Tombstone(normalize_tombstone(spec, x, y, ctx))),
         "ruin" => Ok(RoomObject::Ruin(normalize_ruin(spec, x, y, ctx))),
-        // B4 直通道（B4 评审 3 P3-1 登记——typed 分支原只在 structure 通道，
-        // 裸 kind 落 Generic 透传致 FIND 失配）：复用 normalize_structure 的
-        // structureType 分派（白名单/缺省逻辑单源）
+        // 两种入口共用结构分派，确保矿物与提取器使用相同默认值和校验。
         "mineral" | "extractor" => {
             let mut s = spec.clone();
             if let Some(m) = s.as_object_mut() {
@@ -62,7 +57,7 @@ pub fn normalize(kind: &str, spec: &Value, ctx: &PlaceCtx) -> Result<RoomObject,
     }
 }
 
-/// Generic 保留原始字段，但坐标和类型由引擎统一设置。
+/// Generic 复制除 pos 外的字段，再设置 type；ID 和坐标由投影时覆盖。
 fn generic_fields(type_name: &str, spec: &Value) -> serde_json::Map<String, Value> {
     let mut data = serde_json::Map::new();
     if let Some(obj) = spec.as_object() {
@@ -114,9 +109,8 @@ fn store_energy(spec: &Value) -> Store {
     store
 }
 
-/// 读 spec 的 store 对象为双槽 + 额外资源列表（B3）：energy/G 进 typed 槽，
-/// 其余正量资源（boost 矿物等）进 store_extra——官方 store 是按资源名键的
-/// 开放对象（_die.js:78 逐键循环的全集形态）。
+/// 读取正整数资源存量，energy、G 使用专用字段，其余进入额外资源列表。
+/// 超过 u32 的值饱和到 u32::MAX；负数、非整数和 0 被忽略。不校验资源名。
 fn store_with_extra(spec: &Value) -> (Store, Vec<ResourceStack>) {
     let mut store = Store::default();
     let mut extra: Vec<ResourceStack> = Vec::new();
@@ -140,8 +134,6 @@ fn store_with_extra(spec: &Value) -> (Store, Vec<ResourceStack>) {
     (store, extra)
 }
 
-/// [`store_with_extra`] 的额外资源列表单取（B4：creep/storage 的命名槽——
-/// energy/G 之外的正量资源，与 tombstone/ruin 同口径）。
 fn store_extra_of(spec: &Value) -> Vec<ResourceStack> {
     store_with_extra(spec).1
 }
@@ -163,7 +155,7 @@ fn normalize_creep(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<CreepOb
             boost: None,
         });
     }
-    // spec.boosts：{部件序号: 资源名} 并入对应部件（不泄入对象）
+    // 放置参数按部件索引指定强化，产物将资源名保存在对应 BodyPart 中。
     if let Some(boosts) = spec.get("boosts").and_then(Value::as_object) {
         for (idx, res) in boosts {
             let i: usize = idx
@@ -182,9 +174,9 @@ fn normalize_creep(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<CreepOb
         .map(str::to_string)
         .unwrap_or_else(|| format!("creep_{}", ctx.name_seq));
     let owner = spec_str(spec, "owner").unwrap_or_default().to_string();
-    // vanilla placeCreep（index.ts:1087）：ageTime = gameTime + (ttl ?? LIFE)。
-    // 无 claim 特判、无钳制——claim 区分寿命是引擎孵化路径（creeps/tick.js:87-93
-    // 的 ageTime 缺失分支）与 renew 上限语义，放置路径不适用
+    // 放置的默认寿命与 body 无关，显式 TTL 也不受 CLAIM 寿命上限约束。
+    // 孵化和续命的规则由引擎另行处理。
+    // 来源：screeps-ok adapters/vanilla/index.ts 的 placeCreep。
     let ttl = spec
         .get("ticksToLive")
         .and_then(Value::as_u64)
@@ -210,7 +202,7 @@ fn normalize_creep(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<CreepOb
     })
 }
 
-/// vanilla placeStructure 的 spawn 分支 + M0 的无名稳定名。
+/// 构造 spawn，未指定名称时使用调用方的 name_seq。
 fn normalize_spawn(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<SpawnObj, String> {
     let name = spec_str(spec, "name")
         .map(str::to_string)
@@ -220,7 +212,8 @@ fn normalize_spawn(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<SpawnOb
         .get("hits")
         .and_then(Value::as_u64)
         .unwrap_or(c::SPAWN_HITS as u64) as u32;
-    // vanilla：spec 带 store 则原样（不钳）；整体无 store 才用 SPAWN_ENERGY_START
+    // 不按容量限制能量；只有整个 store 字段缺失时才给初始能量。
+    // 显式空对象或 null 都表示 0。来源：vanilla index.ts 的 placeStructure。
     let store = Store {
         energy: match spec.get("store") {
             Some(v) => saturating_u32(v.get("energy").and_then(Value::as_u64).unwrap_or(0)),
@@ -242,11 +235,8 @@ fn normalize_spawn(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<SpawnOb
         owner,
         store,
         spawning: None,
-        // 官方 getStructureDefaults('spawn') 缺省 notifyWhenAttacked:true
-        //（vanilla index.ts:1919；引擎 build.js:116 对新建结构同）——显式
-        // 给了才覆盖。缺省的后果：玩家对放置的 spawn 调
-        // notifyWhenAttacked(true) 会**多记一条 intent**（官方 `true != true`
-        // 不记，structures.js:1220 差分门）
+        // 默认打开攻击通知，避免 notifyWhenAttacked(true) 再产生无意义的变更指令。
+        // 来源：screeps-ok adapters/vanilla/index.ts 的 getStructureDefaults。
         notify_when_attacked: Some(
             spec.get("notifyWhenAttacked")
                 .and_then(Value::as_bool)
@@ -255,7 +245,7 @@ fn normalize_spawn(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<SpawnOb
     })
 }
 
-/// vanilla placeFlag：color 缺省 1、secondary 缺省 = color。
+/// 构造旗，color 默认 1，secondaryColor 默认跟随 color。
 fn normalize_flag(spec: &Value, x: u8, y: u8) -> FlagObj {
     let color = spec
         .get("color")
@@ -273,13 +263,13 @@ fn normalize_flag(spec: &Value, x: u8, y: u8) -> FlagObj {
             .and_then(Value::as_u64)
             .unwrap_or(color as u64)
             .min(u8::MAX as u64) as u8,
-        // M2B 扩面 P2：owner（缺省 None=无主旗——投影按全局可见兜底）
+        // 无主旗仅在可见房间导出，不授予房间视野。
         owner: spec_str(spec, "owner").map(str::to_string),
     }
 }
 
-/// 掉落资源（0=energy/1=power/2=G；B3 起任意 RESOURCES_ALL 资源名经命名槽
-/// 承载——tombstone/ruin 衰减掉的 boost 矿物等）。
+/// 构造掉落资源，只接受 RESOURCES_ALL 中的资源名。
+/// energy、power、G 使用对应码值；其他资源同时保存名称供投影与结算读取。
 fn normalize_resource(spec: &Value, x: u8, y: u8) -> Result<EnergyObj, String> {
     let resource = match spec_str(spec, "resourceType") {
         None | Some("energy") => None,
@@ -294,8 +284,6 @@ fn normalize_resource(spec: &Value, x: u8, y: u8) -> Result<EnergyObj, String> {
             });
         }
         Some(name) => {
-            // 未知资源名拒绝（RESOURCES_ALL 白名单——官方常量表外的名字
-            // 无游戏语义）
             if !c::RESOURCES_ALL.contains(&name) {
                 return Err(format!("未知掉落资源类型: {name:?}"));
             }
@@ -316,10 +304,10 @@ fn normalize_resource(spec: &Value, x: u8, y: u8) -> Result<EnergyObj, String> {
     })
 }
 
-/// vanilla placeTombstone（adapters/vanilla/index.ts:1263-1280）：deathTime
-/// 缺省 gameTime、ticksToDecay 缺省 500（decayTime = deathTime + ticksToDecay）、
-/// creepName/store 透传、creepBody 缺省 []、creepTicksToLive 缺省 0、creepId
-/// 缺省 null（官方 DB 字段面见 _die.js:22-34）。
+/// 构造墓碑，deathTime 默认当前 tick，decay_time 为 deathTime+ticksToDecay。
+/// 衰减间隔默认 RUIN_DECAY（500），不是根据 body 计算的自然死亡衰减时间。
+/// 无法解析的 creepId 设为 None，无法识别的 creepBody 部件被忽略。
+/// 初始值参考：screeps-ok adapters/vanilla/index.ts 的 placeTombstone。
 fn normalize_tombstone(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> TombstoneObj {
     let death_time = spec
         .get("deathTime")
@@ -369,10 +357,9 @@ fn normalize_tombstone(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> TombstoneO
     }
 }
 
-/// vanilla placeRuin（adapters/vanilla/index.ts:1286-1313）：structure
-/// {id 缺省自分配、type、hits:0、hitsMax 缺省 0、user 缺省无}、destroyTime
-/// 缺省 gameTime、ticksToDecay 缺省 500、store 缺省 {}。官方引擎侧创建路径
-/// 见 structures/_destroy.js:22-40。
+/// 构造废墟，destroyTime 默认当前 tick，衰减间隔默认 RUIN_DECAY（500）。
+/// 未指定或无法解析的 structureId 使用 0，未指定结构最大 hits 保持 None。
+/// 这是放置场景的初始值；正常毁坏产生废墟时由引擎填入原结构信息。
 fn normalize_ruin(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> RuinObj {
     let destroy_time = spec
         .get("destroyTime")
@@ -414,7 +401,7 @@ fn normalize_ruin(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> RuinObj {
     }
 }
 
-/// u64 → u32 的饱和转换（放置值超域不改值语义、不静默回绕）。
+/// 超过 u32 范围时取 u32::MAX，避免强制转换导致回绕。
 fn saturating_u32(v: u64) -> u32 {
     v.min(u32::MAX as u64) as u32
 }
@@ -452,7 +439,7 @@ mod tests {
         assert_eq!(c.body.len(), 3);
         assert_eq!(c.body[0].boost.as_deref(), Some("XUHO2"));
         assert_eq!(c.body[1].boost, None);
-        // hits 与 TTL 使用放置 spec 的值。
+
         assert_eq!(c.hits, 300);
         assert_eq!(c.age_time, 600);
         assert_eq!(c.store.energy, 30);
@@ -460,11 +447,9 @@ mod tests {
         assert!(!c.spawning);
         // 无名稳定名
         assert_eq!(c.name, "creep_7");
-        // spec 私有字段不泄入：typed 对象无 ticksToLive/boosts 字段（编译期保证）
     }
 
-    /// vanilla placeCreep 对放置体不按 claim 区分寿命、不钳制显式 ttl
-    /// （index.ts:1087）；claim 寿命区分是引擎孵化路径的 ageTime 缺失分支。
+    /// 放置 CLAIM creep 时，显式 TTL 不受正常孵化寿命上限限制；默认仍为 1500。
     #[test]
     fn claim_body_ttl_follows_vanilla_placement() {
         let s = spec(json!({
@@ -583,8 +568,7 @@ mod tests {
         assert_eq!(creep.store.energy, u32::MAX);
     }
 
-    /// placeStructure 通道（kind=structure）的 spawn 必须归一为 typed Spawn
-    /// （M0 embed 归一语义——Game.spawns/FIND_MY_SPAWNS/instanceof 的根基）。
+    /// structureType=spawn 须产生 Spawn 变体，使玩家集合和类型判断识别为 spawn。
     #[test]
     fn spawn_via_structure_channel_routes_to_spawn() {
         let s = spec(json!({
@@ -614,8 +598,7 @@ mod tests {
         assert_eq!(sp3.store.energy, 0);
     }
 
-    /// B2：controller 持久化面透传（官方 DB 字段名 camelCase）+ store 的
-    /// ghodium 槽（官方 store 键 RESOURCE_GHODIUM = "G"）。
+    /// 控制器接收绝对计时和完整的签名、预订记录；creep 将 G 保存到专用资源字段。
     #[test]
     fn controller_b2_fields_and_ghodium_passthrough() {
         let s = spec(json!({
@@ -680,9 +663,7 @@ mod tests {
         assert_eq!(cr.store.ghodium, 1200);
     }
 
-    /// B3：tombstone/ruin 进 typed 变体（vanilla placeTombstone index.ts:1263-1280 /
-    /// placeRuin :1286-1313 的缺省面）——deathTime/destroyTime 缺省当前 tick、
-    /// ticksToDecay 缺省 500、store 的额外资源进 store_extra。
+    /// 墓碑、废墟采用默认衰减时间，并保存专用字段之外的资源。
     #[test]
     fn tombstone_and_ruin_placement_defaults() {
         let s = spec(json!({
@@ -742,8 +723,7 @@ mod tests {
         assert_eq!(ru2.decay_time, 100 + 500);
     }
 
-    /// B4：mineral/extractor 的放置缺省面（vanilla placeMineral index.ts:1209-1221 /
-    /// placeStructure 的 extractor cooldown 计数器形态 :1147-1151）。
+    /// 检查矿物默认密度、存量和相对再生时间，以及提取器的默认值与冷却计数。
     #[test]
     fn mineral_and_extractor_placement_defaults() {
         // mineral：density 缺省 DENSITY_HIGH(3)、amount 缺省 MINERAL_DENSITY[3]
@@ -798,7 +778,7 @@ mod tests {
 
     #[test]
     fn unknown_types_go_generic_passthrough() {
-        // tower：M1 无结算变体 → Generic 透传（保持放置接受面）
+        // tower 使用 Generic 保存数据，仍可被结构查询和结算识别。
         let s = spec(json!({
             "pos": [7, 7], "structureType": "tower", "owner": "p1", "hits": 999,
         }));
@@ -811,8 +791,7 @@ mod tests {
         // 非法输入拒绝
         let bad = spec(json!({ "pos": [50, 0] }));
         assert!(normalize("creep", &bad, &ctx()).is_err());
-        // 未知类别落 Generic 透传（M0 接受面）且携带 type 字段（B3 起
-        // tombstone/ruin 已进 typed 变体，用 deposit 示例）
+        // 未知类别保存 type 和原始字段，供投影及后续能力使用。
         let s2 = spec(json!({ "pos": [1, 1], "decayTime": 88 }));
         let RoomObject::Generic(g2) = normalize("deposit", &s2, &ctx()).unwrap() else {
             panic!()

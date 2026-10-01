@@ -1,6 +1,5 @@
-//! 建造面归一化：structure 大分派（structureType → typed 变体/Generic 透传）、
-//! 结构 hits 缺省表（放置/建造两入口单源）、工地归一。B1 结构治理批自
-//! place.rs 纯搬移。
+//! 将 structure、constructionSite 放置参数转换为对象。
+//! 同时提供引擎建造完成时共用的结构 hits、容量及计时默认值。
 
 use kk_core::constants as c;
 use kk_schema::room::{
@@ -13,8 +12,8 @@ use super::PlaceCtx;
 use super::generic_fields;
 use super::{normalize_spawn, saturating_u32, spec_str, store_energy, store_extra_of};
 
-/// structure 类：按 structureType 分派。M1 类型化变体之外的类型进 Generic
-/// （完整 spec 折算成透传 JSON，保持 M0 放置接受面；结算忽略）。
+/// 按 structureType（缺失时用 type）选择对象变体。
+/// 没有专用变体时使用 Generic；它仍可由引擎按类型处理，并非一律忽略结算。
 pub(super) fn normalize_structure(
     spec: &Value,
     x: u8,
@@ -28,13 +27,13 @@ pub(super) fn normalize_structure(
     let hits_override = spec.get("hits").and_then(Value::as_u64);
     match st {
         "spawn" => {
-            // placeStructure 通道的 spawn 必须成为玩家可见的 spawn（M0 embed
-            // 归一语义：Game.spawns / FIND_MY_SPAWNS / instanceof 的根基）
+            // spawn 须使用专用变体，否则玩家的 spawn 集合与 API 无法识别。
             normalize_spawn(spec, x, y, ctx).map(RoomObject::Spawn)
         }
         "source" => {
-            // vanilla placeSource：容量按控制器状态三分支；energy 缺省=容量；
-            // 未满即挂 300 tick 重生钟
+            // 容量默认取决于控制器是否存在及是否有主人；能量默认等于容量。
+            // 显式正再生时间优先，否则未满源设置默认再生时间。
+            // 来源：screeps-ok adapters/vanilla/index.ts 的 placeSource。
             let capacity = saturating_u32(
                 spec.get("energyCapacity")
                     .and_then(Value::as_u64)
@@ -70,9 +69,8 @@ pub(super) fn normalize_structure(
             }))
         }
         "controller" => {
-            // level 缺省 0（vanilla 未占房分支 `rcl ?? 0`，index.ts:904）；
-            // 占房缺省 1 由 embed createShard 显式传入。safeMode/downgradeTime
-            // 为绝对 tick（vanilla index.ts:971-993：种子相对值 + gameTime + 1）。
+            // 等级默认 0；createShard 会显式传入占有房间的初始等级。
+            // safeMode、downgradeTime 接收绝对 tick，不在这里加当前时间。
             let level = spec
                 .get("level")
                 .or_else(|| spec.get("rcl"))
@@ -92,15 +90,13 @@ pub(super) fn normalize_structure(
                 progress: spec.get("progress").and_then(Value::as_u64).unwrap_or(0),
                 downgrade_time: spec.get("downgradeTime").and_then(Value::as_u64),
                 owner,
-                // 放置面不从"曾拥有"态进入（降级归零才置位——官方 tick.js:56）
+                // 放置没有“归属被清除”的标记；该状态由引擎降级处理设置。
                 owner_cleared: false,
                 is_power_enabled: spec
                     .get("isPowerEnabled")
                     .and_then(Value::as_bool)
                     .unwrap_or(false),
-                // B2 持久化面透传（官方 DB 字段名 camelCase，绝对 tick）：
-                // reservation {user, endTime} / sign {user, text, time} /
-                // upgradeBlocked / safeModeCooldown
+                // 嵌套预订与签名缺少必填字段时整体忽略，计时字段保留绝对值。
                 reservation: spec.get("reservation").and_then(|r| {
                     Some(Reservation {
                         user: r.get("user")?.as_str()?.to_string(),
@@ -135,7 +131,7 @@ pub(super) fn normalize_structure(
             id: 0,
             x,
             y,
-            // vanilla：新建墙 hits=1（WALL_HITS），可修到 300M（WALL_HITS_MAX）
+            // 墙初始 hits 仅为 WALL_HITS，最大可修复值由投影的 WALL_HITS_MAX 表示。
             hits: hits_override
                 .map(saturating_u32)
                 .unwrap_or(c::WALL_HITS as u32),
@@ -148,8 +144,7 @@ pub(super) fn normalize_structure(
             hits: hits_override
                 .map(saturating_u32)
                 .unwrap_or(c::ROAD_HITS as u32),
-            // M2B P4：spec.ticksToDecay 覆写（适配器 setup 契约——衰减钟
-            // 绝对形态，官方 getter/快照折算差值）；缺省 ROAD_DECAY_TIME
+            // 放置参数是相对衰减间隔，对象字段保存绝对截止 tick。
             next_decay_time: ctx.time
                 + spec
                     .get("ticksToDecay")
@@ -169,14 +164,11 @@ pub(super) fn normalize_structure(
             notify_when_attacked: spec.get("notifyWhenAttacked").and_then(Value::as_bool),
             store_extra: store_extra_of(spec),
         })),
-        // B4：mineral 进 typed 变体（vanilla placeMineral，index.ts:1209-1221：
-        // mineralType 必填、mineralAmount 缺省 MINERAL_DENSITY[density]、density
-        // 缺省 DENSITY_HIGH(3)、ticksToRegeneration 给定时挂绝对钟——与 source
-        // 的 >0 过滤不同，vanilla 对 mineral 只判 !== undefined）
+        // 矿量默认按密度查表，显式再生间隔转换为绝对 tick。
+        // 矿物的 0 间隔也有效，不能套用 source 的正值过滤。
         "mineral" => {
-            // 白名单 = MINERAL_MIN_AMOUNT 键集（官方六矿种 H/O/U/K/L/Z/X——
-            // 放置面外的矿种名会让内部超容 drop 绕过官方 RESOURCES_ALL
-            // 白名单直接落地（B4 评审 2 P3-3 清偿：放置面收口）
+            // 只接受 MINERAL_MIN_AMOUNT 表中的七种矿物 H/O/U/K/L/Z/X。
+            // 否则采集后可能产生掉落资源入口不接受的资源名。
             let mineral_type = spec_str(spec, "mineralType")
                 .filter(|t| {
                     kk_core::constants::MINERAL_MIN_AMOUNT
@@ -198,11 +190,8 @@ pub(super) fn normalize_structure(
             let next_regen = spec
                 .get("ticksToRegeneration")
                 .and_then(Value::as_u64)
-                // 不过滤 0（与 source 的 >0 过滤刻意不同）：vanilla placeMineral
-                // 对 mineral 只判 !== undefined（index.ts:1218-1220）——0 即
-                // Some(time+0)，官方 minerals/tick 的 `time >= nrt-1` 立即成立
-                // = 放置后首 tick 立即再生（复审 F3：原 >0 过滤把它改成 5 万
-                // tick 延迟，方向性引入分歧，已撤）
+                // 0 也表示已设置再生时间，首个结算 tick 即可触发再生。
+                // 来源：vanilla index.ts 的 placeMineral，及引擎 minerals/tick.js。
                 .map(|t| ctx.time.saturating_add(t));
             Ok(RoomObject::Mineral(MineralObj {
                 id: 0,
@@ -214,8 +203,7 @@ pub(super) fn normalize_structure(
                 next_regeneration_time: next_regen,
             }))
         }
-        // B4：extractor 进 typed 变体（vanilla placeStructure 对 extractor 的
-        // cooldown 计数器形态，index.ts:1147-1151；hits 缺省 EXTRACTOR_HITS）
+        // 提取器保存剩余冷却计数，不加当前时间。
         "extractor" => Ok(RoomObject::Extractor(ExtractorObj {
             id: 0,
             x,
@@ -232,13 +220,9 @@ pub(super) fn normalize_structure(
             if !data.contains_key("structureType") && !st.is_empty() {
                 data.insert("structureType".into(), json!(st));
             }
-            // M2B 扩面 P4：衰减钟缺省/覆写 + cooldown 覆写（适配器 setup
-            // 契约）——绝对挂钟形态（nextDecayTime/cooldownTime），官方
-            // getter/快照面折算差值。缺省对齐官方放置语义：container 在
-            // 有主房 CONTAINER_DECAY_TIME_OWNED、野房 CONTAINER_DECAY_TIME
-            //（containers/tick.js 的重置窗同款）；rampart 恒
-            // RAMPART_DECAY_TIME。generic_fields 原样拷贝的相对键
-            // ticksToDecay/cooldown 转折算后移除（不留双形态）
+            // 相对衰减间隔转换为 nextDecayTime，随后删除相对字段。
+            // container 默认间隔由控制器等级是否大于 0 决定，rampart 使用固定间隔。
+            // 放置默认值参考：screeps-ok adapters/vanilla/index.ts 的 placeStructure。
             let decay_default: Option<u64> = match st {
                 "container" => Some(match ctx.controller {
                     Some(ctl) if ctl.level > 0 => c::CONTAINER_DECAY_TIME_OWNED,
@@ -255,35 +239,22 @@ pub(super) fn normalize_structure(
                 data.insert("nextDecayTime".into(), json!(ctx.time + v));
             }
             data.remove("ticksToDecay");
-            // rampart 的 isPublic 缺省 false（vanilla getStructureDefaults
-            // rampart 分支带 isPublic: false——放置面权威表；P4 曾登记快照
-            // 契约面 isPublic 缺口，本行清偿）。建造面官方 build.js 的
-            // rampart 分支不写该键（DB 无键、getter !!undefined 同读
-            // false）——两入口玩家面同读，各自保持官方/权威表形态
+            // 放置 rampart 时默认私有，显式 isPublic 优先。
             if st == "rampart" {
                 data.entry("isPublic").or_insert(json!(false));
             }
-            // 平面 storeCapacity 与 per-resource storeCapacityResource 成对落
-            // （官方 getStructureDefaults 同表值；spec 显式值优先）。平面容量
-            // 缺失会让 prelude 的 storeCapacity getter 恒读 undefined；
-            // per-resource 缺失会让 `store.getCapacity()` 与 lab/powerSpawn/
-            // nuker 的 *Capacity getter 读错值（见 built_store_capacity_resource）。
+            // 通用容量和按资源容量分别补默认值，显式字段优先。
+            // 特定资源容量会影响 Store.getCapacity() 是否返回 null，不能只补总容量。
             if let Some(cap) = built_store_capacity(st) {
                 data.entry("storeCapacity").or_insert(json!(cap));
             }
             if let Some(res) = built_store_capacity_resource(st) {
                 data.entry("storeCapacityResource").or_insert(res);
             }
-            // lab 特例（vanilla placeStructure index.ts:1122-1128）：spec.store
-            // 带矿物时，给 storeCapacityResource 补缺失矿物的
-            // LAB_MINERAL_CAPACITY——**槽绑定语义的玩家可观测面**：填充后
-            // Σsrc 含已存矿物，未存矿物的 getCapacity 走回退式
-            // `max(0, flat 5000−Σ5000)`=0（官方 null，槽已绑定）；不填则错读
-            // max(0,5000−2000)=3000（槽未绑定）。已存矿物本身的读数两条路
-            // 径同值 3000（表定义使然）。spec 显式给的 per-resource 键不覆盖
-            // （vanilla `!attrs.storeCapacityResource[res]` 同式——只补
-            // falsy/缺失键）。vanilla 同段还写 DB 键 mineralType——官方读取
-            // 面是 store 派生 getter（structures.js:305），DB 键为死数据，不写。
+            // lab 的矿物槽由已有 store 资源绑定，为未声明容量的矿物补容量。
+            // 绑定后，其他矿物查询不会错误地使用尚未分配的剩余总容量。
+            // 此实现只补缺键，保留显式 0；vanilla placeStructure 使用 falsy 检查。
+            // 参考：vanilla index.ts 的 lab 分支，prelude structures.js 的 capacityForResource。
             if st == "lab"
                 && let Some(spec_store) = spec.get("store").and_then(Value::as_object)
                 && let Some(cap) = data
@@ -296,11 +267,9 @@ pub(super) fn normalize_structure(
                     }
                 }
             }
-            // cooldown：官方两形态（vanilla index.ts:1145-1158 明文）——link/
-            // extractor 存每 tick 递减计数器 `o.cooldown`（getter 直读），
-            // lab/terminal/nuker/factory 存未来时间戳 `o.cooldownTime`（getter
-            // 折算）。用错字段则运行期 getter 静默取不到值。generic_fields
-            // 原样拷贝的相对键先移除，再按类型落对形态。
+            // lab、terminal、nuker、factory 使用绝对 cooldownTime，其他类型保留计数 cooldown。
+            // 转换前删除原 cooldown，避免同一记录同时保存相对值和绝对值。
+            // 来源：screeps-ok adapters/vanilla/index.ts 的 placeStructure。
             data.remove("cooldown");
             if let Some(cd) = spec.get("cooldown").and_then(Value::as_u64) {
                 if st == "lab" || st == "terminal" || st == "nuker" || st == "factory" {
@@ -309,12 +278,7 @@ pub(super) fn normalize_structure(
                     data.insert("cooldown".into(), json!(cd));
                 }
             }
-            // 读取面缺省（A6 hits 族）：generic 结构的初始 hits/hitsMax 对齐
-            // vanilla 适配器 getStructureDefaults（adapters/vanilla/index.ts
-            // :1910-1970 的 hits 部分——只补读取面两键，store/actionLog 等
-            // 归各自能力批）。spec 显式值优先（entry.or_insert：官方
-            // placeStructure 的 spec.hits 覆盖同款；hitsMax 不在 spec 键集、
-            // 恒用表值——vanilla `if (spec.hits !== undefined)` 只覆盖 hits）。
+            // 仅补缺失的 hits、hitsMax；显式值保留，包括 Generic 中的 hitsMax。
             if let Some((hits, hits_max)) = generic_structure_hits(st) {
                 data.entry("hits").or_insert(json!(hits));
                 data.entry("hitsMax").or_insert(json!(hits_max));
@@ -329,16 +293,11 @@ pub(super) fn normalize_structure(
     }
 }
 
-/// generic（非 typed 变体）结构的初始 hits/hitsMax 表——vanilla 适配器
-/// getStructureDefaults 的 hits 部分。typed 变体（spawn/extension/road/
-/// storage/wall/extractor）在各自臂内带常量缺省，不查本表。rampart 的
-/// hitsMax 用 RAMPART_HITS_MAX[8] 上限（vanilla placeStructure 同口径；
-/// 官方 build 路径是建时按 rcl 存库——放置面对齐适配器契约）。
-/// pub：settle 的 build 落成分支（complete_construction generic 臂）共用
-/// 本表——两入口（放置/建造）读取面单源（层间一致纪律）。
-/// powerBank 是刻意偏离 vanilla（其 getStructureDefaults 无此 case、且
-/// placeStructure 拒收；我方 place 通道的 powerBank 走 placeObject 直通道
-/// 可放，缺省取官方 DB 值 POWER_BANK_HITS——common/lib/constants.js:259）。
+/// 返回 Generic 结构的初始 hits 和 hitsMax，未知类型返回 None。
+/// 放置与建造完成共用本表；专用对象变体使用各自默认值。
+/// rampart 采用 `RAMPART_HITS_MAX[8]`，不按当前房间等级限制。
+/// powerBank 也有默认值，即使 vanilla 的 placeStructure 不接受该类型。
+/// 参考：screeps-ok adapters/vanilla/index.ts 的 getStructureDefaults。
 pub fn generic_structure_hits(structure_type: &str) -> Option<(i64, i64)> {
     let max8 = kk_core::constants::RAMPART_HITS_MAX
         .iter()
@@ -361,13 +320,10 @@ pub fn generic_structure_hits(structure_type: &str) -> Option<(i64, i64)> {
     })
 }
 
-/// 建造落成入口的衰减钟（官方 build.js:161-168 rampart / :255-263 container）。
-/// 与放置面口径**刻意不同**：官方 build 对 container 直接给
-/// CONTAINER_DECAY_TIME，不判所在房是否 owned（首次衰减后由
-/// containers/tick.js 按 owned 重挂）；rampart 恒 RAMPART_DECAY_TIME。
-/// 落成缺钟的后果见 `kk_engine::settle::economy::generic_decay_tick`——
-/// `nextDecayTime` 缺失（0）被判为「已到点」，rampart（hits=RAMPART_HITS=1）
-/// 会在落成同一 tick 被 RAMPART_DECAY_AMOUNT=300 打光移除。
+/// 返回建造完成时 container、rampart 的绝对衰减截止 tick。
+/// container 首次使用 CONTAINER_DECAY_TIME，与放置时按控制器等级选间隔不同。
+/// 不能省略截止时间，否则衰减结算会立即扣除新结构 hits。
+/// 来源：engine/src/processor/intents/creeps/build.js 的对应结构分支。
 pub fn built_decay_clock(structure_type: &str, time: u64) -> Option<u64> {
     match structure_type {
         "container" => Some(time + c::CONTAINER_DECAY_TIME as u64),
@@ -376,16 +332,10 @@ pub fn built_decay_clock(structure_type: &str, time: u64) -> Option<u64> {
     }
 }
 
-/// 平面 storeCapacity。表值取自 vanilla 适配器 `getStructureDefaults`
-///（placement 面权威口径，`index.ts:1908-1979`）——官方 build.js 落成面是
-/// 本表子集（build.js 对 **link/tower 只落 storeCapacityResource 不落平面容量**），
-/// 那处差异不可观测：`Store.getCapacity()` 无参是
-/// `storeCapacityResource ? null : storeCapacity || null`（store.js:31），
-/// 两键并存时恒 null，与只落 resource 同值（链接/塔的 `storeCapacity`
-/// 平坦 getter 官方本就没有）。故两入口共用本表单源，不做两表复制。
-/// 与 [`built_store_capacity_resource`] **必须成对落**：只落平面不落
-/// per-resource 会把 `getCapacity()` 由官方的 null 变成数值（P4 清偿复审
-/// P2-1 即此形态）。
+/// 返回结构的通用容量字段默认值，未知或无需该字段的类型返回 None。
+/// 对有按资源容量的结构，应同时应用 built_store_capacity_resource；
+/// 否则 Store.getCapacity() 无参可能由 null 变成数值。
+/// 默认值参考：vanilla index.ts 的 getStructureDefaults。
 pub fn built_store_capacity(structure_type: &str) -> Option<i64> {
     Some(match structure_type {
         "container" => c::CONTAINER_CAPACITY,
@@ -400,12 +350,10 @@ pub fn built_store_capacity(structure_type: &str) -> Option<i64> {
     })
 }
 
-/// per-resource 容量（官方 `getStructureDefaults` / build.js 的
-/// `storeCapacityResource`）。**必须与平面 storeCapacity 成对出现**：`Store.
-/// getCapacity()`（无参）是 `storeCapacityResource ? null : storeCapacity` 的
-/// 三元（store.js:31）——只落平面容量会让 getCapacity() 由官方的 null
-/// 变成数值；lab/powerSpawn/nuker/tower/link 的 `energyCapacity`（及
-/// `powerCapacity`/`ghodiumCapacity`）getter 也直读本键，缺失即恒 0。
+/// 返回按资源划分的容量，适用于 lab、powerSpawn、nuker、link 和 tower。
+/// lab 这里只包含 energy；放置已有矿物时须另外绑定矿物容量。
+/// 与 built_store_capacity 配合，供 Store 及各结构资源容量 getter 使用。
+/// 参考：engine/src/game/store.js、vanilla index.ts 的 getStructureDefaults。
 pub fn built_store_capacity_resource(structure_type: &str) -> Option<Value> {
     Some(match structure_type {
         "lab" => json!({ "energy": c::LAB_ENERGY_CAPACITY }),
@@ -423,16 +371,9 @@ pub fn built_store_capacity_resource(structure_type: &str) -> Option<Value> {
     })
 }
 
-/// 建造落成入口的冷却钟（官方 build.js:272 nuker 的
-/// `cooldownTime: gameTime + (config.ptr ? 100 : C.NUKER_COOLDOWN)`）。
-/// `config.ptr` 是官方 PTR 测试服的 100 tick 特例，正式服恒 NUKER_COOLDOWN
-/// （=100000），我方不模拟 PTR。
-///
-/// **只对 nuker 给值**：官方 build.js 对 link/lab/factory 写的是计数器形态
-/// `cooldown: 0`，但那三类的读取面分别是 `o.cooldown || 0`（link）与
-/// `cooldownTime` 折算（lab/factory，structures.js:310/:1431）——link 的
-/// `cooldown: 0` 与缺键同读 0，lab/factory 写计数器键本就读不到，故三者在
-/// 读取面上「缺键 ≡ 官方落值」，不落键即可。
+/// 仅为新建 nuker 返回绝对冷却截止 tick，不模拟 PTR 的短冷却。
+/// 其他类型不设置此字段，玩家 getter 按缺失值读取为 0。
+/// 来源：engine/src/processor/intents/creeps/build.js 的 nuker 分支。
 pub fn built_cooldown_time(structure_type: &str, time: u64) -> Option<u64> {
     match structure_type {
         "nuker" => Some(time + c::NUKER_COOLDOWN as u64),
@@ -440,9 +381,9 @@ pub fn built_cooldown_time(structure_type: &str, time: u64) -> Option<u64> {
     }
 }
 
-/// vanilla placeSite：progress 缺省 0；progressTotal 由 CONSTRUCTION_COST 派生
-/// （vanilla getProgressTotal:1871-1874 为裸成本，不带地形系数——放置路径与
-/// 引擎 intent 建工地（create-construction-site.js:38-48，road 有系数）刻意不同）。
+/// 构造工地，progress 默认 0，总进度来自 CONSTRUCTION_COST。
+/// 不使用 spec.progressTotal，也不加入道路地形系数；玩家建造指令另有地形规则。
+/// 来源：screeps-ok adapters/vanilla/index.ts 的 placeSite、getProgressTotal。
 pub(super) fn normalize_site(spec: &Value, x: u8, y: u8) -> Result<ConstructionSiteObj, String> {
     let structure_type = spec_str(spec, "structureType")
         .or_else(|| spec_str(spec, "type"))
