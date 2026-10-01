@@ -356,8 +356,8 @@ impl World {
     pub fn get(&self, id: ObjId) -> Option<(&str, &RoomObject)> {
         let dir = self.obj_dir();
         let name = dir.rooms.get(&id)?;
-        let state = self.rooms.get(name)?;
-        state.objects.get(&id).map(|o| (state.name.as_str(), o))
+        let (room_name, state) = self.rooms.get_key_value(name)?;
+        state.objects.get(&id).map(|o| (room_name.as_str(), o))
     }
 
     pub fn get_mut(&mut self, id: ObjId) -> Option<&mut RoomObject> {
@@ -759,6 +759,27 @@ mod tests {
             .encode_snapshot(77, 42, world.next_obj_id());
         let back = RoomState::decode_snapshot(&snap).unwrap();
         assert_eq!(back.encode_snapshot(77, 42, world.next_obj_id()), snap);
+    }
+
+    #[test]
+    fn restored_room_queries_use_world_map_key() {
+        let mut world = World::new(1);
+        world.register_room("W1N1", Terrain::plains());
+        let id = world.insert("W1N1", energy(1)).unwrap();
+        let snapshot = world.room("W1N1").unwrap().encode_snapshot(0, 1, 2);
+        let restored = RoomState::decode_snapshot(&snapshot).unwrap();
+        assert!(restored.name.is_empty());
+        world.commit_room("W1N1".into(), restored);
+        world.advance_ticks(1);
+        assert_eq!(world.get(id).unwrap().0, "W1N1");
+        assert_eq!(
+            world.object_json_by_id(id).unwrap()["pos"]["roomName"],
+            "W1N1"
+        );
+        assert_eq!(
+            world.object_snapshot_by_id(id).unwrap()["pos"]["roomName"],
+            "W1N1"
+        );
     }
 
     #[test]
