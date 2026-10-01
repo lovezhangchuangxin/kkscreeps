@@ -11,7 +11,7 @@ use std::path::PathBuf;
 
 use serde_json::{Value, json};
 
-use kk_runner::{ModuleTable, PlayerThreads, SandboxConfig, TickOutcome, TickPlan};
+use kk_runner::{ModuleTable, PlayerThreads, RunEpoch, SandboxConfig, TickOutcome, TickPlan};
 
 const PLAYER: u64 = 0;
 
@@ -51,7 +51,15 @@ fn run_inner(path: &str, ticks: u32, report_path: &str) -> anyhow::Result<bool> 
     // 夹具世界预置了 creep，而真实新服首 tick 无 creep——bot（tooangel）的角色
     // 检查直接读 Memory.creeps（该对象由 creep.memory 访问或既有存档创建），
     // 常态服务器上恒存在；播种把夹具对齐"bot 已运行过"的常态
-    pool.run_player(PLAYER, &home_world(0), "Memory.creeps = {}; 0")?;
+    pool.run_player(
+        PLAYER,
+        &home_world(0),
+        "Memory.creeps = {}; 0",
+        RunEpoch {
+            tick: 0,
+            generation: 0,
+        },
+    )?;
 
     let mut console_errors: Vec<String> = Vec::new();
     let mut console_head: Vec<String> = Vec::new();

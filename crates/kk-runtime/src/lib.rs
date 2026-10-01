@@ -23,19 +23,38 @@ use kk_engine::intent::IntentBatch;
 // 不必直接依赖 kk-engine 的 sandbox 模块）
 pub use embed::{EmbedEngine, PlayerRun};
 pub use kk_engine::{RunOutcome, RunResult, RunSpec, Sandbox as EngineSandbox};
+pub use kk_runner::RunEpoch;
 use serde_json::Value;
 pub use world_source::WorldSource;
 
 /// 玩家执行器的协调层抽象（真/假沙箱同接口）：一次执行 = 一名玩家一轮的
 /// 候选 RunResult。实现方负责世界投影的生成与身份清洗（intents 归注册玩家）。
 pub trait PlayerExecutor {
-    /// 执行一名玩家一轮（世界投影为 per-viewer JSON）。玩家结局与基础设施
-    /// 故障一律经 [`RunOutcome`] 分类承载（未知玩家/线程失联等派发失败也折入
+    /// 执行一名玩家一轮（世界投影为 per-viewer JSON）。`epoch`（A1）是派发
+    /// 轮次标识——实现方须把它钉进派发并拒收错轮回执（同步模型下恒匹配；
+    /// P1 解耦派发/回收后成为真正的迟到防线）。玩家结局与基础设施故障一律
+    /// 经 [`RunOutcome`] 分类承载（未知玩家/线程失联等派发失败也折入
     /// InfraFailure——协调器见此整轮停顿）。
-    fn execute(&mut self, world: &Value, spec: &RunSpec) -> RunResult;
+    fn execute(&mut self, world: &Value, spec: &RunSpec, epoch: RunEpoch) -> RunResult;
 
     /// 注册玩家名（固定序遍历——确定性的前提）。
     fn players(&self) -> Vec<String>;
+}
+
+/// 迟到/错轮回执拒收（A1 单测面）：回执轮次 ≠ 派发轮次 → 折入 InfraFailure
+///（协调器见此整轮停顿——过期候选不得进入本轮结算）。当前同步一问一答
+/// 模型下结构上不会触发（每命令独立 ack 通道 + 同步 recv）；P1 把派发/回收
+/// 解耦后成为真防线。
+fn reject_stale_receipt(player: &str, expected: RunEpoch, got: RunEpoch) -> Option<RunResult> {
+    (expected != got).then(|| {
+        RunResult::infra_failure(
+            player,
+            format!(
+                "迟到/错轮回执拒收：派发轮 (tick={}, gen={})，回执轮 (tick={}, gen={})",
+                expected.tick, expected.generation, got.tick, got.generation
+            ),
+        )
+    })
 }
 
 /// 真沙箱执行器：包装 kk-runner 的 PlayerThreads（一玩家一线程）。
@@ -164,12 +183,18 @@ impl Drop for ThreadExecutor {
 }
 
 impl PlayerExecutor for ThreadExecutor {
-    fn execute(&mut self, world: &Value, spec: &RunSpec) -> RunResult {
+    fn execute(&mut self, world: &Value, spec: &RunSpec, epoch: RunEpoch) -> RunResult {
         let Some(&id) = self.handles.get(&spec.player) else {
             return RunResult::infra_failure(&spec.player, format!("未注册玩家 {}", spec.player));
         };
-        match self.pool.run_player(id, world, &spec.code) {
-            Ok(report) => eval_report_to_run_result(&spec.player, report),
+        match self.pool.run_player(id, world, &spec.code, epoch) {
+            Ok(report) => {
+                // 错轮回执拒收（A1）：同步模型下恒匹配——P1 解耦后的迟到防线
+                if let Some(rejected) = reject_stale_receipt(&spec.player, epoch, report.epoch) {
+                    return rejected;
+                }
+                eval_report_to_run_result(&spec.player, report)
+            }
             // 保守分类（B0-5 拆分注入失败为玩家级）
             Err(e) => RunResult::infra_failure(&spec.player, e.to_string()),
         }
@@ -221,7 +246,7 @@ mod tests {
     }
 
     impl PlayerExecutor for FakeExecutor {
-        fn execute(&mut self, _world: &Value, spec: &RunSpec) -> RunResult {
+        fn execute(&mut self, _world: &Value, spec: &RunSpec, _epoch: RunEpoch) -> RunResult {
             RunResult {
                 player: spec.player.clone(),
                 outcome: RunOutcome::Executed,
@@ -245,10 +270,39 @@ mod tests {
             expr: json!({ "ok": true, "value": 42 }),
         };
         assert_eq!(ex.players(), vec!["p1".to_string()]);
-        let r = ex.execute(&json!({}), &RunSpec::new("p1", "6*7"));
+        let r = ex.execute(&json!({}), &RunSpec::new("p1", "6*7"), RunEpoch::default());
         assert_eq!(r.outcome, RunOutcome::Executed);
         assert_eq!(r.expr["value"], 42);
         assert!(r.intents.users.is_empty());
+    }
+
+    /// 迟到/错轮回执拒收（A1 判据的单测面）：错轮 → InfraFailure 拒收；
+    /// 同轮 → 放行（None）。同步模型下生产路径恒同轮——联调验收在 P1。
+    #[test]
+    fn stale_receipt_epoch_rejected() {
+        let dispatched = RunEpoch {
+            tick: 5,
+            generation: 3,
+        };
+        let stale_tick = RunEpoch {
+            tick: 4,
+            generation: 3,
+        };
+        let stale_gen = RunEpoch {
+            tick: 5,
+            generation: 2,
+        };
+        for stale in [stale_tick, stale_gen] {
+            let Some(rejected) = reject_stale_receipt("p1", dispatched, stale) else {
+                panic!("错轮回执 {stale:?} 必须拒收");
+            };
+            assert!(
+                matches!(rejected.outcome, RunOutcome::InfraFailure(ref e) if e.contains("拒收")),
+                "拒收形态为 InfraFailure：{:?}",
+                rejected.outcome
+            );
+        }
+        assert!(reject_stale_receipt("p1", dispatched, dispatched).is_none());
     }
 
     #[test]
@@ -296,6 +350,7 @@ mod tests {
             cpu_billed_ms: None,
             raw_memory: None,
             segments_out: None,
+            epoch: RunEpoch::default(),
         };
         let r = eval_report_to_run_result("p1", mk("terminated"));
         assert_eq!(r.outcome, RunOutcome::Terminated);
@@ -324,12 +379,12 @@ mod tests {
             "rooms": { "W1N1": { "name": "W1N1" } },
             "objects": []
         });
-        let r = ex.execute(&world, &RunSpec::new("p1", "1 + 1"));
+        let r = ex.execute(&world, &RunSpec::new("p1", "1 + 1"), RunEpoch::default());
         assert_eq!(r.outcome, RunOutcome::Executed, "简单表达式正常执行");
         assert_eq!(r.expr["value"], 2);
         assert!(r.intents.users.is_empty());
         // 未知玩家：协调层错误（非 RunOutcome 形态的兜底——infra 分类）
-        let r = ex.execute(&world, &RunSpec::new("ghost", ""));
+        let r = ex.execute(&world, &RunSpec::new("ghost", ""), RunEpoch::default());
         assert!(!r.outcome.is_player_outcome(), "未注册玩家按 infra 兜底");
         ex.shutdown_all();
         Ok(())

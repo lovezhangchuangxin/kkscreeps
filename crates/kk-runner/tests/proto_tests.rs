@@ -9,7 +9,13 @@ use std::time::{Duration, Instant};
 use serde_json::json;
 
 use kk_runner::{
-    ModuleTable, PlayerThreads, SandboxConfig, TickOutcome, TickPlan, live_sandbox_count,
+    ModuleTable, PlayerThreads, RunEpoch, SandboxConfig, TickOutcome, TickPlan, live_sandbox_count,
+};
+
+/// A1 派发轮次标识（回带断言的基线；本测试的同步模型下恒等于派发值）。
+const EPOCH: RunEpoch = RunEpoch {
+    tick: 1,
+    generation: 0,
 };
 
 fn config() -> SandboxConfig {
@@ -88,7 +94,8 @@ fn skip_penalty_recharge_channel() -> anyhow::Result<()> {
     // 通道 B（Cmd::RunPlayer）：候选留协调器——kind=terminated、无计费候选、
     // bucket_after=提交前口径（-40，回充未并入）
     pool.spawn_player(2, skip_cfg())?;
-    let rep = pool.run_player(2, &world(), "'never-runs'")?;
+    let rep = pool.run_player(2, &world(), "'never-runs'", EPOCH)?;
+    assert_eq!(rep.epoch, EPOCH, "回执回带派发轮次标识（A1）");
     assert_eq!(
         rep.expr["kind"], "terminated",
         "停跑轮 expr 形态：{:?}",
@@ -118,7 +125,8 @@ fn skip_penalty_recharge_channel() -> anyhow::Result<()> {
     // 协调器回退臂（Cmd::DiscardBill）：候选丢弃后桶零痕迹——后续停跑轮照常
     // 即时并入（精确的丢弃语义由 sandbox 级 b06 用例锁定，此处锁通道连通）
     pool.spawn_player(3, skip_cfg())?;
-    let rep = pool.run_player(3, &world(), "'x'")?;
+    let rep = pool.run_player(3, &world(), "'x'", EPOCH)?;
+    assert_eq!(rep.epoch, EPOCH, "回执回带派发轮次标识（A1，两通道一致）");
     assert_eq!(rep.expr["kind"], "terminated");
     pool.discard_bill(3)?;
     let r = pool.tick(3, &world())?;

@@ -20,9 +20,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use kk_core::Terrain;
 use serde_json::{Value, json};
 
-use crate::{PlayerExecutor, ThreadExecutor, WorldSource};
+use crate::{PlayerExecutor, RunEpoch, ThreadExecutor, WorldSource};
 use kk_engine::intent::IntentBatch;
-use kk_engine::{RunOutcome, RunResult, RunSpec, TickInput};
+use kk_engine::{RunOutcome, RunResult, RunSpec, RunState, TickInput, TickStage};
 use kk_world::place::{PlaceCtx, normalize};
 
 use kk_engine::settle::Engine;
@@ -64,6 +64,9 @@ pub struct EmbedEngine {
     /// 测试钩子（双房批）：下一次结算在指定房注入 Err 后自清（一次性）——
     /// embed 全链形态的两阶段跨房回退验收（tick 契约场景 3）。
     fail_next_settle_room: Option<String>,
+    /// 测试钩子（A1 批）：下一次结算在指定**段入口**注入 Err（一次性，自清
+    /// ——段位持续语义在 Engine::set_fail_stage_for_test，此处包装取用即清）。
+    fail_next_settle_stage: Option<TickStage>,
     /// 测试旋钮（双房批）：玩家执行顺序覆盖——None=注册玩家集的 handle
     /// 排序序（handles 为 BTreeMap，注册序天然被排序吸收）。只改
     /// execute_players 的循环序（投影+执行完成序），结果收集/意图合并/
@@ -271,6 +274,7 @@ impl EmbedEngine {
             perf: PerfRecorder::default(),
             fail_next_settle: false,
             fail_next_settle_room: None,
+            fail_next_settle_stage: None,
             execution_order_for_test: None,
             last_execution_order: None,
             sandbox_configs_for_test: BTreeMap::new(),
@@ -298,6 +302,7 @@ impl EmbedEngine {
         self.last_execution_order = None;
         self.fail_next_settle = false;
         self.fail_next_settle_room = None;
+        self.fail_next_settle_stage = None;
 
         let players = self.players.get_or_insert_with(ThreadExecutor::new);
         // 整表取走（R1-P2-6 清偿）：spawn 中途 `?` 早退也不残留——残留
@@ -394,7 +399,7 @@ impl EmbedEngine {
     /// `kind` 为适配器通道类别（creep/structure/constructionSite/flag/resource/…），
     /// 归一化由 [`kk_world::place::normalize`] 完成（初态表 + spec 私有字段折算）。
     pub fn place_object(&mut self, room: &str, kind: &str, spec: &Value) -> anyhow::Result<String> {
-        self.no_pending_round("placeObject")?;
+        self.no_open_round("placeObject")?;
         // 无名稳定名序号用 id 分配器（单调不减）——对象会随结算消亡，
         // 可回退的计数（如对象总数）会让 mid-run 摆放重名
         let ctx = PlaceCtx {
@@ -418,7 +423,7 @@ impl EmbedEngine {
     /// remainingAmount=totalAmount、active 缺省 true、created 缺省当前
     /// gameTime、createdTimestamp 缺省墙钟。
     pub fn place_market_order(&mut self, spec: &Value) -> anyhow::Result<String> {
-        self.no_pending_round("placeMarketOrder")?;
+        self.no_open_round("placeMarketOrder")?;
         let owner = spec
             .get("owner")
             .and_then(Value::as_str)
@@ -478,7 +483,7 @@ impl EmbedEngine {
     }
 
     pub fn set_terrain(&mut self, room: &str, terrain: Vec<u8>) -> anyhow::Result<()> {
-        self.no_pending_round("setTerrain")?;
+        self.no_open_round("setTerrain")?;
         let mut t = Terrain::from_codes(&terrain).map_err(anyhow::Error::msg)?;
         t.normalize();
         self.engine
@@ -572,12 +577,21 @@ impl EmbedEngine {
         if fail_room.is_some() {
             self.engine.set_fail_room_for_test(fail_room.clone());
         }
+        // 段级注入（A1 批）：同款一次性语义——段位持续钩子在 Engine 侧，
+        // 此处取用即清（注入在段入口生效：该段未变异任何权威状态）
+        let fail_stage = self.fail_next_settle_stage.take();
+        if fail_stage.is_some() {
+            self.engine.set_fail_stage_for_test(fail_stage);
+        }
         let settled = self
             .engine
             .tick_with_intents_with_input(batch, input)
             .map_err(|e| anyhow::anyhow!("{e}"));
         if fail_room.is_some() {
             self.engine.set_fail_room_for_test(None);
+        }
+        if fail_stage.is_some() {
+            self.engine.set_fail_stage_for_test(None);
         }
         settled
     }
@@ -609,6 +623,13 @@ impl EmbedEngine {
         // 绑定同一版本」纪律）：本轮全部玩家读同一已提交版本——循环期间
         // 世界不得变异（结算在循环后），debug 断言守护
         let bound_generation = self.engine.world.generation();
+        // 派发轮次标识（A1）：本轮全部玩家派发钉住同一 (tick, generation)——
+        // 回执错轮拒收的基线（P1 解耦派发/回收后的迟到防线；当前同步模型
+        // 下恒匹配）
+        let epoch = RunEpoch {
+            tick: self.engine.world.time(),
+            generation: bound_generation,
+        };
         // 世界读取统一经 seam（WorldSource，ADR-013 决策 2）——M2B 新
         // getter 的登记面
         let source: &dyn WorldSource = &self.engine.world;
@@ -693,7 +714,7 @@ impl EmbedEngine {
             }
             project_ns += t_project.elapsed().as_nanos();
             let t_run = std::time::Instant::now();
-            let result = players.execute(&world, &RunSpec::new(&handle, code));
+            let result = players.execute(&world, &RunSpec::new(&handle, code), epoch);
             run_ns += t_run.elapsed().as_nanos();
             // 基础设施故障 → 整轮停顿（Err；不缓存候选——停顿轮的局部结果作废）
             if let RunOutcome::InfraFailure(err) = &result.outcome {
@@ -826,12 +847,13 @@ impl EmbedEngine {
     }
 
     /// 直接以外部构造的 intent 批结算一轮（测试/工具面；无玩家执行与提交点
-    /// 语义——生产路径经 run_players 的统一提交点）。
+    /// 语义——生产路径经 run_players 的统一提交点）。A1 清偿：与 run_players
+    /// 同走 settle_world（embed 级故障钩子对全部结算入口一致消费——此前
+    /// 直调引擎使段级钩子在此入口不生效）。自身失败后引擎落恢复态、本层
+    /// 无 pending——重试本入口/ run_players 均可（世界未变 ⇒ 引擎门放行）。
     pub fn settle_external(&mut self, batch: IntentBatch) -> anyhow::Result<()> {
         self.no_pending_round("settle_external")?;
-        self.engine
-            .tick_with_intents_with_input(batch, TickInput::now())
-            .map_err(|e| anyhow::anyhow!("{e}"))
+        self.settle_world(batch, TickInput::now())
     }
 
     /// 失败轮缓存存在时拒绝推进/变异世界（B0-5 评审 P1 清偿）：缓存候选的
@@ -842,6 +864,23 @@ impl EmbedEngine {
         if self.pending.is_some() {
             anyhow::bail!(
                 "{op} 被拒：存在未处置的失败轮候选（先 run_players 重试或 discard_pending_round）"
+            );
+        }
+        Ok(())
+    }
+
+    /// 世界/市场**变异**操作的守卫（A1 评审清偿 R2/R3 P1）：在 embed 失败轮
+    /// 候选**或**引擎恢复态任一存在时拒绝。两把门不再同构——
+    /// settle_external/tick 的失败不缓存 pending，引擎仍落 NeedsRecovery；
+    /// 恢复期间变异会使失败轮候选重结算到已变状态（市场域尤甚：
+    /// place_market_order 直改订单簿，而引擎恢复门只键控 world 的
+    /// (time,generation)，捕获不到市场域外改）。出路：重试结算（世界未变
+    /// 时引擎门放行）或 discard_pending_round 显式放弃恢复。
+    fn no_open_round(&self, op: &str) -> anyhow::Result<()> {
+        self.no_pending_round(op)?;
+        if matches!(self.engine.run_state(), RunState::NeedsRecovery { .. }) {
+            anyhow::bail!(
+                "{op} 被拒：引擎处于恢复态（上次结算段失败、世界保持上一 tick）——先重试结算或 discard_pending_round 放弃恢复"
             );
         }
         Ok(())
@@ -865,14 +904,20 @@ impl EmbedEngine {
     }
 
     /// 推进 n tick（无玩家执行；单次结算失败时保持该 tick 开始前的世界状态）。
+    /// A1 清偿：与 run_players 同走 settle_world（钩子一致消费，见
+    /// settle_external 注）。
     pub fn tick(&mut self, count: u64) -> anyhow::Result<()> {
         self.no_pending_round("tick")?;
         for _ in 0..count {
-            self.engine
-                .tick_with_intents_with_input(IntentBatch::default(), TickInput::now())
-                .map_err(|e| anyhow::anyhow!("{e}"))?;
+            self.settle_world(IntentBatch::default(), TickInput::now())?;
         }
         Ok(())
+    }
+
+    /// 引擎运行状态观测（A1 清偿）：embed 级测试的恢复态/净态断言面。
+    #[doc(hidden)]
+    pub fn engine_run_state_for_test(&self) -> &RunState {
+        self.engine.run_state()
     }
 
     /// 对象快照：screeps-ok 契约形状（kind 族 + 玩家 getter 值，snapshot.rs；
@@ -938,6 +983,14 @@ impl EmbedEngine {
         self.fail_next_settle_room = Some(room.to_string());
     }
 
+    /// 测试钩子（A1 批）：下一次结算在指定段入口注入 Err（一次性，自清）。
+    /// 判据（mod-plane-batches A1）：任一段失败后世界/玩家/市场全部保持
+    /// 上一 tick；顺延语义同房级钩子（未达 settle_world 则留存）。
+    #[doc(hidden)]
+    pub fn fail_next_settle_stage_for_test(&mut self, stage: TickStage) {
+        self.fail_next_settle_stage = Some(stage);
+    }
+
     /// 测试旋钮（双房批）：覆盖玩家执行顺序（须为注册玩家集的排列，
     /// assert 钉死——release 亦生效）。只改 execute_players 的循环序，
     /// 结果收集/意图合并/结算序不动——「打乱玩家完成顺序结果不变」验收
@@ -993,7 +1046,11 @@ impl EmbedEngine {
     }
 
     /// 显式丢弃失败轮缓存及其计费候选（回退语义的处置面；重试路径见
-    /// run_players 的 pending 分支）。
+    /// run_players 的 pending 分支）。A1：同步放弃引擎恢复态。abandon 在
+    /// embed 管理面下必成——变异操作已被 no_open_round 拦截、重试/丢弃都
+    /// 不变异世界（失败轮世界恒保持恢复记录的上一 tick）；`let _` 吞掉的
+    /// Err 只可能来自绕过 embed 直改引擎（测试面），此时引擎本就楔死待
+    /// create_shard。
     pub fn discard_pending_round(&mut self) {
         if let Some(pending) = self.pending.take()
             && let Some(players) = &mut self.players
@@ -1002,6 +1059,7 @@ impl EmbedEngine {
                 let _ = players.discard_bill(handle);
             }
         }
+        let _ = self.engine.abandon_recovery();
     }
 
     pub fn teardown(&mut self) {

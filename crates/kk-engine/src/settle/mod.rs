@@ -24,7 +24,10 @@ pub mod market;
 pub mod movement;
 pub mod room;
 pub mod spawn;
+mod stages;
 pub mod structures;
+
+pub use stages::{RunState, TickStage};
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -641,6 +644,12 @@ pub struct Engine {
     /// 测试钩子：命中名房的结算注入 Err，验证两阶段回退（双房批起对
     /// embed 集成测试开放——经 set_fail_room_for_test；生产不得触碰）。
     fail_room: Option<String>,
+    /// 运行状态机（A1 批）：Ready/Committed=净态；NeedsRecovery=段失败后
+    /// 待重试/放弃（世界保持上一 tick，期间拒绝外部变异后的推进）。
+    run_state: stages::RunState,
+    /// 测试钩子（A1）：指定段的**入口**注入 Err（持续语义，同 fail_room——
+    /// 调用方管理清零；embed 级一次性包装 fail_next_settle_stage_for_test）。
+    fail_stage: Option<TickStage>,
 }
 
 impl Default for Engine {
@@ -660,6 +669,8 @@ impl Engine {
             next_id,
             last_events: Vec::new(),
             fail_room: None,
+            run_state: stages::RunState::Ready,
+            fail_stage: None,
         }
     }
 
@@ -669,6 +680,41 @@ impl Engine {
     #[doc(hidden)]
     pub fn set_fail_room_for_test(&mut self, room: Option<String>) {
         self.fail_room = room;
+    }
+
+    /// 当前运行状态（A1 批状态机观测面）。
+    pub fn run_state(&self) -> &RunState {
+        &self.run_state
+    }
+
+    /// 测试钩子（A1）：指定段入口注入 Err（持续语义——命中即 Err 直至清
+    /// None；embed 一次性语义由 EmbedEngine::fail_next_settle_stage_for_test
+    /// 包装）。注入在段入口生效：该段尚未变异任何权威状态。
+    #[doc(hidden)]
+    pub fn set_fail_stage_for_test(&mut self, stage: Option<TickStage>) {
+        self.fail_stage = stage;
+    }
+
+    /// 显式放弃恢复（embed 的 discard_pending_round 同步面）：仅当处于
+    /// NeedsRecovery 且世界仍保持失败轮原样时回到 Ready——以当前已提交
+    /// 状态为新基线。
+    pub fn abandon_recovery(&mut self) -> Result<(), String> {
+        match &self.run_state {
+            RunState::NeedsRecovery {
+                tick, generation, ..
+            } if self.world.time() == *tick && self.world.generation() == *generation => {
+                self.run_state = RunState::Ready;
+                Ok(())
+            }
+            RunState::NeedsRecovery {
+                tick, generation, ..
+            } => Err(format!(
+                "放弃恢复被拒：世界已被外部变异（失败轮 tick={tick}, gen={generation}；当前 tick={}, gen={}）",
+                self.world.time(),
+                self.world.generation()
+            )),
+            _ => Err("无需恢复（不在 NeedsRecovery 态）".to_string()),
+        }
     }
 
     /// 推进一个 tick：收集 intents（玩家名序）→ 逐房间（名字序）结算。
@@ -720,17 +766,111 @@ impl Engine {
     /// [`Engine::tick_with_intents`] 的重放形态：非确定性输入（墙钟）由调用方
     /// 显式注入——同初始世界 + 同 intents + 同 `TickInput` 的两次结算产物
     /// 逐字节一致（ADR-013 决策 5 的验收面）。
+    ///
+    /// A1 批起为分段驱动（stages.rs）：prepare → settle → market → validate
+    /// → publish，段入口可注入故障；失败落 [`RunState::NeedsRecovery`] 并
+    /// 保持全部权威状态（世界/玩家候选/市场快照桥）在上一 tick。
     pub fn tick_with_intents_with_input(
         &mut self,
         batch: IntentBatch,
         input: TickInput,
     ) -> Result<(), SettleError> {
-        let mut events = Vec::new();
-        let mut settled: Vec<(String, RoomState)> = Vec::new();
-        let mut next = self
+        // 状态机门（A1）：NeedsRecovery 只放行「世界保持失败轮原样」的重试
+        //（同候选重结算）；期间任何外部变异（房间/地形/对象增删均 bump 代际）
+        // 都会使旧候选重结算到已变世界——先显式恢复或放弃，否则拒绝推进
+        match &self.run_state {
+            RunState::Ready | RunState::Committed { .. } => {}
+            RunState::NeedsRecovery {
+                tick, generation, ..
+            } => {
+                if self.world.time() != *tick || self.world.generation() != *generation {
+                    return Err(SettleError(format!(
+                        "恢复前世界已被外部变异（失败轮 tick={tick}, gen={generation}；当前 tick={}, gen={}）",
+                        self.world.time(),
+                        self.world.generation()
+                    )));
+                }
+            }
+            // 同步引擎内单调用瞬态——跨调用见到即状态机接线 bug（panic 中断
+            // 的半成品轮：世界可能已部分推进，拒绝继续是唯一安全选择）
+            RunState::Running { .. } | RunState::Prepared { .. } => {
+                return Err(SettleError(
+                    "状态机接线错误：Running/Prepared 不得跨调用存在".into(),
+                ));
+            }
+        }
+        self.run_state = RunState::Running {
+            tick: self.world.time(),
+        };
+        let mut cursor = stages::StageCursor::new(self.fail_stage);
+        let result = self.staged_body(&mut cursor, batch, &input);
+        match result {
+            Ok(()) => {
+                self.run_state = RunState::Committed {
+                    tick: self.world.time(),
+                };
+                Ok(())
+            }
+            Err(e) => {
+                // 市场候选桥（A1→A2 过渡）：市场段之后的失败恢复市场快照——
+                // 「任一段失败 ⇒ 全部权威状态保持上一 tick」对市场域同样成立
+                if let Some(snapshot) = cursor.take_market_snapshot() {
+                    self.market = snapshot;
+                }
+                self.run_state = RunState::NeedsRecovery {
+                    tick: self.world.time(),
+                    generation: self.world.generation(),
+                    stage: cursor.stage(),
+                    reason: e.to_string(),
+                };
+                Err(e)
+            }
+        }
+    }
+
+    /// 分段主体（A1）：prepare → settle → market → validate → publish。
+    /// 失败返回时由调用方（状态机驱动）负责市场快照恢复与 NeedsRecovery
+    /// 落账——本函数自身不写 run_state（Prepared 观察点除外）。
+    fn staged_body(
+        &mut self,
+        cursor: &mut stages::StageCursor,
+        batch: IntentBatch,
+        input: &TickInput,
+    ) -> Result<(), SettleError> {
+        cursor.enter(TickStage::Prepare)?;
+        let mut cand = self.prepare_tick(batch)?;
+        cursor.enter(TickStage::Settle)?;
+        let mut settled = self.settle_rooms_stage(&mut cand, input)?;
+        cursor.enter(TickStage::Market)?;
+        // 市场候选桥：settle_market 仍直写 self.market（不可失败——官方
+        // global 无 throw 路径的镜像语义，A2 改真候选），先落快照，其后
+        // 任一段失败由驱动统一恢复。成本注记：快照为每 tick 无条件
+        // MarketState 克隆（订单簿 + ≤上限流水），A2 真候选化时撤销——
+        // 当前订单簿规模下可忽略（bot/套件负载无订单）
+        cursor.snapshot_market(&self.market);
+        market::settle_market(
+            &mut settled.rooms,
+            &mut cand.players,
+            &mut self.market,
+            &cand.batch,
+            cand.time,
+            input.now_ms,
+        );
+        cursor.enter(TickStage::Validate)?;
+        self.validate_stage(&cand, &settled)?;
+        // 候选完成且通过校验——publish 前的持久观察点
+        self.run_state = RunState::Prepared { tick: cand.time };
+        cursor.enter(TickStage::Publish)?;
+        self.publish_tick(cand, settled);
+        Ok(())
+    }
+
+    /// prepare 段：输入规整与候选域构建（不产生任何权威状态变异）。
+    fn prepare_tick(&mut self, batch: IntentBatch) -> Result<stages::TickCandidates, SettleError> {
+        let next = self
             .next_id
             .max(self.world.next_available_obj_id().map_err(SettleError)?);
-        let mut players = self.players.clone();
+        let players = self.players.clone();
         let mut batch = batch;
         // 门④可信侧兜底（官方 API 层 structures.js:223-225 的等价物——"玩家
         // 名下任一 controller safeMode 生效中 → 新 activateSafeMode 全拒"）。
@@ -763,52 +903,114 @@ impl Engine {
             }
         }
         let room_names: Vec<String> = self.world.rooms().keys().cloned().collect();
-        for name in room_names {
+        Ok(stages::TickCandidates {
+            time,
+            room_names,
+            next,
+            players,
+            batch,
+        })
+    }
+
+    /// settle 段：逐房两阶段候选结算（clone → settle_room → 收集；全部
+    /// 成功前不写回——§6.5）。
+    fn settle_rooms_stage(
+        &mut self,
+        cand: &mut stages::TickCandidates,
+        input: &TickInput,
+    ) -> Result<stages::SettledRooms, SettleError> {
+        let mut events = Vec::new();
+        let mut rooms: Vec<(String, RoomState)> = Vec::new();
+        for name in cand.room_names.clone() {
             if self.fail_room.as_deref() == Some(name.as_str()) {
                 return Err(SettleError(format!("故障注入：房间 {name} 结算失败")));
             }
             let mut room = self.world.room(&name).expect("房间名来自键集").clone();
             let mut room_events = settle_room(
                 &mut room,
-                self.world.time(),
+                cand.time,
                 input.now_ms,
-                &mut next,
-                &mut players,
-                &batch,
+                &mut cand.next,
+                &mut cand.players,
+                &cand.batch,
             )?;
-            settled.push((name, room));
+            rooms.push((name, room));
             events.append(&mut room_events);
         }
+        Ok(stages::SettledRooms { rooms, events })
+    }
+
+    /// validate 段（A1）：候选结构 tripwire——违例形态只可能来自引擎 bug
+    ///（正常路径结构上不可能触达），失败等同段故障进入 NeedsRecovery。
+    /// 读写纪律：只读（世界与候选均不变异）。
+    fn validate_stage(
+        &self,
+        cand: &stages::TickCandidates,
+        settled: &stages::SettledRooms,
+    ) -> Result<(), SettleError> {
+        // ① 房间候选覆盖：settle 段按名序逐房 push——名字序列与候选房间集
+        // 必须逐位一致（缺房/错序 = settle 段装配 bug）
+        if settled.rooms.len() != cand.room_names.len()
+            || settled
+                .rooms
+                .iter()
+                .zip(&cand.room_names)
+                .any(|((settled_name, _), want)| settled_name != want)
+        {
+            return Err(SettleError(format!(
+                "候选房间覆盖不完整：期望 {} 间，实得 {} 间",
+                cand.room_names.len(),
+                settled.rooms.len()
+            )));
+        }
+        // ② id 分配单调：候选 next 不得低于入口基线（引擎侧与世界侧取大；
+        // 世界在候选构建期间不变异，重算即入口值）
+        let base = self
+            .next_id
+            .max(self.world.next_available_obj_id().map_err(SettleError)?);
+        if cand.next < base {
+            return Err(SettleError(format!(
+                "id 候选回退：{} < 基线 {base}",
+                cand.next
+            )));
+        }
+        // ③ 玩家候选键不减：结算只会新增（notify 落账的 or_default），不得丢键
+        if let Some(missing) = self.players.keys().find(|k| !cand.players.contains_key(*k)) {
+            return Err(SettleError(format!("玩家候选丢键：{missing}")));
+        }
+        Ok(())
+    }
+
+    /// publish 段：一次发布（不可失败——各步均为内存写回，失败只可能来自
+    /// 注入钩子且钩子在段入口先行）。
+    fn publish_tick(
+        &mut self,
+        mut cand: stages::TickCandidates,
+        mut settled: stages::SettledRooms,
+    ) {
         // 市场全局阶段（2B 批 P1）：官方 main.js:63-65 的 global 阶段在房间
         // 结算全部完成后运行（processor/global.js:48-49）——我方在 commit 前
         // 对已结算工作副本执行：读到的都是本 tick 结算后状态（官方 commit1
         // 后读 db 的因果序等价），且失败原子性与「一次成功 tick ⇒ generation
         // 恰 +1」双不变量原样保持（settle_market 不可失败——官方 global 无
-        // throw 路径，逐 intent 静默跳过同构）
-        market::settle_market(
-            &mut settled,
-            &mut players,
-            &mut self.market,
-            &batch,
-            time,
-            input.now_ms,
-        );
-        for (name, room) in settled {
+        // throw 路径，逐 intent 静默跳过同构）——已在 staged_body 的 Market
+        // 段先行，此处仅保留发布序注释锚。
+        for (name, room) in settled.rooms.drain(..) {
             self.world.commit_room(name, room);
         }
         // Game.notify 落库（M2B 扩面 P3，全局通道）：与房结算正交——房循环
         // 外每玩家恰一次；官方 groupInterval 是发送端聚合提示（送达面不在
         // 引擎），原样保留
-        for (player, intents) in &batch.users {
+        for (player, intents) in &cand.batch.users {
             if intents.notify.is_empty() {
                 continue;
             }
-            let state = players.entry(player.clone()).or_default();
+            let state = cand.players.entry(player.clone()).or_default();
             for n in &intents.notify {
                 state.notifications.push(NotifyRecord {
                     message: n.message.clone(),
                     group_interval: n.group_interval,
-                    tick: time,
+                    tick: cand.time,
                 });
             }
             let len = state.notifications.len();
@@ -821,24 +1023,23 @@ impl Engine {
         // （controllers/tick.js:18）经 bulk addToSet 在 tick 末落盘——等价于
         // 结算完成后按世界真值（各房 controller.owner）重建集合；unclaim/降级
         // 到 0 的 removeRoomFromUser（unclaim.js:15 / tick.js:53）同被覆盖。
-        for state in players.values_mut() {
+        for state in cand.players.values_mut() {
             state.rooms.clear();
         }
         for room in self.world.rooms().values() {
             if let Some(owner) = room.objects.values().find_map(|o| match o {
                 RoomObject::Controller(c) => c.owner.clone(),
                 _ => None,
-            }) && let Some(state) = players.get_mut(&owner)
+            }) && let Some(state) = cand.players.get_mut(&owner)
             {
                 state.rooms.insert(room.name.clone());
             }
         }
-        self.players = players;
-        self.next_id = next;
-        self.world.bump_next_obj_id(next);
-        self.last_events = events;
+        self.players = cand.players;
+        self.next_id = cand.next;
+        self.world.bump_next_obj_id(self.next_id);
+        self.last_events = settled.events;
         self.world.advance_ticks(1);
-        Ok(())
     }
 }
 
@@ -910,5 +1111,250 @@ mod tests {
                 _ => panic!("{name}：非 source"),
             }
         }
+    }
+
+    /// A1 状态机：Ready → Running →（段）→ Prepared → Committed 的净态观察
+    /// + NeedsRecovery 的重试/放弃两条出路 + 外部变异门。
+    #[test]
+    fn stage_machine_transitions_recovery_and_mutation_gate() {
+        let mut world = kk_world::World::new(1);
+        world.register_room("W1N1", kk_core::Terrain::plains());
+        let mut engine = Engine::new(world);
+        assert_eq!(engine.run_state(), &RunState::Ready);
+        engine.tick_with_intents(IntentBatch::default()).unwrap();
+        assert_eq!(
+            engine.run_state(),
+            &RunState::Committed { tick: 1 },
+            "成功轮落 Committed（可直接开下一轮）"
+        );
+        // Settle 段失败 → NeedsRecovery；世界未变 ⇒ 重试放行（注入仍在则再失败）
+        engine.set_fail_stage_for_test(Some(TickStage::Settle));
+        assert!(engine.tick_with_intents(IntentBatch::default()).is_err());
+        assert!(matches!(
+            engine.run_state(),
+            RunState::NeedsRecovery {
+                stage: TickStage::Settle,
+                tick: 1,
+                ..
+            }
+        ));
+        assert!(
+            engine.tick_with_intents(IntentBatch::default()).is_err(),
+            "注入仍在 ⇒ 重试再失败（世界未变 ⇒ 门放行）"
+        );
+        engine.set_fail_stage_for_test(None);
+        engine.tick_with_intents(IntentBatch::default()).unwrap();
+        assert_eq!(engine.run_state(), &RunState::Committed { tick: 2 });
+        // 放弃恢复：净态拒绝；NeedsRecovery（世界未变）→ Ready 后可正常推进
+        assert!(engine.abandon_recovery().is_err(), "净态无需恢复");
+        engine.set_fail_stage_for_test(Some(TickStage::Validate));
+        assert!(engine.tick_with_intents(IntentBatch::default()).is_err());
+        engine.set_fail_stage_for_test(None);
+        engine.abandon_recovery().unwrap();
+        assert_eq!(engine.run_state(), &RunState::Ready);
+        engine.tick_with_intents(IntentBatch::default()).unwrap();
+        assert_eq!(engine.world.time(), 3);
+        // 外部变异门：NeedsRecovery 后世界被变异 ⇒ 重试与放弃都被拒
+        engine.set_fail_stage_for_test(Some(TickStage::Publish));
+        assert!(engine.tick_with_intents(IntentBatch::default()).is_err());
+        engine.set_fail_stage_for_test(None);
+        let g = engine.world.generation();
+        engine
+            .world
+            .register_room("W9N9", kk_core::Terrain::plains());
+        assert_ne!(
+            engine.world.generation(),
+            g,
+            "夹具前提：register_room bump 代际（否则变异门测试失真）"
+        );
+        let err = engine
+            .tick_with_intents(IntentBatch::default())
+            .unwrap_err();
+        assert!(err.to_string().contains("外部变异"), "{err}");
+        assert!(engine.abandon_recovery().is_err(), "变异后放弃恢复同样被拒");
+    }
+
+    /// A1 判据：任一段入口注入失败 ⇒ 世界/玩家/市场全部保持上一 tick。
+    /// 市场域判别力自证：同 fixture 无注入的成功轮确实消费订单（过期退款
+    /// 变异订单簿与 money，MARKET-ORDER-009 尾段），注入轮的不变断言才有
+    /// 杀伤力；Validate/Publish 注入发生在 settle_market **之后**，市场域
+    /// 不变靠快照桥（A1→A2 过渡）兑现。
+    #[test]
+    fn stage_injection_keeps_world_and_market_at_previous_tick() {
+        let make = || {
+            let mut world = kk_world::World::new(1);
+            world.register_room("W1N1", kk_core::Terrain::plains());
+            let mut engine = Engine::new(world);
+            engine.players.entry("p1".to_string()).or_default().money = 0;
+            let id = engine.market.next_order_id();
+            engine.market.insert_order(market::MarketOrder {
+                id,
+                user: "p1".to_string(),
+                active: true,
+                order_type: "sell".to_string(),
+                resource_type: "energy".to_string(),
+                price: 1000,
+                amount: 0,
+                remaining_amount: 100,
+                total_amount: 100,
+                room_name: Some("W1N1".to_string()),
+                created: 0,
+                // createdTimestamp+30d 过期：真实墙钟（TickInput::now）下
+                // 上古时间戳必过期——退款变异 players.money + 订单簿
+                created_timestamp: 0,
+            });
+            engine
+        };
+        // 判别力自证：无注入成功轮——订单被过期退款消费、money 入账
+        let mut probe = make();
+        probe.tick_with_intents(IntentBatch::default()).unwrap();
+        assert!(
+            probe.market.orders.is_empty(),
+            "成功轮订单过期移除（fixture 判别力前提）"
+        );
+        assert!(probe.players["p1"].money > 0, "成功轮退款入账");
+        // 注入轮：五段逐一——世界（time/代际/事件）、玩家 money、市场订单簿
+        // 全部保持上一 tick
+        for stage in [
+            TickStage::Prepare,
+            TickStage::Settle,
+            TickStage::Market,
+            TickStage::Validate,
+            TickStage::Publish,
+        ] {
+            let mut engine = make();
+            let (t0, g0) = (engine.world.time(), engine.world.generation());
+            engine.set_fail_stage_for_test(Some(stage));
+            let err = engine
+                .tick_with_intents(IntentBatch::default())
+                .unwrap_err();
+            assert!(err.to_string().contains(stage.label()), "{stage:?}: {err}");
+            assert_eq!(
+                (engine.world.time(), engine.world.generation()),
+                (t0, g0),
+                "{stage:?}: 世界保持上一 tick（time/代际均不动）"
+            );
+            assert!(engine.last_events.is_empty(), "{stage:?}: 事件不落账");
+            assert_eq!(
+                engine.market.orders.len(),
+                1,
+                "{stage:?}: 订单簿保持（市场快照桥）"
+            );
+            assert!(
+                engine.market.transactions.is_empty(),
+                "{stage:?}: 交易流水保持"
+            );
+            assert_eq!(engine.players["p1"].money, 0, "{stage:?}: money 保持");
+            assert!(
+                matches!(engine.run_state(),
+                    RunState::NeedsRecovery { stage: s, .. } if *s == stage),
+                "{stage:?}: NeedsRecovery 记录失败段"
+            );
+            // 世界未变异 ⇒ 重试放行；注入解除后同候选重试成功 → Committed；
+            // 闭环：回退后重试恰一次消费订单（无双退款/双移除——快照恢复 +
+            // TickInput 钉死 ⇒ 重放同结果的显式断言）
+            engine.set_fail_stage_for_test(None);
+            engine.tick_with_intents(IntentBatch::default()).unwrap();
+            assert!(
+                matches!(engine.run_state(), RunState::Committed { tick: 1 }),
+                "{stage:?}: 恢复后 Committed"
+            );
+            assert!(
+                engine.market.orders.is_empty(),
+                "{stage:?}: 重试恰一次消费（订单移除不重复）"
+            );
+            assert!(
+                engine.players["p1"].money > 0,
+                "{stage:?}: 重试恰一次退款入账"
+            );
+        }
+    }
+
+    /// validate 段 tripwire（A1）：正常路径结构上不可达——以篡改候选证明
+    /// 三道闸（房间覆盖/id 单调/玩家键不减）各自有判别力。
+    #[test]
+    fn validate_stage_tripwires_discriminate() {
+        let mut world = kk_world::World::new(1);
+        world.register_room("W1N1", kk_core::Terrain::plains());
+        world.register_room("W2N2", kk_core::Terrain::plains());
+        world
+            .insert(
+                "W1N1",
+                RoomObject::Source(kk_schema::room::SourceObj {
+                    id: 0,
+                    x: 5,
+                    y: 5,
+                    energy: 1000,
+                    energy_capacity: 3000,
+                    next_regeneration_time: None,
+                }),
+            )
+            .unwrap();
+        let mut engine = Engine::new(world);
+        engine.players.entry("p1".to_string()).or_default();
+        let mk_cand = |next| stages::TickCandidates {
+            time: 0,
+            room_names: vec!["W1N1".to_string(), "W2N2".to_string()],
+            next,
+            players: engine.players.clone(),
+            batch: IntentBatch::default(),
+        };
+        let settled_full = stages::SettledRooms {
+            rooms: vec![
+                (
+                    "W1N1".to_string(),
+                    engine.world.room("W1N1").unwrap().clone(),
+                ),
+                (
+                    "W2N2".to_string(),
+                    engine.world.room("W2N2").unwrap().clone(),
+                ),
+            ],
+            events: Vec::new(),
+        };
+        // 对照：完整候选 → Ok
+        engine
+            .validate_stage(&mk_cand(engine.next_id), &settled_full)
+            .unwrap();
+        // ① 缺一间
+        let settled_short = stages::SettledRooms {
+            rooms: vec![(
+                "W1N1".to_string(),
+                engine.world.room("W1N1").unwrap().clone(),
+            )],
+            events: Vec::new(),
+        };
+        let err = engine
+            .validate_stage(&mk_cand(engine.next_id), &settled_short)
+            .unwrap_err();
+        assert!(err.to_string().contains("覆盖"), "{err}");
+        // ①b 错序（zip 逐位比较——若被改成集合比较，此臂红）
+        let settled_swapped = stages::SettledRooms {
+            rooms: vec![
+                (
+                    "W2N2".to_string(),
+                    engine.world.room("W2N2").unwrap().clone(),
+                ),
+                (
+                    "W1N1".to_string(),
+                    engine.world.room("W1N1").unwrap().clone(),
+                ),
+            ],
+            events: Vec::new(),
+        };
+        let err = engine
+            .validate_stage(&mk_cand(engine.next_id), &settled_swapped)
+            .unwrap_err();
+        assert!(err.to_string().contains("覆盖"), "错序同为覆盖违例: {err}");
+        // ② id 回退（世界已有 id 0 ⇒ 基线 ≥ 1 > 0）
+        let err = engine
+            .validate_stage(&mk_cand(0), &settled_full)
+            .unwrap_err();
+        assert!(err.to_string().contains("回退"), "{err}");
+        // ③ 玩家丢键
+        let mut cand = mk_cand(engine.next_id);
+        cand.players.remove("p1");
+        let err = engine.validate_stage(&cand, &settled_full).unwrap_err();
+        assert!(err.to_string().contains("丢键"), "{err}");
     }
 }

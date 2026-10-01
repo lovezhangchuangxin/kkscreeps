@@ -327,6 +327,9 @@ impl World {
     /// [`Self::advance_ticks`] 收束，「一次成功 tick ⇒ generation 恰 +1」
     /// 的既有不变量（engine 级测试锁定）由 advance_ticks 单点承载；
     /// 失败回退路径不调用本方法（世界未变）。
+    /// A1 起本纪律额外承重：引擎恢复门以 (time, generation) 为「世界未变」
+    /// 判据——绕过 advance_ticks 直用本方法整房替换会在代际不变下骗过恢复
+    /// 门；违约后果已从「投影缓存陈旧」升级为「恢复门失真」。
     pub fn commit_room(&mut self, name: String, state: RoomState) {
         self.rooms.insert(name, state);
     }

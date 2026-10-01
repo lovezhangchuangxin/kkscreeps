@@ -59,6 +59,19 @@ pub struct EvalReport {
     pub raw_memory: Option<String>,
     /// segments 信封候选（P6：窗口写回+四请求；None = 写回失败/未达）。
     pub segments_out: Option<Value>,
+    /// 派发轮次标识的回带（A1）：协调器在 Cmd::RunPlayer 上钉住、线程原样
+    /// 回带——消费方据此拒收迟到/错轮回执。当前同步一问一答模型下恒等于
+    /// 派发值（每命令独立 ack 通道 + 同步 recv）；P1 把派发/回收解耦后成为
+    /// 真正的防线。
+    pub epoch: RunEpoch,
+}
+
+/// 一次玩家派发的轮次标识（A1，mod-plane-batches A1/P1）：协调器派发时
+/// 钉住 `(tick, generation)`，回执原样回带、错轮拒收。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct RunEpoch {
+    pub tick: u64,
+    pub generation: u64,
 }
 
 enum Cmd {
@@ -83,9 +96,11 @@ enum Cmd {
     },
     /// 一条原子指令：begin_tick（世界注入）→ run_expr（求值玩家代码）→ end_tick。
     /// screeps-ok 的 runPlayer 语义（"恰好推进 1 tick"）靠它保证。
+    /// epoch（A1）由派发方钉住、回执回带——错轮拒收的基线。
     RunPlayer {
         world: Value,
         code: String,
+        epoch: RunEpoch,
         ack: mpsc::Sender<anyhow::Result<EvalReport>>,
     },
     Shutdown,
@@ -164,8 +179,13 @@ impl PlayerThreads {
                             // 纯 CPU 死循环必须可被掐断，否则线程永久挂死（join 无效）
                             let _ = ack.send(sandbox.run_expr_guarded(&code));
                         }
-                        Cmd::RunPlayer { world, code, ack } => {
-                            let _ = ack.send(run_eval_tick(&mut sandbox, &world, &code));
+                        Cmd::RunPlayer {
+                            world,
+                            code,
+                            epoch,
+                            ack,
+                        } => {
+                            let _ = ack.send(run_eval_tick(&mut sandbox, &world, &code, epoch));
                         }
                         Cmd::Shutdown => break,
                     }
@@ -316,12 +336,20 @@ impl PlayerThreads {
     }
 
     /// 原子"求值 tick"：begin→run_expr→end（screeps-ok runPlayer 通道）。
-    pub fn run_player(&mut self, id: u64, world: &Value, code: &str) -> anyhow::Result<EvalReport> {
+    /// epoch（A1）随命令下发并由回执回带——调用方据此拒收错轮回执。
+    pub fn run_player(
+        &mut self,
+        id: u64,
+        world: &Value,
+        code: &str,
+        epoch: RunEpoch,
+    ) -> anyhow::Result<EvalReport> {
         let p = self.player_mut(id)?;
         let (ack_tx, ack_rx) = mpsc::channel();
         p.send(Cmd::RunPlayer {
             world: world.clone(),
             code: code.to_string(),
+            epoch,
             ack: ack_tx,
         });
         ack_rx
@@ -463,7 +491,13 @@ fn run_one_tick(sandbox: &mut Sandbox, world: &Value) -> anyhow::Result<TickRepo
 }
 
 /// runPlayer 通道：世界注入 → 表达式求值（真实沙箱）→ Memory 写回与候选结算。
-fn run_eval_tick(sandbox: &mut Sandbox, world: &Value, code: &str) -> anyhow::Result<EvalReport> {
+/// epoch（A1）原样打戳进报告——派发/回执同轮的回带契约。
+fn run_eval_tick(
+    sandbox: &mut Sandbox,
+    world: &Value,
+    code: &str,
+    epoch: RunEpoch,
+) -> anyhow::Result<EvalReport> {
     // 注入失败分类（B0-5，ADR-013 复现场景①）：玩家把环境搞坏（如 defineProperty
     // Game 冲突）使 beginTick 失败——**玩家级失败**（不冒泡整轮 Err；协调器
     // 记 InjectFailed 结局、轮次继续），mpsc 层故障仍走 Err=基础设施
@@ -486,6 +520,7 @@ fn run_eval_tick(sandbox: &mut Sandbox, world: &Value, code: &str) -> anyhow::Re
                 cpu_billed_ms: bill,
                 raw_memory: None,
                 segments_out: None,
+                epoch,
             });
         }
     };
@@ -504,6 +539,7 @@ fn run_eval_tick(sandbox: &mut Sandbox, world: &Value, code: &str) -> anyhow::Re
             cpu_billed_ms: None,
             raw_memory: None,
             segments_out: None,
+            epoch,
         }),
         TickPlan::Run { .. } => {
             let mut expr = sandbox.run_expr(code)?;
@@ -540,6 +576,7 @@ fn run_eval_tick(sandbox: &mut Sandbox, world: &Value, code: &str) -> anyhow::Re
                     .get("rawMemory")
                     .and_then(Value::as_str)
                     .map(str::to_owned),
+                epoch,
             })
         }
     }

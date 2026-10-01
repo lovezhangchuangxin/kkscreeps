@@ -14,5 +14,5 @@ pub mod watchdog;
 pub use budget::{Bucket, TickPlan};
 pub use modules::{ModuleCode, ModuleKind, ModuleTable};
 pub use ops::LogLine;
-pub use proto::{EvalReport, PlayerThreads, TickReport};
+pub use proto::{EvalReport, PlayerThreads, RunEpoch, TickReport};
 pub use sandbox::{Sandbox, SandboxConfig, TickOutcome, lifo_violations, live_sandbox_count};

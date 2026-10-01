@@ -22,6 +22,9 @@
 - **判据**：任一段失败后世界保持上一 tick（`fail_stage_for_test` 族注入）；状态机单测覆盖全部转移；epoch 拒收单测；棘轮零回归。
 - **依赖**：无（首片）。
 
+> **✅ A1 已收口（2026-10-01，本提交）**：五段落地（prepare/settle/**market**/validate/publish——市场为独立段位）+ 状态机（外部变异门键控 (time,generation) + abandon_recovery 两条出路）+ 市场快照桥（A2 前过渡——每 tick 无条件 MarketState 克隆，当前订单规模可忽略，A2 真候选化时撤销）+ validate 三 tripwire（房间覆盖含错序/id 单调/玩家键不减）+ RunEpoch 接线（Cmd::RunPlayer/EvalReport 回带 + ThreadExecutor 错轮拒收单测，变异击杀×1 验证桥恢复逻辑）。**评审清偿增补（三路 2×P1）**：embed 串行链死代码修复；`no_open_round` 门（世界/市场变异操作在 embed pending **或**引擎恢复态任一存在时拒绝——settle_external/tick 失败不缓存 pending 的两门分叉场景，封死 place_market_order 在恢复态外改订单簿的漏洞）；settle_external/tick 统一走 settle_world（embed 钩子对全部结算入口一致消费）；恢复逃生路/段钩子顺延/重试恰一次消费闭环测试。
+> **范围注记（后批承接）**：①Cmd::Tick 通道（bot_check 消费）未接 epoch——消费方不消费 epoch，随 P1 解耦派发/回收一并接线，RunEpoch 定义位置（现驻 kk-runner 传输层）届时上移评估；②状态机「全部转移」按**外部可观察转移**口径覆盖（调用内瞬态由类型私有性保证；Running/Prepared 跨调用拒绝分支无私有 setter、panic 注入前不可单测——显式登记）；③kk-world commit_room 的「不 bump、advance_ticks 单点」纪律自 A1 起额外承重（恢复门判据依赖），已在 world.rs 文档锚定。
+
 ### A2 市场纳入候选
 
 - **内容**：`settle_market` 从直接改 `self.market` 改为操作 A1 的候选事务；订单簿/credits 写入随 publish 生效。现状有利条件：`settle_market` 对房间的访问已是「收集已结算房数组」形态（settle/market.rs 以已结算房间切片为入参），跨房读写无互相嵌套。**注入方式**：市场候选的故障注入打在 settle 之后、publish 之前的段边界；`settle_market` 函数本身保持不可失败（官方 global 阶段无 throw 路径，为注入而添加真实 Err 路径是对官方镜像语义的反向破坏）。
@@ -44,7 +47,7 @@
 
 ### P1 RunJob 并发执行 + 线程 CPU 计费
 
-- **内容**：合并注入+执行为 `RunJob {view_handle, player_state, budget, code_revision, tick, generation}`（06 §2.3）；一次派发、有界并发回收（上限实测定，不等于玩家数）；线程命令携带期限；**CPU 计费墙钟 → 线程 CPU 时钟**（macOS/Linux 分别验证），墙钟保留为看门狗活性保护；RunJob 携带协调器算好的预算（A4 桶账语义的前半）。epoch 起步可先用已有的 `world.generation()`/`time()`。
+- **内容**：合并注入+执行为 `RunJob {view_handle, player_state, budget, code_revision, tick, generation}`（06 §2.3）；一次派发、有界并发回收（上限实测定，不等于玩家数）；线程命令携带期限；**CPU 计费墙钟 → 线程 CPU 时钟**（macOS/Linux 分别验证），墙钟保留为看门狗活性保护；RunJob 携带协调器算好的预算（A4 桶账语义的前半）。epoch 起步可先用已有的 `world.generation()`/`time()`。A1 范围承接：Cmd::Tick 通道 epoch 接线 + RunEpoch 定义位置上移评估。
 - **判据**：同世界多玩家输出与串行参考逐位一致（执行序无关测试旋钮）；同轮预算语义不变、bot 三夹具不红；**迟到报告拒收联调验收**（A1 只测单测）；P50/P95/P99 与进程 CPU/RSS 改善有测量记录（≥5 独立运行，采样器见 P2）；看门狗 arm/disarm/terminate 代际原子性保持。
 - **依赖**：A1 的状态机 epoch 字段（可先行以现有 generation/time 起步）；不依赖 A3（P1 改 execute_players/proto/budget，与 A3 的引擎侧无类型耦合，仅同文件 embed.rs 需协调）。
 

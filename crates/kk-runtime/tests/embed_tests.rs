@@ -26,6 +26,8 @@ mod m2b_map_notify_cpu_family;
 mod m2b_structure_actions_family;
 #[path = "embed_tests/m2b_structure_readfaces_family.rs"]
 mod m2b_structure_readfaces_family;
+#[path = "embed_tests/stage_recovery_family.rs"]
+mod stage_recovery_family;
 #[path = "embed_tests/stop_run_regression.rs"]
 mod stop_run_regression;
 
@@ -41,6 +43,7 @@ use m2b_map_notify_cpu_family::*;
 use m2b_structure_actions_family::*;
 use m2b_structure_readfaces_family::*;
 use m2b2_terminal_market_family::*;
+use stage_recovery_family::*;
 use stop_run_regression::*;
 
 #[test]
@@ -94,6 +97,9 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     m2b2_terminal_send_e2e_impl()?;
     m2b2_market_book_e2e_impl()?;
     m2b_closing_e2e_impl()?;
+    stage_recovery_family_impl()?;
+    stage_recovery_escape_route_impl()?;
+    stage_hook_deferral_impl()?;
     assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");
     Ok(())
 }
