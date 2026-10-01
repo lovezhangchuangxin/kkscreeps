@@ -35,11 +35,18 @@ using v8::Value;
 class ArenaGuard {
 public:
 	ArenaGuard()
-		: saved_(kk_compat::t_arena) {
+		: saved_(kk_compat::t_arena),
+		  saved_exception_(kk_compat::t_pending_js_exception),
+		  saved_message_(kk_compat::t_pending_js_error_message) {
 		kk_compat::t_arena = &arena_;
 		kk_compat::t_pending_js_exception = false;
+		kk_compat::t_pending_js_error_message = nullptr;
 	}
-	~ArenaGuard() { kk_compat::t_arena = saved_; }
+	~ArenaGuard() {
+		kk_compat::t_arena = saved_;
+		kk_compat::t_pending_js_exception = saved_exception_;
+		kk_compat::t_pending_js_error_message = saved_message_;
+	}
 
 	ArenaGuard(const ArenaGuard&) = delete;
 	ArenaGuard& operator=(const ArenaGuard&) = delete;
@@ -47,6 +54,8 @@ public:
 private:
 	kk_compat::Arena arena_;
 	kk_compat::Arena* saved_;
+	bool saved_exception_;
+	const char* saved_message_;
 };
 
 v8::Local<v8::Object> make_pos_object(uint32_t xx, uint32_t yy) {
@@ -74,7 +83,7 @@ screeps::path_finder_t* acquire_path_finder() {
 // 此处等价提供——非匿名命名空间，保证外部链接符号与 pf.cc 引用一致）
 uint8_t screeps::room_info_t::cost_matrix0[2500] = { 0 };
 
-extern "C" int kk_pf_load_terrain(uint8_t map_xx, uint8_t map_yy, const uint8_t* bits_625) {
+extern "C" int kk_pf_load_terrain(uint8_t map_xx, uint8_t map_yy, const uint8_t* bits_625) try {
 	if (bits_625 == nullptr) {
 		return -1;
 	}
@@ -92,11 +101,13 @@ extern "C" int kk_pf_load_terrain(uint8_t map_xx, uint8_t map_yy, const uint8_t*
 	Nan::Set(rooms, 0u, info);
 	screeps::path_finder_t::load_terrain(rooms);
 	return 0;
+} catch (...) {
+	return -1;
 }
 
 extern "C" int kk_pf_search(kk_pf_world_pos_t origin, const kk_pf_goal_t* goals, size_t goals_len,
 	kk_pf_room_callback_t callback, void* callback_user_data, const kk_pf_options_t* options,
-	kk_pf_search_result_t* out_result) {
+	kk_pf_search_result_t* out_result) try {
 	if (goals == nullptr && goals_len != 0) {
 		return -1;
 	}
@@ -195,6 +206,8 @@ extern "C" int kk_pf_search(kk_pf_world_pos_t origin, const kk_pf_goal_t* goals,
 		std::memcpy(out_result->path, flat.data(), sizeof(uint32_t) * flat.size());
 	}
 	return 0;
+} catch (...) {
+	return -1;
 }
 
 extern "C" void kk_pf_free_result(kk_pf_search_result_t* result) {
