@@ -1,9 +1,5 @@
-//! M2B 扩面 P1 全链 e2e：rangedAttack（API→intent→结算→下一 tick 可见）、
-//! saying 载荷（本人/他人 isPublic 折叠 + 跨 tick 重置）、getActiveBodyparts、
-//! notifyWhenAttacked（creep 通用段 + 投影判重门）。
-//! 官方对照：creeps.js:626-677/589-592/996-1015/106-116、rangedAttack.js、
-//! say.js:18-21。注意 run_players 一次调用 = 执行 + 结算 + 提交（推进一
-//! tick）——双观察者断言须同 tick 并跑（saying 只存活下一 tick）。
+//! 验证远程攻击、saying 的可见性与清除、有效身体部件计数和受击通知。
+//! 两个观察者须在同一轮读取 saying，否则下一次结算会清除上一轮的发言。
 
 use std::collections::BTreeMap;
 
@@ -46,8 +42,7 @@ pub(super) fn m2b_ranged_attack_e2e_impl() -> anyhow::Result<()> {
     assert!(run.console.iter().any(|l| l.contains("gap=1")));
     assert!(run.console.iter().any(|l| l.contains("gapX=0")));
 
-    // 上一 tick 已结算：受攻者 hits 200−10=190；事件 EVENT_ATTACK(=1) 且
-    // attackType=RANGED(=2)
+    // 下一轮读取已提交的 notifyWhenAttacked 设置；重复相同值和改为不同值都应返回 OK。
     let vic = e
         .find_in_room("W1N1", 101)
         .into_iter()

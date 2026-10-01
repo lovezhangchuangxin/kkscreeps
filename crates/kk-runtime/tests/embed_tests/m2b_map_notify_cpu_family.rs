@@ -1,9 +1,4 @@
-//! M2B 扩面 P3 e2e：Game.map 族（describeExits/findRoute A*/findExit/
-//! getRoomStatus/isRoomAvailable/getRoomLinearDistance）+ Room.findExitTo +
-//! Game.notify（全局 intent 通道每 tick 帽+落账）+ cpu 三面（cpuLimit/
-//! getHeapStatistics 真数值/halt 硬停）。
-//! 官方对照：map.js:11-268、rooms.js:1128-1131、game.js:145/153-156/174-180、
-//! runtime.js:78-86、user-vm.js:68-70。
+//! 验证地图路线与房间状态、通知的数量限制和持久化，以及 CPU 查询和 halt。
 
 use super::*;
 
@@ -95,8 +90,7 @@ pub(super) fn m2b_map_multihop_e2e_impl() -> anyhow::Result<()> {
                   { "name": "W1N2" }, { "name": "W2N1" }, { "name": "W2N2" }],
     }))?;
 
-    // 多跳 L 形（2 步——回溯循环与 decrease-key 更新路径真执行）；官方
-    // Heap 序敏感语义锁定（两序等价并列时官方 tie-break 决定）
+    // 两步 L 形路线有两条等成本路径，用来检查并列节点的处理顺序。
     let run = e.run_player(
         "p1",
         r#"[ Game.map.findRoute('W1N1', 'W2N2'),
@@ -105,8 +99,7 @@ pub(super) fn m2b_map_multihop_e2e_impl() -> anyhow::Result<()> {
     let v = &run.expr["value"];
     assert_eq!(v[0].as_array().map(Vec::len), Some(2), "两步路由");
     let route = v[0].as_array().unwrap();
-    // 官方 Heap 并列 fcost 弹出序实测=西行先（LEFT 7 → TOP 1）——以此锁定
-    // 逐字移植形态（自写堆在该 tie 上选北行先，正是评审 1 实测分岔点）
+    // 等成本时应先向西再向北（LEFT 7 → TOP 1）；只检查步数不能发现并列顺序变化。
     assert_eq!(
         (route[0]["room"].clone(), route[1]["room"].clone()),
         (json!("W2N1"), json!("W2N2")),
@@ -116,8 +109,7 @@ pub(super) fn m2b_map_multihop_e2e_impl() -> anyhow::Result<()> {
         (route[0]["exit"].clone(), route[1]["exit"].clone()),
         (json!(7), json!(1))
     );
-    // 剪枝绕行：封锁官方首选西路的 W2N1 → 北路 W1N2→W2N2（评审3：堆
-    // 陈旧条目过滤与回溯在非平凡拓扑下真执行——decrease-key 更新路径）
+    // 封锁先向西的 W2N1，路线应改为向北经 W1N2、W2N2。
     let detour = v[1].as_array().unwrap();
     assert_eq!(detour.len(), 2, "绕行两步");
     assert_eq!(
@@ -231,8 +223,7 @@ pub(super) fn m2b_notify_and_cpu_e2e_impl() -> anyhow::Result<()> {
         !run.console.iter().any(|l| l.contains("after-halt")),
         "halt 后代码不可达"
     );
-    // 官方 runner.js:26-28 对 halt 结局 sendConsoleError("CPU halted")——
-    // 同款补错误行（评审 1 P2-2 清偿；原测试断言「无错误行」与官方相反）
+    // halt 除了返回运行错误，还应输出 CPU halted 错误日志。
     assert!(
         run.console.iter().any(|l| l.contains("CPU halted")),
         "CPU halted 错误行：{:?}",
@@ -243,8 +234,7 @@ pub(super) fn m2b_notify_and_cpu_e2e_impl() -> anyhow::Result<()> {
         "halt 后玩家代码不可达：{:?}",
         run.console
     );
-    // 零计费（官方 make.js:280-284 抛出跳过 :194-212 计费块）：halt tick
-    // 桶净变动 0（结算无计费候选——评审 1 P1-3 口径）
+    // halt 跳过本轮计费，提交前后的 CPU 桶净变动应为 0。
     let before = e.player_bucket_for_test("p1")?;
     let run = e.run_player("p1", r#"Game.cpu.halt(); console.log('nope');"#)?;
     assert!(run.console.iter().any(|l| l.contains("CPU halted")));

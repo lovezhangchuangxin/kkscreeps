@@ -1,8 +1,4 @@
-//! M2B 扩面 P5 e2e：结构动作族 API 全链——tower 三 API（错误码表/攻击
-//! 落地）、link.transferEnergy（十二步错误码含跨房 NOT_IN_RANGE/成功链
-//! 记账+冷却净读）、rampart.setPublic（含敌方 -1）、spawn deprecated 对
-//! （canCreateCreep 判定/createCreep 返回 name+幽灵壳+自动名+NAME_EXISTS）。
-//! 官方对照：structures.js:764-834/:488-531/:652-657/:898-1051。
+//! 验证 tower、link、rampart 和旧版 spawn API 的错误码、意图及结算结果。
 
 use super::*;
 
@@ -10,8 +6,7 @@ pub(super) fn m2b_structure_actions_e2e_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
         "players": ["p1"],
-        // rcl7：spawn 配额 2（两座 spawn 都 active——rcl5 只许 1 座，
-        // 第二座的 createCreep 会被 isActive 结算门拒）、link 配额 4、tower 3
+        // 使用 RCL 7，使两座 spawn 都启用；RCL 5 只允许一座，会影响第二座的创建请求。
         "rooms": [{ "name": "W1N1", "rcl": 7, "owner": "p1" },
                   { "name": "W2N1" }],
     }))?;
@@ -112,7 +107,7 @@ pub(super) fn m2b_structure_actions_e2e_impl() -> anyhow::Result<()> {
     );
     assert_eq!(v[13], json!(false), "自动名不取 'X'（名池固定 100+100）");
     // 官方 Memory getter 首访解析后固化：createCreep 写的 Memory.creeps.X
-    // 对同 tick 后续访问可见（P5 勘正：原直调 ensureMemory 强制重解析丢写）
+    // createCreep 写入的 Memory 在同 tick 的后续访问中应保留。
     assert_eq!(
         v[14],
         json!(false),
@@ -120,7 +115,7 @@ pub(super) fn m2b_structure_actions_e2e_impl() -> anyhow::Result<()> {
     );
     assert_eq!(v[15], err(0), "transfer 100 → OK");
 
-    // 幽灵壳同 tick 可读（官方 :1132-1213：Game.creeps[name].spawning true）
+    // 下一轮仍在孵化的 creep 应出现在 Game.creeps 中，spawning 为 true。
     let run = e.run_player(
         "p1",
         r#"[ Game.creeps.X ? Game.creeps.X.spawning : 'absent',
@@ -155,8 +150,8 @@ pub(super) fn m2b_structure_actions_e2e_impl() -> anyhow::Result<()> {
     );
     assert_eq!(v[1], json!(490), "塔扣 TOWER_ENERGY_COST");
     assert_eq!(v[2], json!(300), "源 link 扣 100");
-    // 冷却：range |35−30|=5 → 挂 5；其后每个结算 tick 的 phase 8 递减 1
-    //（transfer tick 自身 + 幽灵壳 run + tick(1)）→ 净读 2
+    // 两座 link 距离为 5，初始冷却为 5；发送轮、读取孵化 creep 的一轮、
+    // 显式 tick(1) 共递减三次，下一轮读到 2。
     assert_eq!(
         v[3],
         json!(2),

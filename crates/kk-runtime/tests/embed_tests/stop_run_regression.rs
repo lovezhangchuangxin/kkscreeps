@@ -1,15 +1,8 @@
-//! embed 层停跑回归锁（双房批 O3）：负桶停跑（SkipPenalty）走 embed
-//! 全链——结局盲提交语义的回归锁（B0-6 评 2 P2-1 登记的残余风险：未来
-//! 给 commit_players 遍历加结局过滤会静默丢 Terminated 玩家的回充候选）。
+//! 验证 CPU 桶为负时的跳帧惩罚和待提交回充。
 //!
-//! 驱动面：`set_sandbox_config_for_test`（create_shard 前注入
-//! `initial_bucket` 负值）；断言面：`player_bucket_for_test`（桶只活在
-//! 沙箱线程内，经 Cmd::Bucket 通道读出——读取的是已落桶权威值，不含
-//! pending 候选）。官方停跑数值口径（make.js:77）：负桶 begin_tick
-//! 即 Skip、回充**先按原桶严格比较** `bucket < −2×limit ? −2×limit :
-//! bucket+limit`（双房批外部复审 P0 勘误：原 `(bucket+limit).max(−2×
-//! limit)`「先加再钳」在 [−3×limit,−2×limit) 窗与官方分歧）；默认
-//! limit=20（cpu_limit）。
+//! 跳帧玩家虽然不运行代码，仍须在世界成功结算后提交回充；失败时保留候选供重试。
+//! 测试在创建分片前设置初始桶，再读取沙箱的已提交桶值。默认 CPU limit 为 20。
+//! 回充先判断原桶是否小于 -2 * limit：低于时设为该下限，否则加 limit。
 
 use std::collections::BTreeMap;
 
@@ -17,9 +10,8 @@ use serde_json::json;
 
 use kk_runtime::EmbedEngine;
 
-/// 停跑全链与结局盲提交（场景①②）：p1 正常跑 / p2 深负桶停跑同轮混合
-/// ——同轮 commit 同时处置 p1 计费与 p2 回充（结局盲）；桶轨迹
-/// −2000 → 提交后 −40（−2×limit 地板）→ −20 → 0 → 第四轮恢复执行。
+/// 正常玩家与跳帧玩家同轮处理，验证跳帧玩家仍提交回充。
+/// 其桶从 -2000 到 -40、-20、0，第四轮恢复执行。
 pub(super) fn stop_run_commit_blind_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     // 须在 create_shard 之前注入（spawn 消费）
@@ -52,7 +44,7 @@ pub(super) fn stop_run_commit_blind_impl() -> anyhow::Result<()> {
         "p2 结局分类 Terminated"
     );
     assert_eq!(e.get_game_time(), 1, "停跑轮世界照常推进");
-    // 结局盲提交：p2 的回充候选已落桶（−2000 → −2×limit=−40 地板）
+    // 跳帧玩家也要提交回充，桶从 -2000 变为 -2 * limit，即 -40。
     assert_eq!(
         e.player_bucket_for_test("p2")?,
         -40.0,
@@ -74,8 +66,7 @@ pub(super) fn stop_run_commit_blind_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// 失败臂的候选丢弃（场景③）：停跑轮回充候选随统一提交点回退——结算
-/// 失败桶不动、显式丢弃不落桶；重试/新轮提交后候选才生效。
+/// 失败轮不提交回充；重试须保留并提交首次候选，显式丢弃则不改变桶值。
 pub(super) fn stop_run_failure_and_discard_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     let cfg = kk_runner::SandboxConfig {
@@ -104,9 +95,7 @@ pub(super) fn stop_run_failure_and_discard_impl() -> anyhow::Result<()> {
     );
     assert!(e.has_pending_round());
 
-    // 重试臂（评审 3 P2-2 清偿）：不丢弃直接重试缓存轮——commit_players
-    // 须把**首跑暂存的**回充候选并入（若 Err 路径被加「善后清理」误
-    // discard 沙箱候选，重试提交 no-op、桶滞 −2000，此断言即红）
+    // 重试须提交首次保留的回充候选；若失败后误丢弃，桶会停在 -2000。
     let runs = e.run_players(&codes)?;
     assert!(
         !runs["p2"].executed,
@@ -118,8 +107,7 @@ pub(super) fn stop_run_failure_and_discard_impl() -> anyhow::Result<()> {
         "重试提交并入首跑暂存的回充候选（−2×limit 地板）"
     );
 
-    // 显式丢弃臂：再注入失败（候选重挂）→ 丢弃 → 桶不动（B0-6
-    // discard_bill 同点清两类候选）
+    // 再次失败后丢弃候选，不应改变已经提交的桶值。
     e.fail_next_settle_for_test();
     assert!(e.run_players(&codes).is_err());
     e.discard_pending_round();
@@ -142,8 +130,8 @@ pub(super) fn stop_run_failure_and_discard_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// 复审 P0 的 embed 级边界取证：窗口桶（−41 ∈ [−3×limit, −2×limit)）
-/// 提交后钳回地板 −40（官方），旧错误式将得 −21——embed 全链数值锁。
+/// 桶为 -41、limit 为 20 时，先比较原桶应得到 -40；
+/// 若先加 limit 再取下限，会错误地得到 -21。
 pub(super) fn stop_run_floor_window_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     let cfg = kk_runner::SandboxConfig {
@@ -158,7 +146,7 @@ pub(super) fn stop_run_floor_window_impl() -> anyhow::Result<()> {
     let mut codes = BTreeMap::new();
     codes.insert("p1".to_string(), "'x'".to_string());
 
-    // 轮 1：−41 破地板 → 官方钳回 −40（旧式 −21）
+    // -41 低于 -2 * limit，直接设为 -40；不能先加 limit 再取下限。
     let runs = e.run_players(&codes)?;
     assert!(!runs["p1"].executed, "负桶停跑");
     assert_eq!(

@@ -1,9 +1,5 @@
-//! M2B 扩面 P6 收尾 e2e：RawMemory segments 全链（激活窗口/写回持久/
-//! 10 段与 100KB 上限/foreign 授权-默认-撤回-清除）、RoomVisual/MapVisual
-//! （绘制记账/尺寸账计/上限拒绝/sharedBuffer）、CostMatrix 序列化往返。
-//! 官方对照：driver/lib/runtime/runtime.js:122-200、make.js:250-267、
-//! game/console.js:57-108、rooms.js:1144-1218、map.js:275-374、
-//! game/path-finder.js:18-47。
+//! 验证 RawMemory 段的激活、持久化、大小限制与外部授权；
+//! 同时检查 RoomVisual、MapVisual 和 CostMatrix 的序列化行为。
 
 use super::*;
 
@@ -85,8 +81,7 @@ pub(super) fn m2b_closing_e2e_impl() -> anyhow::Result<()> {
     let run = e.run_player("p1", r#"[ RawMemory.segments[9].length ]"#)?;
     assert_eq!(run.expr["value"][0], json!(100 * 1024), "恰 100KB 落库");
 
-    // 空数组清空活动集（评审 1/2 P1 清偿：官方 runtime.js:287 无守卫 emit、
-    // [] truthy 经 make 侧落库清空——与 public 的 [] no-op 是两个形状）
+    // 空数组清除活动段请求；与公开段空数组不发出更新的行为分别检查。
     e.run_player("p1", r#"RawMemory.setActiveSegments([]); 'ok'"#)?;
     let run = e.run_player("p1", r#"[ Object.keys(RawMemory.segments).length ]"#)?;
     assert_eq!(
@@ -95,9 +90,7 @@ pub(super) fn m2b_closing_e2e_impl() -> anyhow::Result<()> {
         "空数组清空窗口（下 tick segments 为空对象）"
     );
 
-    // toJSON 回调内的段写+请求同轮生效（外部复审 P1 清偿：官方 runtime.js
-    // :246-248 先序列化 Memory——stringify 跑 toJSON 回调，段回收 :250 在后；
-    // 修复前段打包先行 → 段内容永久丢失+请求晚一轮）
+    // Memory.toJSON 在段结果收集前执行，因此回调中的段写入和请求应在本轮保存。
     e.run_player(
         "p1",
         r#"Memory.toJSON = function () {
@@ -132,8 +125,8 @@ pub(super) fn m2b_closing_e2e_impl() -> anyhow::Result<()> {
         "toJSON 内超限写段 tick 尾校验仍拦截（官方序下回调写先于段回收）"
     );
 
-    // 段 getter 惰性三次读（外部复审 P2-3 清偿：官方逐 key typeof/长度/终值
-    // 三读——末次读入库；Object.entries 快照会取首值）
+    // 段 getter 在类型检查、长度检查和取最终值时各读取一次，写入的是第三次值。
+    // 用 Object.entries 提前快照会错误地保存第一次值。
     e.run_player(
         "p1",
         r#"RawMemory.setActiveSegments([5]);
@@ -151,8 +144,7 @@ pub(super) fn m2b_closing_e2e_impl() -> anyhow::Result<()> {
         "入库值=末次读（官方三读序；快照实现会存 first）"
     );
 
-    // 11 个抛错 getter：数量门先于任何 getter 执行（官方 keys 先+数量门；
-    // 快照实现 getter 异常先抛）
+    // 段数量超过上限时，应先报数量错误，而不是运行段 getter 并抛出其异常。
     let run = e.run_player(
         "p1",
         r#"RawMemory.setActiveSegments([0,1,2,3,4,5,6,7,8,9]);
@@ -223,8 +215,7 @@ pub(super) fn m2b_closing_e2e_impl() -> anyhow::Result<()> {
         "未知名不 throw（下 tick 无交付）"
     );
 
-    // 未写过的公开槽 data=null（官方 data.js:258 hget 缺失即 null——与活动槽
-    // :251 物化空串刻意不对称；评审 1 P2-3/评审 2 P2-1 清偿）
+    // 已授权但未写过的外部段返回 data=null，活动段则返回空字符串。
     e.run_player("p2", r#"RawMemory.setPublicSegments([1, 3]); 'ok'"#)?;
     e.run_player("p1", r#"RawMemory.setActiveForeignSegment('p2', 3); 'ok'"#)?;
     let run = e.run_player(
@@ -234,8 +225,7 @@ pub(super) fn m2b_closing_e2e_impl() -> anyhow::Result<()> {
     assert_eq!(run.expr["value"][0], json!(true), "未写过公开槽 data=null");
     assert_eq!(run.expr["value"][1], json!(3), "显式 id 交付");
 
-    // foreignSegment 描述符三 true（外部复审 P2 清偿：官方 runtime.js:198 建对象
-    // 后普通赋值——props 描述符挂载三 false 相异；严格赋值官方合法）
+    // foreignSegment 的属性可枚举、可配置、可写，严格模式赋值也应成功。
     let run = e.run_player(
         "p1",
         r#"[ (() => { const d = Object.getOwnPropertyDescriptor(RawMemory, 'foreignSegment');
@@ -254,7 +244,7 @@ pub(super) fn m2b_closing_e2e_impl() -> anyhow::Result<()> {
         "严格模式赋值不抛（官方同形）"
     );
 
-    // ---- visuals：绘制记账/尺寸/sharedBuffer/上限拒绝（VISUAL 族）
+    // 检查 visual 绘制结果、大小、共享缓冲区和长度上限。
     let run = e.run_player(
         "p1",
         r#"[ (() => { const v = new RoomVisual('W1N1');
@@ -290,7 +280,7 @@ pub(super) fn m2b_closing_e2e_impl() -> anyhow::Result<()> {
     );
     assert_eq!(run.expr["value"][1], json!(0), "clear 恢复");
 
-    // ---- CostMatrix：序列化往返/clone 独立/钳制（COSTMATRIX 族 + UNDOC-_bits）
+    // 检查 CostMatrix 序列化往返、克隆独立性和数值范围限制。
     let run = e.run_player(
         "p1",
         r#"[ (() => { const m = new PathFinder.CostMatrix();

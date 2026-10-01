@@ -1,4 +1,6 @@
-//! 嵌入式 API 的集成测试（M0）：createShard → place → runPlayer → tick → 读状态。
+//! 嵌入式 API 的集成测试：创建分片、摆放对象、运行玩家、推进世界并读取结果。
+//!
+//! 所有场景由一个测试顺序调用，避免并行场景干扰进程级沙箱销毁计数。
 
 use serde_json::json;
 
@@ -31,7 +33,6 @@ mod stage_recovery_family;
 #[path = "embed_tests/stop_run_regression.rs"]
 mod stop_run_regression;
 
-// 串行链不变量：顶层唯一 #[test]；子模块 impl 经 glob 进根作用域，链体逐字节不动
 use dual_room_live_fire::*;
 use embed_channels_and_families::*;
 use embed_roundtrip_contract::*;
@@ -48,8 +49,7 @@ use stop_run_regression::*;
 
 #[test]
 fn embed_engine_suite() -> anyhow::Result<()> {
-    // 场景必须串行（真沙箱场景经 PlayerThreads 各占线程；进程级终局计数器
-    // 断言要求不并行污染——单测试串行不变量沿用 sandbox_tests 惯例）
+    // 沙箱销毁统计是进程级的；这些场景串行运行，避免统计被并行场景干扰。
     embed_engine_roundtrip_impl()?;
     embed_run_player_contract_impl()?;
     embed_create_shard_validation_impl()?;

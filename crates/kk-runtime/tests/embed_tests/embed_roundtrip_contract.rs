@@ -1,11 +1,9 @@
-//! B1 结构治理批自 embed_tests.rs 连续切块（串行链 impl；顶层唯一 #[test] 不变量
-//! 在 crate 根——本文件全部 fn 由根链按原调用序调用，不得加 #[test]）。
+//! 验证分片生命周期、玩家结果分类和对象查询的适配器契约。
+//! 场景由 `embed_engine_suite` 顺序调用。
 
 use super::*;
 
-/// A4-i spawn 族全链（prelude spawnCreep/renewCreep → intentsList 清洗 →
-/// settle/spawn.rs 执行器 → 投影回读）：孵化任务落库、能量扣费与涓流、
-/// 到点出生、renewCreep 的 ageTime 递延。
+/// 验证孵化任务、能量扣除、出生时间，以及 renewCreep 延长寿命。
 pub(super) fn embed_spawn_family_chain_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
@@ -19,9 +17,8 @@ pub(super) fn embed_spawn_family_chain_impl() -> anyhow::Result<()> {
     )?;
     let spawn_json = serde_json::to_string(&spawn_id)?;
 
-    // spawnCreep [WORK, WORK]：成本 200、needTime=3×2=6、spawnTime=0+6
-    // （run_player 的结算即发生）——孵化任务 + 雏形落库；扣费 200 后
-    // energyAvailable 100<300 → 免费涓流 +1 → 101
+    // 两个 WORK 成本 200、孵化耗时 6 tick；本轮结算创建孵化任务和 creep。
+    // 扣费后可用能量为 100，低于 300，因此补充 1 能量，最终为 101。
     let run = e.run_player(
         "p1",
         &format!("Game.getObjectById({spawn_json}).spawnCreep([WORK, WORK], 'child')"),
@@ -122,8 +119,8 @@ pub(super) fn embed_spawn_family_chain_impl() -> anyhow::Result<()> {
     assert_eq!(tombstones.len(), 1, "回收死亡产墓碑");
     assert_eq!(tombstones[0]["pos"]["x"], 24, "墓碑位置 = 死亡格");
     assert_eq!(tombstones[0]["creepName"], "rich", "尸体信息（creepName）");
-    // 契约面（vanilla TombstoneSnapshot）只有 kind/id/pos/creepName/deathTime/
-    // store/ticksToDecay 七键——creepBody 等引擎面字段不进查询快照
+    // 查询墓碑快照只包含 kind、id、pos、creepName、deathTime、store、ticksToDecay；
+    // 引擎保存的 creepBody 等字段不属于这个接口。
     assert_eq!(
         tombstones[0].as_object().unwrap().len(),
         7,
@@ -177,7 +174,7 @@ pub(super) fn embed_create_shard_validation_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// typed world + 真结算经 embed 通道可见：source 重生回满、creep TTL 死亡产墓碑。
+/// 检查通过嵌入式接口推进世界时，source 再生和 creep 到期死亡确实发生。
 pub(super) fn embed_real_settlement_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
@@ -204,11 +201,9 @@ pub(super) fn embed_real_settlement_impl() -> anyhow::Result<()> {
     e.tick(1)?;
     assert_eq!(e.find_in_room("W1N1", 101).len(), 1, "TTL 未到 creep 存活");
 
-    // 越过 TTL：creep 死亡——B3（官方 _die.js）：产墓碑承接全部资源（M1
-    // "资源直接掉地"灰区清偿）。body 2 件 ⇒ ticksToDecay = 2×5 = 10；TTL 死亡
-    // 的造价回收 lifeRate = 0.2×1/1500 → floor 后 0，store 只含携带 50 energy；
-    // 掉落只发生在墓碑衰减到点（此后每 tick 衰减 ceil(amount/ENERGY_DECAY)，
-    // 官方 energy/tick.js）
+    // creep 到寿命后生成墓碑。两个身体部件使墓碑存活 10 tick；
+    // 此时造价回收向下取整为 0，所以墓碑只含携带的 50 energy。
+    // 墓碑到期后才转为地上资源，随后逐 tick 衰减。
     e.tick(4)?;
     assert_eq!(e.find_in_room("W1N1", 101).len(), 0, "TTL 到期 creep 死亡");
     assert!(
@@ -261,8 +256,7 @@ pub(super) fn embed_real_settlement_impl() -> anyhow::Result<()> {
         "求值先于结算（上一 tick 视图）"
     );
 
-    // setTerrain 守卫：首个玩家 tick 之后拒绝且世界不变（screeps-ok 契约；
-    // DumbWorld 退役后此处是唯一测试锁定）
+    // 第一个玩家 tick 之后设置地形应失败，并保留原世界。
     let err = e.set_terrain("W1N1", vec![0; 2500]).unwrap_err();
     assert!(
         err.to_string().contains("第一个玩家 tick"),
@@ -349,10 +343,7 @@ pub(super) fn embed_engine_roundtrip_impl() -> anyhow::Result<()> {
         "energy:0 的 source 不算 active（官方 energy > 0）"
     );
     assert_eq!(e.find_in_room("W1N1", 105).len(), 2, "FIND_SOURCES 收全部");
-    // FIND_MY_STRUCTURES 在视角中立面不可判定 → 空（A3c 修掉 MY_* 与
-    // FIND_* 同臂的假绿面——screeps-ok find.ts 契约只支持 9 个中立常量；
-    // 旧断言"仅 controller"是灰区登记的假绿）。归属语义由玩家面承载（下方
-    // runPlayer 锁值：p1 的 MY_STRUCTURES = controller，source 不入）
+    // 嵌入式查询没有玩家身份，不能判断 MY_*；归属查询由下面的玩家视图检查。
     assert_eq!(
         e.find_in_room("W1N1", 108).len(),
         0,
@@ -367,9 +358,7 @@ pub(super) fn embed_engine_roundtrip_impl() -> anyhow::Result<()> {
     assert_eq!(run.expr["value"], 1, "玩家代码看见摆放的 creep");
     assert_eq!(e.get_game_time(), t0 + 1, "恰好推进 1 tick");
 
-    // 玩家面 FIND 族 per-viewer 锁（A3c）：MY_STRUCTURES=controller（source
-    // 不入——game.js:24 my===true 且 structureTypes 表无 source）、
-    // HOSTILE_STRUCTURES 空、MY_CREEPS=本人 creep
+    // 玩家视图中 MY_STRUCTURES 包含控制器但不含 source，MY_CREEPS 只含本人 creep。
     let run = e.run_player(
         "p1",
         "(()=>{ const r = Game.rooms['W1N1']; const st = r.find(FIND_MY_STRUCTURES).map(s=>s.structureType).sort(); \
@@ -381,11 +370,7 @@ pub(super) fn embed_engine_roundtrip_impl() -> anyhow::Result<()> {
     assert_eq!(v[2], 1, "MY_CREEPS 本人");
     assert_eq!(v[3], 1, "FIND_CREEPS 全部（本房仅一只）");
 
-    // Game.gcl 真值链（A3c）：upgrade 结算累点 PlayerState.gcl（settle/creep.rs
-    // 的 player.gcl += boosted）→ 下一 tick world.gcl 投影 → prelude 正变换
-    // （Game.gcl.progress）。行为探针：跨层链路而非单点锁值。upgradeController
-    // 的 prelude API 面仍是桩（A4 族漏网，批次报告登记归 API 补漏批）——意图
-    // 经 settle_external 直注（生产同形清洗路径），链路验证不受桩影响
+    // 直接注入升级意图，验证结算增加玩家 gcl 后，下一轮 Game.gcl.progress 随之变化。
     let upgrader_id = e.place_object(
         "W1N1",
         "creep",
@@ -476,10 +461,8 @@ pub(super) fn embed_run_player_contract_impl() -> anyhow::Result<()> {
         "tick 末序列化失败按契约归 runtime"
     );
 
-    // 官方 _parsed 生命周期（评审 P1 纠偏后定案）：RawMemory 对象每 tick 重建
-    // （runtime.js:102 是 _start 局部变量、make.js:160 每 tick 重调）——毒
-    // _parsed 单 tick 生效；下一 tick 不访问 Memory 时无 _parsed → 写回跳过、
-    // tick 成功，毒 raw 原样保留
+    // RawMemory 每轮重建。下一轮不访问 Memory 时，不会创建 _parsed 或尝试保存，
+    // 因此上一轮无法序列化的 Memory 不应使本轮表达式继续报错。
     let run = e.run_player("p1", "1")?;
     assert_eq!(
         run.expr["value"], 1,
@@ -519,10 +502,8 @@ pub(super) fn embed_run_player_contract_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// 查询面快照契约（screeps-ok common.ts + vanilla snapshots.ts 对照）：
-/// kind 映射、getter 剩余值/null 形态、正量 store、storeCapacity number、
-/// flag 不进查询面。embed 查询面（snapshot.rs）与 prelude 世界投影
-/// （world_json.rs）是两个消费面——本用例锁契约面的形状。
+/// 检查查询快照的类别、剩余倒计时、null、正量 store 和容量字段；flag 不返回快照。
+/// 该查询接口与注入玩家沙箱的世界 JSON 是不同的序列化接口。
 pub(super) fn embed_snapshot_contract_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
@@ -634,8 +615,7 @@ pub(super) fn embed_snapshot_contract_impl() -> anyhow::Result<()> {
     assert_eq!(snap["resourceType"], "energy");
     assert_eq!(snap["amount"], 40);
 
-    // mineral 经 structure 通道放置（适配器 placeMineral 真实路径）：kind 判
-    // structureType 而非透传 type（契约要求 kind:'mineral'）
+    // 通过 structure 类别摆放 mineral 时，快照类别须由 structureType 判断，不能直接照抄 type。
     let mineral_id = e.place_object(
         "W1N1",
         "structure",
@@ -645,8 +625,7 @@ pub(super) fn embed_snapshot_contract_impl() -> anyhow::Result<()> {
     assert_eq!(snap["kind"], "mineral", "structure 通道的 mineral 判 kind");
     assert_eq!(e.find_in_room("W1N1", 116)[0]["kind"], "mineral");
 
-    // 跨面锁定：prelude 玩家面的 FIND_STRUCTURES 同步排除 source/mineral
-    // （与查询面 matches_find 两层一致——官方 game.js:229-251 structureTypes 表）
+    // 玩家视图的 FIND_STRUCTURES 也应排除 source 和 mineral。
     let run = e.run_player(
         "p1",
         "Game.rooms['W1N1'].find(FIND_STRUCTURES).map(s => s.structureType).sort().join(',')",
@@ -658,7 +637,7 @@ pub(super) fn embed_snapshot_contract_impl() -> anyhow::Result<()> {
         run.expr
     );
 
-    // flag 不在查询面契约内（vanilla snapshotObject 无 flag 分支）
+    // 嵌入式对象查询不返回 flag 快照。
     let flag_id = e.place_object("W1N1", "flag", &json!({ "pos": [3, 3], "name": "f1" }))?;
     assert!(
         e.get_object(&flag_id).is_none(),
@@ -669,7 +648,7 @@ pub(super) fn embed_snapshot_contract_impl() -> anyhow::Result<()> {
         "FIND_FLAGS 不在查询面中性选择器内"
     );
 
-    // 玩家面不受查询面影响：prelude 仍能看见 flag 与 Game.flags
+    // 嵌入式查询不返回 flag，但玩家视图的 Game.flags 和 FIND_FLAGS 仍应包含它。
     let run = e.run_player(
         "p1",
         "[Game.flags ? Object.keys(Game.flags).length : -1, \

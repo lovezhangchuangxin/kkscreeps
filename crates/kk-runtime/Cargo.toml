@@ -1,6 +1,6 @@
 [package]
 name = "kk-runtime"
-description = "运行协调层：玩家执行编排、RunResult 统一提交点、真/假沙箱统一执行接口（ADR-013 决策 1）"
+description = "协调玩家沙箱执行、世界结算、候选提交和失败重试"
 version.workspace = true
 edition.workspace = true
 

@@ -1,9 +1,5 @@
-//! 2B 批 P1 e2e：terminal.send 校验序错误码链（013 矩阵形态的内部锁——
-//! 评审 3 P1 清偿：此前唯一锁是外部套件矩阵）+ 跨 tick 冷却 TIRED + 成功链
-//! （送达/成本/交易视图映射/credits getter——P1 交付面原零覆盖）。
-//! 官方对照：structures.js:714-745 / global-intents/market.js:15-95 /
-//! game/market.js:196-233。同 tick 多笔 intents.set 同名覆盖（map 语义）
-//! ——错误码链逐项独立调用，成功链恰留末笔。
+//! 验证 terminal.send 的错误码、冷却、运输成本和交易视图，以及市场订单生命周期。
+//! 同一 tick 的同名意图会覆盖，因此成功运输只保留最后一笔请求。
 
 use super::*;
 
@@ -22,7 +18,7 @@ pub(super) fn m2b2_terminal_send_e2e_impl() -> anyhow::Result<()> {
         &json!({ "pos": [25, 25], "structureType": "terminal", "owner": "p1",
                       "store": {"energy": 100000, "H": 1000} }),
     )?)?;
-    // 敌方 terminal（同房可见——NOT_OWNER 门）
+    // 同房敌方 terminal 可见，但发送请求应返回 NOT_OWNER。
     let foe = serde_json::to_string(&e.place_object(
         "W1N1",
         "structure",
@@ -45,9 +41,7 @@ pub(super) fn m2b2_terminal_send_e2e_impl() -> anyhow::Result<()> {
     )?)?;
     e.tick(1)?;
 
-    // ---- 第一段：无冷却前提下的错误码链（官方序：my → RCL → 房名 → 资源
-    // → 保有 → 冷却 → 能量 → description；组合序由套件 013 矩阵 36 变体锁，
-    // 此处锁单因错误码与门存在性）
+    // 逐项检查无冷却时的校验错误；每次只构造一个非法条件。
     let run = e.run_player(
         "p1",
         &format!(
@@ -81,9 +75,8 @@ pub(super) fn m2b2_terminal_send_e2e_impl() -> anyhow::Result<()> {
     // ---- 结算：H 500 送达 + 冷却挂 10
     e.tick(1)?;
 
-    // ---- 第二段：冷却期跨 tick 二发 → TIRED（API 时刻读的是上轮结算落的
-    // cooldownTime=10 > time）——同 tick 内二发不经此门（013 的
-    // cooldownBeforeNotEnoughEnergyCost 组合由套件锁）
+    // 下一 tick 再次发送时读取上一轮提交的冷却时间，应返回 TIRED。
+    // 同 tick 的第二次调用尚未结算，不能检验这个冷却限制。
     let run = e.run_player(
         "p1",
         &format!(
@@ -146,9 +139,7 @@ pub(super) fn m2b2_terminal_send_e2e_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// P2 e2e：Game.market 描述符镜头（SHAPE-GAME-007 只锁 dataProps 键集——
-/// 四 getter 的三标志/严格赋值面由本测试锁定：P6 评审镜头②的落点）+
-/// createOrder→订单生命周期→deal→交易 order 附带全链。
+/// 检查 Game.market 属性描述符、严格模式赋值，以及创建订单、交易和随附订单信息。
 pub(super) fn m2b2_market_book_e2e_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
@@ -174,8 +165,8 @@ pub(super) fn m2b2_market_book_e2e_impl() -> anyhow::Result<()> {
     }))?)?;
     e.tick(1)?;
 
-    // ---- 描述符镜头：四 getter enumerable+get-only+不可配置；方法字面量
-    // 三 true；严格赋值 getter 抛 TypeError
+    // 四个 getter 可枚举、无 setter、不可配置，严格模式赋值会抛 TypeError；
+    // 方法属性则可枚举、可配置、可写。
     let run = e.run_player(
         "p1",
         r#"[ ...['credits','incomingTransactions','outgoingTransactions','orders'].map(k => {

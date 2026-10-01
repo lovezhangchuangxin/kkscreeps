@@ -1,10 +1,9 @@
-//! B1 结构治理批自 embed_tests.rs 连续切块（串行链 impl；顶层唯一 #[test] 不变量
-//! 在 crate 根——本文件全部 fn 由根链按原调用序调用，不得加 #[test]）。
+//! 验证输入校验、Memory 行为，以及失败轮的玩家状态和重试缓存。
+//! 场景由 `embed_engine_suite` 顺序调用。
 
 use super::*;
 
-/// A5-core 片 1 行为探针：Memory/RawMemory/模块系统/Game 可写性的官方形态
-/// （对照 screeps-ok UNDOC-MEMHACK 族与官方 game.js/runtime.js 逐条）。
+/// 验证 Memory、RawMemory、模块加载和 Game 的属性行为。
 pub(super) fn a5_memory_module_forms_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
@@ -83,7 +82,7 @@ pub(super) fn a5_memory_module_forms_impl() -> anyhow::Result<()> {
         "毒 raw 原样保留（不写回）"
     );
 
-    // ④ RawMemory.set 双门消息形态（官方 runtime.js:110-114）
+    // RawMemory.set 分别检查字符串类型和 2MB 长度上限。
     let run = e.run_player(
         "p1",
         r#"try { RawMemory.set(5); 'no-throw' } catch (e) { e.message }"#,
@@ -131,7 +130,7 @@ pub(super) fn a5_memory_module_forms_impl() -> anyhow::Result<()> {
         run.expr
     );
 
-    // ⑥ spawn.memory 官方形态（structures.js:865-885，本批新增）
+    // spawn.memory 的写入应保存在 Memory.spawns 中。
     let spawn_id = e.place_object(
         "W1N1",
         "structure",
@@ -160,10 +159,8 @@ pub(super) fn a5_memory_module_forms_impl() -> anyhow::Result<()> {
         run.expr
     );
 
-    // ⑦ 盲区补锁（评审 3 清单）：RawMemory 每 tick 新建（对象身份）；require
-    // 负向（.js 补全/ ../ 均不存在→Unknown module 原名）；非对象 JSON 原样
-    // 保留（Memory === '5'）；顶层 __proto__=null（hasOwnProperty 不可用）；
-    // String 包装对象过 _.isString 门
+    // 另外检查 RawMemory 对象每轮重建、模块名不自动补全，
+    // 以及非对象 JSON、Memory 顶层原型和 String 包装对象的处理。
     let run = e.run_player("p1", r#"globalThis.__rm = RawMemory; 'captured'"#)?;
     assert_eq!(run.expr["value"], "captured");
     let run = e.run_player(
@@ -227,9 +224,7 @@ pub(super) fn a5_memory_module_forms_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// A6 结构读取面：isActive 官方四门 + 距离计数（utils.js:456-505）、place
-/// 通道 generic 结构 hits/hitsMax 缺省表、build 负 remaining 官方算术
-/// （ROAD-HITS-001 swamp/wall 的 quirk 通道：播种超限 → 负 effect 回钳完成）。
+/// 检查结构是否启用、默认耐久值，以及工地进度超限时的建造算术。
 pub(super) fn a6_isactive_hits_family_impl() -> anyhow::Result<()> {
     // ---- isActive：RCL 配额 + Chebyshev 距离计数（controller 在 [1,1]）----
     let mut e = EmbedEngine::new();
@@ -301,7 +296,7 @@ pub(super) fn a6_isactive_hits_family_impl() -> anyhow::Result<()> {
         run.expr
     );
 
-    // ---- place 通道 generic 结构 hits/hitsMax 缺省（读取面）----
+    // 检查通用结构默认的 hits 和 hitsMax。
     let mut e2 = EmbedEngine::new();
     e2.create_shard(&json!({
         "players": ["p1"],
@@ -332,7 +327,7 @@ pub(super) fn a6_isactive_hits_family_impl() -> anyhow::Result<()> {
         "structure",
         &json!({ "pos": [14, 10], "structureType": "lab", "owner": "p1" }),
     )?;
-    // 显式 hits 覆盖缺省（vanilla placeStructure 同款）；hitsMax 恒表值
+    // 显式 hits 覆盖默认耐久值，hitsMax 仍取结构常量。
     let tower_override = e2.place_object(
         "W1N1",
         "structure",
@@ -403,8 +398,7 @@ pub(super) fn a6_isactive_hits_family_impl() -> anyhow::Result<()> {
         "负 effect 能量反增 quirk（官方 5-(-1195)=1200）: {builder_snap:?}"
     );
 
-    // ---- build effect==0 两分支（评审 3 P2-2：摘除早退后的行为翻转面锁）----
-    // ① progress==total 精确相等：effect=0 → 一次 build 落成、能量不变
+    // progress 等于 total 时，建造效果为 0，仍应完成工地且不消耗能量。
     let mut e4 = EmbedEngine::new();
     e4.create_shard(&json!({
         "players": ["p1"],
@@ -440,9 +434,8 @@ pub(super) fn a6_isactive_hits_family_impl() -> anyhow::Result<()> {
         "effect=0 能量不动: {b4_snap:?}"
     );
 
-    // ② 零 WORK creep 的 build intent（API 层 ERR_NO_BODYPART 拦、结算侧仍
-    // 记 actionLog + 事件 amount 0——官方 build.js 无 WORK 门直通算术）：
-    // 经 settle_external 绕过 API 预检注入，锁结算侧行为
+    // 直接注入没有 WORK 部件的建造意图，绕过玩家 API 的身体部件预检。
+    // 结算仍应记录 actionLog 和 amount 为 0 的事件。
     let mut e5 = EmbedEngine::new();
     e5.create_shard(&json!({
         "players": ["p1"],
@@ -462,9 +455,7 @@ pub(super) fn a6_isactive_hits_family_impl() -> anyhow::Result<()> {
     let list = json!({ no_work.clone(): { "build": { "id": site5 } } });
     let batch = kk_engine::intent::IntentBatch::from_json("p1", &list);
     e5.settle_external(batch)?;
-    // 零 WORK：effect=0——工地不动、能量不动（economy 门 energy>0 已过），
-    // 但 actionLog + EVENT_BUILD(amount 0) 照记（官方无早退门；旧代码静默
-    // return——正向对照防空批假绿：事件必须在场）
+    // 建造效果为 0 时不改变工地或能量，但仍记录建造动作和事件。
     let site5_snap = e5.get_object(&site5).unwrap();
     assert_eq!(
         site5_snap["progress"], 0,
@@ -479,9 +470,7 @@ pub(super) fn a6_isactive_hits_family_impl() -> anyhow::Result<()> {
         "p1",
         "Game.rooms['W1N1'].getEventLog().filter((ev) => ev.event === 4).length",
     )?;
-    // EVENT_BUILD=4；零 WORK 路径的 amount 0 事件照记（官方无早退门的行为
-    // 翻转面锁——本 tick 的 run_player 自身不带 build intent，读的是上轮
-    // settle_external 落库的事件流）
+    // 当前玩家代码不发出建造意图；读取的是上一轮外部结算记录的 EVENT_BUILD。
     assert_eq!(
         run.expr["value"], 1,
         "零 WORK build 仍推 EVENT_BUILD(amount 0): {:?}",
@@ -490,8 +479,7 @@ pub(super) fn a6_isactive_hits_family_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// 原 kk-engine embed.rs mod tests 随迁（B0-5 移库）：元素级严格性、浮点
-/// 整数 rcl、非法 spec 保世界。
+/// 拒绝非法地形和分片输入，接受整数值的浮点 rcl；校验失败保留现有世界。
 pub(super) fn embed_shard_input_strictness_impl() -> anyhow::Result<()> {
     use kk_runtime::embed::terrain_codes_from_json;
     use serde_json::json;
@@ -508,7 +496,7 @@ pub(super) fn embed_shard_input_strictness_impl() -> anyhow::Result<()> {
     }
     assert!(terrain_codes_from_json(&json!("not-array")).is_err());
 
-    // JSON `3.0` 在 JS 语义里就是整数 3（vanilla 接受）——经玩家 API 面读回
+    // JSON 3.0 的 rcl 应接受为整数 3，并能通过玩家 API 读回。
     let mut engine = EmbedEngine::new();
     engine.create_shard(&json!({
         "players": ["p1"],
@@ -538,9 +526,8 @@ pub(super) fn embed_shard_input_strictness_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// ADR-013 复现场景①（部分提交三连之一）：p2 把 Game 搞成不可重定义 →
-/// p2 世界注入失败——**玩家级失败玩家级恢复**（不冒泡整轮 Err）；轮次照常
-/// 推进，p1 的 Memory 候选照常提交。
+/// 一个玩家把 Game 设为不可重定义后，其下一轮世界注入失败；
+/// 该失败不阻止世界推进，也不阻止另一玩家提交 Memory。
 pub(super) fn b05_partial_commit_inject_failure_impl() -> anyhow::Result<()> {
     use serde_json::json;
     use std::collections::BTreeMap;
@@ -549,8 +536,7 @@ pub(super) fn b05_partial_commit_inject_failure_impl() -> anyhow::Result<()> {
         "players": ["p1", "p2"],
         "rooms": [{ "name": "W1N1", "rcl": 3, "owner": "p1" }],
     }))?;
-    // 轮 A（武装轮）：p2 冻结 Game 的可重定义性——毒化当轮不生效（装配已过），
-    // 影响下一轮 beginTick 的 Game 重装（GPT 复现序列的两 tick 形态）
+    // 本轮世界已注入，再把 Game 设为不可重定义；下一轮重装 Game 时才会失败。
     let mut codes = BTreeMap::new();
     codes.insert(
         "p1".to_string(),
@@ -564,8 +550,7 @@ pub(super) fn b05_partial_commit_inject_failure_impl() -> anyhow::Result<()> {
     let runs = e.run_players(&codes)?;
     assert!(runs["p1"].executed, "武装轮 p1 正常");
     assert!(runs["p2"].executed, "武装轮 p2 正常（毒化下一轮生效）");
-    // 轮 B（毒化生效轮）：p2 世界注入失败——**玩家级失败玩家级恢复**（不冒泡
-    // 整轮 Err）；轮次照常推进，p1 的 Memory 候选照常提交
+    // p2 世界注入失败只影响自身；世界照常推进，p1 的 Memory 仍应提交。
     let mut codes = BTreeMap::new();
     codes.insert(
         "p1".to_string(),
@@ -588,9 +573,8 @@ pub(super) fn b05_partial_commit_inject_failure_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// ADR-013 复现场景②③（部分提交三连之二/三）：世界结算失败轮——先执行
-/// 玩家的 Memory/世界版本全部不变；重试**不重跑玩家代码**（执行次数=1），
-/// 只消费已缓存候选重试结算。
+/// 世界结算失败不提交 Memory；重试消费缓存，只执行玩家代码一次。
+/// 显式丢弃后也不得保留失败轮的 Memory 候选。
 pub(super) fn b05_partial_commit_settle_failure_impl() -> anyhow::Result<()> {
     use serde_json::json;
     let mut e = EmbedEngine::new();
@@ -625,9 +609,7 @@ pub(super) fn b05_partial_commit_settle_failure_impl() -> anyhow::Result<()> {
     assert_eq!(run_count, 1, "重试不重跑玩家（RUN 恰一次）");
     assert_eq!(e.get_game_time(), time_before + 1, "重试轮成功推进");
     assert!(!e.has_pending_round(), "提交后缓存清空");
-    // 提交验证：新一轮读回 n=2（缓存候选 1+1）；exec 计数=1 锁死「执行次数
-    // 恰一次」——即使假想的「协调器缓存 codes 重跑原代码」回归也会推高 exec
-    //（B0-5 评审 P2 清偿：console 计数与 Memory 计数双取证）
+    // 下一轮读回 n=2，exec=1；若重试重新运行原代码，exec 会增加，能检出重复执行。
     let run = e.run_player("p1", "({ n: Memory.n, exec: Memory.exec })")?;
     assert_eq!(run.expr["value"]["n"], 2, "缓存候选（n=2）在重试轮提交");
     assert_eq!(
@@ -635,17 +617,15 @@ pub(super) fn b05_partial_commit_settle_failure_impl() -> anyhow::Result<()> {
         "玩家代码执行次数恰一次（exec 计数）"
     );
 
-    // ④discard 臂（B0-5 评审 P2 清偿）：失败轮可显式丢弃——丢弃后世界仍停
-    // 在失败前、无 pending；新一轮全量重跑、pending 闸门解除。取证：失败轮 B
-    // 的 exec+1 随候选**被丢弃**（不提交），新一轮 code 重跑（exec+100 提交）
-    // → 读回 101（若 B 轮候选被误提交则是 102——两臂可区分）
+    // 显式丢弃后，世界停在失败前且没有缓存。新一轮只提交自己的 Memory 修改；
+    // 若失败轮 Memory 被提前写入，最后的计数会从 101 变成 102。
     e.fail_next_settle_for_test();
     assert!(
         e.run_player("p1", "Memory.exec = Memory.exec + 1; 'x'")
             .is_err()
     );
     assert!(e.has_pending_round());
-    // pending 闸门：变异/推进被拒（B0-5 评审 P1 清偿的锁定）
+    // 缓存失败轮存在时，世界修改和推进操作都应被拒。
     assert!(
         e.place_object("W1N1", "flag", &json!({ "pos": [10, 10], "name": "f" }))
             .is_err()
@@ -662,10 +642,8 @@ pub(super) fn b05_partial_commit_settle_failure_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// B0-6（外部评审清偿·重试缓存销毁）：被拒的重试请求不得销毁失败轮缓存——
-/// 键集校验先于 take。原实现 take 后 bail，缓存随之中毁：错误请求 → pending
-/// 丢失 → 原请求重试**重跑玩家代码**（探针：globalThis.n=2 而世界仅 +1 tick），
-/// 违 tick 契约「不得为重试再次运行玩家代码」+ 验收场景 3「执行次数=1」。
+/// 请求缓存之外的玩家应返回错误，但保留失败轮供原请求重试。
+/// 全局计数器区分缓存重试和重复执行：成功重试后执行次数仍为 1。
 pub(super) fn b06_rejected_retry_preserves_pending_impl() -> anyhow::Result<()> {
     use serde_json::json;
     use std::collections::BTreeMap;
@@ -697,9 +675,7 @@ pub(super) fn b06_rejected_retry_preserves_pending_impl() -> anyhow::Result<()> 
         "被拒的请求不得销毁缓存（B0-6：校验先于 take）"
     );
 
-    // 轮 C：原请求重试 → 消费缓存（返回执行 1 的 expr），玩家代码不再执行。
-    // 请求 code 故意用计数代码本身：旧 bug 形态（缓存被销毁）下此处会**重跑
-    // 计数**——expr=2、终检 n=2，双断言都是杀伤线（评审 3 P2-1 清偿）
+    // 重试仍传入计数代码；若错误请求丢掉了缓存，这里会重新执行并返回 2。
     let run = e.run_player("p1", counter)?;
     assert_eq!(
         run.expr["value"], 1,
@@ -708,8 +684,7 @@ pub(super) fn b06_rejected_retry_preserves_pending_impl() -> anyhow::Result<()> 
     );
     assert!(!e.has_pending_round(), "重试成功后缓存清空");
     assert_eq!(e.get_game_time(), 2, "warmup 1 + 重试轮推进 1");
-    // 执行次数终检：globalThis.n 仍为 1（V8 全局跨执行持久、不随世界回滚——
-    // b05 注入失败场景的 defineProperty 已锁该通道）
+    // V8 全局计数器不随世界回滚；值仍为 1 才能证明重试没有重复执行。
     let run = e.run_player("p1", "globalThis.n")?;
     assert_eq!(
         run.expr["value"], 1,
@@ -718,9 +693,7 @@ pub(super) fn b06_rejected_retry_preserves_pending_impl() -> anyhow::Result<()> 
     Ok(())
 }
 
-/// B0-6（外部评审清偿·TickInput 钉子）：失败轮缓存的结算输入在重试复用——
-/// signController 的 datetime 落**首次尝试**的墙钟（ADR-013 决策 5「重放用
-/// 记录值」），不再随重试重采样（原实现 settle_world 每次取 TickInput::now）。
+/// 失败轮重试应使用首次尝试的墙钟输入，使控制器签名时间早于重试开始时间。
 pub(super) fn b06_retry_reuses_recorded_tick_input_impl() -> anyhow::Result<()> {
     use serde_json::json;
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -735,7 +708,7 @@ pub(super) fn b06_retry_reuses_recorded_tick_input_impl() -> anyhow::Result<()> 
         "players": ["p1"],
         "rooms": [{ "name": "W1N1", "rcl": 3, "owner": "p1" }],
     }))?;
-    // signer creep 贴着 controller(1,1)（signController 邻接门，creeps.js:1087）
+    // signer 与控制器(1,1) 相邻，满足签名的距离要求。
     e.place_object(
         "W1N1",
         "creep",
@@ -743,8 +716,7 @@ pub(super) fn b06_retry_reuses_recorded_tick_input_impl() -> anyhow::Result<()> 
             "body": ["move"], "store": { "energy": 0 } }),
     )?;
     let sign_code = "Game.creeps['signer'].signController(Game.rooms['W1N1'].controller, 'b06')";
-    // 预热一轮：把首跑的沙箱装配耗时挡在 datetime 判窗外（评审 3 P2-2 清偿
-    // ——first_attempt_ms 与 TickInput::now() 的间隙=首轮执行耗时）
+    // 先预热，缩短首次计时起点到 TickInput::now() 之间的沙箱执行时间。
     e.run_player("p1", "'warmup'")?;
 
     // 轮 A：签名 intent + 结算失败 → 缓存轮记录首次尝试的 TickInput
@@ -752,7 +724,7 @@ pub(super) fn b06_retry_reuses_recorded_tick_input_impl() -> anyhow::Result<()> 
     e.fail_next_settle_for_test();
     let err = e.run_player("p1", sign_code).unwrap_err();
     assert!(err.to_string().contains("故障注入"), "{err}");
-    // 隔开两批墙钟：若重试重采样，datetime ≥ 重试起点（与记录值差 ≥ sleep 间隔）
+    // 间隔两次尝试的墙钟；若重试重新采样，签名时间将不早于重试起点。
     std::thread::sleep(Duration::from_millis(150));
     let retry_started_ms = now_ms();
     let run = e.run_player("p1", "'retry'")?;

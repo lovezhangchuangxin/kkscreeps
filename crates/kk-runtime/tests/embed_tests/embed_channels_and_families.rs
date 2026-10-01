@@ -1,12 +1,10 @@
-//! B1 结构治理批自 embed_tests.rs 连续切块（串行链 impl；顶层唯一 #[test] 不变量
-//! 在 crate 根——本文件全部 fn 由根链按原调用序调用，不得加 #[test]）。
+//! 验证玩家意图从沙箱传到结算，再出现在下一轮玩家视图中的完整过程。
+//! 场景由 `embed_engine_suite` 顺序调用。
 
 use super::*;
 
-/// M2A-A2 intent 通道端到端（tick 契约场景 1）：真实沙箱的 move/harvest 经
-/// 清洗、结算，下一轮玩家视图可见；假沙箱（ScriptedSandbox）与真沙箱走同一条
-/// 结算入口（Engine::tick 与 tick_with_intents 汇合于 settle_room），相同
-/// intent 序列产出相同世界转移。
+/// 真实沙箱的 move、harvest 意图经清洗和结算后，在下一轮玩家视图中可见。
+/// 另用脚本沙箱产生相同意图，比较两种入口的世界变化。
 pub(super) fn embed_intent_channel_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
@@ -157,8 +155,7 @@ pub(super) fn embed_intent_channel_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// 外部复审 P1-2/P1-3 修复的回归锁：per-viewer 视野裁切（不可见房/对象/集合）
-/// 与工地总量帽（伪造批量 room intent 也被 100 帽挡住）。
+/// 检查不可见房和对象不会出现在玩家视图中；直接注入工地意图也不能绕过数量上限。
 pub(super) fn embed_per_viewer_and_caps_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
@@ -190,7 +187,7 @@ pub(super) fn embed_per_viewer_and_caps_impl() -> anyhow::Result<()> {
     let v = &run.expr["value"];
     assert_eq!(v[0], "W1N1", "敌方房间不进 Game.rooms: {v:?}");
     assert_eq!(v[1], "mine", "Game.creeps 只收本人: {v:?}");
-    // getObjectById 对不可见对象返回 null（官方同构；== null 同时覆盖 undefined）
+    // 不可见对象应返回 null；== null 同时接受 undefined。
     assert_eq!(v[2], "true", "敌方对象 getObjectById 得 null: {v:?}");
 
     // p2 的视图对偶
@@ -202,8 +199,7 @@ pub(super) fn embed_per_viewer_and_caps_impl() -> anyhow::Result<()> {
     let run = e.run_player("p1", &format!("Game.getObjectById({mine_json}).my"))?;
     assert_eq!(run.expr["value"], true);
 
-    // P1-2：批量 room intent（engine 直驱，等价伪造面）被总量帽挡住——
-    // 120 条 createConstructionSite 只落 100
+    // 直接注入 120 条工地创建意图，也只能创建 100 个。
     let mut room_intents = Vec::new();
     for i in 0..120 {
         room_intents.push(json!({
@@ -222,10 +218,8 @@ pub(super) fn embed_per_viewer_and_caps_impl() -> anyhow::Result<()> {
         "MAX_CONSTRUCTION_SITES 总量帽：120 条只落 100"
     );
 
-    // 自家工地全集（官方 data.js:103 按 user 全量拉 + game.js:366-374）：工地
-    // 不授房视野（data.js:113-116），但 Game.constructionSites 收全部自家工地
-    // 含不可见房——两个语义正交（对抗评审 P2 的回归锁：world 破例导出 +
-    // buildGame visibleRooms 排除工地）
+    // 自家工地都应出现在 Game.constructionSites 中，即使所在房间不可见。
+    // 工地本身不授予房间视野，因此不能把这些房间加入 Game.rooms。
     let own_site_in_hidden_room = e.place_object(
         "W2N2",
         "constructionSite",
@@ -258,9 +252,7 @@ pub(super) fn embed_per_viewer_and_caps_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// A4-ii 资源族四方法端到端（prelude 换真 ↔ 执行器已有结算的接线）：
-/// transfer/withdraw/drop/pickup 的能量流经真实投影（含 extension 容量按
-/// rcl 折算的 prelude/执行器双源一致）。
+/// 验证 transfer、withdraw、drop、pickup 的资源流向和容量限制。
 pub(super) fn embed_resource_family_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
@@ -343,9 +335,7 @@ pub(super) fn embed_resource_family_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// A4-iv 移动杂项族闭环（prelude API → intentsList 清洗 → settle）：
-/// pull+move(puller) 配对位移（被拉者无 MOVE 照样动、疲劳归链拉者）；
-/// suicide 当 tick 死亡并掉落；say 免费且不影响位移。
+/// 验证 pull 与 move 配对位移、suicide 的墓碑和资源回收，以及 say 不影响移动。
 pub(super) fn embed_move_misc_family_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
@@ -434,10 +424,7 @@ pub(super) fn embed_move_misc_family_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// B4 合入冒烟锁值：embed place mineral/extractor 直通道（裸 kind——原落
-/// Generic 透传致 FIND 失配，B4 评审 3 P3-1 登记项清偿）与玩家面
-/// FIND_MINERALS/FIND_STRUCTURES 命中。并入主套件（embed 单测试不变量——
-/// 独立 #[test] 会留 LIFO 违规，A5-lite P2-I 同款教训）。
+/// 检查直接摆放 mineral、extractor 后，查询快照和玩家 FIND 都能识别其类型。
 pub(super) fn embed_mineral_direct_channel_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&serde_json::json!({
@@ -481,9 +468,7 @@ pub(super) fn embed_mineral_direct_channel_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// GPT 外部复审（74c16d5..d5de6ad）五条 P1 的清偿行为探针：P1-1 可见房/
-/// P1-2 tombstone·ruin 提取/P1-3 冷却预检/P1-5 raw 事件日志不可污染
-/// （P1-4 destroy 无事件由 settle 测试 destroy_structure_intent_paths 锁定）。
+/// 检查玩家视野、墓碑和遗迹提取、冷却预检，以及事件日志不被玩家修改。
 pub(super) fn embed_gpt_review_clearance_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&serde_json::json!({
@@ -595,9 +580,7 @@ pub(super) fn embed_gpt_review_clearance_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// 紧凑地形协议端到端（M2B 前置批 P3 评审清偿）：真路径（投影 b64 载荷 →
-/// prelude beginTick 解码 → terrainByRoom）的地形值断言——producer 形态
-/// （world_json 测试）与 consumer 夹具探针（sandbox_tests）之外的全链闭环。
+/// 检查紧凑地形从世界投影经 base64 编码和 prelude 解码后，仍保留原地形值。
 pub(super) fn terrain_compact_protocol_e2e_impl() -> anyhow::Result<()> {
     let mut terrain_codes = vec![0u32; 2500];
     terrain_codes[5 * 50 + 5] = 2; // (5,5) swamp（normalize 只强制四角墙）

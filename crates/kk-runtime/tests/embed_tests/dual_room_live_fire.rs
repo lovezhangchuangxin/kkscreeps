@@ -1,19 +1,8 @@
-//! 双房双玩家实弹验证（双房批片 2）：跨房 tick 合并规则——tick 契约验收
-//! 场景 2 三形态（一玩家影响两房 / 两玩家影响一房 / 无关房独立）+ 玩家
-//! 执行顺序不变性 + 多 tick 稳态与能量守恒。全部经 EmbedEngine 真沙箱
-//! 全链（per-viewer 投影 → V8 玩家代码 → intent 清洗 → 多房结算 → 统一
-//! 提交）；每场景独立引擎、teardown 必达。
+//! 使用真实玩家沙箱验证跨房间结算、执行顺序和失败恢复。
 //!
-//! 夹具口径：own 房 source 摆 3000/3000（有主房容量归一目标=3000）；野房
-//! 一律 `controller: false` 且 source 摆 4000/4000（无 controller 房容量
-//! 归一目标=KEEPER 4000——摆同值免归一差；野房若保留 controller 则归一
-//! NEUTRAL 1500 且钳 energy，口径会被污染）。controller 由 create_shard
-//! 硬编码在 (1,1)。
-//!
-//! 串行参考口径：现单线程协调器的既定序（玩家名序执行 + 意图 handle 序
-//! 合并 + 房名序结算）即参考；本模块钉「结果不依赖可打乱的自由度（执行
-//! 序经测试旋钮打乱）」+「语义正确（守恒核算）」，作为将来并行化批的
-//! 对齐基线。
+//! 有主房的 source 设为 3000/3000；无控制器房设为 4000/4000，
+//! 与结算时的容量归一化一致。创建分片的控制器位于 (1,1)。
+//! 顺序测试只改变玩家执行顺序；意图仍按玩家名合并，房间仍按房名结算。
 
 use std::collections::BTreeMap;
 
@@ -60,10 +49,7 @@ fn controller_progress(e: &EmbedEngine, room: &str) -> i64 {
         .unwrap_or(0)
 }
 
-/// 主负载脚本：有能走 upgrade（须 controller）、空仓走 harvest（满仓即停
-/// ——超容采集的掉落/衰减路径由引擎级测试锁定
-/// settle_tests/combat_heal.rs 的 harvest_source_mixed_holding_overflow_
-/// drops_energy_only 等，本链守恒式保持无缺项）；返回可见房名表（JSON 串）。
+// 有能量时升级，空仓时采集，满仓时停采；不产生超容掉落，便于核算能量收支。
 const DUAL_CODE: &str = r#"
 Memory.mark = Game.time;
 const rooms = Object.keys(Game.rooms).sort();
@@ -78,8 +64,7 @@ for (const name in Game.creeps) {
 JSON.stringify(rooms)
 "#;
 
-/// 纯采集脚本（野房无 controller，upgrade 臂不可达）；带 memory 标记
-///（顺序不变性的跨玩家状态面比对用）与满仓即停门（守恒式无缺项）。
+// 纯采集脚本；满仓停采，避免掉落影响收支核算。Memory 标记用于比较各玩家结果。
 const HARVEST_CODE: &str = r#"
 Memory.mark = Game.time;
 const rooms = Object.keys(Game.rooms).sort();
@@ -99,10 +84,8 @@ fn codes_for(player: &str, code: &str) -> BTreeMap<String, String> {
     m
 }
 
-/// 场景 A「一玩家影响两房」（验收场景 2 形态一）：p1 于 own 房 W0N1
-/// （upgrade 臂）与野房 W1N1（harvest 臂）各有一 creep——同一 RunResult
-/// 携带两房对象级意图，合并结算后两房各自推进；可见性=两房（野房经 creep
-/// 授视野而非所有权）。
+/// 同一玩家的两个 creep 分别采集和升级，验证一个运行结果能影响两房。
+/// 野房的视野来自 creep，不来自房间所有权。
 pub(super) fn dual_a_one_player_two_rooms_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
@@ -112,8 +95,7 @@ pub(super) fn dual_a_one_player_two_rooms_impl() -> anyhow::Result<()> {
             { "name": "W1N1", "controller": false },
         ],
     }))?;
-    // W0N1：controller(1,1) 硬编码；source(2,2)+creep(2,3)——采集/升级
-    // 两臂都在程内（harvest≤1、upgrade≤3）
+    // creep(2,3) 距 source(2,2) 为 1，距 controller(1,1) 为 2；采集和升级都在范围内。
     e.place_object(
         "W0N1",
         "structure",
@@ -126,7 +108,7 @@ pub(super) fn dual_a_one_player_two_rooms_impl() -> anyhow::Result<()> {
         &json!({ "pos": [2, 3], "name": "up1", "owner": "p1",
             "body": ["work", "carry", "move"], "store": { "energy": 50 } }),
     )?;
-    // W1N1：野房（controller:false → 脚本 upgrade 分支不可达）纯采集臂
+    // W1N1 没有控制器，因此脚本只执行采集。
     e.place_object(
         "W1N1",
         "structure",
@@ -175,9 +157,7 @@ pub(super) fn dual_a_one_player_two_rooms_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// 场景 B「两玩家影响一房」（形态二）：p1/p2 各有 own 房（仅 controller），
-/// 双方 creep 共处野房 SHARED 采同一 source——竞争扣减=两者之和（意图
-/// 按玩家名序处理）；两玩家各自可见 own 房+SHARED。
+/// 两个玩家在共享房采集同一 source，验证按玩家名处理意图时的竞争结果。
 pub(super) fn dual_b_two_players_one_room_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
@@ -227,9 +207,8 @@ pub(super) fn dual_b_two_players_one_room_impl() -> anyhow::Result<()> {
     assert_eq!(creep_energy_by_owner(&e, "W2N1", "p2"), 2, "c_p2 +2");
     e.teardown();
 
-    // 稀缺变体（评审 3 P1-4 清偿）：source=2 只够一人——意图按玩家名序
-    // 处理（settle 玩家名序），p1 先采尽、p2 颗粒无收；这是「玩家名序」
-    // 处理序的真杀伤线（充裕 source 下任意序同果）
+    // source 只有 2 能量，按玩家名处理时 p1 采尽、p2 得不到能量。
+    // 充裕资源无法区分处理顺序，因此另设这个竞争场景。
     let mut s = EmbedEngine::new();
     s.create_shard(&json!({
         "players": ["p1", "p2"],
@@ -276,12 +255,7 @@ pub(super) fn dual_b_two_players_one_room_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// 场景 C「无关房先完成」（形态三）：B 布局 + 两个独居远房——p3 居
-/// E9N9（字典序在共享房 W2N1 **之前**结算=「先完成」取向）、p4 居 W9N9
-///（字典序在 W2N1 **之后**=「后完成」取向，评审 3 P1-2 清偿的双向覆盖）。
-/// 断言独立：两远房终态各与「单独跑」逐值一致（同 tick 跨房隔离——结算
-/// 逐房克隆自已提交态的结构性保证，钉成 embed 级回归）；SHARED 竞争终态
-/// 与「无远房跑」逐值一致。
+/// 共享房前后各添加一个独立房，与单独运行的结果比较，检查跨房状态隔离。
 pub(super) fn dual_c_unrelated_room_independent_impl() -> anyhow::Result<()> {
     const TICKS: u64 = 5;
     // 完整世界：p1/p2 竞争 W2N1 + p3 独居 E9N9（先结算）+ p4 独居 W9N9（后结算）
@@ -445,17 +419,12 @@ pub(super) fn dual_c_unrelated_room_independent_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// 顺序不变性（验收场景 2 后半）：B 世界以测试旋钮打乱执行序（p2 先于
-/// p1 投影+执行）——终态逐值与名序执行一致（意图合并序固定=handle 序、
-/// 结算序固定=房名序；打乱的只有玩家完成序——b 引擎建房数组序也同步
-/// 打乱作第二自由度，但 rooms BTreeMap 使其语义惰性）。**双臂**（外部复审 P1
-/// 清偿）：充裕臂的可交换负载证明粗粒度一致；**稀缺臂**（source=2 只够
-/// 一人）才是完成序敏感负载——若协调器按完成顺序处理意图，反序引擎将
-/// 得 (p1,p2)=(0,2)，断言即红。memory 用玩家区分标记（交叉错接可辨）。
+/// 反转玩家执行顺序，比较世界结果和各玩家 Memory。
+/// source 只有 2 能量的场景用来区分执行顺序与意图处理顺序：始终应由 p1 先采到。
 pub(super) fn dual_execution_order_invariance_impl() -> anyhow::Result<()> {
     const TICKS: u64 = 3;
 
-    // ── 充裕臂 ──
+    // 资源充裕时，两名玩家都能采集。
     let mut a = EmbedEngine::new();
     a.create_shard(&json!({
         "players": ["p1", "p2"],
@@ -496,7 +465,7 @@ pub(super) fn dual_execution_order_invariance_impl() -> anyhow::Result<()> {
     }
     b.set_execution_order_for_test(Some(vec!["p2".to_string(), "p1".to_string()]));
 
-    // 玩家区分标记（外部复审 P1 清偿：交叉错接可辨——两玩家 memory 值不同）
+    // 为两个玩家写入不同 Memory 标记，以便发现结果被交叉提交。
     let mut codes = BTreeMap::new();
     for (p, tag) in [("p1", "A"), ("p2", "B")] {
         codes.insert(
@@ -512,8 +481,7 @@ pub(super) fn dual_execution_order_invariance_impl() -> anyhow::Result<()> {
         a.run_players(&codes)?;
         b.run_players(&codes)?;
     }
-    // 旋钮生效取证：观测门控后（复审 P2-2 清偿——默认路径零分配、旋钮
-    // 启用才记录）默认引擎 a 返回 None、旋钮引擎 b 返回注入序
+    // 默认引擎不记录覆盖顺序；覆盖引擎应返回设置的排列。
     assert_eq!(
         a.last_execution_order_for_test(),
         None,
@@ -572,9 +540,8 @@ pub(super) fn dual_execution_order_invariance_impl() -> anyhow::Result<()> {
     a.teardown();
     b.teardown();
 
-    // ── 稀缺臂（复审 P1 清偿）：source=2 只够一人——完成序敏感负载 ──
-    // 意图合并序固定=玩家名序：无论执行完成序如何，p1（名序在先）足额、
-    // p2 颗粒无收。若按完成顺序处理意图，反序引擎将得 (0,2)，断言即红
+    // source 只有 2 能量时，反转执行顺序也应由 p1 采尽。
+    // 若意图改为按执行完成顺序处理，结果会从 (2,0) 变成 (0,2)。
     let mut c = EmbedEngine::new();
     c.create_shard(&json!({
         "players": ["p1", "p2"],
@@ -636,13 +603,8 @@ pub(super) fn dual_execution_order_invariance_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// 多 tick 稳态（评审 3 P2-2 清偿：A 世界 + B 竞争世界双形）：A=单玩家
-/// 两房 ×50 tick，恒等式 Δsource + Δstore + Δprogress = 0（progress 计为
-/// 能量汇，1 work part 每 upgrade 恰 1:1）；B=双玩家共享房 ×50 tick，
-/// Δsource = Δstore_p1 + Δstore_p2。窗口 50=满仓停采分界（carry 50 /
-/// 每 tick 2 ≈ tick 25）的两倍——覆盖 harvest→停的两态；脚本满仓即停
-/// （无掉落/衰减项，超容掉落路径归引擎级测试 combat_heal.rs）；窗口内
-/// source 不触 300-tick 再生回填、无 spawn/transfer 旁路——恒等式无缺项。
+/// 连续运行 50 tick，检查 source、creep 和控制器之间的能量收支。
+/// 窗口覆盖满仓后停采，但不触发 source 再生；脚本不超容采集，故无需计入掉落和衰减。
 pub(super) fn dual_multi_tick_conservation_impl() -> anyhow::Result<()> {
     const TICKS: u64 = 50;
     let mut e = EmbedEngine::new();
@@ -752,8 +714,7 @@ pub(super) fn dual_multi_tick_conservation_impl() -> anyhow::Result<()> {
             + (creep_energy_by_owner(&b, "W2N1", "p2") - bst_p2_0),
         "B 竞争世界守恒：Δsource = Δstore_p1 + Δstore_p2"
     );
-    // 正锚（外部复审 P2 清偿——恒等式对整臂空转恒真，须独立锚定采集
-    // 真实发生）：两人各满仓 50（carry 容量），总采集恰 100、末段停采
+    // 收支等式在无人采集时也成立，因此另检查两人各采满 50，总采集量为 100。
     assert_eq!(
         creep_energy_by_owner(&b, "W2N1", "p1"),
         50,
@@ -770,10 +731,7 @@ pub(super) fn dual_multi_tick_conservation_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// 对象生命周期（片 3，**双房两联装**——外部复审 P1 清偿：原单房实现
-/// 与方案「双房上下文」承诺不符）：p1 同时在 W0N1 与 W1N1 各持
-/// spawn+builder+工地——同轮跨房孵化/建造，分别断言生命周期、资源变化，
-/// 并断言两房新对象 id 全局唯一（跨房 id 分配器语义）。
+/// 两房同轮孵化和建造，检查资源消耗、对象生命周期及跨房新 ID 的唯一性。
 pub(super) fn dual_lifecycle_spawn_and_construction_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
@@ -783,9 +741,8 @@ pub(super) fn dual_lifecycle_spawn_and_construction_impl() -> anyhow::Result<()>
             { "name": "W1N1", "rcl": 4, "owner": "p1" },
         ],
     }))?;
-    // 两房同构负载：spawn(3,3) + builder(3,2)（压住 TOP 格——出生判别力
-    // 面，R1-P2-2 清偿：directions [LEFT] 应落 (2,3)；directions 被静默
-    // 丢弃时缺省序首空格为 (4,2)，断言即红）+ 工地(1,2 progress 2990)
+    // builder 占住 spawn 上方，指定 LEFT 应在 (2,3) 出生；
+    // 忽略方向而使用默认顺序会选 (4,2)，因此这个布局能检出方向丢失。
     for room in ["W0N1", "W1N1"] {
         e.place_object(
             room,
@@ -799,8 +756,7 @@ pub(super) fn dual_lifecycle_spawn_and_construction_impl() -> anyhow::Result<()>
             &json!({ "pos": [3, 2], "name": format!("builder_{room}"), "owner": "p1",
                 "body": ["work", "carry", "move"], "store": { "energy": 20 } }),
         )?;
-        // 工地：预置 progress 2990（总量 3000）——两个 build tick 即转正
-        //（API 建造面为 stub，见 §5 登记）
+        // 工地预置 progress 2990、总量 3000，两个 build tick 后应成为结构。
         e.place_object(
             room,
             "constructionSite",
@@ -900,11 +856,8 @@ for (const roomName of Object.keys(Game.rooms).sort()) {
     Ok(())
 }
 
-/// 结算失败恢复·双房全链（片 3，验收场景 3 的多房形态）：房级注入
-/// （W2N1 名序在后）→ **先结算房 W1N1 的良好结果也整体回退**（两阶段
-/// 跨房提交）→ 世界/时间保旧 → 重试只重结算（执行恰一次，globalThis
-/// 计数）→ 两房一并提交；memory 候选随缓存、失败时点保旧由尾段 discard
-/// 臂断言（b05 单房同构）。
+/// 后结算房失败时，前一房的结果也不得发布；重试一并提交两房且不重跑玩家代码。
+/// 丢弃失败轮的场景另检查 Memory 未提前提交。
 pub(super) fn dual_room_failure_recovery_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
@@ -990,7 +943,7 @@ if (c.store.getFreeCapacity() > 0) c.harvest(c.room.find(FIND_SOURCES)[0]);
     );
     assert_eq!(e.get_game_time(), t0 + 1, "重试恰推进一 tick");
     assert!(!e.has_pending_round(), "候选已消费");
-    // 执行恰一次的终检：读回两沙箱计数器（轮1+轮2 共 2 次，无第 3 次）
+    // 两轮执行后各沙箱计数器都应为 2；重试结算不能使它增加到 3。
     let mut probe = BTreeMap::new();
     probe.insert(
         "p1".to_string(),
@@ -1006,9 +959,7 @@ if (c.store.getFreeCapacity() > 0) c.harvest(c.room.find(FIND_SOURCES)[0]);
         assert_eq!(v, vec![2, 2], "{label} 执行恰两次（轮1+轮2），失败轮未重跑");
     }
 
-    // memory 失败时点保旧（评审 3 P1-1 清偿，b05 单房 discard 臂的双房
-    // 形态）：再注入失败 → 轮 3 执行（计数+1）但 memory 候选随缓存 →
-    // 显式 discard → 读回 Memory.k 仍为 2（失败轮候选未提交、丢弃不落盘）
+    // 再次失败后显式丢弃，再读 Memory.k 应仍为 2，证明失败候选未提前提交。
     e.fail_next_settle_for_test();
     e.run_players(&codes).unwrap_err();
     assert!(e.has_pending_round());
@@ -1037,10 +988,7 @@ if (c.store.getFreeCapacity() > 0) c.harvest(c.room.find(FIND_SOURCES)[0]);
     Ok(())
 }
 
-/// B0-6 三件事的双房双玩家形态（片 3）：①被拒重试不销毁缓存（键集含
-/// pending 外玩家 → bail 且缓存幸存）②TickInput 随失败轮缓存（重试复用
-/// 记录值——signController datetime 早于重试起点）③两房意图一并提交。
-/// （方案③停跑回充候选化的 embed 驱动归可选片 O3。）
+/// 双房失败轮中，检查错误重试保留缓存、签名复用首次墙钟，以及两房一并提交。
 pub(super) fn dual_b06_variants_impl() -> anyhow::Result<()> {
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
     let now_ms = || {
@@ -1058,8 +1006,7 @@ pub(super) fn dual_b06_variants_impl() -> anyhow::Result<()> {
             { "name": "E1N1", "rcl": 1, "owner": "p3" },
         ],
     }))?;
-    // p1：signer 贴 controller(1,1)（邻接门）；p2：野房采集；p3：注册但
-    // 无对象无动作（own 房 controller 授视野）
+    // p1 的 signer 与控制器相邻，p2 在野房采集，p3 已注册但不参与首次执行。
     e.place_object(
         "W1N1",
         "creep",

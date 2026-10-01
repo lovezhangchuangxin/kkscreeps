@@ -1,11 +1,4 @@
-//! M2B 扩面 P4 e2e：结构读取面全链——适配器 setup 契约（ticksToDecay
-//! 覆写/容器-壁垒默认/link cooldown 回程）、Generic 折叠 getter 族
-//!（container store+ticksToDecay、lab 矿物双 getter + 容量对、
-//! Resource.energy 别名键）、link 冷却计数器逐 tick 递减、衰减结算短窗死亡
-//! 落地。
-//! 官方对照：structures.js:146-158/:303-313/:709-713、store.js:28-35、
-//! resources.js:36、processor.js:365/:369/:378/:389、
-//! containers/roads/ramparts/links tick.js。
+//! 验证结构默认容量、衰减和冷却字段如何出现在查询快照与玩家视图中。
 
 use super::*;
 
@@ -18,7 +11,7 @@ pub(super) fn m2b_structure_readfaces_e2e_impl() -> anyhow::Result<()> {
     }))?;
 
     // setup 契约：默认钟——有主房容器 500（CONTAINER_DECAY_TIME_OWNED）、
-    // 野房容器 100、壁垒 100；覆写钟 5（一 tick 后读 4）；link cooldown 7
+    // p1 看不到野房容器，但宿主快照接口可以读取；在玩家运行推进倒计时前先检查初始值。
     let c_owned = serde_json::to_string(&e.place_object(
         "W1N1",
         "structure",
@@ -118,24 +111,20 @@ pub(super) fn m2b_structure_readfaces_e2e_impl() -> anyhow::Result<()> {
         serde_json::Value::Null,
         "非 energy 堆无别名键（官方 o.energy undefined）"
     );
-    // lab 的 energyCapacity 读 storeCapacityResource.energy（官方
-    // structures.js:305 口径，2000）——装配兜底必须照此读，读原始键恒 0
+    // lab.energyCapacity 由 storeCapacityResource.energy 得到，不能读取原始对象的 energyCapacity。
     assert_eq!(v[6], 2000, "lab energyCapacity = LAB_ENERGY_CAPACITY");
-    // getCapacity() 无参是 `storeCapacityResource ? null : storeCapacity`
-    //（store.js:31）——平面容量与 per-resource 容量**成对落**才得官方 null
+    // 存在按资源容量表时，无参数 getCapacity() 返回 null，不能改成返回总容量。
     assert_eq!(
         v[7],
         serde_json::Value::Null,
         "lab store.getCapacity() 为 null"
     );
-    // lab 特例（vanilla placeStructure :1122-1128）：spec.store 带矿物 →
-    // storeCapacityResource 补缺失矿物的 LAB_MINERAL_CAPACITY(3000)。已存
-    // 矿物读数与回退式恒等（3000 两条路径同值）；**槽绑定**才是可观测面——
-    // 下方 STORE-BIND 语义由快照形态断言锁定（摘掉填充则 U/L 键消失转红）
+    // lab 的 store 含矿物时，应为缺失的矿物容量补充 3000。
+    // 单查已存矿物容量无法区分默认回退与实际补充，所以下面还检查容量键是否存在。
     assert_eq!(v[8], 3000, "lab getCapacity('U') = LAB_MINERAL_CAPACITY");
     assert_eq!(v[9], 3000, "lab getCapacity('L') 同式（多矿物全填）");
-    // 槽绑定可观测面：ΣstoreCapacityResource（2000+3000+3000）≥ flat 5000 →
-    // 未存矿物 'O' 读 0→null（STORE-BIND-002 语义）。摘掉填充则错读 3000
+    // 矿物容量已绑定到 U、L 后，未存储的 O 应返回 null；
+    // 若漏填这两个容量键，O 会错误地得到默认矿物容量 3000。
     assert_eq!(
         v[10],
         serde_json::Value::Null,
@@ -144,8 +133,7 @@ pub(super) fn m2b_structure_readfaces_e2e_impl() -> anyhow::Result<()> {
     // link 的 cooldown 是每 tick 递减计数器（官方 links/tick.js:11-22）：
     // 放置 7 → 两 tick 结算后 5（run1 一 tick + tick(1) 一 tick）
     assert_eq!(v[11], 5, "link cooldown 每 tick 递减（非静态回读 7）");
-    // 快照契约面：storeCapacityResource 携带矿物键（vanilla DB 形态）——
-    // 摘掉放置面填充则 U/L 键消失，本断言转红（判别力锚点）
+    // 查询快照也须保留 U、L 容量键，直接检查实际填充，避免默认容量回退掩盖遗漏。
     let lab_snap = e.get_object(lab.trim_matches('"')).expect("lab 快照");
     assert_eq!(
         lab_snap["storeCapacityResource"],
@@ -177,12 +165,8 @@ pub(super) fn m2b_structure_readfaces_e2e_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// 结构 defaults 对账探针（官方 getStructureDefaults，vanilla
-/// `adapters/vanilla/index.ts:1910-2008` 覆盖 16 类）。typed 变体族
-/// （spawn/extension/storage）**不走** ELSE 兜底——容量键由投影派生
-///（`world_json.rs:450` spawn storeCapacityResource / `:473` extension 按
-/// rcl / `:519` storage storeCapacity）。本测锁死这条链路的读数，防「defaults
-/// 声称对齐、实际无源」的静默偏差（该模式本轮已在 lab 兜底上踩过一次）。
+/// 检查默认容量从对象初始化经世界投影到玩家 getter 的结果。
+/// spawn、extension、storage 使用专门的投影逻辑，需与通用结构的默认字段分别验证。
 pub(super) fn m2b_structure_defaults_probe_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({

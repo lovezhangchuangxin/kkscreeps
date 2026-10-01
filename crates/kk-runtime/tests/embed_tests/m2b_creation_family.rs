@@ -1,8 +1,5 @@
-//! M2B 扩面 P2 全链 e2e：创建族（createFlag/createConstructionSite 四 API 面
-//! 与旗按玩家私有可见性）、Flag/Site 增删改、findClosestByRange、
-//! room.storage/terminal 回填、Room.findPath 直线桩、Room.toJSON。
-//! 官方对照：rooms.js:978-1097/1546-1576/540-549、flags.js:58-91、
-//! construction-sites.js:50-62。run_players 一次调用即结算一 tick。
+//! 验证旗帜和工地的创建、修改、删除、可见性，以及房间查询辅助方法。
+//! 每次 `run_players` 都会结算一个 tick。
 
 use std::collections::BTreeMap;
 
@@ -40,8 +37,7 @@ pub(super) fn m2b_create_flag_and_site_e2e_impl() -> anyhow::Result<()> {
         "{:?}",
         run.console
     );
-    // 本地 Game.flags 装配（官方 rooms.js:1022——同 tick 立即可读；壳 .room
-    // 回填 Room 实例——官方 RoomObject.call 同形，清偿复审 P3 锁）
+    // 创建旗帜后，同 tick 的 Game.flags 应立即可读，其 room 指向当前 Room 实例。
     assert!(
         run.console.iter().any(|l| l.contains("sametick=home")),
         "{:?}",
@@ -89,9 +85,7 @@ pub(super) fn m2b_create_flag_and_site_e2e_impl() -> anyhow::Result<()> {
     assert_eq!(v2[0], true, "p2 见自家同名 home 旗（per-user 集合）");
     assert_eq!(v2[1], 1, "p2 的 FIND_FLAGS 只见自家");
 
-    // tick3：旗换色 + 工地 API 删除（setColor 与 setPosition 不同 tick——
-    // 同 tick 时组序处理下第二个同名 createFlag 输给第一个，官方同形；
-    // 该语义由引擎级测试的组序用例另行锁定）
+    // 旗换色与改位置分两轮调用，避免同 tick 的同名创建意图处理顺序影响本场景。
     let run = e.run_player(
         "p1",
         r#"
@@ -127,9 +121,7 @@ pub(super) fn m2b_create_flag_and_site_e2e_impl() -> anyhow::Result<()> {
     assert_eq!(v[0], 40, "移位生效 x");
     assert_eq!(v[1], 40, "移位生效 y");
     assert_eq!(v[2], 0);
-    // tick6：不可见房自家旗双断言（三路评审 P2 清偿）：官方 flags 按 user
-    // 全局查询（data.js:140）——旗在 Game.flags 存活；旗不授房视野
-    //（data.js:113-116 跳过表）——W2N2 不进 Game.rooms
+    // 自家旗帜即使在不可见房仍出现在 Game.flags；旗帜不授予视野，房间不进入 Game.rooms。
     let run = e.run_player(
         "p1",
         r#"[ !!Game.flags['home'], Game.rooms['W2N2'] === undefined, Game.flags['home'].remove() ]"#,

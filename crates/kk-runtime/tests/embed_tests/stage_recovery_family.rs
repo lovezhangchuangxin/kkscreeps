@@ -1,8 +1,5 @@
-//! A1/A2 批（mod-plane-batches 判据）：段边界故障注入的 embed 全链——
-//! 失败轮世界不动、候选缓存、重试不重跑玩家代码。取 Market/Validate/
-//! Publish 三段（settle_market 之后或入口——市场回退语义由引擎级测试
-//! 锁定，A2 起为真候选的结构性保证，本链验证段级注入→恢复态→重试经
-//! embed 全链）。串行链 impl（顶层唯一 #[test] 在 crate 根）。
+//! 在 Market、Validate、Publish 阶段注入失败，验证世界保留、缓存重试和恢复状态。
+//! 场景由 `embed_engine_suite` 顺序调用。
 
 use kk_engine::RunState;
 use kk_engine::TickStage;
@@ -44,12 +41,8 @@ pub(super) fn stage_recovery_family_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// A1 评审清偿（R2/R3 P1）：恢复态与 embed pending 的两门分叉场景——
-/// settle_external 失败不缓存 pending、引擎落 NeedsRecovery。验证：
-/// 恢复期间世界/市场变异被 no_open_round 拒（place_market_order 的市场域
-/// 漏洞随之封死）；出路①重试结算（世界未变 ⇒ 引擎门放行）、出路②
-/// discard 显式放弃恢复。此前形态：变异放行 → 代际 bump → 引擎门与
-/// abandon 双拒 → 永久楔死。
+/// 外部结算失败时没有玩家缓存，但引擎仍处于恢复状态。
+/// 此时修改世界和市场都应被拒；重试结算或显式丢弃后允许继续使用。
 pub(super) fn stage_recovery_escape_route_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
@@ -58,7 +51,7 @@ pub(super) fn stage_recovery_escape_route_impl() -> anyhow::Result<()> {
     }))?;
     e.run_player("p1", "'warmup'")?;
 
-    // settle_external 失败：引擎恢复态、embed 无 pending（两门分叉）
+    // 外部结算失败进入引擎恢复状态，但没有玩家候选缓存。
     e.fail_next_settle_stage_for_test(TickStage::Settle);
     assert!(e.settle_external(IntentBatch::default()).is_err());
     assert!(matches!(
@@ -67,8 +60,8 @@ pub(super) fn stage_recovery_escape_route_impl() -> anyhow::Result<()> {
     ));
     assert!(!e.has_pending_round(), "settle_external 不缓存候选");
 
-    // 恢复期间变异被拒（三个 no_open_round 调用点逐一——place_market_order
-    // 是 P1-b 市场域漏洞的原始向量，单独改回旧门时此臂红）
+    // 恢复期间分别检查对象摆放、市场订单注入和地形修改均被拒。
+    // 市场修改不改变世界 generation，也必须由嵌入式接口阻止。
     let err = e
         .place_object(
             "W1N1",
@@ -89,7 +82,7 @@ pub(super) fn stage_recovery_escape_route_impl() -> anyhow::Result<()> {
     );
     let err = e.set_terrain("W1N1", vec![0; 2500]).unwrap_err();
     assert!(err.to_string().contains("恢复态"), "setTerrain: {err}");
-    // 出路①：重试结算（世界未变 ⇒ 引擎门放行）→ 恢复为净态，变异解禁
+    // 重试成功后引擎恢复为已提交状态，允许修改世界。
     e.run_player("p1", "'after-recovery'")?;
     assert!(matches!(
         e.engine_run_state_for_test(),
@@ -128,9 +121,7 @@ pub(super) fn stage_recovery_escape_route_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// A1 评审清偿（R3 P2）：段级钩子的顺延语义——整轮前置注入
-/// （fail_next_settle）bail 于 settle_world 之前时不吞段钩子（与房级钩子
-/// 的评 2 P2-1 清偿口径一致）：段注入留存至下一次实际结算命中。
+/// 整轮故障钩子先返回错误时，阶段钩子须保留到下一次实际调用引擎。
 pub(super) fn stage_hook_deferral_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
