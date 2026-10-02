@@ -6,6 +6,7 @@
 
 pub mod domain;
 pub mod index;
+pub mod kkpv;
 pub mod place;
 pub mod snapshot;
 pub mod types;

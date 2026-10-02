@@ -63,29 +63,9 @@ impl World {
             let Some(state) = self.rooms.values().find(|r| r.objects.contains_key(&oid)) else {
                 continue;
             };
-            let Some(values) = state.extensions.get(&oid) else {
-                continue;
-            };
             let owner = object.get("owner").and_then(|v| v.as_str());
-            let mut ext = serde_json::Map::new();
-            for (field_key, value) in values {
-                let Some(field_key) = kk_mod_api::Key::new(field_key.clone()).ok() else {
-                    // 写入口径已保证键形合法；此处防御坏键。
-                    continue;
-                };
-                let Some(rule) = catalog.field(type_key, &field_key) else {
-                    continue;
-                };
-                let visible = match rule.visibility {
-                    kk_mod_api::Visibility::Public => true,
-                    kk_mod_api::Visibility::Owner => owner == Some(user),
-                    _ => false,
-                };
-                if visible {
-                    ext.insert(field_key.to_string(), value.clone());
-                }
-            }
-            if !ext.is_empty()
+            if let Some(ext) =
+                ext_entries_json(catalog, type_key, &state.extensions, oid, owner, user)
                 && let Some(map) = object.as_object_mut()
             {
                 map.insert("ext".into(), Value::Object(ext));
@@ -101,14 +81,7 @@ impl World {
             Some(user) => self
                 .rooms
                 .iter()
-                .filter(|(_, state)| {
-                    state.objects.values().any(|o| {
-                        // 归属只用于判断房间是否可见；旗和工地虽有主人，但不授予视野。
-                        // 上游依据：driver/lib/runtime/data.js 的 userObjects 过滤。
-                        !matches!(o, RoomObject::ConstructionSite(_) | RoomObject::Flag(_))
-                            && crate::domain::object_owner(o).as_deref() == Some(user)
-                    })
-                })
+                .filter(|(_, state)| room_visible_to(state, user))
                 .map(|(name, _)| name)
                 .collect(),
         };
@@ -139,25 +112,8 @@ impl World {
             rooms.insert(name.clone(), Value::Object(entry));
             let room_visible = visible.contains(name);
             for (id, object) in &state.objects {
-                // 他人的旗不进入玩家数据；无主旗保留给可见房间的兼容性场景。
-                if let Some(viewer) = user
-                    && let RoomObject::Flag(f) = object
-                    && f.owner.as_deref().is_some_and(|o| o != viewer)
-                {
+                if !object_exported_for(user, room_visible, object) {
                     continue;
-                }
-                if !room_visible {
-                    // 己方旗和工地可出现在全局集合中，即使所在房间不可见。
-                    // 导出这些对象不应使该房间进入 Game.rooms。
-                    // 参考：driver/lib/runtime/data.js 的 userObjects、flags 查询。
-                    let own_private = matches!(
-                        object,
-                        RoomObject::ConstructionSite(_) | RoomObject::Flag(_)
-                    ) && crate::domain::object_owner(object).as_deref()
-                        == Some(user.unwrap_or(""));
-                    if !own_private {
-                        continue;
-                    }
                 }
                 objects.push(object_json(
                     name,
@@ -251,6 +207,77 @@ impl World {
             room_rcl(state),
         ))
     }
+}
+
+/// 房间对查看者可见的条件：房内存在己方非旗/非工地对象。
+/// 归属只用于判断房间是否可见；旗和工地虽有主人，但不授予视野。
+/// 上游依据：driver/lib/runtime/data.js 的 userObjects 房间计算。
+pub(crate) fn room_visible_to(state: &crate::world::RoomState, user: &str) -> bool {
+    state.objects.values().any(|o| {
+        !matches!(o, RoomObject::ConstructionSite(_) | RoomObject::Flag(_))
+            && crate::domain::object_owner(o).as_deref() == Some(user)
+    })
+}
+
+/// 对象进入玩家数据的条件：无查看者时全部导出；他人旗排除在先；
+/// 不可见房只放行己方旗与工地——它们可出现在全局集合，即使所在
+/// 房间不可见，且不使该房间进入 Game.rooms。
+/// 参考：driver/lib/runtime/data.js 的 userObjects、flags 查询。
+pub(crate) fn object_exported_for(
+    user: Option<&str>,
+    room_visible: bool,
+    object: &RoomObject,
+) -> bool {
+    let Some(viewer) = user else {
+        return true;
+    };
+    // 他人的旗不进入玩家数据；无主旗保留给可见房间的兼容性场景。
+    if let RoomObject::Flag(f) = object
+        && f.owner.as_deref().is_some_and(|o| o != viewer)
+    {
+        return false;
+    }
+    if !room_visible {
+        return matches!(
+            object,
+            RoomObject::ConstructionSite(_) | RoomObject::Flag(_)
+        ) && crate::domain::object_owner(object).as_deref() == Some(viewer);
+    }
+    true
+}
+
+/// 按目录权限把对象的扩展字段裁切为 `ext` 键内容；无可见字段时返回
+/// None。写入口径已保证键形合法；此处对坏键防御跳过。
+pub(crate) fn ext_entries_json(
+    catalog: &kk_mod_api::extension::ExtensionCatalog,
+    type_key: &kk_mod_api::Key,
+    extensions: &std::collections::BTreeMap<
+        crate::world::ObjId,
+        std::collections::BTreeMap<String, Value>,
+    >,
+    oid: crate::world::ObjId,
+    owner: Option<&str>,
+    viewer: &str,
+) -> Option<serde_json::Map<String, Value>> {
+    let values = extensions.get(&oid)?;
+    let mut ext = serde_json::Map::new();
+    for (field_key, value) in values {
+        let Some(field_key) = kk_mod_api::Key::new(field_key.clone()).ok() else {
+            continue;
+        };
+        let Some(rule) = catalog.field(type_key, &field_key) else {
+            continue;
+        };
+        let visible = match rule.visibility {
+            kk_mod_api::Visibility::Public => true,
+            kk_mod_api::Visibility::Owner => owner == Some(viewer),
+            _ => false,
+        };
+        if visible {
+            ext.insert(field_key.to_string(), value.clone());
+        }
+    }
+    (!ext.is_empty()).then_some(ext)
 }
 
 /// 用标准 base64 字母表编码地形字节，尾组使用 = 填充。

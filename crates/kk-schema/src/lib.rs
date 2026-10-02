@@ -472,4 +472,5 @@ macro_rules! kk_room_object {
     };
 }
 
+pub mod kkpv;
 pub mod room;

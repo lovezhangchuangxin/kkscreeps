@@ -5,6 +5,7 @@
 //! V8 全局变量不随世界回退；执行阶段线程故障阻止自动重派，需要显式处置。
 
 pub mod embed;
+pub mod kkpv_store;
 pub mod world_source;
 
 use std::collections::BTreeMap;
