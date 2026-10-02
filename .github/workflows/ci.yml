@@ -1,11 +1,10 @@
 name: CI
 
-# 三个 job 对应 roadmap M0 的 CI 条目：格式化/静态检查/单元测试 + 文档链接检查。
-# 仓库尚未推远端时，本地等价命令是 `pnpm run check`（根 package.json）。
+# 分别检查 Rust、JavaScript、文档链接和完整 screeps-ok 回归套件。
+# pnpm run check 覆盖常规检查；完整兼容性套件需另运行 compat/scripts/ratchet.mjs。
 
 on:
-  # push 限 main：PR 分支的 push 与 pull_request 事件会各跑一遍全部 job
-  # （含 ratchet 的 release 构建 + 全量套件），双倍分钟数
+  # 只对 main 响应 push；其他分支通过 pull_request 检查，避免一次更新触发两套任务。
   push:
     branches: [main]
   pull_request:
@@ -16,8 +15,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      # 固定到 rust-toolchain.toml 的同一版本：@stable 会因 toml 自动切工具链，
-      # 但 rustfmt/clippy 组件只装在 stable 上，cargo fmt 会报组件缺失
+      # 与 rust-toolchain.toml 保持同一版本，将 rustfmt/clippy 安装到实际使用的工具链。
       - uses: dtolnay/rust-toolchain@1.98.1
         with:
           components: rustfmt, clippy
@@ -68,14 +66,13 @@ jobs:
       - name: 文档链接检查
         run: node scripts/check-doc-links.mjs
 
-  # M1 验收关卡（roadmap）：通过率棘轮——全量 screeps-ok 套件跑通且 passed 不低于
-  # 地板（compat/reports/ratchet.json，唯一真相源）。RPC 超时（compat/src/rpc.ts）
-  # 是前置：sidecar 挂死时由卡死变为超时红。
+  # 检查 ratchet.json 中的通过数下限和总用例数，并拒绝基线已通过用例的未豁免回归。
+  # 单次 RPC 超时由 compat/src/rpc.ts 处理；整个任务另受 timeout-minutes 限制。
   ratchet:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      # 逐用例门禁基线取 HEAD~1（同提交入库的回归不自我洗白）——需深度 ≥ 2
+      # 读取 HEAD~1 的报告作为逐用例基线，需要保留父提交。
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2

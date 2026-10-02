@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 // 提交信息校验（commit-msg hook）：subject 需符合「前缀：描述」格式。
-// 格式取自仓库既有惯例（如 `B2 收口：…`、`合入轨 C2/C2.1：…`），非 Conventional Commits。
+// 全角、半角冒号均可；前缀和描述须非空，允许换行添加正文。
 // 用法：node scripts/check-commit-msg.mjs <commit-msg 文件>（hook 以 $1 传入）
 
 import { readFileSync } from 'node:fs';
 
-// 标定自全量历史回放（61 条 subject，码点计数）：最长 162、最长前缀 42。
-const MAX_SUBJECT_LENGTH = 350; // 远超历史最长，只拦粘贴事故级超长
-const MAX_PREFIX_LENGTH = 48; // 冒号前的「轨道/批次/事项前缀」长度上限，覆盖历史最长 42 留裕量
+// 长度均按 Unicode 码点计数，不是 UTF-8 字节数或终端显示宽度。
+const MAX_SUBJECT_LENGTH = 350;
+const MAX_PREFIX_LENGTH = 48;
 
-// git 自动生成或改写类提交不适用人工格式，直接放行（含章鱼合并与 git merge <sha>）。
+// 匹配这些前缀的 merge/revert/fixup/squash 标题免检；这里只匹配文本，不验证提交类型。
 const EXEMPT_RE = /^(Merge (?:branch(?:es)?|remote-tracking branch|pull request|tag|commit) |Revert |(?:fixup|squash)! )/;
 
 const file = process.argv[2];
@@ -20,7 +20,7 @@ if (!file) {
 
 let raw;
 try {
-  // 剥 BOM、归一 CRLF，避免不可见字符触发难自查的报错。
+  // 去除文件开头的 BOM；下方按 LF 或 CRLF 分割，仅读取首行标题。
   raw = readFileSync(file, 'utf8').replace(/^\uFEFF/, '');
 } catch {
   console.error(`✗ 提交信息校验失败：无法读取 ${file}`);
@@ -28,7 +28,7 @@ try {
 }
 
 const subject = raw.split(/\r?\n/)[0];
-const chars = Array.from(subject); // 码点计数，与中文/emoji 的视觉长度一致
+const chars = Array.from(subject); // 组合字符或多个码点组成的 emoji 会计为多个。
 
 function reject(reason) {
   console.error(`✗ 提交信息校验失败：${reason}`);

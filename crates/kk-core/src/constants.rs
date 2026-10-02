@@ -1,9 +1,8 @@
-//! 官方常量表（生成物，不手改）。
+//! 由 JSON 常量数据生成的 Rust 常量表。
 //!
-//! 来源：`crates/kk-runner/assets/constants.json`（官方 `common/lib/constants.js`
-//! 全量求值 dump）。重新生成：`node scripts/gen-constants.mjs`。
-//! 键序保持官方文件顺序；嵌套对象（BOOSTS/POWER_INFO 等）以内嵌 JSON 字符串
-//! 提供，消费侧按需解析。
+//! 数据来源：`crates/kk-runner/assets/constants.json`，来自上游 `common/lib/constants.js`。
+//! 修改数据或生成器后运行 `node scripts/gen-constants.mjs`，不要直接修改本文件。
+//! 常量按输入对象的 JavaScript 枚举顺序生成；复杂值保存为 JSON 字符串，调用方按需解析。
 #![allow(clippy::all)]
 
 pub const OK: i64 = 0i64;

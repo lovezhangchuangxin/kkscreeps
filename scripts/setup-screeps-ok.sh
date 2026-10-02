@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# screeps-ok 独立复现（M0 验收前置项，ADR-006 加固措施 1）：
-# 按锁定 commit 克隆到 .compat/screeps-ok（gitignored），装依赖并构建两个基准适配器。
-# 之后的 `npm run parity` 在该目录里跑，对账 vanilla 2897 / xxscreeps 2642 两个数字。
+# 在 .compat/screeps-ok 准备固定版本的上游套件、依赖和基准适配器。
+# 已有 checkout 会更新到指定 commit，并恢复 package-lock.json 后改写下载地址。
+# 准备完成后可在该目录运行 npm run parity，对比 vanilla 与 xxscreeps 的结果。
+# 固定版本的设计依据：ADR-006。
 set -euo pipefail
 
 SCREEPS_OK_PIN="34a630efa42908c117c19c25d2350fa2387bd633"
@@ -17,9 +18,8 @@ git -C "$DEST" checkout -- package-lock.json 2>/dev/null || true
 git -C "$DEST" checkout "$SCREEPS_OK_PIN"
 
 # 上游 lockfile 把 isolated-vm 锁成 git+ssh（需要 GitHub SSH 密钥），
-# 改写成 https 形式（同一 commit，无需凭据）。
-# -i.bak 跨 BSD/GNU sed（BSD 专用的 `sed -i ''` 在 GNU sed 上会把替换式当文件名、退出码 2，
-# set -e 直接中断——Linux CI 上整条复现路径不可用）
+# 改成公开仓库的 HTTPS 地址，保留版本引用，避免依赖 GitHub SSH 密钥。
+# -i.bak 在 BSD/GNU sed 上均可使用；生成的备份在下一行删除。
 sed -i.bak 's|git+ssh://git@github.com/|git+https://github.com/|g' "$DEST/package-lock.json"
 rm -f "$DEST/package-lock.json.bak"
 

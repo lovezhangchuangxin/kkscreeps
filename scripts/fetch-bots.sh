@@ -1,17 +1,14 @@
 #!/usr/bin/env bash
-# 拉取 M0 环境验收用的两个真实 bot 到 compat/fixtures/（gitignored）。
-# - tooangel：多模块纯 JS + 重 lodash（src/ 三十余个模块，xxscreeps README 同款演示路径）
-# - overmind：取 GitHub release 的构建产物单文件 main.js（仓库构建链为 2018 年代，
-#   rollup 0.62 + TS 2.9，在 Node 24 下不可用——按 M0 预案绕过）
-# - wasm 语义：两个 bot 均未带 .wasm 模块，用合成夹具 wasm-bot 覆盖 require 二进制模块路径
+# 在 compat/fixtures/ 准备 bot-check 使用的两个真实 bot 和一个合成 WASM 夹具。
+# TooAngel 使用固定 commit 的 src/，Overmind 直接下载固定 release 的 main.js。
+# WASM 夹具用于检查 require 二进制模块后能否构造 WebAssembly.Module。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEST="$ROOT/compat/fixtures"
 mkdir -p "$DEST"
 
-# tooangel 源码（src/ 即为上传产物形态）。pin 固定 commit（ADR-006 复现纪律：
-# 夹具内容固化在可对账的版本；与 SCREEPS_OK_PIN 同款机制，重跑可复现）
+# TooAngel 按 commit 固定源码版本，不在这里构建或修改 src/；依据见 ADR-006。
 TOOANGEL_PIN="87645a0b933360224737cca3b18ae9d112f46fef"
 if [ ! -d "$DEST/tooangel/.git" ]; then
   git clone https://github.com/TooAngel/screeps.git "$DEST/tooangel"
@@ -21,8 +18,8 @@ git -C "$DEST/tooangel" checkout "$TOOANGEL_PIN"
 TOOANGEL_COMMIT="$(git -C "$DEST/tooangel" rev-parse HEAD)"
 
 # overmind：release v0.5.2.1 的 main.js。
-# -f 让 HTTP 404/限流以非零退出（无 -f 时 curl exit=0，错误响应体如 9 字节 "Not Found"
-# 会被写进 main.js 且被 [ ! -s ] 缓存条件固化）；下载后做最小长度校验兜底
+# curl -f 拒绝 HTTP 错误响应；下载到临时文件，通过最小长度检查后再替换正式文件。
+# 已存在的非空 main.js 会直接复用，此处不校验其版本或内容。
 OVERMIND_URL="https://github.com/bencbartlett/Overmind/releases/download/v0.5.2.1/main.js"
 mkdir -p "$DEST/overmind-dist"
 if [ ! -s "$DEST/overmind-dist/main.js" ]; then
@@ -39,7 +36,7 @@ fi
 mkdir -p "$DEST/wasm-bot"
 if [ ! -s "$DEST/wasm-bot/main.js" ] || [ ! -s "$DEST/wasm-bot/mod.wasm" ]; then
   cat > "$DEST/wasm-bot/main.js" <<'EOF'
-// 合成 bot：验证官方语义——二进制模块 require 返回 Buffer，可直接喂给 WebAssembly
+// 合成 bot：加载包含 WASM 文件头和版本号的空模块，检查二进制 require 与编译路径。
 module.exports.loop = function () {
   if (!globalThis.__wasmChecked) {
     const bytes = require('mod.wasm');

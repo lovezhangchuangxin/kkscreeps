@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// 文档链接检查（M0 CI 条目）：校验仓库内 Markdown 的相对链接与锚点。
-// 只做本地文件检查，不访问网络。用法：node scripts/check-doc-links.mjs
+// 检查仓库 Markdown 的内联本地链接：目标文件存在，标题锚点可匹配。
+// 不访问网络，也不解析完整 Markdown；引用式链接、围栏代码和重复标题的编号均未专门处理。
+// 用法：node scripts/check-doc-links.mjs。
 
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
@@ -21,7 +22,7 @@ function collectMarkdown(dir) {
   return out;
 }
 
-// GitHub 风格的标题锚点：小写、空格转连字符、去掉标点。
+// 简化的标题锚点：转小写、去标点、合并空白；不等同于完整 GitHub Markdown 规则。
 function headingSlug(heading) {
   return heading
     .toLowerCase()
@@ -43,7 +44,7 @@ const files = collectMarkdown(repoRoot);
 const errors = [];
 let checked = 0;
 
-// [text](target) 形式；跳过 ![image](…) 也一并检查（图片链接同样要求存在）。
+// 匹配 [text](target) 和 ![image](target)，不支持带空白或嵌套括号的目标地址。
 const LINK_RE = /\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
 
 for (const file of files) {
@@ -61,6 +62,7 @@ for (const file of files) {
       continue;
     }
     if (anchor !== undefined && anchor !== '') {
+      // 当前文件链接直接查本文件；非 .md 目标按目录中的 README.md 查锚点。
       const mdFile = pathPart === '' ? file : baseDir.endsWith('.md') ? baseDir : join(baseDir, 'README.md');
       if (!existsSync(mdFile) || !anchorsOf(mdFile).has(anchor)) {
         errors.push(`${rel(file)}: 锚点不存在 → ${target}`);
