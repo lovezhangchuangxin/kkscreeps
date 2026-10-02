@@ -294,8 +294,8 @@ impl EmbedEngine {
         let configs = std::mem::take(&mut self.sandbox_configs_for_test);
         for handle in handles {
             let mut config = configs.get(&handle).cloned().unwrap_or_default();
-            // link 有效规则同步到玩家全局常量（B.2：标量容量）。
-            // 计划是常量的权威来源；显式测试配置不得绕开规则漂移。
+            // link 有效规则同步到玩家全局常量。计划是常量的
+            // 权威来源，测试配置里的同名覆盖以引擎规则为准。
             config.constant_overrides.insert(
                 "LINK_CAPACITY".to_string(),
                 serde_json::json!(self.engine.links().capacity),

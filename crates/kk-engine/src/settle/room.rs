@@ -107,7 +107,8 @@ fn create_construction_site(
     if x <= 0 || x >= 49 || y <= 0 || y >= 49 {
         return;
     }
-    // link 的建造成本与配额取有效规则；其余类型仍查官方表。
+    // link 的建造成本与配额取有效规则；其余类型查 CONSTRUCTION_COST
+    // 与 CONTROLLER_STRUCTURES 官方表。
     let cost = if structure_type == "link" {
         w.links.build_cost
     } else {

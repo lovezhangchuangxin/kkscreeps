@@ -174,9 +174,10 @@ pub(super) fn m2b_structure_actions_e2e_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// B.2 玩家常量注入链路冒烟：断言注入值正确（insert 值错则红）。
-/// 注意这不锁定通道存在性——删掉 insert 玩家仍读到嵌入表同值 800；
-/// 通道存在的判别在 kk-runner 的 constant_overrides 覆盖测试。
+/// 玩家常量注入链路冒烟：断言引擎注入的 LINK_CAPACITY 值正确
+/// （注入值写错则红）。注意这不锁定通道存在性——删掉注入后玩家
+/// 仍读到嵌入常量表的同值 800；通道存在的判别在 kk-runner 的
+/// constant_overrides 覆盖测试。
 pub(super) fn b02_link_constants_injected_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({

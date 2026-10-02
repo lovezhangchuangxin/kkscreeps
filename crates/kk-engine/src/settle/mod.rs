@@ -613,13 +613,13 @@ impl Engine {
     }
 
     /// 核对计划的全部声明绑定已有实现：两个 native 键由本引擎内置，
-    /// 声明性绑定对应 B.2 已接线的消费者（见清单注释），处理器绑定
+    /// 声明性绑定须出现在已接线消费者清单（见下方常量），处理器绑定
     /// 已在装配时逐键消费。声明未安装的绑定在此拒绝。
     fn check_installed_bindings(
         plan: &kk_mod_api::ContributionPlan,
         handler_keys: &BTreeSet<kk_mod_api::Key>,
     ) -> Result<(), String> {
-        /// B.2 已接线的声明性绑定：每项对应一个真实消费者。
+        /// 已接线的声明性绑定：每项对应一个真实消费者。
         /// 新增声明绑定时须先接线，或在此登记例外依据。
         const WIRED: &[&str] = &[
             // 放置与建造默认值经 PlaceCtx.links / Working.links。

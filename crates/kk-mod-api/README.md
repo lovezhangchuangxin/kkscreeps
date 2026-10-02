@@ -10,7 +10,7 @@
 
 Record 声明成员及其中可省略的名字；optional 与 nullable 分别表示缺失与 null。link 的转移载荷要求 id 和 amount，resourceType 可省略，与现有结算行为一致；预检和 vanilla 转换仍由后续原生绑定处理。
 
-当前边界（B.2 后）：
+当前边界：
 
 - link 的有效规则与槽分派已由 kk-engine 装配消费（`LinkRules`、`ContributionDispatch`）；本 crate 仍不执行处理器、不接触世界或 V8。
 

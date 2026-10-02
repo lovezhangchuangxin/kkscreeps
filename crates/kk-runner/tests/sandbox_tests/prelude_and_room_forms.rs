@@ -837,7 +837,7 @@ pub(super) fn roomfind_exits_and_path_codec_forms() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// B.2 常量覆盖通道：默认保持嵌入常量表原值；宿主覆盖在平铺前生效。
+/// 常量覆盖通道：默认保持嵌入常量表原值；宿主覆盖在平铺前生效。
 pub(super) fn constant_overrides_reach_player_globals_impl() -> anyhow::Result<()> {
     let mut plain = Sandbox::new(SandboxConfig::default())?;
     let v = plain.run_expr("LINK_CAPACITY")?;

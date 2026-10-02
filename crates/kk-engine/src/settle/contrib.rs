@@ -99,7 +99,7 @@ enum ActionSlot {
         before: Vec<ActionSimple>,
         wraps: Vec<ActionWrap>,
         center: ActionCenter,
-        /// 冻结时已按依赖逆序；执行器顺序调用，不再反转。
+        /// 冻结时已按依赖逆序；执行器必须顺序调用，不能再次反转。
         after: Vec<ActionSimple>,
     },
 }

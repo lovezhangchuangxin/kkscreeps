@@ -1,4 +1,4 @@
-//! B.2 link 默认贡献：有效规则贯穿放置、建造、结算与配额，
+//! link 默认贡献：有效规则贯穿放置、建造、结算与配额，
 //! 处理链（before/wrap/replace/after）的执行序与 next 语义，
 //! 以及装配对缺失实现的拒绝。
 
@@ -99,7 +99,7 @@ fn place_ctx(links: LinkRules) -> kk_world::place::PlaceCtx<'static> {
 }
 
 /// 规则覆盖贯穿放置默认值：容量、hits 与工地总进度读取同一有效规则，
-/// 不再各自直读 kk-core 常量。
+/// 各消费者不单独读 kk-core 常量——否则覆盖无法到达该入口。
 #[test]
 fn rule_overrides_flow_into_placement_defaults() {
     let plan = frozen_plan(&[
@@ -167,7 +167,8 @@ fn rule_overrides_flow_into_transfer_settlement() {
     let links = rules_of(&plan);
 
     let mut f = Fixture::new(7, terrain_with(&[]));
-    // link 为 RCL5 结构：rcl3 配额为 0 会让转移被配额门拒绝。
+    // CONTROLLER_STRUCTURES 中 link 的 rcl0..4 配额为 0、rcl5 起
+    // 非零；控制器用 RCL5 使配额门放行转移。
     f.controller(5, Some("p1"));
     let l1 = place_generic(
         &mut f,
@@ -210,7 +211,9 @@ fn rule_overrides_flow_into_transfer_settlement() {
     // 损耗 ceil(200*0.5)=100：源扣 200，目标进 100。
     assert_eq!(d1["store"]["energy"], json!(100));
     assert_eq!(d2["store"]["energy"], json!(100));
-    // 冷却 = 3 × 切比雪夫距离 3 = 9，同轮对象 tick 再减一（官方先加后减序）。
+    // 冷却 = 3 × 切比雪夫距离 3 = 9；同轮对象 tick 再减一——转移在
+    // 对象动作阶段执行、递减在对象 tick 阶段执行（官方 links/tick.js
+    // 的逐 tick 递减序）。
     assert_eq!(d1["cooldown"], json!(8));
 
     // 目标余量钳走权威字段 storeCapacityResource（放置时已按覆盖规则落值）；
@@ -248,8 +251,9 @@ fn rule_overrides_flow_into_transfer_settlement() {
 /// RCL 配额覆盖生效：配额为 0 时转移被控制器检查拒绝，能量不动。
 #[test]
 fn rule_override_rcl_quota_gates_transfer() {
-    // 覆盖 rcl5 为 0：官方表 rcl5=2，与覆盖值形成分歧窗口；
-    // 若配额绕回官方表，转移会错误通过。
+    // 覆盖 rcl5 为 0。CONTROLLER_STRUCTURES 的 link rcl5=2（官方
+    // 常量表，kk-core 生成物），与覆盖值形成分歧窗口；若配额查表
+    // 而不读规则，转移会错误通过。
     let plan = frozen_plan(&[
         ("link.rcl5", kk_mod_api::Number::Signed(0)),
         ("link.rcl8", kk_mod_api::Number::Signed(0)),
@@ -382,7 +386,8 @@ fn chained_handlers_execute_in_frozen_order() {
     .unwrap();
 
     let mut f = Fixture::new(7, terrain_with(&[]));
-    // RCL5 使官方配额非零：native 转移可真实执行，截断/替换断言才有判别力。
+    // RCL5 使 CONTROLLER_STRUCTURES 的 link 配额非零：native 转移可
+    // 真实执行，截断/替换类断言才有判别力。
     f.controller(5, Some("p1"));
     let l1 = place_generic(
         &mut f,
@@ -510,7 +515,8 @@ fn wrap_without_next_suppresses_default_but_not_after() {
     let dispatch = ContributionDispatch::assemble(&plan, handlers, BTreeMap::new()).unwrap();
 
     let mut f = Fixture::new(7, terrain_with(&[]));
-    // RCL5 使官方配额非零：native 转移可真实执行，截断/替换断言才有判别力。
+    // RCL5 使 CONTROLLER_STRUCTURES 的 link 配额非零：native 转移可
+    // 真实执行，截断/替换类断言才有判别力。
     f.controller(5, Some("p1"));
     let l1 = place_generic(
         &mut f,
@@ -599,7 +605,8 @@ fn replace_supplants_native_transfer() {
     let dispatch = ContributionDispatch::assemble(&plan, handlers, BTreeMap::new()).unwrap();
 
     let mut f = Fixture::new(7, terrain_with(&[]));
-    // RCL5 使官方配额非零：native 转移可真实执行，截断/替换断言才有判别力。
+    // RCL5 使 CONTROLLER_STRUCTURES 的 link 配额非零：native 转移可
+    // 真实执行，截断/替换类断言才有判别力。
     f.controller(5, Some("p1"));
     let l1 = place_generic(
         &mut f,
@@ -639,7 +646,8 @@ fn replace_supplants_native_transfer() {
     let d1 = data_of(&f, l1);
     let d2 = data_of(&f, l2);
     assert_eq!(d1["store"]["energy"], json!(150), "替换实现写半量");
-    // 替换写 42，同轮对象 tick 递减一（先加后减的官方序）。
+    // 替换写 42，同轮对象 tick 再减一（对象动作先于对象 tick 的官方
+    // 结算序，links/tick.js 逐 tick 递减）。
     assert_eq!(d1["cooldown"], json!(41));
     assert_eq!(d2["store"]["energy"], json!(0), "目标不被默认动作写入");
 }
@@ -670,11 +678,12 @@ fn double_next_fails_the_round_and_keeps_old_state() {
             next.call(w, id, d)
         })),
     );
-    // 装配校验本身须通过；执行走引擎路径（处理器在下方重新提供）。
+    // 装配校验本身须通过；执行走引擎路径，处理器在引擎装配时重新提供。
     drop(ContributionDispatch::assemble(&plan, handlers, BTreeMap::new()).unwrap());
 
     let mut f = Fixture::new(7, terrain_with(&[]));
-    // RCL5 使官方配额非零：native 转移可真实执行，截断/替换断言才有判别力。
+    // RCL5 使 CONTROLLER_STRUCTURES 的 link 配额非零：native 转移可
+    // 真实执行，截断/替换类断言才有判别力。
     f.controller(5, Some("p1"));
     let l1 = place_generic(
         &mut f,
@@ -788,7 +797,8 @@ fn rule_overrides_flow_into_self_transfer() {
 /// 玩家工地的 RCL 配额门与转移门同源：覆盖 rcl5=0 后工地创建被拒。
 #[test]
 fn rule_override_rcl_quota_gates_player_site_creation() {
-    // 官方 rcl5=2；覆盖为 0 形成分歧窗口（绕回官方表则工地照建）。
+    // CONTROLLER_STRUCTURES 的 link rcl5=2（官方常量表，kk-core
+    // 生成物）；覆盖为 0 形成分歧窗口——若配额查表而不读规则，工地照建。
     let plan = frozen_plan(&[
         ("link.rcl5", kk_mod_api::Number::Signed(0)),
         ("link.rcl8", kk_mod_api::Number::Signed(0)),
@@ -1042,7 +1052,10 @@ fn rule_override_build_cost_flows_into_player_site() {
             _ => None,
         })
         .expect("玩家 link 工地已创建");
-    assert_eq!(site, 120, "工地总进度取覆盖值而非官方表 5000");
+    assert_eq!(
+        site, 120,
+        "工地总进度取覆盖值而非 CONSTRUCTION_COST 的 5000"
+    );
 }
 
 /// hitsMax 规则覆盖钳住修复：tower 修理不越过覆盖上限。
@@ -1055,7 +1068,8 @@ fn rule_override_hits_max_caps_tower_repair() {
     let links = rules_of(&plan);
 
     let mut f = Fixture::new(7, terrain_with(&[]));
-    // RCL5 使官方配额非零：native 转移可真实执行，截断/替换断言才有判别力。
+    // RCL5 使 CONTROLLER_STRUCTURES 的 link 配额非零：native 转移可
+    // 真实执行，截断/替换类断言才有判别力。
     f.controller(5, Some("p1"));
     let tower = tower(&mut f, 5, 5, 1000);
     let link = place_generic(

@@ -395,7 +395,7 @@ pub(super) fn normalize_site(
         .or_else(|| spec_str(spec, "type"))
         .ok_or_else(|| "constructionSite 缺 structureType".to_string())?
         .to_string();
-    // link 的建造成本取有效规则；其余类型仍查官方常量表。
+    // link 的建造成本取有效规则；其余类型查 CONSTRUCTION_COST 官方表。
     let total = if structure_type == "link" {
         links.build_cost
     } else {

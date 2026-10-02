@@ -27,8 +27,8 @@ Native/Chained 分派。依据[领域与投影设计](../../designs/domain-proje
   `Engine::with_plan` 装配自定义计划并核对声明绑定（白名单对应
   B.2 已接线消费者，未安装的绑定拒绝装配）。
 - 玩家工地创建：`settle/room.rs` 的 `create_construction_site` 中
-  link 建造成本与 RCL 配额同样读 `Working.links`（评审清偿补——
-  转移门先行迁移时该入口被遗漏，玩家工地与结算配额曾短暂分叉）。
+  link 建造成本与 RCL 配额同样读 `Working.links`，与转移门同源
+  （发现过程见本批评审记录：初版只迁了转移门，此入口为清偿补齐）。
 - 玩家常量：`SandboxConfig.constant_overrides` 在常量平铺前叠加
   覆盖（键不在常量表时初始化失败）；`EmbedEngine::create_shard`
   按引擎计划注入 `LINK_CAPACITY`。预检继续读权威字段（其数值源头
@@ -40,7 +40,7 @@ Native/Chained 分派。依据[领域与投影设计](../../designs/domain-proje
 - 工作区测试 428 通过、0 失败、5 忽略（B.1 后 412，+16：
   kk-mod-api 2、settle_tests 14、kk-runner 与 kk-runtime 串行链场景计入既有单测计数）。
   clippy 全工作区全目标 `-D warnings` 通过；fmt 与文档链接检查通过。
-- 新测试族 `m2b_contrib_link_family`（14 项，含评审清偿补的双层
+- 新测试族 `m2b_contrib_link_family`（14 项：双层
   wrap 嵌套、tick 槽 Chained 链、玩家工地 buildCost/配额覆盖、
   覆盖下自转移、double_next 的引擎级回滚断言）：规则覆盖贯穿放置默认值
   （容量/hits/工地总进度+显式字段优先）、转移结算（损耗/冷却/满钳/

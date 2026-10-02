@@ -28,7 +28,7 @@ fn string(max_bytes: u32) -> ValueSchema {
 }
 
 /// link 家族的有效规则快照。装配时从冻结计划解析一次，
-/// 结算与放置热路径按字段读取，不再查稳定键。
+/// 结算与放置热路径按字段读取；稳定键解析只应发生在装配时。
 /// 值只反映计划中的规则；字段描述与处理器不在此快照内。
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LinkRules {

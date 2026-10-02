@@ -326,7 +326,7 @@ impl Fixture {
         events
     }
 
-    /// 以显式 link 规则结算（B.2 覆盖贯穿测试）。
+    /// 以显式 link 有效规则结算，供规则覆盖贯穿类场景使用。
     fn settle_with_rules(&mut self, batch: IntentBatch, links: kk_mod_api::builtin::LinkRules) {
         self.settle_with(
             batch,
@@ -335,7 +335,7 @@ impl Fixture {
         );
     }
 
-    /// 以显式处理链结算（B.2 处理器测试）。
+    /// 以显式处理链结算，供处理器执行序类场景使用。
     fn settle_with_dispatch(
         &mut self,
         batch: IntentBatch,

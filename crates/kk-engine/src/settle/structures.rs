@@ -314,7 +314,8 @@ fn tower_repair(w: &mut Working, id: ObjId, d: &IntentData) {
 
 /// 按目标余量限制能量，发送方扣全部数量，接收方另扣 ceil(amount*loss_ratio)。
 /// 冷却增加 cooldown 规则乘两者距离；事件 amount 是损耗前数量。
-/// 数值取 Working.links 的有效规则，不再直读 kk-core 常量。
+/// 数值取 Working.links 的有效规则；不要在此改读 kk-core 常量，
+/// 否则规则覆盖无法到达结算。
 pub(crate) fn link_transfer(w: &mut Working, id: ObjId, d: &IntentData) {
     let Some(RoomObject::Generic(src)) = w.room.objects.get(&id) else {
         return;
@@ -438,10 +439,12 @@ fn chebyshev(a: (u8, u8), b: (u8, u8)) -> i64 {
         .max((a.1 as i64 - b.1 as i64).abs())
 }
 
-/// 读取结构在某 RCL 的配额；link 走有效规则，其余类型仍查官方表。
+/// 读取结构在某 RCL 的配额。link 走 Working.links 的有效规则，
+/// 其余类型查 CONTROLLER_STRUCTURES 官方表。
 pub(super) fn allowed_for(w: &Working, structure_type: &str, level: i64) -> i64 {
     if structure_type == "link" {
-        // 越界等级与官方表同判为 0 配额，不钳到 rcl8。
+        // 等级越界（负数或 >8）判 0 配额，与 CONTROLLER_STRUCTURES
+        // 查表缺键时的 unwrap_or(0) 同语义；不要钳到 rcl8。
         match usize::try_from(level) {
             Ok(idx) if idx < 9 => w.links.rcl[idx],
             _ => 0,
