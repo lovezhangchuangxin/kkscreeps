@@ -1098,3 +1098,92 @@ fn rule_override_hits_max_caps_tower_repair() {
     let d = data_of(&f, link);
     assert_eq!(d["hits"], json!(600), "修复钳到覆盖的 hitsMax=600");
 }
+
+/// 槽执行链的开销基准：Native 直连与 Chained（无操作 before/wrap/after
+/// 各一）在等量 link tick 上的耗时对照。手动运行（须 --nocapture 才有
+/// 计时输出）：
+/// `cargo test -p kk-engine --release --test settle_tests \
+///  contrib_dispatch_native_vs_chained_bench -- --ignored --nocapture`
+/// 输出每次 link tick 的纳秒数，数字记录在
+/// docs/research/notes/b5-kkpv-wiring-2026-10-03.md；两臂夹具相同
+/// （每臂 50 link、cooldown 起点相同且全程为正），差值即链分派开销。
+/// 无日志回调——闭包体留空，避免把记录成本计入链开销。
+#[test]
+#[ignore = "手动基准（计时输出，非回归断言）"]
+fn contrib_dispatch_native_vs_chained_bench() {
+    use std::time::Instant;
+    const LINKS: usize = 50;
+    const ITERATIONS: u32 = 2000;
+
+    let mut contribution = overrides_mod(&[]);
+    let mut hook = |name: &str| {
+        let key = Key::new(format!("testmod:{name}")).unwrap();
+        contribution.bindings.insert(key.clone());
+        key
+    };
+    let before = hook("bench_before");
+    let wrap = hook("bench_wrap");
+    let after = hook("bench_after");
+    for (key, kind) in [
+        (&before, kk_mod_api::HandlerKind::Before),
+        (&wrap, kk_mod_api::HandlerKind::Wrap),
+        (&after, kk_mod_api::HandlerKind::After),
+    ] {
+        contribution.handlers.push(HandlerDescriptor {
+            key: key.clone(),
+            slot: Key::new("builtin:link.tick").unwrap(),
+            kind,
+            binding: key.clone(),
+            depends_on: BTreeSet::new(),
+        });
+    }
+    let plan = kk_mod_api::freeze(
+        vec![builtin::link(), contribution],
+        FreezeOptions::default(),
+    )
+    .unwrap();
+    let mut tick_handlers = BTreeMap::new();
+    tick_handlers.insert(before, TickHandler::Before(Box::new(|_, _| {})));
+    tick_handlers.insert(
+        wrap,
+        TickHandler::Wrap(Box::new(|w, id, next| next.call(w, id))),
+    );
+    tick_handlers.insert(after, TickHandler::After(Box::new(|_, _| {})));
+    let chained = ContributionDispatch::assemble(&plan, BTreeMap::new(), tick_handlers).unwrap();
+    let native = ContributionDispatch::default();
+
+    let bench = |label: &str, dispatch: &ContributionDispatch| {
+        let mut f = Fixture::new(7, terrain_with(&[]));
+        f.controller(5, Some("p1"));
+        for i in 0..LINKS {
+            place_generic(
+                &mut f,
+                (i % 40 + 2) as u8,
+                (i / 40 * 5 + 2) as u8,
+                json!({
+                    "type": "structure", "structureType": "link", "owner": "p1",
+                    "hits": 1000, "hitsMax": 1000, "nextDecayTime": 1_000_000,
+                    "store": {"energy": 0}, "storeCapacity": 800,
+                    "storeCapacityResource": {"energy": 800},
+                    "cooldown": 1_000_000,
+                }),
+            );
+        }
+        let start = Instant::now();
+        for _ in 0..ITERATIONS {
+            f.settle_with_dispatch(IntentBatch::default(), dispatch);
+        }
+        let per_link_ns =
+            start.elapsed().as_nanos() as f64 / (f64::from(ITERATIONS) * LINKS as f64);
+        println!("{label}: {per_link_ns:.1} ns/link-tick（{LINKS} link × {ITERATIONS} 轮）");
+        per_link_ns
+    };
+
+    let native_ns = bench("native", &native);
+    let chained_ns = bench("chained（before+wrap+after 无操作）", &chained);
+    println!(
+        "链开销：{:+.1} ns/link-tick（{:+.0}%）",
+        chained_ns - native_ns,
+        (chained_ns / native_ns - 1.0) * 100.0
+    );
+}

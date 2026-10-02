@@ -3,6 +3,9 @@
 //! 每玩家拥有独立房间，使用玩家 API 孵化、采集和升级。预热后清空耗时样本，
 //! 报告投影、执行、结算和整次调用的统计，定义沿用 kk-runtime::EmbedEngine；
 //! 另测采集窗口的进程 CPU 与 tick 边界 RSS，包含采样及窗口内负载检查。
+//! `--kkpv` 切换世界注入通道（默认 JSON 参考）做同负载 A/B；报告附
+//! `channel` 与 `injection_bytes_sample`（p1 单玩家在计时窗外的注入
+//! 体积采样，KKPV 形态为信封+束双计数）。
 //! 最多记录 50,000 个采集样本，后续 tick 仍运行但不加入耗时统计。
 //! 负载自检只检查首房的控制器进度和 source 能量；通过不代表每房均得到验证。
 //!
@@ -88,8 +91,9 @@ pub fn run(
     players: u32,
     concurrency: Option<usize>,
     report_path: &str,
+    kkpv: bool,
 ) -> i32 {
-    match run_inner(ticks, warmup, players, concurrency, report_path) {
+    match run_inner(ticks, warmup, players, concurrency, report_path, kkpv) {
         Ok(()) => 0,
         Err(e) => {
             eprintln!("perf-probe 失败: {e:#}");
@@ -104,6 +108,7 @@ fn run_inner(
     players: u32,
     concurrency: Option<usize>,
     report_path: &str,
+    kkpv: bool,
 ) -> anyhow::Result<()> {
     if ticks == 0 {
         anyhow::bail!("采集窗口为 0（--ticks 须 ≥1；纯预热跑不是合法用法）");
@@ -120,6 +125,8 @@ fn run_inner(
         "players": handles,
         "rooms": rooms,
     }))?;
+    // 通道选择在分片创建后、玩家执行前生效；A/B 对照用同一负载同日各跑。
+    e.set_kkpv_channel(kkpv);
 
     // 初始放置 3 个工作 creep，指定出生格还能容纳 2 个。
     // 出口被占用时孵化会等待；初始 creep 死亡后出口才可能再次可用。
@@ -162,7 +169,12 @@ fn run_inner(
     }
 
     println!(
-        "perf-probe: {players} 玩家 × 每房（2 source + spawn + 3 creep），预热 {warmup} + 采集 {ticks} ticks"
+        "perf-probe: {players} 玩家 × 每房（2 source + spawn + 3 creep），预热 {warmup} + 采集 {ticks} ticks，通道 {}",
+        if kkpv {
+            "KKPV（二进制）"
+        } else {
+            "JSON（参考）"
+        }
     );
     for _ in 0..warmup {
         e.run_players(&codes)?;
@@ -220,6 +232,18 @@ fn run_inner(
             "source_energy_min_after": obs_after.energy_min,
         },
         "phases": e.perf_report(),
+        "channel": if kkpv { "kkpv" } else { "json" },
+        // p1 单玩家、采集结束后一次采样（计时窗外）；失败只降级为
+        // null 并告警——测量已完成，附属诊断不得丢弃整份报告。
+        "injection_bytes_sample": match e.injection_size_sample(
+            handles.first().map(String::as_str).unwrap_or("p1"),
+        ) {
+            Ok(sample) => sample,
+            Err(err) => {
+                eprintln!("注入体积采样失败（报告置 null）：{err:#}");
+                serde_json::Value::Null
+            }
+        },
     });
     std::fs::write(report_path, serde_json::to_string_pretty(&report)?)?;
 
@@ -464,7 +488,7 @@ mod tests {
             "kkscreeps-perf-regeneration-{}.json",
             std::process::id()
         ));
-        run_inner(309, 0, 1, None, &path.to_string_lossy())?;
+        run_inner(309, 0, 1, None, &path.to_string_lossy(), false)?;
         let report: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
         std::fs::remove_file(path)?;
         assert!(report["workload"]["progress_delta"].as_i64().unwrap() > 0);

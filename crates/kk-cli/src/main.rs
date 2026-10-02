@@ -72,6 +72,9 @@ enum Command {
         /// 报告输出路径（JSON）
         #[arg(long, default_value = "perf-probe.json")]
         report: String,
+        /// 经 KKPV 二进制通道注入世界（与 JSON 参考通道同负载 A/B）
+        #[arg(long)]
+        kkpv: bool,
     },
 }
 
@@ -114,6 +117,7 @@ fn main() {
             players,
             concurrency,
             report,
+            kkpv,
         } => {
             std::process::exit(perf_probe::run(
                 ticks,
@@ -121,6 +125,7 @@ fn main() {
                 players,
                 concurrency,
                 &report,
+                kkpv,
             ));
         }
     }

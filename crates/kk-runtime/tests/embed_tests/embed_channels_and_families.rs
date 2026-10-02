@@ -155,6 +155,35 @@ pub(super) fn kkpv_channel_e2e_equivalence_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// 注入体积采样两通道形态：JSON 臂给整世界串字节；KKPV 臂给信封+束
+/// 双计数与块数（=注册房间数），全部非零且只读（采样前后世界代际不变）。
+pub(super) fn kkpv_injection_size_sample_impl() -> anyhow::Result<()> {
+    let mut e = EmbedEngine::new();
+    e.create_shard(&json!({
+        "players": ["p1"],
+        "rooms": [{ "name": "W1N1", "rcl": 3, "owner": "p1" }],
+    }))?;
+    e.place_object(
+        "W1N1",
+        "structure",
+        &json!({ "pos": [20, 20], "structureType": "spawn", "owner": "p1", "store": { "energy": 300 } }),
+    )?;
+    let time_before = e.get_game_time();
+    let json_sample = e.injection_size_sample("p1")?;
+    assert_eq!(json_sample["channel"], json!("json"));
+    let json_bytes = json_sample["world_json_bytes"].as_u64().unwrap();
+    assert!(json_bytes > 0, "JSON 臂采样非空");
+    e.set_kkpv_channel(true);
+    let kkpv_sample = e.injection_size_sample("p1")?;
+    assert_eq!(kkpv_sample["channel"], json!("kkpv"));
+    assert_eq!(kkpv_sample["blocks"], json!(1), "每注册房间一块");
+    assert!(kkpv_sample["envelope_bytes"].as_u64().unwrap() > 0);
+    assert!(kkpv_sample["bundle_bytes"].as_u64().unwrap() > 0);
+    // 采样只读：世界代际不变。
+    assert_eq!(e.get_game_time(), time_before, "采样不得推进世界");
+    Ok(())
+}
+
 /// 真实沙箱的 move、harvest 意图经清洗和结算后，在下一轮玩家视图中可见。
 /// 另用脚本沙箱产生相同意图，比较两种入口的世界变化。
 pub(super) fn embed_intent_channel_impl() -> anyhow::Result<()> {

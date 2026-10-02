@@ -1064,6 +1064,49 @@ impl EmbedEngine {
         self.kkpv_channel = enabled;
     }
 
+    /// 采样指定玩家当前世界的注入体积（诊断/基准用）：JSON 通道是整
+    /// 世界串字节，KKPV 通道是信封串 + 块束字节。只读世界、复用与派发
+    /// 相同的投影入口（含 market 注入），不在任何计时窗口内调用。
+    pub fn injection_size_sample(&self, handle: &str) -> anyhow::Result<Value> {
+        let source: &dyn WorldSource = &self.engine.world;
+        let gcl = self.engine.players.get(handle).map(|p| p.gcl).unwrap_or(0);
+        if self.kkpv_channel {
+            let audience = kkpv_audience_hash(handle);
+            let (mut envelope, blocks) = source
+                .kkpv_projection_for_viewer(
+                    handle,
+                    gcl,
+                    self.engine.extensions(),
+                    KKPV_PROTOTYPE_PLAN_HASH,
+                    audience,
+                )
+                .ok_or_else(|| anyhow::anyhow!("世界源未提供 KKPV 投影"))?
+                .map_err(|e| anyhow::anyhow!("KKPV 投影失败：{e}"))?;
+            if let Some(obj) = envelope.as_object_mut() {
+                obj.insert("market".into(), market_view(&self.engine, handle));
+            }
+            let bundle =
+                kk_schema::kkpv::encode_bundle(&blocks, &kk_schema::kkpv::KkpvLimits::default())
+                    .map_err(|e| anyhow::anyhow!("KKPV 块束编码失败：{e}"))?;
+            Ok(json!({
+                "channel": "kkpv",
+                "envelope_bytes": serde_json::to_string(&envelope)?.len(),
+                "bundle_bytes": bundle.len(),
+                "blocks": blocks.len(),
+            }))
+        } else {
+            let mut world =
+                source.world_json_for_viewer_with_extensions(handle, gcl, self.engine.extensions());
+            if let Some(obj) = world.as_object_mut() {
+                obj.insert("market".into(), market_view(&self.engine, handle));
+            }
+            Ok(json!({
+                "channel": "json",
+                "world_json_bytes": serde_json::to_string(&world)?.len(),
+            }))
+        }
+    }
+
     /// 设置下一次创建分片时使用的玩家沙箱配置，未设置的玩家使用默认配置。
     /// 通过输入校验后整表消费，即使注册中途失败也不会留给下一次创建。
     #[doc(hidden)]
