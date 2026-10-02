@@ -2,7 +2,7 @@
 
 本文细化 [ADR-014](../decisions/ADR-014-contribution-plane.md) 和 [Mod 设计](mod-system.md)，作为[贡献平面计划](../plans/mod-plane-batches.md) B 阶段的实施依据。对象、字段、意图、规则与玩家投影共用启动时冻结的定义；实现可以分步接入，但不能各自维护类型目录和字段权限。
 
-B.2 已把 link 有效规则接入放置、建造、结算、配额、伤害与玩家常量，并落地槽执行器（Native/Chained、wrap-next 语义、装配拒绝）；实现与验证边界见 [B.2 接线记录](../research/notes/b2-link-wiring-2026-10-02.md)。
+B.2 已把 link 有效规则接入放置、建造、结算、配额、伤害与玩家常量，并落地槽执行器（Native/Chained、wrap-next 语义、装配拒绝）；实现与验证边界见 [B.2 接线记录](../research/notes/b2-link-wiring-2026-10-02.md)。B.3 已落地对象级扩展字段全链（挂载声明、扩展目录、写入门校验、发布前引用一致、投影按 Public/Owner/ServerOnly 裁切），见 [B.3 记录](../research/notes/b3-extension-fields-2026-10-02.md)。
 
 本文定义 B 阶段的目标接口与二进制布局。B.1 已建立独立的 `kk-mod-api` 描述、校验与冻结入口，尚未接入生产引擎；具体实现边界见 [crate 说明](../../crates/kk-mod-api/README.md)。设计的源码核查基于 `0fa131a`；现有执行与快照机制见 [tick 契约](../architecture/tick-contract.md)与[快照契约](../architecture/snapshot-contract.md)。可信 JS 玩法 VM、Mod 加载及玩家模块安装由 C 阶段接入，持久化迁移与崩溃恢复由 E 阶段完成。
 
@@ -161,6 +161,8 @@ Rust `Arc` 不使 V8 ArrayBuffer 自动只读。玩家不得取得共享块的 A
 
 > **✅ B.2 已收口（2026-10-02）**：放置/建造/结算/配额/伤害/常量六类消费者改读 `LinkRules`；`ContributionDispatch` 落地 Native/Chained 与 wrap-next（重复 next 候选失败、截断、after 成功后逆序执行）；`Engine::with_plan` 装配并拒绝未安装绑定。棘轮 1854 零转红零转绿。残留登记：JS `isActive` 的 CONTROLLER_STRUCTURES 镜像与配额覆盖的同步、EmbedEngine 自定义计划注入通道，均归 C 批。
 | B.3 扩展与 JSON 参考 | 有界对象/字段/动作、候选更新、统一权限及索引 | 私有/server-only 隔离；不可见房旗/工地；删除/跨房索引；重试不重跑玩家 |
+
+> **✅ B.3 已收口（2026-10-02）**：对象级扩展字段全链（FieldMount 挂载声明、ExtensionCatalog 目录、Working 写入门、发布前引用与未知键校验、投影 ext 键按权限裁切）；变异击杀 ×4；棘轮 1854 零转红零转绿。残留登记：快照不含扩展（E 前补入）、房间/玩家/世界层未接、条件权限与玩家 getter 归 B.4/C，见 B.3 记录"限制与后续"。
 | B.4 二进制原型 | KKPV 编解码、公开/私有块、固定句柄与惰性包装器 | 逐字段/缺失/null 对照；畸形数据拒绝；旧引用/慢工作者；缓冲区与权限测试 |
 | B.5 接线与测量 | 协调器/沙箱接入，默认与链路径测量，记录消费者缺口 | 兼容零新增转红；bot 回归；并发/串行状态一致；端到端 CPU/RSS/延迟与复制/固定内存 |
 

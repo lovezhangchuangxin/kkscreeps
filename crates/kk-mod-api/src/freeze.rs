@@ -60,6 +60,9 @@ pub fn freeze(
     }
     contributions.sort_by(|a, b| a.source.namespace.cmp(&b.source.namespace));
     let mut sources = BTreeMap::new();
+    // 挂载记录延后处理：目标类型可能在后续贡献中才声明。
+    let mut mounts: Vec<(String, FieldMountDescriptor)> = Vec::new();
+    let mut touched: BTreeSet<Key> = BTreeSet::new();
     let mut bindings = BTreeSet::new();
     let mut types = BTreeMap::new();
     let mut rules = BTreeMap::new();
@@ -80,6 +83,7 @@ pub fn freeze(
         }
         // Vec 表达的目录按稳定键归一化；集合和映射本身已有确定顺序。
         c.object_types.sort_by(|a, b| a.key.cmp(&b.key));
+        c.field_mounts.sort_by(|a, b| a.field.key.cmp(&b.field.key));
         c.rules.sort_by(|a, b| a.key.cmp(&b.key));
         c.intents.sort_by(|a, b| a.key.cmp(&b.key));
         c.slots.sort_by(|a, b| a.key.cmp(&b.key));
@@ -88,6 +92,16 @@ pub fn freeze(
         for key in &c.bindings {
             owned(key, ns)?;
             bindings.insert(key.clone());
+        }
+        for mount in &c.field_mounts {
+            owned(&mount.field.key, ns)?;
+            owned(&mount.field.binding, ns)?;
+            let context = format!("{} / {}", mount.target.key, mount.field.key);
+            validate::schema_depth(&mount.field.schema, options.max_schema_depth, &context)?;
+            if let FieldDefault::Value(value) = &mount.field.default {
+                validate::default_value(value, &mount.field.schema, &context)?;
+            }
+            mounts.push((ns.to_string(), mount.clone()));
         }
         for ty in &mut c.object_types {
             owned(&ty.key, ns)?;
@@ -205,6 +219,50 @@ pub fn freeze(
                 ));
             }
         }
+    }
+    for (ns, mount) in mounts {
+        // 挂载通道不得使用 builtin 绑定冒充内建适配字段。
+        if mount.field.binding.namespace() == "builtin" {
+            return Err(FreezeError::new(
+                ns,
+                format!(
+                    "挂载字段 {} 的绑定不能占用 builtin 命名空间",
+                    mount.field.key
+                ),
+            ));
+        }
+        let target = types.get_mut(&mount.target.key).ok_or_else(|| {
+            FreezeError::new(
+                ns.clone(),
+                format!("字段挂载的目标类型不存在：{}", mount.target.key),
+            )
+        })?;
+        if target.schema_version != mount.target.schema_version {
+            return Err(FreezeError::new(
+                ns,
+                format!(
+                    "字段挂载的版本不匹配：{} 期望 {}，实得 {}",
+                    mount.target.key, mount.target.schema_version, target.schema_version
+                ),
+            ));
+        }
+        if target.fields.iter().any(|f| f.key == mount.field.key) {
+            return Err(FreezeError::new(
+                ns,
+                format!("字段挂载重复：{} / {}", mount.target.key, mount.field.key),
+            ));
+        }
+        touched.insert(mount.target.key.clone());
+        target.fields.push(mount.field);
+        target.fields.sort_by(|a, b| a.key.cmp(&b.key));
+    }
+    // 挂载并入后重跑类型级校验：挂载字段与自带字段经过同一套
+    // schema 引用/绑定/owner 权限检查，不因挂载通道而绕过。
+    for ty in types.values() {
+        if !touched.contains(&ty.key) {
+            continue;
+        }
+        validate::object(ty, &types, &bindings, &slots, options.max_schema_depth)?;
     }
     let slot_plans = handler_plans(&slots, &handlers, &bindings)?;
     if types.len() > u32::MAX as usize

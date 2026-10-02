@@ -1059,6 +1059,7 @@ dependencies = [
  "anyhow",
  "kk-core",
  "kk-engine",
+ "kk-mod-api",
  "kk-runner",
  "kk-schema",
  "kk-world",

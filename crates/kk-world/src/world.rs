@@ -38,6 +38,13 @@ pub struct RoomState {
     /// 最近一次房间结算产生的事件，每项是一个 JSON 字符串。
     /// 结算整体替换列表，二进制房间快照同时保存它。
     pub events: Vec<String>,
+    /// 对象扩展字段：对象 ID → 字段稳定键全名 → 值。
+    /// 键带贡献命名空间，不能与内建字段冲突；值在写入入口按
+    /// 字段 schema 校验（类型、限额、有限浮点）。随房间候选克隆，
+    /// 与对象表同生命周期：删除对象时调用方须同步清理本表。
+    /// 二进制房间快照（encode/decode_snapshot）当前不保存扩展；
+    /// 持久化格式冻结前必须补入。
+    pub extensions: BTreeMap<ObjId, BTreeMap<String, serde_json::Value>>,
 }
 
 impl RoomState {
@@ -47,6 +54,7 @@ impl RoomState {
             terrain,
             objects: BTreeMap::new(),
             events: Vec::new(),
+            extensions: BTreeMap::new(),
         }
     }
 

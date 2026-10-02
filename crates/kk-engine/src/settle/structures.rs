@@ -68,7 +68,7 @@ pub fn process_structure_intents(
         }
         "link" => {
             if let Some(d) = actions.get(&Action::Transfer) {
-                w.contrib.run_transfer(w, id, d)?;
+                w.plane.contrib.run_transfer(w, id, d)?;
             }
         }
         "rampart" => {
@@ -382,7 +382,7 @@ pub(crate) fn link_transfer(w: &mut Working, id: ObjId, d: &IntentData) {
     };
     // 同一 link 自转移时只损失手续费。必须在一个 JSON 对象上连续更新，
     // 不能分别写回源和目标的旧快照，否则会覆盖接收量。
-    let loss = (amount as f64 * w.links.loss_ratio).ceil() as i64;
+    let loss = (amount as f64 * w.plane.links.loss_ratio).ceil() as i64;
     let range = chebyshev((src_x, src_y), (target.x, target.y));
     if target_id == id {
         if let Some(RoomObject::Generic(g)) = w.room.objects.get_mut(&id)
@@ -394,7 +394,7 @@ pub(crate) fn link_transfer(w: &mut Working, id: ObjId, d: &IntentData) {
                 .unwrap_or(0);
             v["store"]["energy"] = json!((e - loss).max(0));
             let cd = v.get("cooldown").and_then(Value::as_i64).unwrap_or(0);
-            v["cooldown"] = json!(cd + w.links.cooldown * range);
+            v["cooldown"] = json!(cd + w.plane.links.cooldown * range);
             g.data = v.to_string();
         }
     } else {
@@ -409,7 +409,7 @@ pub(crate) fn link_transfer(w: &mut Working, id: ObjId, d: &IntentData) {
         {
             v["store"]["energy"] = json!((energy - amount).max(0));
             let cd = v.get("cooldown").and_then(Value::as_i64).unwrap_or(0);
-            v["cooldown"] = json!(cd + w.links.cooldown * range);
+            v["cooldown"] = json!(cd + w.plane.links.cooldown * range);
             g.data = v.to_string();
         }
     }
@@ -446,7 +446,7 @@ pub(super) fn allowed_for(w: &Working, structure_type: &str, level: i64) -> i64 
         // 等级越界（负数或 >8）判 0 配额，与 CONTROLLER_STRUCTURES
         // 查表缺键时的 unwrap_or(0) 同语义；不要钳到 rcl8。
         match usize::try_from(level) {
-            Ok(idx) if idx < 9 => w.links.rcl[idx],
+            Ok(idx) if idx < 9 => w.plane.links.rcl[idx],
             _ => 0,
         }
     } else {

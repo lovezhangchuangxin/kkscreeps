@@ -110,7 +110,7 @@ fn create_construction_site(
     // link 的建造成本与配额取有效规则；其余类型查 CONSTRUCTION_COST
     // 与 CONTROLLER_STRUCTURES 官方表。
     let cost = if structure_type == "link" {
-        w.links.build_cost
+        w.plane.links.build_cost
     } else {
         match kk_world::types::construction_cost(structure_type) {
             Some(cost) => cost,

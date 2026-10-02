@@ -24,6 +24,8 @@ mod m2b2_terminal_market_family;
 mod m2b_contrib_link_family;
 #[path = "settle_tests/m2b_creation_family.rs"]
 mod m2b_creation_family;
+#[path = "settle_tests/m2b_extension_family.rs"]
+mod m2b_extension_family;
 #[path = "settle_tests/m2b_notify_family.rs"]
 mod m2b_notify_family;
 #[path = "settle_tests/m2b_structure_actions_family.rs"]
@@ -313,8 +315,11 @@ impl Fixture {
             input.now_ms,
             &state,
             &batch,
-            &kk_world::place::builtin_link_rules(),
-            &kk_engine::settle::contrib::ContributionDispatch::default(),
+            &kk_engine::settle::Plane {
+                links: kk_world::place::builtin_link_rules(),
+                contrib: &kk_engine::settle::contrib::ContributionDispatch::default(),
+                extensions: &kk_mod_api::extension::ExtensionCatalog::default(),
+            },
         )
         .unwrap();
         let (players, next) = state.into_parts().unwrap();
@@ -350,6 +355,19 @@ impl Fixture {
         links: kk_mod_api::builtin::LinkRules,
         dispatch: &kk_engine::settle::contrib::ContributionDispatch,
     ) {
+        let extensions = kk_mod_api::extension::ExtensionCatalog::default();
+        self.settle_with_plane(
+            batch,
+            kk_engine::settle::Plane {
+                links,
+                contrib: dispatch,
+                extensions: &extensions,
+            },
+        );
+    }
+
+    /// 以完整贡献平面结算（扩展字段目录非空的场景使用）。
+    fn settle_with_plane(&mut self, batch: IntentBatch, plane: kk_engine::settle::Plane<'_>) {
         let state =
             kk_engine::TickState::new(std::mem::take(&mut self.players), self.world.next_obj_id());
         let mut room = self.world.room("W1N1").unwrap().clone();
@@ -359,8 +377,7 @@ impl Fixture {
             1_700_000_000_000,
             &state,
             &batch,
-            &links,
-            dispatch,
+            &plane,
         )
         .unwrap();
         let (players, next) = state.into_parts().unwrap();

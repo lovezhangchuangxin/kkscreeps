@@ -135,6 +135,14 @@ impl TickInput {
     }
 }
 
+/// 一次结算携带的贡献平面快照：有效规则、槽执行表和扩展字段目录。
+/// 由引擎装配时生成，结算全程只读；三个成员必须来自同一冻结计划。
+pub struct Plane<'a> {
+    pub links: kk_mod_api::builtin::LinkRules,
+    pub contrib: &'a contrib::ContributionDispatch,
+    pub extensions: &'a kk_mod_api::extension::ExtensionCatalog,
+}
+
 /// 单房间结算上下文：房间副本、位置索引及共享候选状态，
 /// 以及本轮的事件、伤害与移动记录。直接调用者须提供工作副本。
 pub struct Working<'w> {
@@ -162,10 +170,8 @@ pub struct Working<'w> {
     /// 采矿时设置的提取器冷却，由 extractor tick 写回冷却计数。
     pub extractor_cooldown_pending: BTreeMap<ObjId, u64>,
     pub movement: movement::Movement,
-    /// 本轮生效的 link 规则，来自引擎装配的冻结计划。
-    pub links: kk_mod_api::builtin::LinkRules,
-    /// link 槽执行表；处理器错误使本轮候选失败。
-    pub contrib: &'w contrib::ContributionDispatch,
+    /// 本轮生效的贡献平面：link 规则、槽执行表与扩展字段目录。
+    pub plane: Plane<'w>,
 }
 
 impl<'w> Working<'w> {
@@ -190,6 +196,72 @@ impl<'w> Working<'w> {
         })
     }
 
+    /// 写入对象扩展字段的候选值。先解析对象类型（目前仅 Generic 结构
+    /// 按 structureType 映射），再校验字段键合法、已在目录中声明，
+    /// 最后按字段 schema 校验值（类型、取值域、长度限额、有限浮点）。
+    /// 写入只修改本房候选，结算失败时随房间候选一并丢弃。
+    pub fn set_extension(
+        &mut self,
+        id: ObjId,
+        field: &str,
+        value: serde_json::Value,
+    ) -> Result<(), String> {
+        let type_key = self.extension_type_of(id)?;
+        let field_key =
+            kk_mod_api::Key::new(field).map_err(|e| format!("扩展字段键非法 {field:?}: {e}"))?;
+        let Some(rule) = self.plane.extensions.field(&type_key, &field_key) else {
+            return Err(format!("扩展字段未声明：{field}"));
+        };
+        kk_mod_api::validate::check_value(&value, &rule.schema, field)?;
+        self.room
+            .extensions
+            .entry(id)
+            .or_default()
+            .insert(field.to_string(), value);
+        Ok(())
+    }
+
+    /// 移除对象的扩展字段候选；字段未在目录声明时拒绝。
+    pub fn remove_extension(&mut self, id: ObjId, field: &str) -> Result<(), String> {
+        let type_key = self.extension_type_of(id)?;
+        let field_key =
+            kk_mod_api::Key::new(field).map_err(|e| format!("扩展字段键非法 {field:?}: {e}"))?;
+        if self.plane.extensions.field(&type_key, &field_key).is_none() {
+            return Err(format!("扩展字段未声明：{field}"));
+        }
+        if let Some(fields) = self.room.extensions.get_mut(&id) {
+            fields.remove(field);
+            if fields.is_empty() {
+                self.room.extensions.remove(&id);
+            }
+        }
+        Ok(())
+    }
+
+    /// 解析对象在扩展目录中的类型键。目前只有 Generic 结构按
+    /// structureType 映射 builtin:{structure_type}；其他对象族
+    /// 尚未声明扩展类型，一律拒绝。
+    fn extension_type_of(&self, id: ObjId) -> Result<kk_mod_api::Key, String> {
+        let structure_type = match self.room.objects.get(&id) {
+            Some(RoomObject::Generic(g)) => {
+                let v: serde_json::Value = serde_json::from_str(&g.data).unwrap_or_default();
+                v.get("structureType")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string)
+            }
+            _ => None,
+        };
+        let Some(st) = structure_type else {
+            return Err(format!("对象 {} 的类型未接入扩展平面", id.as_str()));
+        };
+        let key = kk_mod_api::Key::new(format!("builtin:{st}"))
+            .map_err(|e| format!("结构类型 {st:?} 不能构成类型键: {e}"))?;
+        if self.plane.extensions.fields_of(&key).is_empty() {
+            return Err(format!("结构类型 {st} 未声明扩展字段"));
+        }
+        Ok(key)
+    }
+
     /// 使用共享游标创建对象，并登记位置索引。
     /// 调用方须保证游标不与已有 ID 冲突；游标饱和后无法继续可靠分配。
     pub fn insert_new(&mut self, object: RoomObject) -> ObjId {
@@ -202,11 +274,12 @@ impl<'w> Working<'w> {
         ObjId(id)
     }
 
-    /// 删除对象及位置索引，同时清理它的疲劳、待伤害和待治疗记录。
+    /// 删除对象及位置索引，同时清理它的疲劳、待伤害、待治疗和扩展字段。
     pub fn remove_obj(&mut self, id: ObjId) -> Option<RoomObject> {
         let obj = self.room.objects.remove(&id)?;
         let (x, y) = obj.pos();
         self.index.remove(id, (x, y));
+        self.room.extensions.remove(&id);
         self.old_fatigue.remove(&id);
         self.tick_fatigue.remove(&id);
         self.damage_to_apply.remove(&id);
@@ -446,8 +519,7 @@ pub fn settle_room(
     now_ms: u64,
     state: &TickState,
     batch: &IntentBatch,
-    links: &kk_mod_api::builtin::LinkRules,
-    contrib: &contrib::ContributionDispatch,
+    plane: &Plane<'_>,
 ) -> Result<Vec<Value>, SettleError> {
     let index = RoomIndex::build(&room.objects);
     let mut w = Working {
@@ -466,8 +538,11 @@ pub fn settle_room(
         safe_mode_activated: BTreeSet::new(),
         extractor_cooldown_pending: BTreeMap::new(),
         movement: movement::Movement::new(),
-        links: *links,
-        contrib,
+        plane: Plane {
+            links: plane.links,
+            contrib: plane.contrib,
+            extensions: plane.extensions,
+        },
     };
 
     // 先清空动作记录和说话载荷，避免上一轮内容继续可见。
@@ -536,7 +611,7 @@ pub fn settle_room(
             Some(RoomObject::Road(_)) => economy::road_decay_tick(&mut w, id),
             Some(RoomObject::Generic(g)) => match generic_structure_type(&g.data).as_deref() {
                 Some("container" | "rampart") => economy::generic_decay_tick(&mut w, id),
-                Some("link") => w.contrib.run_tick(&mut w, id).map_err(SettleError)?,
+                Some("link") => w.plane.contrib.run_tick(&mut w, id).map_err(SettleError)?,
                 Some("terminal") => economy::terminal_capacity_tick(&mut w, id),
                 _ => {}
             },
@@ -585,6 +660,8 @@ pub struct Engine {
     pub(crate) links: kk_mod_api::builtin::LinkRules,
     /// link 槽执行表；默认直连 native，装配计划后可携带贡献链。
     pub(crate) contrib: contrib::ContributionDispatch,
+    /// 扩展字段目录；默认为空（不接受扩展写入），with_plan 装配。
+    pub(crate) extensions: kk_mod_api::extension::ExtensionCatalog,
 }
 
 impl Default for Engine {
@@ -609,6 +686,7 @@ impl Engine {
             fail_writeback: None,
             links: kk_world::place::builtin_link_rules(),
             contrib: contrib::ContributionDispatch::default(),
+            extensions: kk_mod_api::extension::ExtensionCatalog::default(),
         }
     }
 
@@ -682,10 +760,14 @@ impl Engine {
         let links = kk_mod_api::builtin::LinkRules::from_plan(plan.rules())?;
         let contrib =
             contrib::ContributionDispatch::assemble(&plan, action_handlers, tick_handlers)?;
-        Self::check_installed_bindings(&plan, &handler_keys)?;
+        let extensions = kk_mod_api::extension::ExtensionCatalog::from_plan(&plan)?;
+        let mut installed = handler_keys;
+        installed.extend(extensions.field_bindings().cloned());
+        Self::check_installed_bindings(&plan, &installed)?;
         let mut engine = Self::new(world);
         engine.links = links;
         engine.contrib = contrib;
+        engine.extensions = extensions;
         Ok(engine)
     }
 
@@ -704,6 +786,11 @@ impl Engine {
     /// 当前生效的 link 有效规则（只读快照，拷贝语义）。
     pub fn links(&self) -> kk_mod_api::builtin::LinkRules {
         self.links
+    }
+
+    /// 当前生效的扩展字段目录（只读引用）。
+    pub fn extensions(&self) -> &kk_mod_api::extension::ExtensionCatalog {
+        &self.extensions
     }
 
     /// 进入指定阶段前返回错误，传 None 解除。
@@ -898,7 +985,7 @@ impl Engine {
                 patch.apply_with_checkpoints(player, |step| self.writeback_checkpoint(step))?;
             }
         }
-        self.validate_stage(&txn)?;
+        self.validate_stage(&mut txn)?;
         let time = txn.time;
         let prepared = txn.into_prepared()?;
         self.run_state = RunState::Prepared { tick: time };
@@ -965,14 +1052,18 @@ impl Engine {
             let mut room = self.world.room(name).expect("房间名来自键集").clone();
             // 二进制房间快照不保存房名；结算指令按世界目录中的名称匹配。
             room.name.clone_from(name);
+            let plane = Plane {
+                links: self.links,
+                contrib: &self.contrib,
+                extensions: &self.extensions,
+            };
             let mut room_events = settle_room(
                 &mut room,
                 txn.time,
                 txn.input.now_ms,
                 &txn.state,
                 &txn.batch,
-                &self.links,
-                &self.contrib,
+                &plane,
             )?;
             txn.rooms.push((name.clone(), room));
             txn.events.append(&mut room_events);
@@ -981,7 +1072,7 @@ impl Engine {
     }
 
     /// 只读检查候选房间覆盖、ID 游标和玩家键，失败进入 NeedsRecovery。
-    fn validate_stage(&self, cand: &txn::OwnedTickTxn) -> Result<(), SettleError> {
+    fn validate_stage(&self, cand: &mut txn::OwnedTickTxn) -> Result<(), SettleError> {
         // 房间数和顺序均须与准备阶段一致，集合相等不能验证顺序。
         if cand.rooms.len() != cand.room_names.len()
             || cand
@@ -1014,6 +1105,101 @@ impl Engine {
             .find(|k| !state.players.contains_key(*k))
         {
             return Err(SettleError(format!("玩家候选丢键：{missing}")));
+        }
+        drop(state);
+        self.validate_extensions(cand)?;
+        Ok(())
+    }
+
+    /// 规整并校验候选房间的扩展字段：键必须在目录中声明（封住绕过
+    /// 写入 API 的直改），未声明或键非法仍然失败；ObjectRef 字段的
+    /// 悬空引用在发布前收敛——nullable 字段写 null、非 nullable 字段
+    /// 整项删除（与玩家侧 getObjectById 对失效引用返回 null 同形）。
+    /// 收敛使被引用对象销毁的 tick 仍可提交。
+    fn validate_extensions(&self, cand: &mut txn::OwnedTickTxn) -> Result<(), SettleError> {
+        if self.extensions.is_empty() {
+            return Ok(());
+        }
+        // 收敛动作先收集后应用，避免边遍历边改。
+        let mut reconcile: Vec<(String, ObjId, String, bool)> = Vec::new();
+        for (room_name, room) in &cand.rooms {
+            for (id, fields) in &room.extensions {
+                for (field, value) in fields {
+                    let structure_type: Option<String> =
+                        room.objects.get(id).and_then(|o| match o {
+                            RoomObject::Generic(g) => {
+                                let v: serde_json::Value =
+                                    serde_json::from_str(&g.data).unwrap_or_default();
+                                v.get("structureType")
+                                    .and_then(|v| v.as_str())
+                                    .map(str::to_string)
+                            }
+                            _ => None,
+                        });
+                    let type_key = structure_type
+                        .as_deref()
+                        .and_then(|st| kk_mod_api::Key::new(format!("builtin:{st}")).ok());
+                    let Some(type_key) = type_key else {
+                        return Err(SettleError(format!(
+                            "扩展候选引用了未接入扩展平面的对象：房间 {room_name} {}",
+                            id.as_str()
+                        )));
+                    };
+                    let Some(rule) =
+                        self.extensions.field(
+                            &type_key,
+                            &kk_mod_api::Key::new(field.clone()).ok().ok_or(SettleError(
+                                format!("扩展候选键非法：房间 {room_name} {field}"),
+                            ))?,
+                        )
+                    else {
+                        return Err(SettleError(format!(
+                            "扩展候选含未声明字段：房间 {room_name} {field}"
+                        )));
+                    };
+                    if matches!(rule.schema.kind, kk_mod_api::ValueKind::ObjectRef(_)) {
+                        // nullable 字段的 null 是合法清除态，跳过引用检查。
+                        if rule.schema.nullable && value.is_null() {
+                            continue;
+                        }
+                        let Some(referred) = value.as_str().and_then(kk_world::ObjId::parse) else {
+                            return Err(SettleError(format!(
+                                "扩展引用值不是合法对象 ID：房间 {room_name} {field}"
+                            )));
+                        };
+                        let exists = cand
+                            .rooms
+                            .iter()
+                            .any(|(_, r)| r.objects.contains_key(&referred));
+                        if !exists {
+                            reconcile.push((
+                                room_name.clone(),
+                                *id,
+                                field.clone(),
+                                rule.schema.nullable,
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        for (room_name, id, field, nullable) in reconcile {
+            let (_, room) = cand
+                .rooms
+                .iter_mut()
+                .find(|(name, _)| name == &room_name)
+                .expect("房间来自候选");
+            let Some(fields) = room.extensions.get_mut(&id) else {
+                continue;
+            };
+            if nullable {
+                fields.insert(field, serde_json::Value::Null);
+            } else {
+                fields.remove(&field);
+                if fields.is_empty() {
+                    room.extensions.remove(&id);
+                }
+            }
         }
         Ok(())
     }
@@ -1518,20 +1704,20 @@ mod tests {
                 .collect();
             txn
         };
-        engine.validate_stage(&mk_cand(engine.next_id)).unwrap();
+        engine.validate_stage(&mut mk_cand(engine.next_id)).unwrap();
         let mut short = mk_cand(engine.next_id);
         short.rooms.pop();
-        let err = engine.validate_stage(&short).unwrap_err();
+        let err = engine.validate_stage(&mut short).unwrap_err();
         assert!(err.to_string().contains("覆盖"), "{err}");
         let mut swapped = mk_cand(engine.next_id);
         swapped.rooms.swap(0, 1);
-        let err = engine.validate_stage(&swapped).unwrap_err();
+        let err = engine.validate_stage(&mut swapped).unwrap_err();
         assert!(err.to_string().contains("覆盖"), "{err}");
-        let err = engine.validate_stage(&mk_cand(0)).unwrap_err();
+        let err = engine.validate_stage(&mut mk_cand(0)).unwrap_err();
         assert!(err.to_string().contains("回退"), "{err}");
-        let cand = mk_cand(engine.next_id);
+        let mut cand = mk_cand(engine.next_id);
         cand.state.inner.borrow_mut().players.remove("p1");
-        let err = engine.validate_stage(&cand).unwrap_err();
+        let err = engine.validate_stage(&mut cand).unwrap_err();
         assert!(err.to_string().contains("丢键"), "{err}");
     }
 }

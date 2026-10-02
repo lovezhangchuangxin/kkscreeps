@@ -14,12 +14,13 @@
 
 pub mod builtin;
 mod definition;
+pub mod extension;
 mod fingerprint;
 mod freeze;
 mod handlers;
 mod plan;
 mod rules;
-mod validate;
+pub mod validate;
 
 pub use definition::*;
 pub use freeze::{FreezeError, freeze};

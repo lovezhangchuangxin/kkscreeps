@@ -255,12 +255,23 @@ pub struct HandlerDescriptor {
     pub depends_on: BTreeSet<Key>,
 }
 
+/// 把本贡献的字段挂载到其他贡献声明的已有类型上。
+/// 类型主体归其命名空间所有；挂载只追加字段，不改类型归属，
+/// 也不给目标类型添加行为。目标类型须在计划中存在且版本匹配。
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct FieldMountDescriptor {
+    pub target: TypeRef,
+    pub field: FieldDescriptor,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Contribution {
     pub source: Source,
     /// 声明宿主必须安装的绑定标识，不包含函数指针或 JS 函数。
     pub bindings: BTreeSet<Key>,
     pub object_types: Vec<ObjectTypeDescriptor>,
+    /// 挂载到已有类型上的扩展字段；字段键与绑定归本贡献命名空间。
+    pub field_mounts: Vec<FieldMountDescriptor>,
     pub intents: Vec<IntentDescriptor>,
     pub rules: Vec<RuleDescriptor>,
     pub overrides: Vec<RuleOverride>,

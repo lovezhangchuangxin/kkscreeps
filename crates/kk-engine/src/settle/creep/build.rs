@@ -201,7 +201,7 @@ fn complete_construction(
         }),
         other => {
             let (hits, hits_max) =
-                kk_world::place::generic_structure_hits(other, &w.links).unwrap_or((1, 1));
+                kk_world::place::generic_structure_hits(other, &w.plane.links).unwrap_or((1, 1));
             // Rampart 的 hitsMax 取决于建造者是否为房主，而不是工地主人。
             let hits_max = if other == "rampart" {
                 match w.controller() {
@@ -228,10 +228,11 @@ fn complete_construction(
             // 与放置入口共用容量及初始时钟。新结构会参加本轮对象 tick，
             // 衰减时钟若遗漏，刚建好的 rampart 可能立即衰减消失。
             // 总容量与按资源容量须配套，玩家 Store 的 null/数值语义依赖两者。
-            if let Some(cap) = kk_world::place::built_store_capacity(other, &w.links) {
+            if let Some(cap) = kk_world::place::built_store_capacity(other, &w.plane.links) {
                 data["storeCapacity"] = serde_json::json!(cap);
             }
-            if let Some(res) = kk_world::place::built_store_capacity_resource(other, &w.links) {
+            if let Some(res) = kk_world::place::built_store_capacity_resource(other, &w.plane.links)
+            {
                 data["storeCapacityResource"] = res;
             }
             if let Some(clock) = kk_world::place::built_decay_clock(other, time) {

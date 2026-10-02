@@ -58,6 +58,7 @@ fn overrides_mod(rules: &[(&str, kk_mod_api::Number)]) -> Contribution {
             player_api_digest: [0; 32],
         },
         bindings: BTreeSet::new(),
+        field_mounts: Vec::new(),
         object_types: Vec::new(),
         intents: Vec::new(),
         rules: Vec::new(),

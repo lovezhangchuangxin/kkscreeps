@@ -716,7 +716,11 @@ impl EmbedEngine {
                     .unwrap_or(serde_json::Value::Null);
                 let gcl = self.engine.players.get(&handle).map(|p| p.gcl).unwrap_or(0);
                 let t_project = std::time::Instant::now();
-                let mut world = source.world_json_for_viewer(&handle, gcl);
+                let mut world = source.world_json_for_viewer_with_extensions(
+                    &handle,
+                    gcl,
+                    self.engine.extensions(),
+                );
                 // 市场读取已提交的引擎状态，随世界 JSON 注入，不存放在 V8 持久闭包中。
                 if let Some(obj) = world.as_object_mut() {
                     obj.insert("market".into(), market_view(&self.engine, &handle));

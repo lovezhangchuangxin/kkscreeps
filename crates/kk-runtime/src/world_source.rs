@@ -32,11 +32,29 @@ pub trait WorldSource {
 
     /// 世界时间（玩家可见 Game.time 的来源）。
     fn game_time(&self) -> u64;
+
+    /// 带扩展字段目录的玩家投影；扩展字段按权限裁切进入对象 ext 键。
+    /// 目录为空时与 world_json_for_viewer 输出相同。
+    fn world_json_for_viewer_with_extensions(
+        &self,
+        viewer: &str,
+        gcl_points: i64,
+        catalog: &kk_mod_api::extension::ExtensionCatalog,
+    ) -> Value;
 }
 
 impl WorldSource for kk_world::World {
     fn world_json_for_viewer(&self, viewer: &str, gcl_points: i64) -> Value {
         kk_world::World::world_json_for_viewer(self, viewer, gcl_points)
+    }
+
+    fn world_json_for_viewer_with_extensions(
+        &self,
+        viewer: &str,
+        gcl_points: i64,
+        catalog: &kk_mod_api::extension::ExtensionCatalog,
+    ) -> Value {
+        kk_world::World::world_json_for_viewer_with_extensions(self, viewer, gcl_points, catalog)
     }
 
     fn object_snapshot(&self, id: &str) -> Option<Value> {
@@ -90,5 +108,102 @@ mod tests {
         assert_eq!(source.world_json_for_viewer("p", 0)["time"], world.time());
         assert!(source.object_snapshot("zz").is_none());
         assert!(source.find_in_room("W1N1", 1).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod extension_projection_via_trait_tests {
+    use super::*;
+
+    #[test]
+    fn nonempty_catalog_projects_ext_through_dyn_source() {
+        // 非空目录经 &dyn WorldSource 分发端到端输出 ext 键；
+        // 目录为空时同一分发不输出（早退）。
+        let mut world = kk_world::World::new(3);
+        world.register_room("W1N1", kk_core::Terrain::plains());
+        let link = world
+            .insert(
+                "W1N1",
+                kk_schema::room::RoomObject::Generic(kk_schema::room::GenericObj {
+                    id: 0,
+                    x: 10,
+                    y: 10,
+                    data: r#"{"type":"structure","structureType":"link","owner":"p1","hits":1,"hitsMax":1}"#.into(),
+                }),
+            )
+            .unwrap();
+        world
+            .room_mut("W1N1")
+            .unwrap()
+            .extensions
+            .entry(link)
+            .or_default()
+            .insert("testmod:mark".into(), serde_json::json!(7));
+
+        let mut contrib = kk_mod_api::Contribution {
+            source: kk_mod_api::Source {
+                namespace: "testmod".into(),
+                api_version: 1,
+                revision: "1".into(),
+                code_digest: [1; 32],
+                config_digest: [0; 32],
+                player_api_digest: [0; 32],
+            },
+            bindings: std::collections::BTreeSet::from([
+                kk_mod_api::Key::new("testmod:bind.mark").unwrap()
+            ]),
+            field_mounts: vec![kk_mod_api::FieldMountDescriptor {
+                target: kk_mod_api::TypeRef {
+                    key: kk_mod_api::Key::new("builtin:link").unwrap(),
+                    schema_version: 1,
+                },
+                field: kk_mod_api::FieldDescriptor {
+                    key: kk_mod_api::Key::new("testmod:mark").unwrap(),
+                    schema: kk_mod_api::ValueSchema {
+                        kind: kk_mod_api::ValueKind::Number(kk_mod_api::NumberDomain::Signed {
+                            min: 0,
+                            max: 100,
+                        }),
+                        nullable: false,
+                    },
+                    default: kk_mod_api::FieldDefault::Missing,
+                    visibility: kk_mod_api::Visibility::Public,
+                    binding: kk_mod_api::Key::new("testmod:bind.mark").unwrap(),
+                },
+            }],
+            object_types: Vec::new(),
+            intents: Vec::new(),
+            rules: Vec::new(),
+            overrides: Vec::new(),
+            constraints: std::collections::BTreeSet::new(),
+            slots: Vec::new(),
+            handlers: Vec::new(),
+        };
+        let _ = &mut contrib;
+        let plan = kk_mod_api::freeze(
+            vec![kk_mod_api::builtin::link(), contrib],
+            kk_mod_api::FreezeOptions::default(),
+        )
+        .unwrap();
+        let catalog = kk_mod_api::extension::ExtensionCatalog::from_plan(&plan).unwrap();
+        let source: &dyn WorldSource = &world;
+        let view = source.world_json_for_viewer_with_extensions("p1", 0, &catalog);
+        let obj = view["objects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|o| o["id"] == serde_json::json!(link.as_str()))
+            .unwrap();
+        assert_eq!(obj["ext"]["testmod:mark"], serde_json::json!(7));
+
+        let empty = kk_mod_api::extension::ExtensionCatalog::default();
+        let plain = source.world_json_for_viewer_with_extensions("p1", 0, &empty);
+        let obj = plain["objects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|o| o["id"] == serde_json::json!(link.as_str()))
+            .unwrap();
+        assert!(obj.get("ext").is_none());
     }
 }

@@ -120,6 +120,12 @@ pub(crate) fn schema(
     Ok(())
 }
 
+/// 校验候选值满足字段 schema（类型、取值域、长度与元素限额、有限浮点）。
+/// 供扩展字段的写入入口复用；context 用于错误定位。
+pub fn check_value(value: &Value, schema: &ValueSchema, context: &str) -> Result<(), String> {
+    default_value(value, schema, context).map_err(|e| format!("{e}: {}", e.message))
+}
+
 pub(crate) fn default_value(
     value: &Value,
     schema: &ValueSchema,

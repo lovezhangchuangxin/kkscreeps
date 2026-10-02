@@ -28,6 +28,72 @@ impl World {
         self.world_json_impl(Some((user, gcl_points)))
     }
 
+    /// 带扩展字段目录的玩家投影：目录内声明的扩展字段按权限裁切后
+    /// 进入对象的 `ext` 键。Public 对看到该对象的玩家可见；Owner 仅
+    /// 对象主人可见；ServerOnly 不进入任何玩家投影，只保存在权威
+    /// 状态 `RoomState.extensions` 中。未声明扩展字段的类型与全部
+    /// 字段被裁掉的对象都不输出 `ext` 键。
+    pub fn world_json_for_viewer_with_extensions(
+        &self,
+        user: &str,
+        gcl_points: i64,
+        catalog: &kk_mod_api::extension::ExtensionCatalog,
+    ) -> Value {
+        use crate::world::ObjId;
+        let mut world = self.world_json_impl(Some((user, gcl_points)));
+        if catalog.is_empty() {
+            return world;
+        }
+        let Some(objects) = world.get_mut("objects").and_then(|v| v.as_array_mut()) else {
+            return world;
+        };
+        for object in objects.iter_mut() {
+            let Some(id) = object.get("id").and_then(|v| v.as_str()) else {
+                continue;
+            };
+            let Some(oid) = ObjId::parse(id) else {
+                continue;
+            };
+            let structure_type = object.get("structureType").and_then(|v| v.as_str());
+            let Some(type_key) = structure_type.and_then(|st| catalog.type_for_structure(st))
+            else {
+                continue;
+            };
+            // 扩展值从权威房间状态读取；玩家 JSON 不携带扩展源数据。
+            let Some(state) = self.rooms.values().find(|r| r.objects.contains_key(&oid)) else {
+                continue;
+            };
+            let Some(values) = state.extensions.get(&oid) else {
+                continue;
+            };
+            let owner = object.get("owner").and_then(|v| v.as_str());
+            let mut ext = serde_json::Map::new();
+            for (field_key, value) in values {
+                let Some(field_key) = kk_mod_api::Key::new(field_key.clone()).ok() else {
+                    // 写入口径已保证键形合法；此处防御坏键。
+                    continue;
+                };
+                let Some(rule) = catalog.field(type_key, &field_key) else {
+                    continue;
+                };
+                let visible = match rule.visibility {
+                    kk_mod_api::Visibility::Public => true,
+                    kk_mod_api::Visibility::Owner => owner == Some(user),
+                    _ => false,
+                };
+                if visible {
+                    ext.insert(field_key.to_string(), value.clone());
+                }
+            }
+            if !ext.is_empty()
+                && let Some(map) = object.as_object_mut()
+            {
+                map.insert("ext".into(), Value::Object(ext));
+            }
+        }
+        world
+    }
+
     fn world_json_impl(&self, viewer: Option<(&str, i64)>) -> Value {
         let user = viewer.map(|(u, _)| u);
         let visible: std::collections::BTreeSet<&String> = match user {

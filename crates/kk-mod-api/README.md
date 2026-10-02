@@ -18,6 +18,6 @@ Record 声明成员及其中可省略的名字；optional 与 nullable 分别表
 - 投影目录保留公开/owner/server-only/条件权限，不是已授权视图，不编码 KKPV 或执行权限判定。
 - 处理器依赖只允许同一入口、同一种 kind；After 列表已逆序，执行器不能再次反转。尚不执行 wrap/next 或回滚。
 - `Source` 摘要由可信装配者提供，冻结器不读取或认证源码。link 工厂摘要目前只覆盖描述工厂，玩家模块摘要为空；接入运行路径时须加入真实 native/玩家代码摘要。外部 Mod 加载器须拒绝占用 builtin 命名空间。
-- 已有类型上的扩展字段、运行期参数清洗、候选扩展状态、自定义 FIND/LOOK 与 JS Mod 加载尚未接入。
+- 已有类型上的扩展字段经 `FieldMountDescriptor` 声明、`ExtensionCatalog` 提取（B.3）；写入门与投影裁切在 kk-engine/kk-world。房间/玩家/世界层扩展、条件权限与 JS Mod 加载尚未接入。
 
 运行 `cargo test -p kk-mod-api` 验证冻结契约。完整接入顺序见[领域与投影设计](../../docs/designs/domain-projection.md)。

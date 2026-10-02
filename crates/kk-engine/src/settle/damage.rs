@@ -266,7 +266,7 @@ pub fn structure_hits_max(w: &Working, obj: &RoomObject) -> Option<i64> {
                     .map(|(_, v)| *v)
                     .unwrap_or(0)
             } else {
-                static_hits_max(structure_type, &w.links)?
+                static_hits_max(structure_type, &w.plane.links)?
             }
         }
         _ => return None,

@@ -20,6 +20,7 @@ fn module(namespace: &str) -> Contribution {
             player_api_digest: [3; 32],
         },
         bindings: BTreeSet::new(),
+        field_mounts: Vec::new(),
         object_types: Vec::new(),
         intents: Vec::new(),
         rules: Vec::new(),
@@ -101,4 +102,202 @@ fn link_rules_follow_override_and_reject_missing_plan() {
     let empty = plan(vec![module("none")]).unwrap();
     let error = builtin::LinkRules::from_plan(empty.rules()).unwrap_err();
     assert!(error.contains("builtin:link.lossRatio"), "{error}");
+}
+
+fn mount_mod(field_key: &str, visibility: Visibility, schema: ValueSchema) -> Contribution {
+    let mut c = module("extmod");
+    c.bindings.insert(key(&format!("extmod:bind.{field_key}")));
+    c.field_mounts.push(FieldMountDescriptor {
+        target: TypeRef {
+            key: key("builtin:link"),
+            schema_version: 1,
+        },
+        field: FieldDescriptor {
+            key: key(&format!("extmod:{field_key}")),
+            schema,
+            default: FieldDefault::Missing,
+            visibility,
+            binding: key(&format!("extmod:bind.{field_key}")),
+        },
+    });
+    c
+}
+
+#[test]
+fn field_mounts_extend_existing_type_into_catalog() {
+    let mut contrib = mount_mod(
+        "charge",
+        Visibility::Owner,
+        ValueSchema {
+            kind: ValueKind::Number(NumberDomain::Signed { min: 0, max: 1000 }),
+            nullable: false,
+        },
+    );
+    contrib.field_mounts.push(FieldMountDescriptor {
+        target: TypeRef {
+            key: key("builtin:link"),
+            schema_version: 1,
+        },
+        field: FieldDescriptor {
+            key: key("extmod:label"),
+            schema: ValueSchema {
+                kind: ValueKind::String { max_bytes: 16 },
+                nullable: false,
+            },
+            default: FieldDefault::Missing,
+            visibility: Visibility::Public,
+            binding: key("extmod:bind.label"),
+        },
+    });
+    contrib.bindings.insert(key("extmod:bind.label"));
+    let frozen = plan(vec![builtin::link(), contrib]).unwrap();
+    let catalog = extension::ExtensionCatalog::from_plan(&frozen).unwrap();
+    let link = key("builtin:link");
+    let charge = catalog.field(&link, &key("extmod:charge")).unwrap();
+    assert_eq!(charge.visibility, Visibility::Owner);
+    let label = catalog.field(&link, &key("extmod:label")).unwrap();
+    assert_eq!(label.visibility, Visibility::Public);
+    // 内建字段经 builtin 绑定适配，不进扩展目录。
+    assert!(
+        catalog
+            .field(&link, &key("builtin:link.capacity"))
+            .is_none()
+    );
+    // 挂载改变投影目录，两个计划的指纹不同。
+    let plain = plan(vec![builtin::link()]).unwrap();
+    assert_ne!(plain.hash(), frozen.hash());
+}
+
+#[test]
+fn field_mounts_reject_bad_targets_and_unsupported_visibility() {
+    // 条件权限没有投影判定入口，目录提取时拒绝（声明本身合法，
+    // 装配扩展写入入口时失败——与处理器缺失同一层）。
+    let mut conditional = mount_mod(
+        "secret",
+        Visibility::Conditional(key("extmod:judge")),
+        ValueSchema {
+            kind: ValueKind::Bool,
+            nullable: false,
+        },
+    );
+    // 判定绑定先行声明，使冻结通过、目录提取层给出"条件权限不支持"。
+    conditional.bindings.insert(key("extmod:judge"));
+    let frozen = plan(vec![builtin::link(), conditional]).unwrap();
+    let err =
+        extension::ExtensionCatalog::from_plan(&frozen).expect_err("条件权限扩展字段拒绝进目录");
+    assert!(err.contains("条件权限"), "{err}");
+
+    // 扩展字段不允许声明默认值：目录不自动落值，声明即误导。
+    let mut defaulted = mount_mod(
+        "charge",
+        Visibility::Owner,
+        ValueSchema {
+            kind: ValueKind::Number(NumberDomain::Signed { min: 0, max: 10 }),
+            nullable: false,
+        },
+    );
+    defaulted.field_mounts[0].field.default = FieldDefault::Value(serde_json::json!(3));
+    let frozen = plan(vec![builtin::link(), defaulted]).unwrap();
+    let err =
+        extension::ExtensionCatalog::from_plan(&frozen).expect_err("带默认值的扩展字段拒绝进目录");
+    assert!(err.contains("默认值"), "{err}");
+
+    // 目标类型不存在。
+    let mut stray = mount_mod(
+        "charge",
+        Visibility::Public,
+        ValueSchema {
+            kind: ValueKind::Bool,
+            nullable: false,
+        },
+    );
+    stray.field_mounts[0].target.key = key("builtin:nosuch");
+    let err = plan(vec![builtin::link(), stray]).unwrap_err().to_string();
+    assert!(err.contains("目标类型不存在"), "{err}");
+
+    // 目标版本不匹配。
+    let mut versioned = mount_mod(
+        "charge",
+        Visibility::Public,
+        ValueSchema {
+            kind: ValueKind::Bool,
+            nullable: false,
+        },
+    );
+    versioned.field_mounts[0].target.schema_version = 2;
+    let err = plan(vec![builtin::link(), versioned])
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("版本不匹配"), "{err}");
+}
+
+#[test]
+fn field_mounts_reject_duplicates_builtin_binding_and_bad_schemas() {
+    // 同键重复挂载。
+    let mut dup = mount_mod(
+        "charge",
+        Visibility::Public,
+        ValueSchema {
+            kind: ValueKind::Bool,
+            nullable: false,
+        },
+    );
+    dup.field_mounts.push(dup.field_mounts[0].clone());
+    let err = plan(vec![builtin::link(), dup]).unwrap_err().to_string();
+    assert!(err.contains("字段挂载重复"), "{err}");
+
+    // builtin 绑定冒充内建适配字段。
+    let mut fake = mount_mod(
+        "charge",
+        Visibility::Public,
+        ValueSchema {
+            kind: ValueKind::Bool,
+            nullable: false,
+        },
+    );
+    let stray = key("builtin:link.field.fake");
+    let original = fake.bindings.insert(stray.clone());
+    fake.field_mounts[0].field.binding = stray;
+    let _ = original;
+    // 贡献不能声明 builtin 命名空间的绑定——首遍归属检查先行拒绝；
+    // 挂载通道的 builtin 检查是同语义的纵深防御。
+    let err = plan(vec![builtin::link(), fake]).unwrap_err().to_string();
+    assert!(err.contains("不能定义其他命名空间"), "{err}");
+
+    // 挂载字段引用不存在的类型：挂载并入后与自带字段同一套校验。
+    let mut bad_ref = mount_mod(
+        "ref",
+        Visibility::Public,
+        ValueSchema {
+            kind: ValueKind::ObjectRef(TypeRef {
+                key: key("extmod:ghost"),
+                schema_version: 1,
+            }),
+            nullable: false,
+        },
+    );
+    bad_ref.field_mounts[0].field.key = key("extmod:ref");
+    bad_ref.field_mounts[0].field.binding = key("extmod:bind.ref");
+    bad_ref.bindings.insert(key("extmod:bind.ref"));
+    let err = plan(vec![builtin::link(), bad_ref])
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("extmod:ghost"), "{err}");
+
+    // 无效数值域（min>max）在冻结期拒绝，不留永久不可写字段。
+    let mut bad_domain = mount_mod(
+        "charge",
+        Visibility::Public,
+        ValueSchema {
+            kind: ValueKind::Number(NumberDomain::Signed { min: 10, max: 5 }),
+            nullable: false,
+        },
+    );
+    bad_domain.field_mounts[0].field.key = key("extmod:charge2");
+    bad_domain.field_mounts[0].field.binding = key("extmod:bind.charge2");
+    bad_domain.bindings.insert(key("extmod:bind.charge2"));
+    let err = plan(vec![builtin::link(), bad_domain])
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("数值范围"), "{err}");
 }

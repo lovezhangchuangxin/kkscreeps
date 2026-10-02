@@ -240,6 +240,7 @@ pub fn link() -> Contribution {
             player_api_digest: [0; 32],
         },
         bindings,
+        field_mounts: Vec::new(),
         object_types: vec![ObjectTypeDescriptor {
             key: key("link"),
             schema_version: 1,
