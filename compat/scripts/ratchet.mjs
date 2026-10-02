@@ -1,14 +1,12 @@
 #!/usr/bin/env node
-// screeps-ok 通过率棘轮（方案 D6 / M1 步 7，外部复审三轮后定型为四重门禁）：
-//   全量跑套件（run-suite.sh --quiet，约 3 分钟）→ 解析 vitest JSON 报告 →
-//   ① passed < floor ⇒ 红；② 用例总数漂移 ⇒ 红；③ 相对 HEAD~1 基线逐用例转红
-//   （缺失/失败/转跳过同罪）⇒ 红，基线不可读 fail closed；④ 有意行为变化的
-//   转红走 ratchet-allow.json 显式豁免（放行但打印留痕，同提交须归因）。
-// 地板唯一真相源：compat/reports/ratchet.json；基线取 HEAD~1（同提交把代码与
-// 重跑报告一起入库时，回归不再被烙进新基线自我洗白——push 的 HEAD~1 = 上一
-// main 状态，pull_request 的合并提交 HEAD~1 = 受保护基分支尖端；CI 需
-// fetch-depth ≥ 2）。本地等价：node compat/scripts/ratchet.mjs（macOS 无
-// timeout 命令——本脚本与其调用的 run-suite.sh 都不用它）。
+// 运行完整 screeps-ok 套件，并检查通过数下限、总用例数和逐用例回归。
+// 基线通过的用例若失败、跳过或缺失，均计为回归；ratchet-allow.json 可显式豁免，
+// 豁免不降低 ratchet.json 的总通过数要求。
+//
+// 基线固定取 HEAD 的父提交报告，避免代码与报告同次提交时与自身比较。
+// 在 PR 合并提交上它通常是目标分支；普通 push 上只是上一提交，
+// 不保证是上次推送或上次通过 CI 的状态。CI 至少需要两层提交历史。
+// 本地运行：node compat/scripts/ratchet.mjs。
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
@@ -21,9 +19,7 @@ const ratchetPath = resolve(root, 'compat/reports/ratchet.json');
 const reportPath = resolve(root, 'compat/reports/kkscreeps.json');
 const suiteLogPath = '/tmp/kk-run-suite.log';
 
-// 形状校验先行：floor 缺失/非正整数时 `passed < undefined` 恒 false——门禁会
-// 对任何回归静默放行（手工编辑键名错、合并冲突解出合法 JSON 都会走到这里），
-// 必须拒绝运行而非空转
+// 先验证通过数下限；缺少 floor 时 passed < undefined 为 false，会绕过总量检查。
 let ratchet;
 try {
   ratchet = JSON.parse(readFileSync(ratchetPath, 'utf8'));
@@ -54,16 +50,16 @@ try {
 }
 
 function tailSuiteLog(lines = 100) {
-  // 套件 --quiet 把 vitest 输出重定向到 /tmp——早崩/解析失败路径上必须把它带回
-  // CI log，否则红得毫无诊断信息（多为 CI 特有故障、本地不可复现）
+  // --quiet 将详细输出写入文件；报告缺失或损坏时附日志末尾，帮助定位套件启动失败。
   if (!existsSync(suiteLogPath)) return;
   const tail = readFileSync(suiteLogPath, 'utf8').split('\n').slice(-lines).join('\n');
   console.error(`--- 套件日志尾部（${suiteLogPath}，最后 ${lines} 行）---`);
   console.error(tail);
 }
 
-// 新鲜度守卫：套件必须真跑过（vitest 有失败用例时 exit 1 属常态——预期失败池
-// 数以千计，套件退出码不作判定；但套件早崩会留下上一轮的陈旧报告，靠 mtime 拦截）
+// 套件存在已知失败，因此不直接用非零退出码判断回归。
+// 检查报告 mtime 是否变化，拒绝读取套件启动失败后留下的旧报告；
+// 后续仍需校验用例总数和逐用例状态，mtime 变化本身不能证明全量运行完成。
 const mtimeBefore = existsSync(reportPath) ? statSync(reportPath).mtimeMs : 0;
 const run = spawnSync(
   'bash',
@@ -109,9 +105,8 @@ if (passed < ratchet.floor) {
   console.error(`ratchet: 回归——passed ${passed} < floor ${ratchet.floor}（差 ${ratchet.floor - passed}）。逐用例归因后修复，或（确属有意的行为变化）随全量重跑上调地板`);
   gateFailed = true;
 }
-// 逐用例回归：总数口径对冲放不过门禁（一红一绿 passed 不变、少跑用例总数降）；
-// 有意行为变化的转红走豁免表（同提交更新 ratchet-allow.json 并在提交说明/台账
-// 归因——豁免即公开）；疑似偶发先重跑 job 复核（flake 策略）
+// 逐用例检查可识别一条变差、一条变好而总通过数不变的情况。
+// 有意变化使用豁免表说明原因；豁免后仍打印命中的用例。
 const flipsRed = printFlipsAgainstBaseline(report);
 if (flipsRed < 0) {
   console.error('ratchet: 基线不可读 ⇒ 门禁红（fail closed）');
@@ -127,18 +122,14 @@ if (passed > ratchet.floor) {
   console.log(`ratchet: 地板可上调 ${ratchet.floor} → ${passed}（行为变化收尾时更新 ratchet.json 并同步 README/roadmap 数字）`);
 }
 
-/** 与 HEAD~1 基线逐用例 diff（git show 读对象库——工作区报告已被本轮覆盖不受
- *  影响）。基线取 HEAD~1 而非 HEAD：同提交把代码与重跑报告一起入库时，HEAD 的
- *  报告已含回归、对自身比较恒零翻转；HEAD~1 保持"受保护前一状态"为基准（CI 需
- *  fetch-depth ≥ 2）。 */
+/** 从 Git 对象库读取 HEAD~1 的报告，比较本轮结果；工作区报告被覆盖不会改变基线。 */
 function printFlipsAgainstBaseline(current) {
-  // 报告约 1.7MB，超过 spawnSync 默认 1MB maxBuffer（ENOBUFS）——显式放大
+  // 完整 JSON 报告可能超过 spawnSync 默认的 1 MiB 输出缓冲，显式提高到 64 MiB。
   const shown = spawnSync('git', ['-C', root, 'show', 'HEAD~1:compat/reports/kkscreeps.json'], {
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
   });
-  // 基线不可读 ⇒ -1：无法验证逐用例回归时 fail closed，不得静默跳过（跳过
-  // 会让这道门禁整体失效）
+  // 读取失败返回 -1，使调用方拒绝放行，而不是跳过逐用例检查。
   if (shown.status !== 0) {
     console.error('ratchet: 无法读取 HEAD~1 基线（git show 失败——CI 需 fetch-depth ≥ 2）——逐用例回归不可验证');
     return -1;

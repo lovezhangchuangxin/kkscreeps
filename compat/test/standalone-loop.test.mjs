@@ -1,7 +1,6 @@
-// 独立 Node 进程的事件循环回归：pending RPC 必须把进程撑到响应到达。
-// 历史缺陷：子进程/管道/超时计时器全 unref ⇒ 顶层 await 的独立脚本在响应
-// 到达前事件循环掏空退出（exit 13）；vitest 环境被运行器句柄掩盖。
-// 用 spawn 出的全新 node 进程复现真实独立环境（不受本测试运行器影响）。
+// 验证 pending RPC 能保持独立 Node 进程运行，直到响应到达。
+// 若子进程、管道、超时计时器均 unref，顶层 await 会因无活动句柄以 exit 13 退出。
+// 必须用独立进程验证，测试运行器的活动句柄可能掩盖此问题。
 
 import assert from 'node:assert/strict';
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -13,8 +12,7 @@ import { test } from 'node:test';
 const repoRoot = resolve(import.meta.dirname, '../..');
 
 test('独立进程：pending RPC 保持事件循环到响应到达', () => {
-  // 假 sidecar：吃掉请求行，延迟 300ms 再回包——给宿主事件循环留出"被掏空"
-  // 的窗口（响应即时回写时竞态不定，延迟使缺陷确定性显形）
+  // 延迟 300ms 响应，确保测试覆盖等待期间的事件循环存活，而非仅检查即时返回。
   const dir = mkdtempSync(resolve(tmpdir(), 'kk-standalone-'));
   const slowBin = resolve(dir, 'slow-sidecar.sh');
   writeFileSync(

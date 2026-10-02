@@ -1,8 +1,6 @@
-// 适配器能力声明（M0 基线起，随里程碑逐项翻真）。
-// 声明与实装面严格一致——terrain 已于 M1 步 5（embed 地形通道）翻真，其余
-// 游戏规则能力仍为 false；未实装的接口不冒充（套件据此跳过或标记）。
-// 字段清单与语义对齐 screeps-ok src/adapter.ts 的 AdapterCapabilities（27 项，
-// pin 34a630e 实测；此前误多列 structures/construction 两键，上游不存在）。
+// 声明 screeps-ok 可以启用的可选测试组，字段含义来自其 src/adapter.ts。
+// true 允许运行对应测试，不表示该组全部用例已通过；false 使 requires 检查跳过该组。
+// 上游版本由 scripts/setup-screeps-ok.sh 的 SCREEPS_OK_PIN 固定。
 
 export interface AdapterCapabilities {
   chemistry: boolean;
@@ -49,7 +47,6 @@ export const capabilities: AdapterCapabilities = {
   nuke: false,
   deposit: false,
   powerBank: false,
-  // M1 步 5：setTerrain 严格实装（元素级校验 + 四角墙 + 首 tick 守卫，测试锁定）
   terrain: true,
   roomStatus: false,
   portals: false,

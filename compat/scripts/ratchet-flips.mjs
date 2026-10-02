@@ -1,8 +1,7 @@
-// 棘轮逐用例回归的判定核心（纯函数，ratchet.mjs 与单测共用）。
-// 独立成模块的原因：对冲场景（一条转跳过 + 一条转通过保住总数）只有
-// 单测能锁死——门禁脚本自身不可 import（顶层副作用会跑全量套件）。
+// 比较两份报告的逐用例状态，并按豁免表分类回归。
+// 单独导出纯函数，避免单元测试导入 ratchet.mjs 时启动完整套件。
 
-/** 报告 → fullName 到 assertion 记录的映射（vitest json reporter 形状）。 */
+/** 按 fullName 建索引，缺失时回退到 title；同名记录会被后项覆盖，报告应提供唯一名称。 */
 export function statusesOf(report) {
   const out = new Map();
   for (const tr of report.testResults ?? []) {
@@ -14,10 +13,9 @@ export function statusesOf(report) {
 }
 
 /**
- * 转红：基线 passed 的用例在当前**非 passed**——缺失、失败或转跳过同罪。
- * passed→skipped 必须与 failed 同级：只认 failed 时，"一条转跳过 + 一条
- * 转通过"可同时保住 passed 总数与用例总数，三重门禁全数放行（对冲漏洞）。
- * 转绿：基线非 passed → 当前 passed（不设限，floor 兜总量）。
+ * 回归：基线通过的用例在当前失败、跳过或缺失。
+ * 跳过也需计为回归，否则一条转跳过、另一条转通过可保持总通过数而隐藏覆盖损失。
+ * 改善：当前通过、基线未通过或不存在；新增通过用例也计入。
  */
 export function analyzeFlips(baselineReport, currentReport) {
   const baseline = statusesOf(baselineReport);
@@ -36,11 +34,11 @@ export function analyzeFlips(baselineReport, currentReport) {
 }
 
 /**
- * 豁免表应用（有意行为变化的显式审核通道）：
+ * 按显式豁免表分类回归：
  * - 条目为用例 fullName 精确匹配，尾缀 `*` 为前缀匹配；
  * - blocked：未豁免的转红——门禁红；
- * - allowed：已豁免的转红——放行但打印留痕（豁免即公开）；
- * - stale：未命中任何转红的条目——多半已转绿、应清理，调用方仅警告。
+ * - allowed：已豁免的回归，调用方打印用例名称；
+ * - stale：未命中任何回归的条目，调用方仅警告；未命中不一定表示已恢复通过。
  */
 export function applyAllow(flipsRed, allowPatterns) {
   const matches = (name, pattern) =>

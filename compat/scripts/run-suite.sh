@@ -13,8 +13,9 @@ if [ ! -f "$ADAPTER" ]; then
   echo "缺少 ${ADAPTER}——先在 compat/ 下 pnpm install && pnpm run build" >&2
   exit 1
 fi
-# dist 新鲜度守卫（2B 批 P1 评审 3 登记：陈旧 dist 会静默用旧 capability 跑
-# 门禁——P4「陈旧 release 二进制」同类事故）。src 任一文件新于 dist 即重建
+# TypeScript 更新时重建适配器；parity.json 更新或构建副本缺失时也重建。
+# 套件从 dist 读取能力声明和跳过项，陈旧副本会改变实际运行的用例范围。
+# 此处按 mtime 判断，不校验内容，也不检查引擎二进制是否与 Rust 源码一致。
 if [ ! -f "$ROOT/compat/dist/parity.json" ] \
   || [ "$ROOT/compat/src/parity.json" -nt "$ROOT/compat/dist/parity.json" ] \
   || [ -n "$(find "$ROOT/compat/src" -name '*.ts' -newer "$ADAPTER" 2>/dev/null)" ]; then

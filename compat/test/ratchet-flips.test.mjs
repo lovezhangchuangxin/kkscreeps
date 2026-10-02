@@ -1,5 +1,4 @@
-// 棘轮逐用例回归判定（compat/scripts/ratchet-flips.mjs）的单测：
-// 对冲场景必须有测试锁死——门禁脚本自身不可 import（顶层副作用跑全量套件）。
+// 验证逐用例回归与豁免分类，尤其是总通过数不变但覆盖减少的情况。
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -15,8 +14,7 @@ const report = (pairs) => ({
 });
 
 test('对冲不放行：passed→skipped 与 failed 同级计红', () => {
-  // 一条转跳过 + 一条转通过：passed 总数与用例总数都不变——只认 failed 的
-  // 门禁会放行，这是外部复审实测构造出的漏洞
+  // 一条转跳过、另一条转通过，总通过数与总用例数均不变；只检查这两个总数会漏报。
   const baseline = report([
     ['A', 'passed'],
     ['B', 'failed'],

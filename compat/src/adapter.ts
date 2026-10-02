@@ -1,17 +1,17 @@
-// screeps-ok 适配器（M0 起）。
+// 将 screeps-ok 的测试操作转为 kkscreeps embed 的逐行 JSON 请求。
 //
-// 形态：导出 createAdapter() 的 ESM 模块 + 同目录 parity.json（fixture 约定）；
-// 经 SCREEPS_OK_ADAPTER=<本文件编译产物> 接入 screeps-ok 套件。引擎侧走
-// `kkscreeps embed` 子进程（stdin/stdout JSON-RPC，ADR-010）。capability 如实
-// 声明当前实装面——未实装的接口不冒充（套件据此跳过或标记）。
+// createAdapter 创建包装对象，同一 JavaScript 全局中的实例共享子进程与世界状态。
+// 测试应串行使用并在结束时 teardown；teardown 重置世界，但保留进程。
+// 编译产物通过 SCREEPS_OK_ADAPTER 接入套件，同目录 parity.json 声明差异与跳过项。
+// 上游接口来源：锁定版本 screeps-ok/src/adapter.ts；进程协议见 ADR-010。
 
 import { client } from './rpc.js';
 import { capabilities, type AdapterCapabilities } from './capabilities.js';
 
-// ---- screeps-ok 契约类型（结构等价的本地声明；规范以 screeps-ok src/adapter.ts 为准） ----
+// 本地类型描述当前包装接口；完整上游契约以 screeps-ok/src/adapter.ts 为准。
 
 export interface ShardSpec {
-  /** 官方契约（adapter.ts:16-19）：玩家可以是字符串 handle 或 PlayerSpec 对象。 */
+  /** 玩家可以是字符串 handle 或 PlayerSpec 对象。来源：screeps-ok/src/adapter.ts 的 ShardSpec。 */
   players: Array<string | { name: string; gcl?: unknown; power?: unknown }>;
   rooms: Array<{
     name: string;
@@ -23,7 +23,7 @@ export interface ShardSpec {
 }
 
 export interface PlaceSpec {
-  /** 引擎侧必填（缺 pos / 越界坐标会被拒绝）——上游 PlaceSpec 契约。 */
+  /** 房间对象的位置，x、y 均为 0..49 的整数；市场订单注入不读取此字段。 */
   pos: [number, number];
   owner?: string;
   [key: string]: unknown;
@@ -95,8 +95,9 @@ export class KkscreepsAdapter {
   placeDroppedResource(room: string, spec: PlaceSpec): Promise<string> { return this.place('resource', room, spec); }
   placePowerCreep(room: string, spec: PlaceSpec): Promise<string> { return this.place('powerCreep', room, spec); }
   placeNuke(room: string, spec: PlaceSpec): Promise<string> { return this.place('nuke', room, spec); }
-  // 2B 批 P2：官方 adapter 契约（MarketOrderSpec——owner/type/resourceType/
-  // price【credits】/totalAmount/roomName?/createdTimestamp?/active?/created?）
+  /** 注入测试订单，绕过玩家 API 的创建资格检查与费用。
+   * price 单位为 credits，createdTimestamp 为 Unix 时间毫秒数。
+   * 字段来源：screeps-ok/src/adapter.ts 的 MarketOrderSpec。 */
   async placeMarketOrder(spec: PlaceSpec): Promise<string> {
     const r = await client().call<{ id: string }>('placeMarketOrder', { spec });
     return r.id;
@@ -109,11 +110,14 @@ export class KkscreepsAdapter {
     await client().call('setTerrain', { room, terrain });
   }
 
+  /** 求值并结算一轮后返回表达式结果；玩家错误可能在世界推进后才抛出。 */
   async runPlayer(userId: string, playerCode: PlayerCode): Promise<unknown> {
     const r = await client().call<PlayerRunResult>('runPlayer', { handle: userId, code: String(playerCode) });
     return mapRunResult(r);
   }
 
+  /** 各玩家观察同一轮世界，合并指令后结算一次；玩家错误会拒绝整个 Promise。
+   * 世界结算失败时，重试复用整轮缓存结果并忽略新代码，规则见 EmbedEngine::run_players。 */
   async runPlayers(codesByUser: Record<string, PlayerCode>): Promise<Record<string, unknown>> {
     const codes: Record<string, string> = {};
     for (const [k, v] of Object.entries(codesByUser)) codes[k] = String(v);
@@ -124,8 +128,8 @@ export class KkscreepsAdapter {
   }
 
   async tick(count = 1, options?: TickOptions): Promise<void> {
-    // 官方契约（adapter.ts:338-342）：signal 每 tick 前检查，中止即抛 reason、
-    // 不再开始下一 tick——真结算有 per-tick 循环，超时围栏必须可中止
+    // 有 signal 时逐 tick 发请求，在下一 tick 开始前检查中止；不取消正在处理的 RPC。
+    // 来源：screeps-ok/src/adapter.ts 的 TickOptions.signal。
     const signal = options?.signal;
     if (!signal) {
       await client().call('tick', { count });

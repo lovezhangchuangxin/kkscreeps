@@ -72,8 +72,8 @@ test(
       // 正常 signal：跑完不抛
       await adapter.tick(2, { signal: new AbortController().signal });
       assert.equal(await adapter.getGameTime(), t0 + 2, 'signal 在途不误伤');
-      // 中途中止（上游围栏的真实用法——fixture 在 tick 间 abort）：抛 reason 本体、
-      // 后续 tick 不再开始（区间断言：推进量 < 请求数，不锁精确 tick 数）
+      // 在 tick 序列中中止，验证抛出同一 reason 并停止后续推进。
+      // 中止可能发生在 RPC 处理中，因此只要求推进量小于请求数，不固定已完成 tick 数。
       const reason = new Error('围栏超时');
       const c1 = new AbortController();
       setTimeout(() => c1.abort(reason), 0);
@@ -93,7 +93,7 @@ test(
 
 test('RPC 超时：死锁 sidecar 被拒绝并 kill（新调用恢复）', async () => {
   const { EmbedClient } = await import('../dist/rpc.js');
-  // 假 sidecar：吃掉 stdin 永不回行——确定性死锁
+  // 假子进程读取请求但不响应，模拟连接一直没有返回结果。
   const dir = mkdtempSync(resolve(tmpdir(), 'kk-rpc-'));
   const hangBin = resolve(dir, 'hang.sh');
   writeFileSync(hangBin, '#!/bin/sh\nexec cat > /dev/null\n');
