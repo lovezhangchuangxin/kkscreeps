@@ -34,6 +34,8 @@
 
 **存储选型基准**（2026-09-29 M2-C3 骨架证据）：[storage-bench.md](notes/storage-bench.md)（redb vs libmdbx 微基准方法学、三档场景夹具、macOS arm64 数字（初轮 + 评审清偿后复跑）与选型判据草案——非正式选型，正式选型待 2A 后真实负载）
 
+**文档历史**：[兼容性历史登记](notes/compatibility-register-history.md)、[路线图历史记录](notes/roadmap-history.md)保存正文整理前的完整记录，便于追溯旧结论；现行要求见[兼容性说明](../designs/compatibility.md)和[路线图](../roadmap.md)。
+
 ## 阅读注意
 
 1. 报告中的结论按置信级别标注：**【实测】**（有可复现的实验或命令输出）、**【文档】**（有官方文档或源码出处）、**【推断】**（实测分量的线性外推或架构推理）——引用数字时请连同级别一起引用；

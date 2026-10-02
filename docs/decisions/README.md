@@ -1,37 +1,43 @@
-# 决策记录（ADR）
+# 技术决策记录
 
-这里存放本项目的重要技术决策记录（ADR，Architecture Decision Record）。每份记录回答四个问题：当时面对什么问题、决定了什么、为什么这么决定、有什么证据。这些决策一经确认就约束后续开发；要推翻某条决策，新写一份 ADR 并标注取代关系。
+技术决策记录（ADR，Architecture Decision Record）说明问题、采用的方案、取舍理由和证据。已接受的决策约束后续设计；改变决策时记录替代关系，保留原来的背景与依据。
+
+“已接受”表示方案已确认，不表示功能已实现。当前机制见[架构文档](../architecture/README.md)，能力与进展见[项目说明](../../README.md)和[路线图](../roadmap.md)。后续决策对早期方案的调整按下面的关系阅读。
 
 ## 决策索引
 
-| 编号 | 决策 | 状态 |
+| 编号 | 决定的事项 | 后续关系与阅读提示 |
 |---|---|---|
-| [ADR-001](ADR-001-rust-monorepo.md) | 用 Rust + cargo monorepo 从零重构服务端 | 已接受 |
-| [ADR-002](ADR-002-deno-core-sandbox.md) | 玩家代码沙箱只采用 deno_core，不做备选后端 | 已接受 |
-| [ADR-003](ADR-003-player-compatibility.md) | 玩家侧体验零差异是最高优先级约束 | 已接受 |
-| [ADR-004](ADR-004-core-architecture.md) | 核心架构定型：房间快照 + 流水线 + 索引 + 分层存储 | 已接受 |
-| [ADR-005](ADR-005-dev-kit.md) | 开发套件与服务器共用同一个引擎二进制 | 已接受 |
-| [ADR-006](ADR-006-screeps-ok-ci.md) | screeps-ok 行为测试套件进 CI 作为验收关卡 | 已接受 |
-| [ADR-007](ADR-007-mod-system.md) | JS mod 系统自建，不要求代码兼容，追求同类功能扩展能力 | 已接受（2026-10-01 需求修订） |
-| [ADR-008](ADR-008-runtime-model.md) | 运行时执行模型与资源管理（线程三层次/同步+并行/事务性结算/速率保护等八项） | 已接受 |
-| [ADR-009](ADR-009-frontend-stack.md) | 前端栈（Vue3+Vite+TS+pnpm）与单 monorepo、自建渲染器 | 已接受 |
-| [ADR-010](ADR-010-screeps-ok-adapter-bridge.md) | screeps-ok 适配器桥接（sidecar 子进程）与嵌入式 API、M0 哑世界、bot 验收与上游 pin 策略 | 已接受 |
-| [ADR-011](ADR-011-engine-skeleton.md) | 引擎骨架定型：typed world 唯一后端、官方结算序子集、intent 通道 trait、声明宏快照格式、常量生成、通过率棘轮 | 已接受 |
-| [ADR-012](ADR-012-m2a-sandbox-runtime.md) | M2A 架构定型：两条硬约束裁决器、玩家 API 层 prelude 对照移植、intent 链路四段、数据面分期 seam 先行、查询面 Rust 单源、验收口径、性能观测点（A6 收口升格） | 已接受 |
-| [ADR-013](ADR-013-architecture-review-coordinator.md) | 2026-09 架构复审：运行协调层（RunResult 统一提交）、直读 seam 先行节奏、LIFO 每线程纠偏、宿主控制面收口、TickInput 非确定性显式化（ADR-012 由 A6 预留） | 已接受 |
-| [ADR-014](ADR-014-contribution-plane.md) | 贡献平面架构定型：六原则（启动冻结/vanilla 同契约/冷热双轨 slot/三平面+投影一步设计/全域 TickTxn/零差异+显式发布）、四项拍板、封闭分派评审门禁、批次 A–G 调整 | 已接受 |
+| [ADR-001](ADR-001-rust-monorepo.md) | Rust 服务端与 Cargo workspace | 模块现状见总体架构；性能收益由端到端基准验证 |
+| [ADR-002](ADR-002-deno-core-sandbox.md) | 只采用 deno_core 玩家沙箱 | ADR-013 澄清线程局部销毁约束；安全与计费边界见沙箱文档 |
+| [ADR-003](ADR-003-player-compatibility.md) | 默认玩家行为兼容优先于性能优化 | ADR-007/014 明确默认玩法与启用 Mod 的验收边界 |
+| [ADR-004](ADR-004-core-architecture.md) | 快照、索引、流水线与分层存储 | ADR-013/014 调整投影协议、实施顺序和提交边界 |
+| [ADR-005](ADR-005-dev-kit.md) | 开发套件共用服务器引擎二进制 | 完整套件仍为目标，具体使用流程见功能设计 |
+| [ADR-006](ADR-006-screeps-ok-ci.md) | screeps-ok 进入 CI 验收 | 当前报告、预期差异与回归豁免规则见[验收工具](../../compat/README.md) |
+| [ADR-007](ADR-007-mod-system.md) | Mod 作者使用 JS，自建扩展接口 | 已撤回 Rust 作者插件方向；架构由 ADR-014 定型 |
+| [ADR-008](ADR-008-runtime-model.md) | 执行、线程、失败处理与资源管理 | ADR-013/014 补充协调与全域提交；原文的调度和回收策略不全是现状 |
+| [ADR-009](ADR-009-frontend-stack.md) | Vue、Vite、TypeScript、pnpm 与前端包边界 | 当前包为占位，生成、构建与协议仍须实现 |
+| [ADR-010](ADR-010-screeps-ok-adapter-bridge.md) | 适配器、嵌入接口和 M0 验收范围 | 早期哑世界已经由真实结算替代，保留当时的接口选择依据 |
+| [ADR-011](ADR-011-engine-skeleton.md) | 类型化世界、结算骨架与回归检查 | M1 定型记录；投影目标随后由 ADR-014 演进 |
+| [ADR-012](ADR-012-m2a-sandbox-runtime.md) | 沙箱接入、玩家 API 和指令通路 | M2A 定型记录；运行协调见 ADR-013，投影目标见 ADR-014 |
+| [ADR-013](ADR-013-architecture-review-coordinator.md) | 运行协调、提交边界与时间输入 | 实装范围见 tick 契约；全域事务与并发仍有后续目标 |
+| [ADR-014](ADR-014-contribution-plane.md) | 贡献定义、规则替换、共享投影与全域事务 | 冻结计划、默认玩法同契约及扩展入口要求；切片见贡献平面方案 |
 
-## 评估过但没有采纳的方案
+上述记录均已接受，具体修订与范围以各记录正文为准。
 
-| 提案 | 否决原因 | 证据 |
+## 评估后未采用的方案
+
+本表概括当时的取舍，不把旧版本实验结果视为永久能力判断。性能数字和机制限制应连同报告的版本、环境与负载阅读。
+
+| 方案 | 当时未采用的原因 | 依据 |
 |---|---|---|
-| QuickJS（rquickjs 绑定）作为低内存备选档 | 单实例内存只要约 0.4MB 很诱人，但执行速度比 V8 慢约 12 倍——CPU 是预算制，这会改变玩家能完成的工作量，破坏公平性；用户拍板不做备选档 | [沙箱选型报告](../research/02-sandbox-evaluation.md) |
-| Boa（纯 Rust 的 JS 引擎） | 没有"内存上限"接口：实验中一段扩张内存的代码让它多吃 216MB 无任何拦截 | 同上 |
-| wasmtime + Javy（玩家代码编译成 WebAssembly） | 不支持 `eval`、`new Function` 等动态能力，玩家代码形态不兼容 | [备选方案笔记](../research/notes/sandbox-alternatives.md) |
-| 直接用 rusty_v8 裸绑（不经 deno_core） | 底层引擎相同、性能相同，但要自己造启动快照、函数注入、模块加载全套设施，且 rusty_v8 的 API 还在不稳定期（调研中迁移实验撞了 19 个编译错误） | 同上 |
-| isolated-vm + Node 独立伴生进程（过渡方案） | deno_core 的全部风险点已实测关闭，不需要过渡形态 | [游戏功能验证报告](../research/04-game-api-feasibility.md) |
-| 自己实现寻路算法 | 即使结果"同样最优"，路径的细节选择（先走哪条同长度的路）可能和官方不同，玩家会观察到差异 | [兼容性红线](../designs/compatibility.md) |
-| 复用官方渲染器代码（01 报告原建议） | 技术栈老旧（旧版 PixiJS + 自研表达式引擎），自建渲染器但复用其美术 SVG 资产与数据驱动设计思想 | [ADR-009](ADR-009-frontend-stack.md) |
-| 世界模型整体改 ECS（2026-09 复审再裁决） | Screeps 对象异构、强类型、每房几百个、迭代序必须确定——`BTreeMap<ObjId, RoomObject>` + 格子索引够用；ECS 的 archetype 收益未证明且破坏"typed 即 schema 类型"单真源 | [架构复审笔记](../research/notes/architecture-review-2026-09.md) |
-| 微服务化 / 每房常驻 Actor / 完整事件溯源（同上） | 当前阶段成本高；统一提交与跨房语义仍需协调，换存储接口不解决分布式执行语义；重放需求用 tick 输入日志 + 检查点即可覆盖 | 同上 |
-| 立即冻结零拷贝列式快照布局（同上） | 偏早：应先验证完整读写链路、生命周期与端到端收益，再按 snapshot 契约的冻结前验收条款冻结；但 seam（世界来源接口化/地形缓存/不可变房间版本句柄）须先行，避免 M2B API 扩面按旧形态翻倍 | [ADR-013](ADR-013-architecture-review-coordinator.md) |
+| QuickJS 作为玩家沙箱备选 | 记录的负载较慢，预算制下影响玩家工作量；同时维护两套后端会增加行为差异 | [沙箱选型](../research/02-sandbox-evaluation.md)、ADR-002 |
+| Boa 作为玩家沙箱 | 选型版本的实例内存与中断机制未满足要求 | [沙箱选型](../research/02-sandbox-evaluation.md) |
+| wasmtime + Javy 编译玩家 JS | 评估方案无法保持 eval、new Function 等动态能力 | [备选方案笔记](../research/notes/sandbox-alternatives.md) |
+| 直接使用 rusty_v8 | 需要自行补齐 deno_core 已提供的嵌入设施，评估时迁移成本较高 | [备选方案笔记](../research/notes/sandbox-alternatives.md) |
+| isolated-vm 与 Node 伴生进程 | 选型实验支持 deno_core 方向，未采用过渡后端；不表示所有生产风险已关闭 | [游戏功能实验](../research/04-game-api-feasibility.md) |
+| 重新实现寻路算法 | 同成本路径的选择仍可被玩家观察，优先复用并验证官方实现 | [兼容性要求](../designs/compatibility.md) |
+| 移植官方渲染器代码 | 采用自建架构和独立包；资产复用另核对许可 | [ADR-009](ADR-009-frontend-stack.md) |
+| 世界模型整体改为 ECS | 尚无足够收益证据，类型化对象与确定性迭代更符合当前需求 | [架构复审笔记](../research/notes/architecture-review-2026-09.md) |
+| 微服务、每房常驻 Actor 或完整事件溯源 | 当前阶段成本较高，仍不能绕过跨房协调与统一提交要求 | [架构复审笔记](../research/notes/architecture-review-2026-09.md) |
+| 在完整链路验证前冻结零拷贝布局 | 须先验证生命周期、权限与端到端收益；ADR-014 要求整体设计协议，具体实现仍分步验收 | [ADR-013](ADR-013-architecture-review-coordinator.md)、[ADR-014](ADR-014-contribution-plane.md) |

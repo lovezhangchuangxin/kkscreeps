@@ -1,35 +1,38 @@
-# ADR-009 前端栈与整体 monorepo 形态
+# ADR-009 前端技术栈与包边界
 
 - **日期**：2026-09-27
-- **状态**：已接受（用户指定技术栈并确认包划分方案）
+- **状态**：已接受
 
 ## 背景
 
-此前架构讨论覆盖了服务端（引擎、沙箱、存储），前端未定。用户明确要求：Vue 3 + Vite + TypeScript + pnpm；前端同样按 monorepo 组织；渲染层独立成包方便他人复用；**不复用官方渲染器**（其技术栈老旧——旧版 PixiJS + 自研表达式引擎），用最新 PixiJS 与更好的架构自建。
+项目需要自建 Web 客户端，并将渲染器等能力提供给其他工具使用。用户选择 Vue 3、Vite、TypeScript 与 pnpm，要求前端按 monorepo 组织，渲染器独立成包，不移植官方渲染器代码。
 
 ## 决策
 
-1. **单 monorepo**：Rust workspace（crates/、compat/）与 pnpm workspace（apps/、packages/）共存于仓库根。不引入 turborepo/nx，先用根 package.json 脚本 + Vite。
-2. **技术栈**：Vue 3 组合式 API + Vite + TypeScript + pnpm；渲染用 PixiJS 最新大版本（v8+，WebGPU/WebGL 双后端，实现期锁版本）；Vitest 单测，Playwright 按需。
-3. **包划分**（详见 [frontend.md](../architecture/frontend.md)）：
-   - `@kkscreeps/shared`：常量（从 Rust kk-core 生成，单一事实来源）+ 协议类型；
-   - `@kkscreeps/renderer`：框架无关的渲染引擎（独立发布，React/Node 工具可复用）；
-   - `@kkscreeps/api`：类型化网络客户端（浏览器/Node 通用）；
-   - `@kkscreeps/editor`：代码编辑器 Vue 组件（内核已定 Monaco：智能提示对写 TS 的玩家价值大，包体问题用按需加载解决）；
-   - `apps/game`：客户端应用，构建产物经 rust-embed 嵌入服务器二进制（单二进制自带 Web 客户端）。
-4. **渲染器架构纪律**：框架无关、数据驱动（对象外观由元数据描述）；渲染循环归渲染器所有，Pixi 对象绝不进 Vue 响应式系统；输入接口（快照/增量/玩家绘制）与后端变更集同构，同一接口服务实时/回放/本地模拟三种数据源。
-5. **资产复用**：官方开源美术（全套 SVG，宽松许可）继续复用；"数据驱动渲染元数据"的设计思想（含服务端注入扩展点）保留；官方渲染器的代码不移植。
-6. **路线图影响**：M3 交付改为"自建客户端可玩 + 官方客户端可连接"；协议兼容关卡不变。
+1. Rust 与 pnpm 工作区共存于仓库根，先使用根脚本与 Vite，不引入额外的 monorepo 调度工具。
+2. 应用采用 Vue 3 组合式 API 与 TypeScript，构建采用 Vite；渲染采用 PixiJS v8 或后续大版本，目标支持 WebGL/WebGPU 双后端，具体版本与支持范围在实现时锁定和验证。目标测试工具为 Vitest，按需使用 Playwright。
+3. 按下表划分包；应用构建产物计划经 rust-embed 嵌入服务器二进制。
+4. 渲染器独立管理图形对象与渲染循环，不把 Pixi 对象放入 Vue 深度响应式状态。对象外观采用数据驱动注册，实时、回放与模拟共用输入契约。
+5. 保留复用官方 SVG 资产与渲染元数据设计的方向，实际引入与分发须核对每项资产的许可、署名及其他条件。
+6. M3 验收包括自建客户端可玩与官方客户端可连接，两项分别验证。
 
-## 理由
+| 包 | 目标职责 |
+|---|---|
+| `@kkscreeps/shared` | 常量、网络协议与渲染数据类型 |
+| `@kkscreeps/renderer` | 框架无关的渲染引擎，计划独立发布 |
+| `@kkscreeps/api` | 浏览器与 Node 工具使用的类型化网络客户端 |
+| `@kkscreeps/editor` | 基于 Monaco 的 Vue 编辑器组件，按需加载 |
+| `apps/game` | 组装应用界面与上述库 |
 
-- 渲染器独立成包 + 框架无关，是"方便其他人使用"的必要条件（社区可拿去做 bot 可视化，不必装 Vue）；
-- 官方渲染器的旧栈（旧 PixiJS、自研表达式引擎）继续维护等于背上技术债，而其可取之处（数据驱动、SVG 资产、服务端元数据扩展点）都可以在新架构里保留；
-- 常量与协议 DTO 都走"Rust 侧生成 + CI 新鲜度校验"的管线（DTO 生成管线已定采纳，契约测试作补充），消灭"同一概念两处定义"这个前后端协作的最大隐患；
-- 客户端嵌入二进制保持"部署 = 一个文件"的项目卖点。
+## 理由与实现边界
+
+包边界让工具按需复用渲染和网络能力。框架无关不等于所有图形后端都能在 Node 运行，运行环境须单独定义与验收。
+
+已接受的目标是由 Rust 侧向 shared 生成常量与协议类型，并在 CI 检查生成同步，以契约测试补充行为验证。当前常量从 `kk-runner/assets/constants.json` 生成 Rust 定义，尚无 Rust 到前端的完整常量与 DTO 生成流程；接入时须保持数值的单一来源，具体设计见[前端架构](../architecture/frontend.md)。
+
+客户端与服务器共同分发可减少版本分叉，仍须验证协议版本、权限、重连和漏包。当前前端目录只有包声明与占位测试，没有客户端、渲染器或嵌入构建产物。
 
 ## 证据
 
-- 官方渲染器技术栈与设计：`sources/screeps/renderer/`（PixiJS 版本与表达式引擎见 [01 报告](../research/01-screeps-rust-feasibility.md) §0 与 renderer 调研）
-- 官方美术许可：`renderer/LICENSE.txt`（宽松许可，含全套 SVG，2026-09-27 已核）
-- 详细设计：[frontend.md](../architecture/frontend.md)
+- [前端架构](../architecture/frontend.md)：目标接口、依赖方向与当前实现边界。
+- [可行性研究](../research/01-screeps-rust-feasibility.md)：官方渲染器与资源调研；其中源码路径属于报告的调研环境。
