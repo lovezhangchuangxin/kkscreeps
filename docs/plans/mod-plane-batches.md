@@ -63,6 +63,8 @@
 
 ### P2 对照 benchmark harness
 
+已实现本仓与本地 xxscreeps 的共享夹具对照，使用生产隔离沙箱，检查每玩家执行和动作计数、全部房间关键状态及实际地形/预算。1/4/8/32 玩家各五次独立运行的结果与边界见 [P2 本地对照记录](../research/notes/p2-local-comparison-2026-10-02.md)。官方私服接入后置；当前结果不代表完整三方端到端矩阵完成。
+
 - **内容**：本仓 / 本地 xxscreeps（`/Users/keqing/Desktop/projects/sources/screeps/xxscreeps`）/ 官方私服三方同负载对照：同源玩家脚本（简单 harvest→upgrade bot）、**同地形数据导入**（跨引擎无共同 seed——本仓 ShardSpec 收 terrain 字节、xxs 走 `scripts/import.ts` 导入通道、官方走 import mod）、1/4/8/32 玩家档、≥5 独立运行；采集 wall/进程 CPU/RSS/P50/P95/P99 与 tick 成分。**首个交付物是进程 CPU/RSS 采样器**（现有 perf-probe 只记各相 wall，无进程级采样；P1 判据复用）。先做本仓 + xxs 本地（`engine/service/main.ts` 的 avg tick 观测点可采）；官方私服（Node+Mongo）后置，A 批内登记状态。
 - **判据**：产出 `docs/research/notes/` 对照报告（机器/版本/commit/负载自检齐全，同 perf-probe 口径）；「性能超官方与 xxs」的后续声称以此为据。
 - **依赖**：无（可与 A1 同日启动）。

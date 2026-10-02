@@ -36,6 +36,8 @@
 
 **测试套件评估**：[screeps-ok 初期质量评估](notes/screeps-ok-evaluation-2026-09-27.md)保存 ADR-006 的原始详细评估，当前采用与回归规则见 [ADR-006](../decisions/ADR-006-screeps-ok-ci.md)。
 
+**本地共同负载对照**（2026-10-02）：[P2 对照记录](notes/p2-local-comparison-2026-10-02.md)保存本项目与本地 xxscreeps 的生产沙箱采集、工作量核对及测量边界；官方私服尚未接入。
+
 **文档历史**：[兼容性历史登记](notes/compatibility-register-history.md)、[路线图历史记录](notes/roadmap-history.md)保存正文整理前的完整记录，便于追溯旧结论；现行要求见[兼容性说明](../designs/compatibility.md)和[路线图](../roadmap.md)。
 
 ## 阅读注意

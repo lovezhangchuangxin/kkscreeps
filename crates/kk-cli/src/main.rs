@@ -38,6 +38,19 @@ enum Command {
         #[arg(long, default_value = "bot-check-report.json")]
         report: String,
     },
+    /// 运行跨引擎共用的显式负载
+    CompareProbe {
+        #[arg(long)]
+        fixture: String,
+        #[arg(long, default_value_t = 500)]
+        warmup: u32,
+        #[arg(long, default_value_t = 3000)]
+        ticks: u32,
+        #[arg(long, default_value_t = 2)]
+        concurrency: usize,
+        #[arg(long)]
+        report: String,
+    },
     /// 运行采集、升级和孵化负载，统计投影、执行、结算与整轮耗时
     PerfProbe {
         /// 采集 tick 数
@@ -74,6 +87,21 @@ fn main() {
             report,
         } => {
             std::process::exit(bot_check::run(&path, ticks, &report));
+        }
+        Command::CompareProbe {
+            fixture,
+            warmup,
+            ticks,
+            concurrency,
+            report,
+        } => {
+            std::process::exit(perf_probe::run_comparison(
+                &fixture,
+                warmup,
+                ticks,
+                concurrency,
+                &report,
+            ));
         }
         Command::PerfProbe {
             ticks,
