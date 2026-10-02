@@ -1,7 +1,7 @@
 //! 验证 CPU 桶为负时的跳帧惩罚和待提交回充。
 //!
 //! 跳帧玩家虽然不运行代码，仍须在世界成功结算后提交回充；失败时保留候选供重试。
-//! 测试在创建分片前设置初始桶，再读取沙箱的已提交桶值。默认 CPU limit 为 20。
+//! 测试在创建分片前设置初始桶，再读取宿主的已提交桶值。默认 CPU limit 为 20。
 //! 回充先判断原桶是否小于 -2 * limit：低于时设为该下限，否则加 limit。
 
 use std::collections::BTreeMap;
@@ -85,7 +85,7 @@ pub(super) fn stop_run_failure_and_discard_impl() -> anyhow::Result<()> {
     codes.insert("p1".to_string(), "'a'".to_string());
     codes.insert("p2".to_string(), "'b'".to_string());
 
-    // 结算失败：p2 已停跑（候选暂存沙箱）→ 整轮 Err → 桶不动
+    // 结算失败：p2 已停跑（候选尚未发布）→ 整轮 Err → 桶不动
     e.fail_next_settle_for_test();
     assert!(e.run_players(&codes).is_err(), "结算失败整轮回退");
     assert_eq!(

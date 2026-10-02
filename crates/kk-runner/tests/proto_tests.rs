@@ -53,6 +53,8 @@ fn world() -> serde_json::Value {
 
 #[test]
 fn m0_thread_model_suite() -> anyhow::Result<()> {
+    host_budget_job()?;
+    pending_receipts_are_independent()?;
     multi_player_ticks()?;
     idle_eviction_and_rebuild()?;
     out_of_order_eviction()?;
@@ -303,5 +305,64 @@ fn lifo_shutdown_clean() -> anyhow::Result<()> {
     }
     pool.shutdown_all();
     assert_eq!(live_sandbox_count(), 0, "全部 isolate 按逆序销毁");
+    Ok(())
+}
+
+/// 每次使用宿主快照，即使线程工作桶发生变化也不能改写下一轮预算。
+fn host_budget_job() -> anyhow::Result<()> {
+    let mut pool = PlayerThreads::new();
+    pool.spawn_player(1, config())?;
+    let committed = kk_core::cpu::Bucket::new(20.0, 10000.0, 500.0, 7.0);
+    for _ in 0..2 {
+        let report = pool.run_job(
+            1,
+            kk_runner::RunJob {
+                world: world(),
+                code: "[Game.cpu.bucket,Game.cpu.tickLimit,Memory.saved]".into(),
+                epoch: EPOCH,
+                attempt: 1,
+                raw_memory: r#"{"saved":42}"#.into(),
+                segments_json: "[]".into(),
+                foreign_json: "null".into(),
+                budget: kk_core::cpu::RunBudget::new(&committed),
+            },
+        )?;
+        let report = report.report;
+        assert_eq!(report.epoch, EPOCH);
+        assert_eq!(report.expr["value"], json!([7, 27, 42]));
+        assert!(report.cpu_billed_ms.unwrap() >= 0.0);
+        assert_eq!(pool.bucket(1)?, 7.0);
+        pool.settle_bill(1)?;
+        assert_eq!(pool.bucket(1)?, 7.0, "RunJob 报告后不留待提交桶账");
+    }
+    assert_eq!(committed.bucket(), 7.0);
+    Ok(())
+}
+
+/// 先等待第二条命令，再读取第一条迟到回执；结果仍与各自 token 对应。
+fn pending_receipts_are_independent() -> anyhow::Result<()> {
+    let mut pool = PlayerThreads::new();
+    pool.spawn_player(1, config())?;
+    let job = |attempt| kk_runner::RunJob {
+        world: world(),
+        code: "globalThis.n=(globalThis.n||0)+1;globalThis.n".into(),
+        epoch: EPOCH,
+        attempt,
+        raw_memory: "{}".into(),
+        segments_json: "[]".into(),
+        foreign_json: "null".into(),
+        budget: kk_core::cpu::RunBudget::new(&kk_core::cpu::Bucket::default()),
+    };
+    let first = pool.dispatch_job(1, job(1))?;
+    let second = pool.dispatch_job(1, job(2))?;
+    let first_token = first.token;
+    let second_token = second.token;
+    let second = second.wait()?;
+    assert_eq!(second.token, second_token);
+    assert_eq!(second.report.expr["value"], 2);
+    let first = first.wait()?;
+    assert_eq!(first.token, first_token);
+    assert_eq!(first.report.expr["value"], 1);
+    assert_ne!(first.token, second.token);
     Ok(())
 }

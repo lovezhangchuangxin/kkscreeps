@@ -1,11 +1,11 @@
 //! 以库接口创建分片、执行玩家代码并结算世界。
 //!
-//! 每轮玩家读取同一已提交世界，运行结果先作为候选保存。世界结算成功后，
-//! 写入玩家的 Memory、segments，再通知沙箱提交 CPU 桶计费；结算失败则缓存
+//! 每轮玩家读取同一已提交世界，运行结果先作为候选保存。Memory、segments
+//! 与 CPU 桶、世界一起发布；结算失败则缓存
 //! 整轮候选，下次调用只重试结算，复用首次尝试的墙钟输入。
 //!
 //! 这些边界不涵盖 V8 全局变量：玩家代码对全局变量的修改不会随结算失败回滚。
-//! 世界提交后的计费通信失败也不会撤销世界；详见 `commit_players`。
+//! 执行阶段基础设施故障会保留已确认结果并阻止自动重派。
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -14,7 +14,9 @@ use serde_json::{Value, json};
 
 use crate::{PlayerExecutor, RunEpoch, ThreadExecutor, WorldSource};
 use kk_engine::intent::IntentBatch;
-use kk_engine::{RunOutcome, RunResult, RunSpec, RunState, TickInput, TickStage};
+use kk_engine::{
+    PlayerWriteback, RunOutcome, RunResult, RunState, SegmentWriteback, TickInput, TickStage,
+};
 use kk_world::place::{PlaceCtx, normalize};
 
 use kk_engine::settle::Engine;
@@ -33,10 +35,16 @@ pub struct PlayerRun {
 
 /// 世界结算失败后保留的整轮候选。重试复用结果和墙钟，不再运行玩家代码。
 struct PendingRound {
-    /// 玩家意图、Memory、segments 和 console；CPU 桶的待提交计费仍在沙箱中。
+    /// 玩家意图、Memory、segments、CPU 用量和 console，均已脱离线程本地计费状态。
     results: BTreeMap<String, RunResult>,
     /// 首次尝试的结算输入，保证重试不改变签名时间等墙钟相关字段。
     input: TickInput,
+}
+
+/// 执行结果无法全部确认的轮次。保留已确认结果供诊断，禁止自动重派。
+struct ExecutionFailure {
+    confirmed: BTreeMap<String, RunResult>,
+    reason: String,
 }
 
 /// 嵌入式分片及其玩家沙箱，协调玩家执行、世界结算和失败重试。
@@ -45,6 +53,8 @@ pub struct EmbedEngine {
     engine: Engine,
     /// 等待重试或丢弃的失败轮。
     pending: Option<PendingRound>,
+    execution_failure: Option<ExecutionFailure>,
+    fail_after_player_for_test: Option<String>,
     last_console: BTreeMap<String, Vec<String>>,
     /// 成功的 `run_players` 调用的耗时样本。
     perf: PerfRecorder,
@@ -54,6 +64,7 @@ pub struct EmbedEngine {
     fail_next_settle_room: Option<String>,
     /// 下一次实际调用引擎结算时使用的阶段故障钩子，用后清除。
     fail_next_settle_stage: Option<TickStage>,
+    fail_next_writeback: Option<kk_engine::WritebackStep>,
     /// 测试用执行顺序，必须是全部注册玩家的排列；默认按玩家名排序。
     execution_order_for_test: Option<Vec<String>>,
     /// 最近一次启用顺序覆盖时的完整排列，包含本轮未请求执行的玩家。
@@ -239,11 +250,14 @@ impl EmbedEngine {
             players: None,
             engine: Engine::default(),
             pending: None,
+            execution_failure: None,
+            fail_after_player_for_test: None,
             last_console: BTreeMap::new(),
             perf: PerfRecorder::default(),
             fail_next_settle: false,
             fail_next_settle_room: None,
             fail_next_settle_stage: None,
+            fail_next_writeback: None,
             execution_order_for_test: None,
             last_execution_order: None,
             sandbox_configs_for_test: BTreeMap::new(),
@@ -262,6 +276,8 @@ impl EmbedEngine {
         }
         self.engine = Engine::default();
         self.pending = None;
+        self.execution_failure = None;
+        self.fail_after_player_for_test = None;
         self.last_console.clear();
         self.perf = PerfRecorder::default();
         self.execution_order_for_test = None;
@@ -269,13 +285,21 @@ impl EmbedEngine {
         self.fail_next_settle = false;
         self.fail_next_settle_room = None;
         self.fail_next_settle_stage = None;
+        self.fail_next_writeback = None;
 
         let players = self.players.get_or_insert_with(ThreadExecutor::new);
         // 先取走全部配置，避免注册中途失败后残留配置被下一次创建意外使用。
         let configs = std::mem::take(&mut self.sandbox_configs_for_test);
         for handle in handles {
             let config = configs.get(&handle).cloned().unwrap_or_default();
+            let cpu = kk_core::cpu::Bucket::new(
+                config.cpu_limit,
+                config.bucket_cap,
+                config.max_per_tick,
+                config.initial_bucket,
+            );
             players.spawn(&handle, config)?;
+            self.engine.players.entry(handle.clone()).or_default().cpu = cpu;
             // 初始余额为 10M credits，内部按千分之一存储。
             // 来源：screeps-ok adapters/vanilla/index.ts 的 createShard 玩家初始化。
             self.engine.players.entry(handle.clone()).or_default().money = 10_000_000_000;
@@ -467,6 +491,7 @@ impl EmbedEngine {
         &mut self,
         codes: &BTreeMap<String, String>,
     ) -> anyhow::Result<BTreeMap<String, PlayerRun>> {
+        self.no_execution_failure("run_players")?;
         let t0 = std::time::Instant::now();
         // 先校验再取走缓存，防止错误请求丢掉失败轮。子集请求仍重试整个缓存轮。
         if let Some(pending) = &self.pending {
@@ -487,12 +512,45 @@ impl EmbedEngine {
         };
         // 墙钟输入随候选一起缓存，重试不会重新采样签名时间等值。
         let t_settle = std::time::Instant::now();
-        let settled = self.settle_world(Self::batch_from_results(&results), input);
+        let writebacks = results
+            .iter()
+            .map(|(handle, result)| {
+                Ok((
+                    handle.clone(),
+                    PlayerWriteback {
+                        cpu: Some(
+                            kk_core::cpu::RunBudget::new(&self.engine.players[handle].cpu)
+                                .finish(result.cpu_billed_ms)
+                                .map_err(anyhow::Error::msg)?,
+                        ),
+                        raw_memory: result.raw_memory.clone(),
+                        segments: result
+                            .segments_out
+                            .as_ref()
+                            .map(SegmentWriteback::from_runner),
+                    },
+                ))
+            })
+            .collect::<anyhow::Result<BTreeMap<_, _>>>();
+        let writebacks = match writebacks {
+            Ok(writebacks) => writebacks,
+            Err(error) => {
+                self.execution_failure = Some(ExecutionFailure {
+                    confirmed: results,
+                    reason: error.to_string(),
+                });
+                return Err(error);
+            }
+        };
+        let settled = self.settle_world_with_writebacks(
+            Self::batch_from_results(&results),
+            input,
+            writebacks,
+        );
         match settled {
             Ok(()) => {
                 let settle_ns = t_settle.elapsed().as_nanos();
-                // 引擎已发布世界；现在才写入玩家持久状态和 CPU 桶。
-                self.commit_players(&results);
+                // 世界、玩家内存和 CPU 桶已经统一发布，无需线程计费回执。
                 self.perf.record([
                     ns_ms(project_ns),
                     ns_ms(run_ns),
@@ -517,6 +575,15 @@ impl EmbedEngine {
 
     /// 执行世界结算并消费测试故障钩子。重试的 `input` 来自失败轮缓存。
     fn settle_world(&mut self, batch: IntentBatch, input: TickInput) -> anyhow::Result<()> {
+        self.settle_world_with_writebacks(batch, input, BTreeMap::new())
+    }
+
+    fn settle_world_with_writebacks(
+        &mut self,
+        batch: IntentBatch,
+        input: TickInput,
+        writebacks: BTreeMap<String, PlayerWriteback>,
+    ) -> anyhow::Result<()> {
         if self.fail_next_settle {
             self.fail_next_settle = false;
             anyhow::bail!("故障注入：世界结算失败（测试钩子）");
@@ -530,9 +597,11 @@ impl EmbedEngine {
         if fail_stage.is_some() {
             self.engine.set_fail_stage_for_test(fail_stage);
         }
+        let fail_writeback = self.fail_next_writeback.take();
+        self.engine.set_fail_writeback_for_test(fail_writeback);
         let settled = self
             .engine
-            .tick_with_intents_with_input(batch, input)
+            .tick_with_writebacks(batch, input, writebacks)
             .map_err(|e| anyhow::anyhow!("{e}"));
         if fail_room.is_some() {
             self.engine.set_fail_room_for_test(None);
@@ -540,11 +609,12 @@ impl EmbedEngine {
         if fail_stage.is_some() {
             self.engine.set_fail_stage_for_test(None);
         }
+        self.engine.set_fail_writeback_for_test(None);
         settled
     }
 
     /// 从已提交状态注入 Memory 和世界，按顺序收集请求玩家的候选结果。
-    /// 宿主注入通信失败或 `InfraFailure` 会中止整轮，不保存已经收集的候选；
+    /// 注入通信失败或 `InfraFailure` 中止整轮，保留已确认结果并阻止自动重跑；
     /// 玩家的语法错误、运行错误和跳帧惩罚则由后续结算统一处理。
     #[allow(clippy::type_complexity)]
     fn execute_players(
@@ -613,20 +683,6 @@ impl EmbedEngine {
             let foreign_json = self
                 .resolve_foreign_segment(&handle)
                 .unwrap_or(serde_json::Value::Null);
-            let players = self
-                .players
-                .as_mut()
-                .ok_or_else(|| anyhow::anyhow!("分片未创建"))?;
-            // 注入已提交的 Memory；活动段中未写过的段为空字符串。
-            // 外部段按发布者当前授权重新解析，撤回公开权限在下一轮生效。
-            let inject = players.set_memory_state(
-                &handle,
-                &raw_mem,
-                &segments_json,
-                &foreign_json.to_string(),
-            );
-            assert_bound();
-            inject?;
             let gcl = self.engine.players.get(&handle).map(|p| p.gcl).unwrap_or(0);
             let t_project = std::time::Instant::now();
             let mut world = source.world_json_for_viewer(&handle, gcl);
@@ -636,13 +692,41 @@ impl EmbedEngine {
             }
             project_ns += t_project.elapsed().as_nanos();
             let t_run = std::time::Instant::now();
-            let result = players.execute(&world, &RunSpec::new(&handle, code), epoch);
+            let budget = kk_core::cpu::RunBudget::new(&self.engine.players[&handle].cpu);
+            let result = self.players.as_mut().expect("已检查分片创建").execute_job(
+                &handle,
+                kk_runner::RunJob {
+                    world,
+                    code: code.clone(),
+                    epoch,
+                    attempt: 0, // ThreadExecutor 在派发时分配，调用方不能复用尝试编号。
+                    raw_memory: raw_mem,
+                    segments_json,
+                    foreign_json: foreign_json.to_string(),
+                    budget,
+                },
+            );
             run_ns += t_run.elapsed().as_nanos();
             if let RunOutcome::InfraFailure(err) = &result.outcome {
                 assert_bound();
-                anyhow::bail!("基础设施故障（玩家 {handle}）: {err}");
+                let reason = format!("基础设施故障（玩家 {handle}）: {err}");
+                self.execution_failure = Some(ExecutionFailure {
+                    confirmed: results,
+                    reason: reason.clone(),
+                });
+                anyhow::bail!(reason);
             }
-            results.insert(handle, result);
+            let fail_after = self.fail_after_player_for_test.as_deref() == Some(handle.as_str());
+            results.insert(handle.clone(), result);
+            if fail_after {
+                self.fail_after_player_for_test = None;
+                let reason = format!("故障注入：玩家 {handle} 回执后执行轮中止");
+                self.execution_failure = Some(ExecutionFailure {
+                    confirmed: results,
+                    reason: reason.clone(),
+                });
+                anyhow::bail!(reason);
+            }
         }
         assert_bound();
         Ok((results, run_ns, project_ns))
@@ -691,71 +775,6 @@ impl EmbedEngine {
         }))
     }
 
-    /// 合并段写入并保存下一轮的活动段、公开段及外部段请求。
-    /// 缺少请求字段时保留旧值；显式 null 清除默认公开段或外部段请求。
-    /// 段 ID 在转换为 u8 前限制为 0..=99，避免畸形值截断后写入另一个段。
-    fn commit_segments(&mut self, handle: &str, out: &serde_json::Value) {
-        let Some(state) = self.engine.players.get_mut(handle) else {
-            return;
-        };
-        let seg_id = |v: &serde_json::Value| -> Option<u8> {
-            let n = v.as_u64()?;
-            (n <= 99).then_some(n as u8)
-        };
-        if let Some(writes) = out.get("writes").and_then(|v| v.as_array()) {
-            for pair in writes {
-                let (Some(id), Some(val)) = (
-                    pair.get(0).and_then(&seg_id),
-                    pair.get(1).and_then(|v| v.as_str()),
-                ) else {
-                    continue; // 忽略非法段写入，保留已有段内容。
-                };
-                state.segments.insert(id, val.to_string());
-            }
-        }
-        if let Some(active) = out.get("active").and_then(|v| v.as_array()) {
-            state.active_request = active.iter().filter_map(seg_id).collect();
-        }
-        if let Some(public) = out.get("public").and_then(|v| v.as_array()) {
-            state.public_ids = public.iter().filter_map(seg_id).collect();
-        }
-        if let Some(dp) = out.get("defaultPublic") {
-            state.default_public = dp.as_u64().and_then(|n| (n <= 99).then_some(n as u8));
-        }
-        if let Some(foreign) = out.get("foreign") {
-            state.foreign_request = match foreign {
-                serde_json::Value::Null => None,
-                v => v
-                    .get("username")
-                    .and_then(|u| u.as_str())
-                    .map(|username| (username.to_string(), v.get("id").and_then(seg_id))),
-            };
-        }
-    }
-
-    /// 世界已提交后，写入玩家 Memory、segments，再提交沙箱中待结算的 CPU 桶。
-    /// 逐玩家提交不是跨线程事务；计费通信错误被忽略，不回滚已提交的世界。
-    fn commit_players(&mut self, results: &BTreeMap<String, RunResult>) {
-        for (handle, result) in results {
-            if let Some(state) = self.engine.players.get_mut(handle)
-                && let Some(raw) = &result.raw_memory
-            {
-                state.raw_memory = raw.clone();
-            }
-            if let Some(segments) = &result.segments_out {
-                self.commit_segments(handle, segments);
-            }
-        }
-        if let Some(players) = &mut self.players {
-            for handle in results.keys() {
-                // 跳帧玩家也有待提交回充，不能只提交 Executed 玩家的计费。
-                // 世界已提交，计费通信失败不会触发回滚。若沙箱仍存活，
-                // 下次 begin_tick 会丢弃未提交计费，因此这里可能漏计而不会补扣两次。
-                let _ = players.settle_bill(handle);
-            }
-        }
-    }
-
     /// 直接结算调用方构造的意图，不执行玩家代码或提交玩家 Memory、CPU 桶。
     /// 有失败轮缓存时拒绝调用；本入口失败不会缓存意图，重试须重新提供。
     pub fn settle_external(&mut self, batch: IntentBatch) -> anyhow::Result<()> {
@@ -763,8 +782,21 @@ impl EmbedEngine {
         self.settle_world(batch, TickInput::now())
     }
 
-    /// 防止缓存的玩家意图被提交到已经推进或修改的世界。
+    /// 执行结果不完整时禁止开始新轮，等待调用方显式处置。
+    fn no_execution_failure(&self, op: &str) -> anyhow::Result<()> {
+        if let Some(failure) = &self.execution_failure {
+            anyhow::bail!(
+                "{op} 被拒：执行轮存在基础设施故障，已确认 {} 个玩家结果；先 discard_pending_round 显式放弃或重建分片。原因：{}",
+                failure.confirmed.len(),
+                failure.reason
+            );
+        }
+        Ok(())
+    }
+
+    /// 防止缓存玩家结果与新世界结算混用。
     fn no_pending_round(&self, op: &str) -> anyhow::Result<()> {
+        self.no_execution_failure(op)?;
         if self.pending.is_some() {
             anyhow::bail!(
                 "{op} 被拒：存在未处置的失败轮候选（先 run_players 重试或 discard_pending_round）"
@@ -883,6 +915,12 @@ impl EmbedEngine {
         self.fail_next_settle_stage = Some(stage);
     }
 
+    /// 下一次实际结算在对应候选子步完成后失败，用后清除。
+    #[doc(hidden)]
+    pub fn fail_next_writeback_for_test(&mut self, step: kk_engine::WritebackStep) {
+        self.fail_next_writeback = Some(step);
+    }
+
     /// 覆盖玩家执行顺序；执行前检查是否为全部注册玩家的排列，release 也检查。
     /// 仅影响注入和执行顺序，不影响结果映射或意图合并顺序。None 恢复按玩家名排序。
     #[doc(hidden)]
@@ -918,32 +956,81 @@ impl EmbedEngine {
             .unwrap_or(&[])
     }
 
-    /// 向玩家沙箱读取 CPU 桶当前值，不包含尚未提交的计费。
+    /// 读取已提交玩家状态，供故障注入测试检查候选是否提前写入。
+    #[doc(hidden)]
+    pub fn player_state_for_test(&self, player: &str) -> Option<&kk_engine::PlayerState> {
+        self.engine.players.get(player)
+    }
+
+    /// 读取宿主已提交 CPU 桶，不包含本轮待发布费用。
     #[doc(hidden)]
     pub fn player_bucket_for_test(&mut self, player: &str) -> anyhow::Result<f64> {
-        let players = self
+        self.engine
             .players
-            .as_mut()
-            .ok_or_else(|| anyhow::anyhow!("分片未创建"))?;
-        players.bucket(player)
+            .get(player)
+            .map(|p| p.cpu.bucket())
+            .ok_or_else(|| anyhow::anyhow!("未知玩家 {player}"))
+    }
+
+    /// 在指定玩家回执确认后中止执行轮，用于验证部分结果不会被盲目重跑。
+    #[doc(hidden)]
+    pub fn fail_after_player_for_test(&mut self, player: &str) {
+        self.fail_after_player_for_test = Some(player.into());
     }
 
     /// 是否有等待重试或丢弃的玩家失败轮缓存。
     pub fn has_pending_round(&self) -> bool {
-        self.pending.is_some()
+        self.pending.is_some() || self.execution_failure.is_some()
     }
 
-    /// 丢弃缓存结果与沙箱待结算计费，并放弃引擎恢复状态。
+    /// 显式放弃执行故障轮并重建全部玩家工作者，保留已提交世界和玩家状态。
+    /// 新线程丢弃全部 V8 全局变量；下一轮从已提交 Memory、segments 和 CPU 桶注入。
+    /// 重建失败时保留故障记录，继续禁止运行；不自动重派故障轮。
+    pub fn rebuild_player_workers(&mut self) -> anyhow::Result<()> {
+        if self.execution_failure.is_none() {
+            anyhow::bail!("没有待处置的执行故障轮");
+        }
+        self.players
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("分片未创建"))?
+            .rebuild_all()?;
+        if matches!(self.engine.run_state(), RunState::NeedsRecovery { .. }) {
+            self.engine
+                .abandon_recovery()
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
+        }
+        self.pending = None;
+        self.execution_failure = None;
+        self.fail_after_player_for_test = None;
+        Ok(())
+    }
+
+    /// 首个替代工作者就绪后使下一次重建失败，用于验证故障门保持关闭。
+    #[doc(hidden)]
+    pub fn fail_next_worker_rebuild_for_test(&mut self) -> anyhow::Result<()> {
+        self.players
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("分片未创建"))?
+            .fail_next_rebuild_for_test();
+        Ok(())
+    }
+
+    /// 在下一条 RunJob 前退出指定玩家线程，使真实回执通道断开。
+    #[doc(hidden)]
+    pub fn exit_worker_before_next_job_for_test(&mut self, player: &str) -> anyhow::Result<()> {
+        self.players
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("分片未创建"))?
+            .exit_before_next_job_for_test(player)
+    }
+
+    /// 丢弃缓存结果或执行故障记录，并放弃引擎恢复状态。
     /// 不撤销玩家已经修改的 V8 全局变量。正常接口会阻止恢复期间修改世界，
     /// 因此这里放弃恢复不会遇到世界版本不匹配。
     pub fn discard_pending_round(&mut self) {
-        if let Some(pending) = self.pending.take()
-            && let Some(players) = &mut self.players
-        {
-            for handle in pending.results.keys() {
-                let _ = players.discard_bill(handle);
-            }
-        }
+        self.pending = None;
+        self.execution_failure = None;
+        self.fail_after_player_for_test = None;
         let _ = self.engine.abandon_recovery();
     }
 
@@ -954,6 +1041,8 @@ impl EmbedEngine {
         }
         self.engine = Engine::default();
         self.pending = None;
+        self.execution_failure = None;
+        self.fail_after_player_for_test = None;
         self.last_console.clear();
     }
 }

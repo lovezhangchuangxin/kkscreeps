@@ -987,6 +987,7 @@ dependencies = [
  "bytes",
  "deno_core",
  "deno_error",
+ "kk-core",
  "serde_json",
  "tokio",
 ]

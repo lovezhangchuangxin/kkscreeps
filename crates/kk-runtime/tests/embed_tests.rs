@@ -98,6 +98,8 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     m2b2_market_book_e2e_impl()?;
     m2b_closing_e2e_impl()?;
     stage_recovery_family_impl()?;
+    execution_failure_blocks_redispatch_impl()?;
+    lost_worker_rebuild_impl()?;
     stage_recovery_escape_route_impl()?;
     stage_hook_deferral_impl()?;
     assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");

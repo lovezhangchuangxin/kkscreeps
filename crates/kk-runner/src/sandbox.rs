@@ -320,10 +320,29 @@ impl Sandbox {
     /// 制定预算计划并注入世界数据，不提交桶余额。
     /// SkipPenalty 表示负余额停跑；回充已暂存，仍需 settle_bill 或 discard_bill。
     pub fn begin_tick(&mut self, world: &serde_json::Value) -> anyhow::Result<TickPlan> {
+        let plan = self.budget.begin_tick();
+        self.begin_tick_plan(world, plan)
+    }
+
+    /// 使用宿主制定的预算；本地桶只作为本次执行与计费的工作副本。
+    pub fn begin_tick_with_budget(
+        &mut self,
+        world: &serde_json::Value,
+        budget: &kk_core::cpu::RunBudget,
+    ) -> anyhow::Result<TickPlan> {
+        self.budget = budget.bucket().clone();
+        self.begin_tick_plan(world, budget.plan().clone())
+    }
+
+    fn begin_tick_plan(
+        &mut self,
+        world: &serde_json::Value,
+        plan: TickPlan,
+    ) -> anyhow::Result<TickPlan> {
         // 调用方应已提交或丢弃上一轮候选；清除残留，避免它混入当前 tick。
         self.pending_bill = None;
         self.pending_recharge = None;
-        match self.budget.begin_tick() {
+        match plan {
             // 停跑分支不注入世界或执行玩家代码；清除上一轮指令，只暂存本轮回充。
             TickPlan::SkipPenalty => {
                 self.pending_intents = None;

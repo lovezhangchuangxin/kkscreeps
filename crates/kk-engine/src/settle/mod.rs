@@ -15,9 +15,11 @@ pub mod spawn;
 mod stages;
 pub mod structures;
 mod txn;
+mod writeback;
 
 pub use stages::{RunState, TickStage};
 pub use txn::TickState;
+pub use writeback::{PlayerWriteback, SegmentWriteback, WritebackStep};
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -70,15 +72,18 @@ impl std::fmt::Display for SettleError {
 /// 与 driver/lib/index.js 的 addRoomToUser（排队写入，未修改运行中的用户对象）。
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct PlayerState {
+    /// 已提交 CPU 桶；执行预算与计费候选从此值派生，随世界发布。
+    pub cpu: kk_core::cpu::Bucket,
     /// 累计 GCL 进度，不是玩家 API 显示的 GCL 等级。
     pub gcl: i64,
     pub rooms: BTreeSet<String>,
-    /// 玩家 RawMemory。kk-runtime 在世界提交后写入，下一次执行时注入。
+    /// 玩家 RawMemory。运行结果在候选中合并，随世界发布；下一次执行时注入。
     pub raw_memory: String,
     /// Game.notify 的内存记录，跨 tick 保留最近 100 条；这里不发送邮件。
     pub notifications: Vec<NotifyRecord>,
     /// RawMemory 段内容。执行器限制 ID 为 0..=99，每段最多 100×1024 个
-    /// UTF-16 码元（JavaScript 字符串 length）。Map 不自行校验，窗口合并由 kk-runtime 完成。
+    /// UTF-16 码元（JavaScript 字符串 length）。Map 不自行校验；
+    /// PlayerWriteback 在候选中合并段内容及请求。
     pub segments: BTreeMap<u8, String>,
     /// 最近一次 setActiveSegments 请求，跨 tick 保留；空集表示空活动窗口。
     pub active_request: Vec<u8>,
@@ -564,6 +569,7 @@ pub struct Engine {
     run_state: stages::RunState,
     /// 持续生效的阶段入口故障注入。
     fail_stage: Option<TickStage>,
+    fail_writeback: Option<WritebackStep>,
 }
 
 impl Default for Engine {
@@ -585,6 +591,7 @@ impl Engine {
             fail_room: None,
             run_state: stages::RunState::Ready,
             fail_stage: None,
+            fail_writeback: None,
         }
     }
 
@@ -605,6 +612,22 @@ impl Engine {
     #[doc(hidden)]
     pub fn set_fail_stage_for_test(&mut self, stage: Option<TickStage>) {
         self.fail_stage = stage;
+    }
+
+    /// 在指定候选子步完成后注入错误；不触碰已发布状态。传 None 解除。
+    #[doc(hidden)]
+    pub fn set_fail_writeback_for_test(&mut self, step: Option<WritebackStep>) {
+        self.fail_writeback = step;
+    }
+
+    fn writeback_checkpoint(&self, step: WritebackStep) -> Result<(), SettleError> {
+        if self.fail_writeback == Some(step) {
+            return Err(SettleError(format!(
+                "故障注入：{} 候选子步完成后失败",
+                step.label()
+            )));
+        }
+        Ok(())
     }
 
     /// 将 NeedsRecovery 改回 Ready，放弃恢复。
@@ -675,6 +698,18 @@ impl Engine {
         batch: IntentBatch,
         input: TickInput,
     ) -> Result<(), SettleError> {
+        self.tick_with_writebacks(batch, input, BTreeMap::new())
+    }
+
+    /// 将玩家内存候选与房间、市场一起发布；失败时所有已提交数据保持旧值。
+    /// 调用方负责绑定玩家身份，并在重试时复用相同的指令、时间及写回候选。
+    /// 不捕获 panic；桶值须由调用方根据固定预算和执行回执计算。
+    pub fn tick_with_writebacks(
+        &mut self,
+        batch: IntentBatch,
+        input: TickInput,
+        writebacks: BTreeMap<String, PlayerWriteback>,
+    ) -> Result<(), SettleError> {
         // 失败后仅在世界时间和版本未变时放行；输入是否相同由调用方保证。
         match &self.run_state {
             RunState::Ready | RunState::Committed { .. } => {}
@@ -700,7 +735,7 @@ impl Engine {
             tick: self.world.time(),
         };
         let mut cursor = stages::StageCursor::new(self.fail_stage);
-        let result = self.staged_body(&mut cursor, batch, &input);
+        let result = self.staged_body(&mut cursor, batch, &input, writebacks);
         match result {
             Ok(()) => {
                 self.run_state = RunState::Committed {
@@ -727,8 +762,17 @@ impl Engine {
         cursor: &mut stages::StageCursor,
         batch: IntentBatch,
         input: &TickInput,
+        writebacks: BTreeMap<String, PlayerWriteback>,
     ) -> Result<(), SettleError> {
         cursor.enter(TickStage::Prepare)?;
+        if let Some(handle) = writebacks
+            .keys()
+            .find(|handle| !self.players.contains_key(*handle))
+        {
+            return Err(SettleError(format!(
+                "玩家写回候选不属于已注册玩家：{handle}"
+            )));
+        }
         let mut txn = self.prepare_tick(batch, *input)?;
         cursor.enter(TickStage::Settle)?;
         self.settle_rooms_stage(&mut txn)?;
@@ -744,7 +788,17 @@ impl Engine {
                 txn.input.now_ms,
             );
         }
+        self.writeback_checkpoint(WritebackStep::Market)?;
         cursor.enter(TickStage::Validate)?;
+        {
+            let mut state = txn.state.inner.borrow_mut();
+            for (handle, patch) in writebacks {
+                let player = state.players.get_mut(&handle).ok_or_else(|| {
+                    SettleError(format!("玩家写回候选不属于已注册玩家：{handle}"))
+                })?;
+                patch.apply_with_checkpoints(player, |step| self.writeback_checkpoint(step))?;
+            }
+        }
         self.validate_stage(&txn)?;
         let time = txn.time;
         let prepared = txn.into_prepared()?;
@@ -882,6 +936,115 @@ impl Engine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn memory_writebacks_publish_with_market_and_retry_without_partial_commit() {
+        let stages = [
+            TickStage::Prepare,
+            TickStage::Settle,
+            TickStage::Market,
+            TickStage::Validate,
+            TickStage::Publish,
+        ]
+        .map(|stage| (Some(stage), None));
+        let steps = [
+            WritebackStep::Market,
+            WritebackStep::Cpu,
+            WritebackStep::RawMemory,
+            WritebackStep::Segments,
+        ]
+        .map(|step| (None, Some(step)));
+        for (stage, step) in stages.into_iter().chain(steps) {
+            let mut engine = Engine::default();
+            engine.players.insert(
+                "p1".into(),
+                PlayerState {
+                    money: 10_000_000,
+                    gcl: 17,
+                    raw_memory: "old".into(),
+                    segments: BTreeMap::from([(5, "old segment".into())]),
+                    ..Default::default()
+                },
+            );
+            let original = engine.players.clone();
+            let market = engine.market.clone();
+            let generation = engine.world.generation();
+            let next_id = engine.next_id;
+            let mut batch = IntentBatch::default();
+            batch.users.entry("p1".into()).or_default().market.push(
+                crate::intent::MarketIntent::CreateOrder {
+                    order_type: Some("sell".into()),
+                    resource_type: Some("token".into()),
+                    price_milli: Some(1000),
+                    total_amount: Some(100),
+                    room_name: None,
+                },
+            );
+            let patches = BTreeMap::from([(
+                "p1".into(),
+                PlayerWriteback {
+                    cpu: Some(kk_core::cpu::Bucket::new(20.0, 10000.0, 500.0, 13.0)),
+                    raw_memory: Some("new".into()),
+                    segments: Some(SegmentWriteback::from_runner(&json!({
+                        "writes": [[5, "new segment"]], "active": [5], "public": [5],
+                        "defaultPublic": 5, "foreign": {"username": "p2", "id": 7}
+                    }))),
+                },
+            )]);
+            let input = TickInput { now_ms: 1234 };
+            engine.set_fail_stage_for_test(stage);
+            engine.set_fail_writeback_for_test(step);
+            assert!(
+                engine
+                    .tick_with_writebacks(batch.clone(), input, patches.clone())
+                    .is_err()
+            );
+            assert_eq!(engine.players, original, "{stage:?}");
+            assert_eq!(engine.market, market, "{stage:?}");
+            assert_eq!(engine.world.time(), 0);
+            assert_eq!(engine.world.generation(), generation);
+            assert_eq!(engine.next_id, next_id);
+            engine.set_fail_stage_for_test(None);
+            engine.set_fail_writeback_for_test(None);
+            engine.tick_with_writebacks(batch, input, patches).unwrap();
+            let player = &engine.players["p1"];
+            assert_eq!(player.cpu.bucket(), 13.0);
+            assert_eq!(player.raw_memory, "new");
+            assert_eq!(player.segments[&5], "new segment");
+            assert_eq!(player.active_request, vec![5]);
+            assert_eq!(player.public_ids, vec![5]);
+            assert_eq!(player.default_public, Some(5));
+            assert_eq!(player.foreign_request, Some(("p2".into(), Some(7))));
+            assert_eq!(player.gcl, 17);
+            assert_eq!(player.money, 9_995_000, "内存写回不能覆盖市场扣费");
+            assert_eq!(engine.market.orders.len(), 1);
+            assert_eq!(engine.world.time(), 1);
+        }
+    }
+
+    #[test]
+    fn unknown_writeback_player_rejects_entire_tick() {
+        let mut engine = Engine::default();
+        engine.players.entry("p1".into()).or_default();
+        let original = engine.players.clone();
+        let patches = BTreeMap::from([
+            (
+                "p1".into(),
+                PlayerWriteback {
+                    raw_memory: Some("new".into()),
+                    ..Default::default()
+                },
+            ),
+            ("unknown".into(), PlayerWriteback::default()),
+        ]);
+        assert!(
+            engine
+                .tick_with_writebacks(IntentBatch::default(), TickInput { now_ms: 0 }, patches)
+                .is_err()
+        );
+        assert_eq!(engine.players, original);
+        assert_eq!(engine.world.time(), 0);
+    }
 
     #[test]
     fn scripted_tick_keeps_market_intents_bound_to_registered_player() {

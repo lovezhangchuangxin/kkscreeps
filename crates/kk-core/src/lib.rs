@@ -1,4 +1,4 @@
-//! 游戏基础数据：常量、房间坐标、地形和确定性伪随机数。
+//! 游戏基础数据与纯计算规则：常量、坐标、地形、伪随机数和 CPU 桶预算。
 //!
 //! [`constants`] 由 `scripts/gen-constants.mjs` 根据上游常量数据生成。
 //! [`RoomName`] 使用带方向的房间坐标，不负责限制世界大小；
@@ -6,6 +6,7 @@
 //! 本 crate 不执行游戏结算，也不管理世界状态或磁盘存储。
 
 pub mod constants;
+pub mod cpu;
 pub mod rng;
 pub mod room_name;
 pub mod terrain;

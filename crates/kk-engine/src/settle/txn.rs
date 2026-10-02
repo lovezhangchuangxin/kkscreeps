@@ -65,7 +65,7 @@ impl TickState {
 }
 
 /// 引擎本轮的全部结算候选与固定输入；失败时直接丢弃。
-/// RawMemory/segments/CPU 的运行结果尚由协调器提交，A4 再纳入此边界。
+/// 协调器提供的 RawMemory、segments 和 CPU 桶值在校验阶段合并。
 pub(crate) struct OwnedTickTxn {
     pub(crate) time: u64,
     pub(crate) input: TickInput,

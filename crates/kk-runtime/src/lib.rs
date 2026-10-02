@@ -1,8 +1,8 @@
 //! 协调玩家沙箱执行与世界结算，为嵌入式调用方提供运行接口。
 //!
-//! 执行器返回候选指令、Memory 和运行报告；世界结算成功后，协调器提交玩家的
-//! Memory、segments 和 CPU 桶候选。结算失败时缓存候选，重试不再次执行代码。
-//! 玩家的 V8 全局变量不随世界回退；线程通信失败也不提供跨线程原子提交保证。
+//! 执行器返回候选指令、Memory 和用量报告；协调器计算 CPU 桶候选，
+//! 与 Memory、segments、世界一起发布。结算失败缓存候选，重试不再次执行代码。
+//! V8 全局变量不随世界回退；执行阶段线程故障阻止自动重派，需要显式处置。
 
 pub mod embed;
 pub mod world_source;
@@ -49,6 +49,32 @@ pub struct ThreadExecutor {
     /// 玩家名到线程 id 的映射，按玩家名字典序遍历。
     handles: BTreeMap<String, u64>,
     next_id: u64,
+    next_attempt: u64,
+    registrations: BTreeMap<String, WorkerRegistration>,
+    fail_rebuild_after_first_for_test: bool,
+}
+
+struct WorkerRegistration {
+    config: kk_runner::SandboxConfig,
+    modules: kk_runner::ModuleTable,
+}
+
+/// 所有维度均须匹配；相同世界版本不能使旧尝试或旧线程的结果合法化。
+fn checked_job_receipt(
+    player: &str,
+    expected: kk_runner::JobToken,
+    receipt: kk_runner::RunReceipt,
+) -> RunResult {
+    if receipt.token != expected || receipt.report.epoch != expected.epoch {
+        return RunResult::infra_failure(
+            player,
+            format!(
+                "迟到/错轮回执拒收：期望 {expected:?}，收到 {:?}",
+                receipt.token
+            ),
+        );
+    }
+    eval_report_to_run_result(player, receipt.report)
 }
 
 impl ThreadExecutor {
@@ -57,7 +83,72 @@ impl ThreadExecutor {
             pool: kk_runner::PlayerThreads::new(),
             handles: BTreeMap::new(),
             next_id: 0,
+            next_attempt: 0,
+            registrations: BTreeMap::new(),
+            fail_rebuild_after_first_for_test: false,
         }
+    }
+
+    /// 执行宿主预算命令，并核对回执所属的世界轮次。
+    pub fn execute_job(&mut self, player: &str, mut job: kk_runner::RunJob) -> RunResult {
+        let Some(&id) = self.handles.get(player) else {
+            return RunResult::infra_failure(player, format!("未注册玩家 {player}"));
+        };
+        let Some(attempt) = self.next_attempt.checked_add(1) else {
+            return RunResult::infra_failure(player, "执行尝试编号耗尽");
+        };
+        self.next_attempt = attempt;
+        job.attempt = attempt;
+        let expected = kk_runner::JobToken {
+            epoch: job.epoch,
+            attempt,
+            worker: id,
+        };
+        match self.pool.run_job(id, job) {
+            Ok(receipt) => checked_job_receipt(player, expected, receipt),
+            Err(e) => RunResult::infra_failure(player, e.to_string()),
+        }
+    }
+
+    /// 建立全部替代线程及模块后才切换线程表；失败时保留原注册表。
+    /// 重建丢弃 V8 全局状态。内存和 CPU 预算由下一次 RunJob 从宿主重新注入。
+    pub fn rebuild_all(&mut self) -> anyhow::Result<()> {
+        let fail_after_first = std::mem::take(&mut self.fail_rebuild_after_first_for_test);
+        let mut replacement = kk_runner::PlayerThreads::new();
+        let mut handles = BTreeMap::new();
+        let mut next_id = self.next_id;
+        for (player, registration) in &self.registrations {
+            next_id = next_id
+                .checked_add(1)
+                .ok_or_else(|| anyhow::anyhow!("工作者编号耗尽"))?;
+            // 即使重建中途失败也不复用工作者编号，避免未来旧回执与替代线程同名。
+            self.next_id = next_id;
+            replacement.spawn_player(next_id, registration.config.clone())?;
+            replacement.set_modules(next_id, registration.modules.clone())?;
+            handles.insert(player.clone(), next_id);
+            if fail_after_first {
+                anyhow::bail!("故障注入：首个替代工作者建立后重建失败");
+            }
+        }
+        self.handles = handles;
+        self.pool = replacement;
+        Ok(())
+    }
+
+    /// 首个替代线程就绪后返回错误，验证部分重建失败不切换工作者表。
+    #[doc(hidden)]
+    pub fn fail_next_rebuild_for_test(&mut self) {
+        self.fail_rebuild_after_first_for_test = true;
+    }
+
+    /// 下一条玩家执行命令不返回回执，用于验证真实线程失联的恢复。
+    #[doc(hidden)]
+    pub fn exit_before_next_job_for_test(&mut self, player: &str) -> anyhow::Result<()> {
+        let id = *self
+            .handles
+            .get(player)
+            .ok_or_else(|| anyhow::anyhow!("未知玩家 {player}"))?;
+        self.pool.exit_before_next_job_for_test(id)
     }
 
     /// 创建并注册玩家线程，等待沙箱创建完成。重复玩家名返回错误并保留原沙箱。
@@ -65,9 +156,19 @@ impl ThreadExecutor {
         if self.handles.contains_key(player) {
             anyhow::bail!("玩家 {player} 已注册");
         }
-        self.next_id += 1;
-        let id = self.next_id;
-        self.pool.spawn_player(id, config)?;
+        let id = self
+            .next_id
+            .checked_add(1)
+            .ok_or_else(|| anyhow::anyhow!("工作者编号耗尽"))?;
+        self.pool.spawn_player(id, config.clone())?;
+        self.next_id = id;
+        self.registrations.insert(
+            player.into(),
+            WorkerRegistration {
+                config,
+                modules: kk_runner::ModuleTable::new(),
+            },
+        );
         self.handles.insert(player.to_string(), id);
         Ok(())
     }
@@ -82,7 +183,12 @@ impl ThreadExecutor {
             .handles
             .get(player)
             .ok_or_else(|| anyhow::anyhow!("未知玩家 {player}"))?;
-        self.pool.set_modules(id, table)
+        self.pool.set_modules(id, table.clone())?;
+        self.registrations
+            .get_mut(player)
+            .expect("注册玩家必有配置")
+            .modules = table;
+        Ok(())
     }
 
     /// 设置沙箱下一轮注入的 RawMemory，不修改引擎的 PlayerState。
@@ -110,7 +216,7 @@ impl ThreadExecutor {
             .set_memory_state(id, raw, segments_json, foreign_json)
     }
 
-    /// 提交沙箱保存的 CPU 计费或停跑回充候选；协调器在世界结算成功后调用。
+    /// 独立执行通道的计费提交。EmbedEngine 使用宿主桶，此方法不修改宿主状态。
     pub fn settle_bill(&mut self, player: &str) -> anyhow::Result<()> {
         let id = *self
             .handles
@@ -128,7 +234,7 @@ impl ThreadExecutor {
         self.pool.discard_bill(id)
     }
 
-    /// 读取已提交的 CPU 桶余额，不包含尚未提交的计费或回充。
+    /// 读取线程工作桶；EmbedEngine 的已提交桶在 PlayerState 中，不能用此值替代。
     #[doc(hidden)]
     pub fn bucket(&mut self, player: &str) -> anyhow::Result<f64> {
         let id = *self
@@ -149,6 +255,8 @@ impl ThreadExecutor {
     pub fn shutdown_all(&mut self) {
         self.pool.shutdown_all();
         self.handles.clear();
+        self.registrations.clear();
+        self.fail_rebuild_after_first_for_test = false;
     }
 }
 
@@ -203,8 +311,7 @@ fn eval_report_to_run_result(player: &str, report: kk_runner::EvalReport) -> Run
         outcome,
         intents,
         expr: report.expr,
-        // Memory 和段结果暂不写入 PlayerState；计费字段仅用于报告，
-        // 实际待提交计费保存在沙箱中，由协调器在世界结算成功后通知提交。
+        // 仅转换回执；协调器计算桶候选并将 Memory、段及桶值交给引擎发布。
         cpu_billed_ms: report.cpu_billed_ms,
         raw_memory: report.raw_memory,
         segments_out: report.segments_out,
@@ -334,6 +441,67 @@ mod tests {
             "软异常=已执行（expr 携带错误）"
         );
         assert_eq!(r.console, vec!["hi".to_string()]);
+    }
+
+    #[test]
+    fn rebuilt_workers_preserve_modules_and_reject_actual_old_receipts() -> anyhow::Result<()> {
+        let mut ex = ThreadExecutor::new();
+        ex.spawn("p1", kk_runner::SandboxConfig::default())?;
+        let mut modules = kk_runner::ModuleTable::new();
+        modules.insert_js("savedModule", "module.exports={value:7}");
+        ex.set_modules("p1", modules)?;
+        let code = "globalThis.n=(globalThis.n||0)+1; [globalThis.n,Memory.saved,require('savedModule').value]";
+        let job = |attempt| kk_runner::RunJob {
+            world: json!({"time":0,"rooms":{},"objects":[]}),
+            code: code.into(),
+            epoch: RunEpoch::default(),
+            attempt,
+            raw_memory: r#"{"saved":42}"#.into(),
+            segments_json: "[]".into(),
+            foreign_json: "null".into(),
+            budget: kk_core::cpu::RunBudget::new(&kk_core::cpu::Bucket::default()),
+        };
+        let old_worker = ex.handles["p1"];
+        let first = ex.pool.dispatch_job(old_worker, job(41))?;
+        let second = ex.pool.dispatch_job(old_worker, job(42))?;
+        let expected = second.token;
+        let second = second.wait()?;
+        assert_eq!(second.report.expr["value"], json!([2, 42, 7]));
+        let stale = checked_job_receipt("p1", expected, first.wait()?);
+        assert!(matches!(stale.outcome, RunOutcome::InfraFailure(_)));
+        assert!(stale.intents.users.is_empty());
+        assert_eq!(stale.cpu_billed_ms, None);
+        let late = ex.pool.dispatch_job(old_worker, job(43))?;
+        let old_token = late.token;
+        ex.rebuild_all()?;
+        let new_worker = ex.handles["p1"];
+        assert_ne!(old_worker, new_worker);
+        let expected = kk_runner::JobToken {
+            worker: new_worker,
+            ..old_token
+        };
+        let stale = checked_job_receipt("p1", expected, late.wait()?);
+        assert!(matches!(stale.outcome, RunOutcome::InfraFailure(_)));
+        let run = ex.execute_job("p1", job(0));
+        assert_eq!(
+            run.expr["value"],
+            json!([1, 42, 7]),
+            "新工作者清空全局变量并保留模块"
+        );
+        ex.fail_next_rebuild_for_test();
+        assert!(ex.rebuild_all().is_err());
+        assert_eq!(ex.handles["p1"], new_worker, "失败重建不换入部分线程");
+        let run = ex.execute_job("p1", job(0));
+        assert_eq!(run.expr["value"], json!([2, 42, 7]));
+        ex.exit_before_next_job_for_test("p1")?;
+        let run = ex.execute_job("p1", job(0));
+        assert!(matches!(run.outcome, RunOutcome::InfraFailure(_)));
+        ex.rebuild_all()?;
+        assert_eq!(
+            ex.execute_job("p1", job(0)).expr["value"],
+            json!([1, 42, 7])
+        );
+        Ok(())
     }
 
     /// 验证真实线程执行、重复注册拒绝、原沙箱保留及未知玩家的错误分类。

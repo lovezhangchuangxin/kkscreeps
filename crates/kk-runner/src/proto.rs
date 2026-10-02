@@ -45,7 +45,7 @@ pub struct EvalReport {
     pub bucket_after: f64,
     /// endTick 带出的本 tick intentsList（Null = 无/硬中断丢弃）。
     pub intents: Value,
-    /// 待提交的 CPU 费用，单位毫秒；世界结算成功后由调用方 settle_bill。
+    /// 待提交 CPU 费用（毫秒）。RunJob 由宿主结算；旧 RunPlayer 通道使用 settle_bill。
     /// 停跑与主动 halt 为 None，注入失败或硬中断携带完整预算。
     /// bucket_after 是提交前余额，与已经即时结算的 TickReport 不同。
     pub cpu_billed_ms: Option<f64>,
@@ -64,7 +64,53 @@ pub struct RunEpoch {
     pub generation: u64,
 }
 
+/// 同一条命令携带已提交内存、世界、宿主预算与代码，返回本轮候选。
+#[derive(Debug)]
+pub struct RunJob {
+    pub world: Value,
+    pub code: String,
+    pub epoch: RunEpoch,
+    pub attempt: u64,
+    pub raw_memory: String,
+    pub segments_json: String,
+    pub foreign_json: String,
+    pub budget: kk_core::cpu::RunBudget,
+}
+
+/// 回执身份包含世界轮次、执行尝试和工作者实例，重建线程后不可复用。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct JobToken {
+    pub epoch: RunEpoch,
+    pub attempt: u64,
+    pub worker: u64,
+}
+
+#[derive(Debug)]
+pub struct RunReceipt {
+    pub token: JobToken,
+    pub report: EvalReport,
+}
+
+/// 已派发命令的独立回执通道；可按任意顺序等待，不混用其他命令的结果。
+pub struct PendingJob {
+    pub token: JobToken,
+    rx: mpsc::Receiver<anyhow::Result<RunReceipt>>,
+}
+
+impl PendingJob {
+    pub fn wait(self) -> anyhow::Result<RunReceipt> {
+        self.rx
+            .recv()
+            .map_err(|_| anyhow::anyhow!("玩家工作者 {} 未返回执行回执", self.token.worker))?
+    }
+}
+
 enum Cmd {
+    RunJob {
+        job: RunJob,
+        ack: mpsc::Sender<anyhow::Result<RunReceipt>>,
+    },
+    ExitBeforeJob(mpsc::Sender<()>),
     SetModules(ModuleTable, mpsc::Sender<anyhow::Result<()>>),
     /// 注入 RawMemory 初值（tick 边界——协调层提交点统一驱动的通道面）。
     SetRawMemory(String, mpsc::Sender<anyhow::Result<()>>),
@@ -138,6 +184,7 @@ impl PlayerThreads {
                 if ready_tx.send(Ok(())).is_err() {
                     return; // registry 已不在，直接退出
                 }
+                let mut exit_before_job = false;
                 while let Ok(cmd) = rx.recv() {
                     match cmd {
                         Cmd::SetModules(table, ack) => {
@@ -174,6 +221,38 @@ impl PlayerThreads {
                             ack,
                         } => {
                             let _ = ack.send(run_eval_tick(&mut sandbox, &world, &code, epoch));
+                        }
+                        Cmd::ExitBeforeJob(ack) => {
+                            exit_before_job = true;
+                            let _ = ack.send(());
+                        }
+                        Cmd::RunJob { job, ack } => {
+                            if exit_before_job {
+                                break;
+                            }
+                            let token = JobToken {
+                                epoch: job.epoch,
+                                attempt: job.attempt,
+                                worker: id,
+                            };
+                            let result = sandbox
+                                .set_memory_state(
+                                    &job.raw_memory,
+                                    &job.segments_json,
+                                    &job.foreign_json,
+                                )
+                                .and_then(|()| {
+                                    run_eval_tick_with_budget(
+                                        &mut sandbox,
+                                        &job.world,
+                                        &job.code,
+                                        job.epoch,
+                                        Some(&job.budget),
+                                    )
+                                });
+                            // 用量已在回执中；宿主发布或丢弃候选均不再通知线程结算。
+                            sandbox.discard_bill();
+                            let _ = ack.send(result.map(|report| RunReceipt { token, report }));
                         }
                         Cmd::Shutdown => break,
                     }
@@ -345,6 +424,32 @@ impl PlayerThreads {
             .map_err(|_| anyhow::anyhow!("玩家 {id} 线程无响应"))?
     }
 
+    /// 合并内存注入与执行；只报告用量，不提交线程内的桶余额。
+    pub fn run_job(&mut self, id: u64, job: RunJob) -> anyhow::Result<RunReceipt> {
+        self.dispatch_job(id, job)?.wait()
+    }
+
+    /// 派发后返回独立回执句柄；调用方在采纳结果前核对完整 token。
+    pub fn dispatch_job(&mut self, id: u64, job: RunJob) -> anyhow::Result<PendingJob> {
+        let token = JobToken {
+            epoch: job.epoch,
+            attempt: job.attempt,
+            worker: id,
+        };
+        let p = self.player_mut(id)?;
+        let (ack_tx, ack_rx) = mpsc::channel();
+        p.send(Cmd::RunJob { job, ack: ack_tx });
+        Ok(PendingJob { token, rx: ack_rx })
+    }
+
+    /// 在下一条 RunJob 执行前退出真实玩家线程，模拟无回执失联。
+    #[doc(hidden)]
+    pub fn exit_before_next_job_for_test(&mut self, id: u64) -> anyhow::Result<()> {
+        let (tx, rx) = mpsc::channel();
+        self.player_mut(id)?.send(Cmd::ExitBeforeJob(tx));
+        rx.recv().map_err(|_| anyhow::anyhow!("工作者 {id} 已退出"))
+    }
+
     /// 回收距离最后一次命令发送已达到 idle 的玩家，按注册顺序返回 id。
     /// 先用同一个 now 确定候选，再逐个发送 Shutdown 并 join，
     /// 避免较慢的销毁过程使其他玩家在本次扫描中额外达到空闲阈值。
@@ -474,9 +579,23 @@ fn run_eval_tick(
     code: &str,
     epoch: RunEpoch,
 ) -> anyhow::Result<EvalReport> {
+    run_eval_tick_with_budget(sandbox, world, code, epoch, None)
+}
+
+fn run_eval_tick_with_budget(
+    sandbox: &mut Sandbox,
+    world: &Value,
+    code: &str,
+    epoch: RunEpoch,
+    budget: Option<&kk_core::cpu::RunBudget>,
+) -> anyhow::Result<EvalReport> {
     // 世界注入失败作为该玩家的 inject_failed 结果返回，让协调器继续处理其他玩家。
     // 通道断开等基础设施故障仍返回 Err。
-    let plan = match sandbox.begin_tick(world) {
+    let begin = match budget {
+        Some(budget) => sandbox.begin_tick_with_budget(world, budget),
+        None => sandbox.begin_tick(world),
+    };
+    let plan = match begin {
         Ok(plan) => plan,
         Err(e) => {
             // 注入失败的费用候选按完整预算计算，报告携带同一候选；此处尚不修改余额。

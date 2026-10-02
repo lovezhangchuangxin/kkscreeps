@@ -8,7 +8,19 @@ use kk_engine::intent::IntentBatch;
 use super::*;
 
 pub(super) fn stage_recovery_family_impl() -> anyhow::Result<()> {
-    for stage in [TickStage::Market, TickStage::Validate, TickStage::Publish] {
+    let stages = [TickStage::Market, TickStage::Validate, TickStage::Publish]
+        .map(|stage| (Some(stage), None));
+    let steps = [
+        kk_engine::WritebackStep::Market,
+        kk_engine::WritebackStep::Cpu,
+        kk_engine::WritebackStep::RawMemory,
+        kk_engine::WritebackStep::Segments,
+    ]
+    .map(|step| (None, Some(step)));
+    for (stage, step) in stages.into_iter().chain(steps) {
+        let label = stage
+            .map(|s| s.label())
+            .unwrap_or_else(|| step.unwrap().label());
         let mut e = EmbedEngine::new();
         e.create_shard(&json!({
             "players": ["p1"],
@@ -19,12 +31,31 @@ pub(super) fn stage_recovery_family_impl() -> anyhow::Result<()> {
 
         // 轮 A：计数代码（globalThis 跨 tick 持久——执行次数取证通道）+
         // 段入口注入 → 整轮 Err、候选缓存、世界不动
-        let counter = "globalThis.n = (globalThis.n || 0) + 1; globalThis.n";
-        e.fail_next_settle_stage_for_test(stage);
+        let before = e.player_state_for_test("p1").unwrap().clone();
+        let counter = r#"
+            globalThis.n = (globalThis.n || 0) + 1;
+            RawMemory.set('{"saved":true}');
+            RawMemory.segments[5] = 'candidate';
+            RawMemory.setActiveSegments([5]);
+            RawMemory.setPublicSegments([5]);
+            RawMemory.setDefaultPublicSegment(5);
+            globalThis.n
+        "#;
+        if let Some(stage) = stage {
+            e.fail_next_settle_stage_for_test(stage);
+        }
+        if let Some(step) = step {
+            e.fail_next_writeback_for_test(step);
+        }
         let err = e.run_player("p1", counter).unwrap_err();
-        assert!(err.to_string().contains(stage.label()), "{stage:?}: {err}");
+        assert!(err.to_string().contains(label), "{stage:?}: {err}");
         assert!(e.has_pending_round(), "{stage:?}: 失败轮候选已缓存");
         assert_eq!(e.get_game_time(), 1, "{stage:?}: 失败轮世界不动");
+        assert_eq!(
+            e.player_state_for_test("p1").unwrap(),
+            &before,
+            "{stage:?}: Memory、段内容及请求不得提前发布"
+        );
 
         // 轮 B：原请求重试 → 消费缓存（expr 为执行 1 的候选）、代码不再执行
         let run = e.run_player("p1", counter)?;
@@ -33,10 +64,20 @@ pub(super) fn stage_recovery_family_impl() -> anyhow::Result<()> {
             "{stage:?}: 重试返回缓存候选的 expr（代码不重跑——旧形态下重跑得 2）"
         );
         assert!(!e.has_pending_round(), "{stage:?}: 重试成功后缓存清空");
+        let committed = e.player_state_for_test("p1").unwrap();
+        assert_eq!(committed.raw_memory, r#"{"saved":true}"#);
+        assert_eq!(committed.segments[&5], "candidate");
+        assert_eq!(committed.active_request, vec![5]);
+        assert_eq!(committed.public_ids, vec![5]);
+        assert_eq!(committed.default_public, Some(5));
         assert_eq!(e.get_game_time(), 2, "{stage:?}: warmup 1 + 重试轮推进 1");
         // 执行次数终检：恰一次
-        let run = e.run_player("p1", "globalThis.n")?;
-        assert_eq!(run.expr["value"], 1, "{stage:?}: 玩家代码执行次数恰一次");
+        let run = e.run_player("p1", "[globalThis.n, Memory.saved, RawMemory.segments[5]]")?;
+        assert_eq!(
+            run.expr["value"],
+            json!([1, true, "candidate"]),
+            "{stage:?}: 代码只执行一次，下一轮读取已发布内存"
+        );
     }
     Ok(())
 }
@@ -150,5 +191,123 @@ pub(super) fn stage_hook_deferral_impl() -> anyhow::Result<()> {
         e.engine_run_state_for_test(),
         RunState::Committed { .. }
     ));
+    Ok(())
+}
+
+/// 中途故障保留旧持久状态，并拒绝重跑任何已经执行的玩家。
+pub(super) fn execution_failure_blocks_redispatch_impl() -> anyhow::Result<()> {
+    for failed in ["p1", "p2"] {
+        let mut e = EmbedEngine::new();
+        e.create_shard(&json!({"players":["p1","p2"], "rooms":[]}))?;
+        let before1 = e.player_state_for_test("p1").unwrap().clone();
+        let before2 = e.player_state_for_test("p2").unwrap().clone();
+        let code = "globalThis.n=(globalThis.n||0)+1; Memory.n=globalThis.n; globalThis.n";
+        let codes = std::collections::BTreeMap::from([
+            ("p1".into(), code.into()),
+            ("p2".into(), code.into()),
+        ]);
+        e.fail_after_player_for_test(failed);
+        assert!(
+            e.run_players(&codes)
+                .unwrap_err()
+                .to_string()
+                .contains("执行轮中止")
+        );
+        assert_eq!(e.get_game_time(), 0);
+        assert_eq!(e.player_state_for_test("p1").unwrap(), &before1);
+        assert_eq!(e.player_state_for_test("p2").unwrap(), &before2);
+        assert!(
+            e.run_players(&codes)
+                .unwrap_err()
+                .to_string()
+                .contains("先 discard_pending_round")
+        );
+        assert!(e.tick(1).is_err());
+        assert!(e.settle_external(IntentBatch::default()).is_err());
+        e.discard_pending_round();
+        let read = std::collections::BTreeMap::from([
+            ("p1".into(), "[globalThis.n||0,Memory.n||0]".into()),
+            ("p2".into(), "[globalThis.n||0,Memory.n||0]".into()),
+        ]);
+        let runs = e.run_players(&read)?;
+        assert_eq!(runs["p1"].expr["value"], json!([1, 0]));
+        assert_eq!(
+            runs["p2"].expr["value"],
+            json!([if failed == "p2" { 1 } else { 0 }, 0])
+        );
+    }
+    Ok(())
+}
+
+/// 第二个真实线程退出时不提交首个玩家的候选；显式重建从旧持久状态继续。
+pub(super) fn lost_worker_rebuild_impl() -> anyhow::Result<()> {
+    let mut e = EmbedEngine::new();
+    e.set_sandbox_config_for_test(
+        "p1",
+        kk_runner::SandboxConfig {
+            initial_bucket: 7.0,
+            ..Default::default()
+        },
+    );
+    e.create_shard(&json!({"players":["p1","p2"],"rooms":[]}))?;
+    let seed = "Memory.saved=true; RawMemory.segments[5]='seed'; RawMemory.setActiveSegments([5]); globalThis.oldGlobal=123";
+    e.run_players(&std::collections::BTreeMap::from([
+        ("p1".into(), seed.into()),
+        ("p2".into(), seed.into()),
+    ]))?;
+    let before1 = e.player_state_for_test("p1").unwrap().clone();
+    let before2 = e.player_state_for_test("p2").unwrap().clone();
+    e.exit_worker_before_next_job_for_test("p2")?;
+    let dirty = "globalThis.dirty=(globalThis.dirty||0)+1; Memory.saved=false; RawMemory.segments[5]='uncommitted'";
+    let codes = std::collections::BTreeMap::from([
+        ("p1".into(), dirty.into()),
+        ("p2".into(), dirty.into()),
+    ]);
+    assert!(
+        e.run_players(&codes)
+            .unwrap_err()
+            .to_string()
+            .contains("未返回执行回执")
+    );
+    assert!(e.has_pending_round());
+    assert_eq!(e.get_game_time(), 1);
+    assert_eq!(e.player_state_for_test("p1").unwrap(), &before1);
+    assert_eq!(e.player_state_for_test("p2").unwrap(), &before2);
+    assert!(e.run_players(&codes).is_err());
+    e.fail_next_worker_rebuild_for_test()?;
+    assert!(
+        e.rebuild_player_workers()
+            .unwrap_err()
+            .to_string()
+            .contains("替代工作者")
+    );
+    assert!(e.has_pending_round(), "重建失败不能解除执行故障门");
+    assert!(e.run_players(&codes).is_err());
+    assert_eq!(e.get_game_time(), 1);
+    assert_eq!(e.player_state_for_test("p1").unwrap(), &before1);
+    assert_eq!(e.player_state_for_test("p2").unwrap(), &before2);
+    e.rebuild_player_workers()?;
+    assert!(!e.has_pending_round());
+    assert_eq!(e.get_game_time(), 1);
+    assert_eq!(e.player_state_for_test("p1").unwrap(), &before1);
+    assert_eq!(e.player_state_for_test("p2").unwrap(), &before2);
+    let read = "[globalThis.dirty||0,Memory.saved,RawMemory.segments[5],Game.cpu.bucket,globalThis.oldGlobal||0]";
+    let runs = e.run_players(&std::collections::BTreeMap::from([
+        ("p1".into(), read.into()),
+        ("p2".into(), read.into()),
+    ]))?;
+    for (player, before) in [("p1", before1), ("p2", before2)] {
+        let values = &runs[player].expr["value"];
+        assert_eq!(values[0], 0);
+        assert_eq!(values[1], true);
+        assert_eq!(values[2], "seed");
+        assert_eq!(values[3].as_f64(), Some(before.cpu.bucket()));
+        assert_eq!(values[4], 0, "工作者重建丢弃全局变量");
+    }
+    assert_eq!(e.get_game_time(), 2);
+    assert!(
+        e.rebuild_player_workers().is_err(),
+        "健康分片不得隐式清空全局状态"
+    );
     Ok(())
 }

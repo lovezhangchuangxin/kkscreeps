@@ -45,7 +45,9 @@
 
 ### A4 同一发布点验证 + 故障注入收口
 
-- **内容**：CPU 桶、RawMemory/segments、market（及 Mod namespace 占位）全部经统一 publish 点。**桶账语义一次性写死（不留「保留现状」选项，06 §2.1 已有方向）**：桶权威移入 PlayerState/事务——RunJob 携带协调器算好的预算，沙箱只报告用量，发布后扣桶，删除 `settle_bill`/`discard_bill` 往返与「线程失联漏计桶账」现状（embed.rs 当前 `let _ =` 忽略回执失败随之消灭）。迟到回执拒收（worker epoch）在本片联调（若 P1 未竟则本片兜底）。**注入范围**：发布点各子步（桶/RawMemory/segments/market）的就地失败注入；进程级崩溃恢复（kill -9 后只接受完整版本）显式留给 E 批（kk-storage 就绪前无持久化可恢复）；扩展 B0-6 三项回归（重试缓存销毁/负桶停跑回血/TickInput 重采样）覆盖面。
+2026-10-02 已接入 RawMemory、segments 及宿主 CPU 桶候选，与房间和市场共用发布点。RunJob 合并注入与执行，执行阶段故障保留已确认结果并阻止自动重派。现有玩家状态的候选子步故障矩阵、显式工作者重建及真实异步回执拒收验证已补齐。并发调度和命令期限仍属于 P1；Mod namespace 尚未接入，未来新增状态须沿用同一候选发布边界。实施与验证见 [A4 玩家状态统一发布](../research/notes/a4-memory-writeback-2026-10-02.md)。
+
+- **内容**：CPU 桶、RawMemory/segments、market（及 Mod namespace 占位）全部经统一 publish 点。**桶账语义一次性写死（不留「保留现状」选项，06 §2.1 已有方向）**：桶权威移入 PlayerState/事务——RunJob 携带协调器算好的预算，沙箱只报告用量，在发布点换入桶候选，删除 `settle_bill`/`discard_bill` 往返与「线程失联漏计桶账」现状（embed.rs 当前 `let _ =` 忽略回执失败随之消灭）。迟到回执拒收（worker epoch）在本片联调（若 P1 未竟则本片兜底）。**注入范围**：发布点各子步（桶/RawMemory/segments/market）的就地失败注入；进程级崩溃恢复（kill -9 后只接受完整版本）显式留给 E 批（kk-storage 就绪前无持久化可恢复）；扩展 B0-6 三项回归（重试缓存销毁/负桶停跑回血/TickInput 重采样）覆盖面。
 - **判据**：发布点任一子步注入后，已提交状态只可能是完整版本、账本无迟到污染；同轮预算语义（官方 make.js 口径）不变；B0-6 回归全绿。
 - **依赖**：A2 + A3 + 并行轨 P1 的 RunJob 预算字段（可先以占位接线）。
 
