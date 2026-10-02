@@ -73,7 +73,7 @@
 
 B 阶段的接口、投影布局、link 接入范围与切片见[开放领域定义与玩家投影](../designs/domain-projection.md)。该文档细化以下方向，不表示对应能力已实现。
 
-B.1 已建立 `kk-mod-api` 的描述、校验、冻结与 link 默认目录，尚未接入现有结算和玩家投影；接口边界见 [crate 说明](../../crates/kk-mod-api/README.md)。下一片 B.2 将接入 link 默认贡献。
+B.1 已建立 `kk-mod-api` 的描述、校验、冻结与 link 默认目录（64f2d91）；**B.2 已收口（2026-10-02）**：link 有效规则接入放置/建造/结算/配额/伤害/玩家常量，槽执行器（Native/Chained+wrap-next）与 `Engine::with_plan` 装配落地，棘轮 1854 零转红——实现与限制见 [B.2 接线记录](../research/notes/b2-link-wiring-2026-10-02.md)。下一片 B.3（已有对象上的扩展字段、有界动作与统一权限）。
 
 | 批 | 内容（06 §6 + ADR-014 调整） | 到批前须补 |
 |---|---|---|

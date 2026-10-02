@@ -27,6 +27,68 @@ fn string(max_bytes: u32) -> ValueSchema {
     }
 }
 
+/// link 家族的有效规则快照。装配时从冻结计划解析一次，
+/// 结算与放置热路径按字段读取，不再查稳定键。
+/// 值只反映计划中的规则；字段描述与处理器不在此快照内。
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LinkRules {
+    pub hits: i64,
+    pub hits_max: i64,
+    pub capacity: i64,
+    /// 冷却系数：转移后按此值乘两 link 的切比雪夫距离。
+    pub cooldown: i64,
+    /// 损耗率：ceil(amount * loss_ratio) 计算转移损耗。
+    pub loss_ratio: f64,
+    pub build_cost: i64,
+    /// RCL 0..=8 的可建数量。
+    pub rcl: [i64; 9],
+}
+
+impl LinkRules {
+    /// 从计划的有效规则提取全部 link 规则；缺键说明计划未含 builtin:link。
+    /// 句柄解析只发生在此处，数值域已在冻结时校验。
+    pub fn from_plan(rules: &EffectiveRules) -> Result<Self, String> {
+        let signed = |name: &str| -> Result<i64, String> {
+            let key = key(name);
+            let Some(handle) = rules.resolve(&key) else {
+                return Err(format!("计划缺少规则 builtin:link.{name}"));
+            };
+            match rules.get(handle) {
+                Some(Number::Signed(v)) => Ok(*v),
+                Some(other) => Err(format!("规则 builtin:link.{name} 须为整数，实得 {other:?}")),
+                None => Err(format!("规则 builtin:link.{name} 句柄越界")),
+            }
+        };
+        let loss_ratio = {
+            let handle = rules
+                .resolve(&key("link.lossRatio"))
+                .ok_or_else(|| "计划缺少规则 builtin:link.lossRatio".to_string())?;
+            match rules.get(handle) {
+                Some(Number::Float(v)) => *v,
+                Some(other) => {
+                    return Err(format!(
+                        "规则 builtin:link.lossRatio 须为浮点，实得 {other:?}"
+                    ));
+                }
+                None => return Err("规则 builtin:link.lossRatio 句柄越界".into()),
+            }
+        };
+        let mut rcl = [0i64; 9];
+        for (level, slot) in rcl.iter_mut().enumerate() {
+            *slot = signed(&format!("link.rcl{level}"))?;
+        }
+        Ok(Self {
+            hits: signed("link.hits")?,
+            hits_max: signed("link.hitsMax")?,
+            capacity: signed("link.capacity")?,
+            cooldown: signed("link.cooldown")?,
+            loss_ratio,
+            build_cost: signed("link.buildCost")?,
+            rcl,
+        })
+    }
+}
+
 pub fn link() -> Contribution {
     let consumers = keys(&[
         "link.init",

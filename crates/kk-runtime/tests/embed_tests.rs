@@ -94,6 +94,7 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     m2b_structure_readfaces_e2e_impl()?;
     m2b_structure_defaults_probe_impl()?;
     m2b_structure_actions_e2e_impl()?;
+    b02_link_constants_injected_impl()?;
     m2b2_terminal_send_e2e_impl()?;
     m2b2_market_book_e2e_impl()?;
     m2b_closing_e2e_impl()?;

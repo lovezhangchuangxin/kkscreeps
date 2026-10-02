@@ -15,6 +15,8 @@ fn world_with_room() -> World {
 
 fn ctx(world: &World) -> PlaceCtx<'_> {
     PlaceCtx {
+        links: crate::place::builtin_link_rules(),
+
         time: world.time,
         controller: None,
         name_seq: 0,
@@ -142,6 +144,8 @@ fn snapshot_contract_shapes() {
             "store": { "energy": 0 },
         }),
         &PlaceCtx {
+            links: crate::place::builtin_link_rules(),
+
             time: world.time,
             controller: None,
             name_seq: 0,
@@ -171,6 +175,8 @@ fn snapshot_contract_shapes() {
             "store": { "energy": 30, "G": 200 },
         }),
         &PlaceCtx {
+            links: crate::place::builtin_link_rules(),
+
             time: world.time,
             controller: None,
             name_seq: 1,
@@ -186,6 +192,8 @@ fn snapshot_contract_shapes() {
         "structure",
         &serde_json::json!({ "pos": [6, 6], "structureType": "spawn", "owner": "p1" }),
         &PlaceCtx {
+            links: crate::place::builtin_link_rules(),
+
             time: world.time,
             controller: None,
             name_seq: 0,
@@ -208,6 +216,8 @@ fn snapshot_contract_shapes() {
         "structure",
         &serde_json::json!({ "pos": [10, 10], "structureType": "source" }),
         &PlaceCtx {
+            links: crate::place::builtin_link_rules(),
+
             time: world.time,
             controller: None,
             name_seq: 0,
@@ -249,6 +259,8 @@ fn snapshot_getter_forms() {
         safe_mode_cooldown: None,
     };
     let ctx = PlaceCtx {
+        links: crate::place::builtin_link_rules(),
+
         time: world.time,
         controller: Some(&ctl),
         name_seq: 0,
@@ -306,6 +318,8 @@ fn snapshot_creep_capacity_boosts_and_null() {
             "body": ["carry", "carry"], "boosts": { "1": "KH" },
         }),
         &PlaceCtx {
+            links: crate::place::builtin_link_rules(),
+
             time: world.time,
             controller: None,
             name_seq: 0,
@@ -323,6 +337,8 @@ fn snapshot_creep_capacity_boosts_and_null() {
         "creep",
         &serde_json::json!({ "pos": [8, 8], "owner": "p1", "body": ["move", "work"] }),
         &PlaceCtx {
+            links: crate::place::builtin_link_rules(),
+
             time: world.time,
             controller: None,
             name_seq: 0,
@@ -350,6 +366,8 @@ fn snapshot_mineral_and_tombstone_kind_mapping() {
             "ticksToRegeneration": 90,
         }),
         &PlaceCtx {
+            links: crate::place::builtin_link_rules(),
+
             time: world.time,
             controller: None,
             name_seq: 0,
@@ -392,6 +410,8 @@ fn snapshot_mineral_and_tombstone_kind_mapping() {
         "tombstone",
         &serde_json::json!({ "pos": [13, 13], "store": { "energy": 30 } }),
         &PlaceCtx {
+            links: crate::place::builtin_link_rules(),
+
             time: world.time,
             controller: None,
             name_seq: 0,
@@ -416,6 +436,8 @@ fn road_hits_max_terrain_scaling() {
         "structure",
         &serde_json::json!({ "pos": [10, 24], "structureType": "road" }),
         &PlaceCtx {
+            links: crate::place::builtin_link_rules(),
+
             time: world.time,
             controller: None,
             name_seq: 0,
@@ -427,6 +449,8 @@ fn road_hits_max_terrain_scaling() {
         "structure",
         &serde_json::json!({ "pos": [10, 25], "structureType": "road" }),
         &PlaceCtx {
+            links: crate::place::builtin_link_rules(),
+
             time: world.time,
             controller: None,
             name_seq: 0,
@@ -438,6 +462,8 @@ fn road_hits_max_terrain_scaling() {
         "structure",
         &serde_json::json!({ "pos": [11, 25], "structureType": "road" }),
         &PlaceCtx {
+            links: crate::place::builtin_link_rules(),
+
             time: world.time,
             controller: None,
             name_seq: 0,

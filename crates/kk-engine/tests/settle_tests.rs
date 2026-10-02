@@ -20,6 +20,8 @@ mod combat_ranged;
 mod controller_safemode;
 #[path = "settle_tests/m2b2_terminal_market_family.rs"]
 mod m2b2_terminal_market_family;
+#[path = "settle_tests/m2b_contrib_link_family.rs"]
+mod m2b_contrib_link_family;
 #[path = "settle_tests/m2b_creation_family.rs"]
 mod m2b_creation_family;
 #[path = "settle_tests/m2b_notify_family.rs"]
@@ -305,8 +307,16 @@ impl Fixture {
         let state =
             kk_engine::TickState::new(std::mem::take(&mut self.players), self.world.next_obj_id());
         let mut room = self.world.room("W1N1").unwrap().clone();
-        let events =
-            settle_room(&mut room, self.world.time(), input.now_ms, &state, &batch).unwrap();
+        let events = settle_room(
+            &mut room,
+            self.world.time(),
+            input.now_ms,
+            &state,
+            &batch,
+            &kk_world::place::builtin_link_rules(),
+            &kk_engine::settle::contrib::ContributionDispatch::default(),
+        )
+        .unwrap();
         let (players, next) = state.into_parts().unwrap();
         self.players = players;
         let name = room.name.clone();
@@ -314,6 +324,52 @@ impl Fixture {
         self.world.bump_next_obj_id(next);
         self.world.advance_ticks(1);
         events
+    }
+
+    /// 以显式 link 规则结算（B.2 覆盖贯穿测试）。
+    fn settle_with_rules(&mut self, batch: IntentBatch, links: kk_mod_api::builtin::LinkRules) {
+        self.settle_with(
+            batch,
+            links,
+            &kk_engine::settle::contrib::ContributionDispatch::default(),
+        );
+    }
+
+    /// 以显式处理链结算（B.2 处理器测试）。
+    fn settle_with_dispatch(
+        &mut self,
+        batch: IntentBatch,
+        dispatch: &kk_engine::settle::contrib::ContributionDispatch,
+    ) {
+        self.settle_with(batch, kk_world::place::builtin_link_rules(), dispatch);
+    }
+
+    fn settle_with(
+        &mut self,
+        batch: IntentBatch,
+        links: kk_mod_api::builtin::LinkRules,
+        dispatch: &kk_engine::settle::contrib::ContributionDispatch,
+    ) {
+        let state =
+            kk_engine::TickState::new(std::mem::take(&mut self.players), self.world.next_obj_id());
+        let mut room = self.world.room("W1N1").unwrap().clone();
+        let events = settle_room(
+            &mut room,
+            self.world.time(),
+            1_700_000_000_000,
+            &state,
+            &batch,
+            &links,
+            dispatch,
+        )
+        .unwrap();
+        let (players, next) = state.into_parts().unwrap();
+        self.players = players;
+        let name = room.name.clone();
+        self.world.commit_room(name, room);
+        self.world.bump_next_obj_id(next);
+        self.world.advance_ticks(1);
+        drop(events);
     }
 
     fn obj(&self, id: ObjId) -> &RoomObject {

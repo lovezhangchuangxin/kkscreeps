@@ -13,6 +13,8 @@ fn storage_named_resources_reach_all_projections() {
             "store": { "energy": 0, "G": 5, "U": 12, "XUHO2": 6, "Z": 0 },
         }),
         &PlaceCtx {
+            links: crate::place::builtin_link_rules(),
+
             time: 0,
             controller: None,
             name_seq: 0,
@@ -206,6 +208,8 @@ fn projection_shape_and_find() {
         safe_mode_cooldown: None,
     };
     let ctx = PlaceCtx {
+        links: crate::place::builtin_link_rules(),
+
         time: world.time,
         controller: Some(&ctl),
         name_seq: 0,
@@ -283,6 +287,8 @@ fn generic_objects_stay_visible_to_find() {
     terrain.normalize();
     world.register_room("W1N1", terrain);
     let ctx = PlaceCtx {
+        links: crate::place::builtin_link_rules(),
+
         time: 0,
         controller: None,
         name_seq: 0,

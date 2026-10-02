@@ -266,14 +266,14 @@ pub fn structure_hits_max(w: &Working, obj: &RoomObject) -> Option<i64> {
                     .map(|(_, v)| *v)
                     .unwrap_or(0)
             } else {
-                static_hits_max(structure_type)?
+                static_hits_max(structure_type, &w.links)?
             }
         }
         _ => return None,
     })
 }
 
-fn static_hits_max(structure_type: &str) -> Option<i64> {
+fn static_hits_max(structure_type: &str, links: &kk_mod_api::builtin::LinkRules) -> Option<i64> {
     Some(match structure_type {
         "tower" => c::TOWER_HITS,
         "observer" => c::OBSERVER_HITS,
@@ -284,7 +284,7 @@ fn static_hits_max(structure_type: &str) -> Option<i64> {
         "powerSpawn" => c::POWER_SPAWN_HITS,
         "nuker" => c::NUKER_HITS,
         "factory" => c::FACTORY_HITS,
-        "link" => c::LINK_HITS_MAX,
+        "link" => links.hits_max,
         _ => return None,
     })
 }

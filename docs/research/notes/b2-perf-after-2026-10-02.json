@@ -1,0 +1,1619 @@
+{
+  "purpose": "本仓改造基线；不代表三引擎对照或完整架构性能验收",
+  "binary_sha256": "5db2f7eec5a90817e312708007dee42f46b7298a1d7237038d829e6b56cc51e3",
+  "platform": "macOS-15.7.3-arm64-arm-64bit",
+  "repetitions": 5,
+  "warmup": 500,
+  "ticks": 3000,
+  "limitations": [
+    "每玩家独立小房间；负载自检仅覆盖首房",
+    "CPU 为当前进程全部线程，包括采样与采集窗口内负载检查",
+    "RSS 峰值为 tick 边界采样最大值，可能漏掉 tick 内瞬时峰值",
+    "长期窗口含 creep 死亡、重新孵化和墓碑衰减",
+    "本地机器未控制频率和其他应用负载；不设置性能硬门禁"
+  ],
+  "summary": {
+    "1": {
+      "median_cpu_core_ms_per_tick": 0.207243,
+      "median_rss_bytes_sampled_p50": 72384512,
+      "max_rss_bytes_sampled_peak": 74612736,
+      "median_wall_p50_ms": 0.132292,
+      "median_wall_p95_ms": 0.192542,
+      "median_wall_p99_ms": 0.54775,
+      "run_wall_p99_ms": [
+        0.617,
+        0.54775,
+        0.511416,
+        0.63625,
+        0.527166
+      ]
+    },
+    "4": {
+      "median_cpu_core_ms_per_tick": 0.9128999999999999,
+      "median_rss_bytes_sampled_p50": 193298432,
+      "max_rss_bytes_sampled_peak": 198705152,
+      "median_wall_p50_ms": 0.369958,
+      "median_wall_p95_ms": 0.781041,
+      "median_wall_p99_ms": 1.079167,
+      "run_wall_p99_ms": [
+        1.114041,
+        1.4033749999999998,
+        1.029959,
+        1.058292,
+        1.079167
+      ]
+    },
+    "8": {
+      "median_cpu_core_ms_per_tick": 2.054927333333333,
+      "median_rss_bytes_sampled_p50": 347127808,
+      "max_rss_bytes_sampled_peak": 353665024,
+      "median_wall_p50_ms": 0.7743329999999999,
+      "median_wall_p95_ms": 1.477833,
+      "median_wall_p99_ms": 2.1725,
+      "run_wall_p99_ms": [
+        1.973958,
+        2.1725,
+        2.154667,
+        2.338666,
+        2.556417
+      ]
+    },
+    "32": {
+      "median_cpu_core_ms_per_tick": 13.389912,
+      "median_rss_bytes_sampled_p50": 1319731200,
+      "max_rss_bytes_sampled_peak": 1386102784,
+      "median_wall_p50_ms": 5.386,
+      "median_wall_p95_ms": 8.140333,
+      "median_wall_p99_ms": 12.273875,
+      "run_wall_p99_ms": [
+        12.273875,
+        11.435583,
+        13.537875,
+        10.792958,
+        12.294417000000001
+      ]
+    }
+  },
+  "runs": [
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 1,
+      "ticks": 3000,
+      "warmup": 500,
+      "player_concurrency": 2,
+      "player_cpu_clock": "thread_cpu_time",
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "64f2d9145c589d66305f775cda8916678f507ed3",
+        "git_status": "M Cargo.lock\n M compat/reports/kkscreeps.json\n M crates/kk-engine/Cargo.toml\n M crates/kk-engine/src/settle/creep/build.rs\n M crates/kk-engine/src/settle/damage.rs\n M crates/kk-engine/src/settle/mod.rs\n M crates/kk-engine/src/settle/structures.rs\n M crates/kk-engine/tests/settle_tests.rs\n M crates/kk-mod-api/README.md\n M crates/kk-mod-api/src/builtin.rs\n M crates/kk-mod-api/tests/freeze.rs\n M crates/kk-runner/src/sandbox.rs\n M crates/kk-runner/tests/sandbox_tests.rs\n M crates/kk-runner/tests/sandbox_tests/prelude_and_room_forms.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/embed_tests.rs\n M crates/kk-runtime/tests/embed_tests/m2b_structure_actions_family.rs\n M crates/kk-storage-bench/src/fixtures.rs\n M crates/kk-world/Cargo.toml\n M crates/kk-world/src/place.rs\n M crates/kk-world/src/place/place_structure.rs\n M crates/kk-world/src/snapshot/tests.rs\n M crates/kk-world/src/world_json/tests/terrain_and_projection_forms.rs\n M crates/kk-world/src/world_json/tests/viewer_semantics_and_families.rs\n M docs/designs/domain-projection.md\n M docs/plans/mod-plane-batches.md\n?? crates/kk-engine/src/settle/contrib.rs\n?? crates/kk-engine/tests/settle_tests/m2b_contrib_link_family.rs\n?? docs/research/notes/b2-link-wiring-2026-10-02.md",
+        "debug_assertions": false,
+        "unix_time_ms": 1790948579119
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 489.453125,
+        "cpu_core_ms": 657.2600000000001,
+        "cpu_core_ms_per_tick": 0.2190866666666667,
+        "rss_bytes_after": 73105408,
+        "rss_bytes_sampled_peak": 73105408,
+        "rss_bytes_sampled_p50": 71368704,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 2.315016000000007,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 0.041833,
+            "p95_ms": 0.068167,
+            "p99_ms": 0.077083,
+            "max_ms": 0.223167,
+            "total_ms": 148.54072700000035
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 0.077292,
+            "p95_ms": 0.120208,
+            "p99_ms": 0.553916,
+            "max_ms": 1.130291,
+            "total_ms": 276.2805670000003
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.01325,
+            "p95_ms": 0.0425,
+            "p99_ms": 0.053584,
+            "max_ms": 0.157625,
+            "total_ms": 53.49105599999983
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 0.13716699999999998,
+            "p95_ms": 0.221,
+            "p99_ms": 0.617,
+            "max_ms": 1.413791,
+            "total_ms": 484.46640900000057
+          }
+        }
+      },
+      "repetition": 1
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 4,
+      "ticks": 3000,
+      "warmup": 500,
+      "player_concurrency": 2,
+      "player_cpu_clock": "thread_cpu_time",
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "64f2d9145c589d66305f775cda8916678f507ed3",
+        "git_status": "M Cargo.lock\n M compat/reports/kkscreeps.json\n M crates/kk-engine/Cargo.toml\n M crates/kk-engine/src/settle/creep/build.rs\n M crates/kk-engine/src/settle/damage.rs\n M crates/kk-engine/src/settle/mod.rs\n M crates/kk-engine/src/settle/structures.rs\n M crates/kk-engine/tests/settle_tests.rs\n M crates/kk-mod-api/README.md\n M crates/kk-mod-api/src/builtin.rs\n M crates/kk-mod-api/tests/freeze.rs\n M crates/kk-runner/src/sandbox.rs\n M crates/kk-runner/tests/sandbox_tests.rs\n M crates/kk-runner/tests/sandbox_tests/prelude_and_room_forms.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/embed_tests.rs\n M crates/kk-runtime/tests/embed_tests/m2b_structure_actions_family.rs\n M crates/kk-storage-bench/src/fixtures.rs\n M crates/kk-world/Cargo.toml\n M crates/kk-world/src/place.rs\n M crates/kk-world/src/place/place_structure.rs\n M crates/kk-world/src/snapshot/tests.rs\n M crates/kk-world/src/world_json/tests/terrain_and_projection_forms.rs\n M crates/kk-world/src/world_json/tests/viewer_semantics_and_families.rs\n M docs/designs/domain-projection.md\n M docs/plans/mod-plane-batches.md\n?? crates/kk-engine/src/settle/contrib.rs\n?? crates/kk-engine/tests/settle_tests/m2b_contrib_link_family.rs\n?? docs/research/notes/b2-link-wiring-2026-10-02.md",
+        "debug_assertions": false,
+        "unix_time_ms": 1790948579831
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 1388.292625,
+        "cpu_core_ms": 2777.3509999999997,
+        "cpu_core_ms_per_tick": 0.9257836666666666,
+        "rss_bytes_after": 195969024,
+        "rss_bytes_sampled_peak": 195969024,
+        "rss_bytes_sampled_p50": 192577536,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 3.5043960000000047,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 0.197749,
+            "p95_ms": 0.326251,
+            "p99_ms": 0.429208,
+            "max_ms": 1.211709,
+            "total_ms": 702.8738499999993
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 0.128626,
+            "p95_ms": 0.483333,
+            "p99_ms": 0.673292,
+            "max_ms": 2.185918,
+            "total_ms": 501.5401519999992
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.04475,
+            "p95_ms": 0.083333,
+            "p99_ms": 0.125708,
+            "max_ms": 1.845666,
+            "total_ms": 167.89595100000003
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 0.38466599999999995,
+            "p95_ms": 0.788541,
+            "p99_ms": 1.114041,
+            "max_ms": 4.269417,
+            "total_ms": 1376.1481310000004
+          }
+        }
+      },
+      "repetition": 1
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 8,
+      "ticks": 3000,
+      "warmup": 500,
+      "player_concurrency": 2,
+      "player_cpu_clock": "thread_cpu_time",
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "64f2d9145c589d66305f775cda8916678f507ed3",
+        "git_status": "M Cargo.lock\n M compat/reports/kkscreeps.json\n M crates/kk-engine/Cargo.toml\n M crates/kk-engine/src/settle/creep/build.rs\n M crates/kk-engine/src/settle/damage.rs\n M crates/kk-engine/src/settle/mod.rs\n M crates/kk-engine/src/settle/structures.rs\n M crates/kk-engine/tests/settle_tests.rs\n M crates/kk-mod-api/README.md\n M crates/kk-mod-api/src/builtin.rs\n M crates/kk-mod-api/tests/freeze.rs\n M crates/kk-runner/src/sandbox.rs\n M crates/kk-runner/tests/sandbox_tests.rs\n M crates/kk-runner/tests/sandbox_tests/prelude_and_room_forms.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/embed_tests.rs\n M crates/kk-runtime/tests/embed_tests/m2b_structure_actions_family.rs\n M crates/kk-storage-bench/src/fixtures.rs\n M crates/kk-world/Cargo.toml\n M crates/kk-world/src/place.rs\n M crates/kk-world/src/place/place_structure.rs\n M crates/kk-world/src/snapshot/tests.rs\n M crates/kk-world/src/world_json/tests/terrain_and_projection_forms.rs\n M crates/kk-world/src/world_json/tests/viewer_semantics_and_families.rs\n M docs/designs/domain-projection.md\n M docs/plans/mod-plane-batches.md\n?? crates/kk-engine/src/settle/contrib.rs\n?? crates/kk-engine/tests/settle_tests/m2b_contrib_link_family.rs\n?? docs/research/notes/b2-link-wiring-2026-10-02.md",
+        "debug_assertions": false,
+        "unix_time_ms": 1790948581645
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 2820.527916,
+        "cpu_core_ms": 6164.781999999999,
+        "cpu_core_ms_per_tick": 2.054927333333333,
+        "rss_bytes_after": 349913088,
+        "rss_bytes_sampled_peak": 349913088,
+        "rss_bytes_sampled_p50": 347127808,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 5.210088999999991,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 0.443625,
+            "p95_ms": 0.789877,
+            "p99_ms": 0.955041,
+            "max_ms": 1.437793,
+            "total_ms": 1583.316501000001
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 0.230999,
+            "p95_ms": 0.683958,
+            "p99_ms": 1.078834,
+            "max_ms": 2.411126,
+            "total_ms": 905.2706029999989
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.082709,
+            "p95_ms": 0.155666,
+            "p99_ms": 0.184625,
+            "max_ms": 0.33375,
+            "total_ms": 305.01881000000014
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 0.795709,
+            "p95_ms": 1.477833,
+            "p99_ms": 1.973958,
+            "max_ms": 3.997667,
+            "total_ms": 2799.7658660000025
+          }
+        }
+      },
+      "repetition": 1
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 32,
+      "ticks": 3000,
+      "warmup": 500,
+      "player_concurrency": 2,
+      "player_cpu_clock": "thread_cpu_time",
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "64f2d9145c589d66305f775cda8916678f507ed3",
+        "git_status": "M Cargo.lock\n M compat/reports/kkscreeps.json\n M crates/kk-engine/Cargo.toml\n M crates/kk-engine/src/settle/creep/build.rs\n M crates/kk-engine/src/settle/damage.rs\n M crates/kk-engine/src/settle/mod.rs\n M crates/kk-engine/src/settle/structures.rs\n M crates/kk-engine/tests/settle_tests.rs\n M crates/kk-mod-api/README.md\n M crates/kk-mod-api/src/builtin.rs\n M crates/kk-mod-api/tests/freeze.rs\n M crates/kk-runner/src/sandbox.rs\n M crates/kk-runner/tests/sandbox_tests.rs\n M crates/kk-runner/tests/sandbox_tests/prelude_and_room_forms.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/embed_tests.rs\n M crates/kk-runtime/tests/embed_tests/m2b_structure_actions_family.rs\n M crates/kk-storage-bench/src/fixtures.rs\n M crates/kk-world/Cargo.toml\n M crates/kk-world/src/place.rs\n M crates/kk-world/src/place/place_structure.rs\n M crates/kk-world/src/snapshot/tests.rs\n M crates/kk-world/src/world_json/tests/terrain_and_projection_forms.rs\n M crates/kk-world/src/world_json/tests/viewer_semantics_and_families.rs\n M docs/designs/domain-projection.md\n M docs/plans/mod-plane-batches.md\n?? crates/kk-engine/src/settle/contrib.rs\n?? crates/kk-engine/tests/settle_tests/m2b_contrib_link_family.rs\n?? docs/research/notes/b2-link-wiring-2026-10-02.md",
+        "debug_assertions": false,
+        "unix_time_ms": 1790948585271
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 17047.648167,
+        "cpu_core_ms": 40050.819,
+        "cpu_core_ms_per_tick": 13.350273000000001,
+        "rss_bytes_after": 1319092224,
+        "rss_bytes_sampled_peak": 1360117760,
+        "rss_bytes_sampled_p50": 1319075840,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 25.7647819999999,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 2.744378,
+            "p95_ms": 4.21283,
+            "p99_ms": 6.617586,
+            "max_ms": 13.274668,
+            "total_ms": 9149.525448999997
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 1.947669,
+            "p95_ms": 3.333001,
+            "p99_ms": 5.57771,
+            "max_ms": 29.961665,
+            "total_ms": 6441.272384999986
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.3485,
+            "p95_ms": 0.682208,
+            "p99_ms": 0.85675,
+            "max_ms": 2.988375,
+            "total_ms": 1327.8417349999977
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 5.28875,
+            "p95_ms": 8.140333,
+            "p99_ms": 12.273875,
+            "max_ms": 43.950125,
+            "total_ms": 16942.80594999998
+          }
+        }
+      },
+      "repetition": 1
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 1,
+      "ticks": 3000,
+      "warmup": 500,
+      "player_concurrency": 2,
+      "player_cpu_clock": "thread_cpu_time",
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "64f2d9145c589d66305f775cda8916678f507ed3",
+        "git_status": "M Cargo.lock\n M compat/reports/kkscreeps.json\n M crates/kk-engine/Cargo.toml\n M crates/kk-engine/src/settle/creep/build.rs\n M crates/kk-engine/src/settle/damage.rs\n M crates/kk-engine/src/settle/mod.rs\n M crates/kk-engine/src/settle/structures.rs\n M crates/kk-engine/tests/settle_tests.rs\n M crates/kk-mod-api/README.md\n M crates/kk-mod-api/src/builtin.rs\n M crates/kk-mod-api/tests/freeze.rs\n M crates/kk-runner/src/sandbox.rs\n M crates/kk-runner/tests/sandbox_tests.rs\n M crates/kk-runner/tests/sandbox_tests/prelude_and_room_forms.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/embed_tests.rs\n M crates/kk-runtime/tests/embed_tests/m2b_structure_actions_family.rs\n M crates/kk-storage-bench/src/fixtures.rs\n M crates/kk-world/Cargo.toml\n M crates/kk-world/src/place.rs\n M crates/kk-world/src/place/place_structure.rs\n M crates/kk-world/src/snapshot/tests.rs\n M crates/kk-world/src/world_json/tests/terrain_and_projection_forms.rs\n M crates/kk-world/src/world_json/tests/viewer_semantics_and_families.rs\n M docs/designs/domain-projection.md\n M docs/plans/mod-plane-batches.md\n?? crates/kk-engine/src/settle/contrib.rs\n?? crates/kk-engine/tests/settle_tests/m2b_contrib_link_family.rs\n?? docs/research/notes/b2-link-wiring-2026-10-02.md",
+        "debug_assertions": false,
+        "unix_time_ms": 1790948606224
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 466.067583,
+        "cpu_core_ms": 621.729,
+        "cpu_core_ms_per_tick": 0.207243,
+        "rss_bytes_after": 74465280,
+        "rss_bytes_sampled_peak": 74465280,
+        "rss_bytes_sampled_p50": 72482816,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 2.244777999999987,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 0.041459,
+            "p95_ms": 0.062833,
+            "p99_ms": 0.068208,
+            "max_ms": 0.235875,
+            "total_ms": 143.8922670000002
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 0.075916,
+            "p95_ms": 0.108292,
+            "p99_ms": 0.473333,
+            "max_ms": 0.740042,
+            "total_ms": 266.55444699999987
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.012833,
+            "p95_ms": 0.020417,
+            "p99_ms": 0.034708,
+            "max_ms": 0.097333,
+            "total_ms": 44.596075999999904
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 0.132292,
+            "p95_ms": 0.190333,
+            "p99_ms": 0.54775,
+            "max_ms": 0.821875,
+            "total_ms": 461.2443639999999
+          }
+        }
+      },
+      "repetition": 2
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 4,
+      "ticks": 3000,
+      "warmup": 500,
+      "player_concurrency": 2,
+      "player_cpu_clock": "thread_cpu_time",
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "64f2d9145c589d66305f775cda8916678f507ed3",
+        "git_status": "M Cargo.lock\n M compat/reports/kkscreeps.json\n M crates/kk-engine/Cargo.toml\n M crates/kk-engine/src/settle/creep/build.rs\n M crates/kk-engine/src/settle/damage.rs\n M crates/kk-engine/src/settle/mod.rs\n M crates/kk-engine/src/settle/structures.rs\n M crates/kk-engine/tests/settle_tests.rs\n M crates/kk-mod-api/README.md\n M crates/kk-mod-api/src/builtin.rs\n M crates/kk-mod-api/tests/freeze.rs\n M crates/kk-runner/src/sandbox.rs\n M crates/kk-runner/tests/sandbox_tests.rs\n M crates/kk-runner/tests/sandbox_tests/prelude_and_room_forms.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/embed_tests.rs\n M crates/kk-runtime/tests/embed_tests/m2b_structure_actions_family.rs\n M crates/kk-storage-bench/src/fixtures.rs\n M crates/kk-world/Cargo.toml\n M crates/kk-world/src/place.rs\n M crates/kk-world/src/place/place_structure.rs\n M crates/kk-world/src/snapshot/tests.rs\n M crates/kk-world/src/world_json/tests/terrain_and_projection_forms.rs\n M crates/kk-world/src/world_json/tests/viewer_semantics_and_families.rs\n M docs/designs/domain-projection.md\n M docs/plans/mod-plane-batches.md\n?? crates/kk-engine/src/settle/contrib.rs\n?? crates/kk-engine/tests/settle_tests/m2b_contrib_link_family.rs\n?? docs/research/notes/b2-link-wiring-2026-10-02.md",
+        "debug_assertions": false,
+        "unix_time_ms": 1790948606905
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 1410.7665,
+        "cpu_core_ms": 2786.112,
+        "cpu_core_ms_per_tick": 0.928704,
+        "rss_bytes_after": 198705152,
+        "rss_bytes_sampled_peak": 198705152,
+        "rss_bytes_sampled_p50": 196149248,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 3.682162000000014,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 0.19379,
+            "p95_ms": 0.315918,
+            "p99_ms": 0.476376,
+            "max_ms": 0.941499,
+            "total_ms": 700.4156730000003
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 0.128499,
+            "p95_ms": 0.512124,
+            "p99_ms": 0.816291,
+            "max_ms": 4.424458,
+            "total_ms": 529.0377170000012
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.043708,
+            "p95_ms": 0.086167,
+            "p99_ms": 0.135666,
+            "max_ms": 0.629416,
+            "total_ms": 165.41796999999957
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 0.36975,
+            "p95_ms": 0.820292,
+            "p99_ms": 1.4033749999999998,
+            "max_ms": 5.004207999999999,
+            "total_ms": 1398.5041839999983
+          }
+        }
+      },
+      "repetition": 2
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 8,
+      "ticks": 3000,
+      "warmup": 500,
+      "player_concurrency": 2,
+      "player_cpu_clock": "thread_cpu_time",
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "64f2d9145c589d66305f775cda8916678f507ed3",
+        "git_status": "M Cargo.lock\n M compat/reports/kkscreeps.json\n M crates/kk-engine/Cargo.toml\n M crates/kk-engine/src/settle/creep/build.rs\n M crates/kk-engine/src/settle/damage.rs\n M crates/kk-engine/src/settle/mod.rs\n M crates/kk-engine/src/settle/structures.rs\n M crates/kk-engine/tests/settle_tests.rs\n M crates/kk-mod-api/README.md\n M crates/kk-mod-api/src/builtin.rs\n M crates/kk-mod-api/tests/freeze.rs\n M crates/kk-runner/src/sandbox.rs\n M crates/kk-runner/tests/sandbox_tests.rs\n M crates/kk-runner/tests/sandbox_tests/prelude_and_room_forms.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/embed_tests.rs\n M crates/kk-runtime/tests/embed_tests/m2b_structure_actions_family.rs\n M crates/kk-storage-bench/src/fixtures.rs\n M crates/kk-world/Cargo.toml\n M crates/kk-world/src/place.rs\n M crates/kk-world/src/place/place_structure.rs\n M crates/kk-world/src/snapshot/tests.rs\n M crates/kk-world/src/world_json/tests/terrain_and_projection_forms.rs\n M crates/kk-world/src/world_json/tests/viewer_semantics_and_families.rs\n M docs/designs/domain-projection.md\n M docs/plans/mod-plane-batches.md\n?? crates/kk-engine/src/settle/contrib.rs\n?? crates/kk-engine/tests/settle_tests/m2b_contrib_link_family.rs\n?? docs/research/notes/b2-link-wiring-2026-10-02.md",
+        "debug_assertions": false,
+        "unix_time_ms": 1790948608741
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 2770.972459,
+        "cpu_core_ms": 6049.540999999999,
+        "cpu_core_ms_per_tick": 2.0165136666666665,
+        "rss_bytes_after": 352419840,
+        "rss_bytes_sampled_peak": 352419840,
+        "rss_bytes_sampled_p50": 348110848,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 5.1319689999999865,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 0.441001,
+            "p95_ms": 0.731793,
+            "p99_ms": 0.833333,
+            "max_ms": 1.849208,
+            "total_ms": 1549.5993730000002
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 0.227295,
+            "p95_ms": 0.714125,
+            "p99_ms": 1.325208,
+            "max_ms": 6.458332,
+            "total_ms": 898.3022750000001
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.081916,
+            "p95_ms": 0.144583,
+            "p99_ms": 0.162083,
+            "max_ms": 0.406708,
+            "total_ms": 296.41215899999975
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 0.7743329999999999,
+            "p95_ms": 1.427583,
+            "p99_ms": 2.1725,
+            "max_ms": 7.078834,
+            "total_ms": 2750.529748000006
+          }
+        }
+      },
+      "repetition": 2
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 32,
+      "ticks": 3000,
+      "warmup": 500,
+      "player_concurrency": 2,
+      "player_cpu_clock": "thread_cpu_time",
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "64f2d9145c589d66305f775cda8916678f507ed3",
+        "git_status": "M Cargo.lock\n M compat/reports/kkscreeps.json\n M crates/kk-engine/Cargo.toml\n M crates/kk-engine/src/settle/creep/build.rs\n M crates/kk-engine/src/settle/damage.rs\n M crates/kk-engine/src/settle/mod.rs\n M crates/kk-engine/src/settle/structures.rs\n M crates/kk-engine/tests/settle_tests.rs\n M crates/kk-mod-api/README.md\n M crates/kk-mod-api/src/builtin.rs\n M crates/kk-mod-api/tests/freeze.rs\n M crates/kk-runner/src/sandbox.rs\n M crates/kk-runner/tests/sandbox_tests.rs\n M crates/kk-runner/tests/sandbox_tests/prelude_and_room_forms.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/embed_tests.rs\n M crates/kk-runtime/tests/embed_tests/m2b_structure_actions_family.rs\n M crates/kk-storage-bench/src/fixtures.rs\n M crates/kk-world/Cargo.toml\n M crates/kk-world/src/place.rs\n M crates/kk-world/src/place/place_structure.rs\n M crates/kk-world/src/snapshot/tests.rs\n M crates/kk-world/src/world_json/tests/terrain_and_projection_forms.rs\n M crates/kk-world/src/world_json/tests/viewer_semantics_and_families.rs\n M docs/designs/domain-projection.md\n M docs/plans/mod-plane-batches.md\n?? crates/kk-engine/src/settle/contrib.rs\n?? crates/kk-engine/tests/settle_tests/m2b_contrib_link_family.rs\n?? docs/research/notes/b2-link-wiring-2026-10-02.md",
+        "debug_assertions": false,
+        "unix_time_ms": 1790948612301
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 16786.629208000002,
+        "cpu_core_ms": 39521.98700000001,
+        "cpu_core_ms_per_tick": 13.17399566666667,
+        "rss_bytes_after": 1326088192,
+        "rss_bytes_sampled_peak": 1368178688,
+        "rss_bytes_sampled_p50": 1325219840,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 25.428721000000007,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 2.820915,
+            "p95_ms": 3.981793,
+            "p99_ms": 5.772291,
+            "max_ms": 10.321205,
+            "total_ms": 9101.154639999972
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 1.840876,
+            "p95_ms": 3.46521,
+            "p99_ms": 5.429832,
+            "max_ms": 25.272671,
+            "total_ms": 6253.441012999995
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.356792,
+            "p95_ms": 0.634666,
+            "p99_ms": 0.744333,
+            "max_ms": 2.370917,
+            "total_ms": 1307.7452169999963
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 5.326207999999999,
+            "p95_ms": 7.855542,
+            "p99_ms": 11.435583,
+            "max_ms": 32.914458,
+            "total_ms": 16685.956903000028
+          }
+        }
+      },
+      "repetition": 2
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 1,
+      "ticks": 3000,
+      "warmup": 500,
+      "player_concurrency": 2,
+      "player_cpu_clock": "thread_cpu_time",
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "64f2d9145c589d66305f775cda8916678f507ed3",
+        "git_status": "M Cargo.lock\n M compat/reports/kkscreeps.json\n M crates/kk-engine/Cargo.toml\n M crates/kk-engine/src/settle/creep/build.rs\n M crates/kk-engine/src/settle/damage.rs\n M crates/kk-engine/src/settle/mod.rs\n M crates/kk-engine/src/settle/structures.rs\n M crates/kk-engine/tests/settle_tests.rs\n M crates/kk-mod-api/README.md\n M crates/kk-mod-api/src/builtin.rs\n M crates/kk-mod-api/tests/freeze.rs\n M crates/kk-runner/src/sandbox.rs\n M crates/kk-runner/tests/sandbox_tests.rs\n M crates/kk-runner/tests/sandbox_tests/prelude_and_room_forms.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/embed_tests.rs\n M crates/kk-runtime/tests/embed_tests/m2b_structure_actions_family.rs\n M crates/kk-storage-bench/src/fixtures.rs\n M crates/kk-world/Cargo.toml\n M crates/kk-world/src/place.rs\n M crates/kk-world/src/place/place_structure.rs\n M crates/kk-world/src/snapshot/tests.rs\n M crates/kk-world/src/world_json/tests/terrain_and_projection_forms.rs\n M crates/kk-world/src/world_json/tests/viewer_semantics_and_families.rs\n M docs/designs/domain-projection.md\n M docs/plans/mod-plane-batches.md\n?? crates/kk-engine/src/settle/contrib.rs\n?? crates/kk-engine/tests/settle_tests/m2b_contrib_link_family.rs\n?? docs/research/notes/b2-link-wiring-2026-10-02.md",
+        "debug_assertions": false,
+        "unix_time_ms": 1790948632799
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 461.275125,
+        "cpu_core_ms": 615.352,
+        "cpu_core_ms_per_tick": 0.20511733333333332,
+        "rss_bytes_after": 74072064,
+        "rss_bytes_sampled_peak": 74072064,
+        "rss_bytes_sampled_p50": 74022912,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 2.2298359999999784,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 0.041208,
+            "p95_ms": 0.062208,
+            "p99_ms": 0.066375,
+            "max_ms": 0.076792,
+            "total_ms": 142.5971250000003
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 0.0755,
+            "p95_ms": 0.108459,
+            "p99_ms": 0.454333,
+            "max_ms": 0.702458,
+            "total_ms": 264.7576020000001
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.012625,
+            "p95_ms": 0.018459,
+            "p99_ms": 0.030625,
+            "max_ms": 0.061542,
+            "total_ms": 42.82186600000006
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 0.13075,
+            "p95_ms": 0.189916,
+            "p99_ms": 0.511416,
+            "max_ms": 0.782833,
+            "total_ms": 456.48194399999994
+          }
+        }
+      },
+      "repetition": 3
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 4,
+      "ticks": 3000,
+      "warmup": 500,
+      "player_concurrency": 2,
+      "player_cpu_clock": "thread_cpu_time",
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "64f2d9145c589d66305f775cda8916678f507ed3",
+        "git_status": "M Cargo.lock\n M compat/reports/kkscreeps.json\n M crates/kk-engine/Cargo.toml\n M crates/kk-engine/src/settle/creep/build.rs\n M crates/kk-engine/src/settle/damage.rs\n M crates/kk-engine/src/settle/mod.rs\n M crates/kk-engine/src/settle/structures.rs\n M crates/kk-engine/tests/settle_tests.rs\n M crates/kk-mod-api/README.md\n M crates/kk-mod-api/src/builtin.rs\n M crates/kk-mod-api/tests/freeze.rs\n M crates/kk-runner/src/sandbox.rs\n M crates/kk-runner/tests/sandbox_tests.rs\n M crates/kk-runner/tests/sandbox_tests/prelude_and_room_forms.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/embed_tests.rs\n M crates/kk-runtime/tests/embed_tests/m2b_structure_actions_family.rs\n M crates/kk-storage-bench/src/fixtures.rs\n M crates/kk-world/Cargo.toml\n M crates/kk-world/src/place.rs\n M crates/kk-world/src/place/place_structure.rs\n M crates/kk-world/src/snapshot/tests.rs\n M crates/kk-world/src/world_json/tests/terrain_and_projection_forms.rs\n M crates/kk-world/src/world_json/tests/viewer_semantics_and_families.rs\n M docs/designs/domain-projection.md\n M docs/plans/mod-plane-batches.md\n?? crates/kk-engine/src/settle/contrib.rs\n?? crates/kk-engine/tests/settle_tests/m2b_contrib_link_family.rs\n?? docs/research/notes/b2-link-wiring-2026-10-02.md",
+        "debug_assertions": false,
+        "unix_time_ms": 1790948633475
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 1354.8155419999998,
+        "cpu_core_ms": 2704.384,
+        "cpu_core_ms_per_tick": 0.9014613333333333,
+        "rss_bytes_after": 194723840,
+        "rss_bytes_sampled_peak": 194723840,
+        "rss_bytes_sampled_p50": 190971904,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 3.3275100000000113,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 0.19325,
+            "p95_ms": 0.298292,
+            "p99_ms": 0.406167,
+            "max_ms": 0.897041,
+            "total_ms": 680.6365130000007
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 0.129251,
+            "p95_ms": 0.490706,
+            "p99_ms": 0.637458,
+            "max_ms": 1.817751,
+            "total_ms": 499.64700699999946
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.043541,
+            "p95_ms": 0.079584,
+            "p99_ms": 0.100667,
+            "max_ms": 0.352541,
+            "total_ms": 159.63111599999982
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 0.369375,
+            "p95_ms": 0.781041,
+            "p99_ms": 1.029959,
+            "max_ms": 2.4329590000000003,
+            "total_ms": 1343.3139309999992
+          }
+        }
+      },
+      "repetition": 3
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 8,
+      "ticks": 3000,
+      "warmup": 500,
+      "player_concurrency": 2,
+      "player_cpu_clock": "thread_cpu_time",
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "64f2d9145c589d66305f775cda8916678f507ed3",
+        "git_status": "M Cargo.lock\n M compat/reports/kkscreeps.json\n M crates/kk-engine/Cargo.toml\n M crates/kk-engine/src/settle/creep/build.rs\n M crates/kk-engine/src/settle/damage.rs\n M crates/kk-engine/src/settle/mod.rs\n M crates/kk-engine/src/settle/structures.rs\n M crates/kk-engine/tests/settle_tests.rs\n M crates/kk-mod-api/README.md\n M crates/kk-mod-api/src/builtin.rs\n M crates/kk-mod-api/tests/freeze.rs\n M crates/kk-runner/src/sandbox.rs\n M crates/kk-runner/tests/sandbox_tests.rs\n M crates/kk-runner/tests/sandbox_tests/prelude_and_room_forms.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/embed_tests.rs\n M crates/kk-runtime/tests/embed_tests/m2b_structure_actions_family.rs\n M crates/kk-storage-bench/src/fixtures.rs\n M crates/kk-world/Cargo.toml\n M crates/kk-world/src/place.rs\n M crates/kk-world/src/place/place_structure.rs\n M crates/kk-world/src/snapshot/tests.rs\n M crates/kk-world/src/world_json/tests/terrain_and_projection_forms.rs\n M crates/kk-world/src/world_json/tests/viewer_semantics_and_families.rs\n M docs/designs/domain-projection.md\n M docs/plans/mod-plane-batches.md\n?? crates/kk-engine/src/settle/contrib.rs\n?? crates/kk-engine/tests/settle_tests/m2b_contrib_link_family.rs\n?? docs/research/notes/b2-link-wiring-2026-10-02.md",
+        "debug_assertions": false,
+        "unix_time_ms": 1790948635251
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 2785.815834,
+        "cpu_core_ms": 6073.513,
+        "cpu_core_ms_per_tick": 2.0245043333333332,
+        "rss_bytes_after": 353665024,
+        "rss_bytes_sampled_peak": 353665024,
+        "rss_bytes_sampled_p50": 350683136,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 5.340626999999991,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 0.432999,
+            "p95_ms": 0.749999,
+            "p99_ms": 0.97821,
+            "max_ms": 6.854293,
+            "total_ms": 1560.0874939999999
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 0.224665,
+            "p95_ms": 0.702334,
+            "p99_ms": 1.178416,
+            "max_ms": 2.507751,
+            "total_ms": 895.3877499999998
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.081,
+            "p95_ms": 0.154791,
+            "p99_ms": 0.194167,
+            "max_ms": 1.587458,
+            "total_ms": 304.0619979999998
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 0.750458,
+            "p95_ms": 1.468916,
+            "p99_ms": 2.154667,
+            "max_ms": 9.539166999999999,
+            "total_ms": 2765.5999870000014
+          }
+        }
+      },
+      "repetition": 3
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 32,
+      "ticks": 3000,
+      "warmup": 500,
+      "player_concurrency": 2,
+      "player_cpu_clock": "thread_cpu_time",
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "64f2d9145c589d66305f775cda8916678f507ed3",
+        "git_status": "M Cargo.lock\n M compat/reports/kkscreeps.json\n M crates/kk-engine/Cargo.toml\n M crates/kk-engine/src/settle/creep/build.rs\n M crates/kk-engine/src/settle/damage.rs\n M crates/kk-engine/src/settle/mod.rs\n M crates/kk-engine/src/settle/structures.rs\n M crates/kk-engine/tests/settle_tests.rs\n M crates/kk-mod-api/README.md\n M crates/kk-mod-api/src/builtin.rs\n M crates/kk-mod-api/tests/freeze.rs\n M crates/kk-runner/src/sandbox.rs\n M crates/kk-runner/tests/sandbox_tests.rs\n M crates/kk-runner/tests/sandbox_tests/prelude_and_room_forms.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/embed_tests.rs\n M crates/kk-runtime/tests/embed_tests/m2b_structure_actions_family.rs\n M crates/kk-storage-bench/src/fixtures.rs\n M crates/kk-world/Cargo.toml\n M crates/kk-world/src/place.rs\n M crates/kk-world/src/place/place_structure.rs\n M crates/kk-world/src/snapshot/tests.rs\n M crates/kk-world/src/world_json/tests/terrain_and_projection_forms.rs\n M crates/kk-world/src/world_json/tests/viewer_semantics_and_families.rs\n M docs/designs/domain-projection.md\n M docs/plans/mod-plane-batches.md\n?? crates/kk-engine/src/settle/contrib.rs\n?? crates/kk-engine/tests/settle_tests/m2b_contrib_link_family.rs\n?? docs/research/notes/b2-link-wiring-2026-10-02.md",
+        "debug_assertions": false,
+        "unix_time_ms": 1790948638788
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 18170.631458,
+        "cpu_core_ms": 42103.416000000005,
+        "cpu_core_ms_per_tick": 14.034472000000001,
+        "rss_bytes_after": 1332674560,
+        "rss_bytes_sampled_peak": 1386102784,
+        "rss_bytes_sampled_p50": 1332428800,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 29.97815100000003,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 3.104292,
+            "p95_ms": 4.574626,
+            "p99_ms": 6.541247,
+            "max_ms": 15.188292,
+            "total_ms": 9755.189255999996
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 2.031374,
+            "p95_ms": 3.855413,
+            "p99_ms": 5.642375,
+            "max_ms": 22.265042,
+            "total_ms": 6880.035319000003
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.385542,
+            "p95_ms": 0.676625,
+            "p99_ms": 0.90225,
+            "max_ms": 4.529292,
+            "total_ms": 1390.520952000003
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 5.522666,
+            "p95_ms": 8.839082999999999,
+            "p99_ms": 13.537875,
+            "max_ms": 38.179583,
+            "total_ms": 18052.013225000024
+          }
+        }
+      },
+      "repetition": 3
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 1,
+      "ticks": 3000,
+      "warmup": 500,
+      "player_concurrency": 2,
+      "player_cpu_clock": "thread_cpu_time",
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "64f2d9145c589d66305f775cda8916678f507ed3",
+        "git_status": "M Cargo.lock\n M compat/reports/kkscreeps.json\n M crates/kk-engine/Cargo.toml\n M crates/kk-engine/src/settle/creep/build.rs\n M crates/kk-engine/src/settle/damage.rs\n M crates/kk-engine/src/settle/mod.rs\n M crates/kk-engine/src/settle/structures.rs\n M crates/kk-engine/tests/settle_tests.rs\n M crates/kk-mod-api/README.md\n M crates/kk-mod-api/src/builtin.rs\n M crates/kk-mod-api/tests/freeze.rs\n M crates/kk-runner/src/sandbox.rs\n M crates/kk-runner/tests/sandbox_tests.rs\n M crates/kk-runner/tests/sandbox_tests/prelude_and_room_forms.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/embed_tests.rs\n M crates/kk-runtime/tests/embed_tests/m2b_structure_actions_family.rs\n M crates/kk-storage-bench/src/fixtures.rs\n M crates/kk-world/Cargo.toml\n M crates/kk-world/src/place.rs\n M crates/kk-world/src/place/place_structure.rs\n M crates/kk-world/src/snapshot/tests.rs\n M crates/kk-world/src/world_json/tests/terrain_and_projection_forms.rs\n M crates/kk-world/src/world_json/tests/viewer_semantics_and_families.rs\n M docs/designs/domain-projection.md\n M docs/plans/mod-plane-batches.md\n?? crates/kk-engine/src/settle/contrib.rs\n?? crates/kk-engine/tests/settle_tests/m2b_contrib_link_family.rs\n?? docs/research/notes/b2-link-wiring-2026-10-02.md",
+        "debug_assertions": false,
+        "unix_time_ms": 1790948660630
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 506.177125,
+        "cpu_core_ms": 666.642,
+        "cpu_core_ms_per_tick": 0.22221400000000002,
+        "rss_bytes_after": 74203136,
+        "rss_bytes_sampled_peak": 74203136,
+        "rss_bytes_sampled_p50": 71450624,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 2.538572999999987,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 0.043209,
+            "p95_ms": 0.06775,
+            "p99_ms": 0.102208,
+            "max_ms": 0.401542,
+            "total_ms": 151.62197599999985
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 0.079958,
+            "p95_ms": 0.127542,
+            "p99_ms": 0.560791,
+            "max_ms": 4.519793,
+            "total_ms": 294.49142799999964
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.013334,
+            "p95_ms": 0.031792,
+            "p99_ms": 0.041875,
+            "max_ms": 0.33175,
+            "total_ms": 48.80406899999982
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 0.140208,
+            "p95_ms": 0.218833,
+            "p99_ms": 0.63625,
+            "max_ms": 4.640625,
+            "total_ms": 500.8513250000003
+          }
+        }
+      },
+      "repetition": 4
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 4,
+      "ticks": 3000,
+      "warmup": 500,
+      "player_concurrency": 2,
+      "player_cpu_clock": "thread_cpu_time",
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "64f2d9145c589d66305f775cda8916678f507ed3",
+        "git_status": "M Cargo.lock\n M compat/reports/kkscreeps.json\n M crates/kk-engine/Cargo.toml\n M crates/kk-engine/src/settle/creep/build.rs\n M crates/kk-engine/src/settle/damage.rs\n M crates/kk-engine/src/settle/mod.rs\n M crates/kk-engine/src/settle/structures.rs\n M crates/kk-engine/tests/settle_tests.rs\n M crates/kk-mod-api/README.md\n M crates/kk-mod-api/src/builtin.rs\n M crates/kk-mod-api/tests/freeze.rs\n M crates/kk-runner/src/sandbox.rs\n M crates/kk-runner/tests/sandbox_tests.rs\n M crates/kk-runner/tests/sandbox_tests/prelude_and_room_forms.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/embed_tests.rs\n M crates/kk-runtime/tests/embed_tests/m2b_structure_actions_family.rs\n M crates/kk-storage-bench/src/fixtures.rs\n M crates/kk-world/Cargo.toml\n M crates/kk-world/src/place.rs\n M crates/kk-world/src/place/place_structure.rs\n M crates/kk-world/src/snapshot/tests.rs\n M crates/kk-world/src/world_json/tests/terrain_and_projection_forms.rs\n M crates/kk-world/src/world_json/tests/viewer_semantics_and_families.rs\n M docs/designs/domain-projection.md\n M docs/plans/mod-plane-batches.md\n?? crates/kk-engine/src/settle/contrib.rs\n?? crates/kk-engine/tests/settle_tests/m2b_contrib_link_family.rs\n?? docs/research/notes/b2-link-wiring-2026-10-02.md",
+        "debug_assertions": false,
+        "unix_time_ms": 1790948661357
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 1354.803375,
+        "cpu_core_ms": 2738.7,
+        "cpu_core_ms_per_tick": 0.9128999999999999,
+        "rss_bytes_after": 198492160,
+        "rss_bytes_sampled_peak": 198492160,
+        "rss_bytes_sampled_p50": 195936256,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 3.999145000000012,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 0.194543,
+            "p95_ms": 0.3115,
+            "p99_ms": 0.392251,
+            "max_ms": 0.641083,
+            "total_ms": 684.1134519999981
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 0.129167,
+            "p95_ms": 0.470541,
+            "p99_ms": 0.682918,
+            "max_ms": 1.512333,
+            "total_ms": 494.5971929999993
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.043792,
+            "p95_ms": 0.083167,
+            "p99_ms": 0.096708,
+            "max_ms": 0.196875,
+            "total_ms": 160.28929200000033
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 0.370292,
+            "p95_ms": 0.761542,
+            "p99_ms": 1.058292,
+            "max_ms": 1.8931250000000002,
+            "total_ms": 1342.4569110000014
+          }
+        }
+      },
+      "repetition": 4
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 8,
+      "ticks": 3000,
+      "warmup": 500,
+      "player_concurrency": 2,
+      "player_cpu_clock": "thread_cpu_time",
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "64f2d9145c589d66305f775cda8916678f507ed3",
+        "git_status": "M Cargo.lock\n M compat/reports/kkscreeps.json\n M crates/kk-engine/Cargo.toml\n M crates/kk-engine/src/settle/creep/build.rs\n M crates/kk-engine/src/settle/damage.rs\n M crates/kk-engine/src/settle/mod.rs\n M crates/kk-engine/src/settle/structures.rs\n M crates/kk-engine/tests/settle_tests.rs\n M crates/kk-mod-api/README.md\n M crates/kk-mod-api/src/builtin.rs\n M crates/kk-mod-api/tests/freeze.rs\n M crates/kk-runner/src/sandbox.rs\n M crates/kk-runner/tests/sandbox_tests.rs\n M crates/kk-runner/tests/sandbox_tests/prelude_and_room_forms.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/embed_tests.rs\n M crates/kk-runtime/tests/embed_tests/m2b_structure_actions_family.rs\n M crates/kk-storage-bench/src/fixtures.rs\n M crates/kk-world/Cargo.toml\n M crates/kk-world/src/place.rs\n M crates/kk-world/src/place/place_structure.rs\n M crates/kk-world/src/snapshot/tests.rs\n M crates/kk-world/src/world_json/tests/terrain_and_projection_forms.rs\n M crates/kk-world/src/world_json/tests/viewer_semantics_and_families.rs\n M docs/designs/domain-projection.md\n M docs/plans/mod-plane-batches.md\n?? crates/kk-engine/src/settle/contrib.rs\n?? crates/kk-engine/tests/settle_tests/m2b_contrib_link_family.rs\n?? docs/research/notes/b2-link-wiring-2026-10-02.md",
+        "debug_assertions": false,
+        "unix_time_ms": 1790948663207
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 2842.514625,
+        "cpu_core_ms": 6227.302999999999,
+        "cpu_core_ms_per_tick": 2.0757676666666662,
+        "rss_bytes_after": 349061120,
+        "rss_bytes_sampled_peak": 349061120,
+        "rss_bytes_sampled_p50": 346275840,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 5.904983000000004,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 0.454916,
+            "p95_ms": 0.739749,
+            "p99_ms": 0.858293,
+            "max_ms": 1.502834,
+            "total_ms": 1568.002014000001
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 0.238125,
+            "p95_ms": 0.760165,
+            "p99_ms": 1.398335,
+            "max_ms": 3.860376,
+            "total_ms": 939.7017579999982
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.085334,
+            "p95_ms": 0.151416,
+            "p99_ms": 0.171833,
+            "max_ms": 0.49025,
+            "total_ms": 306.8273809999991
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 0.799875,
+            "p95_ms": 1.507792,
+            "p99_ms": 2.338666,
+            "max_ms": 5.1195829999999996,
+            "total_ms": 2820.869715000002
+          }
+        }
+      },
+      "repetition": 4
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 32,
+      "ticks": 3000,
+      "warmup": 500,
+      "player_concurrency": 2,
+      "player_cpu_clock": "thread_cpu_time",
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "64f2d9145c589d66305f775cda8916678f507ed3",
+        "git_status": "M Cargo.lock\n M compat/reports/kkscreeps.json\n M crates/kk-engine/Cargo.toml\n M crates/kk-engine/src/settle/creep/build.rs\n M crates/kk-engine/src/settle/damage.rs\n M crates/kk-engine/src/settle/mod.rs\n M crates/kk-engine/src/settle/structures.rs\n M crates/kk-engine/tests/settle_tests.rs\n M crates/kk-mod-api/README.md\n M crates/kk-mod-api/src/builtin.rs\n M crates/kk-mod-api/tests/freeze.rs\n M crates/kk-runner/src/sandbox.rs\n M crates/kk-runner/tests/sandbox_tests.rs\n M crates/kk-runner/tests/sandbox_tests/prelude_and_room_forms.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/embed_tests.rs\n M crates/kk-runtime/tests/embed_tests/m2b_structure_actions_family.rs\n M crates/kk-storage-bench/src/fixtures.rs\n M crates/kk-world/Cargo.toml\n M crates/kk-world/src/place.rs\n M crates/kk-world/src/place/place_structure.rs\n M crates/kk-world/src/snapshot/tests.rs\n M crates/kk-world/src/world_json/tests/terrain_and_projection_forms.rs\n M crates/kk-world/src/world_json/tests/viewer_semantics_and_families.rs\n M docs/designs/domain-projection.md\n M docs/plans/mod-plane-batches.md\n?? crates/kk-engine/src/settle/contrib.rs\n?? crates/kk-engine/tests/settle_tests/m2b_contrib_link_family.rs\n?? docs/research/notes/b2-link-wiring-2026-10-02.md",
+        "debug_assertions": false,
+        "unix_time_ms": 1790948666834
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 17028.622541,
+        "cpu_core_ms": 40169.736000000004,
+        "cpu_core_ms_per_tick": 13.389912,
+        "rss_bytes_after": 1320878080,
+        "rss_bytes_sampled_peak": 1372372992,
+        "rss_bytes_sampled_p50": 1319731200,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 26.608522999999938,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 2.807877,
+            "p95_ms": 4.193542,
+            "p99_ms": 5.512918,
+            "max_ms": 9.298293,
+            "total_ms": 9197.573477999993
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 1.983414,
+            "p95_ms": 3.399791,
+            "p99_ms": 5.026331,
+            "max_ms": 11.249334,
+            "total_ms": 6359.528054999998
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.353959,
+            "p95_ms": 0.681042,
+            "p99_ms": 0.776375,
+            "max_ms": 3.63425,
+            "total_ms": 1339.7698989999994
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 5.386,
+            "p95_ms": 8.079667,
+            "p99_ms": 10.792958,
+            "max_ms": 20.60825,
+            "total_ms": 16921.13948200001
+          }
+        }
+      },
+      "repetition": 4
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 1,
+      "ticks": 3000,
+      "warmup": 500,
+      "player_concurrency": 2,
+      "player_cpu_clock": "thread_cpu_time",
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "64f2d9145c589d66305f775cda8916678f507ed3",
+        "git_status": "M Cargo.lock\n M compat/reports/kkscreeps.json\n M crates/kk-engine/Cargo.toml\n M crates/kk-engine/src/settle/creep/build.rs\n M crates/kk-engine/src/settle/damage.rs\n M crates/kk-engine/src/settle/mod.rs\n M crates/kk-engine/src/settle/structures.rs\n M crates/kk-engine/tests/settle_tests.rs\n M crates/kk-mod-api/README.md\n M crates/kk-mod-api/src/builtin.rs\n M crates/kk-mod-api/tests/freeze.rs\n M crates/kk-runner/src/sandbox.rs\n M crates/kk-runner/tests/sandbox_tests.rs\n M crates/kk-runner/tests/sandbox_tests/prelude_and_room_forms.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/embed_tests.rs\n M crates/kk-runtime/tests/embed_tests/m2b_structure_actions_family.rs\n M crates/kk-storage-bench/src/fixtures.rs\n M crates/kk-world/Cargo.toml\n M crates/kk-world/src/place.rs\n M crates/kk-world/src/place/place_structure.rs\n M crates/kk-world/src/snapshot/tests.rs\n M crates/kk-world/src/world_json/tests/terrain_and_projection_forms.rs\n M crates/kk-world/src/world_json/tests/viewer_semantics_and_families.rs\n M docs/designs/domain-projection.md\n M docs/plans/mod-plane-batches.md\n?? crates/kk-engine/src/settle/contrib.rs\n?? crates/kk-engine/tests/settle_tests/m2b_contrib_link_family.rs\n?? docs/research/notes/b2-link-wiring-2026-10-02.md",
+        "debug_assertions": false,
+        "unix_time_ms": 1790948687724
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 464.373125,
+        "cpu_core_ms": 618.6229999999999,
+        "cpu_core_ms_per_tick": 0.20620766666666665,
+        "rss_bytes_after": 74612736,
+        "rss_bytes_sampled_peak": 74612736,
+        "rss_bytes_sampled_p50": 72384512,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 2.232785999999991,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 0.041375,
+            "p95_ms": 0.063291,
+            "p99_ms": 0.067584,
+            "max_ms": 0.076583,
+            "total_ms": 143.4427180000002
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 0.075916,
+            "p95_ms": 0.109708,
+            "p99_ms": 0.457666,
+            "max_ms": 0.687791,
+            "total_ms": 266.53277100000037
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.012583,
+            "p95_ms": 0.019208,
+            "p99_ms": 0.033459,
+            "max_ms": 0.057958,
+            "total_ms": 43.30634299999999
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 0.131875,
+            "p95_ms": 0.192542,
+            "p99_ms": 0.527166,
+            "max_ms": 0.7478330000000001,
+            "total_ms": 459.5997689999996
+          }
+        }
+      },
+      "repetition": 5
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 4,
+      "ticks": 3000,
+      "warmup": 500,
+      "player_concurrency": 2,
+      "player_cpu_clock": "thread_cpu_time",
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "64f2d9145c589d66305f775cda8916678f507ed3",
+        "git_status": "M Cargo.lock\n M compat/reports/kkscreeps.json\n M crates/kk-engine/Cargo.toml\n M crates/kk-engine/src/settle/creep/build.rs\n M crates/kk-engine/src/settle/damage.rs\n M crates/kk-engine/src/settle/mod.rs\n M crates/kk-engine/src/settle/structures.rs\n M crates/kk-engine/tests/settle_tests.rs\n M crates/kk-mod-api/README.md\n M crates/kk-mod-api/src/builtin.rs\n M crates/kk-mod-api/tests/freeze.rs\n M crates/kk-runner/src/sandbox.rs\n M crates/kk-runner/tests/sandbox_tests.rs\n M crates/kk-runner/tests/sandbox_tests/prelude_and_room_forms.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/embed_tests.rs\n M crates/kk-runtime/tests/embed_tests/m2b_structure_actions_family.rs\n M crates/kk-storage-bench/src/fixtures.rs\n M crates/kk-world/Cargo.toml\n M crates/kk-world/src/place.rs\n M crates/kk-world/src/place/place_structure.rs\n M crates/kk-world/src/snapshot/tests.rs\n M crates/kk-world/src/world_json/tests/terrain_and_projection_forms.rs\n M crates/kk-world/src/world_json/tests/viewer_semantics_and_families.rs\n M docs/designs/domain-projection.md\n M docs/plans/mod-plane-batches.md\n?? crates/kk-engine/src/settle/contrib.rs\n?? crates/kk-engine/tests/settle_tests/m2b_contrib_link_family.rs\n?? docs/research/notes/b2-link-wiring-2026-10-02.md",
+        "debug_assertions": false,
+        "unix_time_ms": 1790948688403
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 1366.9949589999999,
+        "cpu_core_ms": 2726.316,
+        "cpu_core_ms_per_tick": 0.9087719999999999,
+        "rss_bytes_after": 195149824,
+        "rss_bytes_sampled_peak": 195149824,
+        "rss_bytes_sampled_p50": 193298432,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 3.478795000000012,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 0.193458,
+            "p95_ms": 0.302417,
+            "p99_ms": 0.398917,
+            "max_ms": 0.527875,
+            "total_ms": 682.5347510000004
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 0.130624,
+            "p95_ms": 0.479001,
+            "p99_ms": 0.707166,
+            "max_ms": 3.016791,
+            "total_ms": 508.76762300000007
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.043458,
+            "p95_ms": 0.08175,
+            "p99_ms": 0.100583,
+            "max_ms": 0.851,
+            "total_ms": 160.5601499999998
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 0.369958,
+            "p95_ms": 0.7773749999999999,
+            "p99_ms": 1.079167,
+            "max_ms": 3.3544579999999997,
+            "total_ms": 1355.3157150000018
+          }
+        }
+      },
+      "repetition": 5
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 8,
+      "ticks": 3000,
+      "warmup": 500,
+      "player_concurrency": 2,
+      "player_cpu_clock": "thread_cpu_time",
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "64f2d9145c589d66305f775cda8916678f507ed3",
+        "git_status": "M Cargo.lock\n M compat/reports/kkscreeps.json\n M crates/kk-engine/Cargo.toml\n M crates/kk-engine/src/settle/creep/build.rs\n M crates/kk-engine/src/settle/damage.rs\n M crates/kk-engine/src/settle/mod.rs\n M crates/kk-engine/src/settle/structures.rs\n M crates/kk-engine/tests/settle_tests.rs\n M crates/kk-mod-api/README.md\n M crates/kk-mod-api/src/builtin.rs\n M crates/kk-mod-api/tests/freeze.rs\n M crates/kk-runner/src/sandbox.rs\n M crates/kk-runner/tests/sandbox_tests.rs\n M crates/kk-runner/tests/sandbox_tests/prelude_and_room_forms.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/embed_tests.rs\n M crates/kk-runtime/tests/embed_tests/m2b_structure_actions_family.rs\n M crates/kk-storage-bench/src/fixtures.rs\n M crates/kk-world/Cargo.toml\n M crates/kk-world/src/place.rs\n M crates/kk-world/src/place/place_structure.rs\n M crates/kk-world/src/snapshot/tests.rs\n M crates/kk-world/src/world_json/tests/terrain_and_projection_forms.rs\n M crates/kk-world/src/world_json/tests/viewer_semantics_and_families.rs\n M docs/designs/domain-projection.md\n M docs/plans/mod-plane-batches.md\n?? crates/kk-engine/src/settle/contrib.rs\n?? crates/kk-engine/tests/settle_tests/m2b_contrib_link_family.rs\n?? docs/research/notes/b2-link-wiring-2026-10-02.md",
+        "debug_assertions": false,
+        "unix_time_ms": 1790948690197
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 2910.668,
+        "cpu_core_ms": 6260.772999999999,
+        "cpu_core_ms_per_tick": 2.086924333333333,
+        "rss_bytes_after": 346800128,
+        "rss_bytes_sampled_peak": 346800128,
+        "rss_bytes_sampled_p50": 346783744,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 5.300727000000005,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 0.437498,
+            "p95_ms": 0.890584,
+            "p99_ms": 1.197958,
+            "max_ms": 12.635877,
+            "total_ms": 1628.4431550000033
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 0.225251,
+            "p95_ms": 0.745292,
+            "p99_ms": 1.300541,
+            "max_ms": 8.555834,
+            "total_ms": 942.9775180000001
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.080583,
+            "p95_ms": 0.171292,
+            "p99_ms": 0.232958,
+            "max_ms": 3.329042,
+            "total_ms": 312.08564500000017
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 0.760667,
+            "p95_ms": 1.628916,
+            "p99_ms": 2.556417,
+            "max_ms": 13.704584,
+            "total_ms": 2889.7678349999965
+          }
+        }
+      },
+      "repetition": 5
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 32,
+      "ticks": 3000,
+      "warmup": 500,
+      "player_concurrency": 2,
+      "player_cpu_clock": "thread_cpu_time",
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "64f2d9145c589d66305f775cda8916678f507ed3",
+        "git_status": "M Cargo.lock\n M compat/reports/kkscreeps.json\n M crates/kk-engine/Cargo.toml\n M crates/kk-engine/src/settle/creep/build.rs\n M crates/kk-engine/src/settle/damage.rs\n M crates/kk-engine/src/settle/mod.rs\n M crates/kk-engine/src/settle/structures.rs\n M crates/kk-engine/tests/settle_tests.rs\n M crates/kk-mod-api/README.md\n M crates/kk-mod-api/src/builtin.rs\n M crates/kk-mod-api/tests/freeze.rs\n M crates/kk-runner/src/sandbox.rs\n M crates/kk-runner/tests/sandbox_tests.rs\n M crates/kk-runner/tests/sandbox_tests/prelude_and_room_forms.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/embed_tests.rs\n M crates/kk-runtime/tests/embed_tests/m2b_structure_actions_family.rs\n M crates/kk-storage-bench/src/fixtures.rs\n M crates/kk-world/Cargo.toml\n M crates/kk-world/src/place.rs\n M crates/kk-world/src/place/place_structure.rs\n M crates/kk-world/src/snapshot/tests.rs\n M crates/kk-world/src/world_json/tests/terrain_and_projection_forms.rs\n M crates/kk-world/src/world_json/tests/viewer_semantics_and_families.rs\n M docs/designs/domain-projection.md\n M docs/plans/mod-plane-batches.md\n?? crates/kk-engine/src/settle/contrib.rs\n?? crates/kk-engine/tests/settle_tests/m2b_contrib_link_family.rs\n?? docs/research/notes/b2-link-wiring-2026-10-02.md",
+        "debug_assertions": false,
+        "unix_time_ms": 1790948693855
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 18914.279709,
+        "cpu_core_ms": 44069.78800000001,
+        "cpu_core_ms_per_tick": 14.689929333333335,
+        "rss_bytes_after": 1318584320,
+        "rss_bytes_sampled_peak": 1376829440,
+        "rss_bytes_sampled_p50": 1317797888,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 25.38041000000004,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 3.328834,
+            "p95_ms": 5.060331,
+            "p99_ms": 6.340873,
+            "max_ms": 13.735999,
+            "total_ms": 10513.746307000014
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 1.968039,
+            "p95_ms": 4.264207,
+            "p99_ms": 5.855752,
+            "max_ms": 43.975376,
+            "total_ms": 6804.216079000007
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.4485,
+            "p95_ms": 0.666958,
+            "p99_ms": 0.806291,
+            "max_ms": 1.754958,
+            "total_ms": 1454.489255
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 5.792333999999999,
+            "p95_ms": 9.504709,
+            "p99_ms": 12.294417000000001,
+            "max_ms": 58.410334,
+            "total_ms": 18798.722106000005
+          }
+        }
+      },
+      "repetition": 5
+    }
+  ]
+}

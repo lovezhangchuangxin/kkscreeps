@@ -2,6 +2,7 @@
 //! 同时提供引擎建造完成时共用的结构 hits、容量及计时默认值。
 
 use kk_core::constants as c;
+use kk_mod_api::builtin::LinkRules;
 use kk_schema::room::{
     ConstructedWallObj, ConstructionSiteObj, ControllerObj, ExtensionObj, ExtractorObj, GenericObj,
     MineralObj, Reservation, RoadObj, RoomObject, Sign, SourceObj, StorageObj,
@@ -245,10 +246,10 @@ pub(super) fn normalize_structure(
             }
             // 通用容量和按资源容量分别补默认值，显式字段优先。
             // 特定资源容量会影响 Store.getCapacity() 是否返回 null，不能只补总容量。
-            if let Some(cap) = built_store_capacity(st) {
+            if let Some(cap) = built_store_capacity(st, &ctx.links) {
                 data.entry("storeCapacity").or_insert(json!(cap));
             }
-            if let Some(res) = built_store_capacity_resource(st) {
+            if let Some(res) = built_store_capacity_resource(st, &ctx.links) {
                 data.entry("storeCapacityResource").or_insert(res);
             }
             // lab 的矿物槽由已有 store 资源绑定，为未声明容量的矿物补容量。
@@ -279,7 +280,7 @@ pub(super) fn normalize_structure(
                 }
             }
             // 仅补缺失的 hits、hitsMax；显式值保留，包括 Generic 中的 hitsMax。
-            if let Some((hits, hits_max)) = generic_structure_hits(st) {
+            if let Some((hits, hits_max)) = generic_structure_hits(st, &ctx.links) {
                 data.entry("hits").or_insert(json!(hits));
                 data.entry("hitsMax").or_insert(json!(hits_max));
             }
@@ -298,7 +299,7 @@ pub(super) fn normalize_structure(
 /// rampart 采用 `RAMPART_HITS_MAX[8]`，不按当前房间等级限制。
 /// powerBank 也有默认值，即使 vanilla 的 placeStructure 不接受该类型。
 /// 参考：screeps-ok adapters/vanilla/index.ts 的 getStructureDefaults。
-pub fn generic_structure_hits(structure_type: &str) -> Option<(i64, i64)> {
+pub fn generic_structure_hits(structure_type: &str, links: &LinkRules) -> Option<(i64, i64)> {
     let max8 = kk_core::constants::RAMPART_HITS_MAX
         .iter()
         .find(|(k, _)| *k == "8")
@@ -306,7 +307,7 @@ pub fn generic_structure_hits(structure_type: &str) -> Option<(i64, i64)> {
         .unwrap_or(0);
     Some(match structure_type {
         "tower" => (c::TOWER_HITS, c::TOWER_HITS),
-        "link" => (c::LINK_HITS, c::LINK_HITS_MAX),
+        "link" => (links.hits, links.hits_max),
         "container" => (c::CONTAINER_HITS, c::CONTAINER_HITS),
         "rampart" => (c::RAMPART_HITS, max8),
         "lab" => (c::LAB_HITS, c::LAB_HITS),
@@ -336,7 +337,7 @@ pub fn built_decay_clock(structure_type: &str, time: u64) -> Option<u64> {
 /// 对有按资源容量的结构，应同时应用 built_store_capacity_resource；
 /// 否则 Store.getCapacity() 无参可能由 null 变成数值。
 /// 默认值参考：vanilla index.ts 的 getStructureDefaults。
-pub fn built_store_capacity(structure_type: &str) -> Option<i64> {
+pub fn built_store_capacity(structure_type: &str, links: &LinkRules) -> Option<i64> {
     Some(match structure_type {
         "container" => c::CONTAINER_CAPACITY,
         "factory" => c::FACTORY_CAPACITY,
@@ -344,7 +345,7 @@ pub fn built_store_capacity(structure_type: &str) -> Option<i64> {
         "lab" => c::LAB_ENERGY_CAPACITY + c::LAB_MINERAL_CAPACITY,
         "powerSpawn" => c::POWER_SPAWN_ENERGY_CAPACITY + c::POWER_SPAWN_POWER_CAPACITY,
         "nuker" => c::NUKER_ENERGY_CAPACITY + c::NUKER_GHODIUM_CAPACITY,
-        "link" => c::LINK_CAPACITY,
+        "link" => links.capacity,
         "tower" => c::TOWER_CAPACITY,
         _ => return None,
     })
@@ -354,7 +355,7 @@ pub fn built_store_capacity(structure_type: &str) -> Option<i64> {
 /// lab 这里只包含 energy；放置已有矿物时须另外绑定矿物容量。
 /// 与 built_store_capacity 配合，供 Store 及各结构资源容量 getter 使用。
 /// 参考：engine/src/game/store.js、vanilla index.ts 的 getStructureDefaults。
-pub fn built_store_capacity_resource(structure_type: &str) -> Option<Value> {
+pub fn built_store_capacity_resource(structure_type: &str, links: &LinkRules) -> Option<Value> {
     Some(match structure_type {
         "lab" => json!({ "energy": c::LAB_ENERGY_CAPACITY }),
         "powerSpawn" => json!({
@@ -365,7 +366,7 @@ pub fn built_store_capacity_resource(structure_type: &str) -> Option<Value> {
             "energy": c::NUKER_ENERGY_CAPACITY,
             "G": c::NUKER_GHODIUM_CAPACITY,
         }),
-        "link" => json!({ "energy": c::LINK_CAPACITY }),
+        "link" => json!({ "energy": links.capacity }),
         "tower" => json!({ "energy": c::TOWER_CAPACITY }),
         _ => return None,
     })
@@ -384,14 +385,24 @@ pub fn built_cooldown_time(structure_type: &str, time: u64) -> Option<u64> {
 /// 构造工地，progress 默认 0，总进度来自 CONSTRUCTION_COST。
 /// 不使用 spec.progressTotal，也不加入道路地形系数；玩家建造指令另有地形规则。
 /// 来源：screeps-ok adapters/vanilla/index.ts 的 placeSite、getProgressTotal。
-pub(super) fn normalize_site(spec: &Value, x: u8, y: u8) -> Result<ConstructionSiteObj, String> {
+pub(super) fn normalize_site(
+    spec: &Value,
+    x: u8,
+    y: u8,
+    links: &LinkRules,
+) -> Result<ConstructionSiteObj, String> {
     let structure_type = spec_str(spec, "structureType")
         .or_else(|| spec_str(spec, "type"))
         .ok_or_else(|| "constructionSite 缺 structureType".to_string())?
         .to_string();
-    let total = crate::types::construction_cost(&structure_type)
-        .ok_or_else(|| format!("constructionSite 类型无 CONSTRUCTION_COST: {structure_type}"))?
-        .max(0);
+    // link 的建造成本取有效规则；其余类型仍查官方常量表。
+    let total = if structure_type == "link" {
+        links.build_cost
+    } else {
+        crate::types::construction_cost(&structure_type)
+            .ok_or_else(|| format!("constructionSite 类型无 CONSTRUCTION_COST: {structure_type}"))?
+    }
+    .max(0);
     Ok(ConstructionSiteObj {
         id: 0,
         x,

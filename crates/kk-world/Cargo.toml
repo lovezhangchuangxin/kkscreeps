@@ -9,5 +9,6 @@ workspace = true
 
 [dependencies]
 kk-core.workspace = true
+kk-mod-api.workspace = true
 kk-schema.workspace = true
 serde_json.workspace = true

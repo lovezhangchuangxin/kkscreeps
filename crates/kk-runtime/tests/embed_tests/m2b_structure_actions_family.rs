@@ -173,3 +173,18 @@ pub(super) fn m2b_structure_actions_e2e_impl() -> anyhow::Result<()> {
     );
     Ok(())
 }
+
+/// B.2 玩家常量注入链路冒烟：断言注入值正确（insert 值错则红）。
+/// 注意这不锁定通道存在性——删掉 insert 玩家仍读到嵌入表同值 800；
+/// 通道存在的判别在 kk-runner 的 constant_overrides 覆盖测试。
+pub(super) fn b02_link_constants_injected_impl() -> anyhow::Result<()> {
+    let mut e = EmbedEngine::new();
+    e.create_shard(&json!({
+        "players": ["p1"],
+        "rooms": [{ "name": "W1N1", "rcl": 5, "owner": "p1" }],
+    }))?;
+    let run = e.run_player("p1", "[LINK_CAPACITY, typeof LINK_CAPACITY]")?;
+    assert_eq!(run.expr["value"][0], json!(800), "默认计划与常量表同值");
+    assert_eq!(run.expr["value"][1], json!("number"));
+    Ok(())
+}

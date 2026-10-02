@@ -22,12 +22,29 @@ pub use place_structure::{
 use place_structure::{normalize_site, normalize_structure};
 
 /// 放置时的世界上下文，用于默认容量、到期时间与对象命名。
+/// link 的默认值取自冻结计划的有效规则；调用方从引擎或内置计划提供。
 pub struct PlaceCtx<'a> {
     pub time: u64,
+    pub links: kk_mod_api::builtin::LinkRules,
     /// 房内首个控制器；有无控制器和主人决定 source 默认容量。
     pub controller: Option<&'a ControllerObj>,
     /// 未指定 creep、spawn 名称时使用的序号；由调用方提供，须避免重名。
     pub name_seq: usize,
+}
+
+/// 内置贡献计划下的 link 默认规则；无自定义计划的调用方使用。
+/// 冻结只发生一次，默认值与 kk-core 常量由 kk-mod-api 测试锁定一致。
+pub fn builtin_link_rules() -> kk_mod_api::builtin::LinkRules {
+    use std::sync::OnceLock;
+    static RULES: OnceLock<kk_mod_api::builtin::LinkRules> = OnceLock::new();
+    *RULES.get_or_init(|| {
+        let plan = kk_mod_api::freeze(
+            vec![kk_mod_api::builtin::link()],
+            kk_mod_api::FreezeOptions::default(),
+        )
+        .expect("内置 link 贡献必须可冻结");
+        kk_mod_api::builtin::LinkRules::from_plan(plan.rules()).expect("内置计划包含全部 link 规则")
+    })
 }
 
 /// 按嵌入式接口的 kind 将 spec 转换为对象，产物 ID 为 0，等待 World 分配。
@@ -39,7 +56,9 @@ pub fn normalize(kind: &str, spec: &Value, ctx: &PlaceCtx) -> Result<RoomObject,
         "creep" => Ok(RoomObject::Creep(normalize_creep(spec, x, y, ctx)?)),
         "spawn" => Ok(RoomObject::Spawn(normalize_spawn(spec, x, y, ctx)?)),
         "structure" => normalize_structure(spec, x, y, ctx),
-        "constructionSite" => Ok(RoomObject::ConstructionSite(normalize_site(spec, x, y)?)),
+        "constructionSite" => Ok(RoomObject::ConstructionSite(normalize_site(
+            spec, x, y, &ctx.links,
+        )?)),
         "flag" => Ok(RoomObject::Flag(normalize_flag(spec, x, y))),
         "resource" => Ok(RoomObject::Energy(normalize_resource(spec, x, y)?)),
 
@@ -414,6 +433,7 @@ mod tests {
     fn ctx() -> PlaceCtx<'static> {
         PlaceCtx {
             time: 100,
+            links: builtin_link_rules(),
             controller: None,
             name_seq: 7,
         }

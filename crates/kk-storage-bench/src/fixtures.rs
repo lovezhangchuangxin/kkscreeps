@@ -201,6 +201,7 @@ fn place(world: &mut kk_world::world::World, room: &str, kind: &str, spec: Value
             spec,
             &kk_world::place::PlaceCtx {
                 time,
+                links: kk_world::place::builtin_link_rules(),
                 controller: controller.as_ref(),
                 name_seq: w.room(room).expect("夹具房已注册").objects.len(),
             },

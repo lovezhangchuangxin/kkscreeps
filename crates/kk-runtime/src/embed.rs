@@ -293,7 +293,13 @@ impl EmbedEngine {
         // 先取走全部配置，避免注册中途失败后残留配置被下一次创建意外使用。
         let configs = std::mem::take(&mut self.sandbox_configs_for_test);
         for handle in handles {
-            let config = configs.get(&handle).cloned().unwrap_or_default();
+            let mut config = configs.get(&handle).cloned().unwrap_or_default();
+            // link 有效规则同步到玩家全局常量（B.2：标量容量）。
+            // 计划是常量的权威来源；显式测试配置不得绕开规则漂移。
+            config.constant_overrides.insert(
+                "LINK_CAPACITY".to_string(),
+                serde_json::json!(self.engine.links().capacity),
+            );
             let cpu = kk_core::cpu::Bucket::new(
                 config.cpu_limit,
                 config.bucket_cap,
@@ -367,6 +373,7 @@ impl EmbedEngine {
                 }
                 let ctx = PlaceCtx {
                     time,
+                    links: self.engine.links(),
                     controller: None,
                     name_seq: self.engine.world.next_obj_id() as usize,
                 };
@@ -387,6 +394,7 @@ impl EmbedEngine {
         // 使用单调递增的对象 ID 生成默认名字；对象数量会随消亡减少，不能用作序号。
         let ctx = PlaceCtx {
             time: self.engine.world.time(),
+            links: self.engine.links(),
             controller: self.engine.world.room(room).and_then(|r| r.controller()),
             name_seq: self.engine.world.next_obj_id() as usize,
         };

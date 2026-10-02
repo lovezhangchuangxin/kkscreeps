@@ -4,6 +4,7 @@
 //! Engine 在副本中结算所有房间和市场，校验成功后统一写回内存并推进
 //! 时间；直接调用 settle_room 则由调用方负责副本和失败处理。
 
+pub mod contrib;
 pub mod controller;
 pub mod creep;
 pub mod damage;
@@ -161,6 +162,10 @@ pub struct Working<'w> {
     /// 采矿时设置的提取器冷却，由 extractor tick 写回冷却计数。
     pub extractor_cooldown_pending: BTreeMap<ObjId, u64>,
     pub movement: movement::Movement,
+    /// 本轮生效的 link 规则，来自引擎装配的冻结计划。
+    pub links: kk_mod_api::builtin::LinkRules,
+    /// link 槽执行表；处理器错误使本轮候选失败。
+    pub contrib: &'w contrib::ContributionDispatch,
 }
 
 impl<'w> Working<'w> {
@@ -441,6 +446,8 @@ pub fn settle_room(
     now_ms: u64,
     state: &TickState,
     batch: &IntentBatch,
+    links: &kk_mod_api::builtin::LinkRules,
+    contrib: &contrib::ContributionDispatch,
 ) -> Result<Vec<Value>, SettleError> {
     let index = RoomIndex::build(&room.objects);
     let mut w = Working {
@@ -459,6 +466,8 @@ pub fn settle_room(
         safe_mode_activated: BTreeSet::new(),
         extractor_cooldown_pending: BTreeMap::new(),
         movement: movement::Movement::new(),
+        links: *links,
+        contrib,
     };
 
     // 先清空动作记录和说话载荷，避免上一轮内容继续可见。
@@ -496,7 +505,8 @@ pub fn settle_room(
                 }
                 // 真实类型在 structureType 中，处理器再检查结构类型和所有权。
                 Some(RoomObject::Generic(_)) => {
-                    structures::process_structure_intents(&mut w, *obj_id, player, actions);
+                    structures::process_structure_intents(&mut w, *obj_id, player, actions)
+                        .map_err(SettleError)?;
                 }
                 _ => continue,
             }
@@ -526,7 +536,7 @@ pub fn settle_room(
             Some(RoomObject::Road(_)) => economy::road_decay_tick(&mut w, id),
             Some(RoomObject::Generic(g)) => match generic_structure_type(&g.data).as_deref() {
                 Some("container" | "rampart") => economy::generic_decay_tick(&mut w, id),
-                Some("link") => economy::link_cooldown_tick(&mut w, id),
+                Some("link") => w.contrib.run_tick(&mut w, id).map_err(SettleError)?,
                 Some("terminal") => economy::terminal_capacity_tick(&mut w, id),
                 _ => {}
             },
@@ -570,6 +580,11 @@ pub struct Engine {
     /// 持续生效的阶段入口故障注入。
     fail_stage: Option<TickStage>,
     fail_writeback: Option<WritebackStep>,
+    /// 本引擎生效的 link 有效规则；放置、结算与常量同步读取。
+    /// 装配后不应直接改写——规则与已装配的处理链须一起换，经 with_plan。
+    pub(crate) links: kk_mod_api::builtin::LinkRules,
+    /// link 槽执行表；默认直连 native，装配计划后可携带贡献链。
+    pub(crate) contrib: contrib::ContributionDispatch,
 }
 
 impl Default for Engine {
@@ -592,7 +607,86 @@ impl Engine {
             run_state: stages::RunState::Ready,
             fail_stage: None,
             fail_writeback: None,
+            links: kk_world::place::builtin_link_rules(),
+            contrib: contrib::ContributionDispatch::default(),
         }
+    }
+
+    /// 核对计划的全部声明绑定已有实现：两个 native 键由本引擎内置，
+    /// 声明性绑定对应 B.2 已接线的消费者（见清单注释），处理器绑定
+    /// 已在装配时逐键消费。声明未安装的绑定在此拒绝。
+    fn check_installed_bindings(
+        plan: &kk_mod_api::ContributionPlan,
+        handler_keys: &BTreeSet<kk_mod_api::Key>,
+    ) -> Result<(), String> {
+        /// B.2 已接线的声明性绑定：每项对应一个真实消费者。
+        /// 新增声明绑定时须先接线，或在此登记例外依据。
+        const WIRED: &[&str] = &[
+            // 放置与建造默认值经 PlaceCtx.links / Working.links。
+            "builtin:link.init",
+            "builtin:link.build",
+            // Store 容量在放置/建造时落入权威字段。
+            "builtin:link.capacity",
+            // isActive 与配额检查读取 links.rcl。
+            "builtin:link.active",
+            // 玩家预检读取权威字段与常量覆盖通道。
+            "builtin:link.precheck",
+            // 玩家常量经 SandboxConfig 覆盖注入。
+            "builtin:link.constants",
+            // 投影直接输出权威字段。
+            "builtin:link.project",
+            // vanilla 参数转换沿用现有意图清洗。
+            "builtin:link.sanitize",
+            // 字段适配绑定：权威 Generic JSON 的对应键。
+            "builtin:link.field.id",
+            "builtin:link.field.room",
+            "builtin:link.field.x",
+            "builtin:link.field.y",
+            "builtin:link.field.owner",
+            "builtin:link.field.structureType",
+            "builtin:link.field.hits",
+            "builtin:link.field.hitsMax",
+            "builtin:link.field.cooldown",
+            "builtin:link.field.store",
+            "builtin:link.field.storeCapacity",
+            "builtin:link.field.storeCapacityResource",
+        ];
+        const NATIVE: &[&str] = &["builtin:link.transfer.native", "builtin:link.tick.native"];
+        for binding in plan.required_bindings() {
+            let name = binding.as_str();
+            // 只认显式清单与调用方提供的处理器键：新增声明绑定必须先
+            // 接线再进清单，前缀放行会让未接线的 field 键静默通过。
+            let wired =
+                WIRED.contains(&name) || NATIVE.contains(&name) || handler_keys.contains(binding);
+            if !wired {
+                return Err(format!("计划声明了未安装的绑定 {binding}"));
+            }
+        }
+        Ok(())
+    }
+
+    /// 用冻结计划装配引擎；处理器实现随计划提供，缺失或 kind
+    /// 不符时拒绝。计划须包含 builtin:link 贡献。
+    pub fn with_plan(
+        world: kk_world::World,
+        plan: std::sync::Arc<kk_mod_api::ContributionPlan>,
+        action_handlers: BTreeMap<kk_mod_api::Key, contrib::ActionHandler>,
+        tick_handlers: BTreeMap<kk_mod_api::Key, contrib::TickHandler>,
+    ) -> Result<Self, String> {
+        // 先取调用方提供的处理器键，再交给装配消耗。
+        let handler_keys: BTreeSet<kk_mod_api::Key> = action_handlers
+            .keys()
+            .chain(tick_handlers.keys())
+            .cloned()
+            .collect();
+        let links = kk_mod_api::builtin::LinkRules::from_plan(plan.rules())?;
+        let contrib =
+            contrib::ContributionDispatch::assemble(&plan, action_handlers, tick_handlers)?;
+        Self::check_installed_bindings(&plan, &handler_keys)?;
+        let mut engine = Self::new(world);
+        engine.links = links;
+        engine.contrib = contrib;
+        Ok(engine)
     }
 
     /// 结算指定房间前返回错误，传 None 解除。
@@ -605,6 +699,11 @@ impl Engine {
     /// 读取当前结算状态。
     pub fn run_state(&self) -> &RunState {
         &self.run_state
+    }
+
+    /// 当前生效的 link 有效规则（只读快照，拷贝语义）。
+    pub fn links(&self) -> kk_mod_api::builtin::LinkRules {
+        self.links
     }
 
     /// 进入指定阶段前返回错误，传 None 解除。
@@ -872,6 +971,8 @@ impl Engine {
                 txn.input.now_ms,
                 &txn.state,
                 &txn.batch,
+                &self.links,
+                &self.contrib,
             )?;
             txn.rooms.push((name.clone(), room));
             txn.events.append(&mut room_events);

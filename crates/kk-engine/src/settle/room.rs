@@ -107,8 +107,14 @@ fn create_construction_site(
     if x <= 0 || x >= 49 || y <= 0 || y >= 49 {
         return;
     }
-    let Some(cost) = kk_world::types::construction_cost(structure_type) else {
-        return;
+    // link 的建造成本与配额取有效规则；其余类型仍查官方表。
+    let cost = if structure_type == "link" {
+        w.links.build_cost
+    } else {
+        match kk_world::types::construction_cost(structure_type) {
+            Some(cost) => cost,
+            None => return,
+        }
     };
     let existing_sites = w
         .room
@@ -135,7 +141,7 @@ fn create_construction_site(
                 other => type_name_of(other) == structure_type,
             })
             .count() as i64;
-        let allowed = super::controller_allowed(structure_type, rcl);
+        let allowed = super::structures::allowed_for(w, structure_type, rcl);
         if existing >= allowed {
             return;
         }

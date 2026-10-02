@@ -61,3 +61,44 @@ mod handlers;
 mod projection;
 #[path = "freeze_cases/rules.rs"]
 mod rules;
+
+#[test]
+fn link_rules_extract_builtin_defaults() {
+    let frozen = plan(vec![builtin::link()]).unwrap();
+    let rules = builtin::LinkRules::from_plan(frozen.rules()).unwrap();
+    assert_eq!(rules.hits, kk_core::constants::LINK_HITS);
+    assert_eq!(rules.hits_max, kk_core::constants::LINK_HITS_MAX);
+    assert_eq!(rules.capacity, kk_core::constants::LINK_CAPACITY);
+    assert_eq!(rules.cooldown, kk_core::constants::LINK_COOLDOWN);
+    assert_eq!(rules.loss_ratio, kk_core::constants::LINK_LOSS_RATIO);
+    assert_eq!(rules.build_cost, 5000);
+    let quotas: serde_json::Value =
+        serde_json::from_str(kk_core::constants::CONTROLLER_STRUCTURES).unwrap();
+    for level in 0..=8 {
+        assert_eq!(
+            rules.rcl[level],
+            quotas["link"][level.to_string()].as_i64().unwrap_or(0),
+            "RCL {level} 配额应与官方表一致"
+        );
+    }
+}
+
+#[test]
+fn link_rules_follow_override_and_reject_missing_plan() {
+    let mut contrib = override_rule("mods", Number::Signed(400));
+    contrib.overrides.push(RuleOverride {
+        rule: key("builtin:link.lossRatio"),
+        value: Number::Float(0.5),
+    });
+    let frozen = plan(vec![builtin::link(), contrib]).unwrap();
+    let rules = builtin::LinkRules::from_plan(frozen.rules()).unwrap();
+    assert_eq!(rules.capacity, 400);
+    assert_eq!(rules.loss_ratio, 0.5);
+    // 两个计划的指纹不同，规则快照互不可换。
+    let plain = plan(vec![builtin::link()]).unwrap();
+    assert_ne!(plain.hash(), frozen.hash());
+
+    let empty = plan(vec![module("none")]).unwrap();
+    let error = builtin::LinkRules::from_plan(empty.rules()).unwrap_err();
+    assert!(error.contains("builtin:link.lossRatio"), "{error}");
+}

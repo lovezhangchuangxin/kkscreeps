@@ -86,6 +86,9 @@ pub struct SandboxConfig {
     pub bucket_cap: f64,
     pub max_per_tick: f64,
     pub initial_bucket: f64,
+    /// 宿主按有效规则覆盖的玩家全局常量；默认为空，保持嵌入资产原值。
+    /// 键须是常量表已有的名字，覆盖发生在平铺到 globalThis 之前。
+    pub constant_overrides: std::collections::BTreeMap<String, serde_json::Value>,
 }
 
 impl Default for SandboxConfig {
@@ -96,6 +99,7 @@ impl Default for SandboxConfig {
             bucket_cap: BUCKET_CAP,
             max_per_tick: MAX_PER_TICK,
             initial_bucket: BUCKET_CAP,
+            constant_overrides: std::collections::BTreeMap::new(),
         }
     }
 }
@@ -192,7 +196,7 @@ impl Sandbox {
 
             // 先加载 lodash 和常量，再装配 prelude、捕获宿主函数句柄，最后删除临时 __kkp。
             runtime.execute_script("kk-lodash", lodash_script())?;
-            runtime.execute_script("kk-constants", constants_script())?;
+            runtime.execute_script("kk-constants", constants_script(&config.constant_overrides))?;
             for (name, src) in PRELUDE_SEGMENTS {
                 runtime.execute_script(name, src.to_string())?;
             }
@@ -939,9 +943,13 @@ fn lodash_script() -> String {
     s
 }
 
-fn constants_script() -> String {
-    // 将嵌入的常量 JSON 构造成对象并平铺至玩家全局；API 各段按需捕获常量。
-    format!("(function(){{ var C = {CONSTANTS_JSON}; for (var k in C) globalThis[k] = C[k]; }})();")
+fn constants_script(overrides: &std::collections::BTreeMap<String, serde_json::Value>) -> String {
+    // 将嵌入的常量 JSON 构造成对象，叠加宿主按有效规则提供的覆盖，
+    // 再平铺至玩家全局；API 各段按需捕获常量。
+    let extra = serde_json::to_string(overrides).expect("常量覆盖可序列化");
+    format!(
+        "(function(){{ var C = {CONSTANTS_JSON}; var O = {extra}; for (var k in O) {{ if (!Object.prototype.hasOwnProperty.call(C, k)) throw new Error('常量覆盖键不在常量表: ' + k); C[k] = O[k]; }} for (var k in C) globalThis[k] = C[k]; }})();"
+    )
 }
 
 #[cfg(test)]

@@ -836,3 +836,26 @@ pub(super) fn roomfind_exits_and_path_codec_forms() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+/// B.2 常量覆盖通道：默认保持嵌入常量表原值；宿主覆盖在平铺前生效。
+pub(super) fn constant_overrides_reach_player_globals_impl() -> anyhow::Result<()> {
+    let mut plain = Sandbox::new(SandboxConfig::default())?;
+    let v = plain.run_expr("LINK_CAPACITY")?;
+    assert_eq!(v["value"], 800, "默认保持常量表原值");
+
+    let mut config = SandboxConfig::default();
+    config
+        .constant_overrides
+        .insert("LINK_CAPACITY".into(), json!(400));
+    let mut sb = Sandbox::new(config)?;
+    let v = sb.run_expr("LINK_CAPACITY")?;
+    assert_eq!(v["value"], 400, "覆盖值平铺到玩家全局");
+
+    // 覆盖键不在常量表时初始化即失败（fail fast，不静默忽略）。
+    let mut bad = SandboxConfig::default();
+    bad.constant_overrides
+        .insert("NOT_A_CONSTANT".into(), json!(1));
+    let err = Sandbox::new(bad).err().expect("未知覆盖键须拒绝");
+    assert!(err.to_string().contains("NOT_A_CONSTANT"), "{err}");
+    Ok(())
+}

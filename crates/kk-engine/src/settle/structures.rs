@@ -49,12 +49,12 @@ pub fn process_structure_intents(
     id: ObjId,
     player: &str,
     actions: &BTreeMap<Action, IntentData>,
-) {
+) -> Result<(), String> {
     let Some(view) = generic_view(w, id) else {
-        return;
+        return Ok(());
     };
     if view.owner.as_deref().is_some_and(|owner| owner != player) {
-        return;
+        return Ok(());
     }
     match view.structure_type.as_str() {
         "tower" => {
@@ -68,7 +68,7 @@ pub fn process_structure_intents(
         }
         "link" => {
             if let Some(d) = actions.get(&Action::Transfer) {
-                link_transfer(w, id, d);
+                w.contrib.run_transfer(w, id, d)?;
             }
         }
         "rampart" => {
@@ -83,6 +83,7 @@ pub fn process_structure_intents(
         }
         _ => {}
     }
+    Ok(())
 }
 
 /// 房间阶段验证目标、资源和能量费用后保存 send 请求，不在此处转移资源。
@@ -311,9 +312,10 @@ fn tower_repair(w: &mut Working, id: ObjId, d: &IntentData) {
     );
 }
 
-/// 按目标余量限制能量，发送方扣全部数量，接收方另扣 ceil(amount*LINK_LOSS_RATIO)。
-/// 冷却增加 LINK_COOLDOWN 乘两者距离；事件 amount 是损耗前数量。
-fn link_transfer(w: &mut Working, id: ObjId, d: &IntentData) {
+/// 按目标余量限制能量，发送方扣全部数量，接收方另扣 ceil(amount*loss_ratio)。
+/// 冷却增加 cooldown 规则乘两者距离；事件 amount 是损耗前数量。
+/// 数值取 Working.links 的有效规则，不再直读 kk-core 常量。
+pub(crate) fn link_transfer(w: &mut Working, id: ObjId, d: &IntentData) {
     let Some(RoomObject::Generic(src)) = w.room.objects.get(&id) else {
         return;
     };
@@ -379,7 +381,7 @@ fn link_transfer(w: &mut Working, id: ObjId, d: &IntentData) {
     };
     // 同一 link 自转移时只损失手续费。必须在一个 JSON 对象上连续更新，
     // 不能分别写回源和目标的旧快照，否则会覆盖接收量。
-    let loss = (amount as f64 * c::LINK_LOSS_RATIO).ceil() as i64;
+    let loss = (amount as f64 * w.links.loss_ratio).ceil() as i64;
     let range = chebyshev((src_x, src_y), (target.x, target.y));
     if target_id == id {
         if let Some(RoomObject::Generic(g)) = w.room.objects.get_mut(&id)
@@ -391,7 +393,7 @@ fn link_transfer(w: &mut Working, id: ObjId, d: &IntentData) {
                 .unwrap_or(0);
             v["store"]["energy"] = json!((e - loss).max(0));
             let cd = v.get("cooldown").and_then(Value::as_i64).unwrap_or(0);
-            v["cooldown"] = json!(cd + c::LINK_COOLDOWN * range);
+            v["cooldown"] = json!(cd + w.links.cooldown * range);
             g.data = v.to_string();
         }
     } else {
@@ -406,7 +408,7 @@ fn link_transfer(w: &mut Working, id: ObjId, d: &IntentData) {
         {
             v["store"]["energy"] = json!((energy - amount).max(0));
             let cd = v.get("cooldown").and_then(Value::as_i64).unwrap_or(0);
-            v["cooldown"] = json!(cd + c::LINK_COOLDOWN * range);
+            v["cooldown"] = json!(cd + w.links.cooldown * range);
             g.data = v.to_string();
         }
     }
@@ -436,6 +438,19 @@ fn chebyshev(a: (u8, u8), b: (u8, u8)) -> i64 {
         .max((a.1 as i64 - b.1 as i64).abs())
 }
 
+/// 读取结构在某 RCL 的配额；link 走有效规则，其余类型仍查官方表。
+pub(super) fn allowed_for(w: &Working, structure_type: &str, level: i64) -> i64 {
+    if structure_type == "link" {
+        // 越界等级与官方表同判为 0 配额，不钳到 rcl8。
+        match usize::try_from(level) {
+            Ok(idx) if idx < 9 => w.links.rcl[idx],
+            _ => 0,
+        }
+    } else {
+        super::controller_allowed(structure_type, level)
+    }
+}
+
 /// 无主结构视为有效；有主须与 RCL>=1 的房主一致且有配额。
 /// 单件类型通过等级检查即可，多件类型按到控制器的距离占配额，
 /// 等距时 ObjId 较小者优先。来源：上游 engine/src/utils.js::checkStructureAgainstController。
@@ -446,11 +461,11 @@ fn check_structure_against_controller(w: &Working, id: ObjId, view: &GenericView
     let Some(ctl) = super::structure_rcl_prologue(w, owner) else {
         return false;
     };
-    let mut allowed_remaining = super::controller_allowed(&view.structure_type, ctl.level as i64);
+    let mut allowed_remaining = allowed_for(w, &view.structure_type, ctl.level as i64);
     if allowed_remaining == 0 {
         return false;
     }
-    if super::controller_allowed(&view.structure_type, 8) == 1 {
+    if allowed_for(w, &view.structure_type, 8) == 1 {
         return true;
     }
     let obj = match w.room.objects.get(&id) {
