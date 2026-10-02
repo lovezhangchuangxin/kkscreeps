@@ -1,84 +1,64 @@
 # kkscreeps
 
-用 Rust 从零重构 [Screeps](https://screeps.com)（编程 MMO）的服务端。目标：**玩家侧体验与官方完全一致**的前提下，把服务器资源开销降低一个数量级，并提供官方架构给不了的本地开发体验。
+用 Rust 重写 Screeps 服务端。Screeps 是由玩家编写 JavaScript 控制单位的游戏：服务器按 tick 推进世界，玩家代码读取世界、下达指令，服务器随后结算采集、建造、移动和战斗等行为。
 
-> **给没玩过 Screeps 的读者**：Screeps 是一个"写代码玩游戏"的 MMO——玩家用 JavaScript 编写 AI，控制名为爬爬虫（creep）的单位在分成一个个 50×50 格房间的世界里采集能量、建造、战斗。服务器按固定节拍（tick）推进世界；玩家的代码每 tick 在服务器上运行一次，消耗的"CPU"是一种按 tick 发放、可攒可透支的配额货币（约等于毫秒）。玩家代码不直接改世界，而是下达"指令"（intent），由服务器统一结算。
+项目以默认玩法的玩家 API 和游戏行为兼容为目标，同时探索降低运行开销和改善本地开发体验的方法。兼容性与性能目标需要分别通过行为测试和端到端基准验证，目前尚未提供完整游戏服务器。
 
-**当前状态（2026-09-29）：M2A（沙箱运行时 + 玩家 API 核心）A1–A6 全部收口**——M0 已收官（八轮代码评审、screeps-ok 上游基准独立复现零偏差 vanilla 2897 / xxscreeps 2642、[ADR-010](docs/decisions/ADR-010-screeps-ok-adapter-bridge.md) 一实例一线程原型验证通过）；M1 交付 kk-core/kk-schema/kk-world typed world/kk-engine 单房间结算与**通过率棘轮进 CI**（地板见 [compat/reports/ratchet.json](compat/reports/ratchet.json) 唯一真相源，M0 起点为 237；架构结论见 [ADR-011](docs/decisions/ADR-011-engine-skeleton.md)）。M2A 交付：deno_core 真沙箱 + intent 闭环 + prelude 玩家 API 层（架构定型升格 [ADR-012](docs/decisions/ADR-012-m2a-sandbox-runtime.md)）、性能观测点（`kkscreeps perf-probe` 子命令，[首次实测记录](compat/reports/perf-a6.md)）、**通过率地板 1405/2914=48.25%（2A 出口关卡 ≥40% 达成；2026-09-30 M2B 扩面 P1 上调 1454、P2 上调（含清偿）1578/2914=54.15%、P3 上调 1593/2914=54.67%、P4 上调 1626/2914=55.80%（含提交前复审、清偿与主线复核补修复）、P5 上调 1742/2914=59.78%（结构动作族）、P6 上调 1774/2914=60.88%（RawMemory segments/visuals/CostMatrix——**M2B 扩面批 P0-P6 全部收口，「破六成」达成**）；**2026-10-01 2B 批（terminal/market）开批即收口：P0 地基 1774 零位移、P1 终端片上调 1828/2914=62.66%（terminal send 全链+transactions）、P2 市场片上调 1852/2914=63.55%（订单簿全生命周期+Game.market 真化）——2B 批 P0-P2 全部收口**。bot 验收：tooangel 房间管线完整执行（2000 tick 零 console 错误）、overmind 全量执行（2000 tick 零中断、缺失 API 清零，bot-check 退出码机器可判定；P6 后 setPublicSegments 风暴消失、错误 tick 2000→1）。当前兼容性基线为 **1854 通过、153 失败、907 跳过**；storage 额外资源投影修复使混合资源容量和资源枚举两项通过，原有通过用例均保持通过。下一步：剩余 153 红按家族归批（PathFinder 真实现/Safe mode/Object Shape/controller mechanics 等）——方向待用户拍板。
+## 当前能力
 
-## 技术定案摘要
+- 已有内存世界、游戏规则结算、V8 玩家沙箱，以及玩家执行、候选提交和失败重试的协调层。
+- `kkscreeps embed` 提供标准输入/输出的逐行 JSON 调用服务；`bot-check` 检查真实 bot 的运行情况；`perf-probe` 采集固定负载下的性能数据。
+- `serve`、`sim`、`test`、`import` 仍为预留命令，调用时返回退出码 2。HTTP/WebSocket 服务、数据库持久化和前端应用尚未实现。
+- `kk-pathfinder` 已提供独立的原生寻路接口，但玩家沙箱中的 `PathFinder.search` 尚未接入它，目前使用忽略障碍的直线近似。
 
-| 决策点 | 结论 | 定案记录 |
-|---|---|---|
-| 语言与工程 | Rust + cargo workspace（单仓库） | [ADR-001](docs/decisions/ADR-001-rust-monorepo.md) |
-| 玩家代码沙箱 | deno_core（V8 引擎），唯一后端，无备选 | [ADR-002](docs/decisions/ADR-002-deno-core-sandbox.md) |
-| 玩家侧兼容性 | 游戏脚本 API 零变动零差异，优先级最高 | [ADR-003](docs/decisions/ADR-003-player-compatibility.md) |
-| 核心架构 | 房间快照 + 流水线 + 索引 + 分层存储 | [ADR-004](docs/decisions/ADR-004-core-architecture.md) |
-| 本地开发套件 | 模拟器与服务器同一个二进制 | [ADR-005](docs/decisions/ADR-005-dev-kit.md) |
-| 兼容验收 | screeps-ok 行为测试套件进 CI | [ADR-006](docs/decisions/ADR-006-screeps-ok-ci.md) |
-| 预期收益 | CPU 约 1/5~1/10、内存约 1/5~1/10；5 个以上进程 + 2 个中间件（MongoDB、Redis）→ 单个二进制 | [调研底稿](docs/research/) |
+兼容性测试的结果见 [最新入库报告](compat/reports/kkscreeps.json)，通过数下限与用例总数由 [ratchet.json](compat/reports/ratchet.json) 管理。启用某项适配器能力表示允许运行对应测试，不表示该组全部通过。具体运行方法和回归判定见 [兼容性验收说明](compat/README.md)。
 
-## 文档目录
+## 本地构建与检查
 
-| 目录 | 内容 |
+Rust 工具链由 [rust-toolchain.toml](rust-toolchain.toml) 固定；Node 和 pnpm 的要求见 [package.json](package.json)。在仓库根目录运行：
+
+```bash
+pnpm install
+cargo build -p kk-cli
+pnpm run check
+```
+
+`pnpm run check` 执行 Rust 格式检查、Clippy、workspace 测试、JavaScript workspace 测试和本地文档链接检查。它不运行完整 screeps-ok 套件；后者还需准备上游依赖和 release 二进制，步骤见 [compat/README.md](compat/README.md)。
+
+构建后可使用 `target/debug/kkscreeps --help` 查看命令。`embed` 的消息格式与适配器入口见 [总体架构](docs/architecture/overall.md)和 [compat/README.md](compat/README.md)。
+
+## 阅读入口
+
+完整导航见 [文档目录](docs/README.md)。
+
+| 要了解的问题 | 文档 |
 |---|---|
-| [docs/designs/](docs/designs/) | **功能设计**：玩家可见行为与工具的设计（兼容性红线、开发套件……） |
-| [docs/architecture/](docs/architecture/) | **技术架构**：模块划分、游戏循环、沙箱、存储与传输 |
-| [docs/research/](docs/research/) | **调研底稿**：四份主报告 + 16 份笔记（另有 1 份实验输出存档），全部决策的证据链 |
-| [docs/decisions/](docs/decisions/) | **决策记录**：十条 ADR 与否决方案清单 |
-| [docs/roadmap.md](docs/roadmap.md) | **路线图**：里程碑 M0–M5 的内容与验收关卡 |
-
-新读者建议顺序：[decisions](docs/decisions/)（为什么这么做）→ [architecture](docs/architecture/)（要建什么）→ [designs/compatibility.md](docs/designs/compatibility.md)（什么不能动）→ 按需查 [research](docs/research/)。
+| 当前模块职责、调用链与未实现的边界 | [总体架构](docs/architecture/overall.md) |
+| 玩家执行、世界结算和失败重试 | [游戏循环](docs/architecture/game-loop.md)、[tick 契约](docs/architecture/tick-contract.md) |
+| 兼容性要求、已知差异和验收方法 | [兼容性设计](docs/designs/compatibility.md)、[验收工具](compat/README.md) |
+| 技术选择及其依据 | [架构决策记录](docs/decisions/README.md)、[研究证据](docs/research/README.md) |
+| 未来范围与验收目标 | [路线图](docs/roadmap.md)、[功能设计](docs/designs/README.md) |
+| 维护注释与理解术语 | [注释规范](docs/contributing/comment-style.md)、[术语词典](docs/glossary.md) |
 
 ## 仓库布局
 
-```
-docs/            文档（见上表）
-compat/          兼容性验收（TS 包）：screeps-ok 适配器（经 kkscreeps embed sidecar）、
-                 bot 验收工具与验收报告——见 compat/README.md
-crates/          Rust 引擎工作区（九个 kk-* crate，见 docs/architecture/overall.md）
-apps/ packages/  JS 工作区：Vue3 客户端 + 渲染器/API/编辑器/共享类型库（M3 前为占位包），
-                  见 docs/architecture/frontend.md
-scripts/         仓库工具脚本（screeps-ok pin 克隆、bot 拉取、文档链接检查、提交信息校验）
-spikes/          技术验证工程（cargo crate，使命已完成，保留作证据）
-├── deno-spike/    ★ 主力验证：沙箱基础 / 游戏 API 交互模式 / 指令回调 / 预算桶仿真
-│                  运行：cargo run --release [--example game_api | op_callback | bucket_sim]
-├── inspector-spike/ 玩家断点调试验证：CDP 全链路 / 暂停×看门狗 / 快照 / 多 isolate 多 target
-│                  运行：cargo run --release（证据见 docs/research/notes/spike-deno-inspector.md）
-├── rquickjs-spike/（评估后淘汰，保留作证据）
-└── boa-spike/     （评估后淘汰，保留作证据）
+```text
+crates/     Rust workspace：基础数据、世界、结算、沙箱、协调层与命令行工具
+compat/     screeps-ok 适配器、运行脚本、回归判定与报告
+apps/       客户端应用的预留位置
+packages/   渲染器、API、编辑器和共享类型的占位包
+scripts/    常量生成、依赖准备、bot 下载与提交/文档检查
+spikes/     独立技术验证工程，保留实验代码与证据
+docs/      架构、设计、决策、计划与研究文档
 ```
 
-## 本地开发与提交检查
+Rust workspace 的实际成员和依赖见各 crate 的 `Cargo.toml`；模块说明见 [总体架构](docs/architecture/overall.md)。前端包目前只有占位测试，计划职责见 [前端设计](docs/architecture/frontend.md)。
 
-首次克隆后在仓库根执行 `pnpm install` 会自动安装 git hooks（[simple-git-hooks](https://github.com/toplenboren/simple-git-hooks)，经根 package.json 的 `prepare` 脚本）。hooks 只做秒级快速门禁；代码质量门禁仍是 `pnpm run check`（fmt/clippy/test/文档链接，覆盖 CI 同名检查——CI 另有构建类与 ratchet job）。
+## 提交检查
 
-- **pre-commit / pre-merge-commit**：`cargo fmt --all --check`——未通过时运行 `pnpm run fmt` 修复后重新暂存提交（merge 路径修复后重新提交结束合并）。
-- **commit-msg**：`node scripts/check-commit-msg.mjs` 校验 subject——「前缀：描述」格式（全角/半角冒号均可，冒号前 ≤48 字符、描述非空）、非空、首尾无空白、≤350 字符；git 自动生成的 merge/revert/fixup/squash 提交豁免。
+`pnpm install` 通过根目录的 `prepare` 脚本安装 Git hooks：
 
-修改 hook 配置后需 `pnpm exec simple-git-hooks` 重新应用；确需跳过用 `git commit --no-verify` 或临时设 `SKIP_SIMPLE_GIT_HOOKS=1`（不推荐）。彻底移除：先 `node node_modules/simple-git-hooks/uninstall.js`（依赖构建脚本已被 pnpm 审批拒绝，hook 文件不会随之清理）再卸载依赖。CI 里的 `pnpm install` 同样会安装 hooks，无副作用（CI 不产生提交）。
+- `pre-commit` 和 `pre-merge-commit` 检查 Rust 格式。失败时运行 `pnpm run fmt`，检查并重新暂存改动。
+- `commit-msg` 要求首行采用“前缀：描述”，支持全角或半角冒号。标题至多 350 个 Unicode 码点，前缀至多 48 个；匹配 merge/revert/fixup/squash 前缀的标题免检。
 
-**worktree 说明**：hooks 位于主仓库 `.git/hooks`，`.worktrees/` 下的三轨 worktree 共享生效。commit-msg 依赖检出内的校验脚本——尚未并入本机制的旧分支自动跳过，该轨分支并入后即启用；fmt 检查无此依赖、在普通提交与 merge 提交路径始终生效（cherry-pick 不触发任何 hook，由 CI 兜底），旧分支若含未格式化代码，首次提交前先在该 worktree 跑一次 `pnpm run fmt`（一次性修复，随提交合入）。
-
-## 路线图
-
-里程碑 M0–M5 的内容与验收关卡见独立文档 [docs/roadmap.md](docs/roadmap.md)。要点：只有范围和验收、没有时间估算；排序风险驱动（最大的不确定性最先消灭）；screeps-ok 通过率棘轮贯穿全程。
-
-## 参考源码位置
-
-官方与社区源码克隆在 `~/Desktop/projects/sources/screeps/`：官方 engine / common / driver / launcher / renderer、社区重写项目 xxscreeps（最重要的架构参照）、backend-npm 与 pathfinding-npm（官方仓库已私有化，从 npm 发布包解包补齐）、screeps-cn.github.io（官方中文文档，功能面盘点来源）、screeps-ok（行为一致性测试套件）。
-
-## 附录：术语速查
-
-| 术语 | 含义 |
-|---|---|
-| tick | 游戏的一个节拍。服务器按 tick 推进世界；官方服一个 tick 约 2~5 秒 |
-| creep（爬爬虫） | 玩家代码控制的基本游戏单位，由最多 50 个部件组成 |
-| intent（指令） | 玩家代码下达的动作指令（如移动、采集），由服务器在 tick 末统一结算 |
-| CPU | 玩家每 tick 分到的计算配额（约等于毫秒），可攒（桶上限 10000）、可透支（单 tick 上限 500） |
-| isolate | V8 引擎内部的隔离运行环境；每个玩家一个，互不可见 |
-| 房间快照 | 一个房间的全部状态编码成的一段连续二进制数据（本项目内部数据格式） |
-| screeps-ok | 以官方服务器为基准的 Screeps 行为一致性测试套件（2897 个用例），本项目的兼容验收关卡 |
-| ADR | 架构决策记录（Architecture Decision Record），见 docs/decisions/ |
-
-> 单机承载量（并发玩家数）暂不定指标：待 M2 里程碑有可运行系统后以基准实测设定。
+修改 hook 配置后运行 `pnpm exec simple-git-hooks` 重新安装。常规质量检查仍需执行 `pnpm run check`；hook 的配置与命令以 [package.json](package.json) 为准。

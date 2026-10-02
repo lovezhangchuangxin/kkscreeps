@@ -1,14 +1,16 @@
-# JS Mod 系统实现方案
+# JS Mod 系统设计
 
-**状态：2026-10-01 设计提案，尚未接入生产引擎。已确认的需求：Mod 作者只写 JS；可以自建 API，不兼容官方 Mod 源码；覆盖官方和本地 xxscreeps 的同类扩展功能。Rust 只用于本项目内核和宿主实现，不要求 Mod 作者写 Rust、改核心枚举或重编服务器。**
+本设计要求 Mod 作者只写 JS，可以使用本项目 SDK 增加玩法或替换默认规则，不要求修改 Rust 内核或重编服务器。目标能力覆盖官方与 xxscreeps 的同类业务扩展，不承诺兼容其 Mod 源码或 Node 内部接口。
 
-**架构骨架已于同日定型：[ADR-014](../decisions/ADR-014-contribution-plane.md)（贡献平面六原则、四项实施拍板、封闭分派评审门禁、批次 A–G 调整）。本文带 [ADR-014] 标记的段落为定型增补，与其余提案文本共同构成当前基准。**
+架构决策见 [ADR-014](../decisions/ADR-014-contribution-plane.md)。当前生产引擎尚无 Mod 装载器、冻结注册计划或完整 SDK；`kk-mod-api`、`kk-mod-host` 和本文 API 示例均为目标设计。技术实验位于 `spikes/`，不构成可安装的生产 Mod 系统。
+
+当前 `Engine` 已将房间、玩家、市场和 ID 游标作为结算候选，在返回错误时保留提交前状态；玩家 Memory 与 CPU 桶仍由 `EmbedEngine` 在世界结算成功后分别提交，V8 全局不回滚，线程通信失败也没有跨线程原子保证。目标全域事务仍须覆盖这些边界以及新增 Mod 状态和外部事件。
 
 玩家在启用 Mod 的世界中应能够看到新对象与字段，调用新动作，使用新资源，体验修改后的建造、移动、战斗或经济规则，并在客户端看到相应图形和面板。服主安装 JS 包、配置后重启即可生效。未启用任何玩法 Mod 的世界继续满足 [ADR-003](../decisions/ADR-003-player-compatibility.md) 的 vanilla 兼容要求；启用后改变的规则、API 和客户端能力在握手中显式发布。
 
-本文给出可实施的契约与切片，不把所有 API 名称视为已经冻结。审计、性能与实验依据见 [06 架构复审](../research/06-architecture-and-js-mod-review.md)；官方/xxscreeps 源码覆盖依据见 [05](../research/05-mod-extensibility-review.md)。
+本文定义接口契约与验收要求，不把所有 API 名称视为已经冻结。审计、性能与实验依据见 [06 架构复审](../research/06-architecture-and-js-mod-review.md)；官方/xxscreeps 源码覆盖依据见 [05](../research/05-mod-extensibility-review.md)。
 
-## 1. 能力口径与总体选择
+## 1. 能力范围与总体方案
 
 采用 **Rust 默认内核 + 可信 JS Mod 宿主 + JS 贡献注册表 + 独立玩家 API 模块 + 客户端模块**。
 
@@ -22,18 +24,30 @@
 
 deno_core 提供 V8 嵌入与 ops，不自动提供 Node require/npm、文件、网络和子进程。首版声明 ESM JS 模块，包内相对导入及宿主 `@kkscreeps/mod` SDK；不执行安装脚本，不在线解析漂移依赖。TS 作者可预编译为 JS，但服务器收到的是 JS。需要外部服务时使用明确的后台 SDK 或可配置 sidecar，不能承诺旧 Node 包直接运行。
 
-### 1.1 架构六原则与四项拍板 [ADR-014]
+### 1.1 架构约束
 
 | # | 原则 | 一句话约束 |
 |---|---|---|
-| 1 | 贡献平面是支点 | 全部贡献启动时合并校验冻结为 ContributionPlan；运行期查找只有冻结后的数组索引/完美哈希，无动态注册 |
-| 2 | vanilla 走同一契约 | Rust native 是贡献契约的默认实现，不是特权路径；契约覆盖面 = Mod 能力面（评审门禁强制，见 ADR-014 决策 3） |
-| 3 | 冷热双轨 slot | 无 Mod 槽位走 native 直调（「无 Mod 零开销」为独立验收条目）；有 Mod 槽位才进 before/wrap/replace/after 链 |
-| 4 | 三平面分离 | 权威结算（typed + 扩展包络 + TickTxn）/ 共享投影（公共编码一次、per-viewer overlay、lazy wrapper）/ 贡献定义（纯数据、禁 V8）；投影协议一步设计、分步实施 |
-| 5 | 全域 TickTxn | rooms/players/market/全局 ID/Mod 状态/outbox 同一候选、同一发布点 |
+| 1 | 启动合并与冻结 | 全部贡献启动时合并校验冻结为 ContributionPlan；运行期按冻结计划查找；数组索引或完美哈希等表示须按实际键与负载选择，无动态注册 |
+| 2 | vanilla 走同一契约 | Rust native 是贡献契约的默认实现，不是特权路径；契约覆盖面 = Mod 能力面（具体评审约束见 ADR-014 决策 3） |
+| 3 | 默认实现与扩展链 | 无 Mod 槽位走 native 直调；与当前无 Mod 构建对照测量新增成本；有 Mod 槽位才进 before/wrap/replace/after 链 |
+| 4 | 三类职责分离 | 权威结算（typed + 扩展包络 + TickTxn）/ 共享投影（公共编码一次、per-viewer overlay、lazy wrapper）/ 贡献定义（纯数据、禁 V8）；投影协议一步设计、分步实施 |
+| 5 | 全域候选事务 | rooms/players/market/全局 ID/Mod 状态/outbox 同一候选、同一发布点 |
 | 6 | 零差异 + 显式发布 | 无 Mod 世界严格 ADR-003 红线；启用 Mod 的世界在握手中发布能力指纹 |
 
-2026-10-01 用户拍板四项：① vanilla 同契约，是；② 投影协议一步设计到位（共享二进制 + per-viewer overlay + lazy wrapper + 扩展字段目录是同一个协议）、分步实施，玩家协议只改一遍；③ 首版共同可信玩法 VM（全部玩法 Mod 共享一个 VM + 独立后台 I/O 域，Mod 间不构成安全边界，玩家隔离不降级）；④ 对照 benchmark harness（本仓/xxscreeps/官方同负载）与 A 批并行，作为第一等交付物与验收门。
+vanilla 默认规则也使用同一贡献契约；玩家投影协议统一设计、分步实现；首版全部玩法 Mod 使用共同可信 VM，并与后台 I/O 执行域分离。对照性能工具须覆盖本项目、xxscreeps 与官方服务器的相同功能负载，产出可比结果后才能作性能结论。
+
+### 1.2 接口术语
+
+| 名称 | 本文含义 |
+|---|---|
+| descriptor | 描述对象、字段或动作的定义，供宿主校验并生成注册计划 |
+| ContributionPlan | 启动时合并并冻结的定义与处理顺序；运行中不再注册新类型或处理器 |
+| EffectiveRules | 冻结后的有效规则表，默认内核与扩展使用同一份数值规则 |
+| slot | 可以包裹或替换的具名处理位置，例如 source 再生 |
+| TickTxn | 尚未发布的全域候选状态，失败时不改变已提交世界 |
+| overlay | 叠加在公共数据上的查看者私有视图；不能包含该查看者无权读取的字段 |
+| outbox | 随世界提交的待交付事件，提交后再通知外部服务 |
 
 ## 2. 包结构、装载与注册冻结
 
@@ -120,7 +134,7 @@ Extensions {
 
 EffectiveRules 是同一版本的目录与数值集合，生成 native 侧视图、玩家常量/API 输入及客户端说明。简单值可声明覆盖；条件行为由 JS 实现。资源名使用稳定命名空间，Store 已有扩展项可以作为数据起点，但所有校验、容量、生产与交易通路都必须读取有效目录。
 
-[ADR-014] EffectiveRules 冻结后必须生成**平坦形态**的 native 视图（排序数组/定长 struct/函数指针表，例如建造成本表 → 按稳定键排序的定长数组），使结算热路径查表成本与编译期常量同级；「可改常量」不得转化为「结算变慢」，此条进入 B 批验收。寻路层（kk-pathfinder 为官方 C++ FFI 黑盒）改地形/成本规则的 Mod 须经显式 wrapper 槽位（CostMatrix 回调通道 M2-C2 已有接点），不能假设 Mod 可直接改写寻路输入。
+EffectiveRules 冻结后必须生成**平坦形态**的 native 视图（排序数组/定长 struct/函数指针表，例如建造成本表 → 按稳定键排序的定长数组），减少结算热路径的动态查找。其成本须与编译期常量方案测量对照，不能仅凭数据布局宣称相同开销。寻路层（kk-pathfinder 为官方 C++ FFI 黑盒）改地形/成本规则的 Mod 须经显式 wrapper 槽位（Rust CostMatrix 回调接口已有，玩家通道尚未接入），不能假设 Mod 可直接改写寻路输入。
 
 保持 Rust 表示安全的约束（坐标、ID 唯一性、索引一致、字段编码合法）与 vanilla 玩法约束分开。Mod 替换了成本/目标/伤害规则后，宿主不能又在隐藏的另一层按 vanilla 规则拒绝。若需要改变原生类型不能表达的值域/表示，允许为该业务类型提供扩展表示和 JS 默认处理/投影替换；不能强制作者修改 Rust 字段宽度。此能力成本高，单独验收，不把扩展表示直接喂给假设旧布局的 native 处理器。
 
@@ -162,7 +176,7 @@ Mod 不获得 Rust 裸指针。位置、归属、生命周期、Store 与字段�
 
 ### 6.1 推荐依赖方向
 
-`kk-mod-api` 保存纯描述与计划；`kk-engine` 保留内核、候选和 native handlers；`kk-mod-host` 封装 JS 装载、ops、回调和后台调度；`kk-runtime` 管理提交、玩家任务和宿主生命周期。engine 不依赖 deno_core。初期可先在既有 crate 中实现这些边界，再拆包。
+`kk-mod-api` 保存纯描述与计划；`kk-engine` 保留内核、候选和 native handlers；`kk-mod-host` 封装 JS 装载、ops、回调和后台调度；`kk-runtime` 管理提交、玩家任务和宿主生命周期。当前 `kk-engine` 不依赖 deno_core；新增两个 Mod crate 尚不存在。初期可先在既有 crate 中实现这些边界，再拆包。
 
 ### 6.2 先建立 OwnedTxn，再接入 VM
 
@@ -177,15 +191,15 @@ runtime 收集玩家结果 + 原 TickInput
     -> 交回协调器一次发布
 ```
 
-不按每字段 channel 往返。native 修改期间只借用候选；需要进入 JS 时结束借用，将 ID/参数/回调句柄传入；返回后重新查找对象和代际，不能继续使用可能被 JS 删除/移动的旧对象引用。这样同时解决生命周期和生命周期回调中的再入问题。
+不按每字段 channel 往返。native 修改期间只借用候选；需要进入 JS 时结束借用，将 ID/参数/回调句柄传入；返回后重新查找对象和代际，不能继续使用可能被 JS 删除/移动的旧对象引用。这使事务借用与进入 JS 的边界明确；再入调用仍须检查借用、对象失效和错误传播。
 
 已有长函数不能在持有 `&mut Working` 时插入任意 JS 回调；需要分成可恢复的 native 步骤，或在回调边界提取 owned 数据并结束借用。不要使用 unsafe 指针或 lifetime transmute 规避这项改造。嵌套链设置最大深度与 next 单次守卫，错误向最外层候选执行传播。
 
 ### 6.3 数据访问采用多种粒度
 
-低频事务命令可用 fast ops；热读使用当前候选的本地 view/惰性对象；密集更新可用 typed columns 与有界 patch。公开 SDK 可以统一语义，但底层不必只有一种传输形式。
+低频事务命令可用宿主 ops；满足 fast op 签名与重入约束时再选择 fast 调用；热读使用当前候选的本地 view/惰性对象；密集更新可用 typed columns 与有界 patch。公开 SDK 可以统一语义，但底层不必只有一种传输形式。
 
-本地 overlay 必须 read-your-writes；进入 native next 前 flush/校验脏 patch，native 返回后按 mutation epoch 失效或刷新相关 view。native 内的 JS 生命周期回调也要看到最新候选。新对象创建、删除、跨房移动都会失效相关目录；不能拿预 tick 全量 JSON 处理完所有 Mod 再统一覆盖 native 中途修改。
+本地 overlay 必须让后续读取看到本轮此前的写入；进入 native next 前 flush/校验脏 patch，native 返回后按 mutation epoch 失效或刷新相关 view。native 内的 JS 生命周期回调也要看到最新候选。新对象创建、删除、跨房移动都会失效相关目录；不能拿预 tick 全量 JSON 处理完所有 Mod 再统一覆盖 native 中途修改。
 
 先实现安全、可观测的直接命令路径，再比较实际 getter/patch 的开销。实验中 serde_v8 全数组复制并非始终快于 fast ops，不能据此硬选 JSON batch；更不能把可信 Mod 的访问方式直接当作玩家字段读取方式。生产测量记录 op 次数、转换字节、进入 JS 次数、分配/GC、native fallback 和 P99。
 
@@ -211,7 +225,7 @@ sequenceDiagram
 
 TickTxn 包含 rooms、players（Memory/segments/CPU）、market、全局 ID、Mod 状态、瞬态字段与待交付事件。提供事务内对象/房间/玩家/世界状态 namespace；Mod 的伤害、移动等中间量可放 transient namespace，内建中间量经声明的领域服务读写。只开放最终对象字段会遗漏官方 processor 中跨阶段暂存的能力。
 
-[ADR-014] 市场纳入候选排在 A 批早期（mod-plane-batches 切片 A2）：`settle_market` 对房间的访问已是「收集已结算房数组」形态（settle/market.rs 以已结算房间切片为入参），改造阻力小于 06 §2.1 的文字印象；完成前不得在其后插入任何可失败处理器。
+当前市场已通过 `market_cand` 参与结算，后续校验或发布阶段返回错误时不会修改已提交市场。这项保证仅针对当前返回错误的路径，不包括发布中的 panic，也不包含尚未接入的 Mod 回调、持久化或 outbox。新增可失败阶段须维持所有已提交域不变。
 
 Mod 玩法数据必须使用 `ctx.state`，模块全局只允许定义和可重建缓存。JS 堆不随 Rust 候选回滚；失败后销毁/重建玩法 VM，从同一已提交状态、同一输入重新计算，或复用完整候选结果。不能依赖模块级 counter 作为权威状态。需要验证冷/热 VM 对同状态同输入结果一致，重试/回放 hash 一致；这是一项作者契约，无法自动把任意 JS 全局变化变成事务。
 
@@ -229,7 +243,7 @@ Mod 玩法数据必须使用 `ctx.state`，模块全局只允许定义和可重�
 
 server 注册对象/schema/动作后，player.js 独立安装类、字段 getter、原型方法、常量、FIND/LOOK 和 Game 集合。装载发生在核心注册关闭与构造器捕获之前；不要开放内部 `__kkp` 给玩家或 Mod 作为公共接口。
 
-[ADR-014] 投影协议**一步设计到位、分步实施**：共享公共二进制编码（每房间每 tick 编码一次，乃至仅脏房间）、per-viewer 只读 overlay（memory/可见性裁切/市场视图）、lazy wrapper 按需读字段、扩展字段目录与 variable arena 预留——这四件事是同一个协议，不是四个独立优化。它是性能（超越 per-viewer 全量重建）、内存（共享字节、未读零堆占用）与 Mod 可见性裁切的同一交汇层，也是 ADR-004 决策 1「共享内存直读 + 增量通道」的具体收敛形态。先做 JSON 局部优化、之后再另起一套二进制协议（导致玩家协议改两遍）已被 ADR-014 决策 2 明令禁止。
+投影协议**一步设计到位、分步实施**：共享公共二进制编码（每房间每 tick 编码一次，乃至仅脏房间）、per-viewer 只读 overlay（memory/可见性裁切/市场视图）、lazy wrapper 按需读字段、扩展字段目录与 variable arena 预留——这四件事是同一个协议，不是四个独立优化。它同时服务于减少重复编码、共享字节和按权限过滤的目标；惰性字段读取减少提前创建的 JS 值，但包装器、索引和缓存仍有内存成本，也是 ADR-004 决策 1「共享内存直读 + 增量通道」的具体收敛形态。按 ADR-014，协议应统一设计后分步实施；过渡期 JSON 通路继续用于行为对照，不重复设计互不兼容的玩家协议。
 
 player.js 从可信 Mod 包加载，在每个玩家 VM 中执行，函数与构造器在该 VM 内生成；不能把服务器 VM 的函数序列化进去，也不能只取 Function.toString 而丢闭包依赖。需要可版本化的玩家模块加载器和 SDK，允许依赖公开内建类。安装后捕获可信注册数据/入口，隐藏宿主控制句柄；玩家后续原型污染不得影响宿主权限和清洗。
 
@@ -307,7 +321,7 @@ export default function install(api) {
 | renderer/assets/details | 动态资产目录、对象图形/动画/文字、详情 schema；复杂效果加载管理员安装的客户端 JS 模块 |
 | UI pages/menu/widgets、编辑器 types | 客户端 SDK 与注册顺序；服务端能力/内容指纹握手；默认嵌入前端不意味着每个 Mod 都重编二进制 |
 
-底层 JS storage provider 会比 native 存储接口付出额外跨域/序列化开销，但应允许实现；默认高效后端继续是 Rust 内部实现。通知/邮件等集成可以使用后台 fetch、文件或受权限控制的宿主服务；阻塞游戏线程的同步外部 I/O 不属于首版玩法契约。
+底层 JS storage provider 会比 native 存储接口付出额外跨域/序列化开销，但应允许实现；目标默认后端由 Rust 实现；当前存储 crate 尚未接入持久化。通知/邮件等集成可以使用后台 fetch、文件或受权限控制的宿主服务；阻塞游戏线程的同步外部 I/O 不属于首版玩法契约。
 
 服务端任务的模型可是一组实际业务 API，而不必模仿官方 Mongo 查询对象。需要新的业务域时增加 JS 服务契约；只给只读事件、不允许替换认证/存储等实现不能算完整覆盖。
 
@@ -317,7 +331,7 @@ export default function install(api) {
 
 迁移以旧版本读视图和新版本事务进行；顺序由依赖与数据版本决定，校验后整体发布，失败保持旧 manifest。必需 Mod 缺失默认拒绝可写启动，允许显式只读恢复导出；不把未知对象默默当 Generic 丢行为。卸载需要 dependent 检查和有声明的 remove/export/convert 数据处理。ID/tag/字段键不可复用。
 
-首版完整世界串行候选保证任意世界级 JS 规则可表达。后续 scope 分 room/player/world，声明只读/可写域；宿主检查实际访问。room scope 限当前房及自己的房间状态，跨房/账户写通过明确命令/差异汇总；world scope 进入串行屏障，仍有完整能力。未声明不意味着自动隔离成功，不能只相信作者填写 `parallelSafe: true`。
+首版使用完整世界的串行候选，允许规则读取和修改其授权域；可表达的规则仍受 SDK、数据表示和资源预算约束。后续 scope 分 room/player/world，声明只读/可写域；宿主检查实际访问。room scope 限当前房及自己的房间状态，跨房/账户写通过明确命令/差异汇总；world scope 进入串行屏障，仍有完整能力。未声明不意味着自动隔离成功，不能只相信作者填写 `parallelSafe: true`。
 
 `Working` 当前共享 players/next_id 必须先改造。并行新对象 ID 可以采用预分配稳定区间或带映射的临时 ID，必须处理同轮引用/返回值和最终改写；native vanilla ID 次序按兼容测试选择。玩家 GCL/credits 等非交换更新需要串行排序或领域专用合并，不能全部做求和。跨房移动、终端发送和市场归全局阶段。
 
@@ -329,11 +343,11 @@ export default function install(api) {
 - CPU/RSS/分配/GC/复制字节、op/回调数量、wall P50/P95/P99、超时恢复；
 - 同初始状态同输入输出一致，功能工作量相等，≥5 独立运行，正式样本窗口遵守性能验收。
 
-[ADR-014] 增补三项验收与工程项：
+实现中另须验证以下要求：
 
-- **对照基准是一等交付物**：本仓 / 本地 xxscreeps / 官方私服三方同负载（同源玩家脚本、同 seed 世界、1/4/8/32 玩家档、≥5 独立运行）对照 harness 与 A 批并行建设；在产出对照表之前不得声称「性能超官方与 xxscreeps」。官方私服环境（Node+Mongo）重，可后于 xxs 本地对照落地，但须在 A 批内登记状态。
-- **V8 startup snapshot**：prelude 与 lodash 编译产物打入启动快照，每玩家 isolate 从快照启动——服务「内存不超官方」目标的优化点（isolate 重建 <1ms 实测见 ADR-008 证据），官方与 xxscreeps 均未利用满。
-- **CPU 计费墙钟 → 线程 CPU 时钟**与 RunJob 并发化同批落地（玩家可观测口径差异，不得晚于 M3 多用户承载前——ADR-013 决策 6 锚点）；墙钟看门狗保留为活性保护。
+- **可比性能**：本项目、xxscreeps 与官方服务器使用相同初始状态、玩家代码和功能工作量，至少 5 次独立运行；指标范围见[性能验收](../architecture/performance-acceptance.md)。未完成的对照必须说明缺项，不能用功能更少的负载证明性能优势。
+- **V8 启动快照**：应验证将 prelude 和 lodash 预编译产物放入启动快照的方案。当前玩家沙箱仍执行启动脚本；实验中的恢复耗时不等于生产玩家重建耗时，也不能证明整机内存更低。
+- **计费与并发**：当前玩家计费使用墙钟，协调器逐玩家等待回执。有界并发与线程 CPU 计费是目标改造，须同时验证预算口径、超时保护和结果顺序，墙钟看门狗仍用于活性保护。
 
 预算分成每轮 JS 处理时间、堆/外部缓冲、最大 patch/事件数、后台并发与队列。共用 VM 的内存不能可靠逐 Mod 归因；首版给宿主总限额，报告当前 handler/Mod ID 和耗时。需要强隔离或逐 Mod 资源账本时再拆进程/VM，不假定一开始已具备精确隔离。
 
@@ -359,14 +373,8 @@ export default function install(api) {
 
 无法用有限 API 保证复现任意 Node 内部 monkey patch 或原生实现漏洞。本项目的承诺是完整业务功能与默认规则替换，发现未覆盖领域就扩展 JS 契约，不能把“改本项目 Rust 源码”计作已支持的 Mod 能力。这一点应在 Mod API 文档和版本变更规则中明确。
 
-## 13. 首批实施任务
+## 13. 与架构及实施计划的关系
 
-1. 将 `Engine::tick_with_intents_with_input` 拆成 prepare/settle/validate/publish，CPU/Memory/market 与 Mod namespace 同事务；补故障状态机。
-2. 建立不依赖 V8 的 ContributionPlan/EffectiveRules 与开放 Object/Field/Intent 数据类型；将一个现有 Generic 结构接到 native slots，保持默认行为。
-3. 实装本地 ESM loader 与可信玩法 VM，按实验的短借用/reentrant 方式接 native next；不要绕过旧玩家运行通路直接写世界。
-4. 安装 player 模块、查询与扩展投影，完成 counter 包；做 replace/wrap、双玩家、失败回滚和重启验收。
-5. 在此基础上推进真实大房/多玩家性能和首个扩展检查点（有界玩家任务与线程 CPU 计费已按 ADR-014 移至 A 批并行轨 P1），再随网络/前端建设补全服务/客户端 SDK。
+本文件定义 Mod 作者可获得的能力、组合行为、事务边界和验收要求。具体拆分与顺序集中维护在[贡献平面实施计划](../plans/mod-plane-batches.md)，避免设计文档重复保存任务清单。
 
-每片的行为、测量和恢复结果先可评审，再扩大默认内核迁移范围；不先把全部玩法搬到 JS，不先实现复杂热重载，也不以将来 Rust 插件作为缺失能力的出口。
-
-[ADR-014] 排期调整：市场纳入候选提前至任务 1 同期（切片 A2）；RunJob 合并注入/执行 + 有界并发 + 线程 CPU 计费与 A 批**并行**（纯性能轨，worker epoch 为状态机前置）；任务 2 所在批（B）与投影协议一步设计合并；对照 benchmark harness 并行启动。切片与判据见 [mod-plane-batches](../plans/mod-plane-batches.md)。即刻生效纪律（ADR-014 决策 3）：新增封闭 enum 分派/硬编码白名单须同时提供具名 slot，或在提交说明中登记豁免与清偿批次。
+新增封闭类型分派或硬编码玩法规则时，按 [ADR-014](../decisions/ADR-014-contribution-plane.md) 的评审要求提供具名槽位、有效规则数据通道，或登记明确的过渡范围。默认行为迁移须保持兼容性门禁，并验证规则替换不会被另一层隐藏的 vanilla 检查否决。

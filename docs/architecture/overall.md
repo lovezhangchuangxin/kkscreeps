@@ -1,75 +1,89 @@
 # 总体形态与模块划分
 
-## 一个程序，三种运行方式
+当前实现是一个可嵌入调用的内存游戏引擎，配套玩家沙箱、兼容性验收和性能采集工具。完整服务器、持久化与前端属于目标架构；本页先说明已经存在的模块和数据流。
 
-我们只构建一个可执行程序 `kkscreeps`，通过子命令切换运行方式。这带来一个关键保证：**玩家在本地测试用的引擎和线上跑的引擎是同一份代码**，不存在"本地测试通过、上服行为不同"的问题。
+## 运行入口
 
-| 子命令 | 用途 | 说明 |
-|---|---|---|
-| `kkscreeps serve` | 运行游戏服务器 | 完整服务：游戏循环 + 网络接口，替代官方的 5 进程 + 2 中间件 |
-| `kkscreeps sim` / `kkscreeps test` | 本地模拟与集成测试 | 无网络、内存即存储，快速跑完上千个 tick；见[开发套件设计](../designs/dev-kit.md) |
-| `kkscreeps import` / `export` 等 | 运维工具 | 导入官方世界数据、生成地图、管理机器人账号 |
+`kk-cli` 构建可执行程序 `kkscreeps`。各命令的实现位于其 `src/main.rs`、`embed_main.rs`、`bot_check.rs` 和 `perf_probe.rs`。
 
-单机形态下所有模块在同一个进程内协作，模块之间就是普通的函数调用。两个例外见 [README 的设计原则 4](README.md)：面向公网的生产部署可把沙箱（kk-runner）按组拆分成多个进程（安全缓解）；多机扩展时把"游戏引擎"和"沙箱"分组部署到多台机器，通过存储接口的消息通道协调——接口预留，按需启用。
+| 命令 | 当前行为 |
+|---|---|
+| `embed` | 通过 stdin/stdout 接收逐行 JSON 请求，串行处理创建分片、放置对象、执行玩家代码和查询等操作 |
+| `bot-check` | 加载 bot 模块，在固定测试世界中运行并输出运行错误和 API 访问统计 |
+| `perf-probe` | 在采集、升级和孵化负载下测量投影、玩家执行、结算与整轮耗时 |
+| `serve`、`sim`、`test`、`import` | 预留入口，调用时返回“尚未实现”和退出码 2 |
 
-## 代码模块（crate）划分
+`embed` 使用自定义的 `{id, method, params}` / `{id, ok, result或error}` 消息格式，不是标准 JSON-RPC 2.0，也不提供网络监听。接入方式见 [兼容性验收](../../compat/README.md)。当前没有 `export` 子命令。
 
-Rust 的 workspace 把代码组织成多个 crate（可以理解为编译单元/模块包），每个有明确职责：
+目标是让服务器与本地开发工具共用引擎实现，减少规则分叉；不同配置、输入和外部环境仍需分别验证，不能仅凭共用二进制保证运行结果一致。开发工具设计见 [dev-kit.md](../designs/dev-kit.md)。
 
-```
-kkscreeps/
-├── Cargo.toml         Rust workspace（与下方的 pnpm workspace 共存于同一仓库）
-├── crates/            Rust 引擎模块（与 JS 侧互不干扰）
-│   ├── kk-core        基础数据：游戏数值表、房间名编解码、地形编解码、随机数
-│   ├── kk-schema      房间快照的编码格式：字段布局、版本升级、读写器
-│   ├── kk-world       世界模型：房间快照的内存表示、空间索引、对象类型定义
-│   ├── kk-engine      游戏循环：意图执行、移动仲裁、战斗、能量、市场结算
-│   ├── kk-runner      玩家代码沙箱：deno_core 封装、CPU/内存限制、模块加载
-│   ├── kk-runtime     运行协调层：玩家执行编排、RunResult 统一提交点（ADR-013；B0 起步）
-│   ├── kk-storage     存储：内存缓存 + 定期写盘；跨机部署时的 Redis 等后端
-│   ├── kk-pathfinder  寻路：复用官方 C++ 源码（保证路径逐点一致）
-│   ├── kk-backend     网络层：HTTP 接口 + WebSocket 推送（兼容官方协议）
-│   └── kk-cli         命令行入口：组装以上模块
-├── compat/            兼容性验收（TS 包）：screeps-ok 适配器（经 kkscreeps embed sidecar）+ bot 验收工具，见 ADR-010
-├── pnpm-workspace.yaml / package.json   JS workspace（仓库根）
-├── apps/
-│   └── game           客户端应用（Vue 3，构建产物嵌入服务器二进制）
-├── packages/
-│   ├── shared         @kkscreeps/shared：常量（从 kk-core 生成）+ 协议类型
-│   ├── renderer       @kkscreeps/renderer：渲染引擎（PixiJS，框架无关）
-│   ├── api            @kkscreeps/api：网络客户端（浏览器/Node 通用）
-│   └── editor         @kkscreeps/editor：代码编辑器 Vue 组件
-├── spikes/            技术验证工程（已完成使命，保留作证据）
-└── docs/              本文档
-```
+## 模块职责
 
-前端（apps/ 与 packages/）的详细设计见 [frontend.md](frontend.md)。
+| crate | 当前职责与边界 |
+|---|---|
+| `kk-core` | 游戏常量、房间坐标、地形编码和随机数工具 |
+| `kk-schema` | 二进制快照读写、对象字段定义、布局宏和版本升级接口；接口存在不等于已有历史版本迁移 |
+| `kk-world` | 内存世界、房间和对象管理、空间索引，以及沙箱数据和查询快照的投影 |
+| `kk-engine` | 清洗指令，结算房间和市场规则，验证并提交世界、玩家及市场的内存候选状态 |
+| `kk-runner` | V8 沙箱、CommonJS 模块加载、玩家 API 预检查、指令收集、墙钟预算和堆限制 |
+| `kk-runtime` | 玩家世界数据注入、执行编排、Memory/segments/CPU 候选提交及失败重试 |
+| `kk-pathfinder` | 封装 Screeps C++ 寻路算法与 Rust 回调接口；尚未接入玩家沙箱的 PathFinder 搜索 |
+| `kk-storage-bench` | 用合成数据比较 redb 与 libmdbx；结果用于选型研究，不是游戏持久化实现 |
+| `kk-storage` | 预留模块，尚无存储接口或数据库后端 |
+| `kk-backend` | 预留模块，尚无 HTTP 路由、监听或 WebSocket 服务 |
+| `kk-cli` | 命令行参数和嵌入式调用、bot 检查、性能采集入口 |
 
-依赖方向（上层依赖下层，不允许反向）：
+前端 `apps/game` 和 `packages/*` 目前是占位包。目标职责见 [frontend.md](frontend.md)。`compat` 是验收工具，通过子进程调用引擎；`spikes` 保留独立实验，不属于 Rust workspace。
 
-```
-kk-cli ──→ kk-backend ──→ kk-engine ──→ kk-world ──→ kk-schema ──→ kk-core
-              │               │            │
-              │               └──→ kk-pathfinder
-              ├──→ kk-runtime ──→ kk-engine（运行协调层，ADR-013；B0-5 起承接 embed 编排与统一提交点）
-              │        └──→ kk-runner（沙箱，deno_core 只在此与 kk-runtime）
-              └──────────→ kk-storage
-```
+## 实际依赖
 
-两条纪律：
+下表仅列 workspace 内的直接依赖，依据各 crate 的 `Cargo.toml`。它描述编译依赖，不表示每项接口都已经接入所有调用路径。
 
-1. **kk-engine 不依赖任何具体存储实现**。引擎只认识"房间快照"和"意图（intent，玩家下达的动作指令）"这些抽象数据，通过 kk-storage 定义的接口读写。这样"单机内存版"和"多机分布式版"对引擎代码来说没有区别。
-2. **玩家可见的游戏规则全部在 kk-engine 与 kk-world**。沙箱（kk-runner）只负责"忠实地把世界给玩家看、把玩家的指令收回来"，不做任何规则判断。这条边界保证兼容性验收时能明确归因。
-3. **kk-runner 对引擎暴露一个薄的沙箱接口（trait）**。不是为了换引擎后端（已定 deno_core 唯一），而是为了测试：引擎单元测试用一个返回固定指令的假沙箱实现，不必拖着真 V8 跑。一个真实现 + 一个测试假实现。
+| crate | 直接依赖 |
+|---|---|
+| `kk-cli` | core、engine、runtime、runner、world |
+| `kk-runtime` | core、schema、engine、runner、world |
+| `kk-engine` | core、schema、world |
+| `kk-world` | core、schema |
+| `kk-schema` | 无内部依赖 |
+| `kk-runner` | 无内部依赖，使用 deno_core 等外部库 |
+| `kk-storage-bench` | core、schema、world |
+| `kk-core`、`kk-pathfinder`、`kk-storage`、`kk-backend` | 无内部依赖 |
 
-## 各模块的来源
+表中的简称均指 `kk-*` crate。实际引擎并不通过 `kk-storage` 读写，也没有依赖 `kk-pathfinder`；完整服务的目标依赖不应代替这张实际依赖表。
 
-不少模块可以直接"抄"而不是"写"，这是三轮调研换来的效率：
+## 数据流与状态边界
 
-| 模块 | 来源 | 方式 |
-|---|---|---|
-| kk-core 数值表 | 官方 `common/lib/constants.js`（1591 行纯数据） | 写脚本自动转成 Rust 常量，不手抄 |
-| kk-core 意图校验规则 | 官方 `common/lib/system.js` 的字段白名单 | 逐条移植 |
-| kk-pathfinder | 官方 `driver/native/src/pf.cc`（613 行 C++） | FFI 直接复用（FFI 即外部函数接口，让 Rust 直接调用 C/C++ 编译出的代码；直接用官方源码保证路径逐点一致） |
-| 沙箱内的玩家 API 层 | 官方 `engine/src/game/` + xxscreeps `game/` | 移植 + 用实验验证过的"共享内存直读 + 惰性加载"模式 |
-| 房间快照设计 | xxscreeps 的二进制格式（`engine/schema/`） | 思路照搬，实现改在 Rust 编译期完成布局计算 |
+嵌入式执行的主要路径如下：
+
+1. `kk-runtime::EmbedEngine` 从已提交世界构造按玩家视野过滤的 JSON 数据，注入该玩家的 V8 沙箱。
+2. `kk-runner` 执行玩家代码。JavaScript API 检查所有权、距离、资源和参数等条件，接受的动作加入指令收集器；返回 `OK` 表示接受指令，不表示动作已结算成功。
+3. 宿主收集指令、RawMemory、segments、计费候选和日志。Rust 指令入口再次清洗字段并绑定注册玩家身份，不信任玩家自报的身份。
+4. `kk-engine` 在候选副本中处理房间与市场规则，验证后更新内存世界、玩家和市场状态。
+5. 世界结算成功后，协调器提交玩家 Memory、segments 和沙箱 CPU 桶候选。世界结算失败时缓存运行结果及 `TickInput`，重试不再次执行玩家代码。
+
+玩家已修改的 V8 全局变量不随世界回退；线程通信失败、panic 或进程崩溃也不能直接套用内存结算失败的保证。具体边界见 [游戏循环](game-loop.md)和 [tick 契约](tick-contract.md)。
+
+这里有三种不同的数据表示：
+
+| 表示 | 用途 |
+|---|---|
+| `kk-world::world_json` | 供沙箱装配 `Game` 的原始世界 JSON |
+| `kk-world::snapshot` | 供 `getObject` 等查询使用的对象 JSON |
+| `RoomState` 与 `kk-schema` 编码 | 房间状态和二进制快照读写，不自行写入磁盘 |
+
+当前沙箱注入和结果导出仍使用 JSON。共享二进制视图、检查点保存和崩溃恢复的设计见 [快照契约](snapshot-contract.md)与 [存储设计](storage.md)。
+
+## 规则与测试边界
+
+玩家 API 预检查由 `kk-runner` 实现，最终规则和状态更新由 `kk-engine` 处理，世界字段投影由 `kk-world` 提供。维护行为时应同时核对预检查、指令清洗、结算和下一轮投影，避免 API 返回成功而实际动作被遗漏。
+
+`kk-engine::Sandbox` 与 `ScriptedSandbox` 用于无 V8 的引擎测试；真实执行由 `kk-runtime::ThreadExecutor` 调用玩家线程。两者共享结果类型，但不能将测试接口描述为真实 V8 接线的全部路径。
+
+`kk-pathfinder` 复用上游算法及其方向和平局规则；输入转换、回调异常和玩家 API 接线仍需单独验证，不能由“复用源码”推导出完整兼容性。
+
+## 目标架构与来源
+
+房间任务并行、玩家与房间结算重叠、共享快照、持久化、网络服务和前端尚需分别实现与验收。详细要求见 [架构索引](README.md)，取舍依据见 [ADR-004](../decisions/ADR-004-core-architecture.md)、[ADR-013](../decisions/ADR-013-architecture-review-coordinator.md)和 [ADR-014](../decisions/ADR-014-contribution-plane.md)。
+
+常量来源为 Screeps common，指令规则和玩家 API 主要对照 Screeps engine，原生寻路对照 Screeps driver。具体版本与符号在相应源码中注明；原始研究见 [研究索引](../research/README.md)。

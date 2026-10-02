@@ -1,65 +1,102 @@
-# compat/：兼容性验收
+# 兼容性验收
 
-screeps-ok 适配器与 bot 环境验收工具（M0 交付，ADR-010）。
+本目录将 screeps-ok 的测试操作转为 `kkscreeps embed` 调用，并提供回归检查与 bot 运行验收。适配器检查玩家可见行为，bot 检查加载和运行情况；两者都不等于完整玩法兼容或生产服务器验收。
 
-## 目录
+## 结构与状态
 
-```
-compat/
-├── src/                TS 源码
-│   ├── adapter.ts        screeps-ok 适配器（createAdapter 导出）
-│   ├── rpc.ts            kkscreeps embed sidecar 的 JSON-RPC 客户端
-│   ├── capabilities.ts   27 项 capability 声明（M0 全 false，如实；对齐 pin 上游清单）
-│   └── parity.json       空起步（M0 的失败都是真失败，即基线）
-├── test/                冒烟测试（无二进制时自动跳过）
-├── scripts/run-suite.sh 用本适配器跑 screeps-ok 全量套件
-├── reports/             验收报告与基线产物（入库）
-└── fixtures/            bot 代码（gitignored，scripts/fetch-bots.sh 拉取）
-```
+| 路径 | 用途 |
+|---|---|
+| `src/adapter.ts` | 导出 `createAdapter`，将测试操作转为引擎调用 |
+| `src/rpc.ts` | 管理 embed 子进程，以请求 id 匹配逐行 JSON 响应 |
+| `src/capabilities.ts` | 声明允许启用的可选测试组；true 不保证该组全部通过 |
+| `src/parity.json` | 登记预期差异和必须跳过的测试；构建时复制到 dist |
+| `test/` | 回归分类、脚本输入更新检查、RPC 超时、独立 Node 进程和真实引擎冒烟测试 |
+| `scripts/run-suite.sh` | 运行完整上游套件，也可将额外参数传给 Vitest |
+| `scripts/ratchet.mjs` | 全量运行后检查通过数、总用例数和逐用例回归 |
+| `reports/` | 入库机器报告、回归配置与历史验收记录 |
+| `fixtures/` | bot 模块，按需由根目录脚本准备，不入库 |
 
-## 复现步骤
+同一 JavaScript 全局中的适配器实例共享子进程和世界状态，测试应串行使用并调用 `teardown`。它清理世界和玩家线程，保留子进程供后续测试复用。
+
+请求超时会终止整个连接并拒绝其他等待请求，下一次调用启动新进程；旧世界不会自动恢复。`tick` 的 AbortSignal 在每 tick 前检查，不取消正在处理的请求。协议格式见 `crates/kk-cli/src/embed_main.rs`，设计依据见 [ADR-010](../docs/decisions/ADR-010-screeps-ok-adapter-bridge.md)。
+
+## 构建与回归检查
+
+在仓库根目录执行：
 
 ```bash
-# 1. 构建引擎二进制
+pnpm install
 cargo build --release -p kk-cli
-
-# 2. 准备 screeps-ok（pin 34a630e → .compat/screeps-ok，gitignored）
-scripts/setup-screeps-ok.sh
-
-# 3. 构建适配器
-cd compat && pnpm install && pnpm run build
-
-# 4. 跑全量套件出通过率报告（→ compat/reports/kkscreeps.json）
-cd .. && compat/scripts/run-suite.sh
-
-# bot 环境验收（tooangel / overmind / wasm 合成夹具）
-scripts/fetch-bots.sh
-target/release/kkscreeps bot-check --path compat/fixtures/tooangel/src --ticks 2000 --report /tmp/tooangel.json
-target/release/kkscreeps bot-check --path compat/fixtures/overmind-dist --ticks 2000 --report /tmp/overmind.json
+bash scripts/setup-screeps-ok.sh
+pnpm --filter @kkscreeps/compat run build
+pnpm --filter @kkscreeps/compat test
+node compat/scripts/ratchet.mjs
 ```
 
-## 报告索引
+准备脚本将上游检出到 `.compat/screeps-ok`，版本由其中的 `SCREEPS_OK_PIN` 固定。工具链要求见根 [package.json](../package.json)和 [rust-toolchain.toml](../rust-toolchain.toml)。
 
-| 报告 | 内容 |
-|---|---|
-| [reports/m0-screeps-ok-parity.md](reports/m0-screeps-ok-parity.md) | 上游基准独立复现（vanilla 2897 / xxscreeps 2642，零偏差） |
-| [reports/m0-screeps-ok-baseline.md](reports/m0-screeps-ok-baseline.md) | 我们的适配器首份通过率基线（M0） |
-| [reports/m0-bot-missing-api.md](reports/m0-bot-missing-api.md) | bot 环境验收：缺失 API 清单与登记事项 |
-| [reports/m0-code-review.md](reports/m0-code-review.md) | M0 代码评审归档：38 项修复清单、16 项留待后续（M1/M2 输入）、复核否决与验证记录 |
+适配器默认优先使用 `target/release/kkscreeps`，不存在时回退到 debug；可设置 `KKSCREEPS_BIN` 显式选择。修改 Rust 代码后须重新构建选中的二进制，运行脚本不会检查它是否与源码一致。
 
-## parity.json 登记规范
+运行脚本会在 TypeScript 比编译入口新、`parity.json` 比构建副本新或构建副本缺失时重建适配器。这按修改时间判断；需要确认内容同步时应显式执行 build。
 
-`expected_failures` / `skips` 必须是 **gap-id → 登记对象** 的映射（screeps-ok `loadParity`
-的覆盖层 schema），不是数组。每个条目形如：
+只有依赖真实引擎的冒烟用例会在未找到二进制时跳过；其他工具测试仍运行。
+
+### 如何判断回归
+
+[ratchet.json](reports/ratchet.json) 指定通过数下限和总用例数。[kkscreeps.json](reports/kkscreeps.json) 是最近入库的机器报告，工作区报告在运行后会被覆盖。门禁要求：
+
+1. 报告更新时间改变，并且 JSON 可以解析。
+2. 总用例数匹配配置，通过数不低于下限。
+3. 基线已通过的用例在本轮不能失败、跳过或缺失，除非被 [ratchet-allow.json](reports/ratchet-allow.json) 显式豁免。
+
+逐用例基线取 `HEAD~1` 的入库报告。PR 合并提交的父提交通常是目标分支，普通 push 的父提交只是上一提交，不一定是上次通过 CI 的状态；读取基线需要至少两层提交历史。豁免不会降低总通过数要求，未命中的豁免仅给出警告。
+
+上游仍有已知失败用例，直接运行 `bash compat/scripts/run-suite.sh` 可能返回非零。不能仅凭套件退出码判断新增回归，应使用上述门禁核对报告。`expected_failures` 的登记也不会自动豁免逐用例回归。
+
+## Bot 运行验收
+
+在仓库根目录执行：
+
+```bash
+bash scripts/fetch-bots.sh
+target/release/kkscreeps bot-check --path compat/fixtures/tooangel/src --ticks 2000 --report /tmp/tooangel.json
+target/release/kkscreeps bot-check --path compat/fixtures/overmind-dist --ticks 2000 --report /tmp/overmind.json
+target/release/kkscreeps bot-check --path compat/fixtures/wasm-bot --ticks 10 --report /tmp/wasm-bot.json
+```
+
+TooAngel 使用固定 commit；Overmind 下载固定 release，并复用已经存在的非空文件。下载脚本不核验缓存文件的版本或内容。合成 WASM 夹具检查二进制模块加载与编译，不覆盖完整 WASM 游戏行为。
+
+报告应结合请求/完成 tick 数、中断、跳过和错误内容判断。bot 捕获后用普通日志输出的异常不一定计入 console-error，因此不能把“零 console-error”解释为“没有运行问题”。
+
+## 登记差异与跳过
+
+修改 `src/parity.json`，构建后同步到 `dist/parity.json`。`expected_failures` 与 `skips` 均是条目名称到登记对象的映射。`tests` 使用上游测试目录中定义的 catalog ID，不是文件路径或任意标题。
+
+格式示例：
 
 ```json
 {
   "expected_failures": {
-    "gap-id": { "tests": ["suite/case"], "actual": "…", "expected": "…", "why": "…" }
-  }
+    "example-gap": {
+      "tests": ["MOVE-PULL-007"],
+      "actual": "当前观察到的行为",
+      "expected": "上游要求的行为",
+      "why": "差异原因或相关记录"
+    }
+  },
+  "skips": {}
 }
 ```
 
-两个已知的踩坑形态（都在 `loadParity` 报出难以理解的错误）：往数组里追加**对象**条目会
-静默退化（gap id 变数字索引、字段不被校验）；追加**字符串**条目则直接抛 schema 错误。
-改 `src/parity.json` 即可，`dist/` 由 `pnpm run build` 复制。
+示例仅说明结构，不表示该用例存在此差异。预期差异仍执行测试；`skips` 在引擎调用前跳过测试，条目必须包含 `tests` 和非空 `why`。具体校验规则以锁定版本的 screeps-ok `scripts/lib/parity.js` 的 `loadParity` 为准。
+
+## 历史证据
+
+| 文档 | 内容 |
+|---|---|
+| [上游基准复现](reports/m0-screeps-ok-parity.md) | 指定版本下 vanilla 与 xxscreeps 的原始对照结果 |
+| [初始适配器基线](reports/m0-screeps-ok-baseline.md) | 项目初期的通过率记录，不代表当前覆盖 |
+| [初始 bot 缺失 API 记录](reports/m0-bot-missing-api.md) | 当时的错误与缺失项 |
+| [初始代码审阅](reports/m0-code-review.md) | 当时的修复与待办记录 |
+
+历史数字和问题保留其时间、版本与场景，当前结果以重新构建后的报告为准。

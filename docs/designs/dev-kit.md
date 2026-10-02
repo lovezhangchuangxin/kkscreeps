@@ -1,94 +1,89 @@
-# 设计笔记：玩家开发套件与本地集成测试（Dev Kit）
+# 玩家开发套件
 
-> 2026-09-27。目标：玩家本地编写代码后，**不依赖重型私服**就能快速且真实地做集成测试。
-> 前提架构事实：本引擎是单二进制、进程内仿真、确定性 tick、房间快照 + 指令日志（两者合起来构成完整的事件溯源）——
-> 这四点使"官方级真实模拟"在本地以毫秒级 tick 运行成为架构的自然副产品，而不是额外基建。
+开发套件用于在本地编写玩家代码、构造场景、运行集成测试和定位失败。按照 [ADR-005](../decisions/ADR-005-dev-kit.md)，它应复用服务器的玩家沙箱、API 和结算内核，避免维护另一套测试专用玩法。
 
-## 0. 社区现状与缺口（对照）
+复用内核保证本地与本项目服务器使用相同规则；与官方服务器是否一致，仍须由[兼容性验收](../../compat/README.md)证明。测试替身适合验证 bot 自身逻辑，真实场景测试适合验证指令结算与多玩家竞争，两者用途不同。
 
-| 现有方案 | 形态 | 缺陷 |
-|---|---|---|
-| `screeps-test-utils`（jest + mock Game）【社区知识，未逐一核实版本】 | 快（毫秒级） | **不真实**：mock 的 Game 不是官方引擎语义，intent 结算/冲突/寻路行为全靠模拟 |
-| 本地私服（launcher / screeps-server-mockup） | 真实 | **重且慢**：Node 多进程 + 存储中间件，tick ~1s+，1000 ticks ≈ 17 分钟，改一次代码要重新部署 |
-| tooangel 等 bot 作者的 pytest + 私服流水线【社区知识】 | 真实 | 同上，且搭建复杂 |
+## 1. 当前可用工具
 
-缺口 = "快"与"真实"不可兼得。我们的答案：**测试环境就是生产环境的同一个二进制**（同一 deno_core 沙箱、同一 API、同一结算逻辑），只是以 headless 仿真模式运行——快与真实不再互斥。
+完整开发套件尚未实现。当前 [CLI](../../crates/kk-cli/src/main.rs) 提供以下工具：
 
-## 1. CLI 形态
+| 入口 | 能力与限制 |
+|---|---|
+| `kkscreeps embed` | 通过 stdin/stdout 的逐行 JSON 请求构造世界、运行玩家和查询结果；用于适配器与集成测试，没有场景文件、交互调试或部署流程 |
+| `kkscreeps bot-check --path <模块目录>` | 在固定世界中加载 bot，统计 API 访问、错误与中断；意图不参与世界结算，不能据此验证 bot 的实际游戏进展 |
+| `kkscreeps perf-probe` | 运行采集、升级、孵化负载，统计投影、执行、结算和整轮耗时；不是通用场景执行器 |
+| `kkscreeps sim`、`test`、`import`、`serve` | 保留命令入口，调用时返回退出码 2；其参数和子命令尚未实现 |
 
-```bash
-kkscreeps sim init          # 生成 sim/ 工作区：scenario.toml + bot 代码目录
-kkscreeps sim watch         # 热重载循环：保存即重置世界跑 N ticks，console 实时流
-kkscreeps sim run --ticks 1000 --seed 42 --scenario pvp1.toml
-kkscreeps test              # 断言测试套件；退出码供 CI 使用；--report json
-kkscreeps sim replay --from snapshot-4242 --ticks 100   # 时间旅行：从任意快照续跑
-kkscreeps deploy            # 测试通过后经官方 API (/api/user/code) 一键上服
+`bot-check` 返回成功也可能包含玩家逻辑错误或桩方法调用，须阅读报告。性能工具的样本与计时口径见[性能验收](../architecture/performance-acceptance.md)。
+
+嵌入协议由 [embed_main.rs](../../crates/kk-cli/src/embed_main.rs) 定义。`runPlayers` 运行请求中的玩家并推进结算；`tick` 只推进世界，不执行玩家代码。二者不能混用为“执行 N 轮 bot”。该协议采用自定义 `ok/error` 字段，不是标准 JSON-RPC 2.0。
+
+## 2. 目标工作流
+
+以下命令是拟议界面，用于说明工作流，不能作为当前使用说明：
+
+```text
+kkscreeps sim init
+kkscreeps sim run --ticks 1000 --seed 42 --scenario sim/scenario.toml
+kkscreeps sim watch
+kkscreeps test --report json
+kkscreeps sim replay --from <检查点> --ticks 100
+kkscreeps deploy
 ```
 
-## 2. 场景即代码（scenario）
+`init` 创建场景与代码目录；`run` 加载场景并执行指定轮数；`watch` 在代码变化后重新构造初始世界并重跑，避免旧运行状态影响结果。持续运行世界时的代码热更新应是另一个明确选项。
 
-- TOML/JSON 声明：地形（生成器 / import 官方地形 / 手绘 ASCII）、房间布局、初始 creep/建筑/资源/RCL（Room Controller Level，房间控制等级，决定可解锁的建筑）、NPC 入侵脚本；
-- **多 bot 场景**：两份玩家代码同图对抗（PvP、防守、入侵响应测试）；
-- **快照 fixture**：任意 tick 的世界存档可直接作为测试起点（断点续测）。
+`test` 输出断言结果并用退出码供 CI 判断。`deploy` 上传已经测试的构建产物，目标服务器、认证方式和上传协议须显式配置。当前仓库没有部署命令或完整网络后端。
 
-## 3. 断言模型（关键决策）
+## 3. 场景与断言
 
-- 主推**沙箱内 `test` 全局**：测试模块与 bot 同一沙箱运行（`sim/tests/*.js`），
-  API 仿社区熟悉的风格：`test.tick(n, fn)`、`test.assert(cond, msg)`、`test.world` 检查器
-  （`test.world.room('W1N1').find(FIND_CREEPS)` 等，只读快照）；
-- 另提供 **jest adapter**（`@kkscreeps/test`，Node 侧经 Chrome DevTools 调试协议（inspect）驱动同一二进制），
-  兼容存量 jest 工作流；
-- **红线合规**：`test` 全局仅在 `--sim` 显式开启时注入，正常服务器模式不存在——
-  遵守 [compatibility.md](compatibility.md) 的"附加能力默认关闭"规则。
+场景格式应描述地形、房间布局、初始对象、资源、控制器等级和玩家代码，支持多 bot 竞争。有效性检查应覆盖对象 ID、位置、所有权及游戏必需字段；无效场景不能静默生成不同世界。
 
-## 4. 确定性与可复现
+检查点可作为测试起点，但房间二进制数据本身不是完整世界存档。恢复还需要玩家 Memory、segments、CPU 桶、市场、ID 分配状态和规则版本，见[存储设计](../architecture/storage.md)。
 
-- 固定种子 PRNG（内部结算）+ 固定房间处理序：同 seed + 同 scenario + 同 bot 代码 ⇒ 逐 tick 相同的世界状态；
-- 测试失败即自带最小复现：`--seed` + scenario 文件 + 代码版本，一条命令重放；
-- 对照：官方服务器本就不可复现（`Math.random`、时序），我们的 sim 比官方更可测——
-  但玩家可见随机性（`Math.random` 在玩家代码中）仍保持官方行为。
+断言应能读取已提交世界、控制推进轮数，并区分玩家异常、结算失败和断言失败。拟议的沙箱内 `test` 全局只在显式测试模式启用；生产玩家环境不增加该全局，遵守[兼容性要求](compatibility.md)。
 
-## 5. 调试体验
+测试驱动器可以在玩家执行返回后安排下一轮。不要让正在运行的玩家回调直接递归推进世界：它仍持有本轮视图，嵌套推进会使读取时点和提交顺序不明确。Node 测试框架适配器可通过嵌入协议驱动引擎；调试协议用于调试，二者不必绑定。
 
-- **任意 tick 回放**：房间快照双缓冲历史 + 指令日志 = 完整事件溯源（03 报告架构的顺带收益）；
-  "我的 creep 为什么往左走" → 取该对象任意 tick 的状态、收到的 intents、结算依据；
-- **断点调试（M2.5 显式子项）**：`kkscreeps sim --debug` 起本地 CDP 服务（deno_inspector_server，
-  随机端口并打印 ws URL），每个玩家/bot 一个独立 DevTools target——Chrome `chrome://inspect`
-  添加 `localhost:<port>`，或直开 `/json/list` 返回的 devtoolsFrontendUrl；VS Code js-debug 按
-  ws URL attach。多 bot 场景各 isolate 独立 target、独立会话，暂停一个 bot 不影响世界推进。
-  **debug 档语义**：该玩家当 tick 豁免看门狗 arm——实测开着看门狗打断点必被掐，且 terminate
-  要到暂停被唤醒后才展开（[inspector-spike 实验 N](../research/notes/spike-deno-inspector.md)）。
-  默认关闭，`--debug` 显式开启（兼容红线"附加能力默认关闭"，同 §3 test 全局先例）；公网服不
-  开放（鉴权与资源占用归 M5 安全加固）。
-  前置依赖（M2-2A 沙箱接入时预留，均为 spike 实证约束，见笔记 §6/§7）：`SandboxConfig` 加
-  debug 档（`RuntimeOptions.inspector: true`）；玩家模块脚本名**绝对路径化**（断点按 URL 绑定，
-  deno_core 只把绝对路径资源名转成 file:// URL，裸名断点永远不命中）；泵事件循环固定
-  `wait_for_inspector: false`（true 会在空闲循环 + WS 会话下销毁主上下文，此后调试全失效）；
-  inspector 开关不改变遮蔽后全局面（实验 O），白名单测试无需豁免；
-- **CPU/内存报告**：每 tick `getUsed()` 曲线、bucket 演化（bucket_sim 同款机制）、
-  每 intent 的 0.2 计费明细、内存峰值——帮玩家在本地把 CPU 优化做完再上服；
-- **可选本地 viewer**：`kkscreeps sim watch --port 21026` 起 ws，官方 renderer 连接实时观战
-  （复用兼容层，零新前端）；
-- 覆盖率类工具（可选后期）：哪些分支/creep 行为在测试中被执行过。
+## 4. 重试、重放与复现
 
-## 6. 速度预期与依据
+应区分三种操作：
 
-- headless 小世界 tick 成本 ≈ 玩家代码执行（毫秒级）+ 房间结算（目标亚毫秒，无 IPC/存储中间件）；
-- **1000 ticks 集成测试秒级完成**（对照：本地私服 17 分钟）；
-- 依据：单二进制进程内仿真（xxscreeps `simulate()` 先例：单进程内跑完整 tick 管线）、
-  快照恢复 <1ms（snapshot 实测）、blob 读写即内存操作；
-- 这些是【推断+架构推论】，M2 单机可玩后以基准实测为准。
+| 操作 | 必须固定的内容 |
+|---|---|
+| 失败轮重试 | 首次玩家运行结果与外部结算输入；当前协调器已在结算返回错误时缓存这些数据，不重新执行玩家代码 |
+| 结算重放 | 初始已提交状态、玩家输出、外部时间及其他玩法输入、规则版本；需要可恢复的完整记录 |
+| 重新运行 bot | 场景、代码、模块与规则版本，以及玩家可观察的时间和随机来源；只固定引擎种子不足以保证一致 |
 
-## 7. 编译型玩家工作流
+当前 `TickInput.now_ms` 可以固定结算使用的墙钟，不能因此保证任意玩家 JS 可复现。玩家的 `Date`、`Math.random`、CPU 查询和持久全局变量也可能影响行为。默认兼容模式保留其行为；若测试模式提供替代值，须明确说明与生产环境的差异。
 
-- 内置 esbuild/swc：TS/JSX 等在本地 sim 与 deploy 走**同一条转译管线**（所见即所得），
-  上传产物与本地测试产物一致；纯 JS 玩家零感知。
-- 官方语义保持：服务器仍接受多模块 CJS（兼容红线），编译只发生在本地工具链。
+房间版本和缓存只用于当前运行，不自动形成历史记录。任意 tick 回放需要检查点与输入日志；双缓冲或内存快照不能替代这些机制。失败报告应记录场景、代码和规则指纹、输入以及失败轮次，避免只有一个 seed 却无法复现。
 
-## 8. 实现成本评估
+## 5. 调试与观测
 
-低——大部分能力是既有架构的换皮：sim 模式 = 同一 engine crate 以库形式嵌入 CLI +
-场景加载器 + test 全局注入 + 报告输出。不需要新进程、不需要网络（viewer 可选）、
-不需要存储引擎（内存中的房间快照即可）。建议排在 M2（单机可玩）之后、M3（backend）之前，
-因为它同时是**我们自己开发期的回归工具**（与 screeps-ok CI 互补：screeps-ok 管官方语义
-一致性，dev kit 管真实场景行为）。
+当前生产沙箱没有完整的 Inspector 调试入口。已有 [Inspector 实验](../research/notes/spike-deno-inspector.md)验证了部分 V8 调试机制，实验中的参数和行为仍需在生产运行通路中验证。
+
+目标调试模式应为每个玩家提供可识别的 DevTools target 和模块 URL，并明确暂停策略。当前协调器同步等待玩家回执，暂停一个玩家可能阻塞整轮世界；不能承诺其他玩家和结算继续推进。
+
+如果断点调试豁免执行看门狗，调试期间的预算与耗时不应作为生产性能结果。调试服务应默认关闭，绑定与认证策略另行定义。模块 URL、事件循环泵送和异常后恢复须有集成验证。
+
+运行报告应包含玩家错误、控制台输出、桶余额和已提交结果。当前 `Game.cpu.getUsed()` 使用运行墙钟，尚无逐 intent 计费明细或完整内存峰值报告；新增报告须说明计量范围，不能把 V8 堆统计等同于进程总内存。
+
+本地观战页面需要网络数据源与渲染器。它可以复用[前端设计](../architecture/frontend.md)中的房间快照和增量接口，但不是现有嵌入协议自动提供的功能。
+
+## 6. 构建与部署一致性
+
+TypeScript 等源代码可在本地预编译为服务器接受的 JS 模块。模拟与部署应使用同一构建产物，并记录产物指纹，避免测试源码和上传代码不一致。
+
+编译器、模块格式、依赖解析和 WASM 资产处理需要明确版本与规则。当前玩家加载器支持的模块行为见[沙箱说明](../architecture/sandbox.md)；不能假设 Node/npm 包可以直接在玩家沙箱中执行。
+
+## 7. 验收要求
+
+- 相同构建产物在本地与服务器使用相同 API、沙箱和结算规则；测试辅助能力默认关闭。
+- 场景加载后可以运行多玩家，断言读取已提交结果，并报告玩家错误、结算失败和断言失败。
+- 重试不重复执行玩家代码；检查点与记录输入能够重放结算，缺失或版本不匹配的记录应被拒绝。
+- 调试暂停、超时和异常后的恢复具有明确行为，不把调试耗时计入正式性能结果。
+- 测试与部署产物一致；报告包含定位失败所需的场景、代码与规则版本。
+
+速度按实际场景测量，记录预热、玩家数、对象数和执行工作量。不能以空世界或固定世界检查的耗时承诺完整 bot 的测试速度。开发套件与 `screeps-ok` 分别验证真实场景行为和官方语义兼容，二者共同覆盖回归。
