@@ -4,6 +4,7 @@
 //! 近堆上限回调中断过量的 V8 堆分配。玩家线程与计费候选由独立模块管理。
 
 pub mod budget;
+pub mod cpu_clock;
 pub mod modules;
 pub mod ops;
 pub mod proto;
@@ -14,6 +15,7 @@ pub use budget::{Bucket, TickPlan};
 pub use modules::{ModuleCode, ModuleKind, ModuleTable};
 pub use ops::LogLine;
 pub use proto::{
-    EvalReport, JobToken, PendingJob, PlayerThreads, RunEpoch, RunJob, RunReceipt, TickReport,
+    EvalReport, JobGate, JobToken, PendingJob, PlayerThreads, RunEpoch, RunJob, RunReceipt,
+    TickReport,
 };
 pub use sandbox::{Sandbox, SandboxConfig, TickOutcome, lifo_violations, live_sandbox_count};

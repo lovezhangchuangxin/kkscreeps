@@ -18,6 +18,7 @@ def main():
     root = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, default=root / "target/release/kkscreeps")
+    parser.add_argument("--concurrency", type=int)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--warmup", type=int, default=500)
     parser.add_argument("--ticks", type=int, default=3000)
@@ -25,6 +26,8 @@ def main():
     args = parser.parse_args()
     if args.warmup < 0 or args.ticks < 1 or args.repetitions < 1:
         parser.error("warmup 须非负，ticks 与 repetitions 须为正数")
+    if args.concurrency is not None and not 1 <= args.concurrency <= 32:
+        parser.error("concurrency 须为 1..32")
     binary = args.binary.resolve()
     binary_hash = hashlib.sha256(binary.read_bytes()).hexdigest()
     runs = []
@@ -34,10 +37,15 @@ def main():
                 if hashlib.sha256(binary.read_bytes()).hexdigest() != binary_hash:
                     raise RuntimeError("测量期间二进制发生变化，请重新开始")
                 path = Path(temp) / f"{players}-{repetition}.json"
+                command = [
+                    str(binary), "perf-probe", "--players", str(players),
+                    "--warmup", str(args.warmup), "--ticks", str(args.ticks),
+                    "--report", str(path),
+                ]
+                if args.concurrency is not None:
+                    command += ["--concurrency", str(args.concurrency)]
                 result = subprocess.run(
-                    [str(binary), "perf-probe", "--players", str(players),
-                     "--warmup", str(args.warmup), "--ticks", str(args.ticks),
-                     "--report", str(path)],
+                    command,
                     cwd=root, capture_output=True, text=True, timeout=300,
                 )
                 if result.returncode:
@@ -45,14 +53,17 @@ def main():
                 if hashlib.sha256(binary.read_bytes()).hexdigest() != binary_hash:
                     raise RuntimeError("测量期间二进制发生变化，请重新开始")
                 run = json.loads(path.read_text())
+                if args.concurrency is not None and run.get("player_concurrency") != args.concurrency:
+                    raise RuntimeError("实际并发上限与请求不一致")
                 if run["players"] != players or run["ticks"] != args.ticks:
                     raise RuntimeError("实际负载与请求不一致")
                 if run["metadata"]["debug_assertions"]:
                     raise RuntimeError("基线要求 release 构建")
                 phases = run.get("phases", {}).get("phases", {})
-                if any("p99_ms" not in phases.get(phase, {})
-                       for phase in ("project", "run", "settle", "wall")):
-                    raise RuntimeError("报告缺少 p99；请核对并重建二进制及 runtime 依赖")
+                for quantile in ("p50", "p95", "p99"):
+                    if any(f"{quantile}_ms" not in phases.get(phase, {})
+                           for phase in ("project", "run", "settle", "wall")):
+                        raise RuntimeError(f"报告缺少 {quantile}；请核对并重建二进制及 runtime 依赖")
                 if run.get("process", {}).get("scope") != "current_process_all_threads":
                     raise RuntimeError("报告缺少当前进程 CPU/RSS 采样")
                 run["repetition"] = repetition + 1
@@ -74,6 +85,10 @@ def main():
                 r["process"]["rss_bytes_sampled_peak"] for r in selected),
             "median_wall_p50_ms": statistics.median(
                 r["phases"]["phases"]["wall"]["p50_ms"] for r in selected),
+            "median_wall_p95_ms": statistics.median(
+                r["phases"]["phases"]["wall"]["p95_ms"] for r in selected),
+            "median_wall_p99_ms": statistics.median(
+                r["phases"]["phases"]["wall"]["p99_ms"] for r in selected),
             "run_wall_p99_ms": [
                 r["phases"]["phases"]["wall"]["p99_ms"] for r in selected],
         }

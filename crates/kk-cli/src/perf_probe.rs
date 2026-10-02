@@ -82,8 +82,14 @@ fn workload_probe(e: &EmbedEngine, room: &str) -> anyhow::Result<(i64, SourceObs
     Ok((progress, obs))
 }
 
-pub fn run(ticks: u32, warmup: u32, players: u32, report_path: &str) -> i32 {
-    match run_inner(ticks, warmup, players, report_path) {
+pub fn run(
+    ticks: u32,
+    warmup: u32,
+    players: u32,
+    concurrency: Option<usize>,
+    report_path: &str,
+) -> i32 {
+    match run_inner(ticks, warmup, players, concurrency, report_path) {
         Ok(()) => 0,
         Err(e) => {
             eprintln!("perf-probe 失败: {e:#}");
@@ -92,7 +98,13 @@ pub fn run(ticks: u32, warmup: u32, players: u32, report_path: &str) -> i32 {
     }
 }
 
-fn run_inner(ticks: u32, warmup: u32, players: u32, report_path: &str) -> anyhow::Result<()> {
+fn run_inner(
+    ticks: u32,
+    warmup: u32,
+    players: u32,
+    concurrency: Option<usize>,
+    report_path: &str,
+) -> anyhow::Result<()> {
     if ticks == 0 {
         anyhow::bail!("采集窗口为 0（--ticks 须 ≥1；纯预热跑不是合法用法）");
     }
@@ -141,6 +153,9 @@ fn run_inner(ticks: u32, warmup: u32, players: u32, report_path: &str) -> anyhow
         }
     }
 
+    if let Some(limit) = concurrency {
+        e.set_player_concurrency(limit)?;
+    }
     let mut codes: BTreeMap<String, String> = BTreeMap::new();
     for h in &handles {
         codes.insert(h.clone(), player_code());
@@ -195,6 +210,8 @@ fn run_inner(ticks: u32, warmup: u32, players: u32, report_path: &str) -> anyhow
         "players": players,
         "ticks": ticks,
         "warmup": warmup,
+        "player_concurrency": e.player_concurrency(),
+        "player_cpu_clock": "thread_cpu_time",
         "metadata": metadata,
         "process": process_report,
         "workload": {
@@ -281,7 +298,7 @@ mod tests {
             "kkscreeps-perf-regeneration-{}.json",
             std::process::id()
         ));
-        run_inner(309, 0, 1, &path.to_string_lossy())?;
+        run_inner(309, 0, 1, None, &path.to_string_lossy())?;
         let report: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
         std::fs::remove_file(path)?;
         assert!(report["workload"]["progress_delta"].as_i64().unwrap() > 0);

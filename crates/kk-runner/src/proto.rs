@@ -20,9 +20,10 @@ use crate::sandbox::{Sandbox, SandboxConfig, TickOutcome};
 /// 一次玩家 tick 的完整报告（bot-check 与诊断用）。
 #[derive(Debug)]
 pub struct TickReport {
+    pub epoch: RunEpoch,
     pub outcome: TickOutcome,
     pub plan: TickPlan,
-    /// 入口结束时的墙钟用量，不含随后写回耗时和指令费用；入口中断时为 0。
+    /// 从世界注入到入口结束的线程 CPU 用量，不含随后写回和指令费用；中断时为 0。
     pub used_ms: f64,
     /// 入口或写回捕获的普通玩家错误；未捕获普通错误时为 None。
     pub player_error: Option<String>,
@@ -57,12 +58,7 @@ pub struct EvalReport {
     pub epoch: RunEpoch,
 }
 
-/// 标识派发时的游戏 tick 和世界内容版本；线程原样回带，不在此验证。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct RunEpoch {
-    pub tick: u64,
-    pub generation: u64,
-}
+pub use kk_core::RunEpoch;
 
 /// 同一条命令携带已提交内存、世界、宿主预算与代码，返回本轮候选。
 #[derive(Debug)]
@@ -71,6 +67,8 @@ pub struct RunJob {
     pub code: String,
     pub epoch: RunEpoch,
     pub attempt: u64,
+    /// 整条命令的绝对期限；None 在派发时绑定 tickLimit 加 1 秒通信余量。
+    pub deadline: Option<Instant>,
     pub raw_memory: String,
     pub segments_json: String,
     pub foreign_json: String,
@@ -89,28 +87,59 @@ pub struct JobToken {
 pub struct RunReceipt {
     pub token: JobToken,
     pub report: EvalReport,
+    pub finished_at: Instant,
 }
 
 /// 已派发命令的独立回执通道；可按任意顺序等待，不混用其他命令的结果。
 pub struct PendingJob {
     pub token: JobToken,
     rx: mpsc::Receiver<anyhow::Result<RunReceipt>>,
+    pub deadline: Instant,
 }
 
 impl PendingJob {
-    pub fn wait(self) -> anyhow::Result<RunReceipt> {
-        self.rx
-            .recv()
-            .map_err(|_| anyhow::anyhow!("玩家工作者 {} 未返回执行回执", self.token.worker))?
+    fn validate(&self, receipt: anyhow::Result<RunReceipt>) -> anyhow::Result<RunReceipt> {
+        let receipt = receipt?;
+        if receipt.finished_at > self.deadline {
+            anyhow::bail!("玩家执行回执超过命令期限");
+        }
+        Ok(receipt)
     }
+    pub fn wait(self) -> anyhow::Result<RunReceipt> {
+        let receipt = self
+            .rx
+            .recv_timeout(self.deadline.saturating_duration_since(Instant::now()))
+            .map_err(|e| anyhow::anyhow!("玩家工作者 {} 未返回执行回执：{e}", self.token.worker))?;
+        self.validate(receipt)
+    }
+    pub fn try_take(&self) -> anyhow::Result<Option<RunReceipt>> {
+        match self.rx.try_recv() {
+            Ok(receipt) => self.validate(receipt).map(Some),
+            Err(mpsc::TryRecvError::Disconnected) => {
+                anyhow::bail!("玩家工作者 {} 未返回执行回执", self.token.worker)
+            }
+            Err(mpsc::TryRecvError::Empty) if Instant::now() >= self.deadline => {
+                anyhow::bail!("玩家执行回执超过命令期限")
+            }
+            Err(mpsc::TryRecvError::Empty) => Ok(None),
+        }
+    }
+}
+
+/// 测试时在任务开始前阻塞工作者，观察实际派发上限；释放后才进入计时区间。
+pub struct JobGate {
+    pub started: mpsc::Receiver<()>,
+    pub release: mpsc::Sender<()>,
 }
 
 enum Cmd {
     RunJob {
         job: RunJob,
         ack: mpsc::Sender<anyhow::Result<RunReceipt>>,
+        notify: Option<mpsc::Sender<JobToken>>,
     },
     ExitBeforeJob(mpsc::Sender<()>),
+    GateNextJob(mpsc::Receiver<()>, mpsc::Sender<()>, mpsc::Sender<()>),
     SetModules(ModuleTable, mpsc::Sender<anyhow::Result<()>>),
     /// 注入 RawMemory 初值（tick 边界——协调层提交点统一驱动的通道面）。
     SetRawMemory(String, mpsc::Sender<anyhow::Result<()>>),
@@ -124,6 +153,7 @@ enum Cmd {
     Bucket(mpsc::Sender<anyhow::Result<f64>>),
     Tick {
         world: Value,
+        epoch: RunEpoch,
         ack: mpsc::Sender<anyhow::Result<TickReport>>,
     },
     RunExpr {
@@ -185,6 +215,7 @@ impl PlayerThreads {
                     return; // registry 已不在，直接退出
                 }
                 let mut exit_before_job = false;
+                let mut gate: Option<(mpsc::Receiver<()>, mpsc::Sender<()>)> = None;
                 while let Ok(cmd) = rx.recv() {
                     match cmd {
                         Cmd::SetModules(table, ack) => {
@@ -207,8 +238,8 @@ impl PlayerThreads {
                         Cmd::Bucket(ack) => {
                             let _ = ack.send(Ok(sandbox.bucket()));
                         }
-                        Cmd::Tick { world, ack } => {
-                            let _ = ack.send(run_one_tick(&mut sandbox, &world));
+                        Cmd::Tick { world, epoch, ack } => {
+                            let _ = ack.send(run_one_tick(&mut sandbox, &world, epoch));
                         }
                         Cmd::RunExpr { code, ack } => {
                             // 独立表达式也可能死循环，必须使用带看门狗的执行入口，保证线程能继续服务。
@@ -222,37 +253,60 @@ impl PlayerThreads {
                         } => {
                             let _ = ack.send(run_eval_tick(&mut sandbox, &world, &code, epoch));
                         }
+                        Cmd::GateNextJob(release, started, ack) => {
+                            gate = Some((release, started));
+                            let _ = ack.send(());
+                        }
                         Cmd::ExitBeforeJob(ack) => {
                             exit_before_job = true;
                             let _ = ack.send(());
                         }
-                        Cmd::RunJob { job, ack } => {
-                            if exit_before_job {
-                                break;
-                            }
+                        Cmd::RunJob { job, ack, notify } => {
                             let token = JobToken {
                                 epoch: job.epoch,
                                 attempt: job.attempt,
                                 worker: id,
                             };
-                            let result = sandbox
-                                .set_memory_state(
-                                    &job.raw_memory,
-                                    &job.segments_json,
-                                    &job.foreign_json,
-                                )
-                                .and_then(|()| {
-                                    run_eval_tick_with_budget(
-                                        &mut sandbox,
-                                        &job.world,
-                                        &job.code,
-                                        job.epoch,
-                                        Some(&job.budget),
+                            if exit_before_job {
+                                drop(ack);
+                                if let Some(notify) = notify {
+                                    let _ = notify.send(token);
+                                }
+                                break;
+                            }
+                            if let Some((release, started)) = gate.take() {
+                                let _ = started.send(());
+                                let _ = release.recv();
+                            }
+                            let deadline = job.deadline.expect("派发时绑定命令期限");
+                            let result = sandbox.set_command_deadline(deadline).and_then(|()| {
+                                sandbox
+                                    .set_memory_state(
+                                        &job.raw_memory,
+                                        &job.segments_json,
+                                        &job.foreign_json,
                                     )
-                                });
+                                    .and_then(|()| {
+                                        run_eval_tick_with_budget(
+                                            &mut sandbox,
+                                            &job.world,
+                                            &job.code,
+                                            job.epoch,
+                                            Some(&job.budget),
+                                        )
+                                    })
+                            });
+                            sandbox.clear_command_deadline();
                             // 用量已在回执中；宿主发布或丢弃候选均不再通知线程结算。
                             sandbox.discard_bill();
-                            let _ = ack.send(result.map(|report| RunReceipt { token, report }));
+                            let _ = ack.send(result.map(|report| RunReceipt {
+                                token,
+                                report,
+                                finished_at: Instant::now(),
+                            }));
+                            if let Some(notify) = notify {
+                                let _ = notify.send(token);
+                            }
                         }
                         Cmd::Shutdown => break,
                     }
@@ -357,6 +411,10 @@ impl PlayerThreads {
         let (ack_tx, ack_rx) = mpsc::channel();
         p.send(Cmd::Tick {
             world: world.clone(),
+            epoch: RunEpoch {
+                tick: world["time"].as_u64().unwrap_or(0),
+                generation: world["generation"].as_u64().unwrap_or(0),
+            },
             ack: ack_tx,
         });
         ack_rx
@@ -376,6 +434,10 @@ impl PlayerThreads {
             let id = p.id;
             p.send(Cmd::Tick {
                 world: world.clone(),
+                epoch: RunEpoch {
+                    tick: world["time"].as_u64().unwrap_or(0),
+                    generation: world["generation"].as_u64().unwrap_or(0),
+                },
                 ack: ack_tx,
             });
             acks.push((id, ack_rx));
@@ -431,6 +493,20 @@ impl PlayerThreads {
 
     /// 派发后返回独立回执句柄；调用方在采纳结果前核对完整 token。
     pub fn dispatch_job(&mut self, id: u64, job: RunJob) -> anyhow::Result<PendingJob> {
+        self.dispatch_job_notifying(id, job, None)
+    }
+    pub fn dispatch_job_notifying(
+        &mut self,
+        id: u64,
+        mut job: RunJob,
+        notify: Option<mpsc::Sender<JobToken>>,
+    ) -> anyhow::Result<PendingJob> {
+        let deadline = job.deadline.unwrap_or_else(|| {
+            Instant::now()
+                + Duration::from_millis(job.budget.bucket().tick_limit().max(1.0) as u64)
+                + Duration::from_secs(1)
+        });
+        job.deadline = Some(deadline);
         let token = JobToken {
             epoch: job.epoch,
             attempt: job.attempt,
@@ -438,8 +514,32 @@ impl PlayerThreads {
         };
         let p = self.player_mut(id)?;
         let (ack_tx, ack_rx) = mpsc::channel();
-        p.send(Cmd::RunJob { job, ack: ack_tx });
-        Ok(PendingJob { token, rx: ack_rx })
+        p.send(Cmd::RunJob {
+            job,
+            ack: ack_tx,
+            notify,
+        });
+        Ok(PendingJob {
+            token,
+            rx: ack_rx,
+            deadline,
+        })
+    }
+
+    #[doc(hidden)]
+    pub fn gate_next_job_for_test(&mut self, id: u64) -> anyhow::Result<JobGate> {
+        let (release_tx, release_rx) = mpsc::channel();
+        let (started_tx, started_rx) = mpsc::channel();
+        let (ack_tx, ack_rx) = mpsc::channel();
+        self.player_mut(id)?
+            .send(Cmd::GateNextJob(release_rx, started_tx, ack_tx));
+        ack_rx
+            .recv()
+            .map_err(|_| anyhow::anyhow!("玩家线程已退出"))?;
+        Ok(JobGate {
+            started: started_rx,
+            release: release_tx,
+        })
     }
 
     /// 在下一条 RunJob 执行前退出真实玩家线程，模拟无回执失联。
@@ -506,7 +606,11 @@ impl Drop for PlayerThreads {
     }
 }
 
-fn run_one_tick(sandbox: &mut Sandbox, world: &Value) -> anyhow::Result<TickReport> {
+fn run_one_tick(
+    sandbox: &mut Sandbox,
+    world: &Value,
+    epoch: RunEpoch,
+) -> anyhow::Result<TickReport> {
     // 此 tick 通道即时结算；注入失败也提交中断处理产生的完整预算费用。
     let plan = match sandbox.begin_tick(world) {
         Ok(plan) => plan,
@@ -521,6 +625,7 @@ fn run_one_tick(sandbox: &mut Sandbox, world: &Value) -> anyhow::Result<TickRepo
         plan @ TickPlan::SkipPenalty => {
             sandbox.settle_bill();
             Ok(TickReport {
+                epoch,
                 outcome: TickOutcome::Terminated,
                 plan,
                 used_ms: 0.0,
@@ -536,7 +641,7 @@ fn run_one_tick(sandbox: &mut Sandbox, world: &Value) -> anyhow::Result<TickRepo
             let mut outcome = sandbox.run_loop()?;
             let player_error = sandbox.take_last_loop_error();
             let used_ms = match &outcome {
-                TickOutcome::Completed { .. } => sandbox.cpu_used_ms(),
+                TickOutcome::Completed { .. } => sandbox.cpu_used_ms()?,
                 TickOutcome::Terminated => 0.0,
             };
             // 此通道立即提交 end_tick 的费用，包含写回阶段耗时。
@@ -558,6 +663,7 @@ fn run_one_tick(sandbox: &mut Sandbox, world: &Value) -> anyhow::Result<TickRepo
                 },
             };
             Ok(TickReport {
+                epoch,
                 outcome,
                 plan,
                 used_ms,

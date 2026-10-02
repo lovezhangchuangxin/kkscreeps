@@ -5,7 +5,7 @@
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use bytes::BytesMut;
 use deno_core::{OpState, extension, op2};
@@ -31,8 +31,10 @@ pub struct LogLine {
 pub struct Shared {
     /// console 输出收集（op 推入，宿主每 tick drain）。
     pub console: Mutex<Vec<LogLine>>,
-    /// 本 tick 墙钟计时起点；Rust op 返回经过的毫秒数，JS 另加指令费用。
+    /// 本轮墙钟起点，仅用于看门狗期限；正常计费读取线程 CPU 时钟。
     pub tick_start: Mutex<Option<Instant>>,
+    /// 执行线程 CPU 起点；不包含调度等待，getUsed 另加指令费用。
+    pub thread_cpu_start: Mutex<Option<Duration>>,
     /// 近堆回调是否触发过（诊断用）。
     pub near_heap_fired: AtomicBool,
     /// 本 tick 是否调用过 Game.cpu.halt；Sandbox 据此选择零计费的中断处理。
@@ -132,11 +134,14 @@ fn op_kk_cpu_halt(state: &mut OpState) {
 }
 
 #[op2(fast)]
-fn op_kk_get_used(state: &mut OpState) -> f64 {
+fn op_kk_get_used(state: &mut OpState) -> Result<f64, deno_error::JsErrorBox> {
     let shared = state.borrow::<SharedRef>().clone();
-    match *shared.tick_start.lock().unwrap() {
-        Some(t0) => t0.elapsed().as_secs_f64() * 1000.0,
-        None => 0.0,
+    let start = *shared.thread_cpu_start.lock().unwrap();
+    match start {
+        Some(start) => crate::cpu_clock::thread_cpu_time()
+            .map(|now| now.saturating_sub(start).as_secs_f64() * 1000.0)
+            .map_err(|e| deno_error::JsErrorBox::generic(e.to_string())),
+        None => Ok(0.0),
     }
 }
 

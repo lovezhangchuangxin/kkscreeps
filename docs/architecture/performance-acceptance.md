@@ -18,11 +18,11 @@ target/release/kkscreeps perf-probe --players 2 --warmup 100 --ticks 1000 --repo
 | 字段 | 现有采样范围 |
 |---|---|
 | `project` | 玩家世界 JSON 与市场投影构造 |
-| `run` | 玩家执行器调用的累计耗时 |
-| `settle` | 世界结算调用 |
+| `run` | 派发与回收窗口扣除宿主投影时间 |
+| `settle` | 玩家候选生成、世界结算与统一发布 |
 | `wall` | 从 run_players 开始到玩家状态提交后的采样点，不含最后的返回结果装配 |
 
-四项不能简单相加解释为完整时间分解。重试复用缓存时不重新投影和执行，其对应采样为 0；采样只在完成结算后记录。报告提供 count、p50、p95、p99、最大值和总耗时，分位数按排序样本的 `round((N−1)×q)` 下标取值。
+P1 的 `run` 是整个派发与回收窗口扣除宿主投影时间，包含调度和回执检查，不是各玩家 CPU 用量之和；宿主为后续玩家投影时，已派发玩家可以同时执行。`settle` 包含玩家候选生成与统一发布。四项不能简单相加解释为完整时间分解。重试复用缓存时不重新投影和执行，其对应采样为 0；采样只在完成结算后记录。报告提供 count、p50、p95、p99、最大值和总耗时，分位数按排序样本的 `round((N−1)×q)` 下标取值。
 
 macOS/Linux 上，报告的 `process` 部分另测采集窗口内当前进程全部线程的 CPU core-ms，以及采集前和每 tick 结束时的 RSS。CPU 使用 [getrusage(RUSAGE_SELF)](https://www.man7.org/linux/man-pages/man2/getrusage.2.html)，包括协调器、玩家线程和后台线程；它与玩家 `Game.cpu` 账单分列，不包含其他进程。RSS 使用 macOS 的进程 resident size 或 Linux `/proc/self/statm`，单位为字节。`rss_bytes_sampled_peak` 是采样点最大值，可能漏掉 tick 内瞬时峰值；p50 只保留前 50000 个观测点，最大值仍覆盖全部观测点。
 

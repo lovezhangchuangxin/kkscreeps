@@ -1,0 +1,1571 @@
+{
+  "purpose": "本仓改造基线；不代表三引擎对照或完整架构性能验收",
+  "binary_sha256": "4ffdf2ac6dbd4c4d21b518232a2f78bf876469aff529f20fb988028612e0762d",
+  "platform": "macOS-15.7.3-arm64-arm-64bit",
+  "repetitions": 5,
+  "warmup": 500,
+  "ticks": 3000,
+  "limitations": [
+    "每玩家独立小房间；负载自检仅覆盖首房",
+    "CPU 为当前进程全部线程，包括采样与采集窗口内负载检查",
+    "RSS 峰值为 tick 边界采样最大值，可能漏掉 tick 内瞬时峰值",
+    "长期窗口含 creep 死亡、重新孵化和墓碑衰减",
+    "本地机器未控制频率和其他应用负载；不设置性能硬门禁"
+  ],
+  "summary": {
+    "1": {
+      "median_cpu_core_ms_per_tick": 0.18957266666666667,
+      "median_rss_bytes_sampled_p50": 70778880,
+      "max_rss_bytes_sampled_peak": 73613312,
+      "median_wall_p50_ms": 0.121875,
+      "run_wall_p99_ms": [
+        0.6062500000000001,
+        0.497833,
+        0.522333,
+        0.49425,
+        0.529042
+      ]
+    },
+    "4": {
+      "median_cpu_core_ms_per_tick": 0.8236073333333335,
+      "median_rss_bytes_sampled_p50": 192135168,
+      "max_rss_bytes_sampled_peak": 196837376,
+      "median_wall_p50_ms": 0.525834,
+      "run_wall_p99_ms": [
+        1.210834,
+        1.2815,
+        1.2934590000000001,
+        1.280292,
+        1.2691670000000002
+      ]
+    },
+    "8": {
+      "median_cpu_core_ms_per_tick": 1.8247059999999995,
+      "median_rss_bytes_sampled_p50": 348340224,
+      "max_rss_bytes_sampled_peak": 353861632,
+      "median_wall_p50_ms": 1.1735,
+      "run_wall_p99_ms": [
+        3.23975,
+        2.571292,
+        3.51825,
+        2.557042,
+        2.847167
+      ]
+    },
+    "32": {
+      "median_cpu_core_ms_per_tick": 11.897543333333333,
+      "median_rss_bytes_sampled_p50": 1338032128,
+      "max_rss_bytes_sampled_peak": 1377943552,
+      "median_wall_p50_ms": 8.888584,
+      "run_wall_p99_ms": [
+        16.19875,
+        14.806916999999999,
+        15.640082999999999,
+        14.96725,
+        16.865125000000003
+      ]
+    }
+  },
+  "runs": [
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 1,
+      "ticks": 3000,
+      "warmup": 500,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "c1a9a60eb279c0655a3c217a26ab942ec5bf545d",
+        "git_status": "",
+        "debug_assertions": false,
+        "unix_time_ms": 1790929899206
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 453.031792,
+        "cpu_core_ms": 617.1399999999999,
+        "cpu_core_ms_per_tick": 0.2057133333333333,
+        "rss_bytes_after": 73302016,
+        "rss_bytes_sampled_peak": 73302016,
+        "rss_bytes_sampled_p50": 71499776,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 2.0424629999999997,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 0.040042,
+            "p95_ms": 0.061709,
+            "p99_ms": 0.067625,
+            "max_ms": 0.105083,
+            "total_ms": 133.74541999999994
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 0.076625,
+            "p95_ms": 0.10525,
+            "p99_ms": 0.52475,
+            "max_ms": 0.85775,
+            "total_ms": 254.5012780000001
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.014458,
+            "p95_ms": 0.044458,
+            "p99_ms": 0.053084,
+            "max_ms": 0.076084,
+            "total_ms": 56.51000199999985
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 0.134417,
+            "p95_ms": 0.205125,
+            "p99_ms": 0.6062500000000001,
+            "max_ms": 0.921833,
+            "total_ms": 448.58498099999935
+          }
+        }
+      },
+      "repetition": 1
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 4,
+      "ticks": 3000,
+      "warmup": 500,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "c1a9a60eb279c0655a3c217a26ab942ec5bf545d",
+        "git_status": "",
+        "debug_assertions": false,
+        "unix_time_ms": 1790929899871
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 1727.884209,
+        "cpu_core_ms": 2299.558,
+        "cpu_core_ms_per_tick": 0.7665193333333333,
+        "rss_bytes_after": 193970176,
+        "rss_bytes_sampled_peak": 193970176,
+        "rss_bytes_sampled_p50": 191545344,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 2.546774999999968,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 0.159458,
+            "p95_ms": 0.25154,
+            "p99_ms": 0.270418,
+            "max_ms": 0.437791,
+            "total_ms": 549.4197800000001
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 0.288415,
+            "p95_ms": 0.705416,
+            "p99_ms": 0.901625,
+            "max_ms": 1.572374,
+            "total_ms": 1038.4222979999984
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.033334,
+            "p95_ms": 0.067875,
+            "p99_ms": 0.075042,
+            "max_ms": 0.20125,
+            "total_ms": 125.7021750000002
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 0.481666,
+            "p95_ms": 0.909667,
+            "p99_ms": 1.210834,
+            "max_ms": 1.933875,
+            "total_ms": 1719.1660010000003
+          }
+        }
+      },
+      "repetition": 1
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 8,
+      "ticks": 3000,
+      "warmup": 500,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "c1a9a60eb279c0655a3c217a26ab942ec5bf545d",
+        "git_status": "",
+        "debug_assertions": false,
+        "unix_time_ms": 1790929902121
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 4035.4688750000005,
+        "cpu_core_ms": 5307.933,
+        "cpu_core_ms_per_tick": 1.769311,
+        "rss_bytes_after": 353861632,
+        "rss_bytes_sampled_peak": 353861632,
+        "rss_bytes_sampled_p50": 348340224,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 4.732952999999983,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 0.355459,
+            "p95_ms": 0.574711,
+            "p99_ms": 0.664332,
+            "max_ms": 1.838418,
+            "total_ms": 1240.9772160000005
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 0.69775,
+            "p95_ms": 1.385127,
+            "p99_ms": 2.38421,
+            "max_ms": 5.403874,
+            "total_ms": 2504.2763610000034
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.070125,
+            "p95_ms": 0.132125,
+            "p99_ms": 0.163084,
+            "max_ms": 0.559541,
+            "total_ms": 259.8478529999998
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 1.130459,
+            "p95_ms": 2.02075,
+            "p99_ms": 3.23975,
+            "max_ms": 6.661542000000001,
+            "total_ms": 4017.826929000001
+          }
+        }
+      },
+      "repetition": 1
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 32,
+      "ticks": 3000,
+      "warmup": 500,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "c1a9a60eb279c0655a3c217a26ab942ec5bf545d",
+        "git_status": "",
+        "debug_assertions": false,
+        "unix_time_ms": 1790929907215
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 26639.371167,
+        "cpu_core_ms": 34767.802,
+        "cpu_core_ms_per_tick": 11.589267333333334,
+        "rss_bytes_after": 1309851648,
+        "rss_bytes_sampled_peak": 1377943552,
+        "rss_bytes_sampled_p50": 1351204864,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 23.190650999999992,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 2.279538,
+            "p95_ms": 3.353959,
+            "p99_ms": 3.761207,
+            "max_ms": 5.43204,
+            "total_ms": 7584.454834000001
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 5.653958,
+            "p95_ms": 8.013041,
+            "p99_ms": 11.755294,
+            "max_ms": 27.960629,
+            "total_ms": 17670.77460000004
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.328583,
+            "p95_ms": 0.611042,
+            "p99_ms": 0.662875,
+            "max_ms": 1.156292,
+            "total_ms": 1216.0347010000012
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 8.625041,
+            "p95_ms": 11.752749999999999,
+            "p99_ms": 16.19875,
+            "max_ms": 32.338125000000005,
+            "total_ms": 26550.35263900001
+          }
+        }
+      },
+      "repetition": 1
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 1,
+      "ticks": 3000,
+      "warmup": 500,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "c1a9a60eb279c0655a3c217a26ab942ec5bf545d",
+        "git_status": "",
+        "debug_assertions": false,
+        "unix_time_ms": 1790929939791
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 424.874333,
+        "cpu_core_ms": 555.1700000000001,
+        "cpu_core_ms_per_tick": 0.1850566666666667,
+        "rss_bytes_after": 72220672,
+        "rss_bytes_sampled_peak": 72220672,
+        "rss_bytes_sampled_p50": 70565888,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 1.9906000000000403,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 0.0385,
+            "p95_ms": 0.059,
+            "p99_ms": 0.064333,
+            "max_ms": 0.072125,
+            "total_ms": 133.73791099999985
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 0.070333,
+            "p95_ms": 0.101042,
+            "p99_ms": 0.446958,
+            "max_ms": 0.660542,
+            "total_ms": 245.22631800000013
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.011042,
+            "p95_ms": 0.017792,
+            "p99_ms": 0.022541,
+            "max_ms": 0.052292,
+            "total_ms": 37.90489799999987
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 0.120417,
+            "p95_ms": 0.177958,
+            "p99_ms": 0.497833,
+            "max_ms": 0.756208,
+            "total_ms": 420.62717000000043
+          }
+        }
+      },
+      "repetition": 2
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 4,
+      "ticks": 3000,
+      "warmup": 500,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "c1a9a60eb279c0655a3c217a26ab942ec5bf545d",
+        "git_status": "",
+        "debug_assertions": false,
+        "unix_time_ms": 1790929940421
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 1852.756625,
+        "cpu_core_ms": 2442.9570000000003,
+        "cpu_core_ms_per_tick": 0.8143190000000001,
+        "rss_bytes_after": 193904640,
+        "rss_bytes_sampled_peak": 193904640,
+        "rss_bytes_sampled_p50": 192069632,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 2.740690000000005,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 0.169333,
+            "p95_ms": 0.260209,
+            "p99_ms": 0.285292,
+            "max_ms": 1.03375,
+            "total_ms": 588.8969779999995
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 0.30625,
+            "p95_ms": 0.72429,
+            "p99_ms": 0.936709,
+            "max_ms": 3.58375,
+            "total_ms": 1113.2723760000017
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.036459,
+            "p95_ms": 0.065833,
+            "p99_ms": 0.076417,
+            "max_ms": 0.223375,
+            "total_ms": 134.98843999999985
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 0.5119159999999999,
+            "p95_ms": 0.952125,
+            "p99_ms": 1.2815,
+            "max_ms": 4.390833000000001,
+            "total_ms": 1843.2551490000044
+          }
+        }
+      },
+      "repetition": 2
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 8,
+      "ticks": 3000,
+      "warmup": 500,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "c1a9a60eb279c0655a3c217a26ab942ec5bf545d",
+        "git_status": "",
+        "debug_assertions": false,
+        "unix_time_ms": 1790929942818
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 4049.9814169999995,
+        "cpu_core_ms": 5339.777999999999,
+        "cpu_core_ms_per_tick": 1.7799259999999997,
+        "rss_bytes_after": 348995584,
+        "rss_bytes_sampled_peak": 348995584,
+        "rss_bytes_sampled_p50": 347209728,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 4.166371999999982,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 0.364749,
+            "p95_ms": 0.564665,
+            "p99_ms": 0.601708,
+            "max_ms": 1.115918,
+            "total_ms": 1260.8381809999946
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 0.699334,
+            "p95_ms": 1.360458,
+            "p99_ms": 1.908792,
+            "max_ms": 4.700667,
+            "total_ms": 2497.8461899999998
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.070167,
+            "p95_ms": 0.12975,
+            "p99_ms": 0.144208,
+            "max_ms": 0.954834,
+            "total_ms": 261.89329600000053
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 1.139583,
+            "p95_ms": 2.017708,
+            "p99_ms": 2.571292,
+            "max_ms": 5.902,
+            "total_ms": 4033.420958000004
+          }
+        }
+      },
+      "repetition": 2
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 32,
+      "ticks": 3000,
+      "warmup": 500,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "c1a9a60eb279c0655a3c217a26ab942ec5bf545d",
+        "git_status": "",
+        "debug_assertions": false,
+        "unix_time_ms": 1790929947922
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 27131.207833,
+        "cpu_core_ms": 35291.511,
+        "cpu_core_ms_per_tick": 11.763836999999999,
+        "rss_bytes_after": 1286815744,
+        "rss_bytes_sampled_peak": 1375010816,
+        "rss_bytes_sampled_p50": 1327546368,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 24.681558999999975,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 2.359919,
+            "p95_ms": 3.311543,
+            "p99_ms": 4.048084,
+            "max_ms": 6.464289,
+            "total_ms": 7755.0719379999955
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 5.740416,
+            "p95_ms": 8.145749,
+            "p99_ms": 10.464916,
+            "max_ms": 20.216833,
+            "total_ms": 17956.285521000013
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.337833,
+            "p95_ms": 0.61575,
+            "p99_ms": 0.658875,
+            "max_ms": 1.864125,
+            "total_ms": 1244.6637080000003
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 8.791749999999999,
+            "p95_ms": 12.052167,
+            "p99_ms": 14.806916999999999,
+            "max_ms": 27.050916,
+            "total_ms": 27036.762581999996
+          }
+        }
+      },
+      "repetition": 2
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 1,
+      "ticks": 3000,
+      "warmup": 500,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "c1a9a60eb279c0655a3c217a26ab942ec5bf545d",
+        "git_status": "",
+        "debug_assertions": false,
+        "unix_time_ms": 1790929980834
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 432.621041,
+        "cpu_core_ms": 568.718,
+        "cpu_core_ms_per_tick": 0.18957266666666667,
+        "rss_bytes_after": 73613312,
+        "rss_bytes_sampled_peak": 73613312,
+        "rss_bytes_sampled_p50": 73515008,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 2.0404680000000406,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 0.0385,
+            "p95_ms": 0.061333,
+            "p99_ms": 0.068583,
+            "max_ms": 0.082666,
+            "total_ms": 136.2205020000006
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 0.071208,
+            "p95_ms": 0.104208,
+            "p99_ms": 0.460708,
+            "max_ms": 0.70175,
+            "total_ms": 249.54298500000007
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.011167,
+            "p95_ms": 0.018708,
+            "p99_ms": 0.02275,
+            "max_ms": 0.053042,
+            "total_ms": 38.96508099999979
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 0.121875,
+            "p95_ms": 0.18525,
+            "p99_ms": 0.522333,
+            "max_ms": 0.784292,
+            "total_ms": 428.2597220000007
+          }
+        }
+      },
+      "repetition": 3
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 4,
+      "ticks": 3000,
+      "warmup": 500,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "c1a9a60eb279c0655a3c217a26ab942ec5bf545d",
+        "git_status": "",
+        "debug_assertions": false,
+        "unix_time_ms": 1790929981472
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 1893.521792,
+        "cpu_core_ms": 2495.89,
+        "cpu_core_ms_per_tick": 0.8319633333333333,
+        "rss_bytes_after": 196837376,
+        "rss_bytes_sampled_peak": 196837376,
+        "rss_bytes_sampled_p50": 194576384,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 3.0921720000000135,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 0.174291,
+            "p95_ms": 0.267709,
+            "p99_ms": 0.304707,
+            "max_ms": 0.464666,
+            "total_ms": 602.4127300000002
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 0.318542,
+            "p95_ms": 0.732292,
+            "p99_ms": 0.939583,
+            "max_ms": 1.901041,
+            "total_ms": 1134.702917999999
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.038041,
+            "p95_ms": 0.068458,
+            "p99_ms": 0.081584,
+            "max_ms": 0.186625,
+            "total_ms": 139.98106099999995
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 0.534291,
+            "p95_ms": 0.960417,
+            "p99_ms": 1.2934590000000001,
+            "max_ms": 2.3058750000000003,
+            "total_ms": 1883.2411509999968
+          }
+        }
+      },
+      "repetition": 3
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 8,
+      "ticks": 3000,
+      "warmup": 500,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "c1a9a60eb279c0655a3c217a26ab942ec5bf545d",
+        "git_status": "",
+        "debug_assertions": false,
+        "unix_time_ms": 1790929983916
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 4811.311375,
+        "cpu_core_ms": 6350.564,
+        "cpu_core_ms_per_tick": 2.1168546666666668,
+        "rss_bytes_after": 350453760,
+        "rss_bytes_sampled_peak": 350453760,
+        "rss_bytes_sampled_p50": 348815360,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 6.404561000000017,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 0.544083,
+            "p95_ms": 0.740835,
+            "p99_ms": 0.913291,
+            "max_ms": 13.361541,
+            "total_ms": 1634.1261079999992
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 0.882168,
+            "p95_ms": 1.75679,
+            "p99_ms": 2.4315,
+            "max_ms": 6.219916,
+            "total_ms": 2815.402391000001
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.098125,
+            "p95_ms": 0.15175,
+            "p99_ms": 0.21325,
+            "max_ms": 0.517959,
+            "total_ms": 319.2185110000002
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 1.537458,
+            "p95_ms": 2.5355,
+            "p99_ms": 3.51825,
+            "max_ms": 15.710542,
+            "total_ms": 4788.120994999996
+          }
+        }
+      },
+      "repetition": 3
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 32,
+      "ticks": 3000,
+      "warmup": 500,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "c1a9a60eb279c0655a3c217a26ab942ec5bf545d",
+        "git_status": "M Cargo.lock\n M crates/kk-runner/Cargo.toml\n M crates/kk-runner/src/lib.rs\n M crates/kk-runner/src/ops.rs\n M crates/kk-runner/src/proto.rs\n M crates/kk-runner/src/sandbox.rs\n?? crates/kk-runner/src/cpu_clock.rs",
+        "debug_assertions": false,
+        "unix_time_ms": 1790929989812
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 27683.606291,
+        "cpu_core_ms": 35914.487,
+        "cpu_core_ms_per_tick": 11.971495666666668,
+        "rss_bytes_after": 1281818624,
+        "rss_bytes_sampled_peak": 1347403776,
+        "rss_bytes_sampled_p50": 1298857984,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 24.844105999999986,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 2.449627,
+            "p95_ms": 3.338127,
+            "p99_ms": 3.692288,
+            "max_ms": 7.402624,
+            "total_ms": 7938.858668000003
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 5.872085,
+            "p95_ms": 8.262749,
+            "p99_ms": 11.345207,
+            "max_ms": 18.045747,
+            "total_ms": 18293.672256000016
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.3475,
+            "p95_ms": 0.622833,
+            "p99_ms": 0.661041,
+            "max_ms": 2.206083,
+            "total_ms": 1273.4240320000001
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 8.888584,
+            "p95_ms": 11.944917,
+            "p99_ms": 15.640082999999999,
+            "max_ms": 24.276916,
+            "total_ms": 27588.742290999973
+          }
+        }
+      },
+      "repetition": 3
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 1,
+      "ticks": 3000,
+      "warmup": 500,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "c1a9a60eb279c0655a3c217a26ab942ec5bf545d",
+        "git_status": "M Cargo.lock\n M crates/kk-runner/Cargo.toml\n M crates/kk-runner/src/lib.rs\n M crates/kk-runner/src/ops.rs\n M crates/kk-runner/src/proto.rs\n M crates/kk-runner/src/sandbox.rs\n?? crates/kk-runner/src/cpu_clock.rs",
+        "debug_assertions": false,
+        "unix_time_ms": 1790930025462
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 429.436459,
+        "cpu_core_ms": 559.581,
+        "cpu_core_ms_per_tick": 0.186527,
+        "rss_bytes_after": 71647232,
+        "rss_bytes_sampled_peak": 71647232,
+        "rss_bytes_sampled_p50": 70320128,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 2.013691000000049,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 0.0385,
+            "p95_ms": 0.06075,
+            "p99_ms": 0.066459,
+            "max_ms": 0.07575,
+            "total_ms": 135.57915100000045
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 0.071167,
+            "p95_ms": 0.102875,
+            "p99_ms": 0.438875,
+            "max_ms": 0.618625,
+            "total_ms": 247.31505999999985
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.010959,
+            "p95_ms": 0.018459,
+            "p99_ms": 0.024292,
+            "max_ms": 0.046542,
+            "total_ms": 38.78118199999983
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 0.1215,
+            "p95_ms": 0.182916,
+            "p99_ms": 0.49425,
+            "max_ms": 0.711167,
+            "total_ms": 425.1488560000004
+          }
+        }
+      },
+      "repetition": 4
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 4,
+      "ticks": 3000,
+      "warmup": 500,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "c1a9a60eb279c0655a3c217a26ab942ec5bf545d",
+        "git_status": "M Cargo.lock\n M crates/kk-runner/Cargo.toml\n M crates/kk-runner/src/lib.rs\n M crates/kk-runner/src/ops.rs\n M crates/kk-runner/src/proto.rs\n M crates/kk-runner/src/sandbox.rs\n?? crates/kk-runner/src/cpu_clock.rs",
+        "debug_assertions": false,
+        "unix_time_ms": 1790930026101
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 1874.4255409999998,
+        "cpu_core_ms": 2470.8220000000006,
+        "cpu_core_ms_per_tick": 0.8236073333333335,
+        "rss_bytes_after": 193593344,
+        "rss_bytes_sampled_peak": 193593344,
+        "rss_bytes_sampled_p50": 192135168,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 2.914860000000018,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 0.171334,
+            "p95_ms": 0.264458,
+            "p99_ms": 0.28925,
+            "max_ms": 0.4855,
+            "total_ms": 593.4023450000008
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 0.316375,
+            "p95_ms": 0.729874,
+            "p99_ms": 0.953416,
+            "max_ms": 1.555042,
+            "total_ms": 1128.7635770000004
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.036375,
+            "p95_ms": 0.066542,
+            "p99_ms": 0.079625,
+            "max_ms": 0.184125,
+            "total_ms": 136.2004379999999
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 0.527666,
+            "p95_ms": 0.9578749999999999,
+            "p99_ms": 1.280292,
+            "max_ms": 1.95,
+            "total_ms": 1864.4184560000044
+          }
+        }
+      },
+      "repetition": 4
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 8,
+      "ticks": 3000,
+      "warmup": 500,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "c1a9a60eb279c0655a3c217a26ab942ec5bf545d",
+        "git_status": "M Cargo.lock\n M crates/kk-runner/Cargo.toml\n M crates/kk-runner/src/lib.rs\n M crates/kk-runner/src/ops.rs\n M crates/kk-runner/src/proto.rs\n M crates/kk-runner/src/sandbox.rs\n?? crates/kk-runner/src/cpu_clock.rs",
+        "debug_assertions": false,
+        "unix_time_ms": 1790930028529
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 4170.2651670000005,
+        "cpu_core_ms": 5483.4400000000005,
+        "cpu_core_ms_per_tick": 1.8278133333333335,
+        "rss_bytes_after": 351322112,
+        "rss_bytes_sampled_peak": 351322112,
+        "rss_bytes_sampled_p50": 348422144,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 5.0525869999999715,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 0.380709,
+            "p95_ms": 0.576374,
+            "p99_ms": 0.612876,
+            "max_ms": 1.111042,
+            "total_ms": 1299.713289999998
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 0.733166,
+            "p95_ms": 1.379502,
+            "p99_ms": 1.864625,
+            "max_ms": 2.689793,
+            "total_ms": 2564.707701000001
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.073709,
+            "p95_ms": 0.135791,
+            "p99_ms": 0.14875,
+            "max_ms": 0.32325,
+            "total_ms": 274.12599899999987
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 1.1939170000000001,
+            "p95_ms": 2.033667,
+            "p99_ms": 2.557042,
+            "max_ms": 3.693958,
+            "total_ms": 4151.704989000007
+          }
+        }
+      },
+      "repetition": 4
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 32,
+      "ticks": 3000,
+      "warmup": 500,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "c1a9a60eb279c0655a3c217a26ab942ec5bf545d",
+        "git_status": "M Cargo.lock\n M crates/kk-runner/Cargo.toml\n M crates/kk-runner/src/lib.rs\n M crates/kk-runner/src/ops.rs\n M crates/kk-runner/src/proto.rs\n M crates/kk-runner/src/sandbox.rs\n?? crates/kk-runner/src/cpu_clock.rs",
+        "debug_assertions": false,
+        "unix_time_ms": 1790930033773
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 27481.831917,
+        "cpu_core_ms": 35692.63,
+        "cpu_core_ms_per_tick": 11.897543333333333,
+        "rss_bytes_after": 1317388288,
+        "rss_bytes_sampled_peak": 1354874880,
+        "rss_bytes_sampled_p50": 1338032128,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 24.889943999999954,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 2.391872,
+            "p95_ms": 3.388832,
+            "p99_ms": 3.647874,
+            "max_ms": 10.843668,
+            "total_ms": 7839.875499999995
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 5.867249,
+            "p95_ms": 8.502377,
+            "p99_ms": 10.667291,
+            "max_ms": 17.969749,
+            "total_ms": 18203.565736999983
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.34375,
+            "p95_ms": 0.625333,
+            "p99_ms": 0.658792,
+            "max_ms": 1.375708,
+            "total_ms": 1264.5570979999986
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 8.971958,
+            "p95_ms": 12.460291999999999,
+            "p99_ms": 14.96725,
+            "max_ms": 30.373041999999998,
+            "total_ms": 27389.264171000017
+          }
+        }
+      },
+      "repetition": 4
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 1,
+      "ticks": 3000,
+      "warmup": 500,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "c1a9a60eb279c0655a3c217a26ab942ec5bf545d",
+        "git_status": "M Cargo.lock\n M crates/kk-runner/Cargo.toml\n M crates/kk-runner/src/lib.rs\n M crates/kk-runner/src/ops.rs\n M crates/kk-runner/src/proto.rs\n M crates/kk-runner/src/sandbox.rs\n?? crates/kk-runner/src/cpu_clock.rs",
+        "debug_assertions": false,
+        "unix_time_ms": 1790930067209
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 434.41754199999997,
+        "cpu_core_ms": 569.365,
+        "cpu_core_ms_per_tick": 0.18978833333333334,
+        "rss_bytes_after": 72925184,
+        "rss_bytes_sampled_peak": 72925184,
+        "rss_bytes_sampled_p50": 70778880,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 2.0597870000000347,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 0.038791,
+            "p95_ms": 0.061708,
+            "p99_ms": 0.068667,
+            "max_ms": 0.12725,
+            "total_ms": 137.22103800000028
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 0.071709,
+            "p95_ms": 0.103583,
+            "p99_ms": 0.468,
+            "max_ms": 0.723167,
+            "total_ms": 250.05257500000013
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.011125,
+            "p95_ms": 0.018875,
+            "p99_ms": 0.02525,
+            "max_ms": 0.103667,
+            "total_ms": 39.29419199999974
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 0.12241699999999998,
+            "p95_ms": 0.184583,
+            "p99_ms": 0.529042,
+            "max_ms": 0.790041,
+            "total_ms": 430.04952300000053
+          }
+        }
+      },
+      "repetition": 5
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 4,
+      "ticks": 3000,
+      "warmup": 500,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "c1a9a60eb279c0655a3c217a26ab942ec5bf545d",
+        "git_status": "M Cargo.lock\n M crates/kk-runner/Cargo.toml\n M crates/kk-runner/src/lib.rs\n M crates/kk-runner/src/ops.rs\n M crates/kk-runner/src/proto.rs\n M crates/kk-runner/src/sandbox.rs\n?? crates/kk-runner/src/cpu_clock.rs",
+        "debug_assertions": false,
+        "unix_time_ms": 1790930067850
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 1879.958583,
+        "cpu_core_ms": 2475.899,
+        "cpu_core_ms_per_tick": 0.8252996666666667,
+        "rss_bytes_after": 196411392,
+        "rss_bytes_sampled_peak": 196411392,
+        "rss_bytes_sampled_p50": 194314240,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 3.055253000000016,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 0.170124,
+            "p95_ms": 0.267042,
+            "p99_ms": 0.293874,
+            "max_ms": 0.454291,
+            "total_ms": 594.2933859999997
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 0.315958,
+            "p95_ms": 0.735584,
+            "p99_ms": 0.928,
+            "max_ms": 1.454707,
+            "total_ms": 1131.9460780000002
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.036375,
+            "p95_ms": 0.068625,
+            "p99_ms": 0.078583,
+            "max_ms": 0.182334,
+            "total_ms": 137.47423499999994
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 0.525834,
+            "p95_ms": 0.958458,
+            "p99_ms": 1.2691670000000002,
+            "max_ms": 1.832,
+            "total_ms": 1869.8647219999982
+          }
+        }
+      },
+      "repetition": 5
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 8,
+      "ticks": 3000,
+      "warmup": 500,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "c1a9a60eb279c0655a3c217a26ab942ec5bf545d",
+        "git_status": "M Cargo.lock\n M crates/kk-runner/Cargo.toml\n M crates/kk-runner/src/lib.rs\n M crates/kk-runner/src/ops.rs\n M crates/kk-runner/src/proto.rs\n M crates/kk-runner/src/sandbox.rs\n?? crates/kk-runner/src/cpu_clock.rs",
+        "debug_assertions": false,
+        "unix_time_ms": 1790930070283
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 4161.371166,
+        "cpu_core_ms": 5474.117999999999,
+        "cpu_core_ms_per_tick": 1.8247059999999995,
+        "rss_bytes_after": 348897280,
+        "rss_bytes_sampled_peak": 348897280,
+        "rss_bytes_sampled_p50": 345948160,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 4.982825999999932,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 0.376834,
+            "p95_ms": 0.580625,
+            "p99_ms": 0.626457,
+            "max_ms": 0.984625,
+            "total_ms": 1295.0267599999975
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 0.719209,
+            "p95_ms": 1.432251,
+            "p99_ms": 2.140041,
+            "max_ms": 3.069708,
+            "total_ms": 2563.267116000001
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.0725,
+            "p95_ms": 0.136417,
+            "p99_ms": 0.150625,
+            "max_ms": 0.203459,
+            "total_ms": 271.59379200000046
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 1.1735,
+            "p95_ms": 2.057416,
+            "p99_ms": 2.847167,
+            "max_ms": 3.9734999999999996,
+            "total_ms": 4142.929718
+          }
+        }
+      },
+      "repetition": 5
+    },
+    {
+      "tool": "kkscreeps perf-probe",
+      "players": 32,
+      "ticks": 3000,
+      "warmup": 500,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "c1a9a60eb279c0655a3c217a26ab942ec5bf545d",
+        "git_status": "M Cargo.lock\n M crates/kk-runner/Cargo.toml\n M crates/kk-runner/src/lib.rs\n M crates/kk-runner/src/ops.rs\n M crates/kk-runner/src/proto.rs\n M crates/kk-runner/src/sandbox.rs\n?? crates/kk-runner/src/cpu_clock.rs",
+        "debug_assertions": false,
+        "unix_time_ms": 1790930075520
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 27844.921458,
+        "cpu_core_ms": 36042.615000000005,
+        "cpu_core_ms_per_tick": 12.014205000000002,
+        "rss_bytes_after": 1286029312,
+        "rss_bytes_sampled_peak": 1373454336,
+        "rss_bytes_sampled_p50": 1355038720,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 25.260631000000018,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "workload": {
+        "progress_delta": 5994,
+        "source_energy_min_before": 2366,
+        "source_energy_min_after": 2744
+      },
+      "phases": {
+        "ticks": 3000,
+        "phases": {
+          "project": {
+            "count": 3000,
+            "p50_ms": 2.413126,
+            "p95_ms": 3.349622,
+            "p99_ms": 3.924208,
+            "max_ms": 17.125501,
+            "total_ms": 7919.729506
+          },
+          "run": {
+            "count": 3000,
+            "p50_ms": 5.842418,
+            "p95_ms": 8.663413,
+            "p99_ms": 12.286544,
+            "max_ms": 19.253163,
+            "total_ms": 18474.135526
+          },
+          "settle": {
+            "count": 3000,
+            "p50_ms": 0.348333,
+            "p95_ms": 0.621667,
+            "p99_ms": 0.661875,
+            "max_ms": 1.723709,
+            "total_ms": 1272.8092439999984
+          },
+          "wall": {
+            "count": 3000,
+            "p50_ms": 8.907416,
+            "p95_ms": 12.246125,
+            "p99_ms": 16.865125000000003,
+            "max_ms": 28.413958,
+            "total_ms": 27750.077502000066
+          }
+        }
+      },
+      "repetition": 5
+    }
+  ]
+}

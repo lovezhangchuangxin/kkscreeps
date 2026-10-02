@@ -199,6 +199,7 @@ pub(super) fn execution_failure_blocks_redispatch_impl() -> anyhow::Result<()> {
     for failed in ["p1", "p2"] {
         let mut e = EmbedEngine::new();
         e.create_shard(&json!({"players":["p1","p2"], "rooms":[]}))?;
+        e.set_player_concurrency(1)?;
         let before1 = e.player_state_for_test("p1").unwrap().clone();
         let before2 = e.player_state_for_test("p2").unwrap().clone();
         let code = "globalThis.n=(globalThis.n||0)+1; Memory.n=globalThis.n; globalThis.n";
@@ -309,5 +310,100 @@ pub(super) fn lost_worker_rebuild_impl() -> anyhow::Result<()> {
         e.rebuild_player_workers().is_err(),
         "健康分片不得隐式清空全局状态"
     );
+    Ok(())
+}
+
+/// 实际工作者在门闩处同时开始，完成一个后才补第三个；世界结果与串行参考相同。
+pub(super) fn bounded_parallel_players_impl() -> anyhow::Result<()> {
+    fn make(limit: usize) -> anyhow::Result<EmbedEngine> {
+        let mut e = EmbedEngine::new();
+        for player in ["p1", "p2", "p3"] {
+            e.set_sandbox_config_for_test(
+                player,
+                kk_runner::SandboxConfig {
+                    cpu_limit: 1000.0,
+                    ..Default::default()
+                },
+            );
+        }
+        e.create_shard(&json!({"players":["p1","p2","p3"],"rooms":[
+            {"name":"W1N1","owner":"p1","rcl":3},
+            {"name":"W2N1","owner":"p2","rcl":3},
+            {"name":"W3N1","owner":"p3","rcl":3}
+        ]}))?;
+        for (room, owner) in [("W1N1", "p1"), ("W2N1", "p2"), ("W3N1", "p3")] {
+            e.place_object(
+                room,
+                "structure",
+                &json!({"pos":[2,2],"structureType":"source",
+                "energy":3000,"energyCapacity":3000}),
+            )?;
+            e.place_object(
+                room,
+                "creep",
+                &json!({"pos":[2,3],"owner":owner,"name":owner,
+                "body":["work","carry","move"],"store":{"energy":0}}),
+            )?;
+        }
+        e.set_player_concurrency(limit)?;
+        Ok(e)
+    }
+    let mut parallel = make(2)?;
+    let mut serial = make(1)?;
+    let first = parallel.gate_next_job_for_test("p1")?;
+    let second = parallel.gate_next_job_for_test("p2")?;
+    let third = parallel.gate_next_job_for_test("p3")?;
+    let observer = std::thread::spawn(move || -> anyhow::Result<()> {
+        let timeout = std::time::Duration::from_secs(1);
+        first.started.recv_timeout(timeout)?;
+        second.started.recv_timeout(timeout)?;
+        assert!(
+            matches!(
+                third.started.try_recv(),
+                Err(std::sync::mpsc::TryRecvError::Empty)
+            ),
+            "第三个任务不能超出上限开始"
+        );
+        first.release.send(())?;
+        third.started.recv_timeout(timeout)?;
+        second.release.send(())?;
+        third.release.send(())?;
+        Ok(())
+    });
+    let code = "Memory.n=(Memory.n||0)+1; RawMemory.segments[5]='same'; RawMemory.setActiveSegments([5]); Game.notify('same'); for (const c of Object.values(Game.creeps)) { c.harvest(c.room.find(FIND_SOURCES)[0]); } Memory.n";
+    let codes = std::collections::BTreeMap::from([
+        ("p1".into(), code.into()),
+        ("p2".into(), code.into()),
+        ("p3".into(), code.into()),
+    ]);
+    let a = parallel.run_players(&codes)?;
+    observer.join().unwrap()?;
+    let b = serial.run_players(&codes)?;
+    for player in ["p1", "p2", "p3"] {
+        assert_eq!(a[player].expr, b[player].expr);
+        assert_eq!(
+            parallel.player_state_for_test(player),
+            serial.player_state_for_test(player)
+        );
+    }
+    for room in ["W1N1", "W2N1", "W3N1"] {
+        assert_eq!(
+            parallel.find_in_room(room, kk_core::constants::FIND_STRUCTURES),
+            serial.find_in_room(room, kk_core::constants::FIND_STRUCTURES)
+        );
+    }
+    for room in ["W1N1", "W2N1", "W3N1"] {
+        let a = parallel.find_in_room(room, kk_core::constants::FIND_CREEPS);
+        assert_eq!(
+            a,
+            serial.find_in_room(room, kk_core::constants::FIND_CREEPS)
+        );
+        assert_eq!(a[0]["store"]["energy"], 2, "真实采集指令须在本轮生效");
+        assert_eq!(
+            parallel.find_in_room(room, kk_core::constants::FIND_SOURCES),
+            serial.find_in_room(room, kk_core::constants::FIND_SOURCES)
+        );
+    }
+    assert_eq!(parallel.get_game_time(), serial.get_game_time());
     Ok(())
 }

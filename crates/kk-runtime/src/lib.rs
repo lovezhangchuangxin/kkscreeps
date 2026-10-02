@@ -54,6 +54,34 @@ pub struct ThreadExecutor {
     fail_rebuild_after_first_for_test: bool,
 }
 
+pub struct PendingExecution {
+    player: String,
+    pending: kk_runner::PendingJob,
+}
+impl PendingExecution {
+    pub fn deadline(&self) -> std::time::Instant {
+        self.pending.deadline
+    }
+    pub fn try_take(&self) -> Option<RunResult> {
+        match self.pending.try_take() {
+            Ok(Some(receipt)) => Some(checked_job_receipt(
+                &self.player,
+                self.pending.token,
+                receipt,
+            )),
+            Ok(None) => None,
+            Err(e) => Some(RunResult::infra_failure(&self.player, e.to_string())),
+        }
+    }
+    pub fn wait(self) -> RunResult {
+        let expected = self.pending.token;
+        match self.pending.wait() {
+            Ok(receipt) => checked_job_receipt(&self.player, expected, receipt),
+            Err(e) => RunResult::infra_failure(&self.player, e.to_string()),
+        }
+    }
+}
+
 struct WorkerRegistration {
     config: kk_runner::SandboxConfig,
     modules: kk_runner::ModuleTable,
@@ -90,24 +118,32 @@ impl ThreadExecutor {
     }
 
     /// 执行宿主预算命令，并核对回执所属的世界轮次。
-    pub fn execute_job(&mut self, player: &str, mut job: kk_runner::RunJob) -> RunResult {
-        let Some(&id) = self.handles.get(player) else {
-            return RunResult::infra_failure(player, format!("未注册玩家 {player}"));
-        };
-        let Some(attempt) = self.next_attempt.checked_add(1) else {
-            return RunResult::infra_failure(player, "执行尝试编号耗尽");
-        };
-        self.next_attempt = attempt;
-        job.attempt = attempt;
-        let expected = kk_runner::JobToken {
-            epoch: job.epoch,
-            attempt,
-            worker: id,
-        };
-        match self.pool.run_job(id, job) {
-            Ok(receipt) => checked_job_receipt(player, expected, receipt),
+    pub fn execute_job(&mut self, player: &str, job: kk_runner::RunJob) -> RunResult {
+        match self.dispatch_job(player, job, None) {
+            Ok(pending) => pending.wait(),
             Err(e) => RunResult::infra_failure(player, e.to_string()),
         }
+    }
+    pub fn dispatch_job(
+        &mut self,
+        player: &str,
+        mut job: kk_runner::RunJob,
+        notify: Option<std::sync::mpsc::Sender<kk_runner::JobToken>>,
+    ) -> anyhow::Result<PendingExecution> {
+        let id = *self
+            .handles
+            .get(player)
+            .ok_or_else(|| anyhow::anyhow!("未注册玩家 {player}"))?;
+        self.next_attempt = self
+            .next_attempt
+            .checked_add(1)
+            .ok_or_else(|| anyhow::anyhow!("执行尝试编号耗尽"))?;
+        job.attempt = self.next_attempt;
+        let pending = self.pool.dispatch_job_notifying(id, job, notify)?;
+        Ok(PendingExecution {
+            player: player.into(),
+            pending,
+        })
     }
 
     /// 建立全部替代线程及模块后才切换线程表；失败时保留原注册表。
@@ -139,6 +175,15 @@ impl ThreadExecutor {
     #[doc(hidden)]
     pub fn fail_next_rebuild_for_test(&mut self) {
         self.fail_rebuild_after_first_for_test = true;
+    }
+
+    #[doc(hidden)]
+    pub fn gate_next_job_for_test(&mut self, player: &str) -> anyhow::Result<kk_runner::JobGate> {
+        let id = *self
+            .handles
+            .get(player)
+            .ok_or_else(|| anyhow::anyhow!("未知玩家 {player}"))?;
+        self.pool.gate_next_job_for_test(id)
     }
 
     /// 下一条玩家执行命令不返回回执，用于验证真实线程失联的恢复。
@@ -456,6 +501,7 @@ mod tests {
             code: code.into(),
             epoch: RunEpoch::default(),
             attempt,
+            deadline: None,
             raw_memory: r#"{"saved":42}"#.into(),
             segments_json: "[]".into(),
             foreign_json: "null".into(),

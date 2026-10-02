@@ -54,6 +54,7 @@ pub struct EmbedEngine {
     /// 等待重试或丢弃的失败轮。
     pending: Option<PendingRound>,
     execution_failure: Option<ExecutionFailure>,
+    player_concurrency: usize,
     fail_after_player_for_test: Option<String>,
     last_console: BTreeMap<String, Vec<String>>,
     /// 成功的 `run_players` 调用的耗时样本。
@@ -251,6 +252,7 @@ impl EmbedEngine {
             engine: Engine::default(),
             pending: None,
             execution_failure: None,
+            player_concurrency: std::thread::available_parallelism().map_or(1, |n| n.get().min(2)),
             fail_after_player_for_test: None,
             last_console: BTreeMap::new(),
             perf: PerfRecorder::default(),
@@ -472,6 +474,19 @@ impl EmbedEngine {
             .map_err(anyhow::Error::msg)
     }
 
+    /// 设置同时执行的玩家上限；1 为串行参考，失败轮存在时不能修改。
+    pub fn set_player_concurrency(&mut self, limit: usize) -> anyhow::Result<()> {
+        self.no_open_round("set_player_concurrency")?;
+        if !(1..=32).contains(&limit) {
+            anyhow::bail!("玩家并发上限须为 1..=32");
+        }
+        self.player_concurrency = limit;
+        Ok(())
+    }
+    pub fn player_concurrency(&self) -> usize {
+        self.player_concurrency
+    }
+
     /// 请求一个玩家并推进一轮；存在失败缓存时，仍会提交整轮缓存的结果。
     /// 重试时忽略 `code`，且 `handle` 必须属于缓存轮。
     pub fn run_player(&mut self, handle: &str, code: &str) -> anyhow::Result<PlayerRun> {
@@ -613,7 +628,7 @@ impl EmbedEngine {
         settled
     }
 
-    /// 从已提交状态注入 Memory 和世界，按顺序收集请求玩家的候选结果。
+    /// 从同一已提交状态注入 Memory 和世界，有界派发并回收请求玩家的候选。
     /// 注入通信失败或 `InfraFailure` 中止整轮，保留已确认结果并阻止自动重跑；
     /// 玩家的语法错误、运行错误和跳帧惩罚则由后续结算统一处理。
     #[allow(clippy::type_complexity)]
@@ -634,7 +649,6 @@ impl EmbedEngine {
         }
         let mut results = BTreeMap::new();
         let mut project_ns = 0u128;
-        let mut run_ns = 0u128;
         let handles = registered.clone();
         // 本轮所有玩家读取同一代世界，玩家执行结束后才开始结算。
         let bound_generation = self.engine.world.generation();
@@ -664,71 +678,103 @@ impl EmbedEngine {
             }
             None => handles,
         };
-        for handle in handles {
-            let Some(code) = codes.get(&handle) else {
+        let mut requested = handles
+            .into_iter()
+            .filter(|handle| codes.contains_key(handle));
+        let mut pending = BTreeMap::<String, crate::PendingExecution>::new();
+        let (notify, completion) = std::sync::mpsc::channel();
+        let mut failure: Option<String> = None;
+        let started = std::time::Instant::now();
+        loop {
+            while failure.is_none() && pending.len() < self.player_concurrency {
+                let Some(handle) = requested.next() else {
+                    break;
+                };
+                let code = &codes[&handle];
+                let state = self.engine.players.get(&handle);
+                let raw_mem = state.map(|p| p.raw_memory.clone()).unwrap_or_default();
+                let segments_json = match state {
+                    Some(p) if !p.active_request.is_empty() => serde_json::to_string(
+                        &p.active_request
+                            .iter()
+                            .map(|id| (*id, p.segments.get(id).cloned().unwrap_or_default()))
+                            .collect::<Vec<(u8, String)>>(),
+                    )
+                    .unwrap_or_else(|_| "[]".into()),
+                    _ => "[]".into(),
+                };
+                let foreign_json = self
+                    .resolve_foreign_segment(&handle)
+                    .unwrap_or(serde_json::Value::Null);
+                let gcl = self.engine.players.get(&handle).map(|p| p.gcl).unwrap_or(0);
+                let t_project = std::time::Instant::now();
+                let mut world = source.world_json_for_viewer(&handle, gcl);
+                // 市场读取已提交的引擎状态，随世界 JSON 注入，不存放在 V8 持久闭包中。
+                if let Some(obj) = world.as_object_mut() {
+                    obj.insert("market".into(), market_view(&self.engine, &handle));
+                }
+                project_ns += t_project.elapsed().as_nanos();
+                let budget = kk_core::cpu::RunBudget::new(&self.engine.players[&handle].cpu);
+                match self.players.as_mut().expect("已检查分片创建").dispatch_job(
+                    &handle,
+                    kk_runner::RunJob {
+                        world,
+                        code: code.clone(),
+                        epoch,
+                        attempt: 0,
+                        deadline: None,
+                        raw_memory: raw_mem,
+                        segments_json,
+                        foreign_json: foreign_json.to_string(),
+                        budget,
+                    },
+                    Some(notify.clone()),
+                ) {
+                    Ok(job) => {
+                        pending.insert(handle, job);
+                    }
+                    Err(e) => {
+                        failure = Some(format!("基础设施故障（玩家 {handle}）: {e}"));
+                    }
+                }
+            }
+            if pending.is_empty() {
+                break;
+            }
+            let completed: Vec<_> = pending
+                .iter()
+                .filter_map(|(handle, job)| job.try_take().map(|result| (handle.clone(), result)))
+                .collect();
+            if completed.is_empty() {
+                let deadline = pending.values().map(|job| job.deadline()).min().unwrap();
+                let _ = completion
+                    .recv_timeout(deadline.saturating_duration_since(std::time::Instant::now()));
                 continue;
-            };
-            let state = self.engine.players.get(&handle);
-            let raw_mem = state.map(|p| p.raw_memory.clone()).unwrap_or_default();
-            let segments_json = match state {
-                Some(p) if !p.active_request.is_empty() => serde_json::to_string(
-                    &p.active_request
-                        .iter()
-                        .map(|id| (*id, p.segments.get(id).cloned().unwrap_or_default()))
-                        .collect::<Vec<(u8, String)>>(),
-                )
-                .unwrap_or_else(|_| "[]".into()),
-                _ => "[]".into(),
-            };
-            let foreign_json = self
-                .resolve_foreign_segment(&handle)
-                .unwrap_or(serde_json::Value::Null);
-            let gcl = self.engine.players.get(&handle).map(|p| p.gcl).unwrap_or(0);
-            let t_project = std::time::Instant::now();
-            let mut world = source.world_json_for_viewer(&handle, gcl);
-            // 市场读取已提交的引擎状态，随世界 JSON 注入，不存放在 V8 持久闭包中。
-            if let Some(obj) = world.as_object_mut() {
-                obj.insert("market".into(), market_view(&self.engine, &handle));
             }
-            project_ns += t_project.elapsed().as_nanos();
-            let t_run = std::time::Instant::now();
-            let budget = kk_core::cpu::RunBudget::new(&self.engine.players[&handle].cpu);
-            let result = self.players.as_mut().expect("已检查分片创建").execute_job(
-                &handle,
-                kk_runner::RunJob {
-                    world,
-                    code: code.clone(),
-                    epoch,
-                    attempt: 0, // ThreadExecutor 在派发时分配，调用方不能复用尝试编号。
-                    raw_memory: raw_mem,
-                    segments_json,
-                    foreign_json: foreign_json.to_string(),
-                    budget,
-                },
-            );
-            run_ns += t_run.elapsed().as_nanos();
-            if let RunOutcome::InfraFailure(err) = &result.outcome {
-                assert_bound();
-                let reason = format!("基础设施故障（玩家 {handle}）: {err}");
-                self.execution_failure = Some(ExecutionFailure {
-                    confirmed: results,
-                    reason: reason.clone(),
-                });
-                anyhow::bail!(reason);
-            }
-            let fail_after = self.fail_after_player_for_test.as_deref() == Some(handle.as_str());
-            results.insert(handle.clone(), result);
-            if fail_after {
-                self.fail_after_player_for_test = None;
-                let reason = format!("故障注入：玩家 {handle} 回执后执行轮中止");
-                self.execution_failure = Some(ExecutionFailure {
-                    confirmed: results,
-                    reason: reason.clone(),
-                });
-                anyhow::bail!(reason);
+            for (handle, result) in completed {
+                pending.remove(&handle);
+                if let RunOutcome::InfraFailure(err) = &result.outcome {
+                    failure.get_or_insert_with(|| format!("基础设施故障（玩家 {handle}）: {err}"));
+                } else {
+                    results.insert(handle.clone(), result);
+                    if self.fail_after_player_for_test.as_deref() == Some(handle.as_str()) {
+                        self.fail_after_player_for_test = None;
+                        failure.get_or_insert_with(|| {
+                            format!("故障注入：玩家 {handle} 回执后执行轮中止")
+                        });
+                    }
+                }
             }
         }
+        let run_ns = started.elapsed().as_nanos().saturating_sub(project_ns);
         assert_bound();
+        if let Some(reason) = failure {
+            self.execution_failure = Some(ExecutionFailure {
+                confirmed: results,
+                reason: reason.clone(),
+            });
+            anyhow::bail!(reason);
+        }
         Ok((results, run_ns, project_ns))
     }
 
@@ -876,8 +922,8 @@ impl EmbedEngine {
         &self.engine.world
     }
 
-    /// 汇总已记录调用的各阶段耗时，单位为毫秒。结算耗时不含玩家状态提交，
-    /// 整次调用耗时包含提交；详见 `PerfRecorder` 的采样和分位数定义。
+    /// 汇总成功调用的耗时，单位为毫秒。run 为派发回收窗口减去宿主投影时间，
+    /// settle 包含玩家候选与统一发布；各阶段不是工作者 CPU 用量之和。
     pub fn perf_report(&self) -> Value {
         json!({
             "ticks": self.perf.ticks.len(),
@@ -922,7 +968,7 @@ impl EmbedEngine {
     }
 
     /// 覆盖玩家执行顺序；执行前检查是否为全部注册玩家的排列，release 也检查。
-    /// 仅影响注入和执行顺序，不影响结果映射或意图合并顺序。None 恢复按玩家名排序。
+    /// 仅影响投影和派发顺序，不保证完成顺序；结果映射和意图合并顺序不变。
     #[doc(hidden)]
     pub fn set_execution_order_for_test(&mut self, order: Option<Vec<String>>) {
         self.execution_order_for_test = order;
@@ -1013,6 +1059,14 @@ impl EmbedEngine {
             .ok_or_else(|| anyhow::anyhow!("分片未创建"))?
             .fail_next_rebuild_for_test();
         Ok(())
+    }
+
+    #[doc(hidden)]
+    pub fn gate_next_job_for_test(&mut self, player: &str) -> anyhow::Result<kk_runner::JobGate> {
+        self.players
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("分片未创建"))?
+            .gate_next_job_for_test(player)
     }
 
     /// 在下一条 RunJob 前退出指定玩家线程，使真实回执通道断开。

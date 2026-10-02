@@ -45,6 +45,7 @@ fn hang_bot() -> ModuleTable {
 fn world() -> serde_json::Value {
     json!({
         "time": 1,
+        "generation": 42,
         "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
         "rooms": {},
         "objects": []
@@ -55,6 +56,7 @@ fn world() -> serde_json::Value {
 fn m0_thread_model_suite() -> anyhow::Result<()> {
     host_budget_job()?;
     pending_receipts_are_independent()?;
+    queued_command_deadline()?;
     multi_player_ticks()?;
     idle_eviction_and_rebuild()?;
     out_of_order_eviction()?;
@@ -78,6 +80,13 @@ fn skip_penalty_recharge_channel() -> anyhow::Result<()> {
     // 一致（-40 → 报告 -20），intents 恒 Null
     pool.spawn_player(1, skip_cfg())?;
     let r = pool.tick(1, &world())?;
+    assert_eq!(
+        r.epoch,
+        RunEpoch {
+            tick: 1,
+            generation: 42
+        }
+    );
     assert!(
         matches!(r.plan, TickPlan::SkipPenalty),
         "负桶停跑：{:?}",
@@ -321,6 +330,7 @@ fn host_budget_job() -> anyhow::Result<()> {
                 code: "[Game.cpu.bucket,Game.cpu.tickLimit,Memory.saved]".into(),
                 epoch: EPOCH,
                 attempt: 1,
+                deadline: None,
                 raw_memory: r#"{"saved":42}"#.into(),
                 segments_json: "[]".into(),
                 foreign_json: "null".into(),
@@ -348,6 +358,7 @@ fn pending_receipts_are_independent() -> anyhow::Result<()> {
         code: "globalThis.n=(globalThis.n||0)+1;globalThis.n".into(),
         epoch: EPOCH,
         attempt,
+        deadline: None,
         raw_memory: "{}".into(),
         segments_json: "[]".into(),
         foreign_json: "null".into(),
@@ -364,5 +375,33 @@ fn pending_receipts_are_independent() -> anyhow::Result<()> {
     assert_eq!(first.token, first_token);
     assert_eq!(first.report.expr["value"], 1);
     assert_ne!(first.token, second.token);
+    Ok(())
+}
+
+fn queued_command_deadline() -> anyhow::Result<()> {
+    let mut pool = PlayerThreads::new();
+    pool.spawn_player(1, config())?;
+    let gate = pool.gate_next_job_for_test(1)?;
+    let job = |attempt, code: &str| kk_runner::RunJob {
+        world: world(),
+        code: code.into(),
+        epoch: EPOCH,
+        attempt,
+        deadline: None,
+        raw_memory: "{}".into(),
+        segments_json: "[]".into(),
+        foreign_json: "null".into(),
+        budget: kk_core::cpu::RunBudget::new(&kk_core::cpu::Bucket::default()),
+    };
+    let first = pool.dispatch_job(1, job(1, "globalThis.n=1"))?;
+    gate.started.recv_timeout(Duration::from_secs(1))?;
+    let mut expired = job(2, "globalThis.n=99");
+    expired.deadline = Some(Instant::now() + Duration::from_millis(30));
+    let second = pool.dispatch_job(1, expired)?;
+    assert!(second.wait().is_err());
+    gate.release.send(())?;
+    first.wait()?;
+    let third = pool.run_job(1, job(3, "globalThis.n"))?;
+    assert_eq!(third.report.expr["value"], 1, "队列中过期的命令不得执行");
     Ok(())
 }

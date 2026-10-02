@@ -8,6 +8,7 @@ edition.workspace = true
 workspace = true
 
 [dependencies]
+libc = "0.2"
 kk-core.workspace = true
 deno_core = { workspace = true }
 tokio = { workspace = true }

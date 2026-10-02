@@ -1,0 +1,57 @@
+{
+  "workspace": {
+    "passed": 388,
+    "failed": 0,
+    "ignored": 5
+  },
+  "screeps_ok": {
+    "baseline": "c1a9a60",
+    "passed": 1854,
+    "failed": 153,
+    "skipped": 907,
+    "total": 2914,
+    "passed_to_red_skipped_missing": 0,
+    "new_passed": 0
+  },
+  "bots": {
+    "tooangel": {
+      "ticks_requested": 2000,
+      "ticks_completed": 2000,
+      "ticks_terminated": 0,
+      "ticks_skipped_penalty": 0,
+      "ticks_with_console_error": 0,
+      "missing_api": {}
+    },
+    "overmind": {
+      "ticks_requested": 2000,
+      "ticks_completed": 2000,
+      "ticks_terminated": 0,
+      "ticks_skipped_penalty": 0,
+      "ticks_with_console_error": 1,
+      "missing_api": {}
+    },
+    "wasm": {
+      "ticks_requested": 10,
+      "ticks_completed": 10,
+      "ticks_terminated": 0,
+      "ticks_skipped_penalty": 0,
+      "ticks_with_console_error": 0,
+      "missing_api": {}
+    }
+  },
+  "linux_clock": {
+    "platform": "Linux 6.12.54-linuxkit aarch64",
+    "rustc": "1.99.0",
+    "libc": "0.2.183",
+    "passed": 1,
+    "scope": "exact cpu_clock.rs in isolated crate; not full V8 workspace"
+  },
+  "python_tests": {
+    "passed": 3
+  },
+  "review_fixes": [
+    "clear delivered V8 termination at command boundaries",
+    "reject missing P50/P95/P99 before recording performance samples"
+  ],
+  "performance_after_binary_sha256": "ab5d3681ffa2d584ea194586f2b116a5cc20827be92197c5899163ba01d84698"
+}

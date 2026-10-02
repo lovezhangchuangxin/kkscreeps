@@ -10,6 +10,8 @@ pub mod cpu;
 pub mod rng;
 pub mod room_name;
 pub mod terrain;
+pub mod tick;
+pub use tick::RunEpoch;
 
 pub use rng::SeededRng;
 pub use room_name::RoomName;

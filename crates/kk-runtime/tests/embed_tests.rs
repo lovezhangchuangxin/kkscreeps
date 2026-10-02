@@ -100,6 +100,7 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     stage_recovery_family_impl()?;
     execution_failure_blocks_redispatch_impl()?;
     lost_worker_rebuild_impl()?;
+    bounded_parallel_players_impl()?;
     stage_recovery_escape_route_impl()?;
     stage_hook_deferral_impl()?;
     assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");

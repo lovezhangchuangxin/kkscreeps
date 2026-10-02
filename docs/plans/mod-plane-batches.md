@@ -55,6 +55,8 @@
 
 ### P1 RunJob 并发执行 + 线程 CPU 计费
 
+已实现有界玩家派发与回收、绝对命令期限及 macOS/Linux 线程 CPU 时钟。RunEpoch 上移到 kk-core，诊断 Tick 通道回带版本；保留墙钟看门狗和 A4 候选发布边界。实现、回归与重复测量见 [P1 玩家执行](../research/notes/p1-player-execution-2026-10-02.md)。
+
 - **内容**：合并注入+执行为 `RunJob {view_handle, player_state, budget, code_revision, tick, generation}`（06 §2.3）；一次派发、有界并发回收（上限实测定，不等于玩家数）；线程命令携带期限；**CPU 计费墙钟 → 线程 CPU 时钟**（macOS/Linux 分别验证），墙钟保留为看门狗活性保护；RunJob 携带协调器算好的预算（A4 桶账语义的前半）。epoch 起步可先用已有的 `world.generation()`/`time()`。A1 范围承接：Cmd::Tick 通道 epoch 接线 + RunEpoch 定义位置上移评估。
 - **判据**：同世界多玩家输出与串行参考逐位一致（执行序无关测试旋钮）；同轮预算语义不变、bot 三夹具不红；**迟到报告拒收联调验收**（A1 只测单测）；P50/P95/P99 与进程 CPU/RSS 改善有测量记录（≥5 独立运行，采样器见 P2）；看门狗 arm/disarm/terminate 代际原子性保持。
 - **依赖**：A1 的状态机 epoch 字段（可先行以现有 generation/time 起步）；不依赖 A3（P1 改 execute_players/proto/budget，与 A3 的引擎侧无类型耦合，仅同文件 embed.rs 需协调）。

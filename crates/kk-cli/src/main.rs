@@ -49,6 +49,9 @@ enum Command {
         /// 玩家数（1..32）；每玩家独立房间
         #[arg(long, default_value_t = 2)]
         players: u32,
+        /// 同时执行玩家上限；省略时使用引擎默认值
+        #[arg(long)]
+        concurrency: Option<usize>,
         /// 报告输出路径（JSON）
         #[arg(long, default_value = "perf-probe.json")]
         report: String,
@@ -76,9 +79,16 @@ fn main() {
             ticks,
             warmup,
             players,
+            concurrency,
             report,
         } => {
-            std::process::exit(perf_probe::run(ticks, warmup, players, &report));
+            std::process::exit(perf_probe::run(
+                ticks,
+                warmup,
+                players,
+                concurrency,
+                &report,
+            ));
         }
     }
 }

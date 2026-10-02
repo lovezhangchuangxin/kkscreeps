@@ -143,6 +143,7 @@ pub struct Sandbox {
     host: HostFns,
     seq: u64,
     budget: Bucket,
+    command_deadline: Option<Instant>,
     shared: SharedRef,
     /// 配置的堆硬上限（near-heap 触发放大后据此恢复）。
     heap_limit: usize,
@@ -154,8 +155,8 @@ pub struct Sandbox {
     /// 等待 take_intents 取走的本 tick 指令；中断或写回失败时丢弃。
     /// 协调器将其转换为 IntentBatch，再交给世界结算。
     pending_intents: Option<Value>,
-    /// 本 tick 待提交的费用，单位毫秒：正常结束为墙钟用量加 0.2×指令数，
-    /// 超时或近堆上限中断为完整预算。世界结算成功后 settle_bill，失败时 discard_bill。
+    /// 本 tick 待提交的费用，单位毫秒：正常结束为线程 CPU 用量加 0.2×指令数，
+    /// 超时或近堆上限中断为完整预算。RunJob 导出给宿主；独立诊断通道本地提交或丢弃。
     /// 新的 begin_tick 会清除尚未处理的候选，调用方须先处理上一轮结果。
     pending_bill: Option<f64>,
     /// 负余额停跑时暂存的回充增量，与计费候选互斥。
@@ -165,6 +166,7 @@ pub struct Sandbox {
 
 impl Sandbox {
     pub fn new(config: SandboxConfig) -> anyhow::Result<Self> {
+        crate::cpu_clock::thread_cpu_time()?;
         let tokio = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()?;
@@ -208,6 +210,7 @@ impl Sandbox {
             tokio,
             host,
             seq,
+            command_deadline: None,
             budget: Bucket::new(
                 config.cpu_limit,
                 config.bucket_cap,
@@ -309,6 +312,25 @@ impl Sandbox {
         Ok(())
     }
 
+    pub fn set_command_deadline(&mut self, deadline: Instant) -> anyhow::Result<()> {
+        if deadline <= Instant::now() {
+            anyhow::bail!("玩家命令在执行前已过期");
+        }
+        // 先封住旧代次的投递，再清掉已投递的标志；内存注入早于 begin_tick。
+        self.watchdog.disarm();
+        self.clear_terminate_flag();
+        self.command_deadline = Some(deadline);
+        self.watchdog.arm(deadline);
+        Ok(())
+    }
+    pub fn clear_command_deadline(&mut self) {
+        self.watchdog.disarm();
+        self.clear_terminate_flag();
+        self.command_deadline = None;
+        *self.shared.tick_start.lock().unwrap() = None;
+        *self.shared.thread_cpu_start.lock().unwrap() = None;
+    }
+
     pub fn bucket(&self) -> f64 {
         self.budget.bucket()
     }
@@ -384,6 +406,11 @@ impl Sandbox {
                 let world_json = serde_json::to_string(world)?;
                 let deadline = Instant::now()
                     + Duration::from_millis(self.budget.tick_limit().max(1.0) as u64);
+                *self.shared.thread_cpu_start.lock().unwrap() =
+                    Some(crate::cpu_clock::thread_cpu_time()?);
+                let deadline = self
+                    .command_deadline
+                    .map_or(deadline, |command| command.min(deadline));
                 self.watchdog.arm(deadline);
                 *self.shared.tick_start.lock().unwrap() = Some(Instant::now());
                 self.shared.reset_console_gate();
@@ -450,6 +477,7 @@ impl Sandbox {
         }
         self.restore_heap_limit();
         *self.shared.tick_start.lock().unwrap() = None;
+        *self.shared.thread_cpu_start.lock().unwrap() = None;
     }
 
     /// 取走最近一次 runLoop 捕获的玩家逻辑错误；取走后清空。
@@ -478,6 +506,9 @@ impl Sandbox {
         self.runtime.v8_isolate().cancel_terminate_execution();
         if let Some(t0) = *self.shared.tick_start.lock().unwrap() {
             let deadline = t0 + Duration::from_millis(self.budget.tick_limit().max(1.0) as u64);
+            let deadline = self
+                .command_deadline
+                .map_or(deadline, |command| command.min(deadline));
             self.watchdog.arm(deadline);
         }
         let exec = call_host_json(&self.tokio, &mut self.runtime, &self.host.end_tick, &[]);
@@ -498,11 +529,12 @@ impl Sandbox {
                     intents
                 };
                 self.pending_intents = intents;
-                // 墙钟用量包含写回耗时；此处只暂存，世界结算成功后由调用方提交。
-                self.pending_bill = Some(self.cpu_used_ms() + 0.2 * billed as f64);
+                // 线程 CPU 用量包含写回耗时；此处只暂存，世界结算成功后由调用方提交。
+                self.pending_bill = Some(self.cpu_used_ms()? + 0.2 * billed as f64);
                 // 即使宿主调用成功返回，也恢复可能被近堆回调扩大的上限。
                 self.restore_heap_limit();
                 *self.shared.tick_start.lock().unwrap() = None;
+                *self.shared.thread_cpu_start.lock().unwrap() = None;
                 Ok(v)
             }
             Err(_) => {
@@ -672,6 +704,7 @@ impl Sandbox {
         }
         self.restore_heap_limit();
         *self.shared.tick_start.lock().unwrap() = None;
+        *self.shared.thread_cpu_start.lock().unwrap() = None;
     }
 
     /// 清除 tick 外调用可能遗留的终止标志，并恢复近堆回调扩大的上限。
@@ -700,14 +733,16 @@ impl Sandbox {
             .heap_size_limit()
     }
 
-    /// 从本 tick 计时起点经过的墙钟毫秒数；无计时起点时为 0，不含指令费用。
-    pub fn cpu_used_ms(&self) -> f64 {
-        self.shared
-            .tick_start
-            .lock()
-            .unwrap()
-            .map(|t0| t0.elapsed().as_secs_f64() * 1000.0)
-            .unwrap_or(0.0)
+    /// 本 tick 在执行线程上消耗的 CPU 毫秒数，不含指令费用。
+    pub fn cpu_used_ms(&self) -> anyhow::Result<f64> {
+        let start = *self.shared.thread_cpu_start.lock().unwrap();
+        match start {
+            Some(start) => Ok(crate::cpu_clock::thread_cpu_time()?
+                .saturating_sub(start)
+                .as_secs_f64()
+                * 1000.0),
+            None => Ok(0.0),
+        }
     }
 
     pub fn drain_console(&mut self) -> Vec<LogLine> {
@@ -907,4 +942,23 @@ fn lodash_script() -> String {
 fn constants_script() -> String {
     // 将嵌入的常量 JSON 构造成对象并平铺至玩家全局；API 各段按需捕获常量。
     format!("(function(){{ var C = {CONSTANTS_JSON}; for (var k in C) globalThis[k] = C[k]; }})();")
+}
+
+#[cfg(test)]
+mod command_deadline_tests {
+    use super::*;
+
+    #[test]
+    fn command_boundaries_clear_delivered_termination() -> anyhow::Result<()> {
+        let mut sandbox = Sandbox::new(SandboxConfig::default())?;
+        // 模拟上一代看门狗已经投递，但宿主调用成功返回的交错。
+        sandbox.runtime.v8_isolate().terminate_execution();
+        sandbox.set_command_deadline(Instant::now() + Duration::from_secs(1))?;
+        sandbox.set_memory_state("{}", "[]", "null")?;
+        // 解除期限必须同时清掉已投递标志，后续管理命令也应能复用实例。
+        sandbox.runtime.v8_isolate().terminate_execution();
+        sandbox.clear_command_deadline();
+        sandbox.set_memory_state("{}", "[]", "null")?;
+        Ok(())
+    }
 }
