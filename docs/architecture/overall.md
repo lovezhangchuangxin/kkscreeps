@@ -22,6 +22,7 @@
 | crate | 当前职责与边界 |
 |---|---|
 | `kk-core` | 游戏常量、房间坐标、地形编码和随机数工具 |
+| `kk-mod-api` | 玩法描述、启动校验和冻结计划；尚未接入生产引擎或 JS Mod |
 | `kk-schema` | 二进制快照读写、对象字段定义、布局宏和版本升级接口；接口存在不等于已有历史版本迁移 |
 | `kk-world` | 内存世界、房间和对象管理、空间索引，以及沙箱数据和查询快照的投影 |
 | `kk-engine` | 清洗指令，结算房间和市场规则，验证并提交世界、玩家及市场的内存候选状态 |
@@ -45,8 +46,9 @@
 | `kk-runtime` | core、schema、engine、runner、world |
 | `kk-engine` | core、schema、world |
 | `kk-world` | core、schema |
+| `kk-mod-api` | core |
 | `kk-schema` | 无内部依赖 |
-| `kk-runner` | 无内部依赖，使用 deno_core 等外部库 |
+| `kk-runner` | core，使用 deno_core 等外部库 |
 | `kk-storage-bench` | core、schema、world |
 | `kk-core`、`kk-pathfinder`、`kk-storage`、`kk-backend` | 无内部依赖 |
 

@@ -71,9 +71,13 @@
 
 ## 3. B–G 方向登记（长期有效；切片到批前另出）
 
+B 阶段的接口、投影布局、link 接入范围与切片见[开放领域定义与玩家投影](../designs/domain-projection.md)。该文档细化以下方向，不表示对应能力已实现。
+
+B.1 已建立 `kk-mod-api` 的描述、校验、冻结与 link 默认目录，尚未接入现有结算和玩家投影；接口边界见 [crate 说明](../../crates/kk-mod-api/README.md)。下一片 B.2 将接入 link 默认贡献。
+
 | 批 | 内容（06 §6 + ADR-014 调整） | 到批前须补 |
 |---|---|---|
-| B 开放领域定义 | EffectiveRules（平坦形态验收）、ObjectType/Extension、IntentDescriptor、handler graph、默认 slots；**与投影协议一步设计合并**（共享二进制 + per-viewer overlay + lazy wrapper + 扩展字段目录一次定协议，实施分步） | 投影协议设计文档；首个「内建结构家族迁移成内建贡献」选型（rampart/link 候选） |
+| B 开放领域定义 | EffectiveRules（平坦形态验收）、ObjectType/Extension、IntentDescriptor、handler graph、默认 slots；**与投影协议一步设计合并**（共享二进制 + per-viewer overlay + lazy wrapper + 扩展字段目录一次定协议，实施分步） | [定义与投影设计](../designs/domain-projection.md)已给出接口及切片；B.1 定义层已实现，link 运行接线及后续投影尚待完成 |
 | C JS 最小完整玩法 | Mod loader、可信 VM、玩家 API 安装、自定义 FIND/LOOK、counter 对象与动作；一个既有结构的 wrap/replace | 依赖 B 契约冻结 |
 | D 性能与真实规则 | 线程 CPU 计费收口（若 P1 未竟）、公开移动/战斗/建造/容量等必要 slots；同房/跨房串行参考一致；**06 §2.6 两条玩家执行接口收敛**（`Engine::tick` 假沙箱路径当前对非 Executed 结局照常推进 tick——收敛为 engine 只留纯结算/prepared txn 接口 + 限定测试 facade） | 依赖 B/C |
 | E 首次持久化前 | extension 编码、manifest、迁移/缺失 Mod、输入日志与 outbox；**进程级崩溃注入只恢复完整版本**（A4 留下的验收面在此闭合） | 存储格式冻结前最后闸门 |

@@ -1,0 +1,14 @@
+[package]
+name = "kk-mod-api"
+description = "玩法贡献的纯数据定义、启动校验与冻结计划"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+kk-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.10.9"

@@ -12,6 +12,7 @@
 | [dev-kit.md](dev-kit.md) | 本地编写、模拟、测试、调试和部署的目标流程；完整开发套件尚未实现 |
 | [pathfinder-callback.md](pathfinder-callback.md) | 寻路回调与异常行为的对照，以及玩家 API 到原生搜索的接线设计；原生接口已有，玩家接线尚未完成 |
 | [mod-system.md](mod-system.md) | JS Mod 的贡献、规则替换、事务、投影和能力验收设计；未提供完整 Mod 执行通路 |
+| [domain-projection.md](domain-projection.md) | B 阶段的冻结定义、有效规则、意图入口与授权投影；以 link 为首个接入家族，包含实施与验收要求 |
 
 ## 设计与实现的核对
 

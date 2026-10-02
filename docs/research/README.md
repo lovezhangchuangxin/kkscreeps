@@ -38,6 +38,8 @@
 
 **本地共同负载对照**（2026-10-02）：[P2 对照记录](notes/p2-local-comparison-2026-10-02.md)保存本项目与本地 xxscreeps 的生产沙箱采集、工作量核对及测量边界；官方私服尚未接入。
 
+**开放领域定义**（2026-10-02）：[B.1 定义冻结](notes/b1-definition-freeze-2026-10-02.md)记录纯数据贡献层、link 默认描述与验证边界；生产引擎与玩家投影尚未接入冻结计划。
+
 **文档历史**：[兼容性历史登记](notes/compatibility-register-history.md)、[路线图历史记录](notes/roadmap-history.md)保存正文整理前的完整记录，便于追溯旧结论；现行要求见[兼容性说明](../designs/compatibility.md)和[路线图](../roadmap.md)。
 
 ## 阅读注意

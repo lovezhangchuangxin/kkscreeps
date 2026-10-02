@@ -1,0 +1,288 @@
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
+
+use serde::Serialize;
+use serde_json::Value;
+
+/// 稳定身份；整数句柄与编码 tag 不能替代它。
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[serde(transparent)]
+pub struct Key(String);
+
+impl Key {
+    pub fn new(value: impl Into<String>) -> Result<Self, String> {
+        let value = value.into();
+        let Some((namespace, name)) = value.split_once(':') else {
+            return Err("键须为 namespace:name".into());
+        };
+        if value.len() > 128
+            || !valid_namespace(namespace)
+            || !name.starts_with(|c: char| c.is_ascii_alphabetic())
+            || !name
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || b"._-".contains(&c))
+        {
+            return Err(format!("无效稳定键 {value:?}"));
+        }
+        Ok(Self(value))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub fn namespace(&self) -> &str {
+        self.0.split_once(':').expect("Key 构造已校验").0
+    }
+}
+
+impl fmt::Display for Key {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+pub(crate) fn valid_namespace(value: &str) -> bool {
+    value.starts_with(|c: char| c.is_ascii_lowercase())
+        && value.len() <= 64
+        && value
+            .bytes()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || b"_-".contains(&c))
+}
+
+/// 摘要由装配者提供；冻结器不读取文件，也不按包版本猜测源码是否变化。
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct Source {
+    pub namespace: String,
+    pub api_version: u32,
+    pub revision: String,
+    pub code_digest: [u8; 32],
+    pub config_digest: [u8; 32],
+    pub player_api_digest: [u8; 32],
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub enum Number {
+    Signed(i64),
+    Unsigned(u64),
+    Float(f64),
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub enum NumberDomain {
+    Signed { min: i64, max: i64 },
+    Unsigned { min: u64, max: u64 },
+    Float { min: f64, max: f64 },
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct TypeRef {
+    pub key: Key,
+    pub schema_version: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ValueSchema {
+    pub kind: ValueKind,
+    pub nullable: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub enum ValueKind {
+    Bool,
+    Number(NumberDomain),
+    String {
+        max_bytes: u32,
+    },
+    ObjectRef(TypeRef),
+    Enum(BTreeSet<String>),
+    Array {
+        element: Box<ValueSchema>,
+        max_len: u32,
+    },
+    Map {
+        value: Box<ValueSchema>,
+        max_len: u32,
+        max_key_bytes: u32,
+    },
+    /// 未列入 optional 的成员必需存在；可选与 nullable 分别表示缺失和 null。
+    Record {
+        fields: BTreeMap<String, ValueSchema>,
+        optional: BTreeSet<String>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub enum FieldDefault {
+    Missing,
+    Value(Value),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub enum Visibility {
+    Public,
+    Owner,
+    ServerOnly,
+    /// 具名判定绑定；权限须在宿主编码时计算，不能交给玩家 getter 判定。
+    Conditional(Key),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub enum ObjectVisibility {
+    RoomVisible,
+    OwnerCollection,
+    ServerOnly,
+    Conditional(Key),
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct FieldDescriptor {
+    pub key: Key,
+    pub schema: ValueSchema,
+    pub default: FieldDefault,
+    pub visibility: Visibility,
+    pub binding: Key,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Capability {
+    pub key: Key,
+    pub consumers: BTreeSet<Key>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ObjectTypeDescriptor {
+    pub key: Key,
+    pub schema_version: u32,
+    pub owner_field: Option<Key>,
+    pub position_fields: Option<[Key; 2]>,
+    pub fields: Vec<FieldDescriptor>,
+    pub capabilities: Vec<Capability>,
+    pub lifecycle_slots: BTreeSet<Key>,
+    pub visibility: ObjectVisibility,
+    pub player_class: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+pub enum Stage {
+    ObjectAction,
+    Movement,
+    ObjectTick,
+    Market,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub enum IntentScope {
+    Object,
+    Room,
+    Player,
+    World,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub enum Merge {
+    Last,
+    Queue { max_len: u32 },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub enum ArgumentConversion {
+    Strict,
+    /// 复用已有 vanilla 清洗器，不重新定义其 parseInt 等转换。
+    Native(Key),
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct IntentDescriptor {
+    pub key: Key,
+    pub scope: IntentScope,
+    pub receiver: Option<TypeRef>,
+    pub arguments: ValueSchema,
+    pub conversion: ArgumentConversion,
+    pub authority: IntentAuthority,
+    pub merge: Merge,
+    pub slot: Key,
+    pub suppressed_by: BTreeSet<Key>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub enum IntentAuthority {
+    Player,
+    ServerOnly,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct RuleDescriptor {
+    pub key: Key,
+    pub domain: NumberDomain,
+    pub default: Number,
+    pub consumers: BTreeSet<Key>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct RuleOverride {
+    pub rule: Key,
+    pub value: Number,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+pub enum RuleConstraint {
+    LessOrEqual { left: Key, right: Key },
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct SlotDescriptor {
+    pub key: Key,
+    pub stage: Stage,
+    pub native_binding: Key,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+pub enum HandlerKind {
+    Before,
+    Wrap,
+    Replace,
+    After,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct HandlerDescriptor {
+    pub key: Key,
+    pub slot: Key,
+    pub kind: HandlerKind,
+    pub binding: Key,
+    /// 同一 slot、同一种 kind 的拓扑约束；After 在运行时逆序执行。
+    pub depends_on: BTreeSet<Key>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Contribution {
+    pub source: Source,
+    /// 声明宿主必须安装的绑定标识，不包含函数指针或 JS 函数。
+    pub bindings: BTreeSet<Key>,
+    pub object_types: Vec<ObjectTypeDescriptor>,
+    pub intents: Vec<IntentDescriptor>,
+    pub rules: Vec<RuleDescriptor>,
+    pub overrides: Vec<RuleOverride>,
+    pub constraints: BTreeSet<RuleConstraint>,
+    pub slots: Vec<SlotDescriptor>,
+    pub handlers: Vec<HandlerDescriptor>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct FreezeOptions {
+    pub projection_version: u16,
+    pub max_schema_depth: u16,
+    /// 规则键 -> 被服主选中的贡献 namespace；不指定时多方覆盖报错。
+    pub rule_sources: BTreeMap<Key, String>,
+}
+
+impl Default for FreezeOptions {
+    fn default() -> Self {
+        Self {
+            projection_version: 1,
+            max_schema_depth: 16,
+            rule_sources: BTreeMap::new(),
+        }
+    }
+}
