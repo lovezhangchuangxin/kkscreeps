@@ -64,6 +64,9 @@ pub use kk_core::RunEpoch;
 #[derive(Debug)]
 pub struct RunJob {
     pub world: Value,
+    /// KKPV 通道的块束；Some 时 world 是不含对象数组的世界信封，
+    /// 对象记录由沙箱从块束解码。
+    pub kkpv_bundle: Option<Vec<u8>>,
     pub code: String,
     pub epoch: RunEpoch,
     pub attempt: u64,
@@ -153,6 +156,8 @@ enum Cmd {
     Bucket(mpsc::Sender<anyhow::Result<f64>>),
     Tick {
         world: Value,
+        /// KKPV 通道的块束；Some 时 world 是不含对象数组的世界信封。
+        bundle: Option<Vec<u8>>,
         epoch: RunEpoch,
         ack: mpsc::Sender<anyhow::Result<TickReport>>,
     },
@@ -164,6 +169,8 @@ enum Cmd {
     /// 只生成计费与 Memory 候选，世界提交和轮次检查由调用方负责。
     RunPlayer {
         world: Value,
+        /// KKPV 通道的块束；Some 时 world 是不含对象数组的世界信封。
+        bundle: Option<Vec<u8>>,
         code: String,
         epoch: RunEpoch,
         ack: mpsc::Sender<anyhow::Result<EvalReport>>,
@@ -238,8 +245,18 @@ impl PlayerThreads {
                         Cmd::Bucket(ack) => {
                             let _ = ack.send(Ok(sandbox.bucket()));
                         }
-                        Cmd::Tick { world, epoch, ack } => {
-                            let _ = ack.send(run_one_tick(&mut sandbox, &world, epoch));
+                        Cmd::Tick {
+                            world,
+                            bundle,
+                            epoch,
+                            ack,
+                        } => {
+                            let _ = ack.send(run_one_tick(
+                                &mut sandbox,
+                                &world,
+                                bundle.as_deref(),
+                                epoch,
+                            ));
                         }
                         Cmd::RunExpr { code, ack } => {
                             // 独立表达式也可能死循环，必须使用带看门狗的执行入口，保证线程能继续服务。
@@ -247,11 +264,18 @@ impl PlayerThreads {
                         }
                         Cmd::RunPlayer {
                             world,
+                            bundle,
                             code,
                             epoch,
                             ack,
                         } => {
-                            let _ = ack.send(run_eval_tick(&mut sandbox, &world, &code, epoch));
+                            let _ = ack.send(run_eval_tick(
+                                &mut sandbox,
+                                &world,
+                                bundle.as_deref(),
+                                &code,
+                                epoch,
+                            ));
                         }
                         Cmd::GateNextJob(release, started, ack) => {
                             gate = Some((release, started));
@@ -290,6 +314,7 @@ impl PlayerThreads {
                                         run_eval_tick_with_budget(
                                             &mut sandbox,
                                             &job.world,
+                                            job.kkpv_bundle.as_deref(),
                                             &job.code,
                                             job.epoch,
                                             Some(&job.budget),
@@ -407,10 +432,32 @@ impl PlayerThreads {
 
     /// 对一个玩家跑完整一 tick（begin→loop→end），等待报告。
     pub fn tick(&mut self, id: u64, world: &Value) -> anyhow::Result<TickReport> {
+        self.tick_with_bundle(id, world, None)
+    }
+
+    /// [`PlayerThreads::tick`] 的 KKPV 通道形态：`bundle` 为块束字节，
+    /// `world` 为不含对象数组的世界信封；epoch 与 JSON 通道同规则从
+    /// world.time 推得。
+    pub fn tick_kkpv(
+        &mut self,
+        id: u64,
+        world: &Value,
+        bundle: &[u8],
+    ) -> anyhow::Result<TickReport> {
+        self.tick_with_bundle(id, world, Some(bundle.to_vec()))
+    }
+
+    fn tick_with_bundle(
+        &mut self,
+        id: u64,
+        world: &Value,
+        bundle: Option<Vec<u8>>,
+    ) -> anyhow::Result<TickReport> {
         let p = self.player_mut(id)?;
         let (ack_tx, ack_rx) = mpsc::channel();
         p.send(Cmd::Tick {
             world: world.clone(),
+            bundle,
             epoch: RunEpoch {
                 tick: world["time"].as_u64().unwrap_or(0),
                 generation: world["generation"].as_u64().unwrap_or(0),
@@ -434,6 +481,7 @@ impl PlayerThreads {
             let id = p.id;
             p.send(Cmd::Tick {
                 world: world.clone(),
+                bundle: None,
                 epoch: RunEpoch {
                     tick: world["time"].as_u64().unwrap_or(0),
                     generation: world["generation"].as_u64().unwrap_or(0),
@@ -473,10 +521,35 @@ impl PlayerThreads {
         code: &str,
         epoch: RunEpoch,
     ) -> anyhow::Result<EvalReport> {
+        self.run_player_with_bundle(id, world, None, code, epoch)
+    }
+
+    /// [`PlayerThreads::run_player`] 的 KKPV 通道形态：`bundle` 为块束
+    /// 字节，`world` 为不含对象数组的世界信封。
+    pub fn run_player_kkpv(
+        &mut self,
+        id: u64,
+        world: &Value,
+        bundle: &[u8],
+        code: &str,
+        epoch: RunEpoch,
+    ) -> anyhow::Result<EvalReport> {
+        self.run_player_with_bundle(id, world, Some(bundle.to_vec()), code, epoch)
+    }
+
+    fn run_player_with_bundle(
+        &mut self,
+        id: u64,
+        world: &Value,
+        bundle: Option<Vec<u8>>,
+        code: &str,
+        epoch: RunEpoch,
+    ) -> anyhow::Result<EvalReport> {
         let p = self.player_mut(id)?;
         let (ack_tx, ack_rx) = mpsc::channel();
         p.send(Cmd::RunPlayer {
             world: world.clone(),
+            bundle,
             code: code.to_string(),
             epoch,
             ack: ack_tx,
@@ -609,10 +682,15 @@ impl Drop for PlayerThreads {
 fn run_one_tick(
     sandbox: &mut Sandbox,
     world: &Value,
+    bundle: Option<&[u8]>,
     epoch: RunEpoch,
 ) -> anyhow::Result<TickReport> {
     // 此 tick 通道即时结算；注入失败也提交中断处理产生的完整预算费用。
-    let plan = match sandbox.begin_tick(world) {
+    let begin = match bundle {
+        Some(bundle) => sandbox.begin_tick_kkpv(world, bundle),
+        None => sandbox.begin_tick(world),
+    };
+    let plan = match begin {
         Ok(plan) => plan,
         Err(e) => {
             sandbox.settle_bill();
@@ -682,24 +760,28 @@ fn run_one_tick(
 fn run_eval_tick(
     sandbox: &mut Sandbox,
     world: &Value,
+    bundle: Option<&[u8]>,
     code: &str,
     epoch: RunEpoch,
 ) -> anyhow::Result<EvalReport> {
-    run_eval_tick_with_budget(sandbox, world, code, epoch, None)
+    run_eval_tick_with_budget(sandbox, world, bundle, code, epoch, None)
 }
 
 fn run_eval_tick_with_budget(
     sandbox: &mut Sandbox,
     world: &Value,
+    bundle: Option<&[u8]>,
     code: &str,
     epoch: RunEpoch,
     budget: Option<&kk_core::cpu::RunBudget>,
 ) -> anyhow::Result<EvalReport> {
     // 世界注入失败作为该玩家的 inject_failed 结果返回，让协调器继续处理其他玩家。
     // 通道断开等基础设施故障仍返回 Err。
-    let begin = match budget {
-        Some(budget) => sandbox.begin_tick_with_budget(world, budget),
-        None => sandbox.begin_tick(world),
+    let begin = match (bundle, budget) {
+        (Some(bundle), Some(budget)) => sandbox.begin_tick_kkpv_with_budget(world, bundle, budget),
+        (Some(bundle), None) => sandbox.begin_tick_kkpv(world, bundle),
+        (None, Some(budget)) => sandbox.begin_tick_with_budget(world, budget),
+        (None, None) => sandbox.begin_tick(world),
     };
     let plan = match begin {
         Ok(plan) => plan,

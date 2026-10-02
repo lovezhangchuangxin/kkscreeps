@@ -41,6 +41,20 @@ pub trait WorldSource {
         gcl_points: i64,
         catalog: &kk_mod_api::extension::ExtensionCatalog,
     ) -> Value;
+
+    /// 为查看者生成 KKPV 投影：不含对象数组的世界信封与逐房间块输入。
+    /// 未实现二进制投影的源返回 None；启用 KKPV 通道的调用方据此失败
+    /// 而不是静默回落（回落会掩盖接线缺陷）。
+    fn kkpv_projection_for_viewer(
+        &self,
+        _viewer: &str,
+        _gcl_points: i64,
+        _catalog: &kk_mod_api::extension::ExtensionCatalog,
+        _plan_hash: [u8; 32],
+        _audience_hash: [u8; 32],
+    ) -> Option<Result<(Value, Vec<kk_schema::kkpv::KkpvBlockInput>), String>> {
+        None
+    }
 }
 
 impl WorldSource for kk_world::World {
@@ -55,6 +69,31 @@ impl WorldSource for kk_world::World {
         catalog: &kk_mod_api::extension::ExtensionCatalog,
     ) -> Value {
         kk_world::World::world_json_for_viewer_with_extensions(self, viewer, gcl_points, catalog)
+    }
+
+    fn kkpv_projection_for_viewer(
+        &self,
+        viewer: &str,
+        gcl_points: i64,
+        catalog: &kk_mod_api::extension::ExtensionCatalog,
+        plan_hash: [u8; 32],
+        audience_hash: [u8; 32],
+    ) -> Option<Result<(Value, Vec<kk_schema::kkpv::KkpvBlockInput>), String>> {
+        Some(
+            kk_world::World::kkpv_room_blocks_for_viewer(
+                self,
+                viewer,
+                catalog,
+                plan_hash,
+                audience_hash,
+            )
+            .map(|blocks| {
+                (
+                    kk_world::World::kkpv_envelope_for_viewer(self, viewer, gcl_points),
+                    blocks,
+                )
+            }),
+        )
     }
 
     fn object_snapshot(&self, id: &str) -> Option<Value> {

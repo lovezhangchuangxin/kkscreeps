@@ -143,7 +143,7 @@ impl World {
     /// 按地形版本缓存 2500 字节的 base64 载荷，输出 {rev, payload}。
     /// prelude 的 game.js 按 rev 复用解码后的地形；版本变化时重新解码。
     /// 任一房间设置地形或新房注册都会改变全局 rev，使全部房间缓存失效。
-    fn terrain_json(&self, name: &str, state: &crate::world::RoomState) -> Value {
+    pub(crate) fn terrain_json(&self, name: &str, state: &crate::world::RoomState) -> Value {
         let epoch = self.terrain_epoch();
         let mut cache = self.terrain_cache.borrow_mut();
         let payload = match cache.get(name) {
@@ -337,7 +337,7 @@ pub(crate) fn room_rcl(state: &crate::world::RoomState) -> u8 {
 /// 汇总非 off 的 spawn、extension 能量与容量，有 viewer 时只计己方对象。
 /// spawn 容量固定，extension 容量按房间 RCL 查表。结算所用的全房聚合不在此处。
 /// 玩家统计参考：engine/src/game/game.js 的房间 energyAvailable 计算。
-fn room_energy(state: &crate::world::RoomState, viewer: Option<&str>) -> (i64, i64) {
+pub(crate) fn room_energy(state: &crate::world::RoomState, viewer: Option<&str>) -> (i64, i64) {
     let rcl = room_rcl(state);
     let mut available = 0i64;
     let mut capacity = 0i64;

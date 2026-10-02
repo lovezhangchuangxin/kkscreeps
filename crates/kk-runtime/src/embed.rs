@@ -72,6 +72,9 @@ pub struct EmbedEngine {
     last_execution_order: Option<Vec<String>>,
     /// 下次通过输入校验的 `create_shard` 使用的沙箱配置；开始注册前整表取走。
     sandbox_configs_for_test: BTreeMap<String, kk_runner::SandboxConfig>,
+    /// 是否经 KKPV 二进制通道向沙箱注入世界数据；默认走 JSON 参考通道。
+    /// 两条通道装配出的玩家可见面等价，测试按此锁定。
+    kkpv_channel: bool,
 }
 
 /// 记录成功调用的投影、执行、结算和整次调用耗时。失败尝试不记录；
@@ -119,6 +122,24 @@ impl Default for EmbedEngine {
 
 fn ns_ms(ns: u128) -> f64 {
     ns as f64 / 1e6
+}
+
+/// KKPV 原型计划指纹：SHA-256("kkpv-prototype-v1")。冻结计划接入引擎
+/// 装配前以此固定值占位——计划指纹的权威来源（kk-mod-api 冻结结果）与
+/// 块发布的绑定是后续消费者缺口；切换真实指纹会使旧块按计划校验失效，
+/// 属预期行为。
+const KKPV_PROTOTYPE_PLAN_HASH: [u8; 32] = [
+    0x2c, 0x73, 0x66, 0x66, 0xac, 0x99, 0x25, 0x80, 0xca, 0x65, 0x68, 0x3a, 0x68, 0x5e, 0xae, 0x0f,
+    0xc0, 0x5c, 0xfb, 0x9b, 0x1c, 0x83, 0xbd, 0x35, 0xec, 0x49, 0xc3, 0xe1, 0xdb, 0xc1, 0xe6, 0xdc,
+];
+
+/// 私有块的查看者摘要：SHA-256(玩家名)。audience_hash 只是宿主定义的
+/// 一致性摘要，不是授权凭证（设计见 domain-projection.md §6）。
+fn kkpv_audience_hash(viewer: &str) -> [u8; 32] {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(viewer.as_bytes());
+    hasher.finalize().into()
 }
 
 /// `controller: false` 与显式控制器字段互斥（screeps-ok 契约，adapter.ts:45-48）。
@@ -263,6 +284,7 @@ impl EmbedEngine {
             execution_order_for_test: None,
             last_execution_order: None,
             sandbox_configs_for_test: BTreeMap::new(),
+            kkpv_channel: false,
         }
     }
 
@@ -716,21 +738,64 @@ impl EmbedEngine {
                     .unwrap_or(serde_json::Value::Null);
                 let gcl = self.engine.players.get(&handle).map(|p| p.gcl).unwrap_or(0);
                 let t_project = std::time::Instant::now();
-                let mut world = source.world_json_for_viewer_with_extensions(
-                    &handle,
-                    gcl,
-                    self.engine.extensions(),
-                );
-                // 市场读取已提交的引擎状态，随世界 JSON 注入，不存放在 V8 持久闭包中。
-                if let Some(obj) = world.as_object_mut() {
-                    obj.insert("market".into(), market_view(&self.engine, &handle));
-                }
+                // KKPV 通道：对象记录走二进制块束，world 是不含 objects 的信封；
+                // JSON 参考通道：整世界一个 Value。市场都注入 world 顶层。
+                let (world, kkpv_bundle) = if self.kkpv_channel {
+                    match source.kkpv_projection_for_viewer(
+                        &handle,
+                        gcl,
+                        self.engine.extensions(),
+                        KKPV_PROTOTYPE_PLAN_HASH,
+                        kkpv_audience_hash(&handle),
+                    ) {
+                        Some(projection) => match projection
+                            .map_err(|e| anyhow::anyhow!("KKPV 投影失败（玩家 {handle}）: {e}"))
+                            .and_then(|(mut envelope, blocks)| {
+                                if let Some(obj) = envelope.as_object_mut() {
+                                    obj.insert("market".into(), market_view(&self.engine, &handle));
+                                }
+                                kk_schema::kkpv::encode_bundle(
+                                    &blocks,
+                                    &kk_schema::kkpv::KkpvLimits::default(),
+                                )
+                                .map_err(|e| {
+                                    anyhow::anyhow!("KKPV 块束编码失败（玩家 {handle}）: {e}")
+                                })
+                                .map(|bundle| (envelope, Some(bundle)))
+                            }) {
+                            Ok(pair) => pair,
+                            Err(e) => {
+                                // 投影耗时归入投影相，不混入执行相。
+                                project_ns += t_project.elapsed().as_nanos();
+                                failure = Some(e.to_string());
+                                continue;
+                            }
+                        },
+                        None => {
+                            project_ns += t_project.elapsed().as_nanos();
+                            failure = Some(format!("世界源未提供 KKPV 投影（玩家 {handle}）"));
+                            continue;
+                        }
+                    }
+                } else {
+                    let mut world = source.world_json_for_viewer_with_extensions(
+                        &handle,
+                        gcl,
+                        self.engine.extensions(),
+                    );
+                    // 市场读取已提交的引擎状态，随世界 JSON 注入，不存放在 V8 持久闭包中。
+                    if let Some(obj) = world.as_object_mut() {
+                        obj.insert("market".into(), market_view(&self.engine, &handle));
+                    }
+                    (world, None)
+                };
                 project_ns += t_project.elapsed().as_nanos();
                 let budget = kk_core::cpu::RunBudget::new(&self.engine.players[&handle].cpu);
                 match self.players.as_mut().expect("已检查分片创建").dispatch_job(
                     &handle,
                     kk_runner::RunJob {
                         world,
+                        kkpv_bundle,
                         code: code.clone(),
                         epoch,
                         attempt: 0,
@@ -991,6 +1056,12 @@ impl EmbedEngine {
     #[doc(hidden)]
     pub fn last_execution_order_for_test(&self) -> Option<&[String]> {
         self.last_execution_order.as_deref()
+    }
+
+    /// 切换世界注入通道：true 走 KKPV 二进制块束，false（默认）走 JSON
+    /// 参考通道。两条通道装配出的玩家可见面等价，集成测试按此锁定。
+    pub fn set_kkpv_channel(&mut self, enabled: bool) {
+        self.kkpv_channel = enabled;
     }
 
     /// 设置下一次创建分片时使用的玩家沙箱配置，未设置的玩家使用默认配置。

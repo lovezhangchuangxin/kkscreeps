@@ -3,6 +3,158 @@
 
 use super::*;
 
+/// KKPV 二进制通道与 JSON 参考通道在真实分片上的端到端等价：同一分片
+/// 设置与玩家脚本，两条通道各自的可见快照、意图返回码与结算后的世界
+/// 状态完全一致。权威桥的 Ref 编码（墓碑/废墟）无法经 place 通道构造，
+/// 由 kk-runner 沙箱级测试用手工块锁定。
+pub(super) fn kkpv_channel_e2e_equivalence_impl() -> anyhow::Result<()> {
+    let dump_code = r#"
+(function () {
+  function snap(v, d) {
+    if (v === null || v === undefined) return null;
+    var t = typeof v;
+    if (t === 'function') return undefined;
+    if (t !== 'object') return v;
+    if (d > 6) return '[deep]';
+    if (Array.isArray(v)) {
+      var a = [];
+      for (var i = 0; i < v.length; i++) a.push(snap(v[i], d + 1));
+      return a;
+    }
+    var o = {};
+    var keys = Object.keys(v).sort();
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      if (k === 'room') continue;
+      if (k === 'pos') {
+        o.pos = { x: v.pos.x, y: v.pos.y, roomName: v.pos.roomName };
+        continue;
+      }
+      var s = snap(v[k], d + 1);
+      if (s !== undefined) o[k] = s;
+    }
+    return o;
+  }
+  var r = Game.rooms['W1N1'];
+  return JSON.stringify({
+    time: Game.time, gcl: snap(Game.gcl), cpu: snap(Game.cpu),
+    creeps: snap(Game.creeps), spawns: snap(Game.spawns),
+    structures: snap(Game.structures), rooms: snap(Game.rooms),
+    market: snap(Game.market),
+    creepProbe: (function () {
+      var c = Game.creeps['w1'];
+      var out = {};
+      var keys = ['name', 'owner', 'my', 'store', 'body', 'fatigue', 'hits',
+        'spawning', 'ticksToLive', 'carry', 'carryCapacity'];
+      for (var i = 0; i < keys.length; i++) {
+        try { out[keys[i]] = snap(c[keys[i]], 1); } catch (e) { out[keys[i]] = 'THROW'; }
+      }
+      return out;
+    })(),
+    roomProbe: r ? {
+      energyAvailable: r.energyAvailable,
+      energyCapacityAvailable: r.energyCapacityAvailable,
+      controller: snap(r.controller), findCreeps: snap(r.find(101)),
+      findStructures: snap(r.find(107)),
+    } : null,
+  });
+})()
+"#;
+    let mut runs: Vec<(
+        serde_json::Value,
+        serde_json::Value,
+        serde_json::Value,
+        serde_json::Value,
+    )> = Vec::new();
+    let mut worlds: Vec<(serde_json::Value, serde_json::Value, serde_json::Value)> = Vec::new();
+    let mut creep_ids: Vec<String> = Vec::new();
+    for channel in [false, true] {
+        let mut e = EmbedEngine::new();
+        e.set_kkpv_channel(channel);
+        e.create_shard(&json!({
+            "players": ["p1"],
+            "rooms": [{ "name": "W1N1", "rcl": 3, "owner": "p1" }],
+        }))?;
+        let creep_id = e.place_object(
+            "W1N1",
+            "creep",
+            &json!({ "pos": [25, 25], "owner": "p1", "body": ["move", "work", "carry"], "name": "w1" }),
+        )?;
+        let source_id = e.place_object(
+            "W1N1",
+            "structure",
+            &json!({ "pos": [24, 25], "structureType": "source" }),
+        )?;
+        let spawn_id = e.place_object(
+            "W1N1",
+            "structure",
+            &json!({ "pos": [20, 20], "structureType": "spawn", "owner": "p1", "store": { "energy": 300 } }),
+        )?;
+        let dump = e.run_player("p1", dump_code)?;
+        // 意图→结算：harvest 落地后由宿主查询快照核对世界状态；
+        // 随后的自杀→墓碑轮把权威桥的 Ref 编码（墓碑 creepId）接入
+        // 沙箱装配的完整环，并用第二份玩家视图核对结算后的下一轮投影。
+        let src_json = serde_json::to_string(&source_id)?;
+        let harvest = e.run_player(
+            "p1",
+            &format!("Game.creeps['w1'].harvest(Game.getObjectById({src_json}))"),
+        )?;
+        // 结算后的世界快照在自杀前采集（harvest 结果仍在 creep 上）。
+        worlds.push((
+            e.get_object(&creep_id).unwrap_or(serde_json::Value::Null),
+            e.get_object(&source_id).unwrap_or(serde_json::Value::Null),
+            e.get_object(&spawn_id).unwrap_or(serde_json::Value::Null),
+        ));
+        creep_ids.push(creep_id);
+        let suicide = e.run_player("p1", "Game.creeps['w1'].suicide()")?;
+        let dump2_code = r"(function () {
+  var t = Game.rooms['W1N1'].find(118);
+  return JSON.stringify({
+    creepCount: Object.keys(Game.creeps).length,
+    storeAfterHarvest: Memory.lastStore === undefined ? null : Memory.lastStore,
+    tombstones: t.length,
+    tombProbe: t.length ? {
+      deathTime: t[0].deathTime, ticksToDecay: t[0].ticksToDecay,
+      creepId: t[0].creep ? t[0].creep.id : null,
+      store: t[0].store ? Object.keys(t[0].store) : null,
+    } : null,
+  });
+})()";
+        let dump2 = e.run_player("p1", dump2_code)?;
+        runs.push((
+            dump.expr.clone(),
+            harvest.expr.clone(),
+            suicide.expr.clone(),
+            dump2.expr.clone(),
+        ));
+    }
+    assert_eq!(runs[0].0, runs[1].0, "玩家可见快照两通道一致");
+    assert_eq!(runs[0].1, runs[1].1, "harvest 返回码两通道一致");
+    assert_eq!(runs[0].1["value"], json!(0), "harvest 预检通过");
+    assert_eq!(runs[0].2, runs[1].2, "suicide 返回码两通道一致");
+    assert_eq!(runs[0].3, runs[1].3, "自杀结算后的下一轮玩家视图两通道一致");
+    // 墓碑经权威桥编码 creepId 为 Ref，沙箱解回 kk 前缀字符串——
+    // 与死亡 creep 的 id 一致即全环闭环。
+    let tomb = serde_json::from_str::<serde_json::Value>(
+        runs[0].3["value"].as_str().expect("dump2 返回字符串"),
+    )?;
+    assert_eq!(tomb["creepCount"], json!(0), "自杀后无 creep");
+    assert_eq!(tomb["tombstones"], json!(1), "恰一座墓碑");
+    assert_eq!(
+        tomb["tombProbe"]["creepId"],
+        json!(creep_ids[0]),
+        "墓碑 creepId（Ref 解码）指向死亡 creep"
+    );
+    assert_eq!(
+        worlds[0].0["store"]["energy"],
+        json!(2),
+        "1×WORK×2 进 store"
+    );
+    assert_eq!(worlds[0].1["energy"], json!(2998), "source 扣减 2");
+    assert_eq!(worlds[0], worlds[1], "结算后的世界状态两通道一致");
+    Ok(())
+}
+
 /// 真实沙箱的 move、harvest 意图经清洗和结算后，在下一轮玩家视图中可见。
 /// 另用脚本沙箱产生相同意图，比较两种入口的世界变化。
 pub(super) fn embed_intent_channel_impl() -> anyhow::Result<()> {

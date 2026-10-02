@@ -14,10 +14,15 @@
 //!
 //! 建立视图时校验魔数、版本、flags、长度、保留位、段边界与重叠
 //! （零长度段的 offset 须为零）、目录有序性与句柄/行关系（每桶每行
-//! 恰被一个目录项引用）、桶结构恰好消费、键 UTF-8 与升序、位图互斥
+//! 恰被一个目录项引用）、桶结构恰好消费、键 UTF-8 与升序（字段目录；
+//! 嵌套记录保持载荷顺序、只拒绝重复键）、位图互斥
 //! 与越行尾位为零、浮点有限性、bool 字节域、变长描述符 arena 边界
-//! 及各项限额；字段值内的字符串在读取时校验 UTF-8，嵌套记录键须
-//! 严格升序。编码端执行同源限额与值域检查，超限时不得产出数据。
+//! 及各项限额；字段值内的字符串在读取时校验 UTF-8。编码端执行同源
+//! 限额与值域检查，超限时不得产出数据。
+//!
+//! 嵌套记录的条目顺序与 JSON 参考通道的插入序一致（preserve_order
+//! 构建下 serde_json::Map 保插入序）：store、spawning 等嵌套对象的
+//! 键序对玩家可见（如 Object.keys(creep.store)），编码不重排。
 //!
 //! 公开块与私有块只能在相同 tick/generation/计划指纹下经 [`merge`] 合并。
 //! audience_hash 由宿主生成，本模块不解释、不校验（merge 亦不比较它）；
@@ -72,7 +77,7 @@ pub enum KkpvValue {
     Ref(u64),
     Str(String),
     Array(Vec<KkpvValue>),
-    /// 记录的键值对；编码按键排序并拒绝重复。
+    /// 记录的键值对；编码保持条目顺序并拒绝重复键。
     Object(Vec<(String, KkpvValue)>),
 }
 
@@ -411,29 +416,32 @@ fn encode_nested(
             if entries.len() > limits.max_object_entries {
                 return Err(KkpvError::LimitExceeded("max_object_entries"));
             }
-            let mut sorted = entries.clone();
-            sorted.sort_by(|a, b| a.0.cmp(&b.0));
-            for (a, b) in sorted.iter().zip(sorted.iter().skip(1)) {
-                if a.0 == b.0 {
+            // 嵌套记录保持条目顺序：JSON 参考通道的嵌套对象（store、
+            // spawning 等）在 preserve_order 构建下是插入序，玩家可见的
+            // 键序（如 Object.keys(creep.store)）不得因二进制通道重排。
+            // 只拒绝重复键；字节确定性由输入条目序决定。
+            let mut seen = std::collections::BTreeSet::new();
+            for (key, _) in entries {
+                if key.len() > limits.max_string_bytes {
+                    return Err(KkpvError::LimitExceeded("max_string_bytes"));
+                }
+                if !seen.insert(key.as_str()) {
                     return Err(KkpvError::DuplicateField {
                         type_key: "嵌套记录".into(),
-                        field: a.0.clone(),
+                        field: key.clone(),
                     });
                 }
             }
             out.push(TAG_OBJECT);
-            let length = u32::try_from(sorted.len())
+            let length = u32::try_from(entries.len())
                 .map_err(|_| KkpvError::LimitExceeded("max_object_entries"))?;
             out.extend_from_slice(&length.to_le_bytes());
-            for (key, value) in sorted {
-                if key.len() > limits.max_string_bytes {
-                    return Err(KkpvError::LimitExceeded("max_string_bytes"));
-                }
+            for (key, value) in entries {
                 let key_len = u32::try_from(key.len())
                     .map_err(|_| KkpvError::LimitExceeded("max_string_bytes"))?;
                 out.extend_from_slice(&key_len.to_le_bytes());
                 out.extend_from_slice(key.as_bytes());
-                encode_nested(&value, limits, depth + 1, out)?;
+                encode_nested(value, limits, depth + 1, out)?;
             }
         }
     }
@@ -469,7 +477,8 @@ fn bit_set(bitmap: &[u8], row: u32) -> bool {
 }
 
 /// 将输入编码为完整的 KKPV 块。对象按 ID 升序、类型桶与字段按键
-/// 排序后写入，相同输入不依赖字段或对象的提交顺序得到相同字节。
+/// 排序后写入；嵌套记录保持条目顺序（玩家可见的键序不因编码重排），
+/// 相同输入得到相同字节。
 ///
 /// # Errors
 /// 值域或限额违规、对象 ID 或字段键重复、同键值编码不一致时返回错误，
@@ -772,6 +781,39 @@ pub fn encode(input: &KkpvBlockInput, limits: &KkpvLimits) -> Result<Vec<u8>, Kk
     Ok(out)
 }
 
+/// 把多房间块序列编码为单一传输缓冲：`u32` 块数、逐块 `u32` 字节
+/// 长度、随后依次拼接块字节。框架只承载宿主到沙箱的传输分帧，不属于
+/// 块布局本身；整数小端与块内约定一致。空序列编码为仅含零计数的 4
+/// 字节缓冲（无可见对象的世界仍是合法负载）。
+///
+/// # Errors
+/// 任一块编码失败时返回错误，不产出部分缓冲。
+pub fn encode_bundle(inputs: &[KkpvBlockInput], limits: &KkpvLimits) -> Result<Vec<u8>, KkpvError> {
+    let blocks = inputs
+        .iter()
+        .map(|input| encode(input, limits))
+        .collect::<Result<Vec<_>, _>>()?;
+    let framing = 4 + blocks.len() * 4;
+    let total = framing + blocks.iter().map(|b| b.len()).sum::<usize>();
+    if total > limits.max_bytes.saturating_mul(16) {
+        // 束总量按 16×单块限额兜底（与块数无直接关系：1000 个小块可过、
+        // 17 个满块才失败）；多房世界的束不应超过单房块的合理倍数。
+        return Err(KkpvError::LimitExceeded("max_bytes"));
+    }
+    let fits = |v: usize| -> Result<u32, KkpvError> {
+        u32::try_from(v).map_err(|_| KkpvError::LimitExceeded("max_bytes"))
+    };
+    let mut out = Vec::with_capacity(total);
+    out.extend_from_slice(&fits(blocks.len())?.to_le_bytes());
+    for block in &blocks {
+        out.extend_from_slice(&fits(block.len())?.to_le_bytes());
+    }
+    for block in blocks {
+        out.extend_from_slice(&block);
+    }
+    Ok(out)
+}
+
 // —— 解码视图 ——————————————————————————————————————————————
 
 struct FieldView<'a> {
@@ -943,10 +985,11 @@ fn decode_nested(
             if len > limits.max_object_entries {
                 return Err(KkpvError::LimitExceeded("max_object_entries"));
             }
-            // 记录键严格升序是编码侧的规范形态；解码镜像校验，
-            // 重复键的取舍不由消费者偶然决定。
+            // 嵌套记录保持载荷条目顺序（与 JSON 参考的插入序一致，玩家可见
+            // 面——如 Store 的键序——不分叉）；只拒绝重复键，取舍不由消费者
+            // 偶然决定。有界条目数下的集合去重成本可忽略。
             let mut entries = Vec::with_capacity(len.min(bytes.len()));
-            let mut last_key: Option<&str> = None;
+            let mut seen = std::collections::BTreeSet::new();
             for _ in 0..len {
                 let key_len = u32::from_le_bytes(take(bytes, 4)?.try_into().unwrap()) as usize;
                 if key_len > limits.max_string_bytes {
@@ -954,10 +997,12 @@ fn decode_nested(
                 }
                 let key = std::str::from_utf8(take(bytes, key_len)?)
                     .map_err(|_| KkpvError::InvalidUtf8)?;
-                if last_key.is_some_and(|k| key <= k) {
-                    return Err(KkpvError::KeyOrder);
+                if !seen.insert(key) {
+                    return Err(KkpvError::DuplicateField {
+                        type_key: "嵌套记录".into(),
+                        field: key.into(),
+                    });
                 }
-                last_key = Some(key);
                 let value = decode_nested(limits, depth + 1, bytes)?;
                 entries.push((key.into(), value));
             }
@@ -1679,6 +1724,44 @@ mod tests {
     }
 
     #[test]
+    fn bundle_framing_round_trip() {
+        let mut first = input(vec![obj(1, "t:a", &[("k", KkpvValue::Int(5))])]);
+        first.room_name = "W1N1".into();
+        let mut second = input(vec![obj(9, "t:b", &[("s", KkpvValue::Str("x".into()))])]);
+        second.room_name = "E2N2".into();
+        second.tick = 8;
+        let bundle = encode_bundle(&[first, second], &KkpvLimits::default()).expect("编码成功");
+        // 框架自解析：u32 计数 + 逐块长度，块字节可各自建立视图。
+        let count = u32::from_le_bytes(bundle[0..4].try_into().unwrap()) as usize;
+        assert_eq!(count, 2);
+        let mut cursor = 4;
+        let mut lens = Vec::new();
+        for _ in 0..count {
+            lens.push(u32::from_le_bytes(bundle[cursor..cursor + 4].try_into().unwrap()) as usize);
+            cursor += 4;
+        }
+        let mut rooms = Vec::new();
+        for len in lens {
+            let view = dec(&bundle[cursor..cursor + len]);
+            rooms.push((
+                view.room_name().to_string(),
+                view.tick(),
+                view.object_count(),
+            ));
+            cursor += len;
+        }
+        assert_eq!(cursor, bundle.len());
+        assert_eq!(
+            rooms,
+            vec![("W1N1".to_string(), 7, 1), ("E2N2".to_string(), 8, 1)]
+        );
+        // 空序列是仅含零计数的合法负载（无可见对象的世界）。
+        let empty = encode_bundle(&[], &KkpvLimits::default()).expect("空序列编码成功");
+        assert_eq!(empty.len(), 4);
+        assert_eq!(&empty[..4], &0u32.to_le_bytes());
+    }
+
+    #[test]
     fn all_kinds_round_trip() {
         let fields: &[(&str, KkpvValue)] = &[
             ("b", KkpvValue::Bool(true)),
@@ -2116,7 +2199,7 @@ mod tests {
         assert!(matches!(view.field(0, "k"), Err(KkpvError::UnknownTag(_))));
     }
 
-    // —— 清偿后补充的钉子 ——
+    // —— 载荷与限额的行为锁定 ——
 
     /// 解码端执行字节/arena/地形三项限额：超限块不得建立视图。
     #[test]
@@ -2157,7 +2240,7 @@ mod tests {
         );
     }
 
-    /// 嵌套记录的重复键在读取时以键序错误拒绝，不产出编码必拒的值。
+    /// 嵌套记录的重复键在读取时拒绝；条目顺序保持载荷原序，不重排。
     #[test]
     fn nested_duplicate_record_key_rejected_on_read() {
         // 记录含 "a"、"b" 两键；把第二个键名字节改为 'a' 构成重复键。
@@ -2185,9 +2268,35 @@ mod tests {
         let view = dec(&dup);
         assert_eq!(
             view.field(0, "k"),
-            Err(KkpvError::KeyOrder),
+            Err(KkpvError::DuplicateField {
+                type_key: "嵌套记录".into(),
+                field: "a".into()
+            }),
             "重复键须在读取时拒绝"
         );
+    }
+
+    /// 嵌套记录保持条目顺序：非字典序键序原样往返，与 JSON 参考的
+    /// 插入序一致（preserve_order 构建下的玩家可见键序）。
+    #[test]
+    fn nested_record_preserves_entry_order() {
+        let entries = vec![
+            ("energy".to_string(), KkpvValue::Int(50)),
+            ("U".to_string(), KkpvValue::Int(10)),
+            ("XUH2O".to_string(), KkpvValue::Int(3)),
+        ];
+        let bytes = enc(&input(vec![obj(
+            1,
+            "t:a",
+            &[("k", KkpvValue::Object(entries.clone()))],
+        )]));
+        match dec(&bytes).field(0, "k").expect("读取成功") {
+            Some(KkpvValue::Object(decoded)) => {
+                let keys: Vec<&str> = decoded.iter().map(|(k, _)| k.as_str()).collect();
+                assert_eq!(keys, vec!["energy", "U", "XUH2O"], "条目顺序不得重排");
+            }
+            other => panic!("期望嵌套记录，得到 {other:?}"),
+        }
     }
 
     /// 变长描述符吞入额外字节后，载荷非恰好消费完即拒绝。

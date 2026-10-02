@@ -34,7 +34,7 @@
 
   const { missing, hasProbes, stubCalls } = globalThis.__kkp;
   const { resetForNewModules } = globalThis.__kkp.cjs;
-  const { beginTick, writeBackMemory, intentsPayload, setRawMemoryHost, rawMemoryDataHost,
+  const { beginTick, beginTickKkpv, writeBackMemory, intentsPayload, setRawMemoryHost, rawMemoryDataHost,
     setSegmentsWindowHost, setForeignSegmentHost, segmentsOutHost } = globalThis.__kkp.memoryWorld;
 
   globalThis.__kkp.host = {
@@ -42,6 +42,11 @@
      * begin_tick 第二参数——避免整世界深拷贝覆写三键，JS 侧合并覆盖占位基准）。 */
     beginTick(worldJson, cpuMeta) {
       beginTick(worldJson, cpuMeta);
+    },
+    /** KKPV 通道注入：世界信封 JSON 串 + 块束 ArrayBuffer（每 isolate 私有
+     * 拷贝）+ 预算真值；对象记录在沙箱内从块束解码。 */
+    beginTickKkpv(worldJson, bundle, cpuMeta) {
+      beginTickKkpv(worldJson, bundle, cpuMeta);
     },
     /** 执行玩家入口：require('main').loop()。返回结果 JSON 字符串（宿主 exec_json 约定）。 */
     runLoop() {

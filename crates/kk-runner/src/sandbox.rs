@@ -25,13 +25,17 @@ const CONSTANTS_JSON: &str = include_str!("../assets/constants.json");
 /// 按依赖顺序装配共享工具、模块加载、玩家 API 与宿主函数。
 /// 各段通过临时全局 __kkp 共享闭包状态；Rust 捕获宿主函数句柄后删除 __kkp。
 /// 因此 90_host 只能注册句柄，不能提前删除共享容器。
-const PRELUDE_SEGMENTS: [(&str, &str); 15] = [
+const PRELUDE_SEGMENTS: [(&str, &str); 16] = [
     ("kk-prelude-00-shared", include_str!("prelude/00_shared.js")),
     ("kk-prelude-10-buffer", include_str!("prelude/10_buffer.js")),
     ("kk-prelude-20-cjs", include_str!("prelude/20_cjs.js")),
     (
         "kk-prelude-30-game-registry",
         include_str!("prelude/30_game/_registry.js"),
+    ),
+    (
+        "kk-prelude-30-game-kkpv",
+        include_str!("prelude/30_game/kkpv.js"),
     ),
     (
         "kk-prelude-30-game-room-position",
@@ -347,7 +351,18 @@ impl Sandbox {
     /// SkipPenalty 表示负余额停跑；回充已暂存，仍需 settle_bill 或 discard_bill。
     pub fn begin_tick(&mut self, world: &serde_json::Value) -> anyhow::Result<TickPlan> {
         let plan = self.budget.begin_tick();
-        self.begin_tick_plan(world, plan)
+        self.begin_tick_plan(world, None, plan)
+    }
+
+    /// [`Sandbox::begin_tick`] 的 KKPV 通道形态：`world` 是不含对象数组的
+    /// 世界信封，对象记录由沙箱从 `bundle` 块束解码。
+    pub fn begin_tick_kkpv(
+        &mut self,
+        world: &serde_json::Value,
+        bundle: &[u8],
+    ) -> anyhow::Result<TickPlan> {
+        let plan = self.budget.begin_tick();
+        self.begin_tick_plan(world, Some(bundle), plan)
     }
 
     /// 使用宿主制定的预算；本地桶只作为本次执行与计费的工作副本。
@@ -357,12 +372,24 @@ impl Sandbox {
         budget: &kk_core::cpu::RunBudget,
     ) -> anyhow::Result<TickPlan> {
         self.budget = budget.bucket().clone();
-        self.begin_tick_plan(world, budget.plan().clone())
+        self.begin_tick_plan(world, None, budget.plan().clone())
+    }
+
+    /// [`Sandbox::begin_tick_with_budget`] 的 KKPV 通道形态。
+    pub fn begin_tick_kkpv_with_budget(
+        &mut self,
+        world: &serde_json::Value,
+        bundle: &[u8],
+        budget: &kk_core::cpu::RunBudget,
+    ) -> anyhow::Result<TickPlan> {
+        self.budget = budget.bucket().clone();
+        self.begin_tick_plan(world, Some(bundle), budget.plan().clone())
     }
 
     fn begin_tick_plan(
         &mut self,
         world: &serde_json::Value,
+        kkpv_bundle: Option<&[u8]>,
         plan: TickPlan,
     ) -> anyhow::Result<TickPlan> {
         // 调用方应已提交或丢弃上一轮候选；清除残留，避免它混入当前 tick。
@@ -423,13 +450,24 @@ impl Sandbox {
                 self.shared.near_heap_fired.store(false, Ordering::Relaxed);
                 self.shared.halt_requested.store(false, Ordering::Relaxed);
                 // 世界注入也受本 tick 期限约束；失败时生成完整预算费用并清理执行状态。
-                // 参数通过 V8 字符串值传递，不拼接进 JavaScript 源码。
-                call_host_unit(
-                    &self.tokio,
-                    &mut self.runtime,
-                    &self.host.begin_tick,
-                    &[world_json, cpu_json],
-                )
+                // 参数通过 V8 值传递（字符串或 ArrayBuffer），不拼接进 JavaScript 源码。
+                // KKPV 通道的块束在此完成每 isolate 私有拷贝，不共享宿主内存。
+                match kkpv_bundle {
+                    Some(bundle) => call_host_kkpv_begin(
+                        &self.tokio,
+                        &mut self.runtime,
+                        &self.host.begin_tick_kkpv,
+                        &world_json,
+                        bundle,
+                        &cpu_json,
+                    ),
+                    None => call_host_unit(
+                        &self.tokio,
+                        &mut self.runtime,
+                        &self.host.begin_tick,
+                        &[world_json, cpu_json],
+                    ),
+                }
                 .inspect_err(|_| self.after_termination())?;
                 Ok(TickPlan::Run {
                     tick_limit: self.budget.tick_limit(),
@@ -785,6 +823,7 @@ impl Sandbox {
 /// 后续生命周期调用通过句柄完成，不查找玩家可替换的全局属性。
 struct HostFns {
     begin_tick: v8::Global<v8::Function>,
+    begin_tick_kkpv: v8::Global<v8::Function>,
     run_loop: v8::Global<v8::Function>,
     run_expr: v8::Global<v8::Function>,
     end_tick: v8::Global<v8::Function>,
@@ -839,6 +878,7 @@ impl HostFns {
             .map_err(|_| anyhow::anyhow!("__kkp.host 非对象"))?;
         Ok(Self {
             begin_tick: grab!(scope, host, "beginTick"),
+            begin_tick_kkpv: grab!(scope, host, "beginTickKkpv"),
             run_loop: grab!(scope, host, "runLoop"),
             run_expr: grab!(scope, host, "runExpr"),
             end_tick: grab!(scope, host, "endTick"),
@@ -871,6 +911,46 @@ fn call_host_unit(
     args: &[String],
 ) -> anyhow::Result<()> {
     call_host_string(tokio, runtime, f, args).map(|_| ())
+}
+
+/// 调用捕获的宿主函数，参数为（世界信封字符串、块束 ArrayBuffer、CPU
+/// 字符串）。块束字节装入新建 ArrayBuffer——这是一次每 isolate 私有
+/// 拷贝，不共享宿主内存；参数不作源码拼接。异常与中断的处理与
+/// [`call_host_string`] 一致。
+fn call_host_kkpv_begin(
+    tokio: &tokio::runtime::Runtime,
+    runtime: &mut JsRuntime,
+    f: &v8::Global<v8::Function>,
+    world_json: &str,
+    bundle: &[u8],
+    cpu_json: &str,
+) -> anyhow::Result<()> {
+    let _guard = tokio.enter();
+    deno_core::scope!(scope, runtime);
+    v8::tc_scope!(let scope, scope);
+    let func = f.open(scope);
+    let recv: v8::Local<v8::Value> = v8::undefined(scope).into();
+    let world = v8::String::new_from_utf8(scope, world_json.as_bytes(), v8::NewStringType::Normal)
+        .ok_or_else(|| anyhow::anyhow!("宿主通道参数构造失败（超长）"))?;
+    let cpu = v8::String::new_from_utf8(scope, cpu_json.as_bytes(), v8::NewStringType::Normal)
+        .ok_or_else(|| anyhow::anyhow!("宿主通道参数构造失败（超长）"))?;
+    let store = v8::ArrayBuffer::new_backing_store_from_vec(bundle.to_vec()).make_shared();
+    let buffer = v8::ArrayBuffer::with_backing_store(scope, &store);
+    let argv: [v8::Local<v8::Value>; 3] = [world.into(), buffer.into(), cpu.into()];
+    match func.call(scope, recv, &argv) {
+        Some(_) => Ok(()),
+        None => {
+            let msg = if scope.is_execution_terminating() {
+                "硬中断（terminate）".to_string()
+            } else {
+                scope
+                    .exception()
+                    .map(|e| e.to_rust_string_lossy(scope))
+                    .unwrap_or_else(|| "无异常对象".into())
+            };
+            Err(anyhow::anyhow!("宿主通道调用失败: {msg}"))
+        }
+    }
 }
 
 fn call_host_string(

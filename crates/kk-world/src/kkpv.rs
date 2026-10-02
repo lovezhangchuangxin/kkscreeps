@@ -10,13 +10,13 @@
 //! `object_json` 从 u64 生成的引用字段转为 `Ref` 编码，其余字符串保持
 //! 字符串——不猜测任意键的引用语义。
 
-use kk_schema::kkpv::{KkpvBlockInput, KkpvObject, KkpvValue, KkpvView};
+use kk_schema::kkpv::{KkpvBlockInput, KkpvLimits, KkpvObject, KkpvValue, KkpvView, encode_bundle};
 use kk_schema::room::RoomObject;
 use serde_json::Value;
 
 use crate::world::{ObjId, World};
 use crate::world_json::{
-    ext_entries_json, object_exported_for, object_json, room_rcl, room_visible_to,
+    ext_entries_json, object_exported_for, object_json, room_energy, room_rcl, room_visible_to,
 };
 
 impl World {
@@ -89,6 +89,169 @@ impl World {
         }
         Ok(blocks)
     }
+
+    /// KKPV 通道的世界信封：与 [`World::world_json_for_viewer`] 的房间级
+    /// 内容同源同形——同样的可见房集合、逐房名称/地形/能量/事件与
+    /// user/gcl/cpu 占位——但不携带对象数组，对象记录由房间块承载。
+    /// 房间级授权通道不进入房间块，因此地形与能量在信封侧保留现有
+    /// 形态（地形 base64+rev 缓存、能量/事件按可见房裁切）。
+    pub fn kkpv_envelope_for_viewer(&self, user: &str, gcl_points: i64) -> Value {
+        let visible: std::collections::BTreeSet<&String> = self
+            .rooms
+            .iter()
+            .filter(|(_, state)| room_visible_to(state, user))
+            .map(|(name, _)| name)
+            .collect();
+        let mut rooms = serde_json::Map::new();
+        for (name, state) in &self.rooms {
+            let mut entry = serde_json::Map::new();
+            entry.insert("name".into(), Value::String(name.clone()));
+            entry.insert("terrain".into(), self.terrain_json(name, state));
+            if visible.contains(name) {
+                let (available, capacity) = room_energy(state, Some(user));
+                entry.insert("energyAvailable".into(), Value::from(available));
+                entry.insert("energyCapacityAvailable".into(), Value::from(capacity));
+                if !state.events.is_empty() {
+                    let events: Vec<Value> = state
+                        .events
+                        .iter()
+                        .filter_map(|e| serde_json::from_str(e).ok())
+                        .collect();
+                    entry.insert("events".into(), Value::Array(events));
+                }
+            }
+            rooms.insert(name.clone(), Value::Object(entry));
+        }
+        let visible_rooms: Vec<&String> = visible.iter().copied().collect();
+        serde_json::json!({
+            "time": self.time,
+            "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+            "user": user,
+            "gcl": gcl_points,
+            "visibleRooms": visible_rooms,
+            "rooms": Value::Object(rooms),
+        })
+    }
+}
+
+/// 手搓世界 JSON（bot 夹具等不经权威世界构造的数据）的块束转换。
+/// 生产投影走 [`World::kkpv_room_blocks_for_viewer`]——权限裁切与
+/// 墓碑/废墟引用推断同源；本函数面向夹具：全部字符串保持字符串
+/// （不做引用语义推断），对象按记录内 room 字段分房，id 不成
+/// kk 前缀十六进制时按字符串稳定合成小整数（跳过夹具内已用的真实
+/// id 值，避免目录撞号）。块内对象按目录 ID 升序解出，与 JSON 通道
+/// 的数组原序可能不同——依赖顺序的消费者按 id 定位。
+///
+/// # Errors
+/// 记录非对象、缺 id/room、字段值无法映射 KKPV 或编码超限时返回错误。
+pub fn kkpv_bundle_from_world_json(
+    world: &Value,
+    plan_hash: [u8; 32],
+    audience_hash: [u8; 32],
+) -> Result<Vec<u8>, String> {
+    let time = world.get("time").and_then(Value::as_u64).unwrap_or(0);
+    let objects = world
+        .get("objects")
+        .and_then(Value::as_array)
+        .ok_or("手搓世界缺 objects 数组")?;
+    // 真实 id 值先入占用集，合成值从中跳过。
+    let taken: std::collections::BTreeSet<u64> = objects
+        .iter()
+        .filter_map(|record| {
+            record
+                .get("id")
+                .and_then(Value::as_str)
+                .and_then(ObjId::parse)
+                .map(|id| id.0)
+        })
+        .collect();
+    let mut next_synthetic = 1u64;
+    let mut synthetic_ids: std::collections::BTreeMap<String, u64> =
+        std::collections::BTreeMap::new();
+    let mut rooms: std::collections::BTreeMap<String, Vec<KkpvObject>> =
+        std::collections::BTreeMap::new();
+    for record in objects {
+        let obj = record.as_object().ok_or("手搓世界对象须为 JSON 对象")?;
+        let id_str = obj
+            .get("id")
+            .and_then(Value::as_str)
+            .ok_or("手搓世界对象缺 id 字符串")?;
+        let id = match ObjId::parse(id_str) {
+            Some(parsed) => parsed.0,
+            None => match synthetic_ids.get(id_str) {
+                Some(assigned) => *assigned,
+                None => {
+                    let mut assigned = next_synthetic;
+                    while taken.contains(&assigned) {
+                        assigned += 1;
+                    }
+                    next_synthetic = assigned + 1;
+                    synthetic_ids.insert(id_str.to_string(), assigned);
+                    assigned
+                }
+            },
+        };
+        let room = obj
+            .get("room")
+            .and_then(Value::as_str)
+            .ok_or("手搓世界对象缺 room 字符串")?
+            .to_string();
+        let mut fields = Vec::with_capacity(obj.len());
+        for (key, value) in obj {
+            if key == "id" {
+                continue;
+            }
+            fields.push((key.clone(), value_to_kkpv(value)?));
+        }
+        rooms.entry(room).or_default().push(KkpvObject {
+            id,
+            type_key: type_key_of(record),
+            fields,
+        });
+    }
+    let blocks = rooms
+        .into_iter()
+        .map(|(room_name, objects)| -> Result<KkpvBlockInput, String> {
+            let terrain = world
+                .get("rooms")
+                .and_then(|rooms| rooms.get(&room_name))
+                .and_then(|entry| entry.get("terrain"))
+                .and_then(Value::as_array)
+                .map(|bytes| {
+                    bytes
+                        .iter()
+                        .map(|b| {
+                            b.as_u64()
+                                .filter(|v| *v <= 255)
+                                .map(|v| v as u8)
+                                .ok_or_else(|| format!("地形字节越界：{b}"))
+                        })
+                        .collect::<Result<Vec<u8>, _>>()
+                })
+                .transpose()?;
+            Ok(KkpvBlockInput {
+                private: true,
+                tick: time,
+                generation: 0,
+                plan_hash,
+                audience_hash,
+                room_name,
+                terrain,
+                objects,
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    encode_bundle(&blocks, &KkpvLimits::default()).map_err(|e| e.to_string())
+}
+
+/// 手搓世界的 KKPV 信封：去掉 objects 键的浅拷贝；房间级内容（含旧
+/// 数组形态地形——prelude 对两种形态都接受）原样保留。
+pub fn kkpv_envelope_from_world_json(world: &Value) -> Value {
+    let mut envelope = world.clone();
+    if let Some(map) = envelope.as_object_mut() {
+        map.remove("objects");
+    }
+    envelope
 }
 
 /// 记录的 KKPV 类型桶键：结构/出生点用 `builtin:{structureType}`，
@@ -868,6 +1031,25 @@ mod tests {
         eprintln!(
             "KKPV 对照尺寸：p1 块合计 {block_bytes_p1} 字节，p2 块合计 {block_bytes_p2} 字节，JSON 参考 {json_bytes} 字节"
         );
+    }
+
+    /// KKPV 信封与 JSON 参考的房间级内容同形：去掉 objects 后逐键相等，
+    /// 两名查看者的可见房集合与逐房裁切一致（能量/事件只在可见房出现）。
+    #[test]
+    fn kkpv_envelope_matches_json_reference_minus_objects() {
+        let world = rich_world();
+        for viewer in ["p1", "p2"] {
+            let mut reference = world.world_json_for_viewer(viewer, 1000);
+            reference
+                .as_object_mut()
+                .expect("参考是对象")
+                .remove("objects");
+            let envelope = world.kkpv_envelope_for_viewer(viewer, 1000);
+            assert_eq!(
+                reference, envelope,
+                "{viewer}: 信封与参考（去 objects）同形"
+            );
+        }
     }
 
     /// Generic 原生数据自带 ext 键时，目录扩展按 JSON 参考的覆盖语义

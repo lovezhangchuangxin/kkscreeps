@@ -20,8 +20,10 @@ use kk_runner::{ModuleTable, PlayerThreads, RunEpoch, SandboxConfig, TickOutcome
 const PLAYER: u64 = 0;
 
 /// 运行检查并写入 JSON 报告，返回进程退出码；判定条件见本模块说明。
-pub fn run(path: &str, ticks: u32, report_path: &str) -> i32 {
-    match run_inner(path, ticks, report_path) {
+/// `kkpv` 为 true 时世界经 KKPV 二进制通道注入（对象记录走块束，
+/// 判定口径与 JSON 通道一致）。
+pub fn run(path: &str, ticks: u32, report_path: &str, kkpv: bool) -> i32 {
+    match run_inner(path, ticks, report_path, kkpv) {
         Ok(true) => 0,
         Ok(false) => 2,
         Err(e) => {
@@ -31,7 +33,7 @@ pub fn run(path: &str, ticks: u32, report_path: &str) -> i32 {
     }
 }
 
-fn run_inner(path: &str, ticks: u32, report_path: &str) -> anyhow::Result<bool> {
+fn run_inner(path: &str, ticks: u32, report_path: &str, kkpv: bool) -> anyhow::Result<bool> {
     let bot_dir = PathBuf::from(path);
     let table = ModuleTable::from_directory(&bot_dir)?;
     let module_count = table.len();
@@ -49,15 +51,30 @@ fn run_inner(path: &str, ticks: u32, report_path: &str) -> anyhow::Result<bool> 
 
     // 夹具初始就有 creep，因此先建立 Memory.creeps，避免 bot 的角色检查
     // 因缺少记录容器报错。这一轮只准备 Memory，不纳入后面的 tick 统计。
-    pool.run_player(
-        PLAYER,
-        &home_world(0),
-        "Memory.creeps = {}; 0",
-        RunEpoch {
-            tick: 0,
-            generation: 0,
-        },
-    )?;
+    let prep_world = home_world(0);
+    let prep_result = if kkpv {
+        pool.run_player_kkpv(
+            PLAYER,
+            &kk_world::kkpv::kkpv_envelope_from_world_json(&prep_world),
+            &kkpv_fixture_bundle(&prep_world)?,
+            "Memory.creeps = {}; 0",
+            RunEpoch {
+                tick: 0,
+                generation: 0,
+            },
+        )
+    } else {
+        pool.run_player(
+            PLAYER,
+            &prep_world,
+            "Memory.creeps = {}; 0",
+            RunEpoch {
+                tick: 0,
+                generation: 0,
+            },
+        )
+    };
+    prep_result?;
 
     let mut console_errors: Vec<String> = Vec::new();
     let mut console_head: Vec<String> = Vec::new();
@@ -72,7 +89,13 @@ fn run_inner(path: &str, ticks: u32, report_path: &str) -> anyhow::Result<bool> 
 
     for t in 1..=ticks {
         let world = home_world(t);
-        let report = pool.tick(PLAYER, &world)?;
+        let report = if kkpv {
+            let envelope = kk_world::kkpv::kkpv_envelope_from_world_json(&world);
+            let bundle = kkpv_fixture_bundle(&world)?;
+            pool.tick_kkpv(PLAYER, &envelope, &bundle)?
+        } else {
+            pool.tick(PLAYER, &world)?
+        };
         // 跳帧和执行后的硬中断都报告 Terminated，必须结合 plan 分开计数。
         match (&report.outcome, &report.plan) {
             (TickOutcome::Completed { .. }, _) => completed += 1,
@@ -249,6 +272,13 @@ fn normalize_line(line: &str) -> String {
         }
     }
     out
+}
+
+/// 手搓夹具世界的 KKPV 块束。计划/受众摘要用零占位——bot-check 的
+/// 桩世界不与引擎块混用，两个哈希在此只承担结构字段，不是授权。
+fn kkpv_fixture_bundle(world: &Value) -> anyhow::Result<Vec<u8>> {
+    kk_world::kkpv::kkpv_bundle_from_world_json(world, [0; 32], [0; 32])
+        .map_err(|e| anyhow::anyhow!("夹具世界 KKPV 转换失败：{e}"))
 }
 
 /// 构造固定房间和对象，每轮只改变 time。地形为 2500 个平原格，

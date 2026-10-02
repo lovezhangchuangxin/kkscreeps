@@ -1318,10 +1318,31 @@
       return segmentsOutStash;
     },
     /** 每 tick 注入世界快照（宿主经私有句柄以字符串参数传入——下方双分支
-     *  兼容 string/对象两种形态）并重建 Game。 */
+     * 兼容 string/对象两种形态）并重建 Game。 */
     beginTick(worldJson, cpuMeta) {
+      beginTickImpl(worldJson, cpuMeta, null);
+    },
+    /** KKPV 通道注入：worldJson 是不含对象数组的世界信封，对象记录由
+     * 可信解码器从每 isolate 私有拷贝的块束（ArrayBuffer）解出。装配后
+     * 与 JSON 通道的等同面：gw.world.objects 的成员、数组顺序（块房
+     * 序×ID 序）、字段值与缺失形态、Store/嵌套记录的键序（载荷保序）；
+     * 两者共用同一段 beginTickImpl 后续步骤。 */
+    beginTickKkpv(worldJson, bundle, cpuMeta) {
+      beginTickImpl(worldJson, cpuMeta, bundle);
+    },
+    writeBackMemory,
+    intentsPayload,
+  };
+
+  /** beginTick/beginTickKkpv 的共用实现；bundle 非 null 时对象数组来自
+   * KKPV 块束（信封不含 objects 键），其余步骤两条通道完全一致。 */
+  function beginTickImpl(worldJson, cpuMeta, bundle) {
       // 使用捕获的 JSON.parse 解码，避免玩家替换全局函数后改写世界与用户身份。
       gw.world = typeof worldJson === 'string' ? __jsonParse(worldJson) : worldJson;
+      if (bundle !== null && bundle !== undefined) {
+        // 块头 tick 与信封 time 在解码器内交叉校验（同一投影的同界快照）。
+        gw.world.objects = gw.kkpv.decodeBundle(bundle, gw.world.time);
+      }
       // Game.cpu 真值合并（宿主 begin_tick 第二参数——官方 make.js 先算窗口
       // 再装 runtimeData 的等价物；world.cpu 占位基准被此覆盖，键恒权威）
       if (cpuMeta !== undefined && cpuMeta !== null) {
@@ -1391,8 +1412,5 @@
         for (let i = 0; i < fns.length; i++) fns[i]();
       }
       refreshGame();
-    },
-    writeBackMemory,
-    intentsPayload,
-  };
+  }
 })();

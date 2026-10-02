@@ -9,6 +9,8 @@ use serde_json::json;
 
 use kk_runner::{ModuleTable, Sandbox, SandboxConfig, TickOutcome, TickPlan, live_sandbox_count};
 
+#[path = "sandbox_tests/kkpv_channel.rs"]
+mod kkpv_channel;
 #[path = "sandbox_tests/prelude_and_room_forms.rs"]
 mod prelude_and_room_forms;
 #[path = "sandbox_tests/resource_host_and_nearheap.rs"]
@@ -17,8 +19,8 @@ mod resource_host_and_nearheap;
 mod store_spawn_and_viewer;
 #[path = "sandbox_tests/watchdog_and_memory.rs"]
 mod watchdog_and_memory;
-
 // 子模块提供场景函数，由唯一的顶层测试串行调用；不要将它们改成并行测试。
+use kkpv_channel::*;
 use prelude_and_room_forms::*;
 use resource_host_and_nearheap::*;
 use store_spawn_and_viewer::*;
@@ -63,6 +65,10 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     host_face_closed()?;
     strict_frame_hides_host_functions()?;
     nearheap_trigger_then_restore_invariant()?;
+    kkpv_channel_equivalence_impl()?;
+    kkpv_ref_decode_impl()?;
+    kkpv_empty_bundle_impl()?;
+    kkpv_truncated_bundle_fails_impl()?;
     // LIFO 零违规断言在**全部**场景之后——中段断言会让其后场景的违规漏网
     assert_eq!(kk_runner::lifo_violations(), 0, "全流程 LIFO 纪律零违规");
     Ok(())

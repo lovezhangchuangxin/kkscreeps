@@ -62,6 +62,7 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     embed_run_players_shared_snapshot_impl()?;
     embed_snapshot_contract_impl()?;
     embed_intent_channel_impl()?;
+    kkpv_channel_e2e_equivalence_impl()?;
     embed_per_viewer_and_caps_impl()?;
     embed_spawn_family_chain_impl()?;
     embed_resource_family_impl()?;

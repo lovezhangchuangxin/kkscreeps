@@ -37,6 +37,10 @@ enum Command {
         /// 报告输出路径（JSON）
         #[arg(long, default_value = "bot-check-report.json")]
         report: String,
+        /// 经 KKPV 二进制通道注入世界（对象记录走块束；与 JSON 通道的
+        /// 判定口径一致）
+        #[arg(long)]
+        kkpv: bool,
     },
     /// 运行跨引擎共用的显式负载
     CompareProbe {
@@ -85,8 +89,9 @@ fn main() {
             path,
             ticks,
             report,
+            kkpv,
         } => {
-            std::process::exit(bot_check::run(&path, ticks, &report));
+            std::process::exit(bot_check::run(&path, ticks, &report, kkpv));
         }
         Command::CompareProbe {
             fixture,

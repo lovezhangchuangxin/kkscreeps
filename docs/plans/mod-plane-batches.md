@@ -73,7 +73,7 @@
 
 B 阶段的接口、投影布局、link 接入范围与切片见[开放领域定义与玩家投影](../designs/domain-projection.md)。该文档细化以下方向，不表示对应能力已实现。
 
-B.1 已建立 `kk-mod-api` 的描述、校验、冻结与 link 默认目录（64f2d91）；**B.2 已收口（2026-10-02）**：link 有效规则接入放置/建造/结算/配额/伤害/玩家常量，槽执行器（Native/Chained+wrap-next）与 `Engine::with_plan` 装配落地，棘轮 1854 零转红——实现与限制见 [B.2 接线记录](../research/notes/b2-link-wiring-2026-10-02.md)。**B.3 已收口（2026-10-02）**：对象级扩展字段全链——挂载声明/目录/写入门/发布前校验/投影裁切（见 [B.3 记录](../research/notes/b3-extension-fields-2026-10-02.md)）；有界动作的玩家通道与条件权限归 C/B.4。**B.4 已收口（2026-10-02）**：KKPV v1 编解码原型（`kk-schema::kkpv` 布局+惰性视图+公开/私有合并、`kk-world` 同源桥、`kk-runtime` 不可变块句柄库）——逐字段/缺失/null 对照、畸形拒绝矩阵、慢工作者保留均有测试锁定，生产路径零变化（见 [B.4 记录](../research/notes/b4-kkpv-prototype-2026-10-02.md)）。下一片 B.5（接线与测量）。
+B.1 已建立 `kk-mod-api` 的描述、校验、冻结与 link 默认目录（64f2d91）；**B.2 已收口（2026-10-02）**：link 有效规则接入放置/建造/结算/配额/伤害/玩家常量，槽执行器（Native/Chained+wrap-next）与 `Engine::with_plan` 装配落地，棘轮 1854 零转红——实现与限制见 [B.2 接线记录](../research/notes/b2-link-wiring-2026-10-02.md)。**B.3 已收口（2026-10-02）**：对象级扩展字段全链——挂载声明/目录/写入门/发布前校验/投影裁切（见 [B.3 记录](../research/notes/b3-extension-fields-2026-10-02.md)）；有界动作的玩家通道与条件权限归 C/B.4。**B.4 已收口（2026-10-02）**：KKPV v1 编解码原型（`kk-schema::kkpv` 布局+惰性视图+公开/私有合并、`kk-world` 同源桥、`kk-runtime` 不可变块句柄库）——逐字段/缺失/null 对照、畸形拒绝矩阵、慢工作者保留均有测试锁定，生产路径零变化（见 [B.4 记录](../research/notes/b4-kkpv-prototype-2026-10-02.md)）。**B.5 第一片已收口（2026-10-03）**：KKPV 通道接线与等价——束框架/沙箱侧可信解码器（惰性记录+捕获内建）/RunJob 与低层通道的 bundle 字段/EmbedEngine 双通道开关/bot-check `--kkpv`；三道等价测试（沙箱深对照、Ref 全环、e2e 含自杀→墓碑）+ bot 双通道门禁锁定"两通道玩家可见面一致"，嵌套键序经 preserve_order 特性统一发现并修复（编码保序）（见 [B.5 记录](../research/notes/b5-kkpv-wiring-2026-10-03.md)）。B.5 第二片（测量矩阵）待做。
 
 | 批 | 内容（06 §6 + ADR-014 调整） | 到批前须补 |
 |---|---|---|

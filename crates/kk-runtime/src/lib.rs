@@ -498,6 +498,7 @@ mod tests {
         ex.set_modules("p1", modules)?;
         let code = "globalThis.n=(globalThis.n||0)+1; [globalThis.n,Memory.saved,require('savedModule').value]";
         let job = |attempt| kk_runner::RunJob {
+            kkpv_bundle: None,
             world: json!({"time":0,"rooms":{},"objects":[]}),
             code: code.into(),
             epoch: RunEpoch::default(),
