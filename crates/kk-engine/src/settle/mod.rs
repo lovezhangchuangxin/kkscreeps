@@ -14,8 +14,10 @@ pub mod room;
 pub mod spawn;
 mod stages;
 pub mod structures;
+mod txn;
 
 pub use stages::{RunState, TickStage};
+pub use txn::TickState;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -66,7 +68,7 @@ impl std::fmt::Display for SettleError {
 /// 因此同 tick 的后一次 claim 看不到前一次新占的房间。
 /// 来源：上游 engine/src/processor/intents/creeps/claimController.js
 /// 与 driver/lib/index.js 的 addRoomToUser（排队写入，未修改运行中的用户对象）。
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct PlayerState {
     /// 累计 GCL 进度，不是玩家 API 显示的 GCL 等级。
     pub gcl: i64,
@@ -127,7 +129,7 @@ impl TickInput {
     }
 }
 
-/// 单房间结算上下文：房间副本、位置索引、候选玩家与共享 ID 游标，
+/// 单房间结算上下文：房间副本、位置索引及共享候选状态，
 /// 以及本轮的事件、伤害与移动记录。直接调用者须提供工作副本。
 pub struct Working<'w> {
     pub room: &'w mut RoomState,
@@ -135,8 +137,7 @@ pub struct Working<'w> {
     pub time: u64,
     /// Unix 毫秒墙钟，来自本轮 TickInput。
     pub now_ms: u64,
-    pub next_id: &'w mut u64,
-    pub players: &'w mut BTreeMap<String, PlayerState>,
+    pub state: TickState,
     pub events: Vec<Value>,
     /// 处理 move 时记录的疲劳，供移动仲裁判断是否能移动。
     pub old_fatigue: BTreeMap<ObjId, u32>,
@@ -182,8 +183,7 @@ impl<'w> Working<'w> {
     /// 使用共享游标创建对象，并登记位置索引。
     /// 调用方须保证游标不与已有 ID 冲突；游标饱和后无法继续可靠分配。
     pub fn insert_new(&mut self, object: RoomObject) -> ObjId {
-        let id = *self.next_id;
-        *self.next_id = self.next_id.saturating_add(1);
+        let id = self.state.allocate_id();
         let (x, y) = object.pos();
         self.room
             .insert_with_id(id, object)
@@ -426,7 +426,7 @@ pub fn energy_resource_name(o: &kk_schema::room::EnergyObj) -> &str {
 
 /// 原地结算房间，返回事件并替换 room.events。
 ///
-/// 本函数不创建副本，也不回滚 room、players 和 next_id。调用方须提供
+/// 本函数不创建副本，也不回滚 room 与共享状态。调用方须提供
 /// 候选，返回 Err 后丢弃整个候选。Engine 负责跨房间的提交边界。
 /// room.name 须为世界目录中的房名，用于筛选房间级指令；time 是结算前
 /// 的绝对 tick，now_ms 是 Unix 毫秒墙钟。对象级指令仅处理本房间存在的 ID。
@@ -434,8 +434,7 @@ pub fn settle_room(
     room: &mut RoomState,
     time: u64,
     now_ms: u64,
-    next_id: &mut u64,
-    players: &mut BTreeMap<String, PlayerState>,
+    state: &TickState,
     batch: &IntentBatch,
 ) -> Result<Vec<Value>, SettleError> {
     let index = RoomIndex::build(&room.objects);
@@ -444,8 +443,7 @@ pub fn settle_room(
         index,
         time,
         now_ms,
-        next_id,
-        players,
+        state: state.clone(),
         events: Vec::new(),
         old_fatigue: BTreeMap::new(),
         tick_fatigue: BTreeMap::new(),
@@ -731,30 +729,37 @@ impl Engine {
         input: &TickInput,
     ) -> Result<(), SettleError> {
         cursor.enter(TickStage::Prepare)?;
-        let mut cand = self.prepare_tick(batch)?;
+        let mut txn = self.prepare_tick(batch, *input)?;
         cursor.enter(TickStage::Settle)?;
-        let mut settled = self.settle_rooms_stage(&mut cand, input)?;
+        self.settle_rooms_stage(&mut txn)?;
         cursor.enter(TickStage::Market)?;
-        // 市场读取本轮房间候选并修改市场副本，后续阶段失败时一并丢弃。
-        let mut market_cand = self.market.clone();
-        market::settle_market(
-            &mut settled.rooms,
-            &mut cand.players,
-            &mut market_cand,
-            &cand.batch,
-            cand.time,
-            input.now_ms,
-        );
+        {
+            let mut state = txn.state.inner.borrow_mut();
+            market::settle_market(
+                &mut txn.rooms,
+                &mut state.players,
+                &mut txn.market,
+                &txn.batch,
+                txn.time,
+                txn.input.now_ms,
+            );
+        }
         cursor.enter(TickStage::Validate)?;
-        self.validate_stage(&cand, &settled)?;
-        self.run_state = RunState::Prepared { tick: cand.time };
+        self.validate_stage(&txn)?;
+        let time = txn.time;
+        let prepared = txn.into_prepared()?;
+        self.run_state = RunState::Prepared { tick: time };
         cursor.enter(TickStage::Publish)?;
-        self.publish_tick(cand, settled, market_cand);
+        self.publish_tick(prepared);
         Ok(())
     }
 
     /// 构造玩家副本和 ID 起点，并复核安全模式指令。
-    fn prepare_tick(&mut self, batch: IntentBatch) -> Result<stages::TickCandidates, SettleError> {
+    fn prepare_tick(
+        &self,
+        batch: IntentBatch,
+        input: TickInput,
+    ) -> Result<txn::OwnedTickTxn, SettleError> {
         let next = self
             .next_id
             .max(self.world.next_available_obj_id().map_err(SettleError)?);
@@ -786,53 +791,45 @@ impl Engine {
             }
         }
         let room_names: Vec<String> = self.world.rooms().keys().cloned().collect();
-        Ok(stages::TickCandidates {
+        Ok(txn::OwnedTickTxn {
             time,
+            input,
             room_names,
-            next,
-            players,
+            state: TickState::new(players, next),
             batch,
+            rooms: Vec::new(),
+            events: Vec::new(),
+            market: self.market.clone(),
         })
     }
 
     /// 按房名结算副本，共用候选玩家与 ID 游标；任一房间失败均不写回。
-    fn settle_rooms_stage(
-        &mut self,
-        cand: &mut stages::TickCandidates,
-        input: &TickInput,
-    ) -> Result<stages::SettledRooms, SettleError> {
-        let mut events = Vec::new();
-        let mut rooms: Vec<(String, RoomState)> = Vec::new();
-        for name in cand.room_names.clone() {
+    fn settle_rooms_stage(&self, txn: &mut txn::OwnedTickTxn) -> Result<(), SettleError> {
+        for name in &txn.room_names {
             if self.fail_room.as_deref() == Some(name.as_str()) {
                 return Err(SettleError(format!("故障注入：房间 {name} 结算失败")));
             }
-            let mut room = self.world.room(&name).expect("房间名来自键集").clone();
+            let mut room = self.world.room(name).expect("房间名来自键集").clone();
             // 二进制房间快照不保存房名；结算指令按世界目录中的名称匹配。
-            room.name.clone_from(&name);
+            room.name.clone_from(name);
             let mut room_events = settle_room(
                 &mut room,
-                cand.time,
-                input.now_ms,
-                &mut cand.next,
-                &mut cand.players,
-                &cand.batch,
+                txn.time,
+                txn.input.now_ms,
+                &txn.state,
+                &txn.batch,
             )?;
-            rooms.push((name, room));
-            events.append(&mut room_events);
+            txn.rooms.push((name.clone(), room));
+            txn.events.append(&mut room_events);
         }
-        Ok(stages::SettledRooms { rooms, events })
+        Ok(())
     }
 
     /// 只读检查候选房间覆盖、ID 游标和玩家键，失败进入 NeedsRecovery。
-    fn validate_stage(
-        &self,
-        cand: &stages::TickCandidates,
-        settled: &stages::SettledRooms,
-    ) -> Result<(), SettleError> {
+    fn validate_stage(&self, cand: &txn::OwnedTickTxn) -> Result<(), SettleError> {
         // 房间数和顺序均须与准备阶段一致，集合相等不能验证顺序。
-        if settled.rooms.len() != cand.room_names.len()
-            || settled
+        if cand.rooms.len() != cand.room_names.len()
+            || cand
                 .rooms
                 .iter()
                 .zip(&cand.room_names)
@@ -841,21 +838,26 @@ impl Engine {
             return Err(SettleError(format!(
                 "候选房间覆盖不完整：期望 {} 间，实得 {} 间",
                 cand.room_names.len(),
-                settled.rooms.len()
+                cand.rooms.len()
             )));
         }
         // 游标不得低于入口的 ID 起点，避免后续创建对象复用旧 ID。
         let base = self
             .next_id
             .max(self.world.next_available_obj_id().map_err(SettleError)?);
-        if cand.next < base {
+        let state = cand.state.inner.borrow();
+        if state.next_id < base {
             return Err(SettleError(format!(
                 "id 候选回退：{} < 基线 {base}",
-                cand.next
+                state.next_id
             )));
         }
         // 候选可以增加玩家，不能删除已提交的玩家。
-        if let Some(missing) = self.players.keys().find(|k| !cand.players.contains_key(*k)) {
+        if let Some(missing) = self
+            .players
+            .keys()
+            .find(|k| !state.players.contains_key(*k))
+        {
             return Err(SettleError(format!("玩家候选丢键：{missing}")));
         }
         Ok(())
@@ -864,51 +866,15 @@ impl Engine {
     /// 将已校验候选写回内存；不返回 Result，也不捕获 panic。
     /// World::commit_room 不递增版本。全部房间写回后须先推进时间，再允许
     /// 查询世界，使目录和投影缓存一起失效。
-    fn publish_tick(
-        &mut self,
-        mut cand: stages::TickCandidates,
-        mut settled: stages::SettledRooms,
-        market_cand: market::MarketState,
-    ) {
-        self.market = market_cand;
-        for (name, room) in settled.rooms.drain(..) {
+    fn publish_tick(&mut self, prepared: txn::PreparedTick) {
+        self.market = prepared.market;
+        for (name, room) in prepared.rooms {
             self.world.commit_room(name, room);
         }
-        // 通知在房间循环外每玩家处理一次；groupInterval 仅保存，不用于聚合或发送。
-        for (player, intents) in &cand.batch.users {
-            if intents.notify.is_empty() {
-                continue;
-            }
-            let state = cand.players.entry(player.clone()).or_default();
-            for n in &intents.notify {
-                state.notifications.push(NotifyRecord {
-                    message: n.message.clone(),
-                    group_interval: n.group_interval,
-                    tick: cand.time,
-                });
-            }
-            let len = state.notifications.len();
-            if len > NOTIFY_RECORD_CAP {
-                state.notifications.drain(0..len - NOTIFY_RECORD_CAP);
-            }
-        }
-        // 重建 rooms，使占领、放弃和控制器降级后的房间集合在下一轮生效。
-        for state in cand.players.values_mut() {
-            state.rooms.clear();
-        }
-        for room in self.world.rooms().values() {
-            if let Some(owner) = room.objects.values().find_map(|o| match o {
-                RoomObject::Controller(c) => c.owner.clone(),
-                _ => None,
-            }) && let Some(state) = cand.players.get_mut(&owner)
-            {
-                state.rooms.insert(room.name.clone());
-            }
-        }
-        self.players = cand.players;
-        self.next_id = cand.next;
+        self.players = prepared.players;
+        self.next_id = prepared.next_id;
         self.world.bump_next_obj_id(self.next_id);
-        self.last_events = settled.events;
+        self.last_events = prepared.events;
         self.world.advance_ticks(1);
     }
 }
@@ -1276,69 +1242,32 @@ mod tests {
             .unwrap();
         let mut engine = Engine::new(world);
         engine.players.entry("p1".to_string()).or_default();
-        let mk_cand = |next| stages::TickCandidates {
-            time: 0,
-            room_names: vec!["W1N1".to_string(), "W2N2".to_string()],
-            next,
-            players: engine.players.clone(),
-            batch: IntentBatch::default(),
+        let mk_cand = |next| {
+            let mut txn = engine
+                .prepare_tick(IntentBatch::default(), TickInput { now_ms: 0 })
+                .unwrap();
+            txn.state.inner.borrow_mut().next_id = next;
+            txn.rooms = txn
+                .room_names
+                .iter()
+                .map(|name| (name.clone(), engine.world.room(name).unwrap().clone()))
+                .collect();
+            txn
         };
-        let settled_full = stages::SettledRooms {
-            rooms: vec![
-                (
-                    "W1N1".to_string(),
-                    engine.world.room("W1N1").unwrap().clone(),
-                ),
-                (
-                    "W2N2".to_string(),
-                    engine.world.room("W2N2").unwrap().clone(),
-                ),
-            ],
-            events: Vec::new(),
-        };
-        // 对照：完整候选 → Ok
-        engine
-            .validate_stage(&mk_cand(engine.next_id), &settled_full)
-            .unwrap();
-        // ① 缺一间
-        let settled_short = stages::SettledRooms {
-            rooms: vec![(
-                "W1N1".to_string(),
-                engine.world.room("W1N1").unwrap().clone(),
-            )],
-            events: Vec::new(),
-        };
-        let err = engine
-            .validate_stage(&mk_cand(engine.next_id), &settled_short)
-            .unwrap_err();
+        engine.validate_stage(&mk_cand(engine.next_id)).unwrap();
+        let mut short = mk_cand(engine.next_id);
+        short.rooms.pop();
+        let err = engine.validate_stage(&short).unwrap_err();
         assert!(err.to_string().contains("覆盖"), "{err}");
-        // 调换房间顺序也应拒绝；只比较集合会漏掉这个错误。
-        let settled_swapped = stages::SettledRooms {
-            rooms: vec![
-                (
-                    "W2N2".to_string(),
-                    engine.world.room("W2N2").unwrap().clone(),
-                ),
-                (
-                    "W1N1".to_string(),
-                    engine.world.room("W1N1").unwrap().clone(),
-                ),
-            ],
-            events: Vec::new(),
-        };
-        let err = engine
-            .validate_stage(&mk_cand(engine.next_id), &settled_swapped)
-            .unwrap_err();
-        assert!(err.to_string().contains("覆盖"), "错序同为覆盖违例: {err}");
-        // ② id 回退（世界已有 id 0 ⇒ 基线 ≥ 1 > 0）
-        let err = engine
-            .validate_stage(&mk_cand(0), &settled_full)
-            .unwrap_err();
+        let mut swapped = mk_cand(engine.next_id);
+        swapped.rooms.swap(0, 1);
+        let err = engine.validate_stage(&swapped).unwrap_err();
+        assert!(err.to_string().contains("覆盖"), "{err}");
+        let err = engine.validate_stage(&mk_cand(0)).unwrap_err();
         assert!(err.to_string().contains("回退"), "{err}");
-        // ③ 玩家丢键
-        let mut cand = mk_cand(engine.next_id);
-        cand.players.remove("p1");
-        let err = engine.validate_stage(&cand, &settled_full).unwrap_err();
+        let cand = mk_cand(engine.next_id);
+        cand.state.inner.borrow_mut().players.remove("p1");
+        let err = engine.validate_stage(&cand).unwrap_err();
         assert!(err.to_string().contains("丢键"), "{err}");
     }
 }

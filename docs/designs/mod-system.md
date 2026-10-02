@@ -180,7 +180,7 @@ Mod 不获得 Rust 裸指针。位置、归属、生命周期、Store 与字段�
 
 ### 6.2 先建立 OwnedTxn，再接入 VM
 
-现有 `Working<'w>` 借用 room/players/next_id，不能放进生命周期要求为 `'static` 的 OpState。先把结算入口改为拥有数据的候选事务；同一宿主线程的 native 和 VM 通过 `Rc<RefCell<OwnedTxn>>` 或等价安全封装取得短暂访问。
+引擎已建立拥有输入、房间、市场和共享状态的 `OwnedTickTxn`。`Working<'w>` 通过 `TickState` 短暂访问玩家候选和 ID 游标，但仍局部借用 room，不能直接放进生命周期要求为 `'static` 的 OpState。接入 VM 时由同一宿主线程的 native 和 VM 持有拥有数据的候选事务，通过 `Rc<RefCell<OwnedTxn>>` 或等价安全封装取得短暂访问；在进入 JS 前结束房间与事务的可变借用。
 
 ```text
 runtime 收集玩家结果 + 原 TickInput
@@ -333,7 +333,7 @@ export default function install(api) {
 
 首版使用完整世界的串行候选，允许规则读取和修改其授权域；可表达的规则仍受 SDK、数据表示和资源预算约束。后续 scope 分 room/player/world，声明只读/可写域；宿主检查实际访问。room scope 限当前房及自己的房间状态，跨房/账户写通过明确命令/差异汇总；world scope 进入串行屏障，仍有完整能力。未声明不意味着自动隔离成功，不能只相信作者填写 `parallelSafe: true`。
 
-`Working` 当前共享 players/next_id 必须先改造。并行新对象 ID 可以采用预分配稳定区间或带映射的临时 ID，必须处理同轮引用/返回值和最终改写；native vanilla ID 次序按兼容测试选择。玩家 GCL/credits 等非交换更新需要串行排序或领域专用合并，不能全部做求和。跨房移动、终端发送和市场归全局阶段。
+当前 `TickState` 通过同线程 Rc/RefCell 共享玩家候选和 ID 游标，房间仍串行结算；这不是跨线程调度接口。并行新对象 ID 可以采用预分配稳定区间或带映射的临时 ID，必须处理同轮引用/返回值和最终改写；native vanilla ID 次序按兼容测试选择。玩家 GCL/credits 等非交换更新需要串行排序或领域专用合并，不能全部做求和。跨房移动、终端发送和市场归全局阶段。
 
 性能必须验收：
 

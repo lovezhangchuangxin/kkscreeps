@@ -92,6 +92,7 @@ impl PerfRecorder {
             "count": v.len(),
             "p50_ms": pick(0.5),
             "p95_ms": pick(0.95),
+            "p99_ms": pick(0.99),
             "max_ms": v[v.len() - 1],
             "total_ms": v.iter().sum::<f64>(),
         })

@@ -105,8 +105,7 @@ pub(super) fn intent_upgrade_controller(w: &mut Working, id: ObjId, data: &Inten
     } else {
         *w.upgraded.entry(target_id).or_insert(0) += boosted;
     }
-    let player = w.players.entry(owner.clone()).or_default();
-    player.gcl += boosted;
+    w.state.add_gcl(&owner, boosted);
     if let Some(c) = w.creep_mut(id) {
         c.store.energy -= effect as u32;
         set_action_log(&mut c.action_log, ACTION_UPGRADE);
@@ -161,9 +160,8 @@ pub(super) fn intent_claim_controller(w: &mut Working, id: ObjId, data: &IntentD
         return;
     }
     // 本轮的先后 claim 都读取上一 tick 的房间数；新集合到发布时才重建。
-    let claimed_rooms = w.players.get(&owner).map(|p| p.rooms.len()).unwrap_or(0);
+    let (claimed_rooms, gcl) = w.state.claim_state(&owner);
     let needed_gcl = c::GCL_MULTIPLY as f64 * (claimed_rooms as f64).powf(c::GCL_POW);
-    let gcl = w.players.get(&owner).map(|p| p.gcl).unwrap_or(0);
     if (gcl as f64) < needed_gcl {
         return;
     }

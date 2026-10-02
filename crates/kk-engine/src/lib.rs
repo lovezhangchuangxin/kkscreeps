@@ -11,4 +11,6 @@ pub mod settle;
 pub use intent::MarketIntent;
 pub use sandbox::{RunOutcome, RunResult, RunSpec, Sandbox, ScriptedSandbox, WorldView};
 pub use settle::market::{MarketOrder, MarketState, Transaction};
-pub use settle::{Engine, PlayerState, RunState, SettleError, TickInput, TickStage, settle_room};
+pub use settle::{
+    Engine, PlayerState, RunState, SettleError, TickInput, TickStage, TickState, settle_room,
+};

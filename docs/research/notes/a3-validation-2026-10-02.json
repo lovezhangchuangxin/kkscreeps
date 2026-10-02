@@ -1,0 +1,82 @@
+{
+  "source_baseline": "6248546",
+  "workspace": {
+    "passed": 380,
+    "failed": 0,
+    "ignored": 5
+  },
+  "screeps_ok": {
+    "passed": 1854,
+    "failed": 153,
+    "skipped": 907,
+    "total": 2914,
+    "previously_passed_regressions": 0,
+    "new_passed": 0
+  },
+  "bots": [
+    {
+      "bot": "tooangel",
+      "before": {
+        "ticks_requested": 2000,
+        "ticks_completed": 2000,
+        "ticks_terminated": 0,
+        "ticks_skipped_penalty": 0,
+        "ticks_with_console_error": 0,
+        "missing_api": {}
+      },
+      "after": {
+        "ticks_requested": 2000,
+        "ticks_completed": 2000,
+        "ticks_terminated": 0,
+        "ticks_skipped_penalty": 0,
+        "ticks_with_console_error": 0,
+        "missing_api": {}
+      },
+      "console_errors_head": []
+    },
+    {
+      "bot": "overmind",
+      "before": {
+        "ticks_requested": 2000,
+        "ticks_completed": 2000,
+        "ticks_terminated": 0,
+        "ticks_skipped_penalty": 0,
+        "ticks_with_console_error": 1,
+        "missing_api": {}
+      },
+      "after": {
+        "ticks_requested": 2000,
+        "ticks_completed": 2000,
+        "ticks_terminated": 0,
+        "ticks_skipped_penalty": 0,
+        "ticks_with_console_error": 1,
+        "missing_api": {}
+      },
+      "console_errors_head": [
+        "[tick 1] [loop] Caught unhandled exception instantiating colony W1N1: \nTypeError: Cannot read properties of undefined (reading 'harvest:a9d408')\n    at DirectiveHarvest.create (kk_module/main, <anonymous>:14448:76)\n    at DirectiveHarvest.createIfNotPresent (kk_module/main, <anonymous>:14524:33)\n    at Colony.registerRoomObjects_cached (kk_module/main, <anonymous>:15316:30)\n    at Colony.build (kk_module/main, <anonymous>:15239:14)\n    at new Colony (kk_module/main, <anonymous>:15222:14)\n    at _Overmind.registerColonies (kk_module/main, <anonymous>:24047:4844)\n    at _Overmind.build (kk_module/main, <anonymous>:24047:1597)\n    at main (kk_module/main, <anonymous>:24294:18)\n    at Object.wrap (kk_module/main, <anonymous>:971:16)\n    at Object.loop (kk_module/main, <anonymous>:24308:21)",
+        "[tick 1] Caught unhandled exception instantiating colony W1N1: \nTypeError: Cannot read properties of undefined (reading 'harvest:a9d408')\n    at DirectiveHarvest.create (kk_module/main, <anonymous>:14448:76)\n    at DirectiveHarvest.createIfNotPresent (kk_module/main, <anonymous>:14524:33)\n    at Colony.registerRoomObjects_cached (kk_module/main, <anonymous>:15316:30)\n    at Colony.build (kk_module/main, <anonymous>:15239:14)\n    at new Colony (kk_module/main, <anonymous>:15222:14)\n    at _Overmind.registerColonies (kk_module/main, <anonymous>:24047:4844)\n    at _Overmind.build (kk_module/main, <anonymous>:24047:1597)\n    at main (kk_module/main, <anonymous>:24294:18)\n    at Object.wrap (kk_module/main, <anonymous>:971:16)\n    at Object.loop (kk_module/main, <anonymous>:24308:21)"
+      ]
+    },
+    {
+      "bot": "wasm",
+      "before": {
+        "ticks_requested": 10,
+        "ticks_completed": 10,
+        "ticks_terminated": 0,
+        "ticks_skipped_penalty": 0,
+        "ticks_with_console_error": 0,
+        "missing_api": {}
+      },
+      "after": {
+        "ticks_requested": 10,
+        "ticks_completed": 10,
+        "ticks_terminated": 0,
+        "ticks_skipped_penalty": 0,
+        "ticks_with_console_error": 0,
+        "missing_api": {}
+      },
+      "console_errors_head": []
+    }
+  ],
+  "linux_process_sampler": "x86_64-unknown-linux-musl compile only; not executed"
+}

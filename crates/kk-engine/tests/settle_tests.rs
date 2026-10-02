@@ -302,17 +302,13 @@ impl Fixture {
         batch: IntentBatch,
         input: kk_engine::settle::TickInput,
     ) -> Vec<Value> {
-        let mut next = self.world.next_obj_id();
+        let state =
+            kk_engine::TickState::new(std::mem::take(&mut self.players), self.world.next_obj_id());
         let mut room = self.world.room("W1N1").unwrap().clone();
-        let events = settle_room(
-            &mut room,
-            self.world.time(),
-            input.now_ms,
-            &mut next,
-            &mut self.players,
-            &batch,
-        )
-        .unwrap();
+        let events =
+            settle_room(&mut room, self.world.time(), input.now_ms, &state, &batch).unwrap();
+        let (players, next) = state.into_parts().unwrap();
+        self.players = players;
         let name = room.name.clone();
         self.world.commit_room(name, room);
         self.world.bump_next_obj_id(next);

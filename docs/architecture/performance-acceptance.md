@@ -11,7 +11,7 @@ cargo build --release -p kk-cli
 target/release/kkscreeps perf-probe --players 2 --warmup 100 --ticks 1000 --report /tmp/kkscreeps-perf.json
 ```
 
-当前工具把玩家数限制为 1..8，每玩家独立房间，使用采集、升级和孵化脚本。它不覆盖共享房间竞争、跨房调度、数据库写盘或网络推送。
+当前工具接受 1..32 名玩家，每玩家独立房间，使用采集、升级和孵化脚本。超出范围报错，不静默改变请求的负载。它不覆盖共享房间竞争、跨房调度、数据库写盘或网络推送。
 
 `EmbedEngine` 记录的都是墙钟时间，单位毫秒：
 
@@ -22,7 +22,13 @@ target/release/kkscreeps perf-probe --players 2 --warmup 100 --ticks 1000 --repo
 | `settle` | 世界结算调用 |
 | `wall` | 从 run_players 开始到玩家状态提交后的采样点，不含最后的返回结果装配 |
 
-四项不能简单相加解释为完整时间分解。重试复用缓存时不重新投影和执行，其对应采样为 0；采样只在完成结算后记录。报告提供 count、p50、p95、最大值和总耗时，分位数按排序样本的 `round((N−1)×q)` 下标取值。它没有独立测量服务器 CPU core-ms、RSS、GC、复制字节数或网络后台工作。
+四项不能简单相加解释为完整时间分解。重试复用缓存时不重新投影和执行，其对应采样为 0；采样只在完成结算后记录。报告提供 count、p50、p95、p99、最大值和总耗时，分位数按排序样本的 `round((N−1)×q)` 下标取值。
+
+macOS/Linux 上，报告的 `process` 部分另测采集窗口内当前进程全部线程的 CPU core-ms，以及采集前和每 tick 结束时的 RSS。CPU 使用 [getrusage(RUSAGE_SELF)](https://www.man7.org/linux/man-pages/man2/getrusage.2.html)，包括协调器、玩家线程和后台线程；它与玩家 `Game.cpu` 账单分列，不包含其他进程。RSS 使用 macOS 的进程 resident size 或 Linux `/proc/self/statm`，单位为字节。`rss_bytes_sampled_peak` 是采样点最大值，可能漏掉 tick 内瞬时峰值；p50 只保留前 50000 个观测点，最大值仍覆盖全部观测点。
+
+进程窗口在预热与初始负载检查后开始，在采集循环后结束；包括窗口内的负载检查与 RSS 采样开销，报告单列 `rss_sampling_wall_ms`。阶段计时不包含这些循环外部操作，不能将两种口径直接相减作为某一业务阶段耗时。元数据记录运行系统、架构、逻辑 CPU 数、运行环境中的 rustc、源码提交及工作区状态；`debug_assertions` 用于识别 debug 构建。尚未采集 GC、复制字节数或独立网络后台工作。
+
+独立重复运行工具见 [perf-baseline.py](../../scripts/perf-baseline.py)：默认按 1/4/8/32 玩家交替顺序，各运行五次，预热 500 tick、采集 3000 tick，并保存全部原始报告和二进制 SHA-256。此结果只作为本仓基线，不代替三方对照。
 
 预热后清空样本，最多保留 50000 个采集样本；其后的 tick 继续运行但不加入统计。工具只在首房检查控制器进度增加，并在足够长的窗口中检查采集迹象，不能据此保证每房全部动作正确。长窗口会出现 creep 死亡、重新孵化和墓碑衰减，工作负载并非始终不变。
 

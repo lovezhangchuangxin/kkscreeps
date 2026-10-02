@@ -4,14 +4,7 @@
 //! 返回 Err 时保留已提交的世界、玩家和市场状态。这不覆盖 panic、进程崩溃
 //! 或磁盘持久化，指令与墙钟输入的重试缓存由调用方管理。
 
-use std::collections::BTreeMap;
-
-use serde_json::Value;
-
-use crate::intent::IntentBatch;
-use crate::settle::PlayerState;
 use crate::settle::SettleError;
-use kk_world::RoomState;
 
 /// 一次 tick 的处理阶段，也是故障注入和错误报告的边界。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,9 +15,9 @@ pub enum TickStage {
     Settle,
     /// 使用结算后的房间候选执行全局市场规则。
     Market,
-    /// 检查房间覆盖与顺序、对象 ID 游标及玩家键。
+    /// 检查房间覆盖与顺序、对象 ID 游标及玩家键，并准备通知和玩家房间集合。
     Validate,
-    /// 写回候选，保存通知，重建玩家房间集合，再推进时间与世界版本。
+    /// 写回完整结算候选，再推进时间与世界版本。
     Publish,
 }
 
@@ -67,22 +60,6 @@ pub enum RunState {
         stage: TickStage,
         reason: String,
     },
-}
-
-/// 准备阶段产生的输入、玩家副本及对象 ID 游标。
-/// 房间和市场副本分别由后续阶段创建，直到发布前都不写回引擎。
-pub(crate) struct TickCandidates {
-    pub(crate) time: u64,
-    pub(crate) room_names: Vec<String>,
-    pub(crate) next: u64,
-    pub(crate) players: BTreeMap<String, PlayerState>,
-    pub(crate) batch: IntentBatch,
-}
-
-/// 按房名顺序保存结算后的房间副本与事件。
-pub(crate) struct SettledRooms {
-    pub(crate) rooms: Vec<(String, RoomState)>,
-    pub(crate) events: Vec<Value>,
 }
 
 /// 记录当前阶段，并在进入指定阶段时注入错误。

@@ -46,7 +46,7 @@ enum Command {
         /// 预热 tick 数（不计入汇总）
         #[arg(long, default_value_t = 100)]
         warmup: u32,
-        /// 玩家数；每玩家独立房间，小于 1 按 1 运行，大于 8 按 8 运行
+        /// 玩家数（1..32）；每玩家独立房间
         #[arg(long, default_value_t = 2)]
         players: u32,
         /// 报告输出路径（JSON）

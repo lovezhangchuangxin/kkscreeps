@@ -3,6 +3,101 @@
 use super::*;
 use serde_json::json;
 
+/// 真实规则同时更新 GCL、创建资源对象和准备通知；失败重试须与直接成功整态一致。
+#[test]
+fn shared_candidates_retry_without_leaking_players_ids_or_notifications() {
+    for fail_publish in [false, true] {
+        let mut f = Fixture::new(1, terrain_with(&[]));
+        let ctl = f.controller(4, Some("p1"));
+        let worker = f.creep("up", "p1", 5, 6, &[BodyKind::Work, BodyKind::Carry], 50);
+        let dropper = f.creep("drop", "p1", 8, 8, &[BodyKind::Carry], 10);
+        f.world.register_room("W2N2", terrain_with(&[]));
+        let mut batch = IntentBatch::default();
+        batch.add_object_intent(
+            "p1",
+            worker,
+            Action::UpgradeController,
+            IntentData::target(ctl),
+        );
+        let mut drop = IntentData::bare();
+        drop.amount = Some(5);
+        drop.resource_type = Some("energy".into());
+        batch.add_object_intent("p1", dropper, Action::Drop, drop);
+        batch
+            .users
+            .entry("p1".into())
+            .or_default()
+            .notify
+            .push(NotifyIntent {
+                message: "once".into(),
+                group_interval: Some(3),
+            });
+        let mut engine = kk_engine::Engine::new(f.world.clone());
+        engine
+            .players
+            .entry("p1".into())
+            .or_default()
+            .rooms
+            .insert("old".into());
+        let before_players = engine.players.clone();
+        let generation = engine.world.generation();
+        let next = engine.world.next_obj_id();
+        let before_room = engine
+            .world
+            .room("W1N1")
+            .unwrap()
+            .encode_snapshot(0, 1, next);
+        let mut reference = kk_engine::Engine::new(f.world);
+        reference.players = before_players.clone();
+        let input = kk_engine::TickInput { now_ms: 42 };
+        reference
+            .tick_with_intents_with_input(batch.clone(), input)
+            .unwrap();
+        if fail_publish {
+            engine.set_fail_stage_for_test(Some(kk_engine::TickStage::Publish));
+        } else {
+            engine.set_fail_room_for_test(Some("W2N2".into()));
+        }
+        assert!(
+            engine
+                .tick_with_intents_with_input(batch.clone(), input)
+                .is_err()
+        );
+        assert_eq!(engine.players, before_players);
+        assert_eq!(engine.world.generation(), generation);
+        assert_eq!(engine.world.next_obj_id(), next);
+        assert_eq!(
+            engine
+                .world
+                .room("W1N1")
+                .unwrap()
+                .encode_snapshot(0, 1, next),
+            before_room
+        );
+        engine.set_fail_stage_for_test(None);
+        engine.set_fail_room_for_test(None);
+        engine.tick_with_intents_with_input(batch, input).unwrap();
+        assert_eq!(engine.players, reference.players);
+        assert_eq!(engine.players["p1"].gcl, 1);
+        assert_eq!(engine.players["p1"].notifications.len(), 1);
+        assert_eq!(engine.players["p1"].rooms, BTreeSet::from(["W1N1".into()]));
+        assert_eq!(engine.world.next_obj_id(), reference.world.next_obj_id());
+        assert_eq!(engine.world.generation(), generation + 1);
+        for (name, room) in engine.world.rooms() {
+            assert_eq!(
+                room.encode_snapshot(1, 1, engine.world.next_obj_id()),
+                reference.world.room(name).unwrap().encode_snapshot(
+                    1,
+                    1,
+                    reference.world.next_obj_id()
+                )
+            );
+        }
+        assert_eq!(engine.market, reference.market);
+        assert_eq!(engine.last_events, reference.last_events);
+    }
+}
+
 #[test]
 fn notify_intent_from_json_parses_and_sanitizes() {
     let list = json!({

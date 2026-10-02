@@ -8,6 +8,8 @@
 
 ## 0. 总原则
 
+2026-10-02 基于提交 `6248546` 的实现核查见 [A 阶段核查与后续实施顺序](a-stage-current-audit.md)。以下测试统计及完成记录保留当时口径；实施时使用现行棘轮地板与源码核查结果。
+
 - **统一提交点纪律不可破**：每片的行为、测量、恢复结果先可评审，再扩大范围（mod-system §13 同款）。
 - **无 Mod 路径零回归**：screeps-ok 棘轮地板 1852/2914=63.55% 不降、零未豁免转红；bot 三夹具**同既有三基线口径**——tooangel/overmind 各 2000 tick、wasm 10 tick（不放大 wasm 口径），0 硬中断、0 console error。
 - **串行参考保留**：事务化/并行化各片以「与串行参考逐状态一致」为判据（执行序无关测试旋钮已有，kk-runtime embed 测试）。
@@ -38,6 +40,8 @@
 - **内容**：`Working<'w>` 的 `players`/`next_id` 共享借用改为拥有数据的候选事务（mod-system §6.2 / 06 §2.1 路线）；结算入口签名迁移；为 mod 宿主 `Rc<RefCell<OwnedTxn>>` 短借用/reentrant 调用铺路。禁 unsafe 指针/lifetime transmute 规避（mod-system §6.2 同款禁令）。**波及面实测（评审核实）**：`w.players` 仅 3 处（creep/controller.rs）、`w.next_id` 仅 `Working::insert_new`、`settle_room` 调用点仅 2 处（引擎 mod.rs + settle_tests 唯一测试助手）；子模块 `&mut Working` 参数在字段访问语法不变的前提下不需逐个改——真实成本在 OwnedTxn 容器设计、Engine 字段所有权与提交路径，而非调用点数量级。因此 A3 也可排在 A2 之前（先容器后市场槽位，冲突面更小）。
 - **判据**：引擎结算测试全绿；代际 `generation` 恰 +1 的 debug 断言保持；无生命周期逃逸（clippy + 评审）。
 - **依赖**：A1（先有事务容器再迁移所有权）。
+
+2026-10-02 实施记录：[A3 候选事务改造与验证](../research/notes/a3-owned-txn-2026-10-02.md)。已建立 OwnedTickTxn、同线程共享玩家/ID 候选和 PreparedTick，将通知与玩家房间集合移到发布前准备；完整 CPU/Memory 提交及 JS 回调仍属于后续范围。
 
 ### A4 同一发布点验证 + 故障注入收口
 

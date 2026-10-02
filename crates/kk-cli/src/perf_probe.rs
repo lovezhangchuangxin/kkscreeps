@@ -1,7 +1,8 @@
 //! 驱动 EmbedEngine 运行多玩家负载，采集各阶段耗时并输出 JSON 报告。
 //!
 //! 每玩家拥有独立房间，使用玩家 API 孵化、采集和升级。预热后清空耗时样本，
-//! 报告投影、执行、结算和整次调用的统计，定义沿用 kk-runtime::EmbedEngine。
+//! 报告投影、执行、结算和整次调用的统计，定义沿用 kk-runtime::EmbedEngine；
+//! 另测采集窗口的进程 CPU 与 tick 边界 RSS，包含采样及窗口内负载检查。
 //! 最多记录 50,000 个采集样本，后续 tick 仍运行但不加入耗时统计。
 //! 负载自检只检查首房的控制器进度和 source 能量；通过不代表每房均得到验证。
 //!
@@ -12,6 +13,8 @@ use std::collections::BTreeMap;
 
 use kk_runtime::EmbedEngine;
 use serde_json::{Value, json};
+
+mod process;
 
 /// 按此顺序摆放 source，玩家脚本固定采集 `FIND_SOURCES[0]`。
 /// 同房对象按 ID 升序投影，因此首源必须保留在 (2,2)。
@@ -93,7 +96,8 @@ fn run_inner(ticks: u32, warmup: u32, players: u32, report_path: &str) -> anyhow
     if ticks == 0 {
         anyhow::bail!("采集窗口为 0（--ticks 须 ≥1；纯预热跑不是合法用法）");
     }
-    let players = players.clamp(1, 8);
+    anyhow::ensure!((1..=32).contains(&players), "--players 须为 1..32");
+    let metadata = metadata();
     let handles: Vec<String> = (0..players).map(|i| format!("p{}", i + 1)).collect();
     let rooms: Vec<Value> = (0..players)
         .map(|i| json!({ "name": room_name(i), "rcl": 4, "owner": format!("p{}", i + 1) }))
@@ -152,13 +156,16 @@ fn run_inner(ticks: u32, warmup: u32, players: u32, report_path: &str) -> anyhow
     let (progress_before, obs_before) = workload_probe(&e, &room_name(0))?;
     let mut harvest_observed = !obs_before.all_at_capacity;
     e.perf_reset();
+    let mut process = process::ProcessProbe::start()?;
     for _ in 0..ticks {
         e.run_players(&codes)?;
         if !harvest_observed {
             let (_, obs) = workload_probe(&e, &room_name(0))?;
             harvest_observed = !obs.all_at_capacity;
         }
+        process.observe()?;
     }
+    let process_report = process.finish(ticks)?;
 
     // 只检查首房：控制器进度须增加；合计至少 100 tick 时，还须观察到 source 未满。
     // 检查采集期间的状态，不能只看两个边界：source 再生可使它们同时满容量。
@@ -188,6 +195,8 @@ fn run_inner(ticks: u32, warmup: u32, players: u32, report_path: &str) -> anyhow
         "players": players,
         "ticks": ticks,
         "warmup": warmup,
+        "metadata": metadata,
+        "process": process_report,
         "workload": {
             "progress_delta": progress_delta,
             "source_energy_min_before": obs_before.energy_min,
@@ -211,9 +220,10 @@ fn run_inner(ticks: u32, warmup: u32, players: u32, report_path: &str) -> anyhow
     ] {
         if let Some(p) = phases.get(name).and_then(Value::as_object) {
             println!(
-                "  {label:<12} p50 {:>10.3} ms | p95 {:>10.3} ms | max {:>10.3} ms",
+                "  {label:<12} p50 {:>10.3} ms | p95 {:>10.3} ms | p99 {:>10.3} ms | max {:>10.3} ms",
                 p.get("p50_ms").and_then(Value::as_f64).unwrap_or(0.0),
                 p.get("p95_ms").and_then(Value::as_f64).unwrap_or(0.0),
+                p.get("p99_ms").and_then(Value::as_f64).unwrap_or(0.0),
                 p.get("max_ms").and_then(Value::as_f64).unwrap_or(0.0),
             );
         }
@@ -224,6 +234,28 @@ fn run_inner(ticks: u32, warmup: u32, players: u32, report_path: &str) -> anyhow
         .unwrap_or(0);
     println!("  采样 tick 数：{ticks_seen}");
     Ok(())
+}
+
+fn metadata() -> Value {
+    let command = |program: &str, args: &[&str]| {
+        std::process::Command::new(program)
+            .args(args)
+            .output()
+            .ok()
+            .filter(|out| out.status.success())
+            .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
+    };
+    json!({
+        "os": std::env::consts::OS,
+        "arch": std::env::consts::ARCH,
+        "logical_cpus": std::thread::available_parallelism().ok().map(|n| n.get()),
+        "system": command("uname", &["-a"]),
+        "rustc_on_path": command("rustc", &["--version"]),
+        "git_commit": command("git", &["rev-parse", "HEAD"]),
+        "git_status": command("git", &["status", "--porcelain"]),
+        "debug_assertions": cfg!(debug_assertions),
+        "unix_time_ms": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok().map(|d| d.as_millis()),
+    })
 }
 
 /// 检查负载布局，以及 source 再生不会使正常采集被误判。

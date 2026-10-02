@@ -948,6 +948,7 @@ dependencies = [
  "kk-runner",
  "kk-runtime",
  "kk-world",
+ "libc",
  "serde_json",
  "tokio",
 ]
