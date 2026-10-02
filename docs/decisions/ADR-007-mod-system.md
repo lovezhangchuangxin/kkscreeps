@@ -1,39 +1,37 @@
-# ADR-007 JS mod 系统自建，追求功能扩展能力
+# ADR-007 用 JS 提供完整 Mod 扩展能力
 
 - **日期**：2026-09-27
-- **需求修订**：2026-10-01（用户再次确认）
-- **状态**：已接受（用户拍板）
+- **需求修订**：2026-10-01
+- **状态**：已接受；架构与实施方向由 ADR-014 细化
 
 ## 背景
 
-官方私服有一套 mod 机制：JS 模块被 `require` 进各个 Node.js 进程，通过 `config.engine` 等内部事件钩子和 driver 方法扩展服务器，社区有 `screepsmod-*` 系列 мод。早期讨论中曾考虑"事件命名尽量对齐官方以降低 mod 移植成本"的折中。
-
-这些 mod 与官方实现深度耦合：直接操作官方进程内部结构和 MongoDB/lokijs 数据库集合——而这两样正是本项目重构掉的东西。
+官方私服 Mod 通过 JS 模块、内部事件与 driver 接口扩展服务，常与 Node 进程及数据库内部结构耦合。逐接口兼容这些内部实现会限制本项目的数据、存储与调度重构。
 
 ## 决策
 
-**不要求官方 mod 代码/API 兼容，自建 mod 机制；Mod 作者编写 JS，不编写 Rust。** 扩展能力目标是能够实现官方私服与本地 xxscreeps 的同类 Mod 功能，包括深度玩法、对象、动作、玩家 API、资源、地图、存储、网络、管理与客户端图形。不能以“修改核心 Rust 源码”代替 Mod 能力，也不能把 JS 层限制为统计和轻量管理。
+自建 Mod 接口，不要求官方 Mod 源码或内部 API 兼容。Mod 作者只编写 JS，不要求编写 Rust；扩展目标涵盖官方私服与调研版本 xxscreeps 的同类业务能力。
 
-兼容红线覆盖默认 vanilla 玩家侧（见 [ADR-003](ADR-003-player-compatibility.md)）；服主明确启用的玩法 Mod 可以改变行为，应发布相应能力与版本。Mod API 自建与必要的客户端协议适配是独立问题。
+能力范围包括玩法规则、对象、动作、玩家 API、资源、地图、存储、网络、管理和客户端图形。不能以修改核心 Rust 源码代替安装式扩展，也不能把 JS 限制为统计和轻量管理。
 
-## 实现方向（具体接口仍为提案）
+默认 vanilla 配置保持 [ADR-003](ADR-003-player-compatibility.md) 的玩家契约。服主显式启用的玩法 Mod 可以改变规则，须发布能力与内容版本；Mod SDK 的兼容与客户端协议验收分别处理。
 
-1. **Rust 内核与宿主服务**：保留高效默认实现，向 JS 提供具名规则替换、事务状态、数据模型和外部服务入口。这是引擎实现，不是 Mod 作者的交付语言。
-2. **可信 JS Mod**：与玩家 V8 实例分离，通过统一贡献定义新增、包裹、取消或替换玩法及服务；包的玩家 API 与客户端部分也是 JS，安装并重启可生效。
+## 架构与实现边界
 
-设计草案见 [mod-system.md](../designs/mod-system.md)，整体改造建议与实验见 [06 架构复审](../research/06-architecture-and-js-mod-review.md)。**本 ADR 确认语言和能力需求，不把草案的 SDK 名称、crate 拆分、线程模型或批次视为已实现/已接受。** 核心扩展边界前移的建议由该调研提出，完整排期仍需按具体实施计划调整。
+Rust 保留默认规则实现和宿主服务，向 JS 开放具名规则替换、事务状态、数据模型及外部服务入口。可信玩法 Mod 与不可信玩家实例分离；Mod 包也可贡献玩家 API 与客户端代码。
 
-**后续（同日）**：架构骨架已由 [ADR-014](ADR-014-contribution-plane.md) 定型（贡献平面六原则、四项实施拍板、封闭分派评审门禁；批次方向 A–G 及四处调整亦经其决策 4 接受，切片见 [mod-plane-batches](../plans/mod-plane-batches.md)）；本文「实现方向」升格为定型架构的具体设计输入，上文「不把批次视为已接受」就批次方向而言已被 ADR-014 取代。
+[ADR-014](ADR-014-contribution-plane.md)已确认贡献计划、默认玩法同契约、共享投影、全域候选、首版共同可信玩法 VM 和实施方向。本文不再把这些已确认方向写作待定；SDK 名称和具体接口仍按[Mod 设计](../designs/mod-system.md)与[实施方案](../plans/mod-plane-batches.md)逐项实现和验收。
 
-## 历史方向
+当前尚未提供完整 Mod 加载与运行通路。“安装并重启生效”是目标使用方式，不能由已有 Generic 对象、事件观察或 JS/native 交互实验证明全部扩展能力成立。
 
-2026-09-27 曾提出“Rust 编译期插件负责深度玩法 + JS 管理/统计”的双层方向。2026-10-01 用户明确 Mod 必须是 JS，该方向中对 Mod 作者使用 Rust 及 JS 能力限制的部分已撤回。默认玩法由 Rust 实现仍成立。
+## 修订关系
 
-## 理由
+2026-09-27 曾提出 Rust 插件负责深度玩法、JS 负责管理与统计的双层方案。2026-10-01 明确 Mod 作者只写 JS 后，该语言分工与 JS 能力限制撤回；默认内核由 Rust 实现的选择保留。
 
-官方 mod 与 Node/数据库内部实现耦合，逐接口兼容会限制重构。采用贡献点模式和 JS 宿主可以提供安装式扩展，并保留 Rust 默认内核；需要开放完整业务领域与默认行为替换，单纯事件观察不足以满足用户需求。
+## 理由与证据
 
-## 证据
+统一贡献接口使默认行为与扩展行为共用规则入口，避免只能观察事件、无法替换玩法的局限。覆盖范围与真实改造成本仍须逐类验收。
 
-- 官方 mod 机制：`common/lib/config-manager.js`、`launcher/init_dist/example-mods/`（调研见 [01 报告](../research/01-screeps-rust-feasibility.md)）
-- xxscreeps 贡献点模式：[arch-xxscreeps.md](../research/notes/arch-xxscreeps.md)
+- [可行性研究](../research/01-screeps-rust-feasibility.md)：官方 Mod 机制。
+- [xxscreeps 调研](../research/notes/arch-xxscreeps.md)：贡献注册与加载机制。
+- [扩展能力复查](../research/05-mod-extensibility-review.md)、[JS Mod 架构复审](../research/06-architecture-and-js-mod-review.md)：缺口与交互实验。

@@ -1,69 +1,50 @@
-# ADR-011 引擎骨架定型：typed world 为唯一世界后端 + 官方结算序子集 + 棘轮验收
+# ADR-011 类型化世界与引擎骨架
 
 - **日期**：2026-09-28
-- **状态**：已接受（方案 docs/plans/m1-engine-skeleton.md 经用户确认，八步实施收官；
-  本文将该方案的架构级结论升格为 ADR，实现现状同步回写架构文档）
+- **状态**：已接受；运行协调和投影目标随后由 ADR-013/014 细化
 
 ## 背景
 
-M1（引擎骨架）要交付 kk-core / kk-schema / 单房间结算 / 通过率棘轮，并把 M0 的哑世界
-（JSON Value 存取、tick 只计数）换成有真实规则的世界。方案阶段的六项关键决策（D1~D6）
-在实施中全部落地并经逐提交三方评审验证，本文将其定为架构决策，供后续里程碑（M2 真沙箱
-接入、M2B 存储）作为既定事实引用。
+M1 将 M0 的 JSON 桩世界替换为类型化世界和真实结算，并建立回归检查。本记录保存该阶段确认的六项选择；阶段成果不代表后续完整玩法、共享投影或持久化已经完成。
 
 ## 决策
 
-1. **typed world 是唯一世界后端**（方案 D1）：`kk_world::World`（BTreeMap<ObjId, _>，
-   id 全局单调分配）同时服务 embed 通道（screeps-ok 适配器/sim）与引擎结算；
-   M0 的 DumbWorld 已删除。世界投影 JSON（`world_json`）保持 M0 契约形状——prelude
-   消费面零改动是硬约束。放置接受面 = `place::normalize` 归一化表（初态对照官方，
-   spec 私有字段折算不泄入；结算范围外类型落 Generic 透传桶保持 FIND 可见性）。
-2. **结算 = 官方 processor.js 阶段序的忠实子集 + 三处有意差异**（方案 D4）：对象迭代序
-   用 id 升序（= 创建序，天然确定；官方为 DB 插入序）、bulk 写入改为工作副本直接变更
-   （内存模型）、结算失败即整房回退（官方打日志继续）。每房间 clone→settle→写回
-   （深评轮已升级为全房两阶段提交——全部克隆结算成功后统一写回，杜绝部分失败时
-   同 time 重放结算，见"后果与遗留"），`World::advance_ticks` 是 player_ticks
-   唯一维护点。
-3. **intent 通道 = "世界视图进、intent 批出" 的 Sandbox trait**（方案 D5）：M1 只有
-   ScriptedSandbox 假实现（固定脚本回放），embed 路径 intents 恒空——玩家 intent 收集
-   通道是 M2-2A。intent 层（sanitize 白名单、同对象冲突压制图、幂等覆盖）按官方全图
-   建表，M2 补执行器零改动。
-4. **kk-schema = 声明宏生成的二进制快照格式**（方案 D2）：`kk_schema!` 宏展开出 typed
-   struct + encode/decode + 编译期布局常量，M1 只实现所需子集；版本升级函数链，旧版本
-   读入即升级。world → schema → core 的依赖方向合规。
-5. **常量不手抄**（方案 D3）：`crates/kk-core/src/constants.rs` 由官方 constants.json
-   全量 dump 生成（scripts/gen-constants.mjs），消费按需取子集。
-6. **通过率棘轮 = 地板文件 + CI job**（方案 D6）：`compat/reports/ratchet.json` 是唯一
-   真相源（floor 只升不降，行为变化收尾随全量重跑上调并同步文档）；CI 第四 job 全量跑
-   screeps-ok 套件（vitest 退出码不作判定——预期失败池数千；报告 mtime 新鲜度守卫防
-   陈旧假绿；红时与上一入库基线逐用例 diff 列转红名单）。
+### 1. 共用类型化世界
 
-## 与既有 ADR 的关系
+`kk_world::World` 同时服务嵌入接口与引擎结算，替代 DumbWorld。对象采用稳定的有序存储和全局 ID 分配；场景放置通过归一化入口处理缺省值与受信输入，尚无专用结算的对象可由 Generic 表示。
 
-- ADR-008 第 5/6/7/8 条（Sandbox trait 假实现、地形官方算法推后、存储推后、嵌入式 API）
-  的 M1 落地形态由本文细化；嵌入式 API 的方法集与地位不变（ADR-010）。
-- ADR-004（房间快照 + 索引 + 分桶）：typed world 的 `RoomIndex` 与 BTreeMap 对象表是其
-  实现层；M2B 存储落盘时快照格式走 kk-schema。
+M1 保持既有 JSON 玩家投影，避免更换世界后端时同时修改玩家读取层。此过渡约束随后由 ADR-014 的整体投影协议设计演进，不能理解为永远固定 JSON。
 
-## 验收证据
+### 2. 对照官方阶段序结算
 
-- 基线 237 → 268（步 5 embed 切真实结算 +28 全转绿零转红；步 6 仪表批次 +3；逐用例
-  归因见 compat/reports/m0-code-review.md 追记）；
-- bot：tooangel 房间管线完整执行（M1 期实跑 300 tick；2000 tick 证据系 M0 期报告，
-  下里程碑重跑）、overmind 推进到 RoomIntel 全量执行（2000 tick 零中断、缺失 API 清零），
-  bot-check 退出码机器可判定（0/1/2）；wasm-bot 10 tick 零中断；
-- 门禁：fmt/clippy 0 警告、cargo test 全绿（LIFO 零违规）、pnpm run check 全套绿。
+已支持规则按官方结算阶段序执行，工作副本代替数据库 bulk 操作。对象的稳定 ID 顺序是本项目的执行规则；与上游插入顺序是否等价须按 ID 来源及具体场景验证，不能无条件把 ID 升序视为创建顺序。
 
-## 后果与遗留
+初期逐房写回后改为全部房间成功再提交，避免后房失败留下前房新状态。后续协调器与全域候选继续扩大提交范围，当前边界见[游戏循环](../architecture/game-loop.md)。`World::advance_ticks` 统一推进时间与玩家 tick 统计。
 
-- 每步提交前三方并行 subagent 评审（官方语义对照/契约投影保真/Rust 正确性与并发）成为
-  M1 起的常设纪律；
-- 灰区按 compatibility.md 灰区表持续登记（步 3/4/5 各一批：迭代序/玩家序/失败回退/
-  投影形态等）；
-- **M1 深度评审轮（收官后，2026-09-28）**：5 路 subagent 并行深评修复 4 high + 13 medium + 3 low
-  ——其中两处架构级修正回写本文：决策 2 的"每房间 clone→settle→写回"已升级为
-  **两阶段提交**（全房克隆结算成功后统一写回，杜绝后房失败时先房按同 time 重放结算）；
-  决策 4 的"版本升级函数链"由承诺变为 `UPGRADE_CHAIN` 挂载点占位（v1 起步空链）；
-  详见台账追记；
-- M2 输入已登记：intent 收集通道与真沙箱、独立 runExpr 通道计费口径、tombstone 变体、
-  多实例 LIFO、旧对象引用失效语义。
+### 3. 通过执行接口收集指令
+
+世界视图作为玩家执行输入，指令批作为输出；固定结果的测试实现与真实沙箱进入相同结算通路。M1 的 ScriptedSandbox 与空玩家指令属于当时阶段，当前真实沙箱由运行协调层接入。
+
+清洗、动作冲突与覆盖规则对照上游；新增动作仍须检查清洗入口、玩家预检查与执行器，不能由枚举或分派表存在推导动作已经完成。
+
+### 4. 声明宏生成二进制格式
+
+kk-schema 的声明宏生成类型、编码、解码与可计算的布局信息，依赖方向为 world → schema → core。偏移仅覆盖能够静态确定的字段，不能把整个 Rust 对象布局当作磁盘协议。
+
+版本读取和升级需要明确迁移链。M1 从 v1 与空升级链开始，迁移挂载点不等于已经支持全部旧版本，当前格式见[存储说明](../architecture/storage.md)。
+
+### 5. 从统一输入生成常量
+
+[生成脚本](../../scripts/gen-constants.mjs)从 `kk-runner/assets/constants.json` 生成 kk-core 的常量定义，消费方按需使用。避免另维护一份数值表，生成同步与玩家全局属性行为分别验证。
+
+### 6. 持续检查兼容回归
+
+通过数下限和总用例数保存于 [ratchet.json](../../compat/reports/ratchet.json)，CI 全量执行并检查逐用例回归。报告新鲜度、基线来源、失败预期和豁免规则见[验收工具](../../compat/README.md)，不能仅依赖套件退出码或总通过数。
+
+## 后续关系与验收依据
+
+ADR-008 的执行接口、地形排期、存储选型和嵌入接口由 M1 先建立骨架；ADR-013 将编排移到 kk-runtime，并补充重试与玩家写回候选；ADR-014 定义共享投影与完整扩展契约。
+
+阶段范围与结果见 [M1 方案](../plans/m1-engine-skeleton.md)、[初期代码审阅记录](../../compat/reports/m0-code-review.md)。后续缺口、修复和数字沿革见[路线图历史](../research/notes/roadmap-history.md)，不能沿用当时的“待支持墓碑”等记录判断当前状态。
+
+bot-check 的固定世界测试验证加载与执行环境，不证明实际结算中的游戏进展。具体玩法、客户端与性能仍按各自验收条件提供证据。
