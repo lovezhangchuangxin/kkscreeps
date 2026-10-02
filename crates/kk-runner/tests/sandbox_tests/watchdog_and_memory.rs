@@ -270,6 +270,13 @@ pub(super) fn prelude_basics() -> anyhow::Result<()> {
     assert_eq!(v["value"], "[104,105]", "base64 解码");
     let v = sb.run_expr("JSON.stringify(Array.from(Buffer.from('414243','hex')))")?;
     assert_eq!(v["value"], "[65,66,67]", "hex 解码");
+    let v = sb.run_expr("Buffer.from('0123456789abcdefABCDEF', 'hex').toString('hex')")?;
+    assert_eq!(
+        v["value"], "0123456789abcdefabcdef",
+        "十六进制字母不区分大小写"
+    );
+    let v = sb.run_expr("Buffer.from('AaFfG0', 'hex').toString('hex')")?;
+    assert_eq!(v["value"], "aaff", "混合大小写正确解码，遇非法字符停止");
     let v = sb
         .run_expr("try { Buffer.from('x','nope'); 'no-throw' } catch (e) { e.constructor.name }")?;
     assert_eq!(v["value"], "TypeError", "未支持 encoding 显式抛错");

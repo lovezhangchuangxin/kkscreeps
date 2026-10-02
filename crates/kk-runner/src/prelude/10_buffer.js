@@ -67,8 +67,8 @@
   const HEX_DIGITS = '0123456789abcdefABCDEF';
   function hexVal(ch) {
     const v = HEX_DIGITS.indexOf(ch);
-    // 0-f 共 22 个合法字符，>9 时换算大写
-    return v < 0 ? -1 : v % 16;
+    // 字符表先列 0–9/a–f，再列 A–F；大写字母的索引要减 6 才是十六进制值。
+    return v < 0 ? -1 : v < 16 ? v : v - 6;
   }
   const BASE64_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
   function base64Val(ch) { return BASE64_CHARS.indexOf(ch); }
