@@ -43,10 +43,11 @@
     beginTick(worldJson, cpuMeta) {
       beginTick(worldJson, cpuMeta);
     },
-    /** KKPV 通道注入：世界信封 JSON 串 + 块束 ArrayBuffer（每 isolate 私有
-     * 拷贝）+ 预算真值；对象记录在沙箱内从块束解码。 */
-    beginTickKkpv(worldJson, bundle, cpuMeta) {
-      beginTickKkpv(worldJson, bundle, cpuMeta);
+    /** KKPV 通道注入：世界信封 JSON 串 + 私有对象束 ArrayBuffer + 公开
+     * 地形束 ArrayBuffer（共享内存零拷贝挂载）+ 预算真值；对象记录与
+     * 地形视图在沙箱内从两束解码。 */
+    beginTickKkpv(worldJson, bundle, publicBundle, cpuMeta) {
+      beginTickKkpv(worldJson, bundle, publicBundle, cpuMeta);
     },
     /** 执行玩家入口：require('main').loop()。返回结果 JSON 字符串（宿主 exec_json 约定）。 */
     runLoop() {

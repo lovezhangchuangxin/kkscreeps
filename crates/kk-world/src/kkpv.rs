@@ -3,8 +3,10 @@
 //! 块内容与 `world_json_for_viewer` 的玩家数据同源：对象集合走同一条
 //! 可见性规则（`room_visible_to`/`object_exported_for`），对象记录复用
 //! `object_json`，扩展字段复用同一权限裁切。房间级 energy、事件等授权
-//! 通道不进入房间块。本桥只生成私有块；公开块与 overlay 的内容划分
-//! 尚无实现，接线时按投影计划决定（设计见 domain-projection.md §5）。
+//! 通道不进入房间块。受众划分为两组：对象记录是每查看者独立的私有块；
+//! 全部注册房间的地形对任意查看者相同，进入 [`World::kkpv_public_terrain_blocks`]
+//! 产出的公开块（每代际编码一次、跨查看者共享），信封与私有块不再携带
+//! 地形（设计见 domain-projection.md §5/§6）。
 //!
 //! 对象 ID 只进入块目录；墓碑 `creepId` 与废墟 `structure.id` 这两类由
 //! `object_json` 从 u64 生成的引用字段转为 `Ref` 编码，其余字符串保持
@@ -83,18 +85,41 @@ impl World {
                 plan_hash,
                 audience_hash,
                 room_name: name.clone(),
-                terrain: Some(state.terrain.as_slice().to_vec()),
+                terrain: None,
                 objects,
             });
         }
         Ok(blocks)
     }
 
+    /// 为全部注册房间生成公开地形块：内容与查看者无关（同一代际下全部
+    /// 玩家共享同一份字节），每房一块、只携带地形段。`audience_hash` 是
+    /// 宿主定义的公开受众组摘要——同一公开通道对所有查看者使用同一值。
+    pub fn kkpv_public_terrain_blocks(
+        &self,
+        plan_hash: [u8; 32],
+        audience_hash: [u8; 32],
+    ) -> Vec<KkpvBlockInput> {
+        self.rooms
+            .iter()
+            .map(|(name, state)| KkpvBlockInput {
+                private: false,
+                tick: self.time,
+                generation: self.generation(),
+                plan_hash,
+                audience_hash,
+                room_name: name.clone(),
+                terrain: Some(state.terrain.as_slice().to_vec()),
+                objects: Vec::new(),
+            })
+            .collect()
+    }
+
     /// KKPV 通道的世界信封：与 [`World::world_json_for_viewer`] 的房间级
-    /// 内容同源同形——同样的可见房集合、逐房名称/地形/能量/事件与
-    /// user/gcl/cpu 占位——但不携带对象数组，对象记录由房间块承载。
-    /// 房间级授权通道不进入房间块，因此地形与能量在信封侧保留现有
-    /// 形态（地形 base64+rev 缓存、能量/事件按可见房裁切）。
+    /// 内容同源同形——同样的可见房集合、逐房名称/能量/事件与 user/gcl/cpu
+    /// 占位——但不携带对象数组与地形：对象记录由每查看者私有块承载，
+    /// 地形由公开块承载（`kkpv_public_terrain_blocks`）。房间级授权通道
+    /// 不进入任何块，能量/事件按可见房裁切后留在信封侧。
     pub fn kkpv_envelope_for_viewer(&self, user: &str, gcl_points: i64) -> Value {
         let visible: std::collections::BTreeSet<&String> = self
             .rooms
@@ -106,7 +131,6 @@ impl World {
         for (name, state) in &self.rooms {
             let mut entry = serde_json::Map::new();
             entry.insert("name".into(), Value::String(name.clone()));
-            entry.insert("terrain".into(), self.terrain_json(name, state));
             if visible.contains(name) {
                 let (available, capacity) = room_energy(state, Some(user));
                 entry.insert("energyAvailable".into(), Value::from(available));
@@ -134,13 +158,14 @@ impl World {
     }
 }
 
-/// 手搓世界 JSON（bot 夹具等不经权威世界构造的数据）的块束转换。
+/// 手搓世界 JSON（bot 夹具等不经权威世界构造的数据）的私有对象束转换。
 /// 生产投影走 [`World::kkpv_room_blocks_for_viewer`]——权限裁切与
 /// 墓碑/废墟引用推断同源；本函数面向夹具：全部字符串保持字符串
 /// （不做引用语义推断），对象按记录内 room 字段分房，id 不成
 /// kk 前缀十六进制时按字符串稳定合成小整数（跳过夹具内已用的真实
 /// id 值，避免目录撞号）。块内对象按目录 ID 升序解出，与 JSON 通道
-/// 的数组原序可能不同——依赖顺序的消费者按 id 定位。
+/// 的数组原序可能不同——依赖顺序的消费者按 id 定位。地形不进私有束
+/// （公开束承载，见 [`kkpv_public_bundle_from_world_json`]）。
 ///
 /// # Errors
 /// 记录非对象、缺 id/room、字段值无法映射 KKPV 或编码超限时返回错误。
@@ -211,32 +236,15 @@ pub fn kkpv_bundle_from_world_json(
     }
     let blocks = rooms
         .into_iter()
-        .map(|(room_name, objects)| -> Result<KkpvBlockInput, String> {
-            let terrain = world
-                .get("rooms")
-                .and_then(|rooms| rooms.get(&room_name))
-                .and_then(|entry| entry.get("terrain"))
-                .and_then(Value::as_array)
-                .map(|bytes| {
-                    bytes
-                        .iter()
-                        .map(|b| {
-                            b.as_u64()
-                                .filter(|v| *v <= 255)
-                                .map(|v| v as u8)
-                                .ok_or_else(|| format!("地形字节越界：{b}"))
-                        })
-                        .collect::<Result<Vec<u8>, _>>()
-                })
-                .transpose()?;
-            Ok(KkpvBlockInput {
+        .map(|(room_name, objects)| {
+            Ok::<_, String>(KkpvBlockInput {
                 private: true,
                 tick: time,
                 generation: 0,
                 plan_hash,
                 audience_hash,
                 room_name,
-                terrain,
+                terrain: None,
                 objects,
             })
         })
@@ -244,12 +252,69 @@ pub fn kkpv_bundle_from_world_json(
     encode_bundle(&blocks, &KkpvLimits::default()).map_err(|e| e.to_string())
 }
 
-/// 手搓世界的 KKPV 信封：去掉 objects 键的浅拷贝；房间级内容（含旧
-/// 数组形态地形——prelude 对两种形态都接受）原样保留。
+/// 手搓世界的公开地形束：`world.rooms` 下的全部房间各一块公开块，
+/// 携带数组形态地形的原始字节，不依赖对象分布（无对象的房间同样
+/// 有地形）。与 [`kkpv_bundle_from_world_json`] 的私有束配对使用。
+///
+/// # Errors
+/// 地形数组缺失或存在大于 255 的字节值、编码超限时返回错误。
+pub fn kkpv_public_bundle_from_world_json(
+    world: &Value,
+    plan_hash: [u8; 32],
+    audience_hash: [u8; 32],
+) -> Result<Vec<u8>, String> {
+    let time = world.get("time").and_then(Value::as_u64).unwrap_or(0);
+    let rooms = world
+        .get("rooms")
+        .and_then(Value::as_object)
+        .ok_or("手搓世界缺 rooms 对象")?;
+    let mut blocks = Vec::with_capacity(rooms.len());
+    for (room_name, entry) in rooms {
+        let terrain = terrain_bytes_of(entry)?;
+        blocks.push(KkpvBlockInput {
+            private: false,
+            tick: time,
+            generation: 0,
+            plan_hash,
+            audience_hash,
+            room_name: room_name.clone(),
+            terrain: Some(terrain),
+            objects: Vec::new(),
+        });
+    }
+    encode_bundle(&blocks, &KkpvLimits::default()).map_err(|e| e.to_string())
+}
+
+/// 房间条目里数组形态地形的原始字节。
+fn terrain_bytes_of(entry: &Value) -> Result<Vec<u8>, String> {
+    entry
+        .get("terrain")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "手搓世界房间缺数组形态地形".to_string())?
+        .iter()
+        .map(|b| {
+            b.as_u64()
+                .filter(|v| *v <= 255)
+                .map(|v| v as u8)
+                .ok_or_else(|| format!("地形字节越界：{b}"))
+        })
+        .collect()
+}
+
+/// 手搓世界的 KKPV 信封：去掉 objects 与逐房 terrain 键的浅拷贝
+/// （对象记录与地形分别由私有束和公开束承载，与生产信封同形）。
 pub fn kkpv_envelope_from_world_json(world: &Value) -> Value {
     let mut envelope = world.clone();
-    if let Some(map) = envelope.as_object_mut() {
-        map.remove("objects");
+    let Some(map) = envelope.as_object_mut() else {
+        return envelope;
+    };
+    map.remove("objects");
+    if let Some(rooms) = map.get_mut("rooms").and_then(Value::as_object_mut) {
+        for entry in rooms.values_mut() {
+            if let Some(room) = entry.as_object_mut() {
+                room.remove("terrain");
+            }
+        }
     }
     envelope
 }
@@ -977,12 +1042,9 @@ mod tests {
                     "{viewer}/{room}: ServerOnly 不进玩家数据"
                 );
             }
-            // 地形字节与 JSON 参考的 base64 载荷同源。
-            let payload = reference["rooms"][room]["terrain"]["payload"]
-                .as_str()
-                .expect("地形载荷");
-            let encoded = crate::world_json::base64_encode(view.terrain().expect("块带地形"));
-            assert_eq!(encoded, payload, "{viewer}/{room}: 地形");
+            // 地形由公开束承载（见 public_terrain_blocks 对照测试），私有
+            // 块不再携带地形段。
+            assert!(view.terrain().is_none(), "{viewer}/{room}: 私有块不带地形");
         }
         assert!(
             objects_by_room.values().all(|v| v.is_empty()),
@@ -1033,23 +1095,79 @@ mod tests {
         );
     }
 
-    /// KKPV 信封与 JSON 参考的房间级内容同形：去掉 objects 后逐键相等，
+    /// KKPV 信封与 JSON 参考的房间级内容同形：去掉 objects 与逐房
+    /// terrain 后逐键相等（对象记录与地形分别由私有块和公开块承载），
     /// 两名查看者的可见房集合与逐房裁切一致（能量/事件只在可见房出现）。
     #[test]
     fn kkpv_envelope_matches_json_reference_minus_objects() {
         let world = rich_world();
         for viewer in ["p1", "p2"] {
             let mut reference = world.world_json_for_viewer(viewer, 1000);
-            reference
-                .as_object_mut()
-                .expect("参考是对象")
-                .remove("objects");
+            let reference_map = reference.as_object_mut().expect("参考是对象");
+            reference_map.remove("objects");
+            if let Some(rooms) = reference_map
+                .get_mut("rooms")
+                .and_then(Value::as_object_mut)
+            {
+                for entry in rooms.values_mut() {
+                    if let Some(room) = entry.as_object_mut() {
+                        room.remove("terrain");
+                    }
+                }
+            }
             let envelope = world.kkpv_envelope_for_viewer(viewer, 1000);
             assert_eq!(
                 reference, envelope,
-                "{viewer}: 信封与参考（去 objects）同形"
+                "{viewer}: 信封与参考（去 objects 与地形）同形"
             );
         }
+    }
+
+    /// 公开地形块覆盖全部注册房间（含无对象房间），字节与 JSON 参考的
+    /// base64 地形载荷同源，且不随查看者或受众参数中查看者相关的部分
+    /// 变化——公开通道对全部玩家是同一份字节。
+    #[test]
+    fn kkpv_public_terrain_blocks_match_json_reference() {
+        let world = rich_world();
+        let reference = world.world_json_for_viewer("p1", 1000);
+        let blocks = world.kkpv_public_terrain_blocks([1; 32], [2; 32]);
+        assert_eq!(
+            blocks.len(),
+            world.rooms.len(),
+            "公开块数 = 全部注册房间数（不按查看者裁切）"
+        );
+        for block in &blocks {
+            assert!(!block.private, "公开块 flags 无私有位");
+            assert!(block.objects.is_empty(), "公开地形块不带对象");
+            assert_eq!(block.tick, world.time);
+            assert_eq!(block.generation, world.generation());
+            let payload = reference["rooms"][block.room_name.as_str()]["terrain"]["payload"]
+                .as_str()
+                .expect("JSON 参考的每注册房间都有地形载荷");
+            let encoded = crate::world_json::base64_encode(&block.terrain.clone().expect("地形"));
+            assert_eq!(
+                encoded,
+                payload,
+                "{room}: 公开块地形与 JSON 参考同源",
+                room = block.room_name
+            );
+        }
+        // 两次调用产出逐字节相同的公开束（确定编码，可跨查看者共享）。
+        let terrain_of = |blocks: &[KkpvBlockInput]| -> Vec<(String, Vec<u8>)> {
+            blocks
+                .iter()
+                .map(|b| {
+                    (
+                        b.room_name.clone(),
+                        b.terrain.clone().expect("公开块带地形"),
+                    )
+                })
+                .collect()
+        };
+        assert_eq!(
+            terrain_of(&blocks),
+            terrain_of(&world.kkpv_public_terrain_blocks([1; 32], [2; 32]))
+        );
     }
 
     /// Generic 原生数据自带 ext 键时，目录扩展按 JSON 参考的覆盖语义
@@ -1162,9 +1280,11 @@ mod tests {
         let private_bytes =
             kk_schema::kkpv::encode(&private_input, &kk_schema::kkpv::KkpvLimits::default())
                 .expect("编码");
-        let mut public_input = private_input.clone();
-        public_input.private = false;
-        public_input.objects.clear();
+        let public_input = world
+            .kkpv_public_terrain_blocks([3u8; 32], [4u8; 32])
+            .into_iter()
+            .find(|b| b.room_name == private_input.room_name)
+            .expect("公开地形块覆盖同一房间");
         let public_bytes =
             kk_schema::kkpv::encode(&public_input, &kk_schema::kkpv::KkpvLimits::default())
                 .expect("编码");

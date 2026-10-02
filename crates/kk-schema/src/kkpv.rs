@@ -198,6 +198,8 @@ pub enum KkpvError {
         overlay: u16,
     },
     MergeObjectConflict(u64),
+    /// 束框架分帧不符（块数目录、块边界或块间版本一致性）。
+    Malformed(String),
 }
 
 impl std::fmt::Display for KkpvError {
@@ -275,6 +277,7 @@ impl std::fmt::Display for KkpvError {
                 )
             }
             Self::MergeObjectConflict(id) => write!(f, "合并块对象 ID 冲突: {id}"),
+            Self::Malformed(reason) => write!(f, "束框架不合法: {reason}"),
         }
     }
 }
@@ -812,6 +815,64 @@ pub fn encode_bundle(inputs: &[KkpvBlockInput], limits: &KkpvLimits) -> Result<V
         out.extend_from_slice(&block);
     }
     Ok(out)
+}
+
+/// 校验整束并返回（块数、块 tick、块 generation）：逐块走
+/// [`KkpvView::decode`] 的全量结构校验，并要求全部块携带同一
+/// (tick, generation)——同一次投影产出的束不得混入不同世界版本。
+/// 沙箱侧解码器只做逐块结构校验（全量不变式由"生产者即编码器"
+/// 保证）；本函数是共享束发布前的宿主侧校验入口。
+///
+/// # Errors
+/// 框架分帧不符、任一块不合法或块间版本不一致时返回错误。
+pub fn validate_bundle(data: &[u8], limits: &KkpvLimits) -> Result<(usize, u64, u64), KkpvError> {
+    // 与 encode_bundle 同口径的束总量兜底：逐块限额之外再限总量，
+    // 防御未来对外来束开放校验时的放大输入。
+    if data.len() > limits.max_bytes.saturating_mul(16) {
+        return Err(KkpvError::LimitExceeded("max_bytes"));
+    }
+    if data.len() < 4 {
+        return Err(KkpvError::Malformed("束短于框架头部".into()));
+    }
+    let count = read_u32_at(data, 0) as usize;
+    let lens_end = 4usize
+        .checked_add(
+            count
+                .checked_mul(4)
+                .ok_or(KkpvError::Malformed("束长度目录溢出".into()))?,
+        )
+        .ok_or(KkpvError::Malformed("束长度目录溢出".into()))?;
+    if data.len() < lens_end {
+        return Err(KkpvError::Malformed("束短于长度目录".into()));
+    }
+    let mut cur = lens_end;
+    let mut version: Option<(u64, u64)> = None;
+    for index in 0..count {
+        let len = read_u32_at(data, 4 + index * 4) as usize;
+        let end = cur
+            .checked_add(len)
+            .ok_or(KkpvError::Malformed("块长度溢出".into()))?;
+        if end > data.len() {
+            return Err(KkpvError::Malformed("块越界".into()));
+        }
+        let view = KkpvView::decode(&data[cur..end], limits)?;
+        match version {
+            None => version = Some((view.tick(), view.generation())),
+            Some((tick, generation)) => {
+                if (tick, generation) != (view.tick(), view.generation()) {
+                    return Err(KkpvError::Malformed("束内块携带不同的世界版本".into()));
+                }
+            }
+        }
+        cur = end;
+    }
+    if cur != data.len() {
+        return Err(KkpvError::Malformed("束长度与块目录不符".into()));
+    }
+    version.map_or_else(
+        || Err(KkpvError::Malformed("空束无版本可校验".into())),
+        |(tick, generation)| Ok((count, tick, generation)),
+    )
 }
 
 // —— 解码视图 ——————————————————————————————————————————————
@@ -1759,6 +1820,60 @@ mod tests {
         let empty = encode_bundle(&[], &KkpvLimits::default()).expect("空序列编码成功");
         assert_eq!(empty.len(), 4);
         assert_eq!(&empty[..4], &0u32.to_le_bytes());
+    }
+
+    #[test]
+    fn validate_bundle_checks_framing_and_versions() {
+        let same_tick = || {
+            let mut a = input(vec![obj(1, "t:a", &[("k", KkpvValue::Int(5))])]);
+            a.room_name = "W1N1".into();
+            let mut b = input(vec![obj(9, "t:b", &[("s", KkpvValue::Str("x".into()))])]);
+            b.room_name = "E2N2".into();
+            encode_bundle(&[a, b], &KkpvLimits::default()).expect("编码成功")
+        };
+        let (count, tick, generation) =
+            validate_bundle(&same_tick(), &KkpvLimits::default()).expect("同版本束通过");
+        assert_eq!((count, tick, generation), (2, 7, 3));
+
+        // 传输分帧允许混版本（bundle_framing_round_trip 锁定），发布校验
+        // 拒绝——共享束不得跨世界版本拼装。
+        let mut mixed_a = input(vec![]);
+        mixed_a.room_name = "W1N1".into();
+        let mut mixed_b = input(vec![]);
+        mixed_b.room_name = "E2N2".into();
+        mixed_b.tick = 8;
+        let mixed = encode_bundle(&[mixed_a, mixed_b], &KkpvLimits::default()).expect("编码成功");
+        assert!(
+            validate_bundle(&mixed, &KkpvLimits::default()).is_err(),
+            "块间版本不一致须拒绝"
+        );
+
+        let good = same_tick();
+        assert!(
+            validate_bundle(&[], &KkpvLimits::default()).is_err(),
+            "空缓冲拒绝"
+        );
+        assert!(
+            validate_bundle(&good[..3], &KkpvLimits::default()).is_err(),
+            "截断框架头拒绝"
+        );
+        let mut truncated = good.clone();
+        truncated.pop();
+        assert!(
+            validate_bundle(&truncated, &KkpvLimits::default()).is_err(),
+            "尾块截断拒绝"
+        );
+        let mut inflated = good.clone();
+        inflated[0] = 3;
+        assert!(
+            validate_bundle(&inflated, &KkpvLimits::default()).is_err(),
+            "块数虚高时长度目录越界拒绝"
+        );
+        let empty = encode_bundle(&[], &KkpvLimits::default()).expect("空束");
+        assert!(
+            validate_bundle(&empty, &KkpvLimits::default()).is_err(),
+            "空束无版本可校验，不得发布为共享块"
+        );
     }
 
     #[test]

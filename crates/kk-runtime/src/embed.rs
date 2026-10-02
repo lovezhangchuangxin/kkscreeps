@@ -75,6 +75,9 @@ pub struct EmbedEngine {
     /// 是否经 KKPV 二进制通道向沙箱注入世界数据；默认走 JSON 参考通道。
     /// 两条通道装配出的玩家可见面等价，测试按此锁定。
     kkpv_channel: bool,
+    /// 公开地形束的发布库：按代际发布/获取共享束，承载保留报告
+    /// （固定内存测量面）。仅 KKPV 通道使用。
+    kkpv_public_store: crate::kkpv_store::KkpvBlockStore,
 }
 
 /// 记录成功调用的投影、执行、结算和整次调用耗时。失败尝试不记录；
@@ -141,6 +144,14 @@ fn kkpv_audience_hash(viewer: &str) -> [u8; 32] {
     hasher.update(viewer.as_bytes());
     hasher.finalize().into()
 }
+
+/// 公开地形束的受众组摘要：SHA-256("kkpv-public-terrain-v1")。公开通道
+/// 对全部查看者使用同一值——束内容与查看者无关，摘要只承载"哪个公开
+/// 受众组"的一致性校验与缓存分组，同样不是授权凭证。
+const KKPV_PUBLIC_AUDIENCE_HASH: [u8; 32] = [
+    0x52, 0x96, 0x13, 0x9a, 0x7f, 0x68, 0xc1, 0x8a, 0x0a, 0xe7, 0x05, 0x50, 0xa1, 0xb4, 0x17, 0x76,
+    0x5c, 0x9c, 0x88, 0xa3, 0x29, 0xcc, 0x59, 0xe8, 0xc7, 0xfe, 0x27, 0x9e, 0xc8, 0x4a, 0xdb, 0x7b,
+];
 
 /// `controller: false` 与显式控制器字段互斥（screeps-ok 契约，adapter.ts:45-48）。
 const CONTROLLER_ONLY_FIELDS: [&str; 6] = [
@@ -285,6 +296,7 @@ impl EmbedEngine {
             last_execution_order: None,
             sandbox_configs_for_test: BTreeMap::new(),
             kkpv_channel: false,
+            kkpv_public_store: crate::kkpv_store::KkpvBlockStore::new(),
         }
     }
 
@@ -310,6 +322,9 @@ impl EmbedEngine {
         self.fail_next_settle_room = None;
         self.fail_next_settle_stage = None;
         self.fail_next_writeback = None;
+        // 新分片从 tick 0 重新计代；旧公开束句柄全部作废（沙箱先于此
+        // 回收，不存在跨分片的合法持有者）。
+        self.kkpv_public_store = crate::kkpv_store::KkpvBlockStore::new();
 
         let players = self.players.get_or_insert_with(ThreadExecutor::new);
         // 先取走全部配置，避免注册中途失败后残留配置被下一次创建意外使用。
@@ -715,6 +730,18 @@ impl EmbedEngine {
         let (notify, completion) = std::sync::mpsc::channel();
         let mut failure: Option<String> = None;
         let started = std::time::Instant::now();
+        // KKPV 通道的公开地形束按代际发布一次、整轮共享：acquire 命中
+        // （同代际重入或重试轮复投影）不重编码；miss 才投影+编码+发布。
+        // 耗时归入投影相。失败即整轮失败——没有公开束任何玩家都无法装配。
+        let mut kkpv_public: Option<kk_runner::SharedKkpvBundle> = None;
+        if self.kkpv_channel {
+            let t_public = std::time::Instant::now();
+            match self.public_bundle_for_epoch(source, epoch) {
+                Ok(bundle) => kkpv_public = Some(bundle),
+                Err(e) => failure = Some(e.to_string()),
+            }
+            project_ns += t_public.elapsed().as_nanos();
+        }
         loop {
             while failure.is_none() && pending.len() < self.player_concurrency {
                 let Some(handle) = requested.next() else {
@@ -796,6 +823,7 @@ impl EmbedEngine {
                     kk_runner::RunJob {
                         world,
                         kkpv_bundle,
+                        kkpv_public: kkpv_public.clone(),
                         code: code.clone(),
                         epoch,
                         attempt: 0,
@@ -1058,6 +1086,53 @@ impl EmbedEngine {
         self.last_execution_order.as_deref()
     }
 
+    /// 获取当前代际的公开地形束共享句柄；未发布则投影、编码并发布。
+    /// 同代际的重入（一轮内多次 run_players、失败轮重投影）命中缓存
+    /// 不重编码；结算推进 tick 或世界变异推进 generation 后的首次获取
+    /// 重编码（块头 tick 与信封 time 交叉校验要求束随代际更新）。
+    /// 零注册房世界直接下发空束（库发布要求可校验的块版本，空束没有；
+    /// 沙箱侧空公开束解出空地形表，与 JSON 通道的零房行为一致）。
+    ///
+    /// # Errors
+    /// 世界源不提供公开块、编码失败或发布校验失败时返回错误。
+    fn public_bundle_for_epoch(
+        &self,
+        source: &dyn WorldSource,
+        epoch: RunEpoch,
+    ) -> anyhow::Result<kk_runner::SharedKkpvBundle> {
+        if let Some(handle) = self.kkpv_public_store.acquire(epoch) {
+            if let Some(bundle) = handle.shared_bundle() {
+                return Ok(bundle.clone());
+            }
+            anyhow::bail!("公开束载荷不是共享形态（发布库被误用）");
+        }
+        let blocks = source
+            .kkpv_public_terrain_blocks(KKPV_PROTOTYPE_PLAN_HASH, KKPV_PUBLIC_AUDIENCE_HASH)
+            .ok_or_else(|| anyhow::anyhow!("世界源未提供 KKPV 公开地形块"))?;
+        let bytes =
+            kk_schema::kkpv::encode_bundle(&blocks, &kk_schema::kkpv::KkpvLimits::default())
+                .map_err(|e| anyhow::anyhow!("KKPV 公开束编码失败：{e}"))?;
+        if blocks.is_empty() {
+            return Ok(kk_runner::SharedKkpvBundle::from_vec(bytes));
+        }
+        let handle = self.kkpv_public_store.publish_shared(
+            epoch,
+            bytes,
+            &kk_schema::kkpv::KkpvLimits::default(),
+        )?;
+        Ok(handle
+            .shared_bundle()
+            .expect("publish_shared 载荷恒为共享形态")
+            .clone())
+    }
+
+    /// 读取公开束保留报告（固定内存测量面）：仍被句柄持有的代际、
+    /// 字节数与库外句柄数。V8 侧 ArrayBuffer 引用只延长真实存活，
+    /// 不进入读数——报告是存活下界。
+    pub fn kkpv_public_retention_report(&self) -> Vec<crate::kkpv_store::RetainedBlock> {
+        self.kkpv_public_store.retention_report()
+    }
+
     /// 切换世界注入通道：true 走 KKPV 二进制块束，false（默认）走 JSON
     /// 参考通道。两条通道装配出的玩家可见面等价，集成测试按此锁定。
     pub fn set_kkpv_channel(&mut self, enabled: bool) {
@@ -1065,8 +1140,9 @@ impl EmbedEngine {
     }
 
     /// 采样指定玩家当前世界的注入体积（诊断/基准用）：JSON 通道是整
-    /// 世界串字节，KKPV 通道是信封串 + 块束字节。只读世界、复用与派发
-    /// 相同的投影入口（含 market 注入），不在任何计时窗口内调用。
+    /// 世界串字节，KKPV 通道是信封串 + 私有束字节 + 公开束字节（共享，
+    /// 全玩家一份）+ 公开束保留报告。只读世界、复用与派发相同的投影
+    /// 入口（含 market 注入），不在任何计时窗口内调用。
     pub fn injection_size_sample(&self, handle: &str) -> anyhow::Result<Value> {
         let source: &dyn WorldSource = &self.engine.world;
         let gcl = self.engine.players.get(handle).map(|p| p.gcl).unwrap_or(0);
@@ -1088,11 +1164,36 @@ impl EmbedEngine {
             let bundle =
                 kk_schema::kkpv::encode_bundle(&blocks, &kk_schema::kkpv::KkpvLimits::default())
                     .map_err(|e| anyhow::anyhow!("KKPV 块束编码失败：{e}"))?;
+            // 公开束按当前世界重算字节数（不发布、不动库）；块数与私
+            // 有束的房间集一致（全注册房间）。
+            let public_blocks = source
+                .kkpv_public_terrain_blocks(KKPV_PROTOTYPE_PLAN_HASH, KKPV_PUBLIC_AUDIENCE_HASH)
+                .ok_or_else(|| anyhow::anyhow!("世界源未提供 KKPV 公开地形块"))?;
+            let public_bundle = kk_schema::kkpv::encode_bundle(
+                &public_blocks,
+                &kk_schema::kkpv::KkpvLimits::default(),
+            )
+            .map_err(|e| anyhow::anyhow!("KKPV 公开束编码失败：{e}"))?;
+            let retention: Vec<Value> = self
+                .kkpv_public_retention_report()
+                .into_iter()
+                .map(|r| {
+                    json!({
+                        "tick": r.epoch.tick,
+                        "generation": r.epoch.generation,
+                        "bytes": r.bytes,
+                        "handles": r.handles,
+                    })
+                })
+                .collect();
             Ok(json!({
                 "channel": "kkpv",
                 "envelope_bytes": serde_json::to_string(&envelope)?.len(),
                 "bundle_bytes": bundle.len(),
+                "public_bundle_bytes": public_bundle.len(),
+                "public_shared": true,
                 "blocks": blocks.len(),
+                "public_retained": retention,
             }))
         } else {
             let mut world =
@@ -1224,6 +1325,8 @@ impl EmbedEngine {
         self.execution_failure = None;
         self.fail_after_player_for_test = None;
         self.last_console.clear();
+        // 世界已清空；公开束随代际一并作废（沙箱先于此回收）。
+        self.kkpv_public_store = crate::kkpv_store::KkpvBlockStore::new();
     }
 }
 

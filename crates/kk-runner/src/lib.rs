@@ -9,6 +9,7 @@ pub mod modules;
 pub mod ops;
 pub mod proto;
 pub mod sandbox;
+pub mod shared_bundle;
 pub mod watchdog;
 
 pub use budget::{Bucket, TickPlan};
@@ -19,3 +20,4 @@ pub use proto::{
     TickReport,
 };
 pub use sandbox::{Sandbox, SandboxConfig, TickOutcome, lifo_violations, live_sandbox_count};
+pub use shared_bundle::SharedKkpvBundle;

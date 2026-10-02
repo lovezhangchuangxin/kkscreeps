@@ -1,7 +1,9 @@
 /* KKPV 块束的沙箱侧可信解码器。
- * 输入是宿主经私有通道传入的每 isolate 私有拷贝（ArrayBuffer）；本段在
- * 加载时捕获全部内建（含 Error），玩家运行期改写原型或全局不影响解码，
- * 缓冲区本身不进入玩家可见面——记录只暴露解码后的值。
+ * 私有束（对象记录）与公开束（地形）都经宿主传入 ArrayBuffer；公开束
+ * 是跨玩家共享的同一份内存，本段在加载时捕获全部内建（含 Error 与
+ * Uint8Array），玩家运行期改写原型或全局不影响解码，缓冲区本身不进入
+ * 玩家可见面——私有束只暴露解码后的值，公开束只暴露地形字节的视图，
+ * 视图由可信闭包按索引读取（getRawBuffer 经构造器拷出，不返还视图）。
  * 块布局与 crates/kk-schema/src/kkpv.rs 的 v1 编码一致：160 字节头、
  * ID 升序目录、按类型分桶的列式字段、集中 arena 与单字节嵌套标签。
  * 束框架是 u32 块数 + 逐块 u32 长度目录 + 顺序拼接的块字节。
@@ -31,6 +33,7 @@
   const __fromCharCode = String.fromCharCode;
   const __Infinity = Infinity;
   const __Error = Error;
+  const __Uint8Array = Uint8Array;
 
   const HEADER_LEN = 160;
   // 2^32 在 double 中精确；i64 取负经补码量值合成（见 readInt）。
@@ -277,9 +280,10 @@
     });
   }
 
-  // 解析单块并把记录按目录顺序追加进 records；expectedTick 与信封的
-  // world.time 一致性在此交叉校验（块与信封来自同一次投影）。
-  function decodeBlockInto(dv, records, start, len, expectedTick) {
+  // 校验块头与四段边界，返回后续解码需要的头部信息。expectedTick 与
+  // 信封的 world.time 一致性在此交叉校验（块与信封来自同一次投影）。
+  // 段规则：零长度段 offset 须为零；非零段落在 [头长, 块长) 且两两不重叠。
+  function checkBlockHeader(dv, start, len, expectedTick) {
     if (len < HEADER_LEN) fail('块短于头部');
     if (u32(dv, start) !== 0x56504b4b) fail('魔数不符');
     if (u16(dv, start + 4) !== 1) fail('版本不支持');
@@ -297,7 +301,6 @@
     const directory = [u32(dv, start + 120), u32(dv, start + 124)];
     const buckets = [u32(dv, start + 128), u32(dv, start + 132)];
     const arena = [u32(dv, start + 136), u32(dv, start + 140)];
-    // 段边界：零长度段 offset 须为零；非零段落在 [头长, 块长) 且两两不重叠。
     const segs = [terrain, directory, buckets, arena];
     for (let s = 0; s < segs.length; s++) {
       const o = segs[s][0];
@@ -315,16 +318,29 @@
         if (x[1] > 0 && y[1] > 0 && x[0] < y[0] + y[1] && y[0] < x[0] + x[1]) fail('段重叠');
       }
     }
-    if (objectCount * 16 !== directory[1]) fail('目录长度与对象数不符');
-    const arenaBase = start + arena[0];
-    const arenaLen = arena[1];
+    return {
+      flags, objectCount, typeCount, terrain, directory, buckets, arena,
+      arenaBase: start + arena[0], arenaLen: arena[1],
+    };
+  }
+
+  // 解析单块并把记录按目录顺序追加进 records；私有束只接受私有块
+  // （公开块出现在私有束说明通道装配有误）。
+  function decodeBlockInto(dv, records, start, len, expectedTick) {
+    const h = checkBlockHeader(dv, start, len, expectedTick);
+    if ((h.flags & 1) !== 1) fail('私有束要求私有块');
+    if (h.terrain[1] !== 0) fail('私有对象块不带地形段');
+    const objectCount = h.objectCount;
+    const arenaBase = h.arenaBase;
+    const arenaLen = h.arenaLen;
+    if (objectCount * 16 !== h.directory[1]) fail('目录长度与对象数不符');
 
     // 类型桶：16 字节桶头 + 12 字节字段项 + 缺失/null 位图 + 定宽列，
     // 消费量须与桶段长度精确一致。
-    let cur = start + buckets[0];
-    const bucketsEnd = cur + buckets[1];
+    let cur = start + h.buckets[0];
+    const bucketsEnd = cur + h.buckets[1];
     const bucketList = [];
-    for (let t = 0; t < typeCount; t++) {
+    for (let t = 0; t < h.typeCount; t++) {
       if (cur + 16 > bucketsEnd) fail('桶头越界');
       const rows = u32(dv, cur + 8);
       const fieldCount = u32(dv, cur + 12);
@@ -370,7 +386,7 @@
     if (cur !== bucketsEnd) fail('桶段消费不符');
 
     // 目录：ID 升序；句柄与行号须落在已解析桶内。
-    const dirAt = start + directory[0];
+    const dirAt = start + h.directory[0];
     let prevHi = -1;
     let prevLo = -1;
     for (let i = 0; i < objectCount; i++) {
@@ -400,28 +416,73 @@
     }
   }
 
-  /** 解码整束并返回记录数组；块的房间顺序与目录的 ID 顺序共同决定
-   * 数组顺序，与 JSON 参考路径的对象遍历序一致。expectedTick 是信封
-   * 的 world.time，逐块交叉校验。 */
+  /** 束框架走查：校验 u32 块数 + 长度目录 + 精确总量，对每块调用
+   * visit(start, len)。逐块先做束内边界预检，越界在解码前失败。返回块数。 */
+  function forEachBlock(dv, total, visit) {
+    if (total < 4) fail('束短于框架头部');
+    const count = u32(dv, 0);
+    if (count > (total - 4) / 4) fail('束短于长度目录');
+    let cur = 4 + count * 4;
+    for (let i = 0; i < count; i++) {
+      const len = u32(dv, 4 + i * 4);
+      if (len > total - cur) fail('块越界');
+      visit(cur, len);
+      cur += len;
+    }
+    if (cur !== total) fail('束长度与块目录不符');
+    return count;
+  }
+
+  /** 解码私有对象束并返回记录数组；块的房间顺序与目录的 ID 顺序共同
+   * 决定数组顺序，与 JSON 参考路径的对象遍历序一致。expectedTick 是
+   * 信封的 world.time，逐块交叉校验。 */
   function decodeBundle(buffer, expectedTick) {
     const dv = new __DataView(buffer);
     const total = __reflectApply(__dvByteLength, dv, []);
     if (expectedTick === undefined || expectedTick === null) {
       fail('缺少信封 tick 一致性参数');
     }
-    if (total < 4) fail('束短于框架头部');
-    const count = u32(dv, 0);
-    const lens = [];
-    for (let i = 0; i < count; i++) lens[lens.length] = u32(dv, 4 + i * 4);
-    let cur = 4 + count * 4;
     const records = [];
-    for (let i = 0; i < count; i++) {
-      decodeBlockInto(dv, records, cur, lens[i], expectedTick);
-      cur += lens[i];
-    }
-    if (cur !== total) fail('束长度与块目录不符');
+    forEachBlock(dv, total, (start, len) => {
+      decodeBlockInto(dv, records, start, len, expectedTick);
+    });
     return records;
   }
 
-  globalThis.__kkp.gw.kkpv = { decodeBundle };
+  /** 解码公开地形束，返回 {房间名 → 地形字节视图}。视图直接覆盖共享
+   * ArrayBuffer 的地形段（零拷贝）；视图不进入玩家可见面——game.js
+   * 只把它交给 terrainByRoom 供可信闭包按索引读取。公开束只接受公开
+   * 块（flags 无私有位）、无对象且带非空地形段；房名从 arena 严格
+   * UTF-8 读出，重复房名拒绝。 */
+  function decodePublicBundle(buffer, expectedTick) {
+    const dv = new __DataView(buffer);
+    const total = __reflectApply(__dvByteLength, dv, []);
+    if (expectedTick === undefined || expectedTick === null) {
+      fail('缺少信封 tick 一致性参数');
+    }
+    const out = __Object.create(null);
+    forEachBlock(dv, total, (start, len) => {
+      const h = checkBlockHeader(dv, start, len, expectedTick);
+      if ((h.flags & 1) !== 0) fail('公开束要求公开块');
+      if (h.objectCount !== 0 || h.typeCount !== 0) fail('公开地形块不带对象');
+      if (h.directory[1] !== 0 || h.buckets[1] !== 0) fail('公开地形块无目录与桶段');
+      if (h.terrain[1] === 0) fail('公开地形块缺地形段');
+      // 房间地形契约是 50×50：短段会让越界格静默按 plain 读出，须拒绝。
+      if (h.terrain[1] !== 2500) fail('地形段须为 2500 字节');
+      const nameOff = u32(dv, start + 96);
+      const nameLen = u32(dv, start + 100);
+      if (nameLen === 0) fail('公开块缺房间名');
+      if (nameOff + nameLen > h.arenaLen) fail('房间名描述符越界');
+      const room = utf8(dv, h.arenaBase + nameOff, nameLen);
+      if (out[room] !== undefined) fail('公开束房间名重复: ' + room);
+      // 视图锚定在共享缓冲区的地形段上；构造器来自加载期捕获。
+      const view = new __Uint8Array(buffer, start + h.terrain[0], h.terrain[1]);
+      __defineProperty(out, room, {
+        value: view, writable: true, enumerable: true, configurable: true,
+      });
+    });
+    return out;
+  }
+
+  globalThis.__kkp.gw.kkpv = { decodeBundle, decodePublicBundle };
 })();

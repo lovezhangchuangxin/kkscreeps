@@ -1320,28 +1320,38 @@
     /** 每 tick 注入世界快照（宿主经私有句柄以字符串参数传入——下方双分支
      * 兼容 string/对象两种形态）并重建 Game。 */
     beginTick(worldJson, cpuMeta) {
-      beginTickImpl(worldJson, cpuMeta, null);
+      beginTickImpl(worldJson, cpuMeta, null, null);
     },
-    /** KKPV 通道注入：worldJson 是不含对象数组的世界信封，对象记录由
-     * 可信解码器从每 isolate 私有拷贝的块束（ArrayBuffer）解出。装配后
-     * 与 JSON 通道的等同面：gw.world.objects 的成员、数组顺序（块房
-     * 序×ID 序）、字段值与缺失形态、Store/嵌套记录的键序（载荷保序）；
-     * 两者共用同一段 beginTickImpl 后续步骤。 */
-    beginTickKkpv(worldJson, bundle, cpuMeta) {
-      beginTickImpl(worldJson, cpuMeta, bundle);
+    /** KKPV 通道注入：worldJson 是不含对象数组与地形的世界信封；对象记录
+     * 由可信解码器从私有块束（ArrayBuffer）解出，地形由公开地形束解出
+     * 零拷贝视图。装配后与 JSON 通道的等同面：gw.world.objects 的成员、
+     * 数组顺序（块房序×ID 序）、字段值与缺失形态、Store/嵌套记录的键序
+     * （载荷保序）、terrainByRoom 的逐格地形值；两者共用同一段
+     * beginTickImpl 后续步骤。两个束须同时提供。 */
+    beginTickKkpv(worldJson, bundle, publicBundle, cpuMeta) {
+      beginTickImpl(worldJson, cpuMeta, bundle, publicBundle);
     },
     writeBackMemory,
     intentsPayload,
   };
 
   /** beginTick/beginTickKkpv 的共用实现；bundle 非 null 时对象数组来自
-   * KKPV 块束（信封不含 objects 键），其余步骤两条通道完全一致。 */
-  function beginTickImpl(worldJson, cpuMeta, bundle) {
+   * KKPV 私有块束（信封不含 objects 键），publicBundle 非 null 时地形
+   * 来自公开地形束的零拷贝视图（信封不含 terrain 键），其余步骤两条
+   * 通道完全一致。两个束必须同时提供或同时为空——单侧出现即装配错误。 */
+  function beginTickImpl(worldJson, cpuMeta, bundle, publicBundle) {
+      const hasPrivate = bundle !== null && bundle !== undefined;
+      const hasPublic = publicBundle !== null && publicBundle !== undefined;
+      if (hasPrivate !== hasPublic) {
+        throw new Error('KKPV 通道的公开束与私有束须同时提供或同时为空');
+      }
       // 使用捕获的 JSON.parse 解码，避免玩家替换全局函数后改写世界与用户身份。
       gw.world = typeof worldJson === 'string' ? __jsonParse(worldJson) : worldJson;
-      if (bundle !== null && bundle !== undefined) {
+      let terrainViews = null;
+      if (hasPrivate) {
         // 块头 tick 与信封 time 在解码器内交叉校验（同一投影的同界快照）。
         gw.world.objects = gw.kkpv.decodeBundle(bundle, gw.world.time);
+        terrainViews = gw.kkpv.decodePublicBundle(publicBundle, gw.world.time);
       }
       // Game.cpu 真值合并（宿主 begin_tick 第二参数——官方 make.js 先算窗口
       // 再装 runtimeData 的等价物；world.cpu 占位基准被此覆盖，键恒权威）
@@ -1387,22 +1397,39 @@
       gw.terrainByRoom = {};
       // 新 tick 开始时丢弃上一 tick 的绘图缓冲区。
       if (gw.visualReset) gw.visualReset();
-      const terrainEntries = __objectEntries(gw.world.rooms || {});
-      for (let i = 0; i < terrainEntries.length; i++) {
-        const roomName = terrainEntries[i][0];
-        const t = terrainEntries[i][1].terrain;
-        if (t && typeof t === 'object' && typeof t.payload === 'string') {
-          // 紧凑协议（P3 真路径）：rev 命中跨 tick 复用解码产物（地形首玩家
-          // tick 后不可变，稳态零解码）；未命中解码 b64 → 2500 字节索引兼容
-          const cached = gw.terrainCache[roomName];
-          if (!cached || cached.rev !== t.rev) {
-            gw.terrainCache[roomName] = { rev: t.rev, bytes: gw.b64ToBytes(t.payload) };
+      // 地形表一律经 defineProperty 填自有属性：房名形如 "__proto__" 时
+      // 普通赋值会改写原型而不是建键（两条通道同一保护；引擎房名不可
+      // 产生该形态，防御面针对手搓世界注入）。
+      const setTerrain = (room, bytes) => {
+        __Object.defineProperty(gw.terrainByRoom, room, {
+          value: bytes, writable: true, enumerable: true, configurable: true,
+        });
+      };
+      if (terrainViews !== null) {
+        // KKPV 通道：公开束的零拷贝视图直接作为地形源——无 b64 解码、
+        // 无逐 tick 重分配（视图锚定共享内存，旧代际随视图失活回收）。
+        // rev 缓存路径不参与：束每代际整份更换，不存在同 rev 复用问题。
+        for (const room in terrainViews) {
+          setTerrain(room, terrainViews[room]);
+        }
+      } else {
+        const terrainEntries = __objectEntries(gw.world.rooms || {});
+        for (let i = 0; i < terrainEntries.length; i++) {
+          const roomName = terrainEntries[i][0];
+          const t = terrainEntries[i][1].terrain;
+          if (t && typeof t === 'object' && typeof t.payload === 'string') {
+            // 紧凑协议（P3 真路径）：rev 命中跨 tick 复用解码产物（地形首玩家
+            // tick 后不可变，稳态零解码）；未命中解码 b64 → 2500 字节索引兼容
+            const cached = gw.terrainCache[roomName];
+            if (!cached || cached.rev !== t.rev) {
+              gw.terrainCache[roomName] = { rev: t.rev, bytes: gw.b64ToBytes(t.payload) };
+            }
+            setTerrain(roomName, gw.terrainCache[roomName].bytes);
+          } else if (__Array.isArray(t)) {
+            // 旧数组形态（宿主手搓注入的夹具路径——bot_check 桩世界等；真
+            // 路径已不产出），原样接收
+            setTerrain(roomName, t);
           }
-          gw.terrainByRoom[roomName] = gw.terrainCache[roomName].bytes;
-        } else if (__Array.isArray(t)) {
-          // 旧数组形态（宿主手搓注入的夹具路径——bot_check 桩世界等；真
-          // 路径已不产出），原样接收
-          gw.terrainByRoom[roomName] = t;
         }
       }
       // 调用各 API 注册的 tick 重置函数，例如本 tick 已使用的 creep 名。

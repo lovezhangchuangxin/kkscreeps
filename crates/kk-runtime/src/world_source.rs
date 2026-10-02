@@ -42,9 +42,9 @@ pub trait WorldSource {
         catalog: &kk_mod_api::extension::ExtensionCatalog,
     ) -> Value;
 
-    /// 为查看者生成 KKPV 投影：不含对象数组的世界信封与逐房间块输入。
-    /// 未实现二进制投影的源返回 None；启用 KKPV 通道的调用方据此失败
-    /// 而不是静默回落（回落会掩盖接线缺陷）。
+    /// 为查看者生成 KKPV 投影：不含对象数组与地形的世界信封与逐房间
+    /// 私有对象块输入。未实现二进制投影的源返回 None；启用 KKPV 通道的
+    /// 调用方据此失败而不是静默回落（回落会掩盖接线缺陷）。
     fn kkpv_projection_for_viewer(
         &self,
         _viewer: &str,
@@ -53,6 +53,17 @@ pub trait WorldSource {
         _plan_hash: [u8; 32],
         _audience_hash: [u8; 32],
     ) -> Option<Result<(Value, Vec<kk_schema::kkpv::KkpvBlockInput>), String>> {
+        None
+    }
+
+    /// 生成公开地形块输入：全部注册房间、与查看者无关。None 语义与
+    /// [`WorldSource::kkpv_projection_for_viewer`] 一致（启用 KKPV 通道
+    /// 时 fail-loud，不静默回落）。
+    fn kkpv_public_terrain_blocks(
+        &self,
+        _plan_hash: [u8; 32],
+        _audience_hash: [u8; 32],
+    ) -> Option<Vec<kk_schema::kkpv::KkpvBlockInput>> {
         None
     }
 }
@@ -98,6 +109,18 @@ impl WorldSource for kk_world::World {
 
     fn object_snapshot(&self, id: &str) -> Option<Value> {
         kk_world::ObjId::parse(id).and_then(|id| self.object_snapshot_by_id(id))
+    }
+
+    fn kkpv_public_terrain_blocks(
+        &self,
+        plan_hash: [u8; 32],
+        audience_hash: [u8; 32],
+    ) -> Option<Vec<kk_schema::kkpv::KkpvBlockInput>> {
+        Some(kk_world::World::kkpv_public_terrain_blocks(
+            self,
+            plan_hash,
+            audience_hash,
+        ))
     }
 
     fn find_in_room(&self, room: &str, find_const: i64) -> Vec<Value> {

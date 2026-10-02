@@ -57,6 +57,19 @@ pub(super) fn kkpv_channel_e2e_equivalence_impl() -> anyhow::Result<()> {
       controller: snap(r.controller), findCreeps: snap(r.find(101)),
       findStructures: snap(r.find(107)),
     } : null,
+    // 地形面：KKPV 通道经公开束零拷贝视图、JSON 通道经 b64 缓存解码，
+    // 逐格值与 getRawBuffer 拷出语义必须一致。
+    terrainProbe: (function () {
+      var raw = new Room.Terrain('W1N1').getRawBuffer();
+      var before = Game.map.getTerrainAt(10, 10, 'W1N1');
+      raw[10 * 50 + 10] = 99;
+      return {
+        len: raw.length,
+        at: [Game.map.getTerrainAt(0, 0, 'W1N1'), Game.map.getTerrainAt(25, 25, 'W1N1'),
+             Game.map.getTerrainAt(49, 49, 'W1N1')],
+        mutationSafe: Game.map.getTerrainAt(10, 10, 'W1N1') === before,
+      };
+    })(),
   });
 })()
 "#;
@@ -133,6 +146,24 @@ pub(super) fn kkpv_channel_e2e_equivalence_impl() -> anyhow::Result<()> {
     assert_eq!(runs[0].1["value"], json!(0), "harvest 预检通过");
     assert_eq!(runs[0].2, runs[1].2, "suicide 返回码两通道一致");
     assert_eq!(runs[0].3, runs[1].3, "自杀结算后的下一轮玩家视图两通道一致");
+    // 地形探针的正向锁定（假等价防护）：2500 字节、三采样位为合法
+    // 地形词、getRawBuffer 拷出语义成立。引擎房间的真实地形不作全平
+    // 原假设——具体值由两通道主断言锁定。
+    let dump_value = serde_json::from_str::<serde_json::Value>(
+        runs[0].0["value"].as_str().expect("dump 返回字符串"),
+    )?;
+    assert_eq!(dump_value["terrainProbe"]["len"], json!(2500));
+    let at = dump_value["terrainProbe"]["at"]
+        .as_array()
+        .expect("三采样位");
+    assert_eq!(at.len(), 3);
+    for word in at {
+        assert!(
+            matches!(word.as_str(), Some("plain") | Some("wall") | Some("swamp")),
+            "地形词合法：{word}"
+        );
+    }
+    assert_eq!(dump_value["terrainProbe"]["mutationSafe"], json!(true));
     // 墓碑经权威桥编码 creepId 为 Ref，沙箱解回 kk 前缀字符串——
     // 与死亡 creep 的 id 一致即全环闭环。
     let tomb = serde_json::from_str::<serde_json::Value>(
@@ -179,8 +210,139 @@ pub(super) fn kkpv_injection_size_sample_impl() -> anyhow::Result<()> {
     assert_eq!(kkpv_sample["blocks"], json!(1), "每注册房间一块");
     assert!(kkpv_sample["envelope_bytes"].as_u64().unwrap() > 0);
     assert!(kkpv_sample["bundle_bytes"].as_u64().unwrap() > 0);
+    // 公开地形束：与私有束同房间数、全玩家共享一份。
+    assert_eq!(kkpv_sample["public_shared"], json!(true));
+    let public_bytes = kkpv_sample["public_bundle_bytes"].as_u64().unwrap();
+    assert!(public_bytes > 160, "公开束含至少一个块的头与地形段");
+    // 每玩家注入量 = 信封 + 私有束（公开束全服一份，随玩家数摊销，
+    // 不计入单玩家口径）。信封不再携带地形后，单玩家注入量须显著低于
+    // JSON 整世界（其中 b64 地形约占 3/4）。
+    let envelope = kkpv_sample["envelope_bytes"].as_u64().unwrap();
+    let private = kkpv_sample["bundle_bytes"].as_u64().unwrap();
+    assert!(
+        envelope + private < json_bytes,
+        "每玩家注入量（信封 {envelope} + 私有束 {private}）应低于 JSON 整世界（{json_bytes}）"
+    );
     // 采样只读：世界代际不变。
     assert_eq!(e.get_game_time(), time_before, "采样不得推进世界");
+    // 零注册房世界：公开束以空束直接下发（库发布拒绝无版本空束），
+    // 玩家面与 JSON 通道的零房行为一致。
+    e.create_shard(&json!({ "players": ["p1"], "rooms": [] }))?;
+    let mut codes = std::collections::BTreeMap::new();
+    codes.insert(
+        "p1".to_string(),
+        "JSON.stringify({ rooms: Object.keys(Game.rooms), time: Game.time })".to_string(),
+    );
+    let run = e.run_players(&codes)?;
+    let result = run.get("p1").expect("玩家执行完成");
+    assert!(result.executed, "零房世界的 KKPV 轮须照常执行");
+    assert_eq!(
+        result.expr["value"],
+        json!("{\"rooms\":[],\"time\":0}"),
+        "零房玩家面两通道同形（空 Game.rooms）"
+    );
+    Ok(())
+}
+
+/// 多玩家同轮 KKPV 并发（B.5 残留 5 的收口）：两名玩家在并发上限 2 下
+/// 同轮执行，共享同一份公开地形束；各自玩家面正确、结算后世界正确，
+/// 且与串行执行（并发 1）的结果一致——共享直读不改变任何玩家可见面。
+pub(super) fn kkpv_multi_player_concurrency_impl() -> anyhow::Result<()> {
+    let setup = |e: &mut EmbedEngine| -> anyhow::Result<String> {
+        e.create_shard(&json!({
+            "players": ["p1", "p2"],
+            "rooms": [{ "name": "W1N1", "rcl": 3, "owner": "p1" },
+                      { "name": "E2N2", "rcl": 3, "owner": "p2" }],
+        }))?;
+        e.place_object(
+            "W1N1",
+            "structure",
+            &json!({ "pos": [20, 20], "structureType": "spawn", "owner": "p1", "store": { "energy": 300 } }),
+        )?;
+        e.place_object(
+            "E2N2",
+            "structure",
+            &json!({ "pos": [20, 20], "structureType": "spawn", "owner": "p2", "store": { "energy": 300 } }),
+        )?;
+        Ok(String::new())
+    };
+    // 探针按玩家注入对方房名（p1↔p2），不在玩家侧分支用户名形态。
+    let probe_for = |other_room: &str| {
+        format!(
+            r#"(function () {{
+  var rooms = Object.keys(Game.rooms);
+  // ownTerrain：己方可见房；otherTerrain：对方 owned 房——房间级裁切
+  // 下不进 Game.rooms，但公开地形覆盖全部注册房（§5），须仍可读。
+  var otherRaw = new Room.Terrain('{other_room}').getRawBuffer();
+  var ownRaw = new Room.Terrain(rooms[0]).getRawBuffer();
+  return JSON.stringify({{
+    user: Game.username,
+    rooms: rooms,
+    ownTerrain: rooms[0] + ':' + ownRaw.length + ':' + ownRaw.reduce(function (a, b) {{ return a + b; }}, 0),
+    otherTerrain: '{other_room}:' + otherRaw.length + ':' + otherRaw.reduce(function (a, b) {{ return a + b; }}, 0),
+    spawns: Object.keys(Game.spawns).length,
+  }});
+}})()"#
+        )
+    };
+    let mut results = Vec::new();
+    for concurrency in [1usize, 2] {
+        let mut e = EmbedEngine::new();
+        e.set_kkpv_channel(true);
+        setup(&mut e)?;
+        e.set_player_concurrency(concurrency)?;
+        let mut codes = std::collections::BTreeMap::new();
+        codes.insert("p1".to_string(), probe_for("E2N2"));
+        codes.insert("p2".to_string(), probe_for("W1N1"));
+        let run = e.run_players(&codes)?;
+        let mut per_player = std::collections::BTreeMap::new();
+        for (handle, result) in run {
+            assert!(result.executed, "{handle}@并发{concurrency}: 执行须完成");
+            per_player.insert(handle, result.expr["value"].clone());
+        }
+        results.push(per_player);
+    }
+    // 比较两档并发的逐玩家输出。
+    let serial = &results[0];
+    let concurrent = &results[1];
+    assert_eq!(
+        serial.get("p1"),
+        concurrent.get("p1"),
+        "p1 玩家面不随并发档变化"
+    );
+    assert_eq!(
+        serial.get("p2"),
+        concurrent.get("p2"),
+        "p2 玩家面不随并发档变化"
+    );
+    let p1 = serde_json::from_str::<serde_json::Value>(
+        serial["p1"].as_str().expect("p1 探针返回字符串"),
+    )?;
+    let p2 = serde_json::from_str::<serde_json::Value>(
+        serial["p2"].as_str().expect("p2 探针返回字符串"),
+    )?;
+    // 各玩家只见自己的房（房间级裁切）；对方 owned 房不进 Game.rooms，
+    // 但公开地形覆盖全部注册房，两玩家都能读对方房的地形（§5 语义）。
+    assert_eq!(p1["rooms"], json!(["W1N1"]));
+    assert_eq!(p2["rooms"], json!(["E2N2"]));
+    assert!(
+        p1["ownTerrain"].as_str().unwrap().starts_with("W1N1:2500:"),
+        "p1 己方房地形 2500 字节"
+    );
+    assert!(
+        p1["otherTerrain"]
+            .as_str()
+            .unwrap()
+            .starts_with("E2N2:2500:"),
+        "p1 读对方 owned 房（E2N2）的公开地形仍可读"
+    );
+    assert!(
+        p2["otherTerrain"]
+            .as_str()
+            .unwrap()
+            .starts_with("W1N1:2500:"),
+        "p2 读对方 owned 房（W1N1）的公开地形仍可读"
+    );
     Ok(())
 }
 

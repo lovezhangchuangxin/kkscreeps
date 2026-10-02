@@ -327,6 +327,7 @@ fn host_budget_job() -> anyhow::Result<()> {
             1,
             kk_runner::RunJob {
                 kkpv_bundle: None,
+                kkpv_public: None,
                 world: world(),
                 code: "[Game.cpu.bucket,Game.cpu.tickLimit,Memory.saved]".into(),
                 epoch: EPOCH,
@@ -356,6 +357,7 @@ fn pending_receipts_are_independent() -> anyhow::Result<()> {
     pool.spawn_player(1, config())?;
     let job = |attempt| kk_runner::RunJob {
         kkpv_bundle: None,
+        kkpv_public: None,
         world: world(),
         code: "globalThis.n=(globalThis.n||0)+1;globalThis.n".into(),
         epoch: EPOCH,
@@ -386,6 +388,7 @@ fn queued_command_deadline() -> anyhow::Result<()> {
     let gate = pool.gate_next_job_for_test(1)?;
     let job = |attempt, code: &str| kk_runner::RunJob {
         kkpv_bundle: None,
+        kkpv_public: None,
         world: world(),
         code: code.into(),
         epoch: EPOCH,

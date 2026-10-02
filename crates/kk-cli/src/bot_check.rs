@@ -53,10 +53,12 @@ fn run_inner(path: &str, ticks: u32, report_path: &str, kkpv: bool) -> anyhow::R
     // 因缺少记录容器报错。这一轮只准备 Memory，不纳入后面的 tick 统计。
     let prep_world = home_world(0);
     let prep_result = if kkpv {
+        let (public, private) = kkpv_fixture_bundles(&prep_world)?;
         pool.run_player_kkpv(
             PLAYER,
             &kk_world::kkpv::kkpv_envelope_from_world_json(&prep_world),
-            &kkpv_fixture_bundle(&prep_world)?,
+            &kk_runner::SharedKkpvBundle::from_vec(public),
+            &private,
             "Memory.creeps = {}; 0",
             RunEpoch {
                 tick: 0,
@@ -91,8 +93,13 @@ fn run_inner(path: &str, ticks: u32, report_path: &str, kkpv: bool) -> anyhow::R
         let world = home_world(t);
         let report = if kkpv {
             let envelope = kk_world::kkpv::kkpv_envelope_from_world_json(&world);
-            let bundle = kkpv_fixture_bundle(&world)?;
-            pool.tick_kkpv(PLAYER, &envelope, &bundle)?
+            let (public, private) = kkpv_fixture_bundles(&world)?;
+            pool.tick_kkpv(
+                PLAYER,
+                &envelope,
+                &kk_runner::SharedKkpvBundle::from_vec(public),
+                &private,
+            )?
         } else {
             pool.tick(PLAYER, &world)?
         };
@@ -274,11 +281,15 @@ fn normalize_line(line: &str) -> String {
     out
 }
 
-/// 手搓夹具世界的 KKPV 块束。计划/受众摘要用零占位——bot-check 的
-/// 桩世界不与引擎块混用，两个哈希在此只承担结构字段，不是授权。
-fn kkpv_fixture_bundle(world: &Value) -> anyhow::Result<Vec<u8>> {
-    kk_world::kkpv::kkpv_bundle_from_world_json(world, [0; 32], [0; 32])
-        .map_err(|e| anyhow::anyhow!("夹具世界 KKPV 转换失败：{e}"))
+/// 手搓夹具世界的 KKPV 两束（公开地形束 + 私有对象束）。计划/受众摘要
+/// 用零占位——bot-check 的桩世界不与引擎块混用，两个哈希在此只承担
+/// 结构字段，不是授权。
+fn kkpv_fixture_bundles(world: &Value) -> anyhow::Result<(Vec<u8>, Vec<u8>)> {
+    let public = kk_world::kkpv::kkpv_public_bundle_from_world_json(world, [0; 32], [0; 32])
+        .map_err(|e| anyhow::anyhow!("夹具世界 KKPV 公开束转换失败：{e}"))?;
+    let private = kk_world::kkpv::kkpv_bundle_from_world_json(world, [0; 32], [0; 32])
+        .map_err(|e| anyhow::anyhow!("夹具世界 KKPV 私有束转换失败：{e}"))?;
+    Ok((public, private))
 }
 
 /// 构造固定房间和对象，每轮只改变 time。地形为 2500 个平原格，

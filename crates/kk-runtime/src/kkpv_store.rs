@@ -1,14 +1,17 @@
-//! KKPV 块的固定句柄库：按世界代际发布不可变块，句柄持有期间旧块
+//! KKPV 块的固定句柄库：按世界代际发布不可变载荷，句柄持有期间旧块
 //! 不被回收、内容不变。
 //!
-//! 块字节以 `Arc` 共享。发布前在锁外建立完整结构视图校验（变长载荷
-//! 内的字符串仍在字段读取时校验）并核对块头 tick/generation 与发布
-//! 代际一致；校验限额由发布调用方给定并随块钉死，读取复用同一份。
-//! 代际前进性在锁内复核，防并发越序提交。获取只命中当前代际——
-//! 工作者回执被拒收不使旧代际块重新可获取；未发布代际同样返回 None。
-//! 工作者实际结束或沙箱销毁、引用释放后，旧代际在下次发布或报告时
-//! 回收；仍被句柄持有的代际在保留报告中列出（代际、字节数与库外
-//! 存活句柄数——句柄克隆不经库锁，读数是近似快照）。
+//! 载荷有两种：单块字节（`Arc<[u8]>`，B.4 语义——面向未来的 per-viewer
+//! overlay）与共享束（`SharedKkpvBundle`——公开地形通道的发布形态，
+//! 全部玩家共享同一份 V8 可挂载内存）。两种载荷都在发布前于锁外完成
+//! 完整结构校验（`KkpvView::decode` / `validate_bundle`）并核对头部
+//! tick/generation 与发布代际一致；校验限额由发布调用方给定并随块钉死，
+//! 读取复用同一份。代际前进性在锁内复核，防并发越序提交。获取只命中
+//! 当前代际——工作者回执被拒收不使旧代际块重新可获取；未发布代际同样
+//! 返回 None。工作者实际结束或沙箱销毁、引用释放后，旧代际在下次发布
+//! 或报告时回收；仍被句柄持有的代际在保留报告中列出（代际、字节数与
+//! 库外存活句柄数——句柄克隆不经库锁，读数是近似快照；V8 侧
+//! ArrayBuffer 对共享束的引用只延长真实存活，不进入读数）。
 //!
 //! 锁采用中毒即 panic 策略：临界区只做结构提交与集合维护，若这些
 //! 操作 panic，进程状态已不可信，fail-fast 优于带着不一致索引继续。
@@ -16,16 +19,32 @@
 use std::sync::{Arc, Mutex};
 
 use kk_core::RunEpoch;
+use kk_runner::SharedKkpvBundle;
 use kk_schema::kkpv::{KkpvLimits, KkpvView};
+
+/// 已发布载荷：单块字节或跨玩家共享的束内存。
+enum Payload {
+    Block(Arc<[u8]>),
+    Shared(SharedKkpvBundle),
+}
+
+impl Payload {
+    fn byte_len(&self) -> usize {
+        match self {
+            Self::Block(bytes) => bytes.len(),
+            Self::Shared(bundle) => bundle.byte_len(),
+        }
+    }
+}
 
 struct BlockEntry {
     epoch: RunEpoch,
-    block: Arc<[u8]>,
+    payload: Payload,
     limits: KkpvLimits,
 }
 
-/// 不可变块的引用计数句柄。句柄存活期间块字节保持可读且内容不变；
-/// 新版本发布不修改旧块。句柄不依赖库存活。
+/// 不可变载荷的引用计数句柄。句柄存活期间字节保持可读且内容不变；
+/// 新版本发布不修改旧载荷。句柄不依赖库存活。
 #[derive(Clone)]
 pub struct KkpvBlockHandle {
     entry: Arc<BlockEntry>,
@@ -37,18 +56,29 @@ impl KkpvBlockHandle {
     }
 
     pub fn byte_len(&self) -> usize {
-        self.entry.block.len()
+        self.entry.payload.byte_len()
     }
 
-    /// 对块字节建立只读视图。块字节存于不可变 `Arc<[u8]>`、解码限额
+    /// 共享束形态的载荷句柄；单块载荷返回 None。
+    pub fn shared_bundle(&self) -> Option<&SharedKkpvBundle> {
+        match &self.entry.payload {
+            Payload::Shared(bundle) => Some(bundle),
+            Payload::Block(_) => None,
+        }
+    }
+
+    /// 对单块载荷建立只读视图。块字节存于不可变 `Arc<[u8]>`、解码限额
     /// 随发布钉死、解码是纯函数，且发布时已通过同一校验，因此成功
     /// 路径上不期望 Err；保留 Result 是为与字段读取的错误处理一致，
     /// 兼容解码器防御性变更。
     ///
     /// # Errors
-    /// 防御性重校验失败时返回解码错误。
+    /// 防御性重校验失败或载荷是共享束形态时返回错误。
     pub fn view(&self) -> anyhow::Result<KkpvView<'_>> {
-        KkpvView::decode(&self.entry.block, &self.entry.limits)
+        let Payload::Block(block) = &self.entry.payload else {
+            anyhow::bail!("共享束载荷不提供单块视图");
+        };
+        KkpvView::decode(block, &self.entry.limits)
             .map_err(|e| anyhow::anyhow!("块重校验失败：{e}"))
     }
 }
@@ -87,7 +117,7 @@ impl KkpvBlockStore {
         }
     }
 
-    /// 发布当前代际的块并返回其句柄。代际须严格前进（tick 更大，
+    /// 发布当前代际的单块并返回其句柄。代际须严格前进（tick 更大，
     /// 或 tick 相同且 generation 更大）；块头携带的 tick/generation
     /// 必须与发布代际一致。结构校验在锁外完成，代际前进性在锁内复核。
     ///
@@ -111,9 +141,48 @@ impl KkpvBlockStore {
                 epoch.generation
             );
         }
+        self.commit(epoch, Payload::Block(block), limits)
+    }
+
+    /// 发布当前代际的共享束（公开通道形态）并返回句柄。束字节在锁外经
+    /// `validate_bundle` 全量校验（逐块结构 + 束内版本一致），头部
+    /// tick/generation 须与发布代际一致；空束无版本可校验，拒绝。
+    /// 校验通过后字节一次性移入 backing store——此后挂载不再复制。
+    ///
+    /// # Errors
+    /// 代际不前进、束不合法或束内版本与发布代际不符时返回错误，
+    /// 库状态不变。
+    pub fn publish_shared(
+        &self,
+        epoch: RunEpoch,
+        bytes: Vec<u8>,
+        limits: &KkpvLimits,
+    ) -> anyhow::Result<KkpvBlockHandle> {
+        let (_, tick, generation) = kk_schema::kkpv::validate_bundle(&bytes, limits)
+            .map_err(|e| anyhow::anyhow!("共享束不合法：{e}"))?;
+        if (tick, generation) != (epoch.tick, epoch.generation) {
+            anyhow::bail!(
+                "共享束版本 ({tick}, {generation}) 与发布代际 ({}, {}) 不符",
+                epoch.tick,
+                epoch.generation
+            );
+        }
+        self.commit(
+            epoch,
+            Payload::Shared(SharedKkpvBundle::from_vec(bytes)),
+            limits,
+        )
+    }
+
+    fn commit(
+        &self,
+        epoch: RunEpoch,
+        payload: Payload,
+        limits: &KkpvLimits,
+    ) -> anyhow::Result<KkpvBlockHandle> {
         let entry = Arc::new(BlockEntry {
             epoch,
-            block,
+            payload,
             limits: limits.clone(),
         });
         let mut inner = self.inner.lock().expect("块库锁未中毒");
@@ -146,7 +215,7 @@ impl KkpvBlockStore {
         })
     }
 
-    /// 回收无句柄的旧代际后，列出仍被保留的块（含当前块）。
+    /// 回收无句柄的旧代际后，列出仍被保留的载荷（含当前代际）。
     pub fn retention_report(&self) -> Vec<RetainedBlock> {
         let mut inner = self.inner.lock().expect("块库锁未中毒");
         inner.retained.retain(has_handles);
@@ -155,14 +224,14 @@ impl KkpvBlockStore {
             .iter()
             .map(|e| RetainedBlock {
                 epoch: e.epoch,
-                bytes: e.block.len(),
+                bytes: e.payload.byte_len(),
                 handles: Arc::strong_count(e) - 1,
             })
             .collect();
         if let Some(current) = &inner.current {
             report.push(RetainedBlock {
                 epoch: current.epoch,
-                bytes: current.block.len(),
+                bytes: current.payload.byte_len(),
                 handles: Arc::strong_count(current) - 1,
             });
         }
@@ -317,5 +386,74 @@ mod tests {
         drop(store);
         let view = handle.view().expect("库销毁后块仍可读");
         assert_eq!(view.field(0, "marker"), Ok(Some(KkpvValue::Int(42))));
+    }
+
+    fn bundle_bytes(tick: u64, generation: u64) -> Vec<u8> {
+        let block = |room: &str| KkpvBlockInput {
+            private: false,
+            tick,
+            generation,
+            plan_hash: [7; 32],
+            audience_hash: [9; 32],
+            room_name: room.into(),
+            terrain: Some(vec![3u8; 64]),
+            objects: Vec::new(),
+        };
+        kk_schema::kkpv::encode_bundle(&[block("W1N1"), block("E2N2")], &KkpvLimits::default())
+            .expect("测试束编码成功")
+    }
+
+    /// 共享束发布：校验、代际一致、句柄共享与保留报告。
+    #[test]
+    fn publish_shared_validates_and_retains() {
+        let store = KkpvBlockStore::new();
+        let handle = store
+            .publish_shared(epoch(4, 2), bundle_bytes(4, 2), &KkpvLimits::default())
+            .expect("合法共享束可发布");
+        let bundle = handle.shared_bundle().expect("共享束载荷");
+        assert!(bundle.byte_len() > 160, "束字节随句柄可取");
+        assert!(handle.view().is_err(), "共享束不提供单块视图");
+        // 束版本与发布代际不符拒绝；截断束拒绝；单块字节按束框架拒绝。
+        assert!(
+            store
+                .publish_shared(epoch(5, 2), bundle_bytes(9, 2), &KkpvLimits::default())
+                .is_err()
+        );
+        let mut truncated = bundle_bytes(5, 2);
+        truncated.pop();
+        assert!(
+            store
+                .publish_shared(epoch(5, 2), truncated, &KkpvLimits::default())
+                .is_err()
+        );
+        let single = block_bytes(5, 5).to_vec();
+        assert!(
+            store
+                .publish_shared(epoch(5, 2), single, &KkpvLimits::default())
+                .is_err(),
+            "单块字节不是束框架"
+        );
+        let report = store.retention_report();
+        assert_eq!(report.len(), 1, "失败发布不改库状态");
+
+        // 代际前进：旧句柄保留旧束；保留报告列出两代。
+        let second = store
+            .publish_shared(epoch(5, 2), bundle_bytes(5, 2), &KkpvLimits::default())
+            .expect("代际前进可发布");
+        let report = store.retention_report();
+        assert_eq!(report.len(), 2, "旧代际因句柄仍保留");
+        assert_eq!(report[0].epoch, epoch(4, 2));
+        assert_eq!(
+            handle.shared_bundle().unwrap().byte_len(),
+            bundle_bytes(4, 2).len()
+        );
+        assert_ne!(handle.shared_bundle().unwrap().byte_len(), 0);
+        let _ = second;
+        // 同代际重复发布拒绝（与单块口径一致）。
+        assert!(
+            store
+                .publish_shared(epoch(5, 2), bundle_bytes(5, 2), &KkpvLimits::default())
+                .is_err()
+        );
     }
 }

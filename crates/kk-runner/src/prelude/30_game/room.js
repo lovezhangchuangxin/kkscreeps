@@ -16,6 +16,13 @@
   const __reflectApply = Reflect.apply;
   const __jsonStringify = JSON.stringify;
   const __jsonParse = JSON.parse;
+  // 地形拷出使用捕获的 TypedArray 构造器与 set：内部数组可能是锚定
+  // 跨玩家共享内存的视图（KKPV 公开束），不得经玩家可替换的全局构造器
+  // 或动态派发的 .set 外泄（B.6 共享直读安全面）。真 set 在 V8 内部做
+  // TypedArray 品牌校验——伪 destination 在进入拷贝前即抛 TypeError，
+  // 不执行任何玩家代码。
+  const __Uint8Array = Uint8Array;
+  const __u8Set = Uint8Array.prototype.set;
   // look 索引装配使用捕获的 push，避免玩家替换数组原型方法破坏下一 tick。
   const __arrayPush = Array.prototype.push;
   // 捕获未知 look 类型的错误码与地形位码，不使用玩家后来改写的全局常量。
@@ -59,10 +66,13 @@
     };
     this.getRawBuffer = function (destinationArray) {
       if (destinationArray) {
-        destinationArray.set(array);
+        // 经捕获的真 set 拷贝：destination 须是真 TypedArray（V8 品牌
+        // 校验，伪造对象在此抛错），拷贝是引擎内部 memmove——两条路径
+        // 都不把内部数组（可能是共享视图）交给玩家代码。
+        __reflectApply(__u8Set, destinationArray, [array]);
         return destinationArray;
       }
-      return new Uint8Array(array);
+      return new __Uint8Array(array);
     };
   }
   // 官方 Terrain 挂法：Room 的静态属性（rooms.js:1135 `new Room.Terrain(...)`），

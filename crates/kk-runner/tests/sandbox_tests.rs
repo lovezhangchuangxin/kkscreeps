@@ -69,6 +69,7 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     kkpv_ref_decode_impl()?;
     kkpv_empty_bundle_impl()?;
     kkpv_truncated_bundle_fails_impl()?;
+    kkpv_shared_bundle_cross_thread_impl()?;
     // LIFO 零违规断言在**全部**场景之后——中段断言会让其后场景的违规漏网
     assert_eq!(kk_runner::lifo_violations(), 0, "全流程 LIFO 纪律零违规");
     Ok(())

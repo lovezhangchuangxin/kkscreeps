@@ -64,9 +64,13 @@ pub use kk_core::RunEpoch;
 #[derive(Debug)]
 pub struct RunJob {
     pub world: Value,
-    /// KKPV 通道的块束；Some 时 world 是不含对象数组的世界信封，
-    /// 对象记录由沙箱从块束解码。
+    /// KKPV 通道的私有对象束字节；Some 时 world 是不含对象数组与地形的
+    /// 世界信封。进入工作者后一次性移入 backing store，不再复制。
     pub kkpv_bundle: Option<Vec<u8>>,
+    /// KKPV 通道的公开地形束共享句柄；全部玩家同一代际共用同一份内存，
+    /// 派发时克隆引用计数，工作者零拷贝挂载。与 `kkpv_bundle` 同 Some
+    /// 或同 None。
+    pub kkpv_public: Option<crate::shared_bundle::SharedKkpvBundle>,
     pub code: String,
     pub epoch: RunEpoch,
     pub attempt: u64,
@@ -156,8 +160,11 @@ enum Cmd {
     Bucket(mpsc::Sender<anyhow::Result<f64>>),
     Tick {
         world: Value,
-        /// KKPV 通道的块束；Some 时 world 是不含对象数组的世界信封。
+        /// KKPV 通道的私有对象束；Some 时 world 是不含对象数组与地形的
+        /// 世界信封。
         bundle: Option<Vec<u8>>,
+        /// KKPV 通道的公开地形束共享句柄；与 `bundle` 同 Some 或同 None。
+        public: Option<crate::shared_bundle::SharedKkpvBundle>,
         epoch: RunEpoch,
         ack: mpsc::Sender<anyhow::Result<TickReport>>,
     },
@@ -169,8 +176,11 @@ enum Cmd {
     /// 只生成计费与 Memory 候选，世界提交和轮次检查由调用方负责。
     RunPlayer {
         world: Value,
-        /// KKPV 通道的块束；Some 时 world 是不含对象数组的世界信封。
+        /// KKPV 通道的私有对象束；Some 时 world 是不含对象数组与地形的
+        /// 世界信封。
         bundle: Option<Vec<u8>>,
+        /// KKPV 通道的公开地形束共享句柄；与 `bundle` 同 Some 或同 None。
+        public: Option<crate::shared_bundle::SharedKkpvBundle>,
         code: String,
         epoch: RunEpoch,
         ack: mpsc::Sender<anyhow::Result<EvalReport>>,
@@ -248,15 +258,12 @@ impl PlayerThreads {
                         Cmd::Tick {
                             world,
                             bundle,
+                            public,
                             epoch,
                             ack,
                         } => {
-                            let _ = ack.send(run_one_tick(
-                                &mut sandbox,
-                                &world,
-                                bundle.as_deref(),
-                                epoch,
-                            ));
+                            let _ =
+                                ack.send(run_one_tick(&mut sandbox, &world, bundle, public, epoch));
                         }
                         Cmd::RunExpr { code, ack } => {
                             // 独立表达式也可能死循环，必须使用带看门狗的执行入口，保证线程能继续服务。
@@ -265,6 +272,7 @@ impl PlayerThreads {
                         Cmd::RunPlayer {
                             world,
                             bundle,
+                            public,
                             code,
                             epoch,
                             ack,
@@ -272,7 +280,8 @@ impl PlayerThreads {
                             let _ = ack.send(run_eval_tick(
                                 &mut sandbox,
                                 &world,
-                                bundle.as_deref(),
+                                bundle,
+                                public,
                                 &code,
                                 epoch,
                             ));
@@ -314,7 +323,8 @@ impl PlayerThreads {
                                         run_eval_tick_with_budget(
                                             &mut sandbox,
                                             &job.world,
-                                            job.kkpv_bundle.as_deref(),
+                                            job.kkpv_bundle,
+                                            job.kkpv_public,
                                             &job.code,
                                             job.epoch,
                                             Some(&job.budget),
@@ -432,19 +442,21 @@ impl PlayerThreads {
 
     /// 对一个玩家跑完整一 tick（begin→loop→end），等待报告。
     pub fn tick(&mut self, id: u64, world: &Value) -> anyhow::Result<TickReport> {
-        self.tick_with_bundle(id, world, None)
+        self.tick_with_bundle(id, world, None, None)
     }
 
-    /// [`PlayerThreads::tick`] 的 KKPV 通道形态：`bundle` 为块束字节，
-    /// `world` 为不含对象数组的世界信封；epoch 与 JSON 通道同规则从
+    /// [`PlayerThreads::tick`] 的 KKPV 通道形态：`public` 是跨玩家共享的
+    /// 公开地形束句柄，`bundle` 为本玩家私有对象束字节，`world` 为不含
+    /// 对象数组与地形的世界信封；epoch 与 JSON 通道同规则从
     /// world.time 推得。
     pub fn tick_kkpv(
         &mut self,
         id: u64,
         world: &Value,
+        public: &crate::shared_bundle::SharedKkpvBundle,
         bundle: &[u8],
     ) -> anyhow::Result<TickReport> {
-        self.tick_with_bundle(id, world, Some(bundle.to_vec()))
+        self.tick_with_bundle(id, world, Some(bundle.to_vec()), Some(public.clone()))
     }
 
     fn tick_with_bundle(
@@ -452,12 +464,14 @@ impl PlayerThreads {
         id: u64,
         world: &Value,
         bundle: Option<Vec<u8>>,
+        public: Option<crate::shared_bundle::SharedKkpvBundle>,
     ) -> anyhow::Result<TickReport> {
         let p = self.player_mut(id)?;
         let (ack_tx, ack_rx) = mpsc::channel();
         p.send(Cmd::Tick {
             world: world.clone(),
             bundle,
+            public,
             epoch: RunEpoch {
                 tick: world["time"].as_u64().unwrap_or(0),
                 generation: world["generation"].as_u64().unwrap_or(0),
@@ -482,6 +496,7 @@ impl PlayerThreads {
             p.send(Cmd::Tick {
                 world: world.clone(),
                 bundle: None,
+                public: None,
                 epoch: RunEpoch {
                     tick: world["time"].as_u64().unwrap_or(0),
                     generation: world["generation"].as_u64().unwrap_or(0),
@@ -521,27 +536,38 @@ impl PlayerThreads {
         code: &str,
         epoch: RunEpoch,
     ) -> anyhow::Result<EvalReport> {
-        self.run_player_with_bundle(id, world, None, code, epoch)
+        self.run_player_with_bundle(id, world, None, None, code, epoch)
     }
 
-    /// [`PlayerThreads::run_player`] 的 KKPV 通道形态：`bundle` 为块束
-    /// 字节，`world` 为不含对象数组的世界信封。
+    /// [`PlayerThreads::run_player`] 的 KKPV 通道形态：`public` 是跨玩家
+    /// 共享的公开地形束句柄，`bundle` 为本玩家私有对象束字节，`world`
+    /// 为不含对象数组与地形的世界信封。
     pub fn run_player_kkpv(
         &mut self,
         id: u64,
         world: &Value,
+        public: &crate::shared_bundle::SharedKkpvBundle,
         bundle: &[u8],
         code: &str,
         epoch: RunEpoch,
     ) -> anyhow::Result<EvalReport> {
-        self.run_player_with_bundle(id, world, Some(bundle.to_vec()), code, epoch)
+        self.run_player_with_bundle(
+            id,
+            world,
+            Some(bundle.to_vec()),
+            Some(public.clone()),
+            code,
+            epoch,
+        )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn run_player_with_bundle(
         &mut self,
         id: u64,
         world: &Value,
         bundle: Option<Vec<u8>>,
+        public: Option<crate::shared_bundle::SharedKkpvBundle>,
         code: &str,
         epoch: RunEpoch,
     ) -> anyhow::Result<EvalReport> {
@@ -550,6 +576,7 @@ impl PlayerThreads {
         p.send(Cmd::RunPlayer {
             world: world.clone(),
             bundle,
+            public,
             code: code.to_string(),
             epoch,
             ack: ack_tx,
@@ -679,16 +706,46 @@ impl Drop for PlayerThreads {
     }
 }
 
+/// 线程命令的注入通道输入。KKPV 臂的两个束都在工作者侧转为共享句柄：
+/// 公开束是引用计数克隆，私有束把命令携带的字节一次性移入 backing
+/// store——此后挂载不复制。
+enum ChannelInput {
+    Json,
+    Kkpv {
+        public: crate::shared_bundle::SharedKkpvBundle,
+        private: crate::shared_bundle::SharedKkpvBundle,
+    },
+}
+
+fn channel_input(
+    bundle: Option<Vec<u8>>,
+    public: Option<crate::shared_bundle::SharedKkpvBundle>,
+) -> anyhow::Result<ChannelInput> {
+    match (bundle, public) {
+        (Some(private), Some(public)) => Ok(ChannelInput::Kkpv {
+            public,
+            private: crate::shared_bundle::SharedKkpvBundle::from_vec(private),
+        }),
+        (None, None) => Ok(ChannelInput::Json),
+        // 协调器必须成对派发两个束；单侧出现说明装配缺陷，按基础设施
+        // 故障上抛而不是静默降级到 JSON 通道。
+        (Some(_), None) | (None, Some(_)) => {
+            anyhow::bail!("KKPV 通道的公开束与私有束须成对派发（收到单侧 Some）")
+        }
+    }
+}
+
 fn run_one_tick(
     sandbox: &mut Sandbox,
     world: &Value,
-    bundle: Option<&[u8]>,
+    bundle: Option<Vec<u8>>,
+    public: Option<crate::shared_bundle::SharedKkpvBundle>,
     epoch: RunEpoch,
 ) -> anyhow::Result<TickReport> {
     // 此 tick 通道即时结算；注入失败也提交中断处理产生的完整预算费用。
-    let begin = match bundle {
-        Some(bundle) => sandbox.begin_tick_kkpv(world, bundle),
-        None => sandbox.begin_tick(world),
+    let begin = match channel_input(bundle, public)? {
+        ChannelInput::Kkpv { public, private } => sandbox.begin_tick_kkpv(world, &public, &private),
+        ChannelInput::Json => sandbox.begin_tick(world),
     };
     let plan = match begin {
         Ok(plan) => plan,
@@ -760,28 +817,34 @@ fn run_one_tick(
 fn run_eval_tick(
     sandbox: &mut Sandbox,
     world: &Value,
-    bundle: Option<&[u8]>,
+    bundle: Option<Vec<u8>>,
+    public: Option<crate::shared_bundle::SharedKkpvBundle>,
     code: &str,
     epoch: RunEpoch,
 ) -> anyhow::Result<EvalReport> {
-    run_eval_tick_with_budget(sandbox, world, bundle, code, epoch, None)
+    run_eval_tick_with_budget(sandbox, world, bundle, public, code, epoch, None)
 }
 
 fn run_eval_tick_with_budget(
     sandbox: &mut Sandbox,
     world: &Value,
-    bundle: Option<&[u8]>,
+    bundle: Option<Vec<u8>>,
+    public: Option<crate::shared_bundle::SharedKkpvBundle>,
     code: &str,
     epoch: RunEpoch,
     budget: Option<&kk_core::cpu::RunBudget>,
 ) -> anyhow::Result<EvalReport> {
     // 世界注入失败作为该玩家的 inject_failed 结果返回，让协调器继续处理其他玩家。
     // 通道断开等基础设施故障仍返回 Err。
-    let begin = match (bundle, budget) {
-        (Some(bundle), Some(budget)) => sandbox.begin_tick_kkpv_with_budget(world, bundle, budget),
-        (Some(bundle), None) => sandbox.begin_tick_kkpv(world, bundle),
-        (None, Some(budget)) => sandbox.begin_tick_with_budget(world, budget),
-        (None, None) => sandbox.begin_tick(world),
+    let begin = match (channel_input(bundle, public)?, budget) {
+        (ChannelInput::Kkpv { public, private }, Some(budget)) => {
+            sandbox.begin_tick_kkpv_with_budget(world, &public, &private, budget)
+        }
+        (ChannelInput::Kkpv { public, private }, None) => {
+            sandbox.begin_tick_kkpv(world, &public, &private)
+        }
+        (ChannelInput::Json, Some(budget)) => sandbox.begin_tick_with_budget(world, budget),
+        (ChannelInput::Json, None) => sandbox.begin_tick(world),
     };
     let plan = match begin {
         Ok(plan) => plan,

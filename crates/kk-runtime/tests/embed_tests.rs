@@ -64,6 +64,7 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     embed_intent_channel_impl()?;
     kkpv_channel_e2e_equivalence_impl()?;
     kkpv_injection_size_sample_impl()?;
+    kkpv_multi_player_concurrency_impl()?;
     embed_per_viewer_and_caps_impl()?;
     embed_spawn_family_chain_impl()?;
     embed_resource_family_impl()?;
