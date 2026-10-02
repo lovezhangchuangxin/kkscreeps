@@ -2,7 +2,7 @@
 
 本设计要求 Mod 作者只写 JS，可以使用本项目 SDK 增加玩法或替换默认规则，不要求修改 Rust 内核或重编服务器。目标能力覆盖官方与 xxscreeps 的同类业务扩展，不承诺兼容其 Mod 源码或 Node 内部接口。
 
-架构决策见 [ADR-014](../decisions/ADR-014-contribution-plane.md)。`kk-mod-api` 已提供独立的描述、校验和冻结入口，尚未接入生产引擎；当前没有 Mod 装载器或完整 SDK，`kk-mod-host` 与本文 JS API 示例仍为目标设计。技术实验位于 `spikes/`，不构成可安装的生产 Mod 系统。
+架构决策见 [ADR-014](../decisions/ADR-014-contribution-plane.md)。`kk-mod-api` 已提供独立的描述、校验和冻结入口，尚未接入生产引擎；`kk-mod-host` 已落地装载与**注册期**（包发现/依赖拓扑/指纹/可信 realm/注册 SDK → 冻结计划，见 [C.1 记录](../research/notes/c1-mod-loader-2026-10-03.md)），处理器执行、玩家 API 安装与本文其余 JS API 示例仍为目标设计。技术实验位于 `spikes/`，不构成可安装的生产 Mod 系统。
 
 B 阶段的冻结定义、有效规则、意图入口、玩家投影和首个 link 接入方案见[开放领域定义与玩家投影](domain-projection.md)。
 
@@ -178,7 +178,7 @@ Mod 不获得 Rust 裸指针。位置、归属、生命周期、Store 与字段�
 
 ### 6.1 推荐依赖方向
 
-`kk-mod-api` 保存纯描述与计划；`kk-engine` 保留内核、候选和 native handlers；`kk-mod-host` 封装 JS 装载、ops、回调和后台调度；`kk-runtime` 管理提交、玩家任务和宿主生命周期。当前 `kk-engine` 不依赖 deno_core；`kk-mod-api` 已建立独立 crate，`kk-mod-host` 尚未实现，默认处理器和投影消费冻结计划的接线仍待完成。
+`kk-mod-api` 保存纯描述与计划；`kk-engine` 保留内核、候选和 native handlers；`kk-mod-host` 封装 JS 装载、ops、回调和后台调度；`kk-runtime` 管理提交、玩家任务和宿主生命周期。当前 `kk-engine` 不依赖 deno_core；`kk-mod-api` 已建立独立 crate，`kk-mod-host` 已实现注册期（装载/依赖图/指纹/可信 realm/注册 SDK；结算期回调与 ops 未接），默认处理器和投影消费冻结计划的接线仍待完成。
 
 ### 6.2 先建立 OwnedTxn，再接入 VM
 

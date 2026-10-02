@@ -1032,6 +1032,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "kk-mod-host"
+version = "0.1.0"
+dependencies = [
+ "deno_core",
+ "deno_error",
+ "kk-mod-api",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+]
+
+[[package]]
 name = "kk-pathfinder"
 version = "0.1.0"
 dependencies = [

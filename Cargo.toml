@@ -15,6 +15,7 @@ edition = "2024"
 [workspace.dependencies]
 kk-core = { path = "crates/kk-core" }
 kk-mod-api = { path = "crates/kk-mod-api" }
+kk-mod-host = { path = "crates/kk-mod-host" }
 kk-schema = { path = "crates/kk-schema" }
 kk-world = { path = "crates/kk-world" }
 kk-engine = { path = "crates/kk-engine" }

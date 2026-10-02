@@ -1,0 +1,19 @@
+[package]
+name = "kk-mod-host"
+description = "可信 JS Mod 宿主：包装载、依赖排序、注册期贡献收集与冻结计划产出"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+kk-mod-api.workspace = true
+deno_core.workspace = true
+deno_error.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.10.9"
+tokio.workspace = true
+
+[dev-dependencies]
