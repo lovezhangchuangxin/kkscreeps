@@ -1,8 +1,7 @@
-//! 一实例一线程承载原型的集成测试（M0）。
+//! 验证玩家专属线程的执行、回收、预算提交和中断后复用。
 //!
-//! 与 sandbox_tests 同理：全部场景放在一个测试函数里串行执行——进程级
-//! 计数器（live_sandbox_count/lifo_violations）的终局断言要求场景间不并行
-//! 污染，串行也保证确定性、便于定位。
+//! 全部场景通过一个测试函数串行运行，避免进程级存活计数与销毁顺序计数
+//! 被其他场景的沙箱污染。
 
 use std::time::{Duration, Instant};
 
@@ -12,7 +11,7 @@ use kk_runner::{
     ModuleTable, PlayerThreads, RunEpoch, SandboxConfig, TickOutcome, TickPlan, live_sandbox_count,
 };
 
-/// A1 派发轮次标识（回带断言的基线；本测试的同步模型下恒等于派发值）。
+/// 用于验证报告原样返回派发轮次，不在测试线程中验证世界版本。
 const EPOCH: RunEpoch = RunEpoch {
     tick: 1,
     generation: 0,
@@ -64,11 +63,8 @@ fn m0_thread_model_suite() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// B0-6（外部评审清偿·停跑回充候选化）两通道停跑臂的通道级锁（评审 3 P1-1
-/// 清偿）：Cmd::Tick 通道（run_one_tick，bot-check 同款）在 SkipPenalty 臂
-/// **即时 settle_bill**——bucket_after 为并入后的值（删掉那行本测试必红）；
-/// Cmd::RunPlayer 通道不结算、候选留协调器（cpu_billed_ms=None、
-/// bucket_after=提交前值），settle_bill 提交点恰并入一次。
+/// 验证两种线程命令的停跑回充：Tick 即时提交，RunPlayer 保留候选，
+/// 随后 settle_bill 或 discard_bill 决定是否更新余额。
 fn skip_penalty_recharge_channel() -> anyhow::Result<()> {
     let skip_cfg = || SandboxConfig {
         heap_limit_bytes: 64 * 1024 * 1024,
@@ -136,15 +132,12 @@ fn skip_penalty_recharge_channel() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// runExpr 通道的看门狗（并发-4 清偿）：纯 CPU 死循环必须在窗口内被掐断（此前
-/// 未武装会永久挂死线程），且合法的重表达式不得被误杀、善后后线程可继续服务。
-/// 窗口 = min(maxPerTick, limit+bucket) 官方公式现算（新沙箱 ≈ 520ms——锁定
-/// 量级，防回归到 1ms 窗口）。
+/// 独立表达式中的死循环应在预算窗口内中断，且线程仍可继续求值。
+/// 默认窗口是 min(500, 20+10000)=500 毫秒；有限循环用于排除错误的 1 毫秒窗口。
 fn run_expr_watchdog() -> anyhow::Result<()> {
     let mut pool = PlayerThreads::new();
     pool.spawn_player(7, config())?;
-    // 合法忙循环（~10-50ms << 窗口）必须完成——曾因读 stale tick_limit 塌缩成
-    // 1ms 窗口被误掐
+    // 有限循环应能在默认 500 毫秒窗口内完成，不能使用尚未初始化的缓存预算。
     let v = pool.run_expr(7, "let s = 0; for (let i = 0; i < 2e7; i++) s += i; s")?;
     assert_eq!(v["ok"], true, "合法重表达式不被误掐: {v:?}");
     let t0 = Instant::now();
@@ -155,7 +148,7 @@ fn run_expr_watchdog() -> anyhow::Result<()> {
         Some("terminated"),
         "死循环被掐断: {v:?}"
     );
-    // 窗口 ≈ 520ms + 善后余量；旧实现（未武装）此处永挂
+    // 允许中断处理和线程调度余量，但死循环应在 2 秒内返回。
     assert!(elapsed.as_millis() < 2000, "掐断及时（{elapsed:?}）");
     // 线程善后后可复用；且独立通道不动预算桶（后续 tick 不因本通道停跑）
     let v = pool.run_expr(7, "1 + 1")?;
@@ -211,7 +204,7 @@ fn idle_eviction_and_rebuild() -> anyhow::Result<()> {
     assert_eq!(live_sandbox_count(), 0, "isolate 已销毁");
     assert!(pool.is_empty());
 
-    // 重建（无快照路径，M0 预算：应明显快于 1s）
+    // 当前重新执行 prelude 装配，不使用 V8 启动快照；检查重建时间低于测试阈值。
     let t0 = Instant::now();
     pool.spawn_player(100, config())?;
     pool.set_modules(100, counter_bot())?;
@@ -227,11 +220,8 @@ fn idle_eviction_and_rebuild() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// 乱序销毁压力测试（ADR-013 复现场景转回归）：中间实例被逐出（对更晚创建
-/// 的实例构成乱序销毁）+ 存活实例正常执行 + 干净退出 + 每线程 LIFO 零违规。
-/// 跨线程乱序销毁合法（V8 Enter/Exit 线程局部栈）；本测试同时锁定
-/// `evict_idle` 的全表回收语义——后创建的活跃玩家（C）不得挡住前面空闲
-/// 玩家（B）的回收（原栈顶限制缺陷）。
+/// 回收中间空闲玩家，验证较晚创建的活跃玩家不会阻挡它，且存活玩家能继续求值。
+/// 每个线程只有一个 V8 实例，因此跨线程回收不受同线程逆序销毁约束。
 fn out_of_order_eviction() -> anyhow::Result<()> {
     let mut pool = PlayerThreads::new();
     pool.spawn_player(1, config())?;

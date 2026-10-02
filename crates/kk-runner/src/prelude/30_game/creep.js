@@ -1,20 +1,6 @@
-/* kk-runner prelude · 30_game 段 4a：Creep 前半（动作方法族）（对照官方 engine/src/game/creeps.js）。
- * B1 结构治理批：资源族四方法/controller 族/say-suicide-pull 杂项族/GCL 门
- * 三函数/CREEP_METHODS 表与残余桩循环/creep 装配拆至段 4b（creep_resources.js），
- * 段间共享经 gw 桥（C 表/countActiveParts/blockedBySafeMode），纯搬移零行为。
- *
- * A3b 薄壳化：字段/方法全部挂 Creep.prototype（官方 make 语义），实例 own 面
- * 只剩 id/pos/room（构造定格）。字段经 defineGameObjectProperties 的 lazy
- * getter + `_${name}` 首访缓存（utils.js:509-545 机制）——未缓存访问经
- * gw.rawData(this.id) 回查当前 tick 投影：对象消亡抛官方同文案错误
- * （STALERECV-001），跨 tick 旧壳读当前 tick 新值（STALERECV-002）。
- * 动作方法（A2 起从桩换真：预检 + intents.set）维持官方预检序，字段访问走
- * this（getter 通道，与官方 this.my 一致）；官方方法体显式 data(this.id)
- * 回查的位置我方对齐 gw.rawData。A4-iv 增补移动杂项族：moveTo（直线桩形态
- * ——A* 归 M2B FFI 批）/moveByPath/say/suicide/pull 换真。
- * 依赖：gw.intents（收集器，30_game/game.js）、gw.rawData/gw.rawById、
- * gw.viewerName、gw.ensureMemory、gw.mkStubMethod、gw.defineGameObjectProperties、
- * gw.RoomPosition、gw.deserializePath、gw.__Object。
+/* 定义 Creep 字段、移动、采集与战斗方法，并记录通过预检的玩家指令。
+ * getter 的缓存与当前 tick 回查由 _registry.js 管理；资源和控制器方法续于 creep_resources.js。
+ * moveTo 只选择朝目标的直线方向，不进行避障或路径复用；世界状态变化由 Rust 结算处理。
  */
 (() => {
   'use strict';
@@ -66,7 +52,7 @@
     }
     const result = [];
     if (!path.length) return result;
-    // 官方 parseInt 无进制参（'0x' 头病态串 NaN 抛错同官方，片 3b 评审 P3 清偿）
+    // 不传进制参数，保留 parseInt 对 0x 前缀等输入的解析规则。
     let x = parseInt(path.substring(0, 2));
     let y = parseInt(path.substring(2, 4));
     if (Number.isNaN(x) || Number.isNaN(y)) {
@@ -112,7 +98,7 @@
     MOVE: globalThis.MOVE,
     WORK: globalThis.WORK,
     ATTACK: globalThis.ATTACK,
-    // M2B 扩面 P1：ranged 族的部件门（rangedAttack/rangedMassAttack）
+    // 远程攻击所需的部件类型。
     RANGED_ATTACK: globalThis.RANGED_ATTACK,
     HEAL: globalThis.HEAL,
     CLAIM: globalThis.CLAIM,
@@ -121,9 +107,7 @@
     ERR_FULL: globalThis.ERR_FULL,
     ERR_NO_PATH: globalThis.ERR_NO_PATH,
     ERR_GCL_NOT_ENOUGH: globalThis.ERR_GCL_NOT_ENOUGH,
-    // controller 族（A4-iii）：generateSafeMode 的 ghodium 消耗门 +
-    // claimController 的 GCL 门（calcNeededGcl = GCL_MULTIPLY × (n-1)^GCL_POW，
-    // utils.js:661-663）
+    // 安全模式消耗与 GCL 点数计算常量。
     SAFE_MODE_COST: globalThis.SAFE_MODE_COST,
     RESOURCE_GHODIUM: globalThis.RESOURCE_GHODIUM,
     GCL_MULTIPLY: globalThis.GCL_MULTIPLY,
@@ -131,7 +115,7 @@
     ERR_NO_PATH: globalThis.ERR_NO_PATH,
     OBSTACLE_OBJECT_TYPES: freezeConst(globalThis.OBSTACLE_OBJECT_TYPES),
     CONSTRUCTION_COST: freezeConst(globalThis.CONSTRUCTION_COST),
-    // 资源族四方法（A4-ii）所需：资源白名单/容量折算表/结构类型常量
+    // 资源白名单、容量表与结构类型常量。
     RESOURCE_ENERGY: globalThis.RESOURCE_ENERGY,
     RESOURCES_ALL: freezeConst(globalThis.RESOURCES_ALL),
     CARRY_CAPACITY: globalThis.CARRY_CAPACITY,
@@ -154,7 +138,7 @@
     STRUCTURE_NUKER: globalThis.STRUCTURE_NUKER,
     STRUCTURE_POWER_BANK: globalThis.STRUCTURE_POWER_BANK,
   };
-  gw.__creepC = C; // B1 段拆分桥：4b（creep_resources.js）复用同一 C 表对象
+  gw.__creepC = C; // creep_resources.js 复用此常量表。
 
   // 官方 _hasActiveBodypart（game/creeps.js:9-17 的等价物）：hits>0 的指定部件数
   function countActiveParts(body, type) {
@@ -163,8 +147,7 @@
     return n;
   }
 
-  // ---- 以下动作方法的预检逐条对照官方 creeps.js（file:line 见各函数）；
-  // heal/rangedHeal 无执行器（B 批后续）但 intent 记录即参与压制图裁决 ----
+  // 玩家 API 通过预检后仅记录指令，实际动作由 Rust 结算执行。
 
   /** 官方 `controller && !controller.my && controller.safeMode` 判定
    *  （attack/heal/rangedHeal/dismantle 的 API 层门，creeps.js:602/699/723/1045）。 */
@@ -173,7 +156,7 @@
     return !!(ctl && !ctl.my && ctl.safeMode);
   }
 
-  // B1 段拆分桥：4b 经 gw 取用（加载序 4a→4b，绑定同一函数对象，4b 调用点保持裸名）
+  // 资源与控制器方法共用这两个检查函数。
   gw.countActiveParts = countActiveParts;
   gw.blockedBySafeMode = blockedBySafeMode;
 
@@ -181,15 +164,11 @@
     return (self.store && self.store.energy) || 0;
   }
 
-  /** A6：extractor 的 active 门已换 Structure.prototype.isActive 真实现
-   *  （官方 creeps.js:380 同款调用；单实例配额近似 structureActiveAt 已删）。 */
 
-  // ---------------------------------------------------------------- Creep 原型：字段表
-  // 官方 creeps.js:64-90 字段表对照（我方投影字段名换算：ticksToLive 直存
-  // 剩余值、owner 是用户名、body 部件归一 {type,hits}、saying 的 actionLog
-  // 面未投影——官方无 say 记录同样 undefined）。store/carry 走官方
-  // _storeGetter 形态（吃整个 raw 投影 o——creep 落库带 storeCapacity，
-  // A4-i 起投影携带，Store 三函数族经它取数）
+
+  // 字段读取当前 tick 数据：body 字符串部件补 hits=100，store/carry 由 makeStore 构造。
+  // 说话内容由 say/sayPublic 决定可见性，只有本人或公开消息可见。
+  // 来源：上游 engine/src/game/creeps.js 的属性定义。
   gw.defineGameObjectProperties(globalThis.Creep.prototype, gw.rawData, {
     name: (o) => o.name,
     body: (o) => (o.body || []).map((p) => (typeof p === 'string' ? { type: p, hits: 100 } : p)),
@@ -203,8 +182,7 @@
     fatigue: (o) => o.fatigue || 0,
     hits: (o) => o.hits ?? 0,
     hitsMax: (o) => o.hitsMax ?? 0,
-    // M2B 扩面 P1 真化（官方 creeps.js:84-92）：本人恒见消息；他人仅
-    // isPublic 见——载荷由投影 say/sayPublic 携带（say.js 截 10 已在结算侧落）
+    // 本人读取说话内容，其他查看者只读取公开消息；say/sayPublic 来自世界数据。
     saying: (o) => {
       if (o.say == null) return undefined;
       if (o.owner === gw.viewerName) return o.say;
@@ -249,19 +227,10 @@
     return C.OK;
   };
 
-  /** Creep.moveTo：官方 creeps.js:158-257 的**直线桩形态**——预检段完整
-   *  对照，寻路退化为 getDirectionTo 直线一步（真 A* 归 M2B FFI 批）。
-   *  官方序：my(:166) → spawning(:169) → opts 归位（对象形态取第二参浅拷贝
-   *  :172-177——数值形态不拷贝，reusePath 缺省赋值会改写调用方 opts 对象，
-   *  官方 quirk 原样保留）→ fatigue 显式回查（:180，visualizePathStyle 在场
-   *  免疲劳门——纯可视化 tick；官方 `!opts` 是 opts||{} 后的死条件不移植）→
-   *  MOVE 部件(:184) → fetchXYArguments(:187) → roomName 缺省本房(:188) →
-   *  x/y undefined 拒(:189-192，官方 assertTargetObject 是 Memory 序列化壳
-   *  探针，我方无注册表断言面不移植) → 同格即 OK(:213，宽松 ==) →
-   *  reusePath/serializeMemory 缺省 5/true(:205-211，memory._move 缓存面
-   *  桩化登记) → noPathFinding(:253) → 寻路(:255) → move(path[0].direction)。
-   *  直线退化与官方 A* 的行为差异面（绕障/对角穿墙/路径复用/跨房）见批次
-   *  登记报告——ERR_NO_PATH 分支在退化形态下不可达（直线方向恒存在）。 */
+  /** 检查权限、孵化、疲劳、MOVE 部件和目标位置，然后调用 move 走直线方向。
+   * 不使用路径缓存或 A*；noPathFinding 返回 ERR_NOT_FOUND。
+   * 对象位置形态复制 options，数值坐标形态会给传入的 options 补 reusePath/serializeMemory 默认值。
+   * 预检顺序参考上游 engine/src/game/creeps.js 的 moveTo；寻路行为有上述简化。 */
   globalThis.Creep.prototype.moveTo = function moveTo(firstArg, secondArg, opts) {
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;
@@ -287,12 +256,10 @@
     if (opts.noPathFinding) {
       return C.ERR_NOT_FOUND;
     }
-    // 官方 :255 `this.pos.findPathTo(targetPos, opts)` 的 A* 寻路退化为直线
-    // 方向（官方阈值算法已在我方 RoomPosition.getDirectionTo）——只取一步，
-    // 后续每 tick 由玩家代码再次调用推进
+    // 目前只取朝目标的直线方向，后续每 tick 再次调用才能继续前进。
     const direction = this.pos.getDirectionTo(targetPos);
     if (direction === undefined) {
-      return C.ERR_NO_PATH; // 防御：同格已提前 return OK，此路不可达
+      return C.ERR_NO_PATH; // getDirectionTo 可被玩家原型补丁修改，保留无方向的错误出口。
     }
     return this.move(direction);
   };
@@ -326,16 +293,15 @@
     return this.move(cur.direction);
   };
 
-  /** Creep.harvest：官方 creeps.js:335-402 的 source 分支（mineral/deposit 随
-   *  对应能力批）——目标必须是 Source 实例（register.sources 判定的等价物）。 */
+  /** 支持 Source 和 Mineral；矿物还检查同格 extractor 的归属、启用状态与冷却。
+   * 不支持 Deposit 分支。来源：上游 engine/src/game/creeps.js 的 harvest。 */
   globalThis.Creep.prototype.harvest = function harvest(target) {
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;
     if (countActiveParts(this.body, C.WORK) === 0) return C.ERR_NO_BODYPART;
     if (!target || !target.id) return C.ERR_INVALID_TARGET;
     if (target instanceof globalThis.Mineral) {
-      // 官方 mineral 分支（creeps.js:362-385）：矿量/邻接/提取器存在性与
-      // 归属/启用/冷却。deposit 分支随 B4。
+      // 矿物采集检查数量、邻接与提取器的归属、启用和冷却；deposit 不支持。
       if (!target.mineralAmount) return C.ERR_NOT_ENOUGH_RESOURCES;
       if (!target.pos.isNearTo(this.pos)) return C.ERR_NOT_IN_RANGE;
       let extractor = null;
@@ -365,21 +331,20 @@
     if (!target.pos.isNearTo(this.pos)) return C.ERR_NOT_IN_RANGE;
     const ctl = this.room && this.room.controller;
     if (ctl && ctl.owner && ctl.owner.username !== this.owner.username) {
-      return C.ERR_NOT_OWNER; // reservation 分支缺字段（灰区登记，B2 补）
+      return C.ERR_NOT_OWNER; // 当前只检查房间所有者，未检查 controller.reservation。
     }
     gw.intents.set(this.id, 'harvest', { id: target.id });
     return C.OK;
   };
 
-  /** 官方 attack（creeps.js:593-624）：ATTACK 部件 + Creep/Structure 目标 +
-   *  邻接 + safeMode 门；effects 检查随 power 批（M2 无 effects 面）。 */
+  /** 检查 ATTACK 部件、目标存活与类型、邻接及敌方安全模式；未实现 invulnerability effects 检查。
+   * 来源：上游 engine/src/game/creeps.js 的 attack。 */
   globalThis.Creep.prototype.attack = function attack(target) {
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;
     if (countActiveParts(this.body, C.ATTACK) === 0) return C.ERR_NO_BODYPART;
     if (blockedBySafeMode(this)) return C.ERR_NO_BODYPART;
-    // 官方 creeps.js:607：register 存活判定（陈旧壳拒绝——UNDOC-STALEARG 面，
-    // M2B P6 清偿：isKnown* 经 gw 桥与结构 API 单源）
+    // 目标须在当前 tick 的原始数据中仍存在，并通过后面的实例类型检查。
     const okTarget = target && target.id
       && (gw.isKnownCreep(target.id) || gw.isKnownStructure(target.id))
       && (target instanceof globalThis.Creep
@@ -444,8 +409,8 @@
     return C.OK;
   };
 
-  /** 官方 dismantle（creeps.js:1024-1053）：WORK + 可拆结构
-   *  （CONSTRUCTION_COST 有价）+ 邻接 + safeMode；effects 随 power 批。 */
+  /** 检查 WORK 部件、可拆结构、邻接和安全模式；未实现 effects 检查。
+   * 来源：上游 engine/src/game/creeps.js 的 dismantle。 */
   globalThis.Creep.prototype.dismantle = function dismantle(target) {
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;
@@ -489,11 +454,9 @@
     return count;
   };
 
-  /** 官方 rangedAttack（creeps.js:626-657）：RANGED_ATTACK 部件 + 3 格 +
-   *  目标族（Creep/PowerCreep/Spawn/Structure——PowerCreep 归 M4，instanceof
-   *  链保持官方形）+ safeMode 门（敌房 safeMode 下 NO_BODYPART 官方口径）；
-   *  invulnerability 效果门（:649-652）属 power 体系不建模。执行器
-   *  rangedAttack.js：rampart 重定向在结算侧。 */
+  /** 检查 RANGED_ATTACK、当前目标类型、3 格范围及敌方安全模式，再记录指令。
+   * 不建模 invulnerability effects；rampart 重定向由 Rust 结算处理。
+   * 来源：上游 engine/src/game/creeps.js 的 rangedAttack。 */
   globalThis.Creep.prototype.rangedAttack = function rangedAttack(target) {
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;

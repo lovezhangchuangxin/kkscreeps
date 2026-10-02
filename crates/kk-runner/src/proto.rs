@@ -1,15 +1,10 @@
-//! "一个玩家实例绑一个线程"的承载原型（M0）。
+//! 为每个玩家创建专属线程，在该线程内创建、执行和销毁 V8 沙箱。
 //!
-//! 动机：`JsRuntime` 非 Send，V8 实例不能跨线程挪动（ADR-008 第 1 条）。
-//! 模型：每玩家一个专属线程，线程阻塞在命令通道上即"挂起"（park，常驻开销 KB 级）；
-//! V8 实例沿用官方的 3 分钟空闲销毁（官方 user-vm.js 同款），重建实测 <1ms（快照后）。
+//! JsRuntime 不能在线程之间移动；命令通过通道串行处理，每条命令有独立回执。
+//! tick_all 先派发所有玩家再按注册顺序收集结果，各玩家可以并行执行。
 //!
-//! 销毁纪律（ADR-013 纠偏：每线程）：rusty_v8 的 isolate Enter/Exit 是线程
-//! 局部栈，同线程内多实例须按创建逆序销毁；**跨线程没有全局逆序要求**（探针
-//! 实证乱序销毁不崩）。`spawn_player` 会等待实例创建完成的回执再返回，使
-//! "注册顺序 = 创建顺序"确定化；`shutdown_all` 默认仍按创建逆序回收全部线程
-//! （稳妥）；`evict_idle` 解除栈顶限制、支持回收**任意**空闲实例（一玩家一
-//! 线程模型下每线程恰一个 isolate，天然满足线程内约束）。
+//! V8 实例的逆序销毁约束只作用于同一线程。这里每个玩家线程只有一个实例，
+//! 因此可以回收任意空闲玩家；关闭或回收线程时发送 Shutdown 并等待 join。
 
 use std::sync::mpsc;
 use std::thread::JoinHandle;
@@ -27,8 +22,9 @@ use crate::sandbox::{Sandbox, SandboxConfig, TickOutcome};
 pub struct TickReport {
     pub outcome: TickOutcome,
     pub plan: TickPlan,
+    /// 入口结束时的墙钟用量，不含随后写回耗时和指令费用；入口中断时为 0。
     pub used_ms: f64,
-    /// 玩家 loop 逻辑自身的错误（入口执行≠无异常；None = 正常完成或硬中断）。
+    /// 入口或写回捕获的普通玩家错误；未捕获普通错误时为 None。
     pub player_error: Option<String>,
     pub console: Vec<LogLine>,
     pub missing_api: Value,
@@ -49,25 +45,19 @@ pub struct EvalReport {
     pub bucket_after: f64,
     /// endTick 带出的本 tick intentsList（Null = 无/硬中断丢弃）。
     pub intents: Value,
-    /// CPU 计费候选（B0-5 统一提交点：end_tick/善后产出、不再即时落桶——
-    /// 协调器结算成功后 settle_bill 提交；None = 跳帧（未执行不计费）。注入
-    /// 失败携带整份 tickLimit 候选（防免费毒化挂机，见 run_eval_tick）。
-    /// bucket_after 是**结算前**口径（候选未落桶；bot-check 通道在 run_one_tick
-    /// 内即时提交后另读）。
+    /// 待提交的 CPU 费用，单位毫秒；世界结算成功后由调用方 settle_bill。
+    /// 停跑与主动 halt 为 None，注入失败或硬中断携带完整预算。
+    /// bucket_after 是提交前余额，与已经即时结算的 TickReport 不同。
     pub cpu_billed_ms: Option<f64>,
     /// RawMemory 候选（写回成功时的 rawMemoryData 快照；None = 写回失败/未达）。
     pub raw_memory: Option<String>,
-    /// segments 信封候选（P6：窗口写回+四请求；None = 写回失败/未达）。
+    /// 待提交的 segment 内容写入及四类请求；写回失败或未写回时为 None。
     pub segments_out: Option<Value>,
-    /// 派发轮次标识的回带（A1）：协调器在 Cmd::RunPlayer 上钉住、线程原样
-    /// 回带——消费方据此拒收迟到/错轮回执。当前同步一问一答模型下恒等于
-    /// 派发值（每命令独立 ack 通道 + 同步 recv）；P1 把派发/回收解耦后成为
-    /// 真正的防线。
+    /// 原样返回命令携带的轮次标识；调用方负责核对是否属于本轮。
     pub epoch: RunEpoch,
 }
 
-/// 一次玩家派发的轮次标识（A1，mod-plane-batches A1/P1）：协调器派发时
-/// 钉住 `(tick, generation)`，回执原样回带、错轮拒收。
+/// 标识派发时的游戏 tick 和世界内容版本；线程原样回带，不在此验证。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct RunEpoch {
     pub tick: u64,
@@ -78,13 +68,13 @@ enum Cmd {
     SetModules(ModuleTable, mpsc::Sender<anyhow::Result<()>>),
     /// 注入 RawMemory 初值（tick 边界——协调层提交点统一驱动的通道面）。
     SetRawMemory(String, mpsc::Sender<anyhow::Result<()>>),
-    /// 注入记忆全量态（P6）：raw + segments 窗口 JSON + foreignSegment JSON。
+    /// 注入 RawMemory、活动 segment 窗口及 foreignSegment，供下一次 begin_tick 使用。
     SetMemoryState(String, String, String, mpsc::Sender<anyhow::Result<()>>),
     /// 提交计费候选（统一提交点的成功臂）。
     SettleBill(mpsc::Sender<anyhow::Result<()>>),
     /// 丢弃计费候选（统一提交点的失败/回退臂）。
     DiscardBill(mpsc::Sender<anyhow::Result<()>>),
-    /// 读玩家桶当前值（O3 embed 停跑回归锁的断言读取面）。
+    /// 通过命令读取沙箱线程内的当前桶余额。
     Bucket(mpsc::Sender<anyhow::Result<f64>>),
     Tick {
         world: Value,
@@ -94,9 +84,8 @@ enum Cmd {
         code: String,
         ack: mpsc::Sender<anyhow::Result<Value>>,
     },
-    /// 一条原子指令：begin_tick（世界注入）→ run_expr（求值玩家代码）→ end_tick。
-    /// screeps-ok 的 runPlayer 语义（"恰好推进 1 tick"）靠它保证。
-    /// epoch（A1）由派发方钉住、回执回带——错轮拒收的基线。
+    /// 在同一条线程命令中执行 begin_tick → run_expr → end_tick。
+    /// 只生成计费与 Memory 候选，世界提交和轮次检查由调用方负责。
     RunPlayer {
         world: Value,
         code: String,
@@ -120,7 +109,7 @@ impl PlayerThread {
     }
 }
 
-/// 玩家线程池（M0 原型：无工作窃取、无优先级，只验证承载模型）。
+/// 管理玩家专属线程；同一玩家的命令串行执行，不使用工作窃取。
 pub struct PlayerThreads {
     players: Vec<PlayerThread>,
 }
@@ -175,8 +164,7 @@ impl PlayerThreads {
                             let _ = ack.send(run_one_tick(&mut sandbox, &world));
                         }
                         Cmd::RunExpr { code, ack } => {
-                            // 看门狗编排（并发-4 清偿）：通道执行任意玩家代码，
-                            // 纯 CPU 死循环必须可被掐断，否则线程永久挂死（join 无效）
+                            // 独立表达式也可能死循环，必须使用带看门狗的执行入口，保证线程能继续服务。
                             let _ = ack.send(sandbox.run_expr_guarded(&code));
                         }
                         Cmd::RunPlayer {
@@ -222,8 +210,7 @@ impl PlayerThreads {
             .map_err(|_| anyhow::anyhow!("玩家 {id} 线程无响应"))?
     }
 
-    /// 注入玩家 RawMemory 初值（tick 边界；Sandbox::set_raw_memory 的私有
-    /// 句柄通道——协调层提交点统一驱动的接入面）。
+    /// 注入 RawMemory 初值；须在下一次 begin_tick 前调用。
     pub fn set_raw_memory(&mut self, id: u64, data: &str) -> anyhow::Result<()> {
         let p = self.player_mut(id)?;
         let (ack_tx, ack_rx) = mpsc::channel();
@@ -233,7 +220,7 @@ impl PlayerThreads {
             .map_err(|_| anyhow::anyhow!("玩家 {id} 线程无响应"))?
     }
 
-    /// 注入记忆全量态（P6；Sandbox::set_memory_state 的池接入面）。
+    /// 在 tick 边界注入 RawMemory、活动 segment 窗口和 foreignSegment。
     pub fn set_memory_state(
         &mut self,
         id: u64,
@@ -254,7 +241,7 @@ impl PlayerThreads {
             .map_err(|_| anyhow::anyhow!("玩家 {id} 线程无响应"))?
     }
 
-    /// 提交玩家的计费候选（B0-5 统一提交点：世界结算成功后调用——计费落桶）。
+    /// 在世界结算成功后提交玩家的计费或停跑回充候选。
     pub fn settle_bill(&mut self, id: u64) -> anyhow::Result<()> {
         let p = self.player_mut(id)?;
         let (ack_tx, ack_rx) = mpsc::channel();
@@ -298,7 +285,8 @@ impl PlayerThreads {
             .map_err(|_| anyhow::anyhow!("玩家 {id} 线程无响应"))?
     }
 
-    /// 对全部玩家按注册顺序跑一 tick（发送有序、回收有序——确定性的雏形）。
+    /// 先按注册顺序向全部玩家派发 tick，再按相同顺序等待报告。
+    /// 各玩家在专属线程上可并行执行；结果顺序不代表执行完成顺序。
     pub fn tick_all(
         &mut self,
         world: &Value,
@@ -335,8 +323,8 @@ impl PlayerThreads {
             .map_err(|_| anyhow::anyhow!("玩家 {id} 线程无响应"))?
     }
 
-    /// 原子"求值 tick"：begin→run_expr→end（screeps-ok runPlayer 通道）。
-    /// epoch（A1）随命令下发并由回执回带——调用方据此拒收错轮回执。
+    /// 在一条命令中执行世界注入、表达式求值和 Memory 写回，返回候选报告。
+    /// epoch 原样带回，由调用方核对；此方法不提交世界或桶余额。
     pub fn run_player(
         &mut self,
         id: u64,
@@ -357,14 +345,9 @@ impl PlayerThreads {
             .map_err(|_| anyhow::anyhow!("玩家 {id} 线程无响应"))?
     }
 
-    /// 逐出空闲超过 `idle` 的玩家（全表扫描，任意实例——不限栈顶：LIFO 是
-    /// 每线程约束，跨线程销毁顺序无要求，后创建的活跃玩家不得挡住前面空闲
-    /// 玩家的回收）。返回被逐出的玩家 id 列表（按注册表序）。官方语义：V8
-    /// 实例 3 分钟空闲销毁，线程按需重建。
-    ///
-    /// 两段式：先按同一时刻快照判定候选集，再逐个回收——逐出者的 join
-    ///（V8 teardown 可达数百 ms）不得推进后续候选者的时钟（饥饿下会把
-    /// 刚活跃的邻居一并挤出）。
+    /// 回收距离最后一次命令发送已达到 idle 的玩家，按注册顺序返回 id。
+    /// 先用同一个 now 确定候选，再逐个发送 Shutdown 并 join，
+    /// 避免较慢的销毁过程使其他玩家在本次扫描中额外达到空闲阈值。
     pub fn evict_idle(&mut self, idle: Duration) -> Vec<u64> {
         let now = Instant::now();
         let candidates: Vec<u64> = self
@@ -419,8 +402,7 @@ impl Drop for PlayerThreads {
 }
 
 fn run_one_tick(sandbox: &mut Sandbox, world: &Value) -> anyhow::Result<TickReport> {
-    // 注入阶段失败（Err）经善后已写整份计费候选——本通道无提交点概念，
-    // 立即提交保持旧「即时结算」行为（B0-5 评审 P2 清偿：否则该轮丢账）
+    // 此 tick 通道即时结算；注入失败也提交中断处理产生的完整预算费用。
     let plan = match sandbox.begin_tick(world) {
         Ok(plan) => plan,
         Err(e) => {
@@ -429,11 +411,8 @@ fn run_one_tick(sandbox: &mut Sandbox, world: &Value) -> anyhow::Result<TickRepo
         }
     };
     match plan {
-        // 跳帧 tick（桶为负透支，官方 cpuAvailable<0 停跑语义）：不执行玩家代码。
-        // TickReport.plan 携带 SkipPenalty 供消费方（bot_check 等）与真实硬中断区分；
-        // outcome 有意映射为 Terminated（runPlayer 的 executed=false 契约依赖它）。
-        // 停跑轮回充已候选化（B0-6）——本通道无提交点概念，与 Run 臂的
-        // 「立即提交」口径一致在此并入，否则停跑轮回血丢失
+        // 负余额时不执行代码，但仍提交回充。plan 用于区分停跑与执行后中断；
+        // outcome 在两种情况下都使用 Terminated。
         plan @ TickPlan::SkipPenalty => {
             sandbox.settle_bill();
             Ok(TickReport {
@@ -455,10 +434,8 @@ fn run_one_tick(sandbox: &mut Sandbox, world: &Value) -> anyhow::Result<TickRepo
                 TickOutcome::Completed { .. } => sandbox.cpu_used_ms(),
                 TickOutcome::Terminated => 0.0,
             };
-            // end_tick 产出计费候选（统一提交点语义）；bot-check 通道（Cmd::Tick）
-            // 无世界回退概念——立即提交，保持「结算含写回耗时」的原行为。
-            // 写回阶段被硬中断（如玩家经 Memory.toJSON 挂死写回）→ 本 tick 记
-            // Terminated（候选由 after_termination 产出，同样在此提交）
+            // 此通道立即提交 end_tick 的费用，包含写回阶段耗时。
+            // 若写回被中断，报告的 outcome 同步改为 Terminated。
             let writeback = sandbox.end_tick()?;
             sandbox.settle_bill();
             let intents = sandbox.take_intents().unwrap_or(Value::Null);
@@ -490,24 +467,19 @@ fn run_one_tick(sandbox: &mut Sandbox, world: &Value) -> anyhow::Result<TickRepo
     }
 }
 
-/// runPlayer 通道：世界注入 → 表达式求值（真实沙箱）→ Memory 写回与候选结算。
-/// epoch（A1）原样打戳进报告——派发/回执同轮的回带契约。
+/// 执行注入、表达式与写回，返回等待协调器提交的结果；原样回带 epoch。
 fn run_eval_tick(
     sandbox: &mut Sandbox,
     world: &Value,
     code: &str,
     epoch: RunEpoch,
 ) -> anyhow::Result<EvalReport> {
-    // 注入失败分类（B0-5，ADR-013 复现场景①）：玩家把环境搞坏（如 defineProperty
-    // Game 冲突）使 beginTick 失败——**玩家级失败**（不冒泡整轮 Err；协调器
-    // 记 InjectFailed 结局、轮次继续），mpsc 层故障仍走 Err=基础设施
+    // 世界注入失败作为该玩家的 inject_failed 结果返回，让协调器继续处理其他玩家。
+    // 通道断开等基础设施故障仍返回 Err。
     let plan = match sandbox.begin_tick(world) {
         Ok(plan) => plan,
         Err(e) => {
-            // 计费如实携带（B0-5 评审 P2 清偿）：注入失败走 after_termination
-            // 善后——计费候选=整份 tickLimit（防「免费毒化挂机」：玩家每轮
-            // 毒化世界注入即失败，若不收费可无限白嫖 CPU 窗口的装配工作）。
-            // 报告与实际落桶一致，杜绝「报告 None、桶实扣」的口径分歧
+            // 注入失败的费用候选按完整预算计算，报告携带同一候选；此处尚不修改余额。
             let bill = sandbox.pending_bill();
             return Ok(EvalReport {
                 expr: serde_json::json!({
@@ -526,10 +498,8 @@ fn run_eval_tick(
     };
     match plan {
         TickPlan::SkipPenalty => Ok(EvalReport {
-            // 负桶停跑：代码根本没执行——契约规定这是适配器的普通基础设施错误
-            //（"未执行 ≠ undefined"），不是 RunPlayerError。
-            // 回充候选留协调器处置（B0-6 统一提交点）；bucket_after 为提交前
-            // 口径（与 Run 轮计费候选同口径——原停跑轮是唯一即时落桶的例外）
+            // 代码未执行时使用 terminated，区别于成功求值得到 undefined。
+            // 停跑回充留给协调器提交，bucket_after 仍是提交前余额。
             expr: serde_json::json!({
                 "ok": false, "kind": "terminated", "error": "本 tick 停跑（桶透支为负，玩家代码未执行）",
             }),
@@ -545,9 +515,8 @@ fn run_eval_tick(
             let mut expr = sandbox.run_expr(code)?;
             let writeback = sandbox.end_tick()?;
             let intents = sandbox.take_intents().unwrap_or(Value::Null);
-            // 契约（adapter-spec:221-235，vanilla 参照同口径）：按失败阶段分类——
-            // 代码已开始执行后被硬中断、或 tick 末 Memory 序列化失败 → runtime；
-            // 只有"根本没执行"（上面的停跑分支）才保持 terminated
+            // 代码开始执行后被中断，或写回失败，按适配器契约归为 runtime。
+            // 只有上面的负余额停跑分支使用 terminated 表示尚未执行。
             if expr.get("ok").and_then(Value::as_bool) == Some(false)
                 && expr.get("kind").and_then(Value::as_str) == Some("terminated")
             {
@@ -568,8 +537,7 @@ fn run_eval_tick(
                 console: sandbox.drain_console(),
                 bucket_after: sandbox.bucket(),
                 intents,
-                // 候选带出（B0-5 统一提交点）：计费与 RawMemory 都由协调器在
-                // 世界结算成功后提交（settle_bill/PlayerState），失败轮丢弃
+                // 计费与 RawMemory 均作为候选返回；协调器在世界结算成功后提交。
                 cpu_billed_ms: sandbox.pending_bill(),
                 segments_out: writeback.get("segmentsOut").cloned(),
                 raw_memory: writeback

@@ -1,8 +1,7 @@
-//! deno_core op 定义：沙箱与宿主之间的唯一通道。
+//! 提供模块读取、console 收集、墙钟计时与主动中断的 deno_core op。
 //!
-//! 命名纪律：一律 `op_kk_` 前缀，绝不与 deno_core 内置 op 撞名
-//! （撞名会触发 V8 CHECK 直接 abort，spike 踩过的坑）。
-//! prelude 各段在遮蔽 `Deno` 之前把这些 op 的引用捕获进闭包。
+//! 使用 op_kk_ 前缀区分项目 op 与 deno_core 内建 op；重复注册名称会触发
+//! 运行时检查失败。prelude 在删除 Deno 全局前捕获这些 op 的引用。
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -14,9 +13,10 @@ use deno_error::JsErrorBox;
 
 use crate::modules::ModuleTable;
 
-/// 每 tick console 行数上限（官方对 console 输出有频率限制；超限丢行并告知）。
+/// 每 tick 最多保留的玩家 console 行数；超限提示另外保留一行。
 pub const CONSOLE_MAX_LINES: u64 = 1_000;
-/// 每 tick console 累计字节上限（防跨边界放大：op 每次调用把字符串完整复制进宿主）。
+/// 每 tick 保留文本的 UTF-8 字节上限，不含超限提示和日志级别。
+/// op 接收的字符串仍会先传入 Rust；此限制约束累计保留量。
 pub const CONSOLE_MAX_BYTES: u64 = 1024 * 1024;
 
 /// 一行玩家 console 输出。
@@ -31,24 +31,22 @@ pub struct LogLine {
 pub struct Shared {
     /// console 输出收集（op 推入，宿主每 tick drain）。
     pub console: Mutex<Vec<LogLine>>,
-    /// 本 tick 起始时刻（`Game.cpu.getUsed()` 的墙钟口径，M0）。
+    /// 本 tick 墙钟计时起点；Rust op 返回经过的毫秒数，JS 另加指令费用。
     pub tick_start: Mutex<Option<Instant>>,
     /// 近堆回调是否触发过（诊断用）。
     pub near_heap_fired: AtomicBool,
-    /// 玩家本 tick 是否已 Game.cpu.halt（M2B 扩面 P3）：run_loop 据此分叉
-    /// after_halt（实际用量计费）与 after_termination（整份计费）
+    /// 本 tick 是否调用过 Game.cpu.halt；Sandbox 据此选择零计费的中断处理。
     pub halt_requested: AtomicBool,
-    /// 本 tick 已收 console 行数 / 累计字节（闸门计数，begin_tick 重置）。
+    /// 本 tick 尝试输出的行数与 UTF-8 字节数，包含被丢弃的输出；begin_tick 重置。
     console_lines: AtomicU64,
     console_bytes: AtomicU64,
-    /// 本 tick console 是否已被截断（drain 时出告知行并复位）。
+    /// 本 tick 是否已输出过超限提示；第一次超限时立即添加，begin_tick 重置。
     console_truncated: AtomicBool,
 }
 
 impl Shared {
-    /// 推入一行 console 输出；超过每 tick 行数/字节闸门时丢弃（第一次超限出告知行）。
-    /// 防御：JS 堆闸门与看门狗都管不住"极短 tick 内高频 op 调用把字符串复制进宿主"的
-    /// 跨边界放大（实测 300ms 可注入 >1GB），多玩家共进程时会 OOM 宿主。
+    /// 保留一行日志；超过行数或文本字节限制时丢弃，并仅提示一次。
+    /// 限制 Rust 日志缓冲区的累计保留量，避免玩家高频输出耗尽宿主内存。
     pub fn push_console_line(&self, level: &str, text: &str) {
         let lines = self.console_lines.fetch_add(1, Ordering::Relaxed) + 1;
         let bytes = self
@@ -73,7 +71,7 @@ impl Shared {
         });
     }
 
-    /// 每 tick 开始重置 console 闸门计数。
+    /// 重置本 tick 的输出计数和提示标志，不清空已有日志。
     pub fn reset_console_gate(&self) {
         self.console_lines.store(0, Ordering::Relaxed);
         self.console_bytes.store(0, Ordering::Relaxed);
@@ -123,11 +121,7 @@ fn op_kk_console(state: &mut OpState, #[string] level: &str, #[string] text: &st
     shared.push_console_line(level, text);
 }
 
-/// Game.cpu.halt（M2B 扩面 P3）：官方 user-vm.js:68-70 `_halt` 置
-/// didHaltByUserRequest + isolate **dispose**（硬停）。我方：置 halt 标志 +
-/// terminate（沙箱长寿命不销毁，登记差异——官方下一 tick 重建 VM，我方
-/// cancel 后复用）；terminate 同线程调用=设终止标志，控制返回 JS 即抛
-/// 终止异常（官方 halt 后玩家代码不可达，同语义）
+/// 标记玩家主动 halt 并请求 V8 中断；Sandbox 根据此标志选择零计费处理。
 #[op2(fast)]
 fn op_kk_cpu_halt(state: &mut OpState) {
     let shared = state.borrow::<SharedRef>().clone();

@@ -1,9 +1,6 @@
-/* kk-runner prelude · 30_game 段 5b：Structure 族 spawn 面（Spawning 类/
- * StructureSpawn 字段表与 spawn 方法族/notifyWhenAttacked/controller 真方法/
- * 装配/destroy/Tombstone/Ruin 接线）。B1 结构治理批自段 5（structures.js）
- * 纯搬移；per-tick 状态（createdCreepNames/deprecatedShown + perTickReset
- * 钩子）与本段全部用户同迁（闭包内自洽，零接线变更）；段间共享经 gw 桥
- * （C 表/now/Store），调用点保持裸名。
+/* 补充结构属性与动作：孵化、控制器、塔、link、terminal，以及墓碑和废墟视图。
+ * 复用 structures.js 的 Store 和常量；方法记录指令，Rust 结算负责实际修改世界。
+ * 孵化成功会立即在本 tick 的 Game.creeps 放入无 id 的待出生对象；它不是已提交的世界对象。
  */
 (() => {
   'use strict';
@@ -13,7 +10,7 @@
   const __Object = gw.__Object;
   const __MathCeil = Math.ceil;
   const __MathFloor = Math.floor;
-  // B1 段拆分桥（5a 定义点）
+  // 复用 structures.js 提供的常量、时间函数和 Store。
   const C = gw.__structuresC;
   const now = gw.now;
   const Store = gw.Store;
@@ -29,10 +26,8 @@
     deprecatedShown.length = 0;
   });
 
-  // 官方 register.deprecated（game.js:111-117）：每 tick 每条消息只 console.log
-  // 一次（deprecatedShown 同 tick 去重）。console 装载期捕获（评审 1 P3-1：
-  // 玩家重绑 globalThis.console 不截获官方警告文本——官方经注入的
-  // globals.console 闭包同构）
+  // 每 tick 同一弃用消息只输出一次，使用加载时捕获的 console 对象。
+  // 来源：上游 engine/src/game/game.js 的 register.deprecated。
   const __console = globalThis.console;
   function deprecated(msg) {
     if (!_.contains(deprecatedShown, msg)) {
@@ -58,22 +53,14 @@
     return !!o && o.type === 'creep';
   }
 
-  /** 官方 register.structures[target.id] 判定的等价物：raw 投影里存在且是
-   *  结构面（M2B 扩面 P5——tower/link 目标门的存活判定；陈旧壳 id 不在本
-   *  tick raw → 拒，官方 UNDOC-STALEARG 面：API 不得对已消亡对象的缓存壳
-   *  返回 OK）。
-   *  **域注意（评审 2 P2-3）**：≠ register.structures 精确域——source/mineral
-   *  的 raw type 亦为 'structure'（world_json 归一），本判定对它们过收；
-   *  四个调用点（attack/heal/repair/transferEnergy）全部以 instanceof
-   *  Structure/Creep 合取，Source/Mineral 原型链不含 Structure（_registry
-   *  CLASS_PARENTS）→ 最终同 ERR_INVALID_TARGET。**单独复用本函数时必须
-   *  自带 instanceof 或补 structureType 排除**。 */
+  /** 检查 id 是否存在于当前 tick 的 raw 数据且 type 为 structure 或 spawn。
+   * Source/Mineral 也使用 raw type=structure，本函数不能独立验证完整的结构目标范围；
+   * 调用方还需检查 instanceof 或排除其 structureType。 */
   function isKnownStructure(id) {
     const o = id == null ? undefined : gw.rawById.get(id);
     return !!o && (o.type === 'structure' || o.type === 'spawn');
   }
-  // gw 桥（M2B P6）：creep 战斗族五 API 的同款存活判定（UNDOC-STALEARG 剩余
-  // 面清偿——官方 creeps.js:607/:640/:689/:717/:748 的 register 判定）
+  // 供 Creep 战斗方法复用当前 tick 的目标存活检查。
   gw.isKnownCreep = isKnownCreep;
   gw.isKnownStructure = isKnownStructure;
 
@@ -218,29 +205,19 @@
   };
   gw.defineGameObjectProperties(globalThis.StructureRoad.prototype, gw.rawData, ELSE_STRUCTURE_FIELDS);
   gw.defineGameObjectProperties(globalThis.StructureWall.prototype, gw.rawData, ELSE_STRUCTURE_FIELDS);
-  // M2B P4：road 衰减钟折叠（官方 structures.js:672-674——与容器同式，
-  // nextDecayTime 优先、decayTime 兜底）。**wall 官方无 ticksToDecay**
-  //（structures.js:839-841 只挂 ticksToLive），故不对 wall 挂——挂上虽
-  // 读 undefined 与官方同值，但会多出官方不存在的属性面。
+  // road 优先以 nextDecayTime 计算剩余 tick，再用 decayTime。
+  // wall 不添加 ticksToDecay，避免多出上游不存在的属性。
+  // 来源：上游 engine/src/game/structures.js 的 StructureRoad/StructureWall 属性定义。
   gw.defineGameObjectProperties(globalThis.StructureRoad.prototype, gw.rawData, {
     ticksToDecay: (o) => (o.nextDecayTime ? o.nextDecayTime - gw.world.time
       : o.decayTime ? o.decayTime - gw.world.time : undefined),
   });
 
   // ---------------------------------------------------------------- spawn 方法族
-  /** 官方 spawnCreep（structures.js:1063-1218）全预检序：
-   *  ①!name||!isObject(options)→INVALID_ARGS ②name.length>100→INVALID_ARGS
-   *  ③同名（Game.creeps 或同 tick createdCreepNames）→NAME_EXISTS
-   *  ④energyStructures pluck+uniq ⑤directions 数组化校验 ⑥!my→NOT_OWNER
-   *  ⑦spawning（显式回查）→BUSY ⑧off（显式回查）→RCL ⑨body 校验
-   *  ⑩energyAvailable<cost→NOT_ENOUGH_ENERGY ⑪dryRun→OK ⑫名单+Memory
-   *  ⑬幽灵壳 ⑭intent ⑮OK。 */
-  /** 同 tick 幽灵壳（官方 structures.js:1132-1213）：new Creep()（无 id）+
-   *  RoomObject.call（room/pos）+ 十三字段 enumerable getter——官方逐字段对照
-   *  （name/spawning:true/my:true/body:{type,hits:100}/owner/
-   *  ticksToLive:CREEP_LIFE_TIME/carryCapacity/carry:{energy:0}/
-   *  store:new Store({store:{energy:0}})/fatigue:0/hits/hitsMax/saying:
-   *  undefined）。spawnCreep（M2A）与 createCreep（M2B 扩面 P5）共用。 */
+
+  /** 立即放入 Game.creeps 的待出生对象，无 id，spawning=true，字段由 getter 给出。
+   * 它只是当前 tick 的玩家视图；创建指令尚未在 Rust 世界中结算。
+   * spawnCreep 与 createCreep 共用；来源：上游 engine/src/game/structures.js 的孵化视图装配。 */
   function spawnGhostCreep(name, body, spawn) {
     const ghost = __Object.create(globalThis.Creep.prototype);
     ghost.room = spawn.room;
@@ -323,13 +300,9 @@
       return C.OK;
     }
     createdCreepNames.push(name);
-    // 官方 structures.js:1122-1130（spawnCreep）/ :976-984（createCreep）：
-    // `Memory.creeps[name] = opts.memory || ... || {}`——写在 API 层（结算层
-    // create-creep.js 无 Memory 写）。读 globals.Memory 懒触发。
-    // **不能直调 ensureMemory**——它会强制重解析
-    // 并重固化，把玩家同 tick 早先对 Memory 的写入清掉；官方 getter 首访
-    // 解析后固化为值属性，同 tick 后续读写同一对象。M2B 扩面 P5 勘正：
-    // 原直调致 `Memory.x=1; spawnCreep(...); Memory.x` 丢写——官方保留）
+    // 访问全局 Memory，让其只在本 tick 首次读取时解析。
+    // 不能直接调用 ensureMemory；重复解析会覆盖玩家在同 tick 已经写入的数据。
+    // 来源：上游 engine/src/game/structures.js 的 spawnCreep Memory 写入。
     const memory = globalThis.Memory;
     if (memory.creeps === undefined) {
       memory.creeps = {};
@@ -344,9 +317,8 @@
     return C.OK;
   };
 
-  // ---------------------------------------------------------------- canCreateCreep/createCreep（M2B 扩面 P5）
-  // 官方 game/names.js 逐字（100+100 名池 + getUniqueName 重试：4 次后双名
-  // 拼接；Math.random 官方同源不可测——只锁「不与现存/本 tick 已用重名」）
+  // 随机从名称池选取未使用的名字；第五次尝试起拼接两个名字，再继续重试。
+  // 来源：上游 engine/src/game/names.js 的 getUniqueName。
   const boyNames = ['Jackson', 'Aiden', 'Liam', 'Lucas', 'Noah', 'Mason', 'Jayden', 'Ethan', 'Jacob', 'Jack', 'Caden', 'Logan', 'Benjamin', 'Michael', 'Caleb', 'Ryan', 'Alexander', 'Elijah', 'James', 'William', 'Oliver', 'Connor', 'Matthew', 'Daniel', 'Luke', 'Brayden', 'Jayce', 'Henry', 'Carter', 'Dylan', 'Gabriel', 'Joshua', 'Nicholas', 'Isaac', 'Owen', 'Nathan', 'Grayson', 'Eli', 'Landon', 'Andrew', 'Max', 'Samuel', 'Gavin', 'Wyatt', 'Christian', 'Hunter', 'Cameron', 'Evan', 'Charlie', 'David', 'Sebastian', 'Joseph', 'Dominic', 'Anthony', 'Colton', 'John', 'Tyler', 'Zachary', 'Thomas', 'Julian', 'Levi', 'Adam', 'Isaiah', 'Alex', 'Aaron', 'Parker', 'Cooper', 'Miles', 'Chase', 'Muhammad', 'Christopher', 'Blake', 'Austin', 'Jordan', 'Leo', 'Jonathan', 'Adrian', 'Colin', 'Hudson', 'Ian', 'Xavier', 'Camden', 'Tristan', 'Carson', 'Jason', 'Nolan', 'Riley', 'Lincoln', 'Brody', 'Bentley', 'Nathaniel', 'Josiah', 'Declan', 'Jake', 'Asher', 'Jeremiah', 'Cole', 'Mateo', 'Micah', 'Elliot'];
   const girlNames = ['Sophia', 'Emma', 'Olivia', 'Isabella', 'Mia', 'Ava', 'Lily', 'Zoe', 'Emily', 'Chloe', 'Layla', 'Madison', 'Madelyn', 'Abigail', 'Aubrey', 'Charlotte', 'Amelia', 'Ella', 'Kaylee', 'Avery', 'Aaliyah', 'Hailey', 'Hannah', 'Addison', 'Riley', 'Harper', 'Aria', 'Arianna', 'Mackenzie', 'Lila', 'Evelyn', 'Adalyn', 'Grace', 'Brooklyn', 'Ellie', 'Anna', 'Kaitlyn', 'Isabelle', 'Sophie', 'Scarlett', 'Natalie', 'Leah', 'Sarah', 'Nora', 'Mila', 'Elizabeth', 'Lillian', 'Kylie', 'Audrey', 'Lucy', 'Maya', 'Annabelle', 'Makayla', 'Gabriella', 'Elena', 'Victoria', 'Claire', 'Savannah', 'Peyton', 'Maria', 'Alaina', 'Kennedy', 'Stella', 'Liliana', 'Allison', 'Samantha', 'Keira', 'Alyssa', 'Reagan', 'Molly', 'Alexandra', 'Violet', 'Charlie', 'Julia', 'Sadie', 'Ruby', 'Eva', 'Alice', 'Eliana', 'Taylor', 'Callie', 'Penelope', 'Camilla', 'Bailey', 'Kaelyn', 'Alexis', 'Kayla', 'Katherine', 'Sydney', 'Lauren', 'Jasmine', 'London', 'Bella', 'Adeline', 'Caroline', 'Vivian', 'Juliana', 'Gianna', 'Skyler', 'Jordyn'];
   function getUniqueName(checkExistingFn) {
@@ -505,7 +477,7 @@
     return C.OK;
   };
 
-  // ---------------------------------------------------------------- notifyWhenAttacked（A4-iv 换真）
+  // 结构受攻击通知设置。
   /** Structure.notifyWhenAttacked 基类版（官方 structures.js:89-101）：
    *  无房 INVALID_TARGET；非己结构（my === false——undefined 中性结构放行）
    *  或房 controller 归他人 → NOT_OWNER；非布尔参数 INVALID_ARGS；与当前
@@ -528,14 +500,9 @@
   };
 
 
-  // ---------------------------------------------------------------- 原型方法
-  // setActive 桩已摘除（A6）：官方 API 全集无此方法（structures.js:103-127
-  // 实为 destroy/notifyWhenAttacked/isActive 三方法，旧注释误植）——玩家面
-  // 挂官方没有的方法本身就是兼容红线违背。isActive 已在上方 Structure 基类
-  // 原型真化（全结构族经原型链继承）。destroy/notifyWhenAttacked 同在基类
-  // 原型（B3/A4-iv 接线）；不再有实例级桩循环——实例桩会遮蔽真方法（坑⑥）。
+  // 动作方法挂在类原型上；装配器不能再添加同名实例方法，否则会遮蔽这些实现。
 
-  // ---------------------------------------------------------------- controller 真方法（A4-iii）
+  // 控制器操作方法。
   /** StructureController.unclaim：官方 structures.js:200-208——!my 门后记
    *  intent（结算侧 unclaim.js 清主权，settle/controller.rs）。 */
   globalThis.StructureController.prototype.unclaim = function unclaim() {
@@ -544,22 +511,10 @@
     return C.OK;
   };
 
-  /** StructureController.activateSafeMode：官方 structures.js:211-234 六门
-   *  全序（预检序不重排）：
-   /*  ① !this.my → ERR_NOT_OWNER（:213）
-   /*  ② safeModeAvailable <= 0 → ERR_NOT_ENOUGH_RESOURCES（:216）
-   *  ③ safeModeCooldown || upgradeBlocked > 0 || ticksToDowngrade <
-   /*    CONTROLLER_DOWNGRADE[level]/2 − THRESHOLD → ERR_TIRED（:219-221）——
-   *    经 getter 通道读（官方 this.xxx）；cooldown/blocked 官方 undefined
-   *    参与比较恒假，我方同（新 getter undefined 形态）；ticksToDowngrade
-   *    无钟 0（None→0 既有口径）→ 0 < 阈值为真，官方 undefined 比较为假
-   *    ——API 返回码差异（登记报告；终态一致：结算侧对无钟房同拒）
-   /*  ④ 第六门：任何自家房 controller safeMode 生效中 → ERR_BUSY（:223-225，
-   *    官方 _.any(register.structures)——我方对注入世界全结构扫描等价）
-   *  ⑤ lastActivateSafeMode 闭包：有则 intents.remove(旧 id,
-   /*    'activateSafeMode')（收集器退费），记录本 id（:227-231）——同 tick
-   *    后开者覆盖先开者；per-tick 重置（beginTick，官方 make 每 tick 新闭包）
-   /*  ⑥ intents.set('activateSafeMode', {})（:233） */
+  /** 先检查归属、可用次数、冷却、升级封锁与降级剩余时间，再检查自家已有安全模式。
+   * 同 tick 多个有效请求只保留最后一个，并移除上一个请求的指令费用。
+   * 缺少 downgradeTime 时此实现读取 0，会影响 ERR_TIRED 预检；Rust 结算另行复核。
+   * 来源：上游 engine/src/game/structures.js 的 activateSafeMode。 */
   globalThis.StructureController.prototype.activateSafeMode = function activateSafeMode() {
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.safeModeAvailable <= 0) return C.ERR_NOT_ENOUGH_RESOURCES;
@@ -568,9 +523,7 @@
         - C.CONTROLLER_DOWNGRADE_SAFEMODE_THRESHOLD) {
       return C.ERR_TIRED;
     }
-    // 门④扫描用索引迭代：for...of 经 Array.prototype[Symbol.iterator] 运行期
-    // 解析，同 realm 玩家可污染迭代器喂空本门（A4-iii 评审 2 必修）——Engine
-    // 层 tick_with_intents 已按世界真值兜底，此处索引迭代是纵深防御
+    // 扫描所有自家控制器是否已有生效的安全模式，按索引读取以避开数组迭代器补丁。
     const objs = gw.world.objects || [];
     for (let i = 0; i < objs.length; i++) {
       const o = objs[i];
@@ -600,14 +553,8 @@
     return C.OK;
   };
 
-  // 其余结构方法无桩残留（destroy/notifyWhenAttacked 已在 Structure 基类换真
-  // ——else 族/未知类型经原型链继承，不再挂实例桩防遮蔽，坑⑥教训）
 
-  // ---------------------------------------------------------------- 装配
-  // spawn 装配：字段/方法全在原型，own 面只剩 id/pos/room + 静态标记
-  // （isActive 在 Structure 基类原型真化，不再挂实例桩）
-  // M2B 扩面 P4：InvaderCore.spawning 复用（官方 structures.js:760
-  // `new StructureSpawn.Spawning(id)`——跨段经 gw 桥）
+  // spawn 的字段与方法来自原型，实例仅补 isStructure；InvaderCore 也复用 Spawning 类。
   gw.Spawning = Spawning;
   gw.assemblers.spawn = (o, base) => {
     base.isStructure = true;
@@ -629,13 +576,9 @@
     return base;
   };
 
-  // ---------------------------------------------------------------- Structure.destroy（B3 接线批换真）
-  // 官方 structures.js:72-86：!room → INVALID_TARGET；controller 非我 →
-  // NOT_OWNER；房内敌方 creep/powerCreep → BUSY（API 层门——引擎侧
-  // destroy-structure.js 四门对等，官方两层同判）；记 room 级 intent
-  //（pushByName 数组通道，from_json "room" 分支同形）。挂基类原型：
-  // controller/source/mineral 经原型链继承是官方同形（官方即挂在
-  // Structure.prototype）
+  // 销毁需要本房自家控制器，且房内没有敌方 creep/powerCreep，然后记录房间指令。
+  // 方法挂在 Structure.prototype；controller 通过继承获得它，Source/Mineral 不继承 Structure。
+  // 来源：上游 engine/src/game/structures.js 的 Structure.destroy。
   globalThis.Structure.prototype.destroy = function destroy() {
     if (!this.room) return C.ERR_INVALID_TARGET;
     if (!this.room.controller || !this.room.controller.my) return C.ERR_NOT_OWNER;
@@ -647,23 +590,17 @@
     return C.OK;
   };
 
-  // ---------------------------------------------------------------- Tombstone/Ruin 类接线（B3 接线批）
-  // 官方 tombstones.js:41-135 / ruins.js:38-70 的 getter 族——投影（B3
-  // world_json）已是官方 DB 形态（绝对 tick / 折叠 ticksToDecay / 正量 store
-  // / structure 存照 type 键），字段表直读投影。
-  // creep 代理对象（tombstones.js:47-135）：普通对象 + own getter +
-  // Creep.prototype 原型链（官方 new Creep + defineProperties 覆盖同构）
+  // 装配墓碑与废墟的历史对象视图；它们描述死亡或销毁时的数据。
+  // 死亡 creep 代理继承 Creep.prototype，但属性由专门 getter 提供，不回查已消亡的 creep id。
   function tombstoneCreepProxy(o) {
     const proxy = {};
     const carryCap = (o.creepBody || []).reduce((n, t) => n + (t === 'carry' ? C.CARRY_CAPACITY : 0), 0);
-    // pos 构造期定格为闭包引用（官方 RoomObject.call 的 own 数据属性同构——
-    // 身份比较稳定；清偿复审 P3-R1）
+    // 复用构造时的位置实例，连续读取 pos 保持同一引用。
     const posInstance = new gw.RoomPosition(o.x, o.y, o.room);
     const defs = {
       id: { enumerable: true, get: () => o.creepId },
       name: { enumerable: true, get: () => o.creepName },
-      // 官方 RoomObject.call(this, x, y, room) 挂 pos/room（tombstones.js:47-48，
-      // 评审 2 P2-1 清偿——bot 生态读 dead creep 位置）
+      // 死亡 creep 视图也提供位置和房间引用；来源：上游 engine/src/game/tombstones.js。
       pos: { enumerable: true, get: () => posInstance },
       room: { enumerable: true, get: () => (gw.currentGame() ? gw.currentGame().rooms[o.room] : undefined) },
       spawning: { enumerable: true, get: () => false },
@@ -672,10 +609,8 @@
       owner: { enumerable: true, get: () => (o.user === undefined || o.user === null ? undefined : { username: o.user }) },
       ticksToLive: { enumerable: true, get: () => o.creepTicksToLive },
       carryCapacity: { enumerable: true, get: () => carryCap },
-      // 官方上游 quirk（tombstones.js:63-65 的 carry/store 走 _storeGetter 无参
-      // 回退 `{store:{}, storeCapacity: this.carryCapacity}` → 恒空 Store 且容量
-      // =carryCapacity——死 creep 的 store 不透传（墓碑的 store 才是资源面）。
-      // 评审 1 P3-B：原实现给真库存=与官方双反，quirk 原样对齐）
+      // 死亡 creep 的 Store 恒空，容量按其原 body 计算；可提取库存属于墓碑自身的 store。
+      // 来源：上游 engine/src/game/tombstones.js 的 carry/store getter。
       carry: { enumerable: true, get: () => gw.makeStore({ store: {}, storeCapacity: carryCap }) },
       store: { enumerable: true, get: () => gw.makeStore({ store: {}, storeCapacity: carryCap }) },
       fatigue: { enumerable: true, get: () => 0 },
@@ -692,8 +627,7 @@
     deathTime: (o) => o.deathTime,
     ticksToDecay: (o) => o.ticksToDecay, // 投影已折叠（官方 getter 是 decayTime−time 的等价值）
     store: (o) => gw.makeStore(o),
-    // 官方 Tombstone 原型无 carry/carryCapacity（tombstones.js 字段表）——
-    // 评审 1 P3-A 清偿：它们只在 creep 代理上；多挂会让枚举面多出两键
+    // carry/carryCapacity 属于死亡 creep 代理，不能添加到 Tombstone 自身，否则改变枚举结果。
     creep: (o) => (o.creepId ? tombstoneCreepProxy(o) : undefined),
   });
 
@@ -730,27 +664,20 @@
   gw.assemblers.tombstone = (o, base) => base;
   gw.assemblers.ruin = (o, base) => base;
 
-  // StructureExtractor.cooldown（GPT 复审 P1-3 清偿——B4 轨 A 待接第 1 条
-  // 提前：官方 structures.js:268 `o.cooldown || 0`；缺它时 harvest 预检读
-  // undefined → 冷却期 API 假 OK（结算拒、矿量不动——返回码与终态双错）
+  // harvest 的提取器预检读取 cooldown；缺失时按 0 处理。
+  // 来源：上游 engine/src/game/structures.js 的 StructureExtractor 属性定义。
   gw.defineGameObjectProperties(globalThis.StructureExtractor.prototype, gw.rawData, {
     cooldown: (o) => o.cooldown || 0,
   });
 
-  // StructureRampart.isPublic（A5 片 3a 评审 P2 清偿——官方 structures.js:648
-  // `!!o.isPublic`）：withdraw 敌 rampart 门（creep.js）随本片 lookFor 真化
-  // 可观测，包装缺键时恒 undefined——isPublic:true 的公开敌方 rampart 官方
-  // 放行、我方误拒。缺省 false 两侧同形（Rust 结算侧已读原始 isPublic）
+  // 将 isPublic 转成布尔值，供 withdraw 判断敌方 rampart 是否公开。
+  // 来源：上游 engine/src/game/structures.js 的 StructureRampart 属性定义。
   gw.defineGameObjectProperties(globalThis.StructureRampart.prototype, gw.rawData, {
     isPublic: (o) => !!o.isPublic,
   });
 
-  // ---------------------------------------------------------------- M2B 扩面 P4：静态折叠 getter 族
-  // 官方 structures.js 逐类表对照。挂钟折叠（官方读 runtimeData.time——
-  // 我方读 gw.world.time 同位等价）：衰减钟 `nextDecayTime ? 差值 :
-  // decayTime ? 差值 : undefined`（:147 容器式）；冷却钟
-  // `cooldownTime && cooldownTime > time ? 差值 : 0`（:304 lab 式）。
-  // 数据源=Generic 透传投影的绝对键（放置/结算写入）——官方 DB 同形态
+  // 衰减期限与 cooldownTime 是绝对游戏 tick，getter 转为剩余 tick。
+  // 衰减优先 nextDecayTime，再用 decayTime；冷却已结束时返回 0。
   const C_LAB_MINERAL_CAPACITY = globalThis.LAB_MINERAL_CAPACITY;
   function decayFold(o) {
     const t = gw.world.time;
@@ -870,17 +797,9 @@
     energy: (o) => o.energy,
   });
 
-  // ---------------------------------------------------------------- M2B 扩面 P5：结构动作族 API
-  /** tower 三 API 的共同门（官方 structures.js:764-834 每方法同两段）：
-   *  能量（`!store || store.energy < TOWER_ENERGY_COST`）+ RCL。RCL 门官方
-   *  直接调 utils.checkStructureAgainstController——对在 CONTROLLER_STRUCTURES
-   *  表内且房内有 controller 的结构，`!this.isActive()` 与其逐门等价
-   *  （isActive 四门：①!owner→active ≡ 官方 :458-460；②表外类型→active
-   *  对 tower 不可达；③无房/无 controller→inactive ≡ 官方 :463-464 的
-   *  !roomController→false；④即 checkStructureAgainstController 本体）。
-   *  官方对无 controller 的房会 `data(undefined.id)` 抛错——官方世界每房
-   *  有 controller 不可达，我方野房夹具可达，走 isActive 的 ③ 门返
-   *  ERR_RCL_NOT_ENOUGH（官方不可达分支的合意外延，注释记录）。 */
+  // 结构动作的 API 预检与指令记录。
+  /** 塔动作共用能量与 isActive 检查；目标检查由各动作先完成。
+   * 没有控制器时 isActive 返回 false，因此返回 ERR_RCL_NOT_ENOUGH。 */
   function towerCommonGates(tower) {
     const o = gw.rawData(tower.id);
     if (!o.store || o.store.energy < C.TOWER_ENERGY_COST) {
@@ -892,12 +811,8 @@
     return C.OK;
   }
 
-  /** 官方 Tower.attack（structures.js:764-787）：!my → 目标门（creep/
-   *  powerCreep/structure 三 register + instanceof；register 判定以
-   *  instanceof 等价——我方游戏对象只能经装配获得，与 creep.attack 的
-   *  P1 口径一致）→ 能量 → RCL → intent {id}。官方无距离门（20 格 falloff
-   *  底 150 仍执行）；**无 TOWER_COOLDOWN 常量**（限速=能量+每 tick 单动作
-   *  else-if，towers/intents.js:3-8）。 */
+  /** 检查本人权限、当前 tick 的目标类型与存活状态，再检查能量和名额。
+   * 此 API 不检查距离，距离衰减由结算处理。来源：上游 engine/src/game/structures.js 的 StructureTower.attack。 */
   globalThis.StructureTower.prototype.attack = function attack(target) {
     if (!this.my) {
       return C.ERR_NOT_OWNER;
@@ -919,7 +834,8 @@
     return C.OK;
   };
 
-  /** 官方 Tower.heal（:789-810）：目标限 creep/powerCreep（M2 无 powerCreep）。 */
+  /** 目标限当前 tick 中存活的 Creep，检查能量与启用状态后记录 heal。
+   * 此实现尚不接受 PowerCreep。来源：上游 engine/src/game/structures.js 的 StructureTower.heal。 */
   globalThis.StructureTower.prototype.heal = function heal(target) {
     if (!this.my) {
       return C.ERR_NOT_OWNER;

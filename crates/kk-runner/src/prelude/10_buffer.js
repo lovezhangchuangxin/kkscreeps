@@ -1,9 +1,6 @@
-/* kk-runner 桩环境 prelude · 段 1：Buffer 垫片。
- *
- * 官方沙箱可用 Buffer（bot 生态依赖，overmind 的 wasm 模块经 Buffer 使用）。
- * M0 只实现常见子集；缺失方法由缺失 API 探测兜底报告。
- * 原始类（未套仪表的 Buffer 构造器）经 __kkp 暴露给 20_cjs 的二进制模块链路
- * （与单文件时期闭包引用同一语义——玩家改写 globalThis.Buffer 不影响该链路）。
+/* 提供基于 Uint8Array 的 Buffer 子集，支持 UTF-8、hex 和 base64 编解码。
+ * 此实现不包含 Node Buffer 的全部接口；构造器静态属性的缺失访问由 probe 记录。
+ * CommonJS 二进制加载捕获原始构造器，不随玩家替换全局 Buffer 而改变。
  */
 (() => {
   'use strict';

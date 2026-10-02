@@ -1,5 +1,7 @@
-//! B1 结构治理批自 sandbox_tests.rs 连续切块（串行链 impl；顶层唯一 #[test] 不变量
-//! 在 crate 根——本文件全部 fn 由根链按原调用序调用，不得加 #[test]）。
+//! 验证入口返回形态、Memory 属性、RoomPosition 和房间查询。
+//!
+//! 场景由 sandbox_tests.rs 的唯一测试串行调用，避免进程级计数互相干扰；
+//! 这里不添加独立 #[test]。
 
 use super::*;
 
@@ -143,9 +145,8 @@ pub(super) fn run_loop_without_loop_silent() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// 桩返回值形态抽查：
-/// RoomVisual 链式返回 this、Memory 首访后可整体赋值（官方 game.js:492-495）、
-/// getTerrainAt 官方词汇表与边界语义（map.js:235-258）。
+/// 检查 RoomVisual 链式调用、首访后的 Memory 只读属性，以及地形返回值。
+/// 也验证直线 PathFinder 的路径形态，不验证避障或搜索成本。
 pub(super) fn stub_value_shapes() -> anyhow::Result<()> {
     let mut sb = Sandbox::new(SandboxConfig::default())?;
     let mut table = ModuleTable::new();
@@ -157,8 +158,8 @@ pub(super) fn stub_value_shapes() -> anyhow::Result<()> {
     let v = sb.run_expr("(() => { const rv = new RoomVisual('W1N1'); return rv.circle(1,2).line(0,0,2,2) === rv; })()")?;
     assert_eq!(v["value"], true, "RoomVisual 链式调用");
 
-    // Memory 整体赋值：官方描述符无 writable（game.js:492-495）——首访后只读，
-    // sloppy 下静默失败、Memory 保持原对象（跨 tick 也不变）
+    // 首访后的 Memory 值属性不可写；非严格代码整体赋值静默失败，保留原对象。
+    // 此场景在同一 tick 内读取两次，没有验证跨 tick 对象身份。
     let v = sb
         .run_expr("(() => { void Memory.fresh; Memory = { fresh: 1 }; return Memory.fresh; })()")?;
     assert_eq!(

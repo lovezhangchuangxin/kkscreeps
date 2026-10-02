@@ -1,13 +1,7 @@
-/* kk-runner prelude · 30_game 段 9：Game 装配与 tick 生命周期（对照官方
- * engine/src/game/game.js + driver/lib/runtime/runtime.js 的收集器）。
- *
- * RawMemory/Memory（官方 game.js:470-495 懒解析语义）、intents 收集器
- * （官方 runtime.js:60-100 同形闭包私有）、buildGame（Game 装配序，官方
- * game.js:273-345 collections）、refreshGame 与 __kkp.memoryWorld 导出
- * （beginTick/writeBackMemory/intentsPayload——90_host 宿主通道消费）。
- * 依赖：gw 全容器（_registry）、makeRoom/Terrain/terrainWordAt（room 段）、
- * roomNameToXY/getRoomNameFromXY（room-position 段——map 族房名算术）、
- * wrapObject（_registry 段）、各类型 assembler（已注册）。
+/* 管理 RawMemory/Memory、指令收集器和每 tick 的 Game 装配。
+ * beginTick 注入世界并重建对象索引、Game 和 Memory 懒解析入口；writeBackMemory
+ * 先序列化 Memory，再校验 segment 写入与请求，返回等待 Rust 协调器提交的候选。
+ * 宿主函数从 __kkp.memoryWorld 捕获这些入口；私有状态由闭包引用跨 tick 保留。
  */
 (() => {
   'use strict';
@@ -15,34 +9,26 @@
   const { ops, countStub } = globalThis.__kkp;
   const gw = globalThis.__kkp.gw;
 
-  // 预置 JSON 函数（官方 systemFunctions.JSON 同款）：Memory 写回/世界解码等
-  // 宿主关键序列化不经玩家可覆写的全局（外部复审 P1 修复面；自审 P2 补 parse）
+  // 世界解码与 Memory 写回使用捕获的 JSON 函数；玩家读取 Memory 时仍使用全局 JSON.parse。
   const __jsonStringify = JSON.stringify;
   const __jsonParse = JSON.parse;
-  // 预置 Object（官方 systemFunctions.Object 同位，runtime.js 头部捕获）：
-  // 宿主路径的对象构造不得经可交换的 globalThis.Object（对抗评审 P1 实证：
-  // 交换 Object 使 nullEnv 产出真原型对象，null-proto 防线整体绕过）
+  // 捕获 Object 与 Array，宿主消息的构造和编码不从玩家全局重新查找构造器。
   const __Object = Object;
   const __Array = Array;
-  // 预置构造器/方法捕获（A3c 装配批，同 __Object 原则）：buildGame/beginTick
-  // 每 tick 在玩家 realm 内执行，上一 tick 的全局/原型交换会让自家装配崩或
-  // 视野失真（官方引擎 bundle 私有 lodash + 闭包捕获内建——我方等价物）
+  // beginTick 与 buildGame 在同一个 V8 上下文执行；捕获所需方法，减少玩家补丁对装配的影响。
   const __Map = Map;
   const __Set = Set;
   const __mapGet = Map.prototype.get;
   const __mapSet = Map.prototype.set;
   const __setAdd = Set.prototype.add;
   const __setHas = Set.prototype.has;
-  // Reflect.apply 加载期捕获（B0 WP4 .call 家族清偿：.call 动态分派走可
-  // 交换的 Function.prototype.call——玩家可换，A6 对抗评审 P2 登记的家族债）
+  // 调用已捕获的原型方法时使用捕获的 Reflect.apply，避免动态查找 Function.prototype.call。
   const __reflectApply = Reflect.apply;
   const __objectEntries = Object.entries;
   const __objectKeys = Object.keys;
   const mathPow = Math.pow;
   const mathFloor = Math.floor;
-  // M2B 扩面 P3：map/notify/cpu 族常量加载期捕获（官方闭包 C 同款）+
-  // halt 宿主通道（00_shared 暴露，ops.op_kk_cpu_halt——官方 _halt 是 ivm
-  // 引用注入 user-vm.js:68-70，同位等价物）
+  // 捕获地图和 CPU 常量，以及主动中断 op 的闭包引用。
   const cpuHalt = globalThis.__kkp.cpuHalt;
   const C_TOP = globalThis.TOP;
   const C_BOTTOM = globalThis.BOTTOM;
@@ -74,29 +60,23 @@
   const C_ERR_TIRED_MKT = globalThis.ERR_TIRED;
   const C_ERR_NOT_ENOUGH_RESOURCES = globalThis.ERR_NOT_ENOUGH_RESOURCES;
 
-  // null 原型信封（官方 runtime.js:214 `outMessage = systemFunctions.Object.create(null)`
-  // 同款）：宿主消息对象不得携带 Object.prototype——继承的 toJSON 会让预置
-  // stringify 在序列化时被原型污染改写载荷（自审 P1：一条 defineProperty 可
-  // 完整重放"伪造 intentsList 造工地"原探针；官方靠 null-proto + ExternalCopy
-  // 出口双重免疫，我方出口是 stringify，null-proto 是等价结构位之一）
+  // 宿主消息使用 null 原型，避免继承 Object.prototype.toJSON 改写顶层结果。
+  // 嵌套数组等对象另由 sanitizedStringify 处理。
   function nullEnv(props) {
     return __Object.assign(__Object.create(null), props);
   }
   gw.nullEnv = nullEnv;
   gw.__Object = __Object;
 
-  // 地形紧凑载荷解码器（M2B 前置批 P3）：注入协议的 terrain 值为
-  // {rev, payload(base64 2500B)}——宿主侧按纪元缓存（地形首玩家 tick 后
-  // 不可变，稳态零解码）。解码器为自包含实现（无 atob 依赖：V8 裸环境
-  // 不保证宿主扩展）；反查表加载期构建一次。与 Rust 侧 world_json.rs
-  // base64_encode 对表（Rust 测试 test_b64_decode 孪生锁定）。
+  // 地形载荷为 {rev,payload}，payload 是 2500 字节的 base64。
+  // 自行解码以避免依赖 atob；相同 rev 的结果在 terrainCache 中复用。
+  // 对应 Rust 编码器：kk-engine 的 world_json.rs。
   const B64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
   const b64Rev = new Uint8Array(128).fill(255);
   for (let i = 0; i < 64; i++) b64Rev[B64_ALPHABET.charCodeAt(i)] = i;
   function b64ToBytes(s) {
     if (s.length % 4 !== 0) throw new Error('bad base64 length: ' + s.length);
-    // 非法字符 fail-fast（评审清偿）：静默产垃圾字节会让宿主 bug 以错误
-    // 地形扩散——抛错即响亮失败（真路径 Rust 恒发合法串，此为防御纵深）
+    // 反查表中没有映射的字符抛错，避免把这类错误载荷静默解码为地形。
     const rev = (ch) => {
       const v = b64Rev[ch & 127];
       if (v === 255) throw new Error('bad base64 char: ' + String.fromCharCode(ch));
@@ -121,25 +101,18 @@
     return out;
   }
   gw.b64ToBytes = b64ToBytes;
-  // 地形解码缓存（跨 tick）：rev 命中复用 Uint8Array。沙箱与分片同寿命
-  // （create_shard 重建沙箱 ⇒ 缓存自然归空），无跨分片陈旧面
+  // 同一沙箱按房间名和 rev 缓存地形字节；rev 不变时不重新解码载荷。
   gw.terrainCache = {};
 
-  // 出口净化序列化（对抗评审 P1/P2 的根本闸）：序列化窗口内摘除两个根原型的
-  // toJSON（含数组——stringify 对数组自身也查 toJSON，pushByName 数组通道同
-  // 面潜伏）——官方出口是 ExternalCopy 结构拷贝，任何玩家 toJSON 都不参与
-  // 宿主消息（runtime.js:296），摘除=官方等价。save/restore 保持玩家 tick 内
-  // 的原型状态不变（玩家的 toJSON 只在自己的序列化场景可见——如 Memory 写回
-  // 官方就调用，systemFunctions.JSON.stringify 是原生语义）。净化期间的异常
-  // （freeze 原型使 delete 抛错等）一律上抛由出口 catch 归 ok:false
+  // 序列化期间临时移除 Object.prototype 与 Array.prototype 的 toJSON。
+  // 此操作不移除对象自己的 toJSON，也不能替代结构拷贝；取值和恢复仍可能执行玩家代码。
+  // 只保存属性值并尽力恢复，不保证原属性描述符不变。冻结属性导致失败时由宿主出口捕获。
   function sanitizedStringify(v) {
     const OP = __Object.prototype;
     const AP = __Array.prototype;
     const so = OP.toJSON;
     const sa = AP.toJSON;
-    // 摘除容错（对抗评审 P1）：configurable:false 的污染使 delete 抛 TypeError
-    // ——降级赋 undefined（不可调用即不参与序列化）；freeze 使两者皆抛时上抛，
-    // 由出口 catch 的字面量信封兜底（绝不得逃逸为硬中断）
+    // 不可配置属性删除失败时尝试赋 undefined；两者都失败则抛错，由宿主出口返回固定 JSON。
     const lift = (proto) => {
       try { delete proto.toJSON; } catch (_) {
         try { proto.toJSON = undefined; } catch (_) { throw new Error('根原型已冻结'); }
@@ -172,23 +145,11 @@
 
   const RAW_MEMORY_LIMIT = 2 * 1024 * 1024;
   let rawMemoryData = '';
-  // 官方 runtime.js:102 rawMemory 是 _start 函数体局部变量、make.js:160 每 tick
-  // 重调——对象每 tick 新建，`_parsed` 生命周期严格单 tick（毒 parse 不跨 tick
-  // 残留；评审 P1 纠偏：此前持久对象导致写回失败后下一 tick 持续报错，非官方
-  // 同形）。字符串本体 rawMemoryData 跨 tick 持久（官方 data.userMemory.data）
+  // 每 tick 新建 RawMemory，使 _parsed 只属于当前 tick；rawMemoryData 字符串跨 tick 保留。
   let RawMemory;
-  // M2B 扩面 P6：segments 全链（官方 runtime.js:122-200 API + runtime.js:250-269
-  // tick 尾回收）。**后端在协调器 PlayerState**（全量 100 槽存储+请求面）——
-  // prelude 只持有本 tick 注入的**活动窗口**（≤10 槽，宿主 setMemoryState 通道
-  // 注入，官方 data.memorySegments 同位）与 foreignSegment（官方
-  // data.foreignMemorySegment）。四请求闭包变量跨 tick 持久——官方闭包其实
-  // **每 tick 重置**（make 侧每 tick 重跑 _start，runtime.js 顶部 let 全部归
-  // undefined），持久化全靠 db（users.activeSegments 等）+「本 tick 调用过才
-  // emit」双要素；我方闭包持久 + 引擎 PlayerState 兜底 = 官方 db 兜底的等价
-  // 落点（评审 2 P2-2 勘正：勿按「官方闭包持久」类推新语义——emit 门形状
-  // 才是权威：active 无条件带出（[] 清空）、public 经 join(',') 空串被
-  // truthy-check 弃（[] no-op），两者形状不同）；tick 尾经 writeBackMemory
-  // 的 segmentsOut 信封带出
+  // 完整 segment 内容由协调器 PlayerState 保存；这里仅持有本 tick 注入的活动窗口。
+  // 请求变量跨 tick 保留，由 buildSegmentsOut 编码；active=[] 表示清空，public=[] 不带出请求。
+  // 来源：上游 driver/lib/runtime/runtime.js 的请求输出及 make.js 的持久状态更新。
   let segmentsWindow = __Object.create(null);
   let foreignSegmentData;
   let activeSegmentsReq = null;
@@ -241,9 +202,7 @@
       },
       segments: { value: segs },
       interShardSegment: { value: '', writable: true },
-      // 官方 runtime.js:129-148（M2B 扩面 P6 真化——原 countStub 桩面摘除；
-      // 官方 RawMemory 无 getActiveSegments/getSegment/setSegment/
-      // setInterShardMemory/getInterShardMemory 面——bot 实测零消费后撤）
+      // segment 请求通过下列四个方法记录，内容由宿主在下一 tick 注入。
       setActiveSegments: {
         value(ids) {
           const parsed = parseSegmentIds(ids);
@@ -285,11 +244,8 @@
         },
       },
     };
-    // 官方 runtime.js:196-199：foreignSegment 属性只在 data.foreignMemorySegment
-    // 存在时出现（null 原型对象 {username,id,data} 的浅拷贝），且在**建对象
-    // 之后普通赋值**挂载——writable/enumerable/configurable 三 true（props
-    // 描述符挂载三 false 与官方描述符面相异，外部复审 P2 清偿）；未请求/
-    // 未授权/未知名 → 整个属性 undefined
+    // foreignSegment 只在宿主提供数据时出现，以普通赋值设置为可写、可枚举、可配置属性。
+    // 来源：上游 driver/lib/runtime/runtime.js 的 foreignMemorySegment 装配。
     const rm = __Object.create(null, props);
     if (foreignSegmentData !== undefined) {
       const fs = __Object.create(null);
@@ -382,18 +338,14 @@
     foreignSegmentData = v === null || v === undefined ? undefined : v;
   }
 
-  /** tick 尾 segments 信封（官方 runtime.js:250-292 + outMessage 四请求字段）：
-   * 窗口写回（校验 ≤10 槽/0-99/字符串/≤100KB——违例按官方 throw 同义走
-   * {ok:false} 整 tick 失败）+ 四请求闭包值**全量带出**（官方每 tick emit
-   * 同形；publicSegments 空列表丢弃——官方 truthy-check 弃空串 quirk，
-   * suite FOREIGN-008 注释实证）。 */
+  /** 校验并生成 segment 写入与请求候选。
+   * 最多 10 槽，id 为 0–99，内容须为字符串且不超过 100×1024 个 UTF-16 码元。
+   * 请求保留最近记录的值；public 空列表不带出，active 空列表表示清空。 */
   let segmentsOutStash;
   function buildSegmentsOut() {
-    // 官方 runtime.js:250-269 惰性序（外部复审 P2-3 清偿）：先 Object.keys
-    // （不触发 getter）+ 数量门，再逐 key **三次读**（typeof/长度/终值）——
-    // getter 调用次数、入库值（末次读）与异常优先级（数量超限先于任何
-    // getter 执行）与官方逐位同形。Object.entries 快照会先读全部值（getter
-    // 提前执行+首值入库+11 个抛错 getter 时 getter 异常先于数量门）——已弃。
+    // 先取键并检查数量，再逐键读取类型、长度和最终内容，总共三次读取值。
+    // 不能用 Object.entries 提前读取全部值，否则会改变 getter 次数与错误优先级。
+    // 来源：上游 driver/lib/runtime/runtime.js 的 memorySegments 写回。
     const segs = RawMemory.segments;
     const segmentKeys = __objectKeys(segs);
     const writes = [];
@@ -417,8 +369,7 @@
     }
     const out = __Object.create(null);
     out.writes = writes;
-    // active 无条件带出（null=本 tick 未调；[] 是合法的清空请求——官方
-    // runtime.js:287 无守卫，[] truthy 经 make 侧 $set 清库；评审 1/2 P1 清偿）
+    // 已记录的 active 请求始终带出，空数组表示清空活动窗口；null 表示尚无记录。
     if (activeSegmentsReq !== null) out.active = activeSegmentsReq;
     // public 的 [] 是 no-op（官方 join(',') 得 '' 被 truthy-check 弃——与
     // active 的 [] 清空是两个不同的官方形状，勿合并）
@@ -436,17 +387,9 @@
   }
 
   function writeBackMemory() {
-    // 官方 runtime.js 执行序（外部复审 P1 清偿）：先 :246-248 序列化 Memory
-    // （stringify 跑玩家 toJSON 回调——回调内的 segments 写与四请求**对本
-    // tick 生效**），再 :250-269 回收校验 segments，请求最后随信封带出。
-    // `_parsed` 门只支配 Memory 保存——官方段回收与请求带出**不受该门支配**
-    // （玩家删 _parsed 仍保存段与请求；我方原 `!parsed` 早退连请求一起丢，
-    // 同族缺陷一并清偿）。任一步失败整轮回退（官方 throw 于 outMessage
-    // 填充中途、段/请求/Memory 俱失——同形）。
-    // 返回 {ok} | {ok:false,error}：screeps-ok 契约（adapter-spec:229）把 tick 末
-    // 序列化失败归为 runPlayer 的 runtime 错误；玩家侧写回错误（不可序列化 /
-    // Memory.toJSON 返回非字符串等）一律走这里，绝不抛出——抛出会被宿主误判
-    // 为硬中断并按整份 tickLimit 计费。
+    // 先序列化 Memory，再读取 segments 与请求；Memory.toJSON 中的 segment 修改因此本 tick 生效。
+    // 删除 _parsed 只跳过 Memory 保存，不能跳过 segment 写回。两阶段都成功后才更新 rawMemoryData。
+    // 普通序列化错误返回 ok:false，避免被 Rust 当作硬中断而按完整预算计费。
     segmentsOutStash = null;
     // ① Memory 序列化（官方 :246-248：读 `RawMemory._parsed`——玩家可见可删，
     // 删掉即跳过保存；写回无 2MB 门（超限只拦 set）；序列化用预置 stringify）
@@ -489,20 +432,11 @@
   // ---------------------------------------------------------------- Game 装配
 
   const { probe, lodash } = globalThis.__kkp;
-  // cjs 钩子必须加载期捕获（__kkp 在 90_host 末段删除——运行期延迟查找是
-  // A3a 坑① 的固定形态）
+  // 加载时捕获 CJS 钩子；运行时 __kkp 已被 Rust 删除，不能再从全局查找。
   const { ensureRequire, setCurrentUser } = globalThis.__kkp.cjs;
 
-  // -------------------------------------------------------------- 2B 批 P1：Game.market 官方形装配
-  // 官方 market.js:29-192 对象字面量（9 方法）+ :194-250 Object.defineProperties
-  // 四 getter（enumerable:true、仅 get——P6 描述符镜头：与字面量方法的
-  // writable/enumerable 三标志相异，dataProps 恰 4 键=SHAPE-GAME-007 锚）。
-  // 数据源=gw.world.market 注入投影（embed 层 per-viewer 合并——P0 评审定音
-  // 「投影态不走 V8 host 通道」）；P1 真 values=transactions（send 链交易）与
-  // calcTransactionCost（纯房名函数）；credits=注入 money_milli÷1000（P2
-  // 种子前恒 0）；orders/getAllOrders 等维持桩（P2 订单簿真化）。getter
-  // 闭包缓存（官方 _incomingTransactions/_outgoingTransactions——每 tick
-  // make 重建=每 tick 首读快照，P6 惰性缓存同款纪律）。
+  // 市场数据来自当前查看者的世界数据，价格从毫 credit 转为 credit。
+  // 订单、历史和交易结果在本 tick 首次查询时复制并缓存；订单动作记录 global 指令。
   function makeMarket() {
     const view = gw.world.market || {};
     const txView = view.transactions || {};
@@ -681,10 +615,8 @@
           if (!t) {
             return C_ERR_NOT_OWNER;
           }
-          // 官方 `terminal.store[energy] < transferCost`（缺键 undefined<x
-          // =false 过门）；我方 `||0` 缺键拒——收紧侧，terminal store 恒含
-          // energy 键（DB 不变量）下不可达，评审 2 F8 登记（Rust 侧
-          // execute_transfer P5 已登记同型）
+          // 此检查把缺失 energy 当作 0；上游 engine/src/game/market.js 的 deal
+          // 直接比较 store.energy，缺失时 undefined < cost 为 false，返回码可能不同。
           if (!t.store || (t.store[C_RESOURCE_ENERGY_NAME] || 0) < transferCost) {
             return C_ERR_NOT_ENOUGH_RESOURCES;
           }
@@ -805,10 +737,8 @@
       } else if (o.type === 'spawn') {
         if (mine) {
           spawns[o.name] = w; // game.js:313-318
-          // 官方 spawn 先经 structureTypes 表进 structures、再进 spawns
-          //（game.js:298-303 structures 收一切本人 OwnedStructure，spawn 是其
-          // 子类 structures.js:854）——两集合同时收录（自审 P3 修复：
-          // 原只进 spawns 漏 structures）
+          // 本人的 spawn 同时属于 Game.spawns 与 Game.structures。
+          // 来源：上游 engine/src/game/game.js 的 spawn 对象注册。
           structures[o.id] = w;
         }
       } else if (o.type === 'flag') flags[o.name] = w;
@@ -821,16 +751,8 @@
         if (mine && o.owner !== undefined) structures[o.id] = w;
       }
     }
-    // 可见房（官方 game.js:218-220 只注册 runtimeData.rooms）：查看者**非工地
-    /// 非旗**自有对象所在房（对齐官方归集跳过表 data.js:113-116——对抗评审
-    // P2：自家工地经 world 破例导出进 objects 后，此处若不排除会把工地所在
-    // 房带回 Game.rooms，"工地不授视野"在房间存在性层被击穿）；工地全集经
-    // Game.constructionSites 收录（官方 data.js:103 + game.js:366-374），两语义正交
-    // 可见房用 Rust 显式传递的集合（GPT 复审 P1-1 清偿：官方 data.js:103-116
-    // 服务端归集 runtimeData.rooms，JS 不从对象字段重算——原 o.owner 推断
-    // 会漏投影键为 user 的墓碑/废墟，仅剩它们时整房从 Game.rooms 消失）。
-    // 键缺失（手写测试世界不经 world_json 生成）回退对象推断——推断分支
-    // 同时认 owner/user 两键（tombstone/ruin 投影是 user）
+    // 优先使用 Rust 注入的 visibleRooms。手写世界未提供它时，从 owner/user 所属对象推断。
+    // 旗帜与工地不授予房间视野；自家工地仍可单独出现在 Game.constructionSites。
     const visibleRooms = new __Set();
     const visibleList = gw.world.visibleRooms;
     if (visibleList !== undefined && visibleList !== null) {
@@ -840,8 +762,8 @@
     } else {
       for (let i = 0; i < worldObjs.length; i++) {
         const o = worldObjs[i];
-        // 归集跳过表（data.js:113-116）：flag/工地不授房视野（M2B P2 清偿：
-        // 旗有 owner 后此回退分支须显式跳过——主路径 Rust 侧过滤同款）
+        // 旗帜与工地不授予房间视野，即使带有本人的 owner。
+        // 来源：上游 driver/lib/runtime/data.js 的房间视野归集。
         const own = o.owner !== undefined ? o.owner : o.user;
         if (own === gw.viewerName && o.type !== 'constructionSite' && o.type !== 'flag') {
           __reflectApply(__setAdd, visibleRooms, [o.room]);
@@ -855,8 +777,7 @@
       if (gw.viewerName !== null && !__reflectApply(__setHas, visibleRooms, [name])) continue;
       rooms[name] = gw.makeRoom(name, roomEntries[i][1]);
     }
-    // 回填对象上的 room 引用：rawById 直查替代数组 .find（O(N²)→O(N)，
-    // 官方 byRoom 索引同构；.find 经可交换原型，装配路径不得经——A3c 装配批）
+    // 从已建立的对象索引回填 room，避免为每个对象重新扫描世界数组。
     for (let i = 0; i < worldObjs.length; i++) {
       const o = worldObjs[i];
       const w = __reflectApply(__mapGet, gw.objectsById, [o.id]);
@@ -890,16 +811,10 @@
         shardLimits: { shard0: cpu.limit },
         // 官方口径：真实耗时 + intents.cpu（虚拟计费，runtime.js:202-204）
         getUsed: () => ops.op_kk_get_used() + (gw.intents ? gw.intents.cpu : 0),
-        // 官方 game.js:153-155：宿主注入（ivm getHeapStatisticsSync——
-        // snake_case 键面，overmind/tooangel 均按此消费）。我方=begin_tick
-        // 时点在宿主控制线程采样的真 V8 统计（deno_core v8_isolate），
-        // 非调用时实时（登记：快照时点差异）；每次调用返回浅拷贝（官方
-        // 每次新建对象）。externally_allocated_size=ivm 外部分配追踪面，
-        // 我方无对应通道恒 0（登记）
+        // 返回 begin_tick 采样的堆统计浅拷贝，不是调用时的实时统计。
+        // externally_allocated_size 未接入外部分配统计，固定为 0。
         getHeapStatistics: () => ({ ...cpu.heap }),
-        // 官方 user-vm.js:68-70：_halt 置 didHaltByUserRequest + isolate
-        // dispose（硬停不可捕获）；我方 terminate 同为硬停（登记：沙箱
-        // 长寿命不销毁，计费按实际用量）
+        // 主动 halt 请求 V8 中断；保留沙箱且本 tick 不计费，写回与指令丢弃。
         halt: cpuHalt,
         setShardLimits: () => 0,
         generatePixel: () => { countStub('Game.cpu.generatePixel'); return -9; },
@@ -922,10 +837,8 @@
       getObjectById(id) {
         return __reflectApply(__mapGet, gw.objectsById, [id]) || null;
       },
-      // 官方 game.js:174-180：全局 notify intent（maxLen 20——每 tick 上限，
-      // runtime.js:78-86 push 通道；满返 ERR_FULL）。落库面=玩家通知记录
-      //（官方 users.notifications；我方 PlayerState.notifications），游戏内
-      // 不可观测（官方同——邮件通知）
+      // 每 tick 最多 20 条通知，满时返回 ERR_FULL。结算后存入 PlayerState 的内存通知记录。
+      // 来源：上游 engine/src/game/game.js 的 notify。
       notify(message, groupInterval) {
         if (gw.intents.push('notify', { message, groupInterval }, 20)) {
           return C_OK;
@@ -933,18 +846,11 @@
         return C_ERR_FULL;
       },
       map: (() => {
-        // M2B 扩面 P6：MapVisual 惰性单例（官方 map.js:16 `let _visual`——
-        // 数据在 gw.addVisual 的 store（每 tick 重置），对象身份仅当 tick 稳定）
+        // 同一 tick 中惰性创建并复用 MapVisual；绘图缓冲区在 beginTick 清空。
         let _mapVisual;
-        // ---------------------------------------------------------------- M2B 扩面 P3：map 族真化
-        // 官方 map.js:11-268 逐方法对照。数据源=投影 rooms 键集（世界全房
-        // 表——不可见房也携 terrain-only 条目；官方 mapGrid gridData 同位）。
-        // 差异登记（compatibility.md）：①出口推导——官方逐房 t/b/l/r 标记
-        //（可单边封闭/closed 房），我方在场房恒四向全开（单机全图无封闭房
-        // 概念；off-world 返 null 对齐 gridItem 缺失）；②novice/respawn/closed
-        // 状态无数据源（getRoomStatus 恒走 normal/closed 两臂，roomStatus
-        // 能力面随后续批）；③getWorldSize 维持 1（登记面）。玩家调用时点的
-        // Math/Number 裸用=官方同形（官方 map.js 同在玩家 realm 裸用）
+        // 地图数据来自世界 rooms 键集，包括只携带地形的不可见房间。
+        // 现有房间推导四向出口；不建模单边封闭、novice 或 respawn 状态。
+        // getRoomStatus 只返回 normal/closed，getWorldSize 固定为 1；距离计算不环绕。
         const worldRooms = gw.world.rooms || {};
         const ROOM_NAME_RE = /^(W|E)\d+(N|S)\d+$/;
         const ROUTE_RE = /(W|E)\d+(N|S)\d+$/;
@@ -966,11 +872,9 @@
           exits[C_RIGHT] = gw.getRoomNameFromXY(xy[0] + 1, xy[1]);
           return exits;
         }
-          // 官方 path-utils.js:5-122 Heap/OpenClosed 逐字移植（评审 1 P2-1
-          // 清偿：自写二叉堆+惰性删除在并列 fcost 的弹出序与官方分岔——
-          // 实测 8/11 tie 案例返回房间序列不同（成本/步数同），玩家经
-          // findRoute 返回值可直接观测；Heap 冒泡 `<=` 即换/pop `>=` 下沉/
-          // update 线性扫 decrease-key 三处序敏感语义逐字保留）
+          // 堆在相等优先级时仍执行上浮或下沉，更新操作线性查找已有节点。
+          // 这些比较符号影响等成本路线的返回顺序，不能仅按最短成本相同就替换。
+          // 来源：上游 engine/src/game/path-utils.js 的 Heap/OpenClosed。
           class OpenClosed {
             constructor(size) {
               this.list = new Uint8Array(size);
@@ -1215,9 +1119,8 @@
           },
           // 官方 map.js:262-264：getRoomTerrain 返回 Room.Terrain 实例
           getRoomTerrain: (roomName) => new (gw.Terrain)(roomName),
-          // 官方 map.js:275-374（M2B 扩面 P6）：visual 惰性 getter——MapVisual
-          // 全套（世界坐标：RoomPosition 强制 + 各点携房名 n/n1/n2；style
-          // 缺省 {}；绘制经 addVisual("map",...)——map 桶 1000KB 上限）
+          // 绘图点要求 RoomPosition，并携带房间名；style 缺省为空对象。
+          // 图形加入 map 缓冲区，限制由 addVisual 检查。
           get visual() {
             if (!_mapVisual) {
               _mapVisual = {};
@@ -1287,8 +1190,7 @@
             return _mapVisual;
           },
           // 官方 map.js:235-258：返回 'wall'|'swamp'|'plain'（完整词，非缩写）；
-          // 越界或无地形数据 → undefined。M0 世界仅在 createShard/setTerrain 提供
-          // 地形时可用（bit 语义同官方 TERRAIN_MASK_*）
+          // 越界或缺少该房间的地形数据时返回 undefined；位码由 TERRAIN_MASK_* 解释。
           getTerrainAt(x, y, roomName) {
             if (x && typeof x === 'object') { y = x.y; roomName = x.roomName; x = x.x; }
             if (x < 0 || x > 49 || y < 0 || y > 49) return undefined;
@@ -1328,13 +1230,10 @@
   // 路径。等价物：gw.currentGame() 返回当前 tick 的 Game 实例（闭包引用）。
   gw.currentGame = () => gameInstance;
 
-  // ---------------------------------------------------------------- intents 收集器
-  // 官方同形（driver/lib/runtime/runtime.js:60-100）：闭包私有对象，玩家拿不到
-  // 引用——伪造/清空/抢跑均不可能（防篡改是约束②的结构性实现）。同名覆盖
-  // 只计一次费（:68）、say/pull 免费（:61）、cancelOrder 退费不查免费表（:95，
-  // 官方 quirk 原样保留）；list 按对象 id → 动作名组织，room/global 级走
-  // 数组通道（M2A-A2 只实装对象级与 room 级，global 随 market 批次）。
-  // null 原型 + 自有键（官方 runtime.js:60 同款）：原型污染不可使计费免费化
+  // 每 tick 重建闭包内的指令清单：对象动作按 id/动作名覆盖，重复设置不重复计费；
+  // room/global 动作按数组元素计费。say/pull 不收费，remove 统一减 0.2。
+  // JS cpu 供 getUsed 显示，Rust 在 end_tick 按最终保留清单重新计算费用。
+  // 来源：上游 driver/lib/runtime/runtime.js 的 intents 与 make.js 的 intentsCount。
   const FREE_INTENT_NAMES = __Object.create(null);
   FREE_INTENT_NAMES.say = true;
   FREE_INTENT_NAMES.pull = true;
@@ -1399,21 +1298,16 @@
   }
 
   globalThis.__kkp.memoryWorld = {
-    /** 宿主私有通道：注入 RawMemory 初值（官方每 tick 从存档恢复，make.js:160
-     *  一带）。写闭包 rawMemoryData——不经 globalThis.RawMemory 查找（玩家
-     *  换掉全局绑定后旧路径会执行伪造 set，A5-core 对抗评审 P3b），下一次
-     *  beginTick 重建 RawMemory 时即生效（_parsed 单 tick 生命周期，无旁路）。 */
+    /** 设置闭包 rawMemoryData，供下一次 beginTick 创建 RawMemory 时使用。
+     * 不调用玩家可替换的全局 RawMemory.set，须在 beginTick 前完成。 */
     setRawMemoryHost(data) {
       rawMemoryData = data;
     },
-    /** 宿主私有通道：rawMemoryData 当前值（endTick 信封的 rawMemory 候选——
-     *  B0-5 统一提交点：协调器在世界结算成功后写入玩家持久状态）。 */
+    /** 读取当前 RawMemory 数据作为待提交候选；真正保存到 PlayerState 由 Rust 协调器完成。 */
     rawMemoryDataHost() {
       return rawMemoryData;
     },
-    /** 宿主私有通道（M2B 扩面 P6）：注入本 tick 的 segments 活动窗口（官方
-     *  data.memorySegments——协调器从 PlayerState 按 active_request 解算；
-     *  beginTick 重建 RawMemory 时拷入）。 */
+    /** 设置活动 segment 窗口，下一次 beginTick 将内容复制到新的 RawMemory.segments。 */
     setSegmentsWindowHost,
     /** 宿主私有通道（P6）：注入本 tick 的 foreignSegment（官方
      *  data.foreignMemorySegment——null 串表示无）。 */
@@ -1426,9 +1320,7 @@
     /** 每 tick 注入世界快照（宿主经私有句柄以字符串参数传入——下方双分支
      *  兼容 string/对象两种形态）并重建 Game。 */
     beginTick(worldJson, cpuMeta) {
-      // 世界解码走预置 parse（官方 runtime.js:207 对宿主数据用
-      // systemFunctions.JSON.parse 同款）：全局 parse 玩家可覆写，可伪造
-      // 整份世界含 user → per-viewer 判定翻转（自审 P2）
+      // 使用捕获的 JSON.parse 解码，避免玩家替换全局函数后改写世界与用户身份。
       gw.world = typeof worldJson === 'string' ? __jsonParse(worldJson) : worldJson;
       // Game.cpu 真值合并（宿主 begin_tick 第二参数——官方 make.js 先算窗口
       // 再装 runtimeData 的等价物；world.cpu 占位基准被此覆盖，键恒权威）
@@ -1440,8 +1332,7 @@
       // 内层对象官方同样不剥——缺失键走原型链的暴露面官方一致，不深剥
       __Object.setPrototypeOf(gw.world, null);
       gw.viewerName = gw.world.user ?? null;
-      // 原始投影索引（官方 runtimeData.roomObjects 等价物）：原型字段 getter/
-      // 方法经 gw.rawData(id) 回查（A3b）——先于 refreshGame（壳装配期即有回查面）
+      // 先建立当前 tick 的原始对象索引，再装配 Game；装配期间的 getter 已会回查该索引。
       gw.rawById = new __Map();
       const tickObjs = gw.world.objects || [];
       for (let i = 0; i < tickObjs.length; i++) {
@@ -1449,15 +1340,10 @@
         if (o && o.id !== undefined) __reflectApply(__mapSet, gw.rawById, [o.id, o]);
       }
       resetIntents(); // 官方每 tick 新建收集器（runtime.js _start 每 tick 执行）
-      // A4-iii per-tick 闭包重置（官方 game 层每 tick 新 make 闭包的等价物）：
-      // activateSafeMode 的 lastActivateSafeMode（B1 拆分后在 structures_spawn.js——同 tick
-      // 后开者覆盖先开者、跨 tick 不残留）与 claimController 的
-      // controllersClaimedInTick（creeps.js:845——GCL 门的同 tick 已 claim 计数）
+      // 重置安全模式最后请求与本 tick 占领计数，避免上一 tick 的状态影响本轮预检。
       gw.lastActivateSafeMode = null;
       gw.controllersClaimedInTick = 0;
-      // M2B 扩面 P2：创建族 per-tick 计数（官方 game 层闭包每 tick 新建的
-      // 等价物——rooms.js 的 createdFlagNames/createdConstructionSites/
-      // createdSpawnNames，:1015/:1037-1043/:1078-1087 消费）
+      // 重置本 tick 的旗帜名、spawn 名和工地计数；世界查询快照尚不包含新建指令。
       gw.createdFlagNames = new __Set();
       gw.createdConstructionSites = 0;
       gw.createdSpawnNames = new __Set();
@@ -1478,8 +1364,7 @@
         get() { return ensureMemory(); },
       });
       gw.terrainByRoom = {};
-      // M2B 扩面 P6：visual 存储每 tick 重置（官方后端每 tick getVisual drain
-      // 同语义——绘制只活在当 tick）
+      // 新 tick 开始时丢弃上一 tick 的绘图缓冲区。
       if (gw.visualReset) gw.visualReset();
       const terrainEntries = __objectEntries(gw.world.rooms || {});
       for (let i = 0; i < terrainEntries.length; i++) {
@@ -1499,10 +1384,8 @@
           gw.terrainByRoom[roomName] = t;
         }
       }
-      // per-tick 重置钩（官方 game/structures.js make 每 tick 重置
-      // createdCreepNames:29 的等价物——spawn 族的同 tick 同名拒名单）
-      // 索引迭代（A4-i 评审 2 P2-1：beginTick 宿主路径的 for...of 经
-      // Array.prototype[Symbol.iterator] 运行期解析——家族修法，同 A4-ii.1）
+      // 调用各 API 注册的 tick 重置函数，例如本 tick 已使用的 creep 名。
+      // 使用索引遍历，避免动态调用玩家可替换的数组迭代器。
       if (gw.perTickReset) {
         const fns = gw.perTickReset;
         for (let i = 0; i < fns.length; i++) fns[i]();

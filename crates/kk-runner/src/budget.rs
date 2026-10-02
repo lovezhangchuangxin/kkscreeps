@@ -1,32 +1,22 @@
-//! CPU 预算桶（bucket）经济——官方 driver `make.js` 的 Rust 化（spike
-//! bucket_sim 实验的移植）。
+//! 管理玩家 CPU 桶余额与每 tick 的执行预算，单位为毫秒。
 //!
-//! 官方规则（make.js:72-83/187/206-212 逐行对照过）：
-//! - 回充并入结算：`bucket += limit − used`，封顶 10000；内部值允许为负
-//!   （不钳到 0，精确 0 也可达）；
-//! - `tickLimit = min(500, limit + bucket)`（结算前口径）；
-//! - 负桶判定在**回充之前** → 整 tick 停跑；停跑的 tick 照常回充，深负桶钳到
-//!   −2×limit 地板（约 2 tick 内恢复）——回充**候选化**（B0-6）：增量不在
-//!   begin_tick 即时落桶，统一提交点并入（见 [`Bucket::skip_recharge`]）。桶充足时的
-//!   普通超时**不跳帧**——官方 skipTicksPenalty 只用于 runtime 进程硬重置，与普通超时无关；
-//! - 硬超时按整份 tickLimit 计费（usedCleanTime≈tickLimit）。
-//!
-//! 当前计时口径为墙钟毫秒（与 bucket_sim 一致）；正式实现换线程 CPU 时钟
-//! （CLOCK_THREAD_CPUTIME_ID 纳秒精度，调研 02 报告实测过），机制不变。
-//! intent 计费项（+0.2×intents）随 M2 沙箱补全。
+//! 正常结算增加 limit，再扣除向上取整的用量，余额可为负且不超过 cap。
+//! 执行前余额为负则停跑；回充由调用方在提交时应用，begin_tick 只制定计划。
+//! 本项目按墙钟时间计量；指令附加费用由 Sandbox 计算后交给本模块。
+//! 来源：上游 driver/lib/runtime/make.js 的 CPU 预算与回充逻辑。
 
-/// 每 tick 回充量（官方默认 CPU limit，单位约等于毫秒）。
+/// 每 tick 默认回充量，单位毫秒。
 pub const DEFAULT_CPU_LIMIT: f64 = 20.0;
-/// 桶容量上限。
+/// 默认桶余额上限，单位毫秒。
 pub const BUCKET_CAP: f64 = 10_000.0;
-/// 单 tick 可用时间硬上限。
+/// 默认单 tick 执行预算上限，单位毫秒。
 pub const MAX_PER_TICK: f64 = 500.0;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TickPlan {
     /// 正常执行，携带本 tick 的 tickLimit（毫秒）。
     Run { tick_limit: f64 },
-    /// 本 tick 跳过玩家代码执行：桶为负（透支），停跑回血（官方 make.js:72-83 语义）。
+    /// 余额为负，本 tick 跳过玩家代码；调用方仍需提交或丢弃回充候选。
     SkipPenalty,
 }
 
@@ -50,14 +40,9 @@ impl Bucket {
         }
     }
 
-    /// 每 tick 开始：给出本 tick 的执行计划。
-    /// 负桶 → 整 tick 停跑（停跑 tick 照常回充、深负钳到 −2×limit 地板——
-    /// 官方语义不变）；回充**候选化**（B0-6 统一提交点）：不在此即时落桶，
-    /// 增量经 [`Self::skip_recharge`] 现算、由沙箱暂存为候选，统一提交点经
-    /// [`Self::apply_recharge`] 并入——世界结算失败/丢弃轮回充随候选丢弃，
-    /// 玩家桶与世界版本同进退（原实现即时落桶绕过提交点，外部评审清偿）。
-    /// 桶非负 → 执行，tickLimit = min(max_per_tick, limit + bucket)——回充在
-    /// settle 时并入，这里不重复加。
+    /// 根据当前余额制定执行计划，不修改余额。
+    /// 余额非负时缓存 min(max_per_tick, limit + bucket) 作为本 tick 预算；
+    /// 余额为负时返回 SkipPenalty，由调用方暂存回充候选。
     pub fn begin_tick(&mut self) -> TickPlan {
         if self.bucket < 0.0 {
             return TickPlan::SkipPenalty;
@@ -68,14 +53,11 @@ impl Bucket {
         }
     }
 
-    /// 停跑轮回充增量（官方公式 make.js:77——**先按原桶严格比较 −2×limit，
-    /// 再选钳地板或加 limit**：`bucket < −2×limit ? −2×limit : bucket+limit`）
-    /// ——纯函数不落桶，提交点并入。勘误（双房批外部复审 P0）：原实现
-    /// `(bucket+limit).max(−2×limit)` 是「先加再钳」，在 (−3×limit,
-    /// −2×limit) 开窗（limit=20 时 −59..−41；−60 边界点两式合流）与官方
-    /// 分歧——原桶已破地板者
-    /// 应钳回 −2×limit，而非加 limit 后恰好悬在地板上；深负与 ≥−2×limit
-    /// 两区两式合流，故既有测试（−2000/−580/−40）未暴露窗口。
+    /// 计算停跑轮的回充增量，不修改余额。
+    /// 先比较原余额：低于 −2×limit 时恢复到 −2×limit，否则增加 limit。
+    /// 不能写成 `(bucket + limit).max(-2.0 * limit)`；limit=20、bucket=−41
+    /// 时那样会得到 −21，而这里应得到 −40。
+    /// 来源：上游 driver/lib/runtime/make.js 的负余额回充分支。
     pub fn skip_recharge(&self) -> f64 {
         let target = if self.bucket < -2.0 * self.limit {
             -2.0 * self.limit
@@ -85,21 +67,19 @@ impl Bucket {
         target - self.bucket
     }
 
-    /// 并入停跑轮回充（统一提交点）。提交时重算增量：staging 与提交之间桶
-    /// 结构上无写入（停跑轮不执行代码、无其他结算路径），重算即 staging 时
-    /// 的原值——防御陈旧候选的口径。
+    /// 按当前余额重新计算并应用停跑回充。
+    /// 调用方应在暂存候选后保持余额和配置不变，直到提交或丢弃候选。
     pub fn apply_recharge(&mut self) {
         self.bucket += self.skip_recharge();
     }
 
-    /// 本 tick 预算，即玩家读到的 `Game.cpu.tickLimit`。
+    /// 最近一次 Run 计划缓存的预算；尚未执行 begin_tick 时为 0，停跑时不更新。
     pub fn tick_limit(&self) -> f64 {
         self.tick_limit
     }
 
-    /// 按官方公式现算下一窗口（`min(maxPerTick, limit + bucket)`，make.js:85-86）。
-    /// 独立 runExpr 通道无 begin_tick，不能读 stale 的 `tick_limit` 字段
-    /// （新沙箱为 0、tick 过的沙箱为上一 tick 残留值）。
+    /// 按当前余额计算 min(max_per_tick, limit + bucket)，不更新缓存。
+    /// 独立表达式执行使用此值，避免读取尚未初始化或属于上一 tick 的预算。
     pub fn next_tick_limit(&self) -> f64 {
         self.max_per_tick.min(self.bucket + self.limit)
     }
@@ -108,14 +88,14 @@ impl Bucket {
         self.bucket
     }
 
-    /// 正常结算：`bucket += limit − ceil(used)`，封顶 cap、可为负、不落 0。
-    /// 官方逐 tick 向上取整——亚毫秒耗时也计 1。
+    /// 提交计费：bucket += limit − ceil(used_ms)，封顶 cap，允许负余额。
+    /// 亚毫秒的正用量也计 1 毫秒。来源：上游 driver/lib/runtime/make.js 的计费逻辑。
     pub fn settle(&mut self, used_ms: f64) {
         self.bucket = (self.bucket + self.limit - used_ms.ceil()).min(self.cap);
     }
 
-    /// 硬中断结算：超时被沙箱内捕获，按整份 tickLimit 计费（与正常结算同路径
-    /// 回充）。桶充足时不跳帧；负桶由 begin_tick 的停跑规则处理。
+    /// 按最近一次 Run 计划的完整预算结算，并增加本 tick 回充。
+    /// 余额非负时下一 tick 仍可运行；余额为负时由 begin_tick 判定停跑。
     pub fn settle_terminated(&mut self) {
         self.bucket = (self.bucket + self.limit - self.tick_limit.ceil()).min(self.cap);
     }
@@ -162,8 +142,7 @@ mod tests {
         );
     }
 
-    /// 外部复审 P0 边界窗（(−3×limit, −2×limit) 开窗 = −59..−41）：官方语义
-    /// 原桶破地板 → 钳回 −2×limit（增量大），而非「先加再钳」的 bucket+limit。
+    /// 验证先比较原余额再选择恢复方式，覆盖 −3×limit 与 −2×limit 之间的余额。
     #[test]
     fn skip_recharge_floor_window_official_values() {
         for (before, after) in [
@@ -198,9 +177,7 @@ mod tests {
 
     #[test]
     fn negative_bucket_skips_until_recharged() {
-        // 官方语义（make.js:72-83）：回充前判定负桶即整 tick 停跑；停跑 tick 照常
-        // 回充（B0-6 候选化：begin_tick 不即时落桶，增量经 skip_recharge/
-        // apply_recharge 在统一提交点并入——官方数值口径不变）
+        // begin_tick 只判定停跑；回充要等 apply_recharge 调用后才改变余额。
         let mut b = Bucket::new(20.0, 10_000.0, 500.0, 0.0);
         assert!(matches!(b.begin_tick(), TickPlan::Run { tick_limit: 20.0 }));
         b.settle(60.0); // 0 + 20 − 60 = −40（结算并入回充）
@@ -232,7 +209,7 @@ mod tests {
 
     #[test]
     fn deep_negative_floors_at_minus_two_limits() {
-        // 官方 make.js:77：深负桶在停跑回充时钳到 −2×limit 地板（约 2 tick 内恢复）
+        // limit=20 时，−580 先恢复到 −40，再经两次停跑回充到 0。
         let mut b = Bucket::new(20.0, 10_000.0, 500.0, 0.0);
         b.settle(600.0); // 0 + 20 − 600 = −580
         assert_eq!(b.bucket(), -580.0);

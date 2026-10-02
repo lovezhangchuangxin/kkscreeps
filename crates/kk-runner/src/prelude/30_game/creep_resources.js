@@ -1,26 +1,17 @@
-/* kk-runner prelude · 30_game 段 4b：Creep 资源族/controller 族/杂项族
- * （对照官方 engine/src/game/creeps.js:404-593/996-1015 与 A4-iii controller 族）。
- * B1 结构治理批自段 4（creep.js）纯搬移；段间共享经 gw 桥——4a 定义点的
- * C 表/countActiveParts/blockedBySafeMode 在此绑定同一对象/函数，调用点
- * 保持裸名（与拆分前逐字节一致）。creep 装配在本段尾部（须在全部真方法
- * 安装后执行）。M2B 扩面 P1：notifyWhenAttacked 转真 + CREEP_METHODS
- * 残余桩表摘除（官方 29 方法至此全真——表内非官方残留 spawn/recycleCreep/
- * renewCreep/moveHead 一并清除，玩家可见面收缩回官方集）。
+/* 定义 Creep 的资源转移、控制器操作和其他动作，复用 creep.js 捕获的常量与检查函数。
+ * 容量优先读取世界数据提供的字段；字段缺失时按对象类型或有效 CARRY 部件推算。
+ * 方法先按玩家 API 的顺序检查参数，再加入指令；实际资源与世界变化由 Rust 结算复核。
  */
 (() => {
   'use strict';
 
   const gw = globalThis.__kkp.gw;
-  // B1 段拆分桥（4a 定义点）
+  // 与 creep.js 使用同一常量表和检查函数。
   const C = gw.__creepC;
   const countActiveParts = gw.countActiveParts;
   const blockedBySafeMode = gw.blockedBySafeMode;
 
-  // ---- controller 族（A4-iii）的 GCL 门读数 ----
-  // 预置 Math.pow 与 Set（官方 calcNeededGcl/定集在引擎闭包内求值——玩家交换
-  // Math/Set 不影响 API 判定，与预置常量 C 表同一原则；A4-iii 评审 2 必修：
-  // 裸 new Set 在玩家 tick 内执行，假 Set 的 size=undefined 可令 GCL 门整条
-  // 短路——虽然结算侧真值复核兜住，判定门路径不得经可交换全局）
+  // 捕获 GCL 计算所需的函数和构造器，避免玩家替换全局后影响 API 预检。
   const mathPow = Math.pow;
   const __Set = Set;
 
@@ -29,21 +20,15 @@
     return C.GCL_MULTIPLY * mathPow(level - 1, C.GCL_POW);
   }
 
-  /** runtimeData.user.gcl（GCL 点数总量）：A3c 起直读 world.gcl（PlayerState
-   *  投影，与 Game.gcl 正变换 game.js:130-163 同源——精确点数）；缺省世界
-   *  （无 gcl 键）按 Game.gcl 逆变换兜底，等价 0 点。结算侧 claimController
-   *  .js:41-43 用 PlayerState 真值复核，本门最坏是说谎的返回码 + 0.2 计费。 */
+  /** 优先读取 world.gcl 的 GCL 总点数；缺失时由 Game.gcl 反算。
+   * 这里只做玩家 API 预检，Rust 结算还会根据 PlayerState 复核占领条件。 */
   function gclPoints() {
     if (typeof gw.world.gcl === 'number') return gw.world.gcl;
     const g = Game.gcl;
     return C.GCL_MULTIPLY * mathPow(g.level - 1, C.GCL_POW) + g.progress;
   }
 
-  /** runtimeData.user.rooms.length 的等价物：查看者已占房数（去重计 controller
-   *  owner 归属房——官方 user.rooms 经 addRoomToUser/removeRoomFromUser 维护的
-   *  正是此集，我方 Engine 每 tick 按世界真值重建的同一定集）。索引迭代 +
-   *  预置 Set：for...of 经 Array.prototype[Symbol.iterator] 运行期解析，同
-   *  realm 玩家可污染迭代器喂空扫描（A4-iii 评审 2——判定门路径的纵深防御）。 */
+  /** 扫描当前世界控制器，按查看者所有权统计已占房间，按房间名去重。 */
   function myClaimedRoomCount() {
     const seen = new __Set();
     const objs = gw.world.objects || [];
@@ -57,23 +42,11 @@
     return seen.size;
   }
 
-  // ---------------------------------------------------------------- 资源族四方法（A4-ii 换真）
-  // 官方 creeps.js:404-593（drop:404 / transfer:428 / withdraw:493 / pickup:566）。
-  // 公共面（本块局部助手，其余方法不消费）：
-  //  · register.* 成员判定的投影等价：官方 register 按 tick 初 roomObjects 全集
-  //    建（game.js:269-374；structures 收录键集 = structureTypes 表 :224-247，
-  //    source/mineral 独立注册不进 structures，spawn 同时进 structures+spawns），
-  //    我方 rawById 同源全集（M2A 无视野过滤的既有口径）；
-  //  · utils.capacityForResource/calcResources（官方 utils.js:615-676）：官方读
-  //    runtimeData 的 storeCapacity/storeCapacityResource 键——投影无此二键，
-  //    按官方落成表折算（build.js:120-296 落成分支 + extensions/tick.js:8-17
-  //    每结算 tick 的归一 + _recalc-body.js:23 的 creep body 折算），公式逐字保留；
-  //  · assertTargetObject（官方 game.js:122-126）：预检拒绝分支里对 plain
-  //    object + 24 位 id 的序列化对象抛错——调用位置与返回码次序逐条对照不动。
+  // 资源方法先检查目标在当前 tick 注册范围内，再计算容量与数量并记录指令。
+  // 容量字段由正式世界数据提供；缺失时使用下面的类型推算。
+  // 拒绝 24 字符 id 的普通序列化对象时按上游 assertTargetObject 抛错，而非返回错误码。
 
-  // 预置 Math/Array.prototype.includes（A4-ii 评审 2 清偿：缺省钳制与白名单
-  // 判定路径不得经可交换全局——交换 Math 可产负缺省绕 amount<0 前置门、劫持
-  // includes 可放宽资源白名单；结算侧真值复核均兜住，此处为判定门纪律）
+  // 捕获数量计算与白名单检查的方法，避免玩家替换全局改变预检结果。
   const __MathMin = Math.min;
   const __MathMax = Math.max;
   const __arrayIncludes = Array.prototype.includes;
@@ -119,14 +92,11 @@
     return proto === gw.__Object.prototype || proto === null;
   }
 
-  /** 官方 creep storeCapacity（_recalc-body.js:23 calcBodyEffectiveness 的无
-   *  boost 形态）：hits>0 的 carry 部件 × CARRY_CAPACITY。投影 body 是
-   *  {type,hits}；手写世界可为字符串（同字段表归一 hits=100）。boost 容量
-   *  加成随 power 批（M1 无 boost 面，两侧一致——执行器 store_capacity 同形）。 */
+  /** 缺少 storeCapacity 时，按存活 CARRY 部件数推算基础容量。
+   * 此后备计算不含 boost；正式世界数据提供容量字段时优先使用该字段。 */
   function carryCapacityOf(raw) {
     let parts = 0;
-    // 索引迭代（A4-ii 评审 2：for...of 经 Array.prototype[Symbol.iterator]
-    // 运行期解析可被同 realm 污染——判定门路径纵深防御）
+    // 按索引读取 body，避免动态调用玩家可替换的数组迭代器。
     const body = raw.body || [];
     for (let i = 0; i < body.length; i++) {
       const part = typeof body[i] === 'string' ? { type: body[i], hits: 100 } : body[i];
@@ -140,8 +110,7 @@
    *  controller 房保持落成值 0——build.js:134）。 */
   function extensionCapacityIn(roomName) {
     let level = null;
-    // 索引迭代（A4-ii 评审 2：A4-iii.1 已修 structures.js 同模式——本处家族
-    // 扫描漏网；迭代器污染可令扫描失明/喂假 level）
+    // 按索引扫描当前房间控制器，避免动态调用玩家可替换的数组迭代器。
     const objs = gw.world.objects || [];
     for (let i = 0; i < objs.length; i++) {
       const o = objs[i];
@@ -252,10 +221,8 @@
     if (this.spawning) return C.ERR_BUSY; // :432-434
     if (amount < 0) return C.ERR_INVALID_ARGS; // :435-437
     if (!__reflectApply(__arrayIncludes, C.RESOURCES_ALL || [], [resourceType])) return C.ERR_INVALID_ARGS; // :438-440
-    // 目标门 :441-452。customObjects M2 无（官方 register.customObjects 恒空表
-    // ⇒ 该合取项恒真，省略）。structEntry 裸解引用保留官方求值形态：目标有
-    // store 时 && 短路不解引用；storeless 的 creep/powerCreep 目标官方在此
-    // TypeError（引擎态不可达——creep 恒有 store，手写世界可达，语义对齐）
+    // 有 store 时短路跳过 structEntry 解引用；无 store 的非结构目标可能在此抛 TypeError。
+    // 不建模 customObjects。来源：上游 engine/src/game/creeps.js 的 transfer 目标检查。
     if (!target || !target.id) {
       assertTargetObject(target);
       return C.ERR_INVALID_TARGET;
@@ -274,8 +241,8 @@
       assertTargetObject(target);
       return C.ERR_INVALID_TARGET;
     }
-    // :455-457：能量转 controller 重定向 upgradeController（A4-iii 换真前经桩
-    // 返回 OK 无 intent——换真后本分支自动闭合）
+    // 向控制器 transfer 能量时转发 upgradeController，复用其权限、部件和距离检查。
+    // 来源：上游 engine/src/game/creeps.js 的 transfer。
     if (resourceType === C.RESOURCE_ENERGY && structEntry
       && structureKindOf(structEntry) === 'controller') {
       return this.upgradeController(target);
@@ -301,10 +268,8 @@
     return C.OK;
   };
 
-  /** Creep.withdraw：官方 creeps.js:493-565——Structure/Tombstone/Ruin + store
-   *  面 → terminal 封锁（M1 无 effects 面）→ 敌 rampart（A5 片 3a 起 lookFor
-   *  真化、门实际生效）→ safeMode → nuker/powerBank → 容量/保有 → 邻接 → actor
-   *  空容量 → 缺省/钳制，逐条对照。 */
+  /** 检查目标类型与 store、terminal 封锁、rampart、安全模式和不可提取结构，
+   * 再检查距离、空容量与资源数量。来源：上游 engine/src/game/creeps.js 的 withdraw。 */
   globalThis.Creep.prototype.withdraw = function withdraw(target, resourceType, amount) {
     if (!this.my) return C.ERR_NOT_OWNER; // :494-496
     if (this.spawning) return C.ERR_BUSY; // :497-499
@@ -325,15 +290,12 @@
       assertTargetObject(target);
       return C.ERR_INVALID_TARGET;
     }
-    // :518-521：terminal 被 PWR_DISRUPT_TERMINAL 封锁拒（M1 投影无 effects 键
-    // 恒放行；power 批接线后生效——effects 形态按 wrapper 面 {power,
-    // ticksRemaining} 读）
+    // 按 effects 中 power/ticksRemaining 判断 terminal 是否被 PWR_DISRUPT_TERMINAL 封锁。
     if (structureKindOf(rawTarget) === 'terminal') {
       const effect = (rawTarget.effects || []).find((e) => e && e.power === C.PWR_DISRUPT_TERMINAL);
       if (effect && effect.ticksRemaining > 0) return C.ERR_INVALID_TARGET;
     }
-    // :525-527：他人 rampart 护格（A5 片 3a 起 lookFor 真化——门实际生效；
-    // isPublic getter 同批补齐（structures.js），执行器侧 Rust 已读原始值）
+    // 敌方非公开 rampart 保护的目标不能提取资源；公开 rampart 不触发此拒绝。
     if (target.my === false
       && target.pos.lookFor('structure').some(
         (i) => i.structureType === C.STRUCTURE_RAMPART && !i.my && !i.isPublic)) {
@@ -386,7 +348,7 @@
     return C.OK;
   };
 
-  // ---------------------------------------------------------------- controller 族（A4-iii 换真）
+  // 控制器操作；预检顺序决定多个条件同时失败时的返回码。
   /** Creep.claimController：官方 creeps.js:839-886。预检序不重排——
    *  my/spawning → GCL 门（:848-852，读 rooms+同 tick 已 claim 计数）→
    *  新手区门（:853-855，N/A——世界无 novice 概念，官方私服 roomInfo.novice=0
@@ -439,18 +401,9 @@
     return C.OK;
   };
 
-  /** Creep.reserveController：官方 creeps.js:961-987。目标 Structure 实例
-   /*  （:970-973）→ 邻接（:974-976）→ controller 类型（:977-979）→ 已占房不可
-   *  预定（:980-982，房主自己也不行）→ 他人预定不可覆盖（:983-985）→ CLAIM
-   *  部件（:986-988）→ shardAccess（:989-991，N/A）→ intents.set。 */
-  /** Creep.upgradeController：官方 creeps.js:922-964 十门全序（A5-lite 接线
-   *  批换真——A4-iii 漏网项，执行器 GPT boost 批已完善两步算法）：
-   *  ①!my→NOT_OWNER ②spawning→BUSY ③无活跃 WORK→NO_BODYPART ④shardAccess
-   *  门（官方 hosted 面，我方不可达——跳过） ⑤!carry.energy→
-   *  NOT_ENOUGH_RESOURCES ⑥target 无效/非 StructureController→
-   *  INVALID_TARGET ⑦upgradeBlocked 相对值>0→INVALID_TARGET（getter 相对
-   *  形态与官方 `upgradeBlocked > 0` 同口径） ⑧!inRangeTo(3)→NOT_IN_RANGE
-   *  ⑨!target.my→NOT_OWNER ⑩!level||!owner→INVALID_TARGET → intent。 */
+
+  /** 依次检查权限、孵化、WORK、能量、控制器类型、升级封锁、3 格距离与目标归属。
+   * 检查顺序会决定多个条件同时失败时的返回码。来源：上游 engine/src/game/creeps.js 的 upgradeController。 */
   globalThis.Creep.prototype.upgradeController = function upgradeController(target) {
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;
@@ -522,11 +475,9 @@
     return C.OK;
   };
 
-  /** 官方 say（creeps.js:826-838）：my/spawning 后 `""+message` 字符串化记
-   *  intent（免费表已含 say——game.js 收集器）。message 截 100 在宿主清洗层
-   *  （system.js userString），actionLog 的截 10 在执行器（say.js:15）。
-   *  isPublic 出口前 !!折叠（A4-iv.1：官方 system.js:8 的 boolean transform
-   *  在 JS 边界——对象自有 toJSON 不应过通道）。 */
+  /** 权限与孵化检查后记录字符串消息及布尔 isPublic，say 不计指令费。
+   * 消息截断分别由 Rust 指令清洗与结算处理；提前转换 isPublic 避免携带对象的 toJSON。
+   * 来源：上游 engine/src/game/creeps.js 的 say 和 intents/system.js 的布尔转换。 */
   globalThis.Creep.prototype.say = function say(message, isPublic) {
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;
@@ -579,8 +530,6 @@
     return C.OK;
   };
 
-  // ---------------------------------------------------------------- creep 装配
-  // A3b：字段/方法全在 Creep.prototype，装配只确认壳进 objectsById（wrapObject
-  // 的 base {id,pos,room} 即官方构造器的 own 定格面）
+  // 字段与方法由 Creep.prototype 提供，装配函数保留 wrapObject 创建的基础对象。
   gw.assemblers.creep = (o, base) => base;
 })();

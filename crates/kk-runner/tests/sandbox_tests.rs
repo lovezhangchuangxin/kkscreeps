@@ -1,8 +1,7 @@
-//! kk-runner 种子运行时的集成测试。
+//! 验证玩家 API、生命周期、预算候选和中断后沙箱复用。
 //!
-//! 所有沙箱场景放在**一个测试函数**里顺序执行：进程级计数器
-//! （live_sandbox_count/lifo_violations 终局断言）在并行测试下会互相污染，
-//! 串行既保证确定性也便于定位（V8 单测试串行不变量沿此惯例保留）。
+//! 所有场景在一个测试函数中顺序执行，最后核对进程级存活计数与销毁顺序计数，
+//! 避免并行场景互相影响。
 
 use std::path::PathBuf;
 
@@ -19,7 +18,7 @@ mod store_spawn_and_viewer;
 #[path = "sandbox_tests/watchdog_and_memory.rs"]
 mod watchdog_and_memory;
 
-// 串行链不变量：顶层唯一 #[test]；子模块 impl 经 glob 进根作用域，链体逐字节不动
+// 子模块提供场景函数，由唯一的顶层测试串行调用；不要将它们改成并行测试。
 use prelude_and_room_forms::*;
 use resource_host_and_nearheap::*;
 use store_spawn_and_viewer::*;
@@ -99,17 +98,14 @@ fn load_sample_bot(sb: &mut Sandbox) -> anyhow::Result<()> {
 
 fn tick(sb: &mut Sandbox, w: &serde_json::Value) -> anyhow::Result<TickOutcome> {
     match sb.begin_tick(w)? {
-        // 调用方语境下都算"没跑成"；停跑轮回充候选同点即时提交（B0-6——
-        // 本 helper 模拟无回退的协调器，与 Run 臂的「立即提交」口径一致）
+        // 此辅助函数模拟即时提交的调用方：停跑时也提交回充。
         TickPlan::SkipPenalty => {
             sb.settle_bill();
             Ok(TickOutcome::Terminated)
         }
         TickPlan::Run { .. } => {
             let mut out = sb.run_loop()?;
-            // end_tick 产出计费候选（B0-5 统一提交点）；本 helper 模拟单机无回退
-            // 的协调器——立即提交（含写回耗时，官方口径）；写回阶段被硬中断 →
-            // Terminated（候选由善后产出，同样提交）
+            // 执行结束后立即提交费用；若写回被中断，同步返回 Terminated。
             let wb = sb.end_tick()?;
             sb.settle_bill();
             if wb.get("terminated").and_then(serde_json::Value::as_bool) == Some(true) {

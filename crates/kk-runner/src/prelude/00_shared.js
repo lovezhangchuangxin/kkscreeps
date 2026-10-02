@@ -1,17 +1,6 @@
-/* kk-runner 桩环境 prelude · 段 0：共享基础设施。
- *
- * 执行顺序（由 sandbox.rs 保证）：
- *   lodash 资产脚本 → 常量平铺脚本 → prelude 00_shared → 10_buffer → 20_cjs
- *   → 30_game/ 十一段（玩家 API 层，对照官方 game/ 文件结构；B1 拆分后
- *     creep/structures 各含资源族/spawn 族子段）→ 90_host
- *   （末段遮蔽 globalThis.Deno 并删除 __kkp）。
- *
- * 各段独立 IIFE、零全局词法绑定；段间共享只经 globalThis.__kkp（私有上下文，
- * 全部 prelude 段执行完由 90_host 删除，玩家代码不可见）。
- *
- * 本段：缺失 API 探测仪表、console、lodash 装配。
- * 桩环境（stub Game）服务于 bot 环境兼容性验收与 screeps-ok 适配器；
- * M2 起被真正的玩家 API 层（共享内存直读 + 惰性加载）取代。
+/* 装配 console、lodash 和 API 访问诊断，建立各 prelude 段共用的临时 __kkp。
+ * 所有段加载后，Rust 捕获宿主函数并删除 __kkp；运行时使用各段已捕获的闭包引用。
+ * 诊断分别记录缺失属性访问与 in 探测，不能据此推断枚举操作的意图。
  */
 (() => {
   'use strict';
@@ -21,40 +10,24 @@
     throw new Error('kk-runner prelude: op 不可达（extension 未注册？）');
   }
 
-  // 捕获内建的加载期快照（A3c 坑①：全局/原型属性玩家可换）。.call 动态分派
-  // 走可交换的 Function.prototype.call——家族式迁 Reflect.apply 加载期捕获
-  //（B0 WP4，A6 对抗评审 P2 登记；structures.js isActive 立的标杆同形态）
+  // 捕获 map 与 Reflect.apply，避免 console 格式化随玩家替换这些方法而改变。
   const __reflectApply = Reflect.apply;
   const __arrayMap = Array.prototype.map;
 
-  // ---------------------------------------------------------------- 缺失 API 探测
-  // M0 环境验收的核心仪表：记录"玩家代码访问了但桩环境没有"的路径（含次数）。
-  // get trap 覆盖属性访问/解构（GetV），has trap 覆盖 `in` 检查——`hasOwnProperty`/
-  // Object.keys 枚举不触发 trap，属仪表的已知边界（枚举无法反推玩家想找什么）。
+  // 记录玩家访问的缺失属性与次数。get 和 in 会触发诊断，Object.keys/hasOwnProperty 不会。
 
   const missing = new Map();
   function reportMissing(path) {
     missing.set(path, (missing.get(path) || 0) + 1);
   }
-  // has-trap 的缺失记录独立成桶：`!('x' in obj)` 式否定能力探测与真实缺失在
-  // trap 内不可区分，全部降为"低置信 has 探测"，不计入缺失清单（验收面只看
-  // get-trap——访问了且拿不到才是确定的缺失）
+  // in 检查可能只是能力探测，单独计入 hasProbes，不计入缺失属性清单。
   const hasProbes = new Map();
-  // 'pos'：官方 RoomPosition 无 pos 属性（RoomObject 才有）——bot 的防御性访问
-  // 在官方也得 undefined，不按缺失计；wrapObject 的对象自带真 pos 不受影响。
-  // '__packedPos'：isEqualTo 快路径（rooms.js:1579）对任意游戏对象探测该 dunder，
-  // 属宿主内部通道探测非缺失（A5 片 2 评审 P3 清偿）；'x'/'y'：官方游戏对象无
-  // 此二属性（RoomObject 只有 pos），look 区域扫描的 obj.x||obj.pos.x 官方逐字
-  // 回退式（rooms.js:728）与玩家防御性访问在官方同为 undefined（片 3a 评审 P3）
+  // 忽略 Promise 检查、序列化和内部坐标探测等常见属性访问，降低诊断噪声。
+  // 这些豁免只影响诊断；不存在的属性仍返回 undefined。
   const PROBE_IGNORE = new Set(['then', 'constructor', '__proto__', 'prototype', 'inspect', 'toJSON', 'nodeType', 'length', 'name', 'pos', '__packedPos', 'x', 'y']);
-  // 类级定向免计（M2B 扩面 P2 清偿）：bot 鸭子类型探测触及「官方亦无此面」
-  // 的成员——语义上双侧 undefined 非 API 缺口，不应进验收 missing 桶。
-  // overmind 两例：旗 .ref 特性探测（官方 flags.js 无 ref 面）；spawn 读
-  // storeCapacity（官方仅 container/storage/terminal/tombstone 有，
-  // structures.js:157/:692/:710——spawn 表无，我方同构）。
-  // 取 basePath 的类前缀（'Flag:harvest:001cef' → 'Flag'；无 ':name' 后缀的
-  // 标签原样），类名不含 ':'。只作用于 get-trap（验收桶）；has-trap 低置信
-  // 桶不参与验收，免计无必要
+  // 仅豁免 Flag.ref 和 StructureSpawn.storeCapacity 的缺失诊断。
+  // 按标签冒号前的类名判断；旗帜名中包含冒号不影响分类。
+  // 来源：上游 engine/src/game/flags.js 与 structures.js 的属性定义。
   const PROBE_IGNORE_SCOPED = new Set(['Flag.ref', 'StructureSpawn.storeCapacity']);
   const classOfLabel = (basePath) => {
     const i = basePath.indexOf(':');
@@ -129,7 +102,6 @@
   // ---------------------------------------------------------------- 段间私有上下文
   // 90_host 执行完删除本属性；各段在自身加载时捕获所需引用进闭包。
   globalThis.__kkp = { ops, probe, reportMissing, PROBE_IGNORE, missing, hasProbes, stubCalls, countStub, lodash: _,
-    // M2B 扩面 P3：Game.cpu.halt 宿主通道（各段加载期捕获引用；官方 _halt
-    // 是 ivm 引用注入 user-vm.js:68-70——同位等价物）
+    // 通过闭包中的 op 请求主动中断；Rust 据此区分 halt 与预算超时。
     cpuHalt: () => ops.op_kk_cpu_halt() };
 })();

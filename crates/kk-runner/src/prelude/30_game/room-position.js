@@ -1,12 +1,7 @@
-/* kk-runner prelude · 30_game 段 2：RoomPosition（对照官方 engine/src/game/rooms.js:1276-1662）。
- *
- * A5-core 片 2 官方同形：构造器只写 own `__packedPos`（非枚举可写，非配置——
- * 官方 :1288-1292），x/y/roomName 是原型 accessor（:1295-1348，setter 带校验抛错）；
- * 非法构造参抛 'Invalid arguments in RoomPosition constructor'（:1280-1287）。
- * 方法挂载走 prototype `=` 赋值（可枚举——官方 wrapFn 赋值形态与 creep.js 先例
- * 同构，for-in 可见性与挂载序同官方）。副作用方法仍为桩；官方无 moveTo（引擎
- * 全文无 RoomPosition.prototype.moveTo，调用方 TypeError 走探测仪表）。
- * 依赖：gw.terrainWordAt（lookFor 的 terrain 分支，30_game/room.js 注册）。
+/* 实现 RoomPosition 的坐标编码、距离与方向计算，以及 Room API 转发。
+ * 位置保存在非枚举的 __packedPos 中，x/y/roomName 由原型访问器解码并校验修改。
+ * findPathTo 返回空路径，findClosestByPath 返回 null，并记录调用；其余方法见下文。
+ * 来源：上游 engine/src/game/rooms.js 的 RoomPosition。
  */
 (() => {
   'use strict';
@@ -16,11 +11,7 @@
   // 仍经此引用读写共享状态——延迟查找 globalThis.__kkp 会失效
   const gw = globalThis.__kkp.gw;
 
-  // 预置捕获（对抗评审 P1 全家桶原则）：构造器在 beginTick 宿主装配路径执行
-  //（wrapObject → new gw.RoomPosition，_registry.js），玩家 tick 内可换的内置
-  //（defineProperty/parseInt/substr/charAt/Error）一旦被下毒，宿主装配每 tick
-  // 断管（硬中断或 pos 静默残缺）——一律走加载期捕获（defineGameObjectProperties
-  // 捕获 __objectKeys/__objectDefineProperties 同批先例）
+  // 构造器参与每 tick 的世界装配；捕获所需内建函数，避免玩家替换它们后破坏下一 tick。
   const __defineProperty = Object.defineProperty;
   const __parseInt = parseInt;
   const __substr = String.prototype.substr;
@@ -269,23 +260,20 @@
     );
   };
 
-  // 桩（真化归 pathfinder 批）：官方 :1396-1427
+  // 此寻路接口仅记录调用并返回空路径，没有避障实现。
   RoomPosition.prototype.findPathTo = function () { countStub('RoomPosition.findPathTo'); return []; };
 
-  // 桩（真化归 pathfinder 批）：官方 :1429-1516
+  // 此接口仅记录调用并返回 null，没有按路径距离选择目标。
   RoomPosition.prototype.findClosestByPath = function () { countStub('RoomPosition.findClosestByPath'); return null; };
 
   // 官方 :1518-1543：数字 type 走 room.find（opts 透传含 filter）、数组 type
   // 直接过滤；不可达房抛错；inRangeTo（Chebyshev）过滤
   RoomPosition.prototype.findInRange = function (type, range, opts) {
-    // 内部取房走 gw.currentGame() 闭包通道（评审 P2 清偿——官方 register.rooms
-    // 玩家不可达，裸 Game 可被玩家换掉断管内部路径）
+    // 通过闭包读取当前 Game，避免玩家替换全局 Game 后改变此查找。
     const room = gw.currentGame().rooms[this.roomName];
     if (!room) throw new __Error('Could not access room ' + this.roomName);
-    // 官方 :1527-1535：_.isNumber 走 room.find、_.isArray 条件式过滤（无
-    // filter 时原样直通——_.filter 恒等谓词会丢 null/undefined 元素，与官方
-    // forEach 形态不同）、其余（字符串/普通对象）objects=[] → 返回 []（评审
-    // P3 清偿 + 复审逐位同形化）
+    // 数字 type 查询 room.find；数组 type 有 filter 时才过滤；其他类型按空列表处理。
+    // 来源：上游 engine/src/game/rooms.js 的 RoomPosition.findInRange。
     let objects = [];
     if (_.isNumber(type)) {
       objects = room.find(type, opts);
@@ -296,10 +284,8 @@
     return objects.filter((i) => this.inRangeTo(i, range));
   };
 
-  // 桩（真化归 pathfinder 批）：官方 :1546-1576
-  // 官方 rooms.js:1546-1576（M2B 扩面 P2 转真）：内部 room.find（复用 tick
-  // 内 findCache）+ getRangeTo 打擂取最近（严格小于才换——并列取首个，
-  // 官方 forEach 序同构）；无目标返 null
+  // 按距离查找最近目标；等距时保留数组中首个目标，无目标返回 null。
+  // 来源：上游 engine/src/game/rooms.js 的 RoomPosition.findClosestByRange。
   RoomPosition.prototype.findClosestByRange = function (type, opts) {
     const room = gw.currentGame().rooms[this.roomName];
     if (!room) {
@@ -343,10 +329,9 @@
     return Math.max(Math.abs(this.x - x), Math.abs(this.y - y));
   };
 
-  // 官方 :1594-1600 逐字：委托 room.lookAt(this)；不可见房抛
-  // 'Could not access room'（M1 lookAt 桩 terrain-only，片 3 真化）
+  // 委托可见房间的 lookAt；房间不可见时抛错。
+  // 来源：上游 engine/src/game/rooms.js 的 RoomPosition.look。
   RoomPosition.prototype.look = function () {
-    // 内部取房走 gw.currentGame() 闭包通道（评审 P2 清偿，同 findInRange）
     const room = gw.currentGame().rooms[this.roomName];
     if (!room) {
       throw new __Error('Could not access room ' + this.roomName);
@@ -354,13 +339,12 @@
     return room.lookAt(this);
   };
 
-  // 官方 :1602-1620：terrain 分支直接读静态地形返回单词数组；其余 look 类型
-  // 走 room.lookForAt（A5 片 3a 真化）——房间缺失在委托前抛错（:1613-1616）
+  // terrain 直接读静态地形，其他类型委托可见房间的 lookForAt；不可见房间抛错。
+  // 来源：上游 engine/src/game/rooms.js 的 RoomPosition.lookFor。
   RoomPosition.prototype.lookFor = function (type) {
     if (type == LOOK_TERRAIN) {
       return [gw.terrainWordAt(this.roomName, this.x, this.y)];
     }
-    // 内部取房走 gw.currentGame() 闭包通道（评审 P2 清偿，同 findInRange）
     const room = gw.currentGame().rooms[this.roomName];
     if (!room) {
       throw new __Error('Could not access room ' + this.roomName);
@@ -368,8 +352,7 @@
     return room.lookForAt(type, this);
   };
 
-  // 桩（真化移出 A5，归 A6/2B-9）：官方 :1622-1628
-  // 官方 rooms.js:1622-1628：转发 room.createFlag（pos 形态）
+  // 转发到当前可见房间的 createFlag，不可见房间抛错。
   RoomPosition.prototype.createFlag = function (name, color, secondaryColor) {
     const room = gw.currentGame().rooms[this.roomName];
     if (!room) {
@@ -378,8 +361,7 @@
     return room.createFlag(this, name, color, secondaryColor);
   };
 
-  // 桩（真化移出 A5，归 A6/2B-9）：官方 :1630-1636
-  // 官方 rooms.js:1630-1636：转发 room.createConstructionSite（坐标形态）
+  // 转发到当前可见房间的 createConstructionSite，不可见房间抛错。
   RoomPosition.prototype.createConstructionSite = function (structureType, name) {
     const room = gw.currentGame().rooms[this.roomName];
     if (!room) {
@@ -388,19 +370,16 @@
     return room.createConstructionSite(this.x, this.y, structureType, name);
   };
 
-  // 官方 rooms.js:1638 同为非可写 defineProperty（清偿复审 P3-N1）
+  // RoomPosition 全局绑定不可写，原型仍可扩展。
   Object.defineProperty(globalThis, 'RoomPosition', {
     enumerable: true, value: RoomPosition,
   });
   // 内部装配面走捕获引用（与拆分前单闭包绑定等价）：玩家覆写 globalThis.RoomPosition
   // 不影响 wrapObject/makeRoom/PathFinder 桩内部的构造
   gw.RoomPosition = RoomPosition;
-  // M2B 扩面 P3：map 族消费（game.js map 段——官方 map.js 经 utils 直调）。
-  // 段序：room-position 先于 game 执行，游戏装配期（buildGame）引用点在
-  // 全部段加载之后，闭包经 gw 桥恒可达
+  // 向后加载的 game.js 提供房间名与世界坐标转换函数。
   gw.roomNameToXY = roomNameToXY;
   gw.getRoomNameFromXY = getRoomNameFromXY;
-  // 共享解析器（A5 片 3a）：Room.lookAt/lookForAt 官方同用 utils.fetchXYArguments
-  //（rooms.js:769/:799）——gw 注册供 room.js 消费（官方 globals 闭包同构）
+  // Room.lookAt/lookForAt 复用此坐标参数解析器。
   gw.fetchXYArguments = fetchXYArguments;
 })();

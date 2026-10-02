@@ -1,43 +1,6 @@
-/* kk-runner prelude · 30_game 段 5a：Structure 族装配（对照官方
- * B1 结构治理批：spawn 族面（Spawning/StructureSpawn 方法族/controller 真方法/
- * 装配/destroy/Tombstone/Ruin）与 per-tick 状态拆至段 5b（structures_spawn.js），
- * 段间共享经 gw 桥（C 表/now/Store），纯搬移零行为。
- * 同迁 5b 的散布定义：deprecated/assertTargetObject/isKnownCreep/
- * calcCreepCost/calcEnergyAvailable（用户全在 5b，闭包自洽零桥）。
- * engine/src/game/structures.js + sources.js + minerals.js + store.js）。
- *
- * A4-i Store 族 + spawn 方法族换真：
- *   · Store 类（官方 store.js:19-101 全语义）：构造挂 truthy 资源键（0 值
- *     不出现）、Proxy 的 RESOURCES_ALL 缺省 0、getCapacity/getUsedCapacity/
- *     getFreeCapacity 三函数族（capacityForResource，utils.js:671-675）、
- *     toString '[store]'；
- *   · StructureSpawn.Spawning（官方 structures.js:1301-1334）：name/needTime/
- *     remainingTime/directions own 定格 + 非 enumerable spawn 引用 +
- *     setDirections/cancel；
- *   · spawnCreep（:1063-1218 全预检序 + 同 tick 幽灵壳）/renewCreep
- *     （:1237-1267）/recycleCreep（:1269-1290）。
- * destroy（A5-lite）/notifyWhenAttacked（A4-iv）已换真；isActive 官方四门
- * 真化、setActive 幽灵 API 摘除（A6——官方无此方法）。
- *
- * A3b 纪律：字段表挂各类原型（官方 defineGameObjectProperties 挂 prototype
- * 的同构）；getter 经 gw.rawData(this.id) 回查当前 tick 投影；方法体官方
- * this.xxx 走 this（getter 通道）、官方 data(this.id).xxx 走 gw.rawData
- * 显式回查；玩家 tick 内执行路径不得经可交换全局（Object/Proxy/Math/
- * 常量面板全部预置捕获——官方 game 层的 C 来自 driver.constants 注入对象，
- * 玩家覆盖全局常量不影响 API 判定，game.js 头部 C = driver.constants 同款）。
- * 依赖：gw.rawData/gw.rawById/gw.objectsById/gw.viewerName/gw.currentGame/
- * gw.world/gw.intents/gw.ensureMemory/gw.RoomPosition/gw.mkStubMethod/
- * gw.defineGameObjectProperties/gw.__Object/gw.perTickReset、__kkp.lodash。
- * A3b 薄壳化：字段表挂各类原型（官方 defineGameObjectProperties 挂 prototype
- * 的同构），实例 own 面只剩 id/pos/room + 少量静态标记。getter 经
- * gw.rawData(this.id) 回查当前 tick 投影（消亡抛错/旧壳读新值）。
- * 值换算口径保持 A1 起的既有语义（None→0 归一等灰区口径不变——A3b 只改
- * 访问机制不改值语义；官方有而现状未暴露的字段（storage.storeCapacity、
- * road.ticksToDecay、reservation/sign 等）随 A4-iii/Store 族批次补）。
- * A4-iv：notifyWhenAttacked 换真（Structure 基类版 + StructureSpawn 覆盖版，
- * 官方 structures.js:89-101/:1220-1233）。
- * 依赖：gw.viewerName、gw.rawData、gw.mkStubMethod、gw.defineGameObjectProperties、
- * gw.intents。
+/* 定义 Store、结构基础字段和 isActive，供结构动作实现复用。
+ * Store 保留有量的资源键，已知资源缺键读 0，容量方法区分通用容量与资源专用容量。
+ * isActive 按控制器等级、所有权和到控制器的距离分配结构名额；等距时按对象扫描顺序决定。
  */
 (() => {
   'use strict';
@@ -52,11 +15,7 @@
   const __Object = gw.__Object;
   const __MathMax = Math.max;
   const __MathAbs = Math.abs;
-  // 数组 push 捕获（isActive 房对象收集经它——官方 _.keys 走私有 lodash，
-  // 不经玩家可交换的 Array.prototype；room.js 装配扫描同款纪律）。经加载期
-  // 捕获的 Reflect.apply 分派：动态 .call 走 Function.prototype.call 原型，
-  // 玩家可换（A6 对抗评审 P2 的家族债之一——本处立 Reflect.apply 标杆，
-  // 其余 .call 面家族式清偿归后续批）
+  // 结构名额检查会在玩家执行时收集对象；捕获 push 与 Reflect.apply，避免受玩家替换影响。
   const __arrayPush = Array.prototype.push;
   const __reflectApply = Reflect.apply;
 
@@ -92,16 +51,14 @@
     BODYPARTS_ALL: freezeConst(globalThis.BODYPARTS_ALL.slice()),
     BODYPART_COST: freezeConst(__Object.assign({}, globalThis.BODYPART_COST)),
     RESOURCES_ALL: freezeConst(globalThis.RESOURCES_ALL.slice()),
-    // 结构动作族（M2B 扩面 P5）：tower 能量门 / link 目标类型判 / 敌方
-    // link 站 rampart 奇行的 lookFor 面
+    // 塔与 link 动作所需的能量、类型及 look 常量。
     TOWER_ENERGY_COST: globalThis.TOWER_ENERGY_COST,
     STRUCTURE_LINK: globalThis.STRUCTURE_LINK,
     STRUCTURE_RAMPART: globalThis.STRUCTURE_RAMPART,
     LOOK_STRUCTURES: globalThis.LOOK_STRUCTURES,
-    // terminal send（2B 批 P1）：能量常量名（RESOURCES_ALL 用上方 A4-i 的
-    // 私有冻结副本——评审 1 P2-2 清偿：重复键会击穿 .slice() 拷贝纪律）
+    // terminal 发送使用捕获的能量名称及私有资源白名单。
     RESOURCE_ENERGY: globalThis.RESOURCE_ENERGY,
-    // controller 族（A4-iii）：activateSafeMode 门③阈值表与第六门扫描
+    // 安全模式检查使用降级阈值表与当前世界控制器状态。
     ERR_NOT_ENOUGH_RESOURCES: globalThis.ERR_NOT_ENOUGH_RESOURCES,
     ERR_TIRED: globalThis.ERR_TIRED,
     ERR_BUSY: globalThis.ERR_BUSY,
@@ -110,14 +67,12 @@
     // isActive 的配额表（官方 utils.js:470 读 driver.constants 同款注入）
     CONTROLLER_STRUCTURES: freezeConst(globalThis.CONTROLLER_STRUCTURES),
   };
-  gw.__structuresC = C; // B1 段拆分桥：5b（structures_spawn.js）复用同一 C 表对象
+  gw.__structuresC = C; // structures_spawn.js 复用此常量表。
 
-  // ---------------------------------------------------------------- Store 类
-  // 官方 store.js:19-101 逐行对照（A4-i 换真——原垫片 getUsedCapacity 只认
-  // energy/getFreeCapacity 恒 0/getCapacity 恒 null）。
+  // Store 的资源缺省值与容量规则参考上游 engine/src/game/store.js 的 Store。
 
-  /** _.sum(object)（官方 store.js 的 _.sum(object.store) / _.sum(storeCapacityResource)）：
-   *  自有可枚举值求和；undefined 归 0。 */
+  /** 累加自有可枚举值；对象缺失时返回 0。
+   * 容量数据应由数值组成，此函数不对每个值进行类型校验或归零。 */
   function sumValues(o) {
     if (!o) return 0;
     let sum = 0;
@@ -135,11 +90,10 @@
     );
   }
 
-  /** 官方 Store 构造器（store.js:19-97）：truthy 资源键挂 own（0 值不出现），
-   *  三函数族 + toString 以非 enumerable 的 value 属性定义，返回包 this 的
-   *  Proxy——RESOURCES_ALL 资源名缺省读 0（而非 undefined），其余未知名
-   *  undefined。每次 .store 访问新建实例（官方 _storeGetter），_sum 惰性缓存
-   *  （defineProperty value，非 writable）是实例内的。 */
+  /** 创建 Store：资源真值作为自有键，已知资源缺键读 0，其他缺键读 undefined。
+   * 方法为非枚举属性；总量 _sum 在实例内首次读取时缓存。
+   * 游戏对象的 store getter 还受 _registry.js 的字段缓存影响，不能假定每次访问都创建新 Store。
+   * 来源：上游 engine/src/game/store.js 的 Store。 */
   function Store(object) {
     const storeData = object.store || {};
     for (const [resourceType, resourceAmount] of __Object.entries(storeData)) {
@@ -230,26 +184,16 @@
     structureType: (o) => o.structureType,
   });
 
-  // ---------------------------------------------------------------- isActive（A6 真化）
-  /** raw 投影的结构类型键：typed 变体两键齐发（spawn 投影 type:'spawn' +
-   *  structureType:'spawn'）、generic 结构 type:'structure' + structureType
-   *  （官方 DB 的 type 键即结构类型，我方投影归一后的等价读取）。距离扫描
-   *  判据须另加 `compareObj.type === object.type`（官方 utils.js:481-484
-   *  原文）——工地 raw 双键齐备（type:'constructionSite' + structureType）
-   *  但 type 永不等于结构类型，被该判定排除、不计入配额；混合形态
-   *  （手写 raw 用 generic 臂冒充 typed spawn）两形态 type 不同亦不互算
-   *  （放置通道 spawn 恒走 typed 臂，混合形态仅手写世界可达）。 */
+  // 按控制器等级和结构距离判断是否启用。
+  /** 取得结构类型；spawn 通常为 type=spawn，其他结构使用 structureType。
+   * 名额扫描还必须比较 raw type，否则工地会被当作现存结构计数。 */
   function structureTypeOf(o) {
     return o.structureType || o.type;
   }
 
-  /** 官方 checkStructureAgainstController（utils.js:456-505）逐字：同房同类型
-   *  同主结构按到 controller 的 Chebyshev 距离计数，配额耗尽即 inactive；等距
-   *  时扫描序在 self 之前的算更近（官方 _.keys(roomObjects) 插入序 = 落库序，
-   *  我方 world.objects 数组序 = 放置序，同构）。roomObjects 是本玩家视野内
-   *  的本房对象数组（官方 register.objectsByRoom 同为玩家 runtimeData 面，
-   *  视野外结构不参与计数）。object === compareObj 引用同一性成立：
-   *  rawData(id) 与 world.objects 元素同源（beginTick 直插同引用）。 */
+  /** 按同房、同类、同主结构到控制器的 Chebyshev 距离分配名额。
+   * 等距对象中，先扫描到的对象占用名额；rawData 与 world.objects 共用对象引用，用引用识别自身。
+   * 来源：上游 engine/src/utils.js 的 checkStructureAgainstController。 */
   function checkStructureAgainstController(object, roomObjects, roomController) {
     // owner-less objects are always active
     if (!object.owner) {
@@ -303,12 +247,8 @@
     return true;
   }
 
-  /** 官方 Structure.isActive（structures.js:108-119）四门：①无主恒 active
-   *  （this.owner 走 OwnedStructure getter 通道——plain Structure 子类
-   *  （road/wall）原型链无 owner getter 得 undefined，官方同形）②配额表外
-   *  类型恒 active ③无房/无 controller 恒 inactive ④checkStructureAgainst
-   *  Controller 距离计数。房对象收集用索引迭代（Symbol.iterator 污染防御，
-   *  activateSafeMode 门④ 同款纪律）。 */
+  /** 无主结构或名额表外类型返回 true；其余需要房间和控制器，再按等级与距离分配名额。
+   * 来源：上游 engine/src/game/structures.js 的 Structure.isActive。 */
   globalThis.Structure.prototype.isActive = function isActive() {
     if (!this.owner) {
       return true;
@@ -349,8 +289,7 @@
     ticksToRegeneration: (o) => o.ticksToRegeneration ?? 0,
   });
 
-  // Mineral（官方 minerals.js:40-46）——world_json 暂不投影 mineral 对象，
-  // 表先挂（防御分支的现状口径）
+  // 矿物字段读取原始数据；缺失字段使用下方默认值。来源：上游 engine/src/game/minerals.js。
   gw.defineGameObjectProperties(globalThis.Mineral.prototype, gw.rawData, {
     mineralType: (o) => o.mineralType || 'XUH2O',
     mineralAmount: (o) => o.mineralAmount ?? 0,
@@ -358,18 +297,13 @@
     ticksToRegeneration: (o) => o.ticksToRegeneration ?? 0,
   });
 
-  // Controller（官方 structures.js:139-174）。A4-iii 投影清偿：reservation/
-  // sign/upgradeBlocked/safeModeCooldown 四 getter 换官方真形态（绝对 tick
-  // 挂钟 → `> time ? 差值 : undefined`；{user,endTime} → {username,
-  // ticksToEnd}——官方 :176-179/:185/:187-197）。ticksToDowngrade/safeMode
-  // 维持既有 None→0 口径（灰区表登记，A3b 只换访问机制）——注意
-  // activateSafeMode 门③ 读 this.ticksToDowngrade 时无钟房 0 < 阈值为真
-  // （官方 undefined < 阈值为假——API 返回码差异，登记报告；终态一致：结算
-  // 侧 B2 对无钟房同拒）。
+  // 控制器的绝对 tick 字段转换为剩余 tick；结束的 cooldown/upgradeBlocked 为 undefined。
+  // 本实现缺少 downgradeTime 时 ticksToDowngrade 为 0，safeMode 未生效时也为 0。
+  // 这与上游缺省 undefined 不完全相同，activateSafeMode 的预检返回码可能不同。
   gw.defineGameObjectProperties(globalThis.StructureController.prototype, gw.rawData, {
     level: (o) => o.level || 0,
-    // 官方 structures.js:180-181：RCL 0 的 progress/progressTotal 与 RCL 8 的
-    // progressTotal 均 undefined（GPT 复审 P2-4 清偿——`|| 0` 折叠了缺省态）
+    // RCL 0 不暴露 progress，RCL 0 或 8 不暴露 progressTotal；不要将 undefined 改成 0。
+    // 来源：上游 engine/src/game/structures.js 的 StructureController 属性定义。
     progress: (o) => (o.level > 0 ? o.progress : undefined),
     progressTotal: (o) => (o.level > 0 && o.level < 8 ? o.progressTotal : undefined),
     ticksToDowngrade: (o) => (o.downgradeTime != null ? o.downgradeTime - now() : 0),
@@ -387,10 +321,8 @@
           username: o.sign.user,
           text: o.sign.text,
           time: o.sign.time,
-          // 官方第四字段 datetime: new Date(o.sign.datetime)（structures.js:192）
-          // ——签名结算时落一次墙钟（signController.js:23，GPT 复审灰区纠错
-          // 清偿：从持久值构造，同一签名的两次读取不再漂移；缺省回落当前
-          // 墙钟是手写世界无 datetime 的防御，官方不可达）
+          // 从签名时保存的墙钟构造 Date，重复读取同一签名的时间不漂移。
+          // 手写世界缺 datetime 时回退到当前墙钟。来源：上游 engine/src/game/structures.js 的 sign getter。
           datetime: o.sign.datetime != null ? new Date(o.sign.datetime) : new Date(),
         }
       : undefined),
@@ -404,6 +336,6 @@
   function now() {
     return gw.world.time;
   }
-  gw.now = now; // B1 段拆分桥：5b 复用同一函数（controller 真方法的 safeMode 门读数）
+  gw.now = now; // structures_spawn.js 的 controller 方法复用此时间读取函数。
 
 })();

@@ -1,21 +1,11 @@
-//! Sandbox：一个玩家的 deno_core 沙箱宿主（M0 种子实现）。
+//! 持有一个玩家的 V8 实例，装配玩家 API，并生成指令、Memory 和计费候选。
 //!
-//! 组装 spike 验证过的全部机制：
-//! - 内存双闸门：`heap_limits` 硬上限 + `near_heap_limit` 回调内 terminate。
-//!   只设上限不设回调，超限会 FatalOOM 直接 abort 整个进程（spike 阴性对照
-//!   验证过，不是猜测）；
-//! - 看门狗：常驻线程 + 代际守卫，预算硬超时强制掐断；实例跨 tick 复用；
-//! - 每次执行前 `cancel_terminate_execution()` 清遗留终止标志（双保险）；
-//! - tokio current-thread 上下文守卫（V8 延迟任务需要）。
+//! 看门狗按墙钟期限请求中断；近堆上限回调临时扩大堆上限以完成当前分配，
+//! 同时请求中断，随后恢复配置上限。此限制针对 V8 堆，不覆盖所有堆外或宿主分配。
 //!
-//! ## LIFO 销毁纪律（每线程，ADR-013 纠偏）
-//! rusty_v8 的 isolate Enter/Exit 是**线程局部**栈：同一线程内叠多个实例须按
-//! 创建逆序销毁（原 spike 实测正序 drop 直接 abort），**跨线程没有全局逆序
-//! 要求**（探针实证：两线程各持实例乱序销毁，V8 不崩、存活实例正常执行）。
-//! 本类型用线程局部序栈在 Drop 时检测违规并告警（测试断言违规数为零）；正确
-//! 顺序由字段声明序结构性保证：`watchdog`（Drop 先 join 线程）→ `runtime`
-//! → `tokio`。批量顺序由 PlayerThreads 管理（`shutdown_all` 默认仍按创建
-//! 逆序，稳妥；`evict_idle` 允许任意实例回收）。
+//! 同一线程内的多个 V8 实例须按创建逆序销毁；本类型只检测并告警，
+//! 调用方仍需保证顺序。字段顺序保证先回收看门狗，再销毁 runtime 和 tokio。
+//! 每玩家一个线程的 PlayerThreads 可以回收任意玩家，无需跨线程逆序。
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -32,13 +22,9 @@ use serde_json::Value;
 
 const LODASH_SRC: &str = include_str!("../assets/lodash-3.10.1.js");
 const CONSTANTS_JSON: &str = include_str!("../assets/constants.json");
-/// prelude 按职责分段（共享仪表/Buffer/CJS/玩家 API 层/宿主通道），各段独立
-/// IIFE、经 globalThis.__kkp 共享私有状态（末段负责删除）。30_game/ 十一段
-/// 对照官方 engine/src/game 文件结构（A3a 零行为拆分 + B1 结构治理批
-/// creep/structures 各拆资源族/spawn 族两段）：注册表与装配序 →
-/// RoomPosition → Room 面 → Creep → Creep 资源族 → Structure 族 → Structure
-/// spawn 族 → 工地旗帜 → Resource → PathFinder 桩 → Game 装配与 tick
-/// 生命周期；跨段状态经 __kkp.gw 容器。
+/// 按依赖顺序装配共享工具、模块加载、玩家 API 与宿主函数。
+/// 各段通过临时全局 __kkp 共享闭包状态；Rust 捕获宿主函数句柄后删除 __kkp。
+/// 因此 90_host 只能注册句柄，不能提前删除共享容器。
 const PRELUDE_SEGMENTS: [(&str, &str); 15] = [
     ("kk-prelude-00-shared", include_str!("prelude/00_shared.js")),
     ("kk-prelude-10-buffer", include_str!("prelude/10_buffer.js")),
@@ -90,7 +76,7 @@ const PRELUDE_SEGMENTS: [(&str, &str); 15] = [
     ("kk-prelude-90-host", include_str!("prelude/90_host.js")),
 ];
 
-/// 官方配额：单实例堆上限约 256MB。
+/// 默认 V8 堆上限，单位字节；不等于整个玩家线程的内存上限。
 const DEFAULT_HEAP_LIMIT: usize = 256 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
@@ -119,8 +105,8 @@ impl Default for SandboxConfig {
 pub enum TickOutcome {
     /// 正常执行完毕（玩家逻辑自身的错误由 runLoop 结果 JSON 携带，不算这里）。
     Completed { used_ms: f64 },
-    /// 看门狗/内存闸门强制掐断（已按整份 tickLimit 计费；官方语义下桶充足不跳帧，
-    /// 桶被扣成负数时由下一 begin_tick 的停跑规则处理）。
+    /// 执行被中断，包括超时、近堆上限和主动 halt。
+    /// 此结果本身不提交费用；超时和近堆上限生成完整预算费用，halt 不计费。
     Terminated,
 }
 
@@ -129,9 +115,8 @@ pub enum TickOutcome {
 static SEQ: AtomicU64 = AtomicU64::new(0);
 static LIVE_COUNT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static LIFO_VIOLATIONS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-// 本线程存活实例的创建序栈。ADR-013：rusty_v8 的 Enter/Exit 是线程局部栈，
-// isolate 销毁的逆序约束只在本线程内成立——跨线程乱序销毁合法，不做全局
-// 断言（原全局注册栈会把"逐出前面空闲玩家"误报为违规）。
+// 本线程存活实例的创建顺序，用于检测逆序销毁要求。
+// 其他线程的实例不属于这个栈；跨线程销毁顺序不影响本线程的 Enter/Exit。
 thread_local! {
     static THREAD_ORDER: std::cell::RefCell<Vec<u64>> = const { std::cell::RefCell::new(Vec::new()) };
 }
@@ -154,35 +139,27 @@ pub struct Sandbox {
     watchdog: Watchdog,
     runtime: JsRuntime,
     tokio: tokio::runtime::Runtime,
-    /// 宿主通道私有句柄（生命周期经此驱动，玩家全局零宿主通道——B0 WP4）。
+    /// Rust 捕获的宿主函数句柄，不通过玩家全局名称查找生命周期入口。
     host: HostFns,
     seq: u64,
     budget: Bucket,
     shared: SharedRef,
     /// 配置的堆硬上限（near-heap 触发放大后据此恢复）。
     heap_limit: usize,
-    /// 本 tick 是否已硬中断（after_termination 已按整份结算）——end_tick 据此
-    /// 跳过写回（官方：超时打断整个 run 含序列化）。注意与"正常结算完毕"区分：
-    /// 正常 end_tick 之后此标志保持 false，tick 外的 run_expr+end_tick 仍可写回。
+    /// 本 tick 是否已中断；end_tick 据此跳过写回。
+    /// 正常 end_tick 不设置此标志，费用提交与此标志分别管理。
     terminated_this_tick: bool,
     /// 上一次 runLoop 捕获的玩家逻辑错误（run_loop 写入，take_last_loop_error 取走）。
     last_loop_error: Option<String>,
-    /// endTick 带出的本 tick intentsList（官方 run 闭包尾 outMessage.intentsList，
-    /// runtime.js:274-296 的对应物）。硬中断 tick 置 None（官方 isolate 级故障
-    /// 整轮丢弃，make.js:279-294）；EmbedEngine 经 take_intents 消费后转
-    /// IntentBatch 进结算。
+    /// 等待 take_intents 取走的本 tick 指令；中断或写回失败时丢弃。
+    /// 协调器将其转换为 IntentBatch，再交给世界结算。
     pending_intents: Option<Value>,
-    /// 本 tick 的 CPU 计费**候选**（B0-5 统一提交点：不再即时落桶——end_tick
-    /// Ok 路径写 `used+0.2×intents`，硬中断善后写整份 tickLimit）。协调器在
-    /// 世界结算成功后经 settle_bill 提交、失败经 discard_bill 丢弃——消灭
-    /// 「世界回退但玩家桶已扣」的部分提交泄漏（ADR-013 复现①的 CPU 面）。
-    /// 不变量：begin_tick 开头必无未处置候选（有则丢弃——防御）。
+    /// 本 tick 待提交的费用，单位毫秒：正常结束为墙钟用量加 0.2×指令数，
+    /// 超时或近堆上限中断为完整预算。世界结算成功后 settle_bill，失败时 discard_bill。
+    /// 新的 begin_tick 会清除尚未处理的候选，调用方须先处理上一轮结果。
     pending_bill: Option<f64>,
-    /// 停跑轮回充候选（B0-6 统一提交点）：begin_tick 负桶分支的回充增量暂存
-    /// 于此、不即时落桶——原实现即时落桶绕过提交点，世界结算失败/丢弃轮玩家
-    /// 桶仍前进（外部评审清偿）。提交点随 settle_bill 并入
-    /// （budget.apply_recharge）、discard_bill 一并丢弃。不变量与 pending_bill
-    /// 同规：begin_tick 开头必无未处置候选（有则丢弃——防御）。
+    /// 负余额停跑时暂存的回充增量，与计费候选互斥。
+    /// settle_bill 应用回充，discard_bill 丢弃；新的 begin_tick 清除旧候选。
     pending_recharge: Option<f64>,
 }
 
@@ -205,16 +182,13 @@ impl Sandbox {
             let _guard = tokio.enter();
             runtime.op_state().borrow_mut().put(ModuleTable::new());
             runtime.op_state().borrow_mut().put(shared.clone());
-            // Game.cpu.halt 的 terminate 通道（M2B P3）：op 内同线程经句柄
-            // 投递终止标志（与看门狗/near-heap 同一 IsolateHandle 形态）
+            // Game.cpu.halt 在玩家线程内设置 V8 终止标志；后续根据 halt_requested 选择计费方式。
             runtime
                 .op_state()
                 .borrow_mut()
                 .put(runtime.v8_isolate().thread_safe_handle());
 
-            // 注入顺序：lodash（结果放 __kkLodash）→ 常量平铺 → prelude 各段
-            //（末段把宿主通道注册进 __kkp.host 而不上全局）→ 捕获私有句柄 →
-            // 删除 __kkp（此后玩家全局零宿主通道与段间私有上下文）。
+            // 先加载 lodash 和常量，再装配 prelude、捕获宿主函数句柄，最后删除临时 __kkp。
             runtime.execute_script("kk-lodash", lodash_script())?;
             runtime.execute_script("kk-constants", constants_script())?;
             for (name, src) in PRELUDE_SEGMENTS {
@@ -249,20 +223,15 @@ impl Sandbox {
             pending_recharge: None,
         };
         sb.install_near_heap_callback();
-        // 记账（线程序栈压栈 + 存活计数）必须在所有可失败步骤之后、返回前——
-        // 更早压栈时 new 的 `?` 早退会留下"已记账但无实例"的幻影条目，同线程
-        // 后续 drop 会假报违规
+        // 所有可能失败的初始化都完成后再登记实例，避免 ? 早退留下没有实例的计数和栈记录。
         THREAD_ORDER.with(|s| s.borrow_mut().push(seq));
         LIVE_COUNT.fetch_add(1, Ordering::SeqCst);
         Ok(sb)
     }
 
-    /// 内存双闸门之二：接近堆上限时回调内 terminate。
-    ///
-    /// 回调返回值是"临时放大的新上限"——让当前这次分配先完成，中断在随后的
-    /// 检查点展开（deno_core 官方测试同款模式，spike 实验 C 验证）。注意 V8
-    /// 会把返回值**持久写为新堆上限**，不恢复的话"触发 OOM → 上限已放大 →
-    /// 再触发"会指数级架空内存配置——恢复见 restore_heap_limit。
+    /// 接近 V8 堆上限时请求中断，并返回临时扩大后的上限。
+    /// V8 会保留新上限，必须在执行结束后通过 restore_heap_limit 恢复，
+    /// 否则连续触发会不断放大配置上限。回调不覆盖 TypedArray 等全部堆外分配。
     fn install_near_heap_callback(&mut self) {
         let handle = self.runtime.v8_isolate().thread_safe_handle();
         let shared = self.shared.clone();
@@ -274,9 +243,9 @@ impl Sandbox {
             });
     }
 
-    /// 恢复堆硬上限（仅在 near-heap 触发过后执行）：remove 会顺带把上限恢复为
-    /// 参数值，re-add 重新武装回调（deno_core 官方测试同款 remove+re-add 模式）。
-    /// 诊断标志保留到下一 begin_tick 复位（"本 tick 是否触发过"语义，测试可观察）。
+    /// 近堆回调触发后，以配置值请求恢复上限并重新注册回调。
+    /// V8 生效上限还受当前堆状态影响，不保证恰好等于配置值。
+    /// 诊断标志保留至下一次 begin_tick，便于判断本轮是否触发过。
     fn restore_heap_limit(&mut self) {
         if self.shared.near_heap_fired.load(Ordering::Relaxed) {
             self.runtime
@@ -285,13 +254,14 @@ impl Sandbox {
         }
     }
 
-    /// 注册（或替换）玩家模块表；替换时清空 require 缓存。
+    /// 替换 Rust 模块表，并重建 JavaScript require 缓存。
+    /// 缓存重置失败也已替换模块表，此操作不提供失败回滚。
     pub fn set_modules(&mut self, table: ModuleTable) -> anyhow::Result<()> {
         {
             let state = self.runtime.op_state();
             state.borrow_mut().put(table);
         }
-        // 失败也清掉可能遗留的终止标志，沙箱不留"中毒"状态（tick 外路径不结算预算）
+        // 失败时清除 V8 终止标志并恢复堆上限；此调用不生成计费候选。
         call_host_unit(
             &self.tokio,
             &mut self.runtime,
@@ -302,13 +272,10 @@ impl Sandbox {
         Ok(())
     }
 
-    /// 注入玩家的 RawMemory 初值（官方：每 tick 从存档恢复）。私有句柄通道：
-    /// 写 prelude 闭包 rawMemoryData，不经 globalThis.RawMemory 查找（玩家
-    /// 换掉全局绑定后旧路径会执行伪造 set——A5-core 对抗评审 P3b，随本收口根治）。
+    /// 设置下一 tick 的 RawMemory 初值，通过捕获的宿主函数写入闭包状态。
     ///
-    /// 时序约束：只准在 **begin_tick 之前**（tick 边界）调用——mid-tick 注入
-    /// 不失效已物化的 `RawMemory._parsed`，随后的写回会用陈旧 `_parsed` 覆写
-    /// 注入数据（官方 driver 同样只 pre-tick 注入，make.js:160）。
+    /// 调用方须在 begin_tick 前注入；此处不检查时序。tick 中途注入不会清除
+    /// 已解析的 RawMemory._parsed，后续写回可能用旧解析值覆盖新数据。
     pub fn set_raw_memory(&mut self, data: &str) -> anyhow::Result<()> {
         call_host_unit(
             &self.tokio,
@@ -320,9 +287,8 @@ impl Sandbox {
         Ok(())
     }
 
-    /// 注入玩家记忆全量态（M2B 扩面 P6）：RawMemory 初值 + segments 活动窗口
-    /// （[[id,str],...] JSON）+ foreignSegment（'null' 表示无）。与
-    /// set_raw_memory 同时序约束（仅 begin_tick 之前的 tick 边界）。
+    /// 注入 RawMemory、活动 segment 窗口（`[[id,str],...]` JSON）和 foreignSegment。
+    /// foreignSegment 的 null 字符串表示无数据；须在 begin_tick 前调用。
     pub fn set_memory_state(
         &mut self,
         raw: &str,
@@ -351,18 +317,14 @@ impl Sandbox {
         self.budget.tick_limit()
     }
 
-    /// tick 开始：预算结算 + 世界注入。返回 SkipPenalty 时本 tick 不执行玩家代码。
+    /// 制定预算计划并注入世界数据，不提交桶余额。
+    /// SkipPenalty 表示负余额停跑；回充已暂存，仍需 settle_bill 或 discard_bill。
     pub fn begin_tick(&mut self, world: &serde_json::Value) -> anyhow::Result<TickPlan> {
-        // 统一提交点不变量（B0-5）：上一轮的计费候选必须已被协调器处置
-        //（settle_bill/discard_bill）——残留说明调用方漏处置，丢弃并继续
-        //（停跑回充候选同规，B0-6）
+        // 调用方应已提交或丢弃上一轮候选；清除残留，避免它混入当前 tick。
         self.pending_bill = None;
         self.pending_recharge = None;
         match self.budget.begin_tick() {
-            // 停跑 tick 不执行任何代码——stale intents 一并清置（不变量：
-            // 任何 tick 边界不留上一轮未消费的 intents；该分支报告 intents
-            // 恒 Null）。回充候选化（B0-6）：增量暂存、统一提交点并入——
-            // 不即时落桶（世界结算失败/丢弃轮玩家桶与世界版本同回退）
+            // 停跑分支不注入世界或执行玩家代码；清除上一轮指令，只暂存本轮回充。
             TickPlan::SkipPenalty => {
                 self.pending_intents = None;
                 self.pending_recharge = Some(self.budget.skip_recharge());
@@ -374,17 +336,11 @@ impl Sandbox {
                 self.terminated_this_tick = false;
                 self.pending_intents = None;
                 self.runtime.v8_isolate().cancel_terminate_execution();
-                // Game.cpu 真值（官方 make.js:85-86 先算窗口再装 runtimeData：
-                // 玩家看到本 tick 窗口与 tick 初桶值；预算真值在沙箱内）。经
-                // beginTick 第二参数在 JS 侧合并（world_json.rs 的 cpu 键是占位
-                // 基准，被此真值覆盖）——避免每 tick 深拷贝整个世界（含每房
-                // 2500 元素地形数组）只为覆写三键（评审 3 P3-2 清偿）
+                // 将沙箱预算作为独立参数交给 beginTick，替换世界数据中的 CPU 占位值，
+                // 避免为了更新 CPU 字段克隆整个世界数据。
                 let cpu_json = {
-                    // Game.cpu.getHeapStatistics（M2B P3）：begin_tick 时点在
-                    // 控制线程采样真 V8 统计（官方 ivm getHeapStatisticsSync
-                    // 同位——调用时实时 vs 快照时点差异登记）；键面 snake_case
-                    //（overmind/tooangel 消费形）；externally_allocated_size
-                    // 是 ivm 外部分配追踪面，我方无通道恒 0（登记）
+                    // 在 begin_tick 采样 V8 堆统计，字段名使用 snake_case。
+                    // JS getHeapStatistics 返回此快照；externally_allocated_size 无对应统计，固定为 0。
                     let hs = self.runtime.v8_isolate().get_heap_statistics();
                     serde_json::json!({
                         "limit": self.budget.limit,
@@ -405,23 +361,19 @@ impl Sandbox {
                     })
                     .to_string()
                 };
-                // world 序列化在 arm 之前完成：arm 之后的任何失败路径都必须 disarm
-                // （序列化 Value 理论不可达失败，防御性保证不变量成立）
+                // 先序列化世界数据再启动看门狗；启动后的失败路径必须解除期限。
                 let world_json = serde_json::to_string(world)?;
                 let deadline = Instant::now()
                     + Duration::from_millis(self.budget.tick_limit().max(1.0) as u64);
                 self.watchdog.arm(deadline);
                 *self.shared.tick_start.lock().unwrap() = Some(Instant::now());
                 self.shared.reset_console_gate();
-                // 先恢复（幂等）再清标志：tick-外通道（drain/set_*/runExpr 裸调）
-                // 触发 near-heap 放大后标志会残留到此处——直接 store(false) 会把
-                // 放大静默遗忘成永久 512MB ceiling（B0-3 对抗评审 P2-1 清偿）
+                // 先恢复堆上限再清诊断标志，否则会丢失近堆回调曾扩大上限的信息。
                 self.restore_heap_limit();
                 self.shared.near_heap_fired.store(false, Ordering::Relaxed);
                 self.shared.halt_requested.store(false, Ordering::Relaxed);
-                // beginTick 世界注入也在武装窗口内，硬中断（看门狗/near-heap）同样可能
-                // 打在它身上——失败必须走统一的硬中断善后，不留"中毒"状态。
-                // 参数经私有句柄以 v8 值传递（非脚本拼接，无转义面）
+                // 世界注入也受本 tick 期限约束；失败时生成完整预算费用并清理执行状态。
+                // 参数通过 V8 字符串值传递，不拼接进 JavaScript 源码。
                 call_host_unit(
                     &self.tokio,
                     &mut self.runtime,
@@ -453,10 +405,8 @@ impl Sandbox {
                 Ok(TickOutcome::Completed { used_ms: 0.0 })
             }
             Err(_) => {
-                // execute_script 失败且非玩家逻辑错误（runLoop 内部已 try/catch）≈ 硬中断。
-                // Game.cpu.halt（玩家主动停跑）分叉：官方 make.js:280-284
-                // 抛出 CPU halted 跳过 :194-212 整个计费块=零计费（评审 1
-                // P1-3 实证——原「计费不可直读」登记失实，勘正）
+                // runLoop 内部捕获普通玩家异常；逃出宿主调用的错误按中断处理。
+                // halt_requested 区分主动 halt，此情况不生成费用。
                 if self.shared.halt_requested.load(Ordering::Acquire) {
                     self.after_halt();
                 } else {
@@ -467,14 +417,10 @@ impl Sandbox {
         }
     }
 
-    /// Game.cpu.halt 的善后（M2B P3）：与 after_termination 同构（disarm/
-    /// cancel 终止标志/清 tick_start/恢复堆上限/Memory 不写回——官方
-    /// isolate 硬停后 outMessage 不再产出，intents 与写回同弃），唯计费
-    /// **丢弃**——官方 make.js:280-284 的抛出先于 :194-212 计费块，
-    /// lastUsedCpu/cpuAvailable 均不动（零计费）；官方 runner.js:26-28
-    /// 对该结局 sendConsoleError("CPU halted")——同款补错误行（halt 前
-    /// console 行的存活是架构差异：我方逐行即时推送 vs 官方随 outMessage
-    /// 整体丢弃，登记 compatibility.md）
+    /// 处理主动 halt：解除期限、清除终止标志、恢复堆上限并跳过本轮写回。
+    /// 不生成费用，不销毁长期 V8 实例；已收集的日志保留，并追加 CPU halted。
+    /// 来源：上游 driver/lib/runtime/make.js 的 didHaltByUserRequest 分支，
+    /// 保留沙箱和已收日志的差异见 docs/designs/compatibility.md。
     fn after_halt(&mut self) {
         self.watchdog.disarm();
         self.runtime.v8_isolate().cancel_terminate_execution();
@@ -487,37 +433,29 @@ impl Sandbox {
         *self.shared.tick_start.lock().unwrap() = None;
     }
 
-    /// 取走上一次 runLoop 捕获的玩家逻辑错误（None = 正常完成或硬中断）。
+    /// 取走最近一次 runLoop 捕获的玩家逻辑错误；取走后清空。
+    /// 中断分支不更新该字段，调用方应每轮消费，避免残留上一轮错误。
     pub fn take_last_loop_error(&mut self) -> Option<String> {
         self.last_loop_error.take()
     }
 
-    /// tick 结束：Memory 写回 + CPU 结算。
+    /// 执行 Memory 写回并生成指令与计费候选，不提交桶余额。
     ///
-    /// **看门狗保持武装直到写回完成**——玩家可经 `Memory.toJSON` 在写回阶段
-    /// 执行任意代码，不能 disarm 后再执行玩家可感代码（官方把序列化计入玩家
-    /// 的超时窗口与 CPU 计费）。
-    ///
-    /// 返回写回结果 JSON：`{ok:true}` | `{ok:false,error}`（按 screeps-ok 契约
-    /// 归为玩家 runtime 错误）| `{ok:false,terminated:true}`（写回阶段被硬中断，
-    /// 已按整份 tickLimit 善后结算——被中断的 tick 不写回，Memory 保持上一
-    /// tick 存档）。Err 仅剩基础设施级故障。
+    /// 写回可能调用玩家 Memory.toJSON，必须继续受看门狗保护。返回 JSON
+    /// 表示写回成功、普通错误或中断；中断费用由处理函数暂存，调用方随后决定是否提交。
     pub fn end_tick(&mut self) -> anyhow::Result<serde_json::Value> {
         // 硬中断后的 Memory 保持上一 tick 的存档。
         if self.terminated_this_tick {
-            // 硬中断 tick 丢弃本轮 intents（官方 isolate 级故障整轮丢弃，
-            // make.js:279-294；计费已由 after_termination 按整份结算）
+            // 中断后不调用 JS 写回函数，也不保留本轮指令；费用候选已由中断处理生成。
             self.pending_intents = None;
             return Ok(serde_json::json!({
                 "ok": false, "terminated": true,
                 "error": "本 tick 已硬中断，按官方语义跳过 Memory 写回",
             }));
         }
-        // run 恰在 deadline 前完成时，迟到的 terminate 标志会误伤写回，所以先
-        // cancel。但 cancel 后若直接 disarm，挂死的写回就没有第二次终止机会了。
-        // 因此 cancel 后把看门狗重新武装到本 tick 的原 deadline（由 tick_start
-        // 重算，与 begin_tick 无漂移）：正常写回不受影响（旧标志已清），写回
-        // 挂死由新一代兜底——"防误伤"与"写回保持武装"两个约束兼得
+        // 清除执行入口结束后可能迟到的 V8 终止标志，再为写回登记新代次。
+        // 期限根据保存的 tick_start 加预算重算，不重新给写回一份完整预算。
+        // 若不重新登记，旧代次可能已经触发，Memory.toJSON 死循环就无法再次中断。
         self.runtime.v8_isolate().cancel_terminate_execution();
         if let Some(t0) = *self.shared.tick_start.lock().unwrap() {
             let deadline = t0 + Duration::from_millis(self.budget.tick_limit().max(1.0) as u64);
@@ -533,31 +471,23 @@ impl Sandbox {
                 // 硬中断 tick 不进此分支（Err 路径丢弃 intents 并按整份结算，
                 // 官方 isolate 级故障同款 make.js:279-294）
                 let (intents, billed) = self.take_endtick_intents(&v);
-                // Memory 写回失败（ok:false，非硬中断）→ intents 同步丢弃：
-                // 官方 stringify 抛错传播为 isolate 级故障整轮丢（make.js
-                // 垂直链路；UNDOC-MEMJSON-005 以套件锁定该语义）——我方 M1
-                // 契约把该失败归类玩家 runtime 错误，intents 处置跟官方对齐
+                // 普通写回错误也丢弃指令，避免只提交玩家 tick 的部分结果。
+                // 仍按当前已用时间和收集到的指令数生成费用候选。
                 let intents = if v.get("ok").and_then(Value::as_bool) == Some(false) {
                     None
                 } else {
                     intents
                 };
                 self.pending_intents = intents;
-                // 计费候选化（B0-5 统一提交点）：不再即时落桶——含写回耗时
-                //（官方口径），协调器结算成功后经 settle_bill 提交
+                // 墙钟用量包含写回耗时；此处只暂存，世界结算成功后由调用方提交。
                 self.pending_bill = Some(self.cpu_used_ms() + 0.2 * billed as f64);
-                // near-heap 触发后正常完成的 tick 也要恢复堆上限（B0-1 评审
-                // 登记：此前只在硬中断路径恢复，"触发但正常完成"会使沙箱终身
-                // 保持放大后的 512MB ceiling——teardown 成本翻倍、逐出风暴放大）
+                // 即使宿主调用成功返回，也恢复可能被近堆回调扩大的上限。
                 self.restore_heap_limit();
                 *self.shared.tick_start.lock().unwrap() = None;
                 Ok(v)
             }
             Err(_) => {
-                // 写回阶段被硬中断（如玩家经 Memory.toJSON 挂死写回）：统一善后
-                // （disarm、清标志、按整份 tickLimit 结算、恢复堆上限）；
-                // 本轮 intents 丢弃（官方语义）。写回内 Game.cpu.halt 同分叉
-                // 零计费（评审 2 P2-2 清偿：三通道口径统一）
+                // 写回被中断时丢弃指令并清理执行状态；主动 halt 无费用，其他中断计完整预算。
                 self.pending_intents = None;
                 if self.shared.halt_requested.load(Ordering::Acquire) {
                     self.after_halt();
@@ -571,12 +501,9 @@ impl Sandbox {
         }
     }
 
-    /// endTick 返回值里的 intentsList：解析 + 上行闸门 + 宿主计费条数。
-    /// 闸门（约束②纵深，玩家不可见面）：对象键数超上限截断并出告知行。
-    /// 不可达论证是**键空间界**：list 键只能来自被 API 调用的自有对象 id、
-    /// 同键 last-wins 覆盖 ⇒ 键数 ≤ 视图对象数，50k 需单 tick 对 5 万个
-    /// 不同对象发动作——M2A 世界规模不可达（与 M0 console 闸门同形态的
-    /// 第二道纵深；第一道是堆/看门狗对生成量的物理约束）。
+    /// 截取 endTick 的 intentsList，并计算保留清单的计费条数。
+    /// 最多保留 50,000 个顶层键，包括对象 id、room/global 和 notify 等通道。
+    /// 该限制不约束嵌套数组长度或 JSON 字节数；超限截断并添加日志提示。
     fn take_endtick_intents(&mut self, v: &Value) -> (Option<Value>, usize) {
         const MAX_INTENT_OBJECTS: usize = 50_000;
         let Some(list) = v.get("intentsList") else {
@@ -633,16 +560,15 @@ impl Sandbox {
         self.pending_bill
     }
 
-    /// 当前停跑轮回充候选的只读视图（测试/诊断面，B0-6）。
+    /// 读取尚未提交的停跑回充增量。
     pub fn pending_recharge(&self) -> Option<f64> {
         self.pending_recharge
     }
 
-    /// 提交本 tick 的计费候选（协调器统一提交点：世界结算成功后调用）。
-    /// 无候选（未执行/跳帧）为 no-op。停跑轮回充候选同点并入（B0-6）。
+    /// 提交本轮费用或停跑回充，随后消费候选；没有候选时无操作。
+    /// 调用方应在世界结算成功后调用。停跑回充提交时按当前桶余额重新计算。
     pub fn settle_bill(&mut self) {
-        // 互斥不变量（评审 2 P2-3 清偿）：两类候选分属 Skip/Run 分支、
-        // begin_tick 开头双清——同轮共存即结构破坏，同点并入会双计 limit
+        // Run 产生费用，SkipPenalty 产生回充；同轮只能有一个，否则会重复增加 limit。
         debug_assert!(
             self.pending_bill.is_none() || self.pending_recharge.is_none(),
             "计费候选与停跑回充候选不得同轮共存（Skip/Run 分支互斥）"
@@ -655,8 +581,8 @@ impl Sandbox {
         }
     }
 
-    /// 丢弃本 tick 的计费候选（世界结算失败回退——玩家桶不扣）。停跑轮回充
-    /// 候选一并丢弃（B0-6）：失败轮世界不推进，桶不前进。
+    /// 丢弃费用与回充候选，不修改桶余额。
+    /// 此操作不恢复 V8 全局或闭包状态；下一轮应重新注入已提交的 Memory。
     pub fn discard_bill(&mut self) {
         self.pending_bill = None;
         self.pending_recharge = None;
@@ -673,8 +599,7 @@ impl Sandbox {
         ) {
             Ok(v) => Ok(v),
             Err(_) => {
-                // Game.cpu.halt 在表达式通道触发（评审 2 P2-2 清偿：原实现
-                // 无分叉按整份罚）：零计费善后（官方 CPU halted 跳过计费块）
+                // 表达式中的主动 halt 也使用零计费的中断处理。
                 if self.shared.halt_requested.load(Ordering::Acquire) {
                     self.after_halt();
                 } else {
@@ -685,12 +610,9 @@ impl Sandbox {
         }
     }
 
-    /// 独立 runExpr 通道（无 tick 生命周期）的看门狗编排：清遗留标志 → 武装
-    /// 一个按官方公式现算的窗口（min(maxPerTick, limit+bucket)——不能读 stale
-    /// 的 tick_limit 字段：新沙箱为 0、tick 过的为残留值）→ 求值 → 双路径
-    /// disarm + 清标志（迟到的 terminate 不得残留到下一条命令）。
-    /// 不带 begin/end_tick：无世界注入、**不动预算桶**（该通道计费归 M2 intent
-    /// 通道定型；tick 上下文的善后结算走 run_expr 的 Err 路径）。
+    /// 在独立看门狗窗口中求值，不注入世界、不执行 tick 写回、不修改预算桶。
+    /// 窗口按当前余额计算，至少 1 毫秒；成功或失败后均解除期限、清标志并恢复堆上限。
+    /// 需要完整 tick 语义时，由调用方使用 begin_tick、run_expr 和 end_tick。
     pub fn run_expr_guarded(&mut self, code: &str) -> anyhow::Result<serde_json::Value> {
         // arm 前完成可失败步骤（句柄通道参数为值传递，无脚本构造步骤）
         self.clear_terminate_flag();
@@ -707,7 +629,7 @@ impl Sandbox {
         self.runtime.v8_isolate().cancel_terminate_execution();
         match out {
             Ok(v) => {
-                // 独立通道同样遵守"触发即恢复"（stale 标志下为幂等 no-op）
+                // 独立表达式也可能触发近堆回调，成功返回后仍需恢复上限。
                 self.restore_heap_limit();
                 Ok(v)
             }
@@ -719,14 +641,13 @@ impl Sandbox {
         }
     }
 
-    /// 硬中断善后：解除武装、清终止标志、结算（官方语义：扣整份 tickLimit，
-    /// 桶充足不跳帧，负桶由 begin_tick 停跑）、恢复堆上限、清 tick_start。
-    /// 幂等；本 tick 已由善后结算的，end_tick 不再重复结算。
+    /// 解除期限、清终止标志、恢复堆上限，并暂存完整预算费用、清除计时起点。
+    /// 同一 tick 重复调用不会再次生成费用；真正扣桶由 settle_bill 完成。
     fn after_termination(&mut self) {
         self.watchdog.disarm();
         self.runtime.v8_isolate().cancel_terminate_execution();
         if !self.terminated_this_tick {
-            // 硬中断计费同样候选化（B0-5）：整份 tickLimit 的账在提交点落桶
+            // 费用只暂存，提交点再修改桶余额。
             self.pending_bill = Some(self.budget.tick_limit().ceil());
             self.terminated_this_tick = true;
         }
@@ -734,9 +655,8 @@ impl Sandbox {
         *self.shared.tick_start.lock().unwrap() = None;
     }
 
-    /// tick 外路径（set_modules/set_raw_memory/drain 等）失败的轻量善后：清
-    /// 终止标志 + 恢复堆上限（near-heap 恰在这些调用内触发时，放大 ceiling
-    /// 不得残留——B0-3 对抗评审 P2-1；restore 对未触发为幂等 no-op）。
+    /// 清除 tick 外调用可能遗留的终止标志，并恢复近堆回调扩大的上限。
+    /// 不修改计费候选，也不解除看门狗期限。
     fn clear_terminate_flag(&mut self) {
         self.runtime.v8_isolate().cancel_terminate_execution();
         self.restore_heap_limit();
@@ -761,7 +681,7 @@ impl Sandbox {
             .heap_size_limit()
     }
 
-    /// 当前 tick 已用的墙钟毫秒（M0 口径；正式实现换线程 CPU 时钟）。
+    /// 从本 tick 计时起点经过的墙钟毫秒数；无计时起点时为 0，不含指令费用。
     pub fn cpu_used_ms(&self) -> f64 {
         self.shared
             .tick_start
@@ -782,9 +702,8 @@ impl Sandbox {
             &self.host.drain_missing,
             &[],
         );
-        // drain 在无看门狗窗口执行且产物大 JSON（missing 键玩家可控）——
-        // near-heap 可能在此触发放大，Ok/Err 双路径恢复（幂等；Err 被调用方
-        // unwrap_or 吞掉的场景由 Ok 路径覆盖，B0-3 对抗评审 P2-1）
+        // 诊断导出没有看门狗窗口；成功或失败后都恢复近堆回调可能扩大的上限。
+        // missing 的属性名由玩家访问产生，输出量可能较大。
         self.restore_heap_limit();
         out.inspect_err(|_| self.clear_terminate_flag())
     }
@@ -803,10 +722,9 @@ impl Sandbox {
 
 // ---------------------------------------------------------------- 宿主通道私有句柄
 
-/// 宿主 tick 通道的私有函数句柄（B0 WP4，ADR-013 决策 4）：prelude 末段把
-/// 生命周期函数注册进 `__kkp.host`，本结构在装配完成后逐个捕获
-/// `v8::Global`，随后宿主删除 `__kkp`——玩家全局零宿主通道（官方玩家侧
-/// 无宿主 tick 函数，runtime 在 driver 进程），冻结防不住调用的面就此消灭。
+/// 持有装配时捕获的宿主函数句柄。
+/// Rust 在全部 prelude 执行后捕获 __kkp.host，再删除临时全局 __kkp，
+/// 后续生命周期调用通过句柄完成，不查找玩家可替换的全局属性。
 struct HostFns {
     begin_tick: v8::Global<v8::Function>,
     run_loop: v8::Global<v8::Function>,
@@ -875,9 +793,8 @@ impl HostFns {
     }
 }
 
-/// 经私有句柄调用宿主通道函数（字符串参数），返回结果的 JSON 解析。
-/// 参数以 v8 值传递（非脚本拼接——无转义面）；调用失败（JS 异常/硬中断）
-/// 携带异常文本返回 Err，语义与原 execute_script 通道一致。
+/// 调用捕获的函数，将字符串参数作为 V8 值传入，再解析返回的 JSON。
+/// JavaScript 异常或 V8 中断返回 Err；参数不作为源码拼接。
 fn call_host_json(
     tokio: &tokio::runtime::Runtime,
     runtime: &mut JsRuntime,
@@ -940,8 +857,7 @@ impl Drop for Sandbox {
         THREAD_ORDER.with(|stack| {
             let mut stack = stack.borrow_mut();
             if stack.last() != Some(&self.seq) {
-                // 线程内 LIFO 违规（rusty_v8 Enter/Exit 线程局部栈要求逆序）——
-                // 不 panic（Drop 里不能），大声告警并把自己从栈里摘除
+                // 销毁顺序不满足本线程创建栈时记录并告警；告警本身不能修复 V8 的 Enter/Exit 顺序。
                 eprintln!(
                     "kk-runner: 线程内销毁顺序违反 LIFO（seq={}，栈顶={:?}）。V8 的 isolate Enter/Exit 栈是线程局部的，同线程多实例必须按创建逆序销毁！",
                     self.seq,
@@ -970,7 +886,6 @@ fn lodash_script() -> String {
 }
 
 fn constants_script() -> String {
-    // 官方形态：常量深拷贝后平铺为裸全局（game.js:435），玩家可覆盖（不用 freeze，
-    // freeze 的语义差异已登记为待验证项）。
+    // 将嵌入的常量 JSON 构造成对象并平铺至玩家全局；API 各段按需捕获常量。
     format!("(function(){{ var C = {CONSTANTS_JSON}; for (var k in C) globalThis[k] = C[k]; }})();")
 }

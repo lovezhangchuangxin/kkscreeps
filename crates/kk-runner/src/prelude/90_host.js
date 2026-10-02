@@ -1,24 +1,14 @@
-/* kk-runner 桩环境 prelude · 段 4（末段）：宿主通道 + 遮蔽。
- *
- * 宿主 tick 通道（beginTick/runLoop/runExpr/endTick/resetModules/setRawMemory/
- * 仪表排干）注册进 `__kkp.host` 私有容器——**不上玩家全局**（B0 WP4 宿主面
- * 收口，ADR-013 决策 4）：Rust 侧在 prelude 装配完成后立即捕获私有
- * v8::Global 函数句柄，随后删除 __kkp。玩家全局零宿主通道——官方玩家侧
- * 本就没有宿主 tick 函数（runtime 在 driver 进程），原 `globalThis.__kk`
- * 冻结仍可调用的面（清自己指令/伪造世界注入/抢先排空仪表）就此消灭。
- * 本段末尾遮蔽 deno_core 内部面；__kkp 的删除由 Rust 在句柄捕获后执行。
+/* 注册 Rust 使用的生命周期函数：注入世界、执行玩家代码、写回与导出诊断。
+ * 函数先保存到 __kkp.host，由 Rust 捕获 V8 句柄后删除临时全局 __kkp。
+ * 本段删除 Deno 与 __bootstrap；各段此前捕获的 op 引用仍可在闭包中使用。
+ * 宿主返回值使用捕获的 JSON 函数编码，普通玩家错误由结果字段报告。
  */
 (() => {
   'use strict';
 
-  // 预置 JSON 函数（官方 systemFunctions.JSON 同款语义）：宿主消息编码不得
-  // 经玩家可覆写的全局——覆写全局 stringify 曾可伪造 intentsList（外部复审
-  // P1 实证：无 API 调用造出工地）。玩家自己的代码仍用全局 JSON，不受影响。
-  // 信封一律 null 原型 + 出口一律净化序列化（sanitizedStringify——序列化窗口
-  // 内摘除根原型 toJSON，对抗评审 P1 的 Object/Array 绑定交换与数组 toJSON 面；
-  // 官方 ExternalCopy 出口对玩家 toJSON 同样不可见，runtime.js:296）。
-  // 回程 parse 预置化（自审 P2）；eval 捕获（对抗评审 P2：全局 eval 可交换使
-  // 探针代码根本不执行）。
+  // 捕获 JSON.parse 和 eval；消息序列化委托给 gw.sanitizedStringify。
+  // 它只临时移除 Object/Array 根原型上的 toJSON，不能阻止所有玩家回调；
+  // Memory 写回仍按原生 JSON.stringify 语义调用玩家自己的 toJSON。
   const stringify = JSON.stringify;
   const parse = JSON.parse;
   const __eval = eval;
@@ -26,9 +16,7 @@
   const nullEnv = gw.nullEnv;
   const safeStringify = gw.sanitizedStringify;
   const hostObject = gw.__Object;
-  // 宿主信封 error 串的字节闸（A5-core 对抗评审 P3a，B0 补闸）：error 串拼
-  // 玩家可控 message/stack（大小无闸），而 console 闸门不覆盖信封——出口处
-  // 截断，防 exec_json 出口的跨边界放大（16K 码元诊断余量充足）
+  // 错误文本最多保留 16K UTF-16 码元，再附截断提示；此限制不是 UTF-8 字节数。
   const HOST_ERROR_MAX = 16 * 1024;
   function clipHostError(s) {
     return s.length > HOST_ERROR_MAX ? s.slice(0, HOST_ERROR_MAX) + '…[截断]' : s;
@@ -78,8 +66,7 @@
       try {
         return safeStringify(out);
       } catch (e) {
-        // 字面量终极兜底（对抗评审 P1）：sanitizedStringify 自身失败（如根原型
-        // 被 freeze）时不得二次抛——逃逸会被宿主判硬中断并误计费
+        // 结果编码失败时返回固定 JSON，避免再次调用可能失败的序列化函数。
         return '{"ok":true,"note":"loop 完成（结果不可序列化）"}';
       }
     },
@@ -95,8 +82,8 @@
         // eslint-disable-next-line no-eval
         v = __eval(code);
       } catch (e) {
-        // eval 在全局作用域抛出的 SyntaxError 即解析期错误（官方控制台同口径）；
-        // 运行期错误（含运行期动态构造的语法异常）归 runtime
+        // 按异常对象分类：SyntaxError 记为 syntax，其他异常记为 runtime。
+        // 这里也会将执行过程中显式抛出的 SyntaxError 归为 syntax，未单独解析代码。
         const kind = e instanceof SyntaxError ? 'syntax' : 'runtime';
         out = nullEnv({ ok: false, kind, error: safeErrorText(e, false) });
         return safeStringify(out);
@@ -116,7 +103,7 @@
         } else if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
           const ctor = v.constructor;
           if (ctor !== Object && ctor !== undefined) {
-            // ctor.name 可是污染 getter 的任意长串——过闸（B0-3 评审 P2 清偿）
+            // 构造器名称可能来自玩家 getter，错误文本也需限制长度。
             const rawName = (ctor && typeof ctor === 'object' && ctor.name) || 'non-plain';
             const ctorName = clipHostError(String(rawName));
             serErr = 'Return value is a ' + ctorName + ' object, not a plain JSON value';
@@ -128,8 +115,7 @@
         // 循环引用等 stringify 失败 → serialization（区别于检测代码自身抛错 → runtime）
         let json;
         try {
-          // 值序列化同入净化窗口：官方控制台返回值走 ivm（不经 stringify、
-          // 不调玩家 toJSON），净化更贴官方（对抗评审 P2：探针读值不得被污染改写）
+          // 返回值序列化暂时忽略 Object/Array 根原型的 toJSON；对象自己的 toJSON 仍可能执行。
           json = safeStringify(v);
         } catch (e) {
           return safeStringify(nullEnv({
@@ -146,11 +132,10 @@
             error: 'Return value is not JSON-serializable: toJSON produced ' + typeof json,
           }));
         }
-        // 值规范化往返的 parse 走预置捕获（覆写全局 parse 可伪造 {ok:true,value}
-        // 的 value——runExpr 是验收探针读值通道，自审 P2）
+        // 使用捕获的 parse 还原 JSON 值，避免玩家替换全局 parse 后改写返回值。
         return safeStringify(nullEnv({ ok: true, value: parse(json) }));
       } catch (e) {
-        // 字面量终极兜底（对抗评审 P1）：sanitizedStringify 自身失败时不得二次抛
+        // 编码失败时返回固定错误 JSON，避免异常逃出后被 Rust 归为硬中断。
         return '{"ok":false,"kind":"runtime","error":"runExpr 出口序列化失败"}';
       }
     },
@@ -159,8 +144,7 @@
      *  传出）。返回 JSON 字符串（宿主 exec_json 约定）：
      *  {ok:true, intentsList, intentsCpu} | {ok:false, error, intentsList, intentsCpu}。 */
     endTick() {
-      // writeBackMemory 整体守卫（对抗评审 P3）：玩家异常对象的 message getter
-      // 可在写回 catch 块内再抛——逃逸会被宿主判硬中断并误计费
+      // 写回错误处理也可能读取玩家异常对象的 getter；捕获再次抛出的错误，返回普通写回失败。
       let out;
       try {
         out = writeBackMemory();
@@ -169,33 +153,21 @@
       }
       const payload = intentsPayload();
       if (typeof out === 'object' && out !== null) {
-        // error 键统一过闸（B0-3 评审 P1 清偿）：safeErrorText 只覆盖本段拼的
-        // 三处，writeBackMemory 内部 catch（game.js 'Memory 不可序列化: '+why）
-        // 与未来路径的 error 串在此兜底截断——实测 2MB message 可经 toJSON 抛错
-        // 注入（16K 码元上限，防 exec_json 出口跨边界放大）
+        // 统一限制写回结果的 error 文本，覆盖 game.js 内部生成的错误；上限为 UTF-16 码元数。
         if (typeof out.error === 'string') out.error = clipHostError(out.error);
         out.intentsList = payload ? payload.list : null;
         out.intentsCpu = payload ? payload.cpu : 0;
-        // RawMemory 候选（B0-5 统一提交点）：仅写回成功（ok:true）且值是原始
-        // string 时携带——协调器在世界结算成功后写入玩家持久状态；失败轮不携带
-        //（沙箱内 rawMemoryData 保持旧值，官方「写回失败 Memory 保持上一 tick 存档」
-        // 同义）。typeof 门（B0-5 对抗评审清偿）：RawMemory.set 收 String 包装对象
-        //（官方 lodash.isString 同款过门），包装对象经污染的 String.prototype.toJSON
-        // 可在信封序列化时伪造巨串（实测 3MB 绕 2MB set 门）——原始 string 的
-        // 序列化不查 toJSON（ECMA-262 25.5.2.3），typeof 门即免疫
+        // 仅在写回成功且当前 RawMemory 是原始 string 时携带候选，供世界提交后保存。
+        // String 包装对象可能带自定义 toJSON，因此不通过这个导出检查。
         if (out.ok === true) {
           const rm = rawMemoryDataHost();
           if (typeof rm === 'string') out.rawMemory = rm;
-          // M2B 扩面 P6：segments 信封（窗口写回+四请求——官方 outMessage 的
-          // memorySegments/activeSegments/publicSegments/defaultPublicSegment/
-          // activeForeignSegment 同批带出；null 原型对象过净化窗口）
+          // 同时带出活动 segment 窗口写入，以及 active/public/defaultPublic/foreign 请求。
           const so = segmentsOutHost();
           if (so !== null && so !== undefined) out.segmentsOut = so;
         }
       }
-      // 编码守卫（与 writeBackMemory 同构，自审 P2-3）：载荷携带抛错 getter 等
-      // 病态形态时 stringify 抛错不得逃逸——逃逸会被宿主判硬中断并误计费。
-      // 净化窗口覆盖信封与 intentsList 全图（数组通道同面）
+      // 载荷中的 getter 或 toJSON 可能抛错；转换成普通写回失败，避免被宿主归为硬中断。
       try {
         return safeStringify(out);
       } catch (e) {
@@ -203,20 +175,16 @@
         return '{"ok":false,"error":"endTick 序列化失败"}';
       }
     },
-    /** 模块表替换：官方 timestamp 变更路径（game.js:507-512）——整体重绑
-     *  require + 重建缓存对象（而非逐键 delete：玩家冻结 require.cache 时
-     *  delete 会抛 TypeError 打挂 set_modules，重绑新对象天然免疫）。 */
+    /** 模块表替换后整体重建 require 与缓存。
+     * 不能逐键删除旧缓存，因为玩家可以冻结旧缓存对象。 */
     resetModules() {
       resetForNewModules();
     },
-    /** 宿主私有通道：注入 RawMemory 初值（写闭包 rawMemoryData，不经
-     *  globalThis.RawMemory——玩家换掉全局绑定后旧路径执行伪造 set，
-     *  A5-core 对抗评审 P3b；随 B0 WP4 收口根治）。 */
+    /** 通过闭包设置 RawMemory 初值，不调用玩家可替换的全局 RawMemory.set。 */
     setRawMemory(data) {
       setRawMemoryHost(data);
     },
-    /** 宿主私有通道（P6）：一次性注入 raw + segments 窗口 + foreignSegment
-     *  （tick 边界——与 setRawMemory 同时序约束）。 */
+    /** 在 beginTick 前注入 RawMemory、活动 segment 窗口和 foreignSegment。 */
     setMemoryState(data, segmentsJson, foreignJson) {
       setRawMemoryHost(data);
       setSegmentsWindowHost(segmentsJson);
@@ -239,8 +207,7 @@
       return safeStringify(out);
     },
   };
-  // 宿主通道不上玩家全局（B0 WP4）：__kkp.host 由 Rust 侧捕获句柄，
-  // 随后整个 __kkp 连同 host 引用被删除——玩家零宿主控制面
+  // Rust 捕获 host 函数句柄后删除 __kkp，后续通过句柄调用生命周期函数。
 
   // ---------------------------------------------------------------- 遮蔽 deno_core 内部面
   // deno_core 的内部函数集合默认对玩家可见——ADR-002 纪律。

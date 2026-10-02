@@ -1,13 +1,6 @@
-/* kk-runner prelude · 30_game 段 6：工地与旗帜装配（对照官方
- * engine/src/game/construction-sites.js + flags.js）。
- *
- * A3b：ConstructionSite 字段表挂类原型（官方 construction-sites.js:38-46），
- * getter 经 gw.rawData(this.id) 回查。Flag 对照官方 flags.js:25-30——own 定格
- * 面 name/color/secondaryColor（构造器赋值，不走 defineGameObjectProperties，
- * 也没有 id——官方 Flag 构造器不挂 this.id）；memory 是独立 getter/setter
- * （flags.js:31-50）挂类原型。
- * 依赖：gw.viewerName、gw.ensureMemory、gw.rawData、gw.mkStubMethod、
- * gw.defineGameObjectProperties。
+/* 装配 ConstructionSite 与 Flag，并将移除、移动和颜色修改记录为房间指令。
+ * 工地字段通过 getter 回查当前 tick；旗帜名称、颜色和位置在装配时保存。
+ * Flag 没有 id，memory 独立读写 Memory.flags；工地移除需要本人或房主权限。
  */
 (() => {
   'use strict';
@@ -30,9 +23,8 @@
     owner: (o) => (o.owner !== undefined ? { username: o.owner } : undefined),
     my: (o) => (o.owner === undefined ? undefined : o.owner === gw.viewerName),
   });
-  // 官方 construction-sites.js:50-62（M2B 扩面 P2 转真）：非本人且房主非
-  // 本人 → NOT_OWNER；room 级 removeConstructionSite intent（progress>1 时
-  // 结算退 floor(progress/2) 能量掉落）
+  // 非本人工地且房主也非本人时拒绝移除；有效请求记录房间 removeConstructionSite 指令。
+  // 来源：上游 engine/src/game/construction-sites.js 的 remove。
   globalThis.ConstructionSite.prototype.remove = function remove() {
     // 官方 :56-58 逐字：!my（含 undefined——无主工地同拒）且房主非本人
     if (this.my !== true
@@ -60,9 +52,8 @@
     },
   });
 
-  // 官方 flags.js:58-91（M2B 扩面 P2 转真）：三方法均 room 级 intent 组合
-  //——remove=removeFlag；setPosition=removeFlag+createFlag（同 tick 组序
-  // removeFlag→createFlag 官方分派）；setColor 同组合带新色。
+  // remove 记录 removeFlag；移动或改色组合 removeFlag+createFlag，结算先移除再创建。
+  // 来源：上游 engine/src/game/flags.js 的三个修改方法。
   globalThis.Flag.prototype.remove = function remove() {
     gw.intents.pushByName('room', 'removeFlag', {
       roomName: this.pos.roomName, name: this.name,

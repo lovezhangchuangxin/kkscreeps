@@ -1,11 +1,7 @@
-/* kk-runner prelude · 30_game 段 3：Room 面（对照官方 engine/src/game/rooms.js
- * ——RoomVisual :1138-1220、Room.Terrain :1223-1241、Room 类实例面约 :500-980：
- * toString :536、memory :551、find filter :648-654、lookAt :768）。
- *
- * Terrain/terrainWordAt（房间地形，官方 Room.Terrain 闭包式对象）、RoomVisual 桩、
- * makeRoom 装配工厂（find 与 look 系、memory getter 等实例面）。
- * 依赖：gw.terrainByRoom（beginTick 重建）、gw.ensureMemory（memory getter 懒解析）、
- * gw.objectsById/gw.world（find/装配）、RoomPosition（全局，room-position 段已挂）。
+/* 根据当前世界数据装配可见 Room，提供 find、look、地形、创建指令与绘图接口。
+ * 每 tick 重建房间对象和查询缓存；地形数组由 game.js 的 beginTick 注入。
+ * findPath 目前按直线步进，忽略障碍与寻路成本；绘图数据仅保留在本 tick 的缓冲区。
+ * 来源：上游 engine/src/game/rooms.js 与 console.js 的玩家接口。
  */
 (() => {
   'use strict';
@@ -13,28 +9,20 @@
   const { countStub, probe, lodash: _ } = globalThis.__kkp;
   const gw = globalThis.__kkp.gw;
 
-  // 预置捕获（A3c 装配批，同 game.js 原则）：makeRoom 每 tick 装配，Object
-  // 交换会使原型链接/memory 定义走假实现；Room 构造器捕获自安装位（官方
-  // globals.Room 闭包引用等价——.prototype 运行期解引用，玩家原型补丁/
-  // 重挂语义保持可见，绑定交换不可）
+  // 装配时使用捕获的 Object 和 Room 构造器；仍读取 Room.prototype，使玩家原型扩展可见。
   const __Object = Object;
   const __RoomCtor = globalThis.Room;
   const __mapGet = Map.prototype.get;
   const __reflectApply = Reflect.apply;
   const __jsonStringify = JSON.stringify;
   const __jsonParse = JSON.parse;
-  // 装配路径 push（A5 片 3a 评审 P1 清偿）：look 索引构建在 beginTick 宿主
-  // 装配路径执行，玩家可换的 Array.prototype.push 一旦被下毒即断管装配——
-  // 加载期捕获（__mapSet/__arrayIncludes 同批先例）
+  // look 索引装配使用捕获的 push，避免玩家替换数组原型方法破坏下一 tick。
   const __arrayPush = Array.prototype.push;
-  // 常量加载期捕获（片 3a 评审 P2 清偿，官方闭包 C 免疫玩家覆写）：
-  // ERR_INVALID_ARGS（lookForAt 未知类型返码）、TERRAIN_MASK_*（terrainWordAt
-  // 自本片起为全部 look 面 terrain 判定的承重路径）
+  // 捕获未知 look 类型的错误码与地形位码，不使用玩家后来改写的全局常量。
   const ERR_INVALID_ARGS = globalThis.ERR_INVALID_ARGS;
   const TERRAIN_MASK_WALL = globalThis.TERRAIN_MASK_WALL;
   const TERRAIN_MASK_SWAMP = globalThis.TERRAIN_MASK_SWAMP;
-  // 创建族/findPath 消费的常量加载期捕获（M2B 扩面 P2 清偿，官方闭包 C
-  // 免疫玩家覆写——sites-flags.js 同款纪律）
+  // 创建与直线寻路方法使用加载时捕获的常量。
   const C_CONTROLLER_STRUCTURES = globalThis.CONTROLLER_STRUCTURES;
   const C_CONSTRUCTION_COST = globalThis.CONSTRUCTION_COST;
   const C_MAX_CONSTRUCTION_SITES = globalThis.MAX_CONSTRUCTION_SITES;
@@ -119,14 +107,9 @@
   }
   gw.terrainWordAt = terrainWordAt;
 
-  // ---------------------------------------------------------------- RoomVisual（M2B 扩面 P6 真化）
-  // 官方 visual 存储（game/console.js:11 模块级 visual[id]、:57-108 四函数逐字）：
-  // 每玩家**按房名**累积字符串（`JSON.stringify(data)+"\n"` 追加；import 走
-  // 字符串原样）。sizeLimit：map 1000KB / 房 500KB——超限 **throw**（官方
-  // 文案逐字）。生命周期：官方后端每 tick getVisual drain（console.js:110-114
-  // 整表取走）——即绘制只活在当 tick；我方 beginTick 重置（gw.visualReset，
-  // game.js 段调）同语义。**sharedBuffer 语义**（VISUAL-ROOM-001）：缓冲在
-  // store 的房名键上——同房两个实例天然共享一个缓冲。
+  // 绘图字符串按房间名共享：同房间多个 RoomVisual 实例操作同一缓冲区。
+  // 房间限制 500×1024、map 限制 1000×1024 个 UTF-16 码元，超限抛错；
+  // beginTick 清空全部缓冲区。来源：上游 engine/src/game/console.js 的 addVisual。
   const visualStore = __Object.create(null);
   gw.addVisual = function addVisual(roomName, data) {
     roomName = roomName || '';
@@ -204,7 +187,7 @@
     export() { return gw.getVisual(this.roomName); }
     import(data) { gw.addVisual(this.roomName, '' + data); return this; }
   }
-  // 官方 rooms.js:1220 同为非可写 defineProperty（清偿复审 P3-N1）
+  // RoomVisual 全局绑定不可写。来源：上游 engine/src/game/rooms.js 的 RoomVisual 导出。
   Object.defineProperty(globalThis, 'RoomVisual', {
     enumerable: true, value: RoomVisual,
   });
@@ -216,12 +199,9 @@
     // 无 controller 房间的官方投影是 undefined（非 null）
     let controller;
     const worldObjs = gw.world.objects || [];
-    // look 索引（A5 片 3a，官方 game.js:38-47 addObjectToRegister +
-    // rooms.js:485-513 lookTypeRegisters/lookTypeSpatialRegisters 映射）：
-    // type → (id→对象)/(稀疏数组)，索引官方转置公式 x*50+y（读写两侧同式，
-    // 官方原样）；energy/resource 双键同指（rooms.js:487-488/:501-502——
-    // lookAt 固定序里同格资源产出两条 {type:'energy'} 与 {type:'resource'}）。
-    // 与 controller 扫描合并单趟（评审 P3-2：每房每 tick 一趟全量扫描）
+    // 一次扫描本房对象建立类型索引与 x*50+y 的空间索引，同时寻找 controller。
+    // energy/resource 共用索引，lookAt 同格掉落资源会输出两项。
+    // 来源：上游 engine/src/game/rooms.js 的 lookTypeRegisters/lookTypeSpatialRegisters。
     const lookReg = {
       creep: {}, source: {}, mineral: {}, deposit: {}, structure: {}, flag: {},
       constructionSite: {}, tombstone: {}, ruin: {}, nuke: {}, powerCreep: {},
@@ -232,9 +212,7 @@
       creep: [], source: [], mineral: [], deposit: [], structure: [], flag: [],
       constructionSite: [], tombstone: [], ruin: [], nuke: [], powerCreep: [],
     };
-    // 本房 raw 投影对象（M2B 扩面 P2：createConstructionSite 的配额/占位
-    // 预检面——checkControllerAvailability/checkConstructionSite 消费）+
-    // storage/terminal 回填（官方 game.js:330+ buildGame 装配期挂结构实例）
+    // 保留本房原始对象供工地名额与占位检查；storage/terminal 另记录其玩家视图引用。
     const roomObjs = [];
     let storageObj, terminalObj;
     lookSpatial.energy = [];
@@ -293,13 +271,10 @@
       visual: new RoomVisual(name),
       mode: 'world',
     };
-    // findCache（官方 rooms.js:585-598 的 register.findCache 出口臂子集——
-    // makeRoom 每 tick 重建，闭包内对象即天然 per-tick）：方向臂缓存**未滤**
-    // 结果（官方 :641 缓存在尾滤前）；FIND_EXIT 缓存**已滤** concat（子臂先
-    // 各自过 opts.filter——官方 :592-598 陈旧 filter 烘焙 quirk 原样保留）；
-    // 命中/未命中统一经尾部两分支产**新数组**（官方 :648-655——filter 新
-    // 数组或 _.clone 浅拷，元素同实例、本体从不暴露）。对象臂的官方装配期
-    // findCacheFn 预填充面我方未移植（每调用新鲜扫描，纯性能差，登记灰区）
+    // 方向出口缓存未过滤结果；FIND_EXIT 首次合并的缓存已经过当次 filter。
+    // 再次调用的 filter 作用于该缓存，不能恢复首次已过滤掉的出口。
+    // 返回新数组但复用元素引用；对象类查询每次扫描本房对象。
+    // 来源：上游 engine/src/game/rooms.js 的 Room.find。
     const findCache = {};
     room.find = function (type, opts) {
       countStub('room.find:' + type);
@@ -358,10 +333,7 @@
         return _.clone(out);
       }
       const out = [];
-      // 索引迭代（装配批纪律）：for...of 经可交换的 Symbol.iterator。
-      // 裸 run（viewerName=null，无 user 的注入面）= 视角中立面：与 Rust
-      // matches_find 的 None 臂同构——MY_*/HOSTILE_* 不可判定返回空、
-      // 101 保留孵化雏形（评审 1 F-1：两层中立语义同步收口）
+      // 没有查看者时 MY_*/HOSTILE_* 无法分类，返回空；FIND_CREEPS 在此模式保留孵化对象。
       const neutral = gw.viewerName === null;
       for (let i = 0; i < worldObjs.length; i++) {
         const o = worldObjs[i];
@@ -396,8 +368,7 @@
         else if (type === 114 /* FIND_MY_CONSTRUCTION_SITES */ && !neutral && o.type === 'constructionSite' && o.owner === gw.viewerName) out.push(w);
         else if (type === 115 /* FIND_HOSTILE_CONSTRUCTION_SITES */ && !neutral && o.type === 'constructionSite' && typeof o.owner === 'string' && o.owner !== gw.viewerName) out.push(w);
         else if (type === 116 /* FIND_MINERALS */ && o.type === 'structure' && o.structureType === 'mineral') out.push(w);
-        // B3 接线批：官方 game.js:345-360 装配墓碑/废墟/deposit 全族（119/122
-        // 当前无对象恒空，臂在保持与 Rust matches_find 同构）
+        // 这些查询分支从当前世界对象中收集墓碑、powerCreep、deposit 与废墟；无对象时返回空。
         else if (type === 118 /* FIND_TOMBSTONES */ && o.type === 'tombstone') out.push(w);
         else if (type === 119 /* FIND_POWER_CREEPS */ && o.type === 'powerCreep') out.push(w);
         else if (type === 122 /* FIND_DEPOSITS */ && o.type === 'deposit') out.push(w);
@@ -576,14 +547,9 @@
       return result;
     };
     room.getTerrain = function () { return new Terrain(name); };
-    // ---- M2B 扩面 P2：创建族预检 helper（官方 utils.js 对照移植，对象面按
-    // 我方 raw 投影形状适配：官方 i.type 即结构类型，我方结构/孵化位经
-    // structureType 键）----
-    /** 官方 rooms.js:1048/:1084-1087 spawn 名查域：register.spawns（官方全量含
-     *  他人——我方 Game.spawns 仅自家，他人 spawn 名撞车灰区登记
-     *  compatibility.md）+ register.constructionSites（自家工地全房——
-     *  Game.constructionSites 同域；M2B P2 清偿：原 roomObjs 单房检查漏
-     *  跨房自家工地）。 */
+    // 创建预检使用 raw structureType 区分结构类型，type 区分结构、spawn 与工地。
+    /** 在自家所有 Game.spawns 和 Game.constructionSites 中检查 spawn 重名。
+     * 跨房工地也参与检查；与上游 register.spawns 的差异是此处不检查他人 spawn 名。 */
     function spawnNameTaken(name) {
       return Object.values(gw.currentGame().spawns).some((s) => s.name === name)
         || Object.values(gw.currentGame().constructionSites).some(
@@ -608,10 +574,9 @@
       const quota = C_CONTROLLER_STRUCTURES[structureType];
       return cnt < (quota ? quota[rcl] : undefined);
     }
-    /** 官方 utils.js:173-190 checkConstructionSite 的对象分支：同类型占位/
-     *  任意工地占位拒；extractor 需矿物且无既有 extractor（官方在互斥检查
-     *  前提前返回——M2B P2 清偿：extractor 不受造价对象互斥约束）；非
-     *  rampart/road 的造价对象互斥；0/49 边界全类型拒（官方分支尾部同款）。 */
+    /** 检查同格同类型或工地占位；extractor 需矿物，随后提前返回，不使用其他造价对象互斥检查。
+     * 其他非 road/rampart 结构与造价对象互斥，房间边界拒绝建造。
+     * 来源：上游 engine/src/utils.js 的 checkConstructionSite 对象分支。 */
     function checkConstructionSiteObjects(structureType, x, y) {
       const typeOf = (o) => ((o.type === 'structure' || o.type === 'spawn') && o.structureType)
         ? o.structureType : o.type;
@@ -635,18 +600,16 @@
       if (x <= 0 || y <= 0 || x >= 49 || y >= 49) return false;
       return true;
     }
-    /** 官方 utils.js:128-152 checkConstructionSite 的地形分支
-     *  （staticTerrainData 调用形态）：非 road/container 的 1/48 位要求相邻
-     *  边界三格全墙（官方顺序 if——角格 y 边后写胜出，M2B P2 清偿对齐）；
-     *  extractor 恒过；非 road 不可建墙上。 */
+    /** 非 road/container 在 1/48 边缘要求所选边界三格都是墙；extractor 提前通过，其他非 road 不可建墙上。
+     * 来源：上游 engine/src/utils.js 的 checkConstructionSite 地形分支。 */
     function checkConstructionSiteTerrain(structureType, x, y) {
       const terrain = gw.terrainByRoom[name];
       if (!terrain) return false;
       const isWall = (tx, ty) => (terrain[ty * 50 + tx] & TERRAIN_MASK_WALL) !== 0;
       if (structureType !== 'road' && structureType !== 'container'
         && (x === 1 || x === 48 || y === 1 || y === 48)) {
-        // 官方 :132-135 顺序赋值：x==1 → x==48 → y==1 → y==48 依次覆写，
-        // 角格（1,1 等）y 边分支最终胜出——逐字复刻（原三元链 x 边优先）
+        // 先检查 x 边，再检查 y 边；角落位置取最后命中的 y 边三格。
+        // 来源：上游 engine/src/utils.js 的 checkConstructionSite 地形检查。
         let border;
         if (x === 1) border = [[0, y - 1], [0, y], [0, y + 1]];
         if (x === 48) border = [[49, y - 1], [49, y], [49, y + 1]];
@@ -673,10 +636,8 @@
       }
       return result;
     };
-    /** 官方 rooms.js:863-970 findPath 的直线退化桩（M2B 扩面 P2——A* 真语义
-     *  归 FFI 批，与 moveTo/findPathTo 同口径灰区登记；serialize 形态官方
-     *  :968-970）。异房 fromPos/toPos 官方 :901-906 均返 []/'' 原样（toPos
-     *  门为三路评审 P2 清偿补齐）。 */
+    /** 按直线逐格产生路径，最多 100 步；不避障、不计算地形代价。
+     * 异房起点或终点返回空路径，serialize 选项返回序列化字符串。 */
     room.findPath = function (fromPos, toPos, opts) {
       opts = opts || {};
       if (!fromPos || fromPos.roomName !== name) return opts.serialize ? '' : [];
@@ -698,11 +659,9 @@
       }
       return opts.serialize ? serializePath(path) : path;
     };
-    /** 官方 createConstructionSite（rooms.js:1029-1097，M2B 扩面 P2 转真——
-     *  intent 通道与结算执行器自双房批前已在，此处补 API 预检面）。
-     *  预检序：fetchXY/边界 → CONSTRUCTION_COST 门 → spawn 名三查 → 敌主
-     *  controller 拒 → 他人 reservation 拒 → RCL 配额 → 对象/地形双占位检查
-     *  → 总量帽 → spawn 名自增 → intent → OK。 */
+    /** 按坐标、类型、spawn 名、控制器权限、名额、占位与总工地数的顺序检查，然后记录创建指令。
+     * 本 tick 创建计数与世界快照中的已有工地数分别统计。
+     * 来源：上游 engine/src/game/rooms.js 的 createConstructionSite。 */
     room.createConstructionSite = function (firstArg, secondArg, structureType, name) {
       const xy = gw.fetchXYArguments(firstArg, secondArg);
       const x = xy[0], y = xy[1];
@@ -759,12 +718,8 @@
       gw.intents.pushByName('room', 'createConstructionSite', intent);
       return C_OK;
     };
-    // 官方 rooms.js:573-583：raw=true 返回**持久化原始字符串**（不可变——
-    // 玩家改非 raw 拿到的解析数组不得反向改写 raw 输出，GPT 复审 P1-5 清偿：
-    // 原实现 raw 分支即时序列化同一可变数组，改 data.amount 会污染 raw）；
-    // 非 raw 返回解析缓存（官方 roomEventLogCache 同 run 同引用同构——装配期
-    // 一次定格，同 tick 多次调用同引用）。字符串经预置 stringify（宿主数据
-    // 编码不经可换全局）。B3 落账 events 上一 tick 覆写
+    // 装配时分别保存事件 JSON 字符串和解析数组；修改解析数组不会反向改变 raw 返回值。
+    // 同 tick 的非 raw 调用复用解析数组。来源：上游 engine/src/game/rooms.js 的 getEventLog。
     const eventLogRaw = __jsonStringify((r && r.events) || []);
     const eventLogParsed = __jsonParse(eventLogRaw);
     room.getEventLog = function (raw) {
@@ -804,20 +759,14 @@
       }
       if (name.length > 100) return ERR_INVALID_ARGS;
       gw.createdFlagNames.add(name);
-      // 官方 :1019-1022：roomName 经 this.name（闭包 name 已被旗名遮蔽）+
-      // 本地 Game.flags[name] = new Flag(...)——同 tick 立即可用（三路评审
-      // P1 清偿：原实现只记 intent，同 tick Game.flags 读不到新旗）。旗壳经
-      // wrapObject+flag 装配器同构（name/color/secondaryColor 构造定格、
-      // delete base.id——官方旗无 id 面；官方虽以 'flag_'+name 键入 _objects
-      // 索引（game.js:403）但 flag.id 恒 undefined，玩家无文档化路径取键——
-      // 行为面等价）；不入 objectsById，下一 tick 由世界投影重建
+      // 新旗立即加入本 tick 的 Game.flags，但不加入 objectsById；下一 tick 由世界数据重新装配。
+      // 旗名遮蔽局部 name，因此房间名要从 this.name 读取。
       const roomName = this.name;
       const shell = gw.wrapObject(
         { type: 'flag', id: undefined, room: roomName, x, y, name, color, secondaryColor },
         gw.world.time,
       );
-      // 清偿复审 P3：官方经 RoomObject.call（rooms.js:1651）挂 Room 实例——
-      // 本地壳须同步回填（buildGame 的回填循环不覆盖 createFlag 装配的壳）
+      // 新旗帜不经过 buildGame 的回填循环，必须在这里设置其 room 引用。
       shell.room = this;
       gw.currentGame().flags[name] = shell;
       gw.intents.pushByName('room', 'createFlag', {

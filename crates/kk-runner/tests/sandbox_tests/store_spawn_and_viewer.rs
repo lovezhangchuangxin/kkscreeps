@@ -1,5 +1,7 @@
-//! B1 结构治理批自 sandbox_tests.rs 连续切块（串行链 impl；顶层唯一 #[test] 不变量
-//! 在 crate 根——本文件全部 fn 由根链按原调用序调用，不得加 #[test]）。
+//! 验证缺失访问探测、Store、孵化及查看者和 GCL 数据。
+//!
+//! 场景由 sandbox_tests.rs 的唯一测试串行调用，避免进程级计数互相干扰；
+//! 这里不添加独立 #[test]。
 
 use super::*;
 

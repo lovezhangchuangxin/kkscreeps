@@ -1,12 +1,12 @@
-//! B1 结构治理批自 sandbox_tests.rs 连续切块（串行链 impl；顶层唯一 #[test] 不变量
-//! 在 crate 根——本文件全部 fn 由根链按原调用序调用，不得加 #[test]）。
+//! 验证地形协议、模块加载、Memory 写回、预算与中断后复用。
+//!
+//! 场景由 sandbox_tests.rs 的唯一测试串行调用，避免进程级计数互相干扰；
+//! 这里不添加独立 #[test]。
 
 use super::*;
 
-/// 紧凑地形协议（M2B 前置批 P3 真路径形态）：terrain 值 = {rev, payload(b64)}
-/// ——rev 命中跨 tick 复用解码产物、rev 变更必须重解码（行为探针：若 JS 侧
-/// 忽略 rev，第二 tick 会读到陈旧字节）。payload 为手搓 b64：全零 2500 字节
-/// = "A"×3334+"=="；byte0=wall（[1,0,0] 组）= "AQAA"+"A"×3330+"=="。
+/// 验证紧凑地形 {rev,payload} 解码：同版本读取相同值，版本改变后读取新地形。
+/// 载荷为手工构造的 2500 字节 base64；第二份载荷把首格从 wall 改为 plain。
 pub(super) fn terrain_compact_protocol_form() -> anyhow::Result<()> {
     let mut sb = Sandbox::new(SandboxConfig::default())?;
     let mut table = ModuleTable::new();
@@ -59,8 +59,8 @@ pub(super) fn terrain_compact_protocol_form() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// M1 步 5 的 prelude 配套：Terrain 对象（rooms.js:1223-1241）、look 面 terrain
-/// 项、room.controller undefined、console 官方格式化（console.js:16-22）。
+/// 验证 Terrain、look 地形项、缺省 controller 和 console 格式化。
+/// 来源：上游 engine/src/game/rooms.js 与 console.js 的相应接口。
 pub(super) fn terrain_look_and_console_semantics() -> anyhow::Result<()> {
     let mut sb = Sandbox::new(SandboxConfig::default())?;
     let mut table = ModuleTable::new();
@@ -265,7 +265,7 @@ pub(super) fn prelude_basics() -> anyhow::Result<()> {
     let v = sb.run_expr("Buffer.from([0xf4,0x90,0x80,0x80]).toString()")?;
     assert!(v["ok"] == true, "码点超界序列不抛: {v:?}");
 
-    // from 的 encoding 分派（与 toString 对称；此前被静默忽略）
+    // 分别检查 base64、数字 hex、大小写字母和未支持的编码。
     let v = sb.run_expr("JSON.stringify(Array.from(Buffer.from('aGk=','base64')))")?;
     assert_eq!(v["value"], "[104,105]", "base64 解码");
     let v = sb.run_expr("JSON.stringify(Array.from(Buffer.from('414243','hex')))")?;
@@ -483,7 +483,7 @@ pub(super) fn console_capture() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// stub Game 投影：对象可见、find 可用、缺失属性被探测。
+/// 检查 Game 对象装配、find 查询和缺失访问诊断；部分查询也保留在调用计数中。
 pub(super) fn stub_game_projection() -> anyhow::Result<()> {
     let mut sb = Sandbox::new(SandboxConfig::default())?;
     load_sample_bot(&mut sb)?;
@@ -580,8 +580,7 @@ pub(super) fn stub_game_projection() -> anyhow::Result<()> {
         "跨房间（带 roomName 且不等）仍为 Infinity → JSON null"
     );
 
-    // 桩调用计数（A2 起 move/harvest 已从桩换真——真方法不再计数，改锁
-    // 仪表总体工作：sample bot 的 room.find 仍在桩面）
+    // 此处检查调用计数仍工作；Room.find 已实现查询，但仍记录在 stubCalls 中。
     let stubs = sb.drain_stub_calls()?;
     assert!(
         stubs["room.find:101"].as_i64().unwrap_or(0) >= 1,
@@ -674,10 +673,8 @@ pub(super) fn watchdog_hard_terminate_and_reuse() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// 真实看门狗线程的代际守卫：deadline 边缘的 disarm/arm 交界处，迟到的旧到期
-/// 不得把 terminate 投递到下一个 tick 的执行上（并发-1 的窗口）。
-/// 竞态本质非确定，靠高频贴近 deadline 的 arm/disarm 逼近窗口；守卫失效时
-/// 本测试会间歇性失败（runExpr 被 terminate 打死），锁原子化后必然通过。
+/// 在到期附近反复解除与重新登记期限，检查旧代次中断不会影响后续表达式。
+/// 这是调度竞态压力测试，有限次数通过不代表遍历了全部线程交错。
 pub(super) fn watchdog_late_expiry_does_not_kill_next_tick() -> anyhow::Result<()> {
     let mut sb = Sandbox::new(SandboxConfig::default())?;
     let w = world();
@@ -900,11 +897,8 @@ pub(super) fn intent_channel_prelude_forms_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// B0-6（外部评审清偿·停跑回血候选化）：begin_tick 负桶分支不再即时落桶——
-/// 增量暂存为候选，settle_bill 提交点并入、discard_bill 丢弃；官方停跑数值
-/// 口径不变（−40→−20→0，深负钳 −2×limit 地板）。原实现即时落桶绕过统一
-/// 提交点：世界结算失败/丢弃轮玩家桶仍前进（探针：-40 → begin → -20、
-/// discard 后仍 -20）。
+/// 负余额 begin_tick 只暂存回充，settle_bill 更新余额，discard_bill 保持原余额。
+/// 覆盖 −40→−20→0 的恢复轨迹，以及 −580 恢复到 −40 的深度透支分支。
 pub(super) fn b06_skip_recharge_candidate_impl() -> anyhow::Result<()> {
     let mut sb = Sandbox::new(SandboxConfig {
         initial_bucket: -40.0,

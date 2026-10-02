@@ -1,27 +1,13 @@
-/* kk-runner prelude · 段 2：CommonJS 加载器（官方 requireFn 同形）。
- *
- * 官方形态（engine/src/game/game.js:551-594 + driver/lib/runtime/runtime-driver.js:65）：
- * - 名字归一仅剥 `./` 前缀（:553）——无 `../` 解析、无 `.js` 补全，模块名即上传名；
- * - require.cache 是普通对象字面量（Object.prototype 域），键=模块名，值=
- *   **exports 本体**（二进制为 Buffer——:562），非 {exports} 包装；lodash 预置本体；
- * - 循环 require：占坑 -1，命中抛 `Circular reference to module '...'`（:565/:590-592）
- *   ——A5 前我方为 Node 半成品导出语义，已按硬约束①对齐官方（灰区清偿）；
- * - 执行失败删缓存重抛（:578-581）——瞬时初始化错误下一 tick 重跑可自愈；
- * - 模块包装 `(function __module(module,exports){…})(__module,__module.exports)`
- *   （runtime-driver.js:65）：只传两参、this=undefined（非严格模块体落到
- *   globalThis）；require/global/`_` 从全局取（它们本就是全局）；
- * - 官方 game.js:504-512 每 tick 重绑判定：require 缺失 ∨ userCodeTimestamp 变 ∨
- *   cache.main 非对象 ∨ cache.main.loop 非函数 → 重绑 require 并**整体重建缓存
- *   对象**（{lodash:_}）。我方等价物：模块表替换（set_modules→宿主私有句柄 resetModules）
- *   bump codeStamp；beginTick 经 ensureRequire() 跑同款四条件判定。整体重建
- *   （而非逐键 delete）同时免疫玩家冻结 require.cache（对抗评审 P2）。
+/* 按上传模块名加载 CommonJS 模块；仅去掉 ./ 前缀，不解析 ../ 或补 .js。
+ * 缓存直接保存 exports，二进制模块保存 Buffer；初始化失败删除缓存，循环加载抛错。
+ * 模块表替换或入口缓存不符合要求时整体重建 require 和缓存。
+ * 来源：上游 engine/src/game/game.js 的 requireFn 与入口缓存检查。
  */
 (() => {
   'use strict';
 
   const { ops, lodash: _, bufferCtor: Buffer } = globalThis.__kkp;
-  // 模块加载是宿主基础设施：编译经捕获的 Function 构造器（官方走驱动侧
-  // compileScriptSync，不经玩家可交换的 realm 全局 Function）
+  // 捕获 Function 构造器，模块编译不使用玩家后来替换的全局 Function。
   const __Function = Function;
 
   // 官方 user-vm.js:59：`global` = 上下文全局对象自身（官方跨 tick 存储惯例，
@@ -30,8 +16,7 @@
 
   let codeStamp = 0; // 官方 userCodeTimestamp 等价物（重绑时 bump）
   let latestStamp = 0;
-  // moduleObject.user 的取值通道：20_cjs 加载期 gw 尚未创建（_registry 是
-  // 30_game 首文件），且 __kkp 在末段删除——由 game.js beginTick 经钩子注入
+  // 当前查看者由 game.js 的 beginTick 更新；此段加载时世界状态尚未装配。
   let currentUser;
 
   function makeRequire() {
@@ -76,9 +61,8 @@
           'module', 'exports',
           source + '\n//# sourceURL=kk_module/' + name,
         );
-        // 官方 sloppy 直调 `(fn)(module, module.exports)`：this=undefined——非严格
-        // 模块体落到 globalThis、模块体自带 'use strict' 时保持 undefined；
-        // apply(void 0) 精确复刻
+        // 以 undefined 作为 this 调用模块：非严格模块体会看到全局对象，严格模块体保持 undefined。
+        // 来源：上游 driver/lib/runtime/runtime-driver.js 的模块包装器。
         wrapper.apply(void 0, [moduleObject, moduleObject.exports]);
       } catch (e) {
         delete cache[name];

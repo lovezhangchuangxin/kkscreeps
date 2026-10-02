@@ -1,8 +1,7 @@
-//! 玩家模块表：模块名 → 源码/二进制。
+//! 保存玩家 CommonJS 源码与二进制模块，按模块名精确查询。
 //!
-//! Screeps 玩家上传多个 CommonJS 模块；官方存储里模块名可含 `.` 与 `/`（数据库转义为
-//! `$DOT$`/`$SLASH$`，语义上就是原始名）。二进制模块（`.wasm`）的官方语义是
-//! `require` 返回 `Buffer`（官方 engine/src/game/game.js 的 binary 模块分支）。
+//! 目录加载器将 .js 后缀去掉，保留 .wasm 后缀，以 / 连接子目录名。
+//! JavaScript require 的缓存与名称处理见 prelude/20_cjs.js；二进制加载返回 Buffer。
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -19,7 +18,7 @@ pub enum ModuleCode {
     Binary(Vec<u8>),
 }
 
-/// 一个玩家的全部模块。Rust 侧持有，沙箱经 op 按名加载（spike 实验 I 验证的模式）。
+/// 一个玩家的模块表，由 Rust 持有；JavaScript 通过 op 按名称读取。
 #[derive(Debug, Clone, Default)]
 pub struct ModuleTable {
     modules: HashMap<String, ModuleCode>,
@@ -74,8 +73,9 @@ impl ModuleTable {
         self.modules.is_empty()
     }
 
-    /// 从 bot 代码目录加载：递归收集 `*.js`（模块名去掉 `.js` 后缀，与主流上传工具一致）
-    /// 与 `*.wasm`（二进制模块）。子目录用 `/` 拼入模块名。
+    /// 递归读取目录中的 .js 和 .wasm 文件，跳过以 . 开头的目录与文件。
+    /// .js 模块名去掉后缀，.wasm 保留后缀，子目录以 / 连接；其他扩展名忽略。
+    /// 读取失败返回错误；目录遍历使用 is_dir，会跟随目录符号链接。
     pub fn from_directory(root: &Path) -> std::io::Result<Self> {
         let mut table = Self::new();
         fn walk(table: &mut ModuleTable, root: &Path, rel: &str) -> std::io::Result<()> {

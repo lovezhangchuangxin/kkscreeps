@@ -1,9 +1,7 @@
-/* kk-runner prelude · 30_game 段 8：PathFinder 桩（对照官方
- * engine/src/game/path-finder.js + driver/lib/path-finder.js）。
- *
- * M0：直线步进 + incomplete:false 的假结果，保证 bot 流程可跑；
- * 真实现（FFI 官方 pf.cc，逐点一致）的玩家面接线随 M2 API 批（C1/C2 成果）。
- * 依赖：RoomPosition（全局，room-position 段已挂）。
+/* 提供 CostMatrix 与直线步进的 PathFinder.search。
+ * CostMatrix 使用 x*50+y 索引，将 2500 字节通过 Uint32Array 打包成 625 个数值。
+ * search 只采用首个目标，忽略房间、障碍和搜索选项，仍返回 incomplete:false；
+ * 此结果不能用于判断真实路径可达性。尚未调用 kk-pathfinder 的原生寻路实现。
  */
 (() => {
   'use strict';
@@ -11,13 +9,10 @@
   const { countStub } = globalThis.__kkp;
   const gw = globalThis.__kkp.gw;
 
-  // 官方 CostMatrix（path-finder.js:18-47）逐字：_bits 是公开 own 面
-  //（Uint8Array(2500)，索引 **x*50+y**——UNDOC-COSTMATRIX 面）；set 钳
-  // 0..255（|0 强转）；clone 复制位图；serialize 把 2500 字节 buffer 按
-  // Uint32 视图切成 **625 元素普通数组**（官方 `Array.prototype.slice.apply(
-  // new Uint32Array(this._bits.buffer))` 的打包怪形——四格一组小端序）；
-  // deserialize 经 Uint32Array(data).buffer 还原（不走构造器——Object.create
-  // 直接挂 _bits）。M2B 扩面 P6 真化（原桩索引反置+{bits} 形态全非官方）。
+  // CostMatrix._bits 是公开的 2500 字节 Uint8Array，索引为 x*50+y。
+  // 序列化将同一缓冲区视为 Uint32Array，得到 625 元素数组；不是 2500 元素字节数组。
+  // 反序列化直接创建对应原型的对象并还原字节。
+  // 来源：上游 engine/src/game/path-finder.js 的 CostMatrix。
   class CostMatrix {
     constructor() { this._bits = new Uint8Array(2500); }
     set(xx, yy, val) {
@@ -84,7 +79,7 @@
       return { path, ops: path.length, cost: path.length, incomplete: false };
     },
   };
-  // 官方 path-finder.js:78 同为非可写 defineProperty（清偿复审 P3-N1）
+  // PathFinder 全局绑定不可写，但其对象和方法没有因此冻结。
   Object.defineProperty(globalThis, 'PathFinder', {
     enumerable: true, value: PathFinder,
   });

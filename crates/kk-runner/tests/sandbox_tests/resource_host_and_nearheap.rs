@@ -1,5 +1,7 @@
-//! B1 结构治理批自 sandbox_tests.rs 连续切块（串行链 impl；顶层唯一 #[test] 不变量
-//! 在 crate 根——本文件全部 fn 由根链按原调用序调用，不得加 #[test]）。
+//! 验证资源与移动预检、宿主函数隔离和近堆上限恢复。
+//!
+//! 场景由 sandbox_tests.rs 的唯一测试串行调用，避免进程级计数互相干扰；
+//! 这里不添加独立 #[test]。
 
 use super::*;
 
@@ -651,11 +653,8 @@ pub(super) fn host_face_closed() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// B0-3 评审 G1 锁：宿主帧零引用依赖 prelude 各段 'use strict'——V8 对
-/// strict 帧的 CallSite.getFunction() 返回 undefined（玩家自己的 sloppy 帧
-/// 正常透出）。玩家经 Error.prepareStackTrace 能捕到宿主**帧名**（runLoop
-/// 等）但拿不到函数本体——若未来某 prelude 段丢掉 'use strict'，此防线会
-/// 静默重开 prepareStackTrace 窃取向量，在此显形。
+/// 通过 Error.prepareStackTrace 检查宿主严格模式帧的 getFunction 返回 undefined。
+/// 玩家可以看到帧名，但该场景不能取得 runLoop 等函数引用；玩家自己的非严格帧作为对照。
 pub(super) fn strict_frame_hides_host_functions() -> anyhow::Result<()> {
     let mut sb = Sandbox::new(SandboxConfig::default())?;
     let mut table = ModuleTable::new();
@@ -712,10 +711,9 @@ module.exports.loop = function () {
     Ok(())
 }
 
-/// near-heap 触发后的恢复不变量（B0-1 登记、B0-3 补 Ok 路径清偿的锁定）：
-/// 无论触发落在哪条路径（硬中断善后 / end_tick Ok / tick-外 drain / 下一次
-/// begin_tick 前置 restore），堆上限必须回到配置值且沙箱继续可服务——
-/// 「触发但正常完成」不再永久保持放大后的 ceiling。
+/// 逼近堆上限后检查 end_tick 的成功或中断出口，并确认实例仍可求值。
+/// 测试接受 80 MiB 内的生效上限，以区分恢复请求与永久保留的 96 MiB 放大上限，
+/// 不要求 V8 生效上限恰好等于配置的 48 MiB。
 pub(super) fn nearheap_trigger_then_restore_invariant() -> anyhow::Result<()> {
     let cfg = SandboxConfig {
         heap_limit_bytes: 48 * 1024 * 1024,
