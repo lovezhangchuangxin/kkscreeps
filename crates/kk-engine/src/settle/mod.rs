@@ -23,7 +23,10 @@ pub use stages::{RunState, TickStage};
 pub use txn::TickState;
 pub use writeback::{PlayerWriteback, SegmentWriteback, WritebackStep};
 
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
+use std::rc::Rc;
+use std::sync::Arc;
 
 use kk_schema::room::{CreepObj, RoomObject};
 use kk_world::{ObjId, RoomIndex, RoomState};
@@ -139,19 +142,33 @@ impl TickInput {
 /// 一次结算携带的贡献平面快照：有效规则、槽执行表、扩展字段目录与
 /// 冻结计划本体。由引擎装配时生成，结算全程只读；四个成员必须来自
 /// 同一冻结计划。
-pub struct Plane<'a> {
+///
+/// 三个派生物持 `Rc`/`Arc` 而非借用：重入 op 从 OpState 取到的是
+/// 挂起的内层链（`NextAction`），而该闭包要捕获 `RoomCtx` 作为入参，
+/// 因此闭包必须是 `'static`——借用形态的平面进不去。
+///
+/// 克隆成本：两次非原子 `Rc` 递增 + 一次原子 `Arc` 递增 + 120B
+/// `LinkRules` memcpy，每房每 tick 一次，无深拷贝。
+#[derive(Clone)]
+pub struct Plane {
     pub links: kk_mod_api::builtin::LinkRules,
-    pub contrib: &'a contrib::ContributionDispatch,
-    pub extensions: &'a kk_mod_api::extension::ExtensionCatalog,
+    pub contrib: Rc<contrib::ContributionDispatch>,
+    pub extensions: Rc<kk_mod_api::extension::ExtensionCatalog>,
     /// 冻结计划：意图描述符与投影类型目录经它解析（键解析发生在
     /// 装配期以外此处，是扩展意图的低频路径）。
-    pub plan: &'a kk_mod_api::ContributionPlan,
+    pub plan: Arc<kk_mod_api::ContributionPlan>,
 }
 
 /// 单房间结算上下文：房间副本、位置索引及共享候选状态，
-/// 以及本轮的事件、伤害与移动记录。直接调用者须提供工作副本。
-pub struct Working<'w> {
-    pub room: &'w mut RoomState,
+/// 以及本轮的事件、伤害与移动记录。
+///
+/// 房间按值持有而非借用，使本类型成为可拥有、无生命周期的 `'static`
+/// 值：重入 op 从 OpState 取走的是挂起内层链，该链以 `RoomCtx` 为入参
+/// 闭包起来执行——`RoomCtx` **本身不进 OpState**。借用形态的
+/// `Working<'w>` 无法被 `'static` 闭包捕获，这是设计文档 §6.2
+/// 「进入 JS 前结束房间与事务可变借用」得以成立的前提。
+pub struct Working {
+    pub room: RoomState,
     pub index: RoomIndex,
     pub time: u64,
     /// Unix 毫秒墙钟，来自本轮 TickInput。
@@ -176,10 +193,17 @@ pub struct Working<'w> {
     pub extractor_cooldown_pending: BTreeMap<ObjId, u64>,
     pub movement: movement::Movement,
     /// 本轮生效的贡献平面：link 规则、槽执行表与扩展字段目录。
-    pub plane: Plane<'w>,
+    pub plane: Plane,
 }
 
-impl<'w> Working<'w> {
+/// 共享的房间候选句柄。内层链闭包捕获本类型并作为入参传给处理器
+/// （**不进 OpState**——进了会让结算尾部 `Rc::into_inner` 恒失败）。
+/// 两条纪律：处理器调用 `next()` 前不得持有本句柄的可变借用（RefCell
+/// 不允许重入可变借用）；处理器不得克隆留存本句柄，否则该房间此后
+/// 每轮结算都在 `Rc::into_inner` 处失败。
+pub type RoomCtx = Rc<RefCell<Working>>;
+
+impl Working {
     pub fn creep(&self, id: ObjId) -> Option<&CreepObj> {
         match self.room.objects.get(&id) {
             Some(RoomObject::Creep(c)) => Some(c),
@@ -397,7 +421,7 @@ impl<'w> Working<'w> {
             }
         }
         // 链上的拉者不存在时停止向上查找。
-        let head = self.movement.head_puller(self.room, id);
+        let head = self.movement.head_puller(&self.room, id);
         let mut acc = match self.tick_fatigue.get(&head) {
             Some(v) => *v,
             None => self.creep(head).map(|c| c.fatigue as i64).unwrap_or(0),
@@ -525,7 +549,7 @@ impl<'w> Working<'w> {
             }
         });
         self.movement.check_impl(
-            self.room,
+            &self.room,
             &self.index,
             &self.old_fatigue,
             safe_mode_user.as_deref(),
@@ -593,15 +617,17 @@ pub fn energy_resource_name(o: &kk_schema::room::EnergyObj) -> &str {
 /// room.name 须为世界目录中的房名，用于筛选房间级指令；time 是结算前
 /// 的绝对 tick，now_ms 是 Unix 毫秒墙钟。对象级指令仅处理本房间存在的 ID。
 pub fn settle_room(
-    room: &mut RoomState,
+    room: RoomState,
     time: u64,
     now_ms: u64,
     state: &TickState,
     batch: &IntentBatch,
-    plane: &Plane<'_>,
-) -> Result<Vec<Value>, SettleError> {
+    plane: &Plane,
+) -> Result<(RoomState, Vec<Value>), SettleError> {
     let index = RoomIndex::build(&room.objects);
-    let mut w = Working {
+    // 候选以共享句柄持有：贡献处理链（含 JS 侧 wrap 的 next() 重入）
+    // 需要一个 'static 可达的候选，见 RoomCtx 的说明。
+    let ctx: RoomCtx = Rc::new(RefCell::new(Working {
         room,
         index,
         time,
@@ -617,50 +643,60 @@ pub fn settle_room(
         safe_mode_activated: BTreeSet::new(),
         extractor_cooldown_pending: BTreeMap::new(),
         movement: movement::Movement::new(),
-        plane: Plane {
-            links: plane.links,
-            contrib: plane.contrib,
-            extensions: plane.extensions,
-            plan: plane.plan,
-        },
-    };
+        plane: plane.clone(),
+    }));
 
     // 先清空动作记录和说话载荷，避免上一轮内容继续可见。
-    for creep in w.room.objects.values_mut() {
-        if let RoomObject::Creep(c) = creep {
-            c.action_log = 0;
-            c.say_message = None;
-            c.say_public = None;
+    {
+        let mut w = ctx.borrow_mut();
+        for creep in w.room.objects.values_mut() {
+            if let RoomObject::Creep(c) = creep {
+                c.action_log = 0;
+                c.say_message = None;
+                c.say_public = None;
+            }
         }
+        // 处理指令前，按控制器配额计算 spawn/extension 是否启用。
+        spawn::calc_spawns(&mut w);
     }
-
-    // 处理指令前，按控制器配额计算 spawn/extension 是否启用。
-    spawn::calc_spawns(&mut w);
 
     // 玩家按名字排序，先处理房间指令，再按对象 ID 处理对象动作。
     for (player, intents) in &batch.users {
-        room::process_room_intents(&mut w, player, &intents.room);
+        room::process_room_intents(&mut ctx.borrow_mut(), player, &intents.room);
         for (obj_id, actions) in &intents.objects {
             // 通知开关是对象通用指令，在类型分派前处理。
             if let Some(data) = actions.get(&Action::NotifyWhenAttacked) {
-                notify_when_attacked(&mut w, player, *obj_id, data);
+                notify_when_attacked(&mut ctx.borrow_mut(), player, *obj_id, data);
             }
             // Creep 和 spawn 须属于当前玩家；controller 另允许无主对象进入处理器。
-            match w.room.objects.get(obj_id) {
-                Some(RoomObject::Creep(o)) if o.owner == *player => {
-                    creep::process_creep_intents(&mut w, *obj_id, actions);
+            // 先取对象类别再释放借用：处理器链需要共享句柄，不能持借用进入。
+            let kind = {
+                let w = ctx.borrow();
+                match w.room.objects.get(obj_id) {
+                    Some(RoomObject::Creep(o)) if o.owner == *player => Some("creep"),
+                    Some(RoomObject::Spawn(o)) if o.owner == *player => Some("spawn"),
+                    Some(RoomObject::Controller(o))
+                        if o.owner.as_deref().is_none_or(|u| u == player.as_str()) =>
+                    {
+                        Some("controller")
+                    }
+                    // 真实类型在 structureType 中，处理器再检查结构类型和所有权。
+                    Some(RoomObject::Generic(_)) => Some("structure"),
+                    _ => None,
                 }
-                Some(RoomObject::Spawn(o)) if o.owner == *player => {
-                    spawn::process_spawn_intents(&mut w, *obj_id, actions);
+            };
+            match kind {
+                Some("creep") => {
+                    creep::process_creep_intents(&mut ctx.borrow_mut(), *obj_id, actions);
                 }
-                Some(RoomObject::Controller(o))
-                    if o.owner.as_deref().is_none_or(|u| u == player.as_str()) =>
-                {
-                    controller::process_controller_intents(&mut w, *obj_id, actions);
+                Some("spawn") => {
+                    spawn::process_spawn_intents(&mut ctx.borrow_mut(), *obj_id, actions);
                 }
-                // 真实类型在 structureType 中，处理器再检查结构类型和所有权。
-                Some(RoomObject::Generic(_)) => {
-                    structures::process_structure_intents(&mut w, *obj_id, player, actions)
+                Some("controller") => {
+                    controller::process_controller_intents(&mut ctx.borrow_mut(), *obj_id, actions);
+                }
+                Some("structure") => {
+                    structures::process_structure_intents(&ctx, *obj_id, player, actions)
                         .map_err(SettleError)?;
                 }
                 _ => continue,
@@ -669,48 +705,81 @@ pub fn settle_room(
         // Mod 对象的扩展意图在既有动作之后按对象 ID 顺序派发；目标不是
         // Mod 对象的扩展意图在此静默丢弃（与未知 vanilla 动作同待遇）。
         for (obj_id, ext_intents) in &intents.ext {
-            if matches!(w.room.objects.get(obj_id), Some(RoomObject::Mod(_))) {
-                mod_intents::process_object_ext_intents(&mut w, player, *obj_id, ext_intents)
+            let is_mod = matches!(
+                ctx.borrow().room.objects.get(obj_id),
+                Some(RoomObject::Mod(_))
+            );
+            if is_mod {
+                mod_intents::process_object_ext_intents(&ctx, player, *obj_id, ext_intents)
                     .map_err(SettleError)?;
             }
         }
     }
 
     // 所有 move/pull 登记完成后，再统一仲裁目的格冲突。
-    w.check_movement();
+    ctx.borrow_mut().check_movement();
 
     // 按指令处理后的存量重算可用能量，供 spawn tick 的低能量补给判断。
-    let _energy_available = spawn::energy_available(&w);
+    let _energy_available = spawn::energy_available(&ctx.borrow());
 
     // 此时固定 ID 列表：指令阶段创建的对象参加 tick，
     // 逐对象 tick 中新建的对象不参加这一轮。对象按 ID 升序处理。
-    let ids: Vec<ObjId> = w.room.objects.keys().copied().collect();
+    let ids: Vec<ObjId> = ctx.borrow().room.objects.keys().copied().collect();
     for id in ids {
-        match w.room.objects.get(&id) {
-            Some(RoomObject::Energy(_)) => economy::energy_tick(&mut w, id),
-            Some(RoomObject::Source(_)) => economy::source_tick(&mut w, id),
-            Some(RoomObject::Creep(_)) => creep::creep_tick(&mut w, id)?,
-            Some(RoomObject::Spawn(_)) => spawn::spawn_tick(&mut w, id, _energy_available),
-            Some(RoomObject::Controller(_)) => economy::controller_tick(&mut w, id),
-            Some(RoomObject::Tombstone(_)) => economy::tombstone_tick(&mut w, id),
-            Some(RoomObject::Ruin(_)) => economy::ruin_tick(&mut w, id),
-            Some(RoomObject::Mineral(_)) => economy::mineral_tick(&mut w, id),
-            Some(RoomObject::Extractor(_)) => economy::extractor_tick(&mut w, id),
-            Some(RoomObject::Road(_)) => economy::road_decay_tick(&mut w, id),
-            Some(RoomObject::Generic(g)) => match generic_structure_type(&g.data).as_deref() {
-                Some("container" | "rampart") => economy::generic_decay_tick(&mut w, id),
-                Some("link") => w.plane.contrib.run_tick(&mut w, id).map_err(SettleError)?,
-                Some("terminal") => economy::terminal_capacity_tick(&mut w, id),
-                _ => {}
-            },
+        let kind = {
+            let w = ctx.borrow();
+            match w.room.objects.get(&id) {
+                Some(RoomObject::Energy(_)) => "energy",
+                Some(RoomObject::Source(_)) => "source",
+                Some(RoomObject::Creep(_)) => "creep",
+                Some(RoomObject::Spawn(_)) => "spawn",
+                Some(RoomObject::Controller(_)) => "controller",
+                Some(RoomObject::Tombstone(_)) => "tombstone",
+                Some(RoomObject::Ruin(_)) => "ruin",
+                Some(RoomObject::Mineral(_)) => "mineral",
+                Some(RoomObject::Extractor(_)) => "extractor",
+                Some(RoomObject::Road(_)) => "road",
+                Some(RoomObject::Generic(g)) => match generic_structure_type(&g.data).as_deref() {
+                    Some("container" | "rampart") => "decay",
+                    Some("link") => "link",
+                    Some("terminal") => "terminal",
+                    _ => "",
+                },
+                _ => "",
+            }
+        };
+        match kind {
+            "energy" => economy::energy_tick(&mut ctx.borrow_mut(), id),
+            "source" => economy::source_tick(&mut ctx.borrow_mut(), id),
+            "creep" => creep::creep_tick(&mut ctx.borrow_mut(), id)?,
+            "spawn" => spawn::spawn_tick(&mut ctx.borrow_mut(), id, _energy_available),
+            "controller" => economy::controller_tick(&mut ctx.borrow_mut(), id),
+            "tombstone" => economy::tombstone_tick(&mut ctx.borrow_mut(), id),
+            "ruin" => economy::ruin_tick(&mut ctx.borrow_mut(), id),
+            "mineral" => economy::mineral_tick(&mut ctx.borrow_mut(), id),
+            "extractor" => economy::extractor_tick(&mut ctx.borrow_mut(), id),
+            "road" => economy::road_decay_tick(&mut ctx.borrow_mut(), id),
+            "decay" => economy::generic_decay_tick(&mut ctx.borrow_mut(), id),
+            "link" => {
+                // 贡献链经共享句柄执行：wrap 的 next() 会重新借用候选，
+                // 此处不得持有借用。
+                let contrib = ctx.borrow().plane.contrib.clone();
+                contrib.run_tick(&ctx, id).map_err(SettleError)?
+            }
+            "terminal" => economy::terminal_capacity_tick(&mut ctx.borrow_mut(), id),
             _ => {}
         }
     }
 
     // 整体替换本轮事件，下一轮玩家执行时由 room.getEventLog 读取。
+    // settle_room 是本房间候选的唯一持有者，Rc 强计数为 1；
+    // 处理器链只在调用期间借用，不留存句柄。
+    let mut w = Rc::into_inner(ctx)
+        .expect("房间候选在结算期间不应被处理器留存")
+        .into_inner();
     w.room.events = w.events.iter().map(Value::to_string).collect();
 
-    Ok(w.events)
+    Ok((w.room, w.events))
 }
 
 /// 读取 Generic 的结构类型；缺失、类型错误或 JSON 无效时返回 None。
@@ -747,9 +816,9 @@ pub struct Engine {
     /// 装配后不应直接改写——规则与已装配的处理链须一起换，经 with_plan。
     pub(crate) links: kk_mod_api::builtin::LinkRules,
     /// link 槽执行表；默认直连 native，装配计划后可携带贡献链。
-    pub(crate) contrib: contrib::ContributionDispatch,
+    pub(crate) contrib: Rc<contrib::ContributionDispatch>,
     /// 扩展字段目录；默认为空（不接受扩展写入），with_plan 装配。
-    pub(crate) extensions: kk_mod_api::extension::ExtensionCatalog,
+    pub(crate) extensions: Rc<kk_mod_api::extension::ExtensionCatalog>,
     /// 已提交的各 Mod 命名空间状态；每 tick 克隆为候选，发布时整体换回。
     /// 服务端私有，不进世界快照与玩家投影。
     pub mod_states: BTreeMap<String, serde_json::Value>,
@@ -797,8 +866,8 @@ impl Engine {
             fail_stage: None,
             fail_writeback: None,
             links: kk_world::place::builtin_link_rules(),
-            contrib: contrib::ContributionDispatch::default(),
-            extensions: kk_mod_api::extension::ExtensionCatalog::default(),
+            contrib: Rc::new(contrib::ContributionDispatch::default()),
+            extensions: Rc::new(kk_mod_api::extension::ExtensionCatalog::default()),
             mod_states: BTreeMap::new(),
             plan: builtin_plan(),
         }
@@ -1050,8 +1119,8 @@ impl Engine {
         }
         Self::check_installed_bindings(&plan, &installed)?;
         self.links = links;
-        self.contrib = contrib;
-        self.extensions = extensions;
+        self.contrib = Rc::new(contrib);
+        self.extensions = Rc::new(extensions);
         self.plan = plan;
         Ok(())
     }
@@ -1361,12 +1430,12 @@ impl Engine {
             room.name.clone_from(name);
             let plane = Plane {
                 links: self.links,
-                contrib: &self.contrib,
-                extensions: &self.extensions,
-                plan: &self.plan,
+                contrib: self.contrib.clone(),
+                extensions: self.extensions.clone(),
+                plan: self.plan.clone(),
             };
-            let mut room_events = settle_room(
-                &mut room,
+            let (room, mut room_events) = settle_room(
+                room,
                 txn.time,
                 txn.input.now_ms,
                 &txn.state,

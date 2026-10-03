@@ -10,11 +10,11 @@ use kk_schema::room::RoomObject;
 use kk_world::ObjId;
 use serde_json::{Value, json};
 
-use super::Working;
 use super::damage::{
     apply_damage, object_hits, rampart_at, set_structure_hits, structure_hits_max,
 };
 use super::movement::type_name_of;
+use super::{RoomCtx, Working};
 use crate::intent::{Action, IntentData};
 
 struct GenericView {
@@ -45,40 +45,45 @@ fn generic_view(w: &Working, id: ObjId) -> Option<GenericView> {
 /// 按 Generic.structureType 分派结构动作；归属存在且不匹配时拒绝，无主允许进入。
 /// 塔每 tick 只执行一项，优先级为 heal、repair、attack。
 pub fn process_structure_intents(
-    w: &mut Working,
+    ctx: &RoomCtx,
     id: ObjId,
     player: &str,
     actions: &BTreeMap<Action, IntentData>,
 ) -> Result<(), String> {
-    let Some(view) = generic_view(w, id) else {
+    let Some(view) = generic_view(&ctx.borrow(), id) else {
         return Ok(());
     };
     if view.owner.as_deref().is_some_and(|owner| owner != player) {
         return Ok(());
     }
+    // link 走贡献链：必须先于任何借用执行，链内 wrap 的 next() 会重新
+    // 借用同一候选。
+    if view.structure_type == "link" {
+        if let Some(d) = actions.get(&Action::Transfer) {
+            let contrib = ctx.borrow().plane.contrib.clone();
+            contrib.run_transfer(ctx, id, d)?;
+        }
+        return Ok(());
+    }
+    let mut w = ctx.borrow_mut();
     match view.structure_type.as_str() {
         "tower" => {
             if let Some(d) = actions.get(&Action::Heal) {
-                tower_heal(w, id, d);
+                tower_heal(&mut w, id, d);
             } else if let Some(d) = actions.get(&Action::Repair) {
-                tower_repair(w, id, d);
+                tower_repair(&mut w, id, d);
             } else if let Some(d) = actions.get(&Action::Attack) {
-                tower_attack(w, id, d);
-            }
-        }
-        "link" => {
-            if let Some(d) = actions.get(&Action::Transfer) {
-                w.plane.contrib.run_transfer(w, id, d)?;
+                tower_attack(&mut w, id, d);
             }
         }
         "rampart" => {
             if let Some(d) = actions.get(&Action::SetPublic) {
-                rampart_set_public(w, id, d);
+                rampart_set_public(&mut w, id, d);
             }
         }
         "terminal" => {
             if let Some(d) = actions.get(&Action::Send) {
-                terminal_send(w, id, d);
+                terminal_send(&mut w, id, d);
             }
         }
         _ => {}

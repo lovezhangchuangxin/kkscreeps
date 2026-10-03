@@ -532,7 +532,7 @@ pub(crate) fn born_creep(
                     nx as usize,
                     ny as usize,
                     kk_core::TERRAIN_MASK_WALL,
-                ) && !movement::has_road(w.room, &w.index, (nx, ny)));
+                ) && !movement::has_road(&w.room, &w.index, (nx, ny)));
         let busy = w.movement.is_tile_busy(nx, ny);
         let is_occupied = static_obstacle || busy;
         if !is_occupied {

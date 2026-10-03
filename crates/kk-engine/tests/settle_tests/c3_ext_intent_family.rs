@@ -176,26 +176,28 @@ fn link_handler_contribution(id: &str, kind: HandlerKind) -> Contribution {
     }
 }
 
-fn frozen(contribution: Contribution) -> kk_mod_api::ContributionPlan {
-    kk_mod_api::freeze_with_builtin(
-        builtin::link(),
-        vec![contribution],
-        FreezeOptions::default(),
+fn frozen(contribution: Contribution) -> std::sync::Arc<kk_mod_api::ContributionPlan> {
+    std::sync::Arc::new(
+        kk_mod_api::freeze_with_builtin(
+            builtin::link(),
+            vec![contribution],
+            FreezeOptions::default(),
+        )
+        .unwrap(),
     )
-    .unwrap()
 }
 
 /// 记录链序并把 args.amount 累进 value 的 process 中心。
 fn counter_process(log: Rc<RefCell<Vec<String>>>) -> ExtSimple {
-    Box::new(move |w, id, args| {
+    Box::new(move |ctx, id, args| {
         log.borrow_mut().push("process".into());
-        let mut fields = w.mod_fields(id).ok_or("目标不是 Mod 对象")?;
+        let mut fields = ctx.borrow().mod_fields(id).ok_or("目标不是 Mod 对象")?;
         let amount = args
             .get("amount")
             .and_then(Value::as_i64)
             .ok_or("缺少 amount")?;
         fields["value"] = json!(fields["value"].as_i64().unwrap_or(0) + amount);
-        w.update_mod_fields(id, &fields)
+        ctx.borrow_mut().update_mod_fields(id, &fields)
     })
 }
 
@@ -210,8 +212,8 @@ fn observer(log: Rc<RefCell<Vec<String>>>, tag: &'static str) -> ExtSimple {
 fn settle_quiet(
     f: &mut Fixture,
     batch: IntentBatch,
-    dispatch: &ContributionDispatch,
-    plan: &kk_mod_api::ContributionPlan,
+    dispatch: std::rc::Rc<ContributionDispatch>,
+    plan: std::sync::Arc<kk_mod_api::ContributionPlan>,
 ) -> Result<(), String> {
     let state = TickState::new(std::mem::take(&mut f.players), f.world.next_obj_id());
     let mut room = f.world.room("W1N1").unwrap().clone();
@@ -219,20 +221,19 @@ fn settle_quiet(
     let plane = Plane {
         links: kk_world::place::builtin_link_rules(),
         contrib: dispatch,
-        extensions: &kk_mod_api::extension::ExtensionCatalog::default(),
+        extensions: std::rc::Rc::new(kk_mod_api::extension::ExtensionCatalog::default()),
         plan,
     };
-    let result = settle_room(
-        &mut room,
+    let settled = settle_room(
+        room,
         f.world.time(),
         1_700_000_000_000,
         &state,
         &batch,
         &plane,
-    )
-    .map(|_| ())
-    .map_err(|e| e.0);
-    if result.is_ok() {
+    );
+    let result = settled.as_ref().map(|_| ()).map_err(|e| e.0.clone());
+    if let Ok((room, _events)) = settled {
         let (players, next, _) = state.into_parts().unwrap();
         f.players = players;
         let name = room.name.clone();
@@ -323,6 +324,7 @@ fn ext_intent_chain_and_player_gates() {
         ext_processes,
     )
     .unwrap();
+    let dispatch = std::rc::Rc::new(dispatch);
 
     let mut f = Fixture::new(11, terrain_with(&[]));
     let id = place_counter(&mut f, 10, 12, "p1", 5);
@@ -331,8 +333,8 @@ fn ext_intent_chain_and_player_gates() {
     settle_quiet(
         &mut f,
         ext_batch("p1", id, json!({ "amount": 3 })),
-        &dispatch,
-        &plan,
+        dispatch.clone(),
+        plan.clone(),
     )
     .unwrap();
     assert_eq!(*log.borrow(), vec!["before", "process", "after"]);
@@ -348,8 +350,8 @@ fn ext_intent_chain_and_player_gates() {
     settle_quiet(
         &mut f,
         ext_batch("p1", id, json!({ "amount": 99 })),
-        &dispatch,
-        &plan,
+        dispatch.clone(),
+        plan.clone(),
     )
     .unwrap();
     assert!(log.borrow().is_empty(), "越界参数不进链");
@@ -359,8 +361,8 @@ fn ext_intent_chain_and_player_gates() {
     settle_quiet(
         &mut f,
         ext_batch("p2", id, json!({ "amount": 2 })),
-        &dispatch,
-        &plan,
+        dispatch.clone(),
+        plan.clone(),
     )
     .unwrap();
     assert_eq!(counter_value(&f, id)["value"], json!(8), "非归属丢弃");
@@ -368,7 +370,7 @@ fn ext_intent_chain_and_player_gates() {
     // 未知意图键：丢弃。
     let mut unknown = IntentBatch::default();
     unknown.add_ext_intent("p1", id, Key::new("extmod:ghost").unwrap(), json!({}));
-    settle_quiet(&mut f, unknown, &dispatch, &plan).unwrap();
+    settle_quiet(&mut f, unknown, dispatch.clone(), plan.clone()).unwrap();
     assert_eq!(counter_value(&f, id)["value"], json!(8), "未知键丢弃");
 
     // 目标不是 Mod 对象（接收者不符的等价形态）：丢弃。
@@ -376,8 +378,8 @@ fn ext_intent_chain_and_player_gates() {
     settle_quiet(
         &mut f,
         ext_batch("p1", creep, json!({ "amount": 1 })),
-        &dispatch,
-        &plan,
+        dispatch.clone(),
+        plan.clone(),
     )
     .unwrap();
     assert_eq!(counter_value(&f, id)["value"], json!(8), "非 Mod 目标丢弃");
@@ -392,7 +394,7 @@ fn ext_intent_failure_and_partial_write_rejected() {
     processes.insert(
         Key::new("extmod:increment.process").unwrap(),
         Box::new(
-            move |_w: &mut kk_engine::settle::Working, _id: ObjId, _args: &Value| {
+            move |_ctx: &kk_engine::settle::RoomCtx, _id: ObjId, _args: &Value| {
                 Err::<(), String>("process 拒绝".into())
             },
         ) as ExtSimple,
@@ -405,21 +407,24 @@ fn ext_intent_failure_and_partial_write_rejected() {
         processes,
     )
     .unwrap();
+    let dispatch = std::rc::Rc::new(dispatch);
     let mut f = Fixture::new(12, terrain_with(&[]));
     let id = place_counter(&mut f, 5, 5, "p1", 1);
     let err = settle_quiet(
         &mut f,
         ext_batch("p1", id, json!({ "amount": 2 })),
-        &dispatch,
-        &plan,
+        dispatch.clone(),
+        plan.clone(),
     )
     .unwrap_err();
     assert!(err.contains("process 拒绝"), "{err}");
     assert_eq!(counter_value(&f, id)["value"], json!(1), "失败候选不落");
 
     // 部分回写：只返回 value 字段 → 整值校验拒绝。
-    let partial: ExtSimple =
-        Box::new(|w, id, _args| w.update_mod_fields(id, &json!({ "value": 9 })));
+    let partial: ExtSimple = Box::new(|ctx, id, _args| {
+        ctx.borrow_mut()
+            .update_mod_fields(id, &json!({ "value": 9 }))
+    });
     let mut processes = BTreeMap::new();
     processes.insert(Key::new("extmod:increment.process").unwrap(), partial);
     let dispatch = ContributionDispatch::assemble_with_ext(
@@ -430,11 +435,12 @@ fn ext_intent_failure_and_partial_write_rejected() {
         processes,
     )
     .unwrap();
+    let dispatch = std::rc::Rc::new(dispatch);
     let err = settle_quiet(
         &mut f,
         ext_batch("p1", id, json!({ "amount": 2 })),
-        &dispatch,
-        &plan,
+        dispatch.clone(),
+        plan.clone(),
     )
     .unwrap_err();
     assert!(err.contains("缺少字段"), "部分回写被拒：{err}");
@@ -499,12 +505,12 @@ fn engine_validate_rejects_tampered_mod_payload() {
         let mut processes = BTreeMap::new();
         processes.insert(
             Key::new("extmod:increment.process").unwrap(),
-            Box::new(|_w: &mut kk_engine::settle::Working, _id: ObjId, _a: &Value| Ok(()))
+            Box::new(|_ctx: &kk_engine::settle::RoomCtx, _id: ObjId, _a: &Value| Ok(()))
                 as ExtSimple,
         );
         engine
             .install_plan_with_ext(
-                std::sync::Arc::new(plan.clone()),
+                plan.clone(),
                 BTreeMap::new(),
                 BTreeMap::new(),
                 BTreeMap::new(),
@@ -585,7 +591,7 @@ fn install_gates_unsupported_intent_shapes() {
     let mut engine = Engine::new(kk_world::World::new(2));
     let err = engine
         .install_plan_with_ext(
-            std::sync::Arc::new(plan),
+            plan,
             BTreeMap::new(),
             BTreeMap::new(),
             BTreeMap::new(),
@@ -604,7 +610,7 @@ fn install_gates_unsupported_intent_shapes() {
     let mut engine = Engine::new(kk_world::World::new(2));
     let err = engine
         .install_plan_with_ext(
-            std::sync::Arc::new(plan),
+            plan,
             BTreeMap::new(),
             BTreeMap::new(),
             BTreeMap::new(),
@@ -658,7 +664,8 @@ fn link_slot_before_and_replace_failures_propagate() {
             ..kk_engine::intent::IntentData::bare()
         },
     );
-    let err = settle_quiet(&mut f, batch, &dispatch, &plan).unwrap_err();
+    let dispatch = std::rc::Rc::new(dispatch);
+    let err = settle_quiet(&mut f, batch, dispatch, plan.clone()).unwrap_err();
     assert!(err.contains("before 拒绝"), "{err}");
     let d1 = serde_json::from_str::<Value>(&link_data(&f, l1)).unwrap();
     assert_eq!(
@@ -688,7 +695,8 @@ fn link_slot_before_and_replace_failures_propagate() {
             ..kk_engine::intent::IntentData::bare()
         },
     );
-    let err = settle_quiet(&mut f, batch, &dispatch, &plan).unwrap_err();
+    let dispatch = std::rc::Rc::new(dispatch);
+    let err = settle_quiet(&mut f, batch, dispatch, plan.clone()).unwrap_err();
     assert!(err.contains("replace 拒绝"), "{err}");
     let d1 = serde_json::from_str::<Value>(&link_data(&f, l1)).unwrap();
     assert_eq!(d1["store"]["energy"], json!(300), "失败候选不落");
@@ -706,7 +714,8 @@ fn builtin_plan_keeps_vanilla_settle() {
     f.controller(1, None);
     let batch = IntentBatch::default();
     let dispatch = ContributionDispatch::default();
-    settle_quiet(&mut f, batch, &dispatch, &plan).unwrap();
+    let dispatch = std::rc::Rc::new(dispatch);
+    settle_quiet(&mut f, batch, dispatch, plan.clone()).unwrap();
     assert_eq!(f.world.time(), 1);
 }
 
@@ -733,13 +742,14 @@ fn ext_intent_owner_absent_is_fail_closed() {
         processes,
     )
     .unwrap();
+    let dispatch = std::rc::Rc::new(dispatch);
     let mut f = Fixture::new(15, terrain_with(&[]));
     let id = place_counter(&mut f, 5, 5, "p1", 2);
     settle_quiet(
         &mut f,
         ext_batch("p1", id, json!({ "amount": 1 })),
-        &dispatch,
-        &plan,
+        dispatch.clone(),
+        plan.clone(),
     )
     .unwrap();
     assert!(log.borrow().is_empty(), "未声明归属字段：任何玩家不可执行");
@@ -783,6 +793,7 @@ fn ext_intent_receiver_mismatch_between_mod_types() {
         processes,
     )
     .unwrap();
+    let dispatch = std::rc::Rc::new(dispatch);
     let mut f = Fixture::new(16, terrain_with(&[]));
     let counter = place_counter(&mut f, 5, 5, "p1", 2);
     let gauge = f
@@ -801,8 +812,8 @@ fn ext_intent_receiver_mismatch_between_mod_types() {
     settle_quiet(
         &mut f,
         ext_batch("p1", gauge, json!({ "amount": 1 })),
-        &dispatch,
-        &plan,
+        dispatch.clone(),
+        plan.clone(),
     )
     .unwrap();
     assert!(
@@ -822,11 +833,11 @@ fn ext_intent_receiver_mismatch_between_mod_types() {
 #[test]
 fn ext_intent_position_write_syncs_envelope() {
     let plan = frozen(counter_contribution(&[]));
-    let moved: ExtSimple = Box::new(|w, id, args| {
-        let mut fields = w.mod_fields(id).ok_or("目标不是 Mod 对象")?;
+    let moved: ExtSimple = Box::new(|ctx, id, args| {
+        let mut fields = ctx.borrow().mod_fields(id).ok_or("目标不是 Mod 对象")?;
         fields["value"] = json!(1);
         fields["x"] = json!(fields["x"].as_i64().unwrap() + args["amount"].as_i64().unwrap());
-        w.update_mod_fields(id, &fields)
+        ctx.borrow_mut().update_mod_fields(id, &fields)
     });
     let mut processes = BTreeMap::new();
     processes.insert(Key::new("extmod:increment.process").unwrap(), moved);
@@ -838,13 +849,14 @@ fn ext_intent_position_write_syncs_envelope() {
         processes,
     )
     .unwrap();
+    let dispatch = std::rc::Rc::new(dispatch);
     let mut f = Fixture::new(17, terrain_with(&[]));
     let id = place_counter(&mut f, 10, 10, "p1", 0);
     settle_quiet(
         &mut f,
         ext_batch("p1", id, json!({ "amount": 5 })),
-        &dispatch,
-        &plan,
+        dispatch.clone(),
+        plan.clone(),
     )
     .unwrap();
     match f.world.get(id).unwrap().1 {
@@ -891,13 +903,14 @@ fn ext_slot_before_failure_aborts_center_and_after() {
         ext_processes,
     )
     .unwrap();
+    let dispatch = std::rc::Rc::new(dispatch);
     let mut f = Fixture::new(18, terrain_with(&[]));
     let id = place_counter(&mut f, 5, 5, "p1", 1);
     let err = settle_quiet(
         &mut f,
         ext_batch("p1", id, json!({ "amount": 1 })),
-        &dispatch,
-        &plan,
+        dispatch.clone(),
+        plan.clone(),
     )
     .unwrap_err();
     assert!(err.contains("ext before 拒绝"), "{err}");
@@ -929,13 +942,14 @@ fn ext_slot_replace_center_takes_over_process() {
         ext_processes,
     )
     .unwrap();
+    let dispatch = std::rc::Rc::new(dispatch);
     let mut f = Fixture::new(19, terrain_with(&[]));
     let id = place_counter(&mut f, 5, 5, "p1", 7);
     settle_quiet(
         &mut f,
         ext_batch("p1", id, json!({ "amount": 1 })),
-        &dispatch,
-        &plan,
+        dispatch.clone(),
+        plan.clone(),
     )
     .unwrap();
     assert_eq!(
@@ -958,7 +972,7 @@ fn install_gate_matrix_rejects_unwired_shapes() {
         let plan = frozen(c);
         Engine::new(kk_world::World::new(2))
             .install_plan_with_ext(
-                std::sync::Arc::new(plan),
+                plan,
                 BTreeMap::new(),
                 BTreeMap::new(),
                 BTreeMap::new(),
@@ -1020,4 +1034,253 @@ fn install_gate_matrix_rejects_unwired_shapes() {
     c.bindings
         .insert(Key::new("extmod:orphan.process").unwrap());
     expect_reject(c, "没有挂载任何动作");
+}
+
+/// 扩展槽 wrap 链：外→内→中心→内出→外出，after 仅在内层成功后执行。
+///
+/// 该路径随 `'static` 链导出一起启用，装配门已不再拒绝扩展槽 wrap，
+/// 因此需要用例把三个不变量锁死：wrap 拓扑序、next 至多一次、
+/// after 只在内层成功后跑。
+#[test]
+fn ext_slot_wrap_chain_order_and_after_timing() {
+    let log = Rc::new(RefCell::new(Vec::new()));
+    // 冻结期按处理器键稳定排序，链上 wraps[0] 为最外层；这里用键序
+    // （a-outer < b-inner）表达嵌套方向，不依赖声明顺序。
+    let plan = frozen(counter_contribution(&[
+        ("a-outer", HandlerKind::Wrap),
+        ("b-inner", HandlerKind::Wrap),
+        ("post", HandlerKind::After),
+    ]));
+    let mut ext_handlers = BTreeMap::new();
+    for tag in ["a-outer", "b-inner"] {
+        let sink = log.clone();
+        ext_handlers.insert(
+            Key::new(format!("extmod:handler.{tag}")).unwrap(),
+            ExtHandler::Wrap(Box::new(move |ctx, id, args, next| {
+                sink.borrow_mut().push(format!("{tag}-enter"));
+                next.call(id)?;
+                sink.borrow_mut().push(format!("{tag}-exit"));
+                // next 之后的 ctx 仍可用：借用已在 next 内释放。
+                let _ = ctx.borrow().mod_fields(id);
+                let _ = args;
+                Ok(())
+            })),
+        );
+    }
+    ext_handlers.insert(
+        Key::new("extmod:handler.post").unwrap(),
+        ExtHandler::After(observer(log.clone(), "after")),
+    );
+    let mut ext_processes = BTreeMap::new();
+    ext_processes.insert(
+        Key::new("extmod:increment.process").unwrap(),
+        counter_process(log.clone()),
+    );
+    let dispatch = std::rc::Rc::new(
+        ContributionDispatch::assemble_with_ext(
+            &plan,
+            BTreeMap::new(),
+            BTreeMap::new(),
+            ext_handlers,
+            ext_processes,
+        )
+        .unwrap(),
+    );
+
+    let mut f = Fixture::new(11, terrain_with(&[]));
+    let id = place_counter(&mut f, 10, 12, "p1", 5);
+    settle_quiet(
+        &mut f,
+        ext_batch("p1", id, json!({ "amount": 3 })),
+        dispatch.clone(),
+        plan.clone(),
+    )
+    .unwrap();
+    assert_eq!(
+        *log.borrow(),
+        vec![
+            "a-outer-enter",
+            "b-inner-enter",
+            "process",
+            "b-inner-exit",
+            "a-outer-exit",
+            "after"
+        ],
+        "扩展槽 wrap 链须按外→内→中心→内出→外出执行，after 收尾"
+    );
+    assert_eq!(counter_value(&f, id)["value"], json!(8));
+
+    // 内层 wrap 截断：中心不执行，after 也不执行（内层未成功）。
+    log.borrow_mut().clear();
+    let plan2 = frozen(counter_contribution(&[("cut", HandlerKind::Wrap)]));
+    let mut handlers2 = BTreeMap::new();
+    let sink = log.clone();
+    handlers2.insert(
+        Key::new("extmod:handler.cut").unwrap(),
+        ExtHandler::Wrap(Box::new(move |_ctx, _id, _args, _next| {
+            sink.borrow_mut().push("cut".into());
+            Ok(()) // 不调 next：取消内层
+        })),
+    );
+    let mut processes2 = BTreeMap::new();
+    processes2.insert(
+        Key::new("extmod:increment.process").unwrap(),
+        counter_process(log.clone()),
+    );
+    let dispatch2 = std::rc::Rc::new(
+        ContributionDispatch::assemble_with_ext(
+            &plan2,
+            BTreeMap::new(),
+            BTreeMap::new(),
+            handlers2,
+            processes2,
+        )
+        .unwrap(),
+    );
+    settle_quiet(
+        &mut f,
+        ext_batch("p1", id, json!({ "amount": 3 })),
+        dispatch2,
+        plan2.clone(),
+    )
+    .unwrap();
+    assert_eq!(*log.borrow(), vec!["cut"], "截断后中心不执行");
+    assert_eq!(counter_value(&f, id)["value"], json!(8), "截断后值不变");
+}
+
+/// 扩展槽 wrap 重复调用 next 必须使本轮候选失败。
+#[test]
+fn ext_slot_wrap_double_next_fails_candidate() {
+    let plan = frozen(counter_contribution(&[("twice", HandlerKind::Wrap)]));
+    let mut handlers = BTreeMap::new();
+    handlers.insert(
+        Key::new("extmod:handler.twice").unwrap(),
+        ExtHandler::Wrap(Box::new(|_ctx, id, _args, next| {
+            next.call(id)?;
+            next.call(id)
+        })),
+    );
+    let mut processes = BTreeMap::new();
+    processes.insert(
+        Key::new("extmod:increment.process").unwrap(),
+        Box::new(|_ctx: &kk_engine::settle::RoomCtx, _id: ObjId, _a: &Value| Ok(()))
+            as kk_engine::settle::contrib::ExtSimple,
+    );
+    let dispatch = std::rc::Rc::new(
+        ContributionDispatch::assemble_with_ext(
+            &plan,
+            BTreeMap::new(),
+            BTreeMap::new(),
+            handlers,
+            processes,
+        )
+        .unwrap(),
+    );
+
+    let mut f = Fixture::new(11, terrain_with(&[]));
+    let id = place_counter(&mut f, 10, 12, "p1", 5);
+    let error = settle_quiet(
+        &mut f,
+        ext_batch("p1", id, json!({ "amount": 3 })),
+        dispatch,
+        plan,
+    )
+    .expect_err("重复 next 必须使本轮候选失败");
+    assert!(
+        error.contains("重复调用 next"),
+        "错误应指明重复调用，实得：{error}"
+    );
+    assert_eq!(counter_value(&f, id)["value"], json!(5), "失败轮不提交");
+}
+
+/// `ExtSlot::chain()` 导出必须与普通入口同口径，且 `after` 次序可分辨。
+///
+/// 回归背景：与 `tick_chain` 同——把本导出的 after 块删掉，全部测试
+/// 仍然全绿，因为该导出零调用零覆盖。这里与经 settle 的普通入口
+/// 逐项比对执行序。
+#[test]
+fn ext_static_export_matches_run_entry() {
+    let log = Rc::new(RefCell::new(Vec::new()));
+    let plan = frozen(counter_contribution(&[
+        ("pre", HandlerKind::Before),
+        ("post", HandlerKind::After),
+    ]));
+    let slot = Key::new("extmod:increment.slot").unwrap();
+
+    let build = || {
+        let mut ext_handlers = BTreeMap::new();
+        ext_handlers.insert(
+            Key::new("extmod:handler.pre").unwrap(),
+            ExtHandler::Before(observer(log.clone(), "before")),
+        );
+        ext_handlers.insert(
+            Key::new("extmod:handler.post").unwrap(),
+            ExtHandler::After(observer(log.clone(), "after")),
+        );
+        let mut ext_processes = BTreeMap::new();
+        ext_processes.insert(
+            Key::new("extmod:increment.process").unwrap(),
+            counter_process(log.clone()),
+        );
+        std::rc::Rc::new(
+            ContributionDispatch::assemble_with_ext(
+                &plan,
+                BTreeMap::new(),
+                BTreeMap::new(),
+                ext_handlers,
+                ext_processes,
+            )
+            .unwrap(),
+        )
+    };
+
+    let mut f = Fixture::new(11, terrain_with(&[]));
+    let id = place_counter(&mut f, 10, 12, "p1", 5);
+
+    // 臂一：普通入口（settle 派发）。
+    settle_quiet(
+        &mut f,
+        ext_batch("p1", id, json!({ "amount": 3 })),
+        build(),
+        plan.clone(),
+    )
+    .unwrap();
+    let via_run = log.borrow().clone();
+    assert_eq!(via_run, vec!["before", "process", "after"]);
+
+    // 臂二：重入入口——ext_chain(slot) 导出。
+    log.borrow_mut().clear();
+    let dispatch = build();
+    let room = f.world.room("W1N1").unwrap().clone();
+    let ctx: kk_engine::settle::RoomCtx =
+        std::rc::Rc::new(std::cell::RefCell::new(kk_engine::settle::Working {
+            room,
+            index: kk_world::RoomIndex::build(&f.world.room("W1N1").unwrap().objects),
+            time: f.world.time(),
+            now_ms: 1_700_000_000_000,
+            state: kk_engine::TickState::new(BTreeMap::new(), f.world.next_obj_id()),
+            events: Vec::new(),
+            old_fatigue: BTreeMap::new(),
+            tick_fatigue: BTreeMap::new(),
+            upgraded: BTreeMap::new(),
+            damage_to_apply: BTreeMap::new(),
+            heal_to_apply: BTreeMap::new(),
+            upgrade_block_pending: BTreeMap::new(),
+            safe_mode_activated: BTreeSet::new(),
+            extractor_cooldown_pending: BTreeMap::new(),
+            movement: Default::default(),
+            plane: kk_engine::settle::Plane {
+                links: kk_world::place::builtin_link_rules(),
+                contrib: dispatch.clone(),
+                extensions: std::rc::Rc::new(kk_mod_api::extension::ExtensionCatalog::default()),
+                plan,
+            },
+        }));
+    let mut chain = dispatch.ext_chain(&slot).expect("扩展槽已装配");
+    chain(&ctx, id, &json!({ "amount": 3 })).expect("扩展槽重入链执行成功");
+    assert_eq!(
+        *log.borrow(),
+        vec!["before", "process", "after"],
+        "ext_chain() 导出必须与普通入口同口径"
+    );
 }

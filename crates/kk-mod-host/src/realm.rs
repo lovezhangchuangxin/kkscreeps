@@ -54,6 +54,57 @@ struct Registry {
     sealed: bool,
 }
 
+/// JS wrap 处理器调用 `next()` 时要执行的内层链。
+///
+/// 闭包是 `'static`：它捕获的是引擎导出的 `RoomCtx` 与内层链本身
+/// （两者都是 `Rc` 句柄），不借用当轮结算的栈上结构。这是
+/// `Working` 必须去生命周期的直接原因。
+pub type NextAction = Box<dyn FnMut() -> Result<(), String>>;
+
+/// 结算期共享状态：当前挂起的内层链。`Rc<RefCell<…>>` 使重入 op 能从
+/// OpState 取到克隆而不持有 `&mut JsRuntime`——与实验
+/// `spikes/deno-spike/examples/js_mod_host.rs` 的 `op_mod_native` 同法。
+type NextSlot = Rc<RefCell<Option<NextAction>>>;
+
+/// 取出并执行挂起的内层链。
+///
+/// **`reentrant` 是本 op 存在的唯一理由**：JS 处理器正在 V8 中执行时
+/// 调回 Rust，Rust 还要再进一次 JS（内层 wrap 或中心处理器）。
+/// deno_core 只在标记 reentrant 时允许这种嵌套调用。
+///
+/// `reentrant` **不是能力隔离**：它只放开「宿主在 JS 执行途中再进一次
+/// JS」这一条调用时序，不扩大 JS 可达的面——内层链是宿主在进入 JS
+/// 之前装入的既定闭包，JS 无法自造载荷，也无法取走不属于本次调用的链
+/// （槽取出即清空）。沙箱信任边界仍由注册期纪律划定（模块加载约束、
+/// 声明面，见本文件顶部），本 op 不在其中新增任何一条。
+///
+/// 调用方（`ModRealm::invoke_wrap`）在进入 JS **之前**装入内层链、
+/// 之后清空；装入期间持有候选借用会与内层链的借用冲突，因此桥必须
+/// 先释放——见设计 §6.2 与 embed 侧 ext_bridge 的借用纪律。
+#[op2(fast, reentrant)]
+fn op_mod_next(
+    scope: &mut v8::PinScope,
+    state: std::rc::Rc<RefCell<OpState>>,
+) -> Result<(), JsErrorBox> {
+    // 显式作用域：取出即释放 OpState 借用，内层链执行期间不得持有。
+    let slot: NextSlot = {
+        let state = state.borrow();
+        state.borrow::<NextSlot>().clone()
+    };
+    let action = slot.borrow_mut().take();
+    let Some(mut action) = action else {
+        // 无挂起链：next() 出现在 wrap 处理器之外，或处理器在宿主
+        // 装入内层链之前就调用了它。响亮失败，不静默忽略。
+        return Err(JsErrorBox::generic(
+            "next() 没有对应的内层链（处理器不是装配中的 wrap，或内层链已被消耗）",
+        ));
+    };
+    // 内层链可能再次进入 JS（内层 wrap）；此处刻意不额外使用 scope，
+    // reentrant 能力已由 op 签名提供。
+    let _ = scope;
+    action().map_err(JsErrorBox::generic)
+}
+
 #[op2]
 fn op_mod_declare(
     state: &mut OpState,
@@ -81,7 +132,7 @@ fn op_mod_declare(
     Ok(())
 }
 
-extension!(kk_mod_host, ops = [op_mod_declare]);
+extension!(kk_mod_host, ops = [op_mod_declare, op_mod_next]);
 
 /// 包内模块加载器：字节来自装载期的内存快照，注册期不触碰磁盘。
 /// 只允许包内相对导入与 `@kkscreeps/mod`；跨包导入与裸导入拒绝。
@@ -247,6 +298,8 @@ pub struct ModRealm {
     sdk_create_api: v8::Global<v8::Function>,
     sdk_seal: v8::Global<v8::Function>,
     sdk_dispatch: v8::Global<v8::Function>,
+    /// 与 OpState 共享的挂起内层链槽。
+    next_slot: NextSlot,
 }
 
 impl ModRealm {
@@ -264,11 +317,17 @@ impl ModRealm {
             })),
             ..Default::default()
         });
-        runtime.op_state().borrow_mut().put(Registry {
-            current: None,
-            declarations: Vec::new(),
-            sealed: false,
-        });
+        let next_slot: NextSlot = Rc::new(RefCell::new(None));
+        {
+            let op_state = runtime.op_state();
+            let mut op_state = op_state.borrow_mut();
+            op_state.put(Registry {
+                current: None,
+                declarations: Vec::new(),
+                sealed: false,
+            });
+            op_state.put(next_slot.clone());
+        }
         let sdk_url = ModuleSpecifier::parse(SDK_URL)
             .map_err(|error| ModHostError::new("realm", error.to_string()))?;
         let executor_ref = &executor;
@@ -317,6 +376,7 @@ impl ModRealm {
             sdk_create_api,
             sdk_seal,
             sdk_dispatch,
+            next_slot,
         })
     }
 
@@ -340,6 +400,26 @@ impl ModRealm {
             .ok_or_else(|| scope_error!(tc, "invoke", "处理器调用失败"))?;
         deno_core::serde_v8::from_v8(tc, result)
             .map_err(|error| ModHostError::new("invoke", format!("处理器结果序列化失败：{error}")))
+    }
+
+    /// 结算期调用一个 **wrap** 处理器：`inner` 是内层链，由 JS 的
+    /// `next()` 经重入 op 同步触发。
+    ///
+    /// 借用纪律：调用方在进入本方法前必须已释放对房间候选的可变借用，
+    /// 否则 `next()` 触发的内层链会撞上 RefCell 重入借用而 panic。
+    /// 本方法在调用 JS 前装入 `inner`、返回后清空；未调用 `next()`
+    /// 的处理器正常返回，内层链被丢弃（等同「取消内层」）。
+    pub fn invoke_wrap(
+        &mut self,
+        binding: &str,
+        ctx: Value,
+        inner: NextAction,
+    ) -> ModHostResult<Value> {
+        *self.next_slot.borrow_mut() = Some(inner);
+        let result = self.invoke(binding, ctx);
+        // 无论成功失败都清空：残留会让后续非 wrap 调用误触内层链。
+        self.next_slot.borrow_mut().take();
+        result
     }
 
     /// 依拓扑序注册全部包并冻结计划。注册是一次性的：成功后密封；

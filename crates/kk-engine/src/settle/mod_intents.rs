@@ -16,26 +16,29 @@ use kk_mod_api::{IntentScope, Key, validate};
 use kk_world::ObjId;
 use serde_json::Value;
 
-use super::Working;
+use super::RoomCtx;
 
 /// 派发一个玩家在一个 Mod 对象上的全部扩展意图。调用方已确认对象
 /// 是 [`kk_schema::room::RoomObject::Mod`]；目标在此重新读取，对象
 /// 在本轮指令处理中先被销毁的极端形态按"目标不存在"丢弃。
 pub(crate) fn process_object_ext_intents(
-    w: &mut Working,
+    ctx: &RoomCtx,
     player: &str,
     id: ObjId,
     list: &BTreeMap<Key, Value>,
 ) -> Result<(), String> {
-    let type_key = match w.room.objects.get(&id) {
+    let type_key = match ctx.borrow().room.objects.get(&id) {
         Some(kk_schema::room::RoomObject::Mod(o)) => o.type_key.clone(),
         _ => return Ok(()),
     };
+    // 冻结计划是共享的 Arc：在短借用内取出句柄后即释放借用，随后的
+    // 派发不得持有候选借用。
+    let plan = ctx.borrow().plane.plan.clone();
     for (intent_key, args) in list {
-        let Some(handle) = w.plane.plan.resolve_intent(intent_key) else {
+        let Some(handle) = plan.resolve_intent(intent_key) else {
             continue; // 不在冻结目录：未知动作丢弃
         };
-        let descriptor = w.plane.plan.get_intent(handle).expect("句柄来自计划");
+        let descriptor = plan.get_intent(handle).expect("句柄来自计划");
         if descriptor.slot.namespace() == "builtin" {
             // builtin 意图（link.transfer）走 Rust 执行器，不经扩展链；
             // 装配门已拒绝 Mod 意图挂 builtin 槽，此处防御手工构造的批。
@@ -61,24 +64,20 @@ pub(crate) fn process_object_ext_intents(
         // 下方两处 Err 是防御分支：正常装配下不可达，手搓批/直改世界才触及。
         let type_key_parsed = Key::new(type_key.clone())
             .map_err(|e| format!("Mod 对象类型键非法 {type_key:?}: {e}"))?;
-        let Some(type_handle) = w.plane.plan.projection().resolve(&type_key_parsed) else {
+        let Some(type_handle) = plan.projection().resolve(&type_key_parsed) else {
             return Err(format!(
                 "Mod 对象 {} 的类型 {type_key} 不在计划中",
                 id.as_str()
             ));
         };
-        let ty = w
-            .plane
-            .plan
-            .projection()
-            .get(type_handle)
-            .expect("句柄来自计划");
+        let ty = plan.projection().get(type_handle).expect("句柄来自计划");
         let authorized = ty
             .descriptor
             .owner_field
             .as_ref()
             .and_then(|owner_field| {
-                w.mod_fields(id)
+                ctx.borrow()
+                    .mod_fields(id)
                     .and_then(|fields| fields.get(validate::field_name(owner_field)).cloned())
             })
             .and_then(|owner| owner.as_str().map(str::to_string))
@@ -86,10 +85,14 @@ pub(crate) fn process_object_ext_intents(
         if !authorized {
             continue;
         }
-        w.plane
-            .contrib
-            .run_ext(&descriptor.slot, w, id, args)
-            .map_err(|error| format!("动作 {intent_key} @ {}: {error}", w.room.name))?;
+        // 描述符、槽键与执行表都在短借用内取到；派发时不得持有借用——
+        // 链内 wrap 的 next() 会重新借用同一候选。
+        let slot = descriptor.slot.clone();
+        let contrib = ctx.borrow().plane.contrib.clone();
+        let room_name = ctx.borrow().room.name.clone();
+        contrib
+            .run_ext(&slot, ctx, id, args)
+            .map_err(|error| format!("动作 {intent_key} @ {room_name}: {error}"))?;
     }
     Ok(())
 }

@@ -17,7 +17,7 @@ use std::rc::Rc;
 
 use crate::{PlayerExecutor, RunEpoch, ThreadExecutor, WorldSource};
 use kk_engine::intent::IntentBatch;
-use kk_engine::settle::Working;
+use kk_engine::settle::RoomCtx;
 use kk_engine::settle::contrib::{ActionHandler, ExtHandler, TickHandler};
 use kk_engine::{
     PlayerWriteback, RunOutcome, RunResult, RunState, SegmentWriteback, TickInput, TickStage,
@@ -107,9 +107,11 @@ type ModHandlerSet = (
 
 /// 把冻结计划里 Mod 贡献的处理器装成桥闭包：闭包经 realm 调用 JS，
 /// 以 Working 携带的候选 Mod 状态域做读改写回。builtin 命名空间不会
-/// 出现在 before/after/replace 位（builtin 无处理器），防御性跳过。
+/// 出现在四个链位（builtin 无处理器），防御性跳过。
 /// Mod 自有槽同样装配：动作处理桥为各槽中心，槽上贡献处理器接
-/// before/after/replace 位（wrap 拒绝，同 link 槽纪律）。
+/// before/after/replace 位。引擎侧四链位（含 wrap）都已支持装配，
+/// wrap 在本桥仍显式拒收——拒绝的是宿主桥的 next 工厂通道未接线，
+/// 不是引擎执行器缺形态。
 fn mod_handlers(
     plan: &kk_mod_api::ContributionPlan,
     realm: &Rc<RefCell<ModRealm>>,
@@ -148,8 +150,11 @@ fn mod_handlers(
             continue;
         };
         if !wraps.is_empty() {
+            // 扩展槽的 wrap 需要宿主桥提供 next 工厂通道：JS 处理器要
+            // 经重入 op 拿到内层链，而该通道尚未接线。此处显式拒绝而
+            // 不是静默截断链——半条链比没有链更难排查。
             anyhow::bail!(
-                "槽 {} 的 wrap 处理器不支持执行装配（拒绝而不是静默截断链）",
+                "槽 {} 的 wrap 处理器不支持执行装配（宿主桥 next 工厂通道未接线）",
                 slot.key
             );
         }
@@ -233,9 +238,9 @@ fn mod_handlers(
 }
 
 type ActionBridge =
-    Box<dyn Fn(&mut Working, ObjId, &kk_engine::intent::IntentData) -> Result<(), String>>;
-type TickBridge = Box<dyn Fn(&mut Working, ObjId) -> Result<(), String>>;
-type ExtBridge = Box<dyn Fn(&mut Working, ObjId, &serde_json::Value) -> Result<(), String>>;
+    Box<dyn Fn(&RoomCtx, ObjId, &kk_engine::intent::IntentData) -> Result<(), String>>;
+type TickBridge = Box<dyn Fn(&RoomCtx, ObjId) -> Result<(), String>>;
+type ExtBridge = Box<dyn Fn(&RoomCtx, ObjId, &serde_json::Value) -> Result<(), String>>;
 
 /// 对象动作槽的桥闭包；动作参数经冻结计划清洗后进入结算，桥内不再读。
 fn action_bridge(realm: &Rc<RefCell<ModRealm>>, binding: &Key) -> ActionBridge {
@@ -243,8 +248,8 @@ fn action_bridge(realm: &Rc<RefCell<ModRealm>>, binding: &Key) -> ActionBridge {
     let namespace = binding.namespace().to_string();
     let key = binding.to_string();
     Box::new(
-        move |w: &mut Working, _id: ObjId, _data: &kk_engine::intent::IntentData| {
-            bridge_call(&realm, &key, &namespace, w)
+        move |ctx: &RoomCtx, _id: ObjId, _data: &kk_engine::intent::IntentData| {
+            bridge_call(&realm, &key, &namespace, ctx)
         },
     )
 }
@@ -254,78 +259,100 @@ fn tick_bridge(realm: &Rc<RefCell<ModRealm>>, binding: &Key) -> TickBridge {
     let realm = realm.clone();
     let namespace = binding.namespace().to_string();
     let key = binding.to_string();
-    Box::new(move |w: &mut Working, _id: ObjId| bridge_call(&realm, &key, &namespace, w))
+    Box::new(move |ctx: &RoomCtx, _id: ObjId| bridge_call(&realm, &key, &namespace, ctx))
 }
 
 /// 扩展意图槽的桥闭包：ctx 携带目标对象完整字段与已校验参数，处理器
 /// 终值 state 与 target.fields 整值写回候选（null=不改动）。
+///
+/// 借用纪律（设计 §6.2）：进入 JS 之前必须已释放对候选的可变借用。
+/// 读取侧用独立作用域收尾，写回侧在 JS 返回后重新借用——wrap 处理器
+/// 的 `next()` 经重入 op 回到内层链时会再借一次，重入借用会 panic。
 fn ext_bridge(realm: &Rc<RefCell<ModRealm>>, binding: &Key) -> ExtBridge {
     let realm = realm.clone();
     let namespace = binding.namespace().to_string();
     let key = binding.to_string();
-    Box::new(
-        move |w: &mut Working, id: ObjId, args: &serde_json::Value| {
+    Box::new(move |ctx: &RoomCtx, id: ObjId, args: &serde_json::Value| {
+        let (fields, tick, room_name) = {
+            let w = ctx.borrow();
             let fields = w.mod_fields(id).ok_or_else(|| {
                 format!(
                     "处理器 {key} 的目标对象 {} 不是 Mod 对象或 payload 非法",
                     id.as_str()
                 )
             })?;
-            let ctx = json!({
-                "tick": w.time,
-                "room": w.room.name,
-                "state": w.state.mod_state(&namespace),
-                "target": { "id": id.as_str(), "fields": fields },
-                "args": args,
-            });
-            let outcome = realm
-                .borrow_mut()
-                .invoke(&key, ctx)
-                .map_err(|error| format!("处理器 {key} @ {}: {error}", w.room.name))?;
-            // 状态终值整值写回：未触碰时是恒等写，写 null 即清空
-            // （清空与缺失同形，读取侧都得到 null）。
-            if let Some(state) = outcome.get("state") {
-                w.state.set_mod_state(&namespace, state.clone());
+            (fields, w.time, w.room.name.clone())
+        };
+        let js_ctx = json!({
+            "tick": tick,
+            "room": room_name,
+            "state": ctx.borrow().state.mod_state(&namespace),
+            "target": { "id": id.as_str(), "fields": fields },
+            "args": args,
+        });
+        let outcome = realm
+            // try_borrow_mut 而非 borrow_mut：JS 处理器的 next() 会经重入
+            // op 再借一次同一个 realm，而该借用发生在 v8 op 边界——此处的
+            // panic 无法 unwind，会直接 SIGABRT 掉整个进程。借不到时转成
+            // 结算错误，候选照常回滚。
+            .try_borrow_mut()
+            .map_err(|_| {
+                format!("处理器 {key} @ {room_name}: realm 已被重入借用（next() 嵌套尚不支持）")
+            })?
+            .invoke(&key, js_ctx)
+            .map_err(|error| format!("处理器 {key} @ {room_name}: {error}"))?;
+        // 状态终值整值写回：未触碰时是恒等写，写 null 即清空
+        // （清空与缺失同形，读取侧都得到 null）。
+        if let Some(state) = outcome.get("state") {
+            ctx.borrow_mut()
+                .state
+                .set_mod_state(&namespace, state.clone());
+        }
+        // 目标字段终值：null/缺失=不改动；对象值按类型描述符校验后
+        // 整值写入（部分字段的返回会被拒绝，处理器须返回完整字段）。
+        match outcome.get("target") {
+            Some(serde_json::Value::Object(fields)) => {
+                let fields = serde_json::Value::Object(fields.clone());
+                ctx.borrow_mut()
+                    .update_mod_fields(id, &fields)
+                    .map_err(|error| format!("处理器 {key} 的目标回写被拒：{error}"))?;
             }
-            // 目标字段终值：null/缺失=不改动；对象值按类型描述符校验后
-            // 整值写入（部分字段的返回会被拒绝，处理器须返回完整字段）。
-            match outcome.get("target") {
-                Some(serde_json::Value::Object(fields)) => {
-                    let fields = serde_json::Value::Object(fields.clone());
-                    w.update_mod_fields(id, &fields)
-                        .map_err(|error| format!("处理器 {key} 的目标回写被拒：{error}"))?;
-                }
-                Some(serde_json::Value::Null) | None => {}
-                Some(other) => {
-                    return Err(format!(
-                        "处理器 {key} 的 target 终值须为对象或 null，实得 {other}"
-                    ));
-                }
+            Some(serde_json::Value::Null) | None => {}
+            Some(other) => {
+                return Err(format!(
+                    "处理器 {key} 的 target 终值须为对象或 null，实得 {other}"
+                ));
             }
-            Ok(())
-        },
-    )
+        }
+        Ok(())
+    })
 }
 
 fn bridge_call(
     realm: &Rc<RefCell<ModRealm>>,
     key: &str,
     namespace: &str,
-    w: &mut Working,
+    ctx: &RoomCtx,
 ) -> Result<(), String> {
-    let ctx = json!({
-        "tick": w.time,
-        "room": w.room.name,
-        "state": w.state.mod_state(namespace),
-    });
+    let (tick, room_name, state) = {
+        let w = ctx.borrow();
+        (w.time, w.room.name.clone(), w.state.mod_state(namespace))
+    };
+    let js_ctx = json!({ "tick": tick, "room": room_name, "state": state });
+    // 同 ext_bridge：借不到时转结算错误，不在 op 边界 panic。
     let outcome = realm
-        .borrow_mut()
-        .invoke(key, ctx)
-        .map_err(|error| format!("处理器 {key} @ {}: {error}", w.room.name))?;
+        .try_borrow_mut()
+        .map_err(|_| {
+            format!("处理器 {key} @ {room_name}: realm 已被重入借用（next() 嵌套尚不支持）")
+        })?
+        .invoke(key, js_ctx)
+        .map_err(|error| format!("处理器 {key} @ {room_name}: {error}"))?;
     // 状态终值整值写回：处理器未触碰时是恒等写，写 null 即清空
     // （清空与缺失同形，读取侧都得到 null）。
     if let Some(state) = outcome.get("state") {
-        w.state.set_mod_state(namespace, state.clone());
+        ctx.borrow_mut()
+            .state
+            .set_mod_state(namespace, state.clone());
     }
     Ok(())
 }
@@ -772,8 +799,9 @@ impl EmbedEngine {
     /// 重置后、玩家沙箱 spawn 前（常量与结算同源）。可装配面是 link 两槽
     /// 的 before/after/replace 处理器、规则，以及 Mod 自有动作入口的对象
     /// 域执行链（动作处理中心 + before/after/replace 贡献处理器）；wrap
-    /// 处理器与对象域外的执行形态（房间/玩家/世界域、队列合并、非严格
-    /// 转换、显式入口）装配期显式拒绝而不是静默降级。玩家面目录导出与
+    /// 处理器虽在引擎侧已可执行，但宿主桥的 next 工厂通道未接线，仍在
+    /// 装配期显式拒绝而不是静默降级。对象域外的执行形态（房间/玩家/
+    /// 世界域、队列合并、非严格转换、显式入口）同样显式拒绝。玩家面目录导出与
     /// 安装预检先于引擎装配失败；引擎装配之后的失败路径分片停留在 vanilla
     /// 语义（与 create_shard 的"后续失败不恢复旧分片"语义一致——调用方
     /// 须以 teardown/重建收尾，不得复用半装状态）。

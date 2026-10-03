@@ -431,16 +431,16 @@ fn chained_handlers_execute_in_frozen_order() {
     );
     handlers.insert(
         wrap,
-        ActionHandler::Wrap(Box::new(move |w, _id, _d, next| {
+        ActionHandler::Wrap(Box::new(move |ctx, _id, _d, next| {
             log_wrap.borrow_mut().push("wrap-enter".into());
             // wrap 先把源能量改小，native 读到修改后的候选：
             // 写 250 时 native 余 50（读旧值 300 则余 100，可分辨）。
-            if let Some(RoomObject::Generic(g)) = w.room.objects.get_mut(&_id) {
+            if let Some(RoomObject::Generic(g)) = ctx.borrow_mut().room.objects.get_mut(&_id) {
                 let mut v: serde_json::Value = serde_json::from_str(&g.data).unwrap();
                 v["store"]["energy"] = json!(250);
                 g.data = v.to_string();
             }
-            let result = next.call(w, _id, _d);
+            let result = next.call(_id, _d);
             log_wrap.borrow_mut().push("wrap-exit".into());
             result
         })),
@@ -473,7 +473,7 @@ fn chained_handlers_execute_in_frozen_order() {
             ..IntentData::bare()
         },
     );
-    f.settle_with_dispatch(batch, &dispatch);
+    f.settle_with_dispatch(batch, std::rc::Rc::new(dispatch));
 
     assert_eq!(
         *log.borrow(),
@@ -561,7 +561,7 @@ fn wrap_without_next_suppresses_default_but_not_after() {
             ..IntentData::bare()
         },
     );
-    f.settle_with_dispatch(batch, &dispatch);
+    f.settle_with_dispatch(batch, std::rc::Rc::new(dispatch));
     let d1 = data_of(&f, l1);
     let d2 = data_of(&f, l2);
     assert_eq!(d1["store"]["energy"], json!(300), "native 未执行");
@@ -593,9 +593,9 @@ fn replace_supplants_native_transfer() {
     let mut handlers = BTreeMap::new();
     handlers.insert(
         key.clone(),
-        ActionHandler::Replace(Box::new(|w, id, _d| {
+        ActionHandler::Replace(Box::new(|ctx, id, _d| {
             // 替换实现：把源能量对半写回，不触碰目标。
-            let Some(src_e) = w.room.objects.get(&id).and_then(|o| match o {
+            let Some(src_e) = ctx.borrow().room.objects.get(&id).and_then(|o| match o {
                 RoomObject::Generic(g) => {
                     let v: serde_json::Value = serde_json::from_str(&g.data).unwrap();
                     v["store"]["energy"].as_i64()
@@ -604,7 +604,7 @@ fn replace_supplants_native_transfer() {
             }) else {
                 return Ok(());
             };
-            if let Some(RoomObject::Generic(g)) = w.room.objects.get_mut(&id) {
+            if let Some(RoomObject::Generic(g)) = ctx.borrow_mut().room.objects.get_mut(&id) {
                 let mut v: serde_json::Value = serde_json::from_str(&g.data).unwrap();
                 v["store"]["energy"] = json!(src_e / 2);
                 v["cooldown"] = json!(42);
@@ -653,7 +653,7 @@ fn replace_supplants_native_transfer() {
             ..IntentData::bare()
         },
     );
-    f.settle_with_dispatch(batch, &dispatch);
+    f.settle_with_dispatch(batch, std::rc::Rc::new(dispatch));
     let d1 = data_of(&f, l1);
     let d2 = data_of(&f, l2);
     assert_eq!(d1["store"]["energy"], json!(150), "替换实现写半量");
@@ -685,9 +685,9 @@ fn double_next_fails_the_round_and_keeps_old_state() {
     let mut handlers = BTreeMap::new();
     handlers.insert(
         key.clone(),
-        ActionHandler::Wrap(Box::new(|w, id, d, next| {
-            next.call(w, id, d)?;
-            next.call(w, id, d)
+        ActionHandler::Wrap(Box::new(|_ctx, id, d, next| {
+            next.call(id, d)?;
+            next.call(id, d)
         })),
     );
     // 装配校验本身须通过；执行走引擎路径，处理器在引擎装配时重新提供。
@@ -737,9 +737,9 @@ fn double_next_fails_the_round_and_keeps_old_state() {
     let mut handlers2 = BTreeMap::new();
     handlers2.insert(
         key.clone(),
-        ActionHandler::Wrap(Box::new(|w, id, d, next| {
-            next.call(w, id, d)?;
-            next.call(w, id, d)
+        ActionHandler::Wrap(Box::new(|_ctx, id, d, next| {
+            next.call(id, d)?;
+            next.call(id, d)
         })),
     );
     let world = std::mem::replace(&mut f.world, kk_world::World::new(0));
@@ -882,18 +882,18 @@ fn nested_wraps_execute_layer_by_layer() {
     let mut handlers = BTreeMap::new();
     handlers.insert(
         outer.clone(),
-        ActionHandler::Wrap(Box::new(move |w, id, d, next| {
+        ActionHandler::Wrap(Box::new(move |_ctx, id, d, next| {
             log_outer.borrow_mut().push("outer-enter".into());
-            let result = next.call(w, id, d);
+            let result = next.call(id, d);
             log_outer.borrow_mut().push("outer-exit".into());
             result
         })),
     );
     handlers.insert(
         inner.clone(),
-        ActionHandler::Wrap(Box::new(move |w, id, d, next| {
+        ActionHandler::Wrap(Box::new(move |_ctx, id, d, next| {
             log_inner.borrow_mut().push("inner-enter".into());
-            let result = next.call(w, id, d);
+            let result = next.call(id, d);
             log_inner.borrow_mut().push("inner-exit".into());
             result
         })),
@@ -936,7 +936,7 @@ fn nested_wraps_execute_layer_by_layer() {
             ..IntentData::bare()
         },
     );
-    f.settle_with_dispatch(batch, &dispatch);
+    f.settle_with_dispatch(batch, std::rc::Rc::new(dispatch));
     assert_eq!(
         *log.borrow(),
         vec!["outer-enter", "inner-enter", "inner-exit", "outer-exit"],
@@ -996,9 +996,9 @@ fn tick_slot_chained_wraps_native_cooldown() {
     let log_w = log.clone();
     tick_handlers.insert(
         wrap,
-        TickHandler::Wrap(Box::new(move |w, id, next| {
+        TickHandler::Wrap(Box::new(move |_ctx, id, next| {
             log_w.borrow_mut().push("wrap-enter".into());
-            let result = next.call(w, id);
+            let result = next.call(id);
             log_w.borrow_mut().push("wrap-exit".into());
             result
         })),
@@ -1027,7 +1027,7 @@ fn tick_slot_chained_wraps_native_cooldown() {
             "cooldown": 5,
         }),
     );
-    f.settle_with_dispatch(IntentBatch::default(), &dispatch);
+    f.settle_with_dispatch(IntentBatch::default(), std::rc::Rc::new(dispatch));
     assert_eq!(
         *log.borrow(),
         vec!["before", "wrap-enter", "wrap-exit", "after"]
@@ -1162,13 +1162,15 @@ fn contrib_dispatch_native_vs_chained_bench() {
     tick_handlers.insert(before, TickHandler::Before(Box::new(|_, _| Ok(()))));
     tick_handlers.insert(
         wrap,
-        TickHandler::Wrap(Box::new(|w, id, next| next.call(w, id))),
+        TickHandler::Wrap(Box::new(|_ctx, id, next| next.call(id))),
     );
     tick_handlers.insert(after, TickHandler::After(Box::new(|_, _| Ok(()))));
-    let chained = ContributionDispatch::assemble(&plan, BTreeMap::new(), tick_handlers).unwrap();
-    let native = ContributionDispatch::default();
+    let chained = std::rc::Rc::new(
+        ContributionDispatch::assemble(&plan, BTreeMap::new(), tick_handlers).unwrap(),
+    );
+    let native = std::rc::Rc::new(ContributionDispatch::default());
 
-    let bench = |label: &str, dispatch: &ContributionDispatch| {
+    let bench = |label: &str, dispatch: &std::rc::Rc<ContributionDispatch>| {
         let mut f = Fixture::new(7, terrain_with(&[]));
         f.controller(5, Some("p1"));
         for i in 0..LINKS {
@@ -1187,7 +1189,7 @@ fn contrib_dispatch_native_vs_chained_bench() {
         }
         let start = Instant::now();
         for _ in 0..ITERATIONS {
-            f.settle_with_dispatch(IntentBatch::default(), dispatch);
+            f.settle_with_dispatch(IntentBatch::default(), dispatch.clone());
         }
         let per_link_ns =
             start.elapsed().as_nanos() as f64 / (f64::from(ITERATIONS) * LINKS as f64);
@@ -1201,5 +1203,306 @@ fn contrib_dispatch_native_vs_chained_bench() {
         "链开销：{:+.1} ns/link-tick（{:+.0}%）",
         chained_ns - native_ns,
         (chained_ns / native_ns - 1.0) * 100.0
+    );
+}
+
+/// `next()` 载荷必须是「该 wrap 之下」的续行：用整槽导出会让外层
+/// wrap 与全部 before 再跑一遍。
+///
+/// 回归背景：'static 链导出曾只有整槽形态，且其文档注释声称
+/// 「语义完全一致」——接成 next() 载荷会导致外层 wrap 双跑。
+#[test]
+fn action_chain_below_does_not_replay_outer_wrap() {
+    let before = Key::new("testmod:nb-before").unwrap();
+    let outer = Key::new("testmod:nb-outer").unwrap();
+    let inner = Key::new("testmod:nb-inner").unwrap();
+    let after = Key::new("testmod:nb-after").unwrap();
+
+    let mut contribution = overrides_mod(&[]);
+    for key in [&before, &outer, &inner, &after] {
+        contribution.bindings.insert(key.clone());
+    }
+    // 拓扑：inner 依赖 outer ⇒ outer 在外层。冻结后 wraps[0] = outer。
+    for (key, kind) in [
+        (&before, kk_mod_api::HandlerKind::Before),
+        (&outer, kk_mod_api::HandlerKind::Wrap),
+        (&inner, kk_mod_api::HandlerKind::Wrap),
+        (&after, kk_mod_api::HandlerKind::After),
+    ] {
+        contribution.handlers.push(HandlerDescriptor {
+            key: key.clone(),
+            slot: Key::new("builtin:link.transfer").unwrap(),
+            kind,
+            binding: key.clone(),
+            depends_on: match key {
+                k if k == &inner => BTreeSet::from([outer.clone()]),
+                _ => BTreeSet::new(),
+            },
+        });
+    }
+    let plan = kk_mod_api::freeze_with_builtin(
+        builtin::link(),
+        vec![contribution],
+        FreezeOptions::default(),
+    )
+    .unwrap();
+
+    let log: Rc<RefCell<Vec<&'static str>>> = Rc::new(RefCell::new(Vec::new()));
+    let (sb, so, si, sa) = (log.clone(), log.clone(), log.clone(), log.clone());
+    let mut handlers = BTreeMap::new();
+    handlers.insert(
+        before.clone(),
+        ActionHandler::Before(Box::new(move |_ctx, _id, _d| {
+            sb.borrow_mut().push("before");
+            Ok(())
+        })),
+    );
+    // 外层 wrap 在生产路径上会用 chain_below(0) 作为 next 载荷。
+    handlers.insert(
+        outer.clone(),
+        ActionHandler::Wrap(Box::new(move |_ctx, id, d, next| {
+            so.borrow_mut().push("outer-enter");
+            next.call(id, d)?;
+            so.borrow_mut().push("outer-exit");
+            Ok(())
+        })),
+    );
+    handlers.insert(
+        inner.clone(),
+        ActionHandler::Wrap(Box::new(move |_ctx, id, d, next| {
+            si.borrow_mut().push("inner-enter");
+            next.call(id, d)?;
+            si.borrow_mut().push("inner-exit");
+            Ok(())
+        })),
+    );
+    handlers.insert(
+        after.clone(),
+        ActionHandler::After(Box::new(move |_ctx, _id, _d| {
+            sa.borrow_mut().push("after");
+            Ok(())
+        })),
+    );
+    let dispatch = ContributionDispatch::assemble(&plan, handlers, BTreeMap::new()).unwrap();
+
+    let mut f = Fixture::new(7, terrain_with(&[]));
+    f.controller(5, Some("p1"));
+    let room = f.world.room("W1N1").unwrap().clone();
+    let ctx: kk_engine::settle::RoomCtx = Rc::new(RefCell::new(kk_engine::settle::Working {
+        room,
+        index: kk_world::RoomIndex::build(&f.world.room("W1N1").unwrap().objects),
+        time: f.world.time(),
+        now_ms: 1_700_000_000_000,
+        state: kk_engine::TickState::new(BTreeMap::new(), f.world.next_obj_id()),
+        events: Vec::new(),
+        old_fatigue: BTreeMap::new(),
+        tick_fatigue: BTreeMap::new(),
+        upgraded: BTreeMap::new(),
+        damage_to_apply: BTreeMap::new(),
+        heal_to_apply: BTreeMap::new(),
+        upgrade_block_pending: BTreeMap::new(),
+        safe_mode_activated: BTreeSet::new(),
+        extractor_cooldown_pending: BTreeMap::new(),
+        movement: Default::default(),
+        plane: kk_engine::settle::Plane {
+            links: kk_world::place::builtin_link_rules(),
+            contrib: Rc::new(dispatch),
+            extensions: Rc::new(kk_mod_api::extension::ExtensionCatalog::default()),
+            plan: std::sync::Arc::new(plan),
+        },
+    }));
+    let data = kk_engine::intent::IntentData {
+        id: Some(kk_world::ObjId(1)),
+        amount: Some(1),
+        ..kk_engine::intent::IntentData::bare()
+    };
+
+    // 外层（index 0）之下的续行：只应跑 inner + 中心 + after。
+    let mut below = {
+        let contrib = ctx.borrow().plane.contrib.clone();
+        contrib.action_chain_below(0)
+    };
+    below(&ctx, kk_world::ObjId(1), &data).expect("续行执行成功");
+    let via_below = log.borrow().clone();
+    assert_eq!(
+        via_below,
+        vec!["inner-enter", "inner-exit", "after"],
+        "chain_below(0) 只跑内层 wrap 与 after，不得重放外层 wrap 或 before"
+    );
+
+    // 整槽导出则会把外层与 before 一起重跑——这正是它不能当 next 载荷的原因。
+    log.borrow_mut().clear();
+    let mut whole = {
+        let contrib = ctx.borrow().plane.contrib.clone();
+        contrib.transfer_chain()
+    };
+    whole(&ctx, kk_world::ObjId(1), &data).expect("整槽执行成功");
+    assert_eq!(
+        *log.borrow(),
+        vec![
+            "before",
+            "outer-enter",
+            "inner-enter",
+            "inner-exit",
+            "outer-exit",
+            "after"
+        ],
+        "整槽导出会重放外层 wrap 与 before，故不可用作 next 载荷"
+    );
+}
+
+/// tick 槽与扩展槽的 `'static` 导出必须与普通入口同口径，且 `after`
+/// 的**次序**可分辨。
+///
+/// 回归背景：三个导出曾全部漏跑 `after`，而只有 action 槽那条被用例
+/// 锁住——把 `tick_chain` / `ExtSlot::chain` 的 after 块删掉，全部
+/// 测试仍然全绿。这里各放两个带 `depends_on` 的 `after`：顺序错乱
+/// 才会让断言变红。
+#[test]
+fn tick_and_ext_static_exports_match_run_entry() {
+    let before = Key::new("testmod:eq2-before").unwrap();
+    let wrap = Key::new("testmod:eq2-wrap").unwrap();
+    let after_a = Key::new("testmod:eq2-after-a").unwrap();
+    let after_b = Key::new("testmod:eq2-after-b").unwrap();
+
+    let mut contribution = overrides_mod(&[]);
+    for key in [&before, &wrap, &after_a, &after_b] {
+        contribution.bindings.insert(key.clone());
+    }
+    // after_b 依赖 after_a ⇒ 冻结后逆序为 b 先、a 后，log 序可分辨。
+    for (key, kind, depends) in [
+        (&before, kk_mod_api::HandlerKind::Before, BTreeSet::new()),
+        (&wrap, kk_mod_api::HandlerKind::Wrap, BTreeSet::new()),
+        (&after_a, kk_mod_api::HandlerKind::After, BTreeSet::new()),
+        (
+            &after_b,
+            kk_mod_api::HandlerKind::After,
+            BTreeSet::from([after_a.clone()]),
+        ),
+    ] {
+        contribution.handlers.push(HandlerDescriptor {
+            key: key.clone(),
+            slot: Key::new("builtin:link.tick").unwrap(),
+            kind,
+            binding: key.clone(),
+            depends_on: depends,
+        });
+    }
+    let plan = std::sync::Arc::new(
+        kk_mod_api::freeze_with_builtin(
+            builtin::link(),
+            vec![contribution],
+            FreezeOptions::default(),
+        )
+        .unwrap(),
+    );
+
+    let log: Rc<RefCell<Vec<&'static str>>> = Rc::new(RefCell::new(Vec::new()));
+    let build_handlers = |log: &Rc<RefCell<Vec<&'static str>>>| {
+        let (sb, sw, saa, sab) = (log.clone(), log.clone(), log.clone(), log.clone());
+        let mut handlers = BTreeMap::new();
+        handlers.insert(
+            before.clone(),
+            TickHandler::Before(Box::new(move |_ctx, _id| {
+                sb.borrow_mut().push("before");
+                Ok(())
+            })),
+        );
+        handlers.insert(
+            wrap.clone(),
+            TickHandler::Wrap(Box::new(move |_ctx, id, next| {
+                sw.borrow_mut().push("wrap-enter");
+                next.call(id)?;
+                sw.borrow_mut().push("wrap-exit");
+                Ok(())
+            })),
+        );
+        handlers.insert(
+            after_a.clone(),
+            TickHandler::After(Box::new(move |_ctx, _id| {
+                saa.borrow_mut().push("after-a");
+                Ok(())
+            })),
+        );
+        handlers.insert(
+            after_b.clone(),
+            TickHandler::After(Box::new(move |_ctx, _id| {
+                sab.borrow_mut().push("after-b");
+                Ok(())
+            })),
+        );
+        handlers
+    };
+
+    let expected = vec!["before", "wrap-enter", "wrap-exit", "after-b", "after-a"];
+
+    // 臂一：普通入口——经 settle_room 驱动 link tick。
+    let dispatch = ContributionDispatch::assemble(&plan, BTreeMap::new(), build_handlers(&log))
+        .expect("tick 槽装配");
+    let mut f = Fixture::new(7, terrain_with(&[]));
+    f.controller(5, Some("p1"));
+    place_generic(
+        &mut f,
+        3,
+        4,
+        json!({
+            "type": "structure", "structureType": "link", "owner": "p1",
+            "store": {"energy": 300}, "cooldown": 0
+        }),
+    );
+    f.settle_with_dispatch(IntentBatch::default(), std::rc::Rc::new(dispatch));
+    let via_run = log.borrow().clone();
+    assert_eq!(
+        via_run, expected,
+        "普通 tick 入口须跑满 before→wrap→after(b,a)"
+    );
+
+    // 臂二：重入入口——tick_chain() 导出。
+    let dispatch2 = ContributionDispatch::assemble(&plan, BTreeMap::new(), build_handlers(&log))
+        .expect("tick 槽装配");
+    log.borrow_mut().clear();
+    let room = f.world.room("W1N1").unwrap().clone();
+    let ctx: kk_engine::settle::RoomCtx = Rc::new(RefCell::new(kk_engine::settle::Working {
+        room,
+        index: kk_world::RoomIndex::build(&f.world.room("W1N1").unwrap().objects),
+        time: f.world.time(),
+        now_ms: 1_700_000_000_000,
+        state: kk_engine::TickState::new(BTreeMap::new(), f.world.next_obj_id()),
+        events: Vec::new(),
+        old_fatigue: BTreeMap::new(),
+        tick_fatigue: BTreeMap::new(),
+        upgraded: BTreeMap::new(),
+        damage_to_apply: BTreeMap::new(),
+        heal_to_apply: BTreeMap::new(),
+        upgrade_block_pending: BTreeMap::new(),
+        safe_mode_activated: BTreeSet::new(),
+        extractor_cooldown_pending: BTreeMap::new(),
+        movement: Default::default(),
+        plane: kk_engine::settle::Plane {
+            links: kk_world::place::builtin_link_rules(),
+            contrib: Rc::new(dispatch2),
+            extensions: Rc::new(kk_mod_api::extension::ExtensionCatalog::default()),
+            plan: plan.clone(),
+        },
+    }));
+    let id = ctx
+        .borrow()
+        .room
+        .objects
+        .iter()
+        .find_map(|(id, o)| match o {
+            RoomObject::Generic(g) if g.data.contains("link") => Some(*id),
+            _ => None,
+        })
+        .expect("房内有 link");
+    let mut chain = {
+        let contrib = ctx.borrow().plane.contrib.clone();
+        contrib.tick_chain()
+    };
+    chain(&ctx, id).expect("tick 重入链执行成功");
+    assert_eq!(
+        *log.borrow(),
+        expected,
+        "tick_chain() 导出必须与普通入口同口径，且 after 次序不倒置"
     );
 }

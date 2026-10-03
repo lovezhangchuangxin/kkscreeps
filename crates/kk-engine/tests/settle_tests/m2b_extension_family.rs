@@ -127,13 +127,15 @@ fn transfer_batch(l1: ObjId, l2: ObjId) -> IntentBatch {
     batch
 }
 
-fn frozen_extension_plan(contrib: Contribution) -> kk_mod_api::ContributionPlan {
-    kk_mod_api::freeze_with_builtin(
-        kk_mod_api::builtin::link(),
-        vec![contrib],
-        FreezeOptions::default(),
+fn frozen_extension_plan(contrib: Contribution) -> std::sync::Arc<kk_mod_api::ContributionPlan> {
+    std::sync::Arc::new(
+        kk_mod_api::freeze_with_builtin(
+            kk_mod_api::builtin::link(),
+            vec![contrib],
+            FreezeOptions::default(),
+        )
+        .unwrap(),
     )
-    .unwrap()
 }
 
 /// 四类权限的投影隔离：owner 看 charge/label/target，非 owner 只看
@@ -163,18 +165,24 @@ fn extension_projection_applies_visibility() {
     let mut handlers = BTreeMap::new();
     handlers.insert(
         key("extmod:hook"),
-        ActionHandler::Wrap(Box::new(move |w, id, d, next| {
+        ActionHandler::Wrap(Box::new(move |ctx, id, d, next| {
             let target = d.id.expect("转移意图带目标");
-            w.set_extension(id, "extmod:charge", json!(64))?;
-            w.set_extension(id, "extmod:label", json!("charged"))?;
-            w.set_extension(id, "extmod:secret", json!(true))?;
-            w.set_extension(id, "extmod:target", json!(target.as_str()))?;
+            ctx.borrow_mut()
+                .set_extension(id, "extmod:charge", json!(64))?;
+            ctx.borrow_mut()
+                .set_extension(id, "extmod:label", json!("charged"))?;
+            ctx.borrow_mut()
+                .set_extension(id, "extmod:secret", json!(true))?;
+            ctx.borrow_mut()
+                .set_extension(id, "extmod:target", json!(target.as_str()))?;
             // 目标对象只写对非 owner 全不可见的字段：非 owner 视角
             // 对它不得出现 ext 键（空守卫——无条件插入 ext:{} 会泄露
             // "存在隐藏字段"的元事实）。
-            w.set_extension(target, "extmod:charge", json!(32))?;
-            w.set_extension(target, "extmod:secret", json!(false))?;
-            next.call(w, id, d)
+            ctx.borrow_mut()
+                .set_extension(target, "extmod:charge", json!(32))?;
+            ctx.borrow_mut()
+                .set_extension(target, "extmod:secret", json!(false))?;
+            next.call(id, d)
         })),
     );
     let dispatch = ContributionDispatch::assemble(&plan, handlers, BTreeMap::new()).unwrap();
@@ -182,9 +190,9 @@ fn extension_projection_applies_visibility() {
         transfer_batch(l1, l2),
         Plane {
             links: kk_world::place::builtin_link_rules(),
-            contrib: &dispatch,
-            extensions: &catalog,
-            plan: &plan,
+            contrib: std::rc::Rc::new(dispatch),
+            extensions: std::rc::Rc::new(catalog.clone()),
+            plan: plan.clone(),
         },
     );
 
@@ -282,9 +290,9 @@ fn extension_write_validates_against_catalog() {
         let mut handlers = BTreeMap::new();
         handlers.insert(
             key("extmod:probe"),
-            ActionHandler::Wrap(Box::new(move |w, id, d, next| {
-                let result = w.set_extension(id, field, value.clone());
-                let out = next.call(w, id, d);
+            ActionHandler::Wrap(Box::new(move |ctx, id, d, next| {
+                let result = ctx.borrow_mut().set_extension(id, field, value.clone());
+                let out = next.call(id, d);
                 result?;
                 out
             })),
@@ -293,18 +301,18 @@ fn extension_write_validates_against_catalog() {
         // 结算返回扩展写入的错误字符串。
         let state =
             kk_engine::TickState::new(std::mem::take(&mut f2.players), f2.world.next_obj_id());
-        let mut room = f2.world.room("W1N1").unwrap().clone();
+        let room = f2.world.room("W1N1").unwrap().clone();
         let result = settle_room(
-            &mut room,
+            room,
             f2.world.time(),
             1_700_000_000_000,
             &state,
             &transfer_batch(a, b),
             &Plane {
                 links: kk_world::place::builtin_link_rules(),
-                contrib: &dispatch,
-                extensions: &catalog,
-                plan: &plan,
+                contrib: std::rc::Rc::new(dispatch),
+                extensions: std::rc::Rc::new(catalog.clone()),
+                plan: plan.clone(),
             },
         );
         result.err().map(|e| e.0).unwrap_or_default()
@@ -357,15 +365,15 @@ fn dangling_extension_reference_reconciles_on_publish() {
     let mut handlers = BTreeMap::new();
     handlers.insert(
         key("extmod:hook"),
-        ActionHandler::Wrap(Box::new(|w, id, d, next| {
+        ActionHandler::Wrap(Box::new(|ctx, id, d, next| {
             let bad = kk_world::ObjId(9_999_999);
-            w.set_extension(id, "extmod:target", json!(bad.as_str()))?;
-            next.call(w, id, d)
+            ctx.borrow_mut()
+                .set_extension(id, "extmod:target", json!(bad.as_str()))?;
+            next.call(id, d)
         })),
     );
     let world = std::mem::replace(&mut f.world, kk_world::World::new(0));
-    let mut engine =
-        kk_engine::Engine::with_plan(world, plan.into(), handlers, BTreeMap::new()).unwrap();
+    let mut engine = kk_engine::Engine::with_plan(world, plan, handlers, BTreeMap::new()).unwrap();
     engine
         .tick_with_intents(transfer_batch(l1, l2))
         .expect("悬空引用收敛而非失败");
@@ -401,21 +409,21 @@ fn dangling_extension_reference_reconciles_on_publish() {
     let mut handlers = BTreeMap::new();
     handlers.insert(
         key("extmod:lifecycle"),
-        ActionHandler::Wrap(Box::new(move |w, id, d, next| {
-            if w.time == 0 {
+        ActionHandler::Wrap(Box::new(move |ctx, id, d, next| {
+            if ctx.borrow().time == 0 {
                 // 第一轮：写指向 b 的合法引用并执行默认转移。
-                w.set_extension(id, "extmod:target", json!(b.as_str()))?;
-                next.call(w, id, d)
+                ctx.borrow_mut()
+                    .set_extension(id, "extmod:target", json!(b.as_str()))?;
+                next.call(id, d)
             } else {
                 // 第二轮：销毁 b，使已提交引用悬空。
-                w.remove_obj(b);
+                ctx.borrow_mut().remove_obj(b);
                 Ok(())
             }
         })),
     );
     let world = std::mem::replace(&mut f2.world, kk_world::World::new(0));
-    let mut engine =
-        kk_engine::Engine::with_plan(world, plan.into(), handlers, BTreeMap::new()).unwrap();
+    let mut engine = kk_engine::Engine::with_plan(world, plan, handlers, BTreeMap::new()).unwrap();
     engine
         .tick_with_intents(transfer_batch(a, b))
         .expect("第一轮合法引用提交");
@@ -463,9 +471,11 @@ fn object_removal_clears_extensions_and_raw_writes_are_rejected() {
     let mut handlers = BTreeMap::new();
     handlers.insert(
         key("extmod:delete"),
-        ActionHandler::Replace(Box::new(|w, id, _d| {
-            w.set_extension(id, "extmod:charge", json!(7)).unwrap();
-            w.remove_obj(id);
+        ActionHandler::Replace(Box::new(|ctx, id, _d| {
+            ctx.borrow_mut()
+                .set_extension(id, "extmod:charge", json!(7))
+                .unwrap();
+            ctx.borrow_mut().remove_obj(id);
             Ok(())
         })),
     );
@@ -474,9 +484,9 @@ fn object_removal_clears_extensions_and_raw_writes_are_rejected() {
         transfer_batch(l1, l2),
         Plane {
             links: kk_world::place::builtin_link_rules(),
-            contrib: &dispatch,
-            extensions: &catalog,
-            plan: &plan,
+            contrib: std::rc::Rc::new(dispatch),
+            extensions: std::rc::Rc::new(catalog.clone()),
+            plan: plan.clone(),
         },
     );
     let room = f.world.room("W1N1").unwrap();
@@ -502,8 +512,9 @@ fn object_removal_clears_extensions_and_raw_writes_are_rejected() {
     let mut raw_handlers = BTreeMap::new();
     raw_handlers.insert(
         key("extmod:raw"),
-        ActionHandler::Replace(Box::new(|w, id, _d| {
-            w.room
+        ActionHandler::Replace(Box::new(|ctx, id, _d| {
+            ctx.borrow_mut()
+                .room
                 .extensions
                 .entry(id)
                 .or_default()
@@ -513,8 +524,7 @@ fn object_removal_clears_extensions_and_raw_writes_are_rejected() {
     );
     let world = std::mem::replace(&mut f2.world, kk_world::World::new(0));
     let mut engine =
-        kk_engine::Engine::with_plan(world, raw_plan.into(), raw_handlers, BTreeMap::new())
-            .unwrap();
+        kk_engine::Engine::with_plan(world, raw_plan, raw_handlers, BTreeMap::new()).unwrap();
     let _ = (a, b);
     let err = engine
         .tick_with_intents(transfer_batch(a, b))

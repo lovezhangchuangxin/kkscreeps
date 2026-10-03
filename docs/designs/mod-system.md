@@ -172,7 +172,7 @@ Mod 不获得 Rust 裸指针。位置、归属、生命周期、Store 与字段�
 
 依赖/阶段 before/after 是图约束，不能用单一 priority 数字覆盖一切。循环、越过强制阶段边界、同槽位多 replace、引用不存在的 handler 在启动时报错。所有约束缺省用稳定 Mod ID/handler ID 排序；完成顺序与 hashmap 迭代不得参与玩法语义。
 
-首版玩法 callback 必须同步返回，返回 Promise 视为注册/执行错误；不能 await 文件或网络。允许 JS `next()` 同步调用 native、native 再触发生命周期 JS，但所有此类 op 必须显式 reentrant，且进入 JS 之前释放 OpState/事务借用。这条交互已由[实验](../../spikes/deno-spike/examples/js_mod_host.rs)在 debug/release 验证，真实 native 处理器尚待按此重构。
+首版玩法 callback 必须同步返回，返回 Promise 视为注册/执行错误；不能 await 文件或网络。允许 JS `next()` 同步调用 native、native 再触发生命周期 JS，但所有此类 op 必须显式 reentrant，且进入 JS 之前释放 OpState/事务借用。这条交互已由[实验](../../spikes/deno-spike/examples/js_mod_host.rs)在 debug/release 验证；真实处理器的候选访问模型已按此重构落地（`RoomCtx`），JS 侧 wrap 的 `next()` 工厂通道仍待接线。
 
 ## 6. 宿主实现与所有权
 
@@ -182,7 +182,7 @@ Mod 不获得 Rust 裸指针。位置、归属、生命周期、Store 与字段�
 
 ### 6.2 先建立 OwnedTxn，再接入 VM
 
-引擎已建立拥有输入、房间、市场和共享状态的 `OwnedTickTxn`。`Working<'w>` 通过 `TickState` 短暂访问玩家候选和 ID 游标，但仍局部借用 room，不能直接放进生命周期要求为 `'static` 的 OpState。接入 VM 时由同一宿主线程的 native 和 VM 持有拥有数据的候选事务，通过 `Rc<RefCell<OwnedTxn>>` 或等价安全封装取得短暂访问；在进入 JS 前结束房间与事务的可变借用。
+引擎已建立拥有输入、房间、市场和共享状态的 `OwnedTickTxn`。`Working` 现按值持有房间副本、不带生命周期，经 `TickState` 短暂访问玩家候选和 ID 游标；重入 op 从 OpState 取走的是挂起内层链，该链以 `RoomCtx`（`Rc<RefCell<Working>>`）为入参闭包起来执行；`RoomCtx` 本身不进 OpState（进了会让结算尾部的 `Rc::into_inner` 恒失败）。借用纪律随之收紧为：处理器自己取短借用，**在进入 JS 或调用 `next()` 前必须释放**——重入可变借用会 panic。结算尾部的 `Rc::into_inner` 要求候选强计数为 1，因此处理器不得留存 `RoomCtx` 克隆。
 
 ```text
 runtime 收集玩家结果 + 原 TickInput

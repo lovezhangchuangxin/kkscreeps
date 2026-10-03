@@ -64,7 +64,7 @@ pub(super) fn intent_pull(w: &mut Working, id: ObjId, data: &IntentData) {
     if (tx - x).abs() > 1 || (ty - y).abs() > 1 {
         return;
     }
-    w.movement.add_pulling(w.room, id, target_id);
+    w.movement.add_pulling(&w.room, id, target_id);
 }
 
 /// 按 CREEP_CORPSE_RATE 回收死亡 creep。TTL、战斗死亡和 suicide 使用此入口；

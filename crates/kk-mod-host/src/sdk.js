@@ -23,14 +23,14 @@ function anyKey(key, where) {
   return key;
 }
 
-function requireFunction(namespace, key, fn) {
+function requireFunction(namespace, key, fn, kind) {
   if (sealed) throw new Error('注册已密封');
   ownKey(namespace, key);
   if (typeof fn !== 'function') {
     throw new Error(`绑定 ${key} 需要一个函数`);
   }
   if (bindings.has(key)) throw new Error(`绑定 ${key} 重复注册`);
-  bindings.set(key, fn);
+  bindings.set(key, { fn, kind });
 }
 
 function schemaOf(namespace, spec, where) {
@@ -140,7 +140,7 @@ export function createApi(namespace, config) {
         throw new Error(`处理器 id ${JSON.stringify(id)} 须为字母开头的点划线词`);
       }
       const key = ownKey(namespace, `${namespace}:handler.${id}`);
-      requireFunction(namespace, key, fn);
+      requireFunction(namespace, key, fn, kind);
       declare('handler', { key, slot, kind });
     };
   }
@@ -195,9 +195,19 @@ export function seal() {
 // 用它做累计会破坏同输入重试的确定性。
 export function dispatch(key, ctx) {
   if (!sealed) throw new Error('dispatch 仅在注册密封后可用');
-  const fn = bindings.get(key);
-  if (typeof fn !== 'function') throw new Error(`绑定 ${JSON.stringify(key)} 没有注册函数`);
-  const result = fn(ctx);
+  const entry = bindings.get(key);
+  if (!entry || typeof entry.fn !== 'function') {
+    throw new Error(`绑定 ${JSON.stringify(key)} 没有注册函数`);
+  }
+  // wrap 处理器额外收到 next：它的实现是宿主的 reentrant op，JS 侧
+  // 只能经它同步进入内层链。
+  //
+  // 边界说明：这不是能力隔离。包代码经 Deno.core.ops 仍能直接触达
+  // op_mod_next（与其他 op 同表），只是槽空时会响亮失败。信任模型本
+  // 就把 Mod 包视作共同可信单元，故此处不做额外封锁——若将来要收紧，
+  // 须改为传带能力校验的闭包，而不是裸 op。
+  const result =
+    entry.kind === 'wrap' ? entry.fn(ctx, Deno.core.ops.op_mod_next) : entry.fn(ctx);
   if (result !== undefined && result !== null && typeof result.then === 'function') {
     throw new Error(`绑定 ${JSON.stringify(key)} 的处理器返回了 Promise（结算回调必须同步完成）`);
   }

@@ -8,29 +8,38 @@
 //! 本执行器不捕获 panic，也不提供跨线程共享；候选仍由引擎统一回滚。
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::rc::Rc;
 
 use kk_mod_api::{ContributionPlan, Dispatch, Key};
 use kk_world::ObjId;
 use serde_json::Value;
 
-use super::Working;
+use super::{RoomCtx, Working};
 use crate::intent::IntentData;
 
 /// wrap 的续行句柄。`call` 至多一次；第二次调用返回错误，
 /// 该错误沿处理链返回并使本轮结算候选失败。
+///
+/// 句柄同时携带房间候选句柄：JS 处理器的 `next()` 经重入 op 回到
+/// 引擎时，内层链需要一个 `'static` 可达的候选——这正是 `Working`
+/// 去生命周期的原因（见设计 §6.2）。
 pub struct Next<'a> {
     calls: u32,
-    inner: &'a mut (dyn FnMut(&mut Working, ObjId, &IntentData) -> Result<(), String> + 'a),
+    inner: &'a mut (dyn FnMut(&RoomCtx, ObjId, &IntentData) -> Result<(), String> + 'a),
+    ctx: &'a RoomCtx,
 }
 
-impl Next<'_> {
+impl<'a> Next<'a> {
     /// 继续执行内层（剩余 wrap 或中心）；重复调用报错。
-    pub fn call(&mut self, w: &mut Working, id: ObjId, d: &IntentData) -> Result<(), String> {
+    ///
+    /// 调用方在进入本方法前必须已释放自己对 `ctx` 的可变借用：内层链
+    /// 会重新借用同一 `RefCell`，重入可变借用会 panic。
+    pub fn call(&mut self, id: ObjId, d: &IntentData) -> Result<(), String> {
         self.calls += 1;
         if self.calls > 1 {
             return Err("wrap 处理器重复调用 next，本轮候选失败".into());
         }
-        (self.inner)(w, id, d)
+        (self.inner)(self.ctx, id, d)
     }
 
     /// 本层内层是否已被调用过。注意这只反映直接内层：若内层 wrap
@@ -43,16 +52,17 @@ impl Next<'_> {
 /// 对象 tick 槽的 wrap 续行句柄，语义与 [`Next`] 一致。
 pub struct TickNext<'a> {
     calls: u32,
-    inner: &'a mut (dyn FnMut(&mut Working, ObjId) -> Result<(), String> + 'a),
+    inner: &'a mut (dyn FnMut(&RoomCtx, ObjId) -> Result<(), String> + 'a),
+    ctx: &'a RoomCtx,
 }
 
-impl TickNext<'_> {
-    pub fn call(&mut self, w: &mut Working, id: ObjId) -> Result<(), String> {
+impl<'a> TickNext<'a> {
+    pub fn call(&mut self, id: ObjId) -> Result<(), String> {
         self.calls += 1;
         if self.calls > 1 {
             return Err("wrap 处理器重复调用 next，本轮候选失败".into());
         }
-        (self.inner)(w, id)
+        (self.inner)(self.ctx, id)
     }
 
     pub fn called(&self) -> bool {
@@ -60,18 +70,41 @@ impl TickNext<'_> {
     }
 }
 
-type ActionChain<'a> = Box<dyn FnMut(&mut Working, ObjId, &IntentData) -> Result<(), String> + 'a>;
-type TickChain<'a> = Box<dyn FnMut(&mut Working, ObjId) -> Result<(), String> + 'a>;
+type ActionChain<'a> = Box<dyn FnMut(&RoomCtx, ObjId, &IntentData) -> Result<(), String> + 'a>;
+type TickChain<'a> = Box<dyn FnMut(&RoomCtx, ObjId) -> Result<(), String> + 'a>;
 /// before/after/replace 处理器同样可失败：JS 侧处理器的异常必须能使
 /// 本轮候选失败，不能因执行器形状退化为 panic 或静默。
-type ActionSimple = Box<dyn Fn(&mut Working, ObjId, &IntentData) -> Result<(), String>>;
-type ActionWrap =
-    Box<dyn Fn(&mut Working, ObjId, &IntentData, &mut Next<'_>) -> Result<(), String>>;
-type TickSimple = Box<dyn Fn(&mut Working, ObjId) -> Result<(), String>>;
-type TickWrap = Box<dyn Fn(&mut Working, ObjId, &mut TickNext<'_>) -> Result<(), String>>;
+///
+/// 处理器收 `&RoomCtx` 而非 `&mut Working`：借用纪律由类型强制——
+/// 处理器自己取短借用，需要进入 JS 或调用 `next()` 时先释放，
+/// 内层链才能重新借用同一候选。
+type ActionSimple = Box<dyn Fn(&RoomCtx, ObjId, &IntentData) -> Result<(), String>>;
+type ActionWrap = Box<dyn Fn(&RoomCtx, ObjId, &IntentData, &mut Next<'_>) -> Result<(), String>>;
+type TickSimple = Box<dyn Fn(&RoomCtx, ObjId) -> Result<(), String>>;
+type TickWrap = Box<dyn Fn(&RoomCtx, ObjId, &mut TickNext<'_>) -> Result<(), String>>;
 /// 扩展意图槽的处理器签名：args 为按计划 schema 校验后的原始 JSON，
 /// 目标对象读写由实现方经 Working 完成。
-pub type ExtSimple = Box<dyn Fn(&mut Working, ObjId, &Value) -> Result<(), String>>;
+pub type ExtSimple = Box<dyn Fn(&RoomCtx, ObjId, &Value) -> Result<(), String>>;
+/// 扩展意图槽的 wrap 处理器：`next` 续行到剩余 wrap 与中心。
+pub type ExtWrap = Box<dyn Fn(&RoomCtx, ObjId, &Value, &mut ExtNext<'_>) -> Result<(), String>>;
+
+/// 把内建 native 中心适配成处理器形态：取一次短借用后调用。
+/// native 中心不重入 JS（重入只发生在 wrap 层），单次借用安全。
+fn native_action(
+    f: fn(&mut Working, ObjId, &IntentData),
+) -> impl Fn(&RoomCtx, ObjId, &IntentData) -> Result<(), String> {
+    move |ctx, id, d| {
+        f(&mut ctx.borrow_mut(), id, d);
+        Ok(())
+    }
+}
+
+fn native_tick(f: fn(&mut Working, ObjId)) -> impl Fn(&RoomCtx, ObjId) -> Result<(), String> {
+    move |ctx, id| {
+        f(&mut ctx.borrow_mut(), id);
+        Ok(())
+    }
+}
 
 /// 调用方安装的自定义处理器；变体须与描述声明的 kind 一致，错配在装配时拒绝。
 pub enum ActionHandler {
@@ -88,6 +121,66 @@ pub enum TickHandler {
     After(TickSimple),
 }
 
+/// 扩展意图槽的 wrap 续行句柄，语义与 [`Next`] 一致：至多调用一次。
+pub struct ExtNext<'a> {
+    calls: u32,
+    inner: &'a mut (dyn FnMut(&RoomCtx, ObjId, &Value) -> Result<(), String> + 'a),
+    ctx: &'a RoomCtx,
+    args: &'a Value,
+}
+
+impl<'a> ExtNext<'a> {
+    /// 继续执行内层（剩余 wrap 与中心）；重复调用报错。
+    /// 调用方在进入本方法前必须已释放对 `ctx` 的可变借用。
+    pub fn call(&mut self, id: ObjId) -> Result<(), String> {
+        self.calls += 1;
+        if self.calls > 1 {
+            return Err("wrap 处理器重复调用 next，本轮候选失败".into());
+        }
+        (self.inner)(self.ctx, id, self.args)
+    }
+
+    pub fn called(&self) -> bool {
+        self.calls > 0
+    }
+}
+
+type ExtInnerChain<'a> = Box<dyn FnMut(&RoomCtx, ObjId, &Value) -> Result<(), String> + 'a>;
+
+/// 扩展槽 wrap 链：wraps[0] 最外层，中心最内；after 仅在内层成功后执行。
+fn run_ext_wrapped(
+    wraps: &[Rc<ExtWrap>],
+    center: &Rc<ExtSimple>,
+    after: &[Rc<ExtSimple>],
+    ctx: &RoomCtx,
+    id: ObjId,
+    args: &Value,
+) -> Result<(), String> {
+    let result = box_ext_inner(wraps, center)(ctx, id, args);
+    if result.is_ok() {
+        for f in after {
+            f(ctx, id, args)?;
+        }
+    }
+    result
+}
+
+fn box_ext_inner<'a>(wraps: &'a [Rc<ExtWrap>], center: &'a Rc<ExtSimple>) -> ExtInnerChain<'a> {
+    let Some((outer, rest)) = wraps.split_first() else {
+        return Box::new(move |ctx, id, args| (center)(ctx, id, args));
+    };
+    let mut inner = box_ext_inner(rest, center);
+    Box::new(move |ctx, id, args| {
+        let mut next = ExtNext {
+            calls: 0,
+            inner: &mut inner,
+            ctx,
+            args,
+        };
+        outer(ctx, id, args, &mut next)
+    })
+}
+
 enum ActionCenter {
     Native(fn(&mut Working, ObjId, &IntentData)),
     Custom(ActionSimple),
@@ -101,7 +194,7 @@ enum TickCenter {
 /// Mod 自有槽贡献处理器的安装形态；变体须与描述声明的 kind 一致。
 pub enum ExtHandler {
     Before(ExtSimple),
-    Wrap(ExtSimple),
+    Wrap(ExtWrap),
     Replace(ExtSimple),
     After(ExtSimple),
 }
@@ -119,58 +212,80 @@ impl ExtHandler {
 
 /// 扩展意图槽的已装配执行计划。中心恒为可执行实现：动作处理桥
 /// （描述符的 native 形态）或 replace 处理器。
+///
+/// 载荷经 `Rc` 共享，使内层链能导出为 `'static` 闭包（JS wrap 的
+/// `next()` 经重入 op 需要），与 link 两槽同一形态。
 enum ExtSlot {
-    Process(ExtSimple),
-    Chained {
-        before: Vec<ExtSimple>,
-        center: ExtSimple,
-        /// 冻结时已按依赖逆序；执行器顺序调用，不再次反转。
-        after: Vec<ExtSimple>,
-    },
+    Process(Rc<ExtSimple>),
+    Chained(Rc<ExtChained>),
+}
+
+struct ExtChained {
+    before: Vec<Rc<ExtSimple>>,
+    wraps: Vec<Rc<ExtWrap>>,
+    center: Rc<ExtSimple>,
+    /// 冻结时已按依赖逆序；执行器顺序调用，不再次反转。
+    after: Vec<Rc<ExtSimple>>,
 }
 
 impl ExtSlot {
-    fn run(&self, w: &mut Working, id: ObjId, args: &Value) -> Result<(), String> {
+    fn run(&self, ctx: &RoomCtx, id: ObjId, args: &Value) -> Result<(), String> {
         match self {
-            ExtSlot::Process(f) => f(w, id, args),
-            ExtSlot::Chained {
-                before,
-                center,
-                after,
-            } => {
-                for f in before {
-                    f(w, id, args)?;
+            ExtSlot::Process(f) => f(ctx, id, args),
+            ExtSlot::Chained(chain) => {
+                for f in &chain.before {
+                    f(ctx, id, args)?;
                 }
-                center(w, id, args)?;
-                for f in after {
-                    f(w, id, args)?;
-                }
-                Ok(())
+                run_ext_wrapped(&chain.wraps, &chain.center, &chain.after, ctx, id, args)
+            }
+        }
+    }
+
+    /// 本槽内层链的 `'static` 导出。
+    fn chain(&self) -> ExtStaticChain {
+        match self {
+            ExtSlot::Process(f) => {
+                let f = f.clone();
+                Box::new(move |ctx, id, args| f(ctx, id, args))
+            }
+            ExtSlot::Chained(chain) => {
+                let chain = chain.clone();
+                Box::new(move |ctx, id, args| {
+                    for f in &chain.before {
+                        f(ctx, id, args)?;
+                    }
+                    run_ext_wrapped(&chain.wraps, &chain.center, &chain.after, ctx, id, args)
+                })
             }
         }
     }
 }
 
-/// 一个槽的已装配执行计划。
+/// 一个槽的已装配执行计划。链载荷经 `Rc` 共享，使内层链能导出为
+/// `'static` 闭包——JS wrap 处理器的 `next()` 经重入 op 需要的正是它。
+struct ActionChained {
+    before: Vec<ActionSimple>,
+    wraps: Vec<Rc<ActionWrap>>,
+    center: Rc<ActionCenter>,
+    /// 冻结时已按依赖逆序；执行器必须顺序调用，不能再次反转。
+    after: Vec<ActionSimple>,
+}
+
+struct TickChained {
+    before: Vec<TickSimple>,
+    wraps: Vec<Rc<TickWrap>>,
+    center: Rc<TickCenter>,
+    after: Vec<TickSimple>,
+}
+
 enum ActionSlot {
     Native(fn(&mut Working, ObjId, &IntentData)),
-    Chained {
-        before: Vec<ActionSimple>,
-        wraps: Vec<ActionWrap>,
-        center: ActionCenter,
-        /// 冻结时已按依赖逆序；执行器必须顺序调用，不能再次反转。
-        after: Vec<ActionSimple>,
-    },
+    Chained(Rc<ActionChained>),
 }
 
 enum TickSlot {
     Native(fn(&mut Working, ObjId)),
-    Chained {
-        before: Vec<TickSimple>,
-        wraps: Vec<TickWrap>,
-        center: TickCenter,
-        after: Vec<TickSimple>,
-    },
+    Chained(Rc<TickChained>),
 }
 
 /// link 两个槽的执行表。默认实例直连 native；
@@ -217,7 +332,9 @@ impl ContributionDispatch {
     /// [`Self::assemble`] 的完整形态：`ext_handlers` 是 Mod 自有槽上的
     /// before/wrap/replace/after 贡献处理器，`ext_processes` 是各槽中心
     /// 的动作处理实现（键为槽的 native 绑定，通常是 `{intent}.process`）。
-    /// wrap 在扩展槽同样不支持执行装配，非空即拒。
+    /// 扩展槽的 wrap 处理器同样装配成链，语义与 link 槽一致（`next()`
+    /// 至多一次，续行到剩余 wrap 与中心，成功后才跑 after）。装配门不在
+    /// 此处：宿主桥在 next 工厂通道接线前拒收 wrap 绑定，见 kk-runtime。
     pub fn assemble_with_ext(
         plan: &ContributionPlan,
         action_handlers: BTreeMap<Key, ActionHandler>,
@@ -247,15 +364,87 @@ impl ContributionDispatch {
 
     pub(crate) fn run_transfer(
         &self,
-        w: &mut Working,
+        ctx: &RoomCtx,
         id: ObjId,
         d: &IntentData,
     ) -> Result<(), String> {
-        self.transfer.run(w, id, d)
+        self.transfer.run(ctx, id, d)
     }
 
-    pub(crate) fn run_tick(&self, w: &mut Working, id: ObjId) -> Result<(), String> {
-        self.tick.run(w, id)
+    pub(crate) fn run_tick(&self, ctx: &RoomCtx, id: ObjId) -> Result<(), String> {
+        self.tick.run(ctx, id)
+    }
+
+    /// link 动作槽**整槽**执行的 `'static` 导出：`before` + 全部 wraps
+    /// + 中心 + after。
+    ///
+    /// ⚠ 不可直接用作 wrap 处理器的 `next()` 载荷——那会重放外层 wrap 与
+    /// 全部 `before`，并使 JS wrap 经链重入自身。`next()` 载荷必须用
+    /// [`Self::action_chain_below`]。本导出保留给整槽重放式入口。
+    pub fn transfer_chain(&self) -> StaticActionChain {
+        action_chain_static(&self.transfer)
+    }
+
+    /// link tick 槽**整槽**执行的 `'static` 导出，语义同
+    /// [`Self::transfer_chain`]（含 `before` 与全部 wraps）。
+    pub fn tick_chain(&self) -> StaticTickChain {
+        match &self.tick {
+            TickSlot::Native(f) => {
+                let f = *f;
+                Box::new(move |ctx, id| native_tick(f)(ctx, id))
+            }
+            TickSlot::Chained(chain) => {
+                let chain = chain.clone();
+                Box::new(move |ctx, id| {
+                    for f in &chain.before {
+                        f(ctx, id)?;
+                    }
+                    let result = run_tick_wrapped(&chain.wraps, &chain.center, ctx, id);
+                    if result.is_ok() {
+                        for f in &chain.after {
+                            f(ctx, id)?;
+                        }
+                    }
+                    result
+                })
+            }
+        }
+    }
+
+    /// 某个 wrap 之下的续行（`'static`）：跳过 `before`、`wraps[..=index]`
+    /// 与本层自身，只跑 `wraps[index+1..]` + 中心，成功后执行槽级 `after`。
+    ///
+    /// 这才是 JS wrap 处理器 `next()` 应使用的载荷：整槽导出会重放
+    /// 外层 wrap 与全部 `before`。`index` 越界时退回整槽语义。
+    pub fn action_chain_below(&self, index: usize) -> StaticActionChain {
+        match &self.transfer {
+            ActionSlot::Native(f) => {
+                let f = *f;
+                Box::new(move |ctx, id, d| native_action(f)(ctx, id, d))
+            }
+            ActionSlot::Chained(chain) => {
+                let chain = chain.clone();
+                Box::new(move |ctx, id, d| {
+                    let start = index.saturating_add(1).min(chain.wraps.len());
+                    let result = run_wrapped(&chain.wraps[start..], &chain.center, ctx, id, d);
+                    if result.is_ok() {
+                        for f in &chain.after {
+                            f(ctx, id, d)?;
+                        }
+                    }
+                    result
+                })
+            }
+        }
+    }
+
+    /// 扩展意图槽**整槽**执行的 `'static` 导出，语义同
+    /// [`Self::transfer_chain`]。槽未装配按失败处理。
+    pub fn ext_chain(&self, slot: &Key) -> Result<ExtStaticChain, String> {
+        self.ext
+            .get(slot)
+            .map(ExtSlot::chain)
+            .ok_or_else(|| format!("扩展意图槽 {slot} 没有已装配的执行器（计划与执行表不一致）"))
     }
 
     /// 执行一个 Mod 自有槽的处理链。槽未装配说明计划与执行表不一致，
@@ -263,7 +452,7 @@ impl ContributionDispatch {
     pub(crate) fn run_ext(
         &self,
         slot: &Key,
-        w: &mut Working,
+        ctx: &RoomCtx,
         id: ObjId,
         args: &Value,
     ) -> Result<(), String> {
@@ -271,7 +460,7 @@ impl ContributionDispatch {
             .ext
             .get(slot)
             .ok_or_else(|| format!("扩展意图槽 {slot} 没有已装配的执行器（计划与执行表不一致）"))?;
-        chain.run(w, id, args)
+        chain.run(ctx, id, args)
     }
 }
 
@@ -294,7 +483,7 @@ fn assemble_ext_slots(
                 let center = processes
                     .remove(binding)
                     .ok_or_else(|| missing(&slot.key.to_string(), binding, "动作处理"))?;
-                result.insert(slot.key.clone(), ExtSlot::Process(center));
+                result.insert(slot.key.clone(), ExtSlot::Process(Rc::new(center)));
             }
             Dispatch::Chained {
                 before,
@@ -302,40 +491,49 @@ fn assemble_ext_slots(
                 center,
                 after,
             } => {
-                if !wraps.is_empty() {
-                    return Err(format!(
-                        "槽 {} 的 wrap 处理器不支持执行装配（拒绝而不是静默截断链）",
-                        slot.key
-                    ));
-                }
                 let slot_label = slot.key.to_string();
                 let mut before_fns = Vec::new();
                 for binding in before {
                     match handlers.remove(binding) {
-                        Some(ExtHandler::Before(f)) => before_fns.push(f),
+                        Some(ExtHandler::Before(f)) => before_fns.push(Rc::new(f)),
                         Some(other) => {
                             return Err(kind_mismatch(binding, "before", other.label()));
                         }
                         None => return Err(missing(&slot_label, binding, "before")),
                     }
                 }
+                // wrap 处理器在扩展槽同样装配：它们由宿主桥经
+                // invoke_wrap + reentrant op 执行（见 kk-mod-host）。
+                let mut wrap_fns = Vec::new();
+                for binding in wraps.iter() {
+                    match handlers.remove(binding) {
+                        Some(ExtHandler::Wrap(f)) => wrap_fns.push(Rc::new(f)),
+                        Some(other) => {
+                            return Err(kind_mismatch(binding, "wrap", other.label()));
+                        }
+                        None => return Err(missing(&slot_label, binding, "wrap")),
+                    }
+                }
                 let after_fns = take_after(&slot_label, after, &mut handlers)?;
                 let center_fn = match handlers.remove(center) {
-                    Some(ExtHandler::Replace(f)) => f,
+                    Some(ExtHandler::Replace(f)) => Rc::new(f),
                     Some(other) => {
                         return Err(kind_mismatch(center, "replace", other.label()));
                     }
-                    None => processes
-                        .remove(center)
-                        .ok_or_else(|| missing(&slot_label, center, "replace/动作处理"))?,
+                    None => Rc::new(
+                        processes
+                            .remove(center)
+                            .ok_or_else(|| missing(&slot_label, center, "replace/动作处理"))?,
+                    ),
                 };
                 result.insert(
                     slot.key.clone(),
-                    ExtSlot::Chained {
+                    ExtSlot::Chained(Rc::new(ExtChained {
                         before: before_fns,
+                        wraps: wrap_fns,
                         center: center_fn,
                         after: after_fns,
-                    },
+                    })),
                 );
             }
         }
@@ -383,11 +581,11 @@ fn take_after(
     slot: &str,
     after: &[Key],
     handlers: &mut BTreeMap<Key, ExtHandler>,
-) -> Result<Vec<ExtSimple>, String> {
+) -> Result<Vec<Rc<ExtSimple>>, String> {
     let mut after_fns = Vec::new();
     for binding in after {
         match handlers.remove(binding) {
-            Some(ExtHandler::After(f)) => after_fns.push(f),
+            Some(ExtHandler::After(f)) => after_fns.push(Rc::new(f)),
             Some(other) => return Err(kind_mismatch(binding, "after", other.label())),
             None => return Err(missing(slot, binding, "after")),
         }
@@ -487,12 +685,12 @@ fn assemble_action(
                     None => return Err(missing(slot, binding, "after")),
                 }
             }
-            let slot_result = ActionSlot::Chained {
+            let slot_result = ActionSlot::Chained(Rc::new(ActionChained {
                 before: before_fns,
-                wraps: wrap_fns,
-                center: center_fn,
+                wraps: wrap_fns.into_iter().map(Rc::new).collect(),
+                center: Rc::new(center_fn),
                 after: after_fns,
-            };
+            }));
             reject_leftover(slot, &handlers)?;
             Ok(slot_result)
         }
@@ -556,12 +754,12 @@ fn assemble_tick(
                     None => return Err(missing(slot, binding, "after")),
                 }
             }
-            let slot_result = TickSlot::Chained {
+            let slot_result = TickSlot::Chained(Rc::new(TickChained {
                 before: before_fns,
-                wraps: wrap_fns,
-                center: center_fn,
+                wraps: wrap_fns.into_iter().map(Rc::new).collect(),
+                center: Rc::new(center_fn),
                 after: after_fns,
-            };
+            }));
             reject_leftover(slot, &handlers)?;
             Ok(slot_result)
         }
@@ -569,25 +767,17 @@ fn assemble_tick(
 }
 
 impl ActionSlot {
-    fn run(&self, w: &mut Working, id: ObjId, d: &IntentData) -> Result<(), String> {
+    fn run(&self, ctx: &RoomCtx, id: ObjId, d: &IntentData) -> Result<(), String> {
         match self {
-            ActionSlot::Native(f) => {
-                f(w, id, d);
-                Ok(())
-            }
-            ActionSlot::Chained {
-                before,
-                wraps,
-                center,
-                after,
-            } => {
-                for f in before {
-                    f(w, id, d)?;
+            ActionSlot::Native(f) => native_action(*f)(ctx, id, d),
+            ActionSlot::Chained(chain) => {
+                for f in &chain.before {
+                    f(ctx, id, d)?;
                 }
-                let result = run_wrapped(wraps, center, w, id, d);
+                let result = run_wrapped(&chain.wraps, &chain.center, ctx, id, d);
                 if result.is_ok() {
-                    for f in after {
-                        f(w, id, d)?;
+                    for f in &chain.after {
+                        f(ctx, id, d)?;
                     }
                 }
                 result
@@ -597,25 +787,17 @@ impl ActionSlot {
 }
 
 impl TickSlot {
-    fn run(&self, w: &mut Working, id: ObjId) -> Result<(), String> {
+    fn run(&self, ctx: &RoomCtx, id: ObjId) -> Result<(), String> {
         match self {
-            TickSlot::Native(f) => {
-                f(w, id);
-                Ok(())
-            }
-            TickSlot::Chained {
-                before,
-                wraps,
-                center,
-                after,
-            } => {
-                for f in before {
-                    f(w, id)?;
+            TickSlot::Native(f) => native_tick(*f)(ctx, id),
+            TickSlot::Chained(chain) => {
+                for f in &chain.before {
+                    f(ctx, id)?;
                 }
-                let result = run_tick_wrapped(wraps, center, w, id);
+                let result = run_tick_wrapped(&chain.wraps, &chain.center, ctx, id);
                 if result.is_ok() {
-                    for f in after {
-                        f(w, id)?;
+                    for f in &chain.after {
+                        f(ctx, id)?;
                     }
                 }
                 result
@@ -626,94 +808,93 @@ impl TickSlot {
 
 /// wraps[0] 最外层，中心最内；从中心向外逐层装箱。
 fn run_wrapped(
-    wraps: &[ActionWrap],
-    center: &ActionCenter,
-    w: &mut Working,
+    wraps: &[Rc<ActionWrap>],
+    center: &Rc<ActionCenter>,
+    ctx: &RoomCtx,
     id: ObjId,
     d: &IntentData,
 ) -> Result<(), String> {
     let Some((outer, rest)) = wraps.split_first() else {
-        return match center {
-            ActionCenter::Native(f) => {
-                f(w, id, d);
-                Ok(())
-            }
-            ActionCenter::Custom(f) => f(w, id, d),
-        };
+        return run_center(center, ctx, id, d);
     };
     let mut inner = box_inner(rest, center);
     let mut next = Next {
         calls: 0,
         inner: &mut inner,
+        ctx,
     };
-    outer(w, id, d, &mut next)
+    outer(ctx, id, d, &mut next)
+}
+
+fn run_center(
+    center: &Rc<ActionCenter>,
+    ctx: &RoomCtx,
+    id: ObjId,
+    d: &IntentData,
+) -> Result<(), String> {
+    match &**center {
+        ActionCenter::Native(f) => native_action(*f)(ctx, id, d),
+        ActionCenter::Custom(f) => f(ctx, id, d),
+    }
+}
+
+fn run_tick_center(center: &Rc<TickCenter>, ctx: &RoomCtx, id: ObjId) -> Result<(), String> {
+    match &**center {
+        TickCenter::Native(f) => native_tick(*f)(ctx, id),
+        TickCenter::Custom(f) => f(ctx, id),
+    }
 }
 
 /// 递归装箱内层链；每层 wrap 通过 [`Next`] 恰好调用一次内层。
-fn box_inner<'a>(wraps: &'a [ActionWrap], center: &'a ActionCenter) -> ActionChain<'a> {
+fn box_inner<'a>(wraps: &'a [Rc<ActionWrap>], center: &'a Rc<ActionCenter>) -> ActionChain<'a> {
     let Some((outer, rest)) = wraps.split_first() else {
-        return Box::new(
-            move |w: &mut Working, id: ObjId, d: &IntentData| match center {
-                ActionCenter::Native(f) => {
-                    f(w, id, d);
-                    Ok(())
-                }
-                ActionCenter::Custom(f) => f(w, id, d),
-            },
-        );
+        return Box::new(move |ctx: &RoomCtx, id: ObjId, d: &IntentData| {
+            run_center(center, ctx, id, d)
+        });
     };
     let mut inner = box_inner(rest, center);
     Box::new(
-        move |w: &mut Working, id: ObjId, d: &IntentData| -> Result<(), String> {
+        move |ctx: &RoomCtx, id: ObjId, d: &IntentData| -> Result<(), String> {
             let mut next = Next {
                 calls: 0,
                 inner: &mut inner,
+                ctx,
             };
-            outer(w, id, d, &mut next)
+            outer(ctx, id, d, &mut next)
         },
     )
 }
 
 fn run_tick_wrapped(
-    wraps: &[TickWrap],
-    center: &TickCenter,
-    w: &mut Working,
+    wraps: &[Rc<TickWrap>],
+    center: &Rc<TickCenter>,
+    ctx: &RoomCtx,
     id: ObjId,
 ) -> Result<(), String> {
     let Some((outer, rest)) = wraps.split_first() else {
-        return match center {
-            TickCenter::Native(f) => {
-                f(w, id);
-                Ok(())
-            }
-            TickCenter::Custom(f) => f(w, id),
-        };
+        return run_tick_center(center, ctx, id);
     };
     let mut inner = box_tick_inner(rest, center);
     let mut next = TickNext {
         calls: 0,
         inner: &mut inner,
+        ctx,
     };
-    outer(w, id, &mut next)
+    outer(ctx, id, &mut next)
 }
 
-fn box_tick_inner<'a>(wraps: &'a [TickWrap], center: &'a TickCenter) -> TickChain<'a> {
+fn box_tick_inner<'a>(wraps: &'a [Rc<TickWrap>], center: &'a Rc<TickCenter>) -> TickChain<'a> {
     let Some((outer, rest)) = wraps.split_first() else {
-        return Box::new(move |w: &mut Working, id: ObjId| match center {
-            TickCenter::Native(f) => {
-                f(w, id);
-                Ok(())
-            }
-            TickCenter::Custom(f) => f(w, id),
-        });
+        return Box::new(move |ctx: &RoomCtx, id: ObjId| run_tick_center(center, ctx, id));
     };
     let mut inner = box_tick_inner(rest, center);
-    Box::new(move |w: &mut Working, id: ObjId| -> Result<(), String> {
+    Box::new(move |ctx: &RoomCtx, id: ObjId| -> Result<(), String> {
         let mut next = TickNext {
             calls: 0,
             inner: &mut inner,
+            ctx,
         };
-        outer(w, id, &mut next)
+        outer(ctx, id, &mut next)
     })
 }
 
@@ -735,6 +916,44 @@ impl TickHandler {
             TickHandler::Wrap(_) => "wrap",
             TickHandler::Replace(_) => "replace",
             TickHandler::After(_) => "after",
+        }
+    }
+}
+
+/// 本槽内层链的 `'static` 导出：JS 侧 wrap 处理器的 `next()` 经重入 op
+/// 回到引擎时，需要一个不借用本执行表的闭包。`wraps[0]` 最外层。
+///
+/// 与 [`ActionSlot::run`] 的区别只是寿命与入口：这里返回可独立持久的
+/// 闭包，语义（外→内、next 至多一次、after 仅在内层成功后）完全一致。
+pub type StaticActionChain = Box<dyn FnMut(&RoomCtx, ObjId, &IntentData) -> Result<(), String>>;
+/// 扩展意图槽内层链的 `'static` 导出类型。
+pub type ExtStaticChain = Box<dyn FnMut(&RoomCtx, ObjId, &Value) -> Result<(), String>>;
+/// link tick 槽内层链的 `'static` 导出类型。
+pub type StaticTickChain = Box<dyn FnMut(&RoomCtx, ObjId) -> Result<(), String>>;
+
+/// 对象动作槽内层链的 `'static` 导出；无贡献时返回 native 直调。
+fn action_chain_static(slot: &ActionSlot) -> StaticActionChain {
+    match slot {
+        ActionSlot::Native(f) => {
+            let f = *f;
+            Box::new(move |ctx, id, d| native_action(f)(ctx, id, d))
+        }
+        ActionSlot::Chained(chain) => {
+            let chain = chain.clone();
+            Box::new(move |ctx, id, d| {
+                for f in &chain.before {
+                    f(ctx, id, d)?;
+                }
+                // after 只在 wrap+center 全部成功后执行，与 ActionSlot::run
+                // 同口径：重入路径不得因入口不同而少跑一层。
+                let result = run_wrapped(&chain.wraps, &chain.center, ctx, id, d);
+                if result.is_ok() {
+                    for f in &chain.after {
+                        f(ctx, id, d)?;
+                    }
+                }
+                result
+            })
         }
     }
 }

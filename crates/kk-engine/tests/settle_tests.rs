@@ -310,18 +310,20 @@ impl Fixture {
     ) -> Vec<Value> {
         let state =
             kk_engine::TickState::new(std::mem::take(&mut self.players), self.world.next_obj_id());
-        let mut room = self.world.room("W1N1").unwrap().clone();
-        let events = settle_room(
-            &mut room,
+        let room = self.world.room("W1N1").unwrap().clone();
+        let (room, events) = settle_room(
+            room,
             self.world.time(),
             input.now_ms,
             &state,
             &batch,
             &kk_engine::settle::Plane {
                 links: kk_world::place::builtin_link_rules(),
-                contrib: &kk_engine::settle::contrib::ContributionDispatch::default(),
-                extensions: &kk_mod_api::extension::ExtensionCatalog::default(),
-                plan: &kk_engine::settle::builtin_plan(),
+                contrib: std::rc::Rc::new(
+                    kk_engine::settle::contrib::ContributionDispatch::default(),
+                ),
+                extensions: std::rc::Rc::new(kk_mod_api::extension::ExtensionCatalog::default()),
+                plan: kk_engine::settle::builtin_plan(),
             },
         )
         .unwrap();
@@ -339,7 +341,7 @@ impl Fixture {
         self.settle_with(
             batch,
             links,
-            &kk_engine::settle::contrib::ContributionDispatch::default(),
+            std::rc::Rc::new(kk_engine::settle::contrib::ContributionDispatch::default()),
         );
     }
 
@@ -347,7 +349,7 @@ impl Fixture {
     fn settle_with_dispatch(
         &mut self,
         batch: IntentBatch,
-        dispatch: &kk_engine::settle::contrib::ContributionDispatch,
+        dispatch: std::rc::Rc<kk_engine::settle::contrib::ContributionDispatch>,
     ) {
         self.settle_with(batch, kk_world::place::builtin_link_rules(), dispatch);
     }
@@ -356,7 +358,7 @@ impl Fixture {
         &mut self,
         batch: IntentBatch,
         links: kk_mod_api::builtin::LinkRules,
-        dispatch: &kk_engine::settle::contrib::ContributionDispatch,
+        dispatch: std::rc::Rc<kk_engine::settle::contrib::ContributionDispatch>,
     ) {
         let extensions = kk_mod_api::extension::ExtensionCatalog::default();
         self.settle_with_plane(
@@ -364,19 +366,19 @@ impl Fixture {
             kk_engine::settle::Plane {
                 links,
                 contrib: dispatch,
-                extensions: &extensions,
-                plan: &kk_engine::settle::builtin_plan(),
+                extensions: std::rc::Rc::new(extensions),
+                plan: kk_engine::settle::builtin_plan(),
             },
         );
     }
 
     /// 以完整贡献平面结算（扩展字段目录非空的场景使用）。
-    fn settle_with_plane(&mut self, batch: IntentBatch, plane: kk_engine::settle::Plane<'_>) {
+    fn settle_with_plane(&mut self, batch: IntentBatch, plane: kk_engine::settle::Plane) {
         let state =
             kk_engine::TickState::new(std::mem::take(&mut self.players), self.world.next_obj_id());
-        let mut room = self.world.room("W1N1").unwrap().clone();
-        let events = settle_room(
-            &mut room,
+        let room = self.world.room("W1N1").unwrap().clone();
+        let (room, events) = settle_room(
+            room,
             self.world.time(),
             1_700_000_000_000,
             &state,
