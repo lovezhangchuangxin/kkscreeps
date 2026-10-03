@@ -57,7 +57,7 @@ CLI 和重复采集脚本均支持 `--profile`。默认关闭：不安装 Deno o
 python3 scripts/mod-perf-baseline.py --profile --scenarios 400 --warmup 100 --ticks 500 --repetitions 3 --output /tmp/mod-profile.json
 ```
 
-op 计时来自 deno_core 的 dispatch/completed/error 事件，包含参数/返回转换与 host 方法；host 计时包含候选访问、字段解析/校验与 namespace 写回。JS 调用包含 op，整槽包含 JS 和预算，不能将所有阶段相加；op 与 host 的差值仍包含绑定检查、包装和插桩开销，不能解释为纯 JSON 成本。op 的 errors 来自错误事件，其他阶段只记录次数与耗时。getter 引发嵌套 op 时，op 耗时同样为包含耗时。
+op 计时来自 deno_core 的 dispatch/completed/error 事件，包含参数/返回转换与 host 方法；host 计时包含候选访问、字段解析/校验与 namespace 写回。JS 调用包含 op，整槽包含 JS 和预算，不能将所有阶段相加；op 与 host 的差值仍包含绑定检查、包装和插桩开销，不能解释为纯 JSON 成本。op 的 errors 来自错误事件，其他阶段只记录次数与耗时。故障上报的来源认领与诊断文本补充均计入 op_fault，一次处理器故障可对应多次 op 调用；该阶段的 calls 不是处理器故障数量。getter 引发嵌套 op 时，op 耗时同样为包含耗时。
 
 诊断报告 v2 增加 `read_to_v8`，围住读取封套的真实 serde 序列化调用；v3 增加 `write_from_v8`，围住真实载荷反序列化，与 TryCatch 创建/销毁和错误文本格式化分开。两者分别包含在 op_read/op_write 内，与 host_read/host_write 分开；write_from_v8 包含 getter 执行及其嵌套 op，不能称为纯数据转换耗时。转换失败的尝试也计时，故障数仍由 op errors 记录。
 

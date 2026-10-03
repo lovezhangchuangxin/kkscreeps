@@ -7,6 +7,17 @@ const declare = (kind, value) => Deno.core.ops.op_mod_declare(kind, value);
 
 let sealed = false;
 const bindings = new Map();
+const declines = new WeakMap();
+
+// 只有这个工厂生成的返回值表示拒绝，普通对象/错误/返回码保持既有语义。
+export function decline(code) {
+  if (typeof code !== 'string' || !/^[A-Za-z0-9._:-]{1,128}$/.test(code)) {
+    throw new Error('拒绝代码须为 1..128 字节的 ASCII 字母、数字或 ._:-');
+  }
+  const result = Object.freeze({ code });
+  declines.set(result, code);
+  return result;
+}
 
 function ownKey(namespace, key) {
   if (typeof key !== 'string' || !key.startsWith(namespace + ':')) {
@@ -172,6 +183,7 @@ export function createApi(namespace, config) {
   };
 
   return {
+    decline,
     config,
     objects,
     intents,
@@ -201,6 +213,9 @@ export function dispatch(key, ctx) {
   }
   if (entry.kind === 'wrap') throw new Error('wrap 必须经整槽执行入口调用');
   const result = entry.fn(ctx);
+  if (result !== null && (typeof result === 'object' || typeof result === 'function') && declines.has(result)) {
+    throw new Error('正常拒绝必须经支持局部回滚的整槽动作入口执行');
+  }
   if (result !== undefined && result !== null && typeof result.then === 'function') {
     throw new Error(`绑定 ${JSON.stringify(key)} 的处理器返回了 Promise（结算回调必须同步完成）`);
   }
@@ -276,14 +291,35 @@ export function runChain(slot, token) {
   if (!program) throw new Error(`槽 ${slot} 未安装`);
   const ops = Deno.core.ops;
   let firstFault;
-  function fault(error) {
-    const detail = error && error.message ? String(error.message) : String(error);
-    if (firstFault === undefined) firstFault = detail;
-    ops.op_mod_chain_fault(token, detail);
+  let firstDeclined;
+  const declinedSignal = {};
+  function fault(error, binding = '', kind = 'chain') {
+    if (firstFault !== undefined) return;
+    const fallback = binding ? `处理器 ${binding}: 异常诊断格式化失败` : '异常诊断格式化失败';
+    // 读取异常属性之前锁定来源并关闭候选；传播时不再次执行诊断 getter。
+    firstFault = fallback;
+    if (!ops.op_mod_chain_fault(token, binding, kind, fallback)) return;
+    let detail = fallback;
+    try {
+      const message = error && error.message;
+      const text = message ? String(message) : String(error);
+      if (typeof text === 'string') detail = binding ? `处理器 ${binding}: ${text}` : text;
+    } catch {}
+    firstFault = detail;
+    ops.op_mod_chain_fault_detail(token, detail);
   }
   function checkResult(key, result) {
     if (result !== undefined && result !== null && typeof result.then === 'function') {
       throw new Error(`绑定 ${key} 的处理器返回了 Promise（结算回调必须同步完成）`);
+    }
+    if (firstFault !== undefined) throw new Error(firstFault);
+    // 内层拒绝即使被 wrap 捕获，也阻止外层回写；异常仍由 catch 留存。
+    if (firstDeclined !== undefined) throw declinedSignal;
+    const code = result !== null && (typeof result === 'object' || typeof result === 'function') ? declines.get(result) : undefined;
+    if (code !== undefined) {
+      ops.op_mod_chain_decline(token, key, code);
+      firstDeclined = code;
+      throw declinedSignal;
     }
   }
   function write(key, ctx) {
@@ -299,7 +335,8 @@ export function runChain(slot, token) {
       checkResult(key, bindings.get(key).fn(ctx));
       write(key, ctx);
     } catch (error) {
-      fault(new Error(`处理器 ${key}: ${error && error.message ? error.message : error}`));
+      if (error === declinedSignal) throw error;
+      fault(error, key, 'handler');
       throw error;
     }
   }
@@ -317,7 +354,7 @@ export function runChain(slot, token) {
       if (!open) throw new Error('next 只能在所属处理器同步执行期间调用');
       if (called) {
         const error = new Error('wrap 处理器重复调用 next，本轮候选失败');
-        fault(error);
+        fault(error, key, 'control');
         throw error;
       }
       called = true;
@@ -327,16 +364,19 @@ export function runChain(slot, token) {
         inner(depth + 1);
         refreshContext(ctx, ops.op_mod_chain_read(token, key));
       } catch (error) {
-        fault(error);
+        if (error === declinedSignal) throw error;
+        fault(error, key, 'context');
         throw error;
       }
     }
     try {
       checkResult(key, bindings.get(key).fn(ctx, next));
       if (firstFault !== undefined) throw new Error(firstFault);
+      if (firstDeclined !== undefined) throw declinedSignal;
       write(key, ctx);
     } catch (error) {
-      fault(new Error(`处理器 ${key}: ${error && error.message ? error.message : error}`));
+      if (error === declinedSignal) throw error;
+      fault(error, key, 'handler');
       throw error;
     } finally {
       open = false;
@@ -349,7 +389,8 @@ export function runChain(slot, token) {
     // after 属于整个槽：wrap 全部退栈后执行一次；取消中心仍可成功返回。
     for (const key of program.after) simple(key);
   } catch (error) {
+    if (error === declinedSignal) return;
     fault(error);
-    throw error;
+    throw firstFault;
   }
 }

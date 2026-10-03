@@ -1,0 +1,127 @@
+{
+  "baseline_commit": "a8708d972582ec92ee282f1c3d4e319c93c4240f",
+  "status": "passed",
+  "before": [
+    {
+      "case": "register-symbol",
+      "returncode": -6,
+      "failure": "SIGABRT during automatic declaration conversion",
+      "log_sha256": "ec9060001f71253690ee3dceb7498426fd509fc3cc19910a31460260e73a4e34"
+    },
+    {
+      "case": "register-nested-valid",
+      "returncode": -6,
+      "failure": "SIGABRT during getter nested declaration",
+      "log_sha256": "2bf180c93a007b39b3183dc9af6a4291fddf44c222068b48c1f61f84661fcfc0"
+    },
+    {
+      "case": "inactive-gate",
+      "returncode": -6,
+      "failure": "payload getter accessed before registration gate; SIGABRT",
+      "log_sha256": "bc8e2d80ade1e5e3ee3346b26895c5a8c631cfcb658a411c7f33c4059ff7d08e"
+    },
+    {
+      "case": "invoke-symbol",
+      "returncode": 101,
+      "failure": "uncaught Rust panic",
+      "log_sha256": "f82d211691b9433c9b0ff3bdf116c44eb96ca55550cd5e76fda240cc660b5d4b"
+    },
+    {
+      "case": "probe-symbol",
+      "returncode": 101,
+      "failure": "uncaught Rust panic",
+      "log_sha256": "b9990e3f9e85a1d3168e34bdeeea65ac0b75aca61417bd8e79ed558d89d6fa3f"
+    },
+    {
+      "case": "register-caught-throw",
+      "returncode": 101,
+      "failure": "expected Err; got Registered despite caught conversion failure",
+      "log_sha256": "c49fae632be13a05bf319fc493153cb92b71c76d7509b4055f62e302bd2a1b5f"
+    }
+  ],
+  "source_sha256": {
+    "crates/kk-mod-host/src/realm.rs": "4e0c4691b4d5f21bbe3a8931760a8199b693954480aed1f8b3708b56397eb9cd",
+    "crates/kk-mod-host/src/v8_convert.rs": "48e6f1d0d8e9d2355abf7e4fbe202edd70c462de76538c357bf90e689268eae6",
+    "crates/kk-mod-host/src/chain.rs": "313811ab6f27cd5ea21a225c4a2b7462d070a6d35c91961e6339f435e142aadf",
+    "crates/kk-mod-host/src/write.rs": "1cc2a9e5fd1330850a7d3ac837090ac9427756d336d4fce252b9897db5767f23",
+    "crates/kk-mod-host/src/lib.rs": "f4668ed4ba667f69971ea37b99bc0700e434444666cf8bd081e12f52f9f6b7ab",
+    "crates/kk-mod-host/tests/conversion_tests.rs": "560643e2772c7d37ae21e580c85ef70109096da82d40eabcadf719747234ecbc",
+    "crates/kk-mod-host/tests/limits_tests.rs": "70028b305f88262a3eab38749a9c6fe35dc8c080d7acc71a0b0afabe1144b1ef"
+  },
+  "release_binary_sha256": "389772c65c549c51c0f8392e68b97e29ac0d45ad2c51adf907787f93b1603463",
+  "checks": [
+    {
+      "command": "cargo test -p kk-mod-host",
+      "exit_code": 0,
+      "passed": 39,
+      "ignored": 4,
+      "conversion_cases": 15,
+      "new_resource_cases": 8
+    },
+    {
+      "command": "cargo test --release -p kk-mod-host --test conversion_tests --test limits_tests",
+      "exit_code": 0,
+      "passed": 4,
+      "ignored": 2,
+      "conversion_cases": 15,
+      "new_resource_cases": 8
+    },
+    {
+      "command": "KKSCREEPS_BIN=\"$PWD/target/release/kkscreeps\" pnpm run check",
+      "exit_code": 0,
+      "rust_passed": 564,
+      "rust_ignored": 10,
+      "js_passed": 19,
+      "js_skipped": 0,
+      "markdown_files": 217,
+      "local_links": 1103
+    },
+    {
+      "command": "KKSCREEPS_BIN=\"$PWD/target/release/kkscreeps\" node compat/scripts/ratchet.mjs",
+      "exit_code": 0,
+      "passed": 1854,
+      "failed": 153,
+      "skipped": 907,
+      "regressions": 0,
+      "improvements": 0
+    }
+  ],
+  "upstream_pin": "34a630efa42908c117c19c25d2350fa2387bd633",
+  "logs": {
+    "host": {
+      "path": "/tmp/kkscreeps-conversion-host.log",
+      "sha256": "5c2a25c965ac42ebab8246661781cad900db45c67853a08cfe0a41988b321917"
+    },
+    "release": {
+      "path": "/tmp/kkscreeps-conversion-release.log",
+      "sha256": "79a63919af72dd869fde8bdfb710c412f47d987440de185322406de8dabdf5d5"
+    },
+    "release-tests": {
+      "path": "/tmp/kkscreeps-conversion-release-tests.log",
+      "sha256": "b9e3aca89af57cd0fcc677c5d1ad0dc4c5a67bf155730e33f68a35cdd9881423"
+    },
+    "check": {
+      "path": "/tmp/kkscreeps-conversion-check.log",
+      "sha256": "cea59cae000d17cd194a9cc899624a490a039d33329495d9a6e53aadaac3140a"
+    },
+    "compat-setup": {
+      "path": "/tmp/kkscreeps-conversion-compat-setup.log",
+      "sha256": "65db504823c524f859afe5fb6a03c1acbcfb5866657ed1a2b6158a1938026371"
+    },
+    "compat-build": {
+      "path": "/tmp/kkscreeps-conversion-compat-build.log",
+      "sha256": "8ebfcb81adc70e835a6524785828621e81b7c5f862b4f08cd015d332f07616fe"
+    },
+    "ratchet": {
+      "path": "/tmp/kkscreeps-conversion-ratchet.log",
+      "sha256": "eda1e661196c303001e12d95d1e3f56629ee8b2d2ee22411e4c300d8fd46883f"
+    }
+  },
+  "limits": [
+    "synchronous serde_v8 conversion panics only; panic=abort and unrelated Rust panics remain outside this boundary",
+    "ordinary direct invoke/probe conversion errors return Err; they do not independently poison the VM",
+    "shared trusted realm still has shard-wide failure radius; per-Mod stop policy remains pending",
+    "no new performance measurements"
+  ],
+  "compatibility_report_sha256": "0c31d2bdd0c78394948c08cfd5b87b0923e0671285bd95619568a22a2528ea00"
+}

@@ -17,6 +17,7 @@ use kk_engine::intent::IntentBatch;
 pub use embed::{EmbedEngine, PlayerRun};
 pub use kk_engine::{RunOutcome, RunResult, RunSpec, Sandbox as EngineSandbox};
 pub use kk_runner::RunEpoch;
+pub use mod_vm::ModSettlementFault;
 use serde_json::Value;
 pub use world_source::WorldSource;
 

@@ -27,7 +27,23 @@ Rust 自定义处理器仍可经原有纯 Rust 执行器安装。它与 JS 执�
 - 回调返回 Promise 或 thenable 属故障；失败链不执行 after。after 自身故障同样使整轮候选失败，已经发生的 native/JS 候选写入不发布。
 - JS 每槽最多 64 层 wrap，注册时拒绝超限。该限制约束递归栈深度，不等于 CPU/内存预算。
 
-处理器自身正常处理的错误不自动变成故障；以上不可吞掉的错误来自 next 与宿主候选访问边界。未来正常动作拒绝与异常故障的分型仍按 SDK 设计推进。
+处理器自身正常处理的错误不自动变成故障；以上不可吞掉的错误来自 next 与宿主候选访问边界。正常拒绝已开放于 Mod 自有对象动作，范围与局部回滚见下节。
+
+## 正常动作拒绝
+
+`SlotOutcome` 区分 `Completed` 与 `Declined { binding, code }`；异常仍由 Result 的 Err 返回。Mod 自有对象动作的 before/wrap/process/replace/after 可以 `return api.decline('full')`，也可导入 `@kkscreeps/mod` 的 `decline` 工厂。代码为 1..128 字节的 ASCII 字母、数字或 `._:-`。只有工厂产生的返回值表示拒绝；普通 `{code:...}`、返回码等不改变原有语义，throw 拒绝标记仍是异常，Promise/thenable 仍是故障。
+
+拒绝中止本次动作的剩余处理器；已经执行的 before、内层中心与 after 写入也一起撤销。wrap 即使捕获内层拒绝，也不能继续回写；该 wrap 后续抛出异常、或已有候选/转换故障时，异常优先，整轮失败，不能用拒绝掩盖故障。wrap 不调用 next 的主动取消仍是 Completed，保持原来执行 after 的约定。
+
+runtime 的自有动作适配器在调用前只保存目标对象字段，所有参与 namespace 的 state 在本次调用内暂存；正常完成后移交 state。拒绝时丢弃暂存 state，通过 `update_mod_fields` 恢复对象字段、信封坐标和位置索引，保留本轮之前已完成动作的结果。当前自有动作没有 native/ID/玩家/事件写面，因此这个边界足以撤销全部写入，不克隆整个房间。直接使用 SlotExecutor/ModRealm 的其他可信宿主须履行 Declined 返回前的局部恢复契约。
+
+拒绝后继续其他动作并正常发布世界、Memory 与 CPU 候选，保留本轮玩家执行费用；不重建健康 Mod VM。拒绝代码与实际绑定保留在类型化结局中，当前不额外发射玩家事件。内建 link action/tick 仍显式拒绝使用 decline：native 可改多个对象及事件，需先接入相应局部恢复边界。纯 Rust callback 仍使用原成功/异常签名，正常拒绝目前由整槽宿主提供。重复异常停用仍待后续；执行来源的结构化记录见下节。验证见 [正常拒绝记录](../research/notes/mod-intent-decline-2026-10-04.md)。
+
+## 注册声明转换
+
+声明 op 先检查当前注册包、密封状态与已留存故障，再转换载荷；注册尚未开始或已经结束时不访问载荷 getter/Proxy。该 op 与候选写入一样显式使用 `nofast, reentrant`，转换期间不持有 OpState/Registry 借用，允许 getter/Proxy 合法嵌套声明。
+
+转换失败留存在 Registry；即使注册函数或模块求值代码捕获 op 错误，后续声明与外层嵌套声明仍失败。模块求值后、注册回调后都核验故障，不能用剩余声明冻结部分计划。失败清空待收集声明并密封 realm，重试必须新建实例。转换异常仅格式化 serde 错误，不读取 JS 异常属性或堆栈。证据见 [转换边界记录](../research/notes/mod-conversion-boundaries-2026-10-04.md)。
 
 ## 当前候选与上下文同步
 
@@ -47,7 +63,7 @@ runtime 在一次整槽能力内缓存已解析的目标字段，供重复读取
 
 写入宿主接收拥有的 `ChainWrite { state, target_fields }`，转换阶段不再为根和 target 构造临时 JSON Map；开放的 state/fields 仍为 Value。沿用动态 MapAccess 而非固定字段访问，保持自有键顺序、getter/Proxy 行为、undefined 省略及缺失成员语义。未知成员仍完整反序列化，不能用忽略成员的方式绕过其错误或深度限制。
 
-固定版本 serde_v8 对 Symbol 的分类会 Rust panic。整槽写入转换单独以 unwind 边界保护，归一为转换错误；不格式化 panic 载荷，OpState 与候选借用在此之前已释放。转换完成后仍重新检查故障，捕获 panic 也会阻止 host 写回/after/发布并毒化 realm。此边界只保护整槽写入转换，不覆盖其他入口或使用 panic=abort 的外部构建。
+固定版本 serde_v8 对 Symbol 的分类会 Rust panic。注册声明、整槽写入、直接处理器返回值、密封绑定清单和诊断探针结果统一经过同步转换的 unwind 边界，归一为转换错误；不格式化 panic 载荷，OpState 与候选借用在此之前已释放。整槽写入转换完成后仍重新检查故障，阻止 host 写回/after/发布；runtime 按候选失败流程销毁 realm。注册失败密封 realm，直接 invoke/probe 的普通转换错误返回 Err，由调用方处理；资源超限仍毒化 VM。此边界不覆盖其他 Rust panic、使用 panic=abort 的外部构建或进程崩溃。
 
 转换中的 getter 同样处于整轮结算 CPU/墙钟预算内；死循环由原预算中断并毒化 realm。诊断计时不改变候选故障或预算处置：开启和关闭均覆盖嵌套读写与故障边界。
 
@@ -73,13 +89,23 @@ RoomCtx 是 `Rc<RefCell<Working>>`。native/op 访问自行取得短借用，进
 
 持久状态须走 ctx.state，模块全局只用于定义与可重建缓存；恢复从已提交 ctx.state 继续，丢弃全部 Mod 模块全局。重建并不让任意全局状态、Math.random 或墙钟依赖变成可回放输入，Mod 必须自行遵守确定性与缓存重建约束。此保证针对返回错误，不包括 panic、永久卡死、OOM 或进程崩溃。恢复与重试证据见 [VM 恢复记录](../research/notes/mod-vm-recovery-2026-10-03.md)。
 
+## 执行故障诊断
+
+`ModHostError.fault` 可携带 `ModFault { slot, binding, kind }`，原 context/message 与 Display 继续保留。kind 区分 handler、control、context、read、write_conversion、write、native、capability、resource 与 chain；来源由 SDK 调用位置及 Rust 候选边界填写，不解析异常消息中的处理器名。已安装链内的绑定才可上报；正常拒绝不产生故障记录。
+
+ActiveChain 保留首个故障；内层错误经 next 传播、被 wrap 捕获后再次抛错，都不覆盖内层来源。读写与转换错误携带对应绑定；重复 next 属所属 wrap 的 control，JS 刷新上下文错误属 context。原生中心故障、非法绑定能力与无法定位的整槽错误不指定 Mod 绑定。预算 start/finish 的资源错误优先于普通调用错误，只记录正在调用的槽；预算由整轮累计、堆由共享 realm 使用，不能把触发超限时的 wrap 当作唯一责任 Mod。SDK 在读取异常属性之前先以备用文本认领来源并关闭候选访问，再允许补充一次诊断文本；Rust 已留存的故障与后续传播不再格式化异常。异常 message/toString 只执行一次，普通格式化抛错保留备用文本；向宿主抛出已取得的字符串，不再次访问原异常钩子。格式化中的资源超限仍由预算优先处理。
+
+runtime 的 `last_mod_settlement_fault()` 返回最近一次实际结算中失败的 Mod 槽调用，包含 tick、房间、权威目标 ID 与完整宿主错误。在生命周期容器中保留这条记录，销毁、成功/失败重建、结算前拒绝均不清除；下一次实际引擎结算开始时清除，新故障再写入。未调用 Mod 的引擎错误、正常拒绝与成功结算不会留下旧 Mod 归因；新建分片/teardown 随容器清空。该接口是内存 Rust 诊断面，尚未接入 CLI 诊断协议或持久日志。
+
+这些记录描述可信共享 VM 中的执行边界，不证明代码隔离、精确资源责任或主责 Mod。可信 Mod 可直接调用底层 op，上报绑定的成员校验不等价于不可伪造身份。自动停用仍须明确可归责故障类别、依赖/replace 的执行语义及干净候选边界；本片不改变冻结计划、重试或停用行为。测试与证据见 [故障来源记录](../research/notes/mod-fault-attribution-2026-10-04.md) 与 [边界复审修复](../research/notes/mod-boundary-review-2026-10-04.md)。
+
 ## 资源预算
 
 `RegisterOptions.vm_limits` 固定分片玩法 VM 的总配置，创建与恢复均以 `ModRealm::with_options` 使用同一份限额与可选诊断句柄。它不改变规则 PlanHash；恢复配置属于 runtime 私有启动快照。直接使用宿主时，构造限额与诊断句柄须与注册选项一致，注册失败仍密封 realm。没有诊断需求时仍可用 `new`/`with_limits` 构造。
 
 默认注册预算为执行线程 CPU 500 ms、墙钟 2 s；每轮结算累计预算为 CPU 100 ms、墙钟 1 s；V8 已用堆加 V8 统计到的堆外内存限额为 128 MiB。CPU/墙钟限额可配置为正值且不超过一小时，内存为 16 MiB..=4 GiB。默认值是初始保护配置，密集 Mod 负载下需要重新测量与调节。
 
-注册预算覆盖模块求值、注册回调、冻结和链安装。runtime 在每次实际结算前开始累计，结束后关闭该轮；不同房间、对象和槽共享额度。每次进入 Mod 宿主时扣除已使用 CPU/墙钟，仅调用期间的执行线程 CPU 和墙钟累计，其中包含同步 native op；两次调用之间的纯 Rust 规则不计入 Mod VM 额度。直接 `invoke`/`invoke_chain` 未开启整轮累计时使用单次限额；直接宿主调用方须用 begin/end_settlement 绑定轮次。
+注册预算覆盖模块求值、注册回调、冻结和链安装。runtime 在每次实际结算前开始累计，结束后关闭该轮；不同房间、对象和槽共享额度。每次进入 Mod 宿主时扣除已使用 CPU/墙钟，仅调用期间的执行线程 CPU 和墙钟累计，其中包含同步 native op；两次调用之间的纯 Rust 规则不计入 Mod VM 额度。直接 `invoke`/`invoke_chain` 未开启整轮累计时使用单次限额；直接宿主调用方须用 begin/end_settlement 绑定轮次。诊断 `evaluate_probe` 的脚本、异常格式化和结果转换也使用结算预算；整轮累计开启时同样计入该轮，超限后不能继续使用探针绕过毒化门。
 
 常驻看门狗每 1 ms 请求一次 V8 安全点检查，在执行线程读取 CPU 时钟及 V8 堆/堆外计数；每次返回还检查用量，避免短调用在监控间隔内逃过累计门。墙钟到期即留存故障，并持续检查/中断直到调用返回后解除武装。deno_core 的异常转换会临时取消 V8 终止状态，错误属性 getter 与格式化钩子仍可执行 Mod JS，该窗口不能撤掉预算。持续投递和 disarm 仍共用代次锁；玩家普通看门狗保持单次投递语义。近堆上限回调立即请求中断，并临时增加 16 MiB 余量用于传播终止。任何限额故障保持毒化标记，不能清除后复用 VM；整轮候选失败，随后沿上述销毁/重建路径处理。
 
@@ -87,6 +113,6 @@ RoomCtx 是 `Rc<RefCell<Working>>`。native/op 访问自行取得短借用，进
 
 ## 尚未完成的范围
 
-共享可信 VM 的故障半径仍是整分片；确定性异常或超限的 Mod 在新 VM 中仍会失败。故障分型/停用策略、逐 Mod 资源归因、进程级限额、多对象写 API、其他生命周期槽、持久化和 outbox 尚未完成。
+共享可信 VM 的故障半径仍是整分片；确定性异常或超限的 Mod 在新 VM 中仍会失败。内建槽与纯 Rust callback 的正常拒绝、重复故障停用策略、逐 Mod 资源归因、进程级限额、多对象写 API、其他生命周期槽、持久化和 outbox 尚未完成。
 
 默认路径与功能回归、真实混合链和失败候选分别验收。小对象链测试不代表密集 Mod 的成本；性能要求见 [性能验收](performance-acceptance.md)，本次选择与取舍见 [ADR-015](../decisions/ADR-015-mod-chain-execution.md)。

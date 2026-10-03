@@ -1,0 +1,561 @@
+{
+  "status": "review_issue_fixed_and_functional_checks_passed_with_unresolved_performance_differences",
+  "git_base": "a8708d972582ec92ee282f1c3d4e319c93c4240f",
+  "review_scope": "three uncommitted Mod boundary slices since a8708d9; original user documentation and chain-driver experiment excluded from the commit",
+  "confirmed_findings": [
+    {
+      "priority": "P2",
+      "problem": "exception message/toString executes before original fault capture and can claim the first fault through candidate ops",
+      "reproduction_exit_code": 101,
+      "expected_binding": "beta:handler.inner",
+      "actual_binding": null,
+      "reproduction_implementation_sha256": {
+        "crates/kk-mod-api/src/outcome.rs": "4192120e9d44af410785937cbc3113ffa9170170c40c1beba78ed742a0a446fa",
+        "crates/kk-mod-api/src/lib.rs": "6bbfb0f88f98992a94cc09f03a4b2b3fd452c46a69aac38254642c52a49a6571",
+        "crates/kk-engine/src/settle/contrib.rs": "7d44a4ef47652d30d0b98aedbd70d08712c8fadcaaf7964b21ae2ce5ec1d8d50",
+        "crates/kk-engine/src/settle/mod_intents.rs": "f8654b57ac05efdc6997dfa65284418d6476a6732e3af15e7cb25c6416538866",
+        "crates/kk-mod-host/src/chain.rs": "d476d67c6c89efbf1ef98f47fd08418f6deae94c77b9d75b5690c78d9b46d246",
+        "crates/kk-mod-host/src/error.rs": "ffcd8f48ca74cd634fa407f2d45470a4b0449d86d25943a04f159a75b6519812",
+        "crates/kk-mod-host/src/lib.rs": "8c2fa21101487c6ff713602fdb29dc8795154d755c25e56498f68d263742adc3",
+        "crates/kk-mod-host/src/realm.rs": "5c03dc6d2a890f4bc1cbe59b11d631c4c4a16a4fa3a91b2610b72935290a23a9",
+        "crates/kk-mod-host/src/sdk.js": "e25726c6b21e1ebad8a6c1de7018b1d96c41ce753354da19db93bc6d3699e030",
+        "crates/kk-mod-host/src/write.rs": "1cc2a9e5fd1330850a7d3ac837090ac9427756d336d4fce252b9897db5767f23",
+        "crates/kk-mod-host/src/v8_convert.rs": "48e6f1d0d8e9d2355abf7e4fbe202edd70c462de76538c357bf90e689268eae6",
+        "crates/kk-runtime/src/embed.rs": "5b7bc8740e00ffccff18b6185e46074e2d0f13724f092b1da5012aa24f20a7b5",
+        "crates/kk-runtime/src/lib.rs": "4973d37ad4cd6d039aaf0925930bee7dd51b55183e79b25c32d8513096eaebf5",
+        "crates/kk-runtime/src/mod_vm.rs": "6cfe75915969f8937bd22e70cfc3a7857846b13a6ee6f444e0d2613a779c75b5"
+      },
+      "fix": "claim origin and close candidate access before formatting; only claim owner supplies one detail update; skip repeated formatting; throw diagnostic text to host",
+      "regression_tests": "fault_tests inner_fault_retains_binding_and_boundary_through_caught_next and fault_formatting_cannot_access_candidates_or_run_twice",
+      "reproduction_command": "cargo test -p kk-mod-host --test fault_tests inner_fault_retains_binding_and_boundary_through_caught_next"
+    }
+  ],
+  "other_confirmed_actionable_findings": [],
+  "source_sha256": {
+    "crates/kk-mod-api/src/outcome.rs": "4192120e9d44af410785937cbc3113ffa9170170c40c1beba78ed742a0a446fa",
+    "crates/kk-mod-api/src/lib.rs": "6bbfb0f88f98992a94cc09f03a4b2b3fd452c46a69aac38254642c52a49a6571",
+    "crates/kk-engine/src/settle/contrib.rs": "7d44a4ef47652d30d0b98aedbd70d08712c8fadcaaf7964b21ae2ce5ec1d8d50",
+    "crates/kk-engine/src/settle/mod_intents.rs": "f8654b57ac05efdc6997dfa65284418d6476a6732e3af15e7cb25c6416538866",
+    "crates/kk-mod-host/src/chain.rs": "ae51073990fa6b202eb416ca1002202b9bfa601e630a1e3c22503558aaf0f6bb",
+    "crates/kk-mod-host/src/error.rs": "ffcd8f48ca74cd634fa407f2d45470a4b0449d86d25943a04f159a75b6519812",
+    "crates/kk-mod-host/src/lib.rs": "8c2fa21101487c6ff713602fdb29dc8795154d755c25e56498f68d263742adc3",
+    "crates/kk-mod-host/src/realm.rs": "c63caf38cbba7c67e20e5fc3aa615db7886189f7f9d2e17428fc318bca82bca7",
+    "crates/kk-mod-host/src/sdk.js": "09ac58c4794c9fc2798ced691df4836eeb2d7a8ddf5970f55d3c850e5845c500",
+    "crates/kk-mod-host/src/write.rs": "1cc2a9e5fd1330850a7d3ac837090ac9427756d336d4fce252b9897db5767f23",
+    "crates/kk-mod-host/src/v8_convert.rs": "48e6f1d0d8e9d2355abf7e4fbe202edd70c462de76538c357bf90e689268eae6",
+    "crates/kk-mod-host/tests/fault_tests.rs": "78960af562db4635ff29bd8c4b384ca1dba8f7e5666ed6489bb4a856c9c16826",
+    "crates/kk-mod-host/tests/decline_tests.rs": "c5ef9313022f4a71fb9d30c44efdcceb5de64415b3f0f7714cb569ed5bf3172d",
+    "crates/kk-mod-host/tests/conversion_tests.rs": "560643e2772c7d37ae21e580c85ef70109096da82d40eabcadf719747234ecbc",
+    "crates/kk-mod-host/tests/limits_tests.rs": "1ca9c00bed58ac358ba0fbe1ceb594a32870bd466810cfd5be329c0d0f4d9026",
+    "crates/kk-runtime/src/embed.rs": "5b7bc8740e00ffccff18b6185e46074e2d0f13724f092b1da5012aa24f20a7b5",
+    "crates/kk-runtime/src/lib.rs": "4973d37ad4cd6d039aaf0925930bee7dd51b55183e79b25c32d8513096eaebf5",
+    "crates/kk-runtime/src/mod_vm.rs": "6cfe75915969f8937bd22e70cfc3a7857846b13a6ee6f444e0d2613a779c75b5",
+    "crates/kk-runtime/tests/mod_chain_tests.rs": "c59c399286bc62dad0a36a4c3fb1d4af34348459eaff9f1b81d091b2e7663a69",
+    "crates/kk-mod-host/src/profile.rs": "e57839d48ba06b022a93f6a9d8840f765cdf1349d29d9292a8ad258c163cff2a"
+  },
+  "checks": [
+    {
+      "command": "cargo test -p kk-mod-host --test fault_tests --test chain_tests --test limits_tests -p kk-runtime --test mod_chain_tests",
+      "exit_code": 0,
+      "passed": 33,
+      "ignored": 2
+    },
+    {
+      "command": "cargo build --release -p kk-cli",
+      "exit_code": 0
+    },
+    {
+      "command": "KKSCREEPS_BIN=/Users/keqing/Desktop/projects/games/kkscreeps/target/release/kkscreeps pnpm run check",
+      "exit_code": 0,
+      "rust_passed": 575,
+      "rust_ignored": 10,
+      "js_passed": 19,
+      "js_skipped": 0,
+      "markdown_files": 220,
+      "local_links": 1122
+    },
+    {
+      "command": "cargo test --release -p kk-mod-host --test fault_tests --test chain_tests --test limits_tests --test conversion_tests --test decline_tests -p kk-runtime --test mod_chain_tests",
+      "exit_code": 0,
+      "passed": 36,
+      "ignored": 3
+    },
+    {
+      "command": "pnpm --filter @kkscreeps/compat build",
+      "exit_code": 0
+    },
+    {
+      "command": "KKSCREEPS_BIN=/Users/keqing/Desktop/projects/games/kkscreeps/target/release/kkscreeps node compat/scripts/ratchet.mjs",
+      "exit_code": 0,
+      "passed": 1854,
+      "failed": 153,
+      "skipped": 907,
+      "regressions": 0,
+      "improvements": 0
+    },
+    {
+      "command": "node scripts/check-doc-links.mjs",
+      "exit_code": 0,
+      "markdown_files": 220,
+      "local_links": 1124
+    },
+    {
+      "command": "cargo fmt --all --check",
+      "exit_code": 0
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    },
+    {
+      "command": "git diff --cached --check",
+      "exit_code": 0
+    },
+    {
+      "command": "node scripts/check-doc-links.mjs (checkout of staged index)",
+      "exit_code": 0,
+      "markdown_files": 129,
+      "local_links": 764
+    }
+  ],
+  "logs": {
+    "fault-repro": {
+      "path": "/tmp/kkscreeps-review-fault-repro.log",
+      "sha256": "5e9151a33ba363f7ff81f50a67d54b68af1927ec2180c676a70c24d63b7dffc7"
+    },
+    "focused": {
+      "path": "/tmp/kkscreeps-review-focused.log",
+      "sha256": "e423a92046a0338e2262acd3aa9e94bc1621f925e460d5cb0142480aa535eb8d"
+    },
+    "release": {
+      "path": "/tmp/kkscreeps-review-release.log",
+      "sha256": "e9e3b82927a4685fdc497505ce001dc5d0e909b9f167166d41a17afcc8757387"
+    },
+    "release-tests": {
+      "path": "/tmp/kkscreeps-review-release-tests.log",
+      "sha256": "cba9ec0c1c009983eeddc7e6e787a09b6a12fc782562a6d4b56936dca2e43f15"
+    },
+    "full-check": {
+      "path": "/tmp/kkscreeps-review-full-check.log",
+      "sha256": "5059c90f5d6cd3a6f44ca29cafc67a2968997174f2eef77639e6a76aa1cc070e"
+    },
+    "compat-build": {
+      "path": "/tmp/kkscreeps-review-compat-build.log",
+      "sha256": "8ebfcb81adc70e835a6524785828621e81b7c5f862b4f08cd015d332f07616fe"
+    },
+    "ratchet": {
+      "path": "/tmp/kkscreeps-review-ratchet.log",
+      "sha256": "eda1e661196c303001e12d95d1e3f56629ee8b2d2ee22411e4c300d8fd46883f"
+    },
+    "perf": {
+      "path": "/tmp/kkscreeps-review-perf.log",
+      "sha256": "22fe82bcb236c53f5a4bd21d1c063628b5afe7287c98fe6b44d649db036d8567"
+    },
+    "final-docs": {
+      "path": "/tmp/kkscreeps-review-final-docs.log",
+      "sha256": "805353aa86969eaf3458a9cfa6f02744e9ce117738c62cd1486ab85c44845e84"
+    },
+    "final-fmt": {
+      "path": "/tmp/kkscreeps-review-final-fmt.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "final-diff": {
+      "path": "/tmp/kkscreeps-review-final-diff.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "staged-diff": {
+      "path": "/tmp/kkscreeps-review-staged-diff.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "index-docs": {
+      "path": "/tmp/kkscreeps-review-index-docs.log",
+      "sha256": "cad30ae09e42263e59f24bc559c0a069eed6be9164b79f90ec27d4f11b2e6aba"
+    }
+  },
+  "upstream_pin": "34a630efa42908c117c19c25d2350fa2387bd633",
+  "release_binary_sha256": "97e49cc3df391d5358a379ce4203c9b15a4faa915c2ffcf40952cb2bcf4d7ed2",
+  "compatibility_report_sha256": "21577f2206ef07a24b3752529e1d30e5f27523fe143541e84f2b7cfa0fb553dd",
+  "performance": {
+    "report": "mod-boundary-review-perf-2026-10-04.json",
+    "sha256": "ed1900395dfdbbabfb506a99f14df869ce75036365dbe6372759cb5d18ddf95f",
+    "command": "PYTHONDONTWRITEBYTECODE=1 python3 scripts/mod-perf-compare.py --before /tmp/kkscreeps-review-before --after target/release/kkscreeps --output docs/research/notes/mod-boundary-review-perf-2026-10-04.json --rooms 1 --links-per-room 400 --warmup 100 --ticks 500 --repetitions 3 --modes native empty chain",
+    "exit_code": 0,
+    "windows": 18,
+    "before_binary_sha256": "481ebd6ea32a4ef2a431da4cae2482f20a391d7e0de7e2353e21a747ee7baf4a",
+    "summary": {
+      "plain:native": {
+        "pairs": 3,
+        "metrics": {
+          "p50_ms": {
+            "before_runs": [
+              1.8855840000000001,
+              1.993084,
+              1.943625
+            ],
+            "after_runs": [
+              1.977,
+              1.916542,
+              1.99825
+            ],
+            "median_before": 1.943625,
+            "median_after": 1.977,
+            "paired_after_minus_before": [
+              0.09141599999999994,
+              -0.07654200000000011,
+              0.054625000000000146
+            ],
+            "median_paired_delta": 0.054625000000000146,
+            "paired_after_over_before": [
+              1.0484815314512639,
+              0.9615961996584188,
+              1.0281047012669626
+            ],
+            "median_paired_ratio": 1.0281047012669626
+          },
+          "p95_ms": {
+            "before_runs": [
+              2.0198329999999998,
+              2.107625,
+              2.032209
+            ],
+            "after_runs": [
+              2.035291,
+              2.031875,
+              2.096291
+            ],
+            "median_before": 2.032209,
+            "median_after": 2.035291,
+            "paired_after_minus_before": [
+              0.015458000000000194,
+              -0.0757500000000002,
+              0.06408199999999997
+            ],
+            "median_paired_delta": 0.015458000000000194,
+            "paired_after_over_before": [
+              1.0076531079549647,
+              0.9640590712294643,
+              1.0315331739993279
+            ],
+            "median_paired_ratio": 1.0076531079549647
+          },
+          "p99_ms": {
+            "before_runs": [
+              2.053792,
+              2.170667,
+              2.091417
+            ],
+            "after_runs": [
+              2.0743340000000003,
+              2.1290419999999997,
+              2.231084
+            ],
+            "median_before": 2.091417,
+            "median_after": 2.1290419999999997,
+            "paired_after_minus_before": [
+              0.020542000000000282,
+              -0.041625000000000245,
+              0.1396670000000002
+            ],
+            "median_paired_delta": 0.020542000000000282,
+            "paired_after_over_before": [
+              1.010001986569234,
+              0.9808238665811014,
+              1.0667810388841634
+            ],
+            "median_paired_ratio": 1.010001986569234
+          },
+          "cpu_core_ms_per_tick": {
+            "before_runs": [
+              1.8978700000000002,
+              1.9875839999999998,
+              1.9363899999999998
+            ],
+            "after_runs": [
+              1.962138,
+              1.9387419999999997,
+              1.9897240000000003
+            ],
+            "median_before": 1.9363899999999998,
+            "median_after": 1.962138,
+            "paired_after_minus_before": [
+              0.06426799999999977,
+              -0.04884200000000005,
+              0.05333400000000044
+            ],
+            "median_paired_delta": 0.05333400000000044,
+            "paired_after_over_before": [
+              1.0338632256160853,
+              0.9754264473853683,
+              1.027543005283027
+            ],
+            "median_paired_ratio": 1.027543005283027
+          }
+        }
+      },
+      "plain:empty": {
+        "pairs": 3,
+        "metrics": {
+          "p50_ms": {
+            "before_runs": [
+              1.9213749999999998,
+              1.982792,
+              1.9405
+            ],
+            "after_runs": [
+              1.952958,
+              1.987,
+              1.9675420000000001
+            ],
+            "median_before": 1.9405,
+            "median_after": 1.9675420000000001,
+            "paired_after_minus_before": [
+              0.03158300000000014,
+              0.0042079999999999895,
+              0.027042000000000233
+            ],
+            "median_paired_delta": 0.027042000000000233,
+            "paired_after_over_before": [
+              1.0164377073710233,
+              1.0021222599243895,
+              1.013935583612471
+            ],
+            "median_paired_ratio": 1.013935583612471
+          },
+          "p95_ms": {
+            "before_runs": [
+              2.011,
+              2.0985,
+              2.0382909999999996
+            ],
+            "after_runs": [
+              2.021834,
+              2.036584,
+              2.143417
+            ],
+            "median_before": 2.0382909999999996,
+            "median_after": 2.036584,
+            "paired_after_minus_before": [
+              0.01083400000000001,
+              -0.06191600000000008,
+              0.10512600000000027
+            ],
+            "median_paired_delta": 0.01083400000000001,
+            "paired_after_over_before": [
+              1.0053873694679265,
+              0.9704951155587324,
+              1.0515755601138406
+            ],
+            "median_paired_ratio": 1.0053873694679265
+          },
+          "p99_ms": {
+            "before_runs": [
+              2.1521660000000002,
+              2.1879579999999996,
+              2.113625
+            ],
+            "after_runs": [
+              2.069708,
+              2.082042,
+              4.581959
+            ],
+            "median_before": 2.1521660000000002,
+            "median_after": 2.082042,
+            "paired_after_minus_before": [
+              -0.08245800000000036,
+              -0.10591599999999968,
+              2.4683340000000005
+            ],
+            "median_paired_delta": -0.08245800000000036,
+            "paired_after_over_before": [
+              0.9616860409466554,
+              0.9515913925221601,
+              2.1678202140871727
+            ],
+            "median_paired_ratio": 0.9616860409466554
+          },
+          "cpu_core_ms_per_tick": {
+            "before_runs": [
+              1.926422,
+              1.9733539999999998,
+              1.9454099999999999
+            ],
+            "after_runs": [
+              1.946422,
+              1.964736,
+              2.0151660000000002
+            ],
+            "median_before": 1.9454099999999999,
+            "median_after": 1.964736,
+            "paired_after_minus_before": [
+              0.020000000000000018,
+              -0.008617999999999792,
+              0.06975600000000037
+            ],
+            "median_paired_delta": 0.020000000000000018,
+            "paired_after_over_before": [
+              1.0103819412361361,
+              0.9956328160076703,
+              1.0358567088685677
+            ],
+            "median_paired_ratio": 1.0103819412361361
+          }
+        }
+      },
+      "plain:chain": {
+        "pairs": 3,
+        "metrics": {
+          "p50_ms": {
+            "before_runs": [
+              26.315459,
+              26.121167,
+              26.152375
+            ],
+            "after_runs": [
+              26.226916,
+              26.067916999999998,
+              25.966124999999998
+            ],
+            "median_before": 26.152375,
+            "median_after": 26.067916999999998,
+            "paired_after_minus_before": [
+              -0.08854300000000137,
+              -0.05325000000000202,
+              -0.18625000000000114
+            ],
+            "median_paired_delta": -0.08854300000000137,
+            "paired_after_over_before": [
+              0.9966353237463955,
+              0.9979614233927603,
+              0.9928782758736061
+            ],
+            "median_paired_ratio": 0.9966353237463955
+          },
+          "p95_ms": {
+            "before_runs": [
+              26.844791999999998,
+              26.730833,
+              26.799916
+            ],
+            "after_runs": [
+              27.116,
+              26.604540999999998,
+              26.406958
+            ],
+            "median_before": 26.799916,
+            "median_after": 26.604540999999998,
+            "paired_after_minus_before": [
+              0.27120800000000145,
+              -0.12629200000000296,
+              -0.39295800000000014
+            ],
+            "median_paired_delta": -0.12629200000000296,
+            "paired_after_over_before": [
+              1.0101028162185053,
+              0.9952754184652606,
+              0.985337342102117
+            ],
+            "median_paired_ratio": 0.9952754184652606
+          },
+          "p99_ms": {
+            "before_runs": [
+              27.0975,
+              27.015917,
+              27.085917000000002
+            ],
+            "after_runs": [
+              31.535124999999997,
+              26.831457999999998,
+              26.709875
+            ],
+            "median_before": 27.085917000000002,
+            "median_after": 26.831457999999998,
+            "paired_after_minus_before": [
+              4.437624999999997,
+              -0.18445900000000393,
+              -0.37604200000000176
+            ],
+            "median_paired_delta": -0.18445900000000393,
+            "paired_after_over_before": [
+              1.16376510748224,
+              0.9931722102936574,
+              0.9861166967321061
+            ],
+            "median_paired_ratio": 0.9931722102936574
+          },
+          "cpu_core_ms_per_tick": {
+            "before_runs": [
+              27.278830000000003,
+              27.037404000000002,
+              27.068876
+            ],
+            "after_runs": [
+              27.194054,
+              26.972196,
+              26.852301999999998
+            ],
+            "median_before": 27.068876,
+            "median_after": 26.972196,
+            "paired_after_minus_before": [
+              -0.08477600000000152,
+              -0.06520800000000193,
+              -0.21657400000000138
+            ],
+            "median_paired_delta": -0.08477600000000152,
+            "paired_after_over_before": [
+              0.9968922420792974,
+              0.9975882299942701,
+              0.9919991506112038
+            ],
+            "median_paired_ratio": 0.9968922420792974
+          }
+        }
+      }
+    }
+  },
+  "limits": [
+    "no other confirmed actionable review findings; this is not a proof of absence of defects",
+    "baseline performance differences and latest native/empty-Mod/tail samples remain unattributed; all windows retained, no zero-performance-regression or production acceptance claim",
+    "hosted own-object decline only; builtin rollback and repeated-fault disablement remain future work",
+    "fault metadata describes a trusted shared-realm execution boundary, not unforgeable isolation or a per-Mod resource ledger",
+    "CLI diagnostic protocol, persistent logs and process-level crash recovery remain outside these slices"
+  ],
+  "staged_scope_paths": [
+    "compat/reports/kkscreeps.json",
+    "crates/kk-engine/src/settle/contrib.rs",
+    "crates/kk-engine/src/settle/mod_intents.rs",
+    "crates/kk-mod-api/src/lib.rs",
+    "crates/kk-mod-api/src/outcome.rs",
+    "crates/kk-mod-host/src/chain.rs",
+    "crates/kk-mod-host/src/error.rs",
+    "crates/kk-mod-host/src/lib.rs",
+    "crates/kk-mod-host/src/profile.rs",
+    "crates/kk-mod-host/src/realm.rs",
+    "crates/kk-mod-host/src/sdk.js",
+    "crates/kk-mod-host/src/v8_convert.rs",
+    "crates/kk-mod-host/src/write.rs",
+    "crates/kk-mod-host/tests/conversion_tests.rs",
+    "crates/kk-mod-host/tests/decline_tests.rs",
+    "crates/kk-mod-host/tests/fault_tests.rs",
+    "crates/kk-mod-host/tests/limits_tests.rs",
+    "crates/kk-runtime/src/embed.rs",
+    "crates/kk-runtime/src/lib.rs",
+    "crates/kk-runtime/src/mod_vm.rs",
+    "crates/kk-runtime/tests/mod_chain_tests.rs",
+    "docs/architecture/mod-execution.md",
+    "docs/architecture/performance-acceptance.md",
+    "docs/designs/mod-system.md",
+    "docs/research/README.md",
+    "docs/research/notes/mod-boundary-review-2026-10-04.md",
+    "docs/research/notes/mod-boundary-review-perf-2026-10-04.json",
+    "docs/research/notes/mod-boundary-review-validation-2026-10-04.json",
+    "docs/research/notes/mod-conversion-boundaries-2026-10-04.md",
+    "docs/research/notes/mod-conversion-boundaries-validation-2026-10-04.json",
+    "docs/research/notes/mod-fault-attribution-2026-10-04.md",
+    "docs/research/notes/mod-fault-attribution-perf-2026-10-04.json",
+    "docs/research/notes/mod-fault-attribution-validation-2026-10-04.json",
+    "docs/research/notes/mod-intent-decline-2026-10-04.md",
+    "docs/research/notes/mod-intent-decline-perf-2026-10-04.json",
+    "docs/research/notes/mod-intent-decline-validation-2026-10-04.json"
+  ],
+  "staged_scope_note": "Index contains only reviewed implementation/evidence and four README note entries; original plan changes and chain-driver note/examples remain unstaged. Index-only documentation check excludes untracked dependencies and user files."
+}

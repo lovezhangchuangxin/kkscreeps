@@ -18,6 +18,7 @@ pub mod extension;
 mod fingerprint;
 mod freeze;
 mod handlers;
+mod outcome;
 mod plan;
 pub mod player_surface;
 mod rules;
@@ -25,4 +26,5 @@ pub mod validate;
 
 pub use definition::*;
 pub use freeze::{FreezeError, freeze, freeze_with_builtin};
+pub use outcome::{Decline, SlotOutcome};
 pub use plan::*;

@@ -25,16 +25,17 @@ use deno_error::JsErrorBox;
 use serde_json::Value;
 
 use crate::chain::{
-    ActiveChain, ChainHost, ChainProgram, ChainState, op_mod_chain_fault, op_mod_chain_native,
-    op_mod_chain_read, op_mod_chain_write,
+    ActiveChain, ChainHost, ChainProgram, ChainState, op_mod_chain_decline, op_mod_chain_fault,
+    op_mod_chain_fault_detail, op_mod_chain_native, op_mod_chain_read, op_mod_chain_write,
 };
 use crate::convert::{Declaration, build_contribution};
-use crate::error::{ModHostError, ModHostResult};
+use crate::error::{ModFault, ModFaultKind, ModHostError, ModHostResult};
 use crate::graph::dependency_order;
 use crate::package::ModPackage;
 use crate::{ChainProfiler, ModVmLimits};
 use kk_mod_api::{
-    Contribution, ContributionPlan, FreezeOptions, Key, Source, builtin, freeze_with_builtin,
+    Contribution, ContributionPlan, FreezeOptions, Key, SlotOutcome, Source, builtin,
+    freeze_with_builtin,
 };
 use kk_vm::budget::{ExecutionLimits, ResourceState, Usage, VmBudget};
 
@@ -59,32 +60,50 @@ struct Registry {
     current: Option<String>,
     declarations: Vec<Declaration>,
     sealed: bool,
+    fault: Option<String>,
 }
 
-#[op2]
-fn op_mod_declare(
-    state: &mut OpState,
-    #[string] kind: String,
-    #[serde] value: serde_json::Value,
-) -> Result<(), JsErrorBox> {
-    let (namespace, sealed) = {
-        let registry = state.borrow::<Registry>();
-        (registry.current.clone(), registry.sealed)
-    };
-    let Some(namespace) = namespace else {
-        return Err(JsErrorBox::generic("注册不在进行中（宿主未开始或已收尾）"));
-    };
-    if sealed {
-        return Err(JsErrorBox::generic("注册已密封"));
+impl Registry {
+    fn active_namespace(&self) -> Result<String, JsErrorBox> {
+        if self.sealed {
+            return Err(JsErrorBox::generic("注册已密封"));
+        }
+        if let Some(fault) = &self.fault {
+            return Err(JsErrorBox::generic(fault.clone()));
+        }
+        self.current
+            .clone()
+            .ok_or_else(|| JsErrorBox::generic("注册不在进行中（宿主未开始或已收尾）"))
     }
-    state
-        .borrow_mut::<Registry>()
-        .declarations
-        .push(Declaration {
-            namespace,
-            kind,
-            value,
-        });
+}
+
+// 与候选写入同样可执行 getter；进入转换前检查注册能力并释放全部借用。
+#[op2(nofast, reentrant)]
+fn op_mod_declare<'s, 'i>(
+    scope: &mut v8::PinScope<'s, 'i>,
+    state: Rc<RefCell<OpState>>,
+    #[string] kind: String,
+    value: v8::Local<'s, v8::Value>,
+) -> Result<(), JsErrorBox> {
+    let namespace = state.borrow().borrow::<Registry>().active_namespace()?;
+    let value = {
+        v8::tc_scope!(let tc, scope);
+        crate::v8_convert::from_v8::<Value>(tc, value)
+            .map_err(|error| format!("声明 {kind} 转换失败：{error}"))
+    };
+    let mut state = state.borrow_mut();
+    let registry = state.borrow_mut::<Registry>();
+    // 内层转换错误即使被 getter 捕获，也必须阻止外层声明及计划发布。
+    registry.active_namespace()?;
+    let value = value.map_err(|error| {
+        registry.fault.get_or_insert(error.clone());
+        JsErrorBox::generic(error)
+    })?;
+    registry.declarations.push(Declaration {
+        namespace,
+        kind,
+        value,
+    });
     Ok(())
 }
 
@@ -95,7 +114,9 @@ extension!(
         op_mod_chain_read,
         op_mod_chain_write,
         op_mod_chain_native,
-        op_mod_chain_fault
+        op_mod_chain_fault,
+        op_mod_chain_fault_detail,
+        op_mod_chain_decline
     ]
 );
 
@@ -271,7 +292,7 @@ pub struct ModRealm {
     sdk_dispatch: v8::Global<v8::Function>,
     sdk_install_chains: v8::Global<v8::Function>,
     sdk_run_chain: v8::Global<v8::Function>,
-    chains: BTreeMap<String, (bool, Rc<BTreeSet<String>>)>,
+    chains: BTreeMap<String, (bool, bool, Rc<BTreeSet<String>>)>,
     chain_sequence: u64,
     limits: ModVmLimits,
     settlement_usage: Option<Usage>,
@@ -327,6 +348,7 @@ impl ModRealm {
                 current: None,
                 declarations: Vec::new(),
                 sealed: false,
+                fault: None,
             });
             op_state.put(ChainState::default());
         }
@@ -418,18 +440,37 @@ impl ModRealm {
         let result = dispatch
             .call(tc, receiver, &[key.into(), ctx_local])
             .ok_or_else(|| scope_error!(tc, "invoke", "处理器调用失败"))?;
-        deno_core::serde_v8::from_v8(tc, result)
+        crate::v8_convert::from_v8(tc, result)
             .map_err(|error| ModHostError::new("invoke", format!("处理器结果序列化失败：{error}")))
     }
 
     /// 一次进入 JS 完成整个槽。候选能力仅在本次调用期间放入 OpState，
     /// 无论返回或抛错都取出并销毁；已捕获的 next/候选访问故障仍使调用失败。
-    pub fn invoke_chain(&mut self, slot: &str, host: Box<dyn ChainHost>) -> ModHostResult<()> {
+    /// Declined 表示正常拒绝；调用方须恢复本次动作候选，保留此前动作结果。
+    pub fn invoke_chain(
+        &mut self,
+        slot: &str,
+        host: Box<dyn ChainHost>,
+    ) -> ModHostResult<SlotOutcome> {
         let _timer = self.profiler.as_ref().map(|p| p.measure("slot"));
         self.with_budget(false, |realm| realm.invoke_chain_inner(slot, host))
+            .map_err(|mut error| {
+                // 无法定位到处理器的 V8/宿主错误只归槽；预算优先覆盖普通 JS 错误。
+                let fault = error.fault.get_or_insert(ModFault {
+                    slot: None,
+                    binding: None,
+                    kind: ModFaultKind::Chain,
+                });
+                fault.slot = Some(slot.to_string());
+                error
+            })
     }
 
-    fn invoke_chain_inner(&mut self, slot: &str, host: Box<dyn ChainHost>) -> ModHostResult<()> {
+    fn invoke_chain_inner(
+        &mut self,
+        slot: &str,
+        host: Box<dyn ChainHost>,
+    ) -> ModHostResult<SlotOutcome> {
         let program = self
             .chains
             .get(slot)
@@ -441,9 +482,13 @@ impl ModRealm {
         let token = self.chain_sequence.to_string();
         let active = ActiveChain {
             token: token.clone(),
-            bindings: program.1.clone(),
+            slot: slot.to_string(),
+            bindings: program.2.clone(),
             host,
             fault: None,
+            fault_detail_pending: false,
+            declined: None,
+            decline_allowed: program.1,
             native_called: false,
             native_allowed: program.0,
             profiler: self.profiler.clone(),
@@ -462,9 +507,12 @@ impl ModRealm {
             .take()
             .expect("本次调用已安装候选能力");
         if let Some(fault) = active.fault {
-            return Err(ModHostError::new(slot.to_string(), fault));
+            return Err(fault);
         }
-        result
+        result?;
+        Ok(active
+            .declined
+            .map_or(SlotOutcome::Completed, SlotOutcome::Declined))
     }
 
     fn call_chain(&mut self, slot: &str, token: &str) -> ModHostResult<()> {
@@ -503,7 +551,11 @@ impl ModRealm {
             .map(|program| {
                 (
                     program.key.clone(),
-                    (program.native_center, Rc::new(program.bindings())),
+                    (
+                        program.native_center,
+                        program.decline_allowed,
+                        Rc::new(program.bindings()),
+                    ),
                 )
             })
             .collect();
@@ -546,6 +598,7 @@ impl ModRealm {
             let registry = state.borrow_mut::<Registry>();
             registry.current = None;
             registry.sealed = true;
+            registry.declarations.clear();
         }
         result
     }
@@ -589,14 +642,31 @@ impl ModRealm {
                 cpu: limit.cpu.saturating_sub(used.cpu),
                 wall: limit.wall.saturating_sub(used.wall),
             })
-            .map_err(|e| ModHostError::new(label, e.to_string()))?;
+            .map_err(|e| {
+                ModHostError::execution(
+                    label,
+                    e.to_string(),
+                    ModFault {
+                        slot: None,
+                        binding: None,
+                        kind: ModFaultKind::Resource,
+                    },
+                )
+            })?;
         drop(start_timer);
         let result = work(self);
         let finish_timer = self.profiler.as_ref().map(|p| p.measure("budget_finish"));
-        let usage = self
-            .budget
-            .finish(self.runtime.v8_isolate())
-            .map_err(|e| ModHostError::new(label, e.to_string()))?;
+        let usage = self.budget.finish(self.runtime.v8_isolate()).map_err(|e| {
+            ModHostError::execution(
+                label,
+                e.to_string(),
+                ModFault {
+                    slot: None,
+                    binding: None,
+                    kind: ModFaultKind::Resource,
+                },
+            )
+        })?;
         drop(finish_timer);
         if !registration && let Some(total) = &mut self.settlement_usage {
             total.cpu += usage.cpu;
@@ -644,7 +714,9 @@ impl ModRealm {
                 .map_err(|error| {
                     ModHostError::new(id.clone(), format!("入口模块装载或求值失败：{error}"))
                 })?;
+            self.check_registration_fault(id)?;
             self.call_register_function(mod_id, id, config)?;
+            self.check_registration_fault(id)?;
             let declared = {
                 let cell = self.runtime.op_state();
                 let mut state = cell.borrow_mut();
@@ -717,6 +789,15 @@ impl ModRealm {
         })
     }
 
+    fn check_registration_fault(&self, id: &str) -> ModHostResult<()> {
+        let state = self.runtime.op_state();
+        let state = state.borrow();
+        if let Some(fault) = &state.borrow::<Registry>().fault {
+            return Err(ModHostError::new(id.to_string(), fault.clone()));
+        }
+        Ok(())
+    }
+
     /// 调用包入口的 default 导出执行注册。register 函数必须同步返回，
     /// 返回 Promise 视为注册错误（与结算回调的同一条纪律）。
     fn call_register_function(
@@ -778,7 +859,7 @@ impl ModRealm {
         let result = seal
             .call(tc, receiver, &[])
             .ok_or_else(|| scope_error!(tc, "seal", "seal 调用失败"))?;
-        let keys: Vec<String> = deno_core::serde_v8::from_v8(tc, result)
+        let keys: Vec<String> = crate::v8_convert::from_v8(tc, result)
             .map_err(|error| ModHostError::new("seal", format!("绑定表序列化失败：{error}")))?;
         let mut executables = BTreeSet::new();
         for key in keys {
@@ -792,14 +873,19 @@ impl ModRealm {
     /// 在 realm 内执行一段诊断脚本（测试与排障用；realm 本身是可信面，
     /// 这里的额外暴露只有宿主自己写下的代码）。
     pub fn evaluate_probe(&mut self, code: &str) -> ModHostResult<Value> {
+        self.with_budget(false, |realm| realm.evaluate_probe_inner(code))
+    }
+
+    fn evaluate_probe_inner(&mut self, code: &str) -> ModHostResult<Value> {
         let value = self
             .runtime
             .execute_script("mod-host-probe", code.to_string())
             .map_err(|error| ModHostError::new("probe", format!("{error}")))?;
         let runtime_ref = &mut self.runtime;
         deno_core::scope!(scope, runtime_ref);
-        let local = v8::Local::new(scope, value);
-        deno_core::serde_v8::from_v8(scope, local)
+        v8::tc_scope!(let tc, scope);
+        let local = v8::Local::new(tc, value);
+        crate::v8_convert::from_v8(tc, local)
             .map_err(|error| ModHostError::new("probe", format!("结果序列化失败：{error}")))
     }
 }

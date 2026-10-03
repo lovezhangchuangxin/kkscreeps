@@ -16,6 +16,11 @@
 
 ## notes/ 笔记索引
 
+- [Mod 转换、拒绝与故障来源边界复审](notes/mod-boundary-review-2026-10-04.md)
+- [Mod 执行故障来源与跨 VM 恢复诊断](notes/mod-fault-attribution-2026-10-04.md)
+- [Mod 自有动作正常拒绝与局部候选恢复](notes/mod-intent-decline-2026-10-04.md)
+- [Mod 转换边界：注册重入、故障留存与结果转换](notes/mod-conversion-boundaries-2026-10-04.md)
+
 **Mod 拥有值写入封套**（2026-10-04）：[省去外层 Map 与转换 panic 清偿](notes/mod-write-envelope-2026-10-04.md)（动态遍历保留 getter/未知值故障，直接移交 state/fields，Symbol 子进程与候选回滚）。
 
 **Mod 成对采集**（2026-10-03）：[可配置窗口与成对口径](notes/mod-paired-sampling-2026-10-03.md)（默认更长窗口、交替两端次序、逐轮 P99/CPU 和倍率、证据保护）。

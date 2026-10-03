@@ -56,7 +56,7 @@ impl ChainProfiler {
                 "op_mod_chain_read" => "op_read",
                 "op_mod_chain_write" => "op_write",
                 "op_mod_chain_native" => "op_native",
-                "op_mod_chain_fault" => "op_fault",
+                "op_mod_chain_fault" | "op_mod_chain_fault_detail" => "op_fault",
                 _ => return None,
             };
             let profiler = profiler.clone();

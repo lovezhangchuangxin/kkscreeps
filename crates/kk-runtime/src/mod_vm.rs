@@ -3,7 +3,16 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use kk_mod_api::{Key, PlanHash};
-use kk_mod_host::{ModPackage, ModRealm, RegisterOptions};
+use kk_mod_host::{ModHostError, ModPackage, ModRealm, RegisterOptions};
+
+/// 最近一次实际结算的 Mod 调用故障；不随 VM 销毁或重建丢失。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ModSettlementFault {
+    pub tick: u64,
+    pub room: String,
+    pub target: String,
+    pub error: ModHostError,
+}
 
 pub(crate) struct ModVm {
     realm: Option<ModRealm>,
@@ -12,6 +21,7 @@ pub(crate) struct ModVm {
     plan_hash: PlanHash,
     executables: BTreeSet<Key>,
     fail_next_rebuild: bool,
+    pub(crate) last_fault: Option<ModSettlementFault>,
 }
 
 impl ModVm {
@@ -29,6 +39,7 @@ impl ModVm {
             plan_hash,
             executables,
             fail_next_rebuild: false,
+            last_fault: None,
         }
     }
 

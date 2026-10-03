@@ -23,7 +23,7 @@ use kk_engine::settle::contrib::{SlotCall, SlotExecutor};
 use kk_engine::{
     PlayerWriteback, RunOutcome, RunResult, RunState, SegmentWriteback, TickInput, TickStage,
 };
-use kk_mod_api::{Key, SlotPlan};
+use kk_mod_api::{Key, SlotOutcome, SlotPlan};
 use kk_mod_host::{
     ChainContext, ChainHost, ChainTarget, ChainWrite, ModPackage, ModRealm, RegisterOptions,
 };
@@ -121,10 +121,20 @@ struct ModChainContext {
     native: NativeCall,
     /// 仅在本次能力内缓存已解析字段；改写与 native 前失效，不跨槽/对象/tick。
     cached_fields: Option<Value>,
+    /// 自有动作的 namespace 写入暂存到调用成功；拒绝时无需改动共享候选。
+    staged_states: Option<Rc<RefCell<BTreeMap<String, Value>>>>,
 }
 
 impl SlotExecutor for ModSlotExecutor {
-    fn run(&self, slot: &SlotPlan, ctx: &RoomCtx, call: SlotCall<'_>) -> Result<(), String> {
+    fn run(
+        &self,
+        slot: &SlotPlan,
+        ctx: &RoomCtx,
+        call: SlotCall<'_>,
+    ) -> Result<SlotOutcome, String> {
+        // 仅自有对象动作可拒绝：它的写面只有本对象字段与 namespace state，
+        // 没有 native/ID/玩家/事件写面，因而可使用这个局部恢复边界。
+        let extension = matches!(&call, SlotCall::Extension { .. });
         let (id, args, native) = match call {
             SlotCall::Action { id, data, native } => (
                 id,
@@ -140,9 +150,21 @@ impl SlotExecutor for ModSlotExecutor {
             SlotCall::Extension { id, args } => (id, args.clone(), NativeCall::None),
         };
         let room = ctx.borrow().room.name.clone();
-        self.realm
+        let original_fields = if extension {
+            Some(
+                ctx.borrow()
+                    .mod_fields(id)
+                    .ok_or("扩展动作目标不是有效 Mod 对象")?,
+            )
+        } else {
+            None
+        };
+        let staged_states = extension.then(|| Rc::new(RefCell::new(BTreeMap::new())));
+        let mut vm = self
+            .realm
             .try_borrow_mut()
-            .map_err(|_| format!("槽 {} @ {room}: realm 已在执行", slot.key))?
+            .map_err(|_| format!("槽 {} @ {room}: realm 已在执行", slot.key))?;
+        let outcome = vm
             .realm_mut()?
             .invoke_chain(
                 slot.key.as_str(),
@@ -152,9 +174,38 @@ impl SlotExecutor for ModSlotExecutor {
                     args,
                     native,
                     cached_fields: None,
+                    staged_states: staged_states.clone(),
                 }),
             )
-            .map_err(|error| format!("槽 {} @ {room}: {error}", slot.key))
+            .map_err(|error| {
+                // 引擎仍接收原有字符串错误，另在 VM 生命周期容器中保留类型化证据。
+                vm.last_fault
+                    .get_or_insert_with(|| crate::ModSettlementFault {
+                        tick: ctx.borrow().time,
+                        room: room.clone(),
+                        target: id.as_str(),
+                        error: error.clone(),
+                    });
+                format!("槽 {} @ {room}: {error}", slot.key)
+            })?;
+        drop(vm);
+        match &outcome {
+            SlotOutcome::Completed => {
+                if let Some(states) = staged_states {
+                    let states = std::mem::take(&mut *states.borrow_mut());
+                    for (namespace, value) in states {
+                        ctx.borrow().state.set_mod_state(&namespace, value);
+                    }
+                }
+            }
+            SlotOutcome::Declined(_) => {
+                let fields = original_fields.ok_or("该槽没有正常拒绝的局部恢复边界")?;
+                ctx.borrow_mut()
+                    .update_mod_fields(id, &fields)
+                    .map_err(|error| format!("动作拒绝恢复失败：{error}"))?;
+            }
+        }
+        Ok(outcome)
     }
 }
 
@@ -240,7 +291,11 @@ impl ChainHost for ModChainContext {
         let key = Key::new(binding)?;
         let fields = self.fields()?.clone();
         let w = self.ctx.borrow();
-        let state = w.state.mod_state(key.namespace());
+        let state = self
+            .staged_states
+            .as_ref()
+            .and_then(|states| states.borrow().get(key.namespace()).cloned())
+            .unwrap_or_else(|| w.state.mod_state(key.namespace()));
         let tick = w.time;
         let room = w.room.name.clone();
         drop(w);
@@ -264,10 +319,16 @@ impl ChainHost for ModChainContext {
             self.write_fields(fields)?;
         }
         // 字段校验完成后移交 state；固定封套不再构造或拆除 JSON Map。
-        self.ctx
-            .borrow_mut()
-            .state
-            .set_mod_state(key.namespace(), context.state);
+        if let Some(states) = &self.staged_states {
+            states
+                .borrow_mut()
+                .insert(key.namespace().to_string(), context.state);
+        } else {
+            self.ctx
+                .borrow()
+                .state
+                .set_mod_state(key.namespace(), context.state);
+        }
         Ok(())
     }
 
@@ -1073,8 +1134,10 @@ impl EmbedEngine {
         let fail_writeback = self.fail_next_writeback.take();
         self.engine.set_fail_writeback_for_test(fail_writeback);
         if let Some(vm) = &self.mod_realm {
-            vm.borrow_mut()
-                .realm_mut()
+            let mut vm = vm.borrow_mut();
+            // 新的实际结算清除上一轮诊断；恢复和结算前的拒绝不清除。
+            vm.last_fault = None;
+            vm.realm_mut()
                 .map_err(anyhow::Error::msg)?
                 .begin_settlement()
                 .map_err(anyhow::Error::msg)?;
@@ -1719,6 +1782,14 @@ impl EmbedEngine {
         self.mod_realm
             .as_ref()
             .is_some_and(|vm| vm.borrow().needs_recovery())
+    }
+
+    /// 最近一次实际结算的 Mod 槽调用故障；恢复不清除，下一次结算开始时清除。
+    /// 非 Mod 的引擎错误不产生此记录，正常拒绝也不记为故障。
+    pub fn last_mod_settlement_fault(&self) -> Option<crate::ModSettlementFault> {
+        self.mod_realm
+            .as_ref()
+            .and_then(|vm| vm.borrow().last_fault.clone())
     }
 
     /// 从分片创建时的包字节与配置重建 Mod VM，核验原冻结计划后才恢复可用。

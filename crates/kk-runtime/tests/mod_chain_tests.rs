@@ -54,6 +54,60 @@ fn cooldown(e: &EmbedEngine, id: &str) -> Value {
 }
 
 #[test]
+fn settlement_fault_survives_recovery_and_clears_only_on_actual_settlement() -> anyhow::Result<()> {
+    for binary in [false, true] {
+        let outer = package(
+            "api.handlers.wrap('builtin:link.transfer',{id:'outer'},(ctx,next)=>{try{next()}catch(e){} throw Error('outer');});",
+        );
+        let inner = package(
+            "api.handlers.replace('builtin:link.transfer',{id:'inner'},ctx=>{ctx.state={dirty:true};throw Error('处理器 alpha:handler.outer: fake');});",
+        );
+        let mut e = engine(&[("alpha", outer), ("beta", inner)], binary)?;
+        let source = link(&mut e, 20, 100, 0)?;
+        let target = link(&mut e, 21, 0, 0)?;
+        let code = format!(
+            "Memory.dirty=true;Game.getObjectById('{source}').transferEnergy(Game.getObjectById('{target}'),25)"
+        );
+        assert!(e.run_player("p1", &code).is_err());
+        let record = e.last_mod_settlement_fault().expect("保留槽故障");
+        assert_eq!(record.tick, 0);
+        assert_eq!(record.room, "W1N1");
+        assert_eq!(record.target, source);
+        let fault = record.error.fault.as_ref().unwrap();
+        assert_eq!(fault.slot.as_deref(), Some("builtin:link.transfer"));
+        assert_eq!(
+            fault.binding.as_ref().unwrap().as_str(),
+            "beta:handler.inner"
+        );
+        assert_eq!(fault.kind, kk_mod_host::ModFaultKind::Handler);
+        assert_eq!(e.get_object(&source).unwrap()["store"]["energy"], 100);
+        assert_eq!(e.engine_mod_state("beta"), Value::Null);
+        e.fail_next_mod_rebuild_for_test()?;
+        assert!(
+            e.run_player("p1", "throw Error('不得重新运行玩家')")
+                .is_err()
+        );
+        assert_eq!(e.last_mod_settlement_fault(), Some(record.clone()));
+        e.rebuild_mod_realm()?;
+        assert_eq!(e.last_mod_settlement_fault(), Some(record.clone()));
+        // 未运行结算的拒绝保留上一条；实际结算的非 Mod 错误不能残留旧归因。
+        e.fail_next_settle_for_test();
+        assert!(e.run_player("p1", "").is_err());
+        assert_eq!(e.last_mod_settlement_fault(), Some(record));
+        e.fail_next_settle_stage_for_test(kk_engine::TickStage::Prepare);
+        assert!(e.run_player("p1", "").is_err());
+        assert!(e.last_mod_settlement_fault().is_none());
+        e.discard_pending_round();
+        e.tick(1)?;
+        assert!(e.last_mod_settlement_fault().is_none());
+        assert!(!e.needs_mod_recovery());
+        assert!(e.last_mod_settlement_fault().is_none());
+        assert_eq!(e.get_game_time(), 1);
+    }
+    Ok(())
+}
+
+#[test]
 fn nested_js_wraps_flush_refresh_and_run_after_once() -> anyhow::Result<()> {
     let source = package(
         r#"
@@ -543,6 +597,226 @@ api.handlers.after('builtin:link.tick',{{id:'after'}},ctx=>{{ctx.target.fields.c
                 assert_eq!(e.engine_mod_state("chain"), Value::Null);
             }
         }
+    }
+    Ok(())
+}
+
+// 三个同对象动作依稳定键序执行；中间动作拒绝不能丢失前一个动作的结果。
+fn decline_package(rejection: &str) -> String {
+    format!(
+        r#"
+let calls = 0;
+export default function register(api) {{
+  const counter = api.objects.define('a:counter', {{version:1,playerClass:'Counter',visibility:'server-only',ownerField:'owner',positionFields:['x','y'],fields:{{
+    owner:{{type:'string',maxBytes:128}},x:{{type:'u32',min:0,max:49}},y:{{type:'u32',min:0,max:49}},value:{{type:'i32',default:0}}
+  }}}});
+  for (const name of ['a-accept','b-test','c-accept']) {{
+    api.intents.define('a:'+name,{{scope:'object',target:counter,args:{{type:'record',fields:{{}}}},process(ctx){{
+      calls++;
+      ctx.target.fields.value++;
+      ctx.state={{count:(ctx.state?.count||0)+1,calls}};
+      if(name==='b-test') {{ {rejection} }}
+    }}}});
+  }}
+  api.handlers.before('a:b-test.slot',{{id:'pre'}},ctx=>{{ctx.target.fields.x=21;ctx.state={{count:100}};}});
+  api.handlers.wrap('a:b-test.slot',{{id:'outer'}},(ctx,next)=>{{
+    const fields=ctx.target.fields;
+    try {{ next(); }} catch(e) {{}}
+    if (fields.value!==7) throw Error('next 后字段未同步');
+    ctx.state={{count:999}};
+  }});
+  api.handlers.after('a:b-test.slot',{{id:'after'}},ctx=>{{ctx.state={{count:888}};}});
+}}
+"#
+    )
+}
+
+#[test]
+fn declined_intent_rolls_back_only_its_fields_and_all_namespace_states() -> anyhow::Result<()> {
+    let source = decline_package("return api.decline('full');");
+    let b = "api.handlers.before('a:b-test.slot',{id:'pre'},ctx=>{ctx.target.fields.value+=5;ctx.target.fields.y=23;ctx.state={count:500};});";
+    // wrap 捕获内层拒绝时不会刷新；不得把捕获后的代码错误误当成拒绝。
+    let source = source.replace(
+        "if (fields.value!==7) throw Error('next 后字段未同步');",
+        "",
+    );
+    for (binary, initialized) in [(false, false), (true, false), (false, true), (true, true)] {
+        let b = if initialized {
+            package(&format!(
+                "{b} api.handlers.before('a:a-accept.slot',{{id:'initialize'}},ctx=>{{ctx.state={{count:(ctx.state?.count||0)+1}};}});"
+            ))
+        } else {
+            package(b)
+        };
+        let mut e = engine(&[("a", source.clone()), ("b", b.clone())], binary)?;
+        let id = e.place_mod_object("W1N1", "a:counter", &json!({"owner":"p1","x":10,"y":12}))?;
+        let result = e.run_player("p1", &format!("Memory.committed=true;for(const key of ['a:a-accept','a:b-test','a:c-accept']) __kkEmitExtensionIntent(key,'{id}',{{}}); 'ok'"))?;
+        assert_eq!(result.expr["value"], json!("ok"));
+        assert_eq!(e.get_game_time(), 1);
+        assert!(!e.needs_mod_recovery());
+        assert!(e.last_mod_settlement_fault().is_none());
+        let object = e.get_object(&id).unwrap();
+        assert_eq!(
+            object["fields"],
+            json!({"owner":"p1","x":10,"y":12,"value":2})
+        );
+        assert_eq!(object["pos"], json!({"x":10,"y":12,"roomName":"W1N1"}));
+        assert_eq!(
+            e.engine_mod_state("a"),
+            json!({"count":2,"calls":3}),
+            "正常拒绝不重建 VM，全局调用计数保留"
+        );
+        assert_eq!(
+            e.engine_mod_state("b"),
+            if initialized {
+                json!({"count":1})
+            } else {
+                Value::Null
+            },
+            "拒绝须保留动作前的 namespace state，也不能新增空条目"
+        );
+        // Memory 与 CPU 候选照常发布；下一轮正常动作读取前一轮已提交结果。
+        let next = e.run_player("p1", &format!("if(!Memory.committed) throw Error('Memory 未发布');__kkEmitExtensionIntent('a:a-accept','{id}',{{}})"))?;
+        assert!(next.expr.get("error").is_none(), "{:?}", next.expr);
+        assert_eq!(e.engine_mod_state("a"), json!({"count":3,"calls":4}));
+        assert_eq!(e.get_object(&id).unwrap()["fields"]["value"], json!(3));
+    }
+    Ok(())
+}
+
+#[test]
+fn decline_at_each_chain_position_discards_the_entire_action() -> anyhow::Result<()> {
+    for position in [
+        "before",
+        "wrap-before",
+        "process",
+        "replace",
+        "wrap-after",
+        "after",
+    ] {
+        let mut source = decline_package(if position == "process" {
+            "return api.decline('full');"
+        } else {
+            ""
+        });
+        source = source.replace(
+            "if (fields.value!==7) throw Error('next 后字段未同步');",
+            "if(fields.value!==1) throw Error('next 后字段未同步');",
+        );
+        match position {
+            "replace" => source = source.replace("api.handlers.before('a:b-test.slot'", "api.handlers.replace('a:b-test.slot',{id:'replacement'},ctx=>{ctx.state={count:123};ctx.target.fields.value=9;return api.decline('full')});api.handlers.before('a:b-test.slot'"),
+            "before" => {
+                source = source.replace(
+                    "ctx.state={count:100};",
+                    "ctx.state={count:100};return api.decline('full');",
+                )
+            }
+            "wrap-before" => {
+                source = source.replace(
+                    "const fields=ctx.target.fields;",
+                    "return api.decline('full');const fields=ctx.target.fields;",
+                )
+            }
+            "wrap-after" => {
+                source = source.replace(
+                    "ctx.state={count:999};",
+                    "ctx.state={count:999};return api.decline('full');",
+                )
+            }
+            "after" => {
+                source = source.replace(
+                    "ctx.state={count:888};",
+                    "ctx.state={count:888};return api.decline('full');",
+                )
+            }
+            _ => {}
+        }
+        // 内层正常拒绝被 wrap 捕获时不刷新旧引用，也不需要 Mod 主动退出。
+        if matches!(position, "process" | "replace") {
+            source = source.replace("if(fields.value!==1) throw Error('next 后字段未同步');", "");
+        }
+        for binary in [false, true] {
+            let mut e = engine(&[("a", source.clone())], binary)?;
+            let id =
+                e.place_mod_object("W1N1", "a:counter", &json!({"owner":"p1","x":10,"y":12}))?;
+            e.run_player(
+                "p1",
+                &format!("__kkEmitExtensionIntent('a:b-test','{id}',{{}})"),
+            )?;
+            assert_eq!(e.get_game_time(), 1, "{position}");
+            assert!(!e.needs_mod_recovery(), "{position}");
+            assert_eq!(e.engine_mod_state("a"), Value::Null, "{position}");
+            assert_eq!(
+                e.get_object(&id).unwrap()["fields"]["value"],
+                json!(0),
+                "{position}"
+            );
+            assert_eq!(
+                e.get_object(&id).unwrap()["pos"]["x"],
+                json!(10),
+                "{position}"
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn decline_cannot_downgrade_a_later_exception_or_an_earlier_conversion_fault() -> anyhow::Result<()>
+{
+    for source in [
+        decline_package("return api.decline('full');").replace(
+            "if (fields.value!==7) throw Error('next 后字段未同步');",
+            "throw Error('拒绝后的异常');",
+        ),
+        decline_package(
+            "try { Deno.core.ops.op_mod_chain_write('2','a:b-test.process',{state:{bad:Symbol('bad')}}); }catch(e){} return api.decline('full');",
+        ),
+    ] {
+        for binary in [false, true] {
+            let mut e = engine(&[("a", source.clone())], binary)?;
+            let id =
+                e.place_mod_object("W1N1", "a:counter", &json!({"owner":"p1","x":10,"y":12}))?;
+            let old = e.get_object(&id).unwrap();
+            let error = e.run_player("p1", &format!("Memory.committed=true;for(const key of ['a:a-accept','a:b-test']) __kkEmitExtensionIntent(key,'{id}',{{}})" )).unwrap_err();
+            assert!(
+                error.to_string().contains("异常") || error.to_string().contains("转换失败"),
+                "{error}"
+            );
+            assert_eq!(e.get_game_time(), 0);
+            assert_eq!(e.get_object(&id).unwrap(), old);
+            assert_eq!(e.engine_mod_state("a"), Value::Null);
+            assert!(e.needs_mod_recovery());
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn builtin_slots_reject_decline_until_their_native_writes_can_be_restored() -> anyhow::Result<()> {
+    for slot in ["builtin:link.tick", "builtin:link.transfer"] {
+        let source = package(&format!(
+            "api.handlers.before('{slot}',{{id:'reject'}},()=>api.decline('full'));"
+        ));
+        let mut e = engine(&[("a", source)], false)?;
+        let initial_cooldown = if slot.ends_with("tick") { 10 } else { 0 };
+        let id = link(&mut e, 20, 100, initial_cooldown)?;
+        let error = if slot.ends_with("tick") {
+            e.tick(1).unwrap_err()
+        } else {
+            let target = link(&mut e, 21, 0, 0)?;
+            e.run_player(
+                "p1",
+                &format!(
+                    "Game.getObjectById('{id}').transferEnergy(Game.getObjectById('{target}'),25)"
+                ),
+            )
+            .unwrap_err()
+        };
+        assert!(error.to_string().contains("尚不支持正常拒绝"), "{error}");
+        assert_eq!(e.get_game_time(), 0);
+        assert_eq!(cooldown(&e, &id), json!(initial_cooldown));
+        assert!(e.needs_mod_recovery());
     }
     Ok(())
 }

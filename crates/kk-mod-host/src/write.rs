@@ -1,22 +1,8 @@
 //! 写入封套只保留候选成员；全部值仍按原 JSON 转换规则访问和校验。
 
-use deno_core::v8;
-use serde::de::{DeserializeOwned, MapAccess, SeqAccess, Visitor};
+use serde::de::{MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
-
-pub(crate) fn from_v8<'s, 'i, T: DeserializeOwned>(
-    scope: &mut v8::PinScope<'s, 'i>,
-    value: v8::Local<'s, v8::Value>,
-) -> Result<T, deno_core::serde_v8::Error> {
-    // 固定版本 serde_v8 对 Symbol 等未知 ValueType 会 panic，而非返回 Err。
-    // 这里只围住同步转换，期间没有候选/OpState 借用；退出后由调用方留存
-    // 故障并毒化 realm。不格式化 panic 载荷，不把 unwind 带过 V8 op 边界。
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        deno_core::serde_v8::from_v8(scope, value)
-    }))
-    .unwrap_or(Err(deno_core::serde_v8::Error::UnsupportedType))
-}
 
 /// 拥有的写入候选；缺失 state 等同 null，缺失 target.fields 表示不写字段。
 #[derive(Debug, Default)]
@@ -128,7 +114,7 @@ mod tests {
         deno_core::scope!(scope, runtime);
         v8::tc_scope!(let tc, scope);
         let input = v8::Local::new(tc, input);
-        from_v8(tc, input).map_err(|error| error.to_string())
+        crate::v8_convert::from_v8(tc, input).map_err(|error| error.to_string())
     }
 
     fn trace(runtime: &mut JsRuntime) -> String {

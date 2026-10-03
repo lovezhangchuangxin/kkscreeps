@@ -22,10 +22,11 @@ mod manifest;
 mod package;
 mod profile;
 mod realm;
+mod v8_convert;
 mod write;
 
 pub use chain::{ChainContext, ChainHost, ChainTarget};
-pub use error::{ModHostError, ModHostResult};
+pub use error::{ModFault, ModFaultKind, ModHostError, ModHostResult};
 pub use limits::{ModExecutionLimits, ModVmLimits};
 pub use manifest::{ModManifest, SDK_API_VERSION, Version, VersionReq};
 pub use package::{ModPackage, discover_packages};

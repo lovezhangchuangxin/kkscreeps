@@ -1,0 +1,454 @@
+{
+  "status": "passed_with_performance_differences_to_investigate",
+  "git_base": "a8708d972582ec92ee282f1c3d4e319c93c4240f",
+  "baseline_description": "working-tree conversion-boundary slice before this continuation; its validation JSON is preserved separately",
+  "source_sha256": {
+    "crates/kk-mod-api/src/outcome.rs": "4192120e9d44af410785937cbc3113ffa9170170c40c1beba78ed742a0a446fa",
+    "crates/kk-mod-api/src/lib.rs": "6bbfb0f88f98992a94cc09f03a4b2b3fd452c46a69aac38254642c52a49a6571",
+    "crates/kk-engine/src/settle/contrib.rs": "7d44a4ef47652d30d0b98aedbd70d08712c8fadcaaf7964b21ae2ce5ec1d8d50",
+    "crates/kk-engine/src/settle/mod_intents.rs": "f8654b57ac05efdc6997dfa65284418d6476a6732e3af15e7cb25c6416538866",
+    "crates/kk-mod-host/src/chain.rs": "54a7efcaa1d11f05765d720eca3d3466f5cbb29bf2d99db45729c4021f144694",
+    "crates/kk-mod-host/src/realm.rs": "71b71cff86b61c2b84908e7a856cb56c9a62c6d46c39ecd71598657d09d3a9e4",
+    "crates/kk-mod-host/src/sdk.js": "c19b7fea54a7e20ba89a84bc76d23712220768ae2e9849281cc5784f0dcc9859",
+    "crates/kk-mod-host/tests/decline_tests.rs": "c5ef9313022f4a71fb9d30c44efdcceb5de64415b3f0f7714cb569ed5bf3172d",
+    "crates/kk-mod-host/tests/limits_tests.rs": "a014bb0678b314cf8e959d24b18a4d77506f7674df04d776e05726f15dea67f5",
+    "crates/kk-runtime/src/embed.rs": "f28afb6e7189f94c431892051f3e70e318260571f2759101753a043a671b2f34",
+    "crates/kk-runtime/tests/mod_chain_tests.rs": "fe8f0808a4843e5444a839b32d7b8e21e9c70b09f4a43980e5bab09c369a5379"
+  },
+  "checks": [
+    {
+      "command": "cargo test -p kk-runtime --test mod_chain_tests -p kk-mod-host --test decline_tests",
+      "exit_code": 0,
+      "passed": 21
+    },
+    {
+      "command": "cargo test --release -p kk-runtime --test mod_chain_tests -p kk-mod-host --test decline_tests",
+      "exit_code": 0,
+      "passed": 21
+    },
+    {
+      "command": "KKSCREEPS_BIN=\"$PWD/target/release/kkscreeps\" pnpm run check",
+      "exit_code": 0,
+      "rust_passed": 570,
+      "rust_ignored": 10,
+      "js_passed": 19,
+      "js_skipped": 0,
+      "markdown_files": 218,
+      "local_links": 1109
+    },
+    {
+      "command": "KKSCREEPS_BIN=\"$PWD/target/release/kkscreeps\" node compat/scripts/ratchet.mjs",
+      "exit_code": 0,
+      "passed": 1854,
+      "failed": 153,
+      "skipped": 907,
+      "regressions": 0,
+      "improvements": 0
+    },
+    {
+      "command": "cargo clippy -p kk-runtime --all-targets",
+      "exit_code": 0,
+      "reason": "final replace-chain-position test addition"
+    },
+    {
+      "command": "cargo fmt --all --check",
+      "exit_code": 0
+    },
+    {
+      "command": "node scripts/check-doc-links.mjs",
+      "exit_code": 0,
+      "markdown_files": 218,
+      "local_links": 1110
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    }
+  ],
+  "logs": {
+    "focused": {
+      "path": "/tmp/kkscreeps-decline-focused.log",
+      "sha256": "ff09a5f4ccec698eb796ffc591feb82c02f86f31587770ebee0b61823203e78f"
+    },
+    "release": {
+      "path": "/tmp/kkscreeps-decline-release.log",
+      "sha256": "a974c65bbaa64b5e41475d9fb98cc790531fb5f19b874a3ce6bc3438e4f23e58"
+    },
+    "release-tests": {
+      "path": "/tmp/kkscreeps-decline-release-tests.log",
+      "sha256": "5b8a402256280f01d493e9fc600dd6e56ff37636631a8a55ee2fd123527905a3"
+    },
+    "check": {
+      "path": "/tmp/kkscreeps-decline-check.log",
+      "sha256": "cf70da9228565c8eb63430f215c123ceb513ba6f77e677d14cfdae1c3b5e1816"
+    },
+    "compat-build": {
+      "path": "/tmp/kkscreeps-decline-compat-build.log",
+      "sha256": "8ebfcb81adc70e835a6524785828621e81b7c5f862b4f08cd015d332f07616fe"
+    },
+    "ratchet": {
+      "path": "/tmp/kkscreeps-decline-ratchet.log",
+      "sha256": "eda1e661196c303001e12d95d1e3f56629ee8b2d2ee22411e4c300d8fd46883f"
+    },
+    "perf": {
+      "path": "/tmp/kkscreeps-decline-perf.log",
+      "sha256": "5ac17dca6594248399994604ba1fd44f5d9f8b5306f9dc6ebb273dd67f4d006e"
+    },
+    "final-clippy": {
+      "path": "/tmp/kkscreeps-decline-final-clippy.log",
+      "sha256": "95aa1c1c7fcdef7637069152b8fe9197a83d7205ffdeb85167fec801e75214f8"
+    },
+    "final-docs": {
+      "path": "/tmp/kkscreeps-decline-final-docs.log",
+      "sha256": "23ef0637681d5797229f155ccc8e161489942941de378cb41eb3a53babb3e85d"
+    }
+  },
+  "upstream_pin": "34a630efa42908c117c19c25d2350fa2387bd633",
+  "release_binary_sha256": "a2cb4e285abebe0d640ce2a8cb8f778a92c962eba69706610c10cd3bdfec19e9",
+  "compatibility_report_sha256": "c1c6c840b00899e675ee2c612192148f7ab0e485d231fe8c31c7e91385be499b",
+  "performance": {
+    "report": "mod-intent-decline-perf-2026-10-04.json",
+    "sha256": "4b439f7cfdf0a388857d44b74a1c205b7ce58778076072a49f4032e2b402c0dd",
+    "command": "python3 scripts/mod-perf-compare.py --before /tmp/kkscreeps-decline-before --after target/release/kkscreeps --output docs/research/notes/mod-intent-decline-perf-2026-10-04.json --rooms 1 --links-per-room 400 --warmup 100 --ticks 500 --repetitions 3 --modes native empty chain",
+    "exit_code": 0,
+    "windows": 18,
+    "summary": {
+      "plain:native": {
+        "pairs": 3,
+        "metrics": {
+          "p50_ms": {
+            "before_runs": [
+              1.978584,
+              1.971459,
+              1.8809580000000001
+            ],
+            "after_runs": [
+              2.005833,
+              1.9853340000000002,
+              1.9096250000000001
+            ],
+            "median_before": 1.971459,
+            "median_after": 1.9853340000000002,
+            "paired_after_minus_before": [
+              0.02724900000000008,
+              0.013875000000000082,
+              0.028666999999999998
+            ],
+            "median_paired_delta": 0.02724900000000008,
+            "paired_after_over_before": [
+              1.0137719702575176,
+              1.0070379348492664,
+              1.0152406380153092
+            ],
+            "median_paired_ratio": 1.0137719702575176
+          },
+          "p95_ms": {
+            "before_runs": [
+              2.172583,
+              2.103333,
+              2.031542
+            ],
+            "after_runs": [
+              2.31025,
+              2.181292,
+              2.045333
+            ],
+            "median_before": 2.103333,
+            "median_after": 2.181292,
+            "paired_after_minus_before": [
+              0.13766699999999998,
+              0.07795899999999989,
+              0.013790999999999887
+            ],
+            "median_paired_delta": 0.07795899999999989,
+            "paired_after_over_before": [
+              1.0633655883342548,
+              1.0370645066663242,
+              1.0067884395203248
+            ],
+            "median_paired_ratio": 1.0370645066663242
+          },
+          "p99_ms": {
+            "before_runs": [
+              2.5284999999999997,
+              2.187417,
+              2.063459
+            ],
+            "after_runs": [
+              2.5952919999999997,
+              2.31425,
+              2.090375
+            ],
+            "median_before": 2.187417,
+            "median_after": 2.31425,
+            "paired_after_minus_before": [
+              0.06679199999999996,
+              0.12683299999999997,
+              0.02691599999999994
+            ],
+            "median_paired_delta": 0.06679199999999996,
+            "paired_after_over_before": [
+              1.0264156614593631,
+              1.0579830000406873,
+              1.013044116699193
+            ],
+            "median_paired_ratio": 1.0264156614593631
+          },
+          "cpu_core_ms_per_tick": {
+            "before_runs": [
+              1.9885239999999995,
+              1.9724059999999999,
+              1.9162479999999997
+            ],
+            "after_runs": [
+              2.031672,
+              2.0002619999999998,
+              1.9379520000000001
+            ],
+            "median_before": 1.9724059999999999,
+            "median_after": 2.0002619999999998,
+            "paired_after_minus_before": [
+              0.04314800000000041,
+              0.02785599999999988,
+              0.02170400000000039
+            ],
+            "median_paired_delta": 0.02785599999999988,
+            "paired_after_over_before": [
+              1.0216985060275865,
+              1.0141228530028807,
+              1.0113263001448667
+            ],
+            "median_paired_ratio": 1.0141228530028807
+          }
+        }
+      },
+      "plain:empty": {
+        "pairs": 3,
+        "metrics": {
+          "p50_ms": {
+            "before_runs": [
+              1.9654160000000003,
+              1.934,
+              1.997417
+            ],
+            "after_runs": [
+              1.985542,
+              1.989042,
+              1.925416
+            ],
+            "median_before": 1.9654160000000003,
+            "median_after": 1.985542,
+            "paired_after_minus_before": [
+              0.020125999999999644,
+              0.055042000000000035,
+              -0.07200099999999998
+            ],
+            "median_paired_delta": 0.020125999999999644,
+            "paired_after_over_before": [
+              1.0102400713131467,
+              1.0284601861427094,
+              0.963952945228763
+            ],
+            "median_paired_ratio": 1.0102400713131467
+          },
+          "p95_ms": {
+            "before_runs": [
+              2.078917,
+              2.078542,
+              2.050708
+            ],
+            "after_runs": [
+              2.080958,
+              2.114541,
+              2.0274170000000002
+            ],
+            "median_before": 2.078542,
+            "median_after": 2.080958,
+            "paired_after_minus_before": [
+              0.0020409999999997375,
+              0.03599899999999989,
+              -0.02329099999999995
+            ],
+            "median_paired_delta": 0.0020409999999997375,
+            "paired_after_over_before": [
+              1.0009817611766125,
+              1.017319351737901,
+              0.988642459092177
+            ],
+            "median_paired_ratio": 1.0009817611766125
+          },
+          "p99_ms": {
+            "before_runs": [
+              2.22,
+              2.189291,
+              2.128291
+            ],
+            "after_runs": [
+              2.3555,
+              2.2589580000000002,
+              2.0927089999999997
+            ],
+            "median_before": 2.189291,
+            "median_after": 2.2589580000000002,
+            "paired_after_minus_before": [
+              0.13549999999999995,
+              0.06966700000000037,
+              -0.035582000000000225
+            ],
+            "median_paired_delta": 0.06966700000000037,
+            "paired_after_over_before": [
+              1.061036036036036,
+              1.0318217176245645,
+              0.9832814215725199
+            ],
+            "median_paired_ratio": 1.0318217176245645
+          },
+          "cpu_core_ms_per_tick": {
+            "before_runs": [
+              1.9765299999999997,
+              1.9542059999999997,
+              2.0025139999999997
+            ],
+            "after_runs": [
+              1.9789460000000003,
+              1.976512,
+              1.9364780000000004
+            ],
+            "median_before": 1.9765299999999997,
+            "median_after": 1.976512,
+            "paired_after_minus_before": [
+              0.00241600000000064,
+              0.02230600000000038,
+              -0.06603599999999932
+            ],
+            "median_paired_delta": 0.00241600000000064,
+            "paired_after_over_before": [
+              1.0012223442092965,
+              1.0114143544744005,
+              0.9670234515214379
+            ],
+            "median_paired_ratio": 1.0012223442092965
+          }
+        }
+      },
+      "plain:chain": {
+        "pairs": 3,
+        "metrics": {
+          "p50_ms": {
+            "before_runs": [
+              26.263167,
+              26.243959,
+              26.160584
+            ],
+            "after_runs": [
+              26.296542,
+              26.239542,
+              26.103541
+            ],
+            "median_before": 26.243959,
+            "median_after": 26.239542,
+            "paired_after_minus_before": [
+              0.03337499999999949,
+              -0.004417000000000115,
+              -0.05704300000000018
+            ],
+            "median_paired_delta": -0.004417000000000115,
+            "paired_after_over_before": [
+              1.0012707911425913,
+              0.9998316946006508,
+              0.9978195058642422
+            ],
+            "median_paired_ratio": 0.9998316946006508
+          },
+          "p95_ms": {
+            "before_runs": [
+              28.395583,
+              27.496917,
+              28.923041
+            ],
+            "after_runs": [
+              27.281708,
+              27.128916999999998,
+              26.762708
+            ],
+            "median_before": 28.395583,
+            "median_after": 27.128916999999998,
+            "paired_after_minus_before": [
+              -1.1138750000000002,
+              -0.3680000000000021,
+              -2.1603330000000014
+            ],
+            "median_paired_delta": -1.1138750000000002,
+            "paired_after_over_before": [
+              0.960772948384261,
+              0.9866166814265032,
+              0.9253075428686769
+            ],
+            "median_paired_ratio": 0.960772948384261
+          },
+          "p99_ms": {
+            "before_runs": [
+              42.978,
+              32.031042,
+              35.731291
+            ],
+            "after_runs": [
+              27.726792,
+              28.122874999999997,
+              27.431458
+            ],
+            "median_before": 35.731291,
+            "median_after": 27.726792,
+            "paired_after_minus_before": [
+              -15.251208000000002,
+              -3.9081670000000024,
+              -8.299833
+            ],
+            "median_paired_delta": -8.299833,
+            "paired_after_over_before": [
+              0.6451391874912745,
+              0.877988140379573,
+              0.7677152779058557
+            ],
+            "median_paired_ratio": 0.7677152779058557
+          },
+          "cpu_core_ms_per_tick": {
+            "before_runs": [
+              27.568588,
+              27.321108,
+              27.423204
+            ],
+            "after_runs": [
+              27.34625,
+              27.262162000000004,
+              27.091216
+            ],
+            "median_before": 27.423204,
+            "median_after": 27.262162000000004,
+            "paired_after_minus_before": [
+              -0.22233799999999704,
+              -0.05894599999999528,
+              -0.33198799999999906
+            ],
+            "median_paired_delta": -0.22233799999999704,
+            "paired_after_over_before": [
+              0.9919350965671511,
+              0.997842474031434,
+              0.987893901821246
+            ],
+            "median_paired_ratio": 0.9919350965671511
+          }
+        }
+      }
+    }
+  },
+  "limits": [
+    "decline supported only for hosted Mod object intents; builtin action/tick and pure Rust callbacks remain outside this slice",
+    "ordinary direct ModRealm callers must restore domain candidates themselves after Declined",
+    "no new per-intent billing or player-facing rejection event; existing player execution charge is retained",
+    "short paired native CPU +1.41% and P50 +1.38% not causally attributed; no zero-regression claim",
+    "short chain P99 improvement does not settle the previously observed tail-latency issue",
+    "the fixed performance fixture covers link settlement, not the cost of this new object-intent rollback or production end-to-end workload"
+  ],
+  "final_test_matrix_note": "Focused debug and release suites include replace-chain rejection; full workspace and compatibility ran before the final test-only matrix expansion. No implementation changes after those checks or performance capture."
+}

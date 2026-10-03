@@ -65,6 +65,14 @@ fn resource_fault_matrix() -> Result<(), Box<dyn std::error::Error>> {
         "center-cpu",
         "write-getter-cpu",
         "write-getter-wall",
+        "declare-getter-cpu",
+        "declare-getter-wall",
+        "invoke-getter-cpu",
+        "invoke-getter-wall",
+        "probe-script-cpu",
+        "probe-script-wall",
+        "probe-getter-cpu",
+        "probe-getter-wall",
         "array-heap",
         "external-memory",
         "cumulative",
@@ -120,6 +128,9 @@ fn resource_fault_child() -> Result<(), Box<dyn std::error::Error>> {
         "module-wall-prepare" | "module-cpu-prepare" => "Error.prepareStackTrace=()=>{while(true){}};while(true){} export default function register(){}".into(),
         "module-wall-name" | "module-cpu-name" => "Object.defineProperty(Error.prototype,'name',{get(){while(true){}}});while(true){} export default function register(){}".into(),
         "register-cpu" => "export default function register(){while(true){}}".into(),
+        "declare-getter-cpu" | "declare-getter-wall" => "export default function register(){try{Deno.core.ops.op_mod_declare('rule',{get value(){while(true){}}});}catch(e){}}".into(),
+        "invoke-getter-cpu" | "invoke-getter-wall" => "export default function register(api){api.handlers.after('builtin:link.tick',{id:'bad'},ctx=>{ctx.state={get value(){while(true){}}};})}".into(),
+        "probe-script-cpu" | "probe-script-wall" | "probe-getter-cpu" | "probe-getter-wall" => "export default function register(){}".into(),
         "microtasks" => "await new Promise(()=>{const spin=()=>Promise.resolve().then(spin);spin()}); export default function register(){}".into(),
         "array-heap" => "export default function register(api){api.handlers.after('builtin:link.tick',{id:'bad'},()=>{globalThis.a=[];while(true){a.push(Array(8192).fill(Math.random()));}})}".into(),
         "external-memory" => "export default function register(api){api.handlers.after('builtin:link.tick',{id:'bad'},()=>{globalThis.a=new ArrayBuffer(48*1024*1024);})}".into(),
@@ -133,16 +144,16 @@ fn resource_fault_child() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::write(dir.join("server.js"), source)?;
     let packages = discover_packages(&root.0)?;
     let mut limits = ModVmLimits::default();
-    if case.starts_with("module-cpu") || case == "register-cpu" {
+    if case.starts_with("module-cpu") || case == "register-cpu" || case == "declare-getter-cpu" {
         limits.registration.cpu = Duration::from_millis(10);
     }
     limits.settlement.cpu = Duration::from_millis(10);
     limits.settlement.wall = Duration::from_secs(2);
-    if case == "write-getter-wall" {
+    if case.ends_with("-wall") && !case.starts_with("module-") && !case.starts_with("declare-") {
         limits.settlement.cpu = Duration::from_secs(2);
         limits.settlement.wall = Duration::from_millis(30);
     }
-    if case.starts_with("module-wall") || case == "microtasks" {
+    if case.starts_with("module-wall") || case == "microtasks" || case == "declare-getter-wall" {
         limits.registration.cpu = Duration::from_secs(2);
         limits.registration.wall = Duration::from_millis(30);
     }
@@ -156,19 +167,37 @@ fn resource_fault_child() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     };
     let start = Instant::now();
-    let error = if case.starts_with("module-") || case == "register-cpu" || case == "microtasks" {
+    let error = if case.starts_with("module-")
+        || case == "register-cpu"
+        || case == "microtasks"
+        || case.starts_with("declare-")
+    {
         realm.register(&packages, options).unwrap_err().to_string()
     } else {
         // 正常注册用宽限额，保持本例只测试对应结算路径。
         realm.register(&packages, options)?;
         realm.begin_settlement()?;
-        if case == "cumulative" {
+        if case.starts_with("probe-") {
+            let code = if case.starts_with("probe-script-") {
+                "while(true){}"
+            } else {
+                "({get value(){while(true){}}})"
+            };
+            realm.evaluate_probe(code).unwrap_err().to_string()
+        } else if case.starts_with("invoke-") {
+            realm
+                .invoke("test:handler.bad", serde_json::json!({"state":null}))
+                .unwrap_err()
+                .to_string()
+        } else if case == "cumulative" {
             let mut error = None;
             let mut successes = 0;
             for _ in 0..10000 {
                 match realm.invoke_chain("builtin:link.tick", Box::new(Host)) {
-                    Ok(()) => successes += 1,
+                    Ok(kk_mod_api::SlotOutcome::Completed) => successes += 1,
+                    Ok(kk_mod_api::SlotOutcome::Declined(_)) => panic!("tick 不允许正常拒绝"),
                     Err(e) => {
+                        assert_chain_resource_fault(&e);
                         error = Some(e.to_string());
                         break;
                     }
@@ -177,10 +206,11 @@ fn resource_fault_child() -> Result<(), Box<dyn std::error::Error>> {
             assert!(successes > 1, "应累计多个单次未超限调用");
             error.expect("整轮累计 CPU 应超限")
         } else {
-            realm
+            let error = realm
                 .invoke_chain("builtin:link.tick", Box::new(Host))
-                .unwrap_err()
-                .to_string()
+                .unwrap_err();
+            assert_chain_resource_fault(&error);
+            error.to_string()
         }
     };
     let expected = if case.contains("heap") || case.contains("memory") {
@@ -262,4 +292,12 @@ fn native_wait_is_not_cpu_and_queued_checks_use_current_call_budget()
         realm.invoke_chain("builtin:link.tick", Box::new(Host))?;
     }
     Ok(())
+}
+
+// 共享累计预算的超限只定位槽，不把当前 wrap 当作单一责任 Mod。
+fn assert_chain_resource_fault(error: &kk_mod_host::ModHostError) {
+    let fault = error.fault.as_ref().expect("资源故障来源");
+    assert_eq!(fault.kind, kk_mod_host::ModFaultKind::Resource);
+    assert_eq!(fault.slot.as_deref(), Some("builtin:link.tick"));
+    assert!(fault.binding.is_none());
 }

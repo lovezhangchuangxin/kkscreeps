@@ -11,7 +11,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
-use kk_mod_api::{ContributionPlan, Dispatch, Key, SlotPlan};
+use kk_mod_api::{ContributionPlan, Dispatch, Key, SlotOutcome, SlotPlan};
 use kk_world::ObjId;
 use serde_json::Value;
 
@@ -253,9 +253,9 @@ struct ExtChained {
 }
 
 impl ExtSlot {
-    fn run(&self, ctx: &RoomCtx, id: ObjId, args: &Value) -> Result<(), String> {
+    fn run(&self, ctx: &RoomCtx, id: ObjId, args: &Value) -> Result<SlotOutcome, String> {
         match self {
-            ExtSlot::Process(f) => f(ctx, id, args),
+            ExtSlot::Process(f) => f(ctx, id, args).map(|()| SlotOutcome::Completed),
             ExtSlot::Hosted(slot) => {
                 slot.executor
                     .run(&slot.plan, ctx, SlotCall::Extension { id, args })
@@ -265,6 +265,7 @@ impl ExtSlot {
                     f(ctx, id, args)?;
                 }
                 run_ext_wrapped(&chain.wraps, &chain.center, &chain.after, ctx, id, args)
+                    .map(|()| SlotOutcome::Completed)
             }
         }
     }
@@ -319,7 +320,13 @@ pub enum SlotCall<'a> {
 /// 整槽宿主执行接口：引擎只提供冻结计划、候选与权威参数，保持对 V8 无依赖。
 /// 无扩展的 builtin 槽不会调用本接口；JS 宿主在自身 VM 内完成组合。
 pub trait SlotExecutor {
-    fn run(&self, slot: &SlotPlan, ctx: &RoomCtx, call: SlotCall<'_>) -> Result<(), String>;
+    /// Declined 仅适用于扩展动作；返回前须撤销本次槽写入，保留此前候选。
+    fn run(
+        &self,
+        slot: &SlotPlan,
+        ctx: &RoomCtx,
+        call: SlotCall<'_>,
+    ) -> Result<SlotOutcome, String>;
 }
 
 struct HostedSlot {
@@ -498,7 +505,7 @@ impl ContributionDispatch {
         ctx: &RoomCtx,
         id: ObjId,
         args: &Value,
-    ) -> Result<(), String> {
+    ) -> Result<SlotOutcome, String> {
         let chain = self
             .ext
             .get(slot)
@@ -813,15 +820,18 @@ impl ActionSlot {
     fn run(&self, ctx: &RoomCtx, id: ObjId, d: &IntentData) -> Result<(), String> {
         match self {
             ActionSlot::Native(f) => native_action(*f)(ctx, id, d),
-            ActionSlot::Hosted(slot) => slot.executor.run(
-                &slot.plan,
-                ctx,
-                SlotCall::Action {
-                    id,
-                    data: d,
-                    native: super::structures::link_transfer,
-                },
-            ),
+            ActionSlot::Hosted(slot) => slot
+                .executor
+                .run(
+                    &slot.plan,
+                    ctx,
+                    SlotCall::Action {
+                        id,
+                        data: d,
+                        native: super::structures::link_transfer,
+                    },
+                )
+                .and_then(require_completed),
             ActionSlot::Chained(chain) => {
                 for f in &chain.before {
                     f(ctx, id, d)?;
@@ -842,14 +852,17 @@ impl TickSlot {
     fn run(&self, ctx: &RoomCtx, id: ObjId) -> Result<(), String> {
         match self {
             TickSlot::Native(f) => native_tick(*f)(ctx, id),
-            TickSlot::Hosted(slot) => slot.executor.run(
-                &slot.plan,
-                ctx,
-                SlotCall::Tick {
-                    id,
-                    native: super::economy::link_cooldown_tick,
-                },
-            ),
+            TickSlot::Hosted(slot) => slot
+                .executor
+                .run(
+                    &slot.plan,
+                    ctx,
+                    SlotCall::Tick {
+                        id,
+                        native: super::economy::link_cooldown_tick,
+                    },
+                )
+                .and_then(require_completed),
             TickSlot::Chained(chain) => {
                 for f in &chain.before {
                     f(ctx, id)?;
@@ -993,5 +1006,13 @@ impl TickHandler {
             TickHandler::Replace(_) => "replace",
             TickHandler::After(_) => "after",
         }
+    }
+}
+
+// 未接局部回滚的 native 槽不能把宿主 Declined 当成功，以免发布部分写入。
+fn require_completed(outcome: SlotOutcome) -> Result<(), String> {
+    match outcome {
+        SlotOutcome::Completed => Ok(()),
+        SlotOutcome::Declined(_) => Err("内建槽尚不支持正常拒绝".into()),
     }
 }

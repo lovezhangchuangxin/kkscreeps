@@ -5,7 +5,7 @@
 //! 目标对象类型匹配接收者、玩家通过归属字段授权。任何一项不满足都
 //! 是玩家侧错误：意图丢弃，本轮照常结算（与未知 vanilla 动作同待遇）。
 //! 校验全部通过后执行槽处理链，链内失败（含 JS 处理器异常）使本轮
-//! 候选失败。
+//! 候选失败；宿主正常拒绝已撤销本次动作写入，后续动作继续结算。
 //!
 //! 归属策略：类型未声明 owner_field 时玩家不可执行其对象上的任何
 //! 扩展意图（fail-closed）；显式授权策略声明随 SDK 面冻结再开放。
@@ -90,7 +90,7 @@ pub(crate) fn process_object_ext_intents(
         let slot = descriptor.slot.clone();
         let contrib = ctx.borrow().plane.contrib.clone();
         let room_name = ctx.borrow().room.name.clone();
-        contrib
+        let _outcome = contrib
             .run_ext(&slot, ctx, id, args)
             .map_err(|error| format!("动作 {intent_key} @ {room_name}: {error}"))?;
     }

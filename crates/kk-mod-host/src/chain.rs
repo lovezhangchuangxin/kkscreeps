@@ -4,10 +4,10 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
-use crate::{ChainProfiler, ChainWrite};
+use crate::{ChainProfiler, ChainWrite, ModFault, ModFaultKind, ModHostError};
 use deno_core::{OpState, op2, v8};
 use deno_error::JsErrorBox;
-use kk_mod_api::{ContributionPlan, Dispatch};
+use kk_mod_api::{ContributionPlan, Decline, Dispatch, Key, Stage};
 use serde::{Serialize, Serializer};
 use serde_json::Value;
 
@@ -58,6 +58,7 @@ pub(crate) struct ChainProgram {
     pub center: String,
     pub after: Vec<String>,
     pub native_center: bool,
+    pub decline_allowed: bool,
 }
 
 impl ChainProgram {
@@ -90,6 +91,8 @@ impl ChainProgram {
                 center: center.to_string(),
                 after: names(after),
                 native_center: center.namespace() == "builtin",
+                decline_allowed: slot.key.namespace() != "builtin"
+                    && slot.stage == Stage::ObjectAction,
             });
         }
         Ok(programs)
@@ -110,7 +113,12 @@ pub(crate) struct ActiveChain {
     pub token: String,
     pub bindings: Rc<BTreeSet<String>>,
     pub host: Box<dyn ChainHost>,
-    pub fault: Option<String>,
+    pub slot: String,
+    pub fault: Option<ModHostError>,
+    /// 仅 SDK 首次认领的故障可补充一次文本；不允许传播阶段改写诊断。
+    pub fault_detail_pending: bool,
+    pub declined: Option<Decline>,
+    pub decline_allowed: bool,
     pub native_called: bool,
     pub native_allowed: bool,
     pub profiler: Option<ChainProfiler>,
@@ -136,7 +144,10 @@ fn active<'a>(state: &'a mut OpState, token: &str) -> Result<&'a mut ActiveChain
 impl ActiveChain {
     fn check_fault(&self) -> Result<(), JsErrorBox> {
         match &self.fault {
-            Some(error) => Err(JsErrorBox::generic(error.clone())),
+            Some(error) => Err(JsErrorBox::generic(error.message.clone())),
+            None if self.declined.is_some() => {
+                Err(JsErrorBox::generic("本次槽已正常拒绝，候选访问已关闭"))
+            }
             None => Ok(()),
         }
     }
@@ -149,13 +160,33 @@ impl ActiveChain {
             return Ok(());
         }
         let error = format!("绑定 {binding} 不属于本次槽调用");
-        self.fault.get_or_insert(error.clone());
+        self.record_fault(ModFaultKind::Capability, None, error.clone());
         Err(JsErrorBox::generic(error))
     }
 
-    fn outcome<T>(&mut self, result: Result<T, String>) -> Result<T, JsErrorBox> {
+    fn record_fault(&mut self, kind: ModFaultKind, binding: Option<&str>, message: String) {
+        // 首个领域/处理器错误优先，外层 wrap 的传播不能改写来源。
+        self.fault.get_or_insert_with(|| {
+            ModHostError::execution(
+                self.slot.clone(),
+                message,
+                ModFault {
+                    slot: Some(self.slot.clone()),
+                    binding: binding.and_then(|key| Key::new(key).ok()),
+                    kind,
+                },
+            )
+        });
+    }
+
+    fn outcome<T>(
+        &mut self,
+        kind: ModFaultKind,
+        binding: Option<&str>,
+        result: Result<T, String>,
+    ) -> Result<T, JsErrorBox> {
         result.map_err(|error| {
-            self.fault.get_or_insert(error.clone());
+            self.record_fault(kind, binding, error.clone());
             JsErrorBox::generic(error)
         })
     }
@@ -177,7 +208,7 @@ pub(crate) fn op_mod_chain_read(
             .read(&binding)
             .map_err(|error| format!("处理器 {binding}: {error}"))
     };
-    let context = chain.outcome(result)?;
+    let context = chain.outcome(ModFaultKind::Read, Some(&binding), result)?;
     Ok(ChainRead {
         context,
         profiler: chain.profiler.clone(),
@@ -205,7 +236,7 @@ pub(crate) fn op_mod_chain_write<'s, 'i>(
         v8::tc_scope!(let tc, scope);
         let result = {
             let _timer = profiler.as_ref().map(|p| p.measure("write_from_v8"));
-            crate::write::from_v8::<ChainWrite>(tc, context)
+            crate::v8_convert::from_v8::<ChainWrite>(tc, context)
         };
         result.map_err(|error| format!("处理器 {binding}: 上下文转换失败: {error}"))
     };
@@ -213,13 +244,13 @@ pub(crate) fn op_mod_chain_write<'s, 'i>(
     let chain = active(&mut state, &token)?;
     // getter 内被捕获的候选故障仍阻止外层写回；转换失败同样留存。
     chain.checked_binding(&binding)?;
-    let context = chain.outcome(context)?;
+    let context = chain.outcome(ModFaultKind::WriteConversion, Some(&binding), context)?;
     let _timer = chain.profiler.as_ref().map(|p| p.measure("host_write"));
     let result = chain
         .host
         .write(&binding, context)
         .map_err(|error| format!("处理器 {binding}: {error}"));
-    chain.outcome(result)
+    chain.outcome(ModFaultKind::Write, Some(&binding), result)
 }
 
 #[op2(fast)]
@@ -230,20 +261,112 @@ pub(crate) fn op_mod_chain_native(
     let chain = active(state, &token)?;
     chain.check_fault()?;
     if !chain.native_allowed || chain.native_called {
-        return chain.outcome(Err("本次槽调用没有可执行的 native 中心，或已执行过".into()));
+        return chain.outcome(
+            ModFaultKind::Capability,
+            None,
+            Err("本次槽调用没有可执行的 native 中心，或已执行过".into()),
+        );
     }
     chain.native_called = true;
     let _timer = chain.profiler.as_ref().map(|p| p.measure("host_native"));
     let result = chain.host.native();
-    chain.outcome(result)
+    chain.outcome(ModFaultKind::Native, None, result)
 }
 
 #[op2(fast)]
 pub(crate) fn op_mod_chain_fault(
     state: &mut OpState,
     #[string] token: String,
+    #[string] binding: String,
+    #[string] kind: String,
+    #[string] error: String,
+) -> Result<bool, JsErrorBox> {
+    let chain = active(state, &token)?;
+    // 故障上报允许拒绝之后的新异常，但不得覆盖更早的故障。
+    let binding = if binding.is_empty() {
+        None
+    } else {
+        if !chain.bindings.contains(&binding) {
+            return chain.outcome(
+                ModFaultKind::Capability,
+                None,
+                Err("故障来源绑定不属于本次槽调用".into()),
+            );
+        }
+        Some(binding.as_str())
+    };
+    let kind = match kind.as_str() {
+        "handler" => ModFaultKind::Handler,
+        "control" => ModFaultKind::Control,
+        "context" => ModFaultKind::Context,
+        "chain" if binding.is_none() => ModFaultKind::Chain,
+        _ => {
+            return chain.outcome(
+                ModFaultKind::Capability,
+                None,
+                Err("无效的故障来源阶段".into()),
+            );
+        }
+    };
+    if kind != ModFaultKind::Chain && binding.is_none() {
+        return chain.outcome(
+            ModFaultKind::Capability,
+            None,
+            Err("处理器故障缺少来源绑定".into()),
+        );
+    }
+    if chain.fault.is_some() {
+        return Ok(false);
+    }
+    chain.record_fault(kind, binding, error);
+    chain.fault_detail_pending = true;
+    Ok(true)
+}
+
+/// 来源先留存并关闭候选访问，JS 格式化完成后只补充诊断文本。
+#[op2(fast)]
+pub(crate) fn op_mod_chain_fault_detail(
+    state: &mut OpState,
+    #[string] token: String,
     #[string] error: String,
 ) -> Result<(), JsErrorBox> {
-    active(state, &token)?.fault.get_or_insert(error);
+    let chain = active(state, &token)?;
+    if std::mem::take(&mut chain.fault_detail_pending) {
+        chain.fault.as_mut().expect("认领来源时已留存故障").message = error;
+    }
+    Ok(())
+}
+
+/// 拒绝是已校验绑定的正常结局；不能覆盖已留存的异常。
+#[op2(fast)]
+pub(crate) fn op_mod_chain_decline(
+    state: &mut OpState,
+    #[string] token: String,
+    #[string] binding: String,
+    #[string] code: String,
+) -> Result<(), JsErrorBox> {
+    let chain = active(state, &token)?;
+    chain.checked_binding(&binding)?;
+    if !chain.decline_allowed {
+        return chain.outcome(
+            ModFaultKind::Control,
+            Some(&binding),
+            Err("该槽尚不支持正常拒绝；仅 Mod 自有对象动作已接局部回滚".into()),
+        );
+    }
+    if code.is_empty()
+        || code.len() > 128
+        || !code
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || b"._:-".contains(&c))
+    {
+        return chain.outcome(
+            ModFaultKind::Control,
+            Some(&binding),
+            Err("拒绝代码须为 1..128 字节的 ASCII 字母、数字或 ._:-".into()),
+        );
+    }
+    let binding = Key::new(binding).map_err(JsErrorBox::generic)?;
+    chain.declined = Some(Decline { binding, code });
     Ok(())
 }
