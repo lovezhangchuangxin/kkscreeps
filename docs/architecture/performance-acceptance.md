@@ -59,9 +59,17 @@ python3 scripts/mod-perf-baseline.py --profile --scenarios 400 --warmup 100 --ti
 
 op 计时来自 deno_core 的 dispatch/completed/error 事件，包含参数/返回转换与 host 方法；host 计时包含候选访问、字段解析/校验与 namespace 写回。JS 调用包含 op，整槽包含 JS 和预算，不能将所有阶段相加；op 与 host 的差值仍包含绑定检查、包装和插桩开销，不能解释为纯 JSON 成本。op 的 errors 来自错误事件，其他阶段只记录次数与耗时。getter 引发嵌套 op 时，op 耗时同样为包含耗时。
 
+诊断报告 v2 增加 `read_to_v8`，围住读取封套的真实 serde 序列化调用；它包含在 op_read 内，与 host_read 分开。CLI 开启诊断时声明 `profile_schema_version: 2`；报告门要求六次读取对应六次转换，缺失或计数不符即失败。没有版本字段的历史报告按 v1 校验原阶段集合，支持旧二进制前后对照；未知版本拒绝。默认关闭时版本与 profile 均为 null。
+
 开启诊断会增加计时和 op 包装开销，诊断结果与无插桩基线分开汇总。报告门校验各阶段的准确调用次数、错误数与预热排除；无插桩采集拒绝诊断报告。
 
+汇总前校验墙钟分位数与进程 CPU 为有限非负数，分位数有序；报告提供最大值时不得小于 P99。计数与阶段纳秒须为整数，布尔值不能充当数值。上下文封套及门禁的复审修复见 [复审记录](../research/notes/mod-context-review-2026-10-03.md)。
+
 当前字段缓存的前后对照与归因见 [热路径记录](../research/notes/mod-attribution-2026-10-03.md)。
+
+上下文直接装配与 state 移交的后续对照见 [复制优化记录](../research/notes/mod-context-copy-2026-10-03.md)。
+
+固定读取封套与直接转换计时见 [类型化封套记录](../research/notes/mod-context-envelope-2026-10-03.md)。
 
 前后对照探针按模式核验包与预算身份：native、empty、chain 各自跨二进制版本和重复轮次保持一致。不同模式之间允许使用不同包；相同对象终态不能替代该身份校验。发现变化即拒绝成功汇总，保留此前的 partial 记录。
 

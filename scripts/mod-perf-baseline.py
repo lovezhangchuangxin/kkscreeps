@@ -8,6 +8,7 @@
 import argparse
 import hashlib
 import json
+import math
 import platform
 import statistics
 import subprocess
@@ -19,6 +20,12 @@ MODES = ("native", "empty", "chain")
 SCENARIOS = {"100": (1, 100), "400": (1, 400), "1600": (4, 400)}
 
 
+def valid_measurement(value):
+    # bool 是 Python int 的子类，但不是报告中的合法计时数值。
+    return type(value) in (int, float) and value >= 0 and (
+        type(value) is int or math.isfinite(value))
+
+
 def validate_report(report, mode, rooms, links, warmup, ticks, profile=False):
     expected = {"tool": "kkscreeps mod-perf-probe", "mode": mode, "rooms": rooms,
                 "links_per_room": links, "warmup": warmup, "ticks": ticks}
@@ -27,10 +34,20 @@ def validate_report(report, mode, rooms, links, warmup, ticks, profile=False):
     if report.get("metadata", {}).get("debug_assertions") is not False:
         raise RuntimeError("基线要求 release 构建")
     wall = report.get("wall", {})
-    if wall.get("count") != ticks or any(key not in wall for key in ("p50_ms", "p95_ms", "p99_ms")):
+    if type(wall.get("count")) is not int or wall["count"] != ticks or any(key not in wall for key in ("p50_ms", "p95_ms", "p99_ms")):
         raise RuntimeError("结算采样数或分位数不符")
-    if report.get("process", {}).get("scope") != "current_process_all_threads":
+    quantiles = [wall[key] for key in ("p50_ms", "p95_ms", "p99_ms")]
+    if any(not valid_measurement(value) for value in quantiles) or quantiles != sorted(quantiles):
+        raise RuntimeError("结算分位数须为有序的有限非负数")
+    if any(key in wall and not valid_measurement(wall[key]) for key in ("max_ms", "sum_ms")):
+        raise RuntimeError("结算耗时无效")
+    if "max_ms" in wall and wall["max_ms"] < quantiles[-1]:
+        raise RuntimeError("结算最大值小于分位数")
+    process = report.get("process", {})
+    if process.get("scope") != "current_process_all_threads":
         raise RuntimeError("报告缺少进程 CPU/RSS")
+    if not valid_measurement(process.get("cpu_core_ms_per_tick")):
+        raise RuntimeError("进程 CPU 耗时无效")
     samples = report.get("profile")
     if profile:
         if not isinstance(samples, dict):
@@ -39,15 +56,21 @@ def validate_report(report, mode, rooms, links, warmup, ticks, profile=False):
         phases = {"slot": 1, "js_call": 1, "budget_start": 1, "budget_finish": 1,
                   "op_native": 1, "host_native": 1, "op_read": 6, "host_read": 6,
                   "op_write": 6, "host_write": 6} if mode == "chain" else {}
+        # 无版本字段的旧报告为 v1；v2 必须报告转换阶段，缺失不能静默通过。
+        version = report.get("profile_schema_version", 1)
+        if type(version) is not int or version not in (1, 2):
+            raise RuntimeError("诊断报告版本不支持")
+        if mode == "chain" and version == 2:
+            phases["read_to_v8"] = 6
         if set(samples) != set(phases):
             raise RuntimeError("诊断阶段集合不符")
         for phase, factor in phases.items():
             sample = samples[phase]
-            if sample.get("calls") != factor * expected_calls or sample.get("errors") != 0:
+            if type(sample.get("calls")) is not int or type(sample.get("errors")) is not int or sample["calls"] != factor * expected_calls or sample["errors"] != 0:
                 raise RuntimeError("诊断调用次数或错误计数不符")
-            if not isinstance(sample.get("wall_ns"), int) or sample["wall_ns"] < 0:
+            if type(sample.get("wall_ns")) is not int or sample["wall_ns"] < 0:
                 raise RuntimeError("诊断耗时无效")
-    elif samples is not None:
+    elif samples is not None or report.get("profile_schema_version") is not None:
         raise RuntimeError("无插桩基线不能包含诊断计时")
     for boundary, elapsed in (("before", 0), ("after_warmup", warmup), ("after_collection", warmup + ticks)):
         checked = report.get("checks", {}).get(boundary, {})

@@ -1,5 +1,7 @@
 //! 真实死循环与分配探针放在子进程，外层期限防止错误实现挂死整个测试任务。
-use kk_mod_host::{ChainHost, ModRealm, ModVmLimits, RegisterOptions, discover_packages};
+use kk_mod_host::{
+    ChainContext, ChainHost, ChainTarget, ModRealm, ModVmLimits, RegisterOptions, discover_packages,
+};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -14,7 +16,7 @@ impl Drop for Root {
 struct Host;
 struct SleepingHost(Duration);
 impl ChainHost for SleepingHost {
-    fn read(&mut self, binding: &str) -> Result<Value, String> {
+    fn read(&mut self, binding: &str) -> Result<ChainContext, String> {
         Host.read(binding)
     }
     fn write(&mut self, binding: &str, value: Value) -> Result<(), String> {
@@ -26,8 +28,17 @@ impl ChainHost for SleepingHost {
     }
 }
 impl ChainHost for Host {
-    fn read(&mut self, _: &str) -> Result<Value, String> {
-        Ok(json!({"tick":0,"room":"W1N1","state":null,"target":{"fields":{"cooldown":0}}}))
+    fn read(&mut self, _: &str) -> Result<ChainContext, String> {
+        Ok(ChainContext {
+            args: Value::Null,
+            room: "W1N1".into(),
+            state: Value::Null,
+            target: ChainTarget {
+                fields: json!({"cooldown":0}),
+                id: "test".into(),
+            },
+            tick: 0,
+        })
     }
     fn write(&mut self, _: &str, _: Value) -> Result<(), String> {
         Ok(())

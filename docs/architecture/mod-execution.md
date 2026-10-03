@@ -35,11 +35,15 @@ Rust 自定义处理器仍可经原有纯 Rust 执行器安装。它与 JS 执�
 
 runtime 在一次整槽能力内缓存已解析的目标字段，供重复读取及无变更写入的比较使用。改写字段前失效，进入 native 前也失效；内层返回后的读取重新取得 native 修改后的候选。缓存不跨槽、对象或 tick，不缓存 namespace state；改变字段值仍走原有领域校验。JS 上下文仍按下面的同步边界读写和刷新。
 
+`ChainHost::read` 返回类型化的 `ChainContext` / `ChainTarget` 固定封套，直接装配已拥有的 JSON 值。serde_v8 对封套走 struct 路径，使用静态成员键；args、state、fields 仍是开放 JSON 值。封套沿用原默认 JSON Map 键序（args/room/state/target/tick，target 内 fields/id），两条转换路径都创建空原型对象。缓存字段和固定 args 仍克隆出独立视图。写回保持动态 JSON 与领域校验，在目标字段校验成功后移走 op 交付的 state 值，不额外深克隆。两端仍经 serde_v8 转换，不共享 JS 与 Rust 的可变对象，也不省略同步边界。
+
 调用 next 前，先校验并写入外层 state/目标字段；内层从新候选读取上下文。内层返回后刷新外层 ctx，随后外层可以继续修改。类型相同且没有共享引用的对象/数组保留容器身份，使 `const fields = ctx.target.fields`、`const store = fields.store` 等引用看见内层修改；类型改变时替换值，已经脱离上下文的旧容器引用不提供继续跟踪保证。处理器返回时再次校验写入。
 
 权威候选是 JSON 树，不保存 JS 引用别名。外层若把同一容器挂在多个路径上，刷新按 state、args、target 的顺序遍历，成员按宿主投影的键序或数组索引序遍历：首次遇到的兼容路径复用旧容器，其余路径使用独立候选值。原先共享的路径可能不再相等，保存的旧引用跟随首次复用的路径；不能要求同一个旧容器同时跟随多个不同的候选值。该规则也覆盖 state 与目标字段之间的别名，避免把内层或 native 的更新覆盖回旧值。
 
 刷新只复用自有数据属性，不读取继承成员或调用旧属性 getter；`__proto__` 等 JSON 数据键通过自有属性写入，不改变对象原型。ctx 与 target 记录只刷新宿主定义的成员，处理器附加的本地函数、缓存和循环引用保留；它们不会传给其他处理器或进入候选。写回仅序列化 state 和 target.fields，这两处仍须是可序列化的候选数据。
+
+写入 op 先核验调用能力与绑定，再反序列化载荷。serde_v8 可执行载荷 getter，故该入口显式 `nofast, reentrant`；转换期间释放 OpState 和候选借用，getter 的嵌套 op 仍逐次核验能力。转换结束后重新检查故障；getter 内捕获的候选错误、转换本身失败都留存为整槽故障，阻止后续写回及候选发布。转换异常仅格式化 serde 错误，不读取 JS 异常属性或堆栈钩子。候选 host 方法与 native 中心仍只执行 Rust 逻辑。
 
 接收者、原意图参数和 native 函数由 Rust 的本次调用固定。修改 JS 的 `ctx.target.id` 或 `ctx.args` 不会重定向 native。当前不开放通过 next 替换参数或指定另一接收者。
 

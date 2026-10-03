@@ -452,3 +452,94 @@ api.handlers.wrap('builtin:link.tick',{id:'audit'},(ctx,next)=>{
     }
     Ok(())
 }
+
+#[test]
+fn namespace_writeback_preserves_null_scalars_and_nested_json() -> anyhow::Result<()> {
+    let values = r#"[null,true,17.5,"文本",[1,{"nested":[false,null]}],{"__proto__":{"n":2},"data":["x",3]}]"#;
+    let source = format!(
+        r#"
+const values=JSON.parse({encoded});
+let index=0;
+export default function register(api) {{
+  api.handlers.before('builtin:link.tick',{{id:'pre'}},ctx=>{{ctx.state=values[index++];}});
+  api.handlers.after('builtin:link.tick',{{id:'post'}},ctx=>{{
+    if(JSON.stringify(ctx.state)!==JSON.stringify(values[index-1])) throw Error('namespace 状态改变');
+  }});
+}}
+"#,
+        encoded = json!(values),
+    );
+    let expected: Vec<Value> = serde_json::from_str(values)?;
+    for binary in [false, true] {
+        let mut e = engine(&[("chain", source.clone())], binary)?;
+        let id = link(&mut e, 20, 0, 100)?;
+        for (index, state) in expected.iter().enumerate() {
+            e.tick(1)?;
+            assert_eq!(&e.engine_mod_state("chain"), state);
+            assert_eq!(cooldown(&e, &id), json!(99 - index));
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn fixed_context_envelope_keeps_key_order_and_refreshes_authoritative_metadata()
+-> anyhow::Result<()> {
+    let source = package(
+        r#"
+api.handlers.wrap('builtin:link.tick',{id:'audit'},(ctx,next)=>{
+  if(Object.keys(ctx).join(',')!=='args,room,state,target,tick') throw Error('上下文键序改变');
+  if(Object.keys(ctx.target).join(',')!=='fields,id') throw Error('目标键序改变');
+  if(Object.getPrototypeOf(ctx)!==null || Object.getPrototypeOf(ctx.target)!==null) throw Error('封套原型改变');
+  const tick=ctx.tick, room=ctx.room, id=ctx.target.id, target=ctx.target;
+  if(typeof tick!=='number' || typeof id!=='string' || !id || room!=='W1N1' || ctx.args!==null) throw Error('封套成员改变');
+  ctx.tick=-1; ctx.room='fake'; ctx.target.id='fake'; ctx.args={local:1};
+  next();
+  if(ctx.tick!==tick || ctx.room!==room || ctx.target.id!==id || ctx.args!==null || ctx.target!==target) throw Error('权威成员未刷新');
+  if(Object.keys(ctx).join(',')!=='args,room,state,target,tick' || Object.keys(ctx.target).join(',')!=='fields,id') throw Error('刷新键序改变');
+  ctx.state={verified:true};
+});
+"#,
+    );
+    for binary in [false, true] {
+        let mut e = engine(&[("chain", source.clone())], binary)?;
+        let id = link(&mut e, 20, 0, 100)?;
+        e.tick(1)?;
+        assert_eq!(cooldown(&e, &id), json!(99));
+        assert_eq!(e.engine_mod_state("chain"), json!({"verified":true}));
+    }
+    Ok(())
+}
+
+#[test]
+fn caught_write_conversion_fault_rolls_back_getter_native_effects_and_retry() -> anyhow::Result<()>
+{
+    let source = package(
+        r#"
+api.handlers.before('builtin:link.tick',{id:'audit'},ctx=>{
+  try {
+    Deno.core.ops.op_mod_chain_write('1','chain:handler.audit',{
+      get state(){Deno.core.ops.op_mod_chain_native('1');throw Error('conversion-failure');}
+    });
+  } catch(e) {}
+});
+api.handlers.after('builtin:link.tick',{id:'after'},ctx=>{ctx.target.fields.cooldown=999;});
+"#,
+    );
+    for binary in [false, true] {
+        let mut e = engine(&[("chain", source.clone())], binary)?;
+        let id = link(&mut e, 20, 0, 100)?;
+        let generation = e.engine_generation();
+        for _ in 0..2 {
+            let error = e
+                .tick(1)
+                .expect_err("吞掉转换异常不能提交 getter 的 native 副作用");
+            assert!(error.to_string().contains("转换失败"), "{error}");
+            assert_eq!(e.get_game_time(), 0);
+            assert_eq!(e.engine_generation(), generation);
+            assert_eq!(cooldown(&e, &id), json!(100));
+            assert_eq!(e.engine_mod_state("chain"), Value::Null);
+        }
+    }
+    Ok(())
+}

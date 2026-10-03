@@ -1,21 +1,52 @@
-//! 一次整槽 JS 调用的候选能力。普通 op 只读写 Rust 候选，不回入 JS。
+//! 一次整槽 JS 调用的候选能力。候选方法不回入 JS；写入转换可执行 getter。
 
+use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
 use crate::ChainProfiler;
-use deno_core::{OpState, op2};
+use deno_core::{OpState, op2, v8};
 use deno_error::JsErrorBox;
 use kk_mod_api::{ContributionPlan, Dispatch};
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 use serde_json::Value;
+
+/// 固定的候选读取封套；开放领域的字段、参数与 namespace 仍为 JSON 树。
+/// 字段顺序沿用原 JSON Map 的键序，避免改变 JS 可观察的枚举/刷新顺序。
+#[derive(Serialize)]
+pub struct ChainContext {
+    pub args: Value,
+    pub room: String,
+    pub state: Value,
+    pub target: ChainTarget,
+    pub tick: u64,
+}
+
+#[derive(Serialize)]
+pub struct ChainTarget {
+    pub fields: Value,
+    pub id: String,
+}
 
 /// 候选访问适配器：调用方绑定权威对象/参数，JS 无法改变 native 的接收者。
 /// 方法执行期间不得回入 JS；每次访问自己取得并释放候选短借用。
 pub trait ChainHost {
-    fn read(&mut self, binding: &str) -> Result<Value, String>;
+    fn read(&mut self, binding: &str) -> Result<ChainContext, String>;
     fn write(&mut self, binding: &str, context: Value) -> Result<(), String>;
     fn native(&mut self) -> Result<(), String>;
+}
+
+// op 的 serde 输出包装；计时围住真实转换，不从 op/host 的差额推测。
+pub(crate) struct ChainRead {
+    context: ChainContext,
+    profiler: Option<ChainProfiler>,
+}
+
+impl Serialize for ChainRead {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let _timer = self.profiler.as_ref().map(|p| p.measure("read_to_v8"));
+        self.context.serialize(serializer)
+    }
 }
 
 /// 启动时交给 JS 的固定链描述，后续调用只传槽键与本次能力标识。
@@ -136,26 +167,48 @@ pub(crate) fn op_mod_chain_read(
     state: &mut OpState,
     #[string] token: String,
     #[string] binding: String,
-) -> Result<serde_json::Value, JsErrorBox> {
+) -> Result<ChainRead, JsErrorBox> {
     let chain = active(state, &token)?;
     chain.checked_binding(&binding)?;
-    let _timer = chain.profiler.as_ref().map(|p| p.measure("host_read"));
-    let result = chain
-        .host
-        .read(&binding)
-        .map_err(|error| format!("处理器 {binding}: {error}"));
-    chain.outcome(result)
+    let result = {
+        let _timer = chain.profiler.as_ref().map(|p| p.measure("host_read"));
+        chain
+            .host
+            .read(&binding)
+            .map_err(|error| format!("处理器 {binding}: {error}"))
+    };
+    let context = chain.outcome(result)?;
+    Ok(ChainRead {
+        context,
+        profiler: chain.profiler.clone(),
+    })
 }
 
-#[op2]
-pub(crate) fn op_mod_chain_write(
-    state: &mut OpState,
+// getter 可能执行 JS，显式保留慢入口；能力检查不因 reentrant 放宽。
+#[op2(nofast, reentrant)]
+pub(crate) fn op_mod_chain_write<'s, 'i>(
+    scope: &mut v8::PinScope<'s, 'i>,
+    state: Rc<RefCell<OpState>>,
     #[string] token: String,
     #[string] binding: String,
-    #[serde] context: serde_json::Value,
+    context: v8::Local<'s, v8::Value>,
 ) -> Result<(), JsErrorBox> {
-    let chain = active(state, &token)?;
+    {
+        let mut state = state.borrow_mut();
+        active(&mut state, &token)?.checked_binding(&binding)?;
+    }
+    // from_v8 可执行 getter 并嵌套 op；转换期间不得持有 OpState/候选借用。
+    // 捕获 V8 异常，只格式化 serde 错误，不执行异常对象的属性或堆栈钩子。
+    let context = {
+        v8::tc_scope!(let tc, scope);
+        deno_core::serde_v8::from_v8::<Value>(tc, context)
+            .map_err(|error| format!("处理器 {binding}: 上下文转换失败: {error}"))
+    };
+    let mut state = state.borrow_mut();
+    let chain = active(&mut state, &token)?;
+    // getter 内被捕获的候选故障仍阻止外层写回；转换失败同样留存。
     chain.checked_binding(&binding)?;
+    let context = chain.outcome(context)?;
     let _timer = chain.profiler.as_ref().map(|p| p.measure("host_write"));
     let result = chain
         .host

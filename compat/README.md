@@ -14,7 +14,7 @@
 | `scripts/run-suite.sh` | 运行完整上游套件，也可将额外参数传给 Vitest |
 | `scripts/ratchet.mjs` | 全量运行后检查通过数、总用例数和逐用例回归 |
 | `reports/` | 入库机器报告、回归配置与历史验收记录 |
-| `fixtures/` | bot 模块，按需由根目录脚本准备，不入库 |
+| `fixtures/` | bot 下载夹具按需准备、不入库；`mod-perf/` 固定性能夹具入库 |
 
 同一 JavaScript 全局中的适配器实例共享子进程和世界状态，测试应串行使用并调用 `teardown`。它清理世界和玩家线程，保留子进程供后续测试复用。
 

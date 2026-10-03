@@ -22,7 +22,7 @@ class ModPerfGuardTests(unittest.TestCase):
             "links_per_room": 3, "warmup": 2, "ticks": 3,
             "metadata": {"debug_assertions": False},
             "wall": {"count": 3, "p50_ms": 1, "p95_ms": 1, "p99_ms": 1},
-            "process": {"scope": "current_process_all_threads"}, "checks": checks}
+            "process": {"scope": "current_process_all_threads", "cpu_core_ms_per_tick": 1}, "checks": checks}
 
     def validate(self, report):
         module.validate_report(report, "chain", 2, 3, 2, 3)
@@ -73,6 +73,48 @@ class ModPerfGuardTests(unittest.TestCase):
             bad["profile"]["op_read"][key] = value
             with self.assertRaises(RuntimeError):
                 module.validate_report(bad, "chain", 2, 3, 2, 3, profile=True)
+
+    def test_v2_requires_read_conversion_and_checks_its_counts(self):
+        report = self.report()
+        report["profile_schema_version"] = 2
+        phases = {"slot": 1, "js_call": 1, "budget_start": 1, "budget_finish": 1,
+                  "op_native": 1, "host_native": 1, "op_read": 6, "host_read": 6,
+                  "op_write": 6, "host_write": 6, "read_to_v8": 6}
+        report["profile"] = {phase: {"calls": factor * 18, "errors": 0, "wall_ns": 1}
+                             for phase, factor in phases.items()}
+        module.validate_report(report, "chain", 2, 3, 2, 3, profile=True)
+        for key, value in (("calls", 0), ("calls", 108.0), ("errors", 1), ("errors", False), ("wall_ns", -1), ("wall_ns", True)):
+            bad = copy.deepcopy(report)
+            bad["profile"]["read_to_v8"][key] = value
+            with self.assertRaises(RuntimeError):
+                module.validate_report(bad, "chain", 2, 3, 2, 3, profile=True)
+
+        missing = copy.deepcopy(report)
+        del missing["profile"]["read_to_v8"]
+        with self.assertRaisesRegex(RuntimeError, "阶段集合"):
+            module.validate_report(missing, "chain", 2, 3, 2, 3, profile=True)
+        for version in (3, "2", None, True):
+            bad = copy.deepcopy(report)
+            bad["profile_schema_version"] = version
+            with self.assertRaisesRegex(RuntimeError, "版本不支持"):
+                module.validate_report(bad, "chain", 2, 3, 2, 3, profile=True)
+
+    def test_invalid_timing_numbers_cannot_be_summarized(self):
+        for key in ("p50_ms", "p95_ms", "p99_ms"):
+            for value in (float('nan'), float('inf'), -1, True, "1"):
+                report = self.report()
+                report['wall'][key] = value
+                with self.subTest(key=key,value=value), self.assertRaises(RuntimeError):
+                    self.validate(report)
+        for value in (float('nan'), float('inf'), -1, True, None):
+            report = self.report()
+            report['process']['cpu_core_ms_per_tick'] = value
+            with self.subTest(cpu=value), self.assertRaisesRegex(RuntimeError, "CPU"):
+                self.validate(report)
+        report = self.report()
+        report['wall']['p50_ms'] = 2
+        with self.assertRaisesRegex(RuntimeError, "有序"):
+            self.validate(report)
 
 
 if __name__ == "__main__":

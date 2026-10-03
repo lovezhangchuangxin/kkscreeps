@@ -191,6 +191,7 @@ fn measure(options: &Options) -> anyhow::Result<Value> {
         "scope":"EmbedEngine.tick; no player execution or projection",
         "fixture":"synthetic positive cooldown every tick; four audited chain positions",
         "profile": profiler.as_ref().map(ChainProfiler::snapshot),
+        "profile_schema_version": profiler.as_ref().map(|_| 2),
         "wall":{"count":samples.len(),"p50_ms":quantile(0.5),"p95_ms":quantile(0.95),
             "p99_ms":quantile(0.99),"max_ms":samples.last(),"sum_ms":sum},
         "process":process_report,
@@ -277,6 +278,7 @@ mod tests {
                 );
             }
             if profile {
+                assert_eq!(report["profile_schema_version"], 2);
                 let samples = &report["profile"];
                 // 预热不进入计数；每槽六读六写和一次 native，开启诊断仍等价。
                 for phase in [
@@ -289,12 +291,19 @@ mod tests {
                 ] {
                     assert_eq!(samples[phase]["calls"], 18, "{phase}");
                 }
-                for phase in ["op_read", "host_read", "op_write", "host_write"] {
+                for phase in [
+                    "op_read",
+                    "host_read",
+                    "read_to_v8",
+                    "op_write",
+                    "host_write",
+                ] {
                     assert_eq!(samples[phase]["calls"], 108, "{phase}");
                     assert_eq!(samples[phase]["errors"], 0, "{phase}");
                 }
             } else {
                 assert!(report["profile"].is_null());
+                assert!(report["profile_schema_version"].is_null());
             }
             assert_eq!(report["wall"]["count"], 3);
         }

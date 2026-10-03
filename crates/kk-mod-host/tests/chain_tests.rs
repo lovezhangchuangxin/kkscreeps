@@ -4,7 +4,10 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use kk_mod_host::{ChainHost, ChainProfiler, ModRealm, RegisterOptions, discover_packages};
+use kk_mod_host::{
+    ChainContext, ChainHost, ChainProfiler, ChainTarget, ModRealm, RegisterOptions,
+    discover_packages,
+};
 use serde_json::{Value, json};
 
 static SEQUENCE: AtomicUsize = AtomicUsize::new(0);
@@ -71,6 +74,7 @@ fn profile_records_op_errors_without_retaining_candidate_and_resets_window() {
     assert_eq!(samples["op_read"].calls, 2);
     assert_eq!(samples["op_read"].errors, 1);
     assert_eq!(samples["host_read"].calls, 1);
+    assert_eq!(samples["read_to_v8"].calls, 1);
     assert_eq!(samples["slot"].calls, 1);
     profiler.reset();
     assert!(profiler.snapshot().is_empty());
@@ -100,8 +104,17 @@ fn mismatched_profile_sink_seals_realm_instead_of_silently_losing_metrics() {
 
 struct Host(Rc<RefCell<Value>>);
 impl ChainHost for Host {
-    fn read(&mut self, _: &str) -> Result<Value, String> {
-        Ok(json!({"tick":0,"state":self.0.borrow().clone()}))
+    fn read(&mut self, _: &str) -> Result<ChainContext, String> {
+        Ok(ChainContext {
+            args: Value::Null,
+            room: "W1N1".into(),
+            state: self.0.borrow().clone(),
+            target: ChainTarget {
+                fields: Value::Null,
+                id: "test".into(),
+            },
+            tick: 0,
+        })
     }
     fn write(&mut self, _: &str, context: Value) -> Result<(), String> {
         *self.0.borrow_mut() = context["state"].clone();
@@ -171,4 +184,87 @@ fn excessive_wrap_depth_is_rejected_during_registration() {
         })
         .collect::<String>();
     assert!(realm(&body).err().unwrap().contains("超过 64"));
+}
+
+#[test]
+fn write_getter_boundaries_are_safe_and_conversion_faults_are_sticky() {
+    use std::time::{Duration, Instant};
+    for case in [
+        "nested-read",
+        "nested-write",
+        "nested-fault",
+        "conversion-fault",
+        "invalid-binding",
+    ] {
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "write_getter_child", "--ignored", "--nocapture"])
+            .env("KK_CHAIN_GETTER_CASE", case)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let started = Instant::now();
+        while child.try_wait().unwrap().is_none() {
+            if started.elapsed() > Duration::from_secs(10) {
+                child.kill().unwrap();
+                panic!("{case} 超过外层期限");
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        let output = child.wait_with_output().unwrap();
+        assert!(
+            output.status.success(),
+            "{case}: {} {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}
+
+#[test]
+#[ignore = "只由带外层期限的父测试启动"]
+fn write_getter_child() {
+    let case = std::env::var("KK_CHAIN_GETTER_CASE").unwrap();
+    let (code, failed) = match case.as_str() {
+        "nested-read" => (
+            "const value={get state(){const state=Deno.core.ops.op_mod_chain_read('1','test:handler.audit').state;if(state.probe!==42)throw Error('嵌套读取丢失');return state;}}; Deno.core.ops.op_mod_chain_write('1','test:handler.audit',value);",
+            false,
+        ),
+        "nested-write" => (
+            "const value={get state(){Deno.core.ops.op_mod_chain_write('1','test:handler.audit',{state:{nested:true}});if(!Deno.core.ops.op_mod_chain_read('1','test:handler.audit').state.nested)throw Error('嵌套写入丢失');return {outer:true};}}; Deno.core.ops.op_mod_chain_write('1','test:handler.audit',value);",
+            false,
+        ),
+        "nested-fault" => (
+            "try { Deno.core.ops.op_mod_chain_write('1','test:handler.audit',{get state(){try{Deno.core.ops.op_mod_chain_read('1','foreign:handler.bad');}catch(e){}return {};}}); }catch(e){}",
+            true,
+        ),
+        "conversion-fault" => (
+            "try { Deno.core.ops.op_mod_chain_write('1','test:handler.audit',{get state(){throw Error('getter-failure');}}); }catch(e){}",
+            true,
+        ),
+        "invalid-binding" => (
+            "try { Deno.core.ops.op_mod_chain_write('1','foreign:handler.bad',{get state(){globalThis.getterCalls++;return {};}}); }catch(e){}",
+            true,
+        ),
+        _ => panic!("未知 case"),
+    };
+    let mut realm = realm(&format!(
+        "globalThis.afterCalls=0;globalThis.getterCalls=0;
+         api.handlers.before('builtin:link.tick',{{id:'audit'}},ctx=>{{{code}}});
+         api.handlers.after('builtin:link.tick',{{id:'after'}},ctx=>{{globalThis.afterCalls++;}});"
+    ))
+    .unwrap();
+    let state = Rc::new(RefCell::new(json!({"probe":42})));
+    let result = realm.invoke_chain("builtin:link.tick", Box::new(Host(state.clone())));
+    assert_eq!(result.is_err(), failed, "{case}: {result:?}");
+    assert_eq!(Rc::strong_count(&state), 1);
+    assert_eq!(
+        realm.evaluate_probe("globalThis.afterCalls").unwrap(),
+        json!(if failed { 0 } else { 1 })
+    );
+    assert_eq!(
+        realm.evaluate_probe("globalThis.getterCalls").unwrap(),
+        json!(0)
+    );
+    assert_eq!(state.borrow().get("native").is_some(), !failed);
 }

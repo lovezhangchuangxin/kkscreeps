@@ -24,7 +24,7 @@ use kk_engine::{
     PlayerWriteback, RunOutcome, RunResult, RunState, SegmentWriteback, TickInput, TickStage,
 };
 use kk_mod_api::{Key, SlotPlan};
-use kk_mod_host::{ChainHost, ModPackage, ModRealm, RegisterOptions};
+use kk_mod_host::{ChainContext, ChainHost, ChainTarget, ModPackage, ModRealm, RegisterOptions};
 use kk_world::ObjId;
 use kk_world::place::{PlaceCtx, normalize};
 
@@ -234,7 +234,7 @@ impl ModChainContext {
 }
 
 impl ChainHost for ModChainContext {
-    fn read(&mut self, binding: &str) -> Result<Value, String> {
+    fn read(&mut self, binding: &str) -> Result<ChainContext, String> {
         let key = Key::new(binding)?;
         let fields = self.fields()?.clone();
         let w = self.ctx.borrow();
@@ -242,19 +242,34 @@ impl ChainHost for ModChainContext {
         let tick = w.time;
         let room = w.room.name.clone();
         drop(w);
-        Ok(json!({ "tick": tick, "room": room, "state": state,
-            "target": { "id": self.id.as_str(), "fields": fields }, "args": self.args }))
+        // 固定封套不再建动态 Map；直接交给 serde_v8 的 struct 路径。
+        // 缓存字段与固定 args 仍各自克隆，保持候选隔离。
+        Ok(ChainContext {
+            tick,
+            room,
+            state,
+            target: ChainTarget {
+                id: self.id.as_str(),
+                fields,
+            },
+            args: self.args.clone(),
+        })
     }
 
-    fn write(&mut self, binding: &str, context: Value) -> Result<(), String> {
+    fn write(&mut self, binding: &str, mut context: Value) -> Result<(), String> {
         let key = Key::new(binding)?;
         if let Some(fields) = context.pointer("/target/fields") {
             self.write_fields(fields)?;
         }
-        self.ctx.borrow_mut().state.set_mod_state(
-            key.namespace(),
-            context.get("state").cloned().unwrap_or(Value::Null),
-        );
+        // op 已交付 context 所有权，领域校验完成后移走 state，避免深克隆。
+        let state = context
+            .get_mut("state")
+            .map(Value::take)
+            .unwrap_or(Value::Null);
+        self.ctx
+            .borrow_mut()
+            .state
+            .set_mod_state(key.namespace(), state);
         Ok(())
     }
 
