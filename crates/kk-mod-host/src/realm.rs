@@ -222,6 +222,20 @@ pub struct Registered {
     pub contributions: Vec<Contribution>,
     /// 有注册函数的绑定键全集。
     pub executables: BTreeSet<Key>,
+    /// 声明了玩家面的包：玩家模块（入口与全部可解码源文件）依依赖
+    /// 拓扑序导出，供宿主装进每个玩家沙箱执行。
+    pub player_modules: Vec<PlayerModulePackage>,
+}
+
+/// 一个包的玩家面模块集。`files` 是包快照内全部 UTF-8 文件（相对
+/// 路径键）——玩家模块的包内相对导入在玩家 VM 内按同一映射解析；
+/// 非包内与动态导入由玩家侧加载器拒绝（同注册 realm 的纪律）。
+#[derive(Clone, Debug)]
+pub struct PlayerModulePackage {
+    pub namespace: String,
+    /// 入口模块的包内相对路径（manifest 的 player 声明）。
+    pub entry: String,
+    pub files: BTreeMap<String, String>,
 }
 
 pub struct ModRealm {
@@ -424,10 +438,41 @@ impl ModRealm {
         let mut all = vec![builtin::link()];
         all.extend(contributions.iter().cloned());
         let plan = freeze(all, options.freeze)?;
+        let mut player_modules = Vec::new();
+        for id in &order {
+            let Some(entry) = packages[id].manifest.player.clone() else {
+                continue;
+            };
+            let mut files = BTreeMap::new();
+            for (path, bytes) in &packages[id].files {
+                let Some(path) = path.to_str() else {
+                    continue;
+                };
+                let Ok(source) = std::str::from_utf8(bytes) else {
+                    continue;
+                };
+                files.insert(path.to_string(), source.to_string());
+            }
+            // 入口必须在导出集内（UTF-8 且路径可作包内键）：非 UTF-8 或
+            // URL 特殊字符的入口在这里显式失败，而不是推迟到每个玩家
+            // 沙箱 spawn 才以误导文案失败。
+            if !files.contains_key(&entry) {
+                return Err(ModHostError::new(
+                    id.clone(),
+                    format!("玩家模块入口 {entry:?} 不可装载（须为包内 UTF-8 文件）"),
+                ));
+            }
+            player_modules.push(PlayerModulePackage {
+                namespace: id.clone(),
+                entry,
+                files,
+            });
+        }
         Ok(Registered {
             plan,
             contributions,
             executables,
+            player_modules,
         })
     }
 

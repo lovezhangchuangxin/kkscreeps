@@ -145,8 +145,9 @@ fn snapshot_json(
 ) -> Value {
     let id_str = id.as_str();
     match object {
-        // Mod 对象的诊断/管理读面：字段整体展开。玩家投影与 FIND 尚未
-        // 接入此类型，权限裁切随投影扩展批次设计。
+        // Mod 对象的诊断/管理读面：字段整体展开，不做可见性裁切——
+        // 本面只服务管理查询（CLI/embed），玩家可见面走带裁切的投影
+        // 通道（world_json/kkpv 的 mod_record_json）。
         RoomObject::Mod(o) => {
             let fields: Value = serde_json::from_str(&o.data).unwrap_or(json!({}));
             json!({

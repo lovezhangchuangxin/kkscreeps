@@ -195,7 +195,7 @@ fn extension_projection_applies_visibility() {
     // owner 投影：charge/label/target 可见，secret 不进玩家块。
     let owner_view = f
         .world
-        .world_json_for_viewer_with_extensions("p1", 0, &catalog);
+        .world_json_for_viewer_with_extensions("p1", 0, &catalog, None);
     let obj = owner_view["objects"]
         .as_array()
         .unwrap()
@@ -213,7 +213,7 @@ fn extension_projection_applies_visibility() {
     // 非 owner 投影：对象可见，但只见 Public 字段。
     let other_view = f
         .world
-        .world_json_for_viewer_with_extensions("p2", 0, &catalog);
+        .world_json_for_viewer_with_extensions("p2", 0, &catalog, None);
     let obj = other_view["objects"]
         .as_array()
         .unwrap()

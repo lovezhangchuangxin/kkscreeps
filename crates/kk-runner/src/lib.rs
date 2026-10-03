@@ -5,6 +5,7 @@
 
 pub mod budget;
 pub mod cpu_clock;
+pub mod mod_api;
 pub mod modules;
 pub mod ops;
 pub mod proto;
@@ -13,6 +14,7 @@ pub mod shared_bundle;
 pub mod watchdog;
 
 pub use budget::{Bucket, TickPlan};
+pub use mod_api::{ModPlayerApi, ModPlayerModule};
 pub use modules::{ModuleCode, ModuleKind, ModuleTable};
 pub use ops::LogLine;
 pub use proto::{

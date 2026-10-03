@@ -363,6 +363,7 @@ fn mod_objects_excluded_from_all_player_planes() {
         .kkpv_room_blocks_for_viewer(
             "p1",
             &kk_mod_api::extension::ExtensionCatalog::default(),
+            None,
             [0; 32],
             [0; 32],
         )
@@ -374,4 +375,291 @@ fn mod_objects_excluded_from_all_player_planes() {
     assert_eq!(snap["kind"], "mod");
     // matches_find 对防御性空记录不命中（直接锁死兜底口径）。
     assert!(!matches_find(&serde_json::json!({}), 107, None));
+}
+
+fn test_creep() -> kk_schema::room::CreepObj {
+    kk_schema::room::CreepObj {
+        id: 0,
+        x: 5,
+        y: 5,
+        fatigue: 0,
+        age_time: 800,
+        hits: 300,
+        spawning: false,
+        action_log: 0,
+        name: "w1".into(),
+        owner: "p1".into(),
+        body: vec![kk_schema::room::BodyPart {
+            kind: 0,
+            boost: None,
+            hits: 100,
+        }],
+        store: kk_schema::room::Store::default(),
+        store_extra: Vec::new(),
+        say_message: None,
+        say_public: None,
+        notify_when_attacked: Some(false),
+    }
+}
+
+/// 玩家面目录夹具：counter（room-visible，value 公开/treasury 归属者/
+/// secret 服务端）与 vault（owner-collection）。
+fn surface_fixture() -> kk_mod_api::player_surface::PlayerSurface {
+    use kk_mod_api::player_surface::{PlayerSurface, SurfaceField, SurfaceType};
+    use kk_mod_api::{Key, ObjectVisibility, Visibility};
+    let surface_type =
+        |key: &str, visibility: ObjectVisibility, fields: Vec<(&str, Visibility)>| SurfaceType {
+            key: Key::new(key).unwrap(),
+            find_const: kk_mod_api::player_surface::MOD_FIND_BASE,
+            look_key: key.to_string(),
+            player_class: "C".into(),
+            visibility,
+            owner_field: Some("owner".into()),
+            fields: fields
+                .into_iter()
+                .map(|(name, visibility)| SurfaceField {
+                    name: name.into(),
+                    visibility,
+                })
+                .collect(),
+        };
+    PlayerSurface {
+        types: vec![
+            surface_type(
+                "extmod:counter",
+                ObjectVisibility::RoomVisible,
+                vec![
+                    ("owner", Visibility::Public),
+                    ("value", Visibility::Public),
+                    ("treasury", Visibility::Owner),
+                    ("secret", Visibility::ServerOnly),
+                ],
+            ),
+            surface_type(
+                "extmod:vault",
+                ObjectVisibility::OwnerCollection,
+                vec![("owner", Visibility::Public), ("gold", Visibility::Public)],
+            ),
+        ],
+        intents: Vec::new(),
+    }
+}
+
+#[test]
+fn mod_objects_project_with_visibility_cut() {
+    let mut world = crate::world::World::new(11);
+    world.register_room("W1N1", Terrain::plains());
+    // p1 的 creep 授予房间视野（Mod 对象自身不授予）。
+    world
+        .insert("W1N1", kk_schema::room::RoomObject::Creep(test_creep()))
+        .unwrap();
+    world
+        .insert(
+            "W1N1",
+            kk_schema::room::RoomObject::Creep(kk_schema::room::CreepObj {
+                owner: "p2".into(),
+                name: "w2".into(),
+                ..test_creep()
+            }),
+        )
+        .unwrap();
+    let (counter_id, vault_id) = (
+        world
+            .insert(
+                "W1N1",
+                kk_schema::room::RoomObject::Mod(kk_schema::room::ModObj {
+                    id: 0,
+                    x: 10,
+                    y: 12,
+                    type_key: "extmod:counter".into(),
+                    data: r#"{"owner":"p1","value":3,"treasury":9,"secret":"k"}"#.into(),
+                }),
+            )
+            .unwrap(),
+        world
+            .insert(
+                "W1N1",
+                kk_schema::room::RoomObject::Mod(kk_schema::room::ModObj {
+                    id: 0,
+                    x: 20,
+                    y: 22,
+                    type_key: "extmod:vault".into(),
+                    data: r#"{"owner":"p2","gold":7}"#.into(),
+                }),
+            )
+            .unwrap(),
+    );
+    let surface = surface_fixture();
+    let catalog = kk_mod_api::extension::ExtensionCatalog::default();
+
+    // 归属者：公开+归属字段可见，secret 裁掉；vault 归属 p2，p1 不可见。
+    let view = world.world_json_for_viewer_with_extensions("p1", 0, &catalog, Some(&surface));
+    let objects = view["objects"].as_array().unwrap();
+    let counter = objects
+        .iter()
+        .find(|o| o["modType"] == "extmod:counter")
+        .unwrap();
+    assert_eq!(counter["type"], "mod");
+    assert_eq!(counter["id"], counter_id.as_str());
+    assert_eq!(counter["room"], "W1N1");
+    assert_eq!(counter["x"], 10);
+    assert_eq!(counter["pos"]["roomName"], "W1N1");
+    assert_eq!(counter["value"], 3);
+    assert_eq!(counter["treasury"], 9);
+    assert!(counter.get("secret").is_none(), "ServerOnly 字段不进投影");
+    assert!(
+        objects.iter().all(|o| o["modType"] != "extmod:vault"),
+        "OwnerCollection 对象对非归属者不可见"
+    );
+
+    // 他人（p2 亦有 creep 授予房间视野）：treasury 裁掉、value 保留。
+    let other = world.world_json_for_viewer_with_extensions("p2", 0, &catalog, Some(&surface));
+    let counter = other["objects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|o| o["modType"] == "extmod:counter")
+        .unwrap();
+    assert_eq!(counter["value"], 3);
+    assert!(counter.get("treasury").is_none(), "Owner 字段仅归属者可见");
+    // vault 归属 p2：他人视角（p1）不可见已由上方断言；归属者视角可见。
+    let owner = world.world_json_for_viewer_with_extensions("p2", 0, &catalog, Some(&surface));
+    let vault = owner["objects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|o| o["id"] == vault_id.as_str())
+        .unwrap();
+    assert_eq!(vault["gold"], 7);
+
+    // 无视野玩家（p3）：RoomVisible 对象与 OwnerCollection 他人对象都不可见。
+    let stranger = world.world_json_for_viewer_with_extensions("p3", 0, &catalog, Some(&surface));
+    assert!(
+        stranger["objects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|o| o.get("modType").is_none()),
+        "房间不可见时 Mod 对象不出投影"
+    );
+
+    // 无目录（vanilla 口径）：不进投影。
+    let plain = world.world_json_for_viewer_with_extensions("p1", 0, &catalog, None);
+    assert!(
+        plain["objects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|o| o.get("modType").is_none())
+    );
+}
+
+#[test]
+fn owner_collection_in_invisible_room_matches_across_channels() {
+    // 房间对归属者不可见（无任何内建视野授予对象）时，OwnerCollection
+    // 对象按归属者集合语义仍对归属者导出——两条通道都必须如此（曾因
+    // KKPV 侧门序错误出现 JSON 可见/KKPV 不可见的分叉）。
+    let mut world = crate::world::World::new(13);
+    world.register_room("W2N2", Terrain::plains());
+    let vault_id = world
+        .insert(
+            "W2N2",
+            kk_schema::room::RoomObject::Mod(kk_schema::room::ModObj {
+                id: 0,
+                x: 3,
+                y: 4,
+                type_key: "extmod:vault".into(),
+                data: r#"{"owner":"p9","gold":11}"#.into(),
+            }),
+        )
+        .unwrap();
+    let surface = surface_fixture();
+    let catalog = kk_mod_api::extension::ExtensionCatalog::default();
+
+    let json_view = world.world_json_for_viewer_with_extensions("p9", 0, &catalog, Some(&surface));
+    let record = json_view["objects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|o| o["id"] == vault_id.as_str())
+        .expect("JSON 通道对不可见房的归属者导出 OwnerCollection 对象");
+    assert_eq!(record["gold"], 11);
+
+    let blocks = world
+        .kkpv_room_blocks_for_viewer("p9", &catalog, Some(&surface), [5; 32], [6; 32])
+        .unwrap();
+    let block = blocks
+        .iter()
+        .find(|b| b.room_name == "W2N2")
+        .expect("不可见房也有归属者的私有块");
+    let kkpv_object = block
+        .objects
+        .iter()
+        .find(|o| o.type_key == "extmod:vault")
+        .expect("KKPV 通道同样导出（门序与 JSON 一致）");
+    let bytes = kk_schema::kkpv::encode(block, &kk_schema::kkpv::KkpvLimits::default()).unwrap();
+    let view =
+        kk_schema::kkpv::KkpvView::decode(&bytes, &kk_schema::kkpv::KkpvLimits::default()).unwrap();
+    let index = (0..view.object_count())
+        .find(|i| view.object_type(*i) == "extmod:vault")
+        .unwrap();
+    let decoded = crate::kkpv::record_json_from_view(&view, index).unwrap();
+    // mod 记录的 pos 是 mod_record_json 的显式字段，两通道逐键一致。
+    assert_eq!(decoded.as_object().unwrap(), record.as_object().unwrap());
+    let _ = kkpv_object;
+}
+
+#[test]
+fn mod_records_match_across_json_and_kkpv_channels() {
+    let mut world = crate::world::World::new(12);
+    world.register_room("W1N1", Terrain::plains());
+    world
+        .insert("W1N1", kk_schema::room::RoomObject::Creep(test_creep()))
+        .unwrap();
+    world
+        .insert(
+            "W1N1",
+            kk_schema::room::RoomObject::Mod(kk_schema::room::ModObj {
+                id: 0,
+                x: 10,
+                y: 12,
+                type_key: "extmod:counter".into(),
+                data: r#"{"owner":"p1","value":3,"treasury":9,"secret":"k"}"#.into(),
+            }),
+        )
+        .unwrap();
+    let surface = surface_fixture();
+    let catalog = kk_mod_api::extension::ExtensionCatalog::default();
+
+    let json_record =
+        world.world_json_for_viewer_with_extensions("p1", 0, &catalog, Some(&surface))["objects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|o| o["modType"] == "extmod:counter")
+            .cloned()
+            .unwrap();
+    let blocks = world
+        .kkpv_room_blocks_for_viewer("p1", &catalog, Some(&surface), [1; 32], [2; 32])
+        .unwrap();
+    assert!(
+        blocks[0]
+            .objects
+            .iter()
+            .any(|o| o.type_key == "extmod:counter"),
+        "KKPV 块含 Mod 对象（桶键为类型键）"
+    );
+    let bytes = kk_schema::kkpv::encode(&blocks[0], &kk_schema::kkpv::KkpvLimits::default())
+        .expect("块编码成功");
+    let view = kk_schema::kkpv::KkpvView::decode(&bytes, &kk_schema::kkpv::KkpvLimits::default())
+        .expect("块解码成功");
+    let mod_index = (0..view.object_count())
+        .find(|i| view.object_type(*i) == "extmod:counter")
+        .expect("视图中有 counter 类型对象");
+    let decoded = crate::kkpv::record_json_from_view(&view, mod_index)
+        .unwrap_or_else(|e| panic!("解码失败：{e}"));
+    // 两通道逐键一致（含裁切后的字段集合与信封键）。
+    let expected: serde_json::Map<String, serde_json::Value> =
+        json_record.as_object().unwrap().clone();
+    assert_eq!(decoded, serde_json::Value::Object(expected));
 }

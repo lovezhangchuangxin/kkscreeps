@@ -91,6 +91,10 @@ pub struct EmbedEngine {
     mod_realm: Option<Rc<RefCell<ModRealm>>>,
     /// 分片计划是否含 Mod 意图；决定玩家沙箱是否装配扩展意图原语。
     ext_intents: bool,
+    /// 冻结计划导出的 Mod 玩家面目录；投影通道按它裁切 Mod 对象。
+    player_surface: Option<std::sync::Arc<kk_mod_api::player_surface::PlayerSurface>>,
+    /// 注入玩家沙箱的 Mod 玩家面安装清单（模块集 + 查询常量 + emit 目录）。
+    mod_player_api: Option<std::sync::Arc<kk_runner::ModPlayerApi>>,
 }
 
 /// mod_handlers 的产物：link 两槽处理器与 Mod 自有槽的动作处理实现。
@@ -373,15 +377,6 @@ fn ns_ms(ns: u128) -> f64 {
     ns as f64 / 1e6
 }
 
-/// KKPV 原型计划指纹：SHA-256("kkpv-prototype-v1")。冻结计划接入引擎
-/// 装配前以此固定值占位——计划指纹的权威来源（kk-mod-api 冻结结果）与
-/// 块发布的绑定是后续消费者缺口；切换真实指纹会使旧块按计划校验失效，
-/// 属预期行为。
-const KKPV_PROTOTYPE_PLAN_HASH: [u8; 32] = [
-    0x2c, 0x73, 0x66, 0x66, 0xac, 0x99, 0x25, 0x80, 0xca, 0x65, 0x68, 0x3a, 0x68, 0x5e, 0xae, 0x0f,
-    0xc0, 0x5c, 0xfb, 0x9b, 0x1c, 0x83, 0xbd, 0x35, 0xec, 0x49, 0xc3, 0xe1, 0xdb, 0xc1, 0xe6, 0xdc,
-];
-
 /// 私有块的查看者摘要：SHA-256(玩家名)。audience_hash 只是宿主定义的
 /// 一致性摘要，不是授权凭证（设计见 domain-projection.md §6）。
 fn kkpv_audience_hash(viewer: &str) -> [u8; 32] {
@@ -543,6 +538,8 @@ impl EmbedEngine {
             last_execution_order: None,
             sandbox_configs_for_test: BTreeMap::new(),
             ext_intents: false,
+            player_surface: None,
+            mod_player_api: None,
             kkpv_channel: false,
             kkpv_public_store: crate::kkpv_store::KkpvBlockStore::new(),
         }
@@ -571,6 +568,8 @@ impl EmbedEngine {
         self.engine = Engine::default();
         self.mod_realm = None;
         self.ext_intents = false;
+        self.player_surface = None;
+        self.mod_player_api = None;
         self.pending = None;
         self.execution_failure = None;
         self.fail_after_player_for_test = None;
@@ -592,6 +591,63 @@ impl EmbedEngine {
             let registered = realm
                 .register(packages, options.clone())
                 .map_err(|error| anyhow::anyhow!("mod 注册：{error}"))?;
+            // 玩家面目录先于引擎装配导出：保留键冲突/类名非法/条件可见性
+            // 在此失败，不产出半装好的分片。
+            let surface = std::sync::Arc::new(
+                kk_mod_api::player_surface::PlayerSurface::from_plan(&registered.plan)
+                    .map_err(|error| anyhow::anyhow!("mod 玩家面：{error}"))?,
+            );
+            let mod_player_api = {
+                let modules = registered
+                    .player_modules
+                    .iter()
+                    .map(|module| kk_runner::ModPlayerModule {
+                        namespace: module.namespace.clone(),
+                        entry: module.entry.clone(),
+                        files: module.files.clone(),
+                    })
+                    .collect::<Vec<_>>();
+                let types = surface
+                    .types
+                    .iter()
+                    .map(|ty| {
+                        (
+                            ty.key.as_str().to_string(),
+                            ty.find_const,
+                            ty.look_key.clone(),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                let intents = surface
+                    .intents
+                    .iter()
+                    .map(|key| key.as_str().to_string())
+                    .collect::<Vec<_>>();
+                (!modules.is_empty() || !types.is_empty() || !intents.is_empty()).then(|| {
+                    std::sync::Arc::new(kk_runner::ModPlayerApi {
+                        modules: std::sync::Arc::new(modules),
+                        types,
+                        intents,
+                    })
+                })
+            };
+            // 玩家面安装先在一次性 canary 沙箱上完整验证（清单注入 → 模块
+            // 装载 → install 调用 → finalize）：坏 player.js（导入缺陷、
+            // install 抛错、缺绑定）在引擎装配与玩家 spawn 之前失败，
+            // 不留下「计划已装 + 部分玩家已 spawn」的中间态。
+            let has_mod_intents = registered
+                .plan
+                .intents()
+                .iter()
+                .any(|intent| intent.key.namespace() != "builtin");
+            if let Some(api) = &mod_player_api {
+                kk_runner::Sandbox::new(kk_runner::SandboxConfig {
+                    extension_intents: has_mod_intents,
+                    mod_api: Some(api.clone()),
+                    ..kk_runner::SandboxConfig::default()
+                })
+                .map_err(|error| anyhow::anyhow!("Mod 玩家面预检失败：{error}"))?;
+            }
             let realm = Rc::new(RefCell::new(realm));
             let (action, tick, ext_handlers, ext_processes) =
                 mod_handlers(&registered.plan, &realm)?;
@@ -600,11 +656,9 @@ impl EmbedEngine {
                 .install_plan_with_ext(plan, action, tick, ext_handlers, ext_processes)
                 .map_err(anyhow::Error::msg)?;
             // 装配成功后才置位：失败路径保持 vanilla 语义与标志一致。
-            self.ext_intents = registered
-                .plan
-                .intents()
-                .iter()
-                .any(|intent| intent.key.namespace() != "builtin");
+            self.ext_intents = has_mod_intents;
+            self.player_surface = Some(surface);
+            self.mod_player_api = mod_player_api;
             self.mod_realm = Some(realm);
         }
 
@@ -619,8 +673,10 @@ impl EmbedEngine {
                 "LINK_CAPACITY".to_string(),
                 serde_json::json!(self.engine.links().capacity),
             );
-            // 扩展意图原语的装配由引擎计划决定，测试配置不得改写。
+            // 扩展意图原语与玩家面安装清单的装配由引擎计划决定，测试
+            // 配置不得改写。
             config.extension_intents = self.ext_intents;
+            config.mod_api = self.mod_player_api.clone();
             let cpu = kk_core::cpu::Bucket::new(
                 config.cpu_limit,
                 config.bucket_cap,
@@ -710,13 +766,15 @@ impl EmbedEngine {
 
     /// 按适配器的对象类别和初始字段摆放对象，返回对象 ID。
     /// 字段归一化由 [`kk_world::place::normalize`] 完成；未处置的失败轮会阻止摆放。
-    /// 以 Mod 包装建分片：注册与计划装配发生在引擎重置后、玩家沙箱
-    /// spawn 前（常量与结算同源）。可装配面是 link 两槽的 before/after/
-    /// replace 处理器、规则，以及 Mod 自有动作入口的对象域执行链（动作
-    /// 处理中心 + before/after/replace 贡献处理器）；wrap 处理器与对象域
-    /// 外的执行形态（房间/玩家/世界域、队列合并、非严格转换、显式入口）
-    /// 装配期显式拒绝而不是静默降级。装配失败时分片已按 vanilla 建立而
-    /// Mod 面不可用（与 create_shard 的"后续失败不恢复旧分片"语义一致）。
+    /// 以 Mod 包装建分片：注册、玩家面导出/预检与计划装配发生在引擎
+    /// 重置后、玩家沙箱 spawn 前（常量与结算同源）。可装配面是 link 两槽
+    /// 的 before/after/replace 处理器、规则，以及 Mod 自有动作入口的对象
+    /// 域执行链（动作处理中心 + before/after/replace 贡献处理器）；wrap
+    /// 处理器与对象域外的执行形态（房间/玩家/世界域、队列合并、非严格
+    /// 转换、显式入口）装配期显式拒绝而不是静默降级。玩家面目录导出与
+    /// 安装预检先于引擎装配失败；引擎装配之后的失败路径分片停留在 vanilla
+    /// 语义（与 create_shard 的"后续失败不恢复旧分片"语义一致——调用方
+    /// 须以 teardown/重建收尾，不得复用半装状态）。
     pub fn create_shard_with_mods(
         &mut self,
         spec: &Value,
@@ -793,9 +851,12 @@ impl EmbedEngine {
                 anyhow::bail!("字段 {key} 未在类型 {type_key} 中声明");
             }
         }
-        let payload = Value::Object(payload);
+        let mut payload = Value::Object(payload);
         kk_mod_api::validate::check_object_payload(&payload, &descriptor.fields, type_key)
             .map_err(anyhow::Error::msg)?;
+        // 数值 backing 规范化（与结算写入口同口径——Float 域统一浮点
+        // backing，防 KKPV 列型混派）。
+        kk_mod_api::validate::normalize_object_payload(&mut payload, &descriptor.fields);
         let (x, y) = match &descriptor.position_fields {
             Some([fx, fy]) => {
                 let read = |key: &kk_mod_api::Key| {
@@ -1154,7 +1215,8 @@ impl EmbedEngine {
                         &handle,
                         gcl,
                         self.engine.extensions(),
-                        KKPV_PROTOTYPE_PLAN_HASH,
+                        self.player_surface.as_deref(),
+                        self.engine.plan_hash().bytes(),
                         kkpv_audience_hash(&handle),
                     ) {
                         Some(projection) => match projection
@@ -1191,6 +1253,7 @@ impl EmbedEngine {
                         &handle,
                         gcl,
                         self.engine.extensions(),
+                        self.player_surface.as_deref(),
                     );
                     // 市场读取已提交的引擎状态，随世界 JSON 注入，不存放在 V8 持久闭包中。
                     if let Some(obj) = world.as_object_mut() {
@@ -1503,7 +1566,7 @@ impl EmbedEngine {
             anyhow::bail!("公开束载荷不是共享形态（发布库被误用）");
         }
         let blocks = source
-            .kkpv_public_terrain_blocks(KKPV_PROTOTYPE_PLAN_HASH, KKPV_PUBLIC_AUDIENCE_HASH)
+            .kkpv_public_terrain_blocks(self.engine.plan_hash().bytes(), KKPV_PUBLIC_AUDIENCE_HASH)
             .ok_or_else(|| anyhow::anyhow!("世界源未提供 KKPV 公开地形块"))?;
         let bytes =
             kk_schema::kkpv::encode_bundle(&blocks, &kk_schema::kkpv::KkpvLimits::default())
@@ -1549,7 +1612,8 @@ impl EmbedEngine {
                     handle,
                     gcl,
                     self.engine.extensions(),
-                    KKPV_PROTOTYPE_PLAN_HASH,
+                    self.player_surface.as_deref(),
+                    self.engine.plan_hash().bytes(),
                     audience,
                 )
                 .ok_or_else(|| anyhow::anyhow!("世界源未提供 KKPV 投影"))?
@@ -1563,7 +1627,10 @@ impl EmbedEngine {
             // 公开束按当前世界重算字节数（不发布、不动库）；块数与私
             // 有束的房间集一致（全注册房间）。
             let public_blocks = source
-                .kkpv_public_terrain_blocks(KKPV_PROTOTYPE_PLAN_HASH, KKPV_PUBLIC_AUDIENCE_HASH)
+                .kkpv_public_terrain_blocks(
+                    self.engine.plan_hash().bytes(),
+                    KKPV_PUBLIC_AUDIENCE_HASH,
+                )
                 .ok_or_else(|| anyhow::anyhow!("世界源未提供 KKPV 公开地形块"))?;
             let public_bundle = kk_schema::kkpv::encode_bundle(
                 &public_blocks,
@@ -1592,8 +1659,12 @@ impl EmbedEngine {
                 "public_retained": retention,
             }))
         } else {
-            let mut world =
-                source.world_json_for_viewer_with_extensions(handle, gcl, self.engine.extensions());
+            let mut world = source.world_json_for_viewer_with_extensions(
+                handle,
+                gcl,
+                self.engine.extensions(),
+                self.player_surface.as_deref(),
+            );
             if let Some(obj) = world.as_object_mut() {
                 obj.insert("market".into(), market_view(&self.engine, handle));
             }
@@ -1719,6 +1790,8 @@ impl EmbedEngine {
         self.engine = Engine::default();
         self.mod_realm = None;
         self.ext_intents = false;
+        self.player_surface = None;
+        self.mod_player_api = None;
         self.pending = None;
         self.execution_failure = None;
         self.fail_after_player_for_test = None;

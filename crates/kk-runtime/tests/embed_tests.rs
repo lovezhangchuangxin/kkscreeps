@@ -8,6 +8,8 @@ use kk_runtime::EmbedEngine;
 
 #[path = "embed_tests/c3_counter_chain_family.rs"]
 mod c3_counter_chain;
+#[path = "embed_tests/c4_player_api_family.rs"]
+mod c4_player_api;
 #[path = "embed_tests/c_mod_settle_family.rs"]
 mod c_mod_settle;
 #[path = "embed_tests/dual_room_live_fire.rs"]
@@ -116,6 +118,12 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     c_mod_settle::c_mod_settle_replace_and_wrap_gate_impl()?;
     c_mod_settle::c_mod_settle_registration_failure_impl()?;
     c3_counter_chain::c3_counter_full_chain_impl()?;
+    c4_player_api::c4_player_chain_full_impl()?;
+    c4_player_api::c4_dual_channel_parity_impl()?;
+    c4_player_api::c4_field_visibility_cut_impl()?;
+    c4_player_api::c4_install_gates_impl()?;
+    c4_player_api::c4_server_only_type_impl()?;
+    c4_player_api::c4_float_field_dual_channel_impl()?;
     c3_counter_chain::c3_counter_gates_impl()?;
     c3_counter_chain::c3_counter_failure_rolls_back_impl()?;
     c3_counter_chain::c3_counter_creation_gates_impl()?;

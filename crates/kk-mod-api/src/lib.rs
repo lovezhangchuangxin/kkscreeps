@@ -19,6 +19,7 @@ mod fingerprint;
 mod freeze;
 mod handlers;
 mod plan;
+pub mod player_surface;
 mod rules;
 pub mod validate;
 

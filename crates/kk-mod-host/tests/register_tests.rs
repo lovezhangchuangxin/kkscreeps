@@ -210,9 +210,9 @@ fn demo_fixtures_register_and_freeze() {
         sources["demo-counter"].player_api_digest, [0u8; 32],
         "声明 player 的包有玩家面摘要"
     );
-    assert_eq!(
+    assert_ne!(
         sources["demo-base"].player_api_digest, [0u8; 32],
-        "未声明 player 的包摘要为零"
+        "两个夹具包都声明 player 面，摘要非零"
     );
 }
 
@@ -1324,4 +1324,48 @@ export default function register(api) {
     );
     let _ = std::fs::remove_dir_all(&root);
     Ok(())
+}
+
+#[test]
+fn player_modules_exported_in_dependency_order() {
+    let (_realm, registered) = register_fixtures(RegisterOptions::default());
+    // 声明 player 面的包依依赖拓扑序导出模块集（demo-base 在前）。
+    let names: Vec<&str> = registered
+        .player_modules
+        .iter()
+        .map(|m| m.namespace.as_str())
+        .collect();
+    assert_eq!(names, vec!["demo-base", "demo-counter"]);
+    let module = registered
+        .player_modules
+        .iter()
+        .find(|m| m.namespace == "demo-counter")
+        .unwrap();
+    assert_eq!(module.entry, "player.js");
+    // 包快照内的 UTF-8 文件全部可用（mod.json/server.js/util 也在其中，
+    // 玩家模块按需导入；入口不需要的文件不会装载）。
+    assert!(module.files.contains_key("player.js"));
+    assert!(module.files.contains_key("util/label.js"));
+    assert!(module.files["player.js"].contains("api.objects.bind('demo-counter:counter'"));
+    // 玩家面目录：FIND 分配与必需绑定集来自同一冻结计划；两类型按键序
+    // 分配相邻常量。
+    let surface = kk_mod_api::player_surface::PlayerSurface::from_plan(&registered.plan)
+        .expect("夹具计划可导出玩家面");
+    assert_eq!(surface.types.len(), 2);
+    assert_eq!(surface.types[0].key.as_str(), "demo-base:widget");
+    assert_eq!(
+        surface.types[0].find_const,
+        kk_mod_api::player_surface::MOD_FIND_BASE
+    );
+    assert_eq!(surface.types[1].key.as_str(), "demo-counter:counter");
+    assert_eq!(
+        surface.types[1].find_const,
+        kk_mod_api::player_surface::MOD_FIND_BASE + 1
+    );
+    assert_eq!(surface.types[1].player_class, "Counter");
+    assert_eq!(
+        surface.intents,
+        vec![key("demo-base:recharge"), key("demo-counter:increment")],
+        "夹具声明的 Mod 意图进入玩家 emit 目录"
+    );
 }

@@ -762,10 +762,13 @@
     } else {
       for (let i = 0; i < worldObjs.length; i++) {
         const o = worldObjs[i];
-        // 旗帜与工地不授予房间视野，即使带有本人的 owner。
+        // 旗帜与工地不授予房间视野，即使带有本人的 owner；Mod 对象同样
+        // 不授予（Rust 侧 room_visible_to 同口径——权威可见房恒随
+        // visibleRooms 注入，此回退只服务手搓世界）。
         // 来源：上游 driver/lib/runtime/data.js 的房间视野归集。
         const own = o.owner !== undefined ? o.owner : o.user;
-        if (own === gw.viewerName && o.type !== 'constructionSite' && o.type !== 'flag') {
+        if (own === gw.viewerName && o.type !== 'constructionSite' && o.type !== 'flag'
+          && o.type !== 'mod') {
           __reflectApply(__setAdd, visibleRooms, [o.room]);
         }
       }

@@ -33,6 +33,7 @@ impl World {
         &self,
         user: &str,
         catalog: &kk_mod_api::extension::ExtensionCatalog,
+        surface: Option<&kk_mod_api::player_surface::PlayerSurface>,
         plan_hash: [u8; 32],
         audience_hash: [u8; 32],
     ) -> Result<Vec<KkpvBlockInput>, String> {
@@ -42,12 +43,26 @@ impl World {
             let rcl = room_rcl(state);
             let mut objects = Vec::new();
             for (id, object) in &state.objects {
-                if !object_exported_for(Some(user), room_visible, object) {
+                // Mod 分支先于内建导出门（与 world_json_impl 同序）：
+                // mod_record_json 自带完整的对象级/字段级门——OwnerCollection
+                // 的归属者集合语义不受房间视野门，若先过 object_exported_for
+                // 会在不可见房被丢弃，造成与 JSON 通道的可见性分叉。
+                if let RoomObject::Mod(mod_object) = object {
+                    if let Some(surface) = surface
+                        && let Some(record) = crate::world_json::mod_record_json(
+                            name,
+                            *id,
+                            mod_object,
+                            surface,
+                            Some(user),
+                            room_visible,
+                        )
+                    {
+                        objects.push(record_to_kkpv(*id, object, &record)?);
+                    }
                     continue;
                 }
-                // Mod 对象不进玩家投影（与 world_json_impl 同口径）；查询
-                // 快照走 object_snapshot 的专用读面。
-                if matches!(object, RoomObject::Mod(_)) {
+                if !object_exported_for(Some(user), room_visible, object) {
                     continue;
                 }
                 let record = object_json(name, *id, object, self.time, &state.terrain, rcl);
@@ -334,9 +349,17 @@ fn type_key_of(record: &Value) -> String {
         .get("type")
         .and_then(Value::as_str)
         .unwrap_or("generic");
-    match (kind, record.get("structureType").and_then(Value::as_str)) {
-        ("structure", Some(st)) | ("spawn", Some(st)) => format!("builtin:{st}"),
-        _ => format!("builtin:{kind}"),
+    match kind {
+        // Mod 记录的桶键是类型键本身（namespace:name 形，非 builtin 桶）。
+        "mod" => record
+            .get("modType")
+            .and_then(Value::as_str)
+            .unwrap_or("builtin:mod")
+            .to_string(),
+        _ => match (kind, record.get("structureType").and_then(Value::as_str)) {
+            ("structure", Some(st)) | ("spawn", Some(st)) => format!("builtin:{st}"),
+            _ => format!("builtin:{kind}"),
+        },
     }
 }
 
@@ -991,9 +1014,9 @@ mod tests {
     ) -> usize {
         let plan_hash = [7u8; 32];
         let audience = [9u8; 32];
-        let reference = world.world_json_for_viewer_with_extensions(viewer, 1000, catalog);
+        let reference = world.world_json_for_viewer_with_extensions(viewer, 1000, catalog, None);
         let blocks = world
-            .kkpv_room_blocks_for_viewer(viewer, catalog, plan_hash, audience)
+            .kkpv_room_blocks_for_viewer(viewer, catalog, None, plan_hash, audience)
             .expect("块输入构造成功");
         let mut total_block_bytes = 0usize;
         let reference_rooms: Vec<&String> = reference["rooms"]
@@ -1072,7 +1095,7 @@ mod tests {
         let block_bytes_p1 = compare_worlds(&world, &catalog, "p1");
         let block_bytes_p2 = compare_worlds(&world, &catalog, "p2");
         // Owner 权限对两名查看者分别裁切：p1 见 ownerNote，p2 不见。
-        let for_p1 = world.world_json_for_viewer_with_extensions("p1", 0, &catalog);
+        let for_p1 = world.world_json_for_viewer_with_extensions("p1", 0, &catalog, None);
         let link_p1 = for_p1["objects"]
             .as_array()
             .expect("数组")
@@ -1083,7 +1106,7 @@ mod tests {
         assert_eq!(link_p1["ext"]["test:charge"], json!(55));
         assert_eq!(link_p1["ext"]["test:ratio"], json!(1.5));
         assert!(link_p1["ext"].get("test:secret").is_none());
-        let for_p2 = world.world_json_for_viewer_with_extensions("p2", 0, &catalog);
+        let for_p2 = world.world_json_for_viewer_with_extensions("p2", 0, &catalog, None);
         let link_p2 = for_p2["objects"]
             .as_array()
             .expect("数组")
@@ -1238,7 +1261,8 @@ mod tests {
                 ]),
             );
         let _ = link_id;
-        let reference = world.world_json_for_viewer_with_extensions("p1", 0, &catalog_fixture());
+        let reference =
+            world.world_json_for_viewer_with_extensions("p1", 0, &catalog_fixture(), None);
         let link_json = reference["objects"]
             .as_array()
             .expect("数组")
@@ -1251,7 +1275,7 @@ mod tests {
             "JSON 参考的原生 ext 被目录 ext 覆盖"
         );
         let blocks = world
-            .kkpv_room_blocks_for_viewer("p1", &catalog_fixture(), [0; 32], [0; 32])
+            .kkpv_room_blocks_for_viewer("p1", &catalog_fixture(), None, [0; 32], [0; 32])
             .expect("ext 键冲突按覆盖语义合并，不是错误");
         let bytes = kk_schema::kkpv::encode(&blocks[0], &kk_schema::kkpv::KkpvLimits::default())
             .expect("编码");
@@ -1279,7 +1303,7 @@ mod tests {
         .expect("冻结");
         let catalog = kk_mod_api::extension::ExtensionCatalog::from_plan(&plan).expect("目录");
         let mut blocks = world
-            .kkpv_room_blocks_for_viewer("p1", &catalog, [3u8; 32], [4u8; 32])
+            .kkpv_room_blocks_for_viewer("p1", &catalog, None, [3u8; 32], [4u8; 32])
             .expect("块");
         let private_input = blocks.remove(0);
         let private_bytes =

@@ -136,6 +136,56 @@ pub fn field_name(field: &Key) -> &str {
 /// 描述符声明的字段完全一致（未知键拒绝、缺字段拒绝），逐字段按
 /// schema 校验。写入侧（创建与处理器回写）共用此入口，保证存储中的
 /// payload 恒为已校验形态。
+/// 把 payload 数值按字段域改写为规范 backing：Float 域统一浮点
+/// backing（整数 backing 会让 KKPV 列式编码在同桶混派 Int/Float 列型，
+/// 使整轮投影失败——JSON 通道数值语义不变）。嵌套 schema（record/
+/// array/map 成员）同样递归规范化。调用方在 `check_object_payload`
+/// 通过后调用；未知键已被 check 拒绝，此处防御跳过。
+pub fn normalize_object_payload(payload: &mut Value, fields: &[FieldDescriptor]) {
+    let Some(map) = payload.as_object_mut() else {
+        return;
+    };
+    for field in fields {
+        let name = field_name(&field.key);
+        if let Some(value) = map.get_mut(name) {
+            normalize_value(value, &field.schema);
+        }
+    }
+}
+
+fn normalize_value(value: &mut Value, schema: &ValueSchema) {
+    if value.is_null() {
+        return;
+    }
+    match (&schema.kind, &mut *value) {
+        (ValueKind::Number(NumberDomain::Float { .. }), Value::Number(n)) => {
+            if let Some(f) = n.as_f64()
+                && let Some(canonical) = serde_json::Number::from_f64(f)
+            {
+                *n = canonical;
+            }
+        }
+        (ValueKind::Array { element, .. }, Value::Array(items)) => {
+            for item in items.iter_mut() {
+                normalize_value(item, element);
+            }
+        }
+        (ValueKind::Map { value, .. }, Value::Object(map)) => {
+            for member in map.values_mut() {
+                normalize_value(member, value);
+            }
+        }
+        (ValueKind::Record { fields, .. }, Value::Object(map)) => {
+            for (name, member) in map.iter_mut() {
+                if let Some(member_schema) = fields.get(name) {
+                    normalize_value(member, member_schema);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
 pub fn check_object_payload(
     payload: &Value,
     fields: &[FieldDescriptor],
@@ -362,6 +412,88 @@ mod tests {
                 "link transfer"
             )
             .is_err()
+        );
+    }
+}
+
+#[cfg(test)]
+mod normalize_tests {
+    use super::*;
+    use crate::definition::*;
+    use std::collections::{BTreeMap, BTreeSet};
+
+    fn float_field(name: &str) -> FieldDescriptor {
+        FieldDescriptor {
+            key: Key::new(format!("extmod:{name}")).unwrap(),
+            schema: ValueSchema {
+                kind: ValueKind::Number(NumberDomain::Float {
+                    min: 0.0,
+                    max: 100.0,
+                }),
+                nullable: false,
+            },
+            default: FieldDefault::Missing,
+            visibility: Visibility::Public,
+            binding: Key::new(format!("extmod:t.field.{name}")).unwrap(),
+        }
+    }
+
+    /// Float 域整数 backing 规范化为浮点 backing：写入口统一后，同桶
+    /// 混派 Int/Float 列型（KKPV 列式编码按 backing 分派）不再可能。
+    #[test]
+    fn float_domain_backing_normalized() {
+        let fields = vec![float_field("ratio"), float_field("nested")];
+        let mut payload = serde_json::json!({
+            "ratio": 2,           // 整数 backing
+            "nested": 2.5,        // 已是浮点 backing
+        });
+        normalize_object_payload(&mut payload, &fields);
+        assert_eq!(payload["ratio"], serde_json::json!(2.0));
+        assert!(
+            payload["ratio"].as_object().is_none()
+                && serde_json::to_string(&payload["ratio"])
+                    .unwrap()
+                    .contains('.'),
+            "整数 backing 改写为浮点 backing：{:?}",
+            payload["ratio"]
+        );
+        assert_eq!(payload["nested"], serde_json::json!(2.5));
+    }
+
+    /// 嵌套 schema（record 成员）同样规范化；非数值字段不动。
+    #[test]
+    fn nested_float_members_normalized() {
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "ratio".to_string(),
+            ValueSchema {
+                kind: ValueKind::Number(NumberDomain::Float { min: 0.0, max: 1.0 }),
+                nullable: false,
+            },
+        );
+        let field = FieldDescriptor {
+            key: Key::new("extmod:spec").unwrap(),
+            schema: ValueSchema {
+                kind: ValueKind::Record {
+                    fields,
+                    optional: BTreeSet::new(),
+                },
+                nullable: false,
+            },
+            default: FieldDefault::Missing,
+            visibility: Visibility::Public,
+            binding: Key::new("extmod:t.field.spec").unwrap(),
+        };
+        let mut payload = serde_json::json!({
+            "spec": { "ratio": 1 },
+        });
+        normalize_object_payload(&mut payload, &[field]);
+        assert!(
+            serde_json::to_string(&payload["spec"]["ratio"])
+                .unwrap()
+                .contains('.'),
+            "嵌套 record 的 Float 成员同样规范化：{:?}",
+            payload
         );
     }
 }

@@ -227,6 +227,18 @@
     let storageObj, terminalObj;
     lookSpatial.energy = [];
     lookSpatial.resource = lookSpatial.energy;
+    // Mod look 桶按玩家面目录预初始化（与内建 13 桶同等待遇）：空房
+    // lookForAt 返回 [] 而不是 ERR_INVALID_ARGS；类型键来自注册目录
+    //（恒含冒号），不与内建键或 Object.prototype 原型键冲突。
+    const modLookTypes = [];
+    if (gw.modApi !== undefined) {
+      for (const typeKey in gw.modApi.types) {
+        lookReg[typeKey] = {};
+        lookSpatial[typeKey] = [];
+        modLookTypes.push(typeKey);
+      }
+      modLookTypes.sort();
+    }
     for (let i = 0; i < worldObjs.length; i++) {
       const o = worldObjs[i];
       if (o.room !== name) continue;
@@ -257,6 +269,10 @@
       else if (o.type === 'nuke') t = 'nuke';
       else if (o.type === 'powerCreep') t = 'powerCreep';
       else if (o.type === 'deposit') t = 'deposit';
+      // Mod 对象按类型键进 look 桶（键带冒号，不与内建 look 键冲突；
+      // 桶已在下方按玩家面目录预初始化）。未安装玩家面的分片不会有
+      // mod 记录，此分支为死代码。
+      else if (o.type === 'mod') t = o.modType;
       if (t === null) continue;
       const w = __reflectApply(__mapGet, gw.objectsById, [o.id]);
       if (!w) continue;
@@ -343,6 +359,11 @@
         return _.clone(out);
       }
       const out = [];
+      // Mod 查询常量：FIND 下界与常量→类型映射都来自玩家面目录（Rust
+      // 清单权威）；下界判定与映射在循环外完成。
+      const modFindType = gw.modApi === undefined || type < gw.modApi.modFindBase
+        ? undefined
+        : gw.modApi.findByConst[type];
       // 没有查看者时 MY_*/HOSTILE_* 无法分类，返回空；FIND_CREEPS 在此模式保留孵化对象。
       const neutral = gw.viewerName === null;
       for (let i = 0; i < worldObjs.length; i++) {
@@ -383,6 +404,10 @@
         else if (type === 119 /* FIND_POWER_CREEPS */ && o.type === 'powerCreep') out.push(w);
         else if (type === 122 /* FIND_DEPOSITS */ && o.type === 'deposit') out.push(w);
         else if (type === 123 /* FIND_RUINS */ && o.type === 'ruin') out.push(w);
+        // Mod 查询常量（注册期分配，下界见 modFindBase）：命中对应类型。
+        else if (modFindType !== undefined && o.type === 'mod' && o.modType === modFindType) {
+          out.push(w);
+        }
       }
       // 官方 rooms.js:648-654：opts.filter（函数或 lodash 对象谓词）经
       // _.filter 应用——bot 生态最常用的 find 形态
@@ -484,8 +509,9 @@
 
     // 官方 rooms.js:768-796 lookAt 逐字：官方固定序 14 类型（creep→energy→
     // resource→source→mineral→deposit→structure→flag→constructionSite→
-    // terrain 第 10 位→nuke→tombstone→ruin→powerCreep）；官方 customObjectPrototypes
-    // 扩展钩我方引擎无自定义原型面，不接入
+    // terrain 第 10 位→nuke→tombstone→ruin→powerCreep）；Mod 类型键（带
+    // 冒号）按键序追加在内建固定序之后，官方 customObjectPrototypes 协议
+    // 不接入
     room.lookAt = function (firstArg, secondArg) {
       const xy = gw.fetchXYArguments(firstArg, secondArg);
       const x = xy[0], y = xy[1];
@@ -504,6 +530,9 @@
       _lookSpatialRegister('tombstone', x, y, result);
       _lookSpatialRegister('ruin', x, y, result);
       _lookSpatialRegister('powerCreep', x, y, result);
+      for (let m = 0; m < modLookTypes.length; m++) {
+        _lookSpatialRegister(modLookTypes[m], x, y, result);
+      }
       return result;
     };
     // 官方 rooms.js:798-806 lookForAt 逐字：未知类型（非 terrain 且不在
@@ -542,6 +571,9 @@
       _lookAreaMixedRegister('tombstone', top, left, bottom, right, true, asArray, result);
       _lookAreaMixedRegister('ruin', top, left, bottom, right, true, asArray, result);
       _lookAreaMixedRegister('powerCreep', top, left, bottom, right, true, asArray, result);
+      for (let m = 0; m < modLookTypes.length; m++) {
+        _lookAreaMixedRegister(modLookTypes[m], top, left, bottom, right, true, asArray, result);
+      }
       return result;
     };
     // 官方 rooms.js:847-860 lookForAtArea 逐字：非 asArray 只预填行对象（格

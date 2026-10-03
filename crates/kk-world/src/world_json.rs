@@ -15,7 +15,7 @@ use crate::world::World;
 impl World {
     /// 导出所有房间和对象，不限制玩家视野，供内部调用及测试使用。
     pub fn world_json(&self) -> Value {
-        self.world_json_impl(None)
+        self.world_json_impl(None, None)
     }
 
     /// 为指定玩家生成沙箱数据，gcl_points 是玩家累计 GCL 点数，不是等级。
@@ -25,22 +25,24 @@ impl World {
     /// 当前不根据 observer 观察或控制器预订授予额外房间视野。
     /// 视野归集参考：driver/lib/runtime/data.js 的 userObjects 房间计算。
     pub fn world_json_for_viewer(&self, user: &str, gcl_points: i64) -> Value {
-        self.world_json_impl(Some((user, gcl_points)))
+        self.world_json_impl(Some((user, gcl_points)), None)
     }
 
-    /// 带扩展字段目录的玩家投影：目录内声明的扩展字段按权限裁切后
-    /// 进入对象的 `ext` 键。Public 对看到该对象的玩家可见；Owner 仅
-    /// 对象主人可见；ServerOnly 不进入任何玩家投影，只保存在权威
-    /// 状态 `RoomState.extensions` 中。未声明扩展字段的类型与全部
-    /// 字段被裁掉的对象都不输出 `ext` 键。
+    /// 带扩展字段目录与 Mod 玩家面的玩家投影：扩展字段按权限裁切后
+    /// 进入对象的 `ext` 键；Mod 对象经玩家面目录（`PlayerSurface`）按对象/字段
+    /// 可见性裁切后进入对象数组（surface 为 None 时不进——vanilla 口径）。
+    /// Public 对看到该对象的玩家可见；Owner 仅对象主人可见；ServerOnly
+    /// 不进入任何玩家投影。未声明扩展字段的类型与全部字段被裁掉的对象
+    /// 都不输出 `ext` 键。
     pub fn world_json_for_viewer_with_extensions(
         &self,
         user: &str,
         gcl_points: i64,
         catalog: &kk_mod_api::extension::ExtensionCatalog,
+        surface: Option<&kk_mod_api::player_surface::PlayerSurface>,
     ) -> Value {
         use crate::world::ObjId;
-        let mut world = self.world_json_impl(Some((user, gcl_points)));
+        let mut world = self.world_json_impl(Some((user, gcl_points)), surface);
         if catalog.is_empty() {
             return world;
         }
@@ -74,7 +76,11 @@ impl World {
         world
     }
 
-    fn world_json_impl(&self, viewer: Option<(&str, i64)>) -> Value {
+    fn world_json_impl(
+        &self,
+        viewer: Option<(&str, i64)>,
+        surface: Option<&kk_mod_api::player_surface::PlayerSurface>,
+    ) -> Value {
         let user = viewer.map(|(u, _)| u);
         let visible: std::collections::BTreeSet<&String> = match user {
             None => self.rooms.keys().collect(),
@@ -112,9 +118,16 @@ impl World {
             rooms.insert(name.clone(), Value::Object(entry));
             let room_visible = visible.contains(name);
             for (id, object) in &state.objects {
-                // Mod 声明类型的对象暂不进入任何 world_json 投影（含内部
-                // 全量形态）；查询快照走 object_snapshot 的专用读面。
-                if matches!(object, RoomObject::Mod(_)) {
+                // Mod 对象只在携带玩家面目录时进入投影（按对象/字段可见
+                // 性裁切）；内部全量形态（world_json，无目录）与查询快照
+                // 走 object_snapshot 的专用读面。
+                if let RoomObject::Mod(mod_object) = object {
+                    if let Some(surface) = surface
+                        && let Some(record) =
+                            mod_record_json(name, *id, mod_object, surface, user, room_visible)
+                    {
+                        objects.push(record);
+                    }
                     continue;
                 }
                 if !object_exported_for(user, room_visible, object) {
@@ -254,6 +267,76 @@ pub(crate) fn object_exported_for(
         ) && crate::domain::object_owner(object).as_deref() == Some(viewer);
     }
     true
+}
+
+/// 把 Mod 对象裁切为玩家面记录：对象级可见性（OwnerCollection 仅归属
+/// 者可见；RoomVisible 走调用方的房间视野门）与字段级可见性（Public /
+/// Owner=查看者是归属者 / ServerOnly 不出）都在此定论，玩家 getter 只
+/// 读当轮记录。信封键（type/modType/id/room/x/y/pos）最后写入——
+/// 声明位置字段同名时被等值覆写（写入口径保证同步）。类型不在目录、
+/// 归属不可解析或 payload 损坏（发布前校验兜底的防御路径）返回 None。
+pub(crate) fn mod_record_json(
+    room: &str,
+    id: crate::world::ObjId,
+    o: &kk_schema::room::ModObj,
+    surface: &kk_mod_api::player_surface::PlayerSurface,
+    viewer: Option<&str>,
+    room_visible: bool,
+) -> Option<Value> {
+    let ty = surface
+        .types
+        .iter()
+        .find(|ty| ty.key.as_str() == o.type_key)?;
+    // payload 损坏（写入口校验兜底的防御路径）对两种对象可见性都
+    // 整体不导出——骨架记录会让玩家读到"存在但无字段"的假对象。
+    let payload: serde_json::Map<String, Value> = serde_json::from_str(&o.data).ok()?;
+    let owner = ty
+        .owner_field
+        .as_ref()
+        .and_then(|name| payload.get(name))
+        .and_then(Value::as_str);
+    match ty.visibility {
+        // 房间可见即导出（视野门与内建对象同口径——Mod 对象自身不授予
+        // 房间视野）。
+        kk_mod_api::ObjectVisibility::RoomVisible => {
+            if viewer.is_some() && !room_visible {
+                return None;
+            }
+        }
+        // 归属者集合语义（与己方旗同形）：归属者可见，不受房间视野门；
+        // 他人不可见。
+        kk_mod_api::ObjectVisibility::OwnerCollection => {
+            let viewer = viewer?;
+            if owner != Some(viewer) {
+                return None;
+            }
+        }
+        // 目录只收 RoomVisible/OwnerCollection（ServerOnly 不进玩家面，
+        // Conditional 在导出时拒绝）；此处为穷尽性防御。
+        _ => return None,
+    }
+    let mut record = serde_json::Map::new();
+    for field in &ty.fields {
+        let visible = match field.visibility {
+            kk_mod_api::Visibility::Public => true,
+            kk_mod_api::Visibility::Owner => viewer.is_some_and(|v| Some(v) == owner),
+            _ => false,
+        };
+        if visible && let Some(value) = payload.get(&field.name) {
+            record.insert(field.name.clone(), value.clone());
+        }
+    }
+    record.insert("type".into(), json!("mod"));
+    record.insert("modType".into(), json!(o.type_key));
+    record.insert("id".into(), json!(id.as_str()));
+    record.insert("room".into(), json!(room));
+    record.insert("x".into(), json!(o.x));
+    record.insert("y".into(), json!(o.y));
+    record.insert(
+        "pos".into(),
+        json!({ "x": o.x, "y": o.y, "roomName": room }),
+    );
+    Some(Value::Object(record))
 }
 
 /// 按目录权限把对象的扩展字段裁切为 `ext` 键内容；无可见字段时返回

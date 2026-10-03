@@ -33,13 +33,15 @@ pub trait WorldSource {
     /// 世界时间（玩家可见 Game.time 的来源）。
     fn game_time(&self) -> u64;
 
-    /// 带扩展字段目录的玩家投影；扩展字段按权限裁切进入对象 ext 键。
-    /// 目录为空时与 world_json_for_viewer 输出相同。
+    /// 带扩展字段目录与 Mod 玩家面的玩家投影；扩展字段按权限裁切进入
+    /// 对象 ext 键，Mod 对象经 surface 按可见性裁切进入对象数组。
+    /// 目录为空且 surface 为 None 时与 world_json_for_viewer 输出相同。
     fn world_json_for_viewer_with_extensions(
         &self,
         viewer: &str,
         gcl_points: i64,
         catalog: &kk_mod_api::extension::ExtensionCatalog,
+        surface: Option<&kk_mod_api::player_surface::PlayerSurface>,
     ) -> Value;
 
     /// 为查看者生成 KKPV 投影：不含对象数组与地形的世界信封与逐房间
@@ -50,6 +52,7 @@ pub trait WorldSource {
         _viewer: &str,
         _gcl_points: i64,
         _catalog: &kk_mod_api::extension::ExtensionCatalog,
+        _surface: Option<&kk_mod_api::player_surface::PlayerSurface>,
         _plan_hash: [u8; 32],
         _audience_hash: [u8; 32],
     ) -> Option<Result<(Value, Vec<kk_schema::kkpv::KkpvBlockInput>), String>> {
@@ -78,8 +81,11 @@ impl WorldSource for kk_world::World {
         viewer: &str,
         gcl_points: i64,
         catalog: &kk_mod_api::extension::ExtensionCatalog,
+        surface: Option<&kk_mod_api::player_surface::PlayerSurface>,
     ) -> Value {
-        kk_world::World::world_json_for_viewer_with_extensions(self, viewer, gcl_points, catalog)
+        kk_world::World::world_json_for_viewer_with_extensions(
+            self, viewer, gcl_points, catalog, surface,
+        )
     }
 
     fn kkpv_projection_for_viewer(
@@ -87,6 +93,7 @@ impl WorldSource for kk_world::World {
         viewer: &str,
         gcl_points: i64,
         catalog: &kk_mod_api::extension::ExtensionCatalog,
+        surface: Option<&kk_mod_api::player_surface::PlayerSurface>,
         plan_hash: [u8; 32],
         audience_hash: [u8; 32],
     ) -> Option<Result<(Value, Vec<kk_schema::kkpv::KkpvBlockInput>), String>> {
@@ -95,6 +102,7 @@ impl WorldSource for kk_world::World {
                 self,
                 viewer,
                 catalog,
+                surface,
                 plan_hash,
                 audience_hash,
             )
@@ -249,7 +257,7 @@ mod extension_projection_via_trait_tests {
         .unwrap();
         let catalog = kk_mod_api::extension::ExtensionCatalog::from_plan(&plan).unwrap();
         let source: &dyn WorldSource = &world;
-        let view = source.world_json_for_viewer_with_extensions("p1", 0, &catalog);
+        let view = source.world_json_for_viewer_with_extensions("p1", 0, &catalog, None);
         let obj = view["objects"]
             .as_array()
             .unwrap()
@@ -259,7 +267,7 @@ mod extension_projection_via_trait_tests {
         assert_eq!(obj["ext"]["testmod:mark"], serde_json::json!(7));
 
         let empty = kk_mod_api::extension::ExtensionCatalog::default();
-        let plain = source.world_json_for_viewer_with_extensions("p1", 0, &empty);
+        let plain = source.world_json_for_viewer_with_extensions("p1", 0, &empty, None);
         let obj = plain["objects"]
             .as_array()
             .unwrap()

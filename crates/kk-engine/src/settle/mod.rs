@@ -304,6 +304,7 @@ impl<'w> Working<'w> {
     /// 键集合与字段描述完全一致；声明的位置字段同步到对象信封坐标与
     /// 位置索引。只修改本房候选，失败随房间候选一并丢弃。
     pub fn update_mod_fields(&mut self, id: ObjId, fields: &Value) -> Result<(), String> {
+        let mut fields = fields.clone();
         let type_key = match self.room.objects.get(&id) {
             Some(RoomObject::Mod(o)) => o.type_key.clone(),
             _ => return Err(format!("对象 {} 不是 Mod 对象", id.as_str())),
@@ -319,7 +320,10 @@ impl<'w> Working<'w> {
             .projection()
             .get(handle)
             .expect("句柄来自计划");
-        kk_mod_api::validate::check_object_payload(fields, &ty.descriptor.fields, &type_key)?;
+        kk_mod_api::validate::check_object_payload(&fields, &ty.descriptor.fields, &type_key)?;
+        // 数值 backing 规范化（Float 域统一浮点 backing）：KKPV 列式编码
+        // 按值分派列型，整数/浮点 backing 混桶会使整轮投影失败。
+        kk_mod_api::validate::normalize_object_payload(&mut fields, &ty.descriptor.fields);
         let (mut x, mut y) = match self.room.objects.get(&id) {
             Some(RoomObject::Mod(o)) => (o.x, o.y),
             _ => unreachable!("上面已判 Mod"),
@@ -1050,6 +1054,12 @@ impl Engine {
         self.plan = plan;
         self.has_mod_types = has_mod_types;
         Ok(())
+    }
+
+    /// 当前已装配冻结计划的指纹：KKPV 块头的 plan_hash 来源（计划变化
+    /// 使旧块失效——B.5 残留的真实指纹收口）。
+    pub fn plan_hash(&self) -> kk_mod_api::PlanHash {
+        self.plan.hash()
     }
 
     /// 计划中的 Mod 类型描述符（管理面创建对象与诊断用）；builtin 类型

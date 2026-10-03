@@ -25,4 +25,4 @@ mod realm;
 pub use error::{ModHostError, ModHostResult};
 pub use manifest::{ModManifest, SDK_API_VERSION, Version, VersionReq};
 pub use package::{ModPackage, discover_packages};
-pub use realm::{ModRealm, RegisterOptions, Registered};
+pub use realm::{ModRealm, PlayerModulePackage, RegisterOptions, Registered};

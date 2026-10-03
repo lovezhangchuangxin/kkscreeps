@@ -15,9 +15,37 @@ fn spec() -> Value {
     })
 }
 
-fn chain_engine(
+pub(super) fn chain_engine(
     label: &str,
     server_js: &str,
+    configs: Option<Value>,
+) -> anyhow::Result<EmbedEngine> {
+    chain_engine_with_player(label, server_js, PLAYER_JS, configs)
+}
+
+/// counter 的玩家面模块：类/getter/emit 与查询常量（FIND/LOOK）。
+pub(super) const PLAYER_JS: &str = r#"
+export default function install(api) {
+  const { RoomObject } = api.builtins;
+  class Counter extends RoomObject {
+    get value() { return api.view.field(this, 'value'); }
+    get owner() { return api.view.field(this, 'owner'); }
+    increment(amount = 1) {
+      return api.intents.emit('chainmod:increment', this, { amount });
+    }
+  }
+  api.objects.bind('chainmod:counter', Counter);
+  api.globals.define('Counter', Counter);
+  const q = api.queries.install('chainmod:counter');
+  api.globals.define('FIND_COUNTERS', q.find);
+  api.globals.define('LOOK_COUNTERS', q.look);
+}
+"#;
+
+fn chain_engine_with_player(
+    label: &str,
+    server_js: &str,
+    player_js: &str,
     configs: Option<Value>,
 ) -> anyhow::Result<EmbedEngine> {
     let dir = std::env::temp_dir().join(format!(
@@ -30,10 +58,11 @@ fn chain_engine(
     std::fs::create_dir_all(&pkg).expect("建包目录");
     std::fs::write(
         pkg.join("mod.json"),
-        r#"{"id":"chainmod","version":"1.0.0","apiVersion":"^1.0.0"}"#,
+        r#"{"id":"chainmod","version":"1.0.0","apiVersion":"^1.0.0","player":"player.js"}"#,
     )
     .expect("写 manifest");
     std::fs::write(pkg.join("server.js"), server_js).expect("写入口");
+    std::fs::write(pkg.join("player.js"), player_js).expect("写玩家模块");
     let mut options = RegisterOptions::default();
     if let Some(config) = configs {
         options.configs.insert("chainmod".into(), config);
@@ -47,7 +76,7 @@ fn chain_engine(
 
 /// counter 包：类型 + increment 动作（process 更新字段）+ after 审计
 /// （Mod 状态计数）。
-const CHAIN_JS: &str = r#"
+pub(super) const CHAIN_JS: &str = r#"
 import { createApi } from '@kkscreeps/mod';
 export default function register(api) {
   const counter = api.objects.define('chainmod:counter', {
@@ -78,7 +107,7 @@ export default function register(api) {
 }
 "#;
 
-fn place_counter(e: &mut EmbedEngine, owner: &str) -> anyhow::Result<String> {
+pub(super) fn place_counter(e: &mut EmbedEngine, owner: &str) -> anyhow::Result<String> {
     e.place_mod_object(
         "W1N1",
         "chainmod:counter",
@@ -86,7 +115,7 @@ fn place_counter(e: &mut EmbedEngine, owner: &str) -> anyhow::Result<String> {
     )
 }
 
-fn value_of(e: &EmbedEngine, id: &str) -> Value {
+pub(super) fn value_of(e: &EmbedEngine, id: &str) -> Value {
     e.get_object(id).unwrap()["fields"].clone()
 }
 
@@ -310,17 +339,20 @@ export default function register(api) {
     let mut e = chain_engine("config", config_js, Some(json!({ "start": 5 })))?;
     let id = place_counter(&mut e, "p1")?;
     assert_eq!(value_of(&e, &id)["value"], json!(5), "配置默认值落位");
-    // 两通道：玩家执行正常且 counter 不出现在其世界数据。
+    // 两通道：counter 进入玩家投影（C.4 起携带玩家面目录），值经 getter
+    // 读出，两通道一致。
     for channel in [false, true] {
         e.set_kkpv_channel(channel);
         let run = e.run_player(
             "p1",
-            &format!(r#"Game.getObjectById('{id}') === null && typeof __kkEmitExtensionIntent"#),
+            &format!(
+                r#"(function() {{ const c = Game.getObjectById('{id}'); return c === null ? null : [c.value, c instanceof Counter, c.pos.roomName]; }})()"#
+            ),
         )?;
         assert_eq!(
             run.expr["value"],
-            json!("function"),
-            "原语已装配（{channel} 通道）：{:?}",
+            json!([5, true, "W1N1"]),
+            "counter 对玩家可见（{channel} 通道）：{:?}",
             run.expr
         );
     }
@@ -409,7 +441,12 @@ export default function register(api) {
   });
 }
 "#;
-    let mut e = chain_engine("linkonly", server_js, None)?;
+    let mut e = chain_engine_with_player(
+        "linkonly",
+        server_js,
+        "export default function install() {}",
+        None,
+    )?;
     e.run_player("p1", "typeof __kkEmitExtensionIntent")?;
     let logs = e.capture_console_logs("p1");
     let _ = logs;

@@ -11,6 +11,8 @@ use kk_runner::{ModuleTable, Sandbox, SandboxConfig, TickOutcome, TickPlan, live
 
 #[path = "sandbox_tests/kkpv_channel.rs"]
 mod kkpv_channel;
+#[path = "sandbox_tests/mod_player_api.rs"]
+mod mod_player_api;
 #[path = "sandbox_tests/prelude_and_room_forms.rs"]
 mod prelude_and_room_forms;
 #[path = "sandbox_tests/resource_host_and_nearheap.rs"]
@@ -21,6 +23,7 @@ mod store_spawn_and_viewer;
 mod watchdog_and_memory;
 // 子模块提供场景函数，由唯一的顶层测试串行调用；不要将它们改成并行测试。
 use kkpv_channel::*;
+use mod_player_api::*;
 use prelude_and_room_forms::*;
 use resource_host_and_nearheap::*;
 use store_spawn_and_viewer::*;
@@ -35,6 +38,10 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     stub_game_projection()?;
     intent_channel_prelude_forms_impl()?;
     ext_intent_primitive_impl()?;
+    mod_player_api_surface_impl()?;
+    mod_player_api_record_face_impl()?;
+    mod_player_api_module_gates_impl()?;
+    mod_player_api_global_surface_impl()?;
     hostile_probes_impl()?;
     move_misc_family_prelude_forms_impl()?;
     run_expr_channel()?;

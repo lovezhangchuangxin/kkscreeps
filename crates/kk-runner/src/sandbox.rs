@@ -83,6 +83,11 @@ const PRELUDE_SEGMENTS: [(&str, &str); 16] = [
 /// 默认 V8 堆上限，单位字节；不等于整个玩家线程的内存上限。
 const DEFAULT_HEAP_LIMIT: usize = 256 * 1024 * 1024;
 
+/// Mod 玩家面安装（41 段 + 全部玩家模块装载与 install 调用）的墙钟
+/// 期限：作者代码首次执行的总闸——超时中断使沙箱创建失败，不楔死
+/// 分片创建（正常安装是毫秒级）。
+const INSTALL_WALL_LIMIT: Duration = Duration::from_secs(10);
+
 #[derive(Debug, Clone)]
 pub struct SandboxConfig {
     pub heap_limit_bytes: usize,
@@ -96,6 +101,12 @@ pub struct SandboxConfig {
     /// 是否装配扩展意图的玩家面原语（`__kkEmitExtensionIntent`）。
     /// 只有分片计划含 Mod 意图时置 true；vanilla 分片的全局面不变。
     pub extension_intents: bool,
+    /// Mod 玩家面安装清单：存在时装配安装运行时并逐包执行玩家模块
+    ///（prelude 段之后、宿主句柄捕获之前）；vanilla 分片为 None。
+    pub mod_api: Option<std::sync::Arc<crate::mod_api::ModPlayerApi>>,
+    /// Mod 安装期的墙钟期限；None 用默认 10s。测试可缩短以验证挂死
+    /// 兜底（作者代码死循环/TLA 使安装失败而不是楔死分片创建）。
+    pub install_wall_limit: Option<Duration>,
 }
 
 impl Default for SandboxConfig {
@@ -108,6 +119,8 @@ impl Default for SandboxConfig {
             initial_bucket: BUCKET_CAP,
             constant_overrides: std::collections::BTreeMap::new(),
             extension_intents: false,
+            mod_api: None,
+            install_wall_limit: None,
         }
     }
 }
@@ -185,13 +198,22 @@ impl Sandbox {
         let _guard = tokio.enter();
 
         let create_params = v8::CreateParams::default().heap_limits(0, config.heap_limit_bytes);
+        // 玩家模块装载器只在 Mod 分片装配（vanilla 分片的运行时选项不变）。
+        let player_loader = config.mod_api.as_ref().map(|api| {
+            std::rc::Rc::new(crate::mod_api::PlayerModuleLoader {
+                modules: api.modules.clone(),
+            })
+        });
         let mut runtime = JsRuntime::new(RuntimeOptions {
             extensions: vec![kk_runner::init()],
             create_params: Some(create_params),
+            module_loader: player_loader
+                .map(|loader| loader as std::rc::Rc<dyn deno_core::ModuleLoader>),
             ..Default::default()
         });
 
         let shared: SharedRef = Arc::new(Shared::default());
+        let mut install_watchdog = None;
         let host = {
             let _guard = tokio.enter();
             runtime.op_state().borrow_mut().put(ModuleTable::new());
@@ -215,12 +237,47 @@ impl Sandbox {
                     include_str!("prelude/40_ext_intents.js").to_string(),
                 )?;
             }
+            // Mod 玩家面安装（41 段 + 模块装载）先于 __kkp 删除与玩家可
+            // 见化：41 段在 __kkp 上定义安装运行时并把 createInstallApi/
+            // finalize 捕获为 Rust 持有的 v8 句柄，随后先捕获宿主句柄、删
+            // 除 __kkp，再经捕获句柄逐包装载玩家模块——Mod 代码执行时
+            // __kkp 已删除，与玩家同权限面。任何一步失败都使沙箱创建失败
+            // （fail-loud），不产出半装好的玩家 API。
+            //
+            // Mod 代码是首次执行的作者代码：看门狗带安装墙钟期限、近堆
+            // 回调先于安装挂好——死循环挂死与无界分配进程中止都有兜底，
+            // 中断使安装失败而不是楔死分片创建。
+            // 宿主句柄在 __kkp 删除前捕获（90_host 段注册于其上）。
             let host = HostFns::capture(&mut runtime)?;
+            let mod_install = match &config.mod_api {
+                Some(api) => {
+                    let watchdog = Watchdog::spawn(runtime.v8_isolate().thread_safe_handle());
+                    install_near_heap_callback(&mut runtime, shared.clone());
+                    watchdog.arm(
+                        Instant::now() + config.install_wall_limit.unwrap_or(INSTALL_WALL_LIMIT),
+                    );
+                    let result = install_mod_player_api(&mut runtime, &tokio, api);
+                    watchdog.disarm();
+                    runtime.v8_isolate().cancel_terminate_execution();
+                    match result {
+                        Ok(()) => {
+                            install_watchdog = Some(watchdog);
+                            Ok(())
+                        }
+                        Err(error) => Err(anyhow::anyhow!("Mod 玩家面安装失败：{error}")),
+                    }
+                }
+                None => Ok(()),
+            };
+            mod_install?;
+            // Mod 路径在安装内部已删除 __kkp；这里再删一次幂等（缺键 delete
+            // 为 no-op），两路径共用同一收尾。
             runtime.execute_script("kk-host-unlink", "delete globalThis.__kkp".to_string())?;
             host
         };
 
-        let watchdog = Watchdog::spawn(runtime.v8_isolate().thread_safe_handle());
+        let watchdog = install_watchdog
+            .unwrap_or_else(|| Watchdog::spawn(runtime.v8_isolate().thread_safe_handle()));
 
         let seq = SEQ.fetch_add(1, Ordering::SeqCst);
         let mut sb = Self {
@@ -251,18 +308,8 @@ impl Sandbox {
         Ok(sb)
     }
 
-    /// 接近 V8 堆上限时请求中断，并返回临时扩大后的上限。
-    /// V8 会保留新上限，必须在执行结束后通过 restore_heap_limit 恢复，
-    /// 否则连续触发会不断放大配置上限。回调不覆盖 TypedArray 等全部堆外分配。
     fn install_near_heap_callback(&mut self) {
-        let handle = self.runtime.v8_isolate().thread_safe_handle();
-        let shared = self.shared.clone();
-        self.runtime
-            .add_near_heap_limit_callback(move |current_limit, _initial| {
-                shared.near_heap_fired.store(true, Ordering::Relaxed);
-                handle.terminate_execution();
-                current_limit * 2
-            });
+        install_near_heap_callback(&mut self.runtime, self.shared.clone());
     }
 
     /// 近堆回调触发后，以配置值请求恢复上限并重新注册回调。
@@ -1071,6 +1118,18 @@ fn lodash_script() -> String {
     s
 }
 
+/// 近堆回调注册为独立函数：Mod 安装期也要挂好（安装先于 Self 构造）。
+/// 接近 V8 堆上限时请求中断并临时放大上限；执行结束后由
+/// restore_heap_limit 恢复。回调不覆盖 TypedArray 等全部堆外分配。
+fn install_near_heap_callback(runtime: &mut JsRuntime, shared: SharedRef) {
+    let handle = runtime.v8_isolate().thread_safe_handle();
+    runtime.add_near_heap_limit_callback(move |current_limit, _initial| {
+        shared.near_heap_fired.store(true, Ordering::Relaxed);
+        handle.terminate_execution();
+        current_limit * 2
+    });
+}
+
 fn constants_script(overrides: &std::collections::BTreeMap<String, serde_json::Value>) -> String {
     // 将嵌入的常量 JSON 构造成对象，叠加宿主按有效规则提供的覆盖，
     // 再平铺至玩家全局；API 各段按需捕获常量。
@@ -1078,6 +1137,158 @@ fn constants_script(overrides: &std::collections::BTreeMap<String, serde_json::V
     format!(
         "(function(){{ var C = {CONSTANTS_JSON}; var O = {extra}; for (var k in O) {{ if (!Object.prototype.hasOwnProperty.call(C, k)) throw new Error('常量覆盖键不在常量表: ' + k); C[k] = O[k]; }} for (var k in C) globalThis[k] = C[k]; }})();"
     )
+}
+
+/// 装配 Mod 玩家面：清单注入 → 安装运行时（41 段）→ 逐包装载玩家模块
+/// 并以安装 API 调用 default 导出 → finalize 校验必需绑定。任何一步
+/// 失败都使沙箱创建失败；玩家模块只允许静态导入图与同步 install。
+fn install_mod_player_api(
+    runtime: &mut JsRuntime,
+    tokio: &tokio::runtime::Runtime,
+    api: &crate::mod_api::ModPlayerApi,
+) -> anyhow::Result<()> {
+    // findBase 是 Rust 侧唯一权威（清单类型表的最小 FIND 常量；无类型
+    // 时取 i64::MAX——沙箱侧的 mod 查询分支恒不命中）。
+    let find_base = api
+        .types
+        .iter()
+        .map(|(_, find, _)| *find)
+        .min()
+        .unwrap_or(i64::MAX);
+    let manifest = serde_json::json!({
+        "types": api
+            .types
+            .iter()
+            .map(|(key, find, look)| serde_json::json!({ "key": key, "find": find, "look": look }))
+            .collect::<Vec<_>>(),
+        "intents": api.intents,
+        "findBase": find_base,
+    });
+    runtime.execute_script(
+        "kk-mod-api-manifest",
+        format!(
+            "globalThis.__kkModApiManifest = {};",
+            serde_json::to_string(&manifest)?
+        ),
+    )?;
+    runtime.execute_script(
+        "kk-prelude-41-mod-player",
+        include_str!("prelude/41_mod_player.js").to_string(),
+    )?;
+    // 安装运行时的两个入口捕获为 Rust 持有的 v8 句柄：此后不再经
+    // __kkp 全局查找，且可以在模块执行前删除 __kkp——Mod 代码与玩家
+    // 同权限面（读不到 gw/modApiRuntime 等宿主内部容器）。
+    let create_install_api = runtime.execute_script(
+        "kk-mod-api-grab-factory",
+        "globalThis.__kkp.modApiRuntime.createInstallApi".to_string(),
+    )?;
+    let finalize = runtime.execute_script(
+        "kk-mod-api-grab-finalize",
+        "globalThis.__kkp.modApiRuntime.finalize".to_string(),
+    )?;
+    runtime.execute_script("kk-mod-api-unlink", "delete globalThis.__kkp".to_string())?;
+    for module in api.modules.iter() {
+        let install_api = call_install_factory(runtime, &create_install_api, &module.namespace)?;
+        let url = crate::mod_api::entry_specifier(module).map_err(anyhow::Error::msg)?;
+        let runtime_ref: &mut JsRuntime = runtime;
+        let mod_id = tokio
+            .block_on(async {
+                let id = runtime_ref.load_side_es_module(&url).await?;
+                let evaluate = runtime_ref.mod_evaluate(id);
+                runtime_ref.run_event_loop(Default::default()).await?;
+                evaluate.await?;
+                Ok::<_, deno_core::error::CoreError>(id)
+            })
+            .map_err(|error| {
+                anyhow::anyhow!("玩家模块 {} 装载或求值失败：{error}", module.namespace)
+            })?;
+        call_player_install(runtime, mod_id, &install_api, &module.namespace)?;
+    }
+    call_captured_finalize(runtime, &finalize)?;
+    Ok(())
+}
+
+/// 经捕获句柄为命名空间创建安装 API（不经 __kkp 全局查找）。
+fn call_install_factory(
+    runtime: &mut JsRuntime,
+    factory: &v8::Global<v8::Value>,
+    namespace: &str,
+) -> anyhow::Result<v8::Global<v8::Value>> {
+    deno_core::scope!(scope, runtime);
+    v8::tc_scope!(let tc, scope);
+    let factory = v8::Local::<v8::Function>::try_from(v8::Local::new(tc, factory.clone()))
+        .map_err(|_| anyhow::anyhow!("安装 API 工厂非函数（41 段装配缺陷）"))?;
+    let namespace = v8::String::new_from_utf8(tc, namespace.as_bytes(), v8::NewStringType::Normal)
+        .ok_or_else(|| anyhow::anyhow!("键名构造失败"))?;
+    let receiver = v8::undefined(tc).into();
+    let result = factory
+        .call(tc, receiver, &[namespace.into()])
+        .ok_or_else(|| {
+            let detail = tc
+                .exception()
+                .map(|exception| exception.to_rust_string_lossy(tc))
+                .unwrap_or_else(|| "无异常细节".to_string());
+            anyhow::anyhow!("createInstallApi 调用失败：{detail}")
+        })?;
+    Ok(v8::Global::new(tc, result))
+}
+
+/// 经捕获句柄调用 finalize：缺必需绑定在 JS 侧抛错，异常文本随错误返回。
+fn call_captured_finalize(
+    runtime: &mut JsRuntime,
+    finalize: &v8::Global<v8::Value>,
+) -> anyhow::Result<()> {
+    deno_core::scope!(scope, runtime);
+    v8::tc_scope!(let tc, scope);
+    let finalize = v8::Local::<v8::Function>::try_from(v8::Local::new(tc, finalize.clone()))
+        .map_err(|_| anyhow::anyhow!("finalize 非函数（41 段装配缺陷）"))?;
+    let receiver = v8::undefined(tc).into();
+    finalize.call(tc, receiver, &[]).map(|_| ()).ok_or_else(|| {
+        let detail = tc
+            .exception()
+            .map(|exception| exception.to_rust_string_lossy(tc))
+            .unwrap_or_else(|| "无异常细节".to_string());
+        anyhow::anyhow!("玩家面 finalize 失败：{detail}")
+    })
+}
+
+/// 调用玩家模块的 default(install) 导出。install 必须同步返回；异常
+/// 文本随错误返回，供装配失败诊断。
+fn call_player_install(
+    runtime: &mut JsRuntime,
+    mod_id: deno_core::ModuleId,
+    install_api: &v8::Global<v8::Value>,
+    namespace: &str,
+) -> anyhow::Result<()> {
+    let module_namespace = runtime
+        .get_module_namespace(mod_id)
+        .map_err(|error| anyhow::anyhow!("玩家模块 {namespace} 命名空间不可用：{error}"))?;
+    deno_core::scope!(scope, runtime);
+    v8::tc_scope!(let tc, scope);
+    let namespace_obj = v8::Local::new(tc, module_namespace.clone());
+    let default_key = v8::String::new_from_utf8(tc, b"default", v8::NewStringType::Normal)
+        .ok_or_else(|| anyhow::anyhow!("键名构造失败"))?;
+    let default = namespace_obj
+        .get(tc, default_key.into())
+        .ok_or_else(|| anyhow::anyhow!("玩家模块 {namespace} 缺少 default 导出"))?;
+    let install = v8::Local::<v8::Function>::try_from(default)
+        .map_err(|_| anyhow::anyhow!("玩家模块 {namespace} 的 default 导出须为函数"))?;
+    let api_local = v8::Local::new(tc, install_api.clone());
+    let receiver = v8::undefined(tc).into();
+    let result = match install.call(tc, receiver, &[api_local]) {
+        Some(result) => result,
+        None => {
+            let detail = tc
+                .exception()
+                .map(|exception| exception.to_rust_string_lossy(tc))
+                .unwrap_or_else(|| "无异常细节".to_string());
+            anyhow::bail!("玩家模块 {namespace} 的 install 执行失败：{detail}");
+        }
+    };
+    if result.is_promise() {
+        anyhow::bail!("玩家模块 {namespace} 的 install 不得返回 Promise（安装必须同步完成）");
+    }
+    Ok(())
 }
 
 #[cfg(test)]

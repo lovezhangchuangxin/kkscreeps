@@ -259,15 +259,27 @@
     };
     const assemble = gw.assemblers[o.type];
     const obj = assemble ? assemble(o, base, pos, now) : base;
-    const cls = classGlobalFor(o);
-    const ctor = cls ? classCtor(cls) : null;
+    // Mod 对象的类由玩家模块安装（gw.modApi.types[typeKey].cls）；探测
+    // 标签用类型键。未安装面（防御：vanilla 世界不产 mod 记录）得到
+    // 无原型 base。
+    let ctor = null;
+    let label;
+    if (o.type === 'mod') {
+      const entry = gw.modApi === undefined ? undefined : gw.modApi.types[o.modType];
+      ctor = entry === undefined ? null : entry.cls;
+      label = o.modType;
+    } else {
+      const cls = classGlobalFor(o);
+      ctor = cls ? classCtor(cls) : null;
+      label = cls || o.type;
+    }
     if (ctor && ctor.prototype) {
       // 官方语义：Game 对象是类的实例；bot 生态普遍给官方原型打补丁
       //（tooangel 的 prototype_*.js 全系），原型链接通后补丁可见、instanceof 成立
       gw.__Object.setPrototypeOf(obj, ctor.prototype);
     }
     const name = o.name ? ':' + o.name : '';
-    return probe(obj, (cls || o.type) + name);
+    return probe(obj, label + name);
   }
   gw.wrapObject = wrapObject;
 })();
