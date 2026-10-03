@@ -17,12 +17,16 @@ mod chain;
 mod convert;
 mod error;
 mod graph;
+mod limits;
 mod manifest;
 mod package;
+mod profile;
 mod realm;
 
 pub use chain::ChainHost;
 pub use error::{ModHostError, ModHostResult};
+pub use limits::{ModExecutionLimits, ModVmLimits};
 pub use manifest::{ModManifest, SDK_API_VERSION, Version, VersionReq};
 pub use package::{ModPackage, discover_packages};
+pub use profile::{ChainProfiler, ProfileSample};
 pub use realm::{ModRealm, PlayerModulePackage, RegisterOptions, Registered};

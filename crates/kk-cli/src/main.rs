@@ -5,6 +5,7 @@ use clap::{Parser, Subcommand};
 
 mod bot_check;
 mod embed_main;
+mod mod_perf_probe;
 mod perf_probe;
 
 #[derive(Parser)]
@@ -52,6 +53,26 @@ enum Command {
         ticks: u32,
         #[arg(long, default_value_t = 2)]
         concurrency: usize,
+        #[arg(long)]
+        report: String,
+    },
+    /// 固定 link 冷却负载，对比 native、空 Mod 与完整 JS 处理链
+    ModPerfProbe {
+        /// 开启 op/候选/预算包含计时；诊断耗时不能作为无插桩性能基线
+        #[arg(long)]
+        profile: bool,
+        #[arg(long, value_enum)]
+        mode: mod_perf_probe::Mode,
+        #[arg(long, default_value_t = 1)]
+        rooms: u32,
+        #[arg(long, default_value_t = 400)]
+        links_per_room: u32,
+        #[arg(long, default_value_t = 500)]
+        warmup: u32,
+        #[arg(long, default_value_t = 3000)]
+        ticks: u32,
+        #[arg(long, default_value = "compat/fixtures/mod-perf")]
+        fixtures: String,
         #[arg(long)]
         report: String,
     },
@@ -110,6 +131,27 @@ fn main() {
                 concurrency,
                 &report,
             ));
+        }
+        Command::ModPerfProbe {
+            profile,
+            mode,
+            rooms,
+            links_per_room,
+            warmup,
+            ticks,
+            fixtures,
+            report,
+        } => {
+            std::process::exit(mod_perf_probe::run(mod_perf_probe::Options {
+                profile,
+                mode,
+                rooms,
+                links_per_room,
+                warmup,
+                ticks,
+                fixtures,
+                report,
+            }));
         }
         Command::PerfProbe {
             ticks,

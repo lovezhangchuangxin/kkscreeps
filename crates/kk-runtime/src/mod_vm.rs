@@ -49,7 +49,8 @@ impl ModVm {
         if !self.needs_recovery() {
             return Ok(());
         }
-        let mut replacement = ModRealm::new().map_err(|e| format!("Mod VM 重建：{e}"))?;
+        let mut replacement =
+            ModRealm::with_options(&self.options).map_err(|e| format!("Mod VM 重建：{e}"))?;
         let registered = replacement
             .register(&self.packages, self.options.clone())
             .map_err(|e| format!("Mod VM 重新注册：{e}"))?;

@@ -17,7 +17,7 @@ use std::collections::BTreeMap;
 use kk_runtime::EmbedEngine;
 use serde_json::{Value, json};
 
-mod process;
+pub(crate) mod process;
 
 /// 按此顺序摆放 source，玩家脚本固定采集 `FIND_SOURCES[0]`。
 /// 同房对象按 ID 升序投影，因此首源必须保留在 (2,2)。
@@ -277,7 +277,7 @@ fn run_inner(
     Ok(())
 }
 
-fn metadata() -> Value {
+pub(crate) fn metadata() -> Value {
     let command = |program: &str, args: &[&str]| {
         std::process::Command::new(program)
             .args(args)

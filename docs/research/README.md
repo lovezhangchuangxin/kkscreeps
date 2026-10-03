@@ -16,6 +16,12 @@
 
 ## notes/ 笔记索引
 
+**Mod 预算复审与密集负载**（2026-10-03）：[清偿与纯结算对照](notes/mod-budget-review-and-perf-2026-10-03.md)（超时异常转换持续中断、完整链计数与全对象状态验收、native/空包/完整链重复测量）。
+
+**Mod 热路径归因**（2026-10-03）：[包含计时与字段缓存](notes/mod-attribution-2026-10-03.md)（诊断/基线分离、候选解析缓存失效、24 次前后交替对照与原始数据）。
+
+**Mod VM 资源预算**（2026-10-03）：[预算与故障验收](notes/mod-vm-budget-2026-10-03.md)（共用 CPU 时钟/看门狗、整轮累计限额、V8 安全点与候选失败恢复）。
+
 **Mod VM 故障恢复**（2026-10-03）：[恢复与故障验收记录](notes/mod-vm-recovery-2026-10-03.md)（固定包快照、计划核验、污染 VM 销毁、玩家缓存复用与恢复门）。
 
 **沙箱调研**（02 报告证据）：[sandbox-denocore.md](notes/sandbox-denocore.md)、[sandbox-quickjs.md](notes/sandbox-quickjs.md)、[sandbox-boa.md](notes/sandbox-boa.md)、[sandbox-alternatives.md](notes/sandbox-alternatives.md)

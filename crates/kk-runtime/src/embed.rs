@@ -117,6 +117,8 @@ struct ModChainContext {
     id: ObjId,
     args: Value,
     native: NativeCall,
+    /// 仅在本次能力内缓存已解析字段；改写与 native 前失效，不跨槽/对象/tick。
+    cached_fields: Option<Value>,
 }
 
 impl SlotExecutor for ModSlotExecutor {
@@ -147,6 +149,7 @@ impl SlotExecutor for ModSlotExecutor {
                     id,
                     args,
                     native,
+                    cached_fields: None,
                 }),
             )
             .map_err(|error| format!("槽 {} @ {room}: {error}", slot.key))
@@ -154,7 +157,14 @@ impl SlotExecutor for ModSlotExecutor {
 }
 
 impl ModChainContext {
-    fn fields(&self) -> Result<Value, String> {
+    fn fields(&mut self) -> Result<&Value, String> {
+        if self.cached_fields.is_none() {
+            self.cached_fields = Some(self.load_fields()?);
+        }
+        Ok(self.cached_fields.as_ref().expect("已加载字段"))
+    }
+
+    fn load_fields(&self) -> Result<Value, String> {
         let w = self.ctx.borrow();
         match w.room.objects.get(&self.id) {
             Some(kk_schema::room::RoomObject::Mod(_)) => w
@@ -172,14 +182,14 @@ impl ModChainContext {
         }
     }
 
-    fn write_fields(&self, fields: &Value) -> Result<(), String> {
+    fn write_fields(&mut self, fields: &Value) -> Result<(), String> {
         if fields.is_null() {
             return Ok(());
         }
         if !fields.is_object() {
             return Err("target.fields 终值须为对象或 null".into());
         }
-        if self.fields()? == *fields {
+        if self.fields()? == fields {
             return Ok(());
         }
         let is_mod = matches!(
@@ -187,11 +197,12 @@ impl ModChainContext {
             Some(kk_schema::room::RoomObject::Mod(_))
         );
         if is_mod {
+            self.cached_fields = None;
             return self.ctx.borrow_mut().update_mod_fields(self.id, fields);
         }
         // 当前内建写面仅接 cooldown；身份/坐标和其余字段只读。后续规则
         // 字段按领域校验逐项开放，不能把 Generic JSON 整写当通用事务 API。
-        let mut current = self.fields()?;
+        let mut current = self.fields()?.clone();
         let mut proposed = fields.clone();
         let cooldown = proposed
             .as_object_mut()
@@ -210,6 +221,7 @@ impl ModChainContext {
             }
             current["cooldown"] = value.clone();
         }
+        self.cached_fields = None;
         if let Some(kk_schema::room::RoomObject::Generic(object)) =
             self.ctx.borrow_mut().room.objects.get_mut(&self.id)
         {
@@ -224,13 +236,14 @@ impl ModChainContext {
 impl ChainHost for ModChainContext {
     fn read(&mut self, binding: &str) -> Result<Value, String> {
         let key = Key::new(binding)?;
+        let fields = self.fields()?.clone();
         let w = self.ctx.borrow();
         let state = w.state.mod_state(key.namespace());
         let tick = w.time;
         let room = w.room.name.clone();
         drop(w);
         Ok(json!({ "tick": tick, "room": room, "state": state,
-            "target": { "id": self.id.as_str(), "fields": self.fields()? }, "args": self.args }))
+            "target": { "id": self.id.as_str(), "fields": fields }, "args": self.args }))
     }
 
     fn write(&mut self, binding: &str, context: Value) -> Result<(), String> {
@@ -246,6 +259,8 @@ impl ChainHost for ModChainContext {
     }
 
     fn native(&mut self) -> Result<(), String> {
+        // native 可改资源、字段或移除目标，返回后的 read 必须重新取候选。
+        self.cached_fields = None;
         match &self.native {
             NativeCall::Action { data, step } => step(&mut self.ctx.borrow_mut(), self.id, data),
             NativeCall::Tick(step) => step(&mut self.ctx.borrow_mut(), self.id),
@@ -513,8 +528,8 @@ impl EmbedEngine {
         self.kkpv_public_store = crate::kkpv_store::KkpvBlockStore::new();
 
         if let Some((packages, options)) = mod_install {
-            let mut realm =
-                ModRealm::new().map_err(|error| anyhow::anyhow!("mod realm：{error}"))?;
+            let mut realm = ModRealm::with_options(options)
+                .map_err(|error| anyhow::anyhow!("mod realm：{error}"))?;
             let registered = realm
                 .register(packages, options.clone())
                 .map_err(|error| anyhow::anyhow!("mod 注册：{error}"))?;
@@ -1044,6 +1059,13 @@ impl EmbedEngine {
         }
         let fail_writeback = self.fail_next_writeback.take();
         self.engine.set_fail_writeback_for_test(fail_writeback);
+        if let Some(vm) = &self.mod_realm {
+            vm.borrow_mut()
+                .realm_mut()
+                .map_err(anyhow::Error::msg)?
+                .begin_settlement()
+                .map_err(anyhow::Error::msg)?;
+        }
         let settled = self
             .engine
             .tick_with_writebacks(batch, input, writebacks)
@@ -1055,6 +1077,12 @@ impl EmbedEngine {
             self.engine.set_fail_stage_for_test(None);
         }
         self.engine.set_fail_writeback_for_test(None);
+        if let Some(vm) = &self.mod_realm {
+            vm.borrow_mut()
+                .realm_mut()
+                .map_err(anyhow::Error::msg)?
+                .end_settlement();
+        }
         if settled.is_err()
             && let Some(vm) = &self.mod_realm
         {

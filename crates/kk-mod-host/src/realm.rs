@@ -13,6 +13,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use deno_core::v8;
 use deno_core::{
@@ -31,9 +32,11 @@ use crate::convert::{Declaration, build_contribution};
 use crate::error::{ModHostError, ModHostResult};
 use crate::graph::dependency_order;
 use crate::package::ModPackage;
+use crate::{ChainProfiler, ModVmLimits};
 use kk_mod_api::{
     Contribution, ContributionPlan, FreezeOptions, Key, Source, builtin, freeze_with_builtin,
 };
+use kk_vm::budget::{ExecutionLimits, ResourceState, Usage, VmBudget};
 
 /// SDK 虚拟模块的说明符与解析后的 URL。
 const SDK_SPECIFIER: &str = "@kkscreeps/mod";
@@ -226,6 +229,10 @@ impl ModuleLoader for PackageModuleLoader {
 pub struct RegisterOptions {
     pub configs: BTreeMap<String, Value>,
     pub freeze: FreezeOptions,
+    /// 必须与 realm 构造配置一致，恢复使用原配置。
+    pub vm_limits: ModVmLimits,
+    /// 诊断计时，默认关闭；不参与玩法计划身份，恢复沿用同一采集句柄。
+    pub profiler: Option<ChainProfiler>,
 }
 
 /// 一次成功注册的产物。处理器函数仍留在 realm 的 VM 内；
@@ -254,6 +261,8 @@ pub struct PlayerModulePackage {
 }
 
 pub struct ModRealm {
+    // 看门狗必须先于 isolate 回收；排队回调的数据最后回收。
+    budget: VmBudget,
     runtime: JsRuntime,
     executor: tokio::runtime::Runtime,
     loader_packages: Rc<RefCell<BTreeMap<PathBuf, Rc<ModPackage>>>>,
@@ -264,10 +273,28 @@ pub struct ModRealm {
     sdk_run_chain: v8::Global<v8::Function>,
     chains: BTreeMap<String, (bool, Rc<BTreeSet<String>>)>,
     chain_sequence: u64,
+    limits: ModVmLimits,
+    settlement_usage: Option<Usage>,
+    profiler: Option<ChainProfiler>,
+    _budget_keepalive: Arc<ResourceState>,
 }
 
 impl ModRealm {
     pub fn new() -> ModHostResult<Self> {
+        Self::with_limits(ModVmLimits::default())
+    }
+
+    pub fn with_limits(limits: ModVmLimits) -> ModHostResult<Self> {
+        Self::with_options(&RegisterOptions {
+            vm_limits: limits,
+            ..Default::default()
+        })
+    }
+
+    pub fn with_options(options: &RegisterOptions) -> ModHostResult<Self> {
+        let limits = options.vm_limits.clone();
+        let profiler = options.profiler.clone();
+        limits.validate()?;
         let executor = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -279,8 +306,20 @@ impl ModRealm {
             module_loader: Some(Rc::new(PackageModuleLoader {
                 packages: loader_packages.clone(),
             })),
+            create_params: Some(v8::CreateParams::default().heap_limits(0, limits.memory_bytes)),
+            op_metrics_factory_fn: profiler.as_ref().map(ChainProfiler::op_metrics),
             ..Default::default()
         });
+        // SAFETY: 字段顺序先 join 看门狗、再销毁 runtime，最后 drop keepalive。
+        // realm 是线程亲和的，所有预算入口在所属 isolate 的执行线程调用。
+        let budget = unsafe {
+            VmBudget::new(
+                runtime.v8_isolate().thread_safe_handle(),
+                limits.memory_bytes,
+            )
+        };
+        let budget_keepalive = budget.keepalive();
+        runtime.add_near_heap_limit_callback(budget.near_heap_callback());
         {
             let op_state = runtime.op_state();
             let mut op_state = op_state.borrow_mut();
@@ -339,6 +378,7 @@ impl ModRealm {
             )
         };
         Ok(Self {
+            budget,
             runtime,
             executor,
             loader_packages,
@@ -349,6 +389,10 @@ impl ModRealm {
             sdk_run_chain,
             chains: BTreeMap::new(),
             chain_sequence: 0,
+            limits,
+            settlement_usage: None,
+            profiler,
+            _budget_keepalive: budget_keepalive,
         })
     }
 
@@ -357,6 +401,10 @@ impl ModRealm {
     /// 或结果不可序列化都以错误返回——由调用方据此使本轮候选失败。
     /// 调用方负责用返回的 state 写回候选域。
     pub fn invoke(&mut self, binding: &str, ctx: Value) -> ModHostResult<Value> {
+        self.with_budget(false, |realm| realm.invoke_inner(binding, ctx))
+    }
+
+    fn invoke_inner(&mut self, binding: &str, ctx: Value) -> ModHostResult<Value> {
         let runtime_ref = &mut self.runtime;
         deno_core::scope!(scope, runtime_ref);
         v8::tc_scope!(let tc, scope);
@@ -377,6 +425,11 @@ impl ModRealm {
     /// 一次进入 JS 完成整个槽。候选能力仅在本次调用期间放入 OpState，
     /// 无论返回或抛错都取出并销毁；已捕获的 next/候选访问故障仍使调用失败。
     pub fn invoke_chain(&mut self, slot: &str, host: Box<dyn ChainHost>) -> ModHostResult<()> {
+        let _timer = self.profiler.as_ref().map(|p| p.measure("slot"));
+        self.with_budget(false, |realm| realm.invoke_chain_inner(slot, host))
+    }
+
+    fn invoke_chain_inner(&mut self, slot: &str, host: Box<dyn ChainHost>) -> ModHostResult<()> {
         let program = self
             .chains
             .get(slot)
@@ -393,6 +446,7 @@ impl ModRealm {
             fault: None,
             native_called: false,
             native_allowed: program.0,
+            profiler: self.profiler.clone(),
         };
         let op_state = self.runtime.op_state();
         if op_state.borrow().borrow::<ChainState>().active.is_some() {
@@ -414,6 +468,7 @@ impl ModRealm {
     }
 
     fn call_chain(&mut self, slot: &str, token: &str) -> ModHostResult<()> {
+        let _timer = self.profiler.as_ref().map(|p| p.measure("js_call"));
         let runtime_ref = &mut self.runtime;
         deno_core::scope!(scope, runtime_ref);
         v8::tc_scope!(let tc, scope);
@@ -467,13 +522,85 @@ impl ModRealm {
         if sealed {
             return Err(ModHostError::new("register", "realm 已密封，不能再次注册"));
         }
-        let result = self.register_inner(packages, options);
+        let same_profiler = match (&self.profiler, &options.profiler) {
+            (None, None) => true,
+            (Some(a), Some(b)) => a.same_sink(b),
+            _ => false,
+        };
+        let result = if options.vm_limits != self.limits {
+            Err(ModHostError::new(
+                "register",
+                "VM 限额与构造配置不一致；使用 ModRealm::with_limits",
+            ))
+        } else if !same_profiler {
+            Err(ModHostError::new(
+                "register",
+                "诊断句柄与构造配置不一致；使用 ModRealm::with_options",
+            ))
+        } else {
+            self.with_budget(true, |realm| realm.register_inner(packages, options))
+        };
         if result.is_err() {
             let cell = self.runtime.op_state();
             let mut state = cell.borrow_mut();
             let registry = state.borrow_mut::<Registry>();
             registry.current = None;
             registry.sealed = true;
+        }
+        result
+    }
+
+    /// 每次实际结算前开始累计；不同槽、对象与房间共享同一轮 Mod 额度。
+    pub fn begin_settlement(&mut self) -> ModHostResult<()> {
+        if self.settlement_usage.is_some() {
+            return Err(ModHostError::new("结算预算", "上一轮预算尚未结束"));
+        }
+        self.settlement_usage = Some(Usage::default());
+        Ok(())
+    }
+
+    pub fn end_settlement(&mut self) {
+        self.settlement_usage = None;
+    }
+
+    fn with_budget<T>(
+        &mut self,
+        registration: bool,
+        work: impl FnOnce(&mut Self) -> ModHostResult<T>,
+    ) -> ModHostResult<T> {
+        let label = if registration {
+            "Mod 注册"
+        } else {
+            "Mod 结算"
+        };
+        let limit = if registration {
+            self.limits.registration
+        } else {
+            self.limits.settlement
+        };
+        let used = if registration {
+            Usage::default()
+        } else {
+            self.settlement_usage.unwrap_or_default()
+        };
+        let start_timer = self.profiler.as_ref().map(|p| p.measure("budget_start"));
+        self.budget
+            .start(ExecutionLimits {
+                cpu: limit.cpu.saturating_sub(used.cpu),
+                wall: limit.wall.saturating_sub(used.wall),
+            })
+            .map_err(|e| ModHostError::new(label, e.to_string()))?;
+        drop(start_timer);
+        let result = work(self);
+        let finish_timer = self.profiler.as_ref().map(|p| p.measure("budget_finish"));
+        let usage = self
+            .budget
+            .finish(self.runtime.v8_isolate())
+            .map_err(|e| ModHostError::new(label, e.to_string()))?;
+        drop(finish_timer);
+        if !registration && let Some(total) = &mut self.settlement_usage {
+            total.cpu += usage.cpu;
+            total.wall += usage.wall;
         }
         result
     }

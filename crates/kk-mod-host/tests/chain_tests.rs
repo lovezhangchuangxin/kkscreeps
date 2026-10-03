@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use kk_mod_host::{ChainHost, ModRealm, RegisterOptions, discover_packages};
+use kk_mod_host::{ChainHost, ChainProfiler, ModRealm, RegisterOptions, discover_packages};
 use serde_json::{Value, json};
 
 static SEQUENCE: AtomicUsize = AtomicUsize::new(0);
@@ -16,6 +16,10 @@ impl Drop for Root {
 }
 
 fn realm(body: &str) -> Result<ModRealm, String> {
+    realm_with_options(body, RegisterOptions::default())
+}
+
+fn realm_with_options(body: &str, options: RegisterOptions) -> Result<ModRealm, String> {
     let root = Root(std::env::temp_dir().join(format!(
         "kk-chain-host-{}-{}",
         std::process::id(),
@@ -34,11 +38,64 @@ fn realm(body: &str) -> Result<ModRealm, String> {
     )
     .unwrap();
     let packages = discover_packages(&root.0).unwrap();
-    let mut realm = ModRealm::new().unwrap();
+    let mut realm = ModRealm::with_options(&options).unwrap();
     realm
-        .register(&packages, RegisterOptions::default())
+        .register(&packages, options)
         .map_err(|e| e.to_string())?;
     Ok(realm)
+}
+
+#[test]
+fn profile_records_op_errors_without_retaining_candidate_and_resets_window() {
+    let profiler = ChainProfiler::default();
+    let mut realm = realm_with_options(
+        "api.handlers.before('builtin:link.tick',{id:'audit'},ctx=>{});",
+        RegisterOptions {
+            profiler: Some(profiler.clone()),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    profiler.reset();
+    let state = Rc::new(RefCell::new(json!({})));
+    realm
+        .invoke_chain("builtin:link.tick", Box::new(Host(state.clone())))
+        .unwrap();
+    assert_eq!(Rc::strong_count(&state), 1);
+    assert!(
+        realm
+            .evaluate_probe("Deno.core.ops.op_mod_chain_read('1','test:handler.audit')")
+            .is_err()
+    );
+    let samples = profiler.snapshot();
+    assert_eq!(samples["op_read"].calls, 2);
+    assert_eq!(samples["op_read"].errors, 1);
+    assert_eq!(samples["host_read"].calls, 1);
+    assert_eq!(samples["slot"].calls, 1);
+    profiler.reset();
+    assert!(profiler.snapshot().is_empty());
+}
+
+#[test]
+fn mismatched_profile_sink_seals_realm_instead_of_silently_losing_metrics() {
+    let options = RegisterOptions {
+        profiler: Some(ChainProfiler::default()),
+        ..Default::default()
+    };
+    let mut realm = ModRealm::with_options(&options).unwrap();
+    let different = RegisterOptions {
+        profiler: Some(ChainProfiler::default()),
+        ..options.clone()
+    };
+    let packages = Default::default();
+    assert!(
+        realm
+            .register(&packages, different)
+            .unwrap_err()
+            .to_string()
+            .contains("诊断句柄")
+    );
+    assert!(realm.register(&packages, options).is_err());
 }
 
 struct Host(Rc<RefCell<Value>>);

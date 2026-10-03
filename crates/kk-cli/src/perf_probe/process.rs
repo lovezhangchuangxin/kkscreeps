@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 
 const MAX_RSS_SAMPLES: usize = 50_000;
 
-pub(super) struct ProcessProbe {
+pub(crate) struct ProcessProbe {
     started: Instant,
     cpu_before: f64,
     rss: Vec<u64>,
@@ -16,7 +16,7 @@ pub(super) struct ProcessProbe {
 }
 
 impl ProcessProbe {
-    pub(super) fn start() -> anyhow::Result<Self> {
+    pub(crate) fn start() -> anyhow::Result<Self> {
         let rss = resident_bytes()?;
         Ok(Self {
             started: Instant::now(),
@@ -28,7 +28,7 @@ impl ProcessProbe {
         })
     }
 
-    pub(super) fn observe(&mut self) -> anyhow::Result<()> {
+    pub(crate) fn observe(&mut self) -> anyhow::Result<()> {
         let t0 = Instant::now();
         let rss = resident_bytes()?;
         self.observations += 1;
@@ -40,7 +40,7 @@ impl ProcessProbe {
         Ok(())
     }
 
-    pub(super) fn finish(mut self, ticks: u32) -> anyhow::Result<Value> {
+    pub(crate) fn finish(mut self, ticks: u32) -> anyhow::Result<Value> {
         let cpu = (cpu_ms()? - self.cpu_before).max(0.0);
         let wall = self.started.elapsed().as_secs_f64() * 1000.0;
         let rss_after = resident_bytes()?;

@@ -3,6 +3,7 @@
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
+use crate::ChainProfiler;
 use deno_core::{OpState, op2};
 use deno_error::JsErrorBox;
 use kk_mod_api::{ContributionPlan, Dispatch};
@@ -81,6 +82,7 @@ pub(crate) struct ActiveChain {
     pub fault: Option<String>,
     pub native_called: bool,
     pub native_allowed: bool,
+    pub profiler: Option<ChainProfiler>,
 }
 
 #[derive(Default)]
@@ -137,6 +139,7 @@ pub(crate) fn op_mod_chain_read(
 ) -> Result<serde_json::Value, JsErrorBox> {
     let chain = active(state, &token)?;
     chain.checked_binding(&binding)?;
+    let _timer = chain.profiler.as_ref().map(|p| p.measure("host_read"));
     let result = chain
         .host
         .read(&binding)
@@ -153,6 +156,7 @@ pub(crate) fn op_mod_chain_write(
 ) -> Result<(), JsErrorBox> {
     let chain = active(state, &token)?;
     chain.checked_binding(&binding)?;
+    let _timer = chain.profiler.as_ref().map(|p| p.measure("host_write"));
     let result = chain
         .host
         .write(&binding, context)
@@ -171,6 +175,7 @@ pub(crate) fn op_mod_chain_native(
         return chain.outcome(Err("本次槽调用没有可执行的 native 中心，或已执行过".into()));
     }
     chain.native_called = true;
+    let _timer = chain.profiler.as_ref().map(|p| p.measure("host_native"));
     let result = chain.host.native();
     chain.outcome(result)
 }

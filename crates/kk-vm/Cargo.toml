@@ -1,0 +1,12 @@
+[package]
+name = "kk-vm"
+description = "玩家与玩法 VM 共用的 CPU 时钟、看门狗与执行预算"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+deno_core.workspace = true
+libc = "0.2"

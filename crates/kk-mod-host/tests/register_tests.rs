@@ -232,8 +232,10 @@ fn registration_is_deterministic() {
 #[test]
 fn config_reaches_registration_and_digest() {
     let options = RegisterOptions {
+        profiler: None,
         configs: BTreeMap::from([("demo-counter".to_string(), json!({"start": 5}))]),
         freeze: Default::default(),
+        vm_limits: Default::default(),
     };
     let (_, configured) = register_fixtures(options.clone());
     let (_, plain) = register_fixtures(RegisterOptions::default());

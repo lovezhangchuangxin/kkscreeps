@@ -9,6 +9,7 @@ workspace = true
 
 [dependencies]
 kk-mod-api.workspace = true
+kk-vm.workspace = true
 deno_core.workspace = true
 deno_error.workspace = true
 serde.workspace = true

@@ -993,11 +993,13 @@ dependencies = [
  "clap",
  "kk-core",
  "kk-engine",
+ "kk-mod-host",
  "kk-runner",
  "kk-runtime",
  "kk-world",
  "libc",
  "serde_json",
+ "sha2",
  "tokio",
 ]
 
@@ -1038,6 +1040,7 @@ dependencies = [
  "deno_core",
  "deno_error",
  "kk-mod-api",
+ "kk-vm",
  "serde",
  "serde_json",
  "sha2",
@@ -1061,8 +1064,8 @@ dependencies = [
  "deno_error",
  "kk-core",
  "kk-schema",
+ "kk-vm",
  "kk-world",
- "libc",
  "serde_json",
  "tokio",
 ]
@@ -1106,6 +1109,14 @@ dependencies = [
  "redb",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "kk-vm"
+version = "0.1.0"
+dependencies = [
+ "deno_core",
+ "libc",
 ]
 
 [[package]]

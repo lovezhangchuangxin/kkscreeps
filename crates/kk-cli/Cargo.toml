@@ -11,10 +11,12 @@ workspace = true
 kk-core = { workspace = true }
 kk-engine = { workspace = true }
 kk-runtime = { workspace = true }
+kk-mod-host = { workspace = true }
 kk-runner = { workspace = true }
 kk-world = { workspace = true }
 clap = { workspace = true }
 serde_json = { workspace = true }
+sha2 = "0.10.9"
 tokio = { workspace = true }
 anyhow = { workspace = true }
 

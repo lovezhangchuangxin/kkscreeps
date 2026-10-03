@@ -34,6 +34,37 @@ macOS/Linux 上，报告的 `process` 部分另测采集窗口内当前进程全
 
 [早期采集记录](../../compat/reports/perf-a6.md)包含空转负载的历史结果，不作为有效工作量的性能基线。当前负载自检降低空转风险，正式对照仍须逐实现核实动作和关键状态。
 
+## 密集 Mod 纯结算基准
+
+`mod-perf-probe` 用同一合成 link 世界比较三个模式：`native` 没有玩法 VM；`empty` 注册空包但没有处理器；`chain` 为每个 link 安装 before、两层 wrap、native 中心与 after。链模式额外维护四个 namespace 计数，用于核实各链位每对象每 tick 恰好执行一次，不能把差值解释为纯 JS 调用成本。
+
+```bash
+target/release/kkscreeps mod-perf-probe --mode chain --rooms 1 --links-per-room 400 --warmup 500 --ticks 3000 --report /tmp/mod-perf.json
+python3 scripts/mod-perf-baseline.py --output /tmp/mod-perf-baseline.json
+```
+
+房间数为 1..4、每房 link 为 1..400。每个 link 的初始冷却等于预热与采集 tick 数之和，因此整个窗口每 tick 都有一次 native 字段写入。此初值是合成负载，不模拟正常冷却上限。启动与三个边界的验证不计入采集窗口；工具验证全部 link 的完整 JSON 快照、世界 tick/generation 和 namespace 四个计数，报告 link 状态 SHA-256。没有玩家运行、世界投影、存储或网络测量；保留的玩家工作者仍计入进程 RSS。
+
+独立运行脚本默认覆盖单房 100/400 个 link，三个模式各五次，预热 500、采集 3000 tick，并轮换模式顺序。`--scenarios 1600` 可探测四房密集负载，超出默认预算时响亮失败，保留已有 partial 记录，不把失败样本当作加速结果。脚本检查模式间对象状态一致、每次实际负载、回调次数、release 构建、包/预算身份和二进制 SHA-256。Mod 模式采用默认注册/结算预算；native 报告中的 `vm_limits` 仅记录对照配置，它不创建 Mod VM，也不受该预算约束。
+
+wall 分位数覆盖整个 `EmbedEngine.tick(1)` 调用；进程 CPU/RSS 沿用上述采样器，不能把进程 CPU 当作 Mod 执行线程账单。本机结果、预算边界和后续优化方向见 [Mod 预算复审与密集负载记录](../research/notes/mod-budget-review-and-perf-2026-10-03.md)。这份局部基准不替代真实玩家闭环或跨引擎共同负载验收。
+
+### 可选成本归因
+
+CLI 和重复采集脚本均支持 `--profile`。默认关闭：不安装 Deno op metrics 回调，不采集阶段墙钟。开启后，`RegisterOptions.profiler` 的线程亲和句柄记录整槽、JS 调用、预算启动/结束、op read/write/native/fault 和候选 host read/write/native。只累加次数和纳秒，不保留逐对象样本。分片恢复沿用同一句柄；它记录全部尝试而非已提交 tick，采集方须显式 reset 划定窗口。CLI 在预热和边界验证完成后 reset。
+
+```sh
+python3 scripts/mod-perf-baseline.py --profile --scenarios 400 --warmup 100 --ticks 500 --repetitions 3 --output /tmp/mod-profile.json
+```
+
+op 计时来自 deno_core 的 dispatch/completed/error 事件，包含参数/返回转换与 host 方法；host 计时包含候选访问、字段解析/校验与 namespace 写回。JS 调用包含 op，整槽包含 JS 和预算，不能将所有阶段相加；op 与 host 的差值仍包含绑定检查、包装和插桩开销，不能解释为纯 JSON 成本。op 的 errors 来自错误事件，其他阶段只记录次数与耗时。getter 引发嵌套 op 时，op 耗时同样为包含耗时。
+
+开启诊断会增加计时和 op 包装开销，诊断结果与无插桩基线分开汇总。报告门校验各阶段的准确调用次数、错误数与预热排除；无插桩采集拒绝诊断报告。
+
+当前字段缓存的前后对照与归因见 [热路径记录](../research/notes/mod-attribution-2026-10-03.md)。
+
+前后对照探针按模式核验包与预算身份：native、empty、chain 各自跨二进制版本和重复轮次保持一致。不同模式之间允许使用不同包；相同对象终态不能替代该身份校验。发现变化即拒绝成功汇总，保留此前的 partial 记录。
+
 ## 本地共同负载对照
 
 [compare.py](../../scripts/benchmark/compare.py) 默认对 1/4/8/32 玩家各运行五次，预热 500 tick、采集 3000 tick。两端读取同一地形、对象和玩家脚本；并发上限为 2，预算统一为 limit=100、bucket=10000、tickLimit=500。工具从玩家 API 校验有效地形和预算，检查每玩家执行 tick 与成功动作计数，并比较全部房间的初始、预热后、采集后关键状态。状态或动作不同的结果不生成成功汇总。

@@ -4,13 +4,14 @@
 
 ## 运行入口
 
-`kk-cli` 构建可执行程序 `kkscreeps`。各命令的实现位于其 `src/main.rs`、`embed_main.rs`、`bot_check.rs` 和 `perf_probe.rs`。
+`kk-cli` 构建可执行程序 `kkscreeps`。各命令的实现位于其 `src/main.rs`、`embed_main.rs`、`bot_check.rs`、`perf_probe.rs` 和 `mod_perf_probe.rs`。
 
 | 命令 | 当前行为 |
 |---|---|
 | `embed` | 通过 stdin/stdout 接收逐行 JSON 请求，串行处理创建分片、放置对象、执行玩家代码和查询等操作 |
 | `bot-check` | 加载 bot 模块，在固定测试世界中运行并输出运行错误和 API 访问统计 |
 | `perf-probe` | 在采集、升级和孵化负载下测量投影、玩家执行、结算与整轮耗时 |
+| `mod-perf-probe` | 同一 link 冷却负载的 native、空 Mod 与完整处理链纯结算对照；逐对象验证状态与链位计数 |
 | `serve`、`sim`、`test`、`import` | 预留入口，调用时返回“尚未实现”和退出码 2 |
 
 `embed` 使用自定义的 `{id, method, params}` / `{id, ok, result或error}` 消息格式，不是标准 JSON-RPC 2.0，也不提供网络监听。接入方式见 [兼容性验收](../../compat/README.md)。当前没有 `export` 子命令。
@@ -22,6 +23,7 @@
 | crate | 当前职责与边界 |
 |---|---|
 | `kk-core` | 游戏常量、房间坐标、地形编码和随机数工具 |
+| `kk-vm` | 玩家与玩法 VM 共用的执行线程 CPU 时钟、墙钟看门狗、V8 安全点资源检查；不包含游戏规则或两类脚本的 API |
 | `kk-mod-api` | 玩法描述、启动校验、冻结计划与玩家面目录；已接入 link 规则与对象域 Mod 意图，不代表所有默认玩法已迁移 |
 | `kk-mod-host` | 可信 JS 包装载、注册冻结与整槽处理链执行；通过 ChainHost 访问候选，不依赖引擎或玩家 VM |
 | `kk-schema` | 二进制快照读写、对象字段定义、布局宏和版本升级接口；接口存在不等于已有历史版本迁移 |
@@ -43,14 +45,15 @@
 
 | crate | 直接依赖 |
 |---|---|
-| `kk-cli` | core、engine、runtime、runner、world |
+| `kk-cli` | core、engine、runtime、runner、world、mod-host |
 | `kk-runtime` | core、schema、mod-api、mod-host、engine、runner、world |
 | `kk-engine` | core、mod-api、schema、world |
 | `kk-world` | core、mod-api、schema |
 | `kk-mod-api` | core |
-| `kk-mod-host` | mod-api |
+| `kk-mod-host` | mod-api、vm |
 | `kk-schema` | 无内部依赖 |
-| `kk-runner` | core，使用 deno_core 等外部库 |
+| `kk-runner` | core、vm，使用 deno_core 等外部库 |
+| `kk-vm` | 无内部依赖，使用 deno_core 与 libc |
 | `kk-storage-bench` | core、schema、world |
 | `kk-core`、`kk-pathfinder`、`kk-storage`、`kk-backend` | 无内部依赖 |
 
