@@ -2,9 +2,33 @@
 
 ## 项目结构与模块组织
 
-`kkscreeps` 使用 Rust 重写 Screeps 服务端。`crates/` 是 Rust workspace，包含基础类型、世界状态、规则结算、V8 沙箱、后端协调、Mod 支持及命令行工具。各 crate 的源码位于 `src/`，集成测试位于 `tests/`；沙箱资源位于 `crates/kk-runner/assets/`。
+`kkscreeps` 使用 Rust 重写 Screeps 服务端，主要模块及职责如下：
 
-`compat/` 包含 TypeScript screeps-ok 适配器、Node 测试、脚本和回归报告。`apps/game/` 与 `packages/{api,editor,renderer,shared}/` 是前端占位包。`scripts/` 存放维护及基准工具，`docs/` 存放架构、决策和贡献规范。`spikes/` 保存独立实验，不属于 Rust workspace。
+```text
+kkscreeps/
+├── crates/                 Rust workspace
+│   ├── kk-core/            游戏常量、坐标、地形与随机数工具
+│   ├── kk-schema/          对象字段定义、二进制快照编解码
+│   ├── kk-world/           内存世界、空间索引与玩家视野投影
+│   ├── kk-engine/          指令清洗、规则结算与世界候选状态提交
+│   ├── kk-runner/          V8 玩家沙箱、玩家 API 与指令收集
+│   ├── kk-runtime/         玩家执行编排、Memory/CPU 候选提交与失败重试
+│   ├── kk-mod-api/         玩法声明、校验与冻结计划
+│   ├── kk-mod-host/        可信 JS Mod 包装载与注册
+│   ├── kk-pathfinder/      原生 C++ 寻路封装，尚未接入玩家搜索接口
+│   ├── kk-cli/             embed、bot-check、perf-probe 命令入口
+│   ├── kk-storage-bench/   存储引擎选型基准
+│   ├── kk-storage/         持久化预留模块
+│   └── kk-backend/         网络服务预留模块
+├── compat/                 TypeScript 兼容性适配器、测试与回归报告
+├── apps/game/              游戏客户端占位包
+├── packages/               API、编辑器、渲染器与共享类型占位包
+├── scripts/                维护、依赖准备与基准工具
+├── docs/                   架构、设计、决策与贡献规范
+└── spikes/                 独立实验，不属于 Rust workspace
+```
+
+各 crate 的源码位于 `src/`，集成测试位于 `tests/`；沙箱资源位于 `crates/kk-runner/assets/`。目录树表示模块职责；详细依赖和数据流见[总体架构](docs/architecture/overall.md)。主流程为：世界投影 → 玩家沙箱执行 → 收集指令 → 规则结算 → 提交候选状态，由 `kk-runtime` 协调。
 
 ## 构建、测试与开发命令
 
@@ -14,9 +38,9 @@
 - `cargo build -p kk-cli`：构建 `target/debug/kkscreeps`。
 - `target/debug/kkscreeps embed`：在本地启动逐行 JSON 调用服务。
 - `pnpm run fmt`：使用 rustfmt 格式化 Rust 代码。
-- `pnpm run check`：执行格式检查、Clippy、Rust 测试、JavaScript workspace 测试和文档链接检查。
+- `pnpm run check`：执行格式检查、Clippy、Rust 测试、JavaScript workspace 测试和文档链接检查；不运行完整 screeps-ok 套件。
 - `cargo test -p kk-engine`：单独运行引擎 crate 的测试。
-- `pnpm --filter @kkscreeps/compat test`：构建并测试适配器。
+- `KKSCREEPS_BIN="$PWD/target/debug/kkscreeps" pnpm --filter @kkscreeps/compat test`：构建适配器，并通过绝对路径选择上述 debug 二进制。
 
 HTTP 服务和前端开发服务器尚未实现。
 
@@ -30,7 +54,9 @@ HTTP 服务和前端开发服务器尚未实现。
 
 使用 Rust 单元测试、集成测试及 Node 的 `node:test`。JavaScript 测试文件命名为 `*.test.mjs`，Rust 测试名称应体现被测行为。目前未配置覆盖率百分比门槛。
 
-涉及兼容性的修改应按 [compat/README.md](compat/README.md) 重新构建 release CLI、准备固定版本的 screeps-ok 依赖、构建适配器，并运行 `node compat/scripts/ratchet.mjs`。通过数不得低于下限，已通过用例不得出现未豁免回归。可通过 `KKSCREEPS_BIN` 指定二进制；未找到二进制时，引擎冒烟测试可能跳过。
+修改 Rust 后，须重新构建测试使用的二进制。适配器默认优先选择 release，再回退到 debug；建议通过 `KKSCREEPS_BIN` 显式指定，避免测试旧构建产物。未找到二进制且未显式指定时，引擎冒烟测试会跳过，不能据此判断引擎验证通过。
+
+涉及兼容性的修改，按 [compat/README.md](compat/README.md) 构建 release CLI、准备固定版本的 screeps-ok 依赖、构建适配器，再运行 `node compat/scripts/ratchet.mjs`。门禁要求总用例数匹配配置、通过数不低于下限，且基线已通过用例不得出现未豁免的失败、跳过或缺失。
 
 ## 提交与 Pull Request 要求
 
