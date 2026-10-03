@@ -30,7 +30,9 @@ logs/
 # ===== 兼容性验收的本地工件 =====
 # screeps-ok 按 pin 脚本克隆到 .compat/（不入库，报告产物入库）
 .compat/
-compat/fixtures/
+# 下载的 bot 保持本地；固定 Mod 性能夹具随基准入库。
+compat/fixtures/*
+!compat/fixtures/mod-perf/
 compat/reports/tmp/
 .test-output/
 
