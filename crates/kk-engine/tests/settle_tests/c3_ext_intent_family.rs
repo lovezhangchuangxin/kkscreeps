@@ -1110,7 +1110,7 @@ fn ext_slot_wrap_chain_order_and_after_timing() {
     );
     assert_eq!(counter_value(&f, id)["value"], json!(8));
 
-    // 内层 wrap 截断：中心不执行，after 也不执行（内层未成功）。
+    // 内层 wrap 截断：中心不执行；槽成功返回时仍执行已安装的 after。
     log.borrow_mut().clear();
     let plan2 = frozen(counter_contribution(&[("cut", HandlerKind::Wrap)]));
     let mut handlers2 = BTreeMap::new();
@@ -1193,94 +1193,69 @@ fn ext_slot_wrap_double_next_fails_candidate() {
     assert_eq!(counter_value(&f, id)["value"], json!(5), "失败轮不提交");
 }
 
-/// `ExtSlot::chain()` 导出必须与普通入口同口径，且 `after` 次序可分辨。
-///
-/// 回归背景：与 `tick_chain` 同——把本导出的 after 块删掉，全部测试
-/// 仍然全绿，因为该导出零调用零覆盖。这里与经 settle 的普通入口
-/// 逐项比对执行序。
+/// 处理器吞掉 next 的 Err 不能使候选成功：违规与内层故障在执行器留存。
 #[test]
-fn ext_static_export_matches_run_entry() {
-    let log = Rc::new(RefCell::new(Vec::new()));
-    let plan = frozen(counter_contribution(&[
-        ("pre", HandlerKind::Before),
-        ("post", HandlerKind::After),
-    ]));
-    let slot = Key::new("extmod:increment.slot").unwrap();
-
-    let build = || {
-        let mut ext_handlers = BTreeMap::new();
-        ext_handlers.insert(
-            Key::new("extmod:handler.pre").unwrap(),
-            ExtHandler::Before(observer(log.clone(), "before")),
+fn ext_caught_next_error_still_aborts_candidate() {
+    for duplicate in [false, true] {
+        let plan = frozen(counter_contribution(&[
+            ("guard", HandlerKind::Wrap),
+            ("post", HandlerKind::After),
+        ]));
+        let log = Rc::new(RefCell::new(Vec::new()));
+        let mut handlers = BTreeMap::new();
+        handlers.insert(
+            Key::new("extmod:handler.guard").unwrap(),
+            ExtHandler::Wrap(Box::new(move |_, id, _, next| {
+                let _ = next.call(id);
+                if duplicate {
+                    let _ = next.call(id);
+                }
+                Ok(())
+            })),
         );
-        ext_handlers.insert(
+        handlers.insert(
             Key::new("extmod:handler.post").unwrap(),
             ExtHandler::After(observer(log.clone(), "after")),
         );
-        let mut ext_processes = BTreeMap::new();
-        ext_processes.insert(
+        let mut processes: BTreeMap<Key, ExtSimple> = BTreeMap::new();
+        processes.insert(
             Key::new("extmod:increment.process").unwrap(),
-            counter_process(log.clone()),
+            Box::new(move |ctx, id, _| {
+                let mut fields = ctx.borrow().mod_fields(id).unwrap();
+                fields["value"] = json!(8);
+                ctx.borrow_mut().update_mod_fields(id, &fields)?;
+                if duplicate {
+                    Ok(())
+                } else {
+                    Err("process 故障".into())
+                }
+            }),
         );
-        std::rc::Rc::new(
+        let dispatch = Rc::new(
             ContributionDispatch::assemble_with_ext(
                 &plan,
                 BTreeMap::new(),
                 BTreeMap::new(),
-                ext_handlers,
-                ext_processes,
+                handlers,
+                processes,
             )
             .unwrap(),
+        );
+        let mut f = Fixture::new(11, terrain_with(&[]));
+        let id = place_counter(&mut f, 10, 12, "p1", 5);
+        let error = settle_quiet(
+            &mut f,
+            ext_batch("p1", id, json!({"amount":3})),
+            dispatch,
+            plan,
         )
-    };
-
-    let mut f = Fixture::new(11, terrain_with(&[]));
-    let id = place_counter(&mut f, 10, 12, "p1", 5);
-
-    // 臂一：普通入口（settle 派发）。
-    settle_quiet(
-        &mut f,
-        ext_batch("p1", id, json!({ "amount": 3 })),
-        build(),
-        plan.clone(),
-    )
-    .unwrap();
-    let via_run = log.borrow().clone();
-    assert_eq!(via_run, vec!["before", "process", "after"]);
-
-    // 臂二：重入入口——ext_chain(slot) 导出。
-    log.borrow_mut().clear();
-    let dispatch = build();
-    let room = f.world.room("W1N1").unwrap().clone();
-    let ctx: kk_engine::settle::RoomCtx =
-        std::rc::Rc::new(std::cell::RefCell::new(kk_engine::settle::Working {
-            room,
-            index: kk_world::RoomIndex::build(&f.world.room("W1N1").unwrap().objects),
-            time: f.world.time(),
-            now_ms: 1_700_000_000_000,
-            state: kk_engine::TickState::new(BTreeMap::new(), f.world.next_obj_id()),
-            events: Vec::new(),
-            old_fatigue: BTreeMap::new(),
-            tick_fatigue: BTreeMap::new(),
-            upgraded: BTreeMap::new(),
-            damage_to_apply: BTreeMap::new(),
-            heal_to_apply: BTreeMap::new(),
-            upgrade_block_pending: BTreeMap::new(),
-            safe_mode_activated: BTreeSet::new(),
-            extractor_cooldown_pending: BTreeMap::new(),
-            movement: Default::default(),
-            plane: kk_engine::settle::Plane {
-                links: kk_world::place::builtin_link_rules(),
-                contrib: dispatch.clone(),
-                extensions: std::rc::Rc::new(kk_mod_api::extension::ExtensionCatalog::default()),
-                plan,
-            },
+        .expect_err("捕获 next 错误不能提交");
+        assert!(error.contains(if duplicate {
+            "重复调用"
+        } else {
+            "process 故障"
         }));
-    let mut chain = dispatch.ext_chain(&slot).expect("扩展槽已装配");
-    chain(&ctx, id, &json!({ "amount": 3 })).expect("扩展槽重入链执行成功");
-    assert_eq!(
-        *log.borrow(),
-        vec!["before", "process", "after"],
-        "ext_chain() 导出必须与普通入口同口径"
-    );
+        assert_eq!(counter_value(&f, id)["value"], json!(5));
+        assert!(log.borrow().is_empty(), "失败链不得运行 after");
+    }
 }

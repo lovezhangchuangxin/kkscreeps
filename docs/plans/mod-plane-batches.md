@@ -89,6 +89,8 @@ B.1 已建立 `kk-mod-api` 的描述、校验、冻结与 link 默认目录（64
 
 > **✅ C.4.5 前置片已收口（2026-10-03）**：JS 侧 wrap `next()` 工厂接线的前置重构，三片递进——(a) 候选去生命周期化：`Working` 不再持借用（`settle_room` 按值收发房间，无逐 tick 克隆），`Plane` 派生物与 `Engine` 的 contrib/extensions 改 `Rc`/`Arc` 共享；(b) 处理器边界迁 `RoomCtx`（`Rc<RefCell<Working>>`）：六类处理器签名统一为 `&RoomCtx`，让「进 JS 或调 `next()` 前必须释放借用」由类型强制而非约定；`RoomCtx` 不进 OpState（重入 op 取的是挂起内层链 `NextAction`，候选句柄由该闭包捕获作入参）；(c) 槽载荷 `Rc` 化 + 重入 op：三族链载荷经 `Rc` 使内层链可导出为 `'static` 闭包，`kk-mod-host` 增 `op_mod_next`（`reentrant`）、`ModRealm::invoke_wrap`、sdk 按 kind 只给 wrap 传 `next`；扩展槽补齐 wrap 链（此前仅 link 两槽）。`next()` 载荷用新增的 `action_chain_below(index)` 跳过 `before` 与 `wraps[..=index]`，三个「整槽」导出仅供整槽重放（用错会让外层 wrap 双跑）。**装配门仍关闭**：宿主桥 next 工厂通道未接线，非空 wrap 仍显式拒收（引擎侧四链位已可执行，拒绝点是桥不是执行器）。评审清偿：`try_borrow_mut` 取代 `borrow_mut` 消除嵌套重入的 SIGABRT 面（降级为响亮结算错误，嵌套支持待下片）；三个静态导出补 after 等价测试（变异实测变红）；`reentrant` 明确非能力隔离。验证：workspace 536 绿、棘轮 1854 零翻转、bot 三基线同形、clippy/fmt/doc-links 通过（承接登记与两条既有测试缺口见 [C.4 记录](../research/notes/c4-player-api-2026-10-03.md)）；残留：ModRealm 重入模型重做 + next 工厂接线 + 开装配门归下片。
 
+> **C.4.5 执行接线（2026-10-03）**：采用 [ADR-015](../decisions/ADR-015-mod-chain-execution.md) 的双路径：无扩展 native 直调，JS 贡献整槽组合，native 经普通 op 改候选。删除 Rust 闭包续行与静态链导出，开放 link/自有动作的 JS wrap；next 前同步外层修改、返回后刷新上下文；故障留存不能被 JS/Rust 捕获消除。after 统一为 wrap 全部成功退栈后一次执行，取消中心仍可成功；当前实现与验证记录见 [整槽链接线记录](../research/notes/js-chain-execution-2026-10-03.md)。链驱动实验只证明机制可行，不能推广为一切重入都无必要。
+
 | 批 | 内容（06 §6 + ADR-014 调整） | 到批前须补 |
 |---|---|---|
 | B 开放领域定义 | EffectiveRules（平坦形态验收）、ObjectType/Extension、IntentDescriptor、handler graph、默认 slots；**与投影协议一步设计合并**（共享二进制 + per-viewer overlay + lazy wrapper + 扩展字段目录一次定协议，实施分步） | [定义与投影设计](../designs/domain-projection.md)已给出接口及切片；B.1 定义层已实现，link 运行接线及后续投影尚待完成 |

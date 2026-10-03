@@ -143,9 +143,8 @@ impl TickInput {
 /// 冻结计划本体。由引擎装配时生成，结算全程只读；四个成员必须来自
 /// 同一冻结计划。
 ///
-/// 三个派生物持 `Rc`/`Arc` 而非借用：重入 op 从 OpState 取到的是
-/// 挂起的内层链（`NextAction`），而该闭包要捕获 `RoomCtx` 作为入参，
-/// 因此闭包必须是 `'static`——借用形态的平面进不去。
+/// 三个派生物持 `Rc`/`Arc` 而非借用：整槽宿主在本次调用期间通过
+/// OpState 持有候选句柄，返回时移除；借用栈上平面无法进入该拥有状态。
 ///
 /// 克隆成本：两次非原子 `Rc` 递增 + 一次原子 `Arc` 递增 + 120B
 /// `LinkRules` memcpy，每房每 tick 一次，无深拷贝。
@@ -162,11 +161,8 @@ pub struct Plane {
 /// 单房间结算上下文：房间副本、位置索引及共享候选状态，
 /// 以及本轮的事件、伤害与移动记录。
 ///
-/// 房间按值持有而非借用，使本类型成为可拥有、无生命周期的 `'static`
-/// 值：重入 op 从 OpState 取走的是挂起内层链，该链以 `RoomCtx` 为入参
-/// 闭包起来执行——`RoomCtx` **本身不进 OpState**。借用形态的
-/// `Working<'w>` 无法被 `'static` 闭包捕获，这是设计文档 §6.2
-/// 「进入 JS 前结束房间与事务可变借用」得以成立的前提。
+/// 房间按值持有而非借用，候选可以在一次宿主调用期间进入 OpState。
+/// 宿主返回后移除句柄；native op 只取短借用，候选不跨 tick 留存。
 pub struct Working {
     pub room: RoomState,
     pub index: RoomIndex,
@@ -196,11 +192,9 @@ pub struct Working {
     pub plane: Plane,
 }
 
-/// 共享的房间候选句柄。内层链闭包捕获本类型并作为入参传给处理器
-/// （**不进 OpState**——进了会让结算尾部 `Rc::into_inner` 恒失败）。
-/// 两条纪律：处理器调用 `next()` 前不得持有本句柄的可变借用（RefCell
-/// 不允许重入可变借用）；处理器不得克隆留存本句柄，否则该房间此后
-/// 每轮结算都在 `Rc::into_inner` 处失败。
+/// 共享的房间候选句柄。进入 JS 或执行 Rust next 前必须释放可变借用；
+/// 该纪律由 RefCell 动态检查，类型不会自动证明。宿主在调用期间可以
+/// 放入 OpState，但返回前必须清空；处理器不得跨调用留存候选句柄。
 pub type RoomCtx = Rc<RefCell<Working>>;
 
 impl Working {
@@ -625,8 +619,8 @@ pub fn settle_room(
     plane: &Plane,
 ) -> Result<(RoomState, Vec<Value>), SettleError> {
     let index = RoomIndex::build(&room.objects);
-    // 候选以共享句柄持有：贡献处理链（含 JS 侧 wrap 的 next() 重入）
-    // 需要一个 'static 可达的候选，见 RoomCtx 的说明。
+    // 候选以共享句柄持有：Rust 链与 JS 整槽宿主在本次调用期间共享
+    // 同一候选，见 RoomCtx 的说明。
     let ctx: RoomCtx = Rc::new(RefCell::new(Working {
         room,
         index,
@@ -1008,7 +1002,7 @@ impl Engine {
     /// 非自有中心的意图在此拒绝。
     fn check_intent_centers(
         plan: &kk_mod_api::ContributionPlan,
-        ext_handlers: &BTreeMap<kk_mod_api::Key, contrib::ExtHandler>,
+        replacements: &BTreeSet<kk_mod_api::Key>,
     ) -> Result<(), String> {
         for intent in plan.intents() {
             if intent.key.namespace() == "builtin" {
@@ -1033,10 +1027,7 @@ impl Engine {
                 kk_mod_api::Dispatch::Native(binding) => binding,
                 kk_mod_api::Dispatch::Chained { center, .. } => center,
             };
-            let replaced = matches!(
-                ext_handlers.get(center),
-                Some(contrib::ExtHandler::Replace(_))
-            );
+            let replaced = replacements.contains(center);
             if center != &own_process && !replaced {
                 return Err(format!(
                     "动作 {} 的入口 {} 中心不是自身 process，也不是已提供的 Replace 处理器（多意图共享入口或显式入口的执行装配未接线）",
@@ -1089,7 +1080,15 @@ impl Engine {
         ext_processes: BTreeMap<kk_mod_api::Key, contrib::ExtSimple>,
     ) -> Result<(), String> {
         Self::check_executable_intents(&plan)?;
-        Self::check_intent_centers(&plan, &ext_handlers)?;
+        Self::check_intent_centers(
+            &plan,
+            &ext_handlers
+                .iter()
+                .filter_map(|(key, handler)| {
+                    matches!(handler, contrib::ExtHandler::Replace(_)).then_some(key.clone())
+                })
+                .collect(),
+        )?;
         // 先取调用方提供的处理器键，再交给装配消耗。
         let handler_keys: BTreeSet<kk_mod_api::Key> = action_handlers
             .keys()
@@ -1116,6 +1115,43 @@ impl Engine {
                 continue;
             }
             installed.extend(ty.fields.iter().map(|f| f.descriptor.binding.clone()));
+        }
+        Self::check_installed_bindings(&plan, &installed)?;
+        self.links = links;
+        self.contrib = Rc::new(contrib);
+        self.extensions = Rc::new(extensions);
+        self.plan = plan;
+        Ok(())
+    }
+
+    /// 安装整槽宿主执行器，维持同一冻结计划与装配校验。
+    /// bindings 是已注册函数，replacements 是其中确认的 Replace 绑定。
+    /// 失败时所有装配域保持原状。
+    pub fn install_hosted_plan(
+        &mut self,
+        plan: Arc<kk_mod_api::ContributionPlan>,
+        executor: Rc<dyn contrib::SlotExecutor>,
+        bindings: BTreeSet<kk_mod_api::Key>,
+        replacements: BTreeSet<kk_mod_api::Key>,
+    ) -> Result<(), String> {
+        Self::check_executable_intents(&plan)?;
+        if !replacements.is_subset(&bindings) {
+            return Err("Replace 绑定必须是已安装函数".into());
+        }
+        Self::check_intent_centers(&plan, &replacements)?;
+        let links = kk_mod_api::builtin::LinkRules::from_plan(plan.rules())?;
+        let contrib = contrib::ContributionDispatch::assemble_hosted(&plan, executor, &bindings)?;
+        let extensions = kk_mod_api::extension::ExtensionCatalog::from_plan(&plan)?;
+        let mut installed = bindings;
+        installed.extend(extensions.field_bindings().cloned());
+        for ty in plan.projection().types() {
+            if ty.descriptor.key.namespace() != "builtin" {
+                installed.extend(
+                    ty.fields
+                        .iter()
+                        .map(|field| field.descriptor.binding.clone()),
+                );
+            }
         }
         Self::check_installed_bindings(&plan, &installed)?;
         self.links = links;

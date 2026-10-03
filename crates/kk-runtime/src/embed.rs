@@ -18,12 +18,12 @@ use std::rc::Rc;
 use crate::{PlayerExecutor, RunEpoch, ThreadExecutor, WorldSource};
 use kk_engine::intent::IntentBatch;
 use kk_engine::settle::RoomCtx;
-use kk_engine::settle::contrib::{ActionHandler, ExtHandler, TickHandler};
+use kk_engine::settle::contrib::{SlotCall, SlotExecutor};
 use kk_engine::{
     PlayerWriteback, RunOutcome, RunResult, RunState, SegmentWriteback, TickInput, TickStage,
 };
-use kk_mod_api::{Dispatch, Key, Stage};
-use kk_mod_host::{ModPackage, ModRealm, RegisterOptions};
+use kk_mod_api::{Key, SlotPlan};
+use kk_mod_host::{ChainHost, ModPackage, ModRealm, RegisterOptions};
 use kk_world::ObjId;
 use kk_world::place::{PlaceCtx, normalize};
 
@@ -86,7 +86,7 @@ pub struct EmbedEngine {
     /// 公开地形束的发布库：按代际发布/获取共享束，承载保留报告
     /// （固定内存测量面）。仅 KKPV 通道使用。
     kkpv_public_store: crate::kkpv_store::KkpvBlockStore,
-    /// 可信 Mod 注册 realm；仅 `create_shard_with_mods` 装配。持有它使
+    /// 可信 Mod 注册与结算 realm；仅 `create_shard_with_mods` 装配。持有它使
     /// EmbedEngine 不再可跨线程移动（结算与 realm 须同线程）。
     mod_realm: Option<Rc<RefCell<ModRealm>>>,
     /// 分片计划是否含 Mod 意图；决定玩家沙箱是否装配扩展意图原语。
@@ -97,264 +97,160 @@ pub struct EmbedEngine {
     mod_player_api: Option<std::sync::Arc<kk_runner::ModPlayerApi>>,
 }
 
-/// mod_handlers 的产物：link 两槽处理器与 Mod 自有槽的动作处理实现。
-type ModHandlerSet = (
-    BTreeMap<Key, ActionHandler>,
-    BTreeMap<Key, TickHandler>,
-    BTreeMap<Key, ExtHandler>,
-    BTreeMap<Key, kk_engine::settle::contrib::ExtSimple>,
-);
+/// JS 组合的整槽执行器。进入 VM 一次，native 中心只经普通 op 执行。
+struct ModSlotExecutor {
+    realm: Rc<RefCell<ModRealm>>,
+}
 
-/// 把冻结计划里 Mod 贡献的处理器装成桥闭包：闭包经 realm 调用 JS，
-/// 以 Working 携带的候选 Mod 状态域做读改写回。builtin 命名空间不会
-/// 出现在四个链位（builtin 无处理器），防御性跳过。
-/// Mod 自有槽同样装配：动作处理桥为各槽中心，槽上贡献处理器接
-/// before/after/replace 位。引擎侧四链位（含 wrap）都已支持装配，
-/// wrap 在本桥仍显式拒收——拒绝的是宿主桥的 next 工厂通道未接线，
-/// 不是引擎执行器缺形态。
-fn mod_handlers(
-    plan: &kk_mod_api::ContributionPlan,
-    realm: &Rc<RefCell<ModRealm>>,
-) -> anyhow::Result<ModHandlerSet> {
-    let mut action: BTreeMap<Key, ActionHandler> = BTreeMap::new();
-    let mut tick: BTreeMap<Key, TickHandler> = BTreeMap::new();
-    let mut ext_handlers: BTreeMap<Key, ExtHandler> = BTreeMap::new();
-    let mut ext_processes: BTreeMap<Key, kk_engine::settle::contrib::ExtSimple> = BTreeMap::new();
-    // 各 Mod 意图的动作处理绑定（{intent}.process）：Chained 中心的
-    // process/handler 分流依据。意图键 → process 绑定的推导与装载器一致。
-    let mut process_bindings: BTreeSet<Key> = BTreeSet::new();
-    for intent in plan.intents() {
-        if intent.slot.namespace() == "builtin" {
-            continue;
-        }
-        if let Ok(binding) = Key::new(format!("{}.process", intent.key)) {
-            process_bindings.insert(binding);
-        }
-    }
-    for slot in plan.slots() {
-        let Dispatch::Chained {
-            before,
-            wraps,
-            center,
-            after,
-        } = &slot.dispatch
-        else {
-            // Mod 自有槽的 Native 中心是动作处理绑定，装配进 ext 表；
-            // link 两槽的 Native 由引擎内建执行器消费，跳过。
-            if let Dispatch::Native(binding) = &slot.dispatch
-                && binding.namespace() != "builtin"
-                && !kk_engine::settle::contrib::LINK_SLOT_KEYS.contains(&slot.key.as_str())
-            {
-                ext_processes.insert(binding.clone(), ext_bridge(realm, binding));
-            }
-            continue;
+enum NativeCall {
+    Action {
+        data: Box<kk_engine::intent::IntentData>,
+        step: fn(&mut kk_engine::settle::Working, ObjId, &kk_engine::intent::IntentData),
+    },
+    Tick(fn(&mut kk_engine::settle::Working, ObjId)),
+    None,
+}
+
+struct ModChainContext {
+    ctx: RoomCtx,
+    id: ObjId,
+    args: Value,
+    native: NativeCall,
+}
+
+impl SlotExecutor for ModSlotExecutor {
+    fn run(&self, slot: &SlotPlan, ctx: &RoomCtx, call: SlotCall<'_>) -> Result<(), String> {
+        let (id, args, native) = match call {
+            SlotCall::Action { id, data, native } => (
+                id,
+                json!({
+                    "id": data.id.map(|id| id.as_str()), "amount": data.amount, "resourceType": data.resource_type,
+                }),
+                NativeCall::Action {
+                    data: Box::new(data.clone()),
+                    step: native,
+                },
+            ),
+            SlotCall::Tick { id, native } => (id, Value::Null, NativeCall::Tick(native)),
+            SlotCall::Extension { id, args } => (id, args.clone(), NativeCall::None),
         };
-        if !wraps.is_empty() {
-            // 扩展槽的 wrap 需要宿主桥提供 next 工厂通道：JS 处理器要
-            // 经重入 op 拿到内层链，而该通道尚未接线。此处显式拒绝而
-            // 不是静默截断链——半条链比没有链更难排查。
-            anyhow::bail!(
-                "槽 {} 的 wrap 处理器不支持执行装配（宿主桥 next 工厂通道未接线）",
-                slot.key
-            );
-        }
-        let slot_key = slot.key.as_str();
-        let stage = slot.stage;
-        // 只有 link 两槽有既有动作/tick 执行器；其余槽（Mod 自有动作入口）
-        // 走扩展执行链。
-        let wired = (slot_key == kk_engine::settle::contrib::LINK_SLOT_KEYS[0]
-            && stage == Stage::ObjectAction)
-            || (slot_key == kk_engine::settle::contrib::LINK_SLOT_KEYS[1]
-                && stage == Stage::ObjectTick);
-        if wired {
-            for (binding, is_after) in before
-                .iter()
-                .map(|binding| (binding, false))
-                .chain(after.iter().map(|binding| (binding, true)))
-            {
-                if binding.namespace() == "builtin" {
-                    continue;
-                }
-                if slot_key == "builtin:link.tick" {
-                    let handler = if is_after {
-                        TickHandler::After(tick_bridge(realm, binding))
-                    } else {
-                        TickHandler::Before(tick_bridge(realm, binding))
-                    };
-                    tick.insert(binding.clone(), handler);
-                } else {
-                    let handler = if is_after {
-                        ActionHandler::After(action_bridge(realm, binding))
-                    } else {
-                        ActionHandler::Before(action_bridge(realm, binding))
-                    };
-                    action.insert(binding.clone(), handler);
-                }
-            }
-            if center.namespace() != "builtin" {
-                if slot_key == "builtin:link.tick" {
-                    tick.insert(
-                        center.clone(),
-                        TickHandler::Replace(tick_bridge(realm, center)),
-                    );
-                } else {
-                    action.insert(
-                        center.clone(),
-                        ActionHandler::Replace(action_bridge(realm, center)),
-                    );
-                }
-            }
-            continue;
-        }
-        // Mod 自有槽：中心是动作处理绑定或 replace 处理器；before/after
-        // 是贡献处理器。全部经扩展桥（ctx 携带目标对象与参数）。
-        for (binding, is_after) in before
-            .iter()
-            .map(|binding| (binding, false))
-            .chain(after.iter().map(|binding| (binding, true)))
-        {
-            if binding.namespace() == "builtin" {
-                continue;
-            }
-            let handler = if is_after {
-                ExtHandler::After(ext_bridge(realm, binding))
-            } else {
-                ExtHandler::Before(ext_bridge(realm, binding))
-            };
-            ext_handlers.insert(binding.clone(), handler);
-        }
-        if center.namespace() != "builtin" {
-            if process_bindings.contains(center) {
-                ext_processes.insert(center.clone(), ext_bridge(realm, center));
-            } else {
-                ext_handlers.insert(
-                    center.clone(),
-                    ExtHandler::Replace(ext_bridge(realm, center)),
-                );
-            }
-        }
-    }
-    Ok((action, tick, ext_handlers, ext_processes))
-}
-
-type ActionBridge =
-    Box<dyn Fn(&RoomCtx, ObjId, &kk_engine::intent::IntentData) -> Result<(), String>>;
-type TickBridge = Box<dyn Fn(&RoomCtx, ObjId) -> Result<(), String>>;
-type ExtBridge = Box<dyn Fn(&RoomCtx, ObjId, &serde_json::Value) -> Result<(), String>>;
-
-/// 对象动作槽的桥闭包；动作参数经冻结计划清洗后进入结算，桥内不再读。
-fn action_bridge(realm: &Rc<RefCell<ModRealm>>, binding: &Key) -> ActionBridge {
-    let realm = realm.clone();
-    let namespace = binding.namespace().to_string();
-    let key = binding.to_string();
-    Box::new(
-        move |ctx: &RoomCtx, _id: ObjId, _data: &kk_engine::intent::IntentData| {
-            bridge_call(&realm, &key, &namespace, ctx)
-        },
-    )
-}
-
-/// 对象 tick 槽的桥闭包。
-fn tick_bridge(realm: &Rc<RefCell<ModRealm>>, binding: &Key) -> TickBridge {
-    let realm = realm.clone();
-    let namespace = binding.namespace().to_string();
-    let key = binding.to_string();
-    Box::new(move |ctx: &RoomCtx, _id: ObjId| bridge_call(&realm, &key, &namespace, ctx))
-}
-
-/// 扩展意图槽的桥闭包：ctx 携带目标对象完整字段与已校验参数，处理器
-/// 终值 state 与 target.fields 整值写回候选（null=不改动）。
-///
-/// 借用纪律（设计 §6.2）：进入 JS 之前必须已释放对候选的可变借用。
-/// 读取侧用独立作用域收尾，写回侧在 JS 返回后重新借用——wrap 处理器
-/// 的 `next()` 经重入 op 回到内层链时会再借一次，重入借用会 panic。
-fn ext_bridge(realm: &Rc<RefCell<ModRealm>>, binding: &Key) -> ExtBridge {
-    let realm = realm.clone();
-    let namespace = binding.namespace().to_string();
-    let key = binding.to_string();
-    Box::new(move |ctx: &RoomCtx, id: ObjId, args: &serde_json::Value| {
-        let (fields, tick, room_name) = {
-            let w = ctx.borrow();
-            let fields = w.mod_fields(id).ok_or_else(|| {
-                format!(
-                    "处理器 {key} 的目标对象 {} 不是 Mod 对象或 payload 非法",
-                    id.as_str()
-                )
-            })?;
-            (fields, w.time, w.room.name.clone())
-        };
-        let js_ctx = json!({
-            "tick": tick,
-            "room": room_name,
-            "state": ctx.borrow().state.mod_state(&namespace),
-            "target": { "id": id.as_str(), "fields": fields },
-            "args": args,
-        });
-        let outcome = realm
-            // try_borrow_mut 而非 borrow_mut：JS 处理器的 next() 会经重入
-            // op 再借一次同一个 realm，而该借用发生在 v8 op 边界——此处的
-            // panic 无法 unwind，会直接 SIGABRT 掉整个进程。借不到时转成
-            // 结算错误，候选照常回滚。
+        let room = ctx.borrow().room.name.clone();
+        self.realm
             .try_borrow_mut()
-            .map_err(|_| {
-                format!("处理器 {key} @ {room_name}: realm 已被重入借用（next() 嵌套尚不支持）")
-            })?
-            .invoke(&key, js_ctx)
-            .map_err(|error| format!("处理器 {key} @ {room_name}: {error}"))?;
-        // 状态终值整值写回：未触碰时是恒等写，写 null 即清空
-        // （清空与缺失同形，读取侧都得到 null）。
-        if let Some(state) = outcome.get("state") {
-            ctx.borrow_mut()
-                .state
-                .set_mod_state(&namespace, state.clone());
+            .map_err(|_| format!("槽 {} @ {room}: realm 已在执行", slot.key))?
+            .invoke_chain(
+                slot.key.as_str(),
+                Box::new(ModChainContext {
+                    ctx: ctx.clone(),
+                    id,
+                    args,
+                    native,
+                }),
+            )
+            .map_err(|error| format!("槽 {} @ {room}: {error}", slot.key))
+    }
+}
+
+impl ModChainContext {
+    fn fields(&self) -> Result<Value, String> {
+        let w = self.ctx.borrow();
+        match w.room.objects.get(&self.id) {
+            Some(kk_schema::room::RoomObject::Mod(_)) => w
+                .mod_fields(self.id)
+                .ok_or_else(|| "Mod payload 非法".into()),
+            Some(kk_schema::room::RoomObject::Generic(object)) => {
+                let fields: Value =
+                    serde_json::from_str(&object.data).map_err(|error| error.to_string())?;
+                if fields["structureType"] != "link" {
+                    return Err("内建目标不是 link".into());
+                }
+                Ok(fields)
+            }
+            _ => Err(format!("槽目标 {} 已不存在或未接线", self.id.as_str())),
         }
-        // 目标字段终值：null/缺失=不改动；对象值按类型描述符校验后
-        // 整值写入（部分字段的返回会被拒绝，处理器须返回完整字段）。
-        match outcome.get("target") {
-            Some(serde_json::Value::Object(fields)) => {
-                let fields = serde_json::Value::Object(fields.clone());
-                ctx.borrow_mut()
-                    .update_mod_fields(id, &fields)
-                    .map_err(|error| format!("处理器 {key} 的目标回写被拒：{error}"))?;
+    }
+
+    fn write_fields(&self, fields: &Value) -> Result<(), String> {
+        if fields.is_null() {
+            return Ok(());
+        }
+        if !fields.is_object() {
+            return Err("target.fields 终值须为对象或 null".into());
+        }
+        if self.fields()? == *fields {
+            return Ok(());
+        }
+        let is_mod = matches!(
+            self.ctx.borrow().room.objects.get(&self.id),
+            Some(kk_schema::room::RoomObject::Mod(_))
+        );
+        if is_mod {
+            return self.ctx.borrow_mut().update_mod_fields(self.id, fields);
+        }
+        // 当前内建写面仅接 cooldown；身份/坐标和其余字段只读。后续规则
+        // 字段按领域校验逐项开放，不能把 Generic JSON 整写当通用事务 API。
+        let mut current = self.fields()?;
+        let mut proposed = fields.clone();
+        let cooldown = proposed
+            .as_object_mut()
+            .expect("上面已确认对象")
+            .remove("cooldown");
+        current
+            .as_object_mut()
+            .ok_or("link 记录不是对象")?
+            .remove("cooldown");
+        if proposed != current {
+            return Err("link 当前仅允许改写 cooldown，其余字段只读".into());
+        }
+        if let Some(value) = &cooldown {
+            if value.as_u64().is_none_or(|n| n > u64::from(u32::MAX)) {
+                return Err("link.cooldown 须为 u32 整数".into());
             }
-            Some(serde_json::Value::Null) | None => {}
-            Some(other) => {
-                return Err(format!(
-                    "处理器 {key} 的 target 终值须为对象或 null，实得 {other}"
-                ));
-            }
+            current["cooldown"] = value.clone();
+        }
+        if let Some(kk_schema::room::RoomObject::Generic(object)) =
+            self.ctx.borrow_mut().room.objects.get_mut(&self.id)
+        {
+            object.data = current.to_string();
+            Ok(())
+        } else {
+            Err("link 目标已失效".into())
+        }
+    }
+}
+
+impl ChainHost for ModChainContext {
+    fn read(&mut self, binding: &str) -> Result<Value, String> {
+        let key = Key::new(binding)?;
+        let w = self.ctx.borrow();
+        let state = w.state.mod_state(key.namespace());
+        let tick = w.time;
+        let room = w.room.name.clone();
+        drop(w);
+        Ok(json!({ "tick": tick, "room": room, "state": state,
+            "target": { "id": self.id.as_str(), "fields": self.fields()? }, "args": self.args }))
+    }
+
+    fn write(&mut self, binding: &str, context: Value) -> Result<(), String> {
+        let key = Key::new(binding)?;
+        if let Some(fields) = context.pointer("/target/fields") {
+            self.write_fields(fields)?;
+        }
+        self.ctx.borrow_mut().state.set_mod_state(
+            key.namespace(),
+            context.get("state").cloned().unwrap_or(Value::Null),
+        );
+        Ok(())
+    }
+
+    fn native(&mut self) -> Result<(), String> {
+        match &self.native {
+            NativeCall::Action { data, step } => step(&mut self.ctx.borrow_mut(), self.id, data),
+            NativeCall::Tick(step) => step(&mut self.ctx.borrow_mut(), self.id),
+            NativeCall::None => return Err("Mod 自有槽没有 Rust native 中心".into()),
         }
         Ok(())
-    })
-}
-
-fn bridge_call(
-    realm: &Rc<RefCell<ModRealm>>,
-    key: &str,
-    namespace: &str,
-    ctx: &RoomCtx,
-) -> Result<(), String> {
-    let (tick, room_name, state) = {
-        let w = ctx.borrow();
-        (w.time, w.room.name.clone(), w.state.mod_state(namespace))
-    };
-    let js_ctx = json!({ "tick": tick, "room": room_name, "state": state });
-    // 同 ext_bridge：借不到时转结算错误，不在 op 边界 panic。
-    let outcome = realm
-        .try_borrow_mut()
-        .map_err(|_| {
-            format!("处理器 {key} @ {room_name}: realm 已被重入借用（next() 嵌套尚不支持）")
-        })?
-        .invoke(key, js_ctx)
-        .map_err(|error| format!("处理器 {key} @ {room_name}: {error}"))?;
-    // 状态终值整值写回：处理器未触碰时是恒等写，写 null 即清空
-    // （清空与缺失同形，读取侧都得到 null）。
-    if let Some(state) = outcome.get("state") {
-        ctx.borrow_mut()
-            .state
-            .set_mod_state(namespace, state.clone());
     }
-    Ok(())
 }
 
 /// 记录成功调用的投影、执行、结算和整次调用耗时。失败尝试不记录；
@@ -678,11 +574,19 @@ impl EmbedEngine {
                 .map_err(|error| anyhow::anyhow!("Mod 玩家面预检失败：{error}"))?;
             }
             let realm = Rc::new(RefCell::new(realm));
-            let (action, tick, ext_handlers, ext_processes) =
-                mod_handlers(&registered.plan, &realm)?;
+            let executor = Rc::new(ModSlotExecutor {
+                realm: realm.clone(),
+            });
+            let replacements = registered
+                .contributions
+                .iter()
+                .flat_map(|contribution| &contribution.handlers)
+                .filter(|handler| handler.kind == kk_mod_api::HandlerKind::Replace)
+                .map(|handler| handler.binding.clone())
+                .collect();
             let plan = std::sync::Arc::new(registered.plan.clone());
             self.engine
-                .install_plan_with_ext(plan, action, tick, ext_handlers, ext_processes)
+                .install_hosted_plan(plan, executor, registered.executables.clone(), replacements)
                 .map_err(anyhow::Error::msg)?;
             // 装配成功后才置位：失败路径保持 vanilla 语义与标志一致。
             self.ext_intents = has_mod_intents;
@@ -793,17 +697,14 @@ impl EmbedEngine {
         Ok(())
     }
 
-    /// 按适配器的对象类别和初始字段摆放对象，返回对象 ID。
-    /// 字段归一化由 [`kk_world::place::normalize`] 完成；未处置的失败轮会阻止摆放。
     /// 以 Mod 包装建分片：注册、玩家面导出/预检与计划装配发生在引擎
     /// 重置后、玩家沙箱 spawn 前（常量与结算同源）。可装配面是 link 两槽
-    /// 的 before/after/replace 处理器、规则，以及 Mod 自有动作入口的对象
-    /// 域执行链（动作处理中心 + before/after/replace 贡献处理器）；wrap
-    /// 处理器虽在引擎侧已可执行，但宿主桥的 next 工厂通道未接线，仍在
-    /// 装配期显式拒绝而不是静默降级。对象域外的执行形态（房间/玩家/
+    /// 的 before/wrap/after/replace 处理器、规则，以及 Mod 自有动作入口的对象
+    /// 域执行链。JS 贡献由整槽宿主组合，native 只经普通 op 修改候选。
+    /// 对象域外的执行形态（房间/玩家/
     /// 世界域、队列合并、非严格转换、显式入口）同样显式拒绝。玩家面目录导出与
-    /// 安装预检先于引擎装配失败；引擎装配之后的失败路径分片停留在 vanilla
-    /// 语义（与 create_shard 的"后续失败不恢复旧分片"语义一致——调用方
+    /// 安装预检先于引擎装配；后续失败不恢复旧分片，已装配计划也可能留存。
+    /// 这与 create_shard 的失败语义一致——调用方
     /// 须以 teardown/重建收尾，不得复用半装状态）。
     pub fn create_shard_with_mods(
         &mut self,

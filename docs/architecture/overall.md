@@ -22,7 +22,8 @@
 | crate | 当前职责与边界 |
 |---|---|
 | `kk-core` | 游戏常量、房间坐标、地形编码和随机数工具 |
-| `kk-mod-api` | 玩法描述、启动校验和冻结计划；尚未接入生产引擎或 JS Mod |
+| `kk-mod-api` | 玩法描述、启动校验、冻结计划与玩家面目录；已接入 link 规则与对象域 Mod 意图，不代表所有默认玩法已迁移 |
+| `kk-mod-host` | 可信 JS 包装载、注册冻结与整槽处理链执行；通过 ChainHost 访问候选，不依赖引擎或玩家 VM |
 | `kk-schema` | 二进制快照读写、对象字段定义、布局宏和版本升级接口；接口存在不等于已有历史版本迁移 |
 | `kk-world` | 内存世界、房间和对象管理、空间索引，以及沙箱数据和查询快照的投影 |
 | `kk-engine` | 清洗指令，结算房间和市场规则，验证并提交世界、玩家及市场的内存候选状态 |
@@ -43,10 +44,11 @@
 | crate | 直接依赖 |
 |---|---|
 | `kk-cli` | core、engine、runtime、runner、world |
-| `kk-runtime` | core、schema、engine、runner、world |
-| `kk-engine` | core、schema、world |
-| `kk-world` | core、schema |
+| `kk-runtime` | core、schema、mod-api、mod-host、engine、runner、world |
+| `kk-engine` | core、mod-api、schema、world |
+| `kk-world` | core、mod-api、schema |
 | `kk-mod-api` | core |
+| `kk-mod-host` | mod-api |
 | `kk-schema` | 无内部依赖 |
 | `kk-runner` | core，使用 deno_core 等外部库 |
 | `kk-storage-bench` | core、schema、world |
@@ -58,10 +60,10 @@
 
 嵌入式执行的主要路径如下：
 
-1. `kk-runtime::EmbedEngine` 从已提交世界构造按玩家视野过滤的 JSON 数据，注入该玩家的 V8 沙箱。
+1. `kk-runtime::EmbedEngine` 从已提交世界构造按玩家视野过滤的 JSON 或 KKPV 数据，注入该玩家的 V8 沙箱。
 2. `kk-runner` 执行玩家代码。JavaScript API 检查所有权、距离、资源和参数等条件，接受的动作加入指令收集器；返回 `OK` 表示接受指令，不表示动作已结算成功。
 3. 宿主收集指令、RawMemory、segments、计费候选和日志。Rust 指令入口再次清洗字段并绑定注册玩家身份，不信任玩家自报的身份。
-4. `kk-engine` 在候选副本中处理房间与市场规则，验证后更新内存世界、玩家和市场状态。
+4. `kk-engine` 在候选副本中处理房间与市场规则。无扩展内建槽直调 Rust；已接线的 JS 贡献槽由 runtime 一次进入可信 Mod realm，JS 组合处理链、Rust 校验并读写同一候选。验证后发布内存世界、玩家和市场状态。
 5. 世界结算成功后，协调器提交玩家 Memory、segments 和沙箱 CPU 桶候选。世界结算失败时缓存运行结果及 `TickInput`，重试不再次执行玩家代码。
 
 玩家已修改的 V8 全局变量不随世界回退；线程通信失败、panic 或进程崩溃也不能直接套用内存结算失败的保证。具体边界见 [游戏循环](game-loop.md)和 [tick 契约](tick-contract.md)。
@@ -74,7 +76,15 @@
 | `kk-world::snapshot` | 供 `getObject` 等查询使用的对象 JSON |
 | `RoomState` 与 `kk-schema` 编码 | 房间状态和二进制快照读写，不自行写入磁盘 |
 
-当前沙箱注入和结果导出仍使用 JSON。共享二进制视图、检查点保存和崩溃恢复的设计见 [快照契约](snapshot-contract.md)与 [存储设计](storage.md)。
+沙箱注入默认使用 JSON，也可显式选择 KKPV 二进制块束；结果导出仍使用 JSON。KKPV 已有玩家通路与等价验证，不等于所有对象零复制或已具备持久化。块生命周期、检查点保存和崩溃恢复见 [快照契约](snapshot-contract.md)与 [存储设计](storage.md)。
+
+## 当前采用的系统边界
+
+项目适合继续采用单进程的分层内核：玩家读取已提交投影，沙箱只产出意图与写回候选，Rust 结算和协调器共同完成整轮验证与发布。房间是局部工作单元，市场、跨房行为和玩家写回仍须遵守全轮提交边界；不能仅凭房间划分就独立提交。玩家线程已可并发执行，房间结算并行与流水线仍是后续能力。
+
+玩法扩展以启动冻结计划描述对象、规则和槽；可信玩法 VM 与不可信玩家 VM 分开。组合 JS 函数留在玩法 VM，权威状态与领域校验留在 Rust，避免每层 wrap 都重新借用整个 VM。默认规则继续保留 native 路径；当前不为未开放的规则提供虚假的通用扩展保证。机制见 [Mod 执行](mod-execution.md)，取舍见 [ADR-015](../decisions/ADR-015-mod-chain-execution.md)。
+
+先完成这一读写、提交与失败契约，再扩大规则写面、补齐 VM 故障恢复，之后接持久化、网络与客户端。现有 crate 边界足以支撑这条路线；目前没有负载证据要求改成微服务、引入统一 ECS 或把所有规则改写为 JS。后续并行优化、存储选型与进程隔离分别用真实负载和故障验收决定。
 
 ## 规则与测试边界
 

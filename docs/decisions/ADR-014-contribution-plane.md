@@ -94,7 +94,7 @@ Mod 的权威状态保存在 Rust 事务中，JS 堆只保存可重建缓存。�
 
 冻结定义与默认调用路径有助于减少动态查找；共享投影有助于减少重复复制；权威状态与提交契约使扩展参与同一结算。但实现成本包括接口覆盖、扩展链、权限过滤、旧版本保留、故障恢复与基准建设，性能和内存目标都须实测。
 
-当前市场候选、结算阶段、恢复状态、玩家 Memory/CPU 候选及有界并发派发已有实现。完整 ContributionPlan、共享二进制、玩法 Mod VM 与外部输出队列仍未接入，磁盘崩溃恢复也未完成。当前执行与恢复范围见 [tick 契约](../architecture/tick-contract.md)，B 阶段的具体契约与实施顺序见[开放领域定义与玩家投影](../designs/domain-projection.md)。
+当前市场候选、结算阶段、恢复状态、玩家 Memory/CPU 候选及有界并发派发已有实现。ContributionPlan、KKPV 双通道与可信玩法 VM 已按切片接入；Mod 执行当前覆盖 link/对象意图，完整默认槽目录、投影优化、外部输出队列与磁盘崩溃恢复仍未完成。具体执行方式见 [ADR-015](ADR-015-mod-chain-execution.md)。当前执行与恢复范围见 [tick 契约](../architecture/tick-contract.md)，B 阶段的具体契约与实施顺序见[开放领域定义与玩家投影](../designs/domain-projection.md)。
 
 本决策细化 ADR-004 的共享读取、ADR-007 的 JS 扩展与 ADR-008 的执行模型。ADR-011/012 的 JSON 过渡约束演进为整体投影协议；ADR-013 的接口先行和冻结前验证要求保留。默认兼容约束不因此降低。
 

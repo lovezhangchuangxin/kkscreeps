@@ -8,6 +8,7 @@
 |---|---|
 | [overall.md](overall.md) | 当前运行入口、模块职责、实际依赖和数据表示；区分预留模块与目标服务 |
 | [game-loop.md](game-loop.md) | 当前玩家执行与结算流程，以及并行流水线的目标 |
+| [mod-execution.md](mod-execution.md) | JS/native 组合链、候选访问与当前支持范围 |
 | [tick-contract.md](tick-contract.md) | 已提交状态、候选结果、失败重试与目标任务合并规则 |
 | [sandbox.md](sandbox.md) | 玩家沙箱、执行预算、内存限制与模块加载的机制和目标 |
 | [storage.md](storage.md) | 二进制快照、检查点、网络传输与持久化的目标设计 |
@@ -26,7 +27,7 @@
               → kk-schema：字段与二进制编码
 ```
 
-这张图表示主要运行职责，完整的编译依赖见[总体架构](overall.md#实际依赖)。目前不经过 HTTP 服务或数据库；沙箱数据仍通过 JSON 传递。
+这张图表示主要运行职责，完整的编译依赖见[总体架构](overall.md#实际依赖)。目前不经过 HTTP 服务或数据库；沙箱数据默认通过 JSON 传递，也可选择 KKPV。可信玩法链由 runtime 连接 kk-mod-host，执行边界见 [Mod 执行](mod-execution.md)。
 
 ## 架构原则
 

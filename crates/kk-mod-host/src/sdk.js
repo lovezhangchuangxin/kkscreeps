@@ -199,15 +199,8 @@ export function dispatch(key, ctx) {
   if (!entry || typeof entry.fn !== 'function') {
     throw new Error(`绑定 ${JSON.stringify(key)} 没有注册函数`);
   }
-  // wrap 处理器额外收到 next：它的实现是宿主的 reentrant op，JS 侧
-  // 只能经它同步进入内层链。
-  //
-  // 边界说明：这不是能力隔离。包代码经 Deno.core.ops 仍能直接触达
-  // op_mod_next（与其他 op 同表），只是槽空时会响亮失败。信任模型本
-  // 就把 Mod 包视作共同可信单元，故此处不做额外封锁——若将来要收紧，
-  // 须改为传带能力校验的闭包，而不是裸 op。
-  const result =
-    entry.kind === 'wrap' ? entry.fn(ctx, Deno.core.ops.op_mod_next) : entry.fn(ctx);
+  if (entry.kind === 'wrap') throw new Error('wrap 必须经整槽执行入口调用');
+  const result = entry.fn(ctx);
   if (result !== undefined && result !== null && typeof result.then === 'function') {
     throw new Error(`绑定 ${JSON.stringify(key)} 的处理器返回了 Promise（结算回调必须同步完成）`);
   }
@@ -220,4 +213,143 @@ export function dispatch(key, ctx) {
     target,
     result: result === undefined ? null : result,
   };
+}
+
+// 启动时安装冻结链；运行期只传槽键。JS 控制组合，普通 op 访问 Rust 候选。
+const chains = new Map();
+export function installChains(programs) {
+  if (!sealed || chains.size) throw new Error('冻结链只能在密封后安装一次');
+  for (const program of programs) {
+    function check(key, kind) {
+      const entry = bindings.get(key);
+      if (!entry || (kind === 'center' ? entry.kind !== undefined && entry.kind !== 'replace' : entry.kind !== kind)) {
+        throw new Error(`绑定 ${key} 与链位 ${kind} 不匹配`);
+      }
+    }
+    for (const key of program.before) check(key, 'before');
+    for (const key of program.wraps) check(key, 'wrap');
+    if (!program.native_center) check(program.center, 'center');
+    for (const key of program.after) check(key, 'after');
+    chains.set(program.key, program);
+  }
+}
+
+// 仅复用自有数据属性，不能把 __proto__ 等继承值当成待刷新容器。
+function ownValue(object, key) {
+  const descriptor = Object.getOwnPropertyDescriptor(object, key);
+  return descriptor && Object.hasOwn(descriptor, 'value') ? descriptor.value : undefined;
+}
+
+// Rust 候选是 JSON 树；旧 JS 图中的共享容器只能复用一次，其余路径
+// 改用独立候选值，避免第二次刷新覆盖第一次刷新。独立容器保持旧引用。
+// keys 用于上下文记录：只更新权威成员，保留处理器附加的本地属性。
+function refreshValue(current, fresh, reused, keys) {
+  if (current === null || fresh === null || typeof current !== 'object' || typeof fresh !== 'object' || Array.isArray(current) !== Array.isArray(fresh)) {
+    return fresh;
+  }
+  if (reused.has(current)) return fresh;
+  reused.add(current);
+  if (keys === undefined) {
+    for (const key of Object.keys(current)) {
+      if (!Object.hasOwn(fresh, key)) delete current[key];
+    }
+  }
+  if (Array.isArray(current)) current.length = fresh.length;
+  for (const key of keys ?? Object.keys(fresh)) {
+    Object.defineProperty(current, key, { value: refreshValue(ownValue(current, key), fresh[key], reused), writable: true, enumerable: true, configurable: true });
+  }
+  return current;
+}
+
+function refreshContext(ctx, fresh) {
+  // state/args/target 共用一次遍历，跨上下文字段的别名也不能重复复用。
+  const reused = new WeakSet([ctx]);
+  for (const key of ['tick', 'room', 'state', 'args']) {
+    Object.defineProperty(ctx, key, { value: refreshValue(ownValue(ctx, key), fresh[key], reused), writable: true, enumerable: true, configurable: true });
+  }
+  const target = refreshValue(ownValue(ctx, 'target'), fresh.target, reused, ['id', 'fields']);
+  Object.defineProperty(ctx, 'target', { value: target, writable: true, enumerable: true, configurable: true });
+}
+
+export function runChain(slot, token) {
+  const program = chains.get(slot);
+  if (!program) throw new Error(`槽 ${slot} 未安装`);
+  const ops = Deno.core.ops;
+  let firstFault;
+  function fault(error) {
+    const detail = error && error.message ? String(error.message) : String(error);
+    if (firstFault === undefined) firstFault = detail;
+    ops.op_mod_chain_fault(token, detail);
+  }
+  function checkResult(key, result) {
+    if (result !== undefined && result !== null && typeof result.then === 'function') {
+      throw new Error(`绑定 ${key} 的处理器返回了 Promise（结算回调必须同步完成）`);
+    }
+  }
+  function write(key, ctx) {
+    // 只序列化持久候选；ctx/target 上的本地函数、循环引用不进入 Rust。
+    ops.op_mod_chain_write(token, key, {
+      state: ctx.state === undefined ? null : ctx.state,
+      target: { fields: ctx.target?.fields ?? null },
+    });
+  }
+  function simple(key) {
+    const ctx = ops.op_mod_chain_read(token, key);
+    try {
+      checkResult(key, bindings.get(key).fn(ctx));
+      write(key, ctx);
+    } catch (error) {
+      fault(new Error(`处理器 ${key}: ${error && error.message ? error.message : error}`));
+      throw error;
+    }
+  }
+  function inner(depth) {
+    if (depth === program.wraps.length) {
+      if (program.native_center) ops.op_mod_chain_native(token);
+      else simple(program.center);
+      return;
+    }
+    const key = program.wraps[depth];
+    const ctx = ops.op_mod_chain_read(token, key);
+    let called = false;
+    let open = true;
+    function next() {
+      if (!open) throw new Error('next 只能在所属处理器同步执行期间调用');
+      if (called) {
+        const error = new Error('wrap 处理器重复调用 next，本轮候选失败');
+        fault(error);
+        throw error;
+      }
+      called = true;
+      try {
+        // 外层修改先写候选，内层按绑定读取新状态；返回后刷新外层视图。
+        write(key, ctx);
+        inner(depth + 1);
+        refreshContext(ctx, ops.op_mod_chain_read(token, key));
+      } catch (error) {
+        fault(error);
+        throw error;
+      }
+    }
+    try {
+      checkResult(key, bindings.get(key).fn(ctx, next));
+      if (firstFault !== undefined) throw new Error(firstFault);
+      write(key, ctx);
+    } catch (error) {
+      fault(new Error(`处理器 ${key}: ${error && error.message ? error.message : error}`));
+      throw error;
+    } finally {
+      open = false;
+    }
+  }
+  try {
+    for (const key of program.before) simple(key);
+    inner(0);
+    if (firstFault !== undefined) throw new Error(firstFault);
+    // after 属于整个槽：wrap 全部退栈后执行一次；取消中心仍可成功返回。
+    for (const key of program.after) simple(key);
+  } catch (error) {
+    fault(error);
+    throw error;
+  }
 }

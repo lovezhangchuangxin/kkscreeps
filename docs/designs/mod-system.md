@@ -168,21 +168,21 @@ Mod 不获得 Rust 裸指针。位置、归属、生命周期、Store 与字段�
 
 槽位应覆盖动作处理、对象 preTick/tick、房间阶段、世界阶段；再细化到移动资格/争议仲裁/疲劳、伤害累积/最终应用、建造放置/成本、容量、视野、NPC 生成、市场与跨房传输等业务规则。只开放 `room.tick.after` 无法完整替换这些算法。核心阶段列表和 slots 应有覆盖清单，随着默认内核逐块迁移补齐。
 
-组合约定：before 正序；wrap 按拓扑序形成外层→内层链；最内为 replace 或 native default；after 按约定逆序回收。`next()` 在同一候选、对象和动作上下文中继续内层，默认只允许一次；不调用 next 表示取消内层。after 只在相应内层成功返回时运行；回滚清理用单独宿主流程，不让 finally 把失败候选发布。
+组合约定：before 正序；wrap 按拓扑序形成外层→内层链；最内为 replace 或 native default；after 按约定逆序回收。`next()` 在同一候选、对象和动作上下文中继续内层，默认只允许一次；不调用 next 表示取消内层。after 在整条 wrap 链成功退栈后执行一次；取消中心属于成功，仍执行 after，异常或 next 违规则不执行；回滚清理用单独宿主流程，不让 finally 把失败候选发布。
 
 依赖/阶段 before/after 是图约束，不能用单一 priority 数字覆盖一切。循环、越过强制阶段边界、同槽位多 replace、引用不存在的 handler 在启动时报错。所有约束缺省用稳定 Mod ID/handler ID 排序；完成顺序与 hashmap 迭代不得参与玩法语义。
 
-首版玩法 callback 必须同步返回，返回 Promise 视为注册/执行错误；不能 await 文件或网络。允许 JS `next()` 同步调用 native、native 再触发生命周期 JS，但所有此类 op 必须显式 reentrant，且进入 JS 之前释放 OpState/事务借用。这条交互已由[实验](../../spikes/deno-spike/examples/js_mod_host.rs)在 debug/release 验证；真实处理器的候选访问模型已按此重构落地（`RoomCtx`），JS 侧 wrap 的 `next()` 工厂通道仍待接线。
+首版玩法 callback 必须同步返回，返回 Promise/thenable 视为执行错误。当前贡献链采用 [ADR-015](../decisions/ADR-015-mod-chain-execution.md)：JS 在一次宿主调用内完成组合，next 是本 VM 的闭包，native 中心通过普通 op 修改 Rust 候选，不为 wrap 嵌套重新借用 ModRealm。重复 next、内层异常或候选访问故障即使被处理器捕获，也使本轮候选失败。若未来独立 native 生命周期接口需要再进 JS，仍须明确 reentrant 契约并释放 OpState/事务借用。当前可执行范围与限制见 [Mod 处理链执行](../architecture/mod-execution.md)。
 
 ## 6. 宿主实现与所有权
 
 ### 6.1 推荐依赖方向
 
-`kk-mod-api` 保存纯描述与计划；`kk-engine` 保留内核、候选和 native handlers；`kk-mod-host` 封装 JS 装载、ops、回调和后台调度；`kk-runtime` 管理提交、玩家任务和宿主生命周期。当前 `kk-engine` 不依赖 deno_core；`kk-mod-api` 已建立独立 crate，`kk-mod-host` 已实现注册期（装载/依赖图/指纹/可信 realm/注册 SDK；结算期回调与 ops 未接），默认处理器和投影消费冻结计划的接线仍待完成。
+`kk-mod-api` 保存纯描述与冻结计划；`kk-engine` 保留候选、native 规则与不依赖 V8 的 SlotExecutor 接口；`kk-mod-host` 封装 JS 装载、冻结链安装和整槽调用；`kk-runtime` 适配候选领域访问、玩家执行与提交。当前 link transfer/tick 与对象域 Mod 意图已接线，其他业务槽与后台调度仍属目标。
 
 ### 6.2 先建立 OwnedTxn，再接入 VM
 
-引擎已建立拥有输入、房间、市场和共享状态的 `OwnedTickTxn`。`Working` 现按值持有房间副本、不带生命周期，经 `TickState` 短暂访问玩家候选和 ID 游标；重入 op 从 OpState 取走的是挂起内层链，该链以 `RoomCtx`（`Rc<RefCell<Working>>`）为入参闭包起来执行；`RoomCtx` 本身不进 OpState（进了会让结算尾部的 `Rc::into_inner` 恒失败）。借用纪律随之收紧为：处理器自己取短借用，**在进入 JS 或调用 `next()` 前必须释放**——重入可变借用会 panic。结算尾部的 `Rc::into_inner` 要求候选强计数为 1，因此处理器不得留存 `RoomCtx` 克隆。
+引擎已建立拥有输入、房间、市场和共享状态的 `OwnedTickTxn`。`Working` 按值持有房间副本，经 `TickState` 短暂访问玩家候选和 ID 游标；`RoomCtx`（`Rc<RefCell<Working>>`）可在一次整槽调用期间随候选能力进入 OpState，退出时必须清空，才能在结算尾部取回唯一拥有的房间。借用纪律是：进入 JS 前结束候选借用，native/op 自行取短借用；RefCell 动态检查该纪律，类型不自动证明它。处理器不得跨调用留存候选句柄。
 
 ```text
 runtime 收集玩家结果 + 原 TickInput

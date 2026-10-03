@@ -1,6 +1,5 @@
-//! Mod 处理器执行接线：可信 realm 的 before/after/replace 处理器经桥
-//! 闭包进入 link 槽结算，Mod 状态随候选发布、失败回滚；wrap 与未接线
-//! 绑定装配即拒。零 Mod 路径不受影响（同族其余测试即为对照）。
+//! Mod 整槽执行接线：可信 realm 组合处理器，native 经普通 op 进入
+//! link 候选；Mod 状态统一发布、失败回滚，未接线的作用域装配即拒。
 
 use std::path::PathBuf;
 
@@ -125,8 +124,7 @@ export default function register(api) {
     Ok(())
 }
 
-/// replace 中心执行（处理器运行并把状态写回）；声明为 wrap 的处理器
-/// 装配即拒（不支持执行装配，不静默截断链）。native 被替换语义由
+/// replace 中心执行与 wrap 续行均可装配。native 被替换语义由
 /// 引擎级 m2b 用例锁定，此处不重复断言冷却字段。
 pub(super) fn c_mod_settle_replace_and_wrap_gate_impl() -> anyhow::Result<()> {
     let root = write_mod_root(
@@ -157,20 +155,8 @@ export default function register(api) {
 "#,
         None,
     );
-    let packages = discover_packages(&root)?;
-    let mut e = EmbedEngine::new();
-    let rejection = e.create_shard_with_mods(&spec(), &packages, RegisterOptions::default());
-    assert!(
-        rejection.is_err(),
-        "wrap 处理器必须装配即拒，不能静默截断链"
-    );
-    assert!(
-        rejection
-            .unwrap_err()
-            .to_string()
-            .contains("wrap 处理器不支持执行装配"),
-        "错误应指明 wrap 不支持装配"
-    );
+    let mut e = engine_with_link(&root)?;
+    e.tick(2)?;
     let _ = std::fs::remove_dir_all(&root);
     Ok(())
 }

@@ -12,6 +12,7 @@
 | 世界数据有哪些表示，快照怎样管理？ | [总体架构的数据流](architecture/overall.md#数据流与状态边界)、[快照契约](architecture/snapshot-contract.md) |
 | 玩家行为应满足什么要求，如何验证？ | [兼容性设计](designs/compatibility.md)、[验收工具](../compat/README.md) |
 | 为什么采用 Rust、V8 和当前模块边界？ | [决策索引](decisions/README.md) |
+| 当前 Mod 处理链怎样执行？ | [Mod 处理链执行](architecture/mod-execution.md) |
 | Mod、前端和开发工具计划如何工作？ | [功能设计](designs/README.md)、[前端架构](architecture/frontend.md) |
 | 如何写清楚注释和术语？ | [注释规范](contributing/comment-style.md)、[术语词典](glossary.md) |
 

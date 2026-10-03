@@ -3,7 +3,7 @@
 //! 信任模型与 [设计](../../../docs/designs/mod-system.md) 一致：共同可信宿主，
 //! Mod 之间不构成安全隔离边界；注册期 SDK 只暴露声明面，没有世界读写 op。
 //! 处理器函数保存在本 VM 的绑定表内（sdk.js），Rust 侧只记录键——
-//! 执行接线与结算期调用不在本类型内。
+//! 结算期一次调用完成整槽；候选访问由调用方通过 ChainHost 适配。
 //!
 //! 线程亲和：V8 隔离区须在创建线程上使用；`ModRealm` 创建后不得跨线程移动使用，
 //! 也不得在 tokio runtime 上下文（async fn 内）调用——内部 `block_on` 会恐慌。
@@ -23,6 +23,10 @@ use deno_core::{
 use deno_error::JsErrorBox;
 use serde_json::Value;
 
+use crate::chain::{
+    ActiveChain, ChainHost, ChainProgram, ChainState, op_mod_chain_fault, op_mod_chain_native,
+    op_mod_chain_read, op_mod_chain_write,
+};
 use crate::convert::{Declaration, build_contribution};
 use crate::error::{ModHostError, ModHostResult};
 use crate::graph::dependency_order;
@@ -54,57 +58,6 @@ struct Registry {
     sealed: bool,
 }
 
-/// JS wrap 处理器调用 `next()` 时要执行的内层链。
-///
-/// 闭包是 `'static`：它捕获的是引擎导出的 `RoomCtx` 与内层链本身
-/// （两者都是 `Rc` 句柄），不借用当轮结算的栈上结构。这是
-/// `Working` 必须去生命周期的直接原因。
-pub type NextAction = Box<dyn FnMut() -> Result<(), String>>;
-
-/// 结算期共享状态：当前挂起的内层链。`Rc<RefCell<…>>` 使重入 op 能从
-/// OpState 取到克隆而不持有 `&mut JsRuntime`——与实验
-/// `spikes/deno-spike/examples/js_mod_host.rs` 的 `op_mod_native` 同法。
-type NextSlot = Rc<RefCell<Option<NextAction>>>;
-
-/// 取出并执行挂起的内层链。
-///
-/// **`reentrant` 是本 op 存在的唯一理由**：JS 处理器正在 V8 中执行时
-/// 调回 Rust，Rust 还要再进一次 JS（内层 wrap 或中心处理器）。
-/// deno_core 只在标记 reentrant 时允许这种嵌套调用。
-///
-/// `reentrant` **不是能力隔离**：它只放开「宿主在 JS 执行途中再进一次
-/// JS」这一条调用时序，不扩大 JS 可达的面——内层链是宿主在进入 JS
-/// 之前装入的既定闭包，JS 无法自造载荷，也无法取走不属于本次调用的链
-/// （槽取出即清空）。沙箱信任边界仍由注册期纪律划定（模块加载约束、
-/// 声明面，见本文件顶部），本 op 不在其中新增任何一条。
-///
-/// 调用方（`ModRealm::invoke_wrap`）在进入 JS **之前**装入内层链、
-/// 之后清空；装入期间持有候选借用会与内层链的借用冲突，因此桥必须
-/// 先释放——见设计 §6.2 与 embed 侧 ext_bridge 的借用纪律。
-#[op2(fast, reentrant)]
-fn op_mod_next(
-    scope: &mut v8::PinScope,
-    state: std::rc::Rc<RefCell<OpState>>,
-) -> Result<(), JsErrorBox> {
-    // 显式作用域：取出即释放 OpState 借用，内层链执行期间不得持有。
-    let slot: NextSlot = {
-        let state = state.borrow();
-        state.borrow::<NextSlot>().clone()
-    };
-    let action = slot.borrow_mut().take();
-    let Some(mut action) = action else {
-        // 无挂起链：next() 出现在 wrap 处理器之外，或处理器在宿主
-        // 装入内层链之前就调用了它。响亮失败，不静默忽略。
-        return Err(JsErrorBox::generic(
-            "next() 没有对应的内层链（处理器不是装配中的 wrap，或内层链已被消耗）",
-        ));
-    };
-    // 内层链可能再次进入 JS（内层 wrap）；此处刻意不额外使用 scope，
-    // reentrant 能力已由 op 签名提供。
-    let _ = scope;
-    action().map_err(JsErrorBox::generic)
-}
-
 #[op2]
 fn op_mod_declare(
     state: &mut OpState,
@@ -132,7 +85,16 @@ fn op_mod_declare(
     Ok(())
 }
 
-extension!(kk_mod_host, ops = [op_mod_declare, op_mod_next]);
+extension!(
+    kk_mod_host,
+    ops = [
+        op_mod_declare,
+        op_mod_chain_read,
+        op_mod_chain_write,
+        op_mod_chain_native,
+        op_mod_chain_fault
+    ]
+);
 
 /// 包内模块加载器：字节来自装载期的内存快照，注册期不触碰磁盘。
 /// 只允许包内相对导入与 `@kkscreeps/mod`；跨包导入与裸导入拒绝。
@@ -298,8 +260,10 @@ pub struct ModRealm {
     sdk_create_api: v8::Global<v8::Function>,
     sdk_seal: v8::Global<v8::Function>,
     sdk_dispatch: v8::Global<v8::Function>,
-    /// 与 OpState 共享的挂起内层链槽。
-    next_slot: NextSlot,
+    sdk_install_chains: v8::Global<v8::Function>,
+    sdk_run_chain: v8::Global<v8::Function>,
+    chains: BTreeMap<String, (bool, Rc<BTreeSet<String>>)>,
+    chain_sequence: u64,
 }
 
 impl ModRealm {
@@ -317,7 +281,6 @@ impl ModRealm {
             })),
             ..Default::default()
         });
-        let next_slot: NextSlot = Rc::new(RefCell::new(None));
         {
             let op_state = runtime.op_state();
             let mut op_state = op_state.borrow_mut();
@@ -326,7 +289,7 @@ impl ModRealm {
                 declarations: Vec::new(),
                 sealed: false,
             });
-            op_state.put(next_slot.clone());
+            op_state.put(ChainState::default());
         }
         let sdk_url = ModuleSpecifier::parse(SDK_URL)
             .map_err(|error| ModHostError::new("realm", error.to_string()))?;
@@ -344,7 +307,7 @@ impl ModRealm {
         let namespace = runtime
             .get_module_namespace(mod_id)
             .map_err(|error| ModHostError::new("realm", format!("SDK 命名空间不可用：{error}")))?;
-        let (sdk_create_api, sdk_seal, sdk_dispatch) = {
+        let (sdk_create_api, sdk_seal, sdk_dispatch, sdk_install_chains, sdk_run_chain) = {
             let runtime_ref = &mut runtime;
             deno_core::scope!(scope, runtime_ref);
             let namespace = v8::Local::new(scope, namespace.clone());
@@ -367,7 +330,13 @@ impl ModRealm {
                     v8::Global::new(scope, function)
                 }};
             }
-            (grab!("createApi"), grab!("seal"), grab!("dispatch"))
+            (
+                grab!("createApi"),
+                grab!("seal"),
+                grab!("dispatch"),
+                grab!("installChains"),
+                grab!("runChain"),
+            )
         };
         Ok(Self {
             runtime,
@@ -376,7 +345,10 @@ impl ModRealm {
             sdk_create_api,
             sdk_seal,
             sdk_dispatch,
-            next_slot,
+            sdk_install_chains,
+            sdk_run_chain,
+            chains: BTreeMap::new(),
+            chain_sequence: 0,
         })
     }
 
@@ -402,24 +374,85 @@ impl ModRealm {
             .map_err(|error| ModHostError::new("invoke", format!("处理器结果序列化失败：{error}")))
     }
 
-    /// 结算期调用一个 **wrap** 处理器：`inner` 是内层链，由 JS 的
-    /// `next()` 经重入 op 同步触发。
-    ///
-    /// 借用纪律：调用方在进入本方法前必须已释放对房间候选的可变借用，
-    /// 否则 `next()` 触发的内层链会撞上 RefCell 重入借用而 panic。
-    /// 本方法在调用 JS 前装入 `inner`、返回后清空；未调用 `next()`
-    /// 的处理器正常返回，内层链被丢弃（等同「取消内层」）。
-    pub fn invoke_wrap(
-        &mut self,
-        binding: &str,
-        ctx: Value,
-        inner: NextAction,
-    ) -> ModHostResult<Value> {
-        *self.next_slot.borrow_mut() = Some(inner);
-        let result = self.invoke(binding, ctx);
-        // 无论成功失败都清空：残留会让后续非 wrap 调用误触内层链。
-        self.next_slot.borrow_mut().take();
+    /// 一次进入 JS 完成整个槽。候选能力仅在本次调用期间放入 OpState，
+    /// 无论返回或抛错都取出并销毁；已捕获的 next/候选访问故障仍使调用失败。
+    pub fn invoke_chain(&mut self, slot: &str, host: Box<dyn ChainHost>) -> ModHostResult<()> {
+        let program = self
+            .chains
+            .get(slot)
+            .ok_or_else(|| ModHostError::new("chain", format!("槽 {slot} 未安装")))?;
+        self.chain_sequence = self
+            .chain_sequence
+            .checked_add(1)
+            .ok_or_else(|| ModHostError::new("chain", "槽调用序号耗尽"))?;
+        let token = self.chain_sequence.to_string();
+        let active = ActiveChain {
+            token: token.clone(),
+            bindings: program.1.clone(),
+            host,
+            fault: None,
+            native_called: false,
+            native_allowed: program.0,
+        };
+        let op_state = self.runtime.op_state();
+        if op_state.borrow().borrow::<ChainState>().active.is_some() {
+            return Err(ModHostError::new("chain", "不可重入整槽宿主"));
+        }
+        op_state.borrow_mut().borrow_mut::<ChainState>().active = Some(active);
+        let result = self.call_chain(slot, &token);
+        // 尾部清理必须先于向外传播错误，RoomCtx 不得残留到结算的取回阶段。
+        let active = op_state
+            .borrow_mut()
+            .borrow_mut::<ChainState>()
+            .active
+            .take()
+            .expect("本次调用已安装候选能力");
+        if let Some(fault) = active.fault {
+            return Err(ModHostError::new(slot.to_string(), fault));
+        }
         result
+    }
+
+    fn call_chain(&mut self, slot: &str, token: &str) -> ModHostResult<()> {
+        let runtime_ref = &mut self.runtime;
+        deno_core::scope!(scope, runtime_ref);
+        v8::tc_scope!(let tc, scope);
+        let run = v8::Local::new(tc, self.sdk_run_chain.clone());
+        let slot =
+            v8::String::new(tc, slot).ok_or_else(|| ModHostError::new("chain", "槽键构造失败"))?;
+        let token = v8::String::new(tc, token)
+            .ok_or_else(|| ModHostError::new("chain", "能力标识构造失败"))?;
+        let receiver = v8::undefined(tc).into();
+        run.call(tc, receiver, &[slot.into(), token.into()])
+            .ok_or_else(|| scope_error!(tc, "chain", "槽调用失败"))?;
+        Ok(())
+    }
+
+    fn install_chains(&mut self, plan: &ContributionPlan) -> ModHostResult<()> {
+        let programs =
+            ChainProgram::from_plan(plan).map_err(|error| ModHostError::new("chain", error))?;
+        {
+            let runtime_ref = &mut self.runtime;
+            deno_core::scope!(scope, runtime_ref);
+            v8::tc_scope!(let tc, scope);
+            let install = v8::Local::new(tc, self.sdk_install_chains.clone());
+            let value = deno_core::serde_v8::to_v8(tc, &programs)
+                .map_err(|error| ModHostError::new("chain", error.to_string()))?;
+            let receiver = v8::undefined(tc).into();
+            install
+                .call(tc, receiver, &[value])
+                .ok_or_else(|| scope_error!(tc, "chain", "链安装失败"))?;
+        }
+        self.chains = programs
+            .into_iter()
+            .map(|program| {
+                (
+                    program.key.clone(),
+                    (program.native_center, Rc::new(program.bindings())),
+                )
+            })
+            .collect();
+        Ok(())
     }
 
     /// 依拓扑序注册全部包并冻结计划。注册是一次性的：成功后密封；
@@ -518,6 +551,7 @@ impl ModRealm {
             )?);
         }
         let plan = freeze_with_builtin(builtin::link(), contributions.to_vec(), options.freeze)?;
+        self.install_chains(&plan)?;
         let mut player_modules = Vec::new();
         for id in &order {
             let Some(entry) = packages[id].manifest.player.clone() else {
