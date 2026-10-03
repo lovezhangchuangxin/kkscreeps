@@ -24,6 +24,8 @@ impl World {
 
     /// 返回房内匹配 FIND 常量的快照，按对象 ID 排序；房间不存在时返回空列表。
     /// 无玩家视角，MY_*、HOSTILE_* 不匹配；旗和地形派生的出口不在此快照结果中。
+    /// Mod 对象不产出原始记录（object_json 对其返回 None），本面不含 Mod；
+    /// Mod 的管理查询走 object_snapshot_by_id 的单对象读面。
     /// 使用 world_json 的 matches_find 过滤，但返回的是查询快照格式。
     pub fn find_snapshots_in_room(&self, room: &str, find_const: i64) -> Vec<Value> {
         let Some(state) = self.rooms.get(room) else {
@@ -34,15 +36,15 @@ impl World {
         state
             .objects
             .iter()
-            .filter(|(id, o)| {
+            .filter_map(|(id, o)| {
                 if matches!(*o, RoomObject::Flag(_)) {
-                    return false;
+                    return None;
                 }
                 let internal =
-                    crate::world_json::object_json(room, **id, o, self.time, terrain, rcl);
+                    crate::world_json::object_json(room, *id, o, self.time, terrain, rcl)?;
                 crate::world_json::matches_find(&internal, find_const, None)
+                    .then(|| snapshot_json(room, *id, o, self.time, terrain))
             })
-            .map(|(id, o)| snapshot_json(room, *id, o, self.time, terrain))
             .collect()
     }
 }

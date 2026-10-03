@@ -48,7 +48,52 @@ fn owned(key: &Key, namespace: &str) -> Result<(), FreezeError> {
 }
 
 /// 消费启动输入并生成不可变计划；不安装绑定、不验证世界中的对象。
+/// 贡献里不得出现 `builtin` 命名空间——它是内建贡献的保留名，经
+/// [freeze_with_builtin] 的独立参数进入；本入口自带拒绝，使「Mod 不得
+/// 冒充 builtin」不依赖调用方恰好同时传入内建贡献触发撞名。
 pub fn freeze(
+    contributions: Vec<Contribution>,
+    options: FreezeOptions,
+) -> Result<ContributionPlan, FreezeError> {
+    reject_builtin_namespace(&contributions)?;
+    freeze_inner(contributions, options)
+}
+
+/// 带内建贡献的冻结：builtin 经显式参数与 Mod 贡献分离，产出的计划
+/// 与「单一 vec 混装」完全一致（内部按 namespace 排序归一）。builtin
+/// 参数由宿主可信构造（本仓测试会传入改写后的 link 做指纹/排序断言），
+/// 这里只校验其命名空间，不校验内容来源。
+pub fn freeze_with_builtin(
+    builtin: Contribution,
+    contributions: Vec<Contribution>,
+    options: FreezeOptions,
+) -> Result<ContributionPlan, FreezeError> {
+    if builtin.source.namespace != "builtin" {
+        return Err(FreezeError::new(
+            builtin.source.namespace.clone(),
+            "builtin 参数的命名空间必须是 builtin",
+        ));
+    }
+    reject_builtin_namespace(&contributions)?;
+    let mut all = Vec::with_capacity(contributions.len() + 1);
+    all.push(builtin);
+    all.extend(contributions);
+    freeze_inner(all, options)
+}
+
+fn reject_builtin_namespace(contributions: &[Contribution]) -> Result<(), FreezeError> {
+    for c in contributions {
+        if c.source.namespace == "builtin" {
+            return Err(FreezeError::new(
+                "builtin",
+                "builtin 命名空间保留给内建贡献：Mod 贡献不得声明（内建贡献走 freeze_with_builtin 的独立参数）",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn freeze_inner(
     mut contributions: Vec<Contribution>,
     options: FreezeOptions,
 ) -> Result<ContributionPlan, FreezeError> {

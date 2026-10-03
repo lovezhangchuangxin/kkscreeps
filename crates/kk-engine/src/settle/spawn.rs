@@ -552,7 +552,8 @@ pub(crate) fn born_creep(
         if let Some(c) = w.creep_mut(chick_id) {
             c.spawning = false;
         }
-        w.move_obj(chick_id, (nx, ny));
+        w.move_obj(chick_id, (nx, ny))
+            .expect("出生对象是 creep（born_creep 按 Creep 变体筛出）");
         return true;
     }
     let other: Vec<u8> = (1..=8).filter(|d| !directions.contains(d)).collect();
@@ -594,7 +595,8 @@ pub(crate) fn born_creep(
         if let Some(c) = w.creep_mut(chick_id) {
             c.spawning = false;
         }
-        w.move_obj(chick_id, (hx, hy));
+        w.move_obj(chick_id, (hx, hy))
+            .expect("出生对象是 creep（born_creep 按 Creep 变体筛出）");
         return true;
     }
     false

@@ -705,7 +705,7 @@ pub fn kkpv_truncated_bundle_fails_impl() -> anyhow::Result<()> {
         "地形段须为 2500 字节",
         "短地形段必须失败（不得静默按 plain 读出）",
     )?;
-    // 私有块携带地形段（B.6 收紧的对称面）。
+    // 私有对象块携带地形段：地形只进公开束，此形态必须被发布校验拒绝。
     let private_with_terrain = KkpvBlockInput {
         private: true,
         tick: 7,
@@ -726,7 +726,7 @@ pub fn kkpv_truncated_bundle_fails_impl() -> anyhow::Result<()> {
 }
 
 /// 同一公开地形束的同一份共享内存被两个线程上的隔离并发挂载与读取：
-/// 跨线程共享直读的经验验证（B.6 的 §6 验收面）。两线程各自持有句柄
+/// 两线程各自持有句柄
 /// 克隆（Send 移动）；玩家侧在读地形前自旋消耗时间，受迫形成真实的
 /// 并发读取窗口（栅栏只对齐派发时刻，自旋保证窗口重叠）。并发解码后
 /// 地形值与单线程结果一致。

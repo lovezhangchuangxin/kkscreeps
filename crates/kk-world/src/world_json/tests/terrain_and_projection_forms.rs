@@ -550,7 +550,55 @@ fn mod_objects_project_with_visibility_cut() {
             .as_array()
             .unwrap()
             .iter()
-            .all(|o| o.get("modType").is_none())
+            .all(|o| o.get("modType").is_none()),
+        "无玩家面目录时 Mod 对象不进投影"
+    );
+}
+
+/// 管理读面与玩家面的 ServerOnly 分工：object_snapshot_by_id 是操作员
+/// 排障面，可以整体读出字段（含 ServerOnly）；玩家投影永不携带。分工
+/// 由设计契约固定，防止管理面被误当作投影参照实现。
+#[test]
+fn admin_snapshot_face_reads_server_only_player_projection_does_not() {
+    let mut world = crate::world::World::new(12);
+    world.register_room("W1N1", Terrain::plains());
+    world
+        .insert("W1N1", kk_schema::room::RoomObject::Creep(test_creep()))
+        .unwrap();
+    let counter_id = world
+        .insert(
+            "W1N1",
+            kk_schema::room::RoomObject::Mod(kk_schema::room::ModObj {
+                id: 0,
+                x: 10,
+                y: 12,
+                type_key: "extmod:counter".into(),
+                data: r#"{"owner":"p1","value":3,"treasury":9,"secret":"k"}"#.into(),
+            }),
+        )
+        .unwrap();
+
+    let snap = world.object_snapshot_by_id(counter_id).unwrap();
+    assert_eq!(snap["kind"], "mod");
+    assert_eq!(snap["typeKey"], "extmod:counter");
+    assert_eq!(snap["fields"]["value"], 3);
+    assert_eq!(
+        snap["fields"]["secret"], "k",
+        "管理读面可以读出 ServerOnly 字段"
+    );
+
+    let surface = surface_fixture();
+    let catalog = kk_mod_api::extension::ExtensionCatalog::default();
+    let view = world.world_json_for_viewer_with_extensions("p1", 0, &catalog, Some(&surface));
+    let counter = view["objects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|o| o["modType"] == "extmod:counter")
+        .unwrap();
+    assert!(
+        counter.get("secret").is_none(),
+        "玩家投影不携带 ServerOnly 字段"
     );
 }
 

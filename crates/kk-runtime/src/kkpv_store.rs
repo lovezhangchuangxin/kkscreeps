@@ -1,8 +1,8 @@
 //! KKPV 块的固定句柄库：按世界代际发布不可变载荷，句柄持有期间旧块
 //! 不被回收、内容不变。
 //!
-//! 载荷有两种：单块字节（`Arc<[u8]>`，B.4 语义——面向未来的 per-viewer
-//! overlay）与共享束（`SharedKkpvBundle`——公开地形通道的发布形态，
+//! 载荷有两种：单块字节（`Arc<[u8]>`，私有块形态，未来 per-viewer
+//! overlay 沿用）与共享束（`SharedKkpvBundle`——公开地形通道的发布形态，
 //! 全部玩家共享同一份 V8 可挂载内存）。两种载荷都在发布前于锁外完成
 //! 完整结构校验（`KkpvView::decode` / `validate_bundle`）并核对头部
 //! tick/generation 与发布代际一致；校验限额由发布调用方给定并随块钉死，

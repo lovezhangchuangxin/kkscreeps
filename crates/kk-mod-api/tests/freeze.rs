@@ -7,7 +7,21 @@ fn key(value: &str) -> Key {
     Key::new(value).unwrap()
 }
 fn plan(contributions: Vec<Contribution>) -> Result<ContributionPlan, FreezeError> {
-    freeze(contributions, FreezeOptions::default())
+    // 调用方传混合 vec 时：builtin 命名空间贡献分流到独立参数走
+    // freeze_with_builtin，其余走 freeze——两个入口都经夹具覆盖。
+    let mut builtin = None;
+    let mut rest = Vec::new();
+    for c in contributions {
+        if c.source.namespace == "builtin" && builtin.is_none() {
+            builtin = Some(c);
+        } else {
+            rest.push(c);
+        }
+    }
+    match builtin {
+        Some(b) => freeze_with_builtin(b, rest, FreezeOptions::default()),
+        None => freeze(rest, FreezeOptions::default()),
+    }
 }
 fn module(namespace: &str) -> Contribution {
     Contribution {

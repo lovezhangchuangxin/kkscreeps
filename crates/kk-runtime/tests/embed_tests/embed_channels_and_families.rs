@@ -244,7 +244,7 @@ pub(super) fn kkpv_injection_size_sample_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// 多玩家同轮 KKPV 并发（B.5 残留 5 的收口）：两名玩家在并发上限 2 下
+/// 多玩家同轮 KKPV 并发：两名玩家在并发上限 2 下
 /// 同轮执行，共享同一份公开地形束；各自玩家面正确、结算后世界正确，
 /// 且与串行执行（并发 1）的结果一致——共享直读不改变任何玩家可见面。
 pub(super) fn kkpv_multi_player_concurrency_impl() -> anyhow::Result<()> {

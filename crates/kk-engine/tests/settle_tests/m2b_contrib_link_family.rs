@@ -78,8 +78,9 @@ fn overrides_mod(rules: &[(&str, kk_mod_api::Number)]) -> Contribution {
 
 /// 冻结 builtin link + 覆盖，并提取有效规则。
 fn frozen_plan(rules: &[(&str, kk_mod_api::Number)]) -> kk_mod_api::ContributionPlan {
-    kk_mod_api::freeze(
-        vec![builtin::link(), overrides_mod(rules)],
+    kk_mod_api::freeze_with_builtin(
+        builtin::link(),
+        vec![overrides_mod(rules)],
         FreezeOptions::default(),
     )
     .unwrap()
@@ -316,8 +317,9 @@ fn assembly_rejects_missing_handlers_and_unwired_bindings() {
         binding: handler_key,
         depends_on: BTreeSet::new(),
     });
-    let plan = kk_mod_api::freeze(
-        vec![builtin::link(), with_handler],
+    let plan = kk_mod_api::freeze_with_builtin(
+        builtin::link(),
+        vec![with_handler],
         FreezeOptions::default(),
     )
     .unwrap();
@@ -336,8 +338,9 @@ fn assembly_rejects_missing_handlers_and_unwired_bindings() {
     let mut stray = overrides_mod(&[]);
     stray.bindings.insert(Key::new("testmod:extra").unwrap());
     stray.source.namespace = "builtin".into();
-    let freeze_err = kk_mod_api::freeze(vec![builtin::link(), stray], FreezeOptions::default())
-        .expect_err("builtin 命名空间占用被拒绝");
+    let freeze_err =
+        kk_mod_api::freeze_with_builtin(builtin::link(), vec![stray], FreezeOptions::default())
+            .expect_err("builtin 命名空间占用被拒绝");
     assert!(freeze_err.to_string().contains("builtin"), "{freeze_err}");
 }
 
@@ -380,8 +383,9 @@ fn chained_handlers_execute_in_frozen_order() {
         binding: after_b.clone(),
         depends_on: BTreeSet::from([after_a.clone()]),
     });
-    let plan = kk_mod_api::freeze(
-        vec![builtin::link(), contribution],
+    let plan = kk_mod_api::freeze_with_builtin(
+        builtin::link(),
+        vec![contribution],
         FreezeOptions::default(),
     )
     .unwrap();
@@ -500,8 +504,9 @@ fn wrap_without_next_suppresses_default_but_not_after() {
         binding: key.clone(),
         depends_on: BTreeSet::new(),
     });
-    let plan = kk_mod_api::freeze(
-        vec![builtin::link(), contribution],
+    let plan = kk_mod_api::freeze_with_builtin(
+        builtin::link(),
+        vec![contribution],
         FreezeOptions::default(),
     )
     .unwrap();
@@ -578,8 +583,9 @@ fn replace_supplants_native_transfer() {
         binding: key.clone(),
         depends_on: BTreeSet::new(),
     });
-    let plan = kk_mod_api::freeze(
-        vec![builtin::link(), contribution],
+    let plan = kk_mod_api::freeze_with_builtin(
+        builtin::link(),
+        vec![contribution],
         FreezeOptions::default(),
     )
     .unwrap();
@@ -670,8 +676,9 @@ fn double_next_fails_the_round_and_keeps_old_state() {
         binding: key.clone(),
         depends_on: BTreeSet::new(),
     });
-    let plan = kk_mod_api::freeze(
-        vec![builtin::link(), contribution],
+    let plan = kk_mod_api::freeze_with_builtin(
+        builtin::link(),
+        vec![contribution],
         FreezeOptions::default(),
     )
     .unwrap();
@@ -862,8 +869,9 @@ fn nested_wraps_execute_layer_by_layer() {
         binding: inner.clone(),
         depends_on: BTreeSet::from([outer.clone()]),
     });
-    let plan = kk_mod_api::freeze(
-        vec![builtin::link(), contribution],
+    let plan = kk_mod_api::freeze_with_builtin(
+        builtin::link(),
+        vec![contribution],
         FreezeOptions::default(),
     )
     .unwrap();
@@ -968,8 +976,9 @@ fn tick_slot_chained_wraps_native_cooldown() {
             depends_on: BTreeSet::new(),
         });
     }
-    let plan = kk_mod_api::freeze(
-        vec![builtin::link(), contribution],
+    let plan = kk_mod_api::freeze_with_builtin(
+        builtin::link(),
+        vec![contribution],
         FreezeOptions::default(),
     )
     .unwrap();
@@ -1143,8 +1152,9 @@ fn contrib_dispatch_native_vs_chained_bench() {
             depends_on: BTreeSet::new(),
         });
     }
-    let plan = kk_mod_api::freeze(
-        vec![builtin::link(), contribution],
+    let plan = kk_mod_api::freeze_with_builtin(
+        builtin::link(),
+        vec![contribution],
         FreezeOptions::default(),
     )
     .unwrap();

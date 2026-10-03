@@ -18,7 +18,7 @@
   const __jsonParse = JSON.parse;
   // 地形拷出使用捕获的 TypedArray 构造器与 set：内部数组可能是锚定
   // 跨玩家共享内存的视图（KKPV 公开束），不得经玩家可替换的全局构造器
-  // 或动态派发的 .set 外泄（B.6 共享直读安全面）。真 set 在 V8 内部做
+  // 或动态派发的 .set 外泄（共享直读内存的安全要求）。真 set 在 V8 内部做
   // TypedArray 品牌校验——伪 destination 在进入拷贝前即抛 TypeError，
   // 不执行任何玩家代码。
   const __Uint8Array = Uint8Array;

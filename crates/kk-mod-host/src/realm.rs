@@ -27,7 +27,9 @@ use crate::convert::{Declaration, build_contribution};
 use crate::error::{ModHostError, ModHostResult};
 use crate::graph::dependency_order;
 use crate::package::ModPackage;
-use kk_mod_api::{Contribution, ContributionPlan, FreezeOptions, Key, Source, builtin, freeze};
+use kk_mod_api::{
+    Contribution, ContributionPlan, FreezeOptions, Key, Source, builtin, freeze_with_builtin,
+};
 
 /// SDK 虚拟模块的说明符与解析后的 URL。
 const SDK_SPECIFIER: &str = "@kkscreeps/mod";
@@ -435,9 +437,7 @@ impl ModRealm {
                 &executables,
             )?);
         }
-        let mut all = vec![builtin::link()];
-        all.extend(contributions.iter().cloned());
-        let plan = freeze(all, options.freeze)?;
+        let plan = freeze_with_builtin(builtin::link(), contributions.to_vec(), options.freeze)?;
         let mut player_modules = Vec::new();
         for id in &order {
             let Some(entry) = packages[id].manifest.player.clone() else {

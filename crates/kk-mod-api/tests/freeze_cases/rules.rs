@@ -18,7 +18,7 @@ fn one_override_wins_but_multiple_require_explicit_selection() {
         rule_sources: BTreeMap::from([(key("builtin:link.capacity"), "beta".into())]),
         ..Default::default()
     };
-    let selected = freeze(vec![b, builtin::link(), a], options).unwrap();
+    let selected = freeze_with_builtin(builtin::link(), vec![b, a], options).unwrap();
     let handle = selected
         .rules()
         .resolve(&key("builtin:link.capacity"))
@@ -32,9 +32,9 @@ fn selected_override_does_not_hide_an_invalid_contribution() {
         rule_sources: BTreeMap::from([(key("builtin:link.capacity"), "beta".into())]),
         ..Default::default()
     };
-    let error = freeze(
+    let error = freeze_with_builtin(
+        builtin::link(),
         vec![
-            builtin::link(),
             override_rule("alpha", Number::Signed(-1)),
             override_rule("beta", Number::Signed(900)),
         ],
@@ -76,7 +76,7 @@ fn unknown_duplicate_wrong_type_and_stale_override_selection_are_rejected() {
         ..Default::default()
     };
     assert!(
-        freeze(vec![builtin::link()], options)
+        freeze_with_builtin(builtin::link(), vec![], options)
             .unwrap_err()
             .message
             .contains("未覆盖")

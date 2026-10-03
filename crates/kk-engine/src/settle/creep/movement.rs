@@ -246,7 +246,7 @@ fn movement_execute(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
     let fatigue = weight as i64 * fatigue_rate;
     let to_edge = target.0 == 0 || target.0 == 49 || target.1 == 0 || target.1 == 49;
     let from_edge = from.0 == 0 || from.0 == 49 || from.1 == 0 || from.1 == 49;
-    w.move_obj(id, target);
+    w.move_obj(id, target).map_err(SettleError)?;
     // 从非边缘进入边缘时将疲劳归零，即使当前实现没有跨房落地也保留此规则。
     if to_edge && !from_edge {
         if let Some(c) = w.creep_mut(id) {

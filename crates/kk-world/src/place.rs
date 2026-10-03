@@ -38,8 +38,9 @@ pub fn builtin_link_rules() -> kk_mod_api::builtin::LinkRules {
     use std::sync::OnceLock;
     static RULES: OnceLock<kk_mod_api::builtin::LinkRules> = OnceLock::new();
     *RULES.get_or_init(|| {
-        let plan = kk_mod_api::freeze(
-            vec![kk_mod_api::builtin::link()],
+        let plan = kk_mod_api::freeze_with_builtin(
+            kk_mod_api::builtin::link(),
+            vec![],
             kk_mod_api::FreezeOptions::default(),
         )
         .expect("内置 link 贡献必须可冻结");

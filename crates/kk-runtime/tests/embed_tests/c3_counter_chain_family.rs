@@ -339,7 +339,7 @@ export default function register(api) {
     let mut e = chain_engine("config", config_js, Some(json!({ "start": 5 })))?;
     let id = place_counter(&mut e, "p1")?;
     assert_eq!(value_of(&e, &id)["value"], json!(5), "配置默认值落位");
-    // 两通道：counter 进入玩家投影（C.4 起携带玩家面目录），值经 getter
+    // 两通道：counter 经玩家面目录进入投影，值经 getter
     // 读出，两通道一致。
     for channel in [false, true] {
         e.set_kkpv_channel(channel);

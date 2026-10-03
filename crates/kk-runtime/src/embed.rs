@@ -558,7 +558,9 @@ impl EmbedEngine {
         spec: &Value,
         mod_install: Option<(&BTreeMap<String, ModPackage>, &RegisterOptions)>,
     ) -> anyhow::Result<()> {
-        // 在回收旧沙箱前完成输入校验，失败时保留现有分片。
+        // 输入校验先于回收旧沙箱，失败时保留现有分片；其后的 mod 注册、
+        // 玩家面导出与 canary 安装失败发生在回收之后——旧分片已销毁、
+        // 引擎已重置为空（零房间零玩家），宿主须重新调用创建接口。
         let rooms = room_setups(spec)?;
         let handles = player_handles(spec)?;
 

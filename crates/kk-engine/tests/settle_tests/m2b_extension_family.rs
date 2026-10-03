@@ -128,8 +128,9 @@ fn transfer_batch(l1: ObjId, l2: ObjId) -> IntentBatch {
 }
 
 fn frozen_extension_plan(contrib: Contribution) -> kk_mod_api::ContributionPlan {
-    kk_mod_api::freeze(
-        vec![kk_mod_api::builtin::link(), contrib],
+    kk_mod_api::freeze_with_builtin(
+        kk_mod_api::builtin::link(),
+        vec![contrib],
         FreezeOptions::default(),
     )
     .unwrap()

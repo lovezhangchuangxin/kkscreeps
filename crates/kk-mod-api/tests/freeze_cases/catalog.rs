@@ -266,11 +266,28 @@ fn fingerprint_covers_rules_permissions_layout_and_source_digests() {
 
 #[test]
 fn duplicate_sources_definitions_and_namespace_impersonation_are_rejected() {
+    // plan 助手把首个 builtin 命名空间贡献分流到独立参数，第二个留在
+    // mods 侧按保留名拒绝。
     assert!(
         plan(vec![builtin::link(), builtin::link()])
             .unwrap_err()
             .message
+            .contains("builtin 命名空间保留")
+    );
+    // 通用重复来源（非 builtin 命名空间）仍由 freeze 内部拒绝。
+    assert!(
+        plan(vec![module("dup"), module("dup")])
+            .unwrap_err()
+            .message
             .contains("重复贡献来源")
+    );
+    // Mod 侧直接声明 builtin 命名空间：freeze 入口自身拒绝，不依赖
+    // 同批真 builtin 贡献触发撞名。
+    assert!(
+        freeze(vec![module("builtin")], FreezeOptions::default())
+            .unwrap_err()
+            .message
+            .contains("builtin 命名空间保留")
     );
     let mut c = builtin::link();
     c.object_types.push(c.object_types[0].clone());
@@ -310,6 +327,6 @@ fn unsupported_projection_versions_and_schema_limits_are_rejected() {
             ..Default::default()
         },
     ] {
-        assert!(freeze(vec![builtin::link()], options).is_err());
+        assert!(freeze_with_builtin(builtin::link(), vec![], options).is_err());
     }
 }

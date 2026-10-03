@@ -1,4 +1,4 @@
-//! 玩家面安装全链（C.4）：FIND/LOOK 查询常量、玩家类装配与字段 getter、
+//! 玩家面安装全链：FIND/LOOK 查询常量、玩家类装配与字段 getter、
 //! 类方法 emit 进扩展意图、两通道一致、可见性裁切与装配门。
 
 use serde_json::json;
@@ -214,7 +214,7 @@ pub(super) fn c4_install_gates_impl() -> anyhow::Result<()> {
         "安装全局不可改写（原型补丁不破坏装配）：{:?}",
         run.expr
     );
-    // 类方法 emit 的归属门与 C.3 原语同口径：p2 经类方法发射被丢弃。
+    // 类方法 emit 的归属门与扩展意图原语同口径：p2 经类方法发射被丢弃。
     e.run_player("p2", &format!(r#"Game.getObjectById('{id}').increment(5)"#))?;
     assert_eq!(
         value_of(&e, &id)["value"],

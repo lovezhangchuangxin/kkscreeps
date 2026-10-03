@@ -65,7 +65,8 @@ impl World {
                 if !object_exported_for(Some(user), room_visible, object) {
                     continue;
                 }
-                let record = object_json(name, *id, object, self.time, &state.terrain, rcl);
+                let record = object_json(name, *id, object, self.time, &state.terrain, rcl)
+                    .expect("Mod 对象已在 kkpv_room_blocks_for_viewer 上文分流");
                 let mut kkpv_object = record_to_kkpv(*id, object, &record)?;
                 // 扩展目录只按 structureType 登记；非结构类型无 ext 键，
                 // 与 JSON 投影的裁切入口一致。
@@ -575,8 +576,9 @@ mod tests {
     }
 
     fn catalog_fixture() -> kk_mod_api::extension::ExtensionCatalog {
-        let plan = kk_mod_api::freeze(
-            vec![kk_mod_api::builtin::link(), ext_contribution()],
+        let plan = kk_mod_api::freeze_with_builtin(
+            kk_mod_api::builtin::link(),
+            vec![ext_contribution()],
             kk_mod_api::FreezeOptions::default(),
         )
         .expect("夹具计划可冻结");
@@ -1085,8 +1087,9 @@ mod tests {
     #[test]
     fn kkpv_blocks_match_json_reference_per_field() {
         let world = rich_world();
-        let plan = kk_mod_api::freeze(
-            vec![kk_mod_api::builtin::link(), ext_contribution()],
+        let plan = kk_mod_api::freeze_with_builtin(
+            kk_mod_api::builtin::link(),
+            vec![ext_contribution()],
             kk_mod_api::FreezeOptions::default(),
         )
         .expect("夹具计划可冻结");
@@ -1296,8 +1299,9 @@ mod tests {
     #[test]
     fn world_block_merges_with_public_overlay() {
         let world = rich_world();
-        let plan = kk_mod_api::freeze(
-            vec![kk_mod_api::builtin::link(), ext_contribution()],
+        let plan = kk_mod_api::freeze_with_builtin(
+            kk_mod_api::builtin::link(),
+            vec![ext_contribution()],
             kk_mod_api::FreezeOptions::default(),
         )
         .expect("冻结");

@@ -250,8 +250,9 @@ mod extension_projection_via_trait_tests {
             handlers: Vec::new(),
         };
         let _ = &mut contrib;
-        let plan = kk_mod_api::freeze(
-            vec![kk_mod_api::builtin::link(), contrib],
+        let plan = kk_mod_api::freeze_with_builtin(
+            kk_mod_api::builtin::link(),
+            vec![contrib],
             kk_mod_api::FreezeOptions::default(),
         )
         .unwrap();

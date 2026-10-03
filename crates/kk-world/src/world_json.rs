@@ -65,10 +65,21 @@ impl World {
             let Some(state) = self.rooms.values().find(|r| r.objects.contains_key(&oid)) else {
                 continue;
             };
-            let owner = object.get("owner").and_then(|v| v.as_str());
-            if let Some(ext) =
-                ext_entries_json(catalog, type_key, &state.extensions, oid, owner, user)
-                && let Some(map) = object.as_object_mut()
+            // owner 与 KKPV 通道同源（domain::object_owner 从权威枚举派生），
+            // 不读投影 JSON 的 owner 键——两通道的字段可见性判定必须一致，
+            // 避免记录键与枚举派生值出现分歧时 Owner 字段裁切分叉。
+            let owner = state
+                .objects
+                .get(&oid)
+                .and_then(crate::domain::object_owner);
+            if let Some(ext) = ext_entries_json(
+                catalog,
+                type_key,
+                &state.extensions,
+                oid,
+                owner.as_deref(),
+                user,
+            ) && let Some(map) = object.as_object_mut()
             {
                 map.insert("ext".into(), Value::Object(ext));
             }
@@ -133,14 +144,10 @@ impl World {
                 if !object_exported_for(user, room_visible, object) {
                     continue;
                 }
-                objects.push(object_json(
-                    name,
-                    *id,
-                    object,
-                    self.time,
-                    &state.terrain,
-                    rcl,
-                ));
+                objects.push(
+                    object_json(name, *id, object, self.time, &state.terrain, rcl)
+                        .expect("Mod 对象已在 world_json_impl 上文分流"),
+                );
             }
         }
         // 显式传递可见房名，prelude 不必再从 owner/user 等不同字段推断视野。
@@ -177,7 +184,9 @@ impl World {
 
     /// 按对象 ID 顺序返回匹配 FIND 的原始沙箱记录，不执行房间视野裁切。
     /// viewer 只用于归属和孵化过滤；None 使用中立查询规则，详见 matches_find。
-    /// 需要查询快照格式时使用 find_snapshots_in_room。
+    /// Mod 对象不产出原始记录（object_json 对其返回 None），本面天然不含；
+    /// Mod 的管理查询走 object_snapshot_by_id 的单对象读面，玩家面走带
+    /// 裁切的投影通道。需要查询快照格式时使用 find_snapshots_in_room。
     pub fn find_in_room(
         &self,
         room: &str,
@@ -191,13 +200,10 @@ impl World {
         state
             .objects
             .iter()
-            .map(|(id, o)| {
-                (
-                    *id,
-                    object_json(room, *id, o, self.time, &state.terrain, rcl),
-                )
+            .filter_map(|(id, o)| {
+                let record = object_json(room, *id, o, self.time, &state.terrain, rcl)?;
+                matches_find(&record, find_const, viewer).then_some((*id, record))
             })
-            .filter(|(_, o)| matches_find(o, find_const, viewer))
             .collect()
     }
 
@@ -210,25 +216,14 @@ impl World {
         })
     }
 
-    /// 按 ID 返回原始沙箱记录，不过滤玩家视野。
-    /// 运行时的 getObject 查询接口使用 object_snapshot_by_id 的快照格式。
+    /// 按 ID 返回原始沙箱记录，不过滤玩家视野。Mod 对象无原始记录
+    /// （object_json 返回 None）；其查询走 object_snapshot_by_id 的
+    /// 专用读面。运行时的 getObject 查询接口使用快照格式。
     pub fn object_json_by_id(&self, id: crate::world::ObjId) -> Option<Value> {
         let (room, object) = self.get(id)?;
-        // Mod 对象不走本原始记录面（object_json 对它只产防御性空对象，
-        // 尾部还会补造 pos 坐标）；查询走 object_snapshot_by_id 的专用读面。
-        if matches!(object, RoomObject::Mod(_)) {
-            return None;
-        }
         let state = self.rooms.get(room)?;
         let terrain = &state.terrain;
-        Some(object_json(
-            room,
-            id,
-            object,
-            self.time,
-            terrain,
-            room_rcl(state),
-        ))
+        object_json(room, id, object, self.time, terrain, room_rcl(state))
     }
 }
 
@@ -482,7 +477,9 @@ pub(crate) fn energy_resource_name(o: &kk_schema::room::EnergyObj) -> String {
 
 /// 将对象转换为 prelude 消费的原始记录，并附加 pos。
 /// rcl 决定 extension 的能量容量；不会读取或改变对象所属世界的状态。
-/// 可选通知开关只在 Some 时输出，None 保持缺键。
+/// 可选通知开关只在 Some 时输出，None 保持缺键。Mod 对象返回 None：
+/// 玩家投影两通道走带可见性裁切的 mod_record_json，本函数从返回类型上
+/// 杜绝"空对象 + 补造 pos 坐标"的残影记录进入任何查询路径。
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn object_json(
     room: &str,
@@ -491,7 +488,7 @@ pub(crate) fn object_json(
     time: u64,
     terrain: &kk_core::Terrain,
     rcl: u8,
-) -> Value {
+) -> Option<Value> {
     let id_str = id.as_str();
     let mut v = match object {
         RoomObject::Creep(o) => {
@@ -788,10 +785,9 @@ pub(crate) fn object_json(
             }
             v
         }
-        // Mod 对象不进本投影：对象导出在 world_json_impl 已按类型跳过，
-        // 此臂只服务直接调用 object_json 的查询路径（无 type 键自然不匹配
-        // FIND）。玩家可见投影随投影扩展批次另行设计。
-        RoomObject::Mod(_) => json!({}),
+        // Mod 对象不产出原始记录（见函数注释）：直接短路返回，防止
+        // 未分流的调用方拿到残影记录。
+        RoomObject::Mod(_) => return None,
     };
     // pos 供使用原始 JSON 的调用方读取；快照模块另行构造查询格式。
     if let Some(obj) = v.as_object_mut() {
@@ -803,7 +799,7 @@ pub(crate) fn object_json(
             json!({ "x": x, "y": y, "roomName": room_name }),
         );
     }
-    v
+    Some(v)
 }
 
 pub(crate) fn part_json(p: &kk_schema::room::BodyPart) -> Value {

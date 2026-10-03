@@ -177,8 +177,9 @@ fn link_handler_contribution(id: &str, kind: HandlerKind) -> Contribution {
 }
 
 fn frozen(contribution: Contribution) -> kk_mod_api::ContributionPlan {
-    kk_mod_api::freeze(
-        vec![builtin::link(), contribution],
+    kk_mod_api::freeze_with_builtin(
+        builtin::link(),
+        vec![contribution],
         FreezeOptions::default(),
     )
     .unwrap()
@@ -438,6 +439,53 @@ fn ext_intent_failure_and_partial_write_rejected() {
     .unwrap_err();
     assert!(err.contains("缺少字段"), "部分回写被拒：{err}");
     assert_eq!(counter_value(&f, id)["value"], json!(1));
+}
+
+/// 内容键控短路的回归钉：默认引擎（计划无 Mod 类型、扩展目录为空）下，
+/// 绕过写入口直插的 Mod 对象与未声明扩展条目都必须在发布前校验失败，
+/// 不得按计划形态短路而静默发布。
+#[test]
+fn engine_validate_guards_plan_foreign_mod_objects_and_extensions() {
+    // 形态一：计划无 Mod 类型，候选带 Mod 对象。
+    let make = || {
+        let mut engine = Engine::new(kk_world::World::new(3));
+        engine
+            .world
+            .register_room("W1N1", kk_core::Terrain::plains());
+        engine
+    };
+    let mut engine = make();
+    engine
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Mod(ModObj {
+                id: 0,
+                x: 3,
+                y: 4,
+                type_key: "extmod:counter".into(),
+                data: json!({ "owner": "p1", "x": 3, "y": 4, "value": 0 }).to_string(),
+            }),
+        )
+        .unwrap();
+    let err = engine
+        .tick_with_intents(IntentBatch::default())
+        .unwrap_err();
+    assert!(err.to_string().contains("不在计划中"), "{err}");
+    assert_eq!(engine.world.time(), 0, "失败轮不推进");
+
+    // 形态二：扩展目录为空，候选房间带直插扩展条目。
+    let mut engine = make();
+    let oid = ObjId::parse("kk1").unwrap();
+    engine.world.room_mut("W1N1").unwrap().extensions.insert(
+        oid,
+        BTreeMap::from([("extmod:rogue".to_string(), json!(1))]),
+    );
+    let err = engine
+        .tick_with_intents(IntentBatch::default())
+        .unwrap_err();
+    assert!(err.to_string().contains("未接入扩展平面的对象"), "{err}");
+    assert_eq!(engine.world.time(), 0, "失败轮不推进");
 }
 
 /// 发布前校验封堵绕过写入口的直改：未声明字段与位置失同步都在

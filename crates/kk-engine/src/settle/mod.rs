@@ -357,13 +357,22 @@ impl<'w> Working<'w> {
         Ok(())
     }
 
-    /// 对象移动（索引增量更新）。
-    pub fn move_obj(&mut self, id: ObjId, to: (u8, u8)) {
+    /// 对象移动（索引增量更新）。Mod 对象拒绝：其位置同时存在于
+    /// payload 字段与信封坐标，发布前校验要求两者一致，原始索引移动
+    /// 不维护该不变量——Mod 的位置变更走 update_mod_fields。
+    pub fn move_obj(&mut self, id: ObjId, to: (u8, u8)) -> Result<(), String> {
         if let Some(obj) = self.room.objects.get_mut(&id) {
+            if matches!(obj, RoomObject::Mod(_)) {
+                return Err(format!(
+                    "对象 {} 是 Mod 对象：位置变更须走 update_mod_fields（payload 字段与信封坐标同步）",
+                    id.as_str()
+                ));
+            }
             let from = obj.pos();
             obj.set_pos(to.0, to.1);
             self.index.apply_move(id, from, to);
         }
+        Ok(())
     }
 
     /// 累加疲劳，沿拉拽链传到链首。
@@ -747,8 +756,6 @@ pub struct Engine {
     /// 当前生效的冻结计划（默认只含 builtin:link）。扩展意图描述符与
     /// Mod 类型目录从此解析；规则/处理链/扩展目录是它的派生物。
     plan: std::sync::Arc<kk_mod_api::ContributionPlan>,
-    /// 计划是否声明了 Mod 类型（有 Mod 对象时的发布前校验开关）。
-    has_mod_types: bool,
 }
 
 /// 只含 builtin:link 的冻结计划；无 Mod 引擎的默认贡献平面。
@@ -758,8 +765,9 @@ pub fn builtin_plan() -> std::sync::Arc<kk_mod_api::ContributionPlan> {
         std::sync::OnceLock::new();
     PLAN.get_or_init(|| {
         std::sync::Arc::new(
-            kk_mod_api::freeze(
-                vec![kk_mod_api::builtin::link()],
+            kk_mod_api::freeze_with_builtin(
+                kk_mod_api::builtin::link(),
+                vec![],
                 kk_mod_api::FreezeOptions::default(),
             )
             .expect("builtin:link 贡献冻结必成"),
@@ -793,7 +801,6 @@ impl Engine {
             extensions: kk_mod_api::extension::ExtensionCatalog::default(),
             mod_states: BTreeMap::new(),
             plan: builtin_plan(),
-            has_mod_types: false,
         }
     }
 
@@ -1042,22 +1049,15 @@ impl Engine {
             installed.extend(ty.fields.iter().map(|f| f.descriptor.binding.clone()));
         }
         Self::check_installed_bindings(&plan, &installed)?;
-        let has_mod_types = !plan.projection().types().is_empty()
-            && plan
-                .projection()
-                .types()
-                .iter()
-                .any(|t| t.descriptor.key.namespace() != "builtin");
         self.links = links;
         self.contrib = contrib;
         self.extensions = extensions;
         self.plan = plan;
-        self.has_mod_types = has_mod_types;
         Ok(())
     }
 
-    /// 当前已装配冻结计划的指纹：KKPV 块头的 plan_hash 来源（计划变化
-    /// 使旧块失效——B.5 残留的真实指纹收口）。
+    /// 当前已装配冻结计划的指纹：KKPV 块头的 plan_hash 来源——计划变化
+    /// 使旧块失效，块库按指纹淘汰代际。
     pub fn plan_hash(&self) -> kk_mod_api::PlanHash {
         self.plan.hash()
     }
@@ -1424,7 +1424,15 @@ impl Engine {
     /// 满足描述符、声明的位置字段与信封坐标同步。写入路径（创建与
     /// 处理器回写）已各自校验；此处封住绕过写入口的直改形态。
     fn validate_mod_objects(&self, cand: &mut txn::OwnedTickTxn) -> Result<(), SettleError> {
-        if !self.has_mod_types {
+        // 短路按候选内容而非计划布尔量：本函数封的是"绕过写入口的直改"，
+        // 计划里没有 Mod 类型不能成为跳过校验的理由——快照恢复等新来源
+        // 仍可能带入计划外对象。扫描是一次枚举判别匹配，与结算既有的
+        // 逐对象遍历同阶。
+        if !cand.rooms.iter().any(|(_, room)| {
+            room.objects
+                .values()
+                .any(|o| matches!(o, RoomObject::Mod(_)))
+        }) {
             return Ok(());
         }
         for (room_name, room) in &cand.rooms {
@@ -1483,7 +1491,14 @@ impl Engine {
     /// 整项删除（与玩家侧 getObjectById 对失效引用返回 null 同形）。
     /// 收敛使被引用对象销毁的 tick 仍可提交。
     fn validate_extensions(&self, cand: &mut txn::OwnedTickTxn) -> Result<(), SettleError> {
-        if self.extensions.is_empty() {
+        // 短路按候选房间的扩展条目而非扩展目录：目录为空不是跳过的理由
+        // （候选里的未声明条目正是要抓的直改形态），这里只省掉空候选
+        // 的扫描成本。
+        if cand
+            .rooms
+            .iter()
+            .all(|(_, room)| room.extensions.is_empty())
+        {
             return Ok(());
         }
         // 收敛动作先收集后应用，避免边遍历边改。

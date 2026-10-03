@@ -220,8 +220,9 @@ mod tests {
             slots: Vec::new(),
             handlers: Vec::new(),
         };
-        crate::freeze(
-            vec![crate::builtin::link(), contribution],
+        crate::freeze_with_builtin(
+            crate::builtin::link(),
+            vec![contribution],
             FreezeOptions::default(),
         )
         .unwrap()
@@ -310,8 +311,9 @@ mod tests {
             slots: Vec::new(),
             handlers: Vec::new(),
         };
-        let plan = crate::freeze(
-            vec![crate::builtin::link(), contribution],
+        let plan = crate::freeze_with_builtin(
+            crate::builtin::link(),
+            vec![contribution],
             FreezeOptions::default(),
         )
         .unwrap();
@@ -373,8 +375,9 @@ mod tests {
             }],
             handlers: Vec::new(),
         };
-        let plan = crate::freeze(
-            vec![crate::builtin::link(), contribution],
+        let plan = crate::freeze_with_builtin(
+            crate::builtin::link(),
+            vec![contribution],
             FreezeOptions::default(),
         )
         .unwrap();
