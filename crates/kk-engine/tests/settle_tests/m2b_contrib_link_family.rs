@@ -422,6 +422,7 @@ fn chained_handlers_execute_in_frozen_order() {
         before.clone(),
         ActionHandler::Before(Box::new(move |_, _, _| {
             log_before.borrow_mut().push("before1".into());
+            Ok(())
         })),
     );
     handlers.insert(
@@ -444,12 +445,14 @@ fn chained_handlers_execute_in_frozen_order() {
         after_a.clone(),
         ActionHandler::After(Box::new(move |_, _, _| {
             log_after_a.borrow_mut().push("after_a".into());
+            Ok(())
         })),
     );
     handlers.insert(
         after_b.clone(),
         ActionHandler::After(Box::new(move |_, _, _| {
             log_after_b.borrow_mut().push("after_b".into());
+            Ok(())
         })),
     );
     let dispatch = ContributionDispatch::assemble(&plan, handlers, BTreeMap::new()).unwrap();
@@ -593,7 +596,7 @@ fn replace_supplants_native_transfer() {
                 }
                 _ => None,
             }) else {
-                return;
+                return Ok(());
             };
             if let Some(RoomObject::Generic(g)) = w.room.objects.get_mut(&id) {
                 let mut v: serde_json::Value = serde_json::from_str(&g.data).unwrap();
@@ -601,6 +604,7 @@ fn replace_supplants_native_transfer() {
                 v["cooldown"] = json!(42);
                 g.data = v.to_string();
             }
+            Ok(())
         })),
     );
     let dispatch = ContributionDispatch::assemble(&plan, handlers, BTreeMap::new()).unwrap();
@@ -977,6 +981,7 @@ fn tick_slot_chained_wraps_native_cooldown() {
         before,
         TickHandler::Before(Box::new(move |_, _| {
             log_b.borrow_mut().push("before".into());
+            Ok(())
         })),
     );
     let log_w = log.clone();
@@ -994,6 +999,7 @@ fn tick_slot_chained_wraps_native_cooldown() {
         after,
         TickHandler::After(Box::new(move |_, _| {
             log_a.borrow_mut().push("after".into());
+            Ok(())
         })),
     );
     let dispatch = ContributionDispatch::assemble(&plan, BTreeMap::new(), tick_handlers).unwrap();
@@ -1143,12 +1149,12 @@ fn contrib_dispatch_native_vs_chained_bench() {
     )
     .unwrap();
     let mut tick_handlers = BTreeMap::new();
-    tick_handlers.insert(before, TickHandler::Before(Box::new(|_, _| {})));
+    tick_handlers.insert(before, TickHandler::Before(Box::new(|_, _| Ok(()))));
     tick_handlers.insert(
         wrap,
         TickHandler::Wrap(Box::new(|w, id, next| next.call(w, id))),
     );
-    tick_handlers.insert(after, TickHandler::After(Box::new(|_, _| {})));
+    tick_handlers.insert(after, TickHandler::After(Box::new(|_, _| Ok(()))));
     let chained = ContributionDispatch::assemble(&plan, BTreeMap::new(), tick_handlers).unwrap();
     let native = ContributionDispatch::default();
 

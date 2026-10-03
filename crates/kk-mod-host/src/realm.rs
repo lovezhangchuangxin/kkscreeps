@@ -230,6 +230,7 @@ pub struct ModRealm {
     loader_packages: Rc<RefCell<BTreeMap<PathBuf, Rc<ModPackage>>>>,
     sdk_create_api: v8::Global<v8::Function>,
     sdk_seal: v8::Global<v8::Function>,
+    sdk_dispatch: v8::Global<v8::Function>,
 }
 
 impl ModRealm {
@@ -268,7 +269,7 @@ impl ModRealm {
         let namespace = runtime
             .get_module_namespace(mod_id)
             .map_err(|error| ModHostError::new("realm", format!("SDK 命名空间不可用：{error}")))?;
-        let (sdk_create_api, sdk_seal) = {
+        let (sdk_create_api, sdk_seal, sdk_dispatch) = {
             let runtime_ref = &mut runtime;
             deno_core::scope!(scope, runtime_ref);
             let namespace = v8::Local::new(scope, namespace.clone());
@@ -291,7 +292,7 @@ impl ModRealm {
                     v8::Global::new(scope, function)
                 }};
             }
-            (grab!("createApi"), grab!("seal"))
+            (grab!("createApi"), grab!("seal"), grab!("dispatch"))
         };
         Ok(Self {
             runtime,
@@ -299,7 +300,30 @@ impl ModRealm {
             loader_packages,
             sdk_create_api,
             sdk_seal,
+            sdk_dispatch,
         })
+    }
+
+    /// 结算期调用一个已注册的处理器函数：`ctx`（tick/room/state 等）以
+    /// JSON 传入，处理器同步执行并返回其终值。处理器异常、返回 Promise
+    /// 或结果不可序列化都以错误返回——由调用方据此使本轮候选失败。
+    /// 调用方负责用返回的 state 写回候选域。
+    pub fn invoke(&mut self, binding: &str, ctx: Value) -> ModHostResult<Value> {
+        let runtime_ref = &mut self.runtime;
+        deno_core::scope!(scope, runtime_ref);
+        v8::tc_scope!(let tc, scope);
+        let dispatch = v8::Local::new(tc, self.sdk_dispatch.clone());
+        let key = v8::String::new_from_utf8(tc, binding.as_bytes(), v8::NewStringType::Normal)
+            .ok_or_else(|| ModHostError::new("invoke", "键名构造失败"))?;
+        let ctx_local = deno_core::serde_v8::to_v8(tc, &ctx).map_err(|error| {
+            ModHostError::new("invoke", format!("处理器上下文序列化失败：{error}"))
+        })?;
+        let receiver = v8::undefined(tc).into();
+        let result = dispatch
+            .call(tc, receiver, &[key.into(), ctx_local])
+            .ok_or_else(|| scope_error!(tc, "invoke", "处理器调用失败"))?;
+        deno_core::serde_v8::from_v8(tc, result)
+            .map_err(|error| ModHostError::new("invoke", format!("处理器结果序列化失败：{error}")))
     }
 
     /// 依拓扑序注册全部包并冻结计划。注册是一次性的：成功后密封；

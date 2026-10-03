@@ -61,10 +61,12 @@ impl TickNext<'_> {
 
 type ActionChain<'a> = Box<dyn FnMut(&mut Working, ObjId, &IntentData) -> Result<(), String> + 'a>;
 type TickChain<'a> = Box<dyn FnMut(&mut Working, ObjId) -> Result<(), String> + 'a>;
-type ActionSimple = Box<dyn Fn(&mut Working, ObjId, &IntentData)>;
+/// before/after/replace 处理器同样可失败：JS 侧处理器的异常必须能使
+/// 本轮候选失败，不能因执行器形状退化为 panic 或静默。
+type ActionSimple = Box<dyn Fn(&mut Working, ObjId, &IntentData) -> Result<(), String>>;
 type ActionWrap =
     Box<dyn Fn(&mut Working, ObjId, &IntentData, &mut Next<'_>) -> Result<(), String>>;
-type TickSimple = Box<dyn Fn(&mut Working, ObjId)>;
+type TickSimple = Box<dyn Fn(&mut Working, ObjId) -> Result<(), String>>;
 type TickWrap = Box<dyn Fn(&mut Working, ObjId, &mut TickNext<'_>) -> Result<(), String>>;
 
 /// 调用方安装的自定义处理器；变体须与描述声明的 kind 一致，错配在装配时拒绝。
@@ -355,12 +357,12 @@ impl ActionSlot {
                 after,
             } => {
                 for f in before {
-                    f(w, id, d);
+                    f(w, id, d)?;
                 }
                 let result = run_wrapped(wraps, center, w, id, d);
                 if result.is_ok() {
                     for f in after {
-                        f(w, id, d);
+                        f(w, id, d)?;
                     }
                 }
                 result
@@ -383,12 +385,12 @@ impl TickSlot {
                 after,
             } => {
                 for f in before {
-                    f(w, id);
+                    f(w, id)?;
                 }
                 let result = run_tick_wrapped(wraps, center, w, id);
                 if result.is_ok() {
                     for f in after {
-                        f(w, id);
+                        f(w, id)?;
                     }
                 }
                 result
@@ -411,10 +413,7 @@ fn run_wrapped(
                 f(w, id, d);
                 Ok(())
             }
-            ActionCenter::Custom(f) => {
-                f(w, id, d);
-                Ok(())
-            }
+            ActionCenter::Custom(f) => f(w, id, d),
         };
     };
     let mut inner = box_inner(rest, center);
@@ -434,10 +433,7 @@ fn box_inner<'a>(wraps: &'a [ActionWrap], center: &'a ActionCenter) -> ActionCha
                     f(w, id, d);
                     Ok(())
                 }
-                ActionCenter::Custom(f) => {
-                    f(w, id, d);
-                    Ok(())
-                }
+                ActionCenter::Custom(f) => f(w, id, d),
             },
         );
     };
@@ -465,10 +461,7 @@ fn run_tick_wrapped(
                 f(w, id);
                 Ok(())
             }
-            TickCenter::Custom(f) => {
-                f(w, id);
-                Ok(())
-            }
+            TickCenter::Custom(f) => f(w, id),
         };
     };
     let mut inner = box_tick_inner(rest, center);
@@ -486,10 +479,7 @@ fn box_tick_inner<'a>(wraps: &'a [TickWrap], center: &'a TickCenter) -> TickChai
                 f(w, id);
                 Ok(())
             }
-            TickCenter::Custom(f) => {
-                f(w, id);
-                Ok(())
-            }
+            TickCenter::Custom(f) => f(w, id),
         });
     };
     let mut inner = box_tick_inner(rest, center);

@@ -79,6 +79,8 @@ B.1 已建立 `kk-mod-api` 的描述、校验、冻结与 link 默认目录（64
 
 > **✅ C.1 已收口（2026-10-03）**：`kk-mod-host` crate——mod.json 严格子集/依赖拓扑/整包内存快照指纹（符号链接拒绝、装载与摘要同字节）、可信注册 realm（deno_core ESM，仅包内相对导入 + `@kkscreeps/mod` 虚拟模块，包根包含与跨包导入在 load 侧强制）、注册期 SDK（objects/intents/handlers/rules/mounts；函数留 VM、Rust 只记键；seal 双门）、声明→描述符权威转换（键归属 Rust 定论、声明绑定须有函数）。产出 `Registered { plan(含 builtin:link 合并), contributions, executables }`。22 测 + workspace 491 全绿、clippy/fmt/doc-links 通过、棘轮 1854 零翻转（新 crate 不入服务端二进制，默认路径零变化；bot/perf 未跑的条件与理由见 [C.1 记录](../research/notes/c1-mod-loader-2026-10-03.md)）。残留九项登记同 note（处理器执行/玩家 API/SDK 子集面/阶段映射等归 C.2+）。
 
+> **✅ C.2 已收口（2026-10-03）**：处理器执行与 EmbedEngine 接线——执行器 before/after/replace 可失败化（JS 异常必须能炸候选）、`mod_states` 候选域（SharedState/PreparedTick/publish 全链，失败回滚）、sdk `dispatch` + `ModRealm::invoke`（同步纪律/thenable 拒）、`Engine::install_plan` 就地装配 + `create_shard_with_mods`（桥闭包装 link 两槽 Mod 处理器；**wrap 装配即拒**——续行接线归 C.5；自有槽绑定显式拒——C.3）。验证：workspace 492 绿、棘轮 1854 零翻转、bot 三基线过、**零 Mod 开销同机 A/B 双样全相不可分辨**（见 [C.2 记录](../research/notes/c2-mod-execution-2026-10-03.md)）；残留七项登记同 note。
+
 | 批 | 内容（06 §6 + ADR-014 调整） | 到批前须补 |
 |---|---|---|
 | B 开放领域定义 | EffectiveRules（平坦形态验收）、ObjectType/Extension、IntentDescriptor、handler graph、默认 slots；**与投影协议一步设计合并**（共享二进制 + per-viewer overlay + lazy wrapper + 扩展字段目录一次定协议，实施分步） | [定义与投影设计](../designs/domain-projection.md)已给出接口及切片；B.1 定义层已实现，link 运行接线及后续投影尚待完成 |

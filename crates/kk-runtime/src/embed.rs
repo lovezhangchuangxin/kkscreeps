@@ -12,11 +12,19 @@ use std::collections::{BTreeMap, BTreeSet};
 use kk_core::Terrain;
 use serde_json::{Value, json};
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use crate::{PlayerExecutor, RunEpoch, ThreadExecutor, WorldSource};
 use kk_engine::intent::IntentBatch;
+use kk_engine::settle::Working;
+use kk_engine::settle::contrib::{ActionHandler, TickHandler};
 use kk_engine::{
     PlayerWriteback, RunOutcome, RunResult, RunState, SegmentWriteback, TickInput, TickStage,
 };
+use kk_mod_api::{Dispatch, Key, Stage};
+use kk_mod_host::{ModPackage, ModRealm, RegisterOptions};
+use kk_world::ObjId;
 use kk_world::place::{PlaceCtx, normalize};
 
 use kk_engine::settle::Engine;
@@ -78,6 +86,134 @@ pub struct EmbedEngine {
     /// 公开地形束的发布库：按代际发布/获取共享束，承载保留报告
     /// （固定内存测量面）。仅 KKPV 通道使用。
     kkpv_public_store: crate::kkpv_store::KkpvBlockStore,
+    /// 可信 Mod 注册 realm；仅 `create_shard_with_mods` 装配。持有它使
+    /// EmbedEngine 不再可跨线程移动（结算与 realm 须同线程）。
+    mod_realm: Option<Rc<RefCell<ModRealm>>>,
+}
+
+/// 把冻结计划里 Mod 贡献的处理器装成桥闭包：闭包经 realm 调用 JS，
+/// 以 Working 携带的候选 Mod 状态域做读改写回。builtin 命名空间不会
+/// 出现在 before/after/replace 位（builtin 无处理器），防御性跳过。
+fn mod_handlers(
+    plan: &kk_mod_api::ContributionPlan,
+    realm: &Rc<RefCell<ModRealm>>,
+) -> anyhow::Result<(BTreeMap<Key, ActionHandler>, BTreeMap<Key, TickHandler>)> {
+    let mut action: BTreeMap<Key, ActionHandler> = BTreeMap::new();
+    let mut tick: BTreeMap<Key, TickHandler> = BTreeMap::new();
+    for slot in plan.slots() {
+        let Dispatch::Chained {
+            before,
+            wraps,
+            center,
+            after,
+        } = &slot.dispatch
+        else {
+            continue;
+        };
+        if !wraps.is_empty() {
+            anyhow::bail!(
+                "槽 {} 的 wrap 处理器不支持执行装配（拒绝而不是静默截断链）",
+                slot.key
+            );
+        }
+        let slot_key = slot.key.as_str();
+        let stage = slot.stage;
+        // 只有 link 两槽有执行器；Mod 自有槽的绑定由 install_plan 的
+        // 绑定核对显式拒绝。
+        let wired = matches!(
+            (slot_key, stage),
+            ("builtin:link.transfer", Stage::ObjectAction)
+                | ("builtin:link.tick", Stage::ObjectTick)
+        );
+        if !wired {
+            continue;
+        }
+        for (binding, is_after) in before
+            .iter()
+            .map(|binding| (binding, false))
+            .chain(after.iter().map(|binding| (binding, true)))
+        {
+            if binding.namespace() == "builtin" {
+                continue;
+            }
+            if slot_key == "builtin:link.tick" {
+                let handler = if is_after {
+                    TickHandler::After(tick_bridge(realm, binding))
+                } else {
+                    TickHandler::Before(tick_bridge(realm, binding))
+                };
+                tick.insert(binding.clone(), handler);
+            } else {
+                let handler = if is_after {
+                    ActionHandler::After(action_bridge(realm, binding))
+                } else {
+                    ActionHandler::Before(action_bridge(realm, binding))
+                };
+                action.insert(binding.clone(), handler);
+            }
+        }
+        if center.namespace() != "builtin" {
+            if slot_key == "builtin:link.tick" {
+                tick.insert(
+                    center.clone(),
+                    TickHandler::Replace(tick_bridge(realm, center)),
+                );
+            } else {
+                action.insert(
+                    center.clone(),
+                    ActionHandler::Replace(action_bridge(realm, center)),
+                );
+            }
+        }
+    }
+    Ok((action, tick))
+}
+
+type ActionBridge =
+    Box<dyn Fn(&mut Working, ObjId, &kk_engine::intent::IntentData) -> Result<(), String>>;
+type TickBridge = Box<dyn Fn(&mut Working, ObjId) -> Result<(), String>>;
+
+/// 对象动作槽的桥闭包；动作参数经冻结计划清洗后进入结算，桥内不再读。
+fn action_bridge(realm: &Rc<RefCell<ModRealm>>, binding: &Key) -> ActionBridge {
+    let realm = realm.clone();
+    let namespace = binding.namespace().to_string();
+    let key = binding.to_string();
+    Box::new(
+        move |w: &mut Working, _id: ObjId, _data: &kk_engine::intent::IntentData| {
+            bridge_call(&realm, &key, &namespace, w)
+        },
+    )
+}
+
+/// 对象 tick 槽的桥闭包。
+fn tick_bridge(realm: &Rc<RefCell<ModRealm>>, binding: &Key) -> TickBridge {
+    let realm = realm.clone();
+    let namespace = binding.namespace().to_string();
+    let key = binding.to_string();
+    Box::new(move |w: &mut Working, _id: ObjId| bridge_call(&realm, &key, &namespace, w))
+}
+
+fn bridge_call(
+    realm: &Rc<RefCell<ModRealm>>,
+    key: &str,
+    namespace: &str,
+    w: &mut Working,
+) -> Result<(), String> {
+    let ctx = json!({
+        "tick": w.time,
+        "room": w.room.name,
+        "state": w.state.mod_state(namespace),
+    });
+    let outcome = realm
+        .borrow_mut()
+        .invoke(key, ctx)
+        .map_err(|error| format!("处理器 {key} @ {}: {error}", w.room.name))?;
+    // 状态终值整值写回：处理器未触碰时是恒等写，写 null 即清空
+    // （清空与缺失同形，读取侧都得到 null）。
+    if let Some(state) = outcome.get("state") {
+        w.state.set_mod_state(namespace, state.clone());
+    }
+    Ok(())
 }
 
 /// 记录成功调用的投影、执行、结算和整次调用耗时。失败尝试不记录；
@@ -282,6 +418,7 @@ impl EmbedEngine {
         Self {
             players: None,
             engine: Engine::default(),
+            mod_realm: None,
             pending: None,
             execution_failure: None,
             player_concurrency: std::thread::available_parallelism().map_or(1, |n| n.get().min(2)),
@@ -303,6 +440,16 @@ impl EmbedEngine {
     /// 校验房间和玩家输入后，回收旧沙箱并建立新分片。
     /// 输入校验失败时保留旧分片；后续沙箱注册或对象初始化失败不恢复旧分片。
     pub fn create_shard(&mut self, spec: &Value) -> anyhow::Result<()> {
+        self.create_shard_inner(spec, None)
+    }
+
+    /// `mod_install` 在引擎重置后、玩家沙箱 spawn 前生效——玩家常量与
+    /// 结算读同一份已装配规则，不允许两个平面看到不同的 link 规则。
+    fn create_shard_inner(
+        &mut self,
+        spec: &Value,
+        mod_install: Option<(&BTreeMap<String, ModPackage>, &RegisterOptions)>,
+    ) -> anyhow::Result<()> {
         // 在回收旧沙箱前完成输入校验，失败时保留现有分片。
         let rooms = room_setups(spec)?;
         let handles = player_handles(spec)?;
@@ -311,6 +458,7 @@ impl EmbedEngine {
             p.shutdown_all();
         }
         self.engine = Engine::default();
+        self.mod_realm = None;
         self.pending = None;
         self.execution_failure = None;
         self.fail_after_player_for_test = None;
@@ -325,6 +473,20 @@ impl EmbedEngine {
         // 新分片从 tick 0 重新计代；旧公开束句柄全部作废（沙箱先于此
         // 回收，不存在跨分片的合法持有者）。
         self.kkpv_public_store = crate::kkpv_store::KkpvBlockStore::new();
+
+        if let Some((packages, options)) = mod_install {
+            let mut realm =
+                ModRealm::new().map_err(|error| anyhow::anyhow!("mod realm：{error}"))?;
+            let registered = realm
+                .register(packages, options.clone())
+                .map_err(|error| anyhow::anyhow!("mod 注册：{error}"))?;
+            let realm = Rc::new(RefCell::new(realm));
+            let (action, tick) = mod_handlers(&registered.plan, &realm)?;
+            self.engine
+                .install_plan(std::sync::Arc::new(registered.plan.clone()), action, tick)
+                .map_err(anyhow::Error::msg)?;
+            self.mod_realm = Some(realm);
+        }
 
         let players = self.players.get_or_insert_with(ThreadExecutor::new);
         // 先取走全部配置，避免注册中途失败后残留配置被下一次创建意外使用。
@@ -426,6 +588,23 @@ impl EmbedEngine {
 
     /// 按适配器的对象类别和初始字段摆放对象，返回对象 ID。
     /// 字段归一化由 [`kk_world::place::normalize`] 完成；未处置的失败轮会阻止摆放。
+    /// 以 Mod 包装建分片：注册与计划装配发生在引擎重置后、玩家沙箱
+    /// spawn 前（常量与结算同源）。当前可装配面是 link 两槽的
+    /// before/after/replace 处理器与规则；对象/意图/挂载绑定与 wrap
+    /// 处理器不支持装配，装配期显式拒绝而不是静默降级。装配失败时
+    /// 分片已按 vanilla 建立而 Mod 面不可用（与 create_shard 的
+    /// “后续失败不恢复旧分片”语义一致）。
+    pub fn create_shard_with_mods(
+        &mut self,
+        spec: &Value,
+        packages: &BTreeMap<String, ModPackage>,
+        options: RegisterOptions,
+    ) -> anyhow::Result<()> {
+        self.create_shard_inner(spec, Some((packages, &options)))
+    }
+
+    /// 按适配器的对象类别和初始字段摆放对象，返回对象 ID。
+    /// 字段归一化由 [kk_world::place::normalize] 完成，显式字段优先。
     pub fn place_object(&mut self, room: &str, kind: &str, spec: &Value) -> anyhow::Result<String> {
         self.no_open_round("placeObject")?;
         // 使用单调递增的对象 ID 生成默认名字；对象数量会随消亡减少，不能用作序号。
@@ -1010,6 +1189,20 @@ impl EmbedEngine {
         self.source().find_in_room(room, find_const)
     }
 
+    /// 已提交的某 Mod 命名空间状态（诊断与测试面；未初始化为 null）。
+    pub fn engine_mod_state(&self, namespace: &str) -> Value {
+        self.engine
+            .mod_states
+            .get(namespace)
+            .cloned()
+            .unwrap_or(Value::Null)
+    }
+
+    /// 当前世界代际（失败轮不前进；诊断与测试面）。
+    pub fn engine_generation(&self) -> u64 {
+        self.engine.world.generation()
+    }
+
     pub fn get_game_time(&self) -> u64 {
         self.source().game_time()
     }
@@ -1321,6 +1514,7 @@ impl EmbedEngine {
             p.shutdown_all();
         }
         self.engine = Engine::default();
+        self.mod_realm = None;
         self.pending = None;
         self.execution_failure = None;
         self.fail_after_player_for_test = None;

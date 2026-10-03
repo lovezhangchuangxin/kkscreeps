@@ -185,3 +185,18 @@ export function seal() {
   sealed = true;
   return Array.from(bindings.keys());
 }
+
+// 结算期派发：宿主以绑定键调用处理器，ctx 携带 tick/room/state。
+// 处理器同步执行；ctx.state 的终值（含 null=清空）随结果整值写回候选。
+// 处理器的持久状态只准走 ctx.state——模块全局不随失败候选回滚，
+// 用它做累计会破坏同输入重试的确定性。
+export function dispatch(key, ctx) {
+  if (!sealed) throw new Error('dispatch 仅在注册密封后可用');
+  const fn = bindings.get(key);
+  if (typeof fn !== 'function') throw new Error(`绑定 ${JSON.stringify(key)} 没有注册函数`);
+  const result = fn(ctx);
+  if (result !== undefined && result !== null && typeof result.then === 'function') {
+    throw new Error(`绑定 ${JSON.stringify(key)} 的处理器返回了 Promise（结算回调必须同步完成）`);
+  }
+  return { state: ctx.state === undefined ? null : ctx.state, result: result === undefined ? null : result };
+}

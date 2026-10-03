@@ -662,6 +662,9 @@ pub struct Engine {
     pub(crate) contrib: contrib::ContributionDispatch,
     /// 扩展字段目录；默认为空（不接受扩展写入），with_plan 装配。
     pub(crate) extensions: kk_mod_api::extension::ExtensionCatalog,
+    /// 已提交的各 Mod 命名空间状态；每 tick 克隆为候选，发布时整体换回。
+    /// 服务端私有，不进世界快照与玩家投影。
+    pub mod_states: BTreeMap<String, serde_json::Value>,
 }
 
 impl Default for Engine {
@@ -687,6 +690,7 @@ impl Engine {
             links: kk_world::place::builtin_link_rules(),
             contrib: contrib::ContributionDispatch::default(),
             extensions: kk_mod_api::extension::ExtensionCatalog::default(),
+            mod_states: BTreeMap::new(),
         }
     }
 
@@ -751,6 +755,20 @@ impl Engine {
         action_handlers: BTreeMap<kk_mod_api::Key, contrib::ActionHandler>,
         tick_handlers: BTreeMap<kk_mod_api::Key, contrib::TickHandler>,
     ) -> Result<Self, String> {
+        let mut engine = Self::new(world);
+        engine.install_plan(plan, action_handlers, tick_handlers)?;
+        Ok(engine)
+    }
+
+    /// 就地装配冻结计划：换入有效规则、处理链与扩展目录，保留世界、
+    /// 玩家与沙箱。与 [`Self::with_plan`] 走同一校验；装配失败时引擎
+    /// 保持原状。规则与已装配的处理链须一起换，不允许只动其一。
+    pub fn install_plan(
+        &mut self,
+        plan: std::sync::Arc<kk_mod_api::ContributionPlan>,
+        action_handlers: BTreeMap<kk_mod_api::Key, contrib::ActionHandler>,
+        tick_handlers: BTreeMap<kk_mod_api::Key, contrib::TickHandler>,
+    ) -> Result<(), String> {
         // 先取调用方提供的处理器键，再交给装配消耗。
         let handler_keys: BTreeSet<kk_mod_api::Key> = action_handlers
             .keys()
@@ -764,11 +782,10 @@ impl Engine {
         let mut installed = handler_keys;
         installed.extend(extensions.field_bindings().cloned());
         Self::check_installed_bindings(&plan, &installed)?;
-        let mut engine = Self::new(world);
-        engine.links = links;
-        engine.contrib = contrib;
-        engine.extensions = extensions;
-        Ok(engine)
+        self.links = links;
+        self.contrib = contrib;
+        self.extensions = extensions;
+        Ok(())
     }
 
     /// 结算指定房间前返回错误，传 None 解除。
@@ -1035,7 +1052,7 @@ impl Engine {
             time,
             input,
             room_names,
-            state: TickState::new(players, next),
+            state: TickState::with_mod_states(players, next, self.mod_states.clone()),
             batch,
             rooms: Vec::new(),
             events: Vec::new(),
@@ -1213,6 +1230,7 @@ impl Engine {
             self.world.commit_room(name, room);
         }
         self.players = prepared.players;
+        self.mod_states = prepared.mod_states;
         self.next_id = prepared.next_id;
         self.world.bump_next_obj_id(self.next_id);
         self.last_events = prepared.events;

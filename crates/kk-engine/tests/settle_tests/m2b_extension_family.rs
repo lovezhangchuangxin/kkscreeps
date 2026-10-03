@@ -463,6 +463,7 @@ fn object_removal_clears_extensions_and_raw_writes_are_rejected() {
         ActionHandler::Replace(Box::new(|w, id, _d| {
             w.set_extension(id, "extmod:charge", json!(7)).unwrap();
             w.remove_obj(id);
+            Ok(())
         })),
     );
     let dispatch = ContributionDispatch::assemble(&plan, handlers, BTreeMap::new()).unwrap();
@@ -503,6 +504,7 @@ fn object_removal_clears_extensions_and_raw_writes_are_rejected() {
                 .entry(id)
                 .or_default()
                 .insert("extmod:not-declared".to_string(), json!(1));
+            Ok(())
         })),
     );
     let world = std::mem::replace(&mut f2.world, kk_world::World::new(0));

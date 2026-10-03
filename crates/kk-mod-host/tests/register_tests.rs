@@ -1120,3 +1120,123 @@ fn symlinked_package_directory_rejected() {
     assert!(error.contains("包目录不得为符号链接"), "实得 {error}");
     let _ = std::fs::remove_dir_all(&root);
 }
+
+#[test]
+fn invoke_dispatches_handler_with_state_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+    let root = temp_root("invoke");
+    write_pkg(
+        &root,
+        "tally",
+        &[(
+            "server.js",
+            r#"
+import { createApi } from '@kkscreeps/mod';
+export default function register(api) {
+  api.handlers.after('builtin:link.tick', { id: 'tally' }, function tally(ctx) {
+    const count = (ctx.state && ctx.state.count) || 0;
+    ctx.state = { count: count + 1, room: ctx.room, tick: ctx.tick };
+    return 'seen';
+  });
+  api.handlers.after('builtin:link.tick', { id: 'async-bad' }, function bad() {
+    return { then() {} };
+  });
+  api.handlers.after('builtin:link.tick', { id: 'throwing' }, function boom() {
+    throw new Error('处理器抛错');
+  });
+}
+"#,
+        )],
+    );
+    let packages = discover_packages(&root).expect("可装载");
+    let mut realm = ModRealm::new().expect("realm 可创建");
+    let registered = realm
+        .register(&packages, RegisterOptions::default())
+        .expect("可注册");
+
+    let mut state = serde_json::Value::Null;
+    for tick in [7u64, 8] {
+        let ctx = json!({"tick": tick, "room": "E1N1", "state": state});
+        let outcome = realm
+            .invoke("tally:handler.tally", ctx)
+            .expect("处理器可调用");
+        state = outcome["state"].clone();
+        assert_eq!(outcome["result"], json!("seen"));
+        assert_eq!(state["count"], json!(tick - 6), "状态在调用间由调用方续传");
+        assert_eq!(state["room"], json!("E1N1"));
+    }
+
+    let promise = realm
+        .invoke(
+            "tally:handler.async-bad",
+            json!({"tick": 1, "room": "E1N1", "state": null}),
+        )
+        .expect_err("thenable 结果必须被拒");
+    assert!(promise.to_string().contains("同步完成"), "实得 {promise}");
+    let thrown = realm
+        .invoke(
+            "tally:handler.throwing",
+            json!({"tick": 1, "room": "E1N1", "state": null}),
+        )
+        .expect_err("处理器异常必须传播");
+    assert!(thrown.to_string().contains("处理器抛错"), "实得 {thrown}");
+    let unknown = realm
+        .invoke("tally:handler.ghost", json!({}))
+        .expect_err("未知绑定必须失败");
+    assert!(
+        unknown.to_string().contains("没有注册函数"),
+        "实得 {unknown}"
+    );
+    assert!(
+        registered.executables.contains(&key("tally:handler.tally")),
+        "派发键来自密封绑定表"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+    Ok(())
+}
+
+#[test]
+fn invoke_null_result_and_state_clear() -> Result<(), Box<dyn std::error::Error>> {
+    let root = temp_root("invoke-null");
+    write_pkg(
+        &root,
+        "nullable",
+        &[(
+            "server.js",
+            r#"
+import { createApi } from '@kkscreeps/mod';
+export default function register(api) {
+  api.handlers.after('builtin:link.tick', { id: 'echo' }, function echo(ctx) {
+    if (ctx.tick === 2) {
+      ctx.state = null;
+      return null;
+    }
+    ctx.state = { seen: ctx.tick };
+    return null;
+  });
+}
+"#,
+        )],
+    );
+    let packages = discover_packages(&root).expect("可装载");
+    let mut realm = ModRealm::new().expect("realm 可创建");
+    realm
+        .register(&packages, RegisterOptions::default())
+        .expect("可注册");
+    let out = realm
+        .invoke(
+            "nullable:handler.echo",
+            json!({"tick": 1, "room": "W1N1", "state": null}),
+        )
+        .expect("null 返回可用");
+    assert_eq!(out["result"], serde_json::Value::Null);
+    assert_eq!(out["state"]["seen"], serde_json::json!(1));
+    let cleared = realm
+        .invoke(
+            "nullable:handler.echo",
+            json!({"tick": 2, "room": "W1N1", "state": json!({"seen": 1})}),
+        )
+        .expect("清空调用可用");
+    assert_eq!(cleared["state"], serde_json::Value::Null, "写 null 即清空");
+    let _ = std::fs::remove_dir_all(&root);
+    Ok(())
+}

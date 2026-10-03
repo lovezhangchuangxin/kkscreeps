@@ -6,6 +6,8 @@ use serde_json::json;
 
 use kk_runtime::EmbedEngine;
 
+#[path = "embed_tests/c_mod_settle_family.rs"]
+mod c_mod_settle;
 #[path = "embed_tests/dual_room_live_fire.rs"]
 mod dual_room_live_fire;
 #[path = "embed_tests/embed_channels_and_families.rs"]
@@ -107,6 +109,10 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     bounded_parallel_players_impl()?;
     stage_recovery_escape_route_impl()?;
     stage_hook_deferral_impl()?;
+    c_mod_settle::c_mod_settle_state_accumulates_impl()?;
+    c_mod_settle::c_mod_settle_failure_rolls_back_state_impl()?;
+    c_mod_settle::c_mod_settle_replace_and_wrap_gate_impl()?;
+    c_mod_settle::c_mod_settle_registration_failure_impl()?;
     assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");
     Ok(())
 }

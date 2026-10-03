@@ -322,7 +322,7 @@ impl Fixture {
             },
         )
         .unwrap();
-        let (players, next) = state.into_parts().unwrap();
+        let (players, next, _) = state.into_parts().unwrap();
         self.players = players;
         let name = room.name.clone();
         self.world.commit_room(name, room);
@@ -380,7 +380,7 @@ impl Fixture {
             &plane,
         )
         .unwrap();
-        let (players, next) = state.into_parts().unwrap();
+        let (players, next, _) = state.into_parts().unwrap();
         self.players = players;
         let name = room.name.clone();
         self.world.commit_room(name, room);
