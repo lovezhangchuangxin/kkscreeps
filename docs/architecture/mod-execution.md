@@ -51,8 +51,18 @@ RoomCtx 是 `Rc<RefCell<Working>>`。native/op 访问自行取得短借用，进
 
 后续若 native 算法需要 JS 生命周期回调，应在回调边界拆分为可调度的 native 步骤；确实需要 native→JS 嵌套的独立接口仍可使用 op scope 与明确重入契约。当前决定不禁止所有重入，只移除贡献链不需要的回入。
 
+## VM 故障恢复
+
+`kk-runtime` 持有分片创建时的包字节、注册配置、冻结 PlanHash 和可执行绑定清单。整轮引擎结算返回错误时，立即销毁 Mod realm；不仅处理 JS 异常，也覆盖 Mod 已运行后的市场、校验与玩家写回故障。结算之前的测试拒绝未运行 Mod，不销毁健康 realm。成功 tick 继续复用 realm。
+
+下次结算前重新建立 realm，从上述内存快照装载与注册，核对原 PlanHash 和绑定清单，全部通过才发布替代 VM。恢复不重读磁盘、不重新安装引擎计划或玩家 API，不修改已提交世界或玩家状态。注册失败、计划漂移或替代 VM 建立失败时保持空槽；玩家执行前也检查恢复门，不能消耗缓存候选或开始新的玩家轮。
+
+`run_players` 仍复用原玩家结果和 TickInput；Mod 处理链在新 realm 中重新结算。`needs_mod_recovery` 独立于玩家缓存与引擎 NeedsRecovery；`rebuild_mod_realm` 可显式恢复而不处置这两类状态。`discard_pending_round` 仅放弃玩家候选与引擎恢复状态，不能解除 Mod 恢复门，相关世界/市场修改仍被拒。新建分片或 teardown 清空整个生命周期。
+
+持久状态须走 ctx.state，模块全局只用于定义与可重建缓存；恢复从已提交 ctx.state 继续，丢弃全部 Mod 模块全局。重建并不让任意全局状态、Math.random 或墙钟依赖变成可回放输入，Mod 必须自行遵守确定性与缓存重建约束。此保证针对返回错误，不包括 panic、永久卡死、OOM 或进程崩溃。恢复与重试证据见 [VM 恢复记录](../research/notes/mod-vm-recovery-2026-10-03.md)。
+
 ## 尚未完成的范围
 
-候选回滚不回滚 Mod 模块全局。持久状态须走 ctx.state，模块全局只用于定义与可重建缓存；当前结算重试仍复用 realm，未实现失败后自动重建。共享可信 VM 的故障半径仍是整分片，故障分型/停用策略、注册与结算资源预算、多对象写 API、其他生命周期槽、持久化和 outbox 尚未完成。
+共享可信 VM 的故障半径仍是整分片；确定性异常的 Mod 在新 VM 中仍会失败。故障分型/停用策略、注册与结算资源预算、多对象写 API、其他生命周期槽、持久化和 outbox 尚未完成。
 
 默认路径与功能回归、真实混合链和失败候选分别验收。小对象链测试不代表密集 Mod 的成本；性能要求见 [性能验收](performance-acceptance.md)，本次选择与取舍见 [ADR-015](../decisions/ADR-015-mod-chain-execution.md)。

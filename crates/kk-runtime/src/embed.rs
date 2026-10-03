@@ -15,6 +15,7 @@ use serde_json::{Value, json};
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::mod_vm::ModVm;
 use crate::{PlayerExecutor, RunEpoch, ThreadExecutor, WorldSource};
 use kk_engine::intent::IntentBatch;
 use kk_engine::settle::RoomCtx;
@@ -88,7 +89,7 @@ pub struct EmbedEngine {
     kkpv_public_store: crate::kkpv_store::KkpvBlockStore,
     /// 可信 Mod 注册与结算 realm；仅 `create_shard_with_mods` 装配。持有它使
     /// EmbedEngine 不再可跨线程移动（结算与 realm 须同线程）。
-    mod_realm: Option<Rc<RefCell<ModRealm>>>,
+    mod_realm: Option<Rc<RefCell<ModVm>>>,
     /// 分片计划是否含 Mod 意图；决定玩家沙箱是否装配扩展意图原语。
     ext_intents: bool,
     /// 冻结计划导出的 Mod 玩家面目录；投影通道按它裁切 Mod 对象。
@@ -99,7 +100,7 @@ pub struct EmbedEngine {
 
 /// JS 组合的整槽执行器。进入 VM 一次，native 中心只经普通 op 执行。
 struct ModSlotExecutor {
-    realm: Rc<RefCell<ModRealm>>,
+    realm: Rc<RefCell<ModVm>>,
 }
 
 enum NativeCall {
@@ -138,6 +139,7 @@ impl SlotExecutor for ModSlotExecutor {
         self.realm
             .try_borrow_mut()
             .map_err(|_| format!("槽 {} @ {room}: realm 已在执行", slot.key))?
+            .realm_mut()?
             .invoke_chain(
                 slot.key.as_str(),
                 Box::new(ModChainContext {
@@ -573,7 +575,13 @@ impl EmbedEngine {
                 })
                 .map_err(|error| anyhow::anyhow!("Mod 玩家面预检失败：{error}"))?;
             }
-            let realm = Rc::new(RefCell::new(realm));
+            let realm = Rc::new(RefCell::new(ModVm::new(
+                realm,
+                packages.clone(),
+                options.clone(),
+                registered.plan.hash(),
+                registered.executables.clone(),
+            )));
             let executor = Rc::new(ModSlotExecutor {
                 realm: realm.clone(),
             });
@@ -937,6 +945,8 @@ impl EmbedEngine {
                 }
             }
         }
+        // 恢复失败不能取走候选或重新执行玩家；重建只读取原启动快照。
+        self.rebuild_mod_realm()?;
         let (results, run_ns, project_ns, input) = match self.pending.take() {
             Some(pending) => (pending.results, 0u128, 0u128, pending.input),
             None => {
@@ -1018,6 +1028,7 @@ impl EmbedEngine {
         input: TickInput,
         writebacks: BTreeMap<String, PlayerWriteback>,
     ) -> anyhow::Result<()> {
+        self.rebuild_mod_realm()?;
         if self.fail_next_settle {
             self.fail_next_settle = false;
             anyhow::bail!("故障注入：世界结算失败（测试钩子）");
@@ -1044,6 +1055,11 @@ impl EmbedEngine {
             self.engine.set_fail_stage_for_test(None);
         }
         self.engine.set_fail_writeback_for_test(None);
+        if settled.is_err()
+            && let Some(vm) = &self.mod_realm
+        {
+            vm.borrow_mut().invalidate();
+        }
         settled
     }
 
@@ -1337,6 +1353,9 @@ impl EmbedEngine {
     /// 又不会改变世界 generation，因此不能仅依赖引擎的世界版本检查。
     fn no_open_round(&self, op: &str) -> anyhow::Result<()> {
         self.no_pending_round(op)?;
+        if self.needs_mod_recovery() {
+            anyhow::bail!("{op} 被拒：Mod VM 待恢复；先 rebuild_mod_realm 或重试结算");
+        }
         if matches!(self.engine.run_state(), RunState::NeedsRecovery { .. }) {
             anyhow::bail!(
                 "{op} 被拒：引擎处于恢复态（上次结算段失败、世界保持上一 tick）——先重试结算或 discard_pending_round 放弃恢复"
@@ -1654,6 +1673,33 @@ impl EmbedEngine {
         self.pending.is_some() || self.execution_failure.is_some()
     }
 
+    /// Mod VM 已因结算错误销毁；独立于玩家缓存和引擎恢复状态。
+    pub fn needs_mod_recovery(&self) -> bool {
+        self.mod_realm
+            .as_ref()
+            .is_some_and(|vm| vm.borrow().needs_recovery())
+    }
+
+    /// 从分片创建时的包字节与配置重建 Mod VM，核验原冻结计划后才恢复可用。
+    /// 不改变世界、玩家候选或引擎恢复状态；正常结算重试会自动调用。健康 VM 不重建。
+    pub fn rebuild_mod_realm(&mut self) -> anyhow::Result<()> {
+        if let Some(vm) = &self.mod_realm {
+            vm.borrow_mut().recover().map_err(anyhow::Error::msg)?;
+        }
+        Ok(())
+    }
+
+    /// 真实重新注册完成后使下一次恢复失败，验证新 VM 不会提前发布。
+    #[doc(hidden)]
+    pub fn fail_next_mod_rebuild_for_test(&mut self) -> anyhow::Result<()> {
+        self.mod_realm
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("分片未装配 Mod VM"))?
+            .borrow_mut()
+            .fail_next_rebuild_for_test();
+        Ok(())
+    }
+
     /// 显式放弃执行故障轮并重建全部玩家工作者，保留已提交世界和玩家状态。
     /// 新线程丢弃全部 V8 全局变量；下一轮从已提交 Memory、segments 和 CPU 桶注入。
     /// 重建失败时保留故障记录，继续禁止运行；不自动重派故障轮。
@@ -1706,6 +1752,7 @@ impl EmbedEngine {
     /// 丢弃缓存结果或执行故障记录，并放弃引擎恢复状态。
     /// 不撤销玩家已经修改的 V8 全局变量。正常接口会阻止恢复期间修改世界，
     /// 因此这里放弃恢复不会遇到世界版本不匹配。
+    /// 不解除 Mod VM 恢复门；再次结算前仍须成功重建。
     pub fn discard_pending_round(&mut self) {
         self.pending = None;
         self.execution_failure = None;

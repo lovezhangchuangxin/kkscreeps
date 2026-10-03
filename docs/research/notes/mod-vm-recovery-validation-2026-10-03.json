@@ -1,0 +1,313 @@
+{
+  "date": "2026-10-03",
+  "base_commit": "f1db17c",
+  "source_scope": "Mod VM fault recovery",
+  "release_sha256": "be2b292b94642a515c7f249a19e38554b52c7eef0a51ffd2cedf199587a71cf9",
+  "commands": {
+    "runtime_tests": "cargo test -p kk-runtime",
+    "full_check": "pnpm run check",
+    "release": "cargo build --release -p kk-cli",
+    "adapter": "pnpm --filter @kkscreeps/compat run build",
+    "ratchet": "KKSCREEPS_BIN=$PWD/target/release/kkscreeps node compat/scripts/ratchet.mjs",
+    "bots": "target/release/kkscreeps bot-check --path <fixture> --ticks <2000/2000/10> --report <file>"
+  },
+  "full_check": {
+    "exit_code": 0,
+    "rust_passed": 548,
+    "rust_ignored": 7,
+    "rust_suites": 42,
+    "javascript_passed": 19,
+    "fmt": "passed",
+    "clippy_workspace_all_targets": "passed",
+    "doc_links": "passed"
+  },
+  "compat": {
+    "pinned_commit": "34a630efa42908c117c19c25d2350fa2387bd633",
+    "exit_code": 0,
+    "passed": 1854,
+    "failed": 153,
+    "skipped": 907,
+    "floor": 1854,
+    "regressions": 0,
+    "improvements": 0,
+    "baseline": "HEAD~1; 2205b30 at validation"
+  },
+  "runtime_tests": {
+    "passed": 32,
+    "new_unit_tests": 1,
+    "new_integration_tests": 4,
+    "channels": [
+      "json",
+      "kkpv"
+    ],
+    "late_fault_matrix": [
+      "Market",
+      "Validate",
+      "Publish",
+      "Writeback.Market",
+      "Writeback.Cpu",
+      "Writeback.RawMemory",
+      "Writeback.Segments"
+    ],
+    "checks": [
+      "discard poisoned realm",
+      "rebuild from immutable package bytes and config",
+      "plan and binding identity",
+      "atomic replacement on registration failure",
+      "preserve committed namespace and world",
+      "reuse player results and TickInput",
+      "no player redispatch or early Memory/segments/CPU publication",
+      "cached move intent committed once",
+      "discard cannot bypass VM recovery",
+      "cold-start comparison",
+      "deterministic handler fault stays failed"
+    ]
+  },
+  "bots": {
+    "tooangel": {
+      "bot": "compat/fixtures/tooangel/src",
+      "ticks_requested": 2000,
+      "ticks_completed": 2000,
+      "ticks_terminated": 0,
+      "ticks_skipped_penalty": 0,
+      "ticks_with_console_error": 0,
+      "missing_api": {},
+      "has_probes": {},
+      "stub_calls_top": [
+        [
+          "PathFinder.search",
+          10000
+        ],
+        [
+          "room.find:105",
+          8001
+        ],
+        [
+          "room.find:116",
+          4001
+        ],
+        [
+          "room.find:103",
+          4000
+        ],
+        [
+          "room.find:1",
+          2021
+        ],
+        [
+          "room.find:107",
+          2000
+        ],
+        [
+          "room.find:112",
+          2000
+        ],
+        [
+          "room.find:3",
+          21
+        ],
+        [
+          "room.find:5",
+          21
+        ],
+        [
+          "room.find:7",
+          21
+        ]
+      ],
+      "console_errors_head": [],
+      "console_errors_folded": [
+        [
+          "[log] # W#N#                        Executing room failed: W#N# TypeError: offsetPosition.lookFor is not a function TypeError: offsetPosition.lookFor is not a function\n    at Proxy.Room.perturbPath (kk_module/prototype_room_memory, <anonymous>:#:#)\n    at Proxy.Room.setMemoryPath (kk_module/prototype_room_memory, <anonymous>:#:#)\n    at Proxy.Room.getPath (kk_module/prototype_room_routing, <anonymous>:#:#)\n    at Proxy.eval (kk_module/prototype_room_init, <anonymous>:#:#)\n    at Proxy.Room.stepExecute (kk_module/prototype_room_init, <anonymous>:#:#)\n    at Proxy.Room.setup (kk_module/prototype_room_init, <anonymous>:#:#)\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:#:#)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:#:#)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:#:#)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:#:#)",
+          2000
+        ],
+        [
+          "[log] # memory                      Deleting W#N# from memory, no myRoom {\"setup\":{\"steps\":{\"cleanupMemory\":true,\"updatePosition\":true,\"costMatrixSetMineralPath\":true}},\"routing\":{},\"lastSeen\":#}",
+          6
+        ],
+        [
+          "[log] # Script reload - Load: # tickLimit: # limit: # Bucket: #",
+          1
+        ]
+      ],
+      "console_head": [
+        "[tick 1][log] 1 Script reload - Load: 5 tickLimit: 500 limit: 20 Bucket: 10000",
+        "[tick 1][log] 1 W1N1                        Executing room failed: W1N1 TypeError: offsetPosition.lookFor is not a function TypeError: offsetPosition.lookFor is not a function\n    at Proxy.Room.perturbPath (kk_module/prototype_room_memory, <anonymous>:169:26)\n    at Proxy.Room.setMemoryPath (kk_module/prototype_room_memory, <anonymous>:129:17)\n    at Proxy.Room.getPath (kk_module/prototype_room_routing, <anonymous>:261:10)\n    at Proxy.eval (kk_module/prototype_room_init, <anonymous>:309:25)\n    at Proxy.Room.stepExecute (kk_module/prototype_room_init, <anonymous>:445:20)\n    at Proxy.Room.setup (kk_module/prototype_room_init, <anonymous>:508:13)\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:90:10)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)",
+        "[tick 2][log] 2 W1N1                        Executing room failed: W1N1 TypeError: offsetPosition.lookFor is not a function TypeError: offsetPosition.lookFor is not a function\n    at Proxy.Room.perturbPath (kk_module/prototype_room_memory, <anonymous>:169:26)\n    at Proxy.Room.setMemoryPath (kk_module/prototype_room_memory, <anonymous>:129:17)\n    at Proxy.Room.getPath (kk_module/prototype_room_routing, <anonymous>:261:10)\n    at Proxy.eval (kk_module/prototype_room_init, <anonymous>:309:25)\n    at Proxy.Room.stepExecute (kk_module/prototype_room_init, <anonymous>:445:20)\n    at Proxy.Room.setup (kk_module/prototype_room_init, <anonymous>:508:13)\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:90:10)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)",
+        "[tick 3][log] 3 W1N1                        Executing room failed: W1N1 TypeError: offsetPosition.lookFor is not a function TypeError: offsetPosition.lookFor is not a function\n    at Proxy.Room.perturbPath (kk_module/prototype_room_memory, <anonymous>:169:26)\n    at Proxy.Room.setMemoryPath (kk_module/prototype_room_memory, <anonymous>:129:17)\n    at Proxy.Room.getPath (kk_module/prototype_room_routing, <anonymous>:261:10)\n    at Proxy.eval (kk_module/prototype_room_init, <anonymous>:309:25)\n    at Proxy.Room.stepExecute (kk_module/prototype_room_init, <anonymous>:445:20)\n    at Proxy.Room.setup (kk_module/prototype_room_init, <anonymous>:508:13)\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:90:10)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)",
+        "[tick 4][log] 4 W1N1                        Executing room failed: W1N1 TypeError: offsetPosition.lookFor is not a function TypeError: offsetPosition.lookFor is not a function\n    at Proxy.Room.perturbPath (kk_module/prototype_room_memory, <anonymous>:169:26)\n    at Proxy.Room.setMemoryPath (kk_module/prototype_room_memory, <anonymous>:129:17)\n    at Proxy.Room.getPath (kk_module/prototype_room_routing, <anonymous>:261:10)\n    at Proxy.eval (kk_module/prototype_room_init, <anonymous>:309:25)\n    at Proxy.Room.stepExecute (kk_module/prototype_room_init, <anonymous>:445:20)\n    at Proxy.Room.setup (kk_module/prototype_room_init, <anonymous>:508:13)\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:90:10)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)",
+        "[tick 5][log] 5 W1N1                        Executing room failed: W1N1 TypeError: offsetPosition.lookFor is not a function TypeError: offsetPosition.lookFor is not a function\n    at Proxy.Room.perturbPath (kk_module/prototype_room_memory, <anonymous>:169:26)\n    at Proxy.Room.setMemoryPath (kk_module/prototype_room_memory, <anonymous>:129:17)\n    at Proxy.Room.getPath (kk_module/prototype_room_routing, <anonymous>:261:10)\n    at Proxy.eval (kk_module/prototype_room_init, <anonymous>:309:25)\n    at Proxy.Room.stepExecute (kk_module/prototype_room_init, <anonymous>:445:20)\n    at Proxy.Room.setup (kk_module/prototype_room_init, <anonymous>:508:13)\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:90:10)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)",
+        "[tick 6][log] 6 W1N1                        Executing room failed: W1N1 TypeError: offsetPosition.lookFor is not a function TypeError: offsetPosition.lookFor is not a function\n    at Proxy.Room.perturbPath (kk_module/prototype_room_memory, <anonymous>:169:26)\n    at Proxy.Room.setMemoryPath (kk_module/prototype_room_memory, <anonymous>:129:17)\n    at Proxy.Room.getPath (kk_module/prototype_room_routing, <anonymous>:261:10)\n    at Proxy.eval (kk_module/prototype_room_init, <anonymous>:309:25)\n    at Proxy.Room.stepExecute (kk_module/prototype_room_init, <anonymous>:445:20)\n    at Proxy.Room.setup (kk_module/prototype_room_init, <anonymous>:508:13)\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:90:10)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)",
+        "[tick 7][log] 7 W1N1                        Executing room failed: W1N1 TypeError: offsetPosition.lookFor is not a function TypeError: offsetPosition.lookFor is not a function\n    at Proxy.Room.perturbPath (kk_module/prototype_room_memory, <anonymous>:169:26)\n    at Proxy.Room.setMemoryPath (kk_module/prototype_room_memory, <anonymous>:129:17)\n    at Proxy.Room.getPath (kk_module/prototype_room_routing, <anonymous>:261:10)\n    at Proxy.eval (kk_module/prototype_room_init, <anonymous>:309:25)\n    at Proxy.Room.stepExecute (kk_module/prototype_room_init, <anonymous>:445:20)\n    at Proxy.Room.setup (kk_module/prototype_room_init, <anonymous>:508:13)\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:90:10)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)",
+        "[tick 8][log] 8 W1N1                        Executing room failed: W1N1 TypeError: offsetPosition.lookFor is not a function TypeError: offsetPosition.lookFor is not a function\n    at Proxy.Room.perturbPath (kk_module/prototype_room_memory, <anonymous>:169:26)\n    at Proxy.Room.setMemoryPath (kk_module/prototype_room_memory, <anonymous>:129:17)\n    at Proxy.Room.getPath (kk_module/prototype_room_routing, <anonymous>:261:10)\n    at Proxy.eval (kk_module/prototype_room_init, <anonymous>:309:25)\n    at Proxy.Room.stepExecute (kk_module/prototype_room_init, <anonymous>:445:20)\n    at Proxy.Room.setup (kk_module/prototype_room_init, <anonymous>:508:13)\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:90:10)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)",
+        "[tick 9][log] 9 W1N1                        Executing room failed: W1N1 TypeError: offsetPosition.lookFor is not a function TypeError: offsetPosition.lookFor is not a function\n    at Proxy.Room.perturbPath (kk_module/prototype_room_memory, <anonymous>:169:26)\n    at Proxy.Room.setMemoryPath (kk_module/prototype_room_memory, <anonymous>:129:17)\n    at Proxy.Room.getPath (kk_module/prototype_room_routing, <anonymous>:261:10)\n    at Proxy.eval (kk_module/prototype_room_init, <anonymous>:309:25)\n    at Proxy.Room.stepExecute (kk_module/prototype_room_init, <anonymous>:445:20)\n    at Proxy.Room.setup (kk_module/prototype_room_init, <anonymous>:508:13)\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:90:10)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)",
+        "[tick 10][log] 10 W1N1                        Executing room failed: W1N1 TypeError: offsetPosition.lookFor is not a function TypeError: offsetPosition.lookFor is not a function\n    at Proxy.Room.perturbPath (kk_module/prototype_room_memory, <anonymous>:169:26)\n    at Proxy.Room.setMemoryPath (kk_module/prototype_room_memory, <anonymous>:129:17)\n    at Proxy.Room.getPath (kk_module/prototype_room_routing, <anonymous>:261:10)\n    at Proxy.eval (kk_module/prototype_room_init, <anonymous>:309:25)\n    at Proxy.Room.stepExecute (kk_module/prototype_room_init, <anonymous>:445:20)\n    at Proxy.Room.setup (kk_module/prototype_room_init, <anonymous>:508:13)\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:90:10)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)",
+        "[tick 11][log] 11 W1N1                        Executing room failed: W1N1 TypeError: offsetPosition.lookFor is not a function TypeError: offsetPosition.lookFor is not a function\n    at Proxy.Room.perturbPath (kk_module/prototype_room_memory, <anonymous>:169:26)\n    at Proxy.Room.setMemoryPath (kk_module/prototype_room_memory, <anonymous>:129:17)\n    at Proxy.Room.getPath (kk_module/prototype_room_routing, <anonymous>:261:10)\n    at Proxy.eval (kk_module/prototype_room_init, <anonymous>:309:25)\n    at Proxy.Room.stepExecute (kk_module/prototype_room_init, <anonymous>:445:20)\n    at Proxy.Room.setup (kk_module/prototype_room_init, <anonymous>:508:13)\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:90:10)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)",
+        "[tick 12][log] 12 W1N1                        Executing room failed: W1N1 TypeError: offsetPosition.lookFor is not a function TypeError: offsetPosition.lookFor is not a function\n    at Proxy.Room.perturbPath (kk_module/prototype_room_memory, <anonymous>:169:26)\n    at Proxy.Room.setMemoryPath (kk_module/prototype_room_memory, <anonymous>:129:17)\n    at Proxy.Room.getPath (kk_module/prototype_room_routing, <anonymous>:261:10)\n    at Proxy.eval (kk_module/prototype_room_init, <anonymous>:309:25)\n    at Proxy.Room.stepExecute (kk_module/prototype_room_init, <anonymous>:445:20)\n    at Proxy.Room.setup (kk_module/prototype_room_init, <anonymous>:508:13)\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:90:10)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)",
+        "[tick 13][log] 13 W1N1                        Executing room failed: W1N1 TypeError: offsetPosition.lookFor is not a function TypeError: offsetPosition.lookFor is not a function\n    at Proxy.Room.perturbPath (kk_module/prototype_room_memory, <anonymous>:169:26)\n    at Proxy.Room.setMemoryPath (kk_module/prototype_room_memory, <anonymous>:129:17)\n    at Proxy.Room.getPath (kk_module/prototype_room_routing, <anonymous>:261:10)\n    at Proxy.eval (kk_module/prototype_room_init, <anonymous>:309:25)\n    at Proxy.Room.stepExecute (kk_module/prototype_room_init, <anonymous>:445:20)\n    at Proxy.Room.setup (kk_module/prototype_room_init, <anonymous>:508:13)\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:90:10)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)",
+        "[tick 14][log] 14 W1N1                        Executing room failed: W1N1 TypeError: offsetPosition.lookFor is not a function TypeError: offsetPosition.lookFor is not a function\n    at Proxy.Room.perturbPath (kk_module/prototype_room_memory, <anonymous>:169:26)\n    at Proxy.Room.setMemoryPath (kk_module/prototype_room_memory, <anonymous>:129:17)\n    at Proxy.Room.getPath (kk_module/prototype_room_routing, <anonymous>:261:10)\n    at Proxy.eval (kk_module/prototype_room_init, <anonymous>:309:25)\n    at Proxy.Room.stepExecute (kk_module/prototype_room_init, <anonymous>:445:20)\n    at Proxy.Room.setup (kk_module/prototype_room_init, <anonymous>:508:13)\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:90:10)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)",
+        "[tick 15][log] 15 W1N1                        Executing room failed: W1N1 TypeError: offsetPosition.lookFor is not a function TypeError: offsetPosition.lookFor is not a function\n    at Proxy.Room.perturbPath (kk_module/prototype_room_memory, <anonymous>:169:26)\n    at Proxy.Room.setMemoryPath (kk_module/prototype_room_memory, <anonymous>:129:17)\n    at Proxy.Room.getPath (kk_module/prototype_room_routing, <anonymous>:261:10)\n    at Proxy.eval (kk_module/prototype_room_init, <anonymous>:309:25)\n    at Proxy.Room.stepExecute (kk_module/prototype_room_init, <anonymous>:445:20)\n    at Proxy.Room.setup (kk_module/prototype_room_init, <anonymous>:508:13)\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:90:10)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)",
+        "[tick 16][log] 16 W1N1                        Executing room failed: W1N1 TypeError: offsetPosition.lookFor is not a function TypeError: offsetPosition.lookFor is not a function\n    at Proxy.Room.perturbPath (kk_module/prototype_room_memory, <anonymous>:169:26)\n    at Proxy.Room.setMemoryPath (kk_module/prototype_room_memory, <anonymous>:129:17)\n    at Proxy.Room.getPath (kk_module/prototype_room_routing, <anonymous>:261:10)\n    at Proxy.eval (kk_module/prototype_room_init, <anonymous>:309:25)\n    at Proxy.Room.stepExecute (kk_module/prototype_room_init, <anonymous>:445:20)\n    at Proxy.Room.setup (kk_module/prototype_room_init, <anonymous>:508:13)\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:90:10)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)",
+        "[tick 17][log] 17 W1N1                        Executing room failed: W1N1 TypeError: offsetPosition.lookFor is not a function TypeError: offsetPosition.lookFor is not a function\n    at Proxy.Room.perturbPath (kk_module/prototype_room_memory, <anonymous>:169:26)\n    at Proxy.Room.setMemoryPath (kk_module/prototype_room_memory, <anonymous>:129:17)\n    at Proxy.Room.getPath (kk_module/prototype_room_routing, <anonymous>:261:10)\n    at Proxy.eval (kk_module/prototype_room_init, <anonymous>:309:25)\n    at Proxy.Room.stepExecute (kk_module/prototype_room_init, <anonymous>:445:20)\n    at Proxy.Room.setup (kk_module/prototype_room_init, <anonymous>:508:13)\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:90:10)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)",
+        "[tick 18][log] 18 W1N1                        Executing room failed: W1N1 TypeError: offsetPosition.lookFor is not a function TypeError: offsetPosition.lookFor is not a function\n    at Proxy.Room.perturbPath (kk_module/prototype_room_memory, <anonymous>:169:26)\n    at Proxy.Room.setMemoryPath (kk_module/prototype_room_memory, <anonymous>:129:17)\n    at Proxy.Room.getPath (kk_module/prototype_room_routing, <anonymous>:261:10)\n    at Proxy.eval (kk_module/prototype_room_init, <anonymous>:309:25)\n    at Proxy.Room.stepExecute (kk_module/prototype_room_init, <anonymous>:445:20)\n    at Proxy.Room.setup (kk_module/prototype_room_init, <anonymous>:508:13)\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:90:10)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)",
+        "[tick 19][log] 19 W1N1                        Executing room failed: W1N1 TypeError: offsetPosition.lookFor is not a function TypeError: offsetPosition.lookFor is not a function\n    at Proxy.Room.perturbPath (kk_module/prototype_room_memory, <anonymous>:169:26)\n    at Proxy.Room.setMemoryPath (kk_module/prototype_room_memory, <anonymous>:129:17)\n    at Proxy.Room.getPath (kk_module/prototype_room_routing, <anonymous>:261:10)\n    at Proxy.eval (kk_module/prototype_room_init, <anonymous>:309:25)\n    at Proxy.Room.stepExecute (kk_module/prototype_room_init, <anonymous>:445:20)\n    at Proxy.Room.setup (kk_module/prototype_room_init, <anonymous>:508:13)\n    at Proxy.Room.buildBase (kk_module/prototype_room_controller, <anonymous>:90:10)\n    at Proxy.Room.executeRoom (kk_module/prototype_room_my, <anonymous>:620:8)\n    at Proxy.Room.myHandleRoom (kk_module/prototype_room_my, <anonymous>:82:15)\n    at Proxy.Room.handle (kk_module/prototype_room, <anonymous>:134:10)"
+      ]
+    },
+    "overmind": {
+      "bot": "compat/fixtures/overmind-dist",
+      "ticks_requested": 2000,
+      "ticks_completed": 2000,
+      "ticks_terminated": 0,
+      "ticks_skipped_penalty": 0,
+      "ticks_with_console_error": 1,
+      "missing_api": {},
+      "has_probes": {},
+      "stub_calls_top": [
+        [
+          "PathFinder.search",
+          8002
+        ],
+        [
+          "room.find:105",
+          6047
+        ],
+        [
+          "room.find:117",
+          2099
+        ],
+        [
+          "room.find:103",
+          2000
+        ],
+        [
+          "room.find:118",
+          2000
+        ],
+        [
+          "room.find:106",
+          1999
+        ],
+        [
+          "room.find:114",
+          424
+        ],
+        [
+          "RoomPosition.findClosestByPath",
+          99
+        ],
+        [
+          "room.find:116",
+          42
+        ],
+        [
+          "room.find:109",
+          40
+        ],
+        [
+          "room.find:107",
+          39
+        ]
+      ],
+      "console_errors_head": [
+        "[tick 1] [loop] Caught unhandled exception instantiating colony W1N1: \nTypeError: Cannot read properties of undefined (reading 'harvest:9e1995')\n    at DirectiveHarvest.create (kk_module/main, <anonymous>:14448:76)\n    at DirectiveHarvest.createIfNotPresent (kk_module/main, <anonymous>:14524:33)\n    at Colony.registerRoomObjects_cached (kk_module/main, <anonymous>:15316:30)\n    at Colony.build (kk_module/main, <anonymous>:15239:14)\n    at new Colony (kk_module/main, <anonymous>:15222:14)\n    at _Overmind.registerColonies (kk_module/main, <anonymous>:24047:4844)\n    at _Overmind.build (kk_module/main, <anonymous>:24047:1597)\n    at main (kk_module/main, <anonymous>:24294:18)\n    at Object.wrap (kk_module/main, <anonymous>:971:16)\n    at Object.loop (kk_module/main, <anonymous>:24308:21)",
+        "[tick 1] Caught unhandled exception instantiating colony W1N1: \nTypeError: Cannot read properties of undefined (reading 'harvest:9e1995')\n    at DirectiveHarvest.create (kk_module/main, <anonymous>:14448:76)\n    at DirectiveHarvest.createIfNotPresent (kk_module/main, <anonymous>:14524:33)\n    at Colony.registerRoomObjects_cached (kk_module/main, <anonymous>:15316:30)\n    at Colony.build (kk_module/main, <anonymous>:15239:14)\n    at new Colony (kk_module/main, <anonymous>:15222:14)\n    at _Overmind.registerColonies (kk_module/main, <anonymous>:24047:4844)\n    at _Overmind.build (kk_module/main, <anonymous>:24047:1597)\n    at main (kk_module/main, <anonymous>:24294:18)\n    at Object.wrap (kk_module/main, <anonymous>:971:16)\n    at Object.loop (kk_module/main, <anonymous>:24308:21)"
+      ],
+      "console_errors_folded": [
+        [
+          "[log] <font color='yellow'>ALERT  </font> <font color='gray'>#</font> Creating bootstrap directive at <a href=\"#!/room/shard#/W#N#\">[W#N#, #, #]</a>!",
+          1999
+        ],
+        [
+          "[log] <font color='yellow'>ALERT  </font> <font color='gray'>#</font> Creating harvest directive at <a href=\"#!/room/shard#/W#N#\">[W#N#, #, #]</a>!",
+          101
+        ],
+        [
+          "[log] <font color='yellow'>ALERT  </font> <font color='gray'>#</font> Upgrade site at <a href=\"#!/room/shard#/W#N#\">[W#N#, #, #]</a>: no batteryPos!",
+          100
+        ],
+        [
+          "[log] <font color='orange'>WARNING</font> <font color='gray'>#</font> Missing flag for directive <a href=\"#!/room/shard#/W#N#\">[harvest:#]</a>! Removing directive.",
+          7
+        ],
+        [
+          "[log] <font color='orange'>WARNING</font> <font color='gray'>#</font> Missing flag for directive <a href=\"#!/room/shard#/W#N#\">[harvest:#d#]</a>! Removing directive.",
+          4
+        ],
+        [
+          "[log] <font color='yellow'>ALERT  </font> <font color='gray'>#</font> Version migration from #.#.# -> #.#.# (part #) completed successfully.",
+          4
+        ],
+        [
+          "[log] <font color='orange'>WARNING</font> <font color='gray'>#</font> Missing flag for directive <a href=\"#!/room/shard#/W#N#\">[harvest:#a#]</a>! Removing directive.",
+          3
+        ],
+        [
+          "[log] <font color='orange'>WARNING</font> <font color='gray'>#</font> Missing flag for directive <a href=\"#!/room/shard#/W#N#\">[harvest:#b#]</a>! Removing directive.",
+          3
+        ],
+        [
+          "[log] <font color='orange'>WARNING</font> <font color='gray'>#</font> Missing flag for directive <a href=\"#!/room/shard#/W#N#\">[harvest:#c#]</a>! Removing directive.",
+          3
+        ],
+        [
+          "[log] <font color='orange'>WARNING</font> <font color='gray'>#</font> Missing flag for directive <a href=\"#!/room/shard#/W#N#\">[harvest:#c]</a>! Removing directive.",
+          3
+        ]
+      ],
+      "console_head": [
+        "[tick 1][log] <font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.4.x -> 0.5.x (part 1) completed successfully.",
+        "[tick 1][log] <font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.4.x -> 0.5.x (part 2) completed successfully.",
+        "[tick 1][log] <font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.4.x -> 0.5.x (part 3) completed successfully.",
+        "[tick 1][log] <font color='yellow'>ALERT  </font> <font color='gray'>1</font> Genocide complete: suicided 0 innocent drones.",
+        "[tick 1][log] <font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.5.0 -> 0.5.1 (part 1) completed successfully.",
+        "[tick 1][log] <font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.5.0 -> 0.5.1 (part 2) completed successfully.",
+        "[tick 1][log] <font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.5.0 -> 0.5.1 (part 3) completed successfully.",
+        "[tick 1][log] <font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.5.0 -> 0.5.1 (part 4) completed successfully.",
+        "[tick 1][log] <font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.5.1 -> 0.5.2 completed successfully.",
+        "[tick 1][log] <font color='yellow'>ALERT  </font> <font color='gray'>1</font> Codebase updated or global reset. Type \"help\" for a list of console commands.\n                ‣ Version:        Overmind v0.5.2\n                ‣ Checksum:       0x34e6838c39d\n                ‣ Assimilated:    No (clearance code: null) [WIP]\n                ‣ Operating mode: automatic",
+        "[tick 1][log] <font color='yellow'>ALERT  </font> <font color='gray'>1</font> Creating harvest directive at <a href=\"#!/room/shard0/W1N1\">[W1N1, 15, 15]</a>!",
+        "[tick 1][log] <font color='red'>ERROR  </font> <font color='gray'>1</font> Could not find colony match for harvest:9e1995 in W1N1!Try setting memory.maxPathLength and memory.maxLinearRange.",
+        "[tick 1][log] <font color='yellow'>ALERT  </font> <font color='gray'>1</font> Could not get colony for directive <a href=\"#!/room/shard0/W1N1\">[harvest:9e1995]</a>; exceptions present this tick, so won't remove",
+        "[tick 1][log] <font color='orange'>WARNING</font> <font color='gray'>1</font> Exceptions present this tick! Rebuilding Overmind object in next tick.",
+        "[tick 1][error] Caught unhandled exception instantiating colony W1N1: \nTypeError: Cannot read properties of undefined (reading 'harvest:9e1995')\n    at DirectiveHarvest.create (kk_module/main, <anonymous>:14448:76)\n    at DirectiveHarvest.createIfNotPresent (kk_module/main, <anonymous>:14524:33)\n    at Colony.registerRoomObjects_cached (kk_module/main, <anonymous>:15316:30)\n    at Colony.build (kk_module/main, <anonymous>:15239:14)\n    at new Colony (kk_module/main, <anonymous>:15222:14)\n    at _Overmind.registerColonies (kk_module/main, <anonymous>:24047:4844)\n    at _Overmind.build (kk_module/main, <anonymous>:24047:1597)\n    at main (kk_module/main, <anonymous>:24294:18)\n    at Object.wrap (kk_module/main, <anonymous>:971:16)\n    at Object.loop (kk_module/main, <anonymous>:24308:21)",
+        "[tick 2][log] <font color='yellow'>ALERT  </font> <font color='gray'>2</font> Creating harvest directive at <a href=\"#!/room/shard0/W1N1\">[W1N1, 15, 15]</a>!",
+        "[tick 2][log] <font color='yellow'>ALERT  </font> <font color='gray'>2</font> Upgrade site at <a href=\"#!/room/shard0/W1N1\">[W1N1, 10, 10]</a>: no batteryPos!",
+        "[tick 2][log] <font color='yellow'>ALERT  </font> <font color='gray'>2</font> Creating bootstrap directive at <a href=\"#!/room/shard0/W1N1\">[W1N1, 20, 20]</a>!",
+        "[tick 2][log] Room layout and flag positions have been saved.",
+        "[tick 3][log] <font color='orange'>WARNING</font> <font color='gray'>3</font> Missing flag for directive <a href=\"#!/room/shard0/W1N1\">[harvest:381d6d]</a>! Removing directive."
+      ]
+    },
+    "wasm": {
+      "bot": "compat/fixtures/wasm-bot",
+      "ticks_requested": 10,
+      "ticks_completed": 10,
+      "ticks_terminated": 0,
+      "ticks_skipped_penalty": 0,
+      "ticks_with_console_error": 0,
+      "missing_api": {},
+      "has_probes": {},
+      "stub_calls_top": [],
+      "console_errors_head": [],
+      "console_errors_folded": [
+        [
+          "[log] wasm module loaded: true",
+          1
+        ]
+      ],
+      "console_head": [
+        "[tick 1][log] wasm module loaded: true"
+      ]
+    }
+  },
+  "limitations": [
+    "returned errors only; panic/OOM/process crash/permanent stalls excluded",
+    "no registration or settlement resource budget",
+    "no fault disable policy",
+    "no Mod performance claim",
+    "bot-check exercises player VM only; recovery validated by runtime tests"
+  ],
+  "final_release_rebuild": {
+    "exit_code": 0,
+    "same_sha256_as_compat_and_bots": true
+  }
+}
