@@ -24,11 +24,22 @@ kkscreeps/
 ├── apps/game/              游戏客户端占位包
 ├── packages/               API、编辑器、渲染器与共享类型占位包
 ├── scripts/                维护、依赖准备与基准工具
-├── docs/                   架构、设计、决策与贡献规范
+├── docs/                   架构、设计、决策、计划与研究文档
+│   ├── README.md           文档目录与分工索引
+│   ├── architecture/       模块机制、接口边界与目标架构；未实现的能力明确标注
+│   ├── designs/            玩家行为与功能的设计要求及验收条件
+│   ├── decisions/          ADR 技术决策及取舍理由
+│   ├── plans/              开发批次的拆分与阶段验收
+│   ├── research/           调研、实验与原始证据（含批次交付笔记）
+│   ├── contributing/       注释规范等贡献约定
+│   ├── roadmap.md          里程碑范围与验收目标
+│   └── glossary.md         术语词典
 └── spikes/                 独立实验，不属于 Rust workspace
 ```
 
 各 crate 的源码位于 `src/`，集成测试位于 `tests/`；沙箱资源位于 `crates/kk-runner/assets/`。目录树表示模块职责；详细依赖和数据流见[总体架构](docs/architecture/overall.md)。主流程为：世界投影 → 玩家沙箱执行 → 收集指令 → 规则结算 → 提交候选状态，由 `kk-runtime` 协调。
+
+阅读 `docs/` 时先区分当前实现与目标设计——文档采用某个方案不代表功能已实现；`plans/` 与 `research/` 保留开发过程和原始证据、不追改结论，批次完成后现行机制以 `architecture/` 为准。按问题查找入口的完整索引见 [docs/README.md](docs/README.md)。
 
 ## 构建、测试与开发命令
 
@@ -60,6 +71,6 @@ HTTP 服务和前端开发服务器尚未实现。
 
 ## 提交与 Pull Request 要求
 
-历史提交使用描述性前缀，常见中文批次标签。Git hooks 要求首行采用“前缀：描述”，支持半角或全角冒号；标题最多 350 个 Unicode 码点，前缀最多 48 个。
+历史提交使用描述性前缀，常见中文批次标签。`pnpm install` 通过 `prepare` 脚本安装 Git hooks，配置以 [package.json](package.json) 为准，修改后运行 `pnpm exec simple-git-hooks` 重新安装。`pre-commit` 与 `pre-merge-commit` 检查 Rust 格式，未过时运行 `pnpm run fmt` 修复后重新暂存；`commit-msg` 要求首行采用“前缀：描述”，支持半角或全角冒号，标题最多 350 个 Unicode 码点、前缀最多 48 个，merge/revert/fixup/squash 标题免检。
 
 PR 应说明行为变化、关联问题或设计决策，以及验证命令和结果。修改实现时，同步更新受影响的架构文档和兼容性证据。
