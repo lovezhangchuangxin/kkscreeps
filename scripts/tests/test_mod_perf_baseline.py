@@ -93,11 +93,31 @@ class ModPerfGuardTests(unittest.TestCase):
         del missing["profile"]["read_to_v8"]
         with self.assertRaisesRegex(RuntimeError, "阶段集合"):
             module.validate_report(missing, "chain", 2, 3, 2, 3, profile=True)
-        for version in (3, "2", None, True):
+        for version in (4, "2", None, True):
             bad = copy.deepcopy(report)
             bad["profile_schema_version"] = version
             with self.assertRaisesRegex(RuntimeError, "版本不支持"):
                 module.validate_report(bad, "chain", 2, 3, 2, 3, profile=True)
+
+    def test_v3_requires_both_conversion_phases(self):
+        report = self.report()
+        report['profile_schema_version'] = 3
+        phases = {'slot': 1, 'js_call': 1, 'budget_start': 1, 'budget_finish': 1,
+                  'op_native': 1, 'host_native': 1, 'op_read': 6, 'host_read': 6,
+                  'op_write': 6, 'host_write': 6, 'read_to_v8': 6, 'write_from_v8': 6}
+        report['profile'] = {phase: {'calls': factor * 18, 'errors': 0, 'wall_ns': 1}
+                             for phase,factor in phases.items()}
+        module.validate_report(report, 'chain', 2, 3, 2, 3, profile=True)
+        for phase in ('read_to_v8', 'write_from_v8'):
+            bad = copy.deepcopy(report)
+            del bad['profile'][phase]
+            with self.subTest(missing=phase), self.assertRaisesRegex(RuntimeError, '阶段集合'):
+                module.validate_report(bad, 'chain', 2, 3, 2, 3, profile=True)
+        for key,value in (('calls',0),('calls',108.0),('errors',1),('wall_ns',True)):
+            bad = copy.deepcopy(report)
+            bad['profile']['write_from_v8'][key] = value
+            with self.subTest(key=key,value=value), self.assertRaises(RuntimeError):
+                module.validate_report(bad, 'chain', 2, 3, 2, 3, profile=True)
 
     def test_invalid_timing_numbers_cannot_be_summarized(self):
         for key in ("p50_ms", "p95_ms", "p99_ms"):
@@ -115,6 +135,27 @@ class ModPerfGuardTests(unittest.TestCase):
         report['wall']['p50_ms'] = 2
         with self.assertRaisesRegex(RuntimeError, "有序"):
             self.validate(report)
+
+    def test_summarize_rejects_changed_profile_schema_before_aggregating(self):
+        for original, changed in ((2, 3), (3, 2)):
+            runs = []
+            for mode in module.MODES:
+                for version in (original, changed):
+                    report = self.report()
+                    report.update(scenario="test", mode=mode, profile_schema_version=version)
+                    report["process"].update(rss_bytes_sampled_p50=1, rss_bytes_sampled_peak=1)
+                    report["profile"] = {"read_to_v8": {"wall_ns": 1}}
+                    if version == 3:
+                        report["profile"]["write_from_v8"] = {"wall_ns": 1}
+                    runs.append(report)
+            with self.subTest(original=original), self.assertRaisesRegex(RuntimeError, "诊断版本或阶段集合发生变化"):
+                module.summarize(runs)
+
+    def test_same_schema_version_still_requires_same_phase_set(self):
+        references = {}
+        module.check_profile_identity(references, "chain", {"profile": {"slot": {}}})
+        with self.assertRaisesRegex(RuntimeError, "诊断版本或阶段集合发生变化"):
+            module.check_profile_identity(references, "chain", {"profile": {"slot": {}, "op_write": {}}})
 
 
 if __name__ == "__main__":

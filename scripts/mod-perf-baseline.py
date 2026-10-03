@@ -56,12 +56,14 @@ def validate_report(report, mode, rooms, links, warmup, ticks, profile=False):
         phases = {"slot": 1, "js_call": 1, "budget_start": 1, "budget_finish": 1,
                   "op_native": 1, "host_native": 1, "op_read": 6, "host_read": 6,
                   "op_write": 6, "host_write": 6} if mode == "chain" else {}
-        # 无版本字段的旧报告为 v1；v2 必须报告转换阶段，缺失不能静默通过。
+        # 历史 v1/v2 可继续对照；版本声明的转换阶段缺失不能静默通过。
         version = report.get("profile_schema_version", 1)
-        if type(version) is not int or version not in (1, 2):
+        if type(version) is not int or version not in (1, 2, 3):
             raise RuntimeError("诊断报告版本不支持")
-        if mode == "chain" and version == 2:
+        if mode == "chain" and version >= 2:
             phases["read_to_v8"] = 6
+        if mode == "chain" and version >= 3:
+            phases["write_from_v8"] = 6
         if set(samples) != set(phases):
             raise RuntimeError("诊断阶段集合不符")
         for phase, factor in phases.items():
@@ -85,12 +87,23 @@ def validate_report(report, mode, rooms, links, warmup, ticks, profile=False):
             raise RuntimeError("对象状态摘要无效")
 
 
+def check_profile_identity(references, key, report):
+    samples = report.get("profile")
+    identity = None if samples is None else (
+        report.get("profile_schema_version", 1), tuple(sorted(samples)))
+    if references.setdefault(key, identity) != identity:
+        raise RuntimeError("同一采集组的诊断版本或阶段集合发生变化")
+
+
 def summarize(runs):
     result = {}
     for scenario in dict.fromkeys(run["scenario"] for run in runs):
         result[scenario] = {}
         for mode in MODES:
             selected = [run for run in runs if run["scenario"] == scenario and run["mode"] == mode]
+            profiles = {}
+            for run in selected:
+                check_profile_identity(profiles, mode, run)
             result[scenario][mode] = {
                 **{f"median_wall_{q}_ms": statistics.median(run["wall"][f"{q}_ms"] for run in selected)
                    for q in ("p50", "p95", "p99")},
@@ -130,6 +143,7 @@ def main():
     runs = []
     references = {}
     package_references = {}
+    profile_references = {}
     partial = args.output.with_suffix(".partial.json")
     with tempfile.TemporaryDirectory(prefix="kk-mod-perf-") as temp:
         for repetition in range(args.repetitions):
@@ -154,6 +168,7 @@ def main():
                         raise RuntimeError("测量期间二进制发生变化")
                     report = json.loads(path.read_text())
                     validate_report(report, mode, rooms, links, args.warmup, args.ticks, args.profile)
+                    check_profile_identity(profile_references, mode, report)
                     identity = (report["package_digests"], report["vm_limits"])
                     if package_references.setdefault(mode, identity) != identity:
                         raise RuntimeError("测量期间 Mod 包或预算配置发生变化")

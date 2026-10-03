@@ -62,6 +62,8 @@ fn resource_fault_matrix() -> Result<(), Box<dyn std::error::Error>> {
         "wrap-cpu",
         "after-cpu",
         "center-cpu",
+        "write-getter-cpu",
+        "write-getter-wall",
         "array-heap",
         "external-memory",
         "cumulative",
@@ -121,6 +123,7 @@ fn resource_fault_child() -> Result<(), Box<dyn std::error::Error>> {
         "array-heap" => "export default function register(api){api.handlers.after('builtin:link.tick',{id:'bad'},()=>{globalThis.a=[];while(true){a.push(Array(8192).fill(Math.random()));}})}".into(),
         "external-memory" => "export default function register(api){api.handlers.after('builtin:link.tick',{id:'bad'},()=>{globalThis.a=new ArrayBuffer(48*1024*1024);})}".into(),
         "cumulative" => "export default function register(api){api.handlers.after('builtin:link.tick',{id:'bad'},()=>{let n=0;for(let i=0;i<2000;i++)n+=Math.sqrt(i);globalThis.n=n;})}".into(),
+        "write-getter-cpu" | "write-getter-wall" => "export default function register(api){api.handlers.before('builtin:link.tick',{id:'bad'},ctx=>{ctx.state={get value(){while(true){}}};})}".into(),
         other => {
             let kind = match other { "before-cpu" => "before", "wrap-cpu" => "wrap", "after-cpu" => "after", _ => "replace" };
             format!("export default function register(api){{api.handlers.{kind}('builtin:link.tick',{{id:'bad'}},()=>{{while(true){{}}}})}}")
@@ -134,6 +137,10 @@ fn resource_fault_child() -> Result<(), Box<dyn std::error::Error>> {
     }
     limits.settlement.cpu = Duration::from_millis(10);
     limits.settlement.wall = Duration::from_secs(2);
+    if case == "write-getter-wall" {
+        limits.settlement.cpu = Duration::from_secs(2);
+        limits.settlement.wall = Duration::from_millis(30);
+    }
     if case.starts_with("module-wall") || case == "microtasks" {
         limits.registration.cpu = Duration::from_secs(2);
         limits.registration.wall = Duration::from_millis(30);

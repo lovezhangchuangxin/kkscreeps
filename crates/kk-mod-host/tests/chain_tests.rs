@@ -189,35 +189,38 @@ fn excessive_wrap_depth_is_rejected_during_registration() {
 #[test]
 fn write_getter_boundaries_are_safe_and_conversion_faults_are_sticky() {
     use std::time::{Duration, Instant};
-    for case in [
-        "nested-read",
-        "nested-write",
-        "nested-fault",
-        "conversion-fault",
-        "invalid-binding",
-    ] {
-        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
-            .args(["--exact", "write_getter_child", "--ignored", "--nocapture"])
-            .env("KK_CHAIN_GETTER_CASE", case)
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()
-            .unwrap();
-        let started = Instant::now();
-        while child.try_wait().unwrap().is_none() {
-            if started.elapsed() > Duration::from_secs(10) {
-                child.kill().unwrap();
-                panic!("{case} 超过外层期限");
+    for profile in [false, true] {
+        for case in [
+            "nested-read",
+            "nested-write",
+            "nested-fault",
+            "conversion-fault",
+            "invalid-binding",
+        ] {
+            let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "write_getter_child", "--ignored", "--nocapture"])
+                .env("KK_CHAIN_GETTER_CASE", case)
+                .env("KK_CHAIN_GETTER_PROFILE", if profile { "1" } else { "0" })
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .unwrap();
+            let started = Instant::now();
+            while child.try_wait().unwrap().is_none() {
+                if started.elapsed() > Duration::from_secs(10) {
+                    child.kill().unwrap();
+                    panic!("{case} 超过外层期限");
+                }
+                std::thread::sleep(Duration::from_millis(5));
             }
-            std::thread::sleep(Duration::from_millis(5));
+            let output = child.wait_with_output().unwrap();
+            assert!(
+                output.status.success(),
+                "{case}, profile={profile}: {} {}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
         }
-        let output = child.wait_with_output().unwrap();
-        assert!(
-            output.status.success(),
-            "{case}: {} {}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
     }
 }
 
@@ -225,6 +228,8 @@ fn write_getter_boundaries_are_safe_and_conversion_faults_are_sticky() {
 #[ignore = "只由带外层期限的父测试启动"]
 fn write_getter_child() {
     let case = std::env::var("KK_CHAIN_GETTER_CASE").unwrap();
+    let profile = std::env::var("KK_CHAIN_GETTER_PROFILE").is_ok_and(|value| value == "1");
+    let profiler = ChainProfiler::default();
     let (code, failed) = match case.as_str() {
         "nested-read" => (
             "const value={get state(){const state=Deno.core.ops.op_mod_chain_read('1','test:handler.audit').state;if(state.probe!==42)throw Error('嵌套读取丢失');return state;}}; Deno.core.ops.op_mod_chain_write('1','test:handler.audit',value);",
@@ -248,11 +253,17 @@ fn write_getter_child() {
         ),
         _ => panic!("未知 case"),
     };
-    let mut realm = realm(&format!(
-        "globalThis.afterCalls=0;globalThis.getterCalls=0;
+    let mut realm = realm_with_options(
+        &format!(
+            "globalThis.afterCalls=0;globalThis.getterCalls=0;
          api.handlers.before('builtin:link.tick',{{id:'audit'}},ctx=>{{{code}}});
          api.handlers.after('builtin:link.tick',{{id:'after'}},ctx=>{{globalThis.afterCalls++;}});"
-    ))
+        ),
+        RegisterOptions {
+            profiler: profile.then(|| profiler.clone()),
+            ..Default::default()
+        },
+    )
     .unwrap();
     let state = Rc::new(RefCell::new(json!({"probe":42})));
     let result = realm.invoke_chain("builtin:link.tick", Box::new(Host(state.clone())));
@@ -267,4 +278,26 @@ fn write_getter_child() {
         json!(0)
     );
     assert_eq!(state.borrow().get("native").is_some(), !failed);
+    let samples = profiler.snapshot();
+    if profile {
+        let expected = match case.as_str() {
+            "nested-read" => 3,
+            "nested-write" => 4,
+            "invalid-binding" => 0,
+            _ => 1,
+        };
+        assert_eq!(
+            samples
+                .get("write_from_v8")
+                .map_or(0, |sample| sample.calls),
+            expected
+        );
+        assert_eq!(samples["op_write"].errors, if failed { 2 } else { 0 });
+        assert_eq!(
+            samples.get("host_write").map_or(0, |sample| sample.calls),
+            if failed { 0 } else { expected }
+        );
+    } else {
+        assert!(samples.is_empty());
+    }
 }

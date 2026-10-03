@@ -25,6 +25,7 @@ hashes = {name: hashlib.sha256(path.read_bytes()).hexdigest() for name,path in b
 runs=[]
 reference=None
 identities={}
+profile_identities={}
 out=args.output
 
 def require(condition, message):
@@ -49,6 +50,8 @@ with tempfile.TemporaryDirectory(prefix='kk-mod-attribution-') as tmp:
             require(hashlib.sha256(binary.read_bytes()).hexdigest()==hashes[version], '二进制发生变化')
             report=json.loads(report_path.read_text())
             guard.validate_report(report,mode,1,400,100,500,profile)
+            # 允许两端诊断版本不同，同一端的重复采集须保持阶段口径。
+            guard.check_profile_identity(profile_identities,(version,profile,mode),report)
             states={k:v['link_state_sha256'] for k,v in report['checks'].items()}
             if reference is None: reference=states
             require(reference==states, '对象状态不等价')

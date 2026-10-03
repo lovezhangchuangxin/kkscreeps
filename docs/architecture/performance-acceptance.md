@@ -59,7 +59,9 @@ python3 scripts/mod-perf-baseline.py --profile --scenarios 400 --warmup 100 --ti
 
 op 计时来自 deno_core 的 dispatch/completed/error 事件，包含参数/返回转换与 host 方法；host 计时包含候选访问、字段解析/校验与 namespace 写回。JS 调用包含 op，整槽包含 JS 和预算，不能将所有阶段相加；op 与 host 的差值仍包含绑定检查、包装和插桩开销，不能解释为纯 JSON 成本。op 的 errors 来自错误事件，其他阶段只记录次数与耗时。getter 引发嵌套 op 时，op 耗时同样为包含耗时。
 
-诊断报告 v2 增加 `read_to_v8`，围住读取封套的真实 serde 序列化调用；它包含在 op_read 内，与 host_read 分开。CLI 开启诊断时声明 `profile_schema_version: 2`；报告门要求六次读取对应六次转换，缺失或计数不符即失败。没有版本字段的历史报告按 v1 校验原阶段集合，支持旧二进制前后对照；未知版本拒绝。默认关闭时版本与 profile 均为 null。
+诊断报告 v2 增加 `read_to_v8`，围住读取封套的真实 serde 序列化调用；v3 增加 `write_from_v8`，围住真实载荷反序列化，与 TryCatch 创建/销毁和错误文本格式化分开。两者分别包含在 op_read/op_write 内，与 host_read/host_write 分开；write_from_v8 包含 getter 执行及其嵌套 op，不能称为纯数据转换耗时。转换失败的尝试也计时，故障数仍由 op errors 记录。
+
+CLI 开启诊断时声明 `profile_schema_version: 3`；报告门要求完整链每槽六读六写对应各六次转换，缺失或计数不符即失败。没有版本字段的历史报告按 v1 校验原阶段集合，v2 要求读转换、v3 要求读写转换，支持旧二进制前后对照；未知版本拒绝。默认关闭时版本与 profile 均为 null。
 
 开启诊断会增加计时和 op 包装开销，诊断结果与无插桩基线分开汇总。报告门校验各阶段的准确调用次数、错误数与预热排除；无插桩采集拒绝诊断报告。
 
@@ -71,7 +73,9 @@ op 计时来自 deno_core 的 dispatch/completed/error 事件，包含参数/返
 
 固定读取封套与直接转换计时见 [类型化封套记录](../research/notes/mod-context-envelope-2026-10-03.md)。
 
-前后对照探针按模式核验包与预算身份：native、empty、chain 各自跨二进制版本和重复轮次保持一致。不同模式之间允许使用不同包；相同对象终态不能替代该身份校验。发现变化即拒绝成功汇总，保留此前的 partial 记录。
+写入转换直接计时、getter 资源边界与后续采集见 [写入转换记录](../research/notes/mod-write-conversion-2026-10-03.md)。
+
+前后对照探针按模式核验包与预算身份：native、empty、chain 各自跨二进制版本和重复轮次保持一致。不同模式之间允许使用不同包；相同对象终态不能替代该身份校验。发现变化即拒绝成功汇总，保留此前的 partial 记录。同一二进制、模式和诊断开关的重复报告还须保持诊断版本与阶段集合一致；两端二进制允许版本不同，不能将同一端的新增阶段按首份报告静默省略。
 
 ## 本地共同负载对照
 

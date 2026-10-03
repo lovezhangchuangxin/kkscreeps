@@ -193,16 +193,21 @@ pub(crate) fn op_mod_chain_write<'s, 'i>(
     #[string] binding: String,
     context: v8::Local<'s, v8::Value>,
 ) -> Result<(), JsErrorBox> {
-    {
+    let profiler = {
         let mut state = state.borrow_mut();
-        active(&mut state, &token)?.checked_binding(&binding)?;
-    }
+        let chain = active(&mut state, &token)?;
+        chain.checked_binding(&binding)?;
+        chain.profiler.clone()
+    };
     // from_v8 可执行 getter 并嵌套 op；转换期间不得持有 OpState/候选借用。
     // 捕获 V8 异常，只格式化 serde 错误，不执行异常对象的属性或堆栈钩子。
     let context = {
         v8::tc_scope!(let tc, scope);
-        deno_core::serde_v8::from_v8::<Value>(tc, context)
-            .map_err(|error| format!("处理器 {binding}: 上下文转换失败: {error}"))
+        let result = {
+            let _timer = profiler.as_ref().map(|p| p.measure("write_from_v8"));
+            deno_core::serde_v8::from_v8::<Value>(tc, context)
+        };
+        result.map_err(|error| format!("处理器 {binding}: 上下文转换失败: {error}"))
     };
     let mut state = state.borrow_mut();
     let chain = active(&mut state, &token)?;
