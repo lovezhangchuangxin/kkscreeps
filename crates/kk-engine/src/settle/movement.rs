@@ -377,6 +377,9 @@ pub fn type_name_of(obj: &RoomObject) -> std::borrow::Cow<'static, str> {
         RoomObject::Ruin(_) => "ruin".into(),
         RoomObject::Mineral(_) => "mineral".into(),
         RoomObject::Extractor(_) => "extractor".into(),
+        // Mod 对象不参与既有结构规则（阻挡/寻路/耐久尚未声明能力面），
+        // 类型名空串使其与未识别结构同样对待。
+        RoomObject::Mod(_) => "".into(),
     }
 }
 

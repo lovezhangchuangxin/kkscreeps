@@ -12,6 +12,8 @@ use kk_world::{ObjId, World};
 use serde_json::Value;
 
 // 集成测试根（crate root）的 mod 声明解析到 tests/ 平级，故显式 #[path]
+#[path = "settle_tests/c3_ext_intent_family.rs"]
+mod c3_ext_intent_family;
 #[path = "settle_tests/combat_heal.rs"]
 mod combat_heal;
 #[path = "settle_tests/combat_ranged.rs"]
@@ -319,6 +321,7 @@ impl Fixture {
                 links: kk_world::place::builtin_link_rules(),
                 contrib: &kk_engine::settle::contrib::ContributionDispatch::default(),
                 extensions: &kk_mod_api::extension::ExtensionCatalog::default(),
+                plan: &kk_engine::settle::builtin_plan(),
             },
         )
         .unwrap();
@@ -362,6 +365,7 @@ impl Fixture {
                 links,
                 contrib: dispatch,
                 extensions: &extensions,
+                plan: &kk_engine::settle::builtin_plan(),
             },
         );
     }

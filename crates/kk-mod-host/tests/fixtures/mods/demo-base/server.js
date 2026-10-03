@@ -18,7 +18,10 @@ export default function register(api) {
     scope: 'object',
     target: widget,
     args: { type: 'record', fields: { amount: { type: 'i32', min: 1, max: 100 } } },
-    process() {},
+    process(ctx) {
+      const fields = ctx.target.fields;
+      fields.charge = (fields.charge || 0) + ctx.args.amount;
+    },
   });
   api.handlers.after('demo-base:recharge.slot', { id: 'recharge-audit' }, function audit() {});
   api.rules.define('demo-base:recharge.ceiling', {

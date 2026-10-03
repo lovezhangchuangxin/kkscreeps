@@ -45,6 +45,11 @@ impl World {
                 if !object_exported_for(Some(user), room_visible, object) {
                     continue;
                 }
+                // Mod 对象不进玩家投影（与 world_json_impl 同口径）；查询
+                // 快照走 object_snapshot 的专用读面。
+                if matches!(object, RoomObject::Mod(_)) {
+                    continue;
+                }
                 let record = object_json(name, *id, object, self.time, &state.terrain, rcl);
                 let mut kkpv_object = record_to_kkpv(*id, object, &record)?;
                 // 扩展目录只按 structureType 登记；非结构类型无 ext 键，

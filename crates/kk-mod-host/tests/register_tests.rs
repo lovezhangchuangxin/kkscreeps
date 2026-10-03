@@ -1240,3 +1240,88 @@ export default function register(api) {
     let _ = std::fs::remove_dir_all(&root);
     Ok(())
 }
+
+/// 动作处理链的 target 往返：ctx.target.fields 原地改写后随结果返回；
+/// 未触碰（undefined）与显式 null 都归一为 null（不改动）。
+#[test]
+fn invoke_target_fields_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+    let root = temp_root("invoke-target");
+    write_pkg(
+        &root,
+        "bump",
+        &[(
+            "server.js",
+            r#"
+import { createApi } from '@kkscreeps/mod';
+export default function register(api) {
+  const thing = api.objects.define('bump:thing', {
+    version: 1,
+    playerClass: 'Thing',
+    ownerField: 'owner',
+    positionFields: ['x', 'y'],
+    fields: {
+      owner: { type: 'string', maxBytes: 128, nullable: true },
+      x: { type: 'u32', min: 0, max: 49 },
+      y: { type: 'u32', min: 0, max: 49 },
+      value: { type: 'i32', default: 0, visibility: 'public' },
+    },
+  });
+  api.intents.define('bump:bump', {
+    scope: 'object',
+    target: thing,
+    args: { type: 'record', fields: { amount: { type: 'i32', min: 1, max: 10 } } },
+    process(ctx) {
+      ctx.target.fields.value += ctx.args.amount;
+      ctx.state = { bumps: (ctx.state && ctx.state.bumps || 0) + 1 };
+    },
+  });
+}
+"#,
+        )],
+    );
+    let packages = discover_packages(&root).expect("可装载");
+    let mut realm = ModRealm::new().expect("realm 可创建");
+    realm
+        .register(&packages, RegisterOptions::default())
+        .expect("可注册");
+    let ctx = json!({
+        "tick": 3,
+        "room": "W1N1",
+        "state": null,
+        "target": { "id": "kk0000000000000011", "fields": {
+            "owner": "p1", "x": 10, "y": 12, "value": 5
+        } },
+        "args": { "amount": 4 },
+    });
+    let out = realm
+        .invoke("bump:bump.process", ctx)
+        .expect("动作处理可调用");
+    assert_eq!(
+        out["target"]["value"],
+        serde_json::json!(9),
+        "target 改写随结果返回"
+    );
+    assert_eq!(
+        out["target"]["owner"],
+        serde_json::json!("p1"),
+        "未触碰字段保持"
+    );
+    assert_eq!(out["state"]["bumps"], serde_json::json!(1));
+    // 无 target 的处理器（link 槽桥形态）：target 归一 null。
+    let out = realm.invoke(
+        "bump:bump.process",
+        json!({ "tick": 4, "room": "W1N1", "state": null,
+                "target": { "id": "kk0000000000000011", "fields": { "owner": "p1", "x": 10, "y": 12, "value": 1 } },
+                "args": { "amount": 0 } }),
+    );
+    // amount 0 低于 schema 下限不影响 dispatch 层——参数校验属宿主结算侧。
+    assert!(out.is_ok(), "dispatch 不做参数校验：{:?}", out.err());
+    let out = out.unwrap();
+    assert_eq!(
+        out["target"]["value"],
+        serde_json::json!(1),
+        "amount 0 仍执行加法"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+    Ok(())
+}

@@ -7,10 +7,11 @@
 //! 处理器键与实现由装配调用方提供；native 键固定指向内建实现。
 //! 本执行器不捕获 panic，也不提供跨线程共享；候选仍由引擎统一回滚。
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use kk_mod_api::{ContributionPlan, Dispatch, Key};
 use kk_world::ObjId;
+use serde_json::Value;
 
 use super::Working;
 use crate::intent::IntentData;
@@ -68,6 +69,9 @@ type ActionWrap =
     Box<dyn Fn(&mut Working, ObjId, &IntentData, &mut Next<'_>) -> Result<(), String>>;
 type TickSimple = Box<dyn Fn(&mut Working, ObjId) -> Result<(), String>>;
 type TickWrap = Box<dyn Fn(&mut Working, ObjId, &mut TickNext<'_>) -> Result<(), String>>;
+/// 扩展意图槽的处理器签名：args 为按计划 schema 校验后的原始 JSON，
+/// 目标对象读写由实现方经 Working 完成。
+pub type ExtSimple = Box<dyn Fn(&mut Working, ObjId, &Value) -> Result<(), String>>;
 
 /// 调用方安装的自定义处理器；变体须与描述声明的 kind 一致，错配在装配时拒绝。
 pub enum ActionHandler {
@@ -92,6 +96,59 @@ enum ActionCenter {
 enum TickCenter {
     Native(fn(&mut Working, ObjId)),
     Custom(TickSimple),
+}
+
+/// Mod 自有槽贡献处理器的安装形态；变体须与描述声明的 kind 一致。
+pub enum ExtHandler {
+    Before(ExtSimple),
+    Wrap(ExtSimple),
+    Replace(ExtSimple),
+    After(ExtSimple),
+}
+
+impl ExtHandler {
+    fn label(&self) -> &'static str {
+        match self {
+            ExtHandler::Before(_) => "before",
+            ExtHandler::Wrap(_) => "wrap",
+            ExtHandler::Replace(_) => "replace",
+            ExtHandler::After(_) => "after",
+        }
+    }
+}
+
+/// 扩展意图槽的已装配执行计划。中心恒为可执行实现：动作处理桥
+/// （描述符的 native 形态）或 replace 处理器。
+enum ExtSlot {
+    Process(ExtSimple),
+    Chained {
+        before: Vec<ExtSimple>,
+        center: ExtSimple,
+        /// 冻结时已按依赖逆序；执行器顺序调用，不再次反转。
+        after: Vec<ExtSimple>,
+    },
+}
+
+impl ExtSlot {
+    fn run(&self, w: &mut Working, id: ObjId, args: &Value) -> Result<(), String> {
+        match self {
+            ExtSlot::Process(f) => f(w, id, args),
+            ExtSlot::Chained {
+                before,
+                center,
+                after,
+            } => {
+                for f in before {
+                    f(w, id, args)?;
+                }
+                center(w, id, args)?;
+                for f in after {
+                    f(w, id, args)?;
+                }
+                Ok(())
+            }
+        }
+    }
 }
 
 /// 一个槽的已装配执行计划。
@@ -121,6 +178,8 @@ enum TickSlot {
 pub struct ContributionDispatch {
     transfer: ActionSlot,
     tick: TickSlot,
+    /// Mod 自有槽（按槽键查）；扩展意图结算在此派发。
+    ext: BTreeMap<Key, ExtSlot>,
 }
 
 impl Default for ContributionDispatch {
@@ -128,9 +187,14 @@ impl Default for ContributionDispatch {
         Self {
             transfer: ActionSlot::Native(super::structures::link_transfer),
             tick: TickSlot::Native(super::economy::link_cooldown_tick),
+            ext: BTreeMap::new(),
         }
     }
 }
+
+/// link 两槽的既有键；装配扩展槽时跳过（它们由 Rust native 执行器消费）。
+/// 宿主桥装配（kk-runtime）复用同一常量，两侧槽清单不得漂移。
+pub const LINK_SLOT_KEYS: [&str; 2] = ["builtin:link.transfer", "builtin:link.tick"];
 
 impl ContributionDispatch {
     /// 按冻结计划装配执行链。native 键固定指向内建实现；
@@ -140,6 +204,26 @@ impl ContributionDispatch {
         plan: &ContributionPlan,
         action_handlers: BTreeMap<Key, ActionHandler>,
         tick_handlers: BTreeMap<Key, TickHandler>,
+    ) -> Result<Self, String> {
+        Self::assemble_with_ext(
+            plan,
+            action_handlers,
+            tick_handlers,
+            BTreeMap::new(),
+            BTreeMap::new(),
+        )
+    }
+
+    /// [`Self::assemble`] 的完整形态：`ext_handlers` 是 Mod 自有槽上的
+    /// before/wrap/replace/after 贡献处理器，`ext_processes` 是各槽中心
+    /// 的动作处理实现（键为槽的 native 绑定，通常是 `{intent}.process`）。
+    /// wrap 在扩展槽同样不支持执行装配，非空即拒。
+    pub fn assemble_with_ext(
+        plan: &ContributionPlan,
+        action_handlers: BTreeMap<Key, ActionHandler>,
+        tick_handlers: BTreeMap<Key, TickHandler>,
+        ext_handlers: BTreeMap<Key, ExtHandler>,
+        ext_processes: BTreeMap<Key, ExtSimple>,
     ) -> Result<Self, String> {
         let transfer = assemble_action(
             plan,
@@ -153,7 +237,12 @@ impl ContributionDispatch {
             "builtin:link.tick.native",
             tick_handlers,
         )?;
-        Ok(Self { transfer, tick })
+        let ext = assemble_ext_slots(plan, ext_handlers, ext_processes)?;
+        Ok(Self {
+            transfer,
+            tick,
+            ext,
+        })
     }
 
     pub(crate) fn run_transfer(
@@ -168,6 +257,142 @@ impl ContributionDispatch {
     pub(crate) fn run_tick(&self, w: &mut Working, id: ObjId) -> Result<(), String> {
         self.tick.run(w, id)
     }
+
+    /// 执行一个 Mod 自有槽的处理链。槽未装配说明计划与执行表不一致，
+    /// 属装配期错误，按失败处理而不是跳过。
+    pub(crate) fn run_ext(
+        &self,
+        slot: &Key,
+        w: &mut Working,
+        id: ObjId,
+        args: &Value,
+    ) -> Result<(), String> {
+        let chain = self
+            .ext
+            .get(slot)
+            .ok_or_else(|| format!("扩展意图槽 {slot} 没有已装配的执行器（计划与执行表不一致）"))?;
+        chain.run(w, id, args)
+    }
+}
+
+/// 装配计划中全部非 link 槽的扩展执行链。每个槽的中心取其
+/// native 绑定的动作处理实现；贡献处理器按冻结链位接入。
+/// 冻结后的 SlotPlan 不保留 native 绑定：Native 分派的绑定即中心，
+/// Chained 的中心在未被 replace 占位时等于 native 绑定。
+fn assemble_ext_slots(
+    plan: &ContributionPlan,
+    mut handlers: BTreeMap<Key, ExtHandler>,
+    mut processes: BTreeMap<Key, ExtSimple>,
+) -> Result<BTreeMap<Key, ExtSlot>, String> {
+    let mut result = BTreeMap::new();
+    for slot in plan.slots() {
+        if LINK_SLOT_KEYS.contains(&slot.key.as_str()) {
+            continue;
+        }
+        match &slot.dispatch {
+            Dispatch::Native(binding) => {
+                let center = processes
+                    .remove(binding)
+                    .ok_or_else(|| missing(&slot.key.to_string(), binding, "动作处理"))?;
+                result.insert(slot.key.clone(), ExtSlot::Process(center));
+            }
+            Dispatch::Chained {
+                before,
+                wraps,
+                center,
+                after,
+            } => {
+                if !wraps.is_empty() {
+                    return Err(format!(
+                        "槽 {} 的 wrap 处理器不支持执行装配（拒绝而不是静默截断链）",
+                        slot.key
+                    ));
+                }
+                let slot_label = slot.key.to_string();
+                let mut before_fns = Vec::new();
+                for binding in before {
+                    match handlers.remove(binding) {
+                        Some(ExtHandler::Before(f)) => before_fns.push(f),
+                        Some(other) => {
+                            return Err(kind_mismatch(binding, "before", other.label()));
+                        }
+                        None => return Err(missing(&slot_label, binding, "before")),
+                    }
+                }
+                let after_fns = take_after(&slot_label, after, &mut handlers)?;
+                let center_fn = match handlers.remove(center) {
+                    Some(ExtHandler::Replace(f)) => f,
+                    Some(other) => {
+                        return Err(kind_mismatch(center, "replace", other.label()));
+                    }
+                    None => processes
+                        .remove(center)
+                        .ok_or_else(|| missing(&slot_label, center, "replace/动作处理"))?,
+                };
+                result.insert(
+                    slot.key.clone(),
+                    ExtSlot::Chained {
+                        before: before_fns,
+                        center: center_fn,
+                        after: after_fns,
+                    },
+                );
+            }
+        }
+    }
+    // 计划未引用的键是装配调用方的键名错误；静默丢弃会掩盖它。
+    if let Some(binding) = handlers.keys().next() {
+        return Err(format!("装配提供了计划未引用的扩展处理器 {binding}"));
+    }
+    // 动作处理实现的残余只有一种合法形态：意图自身的 process 中心被
+    // Replace 处理器占位（声明绑定仍要求安装、执行不再经它）。按此推导
+    // 允许集，其余残余（含挂在字段/声明性绑定键上的杂项实现）一律拒绝。
+    let mut replaced_processes = BTreeSet::new();
+    for intent in plan.intents() {
+        if intent.key.namespace() == "builtin" {
+            continue; // builtin 意图的派生键不构成合法残余
+        }
+        let Ok(own) = Key::new(format!("{}.process", intent.key)) else {
+            continue;
+        };
+        let Some(handle) = plan.resolve_slot(&intent.slot) else {
+            continue;
+        };
+        let Some(slot) = plan.get_slot(handle) else {
+            continue;
+        };
+        let center = match &slot.dispatch {
+            Dispatch::Native(binding) => binding,
+            Dispatch::Chained { center, .. } => center,
+        };
+        if center != &own {
+            replaced_processes.insert(own);
+        }
+    }
+    for binding in processes.keys() {
+        if !replaced_processes.contains(binding) {
+            return Err(format!(
+                "装配提供了未被任何入口消费的动作处理实现 {binding}（键名错误或挂错通道）"
+            ));
+        }
+    }
+    Ok(result)
+}
+
+fn take_after(
+    slot: &str,
+    after: &[Key],
+    handlers: &mut BTreeMap<Key, ExtHandler>,
+) -> Result<Vec<ExtSimple>, String> {
+    let mut after_fns = Vec::new();
+    for binding in after {
+        match handlers.remove(binding) {
+            Some(ExtHandler::After(f)) => after_fns.push(f),
+            Some(other) => return Err(kind_mismatch(binding, "after", other.label())),
+            None => return Err(missing(slot, binding, "after")),
+        }
+    }
+    Ok(after_fns)
 }
 
 fn key(value: &str) -> Key {

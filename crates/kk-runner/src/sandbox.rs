@@ -93,6 +93,9 @@ pub struct SandboxConfig {
     /// 宿主按有效规则覆盖的玩家全局常量；默认为空，保持嵌入资产原值。
     /// 键须是常量表已有的名字，覆盖发生在平铺到 globalThis 之前。
     pub constant_overrides: std::collections::BTreeMap<String, serde_json::Value>,
+    /// 是否装配扩展意图的玩家面原语（`__kkEmitExtensionIntent`）。
+    /// 只有分片计划含 Mod 意图时置 true；vanilla 分片的全局面不变。
+    pub extension_intents: bool,
 }
 
 impl Default for SandboxConfig {
@@ -104,6 +107,7 @@ impl Default for SandboxConfig {
             max_per_tick: MAX_PER_TICK,
             initial_bucket: BUCKET_CAP,
             constant_overrides: std::collections::BTreeMap::new(),
+            extension_intents: false,
         }
     }
 }
@@ -203,6 +207,13 @@ impl Sandbox {
             runtime.execute_script("kk-constants", constants_script(&config.constant_overrides))?;
             for (name, src) in PRELUDE_SEGMENTS {
                 runtime.execute_script(name, src.to_string())?;
+            }
+            // 条件段在 __kkp 删除前执行（原语需要闭包捕获 gw.intents）。
+            if config.extension_intents {
+                runtime.execute_script(
+                    "kk-prelude-40-ext-intents",
+                    include_str!("prelude/40_ext_intents.js").to_string(),
+                )?;
             }
             let host = HostFns::capture(&mut runtime)?;
             runtime.execute_script("kk-host-unlink", "delete globalThis.__kkp".to_string())?;
@@ -634,7 +645,16 @@ impl Sandbox {
                             inner
                                 .iter()
                                 .filter(|(k, _)| !free.contains(&k.as_str()))
-                                .map(|(_, v)| v.as_array().map_or(1, Vec::len))
+                                .map(|(k, v)| {
+                                    // 扩展意图（冒号键）按"每键一次"计：载荷可为
+                                    // 数组（nullable schema 下的合法形态），不能沿用
+                                    // room/global 数组通道的逐元素计数。
+                                    if k.contains(':') {
+                                        1
+                                    } else {
+                                        v.as_array().map_or(1, Vec::len)
+                                    }
+                                })
                                 .sum::<usize>()
                         })
                         .unwrap_or(0),

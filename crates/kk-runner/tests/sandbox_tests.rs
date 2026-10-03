@@ -34,6 +34,7 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     console_capture()?;
     stub_game_projection()?;
     intent_channel_prelude_forms_impl()?;
+    ext_intent_primitive_impl()?;
     hostile_probes_impl()?;
     move_misc_family_prelude_forms_impl()?;
     run_expr_channel()?;

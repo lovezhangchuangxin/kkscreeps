@@ -175,8 +175,8 @@ export default function register(api) {
     Ok(())
 }
 
-/// 装配失败（动作处理绑定没有执行器）时分片按 vanilla 建立：引擎保持
-/// 默认计划、Mod 面不可用——与 create_shard 的“后续失败不恢复旧分片”
+/// 装配失败（房间域动作的执行通道未接线）时分片按 vanilla 建立：引擎
+/// 保持默认计划、Mod 面不可用——与 create_shard 的“后续失败不恢复旧分片”
 /// 语义一致，且 vanilla tick 仍可推进。
 pub(super) fn c_mod_settle_registration_failure_impl() -> anyhow::Result<()> {
     let root = write_mod_root(
@@ -194,12 +194,12 @@ export default function register(api) {
     let rejection = e.create_shard_with_mods(&spec(), &packages, RegisterOptions::default());
     assert!(
         rejection.is_err(),
-        "动作处理绑定没有执行器，装配必须显式拒绝"
+        "房间域动作的执行通道未接线，装配必须显式拒绝"
     );
     let message = rejection.unwrap_err().to_string();
     assert!(
-        message.contains("settle-mod:boom.process"),
-        "错误应指向未接线的绑定，实得 {message}"
+        message.contains("settle-mod:boom") && message.contains("房间"),
+        "错误应指向动作键与未接线的作用域，实得 {message}"
     );
     e.tick(1)?;
     assert_eq!(e.get_game_time(), 1, "装配失败的 vanilla 分片仍可运行");

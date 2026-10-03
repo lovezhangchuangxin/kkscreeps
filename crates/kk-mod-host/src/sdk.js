@@ -186,8 +186,11 @@ export function seal() {
   return Array.from(bindings.keys());
 }
 
-// 结算期派发：宿主以绑定键调用处理器，ctx 携带 tick/room/state。
+// 结算期派发：宿主以绑定键调用处理器，ctx 携带 tick/room/state/target/args。
 // 处理器同步执行；ctx.state 的终值（含 null=清空）随结果整值写回候选。
+// ctx.target.fields 是目标对象的完整字段（对象域动作处理链专用）；
+// 处理器原地改写后其终值随结果返回——undefined/null 表示不改动，
+// 对象值由宿主按类型描述符校验后整值写入。其余对象读写通道未开放。
 // 处理器的持久状态只准走 ctx.state——模块全局不随失败候选回滚，
 // 用它做累计会破坏同输入重试的确定性。
 export function dispatch(key, ctx) {
@@ -198,5 +201,13 @@ export function dispatch(key, ctx) {
   if (result !== undefined && result !== null && typeof result.then === 'function') {
     throw new Error(`绑定 ${JSON.stringify(key)} 的处理器返回了 Promise（结算回调必须同步完成）`);
   }
-  return { state: ctx.state === undefined ? null : ctx.state, result: result === undefined ? null : result };
+  const target =
+    ctx.target === undefined || ctx.target.fields === undefined
+      ? null
+      : ctx.target.fields;
+  return {
+    state: ctx.state === undefined ? null : ctx.state,
+    target,
+    result: result === undefined ? null : result,
+  };
 }

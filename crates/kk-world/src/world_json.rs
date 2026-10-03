@@ -112,6 +112,11 @@ impl World {
             rooms.insert(name.clone(), Value::Object(entry));
             let room_visible = visible.contains(name);
             for (id, object) in &state.objects {
+                // Mod 声明类型的对象暂不进入任何 world_json 投影（含内部
+                // 全量形态）；查询快照走 object_snapshot 的专用读面。
+                if matches!(object, RoomObject::Mod(_)) {
+                    continue;
+                }
                 if !object_exported_for(user, room_visible, object) {
                     continue;
                 }
@@ -196,6 +201,11 @@ impl World {
     /// 运行时的 getObject 查询接口使用 object_snapshot_by_id 的快照格式。
     pub fn object_json_by_id(&self, id: crate::world::ObjId) -> Option<Value> {
         let (room, object) = self.get(id)?;
+        // Mod 对象不走本原始记录面（object_json 对它只产防御性空对象，
+        // 尾部还会补造 pos 坐标）；查询走 object_snapshot_by_id 的专用读面。
+        if matches!(object, RoomObject::Mod(_)) {
+            return None;
+        }
         let state = self.rooms.get(room)?;
         let terrain = &state.terrain;
         Some(object_json(
@@ -695,6 +705,10 @@ pub(crate) fn object_json(
             }
             v
         }
+        // Mod 对象不进本投影：对象导出在 world_json_impl 已按类型跳过，
+        // 此臂只服务直接调用 object_json 的查询路径（无 type 键自然不匹配
+        // FIND）。玩家可见投影随投影扩展批次另行设计。
+        RoomObject::Mod(_) => json!({}),
     };
     // pos 供使用原始 JSON 的调用方读取；快照模块另行构造查询格式。
     if let Some(obj) = v.as_object_mut() {

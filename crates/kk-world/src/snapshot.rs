@@ -145,6 +145,16 @@ fn snapshot_json(
 ) -> Value {
     let id_str = id.as_str();
     match object {
+        // Mod 对象的诊断/管理读面：字段整体展开。玩家投影与 FIND 尚未
+        // 接入此类型，权限裁切随投影扩展批次设计。
+        RoomObject::Mod(o) => {
+            let fields: Value = serde_json::from_str(&o.data).unwrap_or(json!({}));
+            json!({
+                "kind": "mod", "id": id_str, "typeKey": o.type_key,
+                "pos": snap_pos(room, o.x, o.y),
+                "fields": fields,
+            })
+        }
         RoomObject::Creep(o) => json!({
             "kind": "creep", "id": id_str, "name": o.name,
             "pos": snap_pos(room, o.x, o.y),

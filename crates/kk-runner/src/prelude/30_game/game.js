@@ -1252,6 +1252,16 @@
         __Object.setPrototypeOf(data, null);
         list[id][name] = data;
       },
+      // 扩展意图专用：载荷原样保留（null/原始值都合法——参数 schema 允许
+      // nullable），不做原型剥离。继承的 toJSON 可改写出站载荷——与完整
+      // 性无关（args 本就由玩家全权控制），结构校验在宿主结算侧按冻结
+      // 计划独立进行。计费按键存在性判定（首次发射计 0.2），与宿主侧
+      // "每键一次"同轨，不因载荷为 null/0/false 等假值重复计费。
+      setExt(id, name, data) {
+        list[id] = list[id] || __Object.create(null);
+        if (list[id][name] === undefined) cpu += 0.2;
+        list[id][name] = data;
+      },
       // 全局 intent 通道（官方 runtime.js:78-86 逐字）：list 顶层按动作名
       // 键的数组（非对象 id 路由）；maxLen 上限返 false（Game.notify 20——
       // 每 tick 上限，beginTick 重建 list 即重置）

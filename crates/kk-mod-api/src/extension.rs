@@ -30,6 +30,13 @@ impl ExtensionCatalog {
     pub fn from_plan(plan: &ContributionPlan) -> Result<Self, String> {
         let mut catalog: BTreeMap<Key, BTreeMap<Key, ExtensionField>> = BTreeMap::new();
         for ty in plan.projection().types() {
+            // 扩展目录只承载内建类型的追加字段（`room.extensions` 存储）。
+            // Mod 声明类型的字段——含挂载到 Mod 类型上的字段——整体存放在
+            // 对象 payload 中随类型描述符校验，不进本目录；其默认值由
+            // 创建与处理器写入，不受扩展字段"禁默认值"约束。
+            if ty.descriptor.key.namespace() != "builtin" {
+                continue;
+            }
             for field in &ty.fields {
                 let descriptor = &field.descriptor;
                 // 内建适配字段直接访问权威对象，不进扩展表。

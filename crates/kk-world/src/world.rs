@@ -691,6 +691,49 @@ mod tests {
         ));
     }
 
+    /// Mod 对象随二进制快照往返（新标签编码）：type_key 与字段 payload
+    /// 字节保持，混合对象表内顺序不变；查询快照读面带类型键与字段。
+    #[test]
+    fn snapshot_roundtrip_carries_mod_objects() {
+        let mut world = World::new(42);
+        world.register_room("W1N1", Terrain::plains());
+        world.insert("W1N1", energy(1)).unwrap();
+        let mod_id = world
+            .insert(
+                "W1N1",
+                RoomObject::Mod(kk_schema::room::ModObj {
+                    id: 0,
+                    x: 10,
+                    y: 12,
+                    type_key: "extmod:counter".into(),
+                    data: r#"{"owner":"p1","x":10,"y":12,"value":3}"#.into(),
+                }),
+            )
+            .unwrap();
+        let snap = world
+            .room("W1N1")
+            .unwrap()
+            .encode_snapshot(77, 42, world.next_obj_id());
+        let back = RoomState::decode_snapshot(&snap).unwrap();
+        assert_eq!(back.encode_snapshot(77, 42, world.next_obj_id()), snap);
+        let mod_obj = back
+            .objects
+            .values()
+            .find_map(|o| match o {
+                RoomObject::Mod(m) => Some(m),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(mod_obj.type_key, "extmod:counter");
+        assert_eq!(mod_obj.x, 10);
+        assert!(mod_obj.data.contains("\"value\":3"));
+        world.commit_room("W1N1".into(), back);
+        let snapshot = world.object_snapshot_by_id(mod_id).unwrap();
+        assert_eq!(snapshot["kind"], "mod");
+        assert_eq!(snapshot["typeKey"], "extmod:counter");
+        assert_eq!(snapshot["fields"]["value"], 3);
+    }
+
     #[test]
     fn snapshot_roundtrip_preserves_order_and_ids() {
         let mut world = World::new(42);

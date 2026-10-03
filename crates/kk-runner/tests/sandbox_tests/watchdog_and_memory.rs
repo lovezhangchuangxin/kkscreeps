@@ -798,6 +798,75 @@ pub(super) fn lifo_registry_drains() -> anyhow::Result<()> {
 /// M2A-A2：intentsList 形态（对象id→动作名→参数）、同名覆盖 last-wins、
 /// 覆盖只计一次费、getUsed 含 intents.cpu、软异常照收、硬中断丢弃且整份计费。
 /// （并入串行套件——LIFO 纪律，不得作独立 #[test] 与长套件并行）
+/// 扩展意图玩家面原语：默认沙箱不装配（vanilla 全局面不变）；
+/// 声明装配后记录进 intentsList 的对象容器，同名覆盖 last-wins、
+/// 计费与对象动作同轨，参数原样保留（权威校验在宿主结算侧）。
+pub(super) fn ext_intent_primitive_impl() -> anyhow::Result<()> {
+    // 默认配置：原语不存在（全局面白名单测试另锁完整面）。
+    let mut plain = Sandbox::new(SandboxConfig::default())?;
+    plain.begin_tick(&json!({ "time": 1, "user": "p1", "rooms": {}, "objects": [] }))?;
+    let v = plain.run_expr("typeof __kkEmitExtensionIntent")?;
+    assert_eq!(v["value"], "undefined", "vanilla 沙箱不装配扩展意图原语");
+    drop(plain);
+
+    let cfg = SandboxConfig {
+        extension_intents: true,
+        ..SandboxConfig::default()
+    };
+    let mut sb = Sandbox::new(cfg)?;
+    let w = json!({ "time": 1, "user": "p1", "rooms": {}, "objects": [] });
+    match sb.begin_tick(&w)? {
+        TickPlan::Run { .. } => {
+            // 防篡改：non-writable/non-configurable——赋值静默失败、删除
+            // 失败、描述符不可改写，玩家不能替换原语的实现。
+            let tamper = sb.run_expr(
+                r#"(()=>{
+                const d = Object.getOwnPropertyDescriptor(globalThis, '__kkEmitExtensionIntent');
+                const before = __kkEmitExtensionIntent;
+                globalThis.__kkEmitExtensionIntent = function () { return 'hijacked'; };
+                const afterAssign = __kkEmitExtensionIntent === before;
+                const delOk = delete globalThis.__kkEmitExtensionIntent;
+                const afterDelete = __kkEmitExtensionIntent === before;
+                return [!!d && !d.writable && !d.configurable, afterAssign, delOk, afterDelete];
+            })()"#,
+            )?;
+            assert_eq!(
+                tamper["value"],
+                json!([true, true, false, true]),
+                "原语不可覆写/删除：{:?}",
+                tamper
+            );
+            let v = sb.run_expr(
+                r#"(()=>{
+                const bad = __kkEmitExtensionIntent(3, 'kk1', {}) ||
+                            __kkEmitExtensionIntent('demo:inc', 7, {});
+                const a = __kkEmitExtensionIntent('demo:inc', 'kk1', { amount: 3 });
+                const b = __kkEmitExtensionIntent('demo:inc', 'kk1', { amount: 9 });
+                const c = __kkEmitExtensionIntent('other:act', 'kk2', null);
+                return [bad, a, b, c];
+            })()"#,
+            )?;
+            assert_eq!(v["value"], json!([false, true, true, true]), "发射返回值");
+            let end = sb.end_tick()?;
+            assert_eq!(end["ok"], true);
+            // 两个对象键 × 各一个动作键 = 0.4；同名覆盖只计一次。
+            assert_eq!(end["intentsCpu"], 0.4, "扩展意图与对象动作同轨计费");
+            let intents = sb.take_intents().expect("intentsList 带出");
+            assert_eq!(
+                intents["kk1"]["demo:inc"]["amount"], 9,
+                "同名覆盖 last-wins"
+            );
+            assert_eq!(
+                intents["kk2"]["other:act"],
+                serde_json::Value::Null,
+                "非对象参数原样保留（宿主结算侧按 schema 拒）"
+            );
+        }
+        _ => panic!("应正常执行"),
+    }
+    Ok(())
+}
+
 pub(super) fn intent_channel_prelude_forms_impl() -> anyhow::Result<()> {
     // M2A-A2：intentsList 形态（对象id→动作名→参数）、同名覆盖 last-wins、
     // 覆盖只计一次费、getUsed 含 intents.cpu、软异常照收、硬中断丢弃且整份计费

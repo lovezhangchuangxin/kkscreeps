@@ -373,6 +373,10 @@ pub struct UserIntents {
     pub notify: Vec<NotifyIntent>,
     /// Game.market 的全局列表，由市场阶段按动作类别处理。
     pub market: Vec<MarketIntent>,
+    /// 扩展意图：对象目标按 ObjId 分组，动作键为冻结计划里的意图稳定键；
+    /// 同一对象同一意图后发覆盖先发（合并模式的队列形态尚未接线）。
+    /// args 保留原始 JSON，参数 schema、接收者与所有权由结算侧按计划校验。
+    pub ext: BTreeMap<ObjId, BTreeMap<kk_mod_api::Key, Value>>,
 }
 
 /// 一条玩家通知意图（Game.notify）。
@@ -499,11 +503,17 @@ impl IntentBatch {
                 continue;
             };
             for (name, params) in actions {
-                let Some(action) = Action::parse(name) else {
-                    continue; // 未知动作名：sanitizeUserIntents 白名单外丢弃
-                };
-                let data = sanitize_object_intent(action, params);
-                batch.add_object_intent(player, obj, action, data);
+                if let Some(action) = Action::parse(name) {
+                    let data = sanitize_object_intent(action, params);
+                    batch.add_object_intent(player, obj, action, data);
+                    continue;
+                }
+                // 冒号形状的动作名是扩展意图键（vanilla 动作名不含冒号）；
+                // 键形非法仍丢弃。是否在冻结目录中、参数与所有权由结算侧
+                // 按计划独立校验，未通过即不执行。
+                if let Ok(key) = kk_mod_api::Key::new(name) {
+                    batch.add_ext_intent(player, obj, key, params.clone());
+                }
             }
         }
         batch
@@ -525,6 +535,17 @@ impl IntentBatch {
             .insert(action, data);
     }
 
+    /// 记录一条扩展意图；同对象同键后发覆盖先发（与对象动作的覆盖语义一致）。
+    pub fn add_ext_intent(&mut self, player: &str, obj: ObjId, key: kk_mod_api::Key, args: Value) {
+        self.users
+            .entry(player.to_string())
+            .or_default()
+            .ext
+            .entry(obj)
+            .or_default()
+            .insert(key, args);
+    }
+
     /// 合并另一批：同对象只覆盖同名动作，保留其他动作；
     /// 房间、通知和市场列表追加。因此重复合并会重复列表指令，并非幂等。
     pub fn extend_from(&mut self, other: IntentBatch) {
@@ -532,6 +553,9 @@ impl IntentBatch {
             let entry = self.users.entry(player).or_default();
             for (id, actions) in intents.objects {
                 entry.objects.entry(id).or_default().extend(actions);
+            }
+            for (id, ext) in intents.ext {
+                entry.ext.entry(id).or_default().extend(ext);
             }
             entry.room.extend(intents.room);
             entry.notify.extend(intents.notify);
@@ -832,6 +856,70 @@ mod from_json_tests {
         assert_eq!(actions.len(), 1, "未知动作名 'explode' 丢弃");
         assert_eq!(actions[&Action::Move].direction, Some(3));
         assert!(user.room.is_empty(), "'room' 键非对象丢弃");
+    }
+
+    /// 扩展意图收集：冒号形状的合法键进 ext 容器并绑定玩家身份；
+    /// 键形非法丢弃；载荷原样保留（schema/接收者/所有权由结算侧校验）；
+    /// 同键后发覆盖；与 vanilla 动作可共存于同一对象键。
+    #[test]
+    fn from_json_collects_extension_intents() {
+        let obj = kk_world::ObjId::parse("kk0000000000000031").unwrap();
+        let key = "kk0000000000000031";
+        let list = serde_json::json!({
+            key: {
+                "demo-counter:increment": { "amount": 3 },
+                "demo-counter:increment ": { "amount": 1 },
+                "not-a-key": { "amount": 2 },
+                ":leading": {},
+                "demo-counter:increment": { "amount": 7 },
+            },
+            "kk0000000000000032": {
+                "other:act": null,
+            },
+        });
+        let batch = IntentBatch::from_json("p1", &list);
+        let user = &batch.users["p1"];
+        assert_eq!(user.ext.len(), 2, "两个对象键各持有扩展意图");
+        let ext = &user.ext[&obj];
+        assert_eq!(ext.len(), 1, "同键后发覆盖 + 尾空白键形/非法键丢弃");
+        let intent_key = kk_mod_api::Key::new("demo-counter:increment").unwrap();
+        assert_eq!(ext[&intent_key], serde_json::json!({ "amount": 7 }));
+        let other = kk_world::ObjId::parse("kk0000000000000032").unwrap();
+        assert_eq!(
+            user.ext[&other][&kk_mod_api::Key::new("other:act").unwrap()],
+            serde_json::Value::Null,
+            "null 载荷原样保留（nullable schema 的合法形态）"
+        );
+        // 身份绑定：发射者自报的玩家名不进入读取路径。
+        let forged = serde_json::json!({
+            key: { "demo-counter:increment": { "user": "p9", "amount": 1 } }
+        });
+        let batch = IntentBatch::from_json("p2", &forged);
+        let user = &batch.users["p2"];
+        assert!(user.ext.contains_key(&obj), "扩展意图归调用方给定的玩家");
+        assert_eq!(user.ext[&obj].len(), 1);
+        // 合并语义与对象动作一致：同键覆盖、异键共存。
+        let mut merged = IntentBatch::from_json(
+            "p1",
+            &serde_json::json!({ key: { "demo-counter:increment": { "amount": 1 } } }),
+        );
+        let second = IntentBatch::from_json(
+            "p1",
+            &serde_json::json!({
+                key: {
+                    "demo-counter:increment": { "amount": 5 },
+                    "demo-counter:reset": { "to": 0 },
+                }
+            }),
+        );
+        merged.extend_from(second);
+        let ext = &merged.users["p1"].ext[&obj];
+        assert_eq!(ext.len(), 2, "异键共存");
+        assert_eq!(
+            ext[&kk_mod_api::Key::new("demo-counter:increment").unwrap()],
+            serde_json::json!({ "amount": 5 }),
+            "同键后发覆盖"
+        );
     }
 
     /// 缺失能量结构列表与显式空列表必须保持区别，创建执行器据此选择扣费方式。

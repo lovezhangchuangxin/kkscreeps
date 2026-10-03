@@ -301,3 +301,65 @@ fn field_mounts_reject_duplicates_builtin_binding_and_bad_schemas() {
         .to_string();
     assert!(err.contains("数值范围"), "{err}");
 }
+
+/// Mod 类型 payload 以裸名存取：跨命名空间挂载引入同名裸字段（全键
+/// 不同）会使同一 payload 键被两个 schema 约束，冻结期拒绝；builtin
+/// 类型的扩展字段按全键存储，不受该检查约束（对照）。
+#[test]
+fn field_bare_name_collision_rejected_on_mod_types_only() {
+    let field = |ns: &str, name: &str| FieldDescriptor {
+        key: key(&format!("{ns}:{name}")),
+        schema: ValueSchema {
+            kind: ValueKind::Number(NumberDomain::Signed { min: 0, max: 99 }),
+            nullable: false,
+        },
+        default: FieldDefault::Missing,
+        visibility: Visibility::Public,
+        binding: key(&format!("{ns}:bind.{name}")),
+    };
+    // 目标：nsA 声明的 Mod 类型，自带 nsA:charge。
+    let mut owner = module("nsa");
+    let mut bindings = BTreeSet::new();
+    bindings.insert(key("nsa:bind.charge"));
+    let mut ty = ObjectTypeDescriptor {
+        key: key("nsa:thing"),
+        schema_version: 1,
+        owner_field: None,
+        position_fields: None,
+        fields: vec![field("nsa", "charge")],
+        capabilities: Vec::new(),
+        lifecycle_slots: BTreeSet::new(),
+        visibility: ObjectVisibility::RoomVisible,
+        player_class: "Thing".into(),
+    };
+    ty.fields.sort_by(|a, b| a.key.cmp(&b.key));
+    owner.object_types.push(ty);
+    owner.bindings = bindings;
+    // nsB 挂载 nsB:charge 到 nsA:thing——全键不同、裸名相同。
+    let mut mounter = module("nsb");
+    mounter.bindings.insert(key("nsb:bind.charge"));
+    mounter.field_mounts.push(FieldMountDescriptor {
+        target: TypeRef {
+            key: key("nsa:thing"),
+            schema_version: 1,
+        },
+        field: field("nsb", "charge"),
+    });
+    let err = plan(vec![builtin::link(), owner.clone(), mounter]).unwrap_err();
+    assert!(
+        err.to_string().contains("字段裸名 charge 冲突"),
+        "实得 {err}"
+    );
+    // 对照：同名挂载到 builtin:link（builtin:link 自带 builtin:charge
+    // 全键不同、扩展字段按全键存储）不触发裸名检查。
+    let mut builtin_mount = module("nsb");
+    builtin_mount.bindings.insert(key("nsb:bind.charge"));
+    builtin_mount.field_mounts.push(FieldMountDescriptor {
+        target: TypeRef {
+            key: key("builtin:link"),
+            schema_version: 1,
+        },
+        field: field("nsb", "charge"),
+    });
+    plan(vec![builtin::link(), owner, builtin_mount]).unwrap();
+}

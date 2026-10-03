@@ -2,7 +2,7 @@
 
 本设计要求 Mod 作者只写 JS，可以使用本项目 SDK 增加玩法或替换默认规则，不要求修改 Rust 内核或重编服务器。目标能力覆盖官方与 xxscreeps 的同类业务扩展，不承诺兼容其 Mod 源码或 Node 内部接口。
 
-架构决策见 [ADR-014](../decisions/ADR-014-contribution-plane.md)。`kk-mod-api` 已提供独立的描述、校验和冻结入口，尚未接入生产引擎；`kk-mod-host` 已落地装载与**注册期**（包发现/依赖拓扑/指纹/可信 realm/注册 SDK → 冻结计划，见 [C.1 记录](../research/notes/c1-mod-loader-2026-10-03.md)），处理器执行、玩家 API 安装与本文其余 JS API 示例仍为目标设计。技术实验位于 `spikes/`，不构成可安装的生产 Mod 系统。
+架构决策见 [ADR-014](../decisions/ADR-014-contribution-plane.md)。`kk-mod-api` 已提供独立的描述、校验和冻结入口；`kk-mod-host` 已落地装载与**注册期**（包发现/依赖拓扑/指纹/可信 realm/注册 SDK → 冻结计划，见 [C.1 记录](../research/notes/c1-mod-loader-2026-10-03.md)）；处理器执行与 Mod 状态候选域已接结算（[C.2 记录](../research/notes/c2-mod-execution-2026-10-03.md)）；Mod 声明类型的对象存储、对象域扩展意图全链（玩家面原语→收集→校验→自有槽执行）与管理创建已落地（[C.3 记录](../research/notes/c3-mod-objects-2026-10-03.md)）。玩家 API 安装（player.js/FIND/LOOK/玩家可见 Mod 对象与字段投影）与本文其余 JS API 示例仍为目标设计。技术实验位于 `spikes/`，不构成可安装的生产 Mod 系统。
 
 B 阶段的冻结定义、有效规则、意图入口、玩家投影和首个 link 接入方案见[开放领域定义与玩家投影](domain-projection.md)。
 

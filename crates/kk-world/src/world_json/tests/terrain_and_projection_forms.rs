@@ -324,3 +324,54 @@ fn generic_objects_stay_visible_to_find() {
     assert_eq!(j["structureType"], "tower");
     assert_eq!(j["pos"]["x"], 7);
 }
+
+/// Mod 对象的投影口径：不进内部全量 world_json、玩家视图、任何 FIND
+/// 查询与 KKPV 私有块；查询快照（object_snapshot_by_id）是唯一读面。
+#[test]
+fn mod_objects_excluded_from_all_player_planes() {
+    use crate::world_json::matches_find;
+    let mut world = crate::world::World::new(9);
+    world.register_room("W1N1", Terrain::plains());
+    world
+        .insert(
+            "W1N1",
+            kk_schema::room::RoomObject::Mod(kk_schema::room::ModObj {
+                id: 0,
+                x: 10,
+                y: 12,
+                type_key: "extmod:counter".into(),
+                data: r#"{"owner":"p1","x":10,"y":12,"value":3}"#.into(),
+            }),
+        )
+        .unwrap();
+    let id = world.rooms["W1N1"].objects.keys().copied().next().unwrap();
+    let full = world.world_json();
+    assert!(
+        full["objects"].as_array().unwrap().is_empty(),
+        "内部全量投影不含 Mod 对象"
+    );
+    let viewer = world.world_json_for_viewer("p1", 0);
+    assert!(viewer["objects"].as_array().unwrap().is_empty());
+    // 全 FIND 常量范围 1..=250 内无命中（覆盖对象类 FIND 的实际取值区间）。
+    for find in 1..=250 {
+        assert!(
+            world.find_in_room("W1N1", find, Some("p1")).is_empty(),
+            "FIND {find} 命中了 Mod 对象"
+        );
+    }
+    let blocks = world
+        .kkpv_room_blocks_for_viewer(
+            "p1",
+            &kk_mod_api::extension::ExtensionCatalog::default(),
+            [0; 32],
+            [0; 32],
+        )
+        .unwrap();
+    assert_eq!(blocks.len(), 1);
+    assert!(blocks[0].objects.is_empty(), "KKPV 私有块不含 Mod 对象");
+    // 查询快照读面唯一保留。
+    let snap = world.object_snapshot_by_id(id).unwrap();
+    assert_eq!(snap["kind"], "mod");
+    // matches_find 对防御性空记录不命中（直接锁死兜底口径）。
+    assert!(!matches_find(&serde_json::json!({}), 107, None));
+}

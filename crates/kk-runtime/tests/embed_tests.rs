@@ -6,6 +6,8 @@ use serde_json::json;
 
 use kk_runtime::EmbedEngine;
 
+#[path = "embed_tests/c3_counter_chain_family.rs"]
+mod c3_counter_chain;
 #[path = "embed_tests/c_mod_settle_family.rs"]
 mod c_mod_settle;
 #[path = "embed_tests/dual_room_live_fire.rs"]
@@ -113,6 +115,13 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     c_mod_settle::c_mod_settle_failure_rolls_back_state_impl()?;
     c_mod_settle::c_mod_settle_replace_and_wrap_gate_impl()?;
     c_mod_settle::c_mod_settle_registration_failure_impl()?;
+    c3_counter_chain::c3_counter_full_chain_impl()?;
+    c3_counter_chain::c3_counter_gates_impl()?;
+    c3_counter_chain::c3_counter_failure_rolls_back_impl()?;
+    c3_counter_chain::c3_counter_creation_gates_impl()?;
+    c3_counter_chain::c3_counter_config_and_projection_impl()?;
+    c3_counter_chain::c3_counter_creation_and_round_gates_impl()?;
+    c3_counter_chain::c3_counter_link_only_shard_skips_primitive_impl()?;
     assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");
     Ok(())
 }

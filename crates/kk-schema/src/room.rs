@@ -378,6 +378,20 @@ kk_schema! {
     }
 }
 
+crate::kk_schema! {
+    /// Mod 声明类型的对象包络：type_key 是冻结计划里的类型稳定键
+    /// （namespace:name），data 是已按类型描述符校验的字段 JSON。
+    /// x/y 与 data 中声明的位置字段保持同步（写入侧维护）；编码层
+    /// 不验证 type_key 存在于计划，也不解析 data。
+    pub ModObj {
+        (pub id: u64)
+        (pub x: u8)
+        (pub y: u8)
+        (pub type_key: str)
+        (pub data: str)
+    }
+}
+
 crate::kk_room_object! {
     /// 房间对象，编码为单字节标签加对应载荷；标签值见 [`tags`]。
     /// 访问器和编解码不检查 id 唯一性或坐标范围。
@@ -403,6 +417,8 @@ crate::kk_room_object! {
         Extractor(ExtractorObj) = tags::EXTRACTOR,
         /// 以 JSON 保存的对象，按结构类型参与已实现的结算规则。
         Generic(GenericObj) = tags::GENERIC,
+        /// Mod 声明类型的对象，字段经类型描述符校验后整体存放。
+        Mod(ModObj) = tags::MOD,
     }
 }
 
@@ -425,6 +441,7 @@ pub mod tags {
     pub const RUIN: u8 = 13;
     pub const MINERAL: u8 = 14;
     pub const EXTRACTOR: u8 = 15;
+    pub const MOD: u8 = 16;
 }
 
 crate::kk_schema! {
@@ -768,6 +785,7 @@ mod tests {
     fn mineral_tags_and_optional_fields_roundtrip() {
         assert_eq!(tags::MINERAL, 14, "快照中的固定标签值");
         assert_eq!(tags::EXTRACTOR, 15, "快照中的固定标签值");
+        assert_eq!(tags::MOD, 16, "快照中的固定标签值（向前兼容承诺）");
         let mineral = MineralObj {
             id: 1,
             x: 10,

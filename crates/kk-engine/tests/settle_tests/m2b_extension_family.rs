@@ -183,6 +183,7 @@ fn extension_projection_applies_visibility() {
             links: kk_world::place::builtin_link_rules(),
             contrib: &dispatch,
             extensions: &catalog,
+            plan: &plan,
         },
     );
 
@@ -302,6 +303,7 @@ fn extension_write_validates_against_catalog() {
                 links: kk_world::place::builtin_link_rules(),
                 contrib: &dispatch,
                 extensions: &catalog,
+                plan: &plan,
             },
         );
         result.err().map(|e| e.0).unwrap_or_default()
@@ -473,6 +475,7 @@ fn object_removal_clears_extensions_and_raw_writes_are_rejected() {
             links: kk_world::place::builtin_link_rules(),
             contrib: &dispatch,
             extensions: &catalog,
+            plan: &plan,
         },
     );
     let room = f.world.room("W1N1").unwrap();

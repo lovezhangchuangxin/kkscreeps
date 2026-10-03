@@ -23,7 +23,10 @@ export default function register(api) {
     scope: 'object',
     target: counter,
     args: { type: 'record', fields: { amount: { type: 'i32', min: 1, max: 10 } } },
-    process() {},
+    process(ctx) {
+      const fields = ctx.target.fields;
+      fields.value = (fields.value || 0) + ctx.args.amount;
+    },
   });
   api.mounts.define({ key: 'demo-base:widget', version: 2 }, 'counterTag', {
     type: 'string',

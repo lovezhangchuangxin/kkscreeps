@@ -10,6 +10,7 @@ pub mod creep;
 pub mod damage;
 pub mod economy;
 pub mod market;
+mod mod_intents;
 pub mod movement;
 pub mod room;
 pub mod spawn;
@@ -135,12 +136,16 @@ impl TickInput {
     }
 }
 
-/// 一次结算携带的贡献平面快照：有效规则、槽执行表和扩展字段目录。
-/// 由引擎装配时生成，结算全程只读；三个成员必须来自同一冻结计划。
+/// 一次结算携带的贡献平面快照：有效规则、槽执行表、扩展字段目录与
+/// 冻结计划本体。由引擎装配时生成，结算全程只读；四个成员必须来自
+/// 同一冻结计划。
 pub struct Plane<'a> {
     pub links: kk_mod_api::builtin::LinkRules,
     pub contrib: &'a contrib::ContributionDispatch,
     pub extensions: &'a kk_mod_api::extension::ExtensionCatalog,
+    /// 冻结计划：意图描述符与投影类型目录经它解析（键解析发生在
+    /// 装配期以外此处，是扩展意图的低频路径）。
+    pub plan: &'a kk_mod_api::ContributionPlan,
 }
 
 /// 单房间结算上下文：房间副本、位置索引及共享候选状态，
@@ -285,6 +290,67 @@ impl<'w> Working<'w> {
         self.damage_to_apply.remove(&id);
         self.heal_to_apply.remove(&id);
         Some(obj)
+    }
+
+    /// 读取 Mod 对象的字段 payload；非 Mod 对象或 data 非法 JSON 返回 None。
+    pub fn mod_fields(&self, id: ObjId) -> Option<Value> {
+        match self.room.objects.get(&id) {
+            Some(RoomObject::Mod(o)) => serde_json::from_str(&o.data).ok(),
+            _ => None,
+        }
+    }
+
+    /// 校验并整值写入 Mod 对象的字段 payload：类型必须在计划中声明，
+    /// 键集合与字段描述完全一致；声明的位置字段同步到对象信封坐标与
+    /// 位置索引。只修改本房候选，失败随房间候选一并丢弃。
+    pub fn update_mod_fields(&mut self, id: ObjId, fields: &Value) -> Result<(), String> {
+        let type_key = match self.room.objects.get(&id) {
+            Some(RoomObject::Mod(o)) => o.type_key.clone(),
+            _ => return Err(format!("对象 {} 不是 Mod 对象", id.as_str())),
+        };
+        let key = kk_mod_api::Key::new(type_key.clone())
+            .map_err(|e| format!("Mod 对象类型键非法 {type_key:?}: {e}"))?;
+        let Some(handle) = self.plane.plan.projection().resolve(&key) else {
+            return Err(format!("Mod 对象类型 {type_key} 不在计划中"));
+        };
+        let ty = self
+            .plane
+            .plan
+            .projection()
+            .get(handle)
+            .expect("句柄来自计划");
+        kk_mod_api::validate::check_object_payload(fields, &ty.descriptor.fields, &type_key)?;
+        let (mut x, mut y) = match self.room.objects.get(&id) {
+            Some(RoomObject::Mod(o)) => (o.x, o.y),
+            _ => unreachable!("上面已判 Mod"),
+        };
+        if let Some([fx, fy]) = &ty.descriptor.position_fields {
+            let px = u8::try_from(
+                fields
+                    .get(kk_mod_api::validate::field_name(fx))
+                    .and_then(Value::as_u64)
+                    .expect("payload 已通过 schema 校验，位置字段必为 0..49 整数"),
+            )
+            .expect("0..49 在 u8 内");
+            let py = u8::try_from(
+                fields
+                    .get(kk_mod_api::validate::field_name(fy))
+                    .and_then(Value::as_u64)
+                    .expect("payload 已通过 schema 校验，位置字段必为 0..49 整数"),
+            )
+            .expect("0..49 在 u8 内");
+            if px != x || py != y {
+                self.index.apply_move(id, (x, y), (px, py));
+                x = px;
+                y = py;
+            }
+        }
+        if let Some(RoomObject::Mod(o)) = self.room.objects.get_mut(&id) {
+            o.data = fields.to_string();
+            o.x = x;
+            o.y = y;
+        }
+        Ok(())
     }
 
     /// 对象移动（索引增量更新）。
@@ -542,6 +608,7 @@ pub fn settle_room(
             links: plane.links,
             contrib: plane.contrib,
             extensions: plane.extensions,
+            plan: plane.plan,
         },
     };
 
@@ -584,6 +651,14 @@ pub fn settle_room(
                         .map_err(SettleError)?;
                 }
                 _ => continue,
+            }
+        }
+        // Mod 对象的扩展意图在既有动作之后按对象 ID 顺序派发；目标不是
+        // Mod 对象的扩展意图在此静默丢弃（与未知 vanilla 动作同待遇）。
+        for (obj_id, ext_intents) in &intents.ext {
+            if matches!(w.room.objects.get(obj_id), Some(RoomObject::Mod(_))) {
+                mod_intents::process_object_ext_intents(&mut w, player, *obj_id, ext_intents)
+                    .map_err(SettleError)?;
             }
         }
     }
@@ -665,6 +740,28 @@ pub struct Engine {
     /// 已提交的各 Mod 命名空间状态；每 tick 克隆为候选，发布时整体换回。
     /// 服务端私有，不进世界快照与玩家投影。
     pub mod_states: BTreeMap<String, serde_json::Value>,
+    /// 当前生效的冻结计划（默认只含 builtin:link）。扩展意图描述符与
+    /// Mod 类型目录从此解析；规则/处理链/扩展目录是它的派生物。
+    plan: std::sync::Arc<kk_mod_api::ContributionPlan>,
+    /// 计划是否声明了 Mod 类型（有 Mod 对象时的发布前校验开关）。
+    has_mod_types: bool,
+}
+
+/// 只含 builtin:link 的冻结计划；无 Mod 引擎的默认贡献平面。
+/// 测试夹具构造 Plane 时也使用它。
+pub fn builtin_plan() -> std::sync::Arc<kk_mod_api::ContributionPlan> {
+    static PLAN: std::sync::OnceLock<std::sync::Arc<kk_mod_api::ContributionPlan>> =
+        std::sync::OnceLock::new();
+    PLAN.get_or_init(|| {
+        std::sync::Arc::new(
+            kk_mod_api::freeze(
+                vec![kk_mod_api::builtin::link()],
+                kk_mod_api::FreezeOptions::default(),
+            )
+            .expect("builtin:link 贡献冻结必成"),
+        )
+    })
+    .clone()
 }
 
 impl Default for Engine {
@@ -691,6 +788,8 @@ impl Engine {
             contrib: contrib::ContributionDispatch::default(),
             extensions: kk_mod_api::extension::ExtensionCatalog::default(),
             mod_states: BTreeMap::new(),
+            plan: builtin_plan(),
+            has_mod_types: false,
         }
     }
 
@@ -747,6 +846,127 @@ impl Engine {
         Ok(())
     }
 
+    /// Mod 自有意图的可执行性门：只放行已接线的执行形态，其余在装配期
+    /// 显式拒绝而不是静默不执行。豁免只按**意图键**的命名空间（builtin
+    /// 意图由 Rust native 执行器消费）——按槽豁免会让 Mod 意图挂 builtin
+    /// 槽逃过全部门检查，运行期找不到扩展执行器而成为可重复触发的
+    /// 整轮失败。中心检查在调用方（须结合 Replace 处理器实现判断）。
+    fn check_executable_intents(plan: &kk_mod_api::ContributionPlan) -> Result<(), String> {
+        use kk_mod_api::{ArgumentConversion, IntentAuthority, IntentScope, Merge};
+        for intent in plan.intents() {
+            if intent.key.namespace() == "builtin" {
+                continue; // builtin:link.transfer 由 Rust native 执行器消费
+            }
+            let Some(slot_handle) = plan.resolve_slot(&intent.slot) else {
+                return Err(format!(
+                    "计划缺少动作 {} 的入口 {}",
+                    intent.key, intent.slot
+                ));
+            };
+            let slot = plan.get_slot(slot_handle).expect("句柄来自计划");
+            if slot.stage != kk_mod_api::Stage::ObjectAction {
+                return Err(format!(
+                    "动作 {} 的入口 {} 阶段为 {:?}，扩展意图只在对象动作阶段派发",
+                    intent.key, intent.slot, slot.stage
+                ));
+            }
+            if intent.scope != IntentScope::Object {
+                return Err(format!(
+                    "动作 {} 的 {} 域执行通道未接线（当前只接线对象域）",
+                    intent.key,
+                    match intent.scope {
+                        IntentScope::Room => "房间",
+                        IntentScope::Player => "玩家",
+                        _ => "世界",
+                    }
+                ));
+            }
+            if !matches!(intent.merge, Merge::Last) {
+                return Err(format!(
+                    "动作 {} 声明队列合并模式，该模式的执行装配未接线",
+                    intent.key
+                ));
+            }
+            if !matches!(intent.conversion, ArgumentConversion::Strict) {
+                return Err(format!(
+                    "动作 {} 声明非严格参数转换，该形态的执行装配未接线",
+                    intent.key
+                ));
+            }
+            if intent.authority != IntentAuthority::Player {
+                return Err(format!(
+                    "动作 {} 声明非玩家授权，服务端发射通道未接线",
+                    intent.key
+                ));
+            }
+            if !intent.suppressed_by.is_empty() {
+                return Err(format!(
+                    "动作 {} 声明压制关系，压制判定的执行装配未接线",
+                    intent.key
+                ));
+            }
+        }
+        // 非 link 槽必须被至少一个意图挂载：无意图的槽（生命周期槽、
+        // 其他阶段槽）没有派发点，装配了执行器也只是静默死执行。
+        for slot in plan.slots() {
+            if contrib::LINK_SLOT_KEYS.contains(&slot.key.as_str()) {
+                continue;
+            }
+            let referenced = plan.intents().iter().any(|intent| intent.slot == slot.key);
+            if !referenced {
+                return Err(format!(
+                    "入口 {} 没有挂载任何动作，该槽位的执行接线未开放（生命周期/其他阶段槽归后续批次）",
+                    slot.key
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// 中心规则：动作入口的中心须是自身 process 绑定，或由调用方以
+    /// Replace 处理器占位（跨 Mod 替换动作处理）。多意图共享一槽时
+    /// 非自有中心的意图在此拒绝。
+    fn check_intent_centers(
+        plan: &kk_mod_api::ContributionPlan,
+        ext_handlers: &BTreeMap<kk_mod_api::Key, contrib::ExtHandler>,
+    ) -> Result<(), String> {
+        for intent in plan.intents() {
+            if intent.key.namespace() == "builtin" {
+                continue;
+            }
+            let own_process = match kk_mod_api::Key::new(format!("{}.process", intent.key)) {
+                Ok(key) => key,
+                Err(_) => {
+                    return Err(format!(
+                        "动作 {} 的键过长，无法派生 process 绑定（键上限 128 字节）",
+                        intent.key
+                    ));
+                }
+            };
+            let slot_handle = plan
+                .resolve_slot(&intent.slot)
+                .expect("check_executable_intents 已保证入口存在");
+            let slot = plan.get_slot(slot_handle).expect("句柄来自计划");
+            // 冻结后的入口计划只保留 dispatch；Native 绑定或未被占位的
+            // Chained 中心即 native 绑定。
+            let center = match &slot.dispatch {
+                kk_mod_api::Dispatch::Native(binding) => binding,
+                kk_mod_api::Dispatch::Chained { center, .. } => center,
+            };
+            let replaced = matches!(
+                ext_handlers.get(center),
+                Some(contrib::ExtHandler::Replace(_))
+            );
+            if center != &own_process && !replaced {
+                return Err(format!(
+                    "动作 {} 的入口 {} 中心不是自身 process，也不是已提供的 Replace 处理器（多意图共享入口或显式入口的执行装配未接线）",
+                    intent.key, intent.slot
+                ));
+            }
+        }
+        Ok(())
+    }
+
     /// 用冻结计划装配引擎；处理器实现随计划提供，缺失或 kind
     /// 不符时拒绝。计划须包含 builtin:link 贡献。
     pub fn with_plan(
@@ -760,32 +980,89 @@ impl Engine {
         Ok(engine)
     }
 
-    /// 就地装配冻结计划：换入有效规则、处理链与扩展目录，保留世界、
-    /// 玩家与沙箱。与 [`Self::with_plan`] 走同一校验；装配失败时引擎
-    /// 保持原状。规则与已装配的处理链须一起换，不允许只动其一。
+    /// 就地装配冻结计划：换入有效规则、处理链、扩展目录与计划本体，
+    /// 保留世界、玩家与沙箱。与 [`Self::with_plan`] 走同一校验；装配
+    /// 失败时引擎保持原状。规则与已装配的处理链须一起换，不允许只动其一。
     pub fn install_plan(
         &mut self,
         plan: std::sync::Arc<kk_mod_api::ContributionPlan>,
         action_handlers: BTreeMap<kk_mod_api::Key, contrib::ActionHandler>,
         tick_handlers: BTreeMap<kk_mod_api::Key, contrib::TickHandler>,
     ) -> Result<(), String> {
+        self.install_plan_with_ext(
+            plan,
+            action_handlers,
+            tick_handlers,
+            BTreeMap::new(),
+            BTreeMap::new(),
+        )
+    }
+
+    /// [`Self::install_plan`] 的完整形态：`ext_handlers` 是 Mod 自有槽上的
+    /// 贡献处理器，`ext_processes` 是各槽中心的动作处理实现。
+    pub fn install_plan_with_ext(
+        &mut self,
+        plan: std::sync::Arc<kk_mod_api::ContributionPlan>,
+        action_handlers: BTreeMap<kk_mod_api::Key, contrib::ActionHandler>,
+        tick_handlers: BTreeMap<kk_mod_api::Key, contrib::TickHandler>,
+        ext_handlers: BTreeMap<kk_mod_api::Key, contrib::ExtHandler>,
+        ext_processes: BTreeMap<kk_mod_api::Key, contrib::ExtSimple>,
+    ) -> Result<(), String> {
+        Self::check_executable_intents(&plan)?;
+        Self::check_intent_centers(&plan, &ext_handlers)?;
         // 先取调用方提供的处理器键，再交给装配消耗。
         let handler_keys: BTreeSet<kk_mod_api::Key> = action_handlers
             .keys()
             .chain(tick_handlers.keys())
+            .chain(ext_handlers.keys())
+            .chain(ext_processes.keys())
             .cloned()
             .collect();
         let links = kk_mod_api::builtin::LinkRules::from_plan(plan.rules())?;
-        let contrib =
-            contrib::ContributionDispatch::assemble(&plan, action_handlers, tick_handlers)?;
+        let contrib = contrib::ContributionDispatch::assemble_with_ext(
+            &plan,
+            action_handlers,
+            tick_handlers,
+            ext_handlers,
+            ext_processes,
+        )?;
         let extensions = kk_mod_api::extension::ExtensionCatalog::from_plan(&plan)?;
         let mut installed = handler_keys;
         installed.extend(extensions.field_bindings().cloned());
+        // Mod 类型字段绑定的实现是 payload 存储与写入门（创建/处理器回写/
+        // 发布前校验），随计划装配即安装——与扩展目录的安装口径同原则。
+        for ty in plan.projection().types() {
+            if ty.descriptor.key.namespace() == "builtin" {
+                continue;
+            }
+            installed.extend(ty.fields.iter().map(|f| f.descriptor.binding.clone()));
+        }
         Self::check_installed_bindings(&plan, &installed)?;
+        let has_mod_types = !plan.projection().types().is_empty()
+            && plan
+                .projection()
+                .types()
+                .iter()
+                .any(|t| t.descriptor.key.namespace() != "builtin");
         self.links = links;
         self.contrib = contrib;
         self.extensions = extensions;
+        self.plan = plan;
+        self.has_mod_types = has_mod_types;
         Ok(())
+    }
+
+    /// 计划中的 Mod 类型描述符（管理面创建对象与诊断用）；builtin 类型
+    /// 不在此列。类型键须为 `namespace:name`。
+    pub fn mod_object_type(&self, type_key: &str) -> Option<&kk_mod_api::ObjectTypeDescriptor> {
+        let key = kk_mod_api::Key::new(type_key).ok()?;
+        // builtin 类型有 Rust 权威表示，以 Mod 信封再造一份会形成双表示，
+        // 挂 builtin 键的 Mod 对象也会把玩家面引向无执行器的 builtin 槽。
+        if key.namespace() == "builtin" {
+            return None;
+        }
+        let handle = self.plan.projection().resolve(&key)?;
+        Some(&self.plan.projection().get(handle)?.descriptor)
     }
 
     /// 结算指定房间前返回错误，传 None 解除。
@@ -877,6 +1154,9 @@ impl Engine {
                     entry.room.extend(std::mem::take(&mut intents.room));
                     entry.notify.extend(std::mem::take(&mut intents.notify));
                     entry.market.extend(std::mem::take(&mut intents.market));
+                    for (id, ext) in std::mem::take(&mut intents.ext) {
+                        entry.ext.entry(id).or_default().extend(ext);
+                    }
                 }
             }
         }
@@ -1073,6 +1353,7 @@ impl Engine {
                 links: self.links,
                 contrib: &self.contrib,
                 extensions: &self.extensions,
+                plan: &self.plan,
             };
             let mut room_events = settle_room(
                 &mut room,
@@ -1125,6 +1406,64 @@ impl Engine {
         }
         drop(state);
         self.validate_extensions(cand)?;
+        self.validate_mod_objects(cand)?;
+        Ok(())
+    }
+
+    /// 发布前校验候选中的 Mod 对象：类型在计划中、字段 payload 整体
+    /// 满足描述符、声明的位置字段与信封坐标同步。写入路径（创建与
+    /// 处理器回写）已各自校验；此处封住绕过写入口的直改形态。
+    fn validate_mod_objects(&self, cand: &mut txn::OwnedTickTxn) -> Result<(), SettleError> {
+        if !self.has_mod_types {
+            return Ok(());
+        }
+        for (room_name, room) in &cand.rooms {
+            for (id, obj) in &room.objects {
+                let kk_schema::room::RoomObject::Mod(o) = obj else {
+                    continue;
+                };
+                let key = kk_mod_api::Key::new(o.type_key.clone()).map_err(|e| {
+                    SettleError(format!(
+                        "房间 {room_name} 的 Mod 对象 {} 类型键非法：{e}",
+                        id.as_str()
+                    ))
+                })?;
+                let Some(handle) = self.plan.projection().resolve(&key) else {
+                    return Err(SettleError(format!(
+                        "房间 {room_name} 的 Mod 对象 {} 类型 {} 不在计划中",
+                        id.as_str(),
+                        o.type_key
+                    )));
+                };
+                let ty = self.plan.projection().get(handle).expect("句柄来自计划");
+                let payload: serde_json::Value = serde_json::from_str(&o.data).map_err(|e| {
+                    SettleError(format!(
+                        "房间 {room_name} 的 Mod 对象 {} payload 非法 JSON：{e}",
+                        id.as_str()
+                    ))
+                })?;
+                kk_mod_api::validate::check_object_payload(
+                    &payload,
+                    &ty.descriptor.fields,
+                    &o.type_key,
+                )
+                .map_err(SettleError)?;
+                if let Some([fx, fy]) = &ty.descriptor.position_fields {
+                    let px = payload
+                        .get(kk_mod_api::validate::field_name(fx))
+                        .and_then(serde_json::Value::as_u64);
+                    let py = payload
+                        .get(kk_mod_api::validate::field_name(fy))
+                        .and_then(serde_json::Value::as_u64);
+                    if px != Some(o.x as u64) || py != Some(o.y as u64) {
+                        return Err(SettleError(format!(
+                            "房间 {room_name} 的 Mod 对象 {} 位置字段与信封坐标不同步",
+                            id.as_str()
+                        )));
+                    }
+                }
+            }
+        }
         Ok(())
     }
 

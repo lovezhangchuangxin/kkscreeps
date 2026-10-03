@@ -264,6 +264,25 @@ pub fn freeze(
         }
         validate::object(ty, &types, &bindings, &slots, options.max_schema_depth)?;
     }
+    // Mod 类型的字段 payload 以裸名存取，挂载可引入跨命名空间的同名
+    // 字段（全键不同、裸名相同）——同一 payload 键会被要求同时满足两
+    // 个 schema。此处冻结期拒绝；builtin 类型的扩展字段按全键存储，
+    // 不受此约束。
+    for ty in types.values() {
+        if ty.key.namespace() == "builtin" {
+            continue;
+        }
+        let mut bare: BTreeSet<&str> = BTreeSet::new();
+        for field in &ty.fields {
+            let name = validate::field_name(&field.key);
+            if !bare.insert(name) {
+                return Err(FreezeError::new(
+                    ty.key.to_string(),
+                    format!("字段裸名 {name} 冲突（payload 以裸名存取，同类型内须唯一）"),
+                ));
+            }
+        }
+    }
     let slot_plans = handler_plans(&slots, &handlers, &bindings)?;
     if types.len() > u32::MAX as usize
         || rules.len() > u32::MAX as usize

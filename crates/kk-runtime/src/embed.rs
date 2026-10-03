@@ -18,7 +18,7 @@ use std::rc::Rc;
 use crate::{PlayerExecutor, RunEpoch, ThreadExecutor, WorldSource};
 use kk_engine::intent::IntentBatch;
 use kk_engine::settle::Working;
-use kk_engine::settle::contrib::{ActionHandler, TickHandler};
+use kk_engine::settle::contrib::{ActionHandler, ExtHandler, TickHandler};
 use kk_engine::{
     PlayerWriteback, RunOutcome, RunResult, RunState, SegmentWriteback, TickInput, TickStage,
 };
@@ -89,17 +89,42 @@ pub struct EmbedEngine {
     /// 可信 Mod 注册 realm；仅 `create_shard_with_mods` 装配。持有它使
     /// EmbedEngine 不再可跨线程移动（结算与 realm 须同线程）。
     mod_realm: Option<Rc<RefCell<ModRealm>>>,
+    /// 分片计划是否含 Mod 意图；决定玩家沙箱是否装配扩展意图原语。
+    ext_intents: bool,
 }
+
+/// mod_handlers 的产物：link 两槽处理器与 Mod 自有槽的动作处理实现。
+type ModHandlerSet = (
+    BTreeMap<Key, ActionHandler>,
+    BTreeMap<Key, TickHandler>,
+    BTreeMap<Key, ExtHandler>,
+    BTreeMap<Key, kk_engine::settle::contrib::ExtSimple>,
+);
 
 /// 把冻结计划里 Mod 贡献的处理器装成桥闭包：闭包经 realm 调用 JS，
 /// 以 Working 携带的候选 Mod 状态域做读改写回。builtin 命名空间不会
 /// 出现在 before/after/replace 位（builtin 无处理器），防御性跳过。
+/// Mod 自有槽同样装配：动作处理桥为各槽中心，槽上贡献处理器接
+/// before/after/replace 位（wrap 拒绝，同 link 槽纪律）。
 fn mod_handlers(
     plan: &kk_mod_api::ContributionPlan,
     realm: &Rc<RefCell<ModRealm>>,
-) -> anyhow::Result<(BTreeMap<Key, ActionHandler>, BTreeMap<Key, TickHandler>)> {
+) -> anyhow::Result<ModHandlerSet> {
     let mut action: BTreeMap<Key, ActionHandler> = BTreeMap::new();
     let mut tick: BTreeMap<Key, TickHandler> = BTreeMap::new();
+    let mut ext_handlers: BTreeMap<Key, ExtHandler> = BTreeMap::new();
+    let mut ext_processes: BTreeMap<Key, kk_engine::settle::contrib::ExtSimple> = BTreeMap::new();
+    // 各 Mod 意图的动作处理绑定（{intent}.process）：Chained 中心的
+    // process/handler 分流依据。意图键 → process 绑定的推导与装载器一致。
+    let mut process_bindings: BTreeSet<Key> = BTreeSet::new();
+    for intent in plan.intents() {
+        if intent.slot.namespace() == "builtin" {
+            continue;
+        }
+        if let Ok(binding) = Key::new(format!("{}.process", intent.key)) {
+            process_bindings.insert(binding);
+        }
+    }
     for slot in plan.slots() {
         let Dispatch::Chained {
             before,
@@ -108,6 +133,14 @@ fn mod_handlers(
             after,
         } = &slot.dispatch
         else {
+            // Mod 自有槽的 Native 中心是动作处理绑定，装配进 ext 表；
+            // link 两槽的 Native 由引擎内建执行器消费，跳过。
+            if let Dispatch::Native(binding) = &slot.dispatch
+                && binding.namespace() != "builtin"
+                && !kk_engine::settle::contrib::LINK_SLOT_KEYS.contains(&slot.key.as_str())
+            {
+                ext_processes.insert(binding.clone(), ext_bridge(realm, binding));
+            }
             continue;
         };
         if !wraps.is_empty() {
@@ -118,16 +151,54 @@ fn mod_handlers(
         }
         let slot_key = slot.key.as_str();
         let stage = slot.stage;
-        // 只有 link 两槽有执行器；Mod 自有槽的绑定由 install_plan 的
-        // 绑定核对显式拒绝。
-        let wired = matches!(
-            (slot_key, stage),
-            ("builtin:link.transfer", Stage::ObjectAction)
-                | ("builtin:link.tick", Stage::ObjectTick)
-        );
-        if !wired {
+        // 只有 link 两槽有既有动作/tick 执行器；其余槽（Mod 自有动作入口）
+        // 走扩展执行链。
+        let wired = (slot_key == kk_engine::settle::contrib::LINK_SLOT_KEYS[0]
+            && stage == Stage::ObjectAction)
+            || (slot_key == kk_engine::settle::contrib::LINK_SLOT_KEYS[1]
+                && stage == Stage::ObjectTick);
+        if wired {
+            for (binding, is_after) in before
+                .iter()
+                .map(|binding| (binding, false))
+                .chain(after.iter().map(|binding| (binding, true)))
+            {
+                if binding.namespace() == "builtin" {
+                    continue;
+                }
+                if slot_key == "builtin:link.tick" {
+                    let handler = if is_after {
+                        TickHandler::After(tick_bridge(realm, binding))
+                    } else {
+                        TickHandler::Before(tick_bridge(realm, binding))
+                    };
+                    tick.insert(binding.clone(), handler);
+                } else {
+                    let handler = if is_after {
+                        ActionHandler::After(action_bridge(realm, binding))
+                    } else {
+                        ActionHandler::Before(action_bridge(realm, binding))
+                    };
+                    action.insert(binding.clone(), handler);
+                }
+            }
+            if center.namespace() != "builtin" {
+                if slot_key == "builtin:link.tick" {
+                    tick.insert(
+                        center.clone(),
+                        TickHandler::Replace(tick_bridge(realm, center)),
+                    );
+                } else {
+                    action.insert(
+                        center.clone(),
+                        ActionHandler::Replace(action_bridge(realm, center)),
+                    );
+                }
+            }
             continue;
         }
+        // Mod 自有槽：中心是动作处理绑定或 replace 处理器；before/after
+        // 是贡献处理器。全部经扩展桥（ctx 携带目标对象与参数）。
         for (binding, is_after) in before
             .iter()
             .map(|binding| (binding, false))
@@ -136,42 +207,31 @@ fn mod_handlers(
             if binding.namespace() == "builtin" {
                 continue;
             }
-            if slot_key == "builtin:link.tick" {
-                let handler = if is_after {
-                    TickHandler::After(tick_bridge(realm, binding))
-                } else {
-                    TickHandler::Before(tick_bridge(realm, binding))
-                };
-                tick.insert(binding.clone(), handler);
+            let handler = if is_after {
+                ExtHandler::After(ext_bridge(realm, binding))
             } else {
-                let handler = if is_after {
-                    ActionHandler::After(action_bridge(realm, binding))
-                } else {
-                    ActionHandler::Before(action_bridge(realm, binding))
-                };
-                action.insert(binding.clone(), handler);
-            }
+                ExtHandler::Before(ext_bridge(realm, binding))
+            };
+            ext_handlers.insert(binding.clone(), handler);
         }
         if center.namespace() != "builtin" {
-            if slot_key == "builtin:link.tick" {
-                tick.insert(
-                    center.clone(),
-                    TickHandler::Replace(tick_bridge(realm, center)),
-                );
+            if process_bindings.contains(center) {
+                ext_processes.insert(center.clone(), ext_bridge(realm, center));
             } else {
-                action.insert(
+                ext_handlers.insert(
                     center.clone(),
-                    ActionHandler::Replace(action_bridge(realm, center)),
+                    ExtHandler::Replace(ext_bridge(realm, center)),
                 );
             }
         }
     }
-    Ok((action, tick))
+    Ok((action, tick, ext_handlers, ext_processes))
 }
 
 type ActionBridge =
     Box<dyn Fn(&mut Working, ObjId, &kk_engine::intent::IntentData) -> Result<(), String>>;
 type TickBridge = Box<dyn Fn(&mut Working, ObjId) -> Result<(), String>>;
+type ExtBridge = Box<dyn Fn(&mut Working, ObjId, &serde_json::Value) -> Result<(), String>>;
 
 /// 对象动作槽的桥闭包；动作参数经冻结计划清洗后进入结算，桥内不再读。
 fn action_bridge(realm: &Rc<RefCell<ModRealm>>, binding: &Key) -> ActionBridge {
@@ -191,6 +251,56 @@ fn tick_bridge(realm: &Rc<RefCell<ModRealm>>, binding: &Key) -> TickBridge {
     let namespace = binding.namespace().to_string();
     let key = binding.to_string();
     Box::new(move |w: &mut Working, _id: ObjId| bridge_call(&realm, &key, &namespace, w))
+}
+
+/// 扩展意图槽的桥闭包：ctx 携带目标对象完整字段与已校验参数，处理器
+/// 终值 state 与 target.fields 整值写回候选（null=不改动）。
+fn ext_bridge(realm: &Rc<RefCell<ModRealm>>, binding: &Key) -> ExtBridge {
+    let realm = realm.clone();
+    let namespace = binding.namespace().to_string();
+    let key = binding.to_string();
+    Box::new(
+        move |w: &mut Working, id: ObjId, args: &serde_json::Value| {
+            let fields = w.mod_fields(id).ok_or_else(|| {
+                format!(
+                    "处理器 {key} 的目标对象 {} 不是 Mod 对象或 payload 非法",
+                    id.as_str()
+                )
+            })?;
+            let ctx = json!({
+                "tick": w.time,
+                "room": w.room.name,
+                "state": w.state.mod_state(&namespace),
+                "target": { "id": id.as_str(), "fields": fields },
+                "args": args,
+            });
+            let outcome = realm
+                .borrow_mut()
+                .invoke(&key, ctx)
+                .map_err(|error| format!("处理器 {key} @ {}: {error}", w.room.name))?;
+            // 状态终值整值写回：未触碰时是恒等写，写 null 即清空
+            // （清空与缺失同形，读取侧都得到 null）。
+            if let Some(state) = outcome.get("state") {
+                w.state.set_mod_state(&namespace, state.clone());
+            }
+            // 目标字段终值：null/缺失=不改动；对象值按类型描述符校验后
+            // 整值写入（部分字段的返回会被拒绝，处理器须返回完整字段）。
+            match outcome.get("target") {
+                Some(serde_json::Value::Object(fields)) => {
+                    let fields = serde_json::Value::Object(fields.clone());
+                    w.update_mod_fields(id, &fields)
+                        .map_err(|error| format!("处理器 {key} 的目标回写被拒：{error}"))?;
+                }
+                Some(serde_json::Value::Null) | None => {}
+                Some(other) => {
+                    return Err(format!(
+                        "处理器 {key} 的 target 终值须为对象或 null，实得 {other}"
+                    ));
+                }
+            }
+            Ok(())
+        },
+    )
 }
 
 fn bridge_call(
@@ -432,6 +542,7 @@ impl EmbedEngine {
             execution_order_for_test: None,
             last_execution_order: None,
             sandbox_configs_for_test: BTreeMap::new(),
+            ext_intents: false,
             kkpv_channel: false,
             kkpv_public_store: crate::kkpv_store::KkpvBlockStore::new(),
         }
@@ -459,6 +570,7 @@ impl EmbedEngine {
         }
         self.engine = Engine::default();
         self.mod_realm = None;
+        self.ext_intents = false;
         self.pending = None;
         self.execution_failure = None;
         self.fail_after_player_for_test = None;
@@ -481,10 +593,18 @@ impl EmbedEngine {
                 .register(packages, options.clone())
                 .map_err(|error| anyhow::anyhow!("mod 注册：{error}"))?;
             let realm = Rc::new(RefCell::new(realm));
-            let (action, tick) = mod_handlers(&registered.plan, &realm)?;
+            let (action, tick, ext_handlers, ext_processes) =
+                mod_handlers(&registered.plan, &realm)?;
+            let plan = std::sync::Arc::new(registered.plan.clone());
             self.engine
-                .install_plan(std::sync::Arc::new(registered.plan.clone()), action, tick)
+                .install_plan_with_ext(plan, action, tick, ext_handlers, ext_processes)
                 .map_err(anyhow::Error::msg)?;
+            // 装配成功后才置位：失败路径保持 vanilla 语义与标志一致。
+            self.ext_intents = registered
+                .plan
+                .intents()
+                .iter()
+                .any(|intent| intent.key.namespace() != "builtin");
             self.mod_realm = Some(realm);
         }
 
@@ -499,6 +619,8 @@ impl EmbedEngine {
                 "LINK_CAPACITY".to_string(),
                 serde_json::json!(self.engine.links().capacity),
             );
+            // 扩展意图原语的装配由引擎计划决定，测试配置不得改写。
+            config.extension_intents = self.ext_intents;
             let cpu = kk_core::cpu::Bucket::new(
                 config.cpu_limit,
                 config.bucket_cap,
@@ -589,11 +711,12 @@ impl EmbedEngine {
     /// 按适配器的对象类别和初始字段摆放对象，返回对象 ID。
     /// 字段归一化由 [`kk_world::place::normalize`] 完成；未处置的失败轮会阻止摆放。
     /// 以 Mod 包装建分片：注册与计划装配发生在引擎重置后、玩家沙箱
-    /// spawn 前（常量与结算同源）。当前可装配面是 link 两槽的
-    /// before/after/replace 处理器与规则；对象/意图/挂载绑定与 wrap
-    /// 处理器不支持装配，装配期显式拒绝而不是静默降级。装配失败时
-    /// 分片已按 vanilla 建立而 Mod 面不可用（与 create_shard 的
-    /// “后续失败不恢复旧分片”语义一致）。
+    /// spawn 前（常量与结算同源）。可装配面是 link 两槽的 before/after/
+    /// replace 处理器、规则，以及 Mod 自有动作入口的对象域执行链（动作
+    /// 处理中心 + before/after/replace 贡献处理器）；wrap 处理器与对象域
+    /// 外的执行形态（房间/玩家/世界域、队列合并、非严格转换、显式入口）
+    /// 装配期显式拒绝而不是静默降级。装配失败时分片已按 vanilla 建立而
+    /// Mod 面不可用（与 create_shard 的"后续失败不恢复旧分片"语义一致）。
     pub fn create_shard_with_mods(
         &mut self,
         spec: &Value,
@@ -615,6 +738,86 @@ impl EmbedEngine {
             name_seq: self.engine.world.next_obj_id() as usize,
         };
         let object = normalize(kind, spec, &ctx).map_err(anyhow::Error::msg)?;
+        let id = self
+            .engine
+            .world
+            .insert(room, object)
+            .map_err(anyhow::Error::msg)?;
+        Ok(id.as_str())
+    }
+
+    /// 管理命令：按已装配计划里的 Mod 类型创建对象并放入房间，返回对象 ID。
+    /// `fields` 须提供除带默认值外的全部声明字段（挂载字段同样要求）；
+    /// 缺失的有默认值字段落入默认，整体通过 schema 校验后写入世界存储。
+    /// 声明位置字段的类型以 payload 位置为准（信封坐标同步）。
+    pub fn place_mod_object(
+        &mut self,
+        room: &str,
+        type_key: &str,
+        fields: &Value,
+    ) -> anyhow::Result<String> {
+        self.no_open_round("placeModObject")?;
+        let descriptor = self
+            .engine
+            .mod_object_type(type_key)
+            .ok_or_else(|| {
+                anyhow::anyhow!("类型 {type_key} 不在已装配计划中（Mod 对象须经 Mod 分片创建）")
+            })?
+            .clone();
+        let Some(provided) = fields.as_object() else {
+            anyhow::bail!("Mod 对象字段须为 JSON 对象");
+        };
+        let mut payload = serde_json::Map::new();
+        for field in &descriptor.fields {
+            let name = kk_mod_api::validate::field_name(&field.key);
+            match provided.get(name) {
+                Some(value) => {
+                    payload.insert(name.to_string(), value.clone());
+                }
+                None => match &field.default {
+                    kk_mod_api::FieldDefault::Value(value) => {
+                        payload.insert(name.to_string(), value.clone());
+                    }
+                    kk_mod_api::FieldDefault::Missing => {
+                        anyhow::bail!("类型 {type_key} 的字段 {name} 未提供且无默认值")
+                    }
+                },
+            }
+        }
+        for key in provided.keys() {
+            if !descriptor
+                .fields
+                .iter()
+                .any(|f| kk_mod_api::validate::field_name(&f.key) == key)
+            {
+                anyhow::bail!("字段 {key} 未在类型 {type_key} 中声明");
+            }
+        }
+        let payload = Value::Object(payload);
+        kk_mod_api::validate::check_object_payload(&payload, &descriptor.fields, type_key)
+            .map_err(anyhow::Error::msg)?;
+        let (x, y) = match &descriptor.position_fields {
+            Some([fx, fy]) => {
+                let read = |key: &kk_mod_api::Key| {
+                    u8::try_from(
+                        payload
+                            .get(kk_mod_api::validate::field_name(key))
+                            .and_then(Value::as_u64)
+                            .expect("payload 已通过校验，位置字段必为 0..49 整数"),
+                    )
+                    .expect("0..49 在 u8 内")
+                };
+                (read(fx), read(fy))
+            }
+            None => (0, 0),
+        };
+        let object = kk_schema::room::RoomObject::Mod(kk_schema::room::ModObj {
+            id: 0,
+            x,
+            y,
+            type_key: type_key.to_string(),
+            data: payload.to_string(),
+        });
         let id = self
             .engine
             .world
@@ -1515,6 +1718,7 @@ impl EmbedEngine {
         }
         self.engine = Engine::default();
         self.mod_realm = None;
+        self.ext_intents = false;
         self.pending = None;
         self.execution_failure = None;
         self.fail_after_player_for_test = None;

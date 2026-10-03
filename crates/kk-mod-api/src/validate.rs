@@ -126,6 +126,39 @@ pub fn check_value(value: &Value, schema: &ValueSchema, context: &str) -> Result
     default_value(value, schema, context).map_err(|e| format!("{e}: {}", e.message))
 }
 
+/// 字段键的裸名（`namespace:name` 的 name 段）。对象字段在 payload JSON 中
+/// 以裸名存放；字段键的全名用于目录与绑定。
+pub fn field_name(field: &Key) -> &str {
+    field.as_str().split_once(':').expect("Key 含分隔符").1
+}
+
+/// 校验 Mod 类型对象的完整字段 payload：必须是 JSON 对象，键集合与
+/// 描述符声明的字段完全一致（未知键拒绝、缺字段拒绝），逐字段按
+/// schema 校验。写入侧（创建与处理器回写）共用此入口，保证存储中的
+/// payload 恒为已校验形态。
+pub fn check_object_payload(
+    payload: &Value,
+    fields: &[FieldDescriptor],
+    context: &str,
+) -> Result<(), String> {
+    let Some(map) = payload.as_object() else {
+        return Err(format!("{context}: 字段 payload 须为 JSON 对象"));
+    };
+    for field in fields {
+        let name = field_name(&field.key);
+        let Some(value) = map.get(name) else {
+            return Err(format!("{context}: 缺少字段 {name}"));
+        };
+        check_value(value, &field.schema, &format!("{context} / {name}"))?;
+    }
+    for key in map.keys() {
+        if !fields.iter().any(|f| field_name(&f.key) == key) {
+            return Err(format!("{context}: 字段 {key} 未在类型中声明"));
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn default_value(
     value: &Value,
     schema: &ValueSchema,
