@@ -16,6 +16,8 @@
 
 ## notes/ 笔记索引
 
+**Mod 成对采集**（2026-10-03）：[可配置窗口与成对口径](notes/mod-paired-sampling-2026-10-03.md)（默认更长窗口、交替两端次序、逐轮 P99/CPU 和倍率、证据保护）。
+
 **Mod 写入转换计时**（2026-10-03）：[直接计时与 getter 预算边界](notes/mod-write-conversion-2026-10-03.md)（诊断 v3、包含 getter 的真实转换计时、嵌套计数与 CPU/墙钟中断）。
 
 **Mod 上下文复审**（2026-10-03）：[getter 边界与数值门禁](notes/mod-context-review-2026-10-03.md)（重入 abort、转换故障留存、先核验能力再转换，以及无效测量拒收）。
