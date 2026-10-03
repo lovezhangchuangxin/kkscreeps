@@ -1,0 +1,1955 @@
+{
+  "complete": true,
+  "scope": "paired Mod pure settlement; no player execution or projection",
+  "platform": "macOS-15.7.3-arm64-arm-64bit",
+  "binaries": {
+    "before": "bcafe21c89a565213f8f10dc0ab0198548eb7afa79f7f21810f046afdbcce5a6",
+    "after": "14c1b9f6d0b17a7c4494fa34e6508e20c2d70c53c8a79abe3e217e08baf641f4"
+  },
+  "configuration": {
+    "rooms": 1,
+    "links_per_room": 400,
+    "warmup": 500,
+    "ticks": 3000,
+    "repetitions": 5,
+    "modes": [
+      "native",
+      "empty"
+    ],
+    "profile": false,
+    "timeout": 600,
+    "fixtures": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/mod-perf"
+  },
+  "summary": {
+    "plain:native": {
+      "pairs": 5,
+      "metrics": {
+        "p50_ms": {
+          "before_runs": [
+            1.996708,
+            1.9814580000000002,
+            1.9722089999999999,
+            1.974458,
+            2.0456670000000003
+          ],
+          "after_runs": [
+            2.007458,
+            1.9449999999999998,
+            1.9962080000000002,
+            1.9720829999999998,
+            1.927333
+          ],
+          "median_before": 1.9814580000000002,
+          "median_after": 1.9720829999999998,
+          "paired_after_minus_before": [
+            0.01075000000000026,
+            -0.036458000000000323,
+            0.023999000000000326,
+            -0.002375000000000238,
+            -0.11833400000000038
+          ],
+          "median_paired_delta": -0.002375000000000238,
+          "paired_after_over_before": [
+            1.0053838618365831,
+            0.9816004174703676,
+            1.0121685886232141,
+            0.9987971382526242,
+            0.9421538305110263
+          ],
+          "median_paired_ratio": 0.9987971382526242
+        },
+        "p95_ms": {
+          "before_runs": [
+            2.123125,
+            2.0535829999999997,
+            2.068541,
+            2.0446660000000003,
+            2.100625
+          ],
+          "after_runs": [
+            2.151334,
+            2.0280419999999997,
+            2.043958,
+            2.0905,
+            2.02775
+          ],
+          "median_before": 2.068541,
+          "median_after": 2.043958,
+          "paired_after_minus_before": [
+            0.02820899999999993,
+            -0.025541000000000036,
+            -0.024583000000000244,
+            0.04583399999999971,
+            -0.0728749999999998
+          ],
+          "median_paired_delta": -0.024583000000000244,
+          "paired_after_over_before": [
+            1.013286546953194,
+            0.9875627135596662,
+            0.9881157782224281,
+            1.022416375095003,
+            0.9653079440642667
+          ],
+          "median_paired_ratio": 0.9881157782224281
+        },
+        "p99_ms": {
+          "before_runs": [
+            2.315291,
+            2.129041,
+            2.2052500000000004,
+            2.095,
+            2.142416
+          ],
+          "after_runs": [
+            2.3423749999999997,
+            2.056458,
+            2.091042,
+            2.169833,
+            2.0945
+          ],
+          "median_before": 2.142416,
+          "median_after": 2.0945,
+          "paired_after_minus_before": [
+            0.027083999999999442,
+            -0.07258299999999984,
+            -0.11420800000000053,
+            0.07483299999999993,
+            -0.04791599999999985
+          ],
+          "median_paired_delta": -0.04791599999999985,
+          "paired_after_over_before": [
+            1.011697881605379,
+            0.9659081248317906,
+            0.9482108604466611,
+            1.0357198090692123,
+            0.97763459570877
+          ],
+          "median_paired_ratio": 0.97763459570877
+        },
+        "cpu_core_ms_per_tick": {
+          "before_runs": [
+            1.9933613333333333,
+            1.9813759999999998,
+            1.9767089999999998,
+            1.961955,
+            2.0229179999999998
+          ],
+          "after_runs": [
+            2.004828,
+            1.9486143333333332,
+            2.000116,
+            1.979677333333333,
+            1.9322743333333334
+          ],
+          "median_before": 1.9813759999999998,
+          "median_after": 1.979677333333333,
+          "paired_after_minus_before": [
+            0.011466666666666514,
+            -0.03276166666666658,
+            0.023406999999999956,
+            0.017722333333333173,
+            -0.09064366666666634
+          ],
+          "median_paired_delta": 0.011466666666666514,
+          "paired_after_over_before": [
+            1.0057524275578738,
+            0.9834651945583944,
+            1.0118413990121966,
+            1.009032996849231,
+            0.955191625826323
+          ],
+          "median_paired_ratio": 1.0057524275578738
+        }
+      }
+    },
+    "plain:empty": {
+      "pairs": 5,
+      "metrics": {
+        "p50_ms": {
+          "before_runs": [
+            1.982083,
+            1.941208,
+            1.976875,
+            1.951333,
+            1.896917
+          ],
+          "after_runs": [
+            1.9625,
+            2.001834,
+            1.986583,
+            2.0049170000000003,
+            1.9893329999999998
+          ],
+          "median_before": 1.951333,
+          "median_after": 1.9893329999999998,
+          "paired_after_minus_before": [
+            -0.019583000000000128,
+            0.06062600000000007,
+            0.00970800000000005,
+            0.0535840000000003,
+            0.09241599999999983
+          ],
+          "median_paired_delta": 0.0535840000000003,
+          "paired_after_over_before": [
+            0.9901199899297859,
+            1.0312310684893118,
+            1.0049107809042048,
+            1.027460202845952,
+            1.0487190530740143
+          ],
+          "median_paired_ratio": 1.027460202845952
+        },
+        "p95_ms": {
+          "before_runs": [
+            2.0687499999999996,
+            1.9997499999999997,
+            2.0277920000000003,
+            2.0412920000000003,
+            2.027
+          ],
+          "after_runs": [
+            2.036042,
+            2.1778750000000002,
+            2.129958,
+            2.1377919999999997,
+            2.043
+          ],
+          "median_before": 2.0277920000000003,
+          "median_after": 2.129958,
+          "paired_after_minus_before": [
+            -0.032707999999999515,
+            0.17812500000000053,
+            0.10216599999999953,
+            0.09649999999999936,
+            0.016000000000000014
+          ],
+          "median_paired_delta": 0.09649999999999936,
+          "paired_after_over_before": [
+            0.9841894864048341,
+            1.0890736342042757,
+            1.0503828795063792,
+            1.0472739813804195,
+            1.0078934385791811
+          ],
+          "median_paired_ratio": 1.0472739813804195
+        },
+        "p99_ms": {
+          "before_runs": [
+            2.209041,
+            2.04725,
+            2.061416,
+            2.5865,
+            2.100083
+          ],
+          "after_runs": [
+            2.107084,
+            2.9794169999999998,
+            2.179541,
+            2.194125,
+            2.084917
+          ],
+          "median_before": 2.100083,
+          "median_after": 2.179541,
+          "paired_after_minus_before": [
+            -0.10195700000000008,
+            0.9321669999999997,
+            0.11812500000000004,
+            -0.3923749999999999,
+            -0.015166000000000235
+          ],
+          "median_paired_delta": -0.015166000000000235,
+          "paired_after_over_before": [
+            0.9538455827664584,
+            1.4553264134814994,
+            1.0573028442585097,
+            0.8482988594625943,
+            0.9927783806640023
+          ],
+          "median_paired_ratio": 0.9927783806640023
+        },
+        "cpu_core_ms_per_tick": {
+          "before_runs": [
+            1.980019,
+            1.9475533333333332,
+            1.9797310000000001,
+            1.9642920000000001,
+            1.9175820000000001
+          ],
+          "after_runs": [
+            1.9574690000000001,
+            2.0178789999999998,
+            1.9920026666666666,
+            2.0054410000000003,
+            1.9843463333333335
+          ],
+          "median_before": 1.9642920000000001,
+          "median_after": 1.9920026666666666,
+          "paired_after_minus_before": [
+            -0.022549999999999848,
+            0.07032566666666651,
+            0.012271666666666459,
+            0.0411490000000001,
+            0.06676433333333343
+          ],
+          "median_paired_delta": 0.0411490000000001,
+          "paired_after_over_before": [
+            0.9886112203973801,
+            1.0361097513803643,
+            1.006198653588122,
+            1.0209485147829345,
+            1.0348169378588938
+          ],
+          "median_paired_ratio": 1.0209485147829345
+        }
+      }
+    }
+  },
+  "runs": [
+    {
+      "tool": "kkscreeps mod-perf-probe",
+      "mode": "native",
+      "rooms": 1,
+      "links_per_room": 400,
+      "warmup": 500,
+      "ticks": 3000,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "556452856d8650d43d6ef55d7f53eb0c4de38f86",
+        "git_status": "M compat/reports/kkscreeps.json\n M crates/kk-mod-host/src/chain.rs\n M crates/kk-mod-host/src/lib.rs\n M crates/kk-mod-host/tests/chain_tests.rs\n M crates/kk-mod-host/tests/limits_tests.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/mod_chain_tests.rs\n M docs/architecture/mod-execution.md\n M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? crates/kk-mod-host/src/write.rs\n?? docs/research/notes/mod-chain-driver-2026-10-03.md\n?? docs/research/notes/mod-write-envelope-2026-10-04.md\n?? docs/research/notes/mod-write-envelope-native-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-native-long-2026-10-04.partial.json\n?? docs/research/notes/mod-write-envelope-plain-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-profile-2026-10-04.json\n?? spikes/deno-spike/examples/js_driven_chain.js\n?? spikes/deno-spike/examples/js_driven_chain.rs",
+        "debug_assertions": false,
+        "unix_time_ms": 1791044468814
+      },
+      "package_digests": {},
+      "vm_limits": {
+        "registration_cpu_ms": 500,
+        "registration_wall_ms": 2000,
+        "settlement_cpu_ms": 100,
+        "settlement_wall_ms": 1000,
+        "memory_bytes": 134217728
+      },
+      "scope": "EmbedEngine.tick; no player execution or projection",
+      "fixture": "synthetic positive cooldown every tick; four audited chain positions",
+      "profile": null,
+      "profile_schema_version": null,
+      "wall": {
+        "count": 3000,
+        "p50_ms": 1.996708,
+        "p95_ms": 2.123125,
+        "p99_ms": 2.315291,
+        "max_ms": 3.956083,
+        "sum_ms": 5992.915849
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 5995.844875,
+        "cpu_core_ms": 5980.084,
+        "cpu_core_ms_per_tick": 1.9933613333333333,
+        "rss_bytes_after": 34177024,
+        "rss_bytes_sampled_peak": 34177024,
+        "rss_bytes_sampled_p50": 33734656,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 2.714514000000011,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "checks": {
+        "before": {
+          "tick": 0,
+          "generation": 402,
+          "verified_links": 400,
+          "link_state_sha256": "ac7d8a85c13c3f754bd5e6eb59e7b4c2d631ecf258d93db9d7d32434a85ca608",
+          "namespace": null
+        },
+        "after_warmup": {
+          "tick": 500,
+          "generation": 902,
+          "verified_links": 400,
+          "link_state_sha256": "c2e09ca8545625de7facd35718ea25b0e063d4c5efddcc5ce1a001f19fc9b084",
+          "namespace": null
+        },
+        "after_collection": {
+          "tick": 3500,
+          "generation": 3902,
+          "verified_links": 400,
+          "link_state_sha256": "d5ebb4cf67d5ad0a3b77e2e8b782541d8b8187700a0847988a9e203f550d74a0",
+          "namespace": null
+        }
+      },
+      "version": "before",
+      "binary_label": "before",
+      "instrumented": false,
+      "repetition": 1
+    },
+    {
+      "tool": "kkscreeps mod-perf-probe",
+      "mode": "native",
+      "rooms": 1,
+      "links_per_room": 400,
+      "warmup": 500,
+      "ticks": 3000,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "556452856d8650d43d6ef55d7f53eb0c4de38f86",
+        "git_status": "M compat/reports/kkscreeps.json\n M crates/kk-mod-host/src/chain.rs\n M crates/kk-mod-host/src/lib.rs\n M crates/kk-mod-host/tests/chain_tests.rs\n M crates/kk-mod-host/tests/limits_tests.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/mod_chain_tests.rs\n M docs/architecture/mod-execution.md\n M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? crates/kk-mod-host/src/write.rs\n?? docs/research/notes/mod-chain-driver-2026-10-03.md\n?? docs/research/notes/mod-write-envelope-2026-10-04.md\n?? docs/research/notes/mod-write-envelope-native-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-native-long-2026-10-04.partial.json\n?? docs/research/notes/mod-write-envelope-plain-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-profile-2026-10-04.json\n?? spikes/deno-spike/examples/js_driven_chain.js\n?? spikes/deno-spike/examples/js_driven_chain.rs",
+        "debug_assertions": false,
+        "unix_time_ms": 1791044476016
+      },
+      "package_digests": {},
+      "vm_limits": {
+        "registration_cpu_ms": 500,
+        "registration_wall_ms": 2000,
+        "settlement_cpu_ms": 100,
+        "settlement_wall_ms": 1000,
+        "memory_bytes": 134217728
+      },
+      "scope": "EmbedEngine.tick; no player execution or projection",
+      "fixture": "synthetic positive cooldown every tick; four audited chain positions",
+      "profile": null,
+      "profile_schema_version": null,
+      "wall": {
+        "count": 3000,
+        "p50_ms": 2.007458,
+        "p95_ms": 2.151334,
+        "p99_ms": 2.3423749999999997,
+        "max_ms": 5.4695,
+        "sum_ms": 6036.200617999993
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 6039.420167,
+        "cpu_core_ms": 6014.4839999999995,
+        "cpu_core_ms_per_tick": 2.004828,
+        "rss_bytes_after": 35602432,
+        "rss_bytes_sampled_peak": 35602432,
+        "rss_bytes_sampled_p50": 35373056,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 3.0025459999999877,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "checks": {
+        "before": {
+          "tick": 0,
+          "generation": 402,
+          "verified_links": 400,
+          "link_state_sha256": "ac7d8a85c13c3f754bd5e6eb59e7b4c2d631ecf258d93db9d7d32434a85ca608",
+          "namespace": null
+        },
+        "after_warmup": {
+          "tick": 500,
+          "generation": 902,
+          "verified_links": 400,
+          "link_state_sha256": "c2e09ca8545625de7facd35718ea25b0e063d4c5efddcc5ce1a001f19fc9b084",
+          "namespace": null
+        },
+        "after_collection": {
+          "tick": 3500,
+          "generation": 3902,
+          "verified_links": 400,
+          "link_state_sha256": "d5ebb4cf67d5ad0a3b77e2e8b782541d8b8187700a0847988a9e203f550d74a0",
+          "namespace": null
+        }
+      },
+      "version": "after",
+      "binary_label": "after",
+      "instrumented": false,
+      "repetition": 1
+    },
+    {
+      "tool": "kkscreeps mod-perf-probe",
+      "mode": "empty",
+      "rooms": 1,
+      "links_per_room": 400,
+      "warmup": 500,
+      "ticks": 3000,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "556452856d8650d43d6ef55d7f53eb0c4de38f86",
+        "git_status": "M compat/reports/kkscreeps.json\n M crates/kk-mod-host/src/chain.rs\n M crates/kk-mod-host/src/lib.rs\n M crates/kk-mod-host/tests/chain_tests.rs\n M crates/kk-mod-host/tests/limits_tests.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/mod_chain_tests.rs\n M docs/architecture/mod-execution.md\n M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? crates/kk-mod-host/src/write.rs\n?? docs/research/notes/mod-chain-driver-2026-10-03.md\n?? docs/research/notes/mod-write-envelope-2026-10-04.md\n?? docs/research/notes/mod-write-envelope-native-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-native-long-2026-10-04.partial.json\n?? docs/research/notes/mod-write-envelope-plain-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-profile-2026-10-04.json\n?? spikes/deno-spike/examples/js_driven_chain.js\n?? spikes/deno-spike/examples/js_driven_chain.rs",
+        "debug_assertions": false,
+        "unix_time_ms": 1791044483172
+      },
+      "package_digests": {
+        "perf": "ec399e3adc0884e9f73b5a5269d2a6186d0d377bb8bbaa245323fde99e422079"
+      },
+      "vm_limits": {
+        "registration_cpu_ms": 500,
+        "registration_wall_ms": 2000,
+        "settlement_cpu_ms": 100,
+        "settlement_wall_ms": 1000,
+        "memory_bytes": 134217728
+      },
+      "scope": "EmbedEngine.tick; no player execution or projection",
+      "fixture": "synthetic positive cooldown every tick; four audited chain positions",
+      "profile": null,
+      "profile_schema_version": null,
+      "wall": {
+        "count": 3000,
+        "p50_ms": 1.982083,
+        "p95_ms": 2.0687499999999996,
+        "p99_ms": 2.209041,
+        "max_ms": 6.805042,
+        "sum_ms": 5949.363249999996
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 5951.801584,
+        "cpu_core_ms": 5940.057,
+        "cpu_core_ms_per_tick": 1.980019,
+        "rss_bytes_after": 39763968,
+        "rss_bytes_sampled_peak": 39763968,
+        "rss_bytes_sampled_p50": 39632896,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 2.2449239999999917,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "checks": {
+        "before": {
+          "tick": 0,
+          "generation": 402,
+          "verified_links": 400,
+          "link_state_sha256": "ac7d8a85c13c3f754bd5e6eb59e7b4c2d631ecf258d93db9d7d32434a85ca608",
+          "namespace": null
+        },
+        "after_warmup": {
+          "tick": 500,
+          "generation": 902,
+          "verified_links": 400,
+          "link_state_sha256": "c2e09ca8545625de7facd35718ea25b0e063d4c5efddcc5ce1a001f19fc9b084",
+          "namespace": null
+        },
+        "after_collection": {
+          "tick": 3500,
+          "generation": 3902,
+          "verified_links": 400,
+          "link_state_sha256": "d5ebb4cf67d5ad0a3b77e2e8b782541d8b8187700a0847988a9e203f550d74a0",
+          "namespace": null
+        }
+      },
+      "version": "before",
+      "binary_label": "before",
+      "instrumented": false,
+      "repetition": 1
+    },
+    {
+      "tool": "kkscreeps mod-perf-probe",
+      "mode": "empty",
+      "rooms": 1,
+      "links_per_room": 400,
+      "warmup": 500,
+      "ticks": 3000,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "556452856d8650d43d6ef55d7f53eb0c4de38f86",
+        "git_status": "M compat/reports/kkscreeps.json\n M crates/kk-mod-host/src/chain.rs\n M crates/kk-mod-host/src/lib.rs\n M crates/kk-mod-host/tests/chain_tests.rs\n M crates/kk-mod-host/tests/limits_tests.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/mod_chain_tests.rs\n M docs/architecture/mod-execution.md\n M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? crates/kk-mod-host/src/write.rs\n?? docs/research/notes/mod-chain-driver-2026-10-03.md\n?? docs/research/notes/mod-write-envelope-2026-10-04.md\n?? docs/research/notes/mod-write-envelope-native-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-native-long-2026-10-04.partial.json\n?? docs/research/notes/mod-write-envelope-plain-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-profile-2026-10-04.json\n?? spikes/deno-spike/examples/js_driven_chain.js\n?? spikes/deno-spike/examples/js_driven_chain.rs",
+        "debug_assertions": false,
+        "unix_time_ms": 1791044490170
+      },
+      "package_digests": {
+        "perf": "ec399e3adc0884e9f73b5a5269d2a6186d0d377bb8bbaa245323fde99e422079"
+      },
+      "vm_limits": {
+        "registration_cpu_ms": 500,
+        "registration_wall_ms": 2000,
+        "settlement_cpu_ms": 100,
+        "settlement_wall_ms": 1000,
+        "memory_bytes": 134217728
+      },
+      "scope": "EmbedEngine.tick; no player execution or projection",
+      "fixture": "synthetic positive cooldown every tick; four audited chain positions",
+      "profile": null,
+      "profile_schema_version": null,
+      "wall": {
+        "count": 3000,
+        "p50_ms": 1.9625,
+        "p95_ms": 2.036042,
+        "p99_ms": 2.107084,
+        "max_ms": 2.425959,
+        "sum_ms": 5873.948591000013
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 5876.012000000001,
+        "cpu_core_ms": 5872.407,
+        "cpu_core_ms_per_tick": 1.9574690000000001,
+        "rss_bytes_after": 37797888,
+        "rss_bytes_sampled_peak": 37797888,
+        "rss_bytes_sampled_p50": 37470208,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 1.8853489999999793,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "checks": {
+        "before": {
+          "tick": 0,
+          "generation": 402,
+          "verified_links": 400,
+          "link_state_sha256": "ac7d8a85c13c3f754bd5e6eb59e7b4c2d631ecf258d93db9d7d32434a85ca608",
+          "namespace": null
+        },
+        "after_warmup": {
+          "tick": 500,
+          "generation": 902,
+          "verified_links": 400,
+          "link_state_sha256": "c2e09ca8545625de7facd35718ea25b0e063d4c5efddcc5ce1a001f19fc9b084",
+          "namespace": null
+        },
+        "after_collection": {
+          "tick": 3500,
+          "generation": 3902,
+          "verified_links": 400,
+          "link_state_sha256": "d5ebb4cf67d5ad0a3b77e2e8b782541d8b8187700a0847988a9e203f550d74a0",
+          "namespace": null
+        }
+      },
+      "version": "after",
+      "binary_label": "after",
+      "instrumented": false,
+      "repetition": 1
+    },
+    {
+      "tool": "kkscreeps mod-perf-probe",
+      "mode": "empty",
+      "rooms": 1,
+      "links_per_room": 400,
+      "warmup": 500,
+      "ticks": 3000,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "556452856d8650d43d6ef55d7f53eb0c4de38f86",
+        "git_status": "M compat/reports/kkscreeps.json\n M crates/kk-mod-host/src/chain.rs\n M crates/kk-mod-host/src/lib.rs\n M crates/kk-mod-host/tests/chain_tests.rs\n M crates/kk-mod-host/tests/limits_tests.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/mod_chain_tests.rs\n M docs/architecture/mod-execution.md\n M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? crates/kk-mod-host/src/write.rs\n?? docs/research/notes/mod-chain-driver-2026-10-03.md\n?? docs/research/notes/mod-write-envelope-2026-10-04.md\n?? docs/research/notes/mod-write-envelope-native-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-native-long-2026-10-04.partial.json\n?? docs/research/notes/mod-write-envelope-plain-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-profile-2026-10-04.json\n?? spikes/deno-spike/examples/js_driven_chain.js\n?? spikes/deno-spike/examples/js_driven_chain.rs",
+        "debug_assertions": false,
+        "unix_time_ms": 1791044497425
+      },
+      "package_digests": {
+        "perf": "ec399e3adc0884e9f73b5a5269d2a6186d0d377bb8bbaa245323fde99e422079"
+      },
+      "vm_limits": {
+        "registration_cpu_ms": 500,
+        "registration_wall_ms": 2000,
+        "settlement_cpu_ms": 100,
+        "settlement_wall_ms": 1000,
+        "memory_bytes": 134217728
+      },
+      "scope": "EmbedEngine.tick; no player execution or projection",
+      "fixture": "synthetic positive cooldown every tick; four audited chain positions",
+      "profile": null,
+      "profile_schema_version": null,
+      "wall": {
+        "count": 3000,
+        "p50_ms": 2.001834,
+        "p95_ms": 2.1778750000000002,
+        "p99_ms": 2.9794169999999998,
+        "max_ms": 14.448875,
+        "sum_ms": 6113.467850999986
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 6116.42375,
+        "cpu_core_ms": 6053.637,
+        "cpu_core_ms_per_tick": 2.0178789999999998,
+        "rss_bytes_after": 26017792,
+        "rss_bytes_sampled_peak": 39714816,
+        "rss_bytes_sampled_p50": 38715392,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 2.7336080000000136,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "checks": {
+        "before": {
+          "tick": 0,
+          "generation": 402,
+          "verified_links": 400,
+          "link_state_sha256": "ac7d8a85c13c3f754bd5e6eb59e7b4c2d631ecf258d93db9d7d32434a85ca608",
+          "namespace": null
+        },
+        "after_warmup": {
+          "tick": 500,
+          "generation": 902,
+          "verified_links": 400,
+          "link_state_sha256": "c2e09ca8545625de7facd35718ea25b0e063d4c5efddcc5ce1a001f19fc9b084",
+          "namespace": null
+        },
+        "after_collection": {
+          "tick": 3500,
+          "generation": 3902,
+          "verified_links": 400,
+          "link_state_sha256": "d5ebb4cf67d5ad0a3b77e2e8b782541d8b8187700a0847988a9e203f550d74a0",
+          "namespace": null
+        }
+      },
+      "version": "after",
+      "binary_label": "after",
+      "instrumented": false,
+      "repetition": 2
+    },
+    {
+      "tool": "kkscreeps mod-perf-probe",
+      "mode": "empty",
+      "rooms": 1,
+      "links_per_room": 400,
+      "warmup": 500,
+      "ticks": 3000,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "556452856d8650d43d6ef55d7f53eb0c4de38f86",
+        "git_status": "M compat/reports/kkscreeps.json\n M crates/kk-mod-host/src/chain.rs\n M crates/kk-mod-host/src/lib.rs\n M crates/kk-mod-host/tests/chain_tests.rs\n M crates/kk-mod-host/tests/limits_tests.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/mod_chain_tests.rs\n M docs/architecture/mod-execution.md\n M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? crates/kk-mod-host/src/write.rs\n?? docs/research/notes/mod-chain-driver-2026-10-03.md\n?? docs/research/notes/mod-write-envelope-2026-10-04.md\n?? docs/research/notes/mod-write-envelope-native-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-native-long-2026-10-04.partial.json\n?? docs/research/notes/mod-write-envelope-plain-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-profile-2026-10-04.json\n?? spikes/deno-spike/examples/js_driven_chain.js\n?? spikes/deno-spike/examples/js_driven_chain.rs",
+        "debug_assertions": false,
+        "unix_time_ms": 1791044504421
+      },
+      "package_digests": {
+        "perf": "ec399e3adc0884e9f73b5a5269d2a6186d0d377bb8bbaa245323fde99e422079"
+      },
+      "vm_limits": {
+        "registration_cpu_ms": 500,
+        "registration_wall_ms": 2000,
+        "settlement_cpu_ms": 100,
+        "settlement_wall_ms": 1000,
+        "memory_bytes": 134217728
+      },
+      "scope": "EmbedEngine.tick; no player execution or projection",
+      "fixture": "synthetic positive cooldown every tick; four audited chain positions",
+      "profile": null,
+      "profile_schema_version": null,
+      "wall": {
+        "count": 3000,
+        "p50_ms": 1.941208,
+        "p95_ms": 1.9997499999999997,
+        "p99_ms": 2.04725,
+        "max_ms": 10.305833,
+        "sum_ms": 5854.112506000005
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 5856.009875,
+        "cpu_core_ms": 5842.66,
+        "cpu_core_ms_per_tick": 1.9475533333333332,
+        "rss_bytes_after": 37568512,
+        "rss_bytes_sampled_peak": 37568512,
+        "rss_bytes_sampled_p50": 36978688,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 1.7186769999999794,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "checks": {
+        "before": {
+          "tick": 0,
+          "generation": 402,
+          "verified_links": 400,
+          "link_state_sha256": "ac7d8a85c13c3f754bd5e6eb59e7b4c2d631ecf258d93db9d7d32434a85ca608",
+          "namespace": null
+        },
+        "after_warmup": {
+          "tick": 500,
+          "generation": 902,
+          "verified_links": 400,
+          "link_state_sha256": "c2e09ca8545625de7facd35718ea25b0e063d4c5efddcc5ce1a001f19fc9b084",
+          "namespace": null
+        },
+        "after_collection": {
+          "tick": 3500,
+          "generation": 3902,
+          "verified_links": 400,
+          "link_state_sha256": "d5ebb4cf67d5ad0a3b77e2e8b782541d8b8187700a0847988a9e203f550d74a0",
+          "namespace": null
+        }
+      },
+      "version": "before",
+      "binary_label": "before",
+      "instrumented": false,
+      "repetition": 2
+    },
+    {
+      "tool": "kkscreeps mod-perf-probe",
+      "mode": "native",
+      "rooms": 1,
+      "links_per_room": 400,
+      "warmup": 500,
+      "ticks": 3000,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "556452856d8650d43d6ef55d7f53eb0c4de38f86",
+        "git_status": "M compat/reports/kkscreeps.json\n M crates/kk-mod-host/src/chain.rs\n M crates/kk-mod-host/src/lib.rs\n M crates/kk-mod-host/tests/chain_tests.rs\n M crates/kk-mod-host/tests/limits_tests.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/mod_chain_tests.rs\n M docs/architecture/mod-execution.md\n M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? crates/kk-mod-host/src/write.rs\n?? docs/research/notes/mod-chain-driver-2026-10-03.md\n?? docs/research/notes/mod-write-envelope-2026-10-04.md\n?? docs/research/notes/mod-write-envelope-native-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-native-long-2026-10-04.partial.json\n?? docs/research/notes/mod-write-envelope-plain-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-profile-2026-10-04.json\n?? spikes/deno-spike/examples/js_driven_chain.js\n?? spikes/deno-spike/examples/js_driven_chain.rs",
+        "debug_assertions": false,
+        "unix_time_ms": 1791044511398
+      },
+      "package_digests": {},
+      "vm_limits": {
+        "registration_cpu_ms": 500,
+        "registration_wall_ms": 2000,
+        "settlement_cpu_ms": 100,
+        "settlement_wall_ms": 1000,
+        "memory_bytes": 134217728
+      },
+      "scope": "EmbedEngine.tick; no player execution or projection",
+      "fixture": "synthetic positive cooldown every tick; four audited chain positions",
+      "profile": null,
+      "profile_schema_version": null,
+      "wall": {
+        "count": 3000,
+        "p50_ms": 1.9449999999999998,
+        "p95_ms": 2.0280419999999997,
+        "p99_ms": 2.056458,
+        "max_ms": 2.782167,
+        "sum_ms": 5844.978761000018
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 5846.811667,
+        "cpu_core_ms": 5845.843,
+        "cpu_core_ms_per_tick": 1.9486143333333332,
+        "rss_bytes_after": 32440320,
+        "rss_bytes_sampled_peak": 32440320,
+        "rss_bytes_sampled_p50": 32342016,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 1.6531989999999899,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "checks": {
+        "before": {
+          "tick": 0,
+          "generation": 402,
+          "verified_links": 400,
+          "link_state_sha256": "ac7d8a85c13c3f754bd5e6eb59e7b4c2d631ecf258d93db9d7d32434a85ca608",
+          "namespace": null
+        },
+        "after_warmup": {
+          "tick": 500,
+          "generation": 902,
+          "verified_links": 400,
+          "link_state_sha256": "c2e09ca8545625de7facd35718ea25b0e063d4c5efddcc5ce1a001f19fc9b084",
+          "namespace": null
+        },
+        "after_collection": {
+          "tick": 3500,
+          "generation": 3902,
+          "verified_links": 400,
+          "link_state_sha256": "d5ebb4cf67d5ad0a3b77e2e8b782541d8b8187700a0847988a9e203f550d74a0",
+          "namespace": null
+        }
+      },
+      "version": "after",
+      "binary_label": "after",
+      "instrumented": false,
+      "repetition": 2
+    },
+    {
+      "tool": "kkscreeps mod-perf-probe",
+      "mode": "native",
+      "rooms": 1,
+      "links_per_room": 400,
+      "warmup": 500,
+      "ticks": 3000,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "556452856d8650d43d6ef55d7f53eb0c4de38f86",
+        "git_status": "M compat/reports/kkscreeps.json\n M crates/kk-mod-host/src/chain.rs\n M crates/kk-mod-host/src/lib.rs\n M crates/kk-mod-host/tests/chain_tests.rs\n M crates/kk-mod-host/tests/limits_tests.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/mod_chain_tests.rs\n M docs/architecture/mod-execution.md\n M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? crates/kk-mod-host/src/write.rs\n?? docs/research/notes/mod-chain-driver-2026-10-03.md\n?? docs/research/notes/mod-write-envelope-2026-10-04.md\n?? docs/research/notes/mod-write-envelope-native-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-native-long-2026-10-04.partial.json\n?? docs/research/notes/mod-write-envelope-plain-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-profile-2026-10-04.json\n?? spikes/deno-spike/examples/js_driven_chain.js\n?? spikes/deno-spike/examples/js_driven_chain.rs",
+        "debug_assertions": false,
+        "unix_time_ms": 1791044518455
+      },
+      "package_digests": {},
+      "vm_limits": {
+        "registration_cpu_ms": 500,
+        "registration_wall_ms": 2000,
+        "settlement_cpu_ms": 100,
+        "settlement_wall_ms": 1000,
+        "memory_bytes": 134217728
+      },
+      "scope": "EmbedEngine.tick; no player execution or projection",
+      "fixture": "synthetic positive cooldown every tick; four audited chain positions",
+      "profile": null,
+      "profile_schema_version": null,
+      "wall": {
+        "count": 3000,
+        "p50_ms": 1.9814580000000002,
+        "p95_ms": 2.0535829999999997,
+        "p99_ms": 2.129041,
+        "max_ms": 2.772916,
+        "sum_ms": 5944.578203000005
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 5946.593334,
+        "cpu_core_ms": 5944.128,
+        "cpu_core_ms_per_tick": 1.9813759999999998,
+        "rss_bytes_after": 34734080,
+        "rss_bytes_sampled_peak": 34734080,
+        "rss_bytes_sampled_p50": 33734656,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 1.8305379999999694,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "checks": {
+        "before": {
+          "tick": 0,
+          "generation": 402,
+          "verified_links": 400,
+          "link_state_sha256": "ac7d8a85c13c3f754bd5e6eb59e7b4c2d631ecf258d93db9d7d32434a85ca608",
+          "namespace": null
+        },
+        "after_warmup": {
+          "tick": 500,
+          "generation": 902,
+          "verified_links": 400,
+          "link_state_sha256": "c2e09ca8545625de7facd35718ea25b0e063d4c5efddcc5ce1a001f19fc9b084",
+          "namespace": null
+        },
+        "after_collection": {
+          "tick": 3500,
+          "generation": 3902,
+          "verified_links": 400,
+          "link_state_sha256": "d5ebb4cf67d5ad0a3b77e2e8b782541d8b8187700a0847988a9e203f550d74a0",
+          "namespace": null
+        }
+      },
+      "version": "before",
+      "binary_label": "before",
+      "instrumented": false,
+      "repetition": 2
+    },
+    {
+      "tool": "kkscreeps mod-perf-probe",
+      "mode": "native",
+      "rooms": 1,
+      "links_per_room": 400,
+      "warmup": 500,
+      "ticks": 3000,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "556452856d8650d43d6ef55d7f53eb0c4de38f86",
+        "git_status": "M compat/reports/kkscreeps.json\n M crates/kk-mod-host/src/chain.rs\n M crates/kk-mod-host/src/lib.rs\n M crates/kk-mod-host/tests/chain_tests.rs\n M crates/kk-mod-host/tests/limits_tests.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/mod_chain_tests.rs\n M docs/architecture/mod-execution.md\n M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? crates/kk-mod-host/src/write.rs\n?? docs/research/notes/mod-chain-driver-2026-10-03.md\n?? docs/research/notes/mod-write-envelope-2026-10-04.md\n?? docs/research/notes/mod-write-envelope-native-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-native-long-2026-10-04.partial.json\n?? docs/research/notes/mod-write-envelope-plain-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-profile-2026-10-04.json\n?? spikes/deno-spike/examples/js_driven_chain.js\n?? spikes/deno-spike/examples/js_driven_chain.rs",
+        "debug_assertions": false,
+        "unix_time_ms": 1791044525518
+      },
+      "package_digests": {},
+      "vm_limits": {
+        "registration_cpu_ms": 500,
+        "registration_wall_ms": 2000,
+        "settlement_cpu_ms": 100,
+        "settlement_wall_ms": 1000,
+        "memory_bytes": 134217728
+      },
+      "scope": "EmbedEngine.tick; no player execution or projection",
+      "fixture": "synthetic positive cooldown every tick; four audited chain positions",
+      "profile": null,
+      "profile_schema_version": null,
+      "wall": {
+        "count": 3000,
+        "p50_ms": 1.9722089999999999,
+        "p95_ms": 2.068541,
+        "p99_ms": 2.2052500000000004,
+        "max_ms": 3.697833,
+        "sum_ms": 5931.981913000017
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 5934.070584,
+        "cpu_core_ms": 5930.1269999999995,
+        "cpu_core_ms_per_tick": 1.9767089999999998,
+        "rss_bytes_after": 33062912,
+        "rss_bytes_sampled_peak": 33062912,
+        "rss_bytes_sampled_p50": 33046528,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 1.894984999999976,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "checks": {
+        "before": {
+          "tick": 0,
+          "generation": 402,
+          "verified_links": 400,
+          "link_state_sha256": "ac7d8a85c13c3f754bd5e6eb59e7b4c2d631ecf258d93db9d7d32434a85ca608",
+          "namespace": null
+        },
+        "after_warmup": {
+          "tick": 500,
+          "generation": 902,
+          "verified_links": 400,
+          "link_state_sha256": "c2e09ca8545625de7facd35718ea25b0e063d4c5efddcc5ce1a001f19fc9b084",
+          "namespace": null
+        },
+        "after_collection": {
+          "tick": 3500,
+          "generation": 3902,
+          "verified_links": 400,
+          "link_state_sha256": "d5ebb4cf67d5ad0a3b77e2e8b782541d8b8187700a0847988a9e203f550d74a0",
+          "namespace": null
+        }
+      },
+      "version": "before",
+      "binary_label": "before",
+      "instrumented": false,
+      "repetition": 3
+    },
+    {
+      "tool": "kkscreeps mod-perf-probe",
+      "mode": "native",
+      "rooms": 1,
+      "links_per_room": 400,
+      "warmup": 500,
+      "ticks": 3000,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "556452856d8650d43d6ef55d7f53eb0c4de38f86",
+        "git_status": "M compat/reports/kkscreeps.json\n M crates/kk-mod-host/src/chain.rs\n M crates/kk-mod-host/src/lib.rs\n M crates/kk-mod-host/tests/chain_tests.rs\n M crates/kk-mod-host/tests/limits_tests.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/mod_chain_tests.rs\n M docs/architecture/mod-execution.md\n M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? crates/kk-mod-host/src/write.rs\n?? docs/research/notes/mod-chain-driver-2026-10-03.md\n?? docs/research/notes/mod-write-envelope-2026-10-04.md\n?? docs/research/notes/mod-write-envelope-native-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-native-long-2026-10-04.partial.json\n?? docs/research/notes/mod-write-envelope-plain-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-profile-2026-10-04.json\n?? spikes/deno-spike/examples/js_driven_chain.js\n?? spikes/deno-spike/examples/js_driven_chain.rs",
+        "debug_assertions": false,
+        "unix_time_ms": 1791044532653
+      },
+      "package_digests": {},
+      "vm_limits": {
+        "registration_cpu_ms": 500,
+        "registration_wall_ms": 2000,
+        "settlement_cpu_ms": 100,
+        "settlement_wall_ms": 1000,
+        "memory_bytes": 134217728
+      },
+      "scope": "EmbedEngine.tick; no player execution or projection",
+      "fixture": "synthetic positive cooldown every tick; four audited chain positions",
+      "profile": null,
+      "profile_schema_version": null,
+      "wall": {
+        "count": 3000,
+        "p50_ms": 1.9962080000000002,
+        "p95_ms": 2.043958,
+        "p99_ms": 2.091042,
+        "max_ms": 19.481042000000002,
+        "sum_ms": 6012.143379999999
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 6013.964875,
+        "cpu_core_ms": 6000.348,
+        "cpu_core_ms_per_tick": 2.000116,
+        "rss_bytes_after": 33341440,
+        "rss_bytes_sampled_peak": 33341440,
+        "rss_bytes_sampled_p50": 32915456,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 1.641058999999973,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "checks": {
+        "before": {
+          "tick": 0,
+          "generation": 402,
+          "verified_links": 400,
+          "link_state_sha256": "ac7d8a85c13c3f754bd5e6eb59e7b4c2d631ecf258d93db9d7d32434a85ca608",
+          "namespace": null
+        },
+        "after_warmup": {
+          "tick": 500,
+          "generation": 902,
+          "verified_links": 400,
+          "link_state_sha256": "c2e09ca8545625de7facd35718ea25b0e063d4c5efddcc5ce1a001f19fc9b084",
+          "namespace": null
+        },
+        "after_collection": {
+          "tick": 3500,
+          "generation": 3902,
+          "verified_links": 400,
+          "link_state_sha256": "d5ebb4cf67d5ad0a3b77e2e8b782541d8b8187700a0847988a9e203f550d74a0",
+          "namespace": null
+        }
+      },
+      "version": "after",
+      "binary_label": "after",
+      "instrumented": false,
+      "repetition": 3
+    },
+    {
+      "tool": "kkscreeps mod-perf-probe",
+      "mode": "empty",
+      "rooms": 1,
+      "links_per_room": 400,
+      "warmup": 500,
+      "ticks": 3000,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "556452856d8650d43d6ef55d7f53eb0c4de38f86",
+        "git_status": "M compat/reports/kkscreeps.json\n M crates/kk-mod-host/src/chain.rs\n M crates/kk-mod-host/src/lib.rs\n M crates/kk-mod-host/tests/chain_tests.rs\n M crates/kk-mod-host/tests/limits_tests.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/mod_chain_tests.rs\n M docs/architecture/mod-execution.md\n M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? crates/kk-mod-host/src/write.rs\n?? docs/research/notes/mod-chain-driver-2026-10-03.md\n?? docs/research/notes/mod-write-envelope-2026-10-04.md\n?? docs/research/notes/mod-write-envelope-native-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-native-long-2026-10-04.partial.json\n?? docs/research/notes/mod-write-envelope-plain-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-profile-2026-10-04.json\n?? spikes/deno-spike/examples/js_driven_chain.js\n?? spikes/deno-spike/examples/js_driven_chain.rs",
+        "debug_assertions": false,
+        "unix_time_ms": 1791044539717
+      },
+      "package_digests": {
+        "perf": "ec399e3adc0884e9f73b5a5269d2a6186d0d377bb8bbaa245323fde99e422079"
+      },
+      "vm_limits": {
+        "registration_cpu_ms": 500,
+        "registration_wall_ms": 2000,
+        "settlement_cpu_ms": 100,
+        "settlement_wall_ms": 1000,
+        "memory_bytes": 134217728
+      },
+      "scope": "EmbedEngine.tick; no player execution or projection",
+      "fixture": "synthetic positive cooldown every tick; four audited chain positions",
+      "profile": null,
+      "profile_schema_version": null,
+      "wall": {
+        "count": 3000,
+        "p50_ms": 1.976875,
+        "p95_ms": 2.0277920000000003,
+        "p99_ms": 2.061416,
+        "max_ms": 3.315083,
+        "sum_ms": 5939.360160000015
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 5941.272125,
+        "cpu_core_ms": 5939.193,
+        "cpu_core_ms_per_tick": 1.9797310000000001,
+        "rss_bytes_after": 37552128,
+        "rss_bytes_sampled_peak": 37552128,
+        "rss_bytes_sampled_p50": 37371904,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 1.7318629999999846,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "checks": {
+        "before": {
+          "tick": 0,
+          "generation": 402,
+          "verified_links": 400,
+          "link_state_sha256": "ac7d8a85c13c3f754bd5e6eb59e7b4c2d631ecf258d93db9d7d32434a85ca608",
+          "namespace": null
+        },
+        "after_warmup": {
+          "tick": 500,
+          "generation": 902,
+          "verified_links": 400,
+          "link_state_sha256": "c2e09ca8545625de7facd35718ea25b0e063d4c5efddcc5ce1a001f19fc9b084",
+          "namespace": null
+        },
+        "after_collection": {
+          "tick": 3500,
+          "generation": 3902,
+          "verified_links": 400,
+          "link_state_sha256": "d5ebb4cf67d5ad0a3b77e2e8b782541d8b8187700a0847988a9e203f550d74a0",
+          "namespace": null
+        }
+      },
+      "version": "before",
+      "binary_label": "before",
+      "instrumented": false,
+      "repetition": 3
+    },
+    {
+      "tool": "kkscreeps mod-perf-probe",
+      "mode": "empty",
+      "rooms": 1,
+      "links_per_room": 400,
+      "warmup": 500,
+      "ticks": 3000,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "556452856d8650d43d6ef55d7f53eb0c4de38f86",
+        "git_status": "M compat/reports/kkscreeps.json\n M crates/kk-mod-host/src/chain.rs\n M crates/kk-mod-host/src/lib.rs\n M crates/kk-mod-host/tests/chain_tests.rs\n M crates/kk-mod-host/tests/limits_tests.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/mod_chain_tests.rs\n M docs/architecture/mod-execution.md\n M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? crates/kk-mod-host/src/write.rs\n?? docs/research/notes/mod-chain-driver-2026-10-03.md\n?? docs/research/notes/mod-write-envelope-2026-10-04.md\n?? docs/research/notes/mod-write-envelope-native-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-native-long-2026-10-04.partial.json\n?? docs/research/notes/mod-write-envelope-plain-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-profile-2026-10-04.json\n?? spikes/deno-spike/examples/js_driven_chain.js\n?? spikes/deno-spike/examples/js_driven_chain.rs",
+        "debug_assertions": false,
+        "unix_time_ms": 1791044546809
+      },
+      "package_digests": {
+        "perf": "ec399e3adc0884e9f73b5a5269d2a6186d0d377bb8bbaa245323fde99e422079"
+      },
+      "vm_limits": {
+        "registration_cpu_ms": 500,
+        "registration_wall_ms": 2000,
+        "settlement_cpu_ms": 100,
+        "settlement_wall_ms": 1000,
+        "memory_bytes": 134217728
+      },
+      "scope": "EmbedEngine.tick; no player execution or projection",
+      "fixture": "synthetic positive cooldown every tick; four audited chain positions",
+      "profile": null,
+      "profile_schema_version": null,
+      "wall": {
+        "count": 3000,
+        "p50_ms": 1.986583,
+        "p95_ms": 2.129958,
+        "p99_ms": 2.179541,
+        "max_ms": 3.720125,
+        "sum_ms": 5976.327183999986
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 5978.389958,
+        "cpu_core_ms": 5976.008,
+        "cpu_core_ms_per_tick": 1.9920026666666666,
+        "rss_bytes_after": 37928960,
+        "rss_bytes_sampled_peak": 37928960,
+        "rss_bytes_sampled_p50": 37863424,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 1.8816569999999744,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "checks": {
+        "before": {
+          "tick": 0,
+          "generation": 402,
+          "verified_links": 400,
+          "link_state_sha256": "ac7d8a85c13c3f754bd5e6eb59e7b4c2d631ecf258d93db9d7d32434a85ca608",
+          "namespace": null
+        },
+        "after_warmup": {
+          "tick": 500,
+          "generation": 902,
+          "verified_links": 400,
+          "link_state_sha256": "c2e09ca8545625de7facd35718ea25b0e063d4c5efddcc5ce1a001f19fc9b084",
+          "namespace": null
+        },
+        "after_collection": {
+          "tick": 3500,
+          "generation": 3902,
+          "verified_links": 400,
+          "link_state_sha256": "d5ebb4cf67d5ad0a3b77e2e8b782541d8b8187700a0847988a9e203f550d74a0",
+          "namespace": null
+        }
+      },
+      "version": "after",
+      "binary_label": "after",
+      "instrumented": false,
+      "repetition": 3
+    },
+    {
+      "tool": "kkscreeps mod-perf-probe",
+      "mode": "empty",
+      "rooms": 1,
+      "links_per_room": 400,
+      "warmup": 500,
+      "ticks": 3000,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "556452856d8650d43d6ef55d7f53eb0c4de38f86",
+        "git_status": "M compat/reports/kkscreeps.json\n M crates/kk-mod-host/src/chain.rs\n M crates/kk-mod-host/src/lib.rs\n M crates/kk-mod-host/tests/chain_tests.rs\n M crates/kk-mod-host/tests/limits_tests.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/mod_chain_tests.rs\n M docs/architecture/mod-execution.md\n M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? crates/kk-mod-host/src/write.rs\n?? docs/research/notes/mod-chain-driver-2026-10-03.md\n?? docs/research/notes/mod-write-envelope-2026-10-04.md\n?? docs/research/notes/mod-write-envelope-native-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-native-long-2026-10-04.partial.json\n?? docs/research/notes/mod-write-envelope-plain-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-profile-2026-10-04.json\n?? spikes/deno-spike/examples/js_driven_chain.js\n?? spikes/deno-spike/examples/js_driven_chain.rs",
+        "debug_assertions": false,
+        "unix_time_ms": 1791044553932
+      },
+      "package_digests": {
+        "perf": "ec399e3adc0884e9f73b5a5269d2a6186d0d377bb8bbaa245323fde99e422079"
+      },
+      "vm_limits": {
+        "registration_cpu_ms": 500,
+        "registration_wall_ms": 2000,
+        "settlement_cpu_ms": 100,
+        "settlement_wall_ms": 1000,
+        "memory_bytes": 134217728
+      },
+      "scope": "EmbedEngine.tick; no player execution or projection",
+      "fixture": "synthetic positive cooldown every tick; four audited chain positions",
+      "profile": null,
+      "profile_schema_version": null,
+      "wall": {
+        "count": 3000,
+        "p50_ms": 2.0049170000000003,
+        "p95_ms": 2.1377919999999997,
+        "p99_ms": 2.194125,
+        "max_ms": 2.641292,
+        "sum_ms": 6017.809178
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 6020.161959,
+        "cpu_core_ms": 6016.323,
+        "cpu_core_ms_per_tick": 2.0054410000000003,
+        "rss_bytes_after": 38256640,
+        "rss_bytes_sampled_peak": 38256640,
+        "rss_bytes_sampled_p50": 38158336,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 2.1611889999999883,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "checks": {
+        "before": {
+          "tick": 0,
+          "generation": 402,
+          "verified_links": 400,
+          "link_state_sha256": "ac7d8a85c13c3f754bd5e6eb59e7b4c2d631ecf258d93db9d7d32434a85ca608",
+          "namespace": null
+        },
+        "after_warmup": {
+          "tick": 500,
+          "generation": 902,
+          "verified_links": 400,
+          "link_state_sha256": "c2e09ca8545625de7facd35718ea25b0e063d4c5efddcc5ce1a001f19fc9b084",
+          "namespace": null
+        },
+        "after_collection": {
+          "tick": 3500,
+          "generation": 3902,
+          "verified_links": 400,
+          "link_state_sha256": "d5ebb4cf67d5ad0a3b77e2e8b782541d8b8187700a0847988a9e203f550d74a0",
+          "namespace": null
+        }
+      },
+      "version": "after",
+      "binary_label": "after",
+      "instrumented": false,
+      "repetition": 4
+    },
+    {
+      "tool": "kkscreeps mod-perf-probe",
+      "mode": "empty",
+      "rooms": 1,
+      "links_per_room": 400,
+      "warmup": 500,
+      "ticks": 3000,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "556452856d8650d43d6ef55d7f53eb0c4de38f86",
+        "git_status": "M compat/reports/kkscreeps.json\n M crates/kk-mod-host/src/chain.rs\n M crates/kk-mod-host/src/lib.rs\n M crates/kk-mod-host/tests/chain_tests.rs\n M crates/kk-mod-host/tests/limits_tests.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/mod_chain_tests.rs\n M docs/architecture/mod-execution.md\n M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? crates/kk-mod-host/src/write.rs\n?? docs/research/notes/mod-chain-driver-2026-10-03.md\n?? docs/research/notes/mod-write-envelope-2026-10-04.md\n?? docs/research/notes/mod-write-envelope-native-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-native-long-2026-10-04.partial.json\n?? docs/research/notes/mod-write-envelope-plain-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-profile-2026-10-04.json\n?? spikes/deno-spike/examples/js_driven_chain.js\n?? spikes/deno-spike/examples/js_driven_chain.rs",
+        "debug_assertions": false,
+        "unix_time_ms": 1791044560971
+      },
+      "package_digests": {
+        "perf": "ec399e3adc0884e9f73b5a5269d2a6186d0d377bb8bbaa245323fde99e422079"
+      },
+      "vm_limits": {
+        "registration_cpu_ms": 500,
+        "registration_wall_ms": 2000,
+        "settlement_cpu_ms": 100,
+        "settlement_wall_ms": 1000,
+        "memory_bytes": 134217728
+      },
+      "scope": "EmbedEngine.tick; no player execution or projection",
+      "fixture": "synthetic positive cooldown every tick; four audited chain positions",
+      "profile": null,
+      "profile_schema_version": null,
+      "wall": {
+        "count": 3000,
+        "p50_ms": 1.951333,
+        "p95_ms": 2.0412920000000003,
+        "p99_ms": 2.5865,
+        "max_ms": 6.110375,
+        "sum_ms": 5916.23448100001
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 5918.512125,
+        "cpu_core_ms": 5892.876,
+        "cpu_core_ms_per_tick": 1.9642920000000001,
+        "rss_bytes_after": 38748160,
+        "rss_bytes_sampled_peak": 38748160,
+        "rss_bytes_sampled_p50": 36470784,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 2.093394999999985,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "checks": {
+        "before": {
+          "tick": 0,
+          "generation": 402,
+          "verified_links": 400,
+          "link_state_sha256": "ac7d8a85c13c3f754bd5e6eb59e7b4c2d631ecf258d93db9d7d32434a85ca608",
+          "namespace": null
+        },
+        "after_warmup": {
+          "tick": 500,
+          "generation": 902,
+          "verified_links": 400,
+          "link_state_sha256": "c2e09ca8545625de7facd35718ea25b0e063d4c5efddcc5ce1a001f19fc9b084",
+          "namespace": null
+        },
+        "after_collection": {
+          "tick": 3500,
+          "generation": 3902,
+          "verified_links": 400,
+          "link_state_sha256": "d5ebb4cf67d5ad0a3b77e2e8b782541d8b8187700a0847988a9e203f550d74a0",
+          "namespace": null
+        }
+      },
+      "version": "before",
+      "binary_label": "before",
+      "instrumented": false,
+      "repetition": 4
+    },
+    {
+      "tool": "kkscreeps mod-perf-probe",
+      "mode": "native",
+      "rooms": 1,
+      "links_per_room": 400,
+      "warmup": 500,
+      "ticks": 3000,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "556452856d8650d43d6ef55d7f53eb0c4de38f86",
+        "git_status": "M compat/reports/kkscreeps.json\n M crates/kk-mod-host/src/chain.rs\n M crates/kk-mod-host/src/lib.rs\n M crates/kk-mod-host/tests/chain_tests.rs\n M crates/kk-mod-host/tests/limits_tests.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/mod_chain_tests.rs\n M docs/architecture/mod-execution.md\n M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? crates/kk-mod-host/src/write.rs\n?? docs/research/notes/mod-chain-driver-2026-10-03.md\n?? docs/research/notes/mod-write-envelope-2026-10-04.md\n?? docs/research/notes/mod-write-envelope-native-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-native-long-2026-10-04.partial.json\n?? docs/research/notes/mod-write-envelope-plain-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-profile-2026-10-04.json\n?? spikes/deno-spike/examples/js_driven_chain.js\n?? spikes/deno-spike/examples/js_driven_chain.rs",
+        "debug_assertions": false,
+        "unix_time_ms": 1791044568080
+      },
+      "package_digests": {},
+      "vm_limits": {
+        "registration_cpu_ms": 500,
+        "registration_wall_ms": 2000,
+        "settlement_cpu_ms": 100,
+        "settlement_wall_ms": 1000,
+        "memory_bytes": 134217728
+      },
+      "scope": "EmbedEngine.tick; no player execution or projection",
+      "fixture": "synthetic positive cooldown every tick; four audited chain positions",
+      "profile": null,
+      "profile_schema_version": null,
+      "wall": {
+        "count": 3000,
+        "p50_ms": 1.9720829999999998,
+        "p95_ms": 2.0905,
+        "p99_ms": 2.169833,
+        "max_ms": 10.775375,
+        "sum_ms": 5957.088591999996
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 5959.1020419999995,
+        "cpu_core_ms": 5939.031999999999,
+        "cpu_core_ms_per_tick": 1.979677333333333,
+        "rss_bytes_after": 35782656,
+        "rss_bytes_sampled_peak": 35782656,
+        "rss_bytes_sampled_p50": 35766272,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 1.8295899999999699,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "checks": {
+        "before": {
+          "tick": 0,
+          "generation": 402,
+          "verified_links": 400,
+          "link_state_sha256": "ac7d8a85c13c3f754bd5e6eb59e7b4c2d631ecf258d93db9d7d32434a85ca608",
+          "namespace": null
+        },
+        "after_warmup": {
+          "tick": 500,
+          "generation": 902,
+          "verified_links": 400,
+          "link_state_sha256": "c2e09ca8545625de7facd35718ea25b0e063d4c5efddcc5ce1a001f19fc9b084",
+          "namespace": null
+        },
+        "after_collection": {
+          "tick": 3500,
+          "generation": 3902,
+          "verified_links": 400,
+          "link_state_sha256": "d5ebb4cf67d5ad0a3b77e2e8b782541d8b8187700a0847988a9e203f550d74a0",
+          "namespace": null
+        }
+      },
+      "version": "after",
+      "binary_label": "after",
+      "instrumented": false,
+      "repetition": 4
+    },
+    {
+      "tool": "kkscreeps mod-perf-probe",
+      "mode": "native",
+      "rooms": 1,
+      "links_per_room": 400,
+      "warmup": 500,
+      "ticks": 3000,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "556452856d8650d43d6ef55d7f53eb0c4de38f86",
+        "git_status": "M compat/reports/kkscreeps.json\n M crates/kk-mod-host/src/chain.rs\n M crates/kk-mod-host/src/lib.rs\n M crates/kk-mod-host/tests/chain_tests.rs\n M crates/kk-mod-host/tests/limits_tests.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/mod_chain_tests.rs\n M docs/architecture/mod-execution.md\n M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? crates/kk-mod-host/src/write.rs\n?? docs/research/notes/mod-chain-driver-2026-10-03.md\n?? docs/research/notes/mod-write-envelope-2026-10-04.md\n?? docs/research/notes/mod-write-envelope-native-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-native-long-2026-10-04.partial.json\n?? docs/research/notes/mod-write-envelope-plain-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-profile-2026-10-04.json\n?? spikes/deno-spike/examples/js_driven_chain.js\n?? spikes/deno-spike/examples/js_driven_chain.rs",
+        "debug_assertions": false,
+        "unix_time_ms": 1791044575084
+      },
+      "package_digests": {},
+      "vm_limits": {
+        "registration_cpu_ms": 500,
+        "registration_wall_ms": 2000,
+        "settlement_cpu_ms": 100,
+        "settlement_wall_ms": 1000,
+        "memory_bytes": 134217728
+      },
+      "scope": "EmbedEngine.tick; no player execution or projection",
+      "fixture": "synthetic positive cooldown every tick; four audited chain positions",
+      "profile": null,
+      "profile_schema_version": null,
+      "wall": {
+        "count": 3000,
+        "p50_ms": 1.974458,
+        "p95_ms": 2.0446660000000003,
+        "p99_ms": 2.095,
+        "max_ms": 2.975334,
+        "sum_ms": 5886.007899999996
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 5888.006791999999,
+        "cpu_core_ms": 5885.865,
+        "cpu_core_ms_per_tick": 1.961955,
+        "rss_bytes_after": 33947648,
+        "rss_bytes_sampled_peak": 33947648,
+        "rss_bytes_sampled_p50": 33275904,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 1.8185429999999787,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "checks": {
+        "before": {
+          "tick": 0,
+          "generation": 402,
+          "verified_links": 400,
+          "link_state_sha256": "ac7d8a85c13c3f754bd5e6eb59e7b4c2d631ecf258d93db9d7d32434a85ca608",
+          "namespace": null
+        },
+        "after_warmup": {
+          "tick": 500,
+          "generation": 902,
+          "verified_links": 400,
+          "link_state_sha256": "c2e09ca8545625de7facd35718ea25b0e063d4c5efddcc5ce1a001f19fc9b084",
+          "namespace": null
+        },
+        "after_collection": {
+          "tick": 3500,
+          "generation": 3902,
+          "verified_links": 400,
+          "link_state_sha256": "d5ebb4cf67d5ad0a3b77e2e8b782541d8b8187700a0847988a9e203f550d74a0",
+          "namespace": null
+        }
+      },
+      "version": "before",
+      "binary_label": "before",
+      "instrumented": false,
+      "repetition": 4
+    },
+    {
+      "tool": "kkscreeps mod-perf-probe",
+      "mode": "native",
+      "rooms": 1,
+      "links_per_room": 400,
+      "warmup": 500,
+      "ticks": 3000,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "556452856d8650d43d6ef55d7f53eb0c4de38f86",
+        "git_status": "M compat/reports/kkscreeps.json\n M crates/kk-mod-host/src/chain.rs\n M crates/kk-mod-host/src/lib.rs\n M crates/kk-mod-host/tests/chain_tests.rs\n M crates/kk-mod-host/tests/limits_tests.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/mod_chain_tests.rs\n M docs/architecture/mod-execution.md\n M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? crates/kk-mod-host/src/write.rs\n?? docs/research/notes/mod-chain-driver-2026-10-03.md\n?? docs/research/notes/mod-write-envelope-2026-10-04.md\n?? docs/research/notes/mod-write-envelope-native-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-native-long-2026-10-04.partial.json\n?? docs/research/notes/mod-write-envelope-plain-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-profile-2026-10-04.json\n?? spikes/deno-spike/examples/js_driven_chain.js\n?? spikes/deno-spike/examples/js_driven_chain.rs",
+        "debug_assertions": false,
+        "unix_time_ms": 1791044582272
+      },
+      "package_digests": {},
+      "vm_limits": {
+        "registration_cpu_ms": 500,
+        "registration_wall_ms": 2000,
+        "settlement_cpu_ms": 100,
+        "settlement_wall_ms": 1000,
+        "memory_bytes": 134217728
+      },
+      "scope": "EmbedEngine.tick; no player execution or projection",
+      "fixture": "synthetic positive cooldown every tick; four audited chain positions",
+      "profile": null,
+      "profile_schema_version": null,
+      "wall": {
+        "count": 3000,
+        "p50_ms": 2.0456670000000003,
+        "p95_ms": 2.100625,
+        "p99_ms": 2.142416,
+        "max_ms": 2.642417,
+        "sum_ms": 6069.055890999996
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 6070.956792,
+        "cpu_core_ms": 6068.754,
+        "cpu_core_ms_per_tick": 2.0229179999999998,
+        "rss_bytes_after": 33374208,
+        "rss_bytes_sampled_peak": 33374208,
+        "rss_bytes_sampled_p50": 32260096,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 1.718518999999974,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "checks": {
+        "before": {
+          "tick": 0,
+          "generation": 402,
+          "verified_links": 400,
+          "link_state_sha256": "ac7d8a85c13c3f754bd5e6eb59e7b4c2d631ecf258d93db9d7d32434a85ca608",
+          "namespace": null
+        },
+        "after_warmup": {
+          "tick": 500,
+          "generation": 902,
+          "verified_links": 400,
+          "link_state_sha256": "c2e09ca8545625de7facd35718ea25b0e063d4c5efddcc5ce1a001f19fc9b084",
+          "namespace": null
+        },
+        "after_collection": {
+          "tick": 3500,
+          "generation": 3902,
+          "verified_links": 400,
+          "link_state_sha256": "d5ebb4cf67d5ad0a3b77e2e8b782541d8b8187700a0847988a9e203f550d74a0",
+          "namespace": null
+        }
+      },
+      "version": "before",
+      "binary_label": "before",
+      "instrumented": false,
+      "repetition": 5
+    },
+    {
+      "tool": "kkscreeps mod-perf-probe",
+      "mode": "native",
+      "rooms": 1,
+      "links_per_room": 400,
+      "warmup": 500,
+      "ticks": 3000,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "556452856d8650d43d6ef55d7f53eb0c4de38f86",
+        "git_status": "M compat/reports/kkscreeps.json\n M crates/kk-mod-host/src/chain.rs\n M crates/kk-mod-host/src/lib.rs\n M crates/kk-mod-host/tests/chain_tests.rs\n M crates/kk-mod-host/tests/limits_tests.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/mod_chain_tests.rs\n M docs/architecture/mod-execution.md\n M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? crates/kk-mod-host/src/write.rs\n?? docs/research/notes/mod-chain-driver-2026-10-03.md\n?? docs/research/notes/mod-write-envelope-2026-10-04.md\n?? docs/research/notes/mod-write-envelope-native-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-native-long-2026-10-04.partial.json\n?? docs/research/notes/mod-write-envelope-plain-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-profile-2026-10-04.json\n?? spikes/deno-spike/examples/js_driven_chain.js\n?? spikes/deno-spike/examples/js_driven_chain.rs",
+        "debug_assertions": false,
+        "unix_time_ms": 1791044589194
+      },
+      "package_digests": {},
+      "vm_limits": {
+        "registration_cpu_ms": 500,
+        "registration_wall_ms": 2000,
+        "settlement_cpu_ms": 100,
+        "settlement_wall_ms": 1000,
+        "memory_bytes": 134217728
+      },
+      "scope": "EmbedEngine.tick; no player execution or projection",
+      "fixture": "synthetic positive cooldown every tick; four audited chain positions",
+      "profile": null,
+      "profile_schema_version": null,
+      "wall": {
+        "count": 3000,
+        "p50_ms": 1.927333,
+        "p95_ms": 2.02775,
+        "p99_ms": 2.0945,
+        "max_ms": 3.78525,
+        "sum_ms": 5795.842639999994
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 5797.625417,
+        "cpu_core_ms": 5796.823,
+        "cpu_core_ms_per_tick": 1.9322743333333334,
+        "rss_bytes_after": 32915456,
+        "rss_bytes_sampled_peak": 32915456,
+        "rss_bytes_sampled_p50": 32702464,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 1.5964959999999795,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "checks": {
+        "before": {
+          "tick": 0,
+          "generation": 402,
+          "verified_links": 400,
+          "link_state_sha256": "ac7d8a85c13c3f754bd5e6eb59e7b4c2d631ecf258d93db9d7d32434a85ca608",
+          "namespace": null
+        },
+        "after_warmup": {
+          "tick": 500,
+          "generation": 902,
+          "verified_links": 400,
+          "link_state_sha256": "c2e09ca8545625de7facd35718ea25b0e063d4c5efddcc5ce1a001f19fc9b084",
+          "namespace": null
+        },
+        "after_collection": {
+          "tick": 3500,
+          "generation": 3902,
+          "verified_links": 400,
+          "link_state_sha256": "d5ebb4cf67d5ad0a3b77e2e8b782541d8b8187700a0847988a9e203f550d74a0",
+          "namespace": null
+        }
+      },
+      "version": "after",
+      "binary_label": "after",
+      "instrumented": false,
+      "repetition": 5
+    },
+    {
+      "tool": "kkscreeps mod-perf-probe",
+      "mode": "empty",
+      "rooms": 1,
+      "links_per_room": 400,
+      "warmup": 500,
+      "ticks": 3000,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "556452856d8650d43d6ef55d7f53eb0c4de38f86",
+        "git_status": "M compat/reports/kkscreeps.json\n M crates/kk-mod-host/src/chain.rs\n M crates/kk-mod-host/src/lib.rs\n M crates/kk-mod-host/tests/chain_tests.rs\n M crates/kk-mod-host/tests/limits_tests.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/mod_chain_tests.rs\n M docs/architecture/mod-execution.md\n M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? crates/kk-mod-host/src/write.rs\n?? docs/research/notes/mod-chain-driver-2026-10-03.md\n?? docs/research/notes/mod-write-envelope-2026-10-04.md\n?? docs/research/notes/mod-write-envelope-native-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-native-long-2026-10-04.partial.json\n?? docs/research/notes/mod-write-envelope-plain-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-profile-2026-10-04.json\n?? spikes/deno-spike/examples/js_driven_chain.js\n?? spikes/deno-spike/examples/js_driven_chain.rs",
+        "debug_assertions": false,
+        "unix_time_ms": 1791044596101
+      },
+      "package_digests": {
+        "perf": "ec399e3adc0884e9f73b5a5269d2a6186d0d377bb8bbaa245323fde99e422079"
+      },
+      "vm_limits": {
+        "registration_cpu_ms": 500,
+        "registration_wall_ms": 2000,
+        "settlement_cpu_ms": 100,
+        "settlement_wall_ms": 1000,
+        "memory_bytes": 134217728
+      },
+      "scope": "EmbedEngine.tick; no player execution or projection",
+      "fixture": "synthetic positive cooldown every tick; four audited chain positions",
+      "profile": null,
+      "profile_schema_version": null,
+      "wall": {
+        "count": 3000,
+        "p50_ms": 1.896917,
+        "p95_ms": 2.027,
+        "p99_ms": 2.100083,
+        "max_ms": 4.042040999999999,
+        "sum_ms": 5753.3418850000035
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 5755.047875,
+        "cpu_core_ms": 5752.746,
+        "cpu_core_ms_per_tick": 1.9175820000000001,
+        "rss_bytes_after": 36306944,
+        "rss_bytes_sampled_peak": 36306944,
+        "rss_bytes_sampled_p50": 36257792,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 1.5149819999999732,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "checks": {
+        "before": {
+          "tick": 0,
+          "generation": 402,
+          "verified_links": 400,
+          "link_state_sha256": "ac7d8a85c13c3f754bd5e6eb59e7b4c2d631ecf258d93db9d7d32434a85ca608",
+          "namespace": null
+        },
+        "after_warmup": {
+          "tick": 500,
+          "generation": 902,
+          "verified_links": 400,
+          "link_state_sha256": "c2e09ca8545625de7facd35718ea25b0e063d4c5efddcc5ce1a001f19fc9b084",
+          "namespace": null
+        },
+        "after_collection": {
+          "tick": 3500,
+          "generation": 3902,
+          "verified_links": 400,
+          "link_state_sha256": "d5ebb4cf67d5ad0a3b77e2e8b782541d8b8187700a0847988a9e203f550d74a0",
+          "namespace": null
+        }
+      },
+      "version": "before",
+      "binary_label": "before",
+      "instrumented": false,
+      "repetition": 5
+    },
+    {
+      "tool": "kkscreeps mod-perf-probe",
+      "mode": "empty",
+      "rooms": 1,
+      "links_per_room": 400,
+      "warmup": 500,
+      "ticks": 3000,
+      "metadata": {
+        "os": "macos",
+        "arch": "aarch64",
+        "logical_cpus": 10,
+        "system": "Darwin 192.168.1.3 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+        "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "git_commit": "556452856d8650d43d6ef55d7f53eb0c4de38f86",
+        "git_status": "M compat/reports/kkscreeps.json\n M crates/kk-mod-host/src/chain.rs\n M crates/kk-mod-host/src/lib.rs\n M crates/kk-mod-host/tests/chain_tests.rs\n M crates/kk-mod-host/tests/limits_tests.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/tests/mod_chain_tests.rs\n M docs/architecture/mod-execution.md\n M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? crates/kk-mod-host/src/write.rs\n?? docs/research/notes/mod-chain-driver-2026-10-03.md\n?? docs/research/notes/mod-write-envelope-2026-10-04.md\n?? docs/research/notes/mod-write-envelope-native-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-native-long-2026-10-04.partial.json\n?? docs/research/notes/mod-write-envelope-plain-2026-10-04.json\n?? docs/research/notes/mod-write-envelope-profile-2026-10-04.json\n?? spikes/deno-spike/examples/js_driven_chain.js\n?? spikes/deno-spike/examples/js_driven_chain.rs",
+        "debug_assertions": false,
+        "unix_time_ms": 1791044603184
+      },
+      "package_digests": {
+        "perf": "ec399e3adc0884e9f73b5a5269d2a6186d0d377bb8bbaa245323fde99e422079"
+      },
+      "vm_limits": {
+        "registration_cpu_ms": 500,
+        "registration_wall_ms": 2000,
+        "settlement_cpu_ms": 100,
+        "settlement_wall_ms": 1000,
+        "memory_bytes": 134217728
+      },
+      "scope": "EmbedEngine.tick; no player execution or projection",
+      "fixture": "synthetic positive cooldown every tick; four audited chain positions",
+      "profile": null,
+      "profile_schema_version": null,
+      "wall": {
+        "count": 3000,
+        "p50_ms": 1.9893329999999998,
+        "p95_ms": 2.043,
+        "p99_ms": 2.084917,
+        "max_ms": 2.680709,
+        "sum_ms": 5952.138297999996
+      },
+      "process": {
+        "scope": "current_process_all_threads",
+        "window": "after_warmup_through_collection_loop",
+        "wall_ms": 5953.92225,
+        "cpu_core_ms": 5953.039000000001,
+        "cpu_core_ms_per_tick": 1.9843463333333335,
+        "rss_bytes_after": 37502976,
+        "rss_bytes_sampled_peak": 37502976,
+        "rss_bytes_sampled_p50": 37060608,
+        "rss_observations": 3001,
+        "rss_retained_samples": 3001,
+        "rss_sampling_wall_ms": 1.5968089999999842,
+        "includes_sampling_and_workload_checks": true,
+        "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+      },
+      "checks": {
+        "before": {
+          "tick": 0,
+          "generation": 402,
+          "verified_links": 400,
+          "link_state_sha256": "ac7d8a85c13c3f754bd5e6eb59e7b4c2d631ecf258d93db9d7d32434a85ca608",
+          "namespace": null
+        },
+        "after_warmup": {
+          "tick": 500,
+          "generation": 902,
+          "verified_links": 400,
+          "link_state_sha256": "c2e09ca8545625de7facd35718ea25b0e063d4c5efddcc5ce1a001f19fc9b084",
+          "namespace": null
+        },
+        "after_collection": {
+          "tick": 3500,
+          "generation": 3902,
+          "verified_links": 400,
+          "link_state_sha256": "d5ebb4cf67d5ad0a3b77e2e8b782541d8b8187700a0847988a9e203f550d74a0",
+          "namespace": null
+        }
+      },
+      "version": "after",
+      "binary_label": "after",
+      "instrumented": false,
+      "repetition": 5
+    }
+  ],
+  "limitations": [
+    "桌面负载与频率未控制；增加窗口不能替代稳定基准机，无性能硬门禁",
+    "成对倍率为每轮 after/before 的中位数；各窗口 P99 仍全部保留",
+    "诊断阶段为包含耗时，增加插桩成本，与普通窗口分开",
+    "合成 link 世界，chain 额外维护四个计数；不代表真实玩家、持久化或网络"
+  ]
+}

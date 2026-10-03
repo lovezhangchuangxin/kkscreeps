@@ -45,6 +45,10 @@ runtime 在一次整槽能力内缓存已解析的目标字段，供重复读取
 
 写入 op 先核验调用能力与绑定，再反序列化载荷。serde_v8 可执行载荷 getter，故该入口显式 `nofast, reentrant`；转换期间释放 OpState 和候选借用，getter 的嵌套 op 仍逐次核验能力。转换结束后重新检查故障；getter 内捕获的候选错误、转换本身失败都留存为整槽故障，阻止后续写回及候选发布。转换异常仅格式化 serde 错误，不读取 JS 异常属性或堆栈钩子。候选 host 方法与 native 中心仍只执行 Rust 逻辑。
 
+写入宿主接收拥有的 `ChainWrite { state, target_fields }`，转换阶段不再为根和 target 构造临时 JSON Map；开放的 state/fields 仍为 Value。沿用动态 MapAccess 而非固定字段访问，保持自有键顺序、getter/Proxy 行为、undefined 省略及缺失成员语义。未知成员仍完整反序列化，不能用忽略成员的方式绕过其错误或深度限制。
+
+固定版本 serde_v8 对 Symbol 的分类会 Rust panic。整槽写入转换单独以 unwind 边界保护，归一为转换错误；不格式化 panic 载荷，OpState 与候选借用在此之前已释放。转换完成后仍重新检查故障，捕获 panic 也会阻止 host 写回/after/发布并毒化 realm。此边界只保护整槽写入转换，不覆盖其他入口或使用 panic=abort 的外部构建。
+
 转换中的 getter 同样处于整轮结算 CPU/墙钟预算内；死循环由原预算中断并毒化 realm。诊断计时不改变候选故障或预算处置：开启和关闭均覆盖嵌套读写与故障边界。
 
 接收者、原意图参数和 native 函数由 Rust 的本次调用固定。修改 JS 的 `ctx.target.id` 或 `ctx.args` 不会重定向 native。当前不开放通过 next 替换参数或指定另一接收者。

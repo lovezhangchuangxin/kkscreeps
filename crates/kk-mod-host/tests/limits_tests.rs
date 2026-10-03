@@ -1,6 +1,7 @@
 //! 真实死循环与分配探针放在子进程，外层期限防止错误实现挂死整个测试任务。
 use kk_mod_host::{
-    ChainContext, ChainHost, ChainTarget, ModRealm, ModVmLimits, RegisterOptions, discover_packages,
+    ChainContext, ChainHost, ChainTarget, ChainWrite, ModRealm, ModVmLimits, RegisterOptions,
+    discover_packages,
 };
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
@@ -19,7 +20,7 @@ impl ChainHost for SleepingHost {
     fn read(&mut self, binding: &str) -> Result<ChainContext, String> {
         Host.read(binding)
     }
-    fn write(&mut self, binding: &str, value: Value) -> Result<(), String> {
+    fn write(&mut self, binding: &str, value: ChainWrite) -> Result<(), String> {
         Host.write(binding, value)
     }
     fn native(&mut self) -> Result<(), String> {
@@ -40,7 +41,7 @@ impl ChainHost for Host {
             tick: 0,
         })
     }
-    fn write(&mut self, _: &str, _: Value) -> Result<(), String> {
+    fn write(&mut self, _: &str, _: ChainWrite) -> Result<(), String> {
         Ok(())
     }
     fn native(&mut self) -> Result<(), String> {

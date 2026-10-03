@@ -24,7 +24,9 @@ use kk_engine::{
     PlayerWriteback, RunOutcome, RunResult, RunState, SegmentWriteback, TickInput, TickStage,
 };
 use kk_mod_api::{Key, SlotPlan};
-use kk_mod_host::{ChainContext, ChainHost, ChainTarget, ModPackage, ModRealm, RegisterOptions};
+use kk_mod_host::{
+    ChainContext, ChainHost, ChainTarget, ChainWrite, ModPackage, ModRealm, RegisterOptions,
+};
 use kk_world::ObjId;
 use kk_world::place::{PlaceCtx, normalize};
 
@@ -256,20 +258,16 @@ impl ChainHost for ModChainContext {
         })
     }
 
-    fn write(&mut self, binding: &str, mut context: Value) -> Result<(), String> {
+    fn write(&mut self, binding: &str, context: ChainWrite) -> Result<(), String> {
         let key = Key::new(binding)?;
-        if let Some(fields) = context.pointer("/target/fields") {
+        if let Some(fields) = context.target_fields.as_ref() {
             self.write_fields(fields)?;
         }
-        // op 已交付 context 所有权，领域校验完成后移走 state，避免深克隆。
-        let state = context
-            .get_mut("state")
-            .map(Value::take)
-            .unwrap_or(Value::Null);
+        // 字段校验完成后移交 state；固定封套不再构造或拆除 JSON Map。
         self.ctx
             .borrow_mut()
             .state
-            .set_mod_state(key.namespace(), state);
+            .set_mod_state(key.namespace(), context.state);
         Ok(())
     }
 

@@ -5,7 +5,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use kk_mod_host::{
-    ChainContext, ChainHost, ChainProfiler, ChainTarget, ModRealm, RegisterOptions,
+    ChainContext, ChainHost, ChainProfiler, ChainTarget, ChainWrite, ModRealm, RegisterOptions,
     discover_packages,
 };
 use serde_json::{Value, json};
@@ -116,8 +116,8 @@ impl ChainHost for Host {
             tick: 0,
         })
     }
-    fn write(&mut self, _: &str, context: Value) -> Result<(), String> {
-        *self.0.borrow_mut() = context["state"].clone();
+    fn write(&mut self, _: &str, context: ChainWrite) -> Result<(), String> {
+        *self.0.borrow_mut() = context.state;
         Ok(())
     }
     fn native(&mut self) -> Result<(), String> {
@@ -196,6 +196,7 @@ fn write_getter_boundaries_are_safe_and_conversion_faults_are_sticky() {
             "nested-fault",
             "conversion-fault",
             "invalid-binding",
+            "symbol-fault",
         ] {
             let mut child = std::process::Command::new(std::env::current_exe().unwrap())
                 .args(["--exact", "write_getter_child", "--ignored", "--nocapture"])
@@ -249,6 +250,10 @@ fn write_getter_child() {
         ),
         "invalid-binding" => (
             "try { Deno.core.ops.op_mod_chain_write('1','foreign:handler.bad',{get state(){globalThis.getterCalls++;return {};}}); }catch(e){}",
+            true,
+        ),
+        "symbol-fault" => (
+            "try { Deno.core.ops.op_mod_chain_write('1','test:handler.audit',{state:{bad:Symbol('bad')}}); }catch(e){}",
             true,
         ),
         _ => panic!("未知 case"),

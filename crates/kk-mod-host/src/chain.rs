@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
-use crate::ChainProfiler;
+use crate::{ChainProfiler, ChainWrite};
 use deno_core::{OpState, op2, v8};
 use deno_error::JsErrorBox;
 use kk_mod_api::{ContributionPlan, Dispatch};
@@ -32,7 +32,7 @@ pub struct ChainTarget {
 /// 方法执行期间不得回入 JS；每次访问自己取得并释放候选短借用。
 pub trait ChainHost {
     fn read(&mut self, binding: &str) -> Result<ChainContext, String>;
-    fn write(&mut self, binding: &str, context: Value) -> Result<(), String>;
+    fn write(&mut self, binding: &str, context: ChainWrite) -> Result<(), String>;
     fn native(&mut self) -> Result<(), String>;
 }
 
@@ -205,7 +205,7 @@ pub(crate) fn op_mod_chain_write<'s, 'i>(
         v8::tc_scope!(let tc, scope);
         let result = {
             let _timer = profiler.as_ref().map(|p| p.measure("write_from_v8"));
-            deno_core::serde_v8::from_v8::<Value>(tc, context)
+            crate::write::from_v8::<ChainWrite>(tc, context)
         };
         result.map_err(|error| format!("处理器 {binding}: 上下文转换失败: {error}"))
     };

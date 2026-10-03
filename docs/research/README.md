@@ -16,6 +16,8 @@
 
 ## notes/ 笔记索引
 
+**Mod 拥有值写入封套**（2026-10-04）：[省去外层 Map 与转换 panic 清偿](notes/mod-write-envelope-2026-10-04.md)（动态遍历保留 getter/未知值故障，直接移交 state/fields，Symbol 子进程与候选回滚）。
+
 **Mod 成对采集**（2026-10-03）：[可配置窗口与成对口径](notes/mod-paired-sampling-2026-10-03.md)（默认更长窗口、交替两端次序、逐轮 P99/CPU 和倍率、证据保护）。
 
 **Mod 写入转换计时**（2026-10-03）：[直接计时与 getter 预算边界](notes/mod-write-conversion-2026-10-03.md)（诊断 v3、包含 getter 的真实转换计时、嵌套计数与 CPU/墙钟中断）。

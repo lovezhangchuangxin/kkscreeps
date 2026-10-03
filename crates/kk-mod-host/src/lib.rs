@@ -22,6 +22,7 @@ mod manifest;
 mod package;
 mod profile;
 mod realm;
+mod write;
 
 pub use chain::{ChainContext, ChainHost, ChainTarget};
 pub use error::{ModHostError, ModHostResult};
@@ -30,3 +31,4 @@ pub use manifest::{ModManifest, SDK_API_VERSION, Version, VersionReq};
 pub use package::{ModPackage, discover_packages};
 pub use profile::{ChainProfiler, ProfileSample};
 pub use realm::{ModRealm, PlayerModulePackage, RegisterOptions, Registered};
+pub use write::ChainWrite;

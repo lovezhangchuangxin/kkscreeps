@@ -1,0 +1,124 @@
+{
+  "base_commit": "5564528",
+  "changes": [
+    "Owned ChainWrite transport drops root/target Maps without skipping unknown values or changing V8 MapAccess traversal.",
+    "Synchronous serde_v8 Rust panics are contained at write conversion; normal sticky fault and realm poison still apply."
+  ],
+  "checks": {
+    "pnpm run check": {
+      "exit_code": 0,
+      "rust_passed": 563,
+      "rust_ignored": 9,
+      "javascript_passed": 19,
+      "fmt": "passed",
+      "clippy": "passed"
+    },
+    "python unittest discover scripts/tests": {
+      "exit_code": 0,
+      "passed": 27
+    },
+    "compat ratchet": {
+      "exit_code": 0,
+      "passed": 1854,
+      "failed": 153,
+      "skipped": 907,
+      "regressions": 0,
+      "new_passes": 0,
+      "screeps_ok_commit": "34a630efa42908c117c19c25d2350fa2387bd633"
+    },
+    "node scripts/check-doc-links.mjs": {
+      "exit_code": 0,
+      "markdown_files": 216,
+      "local_links": 1099
+    },
+    "git diff --check": {
+      "exit_code": 0
+    }
+  },
+  "symbol_fault_reproduction": {
+    "unprotected_debug_child": "non-unwinding panic / aborting; parent failed as expected",
+    "release_probe": {
+      "before": {
+        "returncode": -6,
+        "report_created": false,
+        "log": "/tmp/kkscreeps-write-symbol-release-before.log"
+      },
+      "after": {
+        "returncode": 1,
+        "report_created": false,
+        "log": "/tmp/kkscreeps-write-symbol-release-after.log"
+      }
+    },
+    "native_side_effect_rollback": "JSON and KKPV tested for throwing getter and Symbols in state/root-extra/target-extra, including same-input retry"
+  },
+  "binaries": {
+    "before": "bcafe21c89a565213f8f10dc0ab0198548eb7afa79f7f21810f046afdbcce5a6",
+    "after": "14c1b9f6d0b17a7c4494fa34e6508e20c2d70c53c8a79abe3e217e08baf641f4"
+  },
+  "source_sha256": {
+    "crates/kk-mod-host/src/write.rs": "73ae86cd818796962b7a1f0574425fb68a780f52a30a200fc698895dc7e5ecc7",
+    "crates/kk-mod-host/src/chain.rs": "69ed060377794add2c9266b1fb41ba3c5d8ad1357ab7ad90c88bec18b35f2ec3",
+    "crates/kk-mod-host/src/lib.rs": "ba1d751ab7e40eda9410b0e0bd922c289e822a43fbe164cc7364d4f1d3756ff3",
+    "crates/kk-mod-host/tests/chain_tests.rs": "1ed069ca366b1053fbe92b4cda41b4115f8bd622deec6ca33f1d6836b0d5b3b3",
+    "crates/kk-mod-host/tests/limits_tests.rs": "599be2e9063f37879aca1fa27536339d8d3d7ec4bde91a7ab265c933739b68ed",
+    "crates/kk-runtime/src/embed.rs": "0bfc885e4c38058854763f12f8c923d01a5c94ab96ff628a04e493a1ff9270a2",
+    "crates/kk-runtime/tests/mod_chain_tests.rs": "8b4a97204e57967da20ce3b80b8ebe68873a0ce7a7a88560b9ceacb07f18ec64",
+    "scripts/mod-perf-compare.py": "ccdc506ea1b5b1a0f157bff9a3faa6a1f510c17d04934de064fdff1e3344888a",
+    "scripts/mod-perf-baseline.py": "bb75e4671baa8a174e878a22cda1a784692af99ca05991c979d2f4b0254e1c1d"
+  },
+  "report_sha256": {
+    "docs/research/notes/mod-write-envelope-plain-2026-10-04.json": "474692d9710bbe27d26c6454c4cce487fdc58d141ca3e8ca7eaa08f63e8bf94f",
+    "docs/research/notes/mod-write-envelope-profile-2026-10-04.json": "a6019569c9760bbffc86f1453109862a1705efe462b3ea6826c37f4a45476278",
+    "docs/research/notes/mod-write-envelope-native-2026-10-04.json": "53e1f775bdfa7bca25a84745f24a79d2671a65c0eae8ea3ed4ddf4ebee7c911d",
+    "docs/research/notes/mod-write-envelope-native-long-2026-10-04.json": "15e08d20aa1c4041a2a5e2c3cacb2949b1017e8dc64e86b9fa140203a75de110"
+  },
+  "compat_report_sha256": "7d9054b350026b2851d276dc2792c6b1c8adb48281eaa7c40b68a94dfa6e5666",
+  "log_sha256": {
+    "/tmp/kkscreeps-write-envelope-focused.log": "5b42accc872e532414dc21fd6797e963267ee43fc289929de63fb48f400b29d7",
+    "/tmp/kkscreeps-write-envelope-build.log": "3c0cb39c4266c7a34a9a0fac7bb1d60a787507ae6ca275fa4dec60d8ccf1ce6a",
+    "/tmp/kkscreeps-write-envelope-check.log": "db3ed97a15605a25ee8fd618d045c0f0fb4f4291895887f7e24eb0b1f5bb9b46",
+    "/tmp/kkscreeps-write-envelope-python.log": "ff47cf393c63c136092b5a219eb44ad1e020081577308bb84a0e9793775dbab5",
+    "/tmp/kkscreeps-write-envelope-compat-setup.log": "18fd579ceb78407d01f9dd3bb4998038a525836d1fade610b76d3fcd91c99fcf",
+    "/tmp/kkscreeps-write-envelope-compat-build.log": "8ebfcb81adc70e835a6524785828621e81b7c5f862b4f08cd015d332f07616fe",
+    "/tmp/kkscreeps-write-envelope-ratchet.log": "eda1e661196c303001e12d95d1e3f56629ee8b2d2ee22411e4c300d8fd46883f",
+    "/tmp/kkscreeps-write-envelope-plain.log": "da9be4bfe2f18fe638b039e96598b62971b73f08bd83ad6009b4a75317e8419a",
+    "/tmp/kkscreeps-write-envelope-profile.log": "a0b18f73ae95722825276b1b89efa916aeab2ea7e87ba74b34f56a75509272ae",
+    "/tmp/kkscreeps-write-envelope-native.log": "dde8e1270eed8fc5fd82f77d12db91c0088bed6b512f902d29aa4c59a307b82d",
+    "/tmp/kkscreeps-write-envelope-native-long.log": "6211668aebdde0ac328f748d8a950b4836761586ea91f2c45d46391f04681cce",
+    "/tmp/kkscreeps-write-symbol-before.log": "91faca9f121e595ee306e3aea467eb945b8f54c94b2df17c3b4acba04dfe6364",
+    "/tmp/kkscreeps-write-symbol-release-before.log": "2c6842a7782b5d04844ff969d8c1604dba08b2a32ee2d53c0971d968563dd6f4",
+    "/tmp/kkscreeps-write-symbol-release-after.log": "538fbe708b2e1baed6a3d2cbb97a1fb6832c895279bf2312ff685dc6b2bfcae4"
+  },
+  "bots": {
+    "tooangel": {
+      "ticks_requested": 2000,
+      "ticks_completed": 2000,
+      "ticks_terminated": 0,
+      "ticks_skipped_penalty": 0,
+      "ticks_with_console_error": 0,
+      "missing_api": {}
+    },
+    "overmind": {
+      "ticks_requested": 2000,
+      "ticks_completed": 2000,
+      "ticks_terminated": 0,
+      "ticks_skipped_penalty": 0,
+      "ticks_with_console_error": 1,
+      "missing_api": {}
+    },
+    "wasm": {
+      "ticks_requested": 10,
+      "ticks_completed": 10,
+      "ticks_terminated": 0,
+      "ticks_skipped_penalty": 0,
+      "ticks_with_console_error": 0,
+      "missing_api": {}
+    }
+  },
+  "limitations": [
+    "Only the chain write conversion is protected; this is not universal Rust panic recovery and does not apply to panic=abort builds.",
+    "All four benchmark sets are preserved; they ran sequentially after all tests/build/ratchet/bots completed.",
+    "Local dense-chain P50/CPU paired medians improved; no clear write_from_v8 reduction, no tail or overall zero-performance-regression claim.",
+    "Native long windows did not reproduce short-window tail/CPU increase; empty long-window P50/CPU paired medians increased about 2.75%/2.09%; environment is uncontrolled and the differences remain open."
+  ]
+}

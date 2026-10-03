@@ -514,31 +514,34 @@ api.handlers.wrap('builtin:link.tick',{id:'audit'},(ctx,next)=>{
 #[test]
 fn caught_write_conversion_fault_rolls_back_getter_native_effects_and_retry() -> anyhow::Result<()>
 {
-    let source = package(
-        r#"
-api.handlers.before('builtin:link.tick',{id:'audit'},ctx=>{
-  try {
-    Deno.core.ops.op_mod_chain_write('1','chain:handler.audit',{
-      get state(){Deno.core.ops.op_mod_chain_native('1');throw Error('conversion-failure');}
-    });
-  } catch(e) {}
-});
-api.handlers.after('builtin:link.tick',{id:'after'},ctx=>{ctx.target.fields.cooldown=999;});
-"#,
-    );
-    for binary in [false, true] {
-        let mut e = engine(&[("chain", source.clone())], binary)?;
-        let id = link(&mut e, 20, 0, 100)?;
-        let generation = e.engine_generation();
-        for _ in 0..2 {
-            let error = e
-                .tick(1)
-                .expect_err("吞掉转换异常不能提交 getter 的 native 副作用");
-            assert!(error.to_string().contains("转换失败"), "{error}");
-            assert_eq!(e.get_game_time(), 0);
-            assert_eq!(e.engine_generation(), generation);
-            assert_eq!(cooldown(&e, &id), json!(100));
-            assert_eq!(e.engine_mod_state("chain"), Value::Null);
+    for payload in [
+        "{get state(){Deno.core.ops.op_mod_chain_native('1');throw Error('conversion-failure');}}",
+        "{state:{n:1},get extra(){Deno.core.ops.op_mod_chain_native('1');return Symbol('bad');}}",
+        "{state:{n:1},target:{fields:{cooldown:5},get extra(){Deno.core.ops.op_mod_chain_native('1');return Symbol('bad');}}}",
+        "{get state(){Deno.core.ops.op_mod_chain_native('1');return Symbol('bad');}}",
+    ] {
+        let source = package(&format!(
+            r#"
+api.handlers.before('builtin:link.tick',{{id:'audit'}},ctx=>{{
+  try {{ Deno.core.ops.op_mod_chain_write('1','chain:handler.audit',{payload}); }} catch(e) {{}}
+}});
+api.handlers.after('builtin:link.tick',{{id:'after'}},ctx=>{{ctx.target.fields.cooldown=999;}});
+"#
+        ));
+        for binary in [false, true] {
+            let mut e = engine(&[("chain", source.clone())], binary)?;
+            let id = link(&mut e, 20, 0, 100)?;
+            let generation = e.engine_generation();
+            for _ in 0..2 {
+                let error = e
+                    .tick(1)
+                    .expect_err("吞掉转换异常不能提交 getter 的 native 副作用");
+                assert!(error.to_string().contains("转换失败"), "{error}");
+                assert_eq!(e.get_game_time(), 0);
+                assert_eq!(e.engine_generation(), generation);
+                assert_eq!(cooldown(&e, &id), json!(100));
+                assert_eq!(e.engine_mod_state("chain"), Value::Null);
+            }
         }
     }
     Ok(())
