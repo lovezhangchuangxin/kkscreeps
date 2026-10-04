@@ -1009,11 +1009,33 @@ fn install_gate_matrix_rejects_unwired_shapes() {
     });
     c.bindings.insert(Key::new("extmod:other.process").unwrap());
     expect_reject(c, "压制关系");
-    // builtin 槽劫持：Mod 意图挂 builtin:link.transfer（中心不是自身 process）。
-    let mut c = counter_contribution(&[]);
-    c.intents[0].slot = Key::new("builtin:link.transfer").unwrap();
-    c.slots.clear();
-    expect_reject(c, "中心不是自身 process");
+    // 内建资源槽只能挂处理器，不能把自有意图混接到类型化派发域；
+    // 已提供 Replace 同样不能绕过门禁。
+    for slot in builtin::RESOURCE_ACTION_SLOTS {
+        let mut c = counter_contribution(&[]);
+        c.intents[0].slot = Key::new(slot).unwrap();
+        c.slots.clear();
+        expect_reject(c.clone(), "中心不是自身 process");
+        let binding = Key::new("extmod:replace-builtin").unwrap();
+        c.bindings.insert(binding.clone());
+        c.handlers.push(HandlerDescriptor {
+            key: binding.clone(),
+            slot: Key::new(slot).unwrap(),
+            kind: HandlerKind::Replace,
+            binding: binding.clone(),
+            depends_on: BTreeSet::new(),
+        });
+        let error = Engine::new(kk_world::World::new(2))
+            .install_plan_with_ext(
+                frozen(c),
+                BTreeMap::new(),
+                BTreeMap::new(),
+                BTreeMap::from([(binding, ExtHandler::Replace(Box::new(|_, _, _| Ok(()))))]),
+                BTreeMap::new(),
+            )
+            .unwrap_err();
+        assert!(error.contains("扩展意图不能挂载内建派发槽"), "{error}");
+    }
     // 长意图键：派生 process 键超 128 字节上限 → Err 不是 panic。
     let mut c = counter_contribution(&[]);
     // 意图键本身合法（总长恰 128），派生 process 键 136 超上限。

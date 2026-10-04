@@ -124,7 +124,7 @@ impl ChainProgram {
                 native_center: center.namespace() == "builtin",
                 decline_allowed: slot.stage == Stage::ObjectAction
                     && (slot.key.namespace() != "builtin"
-                        || slot.key.as_str() == "builtin:link.transfer"),
+                        || kk_mod_api::builtin::RESOURCE_ACTION_SLOTS.contains(&slot.key.as_str())),
             });
         }
         Ok(programs)
@@ -383,7 +383,7 @@ pub(crate) fn op_mod_chain_decline(
         return chain.outcome(
             ModFaultKind::Control,
             Some(&binding),
-            Err("该槽尚不支持正常拒绝；仅 Mod 自有对象动作与 link.transfer 已接局部回滚".into()),
+            Err("该槽尚不支持正常拒绝；仅 Mod 自有对象动作与已接线的内建资源动作可局部回滚".into()),
         );
     }
     if code.is_empty()

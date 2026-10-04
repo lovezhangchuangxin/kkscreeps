@@ -826,6 +826,99 @@ fn rule_overrides_flow_into_self_transfer() {
     assert_eq!(d1["cooldown"], json!(0));
 }
 
+/// 三个动作共用 Rust 安装表，仍须按槽分配函数与正确的 native 中心。
+#[test]
+fn builtin_resource_slots_partition_rust_handlers_and_use_distinct_native_steps() {
+    let log = Rc::new(RefCell::new(Vec::new()));
+    let mut contribution = overrides_mod(&[]);
+    let mut handlers = BTreeMap::new();
+    for (name, slot) in [
+        ("link", "builtin:link.transfer"),
+        ("transfer", "builtin:creep.transfer"),
+        ("withdraw", "builtin:creep.withdraw"),
+    ] {
+        let binding = Key::new(format!("testmod:{name}")).unwrap();
+        contribution.bindings.insert(binding.clone());
+        contribution.handlers.push(HandlerDescriptor {
+            key: binding.clone(),
+            slot: Key::new(slot).unwrap(),
+            kind: kk_mod_api::HandlerKind::Before,
+            binding: binding.clone(),
+            depends_on: BTreeSet::new(),
+        });
+        let log = log.clone();
+        handlers.insert(
+            binding,
+            ActionHandler::Before(Box::new(move |_, _, _| {
+                log.borrow_mut().push(name);
+                Ok(())
+            })),
+        );
+    }
+    let plan = kk_mod_api::freeze_with_builtin(
+        builtin::link(),
+        vec![contribution],
+        FreezeOptions::default(),
+    )
+    .unwrap();
+    let dispatch = ContributionDispatch::assemble(&plan, handlers, BTreeMap::new()).unwrap();
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    f.controller(8, Some("p1"));
+    let actor = f.creep(
+        "hauler",
+        "p1",
+        10,
+        9,
+        &[BodyKind::Carry, BodyKind::Move],
+        30,
+    );
+    let container = place_generic(
+        &mut f,
+        10,
+        10,
+        json!({"type":"structure","structureType":"container","store":{"energy":20},"storeCapacity":37,"nextDecayTime":1000}),
+    );
+    let source = place_generic(
+        &mut f,
+        20,
+        20,
+        json!({"type":"structure","structureType":"link","owner":"p1","store":{"energy":100},"storeCapacityResource":{"energy":800},"cooldown":0}),
+    );
+    let target = place_generic(
+        &mut f,
+        21,
+        20,
+        json!({"type":"structure","structureType":"link","owner":"p1","store":{"energy":0},"storeCapacityResource":{"energy":800},"cooldown":0}),
+    );
+    let mut batch = IntentBatch::default();
+    for (id, action, target, amount) in [
+        (actor, Action::Transfer, container, 5),
+        (actor, Action::Withdraw, container, 7),
+        (source, Action::Transfer, target, 25),
+    ] {
+        batch.add_object_intent(
+            "p1",
+            id,
+            action,
+            IntentData {
+                id: Some(target),
+                amount: Some(amount),
+                resource_type: Some("energy".into()),
+                ..IntentData::bare()
+            },
+        );
+    }
+    f.settle_with_dispatch(batch, Rc::new(dispatch));
+    assert_eq!(*log.borrow(), vec!["transfer", "withdraw", "link"]);
+    let Some((_, RoomObject::Creep(creep))) = f.world.get(actor) else {
+        panic!("执行 creep 消失")
+    };
+    assert_eq!(creep.store.energy, 32);
+    assert_eq!(data_of(&f, container)["store"]["energy"], 18);
+    assert_eq!(data_of(&f, source)["store"]["energy"], 75);
+    assert_eq!(data_of(&f, target)["store"]["energy"], 24);
+}
+
 /// 玩家工地的 RCL 配额门与转移门同源：覆盖 rcl5=0 后工地创建被拒。
 #[test]
 fn rule_override_rcl_quota_gates_player_site_creation() {

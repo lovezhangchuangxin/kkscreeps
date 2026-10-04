@@ -237,7 +237,7 @@ impl ExtHandler {
 /// 扩展意图槽的已装配执行计划。中心恒为可执行实现：动作处理桥
 /// （描述符的 native 形态）或 replace 处理器。
 ///
-/// 载荷经 `Rc` 共享，与 link 两槽同一形态。
+/// 载荷经 `Rc` 共享，与内建槽同一形态。
 enum ExtSlot {
     Process(Rc<ExtSimple>),
     Chained(Rc<ExtChained>),
@@ -290,7 +290,10 @@ struct TickChained {
 enum ActionSlot {
     Native(fn(&mut Working, ObjId, &IntentData)),
     Chained(Rc<ActionChained>),
-    Hosted(HostedSlot),
+    Hosted {
+        slot: HostedSlot,
+        native: fn(&mut Working, ObjId, &IntentData),
+    },
 }
 
 enum TickSlot {
@@ -320,8 +323,8 @@ pub enum SlotCall<'a> {
 /// 整槽宿主执行接口：引擎只提供冻结计划、候选与权威参数，保持对 V8 无依赖。
 /// 无扩展的 builtin 槽不会调用本接口；JS 宿主在自身 VM 内完成组合。
 pub trait SlotExecutor {
-    /// Declined 适用于扩展动作与 link.transfer。扩展动作由宿主恢复全部写入；
-    /// link.transfer 的源/目标对象和新增事件由引擎恢复，宿主须丢弃暂存
+    /// Declined 适用于扩展动作与内建资源动作。扩展动作由宿主恢复全部写入；
+    /// 内建资源动作的源/目标对象和新增事件由引擎恢复，宿主须丢弃暂存
     /// namespace state，且不得写入这个局部边界以外的候选。
     fn run(
         &self,
@@ -336,11 +339,13 @@ struct HostedSlot {
     executor: Rc<dyn SlotExecutor>,
 }
 
-/// link 两个槽的执行表。默认实例直连 native；
+/// 内建与自有槽的执行表。默认实例直连 native；
 /// [`ContributionDispatch::assemble`] 从冻结计划装配贡献链。
 pub struct ContributionDispatch {
     transfer: ActionSlot,
     tick: TickSlot,
+    creep_transfer: ActionSlot,
+    creep_withdraw: ActionSlot,
     /// Mod 自有槽（按槽键查）；扩展意图结算在此派发。
     ext: BTreeMap<Key, ExtSlot>,
 }
@@ -350,18 +355,23 @@ impl Default for ContributionDispatch {
         Self {
             transfer: ActionSlot::Native(super::structures::link_transfer),
             tick: TickSlot::Native(super::economy::link_cooldown_tick),
+            creep_transfer: ActionSlot::Native(super::creep::intent_transfer),
+            creep_withdraw: ActionSlot::Native(super::creep::intent_withdraw),
             ext: BTreeMap::new(),
         }
     }
 }
 
-/// link 两槽的既有键；装配扩展槽时跳过（它们由 Rust native 执行器消费）。
-/// 宿主桥装配（kk-runtime）复用同一常量，两侧槽清单不得漂移。
-pub const LINK_SLOT_KEYS: [&str; 2] = ["builtin:link.transfer", "builtin:link.tick"];
+/// 保留 link 的既有公开键表；完整内建派发表取共享的 builtin 目录。
+pub const LINK_SLOT_KEYS: [&str; 2] = [
+    kk_mod_api::builtin::SLOT_KEYS[0],
+    kk_mod_api::builtin::SLOT_KEYS[1],
+];
+pub const BUILTIN_SLOT_KEYS: [&str; 4] = kk_mod_api::builtin::SLOT_KEYS;
 
 impl ContributionDispatch {
     /// 装配整槽宿主执行器。冻结计划中的可执行绑定必须由宿主逐项确认；
-    /// 未扩展的 link 保留 native 直调，Mod 自有槽交给宿主执行 JS 中心。
+    /// 未扩展的内建槽保留 native 直调，Mod 自有槽交给宿主执行 JS 中心。
     pub fn assemble_hosted(
         plan: &ContributionPlan,
         executor: Rc<dyn SlotExecutor>,
@@ -392,11 +402,8 @@ impl ContributionDispatch {
                     return Err(missing(slot.key.as_str(), binding, "宿主"));
                 }
                 if binding.namespace() == "builtin"
-                    && !matches!(
-                        (slot.key.as_str(), binding.as_str()),
-                        ("builtin:link.transfer", "builtin:link.transfer.native")
-                            | ("builtin:link.tick", "builtin:link.tick.native")
-                    )
+                    && !(BUILTIN_SLOT_KEYS.contains(&slot.key.as_str())
+                        && binding.as_str() == format!("{}.native", slot.key))
                 {
                     return Err(format!("槽 {} 的内建绑定 {} 未接线", slot.key, binding));
                 }
@@ -415,7 +422,10 @@ impl ContributionDispatch {
             Dispatch::Native(binding) if binding.as_str() == "builtin:link.transfer.native" => {
                 ActionSlot::Native(super::structures::link_transfer)
             }
-            _ => ActionSlot::Hosted(host(LINK_SLOT_KEYS[0])?),
+            _ => ActionSlot::Hosted {
+                slot: host(LINK_SLOT_KEYS[0])?,
+                native: super::structures::link_transfer,
+            },
         };
         let tick = match dispatch_of(plan, LINK_SLOT_KEYS[1])? {
             Dispatch::Native(binding) if binding.as_str() == "builtin:link.tick.native" => {
@@ -424,14 +434,29 @@ impl ContributionDispatch {
             _ => TickSlot::Hosted(host(LINK_SLOT_KEYS[1])?),
         };
         let mut ext = BTreeMap::new();
+        let action = |slot: &str, native| -> Result<ActionSlot, String> {
+            match dispatch_of(plan, slot)? {
+                Dispatch::Native(binding) if binding.as_str() == format!("{slot}.native") => {
+                    Ok(ActionSlot::Native(native))
+                }
+                _ => Ok(ActionSlot::Hosted {
+                    slot: host(slot)?,
+                    native,
+                }),
+            }
+        };
+        let creep_transfer = action("builtin:creep.transfer", super::creep::intent_transfer)?;
+        let creep_withdraw = action("builtin:creep.withdraw", super::creep::intent_withdraw)?;
         for slot in plan.slots() {
-            if !LINK_SLOT_KEYS.contains(&slot.key.as_str()) {
+            if !BUILTIN_SLOT_KEYS.contains(&slot.key.as_str()) {
                 ext.insert(slot.key.clone(), ExtSlot::Hosted(host(slot.key.as_str())?));
             }
         }
         Ok(Self {
             transfer,
             tick,
+            creep_transfer,
+            creep_withdraw,
             ext,
         })
     }
@@ -461,7 +486,7 @@ impl ContributionDispatch {
     /// 此处：JS 宿主经 assemble_hosted 安装整槽执行器。
     pub fn assemble_with_ext(
         plan: &ContributionPlan,
-        action_handlers: BTreeMap<Key, ActionHandler>,
+        mut action_handlers: BTreeMap<Key, ActionHandler>,
         tick_handlers: BTreeMap<Key, TickHandler>,
         ext_handlers: BTreeMap<Key, ExtHandler>,
         ext_processes: BTreeMap<Key, ExtSimple>,
@@ -470,8 +495,24 @@ impl ContributionDispatch {
             plan,
             "builtin:link.transfer",
             "builtin:link.transfer.native",
-            action_handlers,
+            take_action_handlers(plan, "builtin:link.transfer", &mut action_handlers)?,
+            super::structures::link_transfer,
         )?;
+        let creep_transfer = assemble_action(
+            plan,
+            "builtin:creep.transfer",
+            "builtin:creep.transfer.native",
+            take_action_handlers(plan, "builtin:creep.transfer", &mut action_handlers)?,
+            super::creep::intent_transfer,
+        )?;
+        let creep_withdraw = assemble_action(
+            plan,
+            "builtin:creep.withdraw",
+            "builtin:creep.withdraw.native",
+            take_action_handlers(plan, "builtin:creep.withdraw", &mut action_handlers)?,
+            super::creep::intent_withdraw,
+        )?;
+        reject_leftover("内建动作", &action_handlers)?;
         let tick = assemble_tick(
             plan,
             "builtin:link.tick",
@@ -482,6 +523,8 @@ impl ContributionDispatch {
         Ok(Self {
             transfer,
             tick,
+            creep_transfer,
+            creep_withdraw,
             ext,
         })
     }
@@ -497,6 +540,24 @@ impl ContributionDispatch {
 
     pub(crate) fn run_tick(&self, ctx: &RoomCtx, id: ObjId) -> Result<(), String> {
         self.tick.run(ctx, id)
+    }
+
+    pub(crate) fn run_creep_transfer(
+        &self,
+        ctx: &RoomCtx,
+        id: ObjId,
+        d: &IntentData,
+    ) -> Result<(), String> {
+        self.creep_transfer.run(ctx, id, d)
+    }
+
+    pub(crate) fn run_creep_withdraw(
+        &self,
+        ctx: &RoomCtx,
+        id: ObjId,
+        d: &IntentData,
+    ) -> Result<(), String> {
+        self.creep_withdraw.run(ctx, id, d)
     }
 
     /// 执行一个 Mod 自有槽的处理链。槽未装配说明计划与执行表不一致，
@@ -516,7 +577,7 @@ impl ContributionDispatch {
     }
 }
 
-/// 装配计划中全部非 link 槽的扩展执行链。每个槽的中心取其
+/// 装配计划中全部非内建槽的扩展执行链。每个槽的中心取其
 /// native 绑定的动作处理实现；贡献处理器按冻结链位接入。
 /// 冻结后的 SlotPlan 不保留 native 绑定：Native 分派的绑定即中心，
 /// Chained 的中心在未被 replace 占位时等于 native 绑定。
@@ -527,7 +588,7 @@ fn assemble_ext_slots(
 ) -> Result<BTreeMap<Key, ExtSlot>, String> {
     let mut result = BTreeMap::new();
     for slot in plan.slots() {
-        if LINK_SLOT_KEYS.contains(&slot.key.as_str()) {
+        if BUILTIN_SLOT_KEYS.contains(&slot.key.as_str()) {
             continue;
         }
         match &slot.dispatch {
@@ -680,11 +741,40 @@ fn kind_mismatch(binding: &Key, want: &str, got: &str) -> String {
     format!("处理器 {binding} 声明 kind 为 {want}，装配提供的实现是 {got}")
 }
 
+/// action_handlers 共用安装表，按各槽冻结后的实际绑定分配；剩余键仍报错。
+fn take_action_handlers(
+    plan: &ContributionPlan,
+    slot: &str,
+    handlers: &mut BTreeMap<Key, ActionHandler>,
+) -> Result<BTreeMap<Key, ActionHandler>, String> {
+    let mut result = BTreeMap::new();
+    if let Dispatch::Chained {
+        before,
+        wraps,
+        center,
+        after,
+    } = dispatch_of(plan, slot)?
+    {
+        for binding in before
+            .into_iter()
+            .chain(wraps)
+            .chain(std::iter::once(center))
+            .chain(after)
+        {
+            if let Some(handler) = handlers.remove(&binding) {
+                result.insert(binding, handler);
+            }
+        }
+    }
+    Ok(result)
+}
+
 fn assemble_action(
     plan: &ContributionPlan,
     slot: &str,
     native_binding: &str,
     mut handlers: BTreeMap<Key, ActionHandler>,
+    native_step: fn(&mut Working, ObjId, &IntentData),
 ) -> Result<ActionSlot, String> {
     let native = key(native_binding);
     match dispatch_of(plan, slot)? {
@@ -694,7 +784,7 @@ fn assemble_action(
                     "槽 {slot} 的 native 绑定须为 {native_binding}，实得 {binding}"
                 ));
             }
-            Ok(ActionSlot::Native(super::structures::link_transfer))
+            Ok(ActionSlot::Native(native_step))
         }
         Dispatch::Chained {
             before,
@@ -719,7 +809,7 @@ fn assemble_action(
                 }
             }
             let center_fn = if center == native {
-                ActionCenter::Native(super::structures::link_transfer)
+                ActionCenter::Native(native_step)
             } else {
                 match handlers.remove(&center) {
                     Some(ActionHandler::Replace(f)) => ActionCenter::Custom(f),
@@ -822,9 +912,10 @@ impl ActionSlot {
     fn run(&self, ctx: &RoomCtx, id: ObjId, d: &IntentData) -> Result<(), String> {
         match self {
             ActionSlot::Native(f) => native_action(*f)(ctx, id, d),
-            ActionSlot::Hosted(slot) => {
-                // 本槽只有 link.transfer：native 改源/目标记录并追加事件，
-                // JS 字段门禁只允许源 cooldown；不分配 ID、不改位置/玩家。
+            ActionSlot::Hosted { slot, native } => {
+                // 三个资源动作只改源/目标记录并追加事件；实验室绑定容量
+                // 也在目标记录内。JS 只允许 link cooldown 写入，creep 只读。
+                // 不分配 ID、不改位置/玩家或其他工作队列。
                 // 在整链开始前保存，才能撤销 before 与 native 之后的拒绝，
                 // 同时保留此前动作对共享接收方的写入。无 Mod 的 Native 不走这里。
                 let (objects, event_len) = {
@@ -841,7 +932,7 @@ impl ActionSlot {
                     SlotCall::Action {
                         id,
                         data: d,
-                        native: super::structures::link_transfer,
+                        native: *native,
                     },
                 )?;
                 if matches!(outcome, SlotOutcome::Declined(_)) {

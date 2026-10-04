@@ -132,11 +132,11 @@ impl SlotExecutor for ModSlotExecutor {
         ctx: &RoomCtx,
         call: SlotCall<'_>,
     ) -> Result<SlotOutcome, String> {
-        // 自有动作字段由此适配器恢复；link.transfer 的对象/事件由引擎
+        // 自有动作字段由此适配器恢复；内建资源动作的对象/事件由引擎
         // 在整链外恢复。两者的 namespace state 都只在成功后移交候选。
         let extension = matches!(&call, SlotCall::Extension { .. });
-        let link_transfer = matches!(&call, SlotCall::Action { .. })
-            && slot.key.as_str() == "builtin:link.transfer";
+        let resource_action = matches!(&call, SlotCall::Action { .. })
+            && kk_mod_api::builtin::RESOURCE_ACTION_SLOTS.contains(&slot.key.as_str());
         let (id, args, native) = match call {
             SlotCall::Action { id, data, native } => (
                 id,
@@ -162,7 +162,7 @@ impl SlotExecutor for ModSlotExecutor {
             None
         };
         let staged_states =
-            (extension || link_transfer).then(|| Rc::new(RefCell::new(BTreeMap::new())));
+            (extension || resource_action).then(|| Rc::new(RefCell::new(BTreeMap::new())));
         let mut vm = self
             .realm
             .try_borrow_mut()
@@ -206,7 +206,7 @@ impl SlotExecutor for ModSlotExecutor {
                     ctx.borrow_mut()
                         .update_mod_fields(id, &fields)
                         .map_err(|error| format!("动作拒绝恢复失败：{error}"))?;
-                } else if !link_transfer {
+                } else if !resource_action {
                     return Err("该槽没有正常拒绝的局部恢复边界".into());
                 }
             }
@@ -226,6 +226,12 @@ impl ModChainContext {
     fn load_fields(&self) -> Result<Value, String> {
         let w = self.ctx.borrow();
         match w.room.objects.get(&self.id) {
+            Some(kk_schema::room::RoomObject::Creep(object)) => Ok(json!({
+                "name": object.name, "owner": object.owner, "x":object.x,"y":object.y,
+                "spawning":object.spawning,"hits":object.hits,"fatigue":object.fatigue,
+                "store":kk_world::world_json::store_with_extra_json(&object.store,&object.store_extra),
+                "storeCapacity":kk_engine::settle::creep::store_capacity(object),
+            })),
             Some(kk_schema::room::RoomObject::Mod(_)) => w
                 .mod_fields(self.id)
                 .ok_or_else(|| "Mod payload 非法".into()),
@@ -250,6 +256,12 @@ impl ModChainContext {
         }
         if self.fields()? == fields {
             return Ok(());
+        }
+        if matches!(
+            self.ctx.borrow().room.objects.get(&self.id),
+            Some(kk_schema::room::RoomObject::Creep(_))
+        ) {
+            return Err("creep 资源动作的 target.fields 当前只读".into());
         }
         let is_mod = matches!(
             self.ctx.borrow().room.objects.get(&self.id),
@@ -866,7 +878,7 @@ impl EmbedEngine {
     }
 
     /// 以 Mod 包装建分片：注册、玩家面导出/预检与计划装配发生在引擎
-    /// 重置后、玩家沙箱 spawn 前（常量与结算同源）。可装配面是 link 两槽
+    /// 重置后、玩家沙箱 spawn 前（常量与结算同源）。可装配面是 link 两槽与 creep 资源两槽
     /// 的 before/wrap/after/replace 处理器、规则，以及 Mod 自有动作入口的对象
     /// 域执行链。JS 贡献由整槽宿主组合，native 只经普通 op 修改候选。
     /// 对象域外的执行形态（房间/玩家/

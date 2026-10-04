@@ -29,7 +29,7 @@ export default function register(api) {
 
 link 保持既有 `builtin:link.capacity`。spawn、extension、storage、creep 携带量及 boost 数值尚未迁入这组规则。
 
-内置贡献仍使用历史入口名 `builtin::link()`，现在同时声明 link 与仓库规则；默认规则目录为 25 条，处理槽仍只有 link 两槽。数值消费者具名绑定为 `store.init/build/constants/labSlots/terminalTick/containerDeposit`，它们不是可挂 JS handler 的动作槽。
+内置贡献仍使用历史入口名 `builtin::link()`，现在同时声明 link、creep 资源槽与仓库规则；默认规则目录为 25 条，内建槽共 4 个。数值消费者具名绑定为 `store.init/build/constants/labSlots/terminalTick/containerDeposit`，它们不是可挂 JS handler 的动作槽。
 
 ## 权威字段与玩家行为
 
@@ -45,6 +45,6 @@ link 保持既有 `builtin:link.capacity`。spawn、extension、storage、creep 
 
 ## 当前边界
 
-这是 D4 容量数值的第一片，尚未开放 creep transfer/withdraw 的 before/wrap/replace/after、实验室槽绑定策略、nuker/powerBank 禁止提取或终端干扰策略。D6 首片已为 link transfer 接入源/目标、事件与 Mod state 的局部恢复；其他内建多对象动作须随处理槽定义自己的撤销边界，见[Mod 执行](mod-execution.md)。规则已冻结，但没有完整检查点、规则迁移或运行中容量重配置。
+这是 D4 容量数值的第一片；后续已开放 [creep transfer/withdraw 处理槽](creep-resource-slots.md)及正常拒绝。实验室槽绑定策略、nuker/powerBank 禁止提取或终端干扰策略仍未逐项开放。link transfer 和 creep 资源动作已接入执行者/目标、事件与 Mod state 的局部恢复；其他内建多对象动作须随处理槽定义自己的撤销边界，见[Mod 执行](mod-execution.md)。规则已冻结，但没有完整检查点、规则迁移或运行中容量重配置。
 
 实现与验收见[交付记录](../research/notes/d4-store-rules-2026-10-05.md)。

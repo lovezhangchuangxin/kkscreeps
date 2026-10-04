@@ -12,6 +12,7 @@ pub use harvest::harvest_power;
 pub use lifecycle::{die_creep, die_creep_with_rate};
 pub use movement::creep_tick;
 pub(in crate::settle) use store::intent_drop_amount_res;
+pub(in crate::settle) use store::{intent_transfer, intent_withdraw};
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -20,7 +21,7 @@ use kk_schema::room::BodyPart;
 use kk_world::ObjId;
 use kk_world::types::BodyKind;
 
-use crate::settle::Working;
+use crate::settle::RoomCtx;
 
 use crate::intent::{Action, EXECUTION_ORDER, IntentData};
 use crate::settle::spawn;
@@ -38,24 +39,42 @@ use controller::{
 use harvest::intent_harvest;
 use lifecycle::{intent_pull, intent_say, intent_suicide};
 use movement::intent_move;
-use store::{intent_drop, intent_pickup, intent_transfer, intent_withdraw};
+use store::{intent_drop, intent_pickup};
 
 /// 按 EXECUTION_ORDER 执行动作，Action::executes 根据互斥动作判断是否执行。
 /// 判断读取本轮完整动作集合，不随某个动作成功或失败而变化。
-pub fn process_creep_intents(w: &mut Working, id: ObjId, actions: &BTreeMap<Action, IntentData>) {
+pub fn process_creep_intents(
+    ctx: &RoomCtx,
+    id: ObjId,
+    actions: &BTreeMap<Action, IntentData>,
+) -> Result<(), String> {
     let present: BTreeSet<Action> = actions.keys().copied().collect();
     for action in EXECUTION_ORDER {
         if !Action::executes(&present, action) {
             continue;
         }
         let data = &actions[&action];
+        // 资源槽进入 JS 前释放全部 Working 借用；其余动作维持短借用直调。
+        match action {
+            Action::Transfer => {
+                let contrib = ctx.borrow().plane.contrib.clone();
+                contrib.run_creep_transfer(ctx, id, data)?;
+                continue;
+            }
+            Action::Withdraw => {
+                let contrib = ctx.borrow().plane.contrib.clone();
+                contrib.run_creep_withdraw(ctx, id, data)?;
+                continue;
+            }
+            _ => {}
+        }
+        let mut w = ctx.borrow_mut();
+        let w = &mut *w;
         match action {
             Action::Move => intent_move(w, id, data),
             Action::Harvest => intent_harvest(w, id, data),
             Action::Build => intent_build(w, id, data),
             Action::UpgradeController => intent_upgrade_controller(w, id, data),
-            Action::Transfer => intent_transfer(w, id, data),
-            Action::Withdraw => intent_withdraw(w, id, data),
             Action::Drop => intent_drop(w, id, data),
             Action::Pickup => intent_pickup(w, id, data),
             Action::Attack => intent_attack(w, id, data),
@@ -76,6 +95,7 @@ pub fn process_creep_intents(w: &mut Working, id: ObjId, actions: &BTreeMap<Acti
             _ => {}
         }
     }
+    Ok(())
 }
 
 /// Action log 位标记；近程和远程治疗共用 HEAL 位，由事件的 healType 区分。

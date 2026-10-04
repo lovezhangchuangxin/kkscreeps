@@ -1,0 +1,49 @@
+{
+  "batch": "D4/D6 creep transfer and withdraw action slots and normal decline",
+  "date": "2026-10-05",
+  "baseline": "6d2e9ebd1b24f0e61c737ef7f0411cee9f359965",
+  "screeps_ok_pin": "34a630efa42908c117c19c25d2350fa2387bd633",
+  "executable_sha256": "3cd4e65c4fb70cd19b77376806c89ef8503341b1ad855297d733a7fc5a7b6f03",
+  "scope": {
+    "new_slots": [
+      "builtin:creep.transfer",
+      "builtin:creep.withdraw"
+    ],
+    "builtin_slots": 4,
+    "declinable_builtin_resource_slots": 3,
+    "rules": 25,
+    "creep_fields_readonly": true,
+    "creep_catalog_complete": false,
+    "restored_objects_max": 2,
+    "restored_event_append": true,
+    "staged_all_participating_namespaces": true,
+    "native_path_has_savepoint": false,
+    "foreign_intent_on_builtin_slot_rejected_even_with_replace": true,
+    "player_api_result_rewritten": false
+  },
+  "checks": {
+    "workspace_check_exit_code": 0,
+    "rust_passed": 648,
+    "rust_failed": 0,
+    "rust_ignored": 11,
+    "new_runtime_tests": 6,
+    "new_engine_tests": 1,
+    "mod_chain_tests_passed": 47,
+    "compat_node_passed": 14,
+    "ratchet_exit_code": 0,
+    "passed": 1918,
+    "failed": 89,
+    "skipped": 907,
+    "total": 2914,
+    "floor": 1918,
+    "status_changes_vs_head": 0,
+    "status_changes_vs_head_parent": 0,
+    "new_skips": 0,
+    "new_exemptions": 0
+  },
+  "projection_channels": [
+    "json",
+    "kkpv"
+  ],
+  "formal_performance_measurement": false
+}

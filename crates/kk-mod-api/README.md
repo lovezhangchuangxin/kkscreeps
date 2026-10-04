@@ -12,7 +12,7 @@ Record 声明成员及其中可省略的名字；optional 与 nullable 分别表
 
 当前边界：
 
-- link 的有效规则与槽分派已由 kk-engine 装配消费（`LinkRules`、`ContributionDispatch`）；本 crate 仍不执行处理器、不接触世界或 V8。
+- link/仓库的有效规则与 link/creep 资源槽已由 kk-engine 装配消费（`LinkRules`、`StoreRules`、`ContributionDispatch`）；creep 资源槽不代表完整 creep 对象目录已迁入。本 crate 仍不执行处理器、不接触世界或 V8。
 
 - 声明 binding 标识不等于安装实现。宿主必须核对 `required_bindings()` 并连接真实实现；未知引用在冻结时拒绝，但声明后未安装的绑定须由装配层拒绝。
 - 投影目录保留公开/owner/server-only/条件权限，不是已授权视图，不编码 KKPV 或执行权限判定。

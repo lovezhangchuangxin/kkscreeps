@@ -688,7 +688,7 @@ pub fn settle_room(
             };
             match kind {
                 Some("creep") => {
-                    creep::process_creep_intents(&mut ctx.borrow_mut(), *obj_id, actions);
+                    creep::process_creep_intents(&ctx, *obj_id, actions).map_err(SettleError)?;
                 }
                 Some("spawn") => {
                     spawn::process_spawn_intents(&mut ctx.borrow_mut(), *obj_id, actions);
@@ -819,7 +819,7 @@ pub struct Engine {
     pub(crate) links: kk_mod_api::builtin::LinkRules,
     /// Generic 仓库默认容量与槽切换规则，与计划及玩家常量一同装配。
     pub(crate) stores: kk_mod_api::builtin::StoreRules,
-    /// link 槽执行表；默认直连 native，装配计划后可携带贡献链。
+    /// 内建与自有槽执行表；默认直连 native，装配计划后可携带贡献链。
     pub(crate) contrib: Rc<contrib::ContributionDispatch>,
     /// 扩展字段目录；默认为空（不接受扩展写入），with_plan 装配。
     pub(crate) extensions: Rc<kk_mod_api::extension::ExtensionCatalog>,
@@ -923,7 +923,12 @@ impl Engine {
             "builtin:link.field.storeCapacity",
             "builtin:link.field.storeCapacityResource",
         ];
-        const NATIVE: &[&str] = &["builtin:link.transfer.native", "builtin:link.tick.native"];
+        const NATIVE: &[&str] = &[
+            "builtin:link.transfer.native",
+            "builtin:link.tick.native",
+            "builtin:creep.transfer.native",
+            "builtin:creep.withdraw.native",
+        ];
         for binding in plan.required_bindings() {
             let name = binding.as_str();
             // 只认显式清单与调用方提供的处理器键：新增声明绑定必须先
@@ -946,7 +951,7 @@ impl Engine {
         use kk_mod_api::{ArgumentConversion, IntentAuthority, IntentScope, Merge};
         for intent in plan.intents() {
             if intent.key.namespace() == "builtin" {
-                continue; // builtin:link.transfer 由 Rust native 执行器消费
+                continue; // 内建意图由 Rust native 执行器消费
             }
             let Some(slot_handle) = plan.resolve_slot(&intent.slot) else {
                 return Err(format!(
@@ -997,10 +1002,10 @@ impl Engine {
                 ));
             }
         }
-        // 非 link 槽必须被至少一个意图挂载：无意图的槽（生命周期槽、
+        // 非内建槽必须被至少一个意图挂载：无意图的槽（生命周期槽、
         // 其他阶段槽）没有派发点，装配了执行器也只是静默死执行。
         for slot in plan.slots() {
-            if contrib::LINK_SLOT_KEYS.contains(&slot.key.as_str()) {
+            if contrib::BUILTIN_SLOT_KEYS.contains(&slot.key.as_str()) {
                 continue;
             }
             let referenced = plan.intents().iter().any(|intent| intent.slot == slot.key);
@@ -1038,6 +1043,14 @@ impl Engine {
                 .resolve_slot(&intent.slot)
                 .expect("check_executable_intents 已保证入口存在");
             let slot = plan.get_slot(slot_handle).expect("句柄来自计划");
+            // 内建槽由类型化对象动作派发，自有意图由 Mod 对象派发。
+            // 即使 Replace 已安装也不能混接，否则创建成功后找不到 ext 执行器。
+            if contrib::BUILTIN_SLOT_KEYS.contains(&slot.key.as_str()) {
+                return Err(format!(
+                    "动作 {} 的入口 {} 中心不是自身 process；扩展意图不能挂载内建派发槽（Replace 也不能改变派发域）",
+                    intent.key, slot.key
+                ));
+            }
             // 冻结后的入口计划只保留 dispatch；Native 绑定或未被占位的
             // Chained 中心即 native 绑定。
             let center = match &slot.dispatch {

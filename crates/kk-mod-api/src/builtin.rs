@@ -1,4 +1,4 @@
-//! 默认 link 描述及 Generic 仓库容量规则，不安装引擎处理器。
+//! 默认 link/creep 资源动作描述及 Generic 仓库容量规则，不安装引擎处理器。
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -10,6 +10,21 @@ use crate::*;
 
 mod store;
 pub use store::StoreRules;
+
+/// 已有局部恢复边界的内建资源动作；宿主拒绝资格与 runtime 暂存共用此表。
+pub const RESOURCE_ACTION_SLOTS: [&str; 3] = [
+    "builtin:link.transfer",
+    "builtin:creep.transfer",
+    "builtin:creep.withdraw",
+];
+
+/// 内建实际派发的槽；自有动作装配必须跳过它们。
+pub const SLOT_KEYS: [&str; 4] = [
+    RESOURCE_ACTION_SLOTS[0],
+    "builtin:link.tick",
+    RESOURCE_ACTION_SLOTS[1],
+    RESOURCE_ACTION_SLOTS[2],
+];
 
 fn key(name: &str) -> Key {
     Key::new(format!("builtin:{name}")).expect("内建键合法")
@@ -92,7 +107,7 @@ impl LinkRules {
     }
 }
 
-/// 内置贡献入口，保留早期 link 函数名；现含 link 描述与仓库容量规则。
+/// 内置贡献入口，保留早期 link 函数名；现含 link、creep 资源槽与仓库规则。
 pub fn link() -> Contribution {
     let consumers = keys(&[
         "link.init",
@@ -225,6 +240,9 @@ pub fn link() -> Contribution {
     let (store_bindings, store_rules) = store::declarations();
     bindings.extend(store_bindings);
     rules.extend(store_rules);
+    // creep 的类型化对象、玩家 API 和参数清洗沿用原通路；本片声明
+    // 具名处理槽，不把只读宿主视图冒充完整 creep 对象/意图描述目录。
+    bindings.extend(keys(&["creep.transfer.native", "creep.withdraw.native"]));
     let slots = vec![
         SlotDescriptor {
             key: key("link.transfer"),
@@ -236,12 +254,22 @@ pub fn link() -> Contribution {
             stage: Stage::ObjectTick,
             native_binding: key("link.tick.native"),
         },
+        SlotDescriptor {
+            key: key("creep.transfer"),
+            stage: Stage::ObjectAction,
+            native_binding: key("creep.transfer.native"),
+        },
+        SlotDescriptor {
+            key: key("creep.withdraw"),
+            stage: Stage::ObjectAction,
+            native_binding: key("creep.withdraw.native"),
+        },
     ];
     Contribution {
         source: Source {
             namespace: "builtin".into(),
             api_version: 1,
-            revision: "link-and-store-descriptors-v2".into(),
+            revision: "link-creep-store-descriptors-v3".into(),
             code_digest: {
                 let mut hash = Sha256::new();
                 hash.update(include_bytes!("builtin.rs"));

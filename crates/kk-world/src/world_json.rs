@@ -455,7 +455,7 @@ pub(crate) fn store_json(store: &kk_schema::room::Store) -> Value {
 }
 
 /// 在沙箱 store 中合并额外正量资源，仍保留 energy=0 的键。
-pub(crate) fn store_with_extra_json(
+pub fn store_with_extra_json(
     store: &kk_schema::room::Store,
     extra: &[kk_schema::room::ResourceStack],
 ) -> Value {

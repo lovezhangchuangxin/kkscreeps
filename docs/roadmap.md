@@ -49,7 +49,7 @@ M2 分为两道关卡，避免把运行环境可用与完整玩法可玩混为�
 
 D4 首片已开放 Generic 仓库的 10 条容量数值，贯穿放置、建造、玩家常量、实验室槽切换和终端 tick，见[仓库容量规则](architecture/store-rules.md)。特殊存储策略及更多动作槽仍须逐族开放，完整检查点在规则与状态清单收敛后接入。
 
-D6 首片已允许 link transfer 的 JS 处理链正常拒绝一次动作，局部恢复源/目标库存、冷却、新增事件及 Mod state，保留此前成功动作并继续结算。link tick 与 creep transfer/withdraw 尚未开放正常拒绝，见[Mod 执行](architecture/mod-execution.md#正常动作拒绝)。
+D6 首片已允许 link transfer 的 JS 处理链正常拒绝一次动作；后续 D4/D6 片已开放 [creep transfer/withdraw](architecture/creep-resource-slots.md) 的 before/wrap/replace/after 与正常拒绝。局部恢复执行者/目标库存、link 冷却、实验室槽容量、新增事件及 Mod state，保留此前成功动作并继续结算。link tick 和其他动作尚未开放正常拒绝，见[Mod 执行](architecture/mod-execution.md#正常动作拒绝)。
 
 [ADR-014](decisions/ADR-014-contribution-plane.md)已把扩展基础安排在玩法扩面与首次持久化格式冻结之前，不能继续只列作 M4 的末端功能。Mod 作者使用 JS SDK；对象、指令、规则、候选状态和提交协议须共同设计，服务与客户端贡献随 M3 补齐。
 

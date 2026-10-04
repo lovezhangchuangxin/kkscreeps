@@ -10,6 +10,7 @@
 | [game-loop.md](game-loop.md) | 当前玩家执行与结算流程，以及并行流水线的目标 |
 | [mod-execution.md](mod-execution.md) | JS/native 组合链、候选访问与当前支持范围 |
 | [store-rules.md](store-rules.md) | 仓库容量的冻结规则、JS 数值覆盖与实际消费者 |
+| [creep-resource-slots.md](creep-resource-slots.md) | creep 转入/提取动作链、只读候选面与局部拒绝恢复 |
 | [tick-contract.md](tick-contract.md) | 已提交状态、候选结果、失败重试与目标任务合并规则 |
 | [sandbox.md](sandbox.md) | 玩家沙箱、执行预算、内存限制与模块加载的机制和目标 |
 | [local-simulation.md](local-simulation.md) | 已实现的 sim run：场景、模块、断言、报告与失败退出边界 |

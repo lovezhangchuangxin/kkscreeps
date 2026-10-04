@@ -1006,6 +1006,8 @@ fn disabled_bindings_are_removed_from_active_candidate_capabilities() -> anyhow:
 
 #[path = "mod_chain_tests/auto_disable.rs"]
 mod auto_disable;
+#[path = "mod_chain_tests/creep_store.rs"]
+mod creep_store;
 #[path = "mod_chain_tests/link_decline.rs"]
 mod link_decline;
 #[path = "mod_chain_tests/store_rules.rs"]

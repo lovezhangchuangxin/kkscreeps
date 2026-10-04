@@ -102,7 +102,7 @@ fn change_generic_store(
 /// 向相邻 creep 或有容量字段的结构转移资源。
 /// 请求超过自身持有量时整条拒绝；目标容量不足时只转可容纳的数量。
 /// 来源：上游 engine/src/processor/intents/creeps/transfer.js。
-pub(super) fn intent_transfer(w: &mut Working, id: ObjId, data: &IntentData) {
+pub(in crate::settle) fn intent_transfer(w: &mut Working, id: ObjId, data: &IntentData) {
     let resource = data.resource_type.as_deref().unwrap_or("");
     if !c::RESOURCES_ALL.contains(&resource) {
         return;
@@ -193,7 +193,7 @@ pub(super) fn intent_transfer(w: &mut Working, id: ObjId, data: &IntentData) {
 /// 数量按请求、携带余量和目标库存取最小值。事件由资源提供方指向提取者。
 /// nuker、powerBank 和受干扰的 terminal 拒绝提取。
 /// 来源：上游 engine/src/processor/intents/creeps/withdraw.js。
-pub(super) fn intent_withdraw(w: &mut Working, id: ObjId, data: &IntentData) {
+pub(in crate::settle) fn intent_withdraw(w: &mut Working, id: ObjId, data: &IntentData) {
     let resource = data.resource_type.as_deref().unwrap_or("energy");
     if !c::RESOURCES_ALL.contains(&resource) {
         return;
