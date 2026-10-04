@@ -1,0 +1,776 @@
+{
+  "date": "2026-10-04",
+  "source_commit": "45a68b0",
+  "method": "分析入库兼容报告和历史参考报告；本次未重跑完整 screeps-ok。Rust workspace 测试为本次重新执行。",
+  "current_report": {
+    "source": "compat/reports/kkscreeps.json",
+    "sha256": "241f37c7838bc8cf55f17a47f4d27a3c19fcbd46f60ee0827e8b7db7bb4ffa83",
+    "start_time_cst": "2026-10-04T21:17:10.365000+08:00",
+    "summary": {
+      "numTotalTests": 2914,
+      "numPassedTests": 1879,
+      "numFailedTests": 128,
+      "numPendingTests": 907
+    },
+    "pass_percent": 64.48181194234729
+  },
+  "m2b_full_suite_math": {
+    "minimum_passed_for_95_percent": 2769,
+    "additional_passed_required": 890,
+    "pass_percent_if_all_current_failures_pass": 68.87439945092656,
+    "minimum_current_skipped_that_must_pass_if_all_failures_pass": 762
+  },
+  "groups": {
+    "00-adapter-contract": {
+      "passed": 121,
+      "failed": 13,
+      "skipped": 23
+    },
+    "00-framework": {
+      "passed": 60,
+      "skipped": 1
+    },
+    "01-movement": {
+      "passed": 95,
+      "skipped": 4,
+      "failed": 3
+    },
+    "02-pathfinding": {
+      "passed": 34,
+      "failed": 6
+    },
+    "03-harvesting": {
+      "passed": 110,
+      "skipped": 26
+    },
+    "04-resource-transfer": {
+      "failed": 5,
+      "passed": 194,
+      "skipped": 17
+    },
+    "05-construction-repair": {
+      "passed": 163
+    },
+    "06-controller": {
+      "failed": 34,
+      "passed": 224,
+      "skipped": 5
+    },
+    "07-combat": {
+      "passed": 170,
+      "skipped": 112,
+      "failed": 1
+    },
+    "08-boosts": {
+      "skipped": 106
+    },
+    "09-spawning-lifecycle": {
+      "passed": 131,
+      "skipped": 4,
+      "failed": 1
+    },
+    "10-structures-energy": {
+      "passed": 66,
+      "failed": 2
+    },
+    "11-structures-production": {
+      "skipped": 289
+    },
+    "12-structures-military": {
+      "passed": 19,
+      "skipped": 3
+    },
+    "13-structures-infrastructure": {
+      "passed": 62,
+      "skipped": 26
+    },
+    "14-structures-npc": {
+      "failed": 4,
+      "skipped": 37
+    },
+    "15-structure-common": {
+      "passed": 49,
+      "skipped": 29
+    },
+    "16-room-mechanics": {
+      "failed": 4,
+      "passed": 97,
+      "skipped": 5
+    },
+    "17-source-mineral-deposit": {
+      "passed": 16,
+      "failed": 4,
+      "skipped": 24
+    },
+    "18-game-objects": {
+      "passed": 25,
+      "skipped": 8
+    },
+    "19-power": {
+      "skipped": 122,
+      "passed": 1
+    },
+    "20-market": {
+      "passed": 21,
+      "failed": 1
+    },
+    "21-map": {
+      "passed": 15,
+      "skipped": 5
+    },
+    "22-roomposition": {
+      "passed": 28,
+      "failed": 3
+    },
+    "23-store-api": {
+      "passed": 25,
+      "skipped": 8,
+      "failed": 1
+    },
+    "24-intent-resolution": {
+      "passed": 38,
+      "failed": 5
+    },
+    "25-memory": {
+      "passed": 22
+    },
+    "26-object-shapes": {
+      "passed": 14,
+      "skipped": 13,
+      "failed": 19
+    },
+    "27-undocumented": {
+      "passed": 60,
+      "skipped": 25,
+      "failed": 22
+    },
+    "28-deprecation": {
+      "skipped": 7
+    },
+    "29-multi-shard": {
+      "passed": 3,
+      "skipped": 8
+    },
+    "30-cpu-runtime": {
+      "passed": 4
+    },
+    "31-notifications-visuals": {
+      "passed": 12
+    }
+  },
+  "files": {
+    "00-adapter-contract/code-tag.test.ts": {
+      "passed": 4
+    },
+    "00-adapter-contract/coexistence.test.ts": {
+      "passed": 8
+    },
+    "00-adapter-contract/error-model.test.ts": {
+      "passed": 20
+    },
+    "00-adapter-contract/execution.test.ts": {
+      "passed": 17,
+      "failed": 1,
+      "skipped": 3
+    },
+    "00-adapter-contract/hard-prerequisites.test.ts": {
+      "failed": 1,
+      "passed": 2,
+      "skipped": 1
+    },
+    "00-adapter-contract/inspection.test.ts": {
+      "passed": 14,
+      "failed": 5,
+      "skipped": 5
+    },
+    "00-adapter-contract/setup.test.ts": {
+      "passed": 56,
+      "failed": 6,
+      "skipped": 14
+    },
+    "00-framework/canonical-parity.test.ts": {
+      "passed": 4
+    },
+    "00-framework/capability-gates.test.ts": {
+      "passed": 1,
+      "skipped": 1
+    },
+    "00-framework/catalog-id.test.ts": {
+      "passed": 4
+    },
+    "00-framework/ci-shards.test.ts": {
+      "passed": 2
+    },
+    "00-framework/fixture-fence.test.ts": {
+      "passed": 2
+    },
+    "00-framework/helpers.test.ts": {
+      "passed": 11
+    },
+    "00-framework/matrices.test.ts": {
+      "passed": 4
+    },
+    "00-framework/parity-reporter.test.ts": {
+      "passed": 21
+    },
+    "00-framework/parity-skips.test.ts": {
+      "passed": 5
+    },
+    "00-framework/test-claims.test.ts": {
+      "passed": 6
+    },
+    "01-movement/1.1-basic-movement.test.ts": {
+      "passed": 45
+    },
+    "01-movement/1.2-fatigue.test.ts": {
+      "passed": 11,
+      "skipped": 3
+    },
+    "01-movement/1.2b-road-fatigue.test.ts": {
+      "passed": 4,
+      "failed": 1
+    },
+    "01-movement/1.4-room-transitions.test.ts": {
+      "passed": 4
+    },
+    "01-movement/1.5-pulling.test.ts": {
+      "passed": 24,
+      "failed": 1
+    },
+    "01-movement/1.6-collision.test.ts": {
+      "passed": 7,
+      "failed": 1
+    },
+    "01-movement/1.7-power-creep-movement.test.ts": {
+      "skipped": 1
+    },
+    "02-pathfinding/2.1-pathfinder.test.ts": {
+      "passed": 18,
+      "failed": 3
+    },
+    "02-pathfinding/2.2-costmatrix.test.ts": {
+      "passed": 6,
+      "failed": 2
+    },
+    "02-pathfinding/2.3-legacy-path.test.ts": {
+      "passed": 9
+    },
+    "02-pathfinding/2.4-cross-room-search.test.ts": {
+      "passed": 1,
+      "failed": 1
+    },
+    "03-harvesting/3.1-source-harvest.test.ts": {
+      "passed": 42
+    },
+    "03-harvesting/3.2-mineral-harvest.test.ts": {
+      "passed": 68
+    },
+    "03-harvesting/3.3-deposit-harvest.test.ts": {
+      "skipped": 26
+    },
+    "04-resource-transfer/4.1-transfer.test.ts": {
+      "failed": 2,
+      "passed": 67,
+      "skipped": 2
+    },
+    "04-resource-transfer/4.2-4.5-withdraw-pickup-drop.test.ts": {
+      "failed": 3,
+      "passed": 127,
+      "skipped": 15
+    },
+    "05-construction-repair/5.1-build.test.ts": {
+      "passed": 38
+    },
+    "05-construction-repair/5.2-repair.test.ts": {
+      "passed": 31
+    },
+    "05-construction-repair/5.3-dismantle.test.ts": {
+      "passed": 24
+    },
+    "05-construction-repair/5.4-construction-sites.test.ts": {
+      "passed": 69
+    },
+    "05-construction-repair/5.5-my-construction-sites.test.ts": {
+      "passed": 1
+    },
+    "06-controller/6.1-6.3-controller.test.ts": {
+      "failed": 15,
+      "passed": 96
+    },
+    "06-controller/6.10-structlimit.test.ts": {
+      "passed": 40,
+      "skipped": 2
+    },
+    "06-controller/6.4-upgrade.test.ts": {
+      "passed": 50,
+      "skipped": 1
+    },
+    "06-controller/6.6-gensafemode.test.ts": {
+      "passed": 19
+    },
+    "06-controller/6.7-downgrade.test.ts": {
+      "passed": 9,
+      "failed": 2,
+      "skipped": 1
+    },
+    "06-controller/6.8-safemode.test.ts": {
+      "failed": 17,
+      "passed": 7
+    },
+    "06-controller/6.9-unclaim.test.ts": {
+      "passed": 3,
+      "skipped": 1
+    },
+    "07-combat/7.1-melee-attack.test.ts": {
+      "passed": 90
+    },
+    "07-combat/7.12-tower-intent.test.ts": {
+      "passed": 5
+    },
+    "07-combat/7.13-7.14-nukes.test.ts": {
+      "skipped": 101
+    },
+    "07-combat/7.15-safemode-combat.test.ts": {
+      "passed": 1,
+      "failed": 1
+    },
+    "07-combat/7.16-bodypart-damage.test.ts": {
+      "passed": 4
+    },
+    "07-combat/7.17-tower-power.test.ts": {
+      "skipped": 11
+    },
+    "07-combat/7.3-ranged-mass-attack.test.ts": {
+      "passed": 12
+    },
+    "07-combat/7.7-simultaneous.test.ts": {
+      "passed": 6
+    },
+    "07-combat/7.9-7.11-tower.test.ts": {
+      "passed": 52
+    },
+    "08-boosts/8.1-boost-application.test.ts": {
+      "skipped": 37
+    },
+    "08-boosts/8.2-unboost.test.ts": {
+      "skipped": 32
+    },
+    "08-boosts/8.3-boost-aggregation.test.ts": {
+      "skipped": 2
+    },
+    "08-boosts/8.4-8.13-boost-magnitudes.test.ts": {
+      "skipped": 35
+    },
+    "09-spawning-lifecycle/9.1-spawn-creep.test.ts": {
+      "passed": 48
+    },
+    "09-spawning-lifecycle/9.2-duration-direction.test.ts": {
+      "passed": 2
+    },
+    "09-spawning-lifecycle/9.3-spawn-stomp.test.ts": {
+      "passed": 6
+    },
+    "09-spawning-lifecycle/9.4-renew.test.ts": {
+      "passed": 30,
+      "skipped": 3
+    },
+    "09-spawning-lifecycle/9.5-recycle.test.ts": {
+      "passed": 16
+    },
+    "09-spawning-lifecycle/9.6-9.8-creep-spawning.test.ts": {
+      "passed": 18
+    },
+    "09-spawning-lifecycle/9.7a-lifetime.test.ts": {
+      "passed": 3
+    },
+    "09-spawning-lifecycle/9.7b-death.test.ts": {
+      "passed": 8,
+      "failed": 1
+    },
+    "09-spawning-lifecycle/9.9-spawn-power.test.ts": {
+      "skipped": 1
+    },
+    "10-structures-energy/10.1-extension.test.ts": {
+      "passed": 2
+    },
+    "10-structures-energy/10.1b-spawn-energy.test.ts": {
+      "passed": 2
+    },
+    "10-structures-energy/10.3-container.test.ts": {
+      "failed": 1
+    },
+    "10-structures-energy/10.3b-container-decay.test.ts": {
+      "passed": 3
+    },
+    "10-structures-energy/10.4-link.test.ts": {
+      "passed": 59,
+      "failed": 1
+    },
+    "11-structures-production/11.1-11.2-lab.test.ts": {
+      "skipped": 171
+    },
+    "11-structures-production/11.4-11.5-factory.test.ts": {
+      "skipped": 112
+    },
+    "11-structures-production/11.6-power-spawn.test.ts": {
+      "skipped": 6
+    },
+    "12-structures-military/12.1-12.2-rampart.test.ts": {
+      "passed": 17,
+      "skipped": 2
+    },
+    "12-structures-military/12.3-wall.test.ts": {
+      "passed": 2
+    },
+    "12-structures-military/12.4-rampart-power.test.ts": {
+      "skipped": 1
+    },
+    "13-structures-infrastructure/13.1-13.2-road.test.ts": {
+      "passed": 8,
+      "skipped": 1
+    },
+    "13-structures-infrastructure/13.1b-road-decay.test.ts": {
+      "passed": 5
+    },
+    "13-structures-infrastructure/13.3-terminal.test.ts": {
+      "passed": 47,
+      "skipped": 3
+    },
+    "13-structures-infrastructure/13.4-observer.test.ts": {
+      "skipped": 16
+    },
+    "13-structures-infrastructure/13.5-extractor.test.ts": {
+      "passed": 2
+    },
+    "13-structures-infrastructure/13.6-portal.test.ts": {
+      "skipped": 6
+    },
+    "14-structures-npc/14.1-14.2-npc.test.ts": {
+      "failed": 4,
+      "skipped": 8
+    },
+    "14-structures-npc/14.3-power-bank.test.ts": {
+      "skipped": 3
+    },
+    "14-structures-npc/14.5-stronghold-layout.test.ts": {
+      "skipped": 5
+    },
+    "14-structures-npc/14.6-invader-raid-spawning.test.ts": {
+      "skipped": 21
+    },
+    "15-structure-common/15.1-hits.test.ts": {
+      "passed": 16,
+      "skipped": 4
+    },
+    "15-structure-common/15.2-isactive.test.ts": {
+      "passed": 5
+    },
+    "15-structure-common/15.3-construction-cost.test.ts": {
+      "passed": 16,
+      "skipped": 3
+    },
+    "15-structure-common/15.4-structure-api.test.ts": {
+      "passed": 12
+    },
+    "15-structure-common/15.5-effects-substrate.test.ts": {
+      "skipped": 5
+    },
+    "15-structure-common/15.6-effects-hosts.test.ts": {
+      "skipped": 17
+    },
+    "16-room-mechanics/16.1b-survival-info.test.ts": {
+      "failed": 1
+    },
+    "16-room-mechanics/16.3-room-find.test.ts": {
+      "passed": 3
+    },
+    "16-room-mechanics/16.3b-game-api.test.ts": {
+      "passed": 22
+    },
+    "16-room-mechanics/16.4-look.test.ts": {
+      "passed": 13
+    },
+    "16-room-mechanics/16.5-terrain.test.ts": {
+      "passed": 5
+    },
+    "16-room-mechanics/16.6-eventlog.test.ts": {
+      "passed": 26,
+      "failed": 3,
+      "skipped": 5
+    },
+    "16-room-mechanics/16.7-flags.test.ts": {
+      "passed": 24
+    },
+    "16-room-mechanics/16.8-room-helpers.test.ts": {
+      "passed": 2
+    },
+    "16-room-mechanics/16.9-game-collections.test.ts": {
+      "passed": 2
+    },
+    "17-source-mineral-deposit/17.1-source-regen.test.ts": {
+      "passed": 6,
+      "failed": 3
+    },
+    "17-source-mineral-deposit/17.2-source-power.test.ts": {
+      "skipped": 11
+    },
+    "17-source-mineral-deposit/17.3-mineral-regen.test.ts": {
+      "failed": 1,
+      "passed": 10,
+      "skipped": 4
+    },
+    "17-source-mineral-deposit/17.5-deposit.test.ts": {
+      "skipped": 9
+    },
+    "18-game-objects/18.1-tombstone.test.ts": {
+      "passed": 18
+    },
+    "18-game-objects/18.2-ruin.test.ts": {
+      "passed": 7,
+      "skipped": 1
+    },
+    "18-game-objects/18.3-nuke-flight.test.ts": {
+      "skipped": 7
+    },
+    "19-power/19.0-gpl.test.ts": {
+      "skipped": 9
+    },
+    "19-power/19.1-lifecycle.test.ts": {
+      "skipped": 33
+    },
+    "19-power/19.4-19.8-powers.test.ts": {
+      "skipped": 73,
+      "passed": 1
+    },
+    "19-power/19.9-generate-ops.test.ts": {
+      "skipped": 7
+    },
+    "20-market/20.2-20.4-market.test.ts": {
+      "passed": 21,
+      "failed": 1
+    },
+    "21-map/21.1-room-queries.test.ts": {
+      "passed": 7,
+      "skipped": 5
+    },
+    "21-map/21.2-route-finding.test.ts": {
+      "passed": 5
+    },
+    "21-map/21.3-terrain.test.ts": {
+      "passed": 3
+    },
+    "22-roomposition/22.0-basics.test.ts": {
+      "passed": 4
+    },
+    "22-roomposition/22.1-22.4-roomposition.test.ts": {
+      "passed": 16,
+      "failed": 3
+    },
+    "22-roomposition/22.2-direction.test.ts": {
+      "passed": 8
+    },
+    "23-store-api/23.1-23.4-store.test.ts": {
+      "passed": 19,
+      "skipped": 7
+    },
+    "23-store-api/23.5-timers.test.ts": {
+      "skipped": 1,
+      "failed": 1
+    },
+    "23-store-api/23.6-store-access.test.ts": {
+      "passed": 6
+    },
+    "24-intent-resolution/24.1-creep-action-priority.test.ts": {
+      "passed": 28
+    },
+    "24-intent-resolution/24.1b-intent-overwrite.test.ts": {
+      "passed": 3
+    },
+    "24-intent-resolution/24.1c-intent-order.test.ts": {
+      "passed": 2,
+      "failed": 2
+    },
+    "24-intent-resolution/24.2-resource-visibility.test.ts": {
+      "passed": 1,
+      "failed": 3
+    },
+    "24-intent-resolution/24.3-intent-limits.test.ts": {
+      "passed": 2
+    },
+    "24-intent-resolution/24.4-simultaneous-actions.test.ts": {
+      "passed": 2
+    },
+    "25-memory/25.1-25.3-memory.test.ts": {
+      "passed": 22
+    },
+    "26-object-shapes/26.0-discovery.test.ts": {
+      "passed": 14,
+      "skipped": 13,
+      "failed": 19
+    },
+    "27-undocumented/27.1-memhack.test.ts": {
+      "passed": 12
+    },
+    "27-undocumented/27.10-actionlog.test.ts": {
+      "skipped": 21
+    },
+    "27-undocumented/27.11-id-constructors.test.ts": {
+      "failed": 10
+    },
+    "27-undocumented/27.12-cached-live-receiver.test.ts": {
+      "passed": 2
+    },
+    "27-undocumented/27.14-json-objects.test.ts": {
+      "passed": 14,
+      "skipped": 4
+    },
+    "27-undocumented/27.15-prototype-extensions.test.ts": {
+      "passed": 6,
+      "failed": 1
+    },
+    "27-undocumented/27.2-global-persistence.test.ts": {
+      "passed": 1,
+      "failed": 3
+    },
+    "27-undocumented/27.3-memjson.test.ts": {
+      "passed": 5
+    },
+    "27-undocumented/27.4-costmatrix-bits.test.ts": {
+      "passed": 4
+    },
+    "27-undocumented/27.5-creep-memory.test.ts": {
+      "passed": 2
+    },
+    "27-undocumented/27.6-identity.test.ts": {
+      "passed": 5,
+      "failed": 8
+    },
+    "27-undocumented/27.7-packedpos.test.ts": {
+      "passed": 4
+    },
+    "27-undocumented/27.8-system-username.test.ts": {
+      "passed": 1
+    },
+    "27-undocumented/27.9-move-cache.test.ts": {
+      "passed": 4
+    },
+    "28-deprecation/28.1-map.test.ts": {
+      "skipped": 2
+    },
+    "28-deprecation/28.2-pathfinding.test.ts": {
+      "skipped": 3
+    },
+    "28-deprecation/28.3-spawn.test.ts": {
+      "skipped": 1
+    },
+    "28-deprecation/28.4-dedup.test.ts": {
+      "skipped": 1
+    },
+    "29-multi-shard/29.1-shard-identity.test.ts": {
+      "passed": 3
+    },
+    "29-multi-shard/29.3-intershard-memory-local.test.ts": {
+      "skipped": 4
+    },
+    "29-multi-shard/29.4-cpu-shard-limits.test.ts": {
+      "skipped": 3
+    },
+    "29-multi-shard/29.6-shard-pcreep.test.ts": {
+      "skipped": 1
+    },
+    "30-cpu-runtime/30.1-heap-statistics.test.ts": {
+      "passed": 1
+    },
+    "30-cpu-runtime/30.2-get-used.test.ts": {
+      "passed": 2
+    },
+    "30-cpu-runtime/30.4-console.test.ts": {
+      "passed": 1
+    },
+    "31-notifications-visuals/31.1-notify-and-map-visual.test.ts": {
+      "passed": 4
+    },
+    "31-notifications-visuals/31.2-room-visual.test.ts": {
+      "passed": 8
+    }
+  },
+  "historical_references": {
+    "vanilla": {
+      "source": ".compat/screeps-ok/reports/vanilla.json",
+      "sha256": "16dee5e0e72a8327442849c124b3a9acd6d61a58d088f249fe9a6632ff6a448a",
+      "start_time_cst": "2026-09-27T16:56:42.789000+08:00",
+      "summary": {
+        "numTotalTests": 2914,
+        "numPassedTests": 2897,
+        "numFailedTests": 10,
+        "numPendingTests": 7
+      },
+      "current_failed_reference_status": {
+        "passed": 124,
+        "failed": 4
+      }
+    },
+    "xxscreeps": {
+      "source": ".compat/screeps-ok/reports/xxscreeps.json",
+      "sha256": "054da2606ceac5aef62a9ef74c2287adb213e3b8c95cdca1dfcca45524ee2aa1",
+      "start_time_cst": "2026-09-27T16:55:02.358000+08:00",
+      "summary": {
+        "numTotalTests": 2914,
+        "numPassedTests": 2642,
+        "numFailedTests": 77,
+        "numPendingTests": 195
+      },
+      "current_failed_reference_status": {
+        "passed": 124,
+        "failed": 3,
+        "skipped": 1
+      }
+    }
+  },
+  "failed_in_both_current_and_historical_vanilla": [
+    "creep.pull() MOVE-PULL-012:pullerFirst puller-first iteration — fatigue dies with the puller, not stranded on the pulled creep",
+    "creep movement collision MOVE-COLLISION-007 moveTo with ignoreCreeps:false returns ERR_NO_PATH when every viable route is blocked by stationary creeps",
+    "room.getEventLog() ROOM-EVENTLOG-027 Structure.destroy emits EVENT_OBJECT_DESTROYED with structureType",
+    "Market queries MARKET-QUERY-006 getHistory invalid resources and valid resources with no history return empty arrays"
+  ],
+  "archived_bot_reports": {
+    "bot-overmind": {
+      "source": "compat/reports/bot-overmind.json",
+      "sha256": "fe2ad3cf634e592e20a3b9297baa938a78fe380b4cc1ba349ed8481cc4e47b77",
+      "ticks_requested": 2000,
+      "ticks_completed": 2000,
+      "ticks_terminated": 0,
+      "ticks_skipped_penalty": 0,
+      "ticks_with_console_error": 1,
+      "missing_api": {}
+    },
+    "bot-tooangel": {
+      "source": "compat/reports/bot-tooangel.json",
+      "sha256": "315c3155d8e5b8286a32f4cb8366631ef761c7ba09452019384cf821a1679bbb",
+      "ticks_requested": 2000,
+      "ticks_completed": 2000,
+      "ticks_terminated": 0,
+      "ticks_skipped_penalty": 0,
+      "ticks_with_console_error": 0,
+      "missing_api": {}
+    },
+    "bot-wasm": {
+      "source": "compat/reports/bot-wasm.json",
+      "sha256": "b45b10b0c719f8713eae1ca295a3eb40dffa461839999ea798fe8b42a88266a0",
+      "ticks_requested": 10,
+      "ticks_completed": 10,
+      "ticks_terminated": 0,
+      "ticks_skipped_penalty": 0,
+      "ticks_with_console_error": 0,
+      "missing_api": {}
+    }
+  },
+  "fresh_validation": {
+    "command": "rtk cargo test --workspace",
+    "exit_code": 0,
+    "passed": 616,
+    "ignored": 10,
+    "suites": 50,
+    "elapsed_seconds": 31.09
+  }
+}

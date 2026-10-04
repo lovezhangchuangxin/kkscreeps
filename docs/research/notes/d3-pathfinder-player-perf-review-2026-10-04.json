@@ -1,0 +1,106 @@
+{
+  "scenario": "Same release short-path microbenchmark as initial D3; after precommit review fixes, one warmup and five rotating rounds",
+  "release_sha256": "e4bb0d6f3458220d9f31187cd698e462187c5fc82feb287982b8462bdac3bda6",
+  "samples": [
+    {
+      "round": 1,
+      "case": "callback_none",
+      "micros_per_search": 22.896083
+    },
+    {
+      "round": 1,
+      "case": "callback_matrix",
+      "micros_per_search": 22.907291999999998
+    },
+    {
+      "round": 1,
+      "case": "room_grid",
+      "micros_per_search": 29.193375
+    },
+    {
+      "round": 1,
+      "case": "terrain",
+      "micros_per_search": 22.512042
+    },
+    {
+      "round": 2,
+      "case": "callback_matrix",
+      "micros_per_search": 22.986833
+    },
+    {
+      "round": 2,
+      "case": "room_grid",
+      "micros_per_search": 29.202833000000002
+    },
+    {
+      "round": 2,
+      "case": "terrain",
+      "micros_per_search": 22.53625
+    },
+    {
+      "round": 2,
+      "case": "callback_none",
+      "micros_per_search": 22.765583999999997
+    },
+    {
+      "round": 3,
+      "case": "room_grid",
+      "micros_per_search": 28.825958
+    },
+    {
+      "round": 3,
+      "case": "terrain",
+      "micros_per_search": 22.413541
+    },
+    {
+      "round": 3,
+      "case": "callback_none",
+      "micros_per_search": 22.993541999999998
+    },
+    {
+      "round": 3,
+      "case": "callback_matrix",
+      "micros_per_search": 23.264917
+    },
+    {
+      "round": 4,
+      "case": "terrain",
+      "micros_per_search": 22.472125
+    },
+    {
+      "round": 4,
+      "case": "callback_none",
+      "micros_per_search": 23.111
+    },
+    {
+      "round": 4,
+      "case": "callback_matrix",
+      "micros_per_search": 23.089167
+    },
+    {
+      "round": 4,
+      "case": "room_grid",
+      "micros_per_search": 28.500458
+    },
+    {
+      "round": 5,
+      "case": "callback_none",
+      "micros_per_search": 23.12525
+    },
+    {
+      "round": 5,
+      "case": "callback_matrix",
+      "micros_per_search": 23.086208
+    },
+    {
+      "round": 5,
+      "case": "room_grid",
+      "micros_per_search": 28.516625
+    },
+    {
+      "round": 5,
+      "case": "terrain",
+      "micros_per_search": 22.289832999999998
+    }
+  ]
+}

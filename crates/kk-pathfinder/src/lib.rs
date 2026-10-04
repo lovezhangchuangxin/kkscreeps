@@ -135,6 +135,8 @@ pub enum Error {
     ReentrantTerrainLoad,
     /// C ABI 返回失败，包括 C++ 异常、内存分配失败或结果结构不符合约定。
     NativeFailure,
+    /// 宿主取消本次搜索，不得折叠成完整空结果。
+    Cancelled,
 }
 
 impl fmt::Display for Error {
@@ -147,6 +149,7 @@ impl fmt::Display for Error {
                 "load_terrain is not allowed inside a search callback (deadlock guard)"
             ),
             Error::NativeFailure => write!(f, "native pathfinder failure"),
+            Error::Cancelled => write!(f, "native pathfinder cancelled"),
             Error::JSError(Some(msg)) => write!(f, "native pathfinder threw: {msg}"),
             Error::JSError(None) => write!(f, "native pathfinder callback threw"),
         }
@@ -344,6 +347,27 @@ pub enum RoomDecision<'a> {
     CostMatrix(&'a CostMatrix),
 }
 
+/// 宿主桥的房间决策。裸矩阵仅由满足 SearchHost 安全契约的宿主提供。
+pub enum HostRoomDecision {
+    None,
+    Blocked,
+    Matrix { data: *const u8, len: usize },
+    Error,
+}
+
+/// 同步搜索宿主，支持有拥有者的可变矩阵和显式错误/取消。
+///
+/// # Safety
+/// room 返回的 2500 字节矩阵指针须有效至 search_with_host 返回；不得移动或
+/// 释放其存储。矩阵只能在 room 回调内修改（此时 C++ 搜索暂停），且不能保留
+/// 与这些修改冲突的 Rust 借用。嵌套搜索使用独立宿主，不得重入同一实例。
+pub unsafe trait SearchHost {
+    fn room(&mut self, xx: u8, yy: u8) -> HostRoomDecision;
+    fn is_cancelled(&mut self) -> bool {
+        false
+    }
+}
+
 /// 搜索结果；未完成时仍可能包含一段向目标接近的路径。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchResult {
@@ -476,6 +500,7 @@ pub fn load_terrain(room_name: &str, bits: &[u8; 625]) -> Result<(), Error> {
 fn finish(outcome: Option<ffi::RawOutcome>) -> Result<SearchResult, Error> {
     match outcome {
         None => Err(Error::NativeFailure),
+        Some(raw) if raw.status == 4 => Err(Error::Cancelled),
         Some(raw) if raw.status == 3 => Err(Error::JSError(raw.js_error_message)),
         Some(raw) if raw.status == 2 => Ok(SearchResult::empty(false)),
         Some(raw) if raw.status == 1 => Ok(SearchResult::empty(true)),
@@ -535,6 +560,7 @@ pub fn search(
             c_options,
             None,
             std::ptr::null_mut(),
+            None,
         )
     };
     finish(outcome)
@@ -593,9 +619,50 @@ where
             c_options,
             Some(tramp),
             user_data,
+            None,
         )
     };
     finish(outcome)
+}
+
+/// 使用显式宿主桥搜索；原生 room/cancel 回调串行调用同一宿主，panic 转错误。
+/// 矩阵的所有权和修改纪律由 SearchHost 的 unsafe 实现负责。
+pub fn search_with_host<H: SearchHost>(
+    origin: WorldPosition,
+    goals: &[Goal],
+    options: &SearchOptions,
+    host: &mut H,
+) -> Result<SearchResult, Error> {
+    if goals.is_empty() {
+        return Ok(SearchResult::empty(false));
+    }
+    let o = options.clamped();
+    let options = ffi::Options::new(
+        o.plain_cost,
+        o.swamp_cost,
+        o.max_ops,
+        o.max_cost,
+        o.max_rooms,
+        o.flee,
+        o.heuristic_weight,
+    );
+    let goals: Vec<_> = goals
+        .iter()
+        .map(|g| (g.pos.xx, g.pos.yy, g.range))
+        .collect();
+    let _terrain = TERRAIN_LOCK.read();
+    // SAFETY: 两个 trampoline 仅在同步调用内串行访问 host；其矩阵契约由
+    // unsafe trait 保证，地形读锁排除写入，内层搜索使用独立 host。
+    finish(unsafe {
+        ffi::ffi_search(
+            (origin.xx, origin.yy),
+            &goals,
+            options,
+            Some(ffi::host_room::<H>),
+            (host as *mut H).cast(),
+            Some(ffi::host_cancel::<H>),
+        )
+    })
 }
 
 #[cfg(test)]

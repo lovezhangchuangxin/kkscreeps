@@ -15,10 +15,12 @@
 //! `Could not load terrain data` 的路径只可能发生在墙环之外。
 //! 边界语义与分歧登记见 docs/designs/pathfinder-terrain.md。
 
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
-use deno_core::{OpState, op2};
+use deno_core::{OpState, op2, v8};
 use deno_error::JsErrorBox;
 use serde::{Deserialize, Serialize};
 
@@ -352,15 +354,19 @@ fn native_error_message(error: &kk_pathfinder::Error) -> String {
 
 /// 同步原生搜索。地形缺失或原生错误以 op 错误抛回 JS，由玩家面按官方
 /// 异常传播形态处理（如缺地形房的 `Could not load terrain data`）。
-#[op2]
+// 回调可执行任意玩家 JS（包括同 op 的嵌套搜索）；不得跨回调借用 OpState。
+#[op2(reentrant)]
 #[serde]
 pub(crate) fn op_kk_pathfinder_search(
-    state: &mut OpState,
+    scope: &mut v8::PinScope,
+    state: Rc<RefCell<OpState>>,
     #[serde] args: PathfinderArgs,
+    callback: v8::Local<v8::Value>,
 ) -> Result<PathfinderOutcome, JsErrorBox> {
     // try_borrow：begin_tick 前的调用（如 Mod 玩家模块安装期顶层代码）缺
     // TickTerrain 时给出 op 错误而不是 OpState 缺类型 panic。
     let pack = state
+        .borrow()
         .try_borrow::<TickTerrain>()
         .and_then(|terrain| terrain.pack());
     // 不跨 OpState 借用执行载入与搜索；后续嵌套搜索（回调通道）不受影响。
@@ -384,21 +390,142 @@ pub(crate) fn op_kk_pathfinder_search(
         max_rooms: args.max_rooms,
         flee: args.flee,
     };
-    let result = kk_pathfinder::search(
+    let callback = callback
+        .try_cast::<v8::Function>()
+        .ok()
+        .map(|function| v8::Global::new(scope, function));
+    let mut host = PlayerSearchHost {
+        scope,
+        callback,
+        matrices: Vec::new(),
+        exception: None,
+    };
+    let result = kk_pathfinder::search_with_host(
         kk_pathfinder::WorldPosition {
             xx: args.origin.0,
             yy: args.origin.1,
         },
         &goals,
         &options,
-    )
-    .map_err(|e| JsErrorBox::generic(native_error_message(&e)))?;
+        &mut host,
+    );
+    // 重新抛出原值（包括非 Error），不能格式化或用 op 错误替换异常身份。
+    if let Some(exception) = host.exception.take() {
+        let exception = v8::Local::new(host.scope, exception);
+        host.scope.throw_exception(exception);
+        return Ok(PathfinderOutcome {
+            path: Vec::new(),
+            ops: 0,
+            cost: 0,
+            incomplete: true,
+        });
+    }
+    if host.scope.is_execution_terminating() {
+        // 保留不可捕获的 V8 终止；不能用普通错误替换后让玩家继续执行。
+        return Ok(PathfinderOutcome {
+            path: Vec::new(),
+            ops: 0,
+            cost: 0,
+            incomplete: true,
+        });
+    }
+    let result = result.map_err(|e| JsErrorBox::generic(native_error_message(&e)))?;
     Ok(PathfinderOutcome {
         path: result.path.iter().map(|p| (p.xx, p.yy)).collect(),
         ops: result.ops,
         cost: result.cost,
         incomplete: result.incomplete,
     })
+}
+
+/// 保留返回时的 backing store 与偏移；detach 不会释放已被搜索持有的存储。
+/// C++ 只读固定 Cell 缓冲，JS 回调期间同步内容，不借用可变 V8 字节为 &[u8]。
+struct MatrixSnapshot {
+    backing: v8::SharedRef<v8::BackingStore>,
+    offset: usize,
+    bytes: Box<[Cell<u8>; 2500]>,
+}
+
+impl MatrixSnapshot {
+    fn refresh(&self) {
+        let source = self.backing.get(self.offset..).unwrap_or_default();
+        let copied = source.len().min(self.bytes.len());
+        for (target, source) in self.bytes[..copied].iter().zip(&source[..copied]) {
+            target.set(source.get());
+        }
+        // 可缩放 ArrayBuffer 可能在后续回调中收缩到原视图之外。不可读部分
+        // 按地形默认值清零，既不越界读取，也不让旧障碍残留在固定副本中。
+        for target in &self.bytes[copied..] {
+            target.set(0);
+        }
+    }
+}
+
+struct PlayerSearchHost<'a, 's, 'i> {
+    scope: &'a mut v8::PinScope<'s, 'i>,
+    callback: Option<v8::Global<v8::Function>>,
+    matrices: Vec<MatrixSnapshot>,
+    exception: Option<v8::Global<v8::Value>>,
+}
+
+// SAFETY: 矩阵各自拥有固定 Box<Cell>，Vec 增长不移动 Box 的存储。所有写入
+// 仅在 room 回调内（C++ 暂停）发生，不持不可变字节借用；同步搜索结束后才
+// 释放。嵌套 op 建立独立宿主，外层矩阵在内层返回后重新同步。
+unsafe impl kk_pathfinder::SearchHost for PlayerSearchHost<'_, '_, '_> {
+    fn room(&mut self, xx: u8, yy: u8) -> kk_pathfinder::HostRoomDecision {
+        use kk_pathfinder::HostRoomDecision as Decision;
+        let Some(callback) = &self.callback else {
+            return Decision::None;
+        };
+        v8::tc_scope!(let tc, self.scope);
+        let Some(name) = v8::String::new(tc, &kk_pathfinder::generate_room_name(xx, yy)) else {
+            return Decision::Error;
+        };
+        let recv = v8::undefined(tc).into();
+        let ret = callback.open(tc).call(tc, recv, &[name.into()]);
+        let Some(ret) = ret else {
+            if tc.has_terminated() {
+                // TryCatch 的析构会清除已捕获状态；必须重挂不可捕获的终止，
+                // 否则 native 的异常占位会被包装成普通错误，让玩家 catch 后续跑。
+                tc.rethrow();
+                return Decision::Error;
+            }
+            if let Some(exception) = tc.exception() {
+                self.exception = Some(v8::Global::new(tc, exception));
+            }
+            return Decision::Error;
+        };
+        // 包装器已经读取 _bits（含 getter）；native 按 TypedArray 字节长度裁决。
+        // 每次回调后同步此前所有矩阵，包含共享 backing、嵌套搜索与返回 false。
+        for matrix in &self.matrices {
+            matrix.refresh();
+        }
+        if ret.is_false() {
+            return Decision::Blocked;
+        }
+        let Ok(array) = ret.try_cast::<v8::TypedArray>() else {
+            return Decision::None;
+        };
+        if array.byte_length() != 2500 {
+            return Decision::None;
+        }
+        let Some(backing) = array.get_backing_store() else {
+            return Decision::None;
+        };
+        let matrix = MatrixSnapshot {
+            backing,
+            offset: array.byte_offset(),
+            bytes: Box::new(std::array::from_fn(|_| Cell::new(0))),
+        };
+        matrix.refresh();
+        let data = matrix.bytes.as_ptr().cast::<u8>();
+        self.matrices.push(matrix);
+        Decision::Matrix { data, len: 2500 }
+    }
+
+    fn is_cancelled(&mut self) -> bool {
+        self.scope.is_execution_terminating()
+    }
 }
 
 #[cfg(test)]

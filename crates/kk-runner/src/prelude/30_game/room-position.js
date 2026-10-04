@@ -1,6 +1,6 @@
 /* 实现 RoomPosition 的坐标编码、距离与方向计算，以及 Room API 转发。
  * 位置保存在非枚举的 __packedPos 中，x/y/roomName 由原型访问器解码并校验修改。
- * findPathTo/findClosestByPath 委托 PathFinder 地形搜索（结构代价归回调文档）。
+ * findPathTo/findClosestByPath 委托带房间代价矩阵的 PathFinder 原生搜索。
  * 来源：上游 engine/src/game/rooms.js 的 RoomPosition。
  */
 (() => {
@@ -282,7 +282,7 @@
   // 官方 rooms.js:1429 起（默认走 _findClosestByPath2，rooms.js:304-374）：
   // range 1 多目标搜索（maxRooms 1、非 ignoreRoads 时 plainCost 2/swampCost
   // 10），路径终点 isNearTo 反查最近目标；同格命中直接返回、无目标 null。
-  // costCallback/结构代价矩阵尚未接线（docs/designs/pathfinder-terrain.md）。
+  // costCallback 与 Room.findPath 共用房间矩阵，回调收到独立副本。
   RoomPosition.prototype.findClosestByPath = function (type, opts) {
     opts = _.clone(opts || {});
     const room = gw.currentGame().rooms[this.roomName];
@@ -311,7 +311,9 @@
     }
     // :325-328 目标归一：.pos 或自身，range 恒 1
     const goals = _.map(objects, (i) => ({ range: 1, pos: i.pos ? i.pos : i }));
+    gw.pathfindingDeprecated(opts, false);
     const searchOpts = {
+      roomCallback: gw.pathfindingRoomCallback(opts, true),
       maxOps: opts.maxOps,
       maxRooms: 1,
     };

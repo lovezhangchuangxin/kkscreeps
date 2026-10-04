@@ -206,8 +206,12 @@ pub(super) fn pathfinder_kkpv_channel_equivalence_impl() -> anyhow::Result<()> {
 
     let expr = r#"(() => {
         const r = PathFinder.search(new RoomPosition(11, 25, 'W1N1'),
-            new RoomPosition(30, 25, 'W1N1'));
-        return { incomplete: r.incomplete, len: r.path.length, cost: r.cost,
+            new RoomPosition(30, 25, 'W1N1'), {roomCallback(name) {
+                const m=new PathFinder.CostMatrix(); m.set(20,25,255); return m;
+            }});
+        let grid; Game.rooms.W1N1.findPath(new RoomPosition(5,25,'W1N1'),
+            new RoomPosition(9,25,'W1N1'), {costCallback(name,m){grid=m.get(4,25);}});
+        return { grid, incomplete: r.incomplete, len: r.path.length, cost: r.cost,
                  ops: r.ops,
                  tail: r.path.length ? [r.path[r.path.length-1].x, r.path[r.path.length-1].y] : null };
     })()"#;
@@ -241,6 +245,372 @@ pub(super) fn pathfinder_kkpv_channel_equivalence_impl() -> anyhow::Result<()> {
     assert_eq!(
         json_result["value"], kkpv_result["value"],
         "两通道搜索结果逐字段相等"
+    );
+    Ok(())
+}
+
+/// 同步玩家回调、原异常、矩阵偏移和重入均在正式沙箱通路验证。
+pub(super) fn pathfinder_callback_family_impl() -> anyhow::Result<()> {
+    let mut sb = Sandbox::new(SandboxConfig::default())?;
+    let mut table = ModuleTable::new();
+    table.insert_js("main", "module.exports.loop = function () {};");
+    sb.set_modules(table)?;
+    tick(&mut sb, &pathfinder_world())?;
+    let result = sb.run_expr(
+        r#"(() => {
+        const from = new RoomPosition(5,25,'W1N1');
+        const to = new RoomPosition(9,25,'W1N1');
+        const calls = [];
+        const blocked = PathFinder.search(from, to, {roomCallback(name) {
+            calls.push(name); return false;
+        }});
+        const matrix = new PathFinder.CostMatrix();
+        matrix._bits = new Uint8Array(new ArrayBuffer(2700), 100, 2500);
+        for (let y=0; y<50; y++) matrix.set(7,y,255);
+        const wall = PathFinder.search(from,to,{maxRooms:1,roomCallback:()=>matrix});
+        const short = PathFinder.search(from,to,{maxRooms:1,
+            roomCallback:()=>({_bits:new Uint8Array(2499)})});
+        const nonFunction = PathFinder.search(from,to,{roomCallback:3});
+        const token = {message:'identity'};
+        let same=false, getterSame=false;
+        try { PathFinder.search(from,to,{roomCallback:()=>{throw token;}}); }
+        catch(e) { same=e===token; }
+        try { PathFinder.search(from,to,{roomCallback:()=>({get _bits(){throw token;}})}); }
+        catch(e) { getterSame=e===token; }
+        const primitiveTokens=[undefined,null,Symbol('identity'),17];
+        const primitives=primitiveTokens.every(token=>{
+            let caught=false;
+            try {PathFinder.search(from,to,{roomCallback(){throw token;}});}
+            catch(e){caught=e===token;}
+            return caught;
+        });
+        let innerCaught=false;
+        function nested(depth) {
+            return PathFinder.search(from,to,{maxRooms:1,roomCallback:()=>{
+                if (depth) nested(depth-1);
+                else {
+                    try { PathFinder.search(from,to,{roomCallback:()=>{throw token;}}); }
+                    catch(e) { innerCaught=e===token; }
+                }
+            }});
+        }
+        const after=nested(3);
+        const typed=PathFinder.search(from,to,{maxRooms:1,
+            roomCallback:()=>({_bits:new Uint16Array(1250)})});
+        const sharedBits=new Uint8Array(new SharedArrayBuffer(2700),100,2500);
+        for(let y=0;y<50;y++)sharedBits[7*50+y]=255;
+        const shared=PathFinder.search(from,to,{maxRooms:1,roomCallback:()=>({_bits:sharedBits})});
+        return {calls, blocked:blocked.incomplete&&blocked.path.length===0,
+            wall:wall.incomplete&&wall.path.every(p=>p.x<7),
+            short:!short.incomplete&&short.cost===4,
+            nonFunction:!nonFunction.incomplete, same, getterSame, primitives, innerCaught,
+            nested:!after.incomplete&&after.cost===4, typed:typed.cost===4,
+            shared:shared.incomplete&&shared.path.every(p=>p.x<7)};
+    })()"#,
+    )?;
+    assert_eq!(result["ok"], true, "回调不得使沙箱或借用失效：{result}");
+    assert_eq!(result["value"]["calls"], json!(["W1N1"]));
+    for key in [
+        "blocked",
+        "wall",
+        "short",
+        "nonFunction",
+        "same",
+        "getterSame",
+        "primitives",
+        "innerCaught",
+        "nested",
+        "typed",
+        "shared",
+    ] {
+        assert_eq!(result["value"][key], true, "回调契约 {key}: {result}");
+    }
+
+    // 道路穿墙、creep 障碍和 costCallback 克隆隔离同走 Room.findPath 通路。
+    let mut world = pathfinder_world();
+    world["objects"].as_array_mut().unwrap().extend([
+        json!({"id":"road1","type":"structure","structureType":"road","room":"W1N1","x":10,"y":25}),
+        json!({"id":"block1","type":"creep","room":"W1N1","x":7,"y":25,"name":"block","owner":"p1","body":["move"]}),
+        json!({"id":"ramp1","type":"structure","structureType":"rampart","room":"W1N1","x":8,"y":25,"owner":"p2","isPublic":false}),
+        json!({"id":"site1","type":"constructionSite","structureType":"spawn","room":"W1N1","x":9,"y":25,"owner":"p1"}),
+    ]);
+    tick(&mut sb, &world)?;
+    let result = sb.run_expr(
+        r#"(() => {
+        const room=Game.rooms.W1N1, from=new RoomPosition(5,25,'W1N1');
+        const to=new RoomPosition(15,25,'W1N1');
+        let base;
+        const path=room.findPath(from,to,{ignoreCreeps:true,costCallback(name,m){
+            base=[m.get(4,25),m.get(7,25),m.get(8,25),m.get(9,25),m.get(10,25)];
+        }});
+        let creep;
+        room.findPath(from,to,{costCallback(name,m){creep=m.get(7,25);}});
+        const denied=from.findClosestByPath([to],{ignoreCreeps:true,costCallback(name,m){
+            for(let y=0;y<50;y++)m.set(6,y,255);
+        }});
+        const again=room.findPath(from,to,{ignoreCreeps:true});
+        const ignore=room.findPath(from,to,{ignoreCreeps:true,ignoreDestructibleStructures:true,
+            costCallback(name,m){if(m.get(8,25)!==0||m.get(9,25)!==0)throw new Error('ignore');}});
+        return {base,creep,road:path.some(p=>p.x===10&&p.y===25),
+            denied:denied===null,clone:again.some(p=>p.x===10),ignore:ignore.length>0};
+    })()"#,
+    )?;
+    assert_eq!(result["ok"], true, "房间代价矩阵: {result}");
+    assert_eq!(result["value"]["base"], json!([255, 0, 255, 255, 1]));
+    assert_eq!(result["value"]["creep"], 255);
+    for key in ["road", "denied", "clone", "ignore"] {
+        assert_eq!(result["value"][key], true, "房间代价 {key}: {result}");
+    }
+    // 新 tick 重建缓存；自己的安全模式只忽略敌方 creep，不忽略自己的。
+    // 来源：官方 rooms.js::makePathfindingGrid2 的 safeMode 分支。
+    world["time"] = json!(8);
+    world["objects"].as_array_mut().unwrap().extend([
+        json!({"id":"ctl1","type":"structure","structureType":"controller","room":"W1N1","x":20,"y":20,"owner":"p1","level":3,"safeMode":100}),
+        json!({"id":"hostile1","type":"creep","room":"W1N1","x":6,"y":25,"name":"hostile","owner":"p2","body":["move"]}),
+    ]);
+    tick(&mut sb, &world)?;
+    let result = sb.run_expr(
+        r#"(() => {
+        let grid;
+        Game.rooms.W1N1.findPath(new RoomPosition(5,25,'W1N1'),new RoomPosition(9,25,'W1N1'),
+            {costCallback(name,m){grid=[m.get(6,25),m.get(7,25),m.get(20,20)];}});
+        return grid;
+    })()"#,
+    )?;
+    assert_eq!(
+        result["value"],
+        json!([0, 255, 255]),
+        "安全模式与 tick 缓存: {result}"
+    );
+    // 套件 ROOMPOS-FIND-010 要求尚未发布的 range 增强；锁定 stable vanilla
+    // 固定 range=1 的语义，不能为通过该例绕过真实 costCallback。
+    let result = sb.run_expr(
+        r#"new RoomPosition(11,10,'W1N1').findClosestByPath(
+        [new RoomPosition(30,10,'W1N1')], {range:5,costCallback(name,m){
+            for(let x=26;x<=34;x++)for(let y=6;y<=14;y++)m.set(x,y,255);
+            return m;
+        }})"#,
+    )?;
+    assert_eq!(result["value"], serde_json::Value::Null);
+    // 官方 creeps.js::moveTo：疲劳且有绘制选项时，缓存 moveByPath 的
+    // ERR_TIRED 仍落入重算；套件 UNDOC-MOVECACHE-004 的增强尚未在 vanilla 发布。
+    sb.begin_tick(&world)?;
+    let result =
+        sb.run_expr("Game.creeps.w1.moveTo(new RoomPosition(3,25,'W1N1'),{reusePath:20})")?;
+    assert_eq!(result["value"], 0);
+    sb.end_tick()?;
+    world["time"] = json!(9);
+    world["objects"][0]["fatigue"] = json!(10);
+    sb.begin_tick(&world)?;
+    let result=sb.run_expr(r#"(() => {
+        let calls=0;
+        const rc=Game.creeps.w1.moveTo(new RoomPosition(3,25,'W1N1'),{
+            reusePath:20,visualizePathStyle:{stroke:'#fff'},costCallback(name,m){calls++;return m;}});
+        return {rc,calls};
+    })()"#)?;
+    assert_eq!(result["value"], json!({"rc":-11,"calls":1}));
+    sb.end_tick()?;
+    Ok(())
+}
+
+/// 玩家回调死循环仍走正常预算中断，不能转成可捕获错误或空路径。
+pub(super) fn pathfinder_callback_budget_impl() -> anyhow::Result<()> {
+    let mut sb = Sandbox::new(SandboxConfig {
+        max_per_tick: 50.0,
+        initial_bucket: 100.0,
+        ..SandboxConfig::default()
+    })?;
+    let mut table = ModuleTable::new();
+    table.insert_js(
+        "main",
+        r#"module.exports.loop=function(){
+        try { PathFinder.search(new RoomPosition(5,25,'W1N1'),new RoomPosition(9,25,'W1N1'),
+            {roomCallback(){while(true){}}}); }
+        catch(e){globalThis.caught=true;}
+        globalThis.returned=true;
+    };"#,
+    );
+    sb.set_modules(table)?;
+    let start = std::time::Instant::now();
+    assert!(matches!(
+        tick(&mut sb, &pathfinder_world())?,
+        TickOutcome::Terminated
+    ));
+    assert!(start.elapsed() < std::time::Duration::from_secs(2));
+    let mut table = ModuleTable::new();
+    table.insert_js("main", "module.exports.loop=function(){};");
+    sb.set_modules(table)?;
+    tick(&mut sb, &pathfinder_world())?;
+    let value=sb.run_expr("({caught:globalThis.caught===true,returned:globalThis.returned===true, cost:PathFinder.search(new RoomPosition(5,25,'W1N1'),new RoomPosition(9,25,'W1N1')).cost})")?;
+    assert_eq!(
+        value["value"],
+        json!({"caught":false,"returned":false,"cost":4})
+    );
+    Ok(())
+}
+
+/// 原生直接读取可变矩阵是行为参考：后续房间回调修改旧矩阵，JS 桥必须同形。
+pub(super) fn pathfinder_matrix_mutation_impl() -> anyhow::Result<()> {
+    use kk_pathfinder::{HostRoomDecision, SearchHost};
+    use std::cell::Cell;
+    struct Reference {
+        first: Box<[Cell<u8>; 2500]>,
+        blocked: Box<[Cell<u8>; 2500]>,
+        live: bool,
+        update: u8,
+    }
+    // SAFETY: 固定 Cell 存储保持到返回，仅在原生暂停的 room 回调中修改。
+    unsafe impl SearchHost for Reference {
+        fn room(&mut self, xx: u8, yy: u8) -> HostRoomDecision {
+            let origin = kk_pathfinder::generate_room_name(xx, yy) == "W2N1";
+            if !origin && self.live {
+                for cell in self.first.iter() {
+                    cell.set(self.update);
+                }
+            }
+            let bytes = if origin { &self.first } else { &self.blocked };
+            HostRoomDecision::Matrix {
+                data: bytes.as_ptr().cast(),
+                len: 2500,
+            }
+        }
+    }
+    let mut sb = Sandbox::new(SandboxConfig::default())?;
+    let mut table = ModuleTable::new();
+    table.insert_js("main", "module.exports.loop=function(){};");
+    sb.set_modules(table)?;
+    tick(&mut sb, &pathfinder_world())?;
+    let result=sb.run_expr(r#"(() => {
+        const bits=new Uint8Array(2500);
+        const r=PathFinder.search(new RoomPosition(45,25,'W2N1'),new RoomPosition(20,25,'W1N1'),
+            {maxRooms:2,roomCallback(name){if(name!=='W2N1')bits.fill(255);return {_bits:bits};}});
+        return {path:r.path.map(p=>[p.x,p.y,p.roomName]),ops:r.ops,cost:r.cost,incomplete:r.incomplete};
+    })()"#)?;
+    assert_eq!(result["ok"], true, "可变矩阵搜索: {result}");
+    let origin = kk_pathfinder::WorldPosition::from_room("W2N1", 45, 25)?;
+    let goals = [kk_pathfinder::Goal::pos(
+        kk_pathfinder::WorldPosition::from_room("W1N1", 20, 25)?,
+    )];
+    let options = kk_pathfinder::SearchOptions {
+        max_rooms: 2,
+        ..Default::default()
+    };
+    let mut host = Reference {
+        first: Box::new(std::array::from_fn(|_| Cell::new(0))),
+        blocked: Box::new(std::array::from_fn(|_| Cell::new(255))),
+        live: true,
+        update: 255,
+    };
+    let expected = kk_pathfinder::search_with_host(origin, &goals, &options, &mut host)?;
+    let frozen = kk_pathfinder::search_with_host(
+        origin,
+        &goals,
+        &options,
+        &mut Reference {
+            first: Box::new(std::array::from_fn(|_| Cell::new(0))),
+            blocked: Box::new(std::array::from_fn(|_| Cell::new(255))),
+            live: false,
+            update: 255,
+        },
+    )?;
+    assert_ne!(expected, frozen, "夹具必须击杀只在首次返回时复制的错误实现");
+    let path: Vec<_> = expected
+        .path
+        .iter()
+        .map(|p| json!([p.x(), p.y(), p.room_name()]))
+        .collect();
+    assert_eq!(
+        result["value"],
+        json!({"path":path,"ops":expected.ops,"cost":expected.cost,"incomplete":expected.incomplete})
+    );
+    // 后续回调通过内层搜索修改外层矩阵，仍须在原生恢复前同步。
+    let result=sb.run_expr(r#"(() => {
+        const bits=new Uint8Array(2500),blocked=new Uint8Array(2500).fill(255);
+        const r=PathFinder.search(new RoomPosition(45,25,'W2N1'),new RoomPosition(20,25,'W1N1'),
+            {maxRooms:2,roomCallback(name){
+                if(name==='W2N1')return {_bits:bits};
+                PathFinder.search(new RoomPosition(45,25,'W2N1'),new RoomPosition(44,25,'W2N1'),
+                    {maxRooms:1,roomCallback(){bits.fill(255);}});
+                return {_bits:blocked};
+            }});
+        return {path:r.path.map(p=>[p.x,p.y,p.roomName]),ops:r.ops,cost:r.cost,incomplete:r.incomplete};
+    })()"#)?;
+    assert_eq!(
+        result["value"],
+        json!({"path":path,"ops":expected.ops,"cost":expected.cost,"incomplete":expected.incomplete})
+    );
+    // 已返回的视图被 detach 后，搜索持有的 backing store 不得失效。
+    let result=sb.run_expr(r#"(() => {
+        const bits=new Uint8Array(2500),blocked=new Uint8Array(2500).fill(255);
+        let detached=false;
+        const r=PathFinder.search(new RoomPosition(45,25,'W2N1'),new RoomPosition(20,25,'W1N1'),
+            {maxRooms:2,roomCallback(name){
+                if(name==='W2N1')return {_bits:bits};
+                bits.buffer.transfer();detached=bits.byteLength===0;
+                return {_bits:blocked};
+            }});
+        return {detached,path:r.path.map(p=>[p.x,p.y,p.roomName]),ops:r.ops,cost:r.cost,incomplete:r.incomplete};
+    })()"#)?;
+    let frozen_path: Vec<_> = frozen
+        .path
+        .iter()
+        .map(|p| json!([p.x(), p.y(), p.room_name()]))
+        .collect();
+    assert_eq!(
+        result["value"],
+        json!({"detached":true,"path":frozen_path,"ops":frozen.ops,"cost":frozen.cost,"incomplete":frozen.incomplete}),
+        "detach 保留存活字节: {result}"
+    );
+    // RAB 收缩后已移除的字节不能继续沿用旧副本。固定原生矩阵将不可读
+    // 部分归零（地形默认值），避免越界读取并保持明确的本地边界策略。
+    let edge_origin = kk_pathfinder::WorldPosition::from_room("W2N1", 49, 25)?;
+    let shrunk = kk_pathfinder::search_with_host(
+        edge_origin,
+        &goals,
+        &options,
+        &mut Reference {
+            first: Box::new(std::array::from_fn(|i| {
+                Cell::new(if i / 50 == 48 { 255 } else { 0 })
+            })),
+            blocked: Box::new(std::array::from_fn(|_| Cell::new(255))),
+            live: true,
+            update: 0,
+        },
+    )?;
+    let stale = kk_pathfinder::search_with_host(
+        edge_origin,
+        &goals,
+        &options,
+        &mut Reference {
+            first: Box::new(std::array::from_fn(|i| {
+                Cell::new(if i / 50 == 48 { 255 } else { 0 })
+            })),
+            blocked: Box::new(std::array::from_fn(|_| Cell::new(255))),
+            live: false,
+            update: 0,
+        },
+    )?;
+    assert_ne!(shrunk, stale, "收缩夹具须能检出陈旧代价");
+    let result=sb.run_expr(r#"(() => {
+        const buffer=new ArrayBuffer(2700,{maxByteLength:5000});
+        const bits=new Uint8Array(buffer,100,2500),blocked=new Uint8Array(2500).fill(255);
+        for(let y=0;y<50;y++)bits[48*50+y]=255;
+        const r=PathFinder.search(new RoomPosition(49,25,'W2N1'),new RoomPosition(20,25,'W1N1'),
+            {maxRooms:2,roomCallback(name){
+                if(name==='W2N1')return {_bits:bits};
+                buffer.resize(0);return {_bits:blocked};
+            }});
+        return {path:r.path.map(p=>[p.x,p.y,p.roomName]),ops:r.ops,cost:r.cost,incomplete:r.incomplete};
+    })()"#)?;
+    let path: Vec<_> = shrunk
+        .path
+        .iter()
+        .map(|p| json!([p.x(), p.y(), p.room_name()]))
+        .collect();
+    assert_eq!(
+        result["value"],
+        json!({"path":path,"ops":shrunk.ops,"cost":shrunk.cost,"incomplete":shrunk.incomplete}),
+        "收缩不得保留旧矩阵: {result}"
     );
     Ok(())
 }

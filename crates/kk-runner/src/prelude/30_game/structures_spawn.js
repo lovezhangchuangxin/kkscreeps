@@ -35,6 +35,7 @@
       __console.log(msg);
     }
   }
+  gw.deprecated = deprecated;
 
   // 官方 register.assertTargetObject（game.js:122-126）：Memory 序列化壳拦截
   // （isPlainObject && isString(id) && id.length == 24 → throw）。24 判按官方

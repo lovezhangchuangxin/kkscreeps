@@ -57,7 +57,11 @@ CommonJS 加载器按上传模块名加载，只去掉 `./` 前缀，不解析 `
 
 模块有效且入口符合缓存检查时可跨 tick 复用；每轮检查 require、timestamp、cache 和 main.loop，条件不满足则整体重建缓存。全局提供 lodash 3.10.1；Buffer 是项目实现的子集，不能据此承诺完整 Node 环境。
 
-当前实例创建时执行 lodash、常量和 prelude 脚本，没有预生成的游戏运行时启动快照。玩家 `PathFinder.search` 经专用 op 同步调用 `kk-pathfinder` 原生搜索（地形随每 tick 世界注入，见 [寻路地形直通](../designs/pathfinder-terrain.md)）；roomCallback 通道尚未接线，实验中的回调调用时间不等于当前玩家 API 的性能或兼容性保证。
+当前实例创建时执行 lodash、常量和 prelude 脚本，没有预生成的游戏运行时启动快照。玩家 `PathFinder.search` 经专用 op 同步调用 `kk-pathfinder` 原生搜索（地形随每 tick 世界注入，见 [寻路地形直通](../designs/pathfinder-terrain.md)）；roomCallback 已同步接线，完整契约见 [寻路回调设计](../designs/pathfinder-callback.md)。每次 `#[op2(reentrant)]` 调用在局部宿主保存回调、矩阵和异常，进入玩家函数前释放 OpState 借用；嵌套调用建立独立宿主。
+
+原生算法持有固定 `Box<[Cell<u8>;2500]>` 的指针；宿主按 TypedArray 的 byteOffset/byteLength 取 backing store，每次玩家房间回调后重新同步所有此前矩阵，保留共享矩阵和嵌套修改的可见性。Backing store 在搜索结束前保持存活；可缩放缓冲收缩后不可读的矩阵区域清零为地形默认值，避免残留旧障碍或越界读取。Rust 不对可写 V8 内存建立不可变切片借用。原异常对象经 Global 句柄重新抛出；终止异常在 TryCatch 内重挂，原生主循环同时轮询真实 isolate 终止状态，不能转成成功空结果或可捕获普通错误。
+
+`Room.findPath` 家族按实际 Room 身份保存每 tick、每组选项的基础矩阵；障碍、私有 rampart、自有障碍工地、道路及安全模式分支对齐官方。玩家 costCallback 收到克隆矩阵，返回 CostMatrix 时替换该次副本。可信 Mod 寻路成本槽位仍为目标设计，不能从玩家回调已接入推导 Mod 已可改寻路。
 
 ## 宿主与故障边界
 

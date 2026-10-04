@@ -1,0 +1,176 @@
+{
+  "base_commit": "45a68b09224f43b8494ba4e02f792d2ebb39f773",
+  "screeps_ok_pin": "34a630efa42908c117c19c25d2350fa2387bd633",
+  "release_sha256": "cd9020a1e425da4199bc4cd40b9404aa46415e2a4401107e78062d2dce532edf",
+  "suite": {
+    "numPassedTests": 1887,
+    "numFailedTests": 120,
+    "numPendingTests": 907,
+    "numTotalTests": 2914
+  },
+  "bots": {
+    "tooangel": {
+      "bot": "compat/fixtures/tooangel/src",
+      "ticks_requested": 2000,
+      "ticks_completed": 2000,
+      "ticks_terminated": 0,
+      "ticks_skipped_penalty": 0,
+      "ticks_with_console_error": 0,
+      "stub_calls_top": [
+        [
+          "room.find:103",
+          8000
+        ],
+        [
+          "room.find:111",
+          8000
+        ],
+        [
+          "room.find:112",
+          6009
+        ],
+        [
+          "room.find:108",
+          4668
+        ],
+        [
+          "room.find:102",
+          4008
+        ],
+        [
+          "room.find:107",
+          2027
+        ],
+        [
+          "room.find:105",
+          2006
+        ],
+        [
+          "room.find:1",
+          28
+        ],
+        [
+          "room.find:3",
+          28
+        ],
+        [
+          "room.find:5",
+          28
+        ],
+        [
+          "room.find:7",
+          28
+        ],
+        [
+          "room.find:117",
+          15
+        ],
+        [
+          "room.find:116",
+          4
+        ]
+      ],
+      "console_errors_head": []
+    },
+    "overmind": {
+      "bot": "compat/fixtures/overmind-dist",
+      "ticks_requested": 2000,
+      "ticks_completed": 2000,
+      "ticks_terminated": 0,
+      "ticks_skipped_penalty": 0,
+      "ticks_with_console_error": 1,
+      "stub_calls_top": [
+        [
+          "room.find:105",
+          6047
+        ],
+        [
+          "room.find:117",
+          2099
+        ],
+        [
+          "room.find:103",
+          2000
+        ],
+        [
+          "room.find:118",
+          2000
+        ],
+        [
+          "room.find:106",
+          1999
+        ],
+        [
+          "room.find:114",
+          381
+        ],
+        [
+          "room.find:107",
+          43
+        ],
+        [
+          "room.find:116",
+          42
+        ],
+        [
+          "room.find:109",
+          40
+        ],
+        [
+          "room.find:111",
+          2
+        ]
+      ],
+      "console_errors_head": [
+        "[tick 1] [loop] Caught unhandled exception instantiating colony W1N1: \nTypeError: Cannot read properties of undefined (reading 'harvest:06bff5')\n    at DirectiveHarvest.create (kk_module/main, <anonymous>:14448:76)\n    at DirectiveHarvest.createIfNotPresent (kk_module/main, <anonymous>:14524:33)\n    at Colony.registerRoomObjects_cached (kk_module/main, <anonymous>:15316:30)\n    at Colony.build (kk_module/main, <anonymous>:15239:14)\n    at new Colony (kk_module/main, <anonymous>:15222:14)\n    at _Overmind.registerColonies (kk_module/main, <anonymous>:24047:4844)\n    at _Overmind.build (kk_module/main, <anonymous>:24047:1597)\n    at main (kk_module/main, <anonymous>:24294:18)\n    at Object.wrap (kk_module/main, <anonymous>:971:16)\n    at Object.loop (kk_module/main, <anonymous>:24308:21)",
+        "[tick 1] Caught unhandled exception instantiating colony W1N1: \nTypeError: Cannot read properties of undefined (reading 'harvest:06bff5')\n    at DirectiveHarvest.create (kk_module/main, <anonymous>:14448:76)\n    at DirectiveHarvest.createIfNotPresent (kk_module/main, <anonymous>:14524:33)\n    at Colony.registerRoomObjects_cached (kk_module/main, <anonymous>:15316:30)\n    at Colony.build (kk_module/main, <anonymous>:15239:14)\n    at new Colony (kk_module/main, <anonymous>:15222:14)\n    at _Overmind.registerColonies (kk_module/main, <anonymous>:24047:4844)\n    at _Overmind.build (kk_module/main, <anonymous>:24047:1597)\n    at main (kk_module/main, <anonymous>:24294:18)\n    at Object.wrap (kk_module/main, <anonymous>:971:16)\n    at Object.loop (kk_module/main, <anonymous>:24308:21)"
+      ]
+    },
+    "wasm": {
+      "bot": "compat/fixtures/wasm-bot",
+      "ticks_requested": 10,
+      "ticks_completed": 10,
+      "ticks_terminated": 0,
+      "ticks_skipped_penalty": 0,
+      "ticks_with_console_error": 0,
+      "stub_calls_top": [],
+      "console_errors_head": []
+    }
+  },
+  "precommit_review": {
+    "release_sha256": "e4bb0d6f3458220d9f31187cd698e462187c5fc82feb287982b8462bdac3bda6",
+    "check": "passed; Rust 618 passed / 11 ignored; compat Node 14 passed",
+    "ratchet": {
+      "passed": 1887,
+      "failed": 120,
+      "skipped": 907,
+      "total": 2914,
+      "allowed_regressions": 2,
+      "unexplained_regressions": 0
+    },
+    "bots": {
+      "tooangel": {
+        "ticks_requested": 2000,
+        "ticks_completed": 2000,
+        "ticks_terminated": 0,
+        "ticks_skipped_penalty": 0,
+        "ticks_with_console_error": 0
+      },
+      "overmind": {
+        "ticks_requested": 2000,
+        "ticks_completed": 2000,
+        "ticks_terminated": 0,
+        "ticks_skipped_penalty": 0,
+        "ticks_with_console_error": 1
+      },
+      "wasm": {
+        "ticks_requested": 10,
+        "ticks_completed": 10,
+        "ticks_terminated": 0,
+        "ticks_skipped_penalty": 0,
+        "ticks_with_console_error": 0
+      }
+    },
+    "perf": "d3-pathfinder-player-perf-review-2026-10-04.json"
+  }
+}

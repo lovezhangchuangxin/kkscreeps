@@ -11,7 +11,7 @@
 
 use std::ffi::c_void;
 
-use crate::RoomDecision;
+use crate::{HostRoomDecision, RoomDecision, SearchHost};
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -90,6 +90,7 @@ unsafe extern "C" {
         goals_len: usize,
         callback: Option<RoomCallback>,
         callback_user_data: *mut c_void,
+        cancel: Option<unsafe extern "C" fn(*mut c_void) -> i32>,
         options: *const Options,
         out_result: *mut SearchResultRaw,
     ) -> i32;
@@ -158,15 +159,18 @@ pub(super) struct RawOutcome {
 }
 
 /// # Safety
-/// callback 非空时，user_data 必须符合对应 RoomCallback 的指针和独占调用约定。
-/// 回调产出的矩阵须保持不变并存活至返回。调用期间不能并发载入地形；
-/// lib.rs 的搜索读锁负责排除地形写入，同线程嵌套搜索允许。
+/// callback/cancel 非空时，user_data 须符合两个回调的指针和独占调用约定。
+/// 矩阵存储须稳定、可读并存活至返回；只能在 room 回调内（原生算法暂停）
+/// 修改，且不能存在与修改冲突的 Rust 借用。不可变 RoomDecision 接口施加更严
+/// 的只读约束。调用期间不能并发载入地形；lib.rs 的读锁排除地形写入，允许
+/// 同线程使用独立宿主嵌套搜索。取消检查不能与房间回调并发或重入同一宿主。
 pub(super) unsafe fn ffi_search(
     origin: (u32, u32),
     goals: &[(u32, u32, u32)],
     options: Options,
     callback: Option<RoomCallback>,
     user_data: *mut c_void,
+    cancel: Option<unsafe extern "C" fn(*mut c_void) -> i32>,
 ) -> Option<RawOutcome> {
     let c_goals: Vec<Goal> = goals
         .iter()
@@ -196,6 +200,7 @@ pub(super) unsafe fn ffi_search(
             c_goals.len(),
             callback,
             user_data,
+            cancel,
             &options,
             &mut raw,
         )
@@ -235,6 +240,43 @@ pub(super) unsafe fn ffi_search(
     // SAFETY: raw 来自成功的 kk_pf_search，尚未释放；复制后的 Rust 数据不引用它。
     unsafe { kk_pf_free_result(&mut raw) };
     Some(outcome)
+}
+
+/// # Safety
+/// user_data 指向 search_with_host 的独占 H；输出指针由 C++ 栈提供。
+pub(super) unsafe extern "C" fn host_room<H: SearchHost>(
+    user_data: *mut c_void,
+    xx: u8,
+    yy: u8,
+    out_matrix: *mut *const u8,
+    out_len: *mut usize,
+) -> i32 {
+    // SAFETY: search_with_host 在本次同步调用内保持 H 存活，回调串行执行。
+    let host = unsafe { &mut *user_data.cast::<H>() };
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| host.room(xx, yy))) {
+        Ok(HostRoomDecision::None) => 0,
+        Ok(HostRoomDecision::Blocked) => 1,
+        Ok(HostRoomDecision::Matrix { data, len }) => {
+            // SAFETY: 输出地址有效；data 的存活和可读范围由 SearchHost 保证。
+            unsafe {
+                *out_matrix = data;
+                *out_len = len;
+            }
+            2
+        }
+        Ok(HostRoomDecision::Error) | Err(_) => 3,
+    }
+}
+
+/// # Safety
+/// user_data 与 host_room 同源，取消检查不与房间回调同时执行。
+pub(super) unsafe extern "C" fn host_cancel<H: SearchHost>(user_data: *mut c_void) -> i32 {
+    // SAFETY: H 由 search_with_host 保持独占、有效；嵌套调用另有 H。
+    let host = unsafe { &mut *user_data.cast::<H>() };
+    i32::from(
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| host.is_cancelled()))
+            .unwrap_or(true),
+    )
 }
 
 /// 同步复制一个房间的 625 字节地形。

@@ -1,6 +1,6 @@
 /* 根据当前世界数据装配可见 Room，提供 find、look、地形、创建指令与绘图接口。
  * 每 tick 重建房间对象和查询缓存；地形数组由 game.js 的 beginTick 注入。
- * findPath 走 PathFinder 地形搜索（官方 _findPath2 形态，结构代价归回调文档）；绘图数据仅保留在本 tick 的缓冲区。
+ * findPath 走带房间代价矩阵的原生搜索；绘图数据仅保留在本 tick 的缓冲区。
  * 来源：上游 engine/src/game/rooms.js 与 console.js 的玩家接口。
  */
 (() => {
@@ -16,6 +16,81 @@
   const __reflectApply = Reflect.apply;
   const __jsonStringify = JSON.stringify;
   const __jsonParse = JSON.parse;
+  const __WeakMap = WeakMap;
+  const __weakGet = WeakMap.prototype.get;
+  const __weakSet = WeakMap.prototype.set;
+  const pathRooms = new __WeakMap();
+  const C_OBSTACLE_OBJECT_TYPES = globalThis.OBSTACLE_OBJECT_TYPES;
+
+  // 每 tick 的 Room 身份对应独立缓存；不可见房仅使用公共地形。
+  // 来源：官方 rooms.js 的 makePathfindingGrid2/getPathfindingGrid2。
+  function getPathfindingGrid2(name, opts) {
+    const room = gw.currentGame().rooms[name];
+    const state = room && __reflectApply(__weakGet, pathRooms, [room]);
+    if (!state) return new PathFinder.CostMatrix();
+    opts = opts || {};
+    let key = 'grid2';
+    if (opts.ignoreCreeps) key += '_ignoreCreeps';
+    if (opts.ignoreDestructibleStructures) key += '_ignoreDestructibleStructures';
+    if (opts.ignoreRoads) key += '_ignoreRoads';
+    if (state.grids[key]) return state.grids[key];
+    const costs = new PathFinder.CostMatrix();
+    let obstacles = _.clone(C_OBSTACLE_OBJECT_TYPES);
+    obstacles.push('portal');
+    if (opts.ignoreDestructibleStructures) {
+      obstacles = _.without(obstacles, 'constructedWall', 'spawn', 'extension', 'link',
+        'storage', 'observer', 'tower', 'powerBank', 'powerSpawn', 'lab', 'terminal');
+    }
+    const safeMode = room.controller && room.controller.safeMode && room.controller.my;
+    if (opts.ignoreCreeps || safeMode) obstacles = _.without(obstacles, 'creep', 'powerCreep');
+    for (let i = 0; i < state.objects.length; i++) {
+      const object = state.objects[i];
+      let type = object.type === 'structure' ? object.structureType : object.type;
+      if (type === 'wall') type = 'constructedWall';
+      if (_.contains(obstacles, type)
+        || !opts.ignoreCreeps && safeMode && (type === 'creep' || type === 'powerCreep')
+          && object.owner === gw.viewerName
+        || !opts.ignoreDestructibleStructures && type === 'rampart' && !object.isPublic
+          && object.owner !== gw.viewerName
+        || !opts.ignoreDestructibleStructures && type === 'constructionSite'
+          && object.owner === gw.viewerName && _.contains(C_OBSTACLE_OBJECT_TYPES, object.structureType)) {
+        costs.set(object.x, object.y, 255);
+      }
+      if (type === 'swamp' && costs.get(object.x, object.y) === 0) {
+        costs.set(object.x, object.y, opts.ignoreRoads ? 5 : 10);
+      }
+      if (!opts.ignoreRoads && type === 'road' && costs.get(object.x, object.y) < 255) {
+        costs.set(object.x, object.y, 1);
+      }
+    }
+    state.grids[key] = costs;
+    return costs;
+  }
+  gw.getPathfindingGrid2 = getPathfindingGrid2;
+
+  // 两个 wrapper 共用：clone 隔离缓存；只有 CostMatrix 返回值替换矩阵。
+  gw.pathfindingRoomCallback = function (opts, visibleOnly) {
+    return function (name) {
+      if (visibleOnly && !gw.currentGame().rooms[name]) return undefined;
+      let matrix = getPathfindingGrid2(name, opts);
+      if (typeof opts.costCallback === 'function') {
+        matrix = matrix.clone();
+        const result = opts.costCallback(name, matrix);
+        if (result instanceof PathFinder.CostMatrix) matrix = result;
+      }
+      return matrix;
+    };
+  };
+  gw.pathfindingDeprecated = function (opts, clear) {
+    if (opts.avoid) {
+      gw.deprecated('`avoid` option cannot be used when `PathFinder.use()` is enabled. Use `costCallback` instead.');
+      if (clear) opts.avoid = undefined;
+    }
+    if (opts.ignore) {
+      gw.deprecated('`ignore` option cannot be used when `PathFinder.use()` is enabled. Use `costCallback` instead.');
+      if (clear) opts.ignore = undefined;
+    }
+  };
   // 地形拷出使用捕获的 TypedArray 构造器与 set：内部数组可能是锚定
   // 跨玩家共享内存的视图（KKPV 公开束），不得经玩家可替换的全局构造器
   // 或动态派发的 .set 外泄（共享直读内存的安全要求）。真 set 在 V8 内部做
@@ -684,8 +759,7 @@
      * PathFinder 地形搜索（range 缺省 1、跨房 maxOps 缺省 20000、非
      * ignoreRoads 时 plainCost 2/swampCost 10——道路本身须经代价矩阵生效）
      * 后按房界截断；无 range 且终点贴近时回填终点。opts.maxOps 的缺省写入
-     * 原地修改调用方对象（官方同形）。costCallback/结构代价矩阵尚未接线
-     * （docs/designs/pathfinder-terrain.md），当前为地形直通。 */
+     * 原地修改调用方对象（官方同形）；costCallback 收到缓存矩阵的副本。 */
     room.findPath = function (fromPos, toPos, opts) {
       if (fromPos.roomName !== name) {
         return opts.serialize ? '' : [];
@@ -695,12 +769,14 @@
       if (fromPos.isEqualTo(toPos)) {
         return opts.serialize ? '' : [];
       }
+      gw.pathfindingDeprecated(opts, true);
       // :239-241 跨房且未限时缺省 maxOps 20000（注意 maxRooms>1 条件）
       if (opts.maxOps === undefined && (opts.maxRooms === undefined || opts.maxRooms > 1)
         && fromPos.roomName !== toPos.roomName) {
         opts.maxOps = 20000;
       }
       const searchOpts = {
+        roomCallback: gw.pathfindingRoomCallback(opts, false),
         maxOps: opts.maxOps,
         maxRooms: opts.maxRooms,
       };
@@ -888,7 +964,9 @@
     if (__RoomCtor && __RoomCtor.prototype) {
       __Object.setPrototypeOf(room, __RoomCtor.prototype);
     }
-    return probe(room, 'Room[' + name + ']');
+    const result = probe(room, 'Room[' + name + ']');
+    __reflectApply(__weakSet, pathRooms, [result, { objects: roomObjs, grids: __Object.create(null) }]);
+    return result;
   }
   gw.makeRoom = makeRoom;
 })();

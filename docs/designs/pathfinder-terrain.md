@@ -4,7 +4,7 @@
 把 `PathFinder.search` 及其下游（`Room.findPath`、`RoomPosition.findPathTo`/
 `findClosestByPath`、`Creep.moveTo`）从直线桩换成 kk-pathfinder 的真实地形搜索。
 本文档定义接线架构、玩家可见形状与已知分歧；回调时序/异常/静默契约归
-pathfinder-callback.md。
+pathfinder-callback.md。D3 已接入回调与房间矩阵，本文表格同步当前状态；D2 历史验收保留在批次记录。
 
 ## 官方语义对照
 
@@ -85,21 +85,19 @@ cf63d8a）。关键锚点：
 |---|---|---|
 | `PathFinder.search` 返回 | `{path, ops, cost, incomplete}`；path 元素为 RoomPosition 实例、不含起点、行走序 | 与官方一致 |
 | 空/无目标 goal | `{path: [], ops: 0}` 两键 | 与官方一致 |
-| `options.roomCallback` | **忽略**（含返回 false/CostMatrix 的效果） | 分歧，D3 接线 |
-| `Room.findPath` 结构代价 | 地形直通：不叠结构/creep/道路代价矩阵（官方 `_findPath2` 经 `getPathfindingGrid2` 生成 CostMatrix） | 分歧，D3 接线 |
+| `options.roomCallback` | 同步懒调用，false 封房、_bits 矩阵参与搜索、异常原值上抛 | D3 已接入 |
+| `Room.findPath` 结构代价 | 按 tick 与选项缓存结构/creep/道路矩阵；costCallback 克隆隔离 | D3 已接入 |
 | 未注册房（墙环外）起点 | 原生抛 `Could not load terrain data` | 分歧：官方全域有地形；目标房在墙环外只得到 incomplete，不抛错 |
 | 同进程多引擎并发搜索 | C++ 地形表进程共享，跨引擎并发搜索会串地形 | 边界登记：embed CLI/ratchet/bot 均单引擎单进程；多引擎仅出现在串行单元测试 |
 | lava(4) 格 | 低两位→平原可走 | 上游打包契约；生成世界不产 lava |
 | `PathFinder.use` | 保持桩（计数）；模式切换无观察面 | 与 xxscreeps 一致 |
 | 垃圾数值选项（如 `heuristicWeight: 'abc'` → NaN） | JS 清洗同官方产 NaN；Rust `SearchOptions::clamped` 将 NaN 归 1.2 后搜索。官方把 NaN 传入 C++，double→整数转换未定义（x86 实效近似权重 0 的泛洪） | 分歧（垃圾输入域）：官方自身为未定义行为，本仓取确定性 1.2 |
-| `opts.avoid`/`opts.ignore` 弃用警告 | 静默忽略（官方 `register.deprecated` 打 console 警告后同样置 undefined，rooms.js:231-238/:331-336） | 分歧：console 输出面缺失，功能面等价；补齐随回调通道批 |
+| `opts.avoid`/`opts.ignore` 弃用警告 | 按官方打印每 tick 去重警告；findPath 清除旧选项，findClosestByPath 保留 | D3 已补齐 |
 | KKPV 公开束 Rust 解析校验面 | 与沙箱解码器（kkpv.js decodePublicBundle）一致拒绝私有块/非 2500 地形段/重复房名/带对象块；块头 tick 与信封 time 的交叉校验只在沙箱解码器（Rust 侧无信封） | 边界：宿主可信数据 + JS 校验先行抛错 |
 
 ## 验收
 
-- screeps-ok：PATHFINDER-007/008/009/010/011/012/013/014/015/020/022 与
-  LEGACY-PATH-005 转绿；PATHFINDER-004/005/023（回调族）维持红归 D3；
-  棘轮地板只升不降。
+- screeps-ok：地形与回调族均已参与门禁；具体用例翻转及官方同红差异见 [D3 记录](../research/notes/d3-pathfinder-callback-2026-10-04.md)。棘轮地板只升不降。
 - bot 三基线（tooangel 2000t 0 错、overmind-dist 2000t 1 错既有、wasm 10t）：
   PathFinder.search/findPathTo/findClosestByPath 退出桩计数后基线形态变化
   须逐项归因登记（路径真化改变 bot 行为本身属预期）。

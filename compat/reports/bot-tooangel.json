@@ -1,5 +1,5 @@
 {
-  "bot": "compat/fixtures/tooangel",
+  "bot": "compat/fixtures/tooangel/src",
   "ticks_requested": 2000,
   "ticks_completed": 2000,
   "ticks_terminated": 0,
@@ -22,7 +22,7 @@
     ],
     [
       "room.find:108",
-      4667
+      4668
     ],
     [
       "room.find:102",
@@ -30,7 +30,7 @@
     ],
     [
       "room.find:107",
-      2007
+      2027
     ],
     [
       "room.find:105",
@@ -85,11 +85,11 @@
     ]
   ],
   "console_head": [
-    "[tick 1][log] 1 Script reload - Load: 5 tickLimit: 500 limit: 20 Bucket: 10000",
+    "[tick 1][log] 1 Script reload - Load: 4 tickLimit: 500 limit: 20 Bucket: 10000",
+    "[tick 1][log] 1 W1N1                        Setting misplacedSpawn",
+    "[tick 1][log] 1 W1N1                        Setup complete - storing data",
+    "[tick 1][log] 1 W1N1                        Setup completed - storing data",
     "[tick 1][log] 1 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
-    "[tick 2][log] 2 W1N1                        Setting misplacedSpawn",
-    "[tick 2][log] 2 W1N1                        Setup complete - storing data",
-    "[tick 2][log] 2 W1N1                        Setup completed - storing data",
     "[tick 2][log] 2 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
     "[tick 3][log] 3 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
     "[tick 4][log] 4 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",

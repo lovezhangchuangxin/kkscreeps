@@ -13,8 +13,11 @@
 | [05 Mod 扩展能力](05-mod-extensibility-review.md) | 当前架构能达到官方与本地 xxscreeps 的 Mod 扩展能力吗？ | 当前尚未提供完整 Mod 通路；技术方向可保留，需要前移对象、意图、规则替换和事务等扩展契约 |
 | [06 架构与 JS Mod 复审](06-architecture-and-js-mod-review.md) | 整体架构应如何改造，深度玩法能否全部用 JS Mod 实现？ | 保留 Rust/V8/房间模型，补全全域提交、并发派发、开放规则；JS/native 嵌套调用实测可行，完整实现仍待切片 |
 | [07 注释质量调研](07-comment-quality-review.md) | 现有注释为什么难读，怎样避免误导维护者？ | 修复过期说明，分离历史与当前行为，形成[注释规范](../contributing/comment-style.md)和[术语词典](../glossary.md) |
+| [08 开发进展与后续建议](08-development-progress-and-next-steps.md) | 当前做到哪里，接下来优先开发什么？ | 基于 2026-10-04 的源码与入库报告核查，建议 D3 寻路回调、核心经济场景和完整保存恢复，并指出全套件 95% 与后置玩法的覆盖冲突 |
 
 ## notes/ 笔记索引
+
+- [D3 寻路回调记录](notes/d3-pathfinder-callback-2026-10-04.md)：同步 V8 重入、可变矩阵、取消、官方差异及验收。
 
 - [D2 寻路地形直通记录](notes/d2-pathfinder-terrain-2026-10-04.md)：原生搜索接线、TLS 物理内存回归定位与修复、棘轮 1859→1879 与三基线归因。
 - [玩家闭环提交前复审](notes/mod-player-review-2026-10-04.md)：原生目标效果、常驻报告门禁、负面测试与 v2 独立采集。

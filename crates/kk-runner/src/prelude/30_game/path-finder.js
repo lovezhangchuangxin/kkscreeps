@@ -1,9 +1,7 @@
 /* PathFinder.search 经宿主 op 直连原生搜索（kk-pathfinder 的 C++ A*）。
  * CostMatrix 与官方逐字一致；参数清洗、目标归一与坐标转换按官方
  * driver/lib/path-finder.js 逐字复刻（含 |0 强转、|| 缺省与错误文案）。
- * options.roomCallback 尚未接线（docs/designs/pathfinder-callback.md）：
- * 传入的回调被忽略，返回 false/CostMatrix 不改变搜索，属地形式通分歧
- * （登记见 docs/designs/pathfinder-terrain.md）。
+ * roomCallback 在原生首次触达房间时同步执行；矩阵与异常契约见回调设计。
  */
 (() => {
   'use strict';
@@ -113,7 +111,19 @@
         }
         return { range: Math.max(0, g.range | 0), pos: toWorldPosition(g.pos) };
       });
-      // 官方 :114-131 roomCallback 包装尚未接线（段头注释）。
+      // 官方 :114-131：非函数忽略；truthy 返回值读取 _bits（含 getter）。
+      let roomCallback = options.roomCallback;
+      if (typeof roomCallback === 'function') {
+        const callback = roomCallback;
+        roomCallback = function (roomName) {
+          const result = callback(roomName);
+          if (result === false) return false;
+          if (result) return result._bits;
+          return undefined;
+        };
+      } else {
+        roomCallback = undefined;
+      }
       // 原生搜索在宿主侧同步执行：世界公共地形已随本 tick 注入（含未注册
       // 房的全墙边界），缺地形（墙环外）等原生错误以官方消息抛回。
       const originWorld = toWorldPosition(origin);
@@ -127,7 +137,7 @@
         max_cost: maxCost,
         max_rooms: maxRooms,
         flee,
-      });
+      }, roomCallback);
       // 官方 :133-141：原生 undefined（已在目标 range 内）与 -1（起点房不可
       // 入）两个空结果由 op 折叠为四键形状；路径为行走序世界坐标（不含
       // 起点，pf.cc 回溯在 origin 停止），此处映射后不再反转。

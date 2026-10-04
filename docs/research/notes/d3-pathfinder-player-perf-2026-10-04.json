@@ -1,0 +1,105 @@
+{
+  "scenario": "Apple Silicon release; one room, 20-step plain path; 1000 searches per expression; one warmup + five rotating rounds; 10000ms sandbox ceiling",
+  "samples": [
+    {
+      "round": 1,
+      "case": "callback_none",
+      "micros_per_search": 22.796209
+    },
+    {
+      "round": 1,
+      "case": "callback_matrix",
+      "micros_per_search": 23.006542
+    },
+    {
+      "round": 1,
+      "case": "room_grid",
+      "micros_per_search": 28.718500000000002
+    },
+    {
+      "round": 1,
+      "case": "terrain",
+      "micros_per_search": 22.240125
+    },
+    {
+      "round": 2,
+      "case": "callback_matrix",
+      "micros_per_search": 23.314
+    },
+    {
+      "round": 2,
+      "case": "room_grid",
+      "micros_per_search": 29.244959
+    },
+    {
+      "round": 2,
+      "case": "terrain",
+      "micros_per_search": 22.502875
+    },
+    {
+      "round": 2,
+      "case": "callback_none",
+      "micros_per_search": 22.7045
+    },
+    {
+      "round": 3,
+      "case": "room_grid",
+      "micros_per_search": 28.44275
+    },
+    {
+      "round": 3,
+      "case": "terrain",
+      "micros_per_search": 22.1615
+    },
+    {
+      "round": 3,
+      "case": "callback_none",
+      "micros_per_search": 22.973291
+    },
+    {
+      "round": 3,
+      "case": "callback_matrix",
+      "micros_per_search": 23.155958000000002
+    },
+    {
+      "round": 4,
+      "case": "terrain",
+      "micros_per_search": 22.424625
+    },
+    {
+      "round": 4,
+      "case": "callback_none",
+      "micros_per_search": 22.935084
+    },
+    {
+      "round": 4,
+      "case": "callback_matrix",
+      "micros_per_search": 22.996917
+    },
+    {
+      "round": 4,
+      "case": "room_grid",
+      "micros_per_search": 28.343332999999998
+    },
+    {
+      "round": 5,
+      "case": "callback_none",
+      "micros_per_search": 23.080334
+    },
+    {
+      "round": 5,
+      "case": "callback_matrix",
+      "micros_per_search": 23.055667
+    },
+    {
+      "round": 5,
+      "case": "room_grid",
+      "micros_per_search": 28.283292000000003
+    },
+    {
+      "round": 5,
+      "case": "terrain",
+      "micros_per_search": 22.004333000000003
+    }
+  ]
+}

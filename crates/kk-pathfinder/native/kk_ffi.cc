@@ -26,15 +26,23 @@ public:
 	ArenaGuard()
 		: saved_(kk_compat::t_arena),
 		  saved_exception_(kk_compat::t_pending_js_exception),
-		  saved_message_(kk_compat::t_pending_js_error_message) {
+		  saved_message_(kk_compat::t_pending_js_error_message),
+		  saved_cancel_(v8::t_cancel), saved_cancel_user_(v8::t_cancel_user),
+		  saved_cancelled_(v8::t_cancelled) {
 		kk_compat::t_arena = &arena_;
 		kk_compat::t_pending_js_exception = false;
 		kk_compat::t_pending_js_error_message = nullptr;
+		v8::t_cancel = nullptr;
+		v8::t_cancel_user = nullptr;
+		v8::t_cancelled = false;
 	}
 	~ArenaGuard() {
 		kk_compat::t_arena = saved_;
 		kk_compat::t_pending_js_exception = saved_exception_;
 		kk_compat::t_pending_js_error_message = saved_message_;
+		v8::t_cancel = saved_cancel_;
+		v8::t_cancel_user = saved_cancel_user_;
+		v8::t_cancelled = saved_cancelled_;
 	}
 
 	ArenaGuard(const ArenaGuard&) = delete;
@@ -45,6 +53,9 @@ private:
 	kk_compat::Arena* saved_;
 	bool saved_exception_;
 	const char* saved_message_;
+	kk_pf_cancel_callback_t saved_cancel_;
+	void* saved_cancel_user_;
+	bool saved_cancelled_;
 };
 
 v8::Local<v8::Object> make_pos_object(uint32_t xx, uint32_t yy) {
@@ -102,12 +113,15 @@ extern "C" int kk_pf_load_terrain(uint8_t map_xx, uint8_t map_yy, const uint8_t*
 
 // 完整入口捕获所有 C++ 异常，防止分配失败穿过 Rust 的 extern "C" 调用。
 extern "C" int kk_pf_search(kk_pf_world_pos_t origin, const kk_pf_goal_t* goals, size_t goals_len,
-	kk_pf_room_callback_t callback, void* callback_user_data, const kk_pf_options_t* options,
+	kk_pf_room_callback_t callback, void* callback_user_data,
+	kk_pf_cancel_callback_t cancel, const kk_pf_options_t* options,
 	kk_pf_search_result_t* out_result) try {
 	if (goals == nullptr && goals_len != 0) {
 		return -1;
 	}
 	ArenaGuard guard;
+	v8::t_cancel = cancel;
+	v8::t_cancel_user = callback_user_data;
 
 	v8::Local<v8::Array> goals_js = Nan::New<v8::Array>(static_cast<int>(goals_len));
 	for (size_t ii = 0; ii < goals_len; ++ii) {
@@ -149,7 +163,9 @@ extern "C" int kk_pf_search(kk_pf_world_pos_t origin, const kk_pf_goal_t* goals,
 
 	std::memset(out_result, 0, sizeof(*out_result));
 	if (ret->IsUndefined()) {
-		if (kk_compat::t_pending_js_exception) {
+		if (v8::t_cancelled) {
+			out_result->status = 4;
+		} else if (kk_compat::t_pending_js_exception) {
 			// Undefined 既可表示到达目标，也可表示异常，须检查本层异常状态。
 			out_result->status = 3;
 			out_result->js_error_message = kk_compat::t_pending_js_error_message;

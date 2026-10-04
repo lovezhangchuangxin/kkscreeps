@@ -48,6 +48,9 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     hostile_probes_impl()?;
     move_misc_family_prelude_forms_impl()?;
     pathfinder_search_family_impl()?;
+    pathfinder_callback_family_impl()?;
+    pathfinder_matrix_mutation_impl()?;
+    pathfinder_callback_budget_impl()?;
     pathfinder_kkpv_channel_equivalence_impl()?;
     run_expr_channel()?;
     wasm_binary_module()?;

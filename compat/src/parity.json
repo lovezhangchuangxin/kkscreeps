@@ -1,4 +1,21 @@
 {
-  "expected_failures": {},
+  "expected_failures": {
+    "roomposition-find-closest-by-path-range-ignored": {
+      "actual": "Stable vanilla's `_findClosestByPath2` (`@screeps/engine/src/game/rooms.js:304-374`) never reads `opts.range`: it hardcodes `{range: 1, pos: i}` on the PathFinder goal at line 328 and post-filters reachability with `lastPos.isNearTo(obj)` at line 368.",
+      "expected": "RoomPosition.findClosestByPath uses opts.range as the goal range when deciding reachability.",
+      "why": "Canonical claim is PR-derived: screeps/engine#121 (open, enhancement/needs-testing) proposes honoring the range option (#136 is a closed duplicate). Stable vanilla has not shipped it, so this row is an expected failure on BOTH adapters until upstream lands — it is not an xxscreeps bug.",
+      "tests": [
+        "ROOMPOS-FIND-010"
+      ]
+    },
+    "movecache-fatigue-visualization-recomputes": {
+      "actual": "Stable vanilla's `Creep.moveTo` short-circuits `if (fatigue>0 && !opts.visualizePathStyle) return ERR_TIRED` (`@screeps/engine/src/game/creeps.js:173`), so setting `visualizePathStyle` bypasses the early return. The reusable-cache branch (`creeps.js:241-302`) then calls `moveByPath` → `move` (which returns `ERR_TIRED`) and falls through to `findPathTo` at line 283, which re-invokes the supplied `costCallback`.",
+      "expected": "A fatigued moveTo call with a valid reusable path and visualizePathStyle returns ERR_TIRED without recomputing a path.",
+      "why": "Canonical claim is PR-derived: screeps/engine#152 (open) stops moveTo recomputing a path when the creep is fatigued, visualizePathStyle is set, and a valid memorized path exists. xxscreeps already implements it; vanilla stays expected-fail until upstream lands.",
+      "tests": [
+        "UNDOC-MOVECACHE-004"
+      ]
+    }
+  },
   "skips": {}
 }

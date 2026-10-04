@@ -31,7 +31,7 @@
 | `kk-engine` | 清洗指令，结算房间和市场规则，验证并提交世界、玩家及市场的内存候选状态 |
 | `kk-runner` | V8 沙箱、CommonJS 模块加载、玩家 API 预检查、指令收集、墙钟预算和堆限制 |
 | `kk-runtime` | 玩家世界数据注入、执行编排、Memory/segments/CPU 候选提交及失败重试 |
-| `kk-pathfinder` | 封装 Screeps C++ 寻路算法与 Rust 回调接口；经 kk-runner 的 op 供玩家面 PathFinder.search 同步搜索（回调通道归寻路回调设计） |
+| `kk-pathfinder` | 封装 Screeps C++ 寻路算法、宿主回调与取消接口；经 kk-runner 同步执行玩家 roomCallback、代价矩阵与嵌套搜索 |
 | `kk-storage-bench` | 用合成数据比较 redb 与 libmdbx；结果用于选型研究，不是游戏持久化实现 |
 | `kk-storage` | 预留模块，尚无存储接口或数据库后端 |
 | `kk-backend` | 预留模块，尚无 HTTP 路由、监听或 WebSocket 服务 |

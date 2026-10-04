@@ -3,7 +3,7 @@
 // 嵌套调用切换 Arena 并在返回时恢复，外层节点仍存活。TypedArray 节点借用 Rust
 // 缓冲，矩阵保持有效到搜索结束，地形只需有效到载入结束。
 // 函数节点通过 C 回调取房间决策；异常状态由 kk_ffi.cc 的 ArenaGuard 按调用层保存。
-// IsExecutionTerminating 恒为 false，本层没有执行超时；max_ops 不限制回调耗时。
+// IsExecutionTerminating 转发本层宿主取消检查；max_ops 不限制回调耗时。
 // 来源版本见 src/lib.rs；这里只覆盖上游寻路源码实际使用的值操作，不实现完整 V8 语义。
 
 #ifndef KK_PATHFINDER_COMPAT_NAN_H_
@@ -19,7 +19,13 @@
 #include <utility>
 #include <vector>
 
-namespace v8 {
+// 实际符号使用独立命名空间：与 deno_core 同进程链接时，不能让 compat 的
+// Value::IsBoolean 等弱符号与真实 V8 方法发生 ODR 冲突。官方代码仍用 v8 别名。
+namespace kk_pf_v8 {
+
+inline thread_local int (*t_cancel)(void*) = nullptr;
+inline thread_local void* t_cancel_user = nullptr;
+inline thread_local bool t_cancelled = false;
 
 // 值的行为由 type 标签决定；本层的句柄类型只服务上游接口的编译要求。
 class Value {
@@ -74,7 +80,10 @@ public:
 		static Isolate instance;
 		return &instance;
 	}
-	bool IsExecutionTerminating() const { return false; }
+	bool IsExecutionTerminating() const {
+		if (t_cancel && t_cancel(t_cancel_user)) t_cancelled = true;
+		return t_cancelled;
+	}
 };
 
 // 非拥有句柄；模板转换限制为声明的类型继承关系，生命周期由 ArenaGuard 管理。
@@ -89,8 +98,11 @@ public:
 	template <class S, class = std::enable_if_t<std::is_convertible_v<S*, T*>>>
 	Local(const Local<S>& other) : v(other.v) {}
 
-	T* operator->() const { return static_cast<T*>(v); }
-	T& operator*() const { return *static_cast<T*>(v); }
+	// Arena 实际只构造 Value；T 仅是编译期句柄标签。不能向下转换为没有
+	// 被构造的 Array/Object 等派生实例（C++ 下转型的类型前提不成立）。
+	// 上游使用的方法均定义在 Value 上，直接访问真实节点即可。
+	Value* operator->() const { return v; }
+	Value& operator*() const { return *v; }
 
 	// 上游将 Undefined 转作回调接收者；Cast 只改变句柄类型，不创建对象。
 	template <class S>
@@ -129,7 +141,8 @@ public:
 	T FromJust() const { return val; }
 };
 
-} // namespace v8
+} // namespace kk_pf_v8
+namespace v8 = kk_pf_v8;
 
 namespace kk_compat {
 

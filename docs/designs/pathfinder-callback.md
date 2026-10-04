@@ -2,7 +2,9 @@
 
 本文定义玩家 `PathFinder.search` 到原生寻路器的接入契约，重点说明回调时序、矩阵存活、异常传播和预算中断。
 
-当前 [kk-pathfinder](../../crates/kk-pathfinder/src/lib.rs) 已提供原生搜索与 Rust 房间回调；玩家 `PathFinder.search` 已经 [地形直通](pathfinder-terrain.md) 接入原生搜索（含选项清洗、目标归一与结果形状），`findPath`/`moveTo` 等下游随之下游真化。**尚未接线的是本文的主题——回调通道**：`options.roomCallback` 与 `costCallback` 当前被忽略，`getPathfindingGrid2` 的结构/creep/道路代价矩阵不参与搜索。因此原生回调测试通过不代表玩家回调通路已经兼容。
+当前玩家通道已接入（D3，2026-10-04）：`PathFinder.search` 同步调用玩家 `roomCallback`；`Room.findPath`、`findPathTo`、`findClosestByPath`、`moveTo` 使用按 tick 缓存的结构/creep/道路矩阵并执行 `costCallback`。宿主保存原异常对象，支持嵌套搜索，并把 V8 终止接入原生主循环。JSON 与 KKPV 两种投影经过同一回调接口。实现机制见 [沙箱架构](../architecture/sandbox.md)，验收与已知官方差异见 [D3 记录](../research/notes/d3-pathfinder-callback-2026-10-04.md)。
+
+第 4 节说明接入方案及取舍；实际采用案 A 的同步 V8 重入，但不使用 OpState 回调 id 表，而由每次 op 的局部宿主持有 Global 句柄。矩阵采用回调后同步副本方案，避免借用可写 JS 内存为 Rust 不可变切片。Mod 寻路槽位仅完成第 8 节设计，尚未注册或执行。
 
 上游依据使用 `screeps/engine`、`screeps/driver` 的文件与符号定位；下文行号是研究时的辅助位置，核实时须确认采用的源码版本。仓库内的原生来源与接口说明见 `kk-pathfinder`，实验结果不能替代玩家通路的集成验收。
 
@@ -62,6 +64,8 @@
    main.cc:9-14），写者与读者互斥。std RwLock 的递归读在有等待写者时可能死锁，
    故自制（锁的递归读与写入约束见 lib.rs）。
 
+D3 另增加 `SearchHost`：显式 `HostRoomDecision::Error`、只在回调期间可写的稳定矩阵指针、`is_cancelled` 主循环轮询；C ABI status 4 转 `Error::Cancelled`。`ArenaGuard` 同时保存恢复每层取消回调、上下文与标记。compat 的实际类型命名空间为 `kk_pf_v8`（以 `v8` 别名供官方源码编译），防止与同进程真实 V8 的同名符号冲突。
+
 ## 4. 玩家通道设计
 
 ### 4.1 op 面命名与数据编码
@@ -70,7 +74,7 @@
 
 | 建议 op | 形态 | 说明 |
 |---|---|---|
-| `op_kk_pathfinder_search` | `#[op2]`，具体签名按 V8 回调需要确定，入参 origin/goals/搜索选项/回调句柄 id，返回 path/ops/cost/incomplete | 一次完整搜索。JS 入口先按上游完成有符号 int32 等数值归一，Rust 侧再应用缺省值与范围限制；`SearchOptions::clamped` 已有后一步。不能把负值直接转成 u32 后钳制 |
+| `op_kk_pathfinder_search` | `#[op2(reentrant)]`，同步 V8 回调，入参 origin/goals/搜索选项及 V8 回调值，返回 path/ops/cost/incomplete | 一次完整搜索。JS 入口先按上游完成有符号 int32 等数值归一，Rust 侧再应用缺省值与范围限制；`SearchOptions::clamped` 已有后一步。不能把负值直接转成 u32 后钳制 |
 | `op_kk_pathfinder_matrix_get/set`（可选） | CostMatrix 的构造/读写面 | 现有 CostMatrix 在 JS 本地实现；只有选择宿主对象表时才需要这些 op |
 
 **CostMatrix 的两种数据用途**：
@@ -80,27 +84,23 @@
   玩家 `JSON.stringify` 后存储；deserialize 接受任意 array-like（:44-48，长度不校验）。
   这一通道留在 JS 中，不应把序列化产物改成 2500 元素数组。
 - **native 通道**（宿主内部）：上游直接传 `_bits`（driver/lib/path-finder.js:125-127）。
-  当前 Rust `RoomDecision::CostMatrix(&CostMatrix)` 借用 Rust 矩阵，C++ 不复制字节；这不等于已经具备借用 V8 TypedArray 的生产接口。玩家接入须另外设计可写 JS 矩阵的传递方式；当前不可变 Rust 借用不能直接套用到可能在后续回调中改变的 V8 缓冲区。
+  Rust `RoomDecision::CostMatrix(&CostMatrix)` 保持不可变借用接口；玩家通道使用独立的 `SearchHost` 与固定 Cell 存储。V8 backing store 保持存活，每次回调后刷新所有已接纳矩阵，不直接借用可写 V8 内存为不可变 Rust 切片。
 
 上游持有矩阵引用到搜索结束。后续房间回调或嵌套搜索可能修改先前返回的矩阵，原生算法之后读取时会看到修改；只在首次返回时复制一次会改变这一行为。如果使用复制方案，须保持这些后续修改的可见性，并处理多个房间共享同一缓冲区的情况。零拷贝方案则须证明存活期与访问安全，不能在仍持有 Rust 不可变借用时进入可能写同一内存的 JS。
 
 ### 4.2 回调机制：推荐案与备选
 
-**案 A（推荐）：宿主持 `v8::Global<Function>` 同步重入。**
-prelude 的 `PathFinder.search` 把 roomCallback（经 `typeof` 校验，非 function 忽略
-——driver/lib/path-finder.js:116-119）注册进 OpState（Global 句柄 + 回调 id），调
-`op_kk_pathfinder_search`；目标宿主 op 将调用玩家函数的操作接入原生房间回调；现有
-`search_with_room_callback` 需要补齐矩阵存活与显式错误通道：回调触发 → 宿主用 HandleScope 重入 v8 同步调用玩家
-函数 → 返回值按官方包装器语义（§1 #4）映射房间决策。当前 Rust 回调只返回 `RoomDecision`，没有显式错误变体；玩家异常通道须扩展接口，在搜索结束后重新抛出保存的异常对象，不能通过 Rust panic 传递 JS 异常。
-- [op_callback 实验](../../spikes/deno-spike/examples/op_callback.rs)已使用 `&mut v8::PinScope` 和 `#[scoped] v8::Global<v8::Function>` 验证 op 内同步调用 JS。实验只模拟房间遍历，没有连接原生搜索；它把异常转成新错误消息，也没有证明原异常对象、栈和矩阵视图偏移能正确保留。生产接入仍须验证这些边界。
+**案 A（已采用，局部宿主持有句柄）：宿主持 `v8::Global<Function>` 同步重入。**
+prelude 的 `PathFinder.search` 按 `typeof` 校验 roomCallback 并包装 `_bits` 返回值，直接作为第二个参数传给 `op_kk_pathfinder_search`。op 的局部 `PlayerSearchHost` 持有 `v8::Global<Function>`，释放 OpState 借用后进入 `search_with_host`；原生房间回调通过宿主同步调用玩家函数。每层宿主保存矩阵与异常，`HostRoomDecision::Error` 显式中断算法；搜索返回后重新抛出保存的原异常对象，不通过 Rust panic 传递 JS 异常。
+- [op_callback 实验](../../spikes/deno-spike/examples/op_callback.rs)已使用 `&mut v8::PinScope` 和 `#[scoped] v8::Global<v8::Function>` 验证 op 内同步调用 JS。实验只模拟房间遍历，没有连接原生搜索；它把异常转成新错误消息，也没有证明原异常对象、栈和矩阵视图偏移能正确保留。D3 玩家集成测试已覆盖原异常对象与矩阵视图偏移，实验本身仍不替代这些验收。
 - 语义保真：回调与搜索同栈同步执行，玩家在回调里读世界/抛错/嵌套 search 的时序
   应保持上游可观察的同步时序；回调跑在 isolate 内 → 可由 kk-runner watchdog 请求终止
   （对照官方 §1 #12 的 IsExecutionTerminating 路径——pf.cc:558-561 在 isolate 终止
-  时返回 Undefined；当前 compat 层该函数恒 false，原生搜索并未接收沙箱终止标记）。
+  时返回 Undefined；D3 compat 层通过每层取消回调读取真实 isolate 的终止标记）。
 
-V8 终止请求主要在 JS 执行检查点生效。当前原生 compat 层不检查真实 isolate 的终止状态，不能假设看门狗会及时打断没有回调的 C++ 搜索。接入必须验证纯搜索与长时间回调分别如何取消；`maxOps` 限制搜索展开次数，不限制单次玩家回调耗时。不得把超时转成成功的空路径。
+V8 终止请求主要在 JS 执行检查点生效。D3 原生主循环调用真实 isolate 终止检查；确定性原生取消测试和玩家长时间回调测试分别覆盖两条路径；`maxOps` 限制搜索展开次数，不限制单次玩家回调耗时。不得把超时转成成功的空路径。
 
-矩阵读取须遵守 TypedArray 的 byteOffset、byteLength 和 backing store 生命周期，不能直接把整个底层缓冲区当作 `_bits`。嵌套搜索需要各自保存回调句柄、矩阵与异常对象，内层返回时不能释放外层仍使用的数据。普通可写矩阵的借用还须满足 Rust 别名规则；能读 backing store 不等于已经证明零拷贝接口安全。
+矩阵读取须遵守 TypedArray 的 byteOffset、byteLength 和 backing store 生命周期，不能直接把整个底层缓冲区当作 `_bits`。可缩放缓冲在后续回调中收缩时，宿主将不可读区域清零为地形默认值；这是本地安全策略，不承诺官方直接指针越界后的未定义行为。嵌套搜索需要各自保存回调句柄、矩阵与异常对象，内层返回时不能释放外层仍使用的数据。普通可写矩阵的借用还须满足 Rust 别名规则；能读 backing store 不等于已经证明零拷贝接口安全。
 
 **案 B（备选）：两段拉取协议。** search op 分帧：宿主跑到「需要房间决策」时经 op
 返回值把待决房名交回 JS，prelude 收集决策后续跑。代价：一次同步调用拆成 N 次 op
@@ -116,14 +116,14 @@ V8 终止请求主要在 JS 执行检查点生效。当前原生 compat 层不�
 | 情形 | 官方行为（file:line） | 我方处置 | 状态 |
 |---|---|---|---|
 | 回调返回 false | pf.cc:49-52 封房 | `RoomDecision::Blocked` | 原生接口已有回归测试 |
-| 返回 undefined/非 TypedArray | pf.cc:47,55 → 无矩阵 | 映射为 `RoomDecision::None` | Rust 决策已有；任意 JS 类型映射待接入 |
-| 返回非 2500 长度矩阵 | pf.cc:54-57 静默忽略 | 长度透传，**官方代码**裁决 | 原生接口已有回归测试 |
-| 回调 throw（JS） | §1 #8 链 → 抛异常，Undefined 是 C++ 占位返回 | 保存 JS 异常、经显式错误通道中止搜索并重新抛出 | Rust panic 路径已覆盖；JS 异常保留待接入 |
+| 返回 undefined/非 TypedArray | pf.cc:47,55 → 无矩阵 | 映射为 `RoomDecision::None` | 已接入并有玩家集成测试 |
+| 返回非 2500 长度矩阵 | pf.cc:54-57 静默忽略 | Rust 不可变接口透传长度由官方代码裁决；玩家宿主按字节长度预筛选 | 原生与玩家接口均有回归测试 |
+| 回调 throw（JS） | §1 #8 链 → 抛异常，Undefined 是 C++ 占位返回 | 保存 JS 异常、经显式错误通道中止搜索并重新抛出 | 已验证原异常对象身份与 _bits getter 异常 |
 | 回调 panic（宿主 Rust 面） | 官方无 Rust 面 | panic=unwind 且载荷析构不再次 panic 时，catch_unwind → rc=3 → Rust Err | 原生接口已有回归测试 |
-| 回调内嵌套 search | 官方支持两层（main.cc:9-14，第三层起堆分配 2.16MB/实例） | `TerrainLock` 重入读 + kk_ffi.cc 双实例池（复刻 main.cc）；第三层起同样堆分配 | 原生接口已有回归测试（两层） |
+| 回调内嵌套 search | 官方支持两层（main.cc:9-14，第三层起堆分配 2.16MB/实例） | `TerrainLock` 重入读 + kk_ffi.cc 双实例池（复刻 main.cc）；第三层起同样堆分配 | 原生及玩家四层嵌套测试已覆盖 |
 | 回调内 load_terrain（宿主 API） | 官方无此面（地形仅启动期载入，driver/lib/path-finder.js:23-46） | `Err(ReentrantTerrainLoad)` | 原生接口已有回归测试；差异 §6.1 |
-| 回调超时/CPU 限额 | 官方无独立超时；isolate 终止 → pf.cc:558-561 → Undefined（玩家观察不到返回值，脚本被终止） | 验证 JS 回调终止与原生搜索取消；当前原生层不检查真实 V8 终止标记 | 玩家通道待接入与验证 |
-| 回调返回非法类型（数字/字符串等 truthy） | 包装器交出 `ret._bits`=undefined → native 视 undefined → 无矩阵（driver/lib/path-finder.js:125-127） | 案 A 宿主闭包按官方包装器逐字复刻；取属性可能执行 getter 或抛错，不能只按 instanceof CostMatrix 判断 | 玩家接入时验证 |
+| 回调超时/CPU 限额 | 官方无独立超时；isolate 终止 → pf.cc:558-561 → Undefined（玩家观察不到返回值，脚本被终止） | 原生主循环查询真实 V8 终止；TryCatch 重挂终止，玩家 catch 无法继续 | 已覆盖取消、死循环回调、终止后复用 |
+| 回调返回非法类型（数字/字符串等 truthy） | 包装器交出 `ret._bits`=undefined → native 视 undefined → 无矩阵（driver/lib/path-finder.js:125-127） | JS 闭包按官方包装器取 _bits，执行 getter；宿主只检查 TypedArray 字节长度 | 已验证非法类型/长度/偏移/getter |
 
 ### 4.4 prelude 包装器
 
@@ -173,7 +173,7 @@ function wrapRoomCallback(callback) {
 
 内层搜索返回 `Err` 后，Rust 回调可以处理该错误并返回房间决策，外层继续搜索。
 如需传播错误，回调可主动 panic，使外层返回 `Err(JSError(None))`。本 crate 不自动
-将 Rust 错误转换成 JavaScript 异常；JS 接口层须自行实现抛出或捕获。
+将 Rust 错误转换成 JavaScript 异常；kk-runner 局部宿主已实现原异常抛出，玩家可捕获内层异常后继续外层搜索。
 
 测试 `crates/kk-pathfinder/tests/reentrancy.rs` 分别覆盖内层回调 panic 和地形缺失被
 处理后外层继续，并检查超过两份缓存实例的四层嵌套搜索。
@@ -183,7 +183,7 @@ function wrapRoomCallback(callback) {
 官方 `set(x, y, val)` 在 val 为 −5、NaN、3.7 时分别写入 0、0、3 的归一发生在 JS 数值层（engine
 path-finder.js:25 的 `Math.min(Math.max(0, val), 255)` + TypedArray 赋值转换）；
 kk-pathfinder 的 `u32` API 只做上界钳制。负值/NaN/小数面由 prelude 的 CostMatrix
-类负责（4.4），玩家接入时验证。
+类负责（4.4）；本批保持已有 CostMatrix JS 实现，兼容性套件验证归一与序列化。
 
 ### 6.4 玩家接入的数值与异常边界
 
@@ -196,7 +196,7 @@ kk-pathfinder 的 `u32` API 只做上界钳制。负值/NaN/小数面由 prelude
 - **空 goals 两键形态**：官方 engine path-finder.js:60-62 对空 goals 返回
   `{path:[],ops:0}`（**无** cost/incomplete 两键）——prelude 在调 op 前特判。
 - **deserialize 的整数转换**：官方 JS 对 >2^32 的词值取 mod 2^32（TypedArray
-  赋值转换），Rust `CostMatrix::deserialize` 只接受 `&[u32]`，不负责负数、小数、NaN 或超过 u32 的 JS 输入转换——接入时验证这些输入的转换结果。
+  赋值转换），Rust `CostMatrix::deserialize` 只接受 `&[u32]`，不负责负数、小数、NaN 或超过 u32 的 JS 输入转换；此行为仍由已有 JS prelude 完成。
 - **panic 捕获边界**：依赖 panic=unwind。panic=abort、panic hook 主动退出或 panic 载荷析构再次 panic 不在恢复保证内；修改编译策略时须重新评估。
 - **回调异常的消息归属**：宿主层 `Err(JSError(None))` 不携带文案——玩家侧 JS
   包装层直接 rethrow 原生 JS 异常（保留玩家异常对象与栈）；地形缺失的
@@ -215,3 +215,16 @@ kk-pathfinder 的 `u32` API 只做上界钳制。负值/NaN/小数面由 prelude
 | `src/lib.rs::cost_matrix_out_of_range_silent` | 平铺索引越界静默；(0,50)/(1,0) 同字节别名；溢出索引不 panic |
 | `src/lib.rs::cost_matrix_deserialize_any_length_silent` | deserialize 任意长度恒成功，界内可读/界外 None，serialize 往返 |
 | `tests/official_golden.rs::official_profile_checksum` | 金标 11843305（官方 profile.js 全对场景）；适用于原生搜索，不能证明玩家通道兼容 |
+
+
+## 8. Mod 寻路 wrapper 槽位设计（未实现）
+
+拟议槽位名为 `pathfinding.room_costs`，本批只定义边界，不表示 `api.rules` 已可注册该槽位。
+
+- **输入与冻结**：冻结计划声明提供者、顺序及依赖；输入为已按玩家视野裁切的房间对象、基础列序 2500 字节矩阵、当前规则版本。禁止提供者读取不可见对象或修改目标、搜索选项与地形全局表。Mod 的静态障碍声明应进入冻结描述，而不是修改玩家全局 `OBSTACLE_OBJECT_TYPES`。
+- **执行位置**：可信 Mod VM 在投影准备阶段生成拥有值的代价数据，玩家 VM 只消费结果。不得将可信 Mod 函数安装到玩家 realm，也不得在持有 C++ 搜索读锁时跨 VM 执行 Mod。结果按世界版本、viewer、选项及规则指纹缓存，规则或世界变更即失效。
+- **组合顺序**：Room wrapper 的基础结构矩阵 → 冻结次序的 Mod 成本变换 → 玩家 `costCallback` 的克隆副本；直接 `PathFinder.search` 的基础为纯地形默认值，Mod 默认成本随后参与，再由玩家 `roomCallback` 按既有返回语义替换矩阵或封房。玩家矩阵控制寻路建议，权威移动仍由结算规则校验。
+- **失败处理**：非法长度、异常、累计预算超限须按 Mod 故障协议归因，不能静默漏掉部分变换。候选数据随投影候选一起丢弃；恢复及显式停用须重新准备整条成本链。
+- **接入验收**：无 Mod 必须与本批路径逐字段相等；至少两层成本变换、不可见房信息隔离、停用恢复、JSON/KKPV 相等与 4/32 玩家重复性能对照均需覆盖。尚未达到这些验收前，不向用户宣称 Mod 已能改变寻路。
+
+该设计避免在玩家同步搜索栈内执行可信 Mod；具体注册 SDK 和投影数据格式在接入批次冻结。
