@@ -73,7 +73,7 @@ Mod 对象整字段写入遵守类型描述符，位置字段经写入门同步�
 
 ## 能力寿命与借用
 
-本次调用的 `ChainHost` 拥有 RoomCtx 克隆，暂存于 OpState。它只在匹配调用标识时有效，允许的绑定集合来自当前冻结槽；native 中心最多执行一次，JS replace 槽没有 native 能力。退出 JS 后，宿主无论成功或失败都取出并销毁能力，之后才能取回唯一拥有的房间候选。
+本次调用的 `ChainHost` 拥有 RoomCtx 克隆，暂存于 OpState。它只在匹配调用标识时有效，允许的绑定集合来自冻结槽经停用掩码筛选后的执行链；native 中心最多执行一次，有效中心仍为 JS replace 时没有 native 能力。退出 JS 后，宿主无论成功或失败都取出并销毁能力，之后才能取回唯一拥有的房间候选。
 
 RoomCtx 是 `Rc<RefCell<Working>>`。native/op 访问自行取得短借用，进入 JS 前不持候选借用。RefCell 只提供动态检查，不能宣称由类型证明整个借用纪律。当前普通 op 不回入 JS，也不重新借用 ModRealm，因此 wrap 嵌套不需要 reentrant op。
 
@@ -97,7 +97,34 @@ ActiveChain 保留首个故障；内层错误经 next 传播、被 wrap 捕获�
 
 runtime 的 `last_mod_settlement_fault()` 返回最近一次实际结算中失败的 Mod 槽调用，包含 tick、房间、权威目标 ID 与完整宿主错误。在生命周期容器中保留这条记录，销毁、成功/失败重建、结算前拒绝均不清除；下一次实际引擎结算开始时清除，新故障再写入。未调用 Mod 的引擎错误、正常拒绝与成功结算不会留下旧 Mod 归因；新建分片/teardown 随容器清空。该接口是内存 Rust 诊断面，尚未接入 CLI 诊断协议或持久日志。
 
-这些记录描述可信共享 VM 中的执行边界，不证明代码隔离、精确资源责任或主责 Mod。可信 Mod 可直接调用底层 op，上报绑定的成员校验不等价于不可伪造身份。自动停用仍须明确可归责故障类别、依赖/replace 的执行语义及干净候选边界；本片不改变冻结计划、重试或停用行为。测试与证据见 [故障来源记录](../research/notes/mod-fault-attribution-2026-10-04.md) 与 [边界复审修复](../research/notes/mod-boundary-review-2026-10-04.md)。
+这些记录描述可信共享 VM 中的执行边界，不证明代码隔离、精确资源责任或主责 Mod。可信 Mod 可直接调用底层 op，上报绑定的成员校验不等价于不可伪造身份。自动策略仅在宿主明确配置阈值后使用这些可信来源，并排除共享资源与未知来源；它不提供恶意包隔离。显式停用与策略的边界见下文。测试与证据见 [故障来源记录](../research/notes/mod-fault-attribution-2026-10-04.md) 与 [边界复审修复](../research/notes/mod-boundary-review-2026-10-04.md)。
+
+## 显式停用与回退
+
+宿主 Rust API `EmbedEngine::disable_mod(id)` 在调用边界停用指定 Mod，并按 manifest dependencies 与 handler 的显式 depends_on 计算传递依赖者闭包，保守停用整个依赖 Mod。返回本次新增的 ID 集合，`disabled_mods()` 可读取累计集合。未知 ID 不改变状态；重复停用不销毁健康 VM。分片内只允许追加停用，重新启用须重建分片。CLI 命令和持久化事件尚未接入；下述自动策略复用相同停用机制。
+
+停用集合存在 runtime 的生命周期容器中，与 realm、最近故障记录和玩家轮缓存分开。新增停用后先销毁 realm，沿原恢复门从完整包快照重新注册，核对原 PlanHash 与可执行绑定清单，再发布使用停用掩码的执行链。恢复失败保留停用集合、玩家缓存与原故障；可以再次恢复。失败候选不会因停用被直接发布，缓存玩家结果仍在新链上重新结算。
+
+| 执行位置 | 所属 Mod 停用后的行为 |
+|---|---|
+| before / wrap / after | 从执行链与本次候选能力的绑定集合移除；剩余钩子维持原顺序 |
+| replace，槽所属 Mod 仍启用 | 回退到槽声明的原始中心；builtin 槽恢复 native 能力，自有槽恢复原 process |
+| 自有槽所属 Mod 已停用 | 丢弃该槽的动作，整个槽不调用任何钩子、process 或 native |
+| 已声明对象、字段、规则、玩家 API | 保留原冻结目录与有效规则，不删除对象或 namespace 数据，不改写玩家常量 |
+
+丢弃动作仍通过正常整轮发布提交玩家 Memory/CPU 候选，保留已发生的玩家执行费用；未新增逐意图收费或玩家拒绝事件。正常拒绝与停用丢弃都不产生 Mod 故障记录。所有 Mod 的模块求值与注册函数仍会执行；注册故障、共享资源超限、依赖全局状态的非确定性注册不能靠此机制恢复。这里只屏蔽可信包的结算执行，也不禁止诊断 `invoke` 或包间普通 JS 调用。停用状态尚无独立回放身份或输入日志，不能把保留 PlanHash 解释为执行策略也相同。验收与边界见 [Mod 显式停用记录](../research/notes/mod-disable-execution-2026-10-04.md)。
+
+## 可配置自动停用
+
+`RegisterOptions.fault_disable_threshold: Option<NonZeroU32>` 是 runtime 启动策略，默认 `None` 关闭自动停用；`NonZeroU32::new(3)` 表示连续三次可归责失败后停用。该策略不改变 PlanHash，重建保持原配置；直接使用 ModRealm 不执行此 runtime 策略。
+
+仅在一次实际引擎结算返回、预算结束之后计数，每次失败至多记一次首个槽故障。handler、control、context、write_conversion、write 可计数，且绑定必须存在于启动 executable 清单、namespace 对应已安装且未停用的包。read、native、capability、resource、chain、缺绑定或未知绑定不计数；不根据异常文本推断来源。这里依赖可信 Mod 遵守 SDK 上报约定，成员校验不能证明不可伪造的身份。
+
+连续计数存在 ModVm 容器中，不随 realm 或最近故障记录清除。相同 Mod 在相邻实际结算尝试中失败则累计（可以是不同绑定、不同对象或 tick）；另一 Mod 失败从 1 开始，成功发布或不可归责的实际结算失败清除计数。重建成功/失败、结算前拒绝和显式丢弃玩家轮本身不计数也不清除；正常拒绝不记故障，整轮成功时同样清除。计数采用饱和加法，默认关闭自动停用时仍保留诊断计数。
+
+达到阈值后，本次调用继续返回失败，不重新发布失败候选，也不在 JS 调用期间修改链。runtime 停用来源 Mod 及依赖闭包，销毁 realm，返回错误明确包含新增停用 ID、连续次数和下一次重试说明。下一次调用沿恢复门重建链，再以原玩家结果和 TickInput 重新结算；未新增调用内部的无限重试或调度器。
+
+`mod_fault_streak()` 返回当前序列；`last_mod_auto_disable()` 保留最近自动决定（触发故障含 tick/房间/目标/来源、次数、新增停用集合）。普通故障、成功结算和重建不擦除自动决定；新分片或 teardown 清空全部策略状态。该记录与每轮重置的 `last_mod_settlement_fault()` 分开；只保留最近一次决定，无无限增长事件队列。当前均为内存 Rust API，尚无 CLI 通知、持久输入事件或执行策略指纹。验收与范围见 [自动停用记录](../research/notes/mod-auto-disable-2026-10-04.md)。
 
 ## 资源预算
 
@@ -113,6 +140,6 @@ runtime 的 `last_mod_settlement_fault()` 返回最近一次实际结算中失�
 
 ## 尚未完成的范围
 
-共享可信 VM 的故障半径仍是整分片；确定性异常或超限的 Mod 在新 VM 中仍会失败。内建槽与纯 Rust callback 的正常拒绝、重复故障停用策略、逐 Mod 资源归因、进程级限额、多对象写 API、其他生命周期槽、持久化和 outbox 尚未完成。
+共享可信 VM 的故障半径仍是整分片；未显式停用的确定性异常或超限 Mod 在新 VM 中仍会失败。内建槽与纯 Rust callback 的正常拒绝、自动策略的 CLI/持久日志接线、逐 Mod 资源归因、进程级限额、多对象写 API、其他生命周期槽、持久化和 outbox 尚未完成。
 
 默认路径与功能回归、真实混合链和失败候选分别验收。小对象链测试不代表密集 Mod 的成本；性能要求见 [性能验收](performance-acceptance.md)，本次选择与取舍见 [ADR-015](../decisions/ADR-015-mod-chain-execution.md)。

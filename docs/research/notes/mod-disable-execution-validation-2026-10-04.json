@@ -1,0 +1,77 @@
+{
+  "date": "2026-10-04",
+  "status": "passed",
+  "scope": "explicit settlement disable and fallback; no automatic threshold or performance acceptance",
+  "base_commit": "f079c9be654b54b01cf869639fcc7a87ad5c441e",
+  "binary": {
+    "path": "/Users/keqing/Desktop/projects/games/kkscreeps/target/release/kkscreeps",
+    "sha256": "0d5c89cfceb0ce04ef373f5259613f2f79b23e85c450acda929971f61d0ff426"
+  },
+  "source_sha256": {
+    "crates/kk-mod-host/src/chain.rs": "ff8393d3cb5b1a4000c0b44eb7cdd0efcd1404e1685c75a891866bea36622e12",
+    "crates/kk-mod-host/src/realm.rs": "c9e7d411f17bd0ed19a65961d0c4c59a8bfd8473f97632592dc337e4a53d6809",
+    "crates/kk-mod-host/tests/chain_tests.rs": "dc2544bc0cd7239a8690a5a98592824d89b0da2f1bd3cc372434769a047b37cb",
+    "crates/kk-runtime/src/embed.rs": "45bc58167405c8aaba0f369ce8a04abdbe3e30d5093ae00317b32155c59b4a30",
+    "crates/kk-runtime/src/mod_vm.rs": "6338e4498c576a02638eec636522a0ed0ef441dba17b6801865cbbcce908f861",
+    "crates/kk-runtime/tests/mod_chain_tests.rs": "116ba8b2cfdca36d0351645c97d64cffc794743b25184179aa6bd86e5d06515a"
+  },
+  "checks": [
+    {
+      "command": "cargo build --release -p kk-cli",
+      "exit_code": 0
+    },
+    {
+      "command": "KKSCREEPS_BIN=/Users/keqing/Desktop/projects/games/kkscreeps/target/release/kkscreeps pnpm run check",
+      "exit_code": 0,
+      "rust": {
+        "passed": 582,
+        "failed": 0,
+        "ignored": 10
+      },
+      "js": {
+        "passed": 19,
+        "failed": 0,
+        "skipped": 0
+      },
+      "docs": {
+        "markdown": 221,
+        "local_links": 1128
+      }
+    },
+    {
+      "command": "cargo test --release -p kk-mod-host --test chain_tests -p kk-runtime --test mod_chain_tests",
+      "exit_code": 0,
+      "rust": {
+        "passed": 33,
+        "failed": 0,
+        "ignored": 1
+      }
+    },
+    {
+      "command": "pnpm --filter @kkscreeps/compat run build",
+      "exit_code": 0
+    },
+    {
+      "command": "KKSCREEPS_BIN=/Users/keqing/Desktop/projects/games/kkscreeps/target/release/kkscreeps node compat/scripts/ratchet.mjs",
+      "exit_code": 0,
+      "upstream_commit": "34a630efa42908c117c19c25d2350fa2387bd633",
+      "passed": 1854,
+      "failed": 153,
+      "skipped": 907,
+      "new_red": 0,
+      "new_green": 0,
+      "report_sha256": "960198308b0075fcb8df59f3bacb4b923694f52be9118b12716b0c2b6dee0cfc"
+    }
+  ],
+  "log_sha256": {
+    "/tmp/kkscreeps-disable-release.log": "c452d23701c4ea340ff62a02e00ae06bcbe168c40fbcc879ef21207435af1fce",
+    "/tmp/kkscreeps-disable-check.log": "45fb3b601e6a89f0ccc07915caac93f84f4113737d4ac807cec928675de9edb1",
+    "/tmp/kkscreeps-disable-adapter.log": "8ebfcb81adc70e835a6524785828621e81b7c5f862b4f08cd015d332f07616fe",
+    "/tmp/kkscreeps-disable-ratchet.log": "eda1e661196c303001e12d95d1e3f56629ee8b2d2ee22411e4c300d8fd46883f",
+    "/tmp/kkscreeps-disable-release-tests.log": "6e47ae67182ed068217995968347851fb44fa5b5d03b7aa77f90302265bd84e1"
+  },
+  "performance": {
+    "run": false,
+    "previous_unresolved_differences_retained": true
+  }
+}

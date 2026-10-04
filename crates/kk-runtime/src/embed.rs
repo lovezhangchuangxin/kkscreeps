@@ -668,8 +668,7 @@ impl EmbedEngine {
                 realm,
                 packages.clone(),
                 options.clone(),
-                registered.plan.hash(),
-                registered.executables.clone(),
+                &registered,
             )));
             let executor = Rc::new(ModSlotExecutor {
                 realm: realm.clone(),
@@ -1142,7 +1141,7 @@ impl EmbedEngine {
                 .begin_settlement()
                 .map_err(anyhow::Error::msg)?;
         }
-        let settled = self
+        let mut settled = self
             .engine
             .tick_with_writebacks(batch, input, writebacks)
             .map_err(|e| anyhow::anyhow!("{e}"));
@@ -1159,10 +1158,24 @@ impl EmbedEngine {
                 .map_err(anyhow::Error::msg)?
                 .end_settlement();
         }
-        if settled.is_err()
-            && let Some(vm) = &self.mod_realm
-        {
-            vm.borrow_mut().invalidate();
+        if let Some(vm) = &self.mod_realm {
+            let mut vm = vm.borrow_mut();
+            if let Some(decision) = vm.finish_settlement(settled.is_ok()) {
+                let error = settled.expect_err("自动停用只能发生在结算失败后");
+                settled = Err(anyhow::anyhow!(
+                    "{error}；连续 {} 次可归责故障，已自动停用 Mod [{}]；本轮未发布，下次重试使用新链",
+                    decision.consecutive_faults,
+                    decision
+                        .disabled
+                        .iter()
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            }
+            if settled.is_err() {
+                vm.invalidate();
+            }
         }
         settled
     }
@@ -1790,6 +1803,41 @@ impl EmbedEngine {
         self.mod_realm
             .as_ref()
             .and_then(|vm| vm.borrow().last_fault.clone())
+    }
+
+    /// 连续实际结算失败的 Mod 来源计数；不随 VM 重建丢失。
+    /// 成功、不可归责失败或另一 Mod 的失败会中断该序列。
+    pub fn mod_fault_streak(&self) -> Option<crate::ModFaultStreak> {
+        self.mod_realm
+            .as_ref()
+            .and_then(|vm| vm.borrow().fault_streak.clone())
+    }
+
+    /// 最近自动停用决定；成功结算不会擦除，宿主可据此发出诊断通知。
+    pub fn last_mod_auto_disable(&self) -> Option<crate::ModAutoDisable> {
+        self.mod_realm
+            .as_ref()
+            .and_then(|vm| vm.borrow().last_auto_disable.clone())
+    }
+
+    /// 停用指定 Mod 及其传递依赖者的结算执行，返回本次新增停用的 ID。
+    /// 保留冻结 schema、规则、玩家 API 和缓存结果；下一次结算前重建 VM。
+    /// 分片内单调停用，重新启用须重建分片。未知 ID 不改变任何状态。
+    pub fn disable_mod(&mut self, id: &str) -> anyhow::Result<BTreeSet<String>> {
+        self.mod_realm
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("分片未装配 Mod VM"))?
+            .borrow_mut()
+            .disable(id)
+            .map_err(anyhow::Error::msg)
+    }
+
+    /// 当前已停用的 Mod ID；包含随依赖关系被停用的 Mod。
+    pub fn disabled_mods(&self) -> BTreeSet<String> {
+        self.mod_realm
+            .as_ref()
+            .map(|vm| vm.borrow().disabled().clone())
+            .unwrap_or_default()
     }
 
     /// 从分片创建时的包字节与配置重建 Mod VM，核验原冻结计划后才恢复可用。

@@ -16,6 +16,8 @@
 
 ## notes/ 笔记索引
 
+- [Mod 连续故障计数与可配置自动停用](notes/mod-auto-disable-2026-10-04.md)：干净失败边界、可信来源筛选、跨 VM 计数与缓存重试。
+- [Mod 显式停用与回退](notes/mod-disable-execution-2026-10-04.md)：停用依赖闭包、保留冻结目录、恢复原始中心与缓存玩家重试。
 - [Mod 转换、拒绝与故障来源边界复审](notes/mod-boundary-review-2026-10-04.md)
 - [Mod 执行故障来源与跨 VM 恢复诊断](notes/mod-fault-attribution-2026-10-04.md)
 - [Mod 自有动作正常拒绝与局部候选恢复](notes/mod-intent-decline-2026-10-04.md)

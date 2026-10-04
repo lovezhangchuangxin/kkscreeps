@@ -236,6 +236,7 @@ fn config_reaches_registration_and_digest() {
         configs: BTreeMap::from([("demo-counter".to_string(), json!({"start": 5}))]),
         freeze: Default::default(),
         vm_limits: Default::default(),
+        fault_disable_threshold: None,
     };
     let (_, configured) = register_fixtures(options.clone());
     let (_, plain) = register_fixtures(RegisterOptions::default());
@@ -1375,3 +1376,15 @@ fn player_modules_exported_in_dependency_order() {
 // ---------------------------------------------------------------------------
 // wrap 续行：JS 处理器经 reentrant op 同步进入内层链。
 //
+
+#[test]
+fn runtime_fault_policy_does_not_change_frozen_plan_identity() {
+    let (_, original) = register_fixtures(RegisterOptions::default());
+    let (_, configured) = register_fixtures(RegisterOptions {
+        fault_disable_threshold: std::num::NonZeroU32::new(2),
+        ..Default::default()
+    });
+    assert_eq!(original.plan.hash(), configured.plan.hash());
+    assert_eq!(original.contributions, configured.contributions);
+    assert_eq!(original.executables, configured.executables);
+}

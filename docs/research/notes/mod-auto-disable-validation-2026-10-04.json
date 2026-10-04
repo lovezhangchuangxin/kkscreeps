@@ -1,0 +1,114 @@
+{
+  "date": "2026-10-04",
+  "status": "passed",
+  "scope": "opt-in automatic settlement disable; counters retained across realm rebuilds; includes prior explicit-disable slice",
+  "base_commit": "f079c9be654b54b01cf869639fcc7a87ad5c441e",
+  "binary": {
+    "path": "/Users/keqing/Desktop/projects/games/kkscreeps/target/release/kkscreeps",
+    "sha256": "17d82a7667cde48114692340c4675188bb5fa1e1c8e4920c350bb9480ffb6763"
+  },
+  "source_sha256": {
+    "crates/kk-mod-host/src/chain.rs": "ff8393d3cb5b1a4000c0b44eb7cdd0efcd1404e1685c75a891866bea36622e12",
+    "crates/kk-mod-host/src/realm.rs": "1c4fd32997780431a87d63e073539f03503279443cb7fee9f9158fa1d2ea4c98",
+    "crates/kk-mod-host/tests/chain_tests.rs": "dc2544bc0cd7239a8690a5a98592824d89b0da2f1bd3cc372434769a047b37cb",
+    "crates/kk-mod-host/tests/register_tests.rs": "eaf4df150ac53ace87594db416337cad64fa3d4887a2613418518cf1135f2aad",
+    "crates/kk-runtime/src/embed.rs": "823da14b289bab110b8ca09b7bd40d58d51fb01708cce2b90c76e3f26716ab7f",
+    "crates/kk-runtime/src/lib.rs": "cab8912ca89cb1d1b8bea6380deca52283e100dd865dcb8b2fe5b398821d8c36",
+    "crates/kk-runtime/src/mod_vm.rs": "e11c582a80ad4da351cde3d484b54dd8789b71181129f484c69d01f23640295a",
+    "crates/kk-runtime/tests/mod_budget_tests.rs": "38b2f5f0632f945f7ea29a38dcc5b464d5eb77fe2e9d78354a82fb17113e82eb",
+    "crates/kk-runtime/tests/mod_chain_tests.rs": "4e0a3cdcd3c9cbbe3a045128bfff344a62643443cb4af6b756968cb8a450b0e5",
+    "crates/kk-runtime/tests/mod_chain_tests/auto_disable.rs": "a4ee1dc5bbcb0109ce6fc4ee4c4fe76be1e2d2e4a82f41f73ca65fbdb36a504a"
+  },
+  "checks": [
+    {
+      "command": "cargo build --release -p kk-cli",
+      "exit_code": 0
+    },
+    {
+      "command": "cargo test -p kk-runtime -p kk-mod-host",
+      "exit_code": 0,
+      "rust": {
+        "passed": 103,
+        "failed": 0,
+        "ignored": 4
+      }
+    },
+    {
+      "command": "KKSCREEPS_BIN=/Users/keqing/Desktop/projects/games/kkscreeps/target/release/kkscreeps pnpm run check",
+      "exit_code": 0,
+      "rust": {
+        "passed": 590,
+        "failed": 0,
+        "ignored": 10
+      },
+      "js": {
+        "passed": 19,
+        "failed": 0,
+        "skipped": 0
+      },
+      "docs": {
+        "markdown": 222,
+        "local_links": 1134
+      }
+    },
+    {
+      "command": "cargo test --release -p kk-runtime --lib --test mod_chain_tests --test mod_budget_tests -p kk-mod-host --test register_tests",
+      "exit_code": 0,
+      "rust": {
+        "passed": 79,
+        "failed": 0,
+        "ignored": 0
+      }
+    },
+    {
+      "command": "pnpm --filter @kkscreeps/compat run build",
+      "exit_code": 0
+    },
+    {
+      "command": "KKSCREEPS_BIN=/Users/keqing/Desktop/projects/games/kkscreeps/target/release/kkscreeps node compat/scripts/ratchet.mjs",
+      "exit_code": 0,
+      "upstream_commit": "34a630efa42908c117c19c25d2350fa2387bd633",
+      "passed": 1854,
+      "failed": 153,
+      "skipped": 907,
+      "new_red": 0,
+      "new_green": 0,
+      "report_sha256": "38009470c7a783cfa83916206394402eb8a077efdc8824931549c31ccd5fee01"
+    }
+  ],
+  "log_sha256": {
+    "/tmp/kkscreeps-auto-disable-build.log": "a3c688427de324b64a1b006b30a08d21c0dc3403206994190f1aabb4d935a12f",
+    "/tmp/kkscreeps-auto-disable-targeted.log": "92a85b2a3829b271ffd8c7121cd7e09fad396c239cf447c32946daed6f863c74",
+    "/tmp/kkscreeps-auto-disable-check.log": "7672a27b699f91a7fcda2b9a5878d637686fd26601c408b1b0e3ed8382d85f1c",
+    "/tmp/kkscreeps-auto-disable-adapter.log": "8ebfcb81adc70e835a6524785828621e81b7c5f862b4f08cd015d332f07616fe",
+    "/tmp/kkscreeps-auto-disable-ratchet.log": "eda1e661196c303001e12d95d1e3f56629ee8b2d2ee22411e4c300d8fd46883f",
+    "/tmp/kkscreeps-auto-disable-release-tests.log": "1987e2508fb2e2e58aaaa0a09783effd1b8b2649888b1a6ebbea051ed7a2435b"
+  },
+  "policy": {
+    "default_threshold": null,
+    "tested_thresholds": [
+      1,
+      2
+    ],
+    "eligible_kinds": [
+      "handler",
+      "control",
+      "context",
+      "write_conversion",
+      "write"
+    ],
+    "excluded_kinds": [
+      "read",
+      "native",
+      "capability",
+      "resource",
+      "chain"
+    ],
+    "candidate_published_on_threshold": false,
+    "player_reexecuted_on_retry": false
+  },
+  "performance": {
+    "run": false,
+    "previous_unresolved_differences_retained": true
+  }
+}

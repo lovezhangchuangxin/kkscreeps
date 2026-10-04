@@ -254,6 +254,9 @@ pub struct RegisterOptions {
     pub vm_limits: ModVmLimits,
     /// 诊断计时，默认关闭；不参与玩法计划身份，恢复沿用同一采集句柄。
     pub profiler: Option<ChainProfiler>,
+    /// runtime 连续可归责结算故障的停用阈值；None 默认关闭自动停用。
+    /// 不参与玩法 PlanHash，正整数由类型保证，恢复保留启动配置。
+    pub fault_disable_threshold: Option<std::num::NonZeroU32>,
 }
 
 /// 一次成功注册的产物。处理器函数仍留在 realm 的 VM 内；
@@ -293,6 +296,7 @@ pub struct ModRealm {
     sdk_install_chains: v8::Global<v8::Function>,
     sdk_run_chain: v8::Global<v8::Function>,
     chains: BTreeMap<String, (bool, bool, Rc<BTreeSet<String>>)>,
+    inactive_slots: BTreeSet<String>,
     chain_sequence: u64,
     limits: ModVmLimits,
     settlement_usage: Option<Usage>,
@@ -410,6 +414,7 @@ impl ModRealm {
             sdk_install_chains,
             sdk_run_chain,
             chains: BTreeMap::new(),
+            inactive_slots: BTreeSet::new(),
             chain_sequence: 0,
             limits,
             settlement_usage: None,
@@ -471,6 +476,10 @@ impl ModRealm {
         slot: &str,
         host: Box<dyn ChainHost>,
     ) -> ModHostResult<SlotOutcome> {
+        // 停用所属 Mod 的自有槽直接丢弃，连健康 Mod 挂在该槽的钩子也不运行。
+        if self.inactive_slots.contains(slot) {
+            return Ok(SlotOutcome::Completed);
+        }
         let program = self
             .chains
             .get(slot)
@@ -531,9 +540,14 @@ impl ModRealm {
         Ok(())
     }
 
-    fn install_chains(&mut self, plan: &ContributionPlan) -> ModHostResult<()> {
-        let programs =
-            ChainProgram::from_plan(plan).map_err(|error| ModHostError::new("chain", error))?;
+    fn install_chains(
+        &mut self,
+        plan: &ContributionPlan,
+        contributions: &[Contribution],
+        disabled: &BTreeSet<String>,
+    ) -> ModHostResult<()> {
+        let programs = ChainProgram::from_plan(plan, contributions, disabled)
+            .map_err(|error| ModHostError::new("chain", error))?;
         {
             let runtime_ref = &mut self.runtime;
             deno_core::scope!(scope, runtime_ref);
@@ -546,6 +560,12 @@ impl ModRealm {
                 .call(tc, receiver, &[value])
                 .ok_or_else(|| scope_error!(tc, "chain", "链安装失败"))?;
         }
+        self.inactive_slots = plan
+            .slots()
+            .iter()
+            .filter(|slot| disabled.contains(slot.key.namespace()))
+            .map(|slot| slot.key.to_string())
+            .collect();
         self.chains = programs
             .into_iter()
             .map(|program| {
@@ -570,6 +590,20 @@ impl ModRealm {
         packages: &BTreeMap<String, ModPackage>,
         options: RegisterOptions,
     ) -> ModHostResult<Registered> {
+        self.register_with_disabled(packages, options, &BTreeSet::new())
+    }
+
+    /// 按完整包冻结原计划，仅屏蔽结算执行。调用方须先计算依赖停用闭包；
+    /// 注册函数、对象/规则声明与玩家面仍保留，不能据此隔离有恶意的包。
+    pub fn register_with_disabled(
+        &mut self,
+        packages: &BTreeMap<String, ModPackage>,
+        options: RegisterOptions,
+        disabled: &BTreeSet<String>,
+    ) -> ModHostResult<Registered> {
+        if let Some(id) = disabled.iter().find(|id| !packages.contains_key(*id)) {
+            return Err(ModHostError::new("register", format!("未知停用 Mod {id}")));
+        }
         let sealed = self.runtime.op_state().borrow().borrow::<Registry>().sealed;
         if sealed {
             return Err(ModHostError::new("register", "realm 已密封，不能再次注册"));
@@ -590,7 +624,9 @@ impl ModRealm {
                 "诊断句柄与构造配置不一致；使用 ModRealm::with_options",
             ))
         } else {
-            self.with_budget(true, |realm| realm.register_inner(packages, options))
+            self.with_budget(true, |realm| {
+                realm.register_inner(packages, options, disabled)
+            })
         };
         if result.is_err() {
             let cell = self.runtime.op_state();
@@ -679,6 +715,7 @@ impl ModRealm {
         &mut self,
         packages: &BTreeMap<String, ModPackage>,
         options: RegisterOptions,
+        disabled: &BTreeSet<String>,
     ) -> ModHostResult<Registered> {
         let order = dependency_order(packages)?;
         {
@@ -750,7 +787,7 @@ impl ModRealm {
             )?);
         }
         let plan = freeze_with_builtin(builtin::link(), contributions.to_vec(), options.freeze)?;
-        self.install_chains(&plan)?;
+        self.install_chains(&plan, &contributions, disabled)?;
         let mut player_modules = Vec::new();
         for id in &order {
             let Some(entry) = packages[id].manifest.player.clone() else {

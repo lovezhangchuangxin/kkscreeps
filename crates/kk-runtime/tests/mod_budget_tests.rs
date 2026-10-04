@@ -35,6 +35,7 @@ fn engine(source: &str, binary: bool, limits: ModVmLimits) -> anyhow::Result<Emb
         &packages,
         RegisterOptions {
             vm_limits: limits,
+            fault_disable_threshold: std::num::NonZeroU32::new(1),
             ..Default::default()
         },
     )?;
@@ -76,6 +77,9 @@ fn cpu_timeout_keeps_player_candidates_and_reuses_original_limits_on_retry() -> 
             );
             assert!(e.has_pending_round());
             assert!(e.needs_mod_recovery());
+            assert!(e.mod_fault_streak().is_none());
+            assert!(e.disabled_mods().is_empty());
+            assert!(e.last_mod_auto_disable().is_none());
             assert_eq!(e.get_game_time(), 0);
             assert_eq!(e.engine_generation(), generation);
             assert_eq!(e.player_state_for_test("p1"), Some(&player));
@@ -111,6 +115,9 @@ fn external_memory_limit_discards_native_and_mod_writes() -> anyhow::Result<()> 
         for _ in 0..2 {
             assert!(e.tick(1).unwrap_err().to_string().contains("内存预算"));
             assert!(e.needs_mod_recovery());
+            assert!(e.mod_fault_streak().is_none());
+            assert!(e.disabled_mods().is_empty());
+            assert!(e.last_mod_auto_disable().is_none());
             assert_eq!(e.get_game_time(), 0);
             assert_eq!(e.engine_generation(), generation);
             assert_eq!(e.get_object(&id), before);
@@ -139,6 +146,9 @@ fn many_short_object_callbacks_share_one_tick_budget() -> anyhow::Result<()> {
     let generation = e.engine_generation();
     assert!(e.tick(1).unwrap_err().to_string().contains("CPU 预算"));
     assert!(e.needs_mod_recovery());
+    assert!(e.mod_fault_streak().is_none());
+    assert!(e.disabled_mods().is_empty());
+    assert!(e.last_mod_auto_disable().is_none());
     assert_eq!(e.get_game_time(), 0);
     assert_eq!(e.engine_generation(), generation);
     assert_eq!(e.engine_mod_state("budget"), Value::Null);

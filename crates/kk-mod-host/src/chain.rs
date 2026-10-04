@@ -62,9 +62,24 @@ pub(crate) struct ChainProgram {
 }
 
 impl ChainProgram {
-    pub fn from_plan(plan: &ContributionPlan) -> Result<Vec<Self>, String> {
+    pub fn from_plan(
+        plan: &ContributionPlan,
+        contributions: &[kk_mod_api::Contribution],
+        disabled: &BTreeSet<String>,
+    ) -> Result<Vec<Self>, String> {
+        // 原始中心来自声明，不从 replace 后的冻结 dispatch 反推。
+        let builtin = kk_mod_api::builtin::link();
+        let centers: std::collections::BTreeMap<_, _> = std::iter::once(&builtin)
+            .chain(contributions)
+            .flat_map(|contribution| &contribution.slots)
+            .map(|slot| (&slot.key, &slot.native_binding))
+            .collect();
+        let enabled = |key: &Key| !disabled.contains(key.namespace());
         let mut programs = Vec::new();
         for slot in plan.slots() {
+            if !enabled(&slot.key) {
+                continue;
+            }
             let (before, wraps, center, after) = match &slot.dispatch {
                 Dispatch::Native(center) => (&[][..], &[][..], center, &[][..]),
                 Dispatch::Chained {
@@ -83,7 +98,23 @@ impl ChainProgram {
             if wraps.len() > 64 {
                 return Err(format!("槽 {} 的 wrap 层数超过 64", slot.key));
             }
-            let names = |keys: &[kk_mod_api::Key]| keys.iter().map(ToString::to_string).collect();
+            let center = if enabled(center) {
+                center
+            } else {
+                centers
+                    .get(&slot.key)
+                    .copied()
+                    .ok_or_else(|| format!("槽 {} 缺少原始中心", slot.key))?
+            };
+            if !enabled(center) {
+                return Err(format!("槽 {} 的原始中心已经停用", slot.key));
+            }
+            let names = |keys: &[Key]| {
+                keys.iter()
+                    .filter(|key| enabled(key))
+                    .map(ToString::to_string)
+                    .collect()
+            };
             programs.push(Self {
                 key: slot.key.to_string(),
                 before: names(before),

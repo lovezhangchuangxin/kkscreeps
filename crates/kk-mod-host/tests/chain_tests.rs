@@ -23,6 +23,14 @@ fn realm(body: &str) -> Result<ModRealm, String> {
 }
 
 fn realm_with_options(body: &str, options: RegisterOptions) -> Result<ModRealm, String> {
+    realm_with_disabled(body, options, &Default::default())
+}
+
+fn realm_with_disabled(
+    body: &str,
+    options: RegisterOptions,
+    disabled: &std::collections::BTreeSet<String>,
+) -> Result<ModRealm, String> {
     let root = Root(std::env::temp_dir().join(format!(
         "kk-chain-host-{}-{}",
         std::process::id(),
@@ -42,9 +50,19 @@ fn realm_with_options(body: &str, options: RegisterOptions) -> Result<ModRealm, 
     .unwrap();
     let packages = discover_packages(&root.0).unwrap();
     let mut realm = ModRealm::with_options(&options).unwrap();
-    realm
-        .register(&packages, options)
+    let registered = realm
+        .register_with_disabled(&packages, options.clone(), disabled)
         .map_err(|e| e.to_string())?;
+    if !disabled.is_empty() {
+        let mut original = ModRealm::with_options(&options).unwrap();
+        let original = original.register(&packages, options).unwrap();
+        assert_eq!(registered.plan.hash(), original.plan.hash());
+        assert_eq!(registered.executables, original.executables);
+        assert_eq!(
+            registered.plan.required_bindings(),
+            original.plan.required_bindings()
+        );
+    }
     Ok(realm)
 }
 
@@ -305,4 +323,59 @@ fn write_getter_child() {
     } else {
         assert!(samples.is_empty());
     }
+}
+
+#[test]
+fn disabled_replace_restores_native_permission_without_changing_frozen_identity() {
+    for profile in [false, true] {
+        let options = RegisterOptions {
+            profiler: profile.then(ChainProfiler::default),
+            ..Default::default()
+        };
+        let mut vm = realm_with_disabled(
+            "api.handlers.replace('builtin:link.tick',{id:'bad'},()=>{throw Error('不得执行')});",
+            options,
+            &std::collections::BTreeSet::from(["test".into()]),
+        )
+        .unwrap();
+        let state = Rc::new(RefCell::new(json!({})));
+        vm.invoke_chain("builtin:link.tick", Box::new(Host(state.clone())))
+            .unwrap();
+        assert_eq!(*state.borrow(), json!({"native":1}));
+        assert!(
+            vm.evaluate_probe("Deno.core.ops.op_mod_chain_native('1')")
+                .is_err()
+        );
+    }
+}
+
+#[test]
+fn disabled_own_slot_never_accesses_candidate_or_runs_other_hooks() {
+    struct NoAccess;
+    impl ChainHost for NoAccess {
+        fn read(&mut self, _: &str) -> Result<ChainContext, String> {
+            panic!("停用槽不得读取")
+        }
+        fn write(&mut self, _: &str, _: ChainWrite) -> Result<(), String> {
+            panic!("停用槽不得写入")
+        }
+        fn native(&mut self) -> Result<(), String> {
+            panic!("停用槽不得 native")
+        }
+    }
+    let mut vm = realm_with_disabled(
+        "const ty=api.objects.define('test:counter',{version:1,playerClass:'Counter',fields:{}});api.intents.define('test:add',{scope:'object',target:ty,args:{type:'record',fields:{}},process(){throw Error('不得执行')}});",
+        RegisterOptions::default(),
+        &std::collections::BTreeSet::from(["test".into()]),
+    ).unwrap();
+    assert_eq!(
+        vm.invoke_chain("test:add.slot", Box::new(NoAccess))
+            .unwrap(),
+        kk_mod_api::SlotOutcome::Completed
+    );
+    assert!(
+        vm.invoke_chain("test:unknown.slot", Box::new(NoAccess))
+            .is_err(),
+        "掩码不能放宽未知槽检查"
+    );
 }
