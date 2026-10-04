@@ -9,6 +9,7 @@ pub mod controller;
 pub mod creep;
 pub mod damage;
 pub mod economy;
+pub mod inter_room;
 pub mod market;
 mod mod_intents;
 pub mod movement;
@@ -188,6 +189,9 @@ pub struct Working {
     /// 采矿时设置的提取器冷却，由 extractor tick 写回冷却计数。
     pub extractor_cooldown_pending: BTreeMap<ObjId, u64>,
     pub movement: movement::Movement,
+    /// 本 tick 登记的跨房过渡：位于边缘格的 creep 在全部房间结算后由
+    /// 引擎阶段移入邻房候选。
+    pub pending_inter_room: Vec<inter_room::InterRoomMove>,
     /// 本轮生效的贡献平面：link 规则、槽执行表与扩展字段目录。
     pub plane: Plane,
 }
@@ -617,7 +621,7 @@ pub fn settle_room(
     state: &TickState,
     batch: &IntentBatch,
     plane: &Plane,
-) -> Result<(RoomState, Vec<Value>), SettleError> {
+) -> Result<(RoomState, Vec<Value>, Vec<inter_room::InterRoomMove>), SettleError> {
     let index = RoomIndex::build(&room.objects);
     // 候选以共享句柄持有：Rust 链与 JS 整槽宿主在本次调用期间共享
     // 同一候选，见 RoomCtx 的说明。
@@ -637,6 +641,7 @@ pub fn settle_room(
         safe_mode_activated: BTreeSet::new(),
         extractor_cooldown_pending: BTreeMap::new(),
         movement: movement::Movement::new(),
+        pending_inter_room: Vec::new(),
         plane: plane.clone(),
     }));
 
@@ -773,7 +778,8 @@ pub fn settle_room(
         .into_inner();
     w.room.events = w.events.iter().map(Value::to_string).collect();
 
-    Ok((w.room, w.events))
+    let pending_inter_room = std::mem::take(&mut w.pending_inter_room);
+    Ok((w.room, w.events, pending_inter_room))
 }
 
 /// 读取 Generic 的结构类型；缺失、类型错误或 JSON 无效时返回 None。
@@ -1457,6 +1463,7 @@ impl Engine {
 
     /// 按房名结算副本，共用候选玩家与 ID 游标；任一房间失败均不写回。
     fn settle_rooms_stage(&self, txn: &mut txn::OwnedTickTxn) -> Result<(), SettleError> {
+        let mut inter_room_moves = Vec::new();
         for name in &txn.room_names {
             if self.fail_room.as_deref() == Some(name.as_str()) {
                 return Err(SettleError(format!("故障注入：房间 {name} 结算失败")));
@@ -1470,7 +1477,7 @@ impl Engine {
                 extensions: self.extensions.clone(),
                 plan: self.plan.clone(),
             };
-            let (room, mut room_events) = settle_room(
+            let (room, mut room_events, mut moves) = settle_room(
                 room,
                 txn.time,
                 txn.input.now_ms,
@@ -1478,9 +1485,13 @@ impl Engine {
                 &txn.batch,
                 &plane,
             )?;
+            inter_room_moves.append(&mut moves);
             txn.rooms.push((name.clone(), room));
             txn.events.append(&mut room_events);
         }
+        // 跨房过渡在全部房间结算完成后应用到候选：到达对象不参与目的房
+        // 本 tick 的结算（其对象 tick 已在来源房执行），发布后对下一轮可见。
+        inter_room::apply_inter_room_moves(&mut txn.rooms, &inter_room_moves);
         Ok(())
     }
 

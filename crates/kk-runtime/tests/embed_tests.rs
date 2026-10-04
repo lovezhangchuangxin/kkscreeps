@@ -84,6 +84,7 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     dual_a_one_player_two_rooms_impl()?;
     dual_b_two_players_one_room_impl()?;
     dual_c_unrelated_room_independent_impl()?;
+    dual_room_live_fire::dual_inter_room_transition_impl()?;
     dual_execution_order_invariance_impl()?;
     dual_multi_tick_conservation_impl()?;
     dual_lifecycle_spawn_and_construction_impl()?;

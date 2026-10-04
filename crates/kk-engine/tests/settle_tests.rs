@@ -20,6 +20,8 @@ mod combat_heal;
 mod combat_ranged;
 #[path = "settle_tests/controller_safemode.rs"]
 mod controller_safemode;
+#[path = "settle_tests/inter_room_family.rs"]
+mod inter_room_family;
 #[path = "settle_tests/m2b2_terminal_market_family.rs"]
 mod m2b2_terminal_market_family;
 #[path = "settle_tests/m2b_contrib_link_family.rs"]
@@ -311,7 +313,7 @@ impl Fixture {
         let state =
             kk_engine::TickState::new(std::mem::take(&mut self.players), self.world.next_obj_id());
         let room = self.world.room("W1N1").unwrap().clone();
-        let (room, events) = settle_room(
+        let (room, events, _moves) = settle_room(
             room,
             self.world.time(),
             input.now_ms,
@@ -377,7 +379,7 @@ impl Fixture {
         let state =
             kk_engine::TickState::new(std::mem::take(&mut self.players), self.world.next_obj_id());
         let room = self.world.room("W1N1").unwrap().clone();
-        let (room, events) = settle_room(
+        let (room, events, _moves) = settle_room(
             room,
             self.world.time(),
             1_700_000_000_000,

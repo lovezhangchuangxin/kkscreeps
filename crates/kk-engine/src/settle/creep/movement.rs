@@ -4,6 +4,7 @@ use kk_core::constants as c;
 use kk_schema::room::RoomObject;
 use kk_world::ObjId;
 use kk_world::types::BodyKind;
+use serde_json::json;
 
 use crate::intent::IntentData;
 use crate::settle::damage;
@@ -148,6 +149,27 @@ pub fn creep_tick(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
             }
         }
     } else {
+        // 跨房过渡标记：位于边缘格的 creep（无论本 tick 是否移动过）过渡
+        // 到邻房镜像格，方向按西/北/东/南的优先级取值。官方在移动执行后
+        // 立即标记、位于寿命与战斗处理之前，并同拍向源房事件日志推
+        // EVENT_EXIT（含目的房不可达的情形——事件先于迁移应用发出）。
+        // 对象随后死亡时不迁移：本仓实现在应用阶段按缺席跳过。
+        // 来源：上游 engine/src/processor/intents/creeps/tick.js。
+        if let Some((to_room, nx, ny)) = crate::settle::inter_room::edge_target(&w.room.name, x, y)
+        {
+            w.push_event(
+                c::EVENT_EXIT,
+                id,
+                json!({ "room": to_room, "x": nx, "y": ny }),
+            );
+            w.pending_inter_room
+                .push(crate::settle::inter_room::InterRoomMove {
+                    id,
+                    to_room,
+                    x: nx,
+                    y: ny,
+                });
+        }
         // 孵化生成的 creep 在出生后首次进入此分支时初始化寿命；
         // 含任意 CLAIM（包括损毁件）使用 600 tick，否则 1500 tick。
         if age_time == 0 {
@@ -247,7 +269,8 @@ fn movement_execute(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
     let to_edge = target.0 == 0 || target.0 == 49 || target.1 == 0 || target.1 == 49;
     let from_edge = from.0 == 0 || from.0 == 49 || from.1 == 0 || from.1 == 49;
     w.move_obj(id, target).map_err(SettleError)?;
-    // 从非边缘进入边缘时将疲劳归零，即使当前实现没有跨房落地也保留此规则。
+    // 从非边缘进入边缘时将疲劳归零；归零值随跨房过渡带到邻房。
+    // 来源：上游 engine/src/processor/intents/movement.js 的 isAtEdge 判定。
     if to_edge && !from_edge {
         if let Some(c) = w.creep_mut(id) {
             c.fatigue = 0;

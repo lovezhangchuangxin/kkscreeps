@@ -1091,3 +1091,66 @@ pub(super) fn dual_b06_variants_impl() -> anyhow::Result<()> {
     e.teardown();
     Ok(())
 }
+
+/// 跨房移动过渡的端到端：玩家 move 上边缘格，同 tick 过渡到邻房镜像位；
+/// 玩家下一轮视图在结算前读取，看到的是过渡后的位置；随后该轮结算使
+/// 位于新边缘格的对象再次过渡（官方出口弹跳语义）。
+pub(super) fn dual_inter_room_transition_impl() -> anyhow::Result<()> {
+    let mut e = EmbedEngine::new();
+    e.create_shard(&json!({
+        "players": ["p1"],
+        "rooms": [
+            { "name": "W1N1", "rcl": 1, "owner": "p1" },
+            { "name": "W2N1", "rcl": 1, "owner": "p1" },
+        ],
+    }))?;
+    let creep_id = e.place_object(
+        "W1N1",
+        "creep",
+        &json!({ "pos": [1, 10], "name": "Traveler", "owner": "p1", "body": ["move"] }),
+    )?;
+
+    let mut codes = std::collections::BTreeMap::new();
+    codes.insert(
+        "p1".to_string(),
+        "Game.creeps['Traveler'].move(LEFT)".to_string(),
+    );
+    let run = e.run_players(&codes)?;
+    assert_eq!(run["p1"].expr["value"], json!(0), "move(LEFT) 返回 OK");
+
+    // 同 tick 过渡：世界状态中对象已位于西邻镜像位。
+    let after = e.get_object(&creep_id).expect("对象仍存在");
+    let pos = &after["pos"];
+    assert_eq!(pos["roomName"], json!("W2N1"), "过渡到西邻房");
+    assert_eq!(pos["x"], json!(49), "西邻镜像 x=49");
+    assert_eq!(pos["y"], json!(10), "y 不变");
+
+    // 下一轮玩家视图：玩家代码先于结算运行，读到过渡后的位置；
+    // 该轮结算使边缘对象再次过渡（弹回源房）。
+    let mut codes = std::collections::BTreeMap::new();
+    codes.insert(
+        "p1".to_string(),
+        "JSON.stringify((function (c) { return [c.pos.roomName, c.pos.x, c.pos.y, c.name]; }) \
+         (Game.getObjectById(Game.creeps['Traveler'].id)))"
+            .to_string(),
+    );
+    let run = e.run_players(&codes)?;
+    let view: Vec<serde_json::Value> =
+        serde_json::from_str(run["p1"].expr["value"].as_str().expect("JSON 串"))?;
+    assert_eq!(
+        serde_json::Value::Array(view),
+        json!(["W2N1", 49, 10, "Traveler"]),
+        "玩家视图在结算前读到过渡后位置"
+    );
+    let bounced = e.get_object(&creep_id).expect("对象仍存在");
+    assert_eq!(
+        bounced["pos"]["roomName"],
+        json!("W1N1"),
+        "下一轮结算弹回源房"
+    );
+    assert_eq!(bounced["pos"]["x"], json!(0), "弹回镜像位 x=0");
+    assert_eq!(bounced["pos"]["y"], json!(10));
+
+    e.teardown();
+    Ok(())
+}

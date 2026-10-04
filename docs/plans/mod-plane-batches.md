@@ -105,6 +105,17 @@ B.1 已建立 `kk-mod-api` 的描述、校验、冻结与 link 默认目录（64
 | F 网络/客户端随 M3 | JS routes/auth/subscription/providers、资产/renderer/panel/types、握手 | 与 F2 渲染器 worktree 的合流风险登记：worktree 领先基线仅触碰 kk-cli（export_fixtures）与 packages/{renderer,shared}、不改 kk-runtime/kk-runner——真风险是其 feed/export-fixtures 快照契约写于 pre-2B 市场/终端之前，**合流前须对 pre-2B 基线做契约重验与重放**，并考虑 A 批提交时序重构后的兼容 |
 | G 完整能力收口 | 世界生成、周期任务、存储 provider、NPC/经济/跨房规则；[能力验收矩阵](../designs/mod-system.md#12-能力验收矩阵)全覆盖 + 真实大规模基准 | 全部前序批收口 |
 
+**D 批切片（2026-10-04 定，现状核查见本日规模矩阵会话）**：
+
+- **D1 跨房移动出口过渡**（dual-room 批登记欠账 + 棘轮 inter-room 红家族）：`movement_execute` 落边界格且方向外指（或站边界格向外 move）= 同 tick 过渡——结算期收集 pending transition，引擎级阶段应用到邻房（镜像位落点、身份/身体/仓库随对象保持、疲劳归 0；验收=screeps-ok ROOM-TRANSITION-001/002/005 转绿、003 保持绿）。现状：intent_move 越界即丢（settle/creep/movement.rs:67-69）、结算无 transition（dual-room-live-fire.md 登记）、Working 单房隔离（settle/mod.rs:166）——需新引入引擎级跨房阶段与邻房名换算（kk-core 坐标面核对）。边界登记：出口格 tick 起自动过渡（官方源码核对后定）、到达格占用/地形墙的处置、到达 creep 是否参与目的房当 tick 结算。
+- **D2 寻路接入 a——PathFinder.search 地形直通**：kk-pathfinder（零消费者闲置，pub API 齐）接进玩家面：world 地形打包（注意 kk-core 行序 vs pack_terrain 列序）→ search → 玩家面 path 还原；path-finder.js 直线桩换真实现，findPathTo/findClosestByPath/moveTo/findPath 随之真化（m2b-expansion.md:294 排期落点）。
+- **D3 寻路接入 b——roomCallback 通道**：按 [pathfinder-callback.md](../designs/pathfinder-callback.md) 契约（官方时序/异常/静默）接玩家 CostMatrix 回调；寻路 wrapper 槽位（mod-system.md:139）同批设计。
+- **D4 公开 slots 扩族**：移动/战斗/建造/容量四族具名 slots（默认 Native 直调、零 Mod 零开销同口径）；逐族定槽位切点与局部恢复边界。
+- **D5 Engine::tick 收敛**（06 §2.6）：engine 只留纯结算/prepared txn 公开面（OwnedTickTxn/PreparedTick 现 pub(crate)——按需升格）；假沙箱 tick 降级为限定测试 facade；RunSpec/RunResult 归位评估。
+- **D6 分型定论**（SDK 面冻结件）：builtin 槽 decline 的局部恢复边界（link transfer 多对象写入的撤销面）、纯 Rust callback 签名定论、拒绝事件面设计（当前不发射事件）。
+- **D7 性能与测量收口**：零 Mod 开销 A/B ≥5 样判读（C.5 残留）、同房/跨房串行参考一致验收（依赖 D1）、KKPV 投影/编码/解码成本收敛首步（4p 金丝雀二阶效应同观测）、C.3 残留 10（Mod 重解析成本，条件性）。
+
+
 ## 4. 每片通用验证矩阵
 
 2026-10-03 的预算复审与密集负载片：清偿墙钟超时后错误格式化可再入 JS 的永久挂起；预算看门狗持续到解除武装，玩家模式保持单次投递。新增纯结算基准，核验完整处理链的各链位计数及全部 link 状态；测量、资源边界与后续方向见 [复审与密集负载记录](../research/notes/mod-budget-review-and-perf-2026-10-03.md)。

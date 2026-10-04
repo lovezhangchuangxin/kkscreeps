@@ -233,7 +233,7 @@ fn settle_quiet(
         &plane,
     );
     let result = settled.as_ref().map(|_| ()).map_err(|e| e.0.clone());
-    if let Ok((room, _events)) = settled {
+    if let Ok((room, _events, _moves)) = settled {
         let (players, next, _) = state.into_parts().unwrap();
         f.players = players;
         let name = room.name.clone();
