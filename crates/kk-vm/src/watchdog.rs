@@ -5,6 +5,8 @@
 //! 会临时取消 V8 终止状态，错误属性 getter/格式化钩子仍可能执行用户 JS。
 //! 期限更新、代次检查和 terminate 投递共用 state 互斥锁，因此 disarm 返回后
 //! 旧代次不会再投递中断。下一次执行仍需清除已经投递的 V8 终止标志。
+//! 已有定时唤醒不晚于新期限时复用该等待；撤销期限不必唤醒线程。
+//! 这样短调用的连续 arm/disarm 不会每次触发监控线程调度，仍保留每次预算边界。
 //!
 //! 关闭时设置 shutdown，再获取 state 锁并通知等待线程，最后 join。
 //! 这样等待线程不会在检查退出状态之后漏过最后一次唤醒。
@@ -14,12 +16,20 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
 use std::time::Instant;
 
+#[derive(Clone, Copy)]
+enum WorkerWait {
+    Active,
+    Idle,
+    Until(Instant),
+}
+
 struct WatchdogState {
     deadline: Option<Instant>,
     /// deadline 对应的代际。
     armed_generation: u64,
     /// 已为该代际触发过 terminate（普通模式避免解除武装前重触发）。
     fired_generation: u64,
+    waiting: WorkerWait,
 }
 
 struct WatchdogShared {
@@ -53,6 +63,7 @@ impl Watchdog {
                 deadline: None,
                 armed_generation: 0,
                 fired_generation: 0,
+                waiting: WorkerWait::Active,
             }),
             cond: Condvar::new(),
             shutdown: AtomicBool::new(false),
@@ -63,11 +74,13 @@ impl Watchdog {
             .spawn(move || {
                 let mut st = worker.state.lock().unwrap();
                 loop {
+                    st.waiting = WorkerWait::Active;
                     if worker.shutdown.load(Ordering::Acquire) {
                         return;
                     }
                     match st.deadline {
                         None => {
+                            st.waiting = WorkerWait::Idle;
                             st = worker.cond.wait(st).unwrap();
                         }
                         Some(deadline) => {
@@ -86,22 +99,23 @@ impl Watchdog {
                                 }
                                 // 普通玩家模式保持单次投递；预算模式覆盖异常转换取消终止的窗口。
                                 st = if monitor.is_some() {
-                                    worker
-                                        .cond
-                                        .wait_timeout(st, std::time::Duration::from_millis(1))
-                                        .unwrap()
-                                        .0
+                                    let wait = std::time::Duration::from_millis(1);
+                                    st.waiting = WorkerWait::Until(Instant::now() + wait);
+                                    worker.cond.wait_timeout(st, wait).unwrap().0
                                 } else {
+                                    st.waiting = WorkerWait::Idle;
                                     worker.cond.wait(st).unwrap()
                                 };
                                 continue;
                             }
-                            let wait = if let Some(monitor) = &monitor {
+                            let wake_at = if let Some(monitor) = &monitor {
                                 monitor(false);
-                                (deadline - now).min(std::time::Duration::from_millis(1))
+                                deadline.min(Instant::now() + std::time::Duration::from_millis(1))
                             } else {
-                                deadline - now
+                                deadline
                             };
+                            st.waiting = WorkerWait::Until(wake_at);
+                            let wait = wake_at.saturating_duration_since(Instant::now());
                             let (guard, _timed_out) = worker.cond.wait_timeout(st, wait).unwrap();
                             st = guard;
                         }
@@ -122,8 +136,15 @@ impl Watchdog {
         let generation = self.shared.generation.fetch_add(1, Ordering::SeqCst) + 1;
         st.deadline = Some(deadline);
         st.armed_generation = generation;
-        // 状态更新和通知共用工作线程等待时的锁，线程醒来后重新检查期限。
-        self.shared.cond.notify_all();
+        // 等待状态在同一把锁内登记，避免线程检查期限后漏过唤醒。
+        // 已定时等待且会更早醒来时，直接复用；醒来后读取最新代次与期限。
+        if match st.waiting {
+            WorkerWait::Idle => true,
+            WorkerWait::Until(wake_at) => deadline < wake_at,
+            WorkerWait::Active => false,
+        } {
+            self.shared.cond.notify_all();
+        }
         drop(st);
         generation
     }
@@ -134,7 +155,7 @@ impl Watchdog {
         let mut st = self.shared.state.lock().unwrap();
         self.shared.generation.fetch_add(1, Ordering::SeqCst);
         st.deadline = None;
-        self.shared.cond.notify_all(); // 持锁 notify，见 arm 的注释
+        // 工作线程仍可等到原定采样点；共用锁已阻止旧代次继续投递。
         drop(st);
     }
 
@@ -165,7 +186,7 @@ mod tests {
     use super::*;
     use std::time::Duration;
 
-    // 这里只检查共享状态的代次变化；真实线程的中断和回收由沙箱集成测试覆盖。
+    // 同时核对代次变化与真实等待/投递；执行中的 V8 行为由沙箱集成测试覆盖。
 
     #[test]
     fn arm_disarm_and_shutdown() {
@@ -175,6 +196,7 @@ mod tests {
                 deadline: None,
                 armed_generation: 0,
                 fired_generation: 0,
+                waiting: WorkerWait::Active,
             }),
             cond: Condvar::new(),
             shutdown: AtomicBool::new(false),
@@ -190,5 +212,85 @@ mod tests {
         assert_eq!(w.shared.generation.load(Ordering::SeqCst), g2 + 1);
         w.shutdown();
         assert!(w.shared.shutdown.load(Ordering::Acquire));
+    }
+
+    fn wait_for(mut ready: impl FnMut() -> bool) {
+        let started = Instant::now();
+        while !ready() {
+            assert!(started.elapsed() < Duration::from_secs(2), "等待看门狗超时");
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
+
+    #[test]
+    fn earlier_deadline_wakes_timed_wait_and_cancelled_deadline_does_not_fire() {
+        let mut runtime = deno_core::JsRuntime::new(Default::default());
+        let mut watchdog = Watchdog::spawn(runtime.v8_isolate().thread_safe_handle());
+        wait_for(|| {
+            matches!(
+                watchdog.shared.state.lock().unwrap().waiting,
+                WorkerWait::Idle
+            )
+        });
+        watchdog.arm(Instant::now() + Duration::from_secs(30));
+        wait_for(|| {
+            matches!(watchdog.shared.state.lock().unwrap().waiting,
+                WorkerWait::Until(at) if at > Instant::now() + Duration::from_secs(10))
+        });
+        // 工作者正在长定时等待；较早期限必须打断等待，而不能等旧期限。
+        watchdog.arm(Instant::now() + Duration::from_millis(10));
+        // 终止请求需进入 V8 安全点才能观测；有界表达式不会把测试挂死。
+        wait_for(|| runtime.execute_script("watchdog-probe", "1+1").is_err());
+        watchdog.disarm();
+        runtime.v8_isolate().cancel_terminate_execution();
+
+        watchdog.arm(Instant::now() + Duration::from_secs(30));
+        wait_for(|| {
+            matches!(watchdog.shared.state.lock().unwrap().waiting,
+                WorkerWait::Until(at) if at > Instant::now() + Duration::from_secs(10))
+        });
+        watchdog.arm(Instant::now() + Duration::from_millis(10));
+        watchdog.disarm();
+        runtime.v8_isolate().cancel_terminate_execution();
+        std::thread::sleep(Duration::from_millis(30));
+        assert!(runtime.execute_script("watchdog-probe", "1+1").is_ok());
+
+        watchdog.arm(Instant::now() + Duration::from_secs(30));
+        wait_for(|| {
+            matches!(
+                watchdog.shared.state.lock().unwrap().waiting,
+                WorkerWait::Until(_)
+            )
+        });
+        let started = Instant::now();
+        watchdog.shutdown();
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "长等待中也须及时回收"
+        );
+    }
+
+    #[test]
+    fn budget_monitor_repeats_after_expiry_and_stops_on_disarm() {
+        let mut runtime = deno_core::JsRuntime::new(Default::default());
+        let expired = Arc::new(AtomicU64::new(0));
+        let count = expired.clone();
+        let mut watchdog = Watchdog::spawn_with_monitor(
+            runtime.v8_isolate().thread_safe_handle(),
+            Some(Box::new(move |wall_expired| {
+                if wall_expired {
+                    count.fetch_add(1, Ordering::Relaxed);
+                }
+            })),
+        );
+        watchdog.arm(Instant::now());
+        wait_for(|| expired.load(Ordering::Relaxed) >= 3);
+        watchdog.disarm();
+        let stopped = expired.load(Ordering::Relaxed);
+        runtime.v8_isolate().cancel_terminate_execution();
+        std::thread::sleep(Duration::from_millis(10));
+        assert_eq!(expired.load(Ordering::Relaxed), stopped);
+        assert!(runtime.execute_script("watchdog-probe", "1+1").is_ok());
+        watchdog.shutdown();
     }
 }

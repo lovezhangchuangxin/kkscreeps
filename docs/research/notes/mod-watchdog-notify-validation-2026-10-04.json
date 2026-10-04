@@ -1,0 +1,111 @@
+{
+  "base_commit": "e1f866e",
+  "before_binary_sha256": "83d5fa2cb0c97901397e4f5949e795bb973eb27145c93529a908220882adce6d",
+  "after_binary_sha256": "89b73d73afde8564d112022f7d356e03ca10880588b4b21860dd8bda5e4039d7",
+  "source_sha256": {
+    "Cargo.lock": "45adbfd69102ece10258e035c5dba0e25484c6143f702ad910209de7411fbbdf",
+    "crates/kk-cli/Cargo.toml": "cb08222de03c5b488199f873785c76c4042024215368c63a1519b9ed1489961e",
+    "crates/kk-cli/src/main.rs": "64df91f5219aefe57a9f1f3f6738d06c8f8e673abe52e0127f1f8ecfd494e15d",
+    "crates/kk-cli/src/mod_perf_probe.rs": "3f3a4c89d94d69b7533e1bd7d14757016ccf4904526dfe178eeded9978dee1be",
+    "crates/kk-cli/src/perf_probe/process.rs": "95403abe6a2898479fa54d49bc1ad93937dd3af462b34898402f9496d5ec7fbf",
+    "scripts/mod-perf-baseline.py": "843d3ba84344d4e6fa67154047dfde9ef0fcbcef71e129e69a25573baaa85a20",
+    "scripts/tests/test_mod_perf_baseline.py": "951db151ed4e79accf7d8cdd01613289df711d3aebb6f3c32ae8b39a6ba5071a",
+    "crates/kk-vm/src/watchdog.rs": "13bf825818bb1a63da5abe0936aa0822620347bcc2440d8110c2c572ef7b4b8f",
+    "crates/kk-mod-host/tests/limits_tests.rs": "765458bdebce635224b3087f430ead2017ccab0eef49262145be2864045cf91b",
+    "crates/kk-runtime/tests/mod_budget_tests.rs": "be4a5f502edfabaf554a9e2a26bc23d52346599f0bfee130c19d910e48ef77d5"
+  },
+  "log_sha256": {
+    "/tmp/kkscreeps-watchdog-build.log": "bb28cf97bd5bb10a6a514857cd59d4ad46d10c60bedb27889e26e7e9b7eac6db",
+    "/tmp/kkscreeps-watchdog-final-build.log": "5d0ccb72281be581d74562dbfd8e60aee144ef602c4f4f111243c0f0fe4d234d",
+    "/tmp/kkscreeps-watchdog-vm-tests.log": "6ea317ab5c934440a76f400c42b8dcba48e97c0a95072a4283d99636b6df1a63",
+    "/tmp/kkscreeps-watchdog-limits-tests.log": "773911c2dc2efe4a3e61f598c70963873adc514e578c3f8913bb3ad4a299bc6d",
+    "/tmp/kkscreeps-watchdog-release-tests-final.log": "7663a63bf13fba91c9cf98b7f2b3e5e7c3b4b01e55ce2d5c28adb73b08341356",
+    "/tmp/kkscreeps-watchdog-check-final.log": "f102e8afcecf157a132a2495bb96b8f4b7dd1bb827ac89ff3eddd694dbeb8be7",
+    "/tmp/kkscreeps-watchdog-adapter.log": "8ebfcb81adc70e835a6524785828621e81b7c5f862b4f08cd015d332f07616fe",
+    "/tmp/kkscreeps-watchdog-ratchet.log": "eda1e661196c303001e12d95d1e3f56629ee8b2d2ee22411e4c300d8fd46883f",
+    "/tmp/kkscreeps-watchdog-diagnostic.log": "5c306677bc885ac1779fef354b6a6bd400a7b63cc41d4af10d9b976639790d7f",
+    "/tmp/kkscreeps-watchdog-paired-perf.log": "f12560641793eaf836ffc80e0f72b41046b1f01268f551e57cdf425a5219cce9"
+  },
+  "checks": [
+    {
+      "command": "cargo build --release -p kk-cli",
+      "exit_code": 0
+    },
+    {
+      "command": "cargo test -p kk-vm",
+      "passed": 4,
+      "exit_code": 0
+    },
+    {
+      "command": "cargo test -p kk-mod-host --test limits_tests",
+      "passed": 4,
+      "ignored": 1,
+      "exit_code": 0
+    },
+    {
+      "command": "cargo test --release -p kk-vm -p kk-mod-host -p kk-runner -p kk-runtime",
+      "passed": 113,
+      "ignored": 5,
+      "exit_code": 0
+    },
+    {
+      "command": "KKSCREEPS_BIN=/Users/keqing/Desktop/projects/games/kkscreeps/target/release/kkscreeps pnpm run check",
+      "rust_passed": 593,
+      "rust_ignored": 10,
+      "javascript_passed": 19,
+      "javascript_skipped": 0,
+      "exit_code": 0
+    },
+    {
+      "command": "pnpm --filter @kkscreeps/compat run build",
+      "exit_code": 0
+    },
+    {
+      "command": "KKSCREEPS_BIN=/Users/keqing/Desktop/projects/games/kkscreeps/target/release/kkscreeps node compat/scripts/ratchet.mjs",
+      "passed": 1854,
+      "failed": 153,
+      "skipped": 907,
+      "red": 0,
+      "green": 0,
+      "exit_code": 0
+    },
+    {
+      "command": "node scripts/check-doc-links.mjs",
+      "markdown_files": 224,
+      "links": 1152,
+      "exit_code": 0
+    }
+  ],
+  "upstream_commit": "34a630efa42908c117c19c25d2350fa2387bd633",
+  "performance": {
+    "diagnostic_windows": 6,
+    "diagnostic_ticks": 1800,
+    "paired_windows": 24,
+    "captured_without_concurrent_build_or_tests": true,
+    "files": {
+      "mod-watchdog-notify-paired-perf-2026-10-04.json": "65ec144ea7fa7ce71050265b5747dabac007153528f991f91e177613185977e8",
+      "mod-watchdog-notify-diagnostic-perf-2026-10-04.json": "e7eadd015a31df79c8ee5c5933f683e1707dd6983d5c91dc19b74bcc2fb789d0"
+    },
+    "all_reports_revalidated": true
+  },
+  "initial_test_failures": [
+    {
+      "log": "/tmp/kkscreeps-watchdog-targeted.log",
+      "reason": "新增测试直接轮询未进入安全点的 V8 终止状态，改为有界表达式观测实际执行中断",
+      "log_sha256": "8ddffe07390ab88c05a2c3137fcaf05b820af45c013cbceec4eaf27eacbab0e1"
+    },
+    {
+      "log": "/tmp/kkscreeps-watchdog-release-tests.log",
+      "reason": "原累计预算测试的 4000 次循环在优化后未超过 15 ms；增加到 100000 次并断言实际多次 JS 调用，再验整轮回滚",
+      "log_sha256": "9f5a1fb38e6a613b5eedf947f3135fbcd226b42ddec4879430200bde82c785e3"
+    }
+  ],
+  "limitations": [
+    "单房 400 link 的纯结算；没有玩家执行/投影、存储或网络",
+    "配对窗口为预热100/采集500/三轮，未达到正式验收配置",
+    "单次诊断按版本分组运行，切换计数只作探索线索",
+    "native 与历史性能差异未归因，不宣称整体无回归"
+  ],
+  "compatibility_report_sha256": "4a2c922ac7b75bacba58f7d4932f588a493c40e6cdeb5b8550f953264a6179eb",
+  "preserved_user_changes": true
+}

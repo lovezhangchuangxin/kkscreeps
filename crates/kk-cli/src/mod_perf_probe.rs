@@ -7,10 +7,14 @@ use std::time::Instant;
 
 use kk_mod_host::{ChainProfiler, ModVmLimits, RegisterOptions, discover_packages};
 use kk_runtime::EmbedEngine;
+use serde::Serialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
-use crate::perf_probe::{metadata, process::ProcessProbe};
+use crate::perf_probe::{
+    metadata,
+    process::{ProcessProbe, process_usage},
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
 pub(crate) enum Mode {
@@ -31,6 +35,7 @@ impl Mode {
 
 pub(crate) struct Options {
     pub profile: bool,
+    pub tick_diagnostics: bool,
     pub mode: Mode,
     pub rooms: u32,
     pub links_per_room: u32,
@@ -38,6 +43,15 @@ pub(crate) struct Options {
     pub ticks: u32,
     pub fixtures: String,
     pub report: String,
+}
+
+#[derive(Serialize)]
+struct TickDiagnostic {
+    tick: u32,
+    wall_ms: f64,
+    cpu_core_ms: f64,
+    voluntary_context_switches: u64,
+    involuntary_context_switches: u64,
 }
 
 pub(crate) fn run(options: Options) -> i32 {
@@ -165,10 +179,39 @@ fn measure(options: &Options) -> anyhow::Result<Value> {
         profiler.reset();
     }
     let mut samples = Vec::with_capacity(options.ticks as usize);
-    for _ in 0..options.ticks {
+    let mut diagnostics = options
+        .tick_diagnostics
+        .then(|| Vec::with_capacity(options.ticks as usize));
+    let mut diagnostic_sampling_ms = 0.0;
+    for index in 0..options.ticks {
+        let usage_before = if options.tick_diagnostics {
+            let started = Instant::now();
+            let usage = process_usage()?;
+            diagnostic_sampling_ms += started.elapsed().as_secs_f64() * 1000.0;
+            Some(usage)
+        } else {
+            None
+        };
         let started = Instant::now();
         engine.tick(1)?;
-        samples.push(started.elapsed().as_secs_f64() * 1000.0);
+        let wall_ms = started.elapsed().as_secs_f64() * 1000.0;
+        samples.push(wall_ms);
+        if let (Some(before), Some(diagnostics)) = (usage_before, &mut diagnostics) {
+            let started = Instant::now();
+            let after = process_usage()?;
+            diagnostic_sampling_ms += started.elapsed().as_secs_f64() * 1000.0;
+            diagnostics.push(TickDiagnostic {
+                tick: options.warmup + index + 1,
+                wall_ms,
+                cpu_core_ms: (after.cpu_core_ms - before.cpu_core_ms).max(0.0),
+                voluntary_context_switches: after
+                    .voluntary_context_switches
+                    .saturating_sub(before.voluntary_context_switches),
+                involuntary_context_switches: after
+                    .involuntary_context_switches
+                    .saturating_sub(before.involuntary_context_switches),
+            });
+        }
         process.observe()?;
     }
     let process_report = process.finish(options.ticks)?;
@@ -192,6 +235,13 @@ fn measure(options: &Options) -> anyhow::Result<Value> {
         "fixture":"synthetic positive cooldown every tick; four audited chain positions",
         "profile": profiler.as_ref().map(ChainProfiler::snapshot),
         "profile_schema_version": profiler.as_ref().map(|_| 3),
+        "tick_diagnostics": diagnostics.map(|samples| json!({
+            "schema_version": 1,
+            "scope": "current_process_all_threads",
+            "window": "getrusage_before_and_after_engine_tick; excludes_rss_sampling",
+            "sampling_wall_ms": diagnostic_sampling_ms,
+            "samples": samples,
+        })),
         "wall":{"count":samples.len(),"p50_ms":quantile(0.5),"p95_ms":quantile(0.95),
             "p99_ms":quantile(0.99),"max_ms":samples.last(),"sum_ms":sum},
         "process":process_report,
@@ -246,14 +296,19 @@ mod tests {
     #[test]
     fn dense_modes_have_same_link_states_and_exact_chain_counts() -> anyhow::Result<()> {
         let mut reference = None;
-        for (mode, profile) in [
-            (Mode::Native, false),
-            (Mode::Empty, false),
-            (Mode::Chain, false),
-            (Mode::Chain, true),
+        for (mode, profile, tick_diagnostics) in [
+            (Mode::Native, false, false),
+            (Mode::Empty, false, false),
+            (Mode::Chain, false, false),
+            (Mode::Chain, true, false),
+            (Mode::Native, false, true),
+            (Mode::Empty, false, true),
+            (Mode::Chain, false, true),
+            (Mode::Chain, true, true),
         ] {
             let report = measure(&Options {
                 profile,
+                tick_diagnostics,
                 mode,
                 rooms: 2,
                 links_per_room: 3,
@@ -307,6 +362,27 @@ mod tests {
                 assert!(report["profile_schema_version"].is_null());
             }
             assert_eq!(report["wall"]["count"], 3);
+            if tick_diagnostics {
+                let diagnostics = &report["tick_diagnostics"];
+                assert_eq!(diagnostics["schema_version"], 1);
+                assert!(diagnostics["sampling_wall_ms"].as_f64().unwrap() >= 0.0);
+                let ticks = diagnostics["samples"].as_array().unwrap();
+                assert_eq!(ticks.len(), 3);
+                let mut walls = Vec::new();
+                for (index, tick) in ticks.iter().enumerate() {
+                    assert_eq!(tick["tick"], 3 + index);
+                    assert!(tick["cpu_core_ms"].as_f64().unwrap() >= 0.0);
+                    assert!(tick["voluntary_context_switches"].as_u64().is_some());
+                    assert!(tick["involuntary_context_switches"].as_u64().is_some());
+                    walls.push(tick["wall_ms"].as_f64().unwrap());
+                }
+                assert_eq!(report["wall"]["sum_ms"], json!(walls.iter().sum::<f64>()));
+                walls.sort_by(f64::total_cmp);
+                assert_eq!(report["wall"]["p50_ms"], json!(walls[1]));
+                assert_eq!(report["wall"]["p99_ms"], json!(walls[2]));
+            } else {
+                assert!(report["tick_diagnostics"].is_null());
+            }
         }
         Ok(())
     }

@@ -1,5 +1,5 @@
 //! 资源故障与分片候选/恢复接线：玩家只执行一次，VM 超限不提前发布。
-use kk_mod_host::{ModVmLimits, RegisterOptions, discover_packages};
+use kk_mod_host::{ChainProfiler, ModVmLimits, RegisterOptions, discover_packages};
 use kk_runtime::EmbedEngine;
 use serde_json::{Value, json};
 use std::path::PathBuf;
@@ -14,7 +14,12 @@ impl Drop for Root {
     }
 }
 
-fn engine(source: &str, binary: bool, limits: ModVmLimits) -> anyhow::Result<EmbedEngine> {
+fn engine(
+    source: &str,
+    binary: bool,
+    limits: ModVmLimits,
+    profiler: Option<ChainProfiler>,
+) -> anyhow::Result<EmbedEngine> {
     let root = Root(std::env::temp_dir().join(format!(
         "kk-runtime-mod-budget-{}-{}",
         std::process::id(),
@@ -35,6 +40,7 @@ fn engine(source: &str, binary: bool, limits: ModVmLimits) -> anyhow::Result<Emb
         &packages,
         RegisterOptions {
             vm_limits: limits,
+            profiler,
             fault_disable_threshold: std::num::NonZeroU32::new(1),
             ..Default::default()
         },
@@ -58,7 +64,7 @@ fn cpu_timeout_keeps_player_candidates_and_reuses_original_limits_on_retry() -> 
         let mut limits = ModVmLimits::default();
         limits.settlement.cpu = Duration::from_millis(10);
         limits.settlement.wall = Duration::from_secs(2);
-        let mut e = engine(source, binary, limits)?;
+        let mut e = engine(source, binary, limits, None)?;
         let a = link(&mut e, 20, 100)?;
         let b = link(&mut e, 21, 0)?;
         let generation = e.engine_generation();
@@ -108,7 +114,7 @@ fn external_memory_limit_discards_native_and_mod_writes() -> anyhow::Result<()> 
             memory_bytes: 16 * 1024 * 1024,
             ..Default::default()
         };
-        let mut e = engine(source, binary, limits)?;
+        let mut e = engine(source, binary, limits, None)?;
         let id = link(&mut e, 20, 0)?;
         let before = e.get_object(&id);
         let generation = e.engine_generation();
@@ -131,20 +137,24 @@ fn external_memory_limit_discards_native_and_mod_writes() -> anyhow::Result<()> 
 fn many_short_object_callbacks_share_one_tick_budget() -> anyhow::Result<()> {
     let source = r#"export default function register(api){
       api.handlers.after('builtin:link.tick',{id:'count'},ctx=>{
-        let n=0;for(let i=0;i<4000;i++)n+=Math.sqrt(i);globalThis.n=n;
+        let n=0;for(let i=0;i<100000;i++)n+=Math.sqrt(i);globalThis.n=n;
         ctx.target.fields.cooldown=9;ctx.state={count:(ctx.state?.count||0)+1};
       });
     }"#;
     let mut limits = ModVmLimits::default();
     limits.settlement.cpu = Duration::from_millis(15);
     limits.settlement.wall = Duration::from_secs(2);
-    let mut e = engine(source, false, limits)?;
+    let profiler = ChainProfiler::default();
+    let mut e = engine(source, false, limits, Some(profiler.clone()))?;
     let mut ids = Vec::new();
     for i in 0..400 {
         ids.push(e.place_object("W1N1","structure",&json!({"pos":[i%50,i/50],"structureType":"link","owner":"p1","store":{"energy":0},"cooldown":0}))?);
     }
     let generation = e.engine_generation();
+    profiler.reset();
     assert!(e.tick(1).unwrap_err().to_string().contains("CPU 预算"));
+    // 除故障与整轮回滚外，确认实际经过多个单次未超限回调，避免变成单回调超限测试。
+    assert!(profiler.snapshot()["js_call"].calls > 1);
     assert!(e.needs_mod_recovery());
     assert!(e.mod_fault_streak().is_none());
     assert!(e.disabled_mods().is_empty());

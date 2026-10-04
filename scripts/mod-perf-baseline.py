@@ -26,7 +26,7 @@ def valid_measurement(value):
         type(value) is int or math.isfinite(value))
 
 
-def validate_report(report, mode, rooms, links, warmup, ticks, profile=False):
+def validate_report(report, mode, rooms, links, warmup, ticks, profile=False, tick_diagnostics=False):
     expected = {"tool": "kkscreeps mod-perf-probe", "mode": mode, "rooms": rooms,
                 "links_per_room": links, "warmup": warmup, "ticks": ticks}
     if any(report.get(key) != value for key, value in expected.items()):
@@ -48,6 +48,7 @@ def validate_report(report, mode, rooms, links, warmup, ticks, profile=False):
         raise RuntimeError("报告缺少进程 CPU/RSS")
     if not valid_measurement(process.get("cpu_core_ms_per_tick")):
         raise RuntimeError("进程 CPU 耗时无效")
+    validate_tick_diagnostics(report, warmup, ticks, tick_diagnostics)
     samples = report.get("profile")
     if profile:
         if not isinstance(samples, dict):
@@ -87,12 +88,55 @@ def validate_report(report, mode, rooms, links, warmup, ticks, profile=False):
             raise RuntimeError("对象状态摘要无效")
 
 
+def validate_tick_diagnostics(report, warmup, ticks, requested):
+    diagnostics = report.get("tick_diagnostics")
+    if not requested:
+        if diagnostics is not None:
+            raise RuntimeError("普通采集不能包含逐 tick 诊断")
+        return
+    if not isinstance(diagnostics, dict):
+        raise RuntimeError("缺少逐 tick 诊断")
+    if type(diagnostics.get("schema_version")) is not int or diagnostics["schema_version"] != 1:
+        raise RuntimeError("逐 tick 诊断版本不支持")
+    if diagnostics.get("scope") != "current_process_all_threads" or diagnostics.get("window") != "getrusage_before_and_after_engine_tick; excludes_rss_sampling":
+        raise RuntimeError("逐 tick 诊断窗口不符")
+    if not valid_measurement(diagnostics.get("sampling_wall_ms")):
+        raise RuntimeError("逐 tick 诊断采样耗时无效")
+    samples = diagnostics.get("samples")
+    if not isinstance(samples, list) or len(samples) != ticks:
+        raise RuntimeError("逐 tick 诊断采样数量不符")
+    walls = []
+    for index, sample in enumerate(samples):
+        if not isinstance(sample, dict) or type(sample.get("tick")) is not int or sample["tick"] != warmup + index + 1:
+            raise RuntimeError("逐 tick 诊断顺序不符")
+        if any(not valid_measurement(sample.get(key)) for key in ("wall_ms", "cpu_core_ms")):
+            raise RuntimeError("逐 tick 诊断耗时无效")
+        for key in ("voluntary_context_switches", "involuntary_context_switches"):
+            if type(sample.get(key)) is not int or sample[key] < 0:
+                raise RuntimeError("逐 tick 上下文切换计数无效")
+        walls.append(sample["wall_ms"])
+    wall = report["wall"]
+    ordered = sorted(walls)
+    # Rust 的正数 round 与 Python 的 bankers rounding 不同。
+    expected = {f"{name}_ms": ordered[math.floor((ticks - 1) * q + 0.5)]
+                for name, q in (("p50", .5), ("p95", .95), ("p99", .99))}
+    expected.update(max_ms=ordered[-1], sum_ms=sum(walls))
+    if any(not valid_measurement(wall.get(key)) or not math.isclose(wall[key], value, rel_tol=1e-12, abs_tol=1e-12)
+           for key, value in expected.items()):
+        raise RuntimeError("逐 tick 诊断与墙钟汇总不符")
+
+
 def check_profile_identity(references, key, report):
     samples = report.get("profile")
     identity = None if samples is None else (
         report.get("profile_schema_version", 1), tuple(sorted(samples)))
     if references.setdefault(key, identity) != identity:
         raise RuntimeError("同一采集组的诊断版本或阶段集合发生变化")
+    diagnostics = report.get("tick_diagnostics")
+    tick_identity = None if diagnostics is None else (
+        diagnostics["schema_version"], diagnostics["scope"], diagnostics["window"])
+    if references.setdefault((key, "tick_diagnostics"), tick_identity) != tick_identity:
+        raise RuntimeError("同一采集组的逐 tick 诊断口径发生变化")
 
 
 def summarize(runs):
@@ -132,6 +176,7 @@ def main():
     parser.add_argument("--ticks", type=int, default=3000)
     parser.add_argument("--repetitions", type=int, default=5)
     parser.add_argument("--profile", action="store_true", help="开启包含计时，输出为诊断数据")
+    parser.add_argument("--tick-diagnostics", action="store_true", help="保留逐 tick 墙钟、进程 CPU 与上下文切换；输出为诊断数据")
     args = parser.parse_args()
     if not 0 <= args.warmup <= 50000 or not 1 <= args.ticks <= 50000 or args.repetitions < 1:
         parser.error("warmup 须为 0..50000，ticks 须为 1..50000，repetitions 须为正")
@@ -161,13 +206,14 @@ def main():
                         "--warmup", str(args.warmup), "--ticks", str(args.ticks),
                         "--fixtures", str(fixtures), "--report", str(path),
                         *(["--profile"] if args.profile else []),
+                        *(["--tick-diagnostics"] if args.tick_diagnostics else []),
                     ], cwd=root, capture_output=True, text=True, timeout=600)
                     if completed.returncode:
                         raise RuntimeError(completed.stdout + completed.stderr)
                     if hashlib.sha256(binary.read_bytes()).hexdigest() != binary_hash:
                         raise RuntimeError("测量期间二进制发生变化")
                     report = json.loads(path.read_text())
-                    validate_report(report, mode, rooms, links, args.warmup, args.ticks, args.profile)
+                    validate_report(report, mode, rooms, links, args.warmup, args.ticks, args.profile, args.tick_diagnostics)
                     check_profile_identity(profile_references, mode, report)
                     identity = (report["package_digests"], report["vm_limits"])
                     if package_references.setdefault(mode, identity) != identity:
@@ -184,7 +230,8 @@ def main():
         "complete": True, "purpose": "密集 Mod 纯结算基准；不代表玩家闭环或跨引擎性能验收",
         "binary_sha256": binary_hash, "platform": platform.platform(),
         "warmup": args.warmup, "ticks": args.ticks, "repetitions": args.repetitions,
-        "instrumented": args.profile,
+        "instrumented": args.profile or args.tick_diagnostics,
+        "tick_diagnostics": args.tick_diagnostics,
         "summary": summarize(runs), "runs": runs,
         "limitations": [
             "合成 link 冷却保持每 tick 有 native 写入，不能代表全部真实玩法",
@@ -195,6 +242,7 @@ def main():
             "本地机器频率与其他应用负载未控制，不设置性能硬门禁",
             "诊断阶段为包含墙钟；op 包含 host，JS 包含 op，不能将全部阶段相加",
             "开启诊断会增加计时与 op 包装开销；错误计数仅由 op 事件统计",
+            "逐 tick 诊断额外调用 getrusage；CPU 与上下文切换属于全部线程，不证明某个线程的调度或 GC 原因",
         ],
     }
     args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n")

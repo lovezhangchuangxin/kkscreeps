@@ -79,6 +79,18 @@ CLI 开启诊断时声明 `profile_schema_version: 3`；报告门要求完整链
 
 前后对照探针按模式核验包与预算身份：native、empty、chain 各自跨二进制版本和重复轮次保持一致。不同模式之间允许使用不同包；相同对象终态不能替代该身份校验。发现变化即拒绝成功汇总，保留此前的 partial 记录。同一二进制、模式和诊断开关的重复报告还须保持诊断版本与阶段集合一致；两端二进制允许版本不同，不能将同一端的新增阶段按首份报告静默省略。
 
+### 可选逐 tick 诊断
+
+`mod-perf-probe --tick-diagnostics` 和重复采集脚本的同名选项保留原顺序的逐 tick 墙钟、进程 CPU core-ms 与主动/非主动上下文切换增量。报告 `tick_diagnostics` v1 的 tick 编号从预热后第一个世界 tick 开始；默认字段为 null，不额外调用逐 tick `getrusage`。它与 `--profile` 独立，可组合使用。
+
+```sh
+python3 scripts/mod-perf-baseline.py --tick-diagnostics --scenarios 400 --warmup 100 --ticks 500 --repetitions 3 --output /tmp/mod-tick-diagnostics.json
+```
+
+每次在 `EmbedEngine.tick(1)` 前后各调用一次 `getrusage(RUSAGE_SELF)`，不包含后续 RSS 采样。墙钟仍只围住 engine 调用；CPU/切换计数的两个采样点稍宽，包含两点之间的计时和样本追加。CPU 是所有线程之和，可超过墙钟；切换也不能指认某个线程、调度等待、GC 或具体业务原因。字段变化只提供排查线索，不能将墙钟减 CPU 当作准确等待时间。
+
+额外系统调用的墙钟合计单列 `sampling_wall_ms`，不从汇总扣除；整进程窗口仍包含诊断采样及记录开销。原始记录在采集完成后序列化。重复采集声明 `instrumented: true`，校验记录数量、顺序、有限非负耗时、整数切换计数，以及由原始墙钟重算的全部分位数/最大值/总和。普通基线和成对采集拒绝逐 tick 诊断报告；汇总也拒绝在同组混入不同诊断口径。没有该字段的历史普通报告继续接受。同二进制对照、逐 tick 原始记录及未解决的波动见[诊断记录](../research/notes/mod-tick-diagnostics-2026-10-04.md)。
+
 ### 可配置成对采集
 
 [mod-perf-compare.py](../../scripts/mod-perf-compare.py) 将局部前后对照移入维护脚本，默认预热 500 tick、采集 3000 tick、独立运行五轮，单房 400 link。先保存旧端 release，再传入 `--before`；新端默认使用当前 release：
@@ -88,6 +100,16 @@ python3 scripts/mod-perf-compare.py --before /tmp/kkscreeps-before --output /tmp
 ```
 
 每种模式的两端相邻运行，逐轮交换先后，模式也轮换。支持房间数、link 数、窗口、重复次数和子进程外层期限；`--profile` 额外采完整链诊断，旧端可用 `--profile-before` 指定独立诊断构建。普通窗口始终不插桩，诊断结果单独汇总，两端诊断版本可不同。
+
+`--order-pattern abba` 每模式每轮运行四个独立进程：奇数轮 before/after/after/before，偶数轮 after/before/before/after。每轮包含两对，原始报告记录 `pair` 和顺序口径；默认 `adjacent` 每轮仍一对。除了逐对指标，汇总另列轮数、每轮两端窗口指标的算术均值、均值差/倍率及其中位数。四窗口保留两端在位置上的平衡，可以抵消等间隔的加性线性漂移；不同运行时长、非线性漂移、外部负载仍会影响结果。
+
+```sh
+python3 scripts/mod-perf-compare.py --before /tmp/kkscreeps-before --modes native empty --order-pattern abba --output /tmp/mod-balanced.json
+```
+
+两对属于同一轮，不能当成两轮独立重复；各窗口分位数的均值也不是合并 tick 后的分位数。零基线保留该对差值并使配对倍率为 null；每轮均值倍率按该轮包含全部窗口的均值计算，均值为零时为 null。同组缺失第二对、重复版本、混用顺序或无效编号会拒绝成功汇总。没有 `pair`/顺序字段的历史报告按 adjacent 第 1 对处理，原逐对口径继续保留。
+
+四窗口工具验收、native/empty 长窗口和同二进制 A/A 见[平衡采集记录](../research/notes/mod-native-balanced-2026-10-04.md)。这次前后版本的 native CPU 各轮有升有降；历史差异仍未归因，不能用后续 A/A 波动消除旧问题。
 
 继续核验实际负载、链计数、全部 link 状态、包/预算和二进制指纹；诊断版本/阶段口径不得在同一端漂移。每次启动前删除临时报表，不能把上一子进程的报表当作新结果。负载错误、超时或身份变化不生成成功报告，保留此前有效窗口的 partial。启动子进程前独占 partial 路径，逐次更新采用同目录临时文件原子替换；成功报告以独占硬链接发布，后来出现的 output 也不能覆盖。首次失败保留零窗口 partial，已有 output/partial 路径拒绝覆盖。
 

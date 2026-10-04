@@ -16,6 +16,9 @@
 
 ## notes/ 笔记索引
 
+- [native/empty 长窗口与平衡采集](notes/mod-native-balanced-2026-10-04.md)：ABBA/BAAB、逐对与逐轮口径、60 个原始窗口及同二进制 A/A；历史差异仍未归因。
+- [看门狗通知合并](notes/mod-watchdog-notify-2026-10-04.md)：保留逐调用预算、减少重复唤醒，资源与兼容性门禁及全部配对窗口。
+- [Mod 逐 tick 诊断与桌面测量波动](notes/mod-tick-diagnostics-2026-10-04.md)：同二进制 A/A、全部原始 CPU/切换记录和普通/诊断门禁；历史回归仍未归因。
 - [Mod 连续故障计数与可配置自动停用](notes/mod-auto-disable-2026-10-04.md)：干净失败边界、可信来源筛选、跨 VM 计数与缓存重试。
 - [Mod 显式停用与回退](notes/mod-disable-execution-2026-10-04.md)：停用依赖闭包、保留冻结目录、恢复原始中心与缓存玩家重试。
 - [Mod 转换、拒绝与故障来源边界复审](notes/mod-boundary-review-2026-10-04.md)

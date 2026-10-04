@@ -19,7 +19,8 @@ SPEC.loader.exec_module(MODULE)
 
 
 class ModPerfCompareTests(unittest.TestCase):
-    def collect(self, changed=None, separate_profile_before=False, verify_reservation=False):
+    def collect(self, changed=None, separate_profile_before=False, verify_reservation=False,
+                order_pattern="adjacent", linear_drift=False):
         calls = []
         seen = {}
 
@@ -72,6 +73,10 @@ class ModPerfCompareTests(unittest.TestCase):
                 "profile": {phase: {"calls": factor * objects * ticks, "errors": 0, "wall_ns": 1}
                             for phase, factor in phases.items()} if profile else None,
             }
+            if linear_drift:
+                value = 10 + len(calls)
+                report['wall'].update(p50_ms=value, p95_ms=value + 1, p99_ms=value + 2)
+                report['process']['cpu_core_ms_per_tick'] = value
             if changed == "package" and key == ("after", "chain", False):
                 report["package_digests"] = {"perf": "changed"}
             if changed == "state" and key == ("after", "chain", False):
@@ -92,6 +97,7 @@ class ModPerfCompareTests(unittest.TestCase):
             argv = [str(PROBE), "--before", str(root / "before"), "--after", str(root / "after"),
                     "--output", str(out), "--rooms", "2", "--links-per-room", "3", "--warmup", "2",
                     "--ticks", "3", "--repetitions", "3", "--timeout", "9", "--profile"]
+            argv.extend(["--order-pattern", order_pattern])
             if separate_profile_before:
                 argv.extend(["--profile-before", str(root / "profile-before")])
             with patch.object(sys, "argv", argv), patch.object(MODULE.platform, "platform", return_value="test-platform"), \
@@ -120,13 +126,20 @@ class ModPerfCompareTests(unittest.TestCase):
                 MODULE.main()
             result = json.loads(out.read_text())
             self.assertIs(result["complete"], True)
-            self.assertEqual(len(result["runs"]), 24)
+            abba = order_pattern == 'abba'
+            self.assertEqual(len(result["runs"]), 48 if abba else 24)
             self.assertFalse(out.with_suffix(".partial.json").exists())
             # 两端逐对相邻，第二轮先跑 after，模式轮换。
             self.assertEqual(calls[:2], [("before", "native", False), ("after", "native", False)])
-            self.assertEqual(calls[8:10], [("after", "empty", False), ("before", "empty", False)])
+            offset = 16 if abba else 8
+            self.assertEqual(calls[offset:offset + 2], [("after", "empty", False), ("before", "empty", False)])
+            if abba:
+                self.assertEqual(calls[2:4], [("after", "native", False), ("before", "native", False)])
+                self.assertEqual(calls[18:20], [("before", "empty", False), ("after", "empty", False)])
             summary = result["summary"]
-            self.assertEqual(summary["plain:chain"]["pairs"], 3)
+            self.assertEqual(summary["plain:chain"]["pairs"], 6 if abba else 3)
+            self.assertEqual(summary["plain:chain"]["rounds"], 3)
+            self.assertEqual(summary["plain:chain"]["order_pattern"], order_pattern)
             self.assertNotIn("profile_ms_per_tick", summary["plain:chain"])
             self.assertNotIn("write_from_v8", summary["profile:chain"]["profile_ms_per_tick"]["before"])
             self.assertIn("write_from_v8", summary["profile:chain"]["profile_ms_per_tick"]["after"])
@@ -134,11 +147,30 @@ class ModPerfCompareTests(unittest.TestCase):
             if separate_profile_before:
                 self.assertIn(("profile-before", "chain", True), calls)
                 self.assertNotIn(("profile-before", "chain", False), calls)
+            return result, calls
 
     def test_requested_load_order_and_separate_diagnostics(self):
         for separate in (False, True):
             with self.subTest(separate_profile_before=separate):
                 self.collect(separate_profile_before=separate)
+
+    def test_abba_balances_each_round_and_keeps_separate_diagnostics(self):
+        result, _ = self.collect(order_pattern='abba', separate_profile_before=True, linear_drift=True)
+        for item in result['summary'].values():
+            self.assertEqual(item['rounds'], 3)
+            self.assertEqual(item['pairs'], 6)
+            for metric in item['metrics'].values():
+                self.assertEqual(metric['round_after_minus_before'], [0, 0, 0])
+                self.assertEqual(metric['round_after_over_before'], [1, 1, 1])
+                self.assertEqual(len(metric['paired_after_over_before']), 6)
+        # 不以一个样本数组混淆相关的配对和独立轮次。
+        p50 = result['summary']['plain:native']['metrics']['p50_ms']
+        self.assertNotEqual(p50['median_paired_ratio'], p50['median_round_ratio'])
+
+    def test_abba_failure_keeps_completed_prefix(self):
+        for changed in ('schema', 'state', 'timeout'):
+            with self.subTest(changed=changed):
+                self.collect(changed, order_pattern='abba')
 
     def test_identity_schema_and_state_faults_preserve_only_valid_partial(self):
         for changed in ("package", "schema", "state", "binary", "missing-report", "timeout"):
@@ -189,6 +221,29 @@ class ModPerfCompareTests(unittest.TestCase):
         self.assertIsNone(metric["median_paired_ratio"])
         self.assertEqual(metric["paired_after_minus_before"], [2, 1])
 
+    def test_abba_zero_denominator_and_missing_second_pair(self):
+        runs = self.pair_reports([0, 0], [2, 2])
+        for run in runs:
+            run['pair'] = run['repetition']
+            run['repetition'] = 1
+            run['order_pattern'] = 'abba'
+        result = MODULE.paired_summary(runs)['plain:chain']['metrics']['p99_ms']
+        self.assertEqual(result['round_before_means'], [0])
+        self.assertEqual(result['round_after_minus_before'], [2])
+        self.assertEqual(result['round_after_over_before'], [None])
+        self.assertIsNone(result['median_round_ratio'])
+        with self.assertRaisesRegex(RuntimeError, '轮次不完整'):
+            MODULE.paired_summary(runs[:2])
+        mixed = copy.deepcopy(runs)
+        mixed[-1]['order_pattern'] = 'adjacent'
+        with self.assertRaisesRegex(RuntimeError, '采集顺序'):
+            MODULE.paired_summary(mixed)
+        for value in (True, 0, 3):
+            bad = copy.deepcopy(runs)
+            bad[0]['pair'] = value
+            with self.subTest(pair=value), self.assertRaisesRegex(RuntimeError, '成对样本'):
+                MODULE.paired_summary(bad)
+
     def test_missing_or_duplicate_pair_is_rejected(self):
         runs = self.pair_reports([1], [2])
         for bad in (runs[:1], runs + [copy.deepcopy(runs[0])]):
@@ -200,6 +255,7 @@ class ModPerfCompareTests(unittest.TestCase):
             out = Path(temp) / "result.json"
             for flags in (["--ticks", "0"], ["--repetitions", "0"], ["--rooms", "5"],
                           ["--links-per-room", "401"], ["--timeout", "0"],
+                          ["--order-pattern", "random"],
                           ["--modes", "chain", "chain"], ["--profile-before", "unused"],
                           ["--profile", "--modes", "native"]):
                 argv = [str(PROBE), "--before", "unused", "--output", str(out), *flags]

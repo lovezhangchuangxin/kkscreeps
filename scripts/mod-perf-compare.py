@@ -46,14 +46,27 @@ def paired_summary(runs):
         selected = [run for run in runs if (run["mode"], run["instrumented"]) == (mode, profile)]
         pairs = {}
         schemas = {}
+        patterns = {run.get("order_pattern", "adjacent") for run in selected}
+        if len(patterns) != 1 or not patterns <= {"adjacent", "abba"}:
+            raise RuntimeError("采集顺序口径不一致或不支持")
+        pattern = next(iter(patterns))
         for run in selected:
             GUARD.check_profile_identity(schemas, run["version"], run)
-            pair = pairs.setdefault(run["repetition"], {})
+            repetition, pair_id = run["repetition"], run.get("pair", 1)
+            if type(repetition) is not int or repetition < 1 or type(pair_id) is not int:
+                raise RuntimeError("成对样本轮次或配对编号无效")
+            pair = pairs.setdefault((repetition, pair_id), {})
             if run["version"] in pair:
                 raise RuntimeError("重复的成对样本")
             pair[run["version"]] = run
         if any(set(pair) != {"before", "after"} for pair in pairs.values()):
             raise RuntimeError("成对样本不完整")
+        rounds = {}
+        for (repetition, pair_id), pair in pairs.items():
+            rounds.setdefault(repetition, {})[pair_id] = pair
+        expected_pairs = {1, 2} if pattern == "abba" else {1}
+        if any(set(pairs_in_round) != expected_pairs for pairs_in_round in rounds.values()):
+            raise RuntimeError("成对样本轮次不完整或配对编号无效")
         metrics = {}
         for metric in ("p50_ms", "p95_ms", "p99_ms", "cpu_core_ms_per_tick"):
             section = "process" if metric == "cpu_core_ms_per_tick" else "wall"
@@ -61,6 +74,13 @@ def paired_summary(runs):
             after = [pair["after"][section][metric] for pair in pairs.values()]
             deltas = [new - old for old, new in zip(before, after)]
             ratios = [new / old if old else None for old, new in zip(before, after)]
+            # ABBA/BAAB 的每轮两端均值保留平衡位置；不将相关的两对当作两轮。
+            round_before = [statistics.mean(pair["before"][section][metric] for pair in group.values())
+                            for group in rounds.values()]
+            round_after = [statistics.mean(pair["after"][section][metric] for pair in group.values())
+                           for group in rounds.values()]
+            round_deltas = [new - old for old, new in zip(round_before, round_after)]
+            round_ratios = [new / old if old else None for old, new in zip(round_before, round_after)]
             metrics[metric] = {
                 "before_runs": before, "after_runs": after,
                 "median_before": statistics.median(before), "median_after": statistics.median(after),
@@ -69,8 +89,13 @@ def paired_summary(runs):
                 "paired_after_over_before": ratios,
                 # 零基线不能定义倍率；保留全部轮次，不删除零值后再算中位数。
                 "median_paired_ratio": None if None in ratios else statistics.median(ratios),
+                "round_before_means": round_before, "round_after_means": round_after,
+                "round_after_minus_before": round_deltas,
+                "round_after_over_before": round_ratios,
+                "median_round_delta": statistics.median(round_deltas),
+                "median_round_ratio": None if None in round_ratios else statistics.median(round_ratios),
             }
-        item = {"pairs": len(pairs), "metrics": metrics}
+        item = {"pairs": len(pairs), "rounds": len(rounds), "order_pattern": pattern, "metrics": metrics}
         if profile:
             item["profile_ms_per_tick"] = {
                 version: {
@@ -95,6 +120,8 @@ def main():
     parser.add_argument("--warmup", type=int, default=500)
     parser.add_argument("--ticks", type=int, default=3000)
     parser.add_argument("--repetitions", type=int, default=5)
+    parser.add_argument("--order-pattern", choices=("adjacent", "abba"), default="adjacent",
+                        help="adjacent 每轮一对；abba 每轮 ABBA/BAAB 两对，另汇总每轮均值差")
     parser.add_argument("--modes", nargs="+", choices=GUARD.MODES, default=list(GUARD.MODES))
     parser.add_argument("--profile", action="store_true", help="另采完整链诊断，普通窗口保持无插桩")
     parser.add_argument("--timeout", type=int, default=600, help="每个子进程的外层期限，单位秒")
@@ -122,7 +149,7 @@ def main():
         binaries["profile_before"] = args.profile_before.resolve()
     hashes = {name: digest(path) for name, path in binaries.items()}
     configuration = {key: getattr(args, key) for key in
-                     ("rooms", "links_per_room", "warmup", "ticks", "repetitions", "modes", "profile", "timeout")}
+                     ("rooms", "links_per_room", "warmup", "ticks", "repetitions", "modes", "profile", "timeout", "order_pattern")}
     configuration["fixtures"] = str(args.fixtures.resolve())
     runs, identities, schemas = [], {}, {}
     def save_partial(*, exclusive=False):
@@ -141,8 +168,11 @@ def main():
             if args.profile:
                 tasks.append(("chain", True))
             versions = ("after", "before") if rep % 2 else ("before", "after")
+            captures = [(1, version) for version in versions]
+            if args.order_pattern == "abba":
+                captures.extend((2, version) for version in reversed(versions))
             for mode, profile in tasks:
-                for version in versions:
+                for pair_id, version in captures:
                     label = "profile_before" if profile and version == "before" and args.profile_before else version
                     binary = binaries[label]
                     if digest(binary) != hashes[label]:
@@ -172,17 +202,20 @@ def main():
                         reference = states
                     if reference != states:
                         raise RuntimeError("两端或模式的对象状态不等价")
-                    report.update(version=version, binary_label=label, instrumented=profile, repetition=rep + 1)
+                    report.update(version=version, binary_label=label, instrumented=profile,
+                                  repetition=rep + 1, pair=pair_id, order_pattern=args.order_pattern)
                     runs.append(report)
                     save_partial()
-                    print(f"完成 repetition={rep + 1} version={version} mode={mode} profile={profile}", flush=True)
+                    print(f"完成 repetition={rep + 1} pair={pair_id} version={version} mode={mode} profile={profile}", flush=True)
     result = {
         "complete": True, "scope": "paired Mod pure settlement; no player execution or projection",
         "platform": platform.platform(), "binaries": hashes, "configuration": configuration,
         "summary": paired_summary(runs), "runs": runs,
         "limitations": [
             "桌面负载与频率未控制；增加窗口不能替代稳定基准机，无性能硬门禁",
-            "成对倍率为每轮 after/before 的中位数；各窗口 P99 仍全部保留",
+            "成对倍率为逐对 after/before 的中位数；各窗口 P99 仍全部保留",
+            "ABBA/BAAB 每轮四窗口、两对相关；另列各轮两端窗口指标均值的倍率，不等于合并 tick 后的分位数",
+            "平衡顺序只抵消等间隔加性线性漂移，不消除非线性漂移、不同运行时长或外部负载",
             "诊断阶段为包含耗时，增加插桩成本，与普通窗口分开",
             "合成 link 世界，chain 额外维护四个计数；不代表真实玩家、持久化或网络",
         ],

@@ -1,0 +1,833 @@
+{
+  "purpose": "逐 tick 诊断与本地测量波动排查；不关闭历史回归问题，不代表整体性能验收",
+  "files": {
+    "mod-tick-aa-perf-2026-10-04.json": {
+      "sha256": "fbe4534454b7904b006bcc9e53c7141918ff5ad4987c33369c9108ffbde5d22c",
+      "windows": 20
+    },
+    "mod-tick-tool-perf-2026-10-04.json": {
+      "sha256": "598445a41d18ad45133bcfbd26be77947968b2117e766040cd929e78812cfaa5",
+      "windows": 12
+    },
+    "mod-tick-tool-empty-long-perf-2026-10-04.json": {
+      "sha256": "9a2130723df9b717575291e9a374f1f34a2f7fbbee6f620ee1a294ba00d41d45",
+      "windows": 10
+    },
+    "mod-tick-diagnostics-perf-2026-10-04.json": {
+      "sha256": "ac1f0782c3d2e7e6cb944311ba3831a0e2b26d335a98a3ee202faf57a6782efa",
+      "windows": 9
+    }
+  },
+  "windows": 51,
+  "diagnostic_samples": 4500,
+  "diagnostic_runs": [
+    {
+      "mode": "native",
+      "repetition": 1,
+      "count": 500,
+      "wall": {
+        "count": 500,
+        "p50_ms": 2.007291,
+        "p95_ms": 2.073584,
+        "p99_ms": 2.118667,
+        "max_ms": 2.175916,
+        "sum_ms": 1004.3156230000006
+      },
+      "sampling_wall_us_per_tick": 0.6789199999999962,
+      "sampled_cpu_core_ms_sum": 1004.3669999999993,
+      "voluntary_context_switches": 0,
+      "involuntary_context_switches": 24,
+      "top_10_wall_samples": [
+        {
+          "tick": 518,
+          "wall_ms": 2.175916,
+          "cpu_core_ms": 2.1359999999999673,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 5
+        },
+        {
+          "tick": 463,
+          "wall_ms": 2.168334,
+          "cpu_core_ms": 2.1689999999999827,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 517,
+          "wall_ms": 2.138834,
+          "cpu_core_ms": 2.1159999999999854,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 5
+        },
+        {
+          "tick": 494,
+          "wall_ms": 2.128583,
+          "cpu_core_ms": 2.130000000000109,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 487,
+          "wall_ms": 2.1246250000000004,
+          "cpu_core_ms": 2.1249999999998863,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 491,
+          "wall_ms": 2.118667,
+          "cpu_core_ms": 2.119000000000028,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 480,
+          "wall_ms": 2.115958,
+          "cpu_core_ms": 2.1159999999999854,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 495,
+          "wall_ms": 2.111792,
+          "cpu_core_ms": 2.1119999999998527,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 496,
+          "wall_ms": 2.110542,
+          "cpu_core_ms": 2.11099999999999,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 488,
+          "wall_ms": 2.1089580000000003,
+          "cpu_core_ms": 2.1090000000000373,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        }
+      ]
+    },
+    {
+      "mode": "empty",
+      "repetition": 1,
+      "count": 500,
+      "wall": {
+        "count": 500,
+        "p50_ms": 1.880708,
+        "p95_ms": 2.0322920000000004,
+        "p99_ms": 2.099583,
+        "max_ms": 2.189916,
+        "sum_ms": 950.865539
+      },
+      "sampling_wall_us_per_tick": 0.6804179999999963,
+      "sampled_cpu_core_ms_sum": 950.9980000000025,
+      "voluntary_context_switches": 0,
+      "involuntary_context_switches": 6,
+      "top_10_wall_samples": [
+        {
+          "tick": 518,
+          "wall_ms": 2.189916,
+          "cpu_core_ms": 2.1800000000000637,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 2
+        },
+        {
+          "tick": 516,
+          "wall_ms": 2.182083,
+          "cpu_core_ms": 2.1829999999999927,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 580,
+          "wall_ms": 2.14575,
+          "cpu_core_ms": 2.1469999999999345,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 520,
+          "wall_ms": 2.107084,
+          "cpu_core_ms": 2.106999999999971,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 515,
+          "wall_ms": 2.103084,
+          "cpu_core_ms": 2.0950000000000273,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 2
+        },
+        {
+          "tick": 594,
+          "wall_ms": 2.099583,
+          "cpu_core_ms": 2.0989999999999327,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 589,
+          "wall_ms": 2.093917,
+          "cpu_core_ms": 2.094000000000051,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 573,
+          "wall_ms": 2.089625,
+          "cpu_core_ms": 2.089999999999918,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 590,
+          "wall_ms": 2.083,
+          "cpu_core_ms": 2.0829999999998563,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 575,
+          "wall_ms": 2.067458,
+          "cpu_core_ms": 2.0670000000002346,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        }
+      ]
+    },
+    {
+      "mode": "chain",
+      "repetition": 1,
+      "count": 500,
+      "wall": {
+        "count": 500,
+        "p50_ms": 26.284834,
+        "p95_ms": 27.027917,
+        "p99_ms": 27.375,
+        "max_ms": 34.494542,
+        "sum_ms": 13165.390429000003
+      },
+      "sampling_wall_us_per_tick": 1.4234919999999955,
+      "sampled_cpu_core_ms_sum": 13630.350999999982,
+      "voluntary_context_switches": 0,
+      "involuntary_context_switches": 210989,
+      "top_10_wall_samples": [
+        {
+          "tick": 232,
+          "wall_ms": 34.494542,
+          "cpu_core_ms": 34.75699999999961,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 460
+        },
+        {
+          "tick": 217,
+          "wall_ms": 29.152542,
+          "cpu_core_ms": 29.591999999998734,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 506
+        },
+        {
+          "tick": 431,
+          "wall_ms": 27.589458,
+          "cpu_core_ms": 28.391999999999825,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 461
+        },
+        {
+          "tick": 225,
+          "wall_ms": 27.466082999999998,
+          "cpu_core_ms": 29.114000000000487,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 446
+        },
+        {
+          "tick": 454,
+          "wall_ms": 27.434167,
+          "cpu_core_ms": 28.386999999998807,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 436
+        },
+        {
+          "tick": 444,
+          "wall_ms": 27.375,
+          "cpu_core_ms": 28.829999999999927,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 443
+        },
+        {
+          "tick": 456,
+          "wall_ms": 27.373792,
+          "cpu_core_ms": 28.947000000000116,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 441
+        },
+        {
+          "tick": 430,
+          "wall_ms": 27.365875000000003,
+          "cpu_core_ms": 28.137000000000626,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 441
+        },
+        {
+          "tick": 130,
+          "wall_ms": 27.364083,
+          "cpu_core_ms": 28.24200000000019,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 411
+        },
+        {
+          "tick": 600,
+          "wall_ms": 27.360042,
+          "cpu_core_ms": 28.170999999998457,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 435
+        }
+      ]
+    },
+    {
+      "mode": "empty",
+      "repetition": 2,
+      "count": 500,
+      "wall": {
+        "count": 500,
+        "p50_ms": 1.880917,
+        "p95_ms": 2.055542,
+        "p99_ms": 2.115541,
+        "max_ms": 2.215458,
+        "sum_ms": 954.5006489999989
+      },
+      "sampling_wall_us_per_tick": 0.671141999999997,
+      "sampled_cpu_core_ms_sum": 954.6830000000007,
+      "voluntary_context_switches": 0,
+      "involuntary_context_switches": 5,
+      "top_10_wall_samples": [
+        {
+          "tick": 582,
+          "wall_ms": 2.215458,
+          "cpu_core_ms": 2.216000000000122,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 585,
+          "wall_ms": 2.163833,
+          "cpu_core_ms": 2.1639999999999873,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 580,
+          "wall_ms": 2.157291,
+          "cpu_core_ms": 2.15099999999984,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 2
+        },
+        {
+          "tick": 581,
+          "wall_ms": 2.155583,
+          "cpu_core_ms": 2.1559999999997217,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 566,
+          "wall_ms": 2.115542,
+          "cpu_core_ms": 2.115000000000009,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 574,
+          "wall_ms": 2.115541,
+          "cpu_core_ms": 2.115000000000009,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 513,
+          "wall_ms": 2.102917,
+          "cpu_core_ms": 2.1019999999999754,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 1
+        },
+        {
+          "tick": 584,
+          "wall_ms": 2.102833,
+          "cpu_core_ms": 2.1030000000000655,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 583,
+          "wall_ms": 2.1021669999999997,
+          "cpu_core_ms": 2.1030000000000655,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 587,
+          "wall_ms": 2.096667,
+          "cpu_core_ms": 2.0970000000002074,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        }
+      ]
+    },
+    {
+      "mode": "chain",
+      "repetition": 2,
+      "count": 500,
+      "wall": {
+        "count": 500,
+        "p50_ms": 26.312042,
+        "p95_ms": 27.2835,
+        "p99_ms": 27.690125,
+        "max_ms": 31.551792000000003,
+        "sum_ms": 13192.11505500001
+      },
+      "sampling_wall_us_per_tick": 1.9242099999999875,
+      "sampled_cpu_core_ms_sum": 13664.145000000008,
+      "voluntary_context_switches": 0,
+      "involuntary_context_switches": 211380,
+      "top_10_wall_samples": [
+        {
+          "tick": 111,
+          "wall_ms": 31.551792000000003,
+          "cpu_core_ms": 31.826000000000022,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 482
+        },
+        {
+          "tick": 271,
+          "wall_ms": 30.744958,
+          "cpu_core_ms": 31.563000000000102,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 484
+        },
+        {
+          "tick": 101,
+          "wall_ms": 28.270625,
+          "cpu_core_ms": 29.221999999999753,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 425
+        },
+        {
+          "tick": 575,
+          "wall_ms": 27.838207999999998,
+          "cpu_core_ms": 28.814000000000306,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 540
+        },
+        {
+          "tick": 286,
+          "wall_ms": 27.82425,
+          "cpu_core_ms": 29.337000000000444,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 473
+        },
+        {
+          "tick": 299,
+          "wall_ms": 27.690125,
+          "cpu_core_ms": 28.636000000000422,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 440
+        },
+        {
+          "tick": 361,
+          "wall_ms": 27.637375,
+          "cpu_core_ms": 28.59099999999853,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 430
+        },
+        {
+          "tick": 204,
+          "wall_ms": 27.605416,
+          "cpu_core_ms": 28.358000000000175,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 436
+        },
+        {
+          "tick": 188,
+          "wall_ms": 27.525291,
+          "cpu_core_ms": 28.38000000000102,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 450
+        },
+        {
+          "tick": 117,
+          "wall_ms": 27.447833000000003,
+          "cpu_core_ms": 28.35199999999986,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 411
+        }
+      ]
+    },
+    {
+      "mode": "native",
+      "repetition": 2,
+      "count": 500,
+      "wall": {
+        "count": 500,
+        "p50_ms": 2.04775,
+        "p95_ms": 2.1719999999999997,
+        "p99_ms": 2.2477500000000004,
+        "max_ms": 2.390125,
+        "sum_ms": 1026.915878
+      },
+      "sampling_wall_us_per_tick": 0.7658079999999967,
+      "sampled_cpu_core_ms_sum": 1026.4050000000016,
+      "voluntary_context_switches": 0,
+      "involuntary_context_switches": 154,
+      "top_10_wall_samples": [
+        {
+          "tick": 546,
+          "wall_ms": 2.390125,
+          "cpu_core_ms": 2.2999999999999545,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 18
+        },
+        {
+          "tick": 471,
+          "wall_ms": 2.317375,
+          "cpu_core_ms": 2.294999999999959,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 6
+        },
+        {
+          "tick": 530,
+          "wall_ms": 2.2979160000000003,
+          "cpu_core_ms": 2.2789999999999964,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 5
+        },
+        {
+          "tick": 532,
+          "wall_ms": 2.2556249999999998,
+          "cpu_core_ms": 2.242999999999938,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 2
+        },
+        {
+          "tick": 529,
+          "wall_ms": 2.2516670000000003,
+          "cpu_core_ms": 2.25200000000018,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 274,
+          "wall_ms": 2.2477500000000004,
+          "cpu_core_ms": 2.2280000000000655,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 4
+        },
+        {
+          "tick": 470,
+          "wall_ms": 2.2389580000000002,
+          "cpu_core_ms": 2.2390000000000327,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 472,
+          "wall_ms": 2.2303330000000003,
+          "cpu_core_ms": 2.2129999999999654,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 4
+        },
+        {
+          "tick": 467,
+          "wall_ms": 2.229,
+          "cpu_core_ms": 2.230000000000018,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 436,
+          "wall_ms": 2.224541,
+          "cpu_core_ms": 2.224999999999909,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        }
+      ]
+    },
+    {
+      "mode": "chain",
+      "repetition": 3,
+      "count": 500,
+      "wall": {
+        "count": 500,
+        "p50_ms": 26.365917,
+        "p95_ms": 27.249875,
+        "p99_ms": 29.069542000000002,
+        "max_ms": 49.7875,
+        "sum_ms": 13243.313842000003
+      },
+      "sampling_wall_us_per_tick": 2.0036359999999904,
+      "sampled_cpu_core_ms_sum": 13709.376000000017,
+      "voluntary_context_switches": 0,
+      "involuntary_context_switches": 211953,
+      "top_10_wall_samples": [
+        {
+          "tick": 325,
+          "wall_ms": 49.7875,
+          "cpu_core_ms": 32.91399999999885,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 940
+        },
+        {
+          "tick": 532,
+          "wall_ms": 30.69325,
+          "cpu_core_ms": 31.304000000000087,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 500
+        },
+        {
+          "tick": 312,
+          "wall_ms": 30.214542,
+          "cpu_core_ms": 31.438000000000102,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 489
+        },
+        {
+          "tick": 226,
+          "wall_ms": 29.947583,
+          "cpu_core_ms": 30.31300000000101,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 667
+        },
+        {
+          "tick": 324,
+          "wall_ms": 29.216375,
+          "cpu_core_ms": 28.933999999999287,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 570
+        },
+        {
+          "tick": 108,
+          "wall_ms": 29.069542000000002,
+          "cpu_core_ms": 30.157000000000608,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 449
+        },
+        {
+          "tick": 326,
+          "wall_ms": 28.728792,
+          "cpu_core_ms": 29.368000000002212,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 543
+        },
+        {
+          "tick": 478,
+          "wall_ms": 28.33775,
+          "cpu_core_ms": 29.242000000002008,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 428
+        },
+        {
+          "tick": 107,
+          "wall_ms": 28.199708,
+          "cpu_core_ms": 28.914000000000215,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 437
+        },
+        {
+          "tick": 306,
+          "wall_ms": 28.100375,
+          "cpu_core_ms": 29.170000000000073,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 442
+        }
+      ]
+    },
+    {
+      "mode": "native",
+      "repetition": 3,
+      "count": 500,
+      "wall": {
+        "count": 500,
+        "p50_ms": 1.882875,
+        "p95_ms": 1.952458,
+        "p99_ms": 2.05375,
+        "max_ms": 2.0800419999999997,
+        "sum_ms": 944.9226800000006
+      },
+      "sampling_wall_us_per_tick": 0.6577819999999956,
+      "sampled_cpu_core_ms_sum": 945.0829999999994,
+      "voluntary_context_switches": 0,
+      "involuntary_context_switches": 0,
+      "top_10_wall_samples": [
+        {
+          "tick": 589,
+          "wall_ms": 2.0800419999999997,
+          "cpu_core_ms": 2.0799999999997,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 588,
+          "wall_ms": 2.07975,
+          "cpu_core_ms": 2.0800000000001546,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 598,
+          "wall_ms": 2.07225,
+          "cpu_core_ms": 2.0720000000001164,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 590,
+          "wall_ms": 2.059375,
+          "cpu_core_ms": 2.0589999999997417,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 597,
+          "wall_ms": 2.0585,
+          "cpu_core_ms": 2.0579999999997654,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 600,
+          "wall_ms": 2.05375,
+          "cpu_core_ms": 2.0550000000000637,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 599,
+          "wall_ms": 2.038458,
+          "cpu_core_ms": 2.038000000000011,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 595,
+          "wall_ms": 2.026583,
+          "cpu_core_ms": 2.02800000000002,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 594,
+          "wall_ms": 2.023917,
+          "cpu_core_ms": 2.0240000000001146,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 592,
+          "wall_ms": 2.020625,
+          "cpu_core_ms": 2.020000000000209,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        }
+      ]
+    },
+    {
+      "mode": "empty",
+      "repetition": 3,
+      "count": 500,
+      "wall": {
+        "count": 500,
+        "p50_ms": 1.8887909999999999,
+        "p95_ms": 2.091875,
+        "p99_ms": 2.134541,
+        "max_ms": 2.190708,
+        "sum_ms": 960.5622170000001
+      },
+      "sampling_wall_us_per_tick": 0.6789099999999961,
+      "sampled_cpu_core_ms_sum": 960.7209999999999,
+      "voluntary_context_switches": 0,
+      "involuntary_context_switches": 4,
+      "top_10_wall_samples": [
+        {
+          "tick": 509,
+          "wall_ms": 2.190708,
+          "cpu_core_ms": 2.1920000000000073,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 576,
+          "wall_ms": 2.181542,
+          "cpu_core_ms": 2.1820000000002437,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 575,
+          "wall_ms": 2.1795,
+          "cpu_core_ms": 2.1790000000000873,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 508,
+          "wall_ms": 2.1725,
+          "cpu_core_ms": 2.1700000000000728,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 1
+        },
+        {
+          "tick": 577,
+          "wall_ms": 2.14025,
+          "cpu_core_ms": 2.1399999999998727,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 560,
+          "wall_ms": 2.134541,
+          "cpu_core_ms": 2.1319999999998345,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 1
+        },
+        {
+          "tick": 537,
+          "wall_ms": 2.133584,
+          "cpu_core_ms": 2.1340000000000146,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 579,
+          "wall_ms": 2.1319160000000004,
+          "cpu_core_ms": 2.132000000000062,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        },
+        {
+          "tick": 574,
+          "wall_ms": 2.1171670000000002,
+          "cpu_core_ms": 2.106999999999971,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 2
+        },
+        {
+          "tick": 581,
+          "wall_ms": 2.116625,
+          "cpu_core_ms": 2.1169999999997344,
+          "voluntary_context_switches": 0,
+          "involuntary_context_switches": 0
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "A/A 的 before/after 只是两次相邻进程的标签，两端二进制相同",
+    "短窗口和长窗口分别保留；不能合并或择优替换",
+    "CPU 为全部线程，getrusage 窗口略宽于 wall；差值不是精确等待时长",
+    "上下文切换计数不定位线程，不证明看门狗或 GC 是原因",
+    "桌面外部负载、温度、频率未控制；额外诊断系统调用有开销"
+  ]
+}

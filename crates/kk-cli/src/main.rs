@@ -61,6 +61,9 @@ enum Command {
         /// 开启 op/候选/预算包含计时；诊断耗时不能作为无插桩性能基线
         #[arg(long)]
         profile: bool,
+        /// 保留逐 tick 墙钟、进程 CPU 与上下文切换；额外采样只用于诊断
+        #[arg(long)]
+        tick_diagnostics: bool,
         #[arg(long, value_enum)]
         mode: mod_perf_probe::Mode,
         #[arg(long, default_value_t = 1)]
@@ -134,6 +137,7 @@ fn main() {
         }
         Command::ModPerfProbe {
             profile,
+            tick_diagnostics,
             mode,
             rooms,
             links_per_room,
@@ -144,6 +148,7 @@ fn main() {
         } => {
             std::process::exit(mod_perf_probe::run(mod_perf_probe::Options {
                 profile,
+                tick_diagnostics,
                 mode,
                 rooms,
                 links_per_room,

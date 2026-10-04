@@ -6,6 +6,12 @@ use serde_json::{Value, json};
 
 const MAX_RSS_SAMPLES: usize = 50_000;
 
+pub(crate) struct ProcessUsage {
+    pub cpu_core_ms: f64,
+    pub voluntary_context_switches: u64,
+    pub involuntary_context_switches: u64,
+}
+
 pub(crate) struct ProcessProbe {
     started: Instant,
     cpu_before: f64,
@@ -64,7 +70,7 @@ impl ProcessProbe {
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-fn cpu_ms() -> anyhow::Result<f64> {
+pub(crate) fn process_usage() -> anyhow::Result<ProcessUsage> {
     let mut usage = std::mem::MaybeUninit::<libc::rusage>::uninit();
     // getrusage 填满有效输出缓冲区；只在返回成功后读取。
     let rc = unsafe { libc::getrusage(libc::RUSAGE_SELF, usage.as_mut_ptr()) };
@@ -73,7 +79,15 @@ fn cpu_ms() -> anyhow::Result<f64> {
     }
     let usage = unsafe { usage.assume_init() };
     let ms = |t: libc::timeval| t.tv_sec as f64 * 1000.0 + t.tv_usec as f64 / 1000.0;
-    Ok(ms(usage.ru_utime) + ms(usage.ru_stime))
+    Ok(ProcessUsage {
+        cpu_core_ms: ms(usage.ru_utime) + ms(usage.ru_stime),
+        voluntary_context_switches: usage.ru_nvcsw.try_into()?,
+        involuntary_context_switches: usage.ru_nivcsw.try_into()?,
+    })
+}
+
+fn cpu_ms() -> anyhow::Result<f64> {
+    Ok(process_usage()?.cpu_core_ms)
 }
 
 #[cfg(target_os = "macos")]
@@ -110,7 +124,7 @@ fn resident_bytes() -> anyhow::Result<u64> {
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-fn cpu_ms() -> anyhow::Result<f64> {
+pub(crate) fn process_usage() -> anyhow::Result<ProcessUsage> {
     anyhow::bail!("进程资源采样目前仅支持 macOS/Linux")
 }
 

@@ -294,6 +294,46 @@ fn native_wait_is_not_cpu_and_queued_checks_use_current_call_budget()
     Ok(())
 }
 
+#[test]
+fn settlement_excludes_rust_cpu_and_wait_between_callbacks()
+-> Result<(), Box<dyn std::error::Error>> {
+    let root = Root(std::env::temp_dir().join(format!("kk-mod-limit-gap-{}", std::process::id())));
+    let dir = root.0.join("test");
+    std::fs::create_dir_all(&dir)?;
+    std::fs::write(
+        dir.join("mod.json"),
+        r#"{"id":"test","version":"1.0.0","apiVersion":"^1.0.0"}"#,
+    )?;
+    std::fs::write(
+        dir.join("server.js"),
+        "export default function register(api){api.handlers.wrap('builtin:link.tick',{id:'pass'},(ctx,next)=>next());}",
+    )?;
+    let packages = discover_packages(&root.0)?;
+    let mut limits = ModVmLimits::default();
+    limits.settlement.cpu = Duration::from_millis(20);
+    limits.settlement.wall = Duration::from_millis(40);
+    let mut realm = ModRealm::with_limits(limits.clone())?;
+    realm.register(
+        &packages,
+        RegisterOptions {
+            vm_limits: limits,
+            ..Default::default()
+        },
+    )?;
+    realm.begin_settlement()?;
+    realm.invoke_chain("builtin:link.tick", Box::new(Host))?;
+    // 两次宿主调用之间实际消耗超过单轮 CPU/墙钟限额，但不属于 Mod 调用额度。
+    let start = kk_vm::cpu_clock::thread_cpu_time()?;
+    let mut value = 0u64;
+    while kk_vm::cpu_clock::thread_cpu_time()?.saturating_sub(start) < Duration::from_millis(30) {
+        value = std::hint::black_box(value.wrapping_add(1));
+    }
+    std::thread::sleep(Duration::from_millis(50));
+    realm.invoke_chain("builtin:link.tick", Box::new(Host))?;
+    realm.end_settlement();
+    Ok(())
+}
+
 // 共享累计预算的超限只定位槽，不把当前 wrap 当作单一责任 Mod。
 fn assert_chain_resource_fault(error: &kk_mod_host::ModHostError) {
     let fault = error.fault.as_ref().expect("资源故障来源");
