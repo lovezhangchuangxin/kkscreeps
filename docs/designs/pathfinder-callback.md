@@ -2,7 +2,7 @@
 
 本文定义玩家 `PathFinder.search` 到原生寻路器的接入契约，重点说明回调时序、矩阵存活、异常传播和预算中断。
 
-当前 [kk-pathfinder](../../crates/kk-pathfinder/src/lib.rs) 已提供原生搜索与 Rust 房间回调。[玩家 prelude](../../crates/kk-runner/src/prelude/30_game/path-finder.js) 已实现 `CostMatrix`，但 `search` 仍是直线步进桩：只读取首个目标，忽略房间、障碍和搜索选项，不调用 `roomCallback`，并返回 `incomplete: false`。因此原生测试通过不代表玩家寻路已经兼容。
+当前 [kk-pathfinder](../../crates/kk-pathfinder/src/lib.rs) 已提供原生搜索与 Rust 房间回调；玩家 `PathFinder.search` 已经 [地形直通](pathfinder-terrain.md) 接入原生搜索（含选项清洗、目标归一与结果形状），`findPath`/`moveTo` 等下游随之下游真化。**尚未接线的是本文的主题——回调通道**：`options.roomCallback` 与 `costCallback` 当前被忽略，`getPathfindingGrid2` 的结构/creep/道路代价矩阵不参与搜索。因此原生回调测试通过不代表玩家回调通路已经兼容。
 
 上游依据使用 `screeps/engine`、`screeps/driver` 的文件与符号定位；下文行号是研究时的辅助位置，核实时须确认采用的源码版本。仓库内的原生来源与接口说明见 `kk-pathfinder`，实验结果不能替代玩家通路的集成验收。
 

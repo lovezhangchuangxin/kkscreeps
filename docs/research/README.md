@@ -9,13 +9,14 @@
 | [01 可行性研究](01-screeps-rust-feasibility.md) | Rust 重构可行吗？收益多大？ | 支持 Rust 重写方向；序列化、存储和任务等待是候选优化点，整体收益预估仍需正式对照 |
 | [02 沙箱选型](02-sandbox-evaluation.md) | 哪个 JS 引擎能承载玩家代码？ | 实验支持选择 deno_core（V8）；QuickJS 有条件可行，Boa 未满足选型要求，均不代表完整游戏 API 验收 |
 | [03 架构深挖](03-architecture-optimizations.md) | 官方还有哪些可优化的地方？ | 提供序列化、查询等局部实验与架构建议；单项倍率不能代表完整系统收益 |
-| [04 游戏功能完整性](04-game-api-feasibility.md) | deno_core 能实现游戏的全部功能吗？ | 语言与宿主交互实验支持实现方向；寻路回调实验可行，生产玩家接入和完整功能验收尚未完成 |
+| [04 游戏功能完整性](04-game-api-feasibility.md) | deno_core 能实现游戏的全部功能吗？ | 语言与宿主交互实验支持实现方向；寻路回调实验可行（地形直通已落地，回调通道与完整功能验收尚未完成） |
 | [05 Mod 扩展能力](05-mod-extensibility-review.md) | 当前架构能达到官方与本地 xxscreeps 的 Mod 扩展能力吗？ | 当前尚未提供完整 Mod 通路；技术方向可保留，需要前移对象、意图、规则替换和事务等扩展契约 |
 | [06 架构与 JS Mod 复审](06-architecture-and-js-mod-review.md) | 整体架构应如何改造，深度玩法能否全部用 JS Mod 实现？ | 保留 Rust/V8/房间模型，补全全域提交、并发派发、开放规则；JS/native 嵌套调用实测可行，完整实现仍待切片 |
 | [07 注释质量调研](07-comment-quality-review.md) | 现有注释为什么难读，怎样避免误导维护者？ | 修复过期说明，分离历史与当前行为，形成[注释规范](../contributing/comment-style.md)和[术语词典](../glossary.md) |
 
 ## notes/ 笔记索引
 
+- [D2 寻路地形直通记录](notes/d2-pathfinder-terrain-2026-10-04.md)：原生搜索接线、TLS 物理内存回归定位与修复、棘轮 1859→1879 与三基线归因。
 - [玩家闭环提交前复审](notes/mod-player-review-2026-10-04.md)：原生目标效果、常驻报告门禁、负面测试与 v2 独立采集。
 - [玩家与 Mod 连续闭环采集](notes/mod-player-workload-2026-10-04.md)：逐玩家真实动作核验、恢复后连续执行、两种通道的同负载原始窗口。
 - [双玩家与 Mod 的恢复闭环](notes/mod-multiplayer-recovery-2026-10-04.md)：双房间、两种投影、玩家类方法、串行参考、自动停用与晚期写回失败。

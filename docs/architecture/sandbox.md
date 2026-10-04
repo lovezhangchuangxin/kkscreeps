@@ -57,7 +57,7 @@ CommonJS 加载器按上传模块名加载，只去掉 `./` 前缀，不解析 `
 
 模块有效且入口符合缓存检查时可跨 tick 复用；每轮检查 require、timestamp、cache 和 main.loop，条件不满足则整体重建缓存。全局提供 lodash 3.10.1；Buffer 是项目实现的子集，不能据此承诺完整 Node 环境。
 
-当前实例创建时执行 lodash、常量和 prelude 脚本，没有预生成的游戏运行时启动快照。独立 `kk-pathfinder` 已有原生接口和回调支持，但玩家 `PathFinder.search` 尚未接线；实验中的调用时间不等于当前玩家 API 的性能或兼容性保证。
+当前实例创建时执行 lodash、常量和 prelude 脚本，没有预生成的游戏运行时启动快照。玩家 `PathFinder.search` 经专用 op 同步调用 `kk-pathfinder` 原生搜索（地形随每 tick 世界注入，见 [寻路地形直通](../designs/pathfinder-terrain.md)）；roomCallback 通道尚未接线，实验中的回调调用时间不等于当前玩家 API 的性能或兼容性保证。
 
 ## 宿主与故障边界
 

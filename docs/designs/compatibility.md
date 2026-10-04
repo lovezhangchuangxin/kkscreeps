@@ -48,7 +48,7 @@ API 范围以[功能盘点](../research/notes/game-api-inventory.md)和采用版
 
 | 范围 | 当前行为及影响 | 依据 |
 |---|---|---|
-| 玩家寻路 | PathFinder.search、Room.findPath 与 moveTo 仍使用直线近似或基于该近似的路径，不具备原生搜索的障碍、跨房和完整选项语义 | [寻路接入设计](pathfinder-callback.md)、prelude/30_game/path-finder.js、room.js、creep.js |
+| 玩家寻路 | PathFinder.search/Room.findPath/moveTo 已接原生地形搜索（障碍、跨房、完整选项语义）；剩余分歧：roomCallback/costCallback 被忽略（不叠结构、creep、道路代价矩阵），未注册房按全墙边界处理（起点在墙环外抛 `Could not load terrain data`），垃圾数值选项的确定性归一与官方未定义行为不同 | [地形直通设计](pathfinder-terrain.md)分歧表、[回调接入设计](pathfinder-callback.md)、crates/kk-runner/src/pathfinder.rs |
 | 地图数据 | 出口按坐标推导，缺少官方地图连通标记；getRoomStatus 只覆盖 normal/closed，getWorldSize 固定为 1，距离不实现完整环绕世界语义 | prelude/30_game/game.js 的地图接口 |
 | halt 生命周期 | 中断执行并跳过写回，当前不生成费用，但继续复用 V8；不能视为官方销毁实例的完整等价实现 | [沙箱说明](../architecture/sandbox.md)、sandbox.rs::after_halt |
 | CPU 与堆统计 | getUsed 使用墙钟；堆统计在本轮开始时采样，堆外内存不构成完整限额或峰值报告 | kk-runner 的 sandbox.rs、ops.rs 与玩家 cpu 接口 |

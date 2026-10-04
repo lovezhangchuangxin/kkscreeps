@@ -9,7 +9,7 @@
 - 已有内存世界、游戏规则结算、V8 玩家沙箱，以及玩家执行、候选提交和失败重试的协调层。
 - `kkscreeps embed` 提供标准输入/输出的逐行 JSON 调用服务；`bot-check` 检查真实 bot 的运行情况；`perf-probe` 采集固定负载下的性能数据，`mod-perf-probe` 对比密集对象的纯结算与 Mod 处理链成本。
 - `serve`、`sim`、`test`、`import` 仍为预留命令，调用时返回退出码 2。HTTP/WebSocket 服务、数据库持久化和前端应用尚未实现。
-- `kk-pathfinder` 已提供独立的原生寻路接口，但玩家沙箱中的 `PathFinder.search` 尚未接入它，目前使用忽略障碍的直线近似。
+- `kk-pathfinder` 的原生寻路已接入玩家沙箱：`PathFinder.search`/`Room.findPath`/`moveTo` 走真实地形搜索；roomCallback/costCallback 通道尚未接线（传入即忽略）。
 
 兼容性测试的结果见 [最新入库报告](compat/reports/kkscreeps.json)，通过数下限与用例总数由 [ratchet.json](compat/reports/ratchet.json) 管理。启用某项适配器能力表示允许运行对应测试，不表示该组全部通过。具体运行方法和回归判定见 [兼容性验收说明](compat/README.md)。
 
