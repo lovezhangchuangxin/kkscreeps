@@ -346,6 +346,148 @@ pub(super) fn kkpv_multi_player_concurrency_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// 共享公开束的跨 tick 钉住端到端锁定。玩家把当轮地形视图钉进模块全局
+/// （globalThis 数组逐 tick 追加）时须保持的性质：
+/// - Rust 侧保留报告是存活下界：派发结束后句柄全部释放，稳态只列当前
+///   代际（tick 等于本轮执行绑定值）且束体积逐轮不膨胀；被钉视图只在
+///   V8 堆内滞留、受 V8 外部内存压力间接约束且无硬上限，不进报告读数，
+///   也不在本测试断言范围。报告只数库句柄：工作者只携带共享束的
+///   BackingStore 引用，不持有库内条目句柄。
+/// - 拷出语义隔离：篡改 getRawBuffer 返回的拷贝不影响同一玩家对被篡改
+///   格的当轮读取（拷出经加载期捕获的构造器，共享视图不外泄）。
+/// - 旧视图存活且值不变：最早钉住的视图逐轮仍可读、内容不变；旧代际
+///   的回收与存活由保留报告（库侧）与旧视图可读（V8 侧）组合锁定。
+/// - 跨玩家完整性：钉住与拷出篡改不改变另一玩家对共享束的读取。
+pub(super) fn kkpv_public_bundle_pin_hostile_impl() -> anyhow::Result<()> {
+    let mut e = EmbedEngine::new();
+    e.set_kkpv_channel(true);
+    e.create_shard(&json!({
+        "players": ["p1", "p2"],
+        "rooms": [{ "name": "W1N1", "rcl": 3, "owner": "p1" },
+                  { "name": "E2N2", "rcl": 3, "owner": "p2" }],
+    }))?;
+    e.place_object(
+        "W1N1",
+        "structure",
+        &json!({ "pos": [20, 20], "structureType": "spawn", "owner": "p1", "store": { "energy": 300 } }),
+    )?;
+    e.place_object(
+        "E2N2",
+        "structure",
+        &json!({ "pos": [20, 20], "structureType": "spawn", "owner": "p2", "store": { "energy": 300 } }),
+    )?;
+    // p1：每 tick 钉住当轮公开束的地形视图，并从拷出副本与最早钉住的
+    // 旧视图两端取样。pins 逐轮 +1 证明模块全局跨 tick 存活——被钉住
+    // 的旧视图内存因此能逐轮线性累积（每 tick 追加一份当轮视图）。
+    let pin_code = r#"(function () {
+  globalThis.__pins = globalThis.__pins || [];
+  globalThis.__pins.push(new Room.Terrain('W1N1'));
+  var before = Game.map.getTerrainAt(10, 10, 'W1N1');
+  var raw = new Room.Terrain('W1N1').getRawBuffer();
+  raw[10 * 50 + 10] = 99;
+  var oldest = globalThis.__pins[0];
+  return JSON.stringify({
+    time: Game.time,
+    pins: globalThis.__pins.length,
+    mutationSafe: Game.map.getTerrainAt(10, 10, 'W1N1') === before,
+    currentAt: globalThis.__pins[globalThis.__pins.length - 1].get(10, 10),
+    oldestAt: oldest.get(10, 10),
+    oldestSum: oldest.getRawBuffer().reduce(function (a, b) { return a + b; }, 0),
+  });
+})()"#;
+    // p2：读自己的房与对方 owned 房的公开地形；地形静态，除去 time 后
+    // 逐轮结果必须完全一致。
+    let probe_code = r#"(function () {
+  var own = new Room.Terrain('E2N2').getRawBuffer();
+  var other = new Room.Terrain('W1N1').getRawBuffer();
+  var ownTerrain = new Room.Terrain('E2N2');
+  return JSON.stringify({
+    time: Game.time,
+    own: 'E2N2:' + own.length + ':' + own.reduce(function (a, b) { return a + b; }, 0),
+    other: 'W1N1:' + other.length + ':' + other.reduce(function (a, b) { return a + b; }, 0),
+    at: [ownTerrain.get(0, 0), ownTerrain.get(25, 25),
+         ownTerrain.get(49, 49), new Room.Terrain('W1N1').get(10, 10)],
+  });
+})()"#;
+    let mut p2_baseline: Option<serde_json::Value> = None;
+    let mut oldest_sum: Option<i64> = None;
+    let mut bundle_bytes: Option<usize> = None;
+    for round in 0..6u64 {
+        let mut codes = std::collections::BTreeMap::new();
+        codes.insert("p1".to_string(), pin_code.to_string());
+        codes.insert("p2".to_string(), probe_code.to_string());
+        let run = e.run_players(&codes)?;
+        assert!(run["p1"].executed, "p1 须执行完成：{:?}", run["p1"].expr);
+        assert!(run["p2"].executed, "p2 须执行完成：{:?}", run["p2"].expr);
+        let p1 = serde_json::from_str::<serde_json::Value>(
+            run["p1"].expr["value"]
+                .as_str()
+                .expect("p1 钉住探针返回字符串"),
+        )?;
+        let p2 = serde_json::from_str::<serde_json::Value>(
+            run["p2"].expr["value"]
+                .as_str()
+                .expect("p2 读取探针返回字符串"),
+        )?;
+        let time = p1["time"].as_u64().expect("time 为数值");
+        assert_eq!(time, round, "第 {round} 轮的执行绑定 tick");
+        assert_eq!(
+            p2["time"].as_u64(),
+            Some(round),
+            "两名玩家同轮绑定同一 tick"
+        );
+        assert_eq!(
+            p1["pins"].as_u64(),
+            Some(round + 1),
+            "模块全局跨 tick 存活，钉住视图逐轮累积"
+        );
+        assert_eq!(
+            p1["mutationSafe"],
+            json!(true),
+            "篡改拷出副本不得影响地形读取"
+        );
+        assert_eq!(
+            p1["oldestAt"].as_i64(),
+            p1["currentAt"].as_i64(),
+            "最早钉住的旧视图读数与当轮新视图一致（地形静态，值不变）"
+        );
+        assert_eq!(
+            p1["oldestAt"].as_i64(),
+            p2["at"][3].as_i64(),
+            "钉住者的旧视图读数与另一玩家的当前读取一致（跨玩家完整性）"
+        );
+        let sum = p1["oldestSum"].as_i64().expect("旧视图求和为数值");
+        if let Some(prev) = oldest_sum {
+            assert_eq!(sum, prev, "被钉住的旧代际束内容逐轮不变");
+        }
+        oldest_sum = Some(sum);
+        // 除去 time 后 p2 的读取逐轮一致：钉住与拷出篡改不改变另一玩家
+        // 对共享束的读取面。
+        let p2_static = {
+            let mut v = p2.clone();
+            v.as_object_mut().expect("p2 探针为对象").remove("time");
+            v
+        };
+        if let Some(base) = &p2_baseline {
+            assert_eq!(&p2_static, base, "p2 共享束读取不受钉住影响");
+        }
+        p2_baseline = Some(p2_static);
+        // Rust 侧存活下界：本轮派发结束后旧代际全部回收，只剩当前代际
+        // 且无库外句柄；V8 堆内滞留不进报告读数。夹具固定（静态地形、
+        // 固定计划），束体积逐轮必须相等——随代际累积膨胀属泄漏形态。
+        let report = e.kkpv_public_retention_report();
+        assert_eq!(report.len(), 1, "稳态保留报告只列当前代际");
+        assert_eq!(report[0].epoch.tick, round, "当前代际即本轮执行绑定 tick");
+        assert_eq!(report[0].handles, 0, "派发结束后无库外句柄");
+        assert!(report[0].bytes > 0, "当前代际束非空");
+        if let Some(prev) = bundle_bytes {
+            assert_eq!(report[0].bytes, prev, "静态夹具下当前代际束体积逐轮不膨胀");
+        }
+        bundle_bytes = Some(report[0].bytes);
+    }
+    Ok(())
+}
+
 /// 真实沙箱的 move、harvest 意图经清洗和结算后，在下一轮玩家视图中可见。
 /// 另用脚本沙箱产生相同意图，比较两种入口的世界变化。
 pub(super) fn embed_intent_channel_impl() -> anyhow::Result<()> {
