@@ -17,6 +17,7 @@
 
 ## notes/ 笔记索引
 
+- [主项目结构治理](notes/source-structure-2026-10-05.md)：17 个超长源码/测试文件按职责拆分、串行入口保持及文件规模门禁。
 - [D4/D6 creep 资源动作槽](notes/d4-creep-resource-slots-2026-10-05.md)：双向处理链、权威只读面、实验室恢复、竞争与停用重试。
 - [D6 link 动作正常拒绝](notes/d6-link-decline-2026-10-05.md)：多对象与事件恢复、跨 Mod state、竞争、异常优先及缓存重试。
 - [D4 仓库容量规则](notes/d4-store-rules-2026-10-05.md)：JS 数值覆盖、建造与槽切换、玩家安装预检一致、竞争与失败重试。

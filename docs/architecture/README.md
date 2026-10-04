@@ -7,6 +7,7 @@
 | 文档 | 内容 |
 |---|---|
 | [overall.md](overall.md) | 当前运行入口、模块职责、实际依赖和数据表示；区分预留模块与目标服务 |
+| [source-organization.md](source-organization.md) | 当前源码模块导航、测试分组与文件规模门禁 |
 | [game-loop.md](game-loop.md) | 当前玩家执行与结算流程，以及并行流水线的目标 |
 | [mod-execution.md](mod-execution.md) | JS/native 组合链、候选访问与当前支持范围 |
 | [store-rules.md](store-rules.md) | 仓库容量的冻结规则、JS 数值覆盖与实际消费者 |

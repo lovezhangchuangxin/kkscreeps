@@ -7,7 +7,8 @@
   },
   "scripts": {
     "fmt": "cargo fmt --all",
-    "check": "cargo fmt --all --check && cargo clippy --workspace --all-targets && cargo test --workspace && pnpm -r run test && node scripts/check-doc-links.mjs",
+    "check": "cargo fmt --all --check && cargo clippy --workspace --all-targets && cargo test --workspace && pnpm -r run test && node scripts/check-doc-links.mjs && node scripts/check-source-size.mjs",
+    "check:source-size": "node scripts/check-source-size.mjs",
     "prepare": "simple-git-hooks"
   },
   "devDependencies": {

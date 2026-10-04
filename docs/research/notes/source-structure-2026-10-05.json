@@ -1,0 +1,147 @@
+{
+  "batch": "source structure governance",
+  "date": "2026-10-05",
+  "baseline": "78155296030f679c4b554b05276de8a51d1cc0f7",
+  "executable_sha256": "296fbab93206d0863d594fcb86b3c6654032bc8489b27c22ccc635a213c156f4",
+  "screeps_ok_pin": "34a630efa42908c117c19c25d2350fa2387bd633",
+  "inventory": {
+    "main_oversized_before": 17,
+    "main_oversized_after": 0,
+    "main_source_files_after": 305,
+    "main_max_lines_after": 1000,
+    "new_rust_modules": 47,
+    "new_js_domain_modules": 2,
+    "entries": [
+      {
+        "path": "crates/kk-schema/src/kkpv.rs",
+        "before_lines": 2581,
+        "after_entry_lines": 298
+      },
+      {
+        "path": "crates/kk-engine/src/settle/mod.rs",
+        "before_lines": 2255,
+        "after_entry_lines": 435
+      },
+      {
+        "path": "crates/kk-runtime/src/embed.rs",
+        "before_lines": 2170,
+        "after_entry_lines": 549
+      },
+      {
+        "path": "crates/kk-runner/src/prelude/30_game/game.js",
+        "before_lines": 1456,
+        "after_entry_lines": 779
+      },
+      {
+        "path": "crates/kk-engine/src/intent.rs",
+        "before_lines": 1422,
+        "after_entry_lines": 842
+      },
+      {
+        "path": "crates/kk-mod-host/tests/register_tests.rs",
+        "before_lines": 1390,
+        "after_entry_lines": 290
+      },
+      {
+        "path": "crates/kk-runner/src/sandbox.rs",
+        "before_lines": 1354,
+        "after_entry_lines": 727
+      },
+      {
+        "path": "crates/kk-world/src/kkpv.rs",
+        "before_lines": 1336,
+        "after_entry_lines": 490
+      },
+      {
+        "path": "crates/kk-engine/tests/settle_tests/m2b_contrib_link_family.rs",
+        "before_lines": 1320,
+        "after_entry_lines": 200
+      },
+      {
+        "path": "crates/kk-engine/tests/settle_tests/c3_ext_intent_family.rs",
+        "before_lines": 1284,
+        "after_entry_lines": 301
+      },
+      {
+        "path": "crates/kk-engine/src/settle/market.rs",
+        "before_lines": 1208,
+        "after_entry_lines": 527
+      },
+      {
+        "path": "crates/kk-runtime/tests/embed_tests/dual_room_live_fire.rs",
+        "before_lines": 1156,
+        "after_entry_lines": 491
+      },
+      {
+        "path": "crates/kk-engine/src/settle/contrib.rs",
+        "before_lines": 1130,
+        "after_entry_lines": 421
+      },
+      {
+        "path": "crates/kk-runtime/tests/embed_tests/embed_channels_and_families.rs",
+        "before_lines": 1095,
+        "after_entry_lines": 12
+      },
+      {
+        "path": "crates/kk-engine/tests/settle_tests/structures_and_attack.rs",
+        "before_lines": 1071,
+        "after_entry_lines": 371
+      },
+      {
+        "path": "crates/kk-runner/tests/sandbox_tests/watchdog_and_memory.rs",
+        "before_lines": 1029,
+        "after_entry_lines": 193
+      },
+      {
+        "path": "crates/kk-runtime/tests/mod_chain_tests.rs",
+        "before_lines": 1014,
+        "after_entry_lines": 155
+      }
+    ],
+    "retained_exclusions": [
+      {
+        "path": "crates/kk-runner/assets/lodash-3.10.1.js",
+        "lines": 12351,
+        "reason": "第三方固定源码",
+        "bytes_unchanged": true
+      },
+      {
+        "path": "spikes/inspector-spike/src/main.rs",
+        "lines": 1394,
+        "reason": "独立实验，不在主项目门禁范围",
+        "bytes_unchanged": true
+      }
+    ]
+  },
+  "checks": {
+    "workspace_check_exit_code": 0,
+    "rust_passed": 648,
+    "rust_failed": 0,
+    "rust_ignored": 11,
+    "mod_chain_tests_passed": 47,
+    "compat_node_passed": 14,
+    "ratchet_exit_code": 0,
+    "compat_passed": 1918,
+    "compat_failed": 89,
+    "compat_skipped": 907,
+    "compat_total": 2914,
+    "status_changes_vs_head": 0,
+    "status_changes_vs_head_parent": 0,
+    "new_skips": 0,
+    "new_exemptions": 0,
+    "source_size_check_exit_code": 0,
+    "size_1000_accepted": true,
+    "size_1001_rejected": true,
+    "untracked_source_checked": true,
+    "schema_rustdoc_exit_code": 0,
+    "schema_rustdoc_warnings": 0
+  },
+  "review": {
+    "public_api_paths_preserved": true,
+    "serial_suite_entry_order_preserved": true,
+    "candidate_commit_and_retry_boundaries_preserved": true,
+    "kkpv_view_fields_remain_private": true,
+    "js_bridges_captured_before_host_unlink": true
+  },
+  "formal_performance_measurement": false
+}

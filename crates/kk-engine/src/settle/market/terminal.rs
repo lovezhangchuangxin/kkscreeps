@@ -1,0 +1,185 @@
+//! terminal 发送与成交共用的库存、手续费和交易流水写入。
+use super::*;
+
+/// 消费已清除 send 字段的请求，转移成功才设置发送方 cooldownTime。
+pub(super) fn execute_send(
+    rooms: &mut [(String, RoomState)],
+    market: &mut MarketState,
+    time: u64,
+    s: PendingSend,
+) {
+    let from_data = read_terminal_data(rooms, s.room, s.id);
+    if from_data
+        .as_ref()
+        .and_then(|v| v.get("cooldownTime"))
+        .and_then(|t| t.as_i64())
+        .is_some_and(|t| t > time as i64)
+    {
+        return;
+    }
+    let Some((to_room, to_id)) = find_user_terminal(rooms, &s.target_room) else {
+        return;
+    };
+    let description = s.description.map(|d| d.replace('<', "&lt;"));
+    let ok = execute_transfer(
+        rooms,
+        (s.room, s.id),
+        (to_room, to_id),
+        &s.resource_type,
+        s.amount,
+        FeeSide::From,
+        description,
+        None,
+        market,
+        time,
+    );
+    if ok {
+        write_cooldown(rooms, s.room, s.id, time + c::TERMINAL_COOLDOWN as u64);
+    }
+}
+
+/// 资源转移费用由发送方或接收方承担，指资源方向，不表示 deal 的发起者。
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) enum FeeSide {
+    From,
+    #[allow(dead_code)]
+    To,
+}
+
+/// 按目标共享容量限制数量，再对限制后的数量计算费用。成功时写回两侧资源
+/// 和费用、记录交易；失败时不写冷却。当前不模拟 terminal power 效果。
+#[allow(clippy::too_many_arguments)]
+pub(super) fn execute_transfer(
+    rooms: &mut [(String, RoomState)],
+    from: (usize, ObjId),
+    to: (usize, ObjId),
+    resource_type: &str,
+    mut amount: i64,
+    fee_side: FeeSide,
+    description: Option<String>,
+    order: Option<serde_json::Value>,
+    market: &mut MarketState,
+    time: u64,
+) -> bool {
+    let Some(from_data) = read_terminal_data(rooms, from.0, from.1) else {
+        return false;
+    };
+    let from_user = from_data
+        .get("owner")
+        .and_then(|s| s.as_str())
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let have = from_data
+        .pointer(&format!("/store/{resource_type}"))
+        .and_then(|s| s.as_i64())
+        .unwrap_or(0);
+    if from_data.get("store").is_none() || have < amount {
+        return false;
+    }
+    let Some(to_data) = read_terminal_data(rooms, to.0, to.1) else {
+        return false;
+    };
+    let to_user = to_data
+        .get("owner")
+        .and_then(|s| s.as_str())
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    if to_user.is_some() {
+        let total: i64 = to_data
+            .get("store")
+            .and_then(|s| s.as_object())
+            .map(|m| m.values().filter_map(|v| v.as_i64()).sum())
+            .unwrap_or(0);
+        let capacity = to_data
+            .get("storeCapacity")
+            .and_then(|s| s.as_i64())
+            .unwrap_or(0);
+        amount = amount.min((capacity - total).max(0));
+    }
+    if !(amount > 0) {
+        return false;
+    }
+    let from_room = rooms[from.0].0.clone();
+    let to_room = rooms[to.0].0.clone();
+    let Some(range) = calc_rooms_distance(&from_room, &to_room) else {
+        return false;
+    };
+    let cost = calc_terminal_energy_cost(amount, range);
+    let energy_ok = match fee_side {
+        FeeSide::From => {
+            let energy = from_data
+                .pointer("/store/energy")
+                .and_then(|s| s.as_i64())
+                .unwrap_or(0);
+            if resource_type == c::RESOURCE_ENERGY {
+                energy >= amount + cost
+            } else {
+                energy >= cost
+            }
+        }
+        FeeSide::To => {
+            let to_energy = to_data
+                .pointer("/store/energy")
+                .and_then(|s| s.as_i64())
+                .unwrap_or(0);
+            to_energy >= cost
+        }
+    };
+    if !energy_ok {
+        return false;
+    }
+    // 发送到同一 terminal 时必须连续更新同一 JSON，避免源、目标快照相互覆盖。
+    // 有主终端资源转移抵消，仅扣能量费用；无主接收方不执行资源入账。
+    let same = from == to;
+    if same {
+        let Some(RoomObject::Generic(g)) = rooms[from.0].1.objects.get_mut(&from.1) else {
+            return false;
+        };
+        let mut v: serde_json::Value = serde_json::from_str(&g.data).unwrap_or_default();
+        if v.get("store").is_none() {
+            return false;
+        }
+        if to_user.is_some() {
+            bump_store(&mut v, resource_type, amount);
+        }
+        bump_store(&mut v, resource_type, -amount);
+        bump_store(&mut v, "energy", -cost);
+        g.data = v.to_string();
+    } else {
+        if to_user.is_some()
+            && let Some(RoomObject::Generic(g)) = rooms[to.0].1.objects.get_mut(&to.1)
+        {
+            let mut v: serde_json::Value = serde_json::from_str(&g.data).unwrap_or_default();
+            bump_store(&mut v, resource_type, amount);
+            g.data = v.to_string();
+        }
+        if let Some(RoomObject::Generic(g)) = rooms[from.0].1.objects.get_mut(&from.1) {
+            let mut v: serde_json::Value = serde_json::from_str(&g.data).unwrap_or_default();
+            bump_store(&mut v, resource_type, -amount);
+            g.data = v.to_string();
+        }
+        let (fee_room, fee_id) = match fee_side {
+            FeeSide::From => from,
+            FeeSide::To => to,
+        };
+        if let Some(RoomObject::Generic(g)) = rooms[fee_room].1.objects.get_mut(&fee_id) {
+            let mut v: serde_json::Value = serde_json::from_str(&g.data).unwrap_or_default();
+            bump_store(&mut v, "energy", -cost);
+            g.data = v.to_string();
+        }
+    }
+    let tx_id = market.alloc_transaction_id();
+    market.record_transaction(Transaction {
+        id: tx_id,
+        time,
+        sender: from_user,
+        recipient: to_user,
+        resource_type: resource_type.to_string(),
+        amount,
+        from: from_room,
+        to: to_room,
+        description,
+        order,
+    });
+    true
+}

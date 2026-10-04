@@ -1,0 +1,159 @@
+//! 世界候选准备、分阶段结算与统一发布。
+use super::*;
+
+impl Engine {
+    /// 按准备、房间、市场、校验、发布的顺序处理候选。
+    pub(super) fn staged_body(
+        &mut self,
+        cursor: &mut stages::StageCursor,
+        batch: IntentBatch,
+        input: &TickInput,
+        writebacks: BTreeMap<String, PlayerWriteback>,
+    ) -> Result<(), SettleError> {
+        cursor.enter(TickStage::Prepare)?;
+        if let Some(handle) = writebacks
+            .keys()
+            .find(|handle| !self.players.contains_key(*handle))
+        {
+            return Err(SettleError(format!(
+                "玩家写回候选不属于已注册玩家：{handle}"
+            )));
+        }
+        let mut txn = self.prepare_tick(batch, *input)?;
+        cursor.enter(TickStage::Settle)?;
+        self.settle_rooms_stage(&mut txn)?;
+        cursor.enter(TickStage::Market)?;
+        {
+            let mut state = txn.state.inner.borrow_mut();
+            market::settle_market(
+                &mut txn.rooms,
+                &mut state.players,
+                &mut txn.market,
+                &txn.batch,
+                txn.time,
+                txn.input.now_ms,
+            );
+        }
+        self.writeback_checkpoint(WritebackStep::Market)?;
+        cursor.enter(TickStage::Validate)?;
+        {
+            let mut state = txn.state.inner.borrow_mut();
+            for (handle, patch) in writebacks {
+                let player = state.players.get_mut(&handle).ok_or_else(|| {
+                    SettleError(format!("玩家写回候选不属于已注册玩家：{handle}"))
+                })?;
+                patch.apply_with_checkpoints(player, |step| self.writeback_checkpoint(step))?;
+            }
+        }
+        self.validate_stage(&mut txn)?;
+        let time = txn.time;
+        let prepared = txn.into_prepared()?;
+        self.run_state = RunState::Prepared { tick: time };
+        cursor.enter(TickStage::Publish)?;
+        self.publish_tick(prepared);
+        Ok(())
+    }
+
+    /// 构造玩家副本和 ID 起点，并复核安全模式指令。
+    pub(super) fn prepare_tick(
+        &self,
+        batch: IntentBatch,
+        input: TickInput,
+    ) -> Result<txn::OwnedTickTxn, SettleError> {
+        let next = self
+            .next_id
+            .max(self.world.next_available_obj_id().map_err(SettleError)?);
+        let players = self.players.clone();
+        let mut batch = batch;
+        // 按已提交世界复核：玩家已有生效的安全模式时，丢弃其新的激活指令。
+        // 不依赖 JavaScript 的扫描结果，也不计入本轮尚未生效的激活。
+        // 来源：上游 engine/src/game/structures.js 的 StructureController.activateSafeMode。
+        let time = self.world.time();
+        let mut safemode_holders: Vec<String> = self
+            .world
+            .rooms()
+            .values()
+            .flat_map(|r| r.objects.values())
+            .filter_map(|o| match o {
+                RoomObject::Controller(c) if c.safe_mode > time => c.owner.clone(),
+                _ => None,
+            })
+            .collect();
+        safemode_holders.sort_unstable();
+        safemode_holders.dedup();
+        if !safemode_holders.is_empty() {
+            for holder in &safemode_holders {
+                if let Some(intents) = batch.users.get_mut(holder) {
+                    for actions in intents.objects.values_mut() {
+                        actions.remove(&crate::intent::Action::ActivateSafeMode);
+                    }
+                }
+            }
+        }
+        let room_names: Vec<String> = self.world.rooms().keys().cloned().collect();
+        Ok(txn::OwnedTickTxn {
+            time,
+            input,
+            room_names,
+            state: TickState::with_mod_states(players, next, self.mod_states.clone()),
+            batch,
+            rooms: Vec::new(),
+            events: Vec::new(),
+            market: self.market.clone(),
+        })
+    }
+
+    /// 按房名结算副本，共用候选玩家与 ID 游标；任一房间失败均不写回。
+    pub(super) fn settle_rooms_stage(
+        &self,
+        txn: &mut txn::OwnedTickTxn,
+    ) -> Result<(), SettleError> {
+        let mut inter_room_moves = Vec::new();
+        for name in &txn.room_names {
+            if self.fail_room.as_deref() == Some(name.as_str()) {
+                return Err(SettleError(format!("故障注入：房间 {name} 结算失败")));
+            }
+            let mut room = self.world.room(name).expect("房间名来自键集").clone();
+            // 二进制房间快照不保存房名；结算指令按世界目录中的名称匹配。
+            room.name.clone_from(name);
+            let plane = Plane {
+                links: self.links,
+                stores: self.stores,
+                contrib: self.contrib.clone(),
+                extensions: self.extensions.clone(),
+                plan: self.plan.clone(),
+            };
+            let (room, mut room_events, mut moves) = settle_room(
+                room,
+                txn.time,
+                txn.input.now_ms,
+                &txn.state,
+                &txn.batch,
+                &plane,
+            )?;
+            inter_room_moves.append(&mut moves);
+            txn.rooms.push((name.clone(), room));
+            txn.events.append(&mut room_events);
+        }
+        // 跨房过渡在全部房间结算完成后应用到候选：到达对象不参与目的房
+        // 本 tick 的结算（其对象 tick 已在来源房执行），发布后对下一轮可见。
+        inter_room::apply_inter_room_moves(&mut txn.rooms, &inter_room_moves);
+        Ok(())
+    }
+
+    /// 将已校验候选写回内存；不返回 Result，也不捕获 panic。
+    /// World::commit_room 不递增版本。全部房间写回后须先推进时间，再允许
+    /// 查询世界，使目录和投影缓存一起失效。
+    pub(super) fn publish_tick(&mut self, prepared: txn::PreparedTick) {
+        self.market = prepared.market;
+        for (name, room) in prepared.rooms {
+            self.world.commit_room(name, room);
+        }
+        self.players = prepared.players;
+        self.mod_states = prepared.mod_states;
+        self.next_id = prepared.next_id;
+        self.world.bump_next_obj_id(self.next_id);
+        self.last_events = prepared.events;
+        self.world.advance_ticks(1);
+    }
+}

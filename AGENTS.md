@@ -62,6 +62,8 @@ HTTP 服务和前端开发服务器尚未实现。
 
 遵循[注释规范](docs/contributing/comment-style.md)：说明性注释默认使用简体中文，写清当前约束、原因及可核验的来源。
 
+主项目源码和测试文件不得超过 1000 行，`pnpm run check:source-size` 检查此门槛并纳入 `pnpm run check`。接近门槛时按领域职责拆分，保持公开 API、候选提交边界和串行测试顺序；不要通过压缩代码或删除必要注释降低行数。第三方固定源码与独立实验的范围说明，以及当前模块导航见[源码组织](docs/architecture/source-organization.md)。
+
 ## 测试要求
 
 使用 Rust 单元测试、集成测试及 Node 的 `node:test`。JavaScript 测试文件命名为 `*.test.mjs`，Rust 测试名称应体现被测行为。目前未配置覆盖率百分比门槛。
