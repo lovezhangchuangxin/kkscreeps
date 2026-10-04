@@ -21,6 +21,7 @@ mod handlers;
 mod outcome;
 mod plan;
 pub mod player_surface;
+pub mod resources;
 mod rules;
 pub mod validate;
 

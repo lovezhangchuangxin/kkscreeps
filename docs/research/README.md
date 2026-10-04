@@ -18,6 +18,7 @@
 ## notes/ 笔记索引
 
 - [主项目结构治理](notes/source-structure-2026-10-05.md)：17 个超长源码/测试文件按职责拆分、串行入口保持及文件规模门禁。
+- [D4 资源领域能力](notes/d4-resource-domain-2026-10-05.md)：精确转账、显式损耗、同房多对象恢复、能力过期与晚期写回重试。
 - [D5 玩家执行边界](notes/d5-player-execution-2026-10-05.md)：删除旧引擎沙箱入口、结果类型归位、全意图族身份过滤与双玩家缓存重试。
 - [D4/D6 creep 资源动作槽](notes/d4-creep-resource-slots-2026-10-05.md)：双向处理链、权威只读面、实验室恢复、竞争与停用重试。
 - [D6 link 动作正常拒绝](notes/d6-link-decline-2026-10-05.md)：多对象与事件恢复、跨 Mod state、竞争、异常优先及缓存重试。

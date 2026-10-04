@@ -1,0 +1,852 @@
+{
+  "batch": "D4 Mod resource domain capability",
+  "date": "2026-10-05",
+  "baseline": "0664a3dadf46d4c1f9d289ecb082192c709be6dd",
+  "executable_sha256": "9f966759753f5ea282d749a3392a0210cda952df5611e69d431b714cb6f818f2",
+  "screeps_ok_pin": "34a630efa42908c117c19c25d2350fa2387bd633",
+  "checks": {
+    "release_build_exit_code": 0,
+    "focused_test_exit_code": 0,
+    "focused_rust_passed": 428,
+    "focused_rust_ignored": 5,
+    "workspace_check_exit_code": 0,
+    "rust_passed": 667,
+    "rust_failed": 0,
+    "rust_ignored": 11,
+    "rust_suites": 53,
+    "mod_chain_passed": 59,
+    "resource_domain_core_passed": 5,
+    "compat_node_passed": 14,
+    "ratchet_exit_code": 0,
+    "compat_passed": 1918,
+    "compat_failed": 89,
+    "compat_skipped": 907,
+    "compat_total": 2914,
+    "compat_floor": 1918,
+    "comparisons": {
+      "HEAD": {
+        "baseline_tests": 2914,
+        "status_changes": 0
+      },
+      "HEAD~1": {
+        "baseline_tests": 2914,
+        "status_changes": 0
+      }
+    },
+    "new_skips": 0,
+    "new_exemptions": 0,
+    "main_source_files": 315,
+    "main_source_max_lines": 1000
+  },
+  "review": {
+    "native_helpers_and_transfer_withdraw_code_unchanged": true,
+    "context_enum_keys_preserved": true,
+    "post_transfer_generic_total_safe_integer_checked_before_publish": true,
+    "engine_original_pair_and_runtime_extra_object_restore_order_checked": true,
+    "resource_api_invalidates_field_cache": true,
+    "handler_lifetime_and_room_scope_checked": true,
+    "fault_cannot_be_masked_by_catch_then_decline": true,
+    "journal_256_distinct_endpoint_boundary_tested": true,
+    "both_player_projection_channels_tested": true,
+    "late_writeback_cached_player_retry_tested": true,
+    "serial_v8_test_entry_preserved": true,
+    "remaining_blockers": []
+  },
+  "resource_test_matrix": [
+    "transfer/withdraw replacements: 8 debited, 6 credited, 2 lost; exact events and held-store refresh",
+    "link replacement: 10 debited, 7 credited, 3 lost; cooldown field remains writable",
+    "stock and capacity shortage: zero receipt, no loss or event",
+    "unbound shared pool sums resources; independent zero capacity cannot borrow shared capacity",
+    "malformed and unsafe numeric inventory/capacity: no partial debit, including unsafe post-write sum",
+    "tombstone/ruin source only; full loss to valid full target; zero amount has no event",
+    "lab mineral release/rebind with frozen capacity overrides",
+    "multi-object decline at before, wrap-before, replace, wrap-after, after",
+    "extra lab snapshots, events and multiple Mod namespaces restore while prior/later actions remain",
+    "two concurrent players compete against one same-room candidate capacity in stable settlement order",
+    "NaN/negative/fractional/unsafe amounts, excessive loss, same IDs, unknown resource, missing IDs and object coercion rejected",
+    "retained capability after handler return, unrelated slot and other room rejected",
+    "256 distinct endpoints accepted, 257th endpoint faults and discards candidate; repeats do not count again",
+    "late RawMemory writeback failure discards resource/world/player/Mod candidates; retry uses cached player result"
+  ],
+  "bots": {
+    "tooangel": {
+      "bot": "compat/fixtures/tooangel/src",
+      "ticks_requested": 2000,
+      "ticks_completed": 2000,
+      "ticks_terminated": 0,
+      "ticks_skipped_penalty": 0,
+      "ticks_with_console_error": 0,
+      "missing_api": {},
+      "has_probes": {},
+      "stub_calls_top": [
+        [
+          "room.find:103",
+          8000
+        ],
+        [
+          "room.find:111",
+          8000
+        ],
+        [
+          "room.find:112",
+          6009
+        ],
+        [
+          "room.find:108",
+          4667
+        ],
+        [
+          "room.find:102",
+          4008
+        ],
+        [
+          "room.find:107",
+          2026
+        ],
+        [
+          "room.find:105",
+          2006
+        ],
+        [
+          "room.find:1",
+          28
+        ],
+        [
+          "room.find:3",
+          28
+        ],
+        [
+          "room.find:5",
+          28
+        ],
+        [
+          "room.find:7",
+          28
+        ],
+        [
+          "room.find:117",
+          15
+        ],
+        [
+          "room.find:116",
+          4
+        ]
+      ],
+      "console_errors_head": [],
+      "console_errors_folded": [
+        [
+          "[log] # W#N#   harvester#           [room W#N# pos #,#] Creep role not defined for: crp# harvester",
+          2000
+        ],
+        [
+          "[log] # Script reload - Load: # tickLimit: # limit: # Bucket: #",
+          1
+        ],
+        [
+          "[log] # W#N#                        Setting misplacedSpawn",
+          1
+        ],
+        [
+          "[log] # W#N#                        Setup complete - storing data",
+          1
+        ],
+        [
+          "[log] # W#N#                        Setup completed - storing data",
+          1
+        ]
+      ]
+    },
+    "overmind": {
+      "bot": "compat/fixtures/overmind-dist",
+      "ticks_requested": 2000,
+      "ticks_completed": 2000,
+      "ticks_terminated": 0,
+      "ticks_skipped_penalty": 0,
+      "ticks_with_console_error": 1,
+      "missing_api": {},
+      "has_probes": {},
+      "stub_calls_top": [
+        [
+          "room.find:105",
+          6048
+        ],
+        [
+          "room.find:117",
+          2099
+        ],
+        [
+          "room.find:103",
+          2000
+        ],
+        [
+          "room.find:118",
+          2000
+        ],
+        [
+          "room.find:106",
+          1999
+        ],
+        [
+          "room.find:114",
+          387
+        ],
+        [
+          "room.find:107",
+          47
+        ],
+        [
+          "room.find:116",
+          43
+        ],
+        [
+          "room.find:109",
+          40
+        ],
+        [
+          "room.find:111",
+          2
+        ]
+      ],
+      "console_errors_head": [
+        "[tick 1] [loop] Caught unhandled exception instantiating colony W1N1: \nTypeError: Cannot read properties of undefined (reading 'harvest:10fed9')\n    at DirectiveHarvest.create (kk_module/main, <anonymous>:14448:76)\n    at DirectiveHarvest.createIfNotPresent (kk_module/main, <anonymous>:14524:33)\n    at Colony.registerRoomObjects_cached (kk_module/main, <anonymous>:15316:30)\n    at Colony.build (kk_module/main, <anonymous>:15239:14)\n    at new Colony (kk_module/main, <anonymous>:15222:14)\n    at _Overmind.registerColonies (kk_module/main, <anonymous>:24047:4844)\n    at _Overmind.build (kk_module/main, <anonymous>:24047:1597)\n    at main (kk_module/main, <anonymous>:24294:18)\n    at Object.wrap (kk_module/main, <anonymous>:971:16)\n    at Object.loop (kk_module/main, <anonymous>:24308:21)",
+        "[tick 1] Caught unhandled exception instantiating colony W1N1: \nTypeError: Cannot read properties of undefined (reading 'harvest:10fed9')\n    at DirectiveHarvest.create (kk_module/main, <anonymous>:14448:76)\n    at DirectiveHarvest.createIfNotPresent (kk_module/main, <anonymous>:14524:33)\n    at Colony.registerRoomObjects_cached (kk_module/main, <anonymous>:15316:30)\n    at Colony.build (kk_module/main, <anonymous>:15239:14)\n    at new Colony (kk_module/main, <anonymous>:15222:14)\n    at _Overmind.registerColonies (kk_module/main, <anonymous>:24047:4844)\n    at _Overmind.build (kk_module/main, <anonymous>:24047:1597)\n    at main (kk_module/main, <anonymous>:24294:18)\n    at Object.wrap (kk_module/main, <anonymous>:971:16)\n    at Object.loop (kk_module/main, <anonymous>:24308:21)"
+      ],
+      "console_errors_folded": [
+        [
+          "[log] <font color='yellow'>ALERT  </font> <font color='gray'>#</font> Creating bootstrap directive at <a href=\"#!/room/shard#/W#N#\">[W#N#, #, #]</a>!",
+          1999
+        ],
+        [
+          "[log] <font color='yellow'>ALERT  </font> <font color='gray'>#</font> Creating harvest directive at <a href=\"#!/room/shard#/W#N#\">[W#N#, #, #]</a>!",
+          101
+        ],
+        [
+          "[log] <font color='orange'>WARNING</font> <font color='gray'>#</font> Missing flag for directive <a href=\"#!/room/shard#/W#N#\">[harvest:#]</a>! Removing directive.",
+          7
+        ],
+        [
+          "[log] <font color='orange'>WARNING</font> <font color='gray'>#</font> Missing flag for directive <a href=\"#!/room/shard#/W#N#\">[harvest:#d#]</a>! Removing directive.",
+          5
+        ],
+        [
+          "[log] <font color='orange'>WARNING</font> <font color='gray'>#</font> Missing flag for directive <a href=\"#!/room/shard#/W#N#\">[harvest:#f#]</a>! Removing directive.",
+          4
+        ],
+        [
+          "[log] <font color='yellow'>ALERT  </font> <font color='gray'>#</font> Version migration from #.#.# -> #.#.# (part #) completed successfully.",
+          4
+        ],
+        [
+          "[log] <font color='orange'>WARNING</font> <font color='gray'>#</font> Missing flag for directive <a href=\"#!/room/shard#/W#N#\">[harvest:#c#]</a>! Removing directive.",
+          3
+        ],
+        [
+          "[log] <font color='yellow'>ALERT  </font> <font color='gray'>#</font> Version migration from #.#.x -> #.#.x (part #) completed successfully.",
+          3
+        ],
+        [
+          "[log] <font color='orange'>WARNING</font> <font color='gray'>#</font> Missing flag for directive <a href=\"#!/room/shard#/W#N#\">[harvest:#b#f]</a>! Removing directive.",
+          2
+        ],
+        [
+          "[log] <font color='yellow'>ALERT   </font><font color='gray'>#</font> <font color='#ff#ff'>New clearance code obtained: null (expiration: #) </font>",
+          2
+        ]
+      ]
+    },
+    "wasm": {
+      "bot": "compat/fixtures/wasm-bot",
+      "ticks_requested": 10,
+      "ticks_completed": 10,
+      "ticks_terminated": 0,
+      "ticks_skipped_penalty": 0,
+      "ticks_with_console_error": 0,
+      "missing_api": {},
+      "has_probes": {},
+      "stub_calls_top": [],
+      "console_errors_head": [],
+      "console_errors_folded": [
+        [
+          "[log] wasm module loaded: true",
+          1
+        ]
+      ]
+    }
+  },
+  "overmind_errors_equal_after_normalizing_random_harvest_ids": true,
+  "economy": {
+    "economy": {
+      "report_version": 1,
+      "success": true,
+      "status": "passed",
+      "engine_version": "0.1.0",
+      "executable_sha256": "9f966759753f5ea282d749a3392a0210cda952df5611e69d431b714cb6f818f2",
+      "scenario": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/sim-economy/scenario.json",
+      "scenario_sha256": "ae1e26556dd600749241d777e712677aa92c6be0da25bfcf2746c68950c34055",
+      "modules": {
+        "bot": {
+          "directory": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/sim-economy",
+          "sha256": "800c0c2a5153f7b62f5c50077e44c7f5b67c950b814c6900ad9794df7bac42cc",
+          "files": [
+            {
+              "name": "actions",
+              "kind": "js",
+              "bytes": 695,
+              "sha256": "9cf9468b4227f08dc5cf301f95a743e3df3586abb62c6b3c3c8acbc627e7af4b"
+            },
+            {
+              "name": "main",
+              "kind": "js",
+              "bytes": 1939,
+              "sha256": "4f710dea7bd6ed7adf17159e391dc79c1eb648bc4ae96012731ed6fadc777938"
+            }
+          ]
+        }
+      },
+      "channel": "json",
+      "concurrency": 2,
+      "ticks_requested": 2000,
+      "ticks_attempted": 2000,
+      "world_ticks_committed": 2000,
+      "run_wall_ms": 524.232417,
+      "failure": null,
+      "players": {
+        "bot": {
+          "successful_ticks": 2000,
+          "error_ticks": 0,
+          "not_evaluated_ticks": 0,
+          "errors_head": [],
+          "console_head": []
+        }
+      },
+      "aliases": {
+        "container": "kk0000000000000003",
+        "initial_miner": "kk0000000000000005",
+        "initial_upgrader": "kk0000000000000006",
+        "source": "kk0000000000000002",
+        "spawn": "kk0000000000000004"
+      },
+      "assertions": [
+        {
+          "pointer": "/players/bot/gcl",
+          "op": "delta_gte",
+          "expected": 100,
+          "before": 1000000,
+          "actual": 1001468,
+          "delta": 1468,
+          "passed": true
+        },
+        {
+          "pointer": "/rooms/W1N1/controller/progress",
+          "op": "delta_gte",
+          "expected": 100,
+          "before": 0,
+          "actual": 1468,
+          "delta": 1468,
+          "passed": true
+        },
+        {
+          "pointer": "/players/bot/memory/loops",
+          "op": "gte",
+          "expected": 500,
+          "before": null,
+          "actual": 2000,
+          "delta": null,
+          "passed": true
+        },
+        {
+          "pointer": "/players/bot/memory/spawned",
+          "op": "gte",
+          "expected": 2,
+          "before": null,
+          "actual": 4,
+          "delta": null,
+          "passed": true
+        },
+        {
+          "pointer": "/objects/initial_miner",
+          "op": "missing",
+          "expected": null,
+          "actual": null,
+          "delta": null,
+          "passed": true,
+          "before_present": true
+        },
+        {
+          "pointer": "/objects/initial_upgrader",
+          "op": "missing",
+          "expected": null,
+          "actual": null,
+          "delta": null,
+          "passed": true,
+          "before_present": true
+        },
+        {
+          "pointer": "/objects/container",
+          "op": "exists",
+          "expected": null,
+          "delta": null,
+          "passed": true,
+          "before_present": true,
+          "actual_present": true
+        }
+      ]
+    },
+    "economy-kkpv": {
+      "report_version": 1,
+      "success": true,
+      "status": "passed",
+      "engine_version": "0.1.0",
+      "executable_sha256": "9f966759753f5ea282d749a3392a0210cda952df5611e69d431b714cb6f818f2",
+      "scenario": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/sim-economy/scenario.json",
+      "scenario_sha256": "ae1e26556dd600749241d777e712677aa92c6be0da25bfcf2746c68950c34055",
+      "modules": {
+        "bot": {
+          "directory": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/sim-economy",
+          "sha256": "800c0c2a5153f7b62f5c50077e44c7f5b67c950b814c6900ad9794df7bac42cc",
+          "files": [
+            {
+              "name": "actions",
+              "kind": "js",
+              "bytes": 695,
+              "sha256": "9cf9468b4227f08dc5cf301f95a743e3df3586abb62c6b3c3c8acbc627e7af4b"
+            },
+            {
+              "name": "main",
+              "kind": "js",
+              "bytes": 1939,
+              "sha256": "4f710dea7bd6ed7adf17159e391dc79c1eb648bc4ae96012731ed6fadc777938"
+            }
+          ]
+        }
+      },
+      "channel": "kkpv",
+      "concurrency": 2,
+      "ticks_requested": 2000,
+      "ticks_attempted": 2000,
+      "world_ticks_committed": 2000,
+      "run_wall_ms": 693.288834,
+      "failure": null,
+      "players": {
+        "bot": {
+          "successful_ticks": 2000,
+          "error_ticks": 0,
+          "not_evaluated_ticks": 0,
+          "errors_head": [],
+          "console_head": []
+        }
+      },
+      "aliases": {
+        "container": "kk0000000000000003",
+        "initial_miner": "kk0000000000000005",
+        "initial_upgrader": "kk0000000000000006",
+        "source": "kk0000000000000002",
+        "spawn": "kk0000000000000004"
+      },
+      "assertions": [
+        {
+          "pointer": "/players/bot/gcl",
+          "op": "delta_gte",
+          "expected": 100,
+          "before": 1000000,
+          "actual": 1001468,
+          "delta": 1468,
+          "passed": true
+        },
+        {
+          "pointer": "/rooms/W1N1/controller/progress",
+          "op": "delta_gte",
+          "expected": 100,
+          "before": 0,
+          "actual": 1468,
+          "delta": 1468,
+          "passed": true
+        },
+        {
+          "pointer": "/players/bot/memory/loops",
+          "op": "gte",
+          "expected": 500,
+          "before": null,
+          "actual": 2000,
+          "delta": null,
+          "passed": true
+        },
+        {
+          "pointer": "/players/bot/memory/spawned",
+          "op": "gte",
+          "expected": 2,
+          "before": null,
+          "actual": 4,
+          "delta": null,
+          "passed": true
+        },
+        {
+          "pointer": "/objects/initial_miner",
+          "op": "missing",
+          "expected": null,
+          "actual": null,
+          "delta": null,
+          "passed": true,
+          "before_present": true
+        },
+        {
+          "pointer": "/objects/initial_upgrader",
+          "op": "missing",
+          "expected": null,
+          "actual": null,
+          "delta": null,
+          "passed": true,
+          "before_present": true
+        },
+        {
+          "pointer": "/objects/container",
+          "op": "exists",
+          "expected": null,
+          "delta": null,
+          "passed": true,
+          "before_present": true,
+          "actual_present": true
+        }
+      ]
+    }
+  },
+  "economy_final_states_equal": true,
+  "economy_final_state": {
+    "time": 2000,
+    "players": {
+      "bot": {
+        "gcl": 1001468,
+        "rooms": [
+          "W1N1"
+        ],
+        "memory": {
+          "creeps": {
+            "miner": {
+              "role": "miner",
+              "delivering": false,
+              "_move": {
+                "dest": {
+                  "x": 10,
+                  "y": 8,
+                  "room": "W1N1"
+                },
+                "time": 1847,
+                "path": "09094",
+                "room": "W1N1"
+              }
+            },
+            "upgrader": {
+              "role": "upgrader",
+              "upgrading": true,
+              "_move": {
+                "dest": {
+                  "x": 1,
+                  "y": 1,
+                  "room": "W1N1"
+                },
+                "time": 1973,
+                "path": "04038",
+                "room": "W1N1"
+              }
+            }
+          },
+          "loops": 2000,
+          "spawned": 4
+        },
+        "raw_memory": "{\"creeps\":{\"miner\":{\"role\":\"miner\",\"delivering\":false,\"_move\":{\"dest\":{\"x\":10,\"y\":8,\"room\":\"W1N1\"},\"time\":1847,\"path\":\"09094\",\"room\":\"W1N1\"}},\"upgrader\":{\"role\":\"upgrader\",\"upgrading\":true,\"_move\":{\"dest\":{\"x\":1,\"y\":1,\"room\":\"W1N1\"},\"time\":1973,\"path\":\"04038\",\"room\":\"W1N1\"}}},\"loops\":2000,\"spawned\":4}",
+        "cpu_bucket": 10000.0
+      }
+    },
+    "objects": {
+      "container": {
+        "structureType": "container",
+        "type": "structure",
+        "ticksToDecay": 496,
+        "storeCapacity": 2000,
+        "store": {
+          "energy": 1488
+        },
+        "hits": 230000,
+        "hitsMax": 250000,
+        "kind": "structure",
+        "id": "kk0000000000000003",
+        "pos": {
+          "x": 10,
+          "y": 8,
+          "roomName": "W1N1"
+        }
+      },
+      "initial_miner": null,
+      "initial_upgrader": null,
+      "source": {
+        "kind": "source",
+        "id": "kk0000000000000002",
+        "pos": {
+          "x": 10,
+          "y": 10,
+          "roomName": "W1N1"
+        },
+        "energy": 2656,
+        "energyCapacity": 3000,
+        "ticksToRegeneration": 102
+      },
+      "spawn": {
+        "kind": "structure",
+        "structureType": "spawn",
+        "id": "kk0000000000000004",
+        "pos": {
+          "x": 5,
+          "y": 5,
+          "roomName": "W1N1"
+        },
+        "owner": "bot",
+        "hits": 5000,
+        "hitsMax": 5000,
+        "name": "Spawn1",
+        "store": {
+          "energy": 300
+        },
+        "storeCapacity": null,
+        "spawning": null
+      }
+    },
+    "rooms": {
+      "W1N1": {
+        "controller": {
+          "kind": "structure",
+          "structureType": "controller",
+          "id": "kk0000000000000001",
+          "pos": {
+            "x": 1,
+            "y": 1,
+            "roomName": "W1N1"
+          },
+          "level": 3,
+          "progress": 1468,
+          "progressTotal": 135000,
+          "ticksToDowngrade": 20000,
+          "safeMode": null,
+          "safeModeAvailable": 0,
+          "safeModeCooldown": null,
+          "reservation": null,
+          "sign": null,
+          "upgradeBlocked": null,
+          "isPowerEnabled": false,
+          "owner": "bot"
+        }
+      }
+    },
+    "world": {
+      "time": 2000,
+      "cpu": {
+        "limit": 20,
+        "tickLimit": 500,
+        "bucket": 10000
+      },
+      "user": null,
+      "gcl": 0,
+      "visibleRooms": [
+        "W1N1"
+      ],
+      "rooms": {
+        "W1N1": {
+          "name": "W1N1",
+          "terrain": {
+            "rev": 1,
+            "payload": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQ=="
+          },
+          "energyAvailable": 300,
+          "energyCapacityAvailable": 300,
+          "events": [
+            {
+              "event": 5,
+              "objectId": "kk000000000000000e",
+              "data": {
+                "targetId": "kk0000000000000002",
+                "amount": 2
+              }
+            },
+            {
+              "event": 9,
+              "objectId": "kk0000000000000011",
+              "data": {
+                "amount": 1,
+                "energySpent": 1
+              }
+            }
+          ]
+        }
+      },
+      "objects": [
+        {
+          "type": "structure",
+          "structureType": "controller",
+          "id": "kk0000000000000001",
+          "room": "W1N1",
+          "x": 1,
+          "y": 1,
+          "level": 3,
+          "progress": 1468,
+          "progressTotal": 135000,
+          "safeMode": 0,
+          "safeModeAvailable": 0,
+          "downgradeTime": 22000,
+          "isPowerEnabled": false,
+          "upgradeBlocked": null,
+          "safeModeCooldown": null,
+          "reservation": null,
+          "sign": null,
+          "owner": "bot",
+          "pos": {
+            "x": 1,
+            "y": 1,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "structure",
+          "structureType": "source",
+          "id": "kk0000000000000002",
+          "room": "W1N1",
+          "x": 10,
+          "y": 10,
+          "energy": 2656,
+          "energyCapacity": 3000,
+          "ticksToRegeneration": 102,
+          "pos": {
+            "x": 10,
+            "y": 10,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "structureType": "container",
+          "type": "structure",
+          "nextDecayTime": 2496,
+          "storeCapacity": 2000,
+          "store": {
+            "energy": 1488
+          },
+          "hits": 230000,
+          "hitsMax": 250000,
+          "id": "kk0000000000000003",
+          "room": "W1N1",
+          "x": 10,
+          "y": 8,
+          "pos": {
+            "x": 10,
+            "y": 8,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "spawn",
+          "structureType": "spawn",
+          "id": "kk0000000000000004",
+          "room": "W1N1",
+          "x": 5,
+          "y": 5,
+          "name": "Spawn1",
+          "owner": "bot",
+          "store": {
+            "energy": 300
+          },
+          "energy": 300,
+          "energyCapacity": 300,
+          "storeCapacityResource": {
+            "energy": 300
+          },
+          "off": false,
+          "hits": 5000,
+          "hitsMax": 5000,
+          "spawning": null,
+          "notifyWhenAttacked": true,
+          "pos": {
+            "x": 5,
+            "y": 5,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk000000000000000e",
+          "room": "W1N1",
+          "x": 9,
+          "y": 9,
+          "name": "miner",
+          "owner": "bot",
+          "body": [
+            {
+              "type": "work",
+              "hits": 100
+            },
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 3166,
+          "hits": 300,
+          "hitsMax": 300,
+          "store": {
+            "energy": 34
+          },
+          "storeCapacity": 50,
+          "spawning": false,
+          "ticksToLive": 1166,
+          "notifyWhenAttacked": true,
+          "pos": {
+            "x": 9,
+            "y": 9,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk0000000000000011",
+          "room": "W1N1",
+          "x": 4,
+          "y": 3,
+          "name": "upgrader",
+          "owner": "bot",
+          "body": [
+            {
+              "type": "work",
+              "hits": 100
+            },
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 3266,
+          "hits": 300,
+          "hitsMax": 300,
+          "store": {
+            "energy": 26
+          },
+          "storeCapacity": 50,
+          "spawning": false,
+          "ticksToLive": 1266,
+          "notifyWhenAttacked": true,
+          "pos": {
+            "x": 4,
+            "y": 3,
+            "roomName": "W1N1"
+          }
+        }
+      ]
+    }
+  },
+  "formal_performance_measurement": false
+}

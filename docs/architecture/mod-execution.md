@@ -39,7 +39,7 @@ Rust 自定义处理器仍可经原有纯 Rust 执行器安装。它与 JS 执�
 
 runtime 的自有动作适配器在调用前只保存目标对象字段，所有参与 namespace 的 state 在本次调用内暂存；正常完成后移交 state。拒绝时丢弃暂存 state，通过 `update_mod_fields` 恢复对象字段、信封坐标和位置索引，保留本轮之前已完成动作的结果。当前自有动作没有 native/ID/玩家/事件写面，因此这个边界足以撤销全部写入，不克隆整个房间。
 
-三个内建资源动作的局部边界由引擎包住整个 Hosted 链：开始前保存执行者、目标对象原始记录和事件长度；拒绝后恢复记录并截去本次新增事件。自指只保存一份记录；保存的是本次动作开始时的候选，因此共享目标上此前成功动作的入账不会被撤销。runtime 将所有参与 namespace 的 state 暂存到正常完成，拒绝时丢弃。当前 native 只改库存、link 冷却、实验室槽容量并追加传输事件；JS 只可改 link cooldown，creep 字段只读。没有 ID、位置、玩家、市场或其他工作队列写入。以后扩大写面必须同步扩大恢复边界。无扩展的 Native 路径不保存快照、不进入 JS。
+三个内建资源动作的局部边界由引擎包住整个 Hosted 链：开始前保存执行者、目标对象原始记录和事件长度；拒绝后恢复记录并截去本次新增事件。自指只保存一份记录；保存的是本次动作开始时的候选，因此共享目标上此前成功动作的入账不会被撤销。runtime 将所有参与 namespace 的 state 暂存到正常完成，拒绝时丢弃。当前 native 只改库存、link 冷却、实验室槽容量并追加传输事件；JS 字段写面限于 link cooldown，另可通过 [ctx.resources](mod-resources.md) 读写同房库存。运行时首次触达日志恢复 API 两端完整对象，覆盖额外路由对象和实验室槽切换；creep 字段仍只读。没有 ID、位置、玩家、市场或其他工作队列写入。以后扩大写面必须同步扩大恢复边界。无扩展的 Native 路径不保存快照、不进入 JS。
 
 ```js
 export default function register(api) {
@@ -54,7 +54,7 @@ export default function register(api) {
 
 上例按请求数量累计本 Mod namespace 的配额（不代表 native 实际转入量），也可在 `next()` 后拒绝并撤销 native。拒绝后继续其他动作及每轮 tick，并正常发布世界、Memory 与 CPU 候选，保留本轮玩家执行费用；不重建健康 Mod VM。JS 全局变量不在局部恢复范围内，权威玩法状态须放在 `ctx.state`。拒绝代码与实际绑定保留在整槽宿主的类型化结局中，当前不额外发射玩家事件，也不追改玩家此前的 `transferEnergy()` 返回码。
 
-`builtin:link.tick` 仍显式拒绝使用 decline，其他内建资源动作尚未开放可拒绝处理槽。纯 Rust callback 仍使用原成功/异常签名，正常拒绝目前由整槽宿主提供。直接使用 ModRealm 的可信宿主须自行恢复候选；SlotExecutor 的自有动作须由宿主恢复全部写入，内建资源动作的对象/事件由引擎恢复，宿主负责 namespace 暂存且不得写出该边界。自有动作验证见[正常拒绝记录](../research/notes/mod-intent-decline-2026-10-04.md)，内建多对象验证见[link 拒绝记录](../research/notes/d6-link-decline-2026-10-05.md)与[creep 资源槽记录](../research/notes/d4-creep-resource-slots-2026-10-05.md)；执行来源的结构化记录见下节。
+`builtin:link.tick` 仍显式拒绝使用 decline，其他内建资源动作尚未开放可拒绝处理槽。纯 Rust callback 仍使用原成功/异常签名，正常拒绝目前由整槽宿主提供。直接使用 ModRealm 的可信宿主须自行恢复候选；SlotExecutor 的自有动作须由宿主恢复全部写入，内建资源动作的原始两端/事件由引擎恢复，宿主负责 namespace 暂存及额外资源对象恢复；不得写出已有恢复边界。自有动作验证见[正常拒绝记录](../research/notes/mod-intent-decline-2026-10-04.md)，内建多对象验证见[link 拒绝记录](../research/notes/d6-link-decline-2026-10-05.md)与[creep 资源槽记录](../research/notes/d4-creep-resource-slots-2026-10-05.md)；执行来源的结构化记录见下节。
 
 ## 注册声明转换
 
@@ -66,7 +66,7 @@ export default function register(api) {
 
 每个 JS 处理器按绑定的 namespace 从 Rust 候选读取自己的 `ctx.state`，目标字段来自当前权威对象。不同 Mod 的 state 分开保存，目标字段共享同一个候选。
 
-runtime 在一次整槽能力内缓存已解析的目标字段，供重复读取及无变更写入的比较使用。改写字段前失效，进入 native 前也失效；内层返回后的读取重新取得 native 修改后的候选。缓存不跨槽、对象或 tick，不缓存 namespace state；改变字段值仍走原有领域校验。JS 上下文仍按下面的同步边界读写和刷新。
+runtime 在一次整槽能力内缓存已解析的目标字段，供重复读取及无变更写入的比较使用。改写字段及资源能力转账时失效，进入 native 前也失效；内层返回后的读取重新取得 native 修改后的候选。缓存不跨槽、对象或 tick，不缓存 namespace state；改变字段值仍走原有领域校验。JS 上下文仍按下面的同步边界读写和刷新。
 
 `ChainHost::read` 返回类型化的 `ChainContext` / `ChainTarget` 固定封套，直接装配已拥有的 JSON 值。serde_v8 对封套走 struct 路径，使用静态成员键；args、state、fields 仍是开放 JSON 值。封套沿用原默认 JSON Map 键序（args/room/state/target/tick，target 内 fields/id），两条转换路径都创建空原型对象。缓存字段和固定 args 仍克隆出独立视图。写回保持动态 JSON 与领域校验，在目标字段校验成功后移走 op 交付的 state 值，不额外深克隆。两端仍经 serde_v8 转换，不共享 JS 与 Rust 的可变对象，也不省略同步边界。
 
@@ -86,7 +86,7 @@ runtime 在一次整槽能力内缓存已解析的目标字段，供重复读取
 
 接收者、原意图参数和 native 函数由 Rust 的本次调用固定。修改 JS 的 `ctx.target.id` 或 `ctx.args` 不会重定向 native。当前不开放通过 next 替换参数或指定另一接收者。
 
-Mod 对象整字段写入遵守类型描述符，位置字段经写入门同步对象信封与空间索引。内建 link 记录可读，当前只允许改写 `cooldown`（u32 整数，可删除恢复缺省）；身份、坐标、资源和其他字段只读。新的内建写面需经对应领域校验开放，不提供任意 Generic JSON 整写接口。
+Mod 对象整字段写入遵守类型描述符，位置字段经写入门同步对象信封与空间索引。内建 link 记录可读，当前只允许改写 `cooldown`（u32 整数，可删除恢复缺省）；身份、坐标、资源和其他字段只读；资源转账经独立的 [ctx.resources](mod-resources.md) 能力。新的内建写面需经对应领域校验开放，不提供任意 Generic JSON 整写接口。
 
 ## 能力寿命与借用
 
@@ -163,6 +163,6 @@ runtime 的 `last_mod_settlement_fault()` 返回最近一次实际结算中失�
 
 ## 尚未完成的范围
 
-共享可信 VM 的故障半径仍是整分片；未显式停用的确定性异常或超限 Mod 在新 VM 中仍会失败。link tick、其他内建动作与纯 Rust callback 的正常拒绝、自动策略的 CLI/持久日志接线、逐 Mod 资源归因、进程级限额、多对象写 API、其他生命周期槽、持久化和 outbox 尚未完成。
+共享可信 VM 的故障半径仍是整分片；未显式停用的确定性异常或超限 Mod 在新 VM 中仍会失败。link tick、其他内建动作与纯 Rust callback 的正常拒绝、自动策略的 CLI/持久日志接线、逐 Mod 资源归因、进程级限额、资源之外的领域写 API、跨房资源写入、其他生命周期槽、持久化和 outbox 尚未完成。
 
 默认路径与功能回归、真实混合链和失败候选分别验收。小对象链测试不代表密集 Mod 的成本；性能要求见 [性能验收](performance-acceptance.md)，本次选择与取舍见 [ADR-015](../decisions/ADR-015-mod-chain-execution.md)。

@@ -7,7 +7,8 @@ impl ActionSlot {
             ActionSlot::Native(f) => native_action(*f)(ctx, id, d),
             ActionSlot::Hosted { slot, native } => {
                 // 三个资源动作只改源/目标记录并追加事件；实验室绑定容量
-                // 也在目标记录内。JS 只允许 link cooldown 写入，creep 只读。
+                // 也在目标记录内。JS 额外资源写入由运行时的触达日志恢复；
+                // 此边界继续恢复原 native 两端和整链新增事件。
                 // 不分配 ID、不改位置/玩家或其他工作队列。
                 // 在整链开始前保存，才能撤销 before 与 native 之后的拒绝，
                 // 同时保留此前动作对共享接收方的写入。无 Mod 的 Native 不走这里。

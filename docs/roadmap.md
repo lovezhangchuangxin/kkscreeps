@@ -49,6 +49,8 @@ M2 分为两道关卡，避免把运行环境可用与完整玩法可玩混为�
 
 D5 已收敛玩家执行边界：引擎只接受显式指令和写回候选，玩家执行结果类型归到运行时，旧无参数 `Engine::tick` 与沙箱注册表已删除。运行时按注册身份过滤所有意图族，失败重试复用整轮候选，见 [tick 契约](architecture/tick-contract.md#玩家执行与结算接口)。
 
+D4 资源领域后续片已开放 [ctx.resources](architecture/mod-resources.md)：同房候选库存读取、精确转账与损耗、额外对象局部拒绝日志和晚期写回失败缓存重试。
+
 D4 首片已开放 Generic 仓库的 10 条容量数值，贯穿放置、建造、玩家常量、实验室槽切换和终端 tick，见[仓库容量规则](architecture/store-rules.md)。特殊存储策略及更多动作槽仍须逐族开放，完整检查点在规则与状态清单收敛后接入。
 
 D6 首片已允许 link transfer 的 JS 处理链正常拒绝一次动作；后续 D4/D6 片已开放 [creep transfer/withdraw](architecture/creep-resource-slots.md) 的 before/wrap/replace/after 与正常拒绝。局部恢复执行者/目标库存、link 冷却、实验室槽容量、新增事件及 Mod state，保留此前成功动作并继续结算。link tick 和其他动作尚未开放正常拒绝，见[Mod 执行](architecture/mod-execution.md#正常动作拒绝)。

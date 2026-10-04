@@ -157,7 +157,7 @@ fn creep_slot(c: &kk_schema::room::CreepObj, resource: &str) -> i64 {
 }
 
 /// 增加固定槽或命名资源槽，缺失的命名槽按需创建；非正增量不处理。
-fn slots_add(
+pub(in crate::settle) fn slots_add(
     store: &mut kk_schema::room::Store,
     extra: &mut Vec<kk_schema::room::ResourceStack>,
     resource: &str,
@@ -187,7 +187,7 @@ fn slots_add(
 }
 
 /// 减少固定槽或已有命名槽，不创建缺失槽；命名槽减为 0 后仍保留记录。
-fn slots_sub(
+pub(in crate::settle) fn slots_sub(
     store: &mut kk_schema::room::Store,
     extra: &mut [kk_schema::room::ResourceStack],
     resource: &str,

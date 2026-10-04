@@ -11,6 +11,9 @@ use kk_mod_api::{ContributionPlan, Decline, Dispatch, Key, Stage};
 use serde::{Serialize, Serializer};
 use serde_json::Value;
 
+mod resources;
+pub(crate) use resources::{op_mod_chain_resource_read, op_mod_chain_resource_transfer};
+
 /// 固定的候选读取封套；开放领域的字段、参数与 namespace 仍为 JSON 树。
 /// 字段顺序沿用原 JSON Map 的键序，避免改变 JS 可观察的枚举/刷新顺序。
 #[derive(Serialize)]
@@ -34,6 +37,24 @@ pub trait ChainHost {
     fn read(&mut self, binding: &str) -> Result<ChainContext, String>;
     fn write(&mut self, binding: &str, context: ChainWrite) -> Result<(), String>;
     fn native(&mut self) -> Result<(), String>;
+    /// 默认拒绝，宿主须为有局部恢复边界的槽显式开放资源能力。
+    fn resource_read(
+        &mut self,
+        _id: &str,
+        _resource: &str,
+    ) -> Result<kk_mod_api::resources::ResourceView, String> {
+        Err("本次槽没有资源读取能力".into())
+    }
+    fn resource_transfer(
+        &mut self,
+        _from: &str,
+        _to: &str,
+        _resource: &str,
+        _amount: i64,
+        _loss: i64,
+    ) -> Result<kk_mod_api::resources::ResourceTransfer, String> {
+        Err("本次槽没有资源转账能力".into())
+    }
 }
 
 // op 的 serde 输出包装；计时围住真实转换，不从 op/host 的差额推测。

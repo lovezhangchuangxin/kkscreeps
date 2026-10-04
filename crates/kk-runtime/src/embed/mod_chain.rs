@@ -1,6 +1,8 @@
 //! 将 Mod 整槽链接到房间候选，暂存 state 并校验字段写面。
 use super::*;
 
+mod resources;
+
 /// JS 组合的整槽执行器。进入 VM 一次，native 中心只经普通 op 执行。
 pub(super) struct ModSlotExecutor {
     pub(super) realm: Rc<RefCell<ModVm>>,
@@ -24,6 +26,8 @@ struct ModChainContext {
     cached_fields: Option<Value>,
     /// 可拒绝动作的 namespace 写入暂存到调用成功；拒绝时丢弃。
     staged_states: Option<Rc<RefCell<BTreeMap<String, Value>>>>,
+    /// 资源写能力首次触达的对象快照；共享给整槽外层恢复。
+    resource_journal: Option<Rc<RefCell<BTreeMap<ObjId, kk_schema::room::RoomObject>>>>,
 }
 
 impl SlotExecutor for ModSlotExecutor {
@@ -33,8 +37,8 @@ impl SlotExecutor for ModSlotExecutor {
         ctx: &RoomCtx,
         call: SlotCall<'_>,
     ) -> Result<SlotOutcome, String> {
-        // 自有动作字段由此适配器恢复；内建资源动作的对象/事件由引擎
-        // 在整链外恢复。两者的 namespace state 都只在成功后移交候选。
+        // 自有动作字段与额外资源对象由此适配器恢复；内建资源动作的
+        // 原始两端/事件由引擎在整链外恢复。namespace 仅成功后移交。
         let extension = matches!(&call, SlotCall::Extension { .. });
         let resource_action = matches!(&call, SlotCall::Action { .. })
             && kk_mod_api::builtin::RESOURCE_ACTION_SLOTS.contains(&slot.key.as_str());
@@ -64,6 +68,7 @@ impl SlotExecutor for ModSlotExecutor {
         };
         let staged_states =
             (extension || resource_action).then(|| Rc::new(RefCell::new(BTreeMap::new())));
+        let resource_journal = resource_action.then(|| Rc::new(RefCell::new(BTreeMap::new())));
         let mut vm = self
             .realm
             .try_borrow_mut()
@@ -79,6 +84,7 @@ impl SlotExecutor for ModSlotExecutor {
                     native,
                     cached_fields: None,
                     staged_states: staged_states.clone(),
+                    resource_journal: resource_journal.clone(),
                 }),
             )
             .map_err(|error| {
@@ -103,6 +109,12 @@ impl SlotExecutor for ModSlotExecutor {
                 }
             }
             SlotOutcome::Declined(_) => {
+                if let Some(journal) = resource_journal {
+                    let mut w = ctx.borrow_mut();
+                    for (id, object) in std::mem::take(&mut *journal.borrow_mut()) {
+                        w.room.objects.insert(id, object);
+                    }
+                }
                 if let Some(fields) = original_fields {
                     ctx.borrow_mut()
                         .update_mod_fields(id, &fields)
@@ -206,6 +218,25 @@ impl ModChainContext {
 }
 
 impl ChainHost for ModChainContext {
+    fn resource_read(
+        &mut self,
+        id: &str,
+        resource: &str,
+    ) -> Result<kk_mod_api::resources::ResourceView, String> {
+        self.read_resource(id, resource)
+    }
+
+    fn resource_transfer(
+        &mut self,
+        from: &str,
+        to: &str,
+        resource: &str,
+        amount: i64,
+        loss: i64,
+    ) -> Result<kk_mod_api::resources::ResourceTransfer, String> {
+        self.transfer_resource(from, to, resource, amount, loss)
+    }
+
     fn read(&mut self, binding: &str) -> Result<ChainContext, String> {
         let key = Key::new(binding)?;
         let fields = self.fields()?.clone();

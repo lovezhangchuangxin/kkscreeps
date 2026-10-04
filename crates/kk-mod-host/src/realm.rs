@@ -26,7 +26,8 @@ use serde_json::Value;
 
 use crate::chain::{
     ActiveChain, ChainHost, ChainProgram, ChainState, op_mod_chain_decline, op_mod_chain_fault,
-    op_mod_chain_fault_detail, op_mod_chain_native, op_mod_chain_read, op_mod_chain_write,
+    op_mod_chain_fault_detail, op_mod_chain_native, op_mod_chain_read, op_mod_chain_resource_read,
+    op_mod_chain_resource_transfer, op_mod_chain_write,
 };
 use crate::convert::{Declaration, build_contribution};
 use crate::error::{ModFault, ModFaultKind, ModHostError, ModHostResult};
@@ -116,7 +117,9 @@ extension!(
         op_mod_chain_native,
         op_mod_chain_fault,
         op_mod_chain_fault_detail,
-        op_mod_chain_decline
+        op_mod_chain_decline,
+        op_mod_chain_resource_read,
+        op_mod_chain_resource_transfer
     ]
 );
 

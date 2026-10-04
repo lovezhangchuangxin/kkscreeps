@@ -19,13 +19,13 @@ export default function register(api) {
 
 `ctx.target.id` 是执行 creep 的权威 ID；`ctx.args` 带目标 `id`、`amount`、`resourceType`。native 使用 Rust 绑定的原始参数，修改这些 JS 本地值不会改变接收者或 native 请求。`next()` 返回时刷新权威参数和字段，原 store 引用也会反映 native 的结果。
 
-`ctx.target.fields` 是候选中的只读视图，包含 `name/owner/x/y/spawning/hits/fatigue/store/storeCapacity`。store 与玩家投影共用正量资源合并函数（保留 energy=0），capacity 用同一 CARRY/boost 计算。字段回写须与当前候选完全相同，非法修改属于领域写故障；namespace `ctx.state` 可正常读写并按动作暂存。目标资源对象不作为第二个 JS 写能力开放。
+`ctx.target.fields` 是候选中的只读视图，包含 `name/owner/x/y/spawning/hits/fatigue/store/storeCapacity`。store 与玩家投影共用正量资源合并函数（保留 energy=0），capacity 用同一 CARRY/boost 计算。字段回写须与当前候选完全相同，非法修改属于领域写故障；namespace `ctx.state` 可正常读写并按动作暂存。目标资源对象没有任意字段写能力；受控库存读写通过独立的 [ctx.resources](mod-resources.md) 开放。
 
-这一片可实现观察、配额、准入、取消、拒绝以及 Mod 状态处理。replace 代替默认中心，能提交 Mod state 或正常拒绝，但还不能通过任意资源写 API 自行实现一套源到目标的转账。完整 creep 对象/意图描述目录、可调整 native 参数的能力和多对象领域写 API 仍待后续；本片的两个具名槽不冒充这些能力已经完成。
+动作槽可实现观察、配额、准入、取消、拒绝以及 Mod 状态处理。后续资源领域片已允许 replace 通过 `ctx.resources` 自行转账、声明损耗和路由同房多个对象，见[资源能力](mod-resources.md)。完整 creep 对象/意图描述目录、可调整 native 参数的能力和其他领域写 API 仍待后续。
 
 ## 局部恢复边界
 
-三个内建资源槽（link transfer、creep transfer/withdraw）共用引擎的整链边界：调用前保存执行者和请求目标的原始 RoomObject 记录（自指去重）以及事件长度。拒绝时恢复两份记录并截去本次新增事件，runtime 丢弃所有参与 namespace 的暂存 state。此前动作的库存、事件与 Mod state，以及此前 drop 分配的 ID/资源对象仍保留；后续 withdraw、移动和其他动作继续执行。
+三个内建资源槽（link transfer、creep transfer/withdraw）共用引擎的整链边界：调用前保存执行者和请求目标的原始 RoomObject 记录（自指去重）以及事件长度。拒绝时恢复两份记录并截去本次新增事件，runtime 丢弃所有参与 namespace 的暂存 state，并通过首次触达日志恢复资源 API 额外访问的对象。此前动作的库存、事件与 Mod state，以及此前 drop 分配的 ID/资源对象仍保留；后续 withdraw、移动和其他动作继续执行。
 
 creep transfer/withdraw 的 native 只改两对象库存、实验室矿物绑定/释放的容量字段并新增事件，不创建对象、分配 ID、改变位置、玩家、市场或工作队列。保存完整记录覆盖 Generic、creep、spawn、extension、storage、tombstone、ruin 的既有库存形态；空间索引没有本次写入。扩展写面前必须同步审计恢复范围。JS 全局变量不回滚，玩法权威状态须放在 ctx.state。
 

@@ -13,6 +13,9 @@
 | `kk-engine/src/intent.rs` | 动作集合、执行优先级与输入清洗；测试按 JSON 收集、动作语义和市场输入分组 |
 | `kk-engine/src/settle/mod.rs` | 世界引擎状态和控制入口；`working.rs` 房间候选及领域操作，`room_loop.rs` 房间循环，`install.rs` 冻结计划接线，`engine_tick.rs` 世界阶段与发布，`validation.rs` 发布前校验 |
 | `kk-engine/src/settle/contrib.rs` | 槽、处理器和续行类型及运行入口；`contrib/assemble.rs` 冻结表装配，`execute.rs` 内建动作/tick 链执行与 Hosted 局部恢复 |
+| `kk-engine/src/settle/resources.rs` | 资源领域读取与副本预检转账；`resources/generic.rs` 共享 Generic 仓库解析、native 容量与实验室槽写入 |
+| `kk-mod-host/src/chain/resources.rs` | 资源 op 的同步能力访问、数字校验与故障来源 |
+| `kk-runtime/src/embed/mod_chain/resources.rs` | 同房资源能力、首次触达日志与字段缓存失效 |
 | `kk-engine/src/settle/market.rs` | 市场状态和结算入口、成交调度；`market/orders.rs` 订单生命周期，`terminal.rs` 发送/成交共用的库存、费用与交易写入 |
 | `kk-runtime/src/run.rs` | 玩家执行参数、结果分类和未提交的指令/Memory/CPU 候选；由 crate 根导出，结算引擎不拥有这些类型 |
 | `kk-runtime/src/embed.rs` | 分片状态、管理和诊断入口；`embed/setup.rs` 配置校验与创建/放置，`execution.rs` 玩家候选和失败重试，`projection.rs` KKPV 与市场视图，`mod_chain.rs` Mod 候选桥 |

@@ -44,6 +44,24 @@ fn engine_with_options(
     dependencies: &[(&str, &str)],
     options: RegisterOptions,
 ) -> anyhow::Result<EmbedEngine> {
+    engine_with_shard(
+        packages,
+        kkpv,
+        dependencies,
+        options,
+        &json!({
+            "players": ["p1"], "rooms": [{"name": "W1N1", "rcl": 6, "owner": "p1"}]
+        }),
+    )
+}
+
+fn engine_with_shard(
+    packages: &[(&str, String)],
+    kkpv: bool,
+    dependencies: &[(&str, &str)],
+    options: RegisterOptions,
+    shard: &Value,
+) -> anyhow::Result<EmbedEngine> {
     let root = PackageRoot(std::env::temp_dir().join(format!(
         "kk-mod-chain-{}-{}",
         std::process::id(),
@@ -66,11 +84,7 @@ fn engine_with_options(
     let packages = discover_packages(&root.0)?;
     let mut e = EmbedEngine::new();
     e.set_kkpv_channel(kkpv);
-    e.create_shard_with_mods(
-        &json!({"players": ["p1"], "rooms": [{"name": "W1N1", "rcl": 6, "owner": "p1"}]}),
-        &packages,
-        options,
-    )?;
+    e.create_shard_with_mods(shard, &packages, options)?;
     Ok(e)
 }
 
@@ -151,5 +165,9 @@ mod auto_disable;
 mod creep_store;
 #[path = "mod_chain_tests/link_decline.rs"]
 mod link_decline;
+#[path = "mod_chain_tests/resource_domain.rs"]
+mod resource_domain;
+#[path = "mod_chain_tests/resource_faults.rs"]
+mod resource_faults;
 #[path = "mod_chain_tests/store_rules.rs"]
 mod store_rules;

@@ -13,6 +13,7 @@ pub mod inter_room;
 pub mod market;
 mod mod_intents;
 pub mod movement;
+pub mod resources;
 pub mod room;
 pub mod spawn;
 mod stages;
