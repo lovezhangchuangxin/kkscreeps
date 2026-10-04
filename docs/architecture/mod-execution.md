@@ -2,6 +2,8 @@
 
 当前支持 link transfer/tick 与对象域 Mod 意图。冻结计划决定处理器顺序，Rust 候选保存权威数据，可信 Mod realm 保存 JS 函数。玩家 VM 与玩法 realm 分离；管理员安装的 Mod 共用 realm，Mod 之间没有安全隔离。
 
+Generic 仓库另已开放 10 条容量数值规则，贯穿放置、建造、实验室槽切换、终端 tick 与标准玩家常量，见[仓库容量规则](store-rules.md)。这组消费者不增加动作处理槽，默认路径仍是 Rust 结算。
+
 ## 两条执行路径
 
 没有扩展的 link 槽保留 `Native` 直调，不进入 JS。包含 JS 贡献的槽和 Mod 自有动作槽交给 `SlotExecutor` 整槽执行：runtime 一次进入 realm，JS 按冻结顺序运行 before、wrap、中心、after。中心是 JS process/replace，或一个只修改候选的 Rust native 步骤。

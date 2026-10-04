@@ -703,8 +703,23 @@ impl EmbedEngine {
                 .iter()
                 .any(|intent| intent.key.namespace() != "builtin");
             if let Some(api) = &mod_player_api {
+                // 预检与真实玩家安装须观察同一冻结规则，否则 player.js 在
+                // 安装时读取容量常量会被 vanilla 值错误拒绝。
+                let mut constant_overrides =
+                    kk_mod_api::builtin::StoreRules::from_plan(registered.plan.rules())
+                        .map_err(anyhow::Error::msg)?
+                        .constant_overrides();
+                constant_overrides.insert(
+                    "LINK_CAPACITY".into(),
+                    serde_json::json!(
+                        kk_mod_api::builtin::LinkRules::from_plan(registered.plan.rules())
+                            .map_err(anyhow::Error::msg)?
+                            .capacity
+                    ),
+                );
                 kk_runner::Sandbox::new(kk_runner::SandboxConfig {
                     extension_intents: has_mod_intents,
+                    constant_overrides,
                     mod_api: Some(api.clone()),
                     ..kk_runner::SandboxConfig::default()
                 })
@@ -742,12 +757,15 @@ impl EmbedEngine {
         let configs = std::mem::take(&mut self.sandbox_configs_for_test);
         for (handle, gcl) in handles {
             let mut config = configs.get(&handle).cloned().unwrap_or_default();
-            // link 有效规则同步到玩家全局常量。计划是常量的
+            // link 与仓库容量同步到玩家全局常量。计划是常量的
             // 权威来源，测试配置里的同名覆盖以引擎规则为准。
             config.constant_overrides.insert(
                 "LINK_CAPACITY".to_string(),
                 serde_json::json!(self.engine.links().capacity),
             );
+            config
+                .constant_overrides
+                .extend(self.engine.stores().constant_overrides());
             // 扩展意图原语与玩家面安装清单的装配由引擎计划决定，测试
             // 配置不得改写。
             config.extension_intents = self.ext_intents;
@@ -827,6 +845,7 @@ impl EmbedEngine {
                 let ctx = PlaceCtx {
                     time,
                     links: self.engine.links(),
+                    stores: self.engine.stores(),
                     controller: None,
                     name_seq: self.engine.world.next_obj_id() as usize,
                 };
@@ -866,6 +885,7 @@ impl EmbedEngine {
         let ctx = PlaceCtx {
             time: self.engine.world.time(),
             links: self.engine.links(),
+            stores: self.engine.stores(),
             controller: self.engine.world.room(room).and_then(|r| r.controller()),
             name_seq: self.engine.world.next_obj_id() as usize,
         };

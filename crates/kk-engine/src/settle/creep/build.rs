@@ -228,14 +228,19 @@ fn complete_construction(
             // 与放置入口共用容量及初始时钟。新结构会参加本轮对象 tick，
             // 衰减时钟若遗漏，刚建好的 rampart 可能立即衰减消失。
             // 总容量与按资源容量须配套，玩家 Store 的 null/数值语义依赖两者。
-            if let Some(cap) = kk_world::place::built_store_capacity(other, &w.plane.links) {
+            if let Some(cap) =
+                kk_world::place::built_store_capacity(other, &w.plane.links, &w.plane.stores)
+            {
                 data["storeCapacity"] = serde_json::json!(cap);
                 // 新仓库须通过玩家 transfer 的原始 store 字段预检。
                 // 来源：上游 creeps/build.js 的各存储结构初始化。
                 data["store"] = serde_json::json!({"energy": 0});
             }
-            if let Some(res) = kk_world::place::built_store_capacity_resource(other, &w.plane.links)
-            {
+            if let Some(res) = kk_world::place::built_store_capacity_resource(
+                other,
+                &w.plane.links,
+                &w.plane.stores,
+            ) {
                 data["storeCapacityResource"] = res;
             }
             if let Some(clock) = kk_world::place::built_decay_clock(other, time) {

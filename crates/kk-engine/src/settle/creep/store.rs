@@ -73,7 +73,12 @@ fn generic_capacity(value: &Value, resource: &str) -> (i64, i64) {
 
 /// 实验室装入首种矿物时锁定该槽，取空后恢复空闲矿物容量。
 /// 其他字段原样保留，来源：上游 creeps/{transfer,withdraw}.js。
-fn change_generic_store(data: &mut String, resource: &str, amount: i64) {
+fn change_generic_store(
+    data: &mut String,
+    resource: &str,
+    amount: i64,
+    stores: &kk_mod_api::builtin::StoreRules,
+) {
     let mut value = generic_store(data).expect("读阶段已确认 Generic 仓库");
     let next = value["store"][resource].as_i64().unwrap_or(0) + amount;
     value["store"][resource] = next.into();
@@ -84,11 +89,11 @@ fn change_generic_store(data: &mut String, resource: &str, amount: i64) {
                 .unwrap_or(0)
                 == 0
         {
-            value["storeCapacityResource"][resource] = c::LAB_MINERAL_CAPACITY.into();
+            value["storeCapacityResource"][resource] = stores.lab_mineral.into();
             value["storeCapacity"] = Value::Null;
         } else if amount < 0 && next == 0 {
             value["storeCapacityResource"][resource] = Value::Null;
-            value["storeCapacity"] = (c::LAB_ENERGY_CAPACITY + c::LAB_MINERAL_CAPACITY).into();
+            value["storeCapacity"] = (stores.lab_energy + stores.lab_mineral).into();
         }
     }
     *data = value.to_string();
@@ -168,7 +173,9 @@ pub(super) fn intent_transfer(w: &mut Working, id: ObjId, data: &IntentData) {
         Some(RoomObject::Storage(t)) => {
             slots_add(&mut t.store, &mut t.store_extra, resource, amount)
         }
-        Some(RoomObject::Generic(t)) => change_generic_store(&mut t.data, resource, amount),
+        Some(RoomObject::Generic(t)) => {
+            change_generic_store(&mut t.data, resource, amount, &w.plane.stores)
+        }
         _ => return,
     }
     if let Some(c) = w.creep_mut(id) {
@@ -287,7 +294,9 @@ pub(super) fn intent_withdraw(w: &mut Working, id: ObjId, data: &IntentData) {
             slots_sub(&mut t.store, &mut t.store_extra, resource, amount)
         }
         Some(RoomObject::Ruin(t)) => slots_sub(&mut t.store, &mut t.store_extra, resource, amount),
-        Some(RoomObject::Generic(t)) => change_generic_store(&mut t.data, resource, -amount),
+        Some(RoomObject::Generic(t)) => {
+            change_generic_store(&mut t.data, resource, -amount, &w.plane.stores)
+        }
         _ => return,
     }
     if let Some(c) = w.creep_mut(id) {

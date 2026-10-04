@@ -323,6 +323,7 @@ impl Fixture {
             &batch,
             &kk_engine::settle::Plane {
                 links: kk_world::place::builtin_link_rules(),
+                stores: kk_world::place::builtin_store_rules(),
                 contrib: std::rc::Rc::new(
                     kk_engine::settle::contrib::ContributionDispatch::default(),
                 ),
@@ -369,6 +370,7 @@ impl Fixture {
             batch,
             kk_engine::settle::Plane {
                 links,
+                stores: kk_world::place::builtin_store_rules(),
                 contrib: dispatch,
                 extensions: std::rc::Rc::new(extensions),
                 plan: kk_engine::settle::builtin_plan(),

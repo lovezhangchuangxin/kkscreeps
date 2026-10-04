@@ -1016,3 +1016,5 @@ fn disabled_bindings_are_removed_from_active_candidate_capabilities() -> anyhow:
 
 #[path = "mod_chain_tests/auto_disable.rs"]
 mod auto_disable;
+#[path = "mod_chain_tests/store_rules.rs"]
+mod store_rules;

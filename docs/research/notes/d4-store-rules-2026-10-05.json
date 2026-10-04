@@ -1,0 +1,51 @@
+{
+  "batch": "D4 Generic store numeric rules",
+  "date": "2026-10-05",
+  "baseline": "19b3d92c07721250079b0a148362eaed172d1455",
+  "screeps_ok_pin": "34a630efa42908c117c19c25d2350fa2387bd633",
+  "store_rule_count": 10,
+  "builtin_rule_count": 25,
+  "new_js_settlement_calls": 0,
+  "executable_sha256": "5d90d495507e3e0a83482411de27a508fb9505d4705e0cd03d1c6fab296080e9",
+  "checks": {
+    "workspace_check_exit_code": 0,
+    "rust_passed": 636,
+    "rust_failed": 0,
+    "rust_ignored": 11,
+    "compat_node_passed": 14,
+    "ratchet_exit_code": 0,
+    "passed": 1918,
+    "failed": 89,
+    "skipped": 907,
+    "total": 2914,
+    "floor": 1918,
+    "status_changes_vs_head": 0,
+    "new_skips": 0,
+    "new_exemptions": 0
+  },
+  "scenarios": [
+    {
+      "report": "d4-store-economy-json-2026-10-05.json",
+      "channel": "json",
+      "exit_code": 0,
+      "ticks": 2000,
+      "assertions_passed": 7,
+      "gcl_delta": 1468,
+      "spawned": 4,
+      "error_ticks": 0,
+      "run_wall_ms": 256.08970899999997
+    },
+    {
+      "report": "d4-store-economy-kkpv-2026-10-05.json",
+      "channel": "kkpv",
+      "exit_code": 0,
+      "ticks": 2000,
+      "assertions_passed": 7,
+      "gcl_delta": 1468,
+      "spawned": 4,
+      "error_ticks": 0,
+      "run_wall_ms": 388.46637499999997
+    }
+  ],
+  "final_world_and_memory_equal_between_channels_and_previous_batch": true
+}

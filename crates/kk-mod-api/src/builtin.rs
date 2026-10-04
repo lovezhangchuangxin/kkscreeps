@@ -1,4 +1,4 @@
-//! link 的描述与默认数值，不安装引擎处理器，也不替换现有玩家 API。
+//! 默认 link 描述及 Generic 仓库容量规则，不安装引擎处理器。
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -7,6 +7,9 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 
 use crate::*;
+
+mod store;
+pub use store::StoreRules;
 
 fn key(name: &str) -> Key {
     Key::new(format!("builtin:{name}")).expect("内建键合法")
@@ -89,6 +92,7 @@ impl LinkRules {
     }
 }
 
+/// 内置贡献入口，保留早期 link 函数名；现含 link 描述与仓库容量规则。
 pub fn link() -> Contribution {
     let consumers = keys(&[
         "link.init",
@@ -218,6 +222,9 @@ pub fn link() -> Contribution {
             consumers: consumers.clone(),
         });
     }
+    let (store_bindings, store_rules) = store::declarations();
+    bindings.extend(store_bindings);
+    rules.extend(store_rules);
     let slots = vec![
         SlotDescriptor {
             key: key("link.transfer"),
@@ -234,8 +241,13 @@ pub fn link() -> Contribution {
         source: Source {
             namespace: "builtin".into(),
             api_version: 1,
-            revision: "link-descriptors-v1".into(),
-            code_digest: Sha256::digest(include_bytes!("builtin.rs")).into(),
+            revision: "link-and-store-descriptors-v2".into(),
+            code_digest: {
+                let mut hash = Sha256::new();
+                hash.update(include_bytes!("builtin.rs"));
+                hash.update(include_bytes!("builtin/store.rs"));
+                hash.finalize().into()
+            },
             config_digest: [0; 32],
             player_api_digest: [0; 32],
         },

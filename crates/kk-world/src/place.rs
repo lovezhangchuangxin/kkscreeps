@@ -22,10 +22,11 @@ pub use place_structure::{
 use place_structure::{normalize_site, normalize_structure};
 
 /// 放置时的世界上下文，用于默认容量、到期时间与对象命名。
-/// link 的默认值取自冻结计划的有效规则；调用方从引擎或内置计划提供。
+/// link 与 Generic 仓库的默认值取自冻结计划；调用方从引擎或内置计划提供。
 pub struct PlaceCtx<'a> {
     pub time: u64,
     pub links: kk_mod_api::builtin::LinkRules,
+    pub stores: kk_mod_api::builtin::StoreRules,
     /// 房内首个控制器；有无控制器和主人决定 source 默认容量。
     pub controller: Option<&'a ControllerObj>,
     /// 未指定 creep、spawn 名称时使用的序号；由调用方提供，须避免重名。
@@ -45,6 +46,20 @@ pub fn builtin_link_rules() -> kk_mod_api::builtin::LinkRules {
         )
         .expect("内置 link 贡献必须可冻结");
         kk_mod_api::builtin::LinkRules::from_plan(plan.rules()).expect("内置计划包含全部 link 规则")
+    })
+}
+
+/// 无自定义计划时的仓库容量快照；只在首次调用冻结默认计划。
+pub fn builtin_store_rules() -> kk_mod_api::builtin::StoreRules {
+    static RULES: std::sync::OnceLock<kk_mod_api::builtin::StoreRules> = std::sync::OnceLock::new();
+    *RULES.get_or_init(|| {
+        let plan = kk_mod_api::freeze_with_builtin(
+            kk_mod_api::builtin::link(),
+            vec![],
+            kk_mod_api::FreezeOptions::default(),
+        )
+        .expect("内置贡献必须可冻结");
+        kk_mod_api::builtin::StoreRules::from_plan(plan.rules()).expect("内置容量规则完整")
     })
 }
 
@@ -435,6 +450,7 @@ mod tests {
         PlaceCtx {
             time: 100,
             links: builtin_link_rules(),
+            stores: builtin_store_rules(),
             controller: None,
             name_seq: 7,
         }

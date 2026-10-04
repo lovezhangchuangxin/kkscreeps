@@ -95,6 +95,7 @@ fn place_ctx(links: LinkRules) -> kk_world::place::PlaceCtx<'static> {
     kk_world::place::PlaceCtx {
         time: 50,
         links,
+        stores: kk_world::place::builtin_store_rules(),
         controller: None,
         name_seq: 0,
     }

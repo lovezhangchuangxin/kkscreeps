@@ -133,7 +133,7 @@ fn builtin_link_values_match_constant_dump_and_use_native_slots() {
             )
         );
     }
-    assert_eq!(plan.rules().len(), 15);
+    assert_eq!(plan.rules().len(), 25);
     assert_eq!(plan.slots().len(), 2);
     let slot = plan.resolve_slot(&key("builtin:link.transfer")).unwrap();
     assert_eq!(plan.get_slot(slot).unwrap().stage, Stage::ObjectAction);

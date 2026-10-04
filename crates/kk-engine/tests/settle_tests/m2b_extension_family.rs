@@ -190,6 +190,7 @@ fn extension_projection_applies_visibility() {
         transfer_batch(l1, l2),
         Plane {
             links: kk_world::place::builtin_link_rules(),
+            stores: kk_world::place::builtin_store_rules(),
             contrib: std::rc::Rc::new(dispatch),
             extensions: std::rc::Rc::new(catalog.clone()),
             plan: plan.clone(),
@@ -310,6 +311,7 @@ fn extension_write_validates_against_catalog() {
             &transfer_batch(a, b),
             &Plane {
                 links: kk_world::place::builtin_link_rules(),
+                stores: kk_world::place::builtin_store_rules(),
                 contrib: std::rc::Rc::new(dispatch),
                 extensions: std::rc::Rc::new(catalog.clone()),
                 plan: plan.clone(),
@@ -484,6 +486,7 @@ fn object_removal_clears_extensions_and_raw_writes_are_rejected() {
         transfer_batch(l1, l2),
         Plane {
             links: kk_world::place::builtin_link_rules(),
+            stores: kk_world::place::builtin_store_rules(),
             contrib: std::rc::Rc::new(dispatch),
             extensions: std::rc::Rc::new(catalog.clone()),
             plan: plan.clone(),

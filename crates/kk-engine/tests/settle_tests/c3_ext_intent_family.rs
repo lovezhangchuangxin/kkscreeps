@@ -220,6 +220,7 @@ fn settle_quiet(
     room.name = "W1N1".into();
     let plane = Plane {
         links: kk_world::place::builtin_link_rules(),
+        stores: kk_world::place::builtin_store_rules(),
         contrib: dispatch,
         extensions: std::rc::Rc::new(kk_mod_api::extension::ExtensionCatalog::default()),
         plan,

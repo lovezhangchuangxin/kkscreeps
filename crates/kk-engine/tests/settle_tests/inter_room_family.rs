@@ -56,6 +56,7 @@ impl TwoRooms {
             kk_engine::TickState::new(std::mem::take(&mut self.players), self.world.next_obj_id());
         let plane = kk_engine::settle::Plane {
             links: kk_world::place::builtin_link_rules(),
+            stores: kk_world::place::builtin_store_rules(),
             contrib: std::rc::Rc::new(kk_engine::settle::contrib::ContributionDispatch::default()),
             extensions: std::rc::Rc::new(kk_mod_api::extension::ExtensionCatalog::default()),
             plan: kk_engine::settle::builtin_plan(),
@@ -213,6 +214,7 @@ fn inter_room_unregistered_target_keeps_creep() {
         &IntentBatch::default(),
         &kk_engine::settle::Plane {
             links: kk_world::place::builtin_link_rules(),
+            stores: kk_world::place::builtin_store_rules(),
             contrib: std::rc::Rc::new(kk_engine::settle::contrib::ContributionDispatch::default()),
             extensions: std::rc::Rc::new(kk_mod_api::extension::ExtensionCatalog::default()),
             plan: kk_engine::settle::builtin_plan(),

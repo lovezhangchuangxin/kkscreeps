@@ -14,6 +14,7 @@ fn storage_named_resources_reach_all_projections() {
         }),
         &PlaceCtx {
             links: crate::place::builtin_link_rules(),
+            stores: crate::place::builtin_store_rules(),
 
             time: 0,
             controller: None,
@@ -209,6 +210,7 @@ fn projection_shape_and_find() {
     };
     let ctx = PlaceCtx {
         links: crate::place::builtin_link_rules(),
+        stores: crate::place::builtin_store_rules(),
 
         time: world.time,
         controller: Some(&ctl),
@@ -288,6 +290,7 @@ fn generic_objects_stay_visible_to_find() {
     world.register_room("W1N1", terrain);
     let ctx = PlaceCtx {
         links: crate::place::builtin_link_rules(),
+        stores: crate::place::builtin_store_rules(),
 
         time: 0,
         controller: None,

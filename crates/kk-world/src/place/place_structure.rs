@@ -2,7 +2,7 @@
 //! 同时提供引擎建造完成时共用的结构 hits、容量及计时默认值。
 
 use kk_core::constants as c;
-use kk_mod_api::builtin::LinkRules;
+use kk_mod_api::builtin::{LinkRules, StoreRules};
 use kk_schema::room::{
     ConstructedWallObj, ConstructionSiteObj, ControllerObj, ExtensionObj, ExtractorObj, GenericObj,
     MineralObj, Reservation, RoadObj, RoomObject, Sign, SourceObj, StorageObj,
@@ -246,10 +246,10 @@ pub(super) fn normalize_structure(
             }
             // 通用容量和按资源容量分别补默认值，显式字段优先。
             // 特定资源容量会影响 Store.getCapacity() 是否返回 null，不能只补总容量。
-            if let Some(cap) = built_store_capacity(st, &ctx.links) {
+            if let Some(cap) = built_store_capacity(st, &ctx.links, &ctx.stores) {
                 data.entry("storeCapacity").or_insert(json!(cap));
             }
-            if let Some(res) = built_store_capacity_resource(st, &ctx.links) {
+            if let Some(res) = built_store_capacity_resource(st, &ctx.links, &ctx.stores) {
                 data.entry("storeCapacityResource").or_insert(res);
             }
             // 空仓也必须有原始 store，玩家 transfer 预检据此识别可存储目标。
@@ -278,7 +278,7 @@ pub(super) fn normalize_structure(
             {
                 for res in spec_store.keys() {
                     if res != "energy" && cap.get(res).is_none() {
-                        cap.insert(res.clone(), json!(c::LAB_MINERAL_CAPACITY));
+                        cap.insert(res.clone(), json!(ctx.stores.lab_mineral));
                     }
                 }
             }
@@ -351,16 +351,20 @@ pub fn built_decay_clock(structure_type: &str, time: u64) -> Option<u64> {
 /// 对有按资源容量的结构，应同时应用 built_store_capacity_resource；
 /// 否则 Store.getCapacity() 无参可能由 null 变成数值。
 /// 默认值参考：vanilla index.ts 的 getStructureDefaults。
-pub fn built_store_capacity(structure_type: &str, links: &LinkRules) -> Option<i64> {
+pub fn built_store_capacity(
+    structure_type: &str,
+    links: &LinkRules,
+    stores: &StoreRules,
+) -> Option<i64> {
     Some(match structure_type {
-        "container" => c::CONTAINER_CAPACITY,
-        "factory" => c::FACTORY_CAPACITY,
-        "terminal" => c::TERMINAL_CAPACITY,
-        "lab" => c::LAB_ENERGY_CAPACITY + c::LAB_MINERAL_CAPACITY,
-        "powerSpawn" => c::POWER_SPAWN_ENERGY_CAPACITY + c::POWER_SPAWN_POWER_CAPACITY,
-        "nuker" => c::NUKER_ENERGY_CAPACITY + c::NUKER_GHODIUM_CAPACITY,
+        "container" => stores.container,
+        "factory" => stores.factory,
+        "terminal" => stores.terminal,
+        "lab" => stores.lab_energy + stores.lab_mineral,
+        "powerSpawn" => stores.power_spawn_energy + stores.power_spawn_power,
+        "nuker" => stores.nuker_energy + stores.nuker_ghodium,
         "link" => links.capacity,
-        "tower" => c::TOWER_CAPACITY,
+        "tower" => stores.tower,
         _ => return None,
     })
 }
@@ -369,19 +373,23 @@ pub fn built_store_capacity(structure_type: &str, links: &LinkRules) -> Option<i
 /// lab 这里只包含 energy；放置已有矿物时须另外绑定矿物容量。
 /// 与 built_store_capacity 配合，供 Store 及各结构资源容量 getter 使用。
 /// 参考：engine/src/game/store.js、vanilla index.ts 的 getStructureDefaults。
-pub fn built_store_capacity_resource(structure_type: &str, links: &LinkRules) -> Option<Value> {
+pub fn built_store_capacity_resource(
+    structure_type: &str,
+    links: &LinkRules,
+    stores: &StoreRules,
+) -> Option<Value> {
     Some(match structure_type {
-        "lab" => json!({ "energy": c::LAB_ENERGY_CAPACITY }),
+        "lab" => json!({ "energy": stores.lab_energy }),
         "powerSpawn" => json!({
-            "energy": c::POWER_SPAWN_ENERGY_CAPACITY,
-            "power": c::POWER_SPAWN_POWER_CAPACITY,
+            "energy": stores.power_spawn_energy,
+            "power": stores.power_spawn_power,
         }),
         "nuker" => json!({
-            "energy": c::NUKER_ENERGY_CAPACITY,
-            "G": c::NUKER_GHODIUM_CAPACITY,
+            "energy": stores.nuker_energy,
+            "G": stores.nuker_ghodium,
         }),
         "link" => json!({ "energy": links.capacity }),
-        "tower" => json!({ "energy": c::TOWER_CAPACITY }),
+        "tower" => json!({ "energy": stores.tower }),
         _ => return None,
     })
 }

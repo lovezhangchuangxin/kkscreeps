@@ -141,17 +141,18 @@ impl TickInput {
 }
 
 /// 一次结算携带的贡献平面快照：有效规则、槽执行表、扩展字段目录与
-/// 冻结计划本体。由引擎装配时生成，结算全程只读；四个成员必须来自
+/// 冻结计划本体。由引擎装配时生成，结算全程只读；这些成员必须来自
 /// 同一冻结计划。
 ///
-/// 三个派生物持 `Rc`/`Arc` 而非借用：整槽宿主在本次调用期间通过
+/// 槽执行表、扩展目录和计划持 `Rc`/`Arc` 而非借用：整槽宿主在本次调用期间通过
 /// OpState 持有候选句柄，返回时移除；借用栈上平面无法进入该拥有状态。
 ///
-/// 克隆成本：两次非原子 `Rc` 递增 + 一次原子 `Arc` 递增 + 120B
-/// `LinkRules` memcpy，每房每 tick 一次，无深拷贝。
+/// 克隆成本：两次非原子 `Rc` 递增 + 一次原子 `Arc` 递增，
+/// 再按值拷贝 link 与仓库规则，每房每 tick 一次，无深拷贝。
 #[derive(Clone)]
 pub struct Plane {
     pub links: kk_mod_api::builtin::LinkRules,
+    pub stores: kk_mod_api::builtin::StoreRules,
     pub contrib: Rc<contrib::ContributionDispatch>,
     pub extensions: Rc<kk_mod_api::extension::ExtensionCatalog>,
     /// 冻结计划：意图描述符与投影类型目录经它解析（键解析发生在
@@ -192,7 +193,7 @@ pub struct Working {
     /// 本 tick 登记的跨房过渡：位于边缘格的 creep 在全部房间结算后由
     /// 引擎阶段移入邻房候选。
     pub pending_inter_room: Vec<inter_room::InterRoomMove>,
-    /// 本轮生效的贡献平面：link 规则、槽执行表与扩展字段目录。
+    /// 本轮生效的贡献平面：link/仓库规则、槽执行表与扩展字段目录。
     pub plane: Plane,
 }
 
@@ -491,6 +492,7 @@ impl Working {
 
     /// 放入同格第一个存活容器，返回未放入的数量。
     /// 容器使用 Generic.data 的 JSON store，容量按全部资源之和计算。
+    /// 自动承接沿用 _die/资源创建的全局容量口径，读取冻结规则。
     fn deposit_into_container(&mut self, x: u8, y: u8, resource: &str, amount: i64) -> i64 {
         let container = self
             .index
@@ -517,7 +519,7 @@ impl Working {
             .and_then(Value::as_object)
             .map(|s| s.values().map(|v| v.as_i64().unwrap_or(0)).sum::<i64>())
             .unwrap_or(0);
-        let headroom = kk_core::constants::CONTAINER_CAPACITY - total_before;
+        let headroom = self.plane.stores.container - total_before;
         let taken = amount.min(headroom);
         if taken <= 0 {
             return amount;
@@ -815,6 +817,8 @@ pub struct Engine {
     /// 本引擎生效的 link 有效规则；放置、结算与常量同步读取。
     /// 装配后不应直接改写——规则与已装配的处理链须一起换，经 with_plan。
     pub(crate) links: kk_mod_api::builtin::LinkRules,
+    /// Generic 仓库默认容量与槽切换规则，与计划及玩家常量一同装配。
+    pub(crate) stores: kk_mod_api::builtin::StoreRules,
     /// link 槽执行表；默认直连 native，装配计划后可携带贡献链。
     pub(crate) contrib: Rc<contrib::ContributionDispatch>,
     /// 扩展字段目录；默认为空（不接受扩展写入），with_plan 装配。
@@ -822,12 +826,12 @@ pub struct Engine {
     /// 已提交的各 Mod 命名空间状态；每 tick 克隆为候选，发布时整体换回。
     /// 服务端私有，不进世界快照与玩家投影。
     pub mod_states: BTreeMap<String, serde_json::Value>,
-    /// 当前生效的冻结计划（默认只含 builtin:link）。扩展意图描述符与
+    /// 当前生效的冻结计划（默认含 link 与仓库容量规则）。扩展意图描述符与
     /// Mod 类型目录从此解析；规则/处理链/扩展目录是它的派生物。
     plan: std::sync::Arc<kk_mod_api::ContributionPlan>,
 }
 
-/// 只含 builtin:link 的冻结计划；无 Mod 引擎的默认贡献平面。
+/// 内置 link 与仓库容量的冻结计划；无 Mod 引擎的默认贡献平面。
 /// 测试夹具构造 Plane 时也使用它。
 pub fn builtin_plan() -> std::sync::Arc<kk_mod_api::ContributionPlan> {
     static PLAN: std::sync::OnceLock<std::sync::Arc<kk_mod_api::ContributionPlan>> =
@@ -839,7 +843,7 @@ pub fn builtin_plan() -> std::sync::Arc<kk_mod_api::ContributionPlan> {
                 vec![],
                 kk_mod_api::FreezeOptions::default(),
             )
-            .expect("builtin:link 贡献冻结必成"),
+            .expect("内置贡献冻结必成"),
         )
     })
     .clone()
@@ -866,6 +870,7 @@ impl Engine {
             fail_stage: None,
             fail_writeback: None,
             links: kk_world::place::builtin_link_rules(),
+            stores: kk_world::place::builtin_store_rules(),
             contrib: Rc::new(contrib::ContributionDispatch::default()),
             extensions: Rc::new(kk_mod_api::extension::ExtensionCatalog::default()),
             mod_states: BTreeMap::new(),
@@ -883,6 +888,12 @@ impl Engine {
         /// 已接线的声明性绑定：每项对应一个真实消费者。
         /// 新增声明绑定时须先接线，或在此登记例外依据。
         const WIRED: &[&str] = &[
+            "builtin:store.init",
+            "builtin:store.build",
+            "builtin:store.constants",
+            "builtin:store.labSlots",
+            "builtin:store.terminalTick",
+            "builtin:store.containerDeposit",
             // 放置与建造默认值经 PlaceCtx.links / Working.links。
             "builtin:link.init",
             "builtin:link.build",
@@ -1104,6 +1115,7 @@ impl Engine {
             .cloned()
             .collect();
         let links = kk_mod_api::builtin::LinkRules::from_plan(plan.rules())?;
+        let stores = kk_mod_api::builtin::StoreRules::from_plan(plan.rules())?;
         let contrib = contrib::ContributionDispatch::assemble_with_ext(
             &plan,
             action_handlers,
@@ -1124,6 +1136,7 @@ impl Engine {
         }
         Self::check_installed_bindings(&plan, &installed)?;
         self.links = links;
+        self.stores = stores;
         self.contrib = Rc::new(contrib);
         self.extensions = Rc::new(extensions);
         self.plan = plan;
@@ -1146,6 +1159,7 @@ impl Engine {
         }
         Self::check_intent_centers(&plan, &replacements)?;
         let links = kk_mod_api::builtin::LinkRules::from_plan(plan.rules())?;
+        let stores = kk_mod_api::builtin::StoreRules::from_plan(plan.rules())?;
         let contrib = contrib::ContributionDispatch::assemble_hosted(&plan, executor, &bindings)?;
         let extensions = kk_mod_api::extension::ExtensionCatalog::from_plan(&plan)?;
         let mut installed = bindings;
@@ -1161,6 +1175,7 @@ impl Engine {
         }
         Self::check_installed_bindings(&plan, &installed)?;
         self.links = links;
+        self.stores = stores;
         self.contrib = Rc::new(contrib);
         self.extensions = Rc::new(extensions);
         self.plan = plan;
@@ -1201,6 +1216,11 @@ impl Engine {
     /// 当前生效的 link 有效规则（只读快照，拷贝语义）。
     pub fn links(&self) -> kk_mod_api::builtin::LinkRules {
         self.links
+    }
+
+    /// 当前生效的 Generic 仓库容量规则（只读快照）。
+    pub fn stores(&self) -> kk_mod_api::builtin::StoreRules {
+        self.stores
     }
 
     /// 当前生效的扩展字段目录（只读引用）。
@@ -1473,6 +1493,7 @@ impl Engine {
             room.name.clone_from(name);
             let plane = Plane {
                 links: self.links,
+                stores: self.stores,
                 contrib: self.contrib.clone(),
                 extensions: self.extensions.clone(),
                 plan: self.plan.clone(),

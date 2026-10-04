@@ -76,6 +76,8 @@ mod handlers;
 mod projection;
 #[path = "freeze_cases/rules.rs"]
 mod rules;
+#[path = "freeze_cases/store_rules.rs"]
+mod store_rules;
 
 #[test]
 fn link_rules_extract_builtin_defaults() {
