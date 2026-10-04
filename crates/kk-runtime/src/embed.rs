@@ -121,7 +121,7 @@ struct ModChainContext {
     native: NativeCall,
     /// 仅在本次能力内缓存已解析字段；改写与 native 前失效，不跨槽/对象/tick。
     cached_fields: Option<Value>,
-    /// 自有动作的 namespace 写入暂存到调用成功；拒绝时无需改动共享候选。
+    /// 可拒绝动作的 namespace 写入暂存到调用成功；拒绝时丢弃。
     staged_states: Option<Rc<RefCell<BTreeMap<String, Value>>>>,
 }
 
@@ -132,9 +132,11 @@ impl SlotExecutor for ModSlotExecutor {
         ctx: &RoomCtx,
         call: SlotCall<'_>,
     ) -> Result<SlotOutcome, String> {
-        // 仅自有对象动作可拒绝：它的写面只有本对象字段与 namespace state，
-        // 没有 native/ID/玩家/事件写面，因而可使用这个局部恢复边界。
+        // 自有动作字段由此适配器恢复；link.transfer 的对象/事件由引擎
+        // 在整链外恢复。两者的 namespace state 都只在成功后移交候选。
         let extension = matches!(&call, SlotCall::Extension { .. });
+        let link_transfer = matches!(&call, SlotCall::Action { .. })
+            && slot.key.as_str() == "builtin:link.transfer";
         let (id, args, native) = match call {
             SlotCall::Action { id, data, native } => (
                 id,
@@ -159,7 +161,8 @@ impl SlotExecutor for ModSlotExecutor {
         } else {
             None
         };
-        let staged_states = extension.then(|| Rc::new(RefCell::new(BTreeMap::new())));
+        let staged_states =
+            (extension || link_transfer).then(|| Rc::new(RefCell::new(BTreeMap::new())));
         let mut vm = self
             .realm
             .try_borrow_mut()
@@ -199,10 +202,13 @@ impl SlotExecutor for ModSlotExecutor {
                 }
             }
             SlotOutcome::Declined(_) => {
-                let fields = original_fields.ok_or("该槽没有正常拒绝的局部恢复边界")?;
-                ctx.borrow_mut()
-                    .update_mod_fields(id, &fields)
-                    .map_err(|error| format!("动作拒绝恢复失败：{error}"))?;
+                if let Some(fields) = original_fields {
+                    ctx.borrow_mut()
+                        .update_mod_fields(id, &fields)
+                        .map_err(|error| format!("动作拒绝恢复失败：{error}"))?;
+                } else if !link_transfer {
+                    return Err("该槽没有正常拒绝的局部恢复边界".into());
+                }
             }
         }
         Ok(outcome)

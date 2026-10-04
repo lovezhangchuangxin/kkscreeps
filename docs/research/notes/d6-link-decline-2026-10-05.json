@@ -1,0 +1,41 @@
+{
+  "batch": "D6 link.transfer normal decline and local rollback",
+  "date": "2026-10-05",
+  "baseline": "517854068f5f69f5b7c960c7fdf8501aa80491c7",
+  "screeps_ok_pin": "34a630efa42908c117c19c25d2350fa2387bd633",
+  "executable_sha256": "9a2432bb0cebb66be9ae0a549e2b987ef04bff6c3a97a46dfab473434cae4e29",
+  "scope": {
+    "decline_slot": "builtin:link.transfer",
+    "restored_objects_max": 2,
+    "restored_event_append": true,
+    "staged_all_participating_namespaces": true,
+    "native_path_has_savepoint": false,
+    "player_rejection_event_added": false,
+    "player_api_result_rewritten": false
+  },
+  "checks": {
+    "workspace_check_exit_code": 0,
+    "rust_passed": 641,
+    "rust_failed": 0,
+    "rust_ignored": 11,
+    "new_runtime_tests": 5,
+    "mod_chain_tests_passed": 41,
+    "compat_node_passed": 14,
+    "ratchet_exit_code": 0,
+    "passed": 1918,
+    "failed": 89,
+    "skipped": 907,
+    "total": 2914,
+    "floor": 1918,
+    "status_changes_vs_head": 0,
+    "status_changes_vs_head_parent": 0,
+    "new_skips": 0,
+    "new_exemptions": 0
+  },
+  "projection_channels": [
+    "json",
+    "kkpv"
+  ],
+  "self_transfer_validation": "trusted settle_external intents; player API rejects self transfer",
+  "formal_performance_measurement": false
+}

@@ -29,17 +29,32 @@ Rust 自定义处理器仍可经原有纯 Rust 执行器安装。它与 JS 执�
 - 回调返回 Promise 或 thenable 属故障；失败链不执行 after。after 自身故障同样使整轮候选失败，已经发生的 native/JS 候选写入不发布。
 - JS 每槽最多 64 层 wrap，注册时拒绝超限。该限制约束递归栈深度，不等于 CPU/内存预算。
 
-处理器自身正常处理的错误不自动变成故障；以上不可吞掉的错误来自 next 与宿主候选访问边界。正常拒绝已开放于 Mod 自有对象动作，范围与局部回滚见下节。
+处理器自身正常处理的错误不自动变成故障；以上不可吞掉的错误来自 next 与宿主候选访问边界。正常拒绝已开放于 Mod 自有对象动作和 link transfer，范围与局部回滚见下节。
 
 ## 正常动作拒绝
 
-`SlotOutcome` 区分 `Completed` 与 `Declined { binding, code }`；异常仍由 Result 的 Err 返回。Mod 自有对象动作的 before/wrap/process/replace/after 可以 `return api.decline('full')`，也可导入 `@kkscreeps/mod` 的 `decline` 工厂。代码为 1..128 字节的 ASCII 字母、数字或 `._:-`。只有工厂产生的返回值表示拒绝；普通 `{code:...}`、返回码等不改变原有语义，throw 拒绝标记仍是异常，Promise/thenable 仍是故障。
+`SlotOutcome` 区分 `Completed` 与 `Declined { binding, code }`；异常仍由 Result 的 Err 返回。Mod 自有对象动作的 before/wrap/process/replace/after，以及内建 `builtin:link.transfer` 的 before/wrap/replace/after，可以 `return api.decline('full')`，也可导入 `@kkscreeps/mod` 的 `decline` 工厂。代码为 1..128 字节的 ASCII 字母、数字或 `._:-`。只有工厂产生的返回值表示拒绝；普通 `{code:...}`、返回码等不改变原有语义，throw 拒绝标记仍是异常，Promise/thenable 仍是故障。
 
 拒绝中止本次动作的剩余处理器；已经执行的 before、内层中心与 after 写入也一起撤销。wrap 即使捕获内层拒绝，也不能继续回写；该 wrap 后续抛出异常、或已有候选/转换故障时，异常优先，整轮失败，不能用拒绝掩盖故障。wrap 不调用 next 的主动取消仍是 Completed，保持原来执行 after 的约定。
 
-runtime 的自有动作适配器在调用前只保存目标对象字段，所有参与 namespace 的 state 在本次调用内暂存；正常完成后移交 state。拒绝时丢弃暂存 state，通过 `update_mod_fields` 恢复对象字段、信封坐标和位置索引，保留本轮之前已完成动作的结果。当前自有动作没有 native/ID/玩家/事件写面，因此这个边界足以撤销全部写入，不克隆整个房间。直接使用 SlotExecutor/ModRealm 的其他可信宿主须履行 Declined 返回前的局部恢复契约。
+runtime 的自有动作适配器在调用前只保存目标对象字段，所有参与 namespace 的 state 在本次调用内暂存；正常完成后移交 state。拒绝时丢弃暂存 state，通过 `update_mod_fields` 恢复对象字段、信封坐标和位置索引，保留本轮之前已完成动作的结果。当前自有动作没有 native/ID/玩家/事件写面，因此这个边界足以撤销全部写入，不克隆整个房间。
 
-拒绝后继续其他动作并正常发布世界、Memory 与 CPU 候选，保留本轮玩家执行费用；不重建健康 Mod VM。拒绝代码与实际绑定保留在类型化结局中，当前不额外发射玩家事件。内建 link action/tick 仍显式拒绝使用 decline：native 可改多个对象及事件，需先接入相应局部恢复边界。纯 Rust callback 仍使用原成功/异常签名，正常拒绝目前由整槽宿主提供。重复异常停用仍待后续；执行来源的结构化记录见下节。验证见 [正常拒绝记录](../research/notes/mod-intent-decline-2026-10-04.md)。
+内建 link transfer 的局部边界由引擎包住整个 Hosted 链：开始前保存源、目标对象原始记录和事件长度；拒绝后恢复记录并截去本次新增事件。自转移只保存一份记录；保存的是本次动作开始时的候选，因此共享接收方上此前成功动作的入账不会被撤销。runtime 将所有参与 namespace 的 state 暂存到正常完成，拒绝时丢弃。当前 native 只改库存、冷却并追加传输事件，JS 只可改源 cooldown；没有 ID、位置、玩家、市场或其他工作队列写入。以后扩大写面必须同步扩大恢复边界。无扩展的 Native 路径不保存快照、不进入 JS。
+
+```js
+export default function register(api) {
+  api.handlers.wrap('builtin:link.transfer', { id: 'quota' }, (ctx, next) => {
+    const used = ctx.state?.used || 0;
+    if (used + ctx.args.amount > 100) return api.decline('quota');
+    next();
+    ctx.state = { used: used + ctx.args.amount };
+  });
+}
+```
+
+上例按请求数量累计本 Mod namespace 的配额（不代表 native 实际转入量），也可在 `next()` 后拒绝并撤销 native。拒绝后继续其他动作及每轮 tick，并正常发布世界、Memory 与 CPU 候选，保留本轮玩家执行费用；不重建健康 Mod VM。JS 全局变量不在局部恢复范围内，权威玩法状态须放在 `ctx.state`。拒绝代码与实际绑定保留在整槽宿主的类型化结局中，当前不额外发射玩家事件，也不追改玩家此前的 `transferEnergy()` 返回码。
+
+`builtin:link.tick` 仍显式拒绝使用 decline，其他内建资源动作尚未开放可拒绝处理槽。纯 Rust callback 仍使用原成功/异常签名，正常拒绝目前由整槽宿主提供。直接使用 ModRealm 的可信宿主须自行恢复候选；SlotExecutor 的自有动作须由宿主恢复全部写入，link transfer 的对象/事件由引擎恢复，宿主负责 namespace 暂存且不得写出该边界。自有动作验证见[正常拒绝记录](../research/notes/mod-intent-decline-2026-10-04.md)，内建多对象验证见[link 拒绝记录](../research/notes/d6-link-decline-2026-10-05.md)；执行来源的结构化记录见下节。
 
 ## 注册声明转换
 
@@ -148,6 +163,6 @@ runtime 的 `last_mod_settlement_fault()` 返回最近一次实际结算中失�
 
 ## 尚未完成的范围
 
-共享可信 VM 的故障半径仍是整分片；未显式停用的确定性异常或超限 Mod 在新 VM 中仍会失败。内建槽与纯 Rust callback 的正常拒绝、自动策略的 CLI/持久日志接线、逐 Mod 资源归因、进程级限额、多对象写 API、其他生命周期槽、持久化和 outbox 尚未完成。
+共享可信 VM 的故障半径仍是整分片；未显式停用的确定性异常或超限 Mod 在新 VM 中仍会失败。link tick、其他内建动作与纯 Rust callback 的正常拒绝、自动策略的 CLI/持久日志接线、逐 Mod 资源归因、进程级限额、多对象写 API、其他生命周期槽、持久化和 outbox 尚未完成。
 
 默认路径与功能回归、真实混合链和失败候选分别验收。小对象链测试不代表密集 Mod 的成本；性能要求见 [性能验收](performance-acceptance.md)，本次选择与取舍见 [ADR-015](../decisions/ADR-015-mod-chain-execution.md)。

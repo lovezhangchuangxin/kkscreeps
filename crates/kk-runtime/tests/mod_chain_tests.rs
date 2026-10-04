@@ -815,26 +815,16 @@ fn decline_cannot_downgrade_a_later_exception_or_an_earlier_conversion_fault() -
 }
 
 #[test]
-fn builtin_slots_reject_decline_until_their_native_writes_can_be_restored() -> anyhow::Result<()> {
-    for slot in ["builtin:link.tick", "builtin:link.transfer"] {
+fn builtin_tick_rejects_decline_without_a_local_restore_boundary() -> anyhow::Result<()> {
+    for binary in [false, true] {
+        let slot = "builtin:link.tick";
         let source = package(&format!(
             "api.handlers.before('{slot}',{{id:'reject'}},()=>api.decline('full'));"
         ));
-        let mut e = engine(&[("a", source)], false)?;
-        let initial_cooldown = if slot.ends_with("tick") { 10 } else { 0 };
+        let mut e = engine(&[("a", source)], binary)?;
+        let initial_cooldown = 10;
         let id = link(&mut e, 20, 100, initial_cooldown)?;
-        let error = if slot.ends_with("tick") {
-            e.tick(1).unwrap_err()
-        } else {
-            let target = link(&mut e, 21, 0, 0)?;
-            e.run_player(
-                "p1",
-                &format!(
-                    "Game.getObjectById('{id}').transferEnergy(Game.getObjectById('{target}'),25)"
-                ),
-            )
-            .unwrap_err()
-        };
+        let error = e.tick(1).unwrap_err();
         assert!(error.to_string().contains("尚不支持正常拒绝"), "{error}");
         assert_eq!(e.get_game_time(), 0);
         assert_eq!(cooldown(&e, &id), json!(initial_cooldown));
@@ -1016,5 +1006,7 @@ fn disabled_bindings_are_removed_from_active_candidate_capabilities() -> anyhow:
 
 #[path = "mod_chain_tests/auto_disable.rs"]
 mod auto_disable;
+#[path = "mod_chain_tests/link_decline.rs"]
+mod link_decline;
 #[path = "mod_chain_tests/store_rules.rs"]
 mod store_rules;

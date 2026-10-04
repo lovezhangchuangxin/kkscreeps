@@ -45,6 +45,6 @@ link 保持既有 `builtin:link.capacity`。spawn、extension、storage、creep 
 
 ## 当前边界
 
-这是 D4 容量数值的第一片，尚未开放 transfer/withdraw 的 before/wrap/replace/after、实验室槽绑定策略、nuker/powerBank 禁止提取或终端干扰策略。内建多对象动作的正常拒绝仍须先定义撤销边界，见[Mod 执行](mod-execution.md)。规则已冻结，但没有完整检查点、规则迁移或运行中容量重配置。
+这是 D4 容量数值的第一片，尚未开放 creep transfer/withdraw 的 before/wrap/replace/after、实验室槽绑定策略、nuker/powerBank 禁止提取或终端干扰策略。D6 首片已为 link transfer 接入源/目标、事件与 Mod state 的局部恢复；其他内建多对象动作须随处理槽定义自己的撤销边界，见[Mod 执行](mod-execution.md)。规则已冻结，但没有完整检查点、规则迁移或运行中容量重配置。
 
 实现与验收见[交付记录](../research/notes/d4-store-rules-2026-10-05.md)。

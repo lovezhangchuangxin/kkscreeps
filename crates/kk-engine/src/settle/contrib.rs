@@ -320,7 +320,9 @@ pub enum SlotCall<'a> {
 /// 整槽宿主执行接口：引擎只提供冻结计划、候选与权威参数，保持对 V8 无依赖。
 /// 无扩展的 builtin 槽不会调用本接口；JS 宿主在自身 VM 内完成组合。
 pub trait SlotExecutor {
-    /// Declined 仅适用于扩展动作；返回前须撤销本次槽写入，保留此前候选。
+    /// Declined 适用于扩展动作与 link.transfer。扩展动作由宿主恢复全部写入；
+    /// link.transfer 的源/目标对象和新增事件由引擎恢复，宿主须丢弃暂存
+    /// namespace state，且不得写入这个局部边界以外的候选。
     fn run(
         &self,
         slot: &SlotPlan,
@@ -820,9 +822,20 @@ impl ActionSlot {
     fn run(&self, ctx: &RoomCtx, id: ObjId, d: &IntentData) -> Result<(), String> {
         match self {
             ActionSlot::Native(f) => native_action(*f)(ctx, id, d),
-            ActionSlot::Hosted(slot) => slot
-                .executor
-                .run(
+            ActionSlot::Hosted(slot) => {
+                // 本槽只有 link.transfer：native 改源/目标记录并追加事件，
+                // JS 字段门禁只允许源 cooldown；不分配 ID、不改位置/玩家。
+                // 在整链开始前保存，才能撤销 before 与 native 之后的拒绝，
+                // 同时保留此前动作对共享接收方的写入。无 Mod 的 Native 不走这里。
+                let (objects, event_len) = {
+                    let w = ctx.borrow();
+                    let objects: Vec<_> = std::iter::once(id)
+                        .chain(d.id.filter(|target| *target != id))
+                        .filter_map(|id| w.room.objects.get(&id).cloned().map(|o| (id, o)))
+                        .collect();
+                    (objects, w.events.len())
+                };
+                let outcome = slot.executor.run(
                     &slot.plan,
                     ctx,
                     SlotCall::Action {
@@ -830,8 +843,16 @@ impl ActionSlot {
                         data: d,
                         native: super::structures::link_transfer,
                     },
-                )
-                .and_then(require_completed),
+                )?;
+                if matches!(outcome, SlotOutcome::Declined(_)) {
+                    let mut w = ctx.borrow_mut();
+                    for (id, object) in objects {
+                        w.room.objects.insert(id, object);
+                    }
+                    w.events.truncate(event_len);
+                }
+                Ok(())
+            }
             ActionSlot::Chained(chain) => {
                 for f in &chain.before {
                     f(ctx, id, d)?;
