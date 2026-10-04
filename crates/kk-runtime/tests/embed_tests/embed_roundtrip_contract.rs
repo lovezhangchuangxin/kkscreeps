@@ -392,7 +392,7 @@ pub(super) fn embed_engine_roundtrip_impl() -> anyhow::Result<()> {
     )?;
     let v = &run.expr["value"];
     assert_eq!(v[0], 1, "controller.progress 结算 +1");
-    assert_eq!(v[1], 1, "1 点仍在 1 级");
+    assert_eq!(v[1], 2, "默认 2 级，升级后等级不变");
     assert_eq!(v[2], 1, "upgrade +1 GCL 点 → Game.gcl.progress 跨层可见");
 
     // console 捕获

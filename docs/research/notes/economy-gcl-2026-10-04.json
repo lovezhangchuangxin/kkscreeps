@@ -1,0 +1,79 @@
+{
+  "date": "2026-10-04",
+  "base": "5673ec1",
+  "screeps_ok_pin": "34a630efa42908c117c19c25d2350fa2387bd633",
+  "compat_counts": {
+    "passed": 1918,
+    "failed": 89,
+    "skipped": 907
+  },
+  "total": 2914,
+  "new_passes": [
+    "adapter contract: setup createShard PlayerSpec.gcl sets Game.gcl, and defaults to room for one more claim",
+    "creep.transfer() TRANSFER-001 transfers energy from the creep store to the target store",
+    "creep.transfer() TRANSFER-002 transfers partial amount",
+    "creep.withdraw() WITHDRAW-001 withdraws energy from container",
+    "creep.withdraw() WITHDRAW-002 withdraws partial amount",
+    "creep.withdraw() WITHDRAW-004 returns ERR_NOT_ENOUGH_RESOURCES from empty container",
+    "controller mechanics CTRL-CLAIM-001 claimController returns OK and sets the unowned controller to level 1 for the claimant",
+    "controller mechanics CTRL-CLAIM-002 claimController returns ERR_NO_BODYPART without a CLAIM part",
+    "controller mechanics CTRL-CLAIM-003 claimController returns ERR_INVALID_TARGET when the controller is reserved by a hostile player",
+    "controller mechanics CTRL-CLAIM-004 claimController returns ERR_NOT_IN_RANGE when not adjacent to the controller",
+    "controller mechanics CTRL-CLAIM-006 claimController returns ERR_INVALID_TARGET when the controller is already owned",
+    "controller mechanics CTRL-CLAIM-008:invalidTarget claimController() validation returns the canonical code",
+    "controller mechanics CTRL-CLAIM-008:noBodypart claimController() validation returns the canonical code",
+    "controller mechanics CTRL-CLAIM-008:range claimController() validation returns the canonical code",
+    "controller mechanics CTRL-CLAIM-008:invalidControllerState claimController() validation returns the canonical code",
+    "controller mechanics CTRL-CLAIM-008:invalidTargetBeforeNoBodypart claimController() validation returns the canonical code",
+    "controller mechanics CTRL-CLAIM-008:invalidTargetBeforeRange claimController() validation returns the canonical code",
+    "controller mechanics CTRL-CLAIM-008:invalidTargetBeforeInvalidControllerState claimController() validation returns the canonical code",
+    "controller mechanics CTRL-CLAIM-008:noBodypartBeforeRange claimController() validation returns the canonical code",
+    "controller mechanics CTRL-CLAIM-008:noBodypartBeforeInvalidControllerState claimController() validation returns the canonical code",
+    "controller mechanics CTRL-CLAIM-008:rangeBeforeInvalidControllerState claimController() validation returns the canonical code",
+    "StructureContainer CONTAINER-003 a hostile creep adjacent to a container can withdraw from it",
+    "StructureLink LINK-012 transferEnergy returns ERR_NOT_IN_RANGE when target is in a different room",
+    "room.getEventLog() ROOM-EVENTLOG-007 EVENT_TRANSFER is emitted by creep transfer/withdraw and link transferEnergy with vanilla object/target direction",
+    "source regeneration SOURCE-REGEN-001:owned a source in a owned room takes capacity 3000",
+    "source regeneration SOURCE-REGEN-006 source capacity updates to owned-room value after claiming the controller",
+    "Intent creep resolution order INTENT-CREEP-004 transfer resolves before harvest even when harvest is called first",
+    "Intent creep resolution order INTENT-CREEP-006 transfer resolves before suicide even when suicide is called first",
+    "Same-tick resource intent visibility INTENT-RESOURCE-002 transfer removes from sender in same tick",
+    "Same-tick resource intent visibility INTENT-RESOURCE-004 withdraw is preferred over pickup when same-tick capacity conflicts exist",
+    "Same-tick resource intent visibility INTENT-RESOURCE-003 multiple same-tick transfers to same container both succeed"
+  ],
+  "regressions": [],
+  "rust_tests": {
+    "passed": 623,
+    "failed": 0,
+    "ignored": 11
+  },
+  "checks": {
+    "pnpm_check_exit": 0,
+    "release_build_exit": 0,
+    "adapter_build_exit": 0,
+    "ratchet_exit": 0
+  },
+  "scope_limitations": [
+    "账户 power 输入未接入",
+    "存储特殊策略与 GCL 规则开放留待 D4",
+    "尚无完整真实 bot 经济场景 CLI 或持久化"
+  ],
+  "continuous_economy": {
+    "channels": [
+      "json",
+      "kkpv"
+    ],
+    "ticks_per_channel": 40,
+    "initial_energy": 3000,
+    "min_controller_progress_exclusive": 10,
+    "energy_conservation": true,
+    "gcl_equals_upgrade_progress": true,
+    "memory_cycles": 40
+  },
+  "late_writeback_failure": {
+    "resource_transfer_and_gcl_atomic": true,
+    "retries_without_reexecution": true
+  },
+  "compat_floor": 1918,
+  "compat_percentage": 65.82
+}

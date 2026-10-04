@@ -27,6 +27,12 @@
 
 包含 JS 贡献的规则槽通过一次 VM 调用完成整条处理链；native 中心经普通 op 修改同一 Rust 候选，默认无扩展槽仍直调 Rust。组合顺序、候选同步和故障语义见 [Mod 处理链执行](mod-execution.md)。
 
+### 仓库资源与 GCL
+
+`transfer`/`withdraw` 除既有类型化仓库外，也读写 Generic 的 `store`；转入容量由 `storeCapacity` 和 `storeCapacityResource` 字段决定，无需扩充结构类型白名单。放置及建造落成的空仓也带原始 `store`，满足玩家 API 的目标预检；固定能量仓与新建仓库带显式 `energy: 0`。共享仓按所有资源的合计库存计算余量，分资源仓按对应槽计算；实验室首次装入矿物时绑定矿物槽，取空后恢复未绑定容量。同轮动作读取先前动作修改后的候选库存，避免竞争时超容。提取保留安全模式、敌方私有 rampart、nuker/powerBank 禁止提取和 terminal 干扰截止时间限制。实验室槽切换及这些特殊提取规则仍是内置分支，具名 Mod 规则入口留待 D4，例外依据见[本批记录](../research/notes/economy-gcl-2026-10-04.md)。
+
+分片创建支持 `PlayerSpec.gcl = { level, progress? }`。输入按 `ceil(GCL_MULTIPLY × (level−1)^GCL_POW) + progress` 转成累计点数，验证等级回读、整数进度与 JS 安全整数范围；不提供 GCL 时，初始等级为 `max(已拥有房间数+1, 2)`。校验先于回收旧分片。升级的累计点数已由引擎候选更新，JSON 与 KKPV 玩家投影读取同一玩家状态；账户 `power` 输入尚未接入。
+
 ## 候选提交与失败
 
 世界结算在工作副本中处理房间、玩家及市场状态，验证通过后更新内存。结算返回错误时，已提交世界和时间保留旧值；引擎结算段失败会记录 `NeedsRecovery`，不能把这种错误描述成已完成的 tick。

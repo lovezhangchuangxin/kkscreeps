@@ -14,6 +14,8 @@ mod c4_player_api;
 mod c_mod_settle;
 #[path = "embed_tests/dual_room_live_fire.rs"]
 mod dual_room_live_fire;
+#[path = "embed_tests/economy_gcl_family.rs"]
+mod economy_gcl_family;
 #[path = "embed_tests/embed_channels_and_families.rs"]
 mod embed_channels_and_families;
 #[path = "embed_tests/embed_roundtrip_contract.rs"]
@@ -57,6 +59,7 @@ use stop_run_regression::*;
 fn embed_engine_suite() -> anyhow::Result<()> {
     // 沙箱销毁统计是进程级的；这些场景串行运行，避免统计被并行场景干扰。
     embed_engine_roundtrip_impl()?;
+    economy_gcl_family::economy_gcl_e2e_impl()?;
     embed_run_player_contract_impl()?;
     embed_create_shard_validation_impl()?;
     embed_shard_input_strictness_impl()?;

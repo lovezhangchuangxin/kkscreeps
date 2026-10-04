@@ -6,6 +6,7 @@
 use kk_core::constants as c;
 use kk_schema::room::RoomObject;
 use kk_world::ObjId;
+use serde_json::Value;
 
 use super::{
     creep_slot, slots_add, slots_sub, store_capacity, store_slot, store_slot_add, store_slot_sub,
@@ -13,7 +14,87 @@ use super::{
 use crate::intent::IntentData;
 use crate::settle::Working;
 
-/// 向相邻 creep、spawn、extension 或 storage 转移资源。
+/// Generic 仓库通过 store/storeCapacity/storeCapacityResource 字段参与结算，
+/// 不按结构类型列容量白名单；扩展结构可复用同一数据通道。
+/// 来源：上游 utils.capacityForResource 和 creeps/transfer.js。
+fn generic_store(data: &str) -> Option<Value> {
+    let value: Value = serde_json::from_str(data).ok()?;
+    let store = value.get("store")?.as_object()?;
+    if !store
+        .values()
+        .all(|slot| slot.as_i64().is_some_and(|n| n >= 0))
+    {
+        return None;
+    }
+    if let Some(capacities) = value.get("storeCapacityResource").filter(|v| !v.is_null()) {
+        let slots = capacities.as_object()?;
+        if !slots
+            .values()
+            .all(|slot| slot.is_null() || slot.as_i64().is_some_and(|n| n >= 0))
+        {
+            return None;
+        }
+    }
+    Some(value)
+}
+
+fn generic_capacity(value: &Value, resource: &str) -> (i64, i64) {
+    let capacities = value
+        .get("storeCapacityResource")
+        .and_then(Value::as_object);
+    let reserved: i64 = capacities
+        .into_iter()
+        .flat_map(|slots| slots.values())
+        .filter_map(Value::as_i64)
+        .fold(0_i64, i64::saturating_add);
+    let capacity = capacities
+        .and_then(|slots| slots.get(resource))
+        .and_then(Value::as_i64)
+        .filter(|n| *n > 0)
+        .unwrap_or_else(|| {
+            value["storeCapacity"]
+                .as_i64()
+                .unwrap_or(0)
+                .saturating_sub(reserved)
+                .max(0)
+        });
+    let stored = if capacities.is_some() {
+        value["store"][resource].as_i64().unwrap_or(0)
+    } else {
+        value["store"]
+            .as_object()
+            .unwrap()
+            .values()
+            .filter_map(Value::as_i64)
+            .fold(0_i64, i64::saturating_add)
+    };
+    (capacity, stored)
+}
+
+/// 实验室装入首种矿物时锁定该槽，取空后恢复空闲矿物容量。
+/// 其他字段原样保留，来源：上游 creeps/{transfer,withdraw}.js。
+fn change_generic_store(data: &mut String, resource: &str, amount: i64) {
+    let mut value = generic_store(data).expect("读阶段已确认 Generic 仓库");
+    let next = value["store"][resource].as_i64().unwrap_or(0) + amount;
+    value["store"][resource] = next.into();
+    if value["structureType"].as_str() == Some("lab") && resource != "energy" {
+        if amount > 0
+            && value["storeCapacityResource"][resource]
+                .as_i64()
+                .unwrap_or(0)
+                == 0
+        {
+            value["storeCapacityResource"][resource] = c::LAB_MINERAL_CAPACITY.into();
+            value["storeCapacity"] = Value::Null;
+        } else if amount < 0 && next == 0 {
+            value["storeCapacityResource"][resource] = Value::Null;
+            value["storeCapacity"] = (c::LAB_ENERGY_CAPACITY + c::LAB_MINERAL_CAPACITY).into();
+        }
+    }
+    *data = value.to_string();
+}
+
+/// 向相邻 creep 或有容量字段的结构转移资源。
 /// 请求超过自身持有量时整条拒绝；目标容量不足时只转可容纳的数量。
 /// 来源：上游 engine/src/processor/intents/creeps/transfer.js。
 pub(super) fn intent_transfer(w: &mut Working, id: ObjId, data: &IntentData) {
@@ -61,6 +142,13 @@ pub(super) fn intent_transfer(w: &mut Working, id: ObjId, data: &IntentData) {
             (t.x, t.y),
             kk_world::types::store_total(&t.store, &t.store_extra),
         ),
+        Some(RoomObject::Generic(t)) => {
+            let Some(value) = generic_store(&t.data) else {
+                return;
+            };
+            let (capacity, stored) = generic_capacity(&value, resource);
+            (capacity, (t.x, t.y), stored)
+        }
         _ => return,
     };
     if (t_pos.0 as i32 - pos.0 as i32).abs() > 1 || (t_pos.1 as i32 - pos.1 as i32).abs() > 1 {
@@ -69,10 +157,7 @@ pub(super) fn intent_transfer(w: &mut Working, id: ObjId, data: &IntentData) {
     if t_stored >= target_cap {
         return;
     }
-    let mut amount = amount_req.min(held);
-    if t_stored + amount > target_cap {
-        amount = target_cap - t_stored;
-    }
+    let amount = amount_req.min(held).min(target_cap - t_stored);
     if amount == 0 {
         return;
     }
@@ -83,6 +168,7 @@ pub(super) fn intent_transfer(w: &mut Working, id: ObjId, data: &IntentData) {
         Some(RoomObject::Storage(t)) => {
             slots_add(&mut t.store, &mut t.store_extra, resource, amount)
         }
+        Some(RoomObject::Generic(t)) => change_generic_store(&mut t.data, resource, amount),
         _ => return,
     }
     if let Some(c) = w.creep_mut(id) {
@@ -95,10 +181,10 @@ pub(super) fn intent_transfer(w: &mut Working, id: ObjId, data: &IntentData) {
     );
 }
 
-/// 从相邻 spawn、extension、storage、墓碑或废墟提取资源。
+/// 从相邻有库存的结构、墓碑或废墟提取资源。
 /// 他人安全模式会拒绝提取；目标归属不同且被敌方私有 rampart 覆盖时也拒绝。
 /// 数量按请求、携带余量和目标库存取最小值。事件由资源提供方指向提取者。
-/// Generic 结构尚不在目标列表中；能量源和掉落堆分别使用 harvest 和 pickup。
+/// nuker、powerBank 和受干扰的 terminal 拒绝提取。
 /// 来源：上游 engine/src/processor/intents/creeps/withdraw.js。
 pub(super) fn intent_withdraw(w: &mut Working, id: ObjId, data: &IntentData) {
     let resource = data.resource_type.as_deref().unwrap_or("energy");
@@ -143,6 +229,26 @@ pub(super) fn intent_withdraw(w: &mut Working, id: ObjId, data: &IntentData) {
             (t.x, t.y),
             kk_world::types::store_extra_slot(&t.store, &t.store_extra, resource),
         ),
+        Some(RoomObject::Generic(t)) => {
+            let Some(value) = generic_store(&t.data) else {
+                return;
+            };
+            match value["structureType"].as_str() {
+                Some("nuker" | "powerBank") => return,
+                Some("terminal")
+                    if value["effects"].as_array().is_some_and(|effects| {
+                        effects.iter().any(|effect| {
+                            effect["power"].as_i64() == Some(c::PWR_DISRUPT_TERMINAL)
+                                && effect["endTime"].as_u64().is_some_and(|end| end > w.time)
+                        })
+                    }) =>
+                {
+                    return;
+                }
+                _ => {}
+            }
+            ((t.x, t.y), value["store"][resource].as_i64().unwrap_or(0))
+        }
         _ => return,
     };
     let target = &w.room.objects[&target_id];
@@ -181,6 +287,7 @@ pub(super) fn intent_withdraw(w: &mut Working, id: ObjId, data: &IntentData) {
             slots_sub(&mut t.store, &mut t.store_extra, resource, amount)
         }
         Some(RoomObject::Ruin(t)) => slots_sub(&mut t.store, &mut t.store_extra, resource, amount),
+        Some(RoomObject::Generic(t)) => change_generic_store(&mut t.data, resource, -amount),
         _ => return,
     }
     if let Some(c) = w.creep_mut(id) {

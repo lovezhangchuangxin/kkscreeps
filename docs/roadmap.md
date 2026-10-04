@@ -41,6 +41,8 @@ M2 分为两道关卡，避免把运行环境可用与完整玩法可玩混为�
 
 玩家 API 扩面见 [M2B 方案](plans/m2b-expansion.md)。terminal 与市场已开展独立实现和验收，见[终端与市场方案](plans/2b-terminal-market.md)，后续应按剩余差异补齐，不能继续把整个市场视为 M4 才开始的能力。
 
+核心仓库搬运与分片 GCL 输入已接入；两种玩家投影分别通过连续 40 tick 的采集、容器搬运和升级守恒场景，记录见[核心经济链与 GCL](research/notes/economy-gcl-2026-10-04.md)。后续仍须提供可复跑的完整真实 bot 经济场景入口、开放特殊存储规则，并补保存恢复。
+
 并发调度、统一提交和共享视图遵循 [tick 契约](architecture/tick-contract.md)与[快照契约](architecture/snapshot-contract.md)。这些文档分别说明现状和目标；提出契约不等于生产通路已经完整接入。端到端基线按[性能验收方案](architecture/performance-acceptance.md)采集，须先确认夹具实际产生动作与状态变化。
 
 ## JS Mod 与架构扩展

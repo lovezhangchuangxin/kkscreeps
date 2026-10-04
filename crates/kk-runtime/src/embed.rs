@@ -489,8 +489,9 @@ fn room_setups(spec: &Value) -> anyhow::Result<Vec<RoomSetup<'_>>> {
     Ok(setups)
 }
 
-/// 提取玩家名并拒绝空名或重名；对象形式的 `gcl`、`power` 当前不在这里使用。
-fn player_handles(spec: &Value) -> anyhow::Result<Vec<String>> {
+/// 校验玩家名及 GCL，统一转成累计点数；power 尚未接入账户状态。
+/// 默认等级给已有房间留一次扩张空间，来源：screeps-ok PlayerSpec/gclPoints。
+fn player_setups(spec: &Value) -> anyhow::Result<Vec<(String, i64)>> {
     let mut handles = Vec::new();
     let mut seen = BTreeSet::new();
     let players = spec
@@ -509,7 +510,52 @@ fn player_handles(spec: &Value) -> anyhow::Result<Vec<String>> {
         if !seen.insert(name) {
             anyhow::bail!("重复玩家 handle: {name}");
         }
-        handles.push(name.to_string());
+        let owned_rooms = spec["rooms"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|room| room["owner"].as_str() == Some(name))
+            .count();
+        let default_level = (owned_rooms + 1).max(2) as f64;
+        let (level, progress) = match entry.get("gcl") {
+            None => (default_level, 0.0),
+            Some(gcl) => {
+                let level = gcl
+                    .get("level")
+                    .and_then(Value::as_f64)
+                    .ok_or_else(|| anyhow::anyhow!("PlayerSpec {name}: gcl.level 必须为正整数"))?;
+                let progress = match gcl.get("progress") {
+                    None => 0.0,
+                    Some(value) => value.as_f64().ok_or_else(|| {
+                        anyhow::anyhow!("PlayerSpec {name}: gcl.progress 必须为非负整数")
+                    })?,
+                };
+                (level, progress)
+            }
+        };
+        let threshold = |level: f64| {
+            (kk_core::constants::GCL_MULTIPLY as f64
+                * (level - 1.0).powf(kk_core::constants::GCL_POW))
+            .ceil()
+        };
+        let points = threshold(level) + progress;
+        let reads_back = (points / kk_core::constants::GCL_MULTIPLY as f64)
+            .powf(1.0 / kk_core::constants::GCL_POW)
+            .floor()
+            + 1.0;
+        // 玩家 JS 使用 Number，拒绝不能精确表示的点数，避免饱和转换或等级失真。
+        if level < 1.0
+            || level.fract() != 0.0
+            || progress < 0.0
+            || progress.fract() != 0.0
+            || !points.is_finite()
+            || points > 9_007_199_254_740_991.0
+            || points >= threshold(level + 1.0)
+            || reads_back != level
+        {
+            anyhow::bail!("PlayerSpec {name}: gcl 等级、进度或累计点数非法");
+        }
+        handles.push((name.to_string(), points as i64));
     }
     Ok(handles)
 }
@@ -576,7 +622,7 @@ impl EmbedEngine {
         // 玩家面导出与 canary 安装失败发生在回收之后——旧分片已销毁、
         // 引擎已重置为空（零房间零玩家），宿主须重新调用创建接口。
         let rooms = room_setups(spec)?;
-        let handles = player_handles(spec)?;
+        let handles = player_setups(spec)?;
 
         if let Some(p) = &mut self.players {
             p.shutdown_all();
@@ -694,7 +740,7 @@ impl EmbedEngine {
         let players = self.players.get_or_insert_with(ThreadExecutor::new);
         // 先取走全部配置，避免注册中途失败后残留配置被下一次创建意外使用。
         let configs = std::mem::take(&mut self.sandbox_configs_for_test);
-        for handle in handles {
+        for (handle, gcl) in handles {
             let mut config = configs.get(&handle).cloned().unwrap_or_default();
             // link 有效规则同步到玩家全局常量。计划是常量的
             // 权威来源，测试配置里的同名覆盖以引擎规则为准。
@@ -714,6 +760,7 @@ impl EmbedEngine {
             );
             players.spawn(&handle, config)?;
             self.engine.players.entry(handle.clone()).or_default().cpu = cpu;
+            self.engine.players.entry(handle.clone()).or_default().gcl = gcl;
             // 初始余额为 10M credits，内部按千分之一存储。
             // 来源：screeps-ok adapters/vanilla/index.ts 的 createShard 玩家初始化。
             self.engine.players.entry(handle.clone()).or_default().money = 10_000_000_000;

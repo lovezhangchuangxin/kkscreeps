@@ -252,6 +252,20 @@ pub(super) fn normalize_structure(
             if let Some(res) = built_store_capacity_resource(st, &ctx.links) {
                 data.entry("storeCapacityResource").or_insert(res);
             }
+            // 空仓也必须有原始 store，玩家 transfer 预检据此识别可存储目标。
+            // 来源：vanilla getStructureDefaults 与 engine creeps.js 的目标检查。
+            if data.contains_key("storeCapacity") || data.contains_key("storeCapacityResource") {
+                let store = if data
+                    .get("storeCapacityResource")
+                    .and_then(Value::as_object)
+                    .is_some_and(|slots| slots.contains_key("energy"))
+                {
+                    json!({"energy": 0})
+                } else {
+                    json!({})
+                };
+                data.entry("store").or_insert(store);
+            }
             // lab 的矿物槽由已有 store 资源绑定，为未声明容量的矿物补容量。
             // 绑定后，其他矿物查询不会错误地使用尚未分配的剩余总容量。
             // 此实现只补缺键，保留显式 0；vanilla placeStructure 使用 falsy 检查。

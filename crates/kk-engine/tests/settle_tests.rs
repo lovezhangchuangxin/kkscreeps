@@ -20,6 +20,8 @@ mod combat_heal;
 mod combat_ranged;
 #[path = "settle_tests/controller_safemode.rs"]
 mod controller_safemode;
+#[path = "settle_tests/generic_store_family.rs"]
+mod generic_store_family;
 #[path = "settle_tests/inter_room_family.rs"]
 mod inter_room_family;
 #[path = "settle_tests/m2b2_terminal_market_family.rs"]

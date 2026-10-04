@@ -230,6 +230,9 @@ fn complete_construction(
             // 总容量与按资源容量须配套，玩家 Store 的 null/数值语义依赖两者。
             if let Some(cap) = kk_world::place::built_store_capacity(other, &w.plane.links) {
                 data["storeCapacity"] = serde_json::json!(cap);
+                // 新仓库须通过玩家 transfer 的原始 store 字段预检。
+                // 来源：上游 creeps/build.js 的各存储结构初始化。
+                data["store"] = serde_json::json!({"energy": 0});
             }
             if let Some(res) = kk_world::place::built_store_capacity_resource(other, &w.plane.links)
             {
@@ -242,7 +245,6 @@ fn complete_construction(
             if let Some(cd) = kk_world::place::built_cooldown_time(other, time) {
                 data["cooldownTime"] = serde_json::json!(cd);
             }
-            // Generic 初始不保存空 store，玩家 Store 将缺失当作空仓；原始 JSON 字段不同。
             RoomObject::Generic(kk_schema::room::GenericObj {
                 id: 0,
                 x: site.x,
