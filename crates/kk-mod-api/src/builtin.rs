@@ -1,4 +1,4 @@
-//! 默认 link/creep 资源动作描述及 Generic 仓库容量规则，不安装引擎处理器。
+//! 默认 link/creep 资源与移动动作描述及 Generic 仓库容量规则，不安装引擎处理器。
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -18,12 +18,16 @@ pub const RESOURCE_ACTION_SLOTS: [&str; 3] = [
     "builtin:creep.withdraw",
 ];
 
+/// 已有局部恢复边界的内建移动动作；宿主拒绝资格与 runtime 暂存共用此表。
+pub const MOVE_ACTION_SLOTS: [&str; 1] = ["builtin:creep.move"];
+
 /// 内建实际派发的槽；自有动作装配必须跳过它们。
-pub const SLOT_KEYS: [&str; 4] = [
+pub const SLOT_KEYS: [&str; 5] = [
     RESOURCE_ACTION_SLOTS[0],
     "builtin:link.tick",
     RESOURCE_ACTION_SLOTS[1],
     RESOURCE_ACTION_SLOTS[2],
+    MOVE_ACTION_SLOTS[0],
 ];
 
 fn key(name: &str) -> Key {
@@ -242,7 +246,11 @@ pub fn link() -> Contribution {
     rules.extend(store_rules);
     // creep 的类型化对象、玩家 API 和参数清洗沿用原通路；本片声明
     // 具名处理槽，不把只读宿主视图冒充完整 creep 对象/意图描述目录。
-    bindings.extend(keys(&["creep.transfer.native", "creep.withdraw.native"]));
+    bindings.extend(keys(&[
+        "creep.transfer.native",
+        "creep.withdraw.native",
+        "creep.move.native",
+    ]));
     let slots = vec![
         SlotDescriptor {
             key: key("link.transfer"),
@@ -264,12 +272,17 @@ pub fn link() -> Contribution {
             stage: Stage::ObjectAction,
             native_binding: key("creep.withdraw.native"),
         },
+        SlotDescriptor {
+            key: key("creep.move"),
+            stage: Stage::ObjectAction,
+            native_binding: key("creep.move.native"),
+        },
     ];
     Contribution {
         source: Source {
             namespace: "builtin".into(),
             api_version: 1,
-            revision: "link-creep-store-descriptors-v3".into(),
+            revision: "link-creep-store-move-descriptors-v4".into(),
             code_digest: {
                 let mut hash = Sha256::new();
                 hash.update(include_bytes!("builtin.rs"));

@@ -13,24 +13,9 @@ use crate::settle::{SettleError, Working};
 
 use super::lifecycle::die_creep;
 
-/// 按位移符号换算八方向；同格返回无效方向 0。
-fn direction_from_delta(dx: i32, dy: i32) -> u8 {
-    match (dx.signum(), dy.signum()) {
-        (0, -1) => 1,  // TOP
-        (1, -1) => 2,  // TOP_RIGHT
-        (1, 0) => 3,   // RIGHT
-        (1, 1) => 4,   // BOTTOM_RIGHT
-        (0, 1) => 5,   // BOTTOM
-        (-1, 1) => 6,  // BOTTOM_LEFT
-        (-1, 0) => 7,  // LEFT
-        (-1, -1) => 8, // TOP_LEFT
-        _ => 0,
-    }
-}
-
 /// 记录旧疲劳并登记移动请求。direction 优先，否则用相邻 creep 的 ID 求方向。
 /// 预检静态障碍和私有敌方 rampart，creep 冲突交给 Movement 仲裁。
-pub(super) fn intent_move(w: &mut Working, id: ObjId, data: &IntentData) {
+pub(in crate::settle) fn intent_move(w: &mut Working, id: ObjId, data: &IntentData) {
     let (spawning, fatigue, x, y, owner) = match w.creep(id) {
         Some(c) => (
             c.spawning,
@@ -59,7 +44,7 @@ pub(super) fn intent_move(w: &mut Working, id: ObjId, data: &IntentData) {
             if ddx.abs() > 1 || ddy.abs() > 1 {
                 return; // 官方 API 层已挡 isNearTo；结算复核
             }
-            direction_from_delta(ddx, ddy)
+            movement::direction_from_delta(ddx, ddy)
         }
     };
     let Some((dx, dy)) = offsets_by_direction(direction) else {
@@ -70,8 +55,16 @@ pub(super) fn intent_move(w: &mut Working, id: ObjId, data: &IntentData) {
     }
     let target = ((x + dx) as u8, (y + dy) as u8);
     let mover_owner = owner;
-    let has_static_obstacle = w
-        .index
+    if has_static_obstacle(w, target, &mover_owner) {
+        return;
+    }
+    w.movement.add(id, (x as u8, y as u8), dx, dy);
+}
+
+/// 移动登记的静态预检：结构障碍与私有敌方 rampart。creep 不在此预检，
+/// 由仲裁阶段决定是否获准让位；native 意图与移动槽能力共用同一口径。
+fn has_static_obstacle(w: &Working, target: (u8, u8), mover_owner: &str) -> bool {
+    w.index
         .at(target.0 as usize, target.1 as usize)
         .iter()
         .any(|tid| {
@@ -97,11 +90,59 @@ pub(super) fn intent_move(w: &mut Working, id: ObjId, data: &IntentData) {
                 Some(other) => kk_world::types::is_obstacle_type(&movement::type_name_of(other)),
                 None => false,
             }
-        });
-    if has_static_obstacle {
-        return;
+        })
+}
+
+/// 移动槽能力：读取执行者当前登记的请求方向；未登记返回 `None`。
+/// 执行者不在本房候选（或不是 creep）按故障处理，与写能力同一口径。
+pub fn slot_pending_direction(w: &Working, id: ObjId) -> Result<Option<u8>, String> {
+    let creep = w.creep(id).ok_or("移动执行者不在本房候选中")?;
+    let Some(cell) = w.movement.request_cell_of(id) else {
+        return Ok(None);
+    };
+    let direction = movement::direction_from_delta(
+        cell.0 as i32 - creep.x as i32,
+        cell.1 as i32 - creep.y as i32,
+    );
+    Ok((direction != 0).then_some(direction))
+}
+
+/// 移动槽能力：以受控方向登记或替换执行者的移动请求。
+/// 与 native 意图同一预检（越界、静态障碍、孵化中返回 `Ok(false)`，
+/// 不登记、不产生请求；creep 冲突仍由仲裁阶段处理），并同步维护
+/// 意图时疲劳，使疲劳门槛与仲裁评分沿用既有语义。重复调用时
+/// 后一次登记覆盖前一次（单执行者单请求）。
+pub fn slot_request_direction(w: &mut Working, id: ObjId, direction: u8) -> Result<bool, String> {
+    let Some((dx, dy)) = offsets_by_direction(direction) else {
+        return Err("移动方向须为 1..=8".into());
+    };
+    let Some(creep) = w.creep(id) else {
+        return Err("移动执行者不在本房候选中".into());
+    };
+    if creep.spawning {
+        return Ok(false);
     }
+    let (x, y) = (creep.x as i32, creep.y as i32);
+    if x + dx < 0 || x + dx > 49 || y + dy < 0 || y + dy > 49 {
+        return Ok(false);
+    }
+    let target = ((x + dx) as u8, (y + dy) as u8);
+    if has_static_obstacle(w, target, &creep.owner) {
+        return Ok(false);
+    }
+    w.old_fatigue.insert(id, creep.fatigue);
     w.movement.add(id, (x as u8, y as u8), dx, dy);
+    Ok(true)
+}
+
+/// 移动槽能力：取消执行者的请求登记。仲裁尚未发生，实际位移与
+/// 疲劳执行本来也只在有获准请求时进行；此处只移除本执行者的登记。
+pub fn slot_cancel_direction(w: &mut Working, id: ObjId) -> Result<(), String> {
+    if w.creep(id).is_none() {
+        return Err("移动执行者不在本房候选中".into());
+    }
+    w.movement.remove_requests(id);
+    Ok(())
 }
 
 /// 依次执行移动、孵化或 TTL 处理、疲劳恢复、待伤害和治疗。

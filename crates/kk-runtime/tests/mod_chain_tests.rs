@@ -161,6 +161,10 @@ mod disable;
 
 #[path = "mod_chain_tests/auto_disable.rs"]
 mod auto_disable;
+#[path = "mod_chain_tests/creep_move.rs"]
+mod creep_move;
+#[path = "mod_chain_tests/creep_move_world.rs"]
+mod creep_move_world;
 #[path = "mod_chain_tests/creep_store.rs"]
 mod creep_store;
 #[path = "mod_chain_tests/link_decline.rs"]

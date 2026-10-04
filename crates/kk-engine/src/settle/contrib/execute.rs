@@ -6,19 +6,24 @@ impl ActionSlot {
         match self {
             ActionSlot::Native(f) => native_action(*f)(ctx, id, d),
             ActionSlot::Hosted { slot, native } => {
-                // 三个资源动作只改源/目标记录并追加事件；实验室绑定容量
-                // 也在目标记录内。JS 额外资源写入由运行时的触达日志恢复；
-                // 此边界继续恢复原 native 两端和整链新增事件。
-                // 不分配 ID、不改位置/玩家或其他工作队列。
-                // 在整链开始前保存，才能撤销 before 与 native 之后的拒绝，
-                // 同时保留此前动作对共享接收方的写入。无 Mod 的 Native 不走这里。
-                let (objects, event_len) = {
+                // 移动槽额外保存执行者的请求登记与意图疲劳；拒绝时按快照
+                // 恢复，不触碰其他执行者的请求或拉拽关系。三个资源动作只改
+                // 源/目标记录并追加事件；实验室绑定容量也在目标记录内。
+                // JS 额外资源写入由运行时的触达日志恢复；此边界继续恢复
+                // 原 native 两端和整链新增事件。不分配 ID、不改位置/玩家
+                // 或其他工作队列。在整链开始前保存，才能撤销 before 与
+                // native 之后的拒绝，同时保留此前动作对共享接收方的写入。
+                // 无 Mod 的 Native 不走这里。
+                let move_slot =
+                    kk_mod_api::builtin::MOVE_ACTION_SLOTS.contains(&slot.plan.key.as_str());
+                let (objects, event_len, move_snapshot) = {
                     let w = ctx.borrow();
+                    let move_snapshot = move_slot.then(|| w.snapshot_move_requests(id));
                     let objects: Vec<_> = std::iter::once(id)
                         .chain(d.id.filter(|target| *target != id))
                         .filter_map(|id| w.room.objects.get(&id).cloned().map(|o| (id, o)))
                         .collect();
-                    (objects, w.events.len())
+                    (objects, w.events.len(), move_snapshot)
                 };
                 let outcome = slot.executor.run(
                     &slot.plan,
@@ -35,6 +40,9 @@ impl ActionSlot {
                         w.room.objects.insert(id, object);
                     }
                     w.events.truncate(event_len);
+                    if let Some(snapshot) = move_snapshot {
+                        w.restore_move_requests(id, snapshot);
+                    }
                 }
                 Ok(())
             }

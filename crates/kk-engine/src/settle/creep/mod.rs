@@ -11,6 +11,7 @@ mod store;
 pub use harvest::harvest_power;
 pub use lifecycle::{die_creep, die_creep_with_rate};
 pub use movement::creep_tick;
+pub use movement::{slot_cancel_direction, slot_pending_direction, slot_request_direction};
 pub(in crate::settle) use store::intent_drop_amount_res;
 pub(in crate::settle) use store::{intent_transfer, intent_withdraw};
 
@@ -38,7 +39,7 @@ use controller::{
 };
 use harvest::intent_harvest;
 use lifecycle::{intent_pull, intent_say, intent_suicide};
-use movement::intent_move;
+pub(in crate::settle) use movement::intent_move;
 use store::{intent_drop, intent_pickup};
 
 /// 按 EXECUTION_ORDER 执行动作，Action::executes 根据互斥动作判断是否执行。
@@ -54,7 +55,7 @@ pub fn process_creep_intents(
             continue;
         }
         let data = &actions[&action];
-        // 资源槽进入 JS 前释放全部 Working 借用；其余动作维持短借用直调。
+        // 资源与移动槽进入 JS 前释放全部 Working 借用；其余动作维持短借用直调。
         match action {
             Action::Transfer => {
                 let contrib = ctx.borrow().plane.contrib.clone();
@@ -66,12 +67,16 @@ pub fn process_creep_intents(
                 contrib.run_creep_withdraw(ctx, id, data)?;
                 continue;
             }
+            Action::Move => {
+                let contrib = ctx.borrow().plane.contrib.clone();
+                contrib.run_creep_move(ctx, id, data)?;
+                continue;
+            }
             _ => {}
         }
         let mut w = ctx.borrow_mut();
         let w = &mut *w;
         match action {
-            Action::Move => intent_move(w, id, data),
             Action::Harvest => intent_harvest(w, id, data),
             Action::Build => intent_build(w, id, data),
             Action::UpgradeController => intent_upgrade_controller(w, id, data),

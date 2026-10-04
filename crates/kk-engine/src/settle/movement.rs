@@ -36,13 +36,49 @@ struct RateEntry {
     origin: (u8, u8),
 }
 
+/// 快照中的一条请求登记：目的格、格内登记序与原格。
+#[derive(Debug, Clone, Copy)]
+pub struct MoveRequestRecord {
+    pub cell: (u8, u8),
+    pub index: usize,
+    pub origin: (u8, u8),
+}
+
+/// 单个执行者的请求登记快照：请求条目列表，外加登记时的意图疲劳。
+/// 引擎在移动槽整链开始前保存，正常拒绝时按原序回插，不触碰
+/// 其他执行者的请求与拉拽关系。
+#[derive(Debug, Clone, Default)]
+pub struct MoveRequestSnapshot {
+    pub(crate) requests: Vec<MoveRequestRecord>,
+    pub(crate) old_fatigue: Option<u32>,
+}
+
+/// 按位移符号换算八方向；同格返回无效方向 0。
+pub fn direction_from_delta(dx: i32, dy: i32) -> u8 {
+    match (dx.signum(), dy.signum()) {
+        (0, -1) => 1,  // TOP
+        (1, -1) => 2,  // TOP_RIGHT
+        (1, 0) => 3,   // RIGHT
+        (1, 1) => 4,   // BOTTOM_RIGHT
+        (0, 1) => 5,   // BOTTOM
+        (-1, 1) => 6,  // BOTTOM_LEFT
+        (-1, 0) => 7,  // LEFT
+        (-1, -1) => 8, // TOP_LEFT
+        _ => 0,
+    }
+}
+
 impl Movement {
     pub fn new() -> Self {
         Self::default()
     }
 
     /// 登记移动请求，目标钳在房间内 0..=49；不检查地形、疲劳或身体。
+    /// 单执行者单请求：先移除既有登记再入队。纯 native 路径每 tick
+    /// 恰一条 move 意图，此处没有既有登记可移除；移动槽内 JS 能力
+    /// 先登记时，后到的中心（native 或再次 request）覆盖先前登记。
     pub fn add(&mut self, id: ObjId, origin: (u8, u8), dx: i32, dy: i32) {
+        self.remove_requests(id);
         let to = (
             (origin.0 as i32 + dx).clamp(0, 49) as u8,
             (origin.1 as i32 + dy).clamp(0, 49) as u8,
@@ -51,6 +87,57 @@ impl Movement {
             .entry(to)
             .or_default()
             .push(RateEntry { id, origin });
+    }
+
+    /// 移动槽拒绝恢复快照：执行者的请求登记与登记时的意图疲劳。
+    /// 请求记录目的格、格内登记序与原格，恢复时按原序回插。
+    pub fn snapshot_of(&self, id: ObjId) -> MoveRequestSnapshot {
+        let mut requests = Vec::new();
+        for (cell, entries) in &self.matrix {
+            for (index, entry) in entries.iter().enumerate() {
+                if entry.id == id {
+                    requests.push(MoveRequestRecord {
+                        cell: *cell,
+                        index,
+                        origin: entry.origin,
+                    });
+                }
+            }
+        }
+        MoveRequestSnapshot {
+            requests,
+            old_fatigue: None,
+        }
+    }
+
+    /// 移除 id 的全部请求登记；清空的格移除键，保持矩阵形状与
+    /// is_tile_busy 的语义。不触碰其他执行者的请求与拉拽关系。
+    pub fn remove_requests(&mut self, id: ObjId) {
+        for entries in self.matrix.values_mut() {
+            entries.retain(|entry| entry.id != id);
+        }
+        self.matrix.retain(|_, entries| !entries.is_empty());
+    }
+
+    /// 按快照回插一条请求；登记序超出现长竞争者数时钳到末尾。
+    pub fn restore_request(&mut self, id: ObjId, record: MoveRequestRecord) {
+        let entries = self.matrix.entry(record.cell).or_default();
+        let index = record.index.min(entries.len());
+        entries.insert(
+            index,
+            RateEntry {
+                id,
+                origin: record.origin,
+            },
+        );
+    }
+
+    /// 读取 id 当前登记的请求目的格；单请求不变量下至多一个。
+    pub fn request_cell_of(&self, id: ObjId) -> Option<(u8, u8)> {
+        self.matrix
+            .iter()
+            .find(|(_, entries)| entries.iter().any(|entry| entry.id == id))
+            .map(|(cell, _)| *cell)
     }
 
     pub fn is_tile_busy(&self, x: u8, y: u8) -> bool {

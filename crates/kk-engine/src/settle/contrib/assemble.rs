@@ -85,6 +85,7 @@ impl ContributionDispatch {
             "builtin:creep.withdraw",
             crate::settle::creep::intent_withdraw,
         )?;
+        let creep_move = action("builtin:creep.move", crate::settle::creep::intent_move)?;
         for slot in plan.slots() {
             if !BUILTIN_SLOT_KEYS.contains(&slot.key.as_str()) {
                 ext.insert(slot.key.clone(), ExtSlot::Hosted(host(slot.key.as_str())?));
@@ -95,6 +96,7 @@ impl ContributionDispatch {
             tick,
             creep_transfer,
             creep_withdraw,
+            creep_move,
             ext,
         })
     }
@@ -150,6 +152,13 @@ impl ContributionDispatch {
             take_action_handlers(plan, "builtin:creep.withdraw", &mut action_handlers)?,
             crate::settle::creep::intent_withdraw,
         )?;
+        let creep_move = assemble_action(
+            plan,
+            "builtin:creep.move",
+            "builtin:creep.move.native",
+            take_action_handlers(plan, "builtin:creep.move", &mut action_handlers)?,
+            crate::settle::creep::intent_move,
+        )?;
         reject_leftover("内建动作", &action_handlers)?;
         let tick = assemble_tick(
             plan,
@@ -163,6 +172,7 @@ impl ContributionDispatch {
             tick,
             creep_transfer,
             creep_withdraw,
+            creep_move,
             ext,
         })
     }

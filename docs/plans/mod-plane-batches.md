@@ -115,6 +115,8 @@ B.1 已建立 `kk-mod-api` 的描述、校验、冻结与 link 默认目录（64
 
 > **✅ D3 玩家回调已收口（2026-10-04）**：同步 V8 重入、按回调同步可变矩阵、四层嵌套、原异常对象与 getter 异常、取消主循环及终止后复用；Room 基础矩阵覆盖结构/creep/道路/安全模式，costCallback 克隆隔离，每 tick 选项缓存重建。棘轮 **1879→1887**，D2 两项豁免转绿清理，新增两项 stable vanilla 与套件不同的行为经源码取证登记。Mod wrapper 槽位仅完成设计，尚未接注册/投影准备（[设计 §8](../designs/pathfinder-callback.md#8-mod-寻路-wrapper-槽位设计未实现)）。验证与局部微基准见 [D3 记录](../research/notes/d3-pathfinder-callback-2026-10-04.md)。
 - **D4 公开 slots 扩族**：移动/战斗/建造/容量四族具名 slots（默认 Native 直调、零 Mod 零开销同口径）；逐族定槽位切点与局部恢复边界。
+
+> **✅ D4 移动片已收口（2026-10-05）**：`builtin:creep.move` 槽切点定在意图登记阶段——`Movement::add` 收紧为单执行者单请求不变量（纯 native 路径无既有登记，行为不变），JS 侧 `ctx.movement` 受控能力（pending/request/cancel）与 native 共用越界/静态障碍/孵化预检并同步意图时疲劳；拒绝恢复按执行者粒度快照/回插请求矩阵条目（保留格内登记序）+ `old_fatigue`，不触碰其他 creep 请求与 pull 关系；实际位移/道路磨损/工地踩踏/跨房过渡仍走仲裁与执行阶段，边缘格自动过渡与"拒绝本次移动请求"显式区分（验收钉住）。战斗/建造/容量三族与 link tick 拒绝仍开放中。协议与边界见[移动动作槽](../architecture/creep-move-slot.md)，验收见[D4 移动槽记录](../research/notes/d4-move-slot-2026-10-05.md)。
 - **D5 Engine::tick 收敛**（06 §2.6）：engine 只留纯结算/prepared txn 公开面（OwnedTickTxn/PreparedTick 现 pub(crate)——按需升格）；假沙箱 tick 降级为限定测试 facade；RunSpec/RunResult 归位评估。
 - **D6 分型定论**（SDK 面冻结件）：builtin 槽 decline 的局部恢复边界（link transfer 多对象写入的撤销面）、纯 Rust callback 签名定论、拒绝事件面设计（当前不发射事件）。
 - **D7 性能与测量收口**：零 Mod 开销 A/B ≥5 样判读（C.5 残留）、同房/跨房串行参考一致验收（依赖 D1）、KKPV 投影/编码/解码成本收敛首步（4p 金丝雀二阶效应同观测）、C.3 残留 10（Mod 重解析成本，条件性）。

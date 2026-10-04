@@ -293,6 +293,34 @@ impl Working {
         }
     }
 
+    /// 移动槽整链开始前的执行者请求登记快照：请求条目与意图时疲劳。
+    /// 正常拒绝时按快照逐项恢复，只触碰本执行者的登记。
+    pub fn snapshot_move_requests(&self, id: ObjId) -> movement::MoveRequestSnapshot {
+        let mut snapshot = self.movement.snapshot_of(id);
+        snapshot.old_fatigue = self.old_fatigue.get(&id).copied();
+        snapshot
+    }
+
+    /// 恢复执行者的请求登记：先移除本执行者的现行登记，再按快照的
+    /// 原格与格内登记序回插；执行者已不在候选时不回插请求（避免为
+    /// 不存在的对象留下登记），仅恢复疲劳记录。
+    pub fn restore_move_requests(&mut self, id: ObjId, snapshot: movement::MoveRequestSnapshot) {
+        self.movement.remove_requests(id);
+        if self.creep(id).is_some() {
+            for record in snapshot.requests {
+                self.movement.restore_request(id, record);
+            }
+        }
+        match snapshot.old_fatigue {
+            Some(fatigue) => {
+                self.old_fatigue.insert(id, fatigue);
+            }
+            None => {
+                self.old_fatigue.remove(&id);
+            }
+        }
+    }
+
     /// 在指定位置放下 energy：先填充存活容器，再合并同资源掉落堆。
     pub fn create_energy(&mut self, x: u8, y: u8, amount: i64) {
         self.create_energy_typed(x, y, amount, 0);

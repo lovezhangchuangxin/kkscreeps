@@ -52,6 +52,7 @@ impl Engine {
             "builtin:link.tick.native",
             "builtin:creep.transfer.native",
             "builtin:creep.withdraw.native",
+            "builtin:creep.move.native",
         ];
         for binding in plan.required_bindings() {
             let name = binding.as_str();

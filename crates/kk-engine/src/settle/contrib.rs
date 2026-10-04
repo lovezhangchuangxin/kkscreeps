@@ -346,6 +346,7 @@ pub struct ContributionDispatch {
     tick: TickSlot,
     creep_transfer: ActionSlot,
     creep_withdraw: ActionSlot,
+    creep_move: ActionSlot,
     /// Mod 自有槽（按槽键查）；扩展意图结算在此派发。
     ext: BTreeMap<Key, ExtSlot>,
 }
@@ -357,6 +358,7 @@ impl Default for ContributionDispatch {
             tick: TickSlot::Native(super::economy::link_cooldown_tick),
             creep_transfer: ActionSlot::Native(super::creep::intent_transfer),
             creep_withdraw: ActionSlot::Native(super::creep::intent_withdraw),
+            creep_move: ActionSlot::Native(super::creep::intent_move),
             ext: BTreeMap::new(),
         }
     }
@@ -367,7 +369,7 @@ pub const LINK_SLOT_KEYS: [&str; 2] = [
     kk_mod_api::builtin::SLOT_KEYS[0],
     kk_mod_api::builtin::SLOT_KEYS[1],
 ];
-pub const BUILTIN_SLOT_KEYS: [&str; 4] = kk_mod_api::builtin::SLOT_KEYS;
+pub const BUILTIN_SLOT_KEYS: [&str; 5] = kk_mod_api::builtin::SLOT_KEYS;
 
 impl ContributionDispatch {
     pub(crate) fn run_transfer(
@@ -399,6 +401,15 @@ impl ContributionDispatch {
         d: &IntentData,
     ) -> Result<(), String> {
         self.creep_withdraw.run(ctx, id, d)
+    }
+
+    pub(crate) fn run_creep_move(
+        &self,
+        ctx: &RoomCtx,
+        id: ObjId,
+        d: &IntentData,
+    ) -> Result<(), String> {
+        self.creep_move.run(ctx, id, d)
     }
 
     /// 执行一个 Mod 自有槽的处理链。槽未装配说明计划与执行表不一致，

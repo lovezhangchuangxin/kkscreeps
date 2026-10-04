@@ -28,6 +28,8 @@ struct ModChainContext {
     staged_states: Option<Rc<RefCell<BTreeMap<String, Value>>>>,
     /// 资源写能力首次触达的对象快照；共享给整槽外层恢复。
     resource_journal: Option<Rc<RefCell<BTreeMap<ObjId, kk_schema::room::RoomObject>>>>,
+    /// 移动请求能力门：仅 builtin:creep.move 的处理器同步期内有效。
+    move_slot: bool,
 }
 
 impl SlotExecutor for ModSlotExecutor {
@@ -38,16 +40,24 @@ impl SlotExecutor for ModSlotExecutor {
         call: SlotCall<'_>,
     ) -> Result<SlotOutcome, String> {
         // 自有动作字段与额外资源对象由此适配器恢复；内建资源动作的
-        // 原始两端/事件由引擎在整链外恢复。namespace 仅成功后移交。
+        // 原始两端/事件由引擎在整链外恢复；移动槽的请求登记与意图
+        // 疲劳同样由引擎按执行者粒度恢复。namespace 仅成功后移交。
         let extension = matches!(&call, SlotCall::Extension { .. });
         let resource_action = matches!(&call, SlotCall::Action { .. })
             && kk_mod_api::builtin::RESOURCE_ACTION_SLOTS.contains(&slot.key.as_str());
+        let move_action = matches!(&call, SlotCall::Action { .. })
+            && kk_mod_api::builtin::MOVE_ACTION_SLOTS.contains(&slot.key.as_str());
         let (id, args, native) = match call {
             SlotCall::Action { id, data, native } => (
                 id,
-                json!({
-                    "id": data.id.map(|id| id.as_str()), "amount": data.amount, "resourceType": data.resource_type,
-                }),
+                if move_action {
+                    // move 槽固定参数面：方向或用于求方向的相邻 creep。
+                    json!({"id": data.id.map(|id| id.as_str()), "direction": data.direction})
+                } else {
+                    json!({
+                        "id": data.id.map(|id| id.as_str()), "amount": data.amount, "resourceType": data.resource_type,
+                    })
+                },
                 NativeCall::Action {
                     data: Box::new(data.clone()),
                     step: native,
@@ -66,8 +76,8 @@ impl SlotExecutor for ModSlotExecutor {
         } else {
             None
         };
-        let staged_states =
-            (extension || resource_action).then(|| Rc::new(RefCell::new(BTreeMap::new())));
+        let staged_states = (extension || resource_action || move_action)
+            .then(|| Rc::new(RefCell::new(BTreeMap::new())));
         let resource_journal = resource_action.then(|| Rc::new(RefCell::new(BTreeMap::new())));
         let mut vm = self
             .realm
@@ -85,6 +95,7 @@ impl SlotExecutor for ModSlotExecutor {
                     cached_fields: None,
                     staged_states: staged_states.clone(),
                     resource_journal: resource_journal.clone(),
+                    move_slot: move_action,
                 }),
             )
             .map_err(|error| {
@@ -119,7 +130,7 @@ impl SlotExecutor for ModSlotExecutor {
                     ctx.borrow_mut()
                         .update_mod_fields(id, &fields)
                         .map_err(|error| format!("动作拒绝恢复失败：{error}"))?;
-                } else if !resource_action {
+                } else if !(resource_action || move_action) {
                     return Err("该槽没有正常拒绝的局部恢复边界".into());
                 }
             }
@@ -235,6 +246,32 @@ impl ChainHost for ModChainContext {
         loss: i64,
     ) -> Result<kk_mod_api::resources::ResourceTransfer, String> {
         self.transfer_resource(from, to, resource, amount, loss)
+    }
+
+    fn movement_pending(&mut self) -> Result<Option<u8>, String> {
+        if !self.move_slot {
+            return Err("本次槽没有移动请求能力".into());
+        }
+        kk_engine::settle::creep::slot_pending_direction(&self.ctx.borrow(), self.id)
+    }
+
+    fn movement_request(&mut self, direction: u8) -> Result<bool, String> {
+        if !self.move_slot {
+            return Err("本次槽没有移动请求能力".into());
+        }
+        // 登记不改字段缓存读面（执行者坐标未变），与资源读取同型。
+        kk_engine::settle::creep::slot_request_direction(
+            &mut self.ctx.borrow_mut(),
+            self.id,
+            direction,
+        )
+    }
+
+    fn movement_cancel(&mut self) -> Result<(), String> {
+        if !self.move_slot {
+            return Err("本次槽没有移动请求能力".into());
+        }
+        kk_engine::settle::creep::slot_cancel_direction(&mut self.ctx.borrow_mut(), self.id)
     }
 
     fn read(&mut self, binding: &str) -> Result<ChainContext, String> {

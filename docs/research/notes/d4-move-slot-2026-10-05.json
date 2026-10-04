@@ -1,0 +1,61 @@
+{
+  "batch": "D4 Mod creep move slot",
+  "date": "2026-10-05",
+  "baseline": "a23c8d07b8d083916a7e036dcea705df3f5a0645",
+  "executable_sha256": "e099026a697f2aa3bc2df102807283cabfaf4aa8747197bf525e4fe8ed35135a",
+  "screeps_ok_pin": "34a630efa42908c117c19c25d2350fa2387bd633",
+  "checks": {
+    "release_build_exit_code": 0,
+    "focused_test_exit_code": 0,
+    "focused_rust_passed": 482,
+    "focused_rust_failed": 0,
+    "focused_rust_ignored": 5,
+    "workspace_check_exit_code": 0,
+    "rust_passed": 683,
+    "rust_failed": 0,
+    "rust_ignored": 11,
+    "rust_suites": 53,
+    "mod_chain_passed": 75,
+    "compat_node_passed": 14,
+    "doc_links_exit_code": 0,
+    "source_size_files": 318,
+    "source_size_exit_code": 0
+  },
+  "new_tests": {
+    "mod_chain_creep_move": 8,
+    "mod_chain_creep_move_world": 8,
+    "total": 16
+  },
+  "ratchet": {
+    "total": 2914,
+    "passed": 1918,
+    "failed": 89,
+    "skipped": 907,
+    "floor": 1918,
+    "regressions_vs_head": 0,
+    "regressions_vs_head_t1": 0,
+    "new_skips_or_allows": 0
+  },
+  "bots": [
+    {"name": "tooangel", "ticks_requested": 2000, "ticks_completed": 2000, "ticks_terminated": 0, "ticks_skipped_penalty": 0, "ticks_with_console_error": 0},
+    {"name": "overmind", "ticks_requested": 2000, "ticks_completed": 2000, "ticks_terminated": 0, "ticks_skipped_penalty": 0, "ticks_with_console_error": 1, "known_issue": "首 tick DirectiveHarvest.create 既有错误，与入库基线一致"},
+    {"name": "wasm-bot", "ticks_requested": 10, "ticks_completed": 10, "ticks_terminated": 0, "ticks_skipped_penalty": 0, "ticks_with_console_error": 0}
+  ],
+  "economy_scenario": {
+    "ticks": 2000,
+    "channels": ["json", "kkpv"],
+    "assertions_passed": 7,
+    "gcl_delta": 1468,
+    "controller_progress_delta": 1468,
+    "replacements_spawned": 4,
+    "initial_creeps_expired": 2,
+    "channels_final_state_equal": true
+  },
+  "scope_exclusions": [
+    "combat/build/capacity action slots",
+    "link tick decline",
+    "cross-room movement capability",
+    "pathfinder wrapper slot",
+    "persistence"
+  ]
+}

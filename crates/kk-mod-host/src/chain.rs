@@ -13,6 +13,10 @@ use serde_json::Value;
 
 mod resources;
 pub(crate) use resources::{op_mod_chain_resource_read, op_mod_chain_resource_transfer};
+mod movement;
+pub(crate) use movement::{
+    op_mod_chain_move_cancel, op_mod_chain_move_pending, op_mod_chain_move_request,
+};
 
 /// 固定的候选读取封套；开放领域的字段、参数与 namespace 仍为 JSON 树。
 /// 字段顺序沿用原 JSON Map 的键序，避免改变 JS 可观察的枚举/刷新顺序。
@@ -54,6 +58,17 @@ pub trait ChainHost {
         _loss: i64,
     ) -> Result<kk_mod_api::resources::ResourceTransfer, String> {
         Err("本次槽没有资源转账能力".into())
+    }
+    /// 默认拒绝，宿主须为移动槽显式开放移动请求能力；仅作用于
+    /// 本次调用的执行者，不提供任意对象的请求读写。
+    fn movement_pending(&mut self) -> Result<Option<u8>, String> {
+        Err("本次槽没有移动请求能力".into())
+    }
+    fn movement_request(&mut self, _direction: u8) -> Result<bool, String> {
+        Err("本次槽没有移动请求能力".into())
+    }
+    fn movement_cancel(&mut self) -> Result<(), String> {
+        Err("本次槽没有移动请求能力".into())
     }
 }
 
@@ -145,7 +160,8 @@ impl ChainProgram {
                 native_center: center.namespace() == "builtin",
                 decline_allowed: slot.stage == Stage::ObjectAction
                     && (slot.key.namespace() != "builtin"
-                        || kk_mod_api::builtin::RESOURCE_ACTION_SLOTS.contains(&slot.key.as_str())),
+                        || kk_mod_api::builtin::RESOURCE_ACTION_SLOTS.contains(&slot.key.as_str())
+                        || kk_mod_api::builtin::MOVE_ACTION_SLOTS.contains(&slot.key.as_str())),
             });
         }
         Ok(programs)
