@@ -1,12 +1,12 @@
 /* 实现 RoomPosition 的坐标编码、距离与方向计算，以及 Room API 转发。
  * 位置保存在非枚举的 __packedPos 中，x/y/roomName 由原型访问器解码并校验修改。
- * findPathTo 返回空路径，findClosestByPath 返回 null，并记录调用；其余方法见下文。
+ * findPathTo/findClosestByPath 委托 PathFinder 地形搜索（结构代价归回调文档）。
  * 来源：上游 engine/src/game/rooms.js 的 RoomPosition。
  */
 (() => {
   'use strict';
 
-  const { countStub, lodash: _ } = globalThis.__kkp;
+  const { lodash: _ } = globalThis.__kkp;
   // gw 引用在加载期捕获进闭包：90_host 末段删除 __kkp 后，运行期（玩家 tick）
   // 仍经此引用读写共享状态——延迟查找 globalThis.__kkp 会失效
   const gw = globalThis.__kkp.gw;
@@ -260,11 +260,79 @@
     );
   };
 
-  // 此寻路接口仅记录调用并返回空路径，没有避障实现。
-  RoomPosition.prototype.findPathTo = function () { countStub('RoomPosition.findPathTo'); return []; };
+  // 官方 rooms.js:1396-1428：委托本房 findPath（默认 _useNewPathFinder，
+  // 官方 if (roomName == this.roomName || register._useNewPathFinder) 恒真臂）。
+  // _.isObject(secondArg) 时官方克隆 opts（findPath 内的 maxOps 写入不漏给
+  // 调用方对象）；房间不可见抛官方文案。
+  RoomPosition.prototype.findPathTo = function (firstArg, secondArg) {
+    const [x, y, rawRoomName] = fetchXYArguments(firstArg, secondArg);
+    let opts;
+    if (_.isObject(secondArg)) {
+      opts = _.clone(secondArg);
+    }
+    opts = opts || {};
+    const roomName = rawRoomName || this.roomName;
+    const room = gw.currentGame().rooms[this.roomName];
+    if (!room) {
+      throw new __Error('Could not access room ' + this.roomName);
+    }
+    return room.findPath(this, new gw.RoomPosition(x, y, roomName), opts);
+  };
 
-  // 此接口仅记录调用并返回 null，没有按路径距离选择目标。
-  RoomPosition.prototype.findClosestByPath = function () { countStub('RoomPosition.findClosestByPath'); return null; };
+  // 官方 rooms.js:1429 起（默认走 _findClosestByPath2，rooms.js:304-374）：
+  // range 1 多目标搜索（maxRooms 1、非 ignoreRoads 时 plainCost 2/swampCost
+  // 10），路径终点 isNearTo 反查最近目标；同格命中直接返回、无目标 null。
+  // costCallback/结构代价矩阵尚未接线（docs/designs/pathfinder-terrain.md）。
+  RoomPosition.prototype.findClosestByPath = function (type, opts) {
+    opts = _.clone(opts || {});
+    const room = gw.currentGame().rooms[this.roomName];
+    if (!room) {
+      throw new __Error('Could not access room ' + this.roomName);
+    }
+    if (_.isUndefined(type)) {
+      return null;
+    }
+    // :308-313 数字 type 走 room.find（带 filter）；数组 type 有 filter 才过滤
+    let objects;
+    if (_.isNumber(type)) {
+      objects = room.find(type, { filter: opts.filter });
+    } else if (opts.filter) {
+      objects = _.filter(type, opts.filter);
+    } else {
+      objects = type;
+    }
+    if (!objects.length) {
+      return null;
+    }
+    // :319-322 同格目标直接返回
+    const objectOnSquare = _.find(objects, (obj) => this.isEqualTo(obj));
+    if (objectOnSquare) {
+      return objectOnSquare;
+    }
+    // :325-328 目标归一：.pos 或自身，range 恒 1
+    const goals = _.map(objects, (i) => ({ range: 1, pos: i.pos ? i.pos : i }));
+    const searchOpts = {
+      maxOps: opts.maxOps,
+      maxRooms: 1,
+    };
+    if (!opts.ignoreRoads) {
+      searchOpts.plainCost = 2;
+      searchOpts.swampCost = 10;
+    }
+    const ret = PathFinder.search(this, goals, searchOpts);
+    // :360-373 终点（或起点）反查 isNearTo 的最后一个目标
+    let lastPos = this;
+    if (ret.path.length) {
+      lastPos = ret.path[ret.path.length - 1];
+    }
+    let result = null;
+    objects.forEach((obj) => {
+      if (lastPos.isNearTo(obj)) {
+        result = obj;
+      }
+    });
+    return result;
+  };
 
   // 官方 :1518-1543：数字 type 走 room.find（opts 透传含 filter）、数组 type
   // 直接过滤；不可达房抛错；inRangeTo（Chebyshev）过滤
@@ -375,11 +443,13 @@
     enumerable: true, value: RoomPosition,
   });
   // 内部装配面走捕获引用（与拆分前单闭包绑定等价）：玩家覆写 globalThis.RoomPosition
-  // 不影响 wrapObject/makeRoom/PathFinder 桩内部的构造
+  // 不影响 wrapObject/makeRoom/PathFinder 内部闭包的构造
   gw.RoomPosition = RoomPosition;
   // 向后加载的 game.js 提供房间名与世界坐标转换函数。
   gw.roomNameToXY = roomNameToXY;
   gw.getRoomNameFromXY = getRoomNameFromXY;
   // Room.lookAt/lookForAt 复用此坐标参数解析器。
   gw.fetchXYArguments = fetchXYArguments;
+  // findPath/moveTo 等后续段经 gw 复用官方方向判定（加载序在本段之后）。
+  gw.getDirection = getDirection;
 })();

@@ -55,6 +55,22 @@ impl SharedKkpvBundle {
         self.bytes
     }
 
+    /// 束字节的只读视图。构造后字节不可变（见模块级论证），跨线程并发
+    /// 只读安全；本方法只服务宿主侧解析（如寻路地形提取），不进入玩家面。
+    pub fn bytes(&self) -> &[u8] {
+        if self.bytes == 0 {
+            return &[];
+        }
+        // SAFETY：store 存活期与本句柄一致（字段持有引用计数）；字节自
+        // 构造后不再写入，视图中不含 V8 线程亲和状态。
+        let ptr = self
+            .store
+            .data()
+            .expect("非空束的 backing store 有数据指针")
+            .as_ptr() as *const u8;
+        unsafe { std::slice::from_raw_parts(ptr, self.bytes) }
+    }
+
     /// 挂载为当前隔离的 ArrayBuffer：同一份内存，不复制字节。
     /// 极端异常态（如构造超限触发 V8 致命路径前的空返回）返回 None，
     /// 由调用方转为宿主通道错误。

@@ -187,6 +187,9 @@ pub struct Sandbox {
     /// 负余额停跑时暂存的回充增量，与计费候选互斥。
     /// settle_bill 应用回充，discard_bill 丢弃；新的 begin_tick 清除旧候选。
     pending_recharge: Option<f64>,
+    /// JSON 通道的寻路地形打包缓存，键为全局 terrain rev（terrain_epoch，
+    /// 任一房换地形全体失效）；裸数组夹具形态无 rev，不缓存逐 tick 重建。
+    terrain_pack_cache: Option<(u64, std::sync::Arc<crate::pathfinder::TerrainPack>)>,
 }
 
 impl Sandbox {
@@ -300,6 +303,7 @@ impl Sandbox {
             pending_intents: None,
             pending_bill: None,
             pending_recharge: None,
+            terrain_pack_cache: None,
         };
         sb.install_near_heap_callback();
         // 所有可能失败的初始化都完成后再登记实例，避免 ? 早退留下没有实例的计数和栈记录。
@@ -453,6 +457,33 @@ impl Sandbox {
         )
     }
 
+    /// JSON 通道的寻路地形打包（含 rev 缓存）。rev 是全局 terrain_epoch：
+    /// 生产的 world_json 每房 terrain 都带同一 rev，取首房即可判失效；
+    /// 裸数组夹具形态（bot_check 手搓夹具世界等）无 rev，不缓存、逐 tick 重建。
+    fn json_terrain_pack(
+        &mut self,
+        world: &serde_json::Value,
+    ) -> std::sync::Arc<crate::pathfinder::TerrainPack> {
+        let rev = world
+            .get("rooms")
+            .and_then(|rooms| rooms.as_object())
+            .and_then(|rooms| rooms.values().next())
+            .and_then(|entry| entry.get("terrain"))
+            .and_then(|terrain| terrain.get("rev"))
+            .and_then(|rev| rev.as_u64());
+        if let Some(rev) = rev
+            && let Some((cached_rev, cached)) = &self.terrain_pack_cache
+            && *cached_rev == rev
+        {
+            return cached.clone();
+        }
+        let pack = std::sync::Arc::new(crate::pathfinder::TerrainPack::from_world_json(world));
+        if let Some(rev) = rev {
+            self.terrain_pack_cache = Some((rev, pack.clone()));
+        }
+        pack
+    }
+
     fn begin_tick_plan(
         &mut self,
         world: &serde_json::Value,
@@ -476,6 +507,18 @@ impl Sandbox {
                 self.terminated_this_tick = false;
                 self.pending_intents = None;
                 self.runtime.v8_isolate().cancel_terminate_execution();
+                // 寻路地形随世界注入 OpState（停跑分支不注入：不执行玩家
+                // 代码，op 不会被调；下一 Run tick 整体替换旧值）。
+                // JSON 通道按 terrain rev 缓存打包产物（稳态零解码），
+                // KKPV 通道持束句柄、首次搜索懒解码（见 pathfinder.rs）。
+                let tick_terrain = match kkpv_public {
+                    Some(public) => crate::pathfinder::TickTerrain::kkpv(public.clone()),
+                    None => {
+                        let pack = self.json_terrain_pack(world);
+                        crate::pathfinder::TickTerrain::json(pack)
+                    }
+                };
+                self.runtime.op_state().borrow_mut().put(tick_terrain);
                 // 将沙箱预算作为独立参数交给 beginTick，替换世界数据中的 CPU 占位值，
                 // 避免为了更新 CPU 字段克隆整个世界数据。
                 let cpu_json = {

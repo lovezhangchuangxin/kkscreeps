@@ -369,16 +369,18 @@ pub(super) fn resource_family_prelude_matrix_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// A4-iv 移动杂项族 prelude 预检矩阵（moveTo 直线桩/moveByPath/say/suicide/
+/// A4-iv 移动杂项族 prelude 预检矩阵（moveTo 真路径/moveByPath/say/suicide/
 /// pull/notifyWhenAttacked）：逐分支对照官方 creeps.js:158-257/305-327/826-838/
 /// 813-825/1101-1126 与 structures.js:89-101/1220-1233 的返回码与 intent 形态。
 pub(super) fn move_misc_family_prelude_forms_impl() -> anyhow::Result<()> {
     let mut sb = Sandbox::new(SandboxConfig::default())?;
+    // 全平原数组地形：真寻路后 moveTo 依赖每房地形（缺地形房搜索会抛错）。
+    let plains: Vec<u8> = vec![0; 2500];
     let w = json!({
         "time": 1,
         "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
         "user": "p1",
-        "rooms": { "W1N1": { "name": "W1N1" } },
+        "rooms": { "W1N1": { "name": "W1N1", "terrain": plains } },
         "objects": [
             // 主体：p1 的 move+work @ (25,25)
             { "id": "kk1", "type": "creep", "room": "W1N1", "x": 25, "y": 25, "name": "w1",
@@ -470,13 +472,16 @@ pub(super) fn move_misc_family_prelude_forms_impl() -> anyhow::Result<()> {
                 "pull（creeps.js:1101-1126）",
             );
             // moveTo：敌方 NOT_OWNER / 同格 RoomPosition OK / 同格数值 OK /
-            // 非对象目标 INVALID_TARGET / 无 pos 对象 INVALID_TARGET / 数值 OK /
-            // 对象形态（creep 目标解包 .pos）OK / 疲劳 TIRED（显式回查）/
-            // 无 MOVE NO_BODYPART / noPathFinding 且无缓存 → NOT_FOUND
+            // 非对象目标 INVALID_TARGET / 无 pos 对象 INVALID_TARGET / 数值 OK
+            //（写入 _move 缓存 dest=(30,25)）/ 对象形态（creep 目标解包 .pos）
+            // OK（官方 creeps.js:285-293 缓存整体覆写为 dest=(26,25)）/ 疲劳 TIRED
+            //（显式回查）/ 无 MOVE NO_BODYPART / noPathFinding：_move 目的地
+            // 已被上一次 moveTo 覆写，dest 不匹配走缓存未命中臂 → NOT_FOUND
+            //（官方 creeps.js:241-278 的 dest 严格匹配语义）
             expect(
                 r["moveTo"].clone(),
                 &[-1, 0, 0, -7, -7, 0, 0, -11, -12, -5],
-                "moveTo 预检序（creeps.js:158-257 直线桩形态）",
+                "moveTo 预检序（creeps.js:158-257 真路径形态）",
             );
             // moveByPath：RoomPosition 数组（路径首项即当前位 → 下一步方向 3）OK /
             // 不在路径且不邻首项 NOT_FOUND / 序列化串（首落点 (26,25) 的起步格

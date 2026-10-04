@@ -8,6 +8,7 @@ pub mod cpu_clock;
 pub mod mod_api;
 pub mod modules;
 pub mod ops;
+pub mod pathfinder;
 pub mod proto;
 pub mod sandbox;
 pub mod shared_bundle;

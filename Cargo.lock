@@ -1064,9 +1064,11 @@ dependencies = [
  "deno_core",
  "deno_error",
  "kk-core",
+ "kk-pathfinder",
  "kk-schema",
  "kk-vm",
  "kk-world",
+ "serde",
  "serde_json",
  "tokio",
 ]

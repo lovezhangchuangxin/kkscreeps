@@ -170,7 +170,16 @@ pub(super) fn stub_value_shapes() -> anyhow::Result<()> {
     let v = sb.run_expr("Memory.fresh")?;
     assert_eq!(v["value"], serde_json::Value::Null, "Memory 保持原对象");
 
-    // 无地形数据的世界：getTerrainAt → undefined（官方对缺失地形的行为）
+    // 无地形数据的世界：getTerrainAt → undefined（官方对缺失地形的行为）。
+    // 共享 world() 夹具已带全平原地形（寻路族需要），此处用无地形的局部世界。
+    let no_terrain = serde_json::json!({
+        "time": 2,
+        "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+        "user": "p1",
+        "rooms": { "W1N1": { "name": "W1N1" } },
+        "objects": []
+    });
+    sb.begin_tick(&no_terrain)?;
     let v = sb.run_expr("typeof Game.map.getTerrainAt(5,5,'W1N1')")?;
     assert_eq!(v["value"], "undefined", "无地形数据 → undefined");
     let v = sb.run_expr("typeof Game.map.getTerrainAt(-1,5,'W1N1')")?;

@@ -163,7 +163,8 @@ pub(super) fn m2b_creation_gates_and_helpers_e2e_impl() -> anyhow::Result<()> {
         console.log('t1=' + Game.rooms['W1N1'].createConstructionSite(5, 5, 'road'));
         // findClosestByRange：c(25,25) 距离 0 优于 far(27,25)
         console.log('near=' + Game.creeps.c.pos.findClosestByRange(FIND_CREEPS).name);
-        // findPath 直线桩：形态与可调用性
+        // findPath 真路径：range 1 目标环 + 终点回填共两步；首步可直行或
+        // 对角（等代价路径由原生 JPS 平局规则决定），断言长度与 dx 族。
         const path = Game.rooms['W1N1'].findPath(Game.creeps.c.pos, new RoomPosition(27, 25, 'W1N1'));
         console.log('path=' + path.length + ':' + path[0].dx + ':' + path[0].direction);
     "#,
@@ -175,9 +176,14 @@ pub(super) fn m2b_creation_gates_and_helpers_e2e_impl() -> anyhow::Result<()> {
     );
     assert!(run.console.iter().any(|l| l.contains("t1=0")));
     assert!(run.console.iter().any(|l| l.contains("near=c")));
+    let path_line = run
+        .console
+        .iter()
+        .find(|l| l.starts_with("path="))
+        .ok_or_else(|| anyhow::anyhow!("缺少 path 行: {:?}", run.console))?;
     assert!(
-        run.console.iter().any(|l| l.contains("path=2:1:3")),
-        "直线两步向右（RIGHT=3）"
+        path_line.starts_with("path=2:1:"),
+        "两步且首步向东（dx=1），实际 {path_line}"
     );
 
     // 下一 tick：同格同类 → ERR_INVALID_TARGET（工地已进投影）

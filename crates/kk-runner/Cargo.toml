@@ -10,8 +10,12 @@ workspace = true
 [dependencies]
 kk-core.workspace = true
 kk-vm.workspace = true
+# 寻路 op 直连原生搜索；KKPV 公开束解析用 schema 块视图（均为玩家面接线）
+kk-pathfinder.workspace = true
+kk-schema.workspace = true
 deno_core = { workspace = true }
 tokio = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
 deno_error = { workspace = true }
@@ -21,4 +25,3 @@ bytes = { workspace = true }
 # 等价测试用夹具世界转换器（kkpv_bundle_from_world_json）与手工块
 # 构造（Ref 编码路径）；不是运行时依赖。
 kk-world.workspace = true
-kk-schema.workspace = true

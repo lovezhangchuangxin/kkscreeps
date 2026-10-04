@@ -154,5 +154,6 @@ extension!(
         op_kk_console,
         op_kk_cpu_halt,
         op_kk_get_used,
+        crate::pathfinder::op_kk_pathfinder_search,
     ]
 );

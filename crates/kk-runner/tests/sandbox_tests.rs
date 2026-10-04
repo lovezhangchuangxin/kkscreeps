@@ -13,6 +13,8 @@ use kk_runner::{ModuleTable, Sandbox, SandboxConfig, TickOutcome, TickPlan, live
 mod kkpv_channel;
 #[path = "sandbox_tests/mod_player_api.rs"]
 mod mod_player_api;
+#[path = "sandbox_tests/pathfinder_family.rs"]
+mod pathfinder_family;
 #[path = "sandbox_tests/prelude_and_room_forms.rs"]
 mod prelude_and_room_forms;
 #[path = "sandbox_tests/resource_host_and_nearheap.rs"]
@@ -24,6 +26,7 @@ mod watchdog_and_memory;
 // 子模块提供场景函数，由唯一的顶层测试串行调用；不要将它们改成并行测试。
 use kkpv_channel::*;
 use mod_player_api::*;
+use pathfinder_family::*;
 use prelude_and_room_forms::*;
 use resource_host_and_nearheap::*;
 use store_spawn_and_viewer::*;
@@ -44,6 +47,8 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     mod_player_api_global_surface_impl()?;
     hostile_probes_impl()?;
     move_misc_family_prelude_forms_impl()?;
+    pathfinder_search_family_impl()?;
+    pathfinder_kkpv_channel_equivalence_impl()?;
     run_expr_channel()?;
     wasm_binary_module()?;
     watchdog_hard_terminate_and_reuse()?;
@@ -88,11 +93,13 @@ fn fixtures_dir() -> PathBuf {
 }
 
 fn world() -> serde_json::Value {
+    // 地形用全平原数组形态（宿主手搓夹具路径）：寻路/地形读取依赖每房地形。
+    let plains: Vec<u8> = vec![0; 2500];
     json!({
         "time": 1,
         "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
         "user": "p1",
-        "rooms": { "W1N1": { "name": "W1N1" } },
+        "rooms": { "W1N1": { "name": "W1N1", "terrain": plains } },
         "objects": [
             { "id": "c1", "type": "creep", "room": "W1N1", "x": 25, "y": 25, "name": "w1",
               "owner": "p1", "body": ["move", "work"], "store": { "energy": 50 } },

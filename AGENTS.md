@@ -16,7 +16,7 @@ kkscreeps/
 │   ├── kk-runtime/         玩家执行编排、Memory/CPU 候选提交与失败重试
 │   ├── kk-mod-api/         玩法声明、校验与冻结计划
 │   ├── kk-mod-host/        可信 JS Mod 包装载与注册
-│   ├── kk-pathfinder/      原生 C++ 寻路封装，尚未接入玩家搜索接口
+│   ├── kk-pathfinder/      原生 C++ 寻路封装，经 kk-runner op 供玩家面搜索
 │   ├── kk-cli/             embed、bot-check、perf-probe、mod-perf-probe 命令入口
 │   ├── kk-storage-bench/   存储引擎选型基准
 │   ├── kk-storage/         持久化预留模块

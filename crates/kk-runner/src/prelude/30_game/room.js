@@ -1,6 +1,6 @@
 /* 根据当前世界数据装配可见 Room，提供 find、look、地形、创建指令与绘图接口。
  * 每 tick 重建房间对象和查询缓存；地形数组由 game.js 的 beginTick 注入。
- * findPath 目前按直线步进，忽略障碍与寻路成本；绘图数据仅保留在本 tick 的缓冲区。
+ * findPath 走 PathFinder 地形搜索（官方 _findPath2 形态，结构代价归回调文档）；绘图数据仅保留在本 tick 的缓冲区。
  * 来源：上游 engine/src/game/rooms.js 与 console.js 的玩家接口。
  */
 (() => {
@@ -678,28 +678,76 @@
       }
       return result;
     };
-    /** 按直线逐格产生路径，最多 100 步；不避障、不计算地形代价。
-     * 异房起点或终点返回空路径，serialize 选项返回序列化字符串。 */
+    /** 官方 Room.findPath（rooms.js:863 起）：异房起点先出（serialize 访问
+     * 原始 opts——不传 opts 且异房起点按官方抛 TypeError）；默认
+     * _useNewPathFinder=true（game.js:68）走 _findPath2（rooms.js:223-305）：
+     * PathFinder 地形搜索（range 缺省 1、跨房 maxOps 缺省 20000、非
+     * ignoreRoads 时 plainCost 2/swampCost 10——道路本身须经代价矩阵生效）
+     * 后按房界截断；无 range 且终点贴近时回填终点。opts.maxOps 的缺省写入
+     * 原地修改调用方对象（官方同形）。costCallback/结构代价矩阵尚未接线
+     * （docs/designs/pathfinder-terrain.md），当前为地形直通。 */
     room.findPath = function (fromPos, toPos, opts) {
-      opts = opts || {};
-      if (!fromPos || fromPos.roomName !== name) return opts.serialize ? '' : [];
-      if (!toPos || toPos.roomName !== name) return opts.serialize ? '' : [];
-      const path = [];
-      let x = fromPos.x;
-      let y = fromPos.y;
-      while ((x !== toPos.x || y !== toPos.y) && path.length < 100) {
-        const dx = Math.sign(toPos.x - x);
-        const dy = Math.sign(toPos.y - y);
-        x += dx;
-        y += dy;
-        const direction = dx < 0
-          ? (dy < 0 ? C_TOP_LEFT : dy > 0 ? C_BOTTOM_LEFT : C_LEFT)
-          : dx > 0
-            ? (dy < 0 ? C_TOP_RIGHT : dy > 0 ? C_BOTTOM_RIGHT : C_RIGHT)
-            : (dy < 0 ? C_TOP : C_BOTTOM);
-        path.push({ x, y, dx, dy, direction });
+      if (fromPos.roomName !== name) {
+        return opts.serialize ? '' : [];
       }
-      return opts.serialize ? serializePath(path) : path;
+      opts = opts || {};
+      // _findPath2:227-229
+      if (fromPos.isEqualTo(toPos)) {
+        return opts.serialize ? '' : [];
+      }
+      // :239-241 跨房且未限时缺省 maxOps 20000（注意 maxRooms>1 条件）
+      if (opts.maxOps === undefined && (opts.maxRooms === undefined || opts.maxRooms > 1)
+        && fromPos.roomName !== toPos.roomName) {
+        opts.maxOps = 20000;
+      }
+      const searchOpts = {
+        maxOps: opts.maxOps,
+        maxRooms: opts.maxRooms,
+      };
+      // :253-261 非 ignoreRoads 提高平地/沼泽代价（官方为道路绕行的代价设计）
+      if (!opts.ignoreRoads) {
+        searchOpts.plainCost = 2;
+        searchOpts.swampCost = 10;
+      }
+      if (opts.plainCost) {
+        searchOpts.plainCost = opts.plainCost;
+      }
+      if (opts.swampCost) {
+        searchOpts.swampCost = opts.swampCost;
+      }
+      const ret = PathFinder.search(
+        fromPos,
+        { range: Math.max(1, opts.range || 0), pos: toPos },
+        searchOpts,
+      );
+      // :266-271 无 range 时的终点贴近回填（与官方同含"零路径且起点贴近"臂）
+      if (!opts.range && (
+        ret.path.length && ret.path[ret.path.length - 1].isNearTo(toPos)
+          && !ret.path[ret.path.length - 1].isEqualTo(toPos)
+        || !ret.path.length && fromPos.isNearTo(toPos)
+      )) {
+        ret.path.push(toPos);
+      }
+      // :273-292 房界截断 + 步进 {x,y,dx,dy,direction}
+      let curX = fromPos.x, curY = fromPos.y;
+      const resultPath = [];
+      for (let i = 0; i < ret.path.length; i++) {
+        const pos = ret.path[i];
+        if (pos.roomName !== name) {
+          break;
+        }
+        const step = {
+          x: pos.x,
+          y: pos.y,
+          dx: pos.x - curX,
+          dy: pos.y - curY,
+          direction: gw.getDirection(pos.x - curX, pos.y - curY),
+        };
+        curX = step.x;
+        curY = step.y;
+        resultPath.push(step);
+      }
+      return opts.serialize ? serializePath(resultPath) : resultPath;
     };
     /** 按坐标、类型、spawn 名、控制器权限、名额、占位与总工地数的顺序检查，然后记录创建指令。
      * 本 tick 创建计数与世界快照中的已有工地数分别统计。

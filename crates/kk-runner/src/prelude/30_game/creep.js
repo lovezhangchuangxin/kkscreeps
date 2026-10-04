@@ -1,11 +1,15 @@
 /* 定义 Creep 字段、移动、采集与战斗方法，并记录通过预检的玩家指令。
  * getter 的缓存与当前 tick 回查由 _registry.js 管理；资源和控制器方法续于 creep_resources.js。
- * moveTo 只选择朝目标的直线方向，不进行避障或路径复用；世界状态变化由 Rust 结算处理。
+ * moveTo 走 findPathTo 真路径并维护官方 _move 记忆缓存（结构代价归回调文档）。
  */
 (() => {
   'use strict';
 
   const gw = globalThis.__kkp.gw;
+  const _ = globalThis.__kkp.lodash;
+  // room.js（加载序在本段之前）挂载的官方序列化器；捕获防玩家替换
+  // globalThis.Room 后影响 moveTo 路径缓存。
+  const roomSerializePath = globalThis.Room.serializePath;
 
   // 官方 utils.js:80-100 offsetsByDirection 表（deserializePath 的方向位移源）
   const OFFSETS_BY_DIRECTION = {
@@ -227,15 +231,18 @@
     return C.OK;
   };
 
-  /** 检查权限、孵化、疲劳、MOVE 部件和目标位置，然后调用 move 走直线方向。
-   * 不使用路径缓存或 A*；noPathFinding 返回 ERR_NOT_FOUND。
-   * 对象位置形态复制 options，数值坐标形态会给传入的 options 补 reusePath/serializeMemory 默认值。
-   * 预检顺序参考上游 engine/src/game/creeps.js 的 moveTo；寻路行为有上述简化。 */
+  /** 官方 moveTo 全流程（engine/src/game/creeps.js 的 moveTo）：预检（归属/
+   * 孵化/疲劳+visualizePathStyle 豁免/MOVE 部件/目标解析）后消费 creep
+   * memory 的 _move 路径缓存（reusePath 缺省 5、serializeMemory 缺省 true；
+   * 过期或换房删除、目的地匹配时按当前位置截断后 moveByPath），
+   * noPathFinding 出口，findPathTo 真路径（range 缺省 1）写回缓存并走首步。
+   * 数值坐标形态沿用调用方 opts 引用（官方同形：缺省值写入可见）；对象
+   * 目标形态浅拷贝 secondArg。parseInt 用全局（官方 realm 语义）。 */
   globalThis.Creep.prototype.moveTo = function moveTo(firstArg, secondArg, opts) {
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;
     if (isObjectLike(firstArg)) {
-      opts = gw.__Object.assign({}, secondArg);
+      opts = _.clone(secondArg);
     }
     opts = opts || {};
     if (gw.rawData(this.id).fatigue > 0 && !opts.visualizePathStyle) {
@@ -245,23 +252,73 @@
     const [x, y, rawRoomName] = fetchXYArguments(firstArg, secondArg);
     const roomName = rawRoomName || this.pos.roomName;
     if (x === undefined || y === undefined) {
+      // 官方 creeps.js:182-184 先过 register.assertTargetObject（game.js:122-126）：
+      // plain object + 24 位字符串 id 视为 Memory 序列化对象，抛官方文案
+      if (firstArg && _.isPlainObject(firstArg) && _.isString(firstArg.id)
+        && firstArg.id.length === 24) {
+        throw new Error("It seems you're trying to use a serialized game object stored in Memory which is not allowed. Please use `Game.getObjectById` to retrieve a live object reference instead.");
+      }
       return C.ERR_INVALID_TARGET;
     }
     const targetPos = new gw.RoomPosition(x, y, roomName);
     if (opts.reusePath === undefined) opts.reusePath = 5;
     if (opts.serializeMemory === undefined) opts.serializeMemory = true;
+    // 官方 :196-198 绘图样式缺省（官方经 _.defaults 原地补全调用方对象）
+    if (opts.visualizePathStyle) {
+      _.defaults(opts.visualizePathStyle, {
+        fill: 'transparent', stroke: '#fff', lineStyle: 'dashed', strokeWidth: 0.15, opacity: 0.1,
+      });
+    }
     if (x == this.pos.x && y == this.pos.y && roomName == this.pos.roomName) {
       return C.OK;
+    }
+    // 官方 :241-278 _move 缓存消费
+    let visualized = false;
+    if (opts.reusePath && this.memory && isObjectLike(this.memory) && this.memory._move) {
+      const _move = this.memory._move;
+      if (gw.world.time > _move.time + parseInt(opts.reusePath) || _move.room != this.pos.roomName) {
+        delete this.memory._move;
+      } else if (_move.dest.room == roomName && _move.dest.x == x && _move.dest.y == y) {
+        let path = _.isString(_move.path) ? deserializePath(_move.path) : _move.path;
+        const idx = _.findIndex(path, { x: this.pos.x, y: this.pos.y });
+        if (idx !== -1) {
+          path.splice(0, idx + 1);
+          _move.path = opts.serializeMemory ? roomSerializePath(path) : path;
+        }
+        if (path.length === 0) {
+          return this.pos.isNearTo(targetPos) ? C.OK : C.ERR_NO_PATH;
+        }
+        if (opts.visualizePathStyle) {
+          this.room.visual.poly(path, opts.visualizePathStyle);
+          visualized = true;
+        }
+        const result = this.moveByPath(path);
+        if (result === C.OK) {
+          return C.OK;
+        }
+      }
     }
     if (opts.noPathFinding) {
       return C.ERR_NOT_FOUND;
     }
-    // 目前只取朝目标的直线方向，后续每 tick 再次调用才能继续前进。
-    const direction = this.pos.getDirectionTo(targetPos);
-    if (direction === undefined) {
-      return C.ERR_NO_PATH; // getDirectionTo 可被玩家原型补丁修改，保留无方向的错误出口。
+    const path = this.pos.findPathTo(targetPos, opts);
+    // 官方 :285-293 缓存写回（serializeMemory 缺省序列化串驻留 memory）
+    if (opts.reusePath && this.memory && isObjectLike(this.memory)) {
+      this.memory._move = {
+        dest: { x, y, room: roomName },
+        time: gw.world.time,
+        path: opts.serializeMemory ? roomSerializePath(path) : _.clone(path),
+        room: this.pos.roomName,
+      };
     }
-    return this.move(direction);
+    if (path.length === 0) {
+      return C.ERR_NO_PATH;
+    }
+    // 官方 :296-298：缓存臂已绘制时抑制重寻路径的二次绘制
+    if (opts.visualizePathStyle && !visualized) {
+      this.room.visual.poly(path, opts.visualizePathStyle);
+    }
+    return this.move(path[0].direction);
   };
 
   /** Creep.moveByPath：官方 creeps.js:305-327——自身无任何预检（my/spawning/

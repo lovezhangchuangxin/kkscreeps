@@ -57,9 +57,15 @@ v8::Local<v8::Object> make_pos_object(uint32_t xx, uint32_t yy) {
 // 缓存两份零初始化的实例；超过两层时由调用方临时分配新实例。
 // reverse_room_table 初始须为 0，pf.cc 的 room_index_from_pos 将 0 视为未加载。
 // 来源：上游 driver/native/src/main.cc 的 search。
+// 池用指针化 thread_local：path_finder_t 约 2MB/实例，值形态的 TLS 数组
+// 会让进程内所有线程（含从不搜索的 V8 平台工作线程）在线程启动时把整块
+// TLS 记入物理内存；指针形态只有真正执行搜索的线程才付出分配。
 screeps::path_finder_t* acquire_path_finder() {
-	static thread_local std::array<screeps::path_finder_t, 2> pool;
-	for (auto& ii : pool) {
+	static thread_local std::unique_ptr<std::array<screeps::path_finder_t, 2>> pool;
+	if (!pool) {
+		pool = std::make_unique<std::array<screeps::path_finder_t, 2>>();
+	}
+	for (auto& ii : *pool) {
 		if (!ii.is_in_use()) {
 			return &ii;
 		}
