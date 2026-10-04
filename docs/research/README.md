@@ -65,6 +65,8 @@
 
 **架构再思考复核**（ADR-014 证据，2026-10-01）：[architecture-rethink-2026-10-01.md](notes/architecture-rethink-2026-10-01.md)（对 05/06 断言的双路独立核实、xxscreeps 机制取证要点、定型结论与数字勘误表）
 
+**贡献链驱动模型**（2026-10-03，C 批前置片证据）：[链驱动模型记录](notes/mod-chain-driver-2026-10-03.md)（JS 驱动链的最小实验：两层 wrap 嵌套 + Rust native 中心全程 0 个 reentrant 标记；附 `after` 时点陷阱）、[Rust 实验体](../../spikes/deno-spike/examples/js_driven_chain.rs)、[JS 驱动器](../../spikes/deno-spike/examples/js_driven_chain.js)。结论推翻已落地实现的 reentrant 方向，重做与否待定。
+
 **存储选型基准**（2026-09-29 M2-C3 骨架证据）：[storage-bench.md](notes/storage-bench.md)（redb vs libmdbx 微基准方法学、三档场景夹具、macOS arm64 数字（初轮 + 评审清偿后复跑）与选型判据草案——非正式选型，正式选型待 2A 后真实负载）
 
 **测试套件评估**：[screeps-ok 初期质量评估](notes/screeps-ok-evaluation-2026-09-27.md)保存 ADR-006 的原始详细评估，当前采用与回归规则见 [ADR-006](../decisions/ADR-006-screeps-ok-ci.md)。
