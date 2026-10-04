@@ -50,3 +50,5 @@ compat/reports/tmp/
 bot-check-report.json
 .workbuddy/
 perf-probe.json
+
+__pycache__/

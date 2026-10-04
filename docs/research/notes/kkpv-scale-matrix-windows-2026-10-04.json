@@ -1,0 +1,4221 @@
+{
+ "schema": "kkpv-scale-matrix/1",
+ "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9",
+ "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+ "scales": [
+  4,
+  8,
+  32
+ ],
+ "channels": [
+  "json",
+  "kkpv"
+ ],
+ "warmup": 50,
+ "ticks": 300,
+ "repetitions": 5,
+ "summary": {
+  "4p/json": {
+   "cpu_core_ms_per_tick": {
+    "median": 1.1870366666666667,
+    "min": 1.1098266666666665,
+    "max": 1.2392466666666666,
+    "values": [
+     1.2321033333333333,
+     1.1098266666666665,
+     1.2392466666666666,
+     1.1870366666666667,
+     1.1266433333333334
+    ]
+   },
+   "wall_p50_ms": {
+    "median": 0.49904099999999996,
+    "min": 0.48500000000000004,
+    "max": 0.507,
+    "values": [
+     0.5037079999999999,
+     0.48500000000000004,
+     0.507,
+     0.49904099999999996,
+     0.486292
+    ]
+   },
+   "wall_p95_ms": {
+    "median": 0.844792,
+    "min": 0.7643329999999999,
+    "max": 0.943542,
+    "values": [
+     0.939458,
+     0.832584,
+     0.943542,
+     0.844792,
+     0.7643329999999999
+    ]
+   },
+   "wall_p99_ms": {
+    "median": 1.6969999999999998,
+    "min": 1.427792,
+    "max": 1.74925,
+    "values": [
+     1.6969999999999998,
+     1.427792,
+     1.740791,
+     1.74925,
+     1.580875
+    ]
+   },
+   "project_p50_ms": {
+    "median": 0.244083,
+    "min": 0.241,
+    "max": 0.24821,
+    "values": [
+     0.246333,
+     0.241,
+     0.24821,
+     0.244083,
+     0.241459
+    ]
+   },
+   "run_p50_ms": {
+    "median": 0.178708,
+    "min": 0.172958,
+    "max": 0.189749,
+    "values": [
+     0.189083,
+     0.172958,
+     0.189749,
+     0.178708,
+     0.174208
+    ]
+   },
+   "settle_p50_ms": {
+    "median": 0.062416,
+    "min": 0.061875,
+    "max": 0.064208,
+    "values": [
+     0.062416,
+     0.062167,
+     0.064208,
+     0.063375,
+     0.061875
+    ]
+   },
+   "rss_bytes_peak": {
+    "median": 153747456,
+    "min": 152715264,
+    "max": 154583040,
+    "values": [
+     153731072,
+     153747456,
+     154583040,
+     154320896,
+     152715264
+    ]
+   },
+   "per_player_injection_bytes": {
+    "median": 17682,
+    "min": 17682,
+    "max": 17682,
+    "values": [
+     17682,
+     17682,
+     17682,
+     17682,
+     17682
+    ]
+   }
+  },
+  "4p/kkpv": {
+   "cpu_core_ms_per_tick": {
+    "median": 1.92257,
+    "min": 1.8326,
+    "max": 1.9566099999999997,
+    "values": [
+     1.923306666666667,
+     1.92257,
+     1.8326,
+     1.8419500000000002,
+     1.9566099999999997
+    ]
+   },
+   "wall_p50_ms": {
+    "median": 0.746833,
+    "min": 0.737125,
+    "max": 0.7695420000000001,
+    "values": [
+     0.7695420000000001,
+     0.7510830000000001,
+     0.737125,
+     0.745458,
+     0.746833
+    ]
+   },
+   "wall_p95_ms": {
+    "median": 1.5525,
+    "min": 1.512,
+    "max": 1.81175,
+    "values": [
+     1.512,
+     1.5525,
+     1.599792,
+     1.5352919999999999,
+     1.81175
+    ]
+   },
+   "wall_p99_ms": {
+    "median": 2.6277079999999997,
+    "min": 2.398,
+    "max": 3.031208,
+    "values": [
+     2.423667,
+     2.6277079999999997,
+     2.398,
+     2.9519580000000003,
+     3.031208
+    ]
+   },
+   "project_p50_ms": {
+    "median": 0.425209,
+    "min": 0.420417,
+    "max": 0.427501,
+    "values": [
+     0.425209,
+     0.427292,
+     0.420417,
+     0.424708,
+     0.427501
+    ]
+   },
+   "run_p50_ms": {
+    "median": 0.252083,
+    "min": 0.245291,
+    "max": 0.264915,
+    "values": [
+     0.264915,
+     0.255208,
+     0.245291,
+     0.252083,
+     0.247335
+    ]
+   },
+   "settle_p50_ms": {
+    "median": 0.069625,
+    "min": 0.068167,
+    "max": 0.070083,
+    "values": [
+     0.070083,
+     0.069458,
+     0.068167,
+     0.06975,
+     0.069625
+    ]
+   },
+   "rss_bytes_peak": {
+    "median": 190398464,
+    "min": 189464576,
+    "max": 190971904,
+    "values": [
+     189464576,
+     190742528,
+     190398464,
+     190070784,
+     190971904
+    ]
+   },
+   "per_player_injection_bytes": {
+    "median": 6181,
+    "min": 6181,
+    "max": 6181,
+    "values": [
+     6181,
+     6181,
+     6181,
+     6181,
+     6181
+    ]
+   }
+  },
+  "8p/json": {
+   "cpu_core_ms_per_tick": {
+    "median": 2.6085266666666667,
+    "min": 2.476033333333333,
+    "max": 2.7536899999999997,
+    "values": [
+     2.7536899999999997,
+     2.6085266666666667,
+     2.476033333333333,
+     2.6075033333333333,
+     2.6543866666666664
+    ]
+   },
+   "wall_p50_ms": {
+    "median": 1.009125,
+    "min": 0.974083,
+    "max": 1.0715,
+    "values": [
+     1.0715,
+     0.9996250000000001,
+     0.974083,
+     1.009125,
+     1.02
+    ]
+   },
+   "wall_p95_ms": {
+    "median": 1.944625,
+    "min": 1.681417,
+    "max": 2.073417,
+    "values": [
+     2.073417,
+     1.944625,
+     1.681417,
+     1.826209,
+     2.0057500000000004
+    ]
+   },
+   "wall_p99_ms": {
+    "median": 2.625833,
+    "min": 2.492375,
+    "max": 3.531084,
+    "values": [
+     3.531084,
+     2.883792,
+     2.492375,
+     2.625833,
+     2.4957909999999996
+    ]
+   },
+   "project_p50_ms": {
+    "median": 0.542706,
+    "min": 0.523499,
+    "max": 0.55921,
+    "values": [
+     0.55921,
+     0.540375,
+     0.523499,
+     0.542706,
+     0.545335
+    ]
+   },
+   "run_p50_ms": {
+    "median": 0.352749,
+    "min": 0.31983,
+    "max": 0.375166,
+    "values": [
+     0.375166,
+     0.34025,
+     0.31983,
+     0.352793,
+     0.352749
+    ]
+   },
+   "settle_p50_ms": {
+    "median": 0.13125,
+    "min": 0.124209,
+    "max": 0.133208,
+    "values": [
+     0.133208,
+     0.130125,
+     0.124209,
+     0.132083,
+     0.13125
+    ]
+   },
+   "rss_bytes_peak": {
+    "median": 282181632,
+    "min": 282034176,
+    "max": 283459584,
+    "values": [
+     282165248,
+     283459584,
+     282034176,
+     282673152,
+     282181632
+    ]
+   },
+   "per_player_injection_bytes": {
+    "median": 31250,
+    "min": 31250,
+    "max": 31250,
+    "values": [
+     31250,
+     31250,
+     31250,
+     31250,
+     31250
+    ]
+   }
+  },
+  "8p/kkpv": {
+   "cpu_core_ms_per_tick": {
+    "median": 3.9819633333333333,
+    "min": 3.8554000000000004,
+    "max": 4.117713333333333,
+    "values": [
+     3.9819633333333333,
+     3.8554000000000004,
+     3.88161,
+     4.05995,
+     4.117713333333333
+    ]
+   },
+   "wall_p50_ms": {
+    "median": 1.436791,
+    "min": 1.395834,
+    "max": 1.490583,
+    "values": [
+     1.4884169999999999,
+     1.395834,
+     1.421084,
+     1.436791,
+     1.490583
+    ]
+   },
+   "wall_p95_ms": {
+    "median": 3.153083,
+    "min": 2.8665000000000003,
+    "max": 3.5077920000000002,
+    "values": [
+     2.909834,
+     3.5077920000000002,
+     2.8665000000000003,
+     3.474708,
+     3.153083
+    ]
+   },
+   "wall_p99_ms": {
+    "median": 4.367792,
+    "min": 3.901334,
+    "max": 5.921375,
+    "values": [
+     4.2958750000000006,
+     4.5529589999999995,
+     3.901334,
+     5.921375,
+     4.367792
+    ]
+   },
+   "project_p50_ms": {
+    "median": 0.857417,
+    "min": 0.837749,
+    "max": 0.8705,
+    "values": [
+     0.860208,
+     0.837749,
+     0.853166,
+     0.857417,
+     0.8705
+    ]
+   },
+   "run_p50_ms": {
+    "median": 0.454711,
+    "min": 0.427207,
+    "max": 0.50204,
+    "values": [
+     0.50204,
+     0.427207,
+     0.450042,
+     0.454711,
+     0.496915
+    ]
+   },
+   "settle_p50_ms": {
+    "median": 0.132792,
+    "min": 0.132083,
+    "max": 0.13675,
+    "values": [
+     0.134667,
+     0.132709,
+     0.132083,
+     0.132792,
+     0.13675
+    ]
+   },
+   "rss_bytes_peak": {
+    "median": 351682560,
+    "min": 349192192,
+    "max": 353943552,
+    "values": [
+     349192192,
+     353943552,
+     350322688,
+     352731136,
+     351682560
+    ]
+   },
+   "per_player_injection_bytes": {
+    "median": 6945,
+    "min": 6945,
+    "max": 6945,
+    "values": [
+     6945,
+     6945,
+     6945,
+     6945,
+     6945
+    ]
+   }
+  },
+  "32p/json": {
+   "cpu_core_ms_per_tick": {
+    "median": 16.89891666666667,
+    "min": 16.55655333333333,
+    "max": 17.2053,
+    "values": [
+     17.2053,
+     16.89891666666667,
+     16.55655333333333,
+     16.803943333333333,
+     17.164823333333334
+    ]
+   },
+   "wall_p50_ms": {
+    "median": 6.60075,
+    "min": 6.353834,
+    "max": 6.74,
+    "values": [
+     6.67225,
+     6.60075,
+     6.353834,
+     6.458832999999999,
+     6.74
+    ]
+   },
+   "wall_p95_ms": {
+    "median": 10.809917,
+    "min": 10.347166,
+    "max": 11.394917,
+    "values": [
+     11.394917,
+     10.559875,
+     10.347166,
+     10.864083,
+     10.809917
+    ]
+   },
+   "wall_p99_ms": {
+    "median": 13.413958000000001,
+    "min": 12.142708,
+    "max": 16.083125,
+    "values": [
+     16.083125,
+     13.413958000000001,
+     12.142708,
+     12.927875,
+     14.482125
+    ]
+   },
+   "project_p50_ms": {
+    "median": 3.435456,
+    "min": 3.322375,
+    "max": 3.49825,
+    "values": [
+     3.474957,
+     3.435456,
+     3.322375,
+     3.376832,
+     3.49825
+    ]
+   },
+   "run_p50_ms": {
+    "median": 2.423208,
+    "min": 2.349378,
+    "max": 2.545166,
+    "values": [
+     2.472912,
+     2.423208,
+     2.349378,
+     2.387456,
+     2.545166
+    ]
+   },
+   "settle_p50_ms": {
+    "median": 0.601333,
+    "min": 0.587375,
+    "max": 0.605125,
+    "values": [
+     0.601333,
+     0.604958,
+     0.587375,
+     0.598792,
+     0.605125
+    ]
+   },
+   "rss_bytes_peak": {
+    "median": 1349124096,
+    "min": 1344897024,
+    "max": 1353465856,
+    "values": [
+     1349124096,
+     1344897024,
+     1353465856,
+     1349222400,
+     1346519040
+    ]
+   },
+   "per_player_injection_bytes": {
+    "median": 112734,
+    "min": 112734,
+    "max": 112734,
+    "values": [
+     112734,
+     112734,
+     112734,
+     112734,
+     112734
+    ]
+   }
+  },
+  "32p/kkpv": {
+   "cpu_core_ms_per_tick": {
+    "median": 20.39578333333333,
+    "min": 20.247650000000004,
+    "max": 21.1144,
+    "values": [
+     20.771633333333334,
+     20.360673333333335,
+     20.247650000000004,
+     20.39578333333333,
+     21.1144
+    ]
+   },
+   "wall_p50_ms": {
+    "median": 7.435207999999999,
+    "min": 7.420416,
+    "max": 7.7798750000000005,
+    "values": [
+     7.6055,
+     7.4323749999999995,
+     7.420416,
+     7.435207999999999,
+     7.7798750000000005
+    ]
+   },
+   "wall_p95_ms": {
+    "median": 12.466625,
+    "min": 12.12825,
+    "max": 12.861709000000001,
+    "values": [
+     12.368541,
+     12.466625,
+     12.12825,
+     12.861709000000001,
+     12.760666
+    ]
+   },
+   "wall_p99_ms": {
+    "median": 15.933625,
+    "min": 14.886292000000001,
+    "max": 16.80725,
+    "values": [
+     16.123207999999998,
+     14.886292000000001,
+     16.80725,
+     15.933625,
+     15.434875
+    ]
+   },
+   "project_p50_ms": {
+    "median": 4.07221,
+    "min": 4.007251,
+    "max": 4.196749,
+    "values": [
+     4.130335,
+     4.053623,
+     4.007251,
+     4.07221,
+     4.196749
+    ]
+   },
+   "run_p50_ms": {
+    "median": 2.797629,
+    "min": 2.718917,
+    "max": 2.91425,
+    "values": [
+     2.91425,
+     2.745835,
+     2.718917,
+     2.797629,
+     2.906667
+    ]
+   },
+   "settle_p50_ms": {
+    "median": 0.607042,
+    "min": 0.599542,
+    "max": 0.61825,
+    "values": [
+     0.60925,
+     0.599542,
+     0.607042,
+     0.605458,
+     0.61825
+    ]
+   },
+   "rss_bytes_peak": {
+    "median": 1285423104,
+    "min": 1272266752,
+    "max": 1287159808,
+    "values": [
+     1272610816,
+     1285423104,
+     1287159808,
+     1272266752,
+     1286455296
+    ]
+   },
+   "per_player_injection_bytes": {
+    "median": 11595,
+    "min": 11595,
+    "max": 11595,
+    "values": [
+     11595,
+     11595,
+     11595,
+     11595,
+     11595
+    ]
+   }
+  }
+ },
+ "runs": [
+  {
+   "repetition": 0,
+   "position_in_repetition": 0,
+   "scale_order": [
+    4,
+    8,
+    32
+   ],
+   "order": [
+    "json",
+    "kkpv"
+   ],
+   "players": 4,
+   "channel": "json",
+   "elapsed_s": 0.44290614128112793,
+   "extracted": {
+    "metrics": {
+     "cpu_core_ms_per_tick": 1.2321033333333333,
+     "wall_p50_ms": 0.5037079999999999,
+     "wall_p95_ms": 0.939458,
+     "wall_p99_ms": 1.6969999999999998,
+     "project_p50_ms": 0.246333,
+     "run_p50_ms": 0.189083,
+     "settle_p50_ms": 0.062416,
+     "rss_bytes_peak": 153731072
+    },
+    "per_player_injection_bytes": 17682,
+    "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+    "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9"
+   },
+   "report": {
+    "tool": "kkscreeps perf-probe",
+    "players": 4,
+    "ticks": 300,
+    "warmup": 50,
+    "player_concurrency": 2,
+    "player_cpu_clock": "thread_cpu_time",
+    "metadata": {
+     "os": "macos",
+     "arch": "aarch64",
+     "logical_cpus": 10,
+     "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+     "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+     "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+     "git_status": "M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? docs/research/notes/__pycache__/\n?? docs/research/notes/kkpv-scale-matrix-2026-10-04.md\n?? docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py\n?? docs/research/notes/kkpv-scale-matrix-windows-2026-10-04.json\n?? scripts/__pycache__/\n?? scripts/tests/__pycache__/\n?? scripts/tests/test_kkpv_matrix_capture.py",
+     "debug_assertions": false,
+     "unix_time_ms": 1791108713317
+    },
+    "process": {
+     "scope": "current_process_all_threads",
+     "window": "after_warmup_through_collection_loop",
+     "wall_ms": 173.556625,
+     "cpu_core_ms": 369.631,
+     "cpu_core_ms_per_tick": 1.2321033333333333,
+     "rss_bytes_after": 153731072,
+     "rss_bytes_sampled_peak": 153731072,
+     "rss_bytes_sampled_p50": 152387584,
+     "rss_observations": 301,
+     "rss_retained_samples": 301,
+     "rss_sampling_wall_ms": 0.39400899999999844,
+     "includes_sampling_and_workload_checks": true,
+     "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+    },
+    "workload": {
+     "progress_delta": 960,
+     "source_energy_min_before": 2972,
+     "source_energy_min_after": 2866
+    },
+    "phases": {
+     "ticks": 300,
+     "phases": {
+      "project": {
+       "count": 300,
+       "p50_ms": 0.246333,
+       "p95_ms": 0.305875,
+       "p99_ms": 0.388375,
+       "max_ms": 0.803666,
+       "total_ms": 76.51835700000004
+      },
+      "run": {
+       "count": 300,
+       "p50_ms": 0.189083,
+       "p95_ms": 0.582208,
+       "p99_ms": 1.365582,
+       "max_ms": 2.178125,
+       "total_ms": 75.69563399999997
+      },
+      "settle": {
+       "count": 300,
+       "p50_ms": 0.062416,
+       "p95_ms": 0.080292,
+       "p99_ms": 0.110292,
+       "max_ms": 0.26425,
+       "total_ms": 19.650045000000002
+      },
+      "wall": {
+       "count": 300,
+       "p50_ms": 0.5037079999999999,
+       "p95_ms": 0.939458,
+       "p99_ms": 1.6969999999999998,
+       "max_ms": 2.558834,
+       "total_ms": 172.23712799999996
+      }
+     }
+    },
+    "channel": "json",
+    "injection_bytes_sample": {
+     "channel": "json",
+     "world_json_bytes": 17682
+    }
+   }
+  },
+  {
+   "repetition": 0,
+   "position_in_repetition": 1,
+   "scale_order": [
+    4,
+    8,
+    32
+   ],
+   "order": [
+    "json",
+    "kkpv"
+   ],
+   "players": 4,
+   "channel": "kkpv",
+   "elapsed_s": 0.4077131748199463,
+   "extracted": {
+    "metrics": {
+     "cpu_core_ms_per_tick": 1.923306666666667,
+     "wall_p50_ms": 0.7695420000000001,
+     "wall_p95_ms": 1.512,
+     "wall_p99_ms": 2.423667,
+     "project_p50_ms": 0.425209,
+     "run_p50_ms": 0.264915,
+     "settle_p50_ms": 0.070083,
+     "rss_bytes_peak": 189464576
+    },
+    "per_player_injection_bytes": 6181,
+    "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+    "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9"
+   },
+   "report": {
+    "tool": "kkscreeps perf-probe",
+    "players": 4,
+    "ticks": 300,
+    "warmup": 50,
+    "player_concurrency": 2,
+    "player_cpu_clock": "thread_cpu_time",
+    "metadata": {
+     "os": "macos",
+     "arch": "aarch64",
+     "logical_cpus": 10,
+     "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+     "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+     "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+     "git_status": "M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? docs/research/notes/__pycache__/\n?? docs/research/notes/kkpv-scale-matrix-2026-10-04.md\n?? docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py\n?? docs/research/notes/kkpv-scale-matrix-windows-2026-10-04.json\n?? scripts/__pycache__/\n?? scripts/tests/__pycache__/\n?? scripts/tests/test_kkpv_matrix_capture.py",
+     "debug_assertions": false,
+     "unix_time_ms": 1791108713625
+    },
+    "process": {
+     "scope": "current_process_all_threads",
+     "window": "after_warmup_through_collection_loop",
+     "wall_ms": 264.564125,
+     "cpu_core_ms": 576.9920000000001,
+     "cpu_core_ms_per_tick": 1.923306666666667,
+     "rss_bytes_after": 189464576,
+     "rss_bytes_sampled_peak": 189464576,
+     "rss_bytes_sampled_p50": 160219136,
+     "rss_observations": 301,
+     "rss_retained_samples": 301,
+     "rss_sampling_wall_ms": 0.6329179999999992,
+     "includes_sampling_and_workload_checks": true,
+     "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+    },
+    "workload": {
+     "progress_delta": 960,
+     "source_energy_min_before": 2972,
+     "source_energy_min_after": 2866
+    },
+    "phases": {
+     "ticks": 300,
+     "phases": {
+      "project": {
+       "count": 300,
+       "p50_ms": 0.425209,
+       "p95_ms": 0.586792,
+       "p99_ms": 0.708418,
+       "max_ms": 1.11554,
+       "total_ms": 132.49418499999993
+      },
+      "run": {
+       "count": 300,
+       "p50_ms": 0.264915,
+       "p95_ms": 0.920458,
+       "p99_ms": 1.767,
+       "max_ms": 2.195625,
+       "total_ms": 107.51601899999999
+      },
+      "settle": {
+       "count": 300,
+       "p50_ms": 0.070083,
+       "p95_ms": 0.101917,
+       "p99_ms": 0.166417,
+       "max_ms": 0.227833,
+       "total_ms": 22.43583399999999
+      },
+      "wall": {
+       "count": 300,
+       "p50_ms": 0.7695420000000001,
+       "p95_ms": 1.512,
+       "p99_ms": 2.423667,
+       "max_ms": 2.763,
+       "total_ms": 262.856249
+      }
+     }
+    },
+    "channel": "kkpv",
+    "injection_bytes_sample": {
+     "channel": "kkpv",
+     "envelope_bytes": 842,
+     "bundle_bytes": 5339,
+     "public_bundle_bytes": 10676,
+     "public_shared": true,
+     "blocks": 4,
+     "public_retained": [
+      {
+       "tick": 349,
+       "generation": 381,
+       "bytes": 10676,
+       "handles": 0
+      }
+     ]
+    }
+   }
+  },
+  {
+   "repetition": 0,
+   "position_in_repetition": 2,
+   "scale_order": [
+    4,
+    8,
+    32
+   ],
+   "order": [
+    "json",
+    "kkpv"
+   ],
+   "players": 8,
+   "channel": "json",
+   "elapsed_s": 0.5836529731750488,
+   "extracted": {
+    "metrics": {
+     "cpu_core_ms_per_tick": 2.7536899999999997,
+     "wall_p50_ms": 1.0715,
+     "wall_p95_ms": 2.073417,
+     "wall_p99_ms": 3.531084,
+     "project_p50_ms": 0.55921,
+     "run_p50_ms": 0.375166,
+     "settle_p50_ms": 0.133208,
+     "rss_bytes_peak": 282165248
+    },
+    "per_player_injection_bytes": 31250,
+    "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+    "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9"
+   },
+   "report": {
+    "tool": "kkscreeps perf-probe",
+    "players": 8,
+    "ticks": 300,
+    "warmup": 50,
+    "player_concurrency": 2,
+    "player_cpu_clock": "thread_cpu_time",
+    "metadata": {
+     "os": "macos",
+     "arch": "aarch64",
+     "logical_cpus": 10,
+     "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+     "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+     "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+     "git_status": "M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? docs/research/notes/__pycache__/\n?? docs/research/notes/kkpv-scale-matrix-2026-10-04.md\n?? docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py\n?? docs/research/notes/kkpv-scale-matrix-windows-2026-10-04.json\n?? scripts/__pycache__/\n?? scripts/tests/__pycache__/\n?? scripts/tests/test_kkpv_matrix_capture.py",
+     "debug_assertions": false,
+     "unix_time_ms": 1791108714035
+    },
+    "process": {
+     "scope": "current_process_all_threads",
+     "window": "after_warmup_through_collection_loop",
+     "wall_ms": 373.70675,
+     "cpu_core_ms": 826.107,
+     "cpu_core_ms_per_tick": 2.7536899999999997,
+     "rss_bytes_after": 282165248,
+     "rss_bytes_sampled_peak": 282165248,
+     "rss_bytes_sampled_p50": 278478848,
+     "rss_observations": 301,
+     "rss_retained_samples": 301,
+     "rss_sampling_wall_ms": 0.8124589999999985,
+     "includes_sampling_and_workload_checks": true,
+     "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+    },
+    "workload": {
+     "progress_delta": 960,
+     "source_energy_min_before": 2972,
+     "source_energy_min_after": 2866
+    },
+    "phases": {
+     "ticks": 300,
+     "phases": {
+      "project": {
+       "count": 300,
+       "p50_ms": 0.55921,
+       "p95_ms": 0.763374,
+       "p99_ms": 0.903582,
+       "max_ms": 1.070376,
+       "total_ms": 175.48554900000002
+      },
+      "run": {
+       "count": 300,
+       "p50_ms": 0.375166,
+       "p95_ms": 1.227252,
+       "p99_ms": 2.631084,
+       "max_ms": 3.833291,
+       "total_ms": 153.495628
+      },
+      "settle": {
+       "count": 300,
+       "p50_ms": 0.133208,
+       "p95_ms": 0.172792,
+       "p99_ms": 0.203166,
+       "max_ms": 0.316292,
+       "total_ms": 41.03354300000004
+      },
+      "wall": {
+       "count": 300,
+       "p50_ms": 1.0715,
+       "p95_ms": 2.073417,
+       "p99_ms": 3.531084,
+       "max_ms": 5.066584,
+       "total_ms": 370.77674999999994
+      }
+     }
+    },
+    "channel": "json",
+    "injection_bytes_sample": {
+     "channel": "json",
+     "world_json_bytes": 31250
+    }
+   }
+  },
+  {
+   "repetition": 0,
+   "position_in_repetition": 3,
+   "scale_order": [
+    4,
+    8,
+    32
+   ],
+   "order": [
+    "json",
+    "kkpv"
+   ],
+   "players": 8,
+   "channel": "kkpv",
+   "elapsed_s": 0.7616069316864014,
+   "extracted": {
+    "metrics": {
+     "cpu_core_ms_per_tick": 3.9819633333333333,
+     "wall_p50_ms": 1.4884169999999999,
+     "wall_p95_ms": 2.909834,
+     "wall_p99_ms": 4.2958750000000006,
+     "project_p50_ms": 0.860208,
+     "run_p50_ms": 0.50204,
+     "settle_p50_ms": 0.134667,
+     "rss_bytes_peak": 349192192
+    },
+    "per_player_injection_bytes": 6945,
+    "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+    "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9"
+   },
+   "report": {
+    "tool": "kkscreeps perf-probe",
+    "players": 8,
+    "ticks": 300,
+    "warmup": 50,
+    "player_concurrency": 2,
+    "player_cpu_clock": "thread_cpu_time",
+    "metadata": {
+     "os": "macos",
+     "arch": "aarch64",
+     "logical_cpus": 10,
+     "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+     "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+     "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+     "git_status": "M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? docs/research/notes/__pycache__/\n?? docs/research/notes/kkpv-scale-matrix-2026-10-04.md\n?? docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py\n?? docs/research/notes/kkpv-scale-matrix-windows-2026-10-04.json\n?? scripts/__pycache__/\n?? scripts/tests/__pycache__/\n?? scripts/tests/test_kkpv_matrix_capture.py",
+     "debug_assertions": false,
+     "unix_time_ms": 1791108714620
+    },
+    "process": {
+     "scope": "current_process_all_threads",
+     "window": "after_warmup_through_collection_loop",
+     "wall_ms": 518.556458,
+     "cpu_core_ms": 1194.589,
+     "cpu_core_ms_per_tick": 3.9819633333333333,
+     "rss_bytes_after": 349192192,
+     "rss_bytes_sampled_peak": 349192192,
+     "rss_bytes_sampled_p50": 281395200,
+     "rss_observations": 301,
+     "rss_retained_samples": 301,
+     "rss_sampling_wall_ms": 0.991703999999999,
+     "includes_sampling_and_workload_checks": true,
+     "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+    },
+    "workload": {
+     "progress_delta": 960,
+     "source_energy_min_before": 2972,
+     "source_energy_min_after": 2866
+    },
+    "phases": {
+     "ticks": 300,
+     "phases": {
+      "project": {
+       "count": 300,
+       "p50_ms": 0.860208,
+       "p95_ms": 1.133999,
+       "p99_ms": 1.643836,
+       "max_ms": 2.131709,
+       "total_ms": 269.34993100000014
+      },
+      "run": {
+       "count": 300,
+       "p50_ms": 0.50204,
+       "p95_ms": 1.684539,
+       "p99_ms": 2.667916,
+       "max_ms": 4.054624,
+       "total_ms": 202.82227500000002
+      },
+      "settle": {
+       "count": 300,
+       "p50_ms": 0.134667,
+       "p95_ms": 0.194166,
+       "p99_ms": 0.299417,
+       "max_ms": 0.34525,
+       "total_ms": 42.65484200000003
+      },
+      "wall": {
+       "count": 300,
+       "p50_ms": 1.4884169999999999,
+       "p95_ms": 2.909834,
+       "p99_ms": 4.2958750000000006,
+       "max_ms": 5.151959000000001,
+       "total_ms": 515.4397090000001
+      }
+     }
+    },
+    "channel": "kkpv",
+    "injection_bytes_sample": {
+     "channel": "kkpv",
+     "envelope_bytes": 934,
+     "bundle_bytes": 6011,
+     "public_bundle_bytes": 21348,
+     "public_shared": true,
+     "blocks": 8,
+     "public_retained": [
+      {
+       "tick": 349,
+       "generation": 413,
+       "bytes": 21348,
+       "handles": 0
+      }
+     ]
+    }
+   }
+  },
+  {
+   "repetition": 0,
+   "position_in_repetition": 4,
+   "scale_order": [
+    4,
+    8,
+    32
+   ],
+   "order": [
+    "json",
+    "kkpv"
+   ],
+   "players": 32,
+   "channel": "json",
+   "elapsed_s": 3.1098580360412598,
+   "extracted": {
+    "metrics": {
+     "cpu_core_ms_per_tick": 17.2053,
+     "wall_p50_ms": 6.67225,
+     "wall_p95_ms": 11.394917,
+     "wall_p99_ms": 16.083125,
+     "project_p50_ms": 3.474957,
+     "run_p50_ms": 2.472912,
+     "settle_p50_ms": 0.601333,
+     "rss_bytes_peak": 1349124096
+    },
+    "per_player_injection_bytes": 112734,
+    "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+    "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9"
+   },
+   "report": {
+    "tool": "kkscreeps perf-probe",
+    "players": 32,
+    "ticks": 300,
+    "warmup": 50,
+    "player_concurrency": 2,
+    "player_cpu_clock": "thread_cpu_time",
+    "metadata": {
+     "os": "macos",
+     "arch": "aarch64",
+     "logical_cpus": 10,
+     "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+     "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+     "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+     "git_status": "M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? docs/research/notes/__pycache__/\n?? docs/research/notes/kkpv-scale-matrix-2026-10-04.md\n?? docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py\n?? docs/research/notes/kkpv-scale-matrix-windows-2026-10-04.json\n?? scripts/__pycache__/\n?? scripts/tests/__pycache__/\n?? scripts/tests/test_kkpv_matrix_capture.py",
+     "debug_assertions": false,
+     "unix_time_ms": 1791108715378
+    },
+    "process": {
+     "scope": "current_process_all_threads",
+     "window": "after_warmup_through_collection_loop",
+     "wall_ms": 2204.30475,
+     "cpu_core_ms": 5161.59,
+     "cpu_core_ms_per_tick": 17.2053,
+     "rss_bytes_after": 1349124096,
+     "rss_bytes_sampled_peak": 1349124096,
+     "rss_bytes_sampled_p50": 1275101184,
+     "rss_observations": 301,
+     "rss_retained_samples": 301,
+     "rss_sampling_wall_ms": 4.080501000000002,
+     "includes_sampling_and_workload_checks": true,
+     "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+    },
+    "workload": {
+     "progress_delta": 960,
+     "source_energy_min_before": 2972,
+     "source_energy_min_after": 2866
+    },
+    "phases": {
+     "ticks": 300,
+     "phases": {
+      "project": {
+       "count": 300,
+       "p50_ms": 3.474957,
+       "p95_ms": 4.632876,
+       "p99_ms": 5.058247,
+       "max_ms": 5.62246,
+       "total_ms": 1084.3829360000002
+      },
+      "run": {
+       "count": 300,
+       "p50_ms": 2.472912,
+       "p95_ms": 5.943289,
+       "p99_ms": 10.989416,
+       "max_ms": 17.007918,
+       "total_ms": 918.5206400000001
+      },
+      "settle": {
+       "count": 300,
+       "p50_ms": 0.601333,
+       "p95_ms": 0.76025,
+       "p99_ms": 0.8645,
+       "max_ms": 1.323834,
+       "total_ms": 183.84195400000004
+      },
+      "wall": {
+       "count": 300,
+       "p50_ms": 6.67225,
+       "p95_ms": 11.394917,
+       "p99_ms": 16.083125,
+       "max_ms": 22.147042,
+       "total_ms": 2189.5828699999993
+      }
+     }
+    },
+    "channel": "json",
+    "injection_bytes_sample": {
+     "channel": "json",
+     "world_json_bytes": 112734
+    }
+   }
+  },
+  {
+   "repetition": 0,
+   "position_in_repetition": 5,
+   "scale_order": [
+    4,
+    8,
+    32
+   ],
+   "order": [
+    "json",
+    "kkpv"
+   ],
+   "players": 32,
+   "channel": "kkpv",
+   "elapsed_s": 3.496079921722412,
+   "extracted": {
+    "metrics": {
+     "cpu_core_ms_per_tick": 20.771633333333334,
+     "wall_p50_ms": 7.6055,
+     "wall_p95_ms": 12.368541,
+     "wall_p99_ms": 16.123207999999998,
+     "project_p50_ms": 4.130335,
+     "run_p50_ms": 2.91425,
+     "settle_p50_ms": 0.60925,
+     "rss_bytes_peak": 1272610816
+    },
+    "per_player_injection_bytes": 11595,
+    "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+    "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9"
+   },
+   "report": {
+    "tool": "kkscreeps perf-probe",
+    "players": 32,
+    "ticks": 300,
+    "warmup": 50,
+    "player_concurrency": 2,
+    "player_cpu_clock": "thread_cpu_time",
+    "metadata": {
+     "os": "macos",
+     "arch": "aarch64",
+     "logical_cpus": 10,
+     "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+     "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+     "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+     "git_status": "M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? docs/research/notes/__pycache__/\n?? docs/research/notes/kkpv-scale-matrix-2026-10-04.md\n?? docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py\n?? docs/research/notes/kkpv-scale-matrix-windows-2026-10-04.json\n?? scripts/__pycache__/\n?? scripts/tests/__pycache__/\n?? scripts/tests/test_kkpv_matrix_capture.py",
+     "debug_assertions": false,
+     "unix_time_ms": 1791108718496
+    },
+    "process": {
+     "scope": "current_process_all_threads",
+     "window": "after_warmup_through_collection_loop",
+     "wall_ms": 2548.769375,
+     "cpu_core_ms": 6231.49,
+     "cpu_core_ms_per_tick": 20.771633333333334,
+     "rss_bytes_after": 1272610816,
+     "rss_bytes_sampled_peak": 1272610816,
+     "rss_bytes_sampled_p50": 1043562496,
+     "rss_observations": 301,
+     "rss_retained_samples": 301,
+     "rss_sampling_wall_ms": 4.271382999999999,
+     "includes_sampling_and_workload_checks": true,
+     "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+    },
+    "workload": {
+     "progress_delta": 960,
+     "source_energy_min_before": 2972,
+     "source_energy_min_after": 2866
+    },
+    "phases": {
+     "ticks": 300,
+     "phases": {
+      "project": {
+       "count": 300,
+       "p50_ms": 4.130335,
+       "p95_ms": 5.543997,
+       "p99_ms": 8.188834,
+       "max_ms": 24.079585,
+       "total_ms": 1306.8504460000004
+      },
+      "run": {
+       "count": 300,
+       "p50_ms": 2.91425,
+       "p95_ms": 6.618084,
+       "p99_ms": 10.592749,
+       "max_ms": 14.605081,
+       "total_ms": 1036.4825170000004
+      },
+      "settle": {
+       "count": 300,
+       "p50_ms": 0.60925,
+       "p95_ms": 0.743833,
+       "p99_ms": 1.163709,
+       "max_ms": 1.313917,
+       "total_ms": 187.26721699999993
+      },
+      "wall": {
+       "count": 300,
+       "p50_ms": 7.6055,
+       "p95_ms": 12.368541,
+       "p99_ms": 16.123207999999998,
+       "max_ms": 39.4045,
+       "total_ms": 2533.101419
+      }
+     }
+    },
+    "channel": "kkpv",
+    "injection_bytes_sample": {
+     "channel": "kkpv",
+     "envelope_bytes": 1530,
+     "bundle_bytes": 10065,
+     "public_bundle_bytes": 85402,
+     "public_shared": true,
+     "blocks": 32,
+     "public_retained": [
+      {
+       "tick": 349,
+       "generation": 605,
+       "bytes": 85402,
+       "handles": 0
+      }
+     ]
+    }
+   }
+  },
+  {
+   "repetition": 1,
+   "position_in_repetition": 0,
+   "scale_order": [
+    8,
+    32,
+    4
+   ],
+   "order": [
+    "kkpv",
+    "json"
+   ],
+   "players": 8,
+   "channel": "kkpv",
+   "elapsed_s": 0.7647991180419922,
+   "extracted": {
+    "metrics": {
+     "cpu_core_ms_per_tick": 3.8554000000000004,
+     "wall_p50_ms": 1.395834,
+     "wall_p95_ms": 3.5077920000000002,
+     "wall_p99_ms": 4.5529589999999995,
+     "project_p50_ms": 0.837749,
+     "run_p50_ms": 0.427207,
+     "settle_p50_ms": 0.132709,
+     "rss_bytes_peak": 353943552
+    },
+    "per_player_injection_bytes": 6945,
+    "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+    "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9"
+   },
+   "report": {
+    "tool": "kkscreeps perf-probe",
+    "players": 8,
+    "ticks": 300,
+    "warmup": 50,
+    "player_concurrency": 2,
+    "player_cpu_clock": "thread_cpu_time",
+    "metadata": {
+     "os": "macos",
+     "arch": "aarch64",
+     "logical_cpus": 10,
+     "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+     "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+     "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+     "git_status": "M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? docs/research/notes/__pycache__/\n?? docs/research/notes/kkpv-scale-matrix-2026-10-04.md\n?? docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py\n?? docs/research/notes/kkpv-scale-matrix-windows-2026-10-04.json\n?? scripts/__pycache__/\n?? scripts/tests/__pycache__/\n?? scripts/tests/test_kkpv_matrix_capture.py",
+     "debug_assertions": false,
+     "unix_time_ms": 1791108721997
+    },
+    "process": {
+     "scope": "current_process_all_threads",
+     "window": "after_warmup_through_collection_loop",
+     "wall_ms": 499.747958,
+     "cpu_core_ms": 1156.6200000000001,
+     "cpu_core_ms_per_tick": 3.8554000000000004,
+     "rss_bytes_after": 353943552,
+     "rss_bytes_sampled_peak": 353943552,
+     "rss_bytes_sampled_p50": 288210944,
+     "rss_observations": 301,
+     "rss_retained_samples": 301,
+     "rss_sampling_wall_ms": 0.8757979999999989,
+     "includes_sampling_and_workload_checks": true,
+     "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+    },
+    "workload": {
+     "progress_delta": 960,
+     "source_energy_min_before": 2972,
+     "source_energy_min_after": 2866
+    },
+    "phases": {
+     "ticks": 300,
+     "phases": {
+      "project": {
+       "count": 300,
+       "p50_ms": 0.837749,
+       "p95_ms": 1.138043,
+       "p99_ms": 1.59,
+       "max_ms": 2.122834,
+       "total_ms": 264.8338479999999
+      },
+      "run": {
+       "count": 300,
+       "p50_ms": 0.427207,
+       "p95_ms": 1.458166,
+       "p99_ms": 3.204209,
+       "max_ms": 4.85275,
+       "total_ms": 189.53681799999998
+      },
+      "settle": {
+       "count": 300,
+       "p50_ms": 0.132709,
+       "p95_ms": 0.181708,
+       "p99_ms": 0.2355,
+       "max_ms": 0.444,
+       "total_ms": 41.94191000000002
+      },
+      "wall": {
+       "count": 300,
+       "p50_ms": 1.395834,
+       "p95_ms": 3.5077920000000002,
+       "p99_ms": 4.5529589999999995,
+       "max_ms": 6.2335,
+       "total_ms": 496.8991200000002
+      }
+     }
+    },
+    "channel": "kkpv",
+    "injection_bytes_sample": {
+     "channel": "kkpv",
+     "envelope_bytes": 934,
+     "bundle_bytes": 6011,
+     "public_bundle_bytes": 21348,
+     "public_shared": true,
+     "blocks": 8,
+     "public_retained": [
+      {
+       "tick": 349,
+       "generation": 413,
+       "bytes": 21348,
+       "handles": 0
+      }
+     ]
+    }
+   }
+  },
+  {
+   "repetition": 1,
+   "position_in_repetition": 1,
+   "scale_order": [
+    8,
+    32,
+    4
+   ],
+   "order": [
+    "kkpv",
+    "json"
+   ],
+   "players": 8,
+   "channel": "json",
+   "elapsed_s": 0.6083199977874756,
+   "extracted": {
+    "metrics": {
+     "cpu_core_ms_per_tick": 2.6085266666666667,
+     "wall_p50_ms": 0.9996250000000001,
+     "wall_p95_ms": 1.944625,
+     "wall_p99_ms": 2.883792,
+     "project_p50_ms": 0.540375,
+     "run_p50_ms": 0.34025,
+     "settle_p50_ms": 0.130125,
+     "rss_bytes_peak": 283459584
+    },
+    "per_player_injection_bytes": 31250,
+    "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+    "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9"
+   },
+   "report": {
+    "tool": "kkscreeps perf-probe",
+    "players": 8,
+    "ticks": 300,
+    "warmup": 50,
+    "player_concurrency": 2,
+    "player_cpu_clock": "thread_cpu_time",
+    "metadata": {
+     "os": "macos",
+     "arch": "aarch64",
+     "logical_cpus": 10,
+     "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+     "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+     "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+     "git_status": "M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? docs/research/notes/__pycache__/\n?? docs/research/notes/kkpv-scale-matrix-2026-10-04.md\n?? docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py\n?? docs/research/notes/kkpv-scale-matrix-windows-2026-10-04.json\n?? scripts/__pycache__/\n?? scripts/tests/__pycache__/\n?? scripts/tests/test_kkpv_matrix_capture.py",
+     "debug_assertions": false,
+     "unix_time_ms": 1791108722761
+    },
+    "process": {
+     "scope": "current_process_all_threads",
+     "window": "after_warmup_through_collection_loop",
+     "wall_ms": 351.59837500000003,
+     "cpu_core_ms": 782.558,
+     "cpu_core_ms_per_tick": 2.6085266666666667,
+     "rss_bytes_after": 283459584,
+     "rss_bytes_sampled_peak": 283459584,
+     "rss_bytes_sampled_p50": 278102016,
+     "rss_observations": 301,
+     "rss_retained_samples": 301,
+     "rss_sampling_wall_ms": 0.638872999999999,
+     "includes_sampling_and_workload_checks": true,
+     "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+    },
+    "workload": {
+     "progress_delta": 960,
+     "source_energy_min_before": 2972,
+     "source_energy_min_after": 2866
+    },
+    "phases": {
+     "ticks": 300,
+     "phases": {
+      "project": {
+       "count": 300,
+       "p50_ms": 0.540375,
+       "p95_ms": 0.737959,
+       "p99_ms": 0.884832,
+       "max_ms": 1.007461,
+       "total_ms": 170.83939700000008
+      },
+      "run": {
+       "count": 300,
+       "p50_ms": 0.34025,
+       "p95_ms": 1.097792,
+       "p99_ms": 2.002376,
+       "max_ms": 2.919208,
+       "total_ms": 137.07940400000004
+      },
+      "settle": {
+       "count": 300,
+       "p50_ms": 0.130125,
+       "p95_ms": 0.159333,
+       "p99_ms": 0.274458,
+       "max_ms": 0.454875,
+       "total_ms": 40.40358099999997
+      },
+      "wall": {
+       "count": 300,
+       "p50_ms": 0.9996250000000001,
+       "p95_ms": 1.944625,
+       "p99_ms": 2.883792,
+       "max_ms": 3.9227919999999994,
+       "total_ms": 349.0152539999998
+      }
+     }
+    },
+    "channel": "json",
+    "injection_bytes_sample": {
+     "channel": "json",
+     "world_json_bytes": 31250
+    }
+   }
+  },
+  {
+   "repetition": 1,
+   "position_in_repetition": 2,
+   "scale_order": [
+    8,
+    32,
+    4
+   ],
+   "order": [
+    "kkpv",
+    "json"
+   ],
+   "players": 32,
+   "channel": "kkpv",
+   "elapsed_s": 3.3243050575256348,
+   "extracted": {
+    "metrics": {
+     "cpu_core_ms_per_tick": 20.360673333333335,
+     "wall_p50_ms": 7.4323749999999995,
+     "wall_p95_ms": 12.466625,
+     "wall_p99_ms": 14.886292000000001,
+     "project_p50_ms": 4.053623,
+     "run_p50_ms": 2.745835,
+     "settle_p50_ms": 0.599542,
+     "rss_bytes_peak": 1285423104
+    },
+    "per_player_injection_bytes": 11595,
+    "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+    "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9"
+   },
+   "report": {
+    "tool": "kkscreeps perf-probe",
+    "players": 32,
+    "ticks": 300,
+    "warmup": 50,
+    "player_concurrency": 2,
+    "player_cpu_clock": "thread_cpu_time",
+    "metadata": {
+     "os": "macos",
+     "arch": "aarch64",
+     "logical_cpus": 10,
+     "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+     "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+     "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+     "git_status": "M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? docs/research/notes/__pycache__/\n?? docs/research/notes/kkpv-scale-matrix-2026-10-04.md\n?? docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py\n?? docs/research/notes/kkpv-scale-matrix-windows-2026-10-04.json\n?? scripts/__pycache__/\n?? scripts/tests/__pycache__/\n?? scripts/tests/test_kkpv_matrix_capture.py",
+     "debug_assertions": false,
+     "unix_time_ms": 1791108723360
+    },
+    "process": {
+     "scope": "current_process_all_threads",
+     "window": "after_warmup_through_collection_loop",
+     "wall_ms": 2473.18225,
+     "cpu_core_ms": 6108.202,
+     "cpu_core_ms_per_tick": 20.360673333333335,
+     "rss_bytes_after": 1285423104,
+     "rss_bytes_sampled_peak": 1285423104,
+     "rss_bytes_sampled_p50": 1041858560,
+     "rss_observations": 301,
+     "rss_retained_samples": 301,
+     "rss_sampling_wall_ms": 4.153239999999999,
+     "includes_sampling_and_workload_checks": true,
+     "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+    },
+    "workload": {
+     "progress_delta": 960,
+     "source_energy_min_before": 2972,
+     "source_energy_min_after": 2866
+    },
+    "phases": {
+     "ticks": 300,
+     "phases": {
+      "project": {
+       "count": 300,
+       "p50_ms": 4.053623,
+       "p95_ms": 5.456794,
+       "p99_ms": 8.155291,
+       "max_ms": 8.525457,
+       "total_ms": 1268.8632420000001
+      },
+      "run": {
+       "count": 300,
+       "p50_ms": 2.745835,
+       "p95_ms": 6.510459,
+       "p99_ms": 8.376125,
+       "max_ms": 12.799335,
+       "total_ms": 1001.5501720000008
+      },
+      "settle": {
+       "count": 300,
+       "p50_ms": 0.599542,
+       "p95_ms": 0.784292,
+       "p99_ms": 0.999709,
+       "max_ms": 1.348584,
+       "total_ms": 185.21783700000006
+      },
+      "wall": {
+       "count": 300,
+       "p50_ms": 7.4323749999999995,
+       "p95_ms": 12.466625,
+       "p99_ms": 14.886292000000001,
+       "max_ms": 19.354334,
+       "total_ms": 2458.055297000001
+      }
+     }
+    },
+    "channel": "kkpv",
+    "injection_bytes_sample": {
+     "channel": "kkpv",
+     "envelope_bytes": 1530,
+     "bundle_bytes": 10065,
+     "public_bundle_bytes": 85402,
+     "public_shared": true,
+     "blocks": 32,
+     "public_retained": [
+      {
+       "tick": 349,
+       "generation": 605,
+       "bytes": 85402,
+       "handles": 0
+      }
+     ]
+    }
+   }
+  },
+  {
+   "repetition": 1,
+   "position_in_repetition": 3,
+   "scale_order": [
+    8,
+    32,
+    4
+   ],
+   "order": [
+    "kkpv",
+    "json"
+   ],
+   "players": 32,
+   "channel": "json",
+   "elapsed_s": 2.95387601852417,
+   "extracted": {
+    "metrics": {
+     "cpu_core_ms_per_tick": 16.89891666666667,
+     "wall_p50_ms": 6.60075,
+     "wall_p95_ms": 10.559875,
+     "wall_p99_ms": 13.413958000000001,
+     "project_p50_ms": 3.435456,
+     "run_p50_ms": 2.423208,
+     "settle_p50_ms": 0.604958,
+     "rss_bytes_peak": 1344897024
+    },
+    "per_player_injection_bytes": 112734,
+    "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+    "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9"
+   },
+   "report": {
+    "tool": "kkscreeps perf-probe",
+    "players": 32,
+    "ticks": 300,
+    "warmup": 50,
+    "player_concurrency": 2,
+    "player_cpu_clock": "thread_cpu_time",
+    "metadata": {
+     "os": "macos",
+     "arch": "aarch64",
+     "logical_cpus": 10,
+     "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+     "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+     "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+     "git_status": "M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? docs/research/notes/__pycache__/\n?? docs/research/notes/kkpv-scale-matrix-2026-10-04.md\n?? docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py\n?? docs/research/notes/kkpv-scale-matrix-windows-2026-10-04.json\n?? scripts/__pycache__/\n?? scripts/tests/__pycache__/\n?? scripts/tests/test_kkpv_matrix_capture.py",
+     "debug_assertions": false,
+     "unix_time_ms": 1791108726687
+    },
+    "process": {
+     "scope": "current_process_all_threads",
+     "window": "after_warmup_through_collection_loop",
+     "wall_ms": 2169.738208,
+     "cpu_core_ms": 5069.675,
+     "cpu_core_ms_per_tick": 16.89891666666667,
+     "rss_bytes_after": 1344897024,
+     "rss_bytes_sampled_peak": 1344897024,
+     "rss_bytes_sampled_p50": 1278246912,
+     "rss_observations": 301,
+     "rss_retained_samples": 301,
+     "rss_sampling_wall_ms": 4.137327999999999,
+     "includes_sampling_and_workload_checks": true,
+     "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+    },
+    "workload": {
+     "progress_delta": 960,
+     "source_energy_min_before": 2972,
+     "source_energy_min_after": 2866
+    },
+    "phases": {
+     "ticks": 300,
+     "phases": {
+      "project": {
+       "count": 300,
+       "p50_ms": 3.435456,
+       "p95_ms": 4.552918,
+       "p99_ms": 6.071213,
+       "max_ms": 20.515916,
+       "total_ms": 1085.0477789999993
+      },
+      "run": {
+       "count": 300,
+       "p50_ms": 2.423208,
+       "p95_ms": 5.151662,
+       "p99_ms": 7.74825,
+       "max_ms": 15.192919,
+       "total_ms": 882.0681449999993
+      },
+      "settle": {
+       "count": 300,
+       "p50_ms": 0.604958,
+       "p95_ms": 0.74425,
+       "p99_ms": 0.855667,
+       "max_ms": 1.569875,
+       "total_ms": 184.68541
+      },
+      "wall": {
+       "count": 300,
+       "p50_ms": 6.60075,
+       "p95_ms": 10.559875,
+       "p99_ms": 13.413958000000001,
+       "max_ms": 24.530334,
+       "total_ms": 2154.7407990000006
+      }
+     }
+    },
+    "channel": "json",
+    "injection_bytes_sample": {
+     "channel": "json",
+     "world_json_bytes": 112734
+    }
+   }
+  },
+  {
+   "repetition": 1,
+   "position_in_repetition": 4,
+   "scale_order": [
+    8,
+    32,
+    4
+   ],
+   "order": [
+    "kkpv",
+    "json"
+   ],
+   "players": 4,
+   "channel": "kkpv",
+   "elapsed_s": 0.4196279048919678,
+   "extracted": {
+    "metrics": {
+     "cpu_core_ms_per_tick": 1.92257,
+     "wall_p50_ms": 0.7510830000000001,
+     "wall_p95_ms": 1.5525,
+     "wall_p99_ms": 2.6277079999999997,
+     "project_p50_ms": 0.427292,
+     "run_p50_ms": 0.255208,
+     "settle_p50_ms": 0.069458,
+     "rss_bytes_peak": 190742528
+    },
+    "per_player_injection_bytes": 6181,
+    "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+    "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9"
+   },
+   "report": {
+    "tool": "kkscreeps perf-probe",
+    "players": 4,
+    "ticks": 300,
+    "warmup": 50,
+    "player_concurrency": 2,
+    "player_cpu_clock": "thread_cpu_time",
+    "metadata": {
+     "os": "macos",
+     "arch": "aarch64",
+     "logical_cpus": 10,
+     "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+     "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+     "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+     "git_status": "M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? docs/research/notes/__pycache__/\n?? docs/research/notes/kkpv-scale-matrix-2026-10-04.md\n?? docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py\n?? docs/research/notes/kkpv-scale-matrix-windows-2026-10-04.json\n?? scripts/__pycache__/\n?? scripts/tests/__pycache__/\n?? scripts/tests/test_kkpv_matrix_capture.py",
+     "debug_assertions": false,
+     "unix_time_ms": 1791108729647
+    },
+    "process": {
+     "scope": "current_process_all_threads",
+     "window": "after_warmup_through_collection_loop",
+     "wall_ms": 266.599083,
+     "cpu_core_ms": 576.771,
+     "cpu_core_ms_per_tick": 1.92257,
+     "rss_bytes_after": 190742528,
+     "rss_bytes_sampled_peak": 190742528,
+     "rss_bytes_sampled_p50": 162381824,
+     "rss_observations": 301,
+     "rss_retained_samples": 301,
+     "rss_sampling_wall_ms": 0.6253709999999983,
+     "includes_sampling_and_workload_checks": true,
+     "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+    },
+    "workload": {
+     "progress_delta": 960,
+     "source_energy_min_before": 2972,
+     "source_energy_min_after": 2866
+    },
+    "phases": {
+     "ticks": 300,
+     "phases": {
+      "project": {
+       "count": 300,
+       "p50_ms": 0.427292,
+       "p95_ms": 0.654667,
+       "p99_ms": 0.748292,
+       "max_ms": 0.848876,
+       "total_ms": 135.17117100000002
+      },
+      "run": {
+       "count": 300,
+       "p50_ms": 0.255208,
+       "p95_ms": 0.869166,
+       "p99_ms": 1.801043,
+       "max_ms": 2.314959,
+       "total_ms": 105.86007499999998
+      },
+      "settle": {
+       "count": 300,
+       "p50_ms": 0.069458,
+       "p95_ms": 0.113125,
+       "p99_ms": 0.191,
+       "max_ms": 0.315917,
+       "total_ms": 23.310875999999997
+      },
+      "wall": {
+       "count": 300,
+       "p50_ms": 0.7510830000000001,
+       "p95_ms": 1.5525,
+       "p99_ms": 2.6277079999999997,
+       "max_ms": 3.153375,
+       "total_ms": 264.84028200000006
+      }
+     }
+    },
+    "channel": "kkpv",
+    "injection_bytes_sample": {
+     "channel": "kkpv",
+     "envelope_bytes": 842,
+     "bundle_bytes": 5339,
+     "public_bundle_bytes": 10676,
+     "public_shared": true,
+     "blocks": 4,
+     "public_retained": [
+      {
+       "tick": 349,
+       "generation": 381,
+       "bytes": 10676,
+       "handles": 0
+      }
+     ]
+    }
+   }
+  },
+  {
+   "repetition": 1,
+   "position_in_repetition": 5,
+   "scale_order": [
+    8,
+    32,
+    4
+   ],
+   "order": [
+    "kkpv",
+    "json"
+   ],
+   "players": 4,
+   "channel": "json",
+   "elapsed_s": 0.2819089889526367,
+   "extracted": {
+    "metrics": {
+     "cpu_core_ms_per_tick": 1.1098266666666665,
+     "wall_p50_ms": 0.48500000000000004,
+     "wall_p95_ms": 0.832584,
+     "wall_p99_ms": 1.427792,
+     "project_p50_ms": 0.241,
+     "run_p50_ms": 0.172958,
+     "settle_p50_ms": 0.062167,
+     "rss_bytes_peak": 153747456
+    },
+    "per_player_injection_bytes": 17682,
+    "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+    "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9"
+   },
+   "report": {
+    "tool": "kkscreeps perf-probe",
+    "players": 4,
+    "ticks": 300,
+    "warmup": 50,
+    "player_concurrency": 2,
+    "player_cpu_clock": "thread_cpu_time",
+    "metadata": {
+     "os": "macos",
+     "arch": "aarch64",
+     "logical_cpus": 10,
+     "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+     "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+     "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+     "git_status": "M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? docs/research/notes/__pycache__/\n?? docs/research/notes/kkpv-scale-matrix-2026-10-04.md\n?? docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py\n?? docs/research/notes/kkpv-scale-matrix-windows-2026-10-04.json\n?? scripts/__pycache__/\n?? scripts/tests/__pycache__/\n?? scripts/tests/test_kkpv_matrix_capture.py",
+     "debug_assertions": false,
+     "unix_time_ms": 1791108730060
+    },
+    "process": {
+     "scope": "current_process_all_threads",
+     "window": "after_warmup_through_collection_loop",
+     "wall_ms": 160.056708,
+     "cpu_core_ms": 332.948,
+     "cpu_core_ms_per_tick": 1.1098266666666665,
+     "rss_bytes_after": 153747456,
+     "rss_bytes_sampled_peak": 153747456,
+     "rss_bytes_sampled_p50": 152190976,
+     "rss_observations": 301,
+     "rss_retained_samples": 301,
+     "rss_sampling_wall_ms": 0.311444999999999,
+     "includes_sampling_and_workload_checks": true,
+     "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+    },
+    "workload": {
+     "progress_delta": 960,
+     "source_energy_min_before": 2972,
+     "source_energy_min_after": 2866
+    },
+    "phases": {
+     "ticks": 300,
+     "phases": {
+      "project": {
+       "count": 300,
+       "p50_ms": 0.241,
+       "p95_ms": 0.28325,
+       "p99_ms": 0.379874,
+       "max_ms": 0.441583,
+       "total_ms": 73.89792599999993
+      },
+      "run": {
+       "count": 300,
+       "p50_ms": 0.172958,
+       "p95_ms": 0.439749,
+       "p99_ms": 1.098459,
+       "max_ms": 1.460375,
+       "total_ms": 65.26329000000001
+      },
+      "settle": {
+       "count": 300,
+       "p50_ms": 0.062167,
+       "p95_ms": 0.078584,
+       "p99_ms": 0.087333,
+       "max_ms": 0.206208,
+       "total_ms": 19.32921300000001
+      },
+      "wall": {
+       "count": 300,
+       "p50_ms": 0.48500000000000004,
+       "p95_ms": 0.832584,
+       "p99_ms": 1.427792,
+       "max_ms": 1.829792,
+       "total_ms": 158.80067999999994
+      }
+     }
+    },
+    "channel": "json",
+    "injection_bytes_sample": {
+     "channel": "json",
+     "world_json_bytes": 17682
+    }
+   }
+  },
+  {
+   "repetition": 2,
+   "position_in_repetition": 0,
+   "scale_order": [
+    32,
+    4,
+    8
+   ],
+   "order": [
+    "json",
+    "kkpv"
+   ],
+   "players": 32,
+   "channel": "json",
+   "elapsed_s": 2.9169328212738037,
+   "extracted": {
+    "metrics": {
+     "cpu_core_ms_per_tick": 16.55655333333333,
+     "wall_p50_ms": 6.353834,
+     "wall_p95_ms": 10.347166,
+     "wall_p99_ms": 12.142708,
+     "project_p50_ms": 3.322375,
+     "run_p50_ms": 2.349378,
+     "settle_p50_ms": 0.587375,
+     "rss_bytes_peak": 1353465856
+    },
+    "per_player_injection_bytes": 112734,
+    "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+    "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9"
+   },
+   "report": {
+    "tool": "kkscreeps perf-probe",
+    "players": 32,
+    "ticks": 300,
+    "warmup": 50,
+    "player_concurrency": 2,
+    "player_cpu_clock": "thread_cpu_time",
+    "metadata": {
+     "os": "macos",
+     "arch": "aarch64",
+     "logical_cpus": 10,
+     "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+     "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+     "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+     "git_status": "M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? docs/research/notes/__pycache__/\n?? docs/research/notes/kkpv-scale-matrix-2026-10-04.md\n?? docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py\n?? docs/research/notes/kkpv-scale-matrix-windows-2026-10-04.json\n?? scripts/__pycache__/\n?? scripts/tests/__pycache__/\n?? scripts/tests/test_kkpv_matrix_capture.py",
+     "debug_assertions": false,
+     "unix_time_ms": 1791108730341
+    },
+    "process": {
+     "scope": "current_process_all_threads",
+     "window": "after_warmup_through_collection_loop",
+     "wall_ms": 2099.607,
+     "cpu_core_ms": 4966.965999999999,
+     "cpu_core_ms_per_tick": 16.55655333333333,
+     "rss_bytes_after": 1353465856,
+     "rss_bytes_sampled_peak": 1353465856,
+     "rss_bytes_sampled_p50": 1277820928,
+     "rss_observations": 301,
+     "rss_retained_samples": 301,
+     "rss_sampling_wall_ms": 4.004326000000002,
+     "includes_sampling_and_workload_checks": true,
+     "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+    },
+    "workload": {
+     "progress_delta": 960,
+     "source_energy_min_before": 2972,
+     "source_energy_min_after": 2866
+    },
+    "phases": {
+     "ticks": 300,
+     "phases": {
+      "project": {
+       "count": 300,
+       "p50_ms": 3.322375,
+       "p95_ms": 4.635249,
+       "p99_ms": 5.088833,
+       "max_ms": 5.961749,
+       "total_ms": 1046.2974650000003
+      },
+      "run": {
+       "count": 300,
+       "p50_ms": 2.349378,
+       "p95_ms": 5.222418,
+       "p99_ms": 7.621502,
+       "max_ms": 12.770289,
+       "total_ms": 858.5881910000002
+      },
+      "settle": {
+       "count": 300,
+       "p50_ms": 0.587375,
+       "p95_ms": 0.714375,
+       "p99_ms": 0.8135,
+       "max_ms": 0.86375,
+       "total_ms": 178.01208800000003
+      },
+      "wall": {
+       "count": 300,
+       "p50_ms": 6.353834,
+       "p95_ms": 10.347166,
+       "p99_ms": 12.142708,
+       "max_ms": 18.043875,
+       "total_ms": 2085.778119
+      }
+     }
+    },
+    "channel": "json",
+    "injection_bytes_sample": {
+     "channel": "json",
+     "world_json_bytes": 112734
+    }
+   }
+  },
+  {
+   "repetition": 2,
+   "position_in_repetition": 1,
+   "scale_order": [
+    32,
+    4,
+    8
+   ],
+   "order": [
+    "json",
+    "kkpv"
+   ],
+   "players": 32,
+   "channel": "kkpv",
+   "elapsed_s": 3.2872021198272705,
+   "extracted": {
+    "metrics": {
+     "cpu_core_ms_per_tick": 20.247650000000004,
+     "wall_p50_ms": 7.420416,
+     "wall_p95_ms": 12.12825,
+     "wall_p99_ms": 16.80725,
+     "project_p50_ms": 4.007251,
+     "run_p50_ms": 2.718917,
+     "settle_p50_ms": 0.607042,
+     "rss_bytes_peak": 1287159808
+    },
+    "per_player_injection_bytes": 11595,
+    "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+    "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9"
+   },
+   "report": {
+    "tool": "kkscreeps perf-probe",
+    "players": 32,
+    "ticks": 300,
+    "warmup": 50,
+    "player_concurrency": 2,
+    "player_cpu_clock": "thread_cpu_time",
+    "metadata": {
+     "os": "macos",
+     "arch": "aarch64",
+     "logical_cpus": 10,
+     "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+     "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+     "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+     "git_status": "M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? docs/research/notes/__pycache__/\n?? docs/research/notes/kkpv-scale-matrix-2026-10-04.md\n?? docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py\n?? docs/research/notes/kkpv-scale-matrix-windows-2026-10-04.json\n?? scripts/__pycache__/\n?? scripts/tests/__pycache__/\n?? scripts/tests/test_kkpv_matrix_capture.py",
+     "debug_assertions": false,
+     "unix_time_ms": 1791108733260
+    },
+    "process": {
+     "scope": "current_process_all_threads",
+     "window": "after_warmup_through_collection_loop",
+     "wall_ms": 2447.212709,
+     "cpu_core_ms": 6074.295000000001,
+     "cpu_core_ms_per_tick": 20.247650000000004,
+     "rss_bytes_after": 1287159808,
+     "rss_bytes_sampled_peak": 1287159808,
+     "rss_bytes_sampled_p50": 1044348928,
+     "rss_observations": 301,
+     "rss_retained_samples": 301,
+     "rss_sampling_wall_ms": 4.103171000000001,
+     "includes_sampling_and_workload_checks": true,
+     "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+    },
+    "workload": {
+     "progress_delta": 960,
+     "source_energy_min_before": 2972,
+     "source_energy_min_after": 2866
+    },
+    "phases": {
+     "ticks": 300,
+     "phases": {
+      "project": {
+       "count": 300,
+       "p50_ms": 4.007251,
+       "p95_ms": 5.563292,
+       "p99_ms": 7.580542,
+       "max_ms": 9.643456,
+       "total_ms": 1269.538637
+      },
+      "run": {
+       "count": 300,
+       "p50_ms": 2.718917,
+       "p95_ms": 6.195709,
+       "p99_ms": 8.373665,
+       "max_ms": 12.880919,
+       "total_ms": 973.834779
+      },
+      "settle": {
+       "count": 300,
+       "p50_ms": 0.607042,
+       "p95_ms": 0.808125,
+       "p99_ms": 1.057166,
+       "max_ms": 1.312583,
+       "total_ms": 186.75323799999998
+      },
+      "wall": {
+       "count": 300,
+       "p50_ms": 7.420416,
+       "p95_ms": 12.12825,
+       "p99_ms": 16.80725,
+       "max_ms": 19.693167000000003,
+       "total_ms": 2432.4655890000004
+      }
+     }
+    },
+    "channel": "kkpv",
+    "injection_bytes_sample": {
+     "channel": "kkpv",
+     "envelope_bytes": 1530,
+     "bundle_bytes": 10065,
+     "public_bundle_bytes": 85402,
+     "public_shared": true,
+     "blocks": 32,
+     "public_retained": [
+      {
+       "tick": 349,
+       "generation": 605,
+       "bytes": 85402,
+       "handles": 0
+      }
+     ]
+    }
+   }
+  },
+  {
+   "repetition": 2,
+   "position_in_repetition": 2,
+   "scale_order": [
+    32,
+    4,
+    8
+   ],
+   "order": [
+    "json",
+    "kkpv"
+   ],
+   "players": 4,
+   "channel": "json",
+   "elapsed_s": 0.2992370128631592,
+   "extracted": {
+    "metrics": {
+     "cpu_core_ms_per_tick": 1.2392466666666666,
+     "wall_p50_ms": 0.507,
+     "wall_p95_ms": 0.943542,
+     "wall_p99_ms": 1.740791,
+     "project_p50_ms": 0.24821,
+     "run_p50_ms": 0.189749,
+     "settle_p50_ms": 0.064208,
+     "rss_bytes_peak": 154583040
+    },
+    "per_player_injection_bytes": 17682,
+    "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+    "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9"
+   },
+   "report": {
+    "tool": "kkscreeps perf-probe",
+    "players": 4,
+    "ticks": 300,
+    "warmup": 50,
+    "player_concurrency": 2,
+    "player_cpu_clock": "thread_cpu_time",
+    "metadata": {
+     "os": "macos",
+     "arch": "aarch64",
+     "logical_cpus": 10,
+     "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+     "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+     "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+     "git_status": "M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? docs/research/notes/__pycache__/\n?? docs/research/notes/kkpv-scale-matrix-2026-10-04.md\n?? docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py\n?? docs/research/notes/kkpv-scale-matrix-windows-2026-10-04.json\n?? scripts/__pycache__/\n?? scripts/tests/__pycache__/\n?? scripts/tests/test_kkpv_matrix_capture.py",
+     "debug_assertions": false,
+     "unix_time_ms": 1791108736545
+    },
+    "process": {
+     "scope": "current_process_all_threads",
+     "window": "after_warmup_through_collection_loop",
+     "wall_ms": 174.7935,
+     "cpu_core_ms": 371.774,
+     "cpu_core_ms_per_tick": 1.2392466666666666,
+     "rss_bytes_after": 154583040,
+     "rss_bytes_sampled_peak": 154583040,
+     "rss_bytes_sampled_p50": 152829952,
+     "rss_observations": 301,
+     "rss_retained_samples": 301,
+     "rss_sampling_wall_ms": 0.45883199999999874,
+     "includes_sampling_and_workload_checks": true,
+     "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+    },
+    "workload": {
+     "progress_delta": 960,
+     "source_energy_min_before": 2972,
+     "source_energy_min_after": 2866
+    },
+    "phases": {
+     "ticks": 300,
+     "phases": {
+      "project": {
+       "count": 300,
+       "p50_ms": 0.24821,
+       "p95_ms": 0.32625,
+       "p99_ms": 0.428207,
+       "max_ms": 0.554125,
+       "total_ms": 77.54365499999999
+      },
+      "run": {
+       "count": 300,
+       "p50_ms": 0.189749,
+       "p95_ms": 0.58175,
+       "p99_ms": 1.173708,
+       "max_ms": 2.149668,
+       "total_ms": 74.70418099999999
+      },
+      "settle": {
+       "count": 300,
+       "p50_ms": 0.064208,
+       "p95_ms": 0.089875,
+       "p99_ms": 0.132708,
+       "max_ms": 0.266125,
+       "total_ms": 20.637714000000006
+      },
+      "wall": {
+       "count": 300,
+       "p50_ms": 0.507,
+       "p95_ms": 0.943542,
+       "p99_ms": 1.740791,
+       "max_ms": 2.652584,
+       "total_ms": 173.27920600000007
+      }
+     }
+    },
+    "channel": "json",
+    "injection_bytes_sample": {
+     "channel": "json",
+     "world_json_bytes": 17682
+    }
+   }
+  },
+  {
+   "repetition": 2,
+   "position_in_repetition": 3,
+   "scale_order": [
+    32,
+    4,
+    8
+   ],
+   "order": [
+    "json",
+    "kkpv"
+   ],
+   "players": 4,
+   "channel": "kkpv",
+   "elapsed_s": 0.3952038288116455,
+   "extracted": {
+    "metrics": {
+     "cpu_core_ms_per_tick": 1.8326,
+     "wall_p50_ms": 0.737125,
+     "wall_p95_ms": 1.599792,
+     "wall_p99_ms": 2.398,
+     "project_p50_ms": 0.420417,
+     "run_p50_ms": 0.245291,
+     "settle_p50_ms": 0.068167,
+     "rss_bytes_peak": 190398464
+    },
+    "per_player_injection_bytes": 6181,
+    "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+    "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9"
+   },
+   "report": {
+    "tool": "kkscreeps perf-probe",
+    "players": 4,
+    "ticks": 300,
+    "warmup": 50,
+    "player_concurrency": 2,
+    "player_cpu_clock": "thread_cpu_time",
+    "metadata": {
+     "os": "macos",
+     "arch": "aarch64",
+     "logical_cpus": 10,
+     "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+     "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+     "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+     "git_status": "M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? docs/research/notes/__pycache__/\n?? docs/research/notes/kkpv-scale-matrix-2026-10-04.md\n?? docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py\n?? docs/research/notes/kkpv-scale-matrix-windows-2026-10-04.json\n?? scripts/__pycache__/\n?? scripts/tests/__pycache__/\n?? scripts/tests/test_kkpv_matrix_capture.py",
+     "debug_assertions": false,
+     "unix_time_ms": 1791108736846
+    },
+    "process": {
+     "scope": "current_process_all_threads",
+     "window": "after_warmup_through_collection_loop",
+     "wall_ms": 254.062208,
+     "cpu_core_ms": 549.78,
+     "cpu_core_ms_per_tick": 1.8326,
+     "rss_bytes_after": 190398464,
+     "rss_bytes_sampled_peak": 190398464,
+     "rss_bytes_sampled_p50": 164298752,
+     "rss_observations": 301,
+     "rss_retained_samples": 301,
+     "rss_sampling_wall_ms": 0.5388309999999988,
+     "includes_sampling_and_workload_checks": true,
+     "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+    },
+    "workload": {
+     "progress_delta": 960,
+     "source_energy_min_before": 2972,
+     "source_energy_min_after": 2866
+    },
+    "phases": {
+     "ticks": 300,
+     "phases": {
+      "project": {
+       "count": 300,
+       "p50_ms": 0.420417,
+       "p95_ms": 0.565666,
+       "p99_ms": 0.66825,
+       "max_ms": 0.912917,
+       "total_ms": 129.76096500000006
+      },
+      "run": {
+       "count": 300,
+       "p50_ms": 0.245291,
+       "p95_ms": 0.930668,
+       "p99_ms": 1.866749,
+       "max_ms": 2.560499,
+       "total_ms": 100.38449200000005
+      },
+      "settle": {
+       "count": 300,
+       "p50_ms": 0.068167,
+       "p95_ms": 0.092875,
+       "p99_ms": 0.181708,
+       "max_ms": 0.301458,
+       "total_ms": 21.939584000000004
+      },
+      "wall": {
+       "count": 300,
+       "p50_ms": 0.737125,
+       "p95_ms": 1.599792,
+       "p99_ms": 2.398,
+       "max_ms": 3.279625,
+       "total_ms": 252.47813300000007
+      }
+     }
+    },
+    "channel": "kkpv",
+    "injection_bytes_sample": {
+     "channel": "kkpv",
+     "envelope_bytes": 842,
+     "bundle_bytes": 5339,
+     "public_bundle_bytes": 10676,
+     "public_shared": true,
+     "blocks": 4,
+     "public_retained": [
+      {
+       "tick": 349,
+       "generation": 381,
+       "bytes": 10676,
+       "handles": 0
+      }
+     ]
+    }
+   }
+  },
+  {
+   "repetition": 2,
+   "position_in_repetition": 4,
+   "scale_order": [
+    32,
+    4,
+    8
+   ],
+   "order": [
+    "json",
+    "kkpv"
+   ],
+   "players": 8,
+   "channel": "json",
+   "elapsed_s": 0.5252008438110352,
+   "extracted": {
+    "metrics": {
+     "cpu_core_ms_per_tick": 2.476033333333333,
+     "wall_p50_ms": 0.974083,
+     "wall_p95_ms": 1.681417,
+     "wall_p99_ms": 2.492375,
+     "project_p50_ms": 0.523499,
+     "run_p50_ms": 0.31983,
+     "settle_p50_ms": 0.124209,
+     "rss_bytes_peak": 282034176
+    },
+    "per_player_injection_bytes": 31250,
+    "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+    "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9"
+   },
+   "report": {
+    "tool": "kkscreeps perf-probe",
+    "players": 8,
+    "ticks": 300,
+    "warmup": 50,
+    "player_concurrency": 2,
+    "player_cpu_clock": "thread_cpu_time",
+    "metadata": {
+     "os": "macos",
+     "arch": "aarch64",
+     "logical_cpus": 10,
+     "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+     "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+     "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+     "git_status": "M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? docs/research/notes/__pycache__/\n?? docs/research/notes/kkpv-scale-matrix-2026-10-04.md\n?? docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py\n?? docs/research/notes/kkpv-scale-matrix-windows-2026-10-04.json\n?? scripts/__pycache__/\n?? scripts/tests/__pycache__/\n?? scripts/tests/test_kkpv_matrix_capture.py",
+     "debug_assertions": false,
+     "unix_time_ms": 1791108737244
+    },
+    "process": {
+     "scope": "current_process_all_threads",
+     "window": "after_warmup_through_collection_loop",
+     "wall_ms": 330.063,
+     "cpu_core_ms": 742.81,
+     "cpu_core_ms_per_tick": 2.476033333333333,
+     "rss_bytes_after": 282034176,
+     "rss_bytes_sampled_peak": 282034176,
+     "rss_bytes_sampled_p50": 277364736,
+     "rss_observations": 301,
+     "rss_retained_samples": 301,
+     "rss_sampling_wall_ms": 0.5766339999999991,
+     "includes_sampling_and_workload_checks": true,
+     "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+    },
+    "workload": {
+     "progress_delta": 960,
+     "source_energy_min_before": 2972,
+     "source_energy_min_after": 2866
+    },
+    "phases": {
+     "ticks": 300,
+     "phases": {
+      "project": {
+       "count": 300,
+       "p50_ms": 0.523499,
+       "p95_ms": 0.661836,
+       "p99_ms": 0.776668,
+       "max_ms": 1.038501,
+       "total_ms": 163.316339
+      },
+      "run": {
+       "count": 300,
+       "p50_ms": 0.31983,
+       "p95_ms": 0.899875,
+       "p99_ms": 1.693584,
+       "max_ms": 3.490416,
+       "total_ms": 124.97466100000001
+      },
+      "settle": {
+       "count": 300,
+       "p50_ms": 0.124209,
+       "p95_ms": 0.164459,
+       "p99_ms": 0.210458,
+       "max_ms": 0.463667,
+       "total_ms": 38.77816700000001
+      },
+      "wall": {
+       "count": 300,
+       "p50_ms": 0.974083,
+       "p95_ms": 1.681417,
+       "p99_ms": 2.492375,
+       "max_ms": 4.3060410000000005,
+       "total_ms": 327.69225600000016
+      }
+     }
+    },
+    "channel": "json",
+    "injection_bytes_sample": {
+     "channel": "json",
+     "world_json_bytes": 31250
+    }
+   }
+  },
+  {
+   "repetition": 2,
+   "position_in_repetition": 5,
+   "scale_order": [
+    32,
+    4,
+    8
+   ],
+   "order": [
+    "json",
+    "kkpv"
+   ],
+   "players": 8,
+   "channel": "kkpv",
+   "elapsed_s": 0.7422580718994141,
+   "extracted": {
+    "metrics": {
+     "cpu_core_ms_per_tick": 3.88161,
+     "wall_p50_ms": 1.421084,
+     "wall_p95_ms": 2.8665000000000003,
+     "wall_p99_ms": 3.901334,
+     "project_p50_ms": 0.853166,
+     "run_p50_ms": 0.450042,
+     "settle_p50_ms": 0.132083,
+     "rss_bytes_peak": 350322688
+    },
+    "per_player_injection_bytes": 6945,
+    "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+    "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9"
+   },
+   "report": {
+    "tool": "kkscreeps perf-probe",
+    "players": 8,
+    "ticks": 300,
+    "warmup": 50,
+    "player_concurrency": 2,
+    "player_cpu_clock": "thread_cpu_time",
+    "metadata": {
+     "os": "macos",
+     "arch": "aarch64",
+     "logical_cpus": 10,
+     "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+     "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+     "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+     "git_status": "M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? docs/research/notes/__pycache__/\n?? docs/research/notes/kkpv-scale-matrix-2026-10-04.md\n?? docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py\n?? docs/research/notes/kkpv-scale-matrix-windows-2026-10-04.json\n?? scripts/__pycache__/\n?? scripts/tests/__pycache__/\n?? scripts/tests/test_kkpv_matrix_capture.py",
+     "debug_assertions": false,
+     "unix_time_ms": 1791108737772
+    },
+    "process": {
+     "scope": "current_process_all_threads",
+     "window": "after_warmup_through_collection_loop",
+     "wall_ms": 501.983459,
+     "cpu_core_ms": 1164.483,
+     "cpu_core_ms_per_tick": 3.88161,
+     "rss_bytes_after": 350322688,
+     "rss_bytes_sampled_peak": 350322688,
+     "rss_bytes_sampled_p50": 282918912,
+     "rss_observations": 301,
+     "rss_retained_samples": 301,
+     "rss_sampling_wall_ms": 0.909320999999998,
+     "includes_sampling_and_workload_checks": true,
+     "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+    },
+    "workload": {
+     "progress_delta": 960,
+     "source_energy_min_before": 2972,
+     "source_energy_min_after": 2866
+    },
+    "phases": {
+     "ticks": 300,
+     "phases": {
+      "project": {
+       "count": 300,
+       "p50_ms": 0.853166,
+       "p95_ms": 1.113416,
+       "p99_ms": 1.507914,
+       "max_ms": 2.202583,
+       "total_ms": 265.73918299999997
+      },
+      "run": {
+       "count": 300,
+       "p50_ms": 0.450042,
+       "p95_ms": 1.621999,
+       "p99_ms": 2.590002,
+       "max_ms": 4.808585,
+       "total_ms": 190.75899500000006
+      },
+      "settle": {
+       "count": 300,
+       "p50_ms": 0.132083,
+       "p95_ms": 0.182459,
+       "p99_ms": 0.324041,
+       "max_ms": 0.377917,
+       "total_ms": 42.00096600000002
+      },
+      "wall": {
+       "count": 300,
+       "p50_ms": 1.421084,
+       "p95_ms": 2.8665000000000003,
+       "p99_ms": 3.901334,
+       "max_ms": 6.007459,
+       "total_ms": 499.0760859999999
+      }
+     }
+    },
+    "channel": "kkpv",
+    "injection_bytes_sample": {
+     "channel": "kkpv",
+     "envelope_bytes": 934,
+     "bundle_bytes": 6011,
+     "public_bundle_bytes": 21348,
+     "public_shared": true,
+     "blocks": 8,
+     "public_retained": [
+      {
+       "tick": 349,
+       "generation": 413,
+       "bytes": 21348,
+       "handles": 0
+      }
+     ]
+    }
+   }
+  },
+  {
+   "repetition": 3,
+   "position_in_repetition": 0,
+   "scale_order": [
+    4,
+    8,
+    32
+   ],
+   "order": [
+    "kkpv",
+    "json"
+   ],
+   "players": 4,
+   "channel": "kkpv",
+   "elapsed_s": 0.3969588279724121,
+   "extracted": {
+    "metrics": {
+     "cpu_core_ms_per_tick": 1.8419500000000002,
+     "wall_p50_ms": 0.745458,
+     "wall_p95_ms": 1.5352919999999999,
+     "wall_p99_ms": 2.9519580000000003,
+     "project_p50_ms": 0.424708,
+     "run_p50_ms": 0.252083,
+     "settle_p50_ms": 0.06975,
+     "rss_bytes_peak": 190070784
+    },
+    "per_player_injection_bytes": 6181,
+    "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+    "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9"
+   },
+   "report": {
+    "tool": "kkscreeps perf-probe",
+    "players": 4,
+    "ticks": 300,
+    "warmup": 50,
+    "player_concurrency": 2,
+    "player_cpu_clock": "thread_cpu_time",
+    "metadata": {
+     "os": "macos",
+     "arch": "aarch64",
+     "logical_cpus": 10,
+     "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+     "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+     "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+     "git_status": "M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? docs/research/notes/__pycache__/\n?? docs/research/notes/kkpv-scale-matrix-2026-10-04.md\n?? docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py\n?? docs/research/notes/kkpv-scale-matrix-windows-2026-10-04.json\n?? scripts/__pycache__/\n?? scripts/tests/__pycache__/\n?? scripts/tests/test_kkpv_matrix_capture.py",
+     "debug_assertions": false,
+     "unix_time_ms": 1791108738510
+    },
+    "process": {
+     "scope": "current_process_all_threads",
+     "window": "after_warmup_through_collection_loop",
+     "wall_ms": 258.50174999999996,
+     "cpu_core_ms": 552.585,
+     "cpu_core_ms_per_tick": 1.8419500000000002,
+     "rss_bytes_after": 190070784,
+     "rss_bytes_sampled_peak": 190070784,
+     "rss_bytes_sampled_p50": 162807808,
+     "rss_observations": 301,
+     "rss_retained_samples": 301,
+     "rss_sampling_wall_ms": 0.5410089999999993,
+     "includes_sampling_and_workload_checks": true,
+     "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+    },
+    "workload": {
+     "progress_delta": 960,
+     "source_energy_min_before": 2972,
+     "source_energy_min_after": 2866
+    },
+    "phases": {
+     "ticks": 300,
+     "phases": {
+      "project": {
+       "count": 300,
+       "p50_ms": 0.424708,
+       "p95_ms": 0.552582,
+       "p99_ms": 0.705167,
+       "max_ms": 1.015,
+       "total_ms": 131.515552
+      },
+      "run": {
+       "count": 300,
+       "p50_ms": 0.252083,
+       "p95_ms": 0.776292,
+       "p99_ms": 2.399125,
+       "max_ms": 2.789333,
+       "total_ms": 102.25811399999996
+      },
+      "settle": {
+       "count": 300,
+       "p50_ms": 0.06975,
+       "p95_ms": 0.107209,
+       "p99_ms": 0.182875,
+       "max_ms": 0.439125,
+       "total_ms": 22.726511000000002
+      },
+      "wall": {
+       "count": 300,
+       "p50_ms": 0.745458,
+       "p95_ms": 1.5352919999999999,
+       "p99_ms": 2.9519580000000003,
+       "max_ms": 3.512375,
+       "total_ms": 256.8949620000001
+      }
+     }
+    },
+    "channel": "kkpv",
+    "injection_bytes_sample": {
+     "channel": "kkpv",
+     "envelope_bytes": 842,
+     "bundle_bytes": 5339,
+     "public_bundle_bytes": 10676,
+     "public_shared": true,
+     "blocks": 4,
+     "public_retained": [
+      {
+       "tick": 349,
+       "generation": 381,
+       "bytes": 10676,
+       "handles": 0
+      }
+     ]
+    }
+   }
+  },
+  {
+   "repetition": 3,
+   "position_in_repetition": 1,
+   "scale_order": [
+    4,
+    8,
+    32
+   ],
+   "order": [
+    "kkpv",
+    "json"
+   ],
+   "players": 4,
+   "channel": "json",
+   "elapsed_s": 0.29281187057495117,
+   "extracted": {
+    "metrics": {
+     "cpu_core_ms_per_tick": 1.1870366666666667,
+     "wall_p50_ms": 0.49904099999999996,
+     "wall_p95_ms": 0.844792,
+     "wall_p99_ms": 1.74925,
+     "project_p50_ms": 0.244083,
+     "run_p50_ms": 0.178708,
+     "settle_p50_ms": 0.063375,
+     "rss_bytes_peak": 154320896
+    },
+    "per_player_injection_bytes": 17682,
+    "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+    "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9"
+   },
+   "report": {
+    "tool": "kkscreeps perf-probe",
+    "players": 4,
+    "ticks": 300,
+    "warmup": 50,
+    "player_concurrency": 2,
+    "player_cpu_clock": "thread_cpu_time",
+    "metadata": {
+     "os": "macos",
+     "arch": "aarch64",
+     "logical_cpus": 10,
+     "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+     "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+     "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+     "git_status": "M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? docs/research/notes/__pycache__/\n?? docs/research/notes/kkpv-scale-matrix-2026-10-04.md\n?? docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py\n?? docs/research/notes/kkpv-scale-matrix-windows-2026-10-04.json\n?? scripts/__pycache__/\n?? scripts/tests/__pycache__/\n?? scripts/tests/test_kkpv_matrix_capture.py",
+     "debug_assertions": false,
+     "unix_time_ms": 1791108738908
+    },
+    "process": {
+     "scope": "current_process_all_threads",
+     "window": "after_warmup_through_collection_loop",
+     "wall_ms": 168.544334,
+     "cpu_core_ms": 356.111,
+     "cpu_core_ms_per_tick": 1.1870366666666667,
+     "rss_bytes_after": 154320896,
+     "rss_bytes_sampled_peak": 154320896,
+     "rss_bytes_sampled_p50": 152764416,
+     "rss_observations": 301,
+     "rss_retained_samples": 301,
+     "rss_sampling_wall_ms": 0.37850799999999896,
+     "includes_sampling_and_workload_checks": true,
+     "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+    },
+    "workload": {
+     "progress_delta": 960,
+     "source_energy_min_before": 2972,
+     "source_energy_min_after": 2866
+    },
+    "phases": {
+     "ticks": 300,
+     "phases": {
+      "project": {
+       "count": 300,
+       "p50_ms": 0.244083,
+       "p95_ms": 0.330918,
+       "p99_ms": 0.44825,
+       "max_ms": 0.612792,
+       "total_ms": 78.23961900000002
+      },
+      "run": {
+       "count": 300,
+       "p50_ms": 0.178708,
+       "p95_ms": 0.458582,
+       "p99_ms": 1.320749,
+       "max_ms": 2.122916,
+       "total_ms": 68.267041
+      },
+      "settle": {
+       "count": 300,
+       "p50_ms": 0.063375,
+       "p95_ms": 0.086584,
+       "p99_ms": 0.11275,
+       "max_ms": 0.198542,
+       "total_ms": 20.250420999999996
+      },
+      "wall": {
+       "count": 300,
+       "p50_ms": 0.49904099999999996,
+       "p95_ms": 0.844792,
+       "p99_ms": 1.74925,
+       "max_ms": 2.488875,
+       "total_ms": 167.14088000000004
+      }
+     }
+    },
+    "channel": "json",
+    "injection_bytes_sample": {
+     "channel": "json",
+     "world_json_bytes": 17682
+    }
+   }
+  },
+  {
+   "repetition": 3,
+   "position_in_repetition": 2,
+   "scale_order": [
+    4,
+    8,
+    32
+   ],
+   "order": [
+    "kkpv",
+    "json"
+   ],
+   "players": 8,
+   "channel": "kkpv",
+   "elapsed_s": 0.7802319526672363,
+   "extracted": {
+    "metrics": {
+     "cpu_core_ms_per_tick": 4.05995,
+     "wall_p50_ms": 1.436791,
+     "wall_p95_ms": 3.474708,
+     "wall_p99_ms": 5.921375,
+     "project_p50_ms": 0.857417,
+     "run_p50_ms": 0.454711,
+     "settle_p50_ms": 0.132792,
+     "rss_bytes_peak": 352731136
+    },
+    "per_player_injection_bytes": 6945,
+    "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+    "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9"
+   },
+   "report": {
+    "tool": "kkscreeps perf-probe",
+    "players": 8,
+    "ticks": 300,
+    "warmup": 50,
+    "player_concurrency": 2,
+    "player_cpu_clock": "thread_cpu_time",
+    "metadata": {
+     "os": "macos",
+     "arch": "aarch64",
+     "logical_cpus": 10,
+     "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+     "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+     "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+     "git_status": "M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? docs/research/notes/__pycache__/\n?? docs/research/notes/kkpv-scale-matrix-2026-10-04.md\n?? docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py\n?? docs/research/notes/kkpv-scale-matrix-windows-2026-10-04.json\n?? scripts/__pycache__/\n?? scripts/tests/__pycache__/\n?? scripts/tests/test_kkpv_matrix_capture.py",
+     "debug_assertions": false,
+     "unix_time_ms": 1791108739204
+    },
+    "process": {
+     "scope": "current_process_all_threads",
+     "window": "after_warmup_through_collection_loop",
+     "wall_ms": 537.486125,
+     "cpu_core_ms": 1217.985,
+     "cpu_core_ms_per_tick": 4.05995,
+     "rss_bytes_after": 352731136,
+     "rss_bytes_sampled_peak": 352731136,
+     "rss_bytes_sampled_p50": 283705344,
+     "rss_observations": 301,
+     "rss_retained_samples": 301,
+     "rss_sampling_wall_ms": 1.08003,
+     "includes_sampling_and_workload_checks": true,
+     "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+    },
+    "workload": {
+     "progress_delta": 960,
+     "source_energy_min_before": 2972,
+     "source_energy_min_after": 2866
+    },
+    "phases": {
+     "ticks": 300,
+     "phases": {
+      "project": {
+       "count": 300,
+       "p50_ms": 0.857417,
+       "p95_ms": 1.250291,
+       "p99_ms": 2.022,
+       "max_ms": 3.441625,
+       "total_ms": 277.61550499999987
+      },
+      "run": {
+       "count": 300,
+       "p50_ms": 0.454711,
+       "p95_ms": 2.003624,
+       "p99_ms": 4.664793,
+       "max_ms": 5.469294,
+       "total_ms": 211.12603499999994
+      },
+      "settle": {
+       "count": 300,
+       "p50_ms": 0.132792,
+       "p95_ms": 0.232417,
+       "p99_ms": 0.424834,
+       "max_ms": 0.615166,
+       "total_ms": 44.75583099999999
+      },
+      "wall": {
+       "count": 300,
+       "p50_ms": 1.436791,
+       "p95_ms": 3.474708,
+       "p99_ms": 5.921375,
+       "max_ms": 8.971583,
+       "total_ms": 534.1254059999997
+      }
+     }
+    },
+    "channel": "kkpv",
+    "injection_bytes_sample": {
+     "channel": "kkpv",
+     "envelope_bytes": 934,
+     "bundle_bytes": 6011,
+     "public_bundle_bytes": 21348,
+     "public_shared": true,
+     "blocks": 8,
+     "public_retained": [
+      {
+       "tick": 349,
+       "generation": 413,
+       "bytes": 21348,
+       "handles": 0
+      }
+     ]
+    }
+   }
+  },
+  {
+   "repetition": 3,
+   "position_in_repetition": 3,
+   "scale_order": [
+    4,
+    8,
+    32
+   ],
+   "order": [
+    "kkpv",
+    "json"
+   ],
+   "players": 8,
+   "channel": "json",
+   "elapsed_s": 0.5525288581848145,
+   "extracted": {
+    "metrics": {
+     "cpu_core_ms_per_tick": 2.6075033333333333,
+     "wall_p50_ms": 1.009125,
+     "wall_p95_ms": 1.826209,
+     "wall_p99_ms": 2.625833,
+     "project_p50_ms": 0.542706,
+     "run_p50_ms": 0.352793,
+     "settle_p50_ms": 0.132083,
+     "rss_bytes_peak": 282673152
+    },
+    "per_player_injection_bytes": 31250,
+    "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+    "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9"
+   },
+   "report": {
+    "tool": "kkscreeps perf-probe",
+    "players": 8,
+    "ticks": 300,
+    "warmup": 50,
+    "player_concurrency": 2,
+    "player_cpu_clock": "thread_cpu_time",
+    "metadata": {
+     "os": "macos",
+     "arch": "aarch64",
+     "logical_cpus": 10,
+     "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+     "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+     "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+     "git_status": "M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? docs/research/notes/__pycache__/\n?? docs/research/notes/kkpv-scale-matrix-2026-10-04.md\n?? docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py\n?? docs/research/notes/kkpv-scale-matrix-windows-2026-10-04.json\n?? scripts/__pycache__/\n?? scripts/tests/__pycache__/\n?? scripts/tests/test_kkpv_matrix_capture.py",
+     "debug_assertions": false,
+     "unix_time_ms": 1791108739985
+    },
+    "process": {
+     "scope": "current_process_all_threads",
+     "window": "after_warmup_through_collection_loop",
+     "wall_ms": 350.898417,
+     "cpu_core_ms": 782.251,
+     "cpu_core_ms_per_tick": 2.6075033333333333,
+     "rss_bytes_after": 282673152,
+     "rss_bytes_sampled_peak": 282673152,
+     "rss_bytes_sampled_p50": 278183936,
+     "rss_observations": 301,
+     "rss_retained_samples": 301,
+     "rss_sampling_wall_ms": 0.7009959999999987,
+     "includes_sampling_and_workload_checks": true,
+     "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+    },
+    "workload": {
+     "progress_delta": 960,
+     "source_energy_min_before": 2972,
+     "source_energy_min_after": 2866
+    },
+    "phases": {
+     "ticks": 300,
+     "phases": {
+      "project": {
+       "count": 300,
+       "p50_ms": 0.542706,
+       "p95_ms": 0.737,
+       "p99_ms": 0.949666,
+       "max_ms": 1.051041,
+       "total_ms": 170.68276800000007
+      },
+      "run": {
+       "count": 300,
+       "p50_ms": 0.352793,
+       "p95_ms": 0.912086,
+       "p99_ms": 1.599457,
+       "max_ms": 4.130209,
+       "total_ms": 136.116772
+      },
+      "settle": {
+       "count": 300,
+       "p50_ms": 0.132083,
+       "p95_ms": 0.171791,
+       "p99_ms": 0.228,
+       "max_ms": 0.295084,
+       "total_ms": 40.708093999999996
+      },
+      "wall": {
+       "count": 300,
+       "p50_ms": 1.009125,
+       "p95_ms": 1.826209,
+       "p99_ms": 2.625833,
+       "max_ms": 5.361833,
+       "total_ms": 348.21408700000023
+      }
+     }
+    },
+    "channel": "json",
+    "injection_bytes_sample": {
+     "channel": "json",
+     "world_json_bytes": 31250
+    }
+   }
+  },
+  {
+   "repetition": 3,
+   "position_in_repetition": 4,
+   "scale_order": [
+    4,
+    8,
+    32
+   ],
+   "order": [
+    "kkpv",
+    "json"
+   ],
+   "players": 32,
+   "channel": "kkpv",
+   "elapsed_s": 3.3275058269500732,
+   "extracted": {
+    "metrics": {
+     "cpu_core_ms_per_tick": 20.39578333333333,
+     "wall_p50_ms": 7.435207999999999,
+     "wall_p95_ms": 12.861709000000001,
+     "wall_p99_ms": 15.933625,
+     "project_p50_ms": 4.07221,
+     "run_p50_ms": 2.797629,
+     "settle_p50_ms": 0.605458,
+     "rss_bytes_peak": 1272266752
+    },
+    "per_player_injection_bytes": 11595,
+    "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+    "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9"
+   },
+   "report": {
+    "tool": "kkscreeps perf-probe",
+    "players": 32,
+    "ticks": 300,
+    "warmup": 50,
+    "player_concurrency": 2,
+    "player_cpu_clock": "thread_cpu_time",
+    "metadata": {
+     "os": "macos",
+     "arch": "aarch64",
+     "logical_cpus": 10,
+     "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+     "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+     "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+     "git_status": "M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? docs/research/notes/__pycache__/\n?? docs/research/notes/kkpv-scale-matrix-2026-10-04.md\n?? docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py\n?? docs/research/notes/kkpv-scale-matrix-windows-2026-10-04.json\n?? scripts/__pycache__/\n?? scripts/tests/__pycache__/\n?? scripts/tests/test_kkpv_matrix_capture.py",
+     "debug_assertions": false,
+     "unix_time_ms": 1791108740535
+    },
+    "process": {
+     "scope": "current_process_all_threads",
+     "window": "after_warmup_through_collection_loop",
+     "wall_ms": 2465.263916,
+     "cpu_core_ms": 6118.735,
+     "cpu_core_ms_per_tick": 20.39578333333333,
+     "rss_bytes_after": 1272266752,
+     "rss_bytes_sampled_peak": 1272266752,
+     "rss_bytes_sampled_p50": 1047298048,
+     "rss_observations": 301,
+     "rss_retained_samples": 301,
+     "rss_sampling_wall_ms": 4.212132,
+     "includes_sampling_and_workload_checks": true,
+     "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+    },
+    "workload": {
+     "progress_delta": 960,
+     "source_energy_min_before": 2972,
+     "source_energy_min_after": 2866
+    },
+    "phases": {
+     "ticks": 300,
+     "phases": {
+      "project": {
+       "count": 300,
+       "p50_ms": 4.07221,
+       "p95_ms": 5.424625,
+       "p99_ms": 7.900999,
+       "max_ms": 8.932748,
+       "total_ms": 1272.1079189999998
+      },
+      "run": {
+       "count": 300,
+       "p50_ms": 2.797629,
+       "p95_ms": 6.816125,
+       "p99_ms": 9.921707,
+       "max_ms": 16.793043,
+       "total_ms": 989.7092130000009
+      },
+      "settle": {
+       "count": 300,
+       "p50_ms": 0.605458,
+       "p95_ms": 0.783833,
+       "p99_ms": 1.064625,
+       "max_ms": 1.431417,
+       "total_ms": 186.16340600000004
+      },
+      "wall": {
+       "count": 300,
+       "p50_ms": 7.435207999999999,
+       "p95_ms": 12.861709000000001,
+       "p99_ms": 15.933625,
+       "max_ms": 24.400167,
+       "total_ms": 2450.3870379999985
+      }
+     }
+    },
+    "channel": "kkpv",
+    "injection_bytes_sample": {
+     "channel": "kkpv",
+     "envelope_bytes": 1530,
+     "bundle_bytes": 10065,
+     "public_bundle_bytes": 85402,
+     "public_shared": true,
+     "blocks": 32,
+     "public_retained": [
+      {
+       "tick": 349,
+       "generation": 605,
+       "bytes": 85402,
+       "handles": 0
+      }
+     ]
+    }
+   }
+  },
+  {
+   "repetition": 3,
+   "position_in_repetition": 5,
+   "scale_order": [
+    4,
+    8,
+    32
+   ],
+   "order": [
+    "kkpv",
+    "json"
+   ],
+   "players": 32,
+   "channel": "json",
+   "elapsed_s": 2.9368250370025635,
+   "extracted": {
+    "metrics": {
+     "cpu_core_ms_per_tick": 16.803943333333333,
+     "wall_p50_ms": 6.458832999999999,
+     "wall_p95_ms": 10.864083,
+     "wall_p99_ms": 12.927875,
+     "project_p50_ms": 3.376832,
+     "run_p50_ms": 2.387456,
+     "settle_p50_ms": 0.598792,
+     "rss_bytes_peak": 1349222400
+    },
+    "per_player_injection_bytes": 112734,
+    "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+    "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9"
+   },
+   "report": {
+    "tool": "kkscreeps perf-probe",
+    "players": 32,
+    "ticks": 300,
+    "warmup": 50,
+    "player_concurrency": 2,
+    "player_cpu_clock": "thread_cpu_time",
+    "metadata": {
+     "os": "macos",
+     "arch": "aarch64",
+     "logical_cpus": 10,
+     "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+     "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+     "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+     "git_status": "M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? docs/research/notes/__pycache__/\n?? docs/research/notes/kkpv-scale-matrix-2026-10-04.md\n?? docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py\n?? docs/research/notes/kkpv-scale-matrix-windows-2026-10-04.json\n?? scripts/__pycache__/\n?? scripts/tests/__pycache__/\n?? scripts/tests/test_kkpv_matrix_capture.py",
+     "debug_assertions": false,
+     "unix_time_ms": 1791108743866
+    },
+    "process": {
+     "scope": "current_process_all_threads",
+     "window": "after_warmup_through_collection_loop",
+     "wall_ms": 2135.529542,
+     "cpu_core_ms": 5041.183,
+     "cpu_core_ms_per_tick": 16.803943333333333,
+     "rss_bytes_after": 1349222400,
+     "rss_bytes_sampled_peak": 1349222400,
+     "rss_bytes_sampled_p50": 1285357568,
+     "rss_observations": 301,
+     "rss_retained_samples": 301,
+     "rss_sampling_wall_ms": 4.074622,
+     "includes_sampling_and_workload_checks": true,
+     "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+    },
+    "workload": {
+     "progress_delta": 960,
+     "source_energy_min_before": 2972,
+     "source_energy_min_after": 2866
+    },
+    "phases": {
+     "ticks": 300,
+     "phases": {
+      "project": {
+       "count": 300,
+       "p50_ms": 3.376832,
+       "p95_ms": 4.689835,
+       "p99_ms": 5.264165,
+       "max_ms": 5.510879,
+       "total_ms": 1063.5178389999992
+      },
+      "run": {
+       "count": 300,
+       "p50_ms": 2.387456,
+       "p95_ms": 5.701998,
+       "p99_ms": 8.248122,
+       "max_ms": 14.991084,
+       "total_ms": 873.4519079999998
+      },
+      "settle": {
+       "count": 300,
+       "p50_ms": 0.598792,
+       "p95_ms": 0.761,
+       "p99_ms": 0.913791,
+       "max_ms": 1.059917,
+       "total_ms": 181.800786
+      },
+      "wall": {
+       "count": 300,
+       "p50_ms": 6.458832999999999,
+       "p95_ms": 10.864083,
+       "p99_ms": 12.927875,
+       "max_ms": 19.384875,
+       "total_ms": 2121.6544989999998
+      }
+     }
+    },
+    "channel": "json",
+    "injection_bytes_sample": {
+     "channel": "json",
+     "world_json_bytes": 112734
+    }
+   }
+  },
+  {
+   "repetition": 4,
+   "position_in_repetition": 0,
+   "scale_order": [
+    8,
+    32,
+    4
+   ],
+   "order": [
+    "json",
+    "kkpv"
+   ],
+   "players": 8,
+   "channel": "json",
+   "elapsed_s": 0.5557570457458496,
+   "extracted": {
+    "metrics": {
+     "cpu_core_ms_per_tick": 2.6543866666666664,
+     "wall_p50_ms": 1.02,
+     "wall_p95_ms": 2.0057500000000004,
+     "wall_p99_ms": 2.4957909999999996,
+     "project_p50_ms": 0.545335,
+     "run_p50_ms": 0.352749,
+     "settle_p50_ms": 0.13125,
+     "rss_bytes_peak": 282181632
+    },
+    "per_player_injection_bytes": 31250,
+    "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+    "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9"
+   },
+   "report": {
+    "tool": "kkscreeps perf-probe",
+    "players": 8,
+    "ticks": 300,
+    "warmup": 50,
+    "player_concurrency": 2,
+    "player_cpu_clock": "thread_cpu_time",
+    "metadata": {
+     "os": "macos",
+     "arch": "aarch64",
+     "logical_cpus": 10,
+     "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+     "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+     "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+     "git_status": "M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? docs/research/notes/__pycache__/\n?? docs/research/notes/kkpv-scale-matrix-2026-10-04.md\n?? docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py\n?? docs/research/notes/kkpv-scale-matrix-windows-2026-10-04.json\n?? scripts/__pycache__/\n?? scripts/tests/__pycache__/\n?? scripts/tests/test_kkpv_matrix_capture.py",
+     "debug_assertions": false,
+     "unix_time_ms": 1791108746804
+    },
+    "process": {
+     "scope": "current_process_all_threads",
+     "window": "after_warmup_through_collection_loop",
+     "wall_ms": 355.677625,
+     "cpu_core_ms": 796.3159999999999,
+     "cpu_core_ms_per_tick": 2.6543866666666664,
+     "rss_bytes_after": 282181632,
+     "rss_bytes_sampled_peak": 282181632,
+     "rss_bytes_sampled_p50": 278331392,
+     "rss_observations": 301,
+     "rss_retained_samples": 301,
+     "rss_sampling_wall_ms": 0.7459979999999987,
+     "includes_sampling_and_workload_checks": true,
+     "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+    },
+    "workload": {
+     "progress_delta": 960,
+     "source_energy_min_before": 2972,
+     "source_energy_min_after": 2866
+    },
+    "phases": {
+     "ticks": 300,
+     "phases": {
+      "project": {
+       "count": 300,
+       "p50_ms": 0.545335,
+       "p95_ms": 0.749917,
+       "p99_ms": 0.875043,
+       "max_ms": 0.917124,
+       "total_ms": 170.9715420000001
+      },
+      "run": {
+       "count": 300,
+       "p50_ms": 0.352749,
+       "p95_ms": 1.12171,
+       "p99_ms": 1.475375,
+       "max_ms": 3.77954,
+       "total_ms": 140.31288200000003
+      },
+      "settle": {
+       "count": 300,
+       "p50_ms": 0.13125,
+       "p95_ms": 0.174625,
+       "p99_ms": 0.278792,
+       "max_ms": 0.362167,
+       "total_ms": 40.95470899999998
+      },
+      "wall": {
+       "count": 300,
+       "p50_ms": 1.02,
+       "p95_ms": 2.0057500000000004,
+       "p99_ms": 2.4957909999999996,
+       "max_ms": 4.679708000000001,
+       "total_ms": 352.97583099999986
+      }
+     }
+    },
+    "channel": "json",
+    "injection_bytes_sample": {
+     "channel": "json",
+     "world_json_bytes": 31250
+    }
+   }
+  },
+  {
+   "repetition": 4,
+   "position_in_repetition": 1,
+   "scale_order": [
+    8,
+    32,
+    4
+   ],
+   "order": [
+    "json",
+    "kkpv"
+   ],
+   "players": 8,
+   "channel": "kkpv",
+   "elapsed_s": 0.7682449817657471,
+   "extracted": {
+    "metrics": {
+     "cpu_core_ms_per_tick": 4.117713333333333,
+     "wall_p50_ms": 1.490583,
+     "wall_p95_ms": 3.153083,
+     "wall_p99_ms": 4.367792,
+     "project_p50_ms": 0.8705,
+     "run_p50_ms": 0.496915,
+     "settle_p50_ms": 0.13675,
+     "rss_bytes_peak": 351682560
+    },
+    "per_player_injection_bytes": 6945,
+    "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+    "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9"
+   },
+   "report": {
+    "tool": "kkscreeps perf-probe",
+    "players": 8,
+    "ticks": 300,
+    "warmup": 50,
+    "player_concurrency": 2,
+    "player_cpu_clock": "thread_cpu_time",
+    "metadata": {
+     "os": "macos",
+     "arch": "aarch64",
+     "logical_cpus": 10,
+     "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+     "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+     "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+     "git_status": "M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? docs/research/notes/__pycache__/\n?? docs/research/notes/kkpv-scale-matrix-2026-10-04.md\n?? docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py\n?? docs/research/notes/kkpv-scale-matrix-windows-2026-10-04.json\n?? scripts/__pycache__/\n?? scripts/tests/__pycache__/\n?? scripts/tests/test_kkpv_matrix_capture.py",
+     "debug_assertions": false,
+     "unix_time_ms": 1791108747357
+    },
+    "process": {
+     "scope": "current_process_all_threads",
+     "window": "after_warmup_through_collection_loop",
+     "wall_ms": 532.9095,
+     "cpu_core_ms": 1235.3139999999999,
+     "cpu_core_ms_per_tick": 4.117713333333333,
+     "rss_bytes_after": 351682560,
+     "rss_bytes_sampled_peak": 351682560,
+     "rss_bytes_sampled_p50": 285179904,
+     "rss_observations": 301,
+     "rss_retained_samples": 301,
+     "rss_sampling_wall_ms": 1.1310429999999994,
+     "includes_sampling_and_workload_checks": true,
+     "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+    },
+    "workload": {
+     "progress_delta": 960,
+     "source_energy_min_before": 2972,
+     "source_energy_min_after": 2866
+    },
+    "phases": {
+     "ticks": 300,
+     "phases": {
+      "project": {
+       "count": 300,
+       "p50_ms": 0.8705,
+       "p95_ms": 1.290501,
+       "p99_ms": 1.747459,
+       "max_ms": 2.261249,
+       "total_ms": 278.501078
+      },
+      "run": {
+       "count": 300,
+       "p50_ms": 0.496915,
+       "p95_ms": 1.708748,
+       "p99_ms": 2.826667,
+       "max_ms": 3.528457,
+       "total_ms": 205.60566399999993
+      },
+      "settle": {
+       "count": 300,
+       "p50_ms": 0.13675,
+       "p95_ms": 0.220083,
+       "p99_ms": 0.303208,
+       "max_ms": 0.438791,
+       "total_ms": 44.70908900000001
+      },
+      "wall": {
+       "count": 300,
+       "p50_ms": 1.490583,
+       "p95_ms": 3.153083,
+       "p99_ms": 4.367792,
+       "max_ms": 5.05,
+       "total_ms": 529.481373
+      }
+     }
+    },
+    "channel": "kkpv",
+    "injection_bytes_sample": {
+     "channel": "kkpv",
+     "envelope_bytes": 934,
+     "bundle_bytes": 6011,
+     "public_bundle_bytes": 21348,
+     "public_shared": true,
+     "blocks": 8,
+     "public_retained": [
+      {
+       "tick": 349,
+       "generation": 413,
+       "bytes": 21348,
+       "handles": 0
+      }
+     ]
+    }
+   }
+  },
+  {
+   "repetition": 4,
+   "position_in_repetition": 2,
+   "scale_order": [
+    8,
+    32,
+    4
+   ],
+   "order": [
+    "json",
+    "kkpv"
+   ],
+   "players": 32,
+   "channel": "json",
+   "elapsed_s": 3.0232081413269043,
+   "extracted": {
+    "metrics": {
+     "cpu_core_ms_per_tick": 17.164823333333334,
+     "wall_p50_ms": 6.74,
+     "wall_p95_ms": 10.809917,
+     "wall_p99_ms": 14.482125,
+     "project_p50_ms": 3.49825,
+     "run_p50_ms": 2.545166,
+     "settle_p50_ms": 0.605125,
+     "rss_bytes_peak": 1346519040
+    },
+    "per_player_injection_bytes": 112734,
+    "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+    "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9"
+   },
+   "report": {
+    "tool": "kkscreeps perf-probe",
+    "players": 32,
+    "ticks": 300,
+    "warmup": 50,
+    "player_concurrency": 2,
+    "player_cpu_clock": "thread_cpu_time",
+    "metadata": {
+     "os": "macos",
+     "arch": "aarch64",
+     "logical_cpus": 10,
+     "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+     "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+     "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+     "git_status": "M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? docs/research/notes/__pycache__/\n?? docs/research/notes/kkpv-scale-matrix-2026-10-04.md\n?? docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py\n?? docs/research/notes/kkpv-scale-matrix-windows-2026-10-04.json\n?? scripts/__pycache__/\n?? scripts/tests/__pycache__/\n?? scripts/tests/test_kkpv_matrix_capture.py",
+     "debug_assertions": false,
+     "unix_time_ms": 1791108748131
+    },
+    "process": {
+     "scope": "current_process_all_threads",
+     "window": "after_warmup_through_collection_loop",
+     "wall_ms": 2191.166833,
+     "cpu_core_ms": 5149.447,
+     "cpu_core_ms_per_tick": 17.164823333333334,
+     "rss_bytes_after": 1346519040,
+     "rss_bytes_sampled_peak": 1346519040,
+     "rss_bytes_sampled_p50": 1263976448,
+     "rss_observations": 301,
+     "rss_retained_samples": 301,
+     "rss_sampling_wall_ms": 4.368096000000003,
+     "includes_sampling_and_workload_checks": true,
+     "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+    },
+    "workload": {
+     "progress_delta": 960,
+     "source_energy_min_before": 2972,
+     "source_energy_min_after": 2866
+    },
+    "phases": {
+     "ticks": 300,
+     "phases": {
+      "project": {
+       "count": 300,
+       "p50_ms": 3.49825,
+       "p95_ms": 4.802002,
+       "p99_ms": 5.417668,
+       "max_ms": 6.1505,
+       "total_ms": 1090.840526
+      },
+      "run": {
+       "count": 300,
+       "p50_ms": 2.545166,
+       "p95_ms": 5.459542,
+       "p99_ms": 8.854544,
+       "max_ms": 13.825374,
+       "total_ms": 897.3139700000002
+      },
+      "settle": {
+       "count": 300,
+       "p50_ms": 0.605125,
+       "p95_ms": 0.755292,
+       "p99_ms": 0.87375,
+       "max_ms": 0.952875,
+       "total_ms": 184.47969600000008
+      },
+      "wall": {
+       "count": 300,
+       "p50_ms": 6.74,
+       "p95_ms": 10.809917,
+       "p99_ms": 14.482125,
+       "max_ms": 18.825417,
+       "total_ms": 2175.6866550000013
+      }
+     }
+    },
+    "channel": "json",
+    "injection_bytes_sample": {
+     "channel": "json",
+     "world_json_bytes": 112734
+    }
+   }
+  },
+  {
+   "repetition": 4,
+   "position_in_repetition": 3,
+   "scale_order": [
+    8,
+    32,
+    4
+   ],
+   "order": [
+    "json",
+    "kkpv"
+   ],
+   "players": 32,
+   "channel": "kkpv",
+   "elapsed_s": 3.438952922821045,
+   "extracted": {
+    "metrics": {
+     "cpu_core_ms_per_tick": 21.1144,
+     "wall_p50_ms": 7.7798750000000005,
+     "wall_p95_ms": 12.760666,
+     "wall_p99_ms": 15.434875,
+     "project_p50_ms": 4.196749,
+     "run_p50_ms": 2.906667,
+     "settle_p50_ms": 0.61825,
+     "rss_bytes_peak": 1286455296
+    },
+    "per_player_injection_bytes": 11595,
+    "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+    "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9"
+   },
+   "report": {
+    "tool": "kkscreeps perf-probe",
+    "players": 32,
+    "ticks": 300,
+    "warmup": 50,
+    "player_concurrency": 2,
+    "player_cpu_clock": "thread_cpu_time",
+    "metadata": {
+     "os": "macos",
+     "arch": "aarch64",
+     "logical_cpus": 10,
+     "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+     "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+     "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+     "git_status": "M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? docs/research/notes/__pycache__/\n?? docs/research/notes/kkpv-scale-matrix-2026-10-04.md\n?? docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py\n?? docs/research/notes/kkpv-scale-matrix-windows-2026-10-04.json\n?? scripts/__pycache__/\n?? scripts/tests/__pycache__/\n?? scripts/tests/test_kkpv_matrix_capture.py",
+     "debug_assertions": false,
+     "unix_time_ms": 1791108751151
+    },
+    "process": {
+     "scope": "current_process_all_threads",
+     "window": "after_warmup_through_collection_loop",
+     "wall_ms": 2558.1243329999998,
+     "cpu_core_ms": 6334.32,
+     "cpu_core_ms_per_tick": 21.1144,
+     "rss_bytes_after": 1286455296,
+     "rss_bytes_sampled_peak": 1286455296,
+     "rss_bytes_sampled_p50": 1044578304,
+     "rss_observations": 301,
+     "rss_retained_samples": 301,
+     "rss_sampling_wall_ms": 4.399458000000002,
+     "includes_sampling_and_workload_checks": true,
+     "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+    },
+    "workload": {
+     "progress_delta": 960,
+     "source_energy_min_before": 2972,
+     "source_energy_min_after": 2866
+    },
+    "phases": {
+     "ticks": 300,
+     "phases": {
+      "project": {
+       "count": 300,
+       "p50_ms": 4.196749,
+       "p95_ms": 5.600581,
+       "p99_ms": 7.356707,
+       "max_ms": 9.090916,
+       "total_ms": 1308.9992529999993
+      },
+      "run": {
+       "count": 300,
+       "p50_ms": 2.906667,
+       "p95_ms": 6.810623,
+       "p99_ms": 8.181581,
+       "max_ms": 14.509583,
+       "total_ms": 1040.3883780000003
+      },
+      "settle": {
+       "count": 300,
+       "p50_ms": 0.61825,
+       "p95_ms": 0.838167,
+       "p99_ms": 1.126875,
+       "max_ms": 1.388333,
+       "total_ms": 190.34832400000013
+      },
+      "wall": {
+       "count": 300,
+       "p50_ms": 7.7798750000000005,
+       "p95_ms": 12.760666,
+       "p99_ms": 15.434875,
+       "max_ms": 21.423375,
+       "total_ms": 2542.2190379999993
+      }
+     }
+    },
+    "channel": "kkpv",
+    "injection_bytes_sample": {
+     "channel": "kkpv",
+     "envelope_bytes": 1530,
+     "bundle_bytes": 10065,
+     "public_bundle_bytes": 85402,
+     "public_shared": true,
+     "blocks": 32,
+     "public_retained": [
+      {
+       "tick": 349,
+       "generation": 605,
+       "bytes": 85402,
+       "handles": 0
+      }
+     ]
+    }
+   }
+  },
+  {
+   "repetition": 4,
+   "position_in_repetition": 4,
+   "scale_order": [
+    8,
+    32,
+    4
+   ],
+   "order": [
+    "json",
+    "kkpv"
+   ],
+   "players": 4,
+   "channel": "json",
+   "elapsed_s": 0.2831459045410156,
+   "extracted": {
+    "metrics": {
+     "cpu_core_ms_per_tick": 1.1266433333333334,
+     "wall_p50_ms": 0.486292,
+     "wall_p95_ms": 0.7643329999999999,
+     "wall_p99_ms": 1.580875,
+     "project_p50_ms": 0.241459,
+     "run_p50_ms": 0.174208,
+     "settle_p50_ms": 0.061875,
+     "rss_bytes_peak": 152715264
+    },
+    "per_player_injection_bytes": 17682,
+    "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+    "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9"
+   },
+   "report": {
+    "tool": "kkscreeps perf-probe",
+    "players": 4,
+    "ticks": 300,
+    "warmup": 50,
+    "player_concurrency": 2,
+    "player_cpu_clock": "thread_cpu_time",
+    "metadata": {
+     "os": "macos",
+     "arch": "aarch64",
+     "logical_cpus": 10,
+     "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+     "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+     "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+     "git_status": "M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? docs/research/notes/__pycache__/\n?? docs/research/notes/kkpv-scale-matrix-2026-10-04.md\n?? docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py\n?? docs/research/notes/kkpv-scale-matrix-windows-2026-10-04.json\n?? scripts/__pycache__/\n?? scripts/tests/__pycache__/\n?? scripts/tests/test_kkpv_matrix_capture.py",
+     "debug_assertions": false,
+     "unix_time_ms": 1791108754588
+    },
+    "process": {
+     "scope": "current_process_all_threads",
+     "window": "after_warmup_through_collection_loop",
+     "wall_ms": 160.075333,
+     "cpu_core_ms": 337.99300000000005,
+     "cpu_core_ms_per_tick": 1.1266433333333334,
+     "rss_bytes_after": 152715264,
+     "rss_bytes_sampled_peak": 152715264,
+     "rss_bytes_sampled_p50": 151470080,
+     "rss_observations": 301,
+     "rss_retained_samples": 301,
+     "rss_sampling_wall_ms": 0.3085019999999991,
+     "includes_sampling_and_workload_checks": true,
+     "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+    },
+    "workload": {
+     "progress_delta": 960,
+     "source_energy_min_before": 2972,
+     "source_energy_min_after": 2866
+    },
+    "phases": {
+     "ticks": 300,
+     "phases": {
+      "project": {
+       "count": 300,
+       "p50_ms": 0.241459,
+       "p95_ms": 0.288125,
+       "p99_ms": 0.404125,
+       "max_ms": 0.427666,
+       "total_ms": 74.45888200000002
+      },
+      "run": {
+       "count": 300,
+       "p50_ms": 0.174208,
+       "p95_ms": 0.426085,
+       "p99_ms": 1.137334,
+       "max_ms": 1.631667,
+       "total_ms": 64.785291
+      },
+      "settle": {
+       "count": 300,
+       "p50_ms": 0.061875,
+       "p95_ms": 0.077667,
+       "p99_ms": 0.086334,
+       "max_ms": 0.157959,
+       "total_ms": 19.268385000000006
+      },
+      "wall": {
+       "count": 300,
+       "p50_ms": 0.486292,
+       "p95_ms": 0.7643329999999999,
+       "p99_ms": 1.580875,
+       "max_ms": 1.9906250000000003,
+       "total_ms": 158.82605899999993
+      }
+     }
+    },
+    "channel": "json",
+    "injection_bytes_sample": {
+     "channel": "json",
+     "world_json_bytes": 17682
+    }
+   }
+  },
+  {
+   "repetition": 4,
+   "position_in_repetition": 5,
+   "scale_order": [
+    8,
+    32,
+    4
+   ],
+   "order": [
+    "json",
+    "kkpv"
+   ],
+   "players": 4,
+   "channel": "kkpv",
+   "elapsed_s": 0.41488099098205566,
+   "extracted": {
+    "metrics": {
+     "cpu_core_ms_per_tick": 1.9566099999999997,
+     "wall_p50_ms": 0.746833,
+     "wall_p95_ms": 1.81175,
+     "wall_p99_ms": 3.031208,
+     "project_p50_ms": 0.427501,
+     "run_p50_ms": 0.247335,
+     "settle_p50_ms": 0.069625,
+     "rss_bytes_peak": 190971904
+    },
+    "per_player_injection_bytes": 6181,
+    "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+    "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9"
+   },
+   "report": {
+    "tool": "kkscreeps perf-probe",
+    "players": 4,
+    "ticks": 300,
+    "warmup": 50,
+    "player_concurrency": 2,
+    "player_cpu_clock": "thread_cpu_time",
+    "metadata": {
+     "os": "macos",
+     "arch": "aarch64",
+     "logical_cpus": 10,
+     "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+     "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+     "git_commit": "ac3b2480c5705b790d5c0847a9cee3a5ed50c394",
+     "git_status": "M docs/plans/mod-plane-batches.md\n M docs/research/README.md\n?? docs/research/notes/__pycache__/\n?? docs/research/notes/kkpv-scale-matrix-2026-10-04.md\n?? docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py\n?? docs/research/notes/kkpv-scale-matrix-windows-2026-10-04.json\n?? scripts/__pycache__/\n?? scripts/tests/__pycache__/\n?? scripts/tests/test_kkpv_matrix_capture.py",
+     "debug_assertions": false,
+     "unix_time_ms": 1791108754875
+    },
+    "process": {
+     "scope": "current_process_all_threads",
+     "window": "after_warmup_through_collection_loop",
+     "wall_ms": 267.91175,
+     "cpu_core_ms": 586.983,
+     "cpu_core_ms_per_tick": 1.9566099999999997,
+     "rss_bytes_after": 190971904,
+     "rss_bytes_sampled_peak": 190971904,
+     "rss_bytes_sampled_p50": 164347904,
+     "rss_observations": 301,
+     "rss_retained_samples": 301,
+     "rss_sampling_wall_ms": 0.6245819999999984,
+     "includes_sampling_and_workload_checks": true,
+     "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+    },
+    "workload": {
+     "progress_delta": 960,
+     "source_energy_min_before": 2972,
+     "source_energy_min_after": 2866
+    },
+    "phases": {
+     "ticks": 300,
+     "phases": {
+      "project": {
+       "count": 300,
+       "p50_ms": 0.427501,
+       "p95_ms": 0.622709,
+       "p99_ms": 0.748166,
+       "max_ms": 1.034458,
+       "total_ms": 134.51714200000004
+      },
+      "run": {
+       "count": 300,
+       "p50_ms": 0.247335,
+       "p95_ms": 0.951708,
+       "p99_ms": 2.343457,
+       "max_ms": 2.938958,
+       "total_ms": 108.64822000000001
+      },
+      "settle": {
+       "count": 300,
+       "p50_ms": 0.069625,
+       "p95_ms": 0.111833,
+       "p99_ms": 0.177916,
+       "max_ms": 0.219209,
+       "total_ms": 22.594371000000002
+      },
+      "wall": {
+       "count": 300,
+       "p50_ms": 0.746833,
+       "p95_ms": 1.81175,
+       "p99_ms": 3.031208,
+       "max_ms": 4.094875,
+       "total_ms": 266.18812199999996
+      }
+     }
+    },
+    "channel": "kkpv",
+    "injection_bytes_sample": {
+     "channel": "kkpv",
+     "envelope_bytes": 842,
+     "bundle_bytes": 5339,
+     "public_bundle_bytes": 10676,
+     "public_shared": true,
+     "blocks": 4,
+     "public_retained": [
+      {
+       "tick": 349,
+       "generation": 381,
+       "bytes": 10676,
+       "handles": 0
+      }
+     ]
+    }
+   }
+  }
+ ]
+}

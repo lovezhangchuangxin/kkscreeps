@@ -67,6 +67,8 @@
 
 **贡献链驱动模型**（2026-10-03，C 批前置片证据）：[链驱动模型记录](notes/mod-chain-driver-2026-10-03.md)（JS 驱动链的最小实验：两层 wrap 嵌套 + Rust native 中心全程 0 个 reentrant 标记；附 `after` 时点陷阱）、[Rust 实验体](../../spikes/deno-spike/examples/js_driven_chain.rs)、[JS 驱动器](../../spikes/deno-spike/examples/js_driven_chain.js)。结论推翻已落地实现的 reentrant 方向，重做与否待定。
 
+**KKPV 双通道规模矩阵**（2026-10-04，C.5 收口证据）：[规模矩阵记录](notes/kkpv-scale-matrix-2026-10-04.md)（4/8/32 玩家 × JSON/KKPV × 5 轮双重交错——通道序交换+规模序轮换：CPU/wall 亏损随规模收窄但 4..32p 无回本点、每玩家字节优势 −65%→−90% 单调扩大、RSS 8p→32p 交叉反超；32p 方向与 B.6 双样一致、幅度偏窄——跨会话比值不可比）、[采集脚本](notes/kkpv-scale-matrix-capture-2026-10-04.py)（门禁+原子归档，单测见 scripts/tests）、[全部原始报告](notes/kkpv-scale-matrix-windows-2026-10-04.json)。
+
 **存储选型基准**（2026-09-29 M2-C3 骨架证据）：[storage-bench.md](notes/storage-bench.md)（redb vs libmdbx 微基准方法学、三档场景夹具、macOS arm64 数字（初轮 + 评审清偿后复跑）与选型判据草案——非正式选型，正式选型待 2A 后真实负载）
 
 **测试套件评估**：[screeps-ok 初期质量评估](notes/screeps-ok-evaluation-2026-09-27.md)保存 ADR-006 的原始详细评估，当前采用与回归规则见 [ADR-006](../decisions/ADR-006-screeps-ok-ci.md)。
