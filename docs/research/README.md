@@ -16,6 +16,9 @@
 
 ## notes/ 笔记索引
 
+- [玩家闭环提交前复审](notes/mod-player-review-2026-10-04.md)：原生目标效果、常驻报告门禁、负面测试与 v2 独立采集。
+- [玩家与 Mod 连续闭环采集](notes/mod-player-workload-2026-10-04.md)：逐玩家真实动作核验、恢复后连续执行、两种通道的同负载原始窗口。
+- [双玩家与 Mod 的恢复闭环](notes/mod-multiplayer-recovery-2026-10-04.md)：双房间、两种投影、玩家类方法、串行参考、自动停用与晚期写回失败。
 - [native/empty 长窗口与平衡采集](notes/mod-native-balanced-2026-10-04.md)：ABBA/BAAB、逐对与逐轮口径、60 个原始窗口及同二进制 A/A；历史差异仍未归因。
 - [看门狗通知合并](notes/mod-watchdog-notify-2026-10-04.md)：保留逐调用预算、减少重复唤醒，资源与兼容性门禁及全部配对窗口。
 - [Mod 逐 tick 诊断与桌面测量波动](notes/mod-tick-diagnostics-2026-10-04.md)：同二进制 A/A、全部原始 CPU/切换记录和普通/诊断门禁；历史回归仍未归因。

@@ -1,0 +1,320 @@
+{
+  "complete": true,
+  "base_commit": "765b942",
+  "binary_sha256": "e33eb5fda135148d88e582a54fc576c5878d8d6c94374ee852c333227ecb40e5",
+  "source_sha256": {
+    "crates/kk-cli/src/main.rs": "b800b934ad4d78db8ecf7fcbb0e7cc82559e4e5216774180a01a775952f38cf8",
+    "crates/kk-cli/src/mod_player_probe.rs": "db72e51be3889b881d98a017c91d89edfbf2dd236124096c6b4b2bdcb382cd8d",
+    "crates/kk-runtime/tests/mod_multiplayer_tests.rs": "4d025f9c3094a4e6045ea9494efd2fc857b1e7686283f313134ac7a26240b4f4",
+    "compat/fixtures/mod-player/workload/mod.json": "157137445babb21a7c1826426353b41307af753bd9b2a20c7f7fd32d844dadaa",
+    "compat/fixtures/mod-player/workload/server.js": "2b8b7939ad96e6fe5b5166dba458af38cd8633216a692fb5f4c262cb367f1b7f",
+    "compat/fixtures/mod-player/workload/player.js": "49ce950ec27a5c3e889328dd3b28a8bb5b0c42d62c16c81630cf611c0a22f0f1",
+    "docs/research/notes/mod-player-workload-capture-2026-10-04.py": "bed2e719bf362ff94f83570a22081a57924649119dfbe960e7993606f086321a",
+    "docs/research/notes/mod-player-workload-2026-10-04.md": "6410bff8179962f41bcf46d5e8ee1f15a43a36f4070442729a5ddd16d3459664",
+    "docs/architecture/performance-acceptance.md": "4f6229458df7eabf4ff649b9b78b31a67db267dca9b012007adf429ea4462706",
+    "docs/architecture/mod-execution.md": "8227dd156b4be25fc57fc9cbaa7a988ccb282cb6e8706f26d5af5c03dea3e8ee",
+    "compat/README.md": "ab2385970646858c5433bc2822ae97036412abcfb737f100890e22d34688772f",
+    "docs/research/README.md": "361fc9caa5d40781aa84518fca5cabc0ec0034ae6af104cf888c0a58d8eddbd0",
+    ".gitignore": "cfbbc1b82b7c6cd36e137d6f9d5654fa7bee6a1b7a4d86fae902ccb2b0fe3676"
+  },
+  "log_sha256": {
+    "/tmp/kkscreeps-mod-player-adapter.log": "8ebfcb81adc70e835a6524785828621e81b7c5f862b4f08cd015d332f07616fe",
+    "/tmp/kkscreeps-mod-player-build-3.log": "09eb0d26bb2ab670386deb9dc4bbd41882f18bde03859c2635ec7c3bc49af15c",
+    "/tmp/kkscreeps-mod-player-build-4.log": "4c89c9dde3a64f0a031b9989ec0fc1f2cf3bf8b4c00c70f2acdf6b103c52c7ca",
+    "/tmp/kkscreeps-mod-player-build-final.log": "ba7cd93cb33a4091d151cb0dbbefe2d80be7269db1255d6a5bae20b254f4b19f",
+    "/tmp/kkscreeps-mod-player-build.log": "447a5bad0e9a1cdd6e000e23081f594f278d1396e20232873d1663ac45520883",
+    "/tmp/kkscreeps-mod-player-capture-final.log": "319a9b1020cf309649fbcfcfb0db5a9ddb25c0a61157f998bbd0ad9e3e7cfd0b",
+    "/tmp/kkscreeps-mod-player-capture.log": "71ec805e1b4455bba8364e766af695a2a9a7270d06f6c11845981ca0126a4968",
+    "/tmp/kkscreeps-mod-player-check-4.log": "96c382f50b79d22d4935ceea495235ee9f15913f2152f8aef0c57b4f6f284872",
+    "/tmp/kkscreeps-mod-player-check-final.log": "6e9672618f220999ca204109f2450e9a6d5f4491c2a10be62ca16a81123408ac",
+    "/tmp/kkscreeps-mod-player-check.log": "b90d55fa7c0b7a209f65c2a610138a0889cb545dfe4a13e4847b7c07a2ac412c",
+    "/tmp/kkscreeps-mod-player-clippy.log": "efed3adad1bff4120cc7dbd80bd3a9f889283fd65b53c0384d8d71bc442364d6",
+    "/tmp/kkscreeps-mod-player-debug-2.log": "576112f8c4a80817af19e5a8b6b1a2531978d7227e069fef3e62f108a0f12293",
+    "/tmp/kkscreeps-mod-player-debug-3.log": "7a297fcc3aea6c1901fed3a658f69de88640833ddc6115f5c6fe16cd34d77896",
+    "/tmp/kkscreeps-mod-player-debug.log": "0334a471143b78e886dbf0df1653771b07391dd92b2ec13071bb3cde32aa8aaf",
+    "/tmp/kkscreeps-mod-player-doc-final.log": "427731b8eb3d73b1f0295489469773af7328dffc8797f1e76e70a791f617c5ee",
+    "/tmp/kkscreeps-mod-player-invalid.log": "249b6f937a97979bae6157f42dfe196c0bf956613d12530c0c486d779467aaef",
+    "/tmp/kkscreeps-mod-player-ratchet-final.log": "eda1e661196c303001e12d95d1e3f56629ee8b2d2ee22411e4c300d8fd46883f",
+    "/tmp/kkscreeps-mod-player-ratchet.log": "eda1e661196c303001e12d95d1e3f56629ee8b2d2ee22411e4c300d8fd46883f",
+    "/tmp/kkscreeps-mod-player-recovery-debug-2.log": "1f2f2f1d0d4e73fd35d20077978d8e45301c5c213f818feda89b96c4e76d2235",
+    "/tmp/kkscreeps-mod-player-recovery-debug.log": "4beb747376eda33a6b2fb9652bf0d5d774aa07ef6888e51e78cbd7c7733afe0c",
+    "/tmp/kkscreeps-mod-player-recovery-release-final.log": "7cf9e62b4e8dbeb6c9c275b3dc3933c470c711d19d325854173a150b2862d172",
+    "/tmp/kkscreeps-mod-player-recovery-release.log": "200aeac7812f67659ca18aaced3dc4068caa2a09023fce05d26c3b0d0cf3ce75",
+    "/tmp/kkscreeps-mod-player-release-3.log": "1890cfa221d9ed84aee6abbf19bbe3d42f58c73d418e85c97c3db2c9c942cbe1",
+    "/tmp/kkscreeps-mod-player-release-4.log": "b2282affdc818d73298d5a04c45e3eae7ef28c9dc1f1b651e716e06ac1f7ef2b",
+    "/tmp/kkscreeps-mod-player-release-final.log": "4e079ae61c0a89d96dcab544d592165d32048212ada7c9f78577f4e40e8436de",
+    "/tmp/kkscreeps-mod-player-release.log": "bc68602cd39221af05edd58e748f8650fb78324d9217ab63e91ccdfabb2809b6",
+    "/tmp/kkscreeps-mod-player-doc-final-2.log": "3efe180e2df88eddec630e53c758165d2e470587a6d0d4c44da4ef2b8315eb0b"
+  },
+  "checks": [
+    {
+      "command": "cargo build --release -p kk-cli",
+      "exit_code": 0,
+      "log": "/tmp/kkscreeps-mod-player-build-4.log"
+    },
+    {
+      "command": "cargo test --release -p kk-cli mod_player_probe",
+      "exit_code": 0,
+      "passed": 3,
+      "log": "/tmp/kkscreeps-mod-player-release-4.log"
+    },
+    {
+      "command": "cargo test --release -p kk-runtime --test mod_multiplayer_tests",
+      "exit_code": 0,
+      "passed": 3,
+      "log": "/tmp/kkscreeps-mod-player-recovery-release-final.log"
+    },
+    {
+      "command": "KKSCREEPS_BIN=/Users/keqing/Desktop/projects/games/kkscreeps/target/release/kkscreeps pnpm run check",
+      "exit_code": 0,
+      "rust_passed": 599,
+      "rust_ignored": 10,
+      "js_passed": 19,
+      "js_skipped": 0,
+      "log": "/tmp/kkscreeps-mod-player-check-4.log"
+    },
+    {
+      "command": "pnpm --filter @kkscreeps/compat run build",
+      "exit_code": 0,
+      "log": "/tmp/kkscreeps-mod-player-adapter.log"
+    },
+    {
+      "command": "KKSCREEPS_BIN=/Users/keqing/Desktop/projects/games/kkscreeps/target/release/kkscreeps node compat/scripts/ratchet.mjs",
+      "exit_code": 0,
+      "passed": 1854,
+      "failed": 153,
+      "skipped": 907,
+      "red": 0,
+      "green": 0,
+      "log": "/tmp/kkscreeps-mod-player-ratchet-final.log"
+    },
+    {
+      "command": "python3 docs/research/notes/mod-player-workload-capture-2026-10-04.py docs/research/notes/mod-player-workload-windows-2026-10-04.json",
+      "exit_code": 0,
+      "log": "/tmp/kkscreeps-mod-player-capture-final.log"
+    },
+    {
+      "command": "git diff --exit-code -- crates/kk-runner/src crates/kk-runtime/src crates/kk-engine/src",
+      "exit_code": 0
+    },
+    {
+      "command": "node scripts/check-doc-links.mjs",
+      "exit_code": 0,
+      "log": "/tmp/kkscreeps-mod-player-doc-final-2.log"
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    },
+    {
+      "command": "git ls-files --others --exclude-standard compat/fixtures/mod-player",
+      "exit_code": 0,
+      "fixture_files": [
+        "compat/fixtures/mod-player/workload/mod.json",
+        "compat/fixtures/mod-player/workload/player.js",
+        "compat/fixtures/mod-player/workload/server.js"
+      ]
+    }
+  ],
+  "upstream_commit": "34a630efa42908c117c19c25d2350fa2387bd633",
+  "compatibility_report_sha256": "d5a2bc40a9863a0a648b8a506d3655b764975d73d517d3acb8f32fcc30d6bfb8",
+  "preserved_user_changes": {
+    "docs/plans/mod-plane-batches.md": "fc35132c7376dcd9fb6d6d74723fa9a0fedcf8f491ad65143e218a33687b9172",
+    "docs/research/notes/mod-chain-driver-2026-10-03.md": "c3400fce9151e076d9d6f69d282202c9e67641bdd3b6a33087a0c23eb0200d4c",
+    "spikes/deno-spike/examples/js_driven_chain.js": "e5644ed665b0bfa1e989d024072ba6868edd258a8ceb4ed89a203c5e2d6975c5",
+    "spikes/deno-spike/examples/js_driven_chain.rs": "c1fbcf8c0464ca54becef6dd69920ac4d2a1692866d91c611f1ee1d6a0bc3caf",
+    "docs/research/README.md": "164cdf2c6da4a8eac231415c9da2e3743520802c665b53a9eae0c8799330b165"
+  },
+  "unchanged_production_source_paths": [
+    "crates/kk-runner/src",
+    "crates/kk-runtime/src",
+    "crates/kk-engine/src"
+  ],
+  "raw_sha256": {
+    "docs/research/notes/mod-player-workload-windows-2026-10-04.json": "21116743579c283595c7c1dc4b30817db81c686922de98931b1225b22ebb23fa",
+    "docs/research/notes/mod-player-workload-smoke-2026-10-04.json": "82ec169b5c3bb86de4e1b9901349371ace2e6b394d8512b4344a3c1910754274",
+    "docs/research/notes/mod-player-workload-failed-2026-10-04.json": "c48437a61fa58b70d2f3084732dae11f4112520888c52fdd0ea24c7257a0163f"
+  },
+  "performance": {
+    "scope": "synthetic two independent rooms; checks included in process CPU; no cross-engine comparison",
+    "windows": 10,
+    "collection_ticks": 30000,
+    "warmup_ticks": 5000,
+    "summary": {
+      "json": {
+        "cpu_core_ms_per_tick": {
+          "values": [
+            0.29850966666666673,
+            0.30550866666666665,
+            0.3106263333333333,
+            0.3070186666666667,
+            0.31689033333333333
+          ],
+          "median": 0.3070186666666667,
+          "min": 0.29850966666666673,
+          "max": 0.31689033333333333
+        },
+        "embed_wall_p50_ms": {
+          "values": [
+            0.167208,
+            0.17441700000000002,
+            0.176375,
+            0.175875,
+            0.17625
+          ],
+          "median": 0.175875,
+          "min": 0.167208,
+          "max": 0.176375
+        },
+        "embed_wall_p99_ms": {
+          "values": [
+            0.594417,
+            0.572542,
+            0.569375,
+            0.5675,
+            0.656
+          ],
+          "median": 0.572542,
+          "min": 0.5675,
+          "max": 0.656
+        },
+        "sampled_peak_rss_bytes": {
+          "values": [
+            134037504,
+            132628480,
+            131022848,
+            131776512,
+            132120576
+          ],
+          "median": 132120576,
+          "min": 131022848,
+          "max": 134037504
+        }
+      },
+      "kkpv": {
+        "cpu_core_ms_per_tick": {
+          "values": [
+            0.401282,
+            0.393413,
+            0.39931933333333336,
+            0.395741,
+            0.3931226666666666
+          ],
+          "median": 0.395741,
+          "min": 0.3931226666666666,
+          "max": 0.401282
+        },
+        "embed_wall_p50_ms": {
+          "values": [
+            0.22429200000000002,
+            0.22225,
+            0.22458299999999998,
+            0.223458,
+            0.222791
+          ],
+          "median": 0.223458,
+          "min": 0.22225,
+          "max": 0.22458299999999998
+        },
+        "embed_wall_p99_ms": {
+          "values": [
+            0.660125,
+            0.6268750000000001,
+            0.618792,
+            0.630292,
+            0.634167
+          ],
+          "median": 0.630292,
+          "min": 0.618792,
+          "max": 0.660125
+        },
+        "sampled_peak_rss_bytes": {
+          "values": [
+            130088960,
+            131235840,
+            131219456,
+            130777088,
+            130105344
+          ],
+          "median": 130777088,
+          "min": 130088960,
+          "max": 131235840
+        }
+      }
+    },
+    "equivalent_workload_and_identity": true,
+    "per_player_per_window_actions": {
+      "executions": 3000,
+      "mod_increments": 3000,
+      "upgrades": 2000,
+      "harvests": 1000
+    }
+  },
+  "functional_matrix": {
+    "continuous_recovery": {
+      "channels": [
+        "json",
+        "kkpv"
+      ],
+      "concurrency": [
+        1,
+        2
+      ],
+      "rounds_each": 24,
+      "faults": [
+        "first round handler twice triggers auto-disable",
+        "round 9 RawMemory writeback",
+        "round 17 segments writeback"
+      ]
+    },
+    "probe_unit_scenarios": [
+      "JSON/KKPV x concurrency 1/2 x 63 rounds",
+      "1500 warmup plus 3 collection rounds survives default lifetime",
+      "no-op Mod handler rejected",
+      "player exception rejected"
+    ]
+  },
+  "initial_failures": [
+    {
+      "log": "/tmp/kkscreeps-mod-player-debug.log",
+      "exit_code": 101,
+      "cause": "zero-energy key omitted in object snapshot"
+    },
+    {
+      "log": "/tmp/kkscreeps-mod-player-recovery-debug.log",
+      "exit_code": 101,
+      "cause": "snapshot helper assumed previous console empty"
+    },
+    {
+      "log": "/tmp/kkscreeps-mod-player-capture.log",
+      "exit_code": 1,
+      "cause": "ageTime placement argument ignored, worker uses default lifetime; zero accepted windows; overlapping compatibility gate, excluded"
+    },
+    {
+      "log": "/tmp/kkscreeps-mod-player-release-final.log",
+      "exit_code": 101,
+      "cause": "initial lifespan assertion used missing ageTime snapshot field instead of ticksToLive"
+    },
+    {
+      "log": "/tmp/kkscreeps-mod-player-check-final.log",
+      "exit_code": 1,
+      "cause": "same lifespan assertion"
+    },
+    {
+      "log": "/tmp/kkscreeps-mod-player-doc-final.log",
+      "exit_code": 1,
+      "cause": "validation JSON not yet written at time of doc check"
+    }
+  ],
+  "limitations": [
+    "synthetic workload; not actual bots",
+    "no shared rooms or cross-room competition",
+    "no database or network",
+    "CPU includes validation and RSS sampling",
+    "desktop baseline; no before/after optimization claim",
+    "old native/empty differences unresolved",
+    "bots not rerun; previous known errors remain",
+    "not complete architecture acceptance",
+    "fixture .gitignore exception added after capture; binary and package contents unchanged"
+  ]
+}

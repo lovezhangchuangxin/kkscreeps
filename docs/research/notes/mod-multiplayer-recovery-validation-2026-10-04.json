@@ -1,0 +1,187 @@
+{
+  "complete": true,
+  "base_commit": "765b942",
+  "scope": "双玩家/双房间组合验收；生产实现未变更",
+  "release_sha256": "89b73d73afde8564d112022f7d356e03ca10880588b4b21860dd8bda5e4039d7",
+  "source_sha256": {
+    "crates/kk-runtime/tests/mod_multiplayer_tests.rs": "d405297962542b501ba22dfa5edf617929c4ba2780ab33be067c1bcf11b32027"
+  },
+  "matrix": {
+    "fault_scenarios": 8,
+    "clean_serial_reference_rounds": 4,
+    "projection_channels": [
+      "JSON",
+      "KKPV"
+    ],
+    "auto_disable_concurrency": [
+      1,
+      2
+    ],
+    "auto_disable_dispatch_order": [
+      "p2",
+      "p1"
+    ],
+    "clean_reference_dispatch_order": [
+      "p1",
+      "p2"
+    ],
+    "late_writeback_steps": [
+      "RawMemory",
+      "Segments"
+    ]
+  },
+  "checks": [
+    {
+      "command": "cargo build --release -p kk-cli",
+      "exit_code": 0
+    },
+    {
+      "command": "cargo test -p kk-runtime --test mod_multiplayer_tests",
+      "passed": 2,
+      "exit_code": 0
+    },
+    {
+      "command": "cargo test --release -p kk-runtime --test mod_multiplayer_tests",
+      "passed": 2,
+      "exit_code": 0
+    },
+    {
+      "command": "pnpm --filter @kkscreeps/compat run build",
+      "exit_code": 0
+    },
+    {
+      "command": "KKSCREEPS_BIN=/Users/keqing/Desktop/projects/games/kkscreeps/target/release/kkscreeps node compat/scripts/ratchet.mjs",
+      "upstream_commit": "34a630efa42908c117c19c25d2350fa2387bd633",
+      "passed": 1854,
+      "failed": 153,
+      "skipped": 907,
+      "red": 0,
+      "green": 0,
+      "exit_code": 0
+    },
+    {
+      "command": "KKSCREEPS_BIN=/Users/keqing/Desktop/projects/games/kkscreeps/target/release/kkscreeps pnpm run check",
+      "rust_passed": 595,
+      "rust_ignored": 10,
+      "javascript_passed": 19,
+      "javascript_skipped": 0,
+      "fmt": "passed",
+      "clippy_workspace_all_targets": "passed",
+      "exit_code": 0
+    },
+    {
+      "command": "node scripts/check-doc-links.mjs",
+      "markdown_files": 226,
+      "links": 1171,
+      "exit_code": 0
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    }
+  ],
+  "bots": {
+    "tooangel": {
+      "report": "mod-multiplayer-tooangel-2026-10-04.json",
+      "sha256": "677cffbd7a79866fb54f62dade401df9389eeea68cc5f2dfa707826f0aa86e38",
+      "ticks_requested": 2000,
+      "ticks_completed": 2000,
+      "ticks_terminated": 0,
+      "ticks_skipped_penalty": 0,
+      "ticks_with_console_error": 0,
+      "missing_api": {},
+      "exit_code": 0
+    },
+    "overmind": {
+      "report": "mod-multiplayer-overmind-2026-10-04.json",
+      "sha256": "6a5c22dddb6db8c6171f41ebc03cfe7ed51d627b3fa0f14b03f5257506a2e659",
+      "ticks_requested": 2000,
+      "ticks_completed": 2000,
+      "ticks_terminated": 0,
+      "ticks_skipped_penalty": 0,
+      "ticks_with_console_error": 1,
+      "missing_api": {},
+      "exit_code": 0
+    },
+    "wasm": {
+      "report": "mod-multiplayer-wasm-2026-10-04.json",
+      "sha256": "b45b10b0c719f8713eae1ca295a3eb40dffa461839999ea798fe8b42a88266a0",
+      "ticks_requested": 10,
+      "ticks_completed": 10,
+      "ticks_terminated": 0,
+      "ticks_skipped_penalty": 0,
+      "ticks_with_console_error": 0,
+      "missing_api": {},
+      "exit_code": 0
+    }
+  },
+  "bot_existing_errors": {
+    "baseline": "mod-budget-review-validation-2026-10-03.json",
+    "baseline_sha256": "b227694a5208df3fdd695a9c0fe5bd11f317ca0b10d34ed45130c487c7fadadc",
+    "overmind_error_stack_matches_after_harvest_id_normalization": true,
+    "tooangel_offset_position_log_and_count_match": true,
+    "bot_check_does_not_reject_player_errors": true
+  },
+  "initial_failures": [
+    {
+      "log": "/tmp/kkscreeps-mod-multiplayer-debug.log",
+      "reason": "新夹具重用处理器 ID，注册正确拒绝",
+      "exit_code": 101
+    },
+    {
+      "log": "/tmp/kkscreeps-mod-multiplayer-debug-2.log",
+      "reason": "新夹具误取控制器管理对象的 _id；实际字段为 id",
+      "exit_code": 101
+    },
+    {
+      "log": "/tmp/kkscreeps-mod-multiplayer-check.log",
+      "reason": "Rust/JS 部分通过；末尾文档检查早于新笔记落盘，两个链接缺失；随后补齐文档并重跑",
+      "exit_code": 1
+    }
+  ],
+  "limitations": [
+    "有限 counter/link 组合，不是带 Mod 的真实 bot 或性能验收",
+    "bot-check 不执行世界结算，Overmind 和 TooAngel 的既有错误保留",
+    "自动停用默认关闭，本夹具显式设阈值 2；仍由调用方请求重试",
+    "未覆盖持久化/输入日志/进程级故障恢复，历史 native 性能差异仍未归因"
+  ],
+  "preserved_user_changes": true,
+  "production_source_sha256_unchanged": {
+    "Cargo.lock": "45adbfd69102ece10258e035c5dba0e25484c6143f702ad910209de7411fbbdf",
+    "crates/kk-cli/Cargo.toml": "cb08222de03c5b488199f873785c76c4042024215368c63a1519b9ed1489961e",
+    "crates/kk-cli/src/main.rs": "64df91f5219aefe57a9f1f3f6738d06c8f8e673abe52e0127f1f8ecfd494e15d",
+    "crates/kk-cli/src/mod_perf_probe.rs": "3f3a4c89d94d69b7533e1bd7d14757016ccf4904526dfe178eeded9978dee1be",
+    "crates/kk-cli/src/perf_probe/process.rs": "95403abe6a2898479fa54d49bc1ad93937dd3af462b34898402f9496d5ec7fbf",
+    "scripts/mod-perf-baseline.py": "843d3ba84344d4e6fa67154047dfde9ef0fcbcef71e129e69a25573baaa85a20",
+    "scripts/tests/test_mod_perf_baseline.py": "951db151ed4e79accf7d8cdd01613289df711d3aebb6f3c32ae8b39a6ba5071a",
+    "crates/kk-vm/src/watchdog.rs": "13bf825818bb1a63da5abe0936aa0822620347bcc2440d8110c2c572ef7b4b8f",
+    "crates/kk-mod-host/tests/limits_tests.rs": "765458bdebce635224b3087f430ead2017ccab0eef49262145be2864045cf91b",
+    "crates/kk-runtime/tests/mod_budget_tests.rs": "be4a5f502edfabaf554a9e2a26bc23d52346599f0bfee130c19d910e48ef77d5"
+  },
+  "compatibility_report_sha256": "100bd0309c6da73f204063aea6934099850cfa6c408d8e39711d645937f27ff9",
+  "log_sha256": {
+    "/tmp/kkscreeps-mod-multiplayer-debug.log": "5f54b9c117ede6b7b0072eaa83e20502cb95b7c5c3ea4a234812eee708fcb714",
+    "/tmp/kkscreeps-mod-multiplayer-debug-2.log": "69b99db7ca6d6fcef9f1b735066e84fbef67db817729d44d958520a1bd4d2471",
+    "/tmp/kkscreeps-mod-multiplayer-debug-3.log": "08f45a263305b837e12709a24ba8aae903f755b8263c1953567c132ecb08cbbc",
+    "/tmp/kkscreeps-mod-multiplayer-release.log": "7d4b6f5b5c90fa9449b89f4b1966b849297031551a18fc71e877fbf86828d70f",
+    "/tmp/kkscreeps-mod-multiplayer-build.log": "a70da5408e7a6da7efe97b23011504833b16a7875bda14543f2504b5b8c7d97a",
+    "/tmp/kkscreeps-mod-multiplayer-check.log": "c21299b6e3495f4493f83bef0eee32eb39d4f07a752191a94484cd3f82f059f2",
+    "/tmp/kkscreeps-mod-multiplayer-check-final.log": "bdf96508a508df2788b297f5a5987b1bc4562b7b46a7bfb26e7c6740e2a76881",
+    "/tmp/kkscreeps-mod-multiplayer-adapter.log": "8ebfcb81adc70e835a6524785828621e81b7c5f862b4f08cd015d332f07616fe",
+    "/tmp/kkscreeps-mod-multiplayer-ratchet.log": "eda1e661196c303001e12d95d1e3f56629ee8b2d2ee22411e4c300d8fd46883f",
+    "/tmp/kkscreeps-mod-multiplayer-tooangel.log": "69d5bba6dfa394a8f492521a196e240d9d0f764ccae631a60faabf4eee2e4656",
+    "/tmp/kkscreeps-mod-multiplayer-overmind.log": "bb42f43900c2c9340c07d63f2ed4e11fa42a0d16b615e38d88f440acc2ac3b0e",
+    "/tmp/kkscreeps-mod-multiplayer-wasm.log": "1c65169e8c9e3781432051178df29799998963e06dd0407d10a05e311c04d7d0",
+    "/tmp/kkscreeps-mod-multiplayer-doc-links-final.log": "4c7cf18d4ad2efa9dde3ebdd7b5cb7e611c0f113b9c23f47beb35d1031169e91"
+  },
+  "documentation_sha256": {
+    "docs/architecture/mod-execution.md": "20b771f9741a86ffafb6c1dfe440bc6286e6c025903f7721841d73520726074b",
+    "docs/research/notes/mod-multiplayer-recovery-2026-10-04.md": "303eaba4c59368378bcc904b0eadf730ac0858f50125d85db991d5a064f98fab"
+  },
+  "bot_fixture_identity": {
+    "tooangel_commit": "87645a0b933360224737cca3b18ae9d112f46fef",
+    "overmind_main_sha256": "e78ad3c8e58a955163fc81adf6be1d584c881081a6b0a78156d519f202b5a4b8",
+    "wasm_main_sha256": "6d32ebfeccf0c2101fdc5bcf86dec9fdb45cf0349660826b9c2c8bfaacf8e468",
+    "wasm_binary_sha256": "93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476"
+  }
+}

@@ -1,0 +1,145 @@
+{
+  "complete": true,
+  "base_commit": "765b942",
+  "binary_sha256": "f77cd694e8fc5ccae01a08d89bcb928627f86647fe40d4e5fe98daff2d4f7de9",
+  "source_sha256": {
+    ".gitignore": "cfbbc1b82b7c6cd36e137d6f9d5654fa7bee6a1b7a4d86fae902ccb2b0fe3676",
+    "compat/README.md": "ab2385970646858c5433bc2822ae97036412abcfb737f100890e22d34688772f",
+    "crates/kk-cli/src/main.rs": "b800b934ad4d78db8ecf7fcbb0e7cc82559e4e5216774180a01a775952f38cf8",
+    "crates/kk-cli/src/mod_player_probe.rs": "942282158f8cf7d442b347e75cfe5d1a099ae9531259c7746d07b7841b444882",
+    "crates/kk-runtime/tests/mod_multiplayer_tests.rs": "4d025f9c3094a4e6045ea9494efd2fc857b1e7686283f313134ac7a26240b4f4",
+    "docs/architecture/mod-execution.md": "8227dd156b4be25fc57fc9cbaa7a988ccb282cb6e8706f26d5af5c03dea3e8ee",
+    "docs/architecture/performance-acceptance.md": "1d9affdb14724c432c2fa72d8fd7fa330b86fd05f9c4c4cd555575a51dc03fee",
+    "docs/research/notes/mod-player-workload-capture-2026-10-04.py": "940e77e0606314a7060fcc7252ca2908e018fe613965179775244f2d3738fbd1",
+    "scripts/tests/test_mod_player_capture.py": "6b863d454a3707be505b1d2ef9ff877f2e6a72a92912670d40b8016a8b20cdee",
+    "docs/research/notes/mod-player-review-2026-10-04.md": "d3decf0537dbbb26104fe7849030cfabd4e0e37e12255da14bd487bf48356a8f",
+    "compat/fixtures/mod-player/workload/mod.json": "157137445babb21a7c1826426353b41307af753bd9b2a20c7f7fd32d844dadaa",
+    "compat/fixtures/mod-player/workload/server.js": "2b8b7939ad96e6fe5b5166dba458af38cd8633216a692fb5f4c262cb367f1b7f",
+    "compat/fixtures/mod-player/workload/player.js": "49ce950ec27a5c3e889328dd3b28a8bb5b0c42d62c16c81630cf611c0a22f0f1"
+  },
+  "log_sha256": {
+    "/tmp/kkscreeps-player-review-native.log": "8bc6e0071d966960d37f46aecab9971bb58403a29457198aef83804ed932851a",
+    "/tmp/kkscreeps-player-review-python.log": "017b2bc0cb2ee22eb6febaaaf16009fdaa5f7a76c3bc370dac734e3600d7d4db",
+    "/tmp/kkscreeps-player-review-python-final.log": "017b2bc0cb2ee22eb6febaaaf16009fdaa5f7a76c3bc370dac734e3600d7d4db",
+    "/tmp/kkscreeps-player-review-adapter.log": "8ebfcb81adc70e835a6524785828621e81b7c5f862b4f08cd015d332f07616fe",
+    "/tmp/kkscreeps-player-review-python-2.log": "017b2bc0cb2ee22eb6febaaaf16009fdaa5f7a76c3bc370dac734e3600d7d4db",
+    "/tmp/kkscreeps-player-review-capture.log": "319a9b1020cf309649fbcfcfb0db5a9ddb25c0a61157f998bbd0ad9e3e7cfd0b",
+    "/tmp/kkscreeps-player-review-ratchet.log": "eda1e661196c303001e12d95d1e3f56629ee8b2d2ee22411e4c300d8fd46883f",
+    "/tmp/kkscreeps-player-review-build.log": "4ed59f0a6e62ebb2f3bdc247c9166f1726b5239a8241aa875b9fc958a7b5f7cf",
+    "/tmp/kkscreeps-player-review-release.log": "94a61e56db4ea6ac6f32de30efcdc1d66035c7b16805693331c34e4c66bf30ea",
+    "/tmp/kkscreeps-player-review-check.log": "ef32a1aea75df9afe46b6461a6a03f7e917fe9ccb369fbd807cc59e9f0ad9f62",
+    "/tmp/kkscreeps-player-review-doc.log": "e77104854e827dbe6513f0952d1777499f4750d5a3c642223890e837463675ef"
+  },
+  "checks": [
+    {
+      "command": "cargo build --release -p kk-cli",
+      "exit_code": 0,
+      "log": "/tmp/kkscreeps-player-review-build.log"
+    },
+    {
+      "command": "cargo test --release -p kk-cli mod_player_probe",
+      "exit_code": 0,
+      "passed": 3,
+      "log": "/tmp/kkscreeps-player-review-release.log"
+    },
+    {
+      "command": "KKSCREEPS_BIN=/Users/keqing/Desktop/projects/games/kkscreeps/target/release/kkscreeps pnpm run check",
+      "exit_code": 0,
+      "rust_passed": 599,
+      "rust_ignored": 10,
+      "js_passed": 19,
+      "js_skipped": 0,
+      "log": "/tmp/kkscreeps-player-review-check.log"
+    },
+    {
+      "command": "python3 -m unittest discover -s scripts/tests -p test_mod_player_capture.py",
+      "exit_code": 0,
+      "passed": 5,
+      "log": "/tmp/kkscreeps-player-review-python-final.log"
+    },
+    {
+      "command": "pnpm --filter @kkscreeps/compat run build",
+      "exit_code": 0,
+      "log": "/tmp/kkscreeps-player-review-adapter.log"
+    },
+    {
+      "command": "KKSCREEPS_BIN=/Users/keqing/Desktop/projects/games/kkscreeps/target/release/kkscreeps node compat/scripts/ratchet.mjs",
+      "exit_code": 0,
+      "passed": 1854,
+      "failed": 153,
+      "skipped": 907,
+      "red": 0,
+      "green": 0,
+      "log": "/tmp/kkscreeps-player-review-ratchet.log"
+    },
+    {
+      "command": "python3 docs/research/notes/mod-player-workload-capture-2026-10-04.py docs/research/notes/mod-player-review-windows-2026-10-04.json",
+      "exit_code": 0,
+      "log": "/tmp/kkscreeps-player-review-capture.log"
+    },
+    {
+      "command": "node scripts/check-doc-links.mjs",
+      "exit_code": 0,
+      "log": "/tmp/kkscreeps-player-review-doc.log"
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    }
+  ],
+  "upstream_commit": "34a630efa42908c117c19c25d2350fa2387bd633",
+  "compatibility_report_sha256": "03a7b7e658b8220c458556dd3d8e47e056de3a197498f09db14fcc5231f085db",
+  "raw_sha256": {
+    "docs/research/notes/mod-player-review-windows-2026-10-04.json": "e6c4f846f12521f777f753b10e658d4ea239428c1d4882d7873e596161de7d7e",
+    "docs/research/notes/mod-player-review-smoke-2026-10-04.json": "2cac05f009c0bbfc4d4f9cbecae7f4f8ce300e2a26e41394d7249b0a6024b188"
+  },
+  "preserved_user_changes": {
+    "docs/plans/mod-plane-batches.md": "fc35132c7376dcd9fb6d6d74723fa9a0fedcf8f491ad65143e218a33687b9172",
+    "docs/research/notes/mod-chain-driver-2026-10-03.md": "c3400fce9151e076d9d6f69d282202c9e67641bdd3b6a33087a0c23eb0200d4c",
+    "spikes/deno-spike/examples/js_driven_chain.js": "e5644ed665b0bfa1e989d024072ba6868edd258a8ceb4ed89a203c5e2d6975c5",
+    "spikes/deno-spike/examples/js_driven_chain.rs": "c1fbcf8c0464ca54becef6dd69920ac4d2a1692866d91c611f1ee1d6a0bc3caf",
+    "docs/research/README.md": "164cdf2c6da4a8eac231415c9da2e3743520802c665b53a9eae0c8799330b165"
+  },
+  "unchanged_production_source_paths": [
+    "crates/kk-runner/src",
+    "crates/kk-runtime/src",
+    "crates/kk-engine/src"
+  ],
+  "findings": [
+    {
+      "priority": "P2",
+      "file": "crates/kk-cli/src/mod_player_probe.rs",
+      "problem": "only worker energy checked, missing native target effects",
+      "fixed": true,
+      "regression": "upgradeController replaced by drop returns OK, but controller progress guard rejects"
+    },
+    {
+      "priority": "P2",
+      "file": "docs/research/notes/mod-player-workload-capture-2026-10-04.py",
+      "problem": "assert validation disabled by Python -O; incomplete report guards",
+      "fixed": true,
+      "regression": "5 Python tests, including optimized subprocess, invalid metrics, and retained partial archive"
+    }
+  ],
+  "report_schema_version": 2,
+  "performance": {
+    "windows": 10,
+    "collection_ticks": 30000,
+    "warmup_ticks": 5000,
+    "identical_workload_and_identity": true,
+    "per_player_window_actions": {
+      "executions": 3000,
+      "mod_increments": 3000,
+      "upgrades": 2000,
+      "harvests": 1000
+    }
+  },
+  "limitations": [
+    "synthetic independent rooms, no real bots or shared room competition",
+    "CPU includes additional per-round validation; v1 and v2 not pooled",
+    "desktop measurements, no architecture-wide performance claim",
+    "no change in runtime/runner/engine production code",
+    "previous bot errors retained, no bot rerun"
+  ],
+  "staged_readme_sha256": "8c31b45234b8671596329e3ef58884763d2b69a12fc6d61c5ace9cc0fa7ca051"
+}

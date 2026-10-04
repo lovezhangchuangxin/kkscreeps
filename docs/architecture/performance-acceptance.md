@@ -34,6 +34,23 @@ macOS/Linux 上，报告的 `process` 部分另测采集窗口内当前进程全
 
 [早期采集记录](../../compat/reports/perf-a6.md)包含空转负载的历史结果，不作为有效工作量的性能基线。当前负载自检降低空转风险，正式对照仍须逐实现核实动作和关键状态。
 
+## 玩家与 Mod 连续闭环采集
+
+`mod-player-probe` 使用入库的 [workload 包](../../compat/fixtures/mod-player/workload/mod.json)，每玩家独立房间，放置一个 Mod counter、一个 source 和一个 worker。玩家每轮通过 Mod 类与 FIND/LOOK 查询 counter、发出递增指令，并按 worker 能量循环采集和升级；同时写回 Memory 执行序号。worker 的合成寿命延长至窗口之后，整个有限窗口保留同一对象，不覆盖死亡与孵化。
+
+```sh
+target/release/kkscreeps mod-player-probe --players 2 --concurrency 2 --warmup 500 --ticks 3000 --report /tmp/mod-player-json.json
+target/release/kkscreeps mod-player-probe --players 2 --concurrency 2 --warmup 500 --ticks 3000 --kkpv --report /tmp/mod-player-kkpv.json
+```
+
+玩家与并发数为 1..32，采集窗口为 1..50000 tick，预热为 0..50000。默认玩家及 Mod 预算不变，报告记录两者配置、包和玩家脚本 SHA-256。每轮核验全部玩家实际执行且无异常、查询与动作返回值、VM/Memory 序号、全部 counter 的提交值、worker 原生动作后的能量、控制器累计进度、source 消耗与再生、namespace 累计次数以及世界 tick/generation；任何不符使命令失败。固定 RCL 4 与单 WORK 在最多 100000 轮内不达到升级阈值，控制器进度应等于累计升级次数。短窗口允许未进入采集分支，报告准确列出采集窗口内每玩家的升级与采集次数，不将预热动作计入。
+
+当前报告为 v2，新增原生动作目标的逐轮验证；进程 CPU 成本不能与仅检查 worker 能量的 v1 窗口混合汇总。采集脚本的门禁始终执行，Python 优化模式也不禁用；校验完整阶段集合、指标类型与采样数、边界动作和对象效果，再比较各窗口身份与完整快照。归档逐次采用同目录原子替换，后续失败保留已经验收的窗口；复审修复与 v2 原始采集见[复审记录](../research/notes/mod-player-review-2026-10-04.md)。
+
+报告保留初始、预热后、采集后三个边界的全部房间对象状态和逐玩家动作次数。阶段计时沿用 `EmbedEngine`，清除预热样本；进程 CPU/RSS 窗口额外包含每轮状态检查与采样开销。这是有实际玩家投影和原生/Mod 指令的合成负载，仍不覆盖共享房竞争、真实 bot、持久化或网络，也不能和纯结算基准直接相减归因。连续故障恢复另由 runtime 集成测试验证，不在性能窗口注入故障。
+
+首次连续运行及通道状态等价性见[闭环采集记录](../research/notes/mod-player-workload-2026-10-04.md)。桌面上的重复窗口只提供本机基线，不构成完整架构达标或通道加速结论。
+
 ## 密集 Mod 纯结算基准
 
 `mod-perf-probe` 用同一合成 link 世界比较三个模式：`native` 没有玩法 VM；`empty` 注册空包但没有处理器；`chain` 为每个 link 安装 before、两层 wrap、native 中心与 after。链模式额外维护四个 namespace 计数，用于核实各链位每对象每 tick 恰好执行一次，不能把差值解释为纯 JS 调用成本。

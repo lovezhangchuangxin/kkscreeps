@@ -126,6 +126,10 @@ runtime 的 `last_mod_settlement_fault()` 返回最近一次实际结算中失�
 
 `mod_fault_streak()` 返回当前序列；`last_mod_auto_disable()` 保留最近自动决定（触发故障含 tick/房间/目标/来源、次数、新增停用集合）。普通故障、成功结算和重建不擦除自动决定；新分片或 teardown 清空全部策略状态。该记录与每轮重置的 `last_mod_settlement_fault()` 分开；只保留最近一次决定，无无限增长事件队列。当前均为内存 Rust API，尚无 CLI 通知、持久输入事件或执行策略指纹。验收与范围见 [自动停用记录](../research/notes/mod-auto-disable-2026-10-04.md)。
 
+双玩家、双房间的组合验收见[玩家与 Mod 恢复闭环](../research/notes/mod-multiplayer-recovery-2026-10-04.md)：JSON/KKPV 两种投影、串行/并发派发与反向玩家顺序下，第二房间处理器异常回滚两房世界和两名玩家状态；自动停用后的子集重试仍发布整个缓存轮。player.js 类方法、FIND/LOOK、字段裁切与归属校验经过实际玩家沙箱；晚期 Memory/segments 写回失败另验证全部候选回滚。这是有限场景的功能验收，不代表真实 bot、密集 Mod 性能或进程崩溃恢复已完成。
+
+连续验收进一步覆盖恢复后的 24 轮执行，以及中途再次发生的 RawMemory/segments 写回失败。失败保留上一轮 console 与全部已提交状态，空请求重试仍提交两名玩家的缓存结果；后续正常轮核验 VM 序号、Memory、segments、通知和对象计数。`mod-player-probe` 提供独立房间内玩家/Mod/原生动作联合采集，逐轮核验工作量；范围与计时口径见[性能验收](performance-acceptance.md)，原始证据见[连续闭环记录](../research/notes/mod-player-workload-2026-10-04.md)。
+
 ## 资源预算
 
 `RegisterOptions.vm_limits` 固定分片玩法 VM 的总配置，创建与恢复均以 `ModRealm::with_options` 使用同一份限额与可选诊断句柄。它不改变规则 PlanHash；恢复配置属于 runtime 私有启动快照。直接使用宿主时，构造限额与诊断句柄须与注册选项一致，注册失败仍密封 realm。没有诊断需求时仍可用 `new`/`with_limits` 构造。

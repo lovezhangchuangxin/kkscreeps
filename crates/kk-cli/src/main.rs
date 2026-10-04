@@ -6,6 +6,7 @@ use clap::{Parser, Subcommand};
 mod bot_check;
 mod embed_main;
 mod mod_perf_probe;
+mod mod_player_probe;
 mod perf_probe;
 
 #[derive(Parser)]
@@ -76,6 +77,23 @@ enum Command {
         ticks: u32,
         #[arg(long, default_value = "compat/fixtures/mod-perf")]
         fixtures: String,
+        #[arg(long)]
+        report: String,
+    },
+    /// 连续运行玩家与 Mod 联合负载，核验每轮动作并采集阶段与进程成本
+    ModPlayerProbe {
+        #[arg(long, default_value_t = 2)]
+        players: u32,
+        #[arg(long, default_value_t = 2)]
+        concurrency: usize,
+        #[arg(long, default_value_t = 500)]
+        warmup: u32,
+        #[arg(long, default_value_t = 3000)]
+        ticks: u32,
+        #[arg(long, default_value = "compat/fixtures/mod-player")]
+        fixtures: String,
+        #[arg(long)]
+        kkpv: bool,
         #[arg(long)]
         report: String,
     },
@@ -155,6 +173,25 @@ fn main() {
                 warmup,
                 ticks,
                 fixtures,
+                report,
+            }));
+        }
+        Command::ModPlayerProbe {
+            players,
+            concurrency,
+            warmup,
+            ticks,
+            fixtures,
+            kkpv,
+            report,
+        } => {
+            std::process::exit(mod_player_probe::run(mod_player_probe::Options {
+                players,
+                concurrency,
+                warmup,
+                ticks,
+                fixtures,
+                kkpv,
                 report,
             }));
         }

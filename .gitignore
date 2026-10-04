@@ -33,6 +33,7 @@ logs/
 # 下载的 bot 保持本地；固定 Mod 性能夹具随基准入库。
 compat/fixtures/*
 !compat/fixtures/mod-perf/
+!compat/fixtures/mod-player/
 compat/reports/tmp/
 .test-output/
 

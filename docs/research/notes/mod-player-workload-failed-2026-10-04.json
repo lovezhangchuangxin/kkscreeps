@@ -1,0 +1,7 @@
+{
+  "complete": false,
+  "binary_sha256": "00d6a7f5369b2ff35257c2bf2ff5707eceb836f7d69466c91f2d6ed4554c7786",
+  "capture_sha256": "bed2e719bf362ff94f83570a22081a57924649119dfbe960e7993606f086321a",
+  "windows": [],
+  "error": "RuntimeError(\"['/Users/keqing/Desktop/projects/games/kkscreeps/target/release/kkscreeps', 'mod-player-probe', '--players', '2', '--concurrency', '2', '--warmup', '500', '--ticks', '3000', '--report', '/var/folders/f8/953xb5vj2j39wzvk2jkkp9280000gn/T/kk-mod-player-capture-uw8zp4ef/1-json.json']: 1: mod-player-probe 失败: creep 消失\\n\")"
+}
