@@ -12,7 +12,8 @@
 | `bot-check` | 加载 bot 模块，在固定测试世界中运行并输出运行错误和 API 访问统计 |
 | `perf-probe` | 在采集、升级和孵化负载下测量投影、玩家执行、结算与整轮耗时 |
 | `mod-perf-probe` | 同一 link 冷却负载的 native、空 Mod 与完整处理链纯结算对照；逐对象验证状态与链位计数 |
-| `serve`、`sim`、`test`、`import` | 预留入口，调用时返回“尚未实现”和退出码 2 |
+| `sim run` | 加载版本化 JSON 场景与玩家模块，推进真实世界、检查断言并写报告，见[本地场景模拟](local-simulation.md) |
+| `serve`、`test`、`import` | 预留入口，调用时返回“尚未实现”和退出码 2 |
 
 `embed` 使用自定义的 `{id, method, params}` / `{id, ok, result或error}` 消息格式，不是标准 JSON-RPC 2.0，也不提供网络监听。接入方式见 [兼容性验收](../../compat/README.md)。当前没有 `export` 子命令。
 

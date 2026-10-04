@@ -1,5 +1,5 @@
 //! 解析命令行参数并分派到嵌入式服务、bot 检查或性能采集工具。
-//! serve、sim、test、import 当前只保留命令入口，调用时返回退出码 2。
+//! sim run 运行真实场景；serve、test、import 当前只保留命令入口。
 
 use clap::{Parser, Subcommand};
 
@@ -8,6 +8,7 @@ mod embed_main;
 mod mod_perf_probe;
 mod mod_player_probe;
 mod perf_probe;
+mod sim;
 
 #[derive(Parser)]
 #[command(name = "kkscreeps", about = "Screeps 服务端的 Rust 重写版", version)]
@@ -20,8 +21,11 @@ struct Cli {
 enum Command {
     /// 运行游戏服务器（尚未实现）
     Serve,
-    /// 运行本地模拟（尚未实现）
-    Sim,
+    /// 加载 bot 模块并逐轮执行真实世界结算
+    Sim {
+        #[command(subcommand)]
+        command: SimCommand,
+    },
     /// 运行断言测试套件（尚未实现）
     Test,
     /// 导入世界数据（尚未实现）
@@ -120,15 +124,50 @@ enum Command {
     },
 }
 
+#[derive(Subcommand)]
+enum SimCommand {
+    /// 从 JSON 场景运行玩家，检查最终已提交状态并生成报告
+    Run {
+        #[arg(long)]
+        scenario: std::path::PathBuf,
+        #[arg(long, default_value_t = 1000, value_parser = clap::value_parser!(u32).range(1..))]
+        ticks: u32,
+        #[arg(long, default_value_t = 2, value_parser = clap::value_parser!(usize))]
+        concurrency: usize,
+        #[arg(long)]
+        kkpv: bool,
+        #[arg(long)]
+        report: std::path::PathBuf,
+    },
+}
+
 fn main() {
     let cli = Cli::parse();
     match cli.command {
-        Command::Serve | Command::Sim | Command::Test | Command::Import => {
+        Command::Serve | Command::Test | Command::Import => {
             eprintln!("该子命令尚未实装（见 docs/roadmap.md 的里程碑规划）");
             std::process::exit(2);
         }
         Command::Embed => {
             std::process::exit(crate::embed_main::run());
+        }
+        Command::Sim {
+            command:
+                SimCommand::Run {
+                    scenario,
+                    ticks,
+                    concurrency,
+                    kkpv,
+                    report,
+                },
+        } => {
+            std::process::exit(sim::run(sim::Options {
+                scenario,
+                ticks,
+                concurrency,
+                kkpv,
+                report,
+            }));
         }
         Command::BotCheck {
             path,

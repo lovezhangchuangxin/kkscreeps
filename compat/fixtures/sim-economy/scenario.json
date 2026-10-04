@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "shard": {
+    "players": ["bot"],
+    "rooms": [{"name": "W1N1", "owner": "bot", "rcl": 3}]
+  },
+  "bots": [{
+    "player": "bot", "modules": ".",
+    "memory": {"creeps": {"miner": {"role": "miner"}, "upgrader": {"role": "upgrader"}}}
+  }],
+  "objects": [
+    {"alias": "source", "room": "W1N1", "kind": "structure", "spec": {"structureType": "source", "pos": [10, 10], "energy": 3000}},
+    {"alias": "container", "room": "W1N1", "kind": "structure", "spec": {"structureType": "container", "pos": [10, 8]}},
+    {"alias": "spawn", "room": "W1N1", "kind": "structure", "spec": {"structureType": "spawn", "name": "Spawn1", "owner": "bot", "pos": [5, 5], "store": {"energy": 300}}},
+    {"alias": "initial_miner", "room": "W1N1", "kind": "creep", "spec": {"name": "miner", "owner": "bot", "pos": [7, 7], "body": ["work", "carry", "move"], "ticksToLive": 150}},
+    {"alias": "initial_upgrader", "room": "W1N1", "kind": "creep", "spec": {"name": "upgrader", "owner": "bot", "pos": [11, 8], "body": ["work", "carry", "move"], "ticksToLive": 250}}
+  ],
+  "assertions": [
+    {"pointer": "/players/bot/gcl", "op": "delta_gte", "value": 100},
+    {"pointer": "/rooms/W1N1/controller/progress", "op": "delta_gte", "value": 100},
+    {"pointer": "/players/bot/memory/loops", "op": "gte", "value": 500},
+    {"pointer": "/players/bot/memory/spawned", "op": "gte", "value": 2},
+    {"pointer": "/objects/initial_miner", "op": "missing"},
+    {"pointer": "/objects/initial_upgrader", "op": "missing"},
+    {"pointer": "/objects/container", "op": "exists"}
+  ]
+}

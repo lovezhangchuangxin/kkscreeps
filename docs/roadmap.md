@@ -41,7 +41,7 @@ M2 分为两道关卡，避免把运行环境可用与完整玩法可玩混为�
 
 玩家 API 扩面见 [M2B 方案](plans/m2b-expansion.md)。terminal 与市场已开展独立实现和验收，见[终端与市场方案](plans/2b-terminal-market.md)，后续应按剩余差异补齐，不能继续把整个市场视为 M4 才开始的能力。
 
-核心仓库搬运与分片 GCL 输入已接入；两种玩家投影分别通过连续 40 tick 的采集、容器搬运和升级守恒场景，记录见[核心经济链与 GCL](research/notes/economy-gcl-2026-10-04.md)。后续仍须提供可复跑的完整真实 bot 经济场景入口、开放特殊存储规则，并补保存恢复。
+核心仓库搬运与分片 GCL 输入已接入；两种玩家投影分别通过连续 40 tick 的采集、容器搬运和升级守恒场景，记录见[核心经济链与 GCL](research/notes/economy-gcl-2026-10-04.md)。现已提供 [sim run](architecture/local-simulation.md) 和可复跑的采集、搬运、升级、寿命到期后孵化替补场景；完整外部 bot 的玩法验收、特殊存储规则开放及保存恢复仍须继续推进。
 
 并发调度、统一提交和共享视图遵循 [tick 契约](architecture/tick-contract.md)与[快照契约](architecture/snapshot-contract.md)。这些文档分别说明现状和目标；提出契约不等于生产通路已经完整接入。端到端基线按[性能验收方案](architecture/performance-acceptance.md)采集，须先确认夹具实际产生动作与状态变化。
 
@@ -54,6 +54,8 @@ M2 分为两道关卡，避免把运行环境可用与完整玩法可玩混为�
 ## M2.5 开发套件
 
 实现 `kkscreeps sim / test / watch / deploy`，设计见[开发套件](designs/dev-kit.md)。场景、断言与世界推进应使用和服务器一致的运行及结算通路，使玩家能复现错误并验证自己的代码。
+
+当前 `sim run` 已接入版本化 JSON 场景、多玩家模块、初始 Memory、最终状态断言和报告，见[交付记录](research/notes/sim-run-2026-10-04.md)。`init/watch/replay/test/deploy`、检查点恢复与任意 bot 的确定性复现尚未实现。
 
 验收目标是固定场景中上千 tick 的集成测试秒级完成。报告须记录玩家代码、世界规模、构建配置、预热与耗时，不能把这个目标理解为任意 bot 或任意世界的耗时保证。当前部分 CLI 命令仍为占位入口，接口名称存在不代表工具已经完成。
 

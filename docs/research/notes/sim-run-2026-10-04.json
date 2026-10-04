@@ -1,0 +1,53 @@
+{
+  "batch": "sim run JSON v1",
+  "started": "2026-10-04",
+  "validated": "2026-10-05",
+  "baseline": "fdfb1d30ea72c1b06cb3d423450364be2d856811",
+  "screeps_ok_pin": "34a630efa42908c117c19c25d2350fa2387bd633",
+  "executable_sha256": "2fc5629f91f9d710757fc0ce3a5367fa358079ac66749e66cd90b0dbe7d41c3d",
+  "scenario_sha256": "ae1e26556dd600749241d777e712677aa92c6be0da25bfcf2746c68950c34055",
+  "modules_sha256": "800c0c2a5153f7b62f5c50077e44c7f5b67c950b814c6900ad9794df7bac42cc",
+  "scenarios": [
+    {
+      "report": "sim-run-economy-json-2026-10-04.json",
+      "exit_code": 0,
+      "channel": "json",
+      "ticks": 2000,
+      "assertions_passed": 7,
+      "gcl_delta": 1468,
+      "controller_progress_delta": 1468,
+      "spawned": 4,
+      "player_error_ticks": 0,
+      "run_wall_ms": 257.59479200000004
+    },
+    {
+      "report": "sim-run-economy-kkpv-2026-10-04.json",
+      "exit_code": 0,
+      "channel": "kkpv",
+      "ticks": 2000,
+      "assertions_passed": 7,
+      "gcl_delta": 1468,
+      "controller_progress_delta": 1468,
+      "spawned": 4,
+      "player_error_ticks": 0,
+      "run_wall_ms": 444.736292
+    }
+  ],
+  "checks": {
+    "workspace_check_exit_code": 0,
+    "rust_passed": 629,
+    "rust_failed": 0,
+    "rust_ignored": 11,
+    "compat_node_passed": 14,
+    "ratchet_exit_code": 0,
+    "passed": 1918,
+    "failed": 89,
+    "skipped": 907,
+    "total": 2914,
+    "floor": 1918,
+    "status_changes_vs_head": 0,
+    "new_exemptions": 0,
+    "new_skips": 0
+  },
+  "final_world_and_memory_equal": true
+}

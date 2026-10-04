@@ -36,6 +36,8 @@ mod m2b_map_notify_cpu_family;
 mod m2b_structure_actions_family;
 #[path = "embed_tests/m2b_structure_readfaces_family.rs"]
 mod m2b_structure_readfaces_family;
+#[path = "embed_tests/sim_setup_family.rs"]
+mod sim_setup_family;
 #[path = "embed_tests/stage_recovery_family.rs"]
 mod stage_recovery_family;
 #[path = "embed_tests/stop_run_regression.rs"]
@@ -60,6 +62,7 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     // 沙箱销毁统计是进程级的；这些场景串行运行，避免统计被并行场景干扰。
     embed_engine_roundtrip_impl()?;
     economy_gcl_family::economy_gcl_e2e_impl()?;
+    sim_setup_family::sim_setup_preserves_tick_and_failure_candidates_impl()?;
     embed_run_player_contract_impl()?;
     embed_create_shard_validation_impl()?;
     embed_shard_input_strictness_impl()?;

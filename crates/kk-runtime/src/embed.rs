@@ -1049,6 +1049,49 @@ impl EmbedEngine {
         self.player_concurrency
     }
 
+    /// 在轮次之间替换玩家模块，不推进时间；失败候选未处置时拒绝修改。
+    /// 执行器同时保存模块表，工作者恢复时复用这份源码和二进制资产。
+    pub fn set_player_modules(
+        &mut self,
+        player: &str,
+        modules: kk_runner::ModuleTable,
+    ) -> anyhow::Result<()> {
+        self.no_open_round("set_player_modules")?;
+        self.players
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("分片未创建"))?
+            .set_modules(player, modules)
+    }
+
+    /// 设置宿主提供的初始 JSON Memory，不执行玩家代码或推进世界。
+    /// 长度按玩家 RawMemory.set 的 UTF-16 码元上限检查，不能按 UTF-8 字节替代。
+    pub fn set_player_memory(&mut self, player: &str, memory: &Value) -> anyhow::Result<()> {
+        self.no_open_round("set_player_memory")?;
+        anyhow::ensure!(memory.is_object(), "初始 Memory 必须是 JSON 对象");
+        let raw = serde_json::to_string(memory)?;
+        const RAW_MEMORY_LIMIT_UTF16: usize = 2 * 1024 * 1024;
+        anyhow::ensure!(
+            raw.encode_utf16().count() <= RAW_MEMORY_LIMIT_UTF16,
+            "初始 Memory 超过 2 Mi UTF-16 码元"
+        );
+        self.engine
+            .players
+            .get_mut(player)
+            .ok_or_else(|| anyhow::anyhow!("未知玩家 {player}"))?
+            .raw_memory = raw;
+        Ok(())
+    }
+
+    /// 宿主读取已提交的玩家状态；不包含失败轮候选，不用于玩家授权投影。
+    pub fn player_state(&self, player: &str) -> Option<&kk_engine::PlayerState> {
+        self.engine.players.get(player)
+    }
+
+    /// 宿主诊断世界投影，不执行玩家视野过滤；不是可恢复的完整检查点。
+    pub fn world_snapshot(&self) -> Value {
+        self.engine.world.world_json()
+    }
+
     /// 请求一个玩家并推进一轮；存在失败缓存时，仍会提交整轮缓存的结果。
     /// 重试时忽略 `code`，且 `handle` 必须属于缓存轮。
     pub fn run_player(&mut self, handle: &str, code: &str) -> anyhow::Result<PlayerRun> {
@@ -1813,7 +1856,7 @@ impl EmbedEngine {
     /// 读取已提交玩家状态，供故障注入测试检查候选是否提前写入。
     #[doc(hidden)]
     pub fn player_state_for_test(&self, player: &str) -> Option<&kk_engine::PlayerState> {
-        self.engine.players.get(player)
+        self.player_state(player)
     }
 
     /// 读取宿主已提交 CPU 桶，不包含本轮待发布费用。

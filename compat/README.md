@@ -68,6 +68,18 @@ TooAngel 使用固定 commit；Overmind 下载固定 release，并复用已经�
 
 报告应结合请求/完成 tick 数、中断、跳过和错误内容判断。bot 捕获后用普通日志输出的异常不一定计入 console-error，因此不能把“零 console-error”解释为“没有运行问题”。
 
+## 推进真实世界的场景验收
+
+`bot-check` 在固定世界执行代码，指令不参与结算。经济进展应使用 `sim run`，在仓库根目录执行：
+
+```bash
+cargo build --release -p kk-cli
+target/release/kkscreeps sim run --scenario compat/fixtures/sim-economy/scenario.json --ticks 2000 --report /tmp/sim-economy.json
+target/release/kkscreeps sim run --scenario compat/fixtures/sim-economy/scenario.json --ticks 2000 --kkpv --report /tmp/sim-economy-kkpv.json
+```
+
+夹具包含采集、搬运、升级和寿命到期后孵化替补，最终断言要求 GCL/控制器进度增加、替补出生及旧 creep 消失。模块目录相对场景文件解析，支持预编译的玩家模块与初始 Memory；这不代表 TooAngel、Overmind 已全功能验收。格式、退出码与复现边界见[本地场景模拟](../docs/architecture/local-simulation.md)。
+
 ## 登记差异与跳过
 
 修改 `src/parity.json`，构建后同步到 `dist/parity.json`。`expected_failures` 与 `skips` 均是条目名称到登记对象的映射。`tests` 使用上游测试目录中定义的 catalog ID，不是文件路径或任意标题。
