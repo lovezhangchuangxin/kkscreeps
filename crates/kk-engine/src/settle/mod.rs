@@ -145,10 +145,20 @@ impl TickInput {
 /// 房间、玩家和市场先在副本中处理，所有返回 Result 的检查通过后才发布。
 /// 这是同步内存提交，不保证 panic、进程崩溃或磁盘写入时的原子性。
 /// 沙箱执行和内部状态不在结算副本内；失败重试的输入缓存由调用方负责。
+/// 玩家执行入口位于 kk-runtime；引擎不持有或调用玩家沙箱。
+///
+/// ```compile_fail
+/// let mut engine = kk_engine::Engine::default();
+/// engine.tick();
+/// ```
+///
+/// ```compile_fail
+/// let mut engine = kk_engine::Engine::default();
+/// engine.sandboxes.clear();
+/// ```
 pub struct Engine {
     pub world: kk_world::World,
     pub players: BTreeMap<String, PlayerState>,
-    pub sandboxes: BTreeMap<String, Box<dyn crate::sandbox::Sandbox>>,
     /// 跨房间订单簿和交易记录，不在 kk-world 的二进制房间快照中。
     pub market: market::MarketState,
     next_id: u64,
@@ -208,7 +218,6 @@ impl Engine {
         Self {
             world,
             players: BTreeMap::new(),
-            sandboxes: BTreeMap::new(),
             market: market::MarketState::default(),
             next_id,
             last_events: Vec::new(),
@@ -313,38 +322,6 @@ impl Engine {
             )),
             _ => Err("无需恢复（不在 NeedsRecovery 态）".to_string()),
         }
-    }
-
-    /// 调用注册沙箱收集指令，再推进一个 tick。
-    ///
-    /// 只收集 Executed 且属于注册玩家的指令，其余结果被忽略。
-    /// 不提交 Memory、segments 或 CPU 候选；完整执行流程由 kk-runtime 协调。
-    /// 重试本方法会再次调用沙箱，不复用上次执行结果。
-    pub fn tick(&mut self) -> Result<(), SettleError> {
-        let mut batch = IntentBatch::default();
-        {
-            let view = crate::sandbox::WorldView { world: &self.world };
-            for (player, sandbox) in &mut self.sandboxes {
-                let mut result =
-                    sandbox.run(&view, &crate::sandbox::RunSpec::new(player.clone(), ""));
-                // 此简化入口忽略所有非 Executed 结果，包括基础设施故障。
-                if !matches!(result.outcome, crate::sandbox::RunOutcome::Executed) {
-                    continue;
-                }
-                // 只取注册玩家的键，防止沙箱伪造其他玩家的指令。
-                if let Some(intents) = result.intents.users.get_mut(player) {
-                    let entry = batch.users.entry(player.clone()).or_default();
-                    entry.objects.extend(std::mem::take(&mut intents.objects));
-                    entry.room.extend(std::mem::take(&mut intents.room));
-                    entry.notify.extend(std::mem::take(&mut intents.notify));
-                    entry.market.extend(std::mem::take(&mut intents.market));
-                    for (id, ext) in std::mem::take(&mut intents.ext) {
-                        entry.ext.entry(id).or_default().extend(ext);
-                    }
-                }
-            }
-        }
-        self.tick_with_intents(batch)
     }
 
     /// 结算调用方提供的指令，并读取当前墙钟。

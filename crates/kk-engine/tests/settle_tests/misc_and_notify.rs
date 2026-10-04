@@ -153,7 +153,7 @@ fn engine_recomputes_player_rooms_after_tick() {
     let mut engine = Engine::new(world);
     engine.players.entry("p1".to_string()).or_default().gcl = 1_000_000;
     // 空 tick 后 rooms 重建 = {W1N1}
-    engine.tick().unwrap();
+    engine.tick_with_intents(IntentBatch::default()).unwrap();
     assert_eq!(
         engine.players["p1"].rooms,
         BTreeSet::from(["W1N1".to_string()])

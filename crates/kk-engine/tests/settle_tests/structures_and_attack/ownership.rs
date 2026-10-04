@@ -1,9 +1,9 @@
-//! 真实沙箱指令绑定到注册玩家的闭环校验。
+//! 显式指令的多轮结算与对象所有权校验。
 use super::*;
 
 #[test]
-fn engine_scripted_sandbox_closed_loop() {
-    // 通过 ScriptedSandbox 与 Engine 推进多 tick，验证指令采集和房间结算的衔接。
+fn engine_explicit_intents_closed_loop() {
+    // 显式提交同一组指令，验证多轮采集和升级结算的衔接。
     let mut world = World::new(9);
     let mut t = kk_core::Terrain::plains();
     t.normalize();
@@ -108,9 +108,7 @@ fn engine_scripted_sandbox_closed_loop() {
         )
         .unwrap();
 
-    // 每 tick：采 + 升（脚本是按当前 tick 注入的静态批）
-    // 脚本按当前 world.time() 匹配：Engine 首 tick 的 time=0，覆盖 0..10
-    let mut sandbox = kk_engine::ScriptedSandbox::new();
+    // 每轮同时采集和升级，候选指令由测试夹具显式提供。
     let mut batch = IntentBatch::default();
     batch.add_object_intent("p1", creep, Action::Harvest, IntentData::target(src));
     batch.add_object_intent(
@@ -120,12 +118,8 @@ fn engine_scripted_sandbox_closed_loop() {
         IntentData::target(ctl),
     );
     let mut engine = kk_engine::Engine::new(world);
-    for tick in 0..10u64 {
-        sandbox.at(tick, batch.clone());
-    }
-    engine.sandboxes.insert("p1".into(), Box::new(sandbox));
     for _ in 0..10 {
-        engine.tick().unwrap();
+        engine.tick_with_intents(batch.clone()).unwrap();
     }
     let ctl_obj = engine.world.get(ctl).unwrap().1;
     match ctl_obj {
@@ -148,8 +142,8 @@ fn engine_scripted_sandbox_closed_loop() {
 }
 
 #[test]
-fn sandbox_intents_bound_to_registered_player() {
-    // 身份边界：沙箱返回的 intent 只归其注册玩家——冒名键（操作他人对象）整批丢弃
+fn engine_rejects_intents_for_foreign_owned_object() {
+    // 即使上游提供了指令，结算器仍校验玩家是否拥有目标对象。
     let mut world = World::new(1);
     world.register_room("W1N1", kk_core::Terrain::plains());
     let victim = world
@@ -175,15 +169,21 @@ fn sandbox_intents_bound_to_registered_player() {
             }),
         )
         .unwrap();
-    // 恶意沙箱注册为 p1，却发 p2 键的 move intent
-    let mut sandbox = kk_engine::ScriptedSandbox::new();
-    sandbox.at(0, move_intent(victim, 3));
+    let mut batch = IntentBatch::default();
+    batch.add_object_intent(
+        "p1",
+        victim,
+        Action::Move,
+        IntentData {
+            direction: Some(3),
+            ..IntentData::bare()
+        },
+    );
     let mut engine = kk_engine::Engine::new(world);
-    engine.sandboxes.insert("p1".into(), Box::new(sandbox));
-    engine.tick().unwrap();
+    engine.tick_with_intents(batch).unwrap();
     let (x, y) = match engine.world.get(victim).unwrap().1 {
         RoomObject::Creep(c) => (c.x, c.y),
         _ => panic!(),
     };
-    assert_eq!((x, y), (10, 10), "冒名 intent 被丢弃：p2 的 creep 未被移动");
+    assert_eq!((x, y), (10, 10), "p1 的指令不能移动 p2 的 creep");
 }

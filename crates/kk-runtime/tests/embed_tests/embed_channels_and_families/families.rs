@@ -2,7 +2,7 @@
 use super::*;
 
 /// 真实沙箱的 move、harvest 意图经清洗和结算后，在下一轮玩家视图中可见。
-/// 另用脚本沙箱产生相同意图，比较两种入口的世界变化。
+/// 另用显式指令夹具提供相同意图，比较真实执行与纯结算的世界变化。
 pub(crate) fn embed_intent_channel_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
@@ -40,7 +40,7 @@ pub(crate) fn embed_intent_channel_impl() -> anyhow::Result<()> {
     assert_eq!(src_snap["energy"], 2998, "3000 − 2");
     e.teardown();
 
-    // ---- 同一入口等价：ScriptedSandbox 相同 intent 序列 → 相同世界转移 ----
+    // ---- 同一入口等价：显式指令夹具 相同 intent 序列 → 相同世界转移 ----
     let mut world = kk_world::World::new(1);
     let mut terrain = kk_core::Terrain::plains();
     terrain.normalize();
@@ -112,7 +112,6 @@ pub(crate) fn embed_intent_channel_impl() -> anyhow::Result<()> {
             }),
         )
         .unwrap();
-    let mut sandbox = kk_engine::ScriptedSandbox::new();
     let mut move_batch = kk_engine::intent::IntentBatch::default();
     move_batch.add_object_intent(
         "p1",
@@ -130,12 +129,13 @@ pub(crate) fn embed_intent_channel_impl() -> anyhow::Result<()> {
         kk_engine::intent::Action::Harvest,
         kk_engine::intent::IntentData::target(fake_source),
     );
-    sandbox.at(0, move_batch);
-    sandbox.at(1, harvest_batch);
     let mut engine = kk_engine::Engine::new(world);
-    engine.sandboxes.insert("p1".into(), Box::new(sandbox));
-    engine.tick().map_err(|err| anyhow::anyhow!("{err}"))?;
-    engine.tick().map_err(|err| anyhow::anyhow!("{err}"))?;
+    engine
+        .tick_with_intents(move_batch)
+        .map_err(|err| anyhow::anyhow!("{err}"))?;
+    engine
+        .tick_with_intents(harvest_batch)
+        .map_err(|err| anyhow::anyhow!("{err}"))?;
     let (x, y, energy, src_energy) = match engine.world.get(fake_creep).unwrap().1 {
         kk_schema::room::RoomObject::Creep(c) => match engine.world.get(fake_source).unwrap().1 {
             kk_schema::room::RoomObject::Source(s) => {
@@ -148,7 +148,7 @@ pub(crate) fn embed_intent_channel_impl() -> anyhow::Result<()> {
     assert_eq!(
         (x, y, energy, src_energy),
         (25, 26, 2, 2998),
-        "假沙箱与真沙箱同一结算入口：世界转移一致"
+        "显式指令与真实执行使用同一结算入口：世界转移一致"
     );
     Ok(())
 }

@@ -22,6 +22,8 @@ mod embed_channels_and_families;
 mod embed_roundtrip_contract;
 #[path = "embed_tests/embed_strictness_and_partial_commit.rs"]
 mod embed_strictness_and_partial_commit;
+#[path = "embed_tests/execution_boundary.rs"]
+mod execution_boundary;
 #[path = "embed_tests/m2b2_terminal_market_family.rs"]
 mod m2b2_terminal_market_family;
 #[path = "embed_tests/m2b_closing_family.rs"]
@@ -116,6 +118,7 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     m2b2_market_book_e2e_impl()?;
     m2b_closing_e2e_impl()?;
     stage_recovery_family_impl()?;
+    execution_boundary::multi_player_writeback_retry_impl()?;
     execution_failure_blocks_redispatch_impl()?;
     lost_worker_rebuild_impl()?;
     bounded_parallel_players_impl()?;

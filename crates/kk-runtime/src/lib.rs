@@ -8,6 +8,7 @@
 pub mod embed;
 pub mod kkpv_store;
 mod mod_vm;
+mod run;
 pub mod world_source;
 
 use std::collections::BTreeMap;
@@ -15,9 +16,9 @@ use std::collections::BTreeMap;
 use kk_engine::intent::IntentBatch;
 
 pub use embed::{EmbedEngine, PlayerRun};
-pub use kk_engine::{RunOutcome, RunResult, RunSpec, Sandbox as EngineSandbox};
 pub use kk_runner::RunEpoch;
 pub use mod_vm::{ModAutoDisable, ModFaultStreak, ModSettlementFault};
+pub use run::{RunOutcome, RunResult, RunSpec};
 use serde_json::Value;
 pub use world_source::WorldSource;
 

@@ -110,33 +110,6 @@ fn unknown_writeback_player_rejects_entire_tick() {
 }
 
 #[test]
-fn scripted_tick_keeps_market_intents_bound_to_registered_player() {
-    let mut engine = Engine::default();
-    engine.players.entry("p1".into()).or_default().money = 10_000_000;
-    engine.players.entry("p2".into()).or_default().money = 10_000_000;
-    let mut batch = IntentBatch::default();
-    for player in ["p1", "p2"] {
-        batch.users.entry(player.into()).or_default().market.push(
-            crate::intent::MarketIntent::CreateOrder {
-                order_type: Some("sell".into()),
-                resource_type: Some("token".into()),
-                price_milli: Some(1000),
-                total_amount: Some(100),
-                room_name: None,
-            },
-        );
-    }
-    let mut sandbox = crate::sandbox::ScriptedSandbox::new();
-    sandbox.at(0, batch);
-    engine.sandboxes.insert("p1".into(), Box::new(sandbox));
-    engine.tick().unwrap();
-    assert_eq!(engine.market.orders.len(), 1);
-    assert_eq!(engine.market.orders["mkt1"].user, "p1");
-    assert_eq!(engine.players["p1"].money, 9_995_000);
-    assert_eq!(engine.players["p2"].money, 10_000_000);
-}
-
-#[test]
 fn restored_room_uses_directory_name_during_settlement() {
     let mut world = kk_world::World::new(1);
     world.register_room("W1N1", kk_core::Terrain::plains());
@@ -204,7 +177,10 @@ fn engine_tick_rolls_back_all_rooms_on_failure() {
     }
     let mut engine = Engine::new(world);
     engine.fail_room = Some("W2N2".into());
-    assert!(engine.tick().is_err(), "注入房 Err ⇒ 整体 Err");
+    assert!(
+        engine.tick_with_intents(IntentBatch::default()).is_err(),
+        "注入房 Err ⇒ 整体 Err"
+    );
     assert_eq!(engine.world.time(), 0, "time 不推进");
     for name in ["W1N1", "W2N2"] {
         match engine.world.room(name).unwrap().objects.values().next() {
@@ -217,7 +193,7 @@ fn engine_tick_rolls_back_all_rooms_on_failure() {
     }
     // 故障解除后正常推进：两房同一 tick 挂钟（time=0 → 300）
     engine.fail_room = None;
-    engine.tick().unwrap();
+    engine.tick_with_intents(IntentBatch::default()).unwrap();
     assert_eq!(engine.world.time(), 1);
     for name in ["W1N1", "W2N2"] {
         match engine.world.room(name).unwrap().objects.values().next() {

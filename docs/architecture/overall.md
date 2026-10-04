@@ -67,8 +67,8 @@
 1. `kk-runtime::EmbedEngine` 从已提交世界构造按玩家视野过滤的 JSON 或 KKPV 数据，注入该玩家的 V8 沙箱。
 2. `kk-runner` 执行玩家代码。JavaScript API 检查所有权、距离、资源和参数等条件，接受的动作加入指令收集器；返回 `OK` 表示接受指令，不表示动作已结算成功。
 3. 宿主收集指令、RawMemory、segments、计费候选和日志。Rust 指令入口再次清洗字段并绑定注册玩家身份，不信任玩家自报的身份。
-4. `kk-engine` 在候选副本中处理房间与市场规则。无扩展内建槽直调 Rust；已接线的 JS 贡献槽由 runtime 一次进入可信 Mod realm，JS 组合处理链、Rust 校验并读写同一候选。验证后发布内存世界、玩家和市场状态。
-5. 世界结算成功后，协调器提交玩家 Memory、segments 和沙箱 CPU 桶候选。世界结算失败时缓存运行结果及 `TickInput`，重试不再次执行玩家代码。
+4. 协调器构造玩家 Memory、segments 和 CPU 桶写回候选，交给 `kk-engine` 随房间与市场规则在副本中处理。无扩展内建槽直调 Rust；已接线的 JS 贡献槽由 runtime 一次进入可信 Mod realm，JS 组合处理链、Rust 校验并读写同一候选。
+5. 引擎验证后统一发布世界、玩家和市场状态，协调器返回运行结果。世界结算失败时缓存运行结果及 `TickInput`，重试不再次执行玩家代码。
 
 玩家已修改的 V8 全局变量不随世界回退；线程通信失败、panic 或进程崩溃也不能直接套用内存结算失败的保证。具体边界见 [游戏循环](game-loop.md)和 [tick 契约](tick-contract.md)。
 
@@ -96,7 +96,7 @@
 
 玩家 API 预检查由 `kk-runner` 实现，最终规则和状态更新由 `kk-engine` 处理，世界字段投影由 `kk-world` 提供。维护行为时应同时核对预检查、指令清洗、结算和下一轮投影，避免 API 返回成功而实际动作被遗漏。
 
-`kk-engine::Sandbox` 与 `ScriptedSandbox` 用于无 V8 的引擎测试；真实执行由 `kk-runtime::ThreadExecutor` 调用玩家线程。两者共享结果类型，但不能将测试接口描述为真实 V8 接线的全部路径。
+玩家执行参数与结果 `RunSpec`、`RunOutcome`、`RunResult` 定义在 `kk-runtime`，由 `ThreadExecutor` 调用玩家线程产出。`kk-engine` 不持有玩家沙箱，不再提供 `Engine::tick` 或测试沙箱接口；只接收显式指令和写回候选。无 V8 的结算测试直接使用测试夹具提交 `IntentBatch`。执行与重试边界见 [tick 契约](tick-contract.md#玩家执行与结算接口)。
 
 `kk-pathfinder` 复用上游算法及其方向和平局规则；输入转换、回调异常和玩家 API 接线仍需单独验证，不能由“复用源码”推导出完整兼容性。
 

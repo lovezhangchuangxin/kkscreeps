@@ -14,6 +14,7 @@
 | `kk-engine/src/settle/mod.rs` | 世界引擎状态和控制入口；`working.rs` 房间候选及领域操作，`room_loop.rs` 房间循环，`install.rs` 冻结计划接线，`engine_tick.rs` 世界阶段与发布，`validation.rs` 发布前校验 |
 | `kk-engine/src/settle/contrib.rs` | 槽、处理器和续行类型及运行入口；`contrib/assemble.rs` 冻结表装配，`execute.rs` 内建动作/tick 链执行与 Hosted 局部恢复 |
 | `kk-engine/src/settle/market.rs` | 市场状态和结算入口、成交调度；`market/orders.rs` 订单生命周期，`terminal.rs` 发送/成交共用的库存、费用与交易写入 |
+| `kk-runtime/src/run.rs` | 玩家执行参数、结果分类和未提交的指令/Memory/CPU 候选；由 crate 根导出，结算引擎不拥有这些类型 |
 | `kk-runtime/src/embed.rs` | 分片状态、管理和诊断入口；`embed/setup.rs` 配置校验与创建/放置，`execution.rs` 玩家候选和失败重试，`projection.rs` KKPV 与市场视图，`mod_chain.rs` Mod 候选桥 |
 | `kk-runner/src/sandbox.rs` | V8 实例生命周期、运行与写回；`sandbox/host.rs` 加载清单、宿主句柄与 Mod 玩家面安装，`inject.rs` 每轮 JSON/KKPV 与 CPU 窗口注入 |
 | `kk-runner/src/prelude/30_game/game.js` | 世界注入、Game 装配和指令收集；`memory.js` 持有 RawMemory/segments 状态与写回，`market.js` 持有每轮市场视图缓存与指令 |

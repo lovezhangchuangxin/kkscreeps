@@ -399,8 +399,13 @@ impl EmbedEngine {
     /// 合并已清洗并绑定玩家身份的意图，不使用 JavaScript 自报的身份。
     pub(super) fn batch_from_results(results: &BTreeMap<String, RunResult>) -> IntentBatch {
         let mut batch = IntentBatch::default();
-        for result in results.values() {
-            batch.extend_from(result.intents.clone());
+        for (registered_player, result) in results {
+            // 注册表键是身份真相源；自报 player 和其他玩家键均不能越过此边界。
+            if let Some(intents) = result.intents.users.get(registered_player) {
+                batch
+                    .users
+                    .insert(registered_player.clone(), intents.clone());
+            }
         }
         batch
     }
@@ -510,3 +515,6 @@ impl EmbedEngine {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests;
