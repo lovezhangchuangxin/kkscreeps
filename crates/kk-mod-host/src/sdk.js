@@ -366,7 +366,9 @@ export function installRules(entries) {
 // （getPriority/setPriority），只改变仲裁排序，不开放请求或获准集合。
 // 房间级移动准入槽的 ctx.admission 读写本次输入中执行者的准入终值
 // （getAdmitted/setAdmitted），初值即原生 can_move 结果，终值同时约束
-// 链取消与执行阶段。均不可枚举、不可替换且只在处理器同步期内有效。
+// 链取消与执行阶段。房间级移动障碍槽的 ctx.obstacle 提供单向追加阻挡
+// （isBlocked/block），不能放行 native 判定的阻挡。均不可枚举、不可
+// 替换且只在处理器同步期内有效。
 // 处理器的持久状态只准走 ctx.state——模块全局不随失败候选回滚，
 // 用它做累计会破坏同输入重试的确定性。
 export function dispatch(key, ctx) {
@@ -726,6 +728,32 @@ export function runChain(slot, token) {
       },
     });
   }
+  // 房间级障碍槽的 ctx.obstacle 追加阻挡；单向能力，不提供放行。
+  function obstacle(key, isOpen) {
+    function checked(call) {
+      try {
+        if (!isOpen()) throw new Error('移动障碍能力只能在所属处理器同步执行期间调用');
+        return call();
+      } catch (error) {
+        fault(error, key, 'context');
+        throw error;
+      }
+    }
+    return Object.freeze({
+      isBlocked(id) {
+        return checked(() => {
+          if (typeof id !== 'string') throw new Error('胜者 ID 须为原始字符串');
+          return ops.op_mod_chain_obstacle_blocked(token, key, id);
+        });
+      },
+      block(id) {
+        return checked(() => {
+          if (typeof id !== 'string') throw new Error('胜者 ID 须为原始字符串');
+          return ops.op_mod_chain_obstacle_block(token, key, id);
+        });
+      },
+    });
+  }
   function build(key, ctx, isOpen) {
     function checked(call) {
       try {
@@ -763,6 +791,7 @@ export function runChain(slot, token) {
     Object.defineProperty(ctx, 'incoming', { value: incoming(key, () => open) });
     Object.defineProperty(ctx, 'contest', { value: contest(key, () => open) });
     Object.defineProperty(ctx, 'admission', { value: admission(key, () => open) });
+    Object.defineProperty(ctx, 'obstacle', { value: obstacle(key, () => open) });
     try {
       checkResult(key, bindings.get(key).fn(ctx));
       write(key, ctx);
@@ -792,6 +821,7 @@ export function runChain(slot, token) {
     Object.defineProperty(ctx, 'incoming', { value: incoming(key, () => open) });
     Object.defineProperty(ctx, 'contest', { value: contest(key, () => open) });
     Object.defineProperty(ctx, 'admission', { value: admission(key, () => open) });
+    Object.defineProperty(ctx, 'obstacle', { value: obstacle(key, () => open) });
     function next() {
       if (!open) throw new Error('next 只能在所属处理器同步执行期间调用');
       if (called) {

@@ -24,6 +24,7 @@ mod freeze;
 mod handlers;
 pub mod incoming;
 pub mod objects;
+pub mod obstacle;
 mod outcome;
 mod plan;
 pub mod player_surface;

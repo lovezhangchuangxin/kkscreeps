@@ -9,7 +9,7 @@
 - 更新日期：2026-10-06。
 - 实现参考基线：`8e28ac4`，JS 受击策略与独立护甲/护盾组合；这是功能基线，后续文档提交不改变它的含义。接手时仍须核对实际 HEAD 和工作区。
 - 最近已完成：N2c 受击策略第二片，见[现行契约](../architecture/mod-incoming-policy.md)和[验收记录](../research/notes/n2c-incoming-policy-2026-10-06.md)。
-- 当前任务：**G02.b 仲裁障碍准入实施中**（2026-10-06 启动，G02.a 已交付见下）：开放 `builtin:room.moveObstacle` 单向追加阻挡槽。已定设计要点：①取消链的 obstacle = JS 追加阻挡表 || 链内 native `check_obstacle_at_xy`——**只允许追加（block）不允许放行**，因为放行 native 阻挡格会让移动者进入未让位对象占据的格、破坏表示有效性；让位链增量语义（取消 A 后 A 反过来阻挡其原格请求）保留在 native 链内判定。②输入在准入槽之后、取消链之前构造：全部胜者 + 目的格对象摘要（creep 含获准让位标记、结构 type/owner/isPublic、工地 owner、地形墙与路），native 初判可读。③能力 `ctx.obstacle.block(id)` 单向 + `isBlocked(id)` 读初判；decline 丢弃追加。④意图静态预检 `has_static_obstacle`（intent_move/slot_request_direction 两处同口径）不并入本片——预检在仲裁前逐对象执行、无整房视野，登记为后续子片或并入 G07 预检族。孵化中拒绝与越界/坐标仍为宿主约束。G02.a 证据：[mod-move-admission](../architecture/mod-move-admission.md)、[交付记录](../research/notes/g02-move-admission-2026-10-06.md)。
+- 当前任务：**G02.b 仲裁障碍准入已交付**（2026-10-06，随本批提交）：`builtin:room.moveObstacle` 单向追加阻挡槽上线——准入槽之后、取消链之前整房一次进 JS，输入为全部胜者的目的格对象/地形摘要（creep 让位标记=胜者∧准入终值、rampart 公开性、工地 structureType、墙地形与路）与 native 初判；`ctx.obstacle.block/isBlocked` 单向追加，取消链按 追加 ∥ 链内 native 判定，让位链传播保留在引擎。放行方向不开放（坐标表示有效性宿主约束）。stay-north/no-swap 两独立包 + 原生 + 组合并集四场景双通道冷恢复验收；默认路径微基准在噪音内。契约见 [mod-move-obstacle](../architecture/mod-move-obstacle.md)、证据见[交付记录](../research/notes/g02b-move-obstacle-2026-10-06.md)。G02 剩余：意图静态预检 `has_static_obstacle` 开放（后续子片或 G07 预检族）、摘要附带安全模式主人（可解释性增强）；下一批候选 G29.a 类型生成或 G06.a 链诊断（见执行队列"作者与移动"阶段）。
 - 最近维护工作：2026-10-06 开发与实验命令可移植性整理已完成复审和完整仓库门禁，见下方记录；没有新增已实现的 G 功能。
 - 未解决的产品决定：本轮路线复审没有需要用户补充的决定；具体公开接口、权限与耐久协议尚未冻结，须在对应子片设计和验收。
 - 验证参考：使用上述验收记录及其机器数据，不复制其测试数量作为永久门槛。最新兼容性报告和门禁配置位于 `compat/reports/`。
@@ -33,7 +33,7 @@
 | 编号 | 任务 | 依赖/前置 | 状态 | 交付证据 |
 |---|---|---|---|---|
 | G01 | 移动竞争优先级策略 | 现有 move 请求与仲裁 | 已完成 | [mod-move-contest](../architecture/mod-move-contest.md)、[交付记录](../research/notes/g01-move-contest-2026-10-06.md)（G02–G04 未开放，另行推进） |
-| G02 | 移动准入策略 | 已稳定的移动请求输入；同步必要玩家预检，G01 不作硬依赖 | 进行中 | G02.a 疲劳/MOVE/被拉门槛准入槽已交付（提交 b7e65d5）：[mod-move-admission](../architecture/mod-move-admission.md)、[交付记录](../research/notes/g02-move-admission-2026-10-06.md)；G02.b 仲裁障碍追加阻挡槽实施中 |
+| G02 | 移动准入策略 | 已稳定的移动请求输入；同步必要玩家预检，G01 不作硬依赖 | 部分完成 | G02.a 疲劳/MOVE/被拉门槛准入槽（b7e65d5）：[mod-move-admission](../architecture/mod-move-admission.md)、[记录](../research/notes/g02-move-admission-2026-10-06.md)；G02.b 仲裁障碍追加阻挡槽随本批提交：[mod-move-obstacle](../architecture/mod-move-obstacle.md)、[记录](../research/notes/g02b-move-obstacle-2026-10-06.md)；意图静态预检与放行方向未开放 |
 | G03 | 完整房间移动仲裁 | G01、G02 | 未开始 | — |
 | G04 | 移动代价与执行效果 | G02；代价可先行，完整仲裁交互在 G03 后验收 | 未开始 | — |
 | G05 | Mod 作者基础 CLI | 现有 sim、inspect、检查点 | 已完成 | G05.a `mod init` `ee296cb`；G05.b `mod test` `dbc82a4`（[模板与测试说明](../architecture/local-simulation.md#作者包模板)）；后续增强另登记 |
@@ -118,6 +118,8 @@ G28.a 的网络协议及只读原型可提前设计；开放会改变玩法的�
 ### G02 移动准入策略
 
 盘点疲劳、MOVE、地形/结构障碍等默认限制，开放具名可替换入口；玩家预检、请求登记、仲裁和实际执行同源消费，不得 JS 放行后又被隐藏 native 检查否决。未开放的检查逐项登记。数值、坐标和索引一致性属于宿主约束，准入规则属于玩法。
+
+**G02.b 仲裁障碍单向追加阻挡槽（2026-10-06 已交付）**：新增房间级槽 `builtin:room.moveObstacle`（内建槽 16→17、revision v10）：准入槽之后、取消链之前整房一次进 JS；输入含全部胜者（准入被拒者仍在列）的目的格对象摘要（creep 让位=胜者∧准入终值、rampart 公开性、工地 structureType、墙/路）与预填时点 native 初判；`ctx.obstacle.block(id)` 单向追加 + `isBlocked` 读初判，decline 丢弃追加。取消链 obstacle = 追加集 ∥ 链内 `check_obstacle_at_xy`，让位链增量传播（挡 b → b 取消 → a 失让位随链取消）由引擎完成；放行方向不开放（表示有效性宿主约束）。stay-north（replace 区域管制）与 no-swap（after 禁止依赖让位）两独立包 + 原生 + 组合并集验收，双通道冷恢复等价；默认路径零新增可测开销。意图静态预检 `has_static_obstacle`（intent_move/slot_request_direction）与摘要安全模式主人登记为剩余。
 
 **G02.a 疲劳/MOVE/有效被拉门槛准入槽（2026-10-06 已交付）**：新增房间级槽 `builtin:creep.moveAdmission`，仲裁拆为 排名 → 原生预填（配对复核 + can_move 终值表）→ JS 覆盖（`ctx.admission.getAdmitted/setAdmitted`，初值即原生结果）→ 取消链四阶段；执行阶段 `movement_execute` 改读准入终值（同源、fail-closed）。配对复核遍历顺序改为胜者对象 ID 升序（集合等价；同拉者多目标残标在现有意图流不可达，G03/G04 开放 pull 登记时须重审）。tireless（replace 全放行）与 strict（after 收紧配重不足）两独立包 + 原生对照 + 组合（after 收回 replace 放行）验收，双通道冷恢复等价；默认路径输入构造零付费，微基准 1.84–1.95µs/房对基线 1.61–1.75（密集 32 移动者场景准入终值表维护 +0.2–0.3µs）。内建槽 16、revision v9、PlanHash 变更；旧检查点按身份拒绝。剩余：G02.b 障碍准入（`has_static_obstacle` 意图预检、`check_obstacle_at_xy` 仲裁障碍与让位链耦合）、孵化中拒绝、越界/坐标（宿主约束）。
 

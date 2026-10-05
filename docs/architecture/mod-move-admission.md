@@ -1,6 +1,6 @@
 # JS 移动准入策略
 
-2026-10-06 已开放 `builtin:creep.moveAdmission` 房间级槽。独立 JS 包可替换移动准入门槛（原生为疲劳 0 且有存活 MOVE，或有效被拉）：仲裁选胜后对全部获胜执行者整房一次进入 JS，候选初值即原生 `can_move` 结果，JS 可读可覆盖；准入终值**同源**约束链取消与执行阶段——`movement_execute` 不再按当前身体二次 native 复核，缺项一律未获准（fail-closed）。这只是准入切片：目的格障碍（地形/结构/rampart/安全模式）与静态预检仍由原生判定（G02.b 另行开放），获准集合与让位链属 G03。
+2026-10-06 已开放 `builtin:creep.moveAdmission` 房间级槽。独立 JS 包可替换移动准入门槛（原生为疲劳 0 且有存活 MOVE，或有效被拉）：仲裁选胜后对全部获胜执行者整房一次进入 JS，候选初值即原生 `can_move` 结果，JS 可读可覆盖；准入终值**同源**约束链取消与执行阶段——`movement_execute` 不再按当前身体二次 native 复核，缺项一律未获准（fail-closed）。这只是准入切片：目的格障碍的仲裁半边已另行开放为单向追加槽（见[JS 移动障碍](mod-move-obstacle.md)），意图静态预检仍由原生判定，获准集合与让位链属 G03。
 
 ## 输入与结算
 
@@ -61,10 +61,10 @@ native 中心为无操作（保留候选中的原生准入终值，类比竞争�
 - `return api.decline(code)` 正常拒绝整条准入链：丢弃全部覆盖与暂存 namespace state，保留原生预填终值（等同没进过 JS）；此前竞争槽的排序结果不受影响。
 - 准入候选不直接改写世界。输入外 ID、非布尔终值、越权能力（竞争优先级/移动请求/资源/受击）的故障不能被 catch + decline 掩盖；错误/预算超限使整轮候选失败，沿[Mod 执行恢复](mod-execution.md)销毁并重建 realm。执行阶段只读准入终值表，缺项（未参与仲裁或已取消）一律未获准。
 - 晚期写回失败经玩家缓存重试整轮：准入结果与 namespace state 恰一次提交，不重复执行玩家代码。停用出错的 replace 后回退 native 门槛，健康钩子继续组合。
-- 准入终值是 tick 内瞬态，不进入检查点；检查点只保存已提交世界与 Mod state。内建槽现为 16 个，新增冻结描述和 native 绑定改变 PlanHash；旧计划身份的检查点不会被当作同一玩法静默加载。
+- 准入终值是 tick 内瞬态，不进入检查点；检查点只保存已提交世界与 Mod state。内建槽现为 17 个，新增冻结描述和 native 绑定改变 PlanHash；旧计划身份的检查点不会被当作同一玩法静默加载。
 
 ## 验收与剩余范围
 
 [真实玩家场景](../../compat/fixtures/sim-mod-move-admission/README.md)提供原生、tireless、strict 和两包组合；JSON/KKPV 完整 final 一致，准入后保存退出与冷启动续跑等价。专项覆盖输入完整性与要素、原生配对时序（含配对破裂）、放行/收紧两端、非法写入/外部 ID、能力门、停用回退、晚期失败缓存重试与拒绝回退，结果见[交付记录](../research/notes/g02-move-admission-2026-10-06.md)。
 
-当前不开放障碍准入（地形/结构/rampart/安全模式与 `has_static_obstacle`/`check_obstacle_at_xy`，G02.b）、孵化中/spawning 门槛、获准集合与让位链/交换/循环（G03）、移动代价与执行效果（G04）、pull 配对登记策略（保持 native）。准入输入只含胜者，落选者不在其中；整房请求视野属 G03。
+当前不开放障碍放行方向与意图静态预检 `has_static_obstacle`（仲裁半边见[JS 移动障碍](mod-move-obstacle.md)）、孵化中/spawning 门槛、获准集合与让位链/交换/循环（G03）、移动代价与执行效果（G04）、pull 配对登记策略（保持 native）。准入输入只含胜者，落选者不在其中；整房请求视野属 G03。

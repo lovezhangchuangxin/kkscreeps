@@ -793,6 +793,25 @@ impl Working {
         self.movement.apply_admissions(finals);
     }
 
+    /// 障碍槽输入构造；使用与 finish_movement 同时点生效的安全模式
+    /// 主人。仅 Hosted 路径调用。
+    pub fn movement_obstacle_input(&self) -> kk_mod_api::obstacle::MoveObstacleInput {
+        let safe_mode_user: Option<String> = self.controller().and_then(|ctl| {
+            if ctl.safe_mode > self.time {
+                ctl.owner.clone()
+            } else {
+                None
+            }
+        });
+        self.movement
+            .obstacle_input(&self.room, &self.index, safe_mode_user.as_deref())
+    }
+
+    /// 障碍槽成功后的追加集并入取消链。
+    pub fn apply_movement_obstacle_blocks(&mut self, blocks: BTreeSet<ObjId>) {
+        self.movement.apply_extra_blocks(blocks);
+    }
+
     /// 仲裁阶段四：按准入终值取消阻塞链，使用此时生效的安全模式主人。
     pub fn finish_movement(&mut self) {
         let safe_mode_user: Option<String> = self.controller().and_then(|ctl| {

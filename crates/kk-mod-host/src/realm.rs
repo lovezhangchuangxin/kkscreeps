@@ -32,8 +32,9 @@ use crate::chain::{
     op_mod_chain_incoming_set_damage, op_mod_chain_move_cancel, op_mod_chain_move_pending,
     op_mod_chain_move_request, op_mod_chain_native, op_mod_chain_object_create,
     op_mod_chain_object_get, op_mod_chain_object_list, op_mod_chain_object_remove,
-    op_mod_chain_object_update, op_mod_chain_read, op_mod_chain_resource_read,
-    op_mod_chain_resource_transfer, op_mod_chain_write,
+    op_mod_chain_object_update, op_mod_chain_obstacle_block, op_mod_chain_obstacle_blocked,
+    op_mod_chain_read, op_mod_chain_resource_read, op_mod_chain_resource_transfer,
+    op_mod_chain_write,
 };
 use crate::convert::{Declaration, build_contribution};
 use crate::error::{ModFault, ModFaultKind, ModHostError, ModHostResult};
@@ -149,6 +150,8 @@ extension!(
         op_mod_chain_contest_set_priority,
         op_mod_chain_admission_admitted,
         op_mod_chain_admission_set_admitted,
+        op_mod_chain_obstacle_blocked,
+        op_mod_chain_obstacle_block,
         op_mod_chain_build_request,
         op_mod_chain_build_cancel,
         op_mod_chain_object_get,

@@ -1,0 +1,113 @@
+{
+  "version": 1,
+  "shard": {
+    "players": [
+      "p1"
+    ],
+    "rooms": [
+      {
+        "name": "W1N1",
+        "owner": "p1",
+        "rcl": 6
+      }
+    ]
+  },
+  "bots": [
+    {
+      "player": "p1",
+      "modules": "."
+    }
+  ],
+  "objects": [
+    {
+      "room": "W1N1",
+      "kind": "creep",
+      "alias": "a",
+      "spec": {
+        "name": "a",
+        "owner": "p1",
+        "pos": [
+          10,
+          10
+        ],
+        "body": [
+          "move"
+        ],
+        "ticksToLive": 100
+      }
+    },
+    {
+      "room": "W1N1",
+      "kind": "creep",
+      "alias": "b",
+      "spec": {
+        "name": "b",
+        "owner": "p1",
+        "pos": [
+          10,
+          11
+        ],
+        "body": [
+          "move"
+        ],
+        "ticksToLive": 100
+      }
+    },
+    {
+      "room": "W1N1",
+      "kind": "creep",
+      "alias": "c",
+      "spec": {
+        "name": "c",
+        "owner": "p1",
+        "pos": [
+          30,
+          30
+        ],
+        "body": [
+          "move"
+        ],
+        "ticksToLive": 100
+      }
+    }
+  ],
+  "mods": {
+    "root": "../mod-move-obstacle",
+    "selection": {
+      "include": [
+        "move-obstacle-no-swap"
+      ]
+    }
+  },
+  "assertions": [
+    {
+      "pointer": "/players/p1/memory/positions/a",
+      "op": "eq",
+      "value": [
+        10,
+        10
+      ]
+    },
+    {
+      "pointer": "/players/p1/memory/positions/b",
+      "op": "eq",
+      "value": [
+        10,
+        11
+      ]
+    },
+    {
+      "pointer": "/players/p1/memory/positions/c",
+      "op": "eq",
+      "value": [
+        30,
+        31
+      ]
+    },
+    {
+      "pointer": "/mod_states/move-obstacle-no-swap/applied",
+      "op": "eq",
+      "value": 1
+    }
+  ]
+}

@@ -3,7 +3,7 @@
 //! 请求登记不把 creep 当静态障碍，仲裁才考虑它是否获准让位。
 //! 使用坐标排序的矩阵和稳定的竞争者排序，实际位移由 creep tick 完成。
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use kk_core::TERRAIN_MASK_WALL;
 use kk_schema::room::{CreepObj, RoomObject};
@@ -35,6 +35,9 @@ pub struct Movement {
     /// 获准执行者的准入终值；取消链与执行阶段同源读取，缺项视为
     /// 未获准（fail-closed），不存在二次 native 复核路径。
     admissions: BTreeMap<ObjId, bool>,
+    /// 障碍槽追加的阻挡集（单向追加）；取消链与链内 native 障碍
+    /// 判定取或，不进入检查点。
+    extra_blocks: BTreeSet<ObjId>,
     buildings: std::rc::Rc<kk_mod_api::buildings::BuildingCatalog>,
 }
 
@@ -277,9 +280,10 @@ impl Movement {
     /// 先逐目标格选胜者，再沿阻塞链取消移动。
     /// 来源：上游 engine/src/processor/intents/movement.js 的 check。
     /// priorities 是 JS 竞争策略的终值候选（缺项为 0），作为排序首键；
-    /// 平手仍回落默认四键与登记序。原生整链组合；宿主准入槽路径由
-    /// 编排方分阶段调用 rank_winners / prefill_admissions /
-    /// admission_input / apply_admissions / cancel_blocked。
+    /// 平手仍回落默认四键与登记序。原生整链组合；宿主准入/障碍槽
+    /// 路径由编排方分阶段调用 rank_winners / prefill_admissions /
+    /// admission_input / apply_admissions / obstacle_input /
+    /// apply_extra_blocks / cancel_blocked。
     pub fn check_impl(
         &mut self,
         room: &RoomState,
@@ -444,6 +448,112 @@ impl Movement {
         self.admissions.get(&id).copied().unwrap_or(false)
     }
 
+    /// 障碍槽成功后的追加集并入取消链；Native/拒绝路径不调用，
+    /// 追加集保持为空。
+    pub(crate) fn apply_extra_blocks(&mut self, blocks: BTreeSet<ObjId>) {
+        // 每房每 tick 恰调用一次；重入路径若出现（G03），整体替换会
+        // 静默丢弃先前的追加集，先以断言暴露。
+        debug_assert!(self.extra_blocks.is_empty() || blocks.is_empty());
+        self.extra_blocks = blocks;
+    }
+
+    /// 构造障碍槽输入；只读胜者表与对象摘要，不改变仲裁。native
+    /// 初判为预填时点（全部胜者未取消）的 `check_obstacle_at_xy`
+    /// 结果，链内让位取消只会收紧不会放宽。仅 Hosted 路径调用。
+    pub(crate) fn obstacle_input(
+        &self,
+        room: &RoomState,
+        index: &RoomIndex,
+        safe_mode_user: Option<&str>,
+    ) -> kk_mod_api::obstacle::MoveObstacleInput {
+        let mut movers = Vec::new();
+        for (&id, &cell) in &self.winners {
+            let owner = room
+                .objects
+                .get(&id)
+                .and_then(|o| match o {
+                    RoomObject::Creep(c) => Some(c.owner.clone()),
+                    _ => None,
+                })
+                .unwrap_or_default();
+            let native_blocked =
+                check_obstacle_at_xy(room, index, self, cell, owner.as_str(), safe_mode_user);
+            let mut objects = Vec::new();
+            for oid in index.at(cell.0 as usize, cell.1 as usize) {
+                let Some(obj) = room.objects.get(oid) else {
+                    continue;
+                };
+                let (kind, owner_of, is_public, structure_type, yielding) = match obj {
+                    RoomObject::Creep(c) => (
+                        "creep".to_string(),
+                        c.owner.clone(),
+                        false,
+                        None,
+                        // 准入被拒的胜者必被链内取消，让位预期不成立；
+                        // 收紧为胜者且准入终值为真（相对最终结果仍是下界）。
+                        self.winners.contains_key(oid) && self.admitted(*oid),
+                    ),
+                    RoomObject::Generic(o) => {
+                        let data: serde_json::Value =
+                            serde_json::from_str(&o.data).unwrap_or_default();
+                        (
+                            data.get("structureType")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string(),
+                            data.get("owner")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string(),
+                            data.get("isPublic")
+                                .and_then(|v| v.as_bool())
+                                .unwrap_or(false),
+                            None,
+                            false,
+                        )
+                    }
+                    RoomObject::ConstructionSite(site) => (
+                        "constructionSite".to_string(),
+                        site.owner.clone().unwrap_or_default(),
+                        false,
+                        Some(site.structure_type.clone()),
+                        false,
+                    ),
+                    other => (
+                        type_name_of(other).to_string(),
+                        String::new(),
+                        false,
+                        None,
+                        false,
+                    ),
+                };
+                objects.push(kk_mod_api::obstacle::ObstacleObjectInfo {
+                    id: oid.as_str().to_string(),
+                    kind,
+                    owner: owner_of,
+                    is_public,
+                    structure_type,
+                    yielding,
+                });
+            }
+            movers.push(kk_mod_api::obstacle::ObstacleMoverInfo {
+                id: id.as_str().to_string(),
+                owner,
+                target_x: cell.0,
+                target_y: cell.1,
+                terrain_wall: room.terrain.check_mask(
+                    cell.0 as usize,
+                    cell.1 as usize,
+                    TERRAIN_MASK_WALL,
+                ),
+                has_road: has_road(room, index, cell),
+                objects,
+                native_blocked,
+            });
+        }
+        kk_mod_api::obstacle::MoveObstacleInput { movers }
+    }
+
     /// 仲裁阶段四：取消未获准或目的格被占的请求，并递归检查其原格上
     /// 的其他请求。获准与否只读准入终值，不再二次 native 复核。
     pub(crate) fn cancel_blocked(
@@ -475,14 +585,17 @@ impl Movement {
             _ => None,
         });
         let movable = self.admitted(object_id);
-        let obstacle = check_obstacle_at_xy(
-            room,
-            index,
-            self,
-            key,
-            creep.map(|c| c.owner.as_str()).unwrap_or(""),
-            safe_mode_user,
-        );
+        // 障碍槽只允许追加阻挡：追加集与链内 native 判定取或；让位
+        // 链的增量语义（取消 A 后 A 阻挡其原格请求）保留在 native。
+        let obstacle = self.extra_blocks.contains(&object_id)
+            || check_obstacle_at_xy(
+                room,
+                index,
+                self,
+                key,
+                creep.map(|c| c.owner.as_str()).unwrap_or(""),
+                safe_mode_user,
+            );
         if !movable || obstacle {
             self.matrix.remove(&key);
             self.winners.remove(&object_id);

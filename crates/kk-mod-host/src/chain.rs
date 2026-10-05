@@ -30,6 +30,8 @@ mod contest;
 pub(crate) use contest::{op_mod_chain_contest_priority, op_mod_chain_contest_set_priority};
 mod admission;
 pub(crate) use admission::{op_mod_chain_admission_admitted, op_mod_chain_admission_set_admitted};
+mod obstacle;
+pub(crate) use obstacle::{op_mod_chain_obstacle_block, op_mod_chain_obstacle_blocked};
 mod combat_batch;
 pub(crate) use combat_batch::{
     op_mod_chain_combat_apply_damage_batch, op_mod_chain_combat_list,
@@ -82,6 +84,14 @@ pub trait ChainHost {
     }
     fn admission_set_admitted(&mut self, _id: &str, _admitted: bool) -> Result<(), String> {
         Err("本次槽没有移动准入能力".into())
+    }
+    /// 读取胜者当前障碍判定；仅移动障碍槽开放。
+    fn obstacle_blocked(&mut self, _id: &str) -> Result<bool, String> {
+        Err("本次槽没有移动障碍能力".into())
+    }
+    /// 追加阻挡；单向能力，仅移动障碍槽开放。
+    fn obstacle_block(&mut self, _id: &str) -> Result<(), String> {
+        Err("本次槽没有移动障碍能力".into())
     }
     fn read(&mut self, binding: &str) -> Result<ChainContext, String>;
     fn write(&mut self, binding: &str, context: ChainWrite) -> Result<(), String>;
@@ -451,7 +461,7 @@ pub(crate) fn op_mod_chain_decline(
         return chain.outcome(
             ModFaultKind::Control,
             Some(&binding),
-            Err("该槽尚不支持正常拒绝；仅 Mod 自有对象动作与已接局部恢复边界的内建槽（资源/移动/战斗/建造族/受击/移动竞争/移动准入）可回滚".into()),
+            Err("该槽尚不支持正常拒绝；仅 Mod 自有对象动作与已接局部恢复边界的内建槽（资源/移动/战斗/建造族/受击/移动竞争/移动准入/移动障碍）可回滚".into()),
         );
     }
     if code.is_empty()

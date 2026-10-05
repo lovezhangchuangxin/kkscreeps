@@ -19,6 +19,7 @@ pub mod market;
 mod mod_intents;
 pub mod movement;
 pub mod objects;
+pub mod obstacle;
 pub mod resources;
 pub mod room;
 pub mod spawn;

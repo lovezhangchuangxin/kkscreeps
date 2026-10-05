@@ -213,6 +213,8 @@ mod incoming_policy;
 mod move_admission;
 #[path = "mod_chain_tests/move_contest.rs"]
 mod move_contest;
+#[path = "mod_chain_tests/move_obstacle.rs"]
+mod move_obstacle;
 #[path = "mod_chain_tests/retaliation_faults.rs"]
 mod retaliation_faults;
 #[path = "mod_chain_tests/retaliation_policy.rs"]

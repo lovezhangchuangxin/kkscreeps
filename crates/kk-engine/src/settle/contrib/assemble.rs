@@ -89,6 +89,14 @@ impl ContributionDispatch {
                 kk_mod_api::builtin::MOVE_ADMISSION_SLOT,
             )?),
         };
+        let move_obstacle = match dispatch_of(plan, kk_mod_api::builtin::MOVE_OBSTACLE_SLOT)? {
+            Dispatch::Native(binding) if binding.as_str() == "builtin:room.moveObstacle.native" => {
+                super::obstacle::ObstacleSlot::Native
+            }
+            _ => super::obstacle::ObstacleSlot::Hosted(host(
+                kk_mod_api::builtin::MOVE_OBSTACLE_SLOT,
+            )?),
+        };
         let mut ext = BTreeMap::new();
         let action = |slot: &str, native| -> Result<ActionSlot, String> {
             match dispatch_of(plan, slot)? {
@@ -155,6 +163,7 @@ impl ContributionDispatch {
             incoming,
             move_contest,
             move_admission,
+            move_obstacle,
             ext,
         })
     }
@@ -266,6 +275,7 @@ impl ContributionDispatch {
         let incoming = IncomingSlot::native_from_plan(plan)?;
         let move_contest = super::contest::ContestSlot::native_from_plan(plan)?;
         let move_admission = super::admission::AdmissionSlot::native_from_plan(plan)?;
+        let move_obstacle = super::obstacle::ObstacleSlot::native_from_plan(plan)?;
         Ok(Self {
             transfer,
             tick,
@@ -283,6 +293,7 @@ impl ContributionDispatch {
             incoming,
             move_contest,
             move_admission,
+            move_obstacle,
             ext,
         })
     }
