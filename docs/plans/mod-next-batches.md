@@ -9,7 +9,7 @@
 - 更新日期：2026-10-06。
 - 实现参考基线：`8e28ac4`，JS 受击策略与独立护甲/护盾组合；这是功能基线，后续文档提交不改变它的含义。接手时仍须核对实际 HEAD 和工作区。
 - 最近已完成：N2c 受击策略第二片，见[现行契约](../architecture/mod-incoming-policy.md)和[验收记录](../research/notes/n2c-incoming-policy-2026-10-06.md)。
-- 当前任务：**G02.a 移动准入策略首片已交付**（2026-10-06）：`builtin:creep.moveAdmission` 疲劳/MOVE/有效被拉门槛准入槽上线——仲裁选胜后对 winners 整房构造准入要素，候选初值为 native `can_move` 结果，JS `ctx.admission` 可读可覆盖；链取消与 `movement_execute` 同源消费准入终值（不再二次 native 复核，缺项 fail-closed）。tireless/strict 两独立包 + 原生对照 + 组合四场景双通道冷恢复验收；默认路径微基准回归收敛至噪音级（密集 32 移动者 +0.2–0.3µs/房）。契约见 [mod-move-admission](../architecture/mod-move-admission.md)、证据见[交付记录](../research/notes/g02-move-admission-2026-10-06.md)。下一片 **G02.b 障碍准入**：意图静态预检 `has_static_obstacle` 与仲裁障碍 `check_obstacle_at_xy`（与让位链耦合）开放为可替换入口；孵化中拒绝与越界/坐标仍为宿主约束。
+- 当前任务：**G02.b 仲裁障碍准入实施中**（2026-10-06 启动，G02.a 已交付见下）：开放 `builtin:room.moveObstacle` 单向追加阻挡槽。已定设计要点：①取消链的 obstacle = JS 追加阻挡表 || 链内 native `check_obstacle_at_xy`——**只允许追加（block）不允许放行**，因为放行 native 阻挡格会让移动者进入未让位对象占据的格、破坏表示有效性；让位链增量语义（取消 A 后 A 反过来阻挡其原格请求）保留在 native 链内判定。②输入在准入槽之后、取消链之前构造：全部胜者 + 目的格对象摘要（creep 含获准让位标记、结构 type/owner/isPublic、工地 owner、地形墙与路），native 初判可读。③能力 `ctx.obstacle.block(id)` 单向 + `isBlocked(id)` 读初判；decline 丢弃追加。④意图静态预检 `has_static_obstacle`（intent_move/slot_request_direction 两处同口径）不并入本片——预检在仲裁前逐对象执行、无整房视野，登记为后续子片或并入 G07 预检族。孵化中拒绝与越界/坐标仍为宿主约束。G02.a 证据：[mod-move-admission](../architecture/mod-move-admission.md)、[交付记录](../research/notes/g02-move-admission-2026-10-06.md)。
 - 最近维护工作：2026-10-06 开发与实验命令可移植性整理已完成复审和完整仓库门禁，见下方记录；没有新增已实现的 G 功能。
 - 未解决的产品决定：本轮路线复审没有需要用户补充的决定；具体公开接口、权限与耐久协议尚未冻结，须在对应子片设计和验收。
 - 验证参考：使用上述验收记录及其机器数据，不复制其测试数量作为永久门槛。最新兼容性报告和门禁配置位于 `compat/reports/`。
@@ -33,7 +33,7 @@
 | 编号 | 任务 | 依赖/前置 | 状态 | 交付证据 |
 |---|---|---|---|---|
 | G01 | 移动竞争优先级策略 | 现有 move 请求与仲裁 | 已完成 | [mod-move-contest](../architecture/mod-move-contest.md)、[交付记录](../research/notes/g01-move-contest-2026-10-06.md)（G02–G04 未开放，另行推进） |
-| G02 | 移动准入策略 | 已稳定的移动请求输入；同步必要玩家预检，G01 不作硬依赖 | 部分完成 | G02.a 疲劳/MOVE/被拉门槛准入槽随本批提交：[mod-move-admission](../architecture/mod-move-admission.md)、[交付记录](../research/notes/g02-move-admission-2026-10-06.md)；G02.b 障碍准入（静态预检/仲裁障碍与让位链）未开放 |
+| G02 | 移动准入策略 | 已稳定的移动请求输入；同步必要玩家预检，G01 不作硬依赖 | 进行中 | G02.a 疲劳/MOVE/被拉门槛准入槽已交付（提交 b7e65d5）：[mod-move-admission](../architecture/mod-move-admission.md)、[交付记录](../research/notes/g02-move-admission-2026-10-06.md)；G02.b 仲裁障碍追加阻挡槽实施中 |
 | G03 | 完整房间移动仲裁 | G01、G02 | 未开始 | — |
 | G04 | 移动代价与执行效果 | G02；代价可先行，完整仲裁交互在 G03 后验收 | 未开始 | — |
 | G05 | Mod 作者基础 CLI | 现有 sim、inspect、检查点 | 已完成 | G05.a `mod init` `ee296cb`；G05.b `mod test` `dbc82a4`（[模板与测试说明](../architecture/local-simulation.md#作者包模板)）；后续增强另登记 |
