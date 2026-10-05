@@ -4,6 +4,7 @@
 //! Engine 在副本中结算所有房间和市场，校验成功后统一写回内存并推进
 //! 时间；直接调用 settle_room 则由调用方负责副本和失败处理。
 
+pub mod admission;
 pub mod buildings;
 pub mod checkpoint;
 pub mod contest;

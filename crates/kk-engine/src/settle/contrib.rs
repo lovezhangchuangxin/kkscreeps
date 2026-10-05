@@ -315,6 +315,11 @@ pub enum SlotCall<'a> {
     Contest {
         candidate: Rc<crate::settle::contest::MoveContest>,
     },
+    /// 房间级移动准入：整房一次，无单一目标对象；native 中心为无操作
+    /// （保留候选中的原生准入终值）。
+    Admission {
+        candidate: Rc<crate::settle::admission::MoveAdmission>,
+    },
     Action {
         id: ObjId,
         data: &'a IntentData,
@@ -368,6 +373,8 @@ pub struct ContributionDispatch {
     incoming: IncomingSlot,
     /// 房间级移动竞争优先级槽。
     move_contest: ContestSlot,
+    /// 房间级移动准入终值槽。
+    move_admission: AdmissionSlot,
     /// Mod 自有槽（按槽键查）；扩展意图结算在此派发。
     ext: BTreeMap<Key, ExtSlot>,
 }
@@ -390,6 +397,7 @@ impl Default for ContributionDispatch {
             creep_dismantle: ActionSlot::Native(super::creep::intent_dismantle),
             incoming: IncomingSlot::Native,
             move_contest: ContestSlot::Native,
+            move_admission: AdmissionSlot::Native,
             ext: BTreeMap::new(),
         }
     }
@@ -400,7 +408,7 @@ pub const LINK_SLOT_KEYS: [&str; 2] = [
     kk_mod_api::builtin::SLOT_KEYS[0],
     kk_mod_api::builtin::SLOT_KEYS[1],
 ];
-pub const BUILTIN_SLOT_KEYS: [&str; 15] = kk_mod_api::builtin::SLOT_KEYS;
+pub const BUILTIN_SLOT_KEYS: [&str; 16] = kk_mod_api::builtin::SLOT_KEYS;
 
 impl ContributionDispatch {
     pub(crate) fn run_incoming(&self, ctx: &RoomCtx, id: ObjId) -> Result<Option<i64>, String> {
@@ -412,6 +420,14 @@ impl ContributionDispatch {
         ctx: &RoomCtx,
     ) -> Result<Option<BTreeMap<ObjId, i64>>, String> {
         self.move_contest.run(ctx)
+    }
+
+    /// 运行移动准入槽；见 [`AdmissionSlot::run`] 的返回语义。
+    pub(crate) fn run_admission(
+        &self,
+        ctx: &RoomCtx,
+    ) -> Result<Option<BTreeMap<ObjId, bool>>, String> {
+        self.move_admission.run(ctx)
     }
     pub(crate) fn run_transfer(
         &self,
@@ -505,9 +521,11 @@ impl ContributionDispatch {
         chain.run(ctx, id, args)
     }
 }
+mod admission;
 mod assemble;
 mod contest;
 mod execute;
 mod incoming;
+use admission::AdmissionSlot;
 use contest::ContestSlot;
 use incoming::IncomingSlot;

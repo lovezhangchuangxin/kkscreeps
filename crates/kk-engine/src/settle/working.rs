@@ -767,7 +767,34 @@ impl Working {
 
     /// 在指令处理后仲裁移动冲突，使用此时生效的安全模式主人。
     /// priorities 是 JS 竞争策略的终值候选，空表等同原生默认。
-    pub fn check_movement(&mut self, priorities: &BTreeMap<ObjId, i64>) {
+    pub fn rank_movement(&mut self, priorities: &BTreeMap<ObjId, i64>) {
+        self.movement.rank_winners(&self.room, priorities);
+    }
+
+    /// 仲裁阶段二：复核胜者拉拽配对并预填原生准入终值（取消链消费）；
+    /// Native 与 Hosted 准入路径都必须先执行。
+    pub fn prefill_movement_admissions(&mut self) {
+        self.movement
+            .prefill_admissions(&self.room, &self.old_fatigue);
+    }
+
+    /// 准入槽输入构造；仅 Hosted 路径调用，原生路径不为其分配。
+    pub fn movement_admission_input(&self) -> kk_mod_api::admission::MoveAdmissionInput {
+        self.movement.admission_input(&self.room, &self.old_fatigue)
+    }
+
+    /// 原生准入终值表的拷贝；准入槽构造候选初值用。
+    pub fn movement_admission_finals(&self) -> BTreeMap<ObjId, bool> {
+        self.movement.admission_finals().clone()
+    }
+
+    /// 仲裁阶段三：准入槽成功终值整体替换原生预填。
+    pub fn apply_movement_admissions(&mut self, finals: BTreeMap<ObjId, bool>) {
+        self.movement.apply_admissions(finals);
+    }
+
+    /// 仲裁阶段四：按准入终值取消阻塞链，使用此时生效的安全模式主人。
+    pub fn finish_movement(&mut self) {
         let safe_mode_user: Option<String> = self.controller().and_then(|ctl| {
             if ctl.safe_mode > self.time {
                 ctl.owner.clone()
@@ -775,13 +802,8 @@ impl Working {
                 None
             }
         });
-        self.movement.check_impl(
-            &self.room,
-            &self.index,
-            &self.old_fatigue,
-            safe_mode_user.as_deref(),
-            priorities,
-        );
+        self.movement
+            .cancel_blocked(&self.room, &self.index, safe_mode_user.as_deref());
     }
 
     pub fn push_event(&mut self, event: i64, object_id: ObjId, data: Value) {

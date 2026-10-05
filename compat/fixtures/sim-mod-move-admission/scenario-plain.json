@@ -1,0 +1,127 @@
+{
+  "version": 1,
+  "shard": {
+    "players": [
+      "p1"
+    ],
+    "rooms": [
+      {
+        "name": "W1N1",
+        "owner": "p1",
+        "rcl": 6
+      }
+    ]
+  },
+  "bots": [
+    {
+      "player": "p1",
+      "modules": "."
+    }
+  ],
+  "objects": [
+    {
+      "room": "W1N1",
+      "kind": "creep",
+      "alias": "puller",
+      "spec": {
+        "name": "puller",
+        "owner": "p1",
+        "pos": [
+          10,
+          10
+        ],
+        "body": [
+          "move"
+        ],
+        "ticksToLive": 100
+      }
+    },
+    {
+      "room": "W1N1",
+      "kind": "creep",
+      "alias": "f",
+      "spec": {
+        "name": "f",
+        "owner": "p1",
+        "pos": [
+          10,
+          11
+        ],
+        "body": [
+          "work"
+        ],
+        "ticksToLive": 100
+      }
+    },
+    {
+      "room": "W1N1",
+      "kind": "creep",
+      "alias": "heavy",
+      "spec": {
+        "name": "heavy",
+        "owner": "p1",
+        "pos": [
+          30,
+          30
+        ],
+        "body": [
+          "work",
+          "work",
+          "move"
+        ],
+        "ticksToLive": 100
+      }
+    },
+    {
+      "room": "W1N1",
+      "kind": "creep",
+      "alias": "light",
+      "spec": {
+        "name": "light",
+        "owner": "p1",
+        "pos": [
+          31,
+          33
+        ],
+        "body": [
+          "move"
+        ],
+        "ticksToLive": 100
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "pointer": "/players/p1/memory/positions/puller",
+      "op": "eq",
+      "value": [
+        10,
+        9
+      ]
+    },
+    {
+      "pointer": "/players/p1/memory/positions/f",
+      "op": "eq",
+      "value": [
+        10,
+        11
+      ]
+    },
+    {
+      "pointer": "/players/p1/memory/positions/heavy",
+      "op": "eq",
+      "value": [
+        30,
+        31
+      ]
+    },
+    {
+      "pointer": "/players/p1/memory/positions/light",
+      "op": "eq",
+      "value": [
+        31,
+        32
+      ]
+    }
+  ]
+}

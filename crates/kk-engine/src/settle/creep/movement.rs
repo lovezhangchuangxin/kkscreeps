@@ -266,8 +266,9 @@ fn movement_execute(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
     let Some(creep) = w.creep(id) else {
         return Ok(());
     };
-    let old_fatigue = w.old_fatigue.get(&id).copied().unwrap_or(0);
-    if !movement::can_move(creep, old_fatigue, w.movement.is_pulled(id)) {
+    // 准入以仲裁终值为准（与链取消同源），不再按当前身体二次复核；
+    // 缺项视为未获准。
+    if !w.movement.admitted(id) {
         return Ok(());
     }
     let (from, owner, body_len, weight) = (

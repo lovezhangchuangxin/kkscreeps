@@ -74,16 +74,17 @@ impl MoveContest {
 }
 
 /// 房间竞争仲裁入口：有贡献槽时经整槽宿主生成优先级候选再仲裁，
-/// 无贡献或无竞争格直接走原生默认。必须在不持有候选借用时调用。
+/// 无贡献或无竞争格直接走原生默认。选胜后经准入槽决定执行者终值，
+/// 再统一取消阻塞链。必须在不持有候选借用时调用。
 pub fn arbitrate_room(ctx: &RoomCtx) -> Result<(), String> {
     let contrib = ctx.borrow().plane.contrib.clone();
-    match contrib.run_contest(ctx)? {
-        Some(priorities) => ctx.borrow_mut().check_movement(&priorities),
-        None => {
-            let empty = BTreeMap::new();
-            ctx.borrow_mut().check_movement(&empty);
-        }
+    let priorities = contrib.run_contest(ctx)?.unwrap_or_default();
+    ctx.borrow_mut().rank_movement(&priorities);
+    // 准入槽内构造输入并预填原生终值；Native 或拒绝时保留原生预填。
+    if let Some(finals) = contrib.run_admission(ctx)? {
+        ctx.borrow_mut().apply_movement_admissions(finals);
     }
+    ctx.borrow_mut().finish_movement();
     Ok(())
 }
 

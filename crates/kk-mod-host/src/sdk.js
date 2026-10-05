@@ -364,7 +364,9 @@ export function installRules(entries) {
 // 取消本建造族动作（request/cancel，进度/伤害/能量数值不经此面）。
 // 房间级移动竞争槽的 ctx.contest 读写本次输入中竞争者的优先级数值
 // （getPriority/setPriority），只改变仲裁排序，不开放请求或获准集合。
-// 均不可枚举、不可替换且只在处理器同步期内有效。
+// 房间级移动准入槽的 ctx.admission 读写本次输入中执行者的准入终值
+// （getAdmitted/setAdmitted），初值即原生 can_move 结果，终值同时约束
+// 链取消与执行阶段。均不可枚举、不可替换且只在处理器同步期内有效。
 // 处理器的持久状态只准走 ctx.state——模块全局不随失败候选回滚，
 // 用它做累计会破坏同输入重试的确定性。
 export function dispatch(key, ctx) {
@@ -696,6 +698,34 @@ export function runChain(slot, token) {
       },
     });
   }
+  // 房间级准入槽的 ctx.admission 读写本次输入中执行者的准入终值；
+  // 初值即原生 can_move 结果，覆盖只影响获准集合，不开放请求重排。
+  function admission(key, isOpen) {
+    function checked(call) {
+      try {
+        if (!isOpen()) throw new Error('移动准入能力只能在所属处理器同步执行期间调用');
+        return call();
+      } catch (error) {
+        fault(error, key, 'context');
+        throw error;
+      }
+    }
+    return Object.freeze({
+      getAdmitted(id) {
+        return checked(() => {
+          if (typeof id !== 'string') throw new Error('执行者 ID 须为原始字符串');
+          return ops.op_mod_chain_admission_admitted(token, key, id);
+        });
+      },
+      setAdmitted(id, admitted) {
+        return checked(() => {
+          if (typeof id !== 'string') throw new Error('执行者 ID 须为原始字符串');
+          if (typeof admitted !== 'boolean') throw new Error('准入终值须为布尔值');
+          return ops.op_mod_chain_admission_set_admitted(token, key, id, admitted);
+        });
+      },
+    });
+  }
   function build(key, ctx, isOpen) {
     function checked(call) {
       try {
@@ -732,6 +762,7 @@ export function runChain(slot, token) {
     Object.defineProperty(ctx, 'build', { value: build(key, ctx, () => open) });
     Object.defineProperty(ctx, 'incoming', { value: incoming(key, () => open) });
     Object.defineProperty(ctx, 'contest', { value: contest(key, () => open) });
+    Object.defineProperty(ctx, 'admission', { value: admission(key, () => open) });
     try {
       checkResult(key, bindings.get(key).fn(ctx));
       write(key, ctx);
@@ -760,6 +791,7 @@ export function runChain(slot, token) {
     Object.defineProperty(ctx, 'build', { value: build(key, ctx, () => open) });
     Object.defineProperty(ctx, 'incoming', { value: incoming(key, () => open) });
     Object.defineProperty(ctx, 'contest', { value: contest(key, () => open) });
+    Object.defineProperty(ctx, 'admission', { value: admission(key, () => open) });
     function next() {
       if (!open) throw new Error('next 只能在所属处理器同步执行期间调用');
       if (called) {

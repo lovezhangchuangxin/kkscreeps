@@ -20,6 +20,8 @@ enum NativeCall {
     Incoming,
     /// 移动竞争的默认中心：保留已设置的优先级，无默认计算可执行。
     Contest,
+    /// 移动准入的默认中心：保留候选中的原生准入终值，无计算可执行。
+    Admission,
     None,
 }
 
@@ -41,6 +43,9 @@ struct ModChainContext {
     /// 房间级移动竞争能力门：仅 builtin:room.moveContest 有效；
     /// 无对象目标，target.fields 恒为 null。
     contest_slot: bool,
+    /// 房间级移动准入能力门：仅 builtin:creep.moveAdmission 有效；
+    /// 无对象目标，target.fields 恒为 null。
+    admission_slot: bool,
     /// 战斗能力状态：仅五个战斗槽的处理器同步期内有效；consumed 单向
     /// 标记保证本动作经能力或 native 至多执行一次。
     combat: Option<CombatChainState>,
@@ -49,6 +54,7 @@ struct ModChainContext {
     build: Option<BuildChainState>,
     incoming: Option<Rc<kk_engine::settle::incoming::IncomingDamage>>,
     contest: Option<Rc<kk_engine::settle::contest::MoveContest>>,
+    admission: Option<Rc<kk_engine::settle::admission::MoveAdmission>>,
 }
 
 /// 战斗链的运行时状态与首触日志。日志记录能力改向触达、且不在引擎
@@ -95,6 +101,10 @@ impl SlotExecutor for ModSlotExecutor {
             SlotCall::Contest { candidate } => Some(candidate.clone()),
             _ => None,
         };
+        let admission = match &call {
+            SlotCall::Admission { candidate } => Some(candidate.clone()),
+            _ => None,
+        };
         let resource_action = matches!(&call, SlotCall::Action { .. })
             && kk_mod_api::builtin::RESOURCE_ACTION_SLOTS.contains(&slot.key.as_str());
         let move_action = matches!(&call, SlotCall::Action { .. })
@@ -115,6 +125,11 @@ impl SlotExecutor for ModSlotExecutor {
                 ObjId(u64::MAX),
                 serde_json::to_value(candidate.input()).map_err(|e| e.to_string())?,
                 NativeCall::Contest,
+            ),
+            SlotCall::Admission { candidate } => (
+                ObjId(u64::MAX),
+                serde_json::to_value(candidate.input()).map_err(|e| e.to_string())?,
+                NativeCall::Admission,
             ),
             SlotCall::Action { id, data, native } => (
                 id,
@@ -142,7 +157,8 @@ impl SlotExecutor for ModSlotExecutor {
             || combat_action
             || build_action
             || incoming.is_some()
-            || contest.is_some())
+            || contest.is_some()
+            || admission.is_some())
         .then(|| Rc::new(RefCell::new(BTreeMap::new())));
         let resource_journal = resource_action.then(|| Rc::new(RefCell::new(BTreeMap::new())));
         // 外层副本仅供 Declined 分支读共享 journal 与 is_some() 判定；
@@ -179,10 +195,12 @@ impl SlotExecutor for ModSlotExecutor {
                     resource_journal: resource_journal.clone(),
                     move_slot: move_action,
                     contest_slot: contest.is_some(),
+                    admission_slot: admission.is_some(),
                     combat: combat_state.clone(),
                     build: build_state.clone(),
                     incoming: incoming.clone(),
                     contest: contest.clone(),
+                    admission: admission.clone(),
                 }),
             )
             .map_err(|error| {
@@ -233,7 +251,8 @@ impl SlotExecutor for ModSlotExecutor {
                     || combat_state.is_some()
                     || build_state.is_some()
                     || incoming.is_some()
-                    || contest.is_some())
+                    || contest.is_some()
+                    || admission.is_some())
                 {
                     return Err("该槽没有正常拒绝的局部恢复边界".into());
                 }
@@ -277,8 +296,9 @@ impl ModChainContext {
                 Ok(fields)
             }
             None if self.objects_slot => Ok(Value::Null),
-            // 房间级竞争槽没有对象目标；占位 id 不对应任何真实对象。
+            // 房间级竞争/准入槽没有对象目标；占位 id 不对应任何真实对象。
             None if self.contest_slot => Ok(Value::Null),
+            None if self.admission_slot => Ok(Value::Null),
             _ => Err(format!("槽目标 {} 已不存在或未接线", self.id.as_str())),
         }
     }
@@ -287,9 +307,12 @@ impl ModChainContext {
         if fields.is_null() {
             return Ok(());
         }
-        // 房间级竞争槽没有对象目标；提前拒绝，避免落入 link 写面报误导文案。
+        // 房间级竞争/准入槽没有对象目标；提前拒绝，避免落入 link 写面报误导文案。
         if self.contest_slot {
             return Err("移动竞争槽没有对象目标，target.fields 不可写".into());
+        }
+        if self.admission_slot {
+            return Err("移动准入槽没有对象目标，target.fields 不可写".into());
         }
         if !fields.is_object() {
             return Err("target.fields 终值须为对象或 null".into());
@@ -367,6 +390,16 @@ impl ChainHost for ModChainContext {
         let contest = self.contest.as_ref().ok_or("本次槽没有移动竞争能力")?;
         let id = ObjId::parse(id).ok_or("竞争者 ID 非法")?;
         contest.set_priority(id, priority)
+    }
+    fn admission_admitted(&mut self, id: &str) -> Result<bool, String> {
+        let admission = self.admission.as_ref().ok_or("本次槽没有移动准入能力")?;
+        let id = ObjId::parse(id).ok_or("执行者 ID 非法")?;
+        Ok(admission.admitted(id))
+    }
+    fn admission_set_admitted(&mut self, id: &str, admitted: bool) -> Result<(), String> {
+        let admission = self.admission.as_ref().ok_or("本次槽没有移动准入能力")?;
+        let id = ObjId::parse(id).ok_or("执行者 ID 非法")?;
+        admission.set_admitted(id, admitted)
     }
     fn object_get(&mut self, id: &str) -> Result<Option<kk_mod_api::objects::ObjectView>, String> {
         self.get_object(id)
@@ -627,6 +660,7 @@ impl ChainHost for ModChainContext {
             NativeCall::Tick(step) => step(&mut self.ctx.borrow_mut(), self.id),
             NativeCall::Incoming => {}
             NativeCall::Contest => {}
+            NativeCall::Admission => {}
             NativeCall::None => return Err("Mod 自有槽没有 Rust native 中心".into()),
         }
         if let Some(combat) = &mut self.combat {

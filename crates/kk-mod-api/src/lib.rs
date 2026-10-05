@@ -12,6 +12,7 @@
 //! # Ok::<(), kk_mod_api::FreezeError>(())
 //! ```
 
+pub mod admission;
 pub mod buildings;
 pub mod builtin;
 pub mod combat;

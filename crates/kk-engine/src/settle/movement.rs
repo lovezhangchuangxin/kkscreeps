@@ -32,6 +32,9 @@ pub struct Movement {
     winners: BTreeMap<ObjId, (u8, u8)>,
     pull_of: BTreeMap<ObjId, ObjId>,
     pulled_by: BTreeMap<ObjId, ObjId>,
+    /// 获准执行者的准入终值；取消链与执行阶段同源读取，缺项视为
+    /// 未获准（fail-closed），不存在二次 native 复核路径。
+    admissions: BTreeMap<ObjId, bool>,
     buildings: std::rc::Rc<kk_mod_api::buildings::BuildingCatalog>,
 }
 
@@ -274,7 +277,9 @@ impl Movement {
     /// 先逐目标格选胜者，再沿阻塞链取消移动。
     /// 来源：上游 engine/src/processor/intents/movement.js 的 check。
     /// priorities 是 JS 竞争策略的终值候选（缺项为 0），作为排序首键；
-    /// 平手仍回落默认四键与登记序。
+    /// 平手仍回落默认四键与登记序。原生整链组合；宿主准入槽路径由
+    /// 编排方分阶段调用 rank_winners / prefill_admissions /
+    /// admission_input / apply_admissions / cancel_blocked。
     pub fn check_impl(
         &mut self,
         room: &RoomState,
@@ -283,6 +288,13 @@ impl Movement {
         safe_mode_user: Option<&str>,
         priorities: &BTreeMap<ObjId, i64>,
     ) {
+        self.rank_winners(room, priorities);
+        self.prefill_admissions(room, old_fatigue);
+        self.cancel_blocked(room, index, safe_mode_user);
+    }
+
+    /// 仲裁阶段一：逐目标格选胜者，写出缩减矩阵与胜者表。
+    pub(crate) fn rank_winners(&mut self, room: &RoomState, priorities: &BTreeMap<ObjId, i64>) {
         let mut new_matrix: BTreeMap<(u8, u8), Vec<RateEntry>> = BTreeMap::new();
         let mut winners = BTreeMap::new();
         // 评分必须读取完整的原始请求矩阵，不能边选胜者边删除竞争信息。
@@ -323,23 +335,133 @@ impl Movement {
         }
         self.matrix = new_matrix;
         self.winners = winners;
+    }
 
-        let keys: Vec<(u8, u8)> = self.matrix.keys().copied().collect();
-        for key in keys {
-            self.remove_from_matrix(room, index, old_fatigue, safe_mode_user, key);
+    /// 仲裁阶段二：对全部胜者复核拉拽配对，按原生 can_move 语义预填
+    /// 准入终值。准入槽无贡献或正常拒绝时这份原生预填就是终值。
+    /// 输入构造（含字符串分配）只由准入槽的 Hosted 路径按需执行
+    /// （`admission_input`），原生整链不为其付费。
+    ///
+    /// 配对复核的集合与旧 `remove_from_matrix` 取消时点等价（每个
+    /// 胜者恰复核一次），遍历顺序改为胜者对象 ID 升序（旧为目的格
+    /// 访问序）；同一拉者多目标残标的顺序差异在现有意图流不可达
+    /// ——`add_pulling` 每拉者每 tick 至多登记一个目标，开放 pull
+    /// 登记策略（G03/G04）时须重审此处顺序语义。
+    pub(crate) fn prefill_admissions(
+        &mut self,
+        room: &RoomState,
+        old_fatigue: &BTreeMap<ObjId, u32>,
+    ) {
+        self.admissions.clear();
+        // 拆分字段借用：胜者表只读迭代，配对残标与终值表可变写入，
+        // 避免为绕过整表可变借用而复制胜者表。
+        let Movement {
+            winners,
+            pull_of,
+            pulled_by,
+            admissions,
+            ..
+        } = self;
+        for (&id, cell) in winners {
+            let effective_pulled = validate_pull_pair(room, pull_of, pulled_by, id, *cell);
+            let fatigue = old_fatigue.get(&id).copied().unwrap_or(0);
+            let creep = room.objects.get(&id).and_then(|o| match o {
+                RoomObject::Creep(c) => Some(c),
+                _ => None,
+            });
+            admissions.insert(
+                id,
+                creep.is_some_and(|c| can_move(c, fatigue, effective_pulled)),
+            );
         }
     }
 
-    pub fn winners(&self) -> &BTreeMap<ObjId, (u8, u8)> {
-        &self.winners
+    /// 构造准入槽输入（对象 ID 升序、不截断）；只读预填后的配对与
+    /// 终值状态，不改变仲裁。pulled 即预填复核后的有效被拉标记。
+    pub(crate) fn admission_input(
+        &self,
+        room: &RoomState,
+        old_fatigue: &BTreeMap<ObjId, u32>,
+    ) -> kk_mod_api::admission::MoveAdmissionInput {
+        let mut movers = Vec::new();
+        for (&id, &cell) in &self.winners {
+            let fatigue = old_fatigue.get(&id).copied().unwrap_or(0);
+            let creep = room.objects.get(&id).and_then(|o| match o {
+                RoomObject::Creep(c) => Some(c),
+                _ => None,
+            });
+            // 缩减矩阵内该目的格恰登记胜者自身；防御性取 cell 兜底。
+            let origin = self
+                .matrix
+                .get(&cell)
+                .and_then(|entries| entries.first())
+                .map(|entry| entry.origin)
+                .unwrap_or(cell);
+            let mut info = kk_mod_api::admission::MoverInfo {
+                id: id.as_str().to_string(),
+                owner: String::new(),
+                origin_x: origin.0,
+                origin_y: origin.1,
+                target_x: cell.0,
+                target_y: cell.1,
+                old_fatigue: fatigue,
+                active_moves: 0,
+                move_power: 0,
+                weight: 1,
+                pulled: self.pulled_by.contains_key(&id),
+            };
+            if let Some(c) = creep {
+                info.owner = c.owner.clone();
+                info.active_moves = BodyKind::count_active(&c.body, BodyKind::Move) as i64;
+                info.move_power = kk_world::types::calc_body_effectiveness(
+                    &c.body,
+                    BodyKind::Move,
+                    "move",
+                    "fatigue",
+                    1,
+                );
+                info.weight = move_weight(c).max(1) as i64;
+            }
+            movers.push(info);
+        }
+        kk_mod_api::admission::MoveAdmissionInput { movers }
     }
 
-    /// 取消不能移动或目的格被占的请求，并递归检查其原格上的其他请求。
-    fn remove_from_matrix(
+    /// 准入终值当前表（原生预填或槽终值）。
+    pub fn admission_finals(&self) -> &BTreeMap<ObjId, bool> {
+        &self.admissions
+    }
+
+    /// 仲裁阶段三：准入槽成功终值整体替换原生预填。终值表由候选
+    /// 以原生值初始化并经 JS 覆盖产生，此处不再逐项校验；接管
+    /// 所有权避免第三次克隆。
+    pub fn apply_admissions(&mut self, finals: BTreeMap<ObjId, bool>) {
+        self.admissions = finals;
+    }
+
+    /// 执行阶段读取准入终值；缺项（未参与仲裁或已取消）一律未获准。
+    pub fn admitted(&self, id: ObjId) -> bool {
+        self.admissions.get(&id).copied().unwrap_or(false)
+    }
+
+    /// 仲裁阶段四：取消未获准或目的格被占的请求，并递归检查其原格上
+    /// 的其他请求。获准与否只读准入终值，不再二次 native 复核。
+    pub(crate) fn cancel_blocked(
         &mut self,
         room: &RoomState,
         index: &RoomIndex,
-        old_fatigue: &BTreeMap<ObjId, u32>,
+        safe_mode_user: Option<&str>,
+    ) {
+        let keys: Vec<(u8, u8)> = self.matrix.keys().copied().collect();
+        for key in keys {
+            self.cancel_cell(room, index, safe_mode_user, key);
+        }
+    }
+
+    fn cancel_cell(
+        &mut self,
+        room: &RoomState,
+        index: &RoomIndex,
         safe_mode_user: Option<&str>,
         key: (u8, u8),
     ) {
@@ -348,29 +470,11 @@ impl Movement {
         };
         let object_id = entries[0].id;
         let entry = entries[0];
-        // 拉者须仍指向被拉者，被拉者须移动到拉者的当前格，否则解除配对。
-        // 拉者已移除时跳过这项复核，保留现有标记。
-        if let Some(&puller) = self.pulled_by.get(&object_id)
-            && let Some(puller_obj) = room.objects.get(&puller)
-        {
-            let pair_intact = self.pull_of.get(&puller) == Some(&object_id);
-            let dest_is_puller_pos = key == puller_obj.pos();
-            if !pair_intact || !dest_is_puller_pos {
-                self.pull_of.remove(&puller);
-                self.pulled_by.remove(&object_id);
-            }
-        }
         let creep = room.objects.get(&object_id).and_then(|o| match o {
             RoomObject::Creep(c) => Some(c),
             _ => None,
         });
-        let movable = creep.is_some_and(|c| {
-            can_move(
-                c,
-                old_fatigue.get(&object_id).copied().unwrap_or(0),
-                self.pulled_by.contains_key(&object_id),
-            )
-        });
+        let movable = self.admitted(object_id);
         let obstacle = check_obstacle_at_xy(
             room,
             index,
@@ -383,9 +487,13 @@ impl Movement {
             self.matrix.remove(&key);
             self.winners.remove(&object_id);
             if self.matrix.contains_key(&entry.origin) {
-                self.remove_from_matrix(room, index, old_fatigue, safe_mode_user, entry.origin);
+                self.cancel_cell(room, index, safe_mode_user, entry.origin);
             }
         }
+    }
+
+    pub fn winners(&self) -> &BTreeMap<ObjId, (u8, u8)> {
+        &self.winners
     }
 }
 
@@ -588,4 +696,32 @@ pub fn offsets_by_direction(direction: u8) -> Option<(i32, i32)> {
         8 => (-1, -1),
         _ => return None,
     })
+}
+
+/// 复核单个胜者的拉拽配对（判定与旧 remove_from_matrix 逐行等价）：
+/// 拉者须仍指向被拉者且被拉者获准移向拉者当前格，否则解除双向
+/// 残标；拉者已从房间移除时跳过复核并保留现有标记。返回有效被拉
+/// 标记。独立自由函数以支持 prefill 的拆分字段借用；遍历顺序语义
+/// 见 prefill_admissions 注释。
+fn validate_pull_pair(
+    room: &RoomState,
+    pull_of: &mut BTreeMap<ObjId, ObjId>,
+    pulled_by: &mut BTreeMap<ObjId, ObjId>,
+    id: ObjId,
+    cell: (u8, u8),
+) -> bool {
+    let Some(&puller) = pulled_by.get(&id) else {
+        return false;
+    };
+    let Some(puller_obj) = room.objects.get(&puller) else {
+        return true;
+    };
+    let pair_intact = pull_of.get(&puller) == Some(&id);
+    let dest_is_puller_pos = cell == puller_obj.pos();
+    if !pair_intact || !dest_is_puller_pos {
+        pull_of.remove(&puller);
+        pulled_by.remove(&id);
+        return false;
+    }
+    true
 }

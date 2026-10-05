@@ -22,11 +22,11 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::chain::{
-    ActiveChain, ChainHost, ChainProgram, ChainState, op_mod_chain_build_cancel,
-    op_mod_chain_build_request, op_mod_chain_combat_apply_damage,
-    op_mod_chain_combat_apply_damage_batch, op_mod_chain_combat_apply_heal,
-    op_mod_chain_combat_cancel, op_mod_chain_combat_get, op_mod_chain_combat_list,
-    op_mod_chain_combat_request, op_mod_chain_combat_set_retaliation,
+    ActiveChain, ChainHost, ChainProgram, ChainState, op_mod_chain_admission_admitted,
+    op_mod_chain_admission_set_admitted, op_mod_chain_build_cancel, op_mod_chain_build_request,
+    op_mod_chain_combat_apply_damage, op_mod_chain_combat_apply_damage_batch,
+    op_mod_chain_combat_apply_heal, op_mod_chain_combat_cancel, op_mod_chain_combat_get,
+    op_mod_chain_combat_list, op_mod_chain_combat_request, op_mod_chain_combat_set_retaliation,
     op_mod_chain_contest_priority, op_mod_chain_contest_set_priority, op_mod_chain_decline,
     op_mod_chain_fault, op_mod_chain_fault_detail, op_mod_chain_incoming_damage,
     op_mod_chain_incoming_set_damage, op_mod_chain_move_cancel, op_mod_chain_move_pending,
@@ -147,6 +147,8 @@ extension!(
         op_mod_chain_incoming_set_damage,
         op_mod_chain_contest_priority,
         op_mod_chain_contest_set_priority,
+        op_mod_chain_admission_admitted,
+        op_mod_chain_admission_set_admitted,
         op_mod_chain_build_request,
         op_mod_chain_build_cancel,
         op_mod_chain_object_get,

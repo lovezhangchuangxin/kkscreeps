@@ -64,4 +64,4 @@ export default function register(api) {
 
 [真实玩家场景](../../compat/fixtures/sim-mod-incoming-policy/README.md)提供原生、独立护甲、独立护盾和两包组合；JSON/KKPV 完整 final 一致，受击后保存退出与冷启动续跑等价。专项覆盖五位置拒绝、非法原始 op、能力过期、来源截断、不同伤害来源、停用回退和晚期失败缓存重试；结果见[交付记录](../research/notes/n2c-incoming-policy-2026-10-06.md)。
 
-当前不开放结构受击、自有对象伤害 trait、按实际净伤害自动反击或 power 免疫语义。移动竞争排序已另行开放（见[JS 移动竞争](mod-move-contest.md)），移动准入/完整仲裁、玩家预检策略替换与可配置批量预算仍待实现。来源提取在 Hosted 路径扫描房间事件流，密集受击场景性能尚未单独采集。
+当前不开放结构受击、自有对象伤害 trait、按实际净伤害自动反击或 power 免疫语义。移动竞争排序已另行开放（见[JS 移动竞争](mod-move-contest.md)），移动准入已开放（见[JS 移动准入](mod-move-admission.md)），完整仲裁、玩家预检策略替换与可配置批量预算仍待实现。来源提取在 Hosted 路径扫描房间事件流，密集受击场景性能尚未单独采集。

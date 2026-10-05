@@ -9,7 +9,7 @@
 - 更新日期：2026-10-06。
 - 实现参考基线：`8e28ac4`，JS 受击策略与独立护甲/护盾组合；这是功能基线，后续文档提交不改变它的含义。接手时仍须核对实际 HEAD 和工作区。
 - 最近已完成：N2c 受击策略第二片，见[现行契约](../architecture/mod-incoming-policy.md)和[验收记录](../research/notes/n2c-incoming-policy-2026-10-06.md)。
-- 当前任务：无正在实施的 G 批次。本会话已交付 G01（移动竞争优先级策略，`9c8687d`）与 G05.a/G05.b（作者 CLI `mod init`/`mod test`，`ee296cb`/`dbc82a4`）。下一建议：**G02 移动准入策略首片**（须同源处理仲裁 `check_obstacle_at_xy`/`can_move` 与执行阶段 `movement_execute` 复核两处消费者）或 **G29.a 玩家类型生成**；G06.a 链诊断可穿插。
+- 当前任务：**G02.a 移动准入策略首片已交付**（2026-10-06）：`builtin:creep.moveAdmission` 疲劳/MOVE/有效被拉门槛准入槽上线——仲裁选胜后对 winners 整房构造准入要素，候选初值为 native `can_move` 结果，JS `ctx.admission` 可读可覆盖；链取消与 `movement_execute` 同源消费准入终值（不再二次 native 复核，缺项 fail-closed）。tireless/strict 两独立包 + 原生对照 + 组合四场景双通道冷恢复验收；默认路径微基准回归收敛至噪音级（密集 32 移动者 +0.2–0.3µs/房）。契约见 [mod-move-admission](../architecture/mod-move-admission.md)、证据见[交付记录](../research/notes/g02-move-admission-2026-10-06.md)。下一片 **G02.b 障碍准入**：意图静态预检 `has_static_obstacle` 与仲裁障碍 `check_obstacle_at_xy`（与让位链耦合）开放为可替换入口；孵化中拒绝与越界/坐标仍为宿主约束。
 - 最近维护工作：2026-10-06 开发与实验命令可移植性整理已完成复审和完整仓库门禁，见下方记录；没有新增已实现的 G 功能。
 - 未解决的产品决定：本轮路线复审没有需要用户补充的决定；具体公开接口、权限与耐久协议尚未冻结，须在对应子片设计和验收。
 - 验证参考：使用上述验收记录及其机器数据，不复制其测试数量作为永久门槛。最新兼容性报告和门禁配置位于 `compat/reports/`。
@@ -33,7 +33,7 @@
 | 编号 | 任务 | 依赖/前置 | 状态 | 交付证据 |
 |---|---|---|---|---|
 | G01 | 移动竞争优先级策略 | 现有 move 请求与仲裁 | 已完成 | [mod-move-contest](../architecture/mod-move-contest.md)、[交付记录](../research/notes/g01-move-contest-2026-10-06.md)（G02–G04 未开放，另行推进） |
-| G02 | 移动准入策略 | 已稳定的移动请求输入；同步必要玩家预检，G01 不作硬依赖 | 未开始 | — |
+| G02 | 移动准入策略 | 已稳定的移动请求输入；同步必要玩家预检，G01 不作硬依赖 | 部分完成 | G02.a 疲劳/MOVE/被拉门槛准入槽随本批提交：[mod-move-admission](../architecture/mod-move-admission.md)、[交付记录](../research/notes/g02-move-admission-2026-10-06.md)；G02.b 障碍准入（静态预检/仲裁障碍与让位链）未开放 |
 | G03 | 完整房间移动仲裁 | G01、G02 | 未开始 | — |
 | G04 | 移动代价与执行效果 | G02；代价可先行，完整仲裁交互在 G03 后验收 | 未开始 | — |
 | G05 | Mod 作者基础 CLI | 现有 sim、inspect、检查点 | 已完成 | G05.a `mod init` `ee296cb`；G05.b `mod test` `dbc82a4`（[模板与测试说明](../architecture/local-simulation.md#作者包模板)）；后续增强另登记 |
@@ -118,6 +118,8 @@ G28.a 的网络协议及只读原型可提前设计；开放会改变玩法的�
 ### G02 移动准入策略
 
 盘点疲劳、MOVE、地形/结构障碍等默认限制，开放具名可替换入口；玩家预检、请求登记、仲裁和实际执行同源消费，不得 JS 放行后又被隐藏 native 检查否决。未开放的检查逐项登记。数值、坐标和索引一致性属于宿主约束，准入规则属于玩法。
+
+**G02.a 疲劳/MOVE/有效被拉门槛准入槽（2026-10-06 已交付）**：新增房间级槽 `builtin:creep.moveAdmission`，仲裁拆为 排名 → 原生预填（配对复核 + can_move 终值表）→ JS 覆盖（`ctx.admission.getAdmitted/setAdmitted`，初值即原生结果）→ 取消链四阶段；执行阶段 `movement_execute` 改读准入终值（同源、fail-closed）。配对复核遍历顺序改为胜者对象 ID 升序（集合等价；同拉者多目标残标在现有意图流不可达，G03/G04 开放 pull 登记时须重审）。tireless（replace 全放行）与 strict（after 收紧配重不足）两独立包 + 原生对照 + 组合（after 收回 replace 放行）验收，双通道冷恢复等价；默认路径输入构造零付费，微基准 1.84–1.95µs/房对基线 1.61–1.75（密集 32 移动者场景准入终值表维护 +0.2–0.3µs）。内建槽 16、revision v9、PlanHash 变更；旧检查点按身份拒绝。剩余：G02.b 障碍准入（`has_static_obstacle` 意图预检、`check_obstacle_at_xy` 仲裁障碍与让位链耦合）、孵化中拒绝、越界/坐标（宿主约束）。
 
 ### G03 完整房间移动仲裁
 

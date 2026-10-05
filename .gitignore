@@ -79,3 +79,5 @@ __pycache__/
 !compat/fixtures/sim-mod-incoming-policy/
 !compat/fixtures/mod-move-policy/
 !compat/fixtures/sim-mod-move-policy/
+!compat/fixtures/mod-move-admission/
+!compat/fixtures/sim-mod-move-admission/

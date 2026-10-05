@@ -45,8 +45,11 @@ pub const INCOMING_DAMAGE_SLOT: &str = "builtin:creep.receiveDamage";
 /// 房间级移动竞争优先级链；只改变竞争者排序，不是准入或获准集合替换。
 pub const MOVE_CONTEST_SLOT: &str = "builtin:room.moveContest";
 
+/// 仲裁后的疲劳/MOVE 门槛准入链；仲裁与执行阶段同源消费准入终值。
+pub const MOVE_ADMISSION_SLOT: &str = "builtin:creep.moveAdmission";
+
 /// 内建实际派发的槽；自有动作装配必须跳过它们。
-pub const SLOT_KEYS: [&str; 15] = [
+pub const SLOT_KEYS: [&str; 16] = [
     RESOURCE_ACTION_SLOTS[0],
     "builtin:link.tick",
     RESOURCE_ACTION_SLOTS[1],
@@ -62,6 +65,7 @@ pub const SLOT_KEYS: [&str; 15] = [
     BUILD_ACTION_SLOTS[2],
     INCOMING_DAMAGE_SLOT,
     MOVE_CONTEST_SLOT,
+    MOVE_ADMISSION_SLOT,
 ];
 
 fn key(name: &str) -> Key {
@@ -294,6 +298,7 @@ pub fn link() -> Contribution {
         "creep.dismantle.native",
         "creep.receiveDamage.native",
         "room.moveContest.native",
+        "creep.moveAdmission.native",
     ]));
     let slots = vec![
         SlotDescriptor {
@@ -371,12 +376,19 @@ pub fn link() -> Contribution {
             stage: Stage::Movement,
             native_binding: key("room.moveContest.native"),
         },
+        SlotDescriptor {
+            key: key("creep.moveAdmission"),
+            stage: Stage::Movement,
+            native_binding: key("creep.moveAdmission.native"),
+        },
     ];
     Contribution {
         source: Source {
             namespace: "builtin".into(),
             api_version: 1,
-            revision: "link-creep-store-move-combat-build-incoming-contest-descriptors-v8".into(),
+            revision:
+                "link-creep-store-move-combat-build-incoming-contest-admission-descriptors-v9"
+                    .into(),
             code_digest: {
                 let mut hash = Sha256::new();
                 hash.update(include_bytes!("builtin.rs"));

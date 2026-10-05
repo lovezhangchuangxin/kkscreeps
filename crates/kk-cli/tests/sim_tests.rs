@@ -261,6 +261,8 @@ mod mass_policy;
 
 #[path = "sim_tests/incoming_policy.rs"]
 mod incoming_policy;
+#[path = "sim_tests/move_admission.rs"]
+mod move_admission;
 #[path = "sim_tests/move_policy.rs"]
 mod move_policy;
 #[path = "sim_tests/retaliation_policy.rs"]
