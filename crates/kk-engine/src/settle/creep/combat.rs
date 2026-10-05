@@ -156,7 +156,7 @@ fn blocked_by_safe_mode(w: &Working, actor: &str) -> bool {
 /// 修复三格内的可建造结构。基础效果决定能耗，boost 后效果决定恢复耐久，
 /// 最终不超过 hitsMax；效果为 0 不记事件。
 /// 来源：上游 engine/src/processor/intents/creeps/repair.js。
-pub(super) fn intent_repair(w: &mut Working, id: ObjId, data: &IntentData) {
+pub(in crate::settle) fn intent_repair(w: &mut Working, id: ObjId, data: &IntentData) {
     let Some(target_id) = data.id else { return };
     let (pos, energy, repair_power, boost_incs) = match w.creep(id) {
         Some(c) if !c.spawning && c.store.energy > 0 => (
@@ -217,7 +217,7 @@ pub(super) fn intent_repair(w: &mut Working, id: ObjId, data: &IntentData) {
 /// 拆解相邻结构，先按 rampart 重定向，再按目标耐久限量。
 /// 先回收能量并处理超容，再施加伤害，避免击毁后丢失回收信息。
 /// 来源：上游 engine/src/processor/intents/creeps/dismantle.js。
-pub(super) fn intent_dismantle(w: &mut Working, id: ObjId, data: &IntentData) {
+pub(in crate::settle) fn intent_dismantle(w: &mut Working, id: ObjId, data: &IntentData) {
     let Some(target_id) = data.id else { return };
     let (pos, owner, power) = match w.creep(id) {
         Some(c) if !c.spawning => (

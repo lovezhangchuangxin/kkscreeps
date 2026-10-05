@@ -8,7 +8,10 @@ mod lifecycle;
 mod movement;
 mod store;
 
+pub(in crate::settle) use build::intent_build;
+pub use build::{BuildAction, build_touch_targets, dismantle_drop_face, slot_build_request};
 pub use combat::{CombatAction, combat_touch_targets, slot_combat_request};
+pub(in crate::settle) use combat::{intent_dismantle, intent_repair};
 pub use harvest::harvest_power;
 pub use lifecycle::{die_creep, die_creep_with_rate};
 pub use movement::creep_tick;
@@ -29,11 +32,9 @@ use crate::intent::{Action, EXECUTION_ORDER, IntentData};
 use crate::settle::spawn;
 use crate::settle::{controller_allowed, energy_resource_name};
 
-use build::intent_build;
 pub(in crate::settle) use combat::{
     heal_melee_native, heal_ranged_native, intent_attack, intent_ranged_attack, ranged_mass_native,
 };
-use combat::{intent_dismantle, intent_repair};
 use controller::{
     intent_attack_controller, intent_claim_controller, intent_generate_safe_mode,
     intent_reserve_controller, intent_sign_controller, intent_upgrade_controller,
@@ -56,7 +57,8 @@ pub fn process_creep_intents(
             continue;
         }
         let data = &actions[&action];
-        // 资源与移动槽进入 JS 前释放全部 Working 借用；其余动作维持短借用直调。
+        // 贡献槽（资源/移动/战斗/建造族）进入 JS 前释放全部 Working 借用；
+        // 其余动作维持短借用直调。
         match action {
             Action::Transfer => {
                 let contrib = ctx.borrow().plane.contrib.clone();
@@ -83,18 +85,21 @@ pub fn process_creep_intents(
                 contrib.run_combat(slot_key, ctx, id, data)?;
                 continue;
             }
+            Action::Build | Action::Repair | Action::Dismantle => {
+                let slot_key = action.build_slot_key().expect("建造族动作必有槽键");
+                let contrib = ctx.borrow().plane.contrib.clone();
+                contrib.run_build(slot_key, ctx, id, data)?;
+                continue;
+            }
             _ => {}
         }
         let mut w = ctx.borrow_mut();
         let w = &mut *w;
         match action {
             Action::Harvest => intent_harvest(w, id, data),
-            Action::Build => intent_build(w, id, data),
             Action::UpgradeController => intent_upgrade_controller(w, id, data),
             Action::Drop => intent_drop(w, id, data),
             Action::Pickup => intent_pickup(w, id, data),
-            Action::Repair => intent_repair(w, id, data),
-            Action::Dismantle => intent_dismantle(w, id, data),
             Action::ClaimController => intent_claim_controller(w, id, data),
             Action::ReserveController => intent_reserve_controller(w, id, data),
             Action::AttackController => intent_attack_controller(w, id, data),

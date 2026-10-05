@@ -33,6 +33,9 @@ struct ModChainContext {
     /// 战斗能力状态：仅五个战斗槽的处理器同步期内有效；consumed 单向
     /// 标记保证本动作经能力或 native 至多执行一次。
     combat: Option<CombatChainState>,
+    /// 建造族能力状态：仅 build/repair/dismantle 三槽的处理器同步期内
+    /// 有效；consumed 单向标记与战斗能力同型。
+    build: Option<BuildChainState>,
 }
 
 /// 战斗链的运行时状态与首触日志。日志记录能力改向触达、且不在引擎
@@ -41,10 +44,19 @@ struct ModChainContext {
 struct CombatChainState {
     action: kk_engine::settle::creep::CombatAction,
     consumed: bool,
-    journal: Rc<RefCell<BTreeMap<ObjId, CombatJournalEntry>>>,
+    journal: Rc<RefCell<BTreeMap<ObjId, RedirectJournalEntry>>>,
 }
 
-struct CombatJournalEntry {
+/// 建造族链的运行时状态与首触日志，与战斗链同型；触达对象不含延迟
+/// 队列写入面（建造族目标均为工地/结构），条目仍按同构保存。
+#[derive(Clone)]
+struct BuildChainState {
+    action: kk_engine::settle::creep::BuildAction,
+    consumed: bool,
+    journal: Rc<RefCell<BTreeMap<ObjId, RedirectJournalEntry>>>,
+}
+
+struct RedirectJournalEntry {
     object: kk_schema::room::RoomObject,
     damage: Option<i64>,
     heal: Option<i64>,
@@ -67,6 +79,8 @@ impl SlotExecutor for ModSlotExecutor {
             && kk_mod_api::builtin::MOVE_ACTION_SLOTS.contains(&slot.key.as_str());
         let combat_action = matches!(&call, SlotCall::Action { .. })
             && kk_mod_api::builtin::COMBAT_ACTION_SLOTS.contains(&slot.key.as_str());
+        let build_action = matches!(&call, SlotCall::Action { .. })
+            && kk_mod_api::builtin::BUILD_ACTION_SLOTS.contains(&slot.key.as_str());
         let (id, args, native) = match call {
             SlotCall::Action { id, data, native } => (
                 id,
@@ -96,14 +110,21 @@ impl SlotExecutor for ModSlotExecutor {
         } else {
             None
         };
-        let staged_states = (extension || resource_action || move_action || combat_action)
-            .then(|| Rc::new(RefCell::new(BTreeMap::new())));
+        let staged_states =
+            (extension || resource_action || move_action || combat_action || build_action)
+                .then(|| Rc::new(RefCell::new(BTreeMap::new())));
         let resource_journal = resource_action.then(|| Rc::new(RefCell::new(BTreeMap::new())));
         // 外层副本仅供 Declined 分支读共享 journal 与 is_some() 判定；
         // consumed/action 以链内上下文的副本为唯一权威（外层恒为初值）。
         let combat_state = combat_action.then(|| CombatChainState {
             action: kk_engine::settle::creep::CombatAction::from_slot_key(slot.key.as_str())
                 .expect("战斗槽键已由 COMBAT_ACTION_SLOTS 判定"),
+            consumed: false,
+            journal: Rc::new(RefCell::new(BTreeMap::new())),
+        });
+        let build_state = build_action.then(|| BuildChainState {
+            action: kk_engine::settle::creep::BuildAction::from_slot_key(slot.key.as_str())
+                .expect("建造族槽键已由 BUILD_ACTION_SLOTS 判定"),
             consumed: false,
             journal: Rc::new(RefCell::new(BTreeMap::new())),
         });
@@ -125,6 +146,7 @@ impl SlotExecutor for ModSlotExecutor {
                     resource_journal: resource_journal.clone(),
                     move_slot: move_action,
                     combat: combat_state.clone(),
+                    build: build_state.clone(),
                 }),
             )
             .map_err(|error| {
@@ -155,33 +177,25 @@ impl SlotExecutor for ModSlotExecutor {
                         w.room.objects.insert(id, object);
                     }
                 }
-                if let Some(combat) = &combat_state {
-                    let mut w = ctx.borrow_mut();
-                    for (id, entry) in std::mem::take(&mut *combat.journal.borrow_mut()) {
-                        w.room.objects.insert(id, entry.object);
-                        match entry.damage {
-                            Some(v) => {
-                                w.damage_to_apply.insert(id, v);
-                            }
-                            None => {
-                                w.damage_to_apply.remove(&id);
-                            }
-                        }
-                        match entry.heal {
-                            Some(v) => {
-                                w.heal_to_apply.insert(id, v);
-                            }
-                            None => {
-                                w.heal_to_apply.remove(&id);
-                            }
-                        }
-                    }
+                // 战斗与建造族互斥（每槽至多一个能力面），恢复顺序无关。
+                for journal in [
+                    combat_state.as_ref().map(|state| &state.journal),
+                    build_state.as_ref().map(|state| &state.journal),
+                ]
+                .into_iter()
+                .flatten()
+                {
+                    replay_redirect_journal(ctx, journal);
                 }
                 if let Some(fields) = original_fields {
                     ctx.borrow_mut()
                         .update_mod_fields(id, &fields)
                         .map_err(|error| format!("动作拒绝恢复失败：{error}"))?;
-                } else if !(resource_action || move_action || combat_state.is_some()) {
+                } else if !(resource_action
+                    || move_action
+                    || combat_state.is_some()
+                    || build_state.is_some())
+                {
                     return Err("该槽没有正常拒绝的局部恢复边界".into());
                 }
             }
@@ -236,7 +250,7 @@ impl ModChainContext {
             self.ctx.borrow().room.objects.get(&self.id),
             Some(kk_schema::room::RoomObject::Creep(_))
         ) {
-            return Err("creep 资源动作的 target.fields 当前只读".into());
+            return Err("creep 槽的 target.fields 当前只读".into());
         }
         let is_mod = matches!(
             self.ctx.borrow().room.objects.get(&self.id),
@@ -349,7 +363,7 @@ impl ChainHost for ModChainContext {
                 {
                     journal.insert(
                         *id,
-                        CombatJournalEntry {
+                        RedirectJournalEntry {
                             object,
                             damage: w.damage_to_apply.get(id).copied(),
                             heal: w.heal_to_apply.get(id).copied(),
@@ -374,6 +388,56 @@ impl ChainHost for ModChainContext {
             return Err("本动作的战斗能力已消耗（改向/取消/执行恰一次）".into());
         }
         combat.consumed = true;
+        Ok(())
+    }
+
+    fn build_request(&mut self, target: &str) -> Result<(), String> {
+        let (action, journal) = {
+            let Some(build) = &self.build else {
+                return Err("本次槽没有建造目标改向能力".into());
+            };
+            if build.consumed {
+                return Err("本动作的建造能力已消耗（改向/取消/执行恰一次）".into());
+            }
+            (build.action, build.journal.clone())
+        };
+        let target_id = ObjId::parse(target).ok_or("建造目标 ID 非法")?;
+        let touched =
+            kk_engine::settle::creep::build_touch_targets(&self.ctx.borrow(), target_id, action);
+        {
+            let mut w = self.ctx.borrow_mut();
+            let mut journal = journal.borrow_mut();
+            for id in &touched {
+                if !journal.contains_key(id)
+                    && let Some(object) = w.room.objects.get(id).cloned()
+                {
+                    journal.insert(
+                        *id,
+                        RedirectJournalEntry {
+                            object,
+                            damage: w.damage_to_apply.get(id).copied(),
+                            heal: w.heal_to_apply.get(id).copied(),
+                        },
+                    );
+                }
+            }
+            kk_engine::settle::creep::slot_build_request(&mut w, self.id, target_id, action)?;
+        }
+        self.cached_fields = None;
+        if let Some(build) = &mut self.build {
+            build.consumed = true;
+        }
+        Ok(())
+    }
+
+    fn build_cancel(&mut self) -> Result<(), String> {
+        let Some(build) = &mut self.build else {
+            return Err("本次槽没有建造能力".into());
+        };
+        if build.consumed {
+            return Err("本动作的建造能力已消耗（改向/取消/执行恰一次）".into());
+        }
+        build.consumed = true;
         Ok(())
     }
 
@@ -425,9 +489,14 @@ impl ChainHost for ModChainContext {
     fn native(&mut self) -> Result<(), String> {
         // native 可改资源、字段或移除目标，返回后的 read 必须重新取候选。
         self.cached_fields = None;
-        // 战斗槽：能力改向/取消已消耗本动作时跳过 native，防止二次执行。
+        // 战斗/建造族槽：能力改向/取消已消耗本动作时跳过 native，防止二次执行。
         if let Some(combat) = &mut self.combat
             && combat.consumed
+        {
+            return Ok(());
+        }
+        if let Some(build) = &mut self.build
+            && build.consumed
         {
             return Ok(());
         }
@@ -439,6 +508,40 @@ impl ChainHost for ModChainContext {
         if let Some(combat) = &mut self.combat {
             combat.consumed = true;
         }
+        if let Some(build) = &mut self.build {
+            build.consumed = true;
+        }
         Ok(())
+    }
+}
+
+/// 拒绝时按首触日志恢复能力改向触达的对象与延迟队列条目；在引擎
+/// 边界之前执行，引擎快照随后落笔。journal 的 request 前值能当链前值
+/// 用，依赖两个前提：consumed 使 native 与改向互斥（至多一次真实
+/// 执行），且链内对这些对象没有其他候选写通道（creep 字段只读、
+/// 资源/移动能力默认拒绝）；给这两族槽开放新写能力时须重审。
+fn replay_redirect_journal(
+    ctx: &RoomCtx,
+    journal: &Rc<RefCell<BTreeMap<ObjId, RedirectJournalEntry>>>,
+) {
+    let mut w = ctx.borrow_mut();
+    for (id, entry) in std::mem::take(&mut *journal.borrow_mut()) {
+        w.room.objects.insert(id, entry.object);
+        match entry.damage {
+            Some(v) => {
+                w.damage_to_apply.insert(id, v);
+            }
+            None => {
+                w.damage_to_apply.remove(&id);
+            }
+        }
+        match entry.heal {
+            Some(v) => {
+                w.heal_to_apply.insert(id, v);
+            }
+            None => {
+                w.heal_to_apply.remove(&id);
+            }
+        }
     }
 }

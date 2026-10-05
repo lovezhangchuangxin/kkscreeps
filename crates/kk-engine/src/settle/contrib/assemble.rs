@@ -103,6 +103,12 @@ impl ContributionDispatch {
             "builtin:creep.rangedHeal",
             crate::settle::creep::heal_ranged_native,
         )?;
+        let creep_build = action("builtin:creep.build", crate::settle::creep::intent_build)?;
+        let creep_repair = action("builtin:creep.repair", crate::settle::creep::intent_repair)?;
+        let creep_dismantle = action(
+            "builtin:creep.dismantle",
+            crate::settle::creep::intent_dismantle,
+        )?;
         for slot in plan.slots() {
             if !BUILTIN_SLOT_KEYS.contains(&slot.key.as_str()) {
                 ext.insert(slot.key.clone(), ExtSlot::Hosted(host(slot.key.as_str())?));
@@ -119,6 +125,9 @@ impl ContributionDispatch {
             creep_ranged_mass_attack,
             creep_heal,
             creep_ranged_heal,
+            creep_build,
+            creep_repair,
+            creep_dismantle,
             ext,
         })
     }
@@ -213,6 +222,12 @@ impl ContributionDispatch {
             "builtin:creep.rangedHeal",
             crate::settle::creep::heal_ranged_native,
         )?;
+        let creep_build = combat("builtin:creep.build", crate::settle::creep::intent_build)?;
+        let creep_repair = combat("builtin:creep.repair", crate::settle::creep::intent_repair)?;
+        let creep_dismantle = combat(
+            "builtin:creep.dismantle",
+            crate::settle::creep::intent_dismantle,
+        )?;
         reject_leftover("内建动作", &action_handlers)?;
         let tick = assemble_tick(
             plan,
@@ -232,6 +247,9 @@ impl ContributionDispatch {
             creep_ranged_mass_attack,
             creep_heal,
             creep_ranged_heal,
+            creep_build,
+            creep_repair,
+            creep_dismantle,
             ext,
         })
     }

@@ -54,11 +54,11 @@ pub struct Working {
     /// 本 tick 登记的跨房过渡：位于边缘格的 creep 在全部房间结算后由
     /// 引擎阶段移入邻房候选。
     pub pending_inter_room: Vec<inter_room::InterRoomMove>,
-    /// 链内对象增删日志；仅在含结构变换的 Hosted 链（战斗槽）期间武装，
-    /// 正常拒绝时逆序撤销。链故障（Err）路径不解除武装——它依赖"链 Err
-    /// 使整轮候选丢弃、本字段随 Working 一起 drop"兜底；若未来引入链
-    /// 失败但房间候选保留的路径，须先在此处补解除。Native 直调路径
-    /// 保持 None 零开销。
+    /// 链内对象增删日志；仅在含结构变换的 Hosted 链（战斗/建造族槽）
+    /// 期间武装，正常拒绝时逆序撤销。链故障（Err）路径不解除武装——
+    /// 它依赖"链 Err 使整轮候选丢弃、本字段随 Working 一起 drop"兜底；
+    /// 若未来引入链失败但房间候选保留的路径，须先在此处补解除。
+    /// Native 直调路径保持 None 零开销。
     pub chain_mutations: Option<Vec<ChainMutation>>,
     /// 本轮生效的贡献平面：link/仓库规则、槽执行表与扩展字段目录。
     pub plane: Plane,
@@ -86,11 +86,11 @@ pub enum ChainMutation {
     Removed(Box<RemovedObject>),
 }
 
-/// 战斗槽整链开始前的候选快照：受影响对象首触克隆、延迟伤害/治疗
-/// 条目、事件长度与 ID 游标。链内对象增删由 chain_mutations 记录，
+/// 战斗/建造族槽整链开始前的候选快照：受影响对象首触克隆、延迟伤害/
+/// 治疗条目、事件长度与 ID 游标。链内对象增删由 chain_mutations 记录，
 /// 引擎侧在快照时武装。能力触达的链外对象由运行时首触日志恢复。
 #[derive(Debug, Clone)]
-pub struct CombatSnapshot {
+pub struct ChainSnapshot {
     objects: Vec<(ObjId, RoomObject)>,
     queues: Vec<(ObjId, Option<i64>, Option<i64>)>,
     event_len: usize,
@@ -387,14 +387,13 @@ impl Working {
     /// 战斗槽整链开始前的候选快照并武装链内增删日志。受影响集为
     /// 执行者、请求目标及其格上 rampart（攻击重定向面）；群体攻击
     /// 为切比雪夫 3 格内全部对象的急切全量克隆（命中集超集，无论
-    /// 是否拒绝都支付）。逐对象保存克隆与延迟伤害/治疗条目；事件
-    /// 长度与 ID 游标随后记录。
+    /// 是否拒绝都支付）。
     pub fn snapshot_combat(
         &mut self,
         id: ObjId,
         target: Option<ObjId>,
         mass: bool,
-    ) -> CombatSnapshot {
+    ) -> ChainSnapshot {
         let mut touched: Vec<ObjId> = vec![id];
         if let Some(target_id) = target {
             // 与能力触达面同源计算"目标+格上 rampart"，两处漂移会造成
@@ -411,6 +410,39 @@ impl Working {
                 }
             }
         }
+        self.snapshot_touched(touched)
+    }
+
+    /// 建造族槽（build/repair/dismantle）整链开始前的候选快照并武装
+    /// 链内增删日志。受影响集为执行者与请求目标；dismantle 另含目标
+    /// 格 rampart（重定向面）与执行者格上的掉落面（同格掉落堆与容器，
+    /// 超容掉落只写这些对象）。完工结构插入、击毁废墟与对象移除经
+    /// 增删日志逆序撤销，ID 游标随后回退。
+    pub fn snapshot_build(
+        &mut self,
+        id: ObjId,
+        target: Option<ObjId>,
+        action: super::creep::BuildAction,
+    ) -> ChainSnapshot {
+        let mut touched: Vec<ObjId> = vec![id];
+        if let Some(target_id) = target {
+            touched.extend(super::creep::build_touch_targets(self, target_id, action));
+        }
+        if action == super::creep::BuildAction::Dismantle {
+            touched.extend(super::creep::dismantle_drop_face(self, id));
+        }
+        self.snapshot_touched(touched)
+    }
+
+    /// 按受影响集构建快照：逐对象首触克隆与延迟伤害/治疗条目，事件
+    /// 长度与 ID 游标随后记录，并武装链内增删日志。已武装时再次进入
+    /// 属嵌套链（当前不存在：槽串行执行、链 Err 即弃整轮候选），
+    /// 静默重置会丢弃旧日志，以 debug_assert 固化该前提。
+    fn snapshot_touched(&mut self, mut touched: Vec<ObjId>) -> ChainSnapshot {
+        debug_assert!(
+            self.chain_mutations.is_none(),
+            "链内增删日志已武装时不得再次进入快照"
+        );
         touched.sort_unstable();
         touched.dedup();
         let objects: Vec<_> = touched
@@ -427,7 +459,7 @@ impl Working {
                 )
             })
             .collect();
-        let snapshot = CombatSnapshot {
+        let snapshot = ChainSnapshot {
             objects,
             queues,
             event_len: self.events.len(),
@@ -437,22 +469,22 @@ impl Working {
         snapshot
     }
 
-    /// 战斗链正常完成：解除增删日志武装并丢弃记录。
-    pub fn finish_combat_chain(&mut self) {
+    /// 战斗/建造族链正常完成：解除增删日志武装并丢弃记录。
+    pub fn finish_chain_snapshot(&mut self) {
         self.chain_mutations = None;
     }
 
-    /// 战斗链正常拒绝：按增删日志逆序撤销链内对象变换，再恢复首触
-    /// 对象、延迟队列条目与事件长度，最后回退 ID 游标。其他执行者的
-    /// 队列条目、此前动作的写入与移动登记不受影响。
-    /// Removed 按移除时快照回插，其等于链前状态依赖当前战斗链处理器
-    /// 没有其他候选写通道（资源/移动能力默认拒绝、creep 字段只读）；
-    /// 给战斗槽开放新写能力时须重审此对账前提。
-    pub fn restore_combat(&mut self, snapshot: CombatSnapshot) {
+    /// 战斗/建造族链正常拒绝：按增删日志逆序撤销链内对象变换，再恢复
+    /// 首触对象、延迟队列条目与事件长度，最后回退 ID 游标。其他执行者
+    /// 的队列条目、此前动作的写入与移动登记不受影响。
+    /// Removed 按移除时快照回插，其等于链前状态依赖当前链处理器没有
+    /// 其他候选写通道（资源/移动能力默认拒绝、creep 字段只读）；给
+    /// 这两族槽开放新写能力时须重审此对账前提。
+    pub fn restore_chain_snapshot(&mut self, snapshot: ChainSnapshot) {
         let mutations = self
             .chain_mutations
             .take()
-            .expect("战斗链期间增删日志已武装");
+            .expect("战斗/建造族链期间增删日志已武装");
         for mutation in mutations.into_iter().rev() {
             match mutation {
                 ChainMutation::Inserted(id) => {

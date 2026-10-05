@@ -58,6 +58,9 @@ impl Engine {
             "builtin:creep.rangedMassAttack.native",
             "builtin:creep.heal.native",
             "builtin:creep.rangedHeal.native",
+            "builtin:creep.build.native",
+            "builtin:creep.repair.native",
+            "builtin:creep.dismantle.native",
         ];
         for binding in plan.required_bindings() {
             let name = binding.as_str();

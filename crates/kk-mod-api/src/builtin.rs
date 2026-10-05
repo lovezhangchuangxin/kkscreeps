@@ -1,4 +1,5 @@
-//! 默认 link/creep 资源、移动与战斗动作描述及 Generic 仓库容量规则，不安装引擎处理器。
+//! 默认 link/creep 资源、移动、战斗与建造族动作描述及 Generic 仓库容量规则，
+//! 不安装引擎处理器。
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -30,8 +31,16 @@ pub const COMBAT_ACTION_SLOTS: [&str; 5] = [
     "builtin:creep.rangedHeal",
 ];
 
+/// 已有局部恢复边界的内建造族动作（build/repair/dismantle）；
+/// 宿主拒绝资格与 runtime 暂存共用此表。
+pub const BUILD_ACTION_SLOTS: [&str; 3] = [
+    "builtin:creep.build",
+    "builtin:creep.repair",
+    "builtin:creep.dismantle",
+];
+
 /// 内建实际派发的槽；自有动作装配必须跳过它们。
-pub const SLOT_KEYS: [&str; 10] = [
+pub const SLOT_KEYS: [&str; 13] = [
     RESOURCE_ACTION_SLOTS[0],
     "builtin:link.tick",
     RESOURCE_ACTION_SLOTS[1],
@@ -42,6 +51,9 @@ pub const SLOT_KEYS: [&str; 10] = [
     COMBAT_ACTION_SLOTS[2],
     COMBAT_ACTION_SLOTS[3],
     COMBAT_ACTION_SLOTS[4],
+    BUILD_ACTION_SLOTS[0],
+    BUILD_ACTION_SLOTS[1],
+    BUILD_ACTION_SLOTS[2],
 ];
 
 fn key(name: &str) -> Key {
@@ -125,7 +137,7 @@ impl LinkRules {
     }
 }
 
-/// 内置贡献入口，保留早期 link 函数名；现含 link、creep 资源/移动/战斗槽与仓库规则。
+/// 内置贡献入口，保留早期 link 函数名；现含 link、creep 资源/移动/战斗/建造族槽与仓库规则。
 pub fn link() -> Contribution {
     let consumers = keys(&[
         "link.init",
@@ -269,6 +281,9 @@ pub fn link() -> Contribution {
         "creep.rangedMassAttack.native",
         "creep.heal.native",
         "creep.rangedHeal.native",
+        "creep.build.native",
+        "creep.repair.native",
+        "creep.dismantle.native",
     ]));
     let slots = vec![
         SlotDescriptor {
@@ -321,12 +336,27 @@ pub fn link() -> Contribution {
             stage: Stage::ObjectAction,
             native_binding: key("creep.rangedHeal.native"),
         },
+        SlotDescriptor {
+            key: key("creep.build"),
+            stage: Stage::ObjectAction,
+            native_binding: key("creep.build.native"),
+        },
+        SlotDescriptor {
+            key: key("creep.repair"),
+            stage: Stage::ObjectAction,
+            native_binding: key("creep.repair.native"),
+        },
+        SlotDescriptor {
+            key: key("creep.dismantle"),
+            stage: Stage::ObjectAction,
+            native_binding: key("creep.dismantle.native"),
+        },
     ];
     Contribution {
         source: Source {
             namespace: "builtin".into(),
             api_version: 1,
-            revision: "link-creep-store-move-combat-descriptors-v5".into(),
+            revision: "link-creep-store-move-combat-build-descriptors-v6".into(),
             code_digest: {
                 let mut hash = Sha256::new();
                 hash.update(include_bytes!("builtin.rs"));

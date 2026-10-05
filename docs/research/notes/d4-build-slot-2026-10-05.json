@@ -1,0 +1,103 @@
+{
+  "batch": "D4 Mod build-family slots",
+  "date": "2026-10-05",
+  "baseline": "338dfac848cce208c9c9f305b14e9de40d3d9a93",
+  "executable_sha256": "59c514772af881c8b1162105161af4be0cf0cbb26ad175f2af7a1670e848ad2c",
+  "slots": [
+    "builtin:creep.build",
+    "builtin:creep.repair",
+    "builtin:creep.dismantle"
+  ],
+  "checks": {
+    "release_build_exit_code": 0,
+    "rust_passed": 715,
+    "rust_failed": 0,
+    "rust_ignored": 11,
+    "mod_chain_passed": 108,
+    "workspace_check_exit_code": 0
+  },
+  "new_tests": {
+    "mod_chain_creep_build": 8,
+    "mod_chain_creep_build_world": 10,
+    "engine_intent_key_pin": 1,
+    "total": 19
+  },
+  "ratchet": {
+    "total": 2914,
+    "passed": 1918,
+    "failed": 89,
+    "skipped": 907,
+    "floor": 1918,
+    "regressions_vs_head": 0,
+    "new_skips_or_allows": 0
+  },
+  "bots": [
+    {
+      "name": "tooangel",
+      "ticks_requested": 2000,
+      "ticks_completed": 2000,
+      "ticks_terminated": 0,
+      "ticks_skipped_penalty": 0,
+      "ticks_with_console_error": 0
+    },
+    {
+      "name": "overmind",
+      "ticks_requested": 2000,
+      "ticks_completed": 2000,
+      "ticks_terminated": 0,
+      "ticks_skipped_penalty": 0,
+      "ticks_with_console_error": 1,
+      "known_issue": "首 tick DirectiveHarvest.create 既有错误，与入库基线一致"
+    },
+    {
+      "name": "wasm-bot",
+      "ticks_requested": 10,
+      "ticks_completed": 10,
+      "ticks_terminated": 0,
+      "ticks_skipped_penalty": 0,
+      "ticks_with_console_error": 0
+    }
+  ],
+  "build_scenario": {
+    "fixture": "compat/fixtures/sim-build",
+    "ticks": 120,
+    "channels": [
+      "json",
+      "kkpv"
+    ],
+    "assertions_passed": 11,
+    "assertions_total": 11,
+    "channels_final_state_equal": true,
+    "outcome": "修路 30 次完工（300 进度）、extension 2900→3000 补完、repair 预伤墙 900→1300（2 tick）、dismantle 塔 400→击毁（4 tick），各阶段动作计数逐项钉死"
+  },
+  "scope_exclusions": [
+    "attackController 保持原生直调（控制器降级计时不在本片拒绝边界）",
+    "容量族与 link tick 拒绝归后续批次",
+    "dismantle 击毁带孵化任务的 spawn 的连带恢复无专测（放置面不支持孵化任务）",
+    "repair/dismantle 的链序/args 深测仅 build 代表槽（三槽共用执行器与边界）",
+    "零 Mod 开销判读随 D7"
+  ],
+  "review": {
+    "reviewers": 3,
+    "p0": 0,
+    "p1_found": 3,
+    "p1_cleared": [
+      "架构文档五处同步（mod-execution 拒绝清单/边界段/未完成范围、creep-combat-slot 改名引用与过时句、creep-resource-slots 与 store-rules 槽数 10→13、roadmap、source-organization）+ 新建 creep-build-slot.md",
+      "repair hitsMax 钳制专测（缺口 50、能耗 ceil(50/100)=1，修正原注释的误导归因）",
+      "dismantle 改向后拒绝专测（运行时首触日志重放的唯一活路径：原目标/改向目标/掉落面/事件四层复原）"
+    ],
+    "p2_cleared": [
+      "restore_chain_snapshot panic 文案泛化为战斗/建造族",
+      "replay_redirect_journal 注释补全第二个前提（链内无其他候选写通道）",
+      "能力故障矩阵补 ctx.movement 跨面用例",
+      "完工控制组补 incomplete:false 事件断言、摧毁分支补 dismantle attackType/targetId 断言",
+      "只读错误文案族中立化（creep 资源动作→creep 槽）",
+      "snapshot_touched 加 debug_assert 固化未武装前提",
+      "有符号进度超限工地用例（完工+返还能量）"
+    ],
+    "p2_registered": [
+      "spawn 摧毁连带孵化 creep 的恢复无专测（放置面不支持孵化任务，与战斗槽同登记）",
+      "repair/dismantle 的 before/wrap-before 拒绝与链序仅 build 代表槽"
+    ]
+  }
+}

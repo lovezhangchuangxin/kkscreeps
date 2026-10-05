@@ -12,9 +12,93 @@ use crate::intent::IntentData;
 use crate::settle::Working;
 use crate::settle::movement;
 
+/// 建造能力面认得的动作族成员；与 builtin:creep.* 三槽一一对应。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuildAction {
+    Build,
+    Repair,
+    Dismantle,
+}
+
+impl BuildAction {
+    /// 槽键是否属于建造族；宿主桥与引擎边界共用此判定。
+    pub fn from_slot_key(slot_key: &str) -> Option<Self> {
+        Some(match slot_key {
+            "builtin:creep.build" => Self::Build,
+            "builtin:creep.repair" => Self::Repair,
+            "builtin:creep.dismantle" => Self::Dismantle,
+            _ => return None,
+        })
+    }
+
+    fn run(self, w: &mut Working, id: ObjId, data: &IntentData) {
+        match self {
+            Self::Build => intent_build(w, id, data),
+            Self::Repair => super::intent_repair(w, id, data),
+            Self::Dismantle => super::intent_dismantle(w, id, data),
+        }
+    }
+}
+
+/// 能力改向将触碰的对象：dismantle 的伤害经 rampart 重定向，与战斗族
+/// 同型（目标+格上 rampart）；build/repair 只触达请求目标本身。
+/// 仅返回候选中存在的对象；供调用方在执行前做首触快照。
+pub fn build_touch_targets(w: &Working, target_id: ObjId, action: BuildAction) -> Vec<ObjId> {
+    match action {
+        BuildAction::Dismantle => super::combat_touch_targets(w, target_id),
+        _ => {
+            let mut targets = vec![target_id];
+            targets.retain(|id| w.room.objects.contains_key(id));
+            targets
+        }
+    }
+}
+
+/// dismantle 超容掉落可能写入的执行者格对象：同格掉落堆（同资源名合并）
+/// 与容器（Generic store 先接收掉落）。掉落位置恒为执行者坐标，取全部
+/// 同格堆与容器是命中集的超集，无需逐资源名精确匹配。
+pub fn dismantle_drop_face(w: &Working, id: ObjId) -> Vec<ObjId> {
+    let Some((x, y)) = w.creep(id).map(|c| (c.x, c.y)) else {
+        return Vec::new();
+    };
+    w.index
+        .at(x as usize, y as usize)
+        .iter()
+        .filter(|tid| {
+            w.room.objects.get(tid).is_some_and(|o| {
+                matches!(o, RoomObject::Energy(_))
+                    || (matches!(o, RoomObject::Generic(_))
+                        && movement::type_name_of(o) == "container")
+            })
+        })
+        .copied()
+        .collect()
+}
+
+/// 以指定目标执行本建造族动作的完整 native 语义（距离/能量/安全模式/
+/// rampart/同格障碍全部原生预检保持）。目标侧预检不通过时静默返回，
+/// 与原生意图一致；执行者侧（非 creep 或孵化中）为故障——玩家面已
+/// 前置拦截，这里是纵深防御。
+pub fn slot_build_request(
+    w: &mut Working,
+    id: ObjId,
+    target_id: ObjId,
+    action: BuildAction,
+) -> Result<(), String> {
+    let Some(creep) = w.creep(id) else {
+        return Err(format!("执行者 {} 不是有效 creep", id.as_str()));
+    };
+    if creep.spawning {
+        return Err("孵化中的 creep 不能发出建造族动作".into());
+    }
+    let data = IntentData::target(target_id);
+    action.run(w, id, &data);
+    Ok(())
+}
+
 /// 在三格内建造工地，计算基础能耗与 boost 后的进度；完成时替换为新结构。
 /// 来源：上游 engine/src/processor/intents/creeps/build.js。
-pub(super) fn intent_build(w: &mut Working, id: ObjId, data: &IntentData) {
+pub(in crate::settle) fn intent_build(w: &mut Working, id: ObjId, data: &IntentData) {
     let Some(target_id) = data.id else { return };
     let (pos, owner, energy) = match w.creep(id) {
         Some(c) if !c.spawning => ((c.x, c.y), c.owner.clone(), c.store.energy as i64),

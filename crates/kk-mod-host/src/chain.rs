@@ -19,6 +19,8 @@ pub(crate) use movement::{
 };
 mod combat;
 pub(crate) use combat::{op_mod_chain_combat_cancel, op_mod_chain_combat_request};
+mod build;
+pub(crate) use build::{op_mod_chain_build_cancel, op_mod_chain_build_request};
 
 /// 固定的候选读取封套；开放领域的字段、参数与 namespace 仍为 JSON 树。
 /// 字段顺序沿用原 JSON Map 的键序，避免改变 JS 可观察的枚举/刷新顺序。
@@ -79,6 +81,14 @@ pub trait ChainHost {
     }
     fn combat_cancel(&mut self) -> Result<(), String> {
         Err("本次槽没有战斗能力".into())
+    }
+    /// 默认拒绝，宿主须为建造族槽显式开放目标改向/取消能力；仅作用于
+    /// 本次调用的执行者与本动作，进度/伤害/能量数值不经此面修改。
+    fn build_request(&mut self, _target: &str) -> Result<(), String> {
+        Err("本次槽没有建造目标改向能力".into())
+    }
+    fn build_cancel(&mut self) -> Result<(), String> {
+        Err("本次槽没有建造能力".into())
     }
 }
 
@@ -172,7 +182,8 @@ impl ChainProgram {
                     && (slot.key.namespace() != "builtin"
                         || kk_mod_api::builtin::RESOURCE_ACTION_SLOTS.contains(&slot.key.as_str())
                         || kk_mod_api::builtin::MOVE_ACTION_SLOTS.contains(&slot.key.as_str())
-                        || kk_mod_api::builtin::COMBAT_ACTION_SLOTS.contains(&slot.key.as_str())),
+                        || kk_mod_api::builtin::COMBAT_ACTION_SLOTS.contains(&slot.key.as_str())
+                        || kk_mod_api::builtin::BUILD_ACTION_SLOTS.contains(&slot.key.as_str())),
             });
         }
         Ok(programs)
@@ -431,7 +442,7 @@ pub(crate) fn op_mod_chain_decline(
         return chain.outcome(
             ModFaultKind::Control,
             Some(&binding),
-            Err("该槽尚不支持正常拒绝；仅 Mod 自有对象动作与已接局部恢复边界的内建槽（资源/移动/战斗）可回滚".into()),
+            Err("该槽尚不支持正常拒绝；仅 Mod 自有对象动作与已接局部恢复边界的内建槽（资源/移动/战斗/建造族）可回滚".into()),
         );
     }
     if code.is_empty()

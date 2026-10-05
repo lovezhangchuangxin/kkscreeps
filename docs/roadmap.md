@@ -55,9 +55,11 @@ D4 移动片已开放 [creep.move 槽](architecture/creep-move-slot.md)：意图
 
 D4 战斗片已开放 [五个战斗槽](architecture/creep-combat-slot.md)（attack/rangedAttack/rangedMassAttack/heal/rangedHeal）：`ctx.combat` 目标改向/取消（恰一次消耗约束）、延迟伤害/治疗队列条目、rampart 重定向受击对象与结构摧毁废墟/对象移除（链内增删日志+ID 游标回退）的局部拒绝恢复；attackController 与建造/容量等其他动作槽仍须逐族开放。
 
+D4 建造族片已开放 [三个建造族槽](architecture/creep-build-slot.md)（build/repair/dismantle）：`ctx.build` 目标改向/取消（恰一次消耗约束；request 后刷新处理器视图）、完工变换（工地移除+结构插入）与 dismantle 击毁废墟/超容掉落面（链内增删日志+ID 游标回退+执行者格掉落面快照）的局部拒绝恢复；attackController 与容量族仍须逐族开放。
+
 D4 首片已开放 Generic 仓库的 10 条容量数值，贯穿放置、建造、玩家常量、实验室槽切换和终端 tick，见[仓库容量规则](architecture/store-rules.md)。特殊存储策略及更多动作槽仍须逐族开放，完整检查点在规则与状态清单收敛后接入。
 
-D6 首片已允许 link transfer 的 JS 处理链正常拒绝一次动作；后续 D4/D6 片已开放 [creep transfer/withdraw](architecture/creep-resource-slots.md) 与 [creep move](architecture/creep-move-slot.md) 的 before/wrap/replace/after 与正常拒绝。局部恢复执行者/目标库存、link 冷却、实验室槽容量、新增事件、移动请求登记及 Mod state，保留此前成功动作并继续结算。link tick、attackController 和其他动作尚未开放正常拒绝，见[Mod 执行](architecture/mod-execution.md#正常动作拒绝)。
+D6 首片已允许 link transfer 的 JS 处理链正常拒绝一次动作；后续 D4/D6 片已开放 [creep transfer/withdraw](architecture/creep-resource-slots.md) 与 [creep move](architecture/creep-move-slot.md) 的 before/wrap/replace/after 与正常拒绝。局部恢复执行者/目标库存、link 冷却、实验室槽容量、新增事件、移动请求登记及 Mod state，保留此前成功动作并继续结算。link tick、attackController、容量族和其他动作尚未开放正常拒绝，见[Mod 执行](architecture/mod-execution.md#正常动作拒绝)。
 
 [ADR-014](decisions/ADR-014-contribution-plane.md)已把扩展基础安排在玩法扩面与首次持久化格式冻结之前，不能继续只列作 M4 的末端功能。Mod 作者使用 JS SDK；对象、指令、规则、候选状态和提交协议须共同设计，服务与客户端贡献随 M3 补齐。
 

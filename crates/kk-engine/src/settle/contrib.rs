@@ -353,6 +353,9 @@ pub struct ContributionDispatch {
     creep_ranged_mass_attack: ActionSlot,
     creep_heal: ActionSlot,
     creep_ranged_heal: ActionSlot,
+    creep_build: ActionSlot,
+    creep_repair: ActionSlot,
+    creep_dismantle: ActionSlot,
     /// Mod 自有槽（按槽键查）；扩展意图结算在此派发。
     ext: BTreeMap<Key, ExtSlot>,
 }
@@ -370,6 +373,9 @@ impl Default for ContributionDispatch {
             creep_ranged_mass_attack: ActionSlot::Native(super::creep::ranged_mass_native),
             creep_heal: ActionSlot::Native(super::creep::heal_melee_native),
             creep_ranged_heal: ActionSlot::Native(super::creep::heal_ranged_native),
+            creep_build: ActionSlot::Native(super::creep::intent_build),
+            creep_repair: ActionSlot::Native(super::creep::intent_repair),
+            creep_dismantle: ActionSlot::Native(super::creep::intent_dismantle),
             ext: BTreeMap::new(),
         }
     }
@@ -380,7 +386,7 @@ pub const LINK_SLOT_KEYS: [&str; 2] = [
     kk_mod_api::builtin::SLOT_KEYS[0],
     kk_mod_api::builtin::SLOT_KEYS[1],
 ];
-pub const BUILTIN_SLOT_KEYS: [&str; 10] = kk_mod_api::builtin::SLOT_KEYS;
+pub const BUILTIN_SLOT_KEYS: [&str; 13] = kk_mod_api::builtin::SLOT_KEYS;
 
 impl ContributionDispatch {
     pub(crate) fn run_transfer(
@@ -438,6 +444,23 @@ impl ContributionDispatch {
             "builtin:creep.heal" => &self.creep_heal,
             "builtin:creep.rangedHeal" => &self.creep_ranged_heal,
             other => return Err(format!("未知战斗槽 {other}")),
+        };
+        slot.run(ctx, id, d)
+    }
+
+    /// 三个建造族槽共用一个入口，与战斗族同型。
+    pub(crate) fn run_build(
+        &self,
+        slot_key: &str,
+        ctx: &RoomCtx,
+        id: ObjId,
+        d: &IntentData,
+    ) -> Result<(), String> {
+        let slot = match slot_key {
+            "builtin:creep.build" => &self.creep_build,
+            "builtin:creep.repair" => &self.creep_repair,
+            "builtin:creep.dismantle" => &self.creep_dismantle,
+            other => return Err(format!("未知建造族槽 {other}")),
         };
         slot.run(ctx, id, d)
     }

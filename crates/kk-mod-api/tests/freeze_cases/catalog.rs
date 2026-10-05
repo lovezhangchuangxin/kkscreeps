@@ -134,11 +134,12 @@ fn builtin_link_values_match_constant_dump_and_use_native_slots() {
         );
     }
     assert_eq!(plan.rules().len(), 25);
-    assert_eq!(plan.slots().len(), 10);
+    assert_eq!(plan.slots().len(), 13);
     for name in builtin::RESOURCE_ACTION_SLOTS
         .iter()
         .chain(builtin::MOVE_ACTION_SLOTS.iter())
         .chain(builtin::COMBAT_ACTION_SLOTS.iter())
+        .chain(builtin::BUILD_ACTION_SLOTS.iter())
     {
         let slot = plan
             .get_slot(plan.resolve_slot(&key(name)).unwrap())

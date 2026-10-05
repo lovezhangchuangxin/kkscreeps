@@ -19,23 +19,37 @@ impl ActionSlot {
                 // 重定向后的真实受击对象、以及结构摧毁产生的废墟插入与
                 // 对象移除（增删经 chain_mutations 日志逆序撤销并回退 ID
                 // 游标）。能力改向触达的链外对象由运行时首触日志恢复。
+                //
+                // 建造族槽与战斗槽共用该日志化边界：build 的完工变换
+                // （移除工地+插入结构）、dismantle 的击毁废墟与超容掉落
+                // 插入同样经增删日志撤销；dismantle 的受影响集另含目标格
+                // rampart 与执行者格上的掉落面（掉落堆与容器）。
                 let move_slot =
                     kk_mod_api::builtin::MOVE_ACTION_SLOTS.contains(&slot.plan.key.as_str());
                 let combat_slot =
                     kk_mod_api::builtin::COMBAT_ACTION_SLOTS.contains(&slot.plan.key.as_str());
+                let build_slot =
+                    kk_mod_api::builtin::BUILD_ACTION_SLOTS.contains(&slot.plan.key.as_str());
                 enum Boundary {
                     Plain {
                         objects: Vec<(ObjId, RoomObject)>,
                         event_len: usize,
                         moves: Option<crate::settle::movement::MoveRequestSnapshot>,
                     },
-                    Combat(crate::settle::CombatSnapshot),
+                    Journaled(crate::settle::ChainSnapshot),
                 }
                 let boundary = {
                     if combat_slot {
                         let mut w = ctx.borrow_mut();
                         let mass = slot.plan.key.as_str() == "builtin:creep.rangedMassAttack";
-                        Boundary::Combat(w.snapshot_combat(id, d.id, mass))
+                        Boundary::Journaled(w.snapshot_combat(id, d.id, mass))
+                    } else if build_slot {
+                        let mut w = ctx.borrow_mut();
+                        let action = crate::settle::creep::BuildAction::from_slot_key(
+                            slot.plan.key.as_str(),
+                        )
+                        .expect("建造族槽键已由 BUILD_ACTION_SLOTS 判定");
+                        Boundary::Journaled(w.snapshot_build(id, d.id, action))
                     } else {
                         let w = ctx.borrow();
                         let moves = move_slot.then(|| w.snapshot_move_requests(id));
@@ -62,11 +76,11 @@ impl ActionSlot {
                     },
                 )?;
                 match (boundary, matches!(outcome, SlotOutcome::Declined(_))) {
-                    (Boundary::Combat(snapshot), true) => {
-                        ctx.borrow_mut().restore_combat(snapshot);
+                    (Boundary::Journaled(snapshot), true) => {
+                        ctx.borrow_mut().restore_chain_snapshot(snapshot);
                     }
-                    (Boundary::Combat(_), false) => {
-                        ctx.borrow_mut().finish_combat_chain();
+                    (Boundary::Journaled(_), false) => {
+                        ctx.borrow_mut().finish_chain_snapshot();
                     }
                     (
                         Boundary::Plain {

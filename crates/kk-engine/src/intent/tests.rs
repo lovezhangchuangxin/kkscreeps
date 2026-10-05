@@ -112,6 +112,25 @@ fn combat_slot_keys_stay_consistent_across_enumerations() {
     }
 }
 
+/// 建造族槽键与战斗族同型：intent 派发、能力面与权威目录三处等价。
+#[test]
+fn build_slot_keys_stay_consistent_across_enumerations() {
+    let mut engine_side: Vec<&str> = EXECUTION_ORDER
+        .iter()
+        .filter_map(|action| action.build_slot_key())
+        .collect();
+    engine_side.sort_unstable();
+    let mut authority: Vec<&str> = kk_mod_api::builtin::BUILD_ACTION_SLOTS.to_vec();
+    authority.sort_unstable();
+    assert_eq!(engine_side, authority);
+    for key in kk_mod_api::builtin::BUILD_ACTION_SLOTS {
+        assert!(
+            crate::settle::creep::BuildAction::from_slot_key(key).is_some(),
+            "能力面未认识槽键 {key}"
+        );
+    }
+}
+
 /// from_slot_key 定义域探测的桥；定义在测试内避免能力面类型出模块。
 fn kk_engine_probe_from_slot_key(key: &str) -> bool {
     crate::settle::creep::CombatAction::from_slot_key(key).is_some()

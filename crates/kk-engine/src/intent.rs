@@ -145,6 +145,17 @@ impl Action {
         })
     }
 
+    /// 建造族动作对应的具名槽键；仅 build/repair/dismantle 返回 Some，
+    /// 派发侧据此进入贡献槽，与战斗族同型。
+    pub fn build_slot_key(self) -> Option<&'static str> {
+        Some(match self {
+            Self::Build => "builtin:creep.build",
+            Self::Repair => "builtin:creep.repair",
+            Self::Dismantle => "builtin:creep.dismantle",
+            _ => return None,
+        })
+    }
+
     /// 返回会压制本动作的指令。判断只看指令是否存在，不看其执行是否成功。
     /// 来源：上游 engine/src/processor/intents/creeps/intents.js 的 priorities。
     fn suppressed_by(self) -> &'static [Action] {

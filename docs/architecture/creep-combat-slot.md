@@ -30,7 +30,7 @@
 
 战斗链的拒绝恢复分两层，均在整链开始前快照：
 
-- **引擎边界**（`Working::snapshot_combat` / `restore_combat`）：
+- **引擎边界**（`Working::snapshot_combat` / `restore_chain_snapshot`；快照与恢复实现与建造族槽共享，见[建造动作槽](creep-build-slot.md)）：
   1. 受影响对象首触克隆——执行者、请求目标及其格上的 rampart（攻击重定向面）；`rangedMassAttack` 为切比雪夫 3 格内全部对象（命中集的超集）。
   2. 这些对象的延迟伤害/治疗队列条目（含此前动作的既有值，恢复到快照值而非清零）。
   3. 事件长度截除。
@@ -41,6 +41,6 @@
 
 ## 未开放范围
 
-`attackController`（涉及控制器降级计时）仍为原生直调；repair/dismantle 归建造族后续批次；战斗意图的 wrapper 槽（mod-system 的寻路 wrapper 同族设计）未接。spawn 摧毁连带移除孵化 creep 的恢复由增删日志结构覆盖，尚无专测钉住。
+`attackController`（涉及控制器降级计时）仍为原生直调（repair/dismantle 已随[建造动作槽](creep-build-slot.md)开放）；战斗意图的 wrapper 槽（mod-system 的寻路 wrapper 同族设计）未接。spawn 摧毁连带移除孵化 creep 的恢复由增删日志结构覆盖，尚无专测钉住。
 
 验收见[交付记录](../research/notes/d4-combat-slot-2026-10-05.md)。
