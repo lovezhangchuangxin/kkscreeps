@@ -62,3 +62,49 @@ fn effective_rule_reads_drive_gameplay_across_channels() -> anyhow::Result<()> {
     assert_eq!(reports[0]["composition"], reports[1]["composition"]);
     Ok(())
 }
+
+#[test]
+fn documented_rule_example_runs_with_its_declared_fields() -> anyhow::Result<()> {
+    let f = Fixture::new()?;
+    let document = include_str!("../../../../docs/architecture/mod-rules.md");
+    let source = document
+        .split_once("```js\n")
+        .unwrap()
+        .1
+        .split_once("\n```")
+        .unwrap()
+        .0;
+    let package = f.0.join("mods/base");
+    std::fs::create_dir_all(&package)?;
+    std::fs::write(
+        package.join("mod.json"),
+        r#"{"id":"base","version":"1.0.0","apiVersion":"^1.0.0","player":"player.js"}"#,
+    )?;
+    std::fs::write(package.join("server.js"), source)?;
+    std::fs::write(
+        package.join("player.js"),
+        "export default function install(api){class RulesMeter extends api.builtins.RoomObject{};api.objects.bind('base:meter',RulesMeter);}",
+    )?;
+    f.module("exports.loop = function() {};")?;
+    let mut input = simple_scene();
+    input["mods"] = json!({"root":"mods"});
+    input["objects"] = json!([{
+        "alias":"meter","room":"W1N1","kind":"mod",
+        "spec":{"typeKey":"base:meter","fields":{"x":10,"y":10}}
+    }]);
+    let scene = f.scene(&input)?;
+    for binary in [false, true] {
+        let (code, report) = run(
+            &scene,
+            &f.0.join(format!("doc-rules-{binary}.json")),
+            9,
+            binary,
+            1,
+        )?;
+        assert_eq!(code, 0, "{report}");
+        assert_eq!(report["world_ticks_committed"], 9);
+        // 默认 period=4，tick 0/4/8 分别更新；value 由文档 schema 默认初始化。
+        assert_eq!(report["final"]["objects"]["meter"]["fields"]["value"], 3);
+    }
+    Ok(())
+}

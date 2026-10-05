@@ -170,6 +170,46 @@ fn undeclared_namespaced_resources_are_rejected() {
     assert_eq!(piles, 0);
 }
 
+#[test]
+fn pickup_rejects_resources_missing_from_the_current_catalog() {
+    for (resource, with_mods) in [
+        ("resmod:ember", true),
+        ("unknownResource", true),
+        ("resmod:crystal", false),
+    ] {
+        let mut f = Fixture::new(1, terrain_with(&[]));
+        let hauler = f.creep("hauler", "p1", 10, 10, &[BodyKind::Carry], 0);
+        // 快照/宿主可以携带目录外掉落物；pickup 必须在两端写入前拒绝。
+        let pile = f
+            .world
+            .insert(
+                "W1N1",
+                RoomObject::Energy(kk_schema::room::EnergyObj {
+                    id: 0,
+                    x: 10,
+                    y: 11,
+                    resource_type: 0,
+                    amount: 12,
+                    resource: Some(resource.into()),
+                }),
+            )
+            .unwrap();
+        let mut batch = IntentBatch::default();
+        batch.add_object_intent("p1", hauler, Action::Pickup, IntentData::target(pile));
+        if with_mods {
+            f.settle_with_plane(batch, resource_plane());
+        } else {
+            f.settle(batch);
+        }
+        assert_eq!(creep_store(&f, hauler, resource), 0, "{resource}");
+        let RoomObject::Energy(pile) = f.obj(pile) else {
+            panic!("拒绝拾取不得移除掉落堆");
+        };
+        // 正常对象阶段仍衰减 1；其余 11 不得被 pickup 转入库存。
+        assert_eq!(pile.amount, 11, "{resource}");
+    }
+}
+
 /// 声明资源的主动掉落进入命名掉落堆；拾取按既有 pickup 链路入槽。
 #[test]
 fn declared_resource_drop_creates_named_pile_and_pickup_restores() {

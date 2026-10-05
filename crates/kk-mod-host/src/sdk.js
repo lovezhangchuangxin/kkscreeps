@@ -12,7 +12,7 @@ const declines = new WeakMap();
 // 冻结后的有效规则：宿主在密封后随执行链安装一次，此后整个 realm 生存期只读。
 // 注册期（模块求值与 register 回调）尚未冻结，读取一律失败——处理器不能
 // 借注册闭包拿到声明时的默认值冒充有效值。
-const effectiveRules = new Map();
+let effectiveRules = new Map();
 let rulesInstalled = false;
 
 // 只有这个工厂生成的返回值表示拒绝，普通对象/错误/返回码保持既有语义。
@@ -261,15 +261,19 @@ export function seal() {
 export function installRules(entries) {
   if (!sealed || rulesInstalled) throw new Error('有效规则只能在密封后安装一次');
   if (!Array.isArray(entries)) throw new Error('有效规则安装载荷须为数组');
+  // 先验证完整载荷；畸形条目、重复键或 getter 抛错不能留下可读取的半张表。
+  const nextRules = new Map();
   for (const entry of entries) {
     const key = entry && entry.key;
     const value = entry && entry.value;
     if (typeof key !== 'string' || typeof value !== 'number' || !Number.isFinite(value)) {
       throw new Error('有效规则条目须为 { key, value } 且值为有限数');
     }
-    if (effectiveRules.has(key)) throw new Error(`规则 ${key} 重复安装`);
-    effectiveRules.set(key, value);
+    anyKey(key, '规则安装');
+    if (nextRules.has(key)) throw new Error(`规则 ${key} 重复安装`);
+    nextRules.set(key, value);
   }
+  effectiveRules = nextRules;
   rulesInstalled = true;
 }
 

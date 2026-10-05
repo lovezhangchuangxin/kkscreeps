@@ -30,6 +30,8 @@ export default function register(api) {
 | 库存表示 | `store_extra`/Generic `store` 的既有任意命名槽，无新字段宽度 |
 | 快照 | `ResourceStack`/命名掉落堆按既有编码往返 |
 
+拾取与 transfer/withdraw/drop 共用当前资源目录的准入约束；即使快照或宿主放置了目录外的命名掉落堆，也不转入 creep 库存、不扣除拾取量、不移除掉落堆。正常对象阶段的掉落物衰减仍继续执行。
+
 ## 玩家常量与投影
 
 计划声明的资源在分片创建时合成为玩家 `RESOURCES_ALL` 常量（内建序在前，声明键字典序追加），与 `constant_overrides`/StoreRules 同源同批：预检 canary 与真实玩家 spawn 读同一值。**无声明资源时不注入覆盖**——零 Mod 与纯内建目录世界的玩家面保持 vanilla 常量原值。玩家 Store 包装器、`RESOURCES_ALL` 缺省 0 语义、JSON/KKPV 投影都按既有通路工作，新资源数量进入两种投影。

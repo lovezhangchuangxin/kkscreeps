@@ -270,7 +270,7 @@ pub(in crate::settle) fn intent_drop_amount_res(
 }
 
 /// 拾取相邻资源堆，按全部资源占用后的余量限量，清空的堆立即移除。
-/// 当前拒绝 power 堆，其他资源按资源名入槽。
+/// 当前拒绝 power 堆及目录外资源，其他资源按资源名入槽。
 pub(super) fn intent_pickup(w: &mut Working, id: ObjId, data: &IntentData) {
     let Some(target_id) = data.id else { return };
     let (pos, cap, held) = match w.creep(id) {
@@ -291,6 +291,9 @@ pub(super) fn intent_pickup(w: &mut Working, id: ObjId, data: &IntentData) {
         "power" => return,
         name => name.to_string(),
     };
+    if !w.plane.resources.contains(&slot_resource) {
+        return;
+    }
     let (tx, ty, amount) = (target.x, target.y, target.amount as i64);
     if (tx as i32 - pos.0 as i32).abs() > 1 || (ty as i32 - pos.1 as i32).abs() > 1 {
         return;

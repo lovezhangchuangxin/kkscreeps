@@ -9,7 +9,10 @@ export default function register(api) {
   });
   api.objects.define('base:meter', {
     version: 1, playerClass: 'RulesMeter', positionFields: ['x', 'y'],
-    fields: { x: { type: 'u32', min: 0, max: 49 }, y: { type: 'u32', min: 0, max: 49 } },
+    fields: {
+      x: { type: 'u32', min: 0, max: 49 }, y: { type: 'u32', min: 0, max: 49 },
+      value: { type: 'u32', default: 0 },
+    },
     tick(ctx) {
       const period = api.rules.effective('base:period');   // 冻结有效值，可能是其他包覆盖后的值
       if (ctx.tick % period === 0) ctx.target.fields.value += 1;
@@ -17,6 +20,8 @@ export default function register(api) {
   });
 }
 ```
+
+上例为包的 server.js；对应 player.js 仍须通过 api.objects.bind 将 base:meter 绑定到 RulesMeter 类，玩法字段 value 的初始值由 schema 默认值提供。
 
 ## 接口契约
 
@@ -46,6 +51,8 @@ export default function register(api) {
 执行停用只屏蔽结算执行：不卸载内容、不重算冻结规则，读取继续返回**原冻结选择**——即使覆盖方已被停用，其覆盖值仍然生效（与组合诊断 `selected_source` 在停用后保持不变的口径一致）。停用定义方只是让其处理器不再运行，已提交的 state 与规则目录保留。
 
 运行期规则修改、规则迁移与检查点属于后续批次；当前没有"改规则不换计划身份"的通路。mod inspect 的 `--rule-source` 只作用于当次诊断的选择输入，与宿主冻结选项是两个入口，得到相同计划须配置相同选择。
+
+宿主安装规则表时先验证完整载荷，再一次性发布；畸形条目、重复键及转换 getter 抛错均不会留下部分有效规则。即使包捕获一次失败安装的异常，后续宿主安装也只发布真实冻结计划中的条目，目录外键仍按未知键拒绝。
 
 ## 独立 JS 示例
 

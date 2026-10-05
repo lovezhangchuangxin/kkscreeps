@@ -211,3 +211,50 @@ api.rules.override('gate:threshold', 5);
     assert_eq!(rule.selected_source, "tuner");
     let _ = std::fs::remove_dir_all(root);
 }
+
+#[test]
+fn caught_failed_installation_cannot_add_rules_outside_the_frozen_plan() {
+    let root = temp_root("rules-install-atomic");
+    for payload in [
+        "[{key:'gate:ghost',value:77},null]",
+        "[{key:'gate:ghost',value:77},{key:'gate:ghost',value:88}]",
+        "[{key:'gate:ghost',value:77},{get key(){throw Error('getter');},value:1}]",
+        "[{key:'gate:ghost',value:77},{key:'bad-key',value:1}]",
+    ] {
+        let source = format!(
+            r#"import {{ seal, installRules }} from '@kkscreeps/mod';
+export default function register(api) {{
+  api.handlers.after('builtin:link.tick', {{id:'read'}}, ctx => {{
+    ctx.state = {{capacity:api.rules.effective('builtin:link.capacity')}};
+  }});
+  api.handlers.after('builtin:link.tick', {{id:'ghost'}}, ctx => {{
+    ctx.state = {{value:api.rules.effective('gate:ghost')}};
+  }});
+  seal();
+  try {{ installRules({payload}); }} catch (error) {{}}
+}}"#
+        );
+        write_pkg(&root, "gate", &[("server.js", &source)]);
+        let packages = discover_packages(&root).unwrap();
+        let mut realm = ModRealm::new().unwrap();
+        let registered = realm
+            .register(&packages, RegisterOptions::default())
+            .unwrap();
+        assert!(
+            registered
+                .plan
+                .rules()
+                .resolve(&key("gate:ghost"))
+                .is_none()
+        );
+        assert_eq!(read_state(&mut realm)["capacity"], 800);
+        let error = realm
+            .invoke("gate:handler.ghost", json!({"state":null}))
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("未知规则键"),
+            "{payload}: {error}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(root);
+}
