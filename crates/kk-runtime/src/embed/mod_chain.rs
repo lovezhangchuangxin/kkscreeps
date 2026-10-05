@@ -386,6 +386,10 @@ impl ChainHost for ModChainContext {
         self.apply_combat_damage(target, amount)
     }
 
+    fn combat_apply_heal(&mut self, target: &str, amount: i64) -> Result<(), String> {
+        self.apply_combat_heal(target, amount)
+    }
+
     fn combat_get(
         &mut self,
         target: &str,

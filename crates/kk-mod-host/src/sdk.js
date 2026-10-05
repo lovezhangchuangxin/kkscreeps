@@ -605,6 +605,15 @@ export function runChain(slot, token) {
           return ops.op_mod_chain_combat_apply_damage(token, key, targetId, amount);
         });
       },
+      applyHeal(targetId, amount) {
+        return checked(() => {
+          if (typeof targetId !== 'string') throw new Error('战斗目标须为对象 ID 的原始字符串');
+          if (!Number.isInteger(amount) || amount < 0 || amount > 1e9) {
+            throw new Error('策略治疗须为 0..=1e9 的整数');
+          }
+          return ops.op_mod_chain_combat_apply_heal(token, key, targetId, amount);
+        });
+      },
     });
   }
   function build(key, ctx, isOpen) {

@@ -1,6 +1,14 @@
 //! 战斗能力的候选门控、首触日志与恰一次消耗；不在候选借用内进入 JS。
 use super::*;
 
+type CombatEffect = fn(
+    &mut kk_engine::settle::Working,
+    ObjId,
+    ObjId,
+    i64,
+    kk_engine::settle::creep::CombatAction,
+) -> Result<(), String>;
+
 impl ModChainContext {
     pub(super) fn request_combat(&mut self, target: &str) -> Result<(), String> {
         let (action, journal) = {
@@ -43,8 +51,29 @@ impl ModChainContext {
     }
 
     pub(super) fn apply_combat_damage(&mut self, target: &str, amount: i64) -> Result<(), String> {
+        self.apply_combat_effect(
+            target,
+            amount,
+            kk_engine::settle::creep::slot_combat_apply_damage,
+        )
+    }
+
+    pub(super) fn apply_combat_heal(&mut self, target: &str, amount: i64) -> Result<(), String> {
+        self.apply_combat_effect(
+            target,
+            amount,
+            kk_engine::settle::creep::slot_combat_apply_heal,
+        )
+    }
+
+    fn apply_combat_effect(
+        &mut self,
+        target: &str,
+        amount: i64,
+        apply: CombatEffect,
+    ) -> Result<(), String> {
         let Some(combat) = &self.combat else {
-            return Err("本次槽没有策略伤害能力".into());
+            return Err("本次槽没有战斗策略能力".into());
         };
         if combat.consumed {
             return Err("本动作的战斗能力已消耗（改向/取消/执行恰一次）".into());
@@ -52,9 +81,9 @@ impl ModChainContext {
         let action = combat.action;
         let journal = combat.journal.clone();
         let target_id = ObjId::parse(target).ok_or("战斗目标 ID 非法")?;
-        // 策略伤害不做 rampart 改向，只有指定目标为额外写入面。
+        // 策略伤害/治疗均不做 rampart 改向，只有指定目标为额外写入面。
         self.remember_combat_targets(&journal, &[target_id]);
-        kk_engine::settle::creep::slot_combat_apply_damage(
+        apply(
             &mut self.ctx.borrow_mut(),
             self.id,
             target_id,

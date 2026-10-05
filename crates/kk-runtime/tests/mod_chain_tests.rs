@@ -181,6 +181,8 @@ mod creep_move_world;
 mod creep_store;
 #[path = "mod_chain_tests/damage_policy.rs"]
 mod damage_policy;
+#[path = "mod_chain_tests/heal_policy.rs"]
+mod heal_policy;
 #[path = "mod_chain_tests/link_decline.rs"]
 mod link_decline;
 #[path = "mod_chain_tests/mod_building_world.rs"]

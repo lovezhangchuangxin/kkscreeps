@@ -1,0 +1,367 @@
+{
+  "date": "2026-10-05",
+  "base_commit": "c45610d97b5f224d55191dbbc77f1c77d7afe207",
+  "scope": "N2c 第二片：近程/远程 JS 单体治疗策略；不包含群体伤害、反击或玩家预检替换",
+  "executable_sha256": "001a1b0fb2f3e30fa4eda0866bbb43388d724fae2b5d90dde1380f5431b6e9c1",
+  "clean_staged_export": {
+    "run_count": 12,
+    "all_passed": true,
+    "normalized_final_equal_across_channels": true,
+    "ignored_final_fields": [
+      "players.*.cpu_bucket"
+    ],
+    "runs": [
+      {
+        "policy": "flat",
+        "action": "heal",
+        "channel": "json",
+        "ticks": 4,
+        "status": "passed",
+        "plan_hash": "5eedd9292a917a46dc685754bf9928c16ac4510968116d8b2c6992e214ec02a7",
+        "memory": {
+          "method": "heal",
+          "attackCode": 0,
+          "targetHits": 163,
+          "targetBodyHits": [
+            63,
+            100
+          ],
+          "healCode": 0
+        },
+        "mod_states": {
+          "flat-heal": {
+            "applied": 1,
+            "lastHeal": 23
+          },
+          "scaled-heal": null
+        }
+      },
+      {
+        "policy": "flat",
+        "action": "heal",
+        "channel": "kkpv",
+        "ticks": 4,
+        "status": "passed",
+        "plan_hash": "5eedd9292a917a46dc685754bf9928c16ac4510968116d8b2c6992e214ec02a7",
+        "memory": {
+          "method": "heal",
+          "attackCode": 0,
+          "targetHits": 163,
+          "targetBodyHits": [
+            63,
+            100
+          ],
+          "healCode": 0
+        },
+        "mod_states": {
+          "flat-heal": {
+            "applied": 1,
+            "lastHeal": 23
+          },
+          "scaled-heal": null
+        }
+      },
+      {
+        "policy": "flat",
+        "action": "rangedHeal",
+        "channel": "json",
+        "ticks": 4,
+        "status": "passed",
+        "plan_hash": "5eedd9292a917a46dc685754bf9928c16ac4510968116d8b2c6992e214ec02a7",
+        "memory": {
+          "method": "rangedHeal",
+          "attackCode": 0,
+          "targetHits": 163,
+          "targetBodyHits": [
+            63,
+            100
+          ],
+          "healCode": 0
+        },
+        "mod_states": {
+          "flat-heal": {
+            "applied": 1,
+            "lastHeal": 23
+          },
+          "scaled-heal": null
+        }
+      },
+      {
+        "policy": "flat",
+        "action": "rangedHeal",
+        "channel": "kkpv",
+        "ticks": 4,
+        "status": "passed",
+        "plan_hash": "5eedd9292a917a46dc685754bf9928c16ac4510968116d8b2c6992e214ec02a7",
+        "memory": {
+          "method": "rangedHeal",
+          "attackCode": 0,
+          "targetHits": 163,
+          "targetBodyHits": [
+            63,
+            100
+          ],
+          "healCode": 0
+        },
+        "mod_states": {
+          "flat-heal": {
+            "applied": 1,
+            "lastHeal": 23
+          },
+          "scaled-heal": null
+        }
+      },
+      {
+        "policy": "scaled",
+        "action": "heal",
+        "channel": "json",
+        "ticks": 4,
+        "status": "passed",
+        "plan_hash": "009468276bb0b62485fc90c2ba2441e7e537bbfda726c3ea10317a3a8f605eda",
+        "memory": {
+          "method": "heal",
+          "attackCode": 0,
+          "targetHits": 170,
+          "targetBodyHits": [
+            70,
+            100
+          ],
+          "healCode": 0
+        },
+        "mod_states": {
+          "flat-heal": null,
+          "scaled-heal": {
+            "applied": 1,
+            "lastHeal": 30
+          }
+        }
+      },
+      {
+        "policy": "scaled",
+        "action": "heal",
+        "channel": "kkpv",
+        "ticks": 4,
+        "status": "passed",
+        "plan_hash": "009468276bb0b62485fc90c2ba2441e7e537bbfda726c3ea10317a3a8f605eda",
+        "memory": {
+          "method": "heal",
+          "attackCode": 0,
+          "targetHits": 170,
+          "targetBodyHits": [
+            70,
+            100
+          ],
+          "healCode": 0
+        },
+        "mod_states": {
+          "flat-heal": null,
+          "scaled-heal": {
+            "applied": 1,
+            "lastHeal": 30
+          }
+        }
+      },
+      {
+        "policy": "scaled",
+        "action": "rangedHeal",
+        "channel": "json",
+        "ticks": 4,
+        "status": "passed",
+        "plan_hash": "009468276bb0b62485fc90c2ba2441e7e537bbfda726c3ea10317a3a8f605eda",
+        "memory": {
+          "method": "rangedHeal",
+          "attackCode": 0,
+          "targetHits": 170,
+          "targetBodyHits": [
+            70,
+            100
+          ],
+          "healCode": 0
+        },
+        "mod_states": {
+          "flat-heal": null,
+          "scaled-heal": {
+            "applied": 1,
+            "lastHeal": 30
+          }
+        }
+      },
+      {
+        "policy": "scaled",
+        "action": "rangedHeal",
+        "channel": "kkpv",
+        "ticks": 4,
+        "status": "passed",
+        "plan_hash": "009468276bb0b62485fc90c2ba2441e7e537bbfda726c3ea10317a3a8f605eda",
+        "memory": {
+          "method": "rangedHeal",
+          "attackCode": 0,
+          "targetHits": 170,
+          "targetBodyHits": [
+            70,
+            100
+          ],
+          "healCode": 0
+        },
+        "mod_states": {
+          "flat-heal": null,
+          "scaled-heal": {
+            "applied": 1,
+            "lastHeal": 30
+          }
+        }
+      },
+      {
+        "policy": "plain",
+        "action": "heal",
+        "channel": "json",
+        "ticks": 4,
+        "status": "passed",
+        "plan_hash": "b3bf08fd8d006d49c29eef34615542bd10bf633cc339b45c40ffb56ea3d3ac4e",
+        "memory": {
+          "method": "heal",
+          "attackCode": 0,
+          "targetHits": 152,
+          "targetBodyHits": [
+            52,
+            100
+          ],
+          "healCode": 0
+        },
+        "mod_states": {}
+      },
+      {
+        "policy": "plain",
+        "action": "heal",
+        "channel": "kkpv",
+        "ticks": 4,
+        "status": "passed",
+        "plan_hash": "b3bf08fd8d006d49c29eef34615542bd10bf633cc339b45c40ffb56ea3d3ac4e",
+        "memory": {
+          "method": "heal",
+          "attackCode": 0,
+          "targetHits": 152,
+          "targetBodyHits": [
+            52,
+            100
+          ],
+          "healCode": 0
+        },
+        "mod_states": {}
+      },
+      {
+        "policy": "plain",
+        "action": "rangedHeal",
+        "channel": "json",
+        "ticks": 4,
+        "status": "passed",
+        "plan_hash": "b3bf08fd8d006d49c29eef34615542bd10bf633cc339b45c40ffb56ea3d3ac4e",
+        "memory": {
+          "method": "rangedHeal",
+          "attackCode": 0,
+          "targetHits": 144,
+          "targetBodyHits": [
+            44,
+            100
+          ],
+          "healCode": 0
+        },
+        "mod_states": {}
+      },
+      {
+        "policy": "plain",
+        "action": "rangedHeal",
+        "channel": "kkpv",
+        "ticks": 4,
+        "status": "passed",
+        "plan_hash": "b3bf08fd8d006d49c29eef34615542bd10bf633cc339b45c40ffb56ea3d3ac4e",
+        "memory": {
+          "method": "rangedHeal",
+          "attackCode": 0,
+          "targetHits": 144,
+          "targetBodyHits": [
+            44,
+            100
+          ],
+          "healCode": 0
+        },
+        "mod_states": {}
+      }
+    ]
+  },
+  "runtime_specialized": {
+    "passed": 9,
+    "failed": 0,
+    "coverage": [
+      "heal/rangedHeal 数值及 before 消耗",
+      "延迟 hits/body 读面",
+      "零/上界/身体恢复/自愈",
+      "满血治疗与同轮致死伤害抵消",
+      "远处目标的局部拒绝保留既有队列/转账/后续移动",
+      "非法数值/重复消耗/跨槽/跨房/结构/孵化目标",
+      "当前处理器结束故障与跨调用旧 token 拒绝",
+      "晚期 RawMemory 失败的缓存重试恰一次"
+    ]
+  },
+  "cli_specialized": {
+    "passed": 2,
+    "failed": 0,
+    "scenario_runs": 12,
+    "cold_resume_cases": 16,
+    "checkpoint_splits": [
+      1,
+      2
+    ],
+    "continuous_ticks": 4,
+    "packages": [
+      "flat-heal",
+      "scaled-heal"
+    ],
+    "actions": [
+      "heal",
+      "rangedHeal"
+    ],
+    "channels": [
+      "json",
+      "kkpv"
+    ],
+    "compared_fields": [
+      "final (CPU bucket 除外)",
+      "plan_hash",
+      "composition"
+    ]
+  },
+  "inspect": {
+    "single_selected_status": "ok",
+    "two_replaces_status": "setup_failed",
+    "two_replaces_error": "builtin:creep.heal: 多个 replace 处理器冲突：flat-heal:handler.heal, scaled-heal:handler.heal"
+  },
+  "not_measured": [
+    "性能",
+    "新 bot 运行结果",
+    "完整 N2c 或完整 gameplay 兼容"
+  ],
+  "full_check": {
+    "command": "KKSCREEPS_BIN=$PWD/target/debug/kkscreeps pnpm run check",
+    "rust_passed": 875,
+    "rust_failed": 0,
+    "rust_ignored": 12,
+    "rust_groups": 56,
+    "javascript_passed": 19,
+    "clippy_warnings": 0,
+    "source_files_checked": 417,
+    "javascript_compat_passed": 14,
+    "javascript_placeholder_passed": 5
+  },
+  "compatibility": {
+    "command": "KKSCREEPS_BIN=$PWD/target/release/kkscreeps node compat/scripts/ratchet.mjs",
+    "pin": "34a630efa42908c117c19c25d2350fa2387bd633",
+    "total": 2914,
+    "passed": 1918,
+    "existing_failed": 89,
+    "skipped": 907,
+    "baseline": "c45610d",
+    "changed_case_statuses": 0,
+    "existing_unused_waiver_warnings": 2
+  }
+}

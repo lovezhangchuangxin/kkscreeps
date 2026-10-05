@@ -1,5 +1,5 @@
 //! 战斗目标改向与取消能力：目标以原始字符串接收，宿主在候选短借用内
-//! 以新目标执行 native，或应用 JS 策略伤害；二者与取消共用恰一次门。
+//! 以新目标执行 native，或应用 JS 策略伤害/治疗；与取消共用恰一次门。
 use super::*;
 
 #[op2]
@@ -38,6 +38,32 @@ pub(crate) fn op_mod_chain_combat_apply_damage(
         chain.host.combat_apply_damage(&target, amount as i64)
     } else {
         Err("策略伤害须为 0..=1e9 的整数".into())
+    };
+    chain.outcome(ModFaultKind::Write, Some(&binding), result)
+}
+
+#[op2(fast)]
+pub(crate) fn op_mod_chain_combat_apply_heal(
+    state: &mut OpState,
+    #[string] token: String,
+    #[string] binding: String,
+    #[string] target: String,
+    amount: f64,
+) -> Result<(), JsErrorBox> {
+    let chain = active(state, &token)?;
+    chain.checked_binding(&binding)?;
+    let _timer = chain
+        .profiler
+        .as_ref()
+        .map(|p| p.measure("host_combat_apply_heal"));
+    // 原始数值校验在转换前完成，不能将小数截断或把 NaN 转成零。
+    let result = if amount.is_finite()
+        && amount.fract() == 0.0
+        && (0.0..=kk_mod_api::combat::MAX_HEAL as f64).contains(&amount)
+    {
+        chain.host.combat_apply_heal(&target, amount as i64)
+    } else {
+        Err("策略治疗须为 0..=1e9 的整数".into())
     };
     chain.outcome(ModFaultKind::Write, Some(&binding), result)
 }

@@ -67,3 +67,5 @@ __pycache__/
 !compat/fixtures/sim-mod-buildings/
 !compat/fixtures/mod-damage-policy/
 !compat/fixtures/sim-mod-damage-policy/
+!compat/fixtures/mod-heal-policy/
+!compat/fixtures/sim-mod-heal-policy/

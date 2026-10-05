@@ -254,3 +254,5 @@ mod buildings;
 mod checkpoint;
 #[path = "sim_tests/damage_policy.rs"]
 mod damage_policy;
+#[path = "sim_tests/heal_policy.rs"]
+mod heal_policy;

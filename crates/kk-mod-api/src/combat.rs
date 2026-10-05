@@ -6,6 +6,9 @@ use serde::Serialize;
 /// 不是原生 ATTACK/RANGED_ATTACK 功率或部件规则。
 pub const MAX_DAMAGE: i64 = 1_000_000_000;
 
+/// 单次策略治疗的非负整数上限；与伤害相同的表示域，不是 HEAL 功率。
+pub const MAX_HEAL: i64 = 1_000_000_000;
+
 /// 脱离候选所有权的战斗读面；字段使用玩家面部件名，不泄露快照码值。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

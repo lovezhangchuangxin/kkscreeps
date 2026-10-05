@@ -1,0 +1,88 @@
+{
+  "version": 1,
+  "shard": {
+    "players": [
+      "p1"
+    ],
+    "rooms": [
+      {
+        "name": "W1N1",
+        "owner": "p1",
+        "rcl": 6
+      }
+    ]
+  },
+  "bots": [
+    {
+      "player": "p1",
+      "modules": ".",
+      "memory": {
+        "method": "rangedHeal"
+      }
+    }
+  ],
+  "objects": [
+    {
+      "alias": "healer",
+      "room": "W1N1",
+      "kind": "creep",
+      "spec": {
+        "name": "healer",
+        "owner": "p1",
+        "pos": [
+          10,
+          10
+        ],
+        "body": [
+          "heal",
+          "attack",
+          "attack"
+        ],
+        "ticksToLive": 100
+      }
+    },
+    {
+      "alias": "target",
+      "room": "W1N1",
+      "kind": "creep",
+      "spec": {
+        "name": "target",
+        "owner": "p2",
+        "pos": [
+          10,
+          11
+        ],
+        "body": [
+          "move",
+          "move"
+        ],
+        "ticksToLive": 100
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "pointer": "/players/p1/memory/attackCode",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "pointer": "/players/p1/memory/healCode",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "pointer": "/players/p1/memory/targetHits",
+      "op": "eq",
+      "value": 144
+    },
+    {
+      "pointer": "/players/p1/memory/targetBodyHits",
+      "op": "eq",
+      "value": [
+        44,
+        100
+      ]
+    }
+  ]
+}

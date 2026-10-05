@@ -11,8 +11,8 @@ mod store;
 pub(in crate::settle) use build::intent_build;
 pub use build::{BuildAction, build_touch_targets, dismantle_drop_face, slot_build_request};
 pub use combat::{
-    CombatAction, combat_touch_targets, slot_combat_apply_damage, slot_combat_get,
-    slot_combat_request,
+    CombatAction, combat_touch_targets, slot_combat_apply_damage, slot_combat_apply_heal,
+    slot_combat_get, slot_combat_request,
 };
 pub(in crate::settle) use combat::{intent_dismantle, intent_repair};
 pub use harvest::harvest_power;

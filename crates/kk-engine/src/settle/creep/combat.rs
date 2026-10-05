@@ -8,7 +8,7 @@ use kk_schema::room::RoomObject;
 use kk_world::ObjId;
 use kk_world::types::BodyKind;
 
-use super::{ACTION_HEAL, ACTION_HEALED, ACTION_REPAIR, set_action_log};
+use super::{ACTION_REPAIR, set_action_log};
 use crate::intent::IntentData;
 use crate::settle::Working;
 use crate::settle::damage;
@@ -17,6 +17,8 @@ use crate::settle::movement::type_name_of;
 
 mod damage_policy;
 pub use damage_policy::{slot_combat_apply_damage, slot_combat_get};
+mod heal_policy;
+pub use heal_policy::slot_combat_apply_heal;
 
 /// 战斗能力面认得的动作族成员；与 builtin:creep.* 五槽一一对应。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -438,24 +440,6 @@ pub(super) fn intent_heal(w: &mut Working, id: ObjId, data: &IntentData, ranged:
     if blocked_by_safe_mode(w, &owner) {
         return;
     }
-    *w.heal_to_apply.entry(target_id).or_insert(0) += power;
-    if let Some(c) = w.creep_mut(id) {
-        set_action_log(&mut c.action_log, ACTION_HEAL);
-    }
-    if let Some(t) = w.creep_mut(target_id) {
-        set_action_log(&mut t.action_log, ACTION_HEALED);
-    }
-    w.push_event(
-        c::EVENT_HEAL,
-        id,
-        serde_json::json!({
-            "targetId": target_id.as_str(),
-            "amount": power,
-            "healType": if ranged {
-                c::EVENT_HEAL_TYPE_RANGED
-            } else {
-                c::EVENT_HEAL_TYPE_MELEE
-            },
-        }),
-    );
+    // 原生部件功率有界；共用登记器在累计量溢出时不写入候选。
+    let _ = heal_policy::apply_heal(w, id, target_id, power, ranged);
 }

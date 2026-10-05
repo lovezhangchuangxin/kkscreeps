@@ -21,8 +21,8 @@ pub(crate) use movement::{
 };
 mod combat;
 pub(crate) use combat::{
-    op_mod_chain_combat_apply_damage, op_mod_chain_combat_cancel, op_mod_chain_combat_get,
-    op_mod_chain_combat_request,
+    op_mod_chain_combat_apply_damage, op_mod_chain_combat_apply_heal, op_mod_chain_combat_cancel,
+    op_mod_chain_combat_get, op_mod_chain_combat_request,
 };
 mod build;
 pub(crate) use build::{op_mod_chain_build_cancel, op_mod_chain_build_request};
@@ -125,6 +125,10 @@ pub trait ChainHost {
     /// 默认拒绝；宿主只在有对象/队列/增删回滚边界的攻击槽开放。
     fn combat_apply_damage(&mut self, _target: &str, _amount: i64) -> Result<(), String> {
         Err("本次槽没有策略伤害能力".into())
+    }
+    /// 默认拒绝；宿主只在有对象/延迟队列回滚边界的治疗槽开放。
+    fn combat_apply_heal(&mut self, _target: &str, _amount: i64) -> Result<(), String> {
+        Err("本次槽没有策略治疗能力".into())
     }
     fn combat_get(
         &mut self,
