@@ -766,7 +766,8 @@ impl Working {
     }
 
     /// 在指令处理后仲裁移动冲突，使用此时生效的安全模式主人。
-    pub fn check_movement(&mut self) {
+    /// priorities 是 JS 竞争策略的终值候选，空表等同原生默认。
+    pub fn check_movement(&mut self, priorities: &BTreeMap<ObjId, i64>) {
         let safe_mode_user: Option<String> = self.controller().and_then(|ctl| {
             if ctl.safe_mode > self.time {
                 ctl.owner.clone()
@@ -779,6 +780,7 @@ impl Working {
             &self.index,
             &self.old_fatigue,
             safe_mode_user.as_deref(),
+            priorities,
         );
     }
 

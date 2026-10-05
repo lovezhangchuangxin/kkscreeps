@@ -6,6 +6,7 @@
 
 pub mod buildings;
 pub mod checkpoint;
+pub mod contest;
 pub mod contrib;
 pub mod controller;
 pub mod creep;

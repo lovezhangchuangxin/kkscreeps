@@ -46,6 +46,8 @@ mod misc_and_notify;
 mod mod_building_family;
 #[path = "settle_tests/mod_resource_family.rs"]
 mod mod_resource_family;
+#[path = "settle_tests/movement_contest.rs"]
+mod movement_contest;
 #[path = "settle_tests/movement_spawn_basics.rs"]
 mod movement_spawn_basics;
 #[path = "settle_tests/structures_and_attack.rs"]

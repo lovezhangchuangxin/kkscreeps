@@ -209,6 +209,8 @@ mod composition;
 mod incoming_faults;
 #[path = "mod_chain_tests/incoming_policy.rs"]
 mod incoming_policy;
+#[path = "mod_chain_tests/move_contest.rs"]
+mod move_contest;
 #[path = "mod_chain_tests/retaliation_faults.rs"]
 mod retaliation_faults;
 #[path = "mod_chain_tests/retaliation_policy.rs"]

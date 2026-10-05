@@ -26,6 +26,8 @@ pub(crate) use combat::{
     op_mod_chain_combat_get, op_mod_chain_combat_request,
 };
 pub(crate) use incoming::{op_mod_chain_incoming_damage, op_mod_chain_incoming_set_damage};
+mod contest;
+pub(crate) use contest::{op_mod_chain_contest_priority, op_mod_chain_contest_set_priority};
 mod combat_batch;
 pub(crate) use combat_batch::{
     op_mod_chain_combat_apply_damage_batch, op_mod_chain_combat_list,
@@ -64,6 +66,13 @@ pub trait ChainHost {
     }
     fn incoming_set_damage(&mut self, _amount: i64) -> Result<(), String> {
         Err("本次槽没有受击数值能力".into())
+    }
+    /// 读取移动竞争者当前优先级；仅竞争槽开放。
+    fn contest_priority(&mut self, _id: &str) -> Result<i64, String> {
+        Err("本次槽没有移动竞争能力".into())
+    }
+    fn contest_set_priority(&mut self, _id: &str, _priority: i64) -> Result<(), String> {
+        Err("本次槽没有移动竞争能力".into())
     }
     fn read(&mut self, binding: &str) -> Result<ChainContext, String>;
     fn write(&mut self, binding: &str, context: ChainWrite) -> Result<(), String>;
@@ -433,7 +442,7 @@ pub(crate) fn op_mod_chain_decline(
         return chain.outcome(
             ModFaultKind::Control,
             Some(&binding),
-            Err("该槽尚不支持正常拒绝；仅 Mod 自有对象动作与已接局部恢复边界的内建槽（资源/移动/战斗/建造族）可回滚".into()),
+            Err("该槽尚不支持正常拒绝；仅 Mod 自有对象动作与已接局部恢复边界的内建槽（资源/移动/战斗/建造族/受击/移动竞争）可回滚".into()),
         );
     }
     if code.is_empty()

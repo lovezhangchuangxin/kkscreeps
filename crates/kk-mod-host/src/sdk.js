@@ -362,6 +362,8 @@ export function installRules(entries) {
 // movement 读写当前执行者的移动请求登记（pending/request/cancel），combat
 // 以新目标执行或取消本战斗动作（request/cancel），build 以新目标执行或
 // 取消本建造族动作（request/cancel，进度/伤害/能量数值不经此面）。
+// 房间级移动竞争槽的 ctx.contest 读写本次输入中竞争者的优先级数值
+// （getPriority/setPriority），只改变仲裁排序，不开放请求或获准集合。
 // 均不可枚举、不可替换且只在处理器同步期内有效。
 // 处理器的持久状态只准走 ctx.state——模块全局不随失败候选回滚，
 // 用它做累计会破坏同输入重试的确定性。
@@ -668,6 +670,32 @@ export function runChain(slot, token) {
       },
     });
   }
+  function contest(key, isOpen) {
+    function checked(call) {
+      try {
+        if (!isOpen()) throw new Error('移动竞争能力只能在所属处理器同步执行期间调用');
+        return call();
+      } catch (error) {
+        fault(error, key, 'context');
+        throw error;
+      }
+    }
+    return Object.freeze({
+      getPriority(id) {
+        return checked(() => {
+          if (typeof id !== 'string') throw new Error('竞争者 ID 须为原始字符串');
+          return ops.op_mod_chain_contest_priority(token, key, id);
+        });
+      },
+      setPriority(id, priority) {
+        return checked(() => {
+          if (typeof id !== 'string') throw new Error('竞争者 ID 须为原始字符串');
+          if (!Number.isSafeInteger(priority)) throw new Error('竞争优先级须为 JS 安全整数');
+          return ops.op_mod_chain_contest_set_priority(token, key, id, priority);
+        });
+      },
+    });
+  }
   function build(key, ctx, isOpen) {
     function checked(call) {
       try {
@@ -703,6 +731,7 @@ export function runChain(slot, token) {
     Object.defineProperty(ctx, 'combat', { value: combat(key, () => open) });
     Object.defineProperty(ctx, 'build', { value: build(key, ctx, () => open) });
     Object.defineProperty(ctx, 'incoming', { value: incoming(key, () => open) });
+    Object.defineProperty(ctx, 'contest', { value: contest(key, () => open) });
     try {
       checkResult(key, bindings.get(key).fn(ctx));
       write(key, ctx);
@@ -730,6 +759,7 @@ export function runChain(slot, token) {
     Object.defineProperty(ctx, 'combat', { value: combat(key, () => open) });
     Object.defineProperty(ctx, 'build', { value: build(key, ctx, () => open) });
     Object.defineProperty(ctx, 'incoming', { value: incoming(key, () => open) });
+    Object.defineProperty(ctx, 'contest', { value: contest(key, () => open) });
     function next() {
       if (!open) throw new Error('next 只能在所属处理器同步执行期间调用');
       if (called) {

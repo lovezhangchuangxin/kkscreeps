@@ -9,7 +9,7 @@
 - 更新日期：2026-10-06。
 - 实现参考基线：`8e28ac4`，JS 受击策略与独立护甲/护盾组合；这是功能基线，后续文档提交不改变它的含义。接手时仍须核对实际 HEAD 和工作区。
 - 最近已完成：N2c 受击策略第二片，见[现行契约](../architecture/mod-incoming-policy.md)和[验收记录](../research/notes/n2c-incoming-policy-2026-10-06.md)。
-- 当前任务：无正在实施的 G 批次；下一建议实现为 **G01 移动竞争优先级策略**。启动前登记 G30.a 的本领域覆盖清单及 G30.d 的默认参考；之后按下文执行队列穿插作者工具和类型生成。
+- 当前任务：G01 移动竞争优先级策略已于 2026-10-06 交付（含 G30.a 移动领域覆盖清单与 G30.d 默认微基准，三路复审清偿、`pnpm run check` 全绿 955 通过、兼容性棘轮 1918/2914 零转红）。下一建议：按执行队列推进 **G05.a 作者 CLI init** 或 **G02 移动准入策略首片**（注意 G02 须同源处理仲裁与执行阶段两处 `can_move`/障碍消费者）。
 - 最近维护工作：2026-10-06 开发与实验命令可移植性整理已完成复审和完整仓库门禁，见下方记录；没有新增已实现的 G 功能。
 - 未解决的产品决定：本轮路线复审没有需要用户补充的决定；具体公开接口、权限与耐久协议尚未冻结，须在对应子片设计和验收。
 - 验证参考：使用上述验收记录及其机器数据，不复制其测试数量作为永久门槛。最新兼容性报告和门禁配置位于 `compat/reports/`。
@@ -32,7 +32,7 @@
 
 | 编号 | 任务 | 依赖/前置 | 状态 | 交付证据 |
 |---|---|---|---|---|
-| G01 | 移动竞争优先级策略 | 现有 move 请求与仲裁 | 未开始 | — |
+| G01 | 移动竞争优先级策略 | 现有 move 请求与仲裁 | 已完成 | [mod-move-contest](../architecture/mod-move-contest.md)、[交付记录](../research/notes/g01-move-contest-2026-10-06.md)（G02–G04 未开放，另行推进） |
 | G02 | 移动准入策略 | 已稳定的移动请求输入；同步必要玩家预检，G01 不作硬依赖 | 未开始 | — |
 | G03 | 完整房间移动仲裁 | G01、G02 | 未开始 | — |
 | G04 | 移动代价与执行效果 | G02；代价可先行，完整仲裁交互在 G03 后验收 | 未开始 | — |
@@ -314,6 +314,17 @@ G28.a 的网络协议及只读原型可提前设计；开放会改变玩法的�
 已知问题 / 需要用户决定的具体事项：
 下一步与依赖：
 ```
+
+### G01 移动竞争优先级策略（2026-10-06）
+
+- 基线：`8e28ac4` 功能基线之上实施；启动前已采集 G30.d 默认仲裁微基准（release 8 竞争格 ×4 竞争者 ≈1.6 µs/房），改造后同负载 ≈1.6–2.4 µs（噪音内，无默认路径回归）。
+- 本次实现范围与关键契约：新增房间级槽 `builtin:room.moveContest`（内建槽 14→15，builtin revision v8）。整房一次提供全部竞争格（≥2 竞争者目的格）与按登记序的竞争者摘要（含默认四键评分要素，不截断）；`ctx.contest.getPriority/setPriority` 优先级数值候选（±2^53−1 JS 安全整数、id 白名单限本次输入），排序键 优先级 → 默认四键 → 登记序，未设置为 0 保证原生默认与平手登记序兼容；正常拒绝丢弃优先级与暂存 state 回退默认排序；native 中心无操作、停用回退、晚期写回失败缓存重试与受击槽同构。仲裁结果为 tick 瞬态，不新增持久写入域；新增冻结描述改变 PlanHash（旧检查点明确拒绝）。
+- 已完成事项：mod-api 输入与槽描述；引擎 `Movement::check_impl` 优先级接线、`contest_input`/候选 `MoveContest`/`arbitrate_room` 编排、装配与 install 清单；mod-host ChainHost/op/sdk.js `ctx.contest`；runtime `SlotCall::Contest` 与能力实现。独立包 `compat/fixtures/mod-move-policy/{seniority,heaviest}`，场景 `sim-mod-move-policy` 四件套（plain/seniority/heaviest/combined，三种策略三种胜者）。契约文档[JS 移动竞争](../architecture/mod-move-contest.md)、G30.a 移动领域覆盖清单与 G30.d 基准见[交付记录](../research/notes/g01-move-contest-2026-10-06.md)。
+- 剩余消费者与限制：G02 移动准入（含执行阶段 `can_move` 复核同源）、G03 获准集合/让位链/整房请求视野、G04 代价与执行效果、pull 策略未开放；xxscreeps 随机平手语义未提供；JS 策略端到端开销未单独量化（VM 预算管控，G30.d 滚动补测）。
+- 验证：`cargo test -p kk-engine`（新增 contest 单测 6 项含对穿/拉着走 + 竞争排序集成测试）；`kk-runtime mod_chain_tests::move_contest` 7 用例（输入完整性、重排、拒绝回退、非法值/越权不可掩盖、能力门、负优先级、停用回退、缓存重试恰一次）；`kk-cli sim_tests::move_policy`（四场景 × JSON/KKPV 全等、PlanHash 四身份、竞争后保存/冷启动续跑等价、applied 恰一次）；改造前后微基准对照。完整 `pnpm run check` 通过（Rust 955 通过/12 既有忽略、JS/格式/Clippy/链接/规模门禁全绿）；兼容性棘轮 release 重跑 1918/2914 通过、零转红（两条历史豁免未命中警告与本批无关）。
+- 复审发现与处理：三路只读 subagent 评审（仲裁正确性/恢复路径、能力面/数值边界、模块规约/文档一致性）无中/阻断级语义问题；已清偿：冻结目录测试槽计数 14→15（阻断 workspace 测试）、基准补 `#[ignore]` 并统一手动命令、clippy unnecessary_cast、对穿/拉着走两个正向契约用例与 e2e 字段断言补齐、`MoveContest::new` 不可解析 id 改构造期故障、竞争槽 `write_fields` 提前拒绝、decline 文案补受击/竞争、`ctx.target` 文档措辞与非 creep 防御值说明、记录移至时间序末尾。明细见[交付记录](../research/notes/g01-move-contest-2026-10-06.md)。
+- 提交 ID：随本批提交，后续按 Git 补录。
+- 下一步与依赖：G01 状态待复审清偿后改已完成；随后按执行队列推进 G05.a 作者 CLI init 或 G02 准入策略首片。
 
 ## 可直接使用的接手提示词
 

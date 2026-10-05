@@ -10,11 +10,13 @@ use kk_schema::room::{CreepObj, RoomObject};
 use kk_world::types::{BodyKind, is_obstacle_type};
 use kk_world::{ObjId, RoomIndex, RoomState};
 
-/// 冲突评分，依次按原格被请求数量、被拉、拉者、MOVE 功率/重量降序比较。
+/// 冲突评分，依次按优先级、原格被请求数量、被拉、拉者、MOVE 功率/重量
+/// 降序比较。优先级来自 JS 竞争策略候选，未设置为 0（与原生默认等价）。
 #[derive(Debug, Clone)]
 struct Rate {
     object: ObjId,
     origin: (u8, u8),
+    priority: i64,
     rate1: i64,
     rate2: i64,
     rate3: i64,
@@ -24,7 +26,7 @@ struct Rate {
 /// 本轮移动请求、获准目的格与拉拽关系；不直接改变对象坐标。
 /// 持有建筑目录副本：仲裁期的障碍判定要认 Mod 建筑的 obstacle 语义，
 /// 而仲裁在仅有房间快照的上下文中执行。
-#[derive(Default, Debug)]
+#[derive(Clone, Default, Debug)]
 pub struct Movement {
     matrix: BTreeMap<(u8, u8), Vec<RateEntry>>,
     winners: BTreeMap<ObjId, (u8, u8)>,
@@ -198,14 +200,88 @@ impl Movement {
             .collect()
     }
 
+    /// 是否存在多竞争者目的格；竞争策略槽据此决定是否进入 JS。
+    pub fn has_contested_cells(&self) -> bool {
+        self.matrix.values().any(|entries| entries.len() > 1)
+    }
+
+    /// 构造房间移动竞争输入：全部有竞争者的目的格及按登记序排列的
+    /// 竞争者摘要，含默认四键评分要素；不截断房间请求。调用时点为
+    /// 登记完成之后、仲裁开始之前，矩阵仍是完整原始形态。
+    pub fn contest_input(&self, room: &RoomState) -> kk_mod_api::contest::MoveContestInput {
+        let mut contests = Vec::new();
+        for (&cell, entries) in &self.matrix {
+            if entries.len() < 2 {
+                continue;
+            }
+            let contenders = entries
+                .iter()
+                .map(|entry| self.contender_info(room, *entry, cell))
+                .collect();
+            contests.push(kk_mod_api::contest::ContestCell {
+                x: cell.0,
+                y: cell.1,
+                contenders,
+            });
+        }
+        kk_mod_api::contest::MoveContestInput { contests }
+    }
+
+    /// 单个竞争者摘要；评分要素与 [`rate_of`] 同源，对穿标志由原始
+    /// 矩阵推导。非 creep 登记者按防御值填充（默认评分为全 0）。
+    fn contender_info(
+        &self,
+        room: &RoomState,
+        entry: RateEntry,
+        cell: (u8, u8),
+    ) -> kk_mod_api::contest::ContenderInfo {
+        let mut info = kk_mod_api::contest::ContenderInfo {
+            id: entry.id.as_str(),
+            owner: String::new(),
+            origin_x: entry.origin.0,
+            origin_y: entry.origin.1,
+            origin_request_count: self
+                .matrix
+                .get(&entry.origin)
+                .map(|v| v.len() as i64)
+                .unwrap_or(0),
+            reciprocal: false,
+            pulled: self.pulled_by.contains_key(&entry.id),
+            pulling: self.pull_of.contains_key(&entry.id),
+            move_power: 0,
+            weight: 1,
+            power_ratio: 0.0,
+        };
+        info.reciprocal = self
+            .matrix
+            .get(&entry.origin)
+            .is_some_and(|movers| movers.iter().any(|m| movers_at(m, cell)));
+        if let Some(RoomObject::Creep(creep)) = room.objects.get(&entry.id) {
+            info.owner = creep.owner.clone();
+            info.move_power = kk_world::types::calc_body_effectiveness(
+                &creep.body,
+                BodyKind::Move,
+                "move",
+                "fatigue",
+                1,
+            );
+            info.weight = move_weight(creep).max(1) as i64;
+            info.power_ratio = info.move_power as f64 / info.weight as f64;
+        }
+        info
+    }
+
     /// 先逐目标格选胜者，再沿阻塞链取消移动。
     /// 来源：上游 engine/src/processor/intents/movement.js 的 check。
+    /// priorities 是 JS 竞争策略的终值候选（缺项为 0），作为排序首键；
+    /// 平手仍回落默认四键与登记序。
     pub fn check_impl(
         &mut self,
         room: &RoomState,
         index: &RoomIndex,
         old_fatigue: &BTreeMap<ObjId, u32>,
         safe_mode_user: Option<&str>,
+        priorities: &BTreeMap<ObjId, i64>,
     ) {
         let mut new_matrix: BTreeMap<(u8, u8), Vec<RateEntry>> = BTreeMap::new();
         let mut winners = BTreeMap::new();
@@ -215,12 +291,18 @@ impl Movement {
             let winner = if entries.len() > 1 {
                 let mut rates: Vec<Rate> = entries
                     .iter()
-                    .map(|e| rate_of(&original, room, &self.pulled_by, &self.pull_of, *e, cell))
+                    .map(|e| {
+                        let mut rate =
+                            rate_of(&original, room, &self.pulled_by, &self.pull_of, *e, cell);
+                        rate.priority = priorities.get(&e.id).copied().unwrap_or(0);
+                        rate
+                    })
                     .collect();
-                // 四项降序，完全平手保持登记顺序；不可改成不稳定排序。
+                // 优先级与四项降序，完全平手保持登记顺序；不可改成不稳定排序。
                 rates.sort_by(|a, b| {
-                    b.rate1
-                        .cmp(&a.rate1)
+                    b.priority
+                        .cmp(&a.priority)
+                        .then(b.rate1.cmp(&a.rate1))
                         .then(b.rate2.cmp(&a.rate2))
                         .then(b.rate3.cmp(&a.rate3))
                         .then(
@@ -321,6 +403,7 @@ fn rate_of(
         return Rate {
             object: entry.id,
             origin: entry.origin,
+            priority: 0,
             rate1: 0,
             rate2: 0,
             rate3: 0,
@@ -346,6 +429,7 @@ fn rate_of(
     Rate {
         object: entry.id,
         origin: entry.origin,
+        priority: 0,
         rate1,
         rate2,
         rate3,

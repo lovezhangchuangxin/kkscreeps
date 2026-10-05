@@ -62,6 +62,7 @@ impl Engine {
             "builtin:creep.repair.native",
             "builtin:creep.dismantle.native",
             "builtin:creep.receiveDamage.native",
+            "builtin:room.moveContest.native",
         ];
         for binding in plan.required_bindings() {
             let name = binding.as_str();

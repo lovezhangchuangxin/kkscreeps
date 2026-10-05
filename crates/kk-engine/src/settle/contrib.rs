@@ -310,6 +310,11 @@ pub enum SlotCall<'a> {
         id: ObjId,
         candidate: Rc<crate::settle::incoming::IncomingDamage>,
     },
+    /// 房间级移动竞争：整房一次，无单一目标对象；native 中心为无操作
+    /// （保留 before 设置的优先级）。
+    Contest {
+        candidate: Rc<crate::settle::contest::MoveContest>,
+    },
     Action {
         id: ObjId,
         data: &'a IntentData,
@@ -361,6 +366,8 @@ pub struct ContributionDispatch {
     creep_repair: ActionSlot,
     creep_dismantle: ActionSlot,
     incoming: IncomingSlot,
+    /// 房间级移动竞争优先级槽。
+    move_contest: ContestSlot,
     /// Mod 自有槽（按槽键查）；扩展意图结算在此派发。
     ext: BTreeMap<Key, ExtSlot>,
 }
@@ -382,6 +389,7 @@ impl Default for ContributionDispatch {
             creep_repair: ActionSlot::Native(super::creep::intent_repair),
             creep_dismantle: ActionSlot::Native(super::creep::intent_dismantle),
             incoming: IncomingSlot::Native,
+            move_contest: ContestSlot::Native,
             ext: BTreeMap::new(),
         }
     }
@@ -392,11 +400,18 @@ pub const LINK_SLOT_KEYS: [&str; 2] = [
     kk_mod_api::builtin::SLOT_KEYS[0],
     kk_mod_api::builtin::SLOT_KEYS[1],
 ];
-pub const BUILTIN_SLOT_KEYS: [&str; 14] = kk_mod_api::builtin::SLOT_KEYS;
+pub const BUILTIN_SLOT_KEYS: [&str; 15] = kk_mod_api::builtin::SLOT_KEYS;
 
 impl ContributionDispatch {
     pub(crate) fn run_incoming(&self, ctx: &RoomCtx, id: ObjId) -> Result<Option<i64>, String> {
         self.incoming.run(ctx, id)
+    }
+    /// 运行移动竞争优先级槽；见 [`ContestSlot::run`] 的返回语义。
+    pub(crate) fn run_contest(
+        &self,
+        ctx: &RoomCtx,
+    ) -> Result<Option<BTreeMap<ObjId, i64>>, String> {
+        self.move_contest.run(ctx)
     }
     pub(crate) fn run_transfer(
         &self,
@@ -491,6 +506,8 @@ impl ContributionDispatch {
     }
 }
 mod assemble;
+mod contest;
 mod execute;
 mod incoming;
+use contest::ContestSlot;
 use incoming::IncomingSlot;

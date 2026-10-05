@@ -154,8 +154,9 @@ pub fn settle_room(
         }
     }
 
-    // 所有 move/pull 登记完成后，再统一仲裁目的格冲突。
-    ctx.borrow_mut().check_movement();
+    // 所有 move/pull 登记完成后，再统一仲裁目的格冲突。有竞争策略
+    // 贡献时先释放借用经整槽宿主生成优先级候选；正常拒绝回退默认评分。
+    contest::arbitrate_room(&ctx).map_err(SettleError)?;
 
     // 按指令处理后的存量重算可用能量，供 spawn tick 的低能量补给判断。
     let _energy_available = spawn::energy_available(&ctx.borrow());
