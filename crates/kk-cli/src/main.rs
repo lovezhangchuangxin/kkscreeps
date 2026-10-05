@@ -5,6 +5,7 @@ use clap::{Parser, Subcommand};
 
 mod bot_check;
 mod embed_main;
+mod mod_init;
 mod mod_inspect;
 mod mod_perf_probe;
 mod mod_player_probe;
@@ -133,6 +134,15 @@ enum Command {
 
 #[derive(Subcommand)]
 enum ModCommand {
+    /// 生成作者最小包模板（对象 tick、玩家类、场景与断言）
+    Init {
+        /// 包根目录；模板落在 <root>/<id>/，已存在时拒绝
+        #[arg(long)]
+        root: std::path::PathBuf,
+        /// 包 ID（同时是子目录名与命名空间前缀）
+        #[arg(long)]
+        id: String,
+    },
     /// 注册真实包并输出冻结链、规则来源及停用预览，不推进世界
     Inspect {
         #[arg(long)]
@@ -183,6 +193,11 @@ enum SimCommand {
 fn main() {
     let cli = Cli::parse();
     match cli.command {
+        Command::Mod {
+            command: ModCommand::Init { root, id },
+        } => {
+            std::process::exit(mod_init::run(mod_init::Options { root, id }));
+        }
         Command::Mod {
             command:
                 ModCommand::Inspect {

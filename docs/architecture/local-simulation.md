@@ -11,6 +11,17 @@ target/release/kkscreeps sim run \
 
 `--ticks` 默认 1000，必须大于零；`--concurrency` 默认 2，可选 1–32；`--kkpv` 选择二进制玩家投影，默认 JSON。路径相对当前目录定位场景，场景里的模块目录相对场景所在目录定位。报告必须使用 `.json` 后缀，且不能与场景文件相同。`--save-checkpoint` 保存无开放轮次的完整状态，`--load-checkpoint` 从同一场景/模块身份恢复，`--ticks` 表示额外推进轮数；父目录须已存在，完整契约与示例见[检查点](checkpoints.md)。
 
+## 作者包模板
+
+`kkscreeps mod init --root <目录> --id <包ID>` 生成一个可独立运行的最小公共 SDK 包（落在 `<目录>/<包ID>/`）：manifest、声明每 tick 自增计数对象的服务端处理器、绑定玩家类与 FIND 查询的玩家面、玩家脚本、引用本包并带断言的场景，以及包含组合检查、运行与保存恢复命令的 README。目标目录已存在时拒绝，不覆盖现有内容。
+
+```bash
+target/release/kkscreeps mod init --root /tmp/my-mods --id starter
+target/release/kkscreeps sim run --scenario /tmp/my-mods/starter/scenario.json --ticks 3 --report /tmp/starter.json
+```
+
+模板场景断言 3 轮后的对象计数值、玩家读取值与 namespace state；`--save-checkpoint`/`--load-checkpoint` 续跑等价，作为作者的保存恢复示例。生成物只依赖公共 SDK 与 CLI，宿主没有按包 ID 分派的分支。
+
 ## 场景输入
 
 完整示例见[经济夹具](../../compat/fixtures/sim-economy/scenario.json)。场景的顶层、shard、bot、对象声明和断言声明拒绝未知字段；房间和对象 spec 复用已有嵌入接口的字段校验及默认值。
