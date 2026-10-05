@@ -12,7 +12,7 @@
 | 世界数据有哪些表示，快照怎样管理？ | [总体架构的数据流](architecture/overall.md#数据流与状态边界)、[快照契约](architecture/snapshot-contract.md) |
 | 玩家行为应满足什么要求，如何验证？ | [兼容性设计](designs/compatibility.md)、[验收工具](../compat/README.md) |
 | 为什么采用 Rust、V8 和当前模块边界？ | [决策索引](decisions/README.md) |
-| 当前 Mod 处理链和自主对象 tick 怎样执行？ | [Mod 处理链执行](architecture/mod-execution.md)、[自有对象 tick](architecture/mod-object-tick.md)、[对象操作](architecture/mod-objects.md)、[组合诊断](architecture/mod-composition.md) |
+| 当前 Mod 处理链和自主对象 tick 怎样执行？ | [Mod 处理链执行](architecture/mod-execution.md)、[自有对象 tick](architecture/mod-object-tick.md)、[对象操作](architecture/mod-objects.md)、[组合诊断](architecture/mod-composition.md)、[有效规则读取](architecture/mod-rules.md) |
 | 独立 JS Mod 距完整玩法还有哪些缺口，接下来怎样开发？ | [现状复查](research/09-mod-capability-current-audit.md)、[完整玩法计划](plans/mod-complete-gameplay.md) |
 | 官方玩法怎样拆成可选 Mod，如何选择内容和处理存量数据？ | [官方内容包决策](decisions/ADR-016-official-content-packs.md)、[内容包设计](designs/content-packs.md) |
 | Mod、前端和开发工具计划如何工作？ | [功能设计](designs/README.md)、[前端架构](architecture/frontend.md) |

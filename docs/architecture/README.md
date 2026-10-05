@@ -11,6 +11,7 @@
 | [game-loop.md](game-loop.md) | 当前玩家执行与结算流程，以及并行流水线的目标 |
 | [mod-execution.md](mod-execution.md) | JS/native 组合链、候选访问与当前支持范围 |
 | [mod-composition.md](mod-composition.md) | JS handler 依赖、冻结/活动链、规则来源、停用闭包及 mod inspect |
+| [mod-rules.md](mod-rules.md) | 玩法 JS 读取冻结有效规则值：可用范围、错误行为、数值语义与恢复/停用一致性 |
 | [mod-objects.md](mod-objects.md) | 同房候选对象查询、创建/更新/删除、权限与局部拒绝恢复 |
 | [mod-object-tick.md](mod-object-tick.md) | 自有对象同步生命周期、处理链、遍历资格与整轮失败恢复 |
 | [store-rules.md](store-rules.md) | 仓库容量的冻结规则、JS 数值覆盖与实际消费者 |

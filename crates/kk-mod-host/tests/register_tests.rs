@@ -291,3 +291,6 @@ mod invocation;
 
 #[path = "register_tests/composition.rs"]
 mod composition;
+
+#[path = "register_tests/rules_read.rs"]
+mod rules_read;

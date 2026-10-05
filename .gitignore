@@ -58,3 +58,5 @@ __pycache__/
 
 !compat/fixtures/mod-composition/
 !compat/fixtures/sim-mod-composition/
+!compat/fixtures/mod-rules/
+!compat/fixtures/sim-mod-rules/

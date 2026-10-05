@@ -100,3 +100,6 @@
 
 - [JS 整槽处理链接线（2026-10-03）](notes/js-chain-execution-2026-10-03.md)：真实候选同步、嵌套 wrap 与 native、错误留存和兼容性验证。
 - [N1a 自有对象 tick（2026-10-05）](notes/n1a-object-tick-2026-10-05.md)：自主生命周期、官方公共 SDK 原型、Mod 场景与提交恢复验收。
+- [N1b 同房对象操作（2026-10-05）](notes/n1b-mod-objects-2026-10-05.md)：候选对象查询/创建/更新/删除、nursery 自主增删与双房故障恢复。
+- [N1c 处理器依赖与组合诊断（2026-10-05）](notes/n1c-mod-composition-2026-10-05.md)：dependsOn 冻结图、mod inspect、停用闭包与双房场景核对。
+- [N1d 有效规则读取（2026-10-05）](notes/n1d-mod-rules-2026-10-05.md)：执行期读取冻结有效值、注册期拒绝、恢复/停用一致与双房双通路场景。

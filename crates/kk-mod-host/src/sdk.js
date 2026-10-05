@@ -9,6 +9,12 @@ let sealed = false;
 const bindings = new Map();
 const declines = new WeakMap();
 
+// 冻结后的有效规则：宿主在密封后随执行链安装一次，此后整个 realm 生存期只读。
+// 注册期（模块求值与 register 回调）尚未冻结，读取一律失败——处理器不能
+// 借注册闭包拿到声明时的默认值冒充有效值。
+const effectiveRules = new Map();
+let rulesInstalled = false;
+
 // 只有这个工厂生成的返回值表示拒绝，普通对象/错误/返回码保持既有语义。
 export function decline(code) {
   if (typeof code !== 'string' || !/^[A-Za-z0-9._:-]{1,128}$/.test(code)) {
@@ -185,6 +191,21 @@ export function createApi(namespace, config) {
     override(rule, value) {
       declare('override', { rule, value });
     },
+    // 读取冻结计划的有效规则值（含默认、单方覆盖与显式选择的多方覆盖）。
+    // 只在宿主安装冻结规则后可用；键为完整稳定键，可跨命名空间读取。
+    // 返回原始 number：整数按双精度转换，超过 ±(2^53-1) 时取最近双精度值
+    // （与 ctx.state/args 写回候选的 serde_json 转换同一语义，不用 BigInt）；
+    // 这是只读快照，不提供运行期改写。
+    effective(key) {
+      if (!rulesInstalled) {
+        throw new Error('有效规则在注册与冻结完成前不可读取（不能读取声明时的默认值）');
+      }
+      anyKey(key, '规则读取');
+      if (!effectiveRules.has(key)) {
+        throw new Error(`未知规则键 ${JSON.stringify(key)}（不在当前冻结计划内）`);
+      }
+      return effectiveRules.get(key);
+    },
   };
 
   const mounts = {
@@ -210,6 +231,24 @@ export function createApi(namespace, config) {
 export function seal() {
   sealed = true;
   return Array.from(bindings.keys());
+}
+
+// 宿主在密封后随执行链安装冻结有效规则；只能调用一次，载荷来自 Rust 侧
+// 冻结计划，JS 不接受注册代码改写或补充。重复安装、密封前调用与畸形
+// 载荷都抛错，使安装失败沿注册失败密封 realm。
+export function installRules(entries) {
+  if (!sealed || rulesInstalled) throw new Error('有效规则只能在密封后安装一次');
+  if (!Array.isArray(entries)) throw new Error('有效规则安装载荷须为数组');
+  for (const entry of entries) {
+    const key = entry && entry.key;
+    const value = entry && entry.value;
+    if (typeof key !== 'string' || typeof value !== 'number' || !Number.isFinite(value)) {
+      throw new Error('有效规则条目须为 { key, value } 且值为有限数');
+    }
+    if (effectiveRules.has(key)) throw new Error(`规则 ${key} 重复安装`);
+    effectiveRules.set(key, value);
+  }
+  rulesInstalled = true;
 }
 
 // 结算期派发：宿主以绑定键调用处理器，ctx 携带 tick/room/state/target/args。

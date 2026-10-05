@@ -16,12 +16,9 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use deno_core::v8;
-use deno_core::{
-    JsRuntime, ModuleId, ModuleLoadOptions, ModuleLoadReferrer, ModuleLoadResponse, ModuleLoader,
-    ModuleSource, ModuleSourceCode, ModuleSpecifier, ModuleType, OpState, ResolutionKind,
-    RuntimeOptions, extension, op2, resolve_import,
-};
+use deno_core::{JsRuntime, ModuleId, ModuleSpecifier, OpState, RuntimeOptions, extension, op2};
 use deno_error::JsErrorBox;
+use serde::Serialize;
 use serde_json::Value;
 
 use crate::chain::{
@@ -36,17 +33,23 @@ use crate::chain::{
 use crate::convert::{Declaration, build_contribution};
 use crate::error::{ModFault, ModFaultKind, ModHostError, ModHostResult};
 use crate::graph::dependency_order;
+use crate::loader::{PackageModuleLoader, SDK_URL};
 use crate::package::ModPackage;
 use crate::{ChainProfiler, ModVmLimits};
 use kk_mod_api::{
-    Contribution, ContributionPlan, FreezeOptions, Key, SlotOutcome, Source, builtin,
+    Contribution, ContributionPlan, FreezeOptions, Key, Number, SlotOutcome, Source, builtin,
     freeze_with_builtin,
 };
 use kk_vm::budget::{ExecutionLimits, ResourceState, Usage, VmBudget};
 
-/// SDK 虚拟模块的说明符与解析后的 URL。
-const SDK_SPECIFIER: &str = "@kkscreeps/mod";
-const SDK_URL: &str = "kkmods:sdk";
+/// 装入 JS 的有效规则条目。整数按双精度转换：超过 ±(2^53−1) 时取最近
+/// 双精度值，与处理器 state/args 写回候选所走的 serde_json Value → JS
+/// number 转换同一语义，不引入 BigInt。
+#[derive(Serialize)]
+struct RuleEntry {
+    key: String,
+    value: f64,
+}
 
 /// 从 TryCatch 作用域提取异常文本。宏形态绕开 v8 作用域类型的
 /// 泛型参数书写——这些类型按 Deref 链参与强制转换，标注即断链。
@@ -139,131 +142,6 @@ extension!(
     ]
 );
 
-/// 包内模块加载器：字节来自装载期的内存快照，注册期不触碰磁盘。
-/// 只允许包内相对导入与 `@kkscreeps/mod`；跨包导入与裸导入拒绝。
-struct PackageModuleLoader {
-    packages: Rc<RefCell<BTreeMap<PathBuf, Rc<ModPackage>>>>,
-}
-
-impl PackageModuleLoader {
-    fn load_sync(
-        &self,
-        specifier: &ModuleSpecifier,
-        maybe_referrer: Option<&ModuleLoadReferrer>,
-    ) -> Result<ModuleSource, JsErrorBox> {
-        if specifier.as_str() == SDK_URL {
-            let sdk = include_str!("sdk.js").as_bytes().to_vec();
-            return Ok(ModuleSource::new(
-                ModuleType::JavaScript,
-                ModuleSourceCode::Bytes(sdk.into_boxed_slice().into()),
-                specifier,
-                None,
-            ));
-        }
-        if specifier.scheme() != "file" {
-            return Err(JsErrorBox::generic(format!(
-                "仅支持包内 file 模块：{specifier}"
-            )));
-        }
-        let path = specifier
-            .to_file_path()
-            .map_err(|_| JsErrorBox::generic(format!("非法模块路径：{specifier}")))?;
-        let package = self
-            .packages
-            .borrow()
-            .values()
-            .find(|package| path.starts_with(&package.root))
-            .cloned();
-        let Some(package) = package else {
-            return Err(JsErrorBox::generic(format!(
-                "模块在全部包根之外：{}",
-                path.display()
-            )));
-        };
-        if let Some(referrer) = maybe_referrer
-            && referrer.specifier.scheme() == "file"
-        {
-            let referrer_path = referrer
-                .specifier
-                .to_file_path()
-                .map_err(|_| JsErrorBox::generic("非法引用者路径"))?;
-            if !referrer_path.starts_with(&package.root) {
-                return Err(JsErrorBox::generic(format!(
-                    "跨包导入被拒绝：{} 引用 {}",
-                    referrer_path.display(),
-                    path.display()
-                )));
-            }
-        }
-        let relative = path
-            .strip_prefix(&package.root)
-            .map_err(|_| JsErrorBox::generic("模块不在包根内"))?;
-        let bytes = package
-            .file(relative)
-            .ok_or_else(|| JsErrorBox::generic(format!("包内没有模块：{}", path.display())))?;
-        let code = String::from_utf8(bytes.to_vec())
-            .map_err(|_| JsErrorBox::generic(format!("模块须为 UTF-8：{}", path.display())))?;
-        Ok(ModuleSource::new(
-            ModuleType::JavaScript,
-            ModuleSourceCode::Bytes(code.into_bytes().into_boxed_slice().into()),
-            specifier,
-            None,
-        ))
-    }
-}
-
-impl ModuleLoader for PackageModuleLoader {
-    fn resolve(
-        &self,
-        specifier: &str,
-        referrer: &str,
-        kind: ResolutionKind,
-    ) -> Result<ModuleSpecifier, JsErrorBox> {
-        if specifier == SDK_SPECIFIER || specifier == SDK_URL {
-            return ModuleSpecifier::parse(SDK_URL)
-                .map_err(|error| JsErrorBox::generic(error.to_string()));
-        }
-        // 动态导入与 import.meta.resolve 一并拒绝：动态导入的根装载没有
-        // referrer，跨包一致性检查结构性缺席，静态导入图是唯一的装载形态。
-        if matches!(kind, ResolutionKind::DynamicImport) {
-            return Err(JsErrorBox::generic(
-                "不支持动态导入：注册面只接受静态导入（包内相对路径与 @kkscreeps/mod）",
-            ));
-        }
-        if referrer.starts_with("kkmods:") {
-            return Err(JsErrorBox::generic("SDK 模块不导入任何依赖"));
-        }
-        let absolute = specifier.contains("://");
-        if absolute && !specifier.starts_with("file://") {
-            return Err(JsErrorBox::generic(format!(
-                "不支持的外部导入 {specifier:?}：仅包内相对路径与 @kkscreeps/mod"
-            )));
-        }
-        if !absolute {
-            let bare = !specifier.starts_with("./")
-                && !specifier.starts_with("../")
-                && !specifier.starts_with('/');
-            if bare {
-                return Err(JsErrorBox::generic(format!(
-                    "不支持的外部导入 {specifier:?}：仅包内相对路径与 @kkscreeps/mod"
-                )));
-            }
-        }
-        // 绝对 file URL 是宿主装载入口的形态；模块自身的绝对 file 导入
-        // 由 load 侧的包根包含约束拦截，二者共用此分支。
-        resolve_import(specifier, referrer).map_err(JsErrorBox::from_err)
-    }
-
-    fn load(
-        &self,
-        specifier: &ModuleSpecifier,
-        maybe_referrer: Option<&ModuleLoadReferrer>,
-        _options: ModuleLoadOptions,
-    ) -> ModuleLoadResponse {
-        ModuleLoadResponse::Sync(self.load_sync(specifier, maybe_referrer))
-    }
-}
-
 /// 注册选项：逐包配置（进入 `api.config` 与配置摘要）与冻结选项。
 #[derive(Clone, Debug, Default)]
 pub struct RegisterOptions {
@@ -315,6 +193,7 @@ pub struct ModRealm {
     sdk_seal: v8::Global<v8::Function>,
     sdk_dispatch: v8::Global<v8::Function>,
     sdk_install_chains: v8::Global<v8::Function>,
+    sdk_install_rules: v8::Global<v8::Function>,
     sdk_run_chain: v8::Global<v8::Function>,
     chains: BTreeMap<String, (bool, bool, Rc<BTreeSet<String>>)>,
     inactive_slots: BTreeSet<String>,
@@ -393,7 +272,14 @@ impl ModRealm {
         let namespace = runtime
             .get_module_namespace(mod_id)
             .map_err(|error| ModHostError::new("realm", format!("SDK 命名空间不可用：{error}")))?;
-        let (sdk_create_api, sdk_seal, sdk_dispatch, sdk_install_chains, sdk_run_chain) = {
+        let (
+            sdk_create_api,
+            sdk_seal,
+            sdk_dispatch,
+            sdk_install_chains,
+            sdk_install_rules,
+            sdk_run_chain,
+        ) = {
             let runtime_ref = &mut runtime;
             deno_core::scope!(scope, runtime_ref);
             let namespace = v8::Local::new(scope, namespace.clone());
@@ -421,6 +307,7 @@ impl ModRealm {
                 grab!("seal"),
                 grab!("dispatch"),
                 grab!("installChains"),
+                grab!("installRules"),
                 grab!("runChain"),
             )
         };
@@ -433,6 +320,7 @@ impl ModRealm {
             sdk_seal,
             sdk_dispatch,
             sdk_install_chains,
+            sdk_install_rules,
             sdk_run_chain,
             chains: BTreeMap::new(),
             inactive_slots: BTreeSet::new(),
@@ -580,6 +468,33 @@ impl ModRealm {
             install
                 .call(tc, receiver, &[value])
                 .ok_or_else(|| scope_error!(tc, "chain", "链安装失败"))?;
+        }
+        // 有效规则与执行链同源同批安装：值直接来自冻结计划（含默认、
+        // 单方覆盖与显式选择的多方覆盖），恢复重建沿同一入口重装并受
+        // PlanHash 核验；停用掩码不影响这里装入的数值。
+        let entries: Vec<RuleEntry> = plan
+            .rules()
+            .entries()
+            .map(|(key, value)| RuleEntry {
+                key: key.to_string(),
+                value: match value {
+                    Number::Signed(v) => *v as f64,
+                    Number::Unsigned(v) => *v as f64,
+                    Number::Float(v) => *v,
+                },
+            })
+            .collect();
+        {
+            let runtime_ref = &mut self.runtime;
+            deno_core::scope!(scope, runtime_ref);
+            v8::tc_scope!(let tc, scope);
+            let install = v8::Local::new(tc, self.sdk_install_rules.clone());
+            let value = deno_core::serde_v8::to_v8(tc, &entries)
+                .map_err(|error| ModHostError::new("register", error.to_string()))?;
+            let receiver = v8::undefined(tc).into();
+            install
+                .call(tc, receiver, &[value])
+                .ok_or_else(|| scope_error!(tc, "register", "有效规则安装失败"))?;
         }
         self.inactive_slots = plan
             .slots()

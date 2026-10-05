@@ -20,6 +20,7 @@ mod error;
 mod execution_plan;
 mod graph;
 mod limits;
+mod loader;
 mod manifest;
 mod package;
 mod profile;

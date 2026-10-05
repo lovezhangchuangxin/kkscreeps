@@ -244,3 +244,6 @@ mod object_ops;
 
 #[path = "sim_tests/composition.rs"]
 mod composition;
+
+#[path = "sim_tests/rules.rs"]
+mod rules;

@@ -1,6 +1,6 @@
 # 仓库容量规则
 
-Generic 仓库的默认容量现从冻结的 `EffectiveRules` 读取，JS Mod 可在注册时覆盖。`StoreRules` 在计划装配时解析一次；放置、建造、实验室槽切换、终端 tick 和标准玩家常量共用该快照。没有 Mod 时保持官方默认值，不增加 JS 结算调用。
+Generic 仓库的默认容量现从冻结的 `EffectiveRules` 读取，JS Mod 可在注册时覆盖，处理器执行期可经[有效规则读取](mod-rules.md)读取同一冻结值。`StoreRules` 在计划装配时解析一次；放置、建造、实验室槽切换、终端 tick 和标准玩家常量共用该快照。没有 Mod 时保持官方默认值，不增加 JS 结算调用。
 
 ```js
 export default function register(api) {

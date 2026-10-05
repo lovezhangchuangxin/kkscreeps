@@ -1,0 +1,1179 @@
+{
+  "report_version": 1,
+  "status": "passed",
+  "root": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/mod-rules",
+  "packages": {
+    "base": {
+      "directory": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/mod-rules/base",
+      "version": "1.0.0",
+      "api_version": "^1.0.0",
+      "dependencies": {}
+    },
+    "tuner": {
+      "directory": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/mod-rules/tuner",
+      "version": "1.0.0",
+      "api_version": "^1.0.0",
+      "dependencies": {}
+    }
+  },
+  "executable_sha256": "4da58c70d3d03da8429ca35dc05e05d43b036e3a3e437fc557fa8fa80487c18a",
+  "requested_disabled": [],
+  "composition": {
+    "report_version": 1,
+    "plan_hash": "464d43ddb728377bed28b10e4f0466d608192e438e5f2c49fc41199ffb37145f",
+    "sources": {
+      "base": {
+        "namespace": "base",
+        "api_version": 1,
+        "revision": "1.0.0",
+        "code_digest": [
+          152,
+          64,
+          0,
+          203,
+          70,
+          9,
+          200,
+          159,
+          17,
+          255,
+          120,
+          122,
+          244,
+          188,
+          207,
+          206,
+          232,
+          17,
+          198,
+          67,
+          59,
+          239,
+          239,
+          5,
+          63,
+          154,
+          192,
+          46,
+          157,
+          135,
+          18,
+          77
+        ],
+        "config_digest": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "player_api_digest": [
+          190,
+          78,
+          177,
+          135,
+          209,
+          115,
+          177,
+          67,
+          183,
+          229,
+          131,
+          79,
+          119,
+          234,
+          118,
+          191,
+          139,
+          141,
+          157,
+          93,
+          92,
+          220,
+          223,
+          78,
+          193,
+          100,
+          180,
+          151,
+          47,
+          66,
+          186,
+          130
+        ]
+      },
+      "builtin": {
+        "namespace": "builtin",
+        "api_version": 1,
+        "revision": "link-creep-store-move-combat-build-descriptors-v6",
+        "code_digest": [
+          209,
+          18,
+          68,
+          206,
+          151,
+          187,
+          83,
+          29,
+          184,
+          93,
+          219,
+          99,
+          93,
+          105,
+          144,
+          178,
+          56,
+          86,
+          116,
+          175,
+          226,
+          226,
+          41,
+          13,
+          160,
+          140,
+          249,
+          237,
+          171,
+          162,
+          219,
+          66
+        ],
+        "config_digest": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "player_api_digest": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "tuner": {
+        "namespace": "tuner",
+        "api_version": 1,
+        "revision": "1.0.0",
+        "code_digest": [
+          54,
+          213,
+          197,
+          16,
+          137,
+          166,
+          109,
+          162,
+          108,
+          69,
+          68,
+          66,
+          129,
+          108,
+          182,
+          233,
+          184,
+          125,
+          71,
+          21,
+          41,
+          59,
+          251,
+          164,
+          155,
+          120,
+          155,
+          98,
+          249,
+          47,
+          63,
+          241
+        ],
+        "config_digest": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "player_api_digest": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "handlers": [],
+    "slots": [
+      {
+        "key": "base:meter.tick",
+        "stage": "ObjectTick",
+        "original_center": "base:meter.tick.process",
+        "frozen": {
+          "Native": "base:meter.tick.process"
+        },
+        "active": {
+          "key": "base:meter.tick",
+          "before": [],
+          "wraps": [],
+          "center": "base:meter.tick.process",
+          "after": [],
+          "native_center": false,
+          "decline_allowed": false
+        },
+        "execution": "hosted"
+      },
+      {
+        "key": "builtin:creep.attack",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.attack.native",
+        "frozen": {
+          "Native": "builtin:creep.attack.native"
+        },
+        "active": {
+          "key": "builtin:creep.attack",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.attack.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.build",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.build.native",
+        "frozen": {
+          "Native": "builtin:creep.build.native"
+        },
+        "active": {
+          "key": "builtin:creep.build",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.build.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.dismantle",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.dismantle.native",
+        "frozen": {
+          "Native": "builtin:creep.dismantle.native"
+        },
+        "active": {
+          "key": "builtin:creep.dismantle",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.dismantle.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.heal",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.heal.native",
+        "frozen": {
+          "Native": "builtin:creep.heal.native"
+        },
+        "active": {
+          "key": "builtin:creep.heal",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.heal.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.move",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.move.native",
+        "frozen": {
+          "Native": "builtin:creep.move.native"
+        },
+        "active": {
+          "key": "builtin:creep.move",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.move.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.rangedAttack",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.rangedAttack.native",
+        "frozen": {
+          "Native": "builtin:creep.rangedAttack.native"
+        },
+        "active": {
+          "key": "builtin:creep.rangedAttack",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.rangedAttack.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.rangedHeal",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.rangedHeal.native",
+        "frozen": {
+          "Native": "builtin:creep.rangedHeal.native"
+        },
+        "active": {
+          "key": "builtin:creep.rangedHeal",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.rangedHeal.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.rangedMassAttack",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.rangedMassAttack.native",
+        "frozen": {
+          "Native": "builtin:creep.rangedMassAttack.native"
+        },
+        "active": {
+          "key": "builtin:creep.rangedMassAttack",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.rangedMassAttack.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.repair",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.repair.native",
+        "frozen": {
+          "Native": "builtin:creep.repair.native"
+        },
+        "active": {
+          "key": "builtin:creep.repair",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.repair.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.transfer",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.transfer.native",
+        "frozen": {
+          "Native": "builtin:creep.transfer.native"
+        },
+        "active": {
+          "key": "builtin:creep.transfer",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.transfer.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.withdraw",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.withdraw.native",
+        "frozen": {
+          "Native": "builtin:creep.withdraw.native"
+        },
+        "active": {
+          "key": "builtin:creep.withdraw",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.withdraw.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:link.tick",
+        "stage": "ObjectTick",
+        "original_center": "builtin:link.tick.native",
+        "frozen": {
+          "Native": "builtin:link.tick.native"
+        },
+        "active": {
+          "key": "builtin:link.tick",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:link.tick.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": false
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:link.transfer",
+        "stage": "ObjectAction",
+        "original_center": "builtin:link.transfer.native",
+        "frozen": {
+          "Native": "builtin:link.transfer.native"
+        },
+        "active": {
+          "key": "builtin:link.transfer",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:link.transfer.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      }
+    ],
+    "rules": [
+      {
+        "key": "base:period",
+        "default": {
+          "Signed": 4
+        },
+        "value": {
+          "Signed": 2
+        },
+        "definition_source": "base",
+        "selected_source": "tuner",
+        "overrides": {
+          "tuner": {
+            "Signed": 2
+          }
+        },
+        "consumers": [
+          "base:meter.tick.process"
+        ]
+      },
+      {
+        "key": "base:rate",
+        "default": {
+          "Float": 0.5
+        },
+        "value": {
+          "Float": 0.25
+        },
+        "definition_source": "base",
+        "selected_source": "tuner",
+        "overrides": {
+          "tuner": {
+            "Float": 0.25
+          }
+        },
+        "consumers": [
+          "base:meter.tick.process"
+        ]
+      },
+      {
+        "key": "builtin:link.buildCost",
+        "default": {
+          "Signed": 5000
+        },
+        "value": {
+          "Signed": 5000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.capacity",
+        "default": {
+          "Signed": 800
+        },
+        "value": {
+          "Signed": 700
+        },
+        "definition_source": "builtin",
+        "selected_source": "tuner",
+        "overrides": {
+          "tuner": {
+            "Signed": 700
+          }
+        },
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.cooldown",
+        "default": {
+          "Signed": 1
+        },
+        "value": {
+          "Signed": 1
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.hits",
+        "default": {
+          "Signed": 1000
+        },
+        "value": {
+          "Signed": 1000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.hitsMax",
+        "default": {
+          "Signed": 1000
+        },
+        "value": {
+          "Signed": 1000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.lossRatio",
+        "default": {
+          "Float": 0.03
+        },
+        "value": {
+          "Float": 0.03
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl0",
+        "default": {
+          "Signed": 0
+        },
+        "value": {
+          "Signed": 0
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl1",
+        "default": {
+          "Signed": 0
+        },
+        "value": {
+          "Signed": 0
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl2",
+        "default": {
+          "Signed": 0
+        },
+        "value": {
+          "Signed": 0
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl3",
+        "default": {
+          "Signed": 0
+        },
+        "value": {
+          "Signed": 0
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl4",
+        "default": {
+          "Signed": 0
+        },
+        "value": {
+          "Signed": 0
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl5",
+        "default": {
+          "Signed": 2
+        },
+        "value": {
+          "Signed": 2
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl6",
+        "default": {
+          "Signed": 3
+        },
+        "value": {
+          "Signed": 3
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl7",
+        "default": {
+          "Signed": 4
+        },
+        "value": {
+          "Signed": 4
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl8",
+        "default": {
+          "Signed": 6
+        },
+        "value": {
+          "Signed": 6
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:store.container.capacity",
+        "default": {
+          "Signed": 2000
+        },
+        "value": {
+          "Signed": 2000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.containerDeposit",
+          "builtin:store.init"
+        ]
+      },
+      {
+        "key": "builtin:store.factory.capacity",
+        "default": {
+          "Signed": 50000
+        },
+        "value": {
+          "Signed": 50000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init"
+        ]
+      },
+      {
+        "key": "builtin:store.lab.energyCapacity",
+        "default": {
+          "Signed": 2000
+        },
+        "value": {
+          "Signed": 2000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init",
+          "builtin:store.labSlots"
+        ]
+      },
+      {
+        "key": "builtin:store.lab.mineralCapacity",
+        "default": {
+          "Signed": 3000
+        },
+        "value": {
+          "Signed": 3000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init",
+          "builtin:store.labSlots"
+        ]
+      },
+      {
+        "key": "builtin:store.nuker.energyCapacity",
+        "default": {
+          "Signed": 300000
+        },
+        "value": {
+          "Signed": 300000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init"
+        ]
+      },
+      {
+        "key": "builtin:store.nuker.ghodiumCapacity",
+        "default": {
+          "Signed": 5000
+        },
+        "value": {
+          "Signed": 5000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init"
+        ]
+      },
+      {
+        "key": "builtin:store.powerSpawn.energyCapacity",
+        "default": {
+          "Signed": 5000
+        },
+        "value": {
+          "Signed": 5000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init"
+        ]
+      },
+      {
+        "key": "builtin:store.powerSpawn.powerCapacity",
+        "default": {
+          "Signed": 100
+        },
+        "value": {
+          "Signed": 100
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init"
+        ]
+      },
+      {
+        "key": "builtin:store.terminal.capacity",
+        "default": {
+          "Signed": 300000
+        },
+        "value": {
+          "Signed": 300000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init",
+          "builtin:store.terminalTick"
+        ]
+      },
+      {
+        "key": "builtin:store.tower.capacity",
+        "default": {
+          "Signed": 1000
+        },
+        "value": {
+          "Signed": 1000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init"
+        ]
+      }
+    ],
+    "dependencies": {
+      "base": [],
+      "tuner": []
+    },
+    "disable_closures": {
+      "base": [
+        "base"
+      ],
+      "tuner": [
+        "tuner"
+      ]
+    },
+    "disabled_mods": []
+  }
+}

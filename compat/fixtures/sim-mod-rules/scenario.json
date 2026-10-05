@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "mods": {
+    "root": "../mod-rules"
+  },
+  "shard": {
+    "players": [
+      "p1",
+      "p2"
+    ],
+    "rooms": [
+      {
+        "name": "W1N1",
+        "owner": "p1"
+      },
+      {
+        "name": "W2N2",
+        "owner": "p2"
+      }
+    ]
+  },
+  "bots": [
+    {
+      "player": "p1",
+      "modules": ".",
+      "memory": {
+        "room": "W1N1"
+      }
+    },
+    {
+      "player": "p2",
+      "modules": ".",
+      "memory": {
+        "room": "W2N2"
+      }
+    }
+  ],
+  "objects": [
+    {
+      "alias": "first",
+      "room": "W1N1",
+      "kind": "mod",
+      "spec": {
+        "typeKey": "base:meter",
+        "fields": {
+          "x": 10,
+          "y": 12
+        }
+      }
+    },
+    {
+      "alias": "second",
+      "room": "W2N2",
+      "kind": "mod",
+      "spec": {
+        "typeKey": "base:meter",
+        "fields": {
+          "x": 10,
+          "y": 12
+        }
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "pointer": "/objects/first/fields/value",
+      "op": "delta_gte",
+      "value": 50
+    },
+    {
+      "pointer": "/objects/second/fields/value",
+      "op": "delta_gte",
+      "value": 50
+    },
+    {
+      "pointer": "/objects/first/fields/pool",
+      "op": "delta_gte",
+      "value": 25
+    },
+    {
+      "pointer": "/mod_states/base/period",
+      "op": "eq",
+      "value": 2
+    },
+    {
+      "pointer": "/mod_states/base/rate",
+      "op": "eq",
+      "value": 0.25
+    },
+    {
+      "pointer": "/mod_states/base/capacity",
+      "op": "eq",
+      "value": 700
+    },
+    {
+      "pointer": "/mod_states/base/ticks",
+      "op": "gte",
+      "value": 200
+    },
+    {
+      "pointer": "/players/p1/memory/value",
+      "op": "gte",
+      "value": 50
+    }
+  ]
+}

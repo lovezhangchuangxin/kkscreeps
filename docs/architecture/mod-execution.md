@@ -4,7 +4,7 @@
 
 自有类型可通过公共 SDK 声明同步 tick，遍历资格、候选字段及整轮失败恢复见[自有对象 tick](mod-object-tick.md)。
 
-JS 处理器选项 dependsOn 已进入同槽/同 kind 的冻结图；作者可用 mod inspect 或 sim 的 composition 检查链序、原始/活动中心、规则来源及停用闭包，契约见[组合诊断](mod-composition.md)。
+JS 处理器选项 dependsOn 已进入同槽/同 kind 的冻结图；作者可用 mod inspect 或 sim 的 composition 检查链序、原始/活动中心、规则来源及停用闭包，契约见[组合诊断](mod-composition.md)。处理器执行期经 `api.rules.effective` 读取冻结有效规则值，随计划身份一致，契约见[有效规则读取](mod-rules.md)。
 
 Generic 仓库另已开放 10 条容量数值规则，贯穿放置、建造、实验室槽切换、终端 tick 与标准玩家常量，见[仓库容量规则](store-rules.md)。这组消费者不增加动作处理槽，默认路径仍是 Rust 结算。
 

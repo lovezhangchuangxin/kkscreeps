@@ -1,0 +1,129 @@
+{
+  "report_version": 1,
+  "date": "2026-10-05",
+  "base_commit": "b97c13091b2967aa96f5f1aa8dd57328b703122f",
+  "scope": "N1d gameplay JS reads frozen effective rule values (api.rules.effective + host installRules)",
+  "executable_sha256": "4da58c70d3d03da8429ca35dc05e05d43b036e3a3e437fc557fa8fa80487c18a",
+  "plan_hash": "464d43ddb728377bed28b10e4f0466d608192e438e5f2c49fc41199ffb37145f",
+  "packages": [
+    "base",
+    "tuner"
+  ],
+  "targeted_tests": {
+    "host_rules_read": 4,
+    "runtime_recovery_disable": 1,
+    "cli_sim_rules": 1
+  },
+  "validation": {
+    "status": "passed",
+    "full_check": {
+      "command": "KKSCREEPS_BIN=\"$PWD/target/release/kkscreeps\" pnpm run check",
+      "rust": {
+        "passed": 760,
+        "failed": 0,
+        "ignored": 11
+      },
+      "adapter": {
+        "passed": 14,
+        "failed": 0,
+        "skipped": 0
+      },
+      "format": "passed",
+      "clippy": "passed",
+      "documents": {
+        "markdown_files": 267,
+        "local_links": 1519
+      },
+      "source_size": {
+        "files": 366,
+        "limit_lines": 1000,
+        "passed": true
+      }
+    },
+    "compatibility": {
+      "command": "KKSCREEPS_BIN=\"$PWD/target/release/kkscreeps\" node compat/scripts/ratchet.mjs",
+      "screeps_ok_commit": "34a630efa42908c117c19c25d2350fa2387bd633",
+      "total": 2914,
+      "counts": {
+        "passed": 1918,
+        "failed": 89,
+        "skipped": 907
+      },
+      "floor": 1918,
+      "case_identities_and_statuses_equal_base": true,
+      "ratchet_reference": "HEAD~1 at validation time",
+      "red_flips": 0,
+      "green_flips": 0,
+      "new_waivers": 0,
+      "existing_unused_waiver_warnings": 2,
+      "report": "compat/reports/kkscreeps.json",
+      "report_sha256": "80171c5bf4413c3a88ab7f1a75d0413c00688687ee5b849b5d55f9e9d82b47d1"
+    },
+    "simulation": {
+      "channels": [
+        "json",
+        "kkpv"
+      ],
+      "rooms": 2,
+      "players": 2,
+      "committed_ticks_per_channel": 2000,
+      "player_error_ticks": 0,
+      "assertions_passed_per_channel": 8,
+      "meter_value_per_object": 1000,
+      "meter_pool_per_object": 500.0,
+      "base_state": {
+        "period": 2,
+        "rate": 0.25,
+        "capacity": 700,
+        "ticks": 4000
+      },
+      "player_memory": {
+        "value": 1000,
+        "pool": 499.75
+      },
+      "hundred_tick_calibration": {
+        "value": 50,
+        "pool": 25.0,
+        "memory_value": 50,
+        "memory_pool": 24.75
+      },
+      "final_world_mod_objects_state_and_player_memory_equal": true,
+      "composition_equal_across_channels_and_inspect": true
+    },
+    "disable_preview": {
+      "requested": [
+        "tuner"
+      ],
+      "closure": [
+        "tuner"
+      ],
+      "plan_hash_unchanged": true,
+      "rules_unchanged": true,
+      "selected_source_retained": "tuner"
+    }
+  },
+  "raw_reports": {
+    "n1d-mod-rules-json-2026-10-05.json": {
+      "sha256": "1ffbcc780aec4c8b89b87fa47c1ada5daf86a4dc8d2ce914ef878bcbc4a4abbe",
+      "executable_sha256": "4da58c70d3d03da8429ca35dc05e05d43b036e3a3e437fc557fa8fa80487c18a"
+    },
+    "n1d-mod-rules-kkpv-2026-10-05.json": {
+      "sha256": "443684030952762de95898184146e5c5c91ac08c4978dee49475953af238c75f",
+      "executable_sha256": "4da58c70d3d03da8429ca35dc05e05d43b036e3a3e437fc557fa8fa80487c18a"
+    },
+    "n1d-mod-inspect-2026-10-05.json": {
+      "sha256": "2749237177b52c293a60958de3040ed8da93d6f4f203172ea6ab22f3e30d7674",
+      "executable_sha256": "4da58c70d3d03da8429ca35dc05e05d43b036e3a3e437fc557fa8fa80487c18a"
+    },
+    "n1d-mod-inspect-disabled-2026-10-05.json": {
+      "sha256": "1fdbb3ee48931f41b9dae539a0ff03d7d12a7c3e442743d94981e27da37334be",
+      "executable_sha256": "4da58c70d3d03da8429ca35dc05e05d43b036e3a3e437fc557fa8fa80487c18a"
+    }
+  },
+  "limitations": [
+    "Read-only snapshot: no runtime rule modification, migration or checkpointing.",
+    "Player VM keeps consuming rules via constants/projections; no direct player-side rule reads.",
+    "Integer values beyond +/-2^53-1 approximate as doubles; JS declaration surface itself can only express exactly representable integers, so approximation only concerns host-constructed rule values.",
+    "Content selection/presets remain N1e; cold recovery and persistence remain N4."
+  ]
+}

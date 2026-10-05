@@ -55,6 +55,12 @@ impl EffectiveRules {
         self.values.get(handle.0 as usize)
     }
 
+    /// 稳定键序的全部有效条目；供宿主装配（如 JS 有效规则安装）遍历，
+    /// 结算热路径仍应使用句柄读取。
+    pub fn entries(&self) -> impl Iterator<Item = (&Key, &Number)> {
+        self.keys.iter().zip(self.values.iter())
+    }
+
     pub fn len(&self) -> usize {
         self.values.len()
     }
