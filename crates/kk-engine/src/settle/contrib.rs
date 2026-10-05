@@ -12,6 +12,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
 use kk_mod_api::{ContributionPlan, Dispatch, Key, SlotOutcome, SlotPlan};
+use kk_schema::room::RoomObject;
 use kk_world::ObjId;
 use serde_json::Value;
 
@@ -347,6 +348,11 @@ pub struct ContributionDispatch {
     creep_transfer: ActionSlot,
     creep_withdraw: ActionSlot,
     creep_move: ActionSlot,
+    creep_attack: ActionSlot,
+    creep_ranged_attack: ActionSlot,
+    creep_ranged_mass_attack: ActionSlot,
+    creep_heal: ActionSlot,
+    creep_ranged_heal: ActionSlot,
     /// Mod 自有槽（按槽键查）；扩展意图结算在此派发。
     ext: BTreeMap<Key, ExtSlot>,
 }
@@ -359,6 +365,11 @@ impl Default for ContributionDispatch {
             creep_transfer: ActionSlot::Native(super::creep::intent_transfer),
             creep_withdraw: ActionSlot::Native(super::creep::intent_withdraw),
             creep_move: ActionSlot::Native(super::creep::intent_move),
+            creep_attack: ActionSlot::Native(super::creep::intent_attack),
+            creep_ranged_attack: ActionSlot::Native(super::creep::intent_ranged_attack),
+            creep_ranged_mass_attack: ActionSlot::Native(super::creep::ranged_mass_native),
+            creep_heal: ActionSlot::Native(super::creep::heal_melee_native),
+            creep_ranged_heal: ActionSlot::Native(super::creep::heal_ranged_native),
             ext: BTreeMap::new(),
         }
     }
@@ -369,7 +380,7 @@ pub const LINK_SLOT_KEYS: [&str; 2] = [
     kk_mod_api::builtin::SLOT_KEYS[0],
     kk_mod_api::builtin::SLOT_KEYS[1],
 ];
-pub const BUILTIN_SLOT_KEYS: [&str; 5] = kk_mod_api::builtin::SLOT_KEYS;
+pub const BUILTIN_SLOT_KEYS: [&str; 10] = kk_mod_api::builtin::SLOT_KEYS;
 
 impl ContributionDispatch {
     pub(crate) fn run_transfer(
@@ -410,6 +421,25 @@ impl ContributionDispatch {
         d: &IntentData,
     ) -> Result<(), String> {
         self.creep_move.run(ctx, id, d)
+    }
+
+    /// 五个战斗槽共用一个入口：按槽键查表后执行，避免逐槽复制运行方法。
+    pub(crate) fn run_combat(
+        &self,
+        slot_key: &str,
+        ctx: &RoomCtx,
+        id: ObjId,
+        d: &IntentData,
+    ) -> Result<(), String> {
+        let slot = match slot_key {
+            "builtin:creep.attack" => &self.creep_attack,
+            "builtin:creep.rangedAttack" => &self.creep_ranged_attack,
+            "builtin:creep.rangedMassAttack" => &self.creep_ranged_mass_attack,
+            "builtin:creep.heal" => &self.creep_heal,
+            "builtin:creep.rangedHeal" => &self.creep_ranged_heal,
+            other => return Err(format!("未知战斗槽 {other}")),
+        };
+        slot.run(ctx, id, d)
     }
 
     /// 执行一个 Mod 自有槽的处理链。槽未装配说明计划与执行表不一致，

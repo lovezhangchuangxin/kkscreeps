@@ -6,7 +6,7 @@ Generic 仓库另已开放 10 条容量数值规则，贯穿放置、建造、�
 
 ## 两条执行路径
 
-没有扩展的内建槽保留 `Native` 直调，不进入 JS。包含 JS 贡献的槽和 Mod 自有动作槽交给 `SlotExecutor` 整槽执行：runtime 一次进入 realm，JS 按冻结顺序运行 before、wrap、中心、after。中心是 JS process/replace，或一个只修改候选的 Rust native 步骤。creep 资源槽与移动槽的只读字段、装配与能力范围见[资源动作槽](creep-resource-slots.md)和[移动动作槽](creep-move-slot.md)。
+没有扩展的内建槽保留 `Native` 直调，不进入 JS。包含 JS 贡献的槽和 Mod 自有动作槽交给 `SlotExecutor` 整槽执行：runtime 一次进入 realm，JS 按冻结顺序运行 before、wrap、中心、after。中心是 JS process/replace，或一个只修改候选的 Rust native 步骤。creep 资源槽、移动槽与战斗槽的只读字段、装配与能力范围见[资源动作槽](creep-resource-slots.md)、[移动动作槽](creep-move-slot.md)和[战斗动作槽](creep-combat-slot.md)。
 
 ```text
 kk-engine：选择 Native 或整槽宿主
@@ -33,7 +33,7 @@ Rust 自定义处理器仍可经原有纯 Rust 执行器安装。它与 JS 执�
 
 ## 正常动作拒绝
 
-`SlotOutcome` 区分 `Completed` 与 `Declined { binding, code }`；异常仍由 Result 的 Err 返回。Mod 自有对象动作的 before/wrap/process/replace/after，以及内建 `builtin:link.transfer`、`builtin:creep.transfer`、`builtin:creep.withdraw`、`builtin:creep.move` 的 before/wrap/replace/after，可以 `return api.decline('full')`，也可导入 `@kkscreeps/mod` 的 `decline` 工厂。代码为 1..128 字节的 ASCII 字母、数字或 `._:-`。只有工厂产生的返回值表示拒绝；普通 `{code:...}`、返回码等不改变原有语义，throw 拒绝标记仍是异常，Promise/thenable 仍是故障。
+`SlotOutcome` 区分 `Completed` 与 `Declined { binding, code }`；异常仍由 Result 的 Err 返回。Mod 自有对象动作的 before/wrap/process/replace/after，以及内建 `builtin:link.transfer`、`builtin:creep.transfer`、`builtin:creep.withdraw`、`builtin:creep.move` 与五个战斗槽（`builtin:creep.attack/rangedAttack/rangedMassAttack/heal/rangedHeal`）的 before/wrap/replace/after，可以 `return api.decline('full')`，也可导入 `@kkscreeps/mod` 的 `decline` 工厂。代码为 1..128 字节的 ASCII 字母、数字或 `._:-`。只有工厂产生的返回值表示拒绝；普通 `{code:...}`、返回码等不改变原有语义，throw 拒绝标记仍是异常，Promise/thenable 仍是故障。
 
 拒绝中止本次动作的剩余处理器；已经执行的 before、内层中心与 after 写入也一起撤销。wrap 即使捕获内层拒绝，也不能继续回写；该 wrap 后续抛出异常、或已有候选/转换故障时，异常优先，整轮失败，不能用拒绝掩盖故障。wrap 不调用 next 的主动取消仍是 Completed，保持原来执行 after 的约定。
 
@@ -42,6 +42,8 @@ runtime 的自有动作适配器在调用前只保存目标对象字段，所有
 三个内建资源动作的局部边界由引擎包住整个 Hosted 链：开始前保存执行者、目标对象原始记录和事件长度；拒绝后恢复记录并截去本次新增事件。自指只保存一份记录；保存的是本次动作开始时的候选，因此共享目标上此前成功动作的入账不会被撤销。runtime 将所有参与 namespace 的 state 暂存到正常完成，拒绝时丢弃。当前 native 只改库存、link 冷却、实验室槽容量并追加传输事件；JS 字段写面限于 link cooldown，另可通过 [ctx.resources](mod-resources.md) 读写同房库存。运行时首次触达日志恢复 API 两端完整对象，覆盖额外路由对象和实验室槽切换；creep 字段仍只读。没有 ID、位置、玩家、市场或其他工作队列写入。以后扩大写面必须同步扩大恢复边界。无扩展的 Native 路径不保存快照、不进入 JS。
 
 `builtin:creep.move` 的边界同样由引擎包住整条 Hosted 链，但保存的是执行者在移动请求矩阵中的登记条目与意图时疲劳记录；拒绝时按快照恢复本执行者的登记，不触碰其他执行者的请求或拉拽关系，协议与限制见[移动动作槽](creep-move-slot.md)。该槽执行于意图登记阶段，实际位移、道路磨损、工地踩踏、疲劳结算与跨房过渡仍由仲裁及对象 tick 阶段完成，拒绝不影响疲劳恢复、寿命等独立 tick 行为。
+
+五个战斗槽同样由引擎包住整条 Hosted 链：快照受影响对象（执行者、目标及其格上 rampart；群体攻击为范围 3 内全部对象）、延迟伤害/治疗队列条目与事件长度，并以链内增删日志撤销结构击毁产生的废墟插入与对象移除（ID 游标随回退）；`ctx.combat.request` 改向触达的链外对象由运行时首触日志恢复。`ctx.combat` 的恰一次消耗约束与 massAttack 无改向的限制见[战斗动作槽](creep-combat-slot.md)。
 
 ```js
 export default function register(api) {
@@ -56,7 +58,7 @@ export default function register(api) {
 
 上例按请求数量累计本 Mod namespace 的配额（不代表 native 实际转入量），也可在 `next()` 后拒绝并撤销 native。拒绝后继续其他动作及每轮 tick，并正常发布世界、Memory 与 CPU 候选，保留本轮玩家执行费用；不重建健康 Mod VM。JS 全局变量不在局部恢复范围内，权威玩法状态须放在 `ctx.state`。拒绝代码与实际绑定保留在整槽宿主的类型化结局中，当前不额外发射玩家事件，也不追改玩家此前的 `transferEnergy()` 返回码。
 
-`builtin:link.tick` 仍显式拒绝使用 decline，其他内建动作尚未开放可拒绝处理槽。纯 Rust callback 仍使用原成功/异常签名，正常拒绝目前由整槽宿主提供。直接使用 ModRealm 的可信宿主须自行恢复候选；SlotExecutor 的自有动作须由宿主恢复全部写入，内建资源动作的原始两端/事件由引擎恢复，移动动作由引擎恢复执行者的请求登记，宿主负责 namespace 暂存及额外资源对象恢复；不得写出已有恢复边界。自有动作验证见[正常拒绝记录](../research/notes/mod-intent-decline-2026-10-04.md)，内建多对象验证见[link 拒绝记录](../research/notes/d6-link-decline-2026-10-05.md)、[creep 资源槽记录](../research/notes/d4-creep-resource-slots-2026-10-05.md)与[移动槽记录](../research/notes/d4-move-slot-2026-10-05.md)；执行来源的结构化记录见下节。
+`builtin:link.tick` 仍显式拒绝使用 decline，`attackController` 等其他内建动作尚未开放可拒绝处理槽。纯 Rust callback 仍使用原成功/异常签名，正常拒绝目前由整槽宿主提供。直接使用 ModRealm 的可信宿主须自行恢复候选；SlotExecutor 的自有动作须由宿主恢复全部写入，内建资源动作的原始两端/事件由引擎恢复，移动动作由引擎恢复执行者的请求登记，战斗动作由引擎恢复受影响对象/延迟队列/链内增删，宿主负责 namespace 暂存及能力触达对象的额外恢复；不得写出已有恢复边界。自有动作验证见[正常拒绝记录](../research/notes/mod-intent-decline-2026-10-04.md)，内建多对象验证见[link 拒绝记录](../research/notes/d6-link-decline-2026-10-05.md)、[creep 资源槽记录](../research/notes/d4-creep-resource-slots-2026-10-05.md)、[移动槽记录](../research/notes/d4-move-slot-2026-10-05.md)与[战斗槽记录](../research/notes/d4-combat-slot-2026-10-05.md)；执行来源的结构化记录见下节。
 
 ## 注册声明转换
 
@@ -165,6 +167,6 @@ runtime 的 `last_mod_settlement_fault()` 返回最近一次实际结算中失�
 
 ## 尚未完成的范围
 
-共享可信 VM 的故障半径仍是整分片；未显式停用的确定性异常或超限 Mod 在新 VM 中仍会失败。link tick、战斗/建造等其他内建动作与纯 Rust callback 的正常拒绝、自动策略的 CLI/持久日志接线、逐 Mod 资源归因、进程级限额、跨房资源写入、移动之外的其他领域写 API、其他生命周期槽、持久化和 outbox 尚未完成。
+共享可信 VM 的故障半径仍是整分片；未显式停用的确定性异常或超限 Mod 在新 VM 中仍会失败。link tick、建造/容量等其他内建动作与纯 Rust callback 的正常拒绝、自动策略的 CLI/持久日志接线、逐 Mod 资源归因、进程级限额、跨房资源写入、移动/战斗之外的其他领域写 API、其他生命周期槽、持久化和 outbox 尚未完成。
 
 默认路径与功能回归、真实混合链和失败候选分别验收。小对象链测试不代表密集 Mod 的成本；性能要求见 [性能验收](performance-acceptance.md)，本次选择与取舍见 [ADR-015](../decisions/ADR-015-mod-chain-execution.md)。

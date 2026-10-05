@@ -1,4 +1,4 @@
-//! 默认 link/creep 资源与移动动作描述及 Generic 仓库容量规则，不安装引擎处理器。
+//! 默认 link/creep 资源、移动与战斗动作描述及 Generic 仓库容量规则，不安装引擎处理器。
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -21,13 +21,27 @@ pub const RESOURCE_ACTION_SLOTS: [&str; 3] = [
 /// 已有局部恢复边界的内建移动动作；宿主拒绝资格与 runtime 暂存共用此表。
 pub const MOVE_ACTION_SLOTS: [&str; 1] = ["builtin:creep.move"];
 
+/// 已有局部恢复边界的内建战斗动作；宿主拒绝资格与 runtime 暂存共用此表。
+pub const COMBAT_ACTION_SLOTS: [&str; 5] = [
+    "builtin:creep.attack",
+    "builtin:creep.rangedAttack",
+    "builtin:creep.rangedMassAttack",
+    "builtin:creep.heal",
+    "builtin:creep.rangedHeal",
+];
+
 /// 内建实际派发的槽；自有动作装配必须跳过它们。
-pub const SLOT_KEYS: [&str; 5] = [
+pub const SLOT_KEYS: [&str; 10] = [
     RESOURCE_ACTION_SLOTS[0],
     "builtin:link.tick",
     RESOURCE_ACTION_SLOTS[1],
     RESOURCE_ACTION_SLOTS[2],
     MOVE_ACTION_SLOTS[0],
+    COMBAT_ACTION_SLOTS[0],
+    COMBAT_ACTION_SLOTS[1],
+    COMBAT_ACTION_SLOTS[2],
+    COMBAT_ACTION_SLOTS[3],
+    COMBAT_ACTION_SLOTS[4],
 ];
 
 fn key(name: &str) -> Key {
@@ -111,7 +125,7 @@ impl LinkRules {
     }
 }
 
-/// 内置贡献入口，保留早期 link 函数名；现含 link、creep 资源槽与仓库规则。
+/// 内置贡献入口，保留早期 link 函数名；现含 link、creep 资源/移动/战斗槽与仓库规则。
 pub fn link() -> Contribution {
     let consumers = keys(&[
         "link.init",
@@ -250,6 +264,11 @@ pub fn link() -> Contribution {
         "creep.transfer.native",
         "creep.withdraw.native",
         "creep.move.native",
+        "creep.attack.native",
+        "creep.rangedAttack.native",
+        "creep.rangedMassAttack.native",
+        "creep.heal.native",
+        "creep.rangedHeal.native",
     ]));
     let slots = vec![
         SlotDescriptor {
@@ -277,12 +296,37 @@ pub fn link() -> Contribution {
             stage: Stage::ObjectAction,
             native_binding: key("creep.move.native"),
         },
+        SlotDescriptor {
+            key: key("creep.attack"),
+            stage: Stage::ObjectAction,
+            native_binding: key("creep.attack.native"),
+        },
+        SlotDescriptor {
+            key: key("creep.rangedAttack"),
+            stage: Stage::ObjectAction,
+            native_binding: key("creep.rangedAttack.native"),
+        },
+        SlotDescriptor {
+            key: key("creep.rangedMassAttack"),
+            stage: Stage::ObjectAction,
+            native_binding: key("creep.rangedMassAttack.native"),
+        },
+        SlotDescriptor {
+            key: key("creep.heal"),
+            stage: Stage::ObjectAction,
+            native_binding: key("creep.heal.native"),
+        },
+        SlotDescriptor {
+            key: key("creep.rangedHeal"),
+            stage: Stage::ObjectAction,
+            native_binding: key("creep.rangedHeal.native"),
+        },
     ];
     Contribution {
         source: Source {
             namespace: "builtin".into(),
             api_version: 1,
-            revision: "link-creep-store-move-descriptors-v4".into(),
+            revision: "link-creep-store-move-combat-descriptors-v5".into(),
             code_digest: {
                 let mut hash = Sha256::new();
                 hash.update(include_bytes!("builtin.rs"));

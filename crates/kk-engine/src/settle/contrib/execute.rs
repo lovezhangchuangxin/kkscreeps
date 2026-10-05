@@ -14,16 +14,43 @@ impl ActionSlot {
                 // 或其他工作队列。在整链开始前保存，才能撤销 before 与
                 // native 之后的拒绝，同时保留此前动作对共享接收方的写入。
                 // 无 Mod 的 Native 不走这里。
+                //
+                // 战斗槽边界另含三块：延迟伤害/治疗队列条目、攻击经 rampart
+                // 重定向后的真实受击对象、以及结构摧毁产生的废墟插入与
+                // 对象移除（增删经 chain_mutations 日志逆序撤销并回退 ID
+                // 游标）。能力改向触达的链外对象由运行时首触日志恢复。
                 let move_slot =
                     kk_mod_api::builtin::MOVE_ACTION_SLOTS.contains(&slot.plan.key.as_str());
-                let (objects, event_len, move_snapshot) = {
-                    let w = ctx.borrow();
-                    let move_snapshot = move_slot.then(|| w.snapshot_move_requests(id));
-                    let objects: Vec<_> = std::iter::once(id)
-                        .chain(d.id.filter(|target| *target != id))
-                        .filter_map(|id| w.room.objects.get(&id).cloned().map(|o| (id, o)))
-                        .collect();
-                    (objects, w.events.len(), move_snapshot)
+                let combat_slot =
+                    kk_mod_api::builtin::COMBAT_ACTION_SLOTS.contains(&slot.plan.key.as_str());
+                enum Boundary {
+                    Plain {
+                        objects: Vec<(ObjId, RoomObject)>,
+                        event_len: usize,
+                        moves: Option<crate::settle::movement::MoveRequestSnapshot>,
+                    },
+                    Combat(crate::settle::CombatSnapshot),
+                }
+                let boundary = {
+                    if combat_slot {
+                        let mut w = ctx.borrow_mut();
+                        let mass = slot.plan.key.as_str() == "builtin:creep.rangedMassAttack";
+                        Boundary::Combat(w.snapshot_combat(id, d.id, mass))
+                    } else {
+                        let w = ctx.borrow();
+                        let moves = move_slot.then(|| w.snapshot_move_requests(id));
+                        let objects: Vec<_> = std::iter::once(id)
+                            .chain(d.id.filter(|target| *target != id))
+                            .filter_map(|id| w.room.objects.get(&id).cloned().map(|o| (id, o)))
+                            .collect();
+                        let event_len = w.events.len();
+                        drop(w);
+                        Boundary::Plain {
+                            objects,
+                            event_len,
+                            moves,
+                        }
+                    }
                 };
                 let outcome = slot.executor.run(
                     &slot.plan,
@@ -34,15 +61,31 @@ impl ActionSlot {
                         native: *native,
                     },
                 )?;
-                if matches!(outcome, SlotOutcome::Declined(_)) {
-                    let mut w = ctx.borrow_mut();
-                    for (id, object) in objects {
-                        w.room.objects.insert(id, object);
+                match (boundary, matches!(outcome, SlotOutcome::Declined(_))) {
+                    (Boundary::Combat(snapshot), true) => {
+                        ctx.borrow_mut().restore_combat(snapshot);
                     }
-                    w.events.truncate(event_len);
-                    if let Some(snapshot) = move_snapshot {
-                        w.restore_move_requests(id, snapshot);
+                    (Boundary::Combat(_), false) => {
+                        ctx.borrow_mut().finish_combat_chain();
                     }
+                    (
+                        Boundary::Plain {
+                            objects,
+                            event_len,
+                            moves,
+                        },
+                        true,
+                    ) => {
+                        let mut w = ctx.borrow_mut();
+                        for (id, object) in objects {
+                            w.room.objects.insert(id, object);
+                        }
+                        w.events.truncate(event_len);
+                        if let Some(snapshot) = moves {
+                            w.restore_move_requests(id, snapshot);
+                        }
+                    }
+                    (Boundary::Plain { .. }, false) => {}
                 }
                 Ok(())
             }

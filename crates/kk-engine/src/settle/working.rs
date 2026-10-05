@@ -54,8 +54,47 @@ pub struct Working {
     /// 本 tick 登记的跨房过渡：位于边缘格的 creep 在全部房间结算后由
     /// 引擎阶段移入邻房候选。
     pub pending_inter_room: Vec<inter_room::InterRoomMove>,
+    /// 链内对象增删日志；仅在含结构变换的 Hosted 链（战斗槽）期间武装，
+    /// 正常拒绝时逆序撤销。链故障（Err）路径不解除武装——它依赖"链 Err
+    /// 使整轮候选丢弃、本字段随 Working 一起 drop"兜底；若未来引入链
+    /// 失败但房间候选保留的路径，须先在此处补解除。Native 直调路径
+    /// 保持 None 零开销。
+    pub chain_mutations: Option<Vec<ChainMutation>>,
     /// 本轮生效的贡献平面：link/仓库规则、槽执行表与扩展字段目录。
     pub plane: Plane,
+}
+
+/// remove_obj 移除既有对象时保存的全部伴随候选状态；拒绝恢复时整体回插。
+#[derive(Debug, Clone)]
+pub struct RemovedObject {
+    pub id: ObjId,
+    pub object: RoomObject,
+    pub extensions: Option<BTreeMap<String, Value>>,
+    pub old_fatigue: Option<u32>,
+    pub tick_fatigue: Option<i64>,
+    pub damage: Option<i64>,
+    pub heal: Option<i64>,
+}
+
+/// 武装期间 insert_new/remove_obj 记录的候选增删；恢复按逆序回放。
+/// Removed 含整对象克隆，装箱避免让每次日志追加都按最大变体扩张。
+#[derive(Debug, Clone)]
+pub enum ChainMutation {
+    /// insert_new 分配的新对象；恢复时连同索引删除。
+    Inserted(ObjId),
+    /// remove_obj 移除的既有对象；恢复时对象与伴随状态一起回插。
+    Removed(Box<RemovedObject>),
+}
+
+/// 战斗槽整链开始前的候选快照：受影响对象首触克隆、延迟伤害/治疗
+/// 条目、事件长度与 ID 游标。链内对象增删由 chain_mutations 记录，
+/// 引擎侧在快照时武装。能力触达的链外对象由运行时首触日志恢复。
+#[derive(Debug, Clone)]
+pub struct CombatSnapshot {
+    objects: Vec<(ObjId, RoomObject)>,
+    queues: Vec<(ObjId, Option<i64>, Option<i64>)>,
+    event_len: usize,
+    next_id: u64,
 }
 
 /// 共享的房间候选句柄。进入 JS 或执行 Rust next 前必须释放可变借用；
@@ -160,11 +199,32 @@ impl Working {
             .insert_with_id(id, object)
             .expect("结算 id 分配器不得复用已有对象");
         self.index.insert(ObjId(id), (x, y));
-        ObjId(id)
+        let id = ObjId(id);
+        if let Some(log) = &mut self.chain_mutations {
+            log.push(ChainMutation::Inserted(id));
+        }
+        id
     }
 
     /// 删除对象及位置索引，同时清理它的疲劳、待伤害、待治疗和扩展字段。
+    /// 链日志武装期间记录 Removed；同链先插后删的对象经逆序回放净效果
+    /// 仍为删除，无须特判。
     pub fn remove_obj(&mut self, id: ObjId) -> Option<RoomObject> {
+        let journaled = self
+            .chain_mutations
+            .is_some()
+            .then(|| {
+                self.room.objects.get(&id).map(|object| RemovedObject {
+                    id,
+                    object: object.clone(),
+                    extensions: self.room.extensions.get(&id).cloned(),
+                    old_fatigue: self.old_fatigue.get(&id).copied(),
+                    tick_fatigue: self.tick_fatigue.get(&id).copied(),
+                    damage: self.damage_to_apply.get(&id).copied(),
+                    heal: self.heal_to_apply.get(&id).copied(),
+                })
+            })
+            .flatten();
         let obj = self.room.objects.remove(&id)?;
         let (x, y) = obj.pos();
         self.index.remove(id, (x, y));
@@ -173,6 +233,9 @@ impl Working {
         self.tick_fatigue.remove(&id);
         self.damage_to_apply.remove(&id);
         self.heal_to_apply.remove(&id);
+        if let (Some(log), Some(bundle)) = (&mut self.chain_mutations, journaled) {
+            log.push(ChainMutation::Removed(Box::new(bundle)));
+        }
         Some(obj)
     }
 
@@ -319,6 +382,158 @@ impl Working {
                 self.old_fatigue.remove(&id);
             }
         }
+    }
+
+    /// 战斗槽整链开始前的候选快照并武装链内增删日志。受影响集为
+    /// 执行者、请求目标及其格上 rampart（攻击重定向面）；群体攻击
+    /// 为切比雪夫 3 格内全部对象的急切全量克隆（命中集超集，无论
+    /// 是否拒绝都支付）。逐对象保存克隆与延迟伤害/治疗条目；事件
+    /// 长度与 ID 游标随后记录。
+    pub fn snapshot_combat(
+        &mut self,
+        id: ObjId,
+        target: Option<ObjId>,
+        mass: bool,
+    ) -> CombatSnapshot {
+        let mut touched: Vec<ObjId> = vec![id];
+        if let Some(target_id) = target {
+            // 与能力触达面同源计算"目标+格上 rampart"，两处漂移会造成
+            // 恢复覆盖缺口。
+            touched.extend(super::creep::combat_touch_targets(self, target_id));
+        }
+        if mass && let Some(actor) = self.creep(id).map(|c| (c.x, c.y)) {
+            for (oid, obj) in self.room.objects.iter() {
+                let (ox, oy) = obj.pos();
+                if (ox as i32 - actor.0 as i32).abs() <= 3
+                    && (oy as i32 - actor.1 as i32).abs() <= 3
+                {
+                    touched.push(*oid);
+                }
+            }
+        }
+        touched.sort_unstable();
+        touched.dedup();
+        let objects: Vec<_> = touched
+            .iter()
+            .filter_map(|id| self.room.objects.get(id).cloned().map(|o| (*id, o)))
+            .collect();
+        let queues: Vec<_> = touched
+            .iter()
+            .map(|id| {
+                (
+                    *id,
+                    self.damage_to_apply.get(id).copied(),
+                    self.heal_to_apply.get(id).copied(),
+                )
+            })
+            .collect();
+        let snapshot = CombatSnapshot {
+            objects,
+            queues,
+            event_len: self.events.len(),
+            next_id: self.state.peek_next_id(),
+        };
+        self.chain_mutations = Some(Vec::new());
+        snapshot
+    }
+
+    /// 战斗链正常完成：解除增删日志武装并丢弃记录。
+    pub fn finish_combat_chain(&mut self) {
+        self.chain_mutations = None;
+    }
+
+    /// 战斗链正常拒绝：按增删日志逆序撤销链内对象变换，再恢复首触
+    /// 对象、延迟队列条目与事件长度，最后回退 ID 游标。其他执行者的
+    /// 队列条目、此前动作的写入与移动登记不受影响。
+    /// Removed 按移除时快照回插，其等于链前状态依赖当前战斗链处理器
+    /// 没有其他候选写通道（资源/移动能力默认拒绝、creep 字段只读）；
+    /// 给战斗槽开放新写能力时须重审此对账前提。
+    pub fn restore_combat(&mut self, snapshot: CombatSnapshot) {
+        let mutations = self
+            .chain_mutations
+            .take()
+            .expect("战斗链期间增删日志已武装");
+        for mutation in mutations.into_iter().rev() {
+            match mutation {
+                ChainMutation::Inserted(id) => {
+                    if let Some(object) = self.room.objects.remove(&id) {
+                        let (x, y) = object.pos();
+                        self.index.remove(id, (x, y));
+                    }
+                    self.room.extensions.remove(&id);
+                    self.damage_to_apply.remove(&id);
+                    self.heal_to_apply.remove(&id);
+                }
+                ChainMutation::Removed(bundle) => {
+                    let (x, y) = bundle.object.pos();
+                    self.room.objects.insert(bundle.id, bundle.object);
+                    self.index.insert(bundle.id, (x, y));
+                    match bundle.extensions {
+                        Some(fields) => {
+                            self.room.extensions.insert(bundle.id, fields);
+                        }
+                        None => {
+                            self.room.extensions.remove(&bundle.id);
+                        }
+                    }
+                    match bundle.old_fatigue {
+                        Some(v) => {
+                            self.old_fatigue.insert(bundle.id, v);
+                        }
+                        None => {
+                            self.old_fatigue.remove(&bundle.id);
+                        }
+                    }
+                    match bundle.tick_fatigue {
+                        Some(v) => {
+                            self.tick_fatigue.insert(bundle.id, v);
+                        }
+                        None => {
+                            self.tick_fatigue.remove(&bundle.id);
+                        }
+                    }
+                    match bundle.damage {
+                        Some(v) => {
+                            self.damage_to_apply.insert(bundle.id, v);
+                        }
+                        None => {
+                            self.damage_to_apply.remove(&bundle.id);
+                        }
+                    }
+                    match bundle.heal {
+                        Some(v) => {
+                            self.heal_to_apply.insert(bundle.id, v);
+                        }
+                        None => {
+                            self.heal_to_apply.remove(&bundle.id);
+                        }
+                    }
+                }
+            }
+        }
+        for (id, object) in snapshot.objects {
+            self.room.objects.insert(id, object);
+        }
+        for (id, damage, heal) in snapshot.queues {
+            match damage {
+                Some(v) => {
+                    self.damage_to_apply.insert(id, v);
+                }
+                None => {
+                    self.damage_to_apply.remove(&id);
+                }
+            }
+            match heal {
+                Some(v) => {
+                    self.heal_to_apply.insert(id, v);
+                }
+                None => {
+                    self.heal_to_apply.remove(&id);
+                }
+            }
+        }
+        self.events.truncate(snapshot.event_len);
+        self.state.restore_next_id(snapshot.next_id);
     }
 
     /// 在指定位置放下 energy：先填充存活容器，再合并同资源掉落堆。

@@ -80,6 +80,7 @@ pub fn settle_room(
         extractor_cooldown_pending: BTreeMap::new(),
         movement: movement::Movement::new(),
         pending_inter_room: Vec::new(),
+        chain_mutations: None,
         plane: plane.clone(),
     }));
 

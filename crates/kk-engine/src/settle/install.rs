@@ -53,6 +53,11 @@ impl Engine {
             "builtin:creep.transfer.native",
             "builtin:creep.withdraw.native",
             "builtin:creep.move.native",
+            "builtin:creep.attack.native",
+            "builtin:creep.rangedAttack.native",
+            "builtin:creep.rangedMassAttack.native",
+            "builtin:creep.heal.native",
+            "builtin:creep.rangedHeal.native",
         ];
         for binding in plan.required_bindings() {
             let name = binding.as_str();

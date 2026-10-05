@@ -203,9 +203,11 @@ export function seal() {
 // ctx.target.fields 是目标对象的完整字段（对象域动作处理链专用）；
 // 处理器原地改写后其终值随结果返回——undefined/null 表示不改动，
 // 对象值由宿主按类型描述符校验后整值写入。其余对象读写通道未开放。
-// 资源槽的 ctx.resources 与移动槽的 ctx.movement 是各自的受控领域能力：
-// resources 读写同房候选库存，movement 读写当前执行者的移动请求登记
-// （pending/request/cancel），均不可枚举、不可替换且只在处理器同步期内有效。
+// 资源槽的 ctx.resources、移动槽的 ctx.movement 与战斗槽的 ctx.combat
+// 是各自的受控领域能力：resources 读写同房候选库存，movement 读写当前
+// 执行者的移动请求登记（pending/request/cancel），combat 以新目标执行或
+// 取消本战斗动作（request/cancel）。均不可枚举、不可替换且只在处理器
+// 同步期内有效。
 // 处理器的持久状态只准走 ctx.state——模块全局不随失败候选回滚，
 // 用它做累计会破坏同输入重试的确定性。
 export function dispatch(key, ctx) {
@@ -384,11 +386,32 @@ export function runChain(slot, token) {
       cancel() { return checked(() => ops.op_mod_chain_move_cancel(token, key)); },
     });
   }
+  function combat(key, isOpen) {
+    function checked(call) {
+      try {
+        if (!isOpen()) throw new Error('战斗能力只能在所属处理器同步执行期间调用');
+        return call();
+      } catch (error) {
+        fault(error, key, 'context');
+        throw error;
+      }
+    }
+    return Object.freeze({
+      request(targetId) {
+        return checked(() => {
+          if (typeof targetId !== 'string') throw new Error('战斗目标须为对象 ID 的原始字符串');
+          return ops.op_mod_chain_combat_request(token, key, targetId);
+        });
+      },
+      cancel() { return checked(() => ops.op_mod_chain_combat_cancel(token, key)); },
+    });
+  }
   function simple(key) {
     const ctx = ops.op_mod_chain_read(token, key);
     let open = true;
     Object.defineProperty(ctx, 'resources', { value: resources(key, ctx, () => open) });
     Object.defineProperty(ctx, 'movement', { value: movement(key, () => open) });
+    Object.defineProperty(ctx, 'combat', { value: combat(key, () => open) });
     try {
       checkResult(key, bindings.get(key).fn(ctx));
       write(key, ctx);
@@ -412,6 +435,7 @@ export function runChain(slot, token) {
     let open = true;
     Object.defineProperty(ctx, 'resources', { value: resources(key, ctx, () => open) });
     Object.defineProperty(ctx, 'movement', { value: movement(key, () => open) });
+    Object.defineProperty(ctx, 'combat', { value: combat(key, () => open) });
     function next() {
       if (!open) throw new Error('next 只能在所属处理器同步执行期间调用');
       if (called) {

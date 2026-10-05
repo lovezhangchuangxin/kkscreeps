@@ -132,6 +132,19 @@ impl Action {
         })
     }
 
+    /// 战斗族动作对应的具名槽键；仅五个战斗动作返回 Some，派发侧据此
+    /// 进入贡献槽。非战斗动作返回 None，保持各自的原生派发路径。
+    pub fn combat_slot_key(self) -> Option<&'static str> {
+        Some(match self {
+            Self::Attack => "builtin:creep.attack",
+            Self::RangedAttack => "builtin:creep.rangedAttack",
+            Self::RangedMassAttack => "builtin:creep.rangedMassAttack",
+            Self::Heal => "builtin:creep.heal",
+            Self::RangedHeal => "builtin:creep.rangedHeal",
+            _ => return None,
+        })
+    }
+
     /// 返回会压制本动作的指令。判断只看指令是否存在，不看其执行是否成功。
     /// 来源：上游 engine/src/processor/intents/creeps/intents.js 的 priorities。
     fn suppressed_by(self) -> &'static [Action] {

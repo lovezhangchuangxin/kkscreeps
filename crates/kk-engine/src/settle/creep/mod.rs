@@ -8,6 +8,7 @@ mod lifecycle;
 mod movement;
 mod store;
 
+pub use combat::{CombatAction, combat_touch_targets, slot_combat_request};
 pub use harvest::harvest_power;
 pub use lifecycle::{die_creep, die_creep_with_rate};
 pub use movement::creep_tick;
@@ -29,10 +30,10 @@ use crate::settle::spawn;
 use crate::settle::{controller_allowed, energy_resource_name};
 
 use build::intent_build;
-use combat::{
-    intent_attack, intent_dismantle, intent_heal, intent_ranged_attack, intent_ranged_mass_attack,
-    intent_repair,
+pub(in crate::settle) use combat::{
+    heal_melee_native, heal_ranged_native, intent_attack, intent_ranged_attack, ranged_mass_native,
 };
+use combat::{intent_dismantle, intent_repair};
 use controller::{
     intent_attack_controller, intent_claim_controller, intent_generate_safe_mode,
     intent_reserve_controller, intent_sign_controller, intent_upgrade_controller,
@@ -72,6 +73,16 @@ pub fn process_creep_intents(
                 contrib.run_creep_move(ctx, id, data)?;
                 continue;
             }
+            Action::Attack
+            | Action::RangedAttack
+            | Action::RangedMassAttack
+            | Action::Heal
+            | Action::RangedHeal => {
+                let slot_key = action.combat_slot_key().expect("战斗族动作必有槽键");
+                let contrib = ctx.borrow().plane.contrib.clone();
+                contrib.run_combat(slot_key, ctx, id, data)?;
+                continue;
+            }
             _ => {}
         }
         let mut w = ctx.borrow_mut();
@@ -82,11 +93,8 @@ pub fn process_creep_intents(
             Action::UpgradeController => intent_upgrade_controller(w, id, data),
             Action::Drop => intent_drop(w, id, data),
             Action::Pickup => intent_pickup(w, id, data),
-            Action::Attack => intent_attack(w, id, data),
             Action::Repair => intent_repair(w, id, data),
             Action::Dismantle => intent_dismantle(w, id, data),
-            Action::Heal => intent_heal(w, id, data, false),
-            Action::RangedHeal => intent_heal(w, id, data, true),
             Action::ClaimController => intent_claim_controller(w, id, data),
             Action::ReserveController => intent_reserve_controller(w, id, data),
             Action::AttackController => intent_attack_controller(w, id, data),
@@ -95,8 +103,6 @@ pub fn process_creep_intents(
             Action::Say => intent_say(w, id, data),
             Action::Suicide => intent_suicide(w, id),
             Action::Pull => intent_pull(w, id, data),
-            Action::RangedAttack => intent_ranged_attack(w, id, data),
-            Action::RangedMassAttack => intent_ranged_mass_attack(w, id),
             _ => {}
         }
     }

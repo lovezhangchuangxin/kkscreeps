@@ -86,6 +86,23 @@ impl ContributionDispatch {
             crate::settle::creep::intent_withdraw,
         )?;
         let creep_move = action("builtin:creep.move", crate::settle::creep::intent_move)?;
+        let creep_attack = action("builtin:creep.attack", crate::settle::creep::intent_attack)?;
+        let creep_ranged_attack = action(
+            "builtin:creep.rangedAttack",
+            crate::settle::creep::intent_ranged_attack,
+        )?;
+        let creep_ranged_mass_attack = action(
+            "builtin:creep.rangedMassAttack",
+            crate::settle::creep::ranged_mass_native,
+        )?;
+        let creep_heal = action(
+            "builtin:creep.heal",
+            crate::settle::creep::heal_melee_native,
+        )?;
+        let creep_ranged_heal = action(
+            "builtin:creep.rangedHeal",
+            crate::settle::creep::heal_ranged_native,
+        )?;
         for slot in plan.slots() {
             if !BUILTIN_SLOT_KEYS.contains(&slot.key.as_str()) {
                 ext.insert(slot.key.clone(), ExtSlot::Hosted(host(slot.key.as_str())?));
@@ -97,6 +114,11 @@ impl ContributionDispatch {
             creep_transfer,
             creep_withdraw,
             creep_move,
+            creep_attack,
+            creep_ranged_attack,
+            creep_ranged_mass_attack,
+            creep_heal,
+            creep_ranged_heal,
             ext,
         })
     }
@@ -159,6 +181,38 @@ impl ContributionDispatch {
             take_action_handlers(plan, "builtin:creep.move", &mut action_handlers)?,
             crate::settle::creep::intent_move,
         )?;
+        let mut combat = |slot: &str,
+                          native: fn(
+            &mut crate::settle::Working,
+            kk_world::ObjId,
+            &crate::intent::IntentData,
+        )|
+         -> Result<ActionSlot, String> {
+            assemble_action(
+                plan,
+                slot,
+                &format!("{slot}.native"),
+                take_action_handlers(plan, slot, &mut action_handlers)?,
+                native,
+            )
+        };
+        let creep_attack = combat("builtin:creep.attack", crate::settle::creep::intent_attack)?;
+        let creep_ranged_attack = combat(
+            "builtin:creep.rangedAttack",
+            crate::settle::creep::intent_ranged_attack,
+        )?;
+        let creep_ranged_mass_attack = combat(
+            "builtin:creep.rangedMassAttack",
+            crate::settle::creep::ranged_mass_native,
+        )?;
+        let creep_heal = combat(
+            "builtin:creep.heal",
+            crate::settle::creep::heal_melee_native,
+        )?;
+        let creep_ranged_heal = combat(
+            "builtin:creep.rangedHeal",
+            crate::settle::creep::heal_ranged_native,
+        )?;
         reject_leftover("内建动作", &action_handlers)?;
         let tick = assemble_tick(
             plan,
@@ -173,6 +227,11 @@ impl ContributionDispatch {
             creep_transfer,
             creep_withdraw,
             creep_move,
+            creep_attack,
+            creep_ranged_attack,
+            creep_ranged_mass_attack,
+            creep_heal,
+            creep_ranged_heal,
             ext,
         })
     }

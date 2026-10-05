@@ -30,6 +30,24 @@ struct ModChainContext {
     resource_journal: Option<Rc<RefCell<BTreeMap<ObjId, kk_schema::room::RoomObject>>>>,
     /// 移动请求能力门：仅 builtin:creep.move 的处理器同步期内有效。
     move_slot: bool,
+    /// 战斗能力状态：仅五个战斗槽的处理器同步期内有效；consumed 单向
+    /// 标记保证本动作经能力或 native 至多执行一次。
+    combat: Option<CombatChainState>,
+}
+
+/// 战斗链的运行时状态与首触日志。日志记录能力改向触达、且不在引擎
+/// 预计算受影响集内的对象原始记录与延迟队列条目；拒绝时恢复。
+#[derive(Clone)]
+struct CombatChainState {
+    action: kk_engine::settle::creep::CombatAction,
+    consumed: bool,
+    journal: Rc<RefCell<BTreeMap<ObjId, CombatJournalEntry>>>,
+}
+
+struct CombatJournalEntry {
+    object: kk_schema::room::RoomObject,
+    damage: Option<i64>,
+    heal: Option<i64>,
 }
 
 impl SlotExecutor for ModSlotExecutor {
@@ -47,6 +65,8 @@ impl SlotExecutor for ModSlotExecutor {
             && kk_mod_api::builtin::RESOURCE_ACTION_SLOTS.contains(&slot.key.as_str());
         let move_action = matches!(&call, SlotCall::Action { .. })
             && kk_mod_api::builtin::MOVE_ACTION_SLOTS.contains(&slot.key.as_str());
+        let combat_action = matches!(&call, SlotCall::Action { .. })
+            && kk_mod_api::builtin::COMBAT_ACTION_SLOTS.contains(&slot.key.as_str());
         let (id, args, native) = match call {
             SlotCall::Action { id, data, native } => (
                 id,
@@ -76,9 +96,17 @@ impl SlotExecutor for ModSlotExecutor {
         } else {
             None
         };
-        let staged_states = (extension || resource_action || move_action)
+        let staged_states = (extension || resource_action || move_action || combat_action)
             .then(|| Rc::new(RefCell::new(BTreeMap::new())));
         let resource_journal = resource_action.then(|| Rc::new(RefCell::new(BTreeMap::new())));
+        // 外层副本仅供 Declined 分支读共享 journal 与 is_some() 判定；
+        // consumed/action 以链内上下文的副本为唯一权威（外层恒为初值）。
+        let combat_state = combat_action.then(|| CombatChainState {
+            action: kk_engine::settle::creep::CombatAction::from_slot_key(slot.key.as_str())
+                .expect("战斗槽键已由 COMBAT_ACTION_SLOTS 判定"),
+            consumed: false,
+            journal: Rc::new(RefCell::new(BTreeMap::new())),
+        });
         let mut vm = self
             .realm
             .try_borrow_mut()
@@ -96,6 +124,7 @@ impl SlotExecutor for ModSlotExecutor {
                     staged_states: staged_states.clone(),
                     resource_journal: resource_journal.clone(),
                     move_slot: move_action,
+                    combat: combat_state.clone(),
                 }),
             )
             .map_err(|error| {
@@ -126,11 +155,33 @@ impl SlotExecutor for ModSlotExecutor {
                         w.room.objects.insert(id, object);
                     }
                 }
+                if let Some(combat) = &combat_state {
+                    let mut w = ctx.borrow_mut();
+                    for (id, entry) in std::mem::take(&mut *combat.journal.borrow_mut()) {
+                        w.room.objects.insert(id, entry.object);
+                        match entry.damage {
+                            Some(v) => {
+                                w.damage_to_apply.insert(id, v);
+                            }
+                            None => {
+                                w.damage_to_apply.remove(&id);
+                            }
+                        }
+                        match entry.heal {
+                            Some(v) => {
+                                w.heal_to_apply.insert(id, v);
+                            }
+                            None => {
+                                w.heal_to_apply.remove(&id);
+                            }
+                        }
+                    }
+                }
                 if let Some(fields) = original_fields {
                     ctx.borrow_mut()
                         .update_mod_fields(id, &fields)
                         .map_err(|error| format!("动作拒绝恢复失败：{error}"))?;
-                } else if !(resource_action || move_action) {
+                } else if !(resource_action || move_action || combat_state.is_some()) {
                     return Err("该槽没有正常拒绝的局部恢复边界".into());
                 }
             }
@@ -274,6 +325,58 @@ impl ChainHost for ModChainContext {
         kk_engine::settle::creep::slot_cancel_direction(&mut self.ctx.borrow_mut(), self.id)
     }
 
+    fn combat_request(&mut self, target: &str) -> Result<(), String> {
+        let (action, journal) = {
+            let Some(combat) = &self.combat else {
+                return Err("本次槽没有战斗目标改向能力".into());
+            };
+            if !combat.action.targeted() {
+                return Err("rangedMassAttack 没有目标改向能力".into());
+            }
+            if combat.consumed {
+                return Err("本动作的战斗能力已消耗（改向/取消/执行恰一次）".into());
+            }
+            (combat.action, combat.journal.clone())
+        };
+        let target_id = ObjId::parse(target).ok_or("战斗目标 ID 非法")?;
+        let touched = kk_engine::settle::creep::combat_touch_targets(&self.ctx.borrow(), target_id);
+        {
+            let mut w = self.ctx.borrow_mut();
+            let mut journal = journal.borrow_mut();
+            for id in &touched {
+                if !journal.contains_key(id)
+                    && let Some(object) = w.room.objects.get(id).cloned()
+                {
+                    journal.insert(
+                        *id,
+                        CombatJournalEntry {
+                            object,
+                            damage: w.damage_to_apply.get(id).copied(),
+                            heal: w.heal_to_apply.get(id).copied(),
+                        },
+                    );
+                }
+            }
+            kk_engine::settle::creep::slot_combat_request(&mut w, self.id, target_id, action)?;
+        }
+        self.cached_fields = None;
+        if let Some(combat) = &mut self.combat {
+            combat.consumed = true;
+        }
+        Ok(())
+    }
+
+    fn combat_cancel(&mut self) -> Result<(), String> {
+        let Some(combat) = &mut self.combat else {
+            return Err("本次槽没有战斗能力".into());
+        };
+        if combat.consumed {
+            return Err("本动作的战斗能力已消耗（改向/取消/执行恰一次）".into());
+        }
+        combat.consumed = true;
+        Ok(())
+    }
+
     fn read(&mut self, binding: &str) -> Result<ChainContext, String> {
         let key = Key::new(binding)?;
         let fields = self.fields()?.clone();
@@ -322,10 +425,19 @@ impl ChainHost for ModChainContext {
     fn native(&mut self) -> Result<(), String> {
         // native 可改资源、字段或移除目标，返回后的 read 必须重新取候选。
         self.cached_fields = None;
+        // 战斗槽：能力改向/取消已消耗本动作时跳过 native，防止二次执行。
+        if let Some(combat) = &mut self.combat
+            && combat.consumed
+        {
+            return Ok(());
+        }
         match &self.native {
             NativeCall::Action { data, step } => step(&mut self.ctx.borrow_mut(), self.id, data),
             NativeCall::Tick(step) => step(&mut self.ctx.borrow_mut(), self.id),
             NativeCall::None => return Err("Mod 自有槽没有 Rust native 中心".into()),
+        }
+        if let Some(combat) = &mut self.combat {
+            combat.consumed = true;
         }
         Ok(())
     }

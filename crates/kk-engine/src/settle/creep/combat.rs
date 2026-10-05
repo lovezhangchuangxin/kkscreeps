@@ -15,10 +15,98 @@ use crate::settle::damage;
 use crate::settle::movement;
 use crate::settle::movement::type_name_of;
 
+/// 战斗能力面认得的动作族成员；与 builtin:creep.* 五槽一一对应。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CombatAction {
+    Attack,
+    RangedAttack,
+    RangedMassAttack,
+    Heal,
+    RangedHeal,
+}
+
+impl CombatAction {
+    /// 槽键是否属于战斗族；宿主桥与引擎边界共用此判定。
+    pub fn from_slot_key(slot_key: &str) -> Option<Self> {
+        Some(match slot_key {
+            "builtin:creep.attack" => Self::Attack,
+            "builtin:creep.rangedAttack" => Self::RangedAttack,
+            "builtin:creep.rangedMassAttack" => Self::RangedMassAttack,
+            "builtin:creep.heal" => Self::Heal,
+            "builtin:creep.rangedHeal" => Self::RangedHeal,
+            _ => return None,
+        })
+    }
+
+    /// 目标改向只对带显式目标的动作开放；rangedMassAttack 无目标可改。
+    pub fn targeted(self) -> bool {
+        !matches!(self, Self::RangedMassAttack)
+    }
+
+    fn run(self, w: &mut Working, id: ObjId, data: &IntentData) {
+        match self {
+            Self::Attack => intent_attack(w, id, data),
+            Self::RangedAttack => intent_ranged_attack(w, id, data),
+            Self::RangedMassAttack => intent_ranged_mass_attack(w, id),
+            Self::Heal => intent_heal(w, id, data, false),
+            Self::RangedHeal => intent_heal(w, id, data, true),
+        }
+    }
+}
+
+/// 槽 native 入口：与意图派发共用同一实现，hosted 链中心与默认直调
+/// 行为一致。近远程治疗与无目标的群体攻击按槽包装成三参形态。
+pub(in crate::settle) fn heal_melee_native(w: &mut Working, id: ObjId, data: &IntentData) {
+    intent_heal(w, id, data, false);
+}
+
+pub(in crate::settle) fn heal_ranged_native(w: &mut Working, id: ObjId, data: &IntentData) {
+    intent_heal(w, id, data, true);
+}
+
+pub(in crate::settle) fn ranged_mass_native(w: &mut Working, id: ObjId, _data: &IntentData) {
+    intent_ranged_mass_attack(w, id);
+}
+
+/// 能力改向将触碰的对象：请求目标及其格上的 rampart（攻击重定向面）。
+/// 仅返回候选中存在的对象；供调用方在执行前做首触快照。
+pub fn combat_touch_targets(w: &Working, target_id: ObjId) -> Vec<ObjId> {
+    let mut targets = vec![target_id];
+    if let Some(target) = w.room.objects.get(&target_id)
+        && let Some(rampart) = damage::rampart_at(w, target.pos())
+        && rampart != target_id
+    {
+        targets.push(rampart);
+    }
+    targets.retain(|id| w.room.objects.contains_key(id));
+    targets
+}
+
+/// 以指定目标执行本动作的完整 native 语义（含距离/孵化/耐久/安全模式/
+/// rampart 全部原生预检）。目标侧预检不通过时静默返回，与原生意图一致；
+/// 执行者侧（非 creep 或孵化中）为故障——玩家面已前置拦截，这里是纵深
+/// 防御，阻断"改向攻击执行者自己的 spawn 连带移除自身"的自毁链。
+pub fn slot_combat_request(
+    w: &mut Working,
+    id: ObjId,
+    target_id: ObjId,
+    action: CombatAction,
+) -> Result<(), String> {
+    let Some(creep) = w.creep(id) else {
+        return Err(format!("执行者 {} 不是有效 creep", id.as_str()));
+    };
+    if creep.spawning {
+        return Err("孵化中的 creep 不能发出战斗动作".into());
+    }
+    let data = IntentData::target(target_id);
+    action.run(w, id, &data);
+    Ok(())
+}
+
 /// 近战攻击相邻、有耐久且非自身的目标，目标格有 rampart 时转打 rampart。
 /// 功率计入 ATTACK boost；0 功率也会进入伤害入口并生成事件。
 /// 来源：上游 engine/src/processor/intents/creeps/attack.js。
-pub(super) fn intent_attack(w: &mut Working, id: ObjId, data: &IntentData) {
+pub(in crate::settle) fn intent_attack(w: &mut Working, id: ObjId, data: &IntentData) {
     let Some(target_id) = data.id else { return };
     let (pos, owner, power) = match w.creep(id) {
         Some(c) if !c.spawning => (
@@ -182,7 +270,7 @@ pub(super) fn intent_dismantle(w: &mut Working, id: ObjId, data: &IntentData) {
 
 /// 远程攻击三格内目标，rampart 存在时转打它，功率含 rangedAttack boost。
 /// 不拒绝零功率，与 rangedMassAttack 的处理不同。
-pub(super) fn intent_ranged_attack(w: &mut Working, id: ObjId, data: &IntentData) {
+pub(in crate::settle) fn intent_ranged_attack(w: &mut Working, id: ObjId, data: &IntentData) {
     let Some(target_id) = data.id else { return };
     if target_id == id {
         return;

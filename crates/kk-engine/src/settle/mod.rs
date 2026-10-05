@@ -408,6 +408,6 @@ mod room_loop;
 mod validation;
 mod working;
 pub use room_loop::{energy_resource_name, settle_room};
-pub use working::{Plane, RoomCtx, Working};
+pub use working::{CombatSnapshot, Plane, RoomCtx, Working};
 #[cfg(test)]
 mod tests;

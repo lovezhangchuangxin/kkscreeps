@@ -1,0 +1,115 @@
+{
+  "batch": "D4 Mod combat slots",
+  "date": "2026-10-05",
+  "baseline": "f280389d48b4c407f24e02acce8e6a3fea061cdc",
+  "executable_sha256": "c778d9d412d73ae3382e260220a120f3b96907781226cbed4b9687c3f3a4824f",
+  "screeps_ok_pin": "34a630efa42908c117c19c25d2350fa2387bd633",
+  "slots": [
+    "builtin:creep.attack",
+    "builtin:creep.rangedAttack",
+    "builtin:creep.rangedMassAttack",
+    "builtin:creep.heal",
+    "builtin:creep.rangedHeal"
+  ],
+  "checks": {
+    "release_build_exit_code": 0,
+    "focused_test_exit_code": 0,
+    "focused_rust_passed": 499,
+    "focused_rust_failed": 0,
+    "focused_rust_ignored": 5,
+    "rust_passed": 699,
+    "rust_failed": 0,
+    "rust_ignored": 11,
+    "mod_chain_passed": 90,
+    "workspace_check_exit_code": 0,
+    "compat_node_passed": 14,
+    "doc_links_exit_code": 0,
+    "doc_link_files": 250,
+    "source_size_files": 321,
+    "source_size_exit_code": 0
+  },
+  "new_tests": {
+    "mod_chain_creep_combat": 7,
+    "mod_chain_creep_combat_world": 8,
+    "engine_intent_key_pin": 1,
+    "total": 16
+  },
+  "ratchet": {
+    "total": 2914,
+    "passed": 1918,
+    "failed": 89,
+    "skipped": 907,
+    "floor": 1918,
+    "regressions_vs_head": 0,
+    "new_skips_or_allows": 0
+  },
+  "bots": [
+    {
+      "name": "tooangel",
+      "ticks_requested": 2000,
+      "ticks_completed": 2000,
+      "ticks_terminated": 0,
+      "ticks_skipped_penalty": 0,
+      "ticks_with_console_error": 0
+    },
+    {
+      "name": "overmind",
+      "ticks_requested": 2000,
+      "ticks_completed": 2000,
+      "ticks_terminated": 0,
+      "ticks_skipped_penalty": 0,
+      "ticks_with_console_error": 1,
+      "known_issue": "首 tick DirectiveHarvest.create 既有错误，与入库基线一致"
+    },
+    {
+      "name": "wasm-bot",
+      "ticks_requested": 10,
+      "ticks_completed": 10,
+      "ticks_terminated": 0,
+      "ticks_skipped_penalty": 0,
+      "ticks_with_console_error": 0
+    }
+  ],
+  "combat_scenario": {
+    "fixture": "compat/fixtures/sim-combat",
+    "ticks": 300,
+    "channels": [
+      "json",
+      "kkpv"
+    ],
+    "assertions_passed": 6,
+    "channels_final_state_equal": true,
+    "outcome": "蓝方双守卫与 spawn 全部摧毁；红军三 creep 存活且部件级耐久按前列先损分布（240/270/210 of 300）"
+  },
+  "scope_exclusions": [
+    "attackController 保持原生直调（控制器降级计时不在本片拒绝边界）",
+    "repair/dismantle 归建造族后续批次",
+    "spawn 摧毁连带移除孵化 creep 的恢复无专测（放置面不支持孵化任务）",
+    "伤害数值/TOUGH 减伤/power 免疫维持引擎现状未模拟",
+    "零 Mod 开销判读随 D7"
+  ],
+  "review": {
+    "reviewers": 3,
+    "p0": 0,
+    "p1": 0,
+    "p2_found": 13,
+    "p2_cleared": [
+      "孵化口径矛盾（注释/文档三处改为执行者侧故障、目标侧静默）",
+      "chain_mutations 故障路径依赖整轮丢弃的注释兜底说明",
+      "restore_combat 移除时快照==链前快照的前提注释",
+      "decline 过时文案泛化（资源/移动/战斗）",
+      "combat_state.clone() 外层死值注释",
+      "snapshot_combat 复用 combat_touch_targets 消除双份维护",
+      "mass 快照急切全量克隆的注释措辞",
+      "槽键三处平行枚举加集合等价钉子测试",
+      "builtin.rs 模块头注释",
+      "双玩家测试注释写反",
+      "rangedAttack Hosted 链专测（拒绝+改向）",
+      "文档零开销措辞（Hosted 无条件武装）与 mod-execution 剩余范围句"
+    ],
+    "p2_registered": [
+      "spawn 摧毁连带孵化 creep 的恢复无专测（放置面不支持孵化任务）",
+      "mass 快照惰性化归 D7 性能观测面"
+    ]
+  }
+}

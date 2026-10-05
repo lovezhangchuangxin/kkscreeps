@@ -74,6 +74,20 @@ impl TickState {
         id
     }
 
+    /// 当前 ID 游标；供链内快照记录，拒绝回滚插入对象时一并恢复。
+    pub(crate) fn peek_next_id(&self) -> u64 {
+        self.inner.borrow().next_id
+    }
+
+    /// 回滚 ID 游标；仅允许在已删除本链全部新插入对象后调用，
+    /// 否则会出现游标复用。游标只能回退到快照值，不得前进。
+    pub(crate) fn restore_next_id(&self, snapshot: u64) {
+        let mut state = self.inner.borrow_mut();
+        if state.next_id > snapshot {
+            state.next_id = snapshot;
+        }
+    }
+
     pub(crate) fn add_gcl(&self, player: &str, amount: i64) {
         self.inner
             .borrow_mut()
