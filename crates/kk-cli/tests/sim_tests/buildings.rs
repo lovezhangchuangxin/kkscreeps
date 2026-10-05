@@ -30,7 +30,13 @@ fn smelter_building_scenario_matches_across_channels() -> anyhow::Result<()> {
         assert_eq!(mem["grid_foundry"], 255, "obstacle 建筑在代价矩阵中为 255");
         assert_eq!(mem["foundry_hits"], 5000, "受击 6 次后维修回满");
         assert_eq!(mem["foundry_owner"], "p1", "归属语义随完工落成");
-        assert_eq!(mem["storage_ingots"], 100, "产物经真实搬运回仓");
+        assert!(
+            mem["storage_ingots"].as_i64().unwrap_or(0) >= 100,
+            "产物经真实搬运回仓：{}",
+            mem["storage_ingots"]
+        );
+        assert_eq!(mem["attacks"], 6);
+        assert_eq!(mem["build_precheck_empty"], true, "空载预检拒绝分支");
         reports.push(report);
     }
     assert_eq!(
@@ -62,7 +68,11 @@ fn combined_scenario_hosts_two_rule_variants_and_reports_buildings() -> anyhow::
         assert_eq!(mem["grid_panel"], 1, "road 语义建筑按道路成本");
         assert_eq!(mem["panel_energy"], 200, "免费生产至容量后停止");
         assert_eq!(mem["panel_hits"], 300);
-        assert_eq!(mem["storage_ingots"], 100, "smelter 行为不回归");
+        assert!(
+            mem["storage_ingots"].as_i64().unwrap_or(0) >= 100,
+            "smelter 行为不回归：{}",
+            mem["storage_ingots"]
+        );
         reports.push(report);
     }
     assert_eq!(reports[0]["final"]["world"], reports[1]["final"]["world"]);

@@ -83,6 +83,11 @@
       if (typeof typeKey !== 'string' || types[typeKey] === undefined) {
         throw new Error('类型 ' + JSON.stringify(typeKey) + ' 不在冻结计划中（不能绑定玩家类）');
       }
+      // 与 emit 目录同律：只能绑定本包命名空间的类型，防止先装载的包
+      // 抢绑他人类型的玩家类（宿主内容均受信，此处是纵深防御）。
+      if (typeKey.indexOf(prefix) !== 0) {
+        throw new Error('类型 ' + JSON.stringify(typeKey) + ' 不属于本包命名空间 ' + namespace);
+      }
       if (typeof cls !== 'function') {
         throw new Error('玩家类绑定需要一个构造器（' + namespace + ' → ' + typeKey + '）');
       }
@@ -96,6 +101,9 @@
     function bindBuilding(typeKey, cls) {
       if (typeof typeKey !== 'string' || buildings[typeKey] === undefined) {
         throw new Error('建筑 ' + JSON.stringify(typeKey) + ' 不在冻结计划中（不能绑定玩家类）');
+      }
+      if (typeKey.indexOf(prefix) !== 0) {
+        throw new Error('建筑 ' + JSON.stringify(typeKey) + ' 不属于本包命名空间 ' + namespace);
       }
       if (typeof cls !== 'function') {
         throw new Error('建筑玩家类绑定需要一个构造器（' + namespace + ' → ' + typeKey + '）');

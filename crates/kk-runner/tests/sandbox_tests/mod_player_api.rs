@@ -52,6 +52,47 @@ fn counter_config(player_source: &str) -> SandboxConfig {
     }
 }
 
+/// bind 与 buildings.bind 只认本包命名空间：清单内但归他人命名空间的键
+/// 在安装期拒绝（与 emit 目录的纵深防御同律）。
+#[test]
+fn bind_rejects_foreign_namespace_types() {
+    let foreign_api = |source: &str| {
+        std::sync::Arc::new(ModPlayerApi {
+            modules: std::sync::Arc::new(vec![ModPlayerModule {
+                namespace: "testmod".into(),
+                entry: "player.js".into(),
+                files: [("player.js".to_string(), source.to_string())].into(),
+            }]),
+            types: vec![(
+                "othermod:thing".to_string(),
+                1000,
+                "othermod:thing".to_string(),
+            )],
+            intents: Vec::new(),
+            buildings: vec![(
+                "othermod:mill".to_string(),
+                "obstacle".to_string(),
+                vec!["energy".to_string()],
+            )],
+        })
+    };
+    for source in [
+        "export default function install(api) { api.objects.bind('othermod:thing', class T {}); }",
+        "export default function install(api) { api.buildings.bind('othermod:mill', class T {}); }",
+    ] {
+        let err = Sandbox::new(SandboxConfig {
+            mod_api: Some(foreign_api(source)),
+            ..SandboxConfig::default()
+        })
+        .err()
+        .expect("跨包绑定须使沙箱创建失败");
+        assert!(
+            err.to_string().contains("不属于本包命名空间"),
+            "错误应含命名空间拒绝：{err}"
+        );
+    }
+}
+
 /// 装了玩家面的世界：一个 mod 计数器对象与最小房间信封。
 fn mod_world() -> serde_json::Value {
     let terrain = vec![0u32; 2500];

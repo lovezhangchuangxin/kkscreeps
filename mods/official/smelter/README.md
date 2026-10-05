@@ -17,7 +17,7 @@
 
 ## 玩家面
 
-`player.js` 绑定 `SmelterFoundry extends Structure` 并暴露
+`player.js` 绑定 `SmelterFoundry extends OwnedStructure` 并暴露
 `SMELTER_ORE` / `SMELTER_INGOT` 常量；`foundry.ore` / `foundry.ingots`
 读当轮库存。
 

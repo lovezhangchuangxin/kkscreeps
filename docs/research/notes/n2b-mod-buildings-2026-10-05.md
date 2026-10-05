@@ -12,7 +12,8 @@
 
 ## 机器验证
 
-- `cargo test --workspace`：**838 通过 / 0 失败**（基线 809 + 本批新增 29：冻结 9、注册声明 2、结算 11、事务 2、CLI 4、mod-player 清单 1）。
+- `cargo test --workspace`：**844 通过 / 0 失败**（基线 809 + 本批新增 35：冻结 10、mod-host 注册声明 1、mod-api 单元 2、结算 13、事务 3、CLI 4、玩家面绑定 1、评审清偿追加 1）。
+- 三路评审（Rust 数据面 / 玩家面 JS / 官方包与验收证据）全部清偿：dismantle 玩家预检并目录类型、bind 命名空间归属门、拆解回收分母改成本总量（总值=伤害/200 与内建一致）、生产容量可行性冻结门、boost 支付分歧文档化+锁定测试、超限工地回拨测试、玩家路径 dismantle/异常不发布候选/空载预检拒绝测试、三处弱断言强化。
 - 三场景人工核对（`target/debug/kkscreeps sim run`）：
   - `scenario.json`（320 tick）：`grid_foundry=255`、`foundry_hits=5000`（受击 6 次后维修回满）、`foundry_ingots=40`、`storage_ingots=100`（产物真实搬回仓库）、`foundry_owner=p1`。
   - `scenario-combined.json`（320 tick）：另得 `grid_panel=1`、`panel_energy=200`（免费生产至容量停止）、`panel_hits=300`；smelter 各值不回归；组合报告 `buildings=[panel:collector, smelter:foundry]`、selection `[panel, smelter]`。
@@ -24,7 +25,7 @@
 ## 关键实现决定
 
 1. **载体选 Generic 结构**：结构类型本是字符串，工地/受击/废墟/投影/FIND 对字符串天然开放——阻挡点集中在成本白名单、hitsMax 表、维修/拆除门、寻路表、transfer 白名单与 RCL 配额，逐一按目录放开。`RoomObject::Mod` 保持对象域语义不动。
-2. **多资源支付锚定累计比例** `floor(amount·p/total)`：单资源成本严格退化为内建 1:1；boost 加速进度同时按比例提高支付速率，完工恰付清，无需逐工地付款账本。
+2. **多资源支付锚定累计比例** `floor(amount·p/total)`：单资源成本严格退化为内建 1:1（无 boost 时）；boost 语义与内建有意的分歧——支付恒锚定进度比例（内建能耗按未强化效果），复刻内建口径需逐工地付款账本（新快照字段），不值得。
 3. **生产是宿主原生周期**（`time % interval`，无相位状态）：检查点恢复零额外状态；玩法差异（配方/周期/寻路语义）全部由声明表达，第二个包零 Rust 改动。
 4. 玩家类必须 `api.buildings.bind`（finalize 强制），推荐继承 `OwnedStructure` 取得 `owner`/`my`。
 

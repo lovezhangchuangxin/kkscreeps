@@ -171,3 +171,56 @@ fn writeback_failure_retry_settles_production_exactly_once() -> anyhow::Result<(
     }
     Ok(())
 }
+
+/// 玩家路径的拆解预检对 Mod 建筑放行（JS 白名单并目录类型），结算
+/// 按成本占比回收——补上「预检拒绝、结算放行」的偏差回归锁。
+#[test]
+fn player_path_dismantle_accepts_mod_buildings() -> anyhow::Result<()> {
+    for kkpv in [false, true] {
+        let mut e = building_engine("", kkpv)?;
+        let foundry = e.place_object(
+            "W1N1",
+            "structure",
+            &json!({"pos":[20,20],"structureType":"bm:foundry","owner":"p1",
+                "store":{"energy":0},"storeCapacity":500}),
+        )?;
+        let d = worker(&mut e, "d", 21, 20, 0, 0)?;
+        e.run_player(
+            "p1",
+            &format!("Memory.rc = Game.creeps.d.dismantle(Game.getObjectById('{foundry}'));"),
+        )?;
+        assert_eq!(
+            e.player_state_for_test("p1").unwrap().raw_memory,
+            r#"{"rc":0}"#,
+            "预检放行（OK=0），不再恒 ERR_INVALID_TARGET"
+        );
+        assert_eq!(hits(&e, &foundry), 1800, "4 WORK×DISMANTLE_POWER=200 伤害");
+    }
+    Ok(())
+}
+
+/// 建造槽处理器抛异常：整轮候选丢弃不发布，世界与支付保持动作前
+/// （补齐「异常不发布候选」的建筑面证据）。
+#[test]
+fn build_slot_handler_fault_discards_round_without_publishing() -> anyhow::Result<()> {
+    let faulty =
+        "api.handlers.after('builtin:creep.build',{id:'boom'},()=>{throw new Error('boom');});";
+    for kkpv in [false, true] {
+        let mut e = building_engine(faulty, kkpv)?;
+        let w = worker(&mut e, "w", 10, 10, 1000, 100)?;
+        let site = near_done_site(&mut e)?;
+        let err = e
+            .run_player(
+                "p1",
+                &format!("Game.creeps.w.build(Game.getObjectById('{site}'))"),
+            )
+            .expect_err("处理器异常必须使本轮失败");
+        assert!(err.to_string().contains("boom"), "{err}");
+        assert_eq!(e.get_game_time(), 0, "故障轮不提交");
+        assert!(foundry_of(&e).is_none(), "无结构残留");
+        assert_eq!(e.get_object(&site).unwrap()["progress"], json!(990));
+        assert_eq!(e.get_object(&w).unwrap()["store"]["energy"], json!(1000));
+        assert_eq!(e.get_object(&w).unwrap()["store"]["bm:ore"], json!(100));
+    }
+    Ok(())
+}

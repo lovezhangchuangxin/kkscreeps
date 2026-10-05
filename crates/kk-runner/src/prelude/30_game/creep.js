@@ -489,9 +489,13 @@
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;
     if (countActiveParts(this.body, C.WORK) === 0) return C.ERR_NO_BODYPART;
+    // 可拆类型 = 内建造价表或 Mod 建筑目录（与结算侧 cost_bearing 同源）。
+    const modBuilding = gw.modApi === undefined ? undefined
+      : gw.modApi.buildings[target && target.structureType];
     const okTarget = target && target.id
       && (target instanceof globalThis.Structure || target instanceof globalThis.StructureSpawn)
-      && C.CONSTRUCTION_COST && target.structureType in C.CONSTRUCTION_COST;
+      && ((C.CONSTRUCTION_COST && target.structureType in C.CONSTRUCTION_COST)
+        || modBuilding !== undefined);
     if (!okTarget) return C.ERR_INVALID_TARGET;
     if (!target.pos.isNearTo(this.pos)) return C.ERR_NOT_IN_RANGE;
     if (blockedBySafeMode(this)) return C.ERR_NO_BODYPART;

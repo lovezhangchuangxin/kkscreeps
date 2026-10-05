@@ -164,6 +164,40 @@ fn production_requires_capacity_and_valid_interval() {
 }
 
 #[test]
+fn production_capacity_must_hold_a_full_cycle() {
+    // 容量装不下单周期产出：运行期 used+produced>capacity 恒真，生产
+    // 永久 no-op——冻结期拒绝。
+    let mut c = module("alpha");
+    let mut b = building("alpha", "foundry");
+    b.store_capacity = Some(4);
+    b.production = Some(ProductionSpec {
+        interval: 10,
+        inputs: Vec::new(),
+        outputs: vec![("energy".into(), 5)],
+    });
+    c.buildings.push(b);
+    error(c, "须能容纳单周期的全部输入");
+
+    // 容量装不下单周期全部输入：输入永远攒不齐，同样拒绝。
+    let mut c = module("alpha");
+    let mut b = building("alpha", "foundry");
+    b.store_capacity = Some(50);
+    b.production = Some(ProductionSpec {
+        interval: 10,
+        inputs: vec![("energy".into(), 30), ("alpha:dust".into(), 30)],
+        outputs: vec![("alpha:spark".into(), 1)],
+    });
+    c.resources.push(ResourceDescriptor {
+        key: key("alpha:dust"),
+    });
+    c.resources.push(ResourceDescriptor {
+        key: key("alpha:spark"),
+    });
+    c.buildings.push(b);
+    error(c, "须能容纳单周期的全部输入");
+}
+
+#[test]
 fn building_catalog_participates_in_plan_hash() {
     let base = plan(vec![module("alpha")]).unwrap();
     let mut with_building = module("alpha");

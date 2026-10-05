@@ -34,7 +34,19 @@ fn solar() -> kk_mod_api::buildings::BuildingDescriptor {
     }
 }
 
-/// 声明 bm:* 资源与 foundry/solar 建筑的贡献平面。
+fn pass_thru() -> kk_mod_api::buildings::BuildingDescriptor {
+    kk_mod_api::buildings::BuildingDescriptor {
+        key: kk_mod_api::Key::new("bm:pass").unwrap(),
+        player_class: "Pass".into(),
+        cost: vec![("energy".into(), 100)],
+        hits_max: 100,
+        pathing: kk_mod_api::buildings::BuildingPathing::Plain,
+        store_capacity: None,
+        production: None,
+    }
+}
+
+/// 声明 bm:* 资源与 foundry/solar/pass 建筑的贡献平面。
 fn building_plane() -> kk_engine::settle::Plane {
     let mut contribution = kk_mod_api::Contribution {
         source: kk_mod_api::Source {
@@ -62,7 +74,7 @@ fn building_plane() -> kk_engine::settle::Plane {
                 key: kk_mod_api::Key::new("bm:ore").unwrap(),
             },
         ],
-        buildings: vec![foundry(), solar()],
+        buildings: vec![foundry(), pass_thru(), solar()],
     };
     contribution.resources.sort_by(|a, b| a.key.cmp(&b.key));
     let plan = std::sync::Arc::new(
@@ -488,8 +500,16 @@ fn obstacle_building_blocks_movement_while_road_building_does_not() {
     d.direction = Some(5); // BOTTOM → 10,12（solar 格）
     let mut batch = IntentBatch::default();
     batch.add_object_intent("p1", walker, Action::Move, d);
-    f.settle_with_plane(batch, plane);
+    f.settle_with_plane(batch, plane.clone());
     assert_eq!(f.creep_state(walker).1, 12, "road 语义建筑可通行");
+    // plain 语义：可通行且不改变寻路成本。
+    place_building(&mut f, "bm:pass", 10, 13, Value::Null);
+    let mut d = IntentData::bare();
+    d.direction = Some(5); // BOTTOM → 10,13（pass 格）
+    let mut batch = IntentBatch::default();
+    batch.add_object_intent("p1", walker, Action::Move, d);
+    f.settle_with_plane(batch, plane);
+    assert_eq!(f.creep_state(walker).1, 13, "plain 语义建筑可通行");
 }
 
 /// 移除工地按各成本资源返还一半已付量（命名掉落堆）。
@@ -566,4 +586,83 @@ fn owner_can_destroy_mod_building_via_room_intent() {
     );
     f.settle_with_plane(batch, plane);
     assert!(f.world.get(foundry).is_none(), "建筑被销毁");
+}
+
+/// boost 分歧的锁定：XLH2O（build×2）的 creep 建 Mod 工地时，进度与
+/// 支付同比例放大（2 WORK×5×2=20 点，付 20 能量+2 矿）——与内建
+/// 「能耗按未强化效果」不同，是文档化的有意分歧。
+#[test]
+fn boosted_builder_pays_one_to_one_with_boosted_progress() {
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let plane = building_plane();
+    let builder = f.creep_with_mineral(
+        "b",
+        20,
+        19,
+        &[BodyKind::Work, BodyKind::Work],
+        1000,
+        "bm:ore",
+        100,
+    );
+    if let Some(RoomObject::Creep(c)) = f.world.get_mut(builder) {
+        for part in &mut c.body {
+            if part.kind == kk_world::types::BodyKind::Work.code() {
+                part.boost = Some("XLH2O".into());
+            }
+        }
+    }
+    let site = mod_site(&mut f, "bm:foundry", 20, 20, 0, 1000);
+    f.settle_with_plane(build_intent(builder, site), plane);
+    match f.obj(site) {
+        RoomObject::ConstructionSite(s) => assert_eq!(s.progress, 20, "boost 后进度 20 点"),
+        other => panic!("工地仍在：{other:?}"),
+    }
+    match f.obj(builder) {
+        RoomObject::Creep(c) => {
+            assert_eq!(c.store.energy, 980, "支付与进度 1:1（内建此时只付 10）");
+            assert_eq!(
+                kk_world::types::store_extra_slot(&c.store, &c.store_extra, "bm:ore"),
+                98
+            );
+        }
+        _ => panic!(),
+    }
+}
+
+/// 宿主放置的超限工地：build 把进度回拨到 total 完成建造，并按比例
+/// 返还超付资源（与内建有符号回拨约定同形）。
+#[test]
+fn over_progress_site_builds_back_and_refunds_overpayment() {
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let plane = building_plane();
+    let builder = f.creep_with_mineral("b", 20, 19, &[BodyKind::Work; 2], 1000, "bm:ore", 100);
+    let site = mod_site(&mut f, "bm:foundry", 20, 20, 1020, 1000);
+    f.settle_with_plane(build_intent(builder, site), plane);
+    assert!(f.world.get(site).is_none(), "回拨到 total 即完工");
+    let building = f
+        .world
+        .room("W1N1")
+        .unwrap()
+        .objects
+        .values()
+        .find_map(|o| match o {
+            RoomObject::Generic(g) => {
+                let data: Value = serde_json::from_str(&g.data).unwrap();
+                (data["structureType"] == "bm:foundry").then_some(data)
+            }
+            _ => None,
+        })
+        .expect("完工落成");
+    assert_eq!(building["hits"], 2000);
+    match f.obj(builder) {
+        RoomObject::Creep(c) => {
+            // 超付 20 点：energy 返 20、ore 返 floor(100·20/1000)=2。
+            assert_eq!(c.store.energy, 1020, "超付部分返还");
+            assert_eq!(
+                kk_world::types::store_extra_slot(&c.store, &c.store_extra, "bm:ore"),
+                102
+            );
+        }
+        _ => panic!(),
+    }
 }

@@ -325,6 +325,20 @@ fn freeze_inner(
                     "有输入或产出的建筑必须声明仓库容量（否则库存无处存放）",
                 ));
             }
+            // 容量装不下单周期总量时生产永久无法触发（输入攒不齐或产出
+            // 放不下），冻结期拒绝而不是留给运行期静默 no-op。
+            if let Some(cap) = building.store_capacity {
+                let inputs_total: u64 = production.inputs.iter().map(|(_, v)| *v).sum();
+                let outputs_total: u64 = production.outputs.iter().map(|(_, v)| *v).sum();
+                if cap < inputs_total || cap < outputs_total {
+                    return Err(FreezeError::new(
+                        context,
+                        format!(
+                            "仓库容量 {cap} 须能容纳单周期的全部输入（{inputs_total}）与全部产出（{outputs_total}），否则生产永远无法触发"
+                        ),
+                    ));
+                }
+            }
         }
     }
     let effective: BTreeMap<_, _> = rules.keys().zip(&values).collect();

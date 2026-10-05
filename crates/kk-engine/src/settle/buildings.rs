@@ -60,9 +60,17 @@ fn apply_cost(w: &mut Working, id: kk_world::ObjId, resource: &str, delta: i64) 
 }
 
 /// Mod 工地的建造结算：WORK 效果（含 boost）推进进度，各成本资源按
-/// 累计比例扣减——boost 加速进度的同时也按比例提高支付速率，完工恰
-/// 好付清全部成本。可行进度由全部成本资源的持有量共同限定；宿主放置
-/// 的超限工地沿既有约定回拨进度并返还等价资源。
+/// 累计比例扣减，完工恰好付清全部成本。可行进度由全部成本资源的持有
+/// 量共同限定；宿主放置的超限工地沿既有约定回拨进度并返还等价资源。
+///
+/// 与内建的 boost 语义有意分歧：内建「能耗按未强化效果、进度按 boost
+/// 后效果」（build 是 boost 越多越省），本路径支付恒锚定进度比例——
+/// boost 加速进度的同时按同比例提高支付速率，单资源成本仅在无 boost
+/// 时与内建 1:1 一致。多资源支付需要逐工地付款账本才能复刻内建口径
+/// （工地只持久 progress），不值得为此加快照字段。
+/// 另一处次要不对称：无支付能力时本路径不记 amount=0 的 build 事件
+/// （内建在有能量但 remaining<=0 时记）；玩家面预检先行拦截，仅直注
+/// 意图可达。
 pub(in crate::settle) fn build_mod_site(
     w: &mut Working,
     id: kk_world::ObjId,
@@ -147,7 +155,7 @@ pub(in crate::settle) fn refund_mod_site_from(
     building: &BuildingDescriptor,
 ) {
     let total = building.progress_total();
-    if total == 0 || progress <= 1 {
+    if total == 0 {
         return;
     }
     for (resource, amount) in &building.cost {
@@ -159,20 +167,22 @@ pub(in crate::settle) fn refund_mod_site_from(
     }
 }
 
-/// 拆解 Mod 建筑的回收：按成本构成比例返还伤害量/200（单资源成本恰为
-/// 内建的 amount/200 语义），入执行者库存，超容由既有掉落路径处理。
+/// 拆解 Mod 建筑的回收：按成本构成占比瓜分伤害量/200——各资源分母取
+/// 成本总量 ΣA，回收总值恰为伤害/200（单资源成本与内建 amount/200 严格
+/// 等值；若按最大成本量做分母，N 条等量成本会放大 N 倍回收）。入执行者
+/// 库存，超容由既有掉落路径处理。
 pub(in crate::settle) fn dismantle_refund(
     w: &mut Working,
     id: kk_world::ObjId,
     building: &BuildingDescriptor,
     amount: i64,
 ) {
-    let total = building.progress_total() as i64;
-    if total <= 0 || amount <= 0 {
+    let total_cost: i128 = building.cost.iter().map(|(_, cost)| *cost as i128).sum();
+    if total_cost <= 0 || amount <= 0 {
         return;
     }
     for (resource, cost_amount) in &building.cost {
-        let gain = (amount as i128) * (*cost_amount as i128) / (200 * total as i128);
+        let gain = (amount as i128) * (*cost_amount as i128) / (200 * total_cost);
         if gain > 0 {
             apply_cost(w, id, resource, -(gain as i64));
         }
