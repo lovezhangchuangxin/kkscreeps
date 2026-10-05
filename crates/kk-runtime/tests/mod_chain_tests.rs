@@ -147,6 +147,10 @@ export default function register(api) {{
     )
 }
 
+// 共享夹具与契约说明见 mod_chain_tests/README.md。
+#[path = "mod_chain_tests/harness.rs"]
+mod harness;
+
 #[path = "mod_chain_tests/synchronization.rs"]
 mod synchronization;
 

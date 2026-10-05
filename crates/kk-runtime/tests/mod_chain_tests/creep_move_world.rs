@@ -1,39 +1,12 @@
 //! 移动槽开放后保留既有世界语义：冲突/交换/环移/阻塞/疲劳/损毁 MOVE/
 //! pull/道路磨损/工地踩踏/边缘自动过渡/跨房迁移与双玩家一致性。
 use super::*;
-
-fn creep_at(
-    e: &mut EmbedEngine,
-    room: &str,
-    name: &str,
-    owner: &str,
-    x: u8,
-    y: u8,
-    body: &[&str],
-) -> anyhow::Result<String> {
-    e.place_object(
-        room,
-        "creep",
-        &json!({"name":name,"owner":owner,"pos":[x,y],"body":body,"ticksToLive":100}),
-    )
-}
-
-fn pos_in(e: &EmbedEngine, room: &str, id: &str) -> (i64, i64) {
-    let o = e.get_object(id).unwrap();
-    let p = &o["pos"];
-    assert_eq!(p["roomName"], room, "对象应仍在原房");
-    (p["x"].as_i64().unwrap(), p["y"].as_i64().unwrap())
-}
-
-fn observe() -> String {
-    // 观察链使移动槽进入整槽宿主路径，不拒绝、不改动登记。
-    "api.handlers.before('builtin:creep.move',{id:'observe'},ctx=>{ctx.state={seen:(ctx.state?.seen||0)+1};});".into()
-}
+use harness::{creep_at, observe_pkg, pos_in};
 
 /// 两 creep 抢同格、交换与环形移动在观察链下保持官方仲裁结果。
 #[test]
 fn creep_move_conflicts_swap_and_ring_keep_native_arbitration() -> anyhow::Result<()> {
-    let source = package(&observe());
+    let source = observe_pkg("builtin:creep.move");
     for binary in [false, true] {
         // 抢格：恰一个胜者。
         let mut e = engine(&[("alpha", source.clone())], binary)?;
@@ -75,7 +48,7 @@ fn creep_move_conflicts_swap_and_ring_keep_native_arbitration() -> anyhow::Resul
 /// 能力 request 与 native 在这些门槛上同口径。
 #[test]
 fn creep_move_blocked_fatigue_and_broken_move_parts_keep_gates() -> anyhow::Result<()> {
-    let source = package(&observe());
+    let source = observe_pkg("builtin:creep.move");
     let mut e = engine(&[("alpha", source)], false)?;
     // 静止 creep 阻挡。
     let s = creep_at(&mut e, "W1N1", "s", "p1", 11, 10, &["work"])?;
@@ -118,7 +91,7 @@ fn creep_move_blocked_fatigue_and_broken_move_parts_keep_gates() -> anyhow::Resu
 /// 仍可移动，配对按既有仲裁规则解除。
 #[test]
 fn creep_move_pull_relations_survive_move_slot_and_decline() -> anyhow::Result<()> {
-    let observe = package(&observe());
+    let observe = observe_pkg("builtin:creep.move");
     // 拒绝条件只作用于朝相邻 creep 的移动形态（被拉者的随行请求），
     // 拉者自身的方向移动照常走 native 中心。
     let decline_pulled = package(
@@ -184,7 +157,7 @@ fn creep_move_road_wear_swamp_and_stomp_leave_no_residue_on_decline() -> anyhow:
             .unwrap_or(0)
     }
     // 成功移动：road 磨损按身体部件数（3），工地被踩掉并掉落能量。
-    let source = package(&observe());
+    let source = observe_pkg("builtin:creep.move");
     let mut e = engine(&[("alpha", source)], false)?;
     let (road, site, m) = scene(&mut e)?;
     let decay_before = decay(&e, &road);
@@ -234,7 +207,7 @@ fn creep_move_edge_transition_and_cross_room_moves_survive_decline() -> anyhow::
             { "name": "W0N1", "rcl": 4, "owner": "p1" },
         ]
     });
-    let observe = package(&observe());
+    let observe = observe_pkg("builtin:creep.move");
     // 从房内移上东边缘：EVENT_EXIT 先记入源房日志，对象同 tick 迁入邻房。
     let mut e = engine_with_shard(
         &[("alpha", observe.clone())],

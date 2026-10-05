@@ -1,35 +1,6 @@
 //! Creep 战斗槽的链序、权威参数、能力改向/取消、正常拒绝与故障边界。
 use super::*;
-
-fn fighter(e: &mut EmbedEngine, name: &str, x: u8, y: u8, body: &[&str]) -> anyhow::Result<String> {
-    e.place_object(
-        "W1N1",
-        "creep",
-        &json!({"name":name,"owner":"p1","pos":[x,y],"body":body,"store":{"energy":30},"ticksToLive":100}),
-    )
-}
-
-fn enemy(e: &mut EmbedEngine, name: &str, x: u8, y: u8, body: &[&str]) -> anyhow::Result<String> {
-    e.place_object(
-        "W1N1",
-        "creep",
-        &json!({"name":name,"owner":"p2","pos":[x,y],"body":body,"ticksToLive":100}),
-    )
-}
-
-fn hits(e: &EmbedEngine, id: &str) -> i64 {
-    e.get_object(id).unwrap()["hits"].as_i64().unwrap()
-}
-
-fn events(e: &EmbedEngine, event: i64) -> Vec<Value> {
-    e.world_snapshot()["rooms"]["W1N1"]["events"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter(|item| item["event"] == event)
-        .cloned()
-        .collect()
-}
+use harness::{enemy, events, fighter, hits, predictable_id};
 
 /// 链序、权威参数与延迟伤害落地；native 中心经整槽宿主执行，事件与
 /// 结算保持原生日径。wrap 后 args 不被本地篡改影响。
@@ -80,7 +51,7 @@ api.handlers.after('builtin:creep.attack',{id:'post'},ctx=>{ctx.state.trace.push
 fn creep_combat_replace_redirects_or_cancels_execution() -> anyhow::Result<()> {
     // 改向目标用可预测 ID 嵌入 mod 源码（首个放置对象为 2，与资源域
     // 测试同型）；放置后断言命中，假设破裂立即报错而不是静默测错。
-    let alt_id = kk_world::ObjId(2).as_str().to_string();
+    let alt_id = predictable_id(2);
     for kind in ["redirect", "cancel"] {
         let body = if kind == "redirect" {
             format!("ctx.combat.request('{alt_id}');")
@@ -375,7 +346,7 @@ api.handlers.before('builtin:creep.transfer',{id:'use'},()=>{globalThis.saved.ca
 /// 代码仍使用原玩家缓存，重建 realm 中重新结算并应用改向。
 #[test]
 fn creep_combat_candidates_survive_writeback_failure_via_cached_retry() -> anyhow::Result<()> {
-    let alt_id = kk_world::ObjId(2).as_str().to_string();
+    let alt_id = predictable_id(2);
     let source = package(&format!(
         "api.handlers.replace('builtin:creep.attack',{{id:'redirect'}},ctx=>{{ctx.combat.request('{alt_id}');ctx.state={{hit:true}};}});"
     ));

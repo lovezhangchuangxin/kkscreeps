@@ -1,31 +1,6 @@
 //! Creep 移动槽的链序、权威参数、能力改向/取消、正常拒绝与故障边界。
 use super::*;
-
-fn mover(e: &mut EmbedEngine, name: &str, x: u8, y: u8, body: &[&str]) -> anyhow::Result<String> {
-    e.place_object(
-        "W1N1",
-        "creep",
-        &json!({"name":name,"owner":"p1","pos":[x,y],"body":body,"store":{"energy":30},"ticksToLive":100}),
-    )
-}
-
-fn pos(e: &EmbedEngine, id: &str) -> (i64, i64) {
-    let o = e.get_object(id).unwrap();
-    (
-        o["pos"]["x"].as_i64().unwrap(),
-        o["pos"]["y"].as_i64().unwrap(),
-    )
-}
-
-fn events(e: &EmbedEngine, event: i64) -> Vec<Value> {
-    e.world_snapshot()["rooms"]["W1N1"]["events"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter(|item| item["event"] == event)
-        .cloned()
-        .collect()
-}
+use harness::{events, mover, pos_of as pos};
 
 /// 链序、权威参数刷新与 native 登记后的 pending 读面；replace 不经 next
 /// 直接改向/取消；wrap 前能力登记会被后续中心覆盖（单请求不变量）。

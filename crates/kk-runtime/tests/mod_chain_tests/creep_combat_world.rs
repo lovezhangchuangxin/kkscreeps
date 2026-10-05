@@ -1,43 +1,7 @@
 //! 战斗槽开放后保留既有世界语义：延迟伤害/死亡、近战反击、结构摧毁
 //! 废墟、rampart 重定向、治疗、群体攻击与双玩家一致性。
 use super::*;
-
-fn creep_at(
-    e: &mut EmbedEngine,
-    room: &str,
-    name: &str,
-    owner: &str,
-    x: u8,
-    y: u8,
-    body: &[&str],
-) -> anyhow::Result<String> {
-    e.place_object(
-        room,
-        "creep",
-        &json!({"name":name,"owner":owner,"pos":[x,y],"body":body,"ticksToLive":100}),
-    )
-}
-
-fn hits(e: &EmbedEngine, id: &str) -> i64 {
-    e.get_object(id).unwrap()["hits"].as_i64().unwrap()
-}
-
-fn events(e: &EmbedEngine, event: i64) -> Vec<Value> {
-    e.world_snapshot()["rooms"]["W1N1"]["events"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter(|item| item["event"] == event)
-        .cloned()
-        .collect()
-}
-
-fn observe() -> String {
-    // 观察链使战斗槽进入整槽宿主路径，不拒绝、不改动结算。
-    package(
-        "api.handlers.before('builtin:creep.attack',{id:'observe'},ctx=>{ctx.state={seen:(ctx.state?.seen||0)+1};});",
-    )
-}
+use harness::{creep_at, events, hits, observe_pkg, predictable_id};
 
 /// 延迟伤害与击杀边界：伤害在对象 tick 施加，致死创建墓碑并转移资源；
 /// 拒绝后延迟队列条目恢复，目标存活、无墓碑、无事件残留。
@@ -47,7 +11,11 @@ fn creep_combat_kill_boundary_restores_on_decline() -> anyhow::Result<()> {
         "api.handlers.replace('builtin:creep.attack',{id:'no'},ctx=>api.decline('peace'));",
     );
     for (source, dead, label) in [
-        (observe(), true, "控制组：击杀发生"),
+        (
+            observe_pkg("builtin:creep.attack"),
+            true,
+            "控制组：击杀发生",
+        ),
         (reject, false, "拒绝组：击杀被撤销"),
     ] {
         let mut e = engine(&[("alpha", source)], false)?;
@@ -98,7 +66,11 @@ fn creep_combat_attack_back_restores_both_sides_on_decline() -> anyhow::Result<(
     let reject =
         package("api.handlers.after('builtin:creep.attack',{id:'no'},()=>api.decline('peace'));");
     for (source, damaged, label) in [
-        (observe(), true, "控制组：互伤落地"),
+        (
+            observe_pkg("builtin:creep.attack"),
+            true,
+            "控制组：互伤落地",
+        ),
         (reject, false, "拒绝组：双方恢复"),
     ] {
         let mut e = engine(&[("alpha", source)], false)?;
@@ -128,7 +100,11 @@ fn creep_combat_structure_destroy_restores_object_and_ruin_on_decline() -> anyho
         "api.handlers.replace('builtin:creep.attack',{id:'no'},ctx=>api.decline('peace'));",
     );
     for (source, destroyed, label) in [
-        (observe(), true, "控制组：摧毁与废墟"),
+        (
+            observe_pkg("builtin:creep.attack"),
+            true,
+            "控制组：摧毁与废墟",
+        ),
         (reject, false, "拒绝组：结构复原"),
     ] {
         let mut e = engine(&[("alpha", source)], false)?;
@@ -177,7 +153,11 @@ fn creep_combat_rampart_redirect_restores_both_on_decline() -> anyhow::Result<()
         "api.handlers.wrap('builtin:creep.attack',{id:'no'},(ctx,next)=>{next();return api.decline('peace');});",
     );
     for (source, damaged, label) in [
-        (observe(), true, "控制组：rampart 承伤"),
+        (
+            observe_pkg("builtin:creep.attack"),
+            true,
+            "控制组：rampart 承伤",
+        ),
         (reject, false, "拒绝组：双方复原"),
     ] {
         let mut e = engine(&[("alpha", source)], false)?;
@@ -216,7 +196,7 @@ fn creep_combat_rampart_redirect_restores_both_on_decline() -> anyhow::Result<()
 /// replace 可改向治疗另一受伤目标。
 #[test]
 fn creep_heal_slots_apply_deferred_heal_and_restore_on_decline() -> anyhow::Result<()> {
-    let alt_id = kk_world::ObjId(2).as_str().to_string();
+    let alt_id = predictable_id(2);
     let reject_for = |slot: &str| {
         package(&format!(
             "api.handlers.after('{slot}',{{id:'no'}},()=>api.decline('no-heal'));"
@@ -319,7 +299,11 @@ fn creep_ranged_mass_attack_rates_cancel_and_decline() -> anyhow::Result<()> {
         "api.handlers.replace('builtin:creep.rangedMassAttack',{id:'bad'},ctx=>{try{ctx.combat.request(ctx.target.id)}catch(e){}return api.decline('peace');});",
     );
     for (source, outcome, label) in [
-        (observe(), "hit", "控制组：倍率落地"),
+        (
+            observe_pkg("builtin:creep.attack"),
+            "hit",
+            "控制组：倍率落地",
+        ),
         (reject, "decline", "拒绝组：全部恢复"),
         (cancel, "cancel", "取消组：native 抑制"),
     ] {
@@ -440,7 +424,7 @@ api.handlers.before('builtin:creep.attack',{id:'gate'},ctx=>{
 /// 延迟伤害与事件；replace 改向另一射程内目标（RangedAttack 能力臂）。
 #[test]
 fn creep_ranged_attack_hosted_decline_and_redirect() -> anyhow::Result<()> {
-    let alt_id = kk_world::ObjId(2).as_str().to_string();
+    let alt_id = predictable_id(2);
     let reject = package(
         "api.handlers.wrap('builtin:creep.rangedAttack',{id:'no'},(ctx,next)=>{next();return api.decline('peace');});",
     );
