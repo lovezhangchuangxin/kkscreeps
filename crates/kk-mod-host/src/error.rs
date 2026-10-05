@@ -4,7 +4,7 @@ use kk_mod_api::{FreezeError, Key};
 use serde::Serialize;
 
 /// 错误发生的边界；共享 VM 的资源故障不能据此归责到某个 Mod。
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ModFaultKind {
     Handler,
@@ -20,7 +20,7 @@ pub enum ModFaultKind {
 }
 
 /// 可信执行路径留存的来源，不从异常文本解析绑定或命名空间。
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, serde::Deserialize)]
 pub struct ModFault {
     pub slot: Option<String>,
     pub binding: Option<Key>,
@@ -28,7 +28,7 @@ pub struct ModFault {
 }
 
 /// 装载、注册与执行错误；执行边界另保留结构化来源。
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, serde::Deserialize)]
 pub struct ModHostError {
     pub context: String,
     pub message: String,

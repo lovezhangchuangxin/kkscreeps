@@ -103,7 +103,7 @@ impl VersionReq {
 
 /// mod.json 的严格子集；未实现的服务侧/客户端字段按未知字段拒绝，
 /// 能力补齐时再显式放开，避免装出“字段被接受但无效果”的包。
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModManifest {
     pub id: String,

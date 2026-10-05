@@ -50,18 +50,25 @@ impl Engine {
         &self,
         cand: &mut txn::OwnedTickTxn,
     ) -> Result<(), SettleError> {
+        self.validate_mod_object_rooms(&cand.rooms)
+    }
+
+    pub(super) fn validate_mod_object_rooms(
+        &self,
+        rooms: &[(String, RoomState)],
+    ) -> Result<(), SettleError> {
         // 短路按候选内容而非计划布尔量：本函数封的是"绕过写入口的直改"，
         // 计划里没有 Mod 类型不能成为跳过校验的理由——快照恢复等新来源
         // 仍可能带入计划外对象。扫描是一次枚举判别匹配，与结算既有的
         // 逐对象遍历同阶。
-        if !cand.rooms.iter().any(|(_, room)| {
+        if !rooms.iter().any(|(_, room)| {
             room.objects
                 .values()
                 .any(|o| matches!(o, RoomObject::Mod(_)))
         }) {
             return Ok(());
         }
-        for (room_name, room) in &cand.rooms {
+        for (room_name, room) in rooms {
             for (id, obj) in &room.objects {
                 let kk_schema::room::RoomObject::Mod(o) = obj else {
                     continue;
@@ -120,19 +127,22 @@ impl Engine {
         &self,
         cand: &mut txn::OwnedTickTxn,
     ) -> Result<(), SettleError> {
+        self.validate_extension_rooms(&mut cand.rooms)
+    }
+
+    pub(super) fn validate_extension_rooms(
+        &self,
+        rooms: &mut [(String, RoomState)],
+    ) -> Result<(), SettleError> {
         // 短路按候选房间的扩展条目而非扩展目录：目录为空不是跳过的理由
         // （候选里的未声明条目正是要抓的直改形态），这里只省掉空候选
         // 的扫描成本。
-        if cand
-            .rooms
-            .iter()
-            .all(|(_, room)| room.extensions.is_empty())
-        {
+        if rooms.iter().all(|(_, room)| room.extensions.is_empty()) {
             return Ok(());
         }
         // 收敛动作先收集后应用，避免边遍历边改。
         let mut reconcile: Vec<(String, ObjId, String, bool)> = Vec::new();
-        for (room_name, room) in &cand.rooms {
+        for (room_name, room) in rooms.iter() {
             for (id, fields) in &room.extensions {
                 for (field, value) in fields {
                     let structure_type: Option<String> =
@@ -177,10 +187,7 @@ impl Engine {
                                 "扩展引用值不是合法对象 ID：房间 {room_name} {field}"
                             )));
                         };
-                        let exists = cand
-                            .rooms
-                            .iter()
-                            .any(|(_, r)| r.objects.contains_key(&referred));
+                        let exists = rooms.iter().any(|(_, r)| r.objects.contains_key(&referred));
                         if !exists {
                             reconcile.push((
                                 room_name.clone(),
@@ -194,8 +201,7 @@ impl Engine {
             }
         }
         for (room_name, id, field, nullable) in reconcile {
-            let (_, room) = cand
-                .rooms
+            let (_, room) = rooms
                 .iter_mut()
                 .find(|(name, _)| name == &room_name)
                 .expect("房间来自候选");

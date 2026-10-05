@@ -57,7 +57,8 @@ pub fn calc_terminal_energy_cost(amount: i64, range: i64) -> i64 {
 pub const TRANSACTION_CAP: usize = 1000;
 
 /// 市场订单；price 使用整数毫 credits，玩家视图读取时除以 1000。
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct MarketOrder {
     pub id: String,
     pub user: String,
@@ -80,7 +81,8 @@ pub struct MarketOrder {
 }
 
 /// 一次资源交易；sender/recipient 为 None 表示无归属一方。
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Transaction {
     pub id: u64,
     /// 成交发生的游戏 tick。
@@ -97,7 +99,8 @@ pub struct Transaction {
 
 /// 由 Engine 持有的世界级订单簿与交易记录；克隆时包含 ID 计数器，
 /// 候选 tick 失败后必须保留所有字段的旧值。
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct MarketState {
     /// 订单按 ID 字典序存储，例如 mkt10 排在 mkt9 前，不表示创建顺序。
     pub orders: BTreeMap<String, MarketOrder>,
@@ -107,6 +110,30 @@ pub struct MarketState {
 }
 
 impl MarketState {
+    pub(super) fn validate_checkpoint(&self) -> Result<(), String> {
+        if self.transactions.len() > TRANSACTION_CAP
+            || self.next_order_seq == u64::MAX
+            || self.next_transaction_id == u64::MAX
+        {
+            return Err("检查点市场游标或交易记录数量非法".into());
+        }
+        for (id, order) in &self.orders {
+            let sequence = id.strip_prefix("mkt").and_then(|v| v.parse::<u64>().ok());
+            if order.id != *id || sequence.is_none_or(|n| n == 0 || n > self.next_order_seq) {
+                return Err(format!("检查点市场订单 ID 非法：{id}"));
+            }
+        }
+        let mut ids = BTreeSet::new();
+        if self
+            .transactions
+            .iter()
+            .any(|tx| tx.id == 0 || tx.id > self.next_transaction_id || !ids.insert(tx.id))
+        {
+            return Err("检查点交易 ID 非法或重复".into());
+        }
+        Ok(())
+    }
+
     pub fn next_order_id(&mut self) -> String {
         self.next_order_seq += 1;
         format!("mkt{}", self.next_order_seq)

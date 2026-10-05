@@ -8,6 +8,9 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+#[path = "checkpoint.rs"]
+pub mod checkpoint;
+
 use kk_core::Terrain;
 use kk_schema::room::{RoomHeader, RoomObject, RoomSnapshot};
 
@@ -43,7 +46,7 @@ pub struct RoomState {
     /// 字段 schema 校验（类型、限额、有限浮点）。随房间候选克隆，
     /// 与对象表同生命周期：删除对象时调用方须同步清理本表。
     /// 二进制房间快照（encode/decode_snapshot）当前不保存扩展；
-    /// 持久化格式冻结前必须补入。
+    /// 完整世界检查点通过独立 extensions 字段保存，不改变房间二进制布局。
     pub extensions: BTreeMap<ObjId, BTreeMap<String, serde_json::Value>>,
 }
 

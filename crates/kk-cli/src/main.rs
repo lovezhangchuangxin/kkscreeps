@@ -171,6 +171,12 @@ enum SimCommand {
         kkpv: bool,
         #[arg(long)]
         report: std::path::PathBuf,
+        /// 在最终已提交 tick 保存完整检查点；父目录必须已存在
+        #[arg(long)]
+        save_checkpoint: Option<std::path::PathBuf>,
+        /// 从同一场景身份的检查点恢复；ticks 表示额外推进的轮数
+        #[arg(long)]
+        load_checkpoint: Option<std::path::PathBuf>,
     },
 }
 
@@ -214,6 +220,8 @@ fn main() {
                     concurrency,
                     kkpv,
                     report,
+                    save_checkpoint,
+                    load_checkpoint,
                 },
         } => {
             std::process::exit(sim::run(sim::Options {
@@ -222,6 +230,8 @@ fn main() {
                 concurrency,
                 kkpv,
                 report,
+                save_checkpoint,
+                load_checkpoint,
             }));
         }
         Command::BotCheck {

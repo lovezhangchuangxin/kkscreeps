@@ -1,6 +1,6 @@
 # 房间快照与共享视图契约
 
-本文定义共享房间快照的目标格式、生命周期和恢复要求。当前已有类型化世界与二进制编解码，但尚未将快照字节作为沙箱共享视图，也没有检查点持久化；下文要求不能视为已有实现保证。设计依据见 [ADR-004](../decisions/ADR-004-core-architecture.md)和 [ADR-013](../decisions/ADR-013-architecture-review-coordinator.md)。
+本文定义共享房间快照的目标格式、生命周期和恢复要求。当前已有类型化世界与二进制编解码，并有独立的[完整状态检查点](checkpoints.md)，但尚未将房间快照字节作为沙箱共享视图。下文的列式共享布局、多文件 manifest 与历史迁移要求是目标设计，不能视为已有实现保证。设计依据见 [ADR-004](../decisions/ADR-004-core-architecture.md)和 [ADR-013](../decisions/ADR-013-architecture-review-coordinator.md)。
 
 ## 当前版本与编码边界
 

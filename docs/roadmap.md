@@ -41,7 +41,7 @@ M2 分为两道关卡，避免把运行环境可用与完整玩法可玩混为�
 
 玩家 API 扩面见 [M2B 方案](plans/m2b-expansion.md)。terminal 与市场已开展独立实现和验收，见[终端与市场方案](plans/2b-terminal-market.md)，后续应按剩余差异补齐，不能继续把整个市场视为 M4 才开始的能力。
 
-核心仓库搬运与分片 GCL 输入已接入；两种玩家投影分别通过连续 40 tick 的采集、容器搬运和升级守恒场景，记录见[核心经济链与 GCL](research/notes/economy-gcl-2026-10-04.md)。现已提供 [sim run](architecture/local-simulation.md) 和可复跑的采集、搬运、升级、寿命到期后孵化替补场景；完整外部 bot 的玩法验收、特殊存储规则开放及保存恢复仍须继续推进。
+核心仓库搬运与分片 GCL 输入已接入；两种玩家投影分别通过连续 40 tick 的采集、容器搬运和升级守恒场景，记录见[核心经济链与 GCL](research/notes/economy-gcl-2026-10-04.md)。现已提供 [sim run](architecture/local-simulation.md) 和可复跑的采集、搬运、升级、寿命到期后孵化替补场景；完整外部 bot 的玩法验收、特殊存储规则开放及数据库/迁移/日志恢复仍须继续推进；已提供显式[基础检查点](architecture/checkpoints.md)。
 
 并发调度、统一提交和共享视图遵循 [tick 契约](architecture/tick-contract.md)与[快照契约](architecture/snapshot-contract.md)。这些文档分别说明现状和目标；提出契约不等于生产通路已经完整接入。端到端基线按[性能验收方案](architecture/performance-acceptance.md)采集，须先确认夹具实际产生动作与状态变化。
 
@@ -61,7 +61,7 @@ D4 战斗片已开放 [五个战斗槽](architecture/creep-combat-slot.md)（att
 
 D4 建造族片已开放 [三个建造族槽](architecture/creep-build-slot.md)（build/repair/dismantle）：`ctx.build` 目标改向/取消（恰一次消耗约束；request 后刷新处理器视图）、完工变换（工地移除+结构插入）与 dismantle 击毁废墟/超容掉落面（链内增删日志+ID 游标回退+执行者格掉落面快照）的局部拒绝恢复；attackController 与容量族仍须逐族开放。
 
-D4 首片已开放 Generic 仓库的 10 条容量数值，贯穿放置、建造、玩家常量、实验室槽切换和终端 tick，见[仓库容量规则](architecture/store-rules.md)。特殊存储策略及更多动作槽仍须逐族开放。检查点的数据域和版本清单前置，先保存当前完整已提交状态，随新增领域扩展迁移与日志；不等待全部规则开放后才开始恢复通路。
+D4 首片已开放 Generic 仓库的 10 条容量数值，贯穿放置、建造、玩家常量、实验室槽切换和终端 tick，见[仓库容量规则](architecture/store-rules.md)。特殊存储策略及更多动作槽仍须逐族开放。检查点的数据域和版本清单前置，先保存当前完整已提交状态，随新增领域扩展迁移与日志；不等待全部规则开放后才开始恢复通路。2026-10-05 已交付[基础检查点](architecture/checkpoints.md)：显式保存当前完整已提交状态、严格身份核验、冷恢复与 sim 续跑；周期保存、升级迁移、输入日志和 outbox 后续扩展。
 
 D6 首片已允许 link transfer 的 JS 处理链正常拒绝一次动作；后续 D4/D6 片已开放 [creep transfer/withdraw](architecture/creep-resource-slots.md) 与 [creep move](architecture/creep-move-slot.md) 的 before/wrap/replace/after 与正常拒绝。局部恢复执行者/目标库存、link 冷却、实验室槽容量、新增事件、移动请求登记及 Mod state，保留此前成功动作并继续结算。link tick、attackController、容量族和其他动作尚未开放正常拒绝，见[Mod 执行](architecture/mod-execution.md#正常动作拒绝)。
 
@@ -73,7 +73,7 @@ D6 首片已允许 link transfer 的 JS 处理链正常拒绝一次动作；后�
 
 实现 `kkscreeps sim / test / watch / deploy`，设计见[开发套件](designs/dev-kit.md)。场景、断言与世界推进应使用和服务器一致的运行及结算通路，使玩家能复现错误并验证自己的代码。
 
-当前 `sim run` 已接入版本化 JSON 场景、多玩家模块、初始 Memory、最终状态断言和报告，见[交付记录](research/notes/sim-run-2026-10-04.md)。`init/watch/replay/test/deploy`、检查点恢复与任意 bot 的确定性复现尚未实现。
+当前 `sim run` 已接入版本化 JSON 场景、多玩家模块、初始 Memory、最终状态断言和报告，见[交付记录](research/notes/sim-run-2026-10-04.md)。显式检查点保存/冷恢复与 sim 续跑已接入。`init/watch/replay/test/deploy`、自动迁移与任意 bot 的确定性回放尚未实现。
 
 验收目标是固定场景中上千 tick 的集成测试秒级完成。报告须记录玩家代码、世界规模、构建配置、预热与耗时，不能把这个目标理解为任意 bot 或任意世界的耗时保证。当前部分 CLI 命令仍为占位入口，接口名称存在不代表工具已经完成。
 

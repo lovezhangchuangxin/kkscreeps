@@ -1,6 +1,6 @@
 # 总体形态与模块划分
 
-当前实现是一个可嵌入调用的内存游戏引擎，配套玩家沙箱、兼容性验收和性能采集工具。完整服务器、持久化与前端属于目标架构；本页先说明已经存在的模块和数据流。
+当前实现是一个可嵌入调用的内存游戏引擎，配套玩家沙箱、兼容性验收和性能采集工具。现已提供显式完整状态[检查点与冷恢复](checkpoints.md)；完整服务器、数据库/日志持久化与前端属于目标架构；本页先说明已经存在的模块和数据流。
 
 ## 运行入口
 
@@ -82,7 +82,7 @@
 | `kk-world::snapshot` | 供 `getObject` 等查询使用的对象 JSON |
 | `RoomState` 与 `kk-schema` 编码 | 房间状态和二进制快照读写，不自行写入磁盘 |
 
-沙箱注入默认使用 JSON，也可显式选择 KKPV 二进制块束；结果导出仍使用 JSON。KKPV 已有玩家通路与等价验证，不等于所有对象零复制或已具备持久化。块生命周期、检查点保存和崩溃恢复见 [快照契约](snapshot-contract.md)与 [存储设计](storage.md)。
+沙箱注入默认使用 JSON，也可显式选择 KKPV 二进制块束；结果导出仍使用 JSON。KKPV 已有玩家通路与等价验证，不等于所有对象零复制；完整状态的磁盘保存由独立检查点入口负责。块生命周期、检查点保存和崩溃恢复见 [快照契约](snapshot-contract.md)与 [存储设计](storage.md)。
 
 ## 当前采用的系统边界
 
@@ -102,6 +102,6 @@
 
 ## 目标架构与来源
 
-房间任务并行、玩家与房间结算重叠、共享快照、持久化、网络服务和前端尚需分别实现与验收。详细要求见 [架构索引](README.md)，取舍依据见 [ADR-004](../decisions/ADR-004-core-architecture.md)、[ADR-013](../decisions/ADR-013-architecture-review-coordinator.md)和 [ADR-014](../decisions/ADR-014-contribution-plane.md)。
+房间任务并行、玩家与房间结算重叠、共享快照、数据库与输入日志持久化、网络服务和前端尚需分别实现与验收。详细要求见 [架构索引](README.md)，取舍依据见 [ADR-004](../decisions/ADR-004-core-architecture.md)、[ADR-013](../decisions/ADR-013-architecture-review-coordinator.md)和 [ADR-014](../decisions/ADR-014-contribution-plane.md)。
 
 常量来源为 Screeps common，指令规则和玩家 API 主要对照 Screeps engine，原生寻路对照 Screeps driver。具体版本与符号在相应源码中注明；原始研究见 [研究索引](../research/README.md)。

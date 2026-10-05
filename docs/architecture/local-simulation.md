@@ -1,6 +1,6 @@
 # 本地场景模拟
 
-`kkscreeps sim run` 使用 `kk-runtime::EmbedEngine` 加载场景、运行玩家模块和推进真实结算。每轮所有玩家读取同一已提交视图，结果经现有协调器提交。当前实现 JSON v1 场景、默认玩法和显式 Mod 包加载；检查点恢复、热更新、观战、内容预设和 seed 选项尚未实现。
+`kkscreeps sim run` 使用 `kk-runtime::EmbedEngine` 加载场景、运行玩家模块和推进真实结算。每轮所有玩家读取同一已提交视图，结果经现有协调器提交。当前实现 JSON v1 场景、默认玩法和显式 Mod 包加载；已提供显式[检查点保存与冷恢复](checkpoints.md)；热更新、观战、内容预设和 seed 选项尚未实现。
 
 ```bash
 cargo build --release -p kk-cli
@@ -9,7 +9,7 @@ target/release/kkscreeps sim run \
   --ticks 2000 --report /tmp/sim-economy.json
 ```
 
-`--ticks` 默认 1000，必须大于零；`--concurrency` 默认 2，可选 1–32；`--kkpv` 选择二进制玩家投影，默认 JSON。路径相对当前目录定位场景，场景里的模块目录相对场景所在目录定位。报告必须使用 `.json` 后缀，且不能与场景文件相同。
+`--ticks` 默认 1000，必须大于零；`--concurrency` 默认 2，可选 1–32；`--kkpv` 选择二进制玩家投影，默认 JSON。路径相对当前目录定位场景，场景里的模块目录相对场景所在目录定位。报告必须使用 `.json` 后缀，且不能与场景文件相同。`--save-checkpoint` 保存无开放轮次的完整状态，`--load-checkpoint` 从同一场景/模块身份恢复，`--ticks` 表示额外推进轮数；父目录须已存在，完整契约与示例见[检查点](checkpoints.md)。
 
 ## 场景输入
 
@@ -31,7 +31,7 @@ target/release/kkscreeps sim run \
 
 ### 显式加载 Mod
 
-`mods.root` 必须为非空路径，相对场景目录解析，也可使用绝对路径；装载其直接子目录的所有包。包按 manifest 依赖拓扑注册，缺包、版本不符、冲突或注册/装配失败均在运行前拒绝。`mods` 拒绝未知字段，`configs` 的键必须是已加载的包 ID；配置值的业务校验由包负责。省略 mods 保留原生默认创建路径，不加载官方或第三方 JS。当前没有按包列表选择或依赖自动下载。
+`mods.root` 必须为非空路径，相对场景目录解析，也可使用绝对路径；装载其直接子目录的所有包。包按 manifest 依赖拓扑注册，缺包、版本不符、冲突或注册/装配失败均在运行前拒绝。`mods` 拒绝未知字段，`configs` 的键必须是已加载的包 ID；配置值的业务校验由包负责。省略 mods 保留原生默认创建路径，不加载官方或第三方 JS。`mods.selection` 支持显式 include/exclude 与 manifest 依赖展开，见[内容选择](mod-content-selection.md)；没有依赖自动下载。
 
 自有初始对象使用 `kind: "mod"`，spec 严格包含 `typeKey` 和 `fields`，例如 `{"typeKey":"clockwork:counter","fields":{"x":10,"y":12}}`。类型必须在已装配计划中，字段和默认值沿同一 schema 校验。声明了 tick 的对象从第一轮结算开始执行；玩家首轮看到初始化值。完整示例见[官方生命周期场景](../../compat/fixtures/sim-mod-tick/scenario.json)及[对象 tick 契约](mod-object-tick.md)。
 
@@ -59,7 +59,7 @@ alias 或玩家名中的 `/`、`~` 分别转义为 `~1`、`~0`。对象死亡后
 
 报告记录场景字节、模块内容及 CLI 二进制 SHA-256、模块目录与清单、投影通道、并发配置、请求/尝试/已提交轮数、失败轮次、各玩家计数、断言及初始/最终状态。控制台和错误各保留前 20 条。当前运行时控制台仅提供文本，捕获异常后打印日志不会自动判为执行失败；开始执行后的 CPU 硬中断按现有协议记录为 runtime 错误，未进入求值的轮次另计。
 
-Mod 场景另记录实际加载包的目录、版本、SDK 要求、依赖、服务端代码/玩家入口/配置 SHA-256，以及引擎实际安装的 `plan_hash` 和 `disabled_mods`，顶层 composition 保存[冻结/活动组合诊断](mod-composition.md)。无 JS Mod VM 时 composition 为 null。未声明 mods 时包清单为空，仍记录原生计划身份。停用集合单独记录，因为 PlanHash 不包含执行掩码；这些身份用于诊断，报告没有冷恢复或输入回放能力。
+Mod 场景另记录实际加载包的目录、版本、SDK 要求、依赖、服务端代码/玩家入口/配置 SHA-256，以及引擎实际安装的 `plan_hash` 和 `disabled_mods`，顶层 composition 保存[冻结/活动组合诊断](mod-composition.md)。无 JS Mod VM 时 composition 为 null。未声明 mods 时包清单为空，仍记录原生计划身份。停用集合单独记录，因为 PlanHash 不包含执行掩码；报告本身仍是诊断数据；`--save-checkpoint` 另存完整恢复载荷，报告不能替代它，也没有输入回放能力。
 
 `players` 中的 GCL 累计点数、Memory 和 CPU 桶来自实际 PlayerState；GCL 不是玩家 `Game.gcl` 的等级/进度对象。`world` 是宿主诊断投影，其公共 gcl/cpu 字段不是玩家状态。`world` 沿原生 JSON 诊断形态，不包含 Mod 对象；`mod_objects` 独立列出按房间名、ObjId 排序的全部已提交 Mod 对象及 server-only 字段，不能作为玩家可见性接口。报告不保存完整运行状态，也不能作为检查点恢复。
 
@@ -69,7 +69,7 @@ Mod 场景另记录实际加载包的目录、版本、SDK 要求、依赖、服
 |---|---|
 | 0 | 完成全部轮次、玩家执行成功且所有断言通过 |
 | 2 | 玩家/运行失败或断言失败；报告保留失败详情与已提交状态 |
-| 1 | 场景、模块、初始化或报告 I/O 失败；能写报告时 status 为 setup_failed |
+| 1 | 场景、模块、初始化、检查点或报告 I/O 失败；运行前失败为 setup_failed，保存失败为 checkpoint_failed 并保留实际提交状态 |
 
 CLI 参数解析失败沿用 Clap 的退出码 2，不写报告。报告通过同目录临时文件写入后重命名，配置失败也会替换旧报告，避免误读上次成功结果；非法报告路径直接拒绝。该操作不是完整世界持久化协议。
 

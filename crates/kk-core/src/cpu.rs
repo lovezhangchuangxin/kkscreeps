@@ -20,7 +20,8 @@ pub enum TickPlan {
     SkipPenalty,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Bucket {
     pub limit: f64,
     pub cap: f64,
@@ -30,6 +31,29 @@ pub struct Bucket {
 }
 
 impl Bucket {
+    /// 检查持久格式中的完整桶状态；负余额合法，非有限预算不能进入执行器。
+    pub fn validate_checkpoint(&self) -> Result<(), String> {
+        if [
+            self.limit,
+            self.cap,
+            self.max_per_tick,
+            self.bucket,
+            self.tick_limit,
+        ]
+        .iter()
+        .any(|n| !n.is_finite())
+            || self.limit <= 0.0
+            || self.cap < 0.0
+            || self.max_per_tick <= 0.0
+            || self.bucket > self.cap
+            || self.tick_limit < 0.0
+            || self.tick_limit > self.max_per_tick
+        {
+            return Err("检查点 CPU 桶状态非法".into());
+        }
+        Ok(())
+    }
+
     pub fn new(limit: f64, cap: f64, max_per_tick: f64, initial: f64) -> Self {
         Self {
             limit,

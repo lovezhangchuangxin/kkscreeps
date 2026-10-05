@@ -6,7 +6,7 @@ use kk_mod_api::{Key, PlanHash};
 use kk_mod_host::{ModFaultKind, ModHostError, ModPackage, ModRealm, RegisterOptions, Registered};
 
 /// 最近一次实际结算的 Mod 调用故障；不随 VM 销毁或重建丢失。
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ModSettlementFault {
     pub tick: u64,
     pub room: String,
@@ -15,14 +15,14 @@ pub struct ModSettlementFault {
 }
 
 /// 连续实际结算失败的同一 Mod 来源；成功或不可归责失败会中断序列。
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ModFaultStreak {
     pub mod_id: String,
     pub consecutive_faults: u32,
 }
 
 /// 最近一次自动停用决定；后续成功、重建或普通故障不清除该记录。
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ModAutoDisable {
     pub trigger: ModSettlementFault,
     pub consecutive_faults: u32,
@@ -63,6 +63,43 @@ impl ModVm {
             fault_streak: None,
             last_auto_disable: None,
         }
+    }
+
+    pub(crate) fn retire_previous_for_checkpoint(
+        &mut self,
+        previous: &mut Self,
+    ) -> Result<(), String> {
+        if let Some(old) = &previous.realm
+            && !self
+                .realm
+                .as_ref()
+                .expect("替代 VM 已恢复")
+                .can_retire_previous_realm(old)
+        {
+            return Err(
+                "检查点切换被拒：同线程存在其他活跃 Mod 分片或玩家 VM；须按进入栈顺序恢复".into(),
+            );
+        }
+        if let Some(old) = previous.realm.take() {
+            // SAFETY: restore_checkpoint 在同线程构造本替代 VM，所有 canary
+            // 和临时 scope 已退出；旧 VM 未执行且紧邻替代 VM 下方。此前
+            // 所有失败路径先销毁替代 VM；只有无剩余校验的切换点到达这里。
+            unsafe {
+                self.realm
+                    .as_mut()
+                    .expect("替代 VM 已恢复")
+                    .retire_previous_realm(old);
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) fn is_checkpoint_current(&self) -> bool {
+        self.realm.as_ref().is_some_and(ModRealm::is_current_realm)
+    }
+
+    pub(crate) fn checkpoint_input(&self) -> (&BTreeMap<String, ModPackage>, &RegisterOptions) {
+        (&self.packages, &self.options)
     }
 
     pub(crate) fn composition(&self) -> kk_mod_host::CompositionReport {

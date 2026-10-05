@@ -186,6 +186,9 @@ pub struct PlayerModulePackage {
     pub files: BTreeMap<String, String>,
 }
 
+#[path = "realm_lifecycle.rs"]
+mod lifecycle;
+
 pub struct ModRealm {
     // 看门狗必须先于 isolate 回收；排队回调的数据最后回收。
     budget: VmBudget,
@@ -205,6 +208,7 @@ pub struct ModRealm {
     settlement_usage: Option<Usage>,
     profiler: Option<ChainProfiler>,
     _budget_keepalive: Arc<ResourceState>,
+    isolate_order: kk_vm::isolate_order::IsolateOrder,
 }
 
 impl ModRealm {
@@ -314,6 +318,7 @@ impl ModRealm {
                 grab!("runChain"),
             )
         };
+        let isolate_order = kk_vm::isolate_order::IsolateOrder::register();
         Ok(Self {
             budget,
             runtime,
@@ -332,6 +337,7 @@ impl ModRealm {
             settlement_usage: None,
             profiler,
             _budget_keepalive: budget_keepalive,
+            isolate_order,
         })
     }
 

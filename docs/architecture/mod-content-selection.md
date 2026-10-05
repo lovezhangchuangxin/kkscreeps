@@ -53,3 +53,5 @@ target/release/kkscreeps sim run --scenario compat/fixtures/sim-mod-content/scen
 ```
 
 夹具与场景见[内容选择夹具](../../compat/fixtures/mod-content/README.md)，验证记录见[N1e 交付](../research/notes/n1e-mod-selection-2026-10-05.md)。内容预设（按名称选择一组包与配置）语法尚未冻结，登记为后续批次；当前入口都是逐包 ID 的显式列表。
+
+完整状态的[基础检查点](checkpoints.md)另外核验全部发现包与选择/配置身份；缺包或选择漂移拒绝可写冷恢复。旧版分片内失败重试仍使用内存私有启动快照。

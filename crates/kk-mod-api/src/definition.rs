@@ -9,6 +9,13 @@ use serde_json::Value;
 #[serde(transparent)]
 pub struct Key(String);
 
+impl<'de> serde::Deserialize<'de> for Key {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = <String as serde::Deserialize>::deserialize(deserializer)?;
+        Self::new(value).map_err(serde::de::Error::custom)
+    }
+}
+
 impl Key {
     pub fn new(value: impl Into<String>) -> Result<Self, String> {
         let value = value.into();

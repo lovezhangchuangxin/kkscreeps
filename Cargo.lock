@@ -1009,6 +1009,7 @@ dependencies = [
 name = "kk-core"
 version = "0.1.0"
 dependencies = [
+ "serde",
  "serde_json",
 ]
 
@@ -1086,6 +1087,7 @@ dependencies = [
  "kk-runner",
  "kk-schema",
  "kk-world",
+ "serde",
  "serde_json",
  "sha2",
 ]
@@ -1130,6 +1132,7 @@ dependencies = [
  "kk-core",
  "kk-mod-api",
  "kk-schema",
+ "serde",
  "serde_json",
 ]
 

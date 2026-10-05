@@ -5,6 +5,7 @@
 //! 玩家 V8 全局变量不随世界回退；执行阶段线程故障阻止自动重派，需要显式处置。
 //! Mod VM 在结算返回错误后销毁，按固定启动快照恢复后才允许下一次执行。
 
+pub mod checkpoint;
 pub mod embed;
 pub mod kkpv_store;
 mod mod_vm;

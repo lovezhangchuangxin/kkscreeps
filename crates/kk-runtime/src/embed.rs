@@ -560,6 +560,7 @@ impl Drop for EmbedEngine {
     }
 }
 
+mod checkpoint;
 mod execution;
 mod mod_chain;
 mod projection;

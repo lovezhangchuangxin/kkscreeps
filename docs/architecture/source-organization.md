@@ -35,6 +35,10 @@ Rust 子模块通过父模块保留既有公开路径；跨子模块的内部操
 
 JS 的 Memory、市场和 Game 分别持有闭包。加载清单先执行 Memory 和市场，再装配 Game；Game 在加载期捕获桥函数，Rust 捕获宿主句柄后删除临时 `__kkp`。tick 中不能重新查找这一全局。RawMemory 重建、CJS 重绑、Memory getter 安装的先后顺序保持不变，两个世界投影通道共享该流程。
 
+V8 生命周期账本位于 `kk-vm/src/isolate_order.rs`，玩家沙箱与 Mod realm 共用；`kk-mod-host/src/realm_lifecycle.rs` 只负责冷恢复最后切换时的 Enter/Exit 配对。
+
+检查点按所有权分层：`kk-world/src/checkpoint.rs` 保存世界/房间信封与扩展；`kk-engine/src/settle/checkpoint.rs` 保存账户/市场/Mod state 并复用发布校验；`kk-runtime/src/embed/checkpoint.rs` 装配替代分片并核验身份，`checkpoint/identity.rs` 保存包/工作者身份；`kk-runtime/src/checkpoint.rs` 负责文件信封和同步发布；`kk-cli/src/sim/checkpoint.rs` 只处理场景、alias 与原始断言起点。
+
 ## 测试组织
 
 公共夹具留在测试族父模块，案例按规则、执行链、领域写入、安装门、故障/拒绝/停用等职责分组；Mod 链测试的共享工厂与放置/投影/ID 契约见 [mod_chain_tests 夹具契约](../../crates/kk-runtime/tests/mod_chain_tests/README.md)。结构拆分本身保持原测试注册数量；后续功能测试在对应子模块显式注册。`sandbox_tests` 与 `embed_engine_suite` 的串行场景仍由原入口按原顺序调用，子模块不新增独立 `#[test]`，避免改变 V8 生命周期和进程级计数的约束。

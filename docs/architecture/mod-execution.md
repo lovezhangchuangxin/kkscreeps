@@ -175,6 +175,6 @@ runtime 的 `last_mod_settlement_fault()` 返回最近一次实际结算中失�
 
 ## 尚未完成的范围
 
-共享可信 VM 的故障半径仍是整分片；未显式停用的确定性异常或超限 Mod 在新 VM 中仍会失败。link tick、容量族等其他内建动作与纯 Rust callback 的正常拒绝、自动策略的 CLI/持久日志接线、逐 Mod 资源归因、进程级限额、跨房资源写入、资源/移动/战斗/建造族之外的其他领域写 API、其他生命周期槽、持久化和 outbox 尚未完成。
+共享可信 VM 的故障半径仍是整分片；未显式停用的确定性异常或超限 Mod 在新 VM 中仍会失败。link tick、容量族等其他内建动作与纯 Rust callback 的正常拒绝、自动策略的 CLI/持久日志接线、逐 Mod 资源归因、进程级限额、跨房资源写入、资源/移动/战斗/建造族之外的其他领域写 API、其他生命周期槽、数据库/输入日志持久化和 outbox 尚未完成。[基础检查点](checkpoints.md)已保存已提交 namespace state、冻结身份、执行停用与故障计数，提供显式冷恢复；不保存 JS 模块缓存。
 
 默认路径与功能回归、真实混合链和失败候选分别验收。小对象链测试不代表密集 Mod 的成本；性能要求见 [性能验收](performance-acceptance.md)，本次选择与取舍见 [ADR-015](../decisions/ADR-015-mod-chain-execution.md)。

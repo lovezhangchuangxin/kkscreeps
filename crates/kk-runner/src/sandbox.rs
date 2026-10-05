@@ -130,6 +130,8 @@ pub struct Sandbox {
     /// JSON 通道的寻路地形打包缓存，键为全局 terrain rev（terrain_epoch，
     /// 任一房换地形全体失效）；裸数组夹具形态无 rev，不缓存逐 tick 重建。
     terrain_pack_cache: Option<(u64, std::sync::Arc<crate::pathfinder::TerrainPack>)>,
+    /// 与 Mod realm 共用的线程栈账本；须在 runtime 销毁后注销。
+    _isolate_order: kk_vm::isolate_order::IsolateOrder,
 }
 
 impl Sandbox {
@@ -244,6 +246,7 @@ impl Sandbox {
             pending_bill: None,
             pending_recharge: None,
             terrain_pack_cache: None,
+            _isolate_order: kk_vm::isolate_order::IsolateOrder::register(),
         };
         sb.install_near_heap_callback();
         // 所有可能失败的初始化都完成后再登记实例，避免 ? 早退留下没有实例的计数和栈记录。

@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
+mod checkpoint;
 mod mods;
 
 pub struct Options {
@@ -21,6 +22,8 @@ pub struct Options {
     pub concurrency: usize,
     pub kkpv: bool,
     pub report: PathBuf,
+    pub save_checkpoint: Option<PathBuf>,
+    pub load_checkpoint: Option<PathBuf>,
 }
 
 #[derive(Deserialize)]
@@ -118,9 +121,19 @@ pub fn run(options: Options) -> i32 {
         eprintln!("sim run 失败：报告路径不能与场景文件相同");
         return 1;
     }
+    if let Err(error) = checkpoint::validate_paths(&options) {
+        eprintln!("sim run 失败：{error:#}");
+        return 1;
+    }
     let (report, code) = match execute(&options) {
         Ok(report) => {
-            let code = if report["success"] == true { 0 } else { 2 };
+            let code = if report["status"] == "checkpoint_failed" {
+                1
+            } else if report["success"] == true {
+                0
+            } else {
+                2
+            };
             (report, code)
         }
         Err(error) => (
@@ -299,14 +312,29 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
     engine.set_player_concurrency(options.concurrency)?;
     engine.set_kkpv_channel(options.kkpv);
     let shard = serde_json::to_value(&scene.shard)?;
-    let mods_metadata = if let Some(input) = &scene.mods {
-        let loaded = mods::load(base, input)?;
-        engine.create_shard_with_mods(&shard, &loaded.packages, loaded.options)?;
-        loaded.metadata
-    } else {
-        engine.create_shard(&shard)?;
-        json!({"packages": {}})
-    };
+    let loaded = scene
+        .mods
+        .as_ref()
+        .map(|input| mods::load(base, input))
+        .transpose()?;
+    let mods_metadata = loaded
+        .as_ref()
+        .map(|loaded| loaded.metadata.clone())
+        .unwrap_or_else(|| json!({"packages": {}}));
+    if let Some(output) = &options.save_checkpoint {
+        let bot_roots = scene.bots.iter().map(|bot| base.join(&bot.modules));
+        let mod_roots = loaded
+            .iter()
+            .flat_map(|loaded| loaded.packages.values().map(|package| package.root.clone()));
+        checkpoint::protect_sources(output, bot_roots.chain(mod_roots))?;
+    }
+    if options.load_checkpoint.is_none() {
+        if let Some(loaded) = &loaded {
+            engine.create_shard_with_mods(&shard, &loaded.packages, loaded.options.clone())?;
+        } else {
+            engine.create_shard(&shard)?;
+        }
+    }
     let mod_names: Vec<String> = mods_metadata["packages"]
         .as_object()
         .unwrap()
@@ -314,7 +342,11 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
         .cloned()
         .collect();
     let mut aliases = BTreeMap::new();
-    for object in &scene.objects {
+    for object in scene
+        .objects
+        .iter()
+        .filter(|_| options.load_checkpoint.is_none())
+    {
         let id = mods::place(&mut engine, object)
             .with_context(|| format!("放置对象 {}", object.alias))?;
         aliases.insert(object.alias.clone(), id);
@@ -322,14 +354,32 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
     let mut codes = BTreeMap::new();
     let mut stats = BTreeMap::new();
     for bot in &scene.bots {
-        engine.set_player_modules(&bot.player, tables.remove(&bot.player).unwrap())?;
-        engine.set_player_memory(&bot.player, &bot.memory)?;
+        if options.load_checkpoint.is_none() {
+            engine.set_player_modules(&bot.player, tables.remove(&bot.player).unwrap())?;
+            engine.set_player_memory(&bot.player, &bot.memory)?;
+        }
         let entry = serde_json::to_string(&bot.entry)?;
         // 不吞掉缺少 loop 的错误；loop 的返回值不属于游戏提交状态。
         codes.insert(bot.player.clone(), format!("(() => {{ const bot = require({entry}); if (!bot || typeof bot.loop !== 'function') throw new Error('bot entry must export loop'); bot.loop(); return true; }})()"));
         stats.insert(bot.player.clone(), PlayerStats::default());
     }
-    let initial = observe(&engine, &scene, &aliases, &mod_names);
+    let initial = if let Some(path) = &options.load_checkpoint {
+        let (saved_aliases, initial) = checkpoint::resume(
+            &mut engine,
+            path,
+            loaded.as_ref(),
+            &digest(&bytes),
+            &executable_hash,
+            &modules,
+        )?;
+        aliases = saved_aliases;
+        engine.set_player_concurrency(options.concurrency)?;
+        engine.set_kkpv_channel(options.kkpv);
+        initial
+    } else {
+        observe(&engine, &scene, &aliases, &mod_names)
+    };
+    let start_time = engine.get_game_time();
     let start = std::time::Instant::now();
     let mut failure = None;
     let mut attempted = 0;
@@ -378,11 +428,32 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
         .iter()
         .map(|a| evaluate(a, &initial, &final_state))
         .collect();
-    let committed = engine.get_game_time();
+    if failure.is_none()
+        && let Some(path) = &options.save_checkpoint
+        && let Err(error) = checkpoint::save(
+            &engine,
+            path,
+            &digest(&bytes),
+            &executable_hash,
+            &modules,
+            &aliases,
+            &initial,
+        )
+    {
+        failure = Some(
+            json!({"stage": "checkpoint", "tick": engine.get_game_time(), "error": format!("{error:#}")}),
+        );
+    }
+    let committed = engine.get_game_time() - start_time;
     let success = failure.is_none()
         && committed == u64::from(options.ticks)
         && assertions.iter().all(|a| a["passed"] == true);
-    let status = if failure.is_some() {
+    let status = if failure
+        .as_ref()
+        .is_some_and(|failure| failure["stage"] == "checkpoint")
+    {
+        "checkpoint_failed"
+    } else if failure.is_some() {
         "run_failed"
     } else if success {
         "passed"
@@ -398,6 +469,9 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
         "disabled_mods": engine.disabled_mods(),
         "channel": if options.kkpv { "kkpv" } else { "json" }, "concurrency": options.concurrency,
         "ticks_requested": options.ticks, "ticks_attempted": attempted, "world_ticks_committed": committed,
+        "start_time": start_time, "end_time": engine.get_game_time(),
+        "checkpoint_loaded": options.load_checkpoint,
+        "checkpoint_saved": if failure.is_none() { options.save_checkpoint.as_ref() } else { None },
         "run_wall_ms": run_wall_ms, "phases": engine.perf_report(),
         "failure": failure, "players": stats, "aliases": aliases, "assertions": assertions,
         "mod_fault": engine.last_mod_settlement_fault().map(|fault| json!({

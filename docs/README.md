@@ -10,6 +10,7 @@
 | 模块如何协作？ | [总体架构](architecture/overall.md) |
 | 一轮玩家执行和结算如何完成，失败怎样重试？ | [游戏循环](architecture/game-loop.md)、[tick 契约](architecture/tick-contract.md) |
 | 世界数据有哪些表示，快照怎样管理？ | [总体架构的数据流](architecture/overall.md#数据流与状态边界)、[快照契约](architecture/snapshot-contract.md) |
+| 如何保存完整世界并在重启后继续？ | [基础检查点](architecture/checkpoints.md)、[本地模拟](architecture/local-simulation.md) |
 | 玩家行为应满足什么要求，如何验证？ | [兼容性设计](designs/compatibility.md)、[验收工具](../compat/README.md) |
 | 为什么采用 Rust、V8 和当前模块边界？ | [决策索引](decisions/README.md) |
 | 当前 Mod 处理链和自主对象 tick 怎样执行？ | [Mod 处理链执行](architecture/mod-execution.md)、[自有对象 tick](architecture/mod-object-tick.md)、[对象操作](architecture/mod-objects.md)、[组合诊断](architecture/mod-composition.md)、[有效规则读取](architecture/mod-rules.md)、[新世界内容选择](architecture/mod-content-selection.md)、[资源目录](architecture/mod-resource-catalog.md) |

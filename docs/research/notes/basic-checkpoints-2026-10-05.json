@@ -1,0 +1,158 @@
+{
+  "report_version": 1,
+  "status": "passed",
+  "date": "2026-10-05",
+  "base_commit": "40ea41f12256a910cd14fc3efe71d7da645d605f",
+  "scope": [
+    "Full committed-state checkpoint v1",
+    "Atomic single-file publication and cold restore",
+    "Explicit Mod identity and failure-state admission",
+    "CLI process restart continuation"
+  ],
+  "executable_sha256": "57672fc7b726cd1da832d2ab6a12720f2ed8c9924819efdbb7727e79c738f0c4",
+  "targeted_tests": {
+    "runtime_checkpoint": {
+      "command": "cargo test -p kk-runtime --lib checkpoint -- --test-threads=1",
+      "passed": 11,
+      "ignored": 1,
+      "ignored_reason": "Child crash helper is invoked by the passing parent test with --ignored --exact."
+    },
+    "world_checkpoint": {
+      "command": "cargo test -p kk-world checkpoint -- --test-threads=1",
+      "passed": 2
+    },
+    "cli_checkpoint": {
+      "command": "cargo test -p kk-cli --test sim_tests checkpoint -- --test-threads=1",
+      "passed": 3
+    }
+  },
+  "full_check": {
+    "command": "KKSCREEPS_BIN=\"$PWD/target/release/kkscreeps\" pnpm run check",
+    "exit_code": 0,
+    "format": "passed",
+    "clippy": "passed",
+    "rust": {
+      "passed": 809,
+      "failed": 0,
+      "ignored": 12
+    },
+    "rust_result_groups": 56,
+    "adapter": {
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0
+    },
+    "documents": {
+      "markdown_files": 274,
+      "local_links": 1593
+    },
+    "source_size": {
+      "files": 391,
+      "max_allowed_lines": 1000,
+      "passed": true
+    }
+  },
+  "compatibility": {
+    "preparation_commands": [
+      "bash scripts/setup-screeps-ok.sh",
+      "pnpm --filter @kkscreeps/compat run build"
+    ],
+    "command": "KKSCREEPS_BIN=\"$PWD/target/release/kkscreeps\" node compat/scripts/ratchet.mjs",
+    "exit_code": 0,
+    "screeps_ok_commit": "34a630efa42908c117c19c25d2350fa2387bd633",
+    "total": 2914,
+    "counts": {
+      "passed": 1918,
+      "failed": 89,
+      "skipped": 907
+    },
+    "floor": 1918,
+    "case_identities_and_statuses_equal_base": true,
+    "ratchet_baseline_commit": "d0d593b0ec831c249902dd7fd2775ca47a75a35a",
+    "red_flips": 0,
+    "green_flips": 0,
+    "new_waivers": 0,
+    "existing_unused_waiver_warnings": 2,
+    "report": "compat/reports/kkscreeps.json",
+    "report_sha256": "fd8f872942fc5f8f9e2fa59462f8dd0e581c5151dd74698d9038e8bfadecf0ab"
+  },
+  "cli_process_restart": [
+    {
+      "scenario": "compat/fixtures/sim-mod-objects/scenario.json",
+      "scenario_sha256": "98b8005c1c2b9a170811d50d9934f14744f507aa6ab3aad73d91413fdd1f0bd8",
+      "channel": "json",
+      "first_committed_ticks": 20,
+      "first_exit_code": 2,
+      "first_status": "assertion_failed",
+      "resume_committed_ticks": 80,
+      "resume_exit_code": 0,
+      "start_time": 20,
+      "end_time": 100,
+      "reference_committed_ticks": 100,
+      "reference_exit_code": 0,
+      "all_final_assertions_passed": true,
+      "final_gameplay_equal_reference": true,
+      "excluded_comparison_fields": [
+        "final.players.*.cpu_bucket"
+      ],
+      "composition_aliases_initial_and_disabled_equal_reference": true,
+      "checkpoint_bytes": 27127,
+      "checkpoint_sha256": "647a3d8ef474b5728830267f9c41562dccaf3b926094259e68073a9845a9c5f8",
+      "normalized_final_sha256": "85cf15489c81b96bd27e2aaf1bc351549970873a4ab81f89d9c6ed8262a7f19a"
+    },
+    {
+      "scenario": "compat/fixtures/sim-mod-resources/scenario.json",
+      "scenario_sha256": "97c3324d6afb7c3051705b62c3ef48a2de9ebb78224a58bf6b590fb3bae1d3df",
+      "channel": "kkpv",
+      "first_committed_ticks": 2,
+      "first_exit_code": 2,
+      "first_status": "assertion_failed",
+      "resume_committed_ticks": 98,
+      "resume_exit_code": 0,
+      "start_time": 2,
+      "end_time": 100,
+      "reference_committed_ticks": 100,
+      "reference_exit_code": 0,
+      "all_final_assertions_passed": true,
+      "final_gameplay_equal_reference": true,
+      "excluded_comparison_fields": [
+        "final.players.*.cpu_bucket"
+      ],
+      "composition_aliases_initial_and_disabled_equal_reference": true,
+      "checkpoint_bytes": 21746,
+      "checkpoint_sha256": "51105e40ba2a41e2d3830019197565781ed24b74f7fbc4e999b6beb3eb813ad0",
+      "normalized_final_sha256": "efd9381876f6a19e3e3ffdeef262a1e73ce94053dc5e63a3ba544ac3fb5cc850"
+    }
+  ],
+  "file_publication": {
+    "stages": [
+      "Written",
+      "Synced",
+      "Replaced"
+    ],
+    "error_injection": "passed",
+    "abrupt_child_exit_without_drop": "passed",
+    "child_exit_code": 23,
+    "selected_versions": [
+      "old",
+      "old",
+      "new"
+    ],
+    "temporary_files_ignored": true
+  },
+  "review_fixes": [
+    "Committed engine state is eligible for saving.",
+    "Checkpoint I/O failure reports actual committed ticks and final state.",
+    "Replacement Mod realms retire the previous isolate in V8 stack order; other active native or Mod realms block switching.",
+    "Finite floating-point values round trip exactly.",
+    "CLI validates its scenario, modules and binary identity before creating replacement VMs."
+  ],
+  "limitations": [
+    "No periodic checkpoint scheduler, database, input log, deterministic replay, migration, hot reload or outbox.",
+    "VM heaps and module caches reset; business state must use Memory/segments, ctx.state or object fields.",
+    "Actual measured player CPU costs are excluded only from independent CLI gameplay reference comparison; directed fixed-recharge continuation checks complete CPU state.",
+    "Local filesystem rename and directory fsync only; no physical power-loss or network-filesystem durability certification.",
+    "Single writer per path, maximum 256 MiB checkpoint envelope.",
+    "CLI continuation requires the same executable, scenario bytes, module identity and Mod identity."
+  ]
+}

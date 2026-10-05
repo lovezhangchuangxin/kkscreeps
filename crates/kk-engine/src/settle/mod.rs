@@ -4,6 +4,7 @@
 //! Engine 在副本中结算所有房间和市场，校验成功后统一写回内存并推进
 //! 时间；直接调用 settle_room 则由调用方负责副本和失败处理。
 
+pub mod checkpoint;
 pub mod contrib;
 pub mod controller;
 pub mod creep;
@@ -78,7 +79,8 @@ impl std::fmt::Display for SettleError {
 /// 因此同 tick 的后一次 claim 看不到前一次新占的房间。
 /// 来源：上游 engine/src/processor/intents/creeps/claimController.js
 /// 与 driver/lib/index.js 的 addRoomToUser（排队写入，未修改运行中的用户对象）。
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PlayerState {
     /// 已提交 CPU 桶；执行预算与计费候选从此值派生，随世界发布。
     pub cpu: kk_core::cpu::Bucket,
@@ -111,7 +113,8 @@ pub struct PlayerState {
 }
 
 /// 一条已提交的内存通知；tick 是处理指令时的世界时间。
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct NotifyRecord {
     pub message: String,
     pub group_interval: Option<i64>,
