@@ -9,6 +9,7 @@ mod mod_init;
 mod mod_inspect;
 mod mod_perf_probe;
 mod mod_player_probe;
+mod mod_test;
 mod perf_probe;
 mod report;
 mod sim;
@@ -165,6 +166,21 @@ enum ModCommand {
         #[arg(long)]
         report: std::path::PathBuf,
     },
+    /// 对根下自带场景的包逐个运行断言并汇总（sim run 同一执行路径）
+    Test {
+        /// Mod 根目录；包内 scenario.json 参与测试，缺失记 skipped
+        #[arg(long)]
+        root: std::path::PathBuf,
+        /// 每个场景推进的 tick 数（1 起步，默认 3 匹配模板断言）
+        #[arg(long, default_value_t = 3, value_parser = clap::value_parser!(u32).range(1..))]
+        ticks: u32,
+        /// 二进制投影通道（与 sim run --kkpv 同义）
+        #[arg(long)]
+        kkpv: bool,
+        /// 汇总报告输出路径（JSON）
+        #[arg(long)]
+        report: std::path::PathBuf,
+    },
 }
 
 #[derive(Subcommand)]
@@ -197,6 +213,22 @@ fn main() {
             command: ModCommand::Init { root, id },
         } => {
             std::process::exit(mod_init::run(mod_init::Options { root, id }));
+        }
+        Command::Mod {
+            command:
+                ModCommand::Test {
+                    root,
+                    ticks,
+                    kkpv,
+                    report,
+                },
+        } => {
+            std::process::exit(mod_test::run(mod_test::Options {
+                root,
+                ticks,
+                kkpv,
+                report,
+            }));
         }
         Command::Mod {
             command:

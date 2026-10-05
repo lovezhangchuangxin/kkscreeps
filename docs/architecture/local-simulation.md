@@ -22,6 +22,8 @@ target/release/kkscreeps sim run --scenario /tmp/my-mods/starter/scenario.json -
 
 模板场景断言 3 轮后的对象计数值、玩家读取值与 namespace state；`--save-checkpoint`/`--load-checkpoint` 续跑等价，作为作者的保存恢复示例。生成物只依赖公共 SDK 与 CLI，宿主没有按包 ID 分派的分支。
 
+`kkscreeps mod test --root <目录> --report <汇总.json>` 对根下每个自带 `scenario.json` 的包按同一 `sim run` 路径运行断言并汇总：无场景的包记 skipped；`--ticks` 默认 3（匹配模板断言），`--kkpv` 与 `sim run --kkpv` 同义。退出码沿用 sim 语义（0 全过、1 场景/装载失败、2 运行或断言失败），多包失败取最严重退出码；汇总报告内联各场景的机器结果（含 plan_hash 与断言状态），装载期失败也落盘 `setup_failed` 汇总。
+
 ## 场景输入
 
 完整示例见[经济夹具](../../compat/fixtures/sim-economy/scenario.json)。场景的顶层、shard、bot、对象声明和断言声明拒绝未知字段；房间和对象 spec 复用已有嵌入接口的字段校验及默认值。

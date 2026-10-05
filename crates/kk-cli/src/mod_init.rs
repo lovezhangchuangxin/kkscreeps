@@ -29,6 +29,11 @@ pub fn run(options: Options) -> i32 {
                 options.id
             );
             println!(
+                "一键测试：  kkscreeps mod test --root {} --report /tmp/{}-test.json",
+                options.root.display(),
+                options.id
+            );
+            println!(
                 "保存恢复：  同命令加 --save-checkpoint /tmp/{}-cp.json（首拍）后接 --load-checkpoint 续跑",
                 options.id
             );
@@ -225,6 +230,9 @@ kkscreeps mod inspect --root . --report /tmp/{id}-inspect.json
 
 # 2) 运行场景（--ticks 至少 3 才满足断言）
 kkscreeps sim run --scenario {id}/scenario.json --ticks 3 --report /tmp/{id}.json
+
+# 或对根下所有自带场景的包一键测试并汇总
+kkscreeps mod test --root . --report /tmp/{id}-test.json
 
 # 3) 保存恢复：先跑 1 轮保存（断言未满足时退出码 2 是预期），再加载续跑
 kkscreeps sim run --scenario {id}/scenario.json --ticks 1 --save-checkpoint /tmp/{id}-cp.json --report /tmp/{id}-p1.json; echo $?
