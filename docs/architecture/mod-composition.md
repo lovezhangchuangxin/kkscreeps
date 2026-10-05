@@ -28,7 +28,8 @@ manifest dependencies 管包存在、版本和注册/加载顺序；handler depe
 
 | 字段 | 含义 |
 |---|---|
-| report_version / plan_hash / sources | 报告版本 1、真实冻结计划 SHA-256 和来源版本/服务端/配置/玩家面摘要 |
+| report_version / plan_hash / sources | 报告版本 2、真实冻结计划 SHA-256 和来源版本/服务端/配置/玩家面摘要 |
+| selection | 实际内容身份：选择输入（requested/excluded）、展开后安装清单、自动加入项与未安装的已发现包；语义见[内容选择](mod-content-selection.md) |
 | handlers | 按 key 排序的处理器 key、slot、kind、binding 和 depends_on 集合；保留停用处理器的声明 |
 | slots | 槽 key/stage、original_center、frozen dispatch、active 链及 execution 模式 |
 | rules | key、default、实际冻结 value、definition_source、selected_source、所有 overrides 和 consumers |
@@ -62,8 +63,10 @@ target/release/kkscreeps mod inspect --root compat/fixtures/mod-composition --di
 
 root 相对当前工作目录解析，加载其直接子包。`--configs FILE` 读取按包 ID 分组的 JSON 对象，拒绝未知包配置；包仍负责业务配置校验。可重复 `--rule-source key=namespace` 显式解决多方覆盖，重复选择同一规则、不存在的覆盖来源或未知规则报错。该选项只作用于本次 inspect；sim 尚没有相同规则选择输入，需另行配置匹配的宿主冻结选项才能得到相同计划。
 
+可重复 `--select ID` / `--exclude ID` 按显式内容选择装配（与 sim 场景、宿主注册选项共用同一展开语义），报告的 `composition.selection` 列出展开结果与自动加入项；排除与必需依赖相撞时整个配置失败，见[内容选择](mod-content-selection.md)。
+
 可重复 `--disable ID` 仅预览停用闭包及活动链；命令没有世界，不执行 tick，也不改变运行服务器。仍注册完整包及冻结原计划，坏注册、多 replace/规则冲突等不能靠 disable 绕过。公开命令直接使用同一包/SDK/冻结路径，报告记录包目录、版本、依赖及 CLI SHA-256。
 
 report 必须为 .json，放在包根目录之外，不能覆盖 configs。成功退出 0，注册/输入/报告 I/O 失败退出 1；参数解析错误沿 Clap 的 2。已验证输出路径后发生的输入/注册失败会用 setup_failed/error/null composition 替换旧报告，避免残留成功；非法输出路径不写文件。JSON 通过同目录临时文件替换，不是持久世界事务。
 
-sim run 的顶层 composition 保存同结构诊断及当前 disabled_mods；有真实世界时，作者可以同时检查最终对象字段与报告链序。示例见[组合夹具](../../compat/fixtures/mod-composition/README.md)和[双房场景](../../compat/fixtures/sim-mod-composition/scenario.json)，验证记录见[N1c 交付](../research/notes/n1c-mod-composition-2026-10-05.md)。inspect 不验证所有引擎域已经开放，也不提供内容选择、更新、迁移或逐处理器计费。
+sim run 的顶层 composition 保存同结构诊断及当前 disabled_mods；有真实世界时，作者可以同时检查最终对象字段与报告链序。示例见[组合夹具](../../compat/fixtures/mod-composition/README.md)和[双房场景](../../compat/fixtures/sim-mod-composition/scenario.json)，验证记录见[N1c 交付](../research/notes/n1c-mod-composition-2026-10-05.md)。inspect 不验证所有引擎域已经开放，也不提供更新、迁移或逐处理器计费。

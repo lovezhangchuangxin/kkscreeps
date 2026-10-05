@@ -146,6 +146,12 @@ enum ModCommand {
         /// 预览停用指定包及依赖者，可重复；不卸载内容
         #[arg(long)]
         disable: Vec<String>,
+        /// 显式选择的包 ID，可重复；依赖闭包自动加入，未选包不安装
+        #[arg(long)]
+        select: Vec<String>,
+        /// 显式排除的包 ID，可重复；与必需依赖相撞时报错
+        #[arg(long)]
+        exclude: Vec<String>,
         #[arg(long)]
         report: std::path::PathBuf,
     },
@@ -178,6 +184,8 @@ fn main() {
                     configs,
                     rule_source,
                     disable,
+                    select,
+                    exclude,
                     report,
                 },
         } => {
@@ -186,6 +194,8 @@ fn main() {
                 configs,
                 rule_sources: rule_source,
                 disable,
+                select,
+                exclude,
                 report,
             }));
         }

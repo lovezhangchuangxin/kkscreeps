@@ -1,0 +1,6 @@
+{
+  "report_version": 2,
+  "status": "setup_failed",
+  "error": "内容选择: 显式排除 alpha 与必需依赖相撞：beta → alpha；须调整排除或选择，不会静默重新加入",
+  "composition": null
+}

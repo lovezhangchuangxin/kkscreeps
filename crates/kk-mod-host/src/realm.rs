@@ -147,6 +147,9 @@ extension!(
 pub struct RegisterOptions {
     pub configs: BTreeMap<String, Value>,
     pub freeze: FreezeOptions,
+    /// 新世界启动期的显式内容选择；默认为空（安装全部发现的包）。
+    /// 属于分片私有启动快照：恢复重建沿同一选择重新解析并核对 PlanHash。
+    pub selection: crate::ContentSelection,
     /// 必须与 realm 构造配置一致，恢复使用原配置。
     pub vm_limits: ModVmLimits,
     /// 诊断计时，默认关闭；不参与玩法计划身份，恢复沿用同一采集句柄。
@@ -653,17 +656,39 @@ impl ModRealm {
         options: RegisterOptions,
         disabled: &BTreeSet<String>,
     ) -> ModHostResult<Registered> {
-        let order = dependency_order(packages)?;
+        // 内容选择先于装载解析：未选包不进模块加载器、不注册、不导出
+        // 玩家面；配置与停用输入指向未选包属于配置错误，在此整体拒绝。
+        // 无显式选择时 resolve 返回 None，直接沿用发现的全部包，不复制包表。
+        let (filtered, selection_report) =
+            crate::selection::resolve_selection(packages, &options.selection)?;
+        let selected: &BTreeMap<String, ModPackage> = filtered.as_ref().unwrap_or(packages);
+        if let Some(id) = disabled.iter().find(|id| !selected.contains_key(*id)) {
+            return Err(ModHostError::new(
+                "register",
+                format!("停用的 Mod {id} 未被内容选择安装"),
+            ));
+        }
+        if let Some(id) = options
+            .configs
+            .keys()
+            .find(|id| !selected.contains_key(*id))
+        {
+            return Err(ModHostError::new(
+                "register",
+                format!("配置指定了未选择的包 {id}"),
+            ));
+        }
+        let order = dependency_order(selected)?;
         {
             let mut loader = self.loader_packages.borrow_mut();
             loader.clear();
-            for package in packages.values() {
+            for package in selected.values() {
                 loader.insert(package.root.clone(), Rc::new(package.clone()));
             }
         }
         let mut collected: Vec<(String, Source, Vec<Declaration>)> = Vec::new();
         for id in &order {
-            let package = &packages[id];
+            let package = &selected[id];
             let config = options.configs.get(id);
             let start = {
                 let cell = self.runtime.op_state();
@@ -730,9 +755,10 @@ impl ModRealm {
         let composition = crate::CompositionReport::build(
             &plan,
             &contributions,
-            packages,
+            selected,
             &options.freeze,
             disabled,
+            &selection_report,
         )
         .map_err(|error| ModHostError::new("composition", error))?;
         let closed = composition
@@ -747,11 +773,11 @@ impl ModRealm {
         self.install_chains(&plan, &contributions, disabled)?;
         let mut player_modules = Vec::new();
         for id in &order {
-            let Some(entry) = packages[id].manifest.player.clone() else {
+            let Some(entry) = selected[id].manifest.player.clone() else {
                 continue;
             };
             let mut files = BTreeMap::new();
-            for (path, bytes) in &packages[id].files {
+            for (path, bytes) in &selected[id].files {
                 let Some(path) = path.to_str() else {
                     continue;
                 };

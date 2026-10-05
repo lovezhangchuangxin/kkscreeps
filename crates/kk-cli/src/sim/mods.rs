@@ -1,6 +1,6 @@
 //! 场景中的显式 Mod 输入、实际包身份与自有对象初始化。
 use super::*;
-use kk_mod_host::{ModPackage, RegisterOptions, discover_packages};
+use kk_mod_host::{ContentSelection, ModPackage, RegisterOptions, discover_packages};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -8,6 +8,10 @@ pub(super) struct Mods {
     root: PathBuf,
     #[serde(default)]
     configs: BTreeMap<String, Value>,
+    /// 新世界启动期的显式内容选择；省略表示安装全部发现的包。
+    /// 与宿主注册选项、mod inspect 共用同一选择语义。
+    #[serde(default)]
+    selection: ContentSelection,
 }
 
 pub(super) struct Loaded {
@@ -39,13 +43,17 @@ pub(super) fn load(base: &Path, input: &Mods) -> anyhow::Result<Loaded> {
             )
         })
         .collect();
+    // mods 元数据记录的是输入（含显式选择）；展开后的实际安装清单与
+    // 自动加入项由组合报告的 selection 提供，不在两处复制结论。
+    let selection = serde_json::to_value(&input.selection).context("序列化场景的选择输入失败")?;
     Ok(Loaded {
         packages,
         options: RegisterOptions {
             configs: input.configs.clone(),
+            selection: input.selection.clone(),
             ..Default::default()
         },
-        metadata: json!({"root": root, "packages": entries}),
+        metadata: json!({"root": root, "packages": entries, "selection": selection}),
     })
 }
 

@@ -1,7 +1,7 @@
 # ADR-016 官方玩法以可选内容包交付并验证公共 SDK
 
 - **日期**：2026-10-05
-- **状态**：已接受；内容选择装配与官方玩法迁移尚未实现
+- **状态**：已接受；新世界启动期的逐包显式选择已实现（见[内容选择](../architecture/mod-content-selection.md)），官方玩法整体迁移、玩法预设语法与存量世界内容变更尚未实现
 - **前置**：[ADR-007](ADR-007-mod-system.md)、[ADR-014](ADR-014-contribution-plane.md)、[ADR-015](ADR-015-mod-chain-execution.md)
 
 ## 背景

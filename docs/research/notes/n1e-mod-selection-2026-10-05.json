@@ -1,0 +1,201 @@
+{
+  "report_version": 1,
+  "date": "2026-10-05",
+  "base_commit": "90b670fbbd85b6e1f49fded457da6bfa8c86ea7e",
+  "scope": "N1e new-world explicit content selection (include/exclude closure expansion, identity reports, recovery snapshot)",
+  "executable_sha256": "22807ed91eb6b034f1cb39c87d6ae763f88b6f75d19b43d72897276811c228a6",
+  "packages": [
+    "alpha",
+    "beta",
+    "gamma"
+  ],
+  "entry_points_sharing_selection_semantics": [
+    "RegisterOptions.selection (host Rust API)",
+    "sim scenario mods.selection",
+    "mod inspect --select/--exclude"
+  ],
+  "targeted_tests": {
+    "host_selection": 12,
+    "runtime_engine_selection": 2,
+    "runtime_recovery_identity": 1
+  },
+  "validation": {
+    "status": "passed",
+    "full_check": {
+      "command": "KKSCREEPS_BIN=\"$PWD/target/release/kkscreeps\" pnpm run check",
+      "rust": {
+        "passed": 775,
+        "failed": 0,
+        "ignored": 11
+      },
+      "adapter": {
+        "passed": 14,
+        "failed": 0,
+        "skipped": 0
+      },
+      "format": "passed",
+      "clippy": "passed",
+      "documents": {
+        "markdown_files": 269,
+        "local_links": 1540
+      },
+      "source_size": {
+        "files": 375,
+        "limit_lines": 1000,
+        "passed": true
+      }
+    },
+    "compatibility": {
+      "command": "KKSCREEPS_BIN=\"$PWD/target/release/kkscreeps\" node compat/scripts/ratchet.mjs",
+      "screeps_ok_commit": "34a630efa42908c117c19c25d2350fa2387bd633",
+      "total": 2914,
+      "counts": {
+        "passed": 1918,
+        "failed": 89,
+        "skipped": 907
+      },
+      "floor": 1918,
+      "case_identities_and_statuses_equal_base": true,
+      "ratchet_reference": "HEAD~1 at validation time",
+      "red_flips": 0,
+      "green_flips": 0,
+      "new_waivers": 0,
+      "existing_unused_waiver_warnings": 2,
+      "report": "compat/reports/kkscreeps.json",
+      "report_sha256": "cd2c67cd8683c30a32cdee7d67278aaac9264c159e5a5b2e1c89c4455325aea9"
+    },
+    "simulation": {
+      "channels": [
+        "json",
+        "kkpv"
+      ],
+      "committed_ticks_per_scenario_and_channel": 100,
+      "player_error_ticks": 0,
+      "scenarios": {
+        "select-alpha": {
+          "selection": {
+            "requested": [
+              "alpha"
+            ],
+            "selected": [
+              "alpha"
+            ],
+            "auto_added": [],
+            "skipped": [
+              "beta",
+              "gamma"
+            ]
+          },
+          "plan_hash": "8e0e380eb2ff2012f1897eb79f4589529949e4e1f9d3086460b596f8cc037d97",
+          "node_value": 100,
+          "player_memory": {
+            "value": 99,
+            "hasBeta": "undefined",
+            "betaFind": "undefined"
+          },
+          "unselected_mod_states": "null (beta, gamma)",
+          "assertions_passed": 6
+        },
+        "select-beta": {
+          "selection": {
+            "requested": [
+              "beta"
+            ],
+            "selected": [
+              "alpha",
+              "beta"
+            ],
+            "auto_added": [
+              "alpha"
+            ],
+            "skipped": [
+              "gamma"
+            ]
+          },
+          "plan_hash": "b43cfed6dbfc1d990116eb8473bcbd51e3c85b99b838760b91b392d68aa1ca60",
+          "node_value": 300,
+          "beacon_marks": 100,
+          "player_memory": {
+            "value": 297,
+            "hasBeta": "function",
+            "betaFind": "number"
+          },
+          "unselected_mod_states": "null (gamma)",
+          "assertions_passed": 6
+        },
+        "select-alpha-gamma": {
+          "selection": {
+            "requested": [
+              "alpha",
+              "gamma"
+            ],
+            "selected": [
+              "alpha",
+              "gamma"
+            ],
+            "auto_added": [],
+            "skipped": [
+              "beta"
+            ]
+          },
+          "plan_hash": "8fe6bc4989878eba4bcc39e6b78bfd8475da3fe406c7fcf3d8945caad77aa050",
+          "node_value": 100,
+          "gamma_state": {
+            "marked": true
+          },
+          "player_memory": {
+            "hasBeta": "undefined"
+          },
+          "unselected_mod_states": "null (beta)",
+          "assertions_passed": 4
+        }
+      },
+      "final_world_mod_objects_state_and_player_memory_equal_across_channels": true,
+      "composition_equal_across_channels": true,
+      "plan_hashes_distinct_per_selection": true
+    },
+    "rejections": {
+      "exclusion_collision": "显式排除 alpha 与必需依赖相撞：beta → alpha；须调整排除或选择，不会静默重新加入（退出 1）",
+      "unknown_selection": "选择的包不存在：ghost（alpha、beta、gamma）（退出 1）"
+    }
+  },
+  "raw_reports": {
+    "n1e-mod-selection-alpha-json-2026-10-05.json": {
+      "sha256": "62f4b4f734d9ffea25e426a269e72a1edcf70fa037c56430f587b6d74edb8019"
+    },
+    "n1e-mod-selection-alpha-kkpv-2026-10-05.json": {
+      "sha256": "42b61e3c72e1a4b418e14cc8b7bc2547f2c0fe463f463317e854f79a229f7c55"
+    },
+    "n1e-mod-selection-beta-json-2026-10-05.json": {
+      "sha256": "9b4d4672d6558731a87e163d0ded2de149257d9b8742d9b9f270808ef55a5876"
+    },
+    "n1e-mod-selection-beta-kkpv-2026-10-05.json": {
+      "sha256": "79a662a9e49be9bef2bc8af576f892a7bbf4ea0d75060fcecca0125ff7a8bd74"
+    },
+    "n1e-mod-selection-alpha-gamma-json-2026-10-05.json": {
+      "sha256": "9f14e2d8bcec30351661fd5e70db146fe10a6b80e67fa47e79bff3fdbcbe4ea8"
+    },
+    "n1e-mod-selection-alpha-gamma-kkpv-2026-10-05.json": {
+      "sha256": "3585c50632b5216abc881a11fd2576de23604cb538290fe03dc82af63f4f060c"
+    },
+    "n1e-mod-inspect-select-beta-2026-10-05.json": {
+      "sha256": "1dc4f70f6a74a3bc7be0423d14bbef7c9c2df16dbd4e19c092e7a06dcc2e8b05"
+    },
+    "n1e-mod-inspect-select-alpha-2026-10-05.json": {
+      "sha256": "8ca897c2b29e6e85f359b0a0e7b5979117777ca10cedd105fcb6613810b40b49"
+    },
+    "n1e-mod-inspect-reject-collision-2026-10-05.json": {
+      "sha256": "4771fb180cf9800b33e9e5241a26a1f689e73b6fdd88e52138b02e5eae31dac8"
+    },
+    "n1e-mod-inspect-reject-unknown-2026-10-05.json": {
+      "sha256": "7138170c1945fb077333f945cf36dd388a44e0840ef403c0a8f76d65c3a06e82"
+    }
+  },
+  "limitations": [
+    "New-world startup selection only: no runtime re-selection, no unload-on-disable, no migration/upgrade for existing worlds (four distinct operations).",
+    "builtin contribution remains mandatory; native consumer migration proceeds family-by-family in N2/N3.",
+    "Preset syntax (selecting package groups by name and configuration) is not frozen; all current inputs are explicit per-package ID lists.",
+    "Selection input itself is not part of PlanHash; identical installed sets from different inputs share one plan identity.",
+    "Handler dependsOn references to unselected packages keep the existing unknown-handler-dependency freeze error and never auto-add packages."
+  ]
+}

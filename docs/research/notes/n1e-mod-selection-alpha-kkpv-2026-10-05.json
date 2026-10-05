@@ -1,0 +1,1477 @@
+{
+  "report_version": 2,
+  "success": true,
+  "status": "passed",
+  "engine_version": "0.1.0",
+  "executable_sha256": "22807ed91eb6b034f1cb39c87d6ae763f88b6f75d19b43d72897276811c228a6",
+  "scenario": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/sim-mod-content/scenario-alpha.json",
+  "scenario_sha256": "a43c5d82475198e8dcda8c976c5084211dc31f7bebb6e77b44cca964d9f575fa",
+  "modules": {
+    "p1": {
+      "directory": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/sim-mod-content",
+      "sha256": "c3ad2d279931d30b15b898fc072f97d8ecaaa8e974266f683bd1bf7175e47fcb",
+      "files": [
+        {
+          "name": "main",
+          "kind": "js",
+          "bytes": 472,
+          "sha256": "44cb63e9aa5962e0fe4c2374549a4fc99820eab71cf2b4306e9fa60176bb2bab"
+        }
+      ]
+    }
+  },
+  "mods": {
+    "root": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/mod-content",
+    "packages": {
+      "alpha": {
+        "version": "1.0.0",
+        "api_version": "^1.0.0",
+        "dependencies": {},
+        "directory": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/mod-content/alpha",
+        "code_sha256": "a4df7f5140e545a4d933bcd0446607dc50e13f8db7f066260c5f6a3b60218aed",
+        "player_api_sha256": "3538287f236b0481c01595ff902a8741cbc2760c914fccd077bd88a177d92cfd",
+        "config_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "beta": {
+        "version": "1.0.0",
+        "api_version": "^1.0.0",
+        "dependencies": {
+          "alpha": "^1.0.0"
+        },
+        "directory": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/mod-content/beta",
+        "code_sha256": "2c2fbbe06eb842059e8c8f2364b90513d568c740ead7a284ce53e8aa51e9d693",
+        "player_api_sha256": "a5d58f1afe9d2ed542c1b2d3d3957fe0c6b62ada7311173dc08b76c89ce27c71",
+        "config_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "gamma": {
+        "version": "1.0.0",
+        "api_version": "^1.0.0",
+        "dependencies": {},
+        "directory": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/mod-content/gamma",
+        "code_sha256": "e4852320062d9b52a92c91307e31420c157f151449ad83a2360ad2907b454bdc",
+        "player_api_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "config_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    "selection": {
+      "include": [
+        "alpha"
+      ],
+      "exclude": []
+    }
+  },
+  "plan_hash": "8e0e380eb2ff2012f1897eb79f4589529949e4e1f9d3086460b596f8cc037d97",
+  "composition": {
+    "report_version": 2,
+    "plan_hash": "8e0e380eb2ff2012f1897eb79f4589529949e4e1f9d3086460b596f8cc037d97",
+    "sources": {
+      "alpha": {
+        "namespace": "alpha",
+        "api_version": 1,
+        "revision": "1.0.0",
+        "code_digest": [
+          164,
+          223,
+          127,
+          81,
+          64,
+          229,
+          69,
+          164,
+          217,
+          51,
+          188,
+          208,
+          68,
+          102,
+          7,
+          220,
+          80,
+          225,
+          63,
+          141,
+          183,
+          240,
+          102,
+          38,
+          12,
+          95,
+          106,
+          59,
+          96,
+          33,
+          138,
+          237
+        ],
+        "config_digest": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "player_api_digest": [
+          53,
+          56,
+          40,
+          127,
+          35,
+          107,
+          4,
+          129,
+          192,
+          21,
+          149,
+          255,
+          144,
+          42,
+          135,
+          65,
+          203,
+          194,
+          118,
+          12,
+          145,
+          79,
+          204,
+          208,
+          119,
+          189,
+          136,
+          161,
+          119,
+          217,
+          44,
+          253
+        ]
+      },
+      "builtin": {
+        "namespace": "builtin",
+        "api_version": 1,
+        "revision": "link-creep-store-move-combat-build-descriptors-v6",
+        "code_digest": [
+          209,
+          18,
+          68,
+          206,
+          151,
+          187,
+          83,
+          29,
+          184,
+          93,
+          219,
+          99,
+          93,
+          105,
+          144,
+          178,
+          56,
+          86,
+          116,
+          175,
+          226,
+          226,
+          41,
+          13,
+          160,
+          140,
+          249,
+          237,
+          171,
+          162,
+          219,
+          66
+        ],
+        "config_digest": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "player_api_digest": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "selection": {
+      "requested": [
+        "alpha"
+      ],
+      "excluded": [],
+      "selected": [
+        "alpha"
+      ],
+      "auto_added": [],
+      "skipped": [
+        "beta",
+        "gamma"
+      ]
+    },
+    "handlers": [],
+    "slots": [
+      {
+        "key": "alpha:node.tick",
+        "stage": "ObjectTick",
+        "original_center": "alpha:node.tick.process",
+        "frozen": {
+          "Native": "alpha:node.tick.process"
+        },
+        "active": {
+          "key": "alpha:node.tick",
+          "before": [],
+          "wraps": [],
+          "center": "alpha:node.tick.process",
+          "after": [],
+          "native_center": false,
+          "decline_allowed": false
+        },
+        "execution": "hosted"
+      },
+      {
+        "key": "builtin:creep.attack",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.attack.native",
+        "frozen": {
+          "Native": "builtin:creep.attack.native"
+        },
+        "active": {
+          "key": "builtin:creep.attack",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.attack.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.build",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.build.native",
+        "frozen": {
+          "Native": "builtin:creep.build.native"
+        },
+        "active": {
+          "key": "builtin:creep.build",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.build.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.dismantle",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.dismantle.native",
+        "frozen": {
+          "Native": "builtin:creep.dismantle.native"
+        },
+        "active": {
+          "key": "builtin:creep.dismantle",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.dismantle.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.heal",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.heal.native",
+        "frozen": {
+          "Native": "builtin:creep.heal.native"
+        },
+        "active": {
+          "key": "builtin:creep.heal",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.heal.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.move",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.move.native",
+        "frozen": {
+          "Native": "builtin:creep.move.native"
+        },
+        "active": {
+          "key": "builtin:creep.move",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.move.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.rangedAttack",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.rangedAttack.native",
+        "frozen": {
+          "Native": "builtin:creep.rangedAttack.native"
+        },
+        "active": {
+          "key": "builtin:creep.rangedAttack",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.rangedAttack.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.rangedHeal",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.rangedHeal.native",
+        "frozen": {
+          "Native": "builtin:creep.rangedHeal.native"
+        },
+        "active": {
+          "key": "builtin:creep.rangedHeal",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.rangedHeal.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.rangedMassAttack",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.rangedMassAttack.native",
+        "frozen": {
+          "Native": "builtin:creep.rangedMassAttack.native"
+        },
+        "active": {
+          "key": "builtin:creep.rangedMassAttack",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.rangedMassAttack.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.repair",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.repair.native",
+        "frozen": {
+          "Native": "builtin:creep.repair.native"
+        },
+        "active": {
+          "key": "builtin:creep.repair",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.repair.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.transfer",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.transfer.native",
+        "frozen": {
+          "Native": "builtin:creep.transfer.native"
+        },
+        "active": {
+          "key": "builtin:creep.transfer",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.transfer.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.withdraw",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.withdraw.native",
+        "frozen": {
+          "Native": "builtin:creep.withdraw.native"
+        },
+        "active": {
+          "key": "builtin:creep.withdraw",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.withdraw.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:link.tick",
+        "stage": "ObjectTick",
+        "original_center": "builtin:link.tick.native",
+        "frozen": {
+          "Native": "builtin:link.tick.native"
+        },
+        "active": {
+          "key": "builtin:link.tick",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:link.tick.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": false
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:link.transfer",
+        "stage": "ObjectAction",
+        "original_center": "builtin:link.transfer.native",
+        "frozen": {
+          "Native": "builtin:link.transfer.native"
+        },
+        "active": {
+          "key": "builtin:link.transfer",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:link.transfer.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      }
+    ],
+    "rules": [
+      {
+        "key": "alpha:step",
+        "default": {
+          "Signed": 1
+        },
+        "value": {
+          "Signed": 1
+        },
+        "definition_source": "alpha",
+        "selected_source": "alpha",
+        "overrides": {},
+        "consumers": [
+          "alpha:node.tick.process"
+        ]
+      },
+      {
+        "key": "builtin:link.buildCost",
+        "default": {
+          "Signed": 5000
+        },
+        "value": {
+          "Signed": 5000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.capacity",
+        "default": {
+          "Signed": 800
+        },
+        "value": {
+          "Signed": 800
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.cooldown",
+        "default": {
+          "Signed": 1
+        },
+        "value": {
+          "Signed": 1
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.hits",
+        "default": {
+          "Signed": 1000
+        },
+        "value": {
+          "Signed": 1000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.hitsMax",
+        "default": {
+          "Signed": 1000
+        },
+        "value": {
+          "Signed": 1000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.lossRatio",
+        "default": {
+          "Float": 0.03
+        },
+        "value": {
+          "Float": 0.03
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl0",
+        "default": {
+          "Signed": 0
+        },
+        "value": {
+          "Signed": 0
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl1",
+        "default": {
+          "Signed": 0
+        },
+        "value": {
+          "Signed": 0
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl2",
+        "default": {
+          "Signed": 0
+        },
+        "value": {
+          "Signed": 0
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl3",
+        "default": {
+          "Signed": 0
+        },
+        "value": {
+          "Signed": 0
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl4",
+        "default": {
+          "Signed": 0
+        },
+        "value": {
+          "Signed": 0
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl5",
+        "default": {
+          "Signed": 2
+        },
+        "value": {
+          "Signed": 2
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl6",
+        "default": {
+          "Signed": 3
+        },
+        "value": {
+          "Signed": 3
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl7",
+        "default": {
+          "Signed": 4
+        },
+        "value": {
+          "Signed": 4
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl8",
+        "default": {
+          "Signed": 6
+        },
+        "value": {
+          "Signed": 6
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:store.container.capacity",
+        "default": {
+          "Signed": 2000
+        },
+        "value": {
+          "Signed": 2000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.containerDeposit",
+          "builtin:store.init"
+        ]
+      },
+      {
+        "key": "builtin:store.factory.capacity",
+        "default": {
+          "Signed": 50000
+        },
+        "value": {
+          "Signed": 50000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init"
+        ]
+      },
+      {
+        "key": "builtin:store.lab.energyCapacity",
+        "default": {
+          "Signed": 2000
+        },
+        "value": {
+          "Signed": 2000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init",
+          "builtin:store.labSlots"
+        ]
+      },
+      {
+        "key": "builtin:store.lab.mineralCapacity",
+        "default": {
+          "Signed": 3000
+        },
+        "value": {
+          "Signed": 3000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init",
+          "builtin:store.labSlots"
+        ]
+      },
+      {
+        "key": "builtin:store.nuker.energyCapacity",
+        "default": {
+          "Signed": 300000
+        },
+        "value": {
+          "Signed": 300000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init"
+        ]
+      },
+      {
+        "key": "builtin:store.nuker.ghodiumCapacity",
+        "default": {
+          "Signed": 5000
+        },
+        "value": {
+          "Signed": 5000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init"
+        ]
+      },
+      {
+        "key": "builtin:store.powerSpawn.energyCapacity",
+        "default": {
+          "Signed": 5000
+        },
+        "value": {
+          "Signed": 5000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init"
+        ]
+      },
+      {
+        "key": "builtin:store.powerSpawn.powerCapacity",
+        "default": {
+          "Signed": 100
+        },
+        "value": {
+          "Signed": 100
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init"
+        ]
+      },
+      {
+        "key": "builtin:store.terminal.capacity",
+        "default": {
+          "Signed": 300000
+        },
+        "value": {
+          "Signed": 300000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init",
+          "builtin:store.terminalTick"
+        ]
+      },
+      {
+        "key": "builtin:store.tower.capacity",
+        "default": {
+          "Signed": 1000
+        },
+        "value": {
+          "Signed": 1000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init"
+        ]
+      }
+    ],
+    "dependencies": {
+      "alpha": []
+    },
+    "disable_closures": {
+      "alpha": [
+        "alpha"
+      ]
+    },
+    "disabled_mods": []
+  },
+  "disabled_mods": [],
+  "channel": "kkpv",
+  "concurrency": 2,
+  "ticks_requested": 100,
+  "ticks_attempted": 100,
+  "world_ticks_committed": 100,
+  "run_wall_ms": 13.865250000000001,
+  "phases": {
+    "ticks": 100,
+    "phases": {
+      "project": {
+        "count": 100,
+        "p50_ms": 0.0225,
+        "p95_ms": 0.029,
+        "p99_ms": 0.03475,
+        "max_ms": 0.0645,
+        "total_ms": 2.320417999999999
+      },
+      "run": {
+        "count": 100,
+        "p50_ms": 0.063458,
+        "p95_ms": 0.218709,
+        "p99_ms": 0.38175,
+        "max_ms": 1.285833,
+        "total_ms": 8.972824999999998
+      },
+      "settle": {
+        "count": 100,
+        "p50_ms": 0.018292,
+        "p95_ms": 0.038208,
+        "p99_ms": 0.157125,
+        "max_ms": 0.269167,
+        "total_ms": 2.425713
+      },
+      "wall": {
+        "count": 100,
+        "p50_ms": 0.10450000000000001,
+        "p95_ms": 0.270333,
+        "p99_ms": 0.43554200000000004,
+        "max_ms": 1.621375,
+        "total_ms": 13.791249
+      }
+    }
+  },
+  "failure": null,
+  "players": {
+    "p1": {
+      "successful_ticks": 100,
+      "error_ticks": 0,
+      "not_evaluated_ticks": 0,
+      "errors_head": [],
+      "console_head": []
+    }
+  },
+  "aliases": {
+    "node": "kk0000000000000002"
+  },
+  "assertions": [
+    {
+      "pointer": "/objects/node/fields/value",
+      "op": "eq",
+      "expected": 100,
+      "before": 0,
+      "actual": 100,
+      "delta": 100,
+      "passed": true
+    },
+    {
+      "pointer": "/players/p1/memory/value",
+      "op": "eq",
+      "expected": 99,
+      "before": null,
+      "actual": 99,
+      "delta": null,
+      "passed": true
+    },
+    {
+      "pointer": "/players/p1/memory/hasBeta",
+      "op": "eq",
+      "expected": "undefined",
+      "before": null,
+      "actual": "undefined",
+      "delta": null,
+      "passed": true
+    },
+    {
+      "pointer": "/players/p1/memory/betaFind",
+      "op": "eq",
+      "expected": "undefined",
+      "before": null,
+      "actual": "undefined",
+      "delta": null,
+      "passed": true
+    },
+    {
+      "pointer": "/mod_states/beta",
+      "op": "missing",
+      "expected": null,
+      "before": null,
+      "actual": null,
+      "delta": null,
+      "passed": true
+    },
+    {
+      "pointer": "/mod_states/gamma",
+      "op": "missing",
+      "expected": null,
+      "before": null,
+      "actual": null,
+      "delta": null,
+      "passed": true
+    }
+  ],
+  "mod_fault": null,
+  "initial": {
+    "time": 0,
+    "players": {
+      "p1": {
+        "gcl": 1000000,
+        "rooms": [],
+        "memory": {
+          "room": "W1N1"
+        },
+        "raw_memory": "{\"room\":\"W1N1\"}",
+        "cpu_bucket": 10000.0
+      }
+    },
+    "objects": {
+      "node": {
+        "kind": "mod",
+        "id": "kk0000000000000002",
+        "typeKey": "alpha:node",
+        "pos": {
+          "x": 10,
+          "y": 10,
+          "roomName": "W1N1"
+        },
+        "fields": {
+          "x": 10,
+          "y": 10,
+          "value": 0
+        }
+      }
+    },
+    "rooms": {
+      "W1N1": {
+        "controller": {
+          "kind": "structure",
+          "structureType": "controller",
+          "id": "kk0000000000000001",
+          "pos": {
+            "x": 1,
+            "y": 1,
+            "roomName": "W1N1"
+          },
+          "level": 6,
+          "progress": 0,
+          "progressTotal": 3645000,
+          "ticksToDowngrade": 120001,
+          "safeMode": null,
+          "safeModeAvailable": 0,
+          "safeModeCooldown": null,
+          "reservation": null,
+          "sign": null,
+          "upgradeBlocked": null,
+          "isPowerEnabled": false,
+          "owner": "p1"
+        }
+      }
+    },
+    "world": {
+      "time": 0,
+      "cpu": {
+        "limit": 20,
+        "tickLimit": 500,
+        "bucket": 10000
+      },
+      "user": null,
+      "gcl": 0,
+      "visibleRooms": [
+        "W1N1"
+      ],
+      "rooms": {
+        "W1N1": {
+          "name": "W1N1",
+          "terrain": {
+            "rev": 1,
+            "payload": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQ=="
+          },
+          "energyAvailable": 0,
+          "energyCapacityAvailable": 0
+        }
+      },
+      "objects": [
+        {
+          "type": "structure",
+          "structureType": "controller",
+          "id": "kk0000000000000001",
+          "room": "W1N1",
+          "x": 1,
+          "y": 1,
+          "level": 6,
+          "progress": 0,
+          "progressTotal": 3645000,
+          "safeMode": 0,
+          "safeModeAvailable": 0,
+          "downgradeTime": 120001,
+          "isPowerEnabled": false,
+          "upgradeBlocked": null,
+          "safeModeCooldown": null,
+          "reservation": null,
+          "sign": null,
+          "owner": "p1",
+          "pos": {
+            "x": 1,
+            "y": 1,
+            "roomName": "W1N1"
+          }
+        }
+      ]
+    },
+    "mod_objects": [
+      {
+        "kind": "mod",
+        "id": "kk0000000000000002",
+        "typeKey": "alpha:node",
+        "pos": {
+          "x": 10,
+          "y": 10,
+          "roomName": "W1N1"
+        },
+        "fields": {
+          "x": 10,
+          "y": 10,
+          "value": 0
+        }
+      }
+    ],
+    "mod_states": {
+      "alpha": null,
+      "beta": null,
+      "gamma": null
+    }
+  },
+  "final": {
+    "time": 100,
+    "players": {
+      "p1": {
+        "gcl": 1000000,
+        "rooms": [
+          "W1N1"
+        ],
+        "memory": {
+          "room": "W1N1",
+          "value": 99,
+          "hasBeta": "undefined",
+          "betaFind": "undefined"
+        },
+        "raw_memory": "{\"room\":\"W1N1\",\"value\":99,\"hasBeta\":\"undefined\",\"betaFind\":\"undefined\"}",
+        "cpu_bucket": 10000.0
+      }
+    },
+    "objects": {
+      "node": {
+        "kind": "mod",
+        "id": "kk0000000000000002",
+        "typeKey": "alpha:node",
+        "pos": {
+          "x": 10,
+          "y": 10,
+          "roomName": "W1N1"
+        },
+        "fields": {
+          "x": 10,
+          "y": 10,
+          "value": 100
+        }
+      }
+    },
+    "rooms": {
+      "W1N1": {
+        "controller": {
+          "kind": "structure",
+          "structureType": "controller",
+          "id": "kk0000000000000001",
+          "pos": {
+            "x": 1,
+            "y": 1,
+            "roomName": "W1N1"
+          },
+          "level": 6,
+          "progress": 0,
+          "progressTotal": 3645000,
+          "ticksToDowngrade": 119901,
+          "safeMode": null,
+          "safeModeAvailable": 0,
+          "safeModeCooldown": null,
+          "reservation": null,
+          "sign": null,
+          "upgradeBlocked": null,
+          "isPowerEnabled": false,
+          "owner": "p1"
+        }
+      }
+    },
+    "world": {
+      "time": 100,
+      "cpu": {
+        "limit": 20,
+        "tickLimit": 500,
+        "bucket": 10000
+      },
+      "user": null,
+      "gcl": 0,
+      "visibleRooms": [
+        "W1N1"
+      ],
+      "rooms": {
+        "W1N1": {
+          "name": "W1N1",
+          "terrain": {
+            "rev": 1,
+            "payload": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQ=="
+          },
+          "energyAvailable": 0,
+          "energyCapacityAvailable": 0
+        }
+      },
+      "objects": [
+        {
+          "type": "structure",
+          "structureType": "controller",
+          "id": "kk0000000000000001",
+          "room": "W1N1",
+          "x": 1,
+          "y": 1,
+          "level": 6,
+          "progress": 0,
+          "progressTotal": 3645000,
+          "safeMode": 0,
+          "safeModeAvailable": 0,
+          "downgradeTime": 120001,
+          "isPowerEnabled": false,
+          "upgradeBlocked": null,
+          "safeModeCooldown": null,
+          "reservation": null,
+          "sign": null,
+          "owner": "p1",
+          "pos": {
+            "x": 1,
+            "y": 1,
+            "roomName": "W1N1"
+          }
+        }
+      ]
+    },
+    "mod_objects": [
+      {
+        "kind": "mod",
+        "id": "kk0000000000000002",
+        "typeKey": "alpha:node",
+        "pos": {
+          "x": 10,
+          "y": 10,
+          "roomName": "W1N1"
+        },
+        "fields": {
+          "x": 10,
+          "y": 10,
+          "value": 100
+        }
+      }
+    ],
+    "mod_states": {
+      "alpha": null,
+      "beta": null,
+      "gamma": null
+    }
+  }
+}

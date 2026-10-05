@@ -25,6 +25,7 @@ mod manifest;
 mod package;
 mod profile;
 mod realm;
+mod selection;
 mod v8_convert;
 mod write;
 
@@ -39,3 +40,4 @@ pub use write::ChainWrite;
 
 pub use composition::{ComposedSlot, CompositionReport, ExecutionMode, RuleSelection};
 pub use execution_plan::ExecutionChain;
+pub use selection::{ContentSelection, SelectionReport};

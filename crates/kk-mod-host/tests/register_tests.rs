@@ -235,6 +235,7 @@ fn config_reaches_registration_and_digest() {
         profiler: None,
         configs: BTreeMap::from([("demo-counter".to_string(), json!({"start": 5}))]),
         freeze: Default::default(),
+        selection: Default::default(),
         vm_limits: Default::default(),
         fault_disable_threshold: None,
     };
@@ -294,3 +295,6 @@ mod composition;
 
 #[path = "register_tests/rules_read.rs"]
 mod rules_read;
+
+#[path = "register_tests/selection.rs"]
+mod selection;

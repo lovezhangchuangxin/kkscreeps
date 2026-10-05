@@ -1,7 +1,8 @@
-//! 作者使用真实包注册路径检查组合；停用参数仅生成执行预览。
+//! 作者使用真实包注册路径检查组合；停用参数仅生成执行预览，
+//! 选择参数与 sim 场景、宿主注册选项共用同一展开语义。
 use crate::report::write_report;
 use anyhow::Context;
-use kk_mod_host::{ModRealm, RegisterOptions, discover_packages};
+use kk_mod_host::{ContentSelection, ModRealm, RegisterOptions, discover_packages};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
@@ -12,6 +13,8 @@ pub struct Options {
     pub configs: Option<PathBuf>,
     pub rule_sources: Vec<String>,
     pub disable: Vec<String>,
+    pub select: Vec<String>,
+    pub exclude: Vec<String>,
     pub report: PathBuf,
 }
 
@@ -28,7 +31,7 @@ pub fn run(options: Options) -> i32 {
         Ok(report) => (0, report),
         Err(error) => (
             1,
-            json!({"report_version":1,"status":"setup_failed","error":format!("{error:#}"),"composition":null}),
+            json!({"report_version":2,"status":"setup_failed","error":format!("{error:#}"),"composition":null}),
         ),
     };
     if let Err(error) = write_report(&output, &report) {
@@ -82,8 +85,13 @@ fn inspect(options: &Options) -> anyhow::Result<Value> {
     for id in configs.keys() {
         anyhow::ensure!(packages.contains_key(id), "Mod 配置指定了未加载的包 {id}");
     }
+    let selection = ContentSelection {
+        include: options.select.iter().cloned().collect(),
+        exclude: options.exclude.iter().cloned().collect(),
+    };
     let mut register_options = RegisterOptions {
         configs,
+        selection,
         ..Default::default()
     };
     for input in &options.rule_sources {
@@ -127,6 +135,6 @@ fn inspect(options: &Options) -> anyhow::Result<Value> {
         .map(|byte| format!("{byte:02x}"))
         .collect::<String>();
     Ok(
-        json!({"report_version":1,"status":"passed","root":root,"packages":identities,"executable_sha256":hash,"requested_disabled":requested,"composition":composition}),
+        json!({"report_version":2,"status":"passed","root":root,"packages":identities,"executable_sha256":hash,"requested_disabled":requested,"composition":composition}),
     )
 }

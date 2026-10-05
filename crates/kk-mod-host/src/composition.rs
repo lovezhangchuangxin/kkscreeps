@@ -44,6 +44,9 @@ pub struct CompositionReport {
     pub report_version: u32,
     pub plan_hash: String,
     pub sources: BTreeMap<String, kk_mod_api::Source>,
+    /// 实际内容身份：显式选择输入、展开后安装清单与自动加入项。
+    /// 报告版本 2 起提供；选择输入本身不参与 plan_hash。
+    pub selection: crate::SelectionReport,
     pub handlers: Vec<HandlerDescriptor>,
     pub slots: Vec<ComposedSlot>,
     pub rules: Vec<RuleSelection>,
@@ -61,6 +64,7 @@ impl CompositionReport {
         packages: &BTreeMap<String, ModPackage>,
         options: &kk_mod_api::FreezeOptions,
         disabled: &BTreeSet<String>,
+        selection: &crate::SelectionReport,
     ) -> Result<Self, String> {
         let builtin = kk_mod_api::builtin::link();
         let all: Vec<_> = std::iter::once(&builtin).chain(contributions).collect();
@@ -157,9 +161,10 @@ impl CompositionReport {
             })
             .collect::<Result<_, String>>()?;
         Ok(Self {
-            report_version: 1,
+            report_version: 2,
             plan_hash: plan.hash().hex(),
             sources: plan.sources().clone(),
+            selection: selection.clone(),
             handlers,
             slots,
             rules,

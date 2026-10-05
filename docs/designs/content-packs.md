@@ -2,9 +2,9 @@
 
 ## 状态与目标
 
-本设计落实 [ADR-016](../decisions/ADR-016-official-content-packs.md)：官方游戏内容逐步按可选包交付，其中一部分直接使用公共 JS SDK，实现用户可选的内容组合并检验作者体验。**本文是目标契约，尚无完整内容包选择、玩法预设或存量世界卸载通路。**
+本设计落实 [ADR-016](../decisions/ADR-016-official-content-packs.md)：官方游戏内容逐步按可选包交付，其中一部分直接使用公共 JS SDK，实现用户可选的内容组合并检验作者体验。**新世界启动期的显式包选择（下述第 1、2 步与第 5 步的场景报告部分，逐包 ID 形态）已实现**，见[内容选择](../architecture/mod-content-selection.md)；玩法预设语法、世界 manifest 记录（随持久化落实）与存量世界卸载/迁移/升级仍是目标设计。
 
-截至 `3087df8`，JS 包装载和冻结已实现，但 [realm.rs](../../crates/kk-mod-host/src/realm.rs) 固定调用 `freeze_with_builtin(builtin::link(), ...)`；[install.rs](../../crates/kk-engine/src/settle/install.rs) 依赖内建绑定和规则；其他原生阶段也未按内容选择完整门控。当前运行范围见[Mod 执行](../architecture/mod-execution.md)，首片开发见[完整玩法计划](../plans/mod-complete-gameplay.md)。
+截至 `90b670f`，JS 包装载、冻结与选择展开已实现，但 [realm.rs](../../crates/kk-mod-host/src/realm.rs) 仍固定调用 `freeze_with_builtin(builtin::link(), ...)`——builtin 内建贡献不可经选择关闭（过渡范围，随 N2/N3 逐族迁移）；[install.rs](../../crates/kk-engine/src/settle/install.rs) 依赖内建绑定和规则；其他原生阶段也未按内容选择完整门控。当前运行范围见[Mod 执行](../architecture/mod-execution.md)，首片开发见[完整玩法计划](../plans/mod-complete-gameplay.md)。
 
 N1a 已提供[clockwork 官方生命周期原型](../../mods/official/clockwork/README.md)，经同一公共 SDK 与 sim 显式包加载验证自主对象 tick、玩家类和查询。它没有按官方 ID 提权，也尚不具备资源生产、建造或完整内容选择能力；N1b 另提供[nursery 对象操作原型](../../mods/official/nursery/README.md)，验证自主生成/更新/到期删除；这两包仍是接口原型，默认 builtin 固定装配的过渡范围仍保留。
 

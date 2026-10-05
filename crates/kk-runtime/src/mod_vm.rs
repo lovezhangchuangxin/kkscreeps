@@ -177,6 +177,9 @@ impl ModVm {
             return Err("故障注入：Mod VM 重新注册后恢复失败".into());
         }
         // 全部注册与身份校验成功后才发布替代 VM；失败时保持空槽，允许再次恢复。
+        // 组合同步为新 realm 的产物：正常恢复与原值逐项一致（身份已核验），
+        // 避免诊断面滞留重建前的旧副本。
+        self.composition = registered.composition;
         self.realm = Some(replacement);
         Ok(())
     }
@@ -228,6 +231,69 @@ mod tests {
         assert!(vm.needs_recovery());
         vm.packages.clear();
         vm.recover()?;
+        Ok(())
+    }
+
+    #[test]
+    fn selection_drift_is_rejected_by_recovery_identity() -> Result<(), String> {
+        // 两个可注册包；启动时只选择 first。恢复必须用分片私有的同一
+        // 选择快照：漂移的选择会改变实际安装内容，被 PlanHash 核验拒绝。
+        // 同一线程同一时刻只保留一个 realm（V8 isolate 进入栈纪律）。
+        let make = |id: &str| -> Result<ModPackage, String> {
+            Ok(ModPackage {
+                manifest: serde_json::from_value(
+                    serde_json::json!({"id":id,"version":"1.0.0","apiVersion":"^1.0.0"}),
+                )
+                .map_err(|e| e.to_string())?,
+                root: std::env::temp_dir().join(format!("kk-mod-vm-selection-{id}")),
+                files: BTreeMap::from([(
+                    "server.js".into(),
+                    b"export default function register() {}".to_vec(),
+                )]),
+            })
+        };
+        let packages = BTreeMap::from([
+            ("first".to_string(), make("first")?),
+            ("second".to_string(), make("second")?),
+        ]);
+        let options = RegisterOptions {
+            selection: kk_mod_host::ContentSelection {
+                include: BTreeSet::from(["first".to_string()]),
+                exclude: BTreeSet::new(),
+            },
+            ..Default::default()
+        };
+        let mut realm = ModRealm::with_options(&options).map_err(|e| e.to_string())?;
+        let registered = realm
+            .register(&packages, options.clone())
+            .map_err(|e| e.to_string())?;
+        let selected_only = registered.plan.hash();
+        drop(realm);
+        // 全量注册（不做选择）是不同计划：证明选择确实改变实际内容身份。
+        let hash_all = {
+            let mut all = ModRealm::new().map_err(|e| e.to_string())?;
+            let all_registered = all
+                .register(&packages, RegisterOptions::default())
+                .map_err(|e| e.to_string())?;
+            all_registered.plan.hash()
+        };
+        assert_ne!(hash_all, selected_only);
+        let mut realm = ModRealm::with_options(&options).map_err(|e| e.to_string())?;
+        let registered = realm
+            .register(&packages, options.clone())
+            .map_err(|e| e.to_string())?;
+        let mut vm = ModVm::new(realm, packages, options, &registered);
+        vm.invalidate();
+        vm.recover()?;
+        assert_eq!(vm.composition().selection.selected, vec!["first"]);
+        // 启动快照被漂移修改时，恢复拒绝发布替代 VM，保持空槽。
+        vm.options.selection.include.insert("second".into());
+        vm.invalidate();
+        assert!(vm.recover().unwrap_err().contains("计划不匹配"));
+        assert!(vm.needs_recovery());
+        vm.options.selection.include.remove("second");
+        vm.recover()?;
+        assert!(!vm.needs_recovery());
         Ok(())
     }
 
