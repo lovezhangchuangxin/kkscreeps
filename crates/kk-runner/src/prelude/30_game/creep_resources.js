@@ -66,7 +66,12 @@
     const raw = gw.rawById.get(id);
     if (!raw) return undefined;
     if (raw.type === 'spawn') return raw;
-    if (raw.type === 'structure' && STRUCTURE_REGISTER_TYPES.has(raw.structureType)) return raw;
+    if (raw.type === 'structure'
+      && (STRUCTURE_REGISTER_TYPES.has(raw.structureType)
+        || (gw.modApi !== undefined && gw.modApi.buildings !== undefined
+          && gw.modApi.buildings[raw.structureType] !== undefined))) {
+      return raw;
+    }
     return undefined;
   }
 

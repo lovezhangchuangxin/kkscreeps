@@ -291,6 +291,10 @@ impl Engine {
 
     /// 当前生效的资源目录：内建 RESOURCES_ALL 加计划声明的命名空间
     /// 资源（只读引用）。市场/跨房发送不读它——它们显式只认内建资源。
+    pub fn buildings(&self) -> &kk_mod_api::buildings::BuildingCatalog {
+        &self.buildings
+    }
+
     pub fn resources(&self) -> &kk_mod_api::resources::ResourceCatalog {
         &self.resources
     }

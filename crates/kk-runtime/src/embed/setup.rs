@@ -239,6 +239,11 @@ impl EmbedEngine {
                     resources_all = Some(serde_json::json!(catalog.player_resources_all()));
                 }
             }
+            // 建筑目录与玩家面同源：玩家类校验在此失败（非法标识符或重复），
+            // 不产出半装好的分片；寻路语义与成本键供沙箱预检消费。
+            let building_surface =
+                kk_mod_api::buildings::BuildingCatalog::from_plan(&registered.plan)
+                    .map_err(|error| anyhow::anyhow!("mod 建筑目录：{error}"))?;
             let mod_player_api = {
                 let modules = registered
                     .player_modules
@@ -265,11 +270,30 @@ impl EmbedEngine {
                     .iter()
                     .map(|key| key.as_str().to_string())
                     .collect::<Vec<_>>();
-                (!modules.is_empty() || !types.is_empty() || !intents.is_empty()).then(|| {
+                let buildings = building_surface
+                    .iter()
+                    .map(|building| {
+                        (
+                            building.key.to_string(),
+                            building.pathing.as_str().to_string(),
+                            building
+                                .cost
+                                .iter()
+                                .map(|(resource, _)| resource.clone())
+                                .collect::<Vec<_>>(),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                (!modules.is_empty()
+                    || !types.is_empty()
+                    || !intents.is_empty()
+                    || !buildings.is_empty())
+                .then(|| {
                     std::sync::Arc::new(kk_runner::ModPlayerApi {
                         modules: std::sync::Arc::new(modules),
                         types,
                         intents,
+                        buildings,
                     })
                 })
             };
@@ -438,7 +462,7 @@ impl EmbedEngine {
                     time,
                     links: self.engine.links(),
                     stores: self.engine.stores(),
-                    buildings: Default::default(),
+                    buildings: self.engine.buildings().clone(),
                     controller: None,
                     name_seq: self.engine.world.next_obj_id() as usize,
                 };
@@ -479,7 +503,7 @@ impl EmbedEngine {
             time: self.engine.world.time(),
             links: self.engine.links(),
             stores: self.engine.stores(),
-            buildings: Default::default(),
+            buildings: self.engine.buildings().clone(),
             controller: self.engine.world.room(room).and_then(|r| r.controller()),
             name_seq: self.engine.world.next_obj_id() as usize,
         };

@@ -419,12 +419,26 @@
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;
     if (countActiveParts(this.body, C.WORK) === 0) return C.ERR_NO_BODYPART;
-    if (!carriedEnergy(this)) return C.ERR_NOT_ENOUGH_RESOURCES;
+    // Mod 建筑的成本资源集可不含 energy：任一成本资源有持有即可通过
+    // 预检，支付比例由结算按配方定论。
+    const modBuilding = gw.modApi === undefined ? undefined
+      : gw.modApi.buildings[target && target.structureType];
+    if (modBuilding === undefined && !carriedEnergy(this)) {
+      return C.ERR_NOT_ENOUGH_RESOURCES;
+    }
+    if (modBuilding !== undefined) {
+      const hasInput = modBuilding.cost.some(function (resource) {
+        return ((this.store && this.store[resource]) || 0) > 0;
+      }, this);
+      if (!hasInput) return C.ERR_NOT_ENOUGH_RESOURCES;
+    }
     if (!(target && target.id && target instanceof globalThis.ConstructionSite)) {
       return C.ERR_INVALID_TARGET;
     }
     if (!this.pos.inRangeTo(target.pos, 3)) return C.ERR_NOT_IN_RANGE;
-    if ((C.OBSTACLE_OBJECT_TYPES || []).includes(target.structureType)) {
+    const siteIsObstacle = (C.OBSTACLE_OBJECT_TYPES || []).includes(target.structureType)
+      || (modBuilding !== undefined && modBuilding.pathing === 'obstacle');
+    if (siteIsObstacle) {
       let objectsInTile = false;
       let creepsInTile = false;
       let myCreepsInTile = false;
@@ -434,7 +448,10 @@
         if (o.room !== target.pos.roomName || o.x !== target.pos.x || o.y !== target.pos.y) continue;
         const t = o.type === 'structure' || o.type === 'spawn'
           ? (o.structureType || 'spawn') : o.type;
-        if (!(C.OBSTACLE_OBJECT_TYPES || []).includes(t)) continue;
+        const entry = gw.modApi === undefined ? undefined : gw.modApi.buildings[t];
+        const obstacleType = (C.OBSTACLE_OBJECT_TYPES || []).includes(t)
+          || (entry !== undefined && entry.pathing === 'obstacle' && o.type === 'structure');
+        if (!obstacleType) continue;
         if (o.type === 'creep') {
           creepsInTile = true;
           if (o.owner === this.owner.username) myCreepsInTile = true;

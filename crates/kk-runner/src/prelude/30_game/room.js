@@ -43,23 +43,35 @@
     }
     const safeMode = room.controller && room.controller.safeMode && room.controller.my;
     if (opts.ignoreCreeps || safeMode) obstacles = _.without(obstacles, 'creep', 'powerCreep');
+    // Mod 建筑按声明的寻路语义进矩阵：obstacle 阻断、road 按道路成本；
+    // 与官方 makePathfindingGrid2 只按类型名查表不同，语义来自冻结计划。
+    const modBuildings = gw.modApi === undefined ? undefined : gw.modApi.buildings;
     for (let i = 0; i < state.objects.length; i++) {
       const object = state.objects[i];
       let type = object.type === 'structure' ? object.structureType : object.type;
       if (type === 'wall') type = 'constructedWall';
+      const modPathing = modBuildings === undefined ? undefined : modBuildings[type];
       if (_.contains(obstacles, type)
         || !opts.ignoreCreeps && safeMode && (type === 'creep' || type === 'powerCreep')
           && object.owner === gw.viewerName
         || !opts.ignoreDestructibleStructures && type === 'rampart' && !object.isPublic
           && object.owner !== gw.viewerName
+        || !opts.ignoreDestructibleStructures && modPathing !== undefined
+          && object.type === 'structure' && modPathing.pathing === 'obstacle'
         || !opts.ignoreDestructibleStructures && type === 'constructionSite'
-          && object.owner === gw.viewerName && _.contains(C_OBSTACLE_OBJECT_TYPES, object.structureType)) {
+          && object.owner === gw.viewerName
+          && (_.contains(C_OBSTACLE_OBJECT_TYPES, object.structureType)
+            || (modBuildings !== undefined && modBuildings[object.structureType] !== undefined
+              && modBuildings[object.structureType].pathing === 'obstacle'))) {
         costs.set(object.x, object.y, 255);
       }
       if (type === 'swamp' && costs.get(object.x, object.y) === 0) {
         costs.set(object.x, object.y, opts.ignoreRoads ? 5 : 10);
       }
-      if (!opts.ignoreRoads && type === 'road' && costs.get(object.x, object.y) < 255) {
+      if (!opts.ignoreRoads && (type === 'road'
+          || (modPathing !== undefined && object.type === 'structure'
+            && modPathing.pathing === 'road'))
+        && costs.get(object.x, object.y) < 255) {
         costs.set(object.x, object.y, 1);
       }
     }
@@ -677,7 +689,12 @@
      *  工地）< CONTROLLER_STRUCTURES[type][rcl]（rcl：有主 controller 的
      *  level，无主/无 controller 为 0——官方 (user||owner) 真值门的等价物）。
      *  表缺类型/配额 undefined → NaN 比较恒 false，官方同形。 */
+    // Mod 建筑不占用内建 RCL 配额表（当前版本声明面无逐级配额）。
     function checkControllerAvailability(structureType, room) {
+      const modBuildings = gw.modApi === undefined ? undefined : gw.modApi.buildings;
+      if (modBuildings !== undefined && modBuildings[structureType] !== undefined) {
+        return true;
+      }
       const controller = room.controller;
       let rcl = 0;
       if (controller && controller.level && controller.owner) rcl = controller.level;
@@ -697,6 +714,9 @@
     function checkConstructionSiteObjects(structureType, x, y) {
       const typeOf = (o) => ((o.type === 'structure' || o.type === 'spawn') && o.structureType)
         ? o.structureType : o.type;
+      const modBuildings = gw.modApi === undefined ? undefined : gw.modApi.buildings;
+      const costBearing = (t) => C_CONSTRUCTION_COST[t]
+        || (modBuildings !== undefined && modBuildings[t] !== undefined);
       let hasMineral = false;
       let hasExtractor = false;
       const isExtractor = structureType === 'extractor';
@@ -709,7 +729,7 @@
         if (t === 'extractor') hasExtractor = true;
         if (isExtractor) continue;
         if (structureType !== 'rampart' && structureType !== 'road'
-          && t !== 'rampart' && t !== 'road' && C_CONSTRUCTION_COST[t]) {
+          && t !== 'rampart' && t !== 'road' && costBearing(t)) {
           return false;
         }
       }
@@ -837,7 +857,11 @@
       if (typeof secondArg === 'string' && structureType === undefined) {
         structureType = secondArg;
       }
-      if (!C_CONSTRUCTION_COST[structureType]) return ERR_INVALID_ARGS;
+      const modBuildings = gw.modApi === undefined ? undefined : gw.modApi.buildings;
+      if (!C_CONSTRUCTION_COST[structureType]
+        && !(modBuildings !== undefined && modBuildings[structureType] !== undefined)) {
+        return ERR_INVALID_ARGS;
+      }
       if (structureType === 'spawn' && typeof name === 'string') {
         if (name.length > 100) return ERR_INVALID_ARGS;
         if (gw.createdSpawnNames.has(name)) return ERR_INVALID_ARGS;

@@ -268,6 +268,13 @@
       const entry = gw.modApi === undefined ? undefined : gw.modApi.types[o.modType];
       ctor = entry === undefined ? null : entry.cls;
       label = o.modType;
+    } else if (o.type === 'structure' && gw.modApi !== undefined
+      && gw.modApi.buildings !== undefined
+      && gw.modApi.buildings[o.structureType] !== undefined) {
+      // Mod 建筑的玩家类由玩家模块安装（gw.modApi.buildings[key].cls）。
+      const entry = gw.modApi.buildings[o.structureType];
+      ctor = entry.cls;
+      label = o.structureType;
     } else {
       const cls = classGlobalFor(o);
       ctor = cls ? classCtor(cls) : null;

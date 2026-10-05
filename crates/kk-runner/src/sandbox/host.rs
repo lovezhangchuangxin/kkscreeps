@@ -318,6 +318,13 @@ pub(super) fn install_mod_player_api(
             .map(|(key, find, look)| serde_json::json!({ "key": key, "find": find, "look": look }))
             .collect::<Vec<_>>(),
         "intents": api.intents,
+        "buildings": api
+            .buildings
+            .iter()
+            .map(|(key, pathing, cost)| serde_json::json!({
+                "key": key, "pathing": pathing, "cost": cost,
+            }))
+            .collect::<Vec<_>>(),
         "findBase": find_base,
     });
     runtime.execute_script(

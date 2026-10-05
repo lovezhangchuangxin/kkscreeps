@@ -25,7 +25,9 @@ pub struct ModPlayerModule {
 
 /// Mod 玩家面安装清单。`types` 的 FIND 常量由冻结计划确定性分配
 /// （下界 `find_base` 随清单注入沙箱，Rust 侧是唯一权威来源）；
-/// `intents` 是玩家可发出的 Mod 意图键（emit 预检目录）。
+/// `intents` 是玩家可发出的 Mod 意图键（emit 预检目录）；
+/// `buildings` 是计划声明的可建造建筑（玩家类绑定、寻路语义与成本
+/// 资源键，供工地预检、代价矩阵与 transfer 白名单消费）。
 #[derive(Debug, Clone)]
 pub struct ModPlayerApi {
     /// 依依赖拓扑序（被依赖者在前）。Arc 共享：装载器与沙箱配置引用
@@ -34,6 +36,8 @@ pub struct ModPlayerApi {
     /// (类型键, FIND 常量, LOOK 常量)。
     pub types: Vec<(String, i64, String)>,
     pub intents: Vec<String>,
+    /// (类型键, 寻路语义 obstacle/plain/road, 成本资源键列表)。
+    pub buildings: Vec<(String, String, Vec<String>)>,
 }
 
 /// 玩家模块的虚拟方案：命名空间作为 URL authority（manifest id 字符集

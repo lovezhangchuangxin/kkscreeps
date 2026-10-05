@@ -4,7 +4,9 @@
  * 宿主先注入清单（globalThis.__kkModApiManifest，本段入口即取即删），
  * 再逐包以 createInstallApi(namespace) 产出安装 API、经 ESM 装载器调用
  * 包入口的 default(api)，全部模块完成后 finalize 校验必需绑定并登记
- * gw.modApi 供对象装配与 FIND/LOOK 查询使用。
+ * gw.modApi 供对象装配与 FIND/LOOK 查询使用；建筑类型同样经
+ * api.buildings.bind 绑定玩家类，登记的寻路语义与成本键供工地预检、
+ * 代价矩阵与 transfer 白名单消费。
  * api 对象的权限止于闭包引用（gw 与安装期捕获的内建类）；__kkp 删除后
  * 依然可用，玩家后续的原型改写不影响安装结果。
  */
@@ -26,6 +28,13 @@
     const t = manifest.types[i];
     types[t.key] = { find: t.find, look: t.look, cls: null };
     findByConst[t.find] = t.key;
+  }
+  // 建筑类型键 → { pathing, cost, cls }：完工结构记录的 structureType 命中
+  // 本表时使用绑定玩家类；寻路语义与成本键供预检/代价矩阵消费。
+  const buildings = __Object.create(null);
+  for (let i = 0; i < manifest.buildings.length; i++) {
+    const b = manifest.buildings[i];
+    buildings[b.key] = { pathing: b.pathing, cost: b.cost, cls: null };
   }
   // emit 目录按安装包的命名空间裁剪（纵深防御：A 包的模块不经 B 包的
   // 键发出意图；结算侧权威校验仍同源全目录）。
@@ -83,6 +92,20 @@
       types[typeKey].cls = cls;
     }
 
+    // 建筑玩家类绑定：与对象绑定同律（清单内类型、构造器、不得重复）。
+    function bindBuilding(typeKey, cls) {
+      if (typeof typeKey !== 'string' || buildings[typeKey] === undefined) {
+        throw new Error('建筑 ' + JSON.stringify(typeKey) + ' 不在冻结计划中（不能绑定玩家类）');
+      }
+      if (typeof cls !== 'function') {
+        throw new Error('建筑玩家类绑定需要一个构造器（' + namespace + ' → ' + typeKey + '）');
+      }
+      if (buildings[typeKey].cls !== null) {
+        throw new Error('建筑 ' + typeKey + ' 已绑定玩家类（不得重复绑定）');
+      }
+      buildings[typeKey].cls = cls;
+    }
+
     function defineGlobal(name, value) {
       if (typeof name !== 'string' || !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name)) {
         throw new Error('全局名 ' + JSON.stringify(name) + ' 不是合法标识符');
@@ -138,6 +161,7 @@
     return __Object.freeze({
       builtins,
       objects: __Object.freeze({ bind }),
+      buildings: __Object.freeze({ bind: bindBuilding }),
       globals: __Object.freeze({ define: defineGlobal }),
       view,
       intents: intentsApi,
@@ -157,9 +181,22 @@
       throw new Error('玩家模块未绑定玩家面类型：' + missing.join(', ')
         + '（声明包须在 player.js 内 api.objects.bind）');
     }
+    const missingBuildings = [];
+    const buildingKeys = __keys(buildings);
+    for (let i = 0; i < buildingKeys.length; i++) {
+      if (buildings[buildingKeys[i]].cls === null) missingBuildings.push(buildingKeys[i]);
+    }
+    if (missingBuildings.length > 0) {
+      throw new Error('玩家模块未绑定建筑玩家类：' + missingBuildings.join(', ')
+        + '（声明包须在 player.js 内 api.buildings.bind）');
+    }
     // modFindBase 是 Rust 清单权威下界（Rust 侧唯一来源，沙箱不重复
     // 硬编码）；无类型时为 Infinity——mod 查询分支恒不命中。
-    gw.modApi = { types, findByConst, modFindBase: manifest.findBase === undefined ? Infinity : manifest.findBase };
+    gw.modApi = {
+      types, findByConst,
+      modFindBase: manifest.findBase === undefined ? Infinity : manifest.findBase,
+      buildings,
+    };
     return { globals: definedGlobals.slice(), types: keys };
   }
 

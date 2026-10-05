@@ -40,6 +40,7 @@ fn counter_api(player_source: &str) -> std::sync::Arc<ModPlayerApi> {
             "testmod:counter".to_string(),
         )],
         intents: vec!["testmod:increment".to_string()],
+        buildings: Vec::new(),
     })
 }
 
@@ -175,6 +176,7 @@ pub(super) fn mod_player_api_record_face_impl() -> anyhow::Result<()> {
             ),
         ],
         intents: template.intents.clone(),
+        buildings: Vec::new(),
     };
     let config = SandboxConfig {
         extension_intents: true,
@@ -365,6 +367,7 @@ pub(super) fn mod_player_api_module_gates_impl() -> anyhow::Result<()> {
         }]),
         types: template.types.clone(),
         intents: template.intents.clone(),
+        buildings: Vec::new(),
     };
     let mut sb = Sandbox::new(SandboxConfig {
         extension_intents: true,

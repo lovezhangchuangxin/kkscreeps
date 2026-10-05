@@ -248,5 +248,7 @@ mod composition;
 #[path = "sim_tests/rules.rs"]
 mod rules;
 
+#[path = "sim_tests/buildings.rs"]
+mod buildings;
 #[path = "sim_tests/checkpoint.rs"]
 mod checkpoint;
