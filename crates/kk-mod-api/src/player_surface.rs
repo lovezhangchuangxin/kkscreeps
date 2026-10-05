@@ -220,6 +220,7 @@ mod tests {
             slots: Vec::new(),
             handlers: Vec::new(),
             resources: Vec::new(),
+            buildings: Vec::new(),
         };
         crate::freeze_with_builtin(
             crate::builtin::link(),
@@ -312,6 +313,7 @@ mod tests {
             slots: Vec::new(),
             handlers: Vec::new(),
             resources: Vec::new(),
+            buildings: Vec::new(),
         };
         let plan = crate::freeze_with_builtin(
             crate::builtin::link(),
@@ -377,6 +379,7 @@ mod tests {
             }],
             handlers: Vec::new(),
             resources: Vec::new(),
+            buildings: Vec::new(),
         };
         let plan = crate::freeze_with_builtin(
             crate::builtin::link(),

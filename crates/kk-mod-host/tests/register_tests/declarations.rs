@@ -587,3 +587,173 @@ export default function register() {
     }
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// 建筑声明：成功进入计划与组合报告，配方数据完整透传。
+#[test]
+fn building_declarations_enter_plan_and_report() {
+    let root = temp_root("buildings-ok");
+    write_pkg(
+        &root,
+        "forge",
+        &[(
+            "server.js",
+            r#"
+import { createApi } from '@kkscreeps/mod';
+export default function register(api) {
+  api.resources.define('forge:ore');
+  api.resources.define('forge:ingot');
+  api.buildings.define('forge:foundry', {
+    playerClass: 'Foundry',
+    cost: { energy: 5000, 'forge:ore': 200 },
+    hitsMax: 5000,
+    pathing: 'obstacle',
+    capacity: 1000,
+    production: {
+      interval: 12,
+      inputs: { energy: 60, 'forge:ore': 30 },
+      outputs: { 'forge:ingot': 10 },
+    },
+  });
+}
+"#,
+        )],
+    );
+    let packages = discover_packages(&root).expect("可装载");
+    let mut realm = ModRealm::new().expect("realm 可创建");
+    let registered = realm
+        .register(&packages, RegisterOptions::default())
+        .expect("可注册");
+    let catalog =
+        kk_mod_api::buildings::BuildingCatalog::from_plan(&registered.plan).expect("玩家类名合法");
+    let b = catalog.get("forge:foundry").expect("建筑进入目录");
+    assert_eq!(
+        b.cost,
+        vec![("energy".to_string(), 5000), ("forge:ore".to_string(), 200)]
+    );
+    assert_eq!(b.progress_total(), 5000);
+    assert_eq!(b.hits_max, 5000);
+    assert_eq!(b.pathing, kk_mod_api::buildings::BuildingPathing::Obstacle);
+    assert_eq!(b.store_capacity, Some(1000));
+    let production = b.production.as_ref().expect("生产配方透传");
+    assert_eq!(production.interval, 12);
+    assert_eq!(
+        production.inputs,
+        vec![("energy".to_string(), 60), ("forge:ore".to_string(), 30)]
+    );
+    assert_eq!(production.outputs, vec![("forge:ingot".to_string(), 10)]);
+    // 组合报告记录建筑目录与定义来源。
+    assert_eq!(registered.composition.buildings.len(), 1);
+    assert_eq!(
+        registered.composition.buildings[0].key.as_str(),
+        "forge:foundry"
+    );
+    assert_eq!(registered.composition.buildings[0].source, "forge");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn building_declaration_failures() {
+    type BuildingCase = (&'static str, &'static str, &'static str);
+    let cases: Vec<BuildingCase> = vec![
+        (
+            "foreign-building-key",
+            r#"
+import { createApi } from '@kkscreeps/mod';
+export default function register(api) {
+  api.buildings.define('other:mill', { playerClass: 'Mill', cost: { energy: 100 }, hitsMax: 100, pathing: 'obstacle' });
+}
+"#,
+            "必须以",
+        ),
+        (
+            "unknown-building-option",
+            r#"
+import { createApi } from '@kkscreeps/mod';
+export default function register(api) {
+  api.buildings.define('unknown-building-option:mill', { playerClass: 'Mill', cost: { energy: 100 }, hitsMax: 100, pathing: 'obstacle', hitMax: 200 });
+}
+"#,
+            "未知选项",
+        ),
+        (
+            "missing-building-cost",
+            r#"
+import { createApi } from '@kkscreeps/mod';
+export default function register(api) {
+  api.buildings.define('missing-building-cost:mill', { playerClass: 'Mill', hitsMax: 100, pathing: 'obstacle' });
+}
+"#,
+            "缺少成本表",
+        ),
+        (
+            "bad-pathing",
+            r#"
+import { createApi } from '@kkscreeps/mod';
+export default function register(api) {
+  api.buildings.define('bad-pathing:mill', { playerClass: 'Mill', cost: { energy: 100 }, hitsMax: 100, pathing: 'sky' });
+}
+"#,
+            "pathing",
+        ),
+        (
+            "missing-player-class",
+            r#"
+import { createApi } from '@kkscreeps/mod';
+export default function register(api) {
+  api.buildings.define('missing-player-class:mill', { cost: { energy: 100 }, hitsMax: 100, pathing: 'road' });
+}
+"#,
+            "playerClass",
+        ),
+        (
+            "unknown-production-option",
+            r#"
+import { createApi } from '@kkscreeps/mod';
+export default function register(api) {
+  api.buildings.define('unknown-production-option:mill', { playerClass: 'Mill', cost: { energy: 100 }, hitsMax: 100, pathing: 'plain', production: { rate: 5 } });
+}
+"#,
+            "生产配方声明了未知选项",
+        ),
+        (
+            "outputs-without-capacity",
+            r#"
+import { createApi } from '@kkscreeps/mod';
+export default function register(api) {
+  api.buildings.define('outputs-without-capacity:mill', { playerClass: 'Mill', cost: { energy: 100 }, hitsMax: 100, pathing: 'plain', production: { interval: 10, outputs: { energy: 5 } } });
+}
+"#,
+            "必须声明仓库容量",
+        ),
+        (
+            "cost-unknown-resource",
+            r#"
+import { createApi } from '@kkscreeps/mod';
+export default function register(api) {
+  api.buildings.define('cost-unknown-resource:mill', { playerClass: 'Mill', cost: { 'cost-unknown-resource:ghost': 10 }, hitsMax: 100, pathing: 'plain' });
+}
+"#,
+            "引用未知资源",
+        ),
+        (
+            "raw-building-extra-member",
+            r#"
+export default function register() {
+  Deno.core.ops.op_mod_declare('building', { key: 'raw-building-extra-member:mill', playerClass: 'Mill', cost: { energy: 100 }, hitsMax: 100, pathing: 'plain', hitMax: 1 });
+}
+"#,
+            "未知选项",
+        ),
+    ];
+    let root = temp_root("buildings-bad");
+    for (name, server, needle) in cases {
+        write_pkg(&root, name, &[("server.js", server)]);
+        let error = register_root_error(&root);
+        assert!(
+            error.contains(needle),
+            "包 {name} 的错误应包含 {needle:?}，实得 {error}"
+        );
+        let _ = std::fs::remove_dir_all(root.join(name));
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}

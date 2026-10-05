@@ -30,6 +30,7 @@ fn resource_plane() -> kk_engine::settle::Plane {
                 key: kk_mod_api::Key::new("resmod:dust").unwrap(),
             },
         ],
+        buildings: Vec::new(),
     };
     contribution.resources.sort_by(|a, b| a.key.cmp(&b.key));
     let plan = std::sync::Arc::new(
@@ -416,6 +417,7 @@ fn market_and_terminal_send_reject_declared_resources() {
         resources: vec![kk_mod_api::resources::ResourceDescriptor {
             key: kk_mod_api::Key::new("resmod:crystal").unwrap(),
         }],
+        buildings: Vec::new(),
     };
     contribution.resources.sort_by(|a, b| a.key.cmp(&b.key));
     let plan = std::sync::Arc::new(

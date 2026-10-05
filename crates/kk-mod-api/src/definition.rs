@@ -287,6 +287,9 @@ pub struct Contribution {
     pub handlers: Vec<HandlerDescriptor>,
     /// 本包声明的命名空间资源；键归本包命名空间，进 PlanHash 与玩家常量。
     pub resources: Vec<crate::resources::ResourceDescriptor>,
+    /// 本包声明的可建造建筑（纯数据配方）；键归本包命名空间，进 PlanHash，
+    /// 由宿主通用执行器消费（工地/建造/耐久/库存/生产/寻路）。
+    pub buildings: Vec<crate::buildings::BuildingDescriptor>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]

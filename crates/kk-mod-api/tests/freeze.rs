@@ -43,6 +43,7 @@ fn module(namespace: &str) -> Contribution {
         slots: Vec::new(),
         handlers: Vec::new(),
         resources: Vec::new(),
+        buildings: Vec::new(),
     }
 }
 fn override_rule(namespace: &str, value: Number) -> Contribution {
@@ -69,6 +70,8 @@ fn error(c: Contribution, expected: &str) {
     assert!(error.contains(expected), "{error}");
 }
 
+#[path = "freeze_cases/buildings.rs"]
+mod buildings;
 #[path = "freeze_cases/catalog.rs"]
 mod catalog;
 #[path = "freeze_cases/handlers.rs"]

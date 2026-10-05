@@ -126,6 +126,7 @@ mod tests {
             slots: Vec::new(),
             handlers: Vec::new(),
             resources: Vec::new(),
+            buildings: Vec::new(),
         };
         contribution.resources.push(ResourceDescriptor {
             key: Key::new(resource).unwrap(),

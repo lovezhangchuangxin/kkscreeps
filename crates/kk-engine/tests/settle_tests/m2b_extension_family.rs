@@ -45,6 +45,7 @@ fn extension_mod() -> Contribution {
         slots: Vec::new(),
         handlers: Vec::new(),
         resources: Vec::new(),
+        buildings: Vec::new(),
     };
     let mut mount = |short: &str, visibility: Visibility, schema: ValueSchema| {
         let bind = key(&format!("extmod:bind.{short}"));

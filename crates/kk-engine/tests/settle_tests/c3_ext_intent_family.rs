@@ -129,6 +129,7 @@ fn counter_contribution(handlers: &[(&str, HandlerKind)]) -> Contribution {
         }],
         handlers: Vec::new(),
         resources: Vec::new(),
+        buildings: Vec::new(),
     };
     for (id, kind) in handlers {
         let key = Key::new(format!("extmod:handler.{id}")).unwrap();
@@ -168,6 +169,7 @@ fn link_handler_contribution(id: &str, kind: HandlerKind) -> Contribution {
         constraints: BTreeSet::new(),
         slots: Vec::new(),
         resources: Vec::new(),
+        buildings: Vec::new(),
         handlers: vec![HandlerDescriptor {
             key: key.clone(),
             slot: Key::new("builtin:link.transfer").unwrap(),

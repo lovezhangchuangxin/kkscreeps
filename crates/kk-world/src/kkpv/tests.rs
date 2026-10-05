@@ -82,6 +82,7 @@ fn ext_contribution() -> kk_mod_api::Contribution {
         slots: Vec::new(),
         handlers: Vec::new(),
         resources: Vec::new(),
+        buildings: Vec::new(),
     }
 }
 

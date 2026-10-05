@@ -229,6 +229,80 @@ export function createApi(namespace, config) {
     },
   };
 
+  // 可建造建筑声明：纯数据配方（成本向量/耐久/寻路语义/容量/生产配方），
+  // 由宿主通用执行器消费——工地、建造进度、受击维修、库存与生产不需要
+  // 作者提供处理器。键即完工结构的 structureType（玩家面类型名）。
+  const buildings = {
+    define(key, spec) {
+      ownKey(namespace, key);
+      if (spec === null || typeof spec !== 'object' || Array.isArray(spec)) {
+        throw new Error(`建筑 ${key} 的说明须为对象`);
+      }
+      const known = ['playerClass', 'cost', 'hitsMax', 'pathing', 'capacity', 'production'];
+      for (const member of Object.keys(spec)) {
+        if (known.indexOf(member) === -1) {
+          throw new Error(`建筑 ${key} 声明了未知选项 ${member}`);
+        }
+      }
+      if (typeof spec.playerClass !== 'string' || spec.playerClass === '') {
+        throw new Error(`建筑 ${key} 缺少 playerClass`);
+      }
+      if (spec.cost === null || typeof spec.cost !== 'object' || Array.isArray(spec.cost)) {
+        throw new Error(`建筑 ${key} 缺少成本表（资源名到数量的对象）`);
+      }
+      for (const [resource, amount] of Object.entries(spec.cost)) {
+        if (!Number.isSafeInteger(amount) || amount < 0) {
+          throw new Error(`建筑 ${key} 的成本资源 ${resource} 数量须为非负整数`);
+        }
+      }
+      if (!Number.isSafeInteger(spec.hitsMax) || spec.hitsMax < 0) {
+        throw new Error(`建筑 ${key} 的 hitsMax 须为非负整数`);
+      }
+      if (spec.pathing !== 'obstacle' && spec.pathing !== 'plain' && spec.pathing !== 'road') {
+        throw new Error(`建筑 ${key} 的 pathing 须为 obstacle/plain/road`);
+      }
+      if (spec.capacity !== undefined
+        && (!Number.isSafeInteger(spec.capacity) || spec.capacity < 0)) {
+        throw new Error(`建筑 ${key} 的 capacity 须为非负整数`);
+      }
+      if (spec.production !== undefined && spec.production !== null) {
+        const p = spec.production;
+        if (p === null || typeof p !== 'object' || Array.isArray(p)) {
+          throw new Error(`建筑 ${key} 的生产配方须为对象`);
+        }
+        for (const member of Object.keys(p)) {
+          if (member !== 'interval' && member !== 'inputs' && member !== 'outputs') {
+            throw new Error(`建筑 ${key} 的生产配方声明了未知选项 ${member}`);
+          }
+        }
+        if (!Number.isSafeInteger(p.interval) || p.interval <= 0) {
+          throw new Error(`建筑 ${key} 的生产周期须为正整数`);
+        }
+        for (const table of ['inputs', 'outputs']) {
+          if (p[table] === undefined) continue;
+          if (p[table] === null || typeof p[table] !== 'object' || Array.isArray(p[table])) {
+            throw new Error(`建筑 ${key} 的生产${table === 'inputs' ? '输入' : '输出'}须为对象`);
+          }
+          for (const [resource, amount] of Object.entries(p[table])) {
+            if (!Number.isSafeInteger(amount) || amount < 0) {
+              throw new Error(`建筑 ${key} 的生产${table === 'inputs' ? '输入' : '输出'}资源 ${resource} 数量须为非负整数`);
+            }
+          }
+        }
+      }
+      declare('building', {
+        key,
+        playerClass: spec.playerClass,
+        cost: spec.cost,
+        hitsMax: spec.hitsMax,
+        pathing: spec.pathing,
+        capacity: spec.capacity,
+        production: spec.production,
+      });
+      return key;
+    },
+  };
+
   const mounts = {
     define(target, name, spec) {
       declare('mount', {
@@ -246,6 +320,7 @@ export function createApi(namespace, config) {
     handlers,
     rules,
     resources,
+    buildings,
     mounts,
   };
 }

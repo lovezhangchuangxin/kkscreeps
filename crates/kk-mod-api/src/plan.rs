@@ -153,6 +153,8 @@ pub struct ContributionPlan {
     /// 由 [`crate::resources::ResourceCatalog`] 合并提供。随贡献内容参与
     /// PlanHash，不同的资源目录得到不同的计划身份。
     pub(crate) resources: Box<[Key]>,
+    /// 计划声明的可建造建筑，按键排序；随贡献内容参与 PlanHash。
+    pub(crate) buildings: Box<[crate::buildings::BuildingDescriptor]>,
     pub(crate) slots: Box<[SlotPlan]>,
     pub(crate) intents: Box<[IntentDescriptor]>,
     pub(crate) bindings: Box<[Key]>,
@@ -172,6 +174,10 @@ impl ContributionPlan {
     /// 计划声明的命名空间资源（不含内建 RESOURCES_ALL），排序键集合。
     pub fn resources(&self) -> &[Key] {
         &self.resources
+    }
+    /// 计划声明的可建造建筑，按键排序。
+    pub fn buildings(&self) -> &[crate::buildings::BuildingDescriptor] {
+        &self.buildings
     }
     pub fn slots(&self) -> &[SlotPlan] {
         &self.slots

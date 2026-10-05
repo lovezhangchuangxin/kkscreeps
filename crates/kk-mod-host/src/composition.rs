@@ -50,6 +50,8 @@ pub struct CompositionReport {
     /// 计划声明的命名空间资源目录（报告版本 3 起提供）：键与定义来源。
     /// 内建 RESOURCES_ALL 不在此列；玩家常量由两者合并同步。
     pub resources: Vec<DeclaredResource>,
+    /// 计划声明的可建造建筑（报告版本 4 起提供）：键、定义来源与配方摘要。
+    pub buildings: Vec<DeclaredBuilding>,
     pub handlers: Vec<HandlerDescriptor>,
     pub slots: Vec<ComposedSlot>,
     pub rules: Vec<RuleSelection>,
@@ -65,6 +67,18 @@ pub struct CompositionReport {
 pub struct DeclaredResource {
     pub key: Key,
     pub source: String,
+}
+
+/// 组合报告中的建筑目录条目：配方数据随计划序列化，这里给诊断用的摘要。
+#[derive(Clone, Debug, Serialize)]
+pub struct DeclaredBuilding {
+    pub key: Key,
+    pub source: String,
+    pub cost: Vec<(String, u64)>,
+    pub hits_max: u64,
+    pub pathing: kk_mod_api::buildings::BuildingPathing,
+    pub store_capacity: Option<u64>,
+    pub production: Option<kk_mod_api::buildings::ProductionSpec>,
 }
 
 impl CompositionReport {
@@ -161,6 +175,21 @@ impl CompositionReport {
             })
             .collect();
         resources.sort_by(|a, b| a.key.cmp(&b.key));
+        let mut buildings: Vec<_> = all
+            .iter()
+            .flat_map(|c| {
+                c.buildings.iter().map(|building| DeclaredBuilding {
+                    key: building.key.clone(),
+                    source: c.source.namespace.clone(),
+                    cost: building.cost.clone(),
+                    hits_max: building.hits_max,
+                    pathing: building.pathing,
+                    store_capacity: building.store_capacity,
+                    production: building.production.clone(),
+                })
+            })
+            .collect();
+        buildings.sort_by(|a, b| a.key.cmp(&b.key));
         let slots = plan
             .slots()
             .iter()
@@ -181,11 +210,12 @@ impl CompositionReport {
             })
             .collect::<Result<_, String>>()?;
         Ok(Self {
-            report_version: 3,
+            report_version: 4,
             plan_hash: plan.hash().hex(),
             sources: plan.sources().clone(),
             selection: selection.clone(),
             resources,
+            buildings,
             handlers,
             slots,
             rules,

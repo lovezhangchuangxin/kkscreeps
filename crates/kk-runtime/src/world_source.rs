@@ -249,6 +249,7 @@ mod extension_projection_via_trait_tests {
             slots: Vec::new(),
             handlers: Vec::new(),
             resources: Vec::new(),
+            buildings: Vec::new(),
         };
         let _ = &mut contrib;
         let plan = kk_mod_api::freeze_with_builtin(

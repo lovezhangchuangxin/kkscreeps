@@ -67,6 +67,7 @@ fn overrides_mod(rules: &[(&str, kk_mod_api::Number)]) -> Contribution {
         slots: Vec::new(),
         handlers: Vec::new(),
         resources: Vec::new(),
+        buildings: Vec::new(),
     };
     for (rule, value) in rules {
         c.overrides.push(RuleOverride {

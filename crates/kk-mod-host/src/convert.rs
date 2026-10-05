@@ -66,6 +66,12 @@ fn as_u32(namespace: &str, value: &Value, field: &str) -> ModHostResult<u32> {
     Ok(raw as u32)
 }
 
+fn as_u64(namespace: &str, value: &Value, field: &str) -> ModHostResult<u64> {
+    value.get(field).and_then(Value::as_u64).ok_or_else(|| {
+        ModHostError::new(namespace.to_string(), format!("字段 {field} 须为非负整数"))
+    })
+}
+
 /// 存在但形状非法的数值选项一律报错：拼错形状静默落默认值等于改写
 /// 校验语义，与装载器的 fail-loud 立场冲突。
 fn optional_u32(namespace: &str, value: &Value, field: &str) -> ModHostResult<Option<u32>> {
@@ -333,6 +339,7 @@ pub fn build_contribution(
     let mut rules = Vec::new();
     let mut overrides = Vec::new();
     let mut resources = Vec::new();
+    let mut buildings = Vec::new();
     let mut slots = Vec::new();
     let mut handlers = Vec::new();
     let mut required_executables: BTreeSet<Key> = BTreeSet::new();
@@ -570,6 +577,106 @@ pub fn build_contribution(
                 }
                 resources.push(kk_mod_api::resources::ResourceDescriptor { key });
             }
+            "building" => {
+                let key = own_key(namespace, as_str(namespace, value, "key")?)?;
+                // 拒绝未知成员：拼错的选项静默落空等于改写建筑语义
+                //（与资源声明的 fail-loud 立场一致）。
+                for member in value.as_object().into_iter().flat_map(|o| o.keys()) {
+                    if !matches!(
+                        member.as_str(),
+                        "key"
+                            | "playerClass"
+                            | "cost"
+                            | "hitsMax"
+                            | "pathing"
+                            | "capacity"
+                            | "production"
+                    ) {
+                        return err(namespace, format!("建筑 {key} 声明了未知选项 {member}"));
+                    }
+                }
+                let player_class = match optional_str(value, "playerClass") {
+                    Some(name) if !name.is_empty() => name.to_string(),
+                    _ => {
+                        return err(
+                            namespace,
+                            format!("建筑 {key} 缺少 playerClass（玩家类名须显式命名）"),
+                        );
+                    }
+                };
+                let cost = resource_amounts(
+                    namespace,
+                    &key,
+                    value.get("cost").ok_or_else(|| {
+                        ModHostError::new(namespace.to_string(), format!("建筑 {key} 缺少成本表"))
+                    })?,
+                    "成本",
+                )?;
+                let hits_max = as_u64(namespace, value, "hitsMax").map_err(|_| {
+                    ModHostError::new(
+                        namespace.to_string(),
+                        format!("建筑 {key} 的 hitsMax 须为非负整数"),
+                    )
+                })?;
+                let pathing = match as_str(namespace, value, "pathing")? {
+                    "obstacle" => kk_mod_api::buildings::BuildingPathing::Obstacle,
+                    "plain" => kk_mod_api::buildings::BuildingPathing::Plain,
+                    "road" => kk_mod_api::buildings::BuildingPathing::Road,
+                    other => {
+                        return err(
+                            namespace,
+                            format!("建筑 {key} 的寻路语义 {other:?} 未知（obstacle/plain/road）"),
+                        );
+                    }
+                };
+                let store_capacity = match value.get("capacity") {
+                    None | Some(Value::Null) => None,
+                    Some(v) => Some(v.as_u64().ok_or_else(|| {
+                        ModHostError::new(
+                            namespace.to_string(),
+                            format!("建筑 {key} 的 capacity 须为非负整数"),
+                        )
+                    })?),
+                };
+                let production = match value.get("production") {
+                    None | Some(Value::Null) => None,
+                    Some(spec) => {
+                        for member in spec.as_object().into_iter().flat_map(|o| o.keys()) {
+                            if !matches!(member.as_str(), "interval" | "inputs" | "outputs") {
+                                return err(
+                                    namespace,
+                                    format!("建筑 {key} 的生产配方声明了未知选项 {member}"),
+                                );
+                            }
+                        }
+                        let interval = as_u32(namespace, spec, "interval")?;
+                        let inputs = spec
+                            .get("inputs")
+                            .map(|v| resource_amounts(namespace, &key, v, "生产输入"))
+                            .transpose()?
+                            .unwrap_or_default();
+                        let outputs = spec
+                            .get("outputs")
+                            .map(|v| resource_amounts(namespace, &key, v, "生产输出"))
+                            .transpose()?
+                            .unwrap_or_default();
+                        Some(kk_mod_api::buildings::ProductionSpec {
+                            interval,
+                            inputs,
+                            outputs,
+                        })
+                    }
+                };
+                buildings.push(kk_mod_api::buildings::BuildingDescriptor {
+                    key,
+                    player_class,
+                    cost,
+                    hits_max,
+                    pathing,
+                    store_capacity,
+                    production,
+                });
+            }
             "mount" => {
                 let target = value
                     .get("target")
@@ -623,7 +730,46 @@ pub fn build_contribution(
         slots,
         handlers,
         resources,
+        buildings,
     })
+}
+
+/// 资源名 -> 数量的声明表：非空字符串键、非负整数、键内不得重复；
+/// 数值域（1..=1e9、正容量等）在冻结期定论，这里拦明显畸形。
+fn resource_amounts(
+    namespace: &str,
+    key: &Key,
+    value: &Value,
+    what: &str,
+) -> ModHostResult<Vec<(String, u64)>> {
+    let object = value.as_object().ok_or_else(|| {
+        ModHostError::new(
+            namespace.to_string(),
+            format!("建筑 {key} 的{what}须为资源名到数量的对象"),
+        )
+    })?;
+    let mut entries = Vec::with_capacity(object.len());
+    for (resource, amount) in object {
+        if resource.is_empty() || resource.contains(':') && Key::new(resource).is_err() {
+            return err(
+                namespace,
+                format!("建筑 {key} 的{what}资源名 {resource:?} 非法"),
+            );
+        }
+        let amount = amount.as_u64().ok_or_else(|| {
+            ModHostError::new(
+                namespace.to_string(),
+                format!("建筑 {key} 的{what}资源 {resource:?} 数量须为非负整数"),
+            )
+        })?;
+        entries.push((resource.clone(), amount));
+    }
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
+    let duplicates = entries.windows(2).any(|pair| pair[0].0 == pair[1].0);
+    if duplicates {
+        return err(namespace, format!("建筑 {key} 的{what}存在重复资源名"));
+    }
+    Ok(entries)
 }
 
 /// 依赖输入必须显式为稳定键列表；不能把 null/字符串等形状静默降为空集。

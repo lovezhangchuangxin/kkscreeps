@@ -138,7 +138,7 @@ pub fn run(options: Options) -> i32 {
         }
         Err(error) => (
             json!({
-                "report_version": 3, "success": false, "status": "setup_failed",
+                "report_version": 4, "success": false, "status": "setup_failed",
                 "scenario": options.scenario, "ticks_requested": options.ticks,
                 "world_ticks_committed": 0, "error": format!("{error:#}"),
             }),
@@ -461,7 +461,7 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
         "assertion_failed"
     };
     Ok(json!({
-        "report_version": 3, "success": success, "status": status,
+        "report_version": 4, "success": success, "status": status,
         "engine_version": env!("CARGO_PKG_VERSION"), "executable_sha256": executable_hash,
         "scenario": path, "scenario_sha256": digest(&bytes), "modules": modules,
         "mods": mods_metadata, "plan_hash": engine.contribution_plan_hash().hex(),

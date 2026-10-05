@@ -431,5 +431,6 @@ pub fn link() -> Contribution {
         slots,
         handlers: Vec::new(),
         resources: Vec::new(),
+        buildings: Vec::new(),
     }
 }

@@ -12,6 +12,7 @@
 //! # Ok::<(), kk_mod_api::FreezeError>(())
 //! ```
 
+pub mod buildings;
 pub mod builtin;
 mod definition;
 pub mod extension;

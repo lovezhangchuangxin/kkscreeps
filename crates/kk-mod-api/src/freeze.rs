@@ -116,6 +116,7 @@ fn freeze_inner(
     let mut handlers = BTreeMap::new();
     let mut overrides: BTreeMap<Key, BTreeMap<String, Number>> = BTreeMap::new();
     let mut resources: BTreeSet<Key> = BTreeSet::new();
+    let mut buildings: BTreeMap<Key, crate::buildings::BuildingDescriptor> = BTreeMap::new();
     for c in &mut contributions {
         let ns = &c.source.namespace;
         if !crate::definition::valid_namespace(ns)
@@ -136,11 +137,16 @@ fn freeze_inner(
         c.handlers.sort_by(|a, b| a.key.cmp(&b.key));
         c.overrides.sort_by(|a, b| a.rule.cmp(&b.rule));
         c.resources.sort_by(|a, b| a.key.cmp(&b.key));
+        c.buildings.sort_by(|a, b| a.key.cmp(&b.key));
         for resource in &c.resources {
             owned(&resource.key, ns)?;
             if !resources.insert(resource.key.clone()) {
                 return Err(FreezeError::new(resource.key.to_string(), "重复声明的资源"));
             }
+        }
+        for building in &c.buildings {
+            owned(&building.key, ns)?;
+            insert(&mut buildings, building.key.clone(), building.clone())?;
         }
         for key in &c.bindings {
             owned(key, ns)?;
@@ -250,6 +256,75 @@ fn freeze_inner(
         }
     }
     let values = effective_rules(&rules, &overrides, &options, &bindings)?;
+    // 建筑目录的形状与引用校验：类型目录与资源目录此时已完整合并，
+    // 跨包引用（成本/配方消费他包声明的资源）在这里一并定论。
+    for building in buildings.values() {
+        let context = building.key.to_string();
+        if types.contains_key(&building.key) {
+            return Err(FreezeError::new(
+                context,
+                "同一键不能既是对象类型又是建筑类型",
+            ));
+        }
+        let known_resource = |name: &str| {
+            Key::new(name)
+                .map(|key| resources.contains(&key))
+                .unwrap_or(false)
+                || kk_core::constants::RESOURCES_ALL.contains(&name)
+        };
+        let check_entries = |entries: &[(String, u64)], what: &str| -> Result<(), FreezeError> {
+            for (name, amount) in entries {
+                if !known_resource(name) {
+                    return Err(FreezeError::new(
+                        context.clone(),
+                        format!("建筑 {what} 引用未知资源 {name:?}（不在内建表或声明目录中）"),
+                    ));
+                }
+                if *amount == 0 || *amount > 1_000_000_000 {
+                    return Err(FreezeError::new(
+                        context.clone(),
+                        format!("建筑 {what} 的资源 {name:?} 数量须在 1..=1e9"),
+                    ));
+                }
+            }
+            Ok(())
+        };
+        if building.cost.is_empty() {
+            return Err(FreezeError::new(context, "建筑成本至少声明一种资源"));
+        }
+        check_entries(&building.cost, "成本")?;
+        if building.hits_max == 0 || building.hits_max > u32::MAX as u64 {
+            return Err(FreezeError::new(
+                context,
+                format!("建筑耐久上限须在 1..={}（u32 投影域）", u32::MAX),
+            ));
+        }
+        if building
+            .store_capacity
+            .is_some_and(|cap| cap == 0 || cap > u32::MAX as u64)
+        {
+            return Err(FreezeError::new(
+                context,
+                format!(
+                    "建筑仓库容量须在 1..={}（u32 投影域；不建仓库请省略 capacity）",
+                    u32::MAX
+                ),
+            ));
+        }
+        if let Some(production) = &building.production {
+            if production.interval == 0 || production.interval > 100_000 {
+                return Err(FreezeError::new(context, "生产周期须在 1..=100000 tick"));
+            }
+            check_entries(&production.inputs, "生产输入")?;
+            check_entries(&production.outputs, "生产输出")?;
+            if !production.outputs.is_empty() && building.store_capacity.is_none() {
+                return Err(FreezeError::new(
+                    context,
+                    "有产出的建筑必须声明仓库容量（否则产物无处存放）",
+                ));
+            }
+        }
+    }
     let effective: BTreeMap<_, _> = rules.keys().zip(&values).collect();
     for c in &contributions {
         for RuleConstraint::LessOrEqual { left, right } in &c.constraints {
@@ -384,6 +459,7 @@ fn freeze_inner(
             values: values.into_boxed_slice(),
         },
         resources: resources.into_iter().collect(),
+        buildings: buildings.into_values().collect::<Box<[_]>>(),
         slots: slot_plans.into_boxed_slice(),
         intents: intents.into_values().collect(),
         bindings: bindings.into_iter().collect(),
