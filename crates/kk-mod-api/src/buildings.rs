@@ -35,9 +35,9 @@ impl BuildingPathing {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct ProductionSpec {
     pub interval: u32,
-    /// 资源名 -> 每周期消耗量；可为空（免费生产）。
+    /// 资源名 -> 每周期消耗量；可为空（免费生产）；冻结时排序并拒绝重复资源。
     pub inputs: Vec<(String, u64)>,
-    /// 资源名 -> 每周期产量；非空时须声明仓库容量。
+    /// 资源名 -> 每周期产量；非空时须声明仓库容量；冻结时排序并拒绝重复资源。
     pub outputs: Vec<(String, u64)>,
 }
 
@@ -48,7 +48,7 @@ pub struct ProductionSpec {
 pub struct BuildingDescriptor {
     pub key: Key,
     pub player_class: String,
-    /// 已按资源名排序；每项 (资源名, 数量)，数量 1..=1e9。
+    /// 每项 (资源名, 数量)，数量 1..=1e9；冻结时按资源名排序并拒绝重复资源。
     pub cost: Vec<(String, u64)>,
     pub hits_max: u64,
     pub pathing: BuildingPathing,

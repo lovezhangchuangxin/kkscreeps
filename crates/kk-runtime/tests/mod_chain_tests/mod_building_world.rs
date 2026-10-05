@@ -184,7 +184,7 @@ fn player_path_dismantle_accepts_mod_buildings() -> anyhow::Result<()> {
             &json!({"pos":[20,20],"structureType":"bm:foundry","owner":"p1",
                 "store":{"energy":0},"storeCapacity":500}),
         )?;
-        let d = worker(&mut e, "d", 21, 20, 0, 0)?;
+        worker(&mut e, "d", 21, 20, 0, 0)?;
         e.run_player(
             "p1",
             &format!("Memory.rc = Game.creeps.d.dismantle(Game.getObjectById('{foundry}'));"),

@@ -144,8 +144,15 @@ fn freeze_inner(
                 return Err(FreezeError::new(resource.key.to_string(), "重复声明的资源"));
             }
         }
-        for building in &c.buildings {
+        for building in &mut c.buildings {
             owned(&building.key, ns)?;
+            // Rust 贡献也能直接构造 Vec；冻结层保证与 JS 资源表同样的
+            // 稳定顺序，不能仅依赖装载器排序后再计算计划身份。
+            building.cost.sort_by(|a, b| a.0.cmp(&b.0));
+            if let Some(production) = &mut building.production {
+                production.inputs.sort_by(|a, b| a.0.cmp(&b.0));
+                production.outputs.sort_by(|a, b| a.0.cmp(&b.0));
+            }
             insert(&mut buildings, building.key.clone(), building.clone())?;
         }
         for key in &c.bindings {
@@ -273,6 +280,14 @@ fn freeze_inner(
                 || kk_core::constants::RESOURCES_ALL.contains(&name)
         };
         let check_entries = |entries: &[(String, u64)], what: &str| -> Result<(), FreezeError> {
+            for pair in entries.windows(2) {
+                if pair[0].0 == pair[1].0 {
+                    return Err(FreezeError::new(
+                        context.clone(),
+                        format!("建筑 {what} 重复声明资源 {:?}", pair[0].0),
+                    ));
+                }
+            }
             for (name, amount) in entries {
                 if !known_resource(name) {
                     return Err(FreezeError::new(

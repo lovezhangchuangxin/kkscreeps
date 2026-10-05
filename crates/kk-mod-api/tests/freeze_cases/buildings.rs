@@ -215,3 +215,79 @@ fn building_catalog_participates_in_plan_hash() {
         "耐久变化应改变计划身份"
     );
 }
+
+#[test]
+fn duplicate_resources_in_each_building_vector_are_rejected() {
+    for vector in ["成本", "生产输入", "生产输出"] {
+        let mut b = building("alpha", "foundry");
+        b.production = Some(ProductionSpec {
+            interval: 1,
+            inputs: Vec::new(),
+            outputs: vec![("H".into(), 1)],
+        });
+        // 重复项不相邻；生产输入的逐项预检会把同一份库存消费两次。
+        let repeated = vec![
+            ("energy".into(), 50),
+            ("H".into(), 1),
+            ("energy".into(), 50),
+        ];
+        match vector {
+            "成本" => b.cost = repeated,
+            "生产输入" => b.production.as_mut().unwrap().inputs = repeated,
+            "生产输出" => b.production.as_mut().unwrap().outputs = repeated,
+            _ => unreachable!(),
+        }
+        let mut c = module("alpha");
+        c.buildings.push(b);
+        error(c, &format!("建筑 {vector} 重复声明资源 \"energy\""));
+    }
+}
+
+#[test]
+fn building_resource_order_is_canonical_but_amounts_remain_identity() {
+    let mut c = module("alpha");
+    let mut b = building("alpha", "foundry");
+    b.cost = vec![("energy".into(), 50), ("H".into(), 10)];
+    b.production = Some(ProductionSpec {
+        interval: 1,
+        inputs: vec![("energy".into(), 50), ("H".into(), 10)],
+        outputs: vec![("energy".into(), 20), ("H".into(), 5)],
+    });
+    c.buildings.push(b);
+    let original = plan(vec![c.clone()]).unwrap();
+    for vector in ["成本", "生产输入", "生产输出"] {
+        let mut reordered = c.clone();
+        let b = &mut reordered.buildings[0];
+        let entries = match vector {
+            "成本" => &mut b.cost,
+            "生产输入" => &mut b.production.as_mut().unwrap().inputs,
+            "生产输出" => &mut b.production.as_mut().unwrap().outputs,
+            _ => unreachable!(),
+        };
+        entries.reverse();
+        let frozen = plan(vec![reordered.clone()]).unwrap();
+        assert_eq!(original.hash(), frozen.hash(), "{vector} 排列不改变身份");
+        assert_eq!(original.buildings(), frozen.buildings());
+        assert_eq!(frozen.buildings()[0].cost[0].0, "H");
+        assert_eq!(
+            frozen.buildings()[0].production.as_ref().unwrap().inputs[0].0,
+            "H"
+        );
+        assert_eq!(
+            frozen.buildings()[0].production.as_ref().unwrap().outputs[0].0,
+            "H"
+        );
+        let b = &mut reordered.buildings[0];
+        match vector {
+            "成本" => b.cost[0].1 += 1,
+            "生产输入" => b.production.as_mut().unwrap().inputs[0].1 += 1,
+            "生产输出" => b.production.as_mut().unwrap().outputs[0].1 += 1,
+            _ => unreachable!(),
+        }
+        assert_ne!(
+            original.hash(),
+            plan(vec![reordered]).unwrap().hash(),
+            "{vector} 数量改变身份"
+        );
+    }
+}

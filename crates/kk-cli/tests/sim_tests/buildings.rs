@@ -169,7 +169,7 @@ fn cold_resume_matches_uninterrupted_building_world() -> anyhow::Result<()> {
         assert_eq!(output.status.code(), Some(0));
         let actual: Value = serde_json::from_slice(&std::fs::read(&resumed)?)?;
         assert_eq!(actual["world_ticks_committed"], 150);
-        // 完整持久状态等价：世界（含建筑、工地、库存、事件）逐项一致。
+        // 比较报告中的完整最终状态；CPU 桶受真实线程耗时影响，单独排除。
         let strip_cpu = |mut value: Value| {
             for player in value["final"]["players"]
                 .as_object_mut()
@@ -182,11 +182,7 @@ fn cold_resume_matches_uninterrupted_building_world() -> anyhow::Result<()> {
         };
         let a = strip_cpu(actual);
         let b = strip_cpu(expected);
-        assert_eq!(a["final"]["world"], b["final"]["world"]);
-        assert_eq!(
-            a["final"]["players"]["p1"]["memory"]["storage_ingots"],
-            b["final"]["players"]["p1"]["memory"]["storage_ingots"]
-        );
+        assert_eq!(a["final"], b["final"]);
         assert_eq!(a["composition"], b["composition"]);
     }
     Ok(())
