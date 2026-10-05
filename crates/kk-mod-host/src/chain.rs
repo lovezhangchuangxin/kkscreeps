@@ -21,6 +21,11 @@ mod combat;
 pub(crate) use combat::{op_mod_chain_combat_cancel, op_mod_chain_combat_request};
 mod build;
 pub(crate) use build::{op_mod_chain_build_cancel, op_mod_chain_build_request};
+mod objects;
+pub(crate) use objects::{
+    op_mod_chain_object_create, op_mod_chain_object_get, op_mod_chain_object_list,
+    op_mod_chain_object_remove, op_mod_chain_object_update,
+};
 
 /// 固定的候选读取封套；开放领域的字段、参数与 namespace 仍为 JSON 树。
 /// 字段顺序沿用原 JSON Map 的键序，避免改变 JS 可观察的枚举/刷新顺序。
@@ -45,6 +50,36 @@ pub trait ChainHost {
     fn read(&mut self, binding: &str) -> Result<ChainContext, String>;
     fn write(&mut self, binding: &str, context: ChainWrite) -> Result<(), String>;
     fn native(&mut self) -> Result<(), String>;
+    fn object_get(&mut self, _id: &str) -> Result<Option<kk_mod_api::objects::ObjectView>, String> {
+        Err("本次槽没有对象读取能力".into())
+    }
+    fn object_list(
+        &mut self,
+        _type_key: &str,
+        _after: &str,
+        _limit: u32,
+    ) -> Result<kk_mod_api::objects::ObjectPage, String> {
+        Err("本次槽没有对象读取能力".into())
+    }
+    fn object_create(
+        &mut self,
+        _binding: &str,
+        _type_key: &str,
+        _fields: &Value,
+    ) -> Result<kk_mod_api::objects::ObjectView, String> {
+        Err("本次槽没有对象创建能力".into())
+    }
+    fn object_update(
+        &mut self,
+        _binding: &str,
+        _id: &str,
+        _fields: &Value,
+    ) -> Result<kk_mod_api::objects::ObjectView, String> {
+        Err("本次槽没有对象更新能力".into())
+    }
+    fn object_remove(&mut self, _binding: &str, _id: &str) -> Result<(), String> {
+        Err("本次槽没有对象删除能力".into())
+    }
     /// 默认拒绝，宿主须为有局部恢复边界的槽显式开放资源能力。
     fn resource_read(
         &mut self,

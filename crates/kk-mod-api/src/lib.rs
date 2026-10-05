@@ -18,6 +18,7 @@ pub mod extension;
 mod fingerprint;
 mod freeze;
 mod handlers;
+pub mod objects;
 mod outcome;
 mod plan;
 pub mod player_surface;

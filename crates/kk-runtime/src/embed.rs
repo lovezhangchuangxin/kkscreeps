@@ -228,6 +228,19 @@ impl EmbedEngine {
         self.engine.world.world_json()
     }
 
+    /// 管理诊断用的完整 Mod 对象列表，包含自主创建对象和 server-only 字段。
+    /// world_snapshot 沿用原生 JSON 投影，Mod 对象在此独立读取；不是检查点。
+    pub fn mod_object_snapshots(&self) -> Vec<Value> {
+        self.engine
+            .world
+            .rooms()
+            .values()
+            .flat_map(|room| &room.objects)
+            .filter(|(_, object)| matches!(object, kk_schema::room::RoomObject::Mod(_)))
+            .map(|(id, _)| self.get_object(&id.as_str()).expect("已确认存活 Mod 对象"))
+            .collect()
+    }
+
     /// 读取引擎状态，供测试断言失败恢复行为。
     #[doc(hidden)]
     pub fn engine_run_state_for_test(&self) -> &RunState {

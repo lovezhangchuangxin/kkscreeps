@@ -1,6 +1,7 @@
 //! 将 Mod 整槽链接到房间候选，暂存 state 并校验字段写面。
 use super::*;
 
+mod objects;
 mod resources;
 
 /// JS 组合的整槽执行器。进入 VM 一次，native 中心只经普通 op 执行。
@@ -24,6 +25,8 @@ struct ModChainContext {
     native: NativeCall,
     /// 仅在本次能力内缓存已解析字段；改写与 native 前失效，不跨槽/对象/tick。
     cached_fields: Option<Value>,
+    /// 只有自有动作/tick 槽开放同房对象能力；原生领域恢复边界保持独立。
+    objects_slot: bool,
     /// 可拒绝动作的 namespace 写入暂存到调用成功；拒绝时丢弃。
     staged_states: Option<Rc<RefCell<BTreeMap<String, Value>>>>,
     /// 资源写能力首次触达的对象快照；共享给整槽外层恢复。
@@ -69,7 +72,7 @@ impl SlotExecutor for ModSlotExecutor {
         ctx: &RoomCtx,
         call: SlotCall<'_>,
     ) -> Result<SlotOutcome, String> {
-        // 自有动作字段与额外资源对象由此适配器恢复；内建资源动作的
+        // 自有对象变换与额外资源对象由此适配器恢复；内建资源动作的
         // 原始两端/事件由引擎在整链外恢复；移动槽的请求登记与意图
         // 疲劳同样由引擎按执行者粒度恢复。namespace 仅成功后移交。
         let extension = matches!(&call, SlotCall::Extension { .. });
@@ -101,15 +104,7 @@ impl SlotExecutor for ModSlotExecutor {
             SlotCall::Extension { id, args } => (id, args.clone(), NativeCall::None),
         };
         let room = ctx.borrow().room.name.clone();
-        let original_fields = if extension {
-            Some(
-                ctx.borrow()
-                    .mod_fields(id)
-                    .ok_or("扩展动作目标不是有效 Mod 对象")?,
-            )
-        } else {
-            None
-        };
+        let object_snapshot = extension.then(|| ctx.borrow_mut().snapshot_mod_objects());
         let staged_states =
             (extension || resource_action || move_action || combat_action || build_action)
                 .then(|| Rc::new(RefCell::new(BTreeMap::new())));
@@ -142,6 +137,7 @@ impl SlotExecutor for ModSlotExecutor {
                     args,
                     native,
                     cached_fields: None,
+                    objects_slot: extension,
                     staged_states: staged_states.clone(),
                     resource_journal: resource_journal.clone(),
                     move_slot: move_action,
@@ -163,6 +159,9 @@ impl SlotExecutor for ModSlotExecutor {
         drop(vm);
         match &outcome {
             SlotOutcome::Completed => {
+                if object_snapshot.is_some() {
+                    ctx.borrow_mut().finish_chain_snapshot();
+                }
                 if let Some(states) = staged_states {
                     let states = std::mem::take(&mut *states.borrow_mut());
                     for (namespace, value) in states {
@@ -187,10 +186,8 @@ impl SlotExecutor for ModSlotExecutor {
                 {
                     replay_redirect_journal(ctx, journal);
                 }
-                if let Some(fields) = original_fields {
-                    ctx.borrow_mut()
-                        .update_mod_fields(id, &fields)
-                        .map_err(|error| format!("动作拒绝恢复失败：{error}"))?;
+                if let Some(snapshot) = object_snapshot {
+                    ctx.borrow_mut().restore_chain_snapshot(snapshot);
                 } else if !(resource_action
                     || move_action
                     || combat_state.is_some()
@@ -232,6 +229,7 @@ impl ModChainContext {
                 }
                 Ok(fields)
             }
+            None if self.objects_slot => Ok(Value::Null),
             _ => Err(format!("槽目标 {} 已不存在或未接线", self.id.as_str())),
         }
     }
@@ -294,6 +292,37 @@ impl ModChainContext {
 }
 
 impl ChainHost for ModChainContext {
+    fn object_get(&mut self, id: &str) -> Result<Option<kk_mod_api::objects::ObjectView>, String> {
+        self.get_object(id)
+    }
+    fn object_list(
+        &mut self,
+        type_key: &str,
+        after: &str,
+        limit: u32,
+    ) -> Result<kk_mod_api::objects::ObjectPage, String> {
+        self.list_objects(type_key, after, limit)
+    }
+    fn object_create(
+        &mut self,
+        binding: &str,
+        type_key: &str,
+        fields: &Value,
+    ) -> Result<kk_mod_api::objects::ObjectView, String> {
+        self.create_object(binding, type_key, fields)
+    }
+    fn object_update(
+        &mut self,
+        binding: &str,
+        id: &str,
+        fields: &Value,
+    ) -> Result<kk_mod_api::objects::ObjectView, String> {
+        self.update_object(binding, id, fields)
+    }
+    fn object_remove(&mut self, binding: &str, id: &str) -> Result<(), String> {
+        self.remove_object(binding, id)
+    }
+
     fn resource_read(
         &mut self,
         id: &str,

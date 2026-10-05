@@ -39,7 +39,7 @@ Rust 自定义处理器仍可经原有纯 Rust 执行器安装。它与 JS 执�
 
 拒绝中止本次动作的剩余处理器；已经执行的 before、内层中心与 after 写入也一起撤销。wrap 即使捕获内层拒绝，也不能继续回写；该 wrap 后续抛出异常、或已有候选/转换故障时，异常优先，整轮失败，不能用拒绝掩盖故障。wrap 不调用 next 的主动取消仍是 Completed，保持原来执行 after 的约定。
 
-runtime 的自有动作适配器在调用前只保存目标对象字段，所有参与 namespace 的 state 在本次调用内暂存；正常完成后移交 state。拒绝时丢弃暂存 state，通过 `update_mod_fields` 恢复对象字段、信封坐标和位置索引，保留本轮之前已完成动作的结果。当前自有动作没有 native/ID/玩家/事件写面，因此这个边界足以撤销全部写入，不克隆整个房间。
+runtime 的自有动作适配器在调用前武装对象变换日志，所有参与 namespace 的 state 在本次调用内暂存；正常完成后移交 state。拒绝时丢弃暂存 state，逆序撤销自有对象创建/删除及字段首触，恢复信封坐标、索引格原顺序和 ID 游标，保留本轮之前已完成动作的结果，不预克隆整个房间。[ctx.objects](mod-objects.md) 只在自有动作/tick 槽开放，原生领域槽仍遵守各自写面。
 
 三个内建资源动作的局部边界由引擎包住整个 Hosted 链：开始前保存执行者、目标对象原始记录和事件长度；拒绝后恢复记录并截去本次新增事件。自指只保存一份记录；保存的是本次动作开始时的候选，因此共享目标上此前成功动作的入账不会被撤销。runtime 将所有参与 namespace 的 state 暂存到正常完成，拒绝时丢弃。当前 native 只改库存、link 冷却、实验室槽容量并追加传输事件；JS 字段写面限于 link cooldown，另可通过 [ctx.resources](mod-resources.md) 读写同房库存。运行时首次触达日志恢复 API 两端完整对象，覆盖额外路由对象和实验室槽切换；creep 字段仍只读。没有 ID、位置、玩家、市场或其他工作队列写入。以后扩大写面必须同步扩大恢复边界。无扩展的 Native 路径不保存快照、不进入 JS。
 
@@ -74,7 +74,7 @@ export default function register(api) {
 
 每个 JS 处理器按绑定的 namespace 从 Rust 候选读取自己的 `ctx.state`，目标字段来自当前权威对象。不同 Mod 的 state 分开保存，目标字段共享同一个候选。
 
-runtime 在一次整槽能力内缓存已解析的目标字段，供重复读取及无变更写入的比较使用。改写字段及资源能力转账时失效，进入 native 前也失效；内层返回后的读取重新取得 native 修改后的候选。缓存不跨槽、对象或 tick，不缓存 namespace state；改变字段值仍走原有领域校验。JS 上下文仍按下面的同步边界读写和刷新。
+runtime 在一次整槽能力内缓存已解析的目标字段，供重复读取及无变更写入的比较使用。改写字段、资源能力转账及对象能力变换时失效，进入 native 前也失效；内层返回后的读取重新取得 native 修改后的候选。缓存不跨槽、对象或 tick，不缓存 namespace state；改变字段值仍走原有领域校验。JS 上下文仍按下面的同步边界读写和刷新。
 
 `ChainHost::read` 返回类型化的 `ChainContext` / `ChainTarget` 固定封套，直接装配已拥有的 JSON 值。serde_v8 对封套走 struct 路径，使用静态成员键；args、state、fields 仍是开放 JSON 值。封套沿用原默认 JSON Map 键序（args/room/state/target/tick，target 内 fields/id），两条转换路径都创建空原型对象。缓存字段和固定 args 仍克隆出独立视图。写回保持动态 JSON 与领域校验，在目标字段校验成功后移走 op 交付的 state 值，不额外深克隆。两端仍经 serde_v8 转换，不共享 JS 与 Rust 的可变对象，也不省略同步边界。
 

@@ -20,6 +20,7 @@
 
 ## 投影契约
 
+- world_snapshot 沿原生投影不含 Mod 对象；验证 Mod 增删回滚或动态对象全集用 mod_object_snapshots，初始 alias 或已知 ID 的字段可用 get_object。
 - 事件流**每 tick 整体替换**：断言只反映最后一次 `run_player`/`run_players` 的那一轮。
 - road 的 `ticksToDecay = next_decay_time − time`：跨 tick 断言须计入时间推进。
 - creep 的 `actionLog` 不进对象投影——动作日志变化只能经对象快照恢复间接锁定。
@@ -51,3 +52,5 @@ Mod 源码在包构建时固定，**读不到运行期 ID**。两条通道：
 ## 自有对象生命周期
 
 `object_tick.rs` 覆盖同步 tick；对象声明的 tick 自动派生 `<typeKey>.tick` 槽与 `<typeKey>.tick.process` 绑定。生命周期 args 为 null，无玩家授权前提；decline 使用 `return api.decline(code)`，在 tick 中明确拒绝。对象动作先执行，tick 读取随后候选；异常撤销整轮，缓存玩家在恢复后不重跑。
+
+对象操作案例在 object_ops.rs：ctx.objects 查询 Mod 同房候选，写入限于绑定 namespace 的类型；get 返回 detached snapshot，update 部分合并，自删后 target.fields=null。动作中新生本轮 tick、tick 中新生下轮 tick。拒绝撤销对象、位置/格内顺序与 ID；故障则丢弃整轮。

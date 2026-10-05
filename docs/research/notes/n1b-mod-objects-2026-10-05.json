@@ -1,0 +1,100 @@
+{
+  "base_commit": "3ff2471059807f27f9077a13cbc01428bd9c6ea1",
+  "scope": "N1b same-room Mod candidate objects and autonomous independent JS creation/deletion",
+  "executable_sha256": "12d40b144c7ffaed829baa02bb7ae49a89621dcc9d983d5db57e4debd99aae9c",
+  "plan_hash": "99a4c1fdf76795ff7b0b92e466dcb2e5a9dccdbe3ecac0f1923af45a14566d36",
+  "mods": {
+    "root": "/Users/keqing/Desktop/projects/games/kkscreeps/mods/official",
+    "packages": {
+      "clockwork": {
+        "version": "1.0.0",
+        "api_version": "^1.0.0",
+        "dependencies": {},
+        "directory": "/Users/keqing/Desktop/projects/games/kkscreeps/mods/official/clockwork",
+        "code_sha256": "6950ae47ca068a1ae5d2c541b5f416e96c643c145b0893c6b056eee28dd94b56",
+        "player_api_sha256": "5a2c5d78c514316c8378e0ef94b779d3afe9aa0c06ab0b980cfc4ba3a8603441",
+        "config_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "nursery": {
+        "version": "1.0.0",
+        "api_version": "^1.0.0",
+        "dependencies": {},
+        "directory": "/Users/keqing/Desktop/projects/games/kkscreeps/mods/official/nursery",
+        "code_sha256": "94858f723cc7e2a521821b3ec99e12967002dd2f9e3a2b37a5303d6b0e4e1c76",
+        "player_api_sha256": "1c92331b32a03e6dd5360427341ade1c011e6cee36ba6d355bf0cfea6a9097dc",
+        "config_sha256": "aa71cc04ecac921441c660f56585c941f5da1ba08723091b8f7cfe27d60e7b1b"
+      }
+    }
+  },
+  "targeted_tests": {
+    "runtime_object_ops": 9,
+    "engine_object_journal": 1,
+    "cli_all_sim": 9
+  },
+  "scenarios": [
+    {
+      "channel": "json",
+      "requested": 2003,
+      "committed": 2003,
+      "player_errors": 0,
+      "assertions_passed": 4,
+      "run_wall_ms": 788.569167,
+      "report": "n1b-mod-objects-json-2026-10-05.json",
+      "report_sha256": "421ba09aca277e4beefca9273f48bf8e41fc648088ba2a3bdc2e89d5995e24c1"
+    },
+    {
+      "channel": "kkpv",
+      "requested": 2003,
+      "committed": 2003,
+      "player_errors": 0,
+      "assertions_passed": 4,
+      "run_wall_ms": 852.059,
+      "report": "n1b-mod-objects-kkpv-2026-10-05.json",
+      "report_sha256": "8b3d724a91cead10d2589b02d24f42766a4db446bce9ce6e8724aeb57b8f71ed"
+    }
+  ],
+  "final_workload": {
+    "born": 802,
+    "expired": 800,
+    "emitters": 2,
+    "sparks": 2,
+    "spark_age": 2,
+    "player_last_view_age": 1,
+    "player_loops_each": 2003
+  },
+  "equal_final_world": true,
+  "equal_mod_objects": true,
+  "equal_mod_states": true,
+  "equal_player_memory": true,
+  "validation": {
+    "full_check": "passed",
+    "rust_passed": 741,
+    "rust_ignored": 11,
+    "compat_adapter_passed": 14,
+    "doc_markdown_files": 263,
+    "doc_links": 1474,
+    "source_files": 344,
+    "source_max_lines": 1000
+  },
+  "compatibility": {
+    "upstream_pin": "34a630efa42908c117c19c25d2350fa2387bd633",
+    "ratchet": "passed",
+    "floor": 1918,
+    "total": 2914,
+    "passed": 1918,
+    "failed": 89,
+    "skipped": 907,
+    "status_changes_against_base": 0,
+    "regressions_against_parent": 0,
+    "new_waivers": 0,
+    "report_sha256": "ebe36eb6516ec2f4b01c1eabec9f774c8290a223d0f2e70736cc6acff6425d39"
+  },
+  "limitations": [
+    "Mod objects only; same-room custom object slots only",
+    "Writes limited to checked binding namespace; trusted shared VM, no Mod isolation",
+    "No builtin object create/delete, resource production or build traits",
+    "No preTick, room/world lifecycle, content preset or checkpoint/replay",
+    "Mutation log count is not a Rust heap or process RSS hard limit",
+    "Timing is diagnostic and concurrent with validation, not a controlled performance comparison"
+  ]
+}

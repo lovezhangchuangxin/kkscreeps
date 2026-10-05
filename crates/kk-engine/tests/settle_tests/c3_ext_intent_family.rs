@@ -299,5 +299,7 @@ mod installation;
 
 #[path = "c3_ext_intent_family/execution.rs"]
 mod execution;
+#[path = "c3_ext_intent_family/object_ops.rs"]
+mod object_ops;
 #[path = "c3_ext_intent_family/object_tick.rs"]
 mod object_tick;

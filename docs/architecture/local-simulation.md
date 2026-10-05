@@ -37,7 +37,7 @@ target/release/kkscreeps sim run \
 
 ## 状态与断言
 
-初始和最终观察都读取已提交状态，包含 `time`、`players`、`objects`、`rooms`、`world`、`mod_states`。常用指针如下：
+初始和最终观察都读取已提交状态，包含 `time`、`players`、`objects`、`rooms`、`world`、`mod_objects`、`mod_states`。常用指针如下：
 
 | 指针示例 | 读取内容 |
 |---|---|
@@ -46,6 +46,7 @@ target/release/kkscreeps sim run \
 | `/objects/container/store/energy` | alias 对应对象当前能量 |
 | `/rooms/W1N1/controller/progress` | 房间控制器进度 |
 | `/objects/first/fields/value` | Mod 对象声明字段 |
+| `/mod_objects/0/fields/age` | 全部 Mod 对象的管理快照，包括自主生成且无 alias 的对象 |
 | `/mod_states/clockwork/visits` | 包命名空间已提交 state；未初始化为 null |
 
 alias 或玩家名中的 `/`、`~` 分别转义为 `~1`、`~0`。对象死亡后 alias 对应 null，`missing` 同时接受缺失指针和 null；`exists` 要求值存在且非 null。
@@ -60,7 +61,7 @@ alias 或玩家名中的 `/`、`~` 分别转义为 `~1`、`~0`。对象死亡后
 
 Mod 场景另记录实际加载包的目录、版本、SDK 要求、依赖、服务端代码/玩家入口/配置 SHA-256，以及引擎实际安装的 `plan_hash` 和 `disabled_mods`。未声明 mods 时包清单为空，仍记录原生计划身份。停用集合单独记录，因为 PlanHash 不包含执行掩码；这些身份用于诊断，报告没有冷恢复或输入回放能力。
 
-`players` 中的 GCL 累计点数、Memory 和 CPU 桶来自实际 PlayerState；GCL 不是玩家 `Game.gcl` 的等级/进度对象。`world` 是宿主诊断投影，其公共 gcl/cpu 字段不是玩家状态。报告不保存完整运行状态，也不能作为检查点恢复。
+`players` 中的 GCL 累计点数、Memory 和 CPU 桶来自实际 PlayerState；GCL 不是玩家 `Game.gcl` 的等级/进度对象。`world` 是宿主诊断投影，其公共 gcl/cpu 字段不是玩家状态。`world` 沿原生 JSON 诊断形态，不包含 Mod 对象；`mod_objects` 独立列出按房间名、ObjId 排序的全部已提交 Mod 对象及 server-only 字段，不能作为玩家可见性接口。报告不保存完整运行状态，也不能作为检查点恢复。
 
 玩家异常或硬中断使场景失败，但当前轮次仍可能提交合法指令和 Memory，报告必须保留实际已提交状态。基础设施或结算错误停止在最后已提交轮次；此工具不自动重试。Mod 调用故障另保留 mod_fault（tick、room、target 和宿主结构化错误，包括槽/绑定/阶段与故障种类）；其他故障为 null。失败轮重试契约见[tick 契约](tick-contract.md)。
 
@@ -74,4 +75,4 @@ CLI 参数解析失败沿用 Clap 的退出码 2，不写报告。报告通过�
 
 `run_wall_ms` 仅包含推进循环，不含加载、指纹计算、最终状态观察和报告写入。`phases` 使用运行时已有的累计阶段计时，是诊断数据，不能直接作为正式跨实现基准。玩家 Date、Math.random、CPU 查询保持生产行为，因此固定场景和源码不保证任意 bot 完全确定；复现要求见[开发套件设计](../designs/dev-kit.md)。
 
-原生场景验收见[初始交付记录](../research/notes/sim-run-2026-10-04.md)，Mod 场景验收见[生命周期交付记录](../research/notes/n1a-object-tick-2026-10-05.md)。
+原生场景验收见[初始交付记录](../research/notes/sim-run-2026-10-04.md)，Mod 场景验收见[生命周期交付记录](../research/notes/n1a-object-tick-2026-10-05.md)和[对象操作交付记录](../research/notes/n1b-mod-objects-2026-10-05.md)。

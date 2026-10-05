@@ -16,6 +16,10 @@ pub struct RoomIndex {
 }
 
 impl RoomIndex {
+    /// 事务撤销时恢复首次触达前的格内顺序；输入由引擎快照生成。
+    pub fn restore_cell(&mut self, position: (u8, u8), ids: Vec<ObjId>) {
+        self.cells[cell_of(position.0 as usize, position.1 as usize)] = ids;
+    }
     /// 从房间对象表建立索引，各格初始按对象 ID 升序排列。
     /// 调用方须保证所有坐标在 0..50 内。
     pub fn build(objects: &BTreeMap<ObjId, RoomObject>) -> Self {

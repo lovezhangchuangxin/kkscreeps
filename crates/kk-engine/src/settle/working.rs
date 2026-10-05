@@ -54,7 +54,7 @@ pub struct Working {
     /// 本 tick 登记的跨房过渡：位于边缘格的 creep 在全部房间结算后由
     /// 引擎阶段移入邻房候选。
     pub pending_inter_room: Vec<inter_room::InterRoomMove>,
-    /// 链内对象增删日志；仅在含结构变换的 Hosted 链（战斗/建造族槽）
+    /// 链内对象变换日志；在自有对象及战斗/建造族 Hosted 链
     /// 期间武装，正常拒绝时逆序撤销。链故障（Err）路径不解除武装——
     /// 它依赖"链 Err 使整轮候选丢弃、本字段随 Working 一起 drop"兜底；
     /// 若未来引入链失败但房间候选保留的路径，须先在此处补解除。
@@ -76,17 +76,21 @@ pub struct RemovedObject {
     pub heal: Option<i64>,
 }
 
-/// 武装期间 insert_new/remove_obj 记录的候选增删；恢复按逆序回放。
+/// 武装期间记录对象增删、Mod 字段首触和索引格首触；对象逆序恢复。
 /// Removed 含整对象克隆，装箱避免让每次日志追加都按最大变体扩张。
 #[derive(Debug, Clone)]
 pub enum ChainMutation {
+    /// 格内首触顺序。对象逆序撤销完毕后再整格恢复，防止追加顺序漂移。
+    IndexCell((u8, u8), Vec<ObjId>),
+    /// 自有对象字段/坐标的首触原值；拒绝时同步恢复位置索引。
+    ModUpdated(ObjId, Box<RoomObject>),
     /// insert_new 分配的新对象；恢复时连同索引删除。
     Inserted(ObjId),
     /// remove_obj 移除的既有对象；恢复时对象与伴随状态一起回插。
     Removed(Box<RemovedObject>),
 }
 
-/// 战斗/建造族槽整链开始前的候选快照：受影响对象首触克隆、延迟伤害/
+/// 整链开始前的候选快照：原生受影响对象克隆、延迟伤害/
 /// 治疗条目、事件长度与 ID 游标。链内对象增删由 chain_mutations 记录，
 /// 引擎侧在快照时武装。能力触达的链外对象由运行时首触日志恢复。
 #[derive(Debug, Clone)]
@@ -195,6 +199,7 @@ impl Working {
     pub fn insert_new(&mut self, object: RoomObject) -> ObjId {
         let id = self.state.allocate_id();
         let (x, y) = object.pos();
+        self.remember_index_cell((x, y));
         self.room
             .insert_with_id(id, object)
             .expect("结算 id 分配器不得复用已有对象");
@@ -210,6 +215,9 @@ impl Working {
     /// 链日志武装期间记录 Removed；同链先插后删的对象经逆序回放净效果
     /// 仍为删除，无须特判。
     pub fn remove_obj(&mut self, id: ObjId) -> Option<RoomObject> {
+        if let Some(object) = self.room.objects.get(&id) {
+            self.remember_index_cell(object.pos());
+        }
         let journaled = self
             .chain_mutations
             .is_some()
@@ -271,6 +279,17 @@ impl Working {
         // 数值 backing 规范化（Float 域统一浮点 backing）：KKPV 列式编码
         // 按值分派列型，整数/浮点 backing 混桶会使整轮投影失败。
         kk_mod_api::validate::normalize_object_payload(&mut fields, &ty.descriptor.fields);
+        if self.chain_mutations.as_ref().is_some_and(|log| {
+            !log.iter()
+                .any(|entry| matches!(entry, ChainMutation::ModUpdated(old, _) if *old == id))
+        }) {
+            self.check_mod_mutation_budget()?;
+            let original = self.room.objects.get(&id).expect("已确认 Mod 对象").clone();
+            self.chain_mutations
+                .as_mut()
+                .expect("日志已武装")
+                .push(ChainMutation::ModUpdated(id, Box::new(original)));
+        }
         let (mut x, mut y) = match self.room.objects.get(&id) {
             Some(RoomObject::Mod(o)) => (o.x, o.y),
             _ => unreachable!("上面已判 Mod"),
@@ -291,6 +310,8 @@ impl Working {
             )
             .expect("0..49 在 u8 内");
             if px != x || py != y {
+                self.remember_index_cell((x, y));
+                self.remember_index_cell((px, py));
                 self.index.apply_move(id, (x, y), (px, py));
                 x = px;
                 y = py;
@@ -469,12 +490,45 @@ impl Working {
         snapshot
     }
 
-    /// 战斗/建造族链正常完成：解除增删日志武装并丢弃记录。
+    /// 自有对象能力沿同一日志记录增删和字段首触；不预克隆整个房间。
+    pub fn snapshot_mod_objects(&mut self) -> ChainSnapshot {
+        self.snapshot_touched(Vec::new())
+    }
+
+    /// JS 对象能力的日志在 Rust 堆，须独立于 V8 堆限制其条目数。
+    pub fn check_mod_mutation_budget(&self) -> Result<(), String> {
+        if self.chain_mutations.as_ref().is_some_and(|log| {
+            log.iter()
+                .filter(|entry| !matches!(entry, ChainMutation::IndexCell(..)))
+                .count()
+                >= 256
+        }) {
+            return Err("单槽对象能力撤销日志最多 256 条".into());
+        }
+        Ok(())
+    }
+
+    fn remember_index_cell(&mut self, position: (u8, u8)) {
+        if let Some(log) = &mut self.chain_mutations
+            && !log
+                .iter()
+                .any(|entry| matches!(entry, ChainMutation::IndexCell(old, _) if *old == position))
+        {
+            log.push(ChainMutation::IndexCell(
+                position,
+                self.index
+                    .at(position.0 as usize, position.1 as usize)
+                    .to_vec(),
+            ));
+        }
+    }
+
+    /// 处理链正常完成：解除增删日志武装并丢弃记录。
     pub fn finish_chain_snapshot(&mut self) {
         self.chain_mutations = None;
     }
 
-    /// 战斗/建造族链正常拒绝：按增删日志逆序撤销链内对象变换，再恢复
+    /// 链正常拒绝：按日志逆序撤销链内对象变换，再恢复
     /// 首触对象、延迟队列条目与事件长度，最后回退 ID 游标。其他执行者
     /// 的队列条目、此前动作的写入与移动登记不受影响。
     /// Removed 按移除时快照回插，其等于链前状态依赖当前链处理器没有
@@ -484,9 +538,22 @@ impl Working {
         let mutations = self
             .chain_mutations
             .take()
-            .expect("战斗/建造族链期间增删日志已武装");
+            .expect("对象变换链期间日志已武装");
+        let mut cells = Vec::new();
         for mutation in mutations.into_iter().rev() {
             match mutation {
+                ChainMutation::IndexCell(position, ids) => cells.push((position, ids)),
+                ChainMutation::ModUpdated(id, original) => {
+                    let position = original.pos();
+                    if let Some(current) = self.room.objects.insert(id, *original) {
+                        if current.pos() != position {
+                            self.index.remove(id, current.pos());
+                            self.index.insert(id, position);
+                        }
+                    } else {
+                        self.index.insert(id, position);
+                    }
+                }
                 ChainMutation::Inserted(id) => {
                     if let Some(object) = self.room.objects.remove(&id) {
                         let (x, y) = object.pos();
@@ -544,7 +611,15 @@ impl Working {
             }
         }
         for (id, object) in snapshot.objects {
-            self.room.objects.insert(id, object);
+            let position = object.pos();
+            if let Some(current) = self.room.objects.insert(id, object) {
+                if current.pos() != position {
+                    self.index.remove(id, current.pos());
+                    self.index.insert(id, position);
+                }
+            } else {
+                self.index.insert(id, position);
+            }
         }
         for (id, damage, heal) in snapshot.queues {
             match damage {
@@ -565,6 +640,9 @@ impl Working {
             }
         }
         self.events.truncate(snapshot.event_len);
+        for (position, ids) in cells {
+            self.index.restore_cell(position, ids);
+        }
         self.state.restore_next_id(snapshot.next_id);
     }
 

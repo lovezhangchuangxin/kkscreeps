@@ -483,56 +483,10 @@ impl EmbedEngine {
                 anyhow::anyhow!("类型 {type_key} 不在已装配计划中（Mod 对象须经 Mod 分片创建）")
             })?
             .clone();
-        let Some(provided) = fields.as_object() else {
-            anyhow::bail!("Mod 对象字段须为 JSON 对象");
-        };
-        let mut payload = serde_json::Map::new();
-        for field in &descriptor.fields {
-            let name = kk_mod_api::validate::field_name(&field.key);
-            match provided.get(name) {
-                Some(value) => {
-                    payload.insert(name.to_string(), value.clone());
-                }
-                None => match &field.default {
-                    kk_mod_api::FieldDefault::Value(value) => {
-                        payload.insert(name.to_string(), value.clone());
-                    }
-                    kk_mod_api::FieldDefault::Missing => {
-                        anyhow::bail!("类型 {type_key} 的字段 {name} 未提供且无默认值")
-                    }
-                },
-            }
-        }
-        for key in provided.keys() {
-            if !descriptor
-                .fields
-                .iter()
-                .any(|f| kk_mod_api::validate::field_name(&f.key) == key)
-            {
-                anyhow::bail!("字段 {key} 未在类型 {type_key} 中声明");
-            }
-        }
-        let mut payload = Value::Object(payload);
-        kk_mod_api::validate::check_object_payload(&payload, &descriptor.fields, type_key)
-            .map_err(anyhow::Error::msg)?;
-        // 数值 backing 规范化（与结算写入口同口径——Float 域统一浮点
-        // backing，防 KKPV 列型混派）。
-        kk_mod_api::validate::normalize_object_payload(&mut payload, &descriptor.fields);
-        let (x, y) = match &descriptor.position_fields {
-            Some([fx, fy]) => {
-                let read = |key: &kk_mod_api::Key| {
-                    u8::try_from(
-                        payload
-                            .get(kk_mod_api::validate::field_name(key))
-                            .and_then(Value::as_u64)
-                            .expect("payload 已通过校验，位置字段必为 0..49 整数"),
-                    )
-                    .expect("0..49 在 u8 内")
-                };
-                (read(fx), read(fy))
-            }
-            None => (0, 0),
-        };
+        let payload =
+            kk_mod_api::objects::prepare_fields(fields, &descriptor).map_err(anyhow::Error::msg)?;
+        let (x, y) =
+            kk_mod_api::objects::position(&payload, &descriptor).map_err(anyhow::Error::msg)?;
         let object = kk_schema::room::RoomObject::Mod(kk_schema::room::ModObj {
             id: 0,
             x,

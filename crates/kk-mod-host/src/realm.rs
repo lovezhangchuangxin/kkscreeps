@@ -28,7 +28,9 @@ use crate::chain::{
     ActiveChain, ChainHost, ChainProgram, ChainState, op_mod_chain_build_cancel,
     op_mod_chain_build_request, op_mod_chain_combat_cancel, op_mod_chain_combat_request,
     op_mod_chain_decline, op_mod_chain_fault, op_mod_chain_fault_detail, op_mod_chain_move_cancel,
-    op_mod_chain_move_pending, op_mod_chain_move_request, op_mod_chain_native, op_mod_chain_read,
+    op_mod_chain_move_pending, op_mod_chain_move_request, op_mod_chain_native,
+    op_mod_chain_object_create, op_mod_chain_object_get, op_mod_chain_object_list,
+    op_mod_chain_object_remove, op_mod_chain_object_update, op_mod_chain_read,
     op_mod_chain_resource_read, op_mod_chain_resource_transfer, op_mod_chain_write,
 };
 use crate::convert::{Declaration, build_contribution};
@@ -128,7 +130,12 @@ extension!(
         op_mod_chain_combat_request,
         op_mod_chain_combat_cancel,
         op_mod_chain_build_request,
-        op_mod_chain_build_cancel
+        op_mod_chain_build_cancel,
+        op_mod_chain_object_get,
+        op_mod_chain_object_list,
+        op_mod_chain_object_create,
+        op_mod_chain_object_update,
+        op_mod_chain_object_remove
     ]
 );
 

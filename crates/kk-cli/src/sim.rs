@@ -438,7 +438,7 @@ fn observe(
         .iter()
         .map(|name| (name, engine.engine_mod_state(name)))
         .collect();
-    json!({"time": engine.get_game_time(), "players": players, "objects": objects, "rooms": rooms, "world": engine.world_snapshot(), "mod_states": states})
+    json!({"time": engine.get_game_time(), "players": players, "objects": objects, "rooms": rooms, "world": engine.world_snapshot(), "mod_objects": engine.mod_object_snapshots(), "mod_states": states})
 }
 
 fn evaluate(assertion: &Assertion, initial: &Value, final_state: &Value) -> Value {

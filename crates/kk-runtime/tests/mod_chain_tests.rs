@@ -181,6 +181,8 @@ mod creep_move_world;
 mod creep_store;
 #[path = "mod_chain_tests/link_decline.rs"]
 mod link_decline;
+#[path = "mod_chain_tests/object_ops.rs"]
+mod object_ops;
 #[path = "mod_chain_tests/object_tick.rs"]
 mod object_tick;
 #[path = "mod_chain_tests/resource_domain.rs"]
