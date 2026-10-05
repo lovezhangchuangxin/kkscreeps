@@ -51,6 +51,7 @@ kkscreeps/
 - `target/debug/kkscreeps embed`：在本地启动逐行 JSON 调用服务。
 - `pnpm run fmt`：使用 rustfmt 格式化 Rust 代码。
 - `pnpm run check`：执行格式检查、Clippy、Rust 测试、JavaScript workspace 测试和文档链接检查；不运行完整 screeps-ok 套件。
+- `pnpm run check:fast`：开发中程快车道，步骤同 `check` 但 Rust 测试跳过 doctest（rustdoc 每次全量重编 doctest 二进制，约占热缓存测试时间四分之三）；提交前仍须跑完整 `check`。可限定 crate：`pnpm run check:fast -- kk-engine kk-runtime`。
 - `cargo test -p kk-engine`：单独运行引擎 crate 的测试。
 - `KKSCREEPS_BIN="$PWD/target/debug/kkscreeps" pnpm --filter @kkscreeps/compat test`：构建适配器，并通过绝对路径选择上述 debug 二进制。
 
