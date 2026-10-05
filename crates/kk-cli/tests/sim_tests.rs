@@ -256,3 +256,5 @@ mod checkpoint;
 mod damage_policy;
 #[path = "sim_tests/heal_policy.rs"]
 mod heal_policy;
+#[path = "sim_tests/mass_policy.rs"]
+mod mass_policy;

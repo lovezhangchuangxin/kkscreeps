@@ -185,6 +185,10 @@ mod damage_policy;
 mod heal_policy;
 #[path = "mod_chain_tests/link_decline.rs"]
 mod link_decline;
+#[path = "mod_chain_tests/mass_policy.rs"]
+mod mass_policy;
+#[path = "mod_chain_tests/mass_policy_faults.rs"]
+mod mass_policy_faults;
 #[path = "mod_chain_tests/mod_building_world.rs"]
 mod mod_building_world;
 #[path = "mod_chain_tests/object_ops.rs"]

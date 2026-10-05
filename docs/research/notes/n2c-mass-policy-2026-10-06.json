@@ -1,0 +1,223 @@
+{
+  "date": "2026-10-06",
+  "base_commit": "18e8ea6d31c63b8d1b481f1c4711bbf459f50ba5",
+  "scope": "N2c 第三片：同房战斗分页与 JS 群体伤害；不包含反击、TOUGH 策略、移动仲裁或玩家预检替换",
+  "executable_sha256": "25e7dc23bb8a11c5e35025abb59ae17c6d619513c6c381188b6354976e63451c",
+  "clean_staged_export": {
+    "run_count": 6,
+    "all_passed": true,
+    "normalized_final_equal_across_channels": true,
+    "ignored_final_fields": [
+      "players.*.cpu_bucket"
+    ],
+    "runs": [
+      {
+        "policy": "flat",
+        "channel": "json",
+        "ticks": 3,
+        "status": "passed",
+        "plan_hash": "bf9c2742bda088d5c63dfc7bc5e843ee4b1d72066d904e4f871fde06fd7dbfb6",
+        "memory": {
+          "code": 0,
+          "nearHits": 77,
+          "farHits": 77,
+          "containerHits": 77,
+          "rampartHits": 1000,
+          "allyHits": 100
+        },
+        "mod_states": {
+          "falloff-mass": null,
+          "flat-mass": {
+            "applied": 1,
+            "targets": 3
+          }
+        }
+      },
+      {
+        "policy": "flat",
+        "channel": "kkpv",
+        "ticks": 3,
+        "status": "passed",
+        "plan_hash": "bf9c2742bda088d5c63dfc7bc5e843ee4b1d72066d904e4f871fde06fd7dbfb6",
+        "memory": {
+          "code": 0,
+          "nearHits": 77,
+          "farHits": 77,
+          "containerHits": 77,
+          "rampartHits": 1000,
+          "allyHits": 100
+        },
+        "mod_states": {
+          "falloff-mass": null,
+          "flat-mass": {
+            "applied": 1,
+            "targets": 3
+          }
+        }
+      },
+      {
+        "policy": "falloff",
+        "channel": "json",
+        "ticks": 3,
+        "status": "passed",
+        "plan_hash": "7c6b1e913bbcfcd33eedfa676a71df2deec6aada083a4ceb0599795a8b930920",
+        "memory": {
+          "code": 0,
+          "nearHits": 80,
+          "farHits": 92,
+          "containerHits": 86,
+          "rampartHits": 1000,
+          "allyHits": 100
+        },
+        "mod_states": {
+          "falloff-mass": {
+            "applied": 1,
+            "targets": 3
+          },
+          "flat-mass": null
+        }
+      },
+      {
+        "policy": "falloff",
+        "channel": "kkpv",
+        "ticks": 3,
+        "status": "passed",
+        "plan_hash": "7c6b1e913bbcfcd33eedfa676a71df2deec6aada083a4ceb0599795a8b930920",
+        "memory": {
+          "code": 0,
+          "nearHits": 80,
+          "farHits": 92,
+          "containerHits": 86,
+          "rampartHits": 1000,
+          "allyHits": 100
+        },
+        "mod_states": {
+          "falloff-mass": {
+            "applied": 1,
+            "targets": 3
+          },
+          "flat-mass": null
+        }
+      },
+      {
+        "policy": "plain",
+        "channel": "json",
+        "ticks": 3,
+        "status": "passed",
+        "plan_hash": "b3bf08fd8d006d49c29eef34615542bd10bf633cc339b45c40ffb56ea3d3ac4e",
+        "memory": {
+          "code": 0,
+          "nearHits": 90,
+          "farHits": 100,
+          "containerHits": 96,
+          "rampartHits": 1000,
+          "allyHits": 100
+        },
+        "mod_states": {}
+      },
+      {
+        "policy": "plain",
+        "channel": "kkpv",
+        "ticks": 3,
+        "status": "passed",
+        "plan_hash": "b3bf08fd8d006d49c29eef34615542bd10bf633cc339b45c40ffb56ea3d3ac4e",
+        "memory": {
+          "code": 0,
+          "nearHits": 90,
+          "farHits": 100,
+          "containerHits": 96,
+          "rampartHits": 1000,
+          "allyHits": 100
+        },
+        "mod_states": {}
+      }
+    ]
+  },
+  "engine_specialized": {
+    "passed": 4,
+    "failed": 0,
+    "coverage": [
+      "最后一项非法/重复/越界不写前项结构、事件或 ID",
+      "队列溢出整批无效果",
+      "分页脱离副本、删除游标后继续与无耐久过滤",
+      "空批量及 256 项/最大伤害表示域"
+    ]
+  },
+  "runtime_specialized": {
+    "passed": 11,
+    "failed": 0,
+    "coverage": [
+      "分页 JS 筛选远处目标、无 rampart 改向/反击及 before 消耗",
+      "多目标正常拒绝保留此前伤害/治疗/转账和后续移动",
+      "结构/废墟/孵化对象/索引/ID 恢复",
+      "非法批量、规范 ID 重复、晚项无耐久/缺失/跨房目标",
+      "SDK getter 与原始 op 转换重入、浮点预检及 sticky fault",
+      "空批量、跨槽和重复消耗",
+      "当前处理器结束故障与跨调用旧 token 拒绝",
+      "晚期 RawMemory 失败缓存重试恰一次"
+    ]
+  },
+  "cli_specialized": {
+    "passed": 2,
+    "failed": 0,
+    "scenario_runs": 6,
+    "cold_resume_cases": 4,
+    "checkpoint_splits": [
+      1
+    ],
+    "continuous_ticks": 3,
+    "packages": [
+      "flat-mass",
+      "falloff-mass"
+    ],
+    "channels": [
+      "json",
+      "kkpv"
+    ],
+    "compared_fields": [
+      "final (CPU bucket 除外)",
+      "plan_hash",
+      "composition"
+    ]
+  },
+  "inspect": {
+    "single_selected_status": "ok",
+    "two_replaces_status": "setup_failed",
+    "two_replaces_error": "builtin:creep.rangedMassAttack: 多个 replace 处理器冲突：falloff-mass:handler.formula, flat-mass:handler.formula"
+  },
+  "full_check": {
+    "command": "KKSCREEPS_BIN=$PWD/target/debug/kkscreeps pnpm run check",
+    "rust_passed": 892,
+    "rust_failed": 0,
+    "rust_ignored": 12,
+    "rust_groups": 56,
+    "javascript_passed": 19,
+    "javascript_compat_passed": 14,
+    "javascript_placeholder_passed": 5,
+    "clippy_warnings": 0,
+    "source_files_checked": 426
+  },
+  "compatibility": {
+    "command": "KKSCREEPS_BIN=$PWD/target/release/kkscreeps node compat/scripts/ratchet.mjs",
+    "pin": "34a630efa42908c117c19c25d2350fa2387bd633",
+    "total": 2914,
+    "passed": 1918,
+    "existing_failed": 89,
+    "skipped": 907,
+    "baseline": "18e8ea6",
+    "changed_case_statuses": 0,
+    "existing_unused_waiver_warnings": 2
+  },
+  "limits": {
+    "max_page_size": 256,
+    "max_batch_size": 256,
+    "max_damage_per_target": 1000000000,
+    "multiple_writes_per_action": false,
+    "configurable_batch_budget": false
+  },
+  "not_measured": [
+    "性能",
+    "新 bot 运行结果",
+    "完整 N2c 或完整 gameplay 兼容"
+  ]
+}

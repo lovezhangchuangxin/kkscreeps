@@ -38,7 +38,7 @@ Mod 源码在包构建时固定，**读不到运行期 ID**。两条通道：
 - **按执行者门控**：挂链槽后全房同类动作都过链。拒绝/改向 handler 必须 `ctx.target.fields.name === '<目标>'` 门控，否则误伤同房其他执行者。
 - **选择性 replace 对非目标执行者裸 return = 静默取消默认中心**：非目标分支必须 `ctx.<能力>.request(<原参数>)` 重发。
 - replace 返回 `undefined` 即取消默认中心；wrap 才有 `next`（恰一次）；decline 五位置=before/wrap 前/replace/wrap 后/after。
-- 能力（`ctx.resources/movement/combat`）只在所属处理器同步期内有效；战斗能力**恰一次消耗**（request/applyDamage/applyHeal/cancel/native 先到者消耗，之后调用是故障）。
+- 能力（`ctx.resources/movement/combat`）只在所属处理器同步期内有效；战斗能力**恰一次消耗**（request/applyDamage/applyDamageBatch/applyHeal/cancel/native 先到者消耗，之后调用是故障）。
 - 玩家面 API 与 FIND 常量注意：`FIND_HOSTILE_STRUCTURES` 含控制器而控制器无耐久面——攻击目标选择要按 `structureType` 过滤，否则 bot 静默空转。
 
 ## 动作次序（EXECUTION_ORDER 常用段）
@@ -58,3 +58,5 @@ Mod 源码在包构建时固定，**读不到运行期 ID**。两条通道：
 伤害策略案例在 damage_policy.rs：ctx.combat.get 返回同房耐久/部件脱离副本；applyDamage 只在近战/单体远程槽开放，不复用默认功率、距离或 rampart 改向；当前调用的数值/越界/已结束处理器能力故障不能被 catch + decline 掩盖；跨调用旧 token 拒绝访问，捕获后可继续新调用。
 
 治疗策略案例在 heal_policy.rs：applyHeal 仅在近/远程治疗槽开放，与 native 共用延迟队列及身体恢复；覆盖同轮致死伤害抵消、远处目标拒绝保留此前队列/转账/后续移动、孵化目标、非法/重复消耗和生命周期、缓存重试。
+
+群体策略案例在 mass_policy.rs / mass_policy_faults.rs：战斗分页脱离读面，批量一次消耗；多目标/结构/spawn 孵化对象的局部恢复，原始 op 小数/转换重入/能力门，缓存重试；玩家 getObjectById 查询须使用规范长 ID，短 ID 仅宿主 ObjId::parse 能力入口支持。

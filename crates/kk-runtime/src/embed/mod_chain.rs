@@ -390,6 +390,24 @@ impl ChainHost for ModChainContext {
         self.apply_combat_heal(target, amount)
     }
 
+    fn combat_apply_damage_batch(
+        &mut self,
+        requests: &[kk_mod_api::combat::DamageRequest],
+    ) -> Result<(), String> {
+        self.apply_combat_damage_batch(requests)
+    }
+
+    fn combat_list(
+        &mut self,
+        after: &str,
+        limit: u32,
+    ) -> Result<kk_mod_api::combat::CombatPage, String> {
+        if self.combat.is_none() {
+            return Err("本次槽没有战斗读取能力".into());
+        }
+        kk_engine::settle::creep::slot_combat_list(&self.ctx.borrow(), after, limit)
+    }
+
     fn combat_get(
         &mut self,
         target: &str,

@@ -17,6 +17,8 @@ use crate::settle::movement::type_name_of;
 
 mod damage_policy;
 pub use damage_policy::{slot_combat_apply_damage, slot_combat_get};
+mod batch_policy;
+pub use batch_policy::{slot_combat_apply_damage_batch, slot_combat_list};
 mod heal_policy;
 pub use heal_policy::slot_combat_apply_heal;
 

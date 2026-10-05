@@ -24,6 +24,8 @@ pub(crate) use combat::{
     op_mod_chain_combat_apply_damage, op_mod_chain_combat_apply_heal, op_mod_chain_combat_cancel,
     op_mod_chain_combat_get, op_mod_chain_combat_request,
 };
+mod combat_batch;
+pub(crate) use combat_batch::{op_mod_chain_combat_apply_damage_batch, op_mod_chain_combat_list};
 mod build;
 pub(crate) use build::{op_mod_chain_build_cancel, op_mod_chain_build_request};
 mod objects;
@@ -129,6 +131,19 @@ pub trait ChainHost {
     /// 默认拒绝；宿主只在有对象/延迟队列回滚边界的治疗槽开放。
     fn combat_apply_heal(&mut self, _target: &str, _amount: i64) -> Result<(), String> {
         Err("本次槽没有策略治疗能力".into())
+    }
+    fn combat_apply_damage_batch(
+        &mut self,
+        _requests: &[kk_mod_api::combat::DamageRequest],
+    ) -> Result<(), String> {
+        Err("本次槽没有批量策略伤害能力".into())
+    }
+    fn combat_list(
+        &mut self,
+        _after: &str,
+        _limit: u32,
+    ) -> Result<kk_mod_api::combat::CombatPage, String> {
+        Err("本次槽没有战斗读取能力".into())
     }
     fn combat_get(
         &mut self,

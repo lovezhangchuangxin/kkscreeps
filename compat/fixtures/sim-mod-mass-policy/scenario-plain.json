@@ -1,0 +1,154 @@
+{
+  "version": 1,
+  "shard": {
+    "players": [
+      "p1"
+    ],
+    "rooms": [
+      {
+        "name": "W1N1",
+        "owner": "p1",
+        "rcl": 6
+      }
+    ]
+  },
+  "bots": [
+    {
+      "player": "p1",
+      "modules": "."
+    }
+  ],
+  "objects": [
+    {
+      "alias": "attacker",
+      "room": "W1N1",
+      "kind": "creep",
+      "spec": {
+        "name": "attacker",
+        "owner": "p1",
+        "pos": [
+          10,
+          10
+        ],
+        "body": [
+          "ranged_attack"
+        ],
+        "ticksToLive": 100
+      }
+    },
+    {
+      "alias": "near",
+      "room": "W1N1",
+      "kind": "creep",
+      "spec": {
+        "name": "near",
+        "owner": "p2",
+        "pos": [
+          11,
+          10
+        ],
+        "body": [
+          "move"
+        ],
+        "ticksToLive": 100
+      }
+    },
+    {
+      "alias": "far",
+      "room": "W1N1",
+      "kind": "creep",
+      "spec": {
+        "name": "far",
+        "owner": "p2",
+        "pos": [
+          14,
+          10
+        ],
+        "body": [
+          "move"
+        ],
+        "ticksToLive": 100
+      }
+    },
+    {
+      "alias": "ally",
+      "room": "W1N1",
+      "kind": "creep",
+      "spec": {
+        "name": "ally",
+        "owner": "p1",
+        "pos": [
+          11,
+          11
+        ],
+        "body": [
+          "move"
+        ],
+        "ticksToLive": 100
+      }
+    },
+    {
+      "alias": "container",
+      "room": "W1N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "container",
+        "owner": "p2",
+        "pos": [
+          12,
+          10
+        ],
+        "hits": 100,
+        "store": {
+          "energy": 5
+        }
+      }
+    },
+    {
+      "alias": "rampart",
+      "room": "W1N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "rampart",
+        "owner": "p1",
+        "pos": [
+          14,
+          10
+        ],
+        "hits": 1000
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "pointer": "/players/p1/memory/code",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "pointer": "/players/p1/memory/nearHits",
+      "op": "eq",
+      "value": 90
+    },
+    {
+      "pointer": "/players/p1/memory/farHits",
+      "op": "eq",
+      "value": 100
+    },
+    {
+      "pointer": "/players/p1/memory/containerHits",
+      "op": "eq",
+      "value": 96
+    },
+    {
+      "pointer": "/players/p1/memory/allyHits",
+      "op": "eq",
+      "value": 100
+    },
+    {
+      "pointer": "/players/p1/memory/rampartHits",
+      "op": "eq",
+      "value": 1000
+    }
+  ]
+}

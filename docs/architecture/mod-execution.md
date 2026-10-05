@@ -49,7 +49,7 @@ runtime 的自有动作适配器在调用前武装对象变换日志，所有参
 
 `builtin:creep.move` 的边界同样由引擎包住整条 Hosted 链，但保存的是执行者在移动请求矩阵中的登记条目与意图时疲劳记录；拒绝时按快照恢复本执行者的登记，不触碰其他执行者的请求或拉拽关系，协议与限制见[移动动作槽](creep-move-slot.md)。该槽执行于意图登记阶段，实际位移、道路磨损、工地踩踏、疲劳结算与跨房过渡仍由仲裁及对象 tick 阶段完成，拒绝不影响疲劳恢复、寿命等独立 tick 行为。
 
-五个战斗槽同样由引擎包住整条 Hosted 链：快照受影响对象（执行者、目标及其格上 rampart；群体攻击为范围 3 内全部对象）、延迟伤害/治疗队列条目与事件长度，并以链内增删日志撤销结构击毁产生的废墟插入与对象移除（ID 游标随回退）；`ctx.combat.request/applyDamage/applyHeal` 触达的链外对象由运行时首触日志恢复。`ctx.combat` 的恰一次消耗约束与 massAttack 无改向的限制见[战斗动作槽](creep-combat-slot.md)。
+五个战斗槽同样由引擎包住整条 Hosted 链：快照受影响对象（执行者、目标及其格上 rampart；群体攻击为范围 3 内全部对象）、延迟伤害/治疗队列条目与事件长度，并以链内增删日志撤销结构击毁产生的废墟插入与对象移除（ID 游标随回退）；`ctx.combat.request/applyDamage/applyDamageBatch/applyHeal` 触达的链外对象由运行时首触日志恢复。`ctx.combat` 的恰一次消耗约束与 massAttack 无改向的限制见[战斗动作槽](creep-combat-slot.md)。
 
 建造族三槽（build/repair/dismantle）共用战斗族的日志化边界：快照受影响对象（执行者、目标；dismantle 另含目标格 rampart 与执行者格上的掉落面——同格掉落堆与容器）与事件长度，链内增删日志撤销完工结构、废墟与掉落堆的插入及对象移除（ID 游标随回退）；`ctx.build.request` 改向触达的链外对象由运行时首触日志恢复，其恰一次消耗约束与 request 后刷新处理器视图的差异见[建造动作槽](creep-build-slot.md)。
 

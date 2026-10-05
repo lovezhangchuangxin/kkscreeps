@@ -69,6 +69,13 @@ pub fn slot_combat_apply_damage(
     if actor.spawning {
         return Err("孵化中的 creep 不能施加策略伤害".into());
     }
+    validate_damage_target(w, target_id)?;
+    damage::apply_damage_without_retaliation(w, id, target_id, amount, attack_type);
+    Ok(())
+}
+
+/// 单体与批量策略共享目标表示校验；不包含原生距离、阵营或护墙策略。
+pub(super) fn validate_damage_target(w: &Working, target_id: ObjId) -> Result<(), String> {
     let target = w
         .room
         .objects
@@ -81,6 +88,5 @@ pub fn slot_combat_apply_damage(
     if !attackable || damage::object_hits(target) <= 0 {
         return Err("策略目标须为存活 creep 或有耐久的结构".into());
     }
-    damage::apply_damage_without_retaliation(w, id, target_id, amount, attack_type);
     Ok(())
 }
