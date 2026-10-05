@@ -9,7 +9,9 @@
 - 更新日期：2026-10-06。
 - 实现参考基线：`8e28ac4`，JS 受击策略与独立护甲/护盾组合；这是功能基线，后续文档提交不改变它的含义。接手时仍须核对实际 HEAD 和工作区。
 - 最近已完成：G01 移动竞争（`9c8687d`）与 G02.a/G02.b 移动准入/障碍准入槽（`b7e65d5`、`e032991`）、G29.a 玩家类型生成（随本批提交），此前为 N2c 受击策略第二片（`8e28ac4`）。
-- 当前任务：**G29.a 玩家类型生成已交付**（2026-10-06，`73b0f1b`）：`kkscreeps mod types --root <Mod根> --out <声明.d.ts>` 从冻结计划确定性生成玩家面 TypeScript 声明——Mod 对象投影 interface（信封键恰一次，同名位置字段被投影等值覆写不重复；Public 必选/Owner 可选/ServerOnly 不生成）、意图参数类型与 `emit` 字面量窄化签名（可空参数为可选参数；可执行性门与引擎装配共用 `kk-mod-api intent_gate`，未接线形态生成期即拒）、建筑绑定、按计划窄化的 `ModInstallApi`（objects/buildings.bind、queries.install 返回 `{find: 数字字面量, look}`、builtins 内建类清单与 41_mod_player.js 双份维护并经 kk-cli 测试逐项断言一致；全计划联合面，头部注明运行时按命名空间裁剪）、`ModResourceName` 资源联合；ValueKind 全集映射，非 TS 标识符字段名退化为引号键、枚举字面量转义、参数类型名段化净化与撞名消歧。`--check` 按字节对比（只读不重写；缺失/过期/手改退出 2，注册失败 1）；输出与报告都必须在包根之外（守卫先于创建任何目录，词法消解 `..`，被拒路径不落任何文件）。首片不做：官方 screeps 全量 API 的 .d.ts、Room/Player/World 域意图、IDE 自动配置、按包独立声明面。验收：两独立包夹具 [mod-typed](../../compat/fixtures/mod-typed/README.md)（alpha 全 ValueKind 含 bool/f64/ref+三态可见性、beta owner-collection+可空参数意图）组合互不串、选择门零残留（select/exclude 同集逐字节一致）、新鲜度失败/恢复全周期、输出/报告守卫（含投毒路径不建目录）、生成物经 tsc 5.9.3 `--noEmit --strict` 核验且消费者正例（extends+bind）通过、负例（目录外键/错误类型）被 TS 拒绝。契约见 [mod-types](../architecture/mod-types.md)、证据见[交付记录](../research/notes/g29a-mod-types-2026-10-06.md)。G02 剩余不变：意图静态预检 `has_static_obstacle` 开放（后续子片或 G07 预检族）、摘要附带安全模式主人（可解释性增强）。下一步按队列启动 **G06.a 运行 trace 与故障复现**（“作者与移动”阶段出口），G02 静态预检子片可穿插。
+- 当前任务：**G06.a 运行 trace 与故障复现启动**（2026-10-06）：现有诊断面盘点完成——sim 报告只留**最后一条** Mod 故障（`mod_fault`：tick/房间/目标/错误），`ModFaultStreak`/`ModAutoDisable` 有类型化数据但不出报告，正常拒绝（Decline 带绑定与 code）与整轮丢弃→重建→缓存重试的回退链路完全不可见；mod inspect 提供槽级活动链（before/native/after 绑定序）。本片实现**可选、有界**的 Mod 运行 trace：`sim run --mod-trace`（mod test 同名旗标透传）开启，记录槽调用结果（tick/房间/目标/槽键/阶段，Completed/Declined{绑定,code}/Fault{绑定,种类,错误}）与 VM 生命周期回退事件（结算失败待重试、realm 重建、自动停用{来源,连击数,停用闭包}），缓冲上限固定并带丢弃计数，错误文本截断；默认关闭零成本（Option 判空）。与 inspect 活动链一致：trace 槽键/故障绑定须能在同报告 composition 的活动链中找到（验收断言）。不记录参数/字段/玩家 Memory（错误文本可能引用被拒参数，属服务端诊断）；trace 是诊断快照**不是确定性回放日志**——复现材料=场景身份+包目录+选择集重跑（报告已有 scenario_sha256/plan_hash），文档明示。验收：kk-runtime 单测（上限/截断/事件序：Fault→SettlementRetry→Rebuilt→AutoDisabled）+ sim 夹具（拒绝包+故障停用包双场景，报告 mod_trace 事件与 composition 一致、CLI 旗标默认关闭时报告无 trace）。
+  - G29.a 玩家类型生成已交付（2026-10-06，`73b0f1b`）：`kkscreeps mod types` 冻结计划确定性生成玩家面 TypeScript 声明 + `--check` 字节级新鲜度门禁 + 输出/报告双守卫（包外、先于建目录）；TS 标识符安全（引号键/枚举转义/参数类型名消歧）、可执行性门与引擎装配共用 `intent_gate`。契约见 [mod-types](../architecture/mod-types.md)、证据见[交付记录](../research/notes/g29a-mod-types-2026-10-06.md)。
+  - G02 剩余不变：意图静态预检 `has_static_obstacle` 开放（后续子片或 G07 预检族）、摘要附带安全模式主人（可解释性增强）；G29.b/.c 依赖 G28.a。
 - 最近维护工作：2026-10-06 开发与实验命令可移植性整理已完成复审和完整仓库门禁，见下方记录；没有新增已实现的 G 功能。
 - 未解决的产品决定：本轮路线复审没有需要用户补充的决定；具体公开接口、权限与耐久协议尚未冻结，须在对应子片设计和验收。
 - 验证参考：使用上述验收记录及其机器数据，不复制其测试数量作为永久门槛。最新兼容性报告和门禁配置位于 `compat/reports/`。
@@ -37,7 +39,7 @@
 | G03 | 完整房间移动仲裁 | G01、G02 | 未开始 | — |
 | G04 | 移动代价与执行效果 | G02；代价可先行，完整仲裁交互在 G03 后验收 | 未开始 | — |
 | G05 | Mod 作者基础 CLI | 现有 sim、inspect、检查点 | 已完成 | G05.a `mod init` `ee296cb`；G05.b `mod test` `dbc82a4`（[模板与测试说明](../architecture/local-simulation.md#作者包模板)）；后续增强另登记 |
-| G06 | 运行 trace 与故障复现 | 现有活动链与故障诊断 | 未开始 | — |
+| G06 | 运行 trace 与故障复现 | 现有活动链与故障诊断 | 进行中 | G06.a 槽调用/回退事件 trace + CLI 旗标实施中 |
 | G07 | 玩家预检策略扩展 | 各领域策略契约；可分族穿插 | 未开始 | — |
 | G08 | Mod 建筑字段与生命周期 | 现有建筑目录、schema、tick | 未开始 | — |
 | G09 | 自有对象库存与耐久能力 | 现有对象/资源/伤害能力 | 未开始 | — |
