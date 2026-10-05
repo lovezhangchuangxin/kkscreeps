@@ -24,6 +24,8 @@ target/release/kkscreeps sim run --scenario /tmp/my-mods/starter/scenario.json -
 
 `kkscreeps mod test --root <目录> --report <汇总.json>` 对根下每个自带 `scenario.json` 的包按同一 `sim run` 路径运行断言并汇总：无场景的包记 skipped；`--ticks` 默认 3（匹配模板断言），`--kkpv` 与 `sim run --kkpv` 同义。退出码沿用 sim 语义（0 全过、1 场景/装载失败、2 运行或断言失败），多包失败取最严重退出码；汇总报告内联各场景的机器结果（含 plan_hash 与断言状态），装载期失败也落盘 `setup_failed` 汇总。
 
+`kkscreeps mod types --root <目录> --out <声明.d.ts> --report <报告.json>` 从冻结计划生成玩家面 TypeScript 声明（安装 API 窄化签名、对象投影 interface、意图参数与资源联合），`--select`/`--exclude`/`--configs` 与 sim/inspect 共用展开语义；`--check` 与磁盘声明按字节对比校验新鲜（过期或缺失退出 2，只读不改文件）。输出与报告都必须在包根之外（`.d.ts`/`.json` 后缀）——包内文件字节计入计划指纹，被守卫拒绝的路径不落任何文件。完整契约见[玩家类型生成](mod-types.md)。
+
 ## 场景输入
 
 完整示例见[经济夹具](../../compat/fixtures/sim-economy/scenario.json)。场景的顶层、shard、bot、对象声明和断言声明拒绝未知字段；房间和对象 spec 复用已有嵌入接口的字段校验及默认值。

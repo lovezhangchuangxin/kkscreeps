@@ -10,6 +10,7 @@ mod mod_inspect;
 mod mod_perf_probe;
 mod mod_player_probe;
 mod mod_test;
+mod mod_types;
 mod perf_probe;
 mod report;
 mod sim;
@@ -181,6 +182,29 @@ enum ModCommand {
         #[arg(long)]
         report: std::path::PathBuf,
     },
+    /// 从冻结计划生成玩家面 TypeScript 声明；--check 校验新鲜度
+    Types {
+        #[arg(long)]
+        root: std::path::PathBuf,
+        /// 按包 ID 分组的 JSON 配置文件
+        #[arg(long)]
+        configs: Option<std::path::PathBuf>,
+        /// 显式选择的包 ID，可重复；依赖闭包自动加入，未选包不安装
+        #[arg(long)]
+        select: Vec<String>,
+        /// 显式排除的包 ID，可重复；与必需依赖相撞时报错
+        #[arg(long)]
+        exclude: Vec<String>,
+        /// 声明输出路径（.d.ts）；必须位于包根目录之外
+        #[arg(long)]
+        out: std::path::PathBuf,
+        /// 只与磁盘声明按字节对比，不写入也不创建目录；过期或缺失退出非零
+        #[arg(long)]
+        check: bool,
+        /// 汇总报告输出路径（JSON）
+        #[arg(long)]
+        report: std::path::PathBuf,
+    },
 }
 
 #[derive(Subcommand)]
@@ -249,6 +273,28 @@ fn main() {
                 disable,
                 select,
                 exclude,
+                report,
+            }));
+        }
+        Command::Mod {
+            command:
+                ModCommand::Types {
+                    root,
+                    configs,
+                    select,
+                    exclude,
+                    out,
+                    check,
+                    report,
+                },
+        } => {
+            std::process::exit(mod_types::run(mod_types::Options {
+                root,
+                configs,
+                select,
+                exclude,
+                out,
+                check,
                 report,
             }));
         }

@@ -8,8 +8,8 @@
 
 - 更新日期：2026-10-06。
 - 实现参考基线：`8e28ac4`，JS 受击策略与独立护甲/护盾组合；这是功能基线，后续文档提交不改变它的含义。接手时仍须核对实际 HEAD 和工作区。
-- 最近已完成：N2c 受击策略第二片，见[现行契约](../architecture/mod-incoming-policy.md)和[验收记录](../research/notes/n2c-incoming-policy-2026-10-06.md)。
-- 当前任务：**G02.b 仲裁障碍准入已交付**（2026-10-06，随本批提交）：`builtin:room.moveObstacle` 单向追加阻挡槽上线——准入槽之后、取消链之前整房一次进 JS，输入为全部胜者的目的格对象/地形摘要（creep 让位标记=胜者∧准入终值、rampart 公开性、工地 structureType、墙地形与路）与 native 初判；`ctx.obstacle.block/isBlocked` 单向追加，取消链按 追加 ∥ 链内 native 判定，让位链传播保留在引擎。放行方向不开放（坐标表示有效性宿主约束）。stay-north/no-swap 两独立包 + 原生 + 组合并集四场景双通道冷恢复验收；默认路径微基准在噪音内。契约见 [mod-move-obstacle](../architecture/mod-move-obstacle.md)、证据见[交付记录](../research/notes/g02b-move-obstacle-2026-10-06.md)。G02 剩余：意图静态预检 `has_static_obstacle` 开放（后续子片或 G07 预检族）、摘要附带安全模式主人（可解释性增强）；当前启动 **G29.a 玩家类型生成**（2026-10-06）：`kkscreeps mod types` 从冻结计划确定性生成玩家面 TypeScript 声明——Mod 对象类型 interface（信封 + 按 Visibility 的 Public 必选/Owner 可选/ServerOnly 不生成）、`ModInstallApi`（objects/buildings.bind 按类型键字面量窄化、intents.emit 按意图键与 args schema 生成具名参数类型、queries.install 返回 `{find: 数字字面量, look}`、builtins 内建类清单与 41_mod_player.js 同源断言）、声明资源目录联合类型；ValueKind 全集（Bool/Number 域/String/ObjectRef→id 字符串/Enum 联合/Array/Map/Record）映射。新鲜度门禁：`mod types --check` 重生成对比，过期退出非零；输出默认必须在包根之外（包内文件字节计入计划指纹，声明放包内会改变身份——文档明示）。首片不做：官方 screeps 全量 API 的 .d.ts、Room/Player/World 域意图（装配只接对象域）、IDE 自动配置。验收：两独立包组合生成互不串、--select/--exclude 不残留未选包、ValueKind 全覆盖、新鲜度失败/恢复、生成物经 tsc 语法核验（compat 工作区已有 typescript 依赖）。
+- 最近已完成：G01 移动竞争（`9c8687d`）与 G02.a/G02.b 移动准入/障碍准入槽（`b7e65d5`、`e032991`）、G29.a 玩家类型生成（随本批提交），此前为 N2c 受击策略第二片（`8e28ac4`）。
+- 当前任务：**G29.a 玩家类型生成已交付**（2026-10-06，随本批提交）：`kkscreeps mod types --root <Mod根> --out <声明.d.ts>` 从冻结计划确定性生成玩家面 TypeScript 声明——Mod 对象投影 interface（信封键恰一次，同名位置字段被投影等值覆写不重复；Public 必选/Owner 可选/ServerOnly 不生成）、意图参数类型与 `emit` 字面量窄化签名（可空参数为可选参数；可执行性门与引擎装配共用 `kk-mod-api intent_gate`，未接线形态生成期即拒）、建筑绑定、按计划窄化的 `ModInstallApi`（objects/buildings.bind、queries.install 返回 `{find: 数字字面量, look}`、builtins 内建类清单与 41_mod_player.js 双份维护并经 kk-cli 测试逐项断言一致；全计划联合面，头部注明运行时按命名空间裁剪）、`ModResourceName` 资源联合；ValueKind 全集映射，非 TS 标识符字段名退化为引号键、枚举字面量转义、参数类型名段化净化与撞名消歧。`--check` 按字节对比（只读不重写；缺失/过期/手改退出 2，注册失败 1）；输出与报告都必须在包根之外（守卫先于创建任何目录，词法消解 `..`，被拒路径不落任何文件）。首片不做：官方 screeps 全量 API 的 .d.ts、Room/Player/World 域意图、IDE 自动配置、按包独立声明面。验收：两独立包夹具 [mod-typed](../../compat/fixtures/mod-typed/README.md)（alpha 全 ValueKind 含 bool/f64/ref+三态可见性、beta owner-collection+可空参数意图）组合互不串、选择门零残留（select/exclude 同集逐字节一致）、新鲜度失败/恢复全周期、输出/报告守卫（含投毒路径不建目录）、生成物经 tsc 5.9.3 `--noEmit --strict` 核验且消费者正例（extends+bind）通过、负例（目录外键/错误类型）被 TS 拒绝。契约见 [mod-types](../architecture/mod-types.md)、证据见[交付记录](../research/notes/g29a-mod-types-2026-10-06.md)。G02 剩余不变：意图静态预检 `has_static_obstacle` 开放（后续子片或 G07 预检族）、摘要附带安全模式主人（可解释性增强）。下一步按队列启动 **G06.a 运行 trace 与故障复现**（“作者与移动”阶段出口），G02 静态预检子片可穿插。
 - 最近维护工作：2026-10-06 开发与实验命令可移植性整理已完成复审和完整仓库门禁，见下方记录；没有新增已实现的 G 功能。
 - 未解决的产品决定：本轮路线复审没有需要用户补充的决定；具体公开接口、权限与耐久协议尚未冻结，须在对应子片设计和验收。
 - 验证参考：使用上述验收记录及其机器数据，不复制其测试数量作为永久门槛。最新兼容性报告和门禁配置位于 `compat/reports/`。
@@ -60,7 +60,7 @@
 | G26 | 自动检查点与 JS storage provider | .a 基于现有检查点；.b 依赖 G27.a；回放恢复接 G25 | 未开始 | — |
 | G27 | 提交后输出与后台服务 | .a 最小后台宿主；.b 依赖 G25.a/G26.a，按需接 G20 | 未开始 | — |
 | G28 | Backend 贡献入口 | .a 实现 M3 网络基础；.b 依赖 G27 与 .a | 未开始 | — |
-| G29 | 玩家类型与客户端贡献 | .a 类型生成前置；.b 客户端基础依赖 G28.a；.c 依赖 .b | 进行中 | G29.a 冻结描述的 TypeScript 声明生成实施中 |
+| G29 | 玩家类型与客户端贡献 | .a 类型生成前置；.b 客户端基础依赖 G28.a；.c 依赖 .b | 部分完成 | G29.a `mod types` 声明生成与 `--check` 门禁随本批提交：[mod-types](../architecture/mod-types.md)、[记录](../research/notes/g29a-mod-types-2026-10-06.md)；.b/.c 未开始 |
 | G30 | 官方预设、覆盖审计与性能验收 | .a/.d 先建立再滚动；.b/.c 随领域交付，存量变更依赖 G23 | 未开始 | — |
 
 ## 实际执行队列与前置门

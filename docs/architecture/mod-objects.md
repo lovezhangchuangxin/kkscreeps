@@ -40,6 +40,6 @@ create/update/remove 的“自有”指**执行该处理器的绑定 namespace**
 
 ## 独立 JS 示例
 
-[官方 nursery 原型](../../mods/official/nursery/README.md) 只用公共 SDK 周期创建火花，火花更新年龄并到期删除；player.js 提供类及 FIND/LOOK 查询。[场景](../../compat/fixtures/sim-mod-objects/scenario.json) 通过真实玩家 VM 检查动态对象和空间查询，sim 报告的 mod_objects 包含全部已提交 Mod 对象，便于检查无初始别名的对象。
+[官方 nursery 原型](../../mods/official/nursery/README.md) 只用公共 SDK 周期创建火花，火花更新年龄并到期删除；player.js 提供类及 FIND/LOOK 查询（安装 API 与字段形态可用 `kkscreeps mod types` 生成 TypeScript 声明，见[玩家类型生成](mod-types.md)）。[场景](../../compat/fixtures/sim-mod-objects/scenario.json) 通过真实玩家 VM 检查动态对象和空间查询，sim 报告的 mod_objects 包含全部已提交 Mod 对象，便于检查无初始别名的对象。
 
 验证涵盖出生资格、自删/同房删、分页、权限、getter 嵌套、正常拒绝、整轮与晚期故障、双房缓存重试、停用保留数据及 JSON/KKPV 一致。记录见[N1b 交付](../research/notes/n1b-mod-objects-2026-10-05.md)。本片没有生产库存、可建造建筑或内容预设；后续计划见[完整玩法](../plans/mod-complete-gameplay.md)。

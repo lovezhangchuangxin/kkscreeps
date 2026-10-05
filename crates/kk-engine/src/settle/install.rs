@@ -87,7 +87,6 @@ impl Engine {
     pub(super) fn check_executable_intents(
         plan: &kk_mod_api::ContributionPlan,
     ) -> Result<(), String> {
-        use kk_mod_api::{ArgumentConversion, IntentAuthority, IntentScope, Merge};
         Self::check_object_lifecycles(plan)?;
         for intent in plan.intents() {
             if intent.key.namespace() == "builtin" {
@@ -106,41 +105,9 @@ impl Engine {
                     intent.key, intent.slot, slot.stage
                 ));
             }
-            if intent.scope != IntentScope::Object {
-                return Err(format!(
-                    "动作 {} 的 {} 域执行通道未接线（当前只接线对象域）",
-                    intent.key,
-                    match intent.scope {
-                        IntentScope::Room => "房间",
-                        IntentScope::Player => "玩家",
-                        _ => "世界",
-                    }
-                ));
-            }
-            if !matches!(intent.merge, Merge::Last) {
-                return Err(format!(
-                    "动作 {} 声明队列合并模式，该模式的执行装配未接线",
-                    intent.key
-                ));
-            }
-            if !matches!(intent.conversion, ArgumentConversion::Strict) {
-                return Err(format!(
-                    "动作 {} 声明非严格参数转换，该形态的执行装配未接线",
-                    intent.key
-                ));
-            }
-            if intent.authority != IntentAuthority::Player {
-                return Err(format!(
-                    "动作 {} 声明非玩家授权，服务端发射通道未接线",
-                    intent.key
-                ));
-            }
-            if !intent.suppressed_by.is_empty() {
-                return Err(format!(
-                    "动作 {} 声明压制关系，压制判定的执行装配未接线",
-                    intent.key
-                ));
-            }
+            // 意图描述符级的未接线形态与 typegen 共用同一道门（kk-mod-api
+            // intent_gate），声明生成与执行装配不再各自漂移。
+            kk_mod_api::intent_gate::executable_gate(intent)?;
         }
         // 非内建槽必须被对象意图或已接线的自有类型生命周期挂载，
         // 否则装配了执行器也没有实际派发点。

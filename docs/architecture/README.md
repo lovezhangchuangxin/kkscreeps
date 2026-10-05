@@ -31,6 +31,7 @@
 | [creep-build-slot.md](creep-build-slot.md) | creep 建造族动作槽（build/repair/dismantle）、目标改向/取消能力与完工变换/掉落面的拒绝恢复 |
 | [mod-resources.md](mod-resources.md) | Mod 同房库存读取、精确转账与损耗、多对象拒绝日志 |
 | [mod-resource-catalog.md](mod-resource-catalog.md) | 命名空间资源声明、冻结目录、玩家常量同步与市场/跨房显式拒绝 |
+| [mod-types.md](mod-types.md) | 冻结计划确定性生成玩家面 TypeScript 声明、新鲜度门禁与包外输出守卫 |
 | [tick-contract.md](tick-contract.md) | 已提交状态、候选结果、失败重试与目标任务合并规则 |
 | [sandbox.md](sandbox.md) | 玩家沙箱、执行预算、内存限制与模块加载的机制和目标 |
 | [local-simulation.md](local-simulation.md) | 已实现的 sim run：场景、模块、断言、报告与失败退出边界；mod init 作者包模板与 mod test 汇总测试 |

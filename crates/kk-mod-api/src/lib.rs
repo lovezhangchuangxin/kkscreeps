@@ -23,6 +23,7 @@ mod fingerprint;
 mod freeze;
 mod handlers;
 pub mod incoming;
+pub mod intent_gate;
 pub mod objects;
 pub mod obstacle;
 mod outcome;
@@ -30,6 +31,7 @@ mod plan;
 pub mod player_surface;
 pub mod resources;
 mod rules;
+pub mod typegen;
 pub mod validate;
 
 pub use definition::*;
