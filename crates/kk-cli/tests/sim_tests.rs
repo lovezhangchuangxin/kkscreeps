@@ -252,3 +252,5 @@ mod rules;
 mod buildings;
 #[path = "sim_tests/checkpoint.rs"]
 mod checkpoint;
+#[path = "sim_tests/damage_policy.rs"]
+mod damage_policy;

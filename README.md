@@ -10,6 +10,7 @@
 - `kkscreeps embed` 提供标准输入/输出的逐行 JSON 调用服务；`bot-check` 检查真实 bot 的运行情况；`perf-probe` 采集固定负载下的性能数据，`mod-perf-probe` 对比密集对象的纯结算与 Mod 处理链成本。
 - `kkscreeps sim run` 加载 JSON 场景、玩家模块及显式 JS Mod 包，推进真实结算并检查已提交状态；支持多玩家、JSON/KKPV 投影、Mod state 断言和内容/计划身份报告，见[本地场景模拟](docs/architecture/local-simulation.md)。
 - `kkscreeps mod inspect` 注册真实 JS 包并输出处理器依赖、冻结/活动链、规则来源和停用影响预览，见[组合诊断](docs/architecture/mod-composition.md)。
+- 独立 JS 包可声明[新资源](docs/architecture/mod-resource-catalog.md)和[可建造生产建筑](docs/architecture/mod-buildings.md)，并在近战/单体远程槽中提供[自定义伤害策略](docs/architecture/mod-damage-policy.md)；其余领域按[完整玩法计划](docs/plans/mod-complete-gameplay.md)继续开放。
 - 显式完整状态保存与重启续跑见[基础检查点](docs/architecture/checkpoints.md)，`sim run` 支持 `--save-checkpoint` / `--load-checkpoint`。
 - `serve`、`test`、`import` 仍为预留命令，调用时返回退出码 2。HTTP/WebSocket 服务、数据库持久化和前端应用尚未实现。
 - `kk-pathfinder` 的原生寻路已接入玩家沙箱：`PathFinder.search`/`Room.findPath`/`moveTo` 使用真实地形和代价矩阵，支持同步 roomCallback/costCallback、嵌套搜索、异常传播及预算中断。

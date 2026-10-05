@@ -1,6 +1,7 @@
 //! 将 Mod 整槽链接到房间候选，暂存 state 并校验字段写面。
 use super::*;
 
+mod combat;
 mod objects;
 mod resources;
 
@@ -212,12 +213,17 @@ impl ModChainContext {
     fn load_fields(&self) -> Result<Value, String> {
         let w = self.ctx.borrow();
         match w.room.objects.get(&self.id) {
-            Some(kk_schema::room::RoomObject::Creep(object)) => Ok(json!({
-                "name": object.name, "owner": object.owner, "x":object.x,"y":object.y,
-                "spawning":object.spawning,"hits":object.hits,"fatigue":object.fatigue,
-                "store":kk_world::world_json::store_with_extra_json(&object.store,&object.store_extra),
-                "storeCapacity":kk_engine::settle::creep::store_capacity(object),
-            })),
+            Some(kk_schema::room::RoomObject::Creep(object)) => {
+                let view = kk_engine::settle::creep::slot_combat_get(&w, self.id)
+                    .ok_or("creep 战斗读面非法")?;
+                Ok(json!({
+                    "name": object.name, "owner": object.owner, "x":object.x,"y":object.y,
+                    "spawning":object.spawning,"hits":object.hits,"fatigue":object.fatigue,
+                    "hitsMax": view.hits_max, "body": view.body,
+                    "store":kk_world::world_json::store_with_extra_json(&object.store,&object.store_extra),
+                    "storeCapacity":kk_engine::settle::creep::store_capacity(object),
+                }))
+            }
             Some(kk_schema::room::RoomObject::Mod(_)) => w
                 .mod_fields(self.id)
                 .ok_or_else(|| "Mod payload 非法".into()),
@@ -369,55 +375,29 @@ impl ChainHost for ModChainContext {
     }
 
     fn combat_request(&mut self, target: &str) -> Result<(), String> {
-        let (action, journal) = {
-            let Some(combat) = &self.combat else {
-                return Err("本次槽没有战斗目标改向能力".into());
-            };
-            if !combat.action.targeted() {
-                return Err("rangedMassAttack 没有目标改向能力".into());
-            }
-            if combat.consumed {
-                return Err("本动作的战斗能力已消耗（改向/取消/执行恰一次）".into());
-            }
-            (combat.action, combat.journal.clone())
-        };
-        let target_id = ObjId::parse(target).ok_or("战斗目标 ID 非法")?;
-        let touched = kk_engine::settle::creep::combat_touch_targets(&self.ctx.borrow(), target_id);
-        {
-            let mut w = self.ctx.borrow_mut();
-            let mut journal = journal.borrow_mut();
-            for id in &touched {
-                if !journal.contains_key(id)
-                    && let Some(object) = w.room.objects.get(id).cloned()
-                {
-                    journal.insert(
-                        *id,
-                        RedirectJournalEntry {
-                            object,
-                            damage: w.damage_to_apply.get(id).copied(),
-                            heal: w.heal_to_apply.get(id).copied(),
-                        },
-                    );
-                }
-            }
-            kk_engine::settle::creep::slot_combat_request(&mut w, self.id, target_id, action)?;
-        }
-        self.cached_fields = None;
-        if let Some(combat) = &mut self.combat {
-            combat.consumed = true;
-        }
-        Ok(())
+        self.request_combat(target)
     }
 
     fn combat_cancel(&mut self) -> Result<(), String> {
-        let Some(combat) = &mut self.combat else {
-            return Err("本次槽没有战斗能力".into());
-        };
-        if combat.consumed {
-            return Err("本动作的战斗能力已消耗（改向/取消/执行恰一次）".into());
+        self.cancel_combat()
+    }
+
+    fn combat_apply_damage(&mut self, target: &str, amount: i64) -> Result<(), String> {
+        self.apply_combat_damage(target, amount)
+    }
+
+    fn combat_get(
+        &mut self,
+        target: &str,
+    ) -> Result<Option<kk_mod_api::combat::CombatView>, String> {
+        if self.combat.is_none() {
+            return Err("本次槽没有战斗读取能力".into());
         }
-        combat.consumed = true;
-        Ok(())
+        let id = ObjId::parse(target).ok_or("战斗目标 ID 非法")?;
+        Ok(kk_engine::settle::creep::slot_combat_get(
+            &self.ctx.borrow(),
+            id,
+        ))
     }
 
     fn build_request(&mut self, target: &str) -> Result<(), String> {

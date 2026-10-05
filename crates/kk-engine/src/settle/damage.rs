@@ -25,6 +25,29 @@ pub fn apply_damage(
     damage: i64,
     attack_type: i64,
 ) {
+    apply_damage_inner(w, attacker, target_id, damage, attack_type, true);
+}
+
+/// JS 策略已决定目标和伤害，不再隐含追加原生近战反击。生命值、
+/// 延迟队列、死亡/废墟与事件仍走共用应用器，避免出现第二套死亡规则。
+pub(in crate::settle) fn apply_damage_without_retaliation(
+    w: &mut Working,
+    attacker: ObjId,
+    target_id: ObjId,
+    damage: i64,
+    attack_type: i64,
+) {
+    apply_damage_inner(w, attacker, target_id, damage, attack_type, false);
+}
+
+fn apply_damage_inner(
+    w: &mut Working,
+    attacker: ObjId,
+    target_id: ObjId,
+    damage: i64,
+    attack_type: i64,
+    native_retaliation: bool,
+) {
     let Some(target) = w.room.objects.get(&target_id).cloned() else {
         return;
     };
@@ -48,7 +71,10 @@ pub fn apply_damage(
 
     let mut attack_back: i64 = 0;
     if let RoomObject::Creep(t) = &target {
-        if attack_type == c::EVENT_ATTACK_TYPE_MELEE && rampart_at(w, attacker_pos).is_none() {
+        if native_retaliation
+            && attack_type == c::EVENT_ATTACK_TYPE_MELEE
+            && rampart_at(w, attacker_pos).is_none()
+        {
             attack_back = kk_world::types::calc_body_effectiveness(
                 &t.body,
                 BodyKind::Attack,

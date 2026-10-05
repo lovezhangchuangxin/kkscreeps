@@ -15,6 +15,9 @@ use crate::settle::damage;
 use crate::settle::movement;
 use crate::settle::movement::type_name_of;
 
+mod damage_policy;
+pub use damage_policy::{slot_combat_apply_damage, slot_combat_get};
+
 /// 战斗能力面认得的动作族成员；与 builtin:creep.* 五槽一一对应。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CombatAction {

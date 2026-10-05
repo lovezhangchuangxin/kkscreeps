@@ -20,7 +20,10 @@ pub(crate) use movement::{
     op_mod_chain_move_cancel, op_mod_chain_move_pending, op_mod_chain_move_request,
 };
 mod combat;
-pub(crate) use combat::{op_mod_chain_combat_cancel, op_mod_chain_combat_request};
+pub(crate) use combat::{
+    op_mod_chain_combat_apply_damage, op_mod_chain_combat_cancel, op_mod_chain_combat_get,
+    op_mod_chain_combat_request,
+};
 mod build;
 pub(crate) use build::{op_mod_chain_build_cancel, op_mod_chain_build_request};
 mod objects;
@@ -118,6 +121,16 @@ pub trait ChainHost {
     }
     fn combat_cancel(&mut self) -> Result<(), String> {
         Err("本次槽没有战斗能力".into())
+    }
+    /// 默认拒绝；宿主只在有对象/队列/增删回滚边界的攻击槽开放。
+    fn combat_apply_damage(&mut self, _target: &str, _amount: i64) -> Result<(), String> {
+        Err("本次槽没有策略伤害能力".into())
+    }
+    fn combat_get(
+        &mut self,
+        _target: &str,
+    ) -> Result<Option<kk_mod_api::combat::CombatView>, String> {
+        Err("本次槽没有战斗读取能力".into())
     }
     /// 默认拒绝，宿主须为建造族槽显式开放目标改向/取消能力；仅作用于
     /// 本次调用的执行者与本动作，进度/伤害/能量数值不经此面修改。

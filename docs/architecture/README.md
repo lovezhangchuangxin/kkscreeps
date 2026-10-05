@@ -19,6 +19,7 @@
 | [creep-resource-slots.md](creep-resource-slots.md) | creep 转入/提取动作链、只读候选面与局部拒绝恢复 |
 | [creep-move-slot.md](creep-move-slot.md) | creep 移动动作槽、受控请求能力与按执行者粒度的拒绝恢复 |
 | [creep-combat-slot.md](creep-combat-slot.md) | creep 战斗动作槽、目标改向/取消能力与延迟队列/结构摧毁的拒绝恢复 |
+| [mod-damage-policy.md](mod-damage-policy.md) | JS 单体伤害公式与应用、战斗读面、表示约束和恢复边界 |
 | [creep-build-slot.md](creep-build-slot.md) | creep 建造族动作槽（build/repair/dismantle）、目标改向/取消能力与完工变换/掉落面的拒绝恢复 |
 | [mod-resources.md](mod-resources.md) | Mod 同房库存读取、精确转账与损耗、多对象拒绝日志 |
 | [mod-resource-catalog.md](mod-resource-catalog.md) | 命名空间资源声明、冻结目录、玩家常量同步与市场/跨房显式拒绝 |

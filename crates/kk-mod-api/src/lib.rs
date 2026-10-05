@@ -14,6 +14,7 @@
 
 pub mod buildings;
 pub mod builtin;
+pub mod combat;
 mod definition;
 pub mod extension;
 mod fingerprint;

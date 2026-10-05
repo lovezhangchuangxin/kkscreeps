@@ -54,3 +54,5 @@ Mod 源码在包构建时固定，**读不到运行期 ID**。两条通道：
 `object_tick.rs` 覆盖同步 tick；对象声明的 tick 自动派生 `<typeKey>.tick` 槽与 `<typeKey>.tick.process` 绑定。生命周期 args 为 null，无玩家授权前提；decline 使用 `return api.decline(code)`，在 tick 中明确拒绝。对象动作先执行，tick 读取随后候选；异常撤销整轮，缓存玩家在恢复后不重跑。
 
 对象操作案例在 object_ops.rs：ctx.objects 查询 Mod 同房候选，写入限于绑定 namespace 的类型；get 返回 detached snapshot，update 部分合并，自删后 target.fields=null。动作中新生本轮 tick、tick 中新生下轮 tick。拒绝撤销对象、位置/格内顺序与 ID；故障则丢弃整轮。
+
+伤害策略案例在 damage_policy.rs：ctx.combat.get 返回同房耐久/部件脱离副本；applyDamage 只在近战/单体远程槽开放，不复用默认功率、距离或 rampart 改向；当前调用的数值/越界/已结束处理器能力故障不能被 catch + decline 掩盖；跨调用旧 token 拒绝访问，捕获后可继续新调用。

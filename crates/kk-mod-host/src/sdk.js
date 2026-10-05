@@ -590,6 +590,21 @@ export function runChain(slot, token) {
         });
       },
       cancel() { return checked(() => ops.op_mod_chain_combat_cancel(token, key)); },
+      get(targetId) {
+        return checked(() => {
+          if (typeof targetId !== 'string') throw new Error('战斗目标须为对象 ID 的原始字符串');
+          return ops.op_mod_chain_combat_get(token, key, targetId);
+        });
+      },
+      applyDamage(targetId, amount) {
+        return checked(() => {
+          if (typeof targetId !== 'string') throw new Error('战斗目标须为对象 ID 的原始字符串');
+          if (!Number.isInteger(amount) || amount < 0 || amount > 1e9) {
+            throw new Error('策略伤害须为 0..=1e9 的整数');
+          }
+          return ops.op_mod_chain_combat_apply_damage(token, key, targetId, amount);
+        });
+      },
     });
   }
   function build(key, ctx, isOpen) {

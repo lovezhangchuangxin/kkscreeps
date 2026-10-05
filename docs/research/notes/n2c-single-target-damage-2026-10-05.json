@@ -1,0 +1,188 @@
+{
+  "base_commit": "25b427d4a1776cbada92d9780c9cfb46072b76eb",
+  "release_sha256": "a400f2b5574d71eb911aa9f431bf0062381ecd68d87419bd7ff5ae756fa567bb",
+  "full_check": {
+    "rust_passed": 864,
+    "rust_failed": 0,
+    "rust_ignored": 12,
+    "rust_groups": 56,
+    "clippy_warnings": 0,
+    "javascript_passed": 14,
+    "javascript_failed": 0,
+    "source_files": 411
+  },
+  "mod_chain_tests": {
+    "passed": 139,
+    "failed": 0,
+    "new_damage_policy_tests": 10
+  },
+  "cold_resume": {
+    "packages": [
+      "flat-damage",
+      "scaled-damage"
+    ],
+    "channels": [
+      "json",
+      "kkpv"
+    ],
+    "reference_ticks": 3,
+    "before_save_ticks": 1,
+    "after_resume_ticks": 2,
+    "comparison": "complete final report except cpu_bucket; composition and PlanHash"
+  },
+  "clean_staged_export_scenarios": [
+    {
+      "scenario": "flat",
+      "channel": "json",
+      "status": "passed",
+      "committed_ticks": 3,
+      "memory": {
+        "code": 0,
+        "target_hits": 55,
+        "actor_hits": 200
+      },
+      "plan_hash": "e52710746e46955820037f0142bae7c7045e27c3c779dee9963bf96bcd8fa404",
+      "namespace_state": {
+        "flat-damage": {
+          "applied": 1,
+          "lastDamage": 45
+        },
+        "scaled-damage": null
+      }
+    },
+    {
+      "scenario": "flat",
+      "channel": "kkpv",
+      "status": "passed",
+      "committed_ticks": 3,
+      "memory": {
+        "code": 0,
+        "target_hits": 55,
+        "actor_hits": 200
+      },
+      "plan_hash": "e52710746e46955820037f0142bae7c7045e27c3c779dee9963bf96bcd8fa404",
+      "namespace_state": {
+        "flat-damage": {
+          "applied": 1,
+          "lastDamage": 45
+        },
+        "scaled-damage": null
+      }
+    },
+    {
+      "scenario": "scaled",
+      "channel": "json",
+      "status": "passed",
+      "committed_ticks": 3,
+      "memory": {
+        "code": 0,
+        "target_hits": 40,
+        "actor_hits": 200
+      },
+      "plan_hash": "ee2cee449eeff672be1ee9f8b170fbd61b227e67e8face06de52fe367112af88",
+      "namespace_state": {
+        "flat-damage": null,
+        "scaled-damage": {
+          "applied": 1,
+          "lastDamage": 60
+        }
+      }
+    },
+    {
+      "scenario": "scaled",
+      "channel": "kkpv",
+      "status": "passed",
+      "committed_ticks": 3,
+      "memory": {
+        "code": 0,
+        "target_hits": 40,
+        "actor_hits": 200
+      },
+      "plan_hash": "ee2cee449eeff672be1ee9f8b170fbd61b227e67e8face06de52fe367112af88",
+      "namespace_state": {
+        "flat-damage": null,
+        "scaled-damage": {
+          "applied": 1,
+          "lastDamage": 60
+        }
+      }
+    },
+    {
+      "scenario": "plain",
+      "channel": "json",
+      "status": "passed",
+      "committed_ticks": 3,
+      "memory": {
+        "code": 0,
+        "target_hits": 70,
+        "actor_hits": 170
+      },
+      "plan_hash": "b3bf08fd8d006d49c29eef34615542bd10bf633cc339b45c40ffb56ea3d3ac4e",
+      "namespace_state": {}
+    },
+    {
+      "scenario": "plain",
+      "channel": "kkpv",
+      "status": "passed",
+      "committed_ticks": 3,
+      "memory": {
+        "code": 0,
+        "target_hits": 70,
+        "actor_hits": 170
+      },
+      "plan_hash": "b3bf08fd8d006d49c29eef34615542bd10bf633cc339b45c40ffb56ea3d3ac4e",
+      "namespace_state": {}
+    }
+  ],
+  "compatibility": {
+    "total": 2914,
+    "passed": 1918,
+    "failed": 89,
+    "skipped": 907,
+    "status_changes_against_base_commit": [],
+    "existing_unused_waiver_warnings": 2
+  },
+  "bots": {
+    "tooangel": {
+      "ticks_requested": 2000,
+      "ticks_completed": 2000,
+      "ticks_terminated": 0,
+      "ticks_skipped_penalty": 0,
+      "ticks_with_console_error": 0,
+      "missing_api": {},
+      "baseline_report": "compat/reports/bot-tooangel.json",
+      "baseline_metrics_match": true,
+      "normalized_error_stacks_match": true
+    },
+    "overmind": {
+      "ticks_requested": 2000,
+      "ticks_completed": 2000,
+      "ticks_terminated": 0,
+      "ticks_skipped_penalty": 0,
+      "ticks_with_console_error": 1,
+      "missing_api": {},
+      "baseline_report": "compat/reports/bot-overmind.json",
+      "baseline_metrics_match": true,
+      "normalized_error_stacks_match": true
+    },
+    "wasm": {
+      "ticks_requested": 10,
+      "ticks_completed": 10,
+      "ticks_terminated": 0,
+      "ticks_skipped_penalty": 0,
+      "ticks_with_console_error": 0,
+      "missing_api": {},
+      "baseline_report": "compat/reports/bot-wasm.json",
+      "baseline_metrics_match": true,
+      "normalized_error_stacks_match": true
+    }
+  },
+  "composition": {
+    "select_flat_damage_exit": 0,
+    "select_both_exit": 1,
+    "conflicting_bindings": [
+      "flat-damage:handler.formula",
+      "scaled-damage:handler.formula"
+    ]
+  }
+}

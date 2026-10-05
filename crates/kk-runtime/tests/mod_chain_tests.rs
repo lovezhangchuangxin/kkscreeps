@@ -179,6 +179,8 @@ mod creep_move;
 mod creep_move_world;
 #[path = "mod_chain_tests/creep_store.rs"]
 mod creep_store;
+#[path = "mod_chain_tests/damage_policy.rs"]
+mod damage_policy;
 #[path = "mod_chain_tests/link_decline.rs"]
 mod link_decline;
 #[path = "mod_chain_tests/mod_building_world.rs"]
