@@ -1,0 +1,124 @@
+{
+  "report_version": 1,
+  "date": "2026-10-05",
+  "base_commit": "b7ebafcbd0f54be253028d91e5bb096b8e75cbfe",
+  "scope": "N1c JS handler dependencies, shared composition diagnosis and author mod inspect CLI",
+  "executable_sha256": "59537c8821ded3f46d1d3fa557ea4dd45d2878b85728216b0f9bd2394bf68010",
+  "plan_hash": "7f710d2775d4f277d39d9609618eef367da3a699e000046d229ffdbf59212e68",
+  "packages": [
+    "a-audit",
+    "base",
+    "dependent",
+    "z-gate"
+  ],
+  "targeted_tests": {
+    "host_composition": 7,
+    "runtime_composition": 2,
+    "cli_inspect": 3,
+    "cli_sim_composition": 1
+  },
+  "validation": {
+    "status": "passed",
+    "full_check": {
+      "command": "KKSCREEPS_BIN=\"$PWD/target/release/kkscreeps\" pnpm run check",
+      "rust": {
+        "passed": 754,
+        "failed": 0,
+        "ignored": 11,
+        "result_groups": 54
+      },
+      "adapter": {
+        "passed": 14,
+        "failed": 0,
+        "skipped": 0
+      },
+      "format": "passed",
+      "clippy": "passed",
+      "documents": {
+        "markdown_files": 265,
+        "local_links": 1494
+      },
+      "source_size": {
+        "files": 358,
+        "limit_lines": 1000,
+        "passed": true
+      }
+    },
+    "compatibility": {
+      "command": "KKSCREEPS_BIN=\"$PWD/target/release/kkscreeps\" node compat/scripts/ratchet.mjs",
+      "screeps_ok_commit": "34a630efa42908c117c19c25d2350fa2387bd633",
+      "total": 2914,
+      "counts": {
+        "passed": 1918,
+        "failed": 89,
+        "skipped": 907
+      },
+      "floor": 1918,
+      "case_identities_and_statuses_equal_base": true,
+      "ratchet_reference": "HEAD~1 at validation time",
+      "red_flips": 0,
+      "green_flips": 0,
+      "new_waivers": 0,
+      "existing_unused_waiver_warnings": 2,
+      "report": "compat/reports/kkscreeps.json",
+      "report_sha256": "458fd0e6787ce48a6da2d3e933c45d0629fadf8a57559dc47b9e21197620868a"
+    },
+    "simulation": {
+      "channels": [
+        "json",
+        "kkpv"
+      ],
+      "rooms": 2,
+      "players": 2,
+      "committed_ticks_per_channel": 2000,
+      "player_error_ticks": 0,
+      "assertions_passed_per_channel": 3,
+      "counter_value_per_object": 2000,
+      "base_state_visits": 4000,
+      "player_memory_loops": 2000,
+      "player_memory_last_value": 1999,
+      "trace": "ZA([C])az",
+      "final_world_mod_objects_state_and_player_memory_equal": true,
+      "composition_equal_across_channels_and_inspect": true
+    },
+    "disable_preview": {
+      "requested": [
+        "z-gate"
+      ],
+      "closure": [
+        "a-audit",
+        "dependent",
+        "z-gate"
+      ],
+      "original_center": "base:counter.tick.process",
+      "hook_chains_empty": true,
+      "plan_hash_unchanged": true,
+      "rules_unchanged": true
+    }
+  },
+  "raw_reports": {
+    "n1c-mod-composition-json-2026-10-05.json": {
+      "sha256": "a9270356bd5e6c6b109ae7c0a06e3615baa2c7b155a1e29f6af54e82d050403f",
+      "executable_sha256": "59537c8821ded3f46d1d3fa557ea4dd45d2878b85728216b0f9bd2394bf68010"
+    },
+    "n1c-mod-composition-kkpv-2026-10-05.json": {
+      "sha256": "398263c42d3bd50735334b2a997405b75531b6023f3330282adcf7cc394039e3",
+      "executable_sha256": "59537c8821ded3f46d1d3fa557ea4dd45d2878b85728216b0f9bd2394bf68010"
+    },
+    "n1c-mod-inspect-2026-10-05.json": {
+      "sha256": "d4eb3516b02e2298ef3fb2f444cb4312084ec85d789aa6ee8ff2ab37b923daca",
+      "executable_sha256": "59537c8821ded3f46d1d3fa557ea4dd45d2878b85728216b0f9bd2394bf68010"
+    },
+    "n1c-mod-inspect-disabled-2026-10-05.json": {
+      "sha256": "6801daa1f3ca32905c2c1cb373e9a9bd930f153210b0e05e93a92a467208b798",
+      "executable_sha256": "59537c8821ded3f46d1d3fa557ea4dd45d2878b85728216b0f9bd2394bf68010"
+    }
+  },
+  "limitations": [
+    "Registration inspection and execution disable preview do not select or uninstall content.",
+    "Rules, schema, player API and state remain frozen after disable.",
+    "JS effective rule reads remain N1d.",
+    "No live-server control, per-tick trace, persistent input events or cold recovery.",
+    "Wall times were recorded alongside validation processes and are not controlled performance comparisons."
+  ]
+}

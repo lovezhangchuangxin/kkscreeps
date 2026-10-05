@@ -282,6 +282,8 @@ pub struct RegisterOptions {
 /// 丢弃 realm 即丢弃函数表，`executables` 只是键清单。
 #[derive(Clone, Debug)]
 pub struct Registered {
+    /// 冻结组合及活动执行链的诊断；使用与链安装相同的选择逻辑。
+    pub composition: crate::CompositionReport,
     pub plan: ContributionPlan,
     /// Mod 贡献，依依赖拓扑序（被依赖者在前）；不含 builtin 贡献。
     pub contributions: Vec<Contribution>,
@@ -805,7 +807,28 @@ impl ModRealm {
                 &executables,
             )?);
         }
-        let plan = freeze_with_builtin(builtin::link(), contributions.to_vec(), options.freeze)?;
+        let plan = freeze_with_builtin(
+            builtin::link(),
+            contributions.to_vec(),
+            options.freeze.clone(),
+        )?;
+        let composition = crate::CompositionReport::build(
+            &plan,
+            &contributions,
+            packages,
+            &options.freeze,
+            disabled,
+        )
+        .map_err(|error| ModHostError::new("composition", error))?;
+        let closed = composition
+            .with_disabled(disabled)
+            .map_err(|error| ModHostError::new("composition", error))?;
+        if closed.disabled_mods != *disabled {
+            return Err(ModHostError::new(
+                "register",
+                format!("停用集合未覆盖依赖闭包：{:?}", closed.disabled_mods),
+            ));
+        }
         self.install_chains(&plan, &contributions, disabled)?;
         let mut player_modules = Vec::new();
         for id in &order {
@@ -838,6 +861,7 @@ impl ModRealm {
             });
         }
         Ok(Registered {
+            composition,
             plan,
             contributions,
             executables,

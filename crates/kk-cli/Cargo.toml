@@ -12,6 +12,7 @@ kk-core = { workspace = true }
 kk-engine = { workspace = true }
 kk-runtime = { workspace = true }
 kk-mod-host = { workspace = true }
+kk-mod-api = { workspace = true }
 kk-runner = { workspace = true }
 kk-world = { workspace = true }
 clap = { workspace = true }

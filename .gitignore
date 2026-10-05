@@ -55,3 +55,6 @@ bot-check-report.json
 perf-probe.json
 
 __pycache__/
+
+!compat/fixtures/mod-composition/
+!compat/fixtures/sim-mod-composition/

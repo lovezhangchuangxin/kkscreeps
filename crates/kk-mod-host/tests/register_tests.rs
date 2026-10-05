@@ -288,3 +288,6 @@ mod declarations;
 
 #[path = "register_tests/invocation.rs"]
 mod invocation;
+
+#[path = "register_tests/composition.rs"]
+mod composition;

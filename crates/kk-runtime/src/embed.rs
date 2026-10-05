@@ -266,6 +266,11 @@ impl EmbedEngine {
             .unwrap_or(Value::Null)
     }
 
+    /// 已冻结的组合及当前停用掩码；无 JS Mod VM 的原生默认路径返回 None。
+    pub fn mod_composition(&self) -> Option<kk_mod_host::CompositionReport> {
+        self.mod_realm.as_ref().map(|vm| vm.borrow().composition())
+    }
+
     /// 当前已安装贡献计划的身份；诊断报告须记录实际计划而非输入推算值。
     pub fn contribution_plan_hash(&self) -> kk_mod_api::PlanHash {
         self.engine.plan_hash()

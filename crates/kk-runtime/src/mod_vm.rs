@@ -36,7 +36,7 @@ pub(crate) struct ModVm {
     plan_hash: PlanHash,
     executables: BTreeSet<Key>,
     disabled: BTreeSet<String>,
-    dependencies: BTreeMap<String, BTreeSet<String>>,
+    composition: kk_mod_host::CompositionReport,
     fail_next_rebuild: bool,
     pub(crate) last_fault: Option<ModSettlementFault>,
     pub(crate) fault_streak: Option<ModFaultStreak>,
@@ -50,34 +50,6 @@ impl ModVm {
         options: RegisterOptions,
         registered: &Registered,
     ) -> Self {
-        let mut dependencies: BTreeMap<String, BTreeSet<String>> = packages
-            .iter()
-            .map(|(id, package)| {
-                (
-                    id.clone(),
-                    package.manifest.dependencies.keys().cloned().collect(),
-                )
-            })
-            .collect();
-        let handlers: BTreeMap<_, _> = registered
-            .contributions
-            .iter()
-            .flat_map(|contribution| &contribution.handlers)
-            .map(|handler| (&handler.key, handler.key.namespace()))
-            .collect();
-        // handler 的显式依赖也保守提升到 Mod 级，避免留下缺少前置条件的健康钩子。
-        for contribution in &registered.contributions {
-            for handler in &contribution.handlers {
-                for dependency in &handler.depends_on {
-                    if let Some(namespace) = handlers.get(dependency) {
-                        dependencies
-                            .entry(contribution.source.namespace.clone())
-                            .or_default()
-                            .insert((*namespace).to_string());
-                    }
-                }
-            }
-        }
         Self {
             realm: Some(realm),
             packages,
@@ -85,7 +57,7 @@ impl ModVm {
             plan_hash: registered.plan.hash(),
             executables: registered.executables.clone(),
             disabled: BTreeSet::new(),
-            dependencies,
+            composition: registered.composition.clone(),
             fail_next_rebuild: false,
             last_fault: None,
             fault_streak: None,
@@ -93,30 +65,23 @@ impl ModVm {
         }
     }
 
+    pub(crate) fn composition(&self) -> kk_mod_host::CompositionReport {
+        self.composition.clone()
+    }
+
     pub(crate) fn disabled(&self) -> &BTreeSet<String> {
         &self.disabled
     }
 
     pub(crate) fn disable(&mut self, id: &str) -> Result<BTreeSet<String>, String> {
-        if !self.packages.contains_key(id) {
-            return Err(format!("未知 Mod {id}"));
-        }
-        let mut disabled = self.disabled.clone();
-        disabled.insert(id.to_string());
-        loop {
-            let previous = disabled.len();
-            for (dependent, dependencies) in &self.dependencies {
-                if !dependencies.is_disjoint(&disabled) {
-                    disabled.insert(dependent.clone());
-                }
-            }
-            if previous == disabled.len() {
-                break;
-            }
-        }
+        let composition = self
+            .composition
+            .with_disabled(&BTreeSet::from([id.into()]))?;
+        let disabled = composition.disabled_mods.clone();
         let added = disabled.difference(&self.disabled).cloned().collect();
         if disabled != self.disabled {
             self.disabled = disabled;
+            self.composition = composition;
             // 在新掩码下重建后才能重试；不改变玩家缓存与失败诊断。
             self.invalidate();
         }

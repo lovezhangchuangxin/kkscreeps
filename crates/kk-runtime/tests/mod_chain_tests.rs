@@ -191,3 +191,6 @@ mod resource_domain;
 mod resource_faults;
 #[path = "mod_chain_tests/store_rules.rs"]
 mod store_rules;
+
+#[path = "mod_chain_tests/composition.rs"]
+mod composition;

@@ -14,8 +14,10 @@
 //! ```
 
 mod chain;
+mod composition;
 mod convert;
 mod error;
+mod execution_plan;
 mod graph;
 mod limits;
 mod manifest;
@@ -33,3 +35,6 @@ pub use package::{ModPackage, discover_packages};
 pub use profile::{ChainProfiler, ProfileSample};
 pub use realm::{ModRealm, PlayerModulePackage, RegisterOptions, Registered};
 pub use write::ChainWrite;
+
+pub use composition::{ComposedSlot, CompositionReport, ExecutionMode, RuleSelection};
+pub use execution_plan::ExecutionChain;

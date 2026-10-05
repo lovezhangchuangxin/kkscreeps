@@ -241,3 +241,6 @@ fn assertions_and_invalid_scenes_fail_without_stale_success_or_input_overwrite()
 mod mods;
 #[path = "sim_tests/object_ops.rs"]
 mod object_ops;
+
+#[path = "sim_tests/composition.rs"]
+mod composition;

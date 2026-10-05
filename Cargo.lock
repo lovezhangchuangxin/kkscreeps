@@ -993,6 +993,7 @@ dependencies = [
  "clap",
  "kk-core",
  "kk-engine",
+ "kk-mod-api",
  "kk-mod-host",
  "kk-runner",
  "kk-runtime",

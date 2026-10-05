@@ -158,7 +158,15 @@ export function createApi(namespace, config) {
       }
       const key = ownKey(namespace, `${namespace}:handler.${id}`);
       requireFunction(namespace, key, fn, kind);
-      declare('handler', { key, slot, kind });
+      declare('handler', { key, slot, kind, get options() {
+        // 原始属性读取留在声明 op 的转换期；原型上的依赖也不能静默丢失。
+        const options = Object.create(null);
+        for (const name of Object.keys(spec)) options[name] = null;
+        options.id = id;
+        options.dependsOn = spec.dependsOn;
+        return options;
+      } });
+      return key;
     };
   }
 

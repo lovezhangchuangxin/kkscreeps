@@ -4,6 +4,8 @@
 
 自有类型可通过公共 SDK 声明同步 tick，遍历资格、候选字段及整轮失败恢复见[自有对象 tick](mod-object-tick.md)。
 
+JS 处理器选项 dependsOn 已进入同槽/同 kind 的冻结图；作者可用 mod inspect 或 sim 的 composition 检查链序、原始/活动中心、规则来源及停用闭包，契约见[组合诊断](mod-composition.md)。
+
 Generic 仓库另已开放 10 条容量数值规则，贯穿放置、建造、实验室槽切换、终端 tick 与标准玩家常量，见[仓库容量规则](store-rules.md)。这组消费者不增加动作处理槽，默认路径仍是 Rust 结算。
 
 ## 两条执行路径
@@ -126,7 +128,7 @@ runtime 的 `last_mod_settlement_fault()` 返回最近一次实际结算中失�
 
 ## 显式停用与回退
 
-宿主 Rust API `EmbedEngine::disable_mod(id)` 在调用边界停用指定 Mod，并按 manifest dependencies 与 handler 的显式 depends_on 计算传递依赖者闭包，保守停用整个依赖 Mod。返回本次新增的 ID 集合，`disabled_mods()` 可读取累计集合。未知 ID 不改变状态；重复停用不销毁健康 VM。分片内只允许追加停用，重新启用须重建分片。CLI 命令和持久化事件尚未接入；下述自动策略复用相同停用机制。
+宿主 Rust API `EmbedEngine::disable_mod(id)` 在调用边界停用指定 Mod，并按 manifest dependencies 与 JS dependsOn 转换的 handler 显式 depends_on 计算传递依赖者闭包，保守停用整个依赖 Mod。返回本次新增的 ID 集合，`disabled_mods()` 可读取累计集合。未知 ID 不改变状态；重复停用不销毁健康 VM。分片内只允许追加停用，重新启用须重建分片。mod inspect --disable 可预览闭包，但尚无操作运行服务器的 CLI 或持久化事件；下述自动策略复用相同停用机制。
 
 停用集合存在 runtime 的生命周期容器中，与 realm、最近故障记录和玩家轮缓存分开。新增停用后先销毁 realm，沿原恢复门从完整包快照重新注册，核对原 PlanHash 与可执行绑定清单，再发布使用停用掩码的执行链。恢复失败保留停用集合、玩家缓存与原故障；可以再次恢复。失败候选不会因停用被直接发布，缓存玩家结果仍在新链上重新结算。
 

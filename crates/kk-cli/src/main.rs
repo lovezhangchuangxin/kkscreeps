@@ -5,9 +5,11 @@ use clap::{Parser, Subcommand};
 
 mod bot_check;
 mod embed_main;
+mod mod_inspect;
 mod mod_perf_probe;
 mod mod_player_probe;
 mod perf_probe;
+mod report;
 mod sim;
 
 #[derive(Parser)]
@@ -19,6 +21,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// 检查 Mod 冻结组合与停用依赖闭包
+    Mod {
+        #[command(subcommand)]
+        command: ModCommand,
+    },
     /// 运行游戏服务器（尚未实现）
     Serve,
     /// 加载 bot 模块并逐轮执行真实世界结算
@@ -125,6 +132,26 @@ enum Command {
 }
 
 #[derive(Subcommand)]
+enum ModCommand {
+    /// 注册真实包并输出冻结链、规则来源及停用预览，不推进世界
+    Inspect {
+        #[arg(long)]
+        root: std::path::PathBuf,
+        /// 按包 ID 分组的 JSON 配置文件
+        #[arg(long)]
+        configs: Option<std::path::PathBuf>,
+        /// key=namespace；显式选择多方规则覆盖的来源，可重复
+        #[arg(long)]
+        rule_source: Vec<String>,
+        /// 预览停用指定包及依赖者，可重复；不卸载内容
+        #[arg(long)]
+        disable: Vec<String>,
+        #[arg(long)]
+        report: std::path::PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
 enum SimCommand {
     /// 从 JSON 场景运行玩家，检查最终已提交状态并生成报告
     Run {
@@ -144,6 +171,24 @@ enum SimCommand {
 fn main() {
     let cli = Cli::parse();
     match cli.command {
+        Command::Mod {
+            command:
+                ModCommand::Inspect {
+                    root,
+                    configs,
+                    rule_source,
+                    disable,
+                    report,
+                },
+        } => {
+            std::process::exit(mod_inspect::run(mod_inspect::Options {
+                root,
+                configs,
+                rule_sources: rule_source,
+                disable,
+                report,
+            }));
+        }
         Command::Serve | Command::Test | Command::Import => {
             eprintln!("该子命令尚未实装（见 docs/roadmap.md 的里程碑规划）");
             std::process::exit(2);

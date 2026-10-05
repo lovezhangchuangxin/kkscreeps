@@ -1,8 +1,9 @@
 //! 从版本化场景加载真实 bot，复用 EmbedEngine 执行、结算和提交。
 //! 报告读取已提交状态；玩家错误后的该轮可能已提交部分合法意图。
 
+use crate::report::write_report;
 use std::collections::{BTreeMap, BTreeSet};
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
@@ -393,6 +394,7 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
         "engine_version": env!("CARGO_PKG_VERSION"), "executable_sha256": executable_hash,
         "scenario": path, "scenario_sha256": digest(&bytes), "modules": modules,
         "mods": mods_metadata, "plan_hash": engine.contribution_plan_hash().hex(),
+        "composition": engine.mod_composition(),
         "disabled_mods": engine.disabled_mods(),
         "channel": if options.kkpv { "kkpv" } else { "json" }, "concurrency": options.concurrency,
         "ticks_requested": options.ticks, "ticks_attempted": attempted, "world_ticks_committed": committed,
@@ -501,35 +503,6 @@ fn difference(actual: &Value, before: &Value) -> Option<Value> {
     safe_float(actual)
         .zip(safe_float(before))
         .map(|(a, b)| json!(a - b))
-}
-
-fn write_report(path: &Path, report: &Value) -> anyhow::Result<()> {
-    let parent = path
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or(Path::new("."));
-    std::fs::create_dir_all(parent)?;
-    let name = path
-        .file_name()
-        .context("报告路径必须指向文件")?
-        .to_string_lossy();
-    let temporary = parent.join(format!(".{name}.{}.tmp", std::process::id()));
-    let mut file = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&temporary)?;
-    let result = (|| {
-        serde_json::to_writer_pretty(&mut file, report)?;
-        file.write_all(b"\n")?;
-        file.sync_all()?;
-        drop(file);
-        std::fs::rename(&temporary, path)?;
-        Ok(())
-    })();
-    if result.is_err() {
-        let _ = std::fs::remove_file(&temporary);
-    }
-    result
 }
 
 #[cfg(test)]

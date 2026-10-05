@@ -14,6 +14,9 @@
 | `kk-engine/src/settle/mod.rs` | 世界引擎状态和控制入口；`working.rs` 房间候选及领域操作，`room_loop.rs` 房间循环，`install.rs` 冻结计划接线，`engine_tick.rs` 世界阶段与发布，`validation.rs` 发布前校验 |
 | `kk-engine/src/settle/contrib.rs` | 槽、处理器和续行类型及运行入口；`contrib/assemble.rs` 冻结表装配，`execute.rs` 内建动作/tick 链执行与 Hosted 局部恢复（资源两端/事件、移动请求登记、战斗/建造族对象/延迟队列/链内增删） |
 | `kk-engine/src/settle/resources.rs` | 资源领域读取与副本预检转账；`resources/generic.rs` 共享 Generic 仓库解析、native 容量与实验室槽写入 |
+| `kk-mod-host/src/execution_plan.rs` | 链安装与诊断共用的活动顺序/中心回退选择 |
+| `kk-mod-host/src/composition.rs` | 冻结来源、规则候选与选中来源、处理器/manifest 停用闭包 |
+| `kk-cli/src/mod_inspect.rs` | 独立注册诊断与停用预览；report.rs 共用原子 JSON 报告写入 |
 | `kk-mod-api/src/objects.rs` | 对象视图/分页封套和管理初始化/候选创建共用的字段准备 |
 | `kk-engine/src/settle/objects.rs` | 同房 Mod 候选读写、命名空间检查；日志与索引恢复在 working.rs |
 | `kk-mod-host/src/chain/objects.rs` | 对象 op 的同步访问、可重入字段转换与首个故障保留 |

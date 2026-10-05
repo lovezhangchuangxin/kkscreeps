@@ -22,7 +22,10 @@ pub(crate) fn handler_plans(
             if dependency.slot != h.slot || dependency.kind != h.kind {
                 return Err(FreezeError::new(
                     h.key.to_string(),
-                    "处理器依赖须在同一入口和同一种 kind 内",
+                    format!(
+                        "处理器依赖 {key} 指向 {} / {:?}，须在同一入口和同一种 kind 内",
+                        dependency.slot, dependency.kind
+                    ),
                 ));
             }
         }
@@ -49,7 +52,17 @@ pub(crate) fn handler_plans(
                     .find(|k| handlers[*k].depends_on.is_subset(&done))
                     .cloned()
                     .ok_or_else(|| {
-                        FreezeError::new(slot.key.to_string(), format!("{kind:?} 处理器依赖有环"))
+                        FreezeError::new(
+                            slot.key.to_string(),
+                            format!(
+                                "{kind:?} 处理器依赖有环（含下游）：{}",
+                                pending
+                                    .iter()
+                                    .map(ToString::to_string)
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            ),
+                        )
                     })?;
                 pending.remove(&next);
                 done.insert(next.clone());
@@ -63,7 +76,14 @@ pub(crate) fn handler_plans(
         if replacements.len() > 1 {
             return Err(FreezeError::new(
                 slot.key.to_string(),
-                "多个 replace 处理器冲突",
+                format!(
+                    "多个 replace 处理器冲突：{}",
+                    replacements
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
             ));
         }
         let has_handlers = handlers.values().any(|h| h.slot == slot.key);
