@@ -1,12 +1,14 @@
 # Mod 处理链执行
 
-当前支持 link transfer/tick、creep transfer/withdraw/move、五个战斗动作、三个建造动作与对象域 Mod 意图。冻结计划决定处理器顺序，Rust 候选保存权威数据，可信 Mod realm 保存 JS 函数。玩家 VM 与玩法 realm 分离；管理员安装的 Mod 共用 realm，Mod 之间没有安全隔离。
+当前支持 link transfer/tick、creep transfer/withdraw/move、五个战斗动作、三个建造动作与对象域 Mod 意图、自有对象 tick。冻结计划决定处理器顺序，Rust 候选保存权威数据，可信 Mod realm 保存 JS 函数。玩家 VM 与玩法 realm 分离；管理员安装的 Mod 共用 realm，Mod 之间没有安全隔离。
+
+自有类型可通过公共 SDK 声明同步 tick，遍历资格、候选字段及整轮失败恢复见[自有对象 tick](mod-object-tick.md)。
 
 Generic 仓库另已开放 10 条容量数值规则，贯穿放置、建造、实验室槽切换、终端 tick 与标准玩家常量，见[仓库容量规则](store-rules.md)。这组消费者不增加动作处理槽，默认路径仍是 Rust 结算。
 
 ## 两条执行路径
 
-没有扩展的内建槽保留 `Native` 直调，不进入 JS。包含 JS 贡献的槽和 Mod 自有动作槽交给 `SlotExecutor` 整槽执行：runtime 一次进入 realm，JS 按冻结顺序运行 before、wrap、中心、after。中心是 JS process/replace，或一个只修改候选的 Rust native 步骤。creep 资源槽、移动槽、战斗槽与建造族槽的只读字段、装配与能力范围见[资源动作槽](creep-resource-slots.md)、[移动动作槽](creep-move-slot.md)、[战斗动作槽](creep-combat-slot.md)和[建造动作槽](creep-build-slot.md)。
+没有扩展的内建槽保留 `Native` 直调，不进入 JS。包含 JS 贡献的槽、Mod 自有动作与 tick 槽交给 `SlotExecutor` 整槽执行：runtime 一次进入 realm，JS 按冻结顺序运行 before、wrap、中心、after。中心是 JS process/replace，或一个只修改候选的 Rust native 步骤。creep 资源槽、移动槽、战斗槽与建造族槽的只读字段、装配与能力范围见[资源动作槽](creep-resource-slots.md)、[移动动作槽](creep-move-slot.md)、[战斗动作槽](creep-combat-slot.md)和[建造动作槽](creep-build-slot.md)。
 
 ```text
 kk-engine：选择 Native 或整槽宿主
@@ -60,7 +62,7 @@ export default function register(api) {
 
 上例按请求数量累计本 Mod namespace 的配额（不代表 native 实际转入量），也可在 `next()` 后拒绝并撤销 native。拒绝后继续其他动作及每轮 tick，并正常发布世界、Memory 与 CPU 候选，保留本轮玩家执行费用；不重建健康 Mod VM。JS 全局变量不在局部恢复范围内，权威玩法状态须放在 `ctx.state`。拒绝代码与实际绑定保留在整槽宿主的类型化结局中，当前不额外发射玩家事件，也不追改玩家此前的 `transferEnergy()` 返回码。
 
-`builtin:link.tick` 仍显式拒绝使用 decline，`attackController` 等其他内建动作尚未开放可拒绝处理槽。纯 Rust callback 仍使用原成功/异常签名，正常拒绝目前由整槽宿主提供。直接使用 ModRealm 的可信宿主须自行恢复候选；SlotExecutor 的自有动作须由宿主恢复全部写入，内建资源动作的原始两端/事件由引擎恢复，移动动作由引擎恢复执行者的请求登记，战斗动作由引擎恢复受影响对象/延迟队列/链内增删，宿主负责 namespace 暂存及能力触达对象的额外恢复；不得写出已有恢复边界。自有动作验证见[正常拒绝记录](../research/notes/mod-intent-decline-2026-10-04.md)，内建多对象验证见[link 拒绝记录](../research/notes/d6-link-decline-2026-10-05.md)、[creep 资源槽记录](../research/notes/d4-creep-resource-slots-2026-10-05.md)、[移动槽记录](../research/notes/d4-move-slot-2026-10-05.md)与[战斗槽记录](../research/notes/d4-combat-slot-2026-10-05.md)；执行来源的结构化记录见下节。
+`builtin:link.tick` 与自有对象 tick 均显式拒绝使用 decline，`attackController` 等其他内建动作尚未开放可拒绝处理槽。纯 Rust callback 仍使用原成功/异常签名，正常拒绝目前由整槽宿主提供。直接使用 ModRealm 的可信宿主须自行恢复候选；SlotExecutor 的自有动作须由宿主恢复全部写入，内建资源动作的原始两端/事件由引擎恢复，移动动作由引擎恢复执行者的请求登记，战斗动作由引擎恢复受影响对象/延迟队列/链内增删，宿主负责 namespace 暂存及能力触达对象的额外恢复；不得写出已有恢复边界。自有动作验证见[正常拒绝记录](../research/notes/mod-intent-decline-2026-10-04.md)，内建多对象验证见[link 拒绝记录](../research/notes/d6-link-decline-2026-10-05.md)、[creep 资源槽记录](../research/notes/d4-creep-resource-slots-2026-10-05.md)、[移动槽记录](../research/notes/d4-move-slot-2026-10-05.md)与[战斗槽记录](../research/notes/d4-combat-slot-2026-10-05.md)；执行来源的结构化记录见下节。
 
 ## 注册声明转换
 
@@ -118,7 +120,7 @@ RoomCtx 是 `Rc<RefCell<Working>>`。native/op 访问自行取得短借用，进
 
 ActiveChain 保留首个故障；内层错误经 next 传播、被 wrap 捕获后再次抛错，都不覆盖内层来源。读写与转换错误携带对应绑定；重复 next 属所属 wrap 的 control，JS 刷新上下文错误属 context。原生中心故障、非法绑定能力与无法定位的整槽错误不指定 Mod 绑定。预算 start/finish 的资源错误优先于普通调用错误，只记录正在调用的槽；预算由整轮累计、堆由共享 realm 使用，不能把触发超限时的 wrap 当作唯一责任 Mod。SDK 在读取异常属性之前先以备用文本认领来源并关闭候选访问，再允许补充一次诊断文本；Rust 已留存的故障与后续传播不再格式化异常。异常 message/toString 只执行一次，普通格式化抛错保留备用文本；向宿主抛出已取得的字符串，不再次访问原异常钩子。格式化中的资源超限仍由预算优先处理。
 
-runtime 的 `last_mod_settlement_fault()` 返回最近一次实际结算中失败的 Mod 槽调用，包含 tick、房间、权威目标 ID 与完整宿主错误。在生命周期容器中保留这条记录，销毁、成功/失败重建、结算前拒绝均不清除；下一次实际引擎结算开始时清除，新故障再写入。未调用 Mod 的引擎错误、正常拒绝与成功结算不会留下旧 Mod 归因；新建分片/teardown 随容器清空。该接口是内存 Rust 诊断面，尚未接入 CLI 诊断协议或持久日志。
+runtime 的 `last_mod_settlement_fault()` 返回最近一次实际结算中失败的 Mod 槽调用，包含 tick、房间、权威目标 ID 与完整宿主错误。在生命周期容器中保留这条记录，销毁、成功/失败重建、结算前拒绝均不清除；下一次实际引擎结算开始时清除，新故障再写入。未调用 Mod 的引擎错误、正常拒绝与成功结算不会留下旧 Mod 归因；新建分片/teardown 随容器清空。该接口是内存 Rust 诊断面；sim run 已将该记录写入报告的 mod_fault，专用诊断命令和持久日志尚未接入。
 
 这些记录描述可信共享 VM 中的执行边界，不证明代码隔离、精确资源责任或主责 Mod。可信 Mod 可直接调用底层 op，上报绑定的成员校验不等价于不可伪造身份。自动策略仅在宿主明确配置阈值后使用这些可信来源，并排除共享资源与未知来源；它不提供恶意包隔离。显式停用与策略的边界见下文。测试与证据见 [故障来源记录](../research/notes/mod-fault-attribution-2026-10-04.md) 与 [边界复审修复](../research/notes/mod-boundary-review-2026-10-04.md)。
 

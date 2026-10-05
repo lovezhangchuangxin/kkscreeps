@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
+mod mods;
+
 pub struct Options {
     pub scenario: PathBuf,
     pub ticks: u32,
@@ -26,6 +28,8 @@ struct Scene {
     version: u32,
     shard: Shard,
     bots: Vec<Bot>,
+    #[serde(default)]
+    mods: Option<mods::Mods>,
     #[serde(default)]
     objects: Vec<Object>,
     #[serde(default)]
@@ -293,11 +297,24 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
     let mut engine = EmbedEngine::new();
     engine.set_player_concurrency(options.concurrency)?;
     engine.set_kkpv_channel(options.kkpv);
-    engine.create_shard(&serde_json::to_value(&scene.shard)?)?;
+    let shard = serde_json::to_value(&scene.shard)?;
+    let mods_metadata = if let Some(input) = &scene.mods {
+        let loaded = mods::load(base, input)?;
+        engine.create_shard_with_mods(&shard, &loaded.packages, loaded.options)?;
+        loaded.metadata
+    } else {
+        engine.create_shard(&shard)?;
+        json!({"packages": {}})
+    };
+    let mod_names: Vec<String> = mods_metadata["packages"]
+        .as_object()
+        .unwrap()
+        .keys()
+        .cloned()
+        .collect();
     let mut aliases = BTreeMap::new();
     for object in &scene.objects {
-        let id = engine
-            .place_object(&object.room, &object.kind, &object.spec)
+        let id = mods::place(&mut engine, object)
             .with_context(|| format!("放置对象 {}", object.alias))?;
         aliases.insert(object.alias.clone(), id);
     }
@@ -311,7 +328,7 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
         codes.insert(bot.player.clone(), format!("(() => {{ const bot = require({entry}); if (!bot || typeof bot.loop !== 'function') throw new Error('bot entry must export loop'); bot.loop(); return true; }})()"));
         stats.insert(bot.player.clone(), PlayerStats::default());
     }
-    let initial = observe(&engine, &scene, &aliases);
+    let initial = observe(&engine, &scene, &aliases, &mod_names);
     let start = std::time::Instant::now();
     let mut failure = None;
     let mut attempted = 0;
@@ -354,7 +371,7 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
         }
     }
     let run_wall_ms = start.elapsed().as_secs_f64() * 1000.0;
-    let final_state = observe(&engine, &scene, &aliases);
+    let final_state = observe(&engine, &scene, &aliases, &mod_names);
     let assertions: Vec<_> = scene
         .assertions
         .iter()
@@ -375,15 +392,25 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
         "report_version": 1, "success": success, "status": status,
         "engine_version": env!("CARGO_PKG_VERSION"), "executable_sha256": executable_hash,
         "scenario": path, "scenario_sha256": digest(&bytes), "modules": modules,
+        "mods": mods_metadata, "plan_hash": engine.contribution_plan_hash().hex(),
+        "disabled_mods": engine.disabled_mods(),
         "channel": if options.kkpv { "kkpv" } else { "json" }, "concurrency": options.concurrency,
         "ticks_requested": options.ticks, "ticks_attempted": attempted, "world_ticks_committed": committed,
         "run_wall_ms": run_wall_ms, "phases": engine.perf_report(),
         "failure": failure, "players": stats, "aliases": aliases, "assertions": assertions,
+        "mod_fault": engine.last_mod_settlement_fault().map(|fault| json!({
+            "tick": fault.tick, "room": fault.room, "target": fault.target, "error": fault.error,
+        })),
         "initial": initial, "final": final_state,
     }))
 }
 
-fn observe(engine: &EmbedEngine, scene: &Scene, aliases: &BTreeMap<String, String>) -> Value {
+fn observe(
+    engine: &EmbedEngine,
+    scene: &Scene,
+    aliases: &BTreeMap<String, String>,
+    mod_names: &[String],
+) -> Value {
     let players: BTreeMap<_, _> = scene.bots.iter().map(|bot| {
         let state = engine.player_state(&bot.player).unwrap();
         (bot.player.clone(), json!({"gcl": state.gcl, "rooms": state.rooms,
@@ -407,7 +434,11 @@ fn observe(engine: &EmbedEngine, scene: &Scene, aliases: &BTreeMap<String, Strin
             (name, json!({"controller": controller}))
         })
         .collect();
-    json!({"time": engine.get_game_time(), "players": players, "objects": objects, "rooms": rooms, "world": engine.world_snapshot()})
+    let states: BTreeMap<_, _> = mod_names
+        .iter()
+        .map(|name| (name, engine.engine_mod_state(name)))
+        .collect();
+    json!({"time": engine.get_game_time(), "players": players, "objects": objects, "rooms": rooms, "world": engine.world_snapshot(), "mod_states": states})
 }
 
 fn evaluate(assertion: &Assertion, initial: &Value, final_state: &Value) -> Value {

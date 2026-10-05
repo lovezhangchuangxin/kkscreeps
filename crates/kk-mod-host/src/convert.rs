@@ -390,6 +390,24 @@ pub fn build_contribution(
                     }
                     None => None,
                 };
+                let mut lifecycle_slots = BTreeSet::new();
+                if let Some(tick) = value.get("tick").filter(|tick| !tick.is_null()) {
+                    let slot = own_key(namespace, as_str(namespace, tick, "slot")?)?;
+                    let process = own_key(namespace, as_str(namespace, tick, "process")?)?;
+                    if slot.as_str() != format!("{key}.tick")
+                        || process.as_str() != format!("{key}.tick.process")
+                    {
+                        return err(namespace, "对象 tick 的槽与绑定须从类型键派生");
+                    }
+                    bindings.insert(process.clone());
+                    required_executables.insert(process.clone());
+                    lifecycle_slots.insert(slot.clone());
+                    slots.push(SlotDescriptor {
+                        key: slot,
+                        stage: Stage::ObjectTick,
+                        native_binding: process,
+                    });
+                }
                 object_types.push(ObjectTypeDescriptor {
                     key,
                     schema_version: as_u32(namespace, value, "version")?,
@@ -397,7 +415,7 @@ pub fn build_contribution(
                     position_fields,
                     fields,
                     capabilities: Vec::new(),
-                    lifecycle_slots: BTreeSet::new(),
+                    lifecycle_slots,
                     visibility: object_visibility(namespace, optional_str(value, "visibility"))?,
                     player_class: {
                         match optional_str(value, "playerClass") {

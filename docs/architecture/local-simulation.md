@@ -1,6 +1,6 @@
 # 本地场景模拟
 
-`kkscreeps sim run` 使用 `kk-runtime::EmbedEngine` 加载场景、运行玩家模块和推进真实结算。每轮所有玩家读取同一已提交视图，结果经现有协调器提交。当前实现 JSON v1 场景和默认玩法；没有 Mod 包加载、检查点恢复、热更新、观战或 seed 选项。
+`kkscreeps sim run` 使用 `kk-runtime::EmbedEngine` 加载场景、运行玩家模块和推进真实结算。每轮所有玩家读取同一已提交视图，结果经现有协调器提交。当前实现 JSON v1 场景、默认玩法和显式 Mod 包加载；检查点恢复、热更新、观战、内容预设和 seed 选项尚未实现。
 
 ```bash
 cargo build --release -p kk-cli
@@ -21,6 +21,7 @@ target/release/kkscreeps sim run \
 | `shard.players` | 非空且 handle 唯一的玩家列表，支持字符串或现有 PlayerSpec 对象 |
 | `shard.rooms` | 现有 RoomSpec 列表；包括 name、owner、rcl、地形等字段 |
 | `bots` | 每个玩家必须恰有一个声明：player、modules、entry（默认 main）、memory（默认空对象） |
+| `mods` | 可省略；root 为 Mod 根目录，configs 为按包 ID 分组的可选配置 |
 | `objects` | 可省略；按顺序放置 alias、room、kind、spec，alias 必须非空且唯一 |
 | `assertions` | 可省略；最终状态的 JSON Pointer、op 和 value |
 
@@ -28,9 +29,15 @@ target/release/kkscreeps sim run \
 
 对象 alias 用于宿主报告和断言，不增加玩家可见的命名 API。初始化使用真实引擎放置接口，不运行隐藏 tick；初始 Memory 必须是对象，并遵守 RawMemory 的 UTF-16 长度限制。模块或 Memory 不能在待重试轮次中被替换。控制器初始位置沿用现有 RoomSpec 的 `(1,1)`。
 
+### 显式加载 Mod
+
+`mods.root` 必须为非空路径，相对场景目录解析，也可使用绝对路径；装载其直接子目录的所有包。包按 manifest 依赖拓扑注册，缺包、版本不符、冲突或注册/装配失败均在运行前拒绝。`mods` 拒绝未知字段，`configs` 的键必须是已加载的包 ID；配置值的业务校验由包负责。省略 mods 保留原生默认创建路径，不加载官方或第三方 JS。当前没有按包列表选择或依赖自动下载。
+
+自有初始对象使用 `kind: "mod"`，spec 严格包含 `typeKey` 和 `fields`，例如 `{"typeKey":"clockwork:counter","fields":{"x":10,"y":12}}`。类型必须在已装配计划中，字段和默认值沿同一 schema 校验。声明了 tick 的对象从第一轮结算开始执行；玩家首轮看到初始化值。完整示例见[官方生命周期场景](../../compat/fixtures/sim-mod-tick/scenario.json)及[对象 tick 契约](mod-object-tick.md)。
+
 ## 状态与断言
 
-初始和最终观察都读取已提交状态，包含 `time`、`players`、`objects`、`rooms`、`world`。常用指针如下：
+初始和最终观察都读取已提交状态，包含 `time`、`players`、`objects`、`rooms`、`world`、`mod_states`。常用指针如下：
 
 | 指针示例 | 读取内容 |
 |---|---|
@@ -38,6 +45,8 @@ target/release/kkscreeps sim run \
 | `/players/bot/memory/loops` | 解析后的玩家 Memory；非法 JSON 时为 null |
 | `/objects/container/store/energy` | alias 对应对象当前能量 |
 | `/rooms/W1N1/controller/progress` | 房间控制器进度 |
+| `/objects/first/fields/value` | Mod 对象声明字段 |
+| `/mod_states/clockwork/visits` | 包命名空间已提交 state；未初始化为 null |
 
 alias 或玩家名中的 `/`、`~` 分别转义为 `~1`、`~0`。对象死亡后 alias 对应 null，`missing` 同时接受缺失指针和 null；`exists` 要求值存在且非 null。
 
@@ -49,9 +58,11 @@ alias 或玩家名中的 `/`、`~` 分别转义为 `~1`、`~0`。对象死亡后
 
 报告记录场景字节、模块内容及 CLI 二进制 SHA-256、模块目录与清单、投影通道、并发配置、请求/尝试/已提交轮数、失败轮次、各玩家计数、断言及初始/最终状态。控制台和错误各保留前 20 条。当前运行时控制台仅提供文本，捕获异常后打印日志不会自动判为执行失败；开始执行后的 CPU 硬中断按现有协议记录为 runtime 错误，未进入求值的轮次另计。
 
+Mod 场景另记录实际加载包的目录、版本、SDK 要求、依赖、服务端代码/玩家入口/配置 SHA-256，以及引擎实际安装的 `plan_hash` 和 `disabled_mods`。未声明 mods 时包清单为空，仍记录原生计划身份。停用集合单独记录，因为 PlanHash 不包含执行掩码；这些身份用于诊断，报告没有冷恢复或输入回放能力。
+
 `players` 中的 GCL 累计点数、Memory 和 CPU 桶来自实际 PlayerState；GCL 不是玩家 `Game.gcl` 的等级/进度对象。`world` 是宿主诊断投影，其公共 gcl/cpu 字段不是玩家状态。报告不保存完整运行状态，也不能作为检查点恢复。
 
-玩家异常或硬中断使场景失败，但当前轮次仍可能提交合法指令和 Memory，报告必须保留实际已提交状态。基础设施或结算错误停止在最后已提交轮次；此工具不自动重试。失败轮重试契约见[tick 契约](tick-contract.md)。
+玩家异常或硬中断使场景失败，但当前轮次仍可能提交合法指令和 Memory，报告必须保留实际已提交状态。基础设施或结算错误停止在最后已提交轮次；此工具不自动重试。Mod 调用故障另保留 mod_fault（tick、room、target 和宿主结构化错误，包括槽/绑定/阶段与故障种类）；其他故障为 null。失败轮重试契约见[tick 契约](tick-contract.md)。
 
 | 退出码 | 含义 |
 |---|---|
@@ -63,4 +74,4 @@ CLI 参数解析失败沿用 Clap 的退出码 2，不写报告。报告通过�
 
 `run_wall_ms` 仅包含推进循环，不含加载、指纹计算、最终状态观察和报告写入。`phases` 使用运行时已有的累计阶段计时，是诊断数据，不能直接作为正式跨实现基准。玩家 Date、Math.random、CPU 查询保持生产行为，因此固定场景和源码不保证任意 bot 完全确定；复现要求见[开发套件设计](../designs/dev-kit.md)。
 
-本批验收和已知边界见[交付记录](../research/notes/sim-run-2026-10-04.md)。
+原生场景验收见[初始交付记录](../research/notes/sim-run-2026-10-04.md)，Mod 场景验收见[生命周期交付记录](../research/notes/n1a-object-tick-2026-10-05.md)。

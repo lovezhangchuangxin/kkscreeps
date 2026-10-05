@@ -2,7 +2,7 @@
 
 本设计要求 Mod 作者只写 JS，可以使用本项目 SDK 增加玩法或替换默认规则，不要求修改 Rust 内核或重编服务器。目标能力覆盖官方与 xxscreeps 的同类业务扩展，不承诺兼容其 Mod 源码或 Node 内部接口。2026-10-05 已确认以独立 JS 包创造完整玩法，并以可验收的组合、恢复和开发工具形成更强的作者能力。
 
-架构决策见 [ADR-007](../decisions/ADR-007-mod-system.md)与 [ADR-014](../decisions/ADR-014-contribution-plane.md)。当前已接入独立 JS 包装载/冻结、处理链、Mod state 候选、自有对象/动作和玩家 API；13 个内建槽及正常拒绝的现行边界见 [Mod 执行](../architecture/mod-execution.md)。自有对象生命周期、通用对象操作、新资源目录、完整领域策略、后台服务、客户端与持久恢复仍未全部实现。本文其余示例为目标契约，具体名称不代表 SDK 已提供；安装式能力须由真实包验收，不能由 `spikes/` 实验证明。2026-10-05 的[现状复查](../research/09-mod-capability-current-audit.md)与[完整玩法计划](../plans/mod-complete-gameplay.md)按独立玩法闭环调整后续顺序。
+架构决策见 [ADR-007](../decisions/ADR-007-mod-system.md)与 [ADR-014](../decisions/ADR-014-contribution-plane.md)。当前已接入独立 JS 包装载/冻结、处理链、Mod state 候选、自有对象/动作、对象 tick 和玩家 API；13 个内建槽及正常拒绝的现行边界见 [Mod 执行](../architecture/mod-execution.md)。其他对象生命周期、通用对象操作、新资源目录、完整领域策略、后台服务、客户端与持久恢复仍未全部实现。本文其余示例为目标契约，具体名称不代表 SDK 已提供；安装式能力须由真实包验收，不能由 `spikes/` 实验证明。2026-10-05 的[现状复查](../research/09-mod-capability-current-audit.md)与[完整玩法计划](../plans/mod-complete-gameplay.md)按独立玩法闭环调整后续顺序。
 
 B 阶段的冻结定义、有效规则、意图入口、玩家投影和首个 link 接入方案见[开放领域定义与玩家投影](domain-projection.md)。
 

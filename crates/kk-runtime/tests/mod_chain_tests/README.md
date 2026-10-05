@@ -47,3 +47,7 @@ Mod 源码在包构建时固定，**读不到运行期 ID**。两条通道：
 ## 双玩家与并发
 
 `engine_with_shard` 声明多玩家多房；`e.set_player_concurrency(n)` + `e.run_players(&codes)`（codes 须在放置后以字面 id 构造）做串行=并发一致性断言（整 `world_snapshot()` 相等）。
+
+## 自有对象生命周期
+
+`object_tick.rs` 覆盖同步 tick；对象声明的 tick 自动派生 `<typeKey>.tick` 槽与 `<typeKey>.tick.process` 绑定。生命周期 args 为 null，无玩家授权前提；decline 使用 `return api.decline(code)`，在 tick 中明确拒绝。对象动作先执行，tick 读取随后候选；异常撤销整轮，缓存玩家在恢复后不重跑。

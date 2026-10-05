@@ -253,6 +253,11 @@ impl EmbedEngine {
             .unwrap_or(Value::Null)
     }
 
+    /// 当前已安装贡献计划的身份；诊断报告须记录实际计划而非输入推算值。
+    pub fn contribution_plan_hash(&self) -> kk_mod_api::PlanHash {
+        self.engine.plan_hash()
+    }
+
     /// 当前世界代际（失败轮不前进；诊断与测试面）。
     pub fn engine_generation(&self) -> u64 {
         self.engine.world.generation()

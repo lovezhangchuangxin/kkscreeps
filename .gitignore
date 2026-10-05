@@ -35,6 +35,7 @@ compat/fixtures/*
 !compat/fixtures/mod-perf/
 !compat/fixtures/mod-player/
 !compat/fixtures/sim-economy/
+!compat/fixtures/sim-mod-tick/
 compat/reports/tmp/
 .test-output/
 

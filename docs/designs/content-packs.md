@@ -6,6 +6,8 @@
 
 截至 `3087df8`，JS 包装载和冻结已实现，但 [realm.rs](../../crates/kk-mod-host/src/realm.rs) 固定调用 `freeze_with_builtin(builtin::link(), ...)`；[install.rs](../../crates/kk-engine/src/settle/install.rs) 依赖内建绑定和规则；其他原生阶段也未按内容选择完整门控。当前运行范围见[Mod 执行](../architecture/mod-execution.md)，首片开发见[完整玩法计划](../plans/mod-complete-gameplay.md)。
 
+N1a 已提供[clockwork 官方生命周期原型](../../mods/official/clockwork/README.md)，经同一公共 SDK 与 sim 显式包加载验证自主对象 tick、玩家类和查询。它没有按官方 ID 提权，也尚不具备资源生产、建造或完整内容选择能力；默认 builtin 固定装配的过渡范围仍保留。
+
 ## 职责与交付形态
 
 | 层 | 职责 |

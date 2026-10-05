@@ -10,6 +10,7 @@
 | [source-organization.md](source-organization.md) | 当前源码模块导航、测试分组与文件规模门禁 |
 | [game-loop.md](game-loop.md) | 当前玩家执行与结算流程，以及并行流水线的目标 |
 | [mod-execution.md](mod-execution.md) | JS/native 组合链、候选访问与当前支持范围 |
+| [mod-object-tick.md](mod-object-tick.md) | 自有对象同步生命周期、处理链、遍历资格与整轮失败恢复 |
 | [store-rules.md](store-rules.md) | 仓库容量的冻结规则、JS 数值覆盖与实际消费者 |
 | [creep-resource-slots.md](creep-resource-slots.md) | creep 转入/提取动作链、只读候选面与局部拒绝恢复 |
 | [creep-move-slot.md](creep-move-slot.md) | creep 移动动作槽、受控请求能力与按执行者粒度的拒绝恢复 |

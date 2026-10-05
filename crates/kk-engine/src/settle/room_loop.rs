@@ -177,6 +177,7 @@ pub fn settle_room(
                 Some(RoomObject::Mineral(_)) => "mineral",
                 Some(RoomObject::Extractor(_)) => "extractor",
                 Some(RoomObject::Road(_)) => "road",
+                Some(RoomObject::Mod(_)) => "mod",
                 Some(RoomObject::Generic(g)) => match generic_structure_type(&g.data).as_deref() {
                     Some("container" | "rampart") => "decay",
                     Some("link") => "link",
@@ -205,6 +206,7 @@ pub fn settle_room(
                 contrib.run_tick(&ctx, id).map_err(SettleError)?
             }
             "terminal" => economy::terminal_capacity_tick(&mut ctx.borrow_mut(), id),
+            "mod" => mod_intents::process_object_tick(&ctx, id).map_err(SettleError)?,
             _ => {}
         }
     }

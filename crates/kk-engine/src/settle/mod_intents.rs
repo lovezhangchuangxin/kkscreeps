@@ -1,4 +1,4 @@
-//! Mod 对象的扩展意图派发：按冻结计划独立校验后进入槽处理链。
+//! Mod 对象的扩展意图与自主生命周期派发：按冻结计划进入槽处理链。
 //!
 //! 收集层只认键形（`namespace:name`）并保留原始参数；此处的校验才是
 //! 权威——意图必须在计划目录中、参数满足描述符 schema（严格转换）、
@@ -17,6 +17,36 @@ use kk_world::ObjId;
 use serde_json::Value;
 
 use super::RoomCtx;
+
+/// 在对象 tick 阶段派发自有生命周期；没有玩家授权或玩家意图前提。
+/// ID 列表由房间循环固定，进入宿主前释放候选借用。生命周期首版
+/// 不支持局部拒绝，任何异常或 Declined 都使整轮候选失败。
+pub(crate) fn process_object_tick(ctx: &RoomCtx, id: ObjId) -> Result<(), String> {
+    let (plan, type_key, contrib) = {
+        let w = ctx.borrow();
+        let Some(kk_schema::room::RoomObject::Mod(object)) = w.room.objects.get(&id) else {
+            return Ok(());
+        };
+        (
+            w.plane.plan.clone(),
+            object.type_key.clone(),
+            w.plane.contrib.clone(),
+        )
+    };
+    let key = Key::new(type_key)?;
+    let ty = plan
+        .projection()
+        .resolve(&key)
+        .and_then(|handle| plan.projection().get(handle))
+        .ok_or_else(|| format!("Mod 对象类型 {key} 不在计划中"))?;
+    for slot in &ty.descriptor.lifecycle_slots {
+        let outcome = contrib.run_ext(slot, ctx, id, &Value::Null)?;
+        if matches!(outcome, kk_mod_api::SlotOutcome::Declined(_)) {
+            return Err(format!("生命周期槽 {slot} 不支持正常拒绝"));
+        }
+    }
+    Ok(())
+}
 
 /// 派发一个玩家在一个 Mod 对象上的全部扩展意图。调用方已确认对象
 /// 是 [`kk_schema::room::RoomObject::Mod`]；目标在此重新读取，对象

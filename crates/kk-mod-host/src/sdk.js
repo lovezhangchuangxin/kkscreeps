@@ -109,6 +109,11 @@ export function createApi(namespace, config) {
       for (const [name, value] of Object.entries(spec.fields || {})) {
         fields.push(fieldOf(namespace, name, value));
       }
+      let tick;
+      if (spec.tick !== undefined) {
+        tick = { slot: key + '.tick', process: key + '.tick.process' };
+        requireFunction(namespace, tick.process, spec.tick);
+      }
       declare('object', {
         key,
         version: spec.version,
@@ -117,6 +122,7 @@ export function createApi(namespace, config) {
         positionFields: spec.positionFields,
         visibility: spec.visibility,
         fields,
+        tick,
       });
       return { key, version: spec.version };
     },

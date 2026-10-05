@@ -236,3 +236,6 @@ fn assertions_and_invalid_scenes_fail_without_stale_success_or_input_overwrite()
     assert_eq!(std::fs::read(source)?, original);
     Ok(())
 }
+
+#[path = "sim_tests/mods.rs"]
+mod mods;

@@ -1,0 +1,7 @@
+{
+  "id": "clockwork",
+  "version": "1.0.0",
+  "apiVersion": "^1.0.0",
+  "entry": "server.js",
+  "player": "player.js"
+}

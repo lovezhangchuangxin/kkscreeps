@@ -2,7 +2,7 @@
 use super::*;
 
 impl Engine {
-    /// 核对计划的全部声明绑定已有实现：四个 native 键由本引擎内置，
+    /// 核对计划的全部声明绑定已有实现：native 键由本引擎内置，
     /// 声明性绑定须出现在已接线消费者清单（见下方常量），处理器绑定
     /// 已在装配时逐键消费。声明未安装的绑定在此拒绝。
     pub(super) fn check_installed_bindings(
@@ -84,6 +84,7 @@ impl Engine {
         plan: &kk_mod_api::ContributionPlan,
     ) -> Result<(), String> {
         use kk_mod_api::{ArgumentConversion, IntentAuthority, IntentScope, Merge};
+        Self::check_object_lifecycles(plan)?;
         for intent in plan.intents() {
             if intent.key.namespace() == "builtin" {
                 continue; // 内建意图由 Rust native 执行器消费
@@ -137,16 +138,20 @@ impl Engine {
                 ));
             }
         }
-        // 非内建槽必须被至少一个意图挂载：无意图的槽（生命周期槽、
-        // 其他阶段槽）没有派发点，装配了执行器也只是静默死执行。
+        // 非内建槽必须被对象意图或已接线的自有类型生命周期挂载，
+        // 否则装配了执行器也没有实际派发点。
         for slot in plan.slots() {
             if contrib::BUILTIN_SLOT_KEYS.contains(&slot.key.as_str()) {
                 continue;
             }
             let referenced = plan.intents().iter().any(|intent| intent.slot == slot.key);
-            if !referenced {
+            let lifecycle = plan.projection().types().iter().any(|ty| {
+                ty.descriptor.key.namespace() != "builtin"
+                    && ty.descriptor.lifecycle_slots.contains(&slot.key)
+            });
+            if !referenced && !lifecycle {
                 return Err(format!(
-                    "入口 {} 没有挂载任何动作，该槽位的执行接线未开放（生命周期/其他阶段槽归后续批次）",
+                    "入口 {} 没有挂载任何动作或自有对象 tick，该槽位的执行接线未开放",
                     slot.key
                 ));
             }
@@ -154,8 +159,32 @@ impl Engine {
         Ok(())
     }
 
-    /// 中心规则：动作入口的中心须是自身 process 绑定，或由调用方以
-    /// Replace 处理器占位（跨 Mod 替换动作处理）。多意图共享一槽时
+    /// 首版只接自有类型的具名 tick；不允许借此安装未派发阶段、内建
+    /// 生命周期或多个类型共享的槽，防止声明通过但读取错误对象表示。
+    fn check_object_lifecycles(plan: &kk_mod_api::ContributionPlan) -> Result<(), String> {
+        for ty in plan.projection().types() {
+            let ty = &ty.descriptor;
+            if ty.key.namespace() == "builtin" {
+                continue;
+            }
+            for key in &ty.lifecycle_slots {
+                if key.as_str() != format!("{}.tick", ty.key) {
+                    return Err(format!("类型 {} 只开放自身的 object.tick 生命周期", ty.key));
+                }
+                let slot = plan
+                    .resolve_slot(key)
+                    .and_then(|handle| plan.get_slot(handle))
+                    .ok_or_else(|| format!("类型 {} 缺少生命周期槽 {key}", ty.key))?;
+                if slot.stage != kk_mod_api::Stage::ObjectTick {
+                    return Err(format!("生命周期槽 {key} 必须在 ObjectTick 阶段"));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// 中心规则：动作或生命周期中心须是自身 process，或由调用方以
+    /// Replace 处理器占位（跨 Mod 替换处理）。多意图共享一槽时
     /// 非自有中心的意图在此拒绝。
     pub(super) fn check_intent_centers(
         plan: &kk_mod_api::ContributionPlan,
@@ -198,6 +227,25 @@ impl Engine {
                     "动作 {} 的入口 {} 中心不是自身 process，也不是已提供的 Replace 处理器（多意图共享入口或显式入口的执行装配未接线）",
                     intent.key, intent.slot
                 ));
+            }
+        }
+        for ty in plan.projection().types() {
+            if ty.descriptor.key.namespace() == "builtin" {
+                continue;
+            }
+            for key in &ty.descriptor.lifecycle_slots {
+                let slot = plan
+                    .get_slot(plan.resolve_slot(key).expect("生命周期已校验"))
+                    .expect("句柄来自计划");
+                let center = match &slot.dispatch {
+                    kk_mod_api::Dispatch::Native(binding) => binding,
+                    kk_mod_api::Dispatch::Chained { center, .. } => center,
+                };
+                if center.as_str() != format!("{key}.process") && !replacements.contains(center) {
+                    return Err(format!(
+                        "生命周期槽 {key} 的中心不是自身 process 或 Replace"
+                    ));
+                }
             }
         }
         Ok(())

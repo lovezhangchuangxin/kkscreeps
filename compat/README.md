@@ -14,7 +14,7 @@
 | `scripts/run-suite.sh` | 运行完整上游套件，也可将额外参数传给 Vitest |
 | `scripts/ratchet.mjs` | 全量运行后检查通过数、总用例数和逐用例回归 |
 | `reports/` | 入库机器报告、回归配置与历史验收记录 |
-| `fixtures/` | bot 下载夹具按需准备、不入库；`mod-perf/` 纯结算与 `mod-player/` 玩家闭环固定性能夹具入库 |
+| `fixtures/` | bot 下载夹具按需准备、不入库；Mod 性能夹具、`sim-economy/` 经济场景和 `sim-mod-tick/` 生命周期场景入库 |
 
 同一 JavaScript 全局中的适配器实例共享子进程和世界状态，测试应串行使用并调用 `teardown`。它清理世界和玩家线程，保留子进程供后续测试复用。
 
@@ -79,6 +79,8 @@ target/release/kkscreeps sim run --scenario compat/fixtures/sim-economy/scenario
 ```
 
 夹具包含采集、搬运、升级和寿命到期后孵化替补，最终断言要求 GCL/控制器进度增加、替补出生及旧 creep 消失。模块目录相对场景文件解析，支持预编译的玩家模块与初始 Memory；这不代表 TooAngel、Overmind 已全功能验收。格式、退出码与复现边界见[本地场景模拟](../docs/architecture/local-simulation.md)。
+
+Mod 生命周期场景可运行 `target/release/kkscreeps sim run --scenario compat/fixtures/sim-mod-tick/scenario.json --ticks 50 --report /tmp/sim-mod-tick.json`。它显式装载官方原型 clockwork，验证两房对象自主更新、玩家类和查询、Mod state 与真实计划身份；没有玩家意图或按官方包 ID 特殊处理。当前不含对象增删、生产建筑和内容预设。
 
 ## 登记差异与跳过
 

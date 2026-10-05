@@ -5,7 +5,7 @@ import { dirname, extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const roots = ['crates/', 'compat/', 'apps/', 'packages/', 'scripts/'];
+const roots = ['crates/', 'compat/', 'apps/', 'packages/', 'mods/', 'scripts/'];
 const extensions = new Set(['.rs', '.js', '.mjs', '.ts', '.tsx', '.jsx', '.cpp', '.cc', '.c', '.h', '.hpp']);
 const exceptions = new Map([
   ['crates/kk-runner/assets/lodash-3.10.1.js', '第三方固定版本源码，保留原文'],

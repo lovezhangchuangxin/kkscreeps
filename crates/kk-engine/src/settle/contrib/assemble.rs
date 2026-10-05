@@ -333,7 +333,7 @@ fn assemble_ext_slots(
     if let Some(binding) = handlers.keys().next() {
         return Err(format!("装配提供了计划未引用的扩展处理器 {binding}"));
     }
-    // 动作处理实现的残余只有一种合法形态：意图自身的 process 中心被
+    // 处理实现的残余只有一种合法形态：动作或生命周期的 process 中心被
     // Replace 处理器占位（声明绑定仍要求安装、执行不再经它）。按此推导
     // 允许集，其余残余（含挂在字段/声明性绑定键上的杂项实现）一律拒绝。
     let mut replaced_processes = BTreeSet::new();
@@ -356,6 +356,26 @@ fn assemble_ext_slots(
         };
         if center != &own {
             replaced_processes.insert(own);
+        }
+    }
+    for ty in plan.projection().types() {
+        if ty.descriptor.key.namespace() == "builtin" {
+            continue;
+        }
+        for key in &ty.descriptor.lifecycle_slots {
+            let Ok(own) = Key::new(format!("{key}.process")) else {
+                continue;
+            };
+            let Some(slot) = plan.resolve_slot(key).and_then(|h| plan.get_slot(h)) else {
+                continue;
+            };
+            let center = match &slot.dispatch {
+                Dispatch::Native(binding) => binding,
+                Dispatch::Chained { center, .. } => center,
+            };
+            if center != &own {
+                replaced_processes.insert(own);
+            }
         }
     }
     for binding in processes.keys() {

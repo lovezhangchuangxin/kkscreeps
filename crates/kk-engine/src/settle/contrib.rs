@@ -96,10 +96,10 @@ type ActionSimple = Box<dyn Fn(&RoomCtx, ObjId, &IntentData) -> Result<(), Strin
 type ActionWrap = Box<dyn Fn(&RoomCtx, ObjId, &IntentData, &mut Next<'_>) -> Result<(), String>>;
 type TickSimple = Box<dyn Fn(&RoomCtx, ObjId) -> Result<(), String>>;
 type TickWrap = Box<dyn Fn(&RoomCtx, ObjId, &mut TickNext<'_>) -> Result<(), String>>;
-/// 扩展意图槽的处理器签名：args 为按计划 schema 校验后的原始 JSON，
+/// 自有槽的处理器签名：动作 args 已按 schema 校验，生命周期为 null；
 /// 目标对象读写由实现方经 Working 完成。
 pub type ExtSimple = Box<dyn Fn(&RoomCtx, ObjId, &Value) -> Result<(), String>>;
-/// 扩展意图槽的 wrap 处理器：`next` 续行到剩余 wrap 与中心。
+/// 自有槽的 wrap 处理器：`next` 续行到剩余 wrap 与中心。
 pub type ExtWrap = Box<dyn Fn(&RoomCtx, ObjId, &Value, &mut ExtNext<'_>) -> Result<(), String>>;
 
 /// 把内建 native 中心适配成处理器形态：取一次短借用后调用。

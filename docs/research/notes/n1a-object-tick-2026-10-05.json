@@ -1,0 +1,78 @@
+{
+  "base_commit": "e0bed47",
+  "scope": "N1a custom object tick and explicit sim Mod loading",
+  "executable_sha256": "d37cba834175b09cdbd0f5a1e62e300607f88c6129de4b0719e7b49011731999",
+  "plan_hash": "a0f3639491bf6e3bf3cc5508589693b6fa9f97b700ac7ba056e99c6f7584c7d8",
+  "mods": {
+    "root": "/Users/keqing/Desktop/projects/games/kkscreeps/mods/official",
+    "packages": {
+      "clockwork": {
+        "version": "1.0.0",
+        "api_version": "^1.0.0",
+        "dependencies": {},
+        "directory": "/Users/keqing/Desktop/projects/games/kkscreeps/mods/official/clockwork",
+        "code_sha256": "6950ae47ca068a1ae5d2c541b5f416e96c643c145b0893c6b056eee28dd94b56",
+        "player_api_sha256": "5a2c5d78c514316c8378e0ef94b779d3afe9aa0c06ab0b980cfc4ba3a8603441",
+        "config_sha256": "aebcca5f2da4999140b08302faef160fb1ee0efe9badb8415b4cb57c1b9ce0df"
+      }
+    }
+  },
+  "targeted_tests": {
+    "runtime_object_tick": 6,
+    "engine_object_tick": 2,
+    "cli_mod_scenarios": 4
+  },
+  "scenarios": [
+    {
+      "channel": "json",
+      "requested": 2000,
+      "committed": 2000,
+      "player_errors": 0,
+      "assertions_passed": 3,
+      "run_wall_ms": 700.2545839999999,
+      "report": "n1a-object-tick-json-2026-10-05.json"
+    },
+    {
+      "channel": "kkpv",
+      "requested": 2000,
+      "committed": 2000,
+      "player_errors": 0,
+      "assertions_passed": 3,
+      "run_wall_ms": 771.290167,
+      "report": "n1a-object-tick-kkpv-2026-10-05.json"
+    }
+  ],
+  "equal_final_world": true,
+  "equal_mod_states": true,
+  "equal_player_memory": true,
+  "limitations": [
+    "No generic object create/delete or peer object access",
+    "No object preTick, room or world lifecycle",
+    "No content preset or default content migration",
+    "No checkpoint or deterministic replay",
+    "Timing is diagnostic, not a controlled performance comparison"
+  ],
+  "validation": {
+    "full_check": "passed",
+    "rust_passed": 730,
+    "rust_ignored": 11,
+    "compat_adapter_passed": 14,
+    "doc_markdown_files": 260,
+    "doc_links": 1451,
+    "source_files": 334,
+    "source_max_lines": 1000
+  },
+  "compatibility": {
+    "upstream_pin": "34a630efa42908c117c19c25d2350fa2387bd633",
+    "ratchet": "passed",
+    "floor": 1918,
+    "total": 2914,
+    "passed": 1918,
+    "failed": 89,
+    "skipped": 907,
+    "status_changes_against_base": 0,
+    "regressions_against_parent": 0,
+    "new_waivers": 0,
+    "report_sha256": "ec2280a96618b0f170e0bcbe1e27fa313a65aae303acbc717922d3eb1bcb6ecd"
+  }
+}

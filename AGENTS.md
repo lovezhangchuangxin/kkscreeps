@@ -17,13 +17,14 @@ kkscreeps/
 │   ├── kk-mod-api/         玩法声明、校验与冻结计划
 │   ├── kk-mod-host/        可信 JS Mod 包装载与注册
 │   ├── kk-pathfinder/      原生 C++ 寻路封装，经 kk-runner op 供玩家面搜索
-│   ├── kk-cli/             embed、bot-check、perf-probe、mod-perf-probe 命令入口
+│   ├── kk-cli/             embed、sim run、bot-check 与性能命令入口
 │   ├── kk-storage-bench/   存储引擎选型基准
 │   ├── kk-storage/         持久化预留模块
 │   └── kk-backend/         网络服务预留模块
 ├── compat/                 TypeScript 兼容性适配器、测试与回归报告
 ├── apps/game/              游戏客户端占位包
 ├── packages/               API、编辑器、渲染器与共享类型占位包
+├── mods/official/           使用公共 JS SDK 的官方内容原型
 ├── scripts/                维护、依赖准备与基准工具
 ├── docs/                   架构、设计、决策、计划与研究文档
 │   ├── README.md           文档目录与分工索引
