@@ -57,6 +57,17 @@ pub fn slot_combat_apply_damage(
     amount: i64,
     action: CombatAction,
 ) -> Result<(), String> {
+    slot_combat_apply_damage_with_retaliation(w, id, target_id, amount, action, None)
+}
+
+pub fn slot_combat_apply_damage_with_retaliation(
+    w: &mut Working,
+    id: ObjId,
+    target_id: ObjId,
+    amount: i64,
+    action: CombatAction,
+    policy: Option<&super::RetaliationPolicy>,
+) -> Result<(), String> {
     if !(0..=kk_mod_api::combat::MAX_DAMAGE).contains(&amount) {
         return Err("策略伤害须为 0..=1e9 的整数".into());
     }
@@ -70,7 +81,14 @@ pub fn slot_combat_apply_damage(
         return Err("孵化中的 creep 不能施加策略伤害".into());
     }
     validate_damage_target(w, target_id)?;
-    damage::apply_damage_without_retaliation(w, id, target_id, amount, attack_type);
+    super::retaliation_policy::preflight(w, id, policy, if target_id == id { amount } else { 0 })?;
+    w.damage_to_apply
+        .get(&target_id)
+        .copied()
+        .unwrap_or(0)
+        .checked_add(amount)
+        .ok_or("待伤害累计量超出表示域")?;
+    super::retaliation_policy::apply_damage(w, id, target_id, amount, attack_type, policy, false);
     Ok(())
 }
 

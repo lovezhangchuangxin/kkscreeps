@@ -19,11 +19,12 @@
 | `cancel()` | 取消本动作：native 中心不再执行。 |
 | `get(id)` | 同房候选的脱离副本；支持耐久与部件/强化读面，详见[JS 伤害策略](mod-damage-policy.md)。 |
 | `list(after, limit)` | 五个战斗槽均可分页读同房战斗视图，详见[JS 群体伤害](mod-mass-policy.md)。 |
+| `setRetaliation(requests)` | 三个攻击槽在执行前声明一次反击表，不消耗主攻击；详见[JS 反击](mod-retaliation-policy.md)。 |
 | `applyDamageBatch(requests)` | 仅 rangedMassAttack 槽，一次预检并应用多个目标伤害，详见[JS 群体伤害](mod-mass-policy.md)。 |
 | `applyDamage(id, amount)` | 仅 attack/rangedAttack 槽，使用 JS 计算的单体伤害并消耗动作，详见[JS 伤害策略](mod-damage-policy.md)。 |
 | `applyHeal(id, amount)` | 仅 heal/rangedHeal 槽，登记 JS 计算的治疗量并消耗动作，详见[JS 治疗策略](mod-heal-policy.md)。 |
 
-`request` 的 power 仍由身体部件与 boost 决定；`applyDamage/applyHeal` 另开放受限的 JS 伤害/治疗值，身体部件没有直接写面。执行遵循**恰一次**约束：`request`/`applyDamage`/`applyDamageBatch`/`applyHeal`/`cancel`/native 中心先到者消耗本动作，get/list 不消耗动作；之后的再次写能力调用（含 native 执行后的 after 处理器内调用）都是故障，不能被 catch + decline 掩盖。这与移动槽的"单执行者单请求、末次登记生效"不同：战斗执行有真实世界效果，不可重复叠加，消耗标记单向。
+`request` 的 power 仍由身体部件与 boost 决定；`applyDamage/applyHeal` 另开放受限的 JS 伤害/治疗值，身体部件没有直接写面。执行遵循**恰一次**约束：`request`/`applyDamage`/`applyDamageBatch`/`applyHeal`/`cancel`/native 中心先到者消耗本动作，get/list 不消耗动作；setRetaliation 另有攻击执行前只能声明一次的门；之后的再次写能力调用（含 native 执行后的 after 处理器内调用）都是故障，不能被 catch + decline 掩盖。这与移动槽的"单执行者单请求、末次登记生效"不同：战斗执行有真实世界效果，不可重复叠加，消耗标记单向。
 
 `replace` 返回 `undefined` 仍表示静默取消默认中心；有目标的四个槽若使用选择性 replace，保留其他执行者的原生动作须用 `ctx.combat.request(ctx.args.id)` 重发。rangedMassAttack 无 request 能力，选择性策略可使用 wrap：选中执行者时调用 `applyDamageBatch`，其他执行者调用 `next()`；前提是内层仍为默认中心。
 

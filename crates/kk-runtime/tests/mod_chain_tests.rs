@@ -204,3 +204,8 @@ mod store_rules;
 
 #[path = "mod_chain_tests/composition.rs"]
 mod composition;
+
+#[path = "mod_chain_tests/retaliation_faults.rs"]
+mod retaliation_faults;
+#[path = "mod_chain_tests/retaliation_policy.rs"]
+mod retaliation_policy;

@@ -7,6 +7,7 @@ type CombatEffect = fn(
     ObjId,
     i64,
     kk_engine::settle::creep::CombatAction,
+    Option<&kk_engine::settle::creep::RetaliationPolicy>,
 ) -> Result<(), String>;
 
 impl ModChainContext {
@@ -26,12 +27,22 @@ impl ModChainContext {
         let target_id = ObjId::parse(target).ok_or("战斗目标 ID 非法")?;
         let touched = kk_engine::settle::creep::combat_touch_targets(&self.ctx.borrow(), target_id);
         self.remember_combat_targets(&journal, &touched);
-        kk_engine::settle::creep::slot_combat_request(
-            &mut self.ctx.borrow_mut(),
-            self.id,
-            target_id,
-            action,
-        )?;
+        if let Some(policy) = &self.combat.as_ref().unwrap().retaliation {
+            kk_engine::settle::creep::slot_combat_execute_with_retaliation(
+                &mut self.ctx.borrow_mut(),
+                self.id,
+                &kk_engine::intent::IntentData::target(target_id),
+                action,
+                policy,
+            )?;
+        } else {
+            kk_engine::settle::creep::slot_combat_request(
+                &mut self.ctx.borrow_mut(),
+                self.id,
+                target_id,
+                action,
+            )?;
+        }
         self.cached_fields = None;
         if let Some(combat) = &mut self.combat {
             combat.consumed = true;
@@ -54,16 +65,43 @@ impl ModChainContext {
         self.apply_combat_effect(
             target,
             amount,
-            kk_engine::settle::creep::slot_combat_apply_damage,
+            kk_engine::settle::creep::slot_combat_apply_damage_with_retaliation,
         )
     }
 
     pub(super) fn apply_combat_heal(&mut self, target: &str, amount: i64) -> Result<(), String> {
-        self.apply_combat_effect(
-            target,
-            amount,
-            kk_engine::settle::creep::slot_combat_apply_heal,
-        )
+        self.apply_combat_effect(target, amount, |w, actor, target, amount, action, _| {
+            kk_engine::settle::creep::slot_combat_apply_heal(w, actor, target, amount, action)
+        })
+    }
+
+    /// 声明一次反击表，不消耗攻击；重复声明和执行后的声明均为故障。
+    pub(super) fn set_combat_retaliation(
+        &mut self,
+        requests: &[kk_mod_api::combat::DamageRequest],
+    ) -> Result<(), String> {
+        let combat = self.combat.as_ref().ok_or("本次槽没有反击策略能力")?;
+        if matches!(
+            combat.action,
+            kk_engine::settle::creep::CombatAction::Heal
+                | kk_engine::settle::creep::CombatAction::RangedHeal
+        ) {
+            return Err("治疗槽没有反击策略能力".into());
+        }
+        if combat.consumed || combat.retaliation.is_some() {
+            return Err("反击策略须在攻击执行前声明一次".into());
+        }
+        if requests.len() > kk_mod_api::combat::MAX_COMBAT_BATCH as usize {
+            return Err("反击策略最多 256 项".into());
+        }
+        let requests = requests
+            .iter()
+            .map(|r| Ok((ObjId::parse(&r.id).ok_or("反击目标 ID 非法")?, r.amount)))
+            .collect::<Result<Vec<_>, String>>()?;
+        let policy =
+            kk_engine::settle::creep::RetaliationPolicy::new(&self.ctx.borrow(), &requests)?;
+        self.combat.as_mut().unwrap().retaliation = Some(policy);
+        Ok(())
     }
 
     pub(super) fn apply_combat_damage_batch(
@@ -95,11 +133,12 @@ impl ModChainContext {
             &journal,
             &requests.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
         );
-        kk_engine::settle::creep::slot_combat_apply_damage_batch(
+        kk_engine::settle::creep::slot_combat_apply_damage_batch_with_retaliation(
             &mut self.ctx.borrow_mut(),
             self.id,
             &requests,
             action,
+            self.combat.as_ref().unwrap().retaliation.as_ref(),
         )?;
         self.cached_fields = None;
         self.combat.as_mut().expect("已检查战斗能力").consumed = true;
@@ -129,6 +168,7 @@ impl ModChainContext {
             target_id,
             amount,
             action,
+            self.combat.as_ref().unwrap().retaliation.as_ref(),
         )?;
         self.cached_fields = None;
         self.combat.as_mut().expect("已检查战斗能力").consumed = true;

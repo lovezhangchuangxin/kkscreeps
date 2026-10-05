@@ -258,3 +258,6 @@ mod damage_policy;
 mod heal_policy;
 #[path = "sim_tests/mass_policy.rs"]
 mod mass_policy;
+
+#[path = "sim_tests/retaliation_policy.rs"]
+mod retaliation_policy;

@@ -60,3 +60,5 @@ Mod 源码在包构建时固定，**读不到运行期 ID**。两条通道：
 治疗策略案例在 heal_policy.rs：applyHeal 仅在近/远程治疗槽开放，与 native 共用延迟队列及身体恢复；覆盖同轮致死伤害抵消、远处目标拒绝保留此前队列/转账/后续移动、孵化目标、非法/重复消耗和生命周期、缓存重试。
 
 群体策略案例在 mass_policy.rs / mass_policy_faults.rs：战斗分页脱离读面，批量一次消耗；多目标/结构/spawn 孵化对象的局部恢复，原始 op 小数/转换重入/能力门，缓存重试；玩家 getObjectById 查询须使用规范长 ID，短 ID 仅宿主 ObjId::parse 能力入口支持。
+
+反击表专项在 `retaliation_policy.rs`/`retaliation_faults.rs`：native/request/JS 单体及群体组合、实际 rampart 命中、结构荆棘、safeMode 策略替换、拒绝保留此前双队列、反击致死缓存重试，以及转换/消耗/能力过期。孵化目标通过真实 spawnCreep 创建；place_object 会归一化为已出生，不能用 spawning 字段伪造此夹具。

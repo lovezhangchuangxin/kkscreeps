@@ -71,3 +71,6 @@ __pycache__/
 !compat/fixtures/sim-mod-heal-policy/
 !compat/fixtures/mod-mass-policy/
 !compat/fixtures/sim-mod-mass-policy/
+
+!compat/fixtures/mod-retaliation-policy/
+!compat/fixtures/sim-mod-retaliation-policy/

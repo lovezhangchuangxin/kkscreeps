@@ -15,6 +15,7 @@
 | `kk-engine/src/settle/contrib.rs` | 槽、处理器和续行类型及运行入口；`contrib/assemble.rs` 冻结表装配，`execute.rs` 内建动作/tick 链执行与 Hosted 局部恢复（资源两端/事件、移动请求登记、战斗/建造族对象/延迟队列/链内增删） |
 | `kk-engine/src/settle/creep/combat/damage_policy.rs` | 单体策略伤害的表示校验、战斗视图；默认/native 和策略应用共用 damage.rs 的生命值与死亡路径 |
 | `kk-engine/src/settle/creep/combat/heal_policy.rs` | 策略治疗表示校验，native/JS 共用队列、日志与事件登记；最终身体恢复由 damage.rs 处理 |
+| `kk-engine/src/settle/creep/combat/retaliation_policy.rs` | 不可变反击表、执行前表示域预留与原生/JS 主攻击组合 |
 | `kk-engine/src/settle/creep/combat/batch_policy.rs` | 战斗分页与群体批量完整预检/应用；直接候选不变测试在 batch_policy/tests.rs |
 | `kk-engine/src/settle/resources.rs` | 资源领域读取与副本预检转账；`resources/generic.rs` 共享 Generic 仓库解析、native 容量与实验室槽写入 |
 | `kk-mod-host/src/execution_plan.rs` | 链安装与诊断共用的活动顺序/中心回退选择 |
@@ -27,7 +28,7 @@
 | `kk-mod-host/src/chain/resources.rs` | 资源 op 的同步能力访问、数字校验与故障来源 |
 | `kk-mod-host/src/chain/movement.rs` | 移动请求 op 的方向校验与同步能力访问 |
 | `kk-mod-host/src/chain/combat.rs` | 战斗读取/改向/取消/策略伤害与治疗 op 的同步能力访问与故障来源 |
-| `kk-mod-host/src/chain/combat_batch.rs` | 批量有界转换、重入后重新检查能力与战斗分页 op |
+| `kk-mod-host/src/chain/combat_batch.rs` | 伤害批量/反击表共用有界转换、重入后重新检查能力与战斗分页 op |
 | `kk-runtime/src/embed/mod_chain/resources.rs` | 同房资源能力、首次触达日志与字段缓存失效；移动能力在 `mod_chain.rs`；战斗门控、首触日志与 consumed 标记在 `mod_chain/combat.rs` |
 | `kk-engine/src/settle/market.rs` | 市场状态和结算入口、成交调度；`market/orders.rs` 订单生命周期，`terminal.rs` 发送/成交共用的库存、费用与交易写入 |
 | `kk-runtime/src/run.rs` | 玩家执行参数、结果分类和未提交的指令/Memory/CPU 候选；由 crate 根导出，结算引擎不拥有这些类型 |

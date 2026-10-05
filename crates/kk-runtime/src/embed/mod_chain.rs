@@ -48,6 +48,7 @@ struct ModChainContext {
 struct CombatChainState {
     action: kk_engine::settle::creep::CombatAction,
     consumed: bool,
+    retaliation: Option<kk_engine::settle::creep::RetaliationPolicy>,
     journal: Rc<RefCell<BTreeMap<ObjId, RedirectJournalEntry>>>,
 }
 
@@ -116,6 +117,7 @@ impl SlotExecutor for ModSlotExecutor {
             action: kk_engine::settle::creep::CombatAction::from_slot_key(slot.key.as_str())
                 .expect("战斗槽键已由 COMBAT_ACTION_SLOTS 判定"),
             consumed: false,
+            retaliation: None,
             journal: Rc::new(RefCell::new(BTreeMap::new())),
         });
         let build_state = build_action.then(|| BuildChainState {
@@ -390,6 +392,13 @@ impl ChainHost for ModChainContext {
         self.apply_combat_heal(target, amount)
     }
 
+    fn combat_set_retaliation(
+        &mut self,
+        requests: &[kk_mod_api::combat::DamageRequest],
+    ) -> Result<(), String> {
+        self.set_combat_retaliation(requests)
+    }
+
     fn combat_apply_damage_batch(
         &mut self,
         requests: &[kk_mod_api::combat::DamageRequest],
@@ -532,7 +541,21 @@ impl ChainHost for ModChainContext {
             return Ok(());
         }
         match &self.native {
-            NativeCall::Action { data, step } => step(&mut self.ctx.borrow_mut(), self.id, data),
+            NativeCall::Action { data, step } => {
+                if let Some(combat) = &self.combat
+                    && let Some(policy) = &combat.retaliation
+                {
+                    kk_engine::settle::creep::slot_combat_execute_with_retaliation(
+                        &mut self.ctx.borrow_mut(),
+                        self.id,
+                        data,
+                        combat.action,
+                        policy,
+                    )?;
+                } else {
+                    step(&mut self.ctx.borrow_mut(), self.id, data);
+                }
+            }
             NativeCall::Tick(step) => step(&mut self.ctx.borrow_mut(), self.id),
             NativeCall::None => return Err("Mod 自有槽没有 Rust native 中心".into()),
         }

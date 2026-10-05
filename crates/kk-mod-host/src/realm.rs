@@ -26,12 +26,12 @@ use crate::chain::{
     op_mod_chain_build_request, op_mod_chain_combat_apply_damage,
     op_mod_chain_combat_apply_damage_batch, op_mod_chain_combat_apply_heal,
     op_mod_chain_combat_cancel, op_mod_chain_combat_get, op_mod_chain_combat_list,
-    op_mod_chain_combat_request, op_mod_chain_decline, op_mod_chain_fault,
-    op_mod_chain_fault_detail, op_mod_chain_move_cancel, op_mod_chain_move_pending,
-    op_mod_chain_move_request, op_mod_chain_native, op_mod_chain_object_create,
-    op_mod_chain_object_get, op_mod_chain_object_list, op_mod_chain_object_remove,
-    op_mod_chain_object_update, op_mod_chain_read, op_mod_chain_resource_read,
-    op_mod_chain_resource_transfer, op_mod_chain_write,
+    op_mod_chain_combat_request, op_mod_chain_combat_set_retaliation, op_mod_chain_decline,
+    op_mod_chain_fault, op_mod_chain_fault_detail, op_mod_chain_move_cancel,
+    op_mod_chain_move_pending, op_mod_chain_move_request, op_mod_chain_native,
+    op_mod_chain_object_create, op_mod_chain_object_get, op_mod_chain_object_list,
+    op_mod_chain_object_remove, op_mod_chain_object_update, op_mod_chain_read,
+    op_mod_chain_resource_read, op_mod_chain_resource_transfer, op_mod_chain_write,
 };
 use crate::convert::{Declaration, build_contribution};
 use crate::error::{ModFault, ModFaultKind, ModHostError, ModHostResult};
@@ -137,6 +137,7 @@ extension!(
         op_mod_chain_combat_cancel,
         op_mod_chain_combat_apply_damage,
         op_mod_chain_combat_apply_damage_batch,
+        op_mod_chain_combat_set_retaliation,
         op_mod_chain_combat_list,
         op_mod_chain_combat_apply_heal,
         op_mod_chain_combat_get,

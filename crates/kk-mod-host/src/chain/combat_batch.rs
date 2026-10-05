@@ -38,6 +38,28 @@ pub(crate) fn op_mod_chain_combat_apply_damage_batch<'s, 'i>(
     #[string] binding: String,
     requests: v8::Local<'s, v8::Value>,
 ) -> Result<(), JsErrorBox> {
+    write_damage_requests(scope, state, token, binding, requests, false)
+}
+
+#[op2(nofast, reentrant)]
+pub(crate) fn op_mod_chain_combat_set_retaliation<'s, 'i>(
+    scope: &mut v8::PinScope<'s, 'i>,
+    state: Rc<RefCell<OpState>>,
+    #[string] token: String,
+    #[string] binding: String,
+    requests: v8::Local<'s, v8::Value>,
+) -> Result<(), JsErrorBox> {
+    write_damage_requests(scope, state, token, binding, requests, true)
+}
+
+fn write_damage_requests<'s, 'i>(
+    scope: &mut v8::PinScope<'s, 'i>,
+    state: Rc<RefCell<OpState>>,
+    token: String,
+    binding: String,
+    requests: v8::Local<'s, v8::Value>,
+    retaliation: bool,
+) -> Result<(), JsErrorBox> {
     {
         let mut state = state.borrow_mut();
         active(&mut state, &token)?.checked_binding(&binding)?;
@@ -72,10 +94,17 @@ pub(crate) fn op_mod_chain_combat_apply_damage_batch<'s, 'i>(
     let chain = active(&mut state, &token)?;
     chain.checked_binding(&binding)?;
     let requests = chain.outcome(ModFaultKind::WriteConversion, Some(&binding), requests)?;
-    let _timer = chain
-        .profiler
-        .as_ref()
-        .map(|p| p.measure("host_combat_apply_damage_batch"));
-    let result = chain.host.combat_apply_damage_batch(&requests);
+    let _timer = chain.profiler.as_ref().map(|p| {
+        p.measure(if retaliation {
+            "host_combat_set_retaliation"
+        } else {
+            "host_combat_apply_damage_batch"
+        })
+    });
+    let result = if retaliation {
+        chain.host.combat_set_retaliation(&requests)
+    } else {
+        chain.host.combat_apply_damage_batch(&requests)
+    };
     chain.outcome(ModFaultKind::Write, Some(&binding), result)
 }

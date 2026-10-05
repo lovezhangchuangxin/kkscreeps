@@ -1,0 +1,211 @@
+{
+  "date": "2026-10-06",
+  "base_commit": "a2d82a12d08378736b7e8aea88ec4669b14d6e8c",
+  "scope": "N2c 第四片：攻击前 JS 反击表；不含实际伤害逐命中回调或塔/dismantle 等其他伤害源",
+  "executable_sha256": "cef44e30b34e66a71b02efb544f541f383f76812bf859a098d685f99bbcb126d",
+  "clean_staged_export": {
+    "run_count": 6,
+    "all_passed": true,
+    "normalized_final_equal_across_channels": true,
+    "ignored_final_fields": [
+      "players.*.cpu_bucket"
+    ],
+    "runs": [
+      {
+        "policy": "flat",
+        "channel": "json",
+        "ticks": 3,
+        "status": "passed",
+        "plan_hash": "b8fa00e3835874c48555f0af8a026ff6afc63fda28e8db1d34a436f92f50cc83",
+        "memory": {
+          "code": 0,
+          "target_hits": 170,
+          "actor_hits": 193
+        },
+        "mod_states": {
+          "flat-counter": {
+            "applied": 1,
+            "amount": 7
+          },
+          "thorns-counter": null
+        }
+      },
+      {
+        "policy": "flat",
+        "channel": "kkpv",
+        "ticks": 3,
+        "status": "passed",
+        "plan_hash": "b8fa00e3835874c48555f0af8a026ff6afc63fda28e8db1d34a436f92f50cc83",
+        "memory": {
+          "code": 0,
+          "target_hits": 170,
+          "actor_hits": 193
+        },
+        "mod_states": {
+          "flat-counter": {
+            "applied": 1,
+            "amount": 7
+          },
+          "thorns-counter": null
+        }
+      },
+      {
+        "policy": "thorns",
+        "channel": "json",
+        "ticks": 3,
+        "status": "passed",
+        "plan_hash": "16ec2a9bea68f1b3d97747c5f7afa3825acd72c8ea4c78f1440185ec4f303ee2",
+        "memory": {
+          "code": 0,
+          "target_hits": 170,
+          "actor_hits": 194
+        },
+        "mod_states": {
+          "flat-counter": null,
+          "thorns-counter": {
+            "applied": 1,
+            "amount": 6
+          }
+        }
+      },
+      {
+        "policy": "thorns",
+        "channel": "kkpv",
+        "ticks": 3,
+        "status": "passed",
+        "plan_hash": "16ec2a9bea68f1b3d97747c5f7afa3825acd72c8ea4c78f1440185ec4f303ee2",
+        "memory": {
+          "code": 0,
+          "target_hits": 170,
+          "actor_hits": 194
+        },
+        "mod_states": {
+          "flat-counter": null,
+          "thorns-counter": {
+            "applied": 1,
+            "amount": 6
+          }
+        }
+      },
+      {
+        "policy": "plain",
+        "channel": "json",
+        "ticks": 3,
+        "status": "passed",
+        "plan_hash": "b3bf08fd8d006d49c29eef34615542bd10bf633cc339b45c40ffb56ea3d3ac4e",
+        "memory": {
+          "code": 0,
+          "target_hits": 170,
+          "actor_hits": 170
+        },
+        "mod_states": {}
+      },
+      {
+        "policy": "plain",
+        "channel": "kkpv",
+        "ticks": 3,
+        "status": "passed",
+        "plan_hash": "b3bf08fd8d006d49c29eef34615542bd10bf633cc339b45c40ffb56ea3d3ac4e",
+        "memory": {
+          "code": 0,
+          "target_hits": 170,
+          "actor_hits": 170
+        },
+        "mod_states": {}
+      }
+    ]
+  },
+  "engine_specialized": {
+    "new_passed": 3,
+    "failed": 0,
+    "batch_regression_passed": 4,
+    "coverage": [
+      "整表数值/资格/唯一性/上限校验",
+      "反击与自伤累计溢出整批不变",
+      "native 反击累计溢出主攻击前拒绝"
+    ]
+  },
+  "runtime_specialized": {
+    "new_passed": 13,
+    "failed": 0,
+    "single_damage_regression_passed": 1,
+    "coverage": [
+      "native 近战反击禁用/替换，保持主攻击",
+      "native 远程/群体反击及攻击者 rampart",
+      "safeMode 默认抑制与显式策略替换",
+      "实际 rampart 命中及结构击毁后的反击",
+      "JS 单体/群体反击、输入事件顺序与无递归",
+      "request 改向、未命中项与零主伤害",
+      "局部拒绝保留此前双队列/转账/后续移动/ID",
+      "反击致死、墓碑与晚期 RawMemory 缓存重试",
+      "非法/重复/越界表与执行后的声明",
+      "原始 op 数值及 getter 重入门",
+      "跨槽/跨房/孵化目标",
+      "处理器/调用结束能力过期及跨链不泄漏"
+    ]
+  },
+  "cli_specialized": {
+    "passed": 2,
+    "failed": 0,
+    "scenario_runs": 6,
+    "cold_resume_cases": 4,
+    "checkpoint_splits": [
+      1
+    ],
+    "continuous_ticks": 3,
+    "packages": [
+      "flat-counter",
+      "thorns-counter"
+    ],
+    "channels": [
+      "json",
+      "kkpv"
+    ],
+    "compared_fields": [
+      "final (CPU bucket 除外)",
+      "plan_hash",
+      "composition"
+    ]
+  },
+  "inspect": {
+    "single_selected_status": "ok",
+    "two_replaces_status": "setup_failed",
+    "two_replaces_error": "builtin:creep.attack: 多个 replace 处理器冲突：flat-counter:handler.policy, thorns-counter:handler.policy"
+  },
+  "full_check": {
+    "command": "KKSCREEPS_BIN=$PWD/target/debug/kkscreeps pnpm run check",
+    "rust_passed": 910,
+    "rust_failed": 0,
+    "rust_ignored": 12,
+    "rust_groups": 56,
+    "javascript_passed": 19,
+    "javascript_compat_passed": 14,
+    "javascript_placeholder_passed": 5,
+    "clippy_warnings": 0,
+    "source_files_checked": 433
+  },
+  "compatibility": {
+    "command": "KKSCREEPS_BIN=$PWD/target/release/kkscreeps node compat/scripts/ratchet.mjs",
+    "pin": "34a630efa42908c117c19c25d2350fa2387bd633",
+    "total": 2914,
+    "passed": 1918,
+    "existing_failed": 89,
+    "skipped": 907,
+    "baseline": "a2d82a1",
+    "changed_case_statuses": 0,
+    "existing_unused_waiver_warnings": 2
+  },
+  "limits": {
+    "max_table_size": 256,
+    "max_retaliation_per_target": 1000000000,
+    "declarations_per_action": 1,
+    "recursive_retaliation": false,
+    "actual_damage_js_callback": false,
+    "configurable_batch_budget": false
+  },
+  "not_measured": [
+    "性能",
+    "新 bot 运行结果",
+    "完整 N2c 或完整 gameplay 兼容"
+  ]
+}

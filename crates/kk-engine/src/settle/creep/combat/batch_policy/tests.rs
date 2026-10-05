@@ -183,3 +183,58 @@ fn empty_batch_records_action_and_upper_bound_is_accepted() {
     );
     assert_eq!(w.events.len(), 256);
 }
+
+#[test]
+fn retaliation_overflow_and_self_damage_are_checked_before_any_batch_mutation() {
+    let mut w = actors_and_structure();
+    let policy = super::super::RetaliationPolicy::new(&w, &[(ObjId(3), 7), (ObjId(2), 9)]).unwrap();
+    w.damage_to_apply.insert(ObjId(2), i64::MAX - 20);
+    assert!(
+        super::slot_combat_apply_damage_batch_with_retaliation(
+            &mut w,
+            ObjId(2),
+            &[(ObjId(3), 80), (ObjId(2), 5)],
+            CombatAction::RangedMassAttack,
+            Some(&policy),
+        )
+        .is_err()
+    );
+    assert_eq!(damage::object_hits(&w.room.objects[&ObjId(3)]), 20);
+    assert_eq!(w.damage_to_apply[&ObjId(2)], i64::MAX - 20);
+    assert!(w.events.is_empty());
+    assert_eq!(w.state.peek_next_id(), 100);
+}
+
+#[test]
+fn retaliation_table_validates_whole_input_and_numeric_representation() {
+    let w = actors_and_structure();
+    for requests in [
+        vec![(ObjId(3), 7), (ObjId(99), 1)],
+        vec![(ObjId(3), 7), (ObjId(3), 8)],
+        vec![(ObjId(3), -1)],
+        vec![(ObjId(3), MAX_DAMAGE + 1)],
+        vec![(ObjId(3), 0); 257],
+    ] {
+        assert!(super::super::RetaliationPolicy::new(&w, &requests).is_err());
+    }
+    assert!(super::super::RetaliationPolicy::new(&w, &[(ObjId(3), MAX_DAMAGE)]).is_ok());
+}
+
+#[test]
+fn native_retaliation_overflow_is_rejected_before_the_primary_hit() {
+    let mut w = actors_and_structure();
+    let policy = super::super::RetaliationPolicy::new(&w, &[(ObjId(3), 7)]).unwrap();
+    w.damage_to_apply.insert(ObjId(2), i64::MAX);
+    assert!(
+        super::super::slot_combat_execute_with_retaliation(
+            &mut w,
+            ObjId(2),
+            &crate::intent::IntentData::target(ObjId(3)),
+            CombatAction::RangedAttack,
+            &policy
+        )
+        .is_err()
+    );
+    assert_eq!(damage::object_hits(&w.room.objects[&ObjId(3)]), 20);
+    assert!(w.events.is_empty());
+}

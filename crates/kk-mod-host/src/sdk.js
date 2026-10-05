@@ -582,6 +582,22 @@ export function runChain(slot, token) {
         throw error;
       }
     }
+    function damageRequests(requests) {
+      if (!Array.isArray(requests)) throw new Error('批量策略伤害须为数组');
+      const count = requests.length;
+      if (!Number.isInteger(count) || count < 0 || count > 256) throw new Error('批量策略伤害最多 256 项');
+      const batch = [];
+      for (let i = 0; i < count; i++) {
+        const entry = requests[i];
+        if (!entry || typeof entry !== 'object') throw new Error('伤害条目须为对象');
+        const id = entry.id;
+        const amount = entry.amount;
+        if (typeof id !== 'string') throw new Error('战斗目标须为对象 ID 的原始字符串');
+        if (!Number.isInteger(amount) || amount < 0 || amount > 1e9) throw new Error('策略伤害须为 0..=1e9 的整数');
+        batch.push({ id, amount });
+      }
+      return batch;
+    }
     return Object.freeze({
       request(targetId) {
         return checked(() => {
@@ -603,21 +619,12 @@ export function runChain(slot, token) {
           return ops.op_mod_chain_combat_list(token, key, after, limit);
         });
       },
+      setRetaliation(requests) {
+        return checked(() => ops.op_mod_chain_combat_set_retaliation(token, key, damageRequests(requests)));
+      },
       applyDamageBatch(requests) {
         return checked(() => {
-          if (!Array.isArray(requests)) throw new Error('批量策略伤害须为数组');
-          const count = requests.length;
-          if (!Number.isInteger(count) || count < 0 || count > 256) throw new Error('批量策略伤害最多 256 项');
-          const batch = [];
-          for (let i = 0; i < count; i++) {
-            const entry = requests[i];
-            if (!entry || typeof entry !== 'object') throw new Error('伤害条目须为对象');
-            const id = entry.id;
-            const amount = entry.amount;
-            if (typeof id !== 'string') throw new Error('战斗目标须为对象 ID 的原始字符串');
-            if (!Number.isInteger(amount) || amount < 0 || amount > 1e9) throw new Error('策略伤害须为 0..=1e9 的整数');
-            batch.push({ id, amount });
-          }
+          const batch = damageRequests(requests);
           return ops.op_mod_chain_combat_apply_damage_batch(token, key, batch);
         });
       },

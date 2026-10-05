@@ -1,6 +1,8 @@
 //! 群体伤害的完整批量预检与战斗候选分页；应用沿共用伤害/死亡路径。
 use super::{CombatAction, damage_policy};
-use crate::settle::{Working, damage};
+use crate::settle::Working;
+#[cfg(test)]
+use crate::settle::damage;
 use kk_core::constants as c;
 use kk_mod_api::combat::{CombatPage, MAX_COMBAT_BATCH, MAX_DAMAGE};
 use kk_world::ObjId;
@@ -38,6 +40,16 @@ pub fn slot_combat_apply_damage_batch(
     requests: &[(ObjId, i64)],
     action: CombatAction,
 ) -> Result<(), String> {
+    slot_combat_apply_damage_batch_with_retaliation(w, id, requests, action, None)
+}
+
+pub fn slot_combat_apply_damage_batch_with_retaliation(
+    w: &mut Working,
+    id: ObjId,
+    requests: &[(ObjId, i64)],
+    action: CombatAction,
+    policy: Option<&super::RetaliationPolicy>,
+) -> Result<(), String> {
     if action != CombatAction::RangedMassAttack {
         return Err("批量策略伤害仅在 rangedMassAttack 槽开放".into());
     }
@@ -64,13 +76,24 @@ pub fn slot_combat_apply_damage_batch(
             .checked_add(amount)
             .ok_or("待伤害累计量超出表示域")?;
     }
+    super::retaliation_policy::preflight(
+        w,
+        id,
+        policy,
+        requests
+            .iter()
+            .find(|(target, _)| *target == id)
+            .map_or(0, |(_, amount)| *amount),
+    )?;
     for &(target, amount) in requests {
-        damage::apply_damage_without_retaliation(
+        super::retaliation_policy::apply_damage(
             w,
             id,
             target,
             amount,
             c::EVENT_ATTACK_TYPE_RANGED_MASS,
+            policy,
+            false,
         );
     }
     if let Some(actor) = w.creep_mut(id) {

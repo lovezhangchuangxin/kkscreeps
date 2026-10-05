@@ -16,9 +16,16 @@ use crate::settle::movement;
 use crate::settle::movement::type_name_of;
 
 mod damage_policy;
-pub use damage_policy::{slot_combat_apply_damage, slot_combat_get};
+pub use damage_policy::{
+    slot_combat_apply_damage, slot_combat_apply_damage_with_retaliation, slot_combat_get,
+};
 mod batch_policy;
-pub use batch_policy::{slot_combat_apply_damage_batch, slot_combat_list};
+pub use batch_policy::{
+    slot_combat_apply_damage_batch, slot_combat_apply_damage_batch_with_retaliation,
+    slot_combat_list,
+};
+mod retaliation_policy;
+pub use retaliation_policy::{RetaliationPolicy, slot_combat_execute_with_retaliation};
 mod heal_policy;
 pub use heal_policy::slot_combat_apply_heal;
 
@@ -114,6 +121,15 @@ pub fn slot_combat_request(
 /// 功率计入 ATTACK boost；0 功率也会进入伤害入口并生成事件。
 /// 来源：上游 engine/src/processor/intents/creeps/attack.js。
 pub(in crate::settle) fn intent_attack(w: &mut Working, id: ObjId, data: &IntentData) {
+    intent_attack_policy(w, id, data, None);
+}
+
+fn intent_attack_policy(
+    w: &mut Working,
+    id: ObjId,
+    data: &IntentData,
+    policy: Option<&RetaliationPolicy>,
+) {
     let Some(target_id) = data.id else { return };
     let (pos, owner, power) = match w.creep(id) {
         Some(c) if !c.spawning => (
@@ -151,7 +167,15 @@ pub(in crate::settle) fn intent_attack(w: &mut Working, id: ObjId, data: &Intent
         return;
     }
     let target_id = damage::rampart_at(w, (tx, ty)).unwrap_or(target_id);
-    damage::apply_damage(w, id, target_id, power, c::EVENT_ATTACK_TYPE_MELEE);
+    retaliation_policy::apply_damage(
+        w,
+        id,
+        target_id,
+        power,
+        c::EVENT_ATTACK_TYPE_MELEE,
+        policy,
+        true,
+    );
 }
 
 /// 控制器不属于行动者且安全模式仍生效时，拒绝战斗动作；无主也视为非本人。
@@ -286,6 +310,15 @@ pub(in crate::settle) fn intent_dismantle(w: &mut Working, id: ObjId, data: &Int
 /// 远程攻击三格内目标，rampart 存在时转打它，功率含 rangedAttack boost。
 /// 不拒绝零功率，与 rangedMassAttack 的处理不同。
 pub(in crate::settle) fn intent_ranged_attack(w: &mut Working, id: ObjId, data: &IntentData) {
+    intent_ranged_attack_policy(w, id, data, None);
+}
+
+fn intent_ranged_attack_policy(
+    w: &mut Working,
+    id: ObjId,
+    data: &IntentData,
+    policy: Option<&RetaliationPolicy>,
+) {
     let Some(target_id) = data.id else { return };
     if target_id == id {
         return;
@@ -323,7 +356,15 @@ pub(in crate::settle) fn intent_ranged_attack(w: &mut Working, id: ObjId, data: 
         "rangedAttack",
         c::RANGED_ATTACK_POWER,
     );
-    damage::apply_damage(w, id, target_id, attack_power, c::EVENT_ATTACK_TYPE_RANGED);
+    retaliation_policy::apply_damage(
+        w,
+        id,
+        target_id,
+        attack_power,
+        c::EVENT_ATTACK_TYPE_RANGED,
+        policy,
+        true,
+    );
 }
 
 /// 攻击三格内有主的敌方对象和 powerBank。非 rampart 目标若被 rampart 覆盖
@@ -331,6 +372,14 @@ pub(in crate::settle) fn intent_ranged_attack(w: &mut Working, id: ObjId, data: 
 /// 正功率即记录动作，即使没有目标；0 功率不记录。
 /// 来源：上游 engine/src/processor/intents/creeps/rangedMassAttack.js。
 pub(super) fn intent_ranged_mass_attack(w: &mut Working, id: ObjId) {
+    intent_ranged_mass_attack_policy(w, id, None);
+}
+
+fn intent_ranged_mass_attack_policy(
+    w: &mut Working,
+    id: ObjId,
+    policy: Option<&RetaliationPolicy>,
+) {
     let Some((pos, owner, body)) = w
         .creep(id)
         .filter(|c| !c.spawning)
@@ -390,7 +439,15 @@ pub(super) fn intent_ranged_mass_attack(w: &mut Working, id: ObjId) {
             .abs()
             .max((oy as i32 - pos.1 as i32).abs());
         let dmg = (attack_power as f64 * distance_rate(distance)).round() as i64;
-        damage::apply_damage(w, id, tid, dmg, c::EVENT_ATTACK_TYPE_RANGED_MASS);
+        retaliation_policy::apply_damage(
+            w,
+            id,
+            tid,
+            dmg,
+            c::EVENT_ATTACK_TYPE_RANGED_MASS,
+            policy,
+            true,
+        );
     }
     if let Some(a) = w.creep_mut(id) {
         super::set_action_log(&mut a.action_log, super::ACTION_RANGED_MASS);

@@ -1,0 +1,6 @@
+{
+  "id": "thorns-counter",
+  "version": "0.1.0",
+  "apiVersion": "^1.0.0",
+  "entry": "server.js"
+}

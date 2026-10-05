@@ -25,7 +25,7 @@ pub fn apply_damage(
     damage: i64,
     attack_type: i64,
 ) {
-    apply_damage_inner(w, attacker, target_id, damage, attack_type, true);
+    apply_damage_inner(w, attacker, target_id, damage, attack_type, true, None);
 }
 
 /// JS 策略已决定目标和伤害，不再隐含追加原生近战反击。生命值、
@@ -37,7 +37,28 @@ pub(in crate::settle) fn apply_damage_without_retaliation(
     damage: i64,
     attack_type: i64,
 ) {
-    apply_damage_inner(w, attacker, target_id, damage, attack_type, false);
+    apply_damage_inner(w, attacker, target_id, damage, attack_type, false, None);
+}
+
+/// 本动作显式反击量；直接登记一次 HIT_BACK，不递归进入伤害策略。
+/// 调用方先验证反击量及执行者队列的累计表示域。
+pub(in crate::settle) fn apply_damage_with_retaliation(
+    w: &mut Working,
+    attacker: ObjId,
+    target: ObjId,
+    amount: i64,
+    attack_type: i64,
+    retaliation: i64,
+) {
+    apply_damage_inner(
+        w,
+        attacker,
+        target,
+        amount,
+        attack_type,
+        false,
+        Some(retaliation),
+    );
 }
 
 fn apply_damage_inner(
@@ -47,6 +68,7 @@ fn apply_damage_inner(
     damage: i64,
     attack_type: i64,
     native_retaliation: bool,
+    retaliation: Option<i64>,
 ) {
     let Some(target) = w.room.objects.get(&target_id).cloned() else {
         return;
@@ -69,7 +91,7 @@ fn apply_damage_inner(
         _ => return,
     };
 
-    let mut attack_back: i64 = 0;
+    let mut attack_back: i64 = retaliation.unwrap_or(0);
     if let RoomObject::Creep(t) = &target {
         if native_retaliation
             && attack_type == c::EVENT_ATTACK_TYPE_MELEE
@@ -98,7 +120,8 @@ fn apply_damage_inner(
         }
     }
 
-    if attack_back > 0
+    if retaliation.is_none()
+        && attack_back > 0
         && let Some(ctl) = w.controller()
         && ctl.owner.as_deref() == Some(attacker_owner.as_str())
         && ctl.safe_mode > w.time
