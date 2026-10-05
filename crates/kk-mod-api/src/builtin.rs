@@ -430,5 +430,6 @@ pub fn link() -> Contribution {
         .into(),
         slots,
         handlers: Vec::new(),
+        resources: Vec::new(),
     }
 }

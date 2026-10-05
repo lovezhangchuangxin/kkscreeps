@@ -119,6 +119,7 @@ impl Engine {
             let plane = Plane {
                 links: self.links,
                 stores: self.stores,
+                resources: self.resources.clone(),
                 contrib: self.contrib.clone(),
                 extensions: self.extensions.clone(),
                 plan: self.plan.clone(),

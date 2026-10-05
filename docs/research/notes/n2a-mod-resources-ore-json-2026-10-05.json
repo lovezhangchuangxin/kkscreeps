@@ -1,0 +1,1830 @@
+{
+  "report_version": 3,
+  "success": true,
+  "status": "passed",
+  "engine_version": "0.1.0",
+  "executable_sha256": "d7881df032ebe62230ebf3f418a2b3594b02b5aeeb6793272b9e83209672ebc0",
+  "scenario": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/sim-mod-resources/scenario.json",
+  "scenario_sha256": "97c3324d6afb7c3051705b62c3ef48a2de9ebb78224a58bf6b590fb3bae1d3df",
+  "modules": {
+    "p1": {
+      "directory": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/sim-mod-resources",
+      "sha256": "08d6118bf23713a1546d68380fe436d07df6a53990cb595012ba18f333c0c03f",
+      "files": [
+        {
+          "name": "main",
+          "kind": "js",
+          "bytes": 2759,
+          "sha256": "0e8bcbc9f2eb4746df952dde2b5a2500cb80e939b337458c6566343b3fad97df"
+        }
+      ]
+    }
+  },
+  "mods": {
+    "root": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/mod-resources",
+    "packages": {
+      "beacon": {
+        "version": "1.0.0",
+        "api_version": "^1.0.0",
+        "dependencies": {
+          "ore": "^1.0.0"
+        },
+        "directory": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/mod-resources/beacon",
+        "code_sha256": "739b93955838d7599b1ca1277387919a3a1210932101b71e578330227776d413",
+        "player_api_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "config_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "ore": {
+        "version": "1.0.0",
+        "api_version": "^1.0.0",
+        "dependencies": {},
+        "directory": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/mod-resources/ore",
+        "code_sha256": "0f9f5286b1becad31a7036d712c69ed04eaae895e4006542efc76e60c2fd4eca",
+        "player_api_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "config_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    "selection": {
+      "include": [
+        "ore"
+      ],
+      "exclude": []
+    }
+  },
+  "plan_hash": "a74f9f5d6446aa7e17609ff7c1d0f5c0c3e20bb79ed71000a77e64895bef2954",
+  "composition": {
+    "report_version": 3,
+    "plan_hash": "a74f9f5d6446aa7e17609ff7c1d0f5c0c3e20bb79ed71000a77e64895bef2954",
+    "sources": {
+      "builtin": {
+        "namespace": "builtin",
+        "api_version": 1,
+        "revision": "link-creep-store-move-combat-build-descriptors-v6",
+        "code_digest": [
+          140,
+          92,
+          238,
+          40,
+          160,
+          238,
+          104,
+          206,
+          149,
+          31,
+          57,
+          217,
+          226,
+          96,
+          21,
+          135,
+          210,
+          193,
+          7,
+          237,
+          32,
+          86,
+          95,
+          239,
+          222,
+          66,
+          89,
+          223,
+          162,
+          206,
+          66,
+          15
+        ],
+        "config_digest": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "player_api_digest": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ore": {
+        "namespace": "ore",
+        "api_version": 1,
+        "revision": "1.0.0",
+        "code_digest": [
+          15,
+          159,
+          82,
+          134,
+          177,
+          190,
+          202,
+          211,
+          26,
+          112,
+          54,
+          215,
+          18,
+          198,
+          158,
+          208,
+          78,
+          170,
+          232,
+          149,
+          228,
+          0,
+          101,
+          66,
+          239,
+          199,
+          110,
+          96,
+          194,
+          253,
+          78,
+          202
+        ],
+        "config_digest": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "player_api_digest": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "selection": {
+      "requested": [
+        "ore"
+      ],
+      "excluded": [],
+      "selected": [
+        "ore"
+      ],
+      "auto_added": [],
+      "skipped": [
+        "beacon"
+      ]
+    },
+    "resources": [
+      {
+        "key": "ore:crystal",
+        "source": "ore"
+      },
+      {
+        "key": "ore:dust",
+        "source": "ore"
+      }
+    ],
+    "handlers": [],
+    "slots": [
+      {
+        "key": "builtin:creep.attack",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.attack.native",
+        "frozen": {
+          "Native": "builtin:creep.attack.native"
+        },
+        "active": {
+          "key": "builtin:creep.attack",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.attack.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.build",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.build.native",
+        "frozen": {
+          "Native": "builtin:creep.build.native"
+        },
+        "active": {
+          "key": "builtin:creep.build",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.build.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.dismantle",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.dismantle.native",
+        "frozen": {
+          "Native": "builtin:creep.dismantle.native"
+        },
+        "active": {
+          "key": "builtin:creep.dismantle",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.dismantle.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.heal",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.heal.native",
+        "frozen": {
+          "Native": "builtin:creep.heal.native"
+        },
+        "active": {
+          "key": "builtin:creep.heal",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.heal.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.move",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.move.native",
+        "frozen": {
+          "Native": "builtin:creep.move.native"
+        },
+        "active": {
+          "key": "builtin:creep.move",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.move.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.rangedAttack",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.rangedAttack.native",
+        "frozen": {
+          "Native": "builtin:creep.rangedAttack.native"
+        },
+        "active": {
+          "key": "builtin:creep.rangedAttack",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.rangedAttack.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.rangedHeal",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.rangedHeal.native",
+        "frozen": {
+          "Native": "builtin:creep.rangedHeal.native"
+        },
+        "active": {
+          "key": "builtin:creep.rangedHeal",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.rangedHeal.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.rangedMassAttack",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.rangedMassAttack.native",
+        "frozen": {
+          "Native": "builtin:creep.rangedMassAttack.native"
+        },
+        "active": {
+          "key": "builtin:creep.rangedMassAttack",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.rangedMassAttack.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.repair",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.repair.native",
+        "frozen": {
+          "Native": "builtin:creep.repair.native"
+        },
+        "active": {
+          "key": "builtin:creep.repair",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.repair.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.transfer",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.transfer.native",
+        "frozen": {
+          "Native": "builtin:creep.transfer.native"
+        },
+        "active": {
+          "key": "builtin:creep.transfer",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.transfer.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.withdraw",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.withdraw.native",
+        "frozen": {
+          "Native": "builtin:creep.withdraw.native"
+        },
+        "active": {
+          "key": "builtin:creep.withdraw",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.withdraw.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:link.tick",
+        "stage": "ObjectTick",
+        "original_center": "builtin:link.tick.native",
+        "frozen": {
+          "Native": "builtin:link.tick.native"
+        },
+        "active": {
+          "key": "builtin:link.tick",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:link.tick.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": false
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:link.transfer",
+        "stage": "ObjectAction",
+        "original_center": "builtin:link.transfer.native",
+        "frozen": {
+          "Native": "builtin:link.transfer.native"
+        },
+        "active": {
+          "key": "builtin:link.transfer",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:link.transfer.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      }
+    ],
+    "rules": [
+      {
+        "key": "builtin:link.buildCost",
+        "default": {
+          "Signed": 5000
+        },
+        "value": {
+          "Signed": 5000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.capacity",
+        "default": {
+          "Signed": 800
+        },
+        "value": {
+          "Signed": 800
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.cooldown",
+        "default": {
+          "Signed": 1
+        },
+        "value": {
+          "Signed": 1
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.hits",
+        "default": {
+          "Signed": 1000
+        },
+        "value": {
+          "Signed": 1000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.hitsMax",
+        "default": {
+          "Signed": 1000
+        },
+        "value": {
+          "Signed": 1000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.lossRatio",
+        "default": {
+          "Float": 0.03
+        },
+        "value": {
+          "Float": 0.03
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl0",
+        "default": {
+          "Signed": 0
+        },
+        "value": {
+          "Signed": 0
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl1",
+        "default": {
+          "Signed": 0
+        },
+        "value": {
+          "Signed": 0
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl2",
+        "default": {
+          "Signed": 0
+        },
+        "value": {
+          "Signed": 0
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl3",
+        "default": {
+          "Signed": 0
+        },
+        "value": {
+          "Signed": 0
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl4",
+        "default": {
+          "Signed": 0
+        },
+        "value": {
+          "Signed": 0
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl5",
+        "default": {
+          "Signed": 2
+        },
+        "value": {
+          "Signed": 2
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl6",
+        "default": {
+          "Signed": 3
+        },
+        "value": {
+          "Signed": 3
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl7",
+        "default": {
+          "Signed": 4
+        },
+        "value": {
+          "Signed": 4
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl8",
+        "default": {
+          "Signed": 6
+        },
+        "value": {
+          "Signed": 6
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:store.container.capacity",
+        "default": {
+          "Signed": 2000
+        },
+        "value": {
+          "Signed": 50
+        },
+        "definition_source": "builtin",
+        "selected_source": "ore",
+        "overrides": {
+          "ore": {
+            "Signed": 50
+          }
+        },
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.containerDeposit",
+          "builtin:store.init"
+        ]
+      },
+      {
+        "key": "builtin:store.factory.capacity",
+        "default": {
+          "Signed": 50000
+        },
+        "value": {
+          "Signed": 50000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init"
+        ]
+      },
+      {
+        "key": "builtin:store.lab.energyCapacity",
+        "default": {
+          "Signed": 2000
+        },
+        "value": {
+          "Signed": 2000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init",
+          "builtin:store.labSlots"
+        ]
+      },
+      {
+        "key": "builtin:store.lab.mineralCapacity",
+        "default": {
+          "Signed": 3000
+        },
+        "value": {
+          "Signed": 3000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init",
+          "builtin:store.labSlots"
+        ]
+      },
+      {
+        "key": "builtin:store.nuker.energyCapacity",
+        "default": {
+          "Signed": 300000
+        },
+        "value": {
+          "Signed": 300000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init"
+        ]
+      },
+      {
+        "key": "builtin:store.nuker.ghodiumCapacity",
+        "default": {
+          "Signed": 5000
+        },
+        "value": {
+          "Signed": 5000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init"
+        ]
+      },
+      {
+        "key": "builtin:store.powerSpawn.energyCapacity",
+        "default": {
+          "Signed": 5000
+        },
+        "value": {
+          "Signed": 5000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init"
+        ]
+      },
+      {
+        "key": "builtin:store.powerSpawn.powerCapacity",
+        "default": {
+          "Signed": 100
+        },
+        "value": {
+          "Signed": 100
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init"
+        ]
+      },
+      {
+        "key": "builtin:store.terminal.capacity",
+        "default": {
+          "Signed": 300000
+        },
+        "value": {
+          "Signed": 300000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init",
+          "builtin:store.terminalTick"
+        ]
+      },
+      {
+        "key": "builtin:store.tower.capacity",
+        "default": {
+          "Signed": 1000
+        },
+        "value": {
+          "Signed": 1000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init"
+        ]
+      }
+    ],
+    "dependencies": {
+      "ore": []
+    },
+    "disable_closures": {
+      "ore": [
+        "ore"
+      ]
+    },
+    "disabled_mods": []
+  },
+  "disabled_mods": [],
+  "channel": "json",
+  "concurrency": 2,
+  "ticks_requested": 100,
+  "ticks_attempted": 100,
+  "world_ticks_committed": 100,
+  "run_wall_ms": 13.929583000000001,
+  "phases": {
+    "ticks": 100,
+    "phases": {
+      "project": {
+        "count": 100,
+        "p50_ms": 0.022042,
+        "p95_ms": 0.032958,
+        "p99_ms": 0.035833,
+        "max_ms": 0.037083,
+        "total_ms": 2.3907039999999995
+      },
+      "run": {
+        "count": 100,
+        "p50_ms": 0.064584,
+        "p95_ms": 0.281834,
+        "p99_ms": 0.420791,
+        "max_ms": 1.325626,
+        "total_ms": 9.722795999999997
+      },
+      "settle": {
+        "count": 100,
+        "p50_ms": 0.013542,
+        "p95_ms": 0.022208,
+        "p99_ms": 0.032167,
+        "max_ms": 0.098333,
+        "total_ms": 1.5463350000000011
+      },
+      "wall": {
+        "count": 100,
+        "p50_ms": 0.102375,
+        "p95_ms": 0.33304100000000003,
+        "p99_ms": 0.468958,
+        "max_ms": 1.463792,
+        "total_ms": 13.854118999999999
+      }
+    }
+  },
+  "failure": null,
+  "players": {
+    "p1": {
+      "successful_ticks": 100,
+      "error_ticks": 0,
+      "not_evaluated_ticks": 0,
+      "errors_head": [],
+      "console_head": []
+    }
+  },
+  "aliases": {
+    "box": "kk0000000000000003",
+    "hauler": "kk0000000000000005",
+    "store": "kk0000000000000002",
+    "term": "kk0000000000000004"
+  },
+  "assertions": [
+    {
+      "pointer": "/players/p1/memory/phase",
+      "op": "eq",
+      "expected": 5,
+      "before": null,
+      "actual": 5,
+      "delta": null,
+      "passed": true
+    },
+    {
+      "pointer": "/players/p1/memory/withdraw_code",
+      "op": "eq",
+      "expected": 0,
+      "before": null,
+      "actual": 0,
+      "delta": null,
+      "passed": true
+    },
+    {
+      "pointer": "/players/p1/memory/container_dust",
+      "op": "eq",
+      "expected": 30,
+      "before": null,
+      "actual": 30,
+      "delta": null,
+      "passed": true
+    },
+    {
+      "pointer": "/players/p1/memory/container_cap",
+      "op": "eq",
+      "expected": 50,
+      "before": null,
+      "actual": 50,
+      "delta": null,
+      "passed": true
+    },
+    {
+      "pointer": "/players/p1/memory/carried",
+      "op": "gte",
+      "expected": 15,
+      "before": null,
+      "actual": 19,
+      "delta": null,
+      "passed": true
+    },
+    {
+      "pointer": "/objects/store/store/ore:crystal",
+      "op": "eq",
+      "expected": 80,
+      "before": 100,
+      "actual": 80,
+      "delta": -20,
+      "passed": true
+    },
+    {
+      "pointer": "/objects/box/store/ore:dust",
+      "op": "eq",
+      "expected": 30,
+      "before": null,
+      "actual": 30,
+      "delta": null,
+      "passed": true
+    },
+    {
+      "pointer": "/players/p1/memory/create_order_code",
+      "op": "eq",
+      "expected": 0,
+      "before": null,
+      "actual": 0,
+      "delta": null,
+      "passed": true
+    },
+    {
+      "pointer": "/players/p1/memory/send_code",
+      "op": "eq",
+      "expected": 0,
+      "before": null,
+      "actual": 0,
+      "delta": null,
+      "passed": true
+    },
+    {
+      "pointer": "/players/p1/memory/my_orders",
+      "op": "eq",
+      "expected": 0,
+      "before": null,
+      "actual": 0,
+      "delta": null,
+      "passed": true
+    },
+    {
+      "pointer": "/objects/term/store/ore:crystal",
+      "op": "eq",
+      "expected": 50,
+      "before": 50,
+      "actual": 50,
+      "delta": 0,
+      "passed": true
+    },
+    {
+      "pointer": "/objects/term/store/energy",
+      "op": "eq",
+      "expected": 10000,
+      "before": 10000,
+      "actual": 10000,
+      "delta": 0,
+      "passed": true
+    }
+  ],
+  "mod_fault": null,
+  "initial": {
+    "time": 0,
+    "players": {
+      "p1": {
+        "gcl": 1000000,
+        "rooms": [],
+        "memory": {
+          "room": "W1N1"
+        },
+        "raw_memory": "{\"room\":\"W1N1\"}",
+        "cpu_bucket": 10000.0
+      }
+    },
+    "objects": {
+      "box": {
+        "structureType": "container",
+        "type": "structure",
+        "ticksToDecay": 500,
+        "storeCapacity": 50,
+        "store": {},
+        "hits": 250000,
+        "hitsMax": 250000,
+        "kind": "structure",
+        "id": "kk0000000000000003",
+        "pos": {
+          "x": 11,
+          "y": 10,
+          "roomName": "W1N1"
+        }
+      },
+      "hauler": {
+        "kind": "creep",
+        "id": "kk0000000000000005",
+        "name": "hauler",
+        "pos": {
+          "x": 10,
+          "y": 10,
+          "roomName": "W1N1"
+        },
+        "hits": 300,
+        "hitsMax": 300,
+        "fatigue": 0,
+        "body": [
+          {
+            "type": "carry",
+            "hits": 100
+          },
+          {
+            "type": "carry",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          }
+        ],
+        "owner": "p1",
+        "ticksToLive": 1500,
+        "spawning": false,
+        "store": {},
+        "storeCapacity": 100
+      },
+      "store": {
+        "kind": "structure",
+        "structureType": "storage",
+        "id": "kk0000000000000002",
+        "pos": {
+          "x": 10,
+          "y": 11,
+          "roomName": "W1N1"
+        },
+        "owner": "p1",
+        "hits": 10000,
+        "hitsMax": 10000,
+        "store": {
+          "energy": 100,
+          "ore:crystal": 100,
+          "ore:dust": 60
+        },
+        "storeCapacity": 1000000
+      },
+      "term": {
+        "structureType": "terminal",
+        "owner": "p1",
+        "store": {
+          "energy": 10000,
+          "ore:crystal": 50
+        },
+        "type": "structure",
+        "storeCapacity": 300000,
+        "hits": 3000,
+        "hitsMax": 3000,
+        "kind": "structure",
+        "id": "kk0000000000000004",
+        "pos": {
+          "x": 9,
+          "y": 10,
+          "roomName": "W1N1"
+        }
+      }
+    },
+    "rooms": {
+      "W1N1": {
+        "controller": {
+          "kind": "structure",
+          "structureType": "controller",
+          "id": "kk0000000000000001",
+          "pos": {
+            "x": 1,
+            "y": 1,
+            "roomName": "W1N1"
+          },
+          "level": 6,
+          "progress": 0,
+          "progressTotal": 3645000,
+          "ticksToDowngrade": 120001,
+          "safeMode": null,
+          "safeModeAvailable": 0,
+          "safeModeCooldown": null,
+          "reservation": null,
+          "sign": null,
+          "upgradeBlocked": null,
+          "isPowerEnabled": false,
+          "owner": "p1"
+        }
+      }
+    },
+    "world": {
+      "time": 0,
+      "cpu": {
+        "limit": 20,
+        "tickLimit": 500,
+        "bucket": 10000
+      },
+      "user": null,
+      "gcl": 0,
+      "visibleRooms": [
+        "W1N1"
+      ],
+      "rooms": {
+        "W1N1": {
+          "name": "W1N1",
+          "terrain": {
+            "rev": 1,
+            "payload": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQ=="
+          },
+          "energyAvailable": 0,
+          "energyCapacityAvailable": 0
+        }
+      },
+      "objects": [
+        {
+          "type": "structure",
+          "structureType": "controller",
+          "id": "kk0000000000000001",
+          "room": "W1N1",
+          "x": 1,
+          "y": 1,
+          "level": 6,
+          "progress": 0,
+          "progressTotal": 3645000,
+          "safeMode": 0,
+          "safeModeAvailable": 0,
+          "downgradeTime": 120001,
+          "isPowerEnabled": false,
+          "upgradeBlocked": null,
+          "safeModeCooldown": null,
+          "reservation": null,
+          "sign": null,
+          "owner": "p1",
+          "pos": {
+            "x": 1,
+            "y": 1,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "structure",
+          "structureType": "storage",
+          "id": "kk0000000000000002",
+          "room": "W1N1",
+          "x": 10,
+          "y": 11,
+          "owner": "p1",
+          "store": {
+            "energy": 100,
+            "ore:crystal": 100,
+            "ore:dust": 60
+          },
+          "storeCapacity": 1000000,
+          "hits": 10000,
+          "hitsMax": 10000,
+          "pos": {
+            "x": 10,
+            "y": 11,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "structureType": "container",
+          "type": "structure",
+          "nextDecayTime": 500,
+          "storeCapacity": 50,
+          "store": {},
+          "hits": 250000,
+          "hitsMax": 250000,
+          "id": "kk0000000000000003",
+          "room": "W1N1",
+          "x": 11,
+          "y": 10,
+          "pos": {
+            "x": 11,
+            "y": 10,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "structureType": "terminal",
+          "owner": "p1",
+          "store": {
+            "energy": 10000,
+            "ore:crystal": 50
+          },
+          "type": "structure",
+          "storeCapacity": 300000,
+          "hits": 3000,
+          "hitsMax": 3000,
+          "id": "kk0000000000000004",
+          "room": "W1N1",
+          "x": 9,
+          "y": 10,
+          "pos": {
+            "x": 9,
+            "y": 10,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk0000000000000005",
+          "room": "W1N1",
+          "x": 10,
+          "y": 10,
+          "name": "hauler",
+          "owner": "p1",
+          "body": [
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 1500,
+          "hits": 300,
+          "hitsMax": 300,
+          "store": {
+            "energy": 0
+          },
+          "storeCapacity": 100,
+          "spawning": false,
+          "ticksToLive": 1500,
+          "pos": {
+            "x": 10,
+            "y": 10,
+            "roomName": "W1N1"
+          }
+        }
+      ]
+    },
+    "mod_objects": [],
+    "mod_states": {
+      "beacon": null,
+      "ore": null
+    }
+  },
+  "final": {
+    "time": 100,
+    "players": {
+      "p1": {
+        "gcl": 1000000,
+        "rooms": [
+          "W1N1"
+        ],
+        "memory": {
+          "room": "W1N1",
+          "saw_crystal": true,
+          "phase": 5,
+          "withdraw_code": 0,
+          "dust_code": 0,
+          "transfer_code": 0,
+          "drop_code": 0,
+          "pile_seen": true,
+          "carried": 19,
+          "used": 19,
+          "container_dust": 30,
+          "container_cap": 50,
+          "create_order_code": 0,
+          "send_code": 0,
+          "market_tried": true,
+          "my_orders": 0
+        },
+        "raw_memory": "{\"room\":\"W1N1\",\"saw_crystal\":true,\"phase\":5,\"withdraw_code\":0,\"dust_code\":0,\"transfer_code\":0,\"drop_code\":0,\"pile_seen\":true,\"carried\":19,\"used\":19,\"container_dust\":30,\"container_cap\":50,\"create_order_code\":0,\"send_code\":0,\"market_tried\":true,\"my_orders\":0}",
+        "cpu_bucket": 10000.0
+      }
+    },
+    "objects": {
+      "box": {
+        "structureType": "container",
+        "type": "structure",
+        "ticksToDecay": 400,
+        "storeCapacity": 50,
+        "store": {
+          "ore:dust": 30
+        },
+        "hits": 250000,
+        "hitsMax": 250000,
+        "kind": "structure",
+        "id": "kk0000000000000003",
+        "pos": {
+          "x": 11,
+          "y": 10,
+          "roomName": "W1N1"
+        }
+      },
+      "hauler": {
+        "kind": "creep",
+        "id": "kk0000000000000005",
+        "name": "hauler",
+        "pos": {
+          "x": 10,
+          "y": 10,
+          "roomName": "W1N1"
+        },
+        "hits": 300,
+        "hitsMax": 300,
+        "fatigue": 0,
+        "body": [
+          {
+            "type": "carry",
+            "hits": 100
+          },
+          {
+            "type": "carry",
+            "hits": 100
+          },
+          {
+            "type": "move",
+            "hits": 100
+          }
+        ],
+        "owner": "p1",
+        "ticksToLive": 1400,
+        "spawning": false,
+        "store": {
+          "ore:crystal": 19
+        },
+        "storeCapacity": 100
+      },
+      "store": {
+        "kind": "structure",
+        "structureType": "storage",
+        "id": "kk0000000000000002",
+        "pos": {
+          "x": 10,
+          "y": 11,
+          "roomName": "W1N1"
+        },
+        "owner": "p1",
+        "hits": 10000,
+        "hitsMax": 10000,
+        "store": {
+          "energy": 100,
+          "ore:crystal": 80,
+          "ore:dust": 30
+        },
+        "storeCapacity": 1000000
+      },
+      "term": {
+        "structureType": "terminal",
+        "owner": "p1",
+        "store": {
+          "energy": 10000,
+          "ore:crystal": 50
+        },
+        "type": "structure",
+        "storeCapacity": 300000,
+        "hits": 3000,
+        "hitsMax": 3000,
+        "kind": "structure",
+        "id": "kk0000000000000004",
+        "pos": {
+          "x": 9,
+          "y": 10,
+          "roomName": "W1N1"
+        }
+      }
+    },
+    "rooms": {
+      "W1N1": {
+        "controller": {
+          "kind": "structure",
+          "structureType": "controller",
+          "id": "kk0000000000000001",
+          "pos": {
+            "x": 1,
+            "y": 1,
+            "roomName": "W1N1"
+          },
+          "level": 6,
+          "progress": 0,
+          "progressTotal": 3645000,
+          "ticksToDowngrade": 119901,
+          "safeMode": null,
+          "safeModeAvailable": 0,
+          "safeModeCooldown": null,
+          "reservation": null,
+          "sign": null,
+          "upgradeBlocked": null,
+          "isPowerEnabled": false,
+          "owner": "p1"
+        }
+      }
+    },
+    "world": {
+      "time": 100,
+      "cpu": {
+        "limit": 20,
+        "tickLimit": 500,
+        "bucket": 10000
+      },
+      "user": null,
+      "gcl": 0,
+      "visibleRooms": [
+        "W1N1"
+      ],
+      "rooms": {
+        "W1N1": {
+          "name": "W1N1",
+          "terrain": {
+            "rev": 1,
+            "payload": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQ=="
+          },
+          "energyAvailable": 0,
+          "energyCapacityAvailable": 0
+        }
+      },
+      "objects": [
+        {
+          "type": "structure",
+          "structureType": "controller",
+          "id": "kk0000000000000001",
+          "room": "W1N1",
+          "x": 1,
+          "y": 1,
+          "level": 6,
+          "progress": 0,
+          "progressTotal": 3645000,
+          "safeMode": 0,
+          "safeModeAvailable": 0,
+          "downgradeTime": 120001,
+          "isPowerEnabled": false,
+          "upgradeBlocked": null,
+          "safeModeCooldown": null,
+          "reservation": null,
+          "sign": null,
+          "owner": "p1",
+          "pos": {
+            "x": 1,
+            "y": 1,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "structure",
+          "structureType": "storage",
+          "id": "kk0000000000000002",
+          "room": "W1N1",
+          "x": 10,
+          "y": 11,
+          "owner": "p1",
+          "store": {
+            "energy": 100,
+            "ore:crystal": 80,
+            "ore:dust": 30
+          },
+          "storeCapacity": 1000000,
+          "hits": 10000,
+          "hitsMax": 10000,
+          "pos": {
+            "x": 10,
+            "y": 11,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "structureType": "container",
+          "type": "structure",
+          "nextDecayTime": 500,
+          "storeCapacity": 50,
+          "store": {
+            "ore:dust": 30
+          },
+          "hits": 250000,
+          "hitsMax": 250000,
+          "id": "kk0000000000000003",
+          "room": "W1N1",
+          "x": 11,
+          "y": 10,
+          "pos": {
+            "x": 11,
+            "y": 10,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "structureType": "terminal",
+          "owner": "p1",
+          "store": {
+            "energy": 10000,
+            "ore:crystal": 50
+          },
+          "type": "structure",
+          "storeCapacity": 300000,
+          "hits": 3000,
+          "hitsMax": 3000,
+          "id": "kk0000000000000004",
+          "room": "W1N1",
+          "x": 9,
+          "y": 10,
+          "pos": {
+            "x": 9,
+            "y": 10,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk0000000000000005",
+          "room": "W1N1",
+          "x": 10,
+          "y": 10,
+          "name": "hauler",
+          "owner": "p1",
+          "body": [
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 1500,
+          "hits": 300,
+          "hitsMax": 300,
+          "store": {
+            "energy": 0,
+            "ore:crystal": 19
+          },
+          "storeCapacity": 100,
+          "spawning": false,
+          "ticksToLive": 1400,
+          "pos": {
+            "x": 10,
+            "y": 10,
+            "roomName": "W1N1"
+          }
+        }
+      ]
+    },
+    "mod_objects": [],
+    "mod_states": {
+      "beacon": null,
+      "ore": null
+    }
+  }
+}

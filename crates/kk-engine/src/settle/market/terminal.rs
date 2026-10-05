@@ -8,6 +8,11 @@ pub(super) fn execute_send(
     time: u64,
     s: PendingSend,
 ) {
+    // 跨房发送明确只认内建资源：Mod 声明的命名空间资源在此拒绝，
+    // 不依赖房间阶段已拦一道（测试与未来旁路也不放过）。
+    if !c::RESOURCES_ALL.contains(&s.resource_type.as_str()) {
+        return;
+    }
     let from_data = read_terminal_data(rooms, s.room, s.id);
     if from_data
         .as_ref()

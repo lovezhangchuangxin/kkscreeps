@@ -31,7 +31,7 @@ pub fn run(options: Options) -> i32 {
         Ok(report) => (0, report),
         Err(error) => (
             1,
-            json!({"report_version":2,"status":"setup_failed","error":format!("{error:#}"),"composition":null}),
+            json!({"report_version":3,"status":"setup_failed","error":format!("{error:#}"),"composition":null}),
         ),
     };
     if let Err(error) = write_report(&output, &report) {
@@ -135,6 +135,6 @@ fn inspect(options: &Options) -> anyhow::Result<Value> {
         .map(|byte| format!("{byte:02x}"))
         .collect::<String>();
     Ok(
-        json!({"report_version":2,"status":"passed","root":root,"packages":identities,"executable_sha256":hash,"requested_disabled":requested,"composition":composition}),
+        json!({"report_version":3,"status":"passed","root":root,"packages":identities,"executable_sha256":hash,"requested_disabled":requested,"composition":composition}),
     )
 }

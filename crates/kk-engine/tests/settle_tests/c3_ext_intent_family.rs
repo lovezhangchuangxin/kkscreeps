@@ -128,6 +128,7 @@ fn counter_contribution(handlers: &[(&str, HandlerKind)]) -> Contribution {
             native_binding: process,
         }],
         handlers: Vec::new(),
+        resources: Vec::new(),
     };
     for (id, kind) in handlers {
         let key = Key::new(format!("extmod:handler.{id}")).unwrap();
@@ -166,6 +167,7 @@ fn link_handler_contribution(id: &str, kind: HandlerKind) -> Contribution {
         overrides: Vec::new(),
         constraints: BTreeSet::new(),
         slots: Vec::new(),
+        resources: Vec::new(),
         handlers: vec![HandlerDescriptor {
             key: key.clone(),
             slot: Key::new("builtin:link.transfer").unwrap(),
@@ -221,6 +223,7 @@ fn settle_quiet(
     let plane = Plane {
         links: kk_world::place::builtin_link_rules(),
         stores: kk_world::place::builtin_store_rules(),
+        resources: Default::default(),
         contrib: dispatch,
         extensions: std::rc::Rc::new(kk_mod_api::extension::ExtensionCatalog::default()),
         plan,

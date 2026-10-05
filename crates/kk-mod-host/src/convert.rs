@@ -332,6 +332,7 @@ pub fn build_contribution(
     let mut intents = Vec::new();
     let mut rules = Vec::new();
     let mut overrides = Vec::new();
+    let mut resources = Vec::new();
     let mut slots = Vec::new();
     let mut handlers = Vec::new();
     let mut required_executables: BTreeSet<Key> = BTreeSet::new();
@@ -556,6 +557,19 @@ pub fn build_contribution(
                     },
                 });
             }
+            "resource" => {
+                let key = own_key(namespace, as_str(namespace, value, "key")?)?;
+                // SDK 面已拦截未知选项；非对象载荷在 as_str 处先行失败
+                //（缺少 key 字段），这里拒绝绕过 SDK 直接 declare 的额外成员，
+                // 防止静默丢弃作者意图（与装载器的 fail-loud 立场一致）。
+                if let Some(unknown) = value
+                    .as_object()
+                    .and_then(|object| object.keys().find(|member| member.as_str() != "key"))
+                {
+                    return err(namespace, format!("资源 {key} 声明了未知选项 {unknown}"));
+                }
+                resources.push(kk_mod_api::resources::ResourceDescriptor { key });
+            }
             "mount" => {
                 let target = value
                     .get("target")
@@ -608,6 +622,7 @@ pub fn build_contribution(
         constraints: BTreeSet::new(),
         slots,
         handlers,
+        resources,
     })
 }
 

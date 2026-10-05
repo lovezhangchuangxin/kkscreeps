@@ -109,6 +109,9 @@ fn terminal_send(w: &mut Working, id: ObjId, d: &IntentData) {
     let Some(resource_type) = d.resource_type.as_deref() else {
         return;
     };
+    // 跨房发送明确只认内建资源：Mod 声明的命名空间资源（键含冒号）
+    // 在此显式拒绝，与未知资源同路径丢弃请求；正式跨房资源通路随
+    // 后续批次开放（见架构文档 mod-resource-catalog 的当前边界）。
     if !c::RESOURCES_ALL.contains(&resource_type) {
         return;
     }

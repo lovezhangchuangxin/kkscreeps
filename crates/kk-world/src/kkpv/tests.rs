@@ -81,6 +81,7 @@ fn ext_contribution() -> kk_mod_api::Contribution {
         constraints: BTreeSet::new(),
         slots: Vec::new(),
         handlers: Vec::new(),
+        resources: Vec::new(),
     }
 }
 

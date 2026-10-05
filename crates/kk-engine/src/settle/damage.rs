@@ -167,7 +167,8 @@ pub fn distribute_hits(body: &mut [BodyPart], mut hits: i64) {
     }
 }
 
-/// 按 RESOURCES_ALL 声明顺序掉落超量资源，包括矿物，并非只处理 energy。
+/// 按资源目录顺序掉落超量资源：内建 RESOURCES_ALL 声明序在前，计划
+/// 声明的命名空间资源按键字典序随后（含矿物，并非只处理 energy）。
 /// 用于伤后 CARRY 缩容和拆解回收；顺序会影响各资源保留量。
 pub fn drop_energy_over_capacity(w: &mut Working, id: ObjId) {
     let (cap, held, store, extra) = match w.creep(id) {
@@ -184,18 +185,19 @@ pub fn drop_energy_over_capacity(w: &mut Working, id: ObjId) {
     }
     let overflow = held - cap;
     let mut left = overflow;
-    for r in kk_core::constants::RESOURCES_ALL {
+    let catalog = w.plane.resources.clone();
+    for r in catalog.iter() {
         if left <= 0 {
             break;
         }
-        let held_res = if *r == "energy" {
+        let held_res = if r == "energy" {
             store.energy as i64
-        } else if *r == kk_core::constants::RESOURCE_GHODIUM {
+        } else if r == kk_core::constants::RESOURCE_GHODIUM {
             store.ghodium as i64
         } else {
             extra
                 .iter()
-                .find(|s| s.resource == *r)
+                .find(|s| s.resource == r)
                 .map(|s| s.amount as i64)
                 .unwrap_or(0)
         };

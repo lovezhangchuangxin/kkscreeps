@@ -29,9 +29,9 @@ fn total(mut values: impl Iterator<Item = i64>) -> Result<i64, String> {
     })
 }
 
-/// 读取房间候选中的库存；只支持现有资源名与已接线的仓库形态。
+/// 读取房间候选中的库存；只支持资源目录中的资源名与已接线的仓库形态。
 pub fn inspect(w: &Working, id: ObjId, resource: &str) -> Result<ResourceView, String> {
-    if !c::RESOURCES_ALL.contains(&resource) {
+    if !w.plane.resources.contains(resource) {
         return Err("未接线的资源类型".into());
     }
     let object = w

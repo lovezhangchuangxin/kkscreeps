@@ -149,6 +149,10 @@ pub struct ContributionPlan {
     pub(crate) hash: PlanHash,
     pub(crate) rules: EffectiveRules,
     pub(crate) projection: ProjectionPlan,
+    /// 计划声明的命名空间资源，排序键集合；内建 RESOURCES_ALL 不在其中，
+    /// 由 [`crate::resources::ResourceCatalog`] 合并提供。随贡献内容参与
+    /// PlanHash，不同的资源目录得到不同的计划身份。
+    pub(crate) resources: Box<[Key]>,
     pub(crate) slots: Box<[SlotPlan]>,
     pub(crate) intents: Box<[IntentDescriptor]>,
     pub(crate) bindings: Box<[Key]>,
@@ -164,6 +168,10 @@ impl ContributionPlan {
     }
     pub fn projection(&self) -> &ProjectionPlan {
         &self.projection
+    }
+    /// 计划声明的命名空间资源（不含内建 RESOURCES_ALL），排序键集合。
+    pub fn resources(&self) -> &[Key] {
+        &self.resources
     }
     pub fn slots(&self) -> &[SlotPlan] {
         &self.slots

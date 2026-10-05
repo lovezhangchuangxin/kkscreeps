@@ -14,7 +14,7 @@
 | `scripts/run-suite.sh` | 运行完整上游套件，也可将额外参数传给 Vitest |
 | `scripts/ratchet.mjs` | 全量运行后检查通过数、总用例数和逐用例回归 |
 | `reports/` | 入库机器报告、回归配置与历史验收记录 |
-| `fixtures/` | bot 下载夹具按需准备、不入库；Mod 性能夹具、`sim-economy/` 经济场景和 `sim-mod-tick/` 生命周期场景和 `sim-mod-objects/` 自主对象操作、`mod-composition/` 组合包和 `sim-mod-composition/` 组合场景入库 |
+| `fixtures/` | bot 下载夹具按需准备、不入库；Mod 性能夹具、`sim-economy/` 经济场景和 `sim-mod-tick/` 生命周期场景和 `sim-mod-objects/` 自主对象操作、`mod-composition/` 组合包和 `sim-mod-composition/` 组合场景、`mod-resources/` 资源目录包和 `sim-mod-resources/` 资源场景入库 |
 
 同一 JavaScript 全局中的适配器实例共享子进程和世界状态，测试应串行使用并调用 `teardown`。它清理世界和玩家线程，保留子进程供后续测试复用。
 
@@ -83,6 +83,8 @@ target/release/kkscreeps sim run --scenario compat/fixtures/sim-economy/scenario
 Mod 生命周期场景可运行 `target/release/kkscreeps sim run --scenario compat/fixtures/sim-mod-tick/scenario.json --ticks 50 --report /tmp/sim-mod-tick.json`。它显式装载官方原型 clockwork，验证两房对象自主更新、玩家类和查询、Mod state 与真实计划身份；没有玩家意图或按官方包 ID 特殊处理。该场景不含对象增删、生产建筑和内容预设。另有 `sim-mod-objects/scenario.json`，使用相同命令运行至少 53 轮，验证 nursery 双房自主生成/到期删除、玩家类/空间查询；报告 mod_objects 包含全部动态 Mod 对象。两场景的 root 都装载 official 的直接子包，尚不是内容预设或显式包选择。
 
 独立 JS 处理器组合可运行 `target/release/kkscreeps mod inspect --root compat/fixtures/mod-composition --report /tmp/composition.json`，使用 `--disable z-gate` 预览依赖闭包。`sim-mod-composition/scenario.json` 至少运行 100 轮，真实玩家核验链序 trace，报告 composition 与实际装配同源。接口和约束见[组合诊断](../docs/architecture/mod-composition.md)。
+
+命名空间资源目录可运行 `target/release/kkscreeps sim run --scenario compat/fixtures/sim-mod-resources/scenario.json --ticks 100 --report /tmp/sim-mod-resources.json`。它只选 ore 包，验证玩家 VM 内新资源的提取/转入容器/掉落/拾取闭环与市场、跨房发送的显式拒绝；`scenario-combined.json`（选 beacon 自动带入 ore，须 ≥90 轮）与 `scenario-plain.json`（无 Mod 对照）用相同命令运行。接口和约束见[资源目录](../docs/architecture/mod-resource-catalog.md)。
 
 ## 登记差异与跳过
 

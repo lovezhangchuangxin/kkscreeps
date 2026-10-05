@@ -27,6 +27,7 @@ fn working() -> Working {
         plane: Plane {
             links: engine.links,
             stores: engine.stores,
+            resources: engine.resources.clone(),
             contrib: engine.contrib,
             extensions: engine.extensions,
             plan: engine.plan,

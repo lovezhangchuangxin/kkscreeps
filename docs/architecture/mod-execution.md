@@ -8,6 +8,8 @@ JS 处理器选项 dependsOn 已进入同槽/同 kind 的冻结图；作者可�
 
 Generic 仓库另已开放 10 条容量数值规则，贯穿放置、建造、实验室槽切换、终端 tick 与标准玩家常量，见[仓库容量规则](store-rules.md)。这组消费者不增加动作处理槽，默认路径仍是 Rust 结算。
 
+Mod 另可声明**命名空间资源**进入冻结目录：creep 搬运/掉落、领域能力与超容掉落按目录接受新资源，玩家常量 `RESOURCES_ALL` 同源同步；市场与跨房在开放前显式拒绝，契约见[资源目录](mod-resource-catalog.md)。
+
 ## 两条执行路径
 
 没有扩展的内建槽保留 `Native` 直调，不进入 JS。包含 JS 贡献的槽、Mod 自有动作与 tick 槽交给 `SlotExecutor` 整槽执行：runtime 一次进入 realm，JS 按冻结顺序运行 before、wrap、中心、after。中心是 JS process/replace，或一个只修改候选的 Rust native 步骤。creep 资源槽、移动槽、战斗槽与建造族槽的只读字段、装配与能力范围见[资源动作槽](creep-resource-slots.md)、[移动动作槽](creep-move-slot.md)、[战斗动作槽](creep-combat-slot.md)和[建造动作槽](creep-build-slot.md)。

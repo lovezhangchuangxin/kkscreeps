@@ -115,6 +115,7 @@ fn freeze_inner(
     let mut slots = BTreeMap::new();
     let mut handlers = BTreeMap::new();
     let mut overrides: BTreeMap<Key, BTreeMap<String, Number>> = BTreeMap::new();
+    let mut resources: BTreeSet<Key> = BTreeSet::new();
     for c in &mut contributions {
         let ns = &c.source.namespace;
         if !crate::definition::valid_namespace(ns)
@@ -134,6 +135,13 @@ fn freeze_inner(
         c.slots.sort_by(|a, b| a.key.cmp(&b.key));
         c.handlers.sort_by(|a, b| a.key.cmp(&b.key));
         c.overrides.sort_by(|a, b| a.rule.cmp(&b.rule));
+        c.resources.sort_by(|a, b| a.key.cmp(&b.key));
+        for resource in &c.resources {
+            owned(&resource.key, ns)?;
+            if !resources.insert(resource.key.clone()) {
+                return Err(FreezeError::new(resource.key.to_string(), "重复声明的资源"));
+            }
+        }
         for key in &c.bindings {
             owned(key, ns)?;
             bindings.insert(key.clone());
@@ -375,6 +383,7 @@ fn freeze_inner(
             keys: rules.into_keys().collect(),
             values: values.into_boxed_slice(),
         },
+        resources: resources.into_iter().collect(),
         slots: slot_plans.into_boxed_slice(),
         intents: intents.into_values().collect(),
         bindings: bindings.into_iter().collect(),

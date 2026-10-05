@@ -734,6 +734,87 @@ mod tests {
         assert_eq!(snapshot["fields"]["value"], 3);
     }
 
+    /// Mod 声明的命名空间资源随二进制快照往返：store_extra 的资源名与
+    /// 数量、命名的掉落堆都按既有 ResourceStack/EnergyObj 编码保持，
+    /// 查询快照读面带资源键（N2a 资源目录的快照面不引入新编码）。
+    #[test]
+    fn snapshot_roundtrip_carries_mod_named_resources() {
+        let mut world = World::new(42);
+        world.register_room("W1N1", Terrain::plains());
+        let creep_id = world
+            .insert(
+                "W1N1",
+                RoomObject::Creep(kk_schema::room::CreepObj {
+                    id: 0,
+                    x: 10,
+                    y: 12,
+                    fatigue: 0,
+                    age_time: u64::MAX / 2,
+                    hits: 100,
+                    spawning: false,
+                    action_log: 0,
+                    name: "hauler".into(),
+                    owner: "p1".into(),
+                    body: vec![kk_schema::room::BodyPart {
+                        kind: crate::types::BodyKind::Carry.code(),
+                        hits: 100,
+                        boost: None,
+                    }],
+                    store: kk_schema::room::Store::default(),
+                    store_extra: vec![kk_schema::room::ResourceStack {
+                        resource: "resmod:crystal".into(),
+                        amount: 12,
+                    }],
+                    say_message: None,
+                    say_public: None,
+                    notify_when_attacked: None,
+                }),
+            )
+            .unwrap();
+        world
+            .insert(
+                "W1N1",
+                RoomObject::Energy(kk_schema::room::EnergyObj {
+                    id: 0,
+                    x: 11,
+                    y: 12,
+                    resource_type: 0,
+                    amount: 7,
+                    resource: Some("resmod:dust".into()),
+                }),
+            )
+            .unwrap();
+        let snap = world
+            .room("W1N1")
+            .unwrap()
+            .encode_snapshot(77, 42, world.next_obj_id());
+        let back = RoomState::decode_snapshot(&snap).unwrap();
+        assert_eq!(back.encode_snapshot(77, 42, world.next_obj_id()), snap);
+        let creep = match back.objects.get(&ObjId(creep_id.0)).expect("id 保持") {
+            RoomObject::Creep(c) => c,
+            _ => panic!("对象族保持"),
+        };
+        assert_eq!(
+            creep.store_extra,
+            vec![kk_schema::room::ResourceStack {
+                resource: "resmod:crystal".into(),
+                amount: 12,
+            }]
+        );
+        let pile = back
+            .objects
+            .values()
+            .find_map(|o| match o {
+                RoomObject::Energy(e) if e.resource.as_deref() == Some("resmod:dust") => Some(e),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(pile.amount, 7);
+        world.commit_room("W1N1".into(), back);
+        let snapshot = world.object_snapshot_by_id(creep_id).unwrap();
+        assert_eq!(snapshot["store"]["resmod:crystal"], 12);
+    }
+
     #[test]
     fn snapshot_roundtrip_preserves_order_and_ids() {
         let mut world = World::new(42);

@@ -278,6 +278,8 @@ pub struct Contribution {
     pub constraints: BTreeSet<RuleConstraint>,
     pub slots: Vec<SlotDescriptor>,
     pub handlers: Vec<HandlerDescriptor>,
+    /// 本包声明的命名空间资源；键归本包命名空间，进 PlanHash 与玩家常量。
+    pub resources: Vec<crate::resources::ResourceDescriptor>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]

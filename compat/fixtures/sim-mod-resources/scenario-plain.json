@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "shard": {
+    "players": ["p1"],
+    "rooms": [
+      {
+        "name": "W1N1",
+        "rcl": 6,
+        "owner": "p1"
+      }
+    ]
+  },
+  "bots": [
+    {
+      "player": "p1",
+      "modules": ".",
+      "memory": {
+        "room": "W1N1"
+      }
+    }
+  ],
+  "objects": [
+    {
+      "alias": "store",
+      "room": "W1N1",
+      "kind": "structure",
+      "spec": {
+        "structureType": "storage",
+        "pos": [10, 11],
+        "owner": "p1",
+        "store": {
+          "energy": 100
+        }
+      }
+    },
+    {
+      "alias": "hauler",
+      "room": "W1N1",
+      "kind": "creep",
+      "spec": {
+        "name": "hauler",
+        "owner": "p1",
+        "pos": [10, 10],
+        "body": ["carry", "carry", "move"]
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "pointer": "/players/p1/memory/absent",
+      "op": "eq",
+      "value": true
+    },
+    {
+      "pointer": "/players/p1/memory/rejected",
+      "op": "eq",
+      "value": true
+    },
+    {
+      "pointer": "/players/p1/memory/drop_rejected",
+      "op": "eq",
+      "value": true
+    }
+  ]
+}

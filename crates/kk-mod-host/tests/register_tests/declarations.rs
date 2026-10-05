@@ -473,3 +473,117 @@ export default function register(api) {
     );
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// 命名空间资源声明：成功进入计划与组合报告；形状与归属错误整体拒绝。
+#[test]
+fn resource_declarations_enter_plan_and_report() {
+    let root = temp_root("resources-ok");
+    write_pkg(
+        &root,
+        "miner",
+        &[(
+            "server.js",
+            r#"
+import { createApi } from '@kkscreeps/mod';
+export default function register(api) {
+  api.resources.define('miner:crystal');
+  api.resources.define('miner:dust', {});
+}
+"#,
+        )],
+    );
+    let packages = discover_packages(&root).expect("可装载");
+    let mut realm = ModRealm::new().expect("realm 可创建");
+    let registered = realm
+        .register(&packages, RegisterOptions::default())
+        .expect("可注册");
+    let keys: Vec<&str> = registered
+        .plan
+        .resources()
+        .iter()
+        .map(kk_mod_api::Key::as_str)
+        .collect();
+    assert_eq!(keys, ["miner:crystal", "miner:dust"]);
+    let catalog = kk_mod_api::resources::ResourceCatalog::from_plan(&registered.plan);
+    assert!(catalog.contains("energy") && catalog.contains("miner:crystal"));
+    let reported: Vec<&str> = registered
+        .composition
+        .resources
+        .iter()
+        .map(|entry| entry.key.as_str())
+        .collect();
+    assert_eq!(reported, ["miner:crystal", "miner:dust"]);
+    assert_eq!(
+        registered.composition.resources[0].source, "miner",
+        "报告记录定义来源"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn resource_declaration_failures() {
+    type ResourceCase = (&'static str, &'static str, &'static str);
+    let cases: Vec<ResourceCase> = vec![
+        (
+            "foreign-resource",
+            r#"
+import { createApi } from '@kkscreeps/mod';
+export default function register(api) {
+  api.resources.define('other:spark');
+}
+"#,
+            "必须以",
+        ),
+        (
+            "unknown-resource-option",
+            r#"
+import { createApi } from '@kkscreeps/mod';
+export default function register(api) {
+  api.resources.define('unknown-resource-option:spark', { capacity: 5 });
+}
+"#,
+            "声明了未知选项",
+        ),
+        (
+            "resource-spec-shape",
+            r#"
+import { createApi } from '@kkscreeps/mod';
+export default function register(api) {
+  api.resources.define('resource-spec-shape:spark', 3);
+}
+"#,
+            "的说明须为对象",
+        ),
+        (
+            "duplicate-resource",
+            r#"
+import { createApi } from '@kkscreeps/mod';
+export default function register(api) {
+  api.resources.define('duplicate-resource:spark');
+  api.resources.define('duplicate-resource:spark');
+}
+"#,
+            "重复声明的资源",
+        ),
+        (
+            "raw-resource-extra-member",
+            r#"
+export default function register() {
+  Deno.core.ops.op_mod_declare('resource', { key: 'raw-resource-extra-member:spark', capacity: 1 });
+}
+"#,
+            "未知选项",
+        ),
+    ];
+    let root = temp_root("resources-bad");
+    for (name, server, needle) in cases {
+        write_pkg(&root, name, &[("server.js", server)]);
+        let error = register_root_error(&root);
+        assert!(
+            error.contains(needle),
+            "包 {name} 的错误应包含 {needle:?}，实得 {error}"
+        );
+        let _ = std::fs::remove_dir_all(root.join(name));
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}

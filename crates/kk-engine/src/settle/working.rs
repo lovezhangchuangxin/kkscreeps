@@ -14,6 +14,9 @@ use super::*;
 pub struct Plane {
     pub links: kk_mod_api::builtin::LinkRules,
     pub stores: kk_mod_api::builtin::StoreRules,
+    /// 资源目录：内建 RESOURCES_ALL 加计划声明的命名空间资源。
+    /// 搬运/掉落/超容回收与领域能力按它校验；市场/跨房发送不读它。
+    pub resources: Rc<kk_mod_api::resources::ResourceCatalog>,
     pub contrib: Rc<contrib::ContributionDispatch>,
     pub extensions: Rc<kk_mod_api::extension::ExtensionCatalog>,
     /// 冻结计划：意图描述符与投影类型目录经它解析（键解析发生在

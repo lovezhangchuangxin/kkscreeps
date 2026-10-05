@@ -219,6 +219,7 @@ mod tests {
             constraints: BTreeSet::new(),
             slots: Vec::new(),
             handlers: Vec::new(),
+            resources: Vec::new(),
         };
         crate::freeze_with_builtin(
             crate::builtin::link(),
@@ -310,6 +311,7 @@ mod tests {
             constraints: BTreeSet::new(),
             slots: Vec::new(),
             handlers: Vec::new(),
+            resources: Vec::new(),
         };
         let plan = crate::freeze_with_builtin(
             crate::builtin::link(),
@@ -374,6 +376,7 @@ mod tests {
                 native_binding: Key::new("extmod:increment.process").unwrap(),
             }],
             handlers: Vec::new(),
+            resources: Vec::new(),
         };
         let plan = crate::freeze_with_builtin(
             crate::builtin::link(),

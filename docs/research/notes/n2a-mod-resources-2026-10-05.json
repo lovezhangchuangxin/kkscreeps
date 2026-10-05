@@ -1,0 +1,107 @@
+{
+ "batch": "N2a 新资源目录",
+ "base_commit": "fbd15646e942684d626a75b8efd7a01f5c9cc0e3",
+ "executable": "target/release/kkscreeps",
+ "executable_sha256": "d7881df032ebe62230ebf3f418a2b3594b02b5aeeb6793272b9e83209672ebc0",
+ "artifacts": [
+  {
+   "file": "docs/research/notes/n2a-mod-inspect-reject-collision-2026-10-05.json",
+   "executable_sha256": null,
+   "status": "setup_failed",
+   "report_version": 3,
+   "plan_hash": null,
+   "resources": []
+  },
+  {
+   "file": "docs/research/notes/n2a-mod-inspect-select-beacon-2026-10-05.json",
+   "executable_sha256": "d7881df032ebe62230ebf3f418a2b3594b02b5aeeb6793272b9e83209672ebc0",
+   "status": "passed",
+   "report_version": 3,
+   "plan_hash": null,
+   "resources": [
+    "beacon:spark",
+    "ore:crystal",
+    "ore:dust"
+   ]
+  },
+  {
+   "file": "docs/research/notes/n2a-mod-inspect-select-ore-2026-10-05.json",
+   "executable_sha256": "d7881df032ebe62230ebf3f418a2b3594b02b5aeeb6793272b9e83209672ebc0",
+   "status": "passed",
+   "report_version": 3,
+   "plan_hash": null,
+   "resources": [
+    "ore:crystal",
+    "ore:dust"
+   ]
+  },
+  {
+   "file": "docs/research/notes/n2a-mod-resources-combined-json-2026-10-05.json",
+   "executable_sha256": "d7881df032ebe62230ebf3f418a2b3594b02b5aeeb6793272b9e83209672ebc0",
+   "status": "passed",
+   "report_version": 3,
+   "plan_hash": "4029d43ab66e007a35a40628ed36fb70694fbd68ed1653dc0045b13996dc980e",
+   "resources": [
+    "beacon:spark",
+    "ore:crystal",
+    "ore:dust"
+   ]
+  },
+  {
+   "file": "docs/research/notes/n2a-mod-resources-combined-kkpv-2026-10-05.json",
+   "executable_sha256": "d7881df032ebe62230ebf3f418a2b3594b02b5aeeb6793272b9e83209672ebc0",
+   "status": "passed",
+   "report_version": 3,
+   "plan_hash": "4029d43ab66e007a35a40628ed36fb70694fbd68ed1653dc0045b13996dc980e",
+   "resources": [
+    "beacon:spark",
+    "ore:crystal",
+    "ore:dust"
+   ]
+  },
+  {
+   "file": "docs/research/notes/n2a-mod-resources-ore-json-2026-10-05.json",
+   "executable_sha256": "d7881df032ebe62230ebf3f418a2b3594b02b5aeeb6793272b9e83209672ebc0",
+   "status": "passed",
+   "report_version": 3,
+   "plan_hash": "a74f9f5d6446aa7e17609ff7c1d0f5c0c3e20bb79ed71000a77e64895bef2954",
+   "resources": [
+    "ore:crystal",
+    "ore:dust"
+   ]
+  },
+  {
+   "file": "docs/research/notes/n2a-mod-resources-ore-kkpv-2026-10-05.json",
+   "executable_sha256": "d7881df032ebe62230ebf3f418a2b3594b02b5aeeb6793272b9e83209672ebc0",
+   "status": "passed",
+   "report_version": 3,
+   "plan_hash": "a74f9f5d6446aa7e17609ff7c1d0f5c0c3e20bb79ed71000a77e64895bef2954",
+   "resources": [
+    "ore:crystal",
+    "ore:dust"
+   ]
+  },
+  {
+   "file": "docs/research/notes/n2a-mod-resources-plain-json-2026-10-05.json",
+   "executable_sha256": "d7881df032ebe62230ebf3f418a2b3594b02b5aeeb6793272b9e83209672ebc0",
+   "status": "passed",
+   "report_version": 3,
+   "plan_hash": "beabc1a43e4fc0a23eb49f801f9d3fef2928474cda31d8fe916304b162834ed4",
+   "resources": []
+  },
+  {
+   "file": "docs/research/notes/n2a-mod-resources-plain-kkpv-2026-10-05.json",
+   "executable_sha256": "d7881df032ebe62230ebf3f418a2b3594b02b5aeeb6793272b9e83209672ebc0",
+   "status": "passed",
+   "report_version": 3,
+   "plan_hash": "beabc1a43e4fc0a23eb49f801f9d3fef2928474cda31d8fe916304b162834ed4",
+   "resources": []
+  }
+ ],
+ "identity_mismatches": [],
+ "identity_note": "setup_failed 拒绝报告不含 executable_sha256（既有形态，与 N1e 一致）；其余 8 份全部一致。",
+ "gates": {
+  "pnpm_run_check": "Rust 790 通过 / 0 失败 / 11 忽略；适配器 14 通过；文档链接 271 个 Markdown / 1563 链接；源码规模 380 文件 ≤1000 行（日志重定向文件核对）",
+  "compat_ratchet": "1918 通过 / 89 失败 / 907 跳过（floor 1918）；HEAD~1 转红 0、转绿 0；无新增豁免"
+ }
+}

@@ -47,6 +47,9 @@ pub struct CompositionReport {
     /// 实际内容身份：显式选择输入、展开后安装清单与自动加入项。
     /// 报告版本 2 起提供；选择输入本身不参与 plan_hash。
     pub selection: crate::SelectionReport,
+    /// 计划声明的命名空间资源目录（报告版本 3 起提供）：键与定义来源。
+    /// 内建 RESOURCES_ALL 不在此列；玩家常量由两者合并同步。
+    pub resources: Vec<DeclaredResource>,
     pub handlers: Vec<HandlerDescriptor>,
     pub slots: Vec<ComposedSlot>,
     pub rules: Vec<RuleSelection>,
@@ -55,6 +58,13 @@ pub struct CompositionReport {
     /// 每个包停用时受影响的传递闭包，包含自身。
     pub disable_closures: BTreeMap<String, BTreeSet<String>>,
     pub disabled_mods: BTreeSet<String>,
+}
+
+/// 组合报告中的资源目录条目：键与声明它的贡献来源。
+#[derive(Clone, Debug, Serialize)]
+pub struct DeclaredResource {
+    pub key: Key,
+    pub source: String,
 }
 
 impl CompositionReport {
@@ -141,6 +151,16 @@ impl CompositionReport {
             });
         }
         rules.sort_by(|a, b| a.key.cmp(&b.key));
+        let mut resources: Vec<_> = all
+            .iter()
+            .flat_map(|c| {
+                c.resources.iter().map(|resource| DeclaredResource {
+                    key: resource.key.clone(),
+                    source: c.source.namespace.clone(),
+                })
+            })
+            .collect();
+        resources.sort_by(|a, b| a.key.cmp(&b.key));
         let slots = plan
             .slots()
             .iter()
@@ -161,10 +181,11 @@ impl CompositionReport {
             })
             .collect::<Result<_, String>>()?;
         Ok(Self {
-            report_version: 2,
+            report_version: 3,
             plan_hash: plan.hash().hex(),
             sources: plan.sources().clone(),
             selection: selection.clone(),
+            resources,
             handlers,
             slots,
             rules,

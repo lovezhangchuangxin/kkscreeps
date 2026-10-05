@@ -19,7 +19,7 @@ use crate::settle::resources::generic::{change_generic_store, generic_capacity, 
 /// 来源：上游 engine/src/processor/intents/creeps/transfer.js。
 pub(in crate::settle) fn intent_transfer(w: &mut Working, id: ObjId, data: &IntentData) {
     let resource = data.resource_type.as_deref().unwrap_or("");
-    if !c::RESOURCES_ALL.contains(&resource) {
+    if !w.plane.resources.contains(resource) {
         return;
     }
     let Some(amount_req) = data.amount else {
@@ -110,7 +110,7 @@ pub(in crate::settle) fn intent_transfer(w: &mut Working, id: ObjId, data: &Inte
 /// 来源：上游 engine/src/processor/intents/creeps/withdraw.js。
 pub(in crate::settle) fn intent_withdraw(w: &mut Working, id: ObjId, data: &IntentData) {
     let resource = data.resource_type.as_deref().unwrap_or("energy");
-    if !c::RESOURCES_ALL.contains(&resource) {
+    if !w.plane.resources.contains(resource) {
         return;
     }
     let Some(target_id) = data.id else { return };
@@ -227,7 +227,7 @@ pub(in crate::settle) fn intent_withdraw(w: &mut Working, id: ObjId, data: &Inte
 /// 主动掉落请求必须为正数且持有足量，不按现有持有量部分执行。
 pub(super) fn intent_drop(w: &mut Working, id: ObjId, data: &IntentData) {
     let resource = data.resource_type.as_deref().unwrap_or("energy");
-    if !c::RESOURCES_ALL.contains(&resource) {
+    if !w.plane.resources.contains(resource) {
         return;
     }
     let Some(amount) = data.amount else { return };

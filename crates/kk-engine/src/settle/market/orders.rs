@@ -56,6 +56,10 @@ pub(super) fn process_market_intents(
                     let Some(rt) = resource_type.as_deref() else {
                         continue;
                     };
+                    // 市场订单明确只认内建资源与跨 shard 资源：Mod 声明的
+                    // 命名空间资源（键含冒号）不在此列，玩家面预检随
+                    // RESOURCES_ALL 目录放行后在此丢弃，不产生订单；
+                    // Mod 资源市场随后续批次开放（见 mod-resource-catalog）。
                     if !c::RESOURCES_ALL.contains(&rt) && !c::INTERSHARD_RESOURCES.contains(&rt) {
                         continue;
                     }

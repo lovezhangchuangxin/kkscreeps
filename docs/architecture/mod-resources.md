@@ -20,7 +20,7 @@ export default function register(api) {
 }
 ```
 
-`read(id, resourceType)` 返回 `{ amount, capacity, free }`，均为非负安全整数；墓碑、废墟没有接收容量，后两项为 `null`。读取当前候选，因此能看到此前玩家及 Mod 动作的写入。支持已完成孵化的 creep、spawn、extension、类型化 storage、带合法库存字段的 Generic 仓库，以及作为来源的 tombstone/ruin。资源名须在现有 `RESOURCES_ALL` 中；不存在的对象、其他房间、未接线类型和非法库存/容量均为故障。
+`read(id, resourceType)` 返回 `{ amount, capacity, free }`，均为非负安全整数；墓碑、废墟没有接收容量，后两项为 `null`。读取当前候选，因此能看到此前玩家及 Mod 动作的写入。支持已完成孵化的 creep、spawn、extension、类型化 storage、带合法库存字段的 Generic 仓库，以及作为来源的 tombstone/ruin。资源名须在当前[资源目录](mod-resource-catalog.md)（内建 `RESOURCES_ALL` 加计划声明的命名空间资源）中；不存在的对象、其他房间、未接线类型和非法库存/容量均为故障。
 
 `transfer(from, to, resourceType, amount, loss = 0)` 精确扣除来源 `amount`、到账 `amount - loss`，返回 `{ debited, credited, lost }`。两端须不同，ID 和资源须为原始字符串，数量须为原始数字且为非负 JS 安全整数，`loss <= amount`。它不自动截取请求量；库存不足、接收余量不足或请求为零时返回三个零，不改库存、不产生事件、也不扣损耗。Mod 可先读余量自行钳制。允许显式全额损耗，此时有效目标即使已满也能接受零到账；墓碑/废墟仍不能作为目标。
 
@@ -34,7 +34,7 @@ creep 使用当前 CARRY/boost 容量及全资源合计；spawn/extension 仅接
 
 资源能力校验数值、库存、容量及同房候选边界，距离、归属、准入和损耗比例由可信 Mod 决定。它可把一条内建资源动作替换为自定义转账或同房多对象路由。玩家 API 原预检和意图归属校验仍先执行，Mod 不能靠这项结算能力让玩家采集器接受原本非法的调用；改写玩家准入规则需要相应玩家面扩展。
 
-默认 native 的策略与容量算法保持本批之前的行为；领域能力更严格地验证安全整数和独立零容量，并计算未绑定资源共用的剩余池。本批共用的是仓库解析和实验室槽写入，不能据此声称默认 native 已统一所有新校验。尚无通用资源创造/销毁命令、任意新资源目录、跨房转账或任意 Generic JSON 整写。
+默认 native 的策略与容量算法保持本批之前的行为；领域能力更严格地验证安全整数和独立零容量，并计算未绑定资源共用的剩余池。本批共用的是仓库解析和实验室槽写入，不能据此声称默认 native 已统一所有新校验。尚无通用资源创造/销毁命令、跨房转账或任意 Generic JSON 整写；命名空间资源目录另已开放（见[资源目录](mod-resource-catalog.md)）。
 
 ## 局部恢复与整轮失败
 

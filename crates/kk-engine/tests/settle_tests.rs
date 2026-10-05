@@ -42,6 +42,8 @@ mod m2b_structure_decay_family;
 mod minerals_and_boost;
 #[path = "settle_tests/misc_and_notify.rs"]
 mod misc_and_notify;
+#[path = "settle_tests/mod_resource_family.rs"]
+mod mod_resource_family;
 #[path = "settle_tests/movement_spawn_basics.rs"]
 mod movement_spawn_basics;
 #[path = "settle_tests/structures_and_attack.rs"]
@@ -324,6 +326,7 @@ impl Fixture {
             &kk_engine::settle::Plane {
                 links: kk_world::place::builtin_link_rules(),
                 stores: kk_world::place::builtin_store_rules(),
+                resources: Default::default(),
                 contrib: std::rc::Rc::new(
                     kk_engine::settle::contrib::ContributionDispatch::default(),
                 ),
@@ -371,6 +374,7 @@ impl Fixture {
             kk_engine::settle::Plane {
                 links,
                 stores: kk_world::place::builtin_store_rules(),
+                resources: Default::default(),
                 contrib: dispatch,
                 extensions: std::rc::Rc::new(extensions),
                 plan: kk_engine::settle::builtin_plan(),

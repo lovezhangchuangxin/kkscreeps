@@ -42,6 +42,7 @@ fn module(namespace: &str) -> Contribution {
         constraints: BTreeSet::new(),
         slots: Vec::new(),
         handlers: Vec::new(),
+        resources: Vec::new(),
     }
 }
 fn override_rule(namespace: &str, value: Number) -> Contribution {
@@ -74,6 +75,8 @@ mod catalog;
 mod handlers;
 #[path = "freeze_cases/projection.rs"]
 mod projection;
+#[path = "freeze_cases/resources.rs"]
+mod resources;
 #[path = "freeze_cases/rules.rs"]
 mod rules;
 #[path = "freeze_cases/store_rules.rs"]

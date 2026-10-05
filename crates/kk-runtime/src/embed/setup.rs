@@ -214,6 +214,10 @@ impl EmbedEngine {
         // 回收，不存在跨分片的合法持有者）。
         self.kkpv_public_store = crate::kkpv_store::KkpvBlockStore::new();
 
+        // 资源目录与规则同源同批：计划声明的命名空间资源在此合成为
+        // 玩家 RESOURCES_ALL 常量。无声明资源时不注入覆盖，保持
+        // vanilla 常量表原值（零 Mod 与纯内建目录世界的玩家面不变）。
+        let mut resources_all: Option<serde_json::Value> = None;
         if let Some((packages, options)) = mod_install {
             let mut realm = ModRealm::with_options(options)
                 .map_err(|error| anyhow::anyhow!("mod realm：{error}"))?;
@@ -226,6 +230,15 @@ impl EmbedEngine {
                 kk_mod_api::player_surface::PlayerSurface::from_plan(&registered.plan)
                     .map_err(|error| anyhow::anyhow!("mod 玩家面：{error}"))?,
             );
+            // 资源目录与规则同源同批：计划声明的命名空间资源在此合成为
+            // 玩家 RESOURCES_ALL 常量（写入上方 hoist 的 resources_all，
+            // 供预检 canary 与真实玩家 spawn 共用同一值）。
+            {
+                let catalog = kk_mod_api::resources::ResourceCatalog::from_plan(&registered.plan);
+                if !catalog.declared_resources().is_empty() {
+                    resources_all = Some(serde_json::json!(catalog.player_resources_all()));
+                }
+            }
             let mod_player_api = {
                 let modules = registered
                     .player_modules
@@ -284,6 +297,9 @@ impl EmbedEngine {
                             .capacity
                     ),
                 );
+                if let Some(resources_all) = &resources_all {
+                    constant_overrides.insert("RESOURCES_ALL".into(), resources_all.clone());
+                }
                 kk_runner::Sandbox::new(kk_runner::SandboxConfig {
                     extension_intents: has_mod_intents,
                     constant_overrides,
@@ -333,6 +349,15 @@ impl EmbedEngine {
             config
                 .constant_overrides
                 .extend(self.engine.stores().constant_overrides());
+            // Mod 声明资源目录同步玩家全局常量；与规则覆盖同源同批。
+            // 测试配置里的同名覆盖先移除再按引擎目录决定——无声明资源时
+            // 保持 vanilla 常量原值，不允许测试入口注入私有资源目录。
+            config.constant_overrides.remove("RESOURCES_ALL");
+            if let Some(resources_all) = &resources_all {
+                config
+                    .constant_overrides
+                    .insert("RESOURCES_ALL".to_string(), resources_all.clone());
+            }
             // 扩展意图原语与玩家面安装清单的装配由引擎计划决定，测试
             // 配置不得改写。
             config.extension_intents = self.ext_intents;
@@ -526,6 +551,13 @@ impl EmbedEngine {
             .and_then(Value::as_str)
             .ok_or_else(|| anyhow::anyhow!("MarketOrderSpec.resourceType 必须是字符串"))?
             .to_string();
+        // 管理注入沿用市场结算的资源白名单：Mod 声明的命名空间资源（键含
+        // 冒号）不开后门——订单一旦入簿，deal 链路会按订单资源真实转移。
+        if !kk_core::constants::RESOURCES_ALL.contains(&resource_type.as_str())
+            && !kk_core::constants::INTERSHARD_RESOURCES.contains(&resource_type.as_str())
+        {
+            anyhow::bail!("MarketOrderSpec.resourceType 不在市场白名单: {resource_type}");
+        }
         let price = spec
             .get("price")
             .and_then(Value::as_f64)

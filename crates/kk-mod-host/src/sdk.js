@@ -208,6 +208,27 @@ export function createApi(namespace, config) {
     },
   };
 
+  // 命名空间资源目录：键即玩家面与库存槽中的资源名（如 demo:crystal）。
+  // 声明经 op 交给 Rust 权威校验（归属、重复与计划合并在冻结期定论）。
+  // 首片没有逐资源数值——容量沿既有仓库规则面；市场/跨房不在目录消费面内。
+  const resources = {
+    define(key, spec) {
+      ownKey(namespace, key);
+      if (spec !== undefined) {
+        if (spec === null || typeof spec !== 'object' || Array.isArray(spec)) {
+          throw new Error(`资源 ${key} 的说明须为对象`);
+        }
+        const unknown = Object.keys(spec)[0];
+        if (unknown !== undefined) {
+          // 当前没有已知选项；拼错形状静默落空等于改写目录语义。
+          throw new Error(`资源 ${key} 声明了未知选项 ${unknown}`);
+        }
+      }
+      declare('resource', { key });
+      return key;
+    },
+  };
+
   const mounts = {
     define(target, name, spec) {
       declare('mount', {
@@ -224,6 +245,7 @@ export function createApi(namespace, config) {
     intents,
     handlers,
     rules,
+    resources,
     mounts,
   };
 }

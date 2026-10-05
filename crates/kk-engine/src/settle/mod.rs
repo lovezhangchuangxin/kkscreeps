@@ -178,6 +178,10 @@ pub struct Engine {
     pub(crate) links: kk_mod_api::builtin::LinkRules,
     /// Generic 仓库默认容量与槽切换规则，与计划及玩家常量一同装配。
     pub(crate) stores: kk_mod_api::builtin::StoreRules,
+    /// 本引擎生效的资源目录：内建 RESOURCES_ALL 加计划声明的命名空间
+    /// 资源。搬运/掉落/领域能力按它校验；市场与跨房发送不读它（明确
+    /// 只认内建资源）。与计划一同装配，不允许单独换。
+    pub(crate) resources: Rc<kk_mod_api::resources::ResourceCatalog>,
     /// 内建与自有槽执行表；默认直连 native，装配计划后可携带贡献链。
     pub(crate) contrib: Rc<contrib::ContributionDispatch>,
     /// 扩展字段目录；默认为空（不接受扩展写入），with_plan 装配。
@@ -229,6 +233,7 @@ impl Engine {
             fail_writeback: None,
             links: kk_world::place::builtin_link_rules(),
             stores: kk_world::place::builtin_store_rules(),
+            resources: Rc::new(kk_mod_api::resources::ResourceCatalog::default()),
             contrib: Rc::new(contrib::ContributionDispatch::default()),
             extensions: Rc::new(kk_mod_api::extension::ExtensionCatalog::default()),
             mod_states: BTreeMap::new(),
@@ -275,6 +280,12 @@ impl Engine {
     /// 当前生效的 Generic 仓库容量规则（只读快照）。
     pub fn stores(&self) -> kk_mod_api::builtin::StoreRules {
         self.stores
+    }
+
+    /// 当前生效的资源目录：内建 RESOURCES_ALL 加计划声明的命名空间
+    /// 资源（只读引用）。市场/跨房发送不读它——它们显式只认内建资源。
+    pub fn resources(&self) -> &kk_mod_api::resources::ResourceCatalog {
+        &self.resources
     }
 
     /// 当前生效的扩展字段目录（只读引用）。

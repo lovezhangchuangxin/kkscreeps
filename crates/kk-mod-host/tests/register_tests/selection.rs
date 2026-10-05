@@ -101,7 +101,7 @@ fn selection_expands_dependency_closure_and_reports_identity() {
         .unwrap();
     assert_eq!(selected_ids(&registered), vec!["alpha", "beta"]);
     let report = &registered.composition;
-    assert_eq!(report.report_version, 2);
+    assert_eq!(report.report_version, 3);
     assert_eq!(report.selection.requested, vec!["beta"]);
     assert_eq!(report.selection.excluded, Vec::<String>::new());
     assert_eq!(report.selection.selected, vec!["alpha", "beta"]);
