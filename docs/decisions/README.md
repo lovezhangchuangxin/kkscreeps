@@ -22,6 +22,8 @@
 | [ADR-012](ADR-012-m2a-sandbox-runtime.md) | 沙箱接入、玩家 API 和指令通路 | M2A 定型记录；运行协调见 ADR-013，投影目标见 ADR-014 |
 | [ADR-013](ADR-013-architecture-review-coordinator.md) | 运行协调、提交边界与时间输入 | 实装范围见 tick 契约；全域事务与并发仍有后续目标 |
 | [ADR-014](ADR-014-contribution-plane.md) | 贡献定义、规则替换、共享投影与全域事务 | 冻结计划、默认玩法同契约及扩展入口要求；切片见贡献平面方案 |
+| [ADR-015](ADR-015-mod-chain-execution.md) | JS 组合处理链与 Rust 候选访问 | 整槽进入 JS、native op 访问候选；当前机制见 Mod 执行文档 |
+| [ADR-016](ADR-016-official-content-packs.md) | 官方玩法包、内容选择与公共 JS SDK 验收 | 细化 ADR-007/014/015：部分官方内容由 JS 实现，预设装配与存量迁移尚未实现 |
 
 上述记录均已接受，具体修订与范围以各记录正文为准。
 
@@ -41,5 +43,3 @@
 | 世界模型整体改为 ECS | 尚无足够收益证据，类型化对象与确定性迭代更符合当前需求 | [架构复审笔记](../research/notes/architecture-review-2026-09.md) |
 | 微服务、每房常驻 Actor 或完整事件溯源 | 当前阶段成本较高，仍不能绕过跨房协调与统一提交要求 | [架构复审笔记](../research/notes/architecture-review-2026-09.md) |
 | 在完整链路验证前冻结零拷贝布局 | 须先验证生命周期、权限与端到端收益；ADR-014 要求整体设计协议，具体实现仍分步验收 | [ADR-013](ADR-013-architecture-review-coordinator.md)、[ADR-014](ADR-014-contribution-plane.md) |
-
-- [ADR-015 JS 组合处理链与 Rust 候选访问](ADR-015-mod-chain-execution.md)：默认 native 与 JS 整槽执行分离，普通 op 访问候选。

@@ -12,7 +12,8 @@
 | [dev-kit.md](dev-kit.md) | 本地编写、模拟、测试、调试和部署的目标流程；完整开发套件尚未实现 |
 | [pathfinder-terrain.md](pathfinder-terrain.md) | D2 寻路地形直通：PathFinder.search/findPath/moveTo 接原生搜索的接线架构、玩家形状与已知分歧；roomCallback 归回调文档 |
 | [pathfinder-callback.md](pathfinder-callback.md) | 已接入的同步寻路回调、可变矩阵、异常和预算终止契约；Mod 成本槽位只有设计，尚未接入 |
-| [mod-system.md](mod-system.md) | JS Mod 的贡献、规则替换、事务、投影和能力验收设计；未提供完整 Mod 执行通路 |
+| [mod-system.md](mod-system.md) | JS Mod 的贡献、规则替换、事务、投影和能力验收；已有局部执行通路，完整领域覆盖尚未完成 |
+| [content-packs.md](content-packs.md) | 官方内容使用公共 JS SDK、可选包与玩法预设、依赖装配、卸载/升级和验收；目标契约尚未实现 |
 | [domain-projection.md](domain-projection.md) | B 阶段的冻结定义、有效规则、意图入口与授权投影；以 link 为首个接入家族，包含实施与验收要求 |
 
 ## 设计与实现的核对

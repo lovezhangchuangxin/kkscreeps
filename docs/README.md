@@ -14,6 +14,7 @@
 | 为什么采用 Rust、V8 和当前模块边界？ | [决策索引](decisions/README.md) |
 | 当前 Mod 处理链怎样执行？ | [Mod 处理链执行](architecture/mod-execution.md) |
 | 独立 JS Mod 距完整玩法还有哪些缺口，接下来怎样开发？ | [现状复查](research/09-mod-capability-current-audit.md)、[完整玩法计划](plans/mod-complete-gameplay.md) |
+| 官方玩法怎样拆成可选 Mod，如何选择内容和处理存量数据？ | [官方内容包决策](decisions/ADR-016-official-content-packs.md)、[内容包设计](designs/content-packs.md) |
 | Mod、前端和开发工具计划如何工作？ | [功能设计](designs/README.md)、[前端架构](architecture/frontend.md) |
 | 如何写清楚注释和术语？ | [注释规范](contributing/comment-style.md)、[术语词典](glossary.md) |
 
