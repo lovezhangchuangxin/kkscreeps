@@ -78,7 +78,7 @@ try: module.validate_report(json.loads(Path({str(path)!r}).read_text()),'json')
 except RuntimeError: pass
 else: raise RuntimeError('无效报告被接受')
 """
-            result = subprocess.run(['rtk', 'proxy', sys.executable, '-O', '-c', code], capture_output=True, text=True)
+            result = subprocess.run([sys.executable, '-O', '-c', code], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_later_failure_preserves_first_accepted_window(self):

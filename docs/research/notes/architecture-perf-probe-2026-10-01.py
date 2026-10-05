@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Exploratory phase measurement, not the formal performance acceptance suite.
 
-Build first: rtk cargo build --release -p kk-cli
-Run: rtk proxy python3 docs/research/notes/architecture-perf-probe-2026-10-01.py
+Build first: cargo build --release -p kk-cli
+Run: python3 docs/research/notes/architecture-perf-probe-2026-10-01.py
 Runs are sequential to avoid cross-process benchmark contention. The default
 window ends before the fixture's initial 1500-tick creep lifetime boundary.
 """

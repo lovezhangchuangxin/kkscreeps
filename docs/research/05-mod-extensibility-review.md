@@ -100,7 +100,7 @@ Generic 的注释有部分历史过渡表述：实际已有 tower/link/rampart/t
 
 ### 4.3 实测：Generic 数据到玩家对象的链路没有打通
 
-先执行 `rtk cargo build -p kk-cli`，然后使用当前 debug 二进制创建临时内存世界：一个 `myobject(counter=7)` 和一个 `structureType=myfactory(counter=9)`。没有修改引擎代码，也没有安装任何 Mod。
+先执行 `cargo build -p kk-cli`，然后使用当前 debug 二进制创建临时内存世界：一个 `myobject(counter=7)` 和一个 `structureType=myfactory(counter=9)`。没有修改引擎代码，也没有安装任何 Mod。
 
 | 观察 | 当前结果 |
 |---|---|
@@ -117,11 +117,11 @@ Generic 的注释有部分历史过渡表述：实际已有 tower/link/rampart/t
 复现脚本：[mod-extensibility-probe-2026-10-01.py](notes/mod-extensibility-probe-2026-10-01.py)。完整结果：[mod-extensibility-probe-2026-10-01.json](notes/mod-extensibility-probe-2026-10-01.json)。运行方式：
 
 ```sh
-rtk cargo build -p kk-cli
-rtk proxy python3 docs/research/notes/mod-extensibility-probe-2026-10-01.py
+cargo build -p kk-cli
+python3 docs/research/notes/mod-extensibility-probe-2026-10-01.py
 ```
 
-另外执行了 `rtk cargo test -p kk-engine from_json`（7 通过）和 `rtk cargo test -p kk-engine global_unknown_action_dropped_and_missing_fields_none`（1 通过）。现有对抗测试明确保证未知对象动作 `explode` 被丢弃；全局未知动作同样被丢弃。**不能为 Mod 简单取消清洗：必须由可信注册表扩充合法动作，而继续拒绝未注册动作。**
+另外执行了 `cargo test -p kk-engine from_json`（7 通过）和 `cargo test -p kk-engine global_unknown_action_dropped_and_missing_fields_none`（1 通过）。现有对抗测试明确保证未知对象动作 `explode` 被丢弃；全局未知动作同样被丢弃。**不能为 Mod 简单取消清洗：必须由可信注册表扩充合法动作，而继续拒绝未注册动作。**
 
 ## 5. 与需求逐项对照
 

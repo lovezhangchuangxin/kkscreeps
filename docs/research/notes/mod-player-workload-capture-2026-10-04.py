@@ -132,7 +132,7 @@ def collect(output, binary=BIN):
                     if channel == 'kkpv':
                         args.append('--kkpv')
                     started = time.time()
-                    run = subprocess.run(['rtk', 'proxy', *args], cwd=ROOT,
+                    run = subprocess.run(args, cwd=ROOT,
                                          capture_output=True, text=True, timeout=120)
                     require(run.returncode == 0, f'{args}: {run.returncode}: {run.stderr}')
                     require(sha(binary) == binary_sha, '采集中二进制变化')

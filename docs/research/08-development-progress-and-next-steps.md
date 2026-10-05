@@ -8,7 +8,7 @@
 
 交叉检查了路线图、现行架构、批次记录、近期提交、玩家 API 和引擎结算代码，并逐断言统计[当前入库兼容报告](../../compat/reports/kkscreeps.json)。统计、源报告摘要与 SHA-256 保存在[机器证据](notes/development-progress-2026-10-04.json)。
 
-- 本次重新运行 `rtk cargo test --workspace`：616 通过、10 忽略，退出码 0，耗时 31.09 秒。没有重新运行 Clippy、完整 screeps-ok 或 bot 验收。
+- 本次重新运行 `cargo test --workspace`：616 通过、10 忽略，退出码 0，耗时 31.09 秒。没有重新运行 Clippy、完整 screeps-ok 或 bot 验收。
 - 兼容性数字来自入库报告，其开始时间为 2026-10-04 21:17:10（Asia/Shanghai）；不能把读取报告称为本次重新验证。
 - vanilla、xxscreeps 对照使用 2026-09-27 的本地历史报告，套件 pin 为 `34a630efa42908c117c19c25d2350fa2387bd633`。它们用于初步区分上游同红与本项目缺口；具体修复仍需锁定源码和必要的上游复跑。
 - 不用 API 名称数量、提交数量或兼容通过率推算整个项目的完成百分比。

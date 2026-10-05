@@ -9,9 +9,9 @@
 在仓库根目录执行：
 
 ```sh
-rtk cargo build --manifest-path spikes/deno-spike/Cargo.toml --example js_mod_host --release --locked
-rtk cargo build --manifest-path spikes/deno-spike/Cargo.toml --example js_mod_host --locked
-rtk proxy python3 docs/research/notes/js-mod-host-probe-2026-10-01.py
+cargo build --manifest-path spikes/deno-spike/Cargo.toml --example js_mod_host --release --locked
+cargo build --manifest-path spikes/deno-spike/Cargo.toml --example js_mod_host --locked
+python3 docs/research/notes/js-mod-host-probe-2026-10-01.py
 ```
 
 宿主：[js_mod_host.rs](../../../spikes/deno-spike/examples/js_mod_host.rs)；JS 行为：[js_mod_host.js](../../../spikes/deno-spike/examples/js_mod_host.js)。初始化前进入 current-thread Tokio runtime；否则 V8 延迟任务在某些运行路径会 abort，不能把裸 JsRuntime 初始化当作稳健的执行环境。

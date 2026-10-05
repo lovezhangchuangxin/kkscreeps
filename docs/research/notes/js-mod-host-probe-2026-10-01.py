@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Capture five independent release runs plus a debug reentrancy check.
 
-Build both profiles first with rtk cargo run --manifest-path
+Build both profiles first with cargo build --manifest-path
 spikes/deno-spike/Cargo.toml --example js_mod_host [--release] --locked.
 This script executes already-built binaries; it does not benchmark compilation.
 """

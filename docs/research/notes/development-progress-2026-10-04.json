@@ -766,7 +766,7 @@
     }
   },
   "fresh_validation": {
-    "command": "rtk cargo test --workspace",
+    "command": "cargo test --workspace",
     "exit_code": 0,
     "passed": 616,
     "ignored": 10,

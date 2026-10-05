@@ -1,5 +1,5 @@
 //! JS-only mod host feasibility probe; no production engine dependencies.
-//! rtk cargo run --manifest-path spikes/deno-spike/Cargo.toml --example js_mod_host --release --locked
+//! cargo run --manifest-path spikes/deno-spike/Cargo.toml --example js_mod_host --release --locked
 //! Also run the debug profile: deno_core checks nested op reentrancy there.
 //! Prints a JSON report to stdout. All authoritative values remain Rust-owned.
 use deno_core::*;
