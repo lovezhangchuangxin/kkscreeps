@@ -19,6 +19,7 @@ fn ctx(world: &World) -> PlaceCtx<'_> {
         stores: crate::place::builtin_store_rules(),
 
         time: world.time,
+        buildings: Default::default(),
         controller: None,
         name_seq: 0,
     }
@@ -149,6 +150,7 @@ fn snapshot_contract_shapes() {
             stores: crate::place::builtin_store_rules(),
 
             time: world.time,
+            buildings: Default::default(),
             controller: None,
             name_seq: 0,
         },
@@ -181,6 +183,7 @@ fn snapshot_contract_shapes() {
             stores: crate::place::builtin_store_rules(),
 
             time: world.time,
+            buildings: Default::default(),
             controller: None,
             name_seq: 1,
         },
@@ -199,6 +202,7 @@ fn snapshot_contract_shapes() {
             stores: crate::place::builtin_store_rules(),
 
             time: world.time,
+            buildings: Default::default(),
             controller: None,
             name_seq: 0,
         },
@@ -224,6 +228,7 @@ fn snapshot_contract_shapes() {
             stores: crate::place::builtin_store_rules(),
 
             time: world.time,
+            buildings: Default::default(),
             controller: None,
             name_seq: 0,
         },
@@ -268,6 +273,7 @@ fn snapshot_getter_forms() {
         stores: crate::place::builtin_store_rules(),
 
         time: world.time,
+        buildings: Default::default(),
         controller: Some(&ctl),
         name_seq: 0,
     };
@@ -328,6 +334,7 @@ fn snapshot_creep_capacity_boosts_and_null() {
             stores: crate::place::builtin_store_rules(),
 
             time: world.time,
+            buildings: Default::default(),
             controller: None,
             name_seq: 0,
         },
@@ -348,6 +355,7 @@ fn snapshot_creep_capacity_boosts_and_null() {
             stores: crate::place::builtin_store_rules(),
 
             time: world.time,
+            buildings: Default::default(),
             controller: None,
             name_seq: 0,
         },
@@ -378,6 +386,7 @@ fn snapshot_mineral_and_tombstone_kind_mapping() {
             stores: crate::place::builtin_store_rules(),
 
             time: world.time,
+            buildings: Default::default(),
             controller: None,
             name_seq: 0,
         },
@@ -423,6 +432,7 @@ fn snapshot_mineral_and_tombstone_kind_mapping() {
             stores: crate::place::builtin_store_rules(),
 
             time: world.time,
+            buildings: Default::default(),
             controller: None,
             name_seq: 0,
         },
@@ -450,6 +460,7 @@ fn road_hits_max_terrain_scaling() {
             stores: crate::place::builtin_store_rules(),
 
             time: world.time,
+            buildings: Default::default(),
             controller: None,
             name_seq: 0,
         },
@@ -464,6 +475,7 @@ fn road_hits_max_terrain_scaling() {
             stores: crate::place::builtin_store_rules(),
 
             time: world.time,
+            buildings: Default::default(),
             controller: None,
             name_seq: 0,
         },
@@ -478,6 +490,7 @@ fn road_hits_max_terrain_scaling() {
             stores: crate::place::builtin_store_rules(),
 
             time: world.time,
+            buildings: Default::default(),
             controller: None,
             name_seq: 0,
         },

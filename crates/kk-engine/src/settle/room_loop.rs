@@ -13,7 +13,7 @@ fn notify_when_attacked(w: &mut Working, player: &str, id: ObjId, data: &IntentD
     }
     // 控制器、资源源、工地和旗帜不接受此开关；无主可建造结构可以接受。
     let type_gated = matches!(obj, RoomObject::Creep(_))
-        || kk_world::types::construction_cost(&movement::type_name_of(obj)).is_some();
+        || super::buildings::cost_bearing(w, &movement::type_name_of(obj));
     if !type_gated {
         return;
     }
@@ -78,7 +78,7 @@ pub fn settle_room(
         upgrade_block_pending: BTreeMap::new(),
         safe_mode_activated: BTreeSet::new(),
         extractor_cooldown_pending: BTreeMap::new(),
-        movement: movement::Movement::new(),
+        movement: movement::Movement::with_buildings(plane.buildings.clone()),
         pending_inter_room: Vec::new(),
         chain_mutations: None,
         plane: plane.clone(),
@@ -182,6 +182,15 @@ pub fn settle_room(
                     Some("container" | "rampart") => "decay",
                     Some("link") => "link",
                     Some("terminal") => "terminal",
+                    // Mod 建筑的生产周期先于未知类型兜底；无配方的建筑不进入。
+                    Some(st)
+                        if plane
+                            .buildings
+                            .get(st)
+                            .is_some_and(|b| b.production.is_some()) =>
+                    {
+                        "production"
+                    }
                     _ => "",
                 },
                 _ => "",
@@ -206,6 +215,7 @@ pub fn settle_room(
                 contrib.run_tick(&ctx, id).map_err(SettleError)?
             }
             "terminal" => economy::terminal_capacity_tick(&mut ctx.borrow_mut(), id),
+            "production" => buildings::production_tick(&mut ctx.borrow_mut(), id),
             "mod" => mod_intents::process_object_tick(&ctx, id).map_err(SettleError)?,
             _ => {}
         }

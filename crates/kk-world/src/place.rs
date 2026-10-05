@@ -27,6 +27,9 @@ pub struct PlaceCtx<'a> {
     pub time: u64,
     pub links: kk_mod_api::builtin::LinkRules,
     pub stores: kk_mod_api::builtin::StoreRules,
+    /// 计划声明的建筑目录；Mod 建筑的放置默认值（耐久/容量/工地总进度）
+    /// 按配方提供，无 Mod 世界为空目录。
+    pub buildings: kk_mod_api::buildings::BuildingCatalog,
     /// 房内首个控制器；有无控制器和主人决定 source 默认容量。
     pub controller: Option<&'a ControllerObj>,
     /// 未指定 creep、spawn 名称时使用的序号；由调用方提供，须避免重名。
@@ -73,7 +76,11 @@ pub fn normalize(kind: &str, spec: &Value, ctx: &PlaceCtx) -> Result<RoomObject,
         "spawn" => Ok(RoomObject::Spawn(normalize_spawn(spec, x, y, ctx)?)),
         "structure" => normalize_structure(spec, x, y, ctx),
         "constructionSite" => Ok(RoomObject::ConstructionSite(normalize_site(
-            spec, x, y, &ctx.links,
+            spec,
+            x,
+            y,
+            &ctx.links,
+            &ctx.buildings,
         )?)),
         "flag" => Ok(RoomObject::Flag(normalize_flag(spec, x, y))),
         "resource" => Ok(RoomObject::Energy(normalize_resource(spec, x, y)?)),
@@ -451,6 +458,7 @@ mod tests {
             time: 100,
             links: builtin_link_rules(),
             stores: builtin_store_rules(),
+            buildings: Default::default(),
             controller: None,
             name_seq: 7,
         }

@@ -293,6 +293,17 @@ pub(super) fn normalize_structure(
                     data.insert("cooldown".into(), json!(cd));
                 }
             }
+            // Mod 建筑的放置默认值来自配方（显式字段保留）；随后内建表。
+            if let Some(building) = ctx.buildings.get(st) {
+                let hits = building.hits_max.min(u32::MAX as u64) as i64;
+                data.entry("hits").or_insert(json!(hits));
+                data.entry("hitsMax").or_insert(json!(hits));
+                if let Some(cap) = building.store_capacity {
+                    data.entry("storeCapacity")
+                        .or_insert(json!(cap.min(u32::MAX as u64)));
+                    data.entry("store").or_insert(json!({ "energy": 0 }));
+                }
+            }
             // 仅补缺失的 hits、hitsMax；显式值保留，包括 Generic 中的 hitsMax。
             if let Some((hits, hits_max)) = generic_structure_hits(st, &ctx.links) {
                 data.entry("hits").or_insert(json!(hits));
@@ -412,13 +423,17 @@ pub(super) fn normalize_site(
     x: u8,
     y: u8,
     links: &LinkRules,
+    buildings: &kk_mod_api::buildings::BuildingCatalog,
 ) -> Result<ConstructionSiteObj, String> {
     let structure_type = spec_str(spec, "structureType")
         .or_else(|| spec_str(spec, "type"))
         .ok_or_else(|| "constructionSite 缺 structureType".to_string())?
         .to_string();
-    // link 的建造成本取有效规则；其余类型查 CONSTRUCTION_COST 官方表。
-    let total = if structure_type == "link" {
+    // Mod 建筑的总进度取配方最大成本量；link 的建造成本取有效规则；
+    // 其余类型查 CONSTRUCTION_COST 官方表。
+    let total = if let Some(building) = buildings.get(&structure_type) {
+        building.progress_total().min(u32::MAX as u64) as i64
+    } else if structure_type == "link" {
         links.build_cost
     } else {
         crate::types::construction_cost(&structure_type)

@@ -4,6 +4,7 @@
 //! Engine 在副本中结算所有房间和市场，校验成功后统一写回内存并推进
 //! 时间；直接调用 settle_room 则由调用方负责副本和失败处理。
 
+pub mod buildings;
 pub mod checkpoint;
 pub mod contrib;
 pub mod controller;
@@ -185,6 +186,8 @@ pub struct Engine {
     /// 资源。搬运/掉落/领域能力按它校验；市场与跨房发送不读它（明确
     /// 只认内建资源）。与计划一同装配，不允许单独换。
     pub(crate) resources: Rc<kk_mod_api::resources::ResourceCatalog>,
+    /// 本引擎生效的建筑目录：计划声明的可建造结构与配方。与计划一同装配。
+    pub(crate) buildings: Rc<kk_mod_api::buildings::BuildingCatalog>,
     /// 内建与自有槽执行表；默认直连 native，装配计划后可携带贡献链。
     pub(crate) contrib: Rc<contrib::ContributionDispatch>,
     /// 扩展字段目录；默认为空（不接受扩展写入），with_plan 装配。
@@ -237,6 +240,7 @@ impl Engine {
             links: kk_world::place::builtin_link_rules(),
             stores: kk_world::place::builtin_store_rules(),
             resources: Rc::new(kk_mod_api::resources::ResourceCatalog::default()),
+            buildings: Rc::new(kk_mod_api::buildings::BuildingCatalog::default()),
             contrib: Rc::new(contrib::ContributionDispatch::default()),
             extensions: Rc::new(kk_mod_api::extension::ExtensionCatalog::default()),
             mod_states: BTreeMap::new(),

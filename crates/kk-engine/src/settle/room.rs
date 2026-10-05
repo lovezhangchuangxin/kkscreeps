@@ -74,7 +74,7 @@ fn destroy_structure_intent(w: &mut Working, player: &str, id: kk_world::ObjId) 
         return;
     };
     let type_name = type_name_of(&obj);
-    if kk_world::types::construction_cost(&type_name).is_none() {
+    if !super::buildings::cost_bearing(w, &type_name) {
         return;
     }
     let Some(ctl) = w.controller() else {
@@ -107,9 +107,13 @@ fn create_construction_site(
     if x <= 0 || x >= 49 || y <= 0 || y >= 49 {
         return;
     }
-    // link 的建造成本与配额取有效规则；其余类型查 CONSTRUCTION_COST
-    // 与 CONTROLLER_STRUCTURES 官方表。
-    let cost = if structure_type == "link" {
+    // Mod 建筑走目录配方（无 RCL 配额，总进度取最大成本量）；link 的
+    // 建造成本与配额取有效规则；其余类型查 CONSTRUCTION_COST 与
+    // CONTROLLER_STRUCTURES 官方表。
+    let mod_building = w.plane.buildings.get(structure_type);
+    let cost = if let Some(building) = mod_building {
+        building.progress_total().min(u32::MAX as u64) as i64
+    } else if structure_type == "link" {
         w.plane.links.build_cost
     } else {
         match kk_world::types::construction_cost(structure_type) {
@@ -132,19 +136,23 @@ fn create_construction_site(
         if ctl.owner.as_deref().is_some_and(|u| u != player) {
             return;
         }
-        let rcl = ctl.level as i64;
-        let existing = w
-            .room
-            .objects
-            .values()
-            .filter(|o| match o {
-                RoomObject::ConstructionSite(s) => s.structure_type == structure_type,
-                other => type_name_of(other) == structure_type,
-            })
-            .count() as i64;
-        let allowed = super::structures::allowed_for(w, structure_type, rcl);
-        if existing >= allowed {
-            return;
+        // Mod 建筑当前不声明 RCL 配额（逐级配额随需要再开放为配方面）；
+        // 内建类型继续按控制器等级查表。
+        if mod_building.is_none() {
+            let rcl = ctl.level as i64;
+            let existing = w
+                .room
+                .objects
+                .values()
+                .filter(|o| match o {
+                    RoomObject::ConstructionSite(s) => s.structure_type == structure_type,
+                    other => type_name_of(other) == structure_type,
+                })
+                .count() as i64;
+            let allowed = super::structures::allowed_for(w, structure_type, rcl);
+            if existing >= allowed {
+                return;
+            }
         }
     }
     let (ux, uy) = (x as u8, y as u8);
@@ -171,7 +179,7 @@ fn create_construction_site(
                     && structure_type != "road"
                     && tn != "rampart"
                     && tn != "road"
-                    && kk_world::types::construction_cost(&tn).is_some()
+                    && super::buildings::cost_bearing(w, &tn)
                 {
                     return;
                 }
@@ -331,8 +339,14 @@ fn remove_construction_site(w: &mut Working, player: &str, id: ObjId) {
         return;
     }
     let (x, y, progress) = (site.x, site.y, site.progress);
+    let structure_type = site.structure_type.clone();
+    let mod_building = w.plane.buildings.get(&structure_type).cloned();
     w.remove_obj(id);
     if progress > 1 {
-        w.create_energy(x, y, (progress / 2) as i64);
+        if let Some(building) = mod_building {
+            super::buildings::refund_mod_site_from(w, x, y, progress, &building);
+        } else {
+            w.create_energy(x, y, (progress / 2) as i64);
+        }
     }
 }

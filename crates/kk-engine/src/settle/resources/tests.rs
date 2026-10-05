@@ -25,6 +25,7 @@ fn working() -> Working {
         pending_inter_room: Vec::new(),
         chain_mutations: None,
         plane: Plane {
+            buildings: Default::default(),
             links: engine.links,
             stores: engine.stores,
             resources: engine.resources.clone(),
@@ -37,6 +38,7 @@ fn working() -> Working {
 
 fn put(w: &mut Working, id: ObjId, kind: &str, spec: Value) {
     let ctx = kk_world::place::PlaceCtx {
+        buildings: Default::default(),
         time: 0,
         links: w.plane.links,
         stores: w.plane.stores,

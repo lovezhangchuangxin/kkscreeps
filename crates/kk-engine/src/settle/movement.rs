@@ -22,12 +22,15 @@ struct Rate {
 }
 
 /// 本轮移动请求、获准目的格与拉拽关系；不直接改变对象坐标。
+/// 持有建筑目录副本：仲裁期的障碍判定要认 Mod 建筑的 obstacle 语义，
+/// 而仲裁在仅有房间快照的上下文中执行。
 #[derive(Default, Debug)]
 pub struct Movement {
     matrix: BTreeMap<(u8, u8), Vec<RateEntry>>,
     winners: BTreeMap<ObjId, (u8, u8)>,
     pull_of: BTreeMap<ObjId, ObjId>,
     pulled_by: BTreeMap<ObjId, ObjId>,
+    buildings: std::rc::Rc<kk_mod_api::buildings::BuildingCatalog>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -71,6 +74,14 @@ pub fn direction_from_delta(dx: i32, dy: i32) -> u8 {
 impl Movement {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// 携带建筑目录构造；仲裁期按它扩展障碍判定。
+    pub fn with_buildings(buildings: std::rc::Rc<kk_mod_api::buildings::BuildingCatalog>) -> Self {
+        Self {
+            buildings,
+            ..Self::default()
+        }
     }
 
     /// 登记移动请求，目标钳在房间内 0..=49；不检查地形、疲劳或身体。
@@ -410,17 +421,21 @@ pub fn check_obstacle_at_xy(
                     }
                     continue;
                 }
-                if is_obstacle_type(st) {
+                if is_obstacle_type(st) || movement.buildings.is_obstacle(st) {
                     return true;
                 }
             }
             RoomObject::ConstructionSite(s) => {
-                if s.owner.as_deref() == Some(mover_owner) && is_obstacle_type(&s.structure_type) {
+                if s.owner.as_deref() == Some(mover_owner)
+                    && (is_obstacle_type(&s.structure_type)
+                        || movement.buildings.is_obstacle(&s.structure_type))
+                {
                     return true;
                 }
             }
             other => {
-                if is_obstacle_type(&type_name_of(other)) {
+                let name = type_name_of(other);
+                if is_obstacle_type(&name) || movement.buildings.is_obstacle(&name) {
                     return true;
                 }
             }

@@ -184,6 +184,7 @@ fn store_capacity_projection_family() {
         stores: crate::place::builtin_store_rules(),
 
         time: world.time,
+        buildings: Default::default(),
         controller: Some(&ctl),
         name_seq: 0,
     };
@@ -357,6 +358,7 @@ fn find_per_viewer_semantics() {
     terrain.normalize();
     world.register_room("W1N1", terrain);
     let ctx = PlaceCtx {
+        buildings: Default::default(),
         links: crate::place::builtin_link_rules(),
         stores: crate::place::builtin_store_rules(),
 
@@ -498,6 +500,7 @@ fn energy_per_viewer_projection() {
     terrain.normalize();
     world.register_room("W1N1", terrain);
     let ctx = PlaceCtx {
+        buildings: Default::default(),
         links: crate::place::builtin_link_rules(),
         stores: crate::place::builtin_store_rules(),
 

@@ -438,6 +438,7 @@ impl EmbedEngine {
                     time,
                     links: self.engine.links(),
                     stores: self.engine.stores(),
+                    buildings: Default::default(),
                     controller: None,
                     name_seq: self.engine.world.next_obj_id() as usize,
                 };
@@ -478,6 +479,7 @@ impl EmbedEngine {
             time: self.engine.world.time(),
             links: self.engine.links(),
             stores: self.engine.stores(),
+            buildings: Default::default(),
             controller: self.engine.world.room(room).and_then(|r| r.controller()),
             name_seq: self.engine.world.next_obj_id() as usize,
         };

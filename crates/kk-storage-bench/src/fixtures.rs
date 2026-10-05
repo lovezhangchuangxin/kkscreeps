@@ -203,6 +203,7 @@ fn place(world: &mut kk_world::world::World, room: &str, kind: &str, spec: Value
                 time,
                 links: kk_world::place::builtin_link_rules(),
                 stores: kk_world::place::builtin_store_rules(),
+                buildings: Default::default(),
                 controller: controller.as_ref(),
                 name_seq: w.room(room).expect("夹具房已注册").objects.len(),
             },

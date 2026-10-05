@@ -139,6 +139,18 @@ fn production_requires_capacity_and_valid_interval() {
     c.buildings.push(b);
     error(c, "必须声明仓库容量");
 
+    // 有输入无产出同样需要容量：输入没有仓库就无处存放。
+    let mut c = module("alpha");
+    let mut b = building("alpha", "foundry");
+    b.store_capacity = None;
+    b.production = Some(ProductionSpec {
+        interval: 10,
+        inputs: vec![("energy".into(), 1)],
+        outputs: Vec::new(),
+    });
+    c.buildings.push(b);
+    error(c, "必须声明仓库容量");
+
     // 免费生产（无输入）允许；产物入自有仓库。
     let mut c = module("alpha");
     let mut b = building("alpha", "foundry");

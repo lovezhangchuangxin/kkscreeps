@@ -84,10 +84,13 @@ fn has_static_obstacle(w: &Working, target: (u8, u8), mover_owner: &str) -> bool
                         let owner = data.get("owner").and_then(|v| v.as_str()).unwrap_or("");
                         !public && owner != mover_owner
                     } else {
-                        kk_world::types::is_obstacle_type(st)
+                        kk_world::types::is_obstacle_type(st) || w.plane.buildings.is_obstacle(st)
                     }
                 }
-                Some(other) => kk_world::types::is_obstacle_type(&movement::type_name_of(other)),
+                Some(other) => {
+                    let name = movement::type_name_of(other);
+                    kk_world::types::is_obstacle_type(&name) || w.plane.buildings.is_obstacle(&name)
+                }
                 None => false,
             }
         })

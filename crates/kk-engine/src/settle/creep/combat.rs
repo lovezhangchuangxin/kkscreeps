@@ -176,7 +176,7 @@ pub(in crate::settle) fn intent_repair(w: &mut Working, id: ObjId, data: &Intent
     let Some(target) = w.room.objects.get(&target_id).cloned() else {
         return;
     };
-    if kk_world::types::construction_cost(&movement::type_name_of(&target)).is_none() {
+    if !crate::settle::buildings::cost_bearing(w, &movement::type_name_of(&target)) {
         return;
     }
     let Some(hits_max) = damage::structure_hits_max(w, &target) else {
@@ -236,7 +236,7 @@ pub(in crate::settle) fn intent_dismantle(w: &mut Working, id: ObjId, data: &Int
     let Some(target) = w.room.objects.get(&target_id).cloned() else {
         return;
     };
-    if kk_world::types::construction_cost(&movement::type_name_of(&target)).is_none() {
+    if !crate::settle::buildings::cost_bearing(w, &movement::type_name_of(&target)) {
         return;
     }
     let (tx, ty) = target.pos();
@@ -254,15 +254,23 @@ pub(in crate::settle) fn intent_dismantle(w: &mut Working, id: ObjId, data: &Int
         .map(damage::object_hits)
         .unwrap_or(0);
     let amount = power.min(hits);
-    let energy_gain = amount / 200;
     if amount <= 0 {
         return;
     }
-    if let Some(creep) = w.creep_mut(id) {
+    // Mod 建筑按成本构成比例回收各资源；内建结构维持能量 amount/200。
+    let redirected_type = w
+        .room
+        .objects
+        .get(&target_id)
+        .map(|o| movement::type_name_of(o).to_string())
+        .unwrap_or_default();
+    if let Some(building) = w.plane.buildings.get(&redirected_type).cloned() {
+        crate::settle::buildings::dismantle_refund(w, id, &building, amount);
+    } else if let Some(creep) = w.creep_mut(id) {
         creep.store.energy = creep
             .store
             .energy
-            .saturating_add(u32::try_from(energy_gain).unwrap_or(u32::MAX));
+            .saturating_add(u32::try_from(amount / 200).unwrap_or(u32::MAX));
     }
     damage::drop_energy_over_capacity(w, id);
     damage::apply_damage(w, id, target_id, amount, c::EVENT_ATTACK_TYPE_DISMANTLE);

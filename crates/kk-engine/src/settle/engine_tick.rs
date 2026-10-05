@@ -120,6 +120,7 @@ impl Engine {
                 links: self.links,
                 stores: self.stores,
                 resources: self.resources.clone(),
+                buildings: self.buildings.clone(),
                 contrib: self.contrib.clone(),
                 extensions: self.extensions.clone(),
                 plan: self.plan.clone(),

@@ -286,10 +286,7 @@ fn tower_repair(w: &mut Working, id: ObjId, d: &IntentData) {
         return;
     };
     let type_name = type_name_of(&target);
-    if !c::CONSTRUCTION_COST
-        .iter()
-        .any(|(k, _)| *k == type_name.as_ref())
-    {
+    if !super::buildings::cost_bearing(w, &type_name) {
         return;
     }
     let Some(hits_max) = structure_hits_max(w, &target) else {

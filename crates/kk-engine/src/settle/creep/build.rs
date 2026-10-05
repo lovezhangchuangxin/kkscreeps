@@ -97,6 +97,7 @@ pub fn slot_build_request(
 }
 
 /// 在三格内建造工地，计算基础能耗与 boost 后的进度；完成时替换为新结构。
+/// Mod 建筑的工地经目录配方结算：多资源按累计比例支付，boost 只加速进度。
 /// 来源：上游 engine/src/processor/intents/creeps/build.js。
 pub(in crate::settle) fn intent_build(w: &mut Working, id: ObjId, data: &IntentData) {
     let Some(target_id) = data.id else { return };
@@ -104,20 +105,23 @@ pub(in crate::settle) fn intent_build(w: &mut Working, id: ObjId, data: &IntentD
         Some(c) if !c.spawning => ((c.x, c.y), c.owner.clone(), c.store.energy as i64),
         _ => return,
     };
-    if energy <= 0 {
-        return;
-    }
     let Some(RoomObject::ConstructionSite(site)) = w.room.objects.get(&target_id).cloned() else {
         return;
     };
-    if kk_world::types::construction_cost(&site.structure_type).is_none() {
+    let mod_building = w.plane.buildings.get(&site.structure_type).cloned();
+    // Mod 建筑的成本资源集可不含 energy，能量预检只对内建结构生效；
+    // 资源是否够付由结算按累计比例定论（不够时零效果提前返回）。
+    if mod_building.is_none() && energy <= 0 {
+        return;
+    }
+    if !crate::settle::buildings::cost_bearing(w, &site.structure_type) {
         return;
     }
     if (site.x as i32 - pos.0 as i32).abs() > 3 || (site.y as i32 - pos.1 as i32).abs() > 3 {
         return;
     }
     let cell = (site.x, site.y);
-    let site_is_obstacle = kk_world::types::is_obstacle_type(&site.structure_type);
+    let site_is_obstacle = crate::settle::buildings::obstacle_at(w, &site.structure_type);
     // 建造障碍结构时，自己安全模式下只被自家 creep 阻挡，否则任何 creep 都阻挡。
     let my_safe_mode = w.controller().is_some_and(|ctl| {
         ctl.owner.as_deref().is_some_and(|u| u == owner.as_str()) && ctl.safe_mode > w.time
@@ -136,7 +140,7 @@ pub(in crate::settle) fn intent_build(w: &mut Working, id: ObjId, data: &IntentD
                     continue;
                 }
                 if name == site.structure_type
-                    || (site_is_obstacle && kk_world::types::is_obstacle_type(name.as_ref()))
+                    || (site_is_obstacle && crate::settle::buildings::obstacle_at(w, &name))
                 {
                     return;
                 }
@@ -150,6 +154,15 @@ pub(in crate::settle) fn intent_build(w: &mut Working, id: ObjId, data: &IntentD
             .terrain
             .check_mask(cell.0 as usize, cell.1 as usize, kk_core::TERRAIN_MASK_WALL)
     {
+        return;
+    }
+    if let Some(building) = &mod_building {
+        // Mod 建筑的支付与完工由目录配方结算：boost 后效果决定进度，
+        // 支付锚定进度比例（完工恰好付清全部成本资源）。
+        if let Some(creep) = w.creep_mut(id) {
+            set_action_log(&mut creep.action_log, ACTION_BUILD);
+        }
+        crate::settle::buildings::build_mod_site(w, id, target_id, &site, building);
         return;
     }
     // progress_total 使用创建时的存值。宿主可放置进度超限的工地，此时 remaining

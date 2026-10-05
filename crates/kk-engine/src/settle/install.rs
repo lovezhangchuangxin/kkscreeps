@@ -313,6 +313,10 @@ impl Engine {
         let links = kk_mod_api::builtin::LinkRules::from_plan(plan.rules())?;
         let stores = kk_mod_api::builtin::StoreRules::from_plan(plan.rules())?;
         let resources = Rc::new(kk_mod_api::resources::ResourceCatalog::from_plan(&plan));
+        let buildings = Rc::new(
+            kk_mod_api::buildings::BuildingCatalog::from_plan(&plan)
+                .map_err(|error| format!("建筑目录装配失败：{error}"))?,
+        );
         let contrib = contrib::ContributionDispatch::assemble_with_ext(
             &plan,
             action_handlers,
@@ -335,6 +339,7 @@ impl Engine {
         self.links = links;
         self.stores = stores;
         self.resources = resources;
+        self.buildings = buildings;
         self.contrib = Rc::new(contrib);
         self.extensions = Rc::new(extensions);
         self.plan = plan;
@@ -359,6 +364,10 @@ impl Engine {
         let links = kk_mod_api::builtin::LinkRules::from_plan(plan.rules())?;
         let stores = kk_mod_api::builtin::StoreRules::from_plan(plan.rules())?;
         let resources = Rc::new(kk_mod_api::resources::ResourceCatalog::from_plan(&plan));
+        let buildings = Rc::new(
+            kk_mod_api::buildings::BuildingCatalog::from_plan(&plan)
+                .map_err(|error| format!("建筑目录装配失败：{error}"))?,
+        );
         let contrib = contrib::ContributionDispatch::assemble_hosted(&plan, executor, &bindings)?;
         let extensions = kk_mod_api::extension::ExtensionCatalog::from_plan(&plan)?;
         let mut installed = bindings;
@@ -376,6 +385,7 @@ impl Engine {
         self.links = links;
         self.stores = stores;
         self.resources = resources;
+        self.buildings = buildings;
         self.contrib = Rc::new(contrib);
         self.extensions = Rc::new(extensions);
         self.plan = plan;

@@ -95,6 +95,7 @@ fn rules_of(plan: &kk_mod_api::ContributionPlan) -> LinkRules {
 /// 显式规则的放置上下文；控制器可为 None。
 fn place_ctx(links: LinkRules) -> kk_world::place::PlaceCtx<'static> {
     kk_world::place::PlaceCtx {
+        buildings: Default::default(),
         time: 50,
         links,
         stores: kk_world::place::builtin_store_rules(),

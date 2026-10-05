@@ -267,6 +267,8 @@ pub fn structure_hits_max(w: &Working, obj: &RoomObject) -> Option<i64> {
                     .find(|(k, _)| *k == key)
                     .map(|(_, v)| *v)
                     .unwrap_or(0)
+            } else if let Some(building) = w.plane.buildings.get(structure_type) {
+                building.hits_max.min(u32::MAX as u64) as i64
             } else {
                 static_hits_max(structure_type, &w.plane.links)?
             }

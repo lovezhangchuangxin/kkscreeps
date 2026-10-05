@@ -317,10 +317,12 @@ fn freeze_inner(
             }
             check_entries(&production.inputs, "生产输入")?;
             check_entries(&production.outputs, "生产输出")?;
-            if !production.outputs.is_empty() && building.store_capacity.is_none() {
+            if (!production.inputs.is_empty() || !production.outputs.is_empty())
+                && building.store_capacity.is_none()
+            {
                 return Err(FreezeError::new(
                     context,
-                    "有产出的建筑必须声明仓库容量（否则产物无处存放）",
+                    "有输入或产出的建筑必须声明仓库容量（否则库存无处存放）",
                 ));
             }
         }

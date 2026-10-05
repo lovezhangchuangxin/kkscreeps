@@ -17,6 +17,9 @@ pub struct Plane {
     /// 资源目录：内建 RESOURCES_ALL 加计划声明的命名空间资源。
     /// 搬运/掉落/超容回收与领域能力按它校验；市场/跨房发送不读它。
     pub resources: Rc<kk_mod_api::resources::ResourceCatalog>,
+    /// 建筑目录：计划声明的可建造结构配方。工地创建、建造消耗、耐久、
+    /// 寻路语义与生产结算按它执行；内建结构仍走官方常量表。
+    pub buildings: Rc<kk_mod_api::buildings::BuildingCatalog>,
     pub contrib: Rc<contrib::ContributionDispatch>,
     pub extensions: Rc<kk_mod_api::extension::ExtensionCatalog>,
     /// 冻结计划：意图描述符与投影类型目录经它解析（键解析发生在
