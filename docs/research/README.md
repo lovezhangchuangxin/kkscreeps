@@ -14,6 +14,7 @@
 | [06 架构与 JS Mod 复审](06-architecture-and-js-mod-review.md) | 整体架构应如何改造，深度玩法能否全部用 JS Mod 实现？ | 保留 Rust/V8/房间模型，补全全域提交、并发派发、开放规则；JS/native 嵌套调用实测可行，完整实现仍待切片 |
 | [07 注释质量调研](07-comment-quality-review.md) | 现有注释为什么难读，怎样避免误导维护者？ | 修复过期说明，分离历史与当前行为，形成[注释规范](../contributing/comment-style.md)和[术语词典](../glossary.md) |
 | [08 开发进展与后续建议](08-development-progress-and-next-steps.md) | 当前做到哪里，接下来优先开发什么？ | 基于 2026-10-04 的源码与入库报告核查，建议 D3 寻路回调、核心经济场景和完整保存恢复，并指出全套件 95% 与后置玩法的覆盖冲突 |
+| [09 JS Mod 完整玩法现状复查](09-mod-capability-current-audit.md) | 独立 JS 包与 xxscreeps 领域覆盖还差什么，优先级怎样调整？ | 基于 `1b40930` 与本地 xxscreeps `5ff0d1a6` 核查；13 个内建槽已接线，但自主对象、开放资源/能力、深层策略与服务/恢复仍有缺口 |
 
 ## notes/ 笔记索引
 

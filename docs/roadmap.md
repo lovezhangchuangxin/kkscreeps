@@ -47,17 +47,19 @@ M2 分为两道关卡，避免把运行环境可用与完整玩法可玩混为�
 
 ## JS Mod 与架构扩展
 
+独立 JS 包创造完整玩法、覆盖调研版本 xxscreeps 扩展领域，并提供更完善的组合、恢复和开发工具，是已确认的目标，见 [ADR-007](decisions/ADR-007-mod-system.md)。2026-10-05 的[现状复查](research/09-mod-capability-current-audit.md)基于 `1b40930` 核对了 13 个内建槽及其边界：动作改向/取消尚不等于伤害公式、建造配方或移动仲裁可替换。后续按[完整玩法计划](plans/mod-complete-gameplay.md)前移自有对象生命周期、候选对象操作、开放资源/能力和作者工具；下一片接自有对象 tick 与 Mod 场景装载，增删对象另片收口。剩余默认动作槽按完整玩法需求继续开放。
+
 D5 已收敛玩家执行边界：引擎只接受显式指令和写回候选，玩家执行结果类型归到运行时，旧无参数 `Engine::tick` 与沙箱注册表已删除。运行时按注册身份过滤所有意图族，失败重试复用整轮候选，见 [tick 契约](architecture/tick-contract.md#玩家执行与结算接口)。
 
 D4 资源领域后续片已开放 [ctx.resources](architecture/mod-resources.md)：同房候选库存读取、精确转账与损耗、额外对象局部拒绝日志和晚期写回失败缓存重试。
 
 D4 移动片已开放 [creep.move 槽](architecture/creep-move-slot.md)：意图登记阶段的 before/wrap/replace/after、受控移动请求能力（改向/取消登记）与按执行者粒度的正常拒绝，实际位移仍走既有仲裁与执行阶段。
 
-D4 战斗片已开放 [五个战斗槽](architecture/creep-combat-slot.md)（attack/rangedAttack/rangedMassAttack/heal/rangedHeal）：`ctx.combat` 目标改向/取消（恰一次消耗约束）、延迟伤害/治疗队列条目、rampart 重定向受击对象与结构摧毁废墟/对象移除（链内增删日志+ID 游标回退）的局部拒绝恢复；attackController 与建造/容量等其他动作槽仍须逐族开放。
+D4 战斗片已开放 [五个战斗槽](architecture/creep-combat-slot.md)（attack/rangedAttack/rangedMassAttack/heal/rangedHeal）：`ctx.combat` 目标改向/取消（恰一次消耗约束）、延迟伤害/治疗队列条目、rampart 重定向受击对象与结构摧毁废墟/对象移除（链内增删日志+ID 游标回退）的局部拒绝恢复；attackController 与容量等其他动作槽仍须逐族开放。
 
 D4 建造族片已开放 [三个建造族槽](architecture/creep-build-slot.md)（build/repair/dismantle）：`ctx.build` 目标改向/取消（恰一次消耗约束；request 后刷新处理器视图）、完工变换（工地移除+结构插入）与 dismantle 击毁废墟/超容掉落面（链内增删日志+ID 游标回退+执行者格掉落面快照）的局部拒绝恢复；attackController 与容量族仍须逐族开放。
 
-D4 首片已开放 Generic 仓库的 10 条容量数值，贯穿放置、建造、玩家常量、实验室槽切换和终端 tick，见[仓库容量规则](architecture/store-rules.md)。特殊存储策略及更多动作槽仍须逐族开放，完整检查点在规则与状态清单收敛后接入。
+D4 首片已开放 Generic 仓库的 10 条容量数值，贯穿放置、建造、玩家常量、实验室槽切换和终端 tick，见[仓库容量规则](architecture/store-rules.md)。特殊存储策略及更多动作槽仍须逐族开放。检查点的数据域和版本清单前置，先保存当前完整已提交状态，随新增领域扩展迁移与日志；不等待全部规则开放后才开始恢复通路。
 
 D6 首片已允许 link transfer 的 JS 处理链正常拒绝一次动作；后续 D4/D6 片已开放 [creep transfer/withdraw](architecture/creep-resource-slots.md) 与 [creep move](architecture/creep-move-slot.md) 的 before/wrap/replace/after 与正常拒绝。局部恢复执行者/目标库存、link 冷却、实验室槽容量、新增事件、移动请求登记及 Mod state，保留此前成功动作并继续结算。link tick、attackController、容量族和其他动作尚未开放正常拒绝，见[Mod 执行](architecture/mod-execution.md#正常动作拒绝)。
 

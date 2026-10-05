@@ -19,6 +19,7 @@
 | M2B 玩家 API 扩展 | [m2b-expansion.md](m2b-expansion.md) | 当时的 API 盘点、实施与差异登记；盘点状态不自动等于完整兼容 |
 | terminal 与 market | [2b-terminal-market.md](2b-terminal-market.md) | 订单、跨房资源转移、credits 与相关测试的专项实现记录 |
 | 贡献平面与 JS Mod | [mod-plane-batches.md](mod-plane-batches.md) | ADR-014 的事务、并发、投影与扩展实施方向；确认方案不代表已经交付 |
+| 独立 JS Mod 完整玩法 | [mod-complete-gameplay.md](mod-complete-gameplay.md) | 2026-10-05 目标确认后的优先级调整；生命周期、开放能力、全域规则、恢复与作者工具，下一片为自有对象 tick |
 | A 阶段现状核查 | [a-stage-current-audit.md](a-stage-current-audit.md) | 基于 6248546 核对 A1–A4、P1/P2 的实现边界、提交与恢复缺口，以及后续切片顺序 |
 
 ## 使用原则

@@ -1,6 +1,6 @@
 # Mod 处理链执行
 
-当前支持 link transfer/tick、creep transfer/withdraw/move 与对象域 Mod 意图。冻结计划决定处理器顺序，Rust 候选保存权威数据，可信 Mod realm 保存 JS 函数。玩家 VM 与玩法 realm 分离；管理员安装的 Mod 共用 realm，Mod 之间没有安全隔离。
+当前支持 link transfer/tick、creep transfer/withdraw/move、五个战斗动作、三个建造动作与对象域 Mod 意图。冻结计划决定处理器顺序，Rust 候选保存权威数据，可信 Mod realm 保存 JS 函数。玩家 VM 与玩法 realm 分离；管理员安装的 Mod 共用 realm，Mod 之间没有安全隔离。
 
 Generic 仓库另已开放 10 条容量数值规则，贯穿放置、建造、实验室槽切换、终端 tick 与标准玩家常量，见[仓库容量规则](store-rules.md)。这组消费者不增加动作处理槽，默认路径仍是 Rust 结算。
 
@@ -29,7 +29,7 @@ Rust 自定义处理器仍可经原有纯 Rust 执行器安装。它与 JS 执�
 - 回调返回 Promise 或 thenable 属故障；失败链不执行 after。after 自身故障同样使整轮候选失败，已经发生的 native/JS 候选写入不发布。
 - JS 每槽最多 64 层 wrap，注册时拒绝超限。该限制约束递归栈深度，不等于 CPU/内存预算。
 
-处理器自身正常处理的错误不自动变成故障；以上不可吞掉的错误来自 next 与宿主候选访问边界。正常拒绝已开放于 Mod 自有对象动作和三个内建资源动作，范围与局部回滚见下节。
+处理器自身正常处理的错误不自动变成故障；以上不可吞掉的错误来自 next 与宿主候选访问边界。正常拒绝已开放于 Mod 自有对象动作和资源、移动、战斗、建造族的 12 个内建动作槽，范围与局部回滚见下节。
 
 ## 正常动作拒绝
 
