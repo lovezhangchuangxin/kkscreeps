@@ -37,9 +37,9 @@ export default function register(api) {
 | 工地创建 | 玩家 `createConstructionSite` 预检白名单并入目录类型；总进度 = 最大成本量；无 RCL 配额（逐级配额未开放为配方面）；同格造价互斥把目录类型计为造价对象 |
 | 建造支付 | WORK 效果（含 boost）推进进度，各成本资源按累计比例支付（`floor(amount·p/total)`），完工恰好付清。**boost 语义与内建有意的分歧**：支付恒锚定进度比例，boost 加速进度的同时按同比例提高支付速率（内建是"能耗按未强化效果"，boost 越多越省）；单资源成本仅在无 boost 时与内建 1:1 一致 |
 | 完工 | 移除工地、插入 Generic 结构：耐久/归属/`store`+`storeCapacity`（有容量才有 store 键）来自配方 |
-| 生产 | 每 `interval` tick（`time % interval == 0`）检查：全部输入在库且产出合计不超容量时原子消耗产出；无逐建筑相位状态，检查点恢复后语义不变 |
+| 生产 | 每 `interval` tick（`time % interval == 0`）检查全部输入在库，再按 `当前库存合计 - 本次输入合计 + 本次产出合计` 校验最终容量，通过才原子消耗产出；满仓原料可转换，同资源输入/输出按净变化计算，溢出时不扣输入；无逐建筑相位状态，检查点恢复后语义不变 |
 | 受击/维修/拆解 | 耐久上限取配方；维修/拆解/销毁/受袭开关/tower 维修门对目录类型开放（玩家面 dismantle 预检同样认目录类型）；拆解按成本构成占比瓜分伤害量/200——分母是成本总量，回收总值与内建单资源口径一致，超容掉落沿既有目录序 |
-| 寻路 | `obstacle` 阻断（矩阵 255、仲裁与移动登记同样阻挡），`road` 按道路成本（矩阵 1、不阻挡），`plain` 不影响；工地同语义参与建造预检 |
+| 寻路与出生 | `obstacle` 阻断（矩阵 255、仲裁、移动登记与出生出口检查同样阻挡），`road` 按道路成本（矩阵 1、不阻挡），`plain` 不影响；工地同语义参与建造预检。出生的指定出口与其他出口都按目录检查，任何主人的障碍工地均阻挡出生，保持与普通移动只挡自家工地的区别 |
 | 搬运 | transfer/withdraw 经 Generic 仓库链路，容量取 `storeCapacity`；产物/原料与内建资源同槽 |
 | 工地移除 | 按各资源已付量的一半返还（命名掉落堆），与内建 progress/2 退能量同口径 |
 
@@ -64,5 +64,6 @@ export default function register(api) {
 
 ## 验收
 
-- Rust：冻结语义与组合报告（`kk-mod-api` freeze_cases、`kk-mod-host` declarations）、结算闭环 11 项（`kk-engine` `mod_building_family`）、事务边界 2 项（`kk-runtime` `mod_building_world`）。
+- Rust：冻结语义与组合报告（`kk-mod-api` freeze_cases、`kk-mod-host` declarations）、结算 19 项（`kk-engine` `mod_building_family`，含六项 review 回归）、事务边界 4 项（`kk-runtime` `mod_building_world`）。
 - 独立 JS 场景 [sim-mod-buildings](../../compat/fixtures/sim-mod-buildings/README.md) 三件套（smelter / smelter+panel / 无 Mod 对照）：真实玩家 VM 完成建造、投料生产、产物搬运、受击维修与寻路矩阵断言；双投影通道全等；检查点续跑等价（`kk-cli` `sim_tests/buildings.rs`）。证据见 [N2b 交付记录](../research/notes/n2b-mod-buildings-2026-10-05.md)。
+- 满仓生产、出生障碍与夹具干净源码验收见 [review 修复记录](../research/notes/n2b-review-fixes-2026-10-05.md)。

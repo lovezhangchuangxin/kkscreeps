@@ -64,3 +64,4 @@ __pycache__/
 !compat/fixtures/sim-mod-content/
 !compat/fixtures/mod-resources/
 !compat/fixtures/sim-mod-resources/
+!compat/fixtures/sim-mod-buildings/

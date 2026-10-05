@@ -523,9 +523,9 @@ pub(crate) fn born_creep(
                 .iter()
                 .any(|tid| match w.room.objects.get(tid) {
                     Some(RoomObject::ConstructionSite(s)) => {
-                        kk_world::types::is_obstacle_type(&s.structure_type)
+                        super::buildings::obstacle_at(w, &s.structure_type)
                     }
-                    Some(o) => kk_world::types::is_obstacle_type(&movement::type_name_of(o)),
+                    Some(o) => super::buildings::obstacle_at(w, &movement::type_name_of(o)),
                     None => false,
                 })
                 || (w.room.terrain.check_mask(
@@ -575,9 +575,9 @@ pub(crate) fn born_creep(
                 .iter()
                 .any(|tid| match w.room.objects.get(tid) {
                     Some(RoomObject::ConstructionSite(s)) => {
-                        kk_world::types::is_obstacle_type(&s.structure_type)
+                        super::buildings::obstacle_at(w, &s.structure_type)
                     }
-                    Some(o) => kk_world::types::is_obstacle_type(&movement::type_name_of(o)),
+                    Some(o) => super::buildings::obstacle_at(w, &movement::type_name_of(o)),
                     None => false,
                 })
                 && !w

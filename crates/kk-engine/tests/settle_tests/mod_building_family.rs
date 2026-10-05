@@ -2,6 +2,9 @@
 //! 维修/拆解、寻路障碍与工地退款。配方经冻结计划进入贡献平面。
 use super::*;
 
+#[path = "mod_building_family/regressions.rs"]
+mod regressions;
+
 fn foundry() -> kk_mod_api::buildings::BuildingDescriptor {
     kk_mod_api::buildings::BuildingDescriptor {
         key: kk_mod_api::Key::new("bm:foundry").unwrap(),
@@ -48,6 +51,12 @@ fn pass_thru() -> kk_mod_api::buildings::BuildingDescriptor {
 
 /// 声明 bm:* 资源与 foundry/solar/pass 建筑的贡献平面。
 fn building_plane() -> kk_engine::settle::Plane {
+    building_plane_with(vec![foundry(), pass_thru(), solar()])
+}
+
+fn building_plane_with(
+    buildings: Vec<kk_mod_api::buildings::BuildingDescriptor>,
+) -> kk_engine::settle::Plane {
     let mut contribution = kk_mod_api::Contribution {
         source: kk_mod_api::Source {
             namespace: "bm".into(),
@@ -74,7 +83,7 @@ fn building_plane() -> kk_engine::settle::Plane {
                 key: kk_mod_api::Key::new("bm:ore").unwrap(),
             },
         ],
-        buildings: vec![foundry(), pass_thru(), solar()],
+        buildings,
     };
     contribution.resources.sort_by(|a, b| a.key.cmp(&b.key));
     let plan = std::sync::Arc::new(

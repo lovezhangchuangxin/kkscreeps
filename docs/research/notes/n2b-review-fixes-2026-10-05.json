@@ -1,0 +1,226 @@
+{
+  "report_version": 1,
+  "status": "passed",
+  "date": "2026-10-05",
+  "base_commit": "04bfc14fdb6716043a334f80c74ea1d60761aaaa",
+  "scope": [
+    "Track all five sim-mod-buildings fixture files",
+    "Validate production capacity after deducting inputs",
+    "Use BuildingCatalog in both spawn exit scans"
+  ],
+  "executable_sha256": "14376f64a51756e6b87233bc7cbb45dc7690dadbf001a2af709dadaa7c4937e3",
+  "targeted_tests": {
+    "command": "cargo test -p kk-engine --test settle_tests mod_building_family -- --test-threads=1",
+    "passed": 19,
+    "new_regression_tests": 6,
+    "new_regressions_failed_before_fix": 6,
+    "regression_cases": [
+      "full_input_store_conversion",
+      "same_resource_input_and_output",
+      "exact_capacity_and_atomic_overflow_rejection",
+      "selected_exit_obstacles_and_sites_of_both_owners",
+      "road_and_plain_exits",
+      "spawn_stomp_with_mod_obstacles_in_other_exits"
+    ]
+  },
+  "full_check": {
+    "command": "KKSCREEPS_BIN=\"$PWD/target/release/kkscreeps\" pnpm run check",
+    "exit_code": 0,
+    "format": "passed",
+    "clippy": "passed",
+    "rust": {
+      "passed": 850,
+      "failed": 0,
+      "ignored": 12
+    },
+    "rust_result_groups": 56,
+    "adapter": {
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0
+    },
+    "documents": {
+      "markdown_files": 279,
+      "local_links": 1608
+    },
+    "source_size": {
+      "files": 403,
+      "max_allowed_lines": 1000,
+      "passed": true
+    }
+  },
+  "clean_source": {
+    "export_origin": "staged Git tree",
+    "fixture_files": [
+      "README.md",
+      "main.js",
+      "scenario.json",
+      "scenario-combined.json",
+      "scenario-plain.json"
+    ],
+    "document_check": {
+      "exit_code": 0,
+      "markdown_files": 189,
+      "local_links": 1253
+    },
+    "source_size": {
+      "files": 403,
+      "max_allowed_lines": 1000,
+      "passed": true
+    },
+    "scenario_runs": [
+      {
+        "scenario": "compat/fixtures/sim-mod-buildings/scenario.json",
+        "ticks": 320,
+        "channel": "json",
+        "exit_code": 0,
+        "all_assertions_passed": true,
+        "executable_sha256": "14376f64a51756e6b87233bc7cbb45dc7690dadbf001a2af709dadaa7c4937e3",
+        "plan_hash": "dc531ce05fac34a437140153ab4e6723b9de499b856ef8a7fa580eb103aab7dc",
+        "scenario_sha256": "82d61b551b7b626c6f582ce1a55a0addd0cb1ab3c00313cf26f52881bcd37031",
+        "final_world_sha256": "dbad6a0a0c43f5eafb42f8a25a11942f446ae098b6be183aa04780609a5a03e8"
+      },
+      {
+        "scenario": "compat/fixtures/sim-mod-buildings/scenario.json",
+        "ticks": 320,
+        "channel": "kkpv",
+        "exit_code": 0,
+        "all_assertions_passed": true,
+        "executable_sha256": "14376f64a51756e6b87233bc7cbb45dc7690dadbf001a2af709dadaa7c4937e3",
+        "plan_hash": "dc531ce05fac34a437140153ab4e6723b9de499b856ef8a7fa580eb103aab7dc",
+        "scenario_sha256": "82d61b551b7b626c6f582ce1a55a0addd0cb1ab3c00313cf26f52881bcd37031",
+        "final_world_sha256": "dbad6a0a0c43f5eafb42f8a25a11942f446ae098b6be183aa04780609a5a03e8"
+      },
+      {
+        "scenario": "compat/fixtures/sim-mod-buildings/scenario-combined.json",
+        "ticks": 320,
+        "channel": "json",
+        "exit_code": 0,
+        "all_assertions_passed": true,
+        "executable_sha256": "14376f64a51756e6b87233bc7cbb45dc7690dadbf001a2af709dadaa7c4937e3",
+        "plan_hash": "452caee09db4a1f7173c7b02d2248d711363453b05fc3c3aa23f8e183f8581f8",
+        "scenario_sha256": "a20d22d539295c4cf10b49c8756eec836ff63af9541f73d684878e7791eb6f22",
+        "final_world_sha256": "4ab676994d557edb4c4f619d43aff8b55bad9e7dd0ca1623c6343cb0be72bc96"
+      },
+      {
+        "scenario": "compat/fixtures/sim-mod-buildings/scenario-combined.json",
+        "ticks": 320,
+        "channel": "kkpv",
+        "exit_code": 0,
+        "all_assertions_passed": true,
+        "executable_sha256": "14376f64a51756e6b87233bc7cbb45dc7690dadbf001a2af709dadaa7c4937e3",
+        "plan_hash": "452caee09db4a1f7173c7b02d2248d711363453b05fc3c3aa23f8e183f8581f8",
+        "scenario_sha256": "a20d22d539295c4cf10b49c8756eec836ff63af9541f73d684878e7791eb6f22",
+        "final_world_sha256": "4ab676994d557edb4c4f619d43aff8b55bad9e7dd0ca1623c6343cb0be72bc96"
+      },
+      {
+        "scenario": "compat/fixtures/sim-mod-buildings/scenario-plain.json",
+        "ticks": 8,
+        "channel": "json",
+        "exit_code": 0,
+        "all_assertions_passed": true,
+        "executable_sha256": "14376f64a51756e6b87233bc7cbb45dc7690dadbf001a2af709dadaa7c4937e3",
+        "plan_hash": "b3bf08fd8d006d49c29eef34615542bd10bf633cc339b45c40ffb56ea3d3ac4e",
+        "scenario_sha256": "6e20a1f960ebbf4deb9698649a8fc75b24d169b894995a9ba40c9d6657418cdc",
+        "final_world_sha256": "7df00c6ec0ce6bee103c3a359342554b8f9ae0b861d4bdeb8bc28b732eed196a"
+      },
+      {
+        "scenario": "compat/fixtures/sim-mod-buildings/scenario-plain.json",
+        "ticks": 8,
+        "channel": "kkpv",
+        "exit_code": 0,
+        "all_assertions_passed": true,
+        "executable_sha256": "14376f64a51756e6b87233bc7cbb45dc7690dadbf001a2af709dadaa7c4937e3",
+        "plan_hash": "b3bf08fd8d006d49c29eef34615542bd10bf633cc339b45c40ffb56ea3d3ac4e",
+        "scenario_sha256": "6e20a1f960ebbf4deb9698649a8fc75b24d169b894995a9ba40c9d6657418cdc",
+        "final_world_sha256": "7df00c6ec0ce6bee103c3a359342554b8f9ae0b861d4bdeb8bc28b732eed196a"
+      }
+    ],
+    "final_world_equal_across_channels": true
+  },
+  "cli_regression_smoke": [
+    {
+      "case": "full_input_store_converts",
+      "capacity": 100,
+      "initial_store": {
+        "energy": 100
+      },
+      "inputs": {
+        "energy": 100
+      },
+      "outputs": {
+        "rv:ore": 1
+      },
+      "final_store": {
+        "energy": 0,
+        "rv:ore": 1
+      },
+      "committed_ticks": 1,
+      "channels": [
+        "json",
+        "kkpv"
+      ],
+      "final_world_equal_across_channels": true
+    },
+    {
+      "case": "selected_exit_blocked_by_mod_obstacle",
+      "requested_directions": [
+        3
+      ],
+      "spawn_position": [
+        10,
+        10
+      ],
+      "obstacle_position": [
+        11,
+        10
+      ],
+      "child_position": [
+        10,
+        10
+      ],
+      "child_spawning": true,
+      "spawn_creep_return_code": 0,
+      "committed_ticks": 5,
+      "channels": [
+        "json",
+        "kkpv"
+      ],
+      "final_world_equal_across_channels": true
+    }
+  ],
+  "compatibility": {
+    "preparation_commands": [
+      "bash scripts/setup-screeps-ok.sh",
+      "pnpm --filter @kkscreeps/compat run build"
+    ],
+    "command": "KKSCREEPS_BIN=\"$PWD/target/release/kkscreeps\" node compat/scripts/ratchet.mjs",
+    "exit_code": 0,
+    "screeps_ok_commit": "34a630efa42908c117c19c25d2350fa2387bd633",
+    "total": 2914,
+    "counts": {
+      "passed": 1918,
+      "failed": 89,
+      "skipped": 907
+    },
+    "floor": 1918,
+    "case_identities_and_statuses_equal_base": true,
+    "ratchet_baseline_commit": "afb60021b079d2934b680c5fb06c894a48b97e5b",
+    "red_flips": 0,
+    "green_flips": 0,
+    "new_waivers": 0,
+    "existing_unused_waiver_warnings": 2,
+    "report": "compat/reports/kkscreeps.json",
+    "report_sha256": "67669b6aa53291cbabba20e7a85b1a594ad3b65da689c3974f64cb595fadae0d"
+  },
+  "limitations": [
+    "No new building declaration features or checkpoint data fields.",
+    "Production remains atomic native settlement; no production decline, events, custom building lifecycle or migration added.",
+    "Spawn checks retain native ownership and exit-selection distinctions; ordinary movement is not substituted for birth logic."
+  ],
+  "final_document_check": {
+    "exit_code": 0,
+    "markdown_files": 279,
+    "local_links": 1609
+  }
+}

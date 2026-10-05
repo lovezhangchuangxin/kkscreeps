@@ -233,7 +233,14 @@ pub(in crate::settle) fn production_tick(w: &mut Working, id: kk_world::ObjId) {
         .iter()
         .map(|(_, amount)| *amount as i64)
         .sum();
-    if used + produced > capacity {
+    let consumed: i64 = production
+        .inputs
+        .iter()
+        .map(|(_, amount)| *amount as i64)
+        .sum();
+    // 输入已预检足量；校验同一次原子转换的最终库存，不能要求满仓
+    // 原料先给产物腾位。同资源输入/输出也按本次净变化计算容量。
+    if used - consumed + produced > capacity {
         return;
     }
     let Some(store) = data.get_mut("store").and_then(Value::as_object_mut) else {
