@@ -16,6 +16,8 @@ enum NativeCall {
         step: fn(&mut kk_engine::settle::Working, ObjId, &kk_engine::intent::IntentData),
     },
     Tick(fn(&mut kk_engine::settle::Working, ObjId)),
+    /// 默认 TOUGH 已在入链前准备；中心保留数值，避免擦掉 before 的调整。
+    Incoming,
     None,
 }
 
@@ -40,6 +42,7 @@ struct ModChainContext {
     /// 建造族能力状态：仅 build/repair/dismantle 三槽的处理器同步期内
     /// 有效；consumed 单向标记与战斗能力同型。
     build: Option<BuildChainState>,
+    incoming: Option<Rc<kk_engine::settle::incoming::IncomingDamage>>,
 }
 
 /// 战斗链的运行时状态与首触日志。日志记录能力改向触达、且不在引擎
@@ -78,6 +81,10 @@ impl SlotExecutor for ModSlotExecutor {
         // 原始两端/事件由引擎在整链外恢复；移动槽的请求登记与意图
         // 疲劳同样由引擎按执行者粒度恢复。namespace 仅成功后移交。
         let extension = matches!(&call, SlotCall::Extension { .. });
+        let incoming = match &call {
+            SlotCall::Incoming { candidate, .. } => Some(candidate.clone()),
+            _ => None,
+        };
         let resource_action = matches!(&call, SlotCall::Action { .. })
             && kk_mod_api::builtin::RESOURCE_ACTION_SLOTS.contains(&slot.key.as_str());
         let move_action = matches!(&call, SlotCall::Action { .. })
@@ -87,6 +94,11 @@ impl SlotExecutor for ModSlotExecutor {
         let build_action = matches!(&call, SlotCall::Action { .. })
             && kk_mod_api::builtin::BUILD_ACTION_SLOTS.contains(&slot.key.as_str());
         let (id, args, native) = match call {
+            SlotCall::Incoming { id, candidate } => (
+                id,
+                serde_json::to_value(candidate.input()).map_err(|e| e.to_string())?,
+                NativeCall::Incoming,
+            ),
             SlotCall::Action { id, data, native } => (
                 id,
                 if move_action {
@@ -107,9 +119,13 @@ impl SlotExecutor for ModSlotExecutor {
         };
         let room = ctx.borrow().room.name.clone();
         let object_snapshot = extension.then(|| ctx.borrow_mut().snapshot_mod_objects());
-        let staged_states =
-            (extension || resource_action || move_action || combat_action || build_action)
-                .then(|| Rc::new(RefCell::new(BTreeMap::new())));
+        let staged_states = (extension
+            || resource_action
+            || move_action
+            || combat_action
+            || build_action
+            || incoming.is_some())
+        .then(|| Rc::new(RefCell::new(BTreeMap::new())));
         let resource_journal = resource_action.then(|| Rc::new(RefCell::new(BTreeMap::new())));
         // 外层副本仅供 Declined 分支读共享 journal 与 is_some() 判定；
         // consumed/action 以链内上下文的副本为唯一权威（外层恒为初值）。
@@ -146,6 +162,7 @@ impl SlotExecutor for ModSlotExecutor {
                     move_slot: move_action,
                     combat: combat_state.clone(),
                     build: build_state.clone(),
+                    incoming: incoming.clone(),
                 }),
             )
             .map_err(|error| {
@@ -194,7 +211,8 @@ impl SlotExecutor for ModSlotExecutor {
                 } else if !(resource_action
                     || move_action
                     || combat_state.is_some()
-                    || build_state.is_some())
+                    || build_state.is_some()
+                    || incoming.is_some())
                 {
                     return Err("该槽没有正常拒绝的局部恢复边界".into());
                 }
@@ -300,6 +318,19 @@ impl ModChainContext {
 }
 
 impl ChainHost for ModChainContext {
+    fn incoming_damage(&mut self) -> Result<i64, String> {
+        self.incoming
+            .as_ref()
+            .map(|c| c.damage())
+            .ok_or_else(|| "本次槽没有受击数值能力".into())
+    }
+
+    fn incoming_set_damage(&mut self, amount: i64) -> Result<(), String> {
+        self.incoming
+            .as_ref()
+            .ok_or("本次槽没有受击数值能力")?
+            .set_damage(amount)
+    }
     fn object_get(&mut self, id: &str) -> Result<Option<kk_mod_api::objects::ObjectView>, String> {
         self.get_object(id)
     }
@@ -411,7 +442,7 @@ impl ChainHost for ModChainContext {
         after: &str,
         limit: u32,
     ) -> Result<kk_mod_api::combat::CombatPage, String> {
-        if self.combat.is_none() {
+        if self.combat.is_none() && self.incoming.is_none() {
             return Err("本次槽没有战斗读取能力".into());
         }
         kk_engine::settle::creep::slot_combat_list(&self.ctx.borrow(), after, limit)
@@ -421,7 +452,7 @@ impl ChainHost for ModChainContext {
         &mut self,
         target: &str,
     ) -> Result<Option<kk_mod_api::combat::CombatView>, String> {
-        if self.combat.is_none() {
+        if self.combat.is_none() && self.incoming.is_none() {
             return Err("本次槽没有战斗读取能力".into());
         }
         let id = ObjId::parse(target).ok_or("战斗目标 ID 非法")?;
@@ -557,6 +588,7 @@ impl ChainHost for ModChainContext {
                 }
             }
             NativeCall::Tick(step) => step(&mut self.ctx.borrow_mut(), self.id),
+            NativeCall::Incoming => {}
             NativeCall::None => return Err("Mod 自有槽没有 Rust native 中心".into()),
         }
         if let Some(combat) = &mut self.combat {

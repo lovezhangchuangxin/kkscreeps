@@ -306,6 +306,10 @@ enum TickSlot {
 /// 一次槽调用的权威参数。native 步骤只能修改当前候选，不得进入 JS。
 /// 宿主在一次调用期间借用此描述；JS 的 next 不携带 Rust 续行闭包。
 pub enum SlotCall<'a> {
+    Incoming {
+        id: ObjId,
+        candidate: Rc<crate::settle::incoming::IncomingDamage>,
+    },
     Action {
         id: ObjId,
         data: &'a IntentData,
@@ -356,6 +360,7 @@ pub struct ContributionDispatch {
     creep_build: ActionSlot,
     creep_repair: ActionSlot,
     creep_dismantle: ActionSlot,
+    incoming: IncomingSlot,
     /// Mod 自有槽（按槽键查）；扩展意图结算在此派发。
     ext: BTreeMap<Key, ExtSlot>,
 }
@@ -376,6 +381,7 @@ impl Default for ContributionDispatch {
             creep_build: ActionSlot::Native(super::creep::intent_build),
             creep_repair: ActionSlot::Native(super::creep::intent_repair),
             creep_dismantle: ActionSlot::Native(super::creep::intent_dismantle),
+            incoming: IncomingSlot::Native,
             ext: BTreeMap::new(),
         }
     }
@@ -386,9 +392,12 @@ pub const LINK_SLOT_KEYS: [&str; 2] = [
     kk_mod_api::builtin::SLOT_KEYS[0],
     kk_mod_api::builtin::SLOT_KEYS[1],
 ];
-pub const BUILTIN_SLOT_KEYS: [&str; 13] = kk_mod_api::builtin::SLOT_KEYS;
+pub const BUILTIN_SLOT_KEYS: [&str; 14] = kk_mod_api::builtin::SLOT_KEYS;
 
 impl ContributionDispatch {
+    pub(crate) fn run_incoming(&self, ctx: &RoomCtx, id: ObjId) -> Result<Option<i64>, String> {
+        self.incoming.run(ctx, id)
+    }
     pub(crate) fn run_transfer(
         &self,
         ctx: &RoomCtx,
@@ -483,3 +492,5 @@ impl ContributionDispatch {
 }
 mod assemble;
 mod execute;
+mod incoming;
+use incoming::IncomingSlot;

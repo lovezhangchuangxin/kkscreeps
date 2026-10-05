@@ -178,6 +178,25 @@ fn apply_damage_inner(
 /// 净变化才重分配部件耐久，净减少才处理 CARRY 缩容掉落。
 /// 待伤害是减伤前数值；TOUGH 按受伤前部件耐久统一减伤，治疗不增加本轮承伤额度。
 pub fn apply_pending_hits(w: &mut Working, id: ObjId) -> bool {
+    apply_pending_hits_selected(w, id, None)
+}
+
+pub(crate) fn default_pending_damage(w: &Working, id: ObjId) -> Option<i64> {
+    let raw = w.damage_to_apply.get(&id).copied().unwrap_or(0);
+    (raw > 0)
+        .then(|| {
+            w.creep(id)
+                .map(|creep| tough::effective_damage(&creep.body, raw))
+        })
+        .flatten()
+}
+
+/// selected 是受击链选出的最终扣血量，不能再次应用 TOUGH。
+pub(crate) fn apply_pending_hits_selected(
+    w: &mut Working,
+    id: ObjId,
+    selected: Option<i64>,
+) -> bool {
     let damage = w.damage_to_apply.remove(&id).unwrap_or(0);
     let heal = w.heal_to_apply.remove(&id).unwrap_or(0);
     if damage <= 0 && heal <= 0 {
@@ -187,26 +206,26 @@ pub fn apply_pending_hits(w: &mut Working, id: ObjId) -> bool {
         Some(creep) => (
             creep.hits as i64,
             creep.body.len() as i64 * 100,
-            tough::effective_damage(&creep.body, damage),
+            selected.unwrap_or_else(|| tough::effective_damage(&creep.body, damage)),
         ),
         None => return true,
     };
-    let mut new_hits = old_hits - damage + heal;
-    if new_hits > hits_max {
-        new_hits = hits_max;
+    let mut new_hits = i128::from(old_hits) - i128::from(damage) + i128::from(heal);
+    if new_hits > i128::from(hits_max) {
+        new_hits = i128::from(hits_max);
     }
     if new_hits <= 0 {
         super::creep::die_creep(w, id);
         return false;
     }
-    if new_hits == old_hits {
+    if new_hits == i128::from(old_hits) {
         return true;
     }
     if let Some(creep) = w.creep_mut(id) {
         creep.hits = new_hits as u32;
-        distribute_hits(&mut creep.body, new_hits);
+        distribute_hits(&mut creep.body, new_hits as i64);
     }
-    if new_hits < old_hits {
+    if new_hits < i128::from(old_hits) {
         drop_energy_over_capacity(w, id);
     }
     true

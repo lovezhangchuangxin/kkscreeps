@@ -38,4 +38,4 @@ native 和 JS 共用治疗登记器：累计 `heal_to_apply`、设置执行者/�
 
 运行时覆盖近/远程公式、延迟读面、零/上界、自愈、身体恢复、同轮致死伤害抵消、远处目标、拒绝保留此前伤害/治疗及转账/移动、非法数值和目标、孵化目标、能力生命周期与缓存重试。
 
-群体目标批处理已在[第三片](mod-mass-policy.md)开放；[反击表](mod-retaliation-policy.md)已在第四片开放；[原生 TOUGH 减伤](creep-incoming-damage.md)已交付，治疗在默认减伤后合并、不会提前修复护甲。N2c 仍待 JS 受击公式替换、移动仲裁、自有对象伤害 trait 和玩家预检策略替换。自定义治疗与[单体伤害](mod-damage-policy.md)是已交付切片，不能代表完整战斗规则或完整 N2c 已实现。
+群体目标批处理已在[第三片](mod-mass-policy.md)开放；[反击表](mod-retaliation-policy.md)已在第四片开放；[原生 TOUGH 减伤](creep-incoming-damage.md)已交付，治疗在默认减伤后合并、不会提前修复护甲。[JS 受击公式替换与护盾组合](mod-incoming-policy.md)也已交付，治疗在受击链选中伤害之后合并。N2c 仍待移动仲裁、自有对象伤害 trait 和玩家预检策略替换。自定义治疗与[单体伤害](mod-damage-policy.md)是已交付切片，不能代表完整战斗规则或完整 N2c 已实现。

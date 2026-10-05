@@ -648,6 +648,26 @@ export function runChain(slot, token) {
       },
     });
   }
+  function incoming(key, isOpen) {
+    function checked(call) {
+      try {
+        if (!isOpen()) throw new Error('受击能力只能在所属处理器同步执行期间调用');
+        return call();
+      } catch (error) {
+        fault(error, key, 'context');
+        throw error;
+      }
+    }
+    return Object.freeze({
+      getDamage() { return checked(() => ops.op_mod_chain_incoming_damage(token, key)); },
+      setDamage(amount) {
+        return checked(() => {
+          if (!Number.isSafeInteger(amount) || amount < 0) throw new Error('受击伤害须为 JS 安全非负整数');
+          return ops.op_mod_chain_incoming_set_damage(token, key, amount);
+        });
+      },
+    });
+  }
   function build(key, ctx, isOpen) {
     function checked(call) {
       try {
@@ -682,6 +702,7 @@ export function runChain(slot, token) {
     Object.defineProperty(ctx, 'movement', { value: movement(key, () => open) });
     Object.defineProperty(ctx, 'combat', { value: combat(key, () => open) });
     Object.defineProperty(ctx, 'build', { value: build(key, ctx, () => open) });
+    Object.defineProperty(ctx, 'incoming', { value: incoming(key, () => open) });
     try {
       checkResult(key, bindings.get(key).fn(ctx));
       write(key, ctx);
@@ -708,6 +729,7 @@ export function runChain(slot, token) {
     Object.defineProperty(ctx, 'movement', { value: movement(key, () => open) });
     Object.defineProperty(ctx, 'combat', { value: combat(key, () => open) });
     Object.defineProperty(ctx, 'build', { value: build(key, ctx, () => open) });
+    Object.defineProperty(ctx, 'incoming', { value: incoming(key, () => open) });
     function next() {
       if (!open) throw new Error('next 只能在所属处理器同步执行期间调用');
       if (called) {

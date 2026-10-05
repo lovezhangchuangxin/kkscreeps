@@ -199,7 +199,12 @@ pub fn settle_room(
         match kind {
             "energy" => economy::energy_tick(&mut ctx.borrow_mut(), id),
             "source" => economy::source_tick(&mut ctx.borrow_mut(), id),
-            "creep" => creep::creep_tick(&mut ctx.borrow_mut(), id)?,
+            "creep" => {
+                creep::creep_tick_prepare(&mut ctx.borrow_mut(), id)?;
+                let contrib = ctx.borrow().plane.contrib.clone();
+                let selected = contrib.run_incoming(&ctx, id).map_err(SettleError)?;
+                damage::apply_pending_hits_selected(&mut ctx.borrow_mut(), id, selected);
+            }
             "spawn" => spawn::spawn_tick(&mut ctx.borrow_mut(), id, _energy_available),
             "controller" => economy::controller_tick(&mut ctx.borrow_mut(), id),
             "tombstone" => economy::tombstone_tick(&mut ctx.borrow_mut(), id),

@@ -20,10 +20,12 @@ pub(crate) use movement::{
     op_mod_chain_move_cancel, op_mod_chain_move_pending, op_mod_chain_move_request,
 };
 mod combat;
+mod incoming;
 pub(crate) use combat::{
     op_mod_chain_combat_apply_damage, op_mod_chain_combat_apply_heal, op_mod_chain_combat_cancel,
     op_mod_chain_combat_get, op_mod_chain_combat_request,
 };
+pub(crate) use incoming::{op_mod_chain_incoming_damage, op_mod_chain_incoming_set_damage};
 mod combat_batch;
 pub(crate) use combat_batch::{
     op_mod_chain_combat_apply_damage_batch, op_mod_chain_combat_list,
@@ -57,6 +59,12 @@ pub struct ChainTarget {
 /// 候选访问适配器：调用方绑定权威对象/参数，JS 无法改变 native 的接收者。
 /// 方法执行期间不得回入 JS；每次访问自己取得并释放候选短借用。
 pub trait ChainHost {
+    fn incoming_damage(&mut self) -> Result<i64, String> {
+        Err("本次槽没有受击数值能力".into())
+    }
+    fn incoming_set_damage(&mut self, _amount: i64) -> Result<(), String> {
+        Err("本次槽没有受击数值能力".into())
+    }
     fn read(&mut self, binding: &str) -> Result<ChainContext, String>;
     fn write(&mut self, binding: &str, context: ChainWrite) -> Result<(), String>;
     fn native(&mut self) -> Result<(), String>;

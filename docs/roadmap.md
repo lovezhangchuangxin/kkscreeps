@@ -51,7 +51,7 @@ M2 分为两道关卡，避免把运行环境可用与完整玩法可玩混为�
 
 独立 JS 包创造完整玩法、覆盖调研版本 xxscreeps 扩展领域，并提供更完善的组合、恢复和开发工具，是已确认的目标，见 [ADR-007](decisions/ADR-007-mod-system.md)。2026-10-05 的[现状复查](research/09-mod-capability-current-audit.md)基于 `1b40930` 核对了 13 个内建槽及其边界：动作改向/取消尚不等于伤害公式、建造配方或移动仲裁可替换。后续按[完整玩法计划](plans/mod-complete-gameplay.md)前移自有对象生命周期、候选对象操作、开放资源/能力和作者工具；N1a 已交付[自有对象 tick](architecture/mod-object-tick.md)、显式 Mod 场景装载和官方生命周期原型；N1b 已交付[同房对象操作](architecture/mod-objects.md)及 nursery 自主增删原型；N1c 已开放[handler 依赖与组合诊断](architecture/mod-composition.md)及 mod inspect；N1d 已交付[JS 有效规则读取](architecture/mod-rules.md)；N1e 已交付[新世界内容选择](architecture/mod-content-selection.md)；N2a 已交付[命名空间资源目录](architecture/mod-resource-catalog.md)。N2b 已交付[可建造建筑](architecture/mod-buildings.md)，N2c 已交付[JS 单体伤害策略](architecture/mod-damage-policy.md)、[自定义治疗](architecture/mod-heal-policy.md)、[群体伤害策略](architecture/mod-mass-policy.md)和[反击表](architecture/mod-retaliation-policy.md)四个切片。剩余默认动作槽和策略按完整玩法需求继续开放。
 
-受击策略第一片已补齐[原生强化 TOUGH](architecture/creep-incoming-damage.md)：原生/JS 主伤害与反击在对象 tick 按受伤前身体合并减伤，再与治疗结算。JS 独立受击槽和实际伤害驱动的反击尚未开放，下一片优先开放受击公式替换，之后推进移动仲裁。
+受击策略第一片已补齐[原生强化 TOUGH](architecture/creep-incoming-damage.md)：原生/JS 主伤害与反击在对象 tick 按受伤前身体合并减伤，再与治疗结算。第二片已开放 [JS 受击策略](architecture/mod-incoming-policy.md)：公式替换、护盾/免疫组合、来源摘要、拒绝默认回退与冷恢复；内建槽增至 14 个。实际伤害驱动的反击尚未开放，下一方向推进移动仲裁。
 
 D5 已收敛玩家执行边界：引擎只接受显式指令和写回候选，玩家执行结果类型归到运行时，旧无参数 `Engine::tick` 与沙箱注册表已删除。运行时按注册身份过滤所有意图族，失败重试复用整轮候选，见 [tick 契约](architecture/tick-contract.md#玩家执行与结算接口)。
 

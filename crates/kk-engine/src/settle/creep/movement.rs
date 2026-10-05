@@ -152,6 +152,13 @@ pub fn slot_cancel_direction(w: &mut Working, id: ObjId) -> Result<(), String> {
 /// TTL 到期会提前返回；孵化分支若刚出生，本轮不再进入 TTL 初始化分支。
 /// 来源：上游 engine/src/processor/intents/creeps/tick.js。
 pub fn creep_tick(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
+    creep_tick_prepare(w, id)?;
+    damage::apply_pending_hits(w, id);
+    Ok(())
+}
+
+/// 房间编排在此函数之后释放候选借用，再进入可选 JS 受击链。
+pub fn creep_tick_prepare(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
     movement_execute(w, id)?;
     if !w.room.objects.contains_key(&id) {
         return Ok(()); // 对象可能在前面的结算动作中被移除。
@@ -247,7 +254,6 @@ pub fn creep_tick(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
         }
     }
     // 疲劳恢复先读取本轮受伤前的身体，之后才施加伤害、治疗并判断战斗死亡。
-    damage::apply_pending_hits(w, id);
     Ok(())
 }
 

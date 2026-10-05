@@ -20,6 +20,7 @@ pub mod extension;
 mod fingerprint;
 mod freeze;
 mod handlers;
+pub mod incoming;
 pub mod objects;
 mod outcome;
 mod plan;

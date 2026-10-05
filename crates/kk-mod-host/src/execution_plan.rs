@@ -88,12 +88,13 @@ impl ExecutionChain {
             center: center.to_string(),
             after: names(after),
             native_center: center.namespace() == "builtin",
-            decline_allowed: slot.stage == Stage::ObjectAction
-                && (slot.key.namespace() != "builtin"
-                    || kk_mod_api::builtin::RESOURCE_ACTION_SLOTS.contains(&slot.key.as_str())
-                    || kk_mod_api::builtin::MOVE_ACTION_SLOTS.contains(&slot.key.as_str())
-                    || kk_mod_api::builtin::COMBAT_ACTION_SLOTS.contains(&slot.key.as_str())
-                    || kk_mod_api::builtin::BUILD_ACTION_SLOTS.contains(&slot.key.as_str())),
+            decline_allowed: slot.key.as_str() == kk_mod_api::builtin::INCOMING_DAMAGE_SLOT
+                || slot.stage == Stage::ObjectAction
+                    && (slot.key.namespace() != "builtin"
+                        || kk_mod_api::builtin::RESOURCE_ACTION_SLOTS.contains(&slot.key.as_str())
+                        || kk_mod_api::builtin::MOVE_ACTION_SLOTS.contains(&slot.key.as_str())
+                        || kk_mod_api::builtin::COMBAT_ACTION_SLOTS.contains(&slot.key.as_str())
+                        || kk_mod_api::builtin::BUILD_ACTION_SLOTS.contains(&slot.key.as_str())),
         }))
     }
 

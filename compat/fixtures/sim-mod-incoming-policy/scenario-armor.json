@@ -1,0 +1,102 @@
+{
+  "version": 1,
+  "shard": {
+    "players": [
+      "p1"
+    ],
+    "rooms": [
+      {
+        "name": "W1N1",
+        "owner": "p1",
+        "rcl": 6
+      }
+    ]
+  },
+  "bots": [
+    {
+      "player": "p1",
+      "modules": "."
+    }
+  ],
+  "objects": [
+    {
+      "alias": "attacker",
+      "room": "W1N1",
+      "kind": "creep",
+      "spec": {
+        "name": "attacker",
+        "owner": "p1",
+        "pos": [
+          10,
+          10
+        ],
+        "body": [
+          "attack",
+          "move"
+        ],
+        "ticksToLive": 100
+      }
+    },
+    {
+      "alias": "target",
+      "room": "W1N1",
+      "kind": "creep",
+      "spec": {
+        "name": "target",
+        "owner": "p2",
+        "pos": [
+          10,
+          11
+        ],
+        "body": [
+          "tough",
+          "move"
+        ],
+        "boosts": {
+          "0": "GHO2"
+        },
+        "ticksToLive": 100
+      }
+    }
+  ],
+  "mods": {
+    "root": "../mod-incoming-policy",
+    "selection": {
+      "include": [
+        "incoming-armor"
+      ]
+    }
+  },
+  "assertions": [
+    {
+      "pointer": "/players/p1/memory/code",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "pointer": "/players/p1/memory/target_hits",
+      "op": "eq",
+      "value": 180
+    },
+    {
+      "pointer": "/players/p1/memory/tough_hits",
+      "op": "eq",
+      "value": 80
+    },
+    {
+      "pointer": "/players/p1/memory/actor_hits",
+      "op": "eq",
+      "value": 200
+    },
+    {
+      "pointer": "/players/p1/memory/raw_damage",
+      "op": "eq",
+      "value": 30
+    },
+    {
+      "pointer": "/mod_states/incoming-armor/applied",
+      "op": "eq",
+      "value": 2
+    }
+  ]
+}

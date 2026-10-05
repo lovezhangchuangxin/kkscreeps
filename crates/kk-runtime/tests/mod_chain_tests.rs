@@ -205,6 +205,10 @@ mod store_rules;
 #[path = "mod_chain_tests/composition.rs"]
 mod composition;
 
+#[path = "mod_chain_tests/incoming_faults.rs"]
+mod incoming_faults;
+#[path = "mod_chain_tests/incoming_policy.rs"]
+mod incoming_policy;
 #[path = "mod_chain_tests/retaliation_faults.rs"]
 mod retaliation_faults;
 #[path = "mod_chain_tests/retaliation_policy.rs"]

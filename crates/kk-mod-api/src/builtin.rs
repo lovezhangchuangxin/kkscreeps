@@ -39,8 +39,11 @@ pub const BUILD_ACTION_SLOTS: [&str; 3] = [
     "builtin:creep.dismantle",
 ];
 
+/// 对象 tick 中的受击数值链；不是玩家意图或整个 creep tick 替换。
+pub const INCOMING_DAMAGE_SLOT: &str = "builtin:creep.receiveDamage";
+
 /// 内建实际派发的槽；自有动作装配必须跳过它们。
-pub const SLOT_KEYS: [&str; 13] = [
+pub const SLOT_KEYS: [&str; 14] = [
     RESOURCE_ACTION_SLOTS[0],
     "builtin:link.tick",
     RESOURCE_ACTION_SLOTS[1],
@@ -54,6 +57,7 @@ pub const SLOT_KEYS: [&str; 13] = [
     BUILD_ACTION_SLOTS[0],
     BUILD_ACTION_SLOTS[1],
     BUILD_ACTION_SLOTS[2],
+    INCOMING_DAMAGE_SLOT,
 ];
 
 fn key(name: &str) -> Key {
@@ -284,6 +288,7 @@ pub fn link() -> Contribution {
         "creep.build.native",
         "creep.repair.native",
         "creep.dismantle.native",
+        "creep.receiveDamage.native",
     ]));
     let slots = vec![
         SlotDescriptor {
@@ -351,12 +356,17 @@ pub fn link() -> Contribution {
             stage: Stage::ObjectAction,
             native_binding: key("creep.dismantle.native"),
         },
+        SlotDescriptor {
+            key: key("creep.receiveDamage"),
+            stage: Stage::ObjectTick,
+            native_binding: key("creep.receiveDamage.native"),
+        },
     ];
     Contribution {
         source: Source {
             namespace: "builtin".into(),
             api_version: 1,
-            revision: "link-creep-store-move-combat-build-descriptors-v6".into(),
+            revision: "link-creep-store-move-combat-build-incoming-descriptors-v7".into(),
             code_digest: {
                 let mut hash = Sha256::new();
                 hash.update(include_bytes!("builtin.rs"));

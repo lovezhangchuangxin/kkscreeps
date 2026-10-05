@@ -1,0 +1,132 @@
+{
+  "date": "2026-10-06",
+  "base_commit": "4fab581",
+  "slot": "builtin:creep.receiveDamage",
+  "builtin_slot_count": 14,
+  "limits": {
+    "max_damage": 9007199254740991,
+    "max_sources": 256
+  },
+  "release_sha256": "ab36b91326c7cdefb1ebc4cc01eafb753bdd2780203f6fe43fb1926072341b8e",
+  "targeted_tests": {
+    "engine": 3,
+    "runtime": 12,
+    "cli": 1
+  },
+  "staged_export": {
+    "cases": 8,
+    "json_kkpv_final_equal_except_cpu_bucket": true,
+    "scenarios": {
+      "plain": {
+        "plan_hash": "b6584805966c1c32ad99966967584d07151f0061bbd874d5d263b2c6a0f2b9fd",
+        "player_memory": {
+          "code": 0,
+          "target_hits": 170,
+          "tough_hits": 70,
+          "actor_hits": 200,
+          "raw_damage": 30
+        },
+        "mod_states": {}
+      },
+      "armor": {
+        "plan_hash": "71157b95226b2c6ce8401e6d2e538abdf9894e4d7dc536eef3bff8f1070d8605",
+        "player_memory": {
+          "code": 0,
+          "target_hits": 180,
+          "tough_hits": 80,
+          "actor_hits": 200,
+          "raw_damage": 30
+        },
+        "mod_states": {
+          "incoming-armor": {
+            "applied": 2,
+            "lastDamage": 10
+          },
+          "incoming-shield": null
+        }
+      },
+      "shield": {
+        "plan_hash": "943ff58c22ea80075f76af45093c58b73760fa232548eb7113e0e01079de56e9",
+        "player_memory": {
+          "code": 0,
+          "target_hits": 188,
+          "tough_hits": 88,
+          "actor_hits": 200,
+          "raw_damage": 30
+        },
+        "mod_states": {
+          "incoming-armor": null,
+          "incoming-shield": {
+            "pools": {
+              "kk0000000000000003": 0
+            },
+            "applied": 2,
+            "lastDamage": 12,
+            "lastAbsorbed": 3
+          }
+        }
+      },
+      "combined": {
+        "plan_hash": "e9fa065b2abd34e4b62f01d33cdd799337611e7ee770b0c45b15caa0a2e30008",
+        "player_memory": {
+          "code": 0,
+          "target_hits": 198,
+          "tough_hits": 98,
+          "actor_hits": 200,
+          "raw_damage": 30
+        },
+        "mod_states": {
+          "incoming-armor": {
+            "applied": 2,
+            "lastDamage": 10
+          },
+          "incoming-shield": {
+            "pools": {
+              "kk0000000000000003": 0
+            },
+            "applied": 2,
+            "lastDamage": 2,
+            "lastAbsorbed": 8
+          }
+        }
+      }
+    }
+  },
+  "cold_resume": {
+    "cases": 8,
+    "full_final_equal_except_cpu_bucket": true,
+    "plan_hash_equal": true,
+    "composition_equal": true
+  },
+  "compat": {
+    "base_commit": "4fab581",
+    "total": 2914,
+    "passed": 1918,
+    "failed": 89,
+    "skipped": 907,
+    "status_changes": 0,
+    "regressions": 0,
+    "improvements": 0,
+    "screeps_ok_pin": "34a630efa42908c117c19c25d2350fa2387bd633",
+    "engine_version": "4.3.0",
+    "stale_waiver_warnings": 2
+  },
+  "full_check": {
+    "rust_passed": 940,
+    "rust_failed": 0,
+    "rust_ignored_existing": 12,
+    "rust_groups": 56,
+    "js_passed": 19,
+    "js_failed": 0,
+    "clippy_warnings": 0,
+    "source_files_checked": 449,
+    "max_source_lines": 1000,
+    "commands": [
+      "cargo build -p kk-cli",
+      "KKSCREEPS_BIN=$PWD/target/debug/kkscreeps pnpm run check",
+      "cargo build --release -p kk-cli",
+      "pnpm --filter @kkscreeps/compat run build",
+      "KKSCREEPS_BIN=$PWD/target/release/kkscreeps node compat/scripts/ratchet.mjs"
+    ]
+  }
+}

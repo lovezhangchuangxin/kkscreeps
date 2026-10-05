@@ -65,6 +65,14 @@ impl ContributionDispatch {
             }
             _ => TickSlot::Hosted(host(LINK_SLOT_KEYS[1])?),
         };
+        let incoming = match dispatch_of(plan, kk_mod_api::builtin::INCOMING_DAMAGE_SLOT)? {
+            Dispatch::Native(binding)
+                if binding.as_str() == "builtin:creep.receiveDamage.native" =>
+            {
+                IncomingSlot::Native
+            }
+            _ => IncomingSlot::Hosted(host(kk_mod_api::builtin::INCOMING_DAMAGE_SLOT)?),
+        };
         let mut ext = BTreeMap::new();
         let action = |slot: &str, native| -> Result<ActionSlot, String> {
             match dispatch_of(plan, slot)? {
@@ -128,6 +136,7 @@ impl ContributionDispatch {
             creep_build,
             creep_repair,
             creep_dismantle,
+            incoming,
             ext,
         })
     }
@@ -236,6 +245,7 @@ impl ContributionDispatch {
             tick_handlers,
         )?;
         let ext = assemble_ext_slots(plan, ext_handlers, ext_processes)?;
+        let incoming = IncomingSlot::native_from_plan(plan)?;
         Ok(Self {
             transfer,
             tick,
@@ -250,6 +260,7 @@ impl ContributionDispatch {
             creep_build,
             creep_repair,
             creep_dismantle,
+            incoming,
             ext,
         })
     }
@@ -408,7 +419,7 @@ fn key(value: &str) -> Key {
     Key::new(value).expect("内建槽键合法")
 }
 
-fn dispatch_of(plan: &ContributionPlan, slot: &str) -> Result<Dispatch, String> {
+pub(super) fn dispatch_of(plan: &ContributionPlan, slot: &str) -> Result<Dispatch, String> {
     let handle = plan
         .resolve_slot(&key(slot))
         .ok_or_else(|| format!("计划缺少槽 {slot}"))?;

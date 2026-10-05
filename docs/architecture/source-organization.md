@@ -12,10 +12,11 @@
 | `kk-world/src/kkpv.rs` | 权威世界和 JSON 参考数据到块的转换；单元测试独立在 `kkpv/tests.rs` |
 | `kk-engine/src/intent.rs` | 动作集合、执行优先级与输入清洗；测试按 JSON 收集、动作语义和市场输入分组 |
 | `kk-engine/src/settle/mod.rs` | 世界引擎状态和控制入口；`working.rs` 房间候选及领域操作，`room_loop.rs` 房间循环，`install.rs` 冻结计划接线，`engine_tick.rs` 世界阶段与发布，`validation.rs` 发布前校验 |
-| `kk-engine/src/settle/contrib.rs` | 槽、处理器和续行类型及运行入口；`contrib/assemble.rs` 冻结表装配，`execute.rs` 内建动作/tick 链执行与 Hosted 局部恢复（资源两端/事件、移动请求登记、战斗/建造族对象/延迟队列/链内增删） |
+| `kk-engine/src/settle/contrib.rs` | 槽、处理器和续行类型及运行入口；`contrib/assemble.rs` 冻结表装配，`incoming.rs` 受击数值链与默认回退，`execute.rs` 内建动作/tick 链执行与 Hosted 局部恢复（资源两端/事件、移动请求登记、战斗/建造族对象/延迟队列/链内增删） |
 | `kk-engine/src/settle/creep/combat/damage_policy.rs` | 单体策略伤害的表示校验、战斗视图；默认/native 和策略应用共用 damage.rs 的生命值与死亡路径 |
 | `kk-engine/src/settle/creep/combat/heal_policy.rs` | 策略治疗表示校验，native/JS 共用队列、日志与事件登记；最终身体恢复由 damage.rs 处理 |
 | `kk-engine/src/settle/creep/combat/retaliation_policy.rs` | 不可变反击表、执行前表示域预留与原生/JS 主攻击组合 |
+| `kk-engine/src/settle/incoming.rs` | 受击输入摘要、JS 安全整数与独立数值候选；不直接改世界 |
 | `kk-engine/src/settle/damage.rs` | 共用伤害/治疗应用、死亡与库存掉落；`damage/tough.rs` 独立计算原生 TOUGH 累计减伤，不写候选 |
 | `kk-engine/src/settle/creep/combat/batch_policy.rs` | 战斗分页与群体批量完整预检/应用；直接候选不变测试在 batch_policy/tests.rs |
 | `kk-engine/src/settle/resources.rs` | 资源领域读取与副本预检转账；`resources/generic.rs` 共享 Generic 仓库解析、native 容量与实验室槽写入 |
@@ -28,9 +29,11 @@
 | `kk-runtime/src/embed/mod_chain/objects.rs` | 自有槽能力门控、绑定 namespace 和候选适配 |
 | `kk-mod-host/src/chain/resources.rs` | 资源 op 的同步能力访问、数字校验与故障来源 |
 | `kk-mod-host/src/chain/movement.rs` | 移动请求 op 的方向校验与同步能力访问 |
+| `kk-mod-api/src/incoming.rs` | 受击输入与来源的共享表示、数值/来源上限 |
+| `kk-mod-host/src/chain/incoming.rs` | 受击数值 op、原始浮点校验与能力故障归属 |
 | `kk-mod-host/src/chain/combat.rs` | 战斗读取/改向/取消/策略伤害与治疗 op 的同步能力访问与故障来源 |
 | `kk-mod-host/src/chain/combat_batch.rs` | 伤害批量/反击表共用有界转换、重入后重新检查能力与战斗分页 op |
-| `kk-runtime/src/embed/mod_chain/resources.rs` | 同房资源能力、首次触达日志与字段缓存失效；移动能力在 `mod_chain.rs`；战斗门控、首触日志与 consumed 标记在 `mod_chain/combat.rs` |
+| `kk-runtime/src/embed/mod_chain/resources.rs` | 同房资源能力、首次触达日志与字段缓存失效；移动与受击数值能力在 `mod_chain.rs`；战斗门控、首触日志与 consumed 标记在 `mod_chain/combat.rs` |
 | `kk-engine/src/settle/market.rs` | 市场状态和结算入口、成交调度；`market/orders.rs` 订单生命周期，`terminal.rs` 发送/成交共用的库存、费用与交易写入 |
 | `kk-runtime/src/run.rs` | 玩家执行参数、结果分类和未提交的指令/Memory/CPU 候选；由 crate 根导出，结算引擎不拥有这些类型 |
 | `kk-runtime/src/embed.rs` | 分片状态、管理和诊断入口；`embed/setup.rs` 配置校验与创建/放置，`execution.rs` 玩家候选和失败重试，`projection.rs` KKPV 与市场视图，`mod_chain.rs` Mod 候选桥 |

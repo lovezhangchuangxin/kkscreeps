@@ -1,6 +1,6 @@
 # Mod 处理链执行
 
-当前支持 link transfer/tick、creep transfer/withdraw/move、五个战斗动作、三个建造动作与对象域 Mod 意图、自有对象 tick。冻结计划决定处理器顺序，Rust 候选保存权威数据，可信 Mod realm 保存 JS 函数。玩家 VM 与玩法 realm 分离；管理员安装的 Mod 共用 realm，Mod 之间没有安全隔离。
+当前支持 link transfer/tick、creep transfer/withdraw/move、五个战斗动作、三个建造动作、creep 累计受击策略与对象域 Mod 意图、自有对象 tick。冻结计划决定处理器顺序，Rust 候选保存权威数据，可信 Mod realm 保存 JS 函数。玩家 VM 与玩法 realm 分离；管理员安装的 Mod 共用 realm，Mod 之间没有安全隔离。
 
 自有类型可通过公共 SDK 声明同步 tick，遍历资格、候选字段及整轮失败恢复见[自有对象 tick](mod-object-tick.md)。
 
@@ -25,7 +25,7 @@ kk-engine：选择 Native 或整槽宿主
 
 `kk-engine` 不依赖 V8，提供冻结槽描述、权威接收者/参数、RoomCtx 与 native 函数。`kk-mod-host` 不依赖引擎，通过 `ChainHost` 读写候选；`kk-runtime` 实现领域校验与两者的适配。链描述在注册冻结后安装进 JS，运行时只传槽键和本次调用标识，不重新排序或序列化整条链。
 
-Rust 自定义处理器仍可经原有纯 Rust 执行器安装。它与 JS 执行器遵守相同链语义；JS 不通过 Rust 续行闭包回入 realm。
+既有槽的 Rust 自定义处理器仍可经原有纯 Rust 执行器安装；新增受击数值槽的自定义贡献目前须经整槽宿主接线。它与 JS 执行器遵守相同链语义；JS 不通过 Rust 续行闭包回入 realm。
 
 ## 组合与故障语义
 
@@ -35,7 +35,7 @@ Rust 自定义处理器仍可经原有纯 Rust 执行器安装。它与 JS 执�
 - 回调返回 Promise 或 thenable 属故障；失败链不执行 after。after 自身故障同样使整轮候选失败，已经发生的 native/JS 候选写入不发布。
 - JS 每槽最多 64 层 wrap，注册时拒绝超限。该限制约束递归栈深度，不等于 CPU/内存预算。
 
-处理器自身正常处理的错误不自动变成故障；以上不可吞掉的错误来自 next 与宿主候选访问边界。正常拒绝已开放于 Mod 自有对象动作和资源、移动、战斗、建造族的 12 个内建动作槽，范围与局部回滚见下节。
+处理器自身正常处理的错误不自动变成故障；以上不可吞掉的错误来自 next 与宿主候选访问边界。正常拒绝已开放于 Mod 自有对象动作和资源、移动、战斗、建造族的 12 个内建动作槽，范围与局部回滚见下节。另有对象 tick 阶段的[受击策略槽](mod-incoming-policy.md)，拒绝丢弃数值/state 候选并回退默认 TOUGH，不撤销此前攻击动作。
 
 ## 正常动作拒绝
 

@@ -34,7 +34,7 @@ SDK 先读取有界数组的原始值、复制成 id/amount 条目；op 在转�
 
 ## 默认规则、结算与恢复
 
-JS 决定目标、阵营筛选、距离与攻击公式；应用端不追加原生射程、安全模式、部件/强化功率、距离衰减或 rampart 跳过/改向，也不生成默认反击。批量 amount 为减伤前伤害，creep 的最终扣血统一经过[对象 tick 的 TOUGH 减伤](creep-incoming-damage.md)。原玩家 `Creep.rangedMassAttack` 的预检、意图身份清洗与动作互斥仍生效，玩家预检策略替换尚未开放。
+JS 决定目标、阵营筛选、距离与攻击公式；应用端不追加原生射程、安全模式、部件/强化功率、距离衰减或 rampart 跳过/改向，也不生成默认反击。批量 amount 为减伤前伤害，creep 的最终扣血统一在对象 tick 经过[默认 TOUGH](creep-incoming-damage.md)及可选的[JS 受击链](mod-incoming-policy.md)。原玩家 `Creep.rangedMassAttack` 的预检、意图身份清洗与动作互斥仍生效，玩家预检策略替换尚未开放。
 
 批量与 request/applyDamage/applyHeal/cancel/native 共用单向 consumed；before 应用后 native 中心跳过，再次写能力是故障。每个目标按输入顺序记录 `EVENT_ATTACK`，attackType 为群体远程种类；零伤害也记攻击事件。结构立即扣耐久/击毁，creep 仍累计延迟伤害，在对象 tick 与治疗合并后分配身体并判死亡，沿既有库存/死亡/墓碑/废墟路径。
 
@@ -46,6 +46,6 @@ JS 决定目标、阵营筛选、距离与攻击公式；应用端不追加原�
 
 [独立 JS 场景](../../compat/fixtures/sim-mod-mass-policy/README.md)包括六格固定伤害、距离衰减公式及无 Mod 对照，两通道完整 final（排除 CPU 桶）和 PlanHash 一致；批量完成后退出进程再恢复，与连续运行的全部目标/state/组合相等。引擎直接验证“最后一项非法也不写前项”、队列溢出、分页与空/上界；运行时验证多目标拒绝、结构及孵化对象恢复、转换重入、故障、生命周期和缓存重试。
 
-当前批量限额固定为 256，超过限额是能力故障，不能在同一动作中重复分批写入。[反击表](mod-retaliation-policy.md)已在第四片开放；原生 TOUGH 减伤已交付，JS 受击公式替换、移动仲裁、自有对象伤害 trait、玩家预检替换以及可配置批量预算仍待开放；本切片不代表完整 N2c 或所有战斗规则完成。
+当前批量限额固定为 256，超过限额是能力故障，不能在同一动作中重复分批写入。[反击表](mod-retaliation-policy.md)已在第四片开放；原生 TOUGH 减伤已交付，[JS 受击公式替换与护盾组合](mod-incoming-policy.md)已交付；移动仲裁、自有对象伤害 trait、玩家预检替换以及可配置批量预算仍待开放；本切片不代表完整 N2c 或所有战斗规则完成。
 
 本切片的构建、专项和兼容性结果见[交付记录](../research/notes/n2c-mass-policy-2026-10-06.md)。
