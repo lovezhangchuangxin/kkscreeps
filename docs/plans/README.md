@@ -4,6 +4,8 @@
 
 现行职责与机制见[架构文档](../architecture/README.md)，玩家行为与工具要求见[功能设计](../designs/README.md)，采用的技术选择见[决策记录](../decisions/README.md)，里程碑验收见[路线图](../roadmap.md)。
 
+接手开发先读[后续任务与接手台账](mod-next-batches.md)：这是持续更新的当前执行入口，包含 30 个任务的依赖/状态、近期切片验收、交接模板和可复制提示词。AI 每批主动更新当前位置与实际证据；其他历史方案的阶段记录仍保留原结论。
+
 ## 方案索引
 
 | 工作 | 文档 | 内容与阅读范围 |
@@ -19,7 +21,8 @@
 | M2B 玩家 API 扩展 | [m2b-expansion.md](m2b-expansion.md) | 当时的 API 盘点、实施与差异登记；盘点状态不自动等于完整兼容 |
 | terminal 与 market | [2b-terminal-market.md](2b-terminal-market.md) | 订单、跨房资源转移、credits 与相关测试的专项实现记录 |
 | 贡献平面与 JS Mod | [mod-plane-batches.md](mod-plane-batches.md) | ADR-014 的事务、并发、投影与扩展实施方向；确认方案不代表已经交付 |
-| 独立 JS Mod 完整玩法 | [mod-complete-gameplay.md](mod-complete-gameplay.md) | 2026-10-05 目标确认后的优先级调整；生命周期、开放能力、全域规则、恢复与作者工具，下一片为自有对象 tick |
+| 独立 JS Mod 完整玩法 | [mod-complete-gameplay.md](mod-complete-gameplay.md) | 2026-10-05 目标确认后的总体计划及已交付切片；后续执行位置以接手台账为准 |
+| Mod 后续任务与 AI 接手 | [mod-next-batches.md](mod-next-batches.md) | 持续维护的 30 项任务台账、依赖与验收、当前位置、文档更新规则和交接模板 |
 | A 阶段现状核查 | [a-stage-current-audit.md](a-stage-current-audit.md) | 基于 6248546 核对 A1–A4、P1/P2 的实现边界、提交与恢复缺口，以及后续切片顺序 |
 
 ## 使用原则

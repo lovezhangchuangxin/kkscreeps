@@ -15,6 +15,7 @@
 | 为什么采用 Rust、V8 和当前模块边界？ | [决策索引](decisions/README.md) |
 | 当前 Mod 处理链和自主对象 tick 怎样执行？ | [Mod 处理链执行](architecture/mod-execution.md)、[自有对象 tick](architecture/mod-object-tick.md)、[对象操作](architecture/mod-objects.md)、[组合诊断](architecture/mod-composition.md)、[有效规则读取](architecture/mod-rules.md)、[新世界内容选择](architecture/mod-content-selection.md)、[资源目录](architecture/mod-resource-catalog.md)、[可建造建筑](architecture/mod-buildings.md)、[JS 伤害策略](architecture/mod-damage-policy.md)、[JS 治疗策略](architecture/mod-heal-policy.md)、[JS 群体伤害](architecture/mod-mass-policy.md)、[JS 反击](architecture/mod-retaliation-policy.md)、[JS 受击/护盾](architecture/mod-incoming-policy.md) |
 | 独立 JS Mod 距完整玩法还有哪些缺口，接下来怎样开发？ | [现状复查](research/09-mod-capability-current-audit.md)、[完整玩法计划](plans/mod-complete-gameplay.md) |
+| AI 接手从哪里继续，怎样维护进度？ | [后续任务与接手台账](plans/mod-next-batches.md)、[仓库贡献指南](../AGENTS.md#ai-接手与进度维护) |
 | 官方玩法怎样拆成可选 Mod，如何选择内容和处理存量数据？ | [官方内容包决策](decisions/ADR-016-official-content-packs.md)、[内容包设计](designs/content-packs.md) |
 | Mod、前端和开发工具计划如何工作？ | [功能设计](designs/README.md)、[前端架构](architecture/frontend.md) |
 | 如何写清楚注释和术语？ | [注释规范](contributing/comment-style.md)、[术语词典](glossary.md) |
@@ -27,7 +28,7 @@
 | [designs/](designs/README.md) | 玩家行为、功能要求和验收条件 | 保留来源与兼容性例外，区分要求和实装 |
 | [decisions/](decisions/README.md) | 技术决策及取舍理由 | 保留决策背景；方案改变时注明替代关系 |
 | [roadmap.md](roadmap.md) | 开发范围和里程碑验收 | 根据进展更新，不作为接口使用说明 |
-| [plans/](plans/README.md) | 开发拆分、实施过程和阶段验收 | 完成后保留历史记录，现行机制回写架构文档 |
+| [plans/](plans/README.md) | 开发拆分、实施过程和阶段验收 | 完成后保留历史记录；当前任务台账持续更新，现行机制回写架构文档 |
 | [research/](research/README.md) | 调研、实验与原始证据 | 保留实验环境、版本和结果，不追改历史结论 |
 | [contributing/comment-style.md](contributing/comment-style.md) | 注释内容和表达规则 | 保持稳定原则，示例须说明适用范围 |
 
