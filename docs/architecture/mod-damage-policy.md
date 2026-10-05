@@ -29,7 +29,7 @@ export default function register(api) {
 | `ctx.combat.request(id)` | 原生主攻击/治疗：距离、部件/强化功率、安全模式和 rampart 改向仍生效；未声明反击表时保持原生反击 |
 | `ctx.combat.applyDamage(id, amount)` | 使用 JS 指定的承伤对象和数值；不重新计算部件/强化功率，不检查距离/阵营/安全模式，不做 rampart 改向，不追加原生近战反击 |
 
-生命值变化、身体耐久分配、死亡、库存掉落、结构击毁/废墟及事件沿共用应用器处理；事件攻击种类由所属近战/远程槽决定。JS 可通过 before 或 replace 接管伤害；能力与 request/cancel/native 中心共用单向 consumed 标记，先到者消耗动作。before 应用伤害后，后续 native 中心跳过，不能叠加一份默认伤害；再次调用写能力是故障。
+amount 为减伤前伤害；creep 在对象 tick 合并累计伤害后执行[默认 TOUGH 减伤](creep-incoming-damage.md)，再合并治疗。结构立即扣耐久。生命值变化、身体耐久分配、死亡、库存掉落、结构击毁/废墟及事件沿共用应用器处理；事件 damage 保持减伤前量，攻击种类由所属近战/远程槽决定。JS 可通过 before 或 replace 接管攻击公式；能力与 request/cancel/native 中心共用单向 consumed 标记，先到者消耗动作。before 应用伤害后，后续 native 中心跳过，不能叠加一份默认伤害；再次调用写能力是故障。
 
 这个入口不重定义原玩家 `Creep.attack/rangedAttack` 的预检：调用这些玩家方法仍需满足它们的部件、距离和安全模式要求，才能产生原生意图。策略可改为同房其他承伤对象；测试中改向远处且被 rampart 覆盖的目标，证明应用端没有默认距离/护墙否决。任意新意图与玩家 wrapper 的创作面仍须后续开放，不能把此首片称为所有战斗规则完整可替换。
 
@@ -43,4 +43,4 @@ Hosted 链复用[战斗局部恢复](creep-combat-slot.md#局部恢复边界)：
 
 [独立 JS 夹具](../../compat/fixtures/sim-mod-damage-policy/README.md)包含固定伤害包、生命值/护甲比例伤害包及原生对照；两包分别选择，直接同时启用会按既有多 replace 冲突规则拒绝。真实 CLI 的 JSON/KKPV 最终状态和进程退出后的检查点续跑相等（排除实际 CPU 桶）。运行时另验证部件读面、远处目标、拒绝保留此前伤害、击毁/库存/空间索引/ID 恢复，以及故障和缓存重试。
 
-自定义治疗已在[第二片](mod-heal-policy.md)开放；群体目标查询与批处理已在[第三片](mod-mass-policy.md)开放；[反击表](mod-retaliation-policy.md)已在第四片开放；仍待 TOUGH 默认算法替换、移动仲裁、自有对象伤害 trait 或新玩家意图 wrapper。宿主不隐含 TOUGH 减伤；示例包的护甲公式只由 JS 计算。后续按这些消费者继续拆分 N2c，不以单体伤害首片代替完整目标。
+自定义治疗已在[第二片](mod-heal-policy.md)开放；群体目标查询与批处理已在[第三片](mod-mass-policy.md)开放；[反击表](mod-retaliation-policy.md)已在第四片开放；原生 TOUGH 减伤已交付，JS 受击公式替换、移动仲裁、自有对象伤害 trait 或新玩家意图 wrapper 仍待开放。示例包按活跃 TOUGH 数量计算的护甲为 JS 自定公式；若身体同时强化 TOUGH，将叠加默认减伤，详见[作者边界](creep-incoming-damage.md#js-作者与恢复边界)。后续按这些消费者继续拆分 N2c，不以单体伤害首片代替完整目标。

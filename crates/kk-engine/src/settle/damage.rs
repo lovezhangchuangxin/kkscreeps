@@ -1,7 +1,10 @@
 //! 处理即时结构伤害、延迟 creep 伤害与治疗，以及死亡后的资源转移。
 //!
 //! Creep 在自身 tick 中先受伤、后治疗，再判断是否死亡；结构击毁立即创建
-//! 废墟。攻击功率可以包含 boost，但本模块尚未模拟 TOUGH 减伤或 power 免疫。
+//! 废墟。Creep 的累计伤害按现有身体顺序计算 TOUGH 强化减伤，再合并治疗；
+//! power 免疫尚未模拟。
+
+mod tough;
 
 use kk_core::constants as c;
 use kk_schema::room::{BodyPart, RoomObject};
@@ -173,15 +176,19 @@ fn apply_damage_inner(
 
 /// 先扣待伤害再加待治疗，钳到最大生命值，最后判断死亡；死亡返回 false。
 /// 净变化才重分配部件耐久，净减少才处理 CARRY 缩容掉落。
-/// 攻击与治疗功率可含 boost，这里的受伤处理尚不模拟 TOUGH 减伤。
+/// 待伤害是减伤前数值；TOUGH 按受伤前部件耐久统一减伤，治疗不增加本轮承伤额度。
 pub fn apply_pending_hits(w: &mut Working, id: ObjId) -> bool {
     let damage = w.damage_to_apply.remove(&id).unwrap_or(0);
     let heal = w.heal_to_apply.remove(&id).unwrap_or(0);
     if damage <= 0 && heal <= 0 {
         return true;
     }
-    let (old_hits, hits_max) = match w.creep(id) {
-        Some(creep) => (creep.hits as i64, creep.body.len() as i64 * 100),
+    let (old_hits, hits_max, damage) = match w.creep(id) {
+        Some(creep) => (
+            creep.hits as i64,
+            creep.body.len() as i64 * 100,
+            tough::effective_damage(&creep.body, damage),
+        ),
         None => return true,
     };
     let mut new_hits = old_hits - damage + heal;

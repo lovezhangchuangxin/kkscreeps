@@ -52,6 +52,8 @@ mod movement_spawn_basics;
 mod structures_and_attack;
 #[path = "settle_tests/tombstone_ruin_engine.rs"]
 mod tombstone_ruin_engine;
+#[path = "settle_tests/tough_damage.rs"]
+mod tough_damage;
 
 fn terrain_with(swamps: &[(usize, usize)]) -> kk_core::Terrain {
     let mut t = kk_core::Terrain::plains();

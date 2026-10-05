@@ -43,7 +43,7 @@
   4. **链内对象增删日志**（`chain_mutations`，Hosted 战斗链无条件武装、Native 直调路径保持 `None` 零开销）：`insert_new`/`remove_obj` 逐条记录，拒绝时逆序撤销——结构击毁产生的废墟插入被删除、被移除结构（含伴随的扩展字段、疲劳与队列条目）按移除时快照回插，ID 游标随后回退。
 - **运行时首触日志**（`ctx.combat.request/applyDamage/applyDamageBatch/applyHeal` 触达、且不在引擎预计算集内的对象）：改向目标及其格上 rampart 的原始记录与队列条目，拒绝时先于引擎边界恢复。
 
-此前动作的写入、其他执行者的攻击与队列条目、移动登记不受影响；后续动作继续结算。原生伤害尚无统一数值上限，TOUGH 减伤与 power 免疫尚未模拟。策略伤害的表示上限见[JS 伤害策略](mod-damage-policy.md)。
+此前动作的写入、其他执行者的攻击与队列条目、移动登记不受影响；后续动作继续结算。原生伤害尚无统一数值上限；[TOUGH 减伤](creep-incoming-damage.md)已在对象 tick 按累计原始伤害执行，power 免疫尚未模拟。策略伤害的表示上限见[JS 伤害策略](mod-damage-policy.md)。
 
 ## 未开放范围
 

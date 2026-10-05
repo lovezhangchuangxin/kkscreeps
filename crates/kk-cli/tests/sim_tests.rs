@@ -261,3 +261,5 @@ mod mass_policy;
 
 #[path = "sim_tests/retaliation_policy.rs"]
 mod retaliation_policy;
+#[path = "sim_tests/tough_damage.rs"]
+mod tough_damage;

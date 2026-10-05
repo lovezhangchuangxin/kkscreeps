@@ -62,3 +62,5 @@ Mod 源码在包构建时固定，**读不到运行期 ID**。两条通道：
 群体策略案例在 mass_policy.rs / mass_policy_faults.rs：战斗分页脱离读面，批量一次消耗；多目标/结构/spawn 孵化对象的局部恢复，原始 op 小数/转换重入/能力门，缓存重试；玩家 getObjectById 查询须使用规范长 ID，短 ID 仅宿主 ObjId::parse 能力入口支持。
 
 反击表专项在 `retaliation_policy.rs`/`retaliation_faults.rs`：native/request/JS 单体及群体组合、实际 rampart 命中、结构荆棘、safeMode 策略替换、拒绝保留此前双队列、反击致死缓存重试，以及转换/消耗/能力过期。孵化目标通过真实 spawnCreep 创建；place_object 会归一化为已出生，不能用 spawning 字段伪造此夹具。
+
+受击专项在 `tough_damage.rs`：原生/JS 主伤害与反击、JS 批量和塔共享 TOUGH 延迟减伤，事件仍为原始量；拒绝恢复减伤前队列再聚合取整，写回失败从已提交身体重新计算。强化用 place_object 的 `boosts` 索引映射，不能把 body 元素写成对象。

@@ -23,6 +23,7 @@
 | [mod-heal-policy.md](mod-heal-policy.md) | JS 近/远程治疗公式、延迟身体恢复、恰一次与拒绝/故障边界 |
 | [mod-mass-policy.md](mod-mass-policy.md) | 同房战斗分页、群体伤害批量预检与应用、多目标拒绝恢复 |
 | [mod-retaliation-policy.md](mod-retaliation-policy.md) | 攻击前反击表、native/JS 伤害组合、实际命中与恰一次恢复 |
+| [creep-incoming-damage.md](creep-incoming-damage.md) | 原生强化 TOUGH、累计受伤/治疗、原始事件与恢复边界；JS 受击槽待开放 |
 | [creep-build-slot.md](creep-build-slot.md) | creep 建造族动作槽（build/repair/dismantle）、目标改向/取消能力与完工变换/掉落面的拒绝恢复 |
 | [mod-resources.md](mod-resources.md) | Mod 同房库存读取、精确转账与损耗、多对象拒绝日志 |
 | [mod-resource-catalog.md](mod-resource-catalog.md) | 命名空间资源声明、冻结目录、玩家常量同步与市场/跨房显式拒绝 |

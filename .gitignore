@@ -74,3 +74,4 @@ __pycache__/
 
 !compat/fixtures/mod-retaliation-policy/
 !compat/fixtures/sim-mod-retaliation-policy/
+!compat/fixtures/sim-tough-damage/

@@ -1,0 +1,138 @@
+{
+  "date": "2026-10-06",
+  "base_commit": "520bbade2655d8ad4e7aeaf60b142973dcd65757",
+  "scope": "受击策略第一片：原生强化 TOUGH；尚无 JS 受击槽或实际伤害驱动反击",
+  "upstream": {
+    "screeps_ok_pin": "34a630efa42908c117c19c25d2350fa2387bd633",
+    "engine_version": "4.3.0",
+    "source": "src/processor/intents/creeps/tick.js::_applyDamage"
+  },
+  "executable_sha256": "34be878ee618ad8884bba0488c6de3c86d55eaa3d68cca02783c9c5899dffd02",
+  "specialized": {
+    "engine_passed": 8,
+    "runtime_passed": 5,
+    "cli_passed": 1,
+    "failed": 0
+  },
+  "clean_staged_export": {
+    "run_count": 4,
+    "all_passed": true,
+    "normalized_final_equal_across_channels": true,
+    "ignored_final_fields": [
+      "players.*.cpu_bucket"
+    ],
+    "runs": [
+      {
+        "policy": "native",
+        "channel": "json",
+        "ticks": 3,
+        "status": "passed",
+        "plan_hash": "b3bf08fd8d006d49c29eef34615542bd10bf633cc339b45c40ffb56ea3d3ac4e",
+        "memory": {
+          "code": 0,
+          "target_hits": 270,
+          "target_tough_hits": 70,
+          "actor_hits": 270,
+          "actor_tough_hits": 70,
+          "raw_damage": 30
+        },
+        "mod_states": {}
+      },
+      {
+        "policy": "native",
+        "channel": "kkpv",
+        "ticks": 3,
+        "status": "passed",
+        "plan_hash": "b3bf08fd8d006d49c29eef34615542bd10bf633cc339b45c40ffb56ea3d3ac4e",
+        "memory": {
+          "code": 0,
+          "target_hits": 270,
+          "target_tough_hits": 70,
+          "actor_hits": 270,
+          "actor_tough_hits": 70,
+          "raw_damage": 30
+        },
+        "mod_states": {}
+      },
+      {
+        "policy": "js",
+        "channel": "json",
+        "ticks": 3,
+        "status": "passed",
+        "plan_hash": "e52710746e46955820037f0142bae7c7045e27c3c779dee9963bf96bcd8fa404",
+        "memory": {
+          "code": 0,
+          "target_hits": 256,
+          "target_tough_hits": 56,
+          "actor_hits": 300,
+          "actor_tough_hits": 100,
+          "raw_damage": 45
+        },
+        "mod_states": {
+          "flat-damage": {
+            "applied": 2,
+            "lastDamage": 45
+          },
+          "scaled-damage": null
+        }
+      },
+      {
+        "policy": "js",
+        "channel": "kkpv",
+        "ticks": 3,
+        "status": "passed",
+        "plan_hash": "e52710746e46955820037f0142bae7c7045e27c3c779dee9963bf96bcd8fa404",
+        "memory": {
+          "code": 0,
+          "target_hits": 256,
+          "target_tough_hits": 56,
+          "actor_hits": 300,
+          "actor_tough_hits": 100,
+          "raw_damage": 45
+        },
+        "mod_states": {
+          "flat-damage": {
+            "applied": 2,
+            "lastDamage": 45
+          },
+          "scaled-damage": null
+        }
+      }
+    ]
+  },
+  "cold_resume": {
+    "case_count": 4,
+    "first_ticks": 1,
+    "resume_ticks": 2,
+    "total_ticks": 3,
+    "all_passed": true,
+    "compared": [
+      "normalized_full_final",
+      "plan_hash",
+      "composition"
+    ],
+    "ignored_final_fields": [
+      "players.*.cpu_bucket"
+    ]
+  },
+  "full_check": {
+    "command": "KKSCREEPS_BIN=\"$PWD/target/debug/kkscreeps\" pnpm run check",
+    "status": "passed",
+    "rust_passed": 924,
+    "rust_failed": 0,
+    "rust_existing_ignored": 12,
+    "rust_groups": 56,
+    "javascript_passed": 19,
+    "clippy_warnings": 0,
+    "source_files": 438
+  },
+  "compatibility": {
+    "status": "passed",
+    "total": 2914,
+    "passed": 1918,
+    "existing_failed": 89,
+    "skipped": 907,
+    "status_changes_against_base": 0,
+    "existing_unused_allow_warnings": 2
+  }
+}

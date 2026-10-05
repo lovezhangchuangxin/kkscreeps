@@ -209,3 +209,5 @@ mod composition;
 mod retaliation_faults;
 #[path = "mod_chain_tests/retaliation_policy.rs"]
 mod retaliation_policy;
+#[path = "mod_chain_tests/tough_damage.rs"]
+mod tough_damage;

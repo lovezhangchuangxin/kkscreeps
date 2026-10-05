@@ -16,6 +16,7 @@
 | `kk-engine/src/settle/creep/combat/damage_policy.rs` | 单体策略伤害的表示校验、战斗视图；默认/native 和策略应用共用 damage.rs 的生命值与死亡路径 |
 | `kk-engine/src/settle/creep/combat/heal_policy.rs` | 策略治疗表示校验，native/JS 共用队列、日志与事件登记；最终身体恢复由 damage.rs 处理 |
 | `kk-engine/src/settle/creep/combat/retaliation_policy.rs` | 不可变反击表、执行前表示域预留与原生/JS 主攻击组合 |
+| `kk-engine/src/settle/damage.rs` | 共用伤害/治疗应用、死亡与库存掉落；`damage/tough.rs` 独立计算原生 TOUGH 累计减伤，不写候选 |
 | `kk-engine/src/settle/creep/combat/batch_policy.rs` | 战斗分页与群体批量完整预检/应用；直接候选不变测试在 batch_policy/tests.rs |
 | `kk-engine/src/settle/resources.rs` | 资源领域读取与副本预检转账；`resources/generic.rs` 共享 Generic 仓库解析、native 容量与实验室槽写入 |
 | `kk-mod-host/src/execution_plan.rs` | 链安装与诊断共用的活动顺序/中心回退选择 |
