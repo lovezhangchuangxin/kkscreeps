@@ -5,13 +5,42 @@ use kk_mod_host::{ContentSelection, ModPackage, RegisterOptions, discover_packag
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct Mods {
-    root: PathBuf,
+    pub(super) root: PathBuf,
     #[serde(default)]
     configs: BTreeMap<String, Value>,
     /// 新世界启动期的显式内容选择；省略表示安装全部发现的包。
     /// 与宿主注册选项、mod inspect 共用同一选择语义。
     #[serde(default)]
     selection: ContentSelection,
+}
+
+/// 场景声明的中途包切换：世界提交完第 `after_tick` 轮后，在同一根目录
+/// 上把安装集合换为按本字段选择/配置的结果——configs 与 selection
+/// **整体替换**初始 mods 输入（不是合并）。切换是引擎的替代分片操作：
+/// 拒绝（残留/内容变更/开放轮次）时旧计划继续运行，记录进报告。
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct ModsSwitch {
+    after_tick: u64,
+    #[serde(default)]
+    configs: BTreeMap<String, Value>,
+    #[serde(default)]
+    selection: ContentSelection,
+}
+
+impl ModsSwitch {
+    pub(super) fn after_tick(&self) -> u64 {
+        self.after_tick
+    }
+
+    /// 以初始 mods 的根目录构造切换后的装载输入。
+    pub(super) fn to_mods(&self, root: PathBuf) -> Mods {
+        Mods {
+            root,
+            configs: self.configs.clone(),
+            selection: self.selection.clone(),
+        }
+    }
 }
 
 pub(super) struct Loaded {

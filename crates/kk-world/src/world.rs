@@ -209,15 +209,17 @@ impl World {
         self.generation += 1;
         // 仅在目录完整覆盖修改前的版本时增量加入新对象。
         // 陈旧目录不能只补本次插入就标为有效，否则会漏掉其他尚未吸收的修改。
+        // 恢复自检查点的世界把缓存代际置为 u64::MAX 陈旧哨兵，比较须用
+        // 减法（generation 已在上面递增，恒 ≥1），加法会令哨兵 +1 溢出。
         {
             let mut dir = self.obj_dir.borrow_mut();
-            if dir.generation + 1 == self.generation {
+            if dir.generation == self.generation - 1 {
                 dir.rooms.insert(ObjId(id), room_name.to_string());
                 dir.generation = self.generation;
             }
             // 分配前已刷新最大 ID 缓存；同样只把有效的上一版本推进到新版本。
             let mut m = self.max_id_cache.borrow_mut();
-            if m.0 + 1 == self.generation {
+            if m.0 == self.generation - 1 {
                 *m = (self.generation, m.1.max(id));
             }
         }

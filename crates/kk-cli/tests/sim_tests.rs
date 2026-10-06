@@ -283,5 +283,7 @@ mod move_precheck;
 mod move_pull_registration;
 #[path = "sim_tests/retaliation_policy.rs"]
 mod retaliation_policy;
+#[path = "sim_tests/switch.rs"]
+mod switch;
 #[path = "sim_tests/tough_damage.rs"]
 mod tough_damage;

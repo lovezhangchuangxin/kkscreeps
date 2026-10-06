@@ -1,15 +1,16 @@
 # Mod 新世界内容选择
 
-新世界创建时可以显式选择安装哪些包：选择按 manifest 依赖闭包展开，未选包完全不安装，实际内容身份进入组合报告与 PlanHash。本片只覆盖**新建世界口径的启动期选择**；运行期改选、停用即卸载、存量世界的卸载/迁移/升级仍属后续（四种操作的区别见[内容包设计](../designs/content-packs.md#四种不同操作)）。
+新世界创建时可以显式选择安装哪些包：选择按 manifest 依赖闭包展开，未选包完全不安装，实际内容身份进入组合报告与 PlanHash。本片覆盖**新建世界口径的启动期选择**；运行期的包集合增减走[无开放轮次的包切换](mod-switching.md)（tick 边界、同包内容不变约束）；停用即卸载、存量世界的内容级卸载/迁移/升级仍属后续（四种操作的区别见[内容包设计](../designs/content-packs.md#四种不同操作)）。
 
 ## 选择输入与共用语义
 
-三处入口共用同一选择语义，均解析为 `ContentSelection { include, exclude }`：
+四处入口共用同一选择语义，均解析为 `ContentSelection { include, exclude }`：
 
 | 入口 | 形式 |
 |---|---|
 | 宿主 Rust API | `RegisterOptions.selection`（默认空 = 不做选择） |
 | sim 场景 | `mods.selection`（`{"include": [...], "exclude": [...]}`，可省略） |
+| sim 切换 | `mods_switch.selection`（提交完 `after_tick` 轮后整体替换，见[包切换](mod-switching.md)） |
 | mod inspect | `--select ID` 与 `--exclude ID`（均可重复） |
 
 `include`/`exclude` 均为空表示不做显式选择，安装包根目录发现的全部包（既有行为不变）。`include` 非空时从显式选择集出发展开；`include` 为空而 `exclude` 非空时安装"发现的包减去排除项"。两者不得重叠，也不得包含 `builtin`——builtin 是固定内建贡献，当前不可经内容选择安装或关闭（迁移随 N2/N3 逐族落实，见[内容包设计](../designs/content-packs.md)）。

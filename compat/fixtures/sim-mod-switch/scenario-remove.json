@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "mods": { "root": "../mod-composition" },
+  "mods_switch": { "after_tick": 2, "selection": { "include": ["base"] } },
+  "shard": {
+    "players": ["p1"],
+    "rooms": [{ "name": "W1N1", "owner": "p1" }]
+  },
+  "bots": [{ "player": "p1", "modules": ".", "memory": {} }],
+  "objects": [
+    { "alias": "counter", "room": "W1N1", "kind": "mod", "spec": { "typeKey": "base:counter", "fields": { "x": 10, "y": 12 } } }
+  ],
+  "assertions": [
+    { "pointer": "/time", "op": "eq", "value": 6 },
+    { "pointer": "/players/p1/memory/linkCap", "op": "eq", "value": 800 },
+    { "pointer": "/objects/counter/fields/value", "op": "eq", "value": 6 },
+    { "pointer": "/mod_states/base/visits", "op": "eq", "value": 6 }
+  ]
+}

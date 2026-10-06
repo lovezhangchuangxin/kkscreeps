@@ -9,17 +9,20 @@ struct Metadata {
     modules: Value,
     aliases: BTreeMap<String, String>,
     initial: Value,
+    /// 已实际生效的包切换边界（after_tick）：续跑据此选恢复用包集合——
+    /// 被拒绝的切换不改变身份，越过边界不等于携带切换后身份。
+    #[serde(default)]
+    applied_switches: Vec<u64>,
 }
 
 pub(super) fn resume(
     engine: &mut EmbedEngine,
-    path: &Path,
+    value: Value,
     loaded: Option<&mods::Loaded>,
     scenario_sha256: &str,
     executable_sha256: &str,
     modules: &BTreeMap<String, Value>,
 ) -> anyhow::Result<(BTreeMap<String, String>, Value)> {
-    let value = kk_runtime::checkpoint::read_checkpoint(path)?;
     let metadata: Metadata =
         serde_json::from_value(value["metadata"].clone()).context("解析 sim 检查点元数据")?;
     anyhow::ensure!(
@@ -41,6 +44,7 @@ pub(super) fn resume(
     Ok((metadata.aliases, metadata.initial))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn save(
     engine: &EmbedEngine,
     path: &Path,
@@ -49,6 +53,7 @@ pub(super) fn save(
     modules: &BTreeMap<String, Value>,
     aliases: &BTreeMap<String, String>,
     initial: &Value,
+    applied_switches: &[u64],
 ) -> anyhow::Result<()> {
     engine.save_checkpoint(
         path,
@@ -58,6 +63,7 @@ pub(super) fn save(
             modules: serde_json::to_value(modules)?,
             aliases: aliases.clone(),
             initial: initial.clone(),
+            applied_switches: applied_switches.to_vec(),
         })?,
     )
 }

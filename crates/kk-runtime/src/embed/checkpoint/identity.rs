@@ -6,7 +6,7 @@ use std::time::Duration;
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct ModIdentity {
+pub(crate) struct ModIdentity {
     pub packages: BTreeMap<String, Value>,
     options: Value,
 }
@@ -55,7 +55,7 @@ impl ModIdentity {
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct Worker {
+pub(crate) struct Worker {
     heap_limit_bytes: usize,
     cpu_limit: f64,
     bucket_cap: f64,

@@ -33,6 +33,7 @@
 - [G22.a 状态清单与 schema 门禁](notes/g22a-state-inventory-2026-10-06.md)：检查点逐域清单、钉死键树门禁（交付时 99 键，G22.c 后 100）、键树折叠规则、墙钟订单夹具修正与变异验证。
 - [G22.c 活动执行策略的持久身份](notes/g22c-execution-strategy-2026-10-06.md)：组合报告域分隔摘要、ModVm 恢复自检、检查点 `execution_strategy` 键（99→100）与 sim 报告 v5。
 - [G23.a 检查点格式版本与显式迁移](notes/g23a-checkpoint-migration-2026-10-06.md)：必填 `checkpoint_format_version`、解码前迁移链（v1→v2 收编 last_auto_disable 旧形态）、格式≥2 执行策略硬门、版本职权四层与钉死键 100→101。
+- [G24.a 无开放轮次的包/API 切换](notes/g24a-package-switch-2026-10-06.md)：替代分片换装执行层、引擎侧换计划收养（内容校验充当残留硬门）、停用投影与故障过滤、工作者常量封闭集重注入、sim `mods_switch` 场景字段与冷恢复生效集推导。
 - [JS 受击策略第二片](notes/n2c-incoming-policy-2026-10-06.md)：公式替换、独立护甲/护盾与免疫、来源摘要、拒绝回退、缓存重试及冷恢复。
 - [受击策略第一片：原生 TOUGH](notes/n2c-tough-damage-2026-10-06.md)：累计减伤、治疗/死亡/库存、JS 主伤害/反击、拒绝和受伤后的冷恢复。
 

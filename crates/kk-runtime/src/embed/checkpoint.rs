@@ -7,7 +7,9 @@ use std::path::Path;
 mod identity;
 mod migrate;
 
-use identity::{ModIdentity, Worker};
+// 身份与工作者捕获同时供包切换（switch 模块）复用：切换按交集包逐项
+// 比对 manifest/文件摘要，并沿用同一捕获格式转移工作者预算与模块表。
+pub(super) use identity::{ModIdentity, Worker};
 use migrate::CURRENT_FORMAT_VERSION;
 
 #[derive(Serialize, Deserialize)]

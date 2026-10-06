@@ -71,6 +71,9 @@ pub struct EmbedEngine {
     perf: PerfRecorder,
     /// 下一次进入结算入口时返回测试错误，不调用引擎。
     fail_next_settle: bool,
+    /// 下一次 `switch_mod_packages` 在候选验证全部通过后、切换前失败，
+    /// 验证旧分片在切换失败的每个阶段都保持可运行。
+    fail_next_switch_for_test: bool,
     /// 下一次实际调用引擎结算时使用的房间故障钩子，用后清除。
     fail_next_settle_room: Option<String>,
     /// 下一次实际调用引擎结算时使用的阶段故障钩子，用后清除。
@@ -162,6 +165,7 @@ impl EmbedEngine {
             last_console: BTreeMap::new(),
             perf: PerfRecorder::default(),
             fail_next_settle: false,
+            fail_next_switch_for_test: false,
             fail_next_settle_room: None,
             fail_next_settle_stage: None,
             fail_next_writeback: None,
@@ -523,6 +527,13 @@ impl EmbedEngine {
         Ok(())
     }
 
+    /// 使下一次 `switch_mod_packages` 在候选全部验证通过后、切换前失败；
+    /// 旧分片须保持可运行。用后清除。
+    #[doc(hidden)]
+    pub fn fail_next_switch_for_test(&mut self) {
+        self.fail_next_switch_for_test = true;
+    }
+
     /// 显式放弃执行故障轮并重建全部玩家工作者，保留已提交世界和玩家状态。
     /// 新线程丢弃全部 V8 全局变量；下一轮从已提交 Memory、segments 和 CPU 桶注入。
     /// 重建失败时保留故障记录，继续禁止运行；不自动重派故障轮。
@@ -614,6 +625,7 @@ mod execution;
 mod mod_chain;
 mod projection;
 mod setup;
+mod switch;
 
 use mod_chain::ModSlotExecutor;
 use projection::{kkpv_audience_hash, market_view};

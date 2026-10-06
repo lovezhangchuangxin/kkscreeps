@@ -37,6 +37,8 @@ struct Scene {
     #[serde(default)]
     mods: Option<mods::Mods>,
     #[serde(default)]
+    mods_switch: Option<mods::ModsSwitch>,
+    #[serde(default)]
     objects: Vec<Object>,
     #[serde(default)]
     assertions: Vec<Assertion>,
@@ -171,7 +173,8 @@ pub fn run(options: Options) -> i32 {
 
 /// sim run 报告 schema 版本：成功与 setup_failed 两条路径同源引用，
 /// 升版时不得只改一处（同通道版本分裂会误导按版本判读的消费方）。
-const SIM_REPORT_VERSION: u32 = 5;
+/// v6 起顶层新增 `mods_switches`（场景声明的中途包切换记录）。
+const SIM_REPORT_VERSION: u32 = 6;
 
 fn digest(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
@@ -270,6 +273,13 @@ fn validate(scene: &Scene) -> anyhow::Result<()> {
             );
         }
     }
+    if let Some(switch) = &scene.mods_switch {
+        anyhow::ensure!(
+            scene.mods.is_some(),
+            "mods_switch 需要 mods 声明根目录（切换复用同一根）"
+        );
+        anyhow::ensure!(switch.after_tick() >= 1, "mods_switch.after_tick 须 ≥ 1");
+    }
     Ok(())
 }
 
@@ -284,6 +294,30 @@ fn valid_pointer(pointer: &str) -> bool {
         }
     }
     true
+}
+
+/// 应用一次场景声明的包切换并构造报告记录；装载或切换失败都记
+/// `rejected` 且不中断运行（引擎语义：失败保留旧版继续结算）。
+fn apply_mods_switch(
+    engine: &mut EmbedEngine,
+    base: &Path,
+    mods: &mods::Mods,
+    switch: &mods::ModsSwitch,
+) -> Value {
+    let outcome = mods::load(base, &switch.to_mods(mods.root.clone()))
+        .and_then(|switched| engine.switch_mod_packages(&switched.packages, &switched.options));
+    match outcome {
+        Ok(mut summary) => {
+            summary["after_tick"] = json!(switch.after_tick());
+            summary["status"] = json!("applied");
+            summary
+        }
+        Err(error) => json!({
+            "after_tick": switch.after_tick(),
+            "status": "rejected",
+            "error": format!("{error:#}"),
+        }),
+    }
 }
 
 fn execute(options: &Options) -> anyhow::Result<Value> {
@@ -330,6 +364,34 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
         .as_ref()
         .map(|loaded| loaded.metadata.clone())
         .unwrap_or_else(|| json!({"packages": {}}));
+    // 续跑按检查点世界时间与**实际生效的切换**选择恢复用包集合：被
+    // 拒绝的切换不改变身份，越过边界（world.time >= after_tick）不一
+    // 定携带切换后身份。载荷只读一次，resume 复用同一 Value。
+    let loaded_value = match &options.load_checkpoint {
+        Some(path) => Some(kk_runtime::checkpoint::read_checkpoint(path)?),
+        None => None,
+    };
+    let resume_switched = match (&loaded_value, &scene.mods_switch) {
+        (Some(value), Some(switch)) => {
+            let time = value["engine"]["world"]["time"]
+                .as_u64()
+                .context("检查点载荷缺少世界时间")?;
+            let applied = value["metadata"]["applied_switches"]
+                .as_array()
+                .map(|list| list.iter().filter_map(Value::as_u64).collect::<Vec<u64>>())
+                .unwrap_or_default();
+            (time >= switch.after_tick() && applied.contains(&switch.after_tick()))
+                .then(|| {
+                    mods::load(
+                        base,
+                        &switch
+                            .to_mods(scene.mods.as_ref().expect("校验保证 mods 在").root.clone()),
+                    )
+                })
+                .transpose()?
+        }
+        _ => None,
+    };
     if let Some(output) = &options.save_checkpoint {
         let bot_roots = scene.bots.iter().map(|bot| base.join(&bot.modules));
         let mod_roots = loaded
@@ -372,11 +434,11 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
         codes.insert(bot.player.clone(), format!("(() => {{ const bot = require({entry}); if (!bot || typeof bot.loop !== 'function') throw new Error('bot entry must export loop'); bot.loop(); return true; }})()"));
         stats.insert(bot.player.clone(), PlayerStats::default());
     }
-    let initial = if let Some(path) = &options.load_checkpoint {
+    let initial = if let Some(value) = loaded_value {
         let (saved_aliases, initial) = checkpoint::resume(
             &mut engine,
-            path,
-            loaded.as_ref(),
+            value,
+            resume_switched.as_ref().or(loaded.as_ref()),
             &digest(&bytes),
             &executable_hash,
             &modules,
@@ -392,6 +454,7 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
     let start = std::time::Instant::now();
     let mut failure = None;
     let mut attempted = 0;
+    let mut switches: Vec<Value> = Vec::new();
     for _ in 0..options.ticks {
         let tick = engine.get_game_time();
         attempted += 1;
@@ -429,6 +492,18 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
             failure = Some(json!({"stage": "player", "tick": tick, "players": failed_players}));
             break;
         }
+        // 已提交边界应用场景声明的包切换：恰在提交完第 after_tick 轮后。
+        // 拒绝不使运行失败——引擎保证旧计划继续结算，rejected 记录入报告。
+        if let Some(switch) = &scene.mods_switch
+            && engine.get_game_time() == switch.after_tick()
+        {
+            switches.push(apply_mods_switch(
+                &mut engine,
+                base,
+                scene.mods.as_ref().expect("校验保证 mods 在"),
+                switch,
+            ));
+        }
     }
     let run_wall_ms = start.elapsed().as_secs_f64() * 1000.0;
     let final_state = observe(&engine, &scene, &aliases, &mod_names);
@@ -436,6 +511,11 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
         .assertions
         .iter()
         .map(|a| evaluate(a, &initial, &final_state))
+        .collect();
+    let applied_switches: Vec<u64> = switches
+        .iter()
+        .filter(|record| record["status"] == "applied")
+        .filter_map(|record| record["after_tick"].as_u64())
         .collect();
     if failure.is_none()
         && let Some(path) = &options.save_checkpoint
@@ -447,6 +527,7 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
             &modules,
             &aliases,
             &initial,
+            &applied_switches,
         )
     {
         failure = Some(
@@ -473,7 +554,8 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
         "report_version": SIM_REPORT_VERSION, "success": success, "status": status,
         "engine_version": env!("CARGO_PKG_VERSION"), "executable_sha256": executable_hash,
         "scenario": path, "scenario_sha256": digest(&bytes), "modules": modules,
-        "mods": mods_metadata, "plan_hash": engine.contribution_plan_hash().hex(),
+        "mods": mods_metadata, "mods_switches": switches,
+        "plan_hash": engine.contribution_plan_hash().hex(),
         "composition": engine.mod_composition(),
         "execution_strategy": engine.mod_execution_strategy(),
         "disabled_mods": engine.disabled_mods(),

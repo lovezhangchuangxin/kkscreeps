@@ -37,6 +37,7 @@ target/release/kkscreeps sim run --scenario /tmp/my-mods/starter/scenario.json -
 | `shard.rooms` | 现有 RoomSpec 列表；包括 name、owner、rcl、地形等字段 |
 | `bots` | 每个玩家必须恰有一个声明：player、modules、entry（默认 main）、memory（默认空对象） |
 | `mods` | 可省略；root 为 Mod 根目录，configs 为按包 ID 分组的可选配置 |
+| `mods_switch` | 可省略；提交完第 `after_tick` 轮后在同一 root 上整体替换 configs/selection，见[包切换](mod-switching.md) |
 | `objects` | 可省略；按顺序放置 alias、room、kind、spec，alias 必须非空且唯一 |
 | `assertions` | 可省略；最终状态的 JSON Pointer、op 和 value |
 
@@ -49,6 +50,10 @@ target/release/kkscreeps sim run --scenario /tmp/my-mods/starter/scenario.json -
 `mods.root` 必须为非空路径，相对场景目录解析，也可使用绝对路径；装载其直接子目录的所有包。包按 manifest 依赖拓扑注册，缺包、版本不符、冲突或注册/装配失败均在运行前拒绝。`mods` 拒绝未知字段，`configs` 的键必须是已加载的包 ID；配置值的业务校验由包负责。省略 mods 保留原生默认创建路径，不加载官方或第三方 JS。`mods.selection` 支持显式 include/exclude 与 manifest 依赖展开，见[内容选择](mod-content-selection.md)；没有依赖自动下载。
 
 自有初始对象使用 `kind: "mod"`，spec 严格包含 `typeKey` 和 `fields`，例如 `{"typeKey":"clockwork:counter","fields":{"x":10,"y":12}}`。类型必须在已装配计划中，字段和默认值沿同一 schema 校验。声明了 tick 的对象从第一轮结算开始执行；玩家首轮看到初始化值。完整示例见[官方生命周期场景](../../compat/fixtures/sim-mod-tick/scenario.json)及[对象 tick 契约](mod-object-tick.md)。
+
+### 中途切换包集合
+
+`mods_switch` 声明一次[无开放轮次的包切换](mod-switching.md)：提交完第 `after_tick` 轮后，在同一 `mods.root` 上按本字段（整体替换初始 configs/selection，不是合并）重新装载并换装执行层。切换拒绝（残留、同包内容变更、开放轮次或切换装载本身的失败）不使运行失败——旧计划继续结算，报告 v6 顶层 `mods_switches` 记录每次切换：`applied` 含前后 plan_hash、执行策略身份与增删包清单，`rejected` 含错误。`--load-checkpoint` 续跑按检查点世界时间**与实际生效的切换**（保存进检查点元数据的 `applied_switches`）选择恢复用包集合——被拒绝的切换不改变身份，越过边界不等于携带切换后集合；续跑不重放已生效的切换，时间已越过边界的被拒切换也不再重试。报告顶层 `mods` 始终记录**初始装载输入**；切换后的实际身份以 `composition`/`execution_strategy` 顶层域为准。完整示例见[切换夹具](../../compat/fixtures/sim-mod-switch/)。
 
 ## 状态与断言
 

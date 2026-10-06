@@ -37,6 +37,22 @@ impl Engine {
         {
             return Err("检查点计划身份不匹配或引擎存在开放轮次".into());
         }
+        self.adopt_committed_state(saved)
+    }
+
+    /// 换计划收养（包切换专用）：宿主已先在本引擎装好新计划，载荷的
+    /// `plan_hash` 描述切换前世界，跳过等值门；mod_states 命名空间、
+    /// Mod 对象类型与扩展字段 schema 的内容校验对**新计划**照常执行
+    /// ——它们同时是去包残留的硬门（残留即拒绝，不清理、不修补）。
+    pub fn restore_checkpoint_replanned(&mut self, saved: EngineCheckpoint) -> Result<(), String> {
+        if !matches!(self.run_state, RunState::Ready | RunState::Committed { .. }) {
+            return Err("换计划收养被拒：引擎存在开放轮次".into());
+        }
+        self.adopt_committed_state(saved)
+    }
+
+    /// 已提交载荷的公共装入路径：结构/限额/内容校验全通过后一次换入。
+    fn adopt_committed_state(&mut self, saved: EngineCheckpoint) -> Result<(), String> {
         let world = kk_world::World::from_checkpoint(saved.world)?;
         if saved.next_id == 0 || saved.next_id > world.next_obj_id() {
             return Err("检查点引擎 ID 游标非法".into());

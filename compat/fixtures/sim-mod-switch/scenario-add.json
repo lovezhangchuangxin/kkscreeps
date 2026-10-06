@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "mods": { "root": "../../../mods/official", "configs": { "nursery": { "period": 2, "life": 3 } }, "selection": { "include": ["nursery"] } },
+  "mods_switch": { "after_tick": 2, "configs": { "nursery": { "period": 2, "life": 3 } }, "selection": { "include": ["nursery", "clockwork"] } },
+  "shard": {
+    "players": ["p1"],
+    "rooms": [{ "name": "W1N1", "owner": "p1" }]
+  },
+  "bots": [{ "player": "p1", "modules": ".", "memory": {} }],
+  "objects": [
+    { "alias": "emitter", "room": "W1N1", "kind": "mod", "spec": { "typeKey": "nursery:emitter", "fields": { "x": 10, "y": 12 } } }
+  ],
+  "assertions": [
+    { "pointer": "/time", "op": "eq", "value": 6 },
+    { "pointer": "/objects/emitter/fields/emitted", "op": "gte", "value": 3 }
+  ]
+}
