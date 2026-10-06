@@ -4,6 +4,8 @@
 
 ## 已保存的数据清单
 
+逐域字段路径、版本策略与迁移状态见[状态域清单](state-inventory.md)；本页聚焦机制与协议。
+
 | 数据域 | 持久内容 |
 |---|---|
 | 世界 | time、seed、player_ticks、全局 next_obj_id、generation、terrain_epoch、完整房间集合 |

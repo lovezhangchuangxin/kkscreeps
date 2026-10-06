@@ -38,6 +38,7 @@
 | [sandbox.md](sandbox.md) | 玩家沙箱、执行预算、内存限制与模块加载的机制和目标 |
 | [local-simulation.md](local-simulation.md) | 已实现的 sim run：场景、模块、断言、报告与失败退出边界；mod init 作者包模板与 mod test 汇总测试 |
 | [checkpoints.md](checkpoints.md) | 完整已提交状态清单、单文件原子发布、身份核验与 sim 冷恢复 |
+| [state-inventory.md](state-inventory.md) | 检查点逐域字段清单、版本策略、不持久化域与 schema 键树门禁 |
 | [storage.md](storage.md) | 二进制快照、检查点、网络传输与持久化的目标设计 |
 | [snapshot-contract.md](snapshot-contract.md) | 共享视图的布局、生命周期、校验和恢复要求 |
 | [performance-acceptance.md](performance-acceptance.md) | 端到端性能场景、测量方法和验收目标 |
