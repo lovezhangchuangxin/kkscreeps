@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "shard": {
+    "players": ["p1"],
+    "rooms": [{"name": "W1N1", "owner": "p1", "rcl": 4}]
+  },
+  "bots": [
+    {"player": "p1", "modules": ".", "memory": {}}
+  ],
+  "objects": [
+    {"alias": "builder", "room": "W1N1", "kind": "creep", "spec": {"name": "builder", "owner": "p1", "pos": [10, 10], "body": ["work", "work", "carry", "move", "move"], "store": {"energy": 100}, "ticksToLive": 2000}},
+    {"alias": "road_site", "room": "W1N1", "kind": "constructionSite", "spec": {"pos": [12, 10], "structureType": "road", "owner": "p1"}},
+    {"alias": "ext_site", "room": "W1N1", "kind": "constructionSite", "spec": {"pos": [13, 10], "structureType": "extension", "owner": "p1", "progress": 2900}},
+    {"alias": "wall", "room": "W1N1", "kind": "structure", "spec": {"pos": [11, 9], "structureType": "constructedWall", "owner": "p1", "hits": 900}},
+    {"alias": "tower", "room": "W1N1", "kind": "structure", "spec": {"pos": [9, 10], "structureType": "tower", "owner": "p1", "hits": 400}},
+    {"alias": "pile", "room": "W1N1", "kind": "resource", "spec": {"pos": [10, 10], "resourceType": "energy", "amount": 800}}
+  ],
+  "assertions": [
+    {"pointer": "/objects/road_site", "op": "missing"},
+    {"pointer": "/objects/ext_site", "op": "missing"},
+    {"pointer": "/objects/wall/hits", "op": "eq", "value": 1300},
+    {"pointer": "/objects/tower", "op": "missing"},
+    {"pointer": "/objects/builder", "op": "exists"},
+    {"pointer": "/players/p1/memory/built_road", "op": "eq", "value": 30},
+    {"pointer": "/players/p1/memory/built_extension", "op": "eq", "value": 10},
+    {"pointer": "/players/p1/memory/repaired", "op": "eq", "value": 2},
+    {"pointer": "/players/p1/memory/dismantled", "op": "eq", "value": 4},
+    {"pointer": "/players/p1/memory/tower_done", "op": "eq", "value": true},
+    {"pointer": "/players/p1/memory/loops", "op": "gte", "value": 50}
+  ]
+}

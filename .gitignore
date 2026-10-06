@@ -30,13 +30,12 @@ logs/
 # ===== 兼容性验收的本地工件 =====
 # screeps-ok 按 pin 脚本克隆到 .compat/（不入库，报告产物入库）
 .compat/
-# 下载的 bot 保持本地；固定 Mod 性能夹具随基准入库。
-compat/fixtures/*
-!compat/fixtures/mod-perf/
-!compat/fixtures/mod-player/
-!compat/fixtures/sim-economy/
-!compat/fixtures/sim-mod-tick/
-!compat/fixtures/sim-mod-objects/
+# 手写夹具（mod-*/sim-*）默认入库，新批次夹具自动被 git 跟踪；
+# 下载的第三方 bot 保持本地（完整性由 compat/reports/ 基线报告自证），
+# wasm-bot 为 fetch-bots.sh 合成的可再生产物。
+compat/fixtures/tooangel/
+compat/fixtures/overmind-dist/
+compat/fixtures/wasm-bot/
 compat/reports/tmp/
 .test-output/
 
@@ -56,35 +55,3 @@ perf-probe.json
 
 __pycache__/
 
-!compat/fixtures/mod-composition/
-!compat/fixtures/sim-mod-composition/
-!compat/fixtures/mod-rules/
-!compat/fixtures/sim-mod-rules/
-!compat/fixtures/mod-content/
-!compat/fixtures/sim-mod-content/
-!compat/fixtures/mod-resources/
-!compat/fixtures/sim-mod-resources/
-!compat/fixtures/sim-mod-buildings/
-!compat/fixtures/mod-damage-policy/
-!compat/fixtures/sim-mod-damage-policy/
-!compat/fixtures/mod-heal-policy/
-!compat/fixtures/sim-mod-heal-policy/
-!compat/fixtures/mod-mass-policy/
-!compat/fixtures/sim-mod-mass-policy/
-
-!compat/fixtures/mod-retaliation-policy/
-!compat/fixtures/sim-mod-retaliation-policy/
-!compat/fixtures/sim-tough-damage/
-!compat/fixtures/mod-incoming-policy/
-!compat/fixtures/sim-mod-incoming-policy/
-!compat/fixtures/mod-move-policy/
-!compat/fixtures/sim-mod-move-policy/
-!compat/fixtures/mod-move-admission/
-!compat/fixtures/sim-mod-move-admission/
-!compat/fixtures/mod-move-obstacle/
-!compat/fixtures/sim-mod-move-obstacle/
-!compat/fixtures/mod-move-precheck/
-!compat/fixtures/sim-mod-move-precheck/
-!compat/fixtures/mod-typed/
-!compat/fixtures/mod-trace/
-!compat/fixtures/sim-mod-trace/

@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "shard": {
+    "players": ["red", "blue"],
+    "rooms": [{"name": "W1N1", "owner": "blue", "rcl": 4}]
+  },
+  "bots": [
+    {"player": "red", "modules": ".", "memory": {"side": "red"}},
+    {"player": "blue", "modules": ".", "memory": {"side": "blue"}}
+  ],
+  "objects": [
+    {"alias": "blue_spawn", "room": "W1N1", "kind": "structure", "spec": {"structureType": "spawn", "name": "Spawn1", "owner": "blue", "pos": [25, 25], "store": {"energy": 50}}},
+    {"alias": "blue_guard", "room": "W1N1", "kind": "creep", "spec": {"name": "guard", "owner": "blue", "pos": [23, 25], "body": ["attack", "move"], "ticksToLive": 400}},
+    {"alias": "blue_sentry", "room": "W1N1", "kind": "creep", "spec": {"name": "sentry", "owner": "blue", "pos": [27, 25], "body": ["ranged_attack", "move"], "ticksToLive": 400}},
+    {"alias": "red_a", "room": "W1N1", "kind": "creep", "spec": {"name": "ra", "owner": "red", "pos": [5, 5], "body": ["attack", "attack", "move"], "ticksToLive": 800}},
+    {"alias": "red_b", "room": "W1N1", "kind": "creep", "spec": {"name": "rb", "owner": "red", "pos": [6, 5], "body": ["attack", "attack", "move"], "ticksToLive": 800}},
+    {"alias": "red_c", "room": "W1N1", "kind": "creep", "spec": {"name": "rc", "owner": "red", "pos": [7, 5], "body": ["attack", "attack", "move"], "ticksToLive": 800}}
+  ],
+  "assertions": [
+    {"pointer": "/objects/blue_spawn", "op": "missing"},
+    {"pointer": "/objects/blue_guard", "op": "missing"},
+    {"pointer": "/objects/blue_sentry", "op": "missing"},
+    {"pointer": "/objects/red_a", "op": "exists"},
+    {"pointer": "/players/red/memory/loops", "op": "gte", "value": 100},
+    {"pointer": "/players/blue/memory/loops", "op": "gte", "value": 100}
+  ]
+}
