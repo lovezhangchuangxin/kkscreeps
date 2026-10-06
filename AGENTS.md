@@ -83,6 +83,6 @@ HTTP 服务和前端开发服务器尚未实现。
 
 ## 提交与 Pull Request 要求
 
-历史提交使用描述性前缀，常见中文批次标签。`pnpm install` 通过 `prepare` 脚本安装 Git hooks，配置以 [package.json](package.json) 为准，修改后运行 `pnpm exec simple-git-hooks` 重新安装。`pre-commit` 与 `pre-merge-commit` 检查 Rust 格式，未过时运行 `pnpm run fmt` 修复后重新暂存；`commit-msg` 要求首行采用“前缀：描述”，支持半角或全角冒号，标题最多 350 个 Unicode 码点、前缀最多 48 个，merge/revert/fixup/squash 标题免检。
+提交消息首行采用 Conventional Commits 格式：`type(scope)!: 描述`。type 词表固定为 `feat`/`fix`/`docs`/`style`/`refactor`/`perf`/`test`/`build`/`ci`/`chore`/`revert`；scope 可选，限字母、数字与 `._-`（如 `kk-schema`）；破坏性变更在 type 后加 `!`；冒号用半角且后接一个空格；标题最多 350 个 Unicode 码点、type 与 scope 合计最多 48 个；merge/revert/fixup/squash 的自动生成标题免检。更早的历史提交使用中文批次前缀，不追改。`pnpm install` 通过 `prepare` 脚本安装 Git hooks，配置以 [package.json](package.json) 为准，修改后运行 `pnpm exec simple-git-hooks` 重新安装。`pre-commit` 与 `pre-merge-commit` 检查 Rust 格式，未过时运行 `pnpm run fmt` 修复后重新暂存。
 
 PR 应说明行为变化、关联问题或设计决策，以及验证命令和结果。修改实现时，同步更新受影响的架构文档和兼容性证据。
