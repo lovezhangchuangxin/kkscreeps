@@ -189,6 +189,8 @@ pub struct Engine {
     pub(crate) links: kk_mod_api::builtin::LinkRules,
     /// Generic 仓库默认容量与槽切换规则，与计划及玩家常量一同装配。
     pub(crate) stores: kk_mod_api::builtin::StoreRules,
+    /// 单目标战斗动作射程规则，结算与玩家常量注入同源消费；与计划一同装配。
+    pub(crate) combat: kk_mod_api::builtin::CombatRanges,
     /// 本引擎生效的资源目录：内建 RESOURCES_ALL 加计划声明的命名空间
     /// 资源。搬运/掉落/领域能力按它校验；市场与跨房发送不读它（明确
     /// 只认内建资源）。与计划一同装配，不允许单独换。
@@ -246,6 +248,7 @@ impl Engine {
             fail_writeback: None,
             links: kk_world::place::builtin_link_rules(),
             stores: kk_world::place::builtin_store_rules(),
+            combat: kk_world::place::builtin_combat_ranges(),
             resources: Rc::new(kk_mod_api::resources::ResourceCatalog::default()),
             buildings: Rc::new(kk_mod_api::buildings::BuildingCatalog::default()),
             contrib: Rc::new(contrib::ContributionDispatch::default()),
@@ -294,6 +297,11 @@ impl Engine {
     /// 当前生效的 Generic 仓库容量规则（只读快照）。
     pub fn stores(&self) -> kk_mod_api::builtin::StoreRules {
         self.stores
+    }
+
+    /// 当前生效的单目标战斗射程规则（只读快照）；runtime 将它同步到玩家常量。
+    pub fn combat_ranges(&self) -> kk_mod_api::builtin::CombatRanges {
+        self.combat
     }
 
     /// 当前生效的资源目录：内建 RESOURCES_ALL 加计划声明的命名空间

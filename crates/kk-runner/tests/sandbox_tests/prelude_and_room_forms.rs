@@ -868,3 +868,80 @@ pub(super) fn constant_overrides_reach_player_globals_impl() -> anyhow::Result<(
     assert!(err.to_string().contains("NOT_A_CONSTANT"), "{err}");
     Ok(())
 }
+
+/// 战斗射程常量：默认为官方原值；四键覆盖平铺后，prelude 的
+/// attack/rangedAttack/heal/rangedHeal 射程门观察覆盖值放行。
+pub(super) fn combat_range_constants_impl() -> anyhow::Result<()> {
+    let combat_world = json!({
+        "time": 1,
+        "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+        "user": "p1",
+        "rooms": { "W1N1": { "name": "W1N1", "terrain": vec![0u8; 2500] } },
+        "objects": [
+            { "id": "a1", "type": "creep", "room": "W1N1", "x": 10, "y": 10, "name": "atk",
+              "owner": "p1", "body": ["attack", "move"], "store": { "energy": 0 } },
+            { "id": "ra1", "type": "creep", "room": "W1N1", "x": 10, "y": 30, "name": "ratk",
+              "owner": "p1", "body": ["ranged_attack", "move"], "store": { "energy": 0 } },
+            { "id": "h1", "type": "creep", "room": "W1N1", "x": 20, "y": 20, "name": "medic",
+              "owner": "p1", "body": ["heal", "move"], "store": { "energy": 0 } },
+            { "id": "t1", "type": "creep", "room": "W1N1", "x": 12, "y": 10, "name": "foe",
+              "owner": "p2", "body": ["move"], "store": { "energy": 0 } },
+            { "id": "t2", "type": "creep", "room": "W1N1", "x": 14, "y": 30, "name": "foe2",
+              "owner": "p2", "body": ["move"], "store": { "energy": 0 } },
+            { "id": "w1", "type": "creep", "room": "W1N1", "x": 22, "y": 20, "name": "ally",
+              "owner": "p1", "body": ["move"], "store": { "energy": 0 } },
+        ]
+    });
+    // 目标经显式 ID 获取：不依赖 find(FIND_CREEPS) 的数组顺序。
+    let call = |expr: &str| {
+        format!(
+            "(() => {{ const near = Game.getObjectById('t1'); \
+         const far = Game.getObjectById('t2'); \
+         const ally = Game.creeps['ally']; \
+         {expr} }})()"
+        )
+    };
+
+    // 默认：官方射程（1/3/1/3）下距离 2 的近战与距离 4 的远程均被拒。
+    let mut plain_table = ModuleTable::new();
+    plain_table.insert_js("main", "module.exports.loop = function () {};");
+    let mut plain = Sandbox::new(SandboxConfig::default())?;
+    plain.set_modules(plain_table)?;
+    tick(&mut plain, &combat_world)?;
+    let v = plain.run_expr(&call(
+        "return [Game.creeps['atk'].attack(near), Game.creeps['ratk'].rangedAttack(far)].join(',');",
+    ))?;
+    assert_eq!(v["value"], "-9,-9", "默认射程：距离 2/4 均在射程外");
+
+    // 覆盖四键：平铺生效且四个 prelude 射程门都按覆盖值放行。
+    let mut config = SandboxConfig::default();
+    for (name, value) in [
+        ("ATTACK_RANGE", 3),
+        ("RANGED_ATTACK_RANGE", 5),
+        ("HEAL_RANGE", 3),
+        ("RANGED_HEAL_RANGE", 5),
+    ] {
+        config.constant_overrides.insert(name.into(), json!(value));
+    }
+    let mut table = ModuleTable::new();
+    table.insert_js("main", "module.exports.loop = function () {};");
+    let mut sb = Sandbox::new(config)?;
+    sb.set_modules(table)?;
+    tick(&mut sb, &combat_world)?;
+    let v = sb
+        .run_expr("[ATTACK_RANGE, RANGED_ATTACK_RANGE, HEAL_RANGE, RANGED_HEAL_RANGE].join(',')")?;
+    assert_eq!(v["value"], "3,5,3,5", "覆盖值平铺到玩家全局");
+    let v = sb.run_expr(&call(
+        "return [\
+             Game.creeps['atk'].attack(near), \
+             Game.creeps['ratk'].rangedAttack(far), \
+             Game.creeps['medic'].heal(ally), \
+             Game.creeps['medic'].rangedHeal(ally)\
+         ].join(',');",
+    ))?;
+    assert_eq!(
+        v["value"], "0,0,0,0",
+        "覆盖后：近战距离 2、远程距离 4、治疗距离 2 均放行"
+    );
+    Ok(())
+}

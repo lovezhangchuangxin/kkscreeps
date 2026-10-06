@@ -31,6 +31,7 @@ fn working() -> Working {
             buildings: Default::default(),
             links: engine.links,
             stores: engine.stores,
+            combat: engine.combat,
             resources: engine.resources.clone(),
             contrib: engine.contrib,
             extensions: engine.extensions,

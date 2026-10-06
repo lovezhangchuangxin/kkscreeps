@@ -14,6 +14,9 @@ use super::*;
 pub struct Plane {
     pub links: kk_mod_api::builtin::LinkRules,
     pub stores: kk_mod_api::builtin::StoreRules,
+    /// 单目标战斗动作射程规则；attack/rangedAttack/heal/rangedHeal
+    /// 的结算距离判定与 runtime 玩家常量注入同源读取。
+    pub combat: kk_mod_api::builtin::CombatRanges,
     /// 资源目录：内建 RESOURCES_ALL 加计划声明的命名空间资源。
     /// 搬运/掉落/超容回收与领域能力按它校验；市场/跨房发送不读它。
     pub resources: Rc<kk_mod_api::resources::ResourceCatalog>,

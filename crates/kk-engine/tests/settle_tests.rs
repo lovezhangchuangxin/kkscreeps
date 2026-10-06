@@ -18,6 +18,8 @@ mod c3_ext_intent_family;
 mod combat_heal;
 #[path = "settle_tests/combat_ranged.rs"]
 mod combat_ranged;
+#[path = "settle_tests/combat_ranges.rs"]
+mod combat_ranges;
 #[path = "settle_tests/controller_safemode.rs"]
 mod controller_safemode;
 #[path = "settle_tests/generic_store_family.rs"]
@@ -333,6 +335,7 @@ impl Fixture {
                 buildings: Default::default(),
                 links: kk_world::place::builtin_link_rules(),
                 stores: kk_world::place::builtin_store_rules(),
+                combat: kk_world::place::builtin_combat_ranges(),
                 resources: Default::default(),
                 contrib: std::rc::Rc::new(
                     kk_engine::settle::contrib::ContributionDispatch::default(),
@@ -382,6 +385,7 @@ impl Fixture {
                 buildings: Default::default(),
                 links,
                 stores: kk_world::place::builtin_store_rules(),
+                combat: kk_world::place::builtin_combat_ranges(),
                 resources: Default::default(),
                 contrib: dispatch,
                 extensions: std::rc::Rc::new(extensions),

@@ -259,6 +259,8 @@ mod heal_policy;
 #[path = "sim_tests/mass_policy.rs"]
 mod mass_policy;
 
+#[path = "sim_tests/combat_ranges.rs"]
+mod combat_ranges;
 #[path = "sim_tests/incoming_policy.rs"]
 mod incoming_policy;
 #[path = "sim_tests/mod_trace.rs"]

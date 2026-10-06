@@ -2,7 +2,7 @@
 
 use super::*;
 
-fn ranged_attack_intent(player: &str, attacker: ObjId, target: ObjId) -> IntentBatch {
+pub(super) fn ranged_attack_intent(player: &str, attacker: ObjId, target: ObjId) -> IntentBatch {
     let mut b = IntentBatch::default();
     b.add_object_intent(
         player,
@@ -13,7 +13,7 @@ fn ranged_attack_intent(player: &str, attacker: ObjId, target: ObjId) -> IntentB
     b
 }
 
-fn ranged_mass_intent(player: &str, attacker: ObjId) -> IntentBatch {
+pub(super) fn ranged_mass_intent(player: &str, attacker: ObjId) -> IntentBatch {
     let mut b = IntentBatch::default();
     b.add_object_intent(
         player,

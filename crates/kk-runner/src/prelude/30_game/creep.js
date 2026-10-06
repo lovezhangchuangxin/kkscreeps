@@ -106,6 +106,11 @@
     RANGED_ATTACK: globalThis.RANGED_ATTACK,
     HEAL: globalThis.HEAL,
     CLAIM: globalThis.CLAIM,
+    // 单目标战斗动作射程（规则 builtin:creep.*.range 的生效值）。
+    ATTACK_RANGE: globalThis.ATTACK_RANGE,
+    RANGED_ATTACK_RANGE: globalThis.RANGED_ATTACK_RANGE,
+    HEAL_RANGE: globalThis.HEAL_RANGE,
+    RANGED_HEAL_RANGE: globalThis.RANGED_HEAL_RANGE,
     ERR_NOT_FOUND: globalThis.ERR_NOT_FOUND,
     ERR_RCL_NOT_ENOUGH: globalThis.ERR_RCL_NOT_ENOUGH,
     ERR_FULL: globalThis.ERR_FULL,
@@ -394,8 +399,9 @@
     return C.OK;
   };
 
-  /** 检查 ATTACK 部件、目标存活与类型、邻接及敌方安全模式；未实现 invulnerability effects 检查。
-   * 来源：上游 engine/src/game/creeps.js 的 attack。 */
+  /** 检查 ATTACK 部件、目标存活与类型、ATTACK_RANGE 射程及敌方安全模式；未实现 invulnerability effects 检查。
+   * 射程读常量表（规则 builtin:creep.attack.range 注入的生效值），
+   * 与 Rust 结算同源。来源：上游 engine/src/game/creeps.js 的 attack。 */
   globalThis.Creep.prototype.attack = function attack(target) {
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;
@@ -408,7 +414,7 @@
         || target instanceof globalThis.StructureSpawn
         || target instanceof globalThis.Structure);
     if (!okTarget) return C.ERR_INVALID_TARGET;
-    if (!target.pos.isNearTo(this.pos)) return C.ERR_NOT_IN_RANGE;
+    if (!target.pos.inRangeTo(this.pos, C.ATTACK_RANGE)) return C.ERR_NOT_IN_RANGE;
     gw.intents.set(this.id, 'attack', { id: target.id, x: target.pos.x, y: target.pos.y });
     return C.OK;
   };
@@ -503,7 +509,7 @@
     return C.OK;
   };
 
-  /** 官方 heal（creeps.js:678-705）：HEAL + Creep 目标 + 邻接 + safeMode。 */
+  /** 官方 heal（creeps.js:678-705）：HEAL + Creep 目标 + HEAL_RANGE 射程 + safeMode。 */
   globalThis.Creep.prototype.heal = function heal(target) {
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;
@@ -512,7 +518,7 @@
       && target instanceof globalThis.Creep)) {
       return C.ERR_INVALID_TARGET;
     }
-    if (!target.pos.isNearTo(this.pos)) return C.ERR_NOT_IN_RANGE;
+    if (!target.pos.inRangeTo(this.pos, C.HEAL_RANGE)) return C.ERR_NOT_IN_RANGE;
     if (blockedBySafeMode(this)) return C.ERR_NO_BODYPART;
     gw.intents.set(this.id, 'heal', { id: target.id, x: target.pos.x, y: target.pos.y });
     return C.OK;
@@ -532,7 +538,7 @@
     return count;
   };
 
-  /** 检查 RANGED_ATTACK、当前目标类型、3 格范围及敌方安全模式，再记录指令。
+  /** 检查 RANGED_ATTACK、当前目标类型、RANGED_ATTACK_RANGE 射程及敌方安全模式，再记录指令。
    * 不建模 invulnerability effects；rampart 重定向由 Rust 结算处理。
    * 来源：上游 engine/src/game/creeps.js 的 rangedAttack。 */
   globalThis.Creep.prototype.rangedAttack = function rangedAttack(target) {
@@ -547,7 +553,7 @@
         || target instanceof globalThis.StructureSpawn
         || target instanceof globalThis.Structure);
     if (!okTarget) return C.ERR_INVALID_TARGET;
-    if (!this.pos.inRangeTo(target, 3)) return C.ERR_NOT_IN_RANGE;
+    if (!this.pos.inRangeTo(target, C.RANGED_ATTACK_RANGE)) return C.ERR_NOT_IN_RANGE;
     gw.intents.set(this.id, 'rangedAttack', { id: target.id });
     return C.OK;
   };
@@ -571,7 +577,7 @@
     return C.ERR_NOT_FOUND;
   };
 
-  /** 官方 rangedHeal（creeps.js:706-733）：HEAL + Creep 目标 + 3 格 + safeMode。 */
+  /** 官方 rangedHeal（creeps.js:706-733）：HEAL + Creep 目标 + RANGED_HEAL_RANGE 射程 + safeMode。 */
   globalThis.Creep.prototype.rangedHeal = function rangedHeal(target) {
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;
@@ -581,7 +587,7 @@
       return C.ERR_INVALID_TARGET;
     }
     if (blockedBySafeMode(this)) return C.ERR_NO_BODYPART;
-    if (!this.pos.inRangeTo(target.pos, 3)) return C.ERR_NOT_IN_RANGE;
+    if (!this.pos.inRangeTo(target.pos, C.RANGED_HEAL_RANGE)) return C.ERR_NOT_IN_RANGE;
     gw.intents.set(this.id, 'rangedHeal', { id: target.id });
     return C.OK;
   };

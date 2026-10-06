@@ -133,7 +133,29 @@ fn builtin_link_values_match_constant_dump_and_use_native_slots() {
             )
         );
     }
-    assert_eq!(plan.rules().len(), 25);
+    // 战斗射程规则默认值与玩家常量 dump 同源锁定（CombatRanges::from_plan
+    // 与 runtime 常量注入共同依赖此一致性）。
+    for (rule, constant) in [
+        ("creep.attack.range", "ATTACK_RANGE"),
+        ("creep.rangedAttack.range", "RANGED_ATTACK_RANGE"),
+        ("creep.heal.range", "HEAL_RANGE"),
+        ("creep.rangedHeal.range", "RANGED_HEAL_RANGE"),
+    ] {
+        assert_eq!(
+            get(&format!("builtin:{rule}")),
+            &Number::Signed(constants[constant].as_i64().unwrap())
+        );
+    }
+    assert_eq!(
+        builtin::CombatRanges::from_plan(plan.rules()).unwrap(),
+        builtin::CombatRanges {
+            attack: 1,
+            ranged_attack: 3,
+            heal: 1,
+            ranged_heal: 3,
+        }
+    );
+    assert_eq!(plan.rules().len(), 29);
     assert_eq!(plan.slots().len(), 20);
     for name in builtin::RESOURCE_ACTION_SLOTS
         .iter()

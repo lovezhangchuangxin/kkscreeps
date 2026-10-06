@@ -321,6 +321,18 @@ impl EmbedEngine {
                             .capacity
                     ),
                 );
+                // 单目标战斗射程规则同步预检沙箱：player.js 安装期与
+                // 真实执行须看到同一生效值（与结算 Plane 同一计划来源）。
+                let combat = kk_mod_api::builtin::CombatRanges::from_plan(registered.plan.rules())
+                    .map_err(anyhow::Error::msg)?;
+                for (name, value) in [
+                    ("ATTACK_RANGE", combat.attack),
+                    ("RANGED_ATTACK_RANGE", combat.ranged_attack),
+                    ("HEAL_RANGE", combat.heal),
+                    ("RANGED_HEAL_RANGE", combat.ranged_heal),
+                ] {
+                    constant_overrides.insert(name.into(), serde_json::json!(value));
+                }
                 if let Some(resources_all) = &resources_all {
                     constant_overrides.insert("RESOURCES_ALL".into(), resources_all.clone());
                 }
@@ -376,6 +388,21 @@ impl EmbedEngine {
             config
                 .constant_overrides
                 .extend(self.engine.stores().constant_overrides());
+            // 战斗射程同步玩家全局常量：玩家 API 预检（attack/heal 族
+            // inRangeTo 门）与 Rust 结算同源；结算侧读 Plane 同一快照。
+            for (name, value) in [
+                ("ATTACK_RANGE", self.engine.combat_ranges().attack),
+                (
+                    "RANGED_ATTACK_RANGE",
+                    self.engine.combat_ranges().ranged_attack,
+                ),
+                ("HEAL_RANGE", self.engine.combat_ranges().heal),
+                ("RANGED_HEAL_RANGE", self.engine.combat_ranges().ranged_heal),
+            ] {
+                config
+                    .constant_overrides
+                    .insert(name.to_string(), serde_json::json!(value));
+            }
             // Mod 声明资源目录同步玩家全局常量；与规则覆盖同源同批。
             // 测试配置里的同名覆盖先移除再按引擎目录决定——无声明资源时
             // 保持 vanilla 常量原值，不允许测试入口注入私有资源目录。

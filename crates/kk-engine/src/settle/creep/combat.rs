@@ -152,7 +152,10 @@ fn intent_attack_policy(
         return;
     };
     let (tx, ty) = target.pos();
-    if (tx as i32 - pos.0 as i32).abs() > 1 || (ty as i32 - pos.1 as i32).abs() > 1 {
+    // 射程来自 Plane 的战斗射程快照（builtin:creep.attack.range）。
+    if (tx as i32 - pos.0 as i32).abs() as i64 > w.plane.combat.attack
+        || (ty as i32 - pos.1 as i32).abs() as i64 > w.plane.combat.attack
+    {
         return;
     }
     if let RoomObject::Creep(t) = &target
@@ -334,7 +337,10 @@ fn intent_ranged_attack_policy(
         return;
     };
     let (tx, ty) = (target.pos().0, target.pos().1);
-    if (tx as i32 - pos.0 as i32).abs() > 3 || (ty as i32 - pos.1 as i32).abs() > 3 {
+    // 射程来自 Plane 的战斗射程快照（builtin:creep.rangedAttack.range）。
+    if (tx as i32 - pos.0 as i32).abs() as i64 > w.plane.combat.ranged_attack
+        || (ty as i32 - pos.1 as i32).abs() as i64 > w.plane.combat.ranged_attack
+    {
         return;
     }
     if let RoomObject::Creep(t) = &target
@@ -492,8 +498,15 @@ pub(super) fn intent_heal(w: &mut Working, id: ObjId, data: &IntentData, ranged:
         return;
     }
     let (tx, ty) = (t.x, t.y);
-    let range = if ranged { 3 } else { 1 };
-    if (tx as i32 - pos.0 as i32).abs() > range || (ty as i32 - pos.1 as i32).abs() > range {
+    // 射程来自 Plane 的战斗射程快照（builtin:creep.heal/rangedHeal.range）。
+    let range = if ranged {
+        w.plane.combat.ranged_heal
+    } else {
+        w.plane.combat.heal
+    };
+    if (tx as i32 - pos.0 as i32).abs() as i64 > range
+        || (ty as i32 - pos.1 as i32).abs() as i64 > range
+    {
         return;
     }
     if blocked_by_safe_mode(w, &owner) {

@@ -225,6 +225,7 @@ fn settle_quiet(
     let plane = Plane {
         links: kk_world::place::builtin_link_rules(),
         stores: kk_world::place::builtin_store_rules(),
+        combat: kk_world::place::builtin_combat_ranges(),
         buildings: Default::default(),
         resources: Default::default(),
         contrib: dispatch,

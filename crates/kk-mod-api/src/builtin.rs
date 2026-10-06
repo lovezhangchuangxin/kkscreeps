@@ -165,6 +165,48 @@ impl LinkRules {
     }
 }
 
+/// 单目标战斗动作射程的有效规则快照。装配时从冻结计划解析一次，
+/// 结算热路径与玩家常量注入按字段读取。近战/远程分开声明：mod 可以
+/// 只放宽 heal 而保持 rangedHeal 原值。rangedMassAttack 是三格面积
+/// 语义，不在此快照内（首批不开放）。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CombatRanges {
+    /// attack 的切比雪夫射程。
+    pub attack: i64,
+    /// rangedAttack 的切比雪夫射程。
+    pub ranged_attack: i64,
+    /// heal 的切比雪夫射程。
+    pub heal: i64,
+    /// rangedHeal 的切比雪夫射程。
+    pub ranged_heal: i64,
+}
+
+impl CombatRanges {
+    /// 从计划的有效规则提取全部战斗射程；缺键说明计划未含 builtin:creep。
+    /// 句柄解析只发生在此处，数值域已在冻结时校验。
+    pub fn from_plan(rules: &EffectiveRules) -> Result<Self, String> {
+        let signed = |name: &str| -> Result<i64, String> {
+            let key = key(&format!("creep.{name}"));
+            let Some(handle) = rules.resolve(&key) else {
+                return Err(format!("计划缺少规则 builtin:creep.{name}"));
+            };
+            match rules.get(handle) {
+                Some(Number::Signed(v)) => Ok(*v),
+                Some(other) => Err(format!(
+                    "规则 builtin:creep.{name} 须为整数，实得 {other:?}"
+                )),
+                None => Err(format!("规则 builtin:creep.{name} 句柄越界")),
+            }
+        };
+        Ok(Self {
+            attack: signed("attack.range")?,
+            ranged_attack: signed("rangedAttack.range")?,
+            heal: signed("heal.range")?,
+            ranged_heal: signed("rangedHeal.range")?,
+        })
+    }
+}
+
 /// 内置贡献入口，保留早期 link 函数名；现含 link、creep 资源/移动/战斗/建造族槽与仓库规则。
 pub fn link() -> Contribution {
     let consumers = keys(&[
@@ -293,6 +335,28 @@ pub fn link() -> Contribution {
             },
             default: Number::Signed(quotas["link"][level.to_string()].as_i64().unwrap_or(0)),
             consumers: consumers.clone(),
+        });
+    }
+    // 单目标战斗射程规则：结算（Plane 快照）与玩家常量注入同源消费。
+    // 上限 50 为房间对角线内的安全放宽空间；rangedMassAttack 的面积
+    // 语义不在此族（首批不开放）。
+    let combat_consumers = keys(&[
+        "creep.attack.native",
+        "creep.rangedAttack.native",
+        "creep.heal.native",
+        "creep.rangedHeal.native",
+    ]);
+    for (name, value) in [
+        ("creep.attack.range", c::ATTACK_RANGE),
+        ("creep.rangedAttack.range", c::RANGED_ATTACK_RANGE),
+        ("creep.heal.range", c::HEAL_RANGE),
+        ("creep.rangedHeal.range", c::RANGED_HEAL_RANGE),
+    ] {
+        rules.push(RuleDescriptor {
+            key: key(name),
+            domain: NumberDomain::Signed { min: 0, max: 50 },
+            default: Number::Signed(value),
+            consumers: combat_consumers.clone(),
         });
     }
     let (store_bindings, store_rules) = store::declarations();
@@ -427,7 +491,7 @@ pub fn link() -> Contribution {
             namespace: "builtin".into(),
             api_version: 1,
             revision:
-                "link-creep-store-move-combat-build-incoming-contest-admission-obstacle-precheck-pull-cost-descriptors-v13"
+                "link-creep-store-move-combat-build-incoming-contest-admission-obstacle-precheck-pull-cost-ranges-descriptors-v14"
                     .into(),
             code_digest: {
                 let mut hash = Sha256::new();

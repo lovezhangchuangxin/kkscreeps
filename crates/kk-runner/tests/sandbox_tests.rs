@@ -37,6 +37,7 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     prelude_basics()?;
     cjs_and_loop()?;
     constant_overrides_reach_player_globals_impl()?;
+    combat_range_constants_impl()?;
     console_capture()?;
     stub_game_projection()?;
     intent_channel_prelude_forms_impl()?;
