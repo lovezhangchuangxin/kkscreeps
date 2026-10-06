@@ -7,7 +7,7 @@ fn engine_explicit_intents_closed_loop() {
     let mut world = World::new(9);
     let mut t = kk_core::Terrain::plains();
     t.normalize();
-    world.register_room("W1N1", t);
+    world.register_room("W1N1", t).unwrap();
     world
         .insert(
             "W1N1",
@@ -121,16 +121,16 @@ fn engine_explicit_intents_closed_loop() {
     for _ in 0..10 {
         engine.tick_with_intents(batch.clone()).unwrap();
     }
-    let ctl_obj = engine.world.get(ctl).unwrap().1;
+    let ctl_obj = engine.world().get(ctl).unwrap().1;
     match ctl_obj {
         RoomObject::Controller(t) => assert_eq!(t.progress, 20, "10 tick × 2"),
         _ => panic!(),
     }
-    assert_eq!(engine.players["p1"].gcl, 20);
-    assert!(!engine.last_events.is_empty(), "事件日志留存");
+    assert_eq!(engine.players()["p1"].gcl, 20);
+    assert!(!engine.last_events().is_empty(), "事件日志留存");
     // id 单一真相源：结算新建对象后 world.next_obj_id 已同步
     let max_id = engine
-        .world
+        .world()
         .room("W1N1")
         .unwrap()
         .objects
@@ -138,14 +138,16 @@ fn engine_explicit_intents_closed_loop() {
         .max()
         .unwrap()
         .0;
-    assert!(engine.world.next_obj_id() > max_id, "分配器越过最大 id");
+    assert!(engine.world().next_obj_id() > max_id, "分配器越过最大 id");
 }
 
 #[test]
 fn engine_rejects_intents_for_foreign_owned_object() {
     // 即使上游提供了指令，结算器仍校验玩家是否拥有目标对象。
     let mut world = World::new(1);
-    world.register_room("W1N1", kk_core::Terrain::plains());
+    world
+        .register_room("W1N1", kk_core::Terrain::plains())
+        .unwrap();
     let victim = world
         .insert(
             "W1N1",
@@ -181,7 +183,7 @@ fn engine_rejects_intents_for_foreign_owned_object() {
     );
     let mut engine = kk_engine::Engine::new(world);
     engine.tick_with_intents(batch).unwrap();
-    let (x, y) = match engine.world.get(victim).unwrap().1 {
+    let (x, y) = match engine.world().get(victim).unwrap().1 {
         RoomObject::Creep(c) => (c.x, c.y),
         _ => panic!(),
     };

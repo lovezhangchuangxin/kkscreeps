@@ -107,12 +107,12 @@ pub struct WorldFixture {
 /// 按规模档构造世界，相同档位使用相同种子和对象插入顺序。
 pub fn build_world(tier: Tier) -> WorldFixture {
     let mut world = kk_world::world::World::new(0xC3C3);
-    world.set_time_for_test(BASE_TIME);
+    world.set_time_for_test(BASE_TIME).unwrap();
     for i in 0..tier.rooms() {
         let name = room_name(i);
         let mut rng = SeededRng::new(seed_for("room", i as u64));
         let terrain = gen_terrain(&mut rng);
-        world.register_room(name.clone(), terrain);
+        world.register_room(name.clone(), terrain).unwrap();
         build_room(
             &mut world,
             &name,
@@ -140,7 +140,7 @@ impl WorldFixture {
         let state = self.world.room(room).expect("夹具房已注册");
         kk_schema::room::encode_snapshot(&state.encode_snapshot(
             time,
-            self.world.seed,
+            self.world.seed(),
             self.world.next_obj_id(),
         ))
     }

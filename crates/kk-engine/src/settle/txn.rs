@@ -14,6 +14,8 @@ use crate::intent::IntentBatch;
 pub type PublishedCore = (BTreeMap<String, PlayerState>, u64, BTreeMap<String, Value>);
 
 pub(crate) struct SharedState {
+    /// 宿主不变式故障不能被 JS 捕获或链内 decline/游标回滚清除。
+    fatal_error: Option<SettleError>,
     pub(crate) next_id: u64,
     pub(crate) players: BTreeMap<String, PlayerState>,
     /// 各 Mod 命名空间的候选状态；随候选一起发布或丢弃。服务端私有，
@@ -42,6 +44,7 @@ impl TickState {
     ) -> Self {
         Self {
             inner: Rc::new(RefCell::new(SharedState {
+                fatal_error: None,
                 next_id,
                 players,
                 mod_states,
@@ -67,11 +70,34 @@ impl TickState {
             .insert(namespace.to_string(), value);
     }
 
-    pub(crate) fn allocate_id(&self) -> u64 {
+    pub(crate) fn allocate_id(&self) -> Result<u64, SettleError> {
         let mut state = self.inner.borrow_mut();
+        if let Some(error) = &state.fatal_error {
+            return Err(error.clone());
+        }
         let id = state.next_id;
-        state.next_id = id.saturating_add(1);
-        id
+        if id == 0 || id == u64::MAX {
+            let error = SettleError("对象 ID 游标非法或已耗尽".into());
+            state.fatal_error = Some(error.clone());
+            return Err(error);
+        }
+        state.next_id = id + 1;
+        Ok(id)
+    }
+
+    pub(crate) fn record_fatal(&self, error: SettleError) -> SettleError {
+        self.inner
+            .borrow_mut()
+            .fatal_error
+            .get_or_insert(error)
+            .clone()
+    }
+
+    pub(crate) fn check_fatal(&self) -> Result<(), SettleError> {
+        match &self.inner.borrow().fatal_error {
+            Some(error) => Err(error.clone()),
+            None => Ok(()),
+        }
     }
 
     /// 当前 ID 游标；供链内快照记录，拒绝回滚插入对象时一并恢复。
@@ -108,6 +134,7 @@ impl TickState {
 
     /// 消费唯一持有者。仍有规则持有克隆时返回错误，不复制或发布共享候选。
     pub fn into_parts(self) -> Result<PublishedCore, SettleError> {
+        self.check_fatal()?;
         let state = Rc::try_unwrap(self.inner)
             .map_err(|_| SettleError("候选仍被房间规则持有，不能发布".into()))?
             .into_inner();
@@ -187,13 +214,25 @@ mod tests {
     use super::*;
 
     #[test]
+    fn allocator_error_survives_caught_error_and_chain_cursor_rollback() {
+        let state = TickState::new(BTreeMap::new(), u64::MAX - 1);
+        assert_eq!(state.allocate_id().unwrap(), u64::MAX - 1);
+        assert!(state.allocate_id().is_err());
+        state.restore_next_id(1);
+        assert!(state.allocate_id().is_err());
+        assert!(state.into_parts().is_err());
+        let zero = TickState::new(BTreeMap::new(), 0);
+        assert!(zero.allocate_id().is_err());
+    }
+
+    #[test]
     fn room_handles_share_ids_and_player_updates() {
         let state = TickState::new(BTreeMap::new(), 10);
         let first_room = state.clone();
         let second_room = state.clone();
-        assert_eq!(first_room.allocate_id(), 10);
+        assert_eq!(first_room.allocate_id().unwrap(), 10);
         first_room.add_gcl("p1", 7);
-        assert_eq!(second_room.allocate_id(), 11);
+        assert_eq!(second_room.allocate_id().unwrap(), 11);
         assert_eq!(second_room.claim_state("p1"), (0, 7));
         second_room.add_gcl("p1", 3);
         drop((first_room, second_room));
@@ -208,6 +247,6 @@ mod tests {
         let state = TickState::new(BTreeMap::new(), 1);
         let retained = state.clone();
         assert!(state.into_parts().is_err());
-        assert_eq!(retained.allocate_id(), 1);
+        assert_eq!(retained.allocate_id().unwrap(), 1);
     }
 }

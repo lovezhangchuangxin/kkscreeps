@@ -90,6 +90,11 @@ pub struct EmbedEngine {
     kkpv_channel: bool,
     /// 公开地形束的发布库：按代际发布/获取共享束，承载保留报告
     /// （固定内存测量面）。仅 KKPV 通道使用。
+    pathfinder_terrain: Option<(
+        std::sync::Arc<()>,
+        u64,
+        std::sync::Arc<kk_runner::TerrainSet>,
+    )>,
     kkpv_public_store: crate::kkpv_store::KkpvBlockStore,
     /// 可信 Mod 注册与结算 realm；仅 `create_shard_with_mods` 装配。持有它使
     /// EmbedEngine 不再可跨线程移动（结算与 realm 须同线程）。
@@ -176,6 +181,7 @@ impl EmbedEngine {
             player_surface: None,
             mod_player_api: None,
             kkpv_channel: false,
+            pathfinder_terrain: None,
             kkpv_public_store: crate::kkpv_store::KkpvBlockStore::new(),
         }
     }
@@ -219,28 +225,32 @@ impl EmbedEngine {
             "初始 Memory 超过 2 Mi UTF-16 码元"
         );
         self.engine
-            .players
-            .get_mut(player)
-            .ok_or_else(|| anyhow::anyhow!("未知玩家 {player}"))?
-            .raw_memory = raw;
+            .edit_players(|players| {
+                players
+                    .get_mut(player)
+                    .ok_or_else(|| format!("未知玩家 {player}"))?
+                    .raw_memory = raw;
+                Ok(())
+            })
+            .map_err(anyhow::Error::msg)?;
         Ok(())
     }
 
     /// 宿主读取已提交的玩家状态；不包含失败轮候选，不用于玩家授权投影。
     pub fn player_state(&self, player: &str) -> Option<&kk_engine::PlayerState> {
-        self.engine.players.get(player)
+        self.engine.players().get(player)
     }
 
     /// 宿主诊断世界投影，不执行玩家视野过滤；不是可恢复的完整检查点。
     pub fn world_snapshot(&self) -> Value {
-        self.engine.world.world_json()
+        self.engine.world().world_json()
     }
 
     /// 管理诊断用的完整 Mod 对象列表，包含自主创建对象和 server-only 字段。
     /// world_snapshot 沿用原生 JSON 投影，Mod 对象在此独立读取；不是检查点。
     pub fn mod_object_snapshots(&self) -> Vec<Value> {
         self.engine
-            .world
+            .world()
             .rooms()
             .values()
             .flat_map(|room| &room.objects)
@@ -268,7 +278,7 @@ impl EmbedEngine {
     /// 已提交的某 Mod 命名空间状态（诊断与测试面；未初始化为 null）。
     pub fn engine_mod_state(&self, namespace: &str) -> Value {
         self.engine
-            .mod_states
+            .mod_states()
             .get(namespace)
             .cloned()
             .unwrap_or(Value::Null)
@@ -300,7 +310,7 @@ impl EmbedEngine {
 
     /// 当前世界代际（失败轮不前进；诊断与测试面）。
     pub fn engine_generation(&self) -> u64 {
-        self.engine.world.generation()
+        self.engine.world().generation()
     }
 
     pub fn get_game_time(&self) -> u64 {
@@ -317,7 +327,7 @@ impl EmbedEngine {
     }
 
     fn source(&self) -> &dyn WorldSource {
-        &self.engine.world
+        self.engine.world()
     }
 
     /// 汇总成功调用的耗时，单位为毫秒。run 为派发回收窗口减去宿主投影时间，
@@ -341,6 +351,14 @@ impl EmbedEngine {
 
     /// 让下一次进入结算入口的调用返回错误，不改变引擎运行状态。
     #[doc(hidden)]
+    #[doc(hidden)]
+    pub fn bump_next_obj_id_for_test(&mut self, next: u64) -> anyhow::Result<()> {
+        self.no_open_round("bump_next_obj_id_for_test")?;
+        self.engine
+            .bump_next_obj_id_for_test(next)
+            .map_err(anyhow::Error::msg)
+    }
+
     pub fn fail_next_settle_for_test(&mut self) {
         self.fail_next_settle = true;
     }
@@ -394,7 +412,7 @@ impl EmbedEngine {
         player: &str,
     ) -> &[kk_engine::settle::NotifyRecord] {
         self.engine
-            .players
+            .players()
             .get(player)
             .map(|p| p.notifications.as_slice())
             .unwrap_or(&[])
@@ -410,7 +428,7 @@ impl EmbedEngine {
     #[doc(hidden)]
     pub fn player_bucket_for_test(&mut self, player: &str) -> anyhow::Result<f64> {
         self.engine
-            .players
+            .players()
             .get(player)
             .map(|p| p.cpu.bucket())
             .ok_or_else(|| anyhow::anyhow!("未知玩家 {player}"))
@@ -504,7 +522,7 @@ impl EmbedEngine {
             vm.recover().map_err(anyhow::Error::msg)?;
             if needed && tracing {
                 vm.record_trace(crate::mod_trace::ModTraceEntry {
-                    tick: self.engine.world.time(),
+                    tick: self.engine.world().time(),
                     room: String::new(),
                     target: String::new(),
                     slot: String::new(),

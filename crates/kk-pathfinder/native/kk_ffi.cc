@@ -12,7 +12,7 @@
 #include <utility>
 #include <vector>
 
-#include "pf.h" // 官方源码，原样编译（见同目录 pf.cc/pf.h）
+#include <pf.h> // 构建目录中的最小地形适配，固定上游原文留在 native。
 
 namespace {
 
@@ -89,30 +89,9 @@ screeps::path_finder_t* acquire_path_finder() {
 // pf.h 声明的共享零矩阵；上游在 main.cc 中定义，这里提供同名外部链接符号。
 uint8_t screeps::room_info_t::cost_matrix0[2500] = { 0 };
 
-// 函数级 try 覆盖 arena、输入值构造和地形复制，不能只捕获算法调用。
-extern "C" int kk_pf_load_terrain(uint8_t map_xx, uint8_t map_yy, const uint8_t* bits_625) try {
-	if (bits_625 == nullptr) {
-		return -1;
-	}
-	ArenaGuard guard;
-	// pf.cc 的 load_terrain 接收房间信息数组，即使只载入一个房间也须包装成数组。
-	v8::Local<v8::Array> rooms = Nan::New<v8::Array>(1);
-	v8::Local<v8::Object> info = Nan::New<v8::Object>();
-	Nan::Set(info, Nan::New("room").ToLocalChecked(), make_pos_object(map_xx, map_yy));
-	Value* bits = kk_compat::t_arena->alloc();
-	bits->type = v8::Value::TARRAY;
-	bits->tarray_data = bits_625;
-	bits->tarray_len = 625;
-	Nan::Set(info, Nan::New("bits").ToLocalChecked(), v8::Local<v8::Value>(bits));
-	Nan::Set(rooms, 0u, info);
-	screeps::path_finder_t::load_terrain(rooms);
-	return 0;
-} catch (...) {
-	return -1;
-}
-
 // 完整入口捕获所有 C++ 异常，防止分配失败穿过 Rust 的 extern "C" 调用。
-extern "C" int kk_pf_search(kk_pf_world_pos_t origin, const kk_pf_goal_t* goals, size_t goals_len,
+extern "C" int kk_pf_search(kk_pf_terrain_query_t terrain_query, void* terrain_user,
+    kk_pf_world_pos_t origin, const kk_pf_goal_t* goals, size_t goals_len,
 	kk_pf_room_callback_t callback, void* callback_user_data,
 	kk_pf_cancel_callback_t cancel, const kk_pf_options_t* options,
 	kk_pf_search_result_t* out_result) try {
@@ -150,6 +129,12 @@ extern "C" int kk_pf_search(kk_pf_world_pos_t origin, const kk_pf_goal_t* goals,
 		pf = holder.get();
 	}
 
+    // RAII 在正常、异常、取消及结果转换失败时解除借用，池不保留世界指针。
+    struct SearchBinding {
+        screeps::path_finder_t* pf;
+        ~SearchBinding() { pf->release_search(); }
+    } binding{pf};
+    pf->bind_terrain(terrain_query, terrain_user);
 	v8::Local<v8::Value> ret;
 	try {
 		ret = pf->search(make_pos_object(origin.xx, origin.yy), goals_js, room_callback,

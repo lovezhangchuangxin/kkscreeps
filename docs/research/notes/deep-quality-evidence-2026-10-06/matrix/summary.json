@@ -1,0 +1,2242 @@
+{
+  "complete": true,
+  "platform": "macOS-15.7.3-arm64-arm-64bit",
+  "binary_sha256": {
+    "before": "cdb87ac5569c1e49f647063238faa2e080d0b444e853439f3a7df310860865c5",
+    "after": "f0c78d0b4bcb997629a72f30c0bbb30cf3f603bf0bc2192f3ba86bbf681893e4"
+  },
+  "pathfinder_sha256": {
+    "before": "5e3bc9accdabb8b7887599cc403326986175b65368a17b3fa861f0e2084b7099",
+    "after": "1c8f364145feb63599a118d0c95d70a157df3e21e1419fece9fe91a9999a32e0"
+  },
+  "fixture_sha256": {
+    "compat/fixtures/mod-perf/empty/perf/mod.json": "4d07dd5a68f6bd3b8ca5b2fc7a3df96c24e0a96a9ea7247412e2740f0fec239c",
+    "compat/fixtures/mod-perf/empty/perf/server.js": "be195a3b242a672513c3c6dcaa2f86c9be70a5e856ee90bd019759af905acdb4",
+    "compat/fixtures/mod-perf/chain/perf/mod.json": "4d07dd5a68f6bd3b8ca5b2fc7a3df96c24e0a96a9ea7247412e2740f0fec239c",
+    "compat/fixtures/mod-perf/chain/perf/server.js": "a0ee4b55040ece5194164eeeb97c601b1901154a8452d6c2f955f0023168746e",
+    "crates/kk-pathfinder/tests/fixtures/sample-terrain.bin": "ee653ff6f4bb1c28d33aafd094ecb24eb7258c29d925aaf0a28fd36a6090c7d4"
+  },
+  "repetitions": 5,
+  "warmup": 500,
+  "ticks": 3000,
+  "runs": [
+    {
+      "kind": "player",
+      "scenario": "1-json",
+      "version": "before",
+      "repetition": 0,
+      "file": "player-1-json-0-before.json",
+      "process": {
+        "wall_seconds": 0.6326589580858126,
+        "cpu_seconds": 0.706355,
+        "max_rss_bytes": 75448320,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "1-json",
+      "version": "after",
+      "repetition": 0,
+      "file": "player-1-json-0-after.json",
+      "process": {
+        "wall_seconds": 0.629276916035451,
+        "cpu_seconds": 0.731883,
+        "max_rss_bytes": 77332480,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "1-kkpv",
+      "version": "before",
+      "repetition": 0,
+      "file": "player-1-kkpv-0-before.json",
+      "process": {
+        "wall_seconds": 0.8419535419670865,
+        "cpu_seconds": 1.0014399999999999,
+        "max_rss_bytes": 78987264,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "1-kkpv",
+      "version": "after",
+      "repetition": 0,
+      "file": "player-1-kkpv-0-after.json",
+      "process": {
+        "wall_seconds": 0.9359847080195323,
+        "cpu_seconds": 1.042387,
+        "max_rss_bytes": 78168064,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "4-json",
+      "version": "before",
+      "repetition": 0,
+      "file": "player-4-json-0-before.json",
+      "process": {
+        "wall_seconds": 1.7846978749148548,
+        "cpu_seconds": 3.2038889999999998,
+        "max_rss_bytes": 199950336,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "4-json",
+      "version": "after",
+      "repetition": 0,
+      "file": "player-4-json-0-after.json",
+      "process": {
+        "wall_seconds": 1.6705663750180975,
+        "cpu_seconds": 3.1031310000000003,
+        "max_rss_bytes": 199032832,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "4-kkpv",
+      "version": "before",
+      "repetition": 0,
+      "file": "player-4-kkpv-0-before.json",
+      "process": {
+        "wall_seconds": 2.4008098338963464,
+        "cpu_seconds": 4.423359,
+        "max_rss_bytes": 204963840,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "4-kkpv",
+      "version": "after",
+      "repetition": 0,
+      "file": "player-4-kkpv-0-after.json",
+      "process": {
+        "wall_seconds": 2.309209582977928,
+        "cpu_seconds": 4.379039000000001,
+        "max_rss_bytes": 209436672,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "8-json",
+      "version": "before",
+      "repetition": 0,
+      "file": "player-8-json-0-before.json",
+      "process": {
+        "wall_seconds": 3.3508037499850616,
+        "cpu_seconds": 6.839912,
+        "max_rss_bytes": 359612416,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "8-json",
+      "version": "after",
+      "repetition": 0,
+      "file": "player-8-json-0-after.json",
+      "process": {
+        "wall_seconds": 3.2539224589709193,
+        "cpu_seconds": 6.743169,
+        "max_rss_bytes": 357793792,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "8-kkpv",
+      "version": "before",
+      "repetition": 0,
+      "file": "player-8-kkpv-0-before.json",
+      "process": {
+        "wall_seconds": 4.596428666962311,
+        "cpu_seconds": 9.449278,
+        "max_rss_bytes": 364560384,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "8-kkpv",
+      "version": "after",
+      "repetition": 0,
+      "file": "player-8-kkpv-0-after.json",
+      "process": {
+        "wall_seconds": 4.504716541036032,
+        "cpu_seconds": 9.256335,
+        "max_rss_bytes": 366280704,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "32-json",
+      "version": "before",
+      "repetition": 0,
+      "file": "player-32-json-0-before.json",
+      "process": {
+        "wall_seconds": 20.081426582997665,
+        "cpu_seconds": 46.153459,
+        "max_rss_bytes": 1370374144,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "32-json",
+      "version": "after",
+      "repetition": 0,
+      "file": "player-32-json-0-after.json",
+      "process": {
+        "wall_seconds": 20.370749666006304,
+        "cpu_seconds": 46.633339,
+        "max_rss_bytes": 1382957056,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "32-kkpv",
+      "version": "before",
+      "repetition": 0,
+      "file": "player-32-kkpv-0-before.json",
+      "process": {
+        "wall_seconds": 24.063468917040154,
+        "cpu_seconds": 52.443093000000005,
+        "max_rss_bytes": 1305591808,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "32-kkpv",
+      "version": "after",
+      "repetition": 0,
+      "file": "player-32-kkpv-0-after.json",
+      "process": {
+        "wall_seconds": 24.29147524992004,
+        "cpu_seconds": 52.530792,
+        "max_rss_bytes": 1300611072,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "100-native",
+      "version": "before",
+      "repetition": 0,
+      "file": "mod-100-native-0-before.json",
+      "process": {
+        "wall_seconds": 1.873120707925409,
+        "cpu_seconds": 1.850405,
+        "max_rss_bytes": 31899648,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "100-native",
+      "version": "after",
+      "repetition": 0,
+      "file": "mod-100-native-0-after.json",
+      "process": {
+        "wall_seconds": 1.8881792080355808,
+        "cpu_seconds": 1.868984,
+        "max_rss_bytes": 31997952,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "100-empty",
+      "version": "before",
+      "repetition": 0,
+      "file": "mod-100-empty-0-before.json",
+      "process": {
+        "wall_seconds": 1.8823677080217749,
+        "cpu_seconds": 1.827382,
+        "max_rss_bytes": 36552704,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "100-empty",
+      "version": "after",
+      "repetition": 0,
+      "file": "mod-100-empty-0-after.json",
+      "process": {
+        "wall_seconds": 1.8807467080187052,
+        "cpu_seconds": 1.8581649999999998,
+        "max_rss_bytes": 37208064,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "100-chain",
+      "version": "before",
+      "repetition": 0,
+      "file": "mod-100-chain-0-before.json",
+      "process": {
+        "wall_seconds": 23.392257208004594,
+        "cpu_seconds": 23.410628,
+        "max_rss_bytes": 70336512,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "100-chain",
+      "version": "after",
+      "repetition": 0,
+      "file": "mod-100-chain-0-after.json",
+      "process": {
+        "wall_seconds": 23.501277665956877,
+        "cpu_seconds": 23.566309999999998,
+        "max_rss_bytes": 69763072,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "400-native",
+      "version": "before",
+      "repetition": 0,
+      "file": "mod-400-native-0-before.json",
+      "process": {
+        "wall_seconds": 7.078663791995496,
+        "cpu_seconds": 7.029922999999999,
+        "max_rss_bytes": 37388288,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "400-native",
+      "version": "after",
+      "repetition": 0,
+      "file": "mod-400-native-0-after.json",
+      "process": {
+        "wall_seconds": 7.090491833980195,
+        "cpu_seconds": 6.982698,
+        "max_rss_bytes": 36749312,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "400-empty",
+      "version": "before",
+      "repetition": 0,
+      "file": "mod-400-empty-0-before.json",
+      "process": {
+        "wall_seconds": 7.18618791596964,
+        "cpu_seconds": 7.073734,
+        "max_rss_bytes": 42483712,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "400-empty",
+      "version": "after",
+      "repetition": 0,
+      "file": "mod-400-empty-0-after.json",
+      "process": {
+        "wall_seconds": 7.204555375035852,
+        "cpu_seconds": 7.1157770000000005,
+        "max_rss_bytes": 40861696,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "400-chain",
+      "version": "before",
+      "repetition": 0,
+      "file": "mod-400-chain-0-before.json",
+      "process": {
+        "wall_seconds": 90.11834674992133,
+        "cpu_seconds": 90.536992,
+        "max_rss_bytes": 72056832,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "400-chain",
+      "version": "after",
+      "repetition": 0,
+      "file": "mod-400-chain-0-after.json",
+      "process": {
+        "wall_seconds": 91.26758295798209,
+        "cpu_seconds": 91.590203,
+        "max_rss_bytes": 73269248,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "pathfinder",
+      "scenario": "player-search",
+      "version": "before",
+      "repetition": 0,
+      "file": "pathfinder-player-search-0-before.json",
+      "process": {
+        "wall_seconds": 0.7368059160653502,
+        "cpu_seconds": 0.6633609999999999,
+        "max_rss_bytes": 48906240,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "pathfinder",
+      "scenario": "player-search",
+      "version": "after",
+      "repetition": 0,
+      "file": "pathfinder-player-search-0-after.json",
+      "process": {
+        "wall_seconds": 0.6300647909520194,
+        "cpu_seconds": 0.627057,
+        "max_rss_bytes": 50249728,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "1-json",
+      "version": "after",
+      "repetition": 1,
+      "file": "player-1-json-1-after.json",
+      "process": {
+        "wall_seconds": 0.7225029589608312,
+        "cpu_seconds": 0.782251,
+        "max_rss_bytes": 76431360,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "1-json",
+      "version": "before",
+      "repetition": 1,
+      "file": "player-1-json-1-before.json",
+      "process": {
+        "wall_seconds": 0.729915166972205,
+        "cpu_seconds": 0.795671,
+        "max_rss_bytes": 76283904,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "1-kkpv",
+      "version": "after",
+      "repetition": 1,
+      "file": "player-1-kkpv-1-after.json",
+      "process": {
+        "wall_seconds": 0.9418505419744179,
+        "cpu_seconds": 1.099487,
+        "max_rss_bytes": 80396288,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "1-kkpv",
+      "version": "before",
+      "repetition": 1,
+      "file": "player-1-kkpv-1-before.json",
+      "process": {
+        "wall_seconds": 1.0454192080069333,
+        "cpu_seconds": 1.13944,
+        "max_rss_bytes": 80363520,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "4-json",
+      "version": "after",
+      "repetition": 1,
+      "file": "player-4-json-1-after.json",
+      "process": {
+        "wall_seconds": 1.7756933340569958,
+        "cpu_seconds": 3.3353699999999997,
+        "max_rss_bytes": 201228288,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "4-json",
+      "version": "before",
+      "repetition": 1,
+      "file": "player-4-json-1-before.json",
+      "process": {
+        "wall_seconds": 1.7570128749357536,
+        "cpu_seconds": 3.267035,
+        "max_rss_bytes": 201179136,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "4-kkpv",
+      "version": "after",
+      "repetition": 1,
+      "file": "player-4-kkpv-1-after.json",
+      "process": {
+        "wall_seconds": 2.606310624978505,
+        "cpu_seconds": 4.857373,
+        "max_rss_bytes": 204931072,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "4-kkpv",
+      "version": "before",
+      "repetition": 1,
+      "file": "player-4-kkpv-1-before.json",
+      "process": {
+        "wall_seconds": 2.502114500035532,
+        "cpu_seconds": 4.744972,
+        "max_rss_bytes": 207208448,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "8-json",
+      "version": "after",
+      "repetition": 1,
+      "file": "player-8-json-1-after.json",
+      "process": {
+        "wall_seconds": 3.6469649580540136,
+        "cpu_seconds": 7.317964,
+        "max_rss_bytes": 355368960,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "8-json",
+      "version": "before",
+      "repetition": 1,
+      "file": "player-8-json-1-before.json",
+      "process": {
+        "wall_seconds": 3.5406762080965564,
+        "cpu_seconds": 7.281988,
+        "max_rss_bytes": 364314624,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "8-kkpv",
+      "version": "after",
+      "repetition": 1,
+      "file": "player-8-kkpv-1-after.json",
+      "process": {
+        "wall_seconds": 4.78296304109972,
+        "cpu_seconds": 9.85903,
+        "max_rss_bytes": 378699776,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "8-kkpv",
+      "version": "before",
+      "repetition": 1,
+      "file": "player-8-kkpv-1-before.json",
+      "process": {
+        "wall_seconds": 4.882738624932244,
+        "cpu_seconds": 9.932302,
+        "max_rss_bytes": 371228672,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "32-json",
+      "version": "after",
+      "repetition": 1,
+      "file": "player-32-json-1-after.json",
+      "process": {
+        "wall_seconds": 20.172721875016578,
+        "cpu_seconds": 46.207629000000004,
+        "max_rss_bytes": 1364017152,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "32-json",
+      "version": "before",
+      "repetition": 1,
+      "file": "player-32-json-1-before.json",
+      "process": {
+        "wall_seconds": 19.2442175000906,
+        "cpu_seconds": 44.490107,
+        "max_rss_bytes": 1410383872,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "32-kkpv",
+      "version": "after",
+      "repetition": 1,
+      "file": "player-32-kkpv-1-after.json",
+      "process": {
+        "wall_seconds": 21.04492508294061,
+        "cpu_seconds": 46.455922,
+        "max_rss_bytes": 1322450944,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "32-kkpv",
+      "version": "before",
+      "repetition": 1,
+      "file": "player-32-kkpv-1-before.json",
+      "process": {
+        "wall_seconds": 20.91361233405769,
+        "cpu_seconds": 46.295394,
+        "max_rss_bytes": 1310392320,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "100-native",
+      "version": "after",
+      "repetition": 1,
+      "file": "mod-100-native-1-after.json",
+      "process": {
+        "wall_seconds": 1.99166762502864,
+        "cpu_seconds": 1.9235319999999998,
+        "max_rss_bytes": 31522816,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "100-native",
+      "version": "before",
+      "repetition": 1,
+      "file": "mod-100-native-1-before.json",
+      "process": {
+        "wall_seconds": 1.8883745829807594,
+        "cpu_seconds": 1.781405,
+        "max_rss_bytes": 31244288,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "100-empty",
+      "version": "after",
+      "repetition": 1,
+      "file": "mod-100-empty-1-after.json",
+      "process": {
+        "wall_seconds": 1.888634542003274,
+        "cpu_seconds": 1.857943,
+        "max_rss_bytes": 35995648,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "100-empty",
+      "version": "before",
+      "repetition": 1,
+      "file": "mod-100-empty-1-before.json",
+      "process": {
+        "wall_seconds": 1.8898071249714121,
+        "cpu_seconds": 1.79284,
+        "max_rss_bytes": 36077568,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "100-chain",
+      "version": "after",
+      "repetition": 1,
+      "file": "mod-100-chain-1-after.json",
+      "process": {
+        "wall_seconds": 22.88895941595547,
+        "cpu_seconds": 23.023072,
+        "max_rss_bytes": 69779456,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "100-chain",
+      "version": "before",
+      "repetition": 1,
+      "file": "mod-100-chain-1-before.json",
+      "process": {
+        "wall_seconds": 22.758483416982926,
+        "cpu_seconds": 22.893441000000003,
+        "max_rss_bytes": 68681728,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "400-native",
+      "version": "after",
+      "repetition": 1,
+      "file": "mod-400-native-1-after.json",
+      "process": {
+        "wall_seconds": 7.023464541998692,
+        "cpu_seconds": 6.999064000000001,
+        "max_rss_bytes": 35045376,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "400-native",
+      "version": "before",
+      "repetition": 1,
+      "file": "mod-400-native-1-before.json",
+      "process": {
+        "wall_seconds": 6.991057832958177,
+        "cpu_seconds": 6.927998,
+        "max_rss_bytes": 36356096,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "400-empty",
+      "version": "after",
+      "repetition": 1,
+      "file": "mod-400-empty-1-after.json",
+      "process": {
+        "wall_seconds": 6.874022333067842,
+        "cpu_seconds": 6.853294,
+        "max_rss_bytes": 40697856,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "400-empty",
+      "version": "before",
+      "repetition": 1,
+      "file": "mod-400-empty-1-before.json",
+      "process": {
+        "wall_seconds": 6.959617625107057,
+        "cpu_seconds": 6.904388,
+        "max_rss_bytes": 40452096,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "400-chain",
+      "version": "after",
+      "repetition": 1,
+      "file": "mod-400-chain-1-after.json",
+      "process": {
+        "wall_seconds": 90.48231220897287,
+        "cpu_seconds": 90.871415,
+        "max_rss_bytes": 72957952,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "400-chain",
+      "version": "before",
+      "repetition": 1,
+      "file": "mod-400-chain-1-before.json",
+      "process": {
+        "wall_seconds": 91.38688691693824,
+        "cpu_seconds": 91.783498,
+        "max_rss_bytes": 73220096,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "pathfinder",
+      "scenario": "player-search",
+      "version": "after",
+      "repetition": 1,
+      "file": "pathfinder-player-search-1-after.json",
+      "process": {
+        "wall_seconds": 0.6298814159817994,
+        "cpu_seconds": 0.602262,
+        "max_rss_bytes": 49348608,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "pathfinder",
+      "scenario": "player-search",
+      "version": "before",
+      "repetition": 1,
+      "file": "pathfinder-player-search-1-before.json",
+      "process": {
+        "wall_seconds": 0.628566832980141,
+        "cpu_seconds": 0.649429,
+        "max_rss_bytes": 48857088,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "1-json",
+      "version": "before",
+      "repetition": 2,
+      "file": "player-1-json-2-before.json",
+      "process": {
+        "wall_seconds": 0.6293384159216657,
+        "cpu_seconds": 0.735529,
+        "max_rss_bytes": 76480512,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "1-json",
+      "version": "after",
+      "repetition": 2,
+      "file": "player-1-json-2-after.json",
+      "process": {
+        "wall_seconds": 0.6270242499886081,
+        "cpu_seconds": 0.745273,
+        "max_rss_bytes": 77037568,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "1-kkpv",
+      "version": "before",
+      "repetition": 2,
+      "file": "player-1-kkpv-2-before.json",
+      "process": {
+        "wall_seconds": 0.9382876249728724,
+        "cpu_seconds": 1.027753,
+        "max_rss_bytes": 77889536,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "1-kkpv",
+      "version": "after",
+      "repetition": 2,
+      "file": "player-1-kkpv-2-after.json",
+      "process": {
+        "wall_seconds": 0.933537375065498,
+        "cpu_seconds": 1.075459,
+        "max_rss_bytes": 81543168,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "4-json",
+      "version": "before",
+      "repetition": 2,
+      "file": "player-4-json-2-before.json",
+      "process": {
+        "wall_seconds": 1.673690874944441,
+        "cpu_seconds": 3.113486,
+        "max_rss_bytes": 202522624,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "4-json",
+      "version": "after",
+      "repetition": 2,
+      "file": "player-4-json-2-after.json",
+      "process": {
+        "wall_seconds": 1.671836749999784,
+        "cpu_seconds": 3.079395,
+        "max_rss_bytes": 201457664,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "4-kkpv",
+      "version": "before",
+      "repetition": 2,
+      "file": "player-4-kkpv-2-before.json",
+      "process": {
+        "wall_seconds": 2.393117166007869,
+        "cpu_seconds": 4.375186,
+        "max_rss_bytes": 201031680,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "4-kkpv",
+      "version": "after",
+      "repetition": 2,
+      "file": "player-4-kkpv-2-after.json",
+      "process": {
+        "wall_seconds": 2.388757416047156,
+        "cpu_seconds": 4.379153,
+        "max_rss_bytes": 203227136,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "8-json",
+      "version": "before",
+      "repetition": 2,
+      "file": "player-8-json-2-before.json",
+      "process": {
+        "wall_seconds": 3.3329103749711066,
+        "cpu_seconds": 6.773379,
+        "max_rss_bytes": 356466688,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "8-json",
+      "version": "after",
+      "repetition": 2,
+      "file": "player-8-json-2-after.json",
+      "process": {
+        "wall_seconds": 3.335490832920186,
+        "cpu_seconds": 6.77113,
+        "max_rss_bytes": 359809024,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "8-kkpv",
+      "version": "before",
+      "repetition": 2,
+      "file": "player-8-kkpv-2-before.json",
+      "process": {
+        "wall_seconds": 4.473018625052646,
+        "cpu_seconds": 9.122895999999999,
+        "max_rss_bytes": 376750080,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "8-kkpv",
+      "version": "after",
+      "repetition": 2,
+      "file": "player-8-kkpv-2-after.json",
+      "process": {
+        "wall_seconds": 4.385068457922898,
+        "cpu_seconds": 9.137292,
+        "max_rss_bytes": 370360320,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "32-json",
+      "version": "before",
+      "repetition": 2,
+      "file": "player-32-json-2-before.json",
+      "process": {
+        "wall_seconds": 19.07979654194787,
+        "cpu_seconds": 44.278468,
+        "max_rss_bytes": 1382285312,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "32-json",
+      "version": "after",
+      "repetition": 2,
+      "file": "player-32-json-2-after.json",
+      "process": {
+        "wall_seconds": 19.084084291011095,
+        "cpu_seconds": 44.187991,
+        "max_rss_bytes": 1384480768,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "32-kkpv",
+      "version": "before",
+      "repetition": 2,
+      "file": "player-32-kkpv-2-before.json",
+      "process": {
+        "wall_seconds": 21.048254249966703,
+        "cpu_seconds": 46.396789,
+        "max_rss_bytes": 1319682048,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "32-kkpv",
+      "version": "after",
+      "repetition": 2,
+      "file": "player-32-kkpv-2-after.json",
+      "process": {
+        "wall_seconds": 21.13221595797222,
+        "cpu_seconds": 46.599152999999994,
+        "max_rss_bytes": 1319141376,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "100-native",
+      "version": "before",
+      "repetition": 2,
+      "file": "mod-100-native-2-before.json",
+      "process": {
+        "wall_seconds": 1.8871217910200357,
+        "cpu_seconds": 1.798595,
+        "max_rss_bytes": 30490624,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "100-native",
+      "version": "after",
+      "repetition": 2,
+      "file": "mod-100-native-2-after.json",
+      "process": {
+        "wall_seconds": 1.886525833979249,
+        "cpu_seconds": 1.8161859999999999,
+        "max_rss_bytes": 30982144,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "100-empty",
+      "version": "before",
+      "repetition": 2,
+      "file": "mod-100-empty-2-before.json",
+      "process": {
+        "wall_seconds": 1.880774916964583,
+        "cpu_seconds": 1.7712999999999999,
+        "max_rss_bytes": 35930112,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "100-empty",
+      "version": "after",
+      "repetition": 2,
+      "file": "mod-100-empty-2-after.json",
+      "process": {
+        "wall_seconds": 1.870193959097378,
+        "cpu_seconds": 1.853461,
+        "max_rss_bytes": 35536896,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "100-chain",
+      "version": "before",
+      "repetition": 2,
+      "file": "mod-100-chain-2-before.json",
+      "process": {
+        "wall_seconds": 22.768082291004248,
+        "cpu_seconds": 22.872467,
+        "max_rss_bytes": 70025216,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "100-chain",
+      "version": "after",
+      "repetition": 2,
+      "file": "mod-100-chain-2-after.json",
+      "process": {
+        "wall_seconds": 22.999614750035107,
+        "cpu_seconds": 23.082252999999998,
+        "max_rss_bytes": 69107712,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "400-native",
+      "version": "before",
+      "repetition": 2,
+      "file": "mod-400-native-2-before.json",
+      "process": {
+        "wall_seconds": 7.12654183304403,
+        "cpu_seconds": 7.011098,
+        "max_rss_bytes": 37617664,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "400-native",
+      "version": "after",
+      "repetition": 2,
+      "file": "mod-400-native-2-after.json",
+      "process": {
+        "wall_seconds": 7.1365234579425305,
+        "cpu_seconds": 7.062339,
+        "max_rss_bytes": 37044224,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "400-empty",
+      "version": "before",
+      "repetition": 2,
+      "file": "mod-400-empty-2-before.json",
+      "process": {
+        "wall_seconds": 6.9953034579521045,
+        "cpu_seconds": 6.953042,
+        "max_rss_bytes": 40534016,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "400-empty",
+      "version": "after",
+      "repetition": 2,
+      "file": "mod-400-empty-2-after.json",
+      "process": {
+        "wall_seconds": 7.0051580829313025,
+        "cpu_seconds": 6.982784,
+        "max_rss_bytes": 39813120,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "400-chain",
+      "version": "before",
+      "repetition": 2,
+      "file": "mod-400-chain-2-before.json",
+      "process": {
+        "wall_seconds": 91.43060304201208,
+        "cpu_seconds": 91.544393,
+        "max_rss_bytes": 73400320,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "400-chain",
+      "version": "after",
+      "repetition": 2,
+      "file": "mod-400-chain-2-after.json",
+      "process": {
+        "wall_seconds": 91.31109824997839,
+        "cpu_seconds": 91.622365,
+        "max_rss_bytes": 74825728,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "pathfinder",
+      "scenario": "player-search",
+      "version": "before",
+      "repetition": 2,
+      "file": "pathfinder-player-search-2-before.json",
+      "process": {
+        "wall_seconds": 0.7311730840010568,
+        "cpu_seconds": 0.6576029999999999,
+        "max_rss_bytes": 50184192,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "pathfinder",
+      "scenario": "player-search",
+      "version": "after",
+      "repetition": 2,
+      "file": "pathfinder-player-search-2-after.json",
+      "process": {
+        "wall_seconds": 0.6213106249924749,
+        "cpu_seconds": 0.617993,
+        "max_rss_bytes": 49840128,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "1-json",
+      "version": "after",
+      "repetition": 3,
+      "file": "player-1-json-3-after.json",
+      "process": {
+        "wall_seconds": 0.6320241669891402,
+        "cpu_seconds": 0.741171,
+        "max_rss_bytes": 76922880,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "1-json",
+      "version": "before",
+      "repetition": 3,
+      "file": "player-1-json-3-before.json",
+      "process": {
+        "wall_seconds": 0.620128707960248,
+        "cpu_seconds": 0.770386,
+        "max_rss_bytes": 76709888,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "1-kkpv",
+      "version": "after",
+      "repetition": 3,
+      "file": "player-1-kkpv-3-after.json",
+      "process": {
+        "wall_seconds": 0.9408050000201911,
+        "cpu_seconds": 1.0450469999999998,
+        "max_rss_bytes": 80232448,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "1-kkpv",
+      "version": "before",
+      "repetition": 3,
+      "file": "player-1-kkpv-3-before.json",
+      "process": {
+        "wall_seconds": 0.9406511249253526,
+        "cpu_seconds": 1.05108,
+        "max_rss_bytes": 79380480,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "4-json",
+      "version": "after",
+      "repetition": 3,
+      "file": "player-4-json-3-after.json",
+      "process": {
+        "wall_seconds": 1.774972749990411,
+        "cpu_seconds": 3.2053350000000003,
+        "max_rss_bytes": 200097792,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "4-json",
+      "version": "before",
+      "repetition": 3,
+      "file": "player-4-json-3-before.json",
+      "process": {
+        "wall_seconds": 1.7709111659787595,
+        "cpu_seconds": 3.2243690000000003,
+        "max_rss_bytes": 202489856,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "4-kkpv",
+      "version": "after",
+      "repetition": 3,
+      "file": "player-4-kkpv-3-after.json",
+      "process": {
+        "wall_seconds": 2.410352708073333,
+        "cpu_seconds": 4.5186779999999995,
+        "max_rss_bytes": 202276864,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "4-kkpv",
+      "version": "before",
+      "repetition": 3,
+      "file": "player-4-kkpv-3-before.json",
+      "process": {
+        "wall_seconds": 2.401066292077303,
+        "cpu_seconds": 4.47995,
+        "max_rss_bytes": 205357056,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "8-json",
+      "version": "after",
+      "repetition": 3,
+      "file": "player-8-json-3-after.json",
+      "process": {
+        "wall_seconds": 3.4384251669980586,
+        "cpu_seconds": 6.949127,
+        "max_rss_bytes": 358842368,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "8-json",
+      "version": "before",
+      "repetition": 3,
+      "file": "player-8-json-3-before.json",
+      "process": {
+        "wall_seconds": 3.459722416009754,
+        "cpu_seconds": 6.908091,
+        "max_rss_bytes": 359153664,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "8-kkpv",
+      "version": "after",
+      "repetition": 3,
+      "file": "player-8-kkpv-3-after.json",
+      "process": {
+        "wall_seconds": 4.487391583970748,
+        "cpu_seconds": 9.280845999999999,
+        "max_rss_bytes": 369180672,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "8-kkpv",
+      "version": "before",
+      "repetition": 3,
+      "file": "player-8-kkpv-3-before.json",
+      "process": {
+        "wall_seconds": 4.579783166991547,
+        "cpu_seconds": 9.353534,
+        "max_rss_bytes": 375603200,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "32-json",
+      "version": "after",
+      "repetition": 3,
+      "file": "player-32-json-3-after.json",
+      "process": {
+        "wall_seconds": 21.555281791021116,
+        "cpu_seconds": 49.096642,
+        "max_rss_bytes": 1382907904,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "32-json",
+      "version": "before",
+      "repetition": 3,
+      "file": "player-32-json-3-before.json",
+      "process": {
+        "wall_seconds": 21.245336499996483,
+        "cpu_seconds": 48.451629,
+        "max_rss_bytes": 1380614144,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "32-kkpv",
+      "version": "after",
+      "repetition": 3,
+      "file": "player-32-kkpv-3-after.json",
+      "process": {
+        "wall_seconds": 21.49763654207345,
+        "cpu_seconds": 47.468478999999995,
+        "max_rss_bytes": 1300152320,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "32-kkpv",
+      "version": "before",
+      "repetition": 3,
+      "file": "player-32-kkpv-3-before.json",
+      "process": {
+        "wall_seconds": 21.903423583949916,
+        "cpu_seconds": 48.30859,
+        "max_rss_bytes": 1303707648,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "100-native",
+      "version": "after",
+      "repetition": 3,
+      "file": "mod-100-native-3-after.json",
+      "process": {
+        "wall_seconds": 1.9812365830875933,
+        "cpu_seconds": 1.869897,
+        "max_rss_bytes": 31899648,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "100-native",
+      "version": "before",
+      "repetition": 3,
+      "file": "mod-100-native-3-before.json",
+      "process": {
+        "wall_seconds": 1.8754432919668034,
+        "cpu_seconds": 1.840104,
+        "max_rss_bytes": 31391744,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "100-empty",
+      "version": "after",
+      "repetition": 3,
+      "file": "mod-100-empty-3-after.json",
+      "process": {
+        "wall_seconds": 1.8799121669726446,
+        "cpu_seconds": 1.857669,
+        "max_rss_bytes": 35782656,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "100-empty",
+      "version": "before",
+      "repetition": 3,
+      "file": "mod-100-empty-3-before.json",
+      "process": {
+        "wall_seconds": 1.8840775840217248,
+        "cpu_seconds": 1.804772,
+        "max_rss_bytes": 36929536,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "100-chain",
+      "version": "after",
+      "repetition": 3,
+      "file": "mod-100-chain-3-after.json",
+      "process": {
+        "wall_seconds": 24.03423945896793,
+        "cpu_seconds": 23.992478,
+        "max_rss_bytes": 70402048,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "100-chain",
+      "version": "before",
+      "repetition": 3,
+      "file": "mod-100-chain-3-before.json",
+      "process": {
+        "wall_seconds": 23.541414625011384,
+        "cpu_seconds": 23.52143,
+        "max_rss_bytes": 69976064,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "400-native",
+      "version": "after",
+      "repetition": 3,
+      "file": "mod-400-native-3-after.json",
+      "process": {
+        "wall_seconds": 6.897332458989695,
+        "cpu_seconds": 6.849553,
+        "max_rss_bytes": 37634048,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "400-native",
+      "version": "before",
+      "repetition": 3,
+      "file": "mod-400-native-3-before.json",
+      "process": {
+        "wall_seconds": 7.0144679580116645,
+        "cpu_seconds": 6.91937,
+        "max_rss_bytes": 34783232,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "400-empty",
+      "version": "after",
+      "repetition": 3,
+      "file": "mod-400-empty-3-after.json",
+      "process": {
+        "wall_seconds": 7.1107737919082865,
+        "cpu_seconds": 7.046323999999999,
+        "max_rss_bytes": 39469056,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "400-empty",
+      "version": "before",
+      "repetition": 3,
+      "file": "mod-400-empty-3-before.json",
+      "process": {
+        "wall_seconds": 7.00766520795878,
+        "cpu_seconds": 6.9269169999999995,
+        "max_rss_bytes": 40730624,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "400-chain",
+      "version": "after",
+      "repetition": 3,
+      "file": "mod-400-chain-3-after.json",
+      "process": {
+        "wall_seconds": 90.95065358304419,
+        "cpu_seconds": 91.365686,
+        "max_rss_bytes": 74104832,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "400-chain",
+      "version": "before",
+      "repetition": 3,
+      "file": "mod-400-chain-3-before.json",
+      "process": {
+        "wall_seconds": 91.61121483403258,
+        "cpu_seconds": 91.672128,
+        "max_rss_bytes": 73138176,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "pathfinder",
+      "scenario": "player-search",
+      "version": "after",
+      "repetition": 3,
+      "file": "pathfinder-player-search-3-after.json",
+      "process": {
+        "wall_seconds": 0.6316688749939203,
+        "cpu_seconds": 0.6065389999999999,
+        "max_rss_bytes": 48939008,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "pathfinder",
+      "scenario": "player-search",
+      "version": "before",
+      "repetition": 3,
+      "file": "pathfinder-player-search-3-before.json",
+      "process": {
+        "wall_seconds": 0.6303777920547873,
+        "cpu_seconds": 0.650386,
+        "max_rss_bytes": 50298880,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "1-json",
+      "version": "before",
+      "repetition": 4,
+      "file": "player-1-json-4-before.json",
+      "process": {
+        "wall_seconds": 0.6317659580381587,
+        "cpu_seconds": 0.738737,
+        "max_rss_bytes": 76890112,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "1-json",
+      "version": "after",
+      "repetition": 4,
+      "file": "player-1-json-4-after.json",
+      "process": {
+        "wall_seconds": 0.6297696670517325,
+        "cpu_seconds": 0.759118,
+        "max_rss_bytes": 77185024,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "1-kkpv",
+      "version": "before",
+      "repetition": 4,
+      "file": "player-1-kkpv-4-before.json",
+      "process": {
+        "wall_seconds": 0.9443461250048131,
+        "cpu_seconds": 1.027618,
+        "max_rss_bytes": 80068608,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "1-kkpv",
+      "version": "after",
+      "repetition": 4,
+      "file": "player-1-kkpv-4-after.json",
+      "process": {
+        "wall_seconds": 0.9451790839666501,
+        "cpu_seconds": 1.037515,
+        "max_rss_bytes": 80052224,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "4-json",
+      "version": "before",
+      "repetition": 4,
+      "file": "player-4-json-4-before.json",
+      "process": {
+        "wall_seconds": 1.6775685410248116,
+        "cpu_seconds": 3.098008,
+        "max_rss_bytes": 197705728,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "4-json",
+      "version": "after",
+      "repetition": 4,
+      "file": "player-4-json-4-after.json",
+      "process": {
+        "wall_seconds": 1.6755319581134245,
+        "cpu_seconds": 3.071455,
+        "max_rss_bytes": 197345280,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "4-kkpv",
+      "version": "before",
+      "repetition": 4,
+      "file": "player-4-kkpv-4-before.json",
+      "process": {
+        "wall_seconds": 2.3047085830476135,
+        "cpu_seconds": 4.416257,
+        "max_rss_bytes": 211517440,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "4-kkpv",
+      "version": "after",
+      "repetition": 4,
+      "file": "player-4-kkpv-4-after.json",
+      "process": {
+        "wall_seconds": 2.3105347499949858,
+        "cpu_seconds": 4.359884999999999,
+        "max_rss_bytes": 201195520,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "8-json",
+      "version": "before",
+      "repetition": 4,
+      "file": "player-8-json-4-before.json",
+      "process": {
+        "wall_seconds": 3.352457832894288,
+        "cpu_seconds": 6.869366,
+        "max_rss_bytes": 356909056,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "8-json",
+      "version": "after",
+      "repetition": 4,
+      "file": "player-8-json-4-after.json",
+      "process": {
+        "wall_seconds": 3.2554563330486417,
+        "cpu_seconds": 6.719364000000001,
+        "max_rss_bytes": 359596032,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "8-kkpv",
+      "version": "before",
+      "repetition": 4,
+      "file": "player-8-kkpv-4-before.json",
+      "process": {
+        "wall_seconds": 4.397453916026279,
+        "cpu_seconds": 9.122193000000001,
+        "max_rss_bytes": 368492544,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "8-kkpv",
+      "version": "after",
+      "repetition": 4,
+      "file": "player-8-kkpv-4-after.json",
+      "process": {
+        "wall_seconds": 4.509013417060487,
+        "cpu_seconds": 9.163232,
+        "max_rss_bytes": 366854144,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "32-json",
+      "version": "before",
+      "repetition": 4,
+      "file": "player-32-json-4-before.json",
+      "process": {
+        "wall_seconds": 19.67143720795866,
+        "cpu_seconds": 45.135026,
+        "max_rss_bytes": 1388527616,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "32-json",
+      "version": "after",
+      "repetition": 4,
+      "file": "player-32-json-4-after.json",
+      "process": {
+        "wall_seconds": 19.4868067499483,
+        "cpu_seconds": 44.954588,
+        "max_rss_bytes": 1389379584,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "32-kkpv",
+      "version": "before",
+      "repetition": 4,
+      "file": "player-32-kkpv-4-before.json",
+      "process": {
+        "wall_seconds": 21.33975654200185,
+        "cpu_seconds": 47.075769,
+        "max_rss_bytes": 1307803648,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "player",
+      "scenario": "32-kkpv",
+      "version": "after",
+      "repetition": 4,
+      "file": "player-32-kkpv-4-after.json",
+      "process": {
+        "wall_seconds": 21.577961958013475,
+        "cpu_seconds": 47.472645,
+        "max_rss_bytes": 1305444352,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "100-native",
+      "version": "before",
+      "repetition": 4,
+      "file": "mod-100-native-4-before.json",
+      "process": {
+        "wall_seconds": 1.997282666969113,
+        "cpu_seconds": 1.981465,
+        "max_rss_bytes": 32309248,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "100-native",
+      "version": "after",
+      "repetition": 4,
+      "file": "mod-100-native-4-after.json",
+      "process": {
+        "wall_seconds": 1.8883727089269087,
+        "cpu_seconds": 1.859181,
+        "max_rss_bytes": 31522816,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "100-empty",
+      "version": "before",
+      "repetition": 4,
+      "file": "mod-100-empty-4-before.json",
+      "process": {
+        "wall_seconds": 1.8824410830857232,
+        "cpu_seconds": 1.853997,
+        "max_rss_bytes": 36552704,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "100-empty",
+      "version": "after",
+      "repetition": 4,
+      "file": "mod-100-empty-4-after.json",
+      "process": {
+        "wall_seconds": 1.9925336659653112,
+        "cpu_seconds": 1.889781,
+        "max_rss_bytes": 36290560,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "100-chain",
+      "version": "before",
+      "repetition": 4,
+      "file": "mod-100-chain-4-before.json",
+      "process": {
+        "wall_seconds": 22.97182945802342,
+        "cpu_seconds": 22.970032,
+        "max_rss_bytes": 68943872,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "100-chain",
+      "version": "after",
+      "repetition": 4,
+      "file": "mod-100-chain-4-after.json",
+      "process": {
+        "wall_seconds": 23.418361040996388,
+        "cpu_seconds": 23.425034,
+        "max_rss_bytes": 70008832,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "400-native",
+      "version": "before",
+      "repetition": 4,
+      "file": "mod-400-native-4-before.json",
+      "process": {
+        "wall_seconds": 7.078640374937095,
+        "cpu_seconds": 7.018317,
+        "max_rss_bytes": 36831232,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "400-native",
+      "version": "after",
+      "repetition": 4,
+      "file": "mod-400-native-4-after.json",
+      "process": {
+        "wall_seconds": 7.067650291020982,
+        "cpu_seconds": 7.02616,
+        "max_rss_bytes": 36749312,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "400-empty",
+      "version": "before",
+      "repetition": 4,
+      "file": "mod-400-empty-4-before.json",
+      "process": {
+        "wall_seconds": 7.191256624995731,
+        "cpu_seconds": 7.043368,
+        "max_rss_bytes": 41631744,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "400-empty",
+      "version": "after",
+      "repetition": 4,
+      "file": "mod-400-empty-4-after.json",
+      "process": {
+        "wall_seconds": 7.186596708022989,
+        "cpu_seconds": 7.040647,
+        "max_rss_bytes": 42696704,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "400-chain",
+      "version": "before",
+      "repetition": 4,
+      "file": "mod-400-chain-4-before.json",
+      "process": {
+        "wall_seconds": 92.03792983305175,
+        "cpu_seconds": 92.257671,
+        "max_rss_bytes": 72646656,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "mod",
+      "scenario": "400-chain",
+      "version": "after",
+      "repetition": 4,
+      "file": "mod-400-chain-4-after.json",
+      "process": {
+        "wall_seconds": 91.3750491249375,
+        "cpu_seconds": 91.68592699999999,
+        "max_rss_bytes": 73613312,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "pathfinder",
+      "scenario": "player-search",
+      "version": "before",
+      "repetition": 4,
+      "file": "pathfinder-player-search-4-before.json",
+      "process": {
+        "wall_seconds": 0.7319009590428323,
+        "cpu_seconds": 0.6598559999999999,
+        "max_rss_bytes": 50167808,
+        "scope": "complete_child_process_including_startup"
+      }
+    },
+    {
+      "kind": "pathfinder",
+      "scenario": "player-search",
+      "version": "after",
+      "repetition": 4,
+      "file": "pathfinder-player-search-4-after.json",
+      "process": {
+        "wall_seconds": 0.6293937499867752,
+        "cpu_seconds": 0.6159649999999999,
+        "max_rss_bytes": 49250304,
+        "scope": "complete_child_process_including_startup"
+      }
+    }
+  ],
+  "summary": {
+    "player:1-json": {
+      "before": {
+        "wall_p50_ms": 0.12075,
+        "wall_p95_ms": 0.178125,
+        "wall_p99_ms": 0.518792,
+        "cpu_core_ms_per_tick": 0.18381966666666666,
+        "rss_bytes_sampled_p50": 74416128,
+        "rss_bytes_sampled_peak": 76316672
+      },
+      "after": {
+        "wall_p50_ms": 0.123791,
+        "wall_p95_ms": 0.181125,
+        "wall_p99_ms": 0.528125,
+        "cpu_core_ms_per_tick": 0.18728900000000004,
+        "rss_bytes_sampled_p50": 74940416,
+        "rss_bytes_sampled_peak": 76791808
+      }
+    },
+    "player:1-kkpv": {
+      "before": {
+        "wall_p50_ms": 0.178875,
+        "wall_p95_ms": 0.275708,
+        "wall_p99_ms": 0.616459,
+        "cpu_core_ms_per_tick": 0.260583,
+        "rss_bytes_sampled_p50": 79020032,
+        "rss_bytes_sampled_peak": 79183872
+      },
+      "after": {
+        "wall_p50_ms": 0.17966600000000002,
+        "wall_p95_ms": 0.28454199999999996,
+        "wall_p99_ms": 0.6102920000000001,
+        "cpu_core_ms_per_tick": 0.26200966666666664,
+        "rss_bytes_sampled_p50": 79872000,
+        "rss_bytes_sampled_peak": 79953920
+      }
+    },
+    "player:4-json": {
+      "before": {
+        "wall_p50_ms": 0.33883300000000005,
+        "wall_p95_ms": 0.7405419999999999,
+        "wall_p99_ms": 1.0735409999999999,
+        "cpu_core_ms_per_tick": 0.8463446666666667,
+        "rss_bytes_sampled_p50": 198852608,
+        "rss_bytes_sampled_peak": 200916992
+      },
+      "after": {
+        "wall_p50_ms": 0.34425,
+        "wall_p95_ms": 0.725375,
+        "wall_p99_ms": 1.082375,
+        "cpu_core_ms_per_tick": 0.8215206666666667,
+        "rss_bytes_sampled_p50": 197738496,
+        "rss_bytes_sampled_peak": 199720960
+      }
+    },
+    "player:4-kkpv": {
+      "before": {
+        "wall_p50_ms": 0.489083,
+        "wall_p95_ms": 1.00525,
+        "wall_p99_ms": 1.519916,
+        "cpu_core_ms_per_tick": 1.163635,
+        "rss_bytes_sampled_p50": 205012992,
+        "rss_bytes_sampled_peak": 205062144
+      },
+      "after": {
+        "wall_p50_ms": 0.49537500000000007,
+        "wall_p95_ms": 0.972167,
+        "wall_p99_ms": 1.5243749999999998,
+        "cpu_core_ms_per_tick": 1.1531483333333332,
+        "rss_bytes_sampled_p50": 202604544,
+        "rss_bytes_sampled_peak": 202817536
+      }
+    },
+    "player:8-json": {
+      "before": {
+        "wall_p50_ms": 0.710583,
+        "wall_p95_ms": 1.318834,
+        "wall_p99_ms": 1.713167,
+        "cpu_core_ms_per_tick": 1.829548666666667,
+        "rss_bytes_sampled_p50": 356253696,
+        "rss_bytes_sampled_peak": 358711296
+      },
+      "after": {
+        "wall_p50_ms": 0.698625,
+        "wall_p95_ms": 1.319167,
+        "wall_p99_ms": 1.7902090000000002,
+        "cpu_core_ms_per_tick": 1.8075933333333332,
+        "rss_bytes_sampled_p50": 356368384,
+        "rss_bytes_sampled_peak": 358301696
+      }
+    },
+    "player:8-kkpv": {
+      "before": {
+        "wall_p50_ms": 1.019833,
+        "wall_p95_ms": 1.820166,
+        "wall_p99_ms": 2.2303330000000003,
+        "cpu_core_ms_per_tick": 2.4436983333333337,
+        "rss_bytes_sampled_p50": 370638848,
+        "rss_bytes_sampled_peak": 370753536
+      },
+      "after": {
+        "wall_p50_ms": 0.9792080000000001,
+        "wall_p95_ms": 1.762125,
+        "wall_p99_ms": 2.588584,
+        "cpu_core_ms_per_tick": 2.3893220000000004,
+        "rss_bytes_sampled_p50": 368525312,
+        "rss_bytes_sampled_peak": 368607232
+      }
+    },
+    "player:32-json": {
+      "before": {
+        "wall_p50_ms": 5.0685,
+        "wall_p95_ms": 7.585916,
+        "wall_p99_ms": 9.997333000000001,
+        "cpu_core_ms_per_tick": 12.362158,
+        "rss_bytes_sampled_p50": 1335263232,
+        "rss_bytes_sampled_peak": 1382285312
+      },
+      "after": {
+        "wall_p50_ms": 5.1583749999999995,
+        "wall_p95_ms": 7.503666,
+        "wall_p99_ms": 9.882458,
+        "cpu_core_ms_per_tick": 12.561077,
+        "rss_bytes_sampled_p50": 1330823168,
+        "rss_bytes_sampled_peak": 1382957056
+      }
+    },
+    "player:32-kkpv": {
+      "before": {
+        "wall_p50_ms": 5.345417,
+        "wall_p95_ms": 7.878207999999999,
+        "wall_p99_ms": 9.295083,
+        "cpu_core_ms_per_tick": 12.584616666666665,
+        "rss_bytes_sampled_p50": 1298923520,
+        "rss_bytes_sampled_peak": 1307426816
+      },
+      "after": {
+        "wall_p50_ms": 5.448958,
+        "wall_p95_ms": 7.797375,
+        "wall_p99_ms": 9.241249999999999,
+        "cpu_core_ms_per_tick": 12.652254000000001,
+        "rss_bytes_sampled_p50": 1293189120,
+        "rss_bytes_sampled_peak": 1305411584
+      }
+    },
+    "mod:100-native": {
+      "before": {
+        "wall_p50_ms": 0.5071249999999999,
+        "wall_p95_ms": 0.535125,
+        "wall_p99_ms": 0.569959,
+        "cpu_core_ms_per_tick": 0.507262,
+        "rss_bytes_sampled_p50": 30785536,
+        "rss_bytes_sampled_peak": 30982144
+      },
+      "after": {
+        "wall_p50_ms": 0.512083,
+        "wall_p95_ms": 0.5438339999999999,
+        "wall_p99_ms": 0.575959,
+        "cpu_core_ms_per_tick": 0.5126946666666666,
+        "rss_bytes_sampled_p50": 30916608,
+        "rss_bytes_sampled_peak": 30932992
+      }
+    },
+    "mod:100-empty": {
+      "before": {
+        "wall_p50_ms": 0.49045800000000006,
+        "wall_p95_ms": 0.5311250000000001,
+        "wall_p99_ms": 0.5622090000000001,
+        "cpu_core_ms_per_tick": 0.49549999999999994,
+        "rss_bytes_sampled_p50": 35766272,
+        "rss_bytes_sampled_peak": 36257792
+      },
+      "after": {
+        "wall_p50_ms": 0.51075,
+        "wall_p95_ms": 0.533791,
+        "wall_p99_ms": 0.568417,
+        "cpu_core_ms_per_tick": 0.512513,
+        "rss_bytes_sampled_p50": 35487744,
+        "rss_bytes_sampled_peak": 35487744
+      }
+    },
+    "mod:100-chain": {
+      "before": {
+        "wall_p50_ms": 6.423917,
+        "wall_p95_ms": 6.817333,
+        "wall_p99_ms": 7.553125,
+        "cpu_core_ms_per_tick": 6.526522,
+        "rss_bytes_sampled_p50": 69287936,
+        "rss_bytes_sampled_peak": 69779456
+      },
+      "after": {
+        "wall_p50_ms": 6.5007090000000005,
+        "wall_p95_ms": 6.900875,
+        "wall_p99_ms": 7.525042,
+        "cpu_core_ms_per_tick": 6.633567666666667,
+        "rss_bytes_sampled_p50": 69468160,
+        "rss_bytes_sampled_peak": 69550080
+      }
+    },
+    "mod:400-native": {
+      "before": {
+        "wall_p50_ms": 1.9767080000000001,
+        "wall_p95_ms": 2.0569170000000003,
+        "wall_p99_ms": 2.171916,
+        "cpu_core_ms_per_tick": 1.9808153333333334,
+        "rss_bytes_sampled_p50": 35700736,
+        "rss_bytes_sampled_peak": 35995648
+      },
+      "after": {
+        "wall_p50_ms": 1.9558750000000003,
+        "wall_p95_ms": 2.050916,
+        "wall_p99_ms": 2.1549590000000003,
+        "cpu_core_ms_per_tick": 1.9809896666666666,
+        "rss_bytes_sampled_p50": 36274176,
+        "rss_bytes_sampled_peak": 36339712
+      }
+    },
+    "mod:400-empty": {
+      "before": {
+        "wall_p50_ms": 1.9646249999999998,
+        "wall_p95_ms": 2.035959,
+        "wall_p99_ms": 2.174417,
+        "cpu_core_ms_per_tick": 1.9596746666666671,
+        "rss_bytes_sampled_p50": 39714816,
+        "rss_bytes_sampled_peak": 40271872
+      },
+      "after": {
+        "wall_p50_ms": 1.965,
+        "wall_p95_ms": 2.067375,
+        "wall_p99_ms": 2.184583,
+        "cpu_core_ms_per_tick": 1.9837479999999998,
+        "rss_bytes_sampled_p50": 39501824,
+        "rss_bytes_sampled_peak": 39550976
+      }
+    },
+    "mod:400-chain": {
+      "before": {
+        "wall_p50_ms": 25.77125,
+        "wall_p95_ms": 26.553041999999998,
+        "wall_p99_ms": 30.550917000000002,
+        "cpu_core_ms_per_tick": 26.099258666666667,
+        "rss_bytes_sampled_p50": 70238208,
+        "rss_bytes_sampled_peak": 72744960
+      },
+      "after": {
+        "wall_p50_ms": 25.850499999999997,
+        "wall_p95_ms": 26.716041999999998,
+        "wall_p99_ms": 28.93625,
+        "cpu_core_ms_per_tick": 26.11020666666667,
+        "rss_bytes_sampled_p50": 71516160,
+        "rss_bytes_sampled_peak": 72990720
+      }
+    },
+    "pathfinder:player-search": {
+      "before": {
+        "terrain": 22.704792,
+        "callback_none": 23.253916999999998,
+        "callback_matrix": 23.502709,
+        "room_grid": 29.014125
+      },
+      "after": {
+        "terrain": 21.058207999999997,
+        "callback_none": 21.737375,
+        "callback_matrix": 21.72775,
+        "room_grid": 27.8125
+      }
+    }
+  }
+}

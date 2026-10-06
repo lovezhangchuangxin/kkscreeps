@@ -73,176 +73,22 @@ pub struct ChainTarget {
 
 /// 候选访问适配器：调用方绑定权威对象/参数，JS 无法改变 native 的接收者。
 /// 方法执行期间不得回入 JS；每次访问自己取得并释放候选短借用。
-pub trait ChainHost {
-    fn incoming_damage(&mut self) -> Result<i64, String> {
-        Err("本次槽没有受击数值能力".into())
-    }
-    fn incoming_set_damage(&mut self, _amount: i64) -> Result<(), String> {
-        Err("本次槽没有受击数值能力".into())
-    }
-    /// 读取移动竞争者当前优先级；仅竞争槽开放。
-    fn contest_priority(&mut self, _id: &str) -> Result<i64, String> {
-        Err("本次槽没有移动竞争能力".into())
-    }
-    fn contest_set_priority(&mut self, _id: &str, _priority: i64) -> Result<(), String> {
-        Err("本次槽没有移动竞争能力".into())
-    }
-    /// 读取执行者当前准入终值；仅移动准入槽开放，未覆盖项即原生结果。
-    fn admission_admitted(&mut self, _id: &str) -> Result<bool, String> {
-        Err("本次槽没有移动准入能力".into())
-    }
-    fn admission_set_admitted(&mut self, _id: &str, _admitted: bool) -> Result<(), String> {
-        Err("本次槽没有移动准入能力".into())
-    }
-    /// 按候选当前终值只读预演取消链，返回幸存胜者对象 ID（升序）；
-    /// 仅移动准入槽开放。
-    fn admission_evaluate(&mut self) -> Result<Vec<String>, String> {
-        Err("本次槽没有移动准入能力".into())
-    }
-    /// 读取胜者当前障碍判定；仅移动障碍槽开放。
-    fn obstacle_blocked(&mut self, _id: &str) -> Result<bool, String> {
-        Err("本次槽没有移动障碍能力".into())
-    }
-    /// 追加阻挡；单向能力，仅移动障碍槽开放。
-    fn obstacle_block(&mut self, _id: &str) -> Result<(), String> {
-        Err("本次槽没有移动障碍能力".into())
-    }
-    /// 读取请求者当前否决判定；仅移动预检槽开放。
-    fn precheck_blocked(&mut self, _id: &str) -> Result<bool, String> {
-        Err("本次槽没有移动预检能力".into())
-    }
-    /// 追加否决；单向能力，仅移动预检槽开放。
-    fn precheck_block(&mut self, _id: &str) -> Result<(), String> {
-        Err("本次槽没有移动预检能力".into())
-    }
-    /// 读取拉者当前否决判定；仅拉拽登记槽开放。
-    fn pull_denied(&mut self, _id: &str) -> Result<bool, String> {
-        Err("本次槽没有拉拽登记能力".into())
-    }
-    /// 追加拉拽否决；单向能力，仅拉拽登记槽开放。
-    fn pull_deny(&mut self, _id: &str) -> Result<(), String> {
-        Err("本次槽没有拉拽登记能力".into())
-    }
-    /// 读取移动者当前代价候选；未覆盖项为原生代价，仅移动代价槽开放。
-    fn cost_fatigue_of(&mut self, _id: &str) -> Result<i64, String> {
-        Err("本次槽没有移动代价能力".into())
-    }
-    /// 设置疲劳覆盖；数值替换能力，仅移动代价槽开放。
-    fn cost_set_fatigue(&mut self, _id: &str, _value: i64) -> Result<(), String> {
-        Err("本次槽没有移动代价能力".into())
-    }
+pub trait ChainHost: ObjectsHost + ResourcesHost + CombatHost + BuildHost + MovementHost {
     fn read(&mut self, binding: &str) -> Result<ChainContext, String>;
     fn write(&mut self, binding: &str, context: ChainWrite) -> Result<(), String>;
     fn native(&mut self) -> Result<(), String>;
-    fn object_get(&mut self, _id: &str) -> Result<Option<kk_mod_api::objects::ObjectView>, String> {
-        Err("本次槽没有对象读取能力".into())
-    }
-    fn object_list(
-        &mut self,
-        _type_key: &str,
-        _after: &str,
-        _limit: u32,
-    ) -> Result<kk_mod_api::objects::ObjectPage, String> {
-        Err("本次槽没有对象读取能力".into())
-    }
-    fn object_create(
-        &mut self,
-        _binding: &str,
-        _type_key: &str,
-        _fields: &Value,
-    ) -> Result<kk_mod_api::objects::ObjectView, String> {
-        Err("本次槽没有对象创建能力".into())
-    }
-    fn object_update(
-        &mut self,
-        _binding: &str,
-        _id: &str,
-        _fields: &Value,
-    ) -> Result<kk_mod_api::objects::ObjectView, String> {
-        Err("本次槽没有对象更新能力".into())
-    }
-    fn object_remove(&mut self, _binding: &str, _id: &str) -> Result<(), String> {
-        Err("本次槽没有对象删除能力".into())
-    }
-    /// 默认拒绝，宿主须为有局部恢复边界的槽显式开放资源能力。
-    fn resource_read(
-        &mut self,
-        _id: &str,
-        _resource: &str,
-    ) -> Result<kk_mod_api::resources::ResourceView, String> {
-        Err("本次槽没有资源读取能力".into())
-    }
-    fn resource_transfer(
-        &mut self,
-        _from: &str,
-        _to: &str,
-        _resource: &str,
-        _amount: i64,
-        _loss: i64,
-    ) -> Result<kk_mod_api::resources::ResourceTransfer, String> {
-        Err("本次槽没有资源转账能力".into())
-    }
-    /// 默认拒绝，宿主须为移动槽显式开放移动请求能力；仅作用于
-    /// 本次调用的执行者，不提供任意对象的请求读写。
-    fn movement_pending(&mut self) -> Result<Option<u8>, String> {
-        Err("本次槽没有移动请求能力".into())
-    }
-    fn movement_request(&mut self, _direction: u8) -> Result<bool, String> {
-        Err("本次槽没有移动请求能力".into())
-    }
-    fn movement_cancel(&mut self) -> Result<(), String> {
-        Err("本次槽没有移动请求能力".into())
-    }
-    /// 默认拒绝，宿主须为战斗槽显式开放目标改向/取消能力；仅作用于
-    /// 本次调用的执行者与本动作，不提供任意对象的伤害/治疗写入。
-    fn combat_request(&mut self, _target: &str) -> Result<(), String> {
-        Err("本次槽没有战斗目标改向能力".into())
-    }
-    fn combat_cancel(&mut self) -> Result<(), String> {
-        Err("本次槽没有战斗能力".into())
-    }
-    /// 默认拒绝；宿主只在有对象/队列/增删回滚边界的攻击槽开放。
-    fn combat_apply_damage(&mut self, _target: &str, _amount: i64) -> Result<(), String> {
-        Err("本次槽没有策略伤害能力".into())
-    }
-    /// 默认拒绝；宿主只在有对象/延迟队列回滚边界的治疗槽开放。
-    fn combat_apply_heal(&mut self, _target: &str, _amount: i64) -> Result<(), String> {
-        Err("本次槽没有策略治疗能力".into())
-    }
-    fn combat_set_retaliation(
-        &mut self,
-        _requests: &[kk_mod_api::combat::DamageRequest],
-    ) -> Result<(), String> {
-        Err("本次槽没有反击策略能力".into())
-    }
-    fn combat_apply_damage_batch(
-        &mut self,
-        _requests: &[kk_mod_api::combat::DamageRequest],
-    ) -> Result<(), String> {
-        Err("本次槽没有批量策略伤害能力".into())
-    }
-    fn combat_list(
-        &mut self,
-        _after: &str,
-        _limit: u32,
-    ) -> Result<kk_mod_api::combat::CombatPage, String> {
-        Err("本次槽没有战斗读取能力".into())
-    }
-    fn combat_get(
-        &mut self,
-        _target: &str,
-    ) -> Result<Option<kk_mod_api::combat::CombatView>, String> {
-        Err("本次槽没有战斗读取能力".into())
-    }
-    /// 默认拒绝，宿主须为建造族槽显式开放目标改向/取消能力；仅作用于
-    /// 本次调用的执行者与本动作，进度/伤害/能量数值不经此面修改。
-    fn build_request(&mut self, _target: &str) -> Result<(), String> {
-        Err("本次槽没有建造目标改向能力".into())
-    }
-    fn build_cancel(&mut self) -> Result<(), String> {
-        Err("本次槽没有建造能力".into())
-    }
 }
+
+mod host_objects;
+pub use host_objects::ObjectsHost;
+mod host_resources;
+pub use host_resources::ResourcesHost;
+mod host_combat;
+pub use host_combat::CombatHost;
+mod host_build;
+pub use host_build::BuildHost;
+mod host_movement;
+pub use host_movement::MovementHost;
 
 // op 的 serde 输出包装；计时围住真实转换，不从 op/host 的差额推测。
 pub(crate) struct ChainRead {

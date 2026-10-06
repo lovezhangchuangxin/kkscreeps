@@ -2,17 +2,24 @@
 //! 使用 C++20，并保留异常支持：算法以异常传递回调错误和地形缺失。
 //! 上游源码版本见 src/lib.rs 的来源说明，pf.cc/pf.h 保留原文。
 
+mod terrain_adapter;
+
 fn main() {
+    let out = std::path::PathBuf::from(std::env::var_os("OUT_DIR").expect("构建输出目录"));
+    terrain_adapter::generate(&out);
     let mut build = cc::Build::new();
     build
         .cpp(true)
         .std("c++20")
+        .include(&out)
         .include("native/compat") // 让 pf.h 的 <nan.h> 使用本项目兼容层。
         .file("native/kk_ffi.cc")
-        .file("native/pf.cc")
+        .file(out.join("pf.cc"))
         .compile("kk_pathfinder_native");
 
     for path in [
+        "terrain_adapter.rs",
+        "native/terrain_load_anchor.txt",
         "native/pf.cc",
         "native/pf.h",
         "native/kk_ffi.cc",

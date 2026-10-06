@@ -49,9 +49,14 @@ fn heal_target_validation_rejections() {
     assert!(f.settle(b0).is_empty(), "spawning 施疗者拒");
     // 他人 safeMode 拒（heal.js:25-27 与 attack 同形）
     let ctl = f.controller(2, Some("p2"));
-    if let Some(RoomObject::Controller(t)) = f.world.get_mut(ctl) {
-        t.safe_mode = 1000;
-    }
+    f.world
+        .edit_object(ctl, |object| {
+            if let Some(RoomObject::Controller(t)) = Some(object) {
+                t.safe_mode = 1000;
+            }
+            Ok(())
+        })
+        .unwrap();
     let near = f.creep("near", "p1", 11, 10, &[BodyKind::Tough], 0);
     assert!(f.settle(heal_intent(medic, near)).is_empty(), "safeMode 拒");
     assert_eq!(creep_parts(&f, near).0, 100);
@@ -644,8 +649,12 @@ fn tick_input_replay_consistency_engine_level() {
     use kk_engine::settle::TickInput;
     fn run_once(now_ms: u64) -> String {
         let mut world = World::new(7);
-        world.register_room("W1N1", kk_core::Terrain::plains());
-        world.register_room("E2N2", kk_core::Terrain::plains());
+        world
+            .register_room("W1N1", kk_core::Terrain::plains())
+            .unwrap();
+        world
+            .register_room("E2N2", kk_core::Terrain::plains())
+            .unwrap();
         let mut batch = IntentBatch::default();
         for name in ["W1N1", "E2N2"] {
             let ctl = world
@@ -701,17 +710,22 @@ fn tick_input_replay_consistency_engine_level() {
             batch.add_object_intent("p1", creep_id, Action::SignController, d);
         }
         let mut engine = kk_engine::settle::Engine::new(world);
-        engine.players.insert(
-            "p1".to_string(),
-            PlayerState {
-                gcl: 1,
-                ..Default::default()
-            },
-        );
+        engine
+            .edit_players(|players| {
+                players.insert(
+                    "p1".to_string(),
+                    PlayerState {
+                        gcl: 1,
+                        ..Default::default()
+                    },
+                );
+                Ok(())
+            })
+            .unwrap();
         engine
             .tick_with_intents_with_input(batch, TickInput { now_ms })
             .unwrap();
-        serde_json::to_string(&engine.world.world_json_for_viewer("p1", 0)).unwrap()
+        serde_json::to_string(&engine.world().world_json_for_viewer("p1", 0)).unwrap()
     }
     let a = run_once(1_750_000_000_000);
     let b = run_once(1_750_000_000_000);
@@ -748,9 +762,14 @@ fn generate_safe_mode_consumes_ghodium() {
     let mut f = Fixture::new(1, terrain_with(&[]));
     let ctl = f.controller(3, Some("p1"));
     let c = f.creep("w1", "p1", 5, 6, &[BodyKind::Move], 0);
-    if let RoomObject::Creep(cr) = f.world.get_mut(c).unwrap() {
-        cr.store.ghodium = 1500;
-    }
+    f.world
+        .edit_object(c, |object| {
+            if let RoomObject::Creep(cr) = object {
+                cr.store.ghodium = 1500;
+            }
+            Ok(())
+        })
+        .unwrap();
     f.settle(controller_intent(c, Action::GenerateSafeMode, ctl));
     assert_eq!(ctl_of(&f).safe_mode_available, 1, "available 0→1");
     match f.obj(c) {
@@ -761,16 +780,26 @@ fn generate_safe_mode_consumes_ghodium() {
     let mut f2 = Fixture::new(1, terrain_with(&[]));
     let ctl2 = f2.controller(3, Some("p1"));
     let c2 = f2.creep("w2", "p1", 5, 6, &[BodyKind::Move], 0);
-    if let RoomObject::Creep(cr) = f2.world.get_mut(c2).unwrap() {
-        cr.store.ghodium = 999;
-    }
+    f2.world
+        .edit_object(c2, |object| {
+            if let RoomObject::Creep(cr) = object {
+                cr.store.ghodium = 999;
+            }
+            Ok(())
+        })
+        .unwrap();
     f2.settle(controller_intent(c2, Action::GenerateSafeMode, ctl2));
     assert_eq!(ctl_of(&f2).safe_mode_available, 0, "999 < 1000 拒");
     // 非邻接拒
     let c3 = f2.creep("w3", "p1", 5, 8, &[BodyKind::Move], 0);
-    if let RoomObject::Creep(cr) = f2.world.get_mut(c3).unwrap() {
-        cr.store.ghodium = 5000;
-    }
+    f2.world
+        .edit_object(c3, |object| {
+            if let RoomObject::Creep(cr) = object {
+                cr.store.ghodium = 5000;
+            }
+            Ok(())
+        })
+        .unwrap();
     f2.settle(controller_intent(c3, Action::GenerateSafeMode, ctl2));
     assert_eq!(ctl_of(&f2).safe_mode_available, 0, "距离 2 拒");
 }
@@ -784,7 +813,7 @@ fn activate_safe_mode_full_chain() {
     // 数值比较中是 0 >= 0 → 拒（JS null 强制转换角落，行为已由
     // activate_safe_mode_rejections 的 cooldown 用例锁住）
     let mut f = Fixture::new(1, terrain_with(&[]));
-    f.world.set_time_for_test(10);
+    f.world.set_time_for_test(10).unwrap();
     let ctl = f.controller_full(1, Some("p1"), |t| {
         t.safe_mode_available = 1;
         t.downgrade_time = Some(10 + 20_001); // 健康窗：>= time + 20000/2 − 5000
@@ -811,7 +840,7 @@ fn activate_safe_mode_rejections() {
     // activateSafeMode.js 逐门：无 available（:11）、冷却中（:14）、
     // upgradeBlocked（:17）、降级危险窗（:20）、无主/0 级（:8）
     fn base(f: &mut Fixture, tweak: &dyn Fn(&mut kk_schema::room::ControllerObj)) -> ObjId {
-        f.world.set_time_for_test(10);
+        f.world.set_time_for_test(10).unwrap();
         f.controller_full(1, Some("p1"), |t| {
             t.safe_mode_available = 1;
             t.downgrade_time = Some(10 + 20_001);
@@ -898,7 +927,7 @@ fn same_tick_attack_cancels_safe_mode_activation() {
     // 官方同序语义：attackController 的 _upgradeBlocked 被 tick.js:20-23 先
     // 持久化、:25 激活门读到它 → 激活取消（available 不减、safeMode 不挂）
     let mut f = Fixture::new(1, terrain_with(&[]));
-    f.world.set_time_for_test(10);
+    f.world.set_time_for_test(10).unwrap();
     let ctl = f.controller_full(1, Some("p1"), |t| {
         t.safe_mode_available = 1;
         t.downgrade_time = Some(10 + 20_001);

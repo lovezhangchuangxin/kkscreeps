@@ -7,11 +7,12 @@
 //! origin_blocked_pair 为真时仍封锁房间，与原脚本的 false 返回一致。
 
 use kk_pathfinder::{
-    Goal, RoomDecision, SearchOptions, WorldPosition, load_terrain, search_with_room_callback,
+    Goal, RoomDecision, SearchOptions, TerrainSet, WorldPosition, search_with_room_callback,
 };
 
 /// sample-terrain.bin：[u32 LE 房间数] + [每房 u8 xx, u8 yy] + [每房 625 字节]。
-fn load_sample_terrain() {
+fn load_sample_terrain() -> TerrainSet {
+    let mut rooms = Vec::new();
     let data = include_bytes!("fixtures/sample-terrain.bin");
     let count = u32::from_le_bytes([data[0], data[1], data[2], data[3]]) as usize;
     assert_eq!(data.len(), 4 + count * 2 + count * 625);
@@ -20,8 +21,9 @@ fn load_sample_terrain() {
         let yy = data[4 + ii * 2 + 1];
         let start = 4 + count * 2 + ii * 625;
         let bits: &[u8; 625] = data[start..start + 625].try_into().unwrap();
-        load_terrain(&kk_pathfinder::generate_room_name(xx, yy), bits).unwrap();
+        rooms.push((kk_pathfinder::generate_room_name(xx, yy), *bits));
     }
+    TerrainSet::new(rooms).unwrap()
 }
 
 // driver/native/profile.js 的位置列表，顺序影响 range 和封锁条件。
@@ -54,7 +56,7 @@ const POSITIONS: &[(&str, u32, u32)] = &[
 
 #[test]
 fn official_profile_checksum() {
-    load_sample_terrain();
+    let terrain = load_sample_terrain();
     let positions: Vec<WorldPosition> = POSITIONS
         .iter()
         .map(|&(room, x, y)| WorldPosition::from_room(room, x, y).unwrap())
@@ -73,16 +75,21 @@ fn official_profile_checksum() {
                 }
                 let goals = [Goal::with_range(positions[jj], (ii % 3) as u32)];
                 let origin_blocked_pair = jj % 5 == 0 && ii % 2 == 0;
-                let result =
-                    search_with_room_callback(positions[ii], &goals, &options, |_xx, _yy| {
+                let result = search_with_room_callback(
+                    &terrain,
+                    positions[ii],
+                    &goals,
+                    &options,
+                    |_xx, _yy| {
                         if origin_blocked_pair {
                             RoomDecision::Blocked
                         } else {
                             // 官方脚本笔误后回调返回标量 → 等价无矩阵
                             RoomDecision::None
                         }
-                    })
-                    .unwrap();
+                    },
+                )
+                .unwrap();
                 checksum += u64::from(result.path.len() as u32) + u64::from(result.ops);
             }
         }

@@ -442,6 +442,36 @@ mod tests {
     }
 
     #[test]
+    fn account_and_market_edits_reject_pre_edit_receipt_epochs() {
+        let mut engine = kk_engine::Engine::default();
+        for domain in ["account", "market"] {
+            let dispatched = RunEpoch {
+                tick: engine.world().time(),
+                generation: engine.world().generation(),
+            };
+            if domain == "account" {
+                engine
+                    .edit_players(|players| {
+                        players.entry("p1".into()).or_default().money = 100;
+                        Ok(())
+                    })
+                    .unwrap();
+            } else {
+                engine.edit_market(|_| Ok(())).unwrap();
+            }
+            let current = RunEpoch {
+                tick: engine.world().time(),
+                generation: engine.world().generation(),
+            };
+            assert_eq!(current.tick, dispatched.tick);
+            assert!(
+                reject_stale_receipt("p1", current, dispatched).is_some(),
+                "{domain} 编辑后须拒收旧回执"
+            );
+        }
+    }
+
+    #[test]
     fn outcome_classification() {
         assert!(RunOutcome::Executed.is_player_outcome());
         assert!(RunOutcome::Terminated.is_player_outcome());
@@ -505,6 +535,7 @@ mod tests {
         ex.set_modules("p1", modules)?;
         let code = "globalThis.n=(globalThis.n||0)+1; [globalThis.n,Memory.saved,require('savedModule').value]";
         let job = |attempt| kk_runner::RunJob {
+            terrain: None,
             kkpv_bundle: None,
             kkpv_public: None,
             world: json!({"time":0,"rooms":{},"objects":[]}),

@@ -318,7 +318,8 @@ pub(in crate::settle) fn complete_mod_construction(
             data[field.key.as_str()] = value.clone();
         }
     }
-    w.insert_new(RoomObject::Generic(kk_schema::room::GenericObj {
+    // 动作到此结束；分配错误由共享候选在发布前报告。
+    let _ = w.insert_new(RoomObject::Generic(kk_schema::room::GenericObj {
         id: 0,
         x: site.x,
         y: site.y,

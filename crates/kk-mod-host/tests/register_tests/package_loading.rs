@@ -371,3 +371,23 @@ fn symlinked_package_directory_rejected() {
     assert!(error.contains("包目录不得为符号链接"), "实得 {error}");
     let _ = std::fs::remove_dir_all(&root);
 }
+
+#[test]
+fn sdk_internal_modules_are_not_a_public_import_surface() {
+    for target in [
+        "kkmods:sdk/state.js",
+        "kkmods:sdk/registration.js",
+        "kkmods:sdk/chains.js",
+        "@kkscreeps/mod/state.js",
+    ] {
+        let root = temp_root("sdk-private");
+        let source =
+            format!("import {{ bindings }} from '{target}';export default function register(){{}}");
+        write_pkg(&root, "internal", &[("server.js", &source)]);
+        assert!(
+            register_root_error(&root).contains("不支持的外部导入"),
+            "{target}"
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}

@@ -218,9 +218,14 @@ fn attack_kills_structure_and_spawn_chick() {
     b0.add_object_intent("p1", spawn, Action::CreateCreep, d0);
     f.settle(b0);
     // 削弱 spawn 至一击必杀（120 伤害）
-    if let Some(RoomObject::Spawn(s)) = f.world.get_mut(spawn) {
-        s.hits = 100;
-    }
+    f.world
+        .edit_object(spawn, |object| {
+            if let Some(RoomObject::Spawn(s)) = Some(object) {
+                s.hits = 100;
+            }
+            Ok(())
+        })
+        .unwrap();
     let atk = f.creep("atk", "p2", 20, 21, &[BodyKind::Attack; 4], 0);
     f.settle(attack_intent_by("p2", atk, spawn));
     assert!(f.world.get(spawn).is_none(), "spawn 被击毁");

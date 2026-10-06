@@ -5,7 +5,7 @@ use kk_mod_api::objects::{ObjectPage, ObjectView};
 
 impl ModChainContext {
     fn check_objects(&self) -> Result<(), String> {
-        if !self.objects_slot {
+        if !matches!(self.capability, ChainCapability::Objects) {
             return Err("本次槽没有自有对象能力".into());
         }
         Ok(())

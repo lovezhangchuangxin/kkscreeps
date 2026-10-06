@@ -1,5 +1,5 @@
 //! 实际链安装和诊断共用的停用过滤与原始中心回退。
-use kk_mod_api::{ContributionPlan, Dispatch, Key, Stage};
+use kk_mod_api::{ContributionPlan, Dispatch, Key};
 use serde::Serialize;
 use std::collections::BTreeSet;
 
@@ -88,19 +88,7 @@ impl ExecutionChain {
             center: center.to_string(),
             after: names(after),
             native_center: center.namespace() == "builtin",
-            decline_allowed: slot.key.as_str() == kk_mod_api::builtin::INCOMING_DAMAGE_SLOT
-                || slot.key.as_str() == kk_mod_api::builtin::MOVE_CONTEST_SLOT
-                || slot.key.as_str() == kk_mod_api::builtin::MOVE_ADMISSION_SLOT
-                || slot.key.as_str() == kk_mod_api::builtin::MOVE_OBSTACLE_SLOT
-                || slot.key.as_str() == kk_mod_api::builtin::MOVE_PRECHECK_SLOT
-                || slot.key.as_str() == kk_mod_api::builtin::MOVE_PULL_REGISTRATION_SLOT
-                || slot.key.as_str() == kk_mod_api::builtin::MOVE_COST_SLOT
-                || slot.stage == Stage::ObjectAction
-                    && (slot.key.namespace() != "builtin"
-                        || kk_mod_api::builtin::RESOURCE_ACTION_SLOTS.contains(&slot.key.as_str())
-                        || kk_mod_api::builtin::MOVE_ACTION_SLOTS.contains(&slot.key.as_str())
-                        || kk_mod_api::builtin::COMBAT_ACTION_SLOTS.contains(&slot.key.as_str())
-                        || kk_mod_api::builtin::BUILD_ACTION_SLOTS.contains(&slot.key.as_str())),
+            decline_allowed: kk_mod_api::builtin_capabilities::decline_allowed(slot),
         }))
     }
 

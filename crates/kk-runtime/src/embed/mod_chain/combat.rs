@@ -13,7 +13,7 @@ type CombatEffect = fn(
 impl ModChainContext {
     pub(super) fn request_combat(&mut self, target: &str) -> Result<(), String> {
         let (action, journal) = {
-            let Some(combat) = &self.combat else {
+            let Some(combat) = self.capability.combat() else {
                 return Err("本次槽没有战斗目标改向能力".into());
             };
             if !combat.action.targeted() {
@@ -27,7 +27,7 @@ impl ModChainContext {
         let target_id = ObjId::parse(target).ok_or("战斗目标 ID 非法")?;
         let touched = kk_engine::settle::creep::combat_touch_targets(&self.ctx.borrow(), target_id);
         self.remember_combat_targets(&journal, &touched);
-        if let Some(policy) = &self.combat.as_ref().unwrap().retaliation {
+        if let Some(policy) = &self.capability.combat().unwrap().retaliation {
             kk_engine::settle::creep::slot_combat_execute_with_retaliation(
                 &mut self.ctx.borrow_mut(),
                 self.id,
@@ -44,14 +44,14 @@ impl ModChainContext {
             )?;
         }
         self.cached_fields = None;
-        if let Some(combat) = &mut self.combat {
+        if let Some(combat) = self.capability.combat_mut() {
             combat.consumed = true;
         }
         Ok(())
     }
 
     pub(super) fn cancel_combat(&mut self) -> Result<(), String> {
-        let Some(combat) = &mut self.combat else {
+        let Some(combat) = self.capability.combat_mut() else {
             return Err("本次槽没有战斗能力".into());
         };
         if combat.consumed {
@@ -80,7 +80,7 @@ impl ModChainContext {
         &mut self,
         requests: &[kk_mod_api::combat::DamageRequest],
     ) -> Result<(), String> {
-        let combat = self.combat.as_ref().ok_or("本次槽没有反击策略能力")?;
+        let combat = self.capability.combat().ok_or("本次槽没有反击策略能力")?;
         if matches!(
             combat.action,
             kk_engine::settle::creep::CombatAction::Heal
@@ -100,7 +100,7 @@ impl ModChainContext {
             .collect::<Result<Vec<_>, String>>()?;
         let policy =
             kk_engine::settle::creep::RetaliationPolicy::new(&self.ctx.borrow(), &requests)?;
-        self.combat.as_mut().unwrap().retaliation = Some(policy);
+        self.capability.combat_mut().unwrap().retaliation = Some(policy);
         Ok(())
     }
 
@@ -108,7 +108,7 @@ impl ModChainContext {
         &mut self,
         requests: &[kk_mod_api::combat::DamageRequest],
     ) -> Result<(), String> {
-        let Some(combat) = &self.combat else {
+        let Some(combat) = self.capability.combat() else {
             return Err("本次槽没有批量策略伤害能力".into());
         };
         if combat.consumed {
@@ -138,10 +138,13 @@ impl ModChainContext {
             self.id,
             &requests,
             action,
-            self.combat.as_ref().unwrap().retaliation.as_ref(),
+            self.capability.combat().unwrap().retaliation.as_ref(),
         )?;
         self.cached_fields = None;
-        self.combat.as_mut().expect("已检查战斗能力").consumed = true;
+        self.capability
+            .combat_mut()
+            .expect("已检查战斗能力")
+            .consumed = true;
         Ok(())
     }
 
@@ -151,7 +154,7 @@ impl ModChainContext {
         amount: i64,
         apply: CombatEffect,
     ) -> Result<(), String> {
-        let Some(combat) = &self.combat else {
+        let Some(combat) = self.capability.combat() else {
             return Err("本次槽没有战斗策略能力".into());
         };
         if combat.consumed {
@@ -168,10 +171,13 @@ impl ModChainContext {
             target_id,
             amount,
             action,
-            self.combat.as_ref().unwrap().retaliation.as_ref(),
+            self.capability.combat().unwrap().retaliation.as_ref(),
         )?;
         self.cached_fields = None;
-        self.combat.as_mut().expect("已检查战斗能力").consumed = true;
+        self.capability
+            .combat_mut()
+            .expect("已检查战斗能力")
+            .consumed = true;
         Ok(())
     }
 

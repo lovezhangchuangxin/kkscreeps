@@ -1,7 +1,7 @@
 //! Rust 与 native/kk_ffi.h 的 C ABI 绑定，集中管理裸指针、回调和结果释放。
 //!
 //! 输入切片与闭包指针只在同步调用期间使用。矩阵由 C++ 直接借用，必须持续到
-//! 搜索返回；地形则在载入时复制。lib.rs 的读写锁防止搜索期间替换全局地形。
+//! 搜索返回；地形由调用方的 TerrainSet 不可变借用。
 //! C++ 输出的路径由 malloc 分配，这里复制到 Vec 后调用 kk_pf_free_result。
 //!
 //! Rust 回调通过 trampoline 捕获可展开的 panic，转成返回码 3。此机制依赖
@@ -11,7 +11,7 @@
 
 use std::ffi::c_void;
 
-use crate::{HostRoomDecision, RoomDecision, SearchHost};
+use crate::{HostRoomDecision, RoomDecision, SearchHost, TerrainSet};
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -85,6 +85,8 @@ struct SearchResultRaw {
 
 unsafe extern "C" {
     fn kk_pf_search(
+        terrain_query: unsafe extern "C" fn(*mut c_void, u8, u8) -> *const u8,
+        terrain_user: *mut c_void,
         origin: WorldPos,
         goals: *const Goal,
         goals_len: usize,
@@ -97,7 +99,6 @@ unsafe extern "C" {
 
     fn kk_pf_free_result(result: *mut SearchResultRaw);
 
-    fn kk_pf_load_terrain(map_xx: u8, map_yy: u8, bits: *const u8) -> i32;
 }
 
 /// 将 C 回调转回具体类型的 Rust 闭包，捕获可展开的 panic 后返回码 3。
@@ -162,9 +163,10 @@ pub(super) struct RawOutcome {
 /// callback/cancel 非空时，user_data 须符合两个回调的指针和独占调用约定。
 /// 矩阵存储须稳定、可读并存活至返回；只能在 room 回调内（原生算法暂停）
 /// 修改，且不能存在与修改冲突的 Rust 借用。不可变 RoomDecision 接口施加更严
-/// 的只读约束。调用期间不能并发载入地形；lib.rs 的读锁排除地形写入，允许
+/// 的只读约束。TerrainSet 的不可变借用覆盖整个调用，允许
 /// 同线程使用独立宿主嵌套搜索。取消检查不能与房间回调并发或重入同一宿主。
 pub(super) unsafe fn ffi_search(
+    terrain: &TerrainSet,
     origin: (u32, u32),
     goals: &[(u32, u32, u32)],
     options: Options,
@@ -192,6 +194,8 @@ pub(super) unsafe fn ffi_search(
     // SAFETY: c_goals、options、raw 均在本栈帧存活；回调约束由调用方满足。
     let rc = unsafe {
         kk_pf_search(
+            terrain_query,
+            (terrain as *const TerrainSet).cast_mut().cast(),
             WorldPos {
                 xx: origin.0,
                 yy: origin.1,
@@ -279,11 +283,10 @@ pub(super) unsafe extern "C" fn host_cancel<H: SearchHost>(user_data: *mut c_voi
     )
 }
 
-/// 同步复制一个房间的 625 字节地形。
-///
-/// # Safety
-/// 调用期间不得并发搜索或载入地形；lib.rs 的全局写锁满足此条件。
-pub(super) unsafe fn ffi_load_terrain(map_xx: u8, map_yy: u8, bits: &[u8; 625]) -> bool {
-    // SAFETY: bits 含 625 字节且调用期间存活；全局地形的互斥由调用方保证。
-    unsafe { kk_pf_load_terrain(map_xx, map_yy, bits.as_ptr()) == 0 }
+// SAFETY: user 指向 ffi_search 的不可变 TerrainSet，借用覆盖整次原生调用。
+unsafe extern "C" fn terrain_query(user: *mut c_void, xx: u8, yy: u8) -> *const u8 {
+    let terrain = unsafe { &*user.cast::<TerrainSet>() };
+    terrain
+        .terrain(xx, yy)
+        .map_or(std::ptr::null(), |bits| bits.as_ptr())
 }

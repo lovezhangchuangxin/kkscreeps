@@ -4,21 +4,19 @@ use serde_json::json;
 
 fn warehouse(f: &mut Fixture, kind: &str, fields: Value) -> ObjId {
     let id = generic_structure(f, 10, 11, kind, "p1", 1000);
-    let RoomObject::Generic(g) = f
-        .world
-        .room_mut("W1N1")
-        .unwrap()
-        .objects
-        .get_mut(&id)
-        .unwrap()
-    else {
-        unreachable!()
-    };
-    let mut data: Value = serde_json::from_str(&g.data).unwrap();
-    data.as_object_mut()
-        .unwrap()
-        .extend(fields.as_object().unwrap().clone());
-    g.data = data.to_string();
+    f.world
+        .edit_object(id, |object| {
+            let RoomObject::Generic(g) = object else {
+                unreachable!()
+            };
+            let mut data: Value = serde_json::from_str(&g.data).unwrap();
+            data.as_object_mut()
+                .unwrap()
+                .extend(fields.as_object().unwrap().clone());
+            g.data = data.to_string();
+            Ok(())
+        })
+        .unwrap();
     id
 }
 
@@ -158,19 +156,17 @@ fn competing_transfers_share_candidate_capacity_and_private_rampart_blocks_withd
     );
     let before = store["store"]["energy"].clone();
     // 改为无主仓库，覆盖敌方私有 rampart，继承既有保护判定。
-    let RoomObject::Generic(g) = f
-        .world
-        .room_mut("W1N1")
-        .unwrap()
-        .objects
-        .get_mut(&target)
-        .unwrap()
-    else {
-        unreachable!()
-    };
-    let mut data: Value = serde_json::from_str(&g.data).unwrap();
-    data["owner"] = Value::Null;
-    g.data = data.to_string();
+    f.world
+        .edit_object(target, |object| {
+            let RoomObject::Generic(g) = object else {
+                unreachable!()
+            };
+            let mut data: Value = serde_json::from_str(&g.data).unwrap();
+            data["owner"] = Value::Null;
+            g.data = data.to_string();
+            Ok(())
+        })
+        .unwrap();
     generic_structure(&mut f, 10, 11, "rampart", "p2", 1000);
     assert!(exchange(&mut f, a, target, Action::Withdraw, "energy", 10).is_empty());
     assert_eq!(read(&f, target)["store"]["energy"], before);

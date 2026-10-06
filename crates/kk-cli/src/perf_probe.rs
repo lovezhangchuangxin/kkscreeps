@@ -7,7 +7,7 @@
 //! `channel` 与 `injection_bytes_sample`（p1 单玩家在计时窗外的注入
 //! 体积采样，KKPV 形态为信封+束双计数）。
 //! 最多记录 50,000 个采集样本，后续 tick 仍运行但不加入耗时统计。
-//! 负载自检只检查首房的控制器进度和 source 能量；通过不代表每房均得到验证。
+//! 每名玩家的执行回执、成功动作计数和全部房间的边界状态均须通过自检。
 //!
 //! 初始 creep 寿命为 1500 tick。预热与采集合计超过其寿命时，会发生死亡、
 //! 墓碑衰减和重新孵化，长窗口的工作负载不能视为始终不变。
@@ -30,20 +30,23 @@ const CREEPS: [(u8, u8); 3] = [(2, 1), (1, 2), (3, 1)];
 /// 只选择 TOP、LEFT 出生，确保成功出生的 creep 仍在采集和升级范围内。
 fn player_code() -> String {
     r#"
+const counts = globalThis.benchCounts ||= {ticks:0, harvest:0, upgrade:0, spawn:0};
+counts.ticks++;
 const spawn = Game.spawns && Object.values(Game.spawns)[0];
 if (spawn && !spawn.spawning && Object.keys(Game.creeps).length < 6) {
-  spawn.spawnCreep(['work', 'carry', 'move'], 'w' + Game.time + '_' + spawn.name, {directions: [TOP, LEFT]});
+  if (spawn.spawnCreep(['work', 'carry', 'move'], 'w' + Game.time + '_' + spawn.name, {directions: [TOP, LEFT]}) === OK) counts.spawn++;
 }
 for (const name in Game.creeps) {
   const c = Game.creeps[name];
+  if (c.spawning) continue;
   if (c.store.energy > 0 && c.room.controller) {
-    c.upgradeController(c.room.controller);
+    if (c.upgradeController(c.room.controller) === OK) counts.upgrade++;
   } else {
     const src = c.room.find(FIND_SOURCES)[0];
-    if (src) c.harvest(src);
+    if (src && c.harvest(src) === OK) counts.harvest++;
   }
 }
-Game.time
+counts
 "#
     .to_string()
 }
@@ -56,7 +59,6 @@ fn room_name(i: u32) -> String {
 /// 一个房间在采样时的 source 最低能量，以及是否全部达到容量。
 struct SourceObs {
     energy_min: i64,
-    all_at_capacity: bool,
 }
 
 fn workload_probe(e: &EmbedEngine, room: &str) -> anyhow::Result<(i64, SourceObs)> {
@@ -80,7 +82,6 @@ fn workload_probe(e: &EmbedEngine, room: &str) -> anyhow::Result<(i64, SourceObs
     }
     let obs = SourceObs {
         energy_min: sources.iter().map(|(e, _)| *e).min().unwrap(),
-        all_at_capacity: sources.iter().all(|(e, c)| e >= c),
     };
     Ok((progress, obs))
 }
@@ -176,47 +177,70 @@ fn run_inner(
             "JSON（参考）"
         }
     );
-    for _ in 0..warmup {
-        e.run_players(&codes)?;
+    let observe =
+        |engine: &EmbedEngine| -> anyhow::Result<Vec<Value>> {
+            (0..players).map(|i| {
+            let room = room_name(i);
+            let (progress, source) = workload_probe(engine, &room)?;
+            Ok(json!({"room":room,"progress":progress,"source_energy_min":source.energy_min,
+                "sources":engine.find_in_room(&room, kk_core::constants::FIND_SOURCES),
+                "creeps":engine.find_in_room(&room, kk_core::constants::FIND_CREEPS)}))
+        }).collect()
+        };
+    let initial = observe(&e)?;
+    let mut receipts = BTreeMap::new();
+    let mut step = |engine: &mut EmbedEngine, round: u32| -> anyhow::Result<()> {
+        let runs = engine.run_players(&codes)?;
+        anyhow::ensure!(runs.len() == handles.len(), "第 {round} 轮回执缺失");
+        for handle in &handles {
+            let run = runs
+                .get(handle)
+                .ok_or_else(|| anyhow::anyhow!("缺少玩家 {handle}"))?;
+            anyhow::ensure!(
+                run.executed && run.expr["ok"] == true,
+                "玩家 {handle} 第 {round} 轮未成功执行：{}",
+                run.expr
+            );
+            let counters = &run.expr["value"];
+            anyhow::ensure!(
+                counters["ticks"] == round,
+                "玩家 {handle} 执行计数不符：{counters}"
+            );
+            receipts.insert(handle.clone(), counters.clone());
+        }
+        Ok(())
+    };
+    for round in 1..=warmup {
+        step(&mut e, round)?;
     }
-    // 在采集窗口前读取首房状态，并清空预热耗时样本。
-    let (progress_before, obs_before) = workload_probe(&e, &room_name(0))?;
-    let mut harvest_observed = !obs_before.all_at_capacity;
+    let before = observe(&e)?;
     e.perf_reset();
     let mut process = process::ProcessProbe::start()?;
-    for _ in 0..ticks {
-        e.run_players(&codes)?;
-        if !harvest_observed {
-            let (_, obs) = workload_probe(&e, &room_name(0))?;
-            harvest_observed = !obs.all_at_capacity;
-        }
+    for index in 1..=ticks {
+        step(&mut e, warmup + index)?;
         process.observe()?;
     }
     let process_report = process.finish(ticks)?;
-
-    // 只检查首房：控制器进度须增加；合计至少 100 tick 时，还须观察到 source 未满。
-    // 检查采集期间的状态，不能只看两个边界：source 再生可使它们同时满容量。
-    // 一旦观察到未满便停止额外查询；查询在 run_players 的耗时样本之外。
-    let (progress_after, obs_after) = workload_probe(&e, &room_name(0))?;
-    let progress_delta = progress_after - progress_before;
-    let elapsed_ticks = u64::from(warmup) + u64::from(ticks);
-    let window_long_enough = elapsed_ticks >= 100;
-    if progress_delta <= 0 {
-        anyhow::bail!(
-            "工作负载自检失败：upgrade 臂空转（progress 增量 {progress_delta}、\
-             source 最低能量采集前 {} → 采集后 {}）——动作未产生 intent，\
-             检查距离预算注释与脚本分支",
-            obs_before.energy_min,
-            obs_after.energy_min
+    let after = observe(&e)?;
+    for (index, handle) in handles.iter().enumerate() {
+        let counters = &receipts[handle];
+        anyhow::ensure!(
+            after[index]["progress"].as_i64() > before[index]["progress"].as_i64(),
+            "玩家 {handle} 的控制器未升级"
         );
-    }
-    if window_long_enough && !harvest_observed {
-        anyhow::bail!(
-            "工作负载自检失败：未观察到采集（预热与采集合计 {elapsed_ticks} tick，\
-             采集期间首房 source 始终满容量）——检查 harvest 分支与源放置序"
+        anyhow::ensure!(
+            counters["upgrade"].as_u64().is_some_and(|n| n > 0),
+            "玩家 {handle} 没有成功升级动作"
         );
+        if warmup + ticks >= 100 {
+            anyhow::ensure!(
+                counters["harvest"].as_u64().is_some_and(|n| n > 0),
+                "玩家 {handle} 没有成功采集动作"
+            );
+        }
     }
-
+    let progress_delta =
+        after[0]["progress"].as_i64().unwrap() - before[0]["progress"].as_i64().unwrap();
     let report = json!({
         "tool": "kkscreeps perf-probe",
         "players": players,
@@ -228,8 +252,9 @@ fn run_inner(
         "process": process_report,
         "workload": {
             "progress_delta": progress_delta,
-            "source_energy_min_before": obs_before.energy_min,
-            "source_energy_min_after": obs_after.energy_min,
+            "source_energy_min_before": before[0]["source_energy_min"],
+            "source_energy_min_after": after[0]["source_energy_min"],
+            "initial": initial, "before": before, "after": after, "actions": receipts,
         },
         "phases": e.perf_report(),
         "channel": if kkpv { "kkpv" } else { "json" },
@@ -547,6 +572,26 @@ mod tests {
         );
         assert!(!report.exists());
         std::fs::remove_file(path)?;
+        Ok(())
+    }
+
+    #[test]
+    fn perf_probe_checks_all_players_in_both_channels() -> anyhow::Result<()> {
+        for kkpv in [false, true] {
+            let path = std::env::temp_dir().join(format!(
+                "kk-quality-perf-{}-{kkpv}.json",
+                std::process::id()
+            ));
+            run_inner(120, 0, 4, Some(2), &path.to_string_lossy(), kkpv)?;
+            let report: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
+            assert_eq!(report["workload"]["after"].as_array().unwrap().len(), 4);
+            for counters in report["workload"]["actions"].as_object().unwrap().values() {
+                assert_eq!(counters["ticks"], 120);
+                assert!(counters["harvest"].as_u64().unwrap() > 0);
+                assert!(counters["upgrade"].as_u64().unwrap() > 0);
+            }
+            std::fs::remove_file(path)?;
+        }
         Ok(())
     }
 

@@ -4,7 +4,7 @@ use kk_schema::room::{EnergyObj, RoomObject};
 fn fixture() -> World {
     let mut world = World::new(42);
     for name in ["W1N1", "W2N2"] {
-        world.register_room(name, Terrain::plains());
+        world.register_room(name, Terrain::plains()).unwrap();
         world
             .insert(
                 name,
@@ -24,7 +24,7 @@ fn fixture() -> World {
         BTreeMap::from([("ore:private".into(), serde_json::json!({"value": 3}))]),
     );
     world.bump_next_obj_id(100);
-    world.advance_ticks(7);
+    world.advance_ticks(7).unwrap();
     world
 }
 

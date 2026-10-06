@@ -598,7 +598,7 @@ pub fn check_obstacle_at_xy(
         }
     }
     if room
-        .terrain
+        .terrain()
         .check_mask(at.0 as usize, at.1 as usize, TERRAIN_MASK_WALL)
         && !has_road(room, index, at)
     {

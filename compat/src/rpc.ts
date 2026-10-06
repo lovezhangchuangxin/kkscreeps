@@ -34,7 +34,11 @@ export type RpcResponse = RpcOk | RpcErr;
 /** 优先使用 KKSCREEPS_BIN，否则取 release、debug 中首个存在的文件；执行权限由 spawn 检查。 */
 export function locateBinary(): string {
   const fromEnv = process.env['KKSCREEPS_BIN'];
-  if (fromEnv) return fromEnv;
+  if (fromEnv) {
+    const path = resolve(fromEnv);
+    if (!existsSync(path)) throw new Error(`指定的 kkscreeps 二进制不存在：${path}`);
+    return path;
+  }
   // dist/rpc.js → compat/dist → 仓库根
   const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
   const candidates = [

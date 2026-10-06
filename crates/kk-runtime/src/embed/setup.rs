@@ -428,16 +428,23 @@ impl EmbedEngine {
                 config.initial_bucket,
             );
             players.spawn(&handle, config)?;
-            self.engine.players.entry(handle.clone()).or_default().cpu = cpu;
-            self.engine.players.entry(handle.clone()).or_default().gcl = gcl;
-            // 初始余额为 10M credits，内部按千分之一存储。
-            // 来源：screeps-ok adapters/vanilla/index.ts 的 createShard 玩家初始化。
-            self.engine.players.entry(handle.clone()).or_default().money = 10_000_000_000;
+            self.engine
+                .edit_players(|players| {
+                    let state = players.entry(handle.clone()).or_default();
+                    state.cpu = cpu;
+                    state.gcl = gcl;
+                    // 初始余额 10M credits，内部按千分之一存储（vanilla createShard）。
+                    state.money = 10_000_000_000;
+                    Ok(())
+                })
+                .map_err(anyhow::Error::msg)?;
         }
         for setup in rooms {
             let name = setup.name;
             let room = setup.spec;
-            self.engine.world.register_room(name, setup.terrain);
+            self.engine
+                .register_room(name, setup.terrain)
+                .map_err(anyhow::Error::msg)?;
             let has_controller = room
                 .get("controller")
                 .and_then(Value::as_bool)
@@ -452,7 +459,7 @@ impl EmbedEngine {
                     .map(|f| f as i64)
                     .unwrap_or(if owner.is_some() { 1 } else { 0 })
                     .clamp(0, 8);
-                let time = self.engine.world.time();
+                let time = self.engine.world().time();
                 let mut spec = serde_json::json!({
                     "pos": [1, 1],
                     "structureType": "controller",
@@ -499,12 +506,11 @@ impl EmbedEngine {
                     stores: self.engine.stores(),
                     buildings: self.engine.buildings().clone(),
                     controller: None,
-                    name_seq: self.engine.world.next_obj_id() as usize,
+                    name_seq: self.engine.world().next_obj_id() as usize,
                 };
                 let controller = normalize("structure", &spec, &ctx).map_err(anyhow::Error::msg)?;
                 self.engine
-                    .world
-                    .insert(name, controller)
+                    .insert_object(name, controller)
                     .map_err(anyhow::Error::msg)?;
             }
         }
@@ -535,18 +541,17 @@ impl EmbedEngine {
         self.no_open_round("placeObject")?;
         // 使用单调递增的对象 ID 生成默认名字；对象数量会随消亡减少，不能用作序号。
         let ctx = PlaceCtx {
-            time: self.engine.world.time(),
+            time: self.engine.world().time(),
             links: self.engine.links(),
             stores: self.engine.stores(),
             buildings: self.engine.buildings().clone(),
-            controller: self.engine.world.room(room).and_then(|r| r.controller()),
-            name_seq: self.engine.world.next_obj_id() as usize,
+            controller: self.engine.world().room(room).and_then(|r| r.controller()),
+            name_seq: self.engine.world().next_obj_id() as usize,
         };
         let object = normalize(kind, spec, &ctx).map_err(anyhow::Error::msg)?;
         let id = self
             .engine
-            .world
-            .insert(room, object)
+            .insert_object(room, object)
             .map_err(anyhow::Error::msg)?;
         Ok(id.as_str())
     }
@@ -582,8 +587,7 @@ impl EmbedEngine {
         });
         let id = self
             .engine
-            .world
-            .insert(room, object)
+            .insert_object(room, object)
             .map_err(anyhow::Error::msg)?;
         Ok(id.as_str())
     }
@@ -627,35 +631,42 @@ impl EmbedEngine {
             .get("totalAmount")
             .and_then(Value::as_i64)
             .ok_or_else(|| anyhow::anyhow!("MarketOrderSpec.totalAmount 必须是整数"))?;
-        let id = self.engine.market.next_order_id();
-        self.engine.market.insert_order(kk_engine::MarketOrder {
-            id: id.clone(),
-            user: owner,
-            active: spec.get("active").and_then(Value::as_bool).unwrap_or(true),
-            order_type,
-            resource_type,
-            price: (price * 1000.0).round() as i64,
-            amount: 0,
-            remaining_amount: total_amount,
-            total_amount,
-            room_name: spec
-                .get("roomName")
-                .and_then(Value::as_str)
-                .map(str::to_string),
-            created: spec
-                .get("created")
-                .and_then(Value::as_u64)
-                .unwrap_or(self.engine.world.time()),
-            created_timestamp: spec
-                .get("createdTimestamp")
-                .and_then(Value::as_u64)
-                .unwrap_or(
-                    std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map(|d| d.as_millis() as u64)
-                        .unwrap_or(0),
-                ),
-        });
+        let created_time = self.engine.world().time();
+        let id = self
+            .engine
+            .edit_market(|market| {
+                let id = market.next_order_id();
+                market.insert_order(kk_engine::MarketOrder {
+                    id: id.clone(),
+                    user: owner,
+                    active: spec.get("active").and_then(Value::as_bool).unwrap_or(true),
+                    order_type,
+                    resource_type,
+                    price: (price * 1000.0).round() as i64,
+                    amount: 0,
+                    remaining_amount: total_amount,
+                    total_amount,
+                    room_name: spec
+                        .get("roomName")
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
+                    created: spec
+                        .get("created")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(created_time),
+                    created_timestamp: spec
+                        .get("createdTimestamp")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(
+                            std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .map(|d| d.as_millis() as u64)
+                                .unwrap_or(0),
+                        ),
+                });
+                Ok(id)
+            })
+            .map_err(anyhow::Error::msg)?;
         Ok(id)
     }
 
@@ -664,9 +675,6 @@ impl EmbedEngine {
         self.no_open_round("setTerrain")?;
         let mut t = Terrain::from_codes(&terrain).map_err(anyhow::Error::msg)?;
         t.normalize();
-        self.engine
-            .world
-            .set_terrain(room, t)
-            .map_err(anyhow::Error::msg)
+        self.engine.set_terrain(room, t).map_err(anyhow::Error::msg)
     }
 }

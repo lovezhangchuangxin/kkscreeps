@@ -24,3 +24,5 @@ pub use proto::{
 };
 pub use sandbox::{Sandbox, SandboxConfig, TickOutcome, lifo_violations, live_sandbox_count};
 pub use shared_bundle::SharedKkpvBundle;
+
+pub use kk_pathfinder::TerrainSet;

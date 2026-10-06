@@ -15,6 +15,8 @@
 pub mod admission;
 pub mod buildings;
 pub mod builtin;
+#[path = "builtin/capabilities.rs"]
+pub mod builtin_capabilities;
 pub mod combat;
 pub mod contest;
 mod definition;

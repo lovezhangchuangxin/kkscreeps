@@ -51,45 +51,7 @@ impl Engine {
         self.adopt_committed_state(saved)
     }
 
-    /// 已提交载荷的公共装入路径：结构/限额/内容校验全通过后一次换入。
-    fn adopt_committed_state(&mut self, saved: EngineCheckpoint) -> Result<(), String> {
-        let world = kk_world::World::from_checkpoint(saved.world)?;
-        if saved.next_id == 0 || saved.next_id > world.next_obj_id() {
-            return Err("检查点引擎 ID 游标非法".into());
-        }
-        for (name, player) in &saved.players {
-            if name.is_empty() || player.gcl < 0 || player.notifications.len() > NOTIFY_RECORD_CAP {
-                return Err(format!("检查点玩家 {name:?} 状态非法"));
-            }
-            player.cpu.validate_checkpoint()?;
-            if player.raw_memory.encode_utf16().count() > 2 * 1024 * 1024
-                || player
-                    .segments
-                    .iter()
-                    .any(|(id, value)| *id > 99 || value.encode_utf16().count() > 100 * 1024)
-                || player.active_request.len() > 10
-                || player
-                    .active_request
-                    .iter()
-                    .chain(&player.public_ids)
-                    .any(|id| *id > 99)
-                || player.default_public.is_some_and(|id| id > 99)
-                || player
-                    .foreign_request
-                    .as_ref()
-                    .is_some_and(|(_, id)| id.is_some_and(|id| id > 99))
-            {
-                return Err(format!("检查点玩家 {name} Memory/segments 超出限额"));
-            }
-        }
-        saved.market.validate_checkpoint()?;
-        if saved
-            .mod_states
-            .keys()
-            .any(|namespace| !self.plan.sources().contains_key(namespace))
-        {
-            return Err("检查点含未安装命名空间的 Mod state".into());
-        }
+    pub(super) fn validate_world_for_plan(&self, world: &kk_world::World) -> Result<(), String> {
         let mut rooms: Vec<_> = world
             .rooms()
             .iter()
@@ -131,6 +93,54 @@ impl Engine {
                 }
             }
         }
+        Ok(())
+    }
+
+    pub(super) fn validate_players(players: &BTreeMap<String, PlayerState>) -> Result<(), String> {
+        for (name, player) in players {
+            if name.is_empty() || player.gcl < 0 || player.notifications.len() > NOTIFY_RECORD_CAP {
+                return Err(format!("检查点玩家 {name:?} 状态非法"));
+            }
+            player.cpu.validate_checkpoint()?;
+            if player.raw_memory.encode_utf16().count() > 2 * 1024 * 1024
+                || player
+                    .segments
+                    .iter()
+                    .any(|(id, value)| *id > 99 || value.encode_utf16().count() > 100 * 1024)
+                || player.active_request.len() > 10
+                || player
+                    .active_request
+                    .iter()
+                    .chain(&player.public_ids)
+                    .any(|id| *id > 99)
+                || player.default_public.is_some_and(|id| id > 99)
+                || player
+                    .foreign_request
+                    .as_ref()
+                    .is_some_and(|(_, id)| id.is_some_and(|id| id > 99))
+            {
+                return Err(format!("检查点玩家 {name} Memory/segments 超出限额"));
+            }
+        }
+        Ok(())
+    }
+
+    /// 已提交载荷的公共装入路径：结构/限额/内容校验全通过后一次换入。
+    fn adopt_committed_state(&mut self, saved: EngineCheckpoint) -> Result<(), String> {
+        let world = kk_world::World::from_checkpoint(saved.world)?;
+        if saved.next_id == 0 || saved.next_id > world.next_obj_id() {
+            return Err("检查点引擎 ID 游标非法".into());
+        }
+        Self::validate_players(&saved.players)?;
+        saved.market.validate_checkpoint()?;
+        if saved
+            .mod_states
+            .keys()
+            .any(|namespace| !self.plan.sources().contains_key(namespace))
+        {
+            return Err("检查点含未安装命名空间的 Mod state".into());
+        }
+        self.validate_world_for_plan(&world)?;
         self.world = world;
         self.players = saved.players;
         self.market = saved.market;

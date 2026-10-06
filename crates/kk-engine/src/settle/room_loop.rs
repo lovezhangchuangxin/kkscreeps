@@ -227,6 +227,7 @@ pub fn settle_room(
         }
     }
 
+    state.check_fatal()?;
     // 整体替换本轮事件，下一轮玩家执行时由 room.getEventLog 读取。
     // settle_room 是本房间候选的唯一持有者，Rc 强计数为 1；
     // 处理器链只在调用期间借用，不留存句柄。

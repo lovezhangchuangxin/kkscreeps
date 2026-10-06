@@ -1,7 +1,8 @@
+mod support;
 use kk_pathfinder::{
-    Error, Goal, RoomDecision, SearchOptions, TERRAIN_PLAIN, WorldPosition, load_terrain,
-    pack_terrain, search, search_with_room_callback,
+    Error, Goal, RoomDecision, SearchOptions, TERRAIN_PLAIN, WorldPosition, pack_terrain,
 };
+use support::{load_terrain, search, search_with_room_callback};
 
 fn pos(room: &str, x: u32, y: u32) -> WorldPosition {
     WorldPosition::from_room(room, x, y).unwrap()

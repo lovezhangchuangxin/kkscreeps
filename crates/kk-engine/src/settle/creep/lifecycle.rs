@@ -151,7 +151,7 @@ pub fn die_creep_with_rate(w: &mut Working, id: ObjId, drop_rate: f64) {
         }
     }
 
-    w.insert_new(RoomObject::Tombstone(kk_schema::room::TombstoneObj {
+    if w.insert_new(RoomObject::Tombstone(kk_schema::room::TombstoneObj {
         id: 0,
         x,
         y,
@@ -165,7 +165,11 @@ pub fn die_creep_with_rate(w: &mut Working, id: ObjId, drop_rate: f64) {
         owner: Some(owner),
         store: tomb.store,
         store_extra: tomb.extra,
-    }));
+    }))
+    .is_err()
+    {
+        return;
+    }
 
     w.push_event(
         c::EVENT_OBJECT_DESTROYED,

@@ -151,7 +151,7 @@ pub(in crate::settle) fn intent_build(w: &mut Working, id: ObjId, data: &IntentD
     if site.structure_type != "extractor"
         && site.structure_type != "road"
         && w.room
-            .terrain
+            .terrain()
             .check_mask(cell.0 as usize, cell.1 as usize, kk_core::TERRAIN_MASK_WALL)
     {
         return;
@@ -254,14 +254,14 @@ fn complete_construction(
         }),
         "road" => {
             let mut hits = c::ROAD_HITS as u64;
-            if w.room.terrain.check_mask(
+            if w.room.terrain().check_mask(
                 site.x as usize,
                 site.y as usize,
                 kk_core::TERRAIN_MASK_SWAMP,
             ) {
                 hits *= c::CONSTRUCTION_COST_ROAD_SWAMP_RATIO as u64;
             }
-            if w.room.terrain.check_mask(
+            if w.room.terrain().check_mask(
                 site.x as usize,
                 site.y as usize,
                 kk_core::TERRAIN_MASK_WALL,
@@ -355,5 +355,6 @@ fn complete_construction(
             })
         }
     };
-    w.insert_new(obj);
+    // 动作到此结束；分配错误由共享候选在发布前报告。
+    let _ = w.insert_new(obj);
 }

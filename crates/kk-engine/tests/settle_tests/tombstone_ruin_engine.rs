@@ -463,11 +463,16 @@ fn ruin_inherits_mixed_store_and_dumps_on_decay() {
         "混合 store 的非 energy/G 资源进 store_extra"
     );
     // 加速衰减到点（放置面直改钟——decay 语义本身另有锁值）
-    for o in f.world.room_mut("W1N1").unwrap().objects.values_mut() {
-        if let RoomObject::Ruin(r) = o {
-            r.decay_time = 1;
-        }
-    }
+    f.world
+        .edit_room("W1N1", |room| {
+            for o in room.objects.values_mut() {
+                if let RoomObject::Ruin(r) = o {
+                    r.decay_time = 1;
+                }
+            }
+            Ok(())
+        })
+        .unwrap();
     f.settle(IntentBatch::default());
     let piles: Vec<(String, u32)> = f
         .world

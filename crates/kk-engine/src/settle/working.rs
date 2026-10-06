@@ -204,20 +204,25 @@ impl Working {
     }
 
     /// 使用共享游标创建对象，并登记位置索引。
-    /// 调用方须保证游标不与已有 ID 冲突；游标饱和后无法继续可靠分配。
-    pub fn insert_new(&mut self, object: RoomObject) -> ObjId {
-        let id = self.state.allocate_id();
+    /// 非法坐标、耗尽或冲突留存为整轮故障；捕获返回错误不能解除故障。
+    pub fn insert_new(&mut self, object: RoomObject) -> Result<ObjId, SettleError> {
         let (x, y) = object.pos();
-        self.remember_index_cell((x, y));
+        if x >= 50 || y >= 50 {
+            return Err(self
+                .state
+                .record_fatal(SettleError(format!("对象坐标越界：({x},{y})"))));
+        }
+        let id = self.state.allocate_id()?;
         self.room
             .insert_with_id(id, object)
-            .expect("结算 id 分配器不得复用已有对象");
+            .map_err(|error| self.state.record_fatal(SettleError(error)))?;
+        self.remember_index_cell((x, y));
         self.index.insert(ObjId(id), (x, y));
         let id = ObjId(id);
         if let Some(log) = &mut self.chain_mutations {
             log.push(ChainMutation::Inserted(id));
         }
-        id
+        Ok(id)
     }
 
     /// 删除对象及位置索引，同时清理它的疲劳、待伤害、待治疗和扩展字段。
@@ -706,7 +711,8 @@ impl Working {
                     kk_core::constants::RESOURCE_GHODIUM => (2u8, None),
                     other => (0u8, Some(other.to_string())),
                 };
-                self.insert_new(RoomObject::Energy(kk_schema::room::EnergyObj {
+                // 动作到此结束；分配错误由共享候选在发布前报告。
+                let _ = self.insert_new(RoomObject::Energy(kk_schema::room::EnergyObj {
                     id: 0,
                     x,
                     y,

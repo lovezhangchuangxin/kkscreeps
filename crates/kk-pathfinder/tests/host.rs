@@ -1,8 +1,7 @@
 //! 显式宿主桥的取消/异常不能变成成功空路径，嵌套帧不能污染外层。
-use kk_pathfinder::{
-    Error, Goal, HostRoomDecision, SearchHost, SearchOptions, WorldPosition, load_terrain, search,
-    search_with_host,
-};
+mod support;
+use kk_pathfinder::{Error, Goal, HostRoomDecision, SearchHost, SearchOptions, WorldPosition};
+use support::{load_terrain, search, search_with_host};
 
 struct Host {
     cancel: bool,

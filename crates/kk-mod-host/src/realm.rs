@@ -952,3 +952,7 @@ impl ModRealm {
             .map_err(|error| ModHostError::new("probe", format!("结果序列化失败：{error}")))
     }
 }
+
+#[cfg(test)]
+#[path = "realm/sdk_wiring_tests.rs"]
+mod sdk_wiring_tests;

@@ -4,7 +4,9 @@ use kk_mod_api::resources::{ResourceTransfer, ResourceView};
 
 impl ModChainContext {
     pub(super) fn read_resource(&self, id: &str, resource: &str) -> Result<ResourceView, String> {
-        self.resource_journal.as_ref().ok_or("本次槽没有资源能力")?;
+        self.capability
+            .resource_journal()
+            .ok_or("本次槽没有资源能力")?;
         let id = ObjId::parse(id).ok_or("资源对象 ID 非法")?;
         kk_engine::settle::resources::inspect(&self.ctx.borrow(), id, resource)
     }
@@ -17,7 +19,10 @@ impl ModChainContext {
         amount: i64,
         loss: i64,
     ) -> Result<ResourceTransfer, String> {
-        let journal = self.resource_journal.as_ref().ok_or("本次槽没有资源能力")?;
+        let journal = self
+            .capability
+            .resource_journal()
+            .ok_or("本次槽没有资源能力")?;
         let from = ObjId::parse(from).ok_or("资源来源 ID 非法")?;
         let to = ObjId::parse(to).ok_or("资源目标 ID 非法")?;
         let mut w = self.ctx.borrow_mut();

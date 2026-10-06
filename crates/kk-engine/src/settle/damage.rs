@@ -312,13 +312,13 @@ pub fn structure_hits_max(w: &Working, obj: &RoomObject) -> Option<i64> {
         RoomObject::Road(o) => {
             let mut hits = c::ROAD_HITS;
             if w.room
-                .terrain
+                .terrain()
                 .check_mask(o.x as usize, o.y as usize, kk_core::TERRAIN_MASK_SWAMP)
             {
                 hits *= c::CONSTRUCTION_COST_ROAD_SWAMP_RATIO;
             }
             if w.room
-                .terrain
+                .terrain()
                 .check_mask(o.x as usize, o.y as usize, kk_core::TERRAIN_MASK_WALL)
             {
                 hits *= c::CONSTRUCTION_COST_ROAD_WALL_RATIO;
@@ -441,7 +441,8 @@ pub(super) fn destroy_structure(w: &mut Working, id: ObjId) {
         .map(|o| o.into_owned());
     let (store, store_extra) = structure_store(obj);
     w.remove_obj(id);
-    w.insert_new(RoomObject::Ruin(kk_schema::room::RuinObj {
+    // 动作到此结束；分配错误由共享候选在发布前报告。
+    let _ = w.insert_new(RoomObject::Ruin(kk_schema::room::RuinObj {
         id: 0,
         x: pos.0,
         y: pos.1,

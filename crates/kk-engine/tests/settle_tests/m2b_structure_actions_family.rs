@@ -564,9 +564,14 @@ fn repair_intent(f: &mut Fixture, t: ObjId, target: ObjId) {
 
 /// 覆写 Generic 夹具的单字段（hits 微调用）。
 fn place_generic_field(f: &mut Fixture, id: ObjId, key: &str, value: i64) {
-    if let Some(RoomObject::Generic(g)) = f.world.get_mut(id) {
-        let mut v: Value = serde_json::from_str(&g.data).unwrap();
-        v[key] = json!(value);
-        g.data = v.to_string();
-    }
+    f.world
+        .edit_object(id, |object| {
+            if let Some(RoomObject::Generic(g)) = Some(object) {
+                let mut v: Value = serde_json::from_str(&g.data).unwrap();
+                v[key] = json!(value);
+                g.data = v.to_string();
+            }
+            Ok(())
+        })
+        .unwrap();
 }

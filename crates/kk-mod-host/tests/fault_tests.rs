@@ -31,6 +31,17 @@ impl ChainHost for ObservedHost {
         Ok(())
     }
 }
+
+impl kk_mod_host::ObjectsHost for ObservedHost {}
+
+impl kk_mod_host::ResourcesHost for ObservedHost {}
+
+impl kk_mod_host::CombatHost for ObservedHost {}
+
+impl kk_mod_host::BuildHost for ObservedHost {}
+
+impl kk_mod_host::MovementHost for ObservedHost {}
+
 impl ChainHost for Host {
     fn read(&mut self, binding: &str) -> Result<ChainContext, String> {
         if self.0 == Some(ModFaultKind::Read) && binding.starts_with("beta:") {
@@ -62,6 +73,16 @@ impl ChainHost for Host {
         }
     }
 }
+
+impl kk_mod_host::ObjectsHost for Host {}
+
+impl kk_mod_host::ResourcesHost for Host {}
+
+impl kk_mod_host::CombatHost for Host {}
+
+impl kk_mod_host::BuildHost for Host {}
+
+impl kk_mod_host::MovementHost for Host {}
 
 fn realm(outer: &str, inner: &str, profile: bool) -> ModRealm {
     let packages = [("alpha", outer), ("beta", inner)]

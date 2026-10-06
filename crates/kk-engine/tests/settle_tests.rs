@@ -89,7 +89,7 @@ struct Fixture {
 impl Fixture {
     fn new(seed: u64, terrain: kk_core::Terrain) -> Self {
         let mut world = World::new(seed);
-        world.register_room("W1N1", terrain);
+        world.register_room("W1N1", terrain).unwrap();
         Self {
             world,
             players: BTreeMap::new(),
@@ -300,12 +300,17 @@ impl Fixture {
         amount: u32,
     ) -> ObjId {
         let id = self.creep(name, "p1", x, y, kinds, energy);
-        if let Some(RoomObject::Creep(c)) = self.world.get_mut(id) {
-            c.store_extra = vec![kk_schema::room::ResourceStack {
-                resource: mineral.into(),
-                amount,
-            }];
-        }
+        self.world
+            .edit_object(id, |object| {
+                if let Some(RoomObject::Creep(c)) = Some(object) {
+                    c.store_extra = vec![kk_schema::room::ResourceStack {
+                        resource: mineral.into(),
+                        amount,
+                    }];
+                }
+                Ok(())
+            })
+            .unwrap();
         id
     }
 
@@ -350,9 +355,9 @@ impl Fixture {
         let (players, next, _) = state.into_parts().unwrap();
         self.players = players;
         let name = room.name.clone();
-        self.world.commit_room(name, room);
+        self.world.replace_room(name, room).unwrap();
         self.world.bump_next_obj_id(next);
-        self.world.advance_ticks(1);
+        self.world.advance_ticks(1).unwrap();
         events
     }
 
@@ -413,9 +418,9 @@ impl Fixture {
         let (players, next, _) = state.into_parts().unwrap();
         self.players = players;
         let name = room.name.clone();
-        self.world.commit_room(name, room);
+        self.world.replace_room(name, room).unwrap();
         self.world.bump_next_obj_id(next);
-        self.world.advance_ticks(1);
+        self.world.advance_ticks(1).unwrap();
         drop(events);
     }
 

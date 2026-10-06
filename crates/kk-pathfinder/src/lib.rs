@@ -4,7 +4,7 @@
 //! 负责构造输入、调用 Rust 回调及转换结果。复用算法保留其方向枚举和堆的平局
 //! 规则，但不表示 Rust API 与 JavaScript 的所有输入转换、异常行为都相同。
 //!
-//! 地形在进程内全局共享，搜索持有读锁，载入地形持有写锁。回调可同步嵌套搜索，
+//! 搜索显式借用所属世界的不可变地形。回调可同步嵌套不同世界的搜索，
 //! 回调返回的矩阵须存活到搜索结束；指针生命周期与释放责任见 ffi.rs。
 //!
 //! 来源：Screeps driver cf63d8adf902663e2ebddd7f8c5b7baa425dc928 的
@@ -14,9 +14,9 @@
 
 mod ffi;
 
-use std::cell::Cell;
+use std::collections::BTreeMap;
 use std::fmt;
-use std::sync::{Condvar, Mutex, MutexGuard, PoisonError};
+use std::sync::Arc;
 
 /// 平原的两位地形码；1 为墙，2 为沼泽，3 也按障碍处理。
 /// 来源：native/pf.cc 的 look 与 search（只为 `look_table[0]`、`look_table[2]` 设置可通行代价）。
@@ -24,102 +24,28 @@ pub const TERRAIN_PLAIN: u8 = 0;
 pub const TERRAIN_WALL: u8 = 1;
 pub const TERRAIN_SWAMP: u8 = 2;
 
-/// 保护 C++ 静态地形表，允许同线程递归持读锁。
-/// 每线程的最外层搜索计为一个读者，内层搜索只增加 READ_DEPTH；写者等待全部
-/// 读者退出。因此等待中的写者不会阻塞回调里的嵌套搜索。
-///
-/// 本锁只用于 TERRAIN_LOCK：线程本地深度不区分锁实例。
-/// load_terrain 拒绝本线程持读锁时再申请写锁；调用方仍须避免在回调中等待
-/// 另一个正在载入地形的线程，否则会形成跨线程等待环。
-/// 新读者不让位于等待中的写者，持续搜索可能推迟地形更新。
-struct TerrainLock {
-    state: Mutex<TerrainLockState>,
-    readers_done: Condvar,
+/// 世界独立的不可变地形。缓冲由 Arc 持有，搜索只在同步调用内借用。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TerrainSet {
+    rooms: BTreeMap<(u8, u8), Arc<[u8; 625]>>,
 }
 
-struct TerrainLockState {
-    readers: usize,
-    writer: bool,
-}
-
-// 本线程尚未结束的搜索层数；只在从 0 到 1、从 1 到 0 时修改全局读者数。
-thread_local! {
-    static READ_DEPTH: Cell<usize> = const { Cell::new(0) };
-}
-
-impl TerrainLock {
-    fn read(&'static self) -> TerrainReadGuard<'static> {
-        let depth = READ_DEPTH.with(Cell::get);
-        if depth == 0 {
-            let mut state = recover(&self.state);
-            while state.writer {
-                state = self
-                    .readers_done
-                    .wait(state)
-                    .unwrap_or_else(PoisonError::into_inner);
-            }
-            state.readers += 1;
-        }
-        READ_DEPTH.with(|d| d.set(depth + 1));
-        TerrainReadGuard { lock: self }
-    }
-
-    // 调用前须确认 READ_DEPTH == 0；否则写锁会等待本线程自己的读锁。
-    fn write(&'static self) -> TerrainWriteGuard<'static> {
-        let mut state = recover(&self.state);
-        while state.writer || state.readers > 0 {
-            state = self
-                .readers_done
-                .wait(state)
-                .unwrap_or_else(PoisonError::into_inner);
-        }
-        state.writer = true;
-        TerrainWriteGuard { lock: self }
-    }
-}
-
-// 临界区只维护计数与标志，不运行用户回调；中毒时继续使用受保护的状态。
-fn recover<'a, T>(mutex: &'a Mutex<T>) -> MutexGuard<'a, T> {
-    mutex.lock().unwrap_or_else(PoisonError::into_inner)
-}
-
-struct TerrainReadGuard<'a> {
-    lock: &'a TerrainLock,
-}
-
-impl Drop for TerrainReadGuard<'_> {
-    fn drop(&mut self) {
-        let depth = READ_DEPTH.with(Cell::get) - 1;
-        READ_DEPTH.with(|d| d.set(depth));
-        if depth == 0 {
-            let mut state = recover(&self.lock.state);
-            state.readers -= 1;
-            if state.readers == 0 {
-                self.lock.readers_done.notify_all();
+impl TerrainSet {
+    pub fn new(rooms: impl IntoIterator<Item = (String, [u8; 625])>) -> Result<Self, Error> {
+        let mut result = Self::default();
+        for (name, bits) in rooms {
+            let key = parse_room_name(&name).ok_or_else(|| Error::InvalidRoomName(name.clone()))?;
+            if result.rooms.insert(key, Arc::new(bits)).is_some() {
+                return Err(Error::InvalidRoomName(name));
             }
         }
+        Ok(result)
+    }
+
+    pub fn terrain(&self, xx: u8, yy: u8) -> Option<&[u8; 625]> {
+        self.rooms.get(&(xx, yy)).map(AsRef::as_ref)
     }
 }
-
-struct TerrainWriteGuard<'a> {
-    lock: &'a TerrainLock,
-}
-
-impl Drop for TerrainWriteGuard<'_> {
-    fn drop(&mut self) {
-        let mut state = recover(&self.lock.state);
-        state.writer = false;
-        self.lock.readers_done.notify_all();
-    }
-}
-
-static TERRAIN_LOCK: TerrainLock = TerrainLock {
-    state: Mutex::new(TerrainLockState {
-        readers: 0,
-        writer: false,
-    }),
-    readers_done: Condvar::new(),
-};
 
 /// 错误类型。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -131,8 +57,6 @@ pub enum Error {
     InvalidRoomName(String),
     /// 房内 x 或 y 不在 0..50 内。
     InvalidPosition { x: u32, y: u32 },
-    /// 当前线程的搜索尚未结束时尝试载入地形；拒绝从读锁升级到写锁，避免死锁。
-    ReentrantTerrainLoad,
     /// C ABI 返回失败，包括 C++ 异常、内存分配失败或结果结构不符合约定。
     NativeFailure,
     /// 宿主取消本次搜索，不得折叠成完整空结果。
@@ -144,10 +68,6 @@ impl fmt::Display for Error {
         match self {
             Error::InvalidRoomName(name) => write!(f, "invalid room name: {name}"),
             Error::InvalidPosition { x, y } => write!(f, "invalid room position: ({x},{y})"),
-            Error::ReentrantTerrainLoad => write!(
-                f,
-                "load_terrain is not allowed inside a search callback (deadlock guard)"
-            ),
             Error::NativeFailure => write!(f, "native pathfinder failure"),
             Error::Cancelled => write!(f, "native pathfinder cancelled"),
             Error::JSError(Some(msg)) => write!(f, "native pathfinder threw: {msg}"),
@@ -474,28 +394,6 @@ pub fn pack_terrain(tiles: &[[u8; 50]; 50]) -> [u8; 625] {
     bits
 }
 
-/// 将一个房间的地形复制到进程共享的 C++ 地形表，影响之后的所有搜索。
-/// 同名房间重复载入会覆盖表项；上游分配的旧缓冲不会释放，宜在搜索前统一加载。
-/// 来源：native/pf.cc 的 load_terrain。写锁等待正在执行的搜索结束。
-///
-/// # Errors
-/// 名字不合法、当前线程尚在搜索中，或 C ABI 失败时返回错误。
-/// 同线程回调内载入返回 ReentrantTerrainLoad。回调若等待另一线程载入完成，
-/// 仍会相互等待；应在搜索外协调更新。
-pub fn load_terrain(room_name: &str, bits: &[u8; 625]) -> Result<(), Error> {
-    let (xx, yy) =
-        parse_room_name(room_name).ok_or_else(|| Error::InvalidRoomName(room_name.to_owned()))?;
-    if READ_DEPTH.with(Cell::get) > 0 {
-        return Err(Error::ReentrantTerrainLoad);
-    }
-    let _guard = TERRAIN_LOCK.write();
-    // SAFETY: 写锁排除其他搜索或载入；固定长度 bits 在同步调用期间存活。
-    if !unsafe { ffi::ffi_load_terrain(xx, yy, bits) } {
-        return Err(Error::NativeFailure);
-    }
-    Ok(())
-}
-
 // 状态码来自 native/kk_ffi.h；异常与正常的空结果必须分开处理。
 fn finish(outcome: Option<ffi::RawOutcome>) -> Result<SearchResult, Error> {
     match outcome {
@@ -529,6 +427,7 @@ fn finish(outcome: Option<ffi::RawOutcome>) -> Result<SearchResult, Error> {
 /// # Errors
 /// 触达未载入地形的房间时返回 JSError；C ABI 失败时返回 NativeFailure。
 pub fn search(
+    terrain: &TerrainSet,
     origin: WorldPosition,
     goals: &[Goal],
     options: &SearchOptions,
@@ -551,10 +450,10 @@ pub fn search(
         .iter()
         .map(|g| (g.pos.xx, g.pos.yy, g.range))
         .collect();
-    let _terrain = TERRAIN_LOCK.read();
-    // SAFETY: 输入在同步调用期间有效；读锁防止地形被替换；没有回调指针。
+    // SAFETY: 输入在同步调用期间有效；不可变地形在同步调用内存活；没有回调指针。
     let outcome = unsafe {
         ffi::ffi_search(
+            terrain,
             (origin.xx, origin.yy),
             &goal_triples,
             c_options,
@@ -578,8 +477,8 @@ pub fn search(
 /// 缺少地形或 C ABI 失败时与 search 相同。采用 panic=unwind 且普通 panic
 /// 载荷析构不再次 panic 时，回调 panic 被捕获并返回 JSError(None)，不保留载荷。
 /// panic=abort 或 panic hook 主动终止进程不在此捕获范围内。
-/// 回调内 load_terrain 返回 ReentrantTerrainLoad，回调可自行处理该错误。
 pub fn search_with_room_callback<'a, F>(
+    terrain: &TerrainSet,
     origin: WorldPosition,
     goals: &[Goal],
     options: &SearchOptions,
@@ -607,13 +506,13 @@ where
         .collect();
     let tramp = ffi::trampoline::<'a, F>();
     let user_data = (&mut callback) as *mut F as *mut std::ffi::c_void;
-    let _terrain = TERRAIN_LOCK.read();
     // SAFETY: user_data 指向本栈帧的 callback，同步调用结束前不会移动或释放。
     // FnMut 的输出不能借用本次 &mut self，返回的矩阵借用须来自可覆盖整次搜索的
-    // 外部存储；goals 同样存活至返回。读锁防止并发替换地形。
+    // 外部存储；goals 同样存活至返回。不可变地形在同步调用内存活。
     // trampoline 在 C ABI 内捕获可展开的回调 panic；约束见 ffi.rs。
     let outcome = unsafe {
         ffi::ffi_search(
+            terrain,
             (origin.xx, origin.yy),
             &goal_triples,
             c_options,
@@ -628,6 +527,7 @@ where
 /// 使用显式宿主桥搜索；原生 room/cancel 回调串行调用同一宿主，panic 转错误。
 /// 矩阵的所有权和修改纪律由 SearchHost 的 unsafe 实现负责。
 pub fn search_with_host<H: SearchHost>(
+    terrain: &TerrainSet,
     origin: WorldPosition,
     goals: &[Goal],
     options: &SearchOptions,
@@ -650,11 +550,11 @@ pub fn search_with_host<H: SearchHost>(
         .iter()
         .map(|g| (g.pos.xx, g.pos.yy, g.range))
         .collect();
-    let _terrain = TERRAIN_LOCK.read();
     // SAFETY: 两个 trampoline 仅在同步调用内串行访问 host；其矩阵契约由
-    // unsafe trait 保证，地形读锁排除写入，内层搜索使用独立 host。
+    // unsafe trait 保证，地形由外部不可变借用，内层搜索使用独立 host。
     finish(unsafe {
         ffi::ffi_search(
+            terrain,
             (origin.xx, origin.yy),
             &goals,
             options,

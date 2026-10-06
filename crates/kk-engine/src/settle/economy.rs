@@ -83,13 +83,13 @@ pub fn road_decay_tick(w: &mut Working, id: ObjId) {
     };
     let mut decay = kk_core::constants::ROAD_DECAY_AMOUNT;
     if w.room
-        .terrain
+        .terrain()
         .check_mask(x as usize, y as usize, kk_core::TERRAIN_MASK_SWAMP)
     {
         decay *= kk_core::constants::CONSTRUCTION_COST_ROAD_SWAMP_RATIO;
     }
     if w.room
-        .terrain
+        .terrain()
         .check_mask(x as usize, y as usize, kk_core::TERRAIN_MASK_WALL)
     {
         decay *= kk_core::constants::CONSTRUCTION_COST_ROAD_WALL_RATIO;

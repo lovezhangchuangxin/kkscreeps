@@ -1,0 +1,10 @@
+	// Loads static terrain data into module upfront
+	void path_finder_t::load_terrain(v8::Local<v8::Array> terrain) {
+		uint8_t* data = new uint8_t[terrain->Length() * 625];
+		for (uint32_t ii = 0; ii < terrain->Length(); ++ii) {
+			v8::Local<v8::Object> terrain_info = Nan::To<v8::Object>(Nan::Get(terrain, ii).ToLocalChecked()).ToLocalChecked();
+			map_position_t pos = Nan::Get(terrain_info, Nan::New("room").ToLocalChecked()).ToLocalChecked();
+			memcpy(data + ii * 625, *Nan::TypedArrayContents<uint8_t>(Nan::Get(terrain_info, Nan::New("bits").ToLocalChecked()).ToLocalChecked()), 625);
+			path_finder_t::terrain[pos.id] = data + ii * 625;
+		}
+	}

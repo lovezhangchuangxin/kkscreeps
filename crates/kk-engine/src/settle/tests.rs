@@ -112,11 +112,13 @@ fn unknown_writeback_player_rejects_entire_tick() {
 #[test]
 fn restored_room_uses_directory_name_during_settlement() {
     let mut world = kk_world::World::new(1);
-    world.register_room("W1N1", kk_core::Terrain::plains());
+    world
+        .register_room("W1N1", kk_core::Terrain::plains())
+        .unwrap();
     let room = world.room("W1N1").unwrap().clone();
     let restored = RoomState::decode_snapshot(&room.encode_snapshot(0, 1, 0)).unwrap();
     assert!(restored.name.is_empty());
-    world.commit_room("W1N1".into(), restored);
+    world.replace_room("W1N1".into(), restored).unwrap();
     let mut engine = Engine::new(world);
     let mut batch = IntentBatch::default();
     batch.add_room_intent(
@@ -144,7 +146,9 @@ fn restored_room_uses_directory_name_during_settlement() {
 #[test]
 fn engine_tick_bumps_generation_exactly_once() {
     let mut world = kk_world::World::new(1);
-    world.register_room("W1N1", kk_core::Terrain::plains());
+    world
+        .register_room("W1N1", kk_core::Terrain::plains())
+        .unwrap();
     let base = world.generation();
     let mut engine = Engine::new(world);
     engine.tick_with_intents(IntentBatch::default()).unwrap();
@@ -160,7 +164,9 @@ fn engine_tick_bumps_generation_exactly_once() {
 fn engine_tick_rolls_back_all_rooms_on_failure() {
     let mut world = kk_world::World::new(1);
     for name in ["W1N1", "W2N2"] {
-        world.register_room(name, kk_core::Terrain::plains());
+        world
+            .register_room(name, kk_core::Terrain::plains())
+            .unwrap();
         world
             .insert(
                 name,
@@ -209,7 +215,9 @@ fn engine_tick_rolls_back_all_rooms_on_failure() {
 #[test]
 fn stage_machine_transitions_recovery_and_mutation_gate() {
     let mut world = kk_world::World::new(1);
-    world.register_room("W1N1", kk_core::Terrain::plains());
+    world
+        .register_room("W1N1", kk_core::Terrain::plains())
+        .unwrap();
     let mut engine = Engine::new(world);
     assert_eq!(engine.run_state(), &RunState::Ready);
     engine.tick_with_intents(IntentBatch::default()).unwrap();
@@ -252,7 +260,8 @@ fn stage_machine_transitions_recovery_and_mutation_gate() {
     let g = engine.world.generation();
     engine
         .world
-        .register_room("W9N9", kk_core::Terrain::plains());
+        .register_room("W9N9", kk_core::Terrain::plains())
+        .unwrap();
     assert_ne!(
         engine.world.generation(),
         g,
@@ -271,7 +280,9 @@ fn stage_machine_transitions_recovery_and_mutation_gate() {
 fn stage_injection_keeps_world_and_market_at_previous_tick() {
     let make = || {
         let mut world = kk_world::World::new(1);
-        world.register_room("W1N1", kk_core::Terrain::plains());
+        world
+            .register_room("W1N1", kk_core::Terrain::plains())
+            .unwrap();
         let mut engine = Engine::new(world);
         engine.players.entry("p1".to_string()).or_default().money = 0;
         let id = engine.market.next_order_id();
@@ -361,7 +372,9 @@ fn stage_injection_keeps_world_and_market_at_previous_tick() {
 #[test]
 fn market_candidacy_counter_snapshot_and_retry_id_stability() {
     let mut world = kk_world::World::new(1);
-    world.register_room("W1N1", kk_core::Terrain::plains());
+    world
+        .register_room("W1N1", kk_core::Terrain::plains())
+        .unwrap();
     let mut engine = Engine::new(world);
     const SEED: i64 = 10_000_000;
     engine.players.entry("p1".to_string()).or_default().money = SEED;
@@ -427,8 +440,12 @@ fn market_candidacy_counter_snapshot_and_retry_id_stability() {
 #[test]
 fn validate_stage_tripwires_discriminate() {
     let mut world = kk_world::World::new(1);
-    world.register_room("W1N1", kk_core::Terrain::plains());
-    world.register_room("W2N2", kk_core::Terrain::plains());
+    world
+        .register_room("W1N1", kk_core::Terrain::plains())
+        .unwrap();
+    world
+        .register_room("W2N2", kk_core::Terrain::plains())
+        .unwrap();
     world
         .insert(
             "W1N1",

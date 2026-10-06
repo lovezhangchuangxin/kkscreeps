@@ -9,7 +9,7 @@ fn world_with_room() -> World {
     world.time = 10;
     let mut terrain = Terrain::plains();
     terrain.normalize();
-    world.register_room("W1N1", terrain);
+    world.register_room("W1N1", terrain).unwrap();
     world
 }
 
@@ -29,7 +29,7 @@ fn ctx(world: &World) -> PlaceCtx<'_> {
 #[test]
 fn snapshot_store_and_progress_edges() {
     let mut world = World::new(1);
-    world.register_room("W1N1", Terrain::plains());
+    world.register_room("W1N1", Terrain::plains()).unwrap();
     let spawn = world
         .insert(
             "W1N1",
@@ -105,7 +105,7 @@ fn snapshot_store_and_progress_edges() {
         (8, serde_json::Value::Null),
     ] {
         let mut w2 = World::new(1);
-        w2.register_room("W2N2", Terrain::plains());
+        w2.register_room("W2N2", Terrain::plains()).unwrap();
         let id = w2
             .insert(
                 "W2N2",

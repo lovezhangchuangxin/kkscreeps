@@ -135,14 +135,19 @@ fn rule_overrides_flow_into_transfer_settlement() {
     );
     // 清两轮冷却并把 l1 预置到余量 50 的位置。
     for id in [l1, l2] {
-        if let Some(RoomObject::Generic(g)) = f.world.get_mut(id) {
-            let mut v: serde_json::Value = serde_json::from_str(&g.data).unwrap();
-            v["cooldown"] = json!(0);
-            if id == l1 {
-                v["store"]["energy"] = json!(350);
-            }
-            g.data = v.to_string();
-        }
+        f.world
+            .edit_object(id, |object| {
+                if let Some(RoomObject::Generic(g)) = Some(object) {
+                    let mut v: serde_json::Value = serde_json::from_str(&g.data).unwrap();
+                    v["cooldown"] = json!(0);
+                    if id == l1 {
+                        v["store"]["energy"] = json!(350);
+                    }
+                    g.data = v.to_string();
+                }
+                Ok(())
+            })
+            .unwrap();
     }
     f.settle_with_rules(batch, links);
     let d1 = data_of(&f, l1);

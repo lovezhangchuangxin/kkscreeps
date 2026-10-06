@@ -54,3 +54,9 @@ V8 生命周期账本位于 `kk-vm/src/isolate_order.rs`，玩家沙箱与 Mod r
 公共夹具留在测试族父模块，案例按规则、执行链、领域写入、安装门、故障/拒绝/停用等职责分组；Mod 链测试的共享工厂与放置/投影/ID 契约见 [mod_chain_tests 夹具契约](../../crates/kk-runtime/tests/mod_chain_tests/README.md)。结构拆分本身保持原测试注册数量；后续功能测试在对应子模块显式注册。`sandbox_tests` 与 `embed_engine_suite` 的串行场景仍由原入口按原顺序调用，子模块不新增独立 `#[test]`，避免改变 V8 生命周期和进程级计数的约束。
 
 接近 1000 行时应提前检查职责：新增规则、协议形态或故障恢复场景应放到对应模块；只有实际形成新领域边界时才增加模块。阶段记录见[结构治理验收](../research/notes/source-structure-2026-10-05.md)。
+
+## 权威状态与 SDK 模块
+
+`kk-engine/src/settle/state_api.rs` 提供只读 getters 和隔离编辑；`kk-world/src/world_mutation.rs` 管理内容编辑、结构验证与整轮提交。`kk-runtime/src/embed/mod_chain/capability.rs` 的枚举携带领域状态，宿主接口拆在 `kk-mod-host/src/chain/host_*.rs`。SDK 公共入口为 `sdk.js`，注册/规则/链/刷新/领域实现在 `sdk/`，只允许自身静态导入。
+
+`kk-pathfinder/terrain_adapter.rs` 在 OUT_DIR 生成地形适配源码，固定 `native/pf.cc` 与 `pf.h` 不改写。搜索显式接收 TerrainSet，运行时所有权与缓存见[地形设计](../designs/pathfinder-terrain.md)。

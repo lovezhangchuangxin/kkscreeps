@@ -161,7 +161,8 @@ pub fn intent_create_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) 
             directions,
         });
     }
-    w.insert_new(RoomObject::Creep(CreepObj {
+    // 动作到此结束；分配错误由共享候选在发布前报告。
+    let _ = w.insert_new(RoomObject::Creep(CreepObj {
         id: 0,
         x: spawn.x,
         y: spawn.y,
@@ -528,7 +529,7 @@ pub(crate) fn born_creep(
                     Some(o) => super::buildings::obstacle_at(w, &movement::type_name_of(o)),
                     None => false,
                 })
-                || (w.room.terrain.check_mask(
+                || (w.room.terrain().check_mask(
                     nx as usize,
                     ny as usize,
                     kk_core::TERRAIN_MASK_WALL,
@@ -580,10 +581,11 @@ pub(crate) fn born_creep(
                     Some(o) => super::buildings::obstacle_at(w, &movement::type_name_of(o)),
                     None => false,
                 })
-                && !w
-                    .room
-                    .terrain
-                    .check_mask(nx as usize, ny as usize, kk_core::TERRAIN_MASK_WALL)
+                && !w.room.terrain().check_mask(
+                    nx as usize,
+                    ny as usize,
+                    kk_core::TERRAIN_MASK_WALL,
+                )
                 && !w.movement.is_tile_busy(nx, ny);
         if free {
             return false; // 有出口但我们没选它：不 spawnstomp（官方语义）

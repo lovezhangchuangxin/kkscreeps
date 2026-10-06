@@ -185,15 +185,25 @@ fn withdraw_respects_private_rampart_and_safe_mode() {
         let mut f = Fixture::new(1, terrain_with(&[]));
         f.controller_full(8, Some(room_owner), |ctl| ctl.safe_mode = safe_mode);
         let target = f.spawn("target", 10, 10, 100);
-        if let Some(RoomObject::Spawn(s)) = f.world.get_mut(target) {
-            s.owner = target_owner.into();
-        }
+        f.world
+            .edit_object(target, |object| {
+                if let Some(RoomObject::Spawn(s)) = Some(object) {
+                    s.owner = target_owner.into();
+                }
+                Ok(())
+            })
+            .unwrap();
         let rampart = generic_structure(&mut f, 10, 10, "rampart", "p2", 1000);
-        if let Some(RoomObject::Generic(g)) = f.world.get_mut(rampart) {
-            let mut v: Value = serde_json::from_str(&g.data).unwrap();
-            v["isPublic"] = serde_json::json!(rampart_public);
-            g.data = v.to_string();
-        }
+        f.world
+            .edit_object(rampart, |object| {
+                if let Some(RoomObject::Generic(g)) = Some(object) {
+                    let mut v: Value = serde_json::from_str(&g.data).unwrap();
+                    v["isPublic"] = serde_json::json!(rampart_public);
+                    g.data = v.to_string();
+                }
+                Ok(())
+            })
+            .unwrap();
         let actor = f.creep("hauler", "p1", 11, 10, &[BodyKind::Carry], 0);
         let mut data = IntentData::target(target);
         data.amount = Some(10);

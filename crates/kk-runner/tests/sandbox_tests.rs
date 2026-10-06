@@ -53,6 +53,7 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     pathfinder_matrix_mutation_impl()?;
     pathfinder_callback_budget_impl()?;
     pathfinder_kkpv_channel_equivalence_impl()?;
+    same_revision_world_switch_uses_current_terrain_impl()?;
     run_expr_channel()?;
     wasm_binary_module()?;
     watchdog_hard_terminate_and_reuse()?;

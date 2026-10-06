@@ -1,6 +1,6 @@
 // Screeps 寻路器的 C ABI；与 src/ffi.rs 的 repr(C) 结构体保持字段顺序、宽度一致。
 // 来源版本见 src/lib.rs；算法保留在 pf.cc/pf.h，本接口负责数据转换和状态分类。
-// 入口自身不加地形锁：调用方须让载入与所有搜索互斥；多个搜索可并发或嵌套。
+// 地形由本次搜索独立借用；不同世界可并发或嵌套。
 #ifndef KK_PATHFINDER_FFI_H_
 #define KK_PATHFINDER_FFI_H_
 
@@ -45,6 +45,9 @@ typedef struct kk_pf_options {
 typedef int (*kk_pf_room_callback_t)(void* user_data, uint8_t xx, uint8_t yy,
 	const uint8_t** out_matrix, size_t* out_len);
 
+// 查询返回固定 625 字节不可变地形；指针有效至本次搜索结束，缺房返回 null。
+typedef const uint8_t* (*kk_pf_terrain_query_t)(void* user, uint8_t xx, uint8_t yy);
+
 // 搜索主循环的取消检查；非零表示取消。本函数不得抛错或越过 ABI 展开。
 typedef int (*kk_pf_cancel_callback_t)(void* user_data);
 
@@ -68,18 +71,14 @@ typedef struct kk_pf_search_result {
 // options/out_result 必须有效，非空 goals 须指向 goals_len 个元素。
 // 返回 0 时 out_result 有效（包含 status 3 的搜索错误）；非零表示包装层失败，
 // 包括构造输入、运行算法或转换结果期间的 C++ 异常，此时应丢弃 out_result。
-int kk_pf_search(kk_pf_world_pos_t origin, const kk_pf_goal_t* goals, size_t goals_len,
+int kk_pf_search(kk_pf_terrain_query_t terrain_query, void* terrain_user,
+    kk_pf_world_pos_t origin, const kk_pf_goal_t* goals, size_t goals_len,
 	kk_pf_room_callback_t callback, void* callback_user_data,
 	kk_pf_cancel_callback_t cancel, const kk_pf_options_t* options,
 	kk_pf_search_result_t* out_result);
 
 // 释放成功调用的路径分配并将指针清空；允许 result 或 path 为 null。
 void kk_pf_free_result(kk_pf_search_result_t* result);
-
-// bits_625 指向 625 个字节，按列顺序每格两位；调用期间有效即可，pf.cc 会复制。
-// 同一房间再次载入会覆盖表项，但上游不回收旧缓冲。返回 0 表示载入成功，
-// 非零表示空指针或 C++ 异常。载入期间不能有其他载入或搜索。
-int kk_pf_load_terrain(uint8_t map_xx, uint8_t map_yy, const uint8_t* bits_625);
 
 #ifdef __cplusplus
 }

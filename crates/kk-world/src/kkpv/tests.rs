@@ -103,11 +103,11 @@ fn store(energy: u32) -> Store {
 /// 覆盖全部 16 个内建对象族变体与两种查看者视野的对照夹具。
 fn rich_world() -> World {
     let mut world = World::new(11);
-    world.set_time_for_test(500);
+    world.set_time_for_test(500).unwrap();
     let mut w1 = Terrain::plains();
     w1.normalize();
-    world.register_room("W1N1", w1);
-    world.register_room("E2S2", Terrain::plains());
+    world.register_room("W1N1", w1).unwrap();
+    world.register_room("E2S2", Terrain::plains()).unwrap();
     let insert =
         |world: &mut World, room: &str, object| world.insert(room, object).expect("夹具对象可插入");
     insert(
@@ -717,7 +717,7 @@ fn generic_native_ext_key_is_overwritten_by_catalog() {
     let mut world = World::new(3);
     let mut terrain = Terrain::plains();
     terrain.normalize();
-    world.register_room("W1N1", terrain);
+    world.register_room("W1N1", terrain).unwrap();
     world
         .insert(
             "W1N1",

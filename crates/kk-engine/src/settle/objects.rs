@@ -81,18 +81,16 @@ pub fn create(
     let ty = own_type(w, namespace, type_key)?;
     let fields = kk_mod_api::objects::prepare_fields(fields, ty)?;
     let (x, y) = kk_mod_api::objects::position(&fields, ty)?;
-    let next = w.state.peek_next_id();
-    if next == 0 || next == u64::MAX || w.room.objects.contains_key(&ObjId(next)) {
-        return Err("对象 ID 游标已耗尽或与候选对象冲突".into());
-    }
     w.check_mod_mutation_budget()?;
-    let id = w.insert_new(RoomObject::Mod(kk_schema::room::ModObj {
-        id: 0,
-        x,
-        y,
-        type_key: type_key.into(),
-        data: fields.to_string(),
-    }));
+    let id = w
+        .insert_new(RoomObject::Mod(kk_schema::room::ModObj {
+            id: 0,
+            x,
+            y,
+            type_key: type_key.into(),
+            data: fields.to_string(),
+        }))
+        .map_err(|error| error.to_string())?;
     Ok(get(w, id)?.expect("刚创建的 Mod 对象"))
 }
 

@@ -34,6 +34,16 @@ impl ChainHost for Host {
     }
 }
 
+impl kk_mod_host::ObjectsHost for Host {}
+
+impl kk_mod_host::ResourcesHost for Host {}
+
+impl kk_mod_host::CombatHost for Host {}
+
+impl kk_mod_host::BuildHost for Host {}
+
+impl kk_mod_host::MovementHost for Host {}
+
 fn realm(body: &str) -> ModRealm {
     realm_with_profile(body, false)
 }

@@ -381,16 +381,14 @@ fn renew_creep_settles() {
         0,
     );
     // Fixture 默认寿命截止值为 u64::MAX/2，改为 time+100 以允许 renew。
-    if let RoomObject::Creep(c) = f
-        .world
-        .room_mut("W1N1")
-        .unwrap()
-        .objects
-        .get_mut(&creep)
-        .unwrap()
-    {
-        c.age_time = 100;
-    }
+    f.world
+        .edit_object(creep, |object| {
+            if let RoomObject::Creep(c) = object {
+                c.age_time = 100;
+            }
+            Ok(())
+        })
+        .unwrap();
     let mut b = IntentBatch::default();
     b.add_object_intent("p1", spawn, Action::RenewCreep, IntentData::target(creep));
     f.settle(b);
@@ -430,16 +428,14 @@ fn renew_creep_guards() {
         }),
     );
     let creep = f.creep("old", "p1", 20, 21, &[BodyKind::Move], 0);
-    if let RoomObject::Creep(c) = f
-        .world
-        .room_mut("W1N1")
-        .unwrap()
-        .objects
-        .get_mut(&creep)
-        .unwrap()
-    {
-        c.age_time = 100;
-    }
+    f.world
+        .edit_object(creep, |object| {
+            if let RoomObject::Creep(c) = object {
+                c.age_time = 100;
+            }
+            Ok(())
+        })
+        .unwrap();
     let mut b = IntentBatch::default();
     b.add_object_intent("p1", spawn, Action::RenewCreep, IntentData::target(creep));
     f.settle(b);
@@ -452,16 +448,14 @@ fn renew_creep_guards() {
     let mut f = Fixture::new(1, terrain_with(&[]));
     let spawn = spawn_with_job(&mut f, 20, 20, 300, None);
     let claimer = f.creep("claimer", "p1", 20, 21, &[BodyKind::Claim], 0);
-    if let RoomObject::Creep(c) = f
-        .world
-        .room_mut("W1N1")
-        .unwrap()
-        .objects
-        .get_mut(&claimer)
-        .unwrap()
-    {
-        c.age_time = 100;
-    }
+    f.world
+        .edit_object(claimer, |object| {
+            if let RoomObject::Creep(c) = object {
+                c.age_time = 100;
+            }
+            Ok(())
+        })
+        .unwrap();
     let mut b = IntentBatch::default();
     b.add_object_intent("p1", spawn, Action::RenewCreep, IntentData::target(claimer));
     f.settle(b);
@@ -475,26 +469,22 @@ fn renew_creep_guards() {
     let spawn = spawn_with_job(&mut f, 20, 20, 0, None);
     let far = f.creep("far", "p1", 30, 30, &[BodyKind::Move], 0);
     let near = f.creep("near", "p1", 20, 21, &[BodyKind::Move], 0);
-    if let RoomObject::Creep(c) = f
-        .world
-        .room_mut("W1N1")
-        .unwrap()
-        .objects
-        .get_mut(&far)
-        .unwrap()
-    {
-        c.age_time = 100;
-    }
-    if let RoomObject::Creep(c) = f
-        .world
-        .room_mut("W1N1")
-        .unwrap()
-        .objects
-        .get_mut(&near)
-        .unwrap()
-    {
-        c.age_time = 100;
-    }
+    f.world
+        .edit_object(far, |object| {
+            if let RoomObject::Creep(c) = object {
+                c.age_time = 100;
+            }
+            Ok(())
+        })
+        .unwrap();
+    f.world
+        .edit_object(near, |object| {
+            if let RoomObject::Creep(c) = object {
+                c.age_time = 100;
+            }
+            Ok(())
+        })
+        .unwrap();
     let mut b = IntentBatch::default();
     b.add_object_intent("p1", spawn, Action::RenewCreep, IntentData::target(far));
     // 本夹具没有控制器，spawn 被标记 off，可用能量为 0，renew 无法扣款。
@@ -511,16 +501,14 @@ fn renew_creep_guards() {
     let mut f = Fixture::new(1, terrain_with(&[]));
     let spawn = spawn_with_job(&mut f, 20, 20, 300, None);
     let full = f.creep("full", "p1", 20, 21, &[BodyKind::Move], 0);
-    if let RoomObject::Creep(c) = f
-        .world
-        .room_mut("W1N1")
-        .unwrap()
-        .objects
-        .get_mut(&full)
-        .unwrap()
-    {
-        c.age_time = 1500; // time=0：1500 + 600 > 0 + 1500
-    }
+    f.world
+        .edit_object(full, |object| {
+            if let RoomObject::Creep(c) = object {
+                c.age_time = 1500; // time=0：1500 + 600 > 0 + 1500
+            }
+            Ok(())
+        })
+        .unwrap();
     let mut b = IntentBatch::default();
     b.add_object_intent("p1", spawn, Action::RenewCreep, IntentData::target(full));
     f.settle(b);
@@ -535,16 +523,14 @@ fn renew_creep_guards() {
     f.controller(3, Some("p1"));
     let spawn = spawn_with_job(&mut f, 20, 20, 300, None);
     let creep = f.creep("old", "p1", 20, 21, &[BodyKind::Move], 0);
-    if let RoomObject::Creep(c) = f
-        .world
-        .room_mut("W1N1")
-        .unwrap()
-        .objects
-        .get_mut(&creep)
-        .unwrap()
-    {
-        c.age_time = 100;
-    }
+    f.world
+        .edit_object(creep, |object| {
+            if let RoomObject::Creep(c) = object {
+                c.age_time = 100;
+            }
+            Ok(())
+        })
+        .unwrap();
     let mut b = IntentBatch::default();
     let mut d = IntentData::bare();
     d.name = Some("child".into());
@@ -681,16 +667,14 @@ fn cancel_spawning_settles() {
     };
     let spawn = spawn_with_job(&mut f, 20, 20, 300, Some(job));
     let chick = f.creep("child", "p1", 20, 20, &[BodyKind::Move], 0);
-    if let RoomObject::Creep(c) = f
-        .world
-        .room_mut("W1N1")
-        .unwrap()
-        .objects
-        .get_mut(&chick)
-        .unwrap()
-    {
-        c.spawning = true;
-    }
+    f.world
+        .edit_object(chick, |object| {
+            if let RoomObject::Creep(c) = object {
+                c.spawning = true;
+            }
+            Ok(())
+        })
+        .unwrap();
     let mut b = IntentBatch::default();
     b.add_object_intent("p1", spawn, Action::CancelSpawning, IntentData::bare());
     f.settle(b);
@@ -792,7 +776,7 @@ fn chick_age_time_model() {
     f.settle(b); // time 0→1：雏形在（同格 spawn 在——正常孵化）
     let orphan = chick_of(&f, "orphan");
     assert!(f.world.get(orphan).is_some());
-    f.world.room_mut("W1N1").unwrap().objects.remove(&spawn); // spawn 消亡
+    f.world.remove(spawn); // spawn 消亡
     f.settle(IntentBatch::default()); // time 1→2：孤儿雏形移除
     assert!(
         f.world.get(orphan).is_none(),

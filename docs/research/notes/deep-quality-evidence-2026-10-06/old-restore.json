@@ -1,0 +1,33 @@
+{
+  "restores": [
+    {
+      "fixture": "/private/tmp/kkscreeps-quality-20261006/old-checkpoints/json.json",
+      "kkpv": false,
+      "restored_exactly": true,
+      "format_version": 2,
+      "plan_hash": "f2b61e6463e8c71d23e997e9afc30b5ead458679924175c7f13b0748f737d69d",
+      "tick_before": 100,
+      "tick_after": 101,
+      "players": 2
+    },
+    {
+      "fixture": "/private/tmp/kkscreeps-quality-20261006/old-checkpoints/kkpv.json",
+      "kkpv": true,
+      "restored_exactly": true,
+      "format_version": 2,
+      "plan_hash": "f2b61e6463e8c71d23e997e9afc30b5ead458679924175c7f13b0748f737d69d",
+      "tick_before": 100,
+      "tick_after": 101,
+      "players": 2
+    }
+  ],
+  "library_sha256": {
+    "serde_json": "9baf5bd46ba9386948ce89cedaacc3aa4e70730fdc3a2913829e1c01ea8125c0",
+    "kk_mod_host": "46410af6c569391d4c8ea8de577555f224ae7a93ceff68890059ef7ebf373671",
+    "kk_runtime": "945dc66478ffb9a236c20f140ef31b856f725699779d8b49e0601244fda9b2a8"
+  },
+  "fixture_sha256": {
+    "/tmp/kkscreeps-quality-20261006/old-checkpoints/json.json": "d762700f0f72616a0e1b7f85285cf4eb7696b9767703611650b870f94b537d5a",
+    "/tmp/kkscreeps-quality-20261006/old-checkpoints/kkpv.json": "661e573a270a0ac9abad63043eb80a6a3c5b7b042aae2a3925021d4fe5ffe18f"
+  }
+}

@@ -15,9 +15,14 @@ fn source_capacity_3000_under_reservation() {
     });
     let src = f.source(10, 10, 1200);
     // fixture 的 source 挂 3000 容量——先压到 1500 模拟无预定期的归一
-    if let RoomObject::Source(s) = f.world.get_mut(src).unwrap() {
-        s.energy_capacity = 1500;
-    }
+    f.world
+        .edit_object(src, |object| {
+            if let RoomObject::Source(s) = object {
+                s.energy_capacity = 1500;
+            }
+            Ok(())
+        })
+        .unwrap();
     f.settle(IntentBatch::default());
     match f.obj(src) {
         RoomObject::Source(s) => {
@@ -30,9 +35,14 @@ fn source_capacity_3000_under_reservation() {
     let mut f2 = Fixture::new(1, terrain_with(&[]));
     f2.controller(0, None);
     let src2 = f2.source(10, 10, 2000);
-    if let RoomObject::Source(s) = f2.world.get_mut(src2).unwrap() {
-        s.energy_capacity = 3000;
-    }
+    f2.world
+        .edit_object(src2, |object| {
+            if let RoomObject::Source(s) = object {
+                s.energy_capacity = 3000;
+            }
+            Ok(())
+        })
+        .unwrap();
     f2.settle(IntentBatch::default());
     match f2.obj(src2) {
         RoomObject::Source(s) => {
@@ -62,22 +72,19 @@ fn harvest_rejected_under_foreign_reservation() {
         _ => panic!(),
     }
     // 自己的预定放行
-    if let Some(t) = f
-        .world
-        .room_mut("W1N1")
-        .unwrap()
-        .objects
-        .values_mut()
-        .find_map(|o| match o {
-            RoomObject::Controller(t) => Some(t),
-            _ => None,
+    f.world
+        .edit_room("W1N1", |room| {
+            for object in room.objects.values_mut() {
+                if let RoomObject::Controller(t) = object {
+                    t.reservation = Some(kk_schema::room::Reservation {
+                        user: "p1".into(),
+                        end_time: 5000,
+                    });
+                }
+            }
+            Ok(())
         })
-    {
-        t.reservation = Some(kk_schema::room::Reservation {
-            user: "p1".into(),
-            end_time: 5000,
-        });
-    }
+        .unwrap();
     let events2 = f.settle(controller_intent(c, Action::Harvest, src));
     assert!(
         events2
@@ -120,8 +127,8 @@ fn engine_recomputes_player_rooms_after_tick() {
     let mut world = World::new(3);
     let mut t = kk_core::Terrain::plains();
     t.normalize();
-    world.register_room("W1N1", t.clone());
-    world.register_room("W2N2", t);
+    world.register_room("W1N1", t.clone()).unwrap();
+    world.register_room("W2N2", t).unwrap();
     for name in ["W1N1", "W2N2"] {
         world
             .insert(
@@ -151,16 +158,21 @@ fn engine_recomputes_player_rooms_after_tick() {
             .unwrap();
     }
     let mut engine = Engine::new(world);
-    engine.players.entry("p1".to_string()).or_default().gcl = 1_000_000;
+    engine
+        .edit_players(|players| {
+            players.entry("p1".to_string()).or_default().gcl = 1_000_000;
+            Ok(())
+        })
+        .unwrap();
     // 空 tick 后 rooms 重建 = {W1N1}
     engine.tick_with_intents(IntentBatch::default()).unwrap();
     assert_eq!(
-        engine.players["p1"].rooms,
+        engine.players()["p1"].rooms,
         BTreeSet::from(["W1N1".to_string()])
     );
     // W2N2 claim：rooms=1 → 需要 GCL 1e6（恰好放行）
     let w2_ctl = *engine
-        .world
+        .world()
         .room("W2N2")
         .unwrap()
         .objects
@@ -168,8 +180,7 @@ fn engine_recomputes_player_rooms_after_tick() {
         .next()
         .unwrap();
     let claimer = engine
-        .world
-        .insert(
+        .insert_object(
             "W2N2",
             RoomObject::Creep(CreepObj {
                 id: 0,
@@ -200,12 +211,12 @@ fn engine_recomputes_player_rooms_after_tick() {
     );
     engine.tick_with_intents(b).unwrap();
     assert_eq!(
-        engine.players["p1"].rooms,
+        engine.players()["p1"].rooms,
         BTreeSet::from(["W1N1".to_string(), "W2N2".to_string()]),
         "claim 后纳入 rooms"
     );
     match engine
-        .world
+        .world()
         .room("W2N2")
         .unwrap()
         .objects
@@ -225,7 +236,7 @@ fn activate_safe_mode_owner_gate_at_dispatch() {
     // processor.js:248：`object.user && object.user != userId` → 整对象 intent
     // 跳过——敌人对他人 controller 发 activateSafeMode 在分派层丢弃
     let mut f = Fixture::new(1, terrain_with(&[]));
-    f.world.set_time_for_test(10);
+    f.world.set_time_for_test(10).unwrap();
     let ctl = f.controller_full(1, Some("p2"), |t| {
         t.safe_mode_available = 1;
         t.downgrade_time = Some(10 + 20_001);
@@ -272,7 +283,7 @@ fn unclaim_clears_ownership_and_sets_cooldown() {
     // tick 的到期/已占条件另行清除，unclaim 后无主不满足）。removeRoomFromUser
     // （:15）由 Engine rooms 重建承载（engine_recomputes_player_rooms_after_tick）
     let mut f = Fixture::new(1, terrain_with(&[]));
-    f.world.set_time_for_test(100);
+    f.world.set_time_for_test(100).unwrap();
     let ctl = f.controller_full(4, Some("p1"), |t| {
         t.progress = 12_345;
         t.safe_mode = 500;
@@ -341,7 +352,7 @@ fn unclaim_rejections() {
     // 他人 controller 的 intent 整对象跳过
     // ① 无主 + 0 级拒
     let mut f = Fixture::new(1, terrain_with(&[]));
-    f.world.set_time_for_test(10);
+    f.world.set_time_for_test(10).unwrap();
     let ctl = f.controller(0, None);
     f.settle(controller_action(
         "p1",
@@ -354,7 +365,7 @@ fn unclaim_rejections() {
     assert_eq!(t.safe_mode_cooldown, None, "无主：不挂冷却");
     // ② 有主但 0 级拒
     f = Fixture::new(1, terrain_with(&[]));
-    f.world.set_time_for_test(10);
+    f.world.set_time_for_test(10).unwrap();
     let ctl = f.controller_full(0, Some("p1"), |_| {});
     f.settle(controller_action(
         "p1",
@@ -365,7 +376,7 @@ fn unclaim_rejections() {
     assert_eq!(ctl_of(&f).safe_mode_cooldown, None, "0 级：不挂冷却");
     // ③ 他人 controller：分派层丢弃
     f = Fixture::new(1, terrain_with(&[]));
-    f.world.set_time_for_test(10);
+    f.world.set_time_for_test(10).unwrap();
     let ctl = f.controller_full(3, Some("p2"), |t| {
         t.safe_mode_available = 1;
     });
@@ -389,8 +400,8 @@ fn engine_safemode_gate4_backstop_drops_cross_room_activation() {
     let mut world = World::new(3);
     let mut t = kk_core::Terrain::plains();
     t.normalize();
-    world.register_room("W1N1", t.clone());
-    world.register_room("W2N2", t);
+    world.register_room("W1N1", t.clone()).unwrap();
+    world.register_room("W2N2", t).unwrap();
     let mk_ctl = |safe_mode: u64, level: u8| {
         RoomObject::Controller(kk_schema::room::ControllerObj {
             id: 0,
@@ -418,7 +429,13 @@ fn engine_safemode_gate4_backstop_drops_cross_room_activation() {
     let mut batch = IntentBatch::default();
     batch.add_object_intent("p1", b, Action::ActivateSafeMode, IntentData::bare());
     engine.tick_with_intents(batch).unwrap();
-    let ctl = engine.world.room("W2N2").unwrap().objects.get(&b).unwrap();
+    let ctl = engine
+        .world()
+        .room("W2N2")
+        .unwrap()
+        .objects
+        .get(&b)
+        .unwrap();
     match ctl {
         RoomObject::Controller(c) => {
             assert_eq!(c.safe_mode, 0, "A 房生效中 → B 房激活被 Engine 兜底丢弃");
@@ -427,7 +444,13 @@ fn engine_safemode_gate4_backstop_drops_cross_room_activation() {
         _ => panic!("controller 不见了"),
     }
     // 对照：A 房自身的 safeMode 不受影响
-    let ctl_a = engine.world.room("W1N1").unwrap().objects.get(&a).unwrap();
+    let ctl_a = engine
+        .world()
+        .room("W1N1")
+        .unwrap()
+        .objects
+        .get(&a)
+        .unwrap();
     match ctl_a {
         RoomObject::Controller(c) => assert_eq!(c.safe_mode, 3 + 1000),
         _ => panic!(),
@@ -610,16 +633,14 @@ fn pull_pair_moves_fatigue_free_creep() {
     let mut f = Fixture::new(1, terrain_with(&[]));
     let a = f.creep("A", "p1", 10, 10, &[BodyKind::Move, BodyKind::Work], 0); // 拉者
     let b = f.creep("B", "p1", 11, 10, &[BodyKind::Work], 0); // 被拉（无 MOVE）
-    if let RoomObject::Creep(cc) = f
-        .world
-        .room_mut("W1N1")
-        .unwrap()
-        .objects
-        .get_mut(&b)
-        .unwrap()
-    {
-        cc.fatigue = 2; // 被拉者带疲劳
-    }
+    f.world
+        .edit_object(b, |object| {
+            if let RoomObject::Creep(cc) = object {
+                cc.fatigue = 2; // 被拉者带疲劳
+            }
+            Ok(())
+        })
+        .unwrap();
 
     let mut batch = IntentBatch::default();
     batch.add_object_intent("p1", a, Action::Pull, IntentData::target(b));
@@ -827,9 +848,14 @@ fn ghodium_resource_family_settles() {
         .unwrap();
     // G transfer：creep 40G → storage 20G
     let c = f.creep("w1", "p1", 21, 20, &[BodyKind::Move, BodyKind::Carry], 0);
-    if let Some(RoomObject::Creep(cc)) = f.world.get_mut(c) {
-        cc.store.ghodium = 40;
-    }
+    f.world
+        .edit_object(c, |object| {
+            if let Some(RoomObject::Creep(cc)) = Some(object) {
+                cc.store.ghodium = 40;
+            }
+            Ok(())
+        })
+        .unwrap();
     let mut b = IntentBatch::default();
     let mut d = IntentData::bare();
     d.id = Some(st);

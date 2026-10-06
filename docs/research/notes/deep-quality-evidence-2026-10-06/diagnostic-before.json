@@ -1,0 +1,151 @@
+{
+  "tool": "kkscreeps mod-perf-probe",
+  "mode": "chain",
+  "rooms": 1,
+  "links_per_room": 400,
+  "warmup": 100,
+  "ticks": 300,
+  "metadata": {
+    "os": "macos",
+    "arch": "aarch64",
+    "logical_cpus": 10,
+    "system": "Darwin 192.168.1.2 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov  5 21:34:00 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T8132 arm64",
+    "rustc_on_path": "rustc 1.98.1 (48a229cea 2026-09-01)",
+    "git_commit": "229bea4b702590b87d730f3a106b184538c62e5e",
+    "git_status": "M .github/workflows/ci.yml\n M compat/src/rpc.ts\n M crates/kk-cli/src/perf_probe.rs\n M crates/kk-engine/src/settle/buildings.rs\n M crates/kk-engine/src/settle/checkpoint.rs\n M crates/kk-engine/src/settle/creep/build.rs\n M crates/kk-engine/src/settle/creep/lifecycle.rs\n M crates/kk-engine/src/settle/creep/movement.rs\n M crates/kk-engine/src/settle/damage.rs\n M crates/kk-engine/src/settle/economy.rs\n M crates/kk-engine/src/settle/engine_tick.rs\n M crates/kk-engine/src/settle/mod.rs\n M crates/kk-engine/src/settle/movement.rs\n M crates/kk-engine/src/settle/movement/inputs.rs\n M crates/kk-engine/src/settle/objects.rs\n M crates/kk-engine/src/settle/room.rs\n M crates/kk-engine/src/settle/room_loop.rs\n M crates/kk-engine/src/settle/spawn.rs\n M crates/kk-engine/src/settle/tests.rs\n M crates/kk-engine/src/settle/txn.rs\n M crates/kk-engine/src/settle/validation.rs\n M crates/kk-engine/src/settle/working.rs\n M crates/kk-engine/tests/settle_tests.rs\n M crates/kk-engine/tests/settle_tests/building_lifecycle.rs\n M crates/kk-engine/tests/settle_tests/c3_ext_intent_family.rs\n M crates/kk-engine/tests/settle_tests/c3_ext_intent_family/installation.rs\n M crates/kk-engine/tests/settle_tests/c3_ext_intent_family/object_tick.rs\n M crates/kk-engine/tests/settle_tests/combat_heal.rs\n M crates/kk-engine/tests/settle_tests/combat_ranged.rs\n M crates/kk-engine/tests/settle_tests/combat_ranges.rs\n M crates/kk-engine/tests/settle_tests/controller_safemode.rs\n M crates/kk-engine/tests/settle_tests/generic_store_family.rs\n M crates/kk-engine/tests/settle_tests/inter_room_family.rs\n M crates/kk-engine/tests/settle_tests/m2b2_terminal_market_family.rs\n M crates/kk-engine/tests/settle_tests/m2b_contrib_link_family/chains.rs\n M crates/kk-engine/tests/settle_tests/m2b_contrib_link_family/rules.rs\n M crates/kk-engine/tests/settle_tests/m2b_extension_family.rs\n M crates/kk-engine/tests/settle_tests/m2b_notify_family.rs\n M crates/kk-engine/tests/settle_tests/m2b_structure_actions_family.rs\n M crates/kk-engine/tests/settle_tests/minerals_and_boost.rs\n M crates/kk-engine/tests/settle_tests/misc_and_notify.rs\n M crates/kk-engine/tests/settle_tests/mod_building_family.rs\n M crates/kk-engine/tests/settle_tests/mod_building_family/regressions.rs\n M crates/kk-engine/tests/settle_tests/mod_resource_family.rs\n M crates/kk-engine/tests/settle_tests/movement_spawn_basics.rs\n M crates/kk-engine/tests/settle_tests/structures_and_attack.rs\n M crates/kk-engine/tests/settle_tests/structures_and_attack/combat.rs\n M crates/kk-engine/tests/settle_tests/structures_and_attack/ownership.rs\n M crates/kk-engine/tests/settle_tests/structures_and_attack/resources.rs\n M crates/kk-engine/tests/settle_tests/tombstone_ruin_engine.rs\n M crates/kk-engine/tests/settle_tests/tough_damage.rs\n M crates/kk-mod-api/src/builtin.rs\n M crates/kk-mod-host/src/chain.rs\n M crates/kk-mod-host/src/execution_plan.rs\n M crates/kk-mod-host/src/lib.rs\n M crates/kk-mod-host/src/loader.rs\n M crates/kk-mod-host/src/sdk.js\n M crates/kk-mod-host/tests/chain_tests.rs\n M crates/kk-mod-host/tests/decline_tests.rs\n M crates/kk-mod-host/tests/fault_tests.rs\n M crates/kk-mod-host/tests/limits_tests.rs\n M crates/kk-pathfinder/build.rs\n M crates/kk-pathfinder/native/kk_ffi.cc\n M crates/kk-pathfinder/native/kk_ffi.h\n M crates/kk-pathfinder/src/ffi.rs\n M crates/kk-pathfinder/src/lib.rs\n M crates/kk-pathfinder/tests/bench.rs\n M crates/kk-pathfinder/tests/callback_safety.rs\n M crates/kk-pathfinder/tests/host.rs\n M crates/kk-pathfinder/tests/official_golden.rs\n M crates/kk-pathfinder/tests/reentrancy.rs\n M crates/kk-pathfinder/tests/search.rs\n M crates/kk-runner/src/lib.rs\n M crates/kk-runner/src/pathfinder.rs\n M crates/kk-runner/src/proto.rs\n M crates/kk-runner/src/sandbox.rs\n M crates/kk-runner/src/sandbox/inject.rs\n M crates/kk-runner/tests/proto_tests.rs\n M crates/kk-runner/tests/sandbox_tests/pathfinder_family.rs\n M crates/kk-runtime/src/embed.rs\n M crates/kk-runtime/src/embed/checkpoint/tests.rs\n M crates/kk-runtime/src/embed/execution.rs\n M crates/kk-runtime/src/embed/execution/tests.rs\n M crates/kk-runtime/src/embed/mod_chain.rs\n M crates/kk-runtime/src/embed/mod_chain/combat.rs\n M crates/kk-runtime/src/embed/mod_chain/objects.rs\n M crates/kk-runtime/src/embed/mod_chain/resources.rs\n M crates/kk-runtime/src/embed/projection.rs\n M crates/kk-runtime/src/embed/setup.rs\n M crates/kk-runtime/src/lib.rs\n M crates/kk-runtime/src/world_source.rs\n M crates/kk-runtime/tests/embed_tests/embed_channels_and_families/families.rs\n M crates/kk-runtime/tests/mod_chain_tests/object_ops.rs\n M crates/kk-storage-bench/src/fixtures.rs\n M crates/kk-world/src/checkpoint_tests.rs\n M crates/kk-world/src/kkpv/tests.rs\n M crates/kk-world/src/lib.rs\n M crates/kk-world/src/snapshot/tests.rs\n M crates/kk-world/src/world.rs\n M crates/kk-world/src/world_json/tests/terrain_and_projection_forms.rs\n M crates/kk-world/src/world_json/tests/viewer_semantics_and_families.rs\n M docs/plans/mod-next-batches.md\n M scripts/check.mjs\n?? compat/test/binary.test.mjs\n?? crates/kk-engine/src/settle/state_api.rs\n?? crates/kk-engine/tests/id_exhaustion_tests.rs\n?? crates/kk-engine/tests/settle_tests/combat_heal/\n?? crates/kk-engine/tests/settle_tests/m2b2_terminal_market_family/\n?? crates/kk-engine/tests/state_api_tests.rs\n?? crates/kk-mod-api/src/builtin/capabilities.rs\n?? crates/kk-mod-host/src/chain/host_build.rs\n?? crates/kk-mod-host/src/chain/host_combat.rs\n?? crates/kk-mod-host/src/chain/host_movement.rs\n?? crates/kk-mod-host/src/chain/host_objects.rs\n?? crates/kk-mod-host/src/chain/host_resources.rs\n?? crates/kk-mod-host/src/sdk/\n?? crates/kk-pathfinder/native/terrain_load_anchor.txt\n?? crates/kk-pathfinder/terrain_adapter.rs\n?? crates/kk-pathfinder/tests/isolation.rs\n?? crates/kk-pathfinder/tests/support/\n?? crates/kk-runtime/src/embed/checkpoint/tests/\n?? crates/kk-runtime/src/embed/mod_chain/capability.rs\n?? crates/kk-world/src/world_mutation.rs\n?? scripts/benchmark/quality.py\n?? scripts/check.test.mjs",
+    "debug_assertions": false,
+    "unix_time_ms": 1791301293816
+  },
+  "package_digests": {
+    "perf": "24f2cd53807f6680d9badacb1028923efa78454171104ff5d66c0fff38471621"
+  },
+  "vm_limits": {
+    "registration_cpu_ms": 500,
+    "registration_wall_ms": 2000,
+    "settlement_cpu_ms": 100,
+    "settlement_wall_ms": 1000,
+    "memory_bytes": 134217728
+  },
+  "scope": "EmbedEngine.tick; no player execution or projection",
+  "fixture": "synthetic positive cooldown every tick; four audited chain positions",
+  "profile": {
+    "budget_finish": {
+      "calls": 120000,
+      "errors": 0,
+      "wall_ns": 53043237
+    },
+    "budget_start": {
+      "calls": 120000,
+      "errors": 0,
+      "wall_ns": 18682368
+    },
+    "host_native": {
+      "calls": 120000,
+      "errors": 0,
+      "wall_ns": 317322887
+    },
+    "host_read": {
+      "calls": 720000,
+      "errors": 0,
+      "wall_ns": 790678132
+    },
+    "host_write": {
+      "calls": 720000,
+      "errors": 0,
+      "wall_ns": 532546103
+    },
+    "js_call": {
+      "calls": 120000,
+      "errors": 0,
+      "wall_ns": 7465678018
+    },
+    "op_native": {
+      "calls": 120000,
+      "errors": 0,
+      "wall_ns": 326190005
+    },
+    "op_read": {
+      "calls": 720000,
+      "errors": 0,
+      "wall_ns": 2561008633
+    },
+    "op_write": {
+      "calls": 720000,
+      "errors": 0,
+      "wall_ns": 3050137247
+    },
+    "read_to_v8": {
+      "calls": 720000,
+      "errors": 0,
+      "wall_ns": 1259828993
+    },
+    "slot": {
+      "calls": 120000,
+      "errors": 0,
+      "wall_ns": 7618437001
+    },
+    "write_from_v8": {
+      "calls": 720000,
+      "errors": 0,
+      "wall_ns": 2361994305
+    }
+  },
+  "profile_schema_version": 3,
+  "tick_diagnostics": null,
+  "wall": {
+    "count": 300,
+    "p50_ms": 26.514875,
+    "p95_ms": 27.069458,
+    "p99_ms": 27.622459,
+    "max_ms": 36.269666,
+    "sum_ms": 7976.607669999999
+  },
+  "process": {
+    "scope": "current_process_all_threads",
+    "window": "after_warmup_through_collection_loop",
+    "wall_ms": 7977.020083,
+    "cpu_core_ms": 8009.978000000001,
+    "cpu_core_ms_per_tick": 26.69992666666667,
+    "rss_bytes_after": 76316672,
+    "rss_bytes_sampled_peak": 76316672,
+    "rss_bytes_sampled_p50": 76283904,
+    "rss_observations": 301,
+    "rss_retained_samples": 301,
+    "rss_sampling_wall_ms": 0.3907059999999987,
+    "includes_sampling_and_workload_checks": true,
+    "rss_sampling": "before_collection_and_after_each_tick; p50_uses_first_50000_observations"
+  },
+  "checks": {
+    "before": {
+      "tick": 0,
+      "generation": 402,
+      "verified_links": 400,
+      "link_state_sha256": "0e8f1b882fcea8ffc932bf82ce0d43ed28df2079e7b0a09ddd789e2b15eb780f",
+      "namespace": null
+    },
+    "after_warmup": {
+      "tick": 100,
+      "generation": 502,
+      "verified_links": 400,
+      "link_state_sha256": "284725d71507efa4958419115099675b3939726c8e0ddd037caafdaa04431fc4",
+      "namespace": {
+        "before": 40000,
+        "outer": 40000,
+        "inner": 40000,
+        "after": 40000
+      }
+    },
+    "after_collection": {
+      "tick": 400,
+      "generation": 802,
+      "verified_links": 400,
+      "link_state_sha256": "d5ebb4cf67d5ad0a3b77e2e8b782541d8b8187700a0847988a9e203f550d74a0",
+      "namespace": {
+        "before": 160000,
+        "outer": 160000,
+        "inner": 160000,
+        "after": 160000
+      }
+    }
+  }
+}

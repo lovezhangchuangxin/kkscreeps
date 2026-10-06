@@ -345,3 +345,32 @@ fn two_room_mutations_roll_back_then_retry_and_owner_disable_preserves_objects()
     }
     Ok(())
 }
+
+#[test]
+fn caught_id_exhaustion_and_decline_never_publish_or_write_player_candidates() -> anyhow::Result<()>
+{
+    for binary in [false, true] {
+        for ending in ["return api.decline('no');", "return;"] {
+            let action = format!(
+                "try{{ctx.objects.create('chain:node',{{x:30,y:12}});ctx.objects.create('chain:node',{{x:31,y:12}});}}catch(e){{}}{ending}"
+            );
+            let mut e = engine(&[("chain", source("", &action))], binary)?;
+            let root = node(&mut e, "W1N1", 10)?;
+            e.bump_next_obj_id_for_test(u64::MAX - 1)?;
+            let before = (e.world_snapshot(), e.mod_object_snapshots());
+            let player = e.player_state_for_test("p1").unwrap().clone();
+            let code = format!(
+                "Memory.dirty=true;__kkEmitExtensionIntent('chain:b-decline','{root}',{{id:'{root}'}});'cached'"
+            );
+            assert!(e.run_player("p1", &code).is_err());
+            assert_eq!((e.world_snapshot(), e.mod_object_snapshots()), before);
+            assert_eq!(
+                serde_json::to_value(e.player_state_for_test("p1"))?,
+                serde_json::to_value(Some(&player))?
+            );
+            assert!(e.run_player("p1", "throw Error('cannot rerun')").is_err());
+            assert_eq!((e.world_snapshot(), e.mod_object_snapshots()), before);
+        }
+    }
+    Ok(())
+}

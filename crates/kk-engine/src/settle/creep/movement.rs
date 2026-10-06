@@ -300,7 +300,7 @@ fn movement_execute(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
             _ => {}
         }
     }
-    if w.room.terrain.check_mask(
+    if w.room.terrain().check_mask(
         target.0 as usize,
         target.1 as usize,
         kk_core::TERRAIN_MASK_SWAMP,

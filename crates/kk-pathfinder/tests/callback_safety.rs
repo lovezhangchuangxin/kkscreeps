@@ -1,10 +1,9 @@
-use std::sync::mpsc;
-use std::thread;
-use std::time::Duration;
+mod support;
+use support::{load_terrain, search, search_with_room_callback};
 
 use kk_pathfinder::{
-    CostMatrix, Error, Goal, RoomDecision, SearchOptions, SearchResult, TERRAIN_PLAIN,
-    WorldPosition, load_terrain, pack_terrain, search, search_with_room_callback,
+    CostMatrix, Goal, RoomDecision, SearchOptions, SearchResult, TERRAIN_PLAIN, WorldPosition,
+    pack_terrain,
 };
 
 fn pos(room: &str, x: u32, y: u32) -> WorldPosition {
@@ -151,39 +150,6 @@ fn search_works_after_callback_panic() {
     .unwrap();
     assert!(!after.path.is_empty());
     assert!(!after.incomplete);
-}
-
-// 回调持读锁时不能申请地形写锁。用 channel 超时检测阻塞，
-// 错误处理后外层搜索仍应完成。
-#[test]
-fn load_terrain_in_callback_rejected_not_deadlock() {
-    load_plain("W55N0");
-    let (tx, rx) = mpsc::channel::<Error>();
-    let worker = thread::spawn(move || {
-        let result = search_with_room_callback(
-            pos("W55N0", 10, 10),
-            &[Goal::pos(pos("W55N0", 40, 40))],
-            &SearchOptions::default(),
-            |_xx, _yy| {
-                // 回调内重入 load_terrain：必须立即返回 Err 而非阻塞
-                let inner = load_terrain("W54N0", &pack_terrain(&[[TERRAIN_PLAIN; 50]; 50]));
-                tx.send(inner.unwrap_err()).ok();
-                RoomDecision::None
-            },
-        );
-        // 回调返回后搜索应正常完成（重入拒绝不影响外层）
-        result.map(|r| (r.ops, r.incomplete))
-    });
-    let err = rx
-        .recv_timeout(Duration::from_secs(30))
-        .expect("回调内 load_terrain 未返回——疑似死锁回归（READ_DEPTH 重入检测失效？）");
-    assert_eq!(err, Error::ReentrantTerrainLoad);
-    let (ops, incomplete) = worker
-        .join()
-        .expect("搜索线程 panic")
-        .expect("外层搜索本应正常完成");
-    assert!(ops > 0);
-    assert!(!incomplete);
 }
 
 #[test]

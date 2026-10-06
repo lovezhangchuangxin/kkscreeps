@@ -72,7 +72,7 @@ pub fn controller_allowed(structure_type: &str, rcl: i64) -> i64 {
 }
 
 /// 规则结算错误。Engine 丢弃候选；直接调用 settle_room 的调用方须自行丢弃副本。
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SettleError(pub String);
 
 impl std::fmt::Display for SettleError {
@@ -170,13 +170,13 @@ impl TickInput {
 /// engine.sandboxes.clear();
 /// ```
 pub struct Engine {
-    pub world: kk_world::World,
-    pub players: BTreeMap<String, PlayerState>,
+    pub(crate) world: kk_world::World,
+    pub(crate) players: BTreeMap<String, PlayerState>,
     /// 跨房间订单簿和交易记录，不在 kk-world 的二进制房间快照中。
-    pub market: market::MarketState,
+    pub(crate) market: market::MarketState,
     next_id: u64,
     /// 最近成功 tick 的事件，按房间结算顺序拼接；失败不覆盖。
-    pub last_events: Vec<serde_json::Value>,
+    pub(crate) last_events: Vec<serde_json::Value>,
     /// 持续生效的房间故障注入，由调用方显式解除。
     fail_room: Option<String>,
     /// 失败后记录恢复状态；世界版本检查不能检测玩家或市场的直接修改。
@@ -203,7 +203,7 @@ pub struct Engine {
     pub(crate) extensions: Rc<kk_mod_api::extension::ExtensionCatalog>,
     /// 已提交的各 Mod 命名空间状态；每 tick 克隆为候选，发布时整体换回。
     /// 服务端私有，不进世界快照与玩家投影。
-    pub mod_states: BTreeMap<String, serde_json::Value>,
+    pub(crate) mod_states: BTreeMap<String, serde_json::Value>,
     /// 当前生效的冻结计划（默认含 link 与仓库容量规则）。扩展意图描述符与
     /// Mod 类型目录从此解析；规则/处理链/扩展目录是它的派生物。
     plan: std::sync::Arc<kk_mod_api::ContributionPlan>,
@@ -443,6 +443,7 @@ impl Engine {
 mod engine_tick;
 mod install;
 mod room_loop;
+mod state_api;
 mod validation;
 mod working;
 pub use room_loop::{energy_resource_name, settle_room};

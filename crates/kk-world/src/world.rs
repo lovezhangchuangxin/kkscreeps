@@ -11,6 +11,10 @@ use std::sync::Arc;
 #[path = "checkpoint.rs"]
 pub mod checkpoint;
 
+#[path = "world_mutation.rs"]
+mod mutation;
+pub use mutation::RoomContents;
+
 use kk_core::Terrain;
 use kk_schema::room::{RoomHeader, RoomObject, RoomSnapshot};
 
@@ -36,7 +40,7 @@ impl ObjId {
 #[derive(Debug, Clone)]
 pub struct RoomState {
     pub name: String,
-    pub terrain: Terrain,
+    pub(crate) terrain: Terrain,
     pub objects: BTreeMap<ObjId, RoomObject>,
     /// 最近一次房间结算产生的事件，每项是一个 JSON 字符串。
     /// 结算整体替换列表，二进制房间快照同时保存它。
@@ -51,6 +55,10 @@ pub struct RoomState {
 }
 
 impl RoomState {
+    pub fn terrain(&self) -> &Terrain {
+        &self.terrain
+    }
+
     pub fn new(name: impl Into<String>, terrain: Terrain) -> Self {
         Self {
             name: name.into(),
@@ -72,6 +80,9 @@ impl RoomState {
     /// 按指定 ID 导入对象，同时覆写对象自身的 ID；房内重复 ID 返回错误。
     /// 不检查坐标或跨房间 ID 唯一性，也不更新 World 的分配游标。
     pub fn insert_with_id(&mut self, id: u64, mut object: RoomObject) -> Result<(), String> {
+        if id == 0 || id == u64::MAX {
+            return Err("对象 ID 不得为零或耗尽标记".into());
+        }
         if self.objects.contains_key(&ObjId(id)) {
             return Err(format!("对象 id 重复: {}", ObjId(id).as_str()));
         }
@@ -136,23 +147,24 @@ struct ObjDir {
 }
 
 /// 保存房间集合、时钟和对象分配状态；玩家沙箱与玩家账户由运行时管理。
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct World {
+    instance: Arc<()>,
     /// 当前绝对 tick，正常推进使用 advance_ticks，以同时维护内容版本。
-    /// 构造测试场景可用 set_time_for_test，但它不会使缓存失效。
+    /// 构造测试场景可用 set_time_for_test，它也会推进版本使投影失效。
     pub(crate) time: u64,
-    pub seed: u64,
+    pub(crate) seed: u64,
     /// advance_ticks 累计推进的 tick 数；非零时 set_terrain 拒绝替换地形。
-    pub player_ticks: u64,
+    pub(crate) player_ticks: u64,
     /// 按房名保存房间；键是查询和投影使用的房间标识。
     /// crate 内直接修改对象后须递增 generation，否则对象目录和最大 ID 缓存会陈旧。
-    /// 外部整房替换使用 commit_room，并遵守其批量提交契约。
+    /// 外部编辑与发布使用受控编辑入口或 commit_tick_rooms。
     pub(crate) rooms: BTreeMap<String, RoomState>,
     /// 全局 id 分配器（跨房间唯一；快照每房 header 存同一全局值）。
     next_obj_id: u64,
     /// 世界内容版本，用于查询和缓存失效。
     /// 插入、成功删除、注册新房、设置地形及推进时间会递增；可变访问保守递增，
-    /// 即使没有找到对象或房间。commit_room 不递增，批量提交由 advance_ticks 收束。
+    /// 旧内部测试的可变访问即使未找到对象也递增；生产整轮提交只推进一次。
     /// 引擎失败重试依靠时间和此版本判断世界是否仍与首次尝试相同。
     generation: u64,
     /// 地形缓存版本，注册新房或成功调用 set_terrain 时递增。
@@ -169,6 +181,25 @@ pub struct World {
     max_id_cache: RefCell<(u64, u64)>,
 }
 
+// 独立副本拥有新身份；受控编辑发布时 adopt_edit 保留原世界身份。
+impl Clone for World {
+    fn clone(&self) -> Self {
+        Self {
+            instance: Arc::new(()),
+            time: self.time,
+            seed: self.seed,
+            player_ticks: self.player_ticks,
+            rooms: self.rooms.clone(),
+            next_obj_id: self.next_obj_id,
+            generation: self.generation,
+            terrain_epoch: self.terrain_epoch,
+            terrain_cache: self.terrain_cache.clone(),
+            obj_dir: self.obj_dir.clone(),
+            max_id_cache: self.max_id_cache.clone(),
+        }
+    }
+}
+
 impl Default for World {
     fn default() -> Self {
         Self::new(0)
@@ -176,8 +207,20 @@ impl Default for World {
 }
 
 impl World {
+    pub fn instance(&self) -> Arc<()> {
+        self.instance.clone()
+    }
+
+    pub fn seed(&self) -> u64 {
+        self.seed
+    }
+    pub fn player_ticks(&self) -> u64 {
+        self.player_ticks
+    }
+
     pub fn new(seed: u64) -> Self {
         Self {
+            instance: Arc::new(()),
             time: 0,
             seed,
             player_ticks: 0,
@@ -200,13 +243,14 @@ impl World {
         if x as usize >= kk_core::ROOM_SIZE || y as usize >= kk_core::ROOM_SIZE {
             return Err(format!("对象坐标越界: ({x},{y})"));
         }
+        let generation = self.next_generation()?;
         let id = self.next_available_obj_id()?;
         self.rooms
             .get_mut(room_name)
             .expect("房间已检查存在")
             .insert_with_id(id, object)?;
         self.next_obj_id = id + 1;
-        self.generation += 1;
+        self.generation = generation;
         // 仅在目录完整覆盖修改前的版本时增量加入新对象。
         // 陈旧目录不能只补本次插入就标为有效，否则会漏掉其他尚未吸收的修改。
         // 恢复自检查点的世界把缓存代际置为 u64::MAX 陈旧哨兵，比较须用
@@ -228,18 +272,29 @@ impl World {
 
     /// 同时推进 time 和 player_ticks，并递增一次 generation。
     /// 即使 n=0 也递增版本；相对计时投影及批量写回的房间状态依靠它使缓存失效。
-    pub fn advance_ticks(&mut self, n: u64) {
-        self.time += n;
-        self.player_ticks += n;
-        self.generation += 1;
+    pub fn advance_ticks(&mut self, n: u64) -> Result<(), String> {
+        let time = self.time.checked_add(n).ok_or("世界时间已耗尽")?;
+        let player_ticks = self
+            .player_ticks
+            .checked_add(n)
+            .ok_or("玩家 tick 时钟已耗尽")?;
+        let generation = self.next_generation()?;
+        self.time = time;
+        self.player_ticks = player_ticks;
+        self.generation = generation;
+        Ok(())
     }
 
     /// 返回分配游标与当前最大对象 ID 加一中的较大值。
     /// 最大 ID 按 generation 缓存。手工导入的最大对象被删除后，此候选值可能回落；
     /// 需要永久保留导入 ID 范围时，调用 bump_next_obj_id 抬高游标。
     pub fn next_obj_id(&self) -> u64 {
-        let after_existing = self.max_obj_id().saturating_add(1).max(1);
-        self.next_obj_id.max(after_existing)
+        // MAX 只表示耗尽；实际分配由 next_available_obj_id 的 checked_add 拒绝。
+        let max_id = self.max_obj_id();
+        if max_id == u64::MAX {
+            return u64::MAX;
+        }
+        self.next_obj_id.max(max_id + 1)
     }
 
     /// 分配前检查余量；保留 `u64::MAX` 作为耗尽标记。
@@ -262,14 +317,21 @@ impl World {
     }
 
     /// 注册新房间；房名已存在时忽略传入地形，不修改任何版本。
-    pub fn register_room(&mut self, name: impl Into<String>, terrain: Terrain) {
+    pub fn register_room(
+        &mut self,
+        name: impl Into<String>,
+        terrain: Terrain,
+    ) -> Result<(), String> {
         let name = name.into();
         if !self.rooms.contains_key(&name) {
+            let generation = self.next_generation()?;
+            let terrain_epoch = self.terrain_epoch.checked_add(1).ok_or("地形版本已耗尽")?;
             self.rooms
                 .insert(name.clone(), RoomState::new(name, terrain));
-            self.generation += 1;
-            self.terrain_epoch += 1;
+            self.generation = generation;
+            self.terrain_epoch = terrain_epoch;
         }
+        Ok(())
     }
 
     /// 在 player_ticks=0 时替换已有房间的地形，成功后使地形和内容缓存失效。
@@ -278,13 +340,15 @@ impl World {
         if self.player_ticks > 0 {
             return Err("setTerrain 只允许在第一个玩家 tick 之前调用".into());
         }
+        let generation = self.next_generation()?;
+        let terrain_epoch = self.terrain_epoch.checked_add(1).ok_or("地形版本已耗尽")?;
         let state = self
             .rooms
             .get_mut(room)
             .ok_or_else(|| format!("房间 {room} 不存在"))?;
         state.terrain = terrain;
-        self.generation += 1;
-        self.terrain_epoch += 1;
+        self.generation = generation;
+        self.terrain_epoch = terrain_epoch;
         Ok(())
     }
 
@@ -306,21 +370,26 @@ impl World {
     /// 调用方须保证对象 ID 跨房间唯一、坐标合法，且不改变已缓存的地形。
     /// 写回所有房间后，必须在查询前调用 advance_ticks，使目录和内容缓存失效。
     /// 引擎只在所有结算检查通过后调用本方法；失败重试也依赖该版本更新顺序。
-    pub fn commit_room(&mut self, name: String, state: RoomState) {
+    #[cfg(test)]
+    pub(crate) fn commit_room(&mut self, name: String, state: RoomState) {
         self.rooms.insert(name, state);
     }
 
-    /// 仅设置测试场景的绝对 time，不修改 player_ticks 或 generation。
-    /// 应在建立相关缓存前使用；doc(hidden) 只隐藏文档，不限制外部调用。
+    /// 设置测试场景的绝对 time 并推进 generation；不修改 player_ticks。
+    /// 版本耗尽时保留原状态；通过 Engine 调用仍受开放轮次约束。
     #[doc(hidden)]
-    pub fn set_time_for_test(&mut self, t: u64) {
+    pub fn set_time_for_test(&mut self, t: u64) -> Result<(), String> {
+        let generation = self.next_generation()?;
         self.time = t;
+        self.generation = generation;
+        Ok(())
     }
 
     /// 返回可变房间引用，并保守递增 generation，房间不存在时也递增。
     /// 不递增 terrain_epoch，不能通过该引用修改 terrain，否则地形缓存会陈旧。
     /// 直接导入对象时，调用方还须检查坐标及跨房间 ID 唯一性。
-    pub fn room_mut(&mut self, name: &str) -> Option<&mut RoomState> {
+    #[cfg(test)]
+    pub(crate) fn room_mut(&mut self, name: &str) -> Option<&mut RoomState> {
         self.generation += 1; // 保守失效：可变访问即视为内容可能变更
         self.rooms.get_mut(name)
     }
@@ -335,7 +404,8 @@ impl World {
     }
 
     /// 获取可变对象并保守使内容缓存失效；不能修改对象 ID，也须保持坐标合法。
-    pub fn get_mut(&mut self, id: ObjId) -> Option<&mut RoomObject> {
+    #[cfg(test)]
+    pub(crate) fn get_mut(&mut self, id: ObjId) -> Option<&mut RoomObject> {
         // 先使用当前版本的目录定位，再使缓存失效。
         // 提前递增会强制本次定位重建目录；即使 ID 不存在，仍保守递增版本。
         let name = self.obj_dir().rooms.get(&id).cloned();
@@ -344,13 +414,21 @@ impl World {
         self.rooms.get_mut(&name)?.objects.get_mut(&id)
     }
 
-    pub fn remove(&mut self, id: ObjId) -> Option<RoomObject> {
-        let name = self.obj_dir().rooms.get(&id).cloned()?;
-        let removed = self.rooms.get_mut(&name)?.objects.remove(&id);
+    pub fn remove(&mut self, id: ObjId) -> Result<Option<RoomObject>, String> {
+        let Some(name) = self.obj_dir().rooms.get(&id).cloned() else {
+            return Ok(None);
+        };
+        let generation = self.next_generation()?;
+        let removed = self
+            .rooms
+            .get_mut(&name)
+            .expect("目录来自房间")
+            .objects
+            .remove(&id);
         if removed.is_some() {
-            self.generation += 1;
+            self.generation = generation;
         }
-        removed
+        Ok(removed)
     }
 
     /// 当前内容版本；可变访问和时间推进也会改变它。
@@ -405,9 +483,18 @@ impl World {
     }
 
     /// 显式使对象目录和内容缓存失效，不推进时钟或使地形缓存失效。
-    /// 供绕过通常更新方法的内容修改使用。
-    pub fn bump_generation(&mut self) {
-        self.generation += 1;
+    /// 账户等不属于房间的状态提交使用；版本耗尽时失败。
+    // MAX 是目录/最大 ID 缓存的失效哨兵，不能成为有效内容版本。
+    fn next_generation(&self) -> Result<u64, String> {
+        self.generation
+            .checked_add(1)
+            .filter(|value| *value != u64::MAX)
+            .ok_or_else(|| "世界版本已耗尽".into())
+    }
+
+    pub fn bump_generation(&mut self) -> Result<(), String> {
+        self.generation = self.next_generation()?;
+        Ok(())
     }
 
     /// 获取当前房间的版本标识；房间不存在时返回 None。
@@ -442,17 +529,17 @@ mod tests {
     fn generation_bumps_on_content_changes() {
         let mut world = World::new(1);
         assert_eq!((world.generation(), world.terrain_epoch()), (0, 0));
-        world.register_room("W1N1", Terrain::plains());
+        world.register_room("W1N1", Terrain::plains()).unwrap();
         let after_room = world.generation();
         assert_eq!((after_room, world.terrain_epoch()), (1, 1));
         // 已存在房重注册：不替换地形，不 bump
-        world.register_room("W1N1", Terrain::plains());
+        world.register_room("W1N1", Terrain::plains()).unwrap();
         assert_eq!((world.generation(), world.terrain_epoch()), (1, 1));
         world.insert("W1N1", energy(1)).unwrap();
         assert_eq!(world.generation(), 2);
         assert_eq!(world.terrain_epoch(), 1, "对象变更不动地形纪元");
         // tick 推进（结算提交位）：时钟折叠面变化 ⇒ 代际必须失效
-        world.advance_ticks(1);
+        world.advance_ticks(1).unwrap();
         let after_tick = world.generation();
         assert_eq!(after_tick, 3);
         // player_ticks>0 后 set_terrain 拒绝（不 bump）
@@ -471,11 +558,11 @@ mod tests {
         assert!(world.room_version("nope").is_none());
         // 分别检查地形更新、删除和可变访问的版本变化。
         let mut fresh = World::new(2);
-        fresh.register_room("E1S1", Terrain::plains());
+        fresh.register_room("E1S1", Terrain::plains()).unwrap();
         fresh.set_terrain("E1S1", Terrain::plains()).unwrap();
         assert_eq!((fresh.generation(), fresh.terrain_epoch()), (2, 2));
         let id = fresh.insert("E1S1", energy(1)).unwrap();
-        fresh.remove(id);
+        fresh.remove(id).unwrap();
         assert_eq!(fresh.generation(), 4, "insert→remove 净 +2");
         let _ = fresh.get_mut(id);
         assert_eq!(fresh.generation(), 5, "get_mut 保守 +1（对象已删仍计）");
@@ -493,8 +580,8 @@ mod tests {
     #[test]
     fn ids_are_globally_unique_across_rooms() {
         let mut world = World::new(1);
-        world.register_room("W1N1", Terrain::plains());
-        world.register_room("E2S3", Terrain::plains());
+        world.register_room("W1N1", Terrain::plains()).unwrap();
+        world.register_room("E2S3", Terrain::plains()).unwrap();
         let a = world.insert("W1N1", energy(1)).unwrap();
         let b = world.insert("E2S3", energy(2)).unwrap();
         assert_ne!(a, b, "跨房间 id 必须唯一");
@@ -511,7 +598,7 @@ mod tests {
     #[test]
     fn insert_rejects_invalid_position_and_exhausted_ids() {
         let mut world = World::new(1);
-        world.register_room("W1N1", Terrain::plains());
+        world.register_room("W1N1", Terrain::plains()).unwrap();
         let mut invalid = energy(1);
         if let RoomObject::Energy(obj) = &mut invalid {
             obj.y = 50;
@@ -529,7 +616,7 @@ mod tests {
     fn obj_dir_lookup_remove_and_next_id_equivalence() {
         let mut world = World::new(1);
         for name in ["W1N1", "W2N2", "E3S3"] {
-            world.register_room(name, Terrain::plains());
+            world.register_room(name, Terrain::plains()).unwrap();
         }
         let a = world.insert("W1N1", energy(10)).unwrap();
         let b = world.insert("W2N2", energy(20)).unwrap();
@@ -550,7 +637,7 @@ mod tests {
         }
         assert_eq!(world.next_obj_id(), 901, "手工导入高 id 抬升候选");
         // 移除后目录失效（remove bump）→ get None；max 重算不含已移除
-        assert!(world.remove(ObjId(900)).is_some());
+        assert!(world.remove(ObjId(900)).unwrap().is_some());
         assert!(world.get(ObjId(900)).is_none());
         // 游标只保留普通分配所用的范围；手工导入的 900 被删除后不再抬高候选。
         assert_eq!(
@@ -570,14 +657,14 @@ mod tests {
 
     /// 构造场景时设置 time 不改变版本或地形修改的限制条件。
     #[test]
-    fn set_time_for_test_touches_only_time() {
+    fn set_time_for_test_invalidates_content_without_charging_player_ticks() {
         let mut world = World::new(1);
-        world.register_room("W1N1", Terrain::plains());
+        world.register_room("W1N1", Terrain::plains()).unwrap();
         let g0 = world.generation();
         let pt0 = world.player_ticks;
-        world.set_time_for_test(5);
+        world.set_time_for_test(5).unwrap();
         assert_eq!(world.time(), 5);
-        assert_eq!(world.generation(), g0, "摆钟不 bump 代际");
+        assert_eq!(world.generation(), g0 + 1, "摆钟须失效投影代际");
         assert_eq!(world.player_ticks, pt0, "摆钟不动 player_ticks");
     }
 
@@ -585,14 +672,14 @@ mod tests {
     #[test]
     fn obj_dir_rebuilds_after_settle_style_commit() {
         let mut world = World::new(1);
-        world.register_room("W1N1", Terrain::plains());
+        world.register_room("W1N1", Terrain::plains()).unwrap();
         let a = world.insert("W1N1", energy(1)).unwrap();
         // 模拟引擎先替换房间，再统一推进时间的提交顺序。
         let mut room = RoomState::new("W1N1", Terrain::plains());
         room.insert_with_id(a.0, energy(2)).unwrap();
         room.insert_with_id(777, energy(3)).unwrap();
         world.commit_room("W1N1".to_string(), room);
-        world.advance_ticks(1);
+        world.advance_ticks(1).unwrap();
         // bump 后首次触达重建 → 新对象可见
         assert!(world.get(ObjId(777)).is_some(), "提交尾新对象经目录可见");
         assert_eq!(world.next_obj_id(), 778);
@@ -602,7 +689,7 @@ mod tests {
     #[test]
     fn obj_dir_eager_maintenance_on_consecutive_inserts() {
         let mut world = World::new(1);
-        world.register_room("W1N1", Terrain::plains());
+        world.register_room("W1N1", Terrain::plains()).unwrap();
         for i in 0..50 {
             let id = world.insert("W1N1", energy(i)).unwrap();
             // max 缓存增量续档：每次 insert 后保持新鲜
@@ -631,10 +718,10 @@ mod tests {
     fn obj_dir_guard_skips_extension_when_stale() {
         // 形态一：remove 致陈旧 → insert → 触达
         let mut world = World::new(1);
-        world.register_room("W1N1", Terrain::plains());
+        world.register_room("W1N1", Terrain::plains()).unwrap();
         let _ = world.next_obj_id(); // 暖缓存（稳态）
         let a = world.insert("W1N1", energy(1)).unwrap();
-        assert!(world.remove(a).is_some()); // bump，两缓存陈旧
+        assert!(world.remove(a).unwrap().is_some()); // bump，两缓存陈旧
         let b = world.insert("W1N1", energy(2)).unwrap(); // 不得续档
         assert_eq!(b.0, 2, "游标分配");
         assert_eq!(
@@ -647,7 +734,7 @@ mod tests {
 
         // 形态二：room_mut 手工导入高 id 致陈旧 → insert → 触达
         let mut world = World::new(1);
-        world.register_room("W1N1", Terrain::plains());
+        world.register_room("W1N1", Terrain::plains()).unwrap();
         let _ = world.next_obj_id(); // 暖缓存
         let c = world.insert("W1N1", energy(1)).unwrap();
         world
@@ -666,8 +753,8 @@ mod tests {
     #[test]
     fn insert_after_manual_import_keeps_ids_unique_across_rooms() {
         let mut world = World::new(1);
-        world.register_room("W1N1", Terrain::plains());
-        world.register_room("W2N2", Terrain::plains());
+        world.register_room("W1N1", Terrain::plains()).unwrap();
+        world.register_room("W2N2", Terrain::plains()).unwrap();
         world
             .room_mut("W1N1")
             .unwrap()
@@ -701,7 +788,7 @@ mod tests {
     #[test]
     fn snapshot_roundtrip_carries_mod_objects() {
         let mut world = World::new(42);
-        world.register_room("W1N1", Terrain::plains());
+        world.register_room("W1N1", Terrain::plains()).unwrap();
         world.insert("W1N1", energy(1)).unwrap();
         let mod_id = world
             .insert(
@@ -745,7 +832,7 @@ mod tests {
     #[test]
     fn snapshot_roundtrip_carries_mod_named_resources() {
         let mut world = World::new(42);
-        world.register_room("W1N1", Terrain::plains());
+        world.register_room("W1N1", Terrain::plains()).unwrap();
         let creep_id = world
             .insert(
                 "W1N1",
@@ -823,7 +910,7 @@ mod tests {
     #[test]
     fn snapshot_roundtrip_preserves_order_and_ids() {
         let mut world = World::new(42);
-        world.register_room("W1N1", Terrain::plains());
+        world.register_room("W1N1", Terrain::plains()).unwrap();
         world.insert("W1N1", energy(1)).unwrap();
         world.insert("W1N1", energy(2)).unwrap();
         let snap = world
@@ -837,13 +924,13 @@ mod tests {
     #[test]
     fn restored_room_queries_use_world_map_key() {
         let mut world = World::new(1);
-        world.register_room("W1N1", Terrain::plains());
+        world.register_room("W1N1", Terrain::plains()).unwrap();
         let id = world.insert("W1N1", energy(1)).unwrap();
         let snapshot = world.room("W1N1").unwrap().encode_snapshot(0, 1, 2);
         let restored = RoomState::decode_snapshot(&snapshot).unwrap();
         assert!(restored.name.is_empty());
         world.commit_room("W1N1".into(), restored);
-        world.advance_ticks(1);
+        world.advance_ticks(1).unwrap();
         assert_eq!(world.get(id).unwrap().0, "W1N1");
         assert_eq!(
             world.object_json_by_id(id).unwrap()["pos"]["roomName"],
@@ -859,12 +946,12 @@ mod tests {
     fn snapshot_restore_recovers_next_id_and_rejects_bad_terrain() {
         // header.next_obj_id 落后于对象表：World 重建侧用 bump 抬高后不复用
         let mut world = World::new(1);
-        world.register_room("W1N1", Terrain::plains());
+        world.register_room("W1N1", Terrain::plains()).unwrap();
         world.insert("W1N1", energy(1)).unwrap();
         world.insert("W1N1", energy(2)).unwrap();
         let snap = world.room("W1N1").unwrap().encode_snapshot(0, 0, 1);
         let mut world2 = World::new(1);
-        world2.register_room("W1N1", Terrain::plains());
+        world2.register_room("W1N1", Terrain::plains()).unwrap();
         for object in &snap.objects {
             world2
                 .room_mut("W1N1")
@@ -885,7 +972,7 @@ mod tests {
     #[test]
     fn decode_rejects_duplicate_ids_and_out_of_bounds_positions() {
         let mut world = World::new(1);
-        world.register_room("W1N1", Terrain::plains());
+        world.register_room("W1N1", Terrain::plains()).unwrap();
         world.insert("W1N1", energy(1)).unwrap();
         let mut snapshot = world.room("W1N1").unwrap().encode_snapshot(0, 1, 2);
         snapshot.objects.push(snapshot.objects[0].clone());

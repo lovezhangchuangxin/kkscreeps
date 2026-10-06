@@ -1,6 +1,6 @@
 //! PathFinder.search / findPath / moveTo 原生搜索接线的玩家面形态。
 //!
-//! 场景由 sandbox_tests.rs 的唯一测试串行调用（进程级地形表与沙箱计数）；
+//! 场景由 sandbox_tests.rs 的唯一测试串行调用（沙箱计数与销毁纪律）；
 //! 这里不添加独立 #[test]。两通道等价与墙环边界在此族锁定。
 
 use super::*;
@@ -487,6 +487,10 @@ pub(super) fn pathfinder_matrix_mutation_impl() -> anyhow::Result<()> {
         return {path:r.path.map(p=>[p.x,p.y,p.roomName]),ops:r.ops,cost:r.cost,incomplete:r.incomplete};
     })()"#)?;
     assert_eq!(result["ok"], true, "可变矩阵搜索: {result}");
+    let terrain = kk_runner::pathfinder::TerrainPack::from_world_json(&pathfinder_world())
+        .map_err(anyhow::Error::msg)?
+        .native()
+        .map_err(anyhow::Error::msg)?;
     let origin = kk_pathfinder::WorldPosition::from_room("W2N1", 45, 25)?;
     let goals = [kk_pathfinder::Goal::pos(
         kk_pathfinder::WorldPosition::from_room("W1N1", 20, 25)?,
@@ -501,8 +505,9 @@ pub(super) fn pathfinder_matrix_mutation_impl() -> anyhow::Result<()> {
         live: true,
         update: 255,
     };
-    let expected = kk_pathfinder::search_with_host(origin, &goals, &options, &mut host)?;
+    let expected = kk_pathfinder::search_with_host(&terrain, origin, &goals, &options, &mut host)?;
     let frozen = kk_pathfinder::search_with_host(
+        &terrain,
         origin,
         &goals,
         &options,
@@ -565,6 +570,7 @@ pub(super) fn pathfinder_matrix_mutation_impl() -> anyhow::Result<()> {
     // 部分归零（地形默认值），避免越界读取并保持明确的本地边界策略。
     let edge_origin = kk_pathfinder::WorldPosition::from_room("W2N1", 49, 25)?;
     let shrunk = kk_pathfinder::search_with_host(
+        &terrain,
         edge_origin,
         &goals,
         &options,
@@ -578,6 +584,7 @@ pub(super) fn pathfinder_matrix_mutation_impl() -> anyhow::Result<()> {
         },
     )?;
     let stale = kk_pathfinder::search_with_host(
+        &terrain,
         edge_origin,
         &goals,
         &options,
@@ -612,5 +619,34 @@ pub(super) fn pathfinder_matrix_mutation_impl() -> anyhow::Result<()> {
         json!({"path":path,"ops":shrunk.ops,"cost":shrunk.cost,"incomplete":shrunk.incomplete}),
         "收缩不得保留旧矩阵: {result}"
     );
+    Ok(())
+}
+
+/// 原始 JSON 没有可信世界身份；相同 rev 不能复用另一个世界的地形。
+pub(super) fn same_revision_world_switch_uses_current_terrain_impl() -> anyhow::Result<()> {
+    let mut sandbox = Sandbox::new(SandboxConfig::default())?;
+    let mut modules = ModuleTable::new();
+    modules.insert_js("main", "module.exports.loop = function () {};");
+    sandbox.set_modules(modules)?;
+    let mut world = pathfinder_world();
+    let expression = "(() => {const r=PathFinder.search(new RoomPosition(5,25,'W1N1'),new RoomPosition(30,25,'W1N1'),{maxRooms:1});return {path:r.path,cost:r.cost,ops:r.ops,incomplete:r.incomplete};})()";
+    let mut answers = Vec::new();
+    for cells in [terrain_with_wall(10), vec![0; 2500], terrain_with_wall(10)] {
+        let mut source = kk_world::World::default();
+        source
+            .register_room("W1N1", kk_core::Terrain::from_codes(&cells).unwrap())
+            .map_err(anyhow::Error::msg)?;
+        let mut terrain = source.world_json()["rooms"]["W1N1"]["terrain"].clone();
+        terrain["rev"] = json!(7);
+        world["rooms"]["W1N1"]["terrain"] = terrain;
+        tick(&mut sandbox, &world)?;
+        let result = sandbox.run_expr(expression)?;
+        assert_eq!(result["ok"], true, "{result}");
+        answers.push(result["value"].clone());
+    }
+    assert_eq!(answers[0]["incomplete"], true);
+    assert_eq!(answers[1]["incomplete"], false);
+    assert_eq!(answers[0], answers[2]);
+    assert_ne!(answers[0]["path"], answers[1]["path"]);
     Ok(())
 }

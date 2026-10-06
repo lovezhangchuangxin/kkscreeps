@@ -165,7 +165,7 @@ mod tests {
     #[test]
     fn world_source_delegates_to_world() {
         let mut world = kk_world::World::new(7);
-        world.register_room("W1N1", Terrain::plains());
+        world.register_room("W1N1", Terrain::plains()).unwrap();
         let source: &dyn WorldSource = &world;
         assert_eq!(source.generation(), world.generation());
         assert_eq!(source.terrain_epoch(), world.terrain_epoch());
@@ -190,7 +190,9 @@ mod extension_projection_via_trait_tests {
         // 非空目录经 &dyn WorldSource 分发端到端输出 ext 键；
         // 目录为空时同一分发不输出（早退）。
         let mut world = kk_world::World::new(3);
-        world.register_room("W1N1", kk_core::Terrain::plains());
+        world
+            .register_room("W1N1", kk_core::Terrain::plains())
+            .unwrap();
         let link = world
             .insert(
                 "W1N1",
@@ -203,12 +205,14 @@ mod extension_projection_via_trait_tests {
             )
             .unwrap();
         world
-            .room_mut("W1N1")
-            .unwrap()
-            .extensions
-            .entry(link)
-            .or_default()
-            .insert("testmod:mark".into(), serde_json::json!(7));
+            .edit_room("W1N1", |room| {
+                room.extensions
+                    .entry(link)
+                    .or_default()
+                    .insert("testmod:mark".into(), serde_json::json!(7));
+                Ok(())
+            })
+            .unwrap();
 
         let mut contrib = kk_mod_api::Contribution {
             source: kk_mod_api::Source {

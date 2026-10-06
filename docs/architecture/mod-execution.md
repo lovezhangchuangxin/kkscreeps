@@ -178,3 +178,9 @@ runtime 的 `last_mod_settlement_fault()` 返回最近一次实际结算中失�
 共享可信 VM 的故障半径仍是整分片；未显式停用的确定性异常或超限 Mod 在新 VM 中仍会失败。link tick、容量族等其他内建动作与纯 Rust callback 的正常拒绝、自动策略的 CLI/持久日志接线、逐 Mod 资源归因、进程级限额、跨房资源写入、资源/移动/战斗/建造族之外的其他领域写 API、其他生命周期槽、数据库/输入日志持久化和 outbox 尚未完成。[基础检查点](checkpoints.md)已保存已提交 namespace state、冻结身份、执行停用与故障计数，提供显式冷恢复；不保存 JS 模块缓存。
 
 默认路径与功能回归、真实混合链和失败候选分别验收。小对象链测试不代表密集 Mod 的成本；性能要求见 [性能验收](performance-acceptance.md)，本次选择与取舍见 [ADR-015](../decisions/ADR-015-mod-chain-execution.md)。
+
+## SDK 与宿主模块边界
+
+公共入口仍为 `@kkscreeps/mod`，导出和参数保持。`sdk.js` 转导出注册、规则和链入口；`sdk/refresh.js` 保持 next 前同步、返回后刷新和共享旧引用语义；领域模块提供对象、库存、战斗、建造与移动能力。固定内部虚拟模块只允许 SDK 静态导入，Mod 包不能直接引用它们。宿主的 ChainHost 组合五个领域接口，默认能力拒绝；runtime 的 ChainCapability 将能力与领域状态绑定，不能声明有能力却缺少状态。槽分类和正常拒绝资格从 kk-mod-api 元数据导出，不改变计划编码。
+
+创建时 ID 耗尽属于整轮致命错误，即使 Mod 捕获异常或返回正常拒绝也不发布候选。普通可回滚拒绝保持既有语义；详见[状态编辑与发布](state-editing.md)。独立样例继续使用 `compat/fixtures/sim-mod-composition`、`sim-mod-objects` 和资源/移动策略场景，经 CLI 验收。

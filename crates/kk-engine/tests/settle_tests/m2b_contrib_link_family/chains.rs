@@ -465,12 +465,12 @@ fn double_next_fails_the_round_and_keeps_old_state() {
     let err = engine.tick_with_intents(batch).unwrap_err();
     assert!(err.0.contains("重复调用 next"), "{}", err.0);
     // 已提交世界保持上一 tick：能量未动、时间未推进、run_state 进恢复态。
-    let d1: serde_json::Value = match engine.world.get(l1).map(|(_, o)| o.clone()) {
+    let d1: serde_json::Value = match engine.world().get(l1).map(|(_, o)| o.clone()) {
         Some(RoomObject::Generic(g)) => serde_json::from_str(&g.data).unwrap(),
         other => panic!("link 仍在世界中：{other:?}"),
     };
     assert_eq!(d1["store"]["energy"], json!(300), "候选被丢弃，世界未提交");
-    assert_eq!(engine.world.time(), 0);
+    assert_eq!(engine.world().time(), 0);
     assert!(
         matches!(
             engine.run_state(),

@@ -50,31 +50,27 @@ impl Sandbox {
         )
     }
 
-    /// JSON 通道的寻路地形打包（含 rev 缓存）。rev 是全局 terrain_epoch：
-    /// 生产的 world_json 每房 terrain 都带同一 rev，取首房即可判失效；
-    /// 裸数组夹具形态（bot_check 手搓夹具世界等）无 rev，不缓存、逐 tick 重建。
+    /// 无可信身份的原始 JSON 地形按内容核对，不能仅用 rev 判断换世界。
     pub(super) fn json_terrain_pack(
         &mut self,
         world: &serde_json::Value,
-    ) -> std::sync::Arc<crate::pathfinder::TerrainPack> {
-        let rev = world
-            .get("rooms")
-            .and_then(|rooms| rooms.as_object())
-            .and_then(|rooms| rooms.values().next())
-            .and_then(|entry| entry.get("terrain"))
-            .and_then(|terrain| terrain.get("rev"))
-            .and_then(|rev| rev.as_u64());
-        if let Some(rev) = rev
-            && let Some((cached_rev, cached)) = &self.terrain_pack_cache
-            && *cached_rev == rev
+    ) -> anyhow::Result<std::sync::Arc<crate::pathfinder::TerrainPack>> {
+        // 原始 JSON 不带可信世界身份：rev 相同也须按内容核对，防止换世界串缓存。
+        let pack =
+            crate::pathfinder::TerrainPack::from_world_json(world).map_err(anyhow::Error::msg)?;
+        if let Some(cached) = &self.terrain_pack_cache
+            && **cached == pack
         {
-            return cached.clone();
+            return Ok(cached.clone());
         }
-        let pack = std::sync::Arc::new(crate::pathfinder::TerrainPack::from_world_json(world));
-        if let Some(rev) = rev {
-            self.terrain_pack_cache = Some((rev, pack.clone()));
-        }
-        pack
+        let pack = std::sync::Arc::new(pack);
+        self.terrain_pack_cache = Some(pack.clone());
+        Ok(pack)
+    }
+
+    /// 宿主为下一次注入提供世界独立快照；消费一次后恢复原始输入校验。
+    pub fn set_host_terrain(&mut self, terrain: Option<std::sync::Arc<kk_pathfinder::TerrainSet>>) {
+        self.host_terrain = terrain;
     }
 
     pub(super) fn begin_tick_plan(
@@ -85,6 +81,7 @@ impl Sandbox {
         plan: TickPlan,
     ) -> anyhow::Result<TickPlan> {
         // 调用方应已提交或丢弃上一轮候选；清除残留，避免它混入当前 tick。
+        let host_terrain = self.host_terrain.take();
         self.pending_bill = None;
         self.pending_recharge = None;
         match plan {
@@ -102,13 +99,17 @@ impl Sandbox {
                 self.runtime.v8_isolate().cancel_terminate_execution();
                 // 寻路地形随世界注入 OpState（停跑分支不注入：不执行玩家
                 // 代码，op 不会被调；下一 Run tick 整体替换旧值）。
-                // JSON 通道按 terrain rev 缓存打包产物（稳态零解码），
+                // 可信宿主的快照直接复用；原始 JSON 按内容核对，
                 // KKPV 通道持束句柄、首次搜索懒解码（见 pathfinder.rs）。
-                let tick_terrain = match kkpv_public {
-                    Some(public) => crate::pathfinder::TickTerrain::kkpv(public.clone()),
-                    None => {
-                        let pack = self.json_terrain_pack(world);
-                        crate::pathfinder::TickTerrain::json(pack)
+                let tick_terrain = if let Some(terrain) = host_terrain {
+                    crate::pathfinder::TickTerrain::frozen(terrain)
+                } else {
+                    match kkpv_public {
+                        Some(public) => crate::pathfinder::TickTerrain::kkpv(public.clone()),
+                        None => {
+                            let pack = self.json_terrain_pack(world)?;
+                            crate::pathfinder::TickTerrain::json(pack)
+                        }
                     }
                 };
                 self.runtime.op_state().borrow_mut().put(tick_terrain);

@@ -1,0 +1,2296 @@
+{
+  "report_version": 6,
+  "success": true,
+  "status": "passed",
+  "engine_version": "0.1.0",
+  "executable_sha256": "cdb87ac5569c1e49f647063238faa2e080d0b444e853439f3a7df310860865c5",
+  "scenario": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/sim-mod-composition/scenario.json",
+  "scenario_sha256": "c9fd8002beb7f010cb330710c45bc370289cd2d8d0d1e4f8504f2fc243872431",
+  "modules": {
+    "p1": {
+      "directory": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/sim-mod-composition",
+      "sha256": "cabed85bca834029dc81631807e8b29a9bcdb053eacb10421c5110518a2f2c6f",
+      "files": [
+        {
+          "name": "main",
+          "kind": "js",
+          "bytes": 443,
+          "sha256": "245c0bef9f7b75071ab20f3128bfd4da92fcfcda550544241493cc0b2ac7b34b"
+        }
+      ]
+    },
+    "p2": {
+      "directory": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/sim-mod-composition",
+      "sha256": "cabed85bca834029dc81631807e8b29a9bcdb053eacb10421c5110518a2f2c6f",
+      "files": [
+        {
+          "name": "main",
+          "kind": "js",
+          "bytes": 443,
+          "sha256": "245c0bef9f7b75071ab20f3128bfd4da92fcfcda550544241493cc0b2ac7b34b"
+        }
+      ]
+    }
+  },
+  "mods": {
+    "root": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/mod-composition",
+    "packages": {
+      "a-audit": {
+        "version": "1.0.0",
+        "api_version": "^1.0.0",
+        "dependencies": {},
+        "directory": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/mod-composition/a-audit",
+        "code_sha256": "fe0f3d0ae1489d6c36acbd252ed64c27580932e56f497292967a939db81ec1ff",
+        "player_api_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "config_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "base": {
+        "version": "1.0.0",
+        "api_version": "^1.0.0",
+        "dependencies": {},
+        "directory": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/mod-composition/base",
+        "code_sha256": "8d5c9acc2eb9f6a75eca24025c3bcbd8e76509b752cddf9a3455795d87589498",
+        "player_api_sha256": "db6fd63c4b28c505964a7e2f85535eb02e524e15b6c86e749dcf84374df91a46",
+        "config_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "dependent": {
+        "version": "1.0.0",
+        "api_version": "^1.0.0",
+        "dependencies": {
+          "a-audit": "^1.0.0"
+        },
+        "directory": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/mod-composition/dependent",
+        "code_sha256": "f7c84747aa18701b6924d986bccafd97cb62a0a9c1921e7a5d86e2687b56214d",
+        "player_api_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "config_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "z-gate": {
+        "version": "1.0.0",
+        "api_version": "^1.0.0",
+        "dependencies": {},
+        "directory": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/mod-composition/z-gate",
+        "code_sha256": "e5cf2da9856ff87e0844a7ced7639b3cb8d87c4a22295a046c770bea3e399306",
+        "player_api_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "config_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    "selection": {
+      "include": [],
+      "exclude": []
+    }
+  },
+  "mods_switches": [],
+  "plan_hash": "f2b61e6463e8c71d23e997e9afc30b5ead458679924175c7f13b0748f737d69d",
+  "composition": {
+    "report_version": 4,
+    "plan_hash": "f2b61e6463e8c71d23e997e9afc30b5ead458679924175c7f13b0748f737d69d",
+    "sources": {
+      "a-audit": {
+        "namespace": "a-audit",
+        "api_version": 1,
+        "revision": "1.0.0",
+        "code_digest": [
+          254,
+          15,
+          61,
+          10,
+          225,
+          72,
+          157,
+          108,
+          54,
+          172,
+          189,
+          37,
+          46,
+          214,
+          76,
+          39,
+          88,
+          9,
+          50,
+          229,
+          111,
+          73,
+          114,
+          146,
+          150,
+          122,
+          147,
+          157,
+          184,
+          30,
+          193,
+          255
+        ],
+        "config_digest": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "player_api_digest": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "base": {
+        "namespace": "base",
+        "api_version": 1,
+        "revision": "1.0.0",
+        "code_digest": [
+          141,
+          92,
+          154,
+          204,
+          46,
+          185,
+          246,
+          167,
+          94,
+          202,
+          36,
+          2,
+          92,
+          59,
+          203,
+          216,
+          231,
+          101,
+          9,
+          183,
+          82,
+          205,
+          223,
+          154,
+          52,
+          85,
+          121,
+          93,
+          135,
+          88,
+          148,
+          152
+        ],
+        "config_digest": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "player_api_digest": [
+          219,
+          111,
+          214,
+          60,
+          75,
+          40,
+          197,
+          5,
+          150,
+          74,
+          126,
+          47,
+          133,
+          83,
+          94,
+          176,
+          46,
+          82,
+          78,
+          21,
+          182,
+          200,
+          110,
+          116,
+          157,
+          207,
+          132,
+          55,
+          77,
+          249,
+          26,
+          70
+        ]
+      },
+      "builtin": {
+        "namespace": "builtin",
+        "api_version": 1,
+        "revision": "link-creep-store-move-combat-build-incoming-contest-admission-obstacle-precheck-pull-cost-ranges-descriptors-v14",
+        "code_digest": [
+          63,
+          116,
+          20,
+          106,
+          210,
+          179,
+          223,
+          95,
+          38,
+          48,
+          29,
+          165,
+          108,
+          160,
+          249,
+          217,
+          92,
+          203,
+          228,
+          148,
+          5,
+          48,
+          84,
+          28,
+          124,
+          114,
+          219,
+          64,
+          142,
+          72,
+          226,
+          205
+        ],
+        "config_digest": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "player_api_digest": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "dependent": {
+        "namespace": "dependent",
+        "api_version": 1,
+        "revision": "1.0.0",
+        "code_digest": [
+          247,
+          200,
+          71,
+          71,
+          170,
+          24,
+          112,
+          27,
+          105,
+          36,
+          217,
+          134,
+          188,
+          202,
+          253,
+          151,
+          203,
+          98,
+          160,
+          169,
+          193,
+          146,
+          30,
+          122,
+          93,
+          134,
+          226,
+          104,
+          123,
+          86,
+          33,
+          77
+        ],
+        "config_digest": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "player_api_digest": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "z-gate": {
+        "namespace": "z-gate",
+        "api_version": 1,
+        "revision": "1.0.0",
+        "code_digest": [
+          229,
+          207,
+          45,
+          169,
+          133,
+          111,
+          248,
+          126,
+          8,
+          68,
+          167,
+          206,
+          215,
+          99,
+          155,
+          60,
+          184,
+          216,
+          124,
+          74,
+          34,
+          41,
+          90,
+          4,
+          108,
+          119,
+          11,
+          234,
+          62,
+          57,
+          147,
+          6
+        ],
+        "config_digest": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "player_api_digest": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "selection": {
+      "requested": [],
+      "excluded": [],
+      "selected": [
+        "a-audit",
+        "base",
+        "dependent",
+        "z-gate"
+      ],
+      "auto_added": [],
+      "skipped": []
+    },
+    "resources": [],
+    "buildings": [],
+    "handlers": [
+      {
+        "key": "a-audit:handler.after",
+        "slot": "base:counter.tick",
+        "kind": "After",
+        "binding": "a-audit:handler.after",
+        "depends_on": [
+          "z-gate:handler.after"
+        ]
+      },
+      {
+        "key": "a-audit:handler.before",
+        "slot": "base:counter.tick",
+        "kind": "Before",
+        "binding": "a-audit:handler.before",
+        "depends_on": [
+          "z-gate:handler.before"
+        ]
+      },
+      {
+        "key": "a-audit:handler.wrap",
+        "slot": "base:counter.tick",
+        "kind": "Wrap",
+        "binding": "a-audit:handler.wrap",
+        "depends_on": [
+          "z-gate:handler.wrap"
+        ]
+      },
+      {
+        "key": "z-gate:handler.after",
+        "slot": "base:counter.tick",
+        "kind": "After",
+        "binding": "z-gate:handler.after",
+        "depends_on": []
+      },
+      {
+        "key": "z-gate:handler.before",
+        "slot": "base:counter.tick",
+        "kind": "Before",
+        "binding": "z-gate:handler.before",
+        "depends_on": []
+      },
+      {
+        "key": "z-gate:handler.wrap",
+        "slot": "base:counter.tick",
+        "kind": "Wrap",
+        "binding": "z-gate:handler.wrap",
+        "depends_on": []
+      }
+    ],
+    "slots": [
+      {
+        "key": "base:counter.tick",
+        "stage": "ObjectTick",
+        "original_center": "base:counter.tick.process",
+        "frozen": {
+          "Chained": {
+            "before": [
+              "z-gate:handler.before",
+              "a-audit:handler.before"
+            ],
+            "wraps": [
+              "z-gate:handler.wrap",
+              "a-audit:handler.wrap"
+            ],
+            "center": "base:counter.tick.process",
+            "after": [
+              "a-audit:handler.after",
+              "z-gate:handler.after"
+            ]
+          }
+        },
+        "active": {
+          "key": "base:counter.tick",
+          "before": [
+            "z-gate:handler.before",
+            "a-audit:handler.before"
+          ],
+          "wraps": [
+            "z-gate:handler.wrap",
+            "a-audit:handler.wrap"
+          ],
+          "center": "base:counter.tick.process",
+          "after": [
+            "a-audit:handler.after",
+            "z-gate:handler.after"
+          ],
+          "native_center": false,
+          "decline_allowed": false
+        },
+        "execution": "hosted"
+      },
+      {
+        "key": "builtin:creep.attack",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.attack.native",
+        "frozen": {
+          "Native": "builtin:creep.attack.native"
+        },
+        "active": {
+          "key": "builtin:creep.attack",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.attack.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.build",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.build.native",
+        "frozen": {
+          "Native": "builtin:creep.build.native"
+        },
+        "active": {
+          "key": "builtin:creep.build",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.build.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.dismantle",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.dismantle.native",
+        "frozen": {
+          "Native": "builtin:creep.dismantle.native"
+        },
+        "active": {
+          "key": "builtin:creep.dismantle",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.dismantle.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.heal",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.heal.native",
+        "frozen": {
+          "Native": "builtin:creep.heal.native"
+        },
+        "active": {
+          "key": "builtin:creep.heal",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.heal.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.move",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.move.native",
+        "frozen": {
+          "Native": "builtin:creep.move.native"
+        },
+        "active": {
+          "key": "builtin:creep.move",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.move.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.moveAdmission",
+        "stage": "Movement",
+        "original_center": "builtin:creep.moveAdmission.native",
+        "frozen": {
+          "Native": "builtin:creep.moveAdmission.native"
+        },
+        "active": {
+          "key": "builtin:creep.moveAdmission",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.moveAdmission.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.rangedAttack",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.rangedAttack.native",
+        "frozen": {
+          "Native": "builtin:creep.rangedAttack.native"
+        },
+        "active": {
+          "key": "builtin:creep.rangedAttack",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.rangedAttack.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.rangedHeal",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.rangedHeal.native",
+        "frozen": {
+          "Native": "builtin:creep.rangedHeal.native"
+        },
+        "active": {
+          "key": "builtin:creep.rangedHeal",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.rangedHeal.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.rangedMassAttack",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.rangedMassAttack.native",
+        "frozen": {
+          "Native": "builtin:creep.rangedMassAttack.native"
+        },
+        "active": {
+          "key": "builtin:creep.rangedMassAttack",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.rangedMassAttack.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.receiveDamage",
+        "stage": "ObjectTick",
+        "original_center": "builtin:creep.receiveDamage.native",
+        "frozen": {
+          "Native": "builtin:creep.receiveDamage.native"
+        },
+        "active": {
+          "key": "builtin:creep.receiveDamage",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.receiveDamage.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.repair",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.repair.native",
+        "frozen": {
+          "Native": "builtin:creep.repair.native"
+        },
+        "active": {
+          "key": "builtin:creep.repair",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.repair.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.transfer",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.transfer.native",
+        "frozen": {
+          "Native": "builtin:creep.transfer.native"
+        },
+        "active": {
+          "key": "builtin:creep.transfer",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.transfer.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:creep.withdraw",
+        "stage": "ObjectAction",
+        "original_center": "builtin:creep.withdraw.native",
+        "frozen": {
+          "Native": "builtin:creep.withdraw.native"
+        },
+        "active": {
+          "key": "builtin:creep.withdraw",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:creep.withdraw.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:link.tick",
+        "stage": "ObjectTick",
+        "original_center": "builtin:link.tick.native",
+        "frozen": {
+          "Native": "builtin:link.tick.native"
+        },
+        "active": {
+          "key": "builtin:link.tick",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:link.tick.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": false
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:link.transfer",
+        "stage": "ObjectAction",
+        "original_center": "builtin:link.transfer.native",
+        "frozen": {
+          "Native": "builtin:link.transfer.native"
+        },
+        "active": {
+          "key": "builtin:link.transfer",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:link.transfer.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:room.moveContest",
+        "stage": "Movement",
+        "original_center": "builtin:room.moveContest.native",
+        "frozen": {
+          "Native": "builtin:room.moveContest.native"
+        },
+        "active": {
+          "key": "builtin:room.moveContest",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:room.moveContest.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:room.moveCost",
+        "stage": "Movement",
+        "original_center": "builtin:room.moveCost.native",
+        "frozen": {
+          "Native": "builtin:room.moveCost.native"
+        },
+        "active": {
+          "key": "builtin:room.moveCost",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:room.moveCost.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:room.moveObstacle",
+        "stage": "Movement",
+        "original_center": "builtin:room.moveObstacle.native",
+        "frozen": {
+          "Native": "builtin:room.moveObstacle.native"
+        },
+        "active": {
+          "key": "builtin:room.moveObstacle",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:room.moveObstacle.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:room.movePrecheck",
+        "stage": "Movement",
+        "original_center": "builtin:room.movePrecheck.native",
+        "frozen": {
+          "Native": "builtin:room.movePrecheck.native"
+        },
+        "active": {
+          "key": "builtin:room.movePrecheck",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:room.movePrecheck.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      },
+      {
+        "key": "builtin:room.movePullRegistration",
+        "stage": "Movement",
+        "original_center": "builtin:room.movePullRegistration.native",
+        "frozen": {
+          "Native": "builtin:room.movePullRegistration.native"
+        },
+        "active": {
+          "key": "builtin:room.movePullRegistration",
+          "before": [],
+          "wraps": [],
+          "center": "builtin:room.movePullRegistration.native",
+          "after": [],
+          "native_center": true,
+          "decline_allowed": true
+        },
+        "execution": "native"
+      }
+    ],
+    "rules": [
+      {
+        "key": "builtin:creep.attack.range",
+        "default": {
+          "Signed": 1
+        },
+        "value": {
+          "Signed": 1
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:creep.attack.native",
+          "builtin:creep.heal.native",
+          "builtin:creep.rangedAttack.native",
+          "builtin:creep.rangedHeal.native"
+        ]
+      },
+      {
+        "key": "builtin:creep.heal.range",
+        "default": {
+          "Signed": 1
+        },
+        "value": {
+          "Signed": 1
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:creep.attack.native",
+          "builtin:creep.heal.native",
+          "builtin:creep.rangedAttack.native",
+          "builtin:creep.rangedHeal.native"
+        ]
+      },
+      {
+        "key": "builtin:creep.rangedAttack.range",
+        "default": {
+          "Signed": 3
+        },
+        "value": {
+          "Signed": 3
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:creep.attack.native",
+          "builtin:creep.heal.native",
+          "builtin:creep.rangedAttack.native",
+          "builtin:creep.rangedHeal.native"
+        ]
+      },
+      {
+        "key": "builtin:creep.rangedHeal.range",
+        "default": {
+          "Signed": 3
+        },
+        "value": {
+          "Signed": 3
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:creep.attack.native",
+          "builtin:creep.heal.native",
+          "builtin:creep.rangedAttack.native",
+          "builtin:creep.rangedHeal.native"
+        ]
+      },
+      {
+        "key": "builtin:link.buildCost",
+        "default": {
+          "Signed": 5000
+        },
+        "value": {
+          "Signed": 5000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.capacity",
+        "default": {
+          "Signed": 800
+        },
+        "value": {
+          "Signed": 700
+        },
+        "definition_source": "builtin",
+        "selected_source": "z-gate",
+        "overrides": {
+          "z-gate": {
+            "Signed": 700
+          }
+        },
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.cooldown",
+        "default": {
+          "Signed": 1
+        },
+        "value": {
+          "Signed": 1
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.hits",
+        "default": {
+          "Signed": 1000
+        },
+        "value": {
+          "Signed": 1000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.hitsMax",
+        "default": {
+          "Signed": 1000
+        },
+        "value": {
+          "Signed": 1000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.lossRatio",
+        "default": {
+          "Float": 0.03
+        },
+        "value": {
+          "Float": 0.03
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl0",
+        "default": {
+          "Signed": 0
+        },
+        "value": {
+          "Signed": 0
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl1",
+        "default": {
+          "Signed": 0
+        },
+        "value": {
+          "Signed": 0
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl2",
+        "default": {
+          "Signed": 0
+        },
+        "value": {
+          "Signed": 0
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl3",
+        "default": {
+          "Signed": 0
+        },
+        "value": {
+          "Signed": 0
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl4",
+        "default": {
+          "Signed": 0
+        },
+        "value": {
+          "Signed": 0
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl5",
+        "default": {
+          "Signed": 2
+        },
+        "value": {
+          "Signed": 2
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl6",
+        "default": {
+          "Signed": 3
+        },
+        "value": {
+          "Signed": 3
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl7",
+        "default": {
+          "Signed": 4
+        },
+        "value": {
+          "Signed": 4
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:link.rcl8",
+        "default": {
+          "Signed": 6
+        },
+        "value": {
+          "Signed": 6
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:link.active",
+          "builtin:link.build",
+          "builtin:link.capacity",
+          "builtin:link.constants",
+          "builtin:link.init",
+          "builtin:link.precheck",
+          "builtin:link.project",
+          "builtin:link.tick.native",
+          "builtin:link.transfer.native"
+        ]
+      },
+      {
+        "key": "builtin:store.container.capacity",
+        "default": {
+          "Signed": 2000
+        },
+        "value": {
+          "Signed": 2000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.containerDeposit",
+          "builtin:store.init"
+        ]
+      },
+      {
+        "key": "builtin:store.factory.capacity",
+        "default": {
+          "Signed": 50000
+        },
+        "value": {
+          "Signed": 50000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init"
+        ]
+      },
+      {
+        "key": "builtin:store.lab.energyCapacity",
+        "default": {
+          "Signed": 2000
+        },
+        "value": {
+          "Signed": 2000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init",
+          "builtin:store.labSlots"
+        ]
+      },
+      {
+        "key": "builtin:store.lab.mineralCapacity",
+        "default": {
+          "Signed": 3000
+        },
+        "value": {
+          "Signed": 3000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init",
+          "builtin:store.labSlots"
+        ]
+      },
+      {
+        "key": "builtin:store.nuker.energyCapacity",
+        "default": {
+          "Signed": 300000
+        },
+        "value": {
+          "Signed": 300000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init"
+        ]
+      },
+      {
+        "key": "builtin:store.nuker.ghodiumCapacity",
+        "default": {
+          "Signed": 5000
+        },
+        "value": {
+          "Signed": 5000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init"
+        ]
+      },
+      {
+        "key": "builtin:store.powerSpawn.energyCapacity",
+        "default": {
+          "Signed": 5000
+        },
+        "value": {
+          "Signed": 5000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init"
+        ]
+      },
+      {
+        "key": "builtin:store.powerSpawn.powerCapacity",
+        "default": {
+          "Signed": 100
+        },
+        "value": {
+          "Signed": 100
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init"
+        ]
+      },
+      {
+        "key": "builtin:store.terminal.capacity",
+        "default": {
+          "Signed": 300000
+        },
+        "value": {
+          "Signed": 300000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init",
+          "builtin:store.terminalTick"
+        ]
+      },
+      {
+        "key": "builtin:store.tower.capacity",
+        "default": {
+          "Signed": 1000
+        },
+        "value": {
+          "Signed": 1000
+        },
+        "definition_source": "builtin",
+        "selected_source": "builtin",
+        "overrides": {},
+        "consumers": [
+          "builtin:store.build",
+          "builtin:store.constants",
+          "builtin:store.init"
+        ]
+      }
+    ],
+    "dependencies": {
+      "a-audit": [
+        "z-gate"
+      ],
+      "base": [],
+      "dependent": [
+        "a-audit"
+      ],
+      "z-gate": []
+    },
+    "disable_closures": {
+      "a-audit": [
+        "a-audit",
+        "dependent"
+      ],
+      "base": [
+        "base"
+      ],
+      "dependent": [
+        "dependent"
+      ],
+      "z-gate": [
+        "a-audit",
+        "dependent",
+        "z-gate"
+      ]
+    },
+    "disabled_mods": []
+  },
+  "execution_strategy": "761dcced8b802fa2d40e40461f8ef4807a74b1d0ea7432ba154afd020226ef5f",
+  "disabled_mods": [],
+  "channel": "kkpv",
+  "concurrency": 2,
+  "ticks_requested": 100,
+  "ticks_attempted": 100,
+  "world_ticks_committed": 100,
+  "start_time": 0,
+  "end_time": 100,
+  "checkpoint_loaded": null,
+  "checkpoint_saved": "/tmp/kkscreeps-quality-20261006/old-checkpoints/kkpv.json",
+  "run_wall_ms": 36.170083999999996,
+  "phases": {
+    "ticks": 100,
+    "phases": {
+      "project": {
+        "count": 100,
+        "p50_ms": 0.049084,
+        "p95_ms": 0.069084,
+        "p99_ms": 0.085334,
+        "max_ms": 0.113916,
+        "total_ms": 5.198591000000001
+      },
+      "run": {
+        "count": 100,
+        "p50_ms": 0.080875,
+        "p95_ms": 0.298958,
+        "p99_ms": 0.484292,
+        "max_ms": 1.441167,
+        "total_ms": 11.598952000000004
+      },
+      "settle": {
+        "count": 100,
+        "p50_ms": 0.173542,
+        "p95_ms": 0.247792,
+        "p99_ms": 0.546042,
+        "max_ms": 0.77175,
+        "total_ms": 19.158877000000004
+      },
+      "wall": {
+        "count": 100,
+        "p50_ms": 0.308084,
+        "p95_ms": 0.673917,
+        "p99_ms": 0.926666,
+        "max_ms": 2.331292,
+        "total_ms": 36.04838099999999
+      }
+    }
+  },
+  "failure": null,
+  "players": {
+    "p1": {
+      "successful_ticks": 100,
+      "error_ticks": 0,
+      "not_evaluated_ticks": 0,
+      "errors_head": [],
+      "console_head": []
+    },
+    "p2": {
+      "successful_ticks": 100,
+      "error_ticks": 0,
+      "not_evaluated_ticks": 0,
+      "errors_head": [],
+      "console_head": []
+    }
+  },
+  "aliases": {
+    "first": "kk0000000000000003",
+    "second": "kk0000000000000004"
+  },
+  "assertions": [
+    {
+      "pointer": "/objects/first/fields/trace",
+      "op": "eq",
+      "expected": "ZA([C])az",
+      "before": "",
+      "actual": "ZA([C])az",
+      "delta": null,
+      "passed": true
+    },
+    {
+      "pointer": "/objects/second/fields/trace",
+      "op": "eq",
+      "expected": "ZA([C])az",
+      "before": "",
+      "actual": "ZA([C])az",
+      "delta": null,
+      "passed": true
+    },
+    {
+      "pointer": "/mod_states/base/visits",
+      "op": "gte",
+      "expected": 200,
+      "before": null,
+      "actual": 200,
+      "delta": null,
+      "passed": true
+    }
+  ],
+  "mod_fault": null,
+  "mod_trace": null,
+  "initial": {
+    "time": 0,
+    "players": {
+      "p1": {
+        "gcl": 1000000,
+        "rooms": [],
+        "memory": {
+          "room": "W1N1"
+        },
+        "raw_memory": "{\"room\":\"W1N1\"}",
+        "cpu_bucket": 10000.0
+      },
+      "p2": {
+        "gcl": 1000000,
+        "rooms": [],
+        "memory": {
+          "room": "W2N2"
+        },
+        "raw_memory": "{\"room\":\"W2N2\"}",
+        "cpu_bucket": 10000.0
+      }
+    },
+    "objects": {
+      "first": {
+        "kind": "mod",
+        "id": "kk0000000000000003",
+        "typeKey": "base:counter",
+        "pos": {
+          "x": 10,
+          "y": 12,
+          "roomName": "W1N1"
+        },
+        "fields": {
+          "x": 10,
+          "y": 12,
+          "trace": "",
+          "value": 0
+        }
+      },
+      "second": {
+        "kind": "mod",
+        "id": "kk0000000000000004",
+        "typeKey": "base:counter",
+        "pos": {
+          "x": 10,
+          "y": 12,
+          "roomName": "W2N2"
+        },
+        "fields": {
+          "x": 10,
+          "y": 12,
+          "trace": "",
+          "value": 0
+        }
+      }
+    },
+    "rooms": {
+      "W1N1": {
+        "controller": {
+          "kind": "structure",
+          "structureType": "controller",
+          "id": "kk0000000000000001",
+          "pos": {
+            "x": 1,
+            "y": 1,
+            "roomName": "W1N1"
+          },
+          "level": 1,
+          "progress": 0,
+          "progressTotal": 200,
+          "ticksToDowngrade": 20001,
+          "safeMode": null,
+          "safeModeAvailable": 0,
+          "safeModeCooldown": null,
+          "reservation": null,
+          "sign": null,
+          "upgradeBlocked": null,
+          "isPowerEnabled": false,
+          "owner": "p1"
+        }
+      },
+      "W2N2": {
+        "controller": {
+          "kind": "structure",
+          "structureType": "controller",
+          "id": "kk0000000000000002",
+          "pos": {
+            "x": 1,
+            "y": 1,
+            "roomName": "W2N2"
+          },
+          "level": 1,
+          "progress": 0,
+          "progressTotal": 200,
+          "ticksToDowngrade": 20001,
+          "safeMode": null,
+          "safeModeAvailable": 0,
+          "safeModeCooldown": null,
+          "reservation": null,
+          "sign": null,
+          "upgradeBlocked": null,
+          "isPowerEnabled": false,
+          "owner": "p2"
+        }
+      }
+    },
+    "world": {
+      "time": 0,
+      "cpu": {
+        "limit": 20,
+        "tickLimit": 500,
+        "bucket": 10000
+      },
+      "user": null,
+      "gcl": 0,
+      "visibleRooms": [
+        "W1N1",
+        "W2N2"
+      ],
+      "rooms": {
+        "W1N1": {
+          "name": "W1N1",
+          "terrain": {
+            "rev": 2,
+            "payload": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQ=="
+          },
+          "energyAvailable": 0,
+          "energyCapacityAvailable": 0
+        },
+        "W2N2": {
+          "name": "W2N2",
+          "terrain": {
+            "rev": 2,
+            "payload": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQ=="
+          },
+          "energyAvailable": 0,
+          "energyCapacityAvailable": 0
+        }
+      },
+      "objects": [
+        {
+          "type": "structure",
+          "structureType": "controller",
+          "id": "kk0000000000000001",
+          "room": "W1N1",
+          "x": 1,
+          "y": 1,
+          "level": 1,
+          "progress": 0,
+          "progressTotal": 200,
+          "safeMode": 0,
+          "safeModeAvailable": 0,
+          "downgradeTime": 20001,
+          "isPowerEnabled": false,
+          "upgradeBlocked": null,
+          "safeModeCooldown": null,
+          "reservation": null,
+          "sign": null,
+          "owner": "p1",
+          "pos": {
+            "x": 1,
+            "y": 1,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "structure",
+          "structureType": "controller",
+          "id": "kk0000000000000002",
+          "room": "W2N2",
+          "x": 1,
+          "y": 1,
+          "level": 1,
+          "progress": 0,
+          "progressTotal": 200,
+          "safeMode": 0,
+          "safeModeAvailable": 0,
+          "downgradeTime": 20001,
+          "isPowerEnabled": false,
+          "upgradeBlocked": null,
+          "safeModeCooldown": null,
+          "reservation": null,
+          "sign": null,
+          "owner": "p2",
+          "pos": {
+            "x": 1,
+            "y": 1,
+            "roomName": "W2N2"
+          }
+        }
+      ]
+    },
+    "mod_objects": [
+      {
+        "kind": "mod",
+        "id": "kk0000000000000003",
+        "typeKey": "base:counter",
+        "pos": {
+          "x": 10,
+          "y": 12,
+          "roomName": "W1N1"
+        },
+        "fields": {
+          "x": 10,
+          "y": 12,
+          "trace": "",
+          "value": 0
+        }
+      },
+      {
+        "kind": "mod",
+        "id": "kk0000000000000004",
+        "typeKey": "base:counter",
+        "pos": {
+          "x": 10,
+          "y": 12,
+          "roomName": "W2N2"
+        },
+        "fields": {
+          "x": 10,
+          "y": 12,
+          "trace": "",
+          "value": 0
+        }
+      }
+    ],
+    "mod_states": {
+      "a-audit": null,
+      "base": null,
+      "dependent": null,
+      "z-gate": null
+    }
+  },
+  "final": {
+    "time": 100,
+    "players": {
+      "p1": {
+        "gcl": 1000000,
+        "rooms": [
+          "W1N1"
+        ],
+        "memory": {
+          "room": "W1N1",
+          "loops": 100,
+          "value": 99,
+          "trace": "ZA([C])az"
+        },
+        "raw_memory": "{\"room\":\"W1N1\",\"loops\":100,\"value\":99,\"trace\":\"ZA([C])az\"}",
+        "cpu_bucket": 10000.0
+      },
+      "p2": {
+        "gcl": 1000000,
+        "rooms": [
+          "W2N2"
+        ],
+        "memory": {
+          "room": "W2N2",
+          "loops": 100,
+          "value": 99,
+          "trace": "ZA([C])az"
+        },
+        "raw_memory": "{\"room\":\"W2N2\",\"loops\":100,\"value\":99,\"trace\":\"ZA([C])az\"}",
+        "cpu_bucket": 10000.0
+      }
+    },
+    "objects": {
+      "first": {
+        "kind": "mod",
+        "id": "kk0000000000000003",
+        "typeKey": "base:counter",
+        "pos": {
+          "x": 10,
+          "y": 12,
+          "roomName": "W1N1"
+        },
+        "fields": {
+          "x": 10,
+          "y": 12,
+          "trace": "ZA([C])az",
+          "value": 100
+        }
+      },
+      "second": {
+        "kind": "mod",
+        "id": "kk0000000000000004",
+        "typeKey": "base:counter",
+        "pos": {
+          "x": 10,
+          "y": 12,
+          "roomName": "W2N2"
+        },
+        "fields": {
+          "x": 10,
+          "y": 12,
+          "trace": "ZA([C])az",
+          "value": 100
+        }
+      }
+    },
+    "rooms": {
+      "W1N1": {
+        "controller": {
+          "kind": "structure",
+          "structureType": "controller",
+          "id": "kk0000000000000001",
+          "pos": {
+            "x": 1,
+            "y": 1,
+            "roomName": "W1N1"
+          },
+          "level": 1,
+          "progress": 0,
+          "progressTotal": 200,
+          "ticksToDowngrade": 19901,
+          "safeMode": null,
+          "safeModeAvailable": 0,
+          "safeModeCooldown": null,
+          "reservation": null,
+          "sign": null,
+          "upgradeBlocked": null,
+          "isPowerEnabled": false,
+          "owner": "p1"
+        }
+      },
+      "W2N2": {
+        "controller": {
+          "kind": "structure",
+          "structureType": "controller",
+          "id": "kk0000000000000002",
+          "pos": {
+            "x": 1,
+            "y": 1,
+            "roomName": "W2N2"
+          },
+          "level": 1,
+          "progress": 0,
+          "progressTotal": 200,
+          "ticksToDowngrade": 19901,
+          "safeMode": null,
+          "safeModeAvailable": 0,
+          "safeModeCooldown": null,
+          "reservation": null,
+          "sign": null,
+          "upgradeBlocked": null,
+          "isPowerEnabled": false,
+          "owner": "p2"
+        }
+      }
+    },
+    "world": {
+      "time": 100,
+      "cpu": {
+        "limit": 20,
+        "tickLimit": 500,
+        "bucket": 10000
+      },
+      "user": null,
+      "gcl": 0,
+      "visibleRooms": [
+        "W1N1",
+        "W2N2"
+      ],
+      "rooms": {
+        "W1N1": {
+          "name": "W1N1",
+          "terrain": {
+            "rev": 2,
+            "payload": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQ=="
+          },
+          "energyAvailable": 0,
+          "energyCapacityAvailable": 0
+        },
+        "W2N2": {
+          "name": "W2N2",
+          "terrain": {
+            "rev": 2,
+            "payload": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQ=="
+          },
+          "energyAvailable": 0,
+          "energyCapacityAvailable": 0
+        }
+      },
+      "objects": [
+        {
+          "type": "structure",
+          "structureType": "controller",
+          "id": "kk0000000000000001",
+          "room": "W1N1",
+          "x": 1,
+          "y": 1,
+          "level": 1,
+          "progress": 0,
+          "progressTotal": 200,
+          "safeMode": 0,
+          "safeModeAvailable": 0,
+          "downgradeTime": 20001,
+          "isPowerEnabled": false,
+          "upgradeBlocked": null,
+          "safeModeCooldown": null,
+          "reservation": null,
+          "sign": null,
+          "owner": "p1",
+          "pos": {
+            "x": 1,
+            "y": 1,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "structure",
+          "structureType": "controller",
+          "id": "kk0000000000000002",
+          "room": "W2N2",
+          "x": 1,
+          "y": 1,
+          "level": 1,
+          "progress": 0,
+          "progressTotal": 200,
+          "safeMode": 0,
+          "safeModeAvailable": 0,
+          "downgradeTime": 20001,
+          "isPowerEnabled": false,
+          "upgradeBlocked": null,
+          "safeModeCooldown": null,
+          "reservation": null,
+          "sign": null,
+          "owner": "p2",
+          "pos": {
+            "x": 1,
+            "y": 1,
+            "roomName": "W2N2"
+          }
+        }
+      ]
+    },
+    "mod_objects": [
+      {
+        "kind": "mod",
+        "id": "kk0000000000000003",
+        "typeKey": "base:counter",
+        "pos": {
+          "x": 10,
+          "y": 12,
+          "roomName": "W1N1"
+        },
+        "fields": {
+          "x": 10,
+          "y": 12,
+          "trace": "ZA([C])az",
+          "value": 100
+        }
+      },
+      {
+        "kind": "mod",
+        "id": "kk0000000000000004",
+        "typeKey": "base:counter",
+        "pos": {
+          "x": 10,
+          "y": 12,
+          "roomName": "W2N2"
+        },
+        "fields": {
+          "x": 10,
+          "y": 12,
+          "trace": "ZA([C])az",
+          "value": 100
+        }
+      }
+    ],
+    "mod_states": {
+      "a-audit": null,
+      "base": {
+        "visits": 200
+      },
+      "dependent": null,
+      "z-gate": null
+    }
+  }
+}

@@ -83,10 +83,15 @@ fn ready_spawn(f: &mut Fixture, directions: Vec<u8>) -> (ObjId, ObjId) {
         }),
     );
     let child = f.creep("child", "p1", 20, 20, &[BodyKind::Move], 0);
-    let Some(RoomObject::Creep(c)) = f.world.get_mut(child) else {
-        panic!("出生夹具必须是 creep");
-    };
-    c.spawning = true;
+    f.world
+        .edit_object(child, |object| {
+            let RoomObject::Creep(c) = object else {
+                panic!("出生夹具必须是 creep");
+            };
+            c.spawning = true;
+            Ok(())
+        })
+        .unwrap();
     (spawn, child)
 }
 
@@ -107,10 +112,15 @@ fn spawn_waits_when_selected_exit_has_a_mod_obstacle_or_any_owned_site() {
             None => place_building(&mut f, "bm:foundry", 21, 20, Value::Null),
             Some(owner) => {
                 let id = mod_site(&mut f, "bm:foundry", 21, 20, 0, 1000);
-                let Some(RoomObject::ConstructionSite(site)) = f.world.get_mut(id) else {
-                    panic!("工地夹具存在");
-                };
-                site.owner = Some(owner.into());
+                f.world
+                    .edit_object(id, |object| {
+                        let RoomObject::ConstructionSite(site) = object else {
+                            panic!("工地夹具存在");
+                        };
+                        site.owner = Some(owner.into());
+                        Ok(())
+                    })
+                    .unwrap();
                 id
             }
         };
@@ -160,10 +170,15 @@ fn spawn_stomp_detects_mod_obstacles_in_unselected_exits() {
         ] {
             if use_sites {
                 let id = mod_site(&mut f, "bm:foundry", x, y, 0, 1000);
-                let Some(RoomObject::ConstructionSite(site)) = f.world.get_mut(id) else {
-                    panic!("工地夹具存在");
-                };
-                site.owner = Some("p2".into());
+                f.world
+                    .edit_object(id, |object| {
+                        let RoomObject::ConstructionSite(site) = object else {
+                            panic!("工地夹具存在");
+                        };
+                        site.owner = Some("p2".into());
+                        Ok(())
+                    })
+                    .unwrap();
             } else {
                 place_building(&mut f, "bm:foundry", x, y, Value::Null);
             }

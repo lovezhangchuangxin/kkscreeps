@@ -23,8 +23,8 @@ struct MarketFixture {
 impl MarketFixture {
     fn new() -> Self {
         let mut world = kk_world::World::new(7);
-        world.register_room("W1N1", terrain_plain());
-        world.register_room("W5N1", terrain_plain());
+        world.register_room("W1N1", terrain_plain()).unwrap();
+        world.register_room("W5N1", terrain_plain()).unwrap();
         Self {
             engine: Engine::new(world),
         }
@@ -48,8 +48,7 @@ impl MarketFixture {
             "cooldownTime": cooldown_time,
         });
         self.engine
-            .world
-            .insert(
+            .insert_object(
                 room,
                 RoomObject::Generic(GenericObj {
                     id: 0,
@@ -63,19 +62,24 @@ impl MarketFixture {
 
     /// 直接保存 send 请求以单独测试全局处理；绕过 API 清洗与房间执行器。
     fn stow_send(&mut self, id: ObjId, target: &str, rt: &str, amount: i64) {
-        let Some(RoomObject::Generic(g)) = self.engine.world.get_mut(id) else {
-            panic!("terminal 不存在");
-        };
-        let mut v: Value = serde_json::from_str(&g.data).unwrap();
-        v["send"] = json!({
-            "targetRoomName": target, "resourceType": rt,
-            "amount": amount, "description": null,
-        });
-        g.data = v.to_string();
+        self.engine
+            .edit_object(id, |object| {
+                let RoomObject::Generic(g) = object else {
+                    panic!("terminal 不存在");
+                };
+                let mut v: Value = serde_json::from_str(&g.data).unwrap();
+                v["send"] = json!({
+                    "targetRoomName": target, "resourceType": rt,
+                    "amount": amount, "description": null,
+                });
+                g.data = v.to_string();
+                Ok(())
+            })
+            .unwrap();
     }
 
     fn data_of(&self, id: ObjId) -> Value {
-        match self.engine.world.get(id).map(|(_, o)| o) {
+        match self.engine.world().get(id).map(|(_, o)| o) {
             Some(RoomObject::Generic(g)) => serde_json::from_str(&g.data).unwrap(),
             other => panic!("Generic 不存在：{other:?}"),
         }
@@ -109,7 +113,7 @@ impl MarketFixture {
 }
 
 fn market(m: &MarketFixture) -> &MarketState {
-    &m.engine.market
+    m.engine.market()
 }
 
 /// 放置订单（adapter placeMarketOrder 等价——owner/type/rt/毫价/量/房）。
@@ -122,22 +126,30 @@ fn place_order(
     total: i64,
     room: &str,
 ) -> String {
-    let id = engine.market.next_order_id();
-    engine.market.insert_order(kk_engine::MarketOrder {
-        id: id.clone(),
-        user: owner.into(),
-        active: false,
-        order_type: otype.into(),
-        resource_type: rt.into(),
-        price: price_milli,
-        amount: 0,
-        remaining_amount: total,
-        total_amount: total,
-        room_name: Some(room.into()),
-        created: engine.world.time(),
-        // 使用固定创建墙钟，与 market_tick 的 TickInput 相同。
-        created_timestamp: BENCH_NOW_MS,
-    });
+    let created_time = engine.world().time();
+    let id = engine
+        .edit_market(|market| Ok(market.next_order_id()))
+        .unwrap();
+    engine
+        .edit_market(|market| {
+            market.insert_order(kk_engine::MarketOrder {
+                id: id.clone(),
+                user: owner.into(),
+                active: false,
+                order_type: otype.into(),
+                resource_type: rt.into(),
+                price: price_milli,
+                amount: 0,
+                remaining_amount: total,
+                total_amount: total,
+                room_name: Some(room.into()),
+                created: created_time,
+                // 使用固定创建墙钟，与 market_tick 的 TickInput 相同。
+                created_timestamp: BENCH_NOW_MS,
+            });
+            Ok(())
+        })
+        .unwrap();
     id
 }
 
@@ -168,14 +180,24 @@ fn deal_sell_direction_transfer_and_money() {
     let t1 = f.terminal("W1N1", "p1", json!({"energy": 100000}));
     let t2 = f.terminal("W5N1", "p2", json!({"energy": 100000, "H": 1000}));
     let oid = place_order(&mut f.engine, "p2", "sell", "H", 2500, 1000, "W5N1");
-    f.engine.players.entry("p1".into()).or_default().money = 10_000_000;
-    f.engine.players.entry("p2".into()).or_default().money = 10_000_000;
+    f.engine
+        .edit_players(|players| {
+            players.entry("p1".into()).or_default().money = 10_000_000;
+            Ok(())
+        })
+        .unwrap();
+    f.engine
+        .edit_players(|players| {
+            players.entry("p2".into()).or_default().money = 10_000_000;
+            Ok(())
+        })
+        .unwrap();
     // 生命周期把 inactive 订单激活（amount=min(1000 store, 1000 remaining)）
     market_tick(&mut f.engine, "p1", vec![]);
-    assert!(f.engine.market.orders[&oid].active, "SELL 有库存激活");
+    assert!(f.engine.market().orders[&oid].active, "SELL 有库存激活");
 
     // p1 买 100（deal intent）
-    let t_deal = f.engine.world.time();
+    let t_deal = f.engine.world().time();
     market_tick(
         &mut f.engine,
         "p1",
@@ -204,10 +226,10 @@ fn deal_sell_direction_transfer_and_money() {
     );
     // dealCost=100×2500毫=250000毫=250 credits；p1 −250、p2 +250（种子在
     // PlayerState 缺省 0——本测试直置）
-    let o = &f.engine.market.orders[&oid];
+    let o = &f.engine.market().orders[&oid];
     assert_eq!(o.remaining_amount, 900, "remaining 双减");
-    assert_eq!(f.engine.market.transactions.len(), 1);
-    let tx = &f.engine.market.transactions[0];
+    assert_eq!(f.engine.market().transactions.len(), 1);
+    let tx = &f.engine.market().transactions[0];
     assert_eq!(
         tx.order.as_ref().unwrap()["price"],
         json!(2.5),
@@ -223,8 +245,18 @@ fn change_price_skips_same_tick_deals() {
     let _t1 = f.terminal("W1N1", "p1", json!({"energy": 100000, "H": 1000}));
     let _t2 = f.terminal("W5N1", "p2", json!({"energy": 100000}));
     let oid = place_order(&mut f.engine, "p1", "sell", "H", 2500, 1000, "W1N1");
-    f.engine.players.entry("p1".into()).or_default().money = 10_000_000;
-    f.engine.players.entry("p2".into()).or_default().money = 10_000_000;
+    f.engine
+        .edit_players(|players| {
+            players.entry("p1".into()).or_default().money = 10_000_000;
+            Ok(())
+        })
+        .unwrap();
+    f.engine
+        .edit_players(|players| {
+            players.entry("p2".into()).or_default().money = 10_000_000;
+            Ok(())
+        })
+        .unwrap();
     market_tick(&mut f.engine, "p1", vec![]);
     let mut batch = IntentBatch::default();
     batch.users.entry("p1".into()).or_default().market.push(
@@ -251,14 +283,16 @@ fn change_price_skips_same_tick_deals() {
             },
         )
         .unwrap();
-    assert_eq!(f.engine.market.orders[&oid].price, 2600, "改价生效");
+    assert_eq!(f.engine.market().orders[&oid].price, 2600, "改价生效");
     assert_eq!(
-        f.engine.market.orders[&oid].remaining_amount, 1000,
+        f.engine.market().orders[&oid].remaining_amount,
+        1000,
         "deal 被 _skip"
     );
-    assert_eq!(f.engine.market.transactions.len(), 0);
+    assert_eq!(f.engine.market().transactions.len(), 0);
     assert_eq!(
-        f.engine.players["p2"].money, 10_000_000,
+        f.engine.players()["p2"].money,
+        10_000_000,
         "无成交扣款（若未 skip：旧价 2500×100 应扣 250000）"
     );
 }
@@ -270,7 +304,12 @@ fn fee_gate_reads_live_money_same_tick() {
     let mut f = MarketFixture::new();
     let _t1 = f.terminal("W1N1", "p1", json!({"energy": 100000}));
     // fee=ceil(1000×1000×0.05)=50000——money 恰等
-    f.engine.players.entry("p1".into()).or_default().money = 50_000;
+    f.engine
+        .edit_players(|players| {
+            players.entry("p1".into()).or_default().money = 50_000;
+            Ok(())
+        })
+        .unwrap();
     let mk = || kk_engine::MarketIntent::CreateOrder {
         order_type: Some("sell".into()),
         resource_type: Some("H".into()),
@@ -280,12 +319,13 @@ fn fee_gate_reads_live_money_same_tick() {
     };
     market_tick(&mut f.engine, "p1", vec![mk(), mk()]);
     assert_eq!(
-        f.engine.market.orders.len(),
+        f.engine.market().orders.len(),
         1,
         "次笔费门拒（活值 0<50000）"
     );
     assert_eq!(
-        f.engine.players["p1"].money, 0,
+        f.engine.players()["p1"].money,
+        0,
         "不透支——官方 money≥0 不变量"
     );
 }
@@ -296,7 +336,12 @@ fn fee_gate_reads_live_money_same_tick() {
 fn same_tick_created_order_not_lifecycle_synced() {
     let mut f = MarketFixture::new();
     let _t1 = f.terminal("W1N1", "p1", json!({"energy": 100000, "H": 1000}));
-    f.engine.players.entry("p1".into()).or_default().money = 10_000_000;
+    f.engine
+        .edit_players(|players| {
+            players.entry("p1".into()).or_default().money = 10_000_000;
+            Ok(())
+        })
+        .unwrap();
     market_tick(
         &mut f.engine,
         "p1",
@@ -308,12 +353,12 @@ fn same_tick_created_order_not_lifecycle_synced() {
             room_name: Some("W1N1".into()),
         }],
     );
-    let (id, order) = f.engine.market.orders.iter().next().unwrap();
+    let (id, order) = f.engine.market().orders.iter().next().unwrap();
     let id = id.clone();
     assert!(!order.active, "创建 tick 不同步（官方快照外）");
     assert_eq!(order.amount, 0);
     market_tick(&mut f.engine, "p1", vec![]);
-    let order = &f.engine.market.orders[&id];
+    let order = &f.engine.market().orders[&id];
     assert!(order.active, "下一 tick 尾段同步：terminal 有 H 1000");
     assert_eq!(order.amount, 1000, "SELL amount=min(可用,remaining)");
 }
@@ -325,8 +370,18 @@ fn negative_price_change_rejected_no_skip() {
     let _t1 = f.terminal("W1N1", "p1", json!({"energy": 100000, "H": 1000}));
     let _t2 = f.terminal("W5N1", "p2", json!({"energy": 100000}));
     let oid = place_order(&mut f.engine, "p1", "sell", "H", 2500, 1000, "W1N1");
-    f.engine.players.entry("p1".into()).or_default().money = 10_000_000;
-    f.engine.players.entry("p2".into()).or_default().money = 10_000_000;
+    f.engine
+        .edit_players(|players| {
+            players.entry("p1".into()).or_default().money = 10_000_000;
+            Ok(())
+        })
+        .unwrap();
+    f.engine
+        .edit_players(|players| {
+            players.entry("p2".into()).or_default().money = 10_000_000;
+            Ok(())
+        })
+        .unwrap();
     market_tick(&mut f.engine, "p1", vec![]);
     let mut batch = IntentBatch::default();
     batch.users.entry("p1".into()).or_default().market.push(
@@ -353,9 +408,14 @@ fn negative_price_change_rejected_no_skip() {
             },
         )
         .unwrap();
-    assert_eq!(f.engine.market.orders[&oid].price, 2500, "负价拒——原价保持");
     assert_eq!(
-        f.engine.market.orders[&oid].remaining_amount, 900,
+        f.engine.market().orders[&oid].price,
+        2500,
+        "负价拒——原价保持"
+    );
+    assert_eq!(
+        f.engine.market().orders[&oid].remaining_amount,
+        900,
         "负改价不置 _skip——deal 按旧价成交"
     );
 }
@@ -367,7 +427,12 @@ fn change_then_cancel_same_tick_charges_fee_on_original_remaining() {
     let mut f = MarketFixture::new();
     let _t1 = f.terminal("W1N1", "p1", json!({"energy": 100000, "H": 1000}));
     let oid = place_order(&mut f.engine, "p1", "sell", "H", 2500, 1000, "W1N1");
-    f.engine.players.entry("p1".into()).or_default().money = 10_000_000;
+    f.engine
+        .edit_players(|players| {
+            players.entry("p1".into()).or_default().money = 10_000_000;
+            Ok(())
+        })
+        .unwrap();
     market_tick(&mut f.engine, "p1", vec![]);
     // fee=ceil((3500-2500)×1000×0.05)=50000
     market_tick(
@@ -384,11 +449,11 @@ fn change_then_cancel_same_tick_charges_fee_on_original_remaining() {
         ],
     );
     assert!(
-        !f.engine.market.orders.contains_key(&oid),
+        !f.engine.market().orders.contains_key(&oid),
         "取消移除（尾段）"
     );
     assert_eq!(
-        f.engine.players["p1"].money,
+        f.engine.players()["p1"].money,
         10_000_000 - 50_000,
         "先按原 remaining=1000 收提价费再取消（吞费=10_000_000 霞光）"
     );
@@ -400,7 +465,12 @@ fn change_then_cancel_same_tick_charges_fee_on_original_remaining() {
 fn same_tick_created_order_invisible_to_deal() {
     let mut f = MarketFixture::new();
     let _t1 = f.terminal("W1N1", "p1", json!({"energy": 100000, "H": 1000}));
-    f.engine.players.entry("p1".into()).or_default().money = 10_000_000;
+    f.engine
+        .edit_players(|players| {
+            players.entry("p1".into()).or_default().money = 10_000_000;
+            Ok(())
+        })
+        .unwrap();
     market_tick(
         &mut f.engine,
         "p1",
@@ -420,10 +490,10 @@ fn same_tick_created_order_invisible_to_deal() {
             },
         ],
     );
-    assert!(f.engine.market.orders.contains_key("mkt1"), "订单已建");
+    assert!(f.engine.market().orders.contains_key("mkt1"), "订单已建");
     // deal 对快照外 id miss——remaining 不动（生命周期尾段也不跑：快照外）
-    assert_eq!(f.engine.market.orders["mkt1"].remaining_amount, 1000);
-    assert_eq!(f.engine.market.transactions.len(), 0);
+    assert_eq!(f.engine.market().orders["mkt1"].remaining_amount, 1000);
+    assert_eq!(f.engine.market().transactions.len(), 0);
 }
 
 /// buyer money 钳链：dealCost=min(毫×量, buyer money) → floor 回推量
@@ -436,8 +506,18 @@ fn deal_money_clamp_partial_fill() {
     let oid = place_order(&mut f.engine, "p2", "sell", "H", 2500, 1000, "W5N1");
     // 304000/2500=121.6，向下取整应为 121，round/ceil 会得到 122。
     // 使用非整除金额，才能验证取整方向；同时登记卖家用于资金入账。
-    f.engine.players.entry("p1".into()).or_default().money = 304000;
-    f.engine.players.entry("p2".into()).or_default();
+    f.engine
+        .edit_players(|players| {
+            players.entry("p1".into()).or_default().money = 304000;
+            Ok(())
+        })
+        .unwrap();
+    f.engine
+        .edit_players(|players| {
+            players.entry("p2".into()).or_default();
+            Ok(())
+        })
+        .unwrap();
     market_tick(&mut f.engine, "p1", vec![]);
     market_tick(
         &mut f.engine,
@@ -453,13 +533,13 @@ fn deal_money_clamp_partial_fill() {
         Some(&json!(121)),
         "floor(304000/2500)=121（非整除——round/ceil 均 122）"
     );
-    assert_eq!(f.engine.market.orders[&oid].remaining_amount, 879);
+    assert_eq!(f.engine.market().orders[&oid].remaining_amount, 879);
     assert_eq!(
-        f.engine.players["p1"].money,
+        f.engine.players()["p1"].money,
         304000 - 121 * 2500,
         "余 1500 毫（部分成交只花 121×2500）"
     );
-    assert_eq!(f.engine.players["p2"].money, 121 * 2500);
+    assert_eq!(f.engine.players()["p2"].money, 121 * 2500);
 }
 
 /// 过期退费：createdTimestamp 早于 now−30d → remaining×毫price×FEE 退回并
@@ -468,56 +548,86 @@ fn deal_money_clamp_partial_fill() {
 fn order_expiry_refunds_and_removes() {
     let mut f = MarketFixture::new();
     let _t = f.terminal("W5N1", "p2", json!({"energy": 100, "H": 1000}));
-    let id = f.engine.market.next_order_id();
-    f.engine.market.insert_order(kk_engine::MarketOrder {
-        id: id.clone(),
-        user: "p2".into(),
-        active: true,
-        order_type: "sell".into(),
-        resource_type: "H".into(),
-        price: 2500,
-        amount: 1000,
-        remaining_amount: 600,
-        total_amount: 1000,
-        room_name: Some("W5N1".into()),
-        created: 0,
-        // 过期：比测试工作台墙钟早 31 天
-        created_timestamp: BENCH_NOW_MS - 31 * 24 * 3600 * 1000,
-    });
-    f.engine.players.entry("p2".into()).or_default().money = 0;
+    let id = f
+        .engine
+        .edit_market(|market| Ok(market.next_order_id()))
+        .unwrap();
+    f.engine
+        .edit_market(|market| {
+            market.insert_order(kk_engine::MarketOrder {
+                id: id.clone(),
+                user: "p2".into(),
+                active: true,
+                order_type: "sell".into(),
+                resource_type: "H".into(),
+                price: 2500,
+                amount: 1000,
+                remaining_amount: 600,
+                total_amount: 1000,
+                room_name: Some("W5N1".into()),
+                created: 0,
+                // 过期：比测试工作台墙钟早 31 天
+                created_timestamp: BENCH_NOW_MS - 31 * 24 * 3600 * 1000,
+            });
+            Ok(())
+        })
+        .unwrap();
+    f.engine
+        .edit_players(|players| {
+            players.entry("p2".into()).or_default().money = 0;
+            Ok(())
+        })
+        .unwrap();
     let before = 0i64;
     market_tick(&mut f.engine, "p2", vec![]);
-    assert!(!f.engine.market.orders.contains_key(&id), "过期移除");
+    assert!(!f.engine.market().orders.contains_key(&id), "过期移除");
     // refund=600×2500×0.05=75000 毫
-    assert_eq!(f.engine.players["p2"].money, before + 75000);
+    assert_eq!(f.engine.players()["p2"].money, before + 75000);
 }
 
 /// 直接向玩家资源字段注入 token，验证 intershard 的资金与资源划转。
 #[test]
 fn intershard_direct_deal_transfers_resources_and_money() {
     let mut f = MarketFixture::new();
-    let id = f.engine.market.next_order_id();
-    f.engine.market.insert_order(kk_engine::MarketOrder {
-        id: id.clone(),
-        user: "p2".into(),
-        active: true,
-        order_type: "buy".into(),
-        resource_type: "token".into(),
-        price: 100_000,
-        amount: 10,
-        remaining_amount: 10,
-        total_amount: 10,
-        room_name: None,
-        created: 0,
-        created_timestamp: BENCH_NOW_MS,
-    });
-    f.engine.players.entry("p2".into()).or_default().money = 10_000_000;
+    let id = f
+        .engine
+        .edit_market(|market| Ok(market.next_order_id()))
+        .unwrap();
     f.engine
-        .players
-        .entry("p1".into())
-        .or_default()
-        .resources
-        .insert("token".into(), 5);
+        .edit_market(|market| {
+            market.insert_order(kk_engine::MarketOrder {
+                id: id.clone(),
+                user: "p2".into(),
+                active: true,
+                order_type: "buy".into(),
+                resource_type: "token".into(),
+                price: 100_000,
+                amount: 10,
+                remaining_amount: 10,
+                total_amount: 10,
+                room_name: None,
+                created: 0,
+                created_timestamp: BENCH_NOW_MS,
+            });
+            Ok(())
+        })
+        .unwrap();
+    f.engine
+        .edit_players(|players| {
+            players.entry("p2".into()).or_default().money = 10_000_000;
+            Ok(())
+        })
+        .unwrap();
+    f.engine
+        .edit_players(|players| {
+            players
+                .entry("p1".into())
+                .or_default()
+                .resources
+                .insert("token".into(), 5);
+            Ok(())
+        })
+        .unwrap();
     // p1 卖 5 token 给 p2 的买单（BUY：dealer=p1 是卖家）
     market_tick(
         &mut f.engine,
@@ -529,14 +639,14 @@ fn intershard_direct_deal_transfers_resources_and_money() {
         }],
     );
     assert_eq!(
-        f.engine.players["p1"].resources.get("token"),
+        f.engine.players()["p1"].resources.get("token"),
         Some(&0),
         "token 划出"
     );
-    assert_eq!(f.engine.players["p2"].resources.get("token"), Some(&5));
-    assert_eq!(f.engine.players["p1"].money, 5 * 100_000, "seller 收款");
-    assert_eq!(f.engine.players["p2"].money, 10_000_000 - 5 * 100_000);
-    assert_eq!(f.engine.market.orders[&id].remaining_amount, 5);
+    assert_eq!(f.engine.players()["p2"].resources.get("token"), Some(&5));
+    assert_eq!(f.engine.players()["p1"].money, 5 * 100_000, "seller 收款");
+    assert_eq!(f.engine.players()["p2"].money, 10_000_000 - 5 * 100_000);
+    assert_eq!(f.engine.market().orders[&id].remaining_amount, 5);
 }
 
 /// BUY 订单生命周期：newAmount=min(floor(money/price), remaining, 空间)、
@@ -546,18 +656,28 @@ fn buy_order_lifecycle_sync() {
     let mut f = MarketFixture::new();
     let t = f.terminal("W1N1", "p1", json!({"energy": 100000}));
     // p1 买 H：价 2500 毫、钱 300000 → floor=120；空间无 H 存量=300000 全空
-    f.engine.players.entry("p1".into()).or_default().money = 300000;
+    f.engine
+        .edit_players(|players| {
+            players.entry("p1".into()).or_default().money = 300000;
+            Ok(())
+        })
+        .unwrap();
     let oid = place_order(&mut f.engine, "p1", "buy", "H", 2500, 1000, "W1N1");
     market_tick(&mut f.engine, "p1", vec![]);
-    let o = &f.engine.market.orders[&oid];
+    let o = &f.engine.market().orders[&oid];
     assert!(o.active, "isOwner 且量>0 激活");
     assert_eq!(o.amount, 120, "min(floor(300000/2500),1000,空间)=120");
     let _ = t;
 
     // 钱花光 → inactive 0
-    f.engine.players.get_mut("p1").unwrap().money = 0;
+    f.engine
+        .edit_players(|players| {
+            players.get_mut("p1").unwrap().money = 0;
+            Ok(())
+        })
+        .unwrap();
     market_tick(&mut f.engine, "p1", vec![]);
-    let o = &f.engine.market.orders[&oid];
+    let o = &f.engine.market().orders[&oid];
     assert!(!o.active, "钱 0 → inactive");
     assert_eq!(o.amount, 0);
 }
@@ -707,207 +827,5 @@ fn send_to_self_room_converges_with_energy_cost() {
 }
 
 /// 官方 :22-24：发送方资源在 global 相被并行消耗（同 tick 其他结算）后
-/// 复验拒——store 资源不足时 false（不转移不挂冷却）。
-#[test]
-fn send_recheck_resource_in_global_phase() {
-    let mut f = MarketFixture::new();
-    let from = f.terminal("W1N1", "p1", json!({"energy": 100000, "H": 100}));
-    let _to = f.terminal("W5N1", "p2", json!({"energy": 500}));
-    // 直注 stow 1000（>实际 100）：房间相校验同拒（本测试只锁 global 相）
-    f.stow_send(from, "W5N1", "H", 1000);
-    f.tick();
-
-    assert_eq!(f.data_of(from).pointer("/cooldownTime"), Some(&json!(0)));
-    assert_eq!(market(&f).transactions.len(), 0);
-}
-
-/// 接收方空间钳：目标只剩 500 空间 → amount 钳 500，成本按**钳后**量算
-///（官方 :34-35 序），交易记钳后量。
-#[test]
-fn send_clamps_to_receiver_free_space() {
-    let mut f = MarketFixture::new();
-    let from = f.terminal("W1N1", "p1", json!({"energy": 100000, "H": 1000}));
-    let to = f.terminal("W5N1", "p2", json!({"energy": 500, "H": 299000}));
-    // 目标空余容量为 300000-(500+299000)=500。
-    f.send_intent("p1", from, "W5N1", "H", 1000);
-
-    let td = f.data_of(to);
-    assert_eq!(
-        td.pointer("/store/H"),
-        Some(&json!(299500)),
-        "钳后送达 500（299000+500）"
-    );
-    let fd = f.data_of(from);
-    // 成本按 500 算：ceil(500×(1−e^(−4/30)))=ceil(62.42)=63
-    assert_eq!(fd.pointer("/store/energy"), Some(&json!(100000 - 63)));
-    assert_eq!(
-        fd.pointer("/store/H"),
-        Some(&json!(500)),
-        "发送方也只扣钳后量"
-    );
-    assert_eq!(market(&f).transactions[0].amount, 500, "交易记钳后量");
-}
-
-/// 直接保存资源足额、energy=cost-1 的请求，验证全局阶段仍拒绝费用不足。
-/// 房间动作可能已消耗能量，所以不能只依赖提交意图时的检查。
-#[test]
-fn send_global_phase_energy_gate_rejects() {
-    let mut f = MarketFixture::new();
-    // cost(range=4, amount=1000)=125 → energy=124
-    let from = f.terminal("W1N1", "p1", json!({"energy": 124, "H": 1000}));
-    let _to = f.terminal("W5N1", "p2", json!({"energy": 500}));
-    // 直注 stow（绕过房间相能量门——只锁全局相门）
-    f.stow_send(from, "W5N1", "H", 1000);
-    f.tick();
-
-    let fd = f.data_of(from);
-    assert_eq!(fd.pointer("/store/H"), Some(&json!(1000)), "能量不足不转移");
-    assert_eq!(fd.pointer("/store/energy"), Some(&json!(124)), "能量不动");
-    assert_eq!(fd.pointer("/cooldownTime"), Some(&json!(0)), "不挂冷却");
-    assert_eq!(market(&f).transactions.len(), 0);
-}
-
-/// 发送 energy 时须同时持有 amount 和 cost，本例 1125 恰好成功，1124 拒绝。
-#[test]
-fn send_energy_type_amount_plus_cost_branch() {
-    let mut f = MarketFixture::new();
-    let from = f.terminal("W1N1", "p1", json!({"energy": 1125}));
-    let to = f.terminal("W5N1", "p2", json!({"energy": 0}));
-    f.send_intent("p1", from, "W5N1", "energy", 1000);
-
-    let fd = f.data_of(from);
-    assert_eq!(
-        fd.pointer("/store/energy"),
-        Some(&json!(0)),
-        "1125−(1000+125)"
-    );
-    let td = f.data_of(to);
-    assert_eq!(td.pointer("/store/energy"), Some(&json!(1000)), "送达 1000");
-    assert_eq!(market(&f).transactions[0].resource_type, "energy");
-
-    // 边界下侧：1124 拒（amount+cost 差 1）
-    let mut f2 = MarketFixture::new();
-    let from2 = f2.terminal("W1N1", "p1", json!({"energy": 1124}));
-    let _to2 = f2.terminal("W5N1", "p2", json!({"energy": 0}));
-    f2.send_intent("p1", from2, "W5N1", "energy", 1000);
-    assert_eq!(
-        f2.data_of(from2).pointer("/store/energy"),
-        Some(&json!(1124)),
-        "拒"
-    );
-    assert_eq!(f2.data_of(from2).pointer("/cooldownTime"), Some(&json!(0)));
-}
-
-/// 交易 description 中每个 < 都替换为 &lt;。来源：上游 global-intents/market.js。
-#[test]
-fn send_description_lt_escaping_in_transaction() {
-    let mut f = MarketFixture::new();
-    let from = f.terminal("W1N1", "p1", json!({"energy": 100000, "H": 1000}));
-    let _to = f.terminal("W5N1", "p2", json!({"energy": 500}));
-    // stow 带 description（绕 API 层——直注载荷形态与房间相 stow 相同）
-    {
-        let Some(RoomObject::Generic(g)) = f.engine.world.get_mut(from) else {
-            panic!()
-        };
-        let mut v: Value = serde_json::from_str(&g.data).unwrap();
-        v["send"] = json!({
-            "targetRoomName": "W5N1", "resourceType": "H", "amount": 100,
-            "description": "a<b<c",
-        });
-        g.data = v.to_string();
-    }
-    f.tick();
-    let tx = &market(&f).transactions[0];
-    assert_eq!(
-        tx.description.as_deref(),
-        Some("a&lt;b&lt;c"),
-        "`<` 全量转义"
-    );
-}
-
-/// Terminal 无控制器时保留容量；同主 RCL 5 无配额或异主时容量归 0，
-/// 同主 RCL 8 时容量恢复为 300000。
-#[test]
-fn terminal_store_capacity_normalizes_by_rcl() {
-    let mut f = MarketFixture::new();
-    let t = f.terminal("W1N1", "p1", json!({"energy": 1000}));
-    // 无 controller 房：terminal_capacity_tick 的 w.controller() None → 保持
-    f.engine.tick_with_intents(IntentBatch::default()).unwrap();
-    assert_eq!(
-        f.data_of(t).pointer("/storeCapacity"),
-        Some(&json!(300000)),
-        "无 controller 保持放置值（官方 roomController 假门整段跳过）"
-    );
-
-    // 放 controller level 5 owner p1：terminal 允许数为 0 → 归 0
-    f.engine
-        .world
-        .insert(
-            "W1N1",
-            RoomObject::Controller(kk_schema::room::ControllerObj {
-                id: 0,
-                x: 40,
-                y: 40,
-                level: 5,
-                safe_mode: 0,
-                safe_mode_available: 0,
-                progress: 0,
-                downgrade_time: None,
-                owner: Some("p1".into()),
-                owner_cleared: false,
-                is_power_enabled: false,
-                reservation: None,
-                sign: None,
-                upgrade_blocked: None,
-                safe_mode_cooldown: None,
-            }),
-        )
-        .unwrap();
-    f.engine.tick_with_intents(IntentBatch::default()).unwrap();
-    assert_eq!(
-        f.data_of(t).pointer("/storeCapacity"),
-        Some(&json!(0)),
-        "RCL 5（terminal 配额 0）归 0"
-    );
-
-    // 异主：p2 主控（RCL 8）下 p1 的 terminal 归 0（owner 等值门判别）
-    set_controller(&mut f, 8, "p2");
-    f.engine.tick_with_intents(IntentBatch::default()).unwrap();
-    assert_eq!(
-        f.data_of(t).pointer("/storeCapacity"),
-        Some(&json!(0)),
-        "异主 controller（p2 RCL 8）下 p1 terminal 归 0"
-    );
-
-    // 同主 RCL 8：300000（level>0+owner 相等+配额 1 全真——保持/回升侧）
-    set_controller(&mut f, 8, "p1");
-    f.engine.tick_with_intents(IntentBatch::default()).unwrap();
-    assert_eq!(
-        f.data_of(t).pointer("/storeCapacity"),
-        Some(&json!(300000)),
-        "同主 RCL 8 回升 300000（全真路径）"
-    );
-}
-
-/// 改 W1N1 controller 的 level/owner（capacity 测试的三态构造）。
-fn set_controller(f: &mut MarketFixture, level: u8, owner: &str) {
-    let cid = f
-        .engine
-        .world
-        .room("W1N1")
-        .unwrap()
-        .objects
-        .keys()
-        .copied()
-        .find(|k| {
-            f.engine
-                .world
-                .get(*k)
-                .is_some_and(|(_, o)| matches!(o, RoomObject::Controller(_)))
-        })
-        .expect("controller 不存在");
-    if let Some(RoomObject::Controller(c)) = f.engine.world.get_mut(cid) {
-        c.level = level;
-        c.owner = Some(owner.into());
-    }
-}
+#[path = "m2b2_terminal_market_family/receive.rs"]
+mod receive;

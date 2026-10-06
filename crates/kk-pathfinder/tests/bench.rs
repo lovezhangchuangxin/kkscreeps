@@ -6,9 +6,10 @@
 
 use std::time::Instant;
 
-use kk_pathfinder::{Goal, SearchOptions, WorldPosition, load_terrain, search};
+use kk_pathfinder::{Goal, SearchOptions, TerrainSet, WorldPosition, search};
 
-fn load_sample_terrain() {
+fn load_sample_terrain() -> TerrainSet {
+    let mut rooms = Vec::new();
     let data = include_bytes!("fixtures/sample-terrain.bin");
     let count = u32::from_le_bytes([data[0], data[1], data[2], data[3]]) as usize;
     for ii in 0..count {
@@ -16,8 +17,9 @@ fn load_sample_terrain() {
         let yy = data[4 + ii * 2 + 1];
         let start = 4 + count * 2 + ii * 625;
         let bits: &[u8; 625] = data[start..start + 625].try_into().unwrap();
-        load_terrain(&kk_pathfinder::generate_room_name(xx, yy), bits).unwrap();
+        rooms.push((kk_pathfinder::generate_room_name(xx, yy), *bits));
     }
+    TerrainSet::new(rooms).unwrap()
 }
 
 const POSITIONS: &[(&str, u32, u32)] = &[
@@ -51,14 +53,14 @@ const POSITIONS: &[(&str, u32, u32)] = &[
 #[test]
 #[ignore]
 fn bench_short_search() {
-    load_sample_terrain();
+    let terrain = load_sample_terrain();
     let origin = WorldPosition::from_room("W5N3", 20, 39).unwrap();
     let goal = Goal::pos(WorldPosition::from_room("W5N3", 25, 44).unwrap());
-    search(origin, &[goal], &SearchOptions::default()).unwrap(); // 预热
+    search(&terrain, origin, &[goal], &SearchOptions::default()).unwrap(); // 预热
     let rounds = 100_000;
     let start = Instant::now();
     for _ in 0..rounds {
-        search(origin, &[goal], &SearchOptions::default()).unwrap();
+        search(&terrain, origin, &[goal], &SearchOptions::default()).unwrap();
     }
     let elapsed = start.elapsed();
     println!(
@@ -73,7 +75,7 @@ fn bench_short_search() {
 #[test]
 #[ignore]
 fn bench_single_search() {
-    load_sample_terrain();
+    let terrain = load_sample_terrain();
     let options = SearchOptions {
         max_ops: 100000,
         max_cost: 100000,
@@ -82,12 +84,12 @@ fn bench_single_search() {
     let origin = WorldPosition::from_room("W5N3", 20, 39).unwrap();
     let goal = Goal::with_range(WorldPosition::from_room("W8N5", 16, 41).unwrap(), 0);
     // 预热（首搜含线程本地实例初始化）
-    search(origin, &[goal], &options).unwrap();
+    search(&terrain, origin, &[goal], &options).unwrap();
     let rounds = 1000;
     let start = Instant::now();
     let mut total_ops = 0u64;
     for _ in 0..rounds {
-        total_ops += u64::from(search(origin, &[goal], &options).unwrap().ops);
+        total_ops += u64::from(search(&terrain, origin, &[goal], &options).unwrap().ops);
     }
     let elapsed = start.elapsed();
     println!(
@@ -103,7 +105,7 @@ fn bench_single_search() {
 #[test]
 #[ignore]
 fn bench_profile_scenario() {
-    load_sample_terrain();
+    let terrain = load_sample_terrain();
     let positions: Vec<WorldPosition> = POSITIONS
         .iter()
         .map(|&(r, x, y)| WorldPosition::from_room(r, x, y).unwrap())
@@ -113,7 +115,7 @@ fn bench_profile_scenario() {
         max_cost: 100000,
         ..SearchOptions::default()
     };
-    search(positions[0], &[Goal::pos(positions[1])], &options).unwrap(); // 预热
+    search(&terrain, positions[0], &[Goal::pos(positions[1])], &options).unwrap(); // 预热
     let start = Instant::now();
     let mut searches = 0u64;
     for _round in 0..5 {
@@ -123,6 +125,7 @@ fn bench_profile_scenario() {
                     continue;
                 }
                 search(
+                    &terrain,
                     positions[ii],
                     &[Goal::with_range(positions[jj], (ii % 3) as u32)],
                     &options,
@@ -148,7 +151,7 @@ fn bench_profile_scenario() {
 fn bench_callback_overhead() {
     use kk_pathfinder::{RoomDecision, search_with_room_callback};
 
-    load_sample_terrain();
+    let terrain = load_sample_terrain();
     let options = SearchOptions {
         max_ops: 100000,
         max_cost: 100000,
@@ -159,22 +162,23 @@ fn bench_callback_overhead() {
     let rounds = 2000u32;
 
     // 预热 + 一致性断言（无矩阵时回调不得改变结果）
-    let plain = search(origin, &[goal], &options).unwrap();
-    let with_cb =
-        search_with_room_callback(origin, &[goal], &options, |_xx, _yy| RoomDecision::None)
-            .unwrap();
+    let plain = search(&terrain, origin, &[goal], &options).unwrap();
+    let with_cb = search_with_room_callback(&terrain, origin, &[goal], &options, |_xx, _yy| {
+        RoomDecision::None
+    })
+    .unwrap();
     assert_eq!(plain, with_cb, "None 决策不得改变搜索结果");
 
     let start = Instant::now();
     for _ in 0..rounds {
-        search(origin, &[goal], &options).unwrap();
+        search(&terrain, origin, &[goal], &options).unwrap();
     }
     let plain_elapsed = start.elapsed();
 
     let start = Instant::now();
     let mut callback_invocations = 0u64;
     for _ in 0..rounds {
-        search_with_room_callback(origin, &[goal], &options, |_xx, _yy| {
+        search_with_room_callback(&terrain, origin, &[goal], &options, |_xx, _yy| {
             callback_invocations += 1;
             RoomDecision::None
         })

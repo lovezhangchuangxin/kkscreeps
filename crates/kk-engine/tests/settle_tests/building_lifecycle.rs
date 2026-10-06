@@ -216,23 +216,22 @@ fn building_ticks_after_production_within_object_tick() {
             processes,
         )
         .unwrap();
-        e.world.register_room("W1N1", kk_core::Terrain::plains());
-        e.world
-            .insert(
-                "W1N1",
-                RoomObject::Generic(kk_schema::room::GenericObj {
-                    id: 0,
-                    x: 10,
-                    y: 10,
-                    data: json!({
-                        "type":"structure","structureType":"bl:gauge","owner":"p1",
-                        "hits":500,"hitsMax":500,"storeCapacity":200,
-                        "store":{"energy":0},"bl:heat":7,
-                    })
-                    .to_string(),
-                }),
-            )
-            .unwrap();
+        e.register_room("W1N1", kk_core::Terrain::plains()).unwrap();
+        e.insert_object(
+            "W1N1",
+            RoomObject::Generic(kk_schema::room::GenericObj {
+                id: 0,
+                x: 10,
+                y: 10,
+                data: json!({
+                    "type":"structure","structureType":"bl:gauge","owner":"p1",
+                    "hits":500,"hitsMax":500,"storeCapacity":200,
+                    "store":{"energy":0},"bl:heat":7,
+                })
+                .to_string(),
+            }),
+        )
+        .unwrap();
         e.tick_with_intents(IntentBatch::default()).unwrap();
         e.tick_with_intents(IntentBatch::default()).unwrap();
         assert_eq!(

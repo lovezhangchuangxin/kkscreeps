@@ -394,11 +394,16 @@ fn mod_building_takes_damage_repairs_and_ruins_on_destroy() {
         serde_json::json!({"energy": 30, "bm:ingot": 5}),
     );
     // 预伤到 1000 hits。
-    if let Some(RoomObject::Generic(g)) = f.world.get_mut(foundry) {
-        let mut v: Value = serde_json::from_str(&g.data).unwrap();
-        v["hits"] = serde_json::json!(1000);
-        g.data = v.to_string();
-    }
+    f.world
+        .edit_object(foundry, |object| {
+            if let Some(RoomObject::Generic(g)) = Some(object) {
+                let mut v: Value = serde_json::from_str(&g.data).unwrap();
+                v["hits"] = serde_json::json!(1000);
+                g.data = v.to_string();
+            }
+            Ok(())
+        })
+        .unwrap();
     let attacker = f.creep("a", "p2", 21, 20, &[BodyKind::Attack], 0);
     let mut attack = IntentBatch::default();
     attack.add_object_intent("p2", attacker, Action::Attack, IntentData::target(foundry));
@@ -620,13 +625,18 @@ fn boosted_builder_pays_one_to_one_with_boosted_progress() {
         "bm:ore",
         100,
     );
-    if let Some(RoomObject::Creep(c)) = f.world.get_mut(builder) {
-        for part in &mut c.body {
-            if part.kind == kk_world::types::BodyKind::Work.code() {
-                part.boost = Some("XLH2O".into());
+    f.world
+        .edit_object(builder, |object| {
+            if let Some(RoomObject::Creep(c)) = Some(object) {
+                for part in &mut c.body {
+                    if part.kind == kk_world::types::BodyKind::Work.code() {
+                        part.boost = Some("XLH2O".into());
+                    }
+                }
             }
-        }
-    }
+            Ok(())
+        })
+        .unwrap();
     let site = mod_site(&mut f, "bm:foundry", 20, 20, 0, 1000);
     f.settle_with_plane(build_intent(builder, site), plane);
     match f.obj(site) {

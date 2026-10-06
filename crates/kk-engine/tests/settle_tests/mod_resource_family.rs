@@ -72,12 +72,17 @@ fn action(
 /// 放置 storage（Generic 表示）并写入 store 与共享容量字段。
 fn storage_with(f: &mut Fixture, store: Value) -> ObjId {
     let id = generic_structure(f, 10, 11, "storage", "p1", 10_000);
-    if let Some(RoomObject::Generic(g)) = f.world.get_mut(id) {
-        let mut data: Value = serde_json::from_str(&g.data).unwrap();
-        data["store"] = store;
-        data["storeCapacity"] = serde_json::json!(kk_core::constants::STORAGE_CAPACITY);
-        g.data = data.to_string();
-    }
+    f.world
+        .edit_object(id, |object| {
+            if let Some(RoomObject::Generic(g)) = Some(object) {
+                let mut data: Value = serde_json::from_str(&g.data).unwrap();
+                data["store"] = store;
+                data["storeCapacity"] = serde_json::json!(kk_core::constants::STORAGE_CAPACITY);
+                g.data = data.to_string();
+            }
+            Ok(())
+        })
+        .unwrap();
     id
 }
 
@@ -394,8 +399,12 @@ fn overflow_drop_covers_declared_resources_after_builtin_order() {
 fn market_and_terminal_send_reject_declared_resources() {
     use kk_engine::intent::MarketIntent;
     let mut world = kk_world::World::new(7);
-    world.register_room("W1N1", kk_core::Terrain::plains());
-    world.register_room("W5N1", kk_core::Terrain::plains());
+    world
+        .register_room("W1N1", kk_core::Terrain::plains())
+        .unwrap();
+    world
+        .register_room("W5N1", kk_core::Terrain::plains())
+        .unwrap();
     let mut engine = kk_engine::Engine::new(world);
     // 装配声明了资源的计划，证明拒绝是显式的目录边界而不是未知字符串。
     let mut contribution = kk_mod_api::Contribution {
@@ -451,8 +460,7 @@ fn market_and_terminal_send_reject_declared_resources() {
             "store": store, "storeCapacity": 300000,
         });
         engine
-            .world
-            .insert(
+            .insert_object(
                 room,
                 RoomObject::Generic(kk_schema::room::GenericObj {
                     id: 0,
@@ -466,7 +474,7 @@ fn market_and_terminal_send_reject_declared_resources() {
     // 房间相：send 请求不保存（terminal_send 只认内建资源）。
     let terminals: Vec<ObjId> = ["W1N1", "W5N1"]
         .iter()
-        .flat_map(|room| engine.world.room(room).unwrap().objects.keys().copied())
+        .flat_map(|room| engine.world().room(room).unwrap().objects.keys().copied())
         .collect();
     let from = terminals[0];
     let mut batch = IntentBatch::default();
@@ -504,27 +512,32 @@ fn market_and_terminal_send_reject_declared_resources() {
         .unwrap();
     assert!(
         engine
-            .market
+            .market()
             .orders
             .values()
             .all(|o| o.resource_type != "resmod:crystal"),
         "声明资源不产生市场订单"
     );
-    let data: Value = match engine.world.get(from).map(|(_, o)| o.clone()) {
+    let data: Value = match engine.world().get(from).map(|(_, o)| o.clone()) {
         Some(RoomObject::Generic(g)) => serde_json::from_str(&g.data).unwrap(),
         _ => panic!(),
     };
     assert_eq!(data["store"]["resmod:crystal"], 100, "库存不动");
     // 全局相双门：直接 stow 一条 send（绕过房间相）也不转移。
-    if let Some(RoomObject::Generic(g)) = engine.world.get_mut(from) {
-        let mut v: Value = serde_json::from_str(&g.data).unwrap();
-        v["send"] = serde_json::json!({
-            "targetRoomName": "W5N1", "resourceType": "resmod:crystal", "amount": 50,
-        });
-        g.data = v.to_string();
-    }
+    engine
+        .edit_object(from, |object| {
+            if let Some(RoomObject::Generic(g)) = Some(object) {
+                let mut v: Value = serde_json::from_str(&g.data).unwrap();
+                v["send"] = serde_json::json!({
+                    "targetRoomName": "W5N1", "resourceType": "resmod:crystal", "amount": 50,
+                });
+                g.data = v.to_string();
+            }
+            Ok(())
+        })
+        .unwrap();
     engine.tick_with_intents(IntentBatch::default()).unwrap();
-    let data: Value = match engine.world.get(from).map(|(_, o)| o.clone()) {
+    let data: Value = match engine.world().get(from).map(|(_, o)| o.clone()) {
         Some(RoomObject::Generic(g)) => serde_json::from_str(&g.data).unwrap(),
         _ => panic!(),
     };

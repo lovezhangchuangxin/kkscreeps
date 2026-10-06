@@ -9,9 +9,14 @@ fn controller_downgrade_chain() {
     let mut f = Fixture::new(1, terrain_with(&[]));
     let ctl = f.controller(2, Some("p1"));
     // level 2 的 DOWNGRADE=10000：手造快钟绕过长等待——直接改对象
-    if let Some(RoomObject::Controller(t)) = f.world.get_mut(ctl) {
-        t.downgrade_time = Some(2);
-    }
+    f.world
+        .edit_object(ctl, |object| {
+            if let Some(RoomObject::Controller(t)) = Some(object) {
+                t.downgrade_time = Some(2);
+            }
+            Ok(())
+        })
+        .unwrap();
     f.settle(IntentBatch::default());
     f.settle(IntentBatch::default()); // time=1 >= 2-1 → 降级
     match f.obj(ctl) {

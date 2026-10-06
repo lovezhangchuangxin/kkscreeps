@@ -2,22 +2,20 @@
 use super::*;
 
 /// 内容键控短路的回归钉：默认引擎（计划无 Mod 类型、扩展目录为空）下，
-/// 绕过写入口直插的 Mod 对象与未声明扩展条目都必须在发布前校验失败，
-/// 不得按计划形态短路而静默发布。
+/// 未知 Mod 类型与未声明扩展在受控编辑入口拒绝，已提交世界保持。
 #[test]
 fn engine_validate_guards_plan_foreign_mod_objects_and_extensions() {
     // 形态一：计划无 Mod 类型，候选带 Mod 对象。
     let make = || {
         let mut engine = Engine::new(kk_world::World::new(3));
         engine
-            .world
-            .register_room("W1N1", kk_core::Terrain::plains());
+            .register_room("W1N1", kk_core::Terrain::plains())
+            .unwrap();
         engine
     };
     let mut engine = make();
-    engine
-        .world
-        .insert(
+    let err = engine
+        .insert_object(
             "W1N1",
             RoomObject::Mod(ModObj {
                 id: 0,
@@ -27,29 +25,41 @@ fn engine_validate_guards_plan_foreign_mod_objects_and_extensions() {
                 data: json!({ "owner": "p1", "x": 3, "y": 4, "value": 0 }).to_string(),
             }),
         )
-        .unwrap();
-    let err = engine
-        .tick_with_intents(IntentBatch::default())
         .unwrap_err();
     assert!(err.to_string().contains("不在计划中"), "{err}");
-    assert_eq!(engine.world.time(), 0, "失败轮不推进");
+    assert_eq!(engine.world().time(), 0, "编辑失败不推进");
+    assert!(engine.world().room("W1N1").unwrap().extensions.is_empty());
 
     // 形态二：扩展目录为空，候选房间带直插扩展条目。
     let mut engine = make();
-    let oid = ObjId::parse("kk1").unwrap();
-    engine.world.room_mut("W1N1").unwrap().extensions.insert(
-        oid,
-        BTreeMap::from([("extmod:rogue".to_string(), json!(1))]),
-    );
+    let oid = engine
+        .insert_object(
+            "W1N1",
+            RoomObject::Energy(kk_schema::room::EnergyObj {
+                id: 0,
+                x: 10,
+                y: 10,
+                resource_type: 0,
+                amount: 10,
+                resource: None,
+            }),
+        )
+        .unwrap();
     let err = engine
-        .tick_with_intents(IntentBatch::default())
+        .edit_room("W1N1", |room| {
+            room.extensions.insert(
+                oid,
+                BTreeMap::from([("extmod:rogue".to_string(), json!(1))]),
+            );
+            Ok(())
+        })
         .unwrap_err();
     assert!(err.to_string().contains("未接入扩展平面的对象"), "{err}");
-    assert_eq!(engine.world.time(), 0, "失败轮不推进");
+    assert_eq!(engine.world().time(), 0, "编辑失败不推进");
+    assert!(engine.world().room("W1N1").unwrap().extensions.is_empty());
 }
 
-/// 发布前校验封堵绕过写入口的直改：未声明字段与位置失同步都在
-/// Validate 段失败，已提交世界保持。
+/// 受控编辑拒绝未声明字段与位置失同步，合法载荷仍可发布。
 #[test]
 fn engine_validate_rejects_tampered_mod_payload() {
     let plan = frozen(counter_contribution(&[]));
@@ -72,15 +82,14 @@ fn engine_validate_rejects_tampered_mod_payload() {
             )
             .unwrap();
         engine
-            .world
-            .register_room("W1N1", kk_core::Terrain::plains());
+            .register_room("W1N1", kk_core::Terrain::plains())
+            .unwrap();
         engine
     };
     // 形态一：payload 带未声明字段。
     let mut engine = make();
-    engine
-        .world
-        .insert(
+    let err = engine
+        .insert_object(
             "W1N1",
             RoomObject::Mod(ModObj {
                 id: 0,
@@ -90,17 +99,14 @@ fn engine_validate_rejects_tampered_mod_payload() {
                 data: json!({ "owner": "p1", "x": 3, "y": 4, "value": 0, "rogue": 1 }).to_string(),
             }),
         )
-        .unwrap();
-    let err = engine
-        .tick_with_intents(IntentBatch::default())
         .unwrap_err();
     assert!(err.to_string().contains("未在类型中声明"), "{err}");
-    assert_eq!(engine.world.time(), 0, "失败轮不推进");
+    assert_eq!(engine.world().time(), 0, "编辑失败不推进");
+    assert!(engine.world().room("W1N1").unwrap().extensions.is_empty());
     // 形态二：位置字段与信封坐标失同步。
     let mut engine = make();
-    engine
-        .world
-        .insert(
+    let err = engine
+        .insert_object(
             "W1N1",
             RoomObject::Mod(ModObj {
                 id: 0,
@@ -110,16 +116,12 @@ fn engine_validate_rejects_tampered_mod_payload() {
                 data: json!({ "owner": "p1", "x": 3, "y": 4, "value": 0 }).to_string(),
             }),
         )
-        .unwrap();
-    let err = engine
-        .tick_with_intents(IntentBatch::default())
         .unwrap_err();
     assert!(err.to_string().contains("不同步"), "{err}");
     // 形态三（对照）：合法 payload 通过并推进。
     let mut engine = make();
     engine
-        .world
-        .insert(
+        .insert_object(
             "W1N1",
             RoomObject::Mod(ModObj {
                 id: 0,
@@ -131,7 +133,7 @@ fn engine_validate_rejects_tampered_mod_payload() {
         )
         .unwrap();
     engine.tick_with_intents(IntentBatch::default()).unwrap();
-    assert_eq!(engine.world.time(), 1);
+    assert_eq!(engine.world().time(), 1);
 }
 
 /// 装配门：队列合并与非对象域动作在装配期显式拒绝（fail-loud，

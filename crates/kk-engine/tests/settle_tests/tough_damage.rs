@@ -3,10 +3,15 @@
 use super::*;
 
 fn boost(f: &mut Fixture, id: ObjId, index: usize, resource: &str) {
-    let Some(RoomObject::Creep(creep)) = f.world.get_mut(id) else {
-        panic!("预期 creep");
-    };
-    creep.body[index].boost = Some(resource.into());
+    f.world
+        .edit_object(id, |object| {
+            let RoomObject::Creep(creep) = object else {
+                panic!("预期 creep");
+            };
+            creep.body[index].boost = Some(resource.into());
+            Ok(())
+        })
+        .unwrap();
 }
 
 fn parts(f: &Fixture, id: ObjId) -> (u32, Vec<u32>) {
@@ -50,10 +55,15 @@ fn partial_destroyed_and_late_tough_only_absorb_their_remaining_capacity() {
         let a = f.creep("a", "p1", 10, 10, &[BodyKind::Attack], 0);
         let b = f.creep("b", "p2", 10, 11, &[BodyKind::Tough, BodyKind::Move], 0);
         boost(&mut f, b, 0, "GHO2");
-        if let Some(RoomObject::Creep(creep)) = f.world.get_mut(b) {
-            creep.body[0].hits = front_hits;
-            creep.hits = 100 + front_hits;
-        }
+        f.world
+            .edit_object(b, |object| {
+                if let Some(RoomObject::Creep(creep)) = Some(object) {
+                    creep.body[0].hits = front_hits;
+                    creep.hits = 100 + front_hits;
+                }
+                Ok(())
+            })
+            .unwrap();
         f.settle(attack_intent(a, b));
         assert_eq!(parts(&f, b), expected);
     }
@@ -142,10 +152,15 @@ fn heal_merges_after_reduction_can_rescue_lethal_damage_and_does_not_refresh_arm
     let mut f = Fixture::new(1, terrain_with(&[]));
     let b = f.creep("b", "p1", 10, 10, &[BodyKind::Tough, BodyKind::Move], 0);
     boost(&mut f, b, 0, "GHO2");
-    if let Some(RoomObject::Creep(creep)) = f.world.get_mut(b) {
-        creep.hits = 100;
-        creep.body[0].hits = 0;
-    }
+    f.world
+        .edit_object(b, |object| {
+            if let Some(RoomObject::Creep(creep)) = Some(object) {
+                creep.hits = 100;
+                creep.body[0].hits = 0;
+            }
+            Ok(())
+        })
+        .unwrap();
     let a = f.creep("a", "p2", 10, 11, &[BodyKind::Attack], 0);
     let medic = f.creep("medic", "p1", 11, 10, &[BodyKind::Heal; 3], 0);
     let mut batch = attack_intent_by("p2", a, b);

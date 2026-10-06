@@ -102,9 +102,14 @@ fn heal_and_ranged_heal_ranges_override_independently() {
     // 覆盖距离 4——两条规则互不牵连。
     let mut f = Fixture::new(1, terrain_with(&[]));
     let victim = f.creep("v", "p1", 10, 10, &[BodyKind::Tough], 0);
-    if let Some(RoomObject::Creep(c)) = f.world.get_mut(victim) {
-        c.hits = 50;
-    }
+    f.world
+        .edit_object(victim, |object| {
+            if let Some(RoomObject::Creep(c)) = Some(object) {
+                c.hits = 50;
+            }
+            Ok(())
+        })
+        .unwrap();
     let melee_medic = f.creep("m1", "p1", 12, 10, &[BodyKind::Heal], 0);
     // 近战治疗距离 2：默认射程 1 拒，放宽到 3 后 +12。
     f.settle_with_plane(
@@ -147,9 +152,14 @@ fn range_rules_use_chebyshev_metric_on_diagonal_offsets() {
     // 用例为轴向偏移，自身区分不了两种度量）。
     let mut f = Fixture::new(1, terrain_with(&[]));
     let victim = f.creep("v", "p1", 11, 12, &[BodyKind::Tough], 0);
-    if let Some(RoomObject::Creep(c)) = f.world.get_mut(victim) {
-        c.hits = 50;
-    }
+    f.world
+        .edit_object(victim, |object| {
+            if let Some(RoomObject::Creep(c)) = Some(object) {
+                c.hits = 50;
+            }
+            Ok(())
+        })
+        .unwrap();
     let medic = f.creep("m", "p1", 10, 10, &[BodyKind::Heal], 0);
     f.settle_with_plane(
         heal_intent(medic, victim),

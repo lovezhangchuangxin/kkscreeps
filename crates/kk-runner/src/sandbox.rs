@@ -127,9 +127,10 @@ pub struct Sandbox {
     /// 负余额停跑时暂存的回充增量，与计费候选互斥。
     /// settle_bill 应用回充，discard_bill 丢弃；新的 begin_tick 清除旧候选。
     pending_recharge: Option<f64>,
-    /// JSON 通道的寻路地形打包缓存，键为全局 terrain rev（terrain_epoch，
+    /// 原始 JSON 寻路地形按内容核对；可信宿主另传世界独立快照。
     /// 任一房换地形全体失效）；裸数组夹具形态无 rev，不缓存逐 tick 重建。
-    terrain_pack_cache: Option<(u64, std::sync::Arc<crate::pathfinder::TerrainPack>)>,
+    terrain_pack_cache: Option<std::sync::Arc<crate::pathfinder::TerrainPack>>,
+    host_terrain: Option<std::sync::Arc<kk_pathfinder::TerrainSet>>,
     /// 与 Mod realm 共用的线程栈账本；须在 runtime 销毁后注销。
     _isolate_order: kk_vm::isolate_order::IsolateOrder,
 }
@@ -246,6 +247,7 @@ impl Sandbox {
             pending_bill: None,
             pending_recharge: None,
             terrain_pack_cache: None,
+            host_terrain: None,
             _isolate_order: kk_vm::isolate_order::IsolateOrder::register(),
         };
         sb.install_near_heap_callback();

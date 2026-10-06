@@ -52,7 +52,7 @@ impl EmbedEngine {
                     handle.clone(),
                     PlayerWriteback {
                         cpu: Some(
-                            kk_core::cpu::RunBudget::new(&self.engine.players[handle].cpu)
+                            kk_core::cpu::RunBudget::new(&self.engine.players()[handle].cpu)
                                 .finish(result.cpu_billed_ms)
                                 .map_err(anyhow::Error::msg)?,
                         ),
@@ -171,7 +171,7 @@ impl EmbedEngine {
                     // mod_id 来自 finish_settlement 的同一归责口径；
                     // disabled 含依赖闭包，按序保留。
                     vm.record_trace(ModTraceEntry {
-                        tick: self.engine.world.time(),
+                        tick: self.engine.world().time(),
                         room: String::new(),
                         target: String::new(),
                         slot: String::new(),
@@ -200,7 +200,7 @@ impl EmbedEngine {
                 // 回退事实，作者可见"结果被丢弃"而不只是最终错误。
                 if tracing {
                     vm.record_trace(ModTraceEntry {
-                        tick: self.engine.world.time(),
+                        tick: self.engine.world().time(),
                         room: String::new(),
                         target: String::new(),
                         slot: String::new(),
@@ -239,13 +239,34 @@ impl EmbedEngine {
         let mut project_ns = 0u128;
         let handles = registered.clone();
         // 本轮所有玩家读取同一代世界，玩家执行结束后才开始结算。
-        let bound_generation = self.engine.world.generation();
+        let bound_generation = self.engine.world().generation();
         // 回执必须匹配派发时的 tick 和 generation，防止接受另一轮的结果。
         let epoch = RunEpoch {
-            tick: self.engine.world.time(),
+            tick: self.engine.world().time(),
             generation: bound_generation,
         };
-        let source: &dyn WorldSource = &self.engine.world;
+        let identity = self.engine.world().instance();
+        let terrain_epoch = self.engine.world().terrain_epoch();
+        let terrain = match &self.pathfinder_terrain {
+            Some((cached_identity, cached_epoch, terrain))
+                if std::sync::Arc::ptr_eq(cached_identity, &identity)
+                    && *cached_epoch == terrain_epoch =>
+            {
+                terrain.clone()
+            }
+            _ => {
+                let pack =
+                    kk_runner::pathfinder::TerrainPack::from_room_rows(
+                        self.engine.world().rooms().iter().map(|(name, room)| {
+                            (name.to_string(), room.terrain().as_slice().to_vec())
+                        }),
+                    );
+                let terrain = pack.native().map_err(anyhow::Error::msg)?;
+                self.pathfinder_terrain = Some((identity, terrain_epoch, terrain.clone()));
+                terrain
+            }
+        };
+        let source: &dyn WorldSource = self.engine.world();
         // 包括提前返回路径在内，检查玩家执行期间世界未改变。
         let assert_bound = || {
             debug_assert_eq!(
@@ -291,7 +312,7 @@ impl EmbedEngine {
                     break;
                 };
                 let code = &codes[&handle];
-                let state = self.engine.players.get(&handle);
+                let state = self.engine.players().get(&handle);
                 let raw_mem = state.map(|p| p.raw_memory.clone()).unwrap_or_default();
                 let segments_json = match state {
                     Some(p) if !p.active_request.is_empty() => serde_json::to_string(
@@ -306,7 +327,12 @@ impl EmbedEngine {
                 let foreign_json = self
                     .resolve_foreign_segment(&handle)
                     .unwrap_or(serde_json::Value::Null);
-                let gcl = self.engine.players.get(&handle).map(|p| p.gcl).unwrap_or(0);
+                let gcl = self
+                    .engine
+                    .players()
+                    .get(&handle)
+                    .map(|p| p.gcl)
+                    .unwrap_or(0);
                 let t_project = std::time::Instant::now();
                 // KKPV 通道：对象记录走二进制块束，world 是不含 objects 的信封；
                 // JSON 参考通道：整世界一个 Value。市场都注入 world 顶层。
@@ -362,10 +388,11 @@ impl EmbedEngine {
                     (world, None)
                 };
                 project_ns += t_project.elapsed().as_nanos();
-                let budget = kk_core::cpu::RunBudget::new(&self.engine.players[&handle].cpu);
+                let budget = kk_core::cpu::RunBudget::new(&self.engine.players()[&handle].cpu);
                 match self.players.as_mut().expect("已检查分片创建").dispatch_job(
                     &handle,
                     kk_runner::RunJob {
+                        terrain: Some(terrain.clone()),
                         world,
                         kkpv_bundle,
                         kkpv_public: kkpv_public.clone(),
@@ -446,9 +473,9 @@ impl EmbedEngine {
     /// 默认段也必须仍在公开列表中。无请求、无发布者或无授权时返回 None；
     /// 已授权但未写入的段返回 `data: null`，区别于活动段的空字符串。
     pub(super) fn resolve_foreign_segment(&self, reader: &str) -> Option<serde_json::Value> {
-        let req = self.engine.players.get(reader)?.foreign_request.clone()?;
+        let req = self.engine.players().get(reader)?.foreign_request.clone()?;
         let (username, id_opt) = req;
-        let publisher = self.engine.players.get(&username)?;
+        let publisher = self.engine.players().get(&username)?;
         let id = match id_opt {
             Some(id) => {
                 if !publisher.public_ids.contains(&id) {

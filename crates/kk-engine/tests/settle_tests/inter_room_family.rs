@@ -14,8 +14,8 @@ struct TwoRooms {
 impl TwoRooms {
     fn new(terrain: kk_core::Terrain) -> Self {
         let mut world = World::new(1);
-        world.register_room("W1N1", terrain.clone());
-        world.register_room("W2N1", terrain);
+        world.register_room("W1N1", terrain.clone()).unwrap();
+        world.register_room("W2N1", terrain).unwrap();
         Self {
             world,
             players: BTreeMap::new(),
@@ -84,11 +84,7 @@ impl TwoRooms {
         kk_engine::settle::inter_room::apply_inter_room_moves(&mut rooms, &moves);
         let (players, next, _) = state.into_parts().unwrap();
         self.players = players;
-        self.world.bump_next_obj_id(next);
-        for (name, room) in rooms {
-            self.world.commit_room(name, room);
-        }
-        self.world.advance_ticks(1);
+        self.world.commit_tick_rooms(rooms, next).unwrap();
     }
 }
 
@@ -178,7 +174,7 @@ fn inter_room_corner_takes_west_first() {
 fn inter_room_unregistered_target_keeps_creep() {
     // 目的房未注册（本仓世界仅含注册房）：对象留在源房，不丢弃。
     let mut world = World::new(1);
-    world.register_room("W1N1", terrain_with(&[]));
+    world.register_room("W1N1", terrain_with(&[])).unwrap();
     let mut players = BTreeMap::new();
     let c = world
         .insert(
@@ -261,23 +257,11 @@ fn inter_room_apply_moves_extension_fields_with_object() {
     let mut rooms = vec![
         (
             "W1N1".to_string(),
-            RoomState {
-                name: "W1N1".into(),
-                objects: BTreeMap::new(),
-                events: Vec::new(),
-                terrain: terrain_with(&[]),
-                extensions: BTreeMap::new(),
-            },
+            RoomState::new("W1N1", terrain_with(&[])),
         ),
         (
             "W2N1".to_string(),
-            RoomState {
-                name: "W2N1".into(),
-                objects: BTreeMap::new(),
-                events: Vec::new(),
-                terrain: terrain_with(&[]),
-                extensions: BTreeMap::new(),
-            },
+            RoomState::new("W2N1", terrain_with(&[])),
         ),
     ];
     let id = ObjId(7);

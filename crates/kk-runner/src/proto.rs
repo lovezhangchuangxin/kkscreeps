@@ -63,6 +63,8 @@ pub use kk_core::RunEpoch;
 /// 同一条命令携带已提交内存、世界、宿主预算与代码，返回本轮候选。
 #[derive(Debug)]
 pub struct RunJob {
+    /// 可信宿主的不可变寻路快照，不经过玩家输入或持久化编码。
+    pub terrain: Option<std::sync::Arc<kk_pathfinder::TerrainSet>>,
     pub world: Value,
     /// KKPV 通道的私有对象束字节；Some 时 world 是不含对象数组与地形的
     /// 世界信封。进入工作者后一次性移入 backing store，不再复制。
@@ -320,6 +322,7 @@ impl PlayerThreads {
                                         &job.foreign_json,
                                     )
                                     .and_then(|()| {
+                                        sandbox.set_host_terrain(job.terrain.clone());
                                         run_eval_tick_with_budget(
                                             &mut sandbox,
                                             &job.world,

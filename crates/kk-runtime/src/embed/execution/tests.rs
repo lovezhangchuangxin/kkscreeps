@@ -74,7 +74,12 @@ fn registered_identity_filters_every_intent_family() {
 fn filtered_market_results_only_charge_registered_player() {
     let mut engine = kk_engine::Engine::default();
     for player in ["p1", "p2"] {
-        engine.players.entry(player.into()).or_default().money = 10_000_000;
+        engine
+            .edit_players(|players| {
+                players.entry(player.into()).or_default().money = 10_000_000;
+                Ok(())
+            })
+            .unwrap();
     }
     let mut intents = IntentBatch::default();
     for player in ["p1", "p2"] {
@@ -87,8 +92,8 @@ fn filtered_market_results_only_charge_registered_player() {
     }
     let batch = EmbedEngine::batch_from_results(&BTreeMap::from([("p1".into(), result(intents))]));
     engine.tick_with_intents(batch).unwrap();
-    assert_eq!(engine.market.orders.len(), 1);
-    assert_eq!(engine.market.orders["mkt1"].user, "p1");
-    assert_eq!(engine.players["p1"].money, 9_995_000);
-    assert_eq!(engine.players["p2"].money, 10_000_000);
+    assert_eq!(engine.market().orders.len(), 1);
+    assert_eq!(engine.market().orders["mkt1"].user, "p1");
+    assert_eq!(engine.players()["p1"].money, 9_995_000);
+    assert_eq!(engine.players()["p2"].money, 10_000_000);
 }

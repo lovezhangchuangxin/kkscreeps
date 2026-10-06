@@ -58,11 +58,10 @@
 3. **CostMatrix 官方静默语义**（`lib.rs`）：变长 `Vec<u8>` 底座（长度恒为 4 的倍数）；
    set 平铺越界 = 无操作、get 越界 = `None`（↔ undefined）、deserialize 任意长度恒
    成功、索引 checked 运算（官方 float64 大索引同判越界，不 panic）。
-4. **load_terrain 重入拒绝**：搜索栈内（即回调内）调用返回
-   `Error::ReentrantTerrainLoad`（官方无此面，防死锁，§6.1）。
-5. **重入读地形锁**（`TerrainLock`）：同线程嵌套搜索不阻塞（官方支持两层嵌套，
-   main.cc:9-14），写者与读者互斥。std RwLock 的递归读在有等待写者时可能死锁，
-   故自制（锁的递归读与写入约束见 lib.rs）。
+4. **独立不可变地形**：每次搜索显式接收 `TerrainSet`，池只在调用期间借用查询器。
+   正常返回、异常、取消后解除绑定；嵌套搜索使用独立实例，支持跨世界嵌套。
+5. **世界缓存**：生产编排按世界实例身份与 terrain_epoch 缓存 Arc；原始输入按内容
+   校验。不存在进程级地形加载入口、递归读锁或重复加载分配路径。
 
 D3 另增加 `SearchHost`：显式 `HostRoomDecision::Error`、只在回调期间可写的稳定矩阵指针、`is_cancelled` 主循环轮询；C ABI status 4 转 `Error::Cancelled`。`ArenaGuard` 同时保存恢复每层取消回调、上下文与标记。compat 的实际类型命名空间为 `kk_pf_v8`（以 `v8` 别名供官方源码编译），防止与同进程真实 V8 的同名符号冲突。
 
@@ -121,7 +120,7 @@ V8 终止请求主要在 JS 执行检查点生效。D3 原生主循环调用真�
 | 回调 throw（JS） | §1 #8 链 → 抛异常，Undefined 是 C++ 占位返回 | 保存 JS 异常、经显式错误通道中止搜索并重新抛出 | 已验证原异常对象身份与 _bits getter 异常 |
 | 回调 panic（宿主 Rust 面） | 官方无 Rust 面 | panic=unwind 且载荷析构不再次 panic 时，catch_unwind → rc=3 → Rust Err | 原生接口已有回归测试 |
 | 回调内嵌套 search | 官方支持两层（main.cc:9-14，第三层起堆分配 2.16MB/实例） | `TerrainLock` 重入读 + kk_ffi.cc 双实例池（复刻 main.cc）；第三层起同样堆分配 | 原生及玩家四层嵌套测试已覆盖 |
-| 回调内 load_terrain（宿主 API） | 官方无此面（地形仅启动期载入，driver/lib/path-finder.js:23-46） | `Err(ReentrantTerrainLoad)` | 原生接口已有回归测试；差异 §6.1 |
+| 回调内跨世界嵌套搜索（宿主 API） | 官方没有多世界宿主面 | 每次搜索显式绑定独立地形 | 并发与超过池深度嵌套均验证；见 §6.1 |
 | 回调超时/CPU 限额 | 官方无独立超时；isolate 终止 → pf.cc:558-561 → Undefined（玩家观察不到返回值，脚本被终止） | 原生主循环查询真实 V8 终止；TryCatch 重挂终止，玩家 catch 无法继续 | 已覆盖取消、死循环回调、终止后复用 |
 | 回调返回非法类型（数字/字符串等 truthy） | 包装器交出 `ret._bits`=undefined → native 视 undefined → 无矩阵（driver/lib/path-finder.js:125-127） | JS 闭包按官方包装器取 _bits，执行 getter；宿主只检查 TypedArray 字节长度 | 已验证非法类型/长度/偏移/getter |
 
@@ -160,11 +159,13 @@ function wrapRoomCallback(callback) {
 
 ## 6. 宿主差异与接入边界
 
-### 6.1 `load_terrain` 重入拒绝（`Error::ReentrantTerrainLoad`）
+### 6.1 世界独立地形
 
-官方地形只在进程启动期载入（driver/lib/path-finder.js:23-46），搜索期**不存在**
-载入口——故无官方语义可对照（不是「官方允许/禁止」，是「面不存在」）。我方
-允许多次载入（测试/多世界需要），搜索持有读锁时同线程再等待写锁会死锁，因此回调栈内的载入请求直接返回 Err。玩家 JS 不暴露 load_terrain。
+官方地形只在进程启动期载入（driver/lib/path-finder.js:23-46）。本宿主通过
+不可变 `TerrainSet` 支持多个世界；世界地形随 Arc 所有权释放。每次搜索显式绑定
+查询器，C++ 池在全部退出路径解除借用，没有全局加载或锁重入面。固定上游
+源码保留原文，构建目录仅适配地形查询。旧 `load_terrain` / `ReentrantTerrainLoad`
+已删除，历史 D2/D3 记录保留当时实现。
 
 ### 6.2 嵌套搜索的异常隔离
 
@@ -210,7 +211,7 @@ kk-pathfinder 的 `u32` API 只做上界钳制。负值/NaN/小数面由 prelude
 | `::room_callback_panic_first_room_maps_to_official_throw` | 可展开的普通回调 panic 返回 `Err(JSError(None))`；捕获边界见第 6.4 节 |
 | `::room_callback_panic_second_room_maps_to_official_throw` | 异常时刻无关性（第二房 panic 同 Err） |
 | `::search_works_after_callback_panic` | panic 后池实例复位（pf.cc:565），后续搜索正常 |
-| `::load_terrain_in_callback_rejected_not_deadlock` | 回调内 load_terrain → `Err(ReentrantTerrainLoad)`；线程+recv_timeout 防挂起；外层搜索正常完成 |
+| `isolation::cross_world_nesting_beyond_pool_depth_and_terrain_release` | 跨世界六层嵌套，超出池深度仍独立搜索；最后 Arc 释放后 Weak 不可升级 |
 | `::nested_search_in_callback_works` | 嵌套两层 search 正常（官方 main.cc:9-14 语义） |
 | `src/lib.rs::cost_matrix_out_of_range_silent` | 平铺索引越界静默；(0,50)/(1,0) 同字节别名；溢出索引不 panic |
 | `src/lib.rs::cost_matrix_deserialize_any_length_silent` | deserialize 任意长度恒成功，界内可读/界外 None，serialize 往返 |

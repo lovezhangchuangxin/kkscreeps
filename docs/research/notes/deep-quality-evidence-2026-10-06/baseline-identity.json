@@ -1,0 +1,9 @@
+{
+  "head": "229bea4b702590b87d730f3a106b184538c62e5e",
+  "files": {
+    "kkscreeps": "cdb87ac5569c1e49f647063238faa2e080d0b444e853439f3a7df310860865c5",
+    "pathfinder_perf": "5e3bc9accdabb8b7887599cc403326986175b65368a17b3fa861f0e2084b7099"
+  },
+  "source_archive_sha256": "b51c710d2ad48659d6b5c9f6c572e03238818b940cdd041c9d054d1e9abb5c19",
+  "note": "质量修复前；仅增强门禁与性能负载验收工具；测量基线不包含 engine/world/mod/pathfinder 实现变化"
+}

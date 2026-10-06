@@ -35,7 +35,7 @@ node compat/scripts/ratchet.mjs
 
 准备脚本将上游检出到 `.compat/screeps-ok`，版本由其中的 `SCREEPS_OK_PIN` 固定。工具链要求见根 [package.json](../package.json)和 [rust-toolchain.toml](../rust-toolchain.toml)。
 
-适配器默认优先使用 `target/release/kkscreeps`，不存在时回退到 debug；可设置 `KKSCREEPS_BIN` 显式选择。修改 Rust 代码后须重新构建选中的二进制，运行脚本不会检查它是否与源码一致。
+适配器默认优先使用 `target/release/kkscreeps`，不存在时回退到 debug；可设置 `KKSCREEPS_BIN` 显式选择。修改 Rust 代码后须重新构建选中的二进制，单独运行兼容脚本仍由调用方负责选择产物；完整 `pnpm run check` 则显式构建当前 debug CLI 并强制使用其绝对路径，CI 复用此入口。显式指定不存在的路径立即报错，不回退。
 
 运行脚本会在 TypeScript 比编译入口新、`parity.json` 比构建副本新或构建副本缺失时重建适配器。这按修改时间判断；需要确认内容同步时应显式执行 build。
 

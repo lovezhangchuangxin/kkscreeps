@@ -1,0 +1,21 @@
+{
+  "bot": "compat/fixtures/wasm-bot",
+  "ticks_requested": 10,
+  "ticks_completed": 10,
+  "ticks_terminated": 0,
+  "ticks_skipped_penalty": 0,
+  "ticks_with_console_error": 0,
+  "missing_api": {},
+  "has_probes": {},
+  "stub_calls_top": [],
+  "console_errors_head": [],
+  "console_errors_folded": [
+    [
+      "[log] wasm module loaded: true",
+      1
+    ]
+  ],
+  "console_head": [
+    "[tick 1][log] wasm module loaded: true"
+  ]
+}

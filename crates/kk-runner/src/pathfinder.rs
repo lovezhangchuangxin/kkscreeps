@@ -1,4 +1,4 @@
-//! 玩家面 PathFinder.search 的原生搜索接线：地形打包、进程级地形表与搜索 op。
+//! 玩家面 PathFinder.search 的原生搜索接线：地形打包、世界独立地形与搜索 op。
 //!
 //! 玩家沙箱内的 path-finder.js 按 driver/lib/path-finder.js 逐字清洗参数后，
 //! 经 `op_kk_pathfinder_search` 把纯数值送进 kk-pathfinder 的同步搜索，再把
@@ -53,37 +53,35 @@ impl TerrainPack {
 
     /// JSON 通道世界投影提取：`terrain` 为 `{payload}` base64（生产路径，
     /// kk-world terrain_json）或 2500 元素裸数组（宿主手搓夹具，game.js
-    /// beginTick 同样双形态接收）。无 rooms 键或单房形态不符时跳过该房。
-    pub fn from_world_json(world: &serde_json::Value) -> Self {
-        let mut rows = Vec::new();
-        if let Some(rooms) = world.get("rooms").and_then(|v| v.as_object()) {
-            for (name, entry) in rooms {
+    /// beginTick 同样双形态接收）。无 rooms 键允许空世界；存在的地形形态、长度或编码错误明确失败。
+    pub fn from_world_json(world: &serde_json::Value) -> Result<Self, String> {
+        let mut rooms = BTreeMap::new();
+        if let Some(entries) = world.get("rooms").and_then(|v| v.as_object()) {
+            for (name, entry) in entries {
                 let Some(terrain) = entry.get("terrain") else {
                     continue;
                 };
-                if let Some(payload) = terrain.get("payload").and_then(|v| v.as_str()) {
-                    if let Some(row) = base64_decode(payload) {
-                        rows.push((name.clone(), row));
-                    }
+                let row = if let Some(payload) = terrain.get("payload").and_then(|v| v.as_str()) {
+                    base64_decode(payload)
+                        .ok_or_else(|| format!("房间 {name} 地形 base64 不合法"))?
                 } else if let Some(array) = terrain.as_array() {
-                    let mut row = Vec::with_capacity(array.len());
-                    for cell in array {
-                        // 位掩码值 0..=7 只取低两位，与 pack_terrain 输入契约一致。
-                        match cell.as_u64() {
-                            Some(v) => row.push((v & 0x03) as u8),
-                            None => {
-                                row.clear();
-                                break;
-                            }
-                        }
-                    }
-                    if !row.is_empty() {
-                        rows.push((name.clone(), row));
-                    }
-                }
+                    array
+                        .iter()
+                        .map(|cell| {
+                            cell.as_u64()
+                                .map(|value| (value & 3) as u8)
+                                .ok_or_else(|| format!("房间 {name} 地形须为整数"))
+                        })
+                        .collect::<Result<Vec<_>, _>>()?
+                } else {
+                    return Err(format!("房间 {name} 地形形态不合法"));
+                };
+                let bits = pack_row_terrain(&row)
+                    .ok_or_else(|| format!("房间 {name} 地形须为 2500 字节"))?;
+                rooms.insert(name.clone(), bits);
             }
         }
-        TerrainPack::from_room_rows(rows)
+        Ok(Self { rooms })
     }
 
     /// KKPV 公开地形束解析：束框架（u32 块数 + 逐块 u32 长度 + 顺序拼接，
@@ -99,7 +97,12 @@ impl TerrainPack {
             Some(u32::from_le_bytes(bytes[at..end].try_into().unwrap()))
         };
         let count = read_u32(0).ok_or("束短于框架头部")? as usize;
-        let mut cursor = 4 + count.checked_mul(4).ok_or("块数溢出")?;
+        let mut cursor = 4usize
+            .checked_add(count.checked_mul(4).ok_or("块数溢出")?)
+            .ok_or("目录长度溢出")?;
+        if cursor > bytes.len() {
+            return Err("束短于长度目录".into());
+        }
         let mut lens = Vec::with_capacity(count);
         for i in 0..count {
             lens.push(read_u32(4 + i * 4).ok_or("束短于长度目录")? as usize);
@@ -156,7 +159,7 @@ fn pack_row_terrain(row: &[u8]) -> Option<[u8; 625]> {
 }
 
 /// 标准 base64 解码（字母表与 kk-world `base64_encode` 一致，含 '=' 填充）。
-/// 输入含非法字符或长度不符返回 None，由调用方按缺地形处置。
+/// 非法字符、长度或中间填充返回 None，由调用方明确报告解码失败。
 fn base64_decode(input: &str) -> Option<Vec<u8>> {
     fn value(byte: u8) -> Option<u32> {
         match byte {
@@ -173,11 +176,11 @@ fn base64_decode(input: &str) -> Option<Vec<u8>> {
         return None;
     }
     let mut out = Vec::with_capacity(bytes.len() / 4 * 3);
-    for chunk in bytes.chunks(4) {
+    for (index, chunk) in bytes.chunks(4).enumerate() {
         // 填充只出现在末组：组内尾部 '=' 计数即本组填充数；中间 '='
         // 会落入 value() 的非法字符分支而整体失败。
         let pad = chunk.iter().rev().take_while(|&&b| b == b'=').count();
-        if pad > 2 {
+        if pad > 2 || pad != 0 && index + 1 != bytes.len() / 4 {
             return None;
         }
         let mut n: u32 = 0;
@@ -197,46 +200,22 @@ fn base64_decode(input: &str) -> Option<Vec<u8>> {
     Some(out)
 }
 
-/// 进程级已载入地形表：房名 → 最后一次 load_terrain 的字节。
-///
-/// C++ 地形表进程全局且 `load_terrain` 覆盖同名房；这里按**内容比对**判断
-/// 是否需要重载——set_terrain 换地形、createShard 换世界后，差异房与
-/// 期望全墙的墙环房都会被重新载入，陈旧表项不残留。
-static LOADED: Mutex<BTreeMap<String, [u8; 625]>> = Mutex::new(BTreeMap::new());
-
-/// 把 pack 的真实地形与墙环地形同步进 C++ 表。
-///
-/// 比对与载入分两段持锁：比对段取出差异后立即放锁，再逐房
-/// `load_terrain`（写锁会等待其他线程在途搜索），最后回填。并发下两个
-/// 线程可能重复载入同一房（同世界字节相同，仅多一次 C++ 缓冲分配，有界
-/// 无害；同进程多世界的并发载入顺序可倒置，属设计文档登记的串地形边界）；
-/// 换来的约束是未来回调内嵌套搜索不会因本锁与地形写锁互等成环。
-fn ensure_loaded(pack: &TerrainPack) -> Result<(), kk_pathfinder::Error> {
-    let mut pending: Vec<(String, [u8; 625])> = Vec::new();
-    {
-        let loaded = LOADED.lock().unwrap();
-        for (room, bits) in &pack.rooms {
-            if loaded.get(room) != Some(bits) {
-                pending.push((room.clone(), *bits));
-            }
-        }
-        for room in ring_rooms(&pack.rooms) {
-            if loaded.get(&room) != Some(&ALL_WALL) {
-                pending.push((room, ALL_WALL));
-            }
-        }
+impl TerrainPack {
+    /// 原生表与世界同寿命，墙环属于同一不可变快照。
+    pub fn native(&self) -> Result<Arc<kk_pathfinder::TerrainSet>, String> {
+        let rooms = self
+            .rooms
+            .iter()
+            .map(|(name, bits)| (name.clone(), *bits))
+            .chain(
+                ring_rooms(&self.rooms)
+                    .into_iter()
+                    .map(|name| (name, ALL_WALL)),
+            );
+        kk_pathfinder::TerrainSet::new(rooms)
+            .map(Arc::new)
+            .map_err(|e| e.to_string())
     }
-    if pending.is_empty() {
-        return Ok(());
-    }
-    for (room, bits) in &pending {
-        kk_pathfinder::load_terrain(room, bits)?;
-    }
-    let mut loaded = LOADED.lock().unwrap();
-    for (room, bits) in pending {
-        loaded.insert(room, bits);
-    }
-    Ok(())
 }
 
 /// 注册房 8 邻域中不在世界内的房间（全墙补位）。房名解析/生成复用
@@ -274,18 +253,42 @@ pub struct TickTerrain {
     source: TickTerrainSource,
     /// 懒物化缓存：KKPV 首次搜索解码一次；JSON 通道注入前已物化。
     pack: Mutex<Option<Arc<TerrainPack>>>,
+    terrain: Mutex<Option<Arc<kk_pathfinder::TerrainSet>>>,
 }
 
 enum TickTerrainSource {
+    Frozen(Arc<kk_pathfinder::TerrainSet>),
     Json(Arc<TerrainPack>),
     Kkpv(crate::shared_bundle::SharedKkpvBundle),
 }
 
 impl TickTerrain {
+    pub fn frozen(terrain: Arc<kk_pathfinder::TerrainSet>) -> Self {
+        Self {
+            source: TickTerrainSource::Frozen(terrain),
+            pack: Mutex::new(None),
+            terrain: Mutex::new(None),
+        }
+    }
+
+    pub fn terrain(&self) -> Result<Arc<kk_pathfinder::TerrainSet>, String> {
+        if let TickTerrainSource::Frozen(terrain) = &self.source {
+            return Ok(terrain.clone());
+        }
+        let mut cached = self.terrain.lock().unwrap();
+        if let Some(terrain) = &*cached {
+            return Ok(terrain.clone());
+        }
+        let terrain = self.pack()?.native()?;
+        *cached = Some(terrain.clone());
+        Ok(terrain)
+    }
+
     pub fn json(pack: Arc<TerrainPack>) -> Self {
         TickTerrain {
             source: TickTerrainSource::Json(pack),
             pack: Mutex::new(None),
+            terrain: Mutex::new(None),
         }
     }
 
@@ -293,24 +296,24 @@ impl TickTerrain {
         TickTerrain {
             source: TickTerrainSource::Kkpv(bundle),
             pack: Mutex::new(None),
+            terrain: Mutex::new(None),
         }
     }
 
     /// 当前 tick 的地形包；来源不可用（理论上 begin_tick 必注入）返回 None。
-    pub fn pack(&self) -> Option<Arc<TerrainPack>> {
+    pub fn pack(&self) -> Result<Arc<TerrainPack>, String> {
         if let Some(cached) = self.pack.lock().unwrap().clone() {
-            return Some(cached);
+            return Ok(cached);
         }
         let materialized = match &self.source {
-            TickTerrainSource::Json(pack) => Some(pack.clone()),
-            TickTerrainSource::Kkpv(bundle) => TerrainPack::from_public_bundle(bundle.bytes())
-                .ok()
-                .map(Arc::new),
+            TickTerrainSource::Frozen(_) => return Err("原生快照不提供中间地形包".into()),
+            TickTerrainSource::Json(pack) => pack.clone(),
+            TickTerrainSource::Kkpv(bundle) => {
+                Arc::new(TerrainPack::from_public_bundle(bundle.bytes())?)
+            }
         };
-        if let Some(pack) = &materialized {
-            *self.pack.lock().unwrap() = Some(pack.clone());
-        }
-        materialized
+        *self.pack.lock().unwrap() = Some(materialized.clone());
+        Ok(materialized)
     }
 }
 
@@ -368,12 +371,9 @@ pub(crate) fn op_kk_pathfinder_search(
     let pack = state
         .borrow()
         .try_borrow::<TickTerrain>()
-        .and_then(|terrain| terrain.pack());
-    // 不跨 OpState 借用执行载入与搜索；后续嵌套搜索（回调通道）不受影响。
-    let Some(pack) = pack else {
-        return Err(JsErrorBox::generic("寻路地形尚未注入（begin_tick 前）"));
-    };
-    ensure_loaded(&pack).map_err(|e| JsErrorBox::generic(e.to_string()))?;
+        .ok_or_else(|| JsErrorBox::generic("寻路地形尚未注入（begin_tick 前）"))?
+        .terrain()
+        .map_err(JsErrorBox::generic)?;
     let goals: Vec<kk_pathfinder::Goal> = args
         .goals
         .iter()
@@ -401,6 +401,7 @@ pub(crate) fn op_kk_pathfinder_search(
         exception: None,
     };
     let result = kk_pathfinder::search_with_host(
+        &pack,
         kk_pathfinder::WorldPosition {
             xx: args.origin.0,
             yy: args.origin.1,
@@ -624,7 +625,7 @@ mod tests {
         out
     }
 
-    /// JSON 通道双形态：b64 payload 与裸数组；坏房跳过、好房保留。
+    /// JSON 通道双形态：b64 payload 与裸数组保持相同位布局。
     #[test]
     fn from_world_json_accepts_both_terrain_shapes() {
         let row = row_terrain(&[(5, 6, 1)]);
@@ -633,15 +634,34 @@ mod tests {
             "rooms": {
                 "W1N1": { "name": "W1N1", "terrain": { "rev": 3, "payload": payload } },
                 "E2S2": { "name": "E2S2", "terrain": row.clone() },
-                "E3S3": { "name": "E3S3", "terrain": "junk" },
             }
         });
-        let pack = TerrainPack::from_world_json(&world);
+        let pack = TerrainPack::from_world_json(&world).unwrap();
         assert_eq!(pack.rooms.len(), 2);
         assert!(pack.rooms.contains_key("W1N1"));
         let expected = pack_row_terrain(&row).unwrap();
         assert_eq!(pack.rooms["E2S2"], expected);
         assert_eq!(pack.rooms["W1N1"], expected);
+    }
+
+    #[test]
+    fn json_terrain_decode_errors_are_explicit_and_padding_must_be_terminal() {
+        for terrain in [
+            serde_json::json!("junk"),
+            serde_json::json!({"payload":"!bad"}),
+            serde_json::json!([0, 1]),
+            serde_json::json!({"payload":"AAAA"}),
+        ] {
+            let world = serde_json::json!({"rooms":{"W1N1":{"terrain":terrain}}});
+            assert!(TerrainPack::from_world_json(&world).is_err());
+        }
+        assert!(base64_decode("AA==AAAA").is_none());
+        assert!(
+            TickTerrain::kkpv(crate::SharedKkpvBundle::from_vec(vec![0]))
+                .terrain()
+                .unwrap_err()
+                .contains("框架")
+        );
     }
 
     /// 墙环 = 8 邻域减世界内房间；名字经官方坐标语义生成。
@@ -675,50 +695,18 @@ mod tests {
         }
     }
 
-    /// 内容比对的载入语义：同字节零动作、异字节重载、真实房撤出世界后
-    /// 以墙环身份被覆盖回全墙。直接驱动 kk-pathfinder 原生表（进程级状态）；
-    /// 本测试是本二进制内唯一触碰者，其他集成测试各自独立进程。
     #[test]
-    fn ensure_loaded_reloads_on_content_change_and_walls_ring() {
-        fn loaded_snapshot() -> BTreeMap<String, [u8; 625]> {
-            LOADED.lock().unwrap().clone()
-        }
-        let plain_row = vec![0u8; 2500];
+    fn independent_packs_keep_their_terrain_and_wall_ring() {
         let mut rooms = BTreeMap::new();
-        rooms.insert("E10S10".to_string(), pack_row_terrain(&plain_row).unwrap());
-        let pack = TerrainPack { rooms };
-        ensure_loaded(&pack).unwrap();
-        let first = loaded_snapshot();
-        assert_eq!(first.get("E10S10"), pack.rooms.get("E10S10"));
-        assert_eq!(first.get("E9S10"), Some(&ALL_WALL));
-
-        // 同内容再入：无重载（快照一致即可，重复载入无观察差）。
-        ensure_loaded(&pack).unwrap();
-        assert_eq!(loaded_snapshot(), first);
-
-        // 地形变化：该房重载为混合地形（与全墙位级不同——全 1 行打包后
-        // 与 ALL_WALL 相同，撤房回墙的断言会空洞）。
-        let mut mixed_row = vec![1u8; 2500];
-        mixed_row[0] = 0; // (0,0) 平原
-        let mixed_bits = pack_row_terrain(&mixed_row).unwrap();
-        assert_ne!(mixed_bits, ALL_WALL);
-        let mut changed = BTreeMap::new();
-        changed.insert("E10S10".to_string(), mixed_bits);
-        ensure_loaded(&TerrainPack { rooms: changed }).unwrap();
-        let second = loaded_snapshot();
-        assert_eq!(second.get("E10S10"), Some(&mixed_bits));
-        assert_eq!(second.get("E9S10"), Some(&ALL_WALL));
-
-        // 跨分片残留：换世界后旧真实房（E10S10）落入新房间的墙环——期望
-        // 全墙，与残留的 mixed_bits 不同，覆盖重载真实发生（空世界的环为空，
-        // 不触碰任何房，同名场景须以邻房世界构造）。
-        let mut next_world = BTreeMap::new();
-        next_world.insert(
-            "E9S10".to_string(),
-            pack_row_terrain(&vec![0u8; 2500]).unwrap(),
-        );
-        ensure_loaded(&TerrainPack { rooms: next_world }).unwrap();
-        assert_eq!(loaded_snapshot().get("E10S10"), Some(&ALL_WALL));
+        rooms.insert("E10S10".into(), [0; 625]);
+        let plain = TerrainPack { rooms }.native().unwrap();
+        let mut rooms = BTreeMap::new();
+        rooms.insert("E10S10".into(), ALL_WALL);
+        let walls = TerrainPack { rooms }.native().unwrap();
+        let (x, y) = kk_pathfinder::parse_room_name("E10S10").unwrap();
+        assert_eq!(plain.terrain(x, y), Some(&[0; 625]));
+        assert_eq!(walls.terrain(x, y), Some(&ALL_WALL));
+        assert_eq!(plain.terrain(x - 1, y), Some(&ALL_WALL));
     }
 
     /// KKPV 公开束解析对照 kk-world 参考编码：房名与行序地形逐房相等。
@@ -726,8 +714,10 @@ mod tests {
     fn from_public_bundle_matches_kk_world_reference() {
         let terrain = kk_core::Terrain::from_codes(&row_terrain(&[(7, 8, 1), (9, 8, 2)])).unwrap();
         let mut world = kk_world::World::default();
-        world.register_room("W5N5", terrain.clone());
-        world.register_room("W5N6", kk_core::Terrain::plains());
+        world.register_room("W5N5", terrain.clone()).unwrap();
+        world
+            .register_room("W5N6", kk_core::Terrain::plains())
+            .unwrap();
         let blocks = world.kkpv_public_terrain_blocks([0; 32], [0; 32]);
         let bundle =
             kk_schema::kkpv::encode_bundle(&blocks, &kk_schema::kkpv::KkpvLimits::default())
@@ -748,9 +738,12 @@ mod tests {
     #[test]
     fn from_public_bundle_rejects_malformed() {
         assert!(TerrainPack::from_public_bundle(&[]).is_err());
+        assert!(TerrainPack::from_public_bundle(&u32::MAX.to_le_bytes()).is_err());
         assert!(TerrainPack::from_public_bundle(&[0, 0, 0, 5, 9, 9]).is_err());
         let mut world = kk_world::World::default();
-        world.register_room("W5N5", kk_core::Terrain::plains());
+        world
+            .register_room("W5N5", kk_core::Terrain::plains())
+            .unwrap();
         let blocks = world.kkpv_public_terrain_blocks([0; 32], [0; 32]);
         let bundle =
             kk_schema::kkpv::encode_bundle(&blocks, &kk_schema::kkpv::KkpvLimits::default())
@@ -763,7 +756,7 @@ mod tests {
     fn tick_terrain_materializes_once_for_kkpv() {
         let terrain = kk_core::Terrain::from_codes(&row_terrain(&[])).unwrap();
         let mut world = kk_world::World::default();
-        world.register_room("W5N5", terrain);
+        world.register_room("W5N5", terrain).unwrap();
         let blocks = world.kkpv_public_terrain_blocks([0; 32], [0; 32]);
         let bundle =
             kk_schema::kkpv::encode_bundle(&blocks, &kk_schema::kkpv::KkpvLimits::default())
@@ -774,7 +767,7 @@ mod tests {
         assert!(Arc::ptr_eq(&a, &b));
         assert!(a.rooms.contains_key("W5N5"));
 
-        let json_pack = Arc::new(TerrainPack::from_world_json(&serde_json::json!({})));
+        let json_pack = Arc::new(TerrainPack::from_world_json(&serde_json::json!({})).unwrap());
         let tick_json = TickTerrain::json(json_pack.clone());
         assert!(Arc::ptr_eq(&tick_json.pack().unwrap(), &json_pack));
     }

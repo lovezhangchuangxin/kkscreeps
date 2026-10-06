@@ -144,6 +144,16 @@ impl ChainHost for Host {
     }
 }
 
+impl kk_mod_host::ObjectsHost for Host {}
+
+impl kk_mod_host::ResourcesHost for Host {}
+
+impl kk_mod_host::CombatHost for Host {}
+
+impl kk_mod_host::BuildHost for Host {}
+
+impl kk_mod_host::MovementHost for Host {}
+
 #[test]
 fn chain_capability_is_dropped_after_success_cancellation_and_failure() {
     let mut realm = realm(
@@ -363,6 +373,17 @@ fn disabled_own_slot_never_accesses_candidate_or_runs_other_hooks() {
             panic!("停用槽不得 native")
         }
     }
+
+    impl kk_mod_host::ObjectsHost for NoAccess {}
+
+    impl kk_mod_host::ResourcesHost for NoAccess {}
+
+    impl kk_mod_host::CombatHost for NoAccess {}
+
+    impl kk_mod_host::BuildHost for NoAccess {}
+
+    impl kk_mod_host::MovementHost for NoAccess {}
+
     let mut vm = realm_with_disabled(
         "const ty=api.objects.define('test:counter',{version:1,playerClass:'Counter',fields:{}});api.intents.define('test:add',{scope:'object',target:ty,args:{type:'record',fields:{}},process(){throw Error('不得执行')}});",
         RegisterOptions::default(),

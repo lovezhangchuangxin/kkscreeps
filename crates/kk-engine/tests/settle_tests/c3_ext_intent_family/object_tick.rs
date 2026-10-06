@@ -85,24 +85,23 @@ fn rust_lifecycle_replacement_installs_original_binding_and_ticks_without_intent
             processes,
         )
         .unwrap();
-        e.world.register_room("W1N1", kk_core::Terrain::plains());
-        e.world
-            .insert(
-                "W1N1",
-                RoomObject::Mod(ModObj {
-                    id: 0,
-                    x: 10,
-                    y: 12,
-                    type_key: "extmod:counter".into(),
-                    data: json!({"owner":"p1","x":10,"y":12,"value":0}).to_string(),
-                }),
-            )
-            .unwrap();
+        e.register_room("W1N1", kk_core::Terrain::plains()).unwrap();
+        e.insert_object(
+            "W1N1",
+            RoomObject::Mod(ModObj {
+                id: 0,
+                x: 10,
+                y: 12,
+                type_key: "extmod:counter".into(),
+                data: json!({"owner":"p1","x":10,"y":12,"value":0}).to_string(),
+            }),
+        )
+        .unwrap();
         e.tick_with_intents(IntentBatch::default()).unwrap();
         assert_eq!(
             *log.borrow(),
             vec![if replaced { "replace" } else { "tick" }]
         );
-        assert_eq!(e.world.time(), 1);
+        assert_eq!(e.world().time(), 1);
     }
 }

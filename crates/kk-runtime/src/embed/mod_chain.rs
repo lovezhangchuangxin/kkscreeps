@@ -2,9 +2,11 @@
 use super::*;
 use crate::mod_trace::{ModTraceEntry, ModTraceEvent, fault_kind_label, stage_label, truncate};
 
+mod capability;
 mod combat;
 mod objects;
 mod resources;
+use capability::ChainCapability;
 
 /// JS 组合的整槽执行器。进入 VM 一次，native 中心只经普通 op 执行。
 pub(super) struct ModSlotExecutor {
@@ -41,43 +43,10 @@ struct ModChainContext {
     native: NativeCall,
     /// 仅在本次能力内缓存已解析字段；改写与 native 前失效，不跨槽/对象/tick。
     cached_fields: Option<Value>,
-    /// 只有自有动作/tick 槽开放同房对象能力；原生领域恢复边界保持独立。
-    objects_slot: bool,
+    /// 能力和其领域状态不可分离；同一槽只装配一个领域。
+    capability: ChainCapability,
     /// 可拒绝动作的 namespace 写入暂存到调用成功；拒绝时丢弃。
     staged_states: Option<Rc<RefCell<BTreeMap<String, Value>>>>,
-    /// 资源写能力首次触达的对象快照；共享给整槽外层恢复。
-    resource_journal: Option<Rc<RefCell<BTreeMap<ObjId, kk_schema::room::RoomObject>>>>,
-    /// 移动请求能力门：仅 builtin:creep.move 的处理器同步期内有效。
-    move_slot: bool,
-    /// 房间级移动竞争能力门：仅 builtin:room.moveContest 有效；
-    /// 无对象目标，target.fields 恒为 null。
-    contest_slot: bool,
-    /// 房间级移动准入能力门：仅 builtin:creep.moveAdmission 有效；
-    /// 无对象目标，target.fields 恒为 null。
-    admission_slot: bool,
-    /// 房间级移动障碍能力门：仅 builtin:room.moveObstacle 有效；
-    /// 无对象目标，target.fields 恒为 null。
-    obstacle_slot: bool,
-    precheck_slot: bool,
-    /// 房间级拉拽登记能力门：仅 builtin:room.movePullRegistration 有效；
-    /// 无对象目标，target.fields 恒为 null。
-    pull_registration_slot: bool,
-    /// 房间级移动代价能力门：仅 builtin:room.moveCost 有效；
-    /// 无对象目标，target.fields 恒为 null。
-    move_cost_slot: bool,
-    /// 战斗能力状态：仅五个战斗槽的处理器同步期内有效；consumed 单向
-    /// 标记保证本动作经能力或 native 至多执行一次。
-    combat: Option<CombatChainState>,
-    /// 建造族能力状态：仅 build/repair/dismantle 三槽的处理器同步期内
-    /// 有效；consumed 单向标记与战斗能力同型。
-    build: Option<BuildChainState>,
-    incoming: Option<Rc<kk_engine::settle::incoming::IncomingDamage>>,
-    contest: Option<Rc<kk_engine::settle::contest::MoveContest>>,
-    admission: Option<Rc<kk_engine::settle::admission::MoveAdmission>>,
-    obstacle: Option<Rc<kk_engine::settle::obstacle::MoveObstacle>>,
-    precheck: Option<Rc<kk_engine::settle::precheck::MovePrecheck>>,
-    pull_registration: Option<Rc<kk_engine::settle::pull_registration::PullRegistration>>,
-    move_cost: Option<Rc<kk_engine::settle::move_cost::MoveCost>>,
 }
 
 /// 战斗链的运行时状态与首触日志。日志记录能力改向触达、且不在引擎
@@ -144,14 +113,16 @@ impl SlotExecutor for ModSlotExecutor {
             SlotCall::MoveCost { candidate } => Some(candidate.clone()),
             _ => None,
         };
-        let resource_action = matches!(&call, SlotCall::Action { .. })
-            && kk_mod_api::builtin::RESOURCE_ACTION_SLOTS.contains(&slot.key.as_str());
-        let move_action = matches!(&call, SlotCall::Action { .. })
-            && kk_mod_api::builtin::MOVE_ACTION_SLOTS.contains(&slot.key.as_str());
-        let combat_action = matches!(&call, SlotCall::Action { .. })
-            && kk_mod_api::builtin::COMBAT_ACTION_SLOTS.contains(&slot.key.as_str());
-        let build_action = matches!(&call, SlotCall::Action { .. })
-            && kk_mod_api::builtin::BUILD_ACTION_SLOTS.contains(&slot.key.as_str());
+        let kind = kk_mod_api::builtin_capabilities::SlotCapability::for_key(slot.key.as_str());
+        let is_action = matches!(&call, SlotCall::Action { .. });
+        let resource_action =
+            is_action && kind == Some(kk_mod_api::builtin_capabilities::SlotCapability::Resource);
+        let move_action =
+            is_action && kind == Some(kk_mod_api::builtin_capabilities::SlotCapability::Move);
+        let combat_action =
+            is_action && kind == Some(kk_mod_api::builtin_capabilities::SlotCapability::Combat);
+        let build_action =
+            is_action && kind == Some(kk_mod_api::builtin_capabilities::SlotCapability::Build);
         let (id, args, native) = match call {
             SlotCall::Incoming { id, candidate } => (
                 id,
@@ -239,6 +210,33 @@ impl SlotExecutor for ModSlotExecutor {
             consumed: false,
             journal: Rc::new(RefCell::new(BTreeMap::new())),
         });
+        let capability = if extension {
+            ChainCapability::Objects
+        } else if let Some(journal) = &resource_journal {
+            ChainCapability::Resource(journal.clone())
+        } else if move_action {
+            ChainCapability::Move
+        } else if let Some(state) = &combat_state {
+            ChainCapability::Combat(state.clone())
+        } else if let Some(state) = &build_state {
+            ChainCapability::Build(state.clone())
+        } else if let Some(state) = &incoming {
+            ChainCapability::Incoming(state.clone())
+        } else if let Some(state) = &contest {
+            ChainCapability::Contest(state.clone())
+        } else if let Some(state) = &admission {
+            ChainCapability::Admission(state.clone())
+        } else if let Some(state) = &obstacle {
+            ChainCapability::Obstacle(state.clone())
+        } else if let Some(state) = &precheck {
+            ChainCapability::Precheck(state.clone())
+        } else if let Some(state) = &pull_registration {
+            ChainCapability::PullRegistration(state.clone())
+        } else if let Some(state) = &move_cost {
+            ChainCapability::MoveCost(state.clone())
+        } else {
+            ChainCapability::Plain
+        };
         let mut vm = self
             .realm
             .try_borrow_mut()
@@ -264,25 +262,8 @@ impl SlotExecutor for ModSlotExecutor {
                 args,
                 native,
                 cached_fields: None,
-                objects_slot: extension,
                 staged_states: staged_states.clone(),
-                resource_journal: resource_journal.clone(),
-                move_slot: move_action,
-                contest_slot: contest.is_some(),
-                admission_slot: admission.is_some(),
-                obstacle_slot: obstacle.is_some(),
-                precheck_slot: precheck.is_some(),
-                pull_registration_slot: pull_registration.is_some(),
-                move_cost_slot: move_cost.is_some(),
-                combat: combat_state.clone(),
-                build: build_state.clone(),
-                incoming: incoming.clone(),
-                contest: contest.clone(),
-                admission: admission.clone(),
-                obstacle: obstacle.clone(),
-                precheck: precheck.clone(),
-                pull_registration: pull_registration.clone(),
-                move_cost: move_cost.clone(),
+                capability,
             }),
         );
         let outcome = match result {
@@ -445,14 +426,16 @@ impl ModChainContext {
                 }
                 Err("内建目标不是 link 或 Mod 建筑".into())
             }
-            None if self.objects_slot => Ok(Value::Null),
+            None if matches!(self.capability, ChainCapability::Objects) => Ok(Value::Null),
             // 房间级竞争/准入槽没有对象目标；占位 id 不对应任何真实对象。
-            None if self.contest_slot => Ok(Value::Null),
-            None if self.admission_slot => Ok(Value::Null),
-            None if self.obstacle_slot => Ok(Value::Null),
-            None if self.precheck_slot => Ok(Value::Null),
-            None if self.pull_registration_slot => Ok(Value::Null),
-            None if self.move_cost_slot => Ok(Value::Null),
+            None if matches!(self.capability, ChainCapability::Contest(_)) => Ok(Value::Null),
+            None if matches!(self.capability, ChainCapability::Admission(_)) => Ok(Value::Null),
+            None if matches!(self.capability, ChainCapability::Obstacle(_)) => Ok(Value::Null),
+            None if matches!(self.capability, ChainCapability::Precheck(_)) => Ok(Value::Null),
+            None if matches!(self.capability, ChainCapability::PullRegistration(_)) => {
+                Ok(Value::Null)
+            }
+            None if matches!(self.capability, ChainCapability::MoveCost(_)) => Ok(Value::Null),
             _ => Err(format!("槽目标 {} 已不存在或未接线", self.id.as_str())),
         }
     }
@@ -462,22 +445,22 @@ impl ModChainContext {
             return Ok(());
         }
         // 房间级竞争/准入槽没有对象目标；提前拒绝，避免落入 link 写面报误导文案。
-        if self.contest_slot {
+        if matches!(self.capability, ChainCapability::Contest(_)) {
             return Err("移动竞争槽没有对象目标，target.fields 不可写".into());
         }
-        if self.admission_slot {
+        if matches!(self.capability, ChainCapability::Admission(_)) {
             return Err("移动准入槽没有对象目标，target.fields 不可写".into());
         }
-        if self.obstacle_slot {
+        if matches!(self.capability, ChainCapability::Obstacle(_)) {
             return Err("移动障碍槽没有对象目标，target.fields 不可写".into());
         }
-        if self.precheck_slot {
+        if matches!(self.capability, ChainCapability::Precheck(_)) {
             return Err("移动预检槽没有对象目标，target.fields 不可写".into());
         }
-        if self.pull_registration_slot {
+        if matches!(self.capability, ChainCapability::PullRegistration(_)) {
             return Err("拉拽登记槽没有对象目标，target.fields 不可写".into());
         }
-        if self.move_cost_slot {
+        if matches!(self.capability, ChainCapability::MoveCost(_)) {
             return Err("移动代价槽没有对象目标，target.fields 不可写".into());
         }
         if !fields.is_object() {
@@ -552,94 +535,101 @@ impl ModChainContext {
         }
     }
 }
-
 impl ChainHost for ModChainContext {
-    fn incoming_damage(&mut self) -> Result<i64, String> {
-        self.incoming
+    fn read(&mut self, binding: &str) -> Result<ChainContext, String> {
+        let key = Key::new(binding)?;
+        let fields = self.fields()?.clone();
+        let w = self.ctx.borrow();
+        let state = self
+            .staged_states
             .as_ref()
-            .map(|c| c.damage())
-            .ok_or_else(|| "本次槽没有受击数值能力".into())
+            .and_then(|states| states.borrow().get(key.namespace()).cloned())
+            .unwrap_or_else(|| w.state.mod_state(key.namespace()));
+        let tick = w.time;
+        let room = w.room.name.clone();
+        drop(w);
+        // 固定封套不再建动态 Map；直接交给 serde_v8 的 struct 路径。
+        // 缓存字段与固定 args 仍各自克隆，保持候选隔离。
+        Ok(ChainContext {
+            tick,
+            room,
+            state,
+            target: ChainTarget {
+                id: self.id.as_str(),
+                fields,
+            },
+            args: self.args.clone(),
+        })
     }
+    fn write(&mut self, binding: &str, context: ChainWrite) -> Result<(), String> {
+        let key = Key::new(binding)?;
+        if let Some(fields) = context.target_fields.as_ref() {
+            self.write_fields(fields)?;
+        }
+        // 字段校验完成后移交 state；固定封套不再构造或拆除 JSON Map。
+        if let Some(states) = &self.staged_states {
+            states
+                .borrow_mut()
+                .insert(key.namespace().to_string(), context.state);
+        } else {
+            self.ctx
+                .borrow()
+                .state
+                .set_mod_state(key.namespace(), context.state);
+        }
+        Ok(())
+    }
+    fn native(&mut self) -> Result<(), String> {
+        // native 可改资源、字段或移除目标，返回后的 read 必须重新取候选。
+        self.cached_fields = None;
+        // 战斗/建造族槽：能力改向/取消已消耗本动作时跳过 native，防止二次执行。
+        if let Some(combat) = self.capability.combat_mut()
+            && combat.consumed
+        {
+            return Ok(());
+        }
+        if let Some(build) = self.capability.build_mut()
+            && build.consumed
+        {
+            return Ok(());
+        }
+        match &self.native {
+            NativeCall::Action { data, step } => {
+                if let Some(combat) = self.capability.combat()
+                    && let Some(policy) = &combat.retaliation
+                {
+                    kk_engine::settle::creep::slot_combat_execute_with_retaliation(
+                        &mut self.ctx.borrow_mut(),
+                        self.id,
+                        data,
+                        combat.action,
+                        policy,
+                    )?;
+                } else {
+                    step(&mut self.ctx.borrow_mut(), self.id, data);
+                }
+            }
+            NativeCall::Tick(step) => step(&mut self.ctx.borrow_mut(), self.id),
+            NativeCall::Incoming => {}
+            NativeCall::Contest => {}
+            NativeCall::Admission => {}
+            NativeCall::Obstacle => {}
+            NativeCall::PullRegistration => {}
+            NativeCall::MoveCost => {}
+            NativeCall::Precheck => {}
+            NativeCall::None => return Err("Mod 自有槽没有 Rust native 中心".into()),
+        }
+        if let Some(combat) = self.capability.combat_mut() {
+            combat.consumed = true;
+        }
+        if let Some(build) = self.capability.build_mut() {
+            build.consumed = true;
+        }
+        Ok(())
+    }
+}
 
-    fn incoming_set_damage(&mut self, amount: i64) -> Result<(), String> {
-        self.incoming
-            .as_ref()
-            .ok_or("本次槽没有受击数值能力")?
-            .set_damage(amount)
-    }
-    fn contest_priority(&mut self, id: &str) -> Result<i64, String> {
-        let contest = self.contest.as_ref().ok_or("本次槽没有移动竞争能力")?;
-        let id = ObjId::parse(id).ok_or("竞争者 ID 非法")?;
-        Ok(contest.priority(id))
-    }
-    fn contest_set_priority(&mut self, id: &str, priority: i64) -> Result<(), String> {
-        let contest = self.contest.as_ref().ok_or("本次槽没有移动竞争能力")?;
-        let id = ObjId::parse(id).ok_or("竞争者 ID 非法")?;
-        contest.set_priority(id, priority)
-    }
-    fn admission_admitted(&mut self, id: &str) -> Result<bool, String> {
-        let admission = self.admission.as_ref().ok_or("本次槽没有移动准入能力")?;
-        let id = ObjId::parse(id).ok_or("执行者 ID 非法")?;
-        Ok(admission.admitted(id))
-    }
-    fn admission_set_admitted(&mut self, id: &str, admitted: bool) -> Result<(), String> {
-        let admission = self.admission.as_ref().ok_or("本次槽没有移动准入能力")?;
-        let id = ObjId::parse(id).ok_or("执行者 ID 非法")?;
-        admission.set_admitted(id, admitted)
-    }
-    fn admission_evaluate(&mut self) -> Result<Vec<String>, String> {
-        let admission = self.admission.as_ref().ok_or("本次槽没有移动准入能力")?;
-        let finals = admission.finals_snapshot();
-        let survivors = self.ctx.borrow().movement_simulate_survivors(&finals);
-        Ok(survivors.iter().map(|id| id.as_str().to_string()).collect())
-    }
-    fn obstacle_blocked(&mut self, id: &str) -> Result<bool, String> {
-        let obstacle = self.obstacle.as_ref().ok_or("本次槽没有移动障碍能力")?;
-        let id = ObjId::parse(id).ok_or("胜者 ID 非法")?;
-        Ok(obstacle.is_blocked(id))
-    }
-    fn obstacle_block(&mut self, id: &str) -> Result<(), String> {
-        let obstacle = self.obstacle.as_ref().ok_or("本次槽没有移动障碍能力")?;
-        let id = ObjId::parse(id).ok_or("胜者 ID 非法")?;
-        obstacle.block(id)
-    }
-    fn precheck_blocked(&mut self, id: &str) -> Result<bool, String> {
-        let precheck = self.precheck.as_ref().ok_or("本次槽没有移动预检能力")?;
-        let id = ObjId::parse(id).ok_or("请求者 ID 非法")?;
-        Ok(precheck.is_blocked(id))
-    }
-    fn precheck_block(&mut self, id: &str) -> Result<(), String> {
-        let precheck = self.precheck.as_ref().ok_or("本次槽没有移动预检能力")?;
-        let id = ObjId::parse(id).ok_or("请求者 ID 非法")?;
-        precheck.block(id)
-    }
-    fn pull_denied(&mut self, id: &str) -> Result<bool, String> {
-        let pull = self
-            .pull_registration
-            .as_ref()
-            .ok_or("本次槽没有拉拽登记能力")?;
-        let id = ObjId::parse(id).ok_or("拉者 ID 非法")?;
-        Ok(pull.is_denied(id))
-    }
-    fn pull_deny(&mut self, id: &str) -> Result<(), String> {
-        let pull = self
-            .pull_registration
-            .as_ref()
-            .ok_or("本次槽没有拉拽登记能力")?;
-        let id = ObjId::parse(id).ok_or("拉者 ID 非法")?;
-        pull.deny(id)
-    }
-    fn cost_fatigue_of(&mut self, id: &str) -> Result<i64, String> {
-        let cost = self.move_cost.as_ref().ok_or("本次槽没有移动代价能力")?;
-        let id = ObjId::parse(id).ok_or("移动者 ID 非法")?;
-        cost.fatigue_of(id)
-            .ok_or("移动者不在本次输入中".to_string())
-    }
-    fn cost_set_fatigue(&mut self, id: &str, value: i64) -> Result<(), String> {
-        let cost = self.move_cost.as_ref().ok_or("本次槽没有移动代价能力")?;
-        let id = ObjId::parse(id).ok_or("移动者 ID 非法")?;
-        cost.set_fatigue(id, value)
-    }
+impl kk_mod_host::ObjectsHost for ModChainContext {
     fn object_get(&mut self, id: &str) -> Result<Option<kk_mod_api::objects::ObjectView>, String> {
         self.get_object(id)
     }
@@ -670,7 +660,9 @@ impl ChainHost for ModChainContext {
     fn object_remove(&mut self, binding: &str, id: &str) -> Result<(), String> {
         self.remove_object(binding, id)
     }
+}
 
+impl kk_mod_host::ResourcesHost for ModChainContext {
     fn resource_read(
         &mut self,
         id: &str,
@@ -678,7 +670,6 @@ impl ChainHost for ModChainContext {
     ) -> Result<kk_mod_api::resources::ResourceView, String> {
         self.read_resource(id, resource)
     }
-
     fn resource_transfer(
         &mut self,
         from: &str,
@@ -689,79 +680,60 @@ impl ChainHost for ModChainContext {
     ) -> Result<kk_mod_api::resources::ResourceTransfer, String> {
         self.transfer_resource(from, to, resource, amount, loss)
     }
+}
 
-    fn movement_pending(&mut self) -> Result<Option<u8>, String> {
-        if !self.move_slot {
-            return Err("本次槽没有移动请求能力".into());
-        }
-        kk_engine::settle::creep::slot_pending_direction(&self.ctx.borrow(), self.id)
+impl kk_mod_host::CombatHost for ModChainContext {
+    fn incoming_damage(&mut self) -> Result<i64, String> {
+        self.capability
+            .incoming()
+            .map(|c| c.damage())
+            .ok_or_else(|| "本次槽没有受击数值能力".into())
     }
-
-    fn movement_request(&mut self, direction: u8) -> Result<bool, String> {
-        if !self.move_slot {
-            return Err("本次槽没有移动请求能力".into());
-        }
-        // 登记不改字段缓存读面（执行者坐标未变），与资源读取同型。
-        kk_engine::settle::creep::slot_request_direction(
-            &mut self.ctx.borrow_mut(),
-            self.id,
-            direction,
-        )
+    fn incoming_set_damage(&mut self, amount: i64) -> Result<(), String> {
+        self.capability
+            .incoming()
+            .ok_or("本次槽没有受击数值能力")?
+            .set_damage(amount)
     }
-
-    fn movement_cancel(&mut self) -> Result<(), String> {
-        if !self.move_slot {
-            return Err("本次槽没有移动请求能力".into());
-        }
-        kk_engine::settle::creep::slot_cancel_direction(&mut self.ctx.borrow_mut(), self.id)
-    }
-
     fn combat_request(&mut self, target: &str) -> Result<(), String> {
         self.request_combat(target)
     }
-
     fn combat_cancel(&mut self) -> Result<(), String> {
         self.cancel_combat()
     }
-
     fn combat_apply_damage(&mut self, target: &str, amount: i64) -> Result<(), String> {
         self.apply_combat_damage(target, amount)
     }
-
     fn combat_apply_heal(&mut self, target: &str, amount: i64) -> Result<(), String> {
         self.apply_combat_heal(target, amount)
     }
-
     fn combat_set_retaliation(
         &mut self,
         requests: &[kk_mod_api::combat::DamageRequest],
     ) -> Result<(), String> {
         self.set_combat_retaliation(requests)
     }
-
     fn combat_apply_damage_batch(
         &mut self,
         requests: &[kk_mod_api::combat::DamageRequest],
     ) -> Result<(), String> {
         self.apply_combat_damage_batch(requests)
     }
-
     fn combat_list(
         &mut self,
         after: &str,
         limit: u32,
     ) -> Result<kk_mod_api::combat::CombatPage, String> {
-        if self.combat.is_none() && self.incoming.is_none() {
+        if self.capability.combat().is_none() && self.capability.incoming().is_none() {
             return Err("本次槽没有战斗读取能力".into());
         }
         kk_engine::settle::creep::slot_combat_list(&self.ctx.borrow(), after, limit)
     }
-
     fn combat_get(
         &mut self,
         target: &str,
     ) -> Result<Option<kk_mod_api::combat::CombatView>, String> {
-        if self.combat.is_none() && self.incoming.is_none() {
+        if self.capability.combat().is_none() && self.capability.incoming().is_none() {
             return Err("本次槽没有战斗读取能力".into());
         }
         let id = ObjId::parse(target).ok_or("战斗目标 ID 非法")?;
@@ -770,10 +742,12 @@ impl ChainHost for ModChainContext {
             id,
         ))
     }
+}
 
+impl kk_mod_host::BuildHost for ModChainContext {
     fn build_request(&mut self, target: &str) -> Result<(), String> {
         let (action, journal) = {
-            let Some(build) = &self.build else {
+            let Some(build) = self.capability.build() else {
                 return Err("本次槽没有建造目标改向能力".into());
             };
             if build.consumed {
@@ -804,14 +778,13 @@ impl ChainHost for ModChainContext {
             kk_engine::settle::creep::slot_build_request(&mut w, self.id, target_id, action)?;
         }
         self.cached_fields = None;
-        if let Some(build) = &mut self.build {
+        if let Some(build) = self.capability.build_mut() {
             build.consumed = true;
         }
         Ok(())
     }
-
     fn build_cancel(&mut self) -> Result<(), String> {
-        let Some(build) = &mut self.build else {
+        let Some(build) = self.capability.build_mut() else {
             return Err("本次槽没有建造能力".into());
         };
         if build.consumed {
@@ -820,99 +793,119 @@ impl ChainHost for ModChainContext {
         build.consumed = true;
         Ok(())
     }
+}
 
-    fn read(&mut self, binding: &str) -> Result<ChainContext, String> {
-        let key = Key::new(binding)?;
-        let fields = self.fields()?.clone();
-        let w = self.ctx.borrow();
-        let state = self
-            .staged_states
-            .as_ref()
-            .and_then(|states| states.borrow().get(key.namespace()).cloned())
-            .unwrap_or_else(|| w.state.mod_state(key.namespace()));
-        let tick = w.time;
-        let room = w.room.name.clone();
-        drop(w);
-        // 固定封套不再建动态 Map；直接交给 serde_v8 的 struct 路径。
-        // 缓存字段与固定 args 仍各自克隆，保持候选隔离。
-        Ok(ChainContext {
-            tick,
-            room,
-            state,
-            target: ChainTarget {
-                id: self.id.as_str(),
-                fields,
-            },
-            args: self.args.clone(),
-        })
+impl kk_mod_host::MovementHost for ModChainContext {
+    fn contest_priority(&mut self, id: &str) -> Result<i64, String> {
+        let contest = self.capability.contest().ok_or("本次槽没有移动竞争能力")?;
+        let id = ObjId::parse(id).ok_or("竞争者 ID 非法")?;
+        Ok(contest.priority(id))
     }
-
-    fn write(&mut self, binding: &str, context: ChainWrite) -> Result<(), String> {
-        let key = Key::new(binding)?;
-        if let Some(fields) = context.target_fields.as_ref() {
-            self.write_fields(fields)?;
-        }
-        // 字段校验完成后移交 state；固定封套不再构造或拆除 JSON Map。
-        if let Some(states) = &self.staged_states {
-            states
-                .borrow_mut()
-                .insert(key.namespace().to_string(), context.state);
-        } else {
-            self.ctx
-                .borrow()
-                .state
-                .set_mod_state(key.namespace(), context.state);
-        }
-        Ok(())
+    fn contest_set_priority(&mut self, id: &str, priority: i64) -> Result<(), String> {
+        let contest = self.capability.contest().ok_or("本次槽没有移动竞争能力")?;
+        let id = ObjId::parse(id).ok_or("竞争者 ID 非法")?;
+        contest.set_priority(id, priority)
     }
-
-    fn native(&mut self) -> Result<(), String> {
-        // native 可改资源、字段或移除目标，返回后的 read 必须重新取候选。
-        self.cached_fields = None;
-        // 战斗/建造族槽：能力改向/取消已消耗本动作时跳过 native，防止二次执行。
-        if let Some(combat) = &mut self.combat
-            && combat.consumed
-        {
-            return Ok(());
+    fn admission_admitted(&mut self, id: &str) -> Result<bool, String> {
+        let admission = self
+            .capability
+            .admission()
+            .ok_or("本次槽没有移动准入能力")?;
+        let id = ObjId::parse(id).ok_or("执行者 ID 非法")?;
+        Ok(admission.admitted(id))
+    }
+    fn admission_set_admitted(&mut self, id: &str, admitted: bool) -> Result<(), String> {
+        let admission = self
+            .capability
+            .admission()
+            .ok_or("本次槽没有移动准入能力")?;
+        let id = ObjId::parse(id).ok_or("执行者 ID 非法")?;
+        admission.set_admitted(id, admitted)
+    }
+    fn admission_evaluate(&mut self) -> Result<Vec<String>, String> {
+        let admission = self
+            .capability
+            .admission()
+            .ok_or("本次槽没有移动准入能力")?;
+        let finals = admission.finals_snapshot();
+        let survivors = self.ctx.borrow().movement_simulate_survivors(&finals);
+        Ok(survivors.iter().map(|id| id.as_str().to_string()).collect())
+    }
+    fn obstacle_blocked(&mut self, id: &str) -> Result<bool, String> {
+        let obstacle = self.capability.obstacle().ok_or("本次槽没有移动障碍能力")?;
+        let id = ObjId::parse(id).ok_or("胜者 ID 非法")?;
+        Ok(obstacle.is_blocked(id))
+    }
+    fn obstacle_block(&mut self, id: &str) -> Result<(), String> {
+        let obstacle = self.capability.obstacle().ok_or("本次槽没有移动障碍能力")?;
+        let id = ObjId::parse(id).ok_or("胜者 ID 非法")?;
+        obstacle.block(id)
+    }
+    fn precheck_blocked(&mut self, id: &str) -> Result<bool, String> {
+        let precheck = self.capability.precheck().ok_or("本次槽没有移动预检能力")?;
+        let id = ObjId::parse(id).ok_or("请求者 ID 非法")?;
+        Ok(precheck.is_blocked(id))
+    }
+    fn precheck_block(&mut self, id: &str) -> Result<(), String> {
+        let precheck = self.capability.precheck().ok_or("本次槽没有移动预检能力")?;
+        let id = ObjId::parse(id).ok_or("请求者 ID 非法")?;
+        precheck.block(id)
+    }
+    fn pull_denied(&mut self, id: &str) -> Result<bool, String> {
+        let pull = self
+            .capability
+            .pull_registration()
+            .ok_or("本次槽没有拉拽登记能力")?;
+        let id = ObjId::parse(id).ok_or("拉者 ID 非法")?;
+        Ok(pull.is_denied(id))
+    }
+    fn pull_deny(&mut self, id: &str) -> Result<(), String> {
+        let pull = self
+            .capability
+            .pull_registration()
+            .ok_or("本次槽没有拉拽登记能力")?;
+        let id = ObjId::parse(id).ok_or("拉者 ID 非法")?;
+        pull.deny(id)
+    }
+    fn cost_fatigue_of(&mut self, id: &str) -> Result<i64, String> {
+        let cost = self
+            .capability
+            .move_cost()
+            .ok_or("本次槽没有移动代价能力")?;
+        let id = ObjId::parse(id).ok_or("移动者 ID 非法")?;
+        cost.fatigue_of(id)
+            .ok_or("移动者不在本次输入中".to_string())
+    }
+    fn cost_set_fatigue(&mut self, id: &str, value: i64) -> Result<(), String> {
+        let cost = self
+            .capability
+            .move_cost()
+            .ok_or("本次槽没有移动代价能力")?;
+        let id = ObjId::parse(id).ok_or("移动者 ID 非法")?;
+        cost.set_fatigue(id, value)
+    }
+    fn movement_pending(&mut self) -> Result<Option<u8>, String> {
+        if !matches!(self.capability, ChainCapability::Move) {
+            return Err("本次槽没有移动请求能力".into());
         }
-        if let Some(build) = &mut self.build
-            && build.consumed
-        {
-            return Ok(());
+        kk_engine::settle::creep::slot_pending_direction(&self.ctx.borrow(), self.id)
+    }
+    fn movement_request(&mut self, direction: u8) -> Result<bool, String> {
+        if !matches!(self.capability, ChainCapability::Move) {
+            return Err("本次槽没有移动请求能力".into());
         }
-        match &self.native {
-            NativeCall::Action { data, step } => {
-                if let Some(combat) = &self.combat
-                    && let Some(policy) = &combat.retaliation
-                {
-                    kk_engine::settle::creep::slot_combat_execute_with_retaliation(
-                        &mut self.ctx.borrow_mut(),
-                        self.id,
-                        data,
-                        combat.action,
-                        policy,
-                    )?;
-                } else {
-                    step(&mut self.ctx.borrow_mut(), self.id, data);
-                }
-            }
-            NativeCall::Tick(step) => step(&mut self.ctx.borrow_mut(), self.id),
-            NativeCall::Incoming => {}
-            NativeCall::Contest => {}
-            NativeCall::Admission => {}
-            NativeCall::Obstacle => {}
-            NativeCall::PullRegistration => {}
-            NativeCall::MoveCost => {}
-            NativeCall::Precheck => {}
-            NativeCall::None => return Err("Mod 自有槽没有 Rust native 中心".into()),
+        // 登记不改字段缓存读面（执行者坐标未变），与资源读取同型。
+        kk_engine::settle::creep::slot_request_direction(
+            &mut self.ctx.borrow_mut(),
+            self.id,
+            direction,
+        )
+    }
+    fn movement_cancel(&mut self) -> Result<(), String> {
+        if !matches!(self.capability, ChainCapability::Move) {
+            return Err("本次槽没有移动请求能力".into());
         }
-        if let Some(combat) = &mut self.combat {
-            combat.consumed = true;
-        }
-        if let Some(build) = &mut self.build {
-            build.consumed = true;
-        }
-        Ok(())
+        kk_engine::settle::creep::slot_cancel_direction(&mut self.ctx.borrow_mut(), self.id)
     }
 }
 

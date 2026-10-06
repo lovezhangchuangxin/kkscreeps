@@ -1,0 +1,109 @@
+{
+  "bot": "compat/fixtures/tooangel/src",
+  "ticks_requested": 2000,
+  "ticks_completed": 2000,
+  "ticks_terminated": 0,
+  "ticks_skipped_penalty": 0,
+  "ticks_with_console_error": 0,
+  "missing_api": {},
+  "has_probes": {},
+  "stub_calls_top": [
+    [
+      "room.find:103",
+      8000
+    ],
+    [
+      "room.find:111",
+      8000
+    ],
+    [
+      "room.find:112",
+      6009
+    ],
+    [
+      "room.find:108",
+      4668
+    ],
+    [
+      "room.find:102",
+      4008
+    ],
+    [
+      "room.find:107",
+      2027
+    ],
+    [
+      "room.find:105",
+      2006
+    ],
+    [
+      "room.find:1",
+      28
+    ],
+    [
+      "room.find:3",
+      28
+    ],
+    [
+      "room.find:5",
+      28
+    ],
+    [
+      "room.find:7",
+      28
+    ],
+    [
+      "room.find:117",
+      15
+    ],
+    [
+      "room.find:116",
+      4
+    ]
+  ],
+  "console_errors_head": [],
+  "console_errors_folded": [
+    [
+      "[log] # W#N#   harvester#           [room W#N# pos #,#] Creep role not defined for: crp# harvester",
+      2000
+    ],
+    [
+      "[log] # Script reload - Load: # tickLimit: # limit: # Bucket: #",
+      1
+    ],
+    [
+      "[log] # W#N#                        Setting misplacedSpawn",
+      1
+    ],
+    [
+      "[log] # W#N#                        Setup complete - storing data",
+      1
+    ],
+    [
+      "[log] # W#N#                        Setup completed - storing data",
+      1
+    ]
+  ],
+  "console_head": [
+    "[tick 1][log] 1 Script reload - Load: 5 tickLimit: 500 limit: 20 Bucket: 10000",
+    "[tick 1][log] 1 W1N1                        Setting misplacedSpawn",
+    "[tick 1][log] 1 W1N1                        Setup complete - storing data",
+    "[tick 1][log] 1 W1N1                        Setup completed - storing data",
+    "[tick 1][log] 1 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 2][log] 2 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 3][log] 3 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 4][log] 4 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 5][log] 5 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 6][log] 6 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 7][log] 7 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 8][log] 8 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 9][log] 9 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 10][log] 10 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 11][log] 11 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 12][log] 12 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 13][log] 13 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 14][log] 14 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 15][log] 15 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 16][log] 16 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester"
+  ]
+}

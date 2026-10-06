@@ -229,7 +229,7 @@ fn create_construction_site(
             for (bx, by) in border {
                 if !w
                     .room
-                    .terrain
+                    .terrain()
                     .check_mask(bx, by, kk_core::TERRAIN_MASK_WALL)
                 {
                     return;
@@ -240,7 +240,7 @@ fn create_construction_site(
     if structure_type != "road"
         && structure_type != "extractor"
         && w.room
-            .terrain
+            .terrain()
             .check_mask(ux as usize, uy as usize, kk_core::TERRAIN_MASK_WALL)
     {
         return;
@@ -249,19 +249,20 @@ fn create_construction_site(
     let mut progress_total = cost as u64;
     if structure_type == "road" {
         if w.room
-            .terrain
+            .terrain()
             .check_mask(ux as usize, uy as usize, kk_core::TERRAIN_MASK_SWAMP)
         {
             progress_total *= c::CONSTRUCTION_COST_ROAD_SWAMP_RATIO as u64;
         }
         if w.room
-            .terrain
+            .terrain()
             .check_mask(ux as usize, uy as usize, kk_core::TERRAIN_MASK_WALL)
         {
             progress_total *= c::CONSTRUCTION_COST_ROAD_WALL_RATIO as u64;
         }
     }
-    w.insert_new(RoomObject::ConstructionSite(ConstructionSiteObj {
+    // 动作到此结束；分配错误由共享候选在发布前报告。
+    let _ = w.insert_new(RoomObject::ConstructionSite(ConstructionSiteObj {
         id: 0,
         x: ux,
         y: uy,
@@ -302,7 +303,8 @@ fn create_flag(
     if !(0..=49).contains(&x) || !(0..=49).contains(&y) {
         return;
     }
-    w.insert_new(RoomObject::Flag(FlagObj {
+    // 动作到此结束；分配错误由共享候选在发布前报告。
+    let _ = w.insert_new(RoomObject::Flag(FlagObj {
         id: 0,
         x: x as u8,
         y: y as u8,

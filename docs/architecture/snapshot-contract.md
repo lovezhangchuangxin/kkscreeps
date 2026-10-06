@@ -4,7 +4,7 @@
 
 ## 当前版本与编码边界
 
-`World.generation` 表示整个世界的内容版本。成功推进会递增；取得可变访问也会保守递增，即使最后未修改对象。`commit_room` 本身不递增，批量调用方须按协议在查询前更新版本，因此 generation 不等于对象实际修改次数。
+`World.generation` 表示整个世界的内容版本。受控编辑成功和整轮房间提交均推进版本，账户/市场编辑也会失效旧回执。外部不再取得整房可变引用；`commit_tick_rooms` 先验证完整候选再同时更新时间和缓存，错误不会发布房间前缀。generation 不等于对象实际修改次数，详见[权威状态编辑](state-editing.md)。
 
 `terrain_epoch` 用于地形缓存失效。`RoomVersionHandle` 保存房间名、tick 和世界 generation 等标识，不持有固定的不可变字节；其他房间的变化也会影响其世界版本。`WorldSource` 提供读取接口，当前实现仍构造 JSON。
 

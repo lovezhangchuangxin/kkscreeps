@@ -45,7 +45,8 @@ cf63d8a）。关键锚点：
     └────── RoomPosition 数组（含房间名还原）◀── SearchResult ──┤ 参数清洗后的
                                                                │ 坐标/选项
               begin_tick_plan 每 tick 注入 TickTerrain 到 OpState
-              JSON 通道: world.rooms[].terrain{rev,payload} → b64 解码 → pack
+              生产 JSON/KKPV: 世界实例 + terrain_epoch → Arc<TerrainSet>
+              原始 JSON: 按内容核对并打包，不能只信 rev
               KKPV 通道: 持 SharedKkpvBundle 句柄，首次搜索懒解码公开地形块
 ```
 
@@ -56,8 +57,8 @@ cf63d8a）。关键锚点：
 - **地形来源**：寻路地形是世界公共数据，两通道输入相同——
   - JSON 通道：`world.rooms[room].terrain.payload`（行序 2500 字节 b64，含
     全部注册房，不可见房也只发名称与地形，`kk-world/src/world_json.rs` 的
-    `terrain_json`）。`rev` 即 terrain_epoch：Sandbox 以 rev 缓存打包产物，
-    稳态零解码。
+    `terrain_json`）。`rev` 即 terrain_epoch。生产编排层提供已冻结的共享地形，
+    原始 JSON 输入按内容核对，防止同 rev 的不同世界复用旧地形。
   - KKPV 通道：公开地形束承载全部注册房（`kk-world/src/kkpv.rs`
     `kkpv_public_terrain_blocks`）。`SharedKkpvBundle` 暴露只读字节视图，
     kk-runner 内解析块框架（u32 块数 + 长度目录 + 160 字节块头）取每块
@@ -66,18 +67,9 @@ cf63d8a）。关键锚点：
   lava=4），kk-pathfinder `pack_terrain` 要求列序 `i = x*50 + y` 的 625 字节；
   转换在 kk-runner `pathfinder.rs` 一处完成。位值取低两位（kk-pathfinder
   `pack_terrain` 契约）：wall|swamp(3) 按障碍，lava(4) 低两位为 0 按平原。
-- **进程级地形表**：kk-pathfinder 的 C++ 地形表进程全局（`load_terrain`
-  覆盖同名房）。kk-runner 维护 `LOADED: room → 625 字节` 做内容比对：
-  每次 tick 地形打包后，与 LOADED 逐房**内容比对**（非存在性），差异才
-  `load_terrain`——天然覆盖 set_terrain 与跨分片重建（createShard）的陈旧
-  表项失效。
-- **有限世界墙环**：官方 driver `init` 载入全部分片房地形，搜索触达任何
-  合法房都有地形；本仓世界只含注册房。原生 `room_index_from_pos` 对无地形
-  房直接抛 `Could not load terrain data`（`native/pf.cc`），且该检查先于
-  roomCallback。因此搜索前把每个注册房 8 邻域中**不在世界内**的房间按
-  全墙地形载入（等价官方在世界边缘被墙环绕时的行为）：边界 frontier 触达
-  只得到 obstacle，路径以 incomplete 收尾而不是抛错。墙环房间同样进
-  LOADED 内容比对（期望值恒为全墙），跨分片残留的真实地形会被墙覆盖回。
+- **世界独立地形**：Rust 的不可变 `TerrainSet` 由 Arc 持有；每次搜索显式传入地形查询器。C++ 池化实例只在调用期间借用，返回、异常和取消均解除地形/矩阵/回调绑定；嵌套搜索使用独立实例。`native/pf.cc`、`pf.h` 保留固定上游原文，构建目录只适配地形查询与解除绑定，锚点不匹配时构建失败，算法/方向/平局规则保持。
+- **缓存与输入验证**：生产运行时按世界实例身份 + terrain_epoch 缓存 Arc，同一个快照供 JSON/KKPV 全部玩家搜索。原始 JSON 缺少可信身份，按内容核对；公开 KKPV 束首次搜索解码，错误显式传播。身份与缓存不进入检查点。
+- **有限世界墙环**：注册房八邻域中未注册房作为全墙加入同一 TerrainSet。原生仍先查询地形后调用 roomCallback；墙环外缺房保持 `Could not load terrain data`。世界切换不留下进程级房间表，也不再调用上游重复加载分配路径。
 
 ## 玩家可见形状与已知分歧
 
@@ -88,7 +80,7 @@ cf63d8a）。关键锚点：
 | `options.roomCallback` | 同步懒调用，false 封房、_bits 矩阵参与搜索、异常原值上抛 | D3 已接入 |
 | `Room.findPath` 结构代价 | 按 tick 与选项缓存结构/creep/道路矩阵；costCallback 克隆隔离 | D3 已接入 |
 | 未注册房（墙环外）起点 | 原生抛 `Could not load terrain data` | 分歧：官方全域有地形；目标房在墙环外只得到 incomplete，不抛错 |
-| 同进程多引擎并发搜索 | C++ 地形表进程共享，跨引擎并发搜索会串地形 | 边界登记：embed CLI/ratchet/bot 均单引擎单进程；多引擎仅出现在串行单元测试 |
+| 同进程多引擎并发搜索 | 每次搜索绑定独立不可变地形，同名房不同地形可并发与嵌套 | 双世界并发及超过池深度的嵌套回归验证 |
 | lava(4) 格 | 低两位→平原可走 | 上游打包契约；生成世界不产 lava |
 | `PathFinder.use` | 保持桩（计数）；模式切换无观察面 | 与 xxscreeps 一致 |
 | 垃圾数值选项（如 `heuristicWeight: 'abc'` → NaN） | JS 清洗同官方产 NaN；Rust `SearchOptions::clamped` 将 NaN 归 1.2 后搜索。官方把 NaN 传入 C++，double→整数转换未定义（x86 实效近似权重 0 的泛洪） | 分歧（垃圾输入域）：官方自身为未定义行为，本仓取确定性 1.2 |
@@ -102,5 +94,5 @@ cf63d8a）。关键锚点：
   PathFinder.search/findPathTo/findClosestByPath 退出桩计数后基线形态变化
   须逐项归因登记（路径真化改变 bot 行为本身属预期）。
 - Rust 单测：b64 解码、行序→列序打包（含 kk-core 位掩码）、KKPV 公开束
-  解析对照 kk-world 参考编码、墙环计算、LOADED 内容比对与变更重载。
+  解析对照 kk-world 参考编码、墙环计算、世界隔离、嵌套与释放。
 - sandbox 集成测：JSON 与 KKPV 两通道的搜索结果等同；带墙避让路径。

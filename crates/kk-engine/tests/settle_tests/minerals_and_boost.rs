@@ -129,9 +129,14 @@ fn transfer_mixed_holdings_respect_total_capacity() {
         )
         .unwrap();
     let c1 = f.creep("w1", "p1", 21, 20, &[BodyKind::Move, BodyKind::Carry], 0);
-    if let Some(RoomObject::Creep(cc)) = f.world.get_mut(c1) {
-        cc.store.ghodium = 20;
-    }
+    f.world
+        .edit_object(c1, |object| {
+            if let Some(RoomObject::Creep(cc)) = Some(object) {
+                cc.store.ghodium = 20;
+            }
+            Ok(())
+        })
+        .unwrap();
     // 单笔 20G：余量 1e6-999990=10 ⇒ 只收 10
     let mut b = IntentBatch::default();
     let mut d = IntentData::bare();
@@ -203,9 +208,14 @@ fn mineral_regeneration_clock_and_density_rotation() {
     }
     // 把钟拨近（等价很久以前挂的钟——避免 5 万 tick）：MODERATE(2) 起步
     let t = f.world.time();
-    if let Some(RoomObject::Mineral(mm)) = f.world.get_mut(m) {
-        mm.next_regeneration_time = Some(t + 2); // time 1 → 3
-    }
+    f.world
+        .edit_object(m, |object| {
+            if let Some(RoomObject::Mineral(mm)) = Some(object) {
+                mm.next_regeneration_time = Some(t + 2); // time 1 → 3
+            }
+            Ok(())
+        })
+        .unwrap();
     f.settle(IntentBatch::default()); // time 1：1 >= 2? 否 → 不动
     match f.obj(m) {
         RoomObject::Mineral(mm) => assert_eq!(mm.mineral_amount, 0, "差一 tick 不回填"),
@@ -230,9 +240,14 @@ fn mineral_regeneration_clock_and_density_rotation() {
     let m2 = f2.mineral(10, 10, "U", 0, 2, None);
     f2.settle(IntentBatch::default());
     let t = f2.world.time();
-    if let Some(RoomObject::Mineral(mm)) = f2.world.get_mut(m2) {
-        mm.next_regeneration_time = Some(t + 2);
-    }
+    f2.world
+        .edit_object(m2, |object| {
+            if let Some(RoomObject::Mineral(mm)) = Some(object) {
+                mm.next_regeneration_time = Some(t + 2);
+            }
+            Ok(())
+        })
+        .unwrap();
     f2.settle(IntentBatch::default());
     f2.settle(IntentBatch::default());
     match f2.obj(m2) {
@@ -247,9 +262,14 @@ fn mineral_regeneration_clock_and_density_rotation() {
     let m3 = f3.mineral(12, 12, "K", 0, 1, None);
     f3.settle(IntentBatch::default());
     let t = f3.world.time();
-    if let Some(RoomObject::Mineral(mm)) = f3.world.get_mut(m3) {
-        mm.next_regeneration_time = Some(t + 1);
-    }
+    f3.world
+        .edit_object(m3, |object| {
+            if let Some(RoomObject::Mineral(mm)) = Some(object) {
+                mm.next_regeneration_time = Some(t + 1);
+            }
+            Ok(())
+        })
+        .unwrap();
     f3.settle(IntentBatch::default());
     match f3.obj(m3) {
         RoomObject::Mineral(mm) => {
@@ -337,13 +357,23 @@ fn harvest_mineral_named_slot_and_cooldown_cycle() {
     }
     // 官方 quirk 锁：矿量 < 功率时事件 amount 仍是未钳制的 harvestAmount
     //（T6 采集又挂了 cooldown=5——拨回 0 聚焦本断言，冷却周期已由上文锁定）
-    if let Some(RoomObject::Mineral(mm)) = f.world.get_mut(m) {
-        mm.mineral_amount = 1;
-        mm.next_regeneration_time = None;
-    }
-    if let Some(RoomObject::Extractor(e)) = f.world.get_mut(ex) {
-        e.cooldown = 0;
-    }
+    f.world
+        .edit_object(m, |object| {
+            if let Some(RoomObject::Mineral(mm)) = Some(object) {
+                mm.mineral_amount = 1;
+                mm.next_regeneration_time = None;
+            }
+            Ok(())
+        })
+        .unwrap();
+    f.world
+        .edit_object(ex, |object| {
+            if let Some(RoomObject::Extractor(e)) = Some(object) {
+                e.cooldown = 0;
+            }
+            Ok(())
+        })
+        .unwrap();
     let mut b = IntentBatch::default();
     b.add_object_intent("p1", c, Action::Harvest, IntentData::target(m));
     let events = f.settle(b);

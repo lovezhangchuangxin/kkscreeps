@@ -1,0 +1,16 @@
+{
+  "rustc --version": "rustc 1.98.1 (48a229cea 2026-09-01)",
+  "node --version": "v24.11.0",
+  "pnpm --version": "12.4.2",
+  "sysctl -n machdep.cpu.brand_string": "Apple M4",
+  "sysctl -n hw.ncpu": "10",
+  "sysctl -n hw.memsize": "25769803776",
+  "upstream_pin": "34a630efa42908c117c19c25d2350fa2387bd633",
+  "tooangel_pin": "87645a0b933360224737cca3b18ae9d112f46fef",
+  "overmind_release": "v0.5.2.1; fixed URL downloaded again and SHA-256 matched cache",
+  "overmind_sha256": "e78ad3c8e58a955163fc81adf6be1d584c881081a6b0a78156d519f202b5a4b8",
+  "unchanged_native_sha256": {
+    "crates/kk-pathfinder/native/pf.cc": "1a9b715e20b09bde35af7a082e91dd0476ab1b5c0cb081ad56469ffc160f3aa6",
+    "crates/kk-pathfinder/native/pf.h": "fc964749502cf18d867d2061ea27b0327fe03b386791d10e87f0de8568e4f96b"
+  }
+}

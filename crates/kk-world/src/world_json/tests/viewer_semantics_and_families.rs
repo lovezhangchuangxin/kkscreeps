@@ -9,8 +9,8 @@ fn tombstone_and_ruin_world_projection_and_vision() {
     world.time = 100;
     let mut terrain = Terrain::plains();
     terrain.normalize();
-    world.register_room("W1N1", terrain);
-    world.register_room("W2N2", Terrain::plains());
+    world.register_room("W1N1", terrain).unwrap();
+    world.register_room("W2N2", Terrain::plains()).unwrap();
     let tomb = world
         .insert(
             "W1N1",
@@ -135,7 +135,7 @@ fn controller_owner_three_states() {
     let mut world = World::new(42);
     let mut terrain = Terrain::plains();
     terrain.normalize();
-    world.register_room("W1N1", terrain);
+    world.register_room("W1N1", terrain).unwrap();
     let owned = world.insert("W1N1", mk(Some("p1"), false)).unwrap();
     let cleared = world.insert("W1N1", mk(None, true)).unwrap();
     let virgin = world.insert("W1N1", mk(None, false)).unwrap();
@@ -161,7 +161,7 @@ fn store_capacity_projection_family() {
     let mut world = World::new(7);
     let mut terrain = Terrain::plains();
     terrain.normalize();
-    world.register_room("W1N1", terrain);
+    world.register_room("W1N1", terrain).unwrap();
     let ctl = ControllerObj {
         id: 0,
         x: 5,
@@ -305,7 +305,7 @@ fn controller_b2_projection_fields() {
     world.time = 100;
     let mut terrain = Terrain::plains();
     terrain.normalize();
-    world.register_room("W1N1", terrain);
+    world.register_room("W1N1", terrain).unwrap();
     let full = world
         .insert(
             "W1N1",
@@ -356,7 +356,7 @@ fn find_per_viewer_semantics() {
     world.time = 10;
     let mut terrain = Terrain::plains();
     terrain.normalize();
-    world.register_room("W1N1", terrain);
+    world.register_room("W1N1", terrain).unwrap();
     let ctx = PlaceCtx {
         buildings: Default::default(),
         links: crate::place::builtin_link_rules(),
@@ -498,7 +498,7 @@ fn energy_per_viewer_projection() {
     world.time = 1;
     let mut terrain = Terrain::plains();
     terrain.normalize();
-    world.register_room("W1N1", terrain);
+    world.register_room("W1N1", terrain).unwrap();
     let ctx = PlaceCtx {
         buildings: Default::default(),
         links: crate::place::builtin_link_rules(),
@@ -544,8 +544,8 @@ fn mineral_and_extractor_projection_and_find() {
     world.time = 100;
     let mut terrain = Terrain::plains();
     terrain.normalize();
-    world.register_room("W1N1", terrain);
-    world.register_room("W2N2", Terrain::plains());
+    world.register_room("W1N1", terrain).unwrap();
+    world.register_room("W2N2", Terrain::plains()).unwrap();
     let mineral = world
         .insert(
             "W1N1",
@@ -695,7 +695,7 @@ fn gcl_points_projection() {
     let mut world = World::new(1);
     let mut terrain = Terrain::plains();
     terrain.normalize();
-    world.register_room("W1N1", terrain);
+    world.register_room("W1N1", terrain).unwrap();
     let j = world.world_json_for_viewer("p1", 1_000_000);
     assert_eq!(j["gcl"], 1_000_000);
     assert_eq!(j["user"], "p1");

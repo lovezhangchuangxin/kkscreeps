@@ -4,6 +4,7 @@ use super::*;
 impl Engine {
     /// 只读检查候选房间覆盖、ID 游标和玩家键，失败进入 NeedsRecovery。
     pub(super) fn validate_stage(&self, cand: &mut txn::OwnedTickTxn) -> Result<(), SettleError> {
+        cand.state.check_fatal()?;
         // 房间数和顺序均须与准备阶段一致，集合相等不能验证顺序。
         if cand.rooms.len() != cand.room_names.len()
             || cand
@@ -28,6 +29,24 @@ impl Engine {
                 "id 候选回退：{} < 基线 {base}",
                 state.next_id
             )));
+        }
+        let mut ids = std::collections::HashSet::new();
+        for (name, room) in &cand.rooms {
+            for (id, object) in &room.objects {
+                let (x, y) = object.pos();
+                if id.0 == 0
+                    || id.0 >= state.next_id
+                    || object.id() != id.0
+                    || x >= 50
+                    || y >= 50
+                    || !ids.insert(*id)
+                {
+                    return Err(SettleError(format!(
+                        "房间 {name} 对象 {} 的 ID/坐标不变式无效",
+                        id.as_str()
+                    )));
+                }
+            }
         }
         // 候选可以增加玩家，不能删除已提交的玩家。
         if let Some(missing) = self
@@ -218,5 +237,74 @@ impl Engine {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod invariant_tests {
+    use super::*;
+
+    #[test]
+    fn publication_rejects_duplicate_cursor_record_id_and_coordinate_drift() {
+        let mut engine = Engine::default();
+        for name in ["W1N1", "W2N2"] {
+            engine
+                .world
+                .register_room(name, kk_core::Terrain::plains())
+                .unwrap();
+            engine
+                .world
+                .insert(
+                    name,
+                    RoomObject::Energy(kk_schema::room::EnergyObj {
+                        id: 0,
+                        x: 20,
+                        y: 20,
+                        resource_type: 0,
+                        amount: 10,
+                        resource: None,
+                    }),
+                )
+                .unwrap();
+        }
+        for mutation in 0..4 {
+            let mut txn = engine
+                .prepare_tick(IntentBatch::default(), TickInput { now_ms: 0 })
+                .unwrap();
+            txn.rooms = engine
+                .world
+                .rooms()
+                .iter()
+                .map(|(name, room)| (name.clone(), room.clone()))
+                .collect();
+            let (id, object) = txn.rooms[0]
+                .1
+                .objects
+                .iter()
+                .next()
+                .map(|(id, o)| (*id, o.clone()))
+                .unwrap();
+            match mutation {
+                0 => {
+                    txn.rooms[1].1.objects.insert(id, object);
+                }
+                1 => {
+                    txn.state.inner.borrow_mut().next_id = id.0;
+                }
+                2 => {
+                    txn.rooms[0].1.objects.get_mut(&id).unwrap().set_id(999);
+                }
+                _ => {
+                    if let RoomObject::Energy(object) = txn.rooms[0].1.objects.get_mut(&id).unwrap()
+                    {
+                        object.x = 50;
+                    }
+                }
+            }
+            assert!(
+                engine.validate_stage(&mut txn).is_err(),
+                "变异 {mutation} 必须失败"
+            );
+        }
     }
 }

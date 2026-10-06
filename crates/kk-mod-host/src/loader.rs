@@ -18,6 +18,24 @@ use crate::package::ModPackage;
 pub(crate) const SDK_SPECIFIER: &str = "@kkscreeps/mod";
 pub(crate) const SDK_URL: &str = "kkmods:sdk";
 
+// 固定表防止 Mod 猜测内部 URL 绕过注册入口。解析器只为 SDK 引用者开放。
+fn sdk_source(url: &str) -> Option<&'static str> {
+    match url {
+        SDK_URL => Some(include_str!("sdk.js")),
+        "kkmods:sdk/state.js" => Some(include_str!("sdk/state.js")),
+        "kkmods:sdk/registration.js" => Some(include_str!("sdk/registration.js")),
+        "kkmods:sdk/rules.js" => Some(include_str!("sdk/rules.js")),
+        "kkmods:sdk/refresh.js" => Some(include_str!("sdk/refresh.js")),
+        "kkmods:sdk/chains.js" => Some(include_str!("sdk/chains.js")),
+        "kkmods:sdk/resources.js" => Some(include_str!("sdk/resources.js")),
+        "kkmods:sdk/objects.js" => Some(include_str!("sdk/objects.js")),
+        "kkmods:sdk/movement.js" => Some(include_str!("sdk/movement.js")),
+        "kkmods:sdk/combat.js" => Some(include_str!("sdk/combat.js")),
+        "kkmods:sdk/build.js" => Some(include_str!("sdk/build.js")),
+        _ => None,
+    }
+}
+
 /// 包内模块加载器：字节来自装载期的内存快照，注册期不触碰磁盘。
 /// 只允许包内相对导入与 `@kkscreeps/mod`；跨包导入与裸导入拒绝。
 pub(crate) struct PackageModuleLoader {
@@ -30,8 +48,8 @@ impl PackageModuleLoader {
         specifier: &ModuleSpecifier,
         maybe_referrer: Option<&ModuleLoadReferrer>,
     ) -> Result<ModuleSource, JsErrorBox> {
-        if specifier.as_str() == SDK_URL {
-            let sdk = include_str!("sdk.js").as_bytes().to_vec();
+        if let Some(source) = sdk_source(specifier.as_str()) {
+            let sdk = source.as_bytes().to_vec();
             return Ok(ModuleSource::new(
                 ModuleType::JavaScript,
                 ModuleSourceCode::Bytes(sdk.into_boxed_slice().into()),
@@ -110,7 +128,13 @@ impl ModuleLoader for PackageModuleLoader {
             ));
         }
         if referrer.starts_with("kkmods:") {
-            return Err(JsErrorBox::generic("SDK 模块不导入任何依赖"));
+            if let Some(module) = specifier.strip_prefix("./") {
+                let url = format!("{SDK_URL}/{module}");
+                if sdk_source(&url).is_some() {
+                    return ModuleSpecifier::parse(&url).map_err(JsErrorBox::from_err);
+                }
+            }
+            return Err(JsErrorBox::generic("SDK 只允许固定内部静态模块"));
         }
         let absolute = specifier.contains("://");
         if absolute && !specifier.starts_with("file://") {

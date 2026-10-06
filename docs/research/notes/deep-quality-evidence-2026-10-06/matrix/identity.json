@@ -1,0 +1,17 @@
+{
+  "binary_sha256": {
+    "before": "cdb87ac5569c1e49f647063238faa2e080d0b444e853439f3a7df310860865c5",
+    "after": "f0c78d0b4bcb997629a72f30c0bbb30cf3f603bf0bc2192f3ba86bbf681893e4"
+  },
+  "pathfinder_sha256": {
+    "before": "5e3bc9accdabb8b7887599cc403326986175b65368a17b3fa861f0e2084b7099",
+    "after": "1c8f364145feb63599a118d0c95d70a157df3e21e1419fece9fe91a9999a32e0"
+  },
+  "fixture_sha256": {
+    "compat/fixtures/mod-perf/empty/perf/mod.json": "4d07dd5a68f6bd3b8ca5b2fc7a3df96c24e0a96a9ea7247412e2740f0fec239c",
+    "compat/fixtures/mod-perf/empty/perf/server.js": "be195a3b242a672513c3c6dcaa2f86c9be70a5e856ee90bd019759af905acdb4",
+    "compat/fixtures/mod-perf/chain/perf/mod.json": "4d07dd5a68f6bd3b8ca5b2fc7a3df96c24e0a96a9ea7247412e2740f0fec239c",
+    "compat/fixtures/mod-perf/chain/perf/server.js": "a0ee4b55040ece5194164eeeb97c601b1901154a8452d6c2f955f0023168746e",
+    "crates/kk-pathfinder/tests/fixtures/sample-terrain.bin": "ee653ff6f4bb1c28d33aafd094ecb24eb7258c29d925aaf0a28fd36a6090c7d4"
+  }
+}

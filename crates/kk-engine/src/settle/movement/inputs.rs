@@ -49,12 +49,12 @@ impl Movement {
                 weight: 1,
                 pulled: self.pulled_by.contains_key(&id),
                 pulling: self.pull_of.contains_key(&id),
-                terrain_wall: room.terrain.check_mask(
+                terrain_wall: room.terrain().check_mask(
                     cell.0 as usize,
                     cell.1 as usize,
                     TERRAIN_MASK_WALL,
                 ),
-                terrain_swamp: room.terrain.check_mask(
+                terrain_swamp: room.terrain().check_mask(
                     cell.0 as usize,
                     cell.1 as usize,
                     TERRAIN_MASK_SWAMP,
@@ -175,7 +175,7 @@ impl Movement {
             // nativeFatigue 是缺项回退值，必须等于原生实际收费。
             let weight = super::move_weight(creep) as i64;
             let terrain_swamp =
-                room.terrain
+                room.terrain()
                     .check_mask(cell.0 as usize, cell.1 as usize, TERRAIN_MASK_SWAMP);
             let has_road = has_road(room, index, cell);
             // 与 movement_execute 同源的费率规则：沼泽 10、路 1 覆盖沼泽。
@@ -451,7 +451,7 @@ impl Movement {
                 owner,
                 target_x: cell.0,
                 target_y: cell.1,
-                terrain_wall: room.terrain.check_mask(
+                terrain_wall: room.terrain().check_mask(
                     cell.0 as usize,
                     cell.1 as usize,
                     TERRAIN_MASK_WALL,

@@ -389,8 +389,8 @@ fn dangling_extension_reference_reconciles_on_publish() {
         .expect("悬空引用收敛而非失败");
     // 收敛后 tick 正常提交：时间推进，悬空的 target 字段被删除；
     // 它是该对象唯一的扩展字段，行随之清空。
-    assert_eq!(engine.world.time(), 1);
-    let room = engine.world.room("W1N1").unwrap();
+    assert_eq!(engine.world().time(), 1);
+    let room = engine.world().room("W1N1").unwrap();
     assert!(
         room.extensions
             .get(&l1)
@@ -437,7 +437,7 @@ fn dangling_extension_reference_reconciles_on_publish() {
     engine
         .tick_with_intents(transfer_batch(a, b))
         .expect("第一轮合法引用提交");
-    let stored = engine.world.room("W1N1").unwrap();
+    let stored = engine.world().room("W1N1").unwrap();
     assert_eq!(
         stored.extensions[&a]["extmod:target"],
         json!(b.as_str()),
@@ -446,7 +446,7 @@ fn dangling_extension_reference_reconciles_on_publish() {
     engine
         .tick_with_intents(transfer_batch(a, b))
         .expect("销毁轮收敛悬空引用后提交");
-    let room = engine.world.room("W1N1").unwrap();
+    let room = engine.world().room("W1N1").unwrap();
     assert!(!room.objects.contains_key(&b), "目标对象已销毁");
     assert!(
         room.extensions
@@ -454,7 +454,7 @@ fn dangling_extension_reference_reconciles_on_publish() {
             .is_none_or(|fields| fields.get("extmod:target").is_none()),
         "已提交的悬空引用在发布前删除"
     );
-    assert_eq!(engine.world.time(), 2);
+    assert_eq!(engine.world().time(), 2);
 }
 
 /// 删除对象清理扩展：不留孤儿字段；直改扩展表塞未声明键在发布前被拒。

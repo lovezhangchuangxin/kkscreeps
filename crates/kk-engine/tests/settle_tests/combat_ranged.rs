@@ -259,13 +259,18 @@ fn ranged_attack_boost_multiplier() {
     // 类型键误写为 rangedAttack 会查不到 boost，退回未强化功率。
     let mut f = Fixture::new(1, terrain_with(&[]));
     let atk = f.creep("atk", "p1", 10, 10, &[BodyKind::RangedAttack], 0);
-    if let Some(RoomObject::Creep(c)) = f.world.get_mut(atk) {
-        for part in &mut c.body {
-            if part.kind == BodyKind::RangedAttack.code() {
-                part.boost = Some("XKHO2".into());
+    f.world
+        .edit_object(atk, |object| {
+            if let Some(RoomObject::Creep(c)) = Some(object) {
+                for part in &mut c.body {
+                    if part.kind == BodyKind::RangedAttack.code() {
+                        part.boost = Some("XKHO2".into());
+                    }
+                }
             }
-        }
-    }
+            Ok(())
+        })
+        .unwrap();
     let victim = f.creep("v", "p2", 11, 11, &[BodyKind::Tough], 0);
     f.settle(ranged_attack_intent("p1", atk, victim));
     assert_eq!(creep_parts(&f, victim).0, 60, "100−10×4（XKHO2 boost）");

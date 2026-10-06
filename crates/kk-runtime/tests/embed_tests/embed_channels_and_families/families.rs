@@ -44,7 +44,9 @@ pub(crate) fn embed_intent_channel_impl() -> anyhow::Result<()> {
     let mut world = kk_world::World::new(1);
     let mut terrain = kk_core::Terrain::plains();
     terrain.normalize();
-    world.register_room("W1N1", terrain);
+    world
+        .register_room("W1N1", terrain)
+        .map_err(anyhow::Error::msg)?;
     world
         .insert(
             "W1N1",
@@ -136,8 +138,8 @@ pub(crate) fn embed_intent_channel_impl() -> anyhow::Result<()> {
     engine
         .tick_with_intents(harvest_batch)
         .map_err(|err| anyhow::anyhow!("{err}"))?;
-    let (x, y, energy, src_energy) = match engine.world.get(fake_creep).unwrap().1 {
-        kk_schema::room::RoomObject::Creep(c) => match engine.world.get(fake_source).unwrap().1 {
+    let (x, y, energy, src_energy) = match engine.world().get(fake_creep).unwrap().1 {
+        kk_schema::room::RoomObject::Creep(c) => match engine.world().get(fake_source).unwrap().1 {
             kk_schema::room::RoomObject::Source(s) => {
                 (c.x, c.y, c.store.energy as i64, s.energy as i64)
             }

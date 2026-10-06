@@ -50,7 +50,7 @@ impl Engine {
         let prepared = txn.into_prepared()?;
         self.run_state = RunState::Prepared { tick: time };
         cursor.enter(TickStage::Publish)?;
-        self.publish_tick(prepared);
+        self.publish_tick(prepared)?;
         Ok(())
     }
 
@@ -145,18 +145,17 @@ impl Engine {
     }
 
     /// 将已校验候选写回内存；不返回 Result，也不捕获 panic。
-    /// World::commit_room 不递增版本。全部房间写回后须先推进时间，再允许
+    /// World::commit_tick_rooms 不递增版本。全部房间写回后须先推进时间，再允许
     /// 查询世界，使目录和投影缓存一起失效。
-    pub(super) fn publish_tick(&mut self, prepared: txn::PreparedTick) {
+    pub(super) fn publish_tick(&mut self, prepared: txn::PreparedTick) -> Result<(), SettleError> {
+        self.world
+            .commit_tick_rooms(prepared.rooms, prepared.next_id)
+            .map_err(SettleError)?;
         self.market = prepared.market;
-        for (name, room) in prepared.rooms {
-            self.world.commit_room(name, room);
-        }
         self.players = prepared.players;
         self.mod_states = prepared.mod_states;
         self.next_id = prepared.next_id;
-        self.world.bump_next_obj_id(self.next_id);
         self.last_events = prepared.events;
-        self.world.advance_ticks(1);
+        Ok(())
     }
 }

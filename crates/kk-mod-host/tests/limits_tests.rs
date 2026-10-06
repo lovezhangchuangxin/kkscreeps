@@ -28,6 +28,17 @@ impl ChainHost for SleepingHost {
         Ok(())
     }
 }
+
+impl kk_mod_host::ObjectsHost for SleepingHost {}
+
+impl kk_mod_host::ResourcesHost for SleepingHost {}
+
+impl kk_mod_host::CombatHost for SleepingHost {}
+
+impl kk_mod_host::BuildHost for SleepingHost {}
+
+impl kk_mod_host::MovementHost for SleepingHost {}
+
 impl ChainHost for Host {
     fn read(&mut self, _: &str) -> Result<ChainContext, String> {
         Ok(ChainContext {
@@ -48,6 +59,16 @@ impl ChainHost for Host {
         Ok(())
     }
 }
+
+impl kk_mod_host::ObjectsHost for Host {}
+
+impl kk_mod_host::ResourcesHost for Host {}
+
+impl kk_mod_host::CombatHost for Host {}
+
+impl kk_mod_host::BuildHost for Host {}
+
+impl kk_mod_host::MovementHost for Host {}
 
 #[test]
 fn resource_fault_matrix() -> Result<(), Box<dyn std::error::Error>> {

@@ -76,8 +76,13 @@ impl EmbedEngine {
     /// 全玩家一份）+ 公开束保留报告。只读世界、复用与派发相同的投影
     /// 入口（含 market 注入），不在任何计时窗口内调用。
     pub fn injection_size_sample(&self, handle: &str) -> anyhow::Result<Value> {
-        let source: &dyn WorldSource = &self.engine.world;
-        let gcl = self.engine.players.get(handle).map(|p| p.gcl).unwrap_or(0);
+        let source: &dyn WorldSource = self.engine.world();
+        let gcl = self
+            .engine
+            .players()
+            .get(handle)
+            .map(|p| p.gcl)
+            .unwrap_or(0);
         if self.kkpv_channel {
             let audience = kkpv_audience_hash(handle);
             let (mut envelope, blocks) = source
@@ -154,7 +159,7 @@ impl EmbedEngine {
 pub(super) fn market_view(engine: &kk_engine::settle::Engine, viewer: &str) -> Value {
     fn tx_list(engine: &kk_engine::settle::Engine, viewer: &str, outgoing: bool) -> Vec<Value> {
         engine
-            .market
+            .market()
             .transactions_for(viewer, outgoing, 100)
             .iter()
             .map(|t| {
@@ -186,7 +191,7 @@ pub(super) fn market_view(engine: &kk_engine::settle::Engine, viewer: &str) -> V
     // 历史行情当前未实现，返回只有 all 空数组的占位对象。
     let mut orders_all = serde_json::Map::new();
     let mut by_rt: BTreeMap<String, serde_json::Map<String, serde_json::Value>> = BTreeMap::new();
-    for order in engine.market.orders.values().filter(|o| o.active) {
+    for order in engine.market().orders.values().filter(|o| o.active) {
         let v = order_projection(order);
         by_rt
             .entry(order.resource_type.clone())
@@ -200,7 +205,7 @@ pub(super) fn market_view(engine: &kk_engine::settle::Engine, viewer: &str) -> V
         orders.insert(rt, Value::Object(m));
     }
     let my_orders: Vec<Value> = engine
-        .market
+        .market()
         .orders
         .values()
         .filter(|o| o.user == viewer)
@@ -208,13 +213,13 @@ pub(super) fn market_view(engine: &kk_engine::settle::Engine, viewer: &str) -> V
         .collect();
     // 跨分片资源余额用于市场 deal 的资源检查。
     let mut resources = serde_json::Map::new();
-    if let Some(p) = engine.players.get(viewer) {
+    if let Some(p) = engine.players().get(viewer) {
         for (k, v) in &p.resources {
             resources.insert(k.clone(), json!(v));
         }
     }
     json!({
-        "money_milli": engine.players.get(viewer).map(|p| p.money).unwrap_or(0),
+        "money_milli": engine.players().get(viewer).map(|p| p.money).unwrap_or(0),
         "resources": Value::Object(resources),
         "transactions": {
             "outgoing": tx_list(engine, viewer, true),

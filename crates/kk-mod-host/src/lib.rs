@@ -29,7 +29,10 @@ mod selection;
 mod v8_convert;
 mod write;
 
-pub use chain::{ChainContext, ChainHost, ChainTarget};
+pub use chain::{
+    BuildHost, ChainContext, ChainHost, ChainTarget, CombatHost, MovementHost, ObjectsHost,
+    ResourcesHost,
+};
 pub use error::{ModFault, ModFaultKind, ModHostError, ModHostResult};
 pub use limits::{ModExecutionLimits, ModVmLimits};
 pub use manifest::{ModManifest, SDK_API_VERSION, Version, VersionReq};

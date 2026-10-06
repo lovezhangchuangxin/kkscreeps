@@ -11,7 +11,7 @@ fn shared_candidates_retry_without_leaking_players_ids_or_notifications() {
         let ctl = f.controller(4, Some("p1"));
         let worker = f.creep("up", "p1", 5, 6, &[BodyKind::Work, BodyKind::Carry], 50);
         let dropper = f.creep("drop", "p1", 8, 8, &[BodyKind::Carry], 10);
-        f.world.register_room("W2N2", terrain_with(&[]));
+        f.world.register_room("W2N2", terrain_with(&[])).unwrap();
         let mut batch = IntentBatch::default();
         batch.add_object_intent(
             "p1",
@@ -34,21 +34,30 @@ fn shared_candidates_retry_without_leaking_players_ids_or_notifications() {
             });
         let mut engine = kk_engine::Engine::new(f.world.clone());
         engine
-            .players
-            .entry("p1".into())
-            .or_default()
-            .rooms
-            .insert("old".into());
-        let before_players = engine.players.clone();
-        let generation = engine.world.generation();
-        let next = engine.world.next_obj_id();
+            .edit_players(|players| {
+                players
+                    .entry("p1".into())
+                    .or_default()
+                    .rooms
+                    .insert("old".into());
+                Ok(())
+            })
+            .unwrap();
+        let before_players = engine.players().clone();
+        let generation = engine.world().generation();
+        let next = engine.world().next_obj_id();
         let before_room = engine
-            .world
+            .world()
             .room("W1N1")
             .unwrap()
             .encode_snapshot(0, 1, next);
         let mut reference = kk_engine::Engine::new(f.world);
-        reference.players = before_players.clone();
+        reference
+            .edit_players(|players| {
+                *players = before_players.clone();
+                Ok(())
+            })
+            .unwrap();
         let input = kk_engine::TickInput { now_ms: 42 };
         reference
             .tick_with_intents_with_input(batch.clone(), input)
@@ -63,12 +72,12 @@ fn shared_candidates_retry_without_leaking_players_ids_or_notifications() {
                 .tick_with_intents_with_input(batch.clone(), input)
                 .is_err()
         );
-        assert_eq!(engine.players, before_players);
-        assert_eq!(engine.world.generation(), generation);
-        assert_eq!(engine.world.next_obj_id(), next);
+        assert_eq!(engine.players(), &before_players);
+        assert_eq!(engine.world().generation(), generation);
+        assert_eq!(engine.world().next_obj_id(), next);
         assert_eq!(
             engine
-                .world
+                .world()
                 .room("W1N1")
                 .unwrap()
                 .encode_snapshot(0, 1, next),
@@ -77,24 +86,30 @@ fn shared_candidates_retry_without_leaking_players_ids_or_notifications() {
         engine.set_fail_stage_for_test(None);
         engine.set_fail_room_for_test(None);
         engine.tick_with_intents_with_input(batch, input).unwrap();
-        assert_eq!(engine.players, reference.players);
-        assert_eq!(engine.players["p1"].gcl, 1);
-        assert_eq!(engine.players["p1"].notifications.len(), 1);
-        assert_eq!(engine.players["p1"].rooms, BTreeSet::from(["W1N1".into()]));
-        assert_eq!(engine.world.next_obj_id(), reference.world.next_obj_id());
-        assert_eq!(engine.world.generation(), generation + 1);
-        for (name, room) in engine.world.rooms() {
+        assert_eq!(engine.players(), reference.players());
+        assert_eq!(engine.players()["p1"].gcl, 1);
+        assert_eq!(engine.players()["p1"].notifications.len(), 1);
+        assert_eq!(
+            engine.players()["p1"].rooms,
+            BTreeSet::from(["W1N1".into()])
+        );
+        assert_eq!(
+            engine.world().next_obj_id(),
+            reference.world().next_obj_id()
+        );
+        assert_eq!(engine.world().generation(), generation + 1);
+        for (name, room) in engine.world().rooms() {
             assert_eq!(
-                room.encode_snapshot(1, 1, engine.world.next_obj_id()),
-                reference.world.room(name).unwrap().encode_snapshot(
+                room.encode_snapshot(1, 1, engine.world().next_obj_id()),
+                reference.world().room(name).unwrap().encode_snapshot(
                     1,
                     1,
-                    reference.world.next_obj_id()
+                    reference.world().next_obj_id()
                 )
             );
         }
-        assert_eq!(engine.market, reference.market);
-        assert_eq!(engine.last_events, reference.last_events);
+        assert_eq!(engine.market(), reference.market());
+        assert_eq!(engine.last_events(), reference.last_events());
     }
 }
 
@@ -155,7 +170,7 @@ fn notify_intent_from_json_parses_and_sanitizes() {
 #[test]
 fn notify_intents_persist_to_player_state_with_cap() {
     let mut world = World::new(1);
-    world.register_room("W1N1", terrain_with(&[]));
+    world.register_room("W1N1", terrain_with(&[])).unwrap();
     let mut engine = kk_engine::settle::Engine::new(world);
 
     let mut items = Vec::new();
@@ -166,7 +181,7 @@ fn notify_intents_persist_to_player_state_with_cap() {
     let batch = IntentBatch::from_json("p1", &list);
     engine.tick_with_intents(batch).unwrap();
 
-    let state = engine.players.get("p1").expect("玩家状态");
+    let state = engine.players().get("p1").expect("玩家状态");
     assert_eq!(state.notifications.len(), 100, "有界保留最近 100 条");
     assert_eq!(state.notifications[0].message, "n50", "最旧被淘汰");
     assert_eq!(state.notifications[99].message, "n149");
@@ -178,7 +193,7 @@ fn notify_intents_persist_to_player_state_with_cap() {
     engine
         .tick_with_intents(IntentBatch::from_json("p1", &list))
         .unwrap();
-    let state = engine.players.get("p1").unwrap();
+    let state = engine.players().get("p1").unwrap();
     assert_eq!(state.notifications.len(), 100);
     assert_eq!(state.notifications[99].message, "more");
     assert_eq!(state.notifications[99].tick, 1, "第二 tick 落账 tick=1");

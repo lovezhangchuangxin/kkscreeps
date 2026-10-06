@@ -1,8 +1,9 @@
+mod support;
 use kk_pathfinder::{
     CostMatrix, Goal, RoomDecision, SearchOptions, SearchResult, TERRAIN_PLAIN, TERRAIN_SWAMP,
-    TERRAIN_WALL, WorldPosition, generate_room_name, load_terrain, pack_terrain, search,
-    search_with_room_callback,
+    TERRAIN_WALL, WorldPosition, generate_room_name, pack_terrain,
 };
+use support::{load_terrain, search, search_with_room_callback};
 
 fn pos(room: &str, x: u32, y: u32) -> WorldPosition {
     WorldPosition::from_room(room, x, y).unwrap()

@@ -5,7 +5,7 @@ use super::*;
 #[test]
 fn storage_named_resources_reach_all_projections() {
     let mut world = World::new(1);
-    world.register_room("W1N1", Terrain::plains());
+    world.register_room("W1N1", Terrain::plains()).unwrap();
     let storage = normalize(
         "structure",
         &json!({
@@ -47,7 +47,7 @@ fn terrain_payload_cache_epoch_invalidation() {
     let mut world = World::new(1);
     let mut t = Terrain::plains();
     t.normalize();
-    world.register_room("W1N1", t);
+    world.register_room("W1N1", t).unwrap();
     let first = world.world_json()["rooms"]["W1N1"]["terrain"]["payload"]
         .as_str()
         .unwrap()
@@ -81,7 +81,7 @@ fn terrain_payload_cache_epoch_invalidation() {
 #[test]
 fn store_and_progress_single_source_edges() {
     let mut world = World::new(1);
-    world.register_room("W1N1", Terrain::plains());
+    world.register_room("W1N1", Terrain::plains()).unwrap();
     world
         .insert(
             "W1N1",
@@ -157,7 +157,7 @@ fn store_and_progress_single_source_edges() {
     // progressTotal：0 级 → 0；2 级 → 45000；8 级 → 0（世界投影 0 兜底）
     for (level, expect) in [(0u8, 0), (2, 45000), (8, 0)] {
         let mut w2 = World::new(1);
-        w2.register_room("W2N2", Terrain::plains());
+        w2.register_room("W2N2", Terrain::plains()).unwrap();
         w2.insert(
             "W2N2",
             RoomObject::Controller(kk_schema::room::ControllerObj {
@@ -190,7 +190,7 @@ fn projection_shape_and_find() {
     world.time = 55;
     let mut terrain = Terrain::plains();
     terrain.normalize();
-    world.register_room("W1N1", terrain);
+    world.register_room("W1N1", terrain).unwrap();
 
     let ctl = ControllerObj {
         id: 0,
@@ -289,7 +289,7 @@ fn generic_objects_stay_visible_to_find() {
     let mut world = World::new(1);
     let mut terrain = Terrain::plains();
     terrain.normalize();
-    world.register_room("W1N1", terrain);
+    world.register_room("W1N1", terrain).unwrap();
     let ctx = PlaceCtx {
         buildings: Default::default(),
         links: crate::place::builtin_link_rules(),
@@ -337,7 +337,7 @@ fn generic_objects_stay_visible_to_find() {
 fn mod_objects_excluded_from_all_player_planes() {
     use crate::world_json::matches_find;
     let mut world = crate::world::World::new(9);
-    world.register_room("W1N1", Terrain::plains());
+    world.register_room("W1N1", Terrain::plains()).unwrap();
     world
         .insert(
             "W1N1",
@@ -454,7 +454,7 @@ fn surface_fixture() -> kk_mod_api::player_surface::PlayerSurface {
 #[test]
 fn mod_objects_project_with_visibility_cut() {
     let mut world = crate::world::World::new(11);
-    world.register_room("W1N1", Terrain::plains());
+    world.register_room("W1N1", Terrain::plains()).unwrap();
     // p1 的 creep 授予房间视野（Mod 对象自身不授予）。
     world
         .insert("W1N1", kk_schema::room::RoomObject::Creep(test_creep()))
@@ -567,7 +567,7 @@ fn mod_objects_project_with_visibility_cut() {
 #[test]
 fn admin_snapshot_face_reads_server_only_player_projection_does_not() {
     let mut world = crate::world::World::new(12);
-    world.register_room("W1N1", Terrain::plains());
+    world.register_room("W1N1", Terrain::plains()).unwrap();
     world
         .insert("W1N1", kk_schema::room::RoomObject::Creep(test_creep()))
         .unwrap();
@@ -614,7 +614,7 @@ fn owner_collection_in_invisible_room_matches_across_channels() {
     // 对象按归属者集合语义仍对归属者导出——两条通道都必须如此（曾因
     // KKPV 侧门序错误出现 JSON 可见/KKPV 不可见的分叉）。
     let mut world = crate::world::World::new(13);
-    world.register_room("W2N2", Terrain::plains());
+    world.register_room("W2N2", Terrain::plains()).unwrap();
     let vault_id = world
         .insert(
             "W2N2",
@@ -666,7 +666,7 @@ fn owner_collection_in_invisible_room_matches_across_channels() {
 #[test]
 fn mod_records_match_across_json_and_kkpv_channels() {
     let mut world = crate::world::World::new(12);
-    world.register_room("W1N1", Terrain::plains());
+    world.register_room("W1N1", Terrain::plains()).unwrap();
     world
         .insert("W1N1", kk_schema::room::RoomObject::Creep(test_creep()))
         .unwrap();

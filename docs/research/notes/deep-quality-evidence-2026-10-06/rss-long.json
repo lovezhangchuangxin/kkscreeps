@@ -1,0 +1,17 @@
+{
+  "test": "kk-pathfinder isolation::terrain_replacement_rss_plateaus（--ignored --nocapture --test-threads=1，独立窗口）",
+  "binary": "/tmp/kkscreeps-quality-20261006/final/isolation",
+  "binary_sha256": "574343c55c662e437d90bb76e9a0fff59c6fbd2ab9f965934b2297111a02354b",
+  "workload": "1000 次预热 + 5×10000 双世界替换 + 每次替换 2 次搜索（共 100000 次搜索）",
+  "terrain_rss_trend_bytes": [
+    6422528,
+    6504448,
+    6504448,
+    6946816,
+    6946816,
+    6946816
+  ],
+  "growth_bytes": 524288,
+  "assertion": "growth < 16MiB",
+  "verdict": "passed-plateau（末三检查点 6946816 持平，无持续增长）"
+}

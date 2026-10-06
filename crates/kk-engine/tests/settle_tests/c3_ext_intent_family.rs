@@ -245,9 +245,9 @@ fn settle_quiet(
         let (players, next, _) = state.into_parts().unwrap();
         f.players = players;
         let name = room.name.clone();
-        f.world.commit_room(name, room);
+        f.world.replace_room(name, room).unwrap();
         f.world.bump_next_obj_id(next);
-        f.world.advance_ticks(1);
+        f.world.advance_ticks(1).unwrap();
     }
     result
 }
