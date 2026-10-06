@@ -27,6 +27,8 @@ enum NativeCall {
     Obstacle,
     /// 移动预检的默认中心：无否决，无计算可执行。
     Precheck,
+    /// 拉拽登记的默认中心：无否决，无计算可执行。
+    PullRegistration,
     None,
 }
 
@@ -55,6 +57,9 @@ struct ModChainContext {
     /// 无对象目标，target.fields 恒为 null。
     obstacle_slot: bool,
     precheck_slot: bool,
+    /// 房间级拉拽登记能力门：仅 builtin:room.movePullRegistration 有效；
+    /// 无对象目标，target.fields 恒为 null。
+    pull_registration_slot: bool,
     /// 战斗能力状态：仅五个战斗槽的处理器同步期内有效；consumed 单向
     /// 标记保证本动作经能力或 native 至多执行一次。
     combat: Option<CombatChainState>,
@@ -66,6 +71,7 @@ struct ModChainContext {
     admission: Option<Rc<kk_engine::settle::admission::MoveAdmission>>,
     obstacle: Option<Rc<kk_engine::settle::obstacle::MoveObstacle>>,
     precheck: Option<Rc<kk_engine::settle::precheck::MovePrecheck>>,
+    pull_registration: Option<Rc<kk_engine::settle::pull_registration::PullRegistration>>,
 }
 
 /// 战斗链的运行时状态与首触日志。日志记录能力改向触达、且不在引擎
@@ -124,6 +130,10 @@ impl SlotExecutor for ModSlotExecutor {
             SlotCall::Precheck { candidate } => Some(candidate.clone()),
             _ => None,
         };
+        let pull_registration = match &call {
+            SlotCall::PullRegistration { candidate } => Some(candidate.clone()),
+            _ => None,
+        };
         let resource_action = matches!(&call, SlotCall::Action { .. })
             && kk_mod_api::builtin::RESOURCE_ACTION_SLOTS.contains(&slot.key.as_str());
         let move_action = matches!(&call, SlotCall::Action { .. })
@@ -160,6 +170,11 @@ impl SlotExecutor for ModSlotExecutor {
                 serde_json::to_value(candidate.input()).map_err(|e| e.to_string())?,
                 NativeCall::Precheck,
             ),
+            SlotCall::PullRegistration { candidate } => (
+                ObjId(u64::MAX),
+                serde_json::to_value(candidate.input()).map_err(|e| e.to_string())?,
+                NativeCall::PullRegistration,
+            ),
             SlotCall::Action { id, data, native } => (
                 id,
                 if move_action {
@@ -189,7 +204,8 @@ impl SlotExecutor for ModSlotExecutor {
             || contest.is_some()
             || admission.is_some()
             || obstacle.is_some()
-            || precheck.is_some())
+            || precheck.is_some()
+            || pull_registration.is_some())
         .then(|| Rc::new(RefCell::new(BTreeMap::new())));
         let resource_journal = resource_action.then(|| Rc::new(RefCell::new(BTreeMap::new())));
         // 外层副本仅供 Declined 分支读共享 journal 与 is_some() 判定；
@@ -240,6 +256,7 @@ impl SlotExecutor for ModSlotExecutor {
                 admission_slot: admission.is_some(),
                 obstacle_slot: obstacle.is_some(),
                 precheck_slot: precheck.is_some(),
+                pull_registration_slot: pull_registration.is_some(),
                 combat: combat_state.clone(),
                 build: build_state.clone(),
                 incoming: incoming.clone(),
@@ -247,6 +264,7 @@ impl SlotExecutor for ModSlotExecutor {
                 admission: admission.clone(),
                 obstacle: obstacle.clone(),
                 precheck: precheck.clone(),
+                pull_registration: pull_registration.clone(),
             }),
         );
         let outcome = match result {
@@ -355,7 +373,8 @@ impl SlotExecutor for ModSlotExecutor {
                     || contest.is_some()
                     || admission.is_some()
                     || obstacle.is_some()
-                    || precheck.is_some())
+                    || precheck.is_some()
+                    || pull_registration.is_some())
                 {
                     return Err("该槽没有正常拒绝的局部恢复边界".into());
                 }
@@ -404,6 +423,7 @@ impl ModChainContext {
             None if self.admission_slot => Ok(Value::Null),
             None if self.obstacle_slot => Ok(Value::Null),
             None if self.precheck_slot => Ok(Value::Null),
+            None if self.pull_registration_slot => Ok(Value::Null),
             _ => Err(format!("槽目标 {} 已不存在或未接线", self.id.as_str())),
         }
     }
@@ -424,6 +444,9 @@ impl ModChainContext {
         }
         if self.precheck_slot {
             return Err("移动预检槽没有对象目标，target.fields 不可写".into());
+        }
+        if self.pull_registration_slot {
+            return Err("拉拽登记槽没有对象目标，target.fields 不可写".into());
         }
         if !fields.is_object() {
             return Err("target.fields 终值须为对象或 null".into());
@@ -537,6 +560,22 @@ impl ChainHost for ModChainContext {
         let precheck = self.precheck.as_ref().ok_or("本次槽没有移动预检能力")?;
         let id = ObjId::parse(id).ok_or("请求者 ID 非法")?;
         precheck.block(id)
+    }
+    fn pull_denied(&mut self, id: &str) -> Result<bool, String> {
+        let pull = self
+            .pull_registration
+            .as_ref()
+            .ok_or("本次槽没有拉拽登记能力")?;
+        let id = ObjId::parse(id).ok_or("拉者 ID 非法")?;
+        Ok(pull.is_denied(id))
+    }
+    fn pull_deny(&mut self, id: &str) -> Result<(), String> {
+        let pull = self
+            .pull_registration
+            .as_ref()
+            .ok_or("本次槽没有拉拽登记能力")?;
+        let id = ObjId::parse(id).ok_or("拉者 ID 非法")?;
+        pull.deny(id)
     }
     fn object_get(&mut self, id: &str) -> Result<Option<kk_mod_api::objects::ObjectView>, String> {
         self.get_object(id)
@@ -799,6 +838,7 @@ impl ChainHost for ModChainContext {
             NativeCall::Contest => {}
             NativeCall::Admission => {}
             NativeCall::Obstacle => {}
+            NativeCall::PullRegistration => {}
             NativeCall::Precheck => {}
             NativeCall::None => return Err("Mod 自有槽没有 Rust native 中心".into()),
         }

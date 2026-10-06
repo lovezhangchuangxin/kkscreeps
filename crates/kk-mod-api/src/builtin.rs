@@ -54,8 +54,11 @@ pub const MOVE_OBSTACLE_SLOT: &str = "builtin:room.moveObstacle";
 /// 意图登记后的移动请求预检链；单向收紧，被否决请求等同从未登记。
 pub const MOVE_PRECHECK_SLOT: &str = "builtin:room.movePrecheck";
 
+/// 拉拽意图登记后的配对否决链；单向收紧，被否决配对等同从未登记。
+pub const MOVE_PULL_REGISTRATION_SLOT: &str = "builtin:room.movePullRegistration";
+
 /// 内建实际派发的槽；自有动作装配必须跳过它们。
-pub const SLOT_KEYS: [&str; 18] = [
+pub const SLOT_KEYS: [&str; 19] = [
     RESOURCE_ACTION_SLOTS[0],
     "builtin:link.tick",
     RESOURCE_ACTION_SLOTS[1],
@@ -74,6 +77,7 @@ pub const SLOT_KEYS: [&str; 18] = [
     MOVE_ADMISSION_SLOT,
     MOVE_OBSTACLE_SLOT,
     MOVE_PRECHECK_SLOT,
+    MOVE_PULL_REGISTRATION_SLOT,
 ];
 
 fn key(name: &str) -> Key {
@@ -309,6 +313,7 @@ pub fn link() -> Contribution {
         "creep.moveAdmission.native",
         "room.moveObstacle.native",
         "room.movePrecheck.native",
+        "room.movePullRegistration.native",
     ]));
     let slots = vec![
         SlotDescriptor {
@@ -401,13 +406,18 @@ pub fn link() -> Contribution {
             stage: Stage::Movement,
             native_binding: key("room.movePrecheck.native"),
         },
+        SlotDescriptor {
+            key: key("room.movePullRegistration"),
+            stage: Stage::Movement,
+            native_binding: key("room.movePullRegistration.native"),
+        },
     ];
     Contribution {
         source: Source {
             namespace: "builtin".into(),
             api_version: 1,
             revision:
-                "link-creep-store-move-combat-build-incoming-contest-admission-obstacle-precheck-descriptors-v11"
+                "link-creep-store-move-combat-build-incoming-contest-admission-obstacle-precheck-pull-descriptors-v12"
                     .into(),
             code_digest: {
                 let mut hash = Sha256::new();

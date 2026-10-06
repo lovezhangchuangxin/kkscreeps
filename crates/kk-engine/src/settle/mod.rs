@@ -21,6 +21,7 @@ pub mod movement;
 pub mod objects;
 pub mod obstacle;
 pub mod precheck;
+pub mod pull_registration;
 pub mod resources;
 pub mod room;
 pub mod spawn;

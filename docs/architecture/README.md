@@ -29,6 +29,7 @@
 | [mod-move-admission.md](mod-move-admission.md) | 房间级移动准入槽、原生门槛预填与同源终值消费 |
 | [mod-move-obstacle.md](mod-move-obstacle.md) | 房间级移动障碍槽、单向追加阻挡与让位链传播 |
 | [mod-move-precheck.md](mod-move-precheck.md) | 房间级移动请求预检槽、请求级单向否决与"等同从未登记"语义 |
+| [mod-move-pull-registration.md](mod-move-pull-registration.md) | 房间级拉拽登记槽、配对级单向否决与登记双射一致性 |
 | [creep-build-slot.md](creep-build-slot.md) | creep 建造族动作槽（build/repair/dismantle）、目标改向/取消能力与完工变换/掉落面的拒绝恢复 |
 | [mod-resources.md](mod-resources.md) | Mod 同房库存读取、精确转账与损耗、多对象拒绝日志 |
 | [mod-resource-catalog.md](mod-resource-catalog.md) | 命名空间资源声明、冻结目录、玩家常量同步与市场/跨房显式拒绝 |

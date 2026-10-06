@@ -330,6 +330,11 @@ pub enum SlotCall<'a> {
     Precheck {
         candidate: Rc<crate::settle::precheck::MovePrecheck>,
     },
+    /// 房间级拉拽登记：整房一次，无单一目标对象；native 中心为无操作
+    /// （无否决）。
+    PullRegistration {
+        candidate: Rc<crate::settle::pull_registration::PullRegistration>,
+    },
     Action {
         id: ObjId,
         data: &'a IntentData,
@@ -389,6 +394,7 @@ pub struct ContributionDispatch {
     move_obstacle: ObstacleSlot,
     /// 房间级移动请求预检槽。
     move_precheck: PrecheckSlot,
+    move_pull_registration: PullRegistrationSlot,
     /// Mod 自有槽（按槽键查）；扩展意图结算在此派发。
     ext: BTreeMap<Key, ExtSlot>,
 }
@@ -414,6 +420,7 @@ impl Default for ContributionDispatch {
             move_admission: AdmissionSlot::Native,
             move_obstacle: ObstacleSlot::Native,
             move_precheck: PrecheckSlot::Native,
+            move_pull_registration: PullRegistrationSlot::Native,
             ext: BTreeMap::new(),
         }
     }
@@ -424,7 +431,7 @@ pub const LINK_SLOT_KEYS: [&str; 2] = [
     kk_mod_api::builtin::SLOT_KEYS[0],
     kk_mod_api::builtin::SLOT_KEYS[1],
 ];
-pub const BUILTIN_SLOT_KEYS: [&str; 18] = kk_mod_api::builtin::SLOT_KEYS;
+pub const BUILTIN_SLOT_KEYS: [&str; 19] = kk_mod_api::builtin::SLOT_KEYS;
 
 impl ContributionDispatch {
     pub(crate) fn run_incoming(&self, ctx: &RoomCtx, id: ObjId) -> Result<Option<i64>, String> {
@@ -455,6 +462,14 @@ impl ContributionDispatch {
     /// 应用），Native 或拒绝返回 None。
     pub(crate) fn run_precheck(&self, ctx: &RoomCtx) -> Result<Option<BTreeSet<ObjId>>, String> {
         self.move_precheck.run(ctx)
+    }
+
+    /// 运行拉拽登记槽；见 [`PullRegistrationSlot::run`] 的返回语义。
+    pub(crate) fn run_pull_registration(
+        &self,
+        ctx: &RoomCtx,
+    ) -> Result<Option<BTreeSet<ObjId>>, String> {
+        self.move_pull_registration.run(ctx)
     }
     pub(crate) fn run_transfer(
         &self,
@@ -555,8 +570,10 @@ mod execute;
 mod incoming;
 mod obstacle;
 mod precheck;
+mod pull_registration;
 use admission::AdmissionSlot;
 use contest::ContestSlot;
 use incoming::IncomingSlot;
 use obstacle::ObstacleSlot;
 use precheck::PrecheckSlot;
+use pull_registration::PullRegistrationSlot;

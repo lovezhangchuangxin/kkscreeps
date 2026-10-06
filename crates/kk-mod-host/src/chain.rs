@@ -36,7 +36,9 @@ pub(crate) use admission::{
 mod obstacle;
 pub(crate) use obstacle::{op_mod_chain_obstacle_block, op_mod_chain_obstacle_blocked};
 mod precheck;
+mod pull_registration;
 pub(crate) use precheck::{op_mod_chain_precheck_block, op_mod_chain_precheck_blocked};
+pub(crate) use pull_registration::{op_mod_chain_pull_denied, op_mod_chain_pull_deny};
 mod combat_batch;
 pub(crate) use combat_batch::{
     op_mod_chain_combat_apply_damage_batch, op_mod_chain_combat_list,
@@ -110,6 +112,14 @@ pub trait ChainHost {
     /// 追加否决；单向能力，仅移动预检槽开放。
     fn precheck_block(&mut self, _id: &str) -> Result<(), String> {
         Err("本次槽没有移动预检能力".into())
+    }
+    /// 读取拉者当前否决判定；仅拉拽登记槽开放。
+    fn pull_denied(&mut self, _id: &str) -> Result<bool, String> {
+        Err("本次槽没有拉拽登记能力".into())
+    }
+    /// 追加拉拽否决；单向能力，仅拉拽登记槽开放。
+    fn pull_deny(&mut self, _id: &str) -> Result<(), String> {
+        Err("本次槽没有拉拽登记能力".into())
     }
     fn read(&mut self, binding: &str) -> Result<ChainContext, String>;
     fn write(&mut self, binding: &str, context: ChainWrite) -> Result<(), String>;
@@ -479,7 +489,7 @@ pub(crate) fn op_mod_chain_decline(
         return chain.outcome(
             ModFaultKind::Control,
             Some(&binding),
-            Err("该槽尚不支持正常拒绝；仅 Mod 自有对象动作与已接局部恢复边界的内建槽（资源/移动/战斗/建造族/受击/移动竞争/移动准入/移动障碍/移动预检）可回滚".into()),
+            Err("该槽尚不支持正常拒绝；仅 Mod 自有对象动作与已接局部恢复边界的内建槽（资源/移动/战斗/建造族/受击/移动竞争/移动准入/移动障碍/移动预检/拉拽登记）可回滚".into()),
         );
     }
     if code.is_empty()

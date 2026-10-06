@@ -1,0 +1,130 @@
+{
+  "version": 1,
+  "shard": {
+    "players": [
+      "p1",
+      "p2"
+    ],
+    "rooms": [
+      {
+        "name": "W1N1",
+        "owner": "p1",
+        "rcl": 6
+      }
+    ]
+  },
+  "bots": [
+    {
+      "player": "p1",
+      "modules": "."
+    },
+    {
+      "player": "p2",
+      "modules": "."
+    }
+  ],
+  "objects": [
+    {
+      "room": "W1N1",
+      "kind": "creep",
+      "alias": "hauler",
+      "spec": {
+        "name": "hauler",
+        "owner": "p1",
+        "pos": [
+          10,
+          10
+        ],
+        "body": [
+          "move"
+        ],
+        "ticksToLive": 100
+      }
+    },
+    {
+      "room": "W1N1",
+      "kind": "creep",
+      "alias": "cart",
+      "spec": {
+        "name": "cart",
+        "owner": "p1",
+        "pos": [
+          10,
+          11
+        ],
+        "body": [
+          "work"
+        ],
+        "ticksToLive": 100
+      }
+    },
+    {
+      "room": "W1N1",
+      "kind": "creep",
+      "alias": "thief",
+      "spec": {
+        "name": "thief",
+        "owner": "p2",
+        "pos": [
+          11,
+          10
+        ],
+        "body": [
+          "move"
+        ],
+        "ticksToLive": 100
+      }
+    },
+    {
+      "room": "W1N1",
+      "kind": "creep",
+      "alias": "victim",
+      "spec": {
+        "name": "victim",
+        "owner": "p1",
+        "pos": [
+          12,
+          10
+        ],
+        "body": [
+          "work"
+        ],
+        "ticksToLive": 100
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "pointer": "/players/p1/memory/positions/hauler",
+      "op": "eq",
+      "value": [
+        10,
+        9
+      ]
+    },
+    {
+      "pointer": "/players/p1/memory/positions/cart",
+      "op": "eq",
+      "value": [
+        10,
+        10
+      ]
+    },
+    {
+      "pointer": "/players/p1/memory/positions/thief",
+      "op": "eq",
+      "value": [
+        12,
+        9
+      ]
+    },
+    {
+      "pointer": "/players/p1/memory/positions/victim",
+      "op": "eq",
+      "value": [
+        11,
+        10
+      ]
+    }
+  ]
+}

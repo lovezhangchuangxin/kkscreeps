@@ -799,6 +799,18 @@ impl Working {
         self.movement.precheck_input(&self.room, &self.index)
     }
 
+    /// 拉拽登记槽输入；仅 Hosted 路径按需构造。
+    pub fn movement_pull_registration_input(
+        &self,
+    ) -> kk_mod_api::pull_registration::PullRegistrationInput {
+        self.movement.pull_registration_input(&self.room)
+    }
+
+    /// 拉拽登记槽成功后的否决集应用；Native/拒绝路径不调用。
+    pub fn apply_movement_pull_denies(&mut self, denies: &std::collections::BTreeSet<ObjId>) {
+        self.movement.apply_pull_denies(denies);
+    }
+
     /// 预检槽成功后的否决集应用；被否决请求从登记矩阵移除。
     pub fn apply_movement_precheck_blocks(&mut self, blocks: &std::collections::BTreeSet<ObjId>) {
         self.movement.apply_precheck_blocks(blocks);

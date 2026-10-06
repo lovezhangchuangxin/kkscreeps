@@ -126,6 +126,47 @@ impl Movement {
         }
     }
 
+    /// 构造拉拽登记输入：全部有效配对按拉者对象 ID 升序（`pull_of`
+    /// 为 BTreeMap，天然升序）、不截断。调用时点为全部拉拽意图登记
+    /// 完成后、移动请求预检之前；只读，不改变登记。
+    pub(crate) fn pull_registration_input(
+        &self,
+        room: &RoomState,
+    ) -> kk_mod_api::pull_registration::PullRegistrationInput {
+        let mut pulls = Vec::new();
+        for (&puller, &target) in &self.pull_of {
+            let (Some(RoomObject::Creep(p)), Some(RoomObject::Creep(t))) =
+                (room.objects.get(&puller), room.objects.get(&target))
+            else {
+                continue;
+            };
+            pulls.push(kk_mod_api::pull_registration::PullPairInfo {
+                puller_id: puller.as_str().to_string(),
+                target_id: target.as_str().to_string(),
+                puller_x: p.x,
+                puller_y: p.y,
+                target_x: t.x,
+                target_y: t.y,
+                puller_owner: p.owner.clone(),
+                target_owner: t.owner.clone(),
+            });
+        }
+        kk_mod_api::pull_registration::PullRegistrationInput { pulls }
+    }
+
+    /// 拉拽登记槽成功后的否决集应用：被否决拉者的配对双向移除，
+    /// 等同从未登记（预检/竞争/准入视野、准入预填与疲劳转移同源
+    /// 反映）。Native/拒绝路径不调用。
+    pub(crate) fn apply_pull_denies(&mut self, denies: &BTreeSet<ObjId>) {
+        for puller in denies {
+            if let Some(target) = self.pull_of.remove(puller)
+                && self.pulled_by.get(&target) == Some(puller)
+            {
+                self.pulled_by.remove(&target);
+            }
+        }
+    }
+
     /// 构造房间移动竞争输入：全部有竞争者的目的格及按登记序排列的
     /// 竞争者摘要，含默认四键评分要素；不截断房间请求。调用时点为
     /// 登记完成之后、仲裁开始之前，矩阵仍是完整原始形态。

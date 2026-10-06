@@ -66,6 +66,7 @@ impl Engine {
             "builtin:creep.moveAdmission.native",
             "builtin:room.moveObstacle.native",
             "builtin:room.movePrecheck.native",
+            "builtin:room.movePullRegistration.native",
         ];
         for binding in plan.required_bindings() {
             let name = binding.as_str();

@@ -185,7 +185,11 @@ impl Movement {
         cur
     }
 
-    /// 拒绝自拉及循环链，再登记双向拉拽关系；配对一致性在仲裁时复核。
+    /// 拒绝自拉及循环链，再登记双向拉拽关系。重复登记后到覆盖先到：
+    /// 拉者换目标时清除旧目标的被拉标记，目标换拉者时清除旧拉者的
+    /// 拉动标记，两表始终保持双射。否则首个失败配对的复核清理会连带
+    /// 清除当前配对（结果依赖胜者遍历序），`validate_pull_pair` 的
+    /// 复核因此与遍历顺序结构无关。
     pub fn add_pulling(&mut self, room: &RoomState, puller: ObjId, target: ObjId) {
         let mut t = target;
         loop {
@@ -196,6 +200,16 @@ impl Movement {
                 Some(&next) if room.objects.contains_key(&next) => t = next,
                 _ => break,
             }
+        }
+        if let Some(&old_target) = self.pull_of.get(&puller)
+            && self.pulled_by.get(&old_target) == Some(&puller)
+        {
+            self.pulled_by.remove(&old_target);
+        }
+        if let Some(&old_puller) = self.pulled_by.get(&target)
+            && self.pull_of.get(&old_puller) == Some(&target)
+        {
+            self.pull_of.remove(&old_puller);
         }
         self.pull_of.insert(puller, target);
         self.pulled_by.insert(target, puller);
@@ -290,10 +304,10 @@ impl Movement {
     /// （`admission_input`），原生整链不为其付费。
     ///
     /// 配对复核的集合与旧 `remove_from_matrix` 取消时点等价（每个
-    /// 胜者恰复核一次），遍历顺序改为胜者对象 ID 升序（旧为目的格
-    /// 访问序）；同一拉者多目标残标的顺序差异在现有意图流不可达
-    /// ——`add_pulling` 每拉者每 tick 至多登记一个目标，开放 pull
-    /// 登记策略（G03/G04）时须重审此处顺序语义。
+    /// 胜者恰复核一次），遍历顺序为胜者对象 ID 升序（旧为目的格访问
+    /// 序）。`add_pulling` 保持两表双射后，每个失败配对的清理只触及
+    /// 自身两侧，复核结果与遍历顺序结构无关（重复登记的旧残标在
+    /// 登记时即被清除，不会到达复核）。
     pub(crate) fn prefill_admissions(
         &mut self,
         room: &RoomState,

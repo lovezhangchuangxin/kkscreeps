@@ -762,6 +762,32 @@ export function runChain(slot, token) {
       },
     });
   }
+  // 房间级拉拽登记槽的 ctx.pull 追加配对否决；单向能力，不提供放行或新增。
+  function pull(key, isOpen) {
+    function checked(call) {
+      try {
+        if (!isOpen()) throw new Error('拉拽登记能力只能在所属处理器同步执行期间调用');
+        return call();
+      } catch (error) {
+        fault(error, key, 'context');
+        throw error;
+      }
+    }
+    return Object.freeze({
+      isDenied(id) {
+        return checked(() => {
+          if (typeof id !== 'string') throw new Error('拉者 ID 须为原始字符串');
+          return ops.op_mod_chain_pull_denied(token, key, id);
+        });
+      },
+      deny(id) {
+        return checked(() => {
+          if (typeof id !== 'string') throw new Error('拉者 ID 须为原始字符串');
+          return ops.op_mod_chain_pull_deny(token, key, id);
+        });
+      },
+    });
+  }
   // 房间级障碍槽的 ctx.obstacle 追加阻挡；单向能力，不提供放行。
   function obstacle(key, isOpen) {
     function checked(call) {
@@ -827,6 +853,7 @@ export function runChain(slot, token) {
     Object.defineProperty(ctx, 'admission', { value: admission(key, () => open) });
     Object.defineProperty(ctx, 'obstacle', { value: obstacle(key, () => open) });
     Object.defineProperty(ctx, 'precheck', { value: precheck(key, () => open) });
+    Object.defineProperty(ctx, 'pull', { value: pull(key, () => open) });
     try {
       checkResult(key, bindings.get(key).fn(ctx));
       write(key, ctx);
@@ -858,6 +885,7 @@ export function runChain(slot, token) {
     Object.defineProperty(ctx, 'admission', { value: admission(key, () => open) });
     Object.defineProperty(ctx, 'obstacle', { value: obstacle(key, () => open) });
     Object.defineProperty(ctx, 'precheck', { value: precheck(key, () => open) });
+    Object.defineProperty(ctx, 'pull', { value: pull(key, () => open) });
     function next() {
       if (!open) throw new Error('next 只能在所属处理器同步执行期间调用');
       if (called) {

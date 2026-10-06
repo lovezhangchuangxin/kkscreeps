@@ -273,6 +273,8 @@ mod move_obstacle;
 mod move_policy;
 #[path = "sim_tests/move_precheck.rs"]
 mod move_precheck;
+#[path = "sim_tests/move_pull_registration.rs"]
+mod move_pull_registration;
 #[path = "sim_tests/retaliation_policy.rs"]
 mod retaliation_policy;
 #[path = "sim_tests/tough_damage.rs"]
