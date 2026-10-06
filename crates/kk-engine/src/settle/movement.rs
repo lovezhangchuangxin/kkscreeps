@@ -2,6 +2,10 @@
 //!
 //! 请求登记不把 creep 当静态障碍，仲裁才考虑它是否获准让位。
 //! 使用坐标排序的矩阵和稳定的竞争者排序，实际位移由 creep tick 完成。
+//! 各槽的整房输入投影在 [`inputs`] 子模块（按职责拆分，保持本文件
+//! 聚焦仲裁状态机）。
+
+mod inputs;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -214,72 +218,6 @@ impl Movement {
         self.matrix.values().any(|entries| entries.len() > 1)
     }
 
-    /// 构造房间移动竞争输入：全部有竞争者的目的格及按登记序排列的
-    /// 竞争者摘要，含默认四键评分要素；不截断房间请求。调用时点为
-    /// 登记完成之后、仲裁开始之前，矩阵仍是完整原始形态。
-    pub fn contest_input(&self, room: &RoomState) -> kk_mod_api::contest::MoveContestInput {
-        let mut contests = Vec::new();
-        for (&cell, entries) in &self.matrix {
-            if entries.len() < 2 {
-                continue;
-            }
-            let contenders = entries
-                .iter()
-                .map(|entry| self.contender_info(room, *entry, cell))
-                .collect();
-            contests.push(kk_mod_api::contest::ContestCell {
-                x: cell.0,
-                y: cell.1,
-                contenders,
-            });
-        }
-        kk_mod_api::contest::MoveContestInput { contests }
-    }
-
-    /// 单个竞争者摘要；评分要素与 [`rate_of`] 同源，对穿标志由原始
-    /// 矩阵推导。非 creep 登记者按防御值填充（默认评分为全 0）。
-    fn contender_info(
-        &self,
-        room: &RoomState,
-        entry: RateEntry,
-        cell: (u8, u8),
-    ) -> kk_mod_api::contest::ContenderInfo {
-        let mut info = kk_mod_api::contest::ContenderInfo {
-            id: entry.id.as_str(),
-            owner: String::new(),
-            origin_x: entry.origin.0,
-            origin_y: entry.origin.1,
-            origin_request_count: self
-                .matrix
-                .get(&entry.origin)
-                .map(|v| v.len() as i64)
-                .unwrap_or(0),
-            reciprocal: false,
-            pulled: self.pulled_by.contains_key(&entry.id),
-            pulling: self.pull_of.contains_key(&entry.id),
-            move_power: 0,
-            weight: 1,
-            power_ratio: 0.0,
-        };
-        info.reciprocal = self
-            .matrix
-            .get(&entry.origin)
-            .is_some_and(|movers| movers.iter().any(|m| movers_at(m, cell)));
-        if let Some(RoomObject::Creep(creep)) = room.objects.get(&entry.id) {
-            info.owner = creep.owner.clone();
-            info.move_power = kk_world::types::calc_body_effectiveness(
-                &creep.body,
-                BodyKind::Move,
-                "move",
-                "fatigue",
-                1,
-            );
-            info.weight = move_weight(creep).max(1) as i64;
-            info.power_ratio = info.move_power as f64 / info.weight as f64;
-        }
-        info
-    }
-
     /// 先逐目标格选胜者，再沿阻塞链取消移动。
     /// 来源：上游 engine/src/processor/intents/movement.js 的 check。
     /// priorities 是 JS 竞争策略的终值候选（缺项为 0），作为排序首键；
@@ -385,80 +323,6 @@ impl Movement {
         }
     }
 
-    /// 构造准入槽输入（对象 ID 升序、不截断）；只读预填后的配对与
-    /// 终值状态，不改变仲裁。pulled 即预填复核后的有效被拉标记；
-    /// requests 是仲裁前的整房原始请求视野，落选者带 won=false。
-    pub(crate) fn admission_input(
-        &self,
-        room: &RoomState,
-        old_fatigue: &BTreeMap<ObjId, u32>,
-    ) -> kk_mod_api::admission::MoveAdmissionInput {
-        let mut movers = Vec::new();
-        for (&id, &cell) in &self.winners {
-            let fatigue = old_fatigue.get(&id).copied().unwrap_or(0);
-            let creep = room.objects.get(&id).and_then(|o| match o {
-                RoomObject::Creep(c) => Some(c),
-                _ => None,
-            });
-            // 缩减矩阵内该目的格恰登记胜者自身；防御性取 cell 兜底。
-            let origin = self
-                .matrix
-                .get(&cell)
-                .and_then(|entries| entries.first())
-                .map(|entry| entry.origin)
-                .unwrap_or(cell);
-            let mut info = kk_mod_api::admission::MoverInfo {
-                id: id.as_str().to_string(),
-                owner: String::new(),
-                origin_x: origin.0,
-                origin_y: origin.1,
-                target_x: cell.0,
-                target_y: cell.1,
-                old_fatigue: fatigue,
-                active_moves: 0,
-                move_power: 0,
-                weight: 1,
-                pulled: self.pulled_by.contains_key(&id),
-                pulled_by: self
-                    .pulled_by
-                    .get(&id)
-                    .map(|puller| puller.as_str().to_string()),
-                pulling: self
-                    .pull_of
-                    .get(&id)
-                    .map(|target| target.as_str().to_string()),
-            };
-            if let Some(c) = creep {
-                info.owner = c.owner.clone();
-                info.active_moves = BodyKind::count_active(&c.body, BodyKind::Move) as i64;
-                info.move_power = kk_world::types::calc_body_effectiveness(
-                    &c.body,
-                    BodyKind::Move,
-                    "move",
-                    "fatigue",
-                    1,
-                );
-                info.weight = move_weight(c).max(1) as i64;
-            }
-            movers.push(info);
-        }
-        let mut requests = Vec::new();
-        for (&cell, entries) in &self.original_requests {
-            for (index, entry) in entries.iter().enumerate() {
-                requests.push(kk_mod_api::admission::MoveRequestInfo {
-                    mover_id: entry.id.as_str().to_string(),
-                    x: cell.0,
-                    y: cell.1,
-                    index: index as u64,
-                    origin_x: entry.origin.0,
-                    origin_y: entry.origin.1,
-                    won: self.winners.get(&entry.id) == Some(&cell),
-                });
-            }
-        }
-        kk_mod_api::admission::MoveAdmissionInput { movers, requests }
-    }
-
     /// 只读链预演：按给定准入终值在克隆状态上运行与正式仲裁完全
     /// 相同的取消链（同一 `cancel_blocked` 代码路径，无第二套判定），
     /// 返回仍为胜者的对象集合。仅在准入槽时点可用——障碍槽追加集
@@ -515,103 +379,6 @@ impl Movement {
         // 静默丢弃先前的追加集，先以断言暴露。
         debug_assert!(self.extra_blocks.is_empty() || blocks.is_empty());
         self.extra_blocks = blocks;
-    }
-
-    /// 构造障碍槽输入；只读胜者表与对象摘要，不改变仲裁。native
-    /// 初判为预填时点（全部胜者未取消）的 `check_obstacle_at_xy`
-    /// 结果，链内让位取消只会收紧不会放宽。仅 Hosted 路径调用。
-    pub(crate) fn obstacle_input(
-        &self,
-        room: &RoomState,
-        index: &RoomIndex,
-        safe_mode_user: Option<&str>,
-    ) -> kk_mod_api::obstacle::MoveObstacleInput {
-        let mut movers = Vec::new();
-        for (&id, &cell) in &self.winners {
-            let owner = room
-                .objects
-                .get(&id)
-                .and_then(|o| match o {
-                    RoomObject::Creep(c) => Some(c.owner.clone()),
-                    _ => None,
-                })
-                .unwrap_or_default();
-            let native_blocked =
-                check_obstacle_at_xy(room, index, self, cell, owner.as_str(), safe_mode_user);
-            let mut objects = Vec::new();
-            for oid in index.at(cell.0 as usize, cell.1 as usize) {
-                let Some(obj) = room.objects.get(oid) else {
-                    continue;
-                };
-                let (kind, owner_of, is_public, structure_type, yielding) = match obj {
-                    RoomObject::Creep(c) => (
-                        "creep".to_string(),
-                        c.owner.clone(),
-                        false,
-                        None,
-                        // 准入被拒的胜者必被链内取消，让位预期不成立；
-                        // 收紧为胜者且准入终值为真（相对最终结果仍是下界）。
-                        self.winners.contains_key(oid) && self.admitted(*oid),
-                    ),
-                    RoomObject::Generic(o) => {
-                        let data: serde_json::Value =
-                            serde_json::from_str(&o.data).unwrap_or_default();
-                        (
-                            data.get("structureType")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("")
-                                .to_string(),
-                            data.get("owner")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("")
-                                .to_string(),
-                            data.get("isPublic")
-                                .and_then(|v| v.as_bool())
-                                .unwrap_or(false),
-                            None,
-                            false,
-                        )
-                    }
-                    RoomObject::ConstructionSite(site) => (
-                        "constructionSite".to_string(),
-                        site.owner.clone().unwrap_or_default(),
-                        false,
-                        Some(site.structure_type.clone()),
-                        false,
-                    ),
-                    other => (
-                        type_name_of(other).to_string(),
-                        String::new(),
-                        false,
-                        None,
-                        false,
-                    ),
-                };
-                objects.push(kk_mod_api::obstacle::ObstacleObjectInfo {
-                    id: oid.as_str().to_string(),
-                    kind,
-                    owner: owner_of,
-                    is_public,
-                    structure_type,
-                    yielding,
-                });
-            }
-            movers.push(kk_mod_api::obstacle::ObstacleMoverInfo {
-                id: id.as_str().to_string(),
-                owner,
-                target_x: cell.0,
-                target_y: cell.1,
-                terrain_wall: room.terrain.check_mask(
-                    cell.0 as usize,
-                    cell.1 as usize,
-                    TERRAIN_MASK_WALL,
-                ),
-                has_road: has_road(room, index, cell),
-                objects,
-                native_blocked,
-            });
-        }
-        kk_mod_api::obstacle::MoveObstacleInput { movers }
     }
 
     /// 仲裁阶段四：取消未获准或目的格被占的请求，并递归检查其原格上

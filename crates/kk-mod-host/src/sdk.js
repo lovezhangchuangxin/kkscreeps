@@ -369,8 +369,10 @@ export function installRules(entries) {
 // 链取消与执行阶段；evaluate 按候选当前终值只读预演取消链，返回会
 // 存活的胜者 ID（宿主同一取消链代码；按调用时点即时计算，非快照，
 // 障碍槽尚未追加、结果为上界）。房间级移动障碍槽的 ctx.obstacle 提供单向追加阻挡
-// （isBlocked/block），不能放行 native 判定的阻挡。均不可枚举、不可
-// 替换且只在处理器同步期内有效。
+// （isBlocked/block），不能放行 native 判定的阻挡。房间级移动预检槽
+// 的 ctx.precheck 同为单向收紧（isBlocked/block），被否决的移动请求
+// 等同从未登记、不参与竞争。均不可枚举、不可替换且只在处理器同步期
+// 内有效。
 // 处理器的持久状态只准走 ctx.state——模块全局不随失败候选回滚，
 // 用它做累计会破坏同输入重试的确定性。
 export function dispatch(key, ctx) {
@@ -734,6 +736,32 @@ export function runChain(slot, token) {
       },
     });
   }
+  // 房间级预检槽的 ctx.precheck 追加请求否决；单向能力，不提供放行。
+  function precheck(key, isOpen) {
+    function checked(call) {
+      try {
+        if (!isOpen()) throw new Error('移动预检能力只能在所属处理器同步执行期间调用');
+        return call();
+      } catch (error) {
+        fault(error, key, 'context');
+        throw error;
+      }
+    }
+    return Object.freeze({
+      isBlocked(id) {
+        return checked(() => {
+          if (typeof id !== 'string') throw new Error('请求者 ID 须为原始字符串');
+          return ops.op_mod_chain_precheck_blocked(token, key, id);
+        });
+      },
+      block(id) {
+        return checked(() => {
+          if (typeof id !== 'string') throw new Error('请求者 ID 须为原始字符串');
+          return ops.op_mod_chain_precheck_block(token, key, id);
+        });
+      },
+    });
+  }
   // 房间级障碍槽的 ctx.obstacle 追加阻挡；单向能力，不提供放行。
   function obstacle(key, isOpen) {
     function checked(call) {
@@ -798,6 +826,7 @@ export function runChain(slot, token) {
     Object.defineProperty(ctx, 'contest', { value: contest(key, () => open) });
     Object.defineProperty(ctx, 'admission', { value: admission(key, () => open) });
     Object.defineProperty(ctx, 'obstacle', { value: obstacle(key, () => open) });
+    Object.defineProperty(ctx, 'precheck', { value: precheck(key, () => open) });
     try {
       checkResult(key, bindings.get(key).fn(ctx));
       write(key, ctx);
@@ -828,6 +857,7 @@ export function runChain(slot, token) {
     Object.defineProperty(ctx, 'contest', { value: contest(key, () => open) });
     Object.defineProperty(ctx, 'admission', { value: admission(key, () => open) });
     Object.defineProperty(ctx, 'obstacle', { value: obstacle(key, () => open) });
+    Object.defineProperty(ctx, 'precheck', { value: precheck(key, () => open) });
     function next() {
       if (!open) throw new Error('next 只能在所属处理器同步执行期间调用');
       if (called) {

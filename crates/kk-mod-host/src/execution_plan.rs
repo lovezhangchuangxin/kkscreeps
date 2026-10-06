@@ -92,6 +92,7 @@ impl ExecutionChain {
                 || slot.key.as_str() == kk_mod_api::builtin::MOVE_CONTEST_SLOT
                 || slot.key.as_str() == kk_mod_api::builtin::MOVE_ADMISSION_SLOT
                 || slot.key.as_str() == kk_mod_api::builtin::MOVE_OBSTACLE_SLOT
+                || slot.key.as_str() == kk_mod_api::builtin::MOVE_PRECHECK_SLOT
                 || slot.stage == Stage::ObjectAction
                     && (slot.key.namespace() != "builtin"
                         || kk_mod_api::builtin::RESOURCE_ACTION_SLOTS.contains(&slot.key.as_str())

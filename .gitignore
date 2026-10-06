@@ -83,6 +83,8 @@ __pycache__/
 !compat/fixtures/sim-mod-move-admission/
 !compat/fixtures/mod-move-obstacle/
 !compat/fixtures/sim-mod-move-obstacle/
+!compat/fixtures/mod-move-precheck/
+!compat/fixtures/sim-mod-move-precheck/
 !compat/fixtures/mod-typed/
 !compat/fixtures/mod-trace/
 !compat/fixtures/sim-mod-trace/

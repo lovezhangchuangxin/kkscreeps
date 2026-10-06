@@ -218,6 +218,8 @@ mod move_admission;
 mod move_contest;
 #[path = "mod_chain_tests/move_obstacle.rs"]
 mod move_obstacle;
+#[path = "mod_chain_tests/move_precheck.rs"]
+mod move_precheck;
 #[path = "mod_chain_tests/retaliation_faults.rs"]
 mod retaliation_faults;
 #[path = "mod_chain_tests/retaliation_policy.rs"]

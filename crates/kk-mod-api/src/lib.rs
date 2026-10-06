@@ -29,6 +29,7 @@ pub mod obstacle;
 mod outcome;
 mod plan;
 pub mod player_surface;
+pub mod precheck;
 pub mod resources;
 mod rules;
 pub mod typegen;

@@ -73,11 +73,17 @@ impl MoveContest {
     }
 }
 
-/// 房间竞争仲裁入口：有贡献槽时经整槽宿主生成优先级候选再仲裁，
-/// 无贡献或无竞争格直接走原生默认。选胜后经准入槽决定执行者终值、
-/// 障碍槽追加阻挡，再统一取消阻塞链。必须在不持有候选借用时调用。
+/// 房间竞争仲裁入口：预检槽先对登记请求做单向收紧（被否决请求等同
+/// 从未登记），有贡献竞争槽时经整槽宿主生成优先级候选再仲裁，无贡献
+/// 或无竞争格直接走原生默认。选胜后经准入槽决定执行者终值、障碍槽
+/// 追加阻挡，再统一取消阻塞链。必须在不持有候选借用时调用。
 pub fn arbitrate_room(ctx: &RoomCtx) -> Result<(), String> {
     let contrib = ctx.borrow().plane.contrib.clone();
+    // 预检否决在竞争输入构造之前应用：被否决请求不参与竞争评分，
+    // 也不出现在准入槽的整房请求视野里（等同从未登记）。
+    if let Some(blocks) = contrib.run_precheck(ctx)? {
+        ctx.borrow_mut().apply_movement_precheck_blocks(&blocks);
+    }
     let priorities = contrib.run_contest(ctx)?.unwrap_or_default();
     ctx.borrow_mut().rank_movement(&priorities);
     // 准入槽内构造输入并预填原生终值；Native 或拒绝时保留原生预填。

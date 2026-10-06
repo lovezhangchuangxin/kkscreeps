@@ -793,6 +793,17 @@ impl Working {
         self.movement.apply_admissions(finals);
     }
 
+    /// 预检槽输入构造；全部意图登记完成后、竞争输入构造之前调用。
+    /// 仅 Hosted 路径调用，原生路径不为其分配。
+    pub fn movement_precheck_input(&self) -> kk_mod_api::precheck::MovePrecheckInput {
+        self.movement.precheck_input(&self.room, &self.index)
+    }
+
+    /// 预检槽成功后的否决集应用；被否决请求从登记矩阵移除。
+    pub fn apply_movement_precheck_blocks(&mut self, blocks: &std::collections::BTreeSet<ObjId>) {
+        self.movement.apply_precheck_blocks(blocks);
+    }
+
     /// 此刻生效的安全模式主人：控制器处于安全模式时取房主，否则
     /// None。障碍槽输入、链预演与正式取消链共用，规则变更只改此处。
     fn active_safe_mode_user(&self) -> Option<String> {

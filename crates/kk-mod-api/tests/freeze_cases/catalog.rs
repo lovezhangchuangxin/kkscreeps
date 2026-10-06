@@ -134,7 +134,7 @@ fn builtin_link_values_match_constant_dump_and_use_native_slots() {
         );
     }
     assert_eq!(plan.rules().len(), 25);
-    assert_eq!(plan.slots().len(), 17);
+    assert_eq!(plan.slots().len(), 18);
     for name in builtin::RESOURCE_ACTION_SLOTS
         .iter()
         .chain(builtin::MOVE_ACTION_SLOTS.iter())

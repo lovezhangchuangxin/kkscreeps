@@ -325,6 +325,11 @@ pub enum SlotCall<'a> {
     Obstacle {
         candidate: Rc<crate::settle::obstacle::MoveObstacle>,
     },
+    /// 房间级移动请求预检：整房一次，无单一目标对象；native 中心为
+    /// 无操作（无否决）。
+    Precheck {
+        candidate: Rc<crate::settle::precheck::MovePrecheck>,
+    },
     Action {
         id: ObjId,
         data: &'a IntentData,
@@ -382,6 +387,8 @@ pub struct ContributionDispatch {
     move_admission: AdmissionSlot,
     /// 房间级移动障碍追加槽。
     move_obstacle: ObstacleSlot,
+    /// 房间级移动请求预检槽。
+    move_precheck: PrecheckSlot,
     /// Mod 自有槽（按槽键查）；扩展意图结算在此派发。
     ext: BTreeMap<Key, ExtSlot>,
 }
@@ -406,6 +413,7 @@ impl Default for ContributionDispatch {
             move_contest: ContestSlot::Native,
             move_admission: AdmissionSlot::Native,
             move_obstacle: ObstacleSlot::Native,
+            move_precheck: PrecheckSlot::Native,
             ext: BTreeMap::new(),
         }
     }
@@ -416,7 +424,7 @@ pub const LINK_SLOT_KEYS: [&str; 2] = [
     kk_mod_api::builtin::SLOT_KEYS[0],
     kk_mod_api::builtin::SLOT_KEYS[1],
 ];
-pub const BUILTIN_SLOT_KEYS: [&str; 17] = kk_mod_api::builtin::SLOT_KEYS;
+pub const BUILTIN_SLOT_KEYS: [&str; 18] = kk_mod_api::builtin::SLOT_KEYS;
 
 impl ContributionDispatch {
     pub(crate) fn run_incoming(&self, ctx: &RoomCtx, id: ObjId) -> Result<Option<i64>, String> {
@@ -441,6 +449,12 @@ impl ContributionDispatch {
     /// 运行移动障碍槽；见 [`ObstacleSlot::run`] 的返回语义。
     pub(crate) fn run_obstacle(&self, ctx: &RoomCtx) -> Result<Option<BTreeSet<ObjId>>, String> {
         self.move_obstacle.run(ctx)
+    }
+
+    /// 运行移动请求预检槽；成功返回否决集（调用方在竞争输入构造前
+    /// 应用），Native 或拒绝返回 None。
+    pub(crate) fn run_precheck(&self, ctx: &RoomCtx) -> Result<Option<BTreeSet<ObjId>>, String> {
+        self.move_precheck.run(ctx)
     }
     pub(crate) fn run_transfer(
         &self,
@@ -540,7 +554,9 @@ mod contest;
 mod execute;
 mod incoming;
 mod obstacle;
+mod precheck;
 use admission::AdmissionSlot;
 use contest::ContestSlot;
 use incoming::IncomingSlot;
 use obstacle::ObstacleSlot;
+use precheck::PrecheckSlot;

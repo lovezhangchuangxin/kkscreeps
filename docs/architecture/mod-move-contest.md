@@ -68,10 +68,10 @@ before/中心/replace/after 与其他槽同构：native 中心为无操作（保
 - `return api.decline(code)` 正常拒绝整条竞争链：丢弃全部优先级候选与暂存 namespace state，回退默认四键排序；此前已登记的请求与拉拽关系保持参与仲裁。已登记的其他 creep 请求不受影响。
 - 优先级候选不直接改写世界。非法数值（非整数、超出 ±(2^53−1)）、输入外 ID、越权能力（移动请求/资源/战斗/受击）的故障不能被 catch + decline 掩盖；错误/预算超限使整轮候选失败，沿[Mod 执行恢复](mod-execution.md)销毁并重建 realm。
 - 晚期写回失败经玩家缓存重试整轮：竞争结果与 namespace state 恰一次提交，不重复执行玩家代码。停用出错的 replace 后回退 native，健康钩子继续组合。
-- 仲裁结果是 tick 内瞬态，不进入检查点；检查点只保存已提交世界与 Mod state。内建槽现为 17 个，新增冻结描述和 native 绑定改变 PlanHash；旧计划身份的检查点不会被当作同一玩法静默加载。
+- 仲裁结果是 tick 内瞬态，不进入检查点；检查点只保存已提交世界与 Mod state。该批内建槽增至 15（现 18，后续批次见[JS 移动准入](mod-move-admission.md)与[JS 移动预检](mod-move-precheck.md)），新增冻结描述和 native 绑定改变 PlanHash；旧计划身份的检查点不会被当作同一玩法静默加载。
 
 ## 验收与剩余范围
 
 [真实玩家场景](../../compat/fixtures/sim-mod-move-policy/README.md)提供原生、seniority、heaviest 和两包组合；JSON/KKPV 完整 final 一致，竞争后保存退出与冷启动续跑等价。专项覆盖输入完整性与要素、非法数值/外部 ID、能力门、负优先级层、停用回退、晚期失败缓存重试与拒绝回退，结果见[交付记录](../research/notes/g01-move-contest-2026-10-06.md)。
 
-障碍准入的仲裁半边已开放单向追加（见[JS 移动障碍](mod-move-obstacle.md)），疲劳/MOVE/被拉门槛、整房请求视野与链预演见[JS 移动准入](mod-move-admission.md)；当前不开放障碍放行与意图静态预检、移动代价与执行效果（G04）、pull 登记策略（保持 native）。竞争槽输入只含竞争格；房间其余请求经准入槽的 `ctx.args.requests` 整房视野可见。JS 策略的结算开销由 Mod VM 预算统一管控，密集竞争场景的端到端对照随 G30.d 滚动补测。
+障碍准入的仲裁半边已开放单向追加（见[JS 移动障碍](mod-move-obstacle.md)），疲劳/MOVE/被拉门槛、整房请求视野与链预演见[JS 移动准入](mod-move-admission.md)；当前不开放障碍放行、移动代价与执行效果（G04）、pull 登记策略（保持 native）；意图静态预检已开为[JS 移动预检](mod-move-precheck.md)（否决在竞争输入构造之前生效）。竞争槽输入只含竞争格；房间其余请求经准入槽的 `ctx.args.requests` 整房视野可见。JS 策略的结算开销由 Mod VM 预算统一管控，密集竞争场景的端到端对照随 G30.d 滚动补测。
