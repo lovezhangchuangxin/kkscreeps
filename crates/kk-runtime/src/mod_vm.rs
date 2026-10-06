@@ -69,6 +69,10 @@ pub(crate) struct ModVm {
     realm: Option<ModRealm>,
     packages: BTreeMap<String, ModPackage>,
     options: RegisterOptions,
+    /// 世界种子：recover 重建 realm 时注入，保证随机流域与确定性时间
+    /// 不随重建换根（G22.b）。它是引擎世界状态在本容器的镜像，不单独
+    /// 持久化——检查点恢复路径以载荷种子重新构造本结构。
+    world_seed: u64,
     plan_hash: PlanHash,
     executables: BTreeSet<Key>,
     disabled: BTreeSet<String>,
@@ -88,11 +92,13 @@ impl ModVm {
         packages: BTreeMap<String, ModPackage>,
         options: RegisterOptions,
         registered: &Registered,
+        world_seed: u64,
     ) -> Self {
         Self {
             realm: Some(realm),
             packages,
             options,
+            world_seed,
             plan_hash: registered.plan.hash(),
             executables: registered.executables.clone(),
             disabled: BTreeSet::new(),
@@ -270,8 +276,8 @@ impl ModVm {
         if !self.needs_recovery() {
             return Ok(());
         }
-        let mut replacement =
-            ModRealm::with_options(&self.options).map_err(|e| format!("Mod VM 重建：{e}"))?;
+        let mut replacement = ModRealm::with_world_seed(self.world_seed, &self.options)
+            .map_err(|e| format!("Mod VM 重建：{e}"))?;
         let registered = replacement
             .register_with_disabled(&self.packages, self.options.clone(), &self.disabled)
             .map_err(|e| format!("Mod VM 重新注册：{e}"))?;
@@ -322,7 +328,7 @@ mod tests {
         let registered = realm
             .register(&packages, options.clone())
             .map_err(|e| e.to_string())?;
-        let mut vm = ModVm::new(realm, packages, options, &registered);
+        let mut vm = ModVm::new(realm, packages, options, &registered, 0);
         vm.invalidate();
         // 冻结选项属于计划指纹；模拟启动身份与原计划不一致，走真实注册与核验路径。
         vm.options.freeze.max_schema_depth += 1;
@@ -403,7 +409,7 @@ mod tests {
         let registered = realm
             .register(&packages, options.clone())
             .map_err(|e| e.to_string())?;
-        let mut vm = ModVm::new(realm, packages, options, &registered);
+        let mut vm = ModVm::new(realm, packages, options, &registered, 0);
         vm.invalidate();
         vm.recover()?;
         assert_eq!(vm.composition().selection.selected, vec!["first"]);
@@ -433,7 +439,7 @@ mod tests {
         let registered = realm
             .register(&packages, options.clone())
             .map_err(|e| e.to_string())?;
-        let mut vm = ModVm::new(realm, packages, options, &registered);
+        let mut vm = ModVm::new(realm, packages, options, &registered, 0);
         let valid = Key::new("test:handler.test")?;
         assert!(vm.executables.contains(&valid));
         for (kind, binding) in [

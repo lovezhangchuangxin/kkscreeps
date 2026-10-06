@@ -73,15 +73,15 @@ macro_rules! scope_error {
 }
 
 /// 注册期共享状态：当前正在注册的包与已收集声明。密封后拒绝一切声明。
-struct Registry {
-    current: Option<String>,
+pub(crate) struct Registry {
+    pub(crate) current: Option<String>,
     declarations: Vec<Declaration>,
     sealed: bool,
     fault: Option<String>,
 }
 
 impl Registry {
-    fn active_namespace(&self) -> Result<String, JsErrorBox> {
+    pub(crate) fn active_namespace(&self) -> Result<String, JsErrorBox> {
         if self.sealed {
             return Err(JsErrorBox::generic("注册已密封"));
         }
@@ -168,7 +168,9 @@ extension!(
         op_mod_chain_object_list,
         op_mod_chain_object_create,
         op_mod_chain_object_update,
-        op_mod_chain_object_remove
+        op_mod_chain_object_remove,
+        crate::rng::op_mod_random,
+        crate::rng::op_mod_random_init
     ]
 );
 
@@ -254,6 +256,14 @@ impl ModRealm {
     }
 
     pub fn with_options(options: &RegisterOptions) -> ModHostResult<Self> {
+        // 种子 0 是测试/默认口径；生产分片经 with_world_seed 注入世界种子，
+        // 玩法随机流与 Date 映射都以它派生（G22.b 协议）。
+        Self::with_world_seed(0, options)
+    }
+
+    /// 以世界种子构造 realm：随机流域与确定性时间全部由种子派生，种子
+    /// 随分片生命周期不变（恢复/切换重建时由调用方传入同一世界种子）。
+    pub fn with_world_seed(seed: u64, options: &RegisterOptions) -> ModHostResult<Self> {
         let limits = options.vm_limits.clone();
         let profiler = options.profiler.clone();
         limits.validate()?;
@@ -292,6 +302,7 @@ impl ModRealm {
                 fault: None,
             });
             op_state.put(ChainState::default());
+            op_state.put(crate::rng::RngState::new(seed));
         }
         let sdk_url = ModuleSpecifier::parse(SDK_URL)
             .map_err(|error| ModHostError::new("realm", error.to_string()))?;
@@ -621,11 +632,18 @@ impl ModRealm {
     }
 
     /// 每次实际结算前开始累计；不同槽、对象与房间共享同一轮 Mod 额度。
+    /// 同一轮也重置随机流域序号：失败重试或丢弃后同 tick 重开，都会从
+    /// 各域 index 0 重抽（G22.b 轮作用域重置）。
     pub fn begin_settlement(&mut self) -> ModHostResult<()> {
         if self.settlement_usage.is_some() {
             return Err(ModHostError::new("结算预算", "上一轮预算尚未结束"));
         }
         self.settlement_usage = Some(Usage::default());
+        self.runtime
+            .op_state()
+            .borrow_mut()
+            .borrow_mut::<crate::rng::RngState>()
+            .begin_round();
         Ok(())
     }
 

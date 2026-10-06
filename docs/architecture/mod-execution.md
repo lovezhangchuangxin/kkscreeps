@@ -116,7 +116,7 @@ RoomCtx 是 `Rc<RefCell<Working>>`。native/op 访问自行取得短借用，进
 
 `run_players` 仍复用原玩家结果和 TickInput；Mod 处理链在新 realm 中重新结算。`needs_mod_recovery` 独立于玩家缓存与引擎 NeedsRecovery；`rebuild_mod_realm` 可显式恢复而不处置这两类状态。`discard_pending_round` 仅放弃玩家候选与引擎恢复状态，不能解除 Mod 恢复门，相关世界/市场修改仍被拒。新建分片或 teardown 清空整个生命周期。
 
-持久状态须走 ctx.state，模块全局只用于定义与可重建缓存；恢复从已提交 ctx.state 继续，丢弃全部 Mod 模块全局。重建并不让任意全局状态、Math.random 或墙钟依赖变成可回放输入，Mod 必须自行遵守确定性与缓存重建约束。此保证针对返回错误，不包括 panic、永久卡死、OOM 或进程崩溃。恢复与重试证据见 [VM 恢复记录](../research/notes/mod-vm-recovery-2026-10-03.md)。
+持久状态须走 ctx.state，模块全局只用于定义与可重建缓存；恢复从已提交 ctx.state 继续，丢弃全部 Mod 模块全局。realm 的 `Math.random` 与 `Date` 自 G22.b 起是确定性版本（[协议](gameplay-determinism.md)）：重建重装重抽同值；但重建仍不把任意其他全局副作用变成可回放输入，Mod 仍须自行遵守缓存重建约束。此保证针对返回错误，不包括 panic、永久卡死、OOM 或进程崩溃。恢复与重试证据见 [VM 恢复记录](../research/notes/mod-vm-recovery-2026-10-03.md)。
 
 ## 执行故障诊断
 

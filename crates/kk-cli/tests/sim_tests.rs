@@ -263,6 +263,8 @@ mod mass_policy;
 
 #[path = "sim_tests/combat_ranges.rs"]
 mod combat_ranges;
+#[path = "sim_tests/determinism.rs"]
+mod determinism;
 #[path = "sim_tests/incoming_policy.rs"]
 mod incoming_policy;
 #[path = "sim_tests/mod_trace.rs"]
@@ -283,6 +285,7 @@ mod move_precheck;
 mod move_pull_registration;
 #[path = "sim_tests/retaliation_policy.rs"]
 mod retaliation_policy;
+
 #[path = "sim_tests/switch.rs"]
 mod switch;
 #[path = "sim_tests/tough_damage.rs"]

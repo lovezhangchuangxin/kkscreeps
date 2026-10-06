@@ -158,9 +158,16 @@ fn ns_ms(ns: u128) -> f64 {
 
 impl EmbedEngine {
     pub fn new() -> Self {
+        // 种子 0 保持既有默认；宿主选种经 with_world_seed 注入（G22.b）。
+        Self::with_world_seed(0)
+    }
+
+    /// 以指定世界种子建分片：种子随世界持久化，是玩法随机流与确定性
+    /// 时间的派生根；同种子同输入同抽值，异种子抽值序列不同。
+    pub fn with_world_seed(seed: u64) -> Self {
         Self {
             players: None,
-            engine: Engine::default(),
+            engine: Engine::new(kk_world::World::new(seed)),
             mod_realm: None,
             mod_trace_enabled: false,
             pending: None,
@@ -244,6 +251,12 @@ impl EmbedEngine {
     /// 宿主诊断世界投影，不执行玩家视野过滤；不是可恢复的完整检查点。
     pub fn world_snapshot(&self) -> Value {
         self.engine.world().world_json()
+    }
+
+    /// 世界种子：玩法随机流域与确定性时间的派生根（G22.b）。随检查点
+    /// 持久化；sim 报告与管理面读取，玩家不可见。
+    pub fn world_seed(&self) -> u64 {
+        self.engine.world().seed()
     }
 
     /// 管理诊断用的完整 Mod 对象列表，包含自主创建对象和 server-only 字段。
@@ -612,12 +625,15 @@ impl EmbedEngine {
         let _ = self.engine.abandon_recovery();
     }
 
-    /// 停止所有玩家线程，清空世界、失败缓存和 console。
+    /// 停止所有玩家线程，清空世界、失败缓存和 console。世界种子保留
+    /// （与 `World::reset` 同口径）：种子是分片身份的一部分，重建世界
+    /// 不换随机协议根。
     pub fn teardown(&mut self) {
         if let Some(p) = &mut self.players {
             p.shutdown_all();
         }
-        self.engine = Engine::default();
+        let seed = self.engine.world().seed();
+        self.engine = Engine::new(kk_world::World::new(seed));
         self.mod_realm = None;
         self.mod_trace_enabled = false;
         self.ext_intents = false;

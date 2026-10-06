@@ -1,5 +1,6 @@
 import { sealed, bindings, declines } from './state.js';
 import { refreshContext } from './refresh.js';
+import { withStreamScope, streamDomain } from './determinism.js';
 import { createResources } from './resources.js';
 import { createObjects } from './objects.js';
 import { createMovement } from './movement.js';
@@ -36,7 +37,12 @@ export function dispatch(key, ctx) {
     throw new Error(`绑定 ${JSON.stringify(key)} 没有注册函数`);
   }
   if (entry.kind === 'wrap') throw new Error('wrap 必须经整槽执行入口调用');
-  const result = entry.fn(ctx);
+  // 处理器执行期建立随机流域与确定性时钟作用域；直接派发路径的 ctx
+  // 可能缺少 tick（测试直呼），按注册期口径 0 对齐。
+  const result = withStreamScope(
+    { domain: streamDomain(key, ctx), tick: ctx?.tick ?? 0 },
+    () => entry.fn(ctx),
+  );
   if (result !== null && (typeof result === 'object' || typeof result === 'function') && declines.has(result)) {
     throw new Error('正常拒绝必须经支持局部回滚的整槽动作入口执行');
   }
@@ -137,7 +143,12 @@ export function runChain(slot, token) {
     Object.defineProperty(ctx, 'pull', { value: pull(key, () => open) });
     Object.defineProperty(ctx, 'cost', { value: cost(key, () => open) });
     try {
-      checkResult(key, bindings.get(key).fn(ctx));
+      checkResult(
+        key,
+        withStreamScope({ domain: streamDomain(key, ctx), tick: ctx.tick }, () =>
+          bindings.get(key).fn(ctx),
+        ),
+      );
       write(key, ctx);
     } catch (error) {
       if (error === declinedSignal) throw error;
@@ -189,7 +200,12 @@ export function runChain(slot, token) {
       }
     }
     try {
-      checkResult(key, bindings.get(key).fn(ctx, next));
+      checkResult(
+        key,
+        withStreamScope({ domain: streamDomain(key, ctx), tick: ctx.tick }, () =>
+          bindings.get(key).fn(ctx, next),
+        ),
+      );
       if (firstFault !== undefined) throw new Error(firstFault);
       if (firstDeclined !== undefined) throw declinedSignal;
       write(key, ctx);

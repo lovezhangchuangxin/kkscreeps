@@ -108,7 +108,9 @@ impl EmbedEngine {
         // 候选分片：注册 → canary 预检 → install_hosted_plan → 玩家
         // spawn 全链。注入的工作者配置保留预算与模块表来源；计划派生
         // 字段（常量封闭集、mod_api、扩展意图）由装配路径按新计划覆盖。
-        let mut replacement = Self::new();
+        // 分片以当前世界种子构造：realm 装配期就要注入种子，口径与
+        // restore_checkpoint 的载荷种子一致（G22.b）。
+        let mut replacement = Self::with_world_seed(self.engine.world().seed());
         replacement.set_player_concurrency(self.player_concurrency)?;
         replacement.set_kkpv_channel(self.kkpv_channel);
         for (name, worker) in &workers {

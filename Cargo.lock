@@ -1042,6 +1042,7 @@ version = "0.1.0"
 dependencies = [
  "deno_core",
  "deno_error",
+ "kk-core",
  "kk-mod-api",
  "kk-vm",
  "serde",

@@ -21,6 +21,7 @@
 | `kk-engine/src/settle/creep/combat/batch_policy.rs` | 战斗分页与群体批量完整预检/应用；直接候选不变测试在 batch_policy/tests.rs |
 | `kk-engine/src/settle/resources.rs` | 资源领域读取与副本预检转账；`resources/generic.rs` 共享 Generic 仓库解析、native 容量与实验室槽写入 |
 | `kk-mod-host/src/execution_plan.rs` | 链安装与诊断共用的活动顺序/中心回退选择 |
+| `kk-mod-host/src/rng.rs` | 玩法随机流 op 与域序号状态；无状态推导在 `kk-core/src/rng.rs` 的 `gameplay_draw`（协议见[确定性玩法时间与随机协议](gameplay-determinism.md)） |
 | `kk-mod-host/src/composition.rs` | 冻结来源、规则候选与选中来源、处理器/manifest 停用闭包 |
 | `kk-cli/src/mod_inspect.rs` | 独立注册诊断与停用预览；`output_guard.rs` 共用只读路径与输入保护，`report.rs` 共用原子 JSON/声明写入 |
 | `kk-mod-api/src/typegen.rs` | 冻结计划到 TS 声明；`typegen/symbols.rs` 独立维护模块级命名分配与冲突消歧 |

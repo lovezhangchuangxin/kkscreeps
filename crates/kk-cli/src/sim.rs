@@ -34,6 +34,9 @@ struct Scene {
     version: u32,
     shard: Shard,
     bots: Vec<Bot>,
+    /// 世界种子：随机流域与确定性时间的派生根；缺省 0 保持既有场景行为。
+    #[serde(default)]
+    seed: u64,
     #[serde(default)]
     mods: Option<mods::Mods>,
     #[serde(default)]
@@ -173,8 +176,9 @@ pub fn run(options: Options) -> i32 {
 
 /// sim run 报告 schema 版本：成功与 setup_failed 两条路径同源引用，
 /// 升版时不得只改一处（同通道版本分裂会误导按版本判读的消费方）。
-/// v6 起顶层新增 `mods_switches`（场景声明的中途包切换记录）。
-const SIM_REPORT_VERSION: u32 = 6;
+/// v6 顶层 `mods_switches`；v7 起顶层与最终观察新增 `seed`（世界种子，
+/// G22.b 随机协议的可复现身份）。
+const SIM_REPORT_VERSION: u32 = 7;
 
 fn digest(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
@@ -348,7 +352,9 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
         tables.insert(bot.player.clone(), table);
     }
     let executable_hash = executable_digest()?;
-    let mut engine = EmbedEngine::new();
+    // 场景种子进入世界：随机流域与确定性时间的派生根（G22.b）。缺省 0
+    // 与既有场景行为一致；检查点续跑时种子来自载荷，此处值只影响新世界。
+    let mut engine = EmbedEngine::with_world_seed(scene.seed);
     engine.set_player_concurrency(options.concurrency)?;
     engine.set_kkpv_channel(options.kkpv);
     if options.mod_trace {
@@ -561,7 +567,7 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
         "disabled_mods": engine.disabled_mods(),
         "channel": if options.kkpv { "kkpv" } else { "json" }, "concurrency": options.concurrency,
         "ticks_requested": options.ticks, "ticks_attempted": attempted, "world_ticks_committed": committed,
-        "start_time": start_time, "end_time": engine.get_game_time(),
+        "seed": engine.world_seed(), "start_time": start_time, "end_time": engine.get_game_time(),
         "checkpoint_loaded": options.load_checkpoint,
         "checkpoint_saved": if failure.is_none() { options.save_checkpoint.as_ref() } else { None },
         "run_wall_ms": run_wall_ms, "phases": engine.perf_report(),
@@ -619,7 +625,7 @@ fn observe(
         .iter()
         .map(|name| (name, engine.engine_mod_state(name)))
         .collect();
-    json!({"time": engine.get_game_time(), "players": players, "objects": objects, "rooms": rooms, "world": engine.world_snapshot(), "mod_objects": engine.mod_object_snapshots(), "mod_states": states})
+    json!({"time": engine.get_game_time(), "seed": engine.world_seed(), "players": players, "objects": objects, "rooms": rooms, "world": engine.world_snapshot(), "mod_objects": engine.mod_object_snapshots(), "mod_states": states})
 }
 
 fn evaluate(assertion: &Assertion, initial: &Value, final_state: &Value) -> Value {

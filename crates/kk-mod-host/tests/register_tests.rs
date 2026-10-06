@@ -298,3 +298,6 @@ mod rules_read;
 
 #[path = "register_tests/selection.rs"]
 mod selection;
+
+#[path = "register_tests/determinism.rs"]
+mod determinism;

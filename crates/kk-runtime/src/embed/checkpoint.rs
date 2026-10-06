@@ -158,7 +158,10 @@ impl EmbedEngine {
                 .all(|name| saved.engine.players.contains_key(name)),
             "检查点工作者缺少账户状态"
         );
-        let mut replacement = Self::new();
+        // 候选分片按载荷种子构造：realm 在 create_shard_with_mods 期注入
+        // 种子，而引擎世界要到下方 restore_checkpoint 才收养——若用默认
+        // 种子 0，随机流域会与世界种子静默错位（G22.b 修复的错位缺陷）。
+        let mut replacement = Self::with_world_seed(saved.engine.world.seed);
         // 恢复装配期间还未载入保存的世界时间；此时不记录重建事件。
         // 成功切换前再应用原引擎的开启意愿，缓冲从空状态续跑。
         replacement.set_player_concurrency(saved.concurrency)?;

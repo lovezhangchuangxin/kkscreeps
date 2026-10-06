@@ -41,5 +41,6 @@
 ## 边界与后续
 
 - 原生分片（无 Mod）不支持切换；重建分片用 `create_shard_with_mods`。
+- 候选分片按当前世界种子构造（realm 装配期注入），切换不换随机协议根（[协议](gameplay-determinism.md)）。
 - sim metadata 信封（executable_sha256 门）与切换正交；包内容级迁移、Mod 对象/字段的转归、RNG 迁移联动属 G23 后续子片。
 - watch（文件监视自动触发切换）未实现，属 G24 后续。

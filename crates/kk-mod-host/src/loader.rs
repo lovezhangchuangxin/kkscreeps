@@ -32,6 +32,7 @@ fn sdk_source(url: &str) -> Option<&'static str> {
         "kkmods:sdk/movement.js" => Some(include_str!("sdk/movement.js")),
         "kkmods:sdk/combat.js" => Some(include_str!("sdk/combat.js")),
         "kkmods:sdk/build.js" => Some(include_str!("sdk/build.js")),
+        "kkmods:sdk/determinism.js" => Some(include_str!("sdk/determinism.js")),
         _ => None,
     }
 }

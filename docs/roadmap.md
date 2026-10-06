@@ -75,7 +75,7 @@ D6 首片已允许 link transfer 的 JS 处理链正常拒绝一次动作；后�
 
 实现 `kkscreeps sim / test / watch / deploy`，设计见[开发套件](designs/dev-kit.md)。场景、断言与世界推进应使用和服务器一致的运行及结算通路，使玩家能复现错误并验证自己的代码。
 
-当前 `sim run` 已接入版本化 JSON 场景、多玩家模块、初始 Memory、最终状态断言和报告，见[交付记录](research/notes/sim-run-2026-10-04.md)。显式检查点保存/冷恢复与 sim 续跑已接入。`init/watch/replay/test/deploy`、自动迁移与任意 bot 的确定性回放尚未实现。
+当前 `sim run` 已接入版本化 JSON 场景（含世界 seed，玩法随机/时间协议见[确定性玩法时间与随机协议](architecture/gameplay-determinism.md)）、多玩家模块、初始 Memory、最终状态断言和报告，见[交付记录](research/notes/sim-run-2026-10-04.md)。显式检查点保存/冷恢复与 sim 续跑已接入。`init/watch/replay/test/deploy`、自动迁移与任意 bot 的确定性回放尚未实现。
 
 验收目标是固定场景中上千 tick 的集成测试秒级完成。报告须记录玩家代码、世界规模、构建配置、预热与耗时，不能把这个目标理解为任意 bot 或任意世界的耗时保证。当前部分 CLI 命令仍为占位入口，接口名称存在不代表工具已经完成。
 

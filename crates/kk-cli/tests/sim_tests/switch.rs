@@ -76,7 +76,7 @@ fn scenario_switch_adds_and_removes_packages_at_committed_boundary() -> anyhow::
             &report,
         )?;
         assert_eq!(code, 0, "{value}");
-        assert_eq!(value["report_version"], json!(6));
+        assert_eq!(value["report_version"], json!(7));
         let record = &value["mods_switches"][0];
         assert_eq!(record["status"], json!("applied"), "{record}");
         assert_eq!(record["after_tick"], json!(2));

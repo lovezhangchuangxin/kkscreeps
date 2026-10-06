@@ -28,4 +28,22 @@
 
 ## 交付记录
 
-（实现完成后回填）
+**实现（2026-10-07，随本批提交）**：
+
+1. `kk-core/src/rng.rs`：`gameplay_draw(seed, domain, tick, index)`（FNV-1a 域串 + SplitMix64 终结）与 `gameplay_unit`（高 53 位 → [0,1)）；混合常量以固定向量钉死并声明为冻结协议。
+2. `kk-mod-host/src/rng.rs`（新）：`RngState`（种子 + 域序号计数）入 OpState；`op_mod_random(domain, tick)`（结算流；tick 走 f64——op 的 u64 参数需 BigInt，2^53 内与 u64 逐位一致）与 `op_mod_random_init()`（注册窗口经 `Registry.active_namespace` 解析 `{ns}#init`，窗外报错）；`ModRealm::begin_settlement` 轮作用域清零（重试/同 tick 重开重抽同值）；`ModRealm::with_world_seed(seed, options)` 构造器（`with_options` 委托种子 0）。
+3. `kk-mod-host/src/sdk/determinism.js`（新，SDK 求值期先于任何包代码）：`Math.random` 改走 op；`Date` 替换为确定性包装（结算期 `now/new Date()/Date()` = 作用域 tick×3000，注册期恒 0；显式参数构造与 parse/UTC 继承原生）；删除 `Temporal`。`sdk/chains.js` 在 `dispatch/simple/inner` 三处处理器调用外建立 `withStreamScope`（wrap 链嵌套保存/恢复；域 = `绑定键#房间#目标ID`）。
+4. `kk-runtime`：`EmbedEngine::with_world_seed`（`Engine::new(World::new(seed))`）；`teardown`/`create_shard` 世界重置保留种子；`setup.rs` realm 构造注入 `engine.world().seed()`；`ModVm` 持有 `world_seed` 供 recover 重建；**修复两条种子错位路径**——`restore_checkpoint`（`Self::with_world_seed(saved.engine.world.seed)`）与 `switch_mod_packages`（`Self::with_world_seed(self.engine.world().seed())`）：此前 `Self::new()`（种子 0）先装 realm 后收养带种子的世界。
+5. `kk-cli sim`：场景 `seed` 字段（缺省 0）、报告顶层 `seed` 与最终观察 `seed`。
+6. 夹具：`compat/fixtures/mod-determinism/dice`（init 捕获 + 每 tick 双抽 + Date 终值写 ctx.state）与 `compat/fixtures/sim-mod-determinism`（两种子场景钉黄金抽值；断言只取 tick 1 即存在的指针，分相冷恢复不误红）。
+7. 文档：新[确定性玩法时间与随机协议](../../architecture/gameplay-determinism.md)（原则/随机流协议/玩法时间/种子生命周期/边界登记/变更纪律）；同步 state-inventory RNG 行、checkpoints 两处、mod-execution 重建段、local-simulation 场景表与玩家边界句、mod-switching 边界行、architecture/README、docs/README、source-organization。
+
+**验收（实际执行，含复审清偿增量）**：kk-core rng 6 项（含固定向量与桶均匀下限）；kk-mod-host 确定性 8 项（种子敏感、协议推导钉死、轮重置、跨绑定/跨房独立、init 无 tick 重装不变、wrap 链跨层域隔离、跨包不共流、原生 Date 不可取回+注册窗外随机报错）+ lib 全量；kk-runtime `mod_determinism_tests` 5 项（同种子逐位相等/异种子相异/Date 公式、冷恢复续跑等值（并断言恢复种子=载荷种子）、Validate 段失败重试重抽同值、切换重建延续种子流、teardown/重建保种子）；kk-cli sim 确定性 2 项（双场景黄金通过+异种子对照、6 tick 直通 vs 3+检查点+3 双进程逐位等值）。登记计划中「runtime 级跨命名空间独立」实际落在 mod-host realm 级（真实跨包双注册，比 runtime 级更贴协议面）。冷恢复等值断言范围是 Mod 命名空间状态与时间/种子（非零种子下的全状态等值由基线 seed-0 checkpoint 往返族+房间快照头种子核验外推，此处接受）。无兼容面改动（玩家 realm 未动），不需 release 棘轮。
+
+## 复审记录（三路后台只读，2026-10-07）
+
+**R1 协议正确性**：无 P0。P1×2 已清偿——①原生 Date 构造器两条原型链泄漏路径（静态 `Object.getPrototypeOf(Date)`、实例 `Date.prototype.constructor`）：determinism.js 重构为静态面不复挂原生原型（now/parse/UTC 以不可枚举自有属性提供）+ 遮蔽原生 prototype 的 constructor，新增探针测试断言两条路径均不可达且 parse/UTC/instanceof/toJSON（UTC ISO 文本）保真；②wrap 链跨层域隔离与注册窗外报错零覆盖：新增 wrap 处理器（sheller，next 前后各抽）+ RecordingHost 整槽测试钉死「内层抽取不挤占外层序号」，探针测试钉死窗外 `Math.random` 显式报错。P2 清偿：op 内开发期断言拦截垃圾 tick（NaN/负/小数与 tick 0 域串别名）；KkDate 静态面属性特性对齐原生（不可枚举、name/length）；结果属性 getter 在作用域外的边角以协议页「调用面」登记（取值仍确定）。零固定点（seed=0∧空域）属理论备注——绑定键非空，不可达。
+
+**R2 种子集成**：无 P0/P1。P2 清偿：sim 报告新增顶层/观察 `seed` 随纪律升版 6→7（注释与 switch 测试钉值同步）；embed RPC 无选种面在协议页登记（该入口尚不建 Mod 分片，接入时随协议扩展）；冷恢复等值范围与 Date.name 指纹（name 已对齐原生 'Date'）登记。核对确认：候选分片构造仅 restore/switch 两处、realm 构造器全部汇聚 with_world_seed、RngState 单点注入、`Engine::new(World::new(seed))` 与原默认逐位等价、sim 装载检查点时载荷种子经 `*self = replacement` 整体胜出（场景字节 SHA 门+房间快照头种子核验双封）、V8 栈序约束遵守（多分片测试对早分片仅 Rust 侧读）。
+
+**R3 文档一致性**：无 P0。P1×2 已清偿——①local-simulation.md 导语「seed 选项尚未实现」过时句改写；②注册窗外报错零覆盖与「runtime 级独立」口径偏移：前者补测试、后者以真实跨包测试+本节注记清偿。P2 清偿：协议页 `Date()` 改为「本地时区文本」口径；mod-system.md:236 追加 2026-10-07 交付注记（ctx.tick 驱动口径与 TickInput 墙钟的分工、回链协议页）；dispatch 直呼路径缺省与结果 getter 边角入协议页「调用面」。台账 G22 表行/当前任务行的收口更新随交付提交完成。

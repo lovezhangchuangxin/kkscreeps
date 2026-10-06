@@ -1,6 +1,6 @@
 # 本地场景模拟
 
-`kkscreeps sim run` 使用 `kk-runtime::EmbedEngine` 加载场景、运行玩家模块和推进真实结算。每轮所有玩家读取同一已提交视图，结果经现有协调器提交。当前实现 JSON v1 场景、默认玩法和显式 Mod 包加载；已提供显式[检查点保存与冷恢复](checkpoints.md)；热更新、观战、内容预设和 seed 选项尚未实现。
+`kkscreeps sim run` 使用 `kk-runtime::EmbedEngine` 加载场景、运行玩家模块和推进真实结算。每轮所有玩家读取同一已提交视图，结果经现有协调器提交。当前实现 JSON v1 场景、默认玩法和显式 Mod 包加载；已提供显式[检查点保存与冷恢复](checkpoints.md)；热更新、观战和内容预设尚未实现；场景 seed 字段自 G22.b 起可用（见上表）。
 
 ```bash
 cargo build --release -p kk-cli
@@ -33,6 +33,7 @@ target/release/kkscreeps sim run --scenario /tmp/my-mods/starter/scenario.json -
 | 字段 | 含义 |
 |---|---|
 | `version` | 当前仅接受整数 1 |
+| `seed` | 可省略（默认 0）；世界种子——玩法随机流与确定性时间的派生根（[协议](gameplay-determinism.md)），同种子同输入同抽值 |
 | `shard.players` | 非空且 handle 唯一的玩家列表，支持字符串或现有 PlayerSpec 对象 |
 | `shard.rooms` | 现有 RoomSpec 列表；包括 name、owner、rcl、地形等字段 |
 | `bots` | 每个玩家必须恰有一个声明：player、modules、entry（默认 main）、memory（默认空对象） |
@@ -93,6 +94,6 @@ Mod 场景另记录实际加载包的目录、版本、SDK 要求、依赖、服
 
 CLI 参数解析失败沿用 Clap 的退出码 2，不写报告。报告通过同目录临时文件写入后重命名，配置失败也会替换旧报告，避免误读上次成功结果；非法报告路径直接拒绝。该操作不是完整世界持久化协议。
 
-`run_wall_ms` 仅包含推进循环，不含加载、指纹计算、最终状态观察和报告写入。`phases` 使用运行时已有的累计阶段计时，是诊断数据，不能直接作为正式跨实现基准。玩家 Date、Math.random、CPU 查询保持生产行为，因此固定场景和源码不保证任意 bot 完全确定；复现要求见[开发套件设计](../designs/dev-kit.md)。
+`run_wall_ms` 仅包含推进循环，不含加载、指纹计算、最终状态观察和报告写入。`phases` 使用运行时已有的累计阶段计时，是诊断数据，不能直接作为正式跨实现基准。玩家 Date、Math.random、CPU 查询保持生产行为，因此固定场景和源码不保证任意 bot 完全确定；Mod 规则代码的时间/随机则自 G22.b 起确定性（[协议](gameplay-determinism.md)）。复现要求见[开发套件设计](../designs/dev-kit.md)。
 
 原生场景验收见[初始交付记录](../research/notes/sim-run-2026-10-04.md)，Mod 场景验收见[生命周期交付记录](../research/notes/n1a-object-tick-2026-10-05.md)和[对象操作交付记录](../research/notes/n1b-mod-objects-2026-10-05.md)。

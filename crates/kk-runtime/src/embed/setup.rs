@@ -194,7 +194,9 @@ impl EmbedEngine {
         if let Some(p) = &mut self.players {
             p.shutdown_all();
         }
-        self.engine = Engine::default();
+        // 与 teardown 同口径：重建分片保留世界种子，随机协议根不随重建更换。
+        let seed = self.engine.world().seed();
+        self.engine = Engine::new(kk_world::World::new(seed));
         self.mod_realm = None;
         self.ext_intents = false;
         self.player_surface = None;
@@ -219,7 +221,9 @@ impl EmbedEngine {
         // vanilla 常量表原值（零 Mod 与纯内建目录世界的玩家面不变）。
         let mut resources_all: Option<serde_json::Value> = None;
         if let Some((packages, options)) = mod_install {
-            let mut realm = ModRealm::with_options(options)
+            // 世界种子注入 realm：随机流域与确定性时间以它为根（G22.b）；
+            // 恢复/切换路径重建时由调用方保证传入载荷中的同一种子。
+            let mut realm = ModRealm::with_world_seed(self.engine.world().seed(), options)
                 .map_err(|error| anyhow::anyhow!("mod realm：{error}"))?;
             let registered = realm
                 .register(packages, options.clone())
@@ -354,6 +358,7 @@ impl EmbedEngine {
                 packages.clone(),
                 options.clone(),
                 &registered,
+                self.engine.world().seed(),
             )));
             let executor = Rc::new(ModSlotExecutor {
                 realm: realm.clone(),

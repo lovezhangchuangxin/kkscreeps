@@ -25,6 +25,7 @@ mod manifest;
 mod package;
 mod profile;
 mod realm;
+mod rng;
 mod selection;
 mod v8_convert;
 mod write;
