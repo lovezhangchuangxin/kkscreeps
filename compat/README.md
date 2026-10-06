@@ -14,7 +14,7 @@
 | `scripts/run-suite.sh` | 运行完整上游套件，也可将额外参数传给 Vitest |
 | `scripts/ratchet.mjs` | 全量运行后检查通过数、总用例数和逐用例回归 |
 | `reports/` | 入库机器报告、回归配置与历史验收记录 |
-| `fixtures/` | bot 下载夹具按需准备、不入库；Mod 性能夹具、`sim-economy/` 经济场景和 `sim-mod-tick/` 生命周期场景和 `sim-mod-objects/` 自主对象操作、`mod-composition/` 组合包和 `sim-mod-composition/` 组合场景、`mod-resources/` 资源目录包和 `sim-mod-resources/` 资源场景入库 |
+| `fixtures/` | 手写策略包与场景夹具默认入库（新批次夹具自动被 git 跟踪）；第三方 bot（tooangel/overmind-dist）与合成的 wasm-bot 不入库，由 `scripts/fetch-bots.sh` 按需准备、基线报告自证完整性 |
 
 同一 JavaScript 全局中的适配器实例共享子进程和世界状态，测试应串行使用并调用 `teardown`。它清理世界和玩家线程，保留子进程供后续测试复用。
 

@@ -80,7 +80,7 @@ HTTP 服务和前端开发服务器尚未实现。
 
 修改 Rust 后，须重新构建测试使用的二进制。适配器默认优先选择 release，再回退到 debug；建议通过 `KKSCREEPS_BIN` 显式指定，避免测试旧构建产物。未找到二进制且未显式指定时，引擎冒烟测试会跳过，不能据此判断引擎验证通过。
 
-涉及兼容性的修改，按 [compat/README.md](compat/README.md) 构建 release CLI、准备固定版本的 screeps-ok 依赖、构建适配器，再运行 `node compat/scripts/ratchet.mjs`。门禁要求总用例数匹配配置、通过数不低于下限，且基线已通过用例不得出现未豁免的失败、跳过或缺失。
+涉及兼容性的修改，按 [compat/README.md](compat/README.md) 构建 release CLI、准备固定版本的 screeps-ok 依赖与 bot 基线（`bash scripts/fetch-bots.sh`，tooangel/overmind/wasm 三夹具）、构建适配器，再运行 `node compat/scripts/ratchet.mjs`。门禁要求总用例数匹配配置、通过数不低于下限，且基线已通过用例不得出现未豁免的失败、跳过或缺失。
 
 ## 提交与 Pull Request 要求
 
