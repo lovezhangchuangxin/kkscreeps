@@ -176,7 +176,7 @@ fn mismatch_and_invalid_payload_keep_the_running_mod_shard() -> anyhow::Result<(
             .restore_checkpoint(saved.clone(), Some((&packages, &drift)))
             .is_err()
     );
-    for change in ["plan", "cursor", "cpu", "room", "mask", "mod"] {
+    for change in ["plan", "cursor", "cpu", "room", "mask", "mod", "strategy"] {
         let mut bad = saved.clone();
         match change {
             "plan" => bad["engine"]["plan_hash"] = json!("wrong"),
@@ -185,6 +185,7 @@ fn mismatch_and_invalid_payload_keep_the_running_mod_shard() -> anyhow::Result<(
             "room" => bad["engine"]["world"]["rooms"]["W1N1"]["snapshot"] = json!([0]),
             "mask" => bad["disabled_mods"] = json!(["missing"]),
             "mod" => bad["engine"]["mod_states"]["unexpected"] = json!({"dirty": true}),
+            "strategy" => bad["execution_strategy"] = json!("0".repeat(64)),
             _ => unreachable!(),
         }
         assert!(
@@ -710,6 +711,7 @@ const PINNED_CHECKPOINT_KEYS: &[&str] = &[
     "engine.world.terrain_epoch",
     "engine.world.time",
     "engine_version",
+    "execution_strategy",
     "fault_streak",
     "fault_streak.consecutive_faults",
     "fault_streak.mod_id",
@@ -767,6 +769,47 @@ fn checkpoint_schema_keys_are_pinned() -> anyhow::Result<()> {
         added.is_empty() && missing.is_empty(),
         "检查点 schema 键树与钉死清单不一致（新增字段须当批补齐保存恢复、\
          版本策略并同步 state-inventory 文档与清单）：\n新增: {added:?}\n缺失: {missing:?}"
+    );
+    Ok(())
+}
+
+/// 执行策略身份的两个兼容分支钉死：(a) 缺键的检查点跳过核对仍可恢复
+///（engine_version 精确门下只可能是同版本开发期产物；G23.a 决定是否
+/// 升格硬门前，该语义由本测试锁定）；(b) 原生检查点携带该键即拒。
+#[test]
+fn strategy_key_compatibility_branches_are_pinned() -> anyhow::Result<()> {
+    // (a) 删除键 → 恢复成功且续跑。
+    let packages = packages()?;
+    let options = options();
+    let mut engine = prepare(false, &packages, &options)?;
+    run(&mut engine, 1)?;
+    let mut saved = engine.checkpoint(Value::Null)?;
+    assert!(
+        saved["execution_strategy"].is_string(),
+        "当前保存路径必带该键"
+    );
+    saved
+        .as_object_mut()
+        .expect("检查点是对象")
+        .remove("execution_strategy");
+    engine.restore_checkpoint(saved, Some((&packages, &options)))?;
+    run(&mut engine, 1)?;
+    assert_eq!(engine.get_game_time(), 2, "缺键跳过后正常续跑");
+
+    // (b) 原生检查点注入该键 → 拒绝且旧分片完整。
+    let mut native = EmbedEngine::new();
+    native.create_shard(&json!({"players": ["p1"], "rooms": []}))?;
+    let mut poisoned = native.checkpoint(Value::Null)?;
+    assert!(
+        poisoned["execution_strategy"].is_null(),
+        "无 Mod 分片为 null"
+    );
+    poisoned["execution_strategy"] = json!("0".repeat(64));
+    assert!(native.restore_checkpoint(poisoned, None).is_err());
+    let intact = native.checkpoint(Value::Null)?;
+    assert!(
+        intact["execution_strategy"].is_null(),
+        "拒绝后旧分片保持原生形态"
     );
     Ok(())
 }

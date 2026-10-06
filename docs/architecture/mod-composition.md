@@ -28,7 +28,7 @@ manifest dependencies 管包存在、版本和注册/加载顺序；handler depe
 
 | 字段 | 含义 |
 |---|---|
-| report_version / plan_hash / sources | 报告版本 2、真实冻结计划 SHA-256 和来源版本/服务端/配置/玩家面摘要 |
+| report_version / plan_hash / sources | 报告版本 4（现行；2 提供选择身份、3 资源目录、4 建筑目录）、真实冻结计划 SHA-256 和来源版本/服务端/配置/玩家面摘要 |
 | selection | 实际内容身份：选择输入（requested/excluded）、展开后安装清单、自动加入项与未安装的已发现包；语义见[内容选择](mod-content-selection.md) |
 | handlers | 按 key 排序的处理器 key、slot、kind、binding 和 depends_on 集合；保留停用处理器的声明 |
 | slots | 槽 key/stage、original_center、frozen dispatch、active 链及 execution 模式 |
@@ -42,6 +42,15 @@ active 链的 before/wraps/after 是实际运行顺序，center 是当前选中�
 execution=native 表示原冻结 Native 内建槽的 Rust 直调；hosted 表示整槽进入玩法宿主。原本有钩子的 Hosted 内建槽在全部钩子停用后仍按原引擎执行表进入 VM，只有中心回退 native，报告仍为 hosted。这里区分整体分派与中心，避免误报零 JS 成本。
 
 规则 value 从冻结计划按句柄读取，来源按冻结选项及候选集合记录；不靠数值相等猜来源，多个相同值覆盖仍须显式选择。JS 处理器执行期读取同一冻结值的入口见[有效规则读取](mod-rules.md)。数据集合按稳定键排序，计划身份不包含停用掩码；比较执行行为时还须核对 disabled_mods。
+
+## 执行策略身份
+
+组合报告提供**执行策略身份摘要**（`execution_strategy_digest`）：以域分隔前缀 `kkscreeps/execution-strategy/v1` 对「冻结 PlanHash + 停用闭包 + 每槽派生执行面（键/阶段/执行模式/活动链）」做规范化哈希。组合报告是 `(计划, 停用掩码)` 的纯函数，此值把「保存时的派生」与「恢复时重放 `disable` 序列的派生」压成一个可比对凭据：
+
+- **恢复自检**：`ModVm` 重建 realm 后重算摘要与原值等值核对，原先"组合同步逐项一致"只是注释假设，现在是机器核验。
+- **检查点**：编排层检查点保存该摘要，恢复在重装配与停用重放后重算等值（缺键的存量检查点跳过，G23.a 决定是否升格硬门）；sim 报告（report_version 5 起）顶层 `execution_strategy` 同源输出，续跑与直跑等值。
+- **刻意不纳入**：`consumers`/`overrides`/`disable_closures`/`sources` 等诊断字段无执行语义（或已被 PlanHash 覆盖），纳入会造成无害漂移误报；选择输入不参与（同安装集合即同计划，见[内容选择](mod-content-selection.md)）。
+- G23.a 状态版本与 G24.a 包/API 切换以此为基础凭据；kkpv 块库仍只按 PlanHash 淘汰代际（停用掩码变化不失效旧块，现状语义）。
 
 ## 停用闭包
 

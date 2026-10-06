@@ -18,10 +18,20 @@
 
 ## notes/ 笔记索引
 
+- [G01 移动竞争槽](notes/g01-move-contest-2026-10-06.md)：整房竞争优先级槽、请求矩阵输入与默认排序回退。
+- [G02.a 移动准入槽](notes/g02-move-admission-2026-10-06.md)：房间级准入槽、原生门槛预填与终值消费。
+- [G02.b 移动障碍槽](notes/g02b-move-obstacle-2026-10-06.md)：单向追加阻挡与让位链传播。
+- [G02.c 移动预检槽](notes/g02c-move-precheck-2026-10-06.md)：请求级单向否决与"等同从未登记"语义。
+- [G03.a 整房仲裁链预演](notes/g03a-move-arbitration-2026-10-06.md)：请求视野扩展与 admission.evaluate 只读链预演。
+- [G04.a 移动代价槽](notes/g04a-move-cost-2026-10-06.md)：疲劳数值替换与原生回退。
+- [G06.a Mod 运行 trace](notes/g06a-mod-trace-2026-10-06.md)：trace 开启意愿、恢复后启用与诊断快照边界。
+- [G08.a 建筑自定义字段与生命周期](notes/g08a-building-fields-2026-10-06.md)：字段存储键与写面、freeze 五门、玩家面六层直供、停用语义定论与 bl/bk 双包冷恢复。
 - [G07.a 玩家预检规则·战斗射程首片](notes/g07a-combat-ranges-2026-10-06.md)：射程规则双端同源、常量注入、reach/medic 双包与四场景双通道冷恢复验收。
 - [G04.a 移动代价槽](notes/g04a-move-cost-2026-10-06.md)：疲劳数值替换、沼泽原生对照与行军节奏验收。
 - [G03.b 拉拽登记策略](notes/g03b-pull-registration-2026-10-06.md)：配对级否决槽、add_pulling 双射修复与遍历顺序无关化、anchor/leash 双包验收。
-- [G22.a 状态清单与 schema 门禁](notes/g22a-state-inventory-2026-10-06.md)：检查点逐域清单、76 键钉死门禁、键树折叠规则、墙钟订单夹具修正与变异验证。
+- [G29.a 玩家类型生成](notes/g29a-mod-types-2026-10-06.md)：冻结计划确定性 TS 声明、--check 新鲜度门与输出守卫。
+- [G22.a 状态清单与 schema 门禁](notes/g22a-state-inventory-2026-10-06.md)：检查点逐域清单、钉死键树门禁（交付时 99 键，G22.c 后 100）、键树折叠规则、墙钟订单夹具修正与变异验证。
+- [G22.c 活动执行策略的持久身份](notes/g22c-execution-strategy-2026-10-06.md)：组合报告域分隔摘要、ModVm 恢复自检、检查点 `execution_strategy` 键（99→100）与 sim 报告 v5。
 - [JS 受击策略第二片](notes/n2c-incoming-policy-2026-10-06.md)：公式替换、独立护甲/护盾与免疫、来源摘要、拒绝回退、缓存重试及冷恢复。
 - [受击策略第一片：原生 TOUGH](notes/n2c-tough-damage-2026-10-06.md)：累计减伤、治疗/死亡/库存、JS 主伤害/反击、拒绝和受伤后的冷恢复。
 

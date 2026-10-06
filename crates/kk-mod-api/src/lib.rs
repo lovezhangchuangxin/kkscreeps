@@ -20,6 +20,8 @@ pub mod contest;
 mod definition;
 pub mod extension;
 mod fingerprint;
+
+pub use fingerprint::domain_digest;
 mod freeze;
 mod handlers;
 pub mod incoming;

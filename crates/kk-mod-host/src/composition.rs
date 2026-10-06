@@ -225,6 +225,25 @@ impl CompositionReport {
         })
     }
 
+    /// 执行策略身份：冻结计划（plan_hash）、停用闭包（disabled_mods）
+    /// 与每槽派生执行面（键/阶段/模式/活动链）的域分隔摘要。组合报告
+    /// 是 (plan, disabled) 的纯函数，此值把「保存时的派生」与「恢复时
+    /// 重放的派生」压成一个可比对凭据；诊断字段（consumers、overrides、
+    /// disable_closures 等）刻意不入摘要——它们无执行语义，纳入会造成
+    /// 无害漂移误报。G23.a 状态版本与 G24.a 包切换以此为基础凭据。
+    pub fn execution_strategy_digest(&self) -> Result<String, String> {
+        let slots: Vec<_> = self
+            .slots
+            .iter()
+            .map(|slot| (&slot.key, &slot.stage, &slot.execution, &slot.active))
+            .collect();
+        let digest = kk_mod_api::domain_digest(
+            "kkscreeps/execution-strategy/v1",
+            &(&self.plan_hash, &self.disabled_mods, slots),
+        )?;
+        Ok(digest.iter().map(|b| format!("{b:02x}")).collect())
+    }
+
     /// 预测/实施一次停用使用同一闭包；不重注册、不重算规则。
     pub fn with_disabled(&self, requested: &BTreeSet<String>) -> Result<Self, String> {
         for id in requested {

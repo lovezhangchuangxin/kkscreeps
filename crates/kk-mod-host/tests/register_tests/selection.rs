@@ -167,6 +167,13 @@ fn same_installed_set_from_different_inputs_shares_plan_hash() {
         .unwrap();
     // 安装集合都是 {alpha, gamma}：计划身份一致，但报告保留各自输入。
     assert_eq!(included.plan.hash(), excluded.plan.hash());
+    // 执行策略身份同值：选择输入（诊断字段）不入摘要——只有安装
+    // 集合与停用掩码决定执行面。
+    assert_eq!(
+        included.composition.execution_strategy_digest().unwrap(),
+        excluded.composition.execution_strategy_digest().unwrap(),
+        "同安装集合不同选择输入必须共享执行策略身份"
+    );
     assert_eq!(
         included.composition.selection.selected,
         vec!["alpha", "gamma"]

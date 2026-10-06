@@ -282,11 +282,23 @@ impl ModVm {
                 registered.plan.hash().hex()
             ));
         }
+        // 执行策略身份核验：重注册产物与停用重放的派生须与原组合一致，
+        // 否则恢复路径自身存在分叉（此前只是注释假设，无机器核验）。
+        let expected_strategy = self.composition.execution_strategy_digest();
+        let actual_strategy = registered.composition.execution_strategy_digest();
+        match (expected_strategy, actual_strategy) {
+            (Ok(expected), Ok(actual)) if expected == actual => {}
+            (expected, actual) => {
+                return Err(format!(
+                    "Mod VM 恢复执行策略身份不匹配（预期 {expected:?}，实际 {actual:?}）；分片继续停顿"
+                ));
+            }
+        }
         if std::mem::take(&mut self.fail_next_rebuild) {
             return Err("故障注入：Mod VM 重新注册后恢复失败".into());
         }
         // 全部注册与身份校验成功后才发布替代 VM；失败时保持空槽，允许再次恢复。
-        // 组合同步为新 realm 的产物：正常恢复与原值逐项一致（身份已核验），
+        // 组合同步为新 realm 的产物（执行策略身份已核验等值），
         // 避免诊断面滞留重建前的旧副本。
         self.composition = registered.composition;
         self.realm = Some(replacement);

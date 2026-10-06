@@ -15,6 +15,10 @@ struct Checkpoint {
     engine: kk_engine::settle::checkpoint::EngineCheckpoint,
     workers: BTreeMap<String, Worker>,
     mods: Option<ModIdentity>,
+    /// 执行策略身份：冻结计划 + 停用闭包 + 每槽
+    /// 派生执行面的域分隔摘要，保存时取自 VM 组合报告；恢复在重装配
+    /// 与停用重放后重算等值核对。引用而非复制 engine.plan_hash。
+    execution_strategy: Option<String>,
     disabled_mods: BTreeSet<String>,
     fault_streak: Option<crate::ModFaultStreak>,
     last_fault: Option<crate::ModSettlementFault>,
@@ -41,25 +45,32 @@ impl EmbedEngine {
                 Ok((name.clone(), worker))
             })
             .collect::<anyhow::Result<_>>()?;
-        let (mods, fault_streak, last_fault, last_auto_disable) = match &self.mod_realm {
-            Some(vm) => {
-                let vm = vm.borrow();
-                let (packages, options) = vm.checkpoint_input();
-                (
-                    Some(ModIdentity::capture(packages, options)?),
-                    vm.fault_streak.clone(),
-                    vm.last_fault.clone(),
-                    vm.last_auto_disable.clone(),
-                )
-            }
-            None => (None, None, None, None),
-        };
+        let (mods, execution_strategy, fault_streak, last_fault, last_auto_disable) =
+            match &self.mod_realm {
+                Some(vm) => {
+                    let vm = vm.borrow();
+                    let (packages, options) = vm.checkpoint_input();
+                    (
+                        Some(ModIdentity::capture(packages, options)?),
+                        Some(
+                            vm.composition()
+                                .execution_strategy_digest()
+                                .map_err(anyhow::Error::msg)?,
+                        ),
+                        vm.fault_streak.clone(),
+                        vm.last_fault.clone(),
+                        vm.last_auto_disable.clone(),
+                    )
+                }
+                None => (None, None, None, None, None),
+            };
         let saved = Checkpoint {
             engine_version: env!("CARGO_PKG_VERSION").into(),
             room_schema_version: kk_schema::room::SCHEMA_VERSION,
             engine: self.engine.checkpoint().map_err(anyhow::Error::msg)?,
             workers,
             mods,
+            execution_strategy,
             disabled_mods: self.disabled_mods(),
             fault_streak,
             last_fault,
@@ -111,6 +122,7 @@ impl EmbedEngine {
             (Some(identity), Some((packages, options))) => identity.verify(packages, options)?,
             (None, None) => anyhow::ensure!(
                 saved.disabled_mods.is_empty()
+                    && saved.execution_strategy.is_none()
                     && saved.fault_streak.is_none()
                     && saved.last_fault.is_none()
                     && saved.last_auto_disable.is_none(),
@@ -147,6 +159,27 @@ impl EmbedEngine {
                 "检查点停用集合未满足依赖闭包"
             );
             replacement.rebuild_mod_realm()?;
+            // 执行策略身份等值核对：包/配置身份、停用闭包与 PlanHash
+            // 逐项通过后，此处把「组合派生一致性」也钉成机器核验。
+            // 缺键/显式 null 的检查点跳过本项（与故障域先例同口径）：
+            // engine_version 精确门下"存量"只可能是同版本开发期产物，
+            // null 即显式降级为 legacy 语义——plan_hash/ModIdentity/停用
+            // 闭包三道门仍然逐项核验，本项是增强而非唯一门。
+            // G23.a 状态版本收口时再决定是否升格为硬门。
+            if let Some(expected) = &saved.execution_strategy {
+                let actual = replacement
+                    .mod_realm
+                    .as_ref()
+                    .expect("重装配后 Mod VM 在位")
+                    .borrow()
+                    .composition()
+                    .execution_strategy_digest()
+                    .map_err(anyhow::Error::msg)?;
+                anyhow::ensure!(
+                    &actual == expected,
+                    "检查点执行策略身份不匹配（预期 {expected}，实际 {actual}）；尚未提供迁移"
+                );
+            }
         } else {
             replacement.create_shard(&shard)?;
         }

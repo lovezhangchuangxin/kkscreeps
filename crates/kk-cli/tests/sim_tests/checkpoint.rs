@@ -81,6 +81,14 @@ fn cold_cli_resume_matches_uninterrupted_multiplayer_mod_world() -> anyhow::Resu
         assert_eq!(actual["aliases"], expected["aliases"]);
         assert_eq!(actual["composition"], expected["composition"]);
         assert_eq!(
+            actual["execution_strategy"], expected["execution_strategy"],
+            "执行策略身份跨冷恢复一致"
+        );
+        let strategy = expected["execution_strategy"]
+            .as_str()
+            .expect("本场景带 Mod，策略身份必为字符串");
+        assert_eq!(strategy.len(), 64, "64 位十六进制摘要");
+        assert_eq!(
             without_timing_cpu(actual["final"].clone()),
             without_timing_cpu(expected["final"].clone())
         );

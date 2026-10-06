@@ -335,3 +335,74 @@ api.handlers.before('builtin:link.tick',{id:'z'},()=>{});
     assert_eq!(active.before, vec!["test:handler.z", "test:handler.a"]);
     let _ = std::fs::remove_dir_all(root);
 }
+
+/// 执行策略身份摘要：确定性（同输入同值）、停用敏感（掩码/闭包变化
+/// 即变化）、诊断字段不敏感（无执行语义的派生不入摘要）。
+#[test]
+fn execution_strategy_digest_is_deterministic_disable_sensitive_and_stable() {
+    let root = temp_root("strategy-digest");
+    write_pkg(
+        &root,
+        "test",
+        &[(
+            "server.js",
+            r#"export default function register(api){
+api.handlers.before('builtin:link.tick',{id:'a'},()=>{});
+api.handlers.replace('builtin:link.tick',{id:'r'},()=>{});
+}"#,
+        )],
+    );
+    let packages = discover_packages(&root).unwrap();
+    let mut realm = ModRealm::new().unwrap();
+    let registered = realm
+        .register(&packages, RegisterOptions::default())
+        .unwrap();
+    let base = registered.composition.execution_strategy_digest().unwrap();
+    // 同一组合重算等值（规范化确定性）。
+    assert_eq!(
+        base,
+        registered.composition.execution_strategy_digest().unwrap()
+    );
+
+    // 停用改写掩码与槽派生 → 身份变化。
+    let disabled = registered
+        .composition
+        .with_disabled(&BTreeSet::from(["test".into()]))
+        .unwrap();
+    let masked = disabled.execution_strategy_digest().unwrap();
+    assert_ne!(base, masked, "停用掩码必须改变执行策略身份");
+    // 停用后链派生变化：before 处理器（test:handler.a）被掩码滤除、
+    // 替换中心（test:handler.r）回退原生中心——active 链内容进摘要。
+    let chain = |report: &kk_mod_host::CompositionReport| {
+        report
+            .slots
+            .iter()
+            .find(|s| s.key == key("builtin:link.tick"))
+            .and_then(|s| s.active.as_ref())
+            .unwrap()
+            .clone()
+    };
+    let active = chain(&registered.composition);
+    let masked_chain = chain(&disabled);
+    assert!(active.before.iter().any(|h| h == "test:handler.a"));
+    assert!(
+        !masked_chain.before.iter().any(|h| h == "test:handler.a"),
+        "停用后 before 链不得含停用包处理器"
+    );
+    assert_eq!(active.center, "test:handler.r");
+    assert!(masked_chain.native_center, "替换中心停用后回退原生中心");
+
+    // 重新注册同一包集合 → 身份回到基线（与恢复路径自检同一口径）。
+    let mut fresh = ModRealm::new().unwrap();
+    let reregistered = fresh
+        .register(&packages, RegisterOptions::default())
+        .unwrap();
+    assert_eq!(
+        base,
+        reregistered
+            .composition
+            .execution_strategy_digest()
+            .unwrap(),
+        "同包集合重注册必须回到同一执行策略身份"
+    );
+}

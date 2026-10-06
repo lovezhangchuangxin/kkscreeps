@@ -275,6 +275,20 @@ impl EmbedEngine {
         self.mod_realm.as_ref().map(|vm| vm.borrow().composition())
     }
 
+    /// 当前执行策略身份（组合报告摘要）；无 Mod 分片为 None。
+    /// 摘要输入全为派生纯数据，失败理论不可达——报告路径按降级 None
+    /// 处理（debug 下仍断言），检查点保存/恢复路径独立取值且硬失败。
+    pub fn mod_execution_strategy(&self) -> Option<String> {
+        let digest = self
+            .mod_realm
+            .as_ref()?
+            .borrow()
+            .composition()
+            .execution_strategy_digest();
+        debug_assert!(digest.is_ok(), "执行策略摘要不可失败：{digest:?}");
+        digest.ok()
+    }
+
     /// 当前已安装贡献计划的身份；诊断报告须记录实际计划而非输入推算值。
     pub fn contribution_plan_hash(&self) -> kk_mod_api::PlanHash {
         self.engine.plan_hash()

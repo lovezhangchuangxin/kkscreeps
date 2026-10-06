@@ -140,7 +140,7 @@ pub fn run(options: Options) -> i32 {
         }
         Err(error) => (
             json!({
-                "report_version": 4, "success": false, "status": "setup_failed",
+                "report_version": SIM_REPORT_VERSION, "success": false, "status": "setup_failed",
                 "scenario": options.scenario, "ticks_requested": options.ticks,
                 "world_ticks_committed": 0, "error": format!("{error:#}"),
             }),
@@ -168,6 +168,10 @@ pub fn run(options: Options) -> i32 {
     }
     code
 }
+
+/// sim run 报告 schema 版本：成功与 setup_failed 两条路径同源引用，
+/// 升版时不得只改一处（同通道版本分裂会误导按版本判读的消费方）。
+const SIM_REPORT_VERSION: u32 = 5;
 
 fn digest(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
@@ -466,11 +470,12 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
         "assertion_failed"
     };
     Ok(json!({
-        "report_version": 4, "success": success, "status": status,
+        "report_version": SIM_REPORT_VERSION, "success": success, "status": status,
         "engine_version": env!("CARGO_PKG_VERSION"), "executable_sha256": executable_hash,
         "scenario": path, "scenario_sha256": digest(&bytes), "modules": modules,
         "mods": mods_metadata, "plan_hash": engine.contribution_plan_hash().hex(),
         "composition": engine.mod_composition(),
+        "execution_strategy": engine.mod_execution_strategy(),
         "disabled_mods": engine.disabled_mods(),
         "channel": if options.kkpv { "kkpv" } else { "json" }, "concurrency": options.concurrency,
         "ticks_requested": options.ticks, "ticks_attempted": attempted, "world_ticks_committed": committed,
