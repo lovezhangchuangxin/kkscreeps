@@ -8,6 +8,8 @@ use kk_schema::room::RoomObject;
 use serde_json::{Value, json};
 
 use super::Working;
+use super::working::ChainMutation;
+use kk_world::ObjId;
 
 /// 类型是否携带建造成本语义：内建 CONSTRUCTION_COST 成员，或计划声明
 /// 的 Mod 建筑。工地创建、维修/拆除/销毁与受袭开关的准入都按它判定。
@@ -259,6 +261,17 @@ pub(in crate::settle) fn production_tick(w: &mut Working, id: kk_world::ObjId) {
     }
 }
 
+/// Mod 建筑的对象 tick 入口：先按配方结算生产周期（原 production 语义、
+/// 顺序不变），再派发声明生命周期槽。无生产无 tick 的建筑不进入本入口
+/// （房间循环按目录过滤）。槽链经共享句柄执行，调用前不得持有候选借用。
+pub(in crate::settle) fn building_object_tick(
+    ctx: &super::RoomCtx,
+    id: kk_world::ObjId,
+) -> Result<(), String> {
+    production_tick(&mut ctx.borrow_mut(), id);
+    super::mod_intents::process_building_tick(ctx, id)
+}
+
 /// 读取 Generic 数据 JSON 中某资源的库存量；缺失按 0 处理。
 fn store_held(data: &Value, resource: &str) -> i64 {
     data.get("store")
@@ -298,6 +311,13 @@ pub(in crate::settle) fn complete_mod_construction(
         data["storeCapacity"] = json!(cap.min(u32::MAX as u64));
         data["store"] = json!({"energy": 0});
     }
+    // 自定义字段落声明默认值（Missing 默认不写键，与对象域 prepare_fields
+    // 同口径）；键含冒号，与上方原生记录键结构上不相交。
+    for field in &building.fields {
+        if let kk_mod_api::FieldDefault::Value(value) = &field.default {
+            data[field.key.as_str()] = value.clone();
+        }
+    }
     w.insert_new(RoomObject::Generic(kk_schema::room::GenericObj {
         id: 0,
         x: site.x,
@@ -305,3 +325,141 @@ pub(in crate::settle) fn complete_mod_construction(
         data: data.to_string(),
     }));
 }
+
+impl Working {
+    /// 校验并整写 Mod 建筑的记录：目标须是建筑目录中的 Generic 结构且
+    /// 声明了字段。提交记录里不含冒号的原生键（type/structureType/owner/
+    /// hits/hitsMax/notifyWhenAttacked/store/storeCapacity 等）须与当前值
+    /// 逐键一致——耐久与库存的候选写通道在各自结算域，不经本写面；含
+    /// 冒号的自定义键集合与建筑字段描述完全一致并按 schema 校验/规范化。
+    /// 只修改本房候选，失败随房间候选一并丢弃。
+    pub fn update_building_fields(&mut self, id: ObjId, record: &Value) -> Result<(), String> {
+        let structure_type = match self.room.objects.get(&id) {
+            Some(RoomObject::Generic(g)) => {
+                let v: Value = serde_json::from_str(&g.data).map_err(|e| e.to_string())?;
+                v.get("structureType")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            }
+            _ => None,
+        };
+        let Some(st) = structure_type else {
+            return Err(format!(
+                "对象 {} 不是带结构类型的 Generic 记录",
+                id.as_str()
+            ));
+        };
+        let building = self
+            .plane
+            .buildings
+            .get(&st)
+            .ok_or_else(|| format!("结构类型 {st:?} 不在建筑目录中"))?;
+        if building.fields.is_empty() {
+            return Err(format!("建筑 {st} 未声明自定义字段，target.fields 只读"));
+        }
+        let current: Value = match self.room.objects.get(&id) {
+            Some(RoomObject::Generic(g)) => {
+                serde_json::from_str(&g.data).map_err(|e| e.to_string())?
+            }
+            _ => unreachable!("上面已判 Generic"),
+        };
+        let proposed = record
+            .as_object()
+            .ok_or("target.fields 终值须为对象")?
+            .clone();
+        // 原生键（不含冒号）整体比对：任何漂移都拒绝，防止生命周期 tick
+        // 顺带改写耐久/库存/归属绕开各自结算域。
+        let mut native_equal = true;
+        for (key, value) in current.as_object().expect("记录是对象") {
+            if key.contains(':') {
+                continue;
+            }
+            if proposed.get(key) != Some(value) {
+                native_equal = false;
+                break;
+            }
+        }
+        let custom_current: serde_json::Map<String, Value> = current
+            .as_object()
+            .expect("记录是对象")
+            .iter()
+            .filter(|(key, _)| key.contains(':'))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        let custom_proposed: serde_json::Map<String, Value> = proposed
+            .iter()
+            .filter(|(key, _)| key.contains(':'))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        if !native_equal {
+            return Err(format!(
+                "建筑 {st} 的原生记录键（耐久/库存/归属等）只读；自定义键以冒号命名空间区分"
+            ));
+        }
+        // proposed 新增的非冒号键两边比对都覆盖不到（native_equal 只遍历
+        // current 的键），显式点名拒绝——静默丢弃会让误写的原生键看似生效。
+        for key in proposed.keys() {
+            if !key.contains(':') && !current.as_object().expect("记录是对象").contains_key(key)
+            {
+                return Err(format!(
+                    "建筑 {st} 的记录键 {key} 不是原生记录键也不是冒号命名空间自定义键"
+                ));
+            }
+        }
+        // 冗余自定义键先点名拒绝：下方目录校验以去命名空间的字段短名
+        // 构造载荷（与 Mod 对象 payload 同一入口），未声明键不先拦截会
+        // 静默落出校验载荷。
+        for key in custom_proposed.keys() {
+            if !building.fields.iter().any(|f| f.key.as_str() == key) {
+                return Err(format!("{st}: 字段 {key} 未在建筑中声明"));
+            }
+        }
+        // 校验载荷用字段短名；存储键保持 {ns}:{name} 与原生键结构不相交。
+        let mut validation = serde_json::Map::new();
+        for field in &building.fields {
+            let name = kk_mod_api::validate::field_name(&field.key);
+            if let Some(value) = custom_proposed.get(field.key.as_str()) {
+                validation.insert(name.to_string(), value.clone());
+            }
+        }
+        let mut fields = Value::Object(validation);
+        kk_mod_api::validate::check_object_payload(
+            &fields,
+            &building.fields,
+            &building.key.to_string(),
+        )?;
+        kk_mod_api::validate::normalize_object_payload(&mut fields, &building.fields);
+        // 首触原值进链日志（拒绝/回滚按既有机制恢复整个对象）。
+        if self.chain_mutations.as_ref().is_some_and(|log| {
+            !log.iter()
+                .any(|entry| matches!(entry, ChainMutation::ModUpdated(old, _) if *old == id))
+        }) {
+            self.check_mod_mutation_budget()?;
+            let original = self.room.objects.get(&id).expect("已确认对象").clone();
+            self.chain_mutations
+                .as_mut()
+                .expect("日志已武装")
+                .push(ChainMutation::ModUpdated(id, Box::new(original)));
+        }
+        // 以当前原生键 + 新自定义键重组记录：原生键始终取当前候选值。
+        let mut merged = current.clone();
+        let merged_object = merged.as_object_mut().expect("记录是对象");
+        for key in custom_current.keys() {
+            merged_object.remove(key);
+        }
+        let normalized = fields.as_object().expect("payload 已规范化");
+        for field in &building.fields {
+            let name = kk_mod_api::validate::field_name(&field.key);
+            if let Some(value) = normalized.get(name) {
+                merged_object.insert(field.key.as_str().to_string(), value.clone());
+            }
+        }
+        if let Some(RoomObject::Generic(g)) = self.room.objects.get_mut(&id) {
+            g.data = merged.to_string();
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests;

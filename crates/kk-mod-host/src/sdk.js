@@ -238,7 +238,7 @@ export function createApi(namespace, config) {
       if (spec === null || typeof spec !== 'object' || Array.isArray(spec)) {
         throw new Error(`建筑 ${key} 的说明须为对象`);
       }
-      const known = ['playerClass', 'cost', 'hitsMax', 'pathing', 'capacity', 'production'];
+      const known = ['playerClass', 'cost', 'hitsMax', 'pathing', 'capacity', 'production', 'fields', 'tick'];
       for (const member of Object.keys(spec)) {
         if (known.indexOf(member) === -1) {
           throw new Error(`建筑 ${key} 声明了未知选项 ${member}`);
@@ -290,6 +290,24 @@ export function createApi(namespace, config) {
           }
         }
       }
+      const fields = [];
+      if (spec.fields !== undefined) {
+        if (spec.fields === null || typeof spec.fields !== 'object' || Array.isArray(spec.fields)) {
+          throw new Error(`建筑 ${key} 的字段表须为对象`);
+        }
+        for (const [name, value] of Object.entries(spec.fields)) {
+          if (value !== null && typeof value === 'object' && value.visibility !== undefined
+            && value.visibility !== 'public') {
+            throw new Error(`建筑 ${key} 的字段 ${name} 可见性首片只支持 public`);
+          }
+          fields.push(fieldOf(namespace, name, value));
+        }
+      }
+      let tick;
+      if (spec.tick !== undefined) {
+        tick = { slot: key + '.tick', process: key + '.tick.process' };
+        requireFunction(namespace, tick.process, spec.tick);
+      }
       declare('building', {
         key,
         playerClass: spec.playerClass,
@@ -298,6 +316,8 @@ export function createApi(namespace, config) {
         pathing: spec.pathing,
         capacity: spec.capacity,
         production: spec.production,
+        fields,
+        tick,
       });
       return key;
     },

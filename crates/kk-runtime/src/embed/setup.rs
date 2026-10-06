@@ -281,6 +281,11 @@ impl EmbedEngine {
                                 .iter()
                                 .map(|(resource, _)| resource.clone())
                                 .collect::<Vec<_>>(),
+                            building
+                                .fields
+                                .iter()
+                                .map(|field| field.key.to_string())
+                                .collect::<Vec<_>>(),
                         )
                     })
                     .collect::<Vec<_>>();

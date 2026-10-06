@@ -2,6 +2,7 @@
 use super::*;
 use kk_mod_api::buildings::{BuildingDescriptor, BuildingPathing, ProductionSpec};
 use kk_mod_api::resources::ResourceDescriptor;
+use kk_mod_api::{FieldDefault, FieldDescriptor, NumberDomain, ValueKind, ValueSchema, Visibility};
 
 fn building(namespace: &str, name: &str) -> BuildingDescriptor {
     BuildingDescriptor {
@@ -12,6 +13,8 @@ fn building(namespace: &str, name: &str) -> BuildingDescriptor {
         pathing: BuildingPathing::Obstacle,
         store_capacity: Some(1000),
         production: None,
+        fields: Vec::new(),
+        lifecycle_slots: BTreeSet::new(),
     }
 }
 
@@ -23,9 +26,8 @@ fn declared_buildings_merge_into_sorted_plan_catalog() {
     b.buildings.push(building("beta", "alpha"));
     let plan = plan(vec![a, b]).unwrap();
     let keys: Vec<&str> = plan.buildings().iter().map(|b| b.key.as_str()).collect();
+    // 键含冒号，结构上不可能与内建结构名撞车（断言列表本身即锁定该性质）。
     assert_eq!(keys, ["alpha:zeta", "beta:alpha"]);
-    // 键含冒号，结构上不可能与内建结构名撞车。
-    assert!(!keys.iter().any(|k| !k.contains(':')));
 }
 
 #[test]
@@ -290,4 +292,249 @@ fn building_resource_order_is_canonical_but_amounts_remain_identity() {
             "{vector} 数量改变身份"
         );
     }
+}
+
+/// 声明一个 gauge 字段并把它（或指定绑定）登记进贡献 bindings 集
+///（装载器对 JS 声明自动插入；直构贡献须自带，freeze 校验其存在）。
+fn add_gauge_field(c: &mut Contribution, name: &str, binding: Option<&str>, default: FieldDefault) {
+    let descriptor = gauge_field(name, binding, default);
+    c.bindings.insert(descriptor.binding.clone());
+    let b = c.buildings.last_mut().expect("先推入建筑再挂字段");
+    b.fields.push(descriptor);
+}
+
+fn gauge_field(name: &str, binding: Option<&str>, default: FieldDefault) -> FieldDescriptor {
+    FieldDescriptor {
+        key: key(&format!("alpha:{name}")),
+        schema: ValueSchema {
+            kind: ValueKind::Number(NumberDomain::Unsigned { min: 0, max: 100 }),
+            nullable: false,
+        },
+        default,
+        visibility: Visibility::Public,
+        binding: key(binding.unwrap_or(&format!("alpha:foundry.field.{name}"))),
+    }
+}
+
+/// 建筑字段的冻结校验：键/绑定归属、默认值 schema、槽归属与
+/// 嵌套限额。错误上下文以「建筑键 / 字段键」点名。
+#[test]
+fn building_fields_validate_ownership_defaults_and_slots() {
+    let mut c = module("alpha");
+    c.buildings.push(building("alpha", "foundry"));
+    add_gauge_field(&mut c, "heat", None, FieldDefault::Value(json!(200)));
+    error(c, "字段默认值不满足 schema");
+
+    let mut c = module("alpha");
+    c.buildings.push(building("alpha", "foundry"));
+    add_gauge_field(
+        &mut c,
+        "heat",
+        Some("beta:foundry.field.heat"),
+        FieldDefault::Missing,
+    );
+    error(c, "beta:foundry.field.heat");
+
+    let mut c = module("alpha");
+    c.buildings.push(building("alpha", "foundry"));
+    add_gauge_field(&mut c, "heat", None, FieldDefault::Missing);
+    let b = c.buildings.last_mut().unwrap();
+    b.fields.last_mut().unwrap().key = key("beta:heat");
+    error(c, "beta:heat");
+
+    let mut c = module("alpha");
+    let mut b = building("alpha", "foundry");
+    b.lifecycle_slots.insert(key("beta:foundry.tick"));
+    c.buildings.push(b);
+    error(c, "beta:foundry.tick");
+
+    // 可见性门在冻结层设防：JS 转换层之外直构 Rust 贡献同样拒绝
+    //（记录直供无字段级裁切，owner/server-only 首片不开放）。
+    let mut c = module("alpha");
+    c.buildings.push(building("alpha", "foundry"));
+    add_gauge_field(&mut c, "secret", None, FieldDefault::Missing);
+    let b = c.buildings.last_mut().unwrap();
+    b.fields.last_mut().unwrap().visibility = Visibility::Owner;
+    error(c, "建筑字段可见性首片只支持 public");
+
+    // 超深 schema：17 层嵌套数组越过默认限额 16。
+    let mut kind = ValueKind::Bool;
+    for _ in 0..17 {
+        kind = ValueKind::Array {
+            element: Box::new(ValueSchema {
+                kind,
+                nullable: false,
+            }),
+            max_len: 4,
+        };
+    }
+    let mut c = module("alpha");
+    c.buildings.push(building("alpha", "foundry"));
+    add_gauge_field(&mut c, "deep", None, FieldDefault::Missing);
+    let b = c.buildings.last_mut().unwrap();
+    b.fields.last_mut().unwrap().schema = ValueSchema {
+        kind,
+        nullable: false,
+    };
+    error(c, "schema 嵌套超过限额");
+}
+
+/// 字段表参与计划身份：排列归一化不改变身份，默认值/可见性/槽集
+/// 变化改变身份——冷恢复按计划哈希分派，身份漂移必须可检。
+#[test]
+fn building_fields_are_canonicalized_and_participate_in_identity() {
+    let base = |default: FieldDefault, with_slot: bool| {
+        let mut c = module("alpha");
+        let mut b = building("alpha", "foundry");
+        b.fields = vec![
+            gauge_field("heat", None, default.clone()),
+            gauge_field("cycles", None, FieldDefault::Missing),
+        ];
+        for field in &b.fields {
+            c.bindings.insert(field.binding.clone());
+        }
+        if with_slot {
+            let slot = key("alpha:foundry.tick");
+            let process = key("alpha:foundry.tick.process");
+            c.bindings.insert(process.clone());
+            c.slots.push(SlotDescriptor {
+                key: slot.clone(),
+                stage: Stage::ObjectTick,
+                native_binding: process,
+            });
+            b.lifecycle_slots.insert(slot);
+        }
+        c.buildings.push(b);
+        c
+    };
+    let original = plan(vec![base(FieldDefault::Value(json!(7)), true)]).unwrap();
+    let mut reordered = base(FieldDefault::Value(json!(7)), true);
+    reordered.buildings[0].fields.reverse();
+    assert_eq!(
+        original.hash(),
+        plan(vec![reordered]).unwrap().hash(),
+        "字段排列不改变身份"
+    );
+    assert_eq!(
+        original.buildings()[0].fields[0].key.as_str(),
+        "alpha:cycles",
+        "字段表按键稳定排序"
+    );
+    assert_ne!(
+        original.hash(),
+        plan(vec![base(FieldDefault::Value(json!(8)), false)])
+            .unwrap()
+            .hash(),
+        "默认值变化改变身份"
+    );
+    let wider = |default: FieldDefault, with_slot: bool| {
+        let mut c = base(default, with_slot);
+        c.buildings[0].fields[0].schema = ValueSchema {
+            kind: ValueKind::Number(NumberDomain::Unsigned { min: 0, max: 2000 }),
+            nullable: false,
+        };
+        c
+    };
+    assert_ne!(
+        original.hash(),
+        plan(vec![wider(FieldDefault::Value(json!(7)), false)])
+            .unwrap()
+            .hash(),
+        "schema 变化改变身份"
+    );
+    assert_ne!(
+        original.hash(),
+        plan(vec![base(FieldDefault::Value(json!(7)), false)])
+            .unwrap()
+            .hash(),
+        "生命周期槽变化改变身份"
+    );
+    // 冻结期规范化：Float 域的整数默认落为 1.0 backing。
+    let float_field = FieldDescriptor {
+        schema: ValueSchema {
+            kind: ValueKind::Number(NumberDomain::Float {
+                min: 0.0,
+                max: 10.0,
+            }),
+            nullable: false,
+        },
+        ..gauge_field("gauge", None, FieldDefault::Value(json!(1)))
+    };
+    let mut c = module("alpha");
+    let mut b = building("alpha", "foundry");
+    b.fields = vec![float_field];
+    c.bindings.insert(b.fields[0].binding.clone());
+    c.buildings.push(b);
+    let frozen = plan(vec![c]).unwrap();
+    assert_eq!(
+        frozen.buildings()[0].fields[0].default,
+        FieldDefault::Value(json!(1.0)),
+        "整数字段默认经冻结规范化为浮点 backing"
+    );
+}
+
+/// 冻结层第二遍目录门：完整 schema、重复字段键、生命周期槽声明与
+/// 形状、字段绑定入集——Rust 直构贡献与 JS 装载同门。
+#[test]
+fn building_fields_second_pass_gates() {
+    // 空枚举漏到运行期会把房间钉死在永久故障（任何写入恒拒）。
+    let mut c = module("alpha");
+    c.buildings.push(building("alpha", "foundry"));
+    add_gauge_field(&mut c, "mode", None, FieldDefault::Missing);
+    let b = c.buildings.last_mut().unwrap();
+    b.fields.last_mut().unwrap().schema = ValueSchema {
+        kind: ValueKind::Enum(BTreeSet::new()),
+        nullable: false,
+    };
+    error(c, "枚举为空或成员长度无效");
+
+    // ref 指向未知类型同样在第二遍拒绝。
+    let mut c = module("alpha");
+    c.buildings.push(building("alpha", "foundry"));
+    add_gauge_field(&mut c, "link", None, FieldDefault::Missing);
+    let b = c.buildings.last_mut().unwrap();
+    b.fields.last_mut().unwrap().schema = ValueSchema {
+        kind: ValueKind::ObjectRef(TypeRef {
+            key: key("alpha:ghost"),
+            schema_version: 1,
+        }),
+        nullable: false,
+    };
+    error(c, "alpha:ghost");
+
+    // 同建筑重复字段键（目录层门之外的 freeze 权威层）。
+    let mut c = module("alpha");
+    c.buildings.push(building("alpha", "foundry"));
+    add_gauge_field(&mut c, "heat", None, FieldDefault::Missing);
+    add_gauge_field(&mut c, "heat", None, FieldDefault::Missing);
+    error(c, "建筑字段重复声明 alpha:heat");
+
+    // 字段绑定未入贡献 bindings 集。
+    let mut c = module("alpha");
+    c.buildings.push(building("alpha", "foundry"));
+    let orphan = gauge_field("heat", None, FieldDefault::Missing);
+    let b = c.buildings.last_mut().unwrap();
+    b.fields.push(orphan);
+    error(c, "未知绑定 alpha:foundry.field.heat");
+
+    // 生命周期槽未在 slots 声明。
+    let mut c = module("alpha");
+    let mut b = building("alpha", "foundry");
+    b.lifecycle_slots.insert(key("alpha:foundry.tick"));
+    c.buildings.push(b);
+    error(c, "未在 slots 中声明");
+
+    // 槽键不从建筑键派生（即便已声明且阶段正确）。
+    let mut c = module("alpha");
+    let mut b = building("alpha", "foundry");
+    let process = key("alpha:tick.process");
+    c.bindings.insert(process.clone());
+    c.slots.push(SlotDescriptor {
+        key: key("alpha:other.tick"),
+        stage: Stage::ObjectTick,
+        native_binding: process,
+    });
+    b.lifecycle_slots.insert(key("alpha:other.tick"));
+    c.buildings.push(b);
+    error(c, "须为 alpha:foundry.tick");
 }

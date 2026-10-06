@@ -400,6 +400,41 @@ fn emit_buildings(
             "export type {} = new (...args: never[]) => unknown;",
             symbols.constructors[building.key.as_str()]
         );
+        // 自定义字段经存储键（含命名空间冒号）直供玩家；声明为独立
+        // 接口供玩家交叉类型使用，Missing 默认（记录可缺键）为可选成员。
+        if !building.fields.is_empty() {
+            let ctor = &symbols.constructors[building.key.as_str()];
+            doc_lines(
+                out,
+                "",
+                &format!(
+                    "{} 的自定义字段：实例经存储键直供读取（如 obj['{}']），记录缺键为 undefined。",
+                    building.key,
+                    building.fields[0].key.as_str()
+                ),
+            );
+            let members: Vec<String> = building
+                .fields
+                .iter()
+                .map(|field| {
+                    let optional = if matches!(field.default, crate::FieldDefault::Missing) {
+                        "?"
+                    } else {
+                        ""
+                    };
+                    format!(
+                        "{}{optional}: {}",
+                        ts_property(field.key.as_str()),
+                        ts_type(&field.schema)
+                    )
+                })
+                .collect();
+            let _ = writeln!(
+                out,
+                "export interface {ctor}Fields {{ {} }}",
+                members.join("; ")
+            );
+        }
     }
     out.push('\n');
 }

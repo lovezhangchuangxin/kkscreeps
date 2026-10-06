@@ -48,6 +48,37 @@ pub(crate) fn process_object_tick(ctx: &RoomCtx, id: ObjId) -> Result<(), String
     Ok(())
 }
 
+/// 在对象 tick 阶段派发 Mod 建筑的生命周期槽。与自有对象同律：不支持
+/// 局部拒绝，Declined 或异常使整轮候选失败；目标在进入宿主前重新读取。
+pub(crate) fn process_building_tick(ctx: &RoomCtx, id: ObjId) -> Result<(), String> {
+    let (slots, contrib) = {
+        let w = ctx.borrow();
+        let Some(kk_schema::room::RoomObject::Generic(g)) = w.room.objects.get(&id) else {
+            return Ok(());
+        };
+        let Ok(data) = serde_json::from_str::<Value>(&g.data) else {
+            return Ok(());
+        };
+        let Some(st) = data.get("structureType").and_then(Value::as_str) else {
+            return Ok(());
+        };
+        let Some(building) = w.plane.buildings.get(st) else {
+            return Ok(());
+        };
+        (
+            building.lifecycle_slots.iter().cloned().collect::<Vec<_>>(),
+            w.plane.contrib.clone(),
+        )
+    };
+    for slot in &slots {
+        let outcome = contrib.run_ext(slot, ctx, id, &Value::Null)?;
+        if matches!(outcome, kk_mod_api::SlotOutcome::Declined(_)) {
+            return Err(format!("建筑生命周期槽 {slot} 不支持正常拒绝"));
+        }
+    }
+    Ok(())
+}
+
 /// 派发一个玩家在一个 Mod 对象上的全部扩展意图。调用方已确认对象
 /// 是 [`kk_schema::room::RoomObject::Mod`]；目标在此重新读取，对象
 /// 在本轮指令处理中先被销毁的极端形态按"目标不存在"丢弃。

@@ -5,7 +5,7 @@
 //! 宿主按本目录的纯数据执行，玩法规则（成本构成、生产配方、寻路语义）
 //! 留给声明方表达。这里只定义数据与冻结目录，不访问世界。
 
-use crate::definition::Key;
+use crate::definition::{FieldDescriptor, Key};
 use crate::plan::ContributionPlan;
 use serde::Serialize;
 
@@ -55,6 +55,12 @@ pub struct BuildingDescriptor {
     /// 仓库总容量；Some 时完工结构携带 store/storeCapacity，None 则无仓库。
     pub store_capacity: Option<u64>,
     pub production: Option<ProductionSpec>,
+    /// 自定义字段；键为命名空间字段键（含冒号），与完工记录的原生键
+    /// （不含冒号）结构上不相交。完工时写入声明默认值，tick 处理器经
+    /// 校验写面改写，玩家面随 Generic 记录直供。
+    pub fields: Vec<FieldDescriptor>,
+    /// 派生生命周期槽（`{key}.tick`，ObjectTick 阶段）；空集表示无 tick。
+    pub lifecycle_slots: std::collections::BTreeSet<Key>,
 }
 
 impl BuildingDescriptor {
@@ -77,7 +83,9 @@ pub struct BuildingCatalog {
 
 impl BuildingCatalog {
     /// 从冻结计划解析并做玩家面校验（玩家类名须为合法 JS 标识符且在
-    /// 建筑间唯一）。装配期调用一次；此处失败不产出半装好的分片。
+    /// 建筑间唯一；自定义字段键须唯一且与建筑键同命名空间——字段写面
+    /// 按建筑目录校验，跨命名空间字段无法路由）。装配期调用一次；
+    /// 此处失败不产出半装好的分片。
     pub fn from_plan(plan: &ContributionPlan) -> Result<Self, String> {
         let mut classes = std::collections::BTreeSet::new();
         for building in plan.buildings() {
@@ -92,6 +100,18 @@ impl BuildingCatalog {
                     "玩家类名 {} 在多个建筑上重复（玩家绑定须唯一）",
                     building.player_class
                 ));
+            }
+            let mut field_keys = std::collections::BTreeSet::new();
+            for field in &building.fields {
+                if field.key.namespace() != building.key.namespace() {
+                    return Err(format!(
+                        "建筑 {} 的字段 {} 须与建筑键同命名空间",
+                        building.key, field.key
+                    ));
+                }
+                if !field_keys.insert(field.key.clone()) {
+                    return Err(format!("建筑 {} 重复声明字段 {}", building.key, field.key));
+                }
             }
         }
         Ok(Self {
@@ -118,29 +138,6 @@ impl BuildingCatalog {
 
     pub fn iter(&self) -> impl Iterator<Item = &BuildingDescriptor> {
         self.entries.iter()
-    }
-}
-
-/// 建筑的玩家面清单条目：键、寻路语义与玩家类名，供沙箱侧白名单、
-/// 代价矩阵与类绑定装配（由宿主从本目录导出，不从玩家输入读取）。
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-pub struct SurfaceBuilding {
-    pub key: String,
-    pub pathing: &'static str,
-    pub player_class: String,
-}
-
-impl BuildingCatalog {
-    /// 玩家面建筑数据（有序）；ModPlayerApi 清单与预检 canary 共用。
-    pub fn player_surface(&self) -> Vec<SurfaceBuilding> {
-        self.entries
-            .iter()
-            .map(|b| SurfaceBuilding {
-                key: b.key.to_string(),
-                pathing: b.pathing.as_str(),
-                player_class: b.player_class.clone(),
-            })
-            .collect()
     }
 }
 
@@ -200,6 +197,8 @@ mod tests {
                 inputs: vec![("energy".into(), 50), ("demo:ore".into(), 20)],
                 outputs: vec![("demo:ingot".into(), 5)],
             }),
+            fields: Vec::new(),
+            lifecycle_slots: BTreeSet::new(),
         }
     }
 
@@ -224,9 +223,6 @@ mod tests {
         assert!(catalog.is_obstacle("demo:foundry"));
         assert!(!catalog.is_obstacle("demo:missing"));
         assert!(catalog.get("extension").is_none());
-        let surface = catalog.player_surface();
-        assert_eq!(surface.len(), 1);
-        assert_eq!(surface[0].pathing, "obstacle");
     }
 
     #[test]

@@ -73,6 +73,7 @@ fn bind_rejects_foreign_namespace_types() {
                 "othermod:mill".to_string(),
                 "obstacle".to_string(),
                 vec!["energy".to_string()],
+                vec!["othermod:charge".to_string()],
             )],
         })
     };

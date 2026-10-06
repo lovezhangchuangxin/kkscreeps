@@ -123,7 +123,11 @@ impl Engine {
                 ty.descriptor.key.namespace() != "builtin"
                     && ty.descriptor.lifecycle_slots.contains(&slot.key)
             });
-            if !referenced && !lifecycle {
+            let building_lifecycle = plan
+                .buildings()
+                .iter()
+                .any(|b| b.lifecycle_slots.contains(&slot.key));
+            if !referenced && !lifecycle && !building_lifecycle {
                 return Err(format!(
                     "入口 {} 没有挂载任何动作或自有对象 tick，该槽位的执行接线未开放",
                     slot.key
@@ -133,7 +137,7 @@ impl Engine {
         Ok(())
     }
 
-    /// 首版只接自有类型的具名 tick；不允许借此安装未派发阶段、内建
+    /// 首版只接自有类型与建筑的具名 tick；不允许借此安装未派发阶段、内建
     /// 生命周期或多个类型共享的槽，防止声明通过但读取错误对象表示。
     fn check_object_lifecycles(plan: &kk_mod_api::ContributionPlan) -> Result<(), String> {
         for ty in plan.projection().types() {
@@ -149,6 +153,23 @@ impl Engine {
                     .resolve_slot(key)
                     .and_then(|handle| plan.get_slot(handle))
                     .ok_or_else(|| format!("类型 {} 缺少生命周期槽 {key}", ty.key))?;
+                if slot.stage != kk_mod_api::Stage::ObjectTick {
+                    return Err(format!("生命周期槽 {key} 必须在 ObjectTick 阶段"));
+                }
+            }
+        }
+        for building in plan.buildings() {
+            for key in &building.lifecycle_slots {
+                if key.as_str() != format!("{}.tick", building.key) {
+                    return Err(format!(
+                        "建筑 {} 只开放自身的 building.tick 生命周期",
+                        building.key
+                    ));
+                }
+                let slot = plan
+                    .resolve_slot(key)
+                    .and_then(|handle| plan.get_slot(handle))
+                    .ok_or_else(|| format!("建筑 {} 缺少生命周期槽 {key}", building.key))?;
                 if slot.stage != kk_mod_api::Stage::ObjectTick {
                     return Err(format!("生命周期槽 {key} 必须在 ObjectTick 阶段"));
                 }
@@ -208,6 +229,22 @@ impl Engine {
                 continue;
             }
             for key in &ty.descriptor.lifecycle_slots {
+                let slot = plan
+                    .get_slot(plan.resolve_slot(key).expect("生命周期已校验"))
+                    .expect("句柄来自计划");
+                let center = match &slot.dispatch {
+                    kk_mod_api::Dispatch::Native(binding) => binding,
+                    kk_mod_api::Dispatch::Chained { center, .. } => center,
+                };
+                if center.as_str() != format!("{key}.process") && !replacements.contains(center) {
+                    return Err(format!(
+                        "生命周期槽 {key} 的中心不是自身 process 或 Replace"
+                    ));
+                }
+            }
+        }
+        for building in plan.buildings() {
+            for key in &building.lifecycle_slots {
                 let slot = plan
                     .get_slot(plan.resolve_slot(key).expect("生命周期已校验"))
                     .expect("句柄来自计划");
@@ -304,11 +341,15 @@ impl Engine {
         installed.extend(extensions.field_bindings().cloned());
         // Mod 类型字段绑定的实现是 payload 存储与写入门（创建/处理器回写/
         // 发布前校验），随计划装配即安装——与扩展目录的安装口径同原则。
+        // 建筑字段绑定同理：完工落默认值与生命周期写面就是其实现。
         for ty in plan.projection().types() {
             if ty.descriptor.key.namespace() == "builtin" {
                 continue;
             }
             installed.extend(ty.fields.iter().map(|f| f.descriptor.binding.clone()));
+        }
+        for building in plan.buildings() {
+            installed.extend(building.fields.iter().map(|f| f.binding.clone()));
         }
         Self::check_installed_bindings(&plan, &installed)?;
         self.links = links;
@@ -357,6 +398,9 @@ impl Engine {
                         .map(|field| field.descriptor.binding.clone()),
                 );
             }
+        }
+        for building in plan.buildings() {
+            installed.extend(building.fields.iter().map(|f| f.binding.clone()));
         }
         Self::check_installed_bindings(&plan, &installed)?;
         self.links = links;

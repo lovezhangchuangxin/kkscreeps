@@ -29,12 +29,14 @@
     types[t.key] = { find: t.find, look: t.look, cls: null };
     findByConst[t.find] = t.key;
   }
-  // 建筑类型键 → { pathing, cost, cls }：完工结构记录的 structureType 命中
-  // 本表时使用绑定玩家类；寻路语义与成本键供预检/代价矩阵消费。
+  // 建筑类型键 → { pathing, cost, fields, cls }：完工结构记录的
+  // structureType 命中本表时使用绑定玩家类；寻路语义与成本键供预检/
+  // 代价矩阵消费；fields 是自定义字段存储键（含命名空间冒号），
+  // 装配器按记录直供同名属性（首片可见性仅 public，全字段直供）。
   const buildings = __Object.create(null);
   for (let i = 0; i < manifest.buildings.length; i++) {
     const b = manifest.buildings[i];
-    buildings[b.key] = { pathing: b.pathing, cost: b.cost, cls: null };
+    buildings[b.key] = { pathing: b.pathing, cost: b.cost, fields: b.fields || [], cls: null };
   }
   // emit 目录按安装包的命名空间裁剪（纵深防御：A 包的模块不经 B 包的
   // 键发出意图；结算侧权威校验仍同源全目录）。

@@ -153,6 +153,35 @@ fn freeze_inner(
                 production.inputs.sort_by(|a, b| a.0.cmp(&b.0));
                 production.outputs.sort_by(|a, b| a.0.cmp(&b.0));
             }
+            building.fields.sort_by(|a, b| a.key.cmp(&b.key));
+            for field in &mut building.fields {
+                owned(&field.key, ns)?;
+                owned(&field.binding, ns)?;
+                // 建筑记录直供玩家面（无字段级裁切），首片只允许 public；
+                // 该门在冻结层设防——JS 转换层之外直接构造 Rust 贡献的
+                // 路径（builtin 贡献、宿主工具）不能绕开。
+                if field.visibility != Visibility::Public {
+                    return Err(FreezeError::new(
+                        field.key.to_string(),
+                        "建筑字段可见性首片只支持 public（记录直供；owner/server-only 裁切未开放）",
+                    ));
+                }
+                let context = format!("{} / {}", building.key, field.key);
+                validate::schema_depth(&field.schema, options.max_schema_depth, &context)?;
+                // 与对象类型字段同口径：字段绑定须在贡献 bindings 集中
+                // 声明（JS 装载器自动插入；手搓 Rust 贡献在此拦住）。
+                validate::binding(&field.binding, &c.bindings, &context)?;
+                if let FieldDefault::Value(value) = &mut field.default {
+                    validate::default_value(value, &field.schema, &context)?;
+                    // 默认值按 schema 规范化数值 backing（对象域在
+                    // prepare_fields 运行期做；建筑完工直接落键，冻结期
+                    // 一次做齐，Int/Float 混桶不在记录里存活）。
+                    validate::normalize_value(value, &field.schema);
+                }
+            }
+            for slot in &building.lifecycle_slots {
+                owned(slot, ns)?;
+            }
             insert(&mut buildings, building.key.clone(), building.clone())?;
         }
         for key in &c.bindings {
@@ -272,6 +301,47 @@ fn freeze_inner(
                 context,
                 "同一键不能既是对象类型又是建筑类型",
             ));
+        }
+        // 字段表此时已按键排序：相邻重复即重复声明（目录层门是纵深
+        // 防御，freeze 是 Rust 直构贡献的权威层）。
+        for pair in building.fields.windows(2) {
+            if pair[0].key == pair[1].key {
+                return Err(FreezeError::new(
+                    context.clone(),
+                    format!("建筑字段重复声明 {}", pair[0].key),
+                ));
+            }
+        }
+        // 完整 schema 校验（枚举非空、ref 指向已知类型等）：空枚举等
+        // 形态若漏到运行期，该字段任何写入都会整轮失败——房间被钉死
+        // 在永久故障，必须在冻结期拒绝。
+        for field in &building.fields {
+            let field_context = format!("{context} / {}", field.key);
+            validate::schema(
+                &field.schema,
+                &types,
+                1,
+                options.max_schema_depth,
+                &field_context,
+            )?;
+        }
+        // 生命周期槽须已声明、键从建筑键派生且阶段为 ObjectTick
+        //（装载器派生约定在 freeze 层复核；install 门保留为纵深防御）。
+        for slot_key in &building.lifecycle_slots {
+            let slot = slots.get(slot_key).ok_or_else(|| {
+                FreezeError::new(
+                    context.clone(),
+                    format!("建筑生命周期槽 {slot_key} 未在 slots 中声明"),
+                )
+            })?;
+            if slot_key.as_str() != format!("{}.tick", building.key)
+                || slot.stage != Stage::ObjectTick
+            {
+                return Err(FreezeError::new(
+                    context.clone(),
+                    format!("建筑生命周期槽 {slot_key} 须为 {context}.tick 且阶段为 ObjectTick"),
+                ));
+            }
         }
         let known_resource = |name: &str| {
             Key::new(name)

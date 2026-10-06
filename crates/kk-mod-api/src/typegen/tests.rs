@@ -188,6 +188,8 @@ fn rich_plan() -> crate::plan::ContributionPlan {
     c.resources.push(crate::resources::ResourceDescriptor {
         key: key("alpha:fuel"),
     });
+    // 字段绑定按装载器口径入 bindings 集（freeze 校验其存在）。
+    c.bindings.insert(key("alpha:gate.field.charge"));
     c.buildings.push(crate::buildings::BuildingDescriptor {
         key: key("alpha:gate"),
         player_class: "Gate".into(),
@@ -196,6 +198,17 @@ fn rich_plan() -> crate::plan::ContributionPlan {
         pathing: crate::buildings::BuildingPathing::Obstacle,
         store_capacity: None,
         production: None,
+        fields: vec![crate::FieldDescriptor {
+            key: key("alpha:charge"),
+            schema: ValueSchema {
+                kind: ValueKind::Number(NumberDomain::Unsigned { min: 0, max: 100 }),
+                nullable: false,
+            },
+            default: crate::FieldDefault::Value(serde_json::json!(0)),
+            visibility: Visibility::Public,
+            binding: key("alpha:gate.field.charge"),
+        }],
+        lifecycle_slots: BTreeSet::new(),
     });
     freeze_with_builtin(crate::builtin::link(), vec![c], FreezeOptions::default()).unwrap()
 }
@@ -278,6 +291,9 @@ fn intents_resources_and_buildings_are_typed() {
     // 资源联合与建筑绑定。
     assert!(text.contains("export type ModResourceName = 'alpha:fuel';"));
     assert!(text.contains("bind(typeKey: 'alpha:gate', cls: GateConstructor): void;"));
+    // 建筑自定义字段接口：存储键成员直供玩家交叉类型。
+    assert!(text.contains("export interface GateConstructorFields {"));
+    assert!(text.contains("'alpha:charge': number"), "{text}");
     // 查询常量为数字字面量类型。
     assert!(
         text.contains("install(typeKey: 'alpha:beacon'): { find: 1000; look: 'alpha:beacon' };")

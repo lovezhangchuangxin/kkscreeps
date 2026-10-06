@@ -191,6 +191,8 @@ mod link_decline;
 mod mass_policy;
 #[path = "mod_chain_tests/mass_policy_faults.rs"]
 mod mass_policy_faults;
+#[path = "mod_chain_tests/mod_building_fields.rs"]
+mod mod_building_fields;
 #[path = "mod_chain_tests/mod_building_world.rs"]
 mod mod_building_world;
 #[path = "mod_chain_tests/object_ops.rs"]

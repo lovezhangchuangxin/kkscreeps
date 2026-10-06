@@ -153,7 +153,7 @@ pub fn normalize_object_payload(payload: &mut Value, fields: &[FieldDescriptor])
     }
 }
 
-fn normalize_value(value: &mut Value, schema: &ValueSchema) {
+pub(crate) fn normalize_value(value: &mut Value, schema: &ValueSchema) {
     if value.is_null() {
         return;
     }

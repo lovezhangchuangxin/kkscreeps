@@ -591,6 +591,8 @@ pub fn build_contribution(
                             | "pathing"
                             | "capacity"
                             | "production"
+                            | "fields"
+                            | "tick"
                     ) {
                         return err(namespace, format!("建筑 {key} 声明了未知选项 {member}"));
                     }
@@ -667,6 +669,53 @@ pub fn build_contribution(
                         })
                     }
                 };
+                let type_name = key
+                    .as_str()
+                    .split_once(':')
+                    .expect("Key 含分隔符")
+                    .1
+                    .to_string();
+                let mut building_fields = Vec::new();
+                if let Some(list) = value.get("fields").and_then(Value::as_array) {
+                    for field in list {
+                        let name = as_str(namespace, field, "name")?;
+                        if field
+                            .get("visibility")
+                            .and_then(Value::as_str)
+                            .is_some_and(|visibility| visibility != "public")
+                        {
+                            return err(
+                                namespace,
+                                format!(
+                                    "建筑 {key} 的字段 {name} 可见性首片只支持 public（记录直供；owner/server-only 裁切未开放）"
+                                ),
+                            );
+                        }
+                        let descriptor = field_descriptor(namespace, name, field, |name| {
+                            format!("{type_name}.field.{name}")
+                        })?;
+                        bindings.insert(descriptor.binding.clone());
+                        building_fields.push(descriptor);
+                    }
+                }
+                let mut lifecycle_slots = std::collections::BTreeSet::new();
+                if let Some(tick) = value.get("tick").filter(|tick| !tick.is_null()) {
+                    let slot = own_key(namespace, as_str(namespace, tick, "slot")?)?;
+                    let process = own_key(namespace, as_str(namespace, tick, "process")?)?;
+                    if slot.as_str() != format!("{key}.tick")
+                        || process.as_str() != format!("{key}.tick.process")
+                    {
+                        return err(namespace, "建筑 tick 的槽与绑定须从建筑键派生");
+                    }
+                    bindings.insert(process.clone());
+                    required_executables.insert(process.clone());
+                    lifecycle_slots.insert(slot.clone());
+                    slots.push(SlotDescriptor {
+                        key: slot,
+                        stage: Stage::ObjectTick,
+                        native_binding: process,
+                    });
+                }
                 buildings.push(kk_mod_api::buildings::BuildingDescriptor {
                     key,
                     player_class,
@@ -675,6 +724,8 @@ pub fn build_contribution(
                     pathing,
                     store_capacity,
                     production,
+                    fields: building_fields,
+                    lifecycle_slots,
                 });
             }
             "mount" => {

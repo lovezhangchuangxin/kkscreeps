@@ -1,0 +1,6 @@
+{
+  "id": "bk",
+  "version": "1.0.0",
+  "apiVersion": "^1.0.0",
+  "player": "player.js"
+}

@@ -431,10 +431,19 @@ impl ModChainContext {
             Some(kk_schema::room::RoomObject::Generic(object)) => {
                 let fields: Value =
                     serde_json::from_str(&object.data).map_err(|error| error.to_string())?;
-                if fields["structureType"] != "link" {
-                    return Err("内建目标不是 link".into());
+                if fields["structureType"] == "link" {
+                    return Ok(fields);
                 }
-                Ok(fields)
+                // Mod 建筑记录（原生键 + 冒号命名空间自定义键）整读；
+                // 目录命中即建筑目标，写面按 update_building_fields 校验。
+                if fields
+                    .get("structureType")
+                    .and_then(Value::as_str)
+                    .is_some_and(|st| self.ctx.borrow().plane.buildings.get(st).is_some())
+                {
+                    return Ok(fields);
+                }
+                Err("内建目标不是 link 或 Mod 建筑".into())
             }
             None if self.objects_slot => Ok(Value::Null),
             // 房间级竞争/准入槽没有对象目标；占位 id 不对应任何真实对象。
@@ -490,6 +499,26 @@ impl ModChainContext {
         if is_mod {
             self.cached_fields = None;
             return self.ctx.borrow_mut().update_mod_fields(self.id, fields);
+        }
+        // Mod 建筑写面：自定义键按字段描述校验整写，原生键只读。
+        let is_building = 'building: {
+            let w = self.ctx.borrow();
+            let Some(kk_schema::room::RoomObject::Generic(g)) = w.room.objects.get(&self.id) else {
+                break 'building false;
+            };
+            let Ok(data) = serde_json::from_str::<Value>(&g.data) else {
+                break 'building false;
+            };
+            data.get("structureType")
+                .and_then(Value::as_str)
+                .is_some_and(|st| w.plane.buildings.get(st).is_some())
+        };
+        if is_building {
+            self.cached_fields = None;
+            return self
+                .ctx
+                .borrow_mut()
+                .update_building_fields(self.id, fields);
         }
         // 当前内建写面仅接 cooldown；身份/坐标和其余字段只读。后续规则
         // 字段按领域校验逐项开放，不能把 Generic JSON 整写当通用事务 API。

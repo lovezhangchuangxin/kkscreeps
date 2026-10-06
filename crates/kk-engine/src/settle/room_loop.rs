@@ -183,14 +183,14 @@ pub fn settle_room(
                     Some("container" | "rampart") => "decay",
                     Some("link") => "link",
                     Some("terminal") => "terminal",
-                    // Mod 建筑的生产周期先于未知类型兜底；无配方的建筑不进入。
+                    // Mod 建筑：生产周期或生命周期 tick 任一声明即进入
+                    //（同访先产后 tick）；两者皆无的建筑不进入。
                     Some(st)
-                        if plane
-                            .buildings
-                            .get(st)
-                            .is_some_and(|b| b.production.is_some()) =>
+                        if plane.buildings.get(st).is_some_and(|b| {
+                            b.production.is_some() || !b.lifecycle_slots.is_empty()
+                        }) =>
                     {
-                        "production"
+                        "mod-building"
                     }
                     _ => "",
                 },
@@ -221,7 +221,7 @@ pub fn settle_room(
                 contrib.run_tick(&ctx, id).map_err(SettleError)?
             }
             "terminal" => economy::terminal_capacity_tick(&mut ctx.borrow_mut(), id),
-            "production" => buildings::production_tick(&mut ctx.borrow_mut(), id),
+            "mod-building" => buildings::building_object_tick(&ctx, id).map_err(SettleError)?,
             "mod" => mod_intents::process_object_tick(&ctx, id).map_err(SettleError)?,
             _ => {}
         }

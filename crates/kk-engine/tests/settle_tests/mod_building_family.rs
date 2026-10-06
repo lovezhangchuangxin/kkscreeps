@@ -18,6 +18,8 @@ fn foundry() -> kk_mod_api::buildings::BuildingDescriptor {
             inputs: vec![("bm:ore".into(), 20), ("energy".into(), 50)],
             outputs: vec![("bm:ingot".into(), 5)],
         }),
+        fields: Vec::new(),
+        lifecycle_slots: BTreeSet::new(),
     }
 }
 
@@ -34,6 +36,8 @@ fn solar() -> kk_mod_api::buildings::BuildingDescriptor {
             inputs: Vec::new(),
             outputs: vec![("energy".into(), 20)],
         }),
+        fields: Vec::new(),
+        lifecycle_slots: BTreeSet::new(),
     }
 }
 
@@ -46,6 +50,8 @@ fn pass_thru() -> kk_mod_api::buildings::BuildingDescriptor {
         pathing: kk_mod_api::buildings::BuildingPathing::Plain,
         store_capacity: None,
         production: None,
+        fields: Vec::new(),
+        lifecycle_slots: BTreeSet::new(),
     }
 }
 

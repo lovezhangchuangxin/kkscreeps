@@ -36,8 +36,10 @@ pub struct ModPlayerApi {
     /// (类型键, FIND 常量, LOOK 常量)。
     pub types: Vec<(String, i64, String)>,
     pub intents: Vec<String>,
-    /// (类型键, 寻路语义 obstacle/plain/road, 成本资源键列表)。
-    pub buildings: Vec<(String, String, Vec<String>)>,
+    /// (类型键, 寻路语义 obstacle/plain/road, 成本资源键列表,
+    /// 自定义字段存储键列表)。字段键含命名空间冒号，玩家面按记录
+    /// 直供装配同名属性。
+    pub buildings: Vec<(String, String, Vec<String>, Vec<String>)>,
 }
 
 /// 玩家模块的虚拟方案：命名空间作为 URL authority（manifest id 字符集

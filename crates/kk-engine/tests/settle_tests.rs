@@ -12,6 +12,8 @@ use kk_world::{ObjId, World};
 use serde_json::Value;
 
 // 集成测试根（crate root）的 mod 声明解析到 tests/ 平级，故显式 #[path]
+#[path = "settle_tests/building_lifecycle.rs"]
+mod building_lifecycle;
 #[path = "settle_tests/c3_ext_intent_family.rs"]
 mod c3_ext_intent_family;
 #[path = "settle_tests/combat_heal.rs"]
