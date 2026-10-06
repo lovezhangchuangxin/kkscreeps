@@ -45,6 +45,7 @@
 机器结果与全部独立性能样本见 [验证数据](js-chain-validation-2026-10-03.json)。
 
 - `pnpm run check` 最终通过：Rust 539 passed / 7 ignored（包含 doctest），workspace/all-targets Clippy 与格式检查通过，JS workspace 19 passed；补齐验证记录后链接检查为 205 个 Markdown / 1039 个本地链接通过。
+  - （2026-10-06 注：当时完整 check 确含 doctest；现两档门禁均已移除该阶段，改 doctest 时单独 `cargo test -p <crate> --doc`，见 AGENTS.md。）
 - release CLI 重建、适配器构建与完整 ratchet：锁定上游 `34a630efa42908c117c19c25d2350fa2387bd633`，1854 passed / 153 failed / 907 skipped，基线 0 转红 / 0 转绿。失败与跳过仍是既有能力缺口，不表示完整兼容。
 - bot-check：tooangel/overmind 各完成 2000 tick，wasm 完成 10 tick；硬中断、停跑与缺失 API 均为零。Overmind 首 tick 保留既有 1 轮 console error；tooangel 的 log 级内部错误也仍存在，不能将工具通过等同于完整业务正确。
 
