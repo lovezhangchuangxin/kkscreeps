@@ -1,6 +1,6 @@
 # 持久化状态域清单与 schema 门禁
 
-本页逐域登记 `EmbedEngine::checkpoint()` 载荷的持久化字段、版本策略、恢复消费者与迁移状态，并说明钉死键树的机器门禁。检查点的机制、文件格式与发布协议见[基础检查点](checkpoints.md)；本页是"有哪些域、归谁管、怎么验收"的权威清单。G23 负责迁移协议；当前所有域对旧版本一律拒绝，不做迁移。
+本页逐域登记 `EmbedEngine::checkpoint()` 载荷的持久化字段、版本策略、恢复消费者与迁移状态，并说明钉死键树的机器门禁。检查点的机制、文件格式与发布协议见[基础检查点](checkpoints.md)；本页是"有哪些域、归谁管、怎么验收"的权威清单。G23 负责迁移协议；JSON 载荷域自 G23.a 起走显式迁移链（见下表"载荷格式版本"行），信封与其余内容域对旧版本仍一律拒绝。
 
 ## 机器门禁：钉死键树
 
@@ -20,7 +20,8 @@
 | 玩家工作者 | `workers.*`（`heap_limit_bytes`、`cpu_limit`、`bucket_cap`、`max_per_tick`、`initial_bucket`、`install_wall_limit`、`constant_overrides.*`、`modules.*.js`、`modules.*.binary[]`） | 随 `engine_version` 整体硬门；schema 另被键树钉死 | 工作者注册与模块重装；配置重验后重建玩家线程 | 拒绝不迁移，G23 负责 |
 | Mod 包身份 | `mods.packages.*.manifest`、`mods.packages.*.files_sha256`（不透明） | 身份核验：恢复时与调用方提供的包 manifest 与全部文件 SHA-256 逐一比对，含未选择包 | `ModIdentity::verify`；相同包可换目录，缺包/多包/内容变化拒绝 | 拒绝不迁移，G23 负责 |
 | Mod 配置身份 | `mods.options`（不透明） | 与 `RegisterOptions` 重建身份核验（内容选择、逐包配置、冻结选项、VM 预算、profiler 开关、停用阈值） | `ModIdentity::verify` | 拒绝不迁移，G23 负责 |
-| Mod 执行状态 | `disabled_mods[]`、`execution_strategy`、`fault_streak`、`last_fault`、`last_auto_disable` | 无独立版本；停用集合须满足依赖闭包，恢复后停用包 schema/规则仍有效；`execution_strategy` 为组合摘要（plan_hash+停用闭包+每槽派生执行面），恢复在 realm 重建后重算等值核对（缺键的存量检查点跳过，G23.a 决定是否升格硬门） | realm 重建后回填故障与停用状态，策略身份以重注册产物为准 | 拒绝不迁移，G23 负责 |
+| 载荷格式版本 | `checkpoint_format_version` | 当前 2、必填（缺失即拒）；v1→v2 迁移已注册（last_auto_disable 归一） | `migrate::migrate_to_current` 解码前路由 | 显式迁移链（G23.a 起生效；后续格式变化逐链追加） |
+| Mod 执行状态 | `disabled_mods[]`、`execution_strategy`、`fault_streak`、`last_fault`、`last_auto_disable` | 无独立版本；停用集合须满足依赖闭包，恢复后停用包 schema/规则仍有效；`execution_strategy` 为组合摘要（plan_hash+停用闭包+每槽派生执行面），恢复在 realm 重建后重算等值核对，v2 起 Mod 检查点必填（v1 载荷宽容） | realm 重建后回填故障与停用状态，策略身份以重注册产物为准 | 拒绝不迁移，G23 负责（last_auto_disable 旧形态已收编为 v1→v2 迁移） |
 | 协调器 | `concurrency`、`kkpv` | 无独立版本 | 恢复后并发与投影通道初值（sim 可由 CLI 参数覆盖） | 拒绝不迁移，G23 负责 |
 | 最近 console | `last_console.*[]` | 无独立版本 | 恢复后 console 续接 | 拒绝不迁移，G23 负责 |
 | 调用方 metadata | `metadata`（不透明，调用方自管） | 宿主不解释内容、无宿主侧 schema，因而不设迁移（域本身的存在仍被键树钉死）；sim 用于 `initial`/alias/断言起点 | 原样返回给保存方 | 调用方自理 |

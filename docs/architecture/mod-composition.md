@@ -48,7 +48,7 @@ execution=native 表示原冻结 Native 内建槽的 Rust 直调；hosted 表示
 组合报告提供**执行策略身份摘要**（`execution_strategy_digest`）：以域分隔前缀 `kkscreeps/execution-strategy/v1` 对「冻结 PlanHash + 停用闭包 + 每槽派生执行面（键/阶段/执行模式/活动链）」做规范化哈希。组合报告是 `(计划, 停用掩码)` 的纯函数，此值把「保存时的派生」与「恢复时重放 `disable` 序列的派生」压成一个可比对凭据：
 
 - **恢复自检**：`ModVm` 重建 realm 后重算摘要与原值等值核对，原先"组合同步逐项一致"只是注释假设，现在是机器核验。
-- **检查点**：编排层检查点保存该摘要，恢复在重装配与停用重放后重算等值（缺键的存量检查点跳过，G23.a 决定是否升格硬门）；sim 报告（report_version 5 起）顶层 `execution_strategy` 同源输出，续跑与直跑等值。
+- **检查点**：编排层检查点保存该摘要，恢复在重装配与停用重放后重算等值；载荷格式 v2 起 Mod 检查点必填该键（v1 显式载荷经迁移后按 legacy 宽容）；sim 报告（report_version 5 起）与 `mod inspect`（v5 起）顶层 `execution_strategy` 同源输出，续跑与直跑等值。
 - **刻意不纳入**：`consumers`/`overrides`/`disable_closures`/`sources` 等诊断字段无执行语义（或已被 PlanHash 覆盖），纳入会造成无害漂移误报；选择输入不参与（同安装集合即同计划，见[内容选择](mod-content-selection.md)）。
 - G23.a 状态版本与 G24.a 包/API 切换以此为基础凭据；kkpv 块库仍只按 PlanHash 淘汰代际（停用掩码变化不失效旧块，现状语义）。
 

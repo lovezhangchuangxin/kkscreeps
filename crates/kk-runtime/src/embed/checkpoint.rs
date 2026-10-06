@@ -5,11 +5,17 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 mod identity;
+mod migrate;
+
 use identity::{ModIdentity, Worker};
+use migrate::CURRENT_FORMAT_VERSION;
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Checkpoint {
+    /// JSON 载荷域布局版本（信封 version 是线格式；本字段由迁移框架
+    /// 维护，见 migrate 模块）。必填——缺失即拒，v1 载荷经注册迁移升入。
+    checkpoint_format_version: u32,
     engine_version: String,
     room_schema_version: u16,
     engine: kk_engine::settle::checkpoint::EngineCheckpoint,
@@ -65,6 +71,7 @@ impl EmbedEngine {
                 None => (None, None, None, None, None),
             };
         let saved = Checkpoint {
+            checkpoint_format_version: CURRENT_FORMAT_VERSION,
             engine_version: env!("CARGO_PKG_VERSION").into(),
             room_schema_version: kk_schema::room::SCHEMA_VERSION,
             engine: self.engine.checkpoint().map_err(anyhow::Error::msg)?,
@@ -99,7 +106,7 @@ impl EmbedEngine {
 
     pub fn restore_checkpoint(
         &mut self,
-        value: Value,
+        mut value: Value,
         mods: Option<(&BTreeMap<String, ModPackage>, &RegisterOptions)>,
     ) -> anyhow::Result<Value> {
         self.no_open_round("restore_checkpoint")?;
@@ -112,7 +119,18 @@ impl EmbedEngine {
                 "检查点切换被拒：同线程存在其他活跃 Mod 分片或玩家 VM；须按进入栈顺序恢复"
             );
         }
+        // 迁移先于 deny_unknown_fields 解码（对原始 Value 路由版本）；
+        // 返回的原始版本供语义门决策——v2 起保存的检查点必须携带
+        // 执行策略身份，v1 存量迁移后仍按 legacy 宽容（当次恢复有效，
+        // 再保存即当前格式）。
+        let source_format = migrate::migrate_to_current(&mut value).map_err(anyhow::Error::msg)?;
         let saved: Checkpoint = serde_json::from_value(value).context("解码完整检查点")?;
+        if source_format >= 2 {
+            anyhow::ensure!(
+                saved.mods.is_none() || saved.execution_strategy.is_some(),
+                "检查点格式 {source_format} 起必须携带执行策略身份（execution_strategy）；尚未提供迁移补全"
+            );
+        }
         anyhow::ensure!(
             saved.engine_version == env!("CARGO_PKG_VERSION")
                 && saved.room_schema_version == kk_schema::room::SCHEMA_VERSION,
@@ -161,11 +179,9 @@ impl EmbedEngine {
             replacement.rebuild_mod_realm()?;
             // 执行策略身份等值核对：包/配置身份、停用闭包与 PlanHash
             // 逐项通过后，此处把「组合派生一致性」也钉成机器核验。
-            // 缺键/显式 null 的检查点跳过本项（与故障域先例同口径）：
-            // engine_version 精确门下"存量"只可能是同版本开发期产物，
-            // null 即显式降级为 legacy 语义——plan_hash/ModIdentity/停用
-            // 闭包三道门仍然逐项核验，本项是增强而非唯一门。
-            // G23.a 状态版本收口时再决定是否升格为硬门。
+            // v2 起缺键已在上方硬门拒绝；能到这里仍缺键/null 的只有
+            // v1 存量（显式降级 legacy 语义）——plan_hash/ModIdentity/
+            // 停用闭包三道门仍然逐项核验，本项是增强而非唯一门。
             if let Some(expected) = &saved.execution_strategy {
                 let actual = replacement
                     .mod_realm

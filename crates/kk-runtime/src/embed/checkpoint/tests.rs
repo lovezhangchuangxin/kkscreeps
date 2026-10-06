@@ -481,6 +481,10 @@ fn trace_enabled_after_assembly_survives_restore_without_old_entries() -> anyhow
     Ok(())
 }
 
+/// v1 → v2 迁移用例：last_auto_disable 旧形态（trace 批次之前的真实
+/// 记录——来源只在 trigger.error.fault.binding，证据为此前宽松反序列化
+/// 的注释与测试历史）经注册迁移归一为结构化形态；v2 载荷内的不一致
+/// mod_id 仍被解码端一致性校验拒绝。
 #[test]
 fn legacy_auto_disable_checkpoint_restores_structured_source() -> anyhow::Result<()> {
     let packages = packages()?;
@@ -489,7 +493,10 @@ fn legacy_auto_disable_checkpoint_restores_structured_source() -> anyhow::Result
     engine.disable_mod("clockwork")?;
     engine.rebuild_mod_realm()?;
     let mut saved = engine.checkpoint(Value::Null)?;
-    // trace 批次之前的真实记录形态：来源只在 trigger.error.fault.binding 中。
+    // 合成显式 v1 载荷：版本 1、旧形态、无执行策略键（v1 先于该键）。
+    let map = saved.as_object_mut().expect("检查点是对象");
+    map.insert("checkpoint_format_version".into(), json!(1));
+    map.remove("execution_strategy");
     saved["last_auto_disable"] = json!({
         "trigger": {"tick": 0, "room": "W1N1", "target": "counter",
             "error": {"context": "clockwork", "message": "fault", "fault": {
@@ -499,7 +506,12 @@ fn legacy_auto_disable_checkpoint_restores_structured_source() -> anyhow::Result
     });
     engine.restore_checkpoint(saved, Some((&packages, &options)))?;
     assert_eq!(engine.last_mod_auto_disable().unwrap().mod_id, "clockwork");
-    let mut invalid = engine.checkpoint(Value::Null)?;
+    // 迁移后再保存即当前格式：结构化 mod_id 显式在载荷中。
+    let resaved = engine.checkpoint(Value::Null)?;
+    assert_eq!(resaved["checkpoint_format_version"], json!(2));
+    assert_eq!(resaved["last_auto_disable"]["mod_id"], json!("clockwork"));
+    // v2 载荷内来源不一致仍拒（解码端一致性校验，非迁移修补）。
+    let mut invalid = resaved.clone();
     invalid["last_auto_disable"]["mod_id"] = json!("nursery");
     let before = engine.checkpoint(Value::Null)?;
     assert!(
@@ -509,6 +521,110 @@ fn legacy_auto_disable_checkpoint_restores_structured_source() -> anyhow::Result
     );
     assert_eq!(engine.checkpoint(Value::Null)?, before);
     Ok(())
+}
+
+/// 版本路由与迁移失败语义：0/未来版本拒绝；迁移步骤失败（v1 载荷的
+/// last_auto_disable 无法派生来源）整体拒绝且旧分片完整——「不自动
+/// 修补不一致载荷」。
+#[test]
+fn format_version_routing_and_migration_failure_keep_the_old_shard() -> anyhow::Result<()> {
+    let packages = packages()?;
+    let options = options();
+    let mut engine = prepare(false, &packages, &options)?;
+    run(&mut engine, 2)?;
+    let saved = engine.checkpoint(Value::Null)?;
+
+    for version in [0u64, 3] {
+        let mut bad = saved.clone();
+        bad["checkpoint_format_version"] = json!(version);
+        assert!(
+            engine
+                .restore_checkpoint(bad, Some((&packages, &options)))
+                .is_err(),
+            "版本 {version} 须拒绝"
+        );
+    }
+
+    // 迁移失败：v1 载荷的 last_auto_disable 缺故障绑定来源。
+    let mut broken = saved.clone();
+    let map = broken.as_object_mut().expect("检查点是对象");
+    map.insert("checkpoint_format_version".into(), json!(1));
+    broken["last_auto_disable"] = json!({
+        "trigger": {"tick": 0, "room": "W1N1", "target": "counter",
+            "error": {"context": "clockwork", "message": "fault"}},
+        "consecutive_faults": 3, "disabled": ["clockwork"]
+    });
+    assert!(
+        engine
+            .restore_checkpoint(broken, Some((&packages, &options)))
+            .is_err(),
+        "无法派生来源的载荷是畸形数据，不得修补"
+    );
+    assert_eq!(
+        engine.checkpoint(Value::Null)?,
+        saved,
+        "迁移失败后旧分片保持完整"
+    );
+    run(&mut engine, 1)?;
+    assert_eq!(engine.get_game_time(), 3, "旧分片继续可运行");
+    Ok(())
+}
+
+/// 迁移层直测：不经解码端宽容反序列化，证明归一确实发生在迁移里——
+/// v1 载荷在解码前由 `v1_to_v2` 写入结构化 mod_id 并统一盖版本号；
+/// 已是当前版本的载荷 `skip` 过全部步骤保持原样；版本字段的缺失、
+/// 非法与超 u32 形态各有独立拒绝（不与缺键混同）。
+#[test]
+fn migrate_to_current_normalizes_v1_and_routes_versions() {
+    let mut v1 = json!({
+        "checkpoint_format_version": 1,
+        "last_auto_disable": {
+            "trigger": {"error": {"fault": {"binding": "clockwork:counter.tick.process"}}},
+            "consecutive_faults": 3
+        }
+    });
+    assert_eq!(migrate::migrate_to_current(&mut v1), Ok(1));
+    assert_eq!(v1["checkpoint_format_version"], json!(2));
+    assert_eq!(v1["last_auto_disable"]["mod_id"], json!("clockwork"));
+
+    // 当前版本载荷：skip 语义下不重放任何步骤，载荷逐字保持。
+    let mut v2 = json!({
+        "checkpoint_format_version": 2,
+        "last_auto_disable": {"mod_id": "kept", "note": "untouched"}
+    });
+    assert_eq!(migrate::migrate_to_current(&mut v2), Ok(2));
+    assert_eq!(
+        v2["last_auto_disable"].clone(),
+        json!({"mod_id": "kept", "note": "untouched"})
+    );
+
+    // 迁移层自身的失败路径（区别于解码端同语义校验）。
+    let mut underivable = json!({
+        "checkpoint_format_version": 1,
+        "last_auto_disable": {"trigger": {"error": {"message": "fault"}}}
+    });
+    assert!(
+        migrate::migrate_to_current(&mut underivable)
+            .unwrap_err()
+            .contains("缺少故障绑定来源")
+    );
+
+    // 版本字段分诊：缺失、非整数、超 u32、0、未来版本各自独立拒绝。
+    let cases: [(&str, Value, &str); 5] = [
+        ("缺失", Value::Null, "缺少 checkpoint_format_version"),
+        ("字符串", json!("2"), "必须是非负 u32 整数"),
+        ("超 u32", json!(4_294_967_298u64), "必须是非负 u32 整数"),
+        ("零", json!(0), "格式版本 0 无效"),
+        ("未来", json!(3), "高于当前支持"),
+    ];
+    for (label, version, message) in cases {
+        let mut payload = json!({"checkpoint_format_version": version, "time": 1});
+        if version.is_null() {
+            payload = json!({"time": 1});
+        }
+        let error = migrate::migrate_to_current(&mut payload).expect_err(label);
+        assert!(error.contains(message), "{label}: {error}");
+    }
 }
 
 /// 键为数据的映射表（玩家/房间/包/订单/段等）：折叠为首个条目的
@@ -652,6 +768,7 @@ export default function register(api) {
 /// 策略。覆盖边界（数组只下钻首元素、Value 载荷按当时形状、不透明叶子）
 /// 见该文档"覆盖边界"一节。
 const PINNED_CHECKPOINT_KEYS: &[&str] = &[
+    "checkpoint_format_version",
     "concurrency",
     "disabled_mods[]",
     "engine.last_events[]",
@@ -759,6 +876,11 @@ fn checkpoint_schema_keys_are_pinned() -> anyhow::Result<()> {
     let mut tree = BTreeSet::new();
     schema_tree_official_packages(&mut tree)?;
     schema_tree_fault_and_extension_package(&mut tree)?;
+    assert_eq!(
+        PINNED_CHECKPOINT_KEYS.len(),
+        101,
+        "钉死键总数（G22.a 99 → G22.c 100 → G23.a 101）：新增或删减键时更新此计数"
+    );
     let expected: BTreeSet<String> = PINNED_CHECKPOINT_KEYS
         .iter()
         .map(|key| (*key).to_string())
@@ -773,30 +895,62 @@ fn checkpoint_schema_keys_are_pinned() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// 执行策略身份的两个兼容分支钉死：(a) 缺键的检查点跳过核对仍可恢复
-///（engine_version 精确门下只可能是同版本开发期产物；G23.a 决定是否
-/// 升格硬门前，该语义由本测试锁定）；(b) 原生检查点携带该键即拒。
+/// 执行策略身份与格式版本的分支钉死（G23.a 后口径，仅本地开发无存量
+/// 用户）：v2 Mod 检查点缺 execution_strategy 即拒；显式 v1 载荷（带
+/// checkpoint_format_version:1、无该键）经迁移后按 legacy 宽容恢复；
+/// 缺格式版本即拒；原生检查点携带该键即拒。
 #[test]
 fn strategy_key_compatibility_branches_are_pinned() -> anyhow::Result<()> {
-    // (a) 删除键 → 恢复成功且续跑。
+    // (a1) v2 载荷仅删 execution_strategy → 硬门拒绝。
     let packages = packages()?;
     let options = options();
     let mut engine = prepare(false, &packages, &options)?;
     run(&mut engine, 1)?;
-    let mut saved = engine.checkpoint(Value::Null)?;
+    let saved = engine.checkpoint(Value::Null)?;
     assert!(
         saved["execution_strategy"].is_string(),
         "当前保存路径必带该键"
     );
-    saved
+    let mut v2_missing = saved.clone();
+    v2_missing
         .as_object_mut()
         .expect("检查点是对象")
         .remove("execution_strategy");
-    engine.restore_checkpoint(saved, Some((&packages, &options)))?;
-    run(&mut engine, 1)?;
-    assert_eq!(engine.get_game_time(), 2, "缺键跳过后正常续跑");
+    assert!(
+        engine
+            .restore_checkpoint(v2_missing, Some((&packages, &options)))
+            .is_err(),
+        "v2 起 Mod 检查点必须携带执行策略身份"
+    );
 
-    // (b) 原生检查点注入该键 → 拒绝且旧分片完整。
+    // (a2) 显式 v1（版本 1、无执行策略键）→ 迁移后宽容恢复且续跑。
+    let mut v1_payload = saved.clone();
+    let map = v1_payload.as_object_mut().expect("检查点是对象");
+    map.remove("execution_strategy");
+    map.insert("checkpoint_format_version".into(), json!(1));
+    engine.restore_checkpoint(v1_payload, Some((&packages, &options)))?;
+    run(&mut engine, 1)?;
+    assert_eq!(engine.get_game_time(), 2, "v1 宽容语义恢复后正常续跑");
+
+    // (a3) 缺格式版本 → 畸形载荷拒绝（无缺键猜测）。
+    let mut no_version = saved.clone();
+    no_version
+        .as_object_mut()
+        .expect("检查点是对象")
+        .remove("checkpoint_format_version");
+    assert!(
+        engine
+            .restore_checkpoint(no_version, Some((&packages, &options)))
+            .is_err(),
+        "缺 checkpoint_format_version 即拒"
+    );
+    assert_eq!(
+        engine.checkpoint(Value::Null)?["checkpoint_format_version"],
+        json!(2),
+        "当前保存恒为格式 2"
+    );
+
+    // (b) 原生检查点注入该键 → 拒绝且旧分片保持原生形态。
     let mut native = EmbedEngine::new();
     native.create_shard(&json!({"players": ["p1"], "rooms": []}))?;
     let mut poisoned = native.checkpoint(Value::Null)?;

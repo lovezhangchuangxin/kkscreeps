@@ -31,7 +31,7 @@ pub fn run(options: Options) -> i32 {
         Ok(report) => (0, report),
         Err(error) => (
             1,
-            json!({"report_version":4,"status":"setup_failed","error":format!("{error:#}"),"composition":null}),
+            json!({"report_version":INSPECT_REPORT_VERSION,"status":"setup_failed","error":format!("{error:#}"),"execution_strategy":null,"composition":null}),
         ),
     };
     if let Err(error) = write_report(&output, &report) {
@@ -44,6 +44,9 @@ pub fn run(options: Options) -> i32 {
     code
 }
 
+/// mod inspect 报告 schema 版本：passed 与 setup_failed 两条路径同源
+/// 引用（v5 起顶层输出 execution_strategy）。
+const INSPECT_REPORT_VERSION: u32 = 5;
 fn output_path(options: &Options) -> anyhow::Result<PathBuf> {
     crate::output_guard::json_report(&options.report, &options.root, options.configs.as_deref())?;
     crate::output_guard::normalized(&options.report)
@@ -111,7 +114,12 @@ fn inspect(options: &Options) -> anyhow::Result<Value> {
         .iter()
         .map(|byte| format!("{byte:02x}"))
         .collect::<String>();
+    // 执行策略身份与 sim 报告同源（G22.c 跟进项）：作者可离线预判
+    // 停用对身份的影响；停用预览后按同口径重算。
+    let execution_strategy = composition
+        .execution_strategy_digest()
+        .map_err(anyhow::Error::msg)?;
     Ok(
-        json!({"report_version":4,"status":"passed","root":root,"packages":identities,"executable_sha256":hash,"requested_disabled":requested,"composition":composition}),
+        json!({"report_version":INSPECT_REPORT_VERSION,"status":"passed","root":root,"packages":identities,"executable_sha256":hash,"requested_disabled":requested,"execution_strategy":execution_strategy,"composition":composition}),
     )
 }

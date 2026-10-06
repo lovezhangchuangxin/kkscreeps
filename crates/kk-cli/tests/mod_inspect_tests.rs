@@ -101,6 +101,12 @@ fn inspect_reports_real_graph_rule_sources_and_disable_preview() {
         json!([])
     );
     assert_eq!(plain["executable_sha256"].as_str().unwrap().len(), 64);
+    // v5 报告：顶层执行策略身份为 64 位十六进制，停用预览改变它。
+    assert_eq!(plain["report_version"], json!(5));
+    let strategy = plain["execution_strategy"].as_str().unwrap();
+    assert_eq!(strategy.len(), 64);
+    assert!(strategy.bytes().all(|b| b.is_ascii_hexdigit()));
+    assert_ne!(disabled["execution_strategy"], plain["execution_strategy"]);
     let (code, owner) = f.run(&root(), &["--disable", "base"]);
     assert_eq!(code, 0, "{owner}");
     assert_eq!(slot(&owner, "base:counter.tick")["execution"], "inactive");
@@ -136,6 +142,8 @@ fn inspect_failures_replace_stale_success_and_selected_sources_are_explicit() {
         let (code, error) = f.run(&root, &args);
         assert_eq!(code, 1);
         assert_eq!(error["status"], "setup_failed");
+        assert_eq!(error["report_version"], json!(5));
+        assert!(error["execution_strategy"].is_null());
         assert!(error["composition"].is_null());
     }
     let configs = f.0.join("configs.json");
