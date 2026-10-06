@@ -344,6 +344,8 @@
       if (cur + 16 > bucketsEnd) fail('桶头越界');
       const rows = u32(dv, cur + 8);
       const fieldCount = u32(dv, cur + 12);
+      // 与 Rust 解码端同源拒绝：类型桶至少承载一行，零行桶无合法产出方。
+      if (rows === 0) fail('桶行数为零');
       cur += 16;
       const fields = [];
       for (let f = 0; f < fieldCount; f++) {

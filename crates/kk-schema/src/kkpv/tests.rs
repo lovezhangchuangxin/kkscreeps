@@ -528,6 +528,24 @@ fn decode_rejects_segment_and_bucket_mutation() {
     let mut kind = kind_base.clone();
     kind[buckets_off + BUCKET_HEADER + 8] = 9;
     assert_eq!(dec_err(&kind), KkpvError::UnknownKind(9));
+    // 桶头 rows 置零：拒绝必须发生在位图尾位检查之前，否则该处按
+    // bitmap_len - 1 取尾字节会在 bitmap_len == 0 时下溢 panic。
+    let mut zero_rows = kind_base;
+    put_u32(&mut zero_rows, buckets_off + 8, 0);
+    assert_eq!(
+        dec_err(&zero_rows),
+        KkpvError::EmptyBucket {
+            type_key: "t:a".into()
+        }
+    );
+    // 零字段桶是合法形态：同类型对象全部空 fields 时 field_count=0，
+    // 与零行桶不同，不得被连带拒绝。
+    let empty_fields = enc(&input(vec![obj(1, "t:a", &[])]));
+    let view = dec(&empty_fields);
+    assert_eq!(view.object_count(), 1);
+    assert_eq!(view.object_type(0), "t:a");
+    assert!(view.field(0, "k").expect("空字段桶查任意键").is_none());
+    assert!(view.field_keys(0).is_empty());
     let (null_base, _, null_bitmap, _) = minimal_block(KkpvValue::Null);
     assert_eq!(null_base[null_bitmap], 0, "缺失位图原为零");
     assert_eq!(null_base[null_bitmap + 1], 1, "null 位图原为一");

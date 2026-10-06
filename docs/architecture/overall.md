@@ -46,14 +46,14 @@
 
 | crate | 直接依赖 |
 |---|---|
-| `kk-cli` | core、engine、runtime、runner、world、mod-host |
+| `kk-cli` | core、engine、runtime、mod-host、mod-api、runner、world |
 | `kk-runtime` | core、schema、mod-api、mod-host、engine、runner、world |
 | `kk-engine` | core、mod-api、schema、world |
 | `kk-world` | core、mod-api、schema |
 | `kk-mod-api` | core |
 | `kk-mod-host` | mod-api、vm |
 | `kk-schema` | 无内部依赖 |
-| `kk-runner` | core、vm、pathfinder、schema，使用 deno_core 等外部库 |
+| `kk-runner` | core、vm、pathfinder、schema，world（仅测试），使用 deno_core 等外部库 |
 | `kk-vm` | 无内部依赖，使用 deno_core 与 libc |
 | `kk-storage-bench` | core、schema、world |
 | `kk-core`、`kk-pathfinder`、`kk-storage`、`kk-backend` | 无内部依赖 |

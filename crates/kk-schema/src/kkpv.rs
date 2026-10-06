@@ -14,7 +14,8 @@
 //!
 //! 建立视图时校验魔数、版本、flags、长度、保留位、段边界与重叠
 //! （零长度段的 offset 须为零）、目录有序性与句柄/行关系（每桶每行
-//! 恰被一个目录项引用）、桶结构恰好消费、键 UTF-8 与升序（字段目录；
+//! 恰被一个目录项引用）、零行桶拒绝（类型桶至少承载一行）、
+//! 桶结构恰好消费、键 UTF-8 与升序（字段目录；
 //! 嵌套记录保持载荷顺序、只拒绝重复键）、位图互斥
 //! 与越行尾位为零、浮点有限性、bool 字节域、变长描述符 arena 边界
 //! 及各项限额；字段值内的字符串在读取时校验 UTF-8。编码端执行同源
@@ -144,6 +145,10 @@ pub enum KkpvError {
         row: u32,
         rows: u32,
     },
+    /// 类型桶行数为零；编码端只按实际存在的对象分桶，零行桶无合法产出方。
+    EmptyBucket {
+        type_key: String,
+    },
     BucketWalk {
         consumed: usize,
         segment: usize,
@@ -229,6 +234,9 @@ impl std::fmt::Display for KkpvError {
             Self::UnknownTypeHandle(h) => write!(f, "未知类型句柄: {h}"),
             Self::RowOutOfRange { handle, row, rows } => {
                 write!(f, "行 {row} 越出类型句柄 {handle} 的行数 {rows}")
+            }
+            Self::EmptyBucket { type_key } => {
+                write!(f, "类型 {type_key} 的桶行数为零，桶须至少承载一行")
             }
             Self::BucketWalk { consumed, segment } => {
                 write!(f, "类型桶消费 {consumed} 字节不等于段长 {segment}")

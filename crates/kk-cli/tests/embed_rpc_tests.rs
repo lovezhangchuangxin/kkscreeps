@@ -29,7 +29,12 @@ fn embed_rpc_roundtrip() -> anyhow::Result<()> {
         r#"{"id":5,"params":{}}"#.to_string(),
         r#"{"id":6,"method":"runPlayers","params":{"codes":{"p1":42}}}"#.to_string(),
         r#"{"id":7,"method":"runPlayers","params":{"codes":{"p1":null}}}"#.to_string(),
-        r#"{"id":8,"method":"getGameTime","params":{}}"#.to_string(),
+        r#"{"id":8,"method":"tick","params":{"count":4294967296}}"#.to_string(),
+        r#"{"id":9,"method":"tick","params":{"count":0}}"#.to_string(),
+        r#"{"id":10,"method":"tick","params":{"count":"5"}}"#.to_string(),
+        r#"{"id":11,"method":"tick","params":{"count":-1}}"#.to_string(),
+        r#"{"id":12,"method":"tick","params":{}}"#.to_string(),
+        r#"{"id":13,"method":"getGameTime","params":{}}"#.to_string(),
     ];
     // 写入失败也先关闭 stdin 并等待子进程退出，避免直接返回留下未回收的进程。
     let mut write_err = None;
@@ -88,10 +93,44 @@ fn embed_rpc_roundtrip() -> anyhow::Result<()> {
             "错误应指出玩家及代码类型要求: {resp}"
         );
     }
-    let resp: Value = serde_json::from_str(lines.next().expect("拒绝非法代码后的时间响应"))?;
+
+    // tick 次数与 CLI u32 同口径：越上限与零都拒绝，进程继续服务。
+    let resp: Value = serde_json::from_str(lines.next().expect("tick 超上限响应"))?;
     assert_eq!(resp["id"], 8);
+    assert_eq!(resp["ok"], false);
+    assert!(
+        resp["error"].as_str().is_some_and(|e| e.contains("u32")),
+        "超上限报错: {resp}"
+    );
+    let resp: Value = serde_json::from_str(lines.next().expect("tick 零次响应"))?;
+    assert_eq!(resp["id"], 9);
+    assert_eq!(resp["ok"], false);
+    assert!(
+        resp["error"]
+            .as_str()
+            .is_some_and(|e| e.contains("至少为 1")),
+        "零次报错: {resp}"
+    );
+    // 键存在但非非负整数：点名拒绝，不静默按缺省处理。
+    for id in [10, 11] {
+        let resp: Value = serde_json::from_str(lines.next().expect("非法 count 的响应"))?;
+        assert_eq!(resp["id"], id);
+        assert_eq!(resp["ok"], false, "非整数 count 必须被拒绝: {resp}");
+        assert!(
+            resp["error"]
+                .as_str()
+                .is_some_and(|e| e.contains("非负整数")),
+            "非法 count 报错: {resp}"
+        );
+    }
+    let resp: Value = serde_json::from_str(lines.next().expect("缺省一次 tick 响应"))?;
+    assert_eq!(resp["id"], 12);
     assert_eq!(resp["ok"], true);
-    assert_eq!(resp["result"], 0, "非法代码不得执行或推进世界");
+    assert_eq!(resp["result"]["time"], 1, "缺省 count=1 推进一 tick");
+    let resp: Value = serde_json::from_str(lines.next().expect("tick 后时间响应"))?;
+    assert_eq!(resp["id"], 13);
+    assert_eq!(resp["ok"], true);
+    assert_eq!(resp["result"], 1, "被拒的 tick 不得推进世界");
 
     assert!(lines.next().is_none(), "无多余输出");
     Ok(())

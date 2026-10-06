@@ -332,6 +332,13 @@ impl<'a> KkpvView<'a> {
             if rows as usize > limits.max_objects {
                 return Err(KkpvError::LimitExceeded("max_objects"));
             }
+            // 零行桶无合法产出方：编码端只按实际存在的对象分桶，行数恒
+            // ≥1；位图尾位检查以 bitmap_len ≥ 1 为前提，零行会使其下溢。
+            if rows == 0 {
+                return Err(KkpvError::EmptyBucket {
+                    type_key: type_key.into(),
+                });
+            }
             if let Some(last) = buckets.last()
                 && type_key <= last.type_key
             {
@@ -420,7 +427,11 @@ impl<'a> KkpvView<'a> {
                     None => return Err(KkpvError::LimitExceeded("max_objects")),
                 };
                 widths.push(width);
-                total_width += width;
+                // 总宽与单列同口径 checked：回绕会使下方 walk 长度守卫失效。
+                total_width = match total_width.checked_add(width) {
+                    Some(v) => v,
+                    None => return Err(KkpvError::LimitExceeded("max_objects")),
+                };
             }
             if walk.len() < total_width {
                 return Err(KkpvError::BucketWalk {

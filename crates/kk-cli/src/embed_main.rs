@@ -111,8 +111,22 @@ fn handle_line(engine: &mut EmbedEngine, line: &str) -> anyhow::Result<Value> {
             Value::Object(out)
         }
         "tick" => {
-            let count = params.get("count").and_then(Value::as_u64).unwrap_or(1);
-            engine.tick(count)?;
+            // 键缺失时缺省一次；键存在但非非负整数时点名拒绝，不静默
+            // 回退——RPC 面的类型校验不弱于 CLI 面。
+            let count = match params.get("count") {
+                None => 1,
+                Some(v) => v
+                    .as_u64()
+                    .ok_or_else(|| anyhow::anyhow!("count 必须是非负整数"))?,
+            };
+            // 与 CLI `--ticks` 的 u32 同口径：u64 级次数会让主循环长期
+            // 不返回、期间无法处理后续请求。
+            let count = u32::try_from(count)
+                .map_err(|_| anyhow::anyhow!("tick 次数 {count} 超出 u32 上限"))?;
+            if count == 0 {
+                anyhow::bail!("tick 次数须至少为 1");
+            }
+            engine.tick(u64::from(count))?;
             json!({ "time": engine.get_game_time() })
         }
         "getObject" => {
