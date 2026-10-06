@@ -70,8 +70,8 @@ pub fn player_declarations(plan: &ContributionPlan) -> Result<String, String> {
         .map(|projected| (projected.descriptor.key.as_str(), &projected.descriptor))
         .collect();
     for intent in plan.intents() {
-        // 与引擎装配共用同一道可执行性门：能生成声明的计划必须能装配
-        // 执行，未接线形态（含域/合并/转换/授权/压制）在此一并拒绝。
+        // 与引擎装配共用意图描述符门：域/合并/转换/授权/压制同口径
+        // 拒绝；具体入口和执行绑定仍由引擎装配核验。
         if intent.key.namespace() != "builtin" {
             crate::intent_gate::executable_gate(intent)?;
         }
@@ -110,11 +110,12 @@ pub fn player_declarations(plan: &ContributionPlan) -> Result<String, String> {
          // 本文件是全计划联合面：安装 API 在运行时按各包命名空间裁剪——某包的\n\
          // player.js 只能 bind/emit 本包命名空间的键，跨包键类型通过但运行时拒绝。\n\n",
     );
-    emit_types(&mut out, &surface, &by_key)?;
-    let args_names = args_type_names(plan);
-    emit_intents(&mut out, plan, &surface, &args_names);
-    emit_buildings(&mut out, &buildings);
-    emit_install_api(&mut out, &surface, plan, &buildings, &args_names);
+    let symbols = Symbols::new(plan, &surface, &buildings);
+    emit_types(&mut out, &surface, &by_key, &symbols)?;
+    let args_names = &symbols.arguments;
+    emit_intents(&mut out, plan, &surface, args_names);
+    emit_buildings(&mut out, &buildings, &symbols);
+    emit_install_api(&mut out, &surface, plan, &buildings, args_names, &symbols);
     emit_resource_union(&mut out, &resources);
     emit_builtin_classes(&mut out);
     Ok(out)
@@ -166,6 +167,7 @@ fn emit_types(
     out: &mut String,
     surface: &PlayerSurface,
     by_key: &BTreeMap<&str, &ObjectTypeDescriptor>,
+    symbols: &Symbols,
 ) -> Result<(), String> {
     if surface.types.is_empty() {
         return Ok(());
@@ -188,11 +190,15 @@ fn emit_types(
             out,
             "",
             &format!(
-                "{} 的玩家投影（{scope}）；查询常量经 api.queries.install('{}')。",
-                ty.key, ty.key
+                "{} 的玩家投影（{scope}，运行时玩家类 {}）；查询常量经 api.queries.install('{}')。",
+                ty.key, ty.player_class, ty.key
             ),
         );
-        let _ = writeln!(out, "export interface {} {{", ty.player_class);
+        let _ = writeln!(
+            out,
+            "export interface {} {{",
+            symbols.objects[ty.key.as_str()]
+        );
         let _ = writeln!(out, "  id: string;");
         let _ = writeln!(out, "  room: string;");
         let _ = writeln!(out, "  x: number;");
@@ -245,8 +251,8 @@ fn emit_types(
         );
         let _ = writeln!(
             out,
-            "export type {}Constructor = new (...args: never[]) => unknown;",
-            ty.player_class
+            "export type {} = new (...args: never[]) => unknown;",
+            symbols.constructors[ty.key.as_str()]
         );
         out.push('\n');
     }
@@ -300,8 +306,10 @@ fn emit_intents(
 /// 不同的键坍缩为同名（`a-b:c` 与 `a:b-c`），因此按计划序预计算并对
 /// 撞名追加序号，两个产出段（参数 interface 与 emit 签名）共用同一
 /// 份映射。
-fn args_type_names(plan: &ContributionPlan) -> BTreeMap<String, String> {
-    let mut used: BTreeSet<String> = BTreeSet::new();
+fn args_type_names(
+    plan: &ContributionPlan,
+    used: &mut BTreeSet<String>,
+) -> BTreeMap<String, String> {
     let mut names = BTreeMap::new();
     for intent in plan.intents() {
         if intent.key.namespace() == "builtin" {
@@ -356,7 +364,11 @@ fn emit_record_interface(out: &mut String, name: &str, schema: &ValueSchema) {
     let _ = writeln!(out, "}}");
 }
 
-fn emit_buildings(out: &mut String, catalog: &crate::buildings::BuildingCatalog) {
+fn emit_buildings(
+    out: &mut String,
+    catalog: &crate::buildings::BuildingCatalog,
+    symbols: &Symbols,
+) {
     let mut buildings: Vec<_> = catalog.iter().collect();
     if buildings.is_empty() {
         return;
@@ -385,8 +397,8 @@ fn emit_buildings(out: &mut String, catalog: &crate::buildings::BuildingCatalog)
         );
         let _ = writeln!(
             out,
-            "export type {}Constructor = new (...args: never[]) => unknown;",
-            building.player_class
+            "export type {} = new (...args: never[]) => unknown;",
+            symbols.constructors[building.key.as_str()]
         );
     }
     out.push('\n');
@@ -398,6 +410,7 @@ fn emit_install_api(
     plan: &ContributionPlan,
     buildings: &crate::buildings::BuildingCatalog,
     args_names: &BTreeMap<String, String>,
+    symbols: &Symbols,
 ) {
     let _ = writeln!(
         out,
@@ -419,8 +432,9 @@ fn emit_install_api(
         for ty in &surface.types {
             let _ = writeln!(
                 out,
-                "    bind(typeKey: '{}', cls: {}Constructor): void;",
-                ty.key, ty.player_class
+                "    bind(typeKey: '{}', cls: {}): void;",
+                ty.key,
+                symbols.constructors[ty.key.as_str()]
             );
         }
         let _ = writeln!(out, "  }};");
@@ -434,8 +448,9 @@ fn emit_install_api(
         for building in building_list {
             let _ = writeln!(
                 out,
-                "    bind(typeKey: '{}', cls: {}Constructor): void;",
-                building.key, building.player_class
+                "    bind(typeKey: '{}', cls: {}): void;",
+                building.key,
+                symbols.constructors[building.key.as_str()]
             );
         }
         let _ = writeln!(out, "  }};");
@@ -569,7 +584,7 @@ fn ts_kind(kind: &ValueKind) -> String {
             .map(|value| format!("'{}'", ts_string(value)))
             .collect::<Vec<_>>()
             .join(" | "),
-        ValueKind::Array { element, .. } => format!("readonly {}", ts_array_element(element)),
+        ValueKind::Array { element, .. } => format!("ReadonlyArray<{}>", ts_type(element)),
         ValueKind::Map { value, .. } => format!("Record<string, {}>", ts_type(value)),
         ValueKind::Record { fields, optional } => {
             let members: Vec<String> = fields
@@ -581,15 +596,6 @@ fn ts_kind(kind: &ValueKind) -> String {
                 .collect();
             format!("{{ {} }}", members.join("; "))
         }
-    }
-}
-
-fn ts_array_element(schema: &ValueSchema) -> String {
-    let base = ts_kind(&schema.kind);
-    if schema.nullable {
-        format!("({base} | null)[]")
-    } else {
-        format!("{base}[]")
     }
 }
 
@@ -618,6 +624,10 @@ fn kind_note(schema: &ValueSchema) -> String {
     }
     notes.join("，")
 }
+
+#[path = "typegen/symbols.rs"]
+mod symbols;
+use symbols::Symbols;
 
 #[cfg(test)]
 #[path = "typegen/tests.rs"]

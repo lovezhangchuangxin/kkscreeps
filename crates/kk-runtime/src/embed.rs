@@ -91,8 +91,8 @@ pub struct EmbedEngine {
     /// 可信 Mod 注册与结算 realm；仅 `create_shard_with_mods` 装配。持有它使
     /// EmbedEngine 不再可跨线程移动（结算与 realm 须同线程）。
     mod_realm: Option<Rc<RefCell<ModVm>>>,
-    /// Mod 装配前请求开启的运行 trace；setup 在 VM 就绪后应用。
-    mod_trace_pending: bool,
+    /// 本引擎的运行 trace 开启意愿；setup 与替代分片恢复均应用。
+    mod_trace_enabled: bool,
     /// 分片计划是否含 Mod 意图；决定玩家沙箱是否装配扩展意图原语。
     ext_intents: bool,
     /// 冻结计划导出的 Mod 玩家面目录；投影通道按它裁切 Mod 对象。
@@ -154,7 +154,7 @@ impl EmbedEngine {
             players: None,
             engine: Engine::default(),
             mod_realm: None,
-            mod_trace_pending: false,
+            mod_trace_enabled: false,
             pending: None,
             execution_failure: None,
             player_concurrency: std::thread::available_parallelism().map_or(1, |n| n.get().min(2)),
@@ -442,10 +442,9 @@ impl EmbedEngine {
     /// 开启 Mod 运行 trace（幂等）。Mod 未装配时挂起，装配后生效；
     /// 只影响开启之后的事件，无 Mod 分片保持无 trace。
     pub fn enable_mod_trace(&mut self) {
+        self.mod_trace_enabled = true;
         if let Some(vm) = &self.mod_realm {
             vm.borrow_mut().enable_trace();
-        } else {
-            self.mod_trace_pending = true;
         }
     }
 
@@ -577,7 +576,7 @@ impl EmbedEngine {
         }
         self.engine = Engine::default();
         self.mod_realm = None;
-        self.mod_trace_pending = false;
+        self.mod_trace_enabled = false;
         self.ext_intents = false;
         self.player_surface = None;
         self.mod_player_api = None;

@@ -7,12 +7,13 @@
 ## 当前接手位置
 
 - 更新日期：2026-10-06。
-- 实现参考基线：`8e28ac4`，JS 受击策略与独立护甲/护盾组合；这是功能基线，后续文档提交不改变它的含义。接手时仍须核对实际 HEAD 和工作区。
-- 最近已完成：G01 移动竞争（`9c8687d`）与 G02.a/G02.b 移动准入/障碍准入槽（`b7e65d5`、`e032991`）、G29.a 玩家类型生成（随本批提交），此前为 N2c 受击策略第二片（`8e28ac4`）。
-- 当前任务：**G03.a 整房请求视野与获准集合链预演已交付**（2026-10-06，`0efd645`）：准入槽（`builtin:creep.moveAdmission`）输入扩展 `ctx.args.requests`（整房原始请求矩阵含竞争落选者，逐条 won 标记；原始矩阵在 `rank_winners` 零拷贝暂存）与 `movers[].pulledBy/pulling`（有效拉拽配对 ID）；新增 `ctx.admission.evaluate()` 只读链预演——按候选当前终值在克隆状态上走与正式仲裁**完全相同**的 `cancel_blocked`，返回幸存胜者 ID，实现"暂存候选 + 宿主链验证"闭环；拒绝仍是整房回退原生预填。不动槽集合（17 槽/revision v10/PlanHash 预期不变，验收实证）。验收计划：引擎等价性测试（预演幸存集 == 实际链幸存集：交换/环/链/拉拽/落选/占位拓扑）+ wave/calm 两独立包（wave 用 evaluate 发现级联损失全房停下、calm 用落选者视野扣住竞争胜者）+ 原生对照 + 组合 + 双通道与冷恢复。前置已核对：G01/G02.a/G02.b 五阶段（contest→rank→prefill/admission→obstacle→cancel 链）与执行阶段同源消费齐备；`validate_pull_pair` 胜者升序遍历的顺序语义留待 pull 登记开放子片重审。详见下文 G03.a 段落。G06.a 运行 trace 前批已交付（`ce84345`，回填 `a8a751e`）。下一步按队列：G02 剩余 has_static_obstacle 意图静态预检子片可穿插，G22.a 状态清单随后；G03 剩余（pull 登记策略、障碍槽预演）按依赖另拆。
+- 实现参考基线：`0efd645`，整房移动请求视野与准入链预演（含此前移动策略、作者工具和 trace）；这是功能基线，后续文档提交不改变它的含义。接手时仍须核对实际 HEAD 和工作区。
+- 最近已完成：G01 移动竞争（`9c8687d`）与 G02.a/G02.b 移动准入/障碍准入槽（`b7e65d5`、`e032991`）、G29.a 玩家类型生成（`73b0f1b`），此前为 N2c 受击策略第二片（`8e28ac4`）。
+- 当前任务：**作者工具与恢复边界修复、深入复审已完成**（2026-10-06，修复基线 `c52cdd3`）。上一轮 7 项及本轮 R08–R10 全部清偿，当前无剩余阻断发现。完整门禁与 fresh release 兼容逐用例对照均通过，已同步架构、模板指引与机器证据；验证后提交本批修复。详见[修复复审记录](../research/notes/mod-tools-review-fixes-2026-10-06.md)。下一步仍按原队列推进 G02 剩余静态预检与 G22.a 状态清单。
+- 上批任务：**G03.a 整房请求视野与获准集合链预演已交付**（2026-10-06，`0efd645`）：准入槽（`builtin:creep.moveAdmission`）输入扩展 `ctx.args.requests`（整房原始请求矩阵含竞争落选者，逐条 won 标记；原始矩阵在 `rank_winners` 零拷贝暂存）与 `movers[].pulledBy/pulling`（有效拉拽配对 ID）；新增 `ctx.admission.evaluate()` 只读链预演——按候选当前终值在克隆状态上走与正式仲裁**完全相同**的 `cancel_blocked`，返回幸存胜者 ID，实现"暂存候选 + 宿主链验证"闭环；拒绝仍是整房回退原生预填。不动槽集合（17 槽/revision v10/PlanHash 预期不变，验收实证）。验收计划：引擎等价性测试（预演幸存集 == 实际链幸存集：交换/环/链/拉拽/落选/占位拓扑）+ wave/calm 两独立包（wave 用 evaluate 发现级联损失全房停下、calm 用落选者视野扣住竞争胜者）+ 原生对照 + 组合 + 双通道与冷恢复。前置已核对：G01/G02.a/G02.b 五阶段（contest→rank→prefill/admission→obstacle→cancel 链）与执行阶段同源消费齐备；`validate_pull_pair` 胜者升序遍历的顺序语义留待 pull 登记开放子片重审。详见下文 G03.a 段落。G06.a 运行 trace 前批已交付（`ce84345`，回填 `a8a751e`）。下一步按队列：G02 剩余 has_static_obstacle 意图静态预检子片可穿插，G22.a 状态清单随后；G03 剩余（pull 登记策略、障碍槽预演）按依赖另拆。
   - G29.a 玩家类型生成已交付（2026-10-06，`73b0f1b`）：`kkscreeps mod types` 冻结计划确定性生成玩家面 TypeScript 声明 + `--check` 字节级新鲜度门禁 + 输出/报告双守卫（包外、先于建目录）；TS 标识符安全（引号键/枚举转义/参数类型名消歧）、可执行性门与引擎装配共用 `intent_gate`。契约见 [mod-types](../architecture/mod-types.md)、证据见[交付记录](../research/notes/g29a-mod-types-2026-10-06.md)。
   - G02 剩余不变：意图静态预检 `has_static_obstacle` 开放（后续子片或 G07 预检族）、摘要附带安全模式主人（可解释性增强）；G29.b/.c 依赖 G28.a。
-- 最近维护工作：2026-10-06 开发与实验命令可移植性整理已完成复审和完整仓库门禁，见下方记录；没有新增已实现的 G 功能。
+- 最近维护工作：2026-10-06 作者工具与恢复边界修复复审已完成，完整门禁和逐用例兼容对照通过；此前命令可移植性记录保留在下方。本批没有新增已实现的 G 功能。
 - 未解决的产品决定：本轮路线复审没有需要用户补充的决定；具体公开接口、权限与耐久协议尚未冻结，须在对应子片设计和验收。
 - 验证参考：使用上述验收记录及其机器数据，不复制其测试数量作为永久门槛。最新兼容性报告和门禁配置位于 `compat/reports/`。
 
@@ -34,8 +35,8 @@
 
 | 编号 | 任务 | 依赖/前置 | 状态 | 交付证据 |
 |---|---|---|---|---|
-| G01 | 移动竞争优先级策略 | 现有 move 请求与仲裁 | 已完成 | [mod-move-contest](../architecture/mod-move-contest.md)、[交付记录](../research/notes/g01-move-contest-2026-10-06.md)（G02–G04 未开放，另行推进） |
-| G02 | 移动准入策略 | 已稳定的移动请求输入；同步必要玩家预检，G01 不作硬依赖 | 部分完成 | G02.a 疲劳/MOVE/被拉门槛准入槽（b7e65d5）：[mod-move-admission](../architecture/mod-move-admission.md)、[记录](../research/notes/g02-move-admission-2026-10-06.md)；G02.b 仲裁障碍追加阻挡槽随本批提交：[mod-move-obstacle](../architecture/mod-move-obstacle.md)、[记录](../research/notes/g02b-move-obstacle-2026-10-06.md)；意图静态预检与放行方向未开放 |
+| G01 | 移动竞争优先级策略 | 现有 move 请求与仲裁 | 已完成 | [mod-move-contest](../architecture/mod-move-contest.md)、[交付记录](../research/notes/g01-move-contest-2026-10-06.md)（G02/G03 已分片开放，G04 未开始） |
+| G02 | 移动准入策略 | 已稳定的移动请求输入；同步必要玩家预检，G01 不作硬依赖 | 部分完成 | G02.a 疲劳/MOVE/被拉门槛准入槽（b7e65d5）：[mod-move-admission](../architecture/mod-move-admission.md)、[记录](../research/notes/g02-move-admission-2026-10-06.md)；G02.b 仲裁障碍追加阻挡槽（`e032991`）：[mod-move-obstacle](../architecture/mod-move-obstacle.md)、[记录](../research/notes/g02b-move-obstacle-2026-10-06.md)；意图静态预检与放行方向未开放 |
 | G03 | 完整房间移动仲裁 | G01、G02 | 部分完成 | G03.a 整房请求视野 + evaluate 链预演（`0efd645`）：[mod-move-admission](../architecture/mod-move-admission.md)、[记录](../research/notes/g03a-move-arbitration-2026-10-06.md)；pull 登记与障碍槽预演未开放 |
 | G04 | 移动代价与执行效果 | G02；代价可先行，完整仲裁交互在 G03 后验收 | 未开始 | — |
 | G05 | Mod 作者基础 CLI | 现有 sim、inspect、检查点 | 已完成 | G05.a `mod init` `ee296cb`；G05.b `mod test` `dbc82a4`（[模板与测试说明](../architecture/local-simulation.md#作者包模板)）；后续增强另登记 |
@@ -360,3 +361,10 @@ G28.a 的网络协议及只读原型可提前设计；开放会改变玩法的�
 开始任务、范围变化、完成批次和结束会话前，主动更新 mod-next-batches.md 的状态、接手位置和实施记录；同步现行架构、SDK 用法、样例与机器证据，达到里程碑同步路线图。聊天中的进度不能替代仓库记录。
 长期目标是独立 JS Mod 创造完整玩法、覆盖 xxscreeps 扩展领域，提供更完善的组合、恢复和工具；默认兼容性、原子候选提交与恢复边界必须保留。不要自动 push 或发布。
 ```
+
+### 作者工具与恢复边界修复复审（2026-10-06）
+
+- 修复基线：`c52cdd3`；复审范围为 `b3aa9cb` 后新增的移动策略、作者 CLI 与运行 trace。先清偿上一轮 7 项确认问题，再处理深入复审确认的旧自动停用记录解码、sim 失败报告覆盖输入及恢复 trace 时间问题；不新增 G 功能。
+- 实现：只读共用输出守卫、原子声明替换、模块级类型名分配、递归数组声明、无损模板 ID 转义、原子模板目录与私有场景报告目录、trace 开启意愿及恢复完成后启用、旧来源字段恢复。对象/建筑同键的假设经冻结门核实为不合法，无需新增生成策略。
+- 验证：真实 tsc、作者工具、checkpoint 及场景定向回归通过；fresh release 兼容门禁通过，2914 用例状态与本批实际基线逐项一致（1918 通过、89 既有失败、907 跳过）。最终完整 pnpm run check 通过：Rust 1037 通过、13 个既有忽略；JavaScript 19 通过；305 篇 Markdown、1819 个本地链接和 507 个源码/测试文件的规模门禁通过；[机器证据](../research/notes/mod-tools-review-fixes-2026-10-06.json)。
+- 代码、当前架构与模板指引已同步；仅包含本批修复、回归测试与文档，验证后提交；无其他开发中的改动。完整问题表与复审范围见[修复记录](../research/notes/mod-tools-review-fixes-2026-10-06.md)。原开发队列不变：G02 剩余静态预检、G22.a 状态清单；G03 剩余拉拽登记与障碍预演分片。

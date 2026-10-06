@@ -12,13 +12,13 @@
 - **有界**：缓冲上限 1024 条（`TRACE_CAP`），超限截尾并累计 `dropped`；单条错误/拒绝文本截断 200 字符（字符边界）。默认关闭；**所有记录点先经 `trace_enabled()` 判空门控**——关闭时无缓冲、无条目构造、无格式化。开启时每槽调用新增少量字符串克隆，相对链调用本身可忽略。
 - **与 inspect 活动链一致**：trace 的槽键与故障/拒绝绑定取自同一冻结计划——验收断言"每个事件绑定 ∈ 同报告 `composition` 对应槽的 before/after/wraps/center 活动链"，漂移在测试期暴露。
 - **隐私范围**：条目只含定位信息（tick/房间/对象 id/槽键/阶段）与结果摘要；不记录参数、字段值或玩家 Memory。错误文本是结算诊断原文，可能引用被拒参数——属服务端诊断面，不经玩家可见通道输出。
-- **不是回放日志**：trace 是诊断快照，不含确定性重放所需的参数、字段值与随机序列。复现材料=场景身份（报告 `scenario_sha256`）+ 包目录与选择集（`plan_hash`、`mods.packages`）+ 同二进制（`executable_sha256`）重跑；报告 `mod_trace.note` 原文注明。sim 场景本身是确定性的，同输入重跑即复现。
-- **开启时序与检查点**：`enable_mod_trace` 在 Mod 装配前调用会挂起到装配后生效；检查点恢复用替代引擎整体替换，挂起标志随之转移（续跑保持开启，有回归测试锁定）。trace 缓冲本身**不进检查点**：恢复后的分片从新空缓冲开始记录。teardown 重置挂起标志。
+- **不是回放日志**：trace 是诊断快照，不含确定性重放所需的参数、字段值与随机序列。复现材料=场景身份（报告 `scenario_sha256`）+ 包目录与选择集（`plan_hash`、`mods.packages`）+ 同二进制（`executable_sha256`）重跑；报告 `mod_trace.note` 原文注明。固定场景与包可复现所列诊断案例；任意玩家脚本仍可读取 Date、Math.random 或 CPU，不能据此保证所有运行逐字节复现，见[本地模拟](local-simulation.md)。
+- **开启时序与检查点**：`enable_mod_trace` 在 Mod 装配前调用会挂起到装配后生效；检查点恢复用替代引擎整体替换，开启意愿在成功切换时重新应用，装配前后开启均可保持续跑记录；恢复装配期间不记录世界时间尚未恢复的内部重建事件。trace 缓冲本身**不进检查点**：恢复后的分片从新空缓冲开始记录。teardown 重置开启意愿。旧自动停用记录缺少 mod_id 时，从 trigger 中的结构化故障绑定恢复来源；显式来源与绑定不一致时拒绝解码。该兼容处理不绕过包、计划或 sim 二进制身份校验。
 - 槽未进 VM 的早退（"realm 已在执行"/"Mod VM 待恢复"/候选构造失败）不记录——无结果可言。
 
 ## 验收
 
-- `kk-runtime`：`mod_trace.rs` 单测（上限/丢弃计数/字符边界截断/故障种类标签与 serde 名一致）；`mod_chain_tests/trace.rs` 端到端——默认关闭无快照且开启后健康链只有完成事件（非空断言 + tick/房间/槽/阶段字段齐）、拒绝事件带绑定与 code、故障→自动停用→缓存重试→重建→新链完成的**完整事件序**锁定（含 kind 名与错误文本）、停用后重试轮自有槽记 `SlotInactive`（恰 3 个、无新故障）、trace 跨 realm 重建保留历史。
+- `kk-runtime`：`mod_trace.rs` 单测（上限/丢弃计数/字符边界截断/故障种类标签与 serde 名一致）；`mod_chain_tests/trace.rs` 端到端——默认关闭无快照且开启后健康链只有完成事件（非空断言 + tick/房间/槽/阶段字段齐）、拒绝事件带绑定与 code、故障→自动停用→缓存重试→重建→新链完成的**完整事件序**锁定（含 kind 名与错误文本）、停用后重试轮自有槽记 `SlotInactive`（恰 3 个、无新故障）、trace 跨 realm 重建保留历史；检查点单测覆盖装配后开启、失败恢复保留旧快照、带停用掩码的成功恢复清空旧事件并按恢复后的时间续跑，以及旧自动停用记录解码与矛盾来源拒绝。
 - `kk-cli`：`sim_tests/mod_trace.rs` 经真实 CLI——gatekeeper 场景（拒绝+完成，绑定 ∈ composition 活动链，默认关闭时无载荷且最终世界一致）、breaker 场景（`run_failed` 退出 2 且失败归因为结算故障，`slot_fault` 槽/绑定/错误文本 + `settlement_retry`，复现材料字段在报告内）、检查点续跑（保存 2 tick 后 `--load-checkpoint --mod-trace` 续跑继续记录且事件从恢复后的世界时间开始）。
 - JS 夹具 [mod-trace](../../compat/fixtures/mod-trace/) 与 [sim-mod-trace](../../compat/fixtures/sim-mod-trace/README.md)：gatekeeper（可通行/可扣押动作对，房间可见对象 + 玩家类 emit）与 breaker（link tick 前置抛错）。
 

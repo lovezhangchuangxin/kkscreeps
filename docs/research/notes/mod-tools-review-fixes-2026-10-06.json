@@ -1,0 +1,66 @@
+{
+  "date": "2026-10-06",
+  "baseline": "c52cdd3ca48e42f945e585311caa483a7560f859",
+  "review_scope": {
+    "from": "b3aa9cb",
+    "through": "c52cdd3"
+  },
+  "fixed_findings": [
+    "R01",
+    "R02",
+    "R03",
+    "R04",
+    "R05",
+    "R06",
+    "R07",
+    "R08",
+    "R09",
+    "R10"
+  ],
+  "validation": {
+    "full_check": {
+      "status": "passed",
+      "exit_code": 0,
+      "command": "KKSCREEPS_BIN=$PWD/target/debug/kkscreeps pnpm run check",
+      "binary": "target/debug/kkscreeps",
+      "binary_sha256": "d4d82483b3d9c41703ae0419585d0cac9b3bfa48dd3d9c363f17e3194e7b6ff1",
+      "rust": {
+        "passed": 1037,
+        "failed": 0,
+        "ignored": 13,
+        "groups": 60
+      },
+      "javascript": {
+        "passed": 19,
+        "failed": 0
+      },
+      "markdown_files": 305,
+      "local_links": 1819,
+      "source_files": 507,
+      "source_line_limit": 1000,
+      "log": "/tmp/kkscreeps-fix-check.log"
+    },
+    "compat": {
+      "status": "passed",
+      "exit_code": 0,
+      "binary": "target/release/kkscreeps",
+      "binary_sha256": "a4f384adb81edf5fc4de550916225c0ccd133dcae394e68df374902e40c8f62e",
+      "upstream_revision": "34a630efa42908c117c19c25d2350fa2387bd633",
+      "command": "KKSCREEPS_BIN=$PWD/target/release/kkscreeps node compat/scripts/ratchet.mjs",
+      "total": 2914,
+      "passed": 1918,
+      "known_failures": 89,
+      "skipped": 907,
+      "comparison_baseline": "c52cdd3",
+      "case_state_differences": 0,
+      "baseline_case_count": 2914,
+      "current_case_count": 2914,
+      "log": "/tmp/kkscreeps-fix-c52cdd3-ratchet.log"
+    }
+  },
+  "review_result": {
+    "unresolved_blocking_findings": 0,
+    "new_g_features": false,
+    "plan_version_changed": false
+  }
+}

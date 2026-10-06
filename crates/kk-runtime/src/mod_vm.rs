@@ -23,7 +23,7 @@ pub struct ModFaultStreak {
 }
 
 /// 最近一次自动停用决定；后续成功、重建或普通故障不清除该记录。
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct ModAutoDisable {
     /// 停用来源（触发故障绑定的命名空间）；消费方不必从触发故障的
     /// 绑定重复归责。
@@ -31,6 +31,38 @@ pub struct ModAutoDisable {
     pub trigger: ModSettlementFault,
     pub consecutive_faults: u32,
     pub disabled: BTreeSet<String>,
+}
+
+impl<'de> serde::Deserialize<'de> for ModAutoDisable {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        struct Saved {
+            // trace 批次之前的检查点不带 mod_id；来源已存在于结构化故障中。
+            mod_id: Option<String>,
+            trigger: ModSettlementFault,
+            consecutive_faults: u32,
+            disabled: BTreeSet<String>,
+        }
+        let saved = Saved::deserialize(deserializer)?;
+        let source = saved
+            .trigger
+            .error
+            .fault
+            .as_ref()
+            .and_then(|fault| fault.binding.as_ref())
+            .map(Key::namespace)
+            .ok_or_else(|| serde::de::Error::custom("自动停用记录缺少绑定来源"))?;
+        if saved.mod_id.as_deref().is_some_and(|id| id != source) {
+            return Err(serde::de::Error::custom("自动停用来源与故障绑定不一致"));
+        }
+        let mod_id = source.to_string();
+        Ok(Self {
+            mod_id,
+            trigger: saved.trigger,
+            consecutive_faults: saved.consecutive_faults,
+            disabled: saved.disabled,
+        })
+    }
 }
 
 pub(crate) struct ModVm {

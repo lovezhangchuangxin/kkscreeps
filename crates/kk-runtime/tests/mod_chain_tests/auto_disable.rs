@@ -64,6 +64,13 @@ fn automatic_disable_retains_streak_across_recovery_and_retries_cached_players()
         assert_eq!(e.get_object(&source).unwrap()["store"]["energy"], 100);
         assert_eq!(e.engine_mod_state("dependent"), Value::Null);
         let decision = e.last_mod_auto_disable().unwrap();
+        // 旧检查点缺少新增的 mod_id，必须从原有结构化绑定恢复来源。
+        let mut legacy = serde_json::to_value(&decision)?;
+        legacy.as_object_mut().unwrap().remove("mod_id");
+        let decoded: kk_runtime::ModAutoDisable = serde_json::from_value(legacy.clone())?;
+        assert_eq!(decoded, decision);
+        legacy["mod_id"] = json!("healthy");
+        assert!(serde_json::from_value::<kk_runtime::ModAutoDisable>(legacy).is_err());
         assert_eq!(decision.consecutive_faults, 2);
         assert_eq!(decision.trigger.tick, 0);
         assert_eq!(decision.trigger.target, source);

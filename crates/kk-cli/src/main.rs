@@ -11,6 +11,7 @@ mod mod_perf_probe;
 mod mod_player_probe;
 mod mod_test;
 mod mod_types;
+mod output_guard;
 mod perf_probe;
 mod report;
 mod sim;

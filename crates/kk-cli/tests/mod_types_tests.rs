@@ -317,3 +317,77 @@ fn generated_declarations_pass_tsc_and_support_consumers() {
         "字段类型须按声明拒绝：{diagnostics}"
     );
 }
+
+#[test]
+fn recursive_arrays_and_all_generated_symbols_compile_without_shadowing() {
+    let f = Fixture::new();
+    let packages = f.0.join("mods");
+    let package = packages.join("alpha");
+    std::fs::create_dir_all(&package).unwrap();
+    std::fs::write(
+        package.join("mod.json"),
+        r#"{"id":"alpha","version":"1.0.0","apiVersion":"^1.0.0","entry":"server.js"}"#,
+    )
+    .unwrap();
+    std::fs::write(package.join("server.js"), r#"
+export default function register(api) {
+  const types = ['Foo', 'FooConstructor', 'ModInstallApi', 'Record', 'AlphaPingArgs', 'string'];
+  let first;
+  for (let i = 0; i < types.length; i++) {
+    const object = api.objects.define('alpha:object' + i, {
+      version: 1, playerClass: types[i], visibility: 'room-visible',
+      positionFields: ['x', 'y'], fields: {
+        x: { type: 'u32', min: 0, max: 49 }, y: { type: 'u32', min: 0, max: 49 },
+        modes: { type: 'array', maxLen: 4, element: { type: 'enum', values: ['off', 'on'] } },
+        matrix: { type: 'array', maxLen: 4, element: { type: 'array', maxLen: 4, nullable: true, element: { type: 'u32' } } },
+        map: { type: 'map', maxLen: 4, value: { type: 'string', maxBytes: 4 } },
+      }, tick() {},
+    });
+    if (i === 0) first = object;
+  }
+  api.intents.define('alpha:ping', {
+    scope: 'object', target: first, args: { type: 'bool' }, process() {},
+  });
+  api.buildings.define('alpha:gate', { playerClass: 'Foo', cost: { energy: 5 }, hitsMax: 100, pathing: 'plain' });
+}
+"#).unwrap();
+    let generated = f.0.join("generated.d.ts");
+    let (code, report, text) = f.run(&packages, &generated, &[]);
+    assert_eq!(code, 0, "{report}");
+    assert!(text.contains("export interface FooConstructor {"));
+    assert!(text.contains("cls: FooConstructor2"));
+    assert!(text.contains("args: AlphaPingArgs2"));
+    let consumer = f.0.join("consumer.ts");
+    std::fs::write(
+        &consumer,
+        r#"
+import type { Foo, ModInstallApi } from './generated.d.ts';
+declare const foo: Foo;
+declare const api: ModInstallApi;
+const modes: ReadonlyArray<'on' | 'off'> = foo.modes;
+const matrix: ReadonlyArray<ReadonlyArray<number> | null> = foo.matrix;
+api.intents.emit('alpha:ping', { id: 'x' }, true);
+// @ts-expect-error 枚举数组不能混入目录外的成员
+const invalid: Foo['modes'] = ['other'];
+// @ts-expect-error 嵌套数组不能混入字符串
+const badMatrix: Foo['matrix'] = [['wrong']];
+// @ts-expect-error 投影数组只读
+foo.modes.push('on');
+// @ts-expect-error 参数类型碰撞后仍须约束意图
+api.intents.emit('alpha:ping', { id: 'x' }, 'wrong');
+"#,
+    )
+    .unwrap();
+    let tsc = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../compat/node_modules/.bin/tsc");
+    let output = Command::new(tsc)
+        .args(["--noEmit", "--strict"])
+        .arg(consumer)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}{}\n{text}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}

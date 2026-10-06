@@ -430,3 +430,76 @@ fn checkpoint_restore_cannot_retire_a_mod_vm_below_a_native_sandbox() -> anyhow:
     run(&mut engine, 1)?;
     Ok(())
 }
+
+#[test]
+fn trace_enabled_after_assembly_survives_restore_without_old_entries() -> anyhow::Result<()> {
+    let packages = packages()?;
+    let options = options();
+    for binary in [false, true] {
+        let mut engine = prepare(binary, &packages, &options)?;
+        engine.enable_mod_trace();
+        engine.tick(1)?;
+        assert!(!engine.mod_trace_snapshot().unwrap().0.is_empty());
+        // 停用使恢复装配需要重建 realm；该内部重建不能留下 tick=0 的伪运行事件。
+        engine.disable_mod("clockwork")?;
+        engine.rebuild_mod_realm()?;
+        let saved = engine.checkpoint(Value::Null)?;
+        let mut invalid = saved.clone();
+        invalid["engine_version"] = json!("unknown");
+        let before = engine.mod_trace_snapshot();
+        assert!(
+            engine
+                .restore_checkpoint(invalid, Some((&packages, &options)))
+                .is_err()
+        );
+        assert_eq!(engine.mod_trace_snapshot(), before);
+        engine.restore_checkpoint(saved, Some((&packages, &options)))?;
+        assert_eq!(engine.mod_trace_snapshot(), Some((Vec::new(), 0)));
+        let resumed_tick = engine.get_game_time();
+        engine.tick(1)?;
+        let (entries, _) = engine.mod_trace_snapshot().unwrap();
+        assert!(!entries.is_empty());
+        assert!(entries.iter().all(|entry| entry.tick == resumed_tick));
+        engine.teardown();
+        engine.create_shard_with_mods(
+            &json!({"players":[],"rooms":[]}),
+            &packages,
+            options.clone(),
+        )?;
+        assert!(
+            engine.mod_trace_snapshot().is_none(),
+            "teardown 清除开启意愿"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn legacy_auto_disable_checkpoint_restores_structured_source() -> anyhow::Result<()> {
+    let packages = packages()?;
+    let options = options();
+    let mut engine = prepare(false, &packages, &options)?;
+    engine.disable_mod("clockwork")?;
+    engine.rebuild_mod_realm()?;
+    let mut saved = engine.checkpoint(Value::Null)?;
+    // trace 批次之前的真实记录形态：来源只在 trigger.error.fault.binding 中。
+    saved["last_auto_disable"] = json!({
+        "trigger": {"tick": 0, "room": "W1N1", "target": "counter",
+            "error": {"context": "clockwork", "message": "fault", "fault": {
+                "slot": "clockwork:counter.tick", "binding": "clockwork:counter.tick.process", "kind": "handler"
+            }}},
+        "consecutive_faults": 3, "disabled": ["clockwork"]
+    });
+    engine.restore_checkpoint(saved, Some((&packages, &options)))?;
+    assert_eq!(engine.last_mod_auto_disable().unwrap().mod_id, "clockwork");
+    let mut invalid = engine.checkpoint(Value::Null)?;
+    invalid["last_auto_disable"]["mod_id"] = json!("nursery");
+    let before = engine.checkpoint(Value::Null)?;
+    assert!(
+        engine
+            .restore_checkpoint(invalid, Some((&packages, &options)))
+            .is_err()
+    );
+    assert_eq!(engine.checkpoint(Value::Null)?, before);
+    Ok(())
+}

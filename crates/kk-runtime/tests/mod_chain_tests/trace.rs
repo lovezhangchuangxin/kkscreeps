@@ -143,7 +143,7 @@ fn trace_records_fault_retry_rebuild_and_auto_disable_sequence() -> anyhow::Resu
                 binding,
                 kind,
                 error,
-            } => Some((entry, binding.clone(), kind.clone(), error.clone())),
+            } => Some((entry, binding.clone(), *kind, error.clone())),
             _ => None,
         })
         .unwrap();

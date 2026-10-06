@@ -45,31 +45,8 @@ pub fn run(options: Options) -> i32 {
 }
 
 fn output_path(options: &Options) -> anyhow::Result<PathBuf> {
-    anyhow::ensure!(
-        options.report.extension().is_some_and(|ext| ext == "json"),
-        "报告须使用 .json 后缀"
-    );
-    let parent = options
-        .report
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or(std::path::Path::new("."));
-    std::fs::create_dir_all(parent)?;
-    let path = if options.report.exists() {
-        std::fs::canonicalize(&options.report)?
-    } else {
-        std::fs::canonicalize(parent)?.join(options.report.file_name().context("报告路径须为文件")?)
-    };
-    // 报告进入包目录会改变下一次的源码摘要，因此要求输出独立于注册输入。
-    if let Ok(root) = std::fs::canonicalize(&options.root) {
-        anyhow::ensure!(!path.starts_with(root), "报告须放在 Mod 包根目录之外");
-    }
-    if let Some(configs) = &options.configs
-        && let Ok(configs) = std::fs::canonicalize(configs)
-    {
-        anyhow::ensure!(path != configs, "报告不能覆盖配置文件");
-    }
-    Ok(path)
+    crate::output_guard::json_report(&options.report, &options.root, options.configs.as_deref())?;
+    crate::output_guard::normalized(&options.report)
 }
 
 fn inspect(options: &Options) -> anyhow::Result<Value> {

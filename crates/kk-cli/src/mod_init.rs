@@ -20,17 +20,17 @@ pub fn run(options: Options) -> i32 {
             println!("mod init：已生成 {}/ 下的模板包与场景", path.display());
             println!(
                 "检查组合：  kkscreeps mod inspect --root {} --report /tmp/{}-inspect.json",
-                options.root.display(),
+                shell_path(&options.root),
                 options.id
             );
             println!(
-                "运行场景：  kkscreeps sim run --scenario {}/scenario.json --ticks 3 --report /tmp/{}.json",
-                path.display(),
+                "运行场景：  kkscreeps sim run --scenario {} --ticks 3 --report /tmp/{}.json",
+                shell_path(&path.join("scenario.json")),
                 options.id
             );
             println!(
                 "一键测试：  kkscreeps mod test --root {} --report /tmp/{}-test.json",
-                options.root.display(),
+                shell_path(&options.root),
                 options.id
             );
             println!(
@@ -46,6 +46,11 @@ pub fn run(options: Options) -> i32 {
     }
 }
 
+/// 控制台命令可以直接复制；路径中的空格、引号和 shell 元字符作为字面量。
+fn shell_path(path: &std::path::Path) -> String {
+    format!("'{}'", path.to_string_lossy().replace('\'', "'\\''"))
+}
+
 fn init(options: &Options) -> anyhow::Result<PathBuf> {
     let id = &options.id;
     anyhow::ensure!(
@@ -57,13 +62,16 @@ fn init(options: &Options) -> anyhow::Result<PathBuf> {
     kk_mod_api::Key::new(format!("{id}:probe")).map_err(|_| {
         anyhow::anyhow!("包 ID 须以小写字母开头，仅含小写字母/数字/_/- 且不超过 64 字节")
     })?;
+    anyhow::ensure!(id != "builtin", "builtin 是宿主保留命名空间");
     let package_dir = options.root.join(id);
     anyhow::ensure!(
         !package_dir.exists(),
         "目标 {} 已存在；mod init 不覆盖现有目录",
         package_dir.display()
     );
-    std::fs::create_dir_all(&package_dir)?;
+    std::fs::create_dir_all(&options.root)?;
+    // 原子占用包目录，避免并行 init 都通过 exists 后覆盖彼此的文件。
+    std::fs::create_dir(&package_dir)?;
     let names = Names::of(id);
     let files: [(&str, String); 6] = [
         ("mod.json", manifest(id)),
@@ -91,18 +99,12 @@ struct Names {
 
 impl Names {
     fn of(id: &str) -> Self {
-        let upper = id.replace(['-', '_'], "_").to_ascii_uppercase();
-        let class = id
-            .split(['-', '_'])
-            .map(|part| {
-                let mut chars = part.chars();
-                match chars.next() {
-                    Some(first) => first.to_ascii_uppercase().to_string() + chars.as_str(),
-                    None => String::new(),
-                }
-            })
-            .collect::<String>()
-            + "Counter";
+        // 下划线转义为双下划线，连字符转义为 _H：无损且不与字母坍缩。
+        let encoded = id.replace('_', "__").replace('-', "_H");
+        let upper = encoded.to_ascii_uppercase();
+        let mut chars = encoded.chars();
+        let class =
+            chars.next().unwrap().to_ascii_uppercase().to_string() + chars.as_str() + "Counter";
         Self {
             class,
             find: format!("FIND_{upper}_COUNTERS"),
@@ -246,10 +248,14 @@ local-simulation.md。
 
 本包目录可改名（装载按 manifest id 识别）。复制派生新包时须同步修改
 mod.json 的 id 以及 server.js/player.js/scenario.json 中全部 `{id}:`
-前缀；同一 Mod 根下出现重复 id 会被拒绝。scenario.json 的 `mods.root`
+前缀，并修改 server.js/player.js/main.js 中的玩家类 `{class}`、查询
+全局 `{find}`/`{look}`。推荐用新 ID 再运行 mod init 后迁移玩法逻辑，
+避免复制后遗漏全局名。同一 Mod 根下出现重复 id 会被拒绝。
+scenario.json 的 `mods.root`
 指向上级目录（包发现按子目录进行），移动目录时须同步调整。
 "#,
         class = names.class,
-        find = names.find
+        find = names.find,
+        look = names.look
     )
 }

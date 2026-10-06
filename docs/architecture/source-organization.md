@@ -22,7 +22,8 @@
 | `kk-engine/src/settle/resources.rs` | 资源领域读取与副本预检转账；`resources/generic.rs` 共享 Generic 仓库解析、native 容量与实验室槽写入 |
 | `kk-mod-host/src/execution_plan.rs` | 链安装与诊断共用的活动顺序/中心回退选择 |
 | `kk-mod-host/src/composition.rs` | 冻结来源、规则候选与选中来源、处理器/manifest 停用闭包 |
-| `kk-cli/src/mod_inspect.rs` | 独立注册诊断与停用预览；report.rs 共用原子 JSON 报告写入 |
+| `kk-cli/src/mod_inspect.rs` | 独立注册诊断与停用预览；`output_guard.rs` 共用只读路径与输入保护，`report.rs` 共用原子 JSON/声明写入 |
+| `kk-mod-api/src/typegen.rs` | 冻结计划到 TS 声明；`typegen/symbols.rs` 独立维护模块级命名分配与冲突消歧 |
 | `kk-mod-api/src/objects.rs` | 对象视图/分页封套和管理初始化/候选创建共用的字段准备 |
 | `kk-engine/src/settle/objects.rs` | 同房 Mod 候选读写、命名空间检查；日志与索引恢复在 working.rs |
 | `kk-mod-host/src/chain/objects.rs` | 对象 op 的同步访问、可重入字段转换与首个故障保留 |

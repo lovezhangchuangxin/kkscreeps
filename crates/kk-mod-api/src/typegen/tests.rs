@@ -234,7 +234,7 @@ fn declarations_map_every_value_kind_and_envelope() {
         "{text}"
     );
     assert!(text.contains("对象 alpha:beacon 的 id"));
-    assert!(text.contains("visitors: readonly (string | null)[];"));
+    assert!(text.contains("visitors: ReadonlyArray<string | null>;"));
     assert!(text.contains("tally: Record<string, number>;"));
     // 非 TS 标识符合法字段名退化为引号键；枚举值中的引号被转义。
     assert!(

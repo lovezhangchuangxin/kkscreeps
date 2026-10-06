@@ -62,35 +62,10 @@ pub(super) fn save(
     )
 }
 
-/// 先规范化现有父目录，避免报告覆盖检查点、场景或源码；输出目录由调用方准备。
+/// 输出检查先于执行与失败报告写入；共享路径解析不创建任何目录。
 pub(super) fn validate_paths(options: &Options) -> anyhow::Result<()> {
-    fn absolute(path: &Path) -> anyhow::Result<PathBuf> {
-        if path.exists() {
-            return Ok(std::fs::canonicalize(path)?);
-        }
-        let path = if path.is_absolute() {
-            path.to_path_buf()
-        } else {
-            std::env::current_dir()?.join(path)
-        };
-        let mut normalized = PathBuf::new();
-        for component in path.components() {
-            match component {
-                std::path::Component::ParentDir => {
-                    normalized.pop();
-                }
-                std::path::Component::CurDir => {}
-                other => normalized.push(other.as_os_str()),
-            }
-        }
-        if let Some(parent) = normalized.parent().filter(|parent| parent.exists()) {
-            return Ok(std::fs::canonicalize(parent)?
-                .join(normalized.file_name().context("输出路径缺少文件名")?));
-        }
-        Ok(normalized)
-    }
-    let report = absolute(&options.report)?;
-    let scenario = absolute(&options.scenario)?;
+    use crate::output_guard::{distinct, normalized, outside_packages};
+    distinct(&options.report, &options.scenario)?;
     for input in [
         options.load_checkpoint.as_ref(),
         options.save_checkpoint.as_ref(),
@@ -98,11 +73,30 @@ pub(super) fn validate_paths(options: &Options) -> anyhow::Result<()> {
     .into_iter()
     .flatten()
     {
-        let path = absolute(input)?;
-        anyhow::ensure!(
-            path != report && path != scenario,
-            "检查点路径不能与报告或场景相同"
-        );
+        distinct(input, &options.report).context("检查点路径不能与报告相同")?;
+        distinct(input, &options.scenario).context("检查点路径不能与场景相同")?;
+    }
+    // 这里只读路径声明，即使后续场景校验或包装载失败也保护输入。
+    // 解析失败仍由 execute 输出原有 setup_failed 诊断。
+    if let Ok(bytes) = std::fs::read(&options.scenario)
+        && let Ok(scene) = serde_json::from_slice::<Value>(&bytes)
+    {
+        let scenario = normalized(&options.scenario)?;
+        let base = scenario.parent().context("场景路径缺少父目录")?;
+        let mut roots = Vec::new();
+        if let Some(root) = scene["mods"]["root"].as_str() {
+            roots.push(base.join(root));
+        }
+        for bot in scene["bots"].as_array().into_iter().flatten() {
+            if let Some(root) = bot["modules"].as_str() {
+                roots.push(base.join(root));
+            }
+        }
+        for output in std::iter::once(&options.report).chain(options.save_checkpoint.iter()) {
+            for root in &roots {
+                outside_packages(output, root)?;
+            }
+        }
     }
     Ok(())
 }
@@ -111,17 +105,8 @@ pub(super) fn protect_sources(
     path: &Path,
     roots: impl Iterator<Item = PathBuf>,
 ) -> anyhow::Result<()> {
-    let parent = path
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or(Path::new("."));
-    let destination =
-        std::fs::canonicalize(parent)?.join(path.file_name().context("检查点路径缺少文件名")?);
     for root in roots {
-        anyhow::ensure!(
-            !destination.starts_with(std::fs::canonicalize(root)?),
-            "检查点输出不能位于玩家或 Mod 源码目录中"
-        );
+        crate::output_guard::outside_packages(path, &root)?;
     }
     Ok(())
 }

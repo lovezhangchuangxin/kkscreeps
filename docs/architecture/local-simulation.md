@@ -9,11 +9,11 @@ target/release/kkscreeps sim run \
   --ticks 2000 --report /tmp/sim-economy.json
 ```
 
-`--ticks` 默认 1000，必须大于零；`--concurrency` 默认 2，可选 1–32；`--kkpv` 选择二进制玩家投影，默认 JSON；`--mod-trace` 在报告附有界的 Mod 运行事件（槽结果、拒绝、故障与回退；默认关闭，见[运行 trace](mod-trace.md)）。路径相对当前目录定位场景，场景里的模块目录相对场景所在目录定位。报告必须使用 `.json` 后缀，且不能与场景文件相同。`--save-checkpoint` 保存无开放轮次的完整状态，`--load-checkpoint` 从同一场景/模块身份恢复，`--ticks` 表示额外推进轮数；父目录须已存在，完整契约与示例见[检查点](checkpoints.md)。
+`--ticks` 默认 1000，必须大于零；`--concurrency` 默认 2，可选 1–32；`--kkpv` 选择二进制玩家投影，默认 JSON；`--mod-trace` 在报告附有界的 Mod 运行事件（槽结果、拒绝、故障与回退；默认关闭，见[运行 trace](mod-trace.md)）。路径相对当前目录定位场景，场景里的模块目录相对场景所在目录定位。报告必须使用 `.json` 后缀，且不能覆盖场景或装载检查点；报告及保存检查点均须在场景声明的玩家模块与 Mod 包根之外。守卫在装载/执行和失败报告写入之前运行，逐组件解析符号链接，拒绝后不创建输出目录。`--save-checkpoint` 保存无开放轮次的完整状态，`--load-checkpoint` 从同一场景/模块身份恢复，`--ticks` 表示额外推进轮数；父目录须已存在，完整契约与示例见[检查点](checkpoints.md)。
 
 ## 作者包模板
 
-`kkscreeps mod init --root <目录> --id <包ID>` 生成一个可独立运行的最小公共 SDK 包（落在 `<目录>/<包ID>/`）：manifest、声明每 tick 自增计数对象的服务端处理器、绑定玩家类与 FIND 查询的玩家面、玩家脚本、引用本包并带断言的场景，以及包含组合检查、运行与保存恢复命令的 README。目标目录已存在时拒绝，不覆盖现有内容。
+`kkscreeps mod init --root <目录> --id <包ID>` 生成一个可独立运行的最小公共 SDK 包（落在 `<目录>/<包ID>/`）：manifest、声明每 tick 自增计数对象的服务端处理器、绑定玩家类与 FIND 查询的玩家面、玩家脚本、引用本包并带断言的场景，以及包含组合检查、运行与保存恢复命令的 README。目标目录已存在时拒绝，通过原子创建占用包目录，不覆盖现有内容；`builtin` 是保留命名空间，不能用作模板 ID。玩家类及查询常量采用无损 ID 转义：下划线→双下划线、连字符→`_H`，因此 `foo-bar` 与 `foo_bar` 等不同 ID 组合时不会撞名。此规则只应用于新模板，已有包不自动改名。
 
 ```bash
 target/release/kkscreeps mod init --root /tmp/my-mods --id starter
@@ -22,7 +22,7 @@ target/release/kkscreeps sim run --scenario /tmp/my-mods/starter/scenario.json -
 
 模板场景断言 3 轮后的对象计数值、玩家读取值与 namespace state；`--save-checkpoint`/`--load-checkpoint` 续跑等价，作为作者的保存恢复示例。生成物只依赖公共 SDK 与 CLI，宿主没有按包 ID 分派的分支。
 
-`kkscreeps mod test --root <目录> --report <汇总.json>` 对根下每个自带 `scenario.json` 的包按同一 `sim run` 路径运行断言并汇总：无场景的包记 skipped；`--ticks` 默认 3（匹配模板断言），`--kkpv`/`--mod-trace` 与 `sim run` 同义。退出码沿用 sim 语义（0 全过、1 场景/装载失败、2 运行或断言失败），多包失败取最严重退出码；汇总报告内联各场景的机器结果（含 plan_hash 与断言状态），装载期失败也落盘 `setup_failed` 汇总。
+`kkscreeps mod test --root <目录> --report <汇总.json>` 对根下每个自带 `scenario.json` 的包按同一 `sim run` 路径运行断言并汇总：无场景的包记 skipped；`--ticks` 默认 3（匹配模板断言），`--kkpv`/`--mod-trace` 与 `sim run` 同义。退出码沿用 sim 语义（0 全过、1 场景/装载失败、2 运行或断言失败），多包失败取最严重退出码；汇总报告内联各场景的机器结果（含 plan_hash 与断言状态），装载期失败也落盘 `setup_failed` 汇总。汇总报告必须在包根之外，守卫拒绝时不写失败报告；各场景中间报告使用原子占用的私有临时目录，读取失败不会被计为通过，结束后清理。
 
 `kkscreeps mod types --root <目录> --out <声明.d.ts> --report <报告.json>` 从冻结计划生成玩家面 TypeScript 声明（安装 API 窄化签名、对象投影 interface、意图参数与资源联合），`--select`/`--exclude`/`--configs` 与 sim/inspect 共用展开语义；`--check` 与磁盘声明按字节对比校验新鲜（过期或缺失退出 2，只读不改文件）。输出与报告都必须在包根之外（`.d.ts`/`.json` 后缀）——包内文件字节计入计划指纹，被守卫拒绝的路径不落任何文件。完整契约见[玩家类型生成](mod-types.md)。
 

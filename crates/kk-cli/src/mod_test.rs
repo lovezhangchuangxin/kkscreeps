@@ -24,12 +24,8 @@ pub struct Options {
 }
 
 pub fn run(options: Options) -> i32 {
-    if options
-        .report
-        .extension()
-        .is_none_or(|extension| extension != "json")
-    {
-        eprintln!("mod test 失败：汇总报告必须使用 .json 后缀");
+    if let Err(error) = crate::output_guard::json_report(&options.report, &options.root, None) {
+        eprintln!("mod test: {error:#}");
         return 1;
     }
     match test(&options) {
@@ -111,10 +107,8 @@ fn test(options: &Options) -> anyhow::Result<(i32, Value)> {
             }));
             continue;
         }
-        let detail_path = std::env::temp_dir().join(format!(
-            "kkscreeps-mod-test-{}-{id}.json",
-            std::process::id()
-        ));
+        let temporary = TemporaryReport::new()?;
+        let detail_path = temporary.0.join("scene.json");
         let code = sim::run(sim::Options {
             scenario: scenario.clone(),
             ticks: options.ticks,
@@ -125,11 +119,7 @@ fn test(options: &Options) -> anyhow::Result<(i32, Value)> {
             load_checkpoint: None,
             mod_trace: options.mod_trace,
         });
-        let detail: Value = std::fs::read(&detail_path)
-            .ok()
-            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-            .unwrap_or_else(|| json!({"error": "场景报告不可读"}));
-        let _ = std::fs::remove_file(&detail_path);
+        let detail: Value = serde_json::from_slice(&std::fs::read(&detail_path)?)?;
         let outcome = if code == 0 {
             passed += 1;
             "passed"
@@ -162,4 +152,31 @@ fn test(options: &Options) -> anyhow::Result<(i32, Value)> {
             "results": results,
         }),
     ))
+}
+
+/// 原子占用私有临时目录，避免 PID 重用时读取旧结果或替换他人的临时报告。
+struct TemporaryReport(PathBuf);
+impl TemporaryReport {
+    fn new() -> anyhow::Result<Self> {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        for _ in 0..100 {
+            let path = std::env::temp_dir().join(format!(
+                "kkscreeps-mod-test-{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            match std::fs::create_dir(&path) {
+                Ok(()) => return Ok(Self(path)),
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => return Err(error.into()),
+            }
+        }
+        anyhow::bail!("无法占用场景报告临时目录")
+    }
+}
+impl Drop for TemporaryReport {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
 }
