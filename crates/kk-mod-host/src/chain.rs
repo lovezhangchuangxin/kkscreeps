@@ -29,7 +29,10 @@ pub(crate) use incoming::{op_mod_chain_incoming_damage, op_mod_chain_incoming_se
 mod contest;
 pub(crate) use contest::{op_mod_chain_contest_priority, op_mod_chain_contest_set_priority};
 mod admission;
-pub(crate) use admission::{op_mod_chain_admission_admitted, op_mod_chain_admission_set_admitted};
+pub(crate) use admission::{
+    op_mod_chain_admission_admitted, op_mod_chain_admission_evaluate,
+    op_mod_chain_admission_set_admitted,
+};
 mod obstacle;
 pub(crate) use obstacle::{op_mod_chain_obstacle_block, op_mod_chain_obstacle_blocked};
 mod combat_batch;
@@ -83,6 +86,11 @@ pub trait ChainHost {
         Err("本次槽没有移动准入能力".into())
     }
     fn admission_set_admitted(&mut self, _id: &str, _admitted: bool) -> Result<(), String> {
+        Err("本次槽没有移动准入能力".into())
+    }
+    /// 按候选当前终值只读预演取消链，返回幸存胜者对象 ID（升序）；
+    /// 仅移动准入槽开放。
+    fn admission_evaluate(&mut self) -> Result<Vec<String>, String> {
         Err("本次槽没有移动准入能力".into())
     }
     /// 读取胜者当前障碍判定；仅移动障碍槽开放。

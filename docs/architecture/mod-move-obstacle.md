@@ -72,4 +72,4 @@ native 中心为无操作（无追加阻挡）；多包平手关系按[handler �
 
 [真实玩家场景](../../compat/fixtures/sim-mod-move-obstacle/README.md)提供原生、stay-north、no-swap 和两包组合；JSON/KKPV 完整 final 一致，障碍判定后保存退出与冷启动续跑等价。专项覆盖输入完整性与对象摘要（含 yielding 与 native 初判）、墙地形无路判定、追加的让位链传播、两独立策略与并集组合、非法写入/外部 ID、能力门、停用回退、晚期失败缓存重试与拒绝回退，结果见[交付记录](../research/notes/g02b-move-obstacle-2026-10-06.md)。
 
-当前不开放意图登记期静态预检（`has_static_obstacle`，结构/私有 rampart/自家工地，后续子片或 G07 预检族）、放行方向（表示有效性宿主约束）、摘要中的安全模式主人（creep 阻挡的安全模式分支现只能依赖 `nativeBlocked` 初判，后续切片可附带以增强可解释性）、G03 获准集合/整房请求视野、G04 地形代价与执行效果。
+当前不开放意图登记期静态预检（`has_static_obstacle`，结构/私有 rampart/自家工地，后续子片或 G07 预检族）、放行方向（表示有效性宿主约束）、摘要中的安全模式主人（creep 阻挡的安全模式分支现只能依赖 `nativeBlocked` 初判，后续切片可附带以增强可解释性）、障碍槽自身的链预演（准入槽的 `evaluate()` 已开放，障碍追加后无第二预演点）、G04 地形代价与执行效果。整房请求视野经准入槽 `ctx.args.requests` 提供。

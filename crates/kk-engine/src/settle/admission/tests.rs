@@ -279,3 +279,260 @@ fn non_creep_winner_gets_defensive_factors_and_foreign_read_fails_closed() {
     let candidate = MoveAdmission::new(input, BTreeMap::new()).unwrap().unwrap();
     assert!(!candidate.admitted(ObjId(99)), "域外对象读取 fail-closed");
 }
+
+#[test]
+fn requests_view_covers_losers_and_pull_ids() {
+    // 整房请求视野：竞争落选者以 won=false 可见，胜者 won=true 且
+    // 格内登记序保留；有效拉拽配对以对象 ID 互相可见。
+    let mut room = RoomState::new("W1N1", kk_core::Terrain::plains());
+    let mut m = movement::Movement::new();
+    // 竞争格：strong(move,move) 与 weak(move) 都请求 (30,29)。
+    put(
+        &mut room,
+        ObjId(1),
+        30,
+        30,
+        &[BodyKind::Move, BodyKind::Move],
+    );
+    m.add(ObjId(1), (30, 30), 0, -1);
+    put(&mut room, ObjId(2), 31, 30, &[BodyKind::Move]);
+    m.add(ObjId(2), (31, 30), -1, -1);
+    // 拉拽配对：puller 让位、被拉者移向拉者原格。
+    let puller = ObjId(9);
+    put(&mut room, puller, 10, 10, &[BodyKind::Move]);
+    m.add(puller, (10, 10), 0, -1);
+    put(&mut room, ObjId(3), 10, 11, &[]);
+    m.add(ObjId(3), (10, 11), 0, -1);
+    m.add_pulling(&room, puller, ObjId(3));
+    let input = rank_and_fill(&room, &mut m, &BTreeMap::new());
+    assert_eq!(input.requests.len(), 4, "整房视野不截断落选者");
+    let find = |id: ObjId| {
+        input
+            .requests
+            .iter()
+            .find(|r| r.mover_id == id.as_str())
+            .unwrap_or_else(|| panic!("缺 {id:?}"))
+    };
+    let strong = find(ObjId(1));
+    assert_eq!((strong.x, strong.y), (30, 29));
+    assert_eq!((strong.origin_x, strong.origin_y), (30, 30));
+    assert_eq!(strong.index, 0, "格内登记序保留");
+    assert!(strong.won, "功率高者胜出");
+    let weak = find(ObjId(2));
+    assert_eq!((weak.x, weak.y), (30, 29));
+    assert!(!weak.won, "落选者可见且标记为未胜");
+    let pulled = input
+        .movers
+        .iter()
+        .find(|info| info.id == ObjId(3).as_str())
+        .unwrap();
+    assert_eq!(pulled.pulled_by, Some(puller.as_str()), "被拉者可见拉者 ID");
+    assert_eq!(pulled.pulling.as_deref(), None, "被拉者自身未在拉动");
+    let puller_info = input
+        .movers
+        .iter()
+        .find(|info| info.id == puller.as_str())
+        .unwrap();
+    assert_eq!(puller_info.pulling, Some(ObjId(3).as_str()));
+    assert_eq!(puller_info.pulled_by, None);
+    // 落选者不在胜者输入中，但仍在整房视野里。
+    assert!(input.movers.iter().all(|info| info.id != ObjId(2).as_str()));
+}
+
+/// 预演幸存集与实际取消链幸存集的等价性断言：先在原状态上预演，
+/// 再把同一终值应用进正式链，两者必须一致。
+fn assert_simulate_matches_chain(
+    room: &RoomState,
+    m: &mut movement::Movement,
+    finals: &BTreeMap<ObjId, bool>,
+) {
+    assert_simulate_matches_chain_with_safe_mode(room, m, finals, None);
+}
+
+fn assert_simulate_matches_chain_with_safe_mode(
+    room: &RoomState,
+    m: &mut movement::Movement,
+    finals: &BTreeMap<ObjId, bool>,
+    safe_mode_user: Option<&str>,
+) {
+    let index = RoomIndex::build(&room.objects);
+    let simulated = m.simulate_survivors(room, &index, safe_mode_user, finals);
+    m.apply_admissions(finals.clone());
+    m.cancel_blocked(room, &index, safe_mode_user);
+    let actual: std::collections::BTreeSet<ObjId> = m.winners().keys().copied().collect();
+    assert_eq!(
+        simulated, actual,
+        "预演幸存集须与实际取消链一致（预演不改变仲裁状态）"
+    );
+}
+
+#[test]
+fn simulate_matches_chain_on_swap_ring_chain_and_blockage() {
+    // 交换：a、b 互换原格，双方互为让位胜者。
+    let mut room = RoomState::new("W1N1", kk_core::Terrain::plains());
+    let mut m = movement::Movement::new();
+    put(&mut room, ObjId(1), 10, 10, &[BodyKind::Move]);
+    m.add(ObjId(1), (10, 10), 0, -1);
+    put(&mut room, ObjId(2), 10, 9, &[BodyKind::Move]);
+    m.add(ObjId(2), (10, 9), 0, 1);
+    rank_and_fill(&room, &mut m, &BTreeMap::new());
+    let finals = m.admission_finals().clone();
+    assert_eq!(finals.values().filter(|v| **v).count(), 2, "原生双方获准");
+    assert_simulate_matches_chain(&room, &mut m, &finals);
+    assert_eq!(m.winners().len(), 2, "交换双方都存活");
+
+    // 三环旋转：a→b 格、b→c 格、c→a 格；全获准则全存活。
+    let mut room = RoomState::new("W1N1", kk_core::Terrain::plains());
+    let mut m = movement::Movement::new();
+    put(&mut room, ObjId(1), 10, 10, &[BodyKind::Move]);
+    m.add(ObjId(1), (10, 10), 0, -1);
+    put(&mut room, ObjId(2), 10, 9, &[BodyKind::Move]);
+    m.add(ObjId(2), (10, 9), -1, 0);
+    put(&mut room, ObjId(3), 9, 9, &[BodyKind::Move]);
+    m.add(ObjId(3), (9, 9), 1, 1);
+    rank_and_fill(&room, &mut m, &BTreeMap::new());
+    let finals = m.admission_finals().clone();
+    assert_simulate_matches_chain(&room, &mut m, &finals);
+    assert_eq!(m.winners().len(), 3, "环旋转全存活");
+
+    // 扣住环上一员：让位链级联取消整环，预演必须预测到空集。
+    let mut room = RoomState::new("W1N1", kk_core::Terrain::plains());
+    let mut m = movement::Movement::new();
+    put(&mut room, ObjId(1), 10, 10, &[BodyKind::Move]);
+    m.add(ObjId(1), (10, 10), 0, -1);
+    put(&mut room, ObjId(2), 10, 9, &[BodyKind::Move]);
+    m.add(ObjId(2), (10, 9), -1, 0);
+    put(&mut room, ObjId(3), 9, 9, &[BodyKind::Move]);
+    m.add(ObjId(3), (9, 9), 1, 1);
+    rank_and_fill(&room, &mut m, &BTreeMap::new());
+    let mut finals = m.admission_finals().clone();
+    finals.insert(ObjId(2), false);
+    assert_simulate_matches_chain(&room, &mut m, &finals);
+    assert!(m.winners().is_empty(), "扣住一员导致整环级联取消");
+
+    // 链式让位到空格 + 占位阻塞的第三者：预演对占位者返回空幸存。
+    let mut room = RoomState::new("W1N1", kk_core::Terrain::plains());
+    let mut m = movement::Movement::new();
+    put(&mut room, ObjId(1), 10, 10, &[BodyKind::Move]);
+    m.add(ObjId(1), (10, 10), 0, -1);
+    put(&mut room, ObjId(2), 10, 9, &[BodyKind::Move]);
+    m.add(ObjId(2), (10, 9), -1, 0);
+    put(&mut room, ObjId(3), 9, 9, &[BodyKind::Move]);
+    m.add(ObjId(3), (9, 9), -1, 0);
+    // 第三者请求移入静止无件者占据的格：门槛获准但链内阻塞。
+    put(&mut room, ObjId(4), 20, 20, &[BodyKind::Move]);
+    put(&mut room, ObjId(5), 20, 19, &[BodyKind::Work]);
+    m.add(ObjId(4), (20, 20), 0, -1);
+    rank_and_fill(&room, &mut m, &BTreeMap::new());
+    let finals = m.admission_finals().clone();
+    assert!(finals[&ObjId(4)], "占位者门槛原生获准");
+    assert_simulate_matches_chain(&room, &mut m, &finals);
+    assert!(!m.winners().contains_key(&ObjId(4)), "占位者链内取消");
+    assert_eq!(m.winners().len(), 3, "链式让位全存活");
+}
+
+#[test]
+fn simulate_matches_chain_with_overrides_and_pull_pair() {
+    // 覆盖疲劳者放行：预演按覆盖终值预测，而不是原生预填。
+    let (room, mut m, old_fatigue) = gated_room();
+    rank_and_fill(&room, &mut m, &old_fatigue);
+    let mut finals = m.admission_finals().clone();
+    finals.insert(ObjId(1), true);
+    let index = RoomIndex::build(&room.objects);
+    let simulated = m.simulate_survivors(&room, &index, None, &finals);
+    assert_eq!(simulated, [ObjId(1)].into_iter().collect(), "预演含覆盖项");
+    m.apply_admissions(finals);
+    m.cancel_blocked(&room, &index, None);
+    let actual: std::collections::BTreeSet<ObjId> = m.winners().keys().copied().collect();
+    assert_eq!(simulated, actual);
+
+    // 拉拽配对完好时双方存活；扣住拉者后级联取消被拉者。
+    let pull_room = |m: &mut movement::Movement| -> RoomState {
+        let mut room = RoomState::new("W1N1", kk_core::Terrain::plains());
+        let puller = ObjId(9);
+        put(&mut room, puller, 10, 10, &[BodyKind::Move]);
+        m.add(puller, (10, 10), 0, -1);
+        put(&mut room, ObjId(1), 10, 11, &[BodyKind::Move]);
+        m.add(ObjId(1), (10, 11), 0, -1);
+        m.add_pulling(&room, puller, ObjId(1));
+        room
+    };
+    let mut m = movement::Movement::new();
+    let room = pull_room(&mut m);
+    rank_and_fill(&room, &mut m, &BTreeMap::new());
+    let finals = m.admission_finals().clone();
+    assert_eq!(finals.values().filter(|v| **v).count(), 2);
+    assert_simulate_matches_chain(&room, &mut m, &finals);
+    assert_eq!(m.winners().len(), 2, "拉拽配对双方存活");
+
+    let mut m = movement::Movement::new();
+    let room = pull_room(&mut m);
+    rank_and_fill(&room, &mut m, &BTreeMap::new());
+    let mut finals = m.admission_finals().clone();
+    finals.insert(ObjId(9), false);
+    assert_simulate_matches_chain(&room, &mut m, &finals);
+    assert!(m.winners().is_empty(), "拉者被扣后失去让位，被拉者级联取消");
+}
+
+#[test]
+fn finals_snapshot_reflects_candidate_overrides() {
+    let (room, mut m, old_fatigue) = gated_room();
+    let input = rank_and_fill(&room, &mut m, &old_fatigue);
+    let native = m.admission_finals().clone();
+    let candidate = MoveAdmission::new(input, native.clone()).unwrap().unwrap();
+    candidate.set_admitted(ObjId(1), true).unwrap();
+    candidate.set_admitted(ObjId(2), true).unwrap();
+    let snapshot = candidate.finals_snapshot();
+    assert_eq!(snapshot.len(), native.len(), "快照含原生初始项");
+    assert!(snapshot[&ObjId(1)] && snapshot[&ObjId(2)]);
+    assert!(!snapshot[&ObjId(3)], "未覆盖项保持原生值");
+    // 快照不消费候选：终值仍可取出。
+    assert!(candidate.into_finals()[&ObjId(1)]);
+}
+
+#[test]
+fn simulate_matches_chain_under_safe_mode() {
+    // 安全模式主人的 creep 可穿过未让位的敌方 creep（仍被己方阻挡）；
+    // 该分支在预演与正式链中同函数同入参，等价性须有回归护栏。
+    // 主人 p1 的 mover(20,20) 请求移入敌方静止 creep 占据的 (20,19)。
+    let mut room = RoomState::new("W1N1", kk_core::Terrain::plains());
+    let mut m = movement::Movement::new();
+    let mut friendly = creep_with(&[BodyKind::Move], 0);
+    friendly.owner = "p1".into();
+    friendly.x = 20;
+    friendly.y = 20;
+    room.objects.insert(ObjId(1), RoomObject::Creep(friendly));
+    m.add(ObjId(1), (20, 20), 0, -1);
+    let mut enemy = creep_with(&[BodyKind::Work], 0);
+    enemy.owner = "p2".into();
+    enemy.x = 20;
+    enemy.y = 19;
+    room.objects.insert(ObjId(2), RoomObject::Creep(enemy));
+    rank_and_fill(&room, &mut m, &BTreeMap::new());
+    let finals = m.admission_finals().clone();
+    // 无安全模式：敌方占据者阻挡，正式链与预演同为空幸存。
+    assert_simulate_matches_chain_with_safe_mode(&room, &mut m, &finals, None);
+    assert!(!m.winners().contains_key(&ObjId(1)));
+
+    // 同一拓扑重新仲裁：安全模式主人 p1 穿过敌方 creep，双方一致存活。
+    let mut room = RoomState::new("W1N1", kk_core::Terrain::plains());
+    let mut m = movement::Movement::new();
+    let mut friendly = creep_with(&[BodyKind::Move], 0);
+    friendly.owner = "p1".into();
+    friendly.x = 20;
+    friendly.y = 20;
+    room.objects.insert(ObjId(1), RoomObject::Creep(friendly));
+    m.add(ObjId(1), (20, 20), 0, -1);
+    let mut enemy = creep_with(&[BodyKind::Work], 0);
+    enemy.owner = "p2".into();
+    enemy.x = 20;
+    enemy.y = 19;
+    room.objects.insert(ObjId(2), RoomObject::Creep(enemy));
+    rank_and_fill(&room, &mut m, &BTreeMap::new());
+    let finals = m.admission_finals().clone();
+    assert_simulate_matches_chain_with_safe_mode(&room, &mut m, &finals, Some("p1"));
+    assert!(
+        m.winners().contains_key(&ObjId(1)),
+        "安全模式主人可穿过敌方未让位 creep"
+    );
+}

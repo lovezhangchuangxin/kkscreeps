@@ -366,7 +366,9 @@ export function installRules(entries) {
 // （getPriority/setPriority），只改变仲裁排序，不开放请求或获准集合。
 // 房间级移动准入槽的 ctx.admission 读写本次输入中执行者的准入终值
 // （getAdmitted/setAdmitted），初值即原生 can_move 结果，终值同时约束
-// 链取消与执行阶段。房间级移动障碍槽的 ctx.obstacle 提供单向追加阻挡
+// 链取消与执行阶段；evaluate 按候选当前终值只读预演取消链，返回会
+// 存活的胜者 ID（宿主同一取消链代码；按调用时点即时计算，非快照，
+// 障碍槽尚未追加、结果为上界）。房间级移动障碍槽的 ctx.obstacle 提供单向追加阻挡
 // （isBlocked/block），不能放行 native 判定的阻挡。均不可枚举、不可
 // 替换且只在处理器同步期内有效。
 // 处理器的持久状态只准走 ctx.state——模块全局不随失败候选回滚，
@@ -702,6 +704,7 @@ export function runChain(slot, token) {
   }
   // 房间级准入槽的 ctx.admission 读写本次输入中执行者的准入终值；
   // 初值即原生 can_move 结果，覆盖只影响获准集合，不开放请求重排。
+  // evaluate 按候选当前终值预演取消链（只读，不写世界）。
   function admission(key, isOpen) {
     function checked(call) {
       try {
@@ -725,6 +728,9 @@ export function runChain(slot, token) {
           if (typeof admitted !== 'boolean') throw new Error('准入终值须为布尔值');
           return ops.op_mod_chain_admission_set_admitted(token, key, id, admitted);
         });
+      },
+      evaluate() {
+        return checked(() => ops.op_mod_chain_admission_evaluate(token, key));
       },
     });
   }

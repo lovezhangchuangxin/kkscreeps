@@ -37,3 +37,21 @@ pub(crate) fn op_mod_chain_admission_set_admitted(
     let result = chain.host.admission_set_admitted(&id, admitted);
     chain.outcome(ModFaultKind::Write, Some(&binding), result)
 }
+
+/// 按候选当前终值只读预演取消链，返回幸存胜者对象 ID（升序）。
+#[op2]
+#[serde]
+pub(crate) fn op_mod_chain_admission_evaluate(
+    state: &mut OpState,
+    #[string] token: String,
+    #[string] binding: String,
+) -> Result<Vec<String>, JsErrorBox> {
+    let chain = active(state, &token)?;
+    chain.checked_binding(&binding)?;
+    let _timer = chain
+        .profiler
+        .as_ref()
+        .map(|p| p.measure("host_admission_evaluate"));
+    let result = chain.host.admission_evaluate();
+    chain.outcome(ModFaultKind::Read, Some(&binding), result)
+}

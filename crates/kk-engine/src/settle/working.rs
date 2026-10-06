@@ -793,16 +793,22 @@ impl Working {
         self.movement.apply_admissions(finals);
     }
 
-    /// 障碍槽输入构造；使用与 finish_movement 同时点生效的安全模式
-    /// 主人。仅 Hosted 路径调用。
-    pub fn movement_obstacle_input(&self) -> kk_mod_api::obstacle::MoveObstacleInput {
-        let safe_mode_user: Option<String> = self.controller().and_then(|ctl| {
+    /// 此刻生效的安全模式主人：控制器处于安全模式时取房主，否则
+    /// None。障碍槽输入、链预演与正式取消链共用，规则变更只改此处。
+    fn active_safe_mode_user(&self) -> Option<String> {
+        self.controller().and_then(|ctl| {
             if ctl.safe_mode > self.time {
                 ctl.owner.clone()
             } else {
                 None
             }
-        });
+        })
+    }
+
+    /// 障碍槽输入构造；使用与 finish_movement 同时点生效的安全模式
+    /// 主人。仅 Hosted 路径调用。
+    pub fn movement_obstacle_input(&self) -> kk_mod_api::obstacle::MoveObstacleInput {
+        let safe_mode_user = self.active_safe_mode_user();
         self.movement
             .obstacle_input(&self.room, &self.index, safe_mode_user.as_deref())
     }
@@ -812,15 +818,26 @@ impl Working {
         self.movement.apply_extra_blocks(blocks);
     }
 
+    /// 准入槽的只读链预演：按给定准入终值在克隆状态上运行与
+    /// `finish_movement` 完全相同的取消链，返回仍为胜者的对象集合。
+    /// 安全模式主人与正式仲裁同源；只在准入槽时点调用（障碍追加集
+    /// 尚为空，预演结果是最终取消结果的上界）。
+    pub fn movement_simulate_survivors(
+        &self,
+        overrides: &BTreeMap<ObjId, bool>,
+    ) -> BTreeSet<ObjId> {
+        let safe_mode_user = self.active_safe_mode_user();
+        self.movement.simulate_survivors(
+            &self.room,
+            &self.index,
+            safe_mode_user.as_deref(),
+            overrides,
+        )
+    }
+
     /// 仲裁阶段四：按准入终值取消阻塞链，使用此时生效的安全模式主人。
     pub fn finish_movement(&mut self) {
-        let safe_mode_user: Option<String> = self.controller().and_then(|ctl| {
-            if ctl.safe_mode > self.time {
-                ctl.owner.clone()
-            } else {
-                None
-            }
-        });
+        let safe_mode_user = self.active_safe_mode_user();
         self.movement
             .cancel_blocked(&self.room, &self.index, safe_mode_user.as_deref());
     }

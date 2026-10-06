@@ -1,0 +1,176 @@
+{
+  "version": 1,
+  "shard": {
+    "players": [
+      "p1"
+    ],
+    "rooms": [
+      {
+        "name": "W1N1",
+        "owner": "p1",
+        "rcl": 6
+      }
+    ]
+  },
+  "bots": [
+    {
+      "player": "p1",
+      "modules": "."
+    }
+  ],
+  "objects": [
+    {
+      "room": "W1N1",
+      "kind": "creep",
+      "alias": "a",
+      "spec": {
+        "name": "a",
+        "owner": "p1",
+        "pos": [
+          10,
+          10
+        ],
+        "body": [
+          "move"
+        ],
+        "ticksToLive": 100
+      }
+    },
+    {
+      "room": "W1N1",
+      "kind": "creep",
+      "alias": "b",
+      "spec": {
+        "name": "b",
+        "owner": "p1",
+        "pos": [
+          10,
+          9
+        ],
+        "body": [
+          "move"
+        ],
+        "ticksToLive": 100
+      }
+    },
+    {
+      "room": "W1N1",
+      "kind": "creep",
+      "alias": "stranger",
+      "spec": {
+        "name": "stranger",
+        "owner": "p1",
+        "pos": [
+          20,
+          20
+        ],
+        "body": [
+          "move"
+        ],
+        "ticksToLive": 100
+      }
+    },
+    {
+      "room": "W1N1",
+      "kind": "creep",
+      "alias": "parked",
+      "spec": {
+        "name": "parked",
+        "owner": "p1",
+        "pos": [
+          20,
+          19
+        ],
+        "body": [
+          "work"
+        ],
+        "ticksToLive": 100
+      }
+    },
+    {
+      "room": "W1N1",
+      "kind": "creep",
+      "alias": "strong",
+      "spec": {
+        "name": "strong",
+        "owner": "p1",
+        "pos": [
+          30,
+          30
+        ],
+        "body": [
+          "move",
+          "move"
+        ],
+        "ticksToLive": 100
+      }
+    },
+    {
+      "room": "W1N1",
+      "kind": "creep",
+      "alias": "weak",
+      "spec": {
+        "name": "weak",
+        "owner": "p1",
+        "pos": [
+          31,
+          30
+        ],
+        "body": [
+          "move"
+        ],
+        "ticksToLive": 100
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "pointer": "/players/p1/memory/positions/a",
+      "op": "eq",
+      "value": [
+        10,
+        9
+      ]
+    },
+    {
+      "pointer": "/players/p1/memory/positions/b",
+      "op": "eq",
+      "value": [
+        10,
+        10
+      ]
+    },
+    {
+      "pointer": "/players/p1/memory/positions/stranger",
+      "op": "eq",
+      "value": [
+        20,
+        20
+      ]
+    },
+    {
+      "pointer": "/players/p1/memory/positions/parked",
+      "op": "eq",
+      "value": [
+        20,
+        19
+      ]
+    },
+    {
+      "pointer": "/players/p1/memory/positions/strong",
+      "op": "eq",
+      "value": [
+        30,
+        29
+      ]
+    },
+    {
+      "pointer": "/players/p1/memory/positions/weak",
+      "op": "eq",
+      "value": [
+        31,
+        30
+      ]
+    }
+  ]
+}

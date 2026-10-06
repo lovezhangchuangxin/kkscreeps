@@ -491,6 +491,12 @@ impl ChainHost for ModChainContext {
         let id = ObjId::parse(id).ok_or("执行者 ID 非法")?;
         admission.set_admitted(id, admitted)
     }
+    fn admission_evaluate(&mut self) -> Result<Vec<String>, String> {
+        let admission = self.admission.as_ref().ok_or("本次槽没有移动准入能力")?;
+        let finals = admission.finals_snapshot();
+        let survivors = self.ctx.borrow().movement_simulate_survivors(&finals);
+        Ok(survivors.iter().map(|id| id.as_str().to_string()).collect())
+    }
     fn obstacle_blocked(&mut self, id: &str) -> Result<bool, String> {
         let obstacle = self.obstacle.as_ref().ok_or("本次槽没有移动障碍能力")?;
         let id = ObjId::parse(id).ok_or("胜者 ID 非法")?;

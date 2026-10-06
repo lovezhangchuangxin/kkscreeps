@@ -62,6 +62,12 @@ impl MoveAdmission {
         Ok(())
     }
 
+    /// 当前终值候选的快照（原生初始项与 JS 覆盖项的并集）；供只读
+    /// 链预演读取，不改变候选本身。
+    pub fn finals_snapshot(&self) -> BTreeMap<ObjId, bool> {
+        self.finals.borrow().clone()
+    }
+
     /// 取出终值候选（接管所有权）；含原生初始项与 JS 覆盖项的并集。
     /// 只在链成功后由引擎调用一次，候选不再复用。
     pub fn into_finals(&self) -> BTreeMap<ObjId, bool> {

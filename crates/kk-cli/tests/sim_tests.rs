@@ -265,6 +265,8 @@ mod incoming_policy;
 mod mod_trace;
 #[path = "sim_tests/move_admission.rs"]
 mod move_admission;
+#[path = "sim_tests/move_arbitration.rs"]
+mod move_arbitration;
 #[path = "sim_tests/move_obstacle.rs"]
 mod move_obstacle;
 #[path = "sim_tests/move_policy.rs"]

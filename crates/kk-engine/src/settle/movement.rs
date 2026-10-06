@@ -30,6 +30,9 @@ struct Rate {
 pub struct Movement {
     matrix: BTreeMap<(u8, u8), Vec<RateEntry>>,
     winners: BTreeMap<ObjId, (u8, u8)>,
+    /// 仲裁前的完整原始请求矩阵；`rank_winners` 时零拷贝暂存，仅供
+    /// 准入槽构造整房请求视野。Working 每房每 tick 重建，天然瞬态。
+    original_requests: BTreeMap<(u8, u8), Vec<RateEntry>>,
     pull_of: BTreeMap<ObjId, ObjId>,
     pulled_by: BTreeMap<ObjId, ObjId>,
     /// 获准执行者的准入终值；取消链与执行阶段同源读取，缺项视为
@@ -297,7 +300,8 @@ impl Movement {
         self.cancel_blocked(room, index, safe_mode_user);
     }
 
-    /// 仲裁阶段一：逐目标格选胜者，写出缩减矩阵与胜者表。
+    /// 仲裁阶段一：逐目标格选胜者，写出缩减矩阵与胜者表；原始矩阵
+    /// 零拷贝暂存，供准入槽的整房请求视野读取。
     pub(crate) fn rank_winners(&mut self, room: &RoomState, priorities: &BTreeMap<ObjId, i64>) {
         let mut new_matrix: BTreeMap<(u8, u8), Vec<RateEntry>> = BTreeMap::new();
         let mut winners = BTreeMap::new();
@@ -339,6 +343,7 @@ impl Movement {
         }
         self.matrix = new_matrix;
         self.winners = winners;
+        self.original_requests = original;
     }
 
     /// 仲裁阶段二：对全部胜者复核拉拽配对，按原生 can_move 语义预填
@@ -381,7 +386,8 @@ impl Movement {
     }
 
     /// 构造准入槽输入（对象 ID 升序、不截断）；只读预填后的配对与
-    /// 终值状态，不改变仲裁。pulled 即预填复核后的有效被拉标记。
+    /// 终值状态，不改变仲裁。pulled 即预填复核后的有效被拉标记；
+    /// requests 是仲裁前的整房原始请求视野，落选者带 won=false。
     pub(crate) fn admission_input(
         &self,
         room: &RoomState,
@@ -413,6 +419,14 @@ impl Movement {
                 move_power: 0,
                 weight: 1,
                 pulled: self.pulled_by.contains_key(&id),
+                pulled_by: self
+                    .pulled_by
+                    .get(&id)
+                    .map(|puller| puller.as_str().to_string()),
+                pulling: self
+                    .pull_of
+                    .get(&id)
+                    .map(|target| target.as_str().to_string()),
             };
             if let Some(c) = creep {
                 info.owner = c.owner.clone();
@@ -428,7 +442,53 @@ impl Movement {
             }
             movers.push(info);
         }
-        kk_mod_api::admission::MoveAdmissionInput { movers }
+        let mut requests = Vec::new();
+        for (&cell, entries) in &self.original_requests {
+            for (index, entry) in entries.iter().enumerate() {
+                requests.push(kk_mod_api::admission::MoveRequestInfo {
+                    mover_id: entry.id.as_str().to_string(),
+                    x: cell.0,
+                    y: cell.1,
+                    index: index as u64,
+                    origin_x: entry.origin.0,
+                    origin_y: entry.origin.1,
+                    won: self.winners.get(&entry.id) == Some(&cell),
+                });
+            }
+        }
+        kk_mod_api::admission::MoveAdmissionInput { movers, requests }
+    }
+
+    /// 只读链预演：按给定准入终值在克隆状态上运行与正式仲裁完全
+    /// 相同的取消链（同一 `cancel_blocked` 代码路径，无第二套判定），
+    /// 返回仍为胜者的对象集合。仅在准入槽时点可用——障碍槽追加集
+    /// 此时必为空（`arbitrate_room` 槽序固定 admission→obstacle，且
+    /// 预演能力随准入槽 chain 令牌过期失效，双重保障），预演结果因此
+    /// 是最终取消结果的上界（追加只会收紧）。
+    ///
+    /// 克隆只复制取消链消费的字段（matrix/winners/extra_blocks/
+    /// buildings；`cancel_cell` 与 `check_obstacle_at_xy` 不读拉拽表
+    /// 与原始请求矩阵），避免为迭代式策略的多次预演放大深拷贝成本。
+    pub(crate) fn simulate_survivors(
+        &self,
+        room: &RoomState,
+        index: &RoomIndex,
+        safe_mode_user: Option<&str>,
+        overrides: &BTreeMap<ObjId, bool>,
+    ) -> BTreeSet<ObjId> {
+        debug_assert!(self.extra_blocks.is_empty(), "链预演只在障碍槽追加之前可用");
+        let mut sim = Movement {
+            matrix: self.matrix.clone(),
+            winners: self.winners.clone(),
+            original_requests: BTreeMap::new(),
+            pull_of: BTreeMap::new(),
+            pulled_by: BTreeMap::new(),
+            admissions: overrides.clone(),
+            extra_blocks: self.extra_blocks.clone(),
+            buildings: self.buildings.clone(),
+        };
+        sim.cancel_blocked(room, index, safe_mode_user);
+        sim.winners.keys().copied().collect()
     }
 
     /// 准入终值当前表（原生预填或槽终值）。

@@ -176,7 +176,9 @@ fn admission_invalid_values_and_foreign_capabilities_cannot_be_hidden_by_decline
 fn admission_abilities_are_unavailable_in_action_slots() -> anyhow::Result<()> {
     let source = package(
         "api.handlers.before('builtin:creep.move',{id:'wrong'},ctx=>{
-        try{ctx.admission.getAdmitted(ctx.target.id)}catch(e){}return api.decline('hide');
+        try{ctx.admission.getAdmitted(ctx.target.id)}catch(e){}
+        try{ctx.admission.evaluate()}catch(e){}
+        return api.decline('hide');
       });",
     );
     let mut e = engine(&[("bad", source)], false)?;
@@ -185,6 +187,66 @@ fn admission_abilities_are_unavailable_in_action_slots() -> anyhow::Result<()> {
     assert!(e.run_player("p1", "Game.creeps.f.move(RIGHT)").is_err());
     assert_eq!(e.world_snapshot(), before);
     assert_eq!(e.engine_mod_state("bad"), Value::Null);
+    Ok(())
+}
+
+#[test]
+fn admission_evaluate_is_unavailable_in_obstacle_and_contest_slots() -> anyhow::Result<()> {
+    // evaluate 只属于准入槽：在障碍槽或竞争槽的处理器里调用走宿主
+    // 能力门故障（chain.host.admission 为 None），不能被 catch+decline
+    // 掩盖，整轮候选失败且世界不变。
+    for slot in ["builtin:room.moveObstacle", "builtin:room.moveContest"] {
+        let source = package(&format!(
+            "api.handlers.replace('{slot}',{{id:'wrong'}},ctx=>{{
+            try{{ctx.admission.evaluate()}}catch(e){{}}return api.decline('hide');
+          }});"
+        ));
+        let mut e = engine(&[("bad", source)], false)?;
+        // 两格竞争触发竞争槽与障碍槽；准入槽为 Native 使 evaluate
+        // 在这两个槽内的调用是唯一入口。
+        let _one = creep_at(&mut e, "W1N1", "one", "p1", 10, 10, &["move", "move"])?;
+        let _two = creep_at(&mut e, "W1N1", "two", "p1", 11, 10, &["move"])?;
+        let before = e.world_snapshot();
+        // 两者同格竞争 (10,9)：竞争槽与障碍槽都必然进入 JS。
+        let script = "Game.creeps.one.move(TOP);Game.creeps.two.move(TOP_LEFT)";
+        assert!(e.run_player("p1", script).is_err(), "{slot}");
+        assert_eq!(e.world_snapshot(), before, "{slot}");
+        assert_eq!(e.engine_mod_state("bad"), Value::Null, "{slot}");
+    }
+    Ok(())
+}
+
+#[test]
+fn admission_evaluate_sees_overrides_and_requests_view() -> anyhow::Result<()> {
+    // 覆盖→预演的端到端闭环：候选先按原生终值预演（未配对无件者被
+    // 链取消，幸存 1），放行同一执行者后预演幸存回到 2——预演按候选
+    // 当前终值即时计算，不是快照。requests 视野含拉者与被拉者两条
+    // 登记（均 won=true、pulledBy 为 null——无 pull 意图未配对）。
+    let source = package(
+        "api.handlers.replace('builtin:creep.moveAdmission',{id:'probe'},ctx=>{
+        const shape = ctx.args.requests.every((r)=>
+          typeof r.moverId==='string'&&typeof r.x==='number'&&typeof r.y==='number'
+          &&typeof r.index==='number'&&typeof r.originX==='number'
+          &&typeof r.originY==='number'&&typeof r.won==='boolean');
+        if(!shape||ctx.args.requests.length!==ctx.args.movers.length)throw Error('请求视野');
+        const before = ctx.admission.evaluate();
+        const unpaired = ctx.args.movers.find((m)=>m.activeMoves===0);
+        ctx.admission.setAdmitted(unpaired.id, true);
+        const after = ctx.admission.evaluate();
+        ctx.state={before: before.length, after: after.length,
+          requests: ctx.args.requests.length};
+      });",
+    );
+    let mut e = engine(&[("alpha", source)], false)?;
+    let (puller, f) = pair(&mut e)?;
+    e.run_player("p1", DRAG)?;
+    assert_eq!(
+        e.engine_mod_state("alpha"),
+        json!({"before": 1, "after": 2, "requests": 2}),
+        "预演幸存随候选覆盖扩大"
+    );
+    assert_eq!(pos_in(&e, "W1N1", &puller), (10, 9), "拉者让位");
+    assert_eq!(pos_in(&e, "W1N1", &f), (10, 10), "放行后未配对者随链存活");
     Ok(())
 }
 

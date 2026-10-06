@@ -74,4 +74,4 @@ before/中心/replace/after 与其他槽同构：native 中心为无操作（保
 
 [真实玩家场景](../../compat/fixtures/sim-mod-move-policy/README.md)提供原生、seniority、heaviest 和两包组合；JSON/KKPV 完整 final 一致，竞争后保存退出与冷启动续跑等价。专项覆盖输入完整性与要素、非法数值/外部 ID、能力门、负优先级层、停用回退、晚期失败缓存重试与拒绝回退，结果见[交付记录](../research/notes/g01-move-contest-2026-10-06.md)。
 
-障碍准入的仲裁半边已开放单向追加（见[JS 移动障碍](mod-move-obstacle.md)），疲劳/MOVE/被拉门槛见[JS 移动准入](mod-move-admission.md)；当前不开放障碍放行与意图静态预检、获准集合与让位链/交换/循环（G03）、移动代价与执行效果（G04）、pull 登记策略（保持 native）。竞争槽输入只含竞争格，房间其余请求不在输入中；整房请求视野属 G03。JS 策略的结算开销由 Mod VM 预算统一管控，密集竞争场景的端到端对照随 G30.d 滚动补测。
+障碍准入的仲裁半边已开放单向追加（见[JS 移动障碍](mod-move-obstacle.md)），疲劳/MOVE/被拉门槛、整房请求视野与链预演见[JS 移动准入](mod-move-admission.md)；当前不开放障碍放行与意图静态预检、移动代价与执行效果（G04）、pull 登记策略（保持 native）。竞争槽输入只含竞争格；房间其余请求经准入槽的 `ctx.args.requests` 整房视野可见。JS 策略的结算开销由 Mod VM 预算统一管控，密集竞争场景的端到端对照随 G30.d 滚动补测。
