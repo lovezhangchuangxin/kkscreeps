@@ -261,6 +261,8 @@ mod mass_policy;
 
 #[path = "sim_tests/incoming_policy.rs"]
 mod incoming_policy;
+#[path = "sim_tests/mod_trace.rs"]
+mod mod_trace;
 #[path = "sim_tests/move_admission.rs"]
 mod move_admission;
 #[path = "sim_tests/move_obstacle.rs"]

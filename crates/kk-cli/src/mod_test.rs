@@ -17,6 +17,8 @@ pub struct Options {
     pub ticks: u32,
     /// 二进制投影通道（与 sim run --kkpv 同义）。
     pub kkpv: bool,
+    /// 开启 Mod 运行 trace（与 sim run --mod-trace 同义）。
+    pub mod_trace: bool,
     /// 汇总报告输出路径（.json）。
     pub report: PathBuf,
 }
@@ -121,6 +123,7 @@ fn test(options: &Options) -> anyhow::Result<(i32, Value)> {
             report: detail_path.clone(),
             save_checkpoint: None,
             load_checkpoint: None,
+            mod_trace: options.mod_trace,
         });
         let detail: Value = std::fs::read(&detail_path)
             .ok()
@@ -154,6 +157,7 @@ fn test(options: &Options) -> anyhow::Result<(i32, Value)> {
             "tool": "kkscreeps mod test",
             "root": options.root,
             "kkpv": options.kkpv,
+            "mod_trace": options.mod_trace,
             "summary": summary,
             "results": results,
         }),

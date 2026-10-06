@@ -178,6 +178,9 @@ enum ModCommand {
         /// 二进制投影通道（与 sim run --kkpv 同义）
         #[arg(long)]
         kkpv: bool,
+        /// 开启 Mod 运行 trace（与 sim run --mod-trace 同义）
+        #[arg(long)]
+        mod_trace: bool,
         /// 汇总报告输出路径（JSON）
         #[arg(long)]
         report: std::path::PathBuf,
@@ -227,6 +230,9 @@ enum SimCommand {
         /// 从同一场景身份的检查点恢复；ticks 表示额外推进的轮数
         #[arg(long)]
         load_checkpoint: Option<std::path::PathBuf>,
+        /// 开启 Mod 运行 trace（有界事件缓冲；报告附 mod_trace）
+        #[arg(long)]
+        mod_trace: bool,
     },
 }
 
@@ -244,6 +250,7 @@ fn main() {
                     root,
                     ticks,
                     kkpv,
+                    mod_trace,
                     report,
                 },
         } => {
@@ -251,6 +258,7 @@ fn main() {
                 root,
                 ticks,
                 kkpv,
+                mod_trace,
                 report,
             }));
         }
@@ -315,6 +323,7 @@ fn main() {
                     report,
                     save_checkpoint,
                     load_checkpoint,
+                    mod_trace,
                 },
         } => {
             std::process::exit(sim::run(sim::Options {
@@ -325,6 +334,7 @@ fn main() {
                 report,
                 save_checkpoint,
                 load_checkpoint,
+                mod_trace,
             }));
         }
         Command::BotCheck {

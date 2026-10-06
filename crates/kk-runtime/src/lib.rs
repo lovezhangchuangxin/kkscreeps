@@ -8,6 +8,7 @@
 pub mod checkpoint;
 pub mod embed;
 pub mod kkpv_store;
+mod mod_trace;
 mod mod_vm;
 mod run;
 pub mod world_source;
@@ -18,6 +19,7 @@ use kk_engine::intent::IntentBatch;
 
 pub use embed::{EmbedEngine, PlayerRun};
 pub use kk_runner::RunEpoch;
+pub use mod_trace::{ModTraceEntry, ModTraceEvent};
 pub use mod_vm::{ModAutoDisable, ModFaultStreak, ModSettlementFault};
 pub use run::{RunOutcome, RunResult, RunSpec};
 use serde_json::Value;

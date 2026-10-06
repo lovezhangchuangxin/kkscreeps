@@ -1,5 +1,6 @@
 //! 将 Mod 整槽链接到房间候选，暂存 state 并校验字段写面。
 use super::*;
+use crate::mod_trace::{ModTraceEntry, ModTraceEvent, fault_kind_label, stage_label, truncate};
 
 mod combat;
 mod objects;
@@ -196,42 +197,108 @@ impl SlotExecutor for ModSlotExecutor {
             .realm
             .try_borrow_mut()
             .map_err(|_| format!("槽 {} @ {room}: realm 已在执行", slot.key))?;
-        let outcome = vm
-            .realm_mut()?
-            .invoke_chain(
-                slot.key.as_str(),
-                Box::new(ModChainContext {
-                    ctx: ctx.clone(),
-                    id,
-                    args,
-                    native,
-                    cached_fields: None,
-                    objects_slot: extension,
-                    staged_states: staged_states.clone(),
-                    resource_journal: resource_journal.clone(),
-                    move_slot: move_action,
-                    contest_slot: contest.is_some(),
-                    admission_slot: admission.is_some(),
-                    obstacle_slot: obstacle.is_some(),
-                    combat: combat_state.clone(),
-                    build: build_state.clone(),
-                    incoming: incoming.clone(),
-                    contest: contest.clone(),
-                    admission: admission.clone(),
-                    obstacle: obstacle.clone(),
-                }),
+        let stage = stage_label(slot.stage);
+        // trace 关闭时不构造任何条目（含字符串克隆/格式化）；tick 与
+        // "realm 已在执行"/"待恢复"早退路径不记录（槽未进 VM，无结果
+        // 可言）。
+        let tracing = vm.trace_enabled();
+        // 定位四元组只在开启时物化；记录点按需克隆产出条目。
+        let trace_parts: Option<(u64, String, String)> = tracing.then(|| {
+            (
+                ctx.borrow().time,
+                id.as_str().to_string(),
+                slot.key.to_string(),
             )
-            .map_err(|error| {
+        });
+        let result = vm.realm_mut()?.invoke_chain(
+            slot.key.as_str(),
+            Box::new(ModChainContext {
+                ctx: ctx.clone(),
+                id,
+                args,
+                native,
+                cached_fields: None,
+                objects_slot: extension,
+                staged_states: staged_states.clone(),
+                resource_journal: resource_journal.clone(),
+                move_slot: move_action,
+                contest_slot: contest.is_some(),
+                admission_slot: admission.is_some(),
+                obstacle_slot: obstacle.is_some(),
+                combat: combat_state.clone(),
+                build: build_state.clone(),
+                incoming: incoming.clone(),
+                contest: contest.clone(),
+                admission: admission.clone(),
+                obstacle: obstacle.clone(),
+            }),
+        );
+        let outcome = match result {
+            Ok(outcome) => {
+                if let Some((tick, target, slot_key)) = &trace_parts {
+                    let event = match &outcome {
+                        // 停用命名空间的槽被 realm 丢弃而非执行（invoke_chain
+                        // 对 inactive 槽恒返 Completed），与真实完成区分。
+                        SlotOutcome::Completed => {
+                            if vm.slot_inactive(slot.key.as_str()) {
+                                ModTraceEvent::SlotInactive
+                            } else {
+                                ModTraceEvent::SlotCompleted
+                            }
+                        }
+                        SlotOutcome::Declined(decline) => ModTraceEvent::SlotDeclined {
+                            binding: decline.binding.to_string(),
+                            code: truncate(&decline.code),
+                        },
+                    };
+                    vm.record_trace(ModTraceEntry {
+                        tick: *tick,
+                        room: room.clone(),
+                        target: target.clone(),
+                        slot: slot_key.clone(),
+                        stage,
+                        event,
+                    });
+                }
+                outcome
+            }
+            Err(error) => {
+                if let Some((tick, target, slot_key)) = &trace_parts {
+                    // 与 mod_fault 报告的 serde 名同源（fault_kind_label）；
+                    // 无结构化来源的基础设施错误统一记 "chain"。
+                    let event = ModTraceEvent::SlotFault {
+                        binding: error
+                            .fault
+                            .as_ref()
+                            .and_then(|fault| fault.binding.as_ref())
+                            .map(|binding| binding.to_string()),
+                        kind: error
+                            .fault
+                            .as_ref()
+                            .map(|fault| fault_kind_label(fault.kind))
+                            .unwrap_or("chain"),
+                        error: truncate(&error.message),
+                    };
+                    vm.record_trace(ModTraceEntry {
+                        tick: *tick,
+                        room: room.clone(),
+                        target: target.clone(),
+                        slot: slot_key.clone(),
+                        stage,
+                        event,
+                    });
+                }
                 // 引擎仍接收原有字符串错误，另在 VM 生命周期容器中保留类型化证据。
                 vm.last_fault
                     .get_or_insert_with(|| crate::ModSettlementFault {
                         tick: ctx.borrow().time,
                         room: room.clone(),
-                        target: id.as_str(),
+                        target: id.as_str().to_string(),
                         error: error.clone(),
                     });
-                format!("槽 {} @ {room}: {error}", slot.key)
-            })?;
+                return Err(format!("槽 {} @ {room}: {error}", slot.key));
+            }
+        };
         drop(vm);
         match &outcome {
             SlotOutcome::Completed => {

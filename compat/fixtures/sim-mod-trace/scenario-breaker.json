@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "shard": {
+    "players": ["p1"],
+    "rooms": [{ "name": "W1N1", "owner": "p1", "rcl": 6 }]
+  },
+  "bots": [
+    { "player": "p1", "modules": "." }
+  ],
+  "objects": [
+    {
+      "room": "W1N1",
+      "kind": "structure",
+      "alias": "link",
+      "spec": { "pos": [20, 20], "structureType": "link", "owner": "p1", "store": { "energy": 50 }, "cooldown": 9 }
+    }
+  ],
+  "mods": {
+    "root": "../mod-trace",
+    "selection": { "include": ["breaker"] }
+  },
+  "assertions": []
+}

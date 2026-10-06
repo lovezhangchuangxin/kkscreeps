@@ -15,6 +15,7 @@ use serde_json::{Value, json};
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::mod_trace::ModTraceEntry;
 use crate::mod_vm::ModVm;
 use crate::{PlayerExecutor, RunEpoch, RunOutcome, RunResult, ThreadExecutor, WorldSource};
 use kk_engine::intent::IntentBatch;
@@ -90,6 +91,8 @@ pub struct EmbedEngine {
     /// 可信 Mod 注册与结算 realm；仅 `create_shard_with_mods` 装配。持有它使
     /// EmbedEngine 不再可跨线程移动（结算与 realm 须同线程）。
     mod_realm: Option<Rc<RefCell<ModVm>>>,
+    /// Mod 装配前请求开启的运行 trace；setup 在 VM 就绪后应用。
+    mod_trace_pending: bool,
     /// 分片计划是否含 Mod 意图；决定玩家沙箱是否装配扩展意图原语。
     ext_intents: bool,
     /// 冻结计划导出的 Mod 玩家面目录；投影通道按它裁切 Mod 对象。
@@ -151,6 +154,7 @@ impl EmbedEngine {
             players: None,
             engine: Engine::default(),
             mod_realm: None,
+            mod_trace_pending: false,
             pending: None,
             execution_failure: None,
             player_concurrency: std::thread::available_parallelism().map_or(1, |n| n.get().min(2)),
@@ -435,6 +439,24 @@ impl EmbedEngine {
             .and_then(|vm| vm.borrow().last_auto_disable.clone())
     }
 
+    /// 开启 Mod 运行 trace（幂等）。Mod 未装配时挂起，装配后生效；
+    /// 只影响开启之后的事件，无 Mod 分片保持无 trace。
+    pub fn enable_mod_trace(&mut self) {
+        if let Some(vm) = &self.mod_realm {
+            vm.borrow_mut().enable_trace();
+        } else {
+            self.mod_trace_pending = true;
+        }
+    }
+
+    /// 当前 trace 快照（条目按发生序）与累计丢弃数；未开启或无 Mod
+    /// 分片返回 None。
+    pub fn mod_trace_snapshot(&self) -> Option<(Vec<ModTraceEntry>, usize)> {
+        self.mod_realm
+            .as_ref()
+            .and_then(|vm| vm.borrow().trace_snapshot())
+    }
+
     /// 停用指定 Mod 及其传递依赖者的结算执行，返回本次新增停用的 ID。
     /// 保留冻结 schema、规则、玩家 API 和缓存结果；下一次结算前重建 VM。
     /// 分片内单调停用，重新启用须重建分片。未知 ID 不改变任何状态。
@@ -459,7 +481,20 @@ impl EmbedEngine {
     /// 不改变世界、玩家候选或引擎恢复状态；正常结算重试会自动调用。健康 VM 不重建。
     pub fn rebuild_mod_realm(&mut self) -> anyhow::Result<()> {
         if let Some(vm) = &self.mod_realm {
-            vm.borrow_mut().recover().map_err(anyhow::Error::msg)?;
+            let mut vm = vm.borrow_mut();
+            let needed = vm.needs_recovery();
+            let tracing = vm.trace_enabled();
+            vm.recover().map_err(anyhow::Error::msg)?;
+            if needed && tracing {
+                vm.record_trace(crate::mod_trace::ModTraceEntry {
+                    tick: self.engine.world.time(),
+                    room: String::new(),
+                    target: String::new(),
+                    slot: String::new(),
+                    stage: "",
+                    event: crate::mod_trace::ModTraceEvent::RealmRebuilt,
+                });
+            }
         }
         Ok(())
     }
@@ -542,6 +577,7 @@ impl EmbedEngine {
         }
         self.engine = Engine::default();
         self.mod_realm = None;
+        self.mod_trace_pending = false;
         self.ext_intents = false;
         self.player_surface = None;
         self.mod_player_api = None;

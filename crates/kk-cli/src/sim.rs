@@ -24,6 +24,8 @@ pub struct Options {
     pub report: PathBuf,
     pub save_checkpoint: Option<PathBuf>,
     pub load_checkpoint: Option<PathBuf>,
+    /// 开启 Mod 运行 trace（有界；报告附 mod_trace 字段）。
+    pub mod_trace: bool,
 }
 
 #[derive(Deserialize)]
@@ -311,6 +313,9 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
     let mut engine = EmbedEngine::new();
     engine.set_player_concurrency(options.concurrency)?;
     engine.set_kkpv_channel(options.kkpv);
+    if options.mod_trace {
+        engine.enable_mod_trace();
+    }
     let shard = serde_json::to_value(&scene.shard)?;
     let loaded = scene
         .mods
@@ -477,6 +482,19 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
         "mod_fault": engine.last_mod_settlement_fault().map(|fault| json!({
             "tick": fault.tick, "room": fault.room, "target": fault.target, "error": fault.error,
         })),
+        // 诊断快照：只含定位信息与结果摘要，不含参数/字段值/玩家
+        // Memory，不构成确定性回放日志——复现依赖场景身份与包目录重跑。
+        "mod_trace": options.mod_trace.then(|| {
+            match engine.mod_trace_snapshot() {
+                Some((entries, dropped)) => json!({
+                    "entries": entries,
+                    "dropped": dropped,
+                    "note": "诊断快照，非确定性回放日志；复现=同场景（scenario_sha256）+同包计划（plan_hash）+同二进制（executable_sha256）重跑",
+                }),
+                None => json!({"entries": [], "dropped": 0,
+                    "note": "分片未装配 Mod（无 Mod 计划），无事件可记"}),
+            }
+        }),
         "initial": initial, "final": final_state,
     }))
 }

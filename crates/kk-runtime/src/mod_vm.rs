@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::mod_trace::{ModTraceEntry, TraceLog};
 use kk_mod_api::{Key, PlanHash};
 use kk_mod_host::{ModFaultKind, ModHostError, ModPackage, ModRealm, RegisterOptions, Registered};
 
@@ -24,6 +25,9 @@ pub struct ModFaultStreak {
 /// 最近一次自动停用决定；后续成功、重建或普通故障不清除该记录。
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ModAutoDisable {
+    /// 停用来源（触发故障绑定的命名空间）；消费方不必从触发故障的
+    /// 绑定重复归责。
+    pub mod_id: String,
     pub trigger: ModSettlementFault,
     pub consecutive_faults: u32,
     pub disabled: BTreeSet<String>,
@@ -38,6 +42,9 @@ pub(crate) struct ModVm {
     disabled: BTreeSet<String>,
     composition: kk_mod_host::CompositionReport,
     fail_next_rebuild: bool,
+    /// 可选运行 trace；None 即关闭（记录点先经 trace_enabled 判空，
+    /// 关闭时无条目构造与缓冲）。
+    pub(crate) trace: Option<TraceLog>,
     pub(crate) last_fault: Option<ModSettlementFault>,
     pub(crate) fault_streak: Option<ModFaultStreak>,
     pub(crate) last_auto_disable: Option<ModAutoDisable>,
@@ -59,6 +66,7 @@ impl ModVm {
             disabled: BTreeSet::new(),
             composition: registered.composition.clone(),
             fail_next_rebuild: false,
+            trace: None,
             last_fault: None,
             fault_streak: None,
             last_auto_disable: None,
@@ -100,6 +108,37 @@ impl ModVm {
 
     pub(crate) fn checkpoint_input(&self) -> (&BTreeMap<String, ModPackage>, &RegisterOptions) {
         (&self.packages, &self.options)
+    }
+
+    /// 开启运行 trace（幂等；只影响开启之后的记录点）。
+    pub(crate) fn enable_trace(&mut self) {
+        if self.trace.is_none() {
+            self.trace = Some(TraceLog::default());
+        }
+    }
+
+    /// 记录点门控：关闭时调用方不构造条目（无分配、无格式化）。
+    pub(crate) fn trace_enabled(&self) -> bool {
+        self.trace.is_some()
+    }
+
+    /// 槽是否属停用命名空间（realm 对这类槽直接丢弃动作）。
+    pub(crate) fn slot_inactive(&self, slot: &str) -> bool {
+        self.realm
+            .as_ref()
+            .is_some_and(|realm| realm.is_inactive_slot(slot))
+    }
+
+    /// 记录一条 trace 事件；调用方须先经 trace_enabled() 门控。
+    pub(crate) fn record_trace(&mut self, entry: ModTraceEntry) {
+        if let Some(log) = &mut self.trace {
+            log.push(entry);
+        }
+    }
+
+    /// 当前快照与累计丢弃数；未开启返回 None。
+    pub(crate) fn trace_snapshot(&self) -> Option<(Vec<ModTraceEntry>, usize)> {
+        self.trace.as_ref().map(TraceLog::snapshot)
     }
 
     pub(crate) fn composition(&self) -> kk_mod_host::CompositionReport {
@@ -173,6 +212,7 @@ impl ModVm {
         // 已核对包身份；依赖闭包与显式停用复用同一机制。下一次重试才执行新链。
         let disabled = self.disable(&id).expect("已核对来源 Mod 存在于固定包快照");
         let decision = ModAutoDisable {
+            mod_id: id,
             trigger: self.last_fault.clone().expect("仅已留存故障可以归责"),
             consecutive_faults: count,
             disabled,

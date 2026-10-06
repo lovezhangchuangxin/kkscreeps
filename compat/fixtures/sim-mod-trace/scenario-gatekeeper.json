@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "shard": {
+    "players": [
+      "p1"
+    ],
+    "rooms": [
+      {
+        "name": "W1N1",
+        "owner": "p1",
+        "rcl": 6
+      }
+    ]
+  },
+  "bots": [
+    {
+      "player": "p1",
+      "modules": ".",
+      "memory": {
+        "phase": 1
+      }
+    }
+  ],
+  "objects": [
+    {
+      "room": "W1N1",
+      "kind": "mod",
+      "alias": "door",
+      "spec": {
+        "typeKey": "gatekeeper:door",
+        "fields": {
+          "owner": "p1",
+          "x": 10,
+          "y": 12
+        }
+      }
+    }
+  ],
+  "mods": {
+    "root": "../mod-trace",
+    "selection": {
+      "include": [
+        "gatekeeper"
+      ]
+    }
+  },
+  "assertions": [
+    {
+      "pointer": "/mod_states/gatekeeper/passed",
+      "op": "gte",
+      "value": 1
+    },
+    {
+      "pointer": "/players/p1/memory/doorValue",
+      "op": "eq",
+      "value": 1
+    },
+    {
+      "pointer": "/players/p1/memory/codes",
+      "op": "eq",
+      "value": [
+        0,
+        0
+      ]
+    }
+  ]
+}

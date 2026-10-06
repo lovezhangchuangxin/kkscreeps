@@ -27,7 +27,8 @@ struct Checkpoint {
 
 impl EmbedEngine {
     /// 导出完整已提交状态。metadata 供调用方保存场景身份、alias 等自身持久数据。
-    /// VM 堆、模块缓存、失败轮、计时样本与地形编码缓存不进入检查点。
+    /// VM 堆、模块缓存、失败轮、计时样本、地形编码缓存与运行 trace
+    /// 缓冲不进入检查点（trace 开启意愿经引擎挂起标志跨恢复保留）。
     pub fn checkpoint(&self, metadata: Value) -> anyhow::Result<Value> {
         self.no_open_round("checkpoint")?;
         let executor = self.players.as_ref().context("分片未创建")?;
@@ -126,6 +127,10 @@ impl EmbedEngine {
             "检查点工作者缺少账户状态"
         );
         let mut replacement = Self::new();
+        // 恢复用替代引擎整体替换 self；调用方在本引擎上请求过的
+        // trace 开启意愿必须在替代引擎装配 Mod 之前转移过去（挂起标志
+        // 在 create_shard_with_mods 内消费），否则续跑静默失去 trace。
+        replacement.mod_trace_pending = self.mod_trace_pending;
         replacement.set_player_concurrency(saved.concurrency)?;
         replacement.set_kkpv_channel(saved.kkpv);
         for (name, worker) in &saved.workers {

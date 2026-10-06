@@ -1,5 +1,6 @@
 //! 收集玩家候选、缓存失败轮并协调 Memory/CPU/世界统一发布。
 use super::*;
+use crate::mod_trace::{ModTraceEntry, ModTraceEvent};
 
 impl EmbedEngine {
     /// 请求一个玩家并推进一轮；存在失败缓存时，仍会提交整轮缓存的结果。
@@ -164,7 +165,24 @@ impl EmbedEngine {
         }
         if let Some(vm) = &self.mod_realm {
             let mut vm = vm.borrow_mut();
+            let tracing = vm.trace_enabled();
             if let Some(decision) = vm.finish_settlement(settled.is_ok()) {
+                if tracing {
+                    // mod_id 来自 finish_settlement 的同一归责口径；
+                    // disabled 含依赖闭包，按序保留。
+                    vm.record_trace(ModTraceEntry {
+                        tick: self.engine.world.time(),
+                        room: String::new(),
+                        target: String::new(),
+                        slot: String::new(),
+                        stage: "",
+                        event: ModTraceEvent::AutoDisabled {
+                            mod_id: decision.mod_id.clone(),
+                            consecutive: decision.consecutive_faults,
+                            disabled: decision.disabled.iter().cloned().collect(),
+                        },
+                    });
+                }
                 let error = settled.expect_err("自动停用只能发生在结算失败后");
                 settled = Err(anyhow::anyhow!(
                     "{error}；连续 {} 次可归责故障，已自动停用 Mod [{}]；本轮未发布，下次重试使用新链",
@@ -177,7 +195,21 @@ impl EmbedEngine {
                         .join(", ")
                 ));
             }
-            if settled.is_err() {
+            if let Err(error) = &settled {
+                // 整轮失败：候选缓存待重试（不重跑玩家代码）；trace 记录
+                // 回退事实，作者可见"结果被丢弃"而不只是最终错误。
+                if tracing {
+                    vm.record_trace(ModTraceEntry {
+                        tick: self.engine.world.time(),
+                        room: String::new(),
+                        target: String::new(),
+                        slot: String::new(),
+                        stage: "",
+                        event: ModTraceEvent::SettlementRetry {
+                            error: crate::mod_trace::truncate(&error.to_string()),
+                        },
+                    });
+                }
                 vm.invalidate();
             }
         }

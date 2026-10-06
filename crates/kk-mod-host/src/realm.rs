@@ -604,6 +604,12 @@ impl ModRealm {
         result
     }
 
+    /// 槽是否属停用命名空间（invoke_chain 对这类槽直接丢弃返回完成）；
+    /// 诊断面据此区分"执行完成"与"因停用被丢弃"。
+    pub fn is_inactive_slot(&self, slot: &str) -> bool {
+        self.inactive_slots.contains(slot)
+    }
+
     /// 每次实际结算前开始累计；不同槽、对象与房间共享同一轮 Mod 额度。
     pub fn begin_settlement(&mut self) -> ModHostResult<()> {
         if self.settlement_usage.is_some() {

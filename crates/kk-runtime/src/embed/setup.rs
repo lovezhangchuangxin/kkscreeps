@@ -356,6 +356,9 @@ impl EmbedEngine {
             self.ext_intents = has_mod_intents;
             self.player_surface = Some(surface);
             self.mod_player_api = mod_player_api;
+            if self.mod_trace_pending {
+                realm.borrow_mut().enable_trace();
+            }
             self.mod_realm = Some(realm);
         }
 

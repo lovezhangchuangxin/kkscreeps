@@ -84,3 +84,5 @@ __pycache__/
 !compat/fixtures/mod-move-obstacle/
 !compat/fixtures/sim-mod-move-obstacle/
 !compat/fixtures/mod-typed/
+!compat/fixtures/mod-trace/
+!compat/fixtures/sim-mod-trace/
