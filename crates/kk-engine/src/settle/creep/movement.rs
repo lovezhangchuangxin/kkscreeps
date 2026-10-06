@@ -316,7 +316,12 @@ fn movement_execute(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
                 .saturating_sub((c::ROAD_WEAROUT * body_len as i64).max(0) as u64);
         }
     }
-    let fatigue = weight as i64 * fatigue_rate;
+    // 代价槽覆盖优先（取消链后整房设置）；缺项为原生代价。
+    let fatigue = w
+        .movement
+        .cost_of(id)
+        .map(|cost| cost as i64)
+        .unwrap_or(weight as i64 * fatigue_rate);
     let to_edge = target.0 == 0 || target.0 == 49 || target.1 == 0 || target.1 == 49;
     let from_edge = from.0 == 0 || from.0 == 49 || from.1 == 0 || from.1 == 49;
     w.move_obj(id, target).map_err(SettleError)?;

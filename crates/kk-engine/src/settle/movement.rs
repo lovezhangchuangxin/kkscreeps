@@ -45,6 +45,9 @@ pub struct Movement {
     /// 障碍槽追加的阻挡集（单向追加）；取消链与链内 native 障碍
     /// 判定取或，不进入检查点。
     extra_blocks: BTreeSet<ObjId>,
+    /// 代价槽的幸存者疲劳覆盖；缺项为原生代价（重量×地形费率）。
+    /// 执行阶段同源读取，不进入检查点。
+    costs: BTreeMap<ObjId, u32>,
     buildings: std::rc::Rc<kk_mod_api::buildings::BuildingCatalog>,
 }
 
@@ -220,6 +223,11 @@ impl Movement {
         self.winners.get(&id).copied()
     }
 
+    /// 幸存者的疲劳代价覆盖；缺项 None 表示原生代价。
+    pub fn cost_of(&self, id: ObjId) -> Option<u32> {
+        self.costs.get(&id).copied()
+    }
+
     pub fn debug_matrix(&self) -> Vec<((u8, u8), Vec<ObjId>)> {
         self.matrix
             .iter()
@@ -363,6 +371,8 @@ impl Movement {
             pulled_by: BTreeMap::new(),
             admissions: overrides.clone(),
             extra_blocks: self.extra_blocks.clone(),
+            // 链预演不消费代价覆盖；取消链不读代价表。
+            costs: BTreeMap::new(),
             buildings: self.buildings.clone(),
         };
         sim.cancel_blocked(room, index, safe_mode_user);

@@ -267,6 +267,8 @@ mod mod_trace;
 mod move_admission;
 #[path = "sim_tests/move_arbitration.rs"]
 mod move_arbitration;
+#[path = "sim_tests/move_cost.rs"]
+mod move_cost;
 #[path = "sim_tests/move_obstacle.rs"]
 mod move_obstacle;
 #[path = "sim_tests/move_policy.rs"]

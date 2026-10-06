@@ -154,6 +154,66 @@ impl Movement {
         kk_mod_api::pull_registration::PullRegistrationInput { pulls }
     }
 
+    /// 构造移动代价输入：终局幸存者（取消链结算后）按对象 ID 升序、
+    /// 不截断，附原生代价与构成要素。调用时点为取消链之后、执行循环
+    /// 之前；只读，不改变仲裁。hasRoad 为此时点快照——逐对象执行期
+    /// 道路耐久衰减可能移除道路，缺项回退按执行时点实收，覆盖值为
+    /// 绝对替换不受影响。
+    pub(crate) fn cost_input(
+        &self,
+        room: &RoomState,
+        index: &RoomIndex,
+    ) -> kk_mod_api::move_cost::MoveCostInput {
+        let mut movers = Vec::new();
+        for (&id, &cell) in &self.winners {
+            let creep = room.objects.get(&id).and_then(|o| match o {
+                RoomObject::Creep(c) => Some(c),
+                _ => None,
+            });
+            let Some(creep) = creep else { continue };
+            // 与 movement_execute 实收同源（裸 move_weight，无下限）；
+            // nativeFatigue 是缺项回退值，必须等于原生实际收费。
+            let weight = super::move_weight(creep) as i64;
+            let terrain_swamp =
+                room.terrain
+                    .check_mask(cell.0 as usize, cell.1 as usize, TERRAIN_MASK_SWAMP);
+            let has_road = has_road(room, index, cell);
+            // 与 movement_execute 同源的费率规则：沼泽 10、路 1 覆盖沼泽。
+            let rate = if has_road {
+                1
+            } else if terrain_swamp {
+                10
+            } else {
+                2
+            };
+            movers.push(kk_mod_api::move_cost::MoveCostMoverInfo {
+                id: id.as_str().to_string(),
+                owner: creep.owner.clone(),
+                origin_x: creep.x,
+                origin_y: creep.y,
+                target_x: cell.0,
+                target_y: cell.1,
+                weight,
+                terrain_swamp,
+                has_road,
+                body_length: creep.body.len() as i64,
+                // 疲劳原生转记给链首拉者（与 head_puller 同一链走法）。
+                pulled_by: self
+                    .pulled_by
+                    .get(&id)
+                    .map(|_| self.head_puller(room, id).as_str().to_string()),
+                native_fatigue: weight * rate,
+            });
+        }
+        kk_mod_api::move_cost::MoveCostInput { movers }
+    }
+
+    /// 代价槽成功后的覆盖应用（接管所有权）；Native/拒绝路径不调用，
+    /// 缺项执行原生。
+    pub(crate) fn apply_costs(&mut self, costs: BTreeMap<ObjId, u32>) {
+        self.costs = costs;
+    }
+
     /// 拉拽登记槽成功后的否决集应用：被否决拉者的配对双向移除，
     /// 等同从未登记（预检/竞争/准入视野、准入预填与疲劳转移同源
     /// 反映）。Native/拒绝路径不调用。

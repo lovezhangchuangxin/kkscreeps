@@ -788,6 +788,33 @@ export function runChain(slot, token) {
       },
     });
   }
+  // 房间级代价槽的 ctx.cost 读写疲劳覆盖；数值替换，缺项为原生代价。
+  function cost(key, isOpen) {
+    function checked(call) {
+      try {
+        if (!isOpen()) throw new Error('移动代价能力只能在所属处理器同步执行期间调用');
+        return call();
+      } catch (error) {
+        fault(error, key, 'context');
+        throw error;
+      }
+    }
+    return Object.freeze({
+      getFatigue(id) {
+        return checked(() => {
+          if (typeof id !== 'string') throw new Error('移动者 ID 须为原始字符串');
+          return ops.op_mod_chain_cost_fatigue_of(token, key, id);
+        });
+      },
+      setFatigue(id, value) {
+        return checked(() => {
+          if (typeof id !== 'string') throw new Error('移动者 ID 须为原始字符串');
+          if (!Number.isSafeInteger(value) || value < 0) throw new Error('移动代价须为非负安全整数');
+          return ops.op_mod_chain_cost_set_fatigue(token, key, id, value);
+        });
+      },
+    });
+  }
   // 房间级障碍槽的 ctx.obstacle 追加阻挡；单向能力，不提供放行。
   function obstacle(key, isOpen) {
     function checked(call) {
@@ -854,6 +881,7 @@ export function runChain(slot, token) {
     Object.defineProperty(ctx, 'obstacle', { value: obstacle(key, () => open) });
     Object.defineProperty(ctx, 'precheck', { value: precheck(key, () => open) });
     Object.defineProperty(ctx, 'pull', { value: pull(key, () => open) });
+    Object.defineProperty(ctx, 'cost', { value: cost(key, () => open) });
     try {
       checkResult(key, bindings.get(key).fn(ctx));
       write(key, ctx);
@@ -886,6 +914,7 @@ export function runChain(slot, token) {
     Object.defineProperty(ctx, 'obstacle', { value: obstacle(key, () => open) });
     Object.defineProperty(ctx, 'precheck', { value: precheck(key, () => open) });
     Object.defineProperty(ctx, 'pull', { value: pull(key, () => open) });
+    Object.defineProperty(ctx, 'cost', { value: cost(key, () => open) });
     function next() {
       if (!open) throw new Error('next 只能在所属处理器同步执行期间调用');
       if (called) {

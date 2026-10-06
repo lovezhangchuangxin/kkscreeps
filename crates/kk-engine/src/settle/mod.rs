@@ -17,6 +17,7 @@ pub mod incoming;
 pub mod inter_room;
 pub mod market;
 mod mod_intents;
+pub mod move_cost;
 pub mod movement;
 pub mod objects;
 pub mod obstacle;

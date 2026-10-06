@@ -101,6 +101,11 @@ pub fn arbitrate_room(ctx: &RoomCtx) -> Result<(), String> {
         ctx.borrow_mut().apply_movement_obstacle_blocks(blocks);
     }
     ctx.borrow_mut().finish_movement();
+    // 代价槽在取消链之后（输入为终局幸存者）、执行循环之前整房一次；
+    // Native 或拒绝时执行阶段按原生代价收费。
+    if let Some(costs) = contrib.run_move_cost(ctx)? {
+        ctx.borrow_mut().apply_movement_costs(costs);
+    }
     Ok(())
 }
 

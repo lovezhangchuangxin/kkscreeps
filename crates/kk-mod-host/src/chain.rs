@@ -35,8 +35,10 @@ pub(crate) use admission::{
 };
 mod obstacle;
 pub(crate) use obstacle::{op_mod_chain_obstacle_block, op_mod_chain_obstacle_blocked};
+mod move_cost;
 mod precheck;
 mod pull_registration;
+pub(crate) use move_cost::{op_mod_chain_cost_fatigue_of, op_mod_chain_cost_set_fatigue};
 pub(crate) use precheck::{op_mod_chain_precheck_block, op_mod_chain_precheck_blocked};
 pub(crate) use pull_registration::{op_mod_chain_pull_denied, op_mod_chain_pull_deny};
 mod combat_batch;
@@ -120,6 +122,14 @@ pub trait ChainHost {
     /// 追加拉拽否决；单向能力，仅拉拽登记槽开放。
     fn pull_deny(&mut self, _id: &str) -> Result<(), String> {
         Err("本次槽没有拉拽登记能力".into())
+    }
+    /// 读取移动者当前代价候选；未覆盖项为原生代价，仅移动代价槽开放。
+    fn cost_fatigue_of(&mut self, _id: &str) -> Result<i64, String> {
+        Err("本次槽没有移动代价能力".into())
+    }
+    /// 设置疲劳覆盖；数值替换能力，仅移动代价槽开放。
+    fn cost_set_fatigue(&mut self, _id: &str, _value: i64) -> Result<(), String> {
+        Err("本次槽没有移动代价能力".into())
     }
     fn read(&mut self, binding: &str) -> Result<ChainContext, String>;
     fn write(&mut self, binding: &str, context: ChainWrite) -> Result<(), String>;
@@ -489,7 +499,7 @@ pub(crate) fn op_mod_chain_decline(
         return chain.outcome(
             ModFaultKind::Control,
             Some(&binding),
-            Err("该槽尚不支持正常拒绝；仅 Mod 自有对象动作与已接局部恢复边界的内建槽（资源/移动/战斗/建造族/受击/移动竞争/移动准入/移动障碍/移动预检/拉拽登记）可回滚".into()),
+            Err("该槽尚不支持正常拒绝；仅 Mod 自有对象动作与已接局部恢复边界的内建槽（资源/移动/战斗/建造族/受击/移动竞争/移动准入/移动障碍/移动预检/拉拽登记/移动代价）可回滚".into()),
         );
     }
     if code.is_empty()

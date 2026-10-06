@@ -216,6 +216,8 @@ mod incoming_policy;
 mod move_admission;
 #[path = "mod_chain_tests/move_contest.rs"]
 mod move_contest;
+#[path = "mod_chain_tests/move_cost.rs"]
+mod move_cost;
 #[path = "mod_chain_tests/move_obstacle.rs"]
 mod move_obstacle;
 #[path = "mod_chain_tests/move_precheck.rs"]

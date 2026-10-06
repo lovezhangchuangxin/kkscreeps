@@ -335,6 +335,11 @@ pub enum SlotCall<'a> {
     PullRegistration {
         candidate: Rc<crate::settle::pull_registration::PullRegistration>,
     },
+    /// 房间级移动代价：整房一次，无单一目标对象；native 中心为无操作
+    /// （无覆盖，执行原生代价）。
+    MoveCost {
+        candidate: Rc<crate::settle::move_cost::MoveCost>,
+    },
     Action {
         id: ObjId,
         data: &'a IntentData,
@@ -395,6 +400,7 @@ pub struct ContributionDispatch {
     /// 房间级移动请求预检槽。
     move_precheck: PrecheckSlot,
     move_pull_registration: PullRegistrationSlot,
+    move_cost: MoveCostSlot,
     /// Mod 自有槽（按槽键查）；扩展意图结算在此派发。
     ext: BTreeMap<Key, ExtSlot>,
 }
@@ -421,6 +427,7 @@ impl Default for ContributionDispatch {
             move_obstacle: ObstacleSlot::Native,
             move_precheck: PrecheckSlot::Native,
             move_pull_registration: PullRegistrationSlot::Native,
+            move_cost: MoveCostSlot::Native,
             ext: BTreeMap::new(),
         }
     }
@@ -431,7 +438,7 @@ pub const LINK_SLOT_KEYS: [&str; 2] = [
     kk_mod_api::builtin::SLOT_KEYS[0],
     kk_mod_api::builtin::SLOT_KEYS[1],
 ];
-pub const BUILTIN_SLOT_KEYS: [&str; 19] = kk_mod_api::builtin::SLOT_KEYS;
+pub const BUILTIN_SLOT_KEYS: [&str; 20] = kk_mod_api::builtin::SLOT_KEYS;
 
 impl ContributionDispatch {
     pub(crate) fn run_incoming(&self, ctx: &RoomCtx, id: ObjId) -> Result<Option<i64>, String> {
@@ -470,6 +477,14 @@ impl ContributionDispatch {
         ctx: &RoomCtx,
     ) -> Result<Option<BTreeSet<ObjId>>, String> {
         self.move_pull_registration.run(ctx)
+    }
+
+    /// 运行移动代价槽；见 [`MoveCostSlot::run`] 的返回语义。
+    pub(crate) fn run_move_cost(
+        &self,
+        ctx: &RoomCtx,
+    ) -> Result<Option<BTreeMap<ObjId, u32>>, String> {
+        self.move_cost.run(ctx)
     }
     pub(crate) fn run_transfer(
         &self,
@@ -568,12 +583,14 @@ mod assemble;
 mod contest;
 mod execute;
 mod incoming;
+mod move_cost;
 mod obstacle;
 mod precheck;
 mod pull_registration;
 use admission::AdmissionSlot;
 use contest::ContestSlot;
 use incoming::IncomingSlot;
+use move_cost::MoveCostSlot;
 use obstacle::ObstacleSlot;
 use precheck::PrecheckSlot;
 use pull_registration::PullRegistrationSlot;

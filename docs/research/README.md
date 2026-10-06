@@ -18,6 +18,7 @@
 
 ## notes/ 笔记索引
 
+- [G04.a 移动代价槽](notes/g04a-move-cost-2026-10-06.md)：疲劳数值替换、沼泽原生对照与行军节奏验收。
 - [G03.b 拉拽登记策略](notes/g03b-pull-registration-2026-10-06.md)：配对级否决槽、add_pulling 双射修复与遍历顺序无关化、anchor/leash 双包验收。
 - [G22.a 状态清单与 schema 门禁](notes/g22a-state-inventory-2026-10-06.md)：检查点逐域清单、76 键钉死门禁、键树折叠规则、墙钟订单夹具修正与变异验证。
 - [JS 受击策略第二片](notes/n2c-incoming-policy-2026-10-06.md)：公式替换、独立护甲/护盾与免疫、来源摘要、拒绝回退、缓存重试及冷恢复。

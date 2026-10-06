@@ -24,6 +24,7 @@ mod freeze;
 mod handlers;
 pub mod incoming;
 pub mod intent_gate;
+pub mod move_cost;
 pub mod objects;
 pub mod obstacle;
 mod outcome;

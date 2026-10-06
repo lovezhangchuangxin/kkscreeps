@@ -364,7 +364,10 @@ impl Working {
             d += resting;
             self.tick_fatigue.insert(id, acc);
             if let Some(creep) = self.creep_mut(id) {
-                creep.fatigue = acc.max(0) as u32;
+                // 与链首转记分支同口径：tick_fatigue 内部可为超 2^32 的
+                // i64 累加（代价槽 u32::MAX 覆盖 ×多次转移），回写钳到
+                // 字段上限，恢复路径不得让惩罚经回绕蒸发。
+                creep.fatigue = acc.clamp(0, u32::MAX as i64) as u32;
             }
             if d == 0 {
                 return;
@@ -379,7 +382,9 @@ impl Working {
         acc += d;
         self.tick_fatigue.insert(head, acc);
         if let Some(creep) = self.creep_mut(head) {
-            creep.fatigue = acc.max(0) as u32;
+            // u32 疲劳字段的表示边界：代价槽允许 u32::MAX 覆盖，同 tick
+            // 多次转移可超过 2^32，`as u32` 会回绕——钳到字段上限。
+            creep.fatigue = acc.clamp(0, u32::MAX as i64) as u32;
         }
     }
 
@@ -809,6 +814,16 @@ impl Working {
     /// 拉拽登记槽成功后的否决集应用；Native/拒绝路径不调用。
     pub fn apply_movement_pull_denies(&mut self, denies: &std::collections::BTreeSet<ObjId>) {
         self.movement.apply_pull_denies(denies);
+    }
+
+    /// 代价槽输入；仅 Hosted 路径按需构造（取消链之后、执行前）。
+    pub fn movement_cost_input(&self) -> kk_mod_api::move_cost::MoveCostInput {
+        self.movement.cost_input(&self.room, &self.index)
+    }
+
+    /// 代价槽成功后的覆盖应用；Native/拒绝路径不调用。
+    pub fn apply_movement_costs(&mut self, costs: std::collections::BTreeMap<ObjId, u32>) {
+        self.movement.apply_costs(costs);
     }
 
     /// 预检槽成功后的否决集应用；被否决请求从登记矩阵移除。

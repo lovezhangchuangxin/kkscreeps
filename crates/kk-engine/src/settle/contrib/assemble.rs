@@ -116,6 +116,12 @@ impl ContributionDispatch {
                     kk_mod_api::builtin::MOVE_PULL_REGISTRATION_SLOT,
                 )?),
             };
+        let move_cost = match dispatch_of(plan, kk_mod_api::builtin::MOVE_COST_SLOT)? {
+            Dispatch::Native(binding) if binding.as_str() == "builtin:room.moveCost.native" => {
+                super::move_cost::MoveCostSlot::Native
+            }
+            _ => super::move_cost::MoveCostSlot::Hosted(host(kk_mod_api::builtin::MOVE_COST_SLOT)?),
+        };
         let mut ext = BTreeMap::new();
         let action = |slot: &str, native| -> Result<ActionSlot, String> {
             match dispatch_of(plan, slot)? {
@@ -185,6 +191,7 @@ impl ContributionDispatch {
             move_obstacle,
             move_precheck,
             move_pull_registration,
+            move_cost,
             ext,
         })
     }
@@ -300,6 +307,7 @@ impl ContributionDispatch {
         let move_precheck = super::precheck::PrecheckSlot::native_from_plan(plan)?;
         let move_pull_registration =
             super::pull_registration::PullRegistrationSlot::native_from_plan(plan)?;
+        let move_cost = super::move_cost::MoveCostSlot::native_from_plan(plan)?;
         Ok(Self {
             transfer,
             tick,
@@ -320,6 +328,7 @@ impl ContributionDispatch {
             move_obstacle,
             move_precheck,
             move_pull_registration,
+            move_cost,
             ext,
         })
     }
