@@ -48,6 +48,33 @@ export default function register(api) {
             "重复注册",
         ),
         (
+            // G07.b：suppressedBy 转换形态（非数组 / 非字符串元素）。
+            "suppressed-not-array",
+            r#"
+import { createApi } from '@kkscreeps/mod';
+export default function register(api) {
+  api.intents.define('suppressed-not-array:hit', {
+    scope: 'room', args: { type: 'bool' }, suppressedBy: 'plain-string',
+    process() {},
+  });
+}
+"#,
+            "须为字符串数组",
+        ),
+        (
+            "suppressed-not-string",
+            r#"
+import { createApi } from '@kkscreeps/mod';
+export default function register(api) {
+  api.intents.define('suppressed-not-string:hit', {
+    scope: 'room', args: { type: 'bool' }, suppressedBy: [42],
+    process() {},
+  });
+}
+"#,
+            "须为字符串",
+        ),
+        (
             "raw-unknown-kind",
             r#"
 export default function register() {
@@ -109,6 +136,35 @@ export default function register() {}
         );
         let _ = std::fs::remove_dir_all(root.join(name));
     }
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn suppressed_by_null_registers_as_undeclared() {
+    // G07.b：suppressedBy: null 与缺省同判（与 queueMax/mode 容忍一致），
+    // 空数组才是显式空形态——注册不因 null 失败。
+    let root = temp_root("suppress-null");
+    write_pkg(
+        &root,
+        "nullable",
+        &[(
+            "server.js",
+            r#"
+import { createApi } from '@kkscreeps/mod';
+export default function register(api) {
+  api.intents.define('nullable:hit', {
+    scope: 'room', args: { type: 'bool' }, suppressedBy: null,
+    process() {},
+  });
+}
+"#,
+        )],
+    );
+    let packages = discover_packages(&root).expect("可装载");
+    let mut realm = ModRealm::new().expect("realm 可创建");
+    realm
+        .register(&packages, RegisterOptions::default())
+        .expect("suppressedBy=null 等价未声明，注册成功");
     let _ = std::fs::remove_dir_all(&root);
 }
 

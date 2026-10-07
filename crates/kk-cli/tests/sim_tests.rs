@@ -271,6 +271,8 @@ mod determinism;
 mod incoming_policy;
 #[path = "sim_tests/input_log.rs"]
 mod input_log;
+#[path = "sim_tests/intent_suppression.rs"]
+mod intent_suppression;
 #[path = "sim_tests/mod_trace.rs"]
 mod mod_trace;
 #[path = "sim_tests/move_admission.rs"]

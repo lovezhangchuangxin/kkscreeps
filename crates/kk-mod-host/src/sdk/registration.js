@@ -133,6 +133,9 @@ export function createApi(namespace, config) {
         mode: spec.mode,
         queueMax: spec.queueMax,
         slot: spec.slot,
+        // 压制声明（G07.b）：数组内为压制者动作的完整键；冻结校验要求
+        // 同 scope 同接收者，引擎按同 tick 键存在性判定（见架构文档）。
+        suppressedBy: spec.suppressedBy,
       });
     },
   };

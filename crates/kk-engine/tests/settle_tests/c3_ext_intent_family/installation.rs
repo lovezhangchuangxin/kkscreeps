@@ -179,8 +179,9 @@ fn install_gates_unsupported_intent_shapes() {
     );
 }
 
-/// 装配门矩阵：非严格转换、非玩家授权、压制关系、builtin 槽劫持、
-/// 长键、阶段不符、无意图槽全部显式拒绝。
+/// 装配门矩阵：非严格转换、非玩家授权、builtin 槽劫持、长键、阶段不
+/// 符、无意图槽全部显式拒绝；压制关系自 G07.b 起装配通过（行为见
+/// suppression.rs）。
 #[test]
 fn install_gate_matrix_rejects_unwired_shapes() {
     let install = |c: Contribution| {
@@ -206,8 +207,38 @@ fn install_gate_matrix_rejects_unwired_shapes() {
     let mut c = counter_contribution(&[]);
     c.intents[0].authority = IntentAuthority::ServerOnly;
     expect_reject(c, "非玩家授权");
+    // 内建类型接收者（G07.b 清偿）：freeze/player_surface 能通过（类型
+    // 目录含内建类型），但 ext 派发只认 Mod 对象——门显式拒绝而非静默
+    // 死码。
     let mut c = counter_contribution(&[]);
-    // 压制动作须同接收者：再造一个同接收者意图。
+    c.intents[0].receiver = Some(TypeRef {
+        key: Key::new("builtin:link").unwrap(),
+        schema_version: 1,
+    });
+    expect_reject(c, "内建对象上的扩展意图派发未接线");
+    // Queue 合并 + 压制组合：报错优先级=先合并模式（压制自 G07.b 起可
+    // 声明，不再抢先报）；压制者须真实存在以越过冻结校验。
+    let mut c = counter_contribution(&[]);
+    c.intents[0].merge = Merge::Queue { max_len: 4 };
+    c.intents[0].suppressed_by = BTreeSet::from([Key::new("extmod:other").unwrap()]);
+    c.intents.push({
+        let mut other = c.intents[0].clone();
+        other.key = Key::new("extmod:other").unwrap();
+        other.slot = Key::new("extmod:other.slot").unwrap();
+        other.suppressed_by = BTreeSet::new();
+        other.merge = Merge::Last;
+        other
+    });
+    c.slots.push(SlotDescriptor {
+        key: Key::new("extmod:other.slot").unwrap(),
+        stage: kk_mod_api::Stage::ObjectAction,
+        native_binding: Key::new("extmod:other.process").unwrap(),
+    });
+    c.bindings.insert(Key::new("extmod:other.process").unwrap());
+    expect_reject(c, "队列合并模式");
+    // 压制关系自 G07.b 起可执行：同接收者双意图+压制关系装配通过
+    //（派发点存在性判定，行为测试见 suppression.rs）。
+    let mut c = counter_contribution(&[]);
     c.intents[0].suppressed_by = BTreeSet::from([Key::new("extmod:other").unwrap()]);
     c.intents.push({
         let mut other = c.intents[0].clone();
@@ -222,7 +253,23 @@ fn install_gate_matrix_rejects_unwired_shapes() {
         native_binding: Key::new("extmod:other.process").unwrap(),
     });
     c.bindings.insert(Key::new("extmod:other.process").unwrap());
-    expect_reject(c, "压制关系");
+    // 门矩阵的共享闭包不带 ext 处理器；压制用例须带两个 process 实现
+    // 才能越过装配的处理器存在性检查（这里只验门，不执行）。
+    let plan = frozen(c);
+    let noop: ExtSimple = Box::new(|_, _, _| Ok(()));
+    let mut ext_processes = BTreeMap::new();
+    ext_processes.insert(Key::new("extmod:increment.process").unwrap(), noop);
+    let noop: ExtSimple = Box::new(|_, _, _| Ok(()));
+    ext_processes.insert(Key::new("extmod:other.process").unwrap(), noop);
+    Engine::new(kk_world::World::new(2))
+        .install_plan_with_ext(
+            plan,
+            BTreeMap::new(),
+            BTreeMap::new(),
+            BTreeMap::new(),
+            ext_processes,
+        )
+        .expect("压制关系的装配自 G07.b 起通过");
     // 内建资源槽只能挂处理器，不能把自有意图混接到类型化派发域；
     // 已提供 Replace 同样不能绕过门禁。
     for slot in builtin::RESOURCE_ACTION_SLOTS {

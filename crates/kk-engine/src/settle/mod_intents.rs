@@ -105,6 +105,18 @@ pub(crate) fn process_object_ext_intents(
             // 装配门已拒绝 Mod 意图挂 builtin 槽，此处防御手工构造的批。
             continue;
         }
+        // 压制（G07.b）：与 vanilla `Action::executes` 同语义——同接收者
+        // 同 tick，压制者键存在于本对象的意图表即跳过被压制键。只看存在
+        // 性不看压制者自身是否执行成功（压制者参数越界被丢弃时被压制键
+        // 仍不执行）；玩家侧记录照常返 OK（官方静默形态）。冻结校验保证
+        // 压制动作与被压制动作同 scope 同接收者，跨对象意图表天然隔离。
+        if descriptor
+            .suppressed_by
+            .iter()
+            .any(|suppressor| list.contains_key(suppressor))
+        {
+            continue;
+        }
         let Some(receiver) = &descriptor.receiver else {
             continue; // 装配门保证对象域意图必有接收者；防御性丢弃
         };

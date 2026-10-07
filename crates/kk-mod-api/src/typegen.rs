@@ -70,7 +70,8 @@ pub fn player_declarations(plan: &ContributionPlan) -> Result<String, String> {
         .map(|projected| (projected.descriptor.key.as_str(), &projected.descriptor))
         .collect();
     for intent in plan.intents() {
-        // 与引擎装配共用意图描述符门：域/合并/转换/授权/压制同口径
+        // 与引擎装配共用意图描述符门：域/合并/转换/授权/接收者域同口径
+        //（压制关系自 G07.b 起可执行，不再是拒绝项）
         // 拒绝；具体入口和执行绑定仍由引擎装配核验。
         if intent.key.namespace() != "builtin" {
             crate::intent_gate::executable_gate(intent)?;

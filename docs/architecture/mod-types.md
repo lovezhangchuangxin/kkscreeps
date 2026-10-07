@@ -11,7 +11,7 @@ target/debug/kkscreeps mod types --root <Mod根> --out <声明文件> --check --
 ## 生成内容
 
 - **Mod 对象投影 interface**（`playerClass` 命名）：投影信封键（`id`/`room`/`x`/`y`/`pos`/`type: 'mod'`/`modType` 字面量）恰好声明一次——投影把信封键最后写入（`kk-world` 的 mod 记录裁切），同名声明字段（位置字段）被等值覆写，不重复出现。字段按可见性映射：Public 必选、Owner 可选（`?`，JSDoc 注明非归属者投影不含此键）、ServerOnly 不生成。另产出 `{PlayerClass}Constructor` 供 `api.objects.bind`：运行时把绑定类仅作原型载体（`setPrototypeOf` 从不构造），构造器类型为 `new (...args: never[]) => unknown`——不做实例约束（extends 内建类、只带部分 getter 的玩家类无法满足投影 interface）。
-- **意图参数类型**（按意图键分段 Pascal 化命名）与 `emit` 窄化签名：intentKey 为字面量、args 按参数 schema 类型化；可空参数是可选参数（宿主把缺省 args 归一为 null，非 nullable 时省略会在结算侧被拒；内联形态的 `| null` 已含在类型里，Record 引用名由签名补拼）。可执行性门与引擎装配**共用同一实现**（`kk-mod-api/src/intent_gate.rs`）：域/合并模式/参数转换/授权/压制任一未接线形态在生成期即拒绝，该门核验意图描述符支持范围；具体槽入口、生命周期与可执行绑定仍须由引擎装配核验，生成成功不代替场景运行。
+- **意图参数类型**（按意图键分段 Pascal 化命名）与 `emit` 窄化签名：intentKey 为字面量、args 按参数 schema 类型化；可空参数是可选参数（宿主把缺省 args 归一为 null，非 nullable 时省略会在结算侧被拒；内联形态的 `| null` 已含在类型里，Record 引用名由签名补拼）。可执行性门与引擎装配**共用同一实现**（`kk-mod-api/src/intent_gate.rs`）：域/合并模式/参数转换/授权/接收者域任一未接线形态在生成期即拒绝（压制关系自 G07.b 起可声明可执行），该门核验意图描述符支持范围；具体槽入口、生命周期与可执行绑定仍须由引擎装配核验，生成成功不代替场景运行。
 - **建筑绑定**：`{PlayerClass}Constructor` 与 `api.buildings.bind` 字面量窄化。
 - **`ModInstallApi`**：`builtins`（内建类表，`abstract new (...args: never[]) => object` 使 `class X extends api.builtins.RoomObject` 在 strict 下成立）、`objects`/`buildings`（按类型键字面量窄化的 bind 重载）、`globals.define`、`view.field`（动态字段逃生舱）、`intents.emit`、`queries.install`（返回 `{ find: 数字字面量; look: 类型键 }`）。空目录退化为 `{}`。注意本文件是**全计划联合面**：安装 API 在运行时按各包命名空间裁剪（某包的 player.js 只能 bind/emit 本包命名空间的键），跨包键类型通过但运行时拒绝——生成头部有同样提示。
 - **`ModResourceName`**：本计划声明的命名空间资源联合（`RESOURCES_ALL` 的 Mod 部分）。

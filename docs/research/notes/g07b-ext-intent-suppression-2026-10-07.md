@@ -32,4 +32,40 @@
 
 ## 交付记录
 
-（实现完成后回填。）
+（2026-10-07 实现完成后回填；提交 ID 见 git log。）
+
+实现落点：
+
+- `kk-mod-api/src/intent_gate.rs`：删除「压制关系」拒绝臂（typegen 与装配共用门同口径放开，压制自本批可声明可执行）；typegen.rs 零 suppressed_by 引用，.d.ts 产物与 `--check` 字节门不变（mod-types.md:14 门描述同步）。
+- `kk-engine/src/settle/mod_intents.rs`：ext 派发循环在 builtin 槽防御跳过之后加存在性压制判定——压制者键存在于本对象意图表即 `continue`；与 vanilla `Action::executes` 同语义（只看存在不看压制者成败）。
+- SDK 面：`kk-mod-host/src/sdk/registration.js` 的 `intents.define` 暴露 `suppressedBy`（字符串数组）；`kk-mod-host/src/convert.rs` 解析为 `BTreeSet<Key>`（any_key 支持跨命名空间压制者，非数组/非字符串元素拒绝；语义校验仍在冻结期）。
+- 测试：kk-engine `c3_ext_intent_family/suppression.rs` 四用例（齐发只执行压制者/压制者缺席则执行/存在性语义——压制者参数越界被丢弃仍压制/跨对象意图表隔离）+ 门矩阵「压制关系」断言翻转为装配通过（带 noop process 越过处理器存在性检查）；kk-runtime c3 压制族两用例（SDK suppressedBy 端到端 × JSON/KKPV 双通道 × 带包冷恢复；未知压制动作经 SDK 面拒绝注册）；kk-cli `sim_tests/intent_suppression.rs` 两用例（四场景 × 双通道 × 第 2 tick 检查点冷恢复续跑等值 + suppress 三场景同计划身份/free 独立身份；期望值逐场景表）。
+- 夹具：`compat/fixtures/mod-intent-suppression/{suppressed,free}`（suppress:bump 置 amount + suppress:mark 置 mark 且声明被 bump 压制；free 同形无压制——两意图都设绝对值使期望每 tick 稳定）与 `compat/fixtures/sim-mod-intent-suppression/`（both=3/alone=7/invalid=0/free=7 四场景 + main.js 按 memory mode/prefix 发射）。
+- 文档：player-precheck-rules.md 新「可扩展意图盘点（G07.b）」节（四项现状：互斥开放面+vanilla 保持、EXECUTION_ORDER 编译期常量+策略化耦合 G22.b 抽值序列 G07.c 设计前置、参数策略边界不变+Native 未接线、可执行五门+缺口清单）+ :3 导语与 :31 边界句口径更新 + 验收节补压制验收；mod-types.md:14 门描述；architecture README 索引行；research README 索引。
+
+实现期修正：夹具首版 increment 用累加语义——both 场景每 tick +3 期望不稳定（实测 2 tick 得 6）；改为两意图都设绝对值（bump/mark）后四场景期望 3/7/0/7 每 tick 稳定。门矩阵翻转用例初版沿用共享 install 闭包（不带 ext 处理器）——门放行后在处理器存在性检查处失败，改为内联提供 noop process。
+
+复审清偿期增补（详见下节记录）：executable_gate 补「内建类型接收者」拒绝（P1）；freeze 补互压环拒绝；convert 对 suppressedBy:null 与缺省同判；测试补 convert 形态三路、freeze 同接收者/环、引擎链式逐环与跨玩家隔离、门矩阵 builtin 接收者与 Queue 优先级、runtime 冷恢复断言改顺序敏感+发射原语返 true、sim 组合选择场景（第五场景，suppress/free 同计划共存）与夹具 README。
+
+验收：完整 `pnpm run check` 见收口提交。
+
+## 复审记录（2026-10-07，三路后台只读复审，全部清偿）
+
+分工：协议与语义正确性 / 测试充分性与边界 / 文档与台账一致性。结论：0 P0；5 P1 全部修复；P2 逐条处置如下。
+
+**P1 清偿**：
+
+1. 盘点篇把「builtin 对象上的扩展意图」写成「声明即拒」与实现相反（freeze/player_surface 能通过，派发静默死码）→ 双修：executable_gate 补内建类型接收者拒绝（fail-loud 优于死码，正合该门「拦截未接线形态」职责；同族边——Mod 意图声明 `suppressedBy` 指向 builtin 意图——被同接收者校验+新门共同封死）+ 盘点篇五门/缺口清单改写。player_surface 既有 builtin 接收者测试只走 freeze+from_plan、不经门，不受影响。
+2. 登记验收「kk-runtime 原生+组合」缩窄 → 组合补齐：sim 第五场景 combined（suppress+free 同计划、双类型对象、压制按包内声明各自生效，三计划身份互异；free 包玩家类名改 FreeCounter、查询全局改 FIND_FREE_COUNTERS 避组合撞唯一绑定）；原生臂登记偏差——压制语义无原生对照可测，由 c3「无 Mod 意图分片不装配发射原语」既有用例承担对照。
+3. 台账 G07 父行滞后 → 收口提交同步（.b 交付、互斥拆「ext 声明面开放/vanilla 表未动」）。
+4. convert 新增 suppressedBy 解析错误分支零直接测试 → kk-mod-host register_failures 补非数组/非字符串两案 + suppressedBy:null 注册成功用例（null 与缺省同判，见下）。
+5. runtime 冷恢复断言 json!(1) 对压制丢失不敏感 → 改顺序敏感形态：恢复后发 increment(4)+reset(mark=99)——压制保持则值不变 12、丢失则 16。
+
+**P2 清偿（修复类）**：freeze 拒互压环（存在性判定下齐发双静默丢弃，vanilla 是严格优先级 DAG）+ freeze 用例补同接收者/环两分支；convert suppressedBy:null 与缺省同判（与 queueMax/mode 容忍一致，空数组才是显式空）；typegen.rs:73 陈旧注释（压制不再是门拒绝项、补接收者域）；盘点篇「测试钉死位次」收敛为采样钉死表述、「跨接收者」改「跨对象」；引擎补链式逐环（三键链：高存在→链下全静默；高层缺席→中层执行且其存在继续压低层）与跨玩家隔离用例；门矩阵补 builtin 接收者与 Queue+压制报错优先级两案；发射原语返 true 显式断言（官方记录即 OK）；sim 测试注释意图名对齐夹具（bump/mark）；suppress-bad 错误路径临时目录清理；c3 文档注释 `*/` 残留；两夹具目录补 README（mod-intent-suppression 新增）。
+
+**P2 处置（记录不改，附理由）**：
+
+- 「三索引」计数：实际更新 architecture README + research README 两处；docs/README.md:20 为通用行（已含玩家预检规则链接）无需随批改——本条即澄清。
+- mod-system.md:281-307 设计示例字段名与现行 SDK 漂移（targetTypes/ownership/replace-last/phase vs target/mode:last|queue）：该文档自声明「拟议公共 SDK 形状，不代表仓库已有」，属既有状态非本批引入，不在本批追改。
+- 跨包压制者（freeze 目录是全计划合并、允许声明）无专门用例：SDK/convert 面已按 any_key 支持跨命名空间，语义由同接收者+存在性结构覆盖；跨包场景待真实用例出现时随批补。
+- mod-intent-suppression 包目录名（suppressed/）与包 id（suppress）不一致：selection 按 id 匹配功能正确，README 已写明对应关系；目录名保留（改名会动 selection 与既有场景）。

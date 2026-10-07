@@ -88,4 +88,43 @@ fn invalid_intent_scope_merge_conversion_and_suppression_are_rejected() {
     let self_key = c.intents[0].key.clone();
     c.intents[0].suppressed_by.insert(self_key);
     error(c, "其他动作");
+    // 压制动作在不同接收者上（G07.b 清偿：钉死同接收者分支）——需要
+    // 两个类型：克隆 link 类型为 builtin:panel，意图挂其上，link.transfer
+    // 声明被它压制 → 冻结拒。
+    let mut c = builtin::link();
+    let mut panel_intent = c.intents[0].clone();
+    panel_intent.key = key("builtin:panel.tap");
+    panel_intent.slot = key("builtin:panel.tap.slot");
+    panel_intent.suppressed_by = BTreeSet::new();
+    let mut panel_slot = c.slots[0].clone();
+    panel_slot.key = key("builtin:panel.tap.slot");
+    let mut panel_type = c.object_types[0].clone();
+    panel_type.key = key("builtin:panel");
+    panel_intent.receiver = Some(TypeRef {
+        key: key("builtin:panel"),
+        schema_version: 1,
+    });
+    c.intents.push(panel_intent);
+    c.slots.push(panel_slot);
+    c.object_types.push(panel_type);
+    c.intents[0].suppressed_by.insert(key("builtin:panel.tap"));
+    error(c, "同一接收者");
+    // 互压环：A 压 B、B 压 A——存在性判定下齐发双双静默丢弃，冻结拒。
+    let mut c = builtin::link();
+    let mut second = builtin::link();
+    second.intents[0].key = key("builtin:second");
+    second.intents[0].slot = key("builtin:second.slot");
+    second.slots[0].key = key("builtin:second.slot");
+    second.intents[0]
+        .suppressed_by
+        .insert(c.intents[0].key.clone());
+    let first_key = c.intents[0].key.clone();
+    c.intents[0]
+        .suppressed_by
+        .insert(second.intents[0].key.clone());
+    let _ = first_key;
+    // link() 的两条意图共用接收者 builtin:link：直接把 second 追加进 c。
+    c.intents.push(second.intents[0].clone());
+    c.slots.push(second.slots[0].clone());
+    error(c, "压制关系成环");
 }

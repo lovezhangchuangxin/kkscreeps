@@ -310,3 +310,6 @@ mod execution;
 mod object_ops;
 #[path = "c3_ext_intent_family/object_tick.rs"]
 mod object_tick;
+
+#[path = "c3_ext_intent_family/suppression.rs"]
+mod suppression;

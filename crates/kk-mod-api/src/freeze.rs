@@ -289,6 +289,15 @@ fn freeze_inner(
                     "压制动作须是同一接收者上的其他动作",
                 ));
             }
+            // 互压环（A 压 B、B 压 A）：存在性判定下两键齐发会双双静默
+            // 丢弃——vanilla 压制表是严格优先级 DAG，环不属于同语义开
+            // 放面，冻结期显式拒绝（G07.b 复审清偿）。
+            if other.suppressed_by.contains(&intent.key) {
+                return Err(FreezeError::new(
+                    context,
+                    format!("压制关系成环：{key} 与 {}", intent.key),
+                ));
+            }
         }
     }
     let values = effective_rules(&rules, &overrides, &options, &bindings)?;

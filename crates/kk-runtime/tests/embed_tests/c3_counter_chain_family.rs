@@ -3,6 +3,8 @@
 //! （process 中心 + after 处理器 + Mod 状态）、权限与异常回滚、
 //! 未知键/越界参数丢弃、双通道一致性（Mod 对象不进玩家投影）。
 
+use std::collections::BTreeMap;
+
 use serde_json::{Value, json};
 
 use super::*;
@@ -21,6 +23,32 @@ pub(super) fn chain_engine(
     configs: Option<Value>,
 ) -> anyhow::Result<EmbedEngine> {
     chain_engine_with_player(label, server_js, PLAYER_JS, configs)
+}
+
+/// 同 chain_engine 但保留包目录并返回包表，供冷恢复用同包重装。
+pub(super) fn chain_engine_kept(
+    label: &str,
+    server_js: &str,
+) -> anyhow::Result<(EmbedEngine, BTreeMap<String, kk_mod_host::ModPackage>)> {
+    let dir = std::env::temp_dir().join(format!(
+        "kk-c3-chain-tests-{}-{}",
+        label,
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    let pkg = dir.join("chainmod");
+    std::fs::create_dir_all(&pkg).expect("建包目录");
+    std::fs::write(
+        pkg.join("mod.json"),
+        r#"{"id":"chainmod","version":"1.0.0","apiVersion":"^1.0.0","player":"player.js"}"#,
+    )
+    .expect("写 manifest");
+    std::fs::write(pkg.join("server.js"), server_js).expect("写入口");
+    std::fs::write(pkg.join("player.js"), PLAYER_JS).expect("写玩家模块");
+    let packages = discover_packages(&dir)?;
+    let mut e = EmbedEngine::new();
+    e.create_shard_with_mods(&spec(), &packages, RegisterOptions::default())?;
+    Ok((e, packages))
 }
 
 /// counter 的玩家面模块：类/getter/emit 与查询常量（FIND/LOOK）。
@@ -457,5 +485,179 @@ export default function register(api) {
         "无 Mod 意图的分片不装配原语：{:?}",
         run.expr
     );
+    Ok(())
+}
+
+/// 压制包：increment 声明被 reset 压制（SDK suppressedBy），reset 把
+/// value 置为 mark（G07.b）。
+const SUPPRESSION_JS: &str = r#"
+import { createApi } from '@kkscreeps/mod';
+export default function register(api) {
+  const counter = api.objects.define('chainmod:counter', {
+    version: 1,
+    playerClass: 'Counter',
+    visibility: 'room-visible',
+    ownerField: 'owner',
+    positionFields: ['x', 'y'],
+    fields: {
+      owner: { type: 'string', maxBytes: 128, nullable: true },
+      x: { type: 'u32', min: 0, max: 49 },
+      y: { type: 'u32', min: 0, max: 49 },
+      value: { type: 'i32', default: 0, visibility: 'public' },
+    },
+  });
+  api.intents.define('chainmod:increment', {
+    scope: 'object',
+    target: counter,
+    args: { type: 'record', fields: { amount: { type: 'i32', min: 1, max: 10 } } },
+    suppressedBy: ['chainmod:reset'],
+    process(ctx) {
+      ctx.target.fields.value += ctx.args.amount;
+    },
+  });
+  api.intents.define('chainmod:reset', {
+    scope: 'object',
+    target: counter,
+    args: { type: 'record', fields: { mark: { type: 'i32', min: 0, max: 9 } } },
+    process(ctx) {
+      ctx.target.fields.value = ctx.args.mark;
+    },
+  });
+}
+"#;
+
+/// SDK 压制声明端到端：齐发只执行压制者、压制者缺席则执行、压制按
+/// 键存在性（压制者参数越界被丢弃仍压制）、跨对象隔离；两通道一致。
+pub(super) fn c3_counter_suppression_impl() -> anyhow::Result<()> {
+    let (mut e, kept_packages) = chain_engine_kept("suppress", SUPPRESSION_JS)?;
+    for channel in [false, true] {
+        e.set_kkpv_channel(channel);
+        let a = place_counter(&mut e, "p1")?;
+        let b = place_counter(&mut e, "p1")?;
+
+        // 齐发：increment 被 reset 压制，只有 reset 落地。发射原语恒返
+        // true（记录即 OK——压制对玩家不可见，官方静默形态）。
+        let run = e.run_player(
+            "p1",
+            &format!(
+                r#"__kkEmitExtensionIntent('chainmod:increment', '{a}', {{ amount: 3 }}) &&
+                   __kkEmitExtensionIntent('chainmod:reset', '{a}', {{ mark: 7 }})"#
+            ),
+        )?;
+        assert_eq!(
+            run.expr["value"],
+            json!(true),
+            "{channel}: 发射原语记录即返 OK"
+        );
+        assert_eq!(
+            value_of(&e, &a)["value"],
+            json!(7),
+            "{channel}: 齐发只执行压制者"
+        );
+
+        // 压制者缺席：increment 照常执行。
+        e.run_player(
+            "p1",
+            &format!(
+                r#"__kkEmitExtensionIntent('chainmod:increment', '{a}', {{ amount: 3 }}); 'ok'"#
+            ),
+        )?;
+        assert_eq!(
+            value_of(&e, &a)["value"],
+            json!(10),
+            "{channel}: 无压制者则执行"
+        );
+
+        // 存在性语义：reset 参数越界被丢弃，increment 仍被压制。
+        e.run_player(
+            "p1",
+            &format!(
+                r#"__kkEmitExtensionIntent('chainmod:increment', '{a}', {{ amount: 3 }});
+                   __kkEmitExtensionIntent('chainmod:reset', '{a}', {{ mark: 99 }}); 'ok'"#
+            ),
+        )?;
+        assert_eq!(
+            value_of(&e, &a)["value"],
+            json!(10),
+            "{channel}: 压制只看键存在不看压制者成败"
+        );
+
+        // 跨对象隔离：reset 发往另一对象不压制本对象的 increment。
+        e.run_player(
+            "p1",
+            &format!(
+                r#"__kkEmitExtensionIntent('chainmod:increment', '{a}', {{ amount: 2 }});
+                   __kkEmitExtensionIntent('chainmod:reset', '{b}', {{ mark: 5 }}); 'ok'"#
+            ),
+        )?;
+        assert_eq!(
+            value_of(&e, &a)["value"],
+            json!(12),
+            "{channel}: 跨对象不压制"
+        );
+        assert_eq!(
+            value_of(&e, &b)["value"],
+            json!(5),
+            "{channel}: 另一对象效果落地"
+        );
+
+        // 冷恢复：检查点恢复（带同包）后压制语义仍在（描述符在计划身份内）。
+        let snapshot = e.checkpoint(serde_json::Value::Null)?;
+        let mut restored = EmbedEngine::new();
+        restored.restore_checkpoint(
+            snapshot,
+            Some((&kept_packages, &RegisterOptions::default())),
+        )?;
+        restored.set_kkpv_channel(channel);
+        // 恢复后发射 increment(4)+reset(mark=99 越界)：压制语义保持时
+        // increment 被 reset 的存在压制、reset 被 schema 丢弃 → 值不变
+        //（12）；压制若在重装中丢失则 increment 执行 → 16。顺序敏感。
+        restored.run_player(
+            "p1",
+            &format!(
+                r#"__kkEmitExtensionIntent('chainmod:increment', '{a}', {{ amount: 4 }});
+                   __kkEmitExtensionIntent('chainmod:reset', '{a}', {{ mark: 99 }}); 'ok'"#
+            ),
+        )?;
+        assert_eq!(
+            value_of(&restored, &a)["value"],
+            json!(12),
+            "{channel}: 冷恢复后压制语义保持（丢失则为 16）"
+        );
+    }
+    Ok(())
+}
+
+/// 冻结校验经 SDK 面可见：压制动作不在计划（未知键）拒绝注册。
+pub(super) fn c3_counter_suppression_freeze_gates_impl() -> anyhow::Result<()> {
+    let server_js = r#"
+import { createApi } from '@kkscreeps/mod';
+export default function register(api) {
+  const counter = api.objects.define('chainmod:counter', {
+    version: 1, playerClass: 'Counter', visibility: 'room-visible',
+    ownerField: 'owner', positionFields: ['x', 'y'],
+    fields: {
+      owner: { type: 'string', maxBytes: 128, nullable: true },
+      x: { type: 'u32', min: 0, max: 49 }, y: { type: 'u32', min: 0, max: 49 },
+      value: { type: 'i32', default: 0, visibility: 'public' },
+    },
+  });
+  api.intents.define('chainmod:increment', {
+    scope: 'object',
+    target: counter,
+    args: { type: 'record', fields: { amount: { type: 'i32', min: 1, max: 10 } } },
+    suppressedBy: ['chainmod:ghost'],
+    process(ctx) { ctx.target.fields.value += ctx.args.amount; },
+  });
+}
+"#;
+    let result = chain_engine("suppress-bad", server_js, None);
+    let error = format!("{:#}", result.err().expect("未知压制动作必须拒绝注册"));
+    // chain_engine 的清理只在成功路径执行；错误路径手工清临时目录。
+    let _ = std::fs::remove_dir_all(std::env::temp_dir().join(format!(
+        "kk-c3-chain-tests-suppress-bad-{}",
+        std::process::id()
+    )));
+    assert!(error.contains("未知压制动作"), "冻结校验文案：{error}");
     Ok(())
 }

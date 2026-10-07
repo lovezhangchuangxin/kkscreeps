@@ -19,7 +19,7 @@
 | [creep-resource-slots.md](creep-resource-slots.md) | creep 转入/提取动作链、只读候选面与局部拒绝恢复 |
 | [creep-move-slot.md](creep-move-slot.md) | creep 移动动作槽、受控请求能力与按执行者粒度的拒绝恢复 |
 | [creep-combat-slot.md](creep-combat-slot.md) | creep 战斗动作槽、目标改向/取消能力与延迟队列/结构摧毁的拒绝恢复 |
-| [player-precheck-rules.md](player-precheck-rules.md) | 规则驱动双端同源的玩家预检契约：战斗射程四条首篇 |
+| [player-precheck-rules.md](player-precheck-rules.md) | 规则驱动双端同源的玩家预检契约：战斗射程四条与扩展意图压制，含可扩展意图盘点 |
 | [mod-damage-policy.md](mod-damage-policy.md) | JS 单体伤害公式与应用、战斗读面、表示约束和恢复边界 |
 | [mod-heal-policy.md](mod-heal-policy.md) | JS 近/远程治疗公式、延迟身体恢复、恰一次与拒绝/故障边界 |
 | [mod-mass-policy.md](mod-mass-policy.md) | 同房战斗分页、群体伤害批量预检与应用、多目标拒绝恢复 |

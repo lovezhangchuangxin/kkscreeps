@@ -27,6 +27,7 @@
 - [G06.a Mod 运行 trace](notes/g06a-mod-trace-2026-10-06.md)：trace 开启意愿、恢复后启用与诊断快照边界。
 - [G08.a 建筑自定义字段与生命周期](notes/g08a-building-fields-2026-10-06.md)：字段存储键与写面、freeze 五门、玩家面六层直供、停用语义定论与 bl/bk 双包冷恢复。
 - [G07.a 玩家预检规则·战斗射程首片](notes/g07a-combat-ranges-2026-10-06.md)：射程规则双端同源、常量注入、reach/medic 双包与四场景双通道冷恢复验收。
+- [G07.b ext 意图压制与可扩展意图盘点](notes/g07b-ext-intent-suppression-2026-10-07.md)：suppressed_by 声明/冻结校验/存在性执行接线、SDK suppressedBy、suppress/free 双包四场景验收。
 - [G04.a 移动代价槽](notes/g04a-move-cost-2026-10-06.md)：疲劳数值替换、沼泽原生对照与行军节奏验收。
 - [G03.b 拉拽登记策略](notes/g03b-pull-registration-2026-10-06.md)：配对级否决槽、add_pulling 双射修复与遍历顺序无关化、anchor/leash 双包验收。
 - [G29.a 玩家类型生成](notes/g29a-mod-types-2026-10-06.md)：冻结计划确定性 TS 声明、--check 新鲜度门与输出守卫。

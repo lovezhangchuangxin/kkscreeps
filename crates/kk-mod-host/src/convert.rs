@@ -481,6 +481,25 @@ pub fn build_contribution(
                 };
                 required_executables.insert(process_binding.clone());
                 bindings.insert(process_binding);
+                // 压制者键数组（可跨命名空间，语义校验在冻结期：同 scope
+                // 同接收者、未知压制动作拒）。
+                let mut suppressed_by = BTreeSet::new();
+                // null 与缺省同判（与 queueMax/mode 对 null 的容忍一致）；
+                // 空数组才是显式空形态。
+                if let Some(list) = value.get("suppressedBy").filter(|v| !v.is_null()) {
+                    let Some(list) = list.as_array() else {
+                        return err(
+                            namespace,
+                            format!("动作 {key} 的 suppressedBy 须为字符串数组"),
+                        );
+                    };
+                    for entry in list {
+                        let Some(entry) = entry.as_str() else {
+                            return err(namespace, format!("动作 {key} 的压制动作键须为字符串"));
+                        };
+                        suppressed_by.insert(any_key(namespace, entry)?);
+                    }
+                }
                 intents.push(IntentDescriptor {
                     key,
                     scope,
@@ -495,7 +514,7 @@ pub fn build_contribution(
                     authority: IntentAuthority::Player,
                     merge,
                     slot: slot_key,
-                    suppressed_by: BTreeSet::new(),
+                    suppressed_by,
                 });
             }
             "handler" => {

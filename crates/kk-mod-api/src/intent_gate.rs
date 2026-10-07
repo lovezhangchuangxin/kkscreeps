@@ -38,11 +38,20 @@ pub fn executable_gate(intent: &IntentDescriptor) -> Result<(), String> {
             intent.key
         ));
     }
-    if !intent.suppressed_by.is_empty() {
+    // 内建类型接收者（如 builtin:link）：freeze/player_surface 能通过
+    //（类型目录含内建类型），但 ext 派发只认 Mod 对象——不拦就是声明
+    // 通过、运行期静默永不执行的死码，按本门「拦截未接线执行形态」
+    // 的职责显式拒绝（G07.b 复审清偿）。
+    if let Some(receiver) = intent.receiver.as_ref()
+        && receiver.key.namespace() == "builtin"
+    {
         return Err(format!(
-            "动作 {} 声明压制关系，压制判定的执行装配未接线",
-            intent.key
+            "动作 {} 的接收者是内建类型 {}，内建对象上的扩展意图派发未接线",
+            intent.key, receiver.key
         ));
     }
+    // 压制关系自 G07.b 起可执行：引擎侧在 ext 派发点做存在性判定
+    //（settle::mod_intents，与 vanilla Action::executes 同语义），
+    // 冻结期校验压制动作须同 scope 同接收者（freeze）。
     Ok(())
 }

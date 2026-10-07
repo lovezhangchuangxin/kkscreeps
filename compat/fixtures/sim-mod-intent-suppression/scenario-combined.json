@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "shard": {
+    "players": [
+      "p1"
+    ],
+    "rooms": [
+      {
+        "name": "W1N1",
+        "rcl": 3,
+        "owner": "p1"
+      }
+    ]
+  },
+  "bots": [
+    {
+      "player": "p1",
+      "modules": ".",
+      "memory": {
+        "mode": "combined"
+      }
+    }
+  ],
+  "objects": [
+    {
+      "room": "W1N1",
+      "kind": "mod",
+      "alias": "counterA",
+      "spec": {
+        "typeKey": "suppress:counter",
+        "fields": {
+          "x": 10,
+          "y": 12,
+          "owner": "p1"
+        }
+      }
+    },
+    {
+      "room": "W1N1",
+      "kind": "mod",
+      "alias": "counterB",
+      "spec": {
+        "typeKey": "free:counter",
+        "fields": {
+          "x": 20,
+          "y": 12,
+          "owner": "p1"
+        }
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "pointer": "/objects/counterA/fields/value",
+      "op": "eq",
+      "value": 3
+    },
+    {
+      "pointer": "/objects/counterB/fields/value",
+      "op": "eq",
+      "value": 7
+    }
+  ],
+  "mods": {
+    "root": "../mod-intent-suppression",
+    "selection": {
+      "include": [
+        "suppress",
+        "free"
+      ]
+    }
+  }
+}

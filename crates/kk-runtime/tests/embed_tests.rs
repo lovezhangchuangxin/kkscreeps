@@ -147,6 +147,8 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     c3_counter_chain::c3_counter_config_and_projection_impl()?;
     c3_counter_chain::c3_counter_creation_and_round_gates_impl()?;
     c3_counter_chain::c3_counter_link_only_shard_skips_primitive_impl()?;
+    c3_counter_chain::c3_counter_suppression_impl()?;
+    c3_counter_chain::c3_counter_suppression_freeze_gates_impl()?;
     three_sources_round_trip_impl()?;
     failed_round_and_retry_semantics_impl()?;
     log_io_failure_commits_round_and_detaches_impl()?;
