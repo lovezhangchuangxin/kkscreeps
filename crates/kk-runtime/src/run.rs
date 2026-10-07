@@ -52,6 +52,9 @@ pub struct RunResult {
     pub outcome: RunOutcome,
     /// 经身份绑定的指令批；未执行或中断时通常为空。
     pub intents: IntentBatch,
+    /// 沙箱报告的原始意图 JSON（G25.a 输入日志记录面）：与 intents 的
+    /// 转换同源（`IntentBatch::from_json`），是回放的权威输入形态。
+    pub intents_raw: serde_json::Value,
     /// runExpr 结果 JSON（screeps-ok 通道：`{ok, value?} | {ok:false, kind, error}`）。
     pub expr: serde_json::Value,
     /// 本轮 CPU 计费候选，单位毫秒；None 表示没有产出。
@@ -72,6 +75,7 @@ impl RunResult {
             player: player.into(),
             outcome: RunOutcome::InjectFailed,
             intents: IntentBatch::default(),
+            intents_raw: serde_json::Value::Null,
             expr: serde_json::json!({
                 "ok": false, "kind": "inject_failed", "error": error.into(),
             }),
@@ -88,6 +92,7 @@ impl RunResult {
             player: player.into(),
             outcome: RunOutcome::InfraFailure(error.into()),
             intents: IntentBatch::default(),
+            intents_raw: serde_json::Value::Null,
             expr: serde_json::Value::Null,
             cpu_billed_ms: None,
             raw_memory: None,

@@ -71,6 +71,8 @@ pub struct EmbedEngine {
     perf: PerfRecorder,
     /// 下一次进入结算入口时返回测试错误，不调用引擎。
     fail_next_settle: bool,
+    /// 下一次日志段写入模拟 I/O 失败（不落盘），用后清除。
+    fail_next_log_write: bool,
     /// 下一次 `switch_mod_packages` 在候选验证全部通过后、切换前失败，
     /// 验证旧分片在切换失败的每个阶段都保持可运行。
     fail_next_switch_for_test: bool,
@@ -81,6 +83,10 @@ pub struct EmbedEngine {
     fail_next_writeback: Option<kk_engine::WritebackStep>,
     /// 测试用执行顺序，必须是全部注册玩家的排列；默认按玩家名排序。
     execution_order_for_test: Option<Vec<String>>,
+    /// 持久输入日志（G25.a）：每轮成功提交后追加一段；None 即未记录。
+    /// 生命周期=当前分片运行期，teardown/重建分片/切换/恢复时终止
+    /// （文件保留）。每段携带身份快照，切换后的段以新身份自描述。
+    input_log: Option<input_log::InputLog>,
     /// 最近一次启用顺序覆盖时的完整排列，包含本轮未请求执行的玩家。
     last_execution_order: Option<Vec<String>>,
     /// 下次通过输入校验的 `create_shard` 使用的沙箱配置；开始注册前整表取走。
@@ -177,11 +183,13 @@ impl EmbedEngine {
             last_console: BTreeMap::new(),
             perf: PerfRecorder::default(),
             fail_next_settle: false,
+            fail_next_log_write: false,
             fail_next_switch_for_test: false,
             fail_next_settle_room: None,
             fail_next_settle_stage: None,
             fail_next_writeback: None,
             execution_order_for_test: None,
+            input_log: None,
             last_execution_order: None,
             sandbox_configs_for_test: BTreeMap::new(),
             ext_intents: false,
@@ -376,6 +384,12 @@ impl EmbedEngine {
         self.fail_next_settle = true;
     }
 
+    /// 下一次日志段写入模拟 I/O 失败：走真实的停用与「已提交不可重试」
+    /// 错误路径，用后清除。
+    pub fn fail_next_log_write_for_test(&mut self) {
+        self.fail_next_log_write = true;
+    }
+
     /// 让下一次实际调用引擎时在指定房间结算失败，用后清除。
     /// 若玩家执行提前失败，或整轮故障钩子先返回错误，该钩子留待下一次结算。
     #[doc(hidden)]
@@ -517,6 +531,65 @@ impl EmbedEngine {
             .map_err(anyhow::Error::msg)
     }
 
+    /// 启用持久输入日志（G25.a）：每轮成功提交后追加一段可回放输入。
+    /// 无开放轮次才可启用；文件存在时先整读校验再续接（撕裂/断链拒绝）。
+    /// 生命周期到 teardown/重建分片/包切换/检查点恢复为止。
+    pub fn enable_input_log(
+        &mut self,
+        path: &std::path::Path,
+        metadata: Value,
+    ) -> anyhow::Result<()> {
+        self.no_open_round("enable_input_log")?;
+        anyhow::ensure!(
+            self.input_log.is_none(),
+            "已有输入日志在记录；一个分片运行期只挂一份"
+        );
+        let mut header = serde_json::Map::new();
+        header.insert("format".into(), json!(input_log::LOG_FORMAT));
+        header.insert("version".into(), json!(input_log::LOG_VERSION));
+        header.insert("seq".into(), json!(0));
+        header.insert("kind".into(), json!("header"));
+        header.insert("prev_hash".into(), Value::Null);
+        header.insert("identity".into(), self.input_log_identity());
+        header.insert("metadata".into(), metadata);
+        let log = input_log::InputLog::open(path, header).map_err(anyhow::Error::msg)?;
+        self.input_log = Some(log);
+        Ok(())
+    }
+
+    /// 日志文件中的段数（含续接时既有的段）；未启用为 None。
+    pub fn input_log_segments(&self) -> Option<u64> {
+        self.input_log
+            .as_ref()
+            .map(input_log::InputLog::segments_written)
+    }
+
+    /// 当前身份快照：头段与每段各带一份；切换后的段以新快照自描述。
+    fn input_log_identity(&self) -> Value {
+        let (plan_hash, strategy, disabled) = self.log_identity_fields();
+        json!({
+            "engine_version": env!("CARGO_PKG_VERSION"),
+            "seed": self.world_seed(),
+            "plan_hash": plan_hash,
+            "execution_strategy": strategy,
+            "disabled_mods": disabled,
+        })
+    }
+
+    /// 段级身份三元组（plan_hash/执行策略/停用集），头段与逐段共用同源。
+    fn log_identity_fields(&self) -> (String, Option<String>, BTreeMap<String, Value>) {
+        let disabled = self
+            .disabled_mods()
+            .into_iter()
+            .map(|id| (id, Value::Bool(true)))
+            .collect();
+        (
+            self.contribution_plan_hash().hex(),
+            self.mod_execution_strategy(),
+            disabled,
+        )
+    }
+
     /// 当前已停用的 Mod ID；包含随依赖关系被停用的 Mod。
     pub fn disabled_mods(&self) -> BTreeSet<String> {
         self.mod_realm
@@ -633,6 +706,7 @@ impl EmbedEngine {
             p.shutdown_all();
         }
         let seed = self.engine.world().seed();
+        self.input_log = None;
         self.engine = Engine::new(kk_world::World::new(seed));
         self.mod_realm = None;
         self.mod_trace_enabled = false;
@@ -656,11 +730,14 @@ impl Drop for EmbedEngine {
 
 mod checkpoint;
 mod execution;
+mod input_log;
 mod mod_chain;
 mod projection;
 mod setup;
 mod switch;
 
+pub use input_log::{InputLogData, InputLogError, read_input_log};
 use mod_chain::ModSlotExecutor;
 use projection::{kkpv_audience_hash, market_view};
+
 pub use setup::terrain_codes_from_json;

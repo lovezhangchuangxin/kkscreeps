@@ -194,8 +194,10 @@ impl EmbedEngine {
         if let Some(p) = &mut self.players {
             p.shutdown_all();
         }
-        // 与 teardown 同口径：重建分片保留世界种子，随机协议根不随重建更换。
+        // 与 teardown 同口径：重建分片保留世界种子，随机协议根不随重建更换；
+        // 输入日志随旧分片生命周期终止（文件保留，重建后的世界需重新挂日志）。
         let seed = self.engine.world().seed();
+        self.input_log = None;
         self.engine = Engine::new(kk_world::World::new(seed));
         self.mod_realm = None;
         self.ext_intents = false;

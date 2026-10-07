@@ -24,6 +24,8 @@ mod embed_roundtrip_contract;
 mod embed_strictness_and_partial_commit;
 #[path = "embed_tests/execution_boundary.rs"]
 mod execution_boundary;
+#[path = "embed_tests/input_log_family.rs"]
+mod input_log_family;
 #[path = "embed_tests/m2b2_terminal_market_family.rs"]
 mod m2b2_terminal_market_family;
 #[path = "embed_tests/m2b_closing_family.rs"]
@@ -49,6 +51,7 @@ use dual_room_live_fire::*;
 use embed_channels_and_families::*;
 use embed_roundtrip_contract::*;
 use embed_strictness_and_partial_commit::*;
+use input_log_family::*;
 use m2b_closing_family::*;
 use m2b_creation_family::*;
 use m2b_creep_tails::*;
@@ -141,6 +144,12 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     c3_counter_chain::c3_counter_config_and_projection_impl()?;
     c3_counter_chain::c3_counter_creation_and_round_gates_impl()?;
     c3_counter_chain::c3_counter_link_only_shard_skips_primitive_impl()?;
+    three_sources_round_trip_impl()?;
+    failed_round_and_retry_semantics_impl()?;
+    log_io_failure_commits_round_and_detaches_impl()?;
+    tamper_matrix_impl()?;
+    torn_tail_byte_forms_impl()?;
+    resume_and_lifecycle_impl()?;
     assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");
     Ok(())
 }

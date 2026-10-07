@@ -18,6 +18,7 @@ fn result(intents: IntentBatch) -> RunResult {
         player: "p2".into(),
         outcome: crate::RunOutcome::Executed,
         intents,
+        intents_raw: serde_json::Value::Null,
         expr: serde_json::Value::Null,
         cpu_billed_ms: None,
         raw_memory: None,

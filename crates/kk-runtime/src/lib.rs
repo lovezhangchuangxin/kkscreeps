@@ -355,6 +355,7 @@ fn eval_report_to_run_result(player: &str, report: kk_runner::EvalReport) -> Run
         Some("inject_failed") => RunOutcome::InjectFailed,
         _ => RunOutcome::Executed,
     };
+    let intents_raw = report.intents.clone();
     let intents = match report.intents.as_object() {
         Some(list) => IntentBatch::from_json(player, &Value::Object(list.clone())),
         None => IntentBatch::default(),
@@ -363,6 +364,7 @@ fn eval_report_to_run_result(player: &str, report: kk_runner::EvalReport) -> Run
         player: player.to_string(),
         outcome,
         intents,
+        intents_raw,
         expr: report.expr,
         // 仅转换回执；协调器计算桶候选并将 Memory、段及桶值交给引擎发布。
         cpu_billed_ms: report.cpu_billed_ms,
@@ -386,6 +388,7 @@ mod tests {
         fn execute(&mut self, _world: &Value, spec: &RunSpec, _epoch: RunEpoch) -> RunResult {
             RunResult {
                 player: spec.player.clone(),
+                intents_raw: serde_json::Value::Null,
                 outcome: RunOutcome::Executed,
                 intents: IntentBatch::default(),
                 expr: self.expr.clone(),

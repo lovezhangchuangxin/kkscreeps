@@ -858,9 +858,14 @@ pub fn creep_cost(body: &[BodyKind]) -> i64 {
         })
         .sum()
 }
+mod to_json;
+
 #[cfg(test)]
 mod from_json_tests;
+
 #[cfg(test)]
 mod market_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod to_json_tests;

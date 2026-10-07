@@ -142,6 +142,15 @@ fn handle_line(engine: &mut EmbedEngine, line: &str) -> anyhow::Result<Value> {
             json!(engine.find_in_room(room, find_const))
         }
         "getGameTime" => json!(engine.get_game_time()),
+        "enableInputLog" => {
+            // G25.a：挂载持久输入日志。path 必填；metadata 可选（诊断用，
+            // 原样入头段）。重复挂载/有开放轮次由引擎侧拒绝。
+            let path = s(&params, "path")?;
+            let metadata = params.get("metadata").cloned().unwrap_or_else(|| json!({}));
+            engine.enable_input_log(std::path::Path::new(path), metadata)?;
+            json!({ "done": true })
+        }
+        "inputLogSegments" => json!(engine.input_log_segments()),
         "captureConsoleLogs" => {
             let handle = s(&params, "handle")?;
             json!(engine.capture_console_logs(handle))

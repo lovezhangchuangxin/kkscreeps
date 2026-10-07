@@ -234,6 +234,9 @@ enum SimCommand {
         /// 开启 Mod 运行 trace（有界事件缓冲；报告附 mod_trace）
         #[arg(long)]
         mod_trace: bool,
+        /// 每轮提交后追加持久输入日志段（G25.a）；文件存在时先整读校验再续接
+        #[arg(long)]
+        input_log: Option<std::path::PathBuf>,
     },
 }
 
@@ -325,6 +328,7 @@ fn main() {
                     save_checkpoint,
                     load_checkpoint,
                     mod_trace,
+                    input_log,
                 },
         } => {
             std::process::exit(sim::run(sim::Options {
@@ -336,6 +340,7 @@ fn main() {
                 save_checkpoint,
                 load_checkpoint,
                 mod_trace,
+                input_log,
             }));
         }
         Command::BotCheck {

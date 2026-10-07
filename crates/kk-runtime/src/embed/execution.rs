@@ -75,6 +75,38 @@ impl EmbedEngine {
                 return Err(error);
             }
         };
+        // G25.a：日志载荷须在 results/writebacks 被结算消费前构造；轮身份
+        // 取结算前的世界值（结算执行的是世界当前 tick），墙钟用缓存首次值。
+        let (round_tick, round_generation) =
+            (self.engine.world().time(), self.engine.world().generation());
+        let log_input = self.input_log.is_some().then(|| {
+            let intents = Value::Object(
+                results
+                    .iter()
+                    .map(|(handle, result)| (handle.clone(), result.intents_raw.clone()))
+                    .collect(),
+            );
+            let entries = results
+                .iter()
+                .map(|(handle, result)| {
+                    // run_players 的写回路径恒带新桶；缺桶说明构造逻辑被改动。
+                    let bucket = writebacks[handle]
+                        .cpu
+                        .as_ref()
+                        .expect("run_players 写回必须携带新 CPU 桶");
+                    (
+                        handle.as_str(),
+                        input_log::PlayerLogEntry {
+                            cpu_bucket: bucket,
+                            cpu_billed_ms: result.cpu_billed_ms,
+                            raw_memory: result.raw_memory.as_deref(),
+                            segments_out: result.segments_out.as_ref(),
+                        },
+                    )
+                })
+                .collect();
+            (input.now_ms, intents, input_log::players_map(&entries))
+        });
         let settled = self.settle_world_with_writebacks(
             Self::batch_from_results(&results),
             input,
@@ -82,6 +114,18 @@ impl EmbedEngine {
         );
         match settled {
             Ok(()) => {
+                if let Some((now_ms, intents, players)) = log_input
+                    && let Err(e) = self.log_round(
+                        round_tick,
+                        round_generation,
+                        "players",
+                        now_ms,
+                        intents,
+                        players,
+                    )
+                {
+                    return Err(self.drop_log_for_io_failure(e));
+                }
                 let settle_ns = t_settle.elapsed().as_nanos();
                 // 世界、玩家内存和 CPU 桶已经统一发布，无需线程计费回执。
                 self.perf.record([
@@ -469,6 +513,48 @@ impl EmbedEngine {
         batch
     }
 
+    /// 结算成功后向输入日志追加一段（未启用时无操作）。调用点必须在引擎
+    /// 提交之后；失败轮/被丢弃轮不得调用。返回 Err 表示日志 I/O 故障。
+    fn log_round(
+        &mut self,
+        tick: u64,
+        generation: u64,
+        source: &str,
+        now_ms: u64,
+        intents: Value,
+        players: Value,
+    ) -> Result<(), String> {
+        if self.input_log.is_none() {
+            return Ok(());
+        }
+        if self.fail_next_log_write {
+            self.fail_next_log_write = false;
+            return Err("故障注入：输入日志写入失败（测试钩子）".into());
+        }
+        // 身份先取后借：input_log 的可变借用不能与 self 的方法调用共存。
+        let (plan_hash, strategy, disabled) = self.log_identity_fields();
+        let log = self.input_log.as_mut().expect("上方已判在位");
+        log.append_round(
+            tick,
+            generation,
+            source,
+            now_ms,
+            intents,
+            players,
+            &plan_hash,
+            strategy.as_deref(),
+            &disabled,
+        )
+        .map_err(|e| e.to_string())
+    }
+
+    /// 日志写入失败的统一处置：日志链已与世界脱节，摘除停用；本轮世界
+    /// 事实上已提交，错误文案必须如实说明不得重试结算。
+    fn drop_log_for_io_failure(&mut self, error: String) -> anyhow::Error {
+        self.input_log = None;
+        anyhow::anyhow!("输入日志写入失败，日志已停用；本轮结算已提交、不得重试：{error}")
+    }
+
     /// 按发布者当前公开列表解析外部段；未指定 ID 时使用其默认公开段。
     /// 默认段也必须仍在公开列表中。无请求、无发布者或无授权时返回 None；
     /// 已授权但未写入的段返回 `data: null`，区别于活动段的空字符串。
@@ -507,7 +593,24 @@ impl EmbedEngine {
     /// 有失败轮缓存时拒绝调用；本入口失败不会缓存意图，重试须重新提供。
     pub fn settle_external(&mut self, batch: IntentBatch) -> anyhow::Result<()> {
         self.no_pending_round("settle_external")?;
-        self.settle_world(batch, TickInput::now())
+        let (tick, generation) = (self.engine.world().time(), self.engine.world().generation());
+        // to_json 须在 batch 被结算消费前求值；此处是外部轮的唯一持久形态。
+        let intents = batch.to_json();
+        let input = TickInput::now();
+        self.settle_world(batch, input)?;
+        if self.input_log.is_some()
+            && let Err(e) = self.log_round(
+                tick,
+                generation,
+                "external",
+                input.now_ms,
+                intents,
+                json!({}),
+            )
+        {
+            return Err(self.drop_log_for_io_failure(e));
+        }
+        Ok(())
     }
 
     /// 执行结果不完整时禁止开始新轮，等待调用方显式处置。
@@ -569,7 +672,21 @@ impl EmbedEngine {
     pub fn tick(&mut self, count: u64) -> anyhow::Result<()> {
         self.no_pending_round("tick")?;
         for _ in 0..count {
-            self.settle_world(IntentBatch::default(), TickInput::now())?;
+            let (tick, generation) = (self.engine.world().time(), self.engine.world().generation());
+            let input = TickInput::now();
+            self.settle_world(IntentBatch::default(), input)?;
+            if self.input_log.is_some()
+                && let Err(e) = self.log_round(
+                    tick,
+                    generation,
+                    "advance",
+                    input.now_ms,
+                    json!({}),
+                    json!({}),
+                )
+            {
+                return Err(self.drop_log_for_io_failure(e));
+            }
         }
         Ok(())
     }

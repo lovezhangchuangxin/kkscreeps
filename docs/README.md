@@ -13,6 +13,7 @@
 | 如何保存完整世界并在重启后继续？ | [基础检查点](architecture/checkpoints.md)、[状态域清单](architecture/state-inventory.md)、[本地模拟](architecture/local-simulation.md) |
 | 运行中的世界如何更换 Mod 包集合？ | [无开放轮次的包切换](architecture/mod-switching.md) |
 | Mod 规则代码的随机与时间如何确定且可恢复？ | [确定性玩法时间与随机协议](architecture/gameplay-determinism.md) |
+| 如何记录每轮提交的输入以便回放？ | [持久输入与玩家结果日志](architecture/input-log.md) |
 | 玩家行为应满足什么要求，如何验证？ | [兼容性设计](designs/compatibility.md)、[验收工具](../compat/README.md) |
 | 为什么采用 Rust、V8 和当前模块边界？ | [决策索引](decisions/README.md) |
 | 当前 Mod 处理链和自主对象 tick 怎样执行？ | [Mod 处理链执行](architecture/mod-execution.md)、[自有对象 tick](architecture/mod-object-tick.md)、[对象操作](architecture/mod-objects.md)、[组合诊断](architecture/mod-composition.md)、[有效规则读取](architecture/mod-rules.md)、[新世界内容选择](architecture/mod-content-selection.md)、[资源目录](architecture/mod-resource-catalog.md)、[可建造建筑](architecture/mod-buildings.md)、[JS 伤害策略](architecture/mod-damage-policy.md)、[JS 治疗策略](architecture/mod-heal-policy.md)、[JS 群体伤害](architecture/mod-mass-policy.md)、[JS 反击](architecture/mod-retaliation-policy.md)、[JS 受击/护盾](architecture/mod-incoming-policy.md)、[JS 移动竞争](architecture/mod-move-contest.md)、[JS 移动准入](architecture/mod-move-admission.md)、[JS 移动障碍](architecture/mod-move-obstacle.md)、[JS 移动预检](architecture/mod-move-precheck.md)、[JS 拉拽登记](architecture/mod-move-pull-registration.md)、[JS 移动代价](architecture/mod-move-cost.md)、[玩家预检规则](architecture/player-precheck-rules.md) |

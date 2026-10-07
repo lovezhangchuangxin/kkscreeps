@@ -267,6 +267,8 @@ mod combat_ranges;
 mod determinism;
 #[path = "sim_tests/incoming_policy.rs"]
 mod incoming_policy;
+#[path = "sim_tests/input_log.rs"]
+mod input_log;
 #[path = "sim_tests/mod_trace.rs"]
 mod mod_trace;
 #[path = "sim_tests/move_admission.rs"]

@@ -135,3 +135,88 @@ fn embed_rpc_roundtrip() -> anyhow::Result<()> {
     assert!(lines.next().is_none(), "无多余输出");
     Ok(())
 }
+
+/// G25.a RPC 面：enableInputLog 挂载、逐轮记段、teardown 摘除与
+/// 同路径续接（先整读校验）。
+#[test]
+fn embed_rpc_input_log_lifecycle() -> anyhow::Result<()> {
+    let dir = std::env::temp_dir().join(format!("kkscreeps-embed-log-{}", std::process::id()));
+    std::fs::create_dir_all(&dir)?;
+    let log = dir.join("input.jsonl");
+
+    let mut child = spawn_embed();
+    let mut stdin = child.stdin.take().expect("stdin");
+    let requests = [
+        r#"{"id":1,"method":"createShard","params":{"players":["p1"],"rooms":[{"name":"W1N1","rcl":1,"owner":"p1"}]}}"#,
+        r#"{"id":2,"method":"enableInputLog","params":{}}"#,
+        &format!(
+            r#"{{"id":3,"method":"enableInputLog","params":{{"path":"{}"}}}}"#,
+            log.display().to_string().replace('\\', "\\\\")
+        ),
+        // 重复挂载拒绝：一个分片运行期只挂一份。
+        &format!(
+            r#"{{"id":4,"method":"enableInputLog","params":{{"path":"{}/second.jsonl"}}}}"#,
+            dir.display()
+        ),
+        r#"{"id":5,"method":"inputLogSegments","params":{}}"#,
+        r#"{"id":6,"method":"tick","params":{"count":2}}"#,
+        r#"{"id":7,"method":"inputLogSegments","params":{}}"#,
+        r#"{"id":8,"method":"teardown","params":{}}"#,
+        r#"{"id":9,"method":"inputLogSegments","params":{}}"#,
+        // teardown 摘除后同路径续接：先整读校验，段数按整个文件计。
+        &format!(
+            r#"{{"id":10,"method":"enableInputLog","params":{{"path":"{}"}}}}"#,
+            log.display().to_string().replace('\\', "\\\\")
+        ),
+        r#"{"id":11,"method":"inputLogSegments","params":{}}"#,
+    ]
+    .map(str::to_string);
+    // 写入失败也先等待子进程退出，避免留下未回收的进程。
+    let mut write_err = None;
+    for req in &requests {
+        if let Err(e) = writeln!(stdin, "{req}") {
+            write_err = Some(e);
+            break;
+        }
+    }
+    drop(stdin);
+
+    let out = child.wait_with_output()?;
+    if let Some(e) = write_err {
+        return Err(anyhow::anyhow!("写入请求失败: {e}"));
+    }
+    assert!(out.status.success());
+    let stdout = String::from_utf8(out.stdout)?;
+    let mut lines = stdout.lines();
+    let mut next = |label: &str| -> anyhow::Result<Value> {
+        Ok(serde_json::from_str(lines.next().expect(label))?)
+    };
+
+    assert_eq!(next("createShard")?["ok"], true);
+    let resp = next("缺 path 拒绝")?;
+    assert_eq!(resp["id"], 2);
+    assert_eq!(resp["ok"], false, "缺少 path 参数必须被拒绝");
+    assert_eq!(next("挂载")?["ok"], true);
+    let resp = next("重复挂载拒绝")?;
+    assert_eq!(resp["id"], 4);
+    assert_eq!(resp["ok"], false);
+    assert_eq!(next("初始段数")?["result"], 0);
+    assert_eq!(next("tick")?["ok"], true);
+    assert_eq!(next("两段后")?["result"], 2, "每个推进轮一段");
+    assert_eq!(next("teardown")?["ok"], true);
+    assert_eq!(
+        next("摘除后段数")?["result"],
+        Value::Null,
+        "teardown 摘除日志"
+    );
+    assert_eq!(next("续接")?["ok"], true, "干净日志可续接");
+    assert_eq!(next("续接后段数")?["result"], 2, "既有段计入");
+    assert!(lines.next().is_none(), "无多余输出");
+
+    // RPC 面写入的日志与库面同一读回校验器兼容。
+    let data = kk_runtime::embed::read_input_log(&log)?;
+    assert_eq!(data.segments.len(), 2);
+    assert!(data.segments.iter().all(|s| s["source"] == "advance"));
+    let _ = std::fs::remove_dir_all(&dir);
+    Ok(())
+}

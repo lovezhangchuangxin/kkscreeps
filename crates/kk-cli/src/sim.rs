@@ -26,6 +26,8 @@ pub struct Options {
     pub load_checkpoint: Option<PathBuf>,
     /// 开启 Mod 运行 trace（有界；报告附 mod_trace 字段）。
     pub mod_trace: bool,
+    /// 开启持久输入日志（G25.a）：每轮提交后追加一段；报告附 input_log 摘要。
+    pub input_log: Option<PathBuf>,
 }
 
 #[derive(Deserialize)]
@@ -148,6 +150,10 @@ pub fn run(options: Options) -> i32 {
                 "report_version": SIM_REPORT_VERSION, "success": false, "status": "setup_failed",
                 "scenario": options.scenario, "ticks_requested": options.ticks,
                 "world_ticks_committed": 0, "error": format!("{error:#}"),
+                // v8 契约：--input-log 启用时该键非 null；setup 阶段即失败
+                // 则一行段都没有（含「损坏日志拒绝续接」路径）。
+                "input_log": options.input_log.as_ref().map(|path|
+                    json!({"path": path, "status": "setup_failed"})),
             }),
             1,
         ),
@@ -177,8 +183,9 @@ pub fn run(options: Options) -> i32 {
 /// sim run 报告 schema 版本：成功与 setup_failed 两条路径同源引用，
 /// 升版时不得只改一处（同通道版本分裂会误导按版本判读的消费方）。
 /// v6 顶层 `mods_switches`；v7 起顶层与最终观察新增 `seed`（世界种子，
-/// G22.b 随机协议的可复现身份）。
-const SIM_REPORT_VERSION: u32 = 7;
+/// G22.b 随机协议的可复现身份）；v8 起顶层新增 `input_log`（--input-log
+/// 启用时非 null：段数、首末 tick 与读回校验结果）。
+const SIM_REPORT_VERSION: u32 = 8;
 
 fn digest(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
@@ -456,6 +463,18 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
     } else {
         observe(&engine, &scene, &aliases, &mod_names)
     };
+    // 输入日志在分片就绪后、首轮执行前挂载；文件已存在时先整读校验
+    // （撕裂/断链拒绝），续接段从此处继续。元数据只作诊断，不入链。
+    if let Some(path) = &options.input_log {
+        engine.enable_input_log(
+            path,
+            json!({
+                "scenario_sha256": digest(&bytes),
+                "executable_sha256": executable_hash,
+                "ticks_requested": options.ticks,
+            }),
+        )?;
+    }
     let start_time = engine.get_game_time();
     let start = std::time::Instant::now();
     let mut failure = None;
@@ -571,6 +590,7 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
         "checkpoint_loaded": options.load_checkpoint,
         "checkpoint_saved": if failure.is_none() { options.save_checkpoint.as_ref() } else { None },
         "run_wall_ms": run_wall_ms, "phases": engine.perf_report(),
+        "input_log": options.input_log.as_ref().map(|path| input_log_summary(&engine, path)),
         "failure": failure, "players": stats, "aliases": aliases, "assertions": assertions,
         "mod_fault": engine.last_mod_settlement_fault().map(|fault| json!({
             "tick": fault.tick, "room": fault.room, "target": fault.target, "error": fault.error,
@@ -590,6 +610,46 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
         }),
         "initial": initial, "final": final_state,
     }))
+}
+
+/// 输入日志的运行后摘要：整读校验（链/摘要/段号），写读两侧段数并
+/// 列以便对账；写侧计数为 None 表示运行中 I/O 失败已停用日志。
+fn input_log_summary(engine: &EmbedEngine, path: &Path) -> Value {
+    match engine.input_log_segments() {
+        Some(segments) => match kk_runtime::embed::read_input_log(path) {
+            Ok(data) => {
+                let first_tick = data.segments.first().and_then(|s| s["tick"].as_u64());
+                let last_tick = data.segments.last().and_then(|s| s["tick"].as_u64());
+                json!({
+                    "path": path, "segments": segments,
+                    "read_back_segments": data.segments.len(),
+                    "first_tick": first_tick, "last_tick": last_tick,
+                    "validation": "ok",
+                })
+            }
+            Err(error) => json!({
+                "path": path, "segments": segments, "validation": "failed",
+                "validation_error": error.to_string(),
+            }),
+        },
+        // None＝运行期日志已摘除：包切换/检查点恢复/重建分片（生命周期
+        // 语义）或写入失败（failure 里带「已提交」错误文案）都会走到这里；
+        // 磁盘文件仍在，照常整读校验并按实际段数对账。
+        None => match kk_runtime::embed::read_input_log(path) {
+            Ok(data) => json!({
+                "path": path, "status": "detached",
+                "read_back_segments": data.segments.len(),
+                "first_tick": data.segments.first().and_then(|s| s["tick"].as_u64()),
+                "last_tick": data.segments.last().and_then(|s| s["tick"].as_u64()),
+                "validation": "ok",
+                "note": "运行期日志已摘除（包切换/检查点恢复/重建分片，或写入失败——详情见 failure）；此后轮次不记段",
+            }),
+            Err(error) => json!({
+                "path": path, "status": "detached", "validation": "failed",
+                "validation_error": error.to_string(),
+            }),
+        },
+    }
 }
 
 fn observe(

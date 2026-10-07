@@ -82,6 +82,21 @@ pub(super) fn validate_paths(options: &Options) -> anyhow::Result<()> {
         distinct(input, &options.report).context("检查点路径不能与报告相同")?;
         distinct(input, &options.scenario).context("检查点路径不能与场景相同")?;
     }
+    // 输入日志也是运行输出：与报告/检查点的临时文件+原子替换写互踩会
+    // 静默毁掉对方，与场景同路径则吞掉输入。
+    if let Some(log) = options.input_log.as_ref() {
+        distinct(log, &options.report).context("输入日志路径不能与报告相同")?;
+        distinct(log, &options.scenario).context("输入日志路径不能与场景相同")?;
+        for input in [
+            options.load_checkpoint.as_ref(),
+            options.save_checkpoint.as_ref(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            distinct(log, input).context("输入日志路径不能与检查点相同")?;
+        }
+    }
     // 这里只读路径声明，即使后续场景校验或包装载失败也保护输入。
     // 解析失败仍由 execute 输出原有 setup_failed 诊断。
     if let Ok(bytes) = std::fs::read(&options.scenario)
@@ -98,7 +113,11 @@ pub(super) fn validate_paths(options: &Options) -> anyhow::Result<()> {
                 roots.push(base.join(root));
             }
         }
-        for output in std::iter::once(&options.report).chain(options.save_checkpoint.iter()) {
+        // 输入日志与检查点同为运行期输出，同样不得落进包根（会污染输入）。
+        for output in std::iter::once(&options.report)
+            .chain(options.save_checkpoint.iter())
+            .chain(options.input_log.iter())
+        {
             for root in &roots {
                 outside_packages(output, root)?;
             }
