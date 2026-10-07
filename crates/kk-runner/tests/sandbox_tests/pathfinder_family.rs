@@ -694,3 +694,56 @@ pub(super) fn move_to_never_paths_through_walls_impl() -> anyhow::Result<()> {
     assert_eq!(v["value"], "4|9", "墙前目标：4 步且终点 x=9");
     Ok(())
 }
+
+/// 计划级墙通行声明：SandboxConfig 旗标驱动 JSON 通道的
+/// 寻路地形。同一单房墙列世界——默认穿墙 incomplete、步进止于墙前；
+/// 声明开启后直达；物理地形查询在两种配置下都保持原值。
+pub(super) fn terrain_walls_passability_impl() -> anyhow::Result<()> {
+    let walled_world = json!({
+        "time": 7,
+        "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+        "user": "p1",
+        "rooms": { "W1N1": { "name": "W1N1", "terrain": terrain_with_wall(10) } },
+        "objects": [
+            { "id": "c1", "type": "creep", "room": "W1N1", "x": 5, "y": 25, "name": "w1",
+              "owner": "p1", "body": ["move", "work"], "store": { "energy": 50 } },
+        ],
+    });
+    let probe = "(() => { \
+        const search = PathFinder.search( \
+            new RoomPosition(5, 25, 'W1N1'), \
+            { pos: new RoomPosition(15, 25, 'W1N1'), range: 0 }, \
+            { maxRooms: 1 }); \
+        const steps = Game.creeps['w1'].pos.findPathTo(15, 25); \
+        const last = steps[steps.length - 1]; \
+        return [search.incomplete, search.path.length, steps.length, last && last.x, \
+            Game.map.getTerrainAt(10, 25, 'W1N1')].join('|'); })()";
+
+    let mut sb = Sandbox::new(SandboxConfig::default())?;
+    let mut table = ModuleTable::new();
+    table.insert_js("main", "module.exports.loop = function () {};");
+    sb.set_modules(table)?;
+    tick(&mut sb, &walled_world)?;
+    let v = sb.run_expr(probe)?;
+    assert_eq!(
+        v["value"], "true|4|4|9|wall",
+        "默认墙列不可穿越，部分路径止于墙前一格: {:?}",
+        v
+    );
+
+    let mut sb = Sandbox::new(SandboxConfig {
+        terrain_walls_passable: true,
+        ..SandboxConfig::default()
+    })?;
+    let mut table = ModuleTable::new();
+    table.insert_js("main", "module.exports.loop = function () {};");
+    sb.set_modules(table)?;
+    tick(&mut sb, &walled_world)?;
+    let v = sb.run_expr(probe)?;
+    assert_eq!(
+        v["value"], "false|10|10|15|wall",
+        "声明开启后穿墙直达，物理查询保持 wall: {:?}",
+        v
+    );
+    Ok(())
+}

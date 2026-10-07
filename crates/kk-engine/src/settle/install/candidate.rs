@@ -1,7 +1,7 @@
 //! 安装候选独占全部派生域；返回错误时不触碰已安装引擎。
 use crate::settle::{Engine, contrib::ContributionDispatch};
 use kk_mod_api::buildings::BuildingCatalog;
-use kk_mod_api::builtin::{CombatRanges, LinkRules, MoveGate, StoreRules};
+use kk_mod_api::builtin::{CombatRanges, LinkRules, MoveGate, StoreRules, TerrainPassability};
 use kk_mod_api::extension::ExtensionCatalog;
 use kk_mod_api::resources::ResourceCatalog;
 use kk_mod_api::{ContributionPlan, Key};
@@ -16,6 +16,7 @@ pub(super) struct Installation {
     stores: StoreRules,
     combat: CombatRanges,
     move_gate: MoveGate,
+    terrain_passability: TerrainPassability,
     resources: Rc<ResourceCatalog>,
     buildings: Rc<BuildingCatalog>,
     contrib: Rc<ContributionDispatch>,
@@ -34,6 +35,7 @@ impl Installation {
         let stores = StoreRules::from_plan(plan.rules())?;
         let combat = CombatRanges::from_plan(plan.rules())?;
         let move_gate = MoveGate::from_plan(plan.rules())?;
+        let terrain_passability = TerrainPassability::from_plan(plan.rules())?;
         let resources = Rc::new(ResourceCatalog::from_plan(&plan));
         let buildings = Rc::new(
             BuildingCatalog::from_plan(&plan)
@@ -63,6 +65,7 @@ impl Installation {
             stores,
             combat,
             move_gate,
+            terrain_passability,
             resources,
             buildings,
             contrib,
@@ -76,6 +79,7 @@ impl Installation {
         engine.stores = self.stores;
         engine.combat = self.combat;
         engine.move_gate = self.move_gate;
+        engine.terrain_passability = self.terrain_passability;
         engine.resources = self.resources;
         engine.buildings = self.buildings;
         engine.contrib = self.contrib;

@@ -60,6 +60,9 @@ pub struct Movement {
     /// 静态放行只作用于同一请求；动态占格仍在取消链中即时复核。
     static_allowed: BTreeSet<ObjId>,
     buildings: std::rc::Rc<kk_mod_api::buildings::BuildingCatalog>,
+    /// 计划级墙地形通行声明；仲裁静态障碍的墙项与玩家面原生寻路
+    /// 地形同源。登记阶段本就不查地形，不在此字段参与。
+    walls_passable: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -106,10 +109,14 @@ impl Movement {
         Self::default()
     }
 
-    /// 携带建筑目录构造；仲裁期按它扩展障碍判定。
-    pub fn with_buildings(buildings: std::rc::Rc<kk_mod_api::buildings::BuildingCatalog>) -> Self {
+    /// 携带建筑目录与地形通行声明构造；仲裁期按它们扩展障碍判定。
+    pub fn with_buildings(
+        buildings: std::rc::Rc<kk_mod_api::buildings::BuildingCatalog>,
+        walls_passable: bool,
+    ) -> Self {
         Self {
             buildings,
+            walls_passable,
             ..Self::default()
         }
     }
@@ -391,6 +398,8 @@ impl Movement {
             // 链预演不消费代价覆盖；取消链不读代价表。
             costs: BTreeMap::new(),
             buildings: self.buildings.clone(),
+            // 链预演与正式链读同一通行声明；取消链的墙项语义一致。
+            walls_passable: self.walls_passable,
             // 取消链不再读取登记期过滤快照。
             registration_blocks: BTreeSet::new(),
             static_allowed: self.static_allowed.clone(),
@@ -565,7 +574,8 @@ pub fn move_weight(creep: &CreepObj) -> usize {
 
 /// 检查仲裁阶段的障碍。获准移走的 creep 不阻挡；房主安全模式下可穿过
 /// 敌方 creep，但仍被己方未移动的 creep 阻挡。自家障碍工地、私有敌方
-/// rampart 和无路的墙地形也阻挡。
+/// rampart 和无路的墙地形也阻挡；墙项遵循计划级通行声明
+/// （`terrain.wallPassable`，见 static_obstacles）。
 pub fn check_obstacle_at_xy(
     room: &RoomState,
     index: &RoomIndex,
@@ -597,6 +607,7 @@ pub fn check_obstacle_at_xy(
                 room,
                 index,
                 &movement.buildings,
+                movement.walls_passable,
                 at,
                 mover_owner,
             ))

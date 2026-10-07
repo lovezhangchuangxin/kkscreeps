@@ -47,6 +47,7 @@ fn resource_plane() -> kk_engine::settle::Plane {
         stores: kk_mod_api::builtin::StoreRules::from_plan(plan.rules()).unwrap(),
         combat: kk_mod_api::builtin::CombatRanges::from_plan(plan.rules()).unwrap(),
         move_gate: Default::default(),
+        terrain_passability: Default::default(),
         resources: std::rc::Rc::new(kk_mod_api::resources::ResourceCatalog::from_plan(&plan)),
         contrib: std::rc::Rc::new(kk_engine::settle::contrib::ContributionDispatch::default()),
         extensions: std::rc::Rc::new(kk_mod_api::extension::ExtensionCatalog::default()),

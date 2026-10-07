@@ -78,6 +78,10 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
         move_to_never_paths_through_walls_impl,
     )?;
     scenarios.run(
+        "terrain_walls_passability_impl",
+        terrain_walls_passability_impl,
+    )?;
+    scenarios.run(
         "pathfinder_callback_family_impl",
         pathfinder_callback_family_impl,
     )?;
@@ -187,7 +191,7 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
         "movement_codec_capture_and_cache_lifetime",
         movement_codec_capture_and_cache_lifetime,
     )?;
-    scenarios.finish(58)?;
+    scenarios.finish(59)?;
     assert_eq!(kk_runner::lifo_violations(), 0, "全流程 LIFO 纪律零违规");
     Ok(())
 }

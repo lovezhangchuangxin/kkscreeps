@@ -116,13 +116,31 @@ export default function register(api) {
 - `api.decline(code)` 丢弃整条链全部 JS 放行、显式否决和暂存 namespace state，再按登记快照恢复原生过滤；其他移动槽仍正常运行。这是整房回退边界。
 - 域外 ID、非字符串、跨槽或异步过期调用走能力故障，不能被 catch + decline 掩盖；整轮不发布，按[Mod 执行恢复](mod-execution.md)重建 realm。
 - 晚期写回失败重用玩家结果缓存，重新决策后世界与 state 恰一次提交；停用包重装后按有效链执行，全部贡献摘除则恢复 native 登记。
-- 新集合是 tick 内瞬态，无新持久写入域；检查点只保存已提交世界与 Mod state。内建槽仍为 20，catalog revision 随本族演进（G02.d1 自 v14 升 v15、G02.d2 升 **v16** 现行），覆盖输入/能力语义变更；旧计划身份的检查点按已有身份门拒绝，没有自动迁移。
+- 新集合是 tick 内瞬态，无新持久写入域；检查点只保存已提交世界与 Mod state。内建槽仍为 20，catalog revision 随本族演进（G02.d1 自 v14 升 v15、G02.d2 升 v16、G02.d3 升 **v17** 现行），覆盖输入/能力语义变更；旧计划身份的检查点按已有身份门拒绝，没有自动迁移。
 
 ### 请求预检：验收与后续
 
 [四个真实玩家场景](../../compat/fixtures/sim-mod-move-static/README.md)核对原生、ghost、seal、组合，JSON/KKPV final、冷启动续跑、namespace 恰一次与回放一致。引擎和运行时另覆盖墙地形/结构/私有 rampart/己方工地、不可逆否决、动态取消链、准入预演、移动槽入口、拉拽、源房障碍放行后跨房、decline/能力门/停用/失败重试。证据见 [G02.d1 交付记录](../research/notes/g02d1-static-movement-2026-10-07.md)；G02.c 的[历史证据](../research/notes/g02c-move-precheck-2026-10-06.md)保留当时的单向接口。
 
-玩家 `move(direction)` 没有静态地形/结构预检，本片在正常身体和疲劳条件下可直接发出请求（疲劳/MOVE 门自 G02.d2 起读计划派生常量，见[移动玩家门](player-precheck-rules.md#移动玩家门g02d2)）。`moveTo`/PathFinder 仍使用原生寻路障碍，**不会自动规划穿墙路径**——放行决策在结算段产生，时序与粒度均不可被寻路感知；该边界已有回归测试钉死（墙列下 moveTo 沿部分路径止于墙前、ghost 放行下同 tick 玩家搜索仍绕行墙格）。声明式寻路规则（计划级可走性）登记为 G02.d3 设计。跨房到达格仍沿用既有原生过渡语义（不复检目的房占格/地形），本片不改写它。G02/G03 父项保持部分完成；孵化门槛、完整仲裁替换和障碍槽第二次预演属于后续切片。
+玩家 `move(direction)` 没有静态地形/结构预检，本片在正常身体和疲劳条件下可直接发出请求（疲劳/MOVE 门自 G02.d2 起读计划派生常量，见[移动玩家门](player-precheck-rules.md#移动玩家门g02d2)）。`moveTo`/PathFinder 仍使用原生寻路障碍，**不会自动规划穿墙路径**——放行决策在结算段产生，时序与粒度均不可被寻路感知；该边界已有回归测试钉死（墙列下 moveTo 沿部分路径止于墙前、ghost 放行下同 tick 玩家搜索仍绕行墙格）。tick 级放行与服务器 JS 回调永久不进玩家寻路（宿主约束）；**计划级**的墙地形可走性自 G02.d3 起可声明，见[静态通行声明](#静态通行声明g02d3)。跨房到达格仍沿用既有原生过渡语义（不复检目的房占格/地形），本片不改写它。G02/G03 父项保持部分完成；孵化门槛、完整仲裁替换和障碍槽第二次预演属于后续切片。
+
+## 静态通行声明（G02.d3）
+
+2026-10-08 开放计划级墙地形通行规则 `builtin:terrain.wallPassable`（整数域 {0,1}，默认 0 即官方「墙不可通行」）。公共 SDK 写法：
+
+```js
+api.rules.override('builtin:terrain.wallPassable', 1);
+```
+
+无处理器——冻结规则在装配期形成 [`TerrainPassability`](../../crates/kk-mod-api/src/builtin.rs) 快照，同源驱动三处消费面：
+
+1. **仲裁静态障碍的墙项**：`static_obstacles::arbitration_blocked` 在声明开启时跳过墙地形项（`has_road` 豁免与声明无关，两条路径都放行）；登记阶段本就不查地形。G02.d1 的 `allowStatic` 仍按请求放行，两机制独立可叠加。
+2. **预检槽输入**：`native_static_blocked` 经同一函数自动同源；`terrainWall/terrainSwamp` 摘要保持**物理值**——JS 可见「这是墙但 native 放行」。
+3. **玩家面原生寻路地形**：`TerrainPack::native_with_walls` 在打包后清除每个真实房间两位码的 wall 位（1→平原、3→沼泽），全部原生搜索（moveTo/findPath/PathFinder.search，含自定义 roomCallback）统一感知；全墙保护环是未注册房占位，不随声明放开。三通道同源：Frozen 快照由 embed 构建时带引擎旗标（缓存键含声明，切包后同代际也重建），json/kkpv 通道经 `SandboxConfig.terrain_walls_passable` 在物化时应用（canary 与玩家工作者配置均从计划装配）。
+
+执行语义：墙位按平原参与移动——疲劳按位掩码判沼泽的既有路径天然给出 墙=平原费率、墙|沼泽=沼泽费率，无专用分支。物理面不随声明改写：`getTerrain().get`、`look` 系地形单词、`Game.map.getTerrainAt`、FIND_EXIT 出口判定（物理位）、建造/孵化放置的墙拒绝与道路 hits 系数保持原值。规则是计划级单值（非逐房/逐 tick），PlanHash 随 builtin revision（v16→v17）变化，旧检查点按既有身份门拒绝。
+
+组合语义（freeze 既有约束）：**两个包覆盖同一规则即冲突**，即使值相同——单轴规则没有冗余共装；跨规则组合正常。验收夹具 [sim-mod-terrain-walls](../../compat/fixtures/sim-mod-terrain-walls/README.md)：原生对照（穿墙 incomplete、沿墙面靠近不越墙列）、ghost/deepwalk 两独立包（同值声明各自生效，证明不按包 ID 特判）、combined（wallPassable + fatigueLimit 跨规则组合）、双通道冷恢复与四 plan_hash 身份；runner 沙箱另有 JSON 通道 `SandboxConfig` 旗标与默认对照场景（默认分支部分路径止于墙前一格，与 G02.d2 钉死的 moveTo 边界一致）。结构/rampart 通行声明与逐房粒度属后续切片，首片不标 G02 全部完成。
 
 ## 竞争排序
 

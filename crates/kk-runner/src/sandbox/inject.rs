@@ -105,10 +105,13 @@ impl Sandbox {
                     crate::pathfinder::TickTerrain::frozen(terrain)
                 } else {
                     match kkpv_public {
-                        Some(public) => crate::pathfinder::TickTerrain::kkpv(public.clone()),
+                        Some(public) => crate::pathfinder::TickTerrain::kkpv(
+                            public.clone(),
+                            self.terrain_walls_passable,
+                        ),
                         None => {
                             let pack = self.json_terrain_pack(world)?;
-                            crate::pathfinder::TickTerrain::json(pack)
+                            crate::pathfinder::TickTerrain::json(pack, self.terrain_walls_passable)
                         }
                     }
                 };

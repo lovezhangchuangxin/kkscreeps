@@ -127,3 +127,5 @@ Mod 后续工作使用[30 项任务与接手台账](plans/mod-next-batches.md)�
 2026-10-07 G02.d1 静态移动放行已交付（完整门禁与 release ratchet 通过）：公共 JS 包可放行墙/结构/私有 rampart/己方工地，准入预演与仲裁同源，动态占格及组合否决保持。剩余疲劳/MOVE 玩家门与 moveTo/PathFinder 寻路消费者登记 G02.d2；G02 父项仍部分完成。契约见[移动预检](architecture/movement.md#请求预检)，最终检查与提交以持续台账为准。
 
 2026-10-07 G02.d2 移动玩家门双端冻结已交付（完整门禁与 release ratchet 通过）：fatigueLimit/minActiveMoves 两条规则同源驱动玩家面 move()/moveTo() 预检与仲裁原生预填；moveTo 不穿墙、PathFinder 不感知放行已由回归测试钉死。声明式寻路规则登记 G02.d3 设计；G02 父项仍部分完成。契约见[玩家预检规则](architecture/player-precheck-rules.md)，最终检查与提交以持续台账为准。
+
+2026-10-08 G02.d3 首片墙地形静态通行声明已交付（完整门禁与 release ratchet 通过）：`builtin:terrain.wallPassable` 规则同源驱动仲裁静态墙项与玩家面原生寻路地形（三通道），物理地形查询保持原值，全墙保护环不放开；默认零行为变化（棘轮零转红）。结构/rampart 通行声明属后续切片，G02 父项仍部分完成。契约见[静态通行声明](architecture/movement.md#静态通行声明g02d3)，最终检查与提交以持续台账为准。

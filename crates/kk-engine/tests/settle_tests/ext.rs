@@ -227,6 +227,7 @@ fn settle_quiet(
         stores: kk_world::place::builtin_store_rules(),
         combat: kk_world::place::builtin_combat_ranges(),
         move_gate: Default::default(),
+        terrain_passability: Default::default(),
         buildings: Default::default(),
         resources: Default::default(),
         contrib: dispatch,

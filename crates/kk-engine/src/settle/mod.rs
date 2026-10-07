@@ -188,6 +188,9 @@ pub struct Engine {
     /// 移动玩家门规则（疲劳/MOVE 预检），仲裁原生准入预填与玩家常量
     /// 注入同源消费；与计划一同装配。
     pub(crate) move_gate: kk_mod_api::builtin::MoveGate,
+    /// 地形静态通行规则：仲裁静态障碍判定的墙项与玩家面原生寻路地形
+    /// 同源消费；与计划一同装配。
+    pub(crate) terrain_passability: kk_mod_api::builtin::TerrainPassability,
     /// 本引擎生效的资源目录：内建 RESOURCES_ALL 加计划声明的命名空间
     /// 资源。搬运/掉落/领域能力按它校验；市场与跨房发送不读它（明确
     /// 只认内建资源）。与计划一同装配，不允许单独换。
@@ -247,6 +250,7 @@ impl Engine {
             stores: kk_world::place::builtin_store_rules(),
             combat: kk_world::place::builtin_combat_ranges(),
             move_gate: kk_world::place::builtin_move_gate(),
+            terrain_passability: kk_mod_api::builtin::TerrainPassability::default(),
             resources: Rc::new(kk_mod_api::resources::ResourceCatalog::default()),
             buildings: Rc::new(kk_mod_api::buildings::BuildingCatalog::default()),
             contrib: Rc::new(contrib::ContributionDispatch::default()),
@@ -305,6 +309,12 @@ impl Engine {
     /// 当前生效的移动玩家门规则（只读快照）；runtime 将它同步到玩家常量。
     pub fn move_gate(&self) -> kk_mod_api::builtin::MoveGate {
         self.move_gate
+    }
+
+    /// 当前生效的地形静态通行规则（只读快照）；runtime 将它同步到玩家
+    /// 沙箱的原生寻路地形。
+    pub fn terrain_passability(&self) -> kk_mod_api::builtin::TerrainPassability {
+        self.terrain_passability
     }
 
     /// 当前生效的资源目录：内建 RESOURCES_ALL 加计划声明的命名空间

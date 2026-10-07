@@ -164,7 +164,18 @@ fn builtin_link_values_match_constant_dump_and_use_native_slots() {
             min_active_moves: 1,
         }
     );
-    assert_eq!(plan.rules().len(), 31);
+    assert_eq!(
+        builtin::TerrainPassability::from_plan(plan.rules()).unwrap(),
+        builtin::TerrainPassability {
+            wall_passable: false,
+        }
+    );
+    assert_eq!(
+        get("builtin:terrain.wallPassable"),
+        &Number::Signed(0),
+        "地形通行默认值即官方墙不可通行"
+    );
+    assert_eq!(plan.rules().len(), 32);
     assert_eq!(plan.slots().len(), 20);
     for name in builtin::RESOURCE_ACTION_SLOTS
         .iter()

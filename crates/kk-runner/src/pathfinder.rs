@@ -201,12 +201,29 @@ fn base64_decode(input: &str) -> Option<Vec<u8>> {
 }
 
 impl TerrainPack {
-    /// 原生表与世界同寿命，墙环属于同一不可变快照。
+    /// 物理地形的原生表（墙不可通行）；测试与诊断用途。
     pub fn native(&self) -> Result<Arc<kk_pathfinder::TerrainSet>, String> {
+        self.native_with_walls(false)
+    }
+
+    /// 按计划级通行声明构建原生表：`walls_passable` 为真时清除每个
+    /// 真实房间两位码的 wall 位（1→0 平原、3→2 沼泽），墙位按对应
+    /// 地形代价参与搜索；全墙保护环是未注册房的占位，不是可被声明
+    /// 放开的世界地形，保持全墙。物理地形查询不经本视图。
+    pub fn native_with_walls(
+        &self,
+        walls_passable: bool,
+    ) -> Result<Arc<kk_pathfinder::TerrainSet>, String> {
         let rooms = self
             .rooms
             .iter()
-            .map(|(name, bits)| (name.clone(), *bits))
+            .map(|(name, bits)| {
+                let mut bits = *bits;
+                if walls_passable {
+                    clear_wall_bits(&mut bits);
+                }
+                (name.clone(), bits)
+            })
             .chain(
                 ring_rooms(&self.rooms)
                     .into_iter()
@@ -215,6 +232,15 @@ impl TerrainPack {
         kk_pathfinder::TerrainSet::new(rooms)
             .map(Arc::new)
             .map_err(|e| e.to_string())
+    }
+}
+
+/// 清除列序 625 字节中每个两位码的 wall 位（bit 0）：1→0、3→2，
+/// 平原/沼泽不变。与 kk-core 位掩码的「清 TERRAIN_MASK_WALL」同义，
+/// 作用在打包后的两位码上。
+fn clear_wall_bits(bits: &mut [u8; 625]) {
+    for byte in bits.iter_mut() {
+        *byte &= 0b1010_1010;
     }
 }
 
@@ -249,8 +275,11 @@ fn ring_rooms(rooms: &BTreeMap<String, [u8; 625]>) -> Vec<String> {
 }
 
 /// 本 tick 的寻路地形来源，begin_tick_plan 注入 OpState，每 tick 整体替换。
+/// `walls_passable` 是计划级墙通行声明：json/kkpv 通道物化原生表时应用
+/// （Frozen 通道的快照由宿主构建时已应用同一声明）。
 pub struct TickTerrain {
     source: TickTerrainSource,
+    walls_passable: bool,
     /// 懒物化缓存：KKPV 首次搜索解码一次；JSON 通道注入前已物化。
     pack: Mutex<Option<Arc<TerrainPack>>>,
     terrain: Mutex<Option<Arc<kk_pathfinder::TerrainSet>>>,
@@ -266,6 +295,7 @@ impl TickTerrain {
     pub fn frozen(terrain: Arc<kk_pathfinder::TerrainSet>) -> Self {
         Self {
             source: TickTerrainSource::Frozen(terrain),
+            walls_passable: false,
             pack: Mutex::new(None),
             terrain: Mutex::new(None),
         }
@@ -279,22 +309,24 @@ impl TickTerrain {
         if let Some(terrain) = &*cached {
             return Ok(terrain.clone());
         }
-        let terrain = self.pack()?.native()?;
+        let terrain = self.pack()?.native_with_walls(self.walls_passable)?;
         *cached = Some(terrain.clone());
         Ok(terrain)
     }
 
-    pub fn json(pack: Arc<TerrainPack>) -> Self {
+    pub fn json(pack: Arc<TerrainPack>, walls_passable: bool) -> Self {
         TickTerrain {
             source: TickTerrainSource::Json(pack),
+            walls_passable,
             pack: Mutex::new(None),
             terrain: Mutex::new(None),
         }
     }
 
-    pub fn kkpv(bundle: crate::shared_bundle::SharedKkpvBundle) -> Self {
+    pub fn kkpv(bundle: crate::shared_bundle::SharedKkpvBundle, walls_passable: bool) -> Self {
         TickTerrain {
             source: TickTerrainSource::Kkpv(bundle),
+            walls_passable,
             pack: Mutex::new(None),
             terrain: Mutex::new(None),
         }
@@ -657,7 +689,7 @@ mod tests {
         }
         assert!(base64_decode("AA==AAAA").is_none());
         assert!(
-            TickTerrain::kkpv(crate::SharedKkpvBundle::from_vec(vec![0]))
+            TickTerrain::kkpv(crate::SharedKkpvBundle::from_vec(vec![0]), false)
                 .terrain()
                 .unwrap_err()
                 .contains("框架")
@@ -761,14 +793,91 @@ mod tests {
         let bundle =
             kk_schema::kkpv::encode_bundle(&blocks, &kk_schema::kkpv::KkpvLimits::default())
                 .unwrap();
-        let tick = TickTerrain::kkpv(crate::shared_bundle::SharedKkpvBundle::from_vec(bundle));
+        let tick = TickTerrain::kkpv(
+            crate::shared_bundle::SharedKkpvBundle::from_vec(bundle),
+            false,
+        );
         let a = tick.pack().unwrap();
         let b = tick.pack().unwrap();
         assert!(Arc::ptr_eq(&a, &b));
         assert!(a.rooms.contains_key("W5N5"));
 
         let json_pack = Arc::new(TerrainPack::from_world_json(&serde_json::json!({})).unwrap());
-        let tick_json = TickTerrain::json(json_pack.clone());
+        let tick_json = TickTerrain::json(json_pack.clone(), false);
         assert!(Arc::ptr_eq(&tick_json.pack().unwrap(), &json_pack));
+    }
+
+    /// 计划级墙通行声明：真实房间清两位码的 wall 位（1→0、3→2），
+    /// 平原/沼泽不变；全墙保护环不随声明放开。
+    #[test]
+    fn native_with_walls_clears_real_rooms_only() {
+        let mut row = vec![0u8; 2500];
+        row[10 * 50 + 10] = 1; // (10,10) 纯墙
+        row[11 * 50 + 11] = 3; // (11,11) 墙|沼泽
+        row[12 * 50 + 12] = 2; // (12,12) 纯沼泽（对照，不变）
+        row[3 * 50 + 41] = 1; // (41,3) 纯墙，x≠y 取样防对称巧合
+        let pack = TerrainPack::from_room_rows([("E10S10".to_string(), row)]);
+        let physical = pack.native().unwrap();
+        let passable = pack.native_with_walls(true).unwrap();
+        let (x, y) = kk_pathfinder::parse_room_name("E10S10").unwrap();
+        let code_at = |terrain: &kk_pathfinder::TerrainSet, ii: usize| {
+            let bits = terrain.terrain(x, y).unwrap();
+            bits[ii / 4] >> (ii % 4 * 2) & 0x03
+        };
+        // 列序布局 ii = x*50 + y。
+        assert_eq!(code_at(&physical, 10 * 50 + 10), 1);
+        assert_eq!(code_at(&passable, 10 * 50 + 10), 0, "纯墙按平原放行");
+        assert_eq!(code_at(&physical, 11 * 50 + 11), 3);
+        assert_eq!(code_at(&passable, 11 * 50 + 11), 2, "墙|沼泽保留沼泽语义");
+        assert_eq!(code_at(&passable, 12 * 50 + 12), 2, "沼泽位不受影响");
+        // 行序写入 (x=41,y=3)，列序读取 ii=x*50+y=41*50+3。
+        assert_eq!(code_at(&physical, 41 * 50 + 3), 1);
+        assert_eq!(code_at(&passable, 41 * 50 + 3), 0, "x≠y 墙位同样清位");
+        // 声明只作用于真实房间：邻房墙环保持全墙。
+        assert_eq!(passable.terrain(x + 1, y), Some(&ALL_WALL));
+        assert_eq!(physical.terrain(x + 1, y), Some(&ALL_WALL));
+    }
+
+    /// 声明关闭时原生表与物理表逐字节一致（默认路径零变化）。
+    #[test]
+    fn native_with_walls_false_matches_physical() {
+        let row: Vec<u8> = (0..2500).map(|i| (i % 4) as u8).collect();
+        let pack = TerrainPack::from_room_rows([("W3N4".to_string(), row)]);
+        let physical = pack.native().unwrap();
+        let off = pack.native_with_walls(false).unwrap();
+        let (x, y) = kk_pathfinder::parse_room_name("W3N4").unwrap();
+        assert_eq!(physical.terrain(x, y), off.terrain(x, y));
+    }
+
+    /// json/kkpv 通道的声明在物化原生表时生效，且不影响物理地形包
+    ///（地形束数据保持原值）。
+    #[test]
+    fn tick_terrain_applies_walls_passability_on_materialization() {
+        let terrain = kk_core::Terrain::from_codes(&row_terrain(&[(7, 8, 1)])).unwrap();
+        let physical_row = terrain.as_slice().to_vec();
+        let mut world = kk_world::World::default();
+        world.register_room("W5N5", terrain).unwrap();
+        let blocks = world.kkpv_public_terrain_blocks([0; 32], [0; 32]);
+        let bundle =
+            kk_schema::kkpv::encode_bundle(&blocks, &kk_schema::kkpv::KkpvLimits::default())
+                .unwrap();
+        let physical_bits = pack_row_terrain(&physical_row).unwrap();
+        for walls in [false, true] {
+            let tick = TickTerrain::kkpv(
+                crate::shared_bundle::SharedKkpvBundle::from_vec(bundle.clone()),
+                walls,
+            );
+            let (x, y) = kk_pathfinder::parse_room_name("W5N5").unwrap();
+            let ii = 7 * 50 + 8;
+            let set = tick.terrain().unwrap();
+            let code = {
+                let bits = set.terrain(x, y).unwrap();
+                bits[ii / 4] >> (ii % 4 * 2) & 0x03
+            };
+            assert_eq!(code, if walls { 0 } else { 1 });
+            // 物理地形包不经声明改写：墙位保持原码。
+            let pack = tick.pack().unwrap();
+            assert_eq!(pack.rooms["W5N5"], physical_bits);
+        }
     }
 }

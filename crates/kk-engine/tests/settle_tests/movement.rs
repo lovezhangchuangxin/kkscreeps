@@ -574,3 +574,85 @@ fn cascade_removal_clears_chain_on_head_failure() {
     assert_eq!(f.creep_state(b).0, 11);
     assert_eq!(f.creep_state(c).0, 12);
 }
+
+// ---- 计划级墙地形静态通行声明（movement.md 静态通行声明） ----
+
+/// 带地形通行声明的贡献平面；其余域取内置默认。
+fn passability_plane(walls: bool) -> kk_engine::settle::Plane {
+    kk_engine::settle::Plane {
+        buildings: Default::default(),
+        links: kk_world::place::builtin_link_rules(),
+        stores: kk_world::place::builtin_store_rules(),
+        combat: kk_world::place::builtin_combat_ranges(),
+        move_gate: Default::default(),
+        terrain_passability: kk_mod_api::builtin::TerrainPassability {
+            wall_passable: walls,
+        },
+        resources: Default::default(),
+        contrib: std::rc::Rc::new(kk_engine::settle::contrib::ContributionDispatch::default()),
+        extensions: Default::default(),
+        plan: kk_engine::settle::builtin_plan(),
+    }
+}
+
+fn wall_terrain(swamp_at_wall: Option<(usize, usize)>) -> kk_core::Terrain {
+    // (11,10) 竖墙；可选格改为墙|沼泽。
+    let mut t = kk_core::Terrain::plains();
+    t.as_mut_slice()[10 * 50 + 11] |= kk_core::TERRAIN_MASK_WALL;
+    if let Some((x, y)) = swamp_at_wall {
+        assert_eq!((x, y), (11, 10), "墙|沼泽格固定在 (11,10)");
+        t.as_mut_slice()[10 * 50 + 11] |= kk_core::TERRAIN_MASK_SWAMP;
+    }
+    t.normalize();
+    t
+}
+
+#[test]
+fn terrain_passability_allows_move_onto_wall_with_plain_fatigue() {
+    // 声明放行墙位：move 意图可入墙格，疲劳按平原费率（重量 1 × 2）。
+    let mut f = Fixture::new(1, wall_terrain(None));
+    let c = f.creep("w1", "p1", 10, 10, &[BodyKind::Move, BodyKind::Work], 0);
+    f.settle_with_plane(move_intent(c, 3), passability_plane(true));
+    // 平原净疲劳：+2（重量 1×平原率 2）−2（1 个 MOVE 恢复）= 0。
+    assert_eq!(
+        f.creep_state(c),
+        (11, 10, 0, 0),
+        "墙位按平原放行，净疲劳与平原一致"
+    );
+    // 原生对照：默认平面同意图被静态障碍拒绝。
+    let mut f = Fixture::new(1, wall_terrain(None));
+    let c = f.creep("w1", "p1", 10, 10, &[BodyKind::Move, BodyKind::Work], 0);
+    f.settle_with_plane(move_intent(c, 3), passability_plane(false));
+    assert_eq!(f.creep_state(c), (10, 10, 0, 0), "默认墙位不可入");
+}
+
+#[test]
+fn terrain_passability_keeps_swamp_fatigue_on_wall_swamp_tile() {
+    // 墙|沼泽位放行后按沼泽语义计疲劳（重量 1 × 10）。
+    let mut f = Fixture::new(1, wall_terrain(Some((11, 10))));
+    let c = f.creep("w1", "p1", 10, 10, &[BodyKind::Move, BodyKind::Work], 0);
+    f.settle_with_plane(move_intent(c, 3), passability_plane(true));
+    // 沼泽净疲劳：+10（重量 1×沼泽率 10）−2（1 个 MOVE 恢复）= 8。
+    assert_eq!(f.creep_state(c), (11, 10, 8, 0), "墙|沼泽按沼泽费率");
+}
+
+#[test]
+fn terrain_passability_does_not_release_dynamic_blocking() {
+    // 声明只放行静态地形面：动态占格（未获准移动的 creep）仍阻挡。
+    let mut f = Fixture::new(1, wall_terrain(None));
+    let _still = f.creep("still", "p1", 11, 10, &[BodyKind::Move], 0);
+    let mover = f.creep("mover", "p1", 10, 10, &[BodyKind::Move], 0);
+    f.settle_with_plane(move_intent(mover, 3), passability_plane(true));
+    assert_eq!(f.creep_state(mover), (10, 10, 0, 0), "占格 creep 仍挡路");
+}
+
+#[test]
+fn terrain_passability_keeps_structure_obstacles_blocking() {
+    // 声明只作用于地形墙项：内建障碍结构不随声明放行（登记与仲裁的
+    // 结构判定不读通行声明）。
+    let mut f = Fixture::new(1, wall_terrain(None));
+    let _wall = generic_structure(&mut f, 11, 10, "constructedWall", "p1", 1);
+    let c = f.creep("w1", "p1", 10, 10, &[BodyKind::Move, BodyKind::Work], 0);
+    f.settle_with_plane(move_intent(c, 3), passability_plane(true));
+    assert_eq!(f.creep_state(c), (10, 10, 0, 0), "结构障碍仍阻挡");
+}

@@ -271,4 +271,5 @@ mod replay;
 mod retaliation_policy;
 
 mod switch;
+mod terrain_walls;
 mod tough_damage;

@@ -91,6 +91,7 @@ fn working_with_contest() -> (Working, movement::Movement) {
             stores: engine.stores,
             combat: engine.combat,
             move_gate: Default::default(),
+            terrain_passability: Default::default(),
             resources: engine.resources.clone(),
             contrib: engine.contrib,
             extensions: engine.extensions,

@@ -6,11 +6,11 @@
 
 ## 当前接手位置
 
-- 当前任务：**Mod 字段校验与规范化边界治理（已验收，随本次提交交付）**。runtime 调用与局部恢复已提交 `dd1e4f7`，工作区干净后开始；建筑写面直接校验命名空间键，共享字段 schema 检查与规范化，保留对象默认值、建筑完整回写/已有记录检查和扩展缺值的不同契约。源码复审、完整门禁及最终 release 回归均通过。
+- 当前任务：**G02.d3 首片已交付（计划级墙地形静态通行声明，随本次提交）**。新内建规则 `builtin:terrain.wallPassable`（{0,1}，默认 0），`TerrainPassability` 快照同源驱动仲裁静态墙项、预检输入 `native_static_blocked` 与玩家面原生寻路地形（三通道：Frozen/json/kkpv）；墙位按平原计疲劳、墙|沼泽按沼泽；物理查询（getTerrain/look/FIND_EXIT/放置）保持原值，全墙保护环不放开。builtin revision v16→v17（规则 31→32、槽仍 20），PlanHash 变化，旧检查点按身份门拒绝；无新持久写入域。结构/rampart 通行声明与逐房粒度为 G02.d3 后续切片。
 - 已完成基线：S01 `e0b457b`、S02 `5a25bc2`。旧 S03–S06 的纯搬迁限制由本轮职责治理方案替代，详见[维护结构方案](archive/structure-governance-2026-10.md)。
 - 已完成实现：移动领域跨层归拢；Working 统一构造与瞬态字段收口、engine 首触日志；世界容器/投影与 runtime 执行器分离、Generic 共享读取；串行场景名称/耗时/子集反馈；文档契约合并、旧计划归档与工具门禁。保留玩法语义和恢复身份，不推进 G02.d3 等新玩法。
 - 本轮实现：对象短名载荷与建筑全名字段共用必需字段检查和递归规范化；`BuildingDescriptor::prepare_fields` 持有建筑整集契约。engine 不再构造短名载荷，只保留原生键只读检查、日志与候选合并。已有记录检查和扩展写入保持原契约；未改内建身份源码、SDK 或检查点版本。
-- 当前验证：无参数 `pnpm run check` 完整通过（Rust 1228 通过/12 忽略，CLI sim 84，Python 58+12、Node 7、JS workspace，287 Markdown/1846 本地链接/812 源码规模）。建筑写面 5 项单测包含嵌套 array/map Float backing、nullable、失败候选与输入保持。最终 release 棘轮 1918 通过/89 既有失败/907 跳过，2914 项状态逐项与 HEAD `dd1e4f7` 一致；官方/typed 完整 inspect 除 CLI 摘要外一致，三组 bot 完成 2000/2000/10 轮，核心指标及归一化异常保持（Overmind 既有首轮异常 1）。错误顺序、日志和候选边界复审保持，无剩余阻塞问题；本轮未改 Rust 示例、SDK 或协议版本。现行契约与兼容报告已同步，用户已授权提交，随本次提交交付，未推送。
+- 当前验证：无参数 `pnpm run check` 完整通过（Rust 1228 通过/12 忽略，CLI sim 84，Python 58+12、Node 7、JS workspace，287 Markdown/1846 本地链接/812 源码规模）。建筑写面 5 项单测包含嵌套 array/map Float backing、nullable、失败候选与输入保持。最终 release 棘轮 1918 通过/89 既有失败/907 跳过，2914 项状态逐项与 HEAD `dd1e4f7` 一致；官方/typed 完整 inspect 除 CLI 摘要外一致，三组 bot 完成 2000/2000/10 轮，核心指标及归一化异常保持（Overmind 既有首轮异常 1）。错误顺序、日志和候选边界复审保持，无剩余阻塞问题；本轮未改 Rust 示例、SDK 或协议版本。现行契约与兼容报告已同步，实现已提交 `f32f972`，未推送；本次选型只修改台账，未重跑行为测试。
 - 历史交接、阶段验证与审查过程见[历史记录](archive/mod-history-2026-10.md)；玩法缺口继续以本文件任务表为准。
 
 ## 执行与更新规则
@@ -24,7 +24,7 @@
 | 编号 | 任务 | 依赖/前置 | 状态 | 交付证据 |
 |---|---|---|---|---|
 | G01 | 移动竞争优先级策略 | 现有 move 请求与仲裁 | 已完成 | [mod-move-contest](../architecture/movement.md#竞争排序)、[交付记录](../research/notes/g01-move-contest-2026-10-06.md)（G02/G03/G04 均已分片开放） |
-| G02 | 移动准入策略 | 已稳定的移动请求输入；同步必要玩家预检，G01 不作硬依赖 | 部分完成 | G02.a 准入槽（b7e65d5）、G02.b 障碍槽（e032991）、G02.c 预检槽（`0f390b5`）：[mod-move-admission](../architecture/movement.md#准入与预演)、[mod-move-obstacle](../architecture/movement.md#障碍追加)、[mod-move-precheck](../architecture/movement.md#请求预检)（G02.d1 静态放行、G02.d2 玩家门双端冻结均已交付；声明式寻路规则登记 G02.d3 设计；孵化门槛归 G13；安全模式主人摘要为可解释性增强另登记） |
+| G02 | 移动准入策略 | 已稳定的移动请求输入；同步必要玩家预检，G01 不作硬依赖 | 部分完成 | G02.a 准入槽（b7e65d5）、G02.b 障碍槽（e032991）、G02.c 预检槽（`0f390b5`）：[mod-move-admission](../architecture/movement.md#准入与预演)、[mod-move-obstacle](../architecture/movement.md#障碍追加)、[mod-move-precheck](../architecture/movement.md#请求预检)（G02.d1 静态放行、G02.d2 玩家门双端冻结、G02.d3 首片墙地形静态通行声明均已交付，见[静态通行声明](../architecture/movement.md#静态通行声明g02d3)；孵化门槛归 G13；安全模式主人摘要为可解释性增强另登记） |
 | G03 | 完整房间移动仲裁 | G01、G02 | 部分完成 | G03.a 整房请求视野 + evaluate 链预演（`0efd645`）：[mod-move-admission](../architecture/movement.md#准入与预演)、[记录](../research/notes/g03a-move-arbitration-2026-10-06.md)；pull 登记已开放（`movePullRegistration` 槽 + add_pulling 双射修复，见[移动契约](../architecture/movement.md)）；静态放行由 G02.d1 实现，障碍槽第二预演与完整仲裁替换仍未开放 |
 | G04 | 移动代价与执行效果 | G02；代价可先行，完整仲裁交互在 G03 后验收 | 部分完成 | G04.a 代价槽已交付（`builtin:room.moveCost` + add_fatigue u32 钳制，见[移动契约](../architecture/movement.md)）；疲劳恢复/重量评分要素未开放 |
 | G05 | Mod 作者基础 CLI | 现有 sim、inspect、检查点 | 已完成 | G05.a `mod init` `ee296cb`；G05.b `mod test` `dbc82a4`（[模板与测试说明](../architecture/local-simulation.md#作者包模板)）；后续增强另登记 |
@@ -56,7 +56,7 @@
 
 ## 实际执行队列与前置门
 
-上一轮维护范围已提交；realm 注册/执行/预算及声明转换优化已提交为 `0c28c92`。Room API 状态所有权和历史文档入口治理已提交为 `8f822fd`；Prelude 命名与集中装配优化已提交 `de15765`；验收成本与首轮 research 文档价值优化已提交 `646e395`；Game 装配、地图缓存、指令状态与世界注入边界已提交 `a0d375e`；结构 API/孵化生命周期、字段/装配所有权及共用目标/诊断依赖优化已完成验收，三轮已提交 `b99cda3`，Creep 移动已提交 `3abb616`；engine/Mod 三组与 CLI 职责分组及整体复审已提交 `eedfbfb`；计划安装候选与统一发布已提交 `4443c3c`；runtime 单次调用与局部恢复治理已提交 `dd1e4f7`；字段校验边界治理已验收，随本次提交交付。后续 research 按独立证据价值继续复审；源码后续优先核查 Mod API 运行期目录的共享字段校验、host 候选能力边界及剩余领域的分派接线，避免机械按行数搬迁。G02.d1 静态放行与 G02.d2 双端移动门已交付；恢复玩法开发时先审定 G02.d3 声明式寻路规则，或选择下表依赖已满足的其他领域。
+上一轮维护范围已提交；realm 注册/执行/预算及声明转换优化已提交为 `0c28c92`。Room API 状态所有权和历史文档入口治理已提交为 `8f822fd`；Prelude 命名与集中装配优化已提交 `de15765`；验收成本与首轮 research 文档价值优化已提交 `646e395`；Game 装配、地图缓存、指令状态与世界注入边界已提交 `a0d375e`；结构 API/孵化生命周期、字段/装配所有权及共用目标/诊断依赖优化已完成验收，三轮已提交 `b99cda3`，Creep 移动已提交 `3abb616`；engine/Mod 三组与 CLI 职责分组及整体复审已提交 `eedfbfb`；计划安装候选与统一发布已提交 `4443c3c`；runtime 单次调用与局部恢复治理已提交 `dd1e4f7`；字段校验边界治理已提交 `f32f972`。专项维护暂告一段落，剩余治理项不作为恢复开发的前置。G02.d1/d2/d3 首片均已交付；G02.d3 后续（结构/rampart 通行声明、逐房粒度）按需另拆，或按依赖选择下表其他领域（G11.a/G09.a 为备选，M2B 兼容批按路线图并行）。
 
 父编号用于领域归档，**不是一口气做完 G01 再顺序做到 G30 的调度表**。每个父任务首次实施前拆成可独立验收的子片，记录显式依赖；前置小片可先完成，父任务保留“部分完成”。默认兼容性 M2B 按现有路线图继续推进，不等全部 Mod 领域结束。
 
@@ -104,7 +104,7 @@ G28.a 的网络协议及只读原型可提前设计；开放会改变玩法的�
 
 ## 维护结构优化
 
-S01 已提交 `e0b457b`，S02 已提交 `5a25bc2`。旧 S03–S06 的按行数拆文件和禁止调整候选字段约束由[职责治理方案](archive/structure-governance-2026-10.md)替代；串行场景默认顺序和 V8 生命周期约束继续保持。当前进度见文件开头，玩法队列暂停到本轮验收完成。
+S01 已提交 `e0b457b`，S02 已提交 `5a25bc2`。旧 S03–S06 的按行数拆文件和禁止调整候选字段约束由[职责治理方案](archive/structure-governance-2026-10.md)替代；串行场景默认顺序和 V8 生命周期约束继续保持。本轮维护已完成验收并提交；专项优化暂告一段落，建议恢复功能开发，具体选型见文件开头。
 
 ## 近期：移动与作者工具
 
@@ -280,15 +280,21 @@ S01 已提交 `e0b457b`，S02 已提交 `5a25bc2`。旧 S03–S06 的按行数�
 
 当前会话只记录范围、剩余工作、实际验证和提交状态；历史过程见[归档](archive/mod-history-2026-10.md)。贡献与交接要求以 [AGENTS.md](../../AGENTS.md) 为准，不复制提示词或逐项复审流水账。
 
+2026-10-08 G02.d3 首片交付：基线 `f32f972`。实现与验收细节见上文 G02.d3 节与[交付记录](../research/notes/g02d3-terrain-passability-2026-10-08.md)。验证：无参数 `pnpm run check` 完整通过（Rust 1235 通过/0 失败，sim 85，文档链接与源码规模绿，817 文件无超 1000；pathfinder.rs 879 行越过 700 复审线为既有+本批增量，登记后续按职责复审）；release 重建后棘轮 1918 通过/89 既有失败/907 跳过，零转红零转绿；三组 bot 完成 2000/2000/10 轮，核心指标与入库基线一致（Overmind 保留既有首轮异常 1）。三路复审无 P0/P1 代码问题，P1 文档层已清偿，P3 登记见上。下一批候选：G02.d3 后续（结构/rampart 通行声明）、G11.a 建筑 RCL 配额、G09.a 自有对象库存或 M2B 兼容批（安全模式 17 项失败优先复现）；恢复开发时按依赖与价值重选。
+
 上一轮验证：完整 `pnpm run check` 通过（Rust 1221 通过/12 忽略、Python 工具 58+12、Node 门禁回归、JS workspace、文档链接与源码规模）；`cargo test --workspace --doc` 通过（6 通过/2 忽略），最终 Clippy/格式通过。重建 release 后兼容棘轮 1918 通过/89 既有失败/907 跳过，零转红；三组 bot 指标及错误形态与入库基线一致（TooAngel/Overmind 2000 轮、WASM 10 轮；Overmind 有既有首轮初始化异常）。本记录随维护重构提交入库；开发基线为 `5a25bc2`，提交号以 Git 历史为准，未推送。
 
 2026-10-07 维护结构优化完成：移动领域归拢、Working 构造/瞬态及首触恢复所有权、世界/投影/执行器组织、Generic 读取、串行诊断及文档/工具治理已落地。架构页 46→37，当前 plans 页 17→4（含索引），历史结论保留归档。本轮不扩展玩法或放宽恢复身份；builtin.rs 与 builtin/store.rs 字节同 HEAD，串行 56+94 场景调用和顺序保持。Working 外部字面构造迁至 new，调用方已迁移，见[Rust 迁移说明](../architecture/state-editing.md#rust-调用方迁移)。
 
 完整门禁、doctest、最终 Clippy/格式、release ratchet 和三组 bot 已执行，结果见当前接手位置；定向 `embed_snapshot_contract_impl` 通过，未匹配的 `__no_such_scenario__` 正确失败（退出 101），完整门禁清除过滤条件。兼容机器报告更新；bot 对照报告保存在 `/tmp/kks-maintenance-{tooangel,overmind,wasm}.json`，不替换历史基线。复审未发现阻塞问题；现有长文件与共享 VM 故障半径仍需按实际职责持续改善，不以本轮宣布全仓架构完成。下一玩法任务仍须审定 G02.d3 设计或按依赖选择其他领域；本轮未自动继续新玩法。用户已授权提交本轮改动；提交记录以 Git 历史为准，未推送。
 
-## G02.d3 声明式寻路规则（2026-10-07 登记，未开始）
+## G02.d3 声明式寻路规则（2026-10-07 登记；2026-10-08 首片交付）
 
 G02.d2 盘点结论登记：数据面=计划级可走性规则（仿建筑 `BuildingPathing::{Obstacle,Plain,Road}` 先例，冻结计划承载墙/结构可走性声明）；消费面三点同源=kk-pathfinder 地形包/room.js `getPathfindingGrid2` 基线矩阵/engine `static_obstacles.rs` 原生默认；开放问题=玩家可见地形形状（`room.getTerrain().get`）是否随规则改写、跨房矩阵投影边界。验收至少包括：独立 JS 包声明墙可走、原生对照、双端寻路一致、结算与寻路同源、双通道冷恢复。tick 级 allowStatic 决策与服务器 JS 回调永久不进玩家寻路（时序与粒度不可行，宿主约束）。
+
+2026-10-08 开发选型建议（据此实施）：首片限定计划级墙地形通行声明，统一 native 寻路地形/Room 基线矩阵/engine 静态默认，保留动态占格、组合否决与玩家 CostMatrix 的既有语义。物理地形查询保持原值，仅派生通行视图；不可见的已注册房可消费公开静态规则，不暴露对象信息，未注册房的全墙保护环不得被规则放开。**当日已按此范围交付**：`builtin:terrain.wallPassable` 规则 + `TerrainPassability` 快照（kk-mod-api）；engine `arbitration_blocked` 墙项与预检输入同源（Plane/Movement 携带旗标，链预演克隆同值）；玩家寻路 `TerrainPack::native_with_walls` 打包后清真实房间的 wall 位（1→平原、3→沼泽），墙环保留；三通道接线（Frozen 缓存键含旗标、`SandboxConfig.terrain_walls_passable` 覆盖 json/kkpv、canary 与工作者配置从计划装配）。执行语义零新分支：疲劳按既有位掩码判沼泽，墙=平原费率、墙|沼泽=沼泽费率。组合语义为 freeze 既有约束：同规则双包一律覆盖冲突（即使值相同），组合验收用跨规则（wallPassable+fatigueLimit）；等值共装若要放开属 freeze 组合语义变更，后续另行设计。验收：引擎 4 测（平原费率放行+原生对照、墙|沼泽沼泽费率、动态占格不放开、结构障碍不放开）、runner 单测 4 项（清位+墙环保留、false=物理表逐字节、kkpv 物化、x≠y 取样）、沙箱串行 59 场景（JSON 通道旗标两态对照，默认分支与 G02.d2 moveTo 边界互证）、sim 四场景（native/ghost/deepwalk/combined）双通道+冷恢复+verify-replay+四 plan_hash 身份、物理查询四场景均读回 TERRAIN_MASK_WALL。三路复审无 P0/P1 代码问题（P1 均为文档/台账层，已清偿；清偿含 native 场景"原地不动"改"沿墙面绕行不越墙列"、combined/deepwalk"同值共装"表述纠正、switch.rs 封闭集注释补 MOVE 两键与旗标、三处批次号注释改行为描述、测试 x≠y 取样）；P3 登记：Worker 快照不含旗标（靠 create 路径覆盖的隐式约定）、kk-world place 无 builtin_terrain_passability 对应物（catalog 测试兜底）、跨房墙环端到端与 allowStatic×声明叠加测试缺口。详见[交付记录](../research/notes/g02d3-terrain-passability-2026-10-08.md)。
+
+备选排序：G11.a 建筑 RCL 配额/isActive（已有建筑、工地和库存通路，需玩家预检/结算同源），G09.a 自有对象库存（价值高，但须贯通通用 Store/目标类型/投影/日志/保存，范围更大）。M2B 单列兼容开发批次：当前报告 1918/2914 通过、89 失败、907 跳过，失败集中于对象形状、安全模式、ID 构造/对象身份；跳过集中于实验室、工厂及 power/nuke 等未启用能力。分组是定位线索，不直接归因适配器或引擎；建议先复现安全模式的 17 项失败及真实世界 bot 阻塞，再按实际缺口排化学领域。G27/G28 服务链与内容迁移/watch 暂列后续，不把占位 crate 视为已就绪。
 
 2026-10-07 维护续轮：基线 `679c79d`。realm 按装配、注册、执行、安装、预算、诊断与生命周期组织；Registry 将空闲/注册包/密封阶段和首故障封装，调用方经阶段方法操作；活动链和预算参数改为具名类型。声明转换按对象/意图/处理器/规则/建筑资源领域组织，由单包 ContributionBuilder 持有候选和绑定覆盖校验。VM 字段销毁顺序、SDK/内建身份源码、宿主协议与公开 API 保持。开发门禁支持单目标过滤、空匹配失败及步骤耗时，无参数仍为完整验收；真实定向通过，虚构过滤退出 1。实现及适用架构已同步，无新玩法或任务报告。完整无参数门禁通过（Rust 1221/12 忽略、Python 58+12、Node 7、JS workspace、274 Markdown/1742 本地链接、668 源码文件规模）；host doctest 1 通过/1 依赖宏示例忽略。Rust 全量测试实际耗时 703.71s；本轮改善定向反馈，不声称已降低完整测试成本。复审确认 8 类声明转换分支保留默认值/校验/错误语义，未发现阻塞问题。后续仍需按实际消费者复审玩家 Room API、research 文档价值和全量 CLI 测试成本；整个项目的维护优化并非全部结束。用户已授权提交续轮；提交号以 Git 历史为准，未推送。bot 证据位于 `/tmp/kks-host-{tooangel,overmind,wasm}.json`：TooAngel/Overmind 2000 轮、WASM 10 轮，全部完成，无终止/惩罚跳过/缺失 API；Overmind 保留既有首轮初始化异常。对照仅核验上述指标及归一化异常，日志时序、随机 flag 名与部分调用计数存在差异，不声称机器报告逐字一致。
 

@@ -47,6 +47,10 @@ pub struct SandboxConfig {
     /// Mod 安装期的墙钟期限；None 用默认 10s。测试可缩短以验证挂死
     /// 兜底（作者代码死循环/TLA 使安装失败而不是楔死分片创建）。
     pub install_wall_limit: Option<Duration>,
+    /// 计划级墙地形通行声明：JSON/KKPV 通道的寻路地形在物化时按它
+    /// 清除墙位（Frozen 通道的快照由宿主构建时已应用）。默认 false
+    /// 即官方「墙不可通行」；不影响物理地形查询。
+    pub terrain_walls_passable: bool,
 }
 
 impl Default for SandboxConfig {
@@ -61,6 +65,7 @@ impl Default for SandboxConfig {
             extension_intents: false,
             mod_api: None,
             install_wall_limit: None,
+            terrain_walls_passable: false,
         }
     }
 }
@@ -131,6 +136,8 @@ pub struct Sandbox {
     /// 任一房换地形全体失效）；裸数组夹具形态无 rev，不缓存逐 tick 重建。
     terrain_pack_cache: Option<std::sync::Arc<crate::pathfinder::TerrainPack>>,
     host_terrain: Option<std::sync::Arc<kk_pathfinder::TerrainSet>>,
+    /// 计划级墙地形通行声明；见 [`SandboxConfig::terrain_walls_passable`]。
+    terrain_walls_passable: bool,
     /// 与 Mod realm 共用的线程栈账本；须在 runtime 销毁后注销。
     _isolate_order: kk_vm::isolate_order::IsolateOrder,
 }
@@ -236,6 +243,7 @@ impl Sandbox {
             pending_recharge: None,
             terrain_pack_cache: None,
             host_terrain: None,
+            terrain_walls_passable: config.terrain_walls_passable,
             _isolate_order: kk_vm::isolate_order::IsolateOrder::register(),
         };
         sb.install_near_heap_callback();

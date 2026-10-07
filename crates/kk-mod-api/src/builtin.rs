@@ -254,6 +254,38 @@ impl MoveGate {
     }
 }
 
+/// 地形静态通行规则快照：仲裁静态障碍判定的墙项与玩家面原生寻路
+/// 地形包同源读取。默认即官方行为（墙不可通行）；`wall_passable`
+/// 将墙位按平原参与通行（wall|swamp 保留沼泽语义，疲劳与代价按
+/// 对应地形费率）。物理地形查询（getTerrain/look/FIND_EXIT）与
+/// 放置检查不随本规则改变，未注册房的全墙保护环不放开。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TerrainPassability {
+    pub wall_passable: bool,
+}
+
+impl TerrainPassability {
+    /// 从计划的有效规则提取地形静态通行；缺键说明计划未含 builtin:terrain。
+    /// 句柄解析只发生在此处，数值域已在冻结时校验。
+    pub fn from_plan(rules: &EffectiveRules) -> Result<Self, String> {
+        let handle = rules
+            .resolve(&key("terrain.wallPassable"))
+            .ok_or_else(|| "计划缺少规则 builtin:terrain.wallPassable".to_string())?;
+        match rules.get(handle) {
+            Some(Number::Signed(0)) => Ok(Self {
+                wall_passable: false,
+            }),
+            Some(Number::Signed(1)) => Ok(Self {
+                wall_passable: true,
+            }),
+            Some(other) => Err(format!(
+                "规则 builtin:terrain.wallPassable 须为 0 或 1，实得 {other:?}"
+            )),
+            None => Err("规则 builtin:terrain.wallPassable 句柄越界".into()),
+        }
+    }
+}
+
 /// 内置贡献入口，保留早期 link 函数名；现含 link、creep 资源/移动/战斗/建造族槽与仓库规则。
 pub fn link() -> Contribution {
     let consumers = keys(&[
@@ -426,6 +458,16 @@ pub fn link() -> Contribution {
             consumers: move_gate_consumers.clone(),
         });
     }
+    // 地形静态通行规则：结算静态障碍判定的墙项与玩家面原生寻路地形
+    // 同源消费。默认 0 即官方「墙不可通行」；1 将墙位按平原放行
+    // （wall|swamp 保留沼泽语义）。物理地形查询与放置检查不在此面内。
+    let terrain_consumers = keys(&["terrain.passability.native"]);
+    rules.push(RuleDescriptor {
+        key: key("terrain.wallPassable"),
+        domain: NumberDomain::Signed { min: 0, max: 1 },
+        default: Number::Signed(0),
+        consumers: terrain_consumers,
+    });
     let (store_bindings, store_rules) = store::declarations();
     bindings.extend(store_bindings);
     rules.extend(store_rules);
@@ -450,6 +492,7 @@ pub fn link() -> Contribution {
         "room.movePrecheck.native",
         "room.movePullRegistration.native",
         "room.moveCost.native",
+        "terrain.passability.native",
     ]));
     let slots = vec![
         SlotDescriptor {
@@ -558,7 +601,7 @@ pub fn link() -> Contribution {
             namespace: "builtin".into(),
             api_version: 1,
             revision:
-                "link-creep-store-move-combat-build-incoming-contest-admission-obstacle-precheck-pull-cost-ranges-static-precheck-movegate-v16"
+                "link-creep-store-move-combat-build-incoming-contest-admission-obstacle-precheck-pull-cost-ranges-static-precheck-movegate-terrain-v17"
                     .into(),
             code_digest: {
                 let mut hash = Sha256::new();

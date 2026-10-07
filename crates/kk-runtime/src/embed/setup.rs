@@ -354,6 +354,11 @@ impl EmbedEngine {
                 ] {
                     constant_overrides.insert(name.into(), serde_json::json!(value));
                 }
+                // 地形通行声明同步预检沙箱：json/kkpv 通道的原生寻路
+                // 地形与结算静态障碍判定读同一生效值。
+                let terrain =
+                    kk_mod_api::builtin::TerrainPassability::from_plan(registered.plan.rules())
+                        .map_err(anyhow::Error::msg)?;
                 if let Some(resources_all) = &resources_all {
                     constant_overrides.insert("RESOURCES_ALL".into(), resources_all.clone());
                 }
@@ -361,6 +366,7 @@ impl EmbedEngine {
                     extension_intents: has_mod_intents,
                     constant_overrides,
                     mod_api: Some(api.clone()),
+                    terrain_walls_passable: terrain.wall_passable,
                     ..kk_runner::SandboxConfig::default()
                 })
                 .map_err(|error| anyhow::anyhow!("Mod 玩家面预检失败：{error}"))?;
@@ -438,6 +444,9 @@ impl EmbedEngine {
                     .constant_overrides
                     .insert(name.to_string(), serde_json::json!(value));
             }
+            // 地形通行声明同步玩家沙箱：json/kkpv 通道的原生寻路地形与
+            // 结算静态障碍判定（引擎 Plane）读同一生效值。
+            config.terrain_walls_passable = self.engine.terrain_passability().wall_passable;
             // Mod 声明资源目录同步玩家全局常量；与规则覆盖同源同批。
             // 测试配置里的同名覆盖先移除再按引擎目录决定——无声明资源时
             // 保持 vanilla 常量原值，不允许测试入口注入私有资源目录。

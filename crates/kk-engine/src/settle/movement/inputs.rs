@@ -66,6 +66,7 @@ impl Movement {
                     room,
                     index,
                     &self.buildings,
+                    self.walls_passable,
                     cell,
                     creep.map(|c| c.owner.as_str()).unwrap_or(""),
                 ),

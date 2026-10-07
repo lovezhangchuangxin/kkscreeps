@@ -36,10 +36,15 @@ pub(crate) fn registration_blocked(
         })
 }
 
+/// 墙项遵循计划级通行声明：`walls_passable` 为真时墙地形不阻挡
+/// （wall|swamp 同样放行，执行期按沼泽费率计疲劳）；有路格的既有
+/// 豁免与声明无关，两条路径都放行。声明不改变登记阶段——它本就
+/// 不查地形。
 pub(crate) fn arbitration_blocked(
     room: &RoomState,
     index: &RoomIndex,
     buildings: &kk_mod_api::buildings::BuildingCatalog,
+    walls_passable: bool,
     at: (u8, u8),
     owner: &str,
 ) -> bool {
@@ -49,6 +54,7 @@ pub(crate) fn arbitration_blocked(
                 if site.owner.as_deref() == Some(owner)
                     && (is_obstacle_type(&site.structure_type) || buildings.is_obstacle(&site.structure_type)))
         })
-        || (room.terrain().check_mask(at.0 as usize, at.1 as usize, TERRAIN_MASK_WALL)
-            && !has_road(room, index, at))
+        || (!walls_passable
+            && (room.terrain().check_mask(at.0 as usize, at.1 as usize, TERRAIN_MASK_WALL)
+                && !has_road(room, index, at)))
 }

@@ -292,10 +292,13 @@ impl EmbedEngine {
         };
         let identity = self.engine.world().instance();
         let terrain_epoch = self.engine.world().terrain_epoch();
+        // 计划级墙通行声明参与缓存键：切包改变声明时，同世界代际也须重建。
+        let walls_passable = self.engine.terrain_passability().wall_passable;
         let terrain = match &self.pathfinder_terrain {
-            Some((cached_identity, cached_epoch, terrain))
+            Some((cached_identity, cached_epoch, cached_walls, terrain))
                 if std::sync::Arc::ptr_eq(cached_identity, &identity)
-                    && *cached_epoch == terrain_epoch =>
+                    && *cached_epoch == terrain_epoch
+                    && *cached_walls == walls_passable =>
             {
                 terrain.clone()
             }
@@ -306,8 +309,11 @@ impl EmbedEngine {
                             (name.to_string(), room.terrain().as_slice().to_vec())
                         }),
                     );
-                let terrain = pack.native().map_err(anyhow::Error::msg)?;
-                self.pathfinder_terrain = Some((identity, terrain_epoch, terrain.clone()));
+                let terrain = pack
+                    .native_with_walls(walls_passable)
+                    .map_err(anyhow::Error::msg)?;
+                self.pathfinder_terrain =
+                    Some((identity, terrain_epoch, walls_passable, terrain.clone()));
                 terrain
             }
         };

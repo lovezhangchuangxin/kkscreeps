@@ -89,10 +89,12 @@ pub struct EmbedEngine {
     /// 两条通道装配出的玩家可见面等价，测试按此锁定。
     kkpv_channel: bool,
     /// 公开地形束的发布库：按代际发布/获取共享束，承载保留报告
-    /// （固定内存测量面）。仅 KKPV 通道使用。
+    /// （固定内存测量面）。仅 KKPV 通道使用。元组含计划级墙通行声明：
+    /// 声明随计划变化，不随世界代际——切包后同代际也须重建。
     pathfinder_terrain: Option<(
         std::sync::Arc<()>,
         u64,
+        bool,
         std::sync::Arc<kk_runner::TerrainSet>,
     )>,
     kkpv_public_store: crate::kkpv_store::KkpvBlockStore,

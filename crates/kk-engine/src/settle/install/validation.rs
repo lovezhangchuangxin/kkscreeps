@@ -69,6 +69,9 @@ impl Engine {
             "builtin:room.movePrecheck.native",
             "builtin:room.movePullRegistration.native",
             "builtin:room.moveCost.native",
+            // 地形通行声明驱动仲裁静态障碍的墙项（Plane 快照）与玩家面
+            // 原生寻路地形（SandboxConfig），两端同源消费。
+            "builtin:terrain.passability.native",
         ];
         for binding in plan.required_bindings() {
             let name = binding.as_str();

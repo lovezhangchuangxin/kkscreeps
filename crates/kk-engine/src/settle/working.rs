@@ -20,6 +20,9 @@ pub struct Plane {
     /// 移动玩家门规则；仲裁原生准入预填（can_move）与玩家面
     /// move()/moveTo() 预检常量注入同源读取。
     pub move_gate: kk_mod_api::builtin::MoveGate,
+    /// 地形静态通行规则；仲裁静态障碍判定的墙项与玩家面原生寻路
+    /// 地形同源读取。
+    pub terrain_passability: kk_mod_api::builtin::TerrainPassability,
     /// 资源目录：内建 RESOURCES_ALL 加计划声明的命名空间资源。
     /// 搬运/掉落/超容回收与领域能力按它校验；市场/跨房发送不读它。
     pub resources: Rc<kk_mod_api::resources::ResourceCatalog>,
@@ -109,7 +112,10 @@ impl Working {
             upgrade_block_pending: BTreeMap::new(),
             safe_mode_activated: BTreeSet::new(),
             extractor_cooldown_pending: BTreeMap::new(),
-            movement: crate::settle::movement::Movement::with_buildings(plane.buildings.clone()),
+            movement: crate::settle::movement::Movement::with_buildings(
+                plane.buildings.clone(),
+                plane.terrain_passability.wall_passable,
+            ),
             pending_inter_room: Vec::new(),
             chain_mutations: None,
             plane,
