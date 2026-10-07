@@ -36,7 +36,7 @@
 - [G24.a 无开放轮次的包/API 切换](notes/g24a-package-switch-2026-10-06.md)：替代分片换装执行层、引擎侧换计划收养（内容校验充当残留硬门）、停用投影与故障过滤、工作者常量封闭集重注入、sim `mods_switch` 场景字段与冷恢复生效集推导。
 - [G22.b 确定性玩法时间/RNG](notes/g22b-determinism-2026-10-07.md)：无状态派生随机流（seed+域+tick+序号）、轮作用域重置、SDK 确定性 Date/Math.random、seed 注入面与 restore/switch 种子错位修复。
 - [G25.a 持久输入与玩家结果日志](notes/g25a-input-log-2026-10-07.md)：轮级提交后追加日志（意图/写回/墙钟/CPU 桶）、链哈希信封与撕裂尾检测、校验读取器与 sim --input-log。
-- [G25.b 结算回放与完整状态核对](notes/g25b-replay-2026-10-07.md)：检查点+日志段配对规则、回放内核与逐位等值核对、sim --verify-replay。
+- [G25.b 结算回放与完整状态核对](notes/g25b-replay-2026-10-07.md)：检查点+日志段配对规则（接缝/头段种子门）、回放内核与逐位等值核对、settle_external 规范化、sim --verify-replay（replay_failed 退出语义）。
 - [JS 受击策略第二片](notes/n2c-incoming-policy-2026-10-06.md)：公式替换、独立护甲/护盾与免疫、来源摘要、拒绝回退、缓存重试及冷恢复。
 - [受击策略第一片：原生 TOUGH](notes/n2c-tough-damage-2026-10-06.md)：累计减伤、治疗/死亡/库存、JS 主伤害/反击、拒绝和受伤后的冷恢复。
 
