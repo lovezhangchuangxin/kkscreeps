@@ -99,7 +99,7 @@ processor 台账还须覆盖资源采集/再生、spawn 与寿命/死亡、塔�
 
 **受击策略第二片（2026-10-06 已交付）**：新增 `builtin:creep.receiveDamage`，原始/默认伤害和有界来源摘要供 JS 替换公式，`ctx.incoming` 数值候选支持多处理器组合；正常拒绝回退默认 TOUGH，显式零值提供免疫。独立护甲/护盾包、两包组合、原生对照，来源截断与能力门、缓存重试及双通道冷恢复有验收。没有开放结构受击或实际伤害反击；移动仲裁的排序片随后由 G01 交付（见下），准入与完整仲裁继续登记为未完成。现行契约见[JS 受击策略](../architecture/mod-incoming-policy.md)。
 
-**G01 移动竞争优先级策略（2026-10-06 已交付）**：新增房间级槽 `builtin:room.moveContest`，整房一次提供全部竞争格与默认评分要素，JS 以优先级数值候选改变竞争者排序，宿主按 优先级 → 默认四键 → 登记序 稳定选胜；未设置优先级为 0，原生默认与平手登记序保持兼容。seniority/heaviest 两个独立包与原生对照选出三种不同胜者，组合、拒绝回退、能力门、故障停用、缓存重试与双通道冷恢复有验收；无贡献路径不进入 realm，默认微基准无可测量回归。移动准入（G02）、获准集合与让位链（G03）、代价与执行效果（G04）中，疲劳/MOVE/被拉门槛准入已按 G02.a 交付（见[JS 移动准入](../architecture/mod-move-admission.md)），仲裁障碍追加阻挡已按 G02.b 交付（见[JS 移动障碍](../architecture/mod-move-obstacle.md)），意图静态预检已按 G02.c 交付（见[JS 移动预检](../architecture/mod-move-precheck.md)，请求级单向收紧）；G02.d1 静态放行已交付（三路复审与完整门禁、release ratchet 通过）；疲劳/MOVE 玩家门与寻路消费者续拆 G02.d2，G02 父项部分完成，不能据已有 native 二次否决关闭长期玩法目标。竞争现行契约见[JS 移动竞争](../architecture/mod-move-contest.md)，证据见[交付记录](../research/notes/g01-move-contest-2026-10-06.md)。
+**G01 移动竞争优先级策略（2026-10-06 已交付）**：新增房间级槽 `builtin:room.moveContest`，整房一次提供全部竞争格与默认评分要素，JS 以优先级数值候选改变竞争者排序，宿主按 优先级 → 默认四键 → 登记序 稳定选胜；未设置优先级为 0，原生默认与平手登记序保持兼容。seniority/heaviest 两个独立包与原生对照选出三种不同胜者，组合、拒绝回退、能力门、故障停用、缓存重试与双通道冷恢复有验收；无贡献路径不进入 realm，默认微基准无可测量回归。移动准入（G02）、获准集合与让位链（G03）、代价与执行效果（G04）中，疲劳/MOVE/被拉门槛准入已按 G02.a 交付（见[JS 移动准入](../architecture/mod-move-admission.md)），仲裁障碍追加阻挡已按 G02.b 交付（见[JS 移动障碍](../architecture/mod-move-obstacle.md)），意图静态预检已按 G02.c 交付（见[JS 移动预检](../architecture/mod-move-precheck.md)，请求级单向收紧）；G02.d1 静态放行已交付（三路复审与完整门禁、release ratchet 通过）；G02.d2 玩家门双端冻结已交付（fatigueLimit/minActiveMoves 规则同源驱动玩家预检与仲裁预填，完整门禁与 ratchet 通过）；声明式寻路规则登记 G02.d3 设计，G02 父项部分完成，不能据已有 native 二次否决关闭长期玩法目标。竞争现行契约见[JS 移动竞争](../architecture/mod-move-contest.md)，证据见[交付记录](../research/notes/g01-move-contest-2026-10-06.md)。
 
 坐标有效、ID 唯一、索引一致、数值合法和编码上限是宿主不变量；距离、目标准入、能量价格、部件效果、伤害公式和冲突优先级是可替换玩法。若 typed 表示无法表达新规则，提供扩展表示及相应处理/投影路径，不要求作者修改 enum 或字段宽度。JS 不持有 Rust 裸指针，也不直接破坏 native 假设。
 
@@ -135,3 +135,5 @@ N4 先建立数据清单：rooms/扩展字段、players/Memory/segments/CPU/通�
 2026-10-07 稳定化纠偏：G02 的墙地形/结构/私有 rampart 放行仍是未实现的玩法能力，已登记 G02.d；宿主只永久保留坐标、ID、占格等表示/提交不变式。检查点现为载荷 v3，宿主玩法协议明确区分 UTC Date 与旧本地时区历史；目录恢复按链哈希游标配对，详见现行 checkpoints/input-log/gameplay-determinism。
 
 2026-10-07 G02.d1 采用 [移动预检](../architecture/mod-move-precheck.md)的公共 `allowStatic`，不新增槽或持久状态。动态占格和显式否决仍生效；玩家 moveTo/PathFinder 穿墙寻路未交付，下一子片先盘点双端预检消费者。
+
+2026-10-07 G02.d2 交付[移动玩家门](../architecture/player-precheck-rules.md)规则化：两条数值规则双端同源，准入撕裂消除；寻路边界（moveTo 不穿墙、PathFinder 不感知放行）以回归测试钉死。声明式寻路规则为 G02.d3 设计前置，tick 级放行决策与服务器 JS 回调永不进玩家寻路。

@@ -33,7 +33,7 @@ native 的安全模式、rampart、nuker/powerBank 和 terminal 干扰检查仍�
 
 ## 装配与默认路径
 
-历史 `builtin::link()` 入口现在聚合 link、creep 资源、移动、战斗与建造族槽及仓库容量规则；规则仍 25 条，内建槽共 14 个（含对象 tick 受击策略）。各 native 绑定由安装门显式校验，builtin revision/内容摘要纳入新描述。自有意图不能挂载内建派发槽，即使已安装 replace 也会在装配期拒绝；它们由 Mod 对象派发，内建动作则由类型化对象派发。自有意图装配跳过全部内建槽，避免把 creep native 当成 Mod process；纯 Rust 安装表按冻结槽分配处理器，各动作使用各自 native 函数。JS 宿主沿用一次进入 VM 的整链组合。移动槽的协议另见[移动动作槽](creep-move-slot.md)，战斗槽见[战斗动作槽](creep-combat-slot.md)，建造族见[建造动作槽](creep-build-slot.md)。
+历史 `builtin::link()` 入口现在聚合 link、creep 资源、移动、战斗与建造族槽及仓库容量规则；内建规则现 31 条、槽共 20 个（含对象 tick 受击策略；随移动/战斗/预检/拉拽/代价等族逐批增长）。各 native 绑定由安装门显式校验，builtin revision/内容摘要纳入新描述。自有意图不能挂载内建派发槽，即使已安装 replace 也会在装配期拒绝；它们由 Mod 对象派发，内建动作则由类型化对象派发。自有意图装配跳过全部内建槽，避免把 creep native 当成 Mod process；纯 Rust 安装表按冻结槽分配处理器，各动作使用各自 native 函数。JS 宿主沿用一次进入 VM 的整链组合。移动槽的协议另见[移动动作槽](creep-move-slot.md)，战斗槽见[战斗动作槽](creep-combat-slot.md)，建造族见[建造动作槽](creep-build-slot.md)。
 
 无扩展时走 Native，不保存局部快照、不暂存 namespace、不进入 JS。creep 动作改用短借用，不能据此声称默认开销为零；性能须另行测量。link tick 的正常拒绝、其他 creep 动作槽和保存恢复不属于本片。
 

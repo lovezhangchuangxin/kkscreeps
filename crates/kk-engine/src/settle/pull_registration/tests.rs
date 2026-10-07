@@ -96,7 +96,7 @@ fn denied_pair_equivalent_to_never_registered() {
     base_m.rank_winners(&base_room, &BTreeMap::new());
     let mut base_fatigue = BTreeMap::new();
     base_fatigue.insert(ObjId(1), 5);
-    base_m.prefill_admissions(&base_room, &base_fatigue);
+    base_m.prefill_admissions(&base_room, &base_fatigue, &Default::default());
     base_m.cancel_blocked(&base_room, &RoomIndex::build(&base_room.objects), None);
     assert!(!base_m.admitted(ObjId(1)), "基线：疲劳无 MOVE 拒绝");
 
@@ -118,7 +118,7 @@ fn denied_pair_equivalent_to_never_registered() {
     m.rank_winners(&room, &BTreeMap::new());
     let mut fatigue = BTreeMap::new();
     fatigue.insert(ObjId(1), 5);
-    m.prefill_admissions(&room, &fatigue);
+    m.prefill_admissions(&room, &fatigue, &Default::default());
     assert!(!m.admitted(ObjId(1)), "被拉豁免不再生效");
     m.cancel_blocked(&room, &index, None);
     assert_eq!(
@@ -198,7 +198,7 @@ fn pair_validation_is_traversal_order_independent() {
         m.rank_winners(&room, &BTreeMap::new());
         let mut fatigue = BTreeMap::new();
         fatigue.insert(current, 5);
-        m.prefill_admissions(&room, &fatigue);
+        m.prefill_admissions(&room, &fatigue, &Default::default());
         assert!(
             m.admitted(current),
             "新目标配对不受旧目标复核影响（id 布局 {:?}/{:?}）",

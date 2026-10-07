@@ -140,6 +140,8 @@ fn builtin_link_values_match_constant_dump_and_use_native_slots() {
         ("creep.rangedAttack.range", "RANGED_ATTACK_RANGE"),
         ("creep.heal.range", "HEAL_RANGE"),
         ("creep.rangedHeal.range", "RANGED_HEAL_RANGE"),
+        ("creep.move.fatigueLimit", "MOVE_FATIGUE_LIMIT"),
+        ("creep.move.minActiveMoves", "MOVE_MIN_ACTIVE_MOVES"),
     ] {
         assert_eq!(
             get(&format!("builtin:{rule}")),
@@ -155,7 +157,14 @@ fn builtin_link_values_match_constant_dump_and_use_native_slots() {
             ranged_heal: 3,
         }
     );
-    assert_eq!(plan.rules().len(), 29);
+    assert_eq!(
+        builtin::MoveGate::from_plan(plan.rules()).unwrap(),
+        builtin::MoveGate {
+            fatigue_limit: 0,
+            min_active_moves: 1,
+        }
+    );
+    assert_eq!(plan.rules().len(), 31);
     assert_eq!(plan.slots().len(), 20);
     for name in builtin::RESOURCE_ACTION_SLOTS
         .iter()

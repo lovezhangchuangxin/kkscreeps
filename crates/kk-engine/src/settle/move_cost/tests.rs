@@ -66,7 +66,7 @@ fn cost_input_lists_survivors_with_native_factors() {
     put(&mut room, ObjId(9), 10, 11, &[BodyKind::Move]);
     m.add(ObjId(9), (10, 11), 0, 1);
     m.rank_winners(&room, &BTreeMap::new());
-    m.prefill_admissions(&room, &BTreeMap::new());
+    m.prefill_admissions(&room, &BTreeMap::new(), &Default::default());
     m.cancel_blocked(&room, &RoomIndex::build(&room.objects), None);
     let input = m.cost_input(&room, &RoomIndex::build(&room.objects));
     assert_eq!(input.movers.len(), 3, "全部幸存者可见");
@@ -108,7 +108,7 @@ fn overridden_cost_replaces_native_and_missing_falls_back() {
     );
     m.add(ObjId(2), (40, 40), 0, -1);
     m.rank_winners(&room, &BTreeMap::new());
-    m.prefill_admissions(&room, &BTreeMap::new());
+    m.prefill_admissions(&room, &BTreeMap::new(), &Default::default());
     m.cancel_blocked(&room, &RoomIndex::build(&room.objects), None);
     let index = RoomIndex::build(&room.objects);
     let input = m.cost_input(&room, &index);
@@ -185,6 +185,7 @@ fn working() -> Working {
             links: engine.links,
             stores: engine.stores,
             combat: engine.combat,
+            move_gate: Default::default(),
             resources: engine.resources.clone(),
             contrib: engine.contrib,
             extensions: engine.extensions,

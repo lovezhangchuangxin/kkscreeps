@@ -17,6 +17,9 @@ pub struct Plane {
     /// 单目标战斗动作射程规则；attack/rangedAttack/heal/rangedHeal
     /// 的结算距离判定与 runtime 玩家常量注入同源读取。
     pub combat: kk_mod_api::builtin::CombatRanges,
+    /// 移动玩家门规则；仲裁原生准入预填（can_move）与玩家面
+    /// move()/moveTo() 预检常量注入同源读取。
+    pub move_gate: kk_mod_api::builtin::MoveGate,
     /// 资源目录：内建 RESOURCES_ALL 加计划声明的命名空间资源。
     /// 搬运/掉落/超容回收与领域能力按它校验；市场/跨房发送不读它。
     pub resources: Rc<kk_mod_api::resources::ResourceCatalog>,
@@ -788,10 +791,12 @@ impl Working {
     }
 
     /// 仲裁阶段二：复核胜者拉拽配对并预填原生准入终值（取消链消费）；
-    /// Native 与 Hosted 准入路径都必须先执行。
+    /// Native 与 Hosted 准入路径都必须先执行。原生门槛按 Plane 的
+    /// 移动玩家门规则判定，与玩家面预检同源。
     pub fn prefill_movement_admissions(&mut self) {
+        let gate = self.plane.move_gate;
         self.movement
-            .prefill_admissions(&self.room, &self.old_fatigue);
+            .prefill_admissions(&self.room, &self.old_fatigue, &gate);
     }
 
     /// 准入槽输入构造；仅 Hosted 路径调用，原生路径不为其分配。

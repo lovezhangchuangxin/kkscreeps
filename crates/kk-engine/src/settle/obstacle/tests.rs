@@ -59,7 +59,7 @@ fn obstacle_input_carries_cell_summary_and_native_verdict() {
     put(&mut room, ObjId(5), 30, 31);
     m.add(ObjId(5), (30, 31), 0, -1); // d 让位离开 (30,31)
     m.rank_winners(&room, &BTreeMap::new());
-    m.prefill_admissions(&room, &BTreeMap::new());
+    m.prefill_admissions(&room, &BTreeMap::new(), &Default::default());
     let input = m.obstacle_input(&room, &RoomIndex::build(&room.objects), None);
     let by_id = |id: &str| {
         input
@@ -113,7 +113,7 @@ fn extra_block_cancels_mover_and_dependent_chain() {
     m.add(ObjId(2), (10, 11), 0, -1);
     let old_fatigue = BTreeMap::new();
     m.rank_winners(&room, &BTreeMap::new());
-    m.prefill_admissions(&room, &old_fatigue);
+    m.prefill_admissions(&room, &old_fatigue, &Default::default());
     let index = RoomIndex::build(&room.objects);
     let input = m.obstacle_input(&room, &index, None);
     // 预填时点两者均不被阻挡（a 让位成立）。
@@ -134,7 +134,14 @@ fn extra_block_cancels_mover_and_dependent_chain() {
     let mut m2 = movement::Movement::new();
     m2.add(ObjId(1), (10, 10), 0, 1);
     m2.add(ObjId(2), (10, 11), 0, -1);
-    m2.check_impl(&room, &index, &old_fatigue, None, &BTreeMap::new());
+    m2.check_impl(
+        &room,
+        &index,
+        &old_fatigue,
+        None,
+        &BTreeMap::new(),
+        &Default::default(),
+    );
     assert_eq!(m2.winners().len(), 2, "原生对照两步链移动成立");
 }
 

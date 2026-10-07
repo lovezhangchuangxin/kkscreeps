@@ -60,12 +60,26 @@ fn movement_benchmark_native_arbitration() {
     let iterations = if cfg!(debug_assertions) { 10 } else { 2000 };
     // 预热与正确性检查不计入窗口。
     let mut probe = movement.clone();
-    probe.check_impl(&room, &index, &old_fatigue, None, &BTreeMap::new());
+    probe.check_impl(
+        &room,
+        &index,
+        &old_fatigue,
+        None,
+        &BTreeMap::new(),
+        &Default::default(),
+    );
     assert_eq!(probe.winners().len(), 8, "每个竞争格恰一胜者");
     let start = std::time::Instant::now();
     for _ in 0..iterations {
         let mut m = movement.clone();
-        m.check_impl(&room, &index, &old_fatigue, None, &BTreeMap::new());
+        m.check_impl(
+            &room,
+            &index,
+            &old_fatigue,
+            None,
+            &BTreeMap::new(),
+            &Default::default(),
+        );
         debug_assert_eq!(m.winners().len(), 8);
     }
     let elapsed = start.elapsed();

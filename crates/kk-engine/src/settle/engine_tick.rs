@@ -120,6 +120,7 @@ impl Engine {
                 links: self.links,
                 stores: self.stores,
                 combat: self.combat,
+                move_gate: self.move_gate,
                 resources: self.resources.clone(),
                 buildings: self.buildings.clone(),
                 contrib: self.contrib.clone(),

@@ -299,3 +299,54 @@ fn static_allowance_dual_player_prechecks_and_concurrency_agree() -> anyhow::Res
     }
     Ok(())
 }
+
+/// G02.d2 边界钉死：ghost 放行只作用于结算侧——同一 tick 内玩家
+/// PathFinder.search 仍按原生墙格绕行（不感知 allowStatic，时序上
+/// 放行决策也在玩家执行之后才产生），而方向 move 经结算侧放行真实
+/// 穿墙。双断言互为对照。
+#[test]
+fn pathfinder_stays_native_blind_to_static_allowance() -> anyhow::Result<()> {
+    for binary in [false, true] {
+        for active in [false, true] {
+            let mut terrain = vec![0; 2500];
+            terrain[10 * 50 + 11] = 1;
+            let shard = json!({"players":["p1"],"rooms":[{"name":"W1N1","owner":"p1","rcl":6,"terrain":terrain}]});
+            let source = if active {
+                package(ALLOW)
+            } else {
+                package("api.handlers.before('builtin:room.movePrecheck',{id:'noop'},()=>{});")
+            };
+            let mut e = engine_with_shard(
+                &[("alpha", source)],
+                binary,
+                &[],
+                RegisterOptions::default(),
+                &shard,
+            )?;
+            let id = creep_at(&mut e, "W1N1", "m", "p1", 10, 10, &["move"])?;
+            let run = e.run_player(
+                "p1",
+                r#"(() => {
+                    const r = PathFinder.search(
+                        new RoomPosition(10, 10, 'W1N1'),
+                        { pos: new RoomPosition(12, 10, 'W1N1'), range: 0 },
+                        { maxRooms: 1 });
+                    const crosses = r.path.some((p) => p.x === 11 && p.y === 10);
+                    const rc = Game.creeps.m.move(RIGHT);
+                    return [rc, r.incomplete, r.path.length > 0, crosses].join(',');
+                })()"#,
+            )?;
+            assert_eq!(
+                run.expr["value"],
+                json!("0,false,true,false"),
+                "{binary} {active}: move 记录 OK 且寻路绕开墙格"
+            );
+            assert_eq!(
+                pos_in(&e, "W1N1", &id),
+                if active { (11, 10) } else { (10, 10) },
+                "{binary} {active}: 结算侧按放行决策"
+            );
+        }
+    }
+    Ok(())
+}

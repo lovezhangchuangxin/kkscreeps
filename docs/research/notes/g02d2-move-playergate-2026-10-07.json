@@ -1,0 +1,90 @@
+{
+  "baseline": "f84a2b4",
+  "scope": "G02.d2",
+  "catalog_revision": {
+    "from": 15,
+    "to": 16,
+    "slots": 20,
+    "rules": {
+      "from": 29,
+      "to": 31
+    }
+  },
+  "constants": {
+    "added": [
+      "MOVE_FATIGUE_LIMIT",
+      "MOVE_MIN_ACTIVE_MOVES"
+    ],
+    "total": 429
+  },
+  "new_persistent_domains": [],
+  "targeted_checks": {
+    "engine_admission": {
+      "passed": 13,
+      "new": 1
+    },
+    "runner_sandbox": {
+      "new_impl_fns": 2
+    },
+    "runtime_move_gate": {
+      "passed": 3
+    },
+    "runtime_move_static": {
+      "passed": 10,
+      "new": 1
+    },
+    "sim": {
+      "passed": 1,
+      "seconds": 99.03,
+      "scenarios": 4,
+      "channels": [
+        "JSON",
+        "KKPV"
+      ],
+      "cold_resume": true,
+      "replay_verified": true,
+      "plan_hash_identities": 4
+    }
+  },
+  "pathfinding_boundary": {
+    "move_to_wall": "部分路径止于墙前、步进不越墙列（官方 moveTo 语义非 ERR_NO_PATH）",
+    "allow_static_blindness": "ghost 放行下同 tick 玩家搜索绕行原生墙格、结算侧穿墙成功（双断言）",
+    "declarative_rules": "G02.d3 设计登记，未实现"
+  },
+  "full_gate": {
+    "status": "passed",
+    "rust_passed": 1219,
+    "rust_ignored": 12,
+    "compat_js_passed": 15,
+    "renderer_js_passed": 1
+  },
+  "release_ratchet": {
+    "status": "passed",
+    "suite_total": 2914,
+    "suite_passed": 1918,
+    "floor": 1918,
+    "new_red": 0
+  },
+  "remaining": [
+    "G02.d3: declarative pathfinding rules (design registered)",
+    "spawning gate, full arbitration replacement, obstacle slot second preview"
+  ],
+  "review": {
+    "agents": 3,
+    "p1": 1,
+    "p2": 0,
+    "p3": 8,
+    "cleared": [
+      "P1 prelude_and_room_forms.rs 1022 行超规模门：常量族拆出 constant_gate_forms.rs（847+178）",
+      "kk-core 键数门注释 4→6 本地常量",
+      "mod-move-precheck.md revision 演进口径（现 v16）",
+      "mod-move-admission.md 槽数 18→20",
+      "creep-resource-slots.md 规则 25/槽 14 陈旧数字",
+      "pathfinder_family.rs 头注释 ERR_NO_PATH 残留假设",
+      "move_gate.rs 默认臂 return 0 语法错误轮次",
+      "sim README 披露 final 比较剥离 CPU bucket",
+      "admission 测试 m2/m3 各自 room"
+    ],
+    "process_lesson": "管道 | tail 吞掉门禁退出码，首轮假通过；最终轮显式落盘退出码"
+  }
+}

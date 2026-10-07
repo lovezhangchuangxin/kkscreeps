@@ -30,9 +30,9 @@ mod tests {
         let dump: serde_json::Value =
             serde_json::from_str(include_str!("../../kk-runner/assets/constants.json")).unwrap();
         let obj = dump.as_object().unwrap();
-        // 423 个上游键 + 4 个本地新增射程常量（上游 dump 无此名字，
-        // 见 builtin:creep.*.range 规则与 player-precheck-rules 契约）。
-        assert_eq!(obj.len(), 427, "官方 dump + 本地新增键数");
+        // 423 个上游键 + 6 个本地新增常量（4 射程 + 2 移动玩家门，
+        // 上游 dump 无此名字，见 player-precheck-rules 契约）。
+        assert_eq!(obj.len(), 429, "官方 dump + 本地新增键数");
 
         // 关键游戏数值的固定期望，用于发现常量变化。
         assert_eq!(c::HARVEST_POWER, 2);

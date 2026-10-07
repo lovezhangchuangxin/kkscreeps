@@ -344,6 +344,16 @@ impl EmbedEngine {
                 ] {
                     constant_overrides.insert(name.into(), serde_json::json!(value));
                 }
+                // 移动玩家门规则同步预检沙箱：move()/moveTo() 预检门与
+                // 仲裁原生准入预填读同一生效值。
+                let move_gate = kk_mod_api::builtin::MoveGate::from_plan(registered.plan.rules())
+                    .map_err(anyhow::Error::msg)?;
+                for (name, value) in [
+                    ("MOVE_FATIGUE_LIMIT", move_gate.fatigue_limit),
+                    ("MOVE_MIN_ACTIVE_MOVES", move_gate.min_active_moves),
+                ] {
+                    constant_overrides.insert(name.into(), serde_json::json!(value));
+                }
                 if let Some(resources_all) = &resources_all {
                     constant_overrides.insert("RESOURCES_ALL".into(), resources_all.clone());
                 }
@@ -410,6 +420,19 @@ impl EmbedEngine {
                 ),
                 ("HEAL_RANGE", self.engine.combat_ranges().heal),
                 ("RANGED_HEAL_RANGE", self.engine.combat_ranges().ranged_heal),
+            ] {
+                config
+                    .constant_overrides
+                    .insert(name.to_string(), serde_json::json!(value));
+            }
+            // 移动玩家门同步玩家全局常量：move()/moveTo() 的疲劳/MOVE
+            // 预检门与仲裁原生准入预填同源；结算侧读 Plane 同一快照。
+            for (name, value) in [
+                ("MOVE_FATIGUE_LIMIT", self.engine.move_gate().fatigue_limit),
+                (
+                    "MOVE_MIN_ACTIVE_MOVES",
+                    self.engine.move_gate().min_active_moves,
+                ),
             ] {
                 config
                     .constant_overrides

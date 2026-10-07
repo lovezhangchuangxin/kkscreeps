@@ -116,3 +116,5 @@ Mod 后续工作使用[30 项任务与接手台账](plans/mod-next-batches.md)�
 2026-10-07 复审范围纠偏：移动准入 G02 仍为部分完成；墙地形/结构等静态阻挡放行、玩家预检与仲裁复检贯通已登记 G02.d，属于完整 JS 玩法验收的剩余消费者。稳定化中的 UTC Date、协议身份、哈希游标、建筑记录校验和批量初始化不代表这些新玩法已经开放；具体进度见持续台账。
 
 2026-10-07 G02.d1 静态移动放行已交付（完整门禁与 release ratchet 通过）：公共 JS 包可放行墙/结构/私有 rampart/己方工地，准入预演与仲裁同源，动态占格及组合否决保持。剩余疲劳/MOVE 玩家门与 moveTo/PathFinder 寻路消费者登记 G02.d2；G02 父项仍部分完成。契约见[移动预检](architecture/mod-move-precheck.md)，最终检查与提交以持续台账为准。
+
+2026-10-07 G02.d2 移动玩家门双端冻结已交付（完整门禁与 release ratchet 通过）：fatigueLimit/minActiveMoves 两条规则同源驱动玩家面 move()/moveTo() 预检与仲裁原生预填；moveTo 不穿墙、PathFinder 不感知放行已由回归测试钉死。声明式寻路规则登记 G02.d3 设计；G02 父项仍部分完成。契约见[玩家预检规则](architecture/player-precheck-rules.md)，最终检查与提交以持续台账为准。

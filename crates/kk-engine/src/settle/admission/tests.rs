@@ -77,7 +77,7 @@ fn rank_and_fill(
     old_fatigue: &BTreeMap<ObjId, u32>,
 ) -> MoveAdmissionInput {
     m.rank_winners(room, &BTreeMap::new());
-    m.prefill_admissions(room, old_fatigue);
+    m.prefill_admissions(room, old_fatigue, &Default::default());
     m.admission_input(room, old_fatigue)
 }
 
@@ -118,7 +118,14 @@ fn admission_input_carries_native_gate_factors() {
 fn native_path_cancels_all_and_check_impl_stays_equivalent() {
     let (room, mut m, old_fatigue) = gated_room();
     let index = RoomIndex::build(&room.objects);
-    m.check_impl(&room, &index, &old_fatigue, None, &BTreeMap::new());
+    m.check_impl(
+        &room,
+        &index,
+        &old_fatigue,
+        None,
+        &BTreeMap::new(),
+        &Default::default(),
+    );
     assert!(m.winners().is_empty(), "原生门槛下三者全部取消");
 
     // 分阶段调用与整链组合等价。
@@ -534,5 +541,90 @@ fn simulate_matches_chain_under_safe_mode() {
     assert!(
         m.winners().contains_key(&ObjId(1)),
         "安全模式主人可穿过敌方未让位 creep"
+    );
+}
+
+/// G02.d2 移动玩家门规则：默认值等价旧的硬编码门槛（疲劳须 0 且有
+/// 存活 MOVE、被拉豁免）；fatigueLimit/minActiveMoves 覆盖经同一
+/// `can_move` 生效，仲裁原生预填与玩家面预检同源消费同一快照。
+#[test]
+fn move_gate_rules_drive_native_admission_prefill() {
+    use kk_mod_api::builtin::MoveGate;
+    let mover = creep_with(&[BodyKind::Move], 0);
+    let legless = creep_with(&[BodyKind::Work], 0);
+    let official = MoveGate::default();
+    assert_eq!(official.fatigue_limit, 0, "默认疲劳上界即官方");
+    assert_eq!(official.min_active_moves, 1, "默认 MOVE 门槛即官方");
+
+    // 默认 ≡ 旧硬编码（疲劳 0 + 有 MOVE 才可自发移动）。
+    assert!(movement::can_move(&mover, 0, false, &official));
+    assert!(!movement::can_move(&mover, 1, false, &official));
+    assert!(!movement::can_move(&legless, 0, false, &official));
+    // 被拉豁免不进规则面：任一门下都放行。
+    assert!(movement::can_move(&legless, 9, true, &official));
+
+    // fatigueLimit 覆盖：疲劳不超过上界即可自发移动。
+    let marathon = MoveGate {
+        fatigue_limit: 5,
+        min_active_moves: 1,
+    };
+    assert!(movement::can_move(&mover, 5, false, &marathon));
+    assert!(!movement::can_move(&mover, 6, false, &marathon));
+    // minActiveMoves=0：无 MOVE 件也可自发移动。
+    let free_legs = MoveGate {
+        fatigue_limit: 0,
+        min_active_moves: 0,
+    };
+    assert!(movement::can_move(&legless, 0, false, &free_legs));
+    // 两门独立叠加。
+    let both = MoveGate {
+        fatigue_limit: 3,
+        min_active_moves: 0,
+    };
+    assert!(movement::can_move(&legless, 3, false, &both));
+    assert!(!movement::can_move(&legless, 4, false, &both));
+
+    // 预填链路消费同一 gate：gated_room 的疲劳 2 移动者官方门拒绝、
+    // fatigueLimit≥2 门获准；无 MOVE 者官方门拒绝、minActiveMoves=0 获准。
+    let (room, mut m, old_fatigue) = gated_room();
+    m.rank_winners(&room, &BTreeMap::new());
+    m.prefill_admissions(&room, &old_fatigue, &official);
+    let finals = m.admission_finals();
+    assert!(
+        !finals.get(&ObjId(1)).copied().unwrap_or(false),
+        "官方门：疲劳 2 拒绝"
+    );
+    assert!(
+        !finals.get(&ObjId(2)).copied().unwrap_or(false),
+        "官方门：无 MOVE 拒绝"
+    );
+
+    let (room2, mut m2, old_fatigue2) = gated_room();
+    m2.rank_winners(&room2, &BTreeMap::new());
+    m2.prefill_admissions(&room2, &old_fatigue2, &marathon);
+    assert!(
+        m2.admission_finals()
+            .get(&ObjId(1))
+            .copied()
+            .unwrap_or(false),
+        "fatigueLimit=5：疲劳 2 获准"
+    );
+    assert!(
+        !m2.admission_finals()
+            .get(&ObjId(2))
+            .copied()
+            .unwrap_or(false),
+        "minActiveMoves 仍为 1：无 MOVE 继续拒绝"
+    );
+
+    let (room3, mut m3, old_fatigue3) = gated_room();
+    m3.rank_winners(&room3, &BTreeMap::new());
+    m3.prefill_admissions(&room3, &old_fatigue3, &free_legs);
+    assert!(
+        m3.admission_finals()
+            .get(&ObjId(2))
+            .copied()
+            .unwrap_or(false),
+        "minActiveMoves=0：无 MOVE 获准"
     );
 }

@@ -145,3 +145,4 @@
 - [增量复审深度修复与结构优化](notes/mod-deep-repairs-2026-10-07.md)：R1–R11 处置、宿主协议身份、初态摘要/哈希游标、建筑记录校验与原子批量初始化；最终复审、完整门禁和兼容 ratchet 结果见记录及机器证据。
 
 - [G02.d1 静态移动放行](notes/g02d1-static-movement-2026-10-07.md)：登记快照、仲裁/预演同源、独立 ghost/seal 包、双通道冷恢复及回放；G02 父项保留剩余玩家预检消费者。
+- [G02.d2 移动玩家门双端冻结](notes/g02d2-move-playergate-2026-10-07.md)：fatigueLimit/minActiveMoves 规则化双端同源、方向形态返回码钉死与寻路边界回归（moveTo 不穿墙、PathFinder 不感知放行）。

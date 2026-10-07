@@ -81,6 +81,20 @@ pub fn builtin_combat_ranges() -> kk_mod_api::builtin::CombatRanges {
     })
 }
 
+/// 无自定义计划时的移动玩家门快照；与 link/仓库同批冻结默认计划。
+pub fn builtin_move_gate() -> kk_mod_api::builtin::MoveGate {
+    static GATE: std::sync::OnceLock<kk_mod_api::builtin::MoveGate> = std::sync::OnceLock::new();
+    *GATE.get_or_init(|| {
+        let plan = kk_mod_api::freeze_with_builtin(
+            kk_mod_api::builtin::link(),
+            vec![],
+            kk_mod_api::FreezeOptions::default(),
+        )
+        .expect("内置贡献必须可冻结");
+        kk_mod_api::builtin::MoveGate::from_plan(plan.rules()).expect("内置移动门规则完整")
+    })
+}
+
 /// 按嵌入式接口的 kind 将 spec 转换为对象，产物 ID 为 0，等待 World 分配。
 /// 坐标来自 `spec.pos=[x,y]`。未知 kind 进入 Generic，并保留 type=kind。
 /// 参数验证按对象类型进行，不检查地形、重叠、配额或主人是否存在。

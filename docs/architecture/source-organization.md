@@ -64,4 +64,4 @@ V8 生命周期账本位于 `kk-vm/src/isolate_order.rs`，玩家沙箱与 Mod r
 
 管理初始化使用 `Engine::insert_objects` / `EmbedEngine::place_objects` 或一次 `edit_world`：按输入顺序分配 ID、读取此前已放置的控制器，末项失败不发布前缀，成功只推进一次编辑版本。sim 将全部场景对象作为一批放置；分片房间/控制器创建也在单份草稿上完成。单对象管理 API 保留，反复调用仍承担独立事务的复制成本。世界计划校验在无扩展字段时借用房间，避免额外整房复制。
 
-移动静态判定在 `kk-engine/src/settle/movement/static_obstacles.rs`，由登记和仲裁共用；`precheck.rs` 保存登记拒绝快照与 JS 决策，`movement/inputs.rs` 投影输入及提交瞬态放行。专项测试在 `kk-runtime/tests/mod_chain_tests/move_static.rs` 与 `kk-cli/tests/sim_tests/move_static.rs`，避免继续扩大原预检测试文件。
+移动静态判定在 `kk-engine/src/settle/movement/static_obstacles.rs`，由登记和仲裁共用；`precheck.rs` 保存登记拒绝快照与 JS 决策，`movement/inputs.rs` 投影输入及提交瞬态放行。专项测试在 `kk-runtime/tests/mod_chain_tests/move_static.rs` 与 `kk-cli/tests/sim_tests/move_static.rs`，避免继续扩大原预检测试文件。移动玩家门快照 `MoveGate` 与规则声明同在 `kk-mod-api/src/builtin.rs`（战斗射程先例），专项测试在 `kk-runtime/tests/mod_chain_tests/move_gate.rs` 与 `kk-cli/tests/sim_tests/move_playergate.rs`。

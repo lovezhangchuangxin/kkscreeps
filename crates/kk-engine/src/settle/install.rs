@@ -324,6 +324,7 @@ impl Engine {
         let links = kk_mod_api::builtin::LinkRules::from_plan(plan.rules())?;
         let stores = kk_mod_api::builtin::StoreRules::from_plan(plan.rules())?;
         let combat = kk_mod_api::builtin::CombatRanges::from_plan(plan.rules())?;
+        let move_gate = kk_mod_api::builtin::MoveGate::from_plan(plan.rules())?;
         let resources = Rc::new(kk_mod_api::resources::ResourceCatalog::from_plan(&plan));
         let buildings = Rc::new(
             kk_mod_api::buildings::BuildingCatalog::from_plan(&plan)
@@ -355,6 +356,7 @@ impl Engine {
         self.links = links;
         self.stores = stores;
         self.combat = combat;
+        self.move_gate = move_gate;
         self.resources = resources;
         self.buildings = buildings;
         self.contrib = Rc::new(contrib);
@@ -381,6 +383,7 @@ impl Engine {
         let links = kk_mod_api::builtin::LinkRules::from_plan(plan.rules())?;
         let stores = kk_mod_api::builtin::StoreRules::from_plan(plan.rules())?;
         let combat = kk_mod_api::builtin::CombatRanges::from_plan(plan.rules())?;
+        let move_gate = kk_mod_api::builtin::MoveGate::from_plan(plan.rules())?;
         let resources = Rc::new(kk_mod_api::resources::ResourceCatalog::from_plan(&plan));
         let buildings = Rc::new(
             kk_mod_api::buildings::BuildingCatalog::from_plan(&plan)
@@ -406,6 +409,7 @@ impl Engine {
         self.links = links;
         self.stores = stores;
         self.combat = combat;
+        self.move_gate = move_gate;
         self.resources = resources;
         self.buildings = buildings;
         self.contrib = Rc::new(contrib);

@@ -283,6 +283,8 @@ mod move_arbitration;
 mod move_cost;
 #[path = "sim_tests/move_obstacle.rs"]
 mod move_obstacle;
+#[path = "sim_tests/move_playergate.rs"]
+mod move_playergate;
 #[path = "sim_tests/move_policy.rs"]
 mod move_policy;
 #[path = "sim_tests/move_precheck.rs"]

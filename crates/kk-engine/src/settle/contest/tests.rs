@@ -103,6 +103,7 @@ fn working_with_contest() -> (Working, movement::Movement) {
             links: engine.links,
             stores: engine.stores,
             combat: engine.combat,
+            move_gate: Default::default(),
             resources: engine.resources.clone(),
             contrib: engine.contrib,
             extensions: engine.extensions,
@@ -179,7 +180,14 @@ fn priorities_reorder_winners_with_default_tiebreak() {
     let index = RoomIndex::build(&w.room.objects);
     let old_fatigue = BTreeMap::new();
     // 全部单 MOVE：默认四键平手 → 登记序首个 ObjId(1) 胜。
-    m2.check_impl(&w.room, &index, &old_fatigue, None, &BTreeMap::new());
+    m2.check_impl(
+        &w.room,
+        &index,
+        &old_fatigue,
+        None,
+        &BTreeMap::new(),
+        &Default::default(),
+    );
     assert_eq!(m2.winners().len(), 1);
     assert_eq!(m2.winners().keys().next().copied(), Some(ObjId(1)));
 
@@ -188,14 +196,28 @@ fn priorities_reorder_winners_with_default_tiebreak() {
     let mut priorities = BTreeMap::new();
     priorities.insert(ObjId(1), -1i64);
     priorities.insert(ObjId(3), 1i64);
-    m3.check_impl(&w.room, &index, &old_fatigue, None, &priorities);
+    m3.check_impl(
+        &w.room,
+        &index,
+        &old_fatigue,
+        None,
+        &priorities,
+        &Default::default(),
+    );
     assert_eq!(m3.winners().keys().next().copied(), Some(ObjId(3)));
 
     // 仅设一个正值：其余默认 0，同层回落登记序。
     let mut m4 = m.clone();
     let mut priorities = BTreeMap::new();
     priorities.insert(ObjId(2), 1i64);
-    m4.check_impl(&w.room, &index, &old_fatigue, None, &priorities);
+    m4.check_impl(
+        &w.room,
+        &index,
+        &old_fatigue,
+        None,
+        &priorities,
+        &Default::default(),
+    );
     assert_eq!(m4.winners().keys().next().copied(), Some(ObjId(2)));
 }
 
@@ -225,7 +247,14 @@ fn contest_input_reports_reciprocal_and_request_count_for_crossing() {
     assert_eq!(c.origin_request_count, 0);
     let index = RoomIndex::build(&room.objects);
     let mut m2 = m.clone();
-    m2.check_impl(&room, &index, &BTreeMap::new(), None, &BTreeMap::new());
+    m2.check_impl(
+        &room,
+        &index,
+        &BTreeMap::new(),
+        None,
+        &BTreeMap::new(),
+        &Default::default(),
+    );
     assert_eq!(
         m2.winners().get(&ObjId(1)),
         Some(&(10u8, 11u8)),
@@ -262,7 +291,14 @@ fn contest_input_reports_pull_flags_and_default_rate2_wins() {
     assert_eq!(t.weight, 1);
     let index = RoomIndex::build(&room.objects);
     let mut m2 = m.clone();
-    m2.check_impl(&room, &index, &BTreeMap::new(), None, &BTreeMap::new());
+    m2.check_impl(
+        &room,
+        &index,
+        &BTreeMap::new(),
+        None,
+        &BTreeMap::new(),
+        &Default::default(),
+    );
     assert_eq!(
         m2.winners().get(&ObjId(1)),
         Some(&(10u8, 10u8)),

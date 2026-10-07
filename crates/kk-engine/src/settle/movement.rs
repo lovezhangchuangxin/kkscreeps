@@ -262,9 +262,10 @@ impl Movement {
         old_fatigue: &BTreeMap<ObjId, u32>,
         safe_mode_user: Option<&str>,
         priorities: &BTreeMap<ObjId, i64>,
+        gate: &kk_mod_api::builtin::MoveGate,
     ) {
         self.rank_winners(room, priorities);
-        self.prefill_admissions(room, old_fatigue);
+        self.prefill_admissions(room, old_fatigue, gate);
         self.cancel_blocked(room, index, safe_mode_user);
     }
 
@@ -328,6 +329,7 @@ impl Movement {
         &mut self,
         room: &RoomState,
         old_fatigue: &BTreeMap<ObjId, u32>,
+        gate: &kk_mod_api::builtin::MoveGate,
     ) {
         self.admissions.clear();
         // 拆分字段借用：胜者表只读迭代，配对残标与终值表可变写入，
@@ -348,7 +350,7 @@ impl Movement {
             });
             admissions.insert(
                 id,
-                creep.is_some_and(|c| can_move(c, fatigue, effective_pulled)),
+                creep.is_some_and(|c| can_move(c, fatigue, effective_pulled, gate)),
             );
         }
     }
@@ -524,9 +526,19 @@ fn movers_at(m: &RateEntry, cell: (u8, u8)) -> bool {
     m.origin == cell
 }
 
-/// 被拉对象免除疲劳和 MOVE 检查；其他对象须旧疲劳为 0 且有存活 MOVE。
-pub fn can_move(creep: &CreepObj, old_fatigue: u32, is_pulled: bool) -> bool {
-    is_pulled || (old_fatigue == 0 && BodyKind::count_active(&creep.body, BodyKind::Move) > 0)
+/// 被拉对象免除疲劳和 MOVE 检查；其他对象按移动玩家门规则判定：
+/// 意图时疲劳不超过 `fatigue_limit` 且存活 MOVE 数不少于
+/// `min_active_moves`。默认值即官方行为（疲劳须为 0、至少 1 个存活
+/// MOVE），与玩家面 `move()`/`moveTo()` 预检同源（同一 MoveGate 快照）。
+pub fn can_move(
+    creep: &CreepObj,
+    old_fatigue: u32,
+    is_pulled: bool,
+    gate: &kk_mod_api::builtin::MoveGate,
+) -> bool {
+    is_pulled
+        || (i64::from(old_fatigue) <= gate.fatigue_limit
+            && BodyKind::count_active(&creep.body, BodyKind::Move) as i64 >= gate.min_active_moves)
 }
 
 /// 按全资源携带量，从身体尾部计算需要的存活 CARRY 数，包含容量 boost。

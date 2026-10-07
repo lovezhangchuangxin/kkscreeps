@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "shard": {
+    "players": [
+      "p1"
+    ],
+    "rooms": [
+      {
+        "name": "W1N1",
+        "owner": "p1",
+        "rcl": 6
+      }
+    ]
+  },
+  "bots": [
+    {
+      "player": "p1",
+      "modules": "."
+    }
+  ],
+  "objects": [
+    {
+      "room": "W1N1",
+      "kind": "creep",
+      "alias": "runner",
+      "spec": {
+        "name": "runner",
+        "owner": "p1",
+        "pos": [
+          20,
+          20
+        ],
+        "body": [
+          "move",
+          "work",
+          "work"
+        ],
+        "ticksToLive": 100
+      }
+    },
+    {
+      "room": "W1N1",
+      "kind": "creep",
+      "alias": "crawler",
+      "spec": {
+        "name": "crawler",
+        "owner": "p1",
+        "pos": [
+          20,
+          25
+        ],
+        "body": [
+          "work",
+          "carry"
+        ],
+        "ticksToLive": 100
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "pointer": "/players/p1/memory/positions/runner",
+      "op": "eq",
+      "value": [
+        20,
+        21
+      ]
+    },
+    {
+      "pointer": "/players/p1/memory/positions/crawler",
+      "op": "eq",
+      "value": [
+        20,
+        26
+      ]
+    }
+  ],
+  "mods": {
+    "root": "../mod-move-playergate",
+    "selection": {
+      "include": [
+        "move-playergate-legless"
+      ]
+    }
+  }
+}

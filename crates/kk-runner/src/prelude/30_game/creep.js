@@ -111,6 +111,10 @@
     RANGED_ATTACK_RANGE: globalThis.RANGED_ATTACK_RANGE,
     HEAL_RANGE: globalThis.HEAL_RANGE,
     RANGED_HEAL_RANGE: globalThis.RANGED_HEAL_RANGE,
+    // 移动玩家门（规则 builtin:creep.move.* 的生效值）：move()/moveTo()
+    // 的疲劳/MOVE 预检与结算仲裁原生准入同源。
+    MOVE_FATIGUE_LIMIT: globalThis.MOVE_FATIGUE_LIMIT,
+    MOVE_MIN_ACTIVE_MOVES: globalThis.MOVE_MIN_ACTIVE_MOVES,
     ERR_NOT_FOUND: globalThis.ERR_NOT_FOUND,
     ERR_RCL_NOT_ENOUGH: globalThis.ERR_RCL_NOT_ENOUGH,
     ERR_FULL: globalThis.ERR_FULL,
@@ -217,9 +221,12 @@
 
   // ---------------------------------------------------------------- Creep 原型：动作方法
   /** Creep.move：官方 creeps.js:126-156——重预检（fatigue/bodypart/方向）后记
-   *  intent 返回 OK；朝相邻 creep 形态（target 为 Creep 实例）同官方 :132-141。
-   *  官方 :130-133 读 this.my/this.spawning（getter 通道）；:145 的 fatigue 是
-   *  data(this.id) 显式回查（新鲜读绕缓存——跨 tick 旧壳按当前值判 ERR_TIRED）。 */
+   *  intent 返回 OK；朝相邻 creep 形态（target 为 Creep 实例）同官方 :132-141，
+   *  结构上跳过疲劳/MOVE 门（拉拽通道）。疲劳与 MOVE 门读计划派生常量
+   *  （规则 builtin:creep.move.*，默认 0/1 即官方行为；与结算仲裁原生
+   *  准入预填同源）。官方 :130-133 读 this.my/this.spawning（getter 通道）；
+   *  :145 的 fatigue 是 data(this.id) 显式回查（新鲜读绕缓存——跨 tick
+   *  旧壳按当前值判 ERR_TIRED）。 */
   globalThis.Creep.prototype.move = function move(target) {
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;
@@ -228,8 +235,10 @@
       gw.intents.set(this.id, 'move', { id: target.id });
       return C.OK;
     }
-    if (gw.rawData(this.id).fatigue > 0) return C.ERR_TIRED;
-    if (countActiveParts(this.body, C.MOVE) === 0) return C.ERR_NO_BODYPART;
+    if (gw.rawData(this.id).fatigue > C.MOVE_FATIGUE_LIMIT) return C.ERR_TIRED;
+    if (countActiveParts(this.body, C.MOVE) < C.MOVE_MIN_ACTIVE_MOVES) {
+      return C.ERR_NO_BODYPART;
+    }
     const direction = +target;
     if (!direction || direction < 1 || direction > 8) return C.ERR_INVALID_ARGS;
     gw.intents.set(this.id, 'move', { direction });
@@ -250,10 +259,12 @@
       opts = _.clone(secondArg);
     }
     opts = opts || {};
-    if (gw.rawData(this.id).fatigue > 0 && !opts.visualizePathStyle) {
+    if (gw.rawData(this.id).fatigue > C.MOVE_FATIGUE_LIMIT && !opts.visualizePathStyle) {
       return C.ERR_TIRED;
     }
-    if (countActiveParts(this.body, C.MOVE) === 0) return C.ERR_NO_BODYPART;
+    if (countActiveParts(this.body, C.MOVE) < C.MOVE_MIN_ACTIVE_MOVES) {
+      return C.ERR_NO_BODYPART;
+    }
     const [x, y, rawRoomName] = fetchXYArguments(firstArg, secondArg);
     const roomName = rawRoomName || this.pos.roomName;
     if (x === undefined || y === undefined) {

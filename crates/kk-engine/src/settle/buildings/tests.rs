@@ -111,6 +111,7 @@ fn working_with_gauge() -> (Working, ObjId) {
             links: engine.links,
             stores: engine.stores,
             combat: engine.combat,
+            move_gate: Default::default(),
             resources: engine.resources.clone(),
             contrib: engine.contrib,
             extensions: engine.extensions,

@@ -207,6 +207,53 @@ impl CombatRanges {
     }
 }
 
+/// 移动玩家门规则快照：玩家面 `move()`/`moveTo()` 的疲劳/MOVE 预检
+/// 与引擎仲裁原生准入预填（`can_move`）同源读取。默认值即官方行为
+/// （疲劳 0 才可自发移动、至少 1 个存活 MOVE）；被拉豁免经
+/// `move(target)` 结构通道到达仲裁，不在此规则面内。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MoveGate {
+    /// 自发移动允许的意图时疲劳上界；0 即官方「疲劳须为 0」。
+    pub fatigue_limit: i64,
+    /// 自发移动要求的最少存活 MOVE 部件数；1 即官方门槛。
+    pub min_active_moves: i64,
+}
+
+impl Default for MoveGate {
+    /// 默认即官方行为：疲劳须为 0、至少 1 个存活 MOVE。与常量表
+    /// 同源锁定（catalog 逐键比对），测试与无计划引擎共用。
+    fn default() -> Self {
+        Self {
+            fatigue_limit: c::MOVE_FATIGUE_LIMIT,
+            min_active_moves: c::MOVE_MIN_ACTIVE_MOVES,
+        }
+    }
+}
+
+impl MoveGate {
+    /// 从计划的有效规则提取移动玩家门；缺键说明计划未含 builtin:creep。
+    /// 句柄解析只发生在此处，数值域已在冻结时校验。
+    pub fn from_plan(rules: &EffectiveRules) -> Result<Self, String> {
+        let signed = |name: &str| -> Result<i64, String> {
+            let key = key(&format!("creep.{name}"));
+            let Some(handle) = rules.resolve(&key) else {
+                return Err(format!("计划缺少规则 builtin:creep.{name}"));
+            };
+            match rules.get(handle) {
+                Some(Number::Signed(v)) => Ok(*v),
+                Some(other) => Err(format!(
+                    "规则 builtin:creep.{name} 须为整数，实得 {other:?}"
+                )),
+                None => Err(format!("规则 builtin:creep.{name} 句柄越界")),
+            }
+        };
+        Ok(Self {
+            fatigue_limit: signed("move.fatigueLimit")?,
+            min_active_moves: signed("move.minActiveMoves")?,
+        })
+    }
+}
+
 /// 内置贡献入口，保留早期 link 函数名；现含 link、creep 资源/移动/战斗/建造族槽与仓库规则。
 pub fn link() -> Contribution {
     let consumers = keys(&[
@@ -359,6 +406,26 @@ pub fn link() -> Contribution {
             consumers: combat_consumers.clone(),
         });
     }
+    // 移动玩家门规则：玩家面预检常量注入与仲裁原生准入预填（Plane
+    // 快照）同源消费。fatigueLimit 上界对齐疲劳 u32 域；minActiveMoves
+    // 上界 50 为身体部件数上限。被拉豁免与 visualizePathStyle 官方怪癖
+    // 不在规则面内。
+    let move_gate_consumers = keys(&["creep.move.native"]);
+    for (name, value, max) in [
+        (
+            "creep.move.fatigueLimit",
+            c::MOVE_FATIGUE_LIMIT,
+            i64::from(u32::MAX),
+        ),
+        ("creep.move.minActiveMoves", c::MOVE_MIN_ACTIVE_MOVES, 50),
+    ] {
+        rules.push(RuleDescriptor {
+            key: key(name),
+            domain: NumberDomain::Signed { min: 0, max },
+            default: Number::Signed(value),
+            consumers: move_gate_consumers.clone(),
+        });
+    }
     let (store_bindings, store_rules) = store::declarations();
     bindings.extend(store_bindings);
     rules.extend(store_rules);
@@ -491,7 +558,7 @@ pub fn link() -> Contribution {
             namespace: "builtin".into(),
             api_version: 1,
             revision:
-                "link-creep-store-move-combat-build-incoming-contest-admission-obstacle-precheck-pull-cost-ranges-static-precheck-descriptors-v15"
+                "link-creep-store-move-combat-build-incoming-contest-admission-obstacle-precheck-pull-cost-ranges-static-precheck-movegate-v16"
                     .into(),
             code_digest: {
                 let mut hash = Sha256::new();

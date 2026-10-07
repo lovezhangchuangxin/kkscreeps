@@ -650,3 +650,47 @@ pub(super) fn same_revision_world_switch_uses_current_terrain_impl() -> anyhow::
     assert_ne!(answers[0]["path"], answers[1]["path"]);
     Ok(())
 }
+
+/// G02.d2 边界钉死：moveTo 按原生障碍寻路、不感知任何静态放行策略。
+/// 官方语义下墙隔断目标沿 search 部分路径靠近并返回 OK——钉住的
+/// 边界是步进永不越过墙列、findPath 止于墙前一格，而非返回码。
+pub(super) fn move_to_never_paths_through_walls_impl() -> anyhow::Result<()> {
+    // 单房世界 + x=10 整列墙：无相邻房可绕行，墙后目标真不可达。
+    let walled_world = json!({
+        "time": 7,
+        "cpu": { "limit": 20, "tickLimit": 500, "bucket": 10000 },
+        "user": "p1",
+        "rooms": { "W1N1": { "name": "W1N1", "terrain": terrain_with_wall(10) } },
+        "objects": [
+            { "id": "c1", "type": "creep", "room": "W1N1", "x": 5, "y": 25, "name": "w1",
+              "owner": "p1", "body": ["move", "work"], "store": { "energy": 50 } },
+        ],
+    });
+    let mut sb = Sandbox::new(SandboxConfig::default())?;
+    let mut table = ModuleTable::new();
+    table.insert_js("main", "module.exports.loop = function () {};");
+    sb.set_modules(table)?;
+    tick(&mut sb, &walled_world)?;
+    // x=10 整列墙：目标 (30,25) 不可达。官方 moveTo 沿 search 的部分
+    // 路径靠近并返回 OK——钉住的边界是步进永不越过墙列、findPath 止于
+    // 墙前一格，而非返回码。
+    let v = sb.run_expr(
+        "(() => { const rc = Game.creeps['w1'].moveTo(30, 25, { reusePath: 0 }); \
+         const steps = Game.creeps['w1'].pos.findPathTo(30, 25); \
+         const maxX = Math.max(5, ...steps.map((s) => s.x)); \
+         const crossed = steps.some((s) => s.x > 9); \
+         return [rc, steps.length > 0, maxX, crossed].join('|'); })()",
+    )?;
+    let result = v["value"].as_str().unwrap_or_default();
+    assert_eq!(
+        result, "0|true|9|false",
+        "moveTo 靠近但步进不越墙: {result}"
+    );
+    // 对照：墙前目标 (9,25) 可达——findPath 4 步、终点恰在墙前。
+    let v = sb.run_expr(
+        "(() => { const steps = Game.creeps['w1'].pos.findPathTo(9, 25); \
+         return [steps.length, steps[steps.length - 1].x].join('|'); })()",
+    )?;
+    assert_eq!(v["value"], "4|9", "墙前目标：4 步且终点 x=9");
+    Ok(())
+}

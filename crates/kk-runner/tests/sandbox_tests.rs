@@ -9,6 +9,8 @@ use serde_json::json;
 
 use kk_runner::{ModuleTable, Sandbox, SandboxConfig, TickOutcome, TickPlan, live_sandbox_count};
 
+#[path = "sandbox_tests/constant_gate_forms.rs"]
+mod constant_gate_forms;
 #[path = "sandbox_tests/kkpv_channel.rs"]
 mod kkpv_channel;
 #[path = "sandbox_tests/mod_player_api.rs"]
@@ -24,6 +26,7 @@ mod store_spawn_and_viewer;
 #[path = "sandbox_tests/watchdog_and_memory.rs"]
 mod watchdog_and_memory;
 // 子模块提供场景函数，由唯一的顶层测试串行调用；不要将它们改成并行测试。
+use constant_gate_forms::*;
 use kkpv_channel::*;
 use mod_player_api::*;
 use pathfinder_family::*;
@@ -38,6 +41,7 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     cjs_and_loop()?;
     constant_overrides_reach_player_globals_impl()?;
     combat_range_constants_impl()?;
+    move_gate_constants_impl()?;
     console_capture()?;
     stub_game_projection()?;
     intent_channel_prelude_forms_impl()?;
@@ -49,6 +53,7 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     hostile_probes_impl()?;
     move_misc_family_prelude_forms_impl()?;
     pathfinder_search_family_impl()?;
+    move_to_never_paths_through_walls_impl()?;
     pathfinder_callback_family_impl()?;
     pathfinder_matrix_mutation_impl()?;
     pathfinder_callback_budget_impl()?;

@@ -132,7 +132,7 @@ fn blocked_request_never_contests_and_rival_takes_cell() {
     assert_eq!(m.winners().get(&ObjId(2)), Some(&(40u8, 19u8)));
     assert_eq!(m.winners().get(&ObjId(3)), Some(&(11u8, 10u8)));
     // 准入槽的整房请求视野同样看不到被否决请求。
-    m.prefill_admissions(&room, &BTreeMap::new());
+    m.prefill_admissions(&room, &BTreeMap::new(), &Default::default());
     let admission_input = m.admission_input(&room, &BTreeMap::new());
     assert!(
         admission_input
@@ -171,7 +171,7 @@ fn blocked_puller_breaks_pulled_chain_at_arbitration() {
     // 登记的基线逐步一致（基线里 pull 配对同样保留）。
     let baseline = |m: &mut movement::Movement, room: &RoomState| {
         m.rank_winners(room, &BTreeMap::new());
-        m.prefill_admissions(room, &BTreeMap::new());
+        m.prefill_admissions(room, &BTreeMap::new(), &Default::default());
         assert!(m.admitted(ObjId(1)), "配对完好：被拉免除部件门槛");
         m.cancel_blocked(room, &RoomIndex::build(&room.objects), None);
         m.winners().clone()
@@ -186,7 +186,7 @@ fn blocked_puller_breaks_pulled_chain_at_arbitration() {
     let base_winners = baseline(&mut base_m, &base_room);
 
     m.rank_winners(&room, &BTreeMap::new());
-    m.prefill_admissions(&room, &BTreeMap::new());
+    m.prefill_admissions(&room, &BTreeMap::new(), &Default::default());
     assert!(m.admitted(ObjId(1)), "否决不动配对：被拉门槛仍豁免");
     m.cancel_blocked(&room, &index, None);
     assert_eq!(
@@ -241,7 +241,7 @@ fn static_allowance_matches_preview_and_keeps_dynamic_cancellation() {
         assert!(!candidate.is_blocked(ObjId(1)));
         m.apply_precheck_decisions(candidate.decisions(true));
         m.rank_winners(&room, &BTreeMap::new());
-        m.prefill_admissions(&room, &BTreeMap::new());
+        m.prefill_admissions(&room, &BTreeMap::new(), &Default::default());
         let preview = m.simulate_survivors(
             &room,
             &index,
@@ -312,7 +312,7 @@ fn losing_contenders_static_allowance_cannot_leak_to_winner() {
         c.allow_static(allowed).unwrap();
         m.apply_precheck_decisions(c.decisions(true));
         m.rank_winners(&room, &BTreeMap::new());
-        m.prefill_admissions(&room, &BTreeMap::new());
+        m.prefill_admissions(&room, &BTreeMap::new(), &Default::default());
         m.cancel_blocked(&room, &index, None);
         assert_eq!(m.winners().contains_key(&ObjId(1)), allowed == ObjId(1));
         assert!(
