@@ -7,6 +7,10 @@
 > clippy 零告警、129 测全绿、renderer/shared 测试全绿、文档链接 1848 通过。遗留：
 > `crates/kk-cli/src/export_fixtures.rs` 1142 行超源码规模门禁（原分支即 1124 行超限，本次
 > 适配净增 18 行），拆分留给后续批；完整 `pnpm run check` 未在本分支整跑。
+>
+> **2026-10-07 合并收尾**：分支已合并回 main（merge commit `fe55614`，零冲突），`.worktrees/renderer/`
+> worktree 与 `f2-renderer` 分支已清理——**R7 后续工作直接在 main 上继续**（正文提及的 worktree
+> 环境与分支名仅作历史快照）；export-fixtures 行为已在合并前端到端验证（6 夹具 × 4 快照全部生成）。
 
 > 当前有效入口：黑屏修复已提交`2bf8558`；随后继续RoomVisual性能/内存优化，
 > 见[新复核报告](../research/notes/renderer-visual-reuse-verification-2026-10-01.md)。
