@@ -11,7 +11,7 @@
 - `kkscreeps sim run` 加载 JSON 场景、玩家模块及显式 JS Mod 包，推进真实结算并检查已提交状态；支持多玩家、JSON/KKPV 投影、Mod state 断言和内容/计划身份报告，见[本地场景模拟](docs/architecture/local-simulation.md)。
 - `kkscreeps mod inspect` 注册真实 JS 包并输出处理器依赖、冻结/活动链、规则来源和停用影响预览，见[组合诊断](docs/architecture/mod-composition.md)。
 - 独立 JS 包可声明[新资源](docs/architecture/mod-resource-catalog.md)和[可建造生产建筑](docs/architecture/mod-buildings.md)，并在近战/单体远程槽中提供[自定义伤害策略](docs/architecture/mod-damage-policy.md)，在近程/远程治疗槽中提供[自定义治疗](docs/architecture/mod-heal-policy.md)，在群体远程槽中提供[批量伤害策略](docs/architecture/mod-mass-policy.md)，在三个攻击槽中配置[反击策略](docs/architecture/mod-retaliation-policy.md)；其余领域按[完整玩法计划](docs/plans/mod-complete-gameplay.md)继续开放。
-- 显式完整状态保存与重启续跑见[基础检查点](docs/architecture/checkpoints.md)，`sim run` 支持 `--save-checkpoint` / `--load-checkpoint`。
+- 显式完整状态保存与重启续跑见[基础检查点](docs/architecture/checkpoints.md)，`sim run` 支持 `--save-checkpoint` / `--load-checkpoint`、周期保存 `--checkpoint-every` 与目录恢复（[周期保存与恢复选择](docs/architecture/checkpoints.md#周期保存与恢复选择g26a)）。
 - `serve`、`test`、`import` 仍为预留命令，调用时返回退出码 2。HTTP/WebSocket 服务、数据库持久化和前端应用尚未实现。
 - `kk-pathfinder` 的原生寻路已接入玩家沙箱：`PathFinder.search`/`Room.findPath`/`moveTo` 使用真实地形和代价矩阵，支持同步 roomCallback/costCallback、嵌套搜索、异常传播及预算中断。
 - 玩家可在容器等 Generic 仓库间真实搬运资源；分片创建应用 GCL 等级与进度，升级累计和认领扩张通过同一候选提交机制生效。机制见[游戏循环](docs/architecture/game-loop.md#仓库资源与-gcl)。

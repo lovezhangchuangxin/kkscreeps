@@ -40,7 +40,7 @@
 | [tick-contract.md](tick-contract.md) | 已提交状态、候选结果、失败重试与目标任务合并规则 |
 | [sandbox.md](sandbox.md) | 玩家沙箱、执行预算、内存限制与模块加载的机制和目标 |
 | [local-simulation.md](local-simulation.md) | 已实现的 sim run：场景、模块、断言、报告与失败退出边界；mod init 作者包模板与 mod test 汇总测试 |
-| [checkpoints.md](checkpoints.md) | 完整已提交状态清单、单文件原子发布、身份核验与 sim 冷恢复 |
+| [checkpoints.md](checkpoints.md) | 完整已提交状态清单、单文件原子发布、身份核验、sim 冷恢复与周期保存/恢复选择 |
 | [state-inventory.md](state-inventory.md) | 检查点逐域字段清单、版本策略、不持久化域与 schema 键树门禁 |
 | [mod-switching.md](mod-switching.md) | 无开放轮次的包集合切换：残留分诊、停用投影、工作者重注入与 sim mods_switch |
 | [gameplay-determinism.md](gameplay-determinism.md) | 确定性玩法时间与随机协议：无状态随机流、种子生命周期、Date 映射与非确定边界 |

@@ -120,6 +120,9 @@ fn test(options: &Options) -> anyhow::Result<(i32, Value)> {
             mod_trace: options.mod_trace,
             input_log: None,
             verify_replay: false,
+            checkpoint_every: None,
+            checkpoint_dir: None,
+            checkpoint_keep: None,
         });
         let detail: Value = serde_json::from_slice(&std::fs::read(&detail_path)?)?;
         let outcome = if code == 0 {

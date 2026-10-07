@@ -240,6 +240,15 @@ enum SimCommand {
         /// 运行成功后从起点快照按日志逐段重放并核对终态（需 --input-log）
         #[arg(long)]
         verify_replay: bool,
+        /// 提交后世界时间为 N 整倍数的轮次保存一份完整检查点（G26.a）
+        #[arg(long, value_parser = clap::value_parser!(u32).range(1..))]
+        checkpoint_every: Option<u32>,
+        /// 周期检查点目录（与 --checkpoint-every 同用；--load-checkpoint 可指向它做恢复）
+        #[arg(long)]
+        checkpoint_dir: Option<std::path::PathBuf>,
+        /// 周期检查点保留份数（缺省保留全部）
+        #[arg(long, value_parser = clap::value_parser!(u32).range(1..))]
+        checkpoint_keep: Option<u32>,
     },
 }
 
@@ -333,6 +342,9 @@ fn main() {
                     mod_trace,
                     input_log,
                     verify_replay,
+                    checkpoint_every,
+                    checkpoint_dir,
+                    checkpoint_keep,
                 },
         } => {
             std::process::exit(sim::run(sim::Options {
@@ -346,6 +358,9 @@ fn main() {
                 mod_trace,
                 input_log,
                 verify_replay,
+                checkpoint_every,
+                checkpoint_dir,
+                checkpoint_keep,
             }));
         }
         Command::BotCheck {

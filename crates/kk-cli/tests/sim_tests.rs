@@ -248,6 +248,8 @@ mod composition;
 #[path = "sim_tests/rules.rs"]
 mod rules;
 
+#[path = "sim_tests/auto_checkpoint.rs"]
+mod auto_checkpoint;
 #[path = "sim_tests/building_fields.rs"]
 mod building_fields;
 #[path = "sim_tests/buildings.rs"]

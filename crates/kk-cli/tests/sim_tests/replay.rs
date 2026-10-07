@@ -50,7 +50,7 @@ fn verify_replay_passes_on_plain_scenario() -> anyhow::Result<()> {
         }
         let (code, report) = result(&mut command, &report)?;
         assert_eq!(code, 0);
-        assert_eq!(report["report_version"], 9, "v9 起顶层带 verify_replay");
+        assert_eq!(report["report_version"], 10, "v10 起报告版本随周期保存升版");
         let verify = &report["verify_replay"];
         assert_eq!(verify["status"], "passed", "{verify}");
         assert_eq!(verify["segments"], 3);

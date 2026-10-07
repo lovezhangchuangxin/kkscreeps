@@ -10,7 +10,7 @@
 | 模块如何协作？ | [总体架构](architecture/overall.md) |
 | 一轮玩家执行和结算如何完成，失败怎样重试？ | [游戏循环](architecture/game-loop.md)、[tick 契约](architecture/tick-contract.md) |
 | 世界数据有哪些表示，快照怎样管理？ | [总体架构的数据流](architecture/overall.md#数据流与状态边界)、[快照契约](architecture/snapshot-contract.md) |
-| 如何保存完整世界并在重启后继续？ | [基础检查点](architecture/checkpoints.md)、[状态域清单](architecture/state-inventory.md)、[本地模拟](architecture/local-simulation.md) |
+| 如何保存完整世界并在重启后继续？ | [基础检查点](architecture/checkpoints.md)（含周期保存与恢复选择）、[状态域清单](architecture/state-inventory.md)、[本地模拟](architecture/local-simulation.md) |
 | 运行中的世界如何更换 Mod 包集合？ | [无开放轮次的包切换](architecture/mod-switching.md) |
 | Mod 规则代码的随机与时间如何确定且可恢复？ | [确定性玩法时间与随机协议](architecture/gameplay-determinism.md) |
 | 如何记录每轮提交的输入以便回放？ | [持久输入与玩家结果日志](architecture/input-log.md) |

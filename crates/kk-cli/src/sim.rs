@@ -13,8 +13,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
+mod auto_checkpoint;
 mod checkpoint;
 mod mods;
+mod replay;
 
 pub struct Options {
     pub scenario: PathBuf,
@@ -30,6 +32,12 @@ pub struct Options {
     pub input_log: Option<PathBuf>,
     /// 运行成功后从起点快照按日志逐段重放并核对终态（G25.b；需 input_log）。
     pub verify_replay: bool,
+    /// 每 N 轮提交后保存完整检查点到 checkpoint_dir（G26.a）。
+    pub checkpoint_every: Option<u32>,
+    /// 周期检查点目录；`--load-checkpoint` 指向它时走「最新可用」恢复。
+    pub checkpoint_dir: Option<PathBuf>,
+    /// 周期检查点保留份数（缺省保留全部）。
+    pub checkpoint_keep: Option<u32>,
 }
 
 #[derive(Deserialize)]
@@ -158,6 +166,17 @@ pub fn run(options: Options) -> i32 {
                     json!({"path": path, "status": "setup_failed"})),
                 // v9 契约：--verify-replay 启用时该键非 null。
                 "verify_replay": options.verify_replay.then(|| json!({"status": "setup_failed"})),
+                // v10 契约：周期保存启用时该键非 null。
+                "auto_checkpoint": options.checkpoint_every
+                    .map(|_| json!({"status": "setup_failed"})),
+                // v10 契约：目录形态恢复启用时该键非 null（撕裂日志/全
+                // 部损坏/配对硬错都发生在 setup 期，与上面的键对称，消费
+                // 方可区分「未启用」与「启用后失败」）。
+                "recovery": options
+                    .load_checkpoint
+                    .as_ref()
+                    .filter(|path| path.is_dir())
+                    .map(|_| json!({"status": "setup_failed"})),
             }),
             1,
         ),
@@ -189,8 +208,11 @@ pub fn run(options: Options) -> i32 {
 /// v6 顶层 `mods_switches`；v7 起顶层与最终观察新增 `seed`（世界种子，
 /// G22.b 随机协议的可复现身份）；v8 起顶层新增 `input_log`（--input-log
 /// 启用时非 null：段数、首末 tick 与读回校验结果）；v9 起顶层新增
-/// `verify_replay`（--verify-replay 启用时非 null：回放核对结果）。
-const SIM_REPORT_VERSION: u32 = 9;
+/// `verify_replay`（--verify-replay 启用时非 null：回放核对结果）；v10
+/// 起顶层新增 `auto_checkpoint`（周期保存摘要/RPO 声明，启用时含
+/// setup_failed 路径非 null）与 `recovery`（--load-checkpoint 指向目
+/// 录时的恢复选择记录，目录形态启用时同样两路非 null）。
+const SIM_REPORT_VERSION: u32 = 10;
 
 fn digest(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
@@ -336,6 +358,8 @@ fn apply_mods_switch(
     }
 }
 
+/// 周期保存的运行内统计与到点保存/保留策略/报告字段见 auto_checkpoint
+/// 模块（G26.a）；本文件只保留编排调用点。
 fn execute(options: &Options) -> anyhow::Result<Value> {
     anyhow::ensure!(options.ticks > 0, "ticks 必须大于 0");
     anyhow::ensure!(
@@ -358,6 +382,42 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
         anyhow::bail!(
             "--verify-replay 与 mods_switch 暂不兼容（切换场景的逐段身份重装属后续切片）"
         );
+    }
+    // 周期保存（G26.a）：间隔与目录同进同出；切换会摘除运行期日志，
+    // 切换后保存的检查点没有日志覆盖、恢复配对必败——组合显式拒绝。
+    if let Some(every) = options.checkpoint_every {
+        anyhow::ensure!(
+            options.checkpoint_dir.is_some(),
+            "--checkpoint-every 需同时指定 --checkpoint-dir"
+        );
+        anyhow::ensure!(
+            scene.mods_switch.is_none(),
+            "--checkpoint-every 与 mods_switch 暂不兼容（切换摘除运行期日志，之后的检查点无日志覆盖；组合恢复属后续切片）"
+        );
+        let _ = every;
+    }
+    anyhow::ensure!(
+        options.checkpoint_dir.is_none() || options.checkpoint_every.is_some(),
+        "--checkpoint-dir 需与 --checkpoint-every 同用"
+    );
+    anyhow::ensure!(
+        options.checkpoint_keep.is_none() || options.checkpoint_every.is_some(),
+        "--checkpoint-keep 需与 --checkpoint-every 同用"
+    );
+    // 目录形态的 --load-checkpoint 走「最新可用」恢复：必须带日志。
+    if options
+        .load_checkpoint
+        .as_ref()
+        .is_some_and(|path| path.is_dir())
+    {
+        anyhow::ensure!(
+            options.input_log.is_some(),
+            "--load-checkpoint 指向目录时需同时启用 --input-log（恢复按日志段配对重放）"
+        );
+    }
+    if let Some(dir) = &options.checkpoint_dir {
+        std::fs::create_dir_all(dir)
+            .with_context(|| format!("创建周期检查点目录 {}", dir.display()))?;
     }
     let base = path.parent().unwrap();
     let mut tables = BTreeMap::new();
@@ -398,7 +458,17 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
     // 续跑按检查点世界时间与**实际生效的切换**选择恢复用包集合：被
     // 拒绝的切换不改变身份，越过边界（world.time >= after_tick）不一
     // 定携带切换后身份。载荷只读一次，resume 复用同一 Value。
+    // 目录形态=「最新可用」恢复（G26.a）：选出的检查点与需要重放的日志
+    // 段一起暂存，resume 后、日志挂载前逐段重放到日志尾。
+    let mut recovery: Option<checkpoint::Recovery> = None;
     let loaded_value = match &options.load_checkpoint {
+        Some(path) if path.is_dir() => {
+            let log = options.input_log.as_ref().expect("校验保证日志在");
+            let found = checkpoint::recover_latest(path, log)?;
+            let value = found.value.clone();
+            recovery = Some(found);
+            Some(value)
+        }
         Some(path) => Some(kk_runtime::checkpoint::read_checkpoint(path)?),
         None => None,
     };
@@ -477,6 +547,11 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
         aliases = saved_aliases;
         engine.set_player_concurrency(options.concurrency)?;
         engine.set_kkpv_channel(options.kkpv);
+        // 目录恢复：把所选检查点之后的日志段重放到日志尾（零段=合法
+        // 终态）。此后运行从已恢复的最新状态继续，新轮次照常记日志。
+        if let Some(found) = &recovery {
+            engine.replay_input_rounds(&found.header, &found.replay_segments)?;
+        }
         initial
     } else {
         observe(&engine, &scene, &aliases, &mod_names)
@@ -504,6 +579,7 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
     let mut failure = None;
     let mut attempted = 0;
     let mut switches: Vec<Value> = Vec::new();
+    let mut auto = auto_checkpoint::Stats::default();
     for _ in 0..options.ticks {
         let tick = engine.get_game_time();
         attempted += 1;
@@ -539,6 +615,28 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
         }
         if !failed_players.is_empty() {
             failure = Some(json!({"stage": "player", "tick": tick, "players": failed_players}));
+            break;
+        }
+        // 周期检查点（G26.a）：到点保存+保留策略；失败值携带
+        // stage=checkpoint，终结运行（详见 auto_checkpoint 模块）。
+        if let Some(broken) = options.checkpoint_every.and_then(|every| {
+            auto_checkpoint::save_if_due(
+                &auto_checkpoint::Periodic {
+                    engine: &engine,
+                    every,
+                    dir: options.checkpoint_dir.as_ref().expect("校验保证目录在"),
+                    keep: options.checkpoint_keep,
+                    log: options.input_log.as_deref(),
+                    scenario_sha256: &digest(&bytes),
+                    executable_sha256: &executable_hash,
+                    modules: &modules,
+                    aliases: &aliases,
+                    initial: &initial,
+                },
+                &mut auto,
+            )
+        }) {
+            failure = Some(broken);
             break;
         }
         // 已提交边界应用场景声明的包切换：恰在提交完第 after_tick 轮后。
@@ -577,6 +675,15 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
             &aliases,
             &initial,
             &applied_switches,
+            // 终态保存也带游标：文件内段数即最后 seq（日志挂载时）。
+            options
+                .input_log
+                .as_ref()
+                .and(engine.input_log_segments())
+                .map(|last_seq| checkpoint::LogCursor {
+                    last_seq,
+                    last_tick: engine.get_game_time().saturating_sub(1),
+                }),
         )
     {
         failure = Some(
@@ -599,6 +706,17 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
     } else {
         "assertion_failed"
     };
+    // v10 字段：周期保存摘要（RPO 声明兑现「报告所选耐久策略」）与目录
+    // 恢复记录；装配见 auto_checkpoint 模块，此处只保留挂点。
+    let auto_checkpoint_record = options.checkpoint_every.map(|every| {
+        auto_checkpoint::record(
+            every,
+            options.checkpoint_dir.as_deref(),
+            options.checkpoint_keep,
+            &auto,
+        )
+    });
+    let recovery_record = recovery.as_ref().map(auto_checkpoint::recovery_record);
     let mut report = json!({
         "report_version": SIM_REPORT_VERSION, "success": success, "status": status,
         "engine_version": env!("CARGO_PKG_VERSION"), "executable_sha256": executable_hash,
@@ -614,7 +732,8 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
         "checkpoint_loaded": options.load_checkpoint,
         "checkpoint_saved": if failure.is_none() { options.save_checkpoint.as_ref() } else { None },
         "run_wall_ms": run_wall_ms, "phases": engine.perf_report(),
-        "input_log": options.input_log.as_ref().map(|path| input_log_summary(&engine, path)),
+        "input_log": options.input_log.as_ref().map(|path| replay::input_log_summary(&engine, path)),
+        "auto_checkpoint": auto_checkpoint_record, "recovery": recovery_record,
         "failure": failure, "players": stats, "aliases": aliases, "assertions": assertions,
         "mod_fault": engine.last_mod_settlement_fault().map(|fault| json!({
             "tick": fault.tick, "room": fault.room, "target": fault.target, "error": fault.error,
@@ -638,7 +757,7 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
     // 引擎侧字段必须先取完。
     if options.verify_replay {
         report["verify_replay"] = match (&replay_start, &failure, &options.input_log) {
-            (Some(start), None, Some(log)) => verify_replay_in_process(
+            (Some(start), None, Some(log)) => replay::verify_in_process(
                 &mut engine,
                 start,
                 log,
@@ -658,101 +777,6 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
         }
     }
     Ok(report)
-}
-
-/// 进程内回放核对（G25.b）：restore 起点快照后逐段重放，比较整份检查点
-/// （剥离 last_console——回放无沙箱执行；剥离 metadata——调用方自定）。
-/// CPU 桶按记录桶逐位参与比较（ADR-013 决策 5，不做 freeze 处理）。
-fn verify_replay_in_process(
-    engine: &mut EmbedEngine,
-    start: &Value,
-    log: &Path,
-    mods: Option<(
-        &BTreeMap<String, kk_mod_host::ModPackage>,
-        &kk_mod_host::RegisterOptions,
-    )>,
-) -> Value {
-    let outcome = (|| -> anyhow::Result<Value> {
-        let data = kk_runtime::embed::read_input_log(log)?;
-        let start_time = start["engine"]["world"]["time"]
-            .as_u64()
-            .context("起点快照缺少世界时间")?;
-        let segments = kk_runtime::embed::segments_from_checkpoint(start_time, &data.segments)?;
-        let replay_count = segments.len();
-        let final_live = engine.checkpoint(Value::Null)?;
-        engine.restore_checkpoint(start.clone(), mods)?;
-        engine.replay_input_rounds(&data.header, segments)?;
-        let replayed = engine.checkpoint(Value::Null)?;
-        let mut live = final_live;
-        let mut back = replayed;
-        for value in [&mut live, &mut back] {
-            let object = value.as_object_mut().expect("检查点是对象");
-            object.remove("last_console");
-            object.remove("metadata");
-        }
-        if live == back {
-            Ok(json!({
-                "status": "passed",
-                "segments": replay_count,
-                "first_tick": segments.first().and_then(|s| s["tick"].as_u64()),
-                "last_tick": segments.last().and_then(|s| s["tick"].as_u64()),
-                "note": "整份检查点逐位相等（剥离 last_console/metadata；CPU 按记录桶比较）",
-            }))
-        } else {
-            let mut diverged: Vec<&String> = live
-                .as_object()
-                .expect("检查点是对象")
-                .keys()
-                .filter(|key| live.get(key) != back.get(key))
-                .collect();
-            diverged.sort_unstable();
-            anyhow::bail!("回放终态与直跑终态不等，分歧域：{diverged:?}")
-        }
-    })();
-    match outcome {
-        Ok(value) => value,
-        Err(error) => json!({"status": "failed", "error": format!("{error:#}")}),
-    }
-}
-
-/// 输入日志的运行后摘要：整读校验（链/摘要/段号），写读两侧段数并
-/// 列以便对账；写侧计数为 None 表示运行中 I/O 失败已停用日志。
-fn input_log_summary(engine: &EmbedEngine, path: &Path) -> Value {
-    match engine.input_log_segments() {
-        Some(segments) => match kk_runtime::embed::read_input_log(path) {
-            Ok(data) => {
-                let first_tick = data.segments.first().and_then(|s| s["tick"].as_u64());
-                let last_tick = data.segments.last().and_then(|s| s["tick"].as_u64());
-                json!({
-                    "path": path, "segments": segments,
-                    "read_back_segments": data.segments.len(),
-                    "first_tick": first_tick, "last_tick": last_tick,
-                    "validation": "ok",
-                })
-            }
-            Err(error) => json!({
-                "path": path, "segments": segments, "validation": "failed",
-                "validation_error": error.to_string(),
-            }),
-        },
-        // None＝运行期日志已摘除：包切换/检查点恢复/重建分片（生命周期
-        // 语义）或写入失败（failure 里带「已提交」错误文案）都会走到这里；
-        // 磁盘文件仍在，照常整读校验并按实际段数对账。
-        None => match kk_runtime::embed::read_input_log(path) {
-            Ok(data) => json!({
-                "path": path, "status": "detached",
-                "read_back_segments": data.segments.len(),
-                "first_tick": data.segments.first().and_then(|s| s["tick"].as_u64()),
-                "last_tick": data.segments.last().and_then(|s| s["tick"].as_u64()),
-                "validation": "ok",
-                "note": "运行期日志已摘除（包切换/检查点恢复/重建分片，或写入失败——详情见 failure）；此后轮次不记段",
-            }),
-            Err(error) => json!({
-                "path": path, "status": "detached", "validation": "failed",
-                "validation_error": error.to_string(),
-            }),
-        },
-    }
 }
 
 fn observe(
