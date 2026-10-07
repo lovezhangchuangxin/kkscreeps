@@ -21,11 +21,13 @@
 
 **实施交付（同日）**：契约见[建筑 RCL 配额规则](../architecture/structure-quota.md)。`StructureQuotaSnapshot` 装配期一次解析、Rc 共享入逐房 Plane；`fold_controller_structures` 折叠表经 setup.rs canary 预检与玩家 worker 双点注入（switch/冷恢复同一路径）；五消费者统一 `allowed_for`（快照 miss 回退官方静态表，仅默认引擎/非官方类型可达）。夹具 [mod-quota](../../compat/fixtures/mod-quota/README.md)（quota-raise 塔 20 / quota-lower 墙 3 两独立包）与 [sim-mod-quota](../../compat/fixtures/sim-mod-quota/README.md)（三轮探针：首 tick 结算收口、次 tick 预检读「已提交数 vs 注入表」、末 tick 回读世界工地数，三面互证）；Rust 侧 `sim_tests/quota.rs` 四场景×双通道+冷恢复+组合身份互异。验证：完整门禁通过；棘轮 1983 持平（0 转红 0 转绿）；三 bot 2000/2000/10 指标+验收判定全通过；三路复审 0 P0/P1，P2（Plane 深拷贝→Rc）当批清偿，P3 清偿或登记（折叠键序依赖 workspace preserve_order 已注释；link 迁移玩家面覆盖为间接）。已知边界：RCL 0 级别键不声明（官方表无此键）；首片不开放逐房差异/动态配额/Mod 建筑配额。
 
-## G09.a 自有对象库存（2026-10-08 调查与选型登记，待实施）
+## G09.a 自有对象库存（2026-10-08 交付）
 
 调查结论（登记时点现状）：`RoomObject::Mod`（`api.objects.define` 类型实例）今天完全不能作为资源端点——六条链全部按变体白名单拒绝：① 结算接收门 `settle/creep/store.rs` intent_transfer/intent_withdraw 只认 Creep/Spawn/Extension/Storage/Generic（withdraw 另有 Tombstone/Ruin），`_ => return` 静默拒 Mod；② Mod 侧资源槽 `settle/resources.rs::inspect/transfer/change` 同名单拒（「对象没有已接线的可用资源仓库」）；③ 玩家预检 `creep-resources.js` transfer/withdraw 要求 structureRegister（`raw.type === 'structure'`）或 creep + `instanceof Structure` 族，Mod 对象投影 `type:"mod"` 两门都不过；④ 对象字段 schema（definition.rs ValueKind：Bool/Number/String/ObjectRef/Enum/Array/Map/Record）无库存形态字段，ObjectTypeDescriptor 无容量槽；⑤ 投影 `mod_record_json` 只合成 type/modType/id/room/x/y/pos 信封键，且 `store` 不在保留键清单（player_surface.rs）——声明的同名字段是惰性数据；⑥ 既有先例是 Mod 建筑（G08.a）：`store_capacity` → 完工写 `store/storeCapacity` → 落 `RoomObject::Generic`，天然过①②③全部 Generic 臂——但建筑是静态放置+工地生命周期，不能替代可动态增删/移动/自定义玩家类的对象。
 
 **选型（路线①：对象级库存声明 + Generic 库存语义复用）**：ObjectTypeDescriptor 新增可选 `store` 声明（首片=单一总容量 u32，形态对齐建筑 `store_capacity`）；引擎把库存作为 ModObj.data 信封键 `store/storeCapacity` 维护（复用 `resources/generic.rs` 的 generic_capacity/change_generic_store，六链按「带合法库存字段的 Generic」同款语义接纳 Mod 对象）；`store/storeCapacity` 入 player_surface 保留键（冻结期拒绝声明同名字段，无存量用户）；投影 mod_record_json 合成两信封键；预检 creep-resources.js 增 `type:"mod"` 目标族（读同一信封键容量）；mod 侧 inspect/change 增 Mod 臂。容量来源=类型级冻结声明（与建筑同口径），不进 StoreRules（那是内建结构规则族）；首片不做逐资源容量/实验室式槽绑定/损耗（mod 可用 ctx.resources 槽组合）。验收=共同验收（两独立包：搬运型/仓储型 + 原生对照 + 组合 + 双通道 + 冷恢复）+ 领域项：creep transfer/withdraw 对 Mod 对象进出双向、预检错误码与结算同源、mod 槽 read/transfer 触达自有对象、保留键冻结拒绝、投影 store 键形状、事件与保存恢复随既有链路。G09.b 耐久/死亡、G09.c 结构受击另拆（本片不碰 hits/伤害）。
+
+**实施交付（同日）**：契约见[自有对象库存](../architecture/object-store.md)。`store_capacity` 为 Option<u64> 且冻结界 ≤2^53-1（登记为 u32，实施放宽以对齐 JS 安全整数；`skip_serializing_if` 使未用 store 的计划 PlanHash 稳定）；三条创建路径（结算 create、embed 放置、既有建筑线）同形注入 `{"energy":0}` 信封。六链接纳：creep 双向结算四臂、mod 资源槽 inspect/change（新增 `change_mod_store` 纯助手，不带实验室槽语义）、`mod_record_json` 投影合成信封键、`creep-resources.js` modEntry 目标族（容量门读同一信封）、对象 tick 读、发布前校验三臂守卫（声明缺信封/信封非法/未声明携带）。保留键扩至 9 项（+store/storeCapacity/storeCapacityResource）并移到**冻结层**拒绝（validate::object，builtin:link 豁免——其字段名即官方投影形状）；字段写回丢弃处理器提供的信封、回填世界当前值（同时防篡改与防陈旧快照回滚）；typegen 为 store 声明类型合成 `store/storeCapacity` 成员。夹具 [mod-objstore](../../compat/fixtures/mod-objstore/README.md)（objstore-hauler/objstore-vault 两独立包）与 [sim-mod-objstore](../../compat/fixtures/sim-mod-objstore/README.md)（hauler/vault/combined 三场景四轮探针，`--ticks 4`）；Rust 侧 `sim_tests/obj_store.rs` 三场景×双通道+冷恢复+plan_hash 互异。验证：完整门禁通过；棘轮 1983 持平（0 转红 0 转绿）；三 bot 2000/2000/10 验收判定全通过；三路复审 1 P1（信封写回边界）+4 P2 当批清偿，P3 已知角落登记于契约文档（structureType:terminal 预检分歧、object_owner 对 Mod 返 None 的 rampart 语义、同 tick 预提交读与单意图覆盖）。首片不做逐资源容量/槽绑定/损耗。
 
 ## 执行与更新规则
 
@@ -45,7 +47,7 @@
 | G06 | 运行 trace 与故障复现 | 现有活动链与故障诊断 | 部分完成 | G06.a 槽调用/回退事件 trace + `--mod-trace` CLI `ce84345`：[mod-trace](../architecture/mod-trace.md)、[记录](../research/notes/g06a-mod-trace-2026-10-06.md)；过滤参数/停用阈值暴露/一键复现未做 |
 | G07 | 玩家预检策略扩展 | 各领域策略契约；可分族穿插 | 部分完成 | G07.a 战斗射程首片（[player-precheck-rules](../architecture/player-precheck-rules.md)、[记录](../research/notes/g07a-combat-ranges-2026-10-06.md)）；G07.b ext 意图压制接线+可扩展意图盘点篇（2026-10-07，见[历史交付记录](archive/mod-history-2026-10.md)）——动作互斥的 ext 声明面已开放、vanilla 压制表与 EXECUTION_ORDER 未动；EXECUTION_ORDER 策略化（G07.c 候选，设计前置）与参数策略未开始 |
 | G08 | Mod 建筑字段与生命周期 | 现有建筑目录、schema、tick | 部分完成 | G08.a 字段+tick 首片已交付（见[历史交付记录](archive/mod-history-2026-10.md)）；RCL 配额/逐资源容量/专属 FIND/生产事件未开始 |
-| G09 | 自有对象库存与耐久能力 | 现有对象/资源/伤害能力 | 未开始 | — |
+| G09 | 自有对象库存与耐久能力 | 现有对象/资源/伤害能力 | 部分完成 | G09.a 库存首片已交付（store 声明+信封六链同源，见[自有对象库存](../architecture/object-store.md)与夹具）；耐久/死亡（G09.b）与结构受击（G09.c）未开始 |
 | G10 | 可编程生产与建筑动作 | G08；现有资源与配方 | 未开始 | — |
 | G11 | 建筑配额与资源容量策略 | 现有建筑/资源目录 | 部分完成 | G11.a 配额族首片已交付（132 条逐型逐级规则+玩家表折叠注入+link.rcl 迁移，见[配额规则](../architecture/structure-quota.md)与[夹具](../../compat/fixtures/mod-quota/README.md)）；资源容量策略与逐房/动态配额未开始 |
 | G12 | 采集与资源再生策略 | 相关原生消费者与当批领域预检，G07 可随后通用化 | 未开始 | — |
@@ -70,7 +72,7 @@
 
 ## 实际执行队列与前置门
 
-上一轮维护范围已提交；realm 注册/执行/预算及声明转换优化已提交为 `0c28c92`。Room API 状态所有权和历史文档入口治理已提交为 `8f822fd`；Prelude 命名与集中装配优化已提交 `de15765`；验收成本与首轮 research 文档价值优化已提交 `646e395`；Game 装配、地图缓存、指令状态与世界注入边界已提交 `a0d375e`；结构 API/孵化生命周期、字段/装配所有权及共用目标/诊断依赖优化已完成验收，三轮已提交 `b99cda3`，Creep 移动已提交 `3abb616`；engine/Mod 三组与 CLI 职责分组及整体复审已提交 `eedfbfb`；计划安装候选与统一发布已提交 `4443c3c`；runtime 单次调用与局部恢复治理已提交 `dd1e4f7`；字段校验边界治理已提交 `f32f972`。专项维护暂告一段落，剩余治理项不作为恢复开发的前置。G02.d1/d2/d3 首片均已交付；G02.d3 后续（结构/rampart 通行声明、逐房粒度）按需另拆。G11.a 配额首片已交付（见上方实施记录）；下一批候选：G09.a 自有对象库存、G02.d3 后续或剩余 24 例零散兼容失败（量小，见 M2D 记录）。M2B 兼容批按路线图并行。
+上一轮维护范围已提交；realm 注册/执行/预算及声明转换优化已提交为 `0c28c92`。Room API 状态所有权和历史文档入口治理已提交为 `8f822fd`；Prelude 命名与集中装配优化已提交 `de15765`；验收成本与首轮 research 文档价值优化已提交 `646e395`；Game 装配、地图缓存、指令状态与世界注入边界已提交 `a0d375e`；结构 API/孵化生命周期、字段/装配所有权及共用目标/诊断依赖优化已完成验收，三轮已提交 `b99cda3`，Creep 移动已提交 `3abb616`；engine/Mod 三组与 CLI 职责分组及整体复审已提交 `eedfbfb`；计划安装候选与统一发布已提交 `4443c3c`；runtime 单次调用与局部恢复治理已提交 `dd1e4f7`；字段校验边界治理已提交 `f32f972`。专项维护暂告一段落，剩余治理项不作为恢复开发的前置。G02.d1/d2/d3 首片均已交付；G02.d3 后续（结构/rampart 通行声明、逐房粒度）按需另拆。G11.a 配额首片与 G09.a 自有对象库存首片均已交付（见上方实施记录）；下一批候选：G09.b 耐久/死亡、G02.d3 后续（结构/rampart 通行声明）或剩余 24 例零散兼容失败（量小，见 M2D 记录）。M2B 兼容批按路线图并行。
 
 父编号用于领域归档，**不是一口气做完 G01 再顺序做到 G30 的调度表**。每个父任务首次实施前拆成可独立验收的子片，记录显式依赖；前置小片可先完成，父任务保留“部分完成”。默认兼容性 M2B 按现有路线图继续推进，不等全部 Mod 领域结束。
 
@@ -293,6 +295,8 @@ S01 已提交 `e0b457b`，S02 已提交 `5a25bc2`。旧 S03–S06 的按行数�
 ## 实施记录与交接模板
 
 当前会话只记录范围、剩余工作、实际验证和提交状态；历史过程见[归档](archive/mod-history-2026-10.md)。贡献与交接要求以 [AGENTS.md](../../AGENTS.md) 为准，不复制提示词或逐项复审流水账。
+
+2026-10-08 G09.a 自有对象库存首片交付：基线 `39334ae`（G09.a 登记，前序 G11.a 为 `bd1a87c`）。路线①落地：`store_capacity` 冻结声明（Option<u64> ≤2^53-1，登记为 u32、实施放宽以对齐 JS 安全整数，无存量用户）+ ModObj.data 信封键 `store/storeCapacity`（库存作为不透明 data 串的内嵌键，不新增持久化形态，KKPV/检查点随既有链路，无 revision bump）；六链接纳（creep 双向结算、mod 资源槽 inspect/change、投影合成、玩家预检 modEntry 目标族、对象 tick 读、发布前校验三臂守卫）；保留键 9 项在冻结层拒绝（builtin:link 豁免）；字段写回丢弃处理器信封、回填世界值。验收：两独立包（搬运型/仓储型）+原生对照（无容量 marker 预检 -7）+组合+双通道+冷恢复全绿，三场景 plan_hash 互异；领域项（双向 transfer/withdraw、错误码同源、mod 槽触达、保留键冻结拒绝、投影形状）随 sim 断言。验证：完整门禁通过；棘轮 1983 持平（0 转红 0 转绿）；三 bot 2000/2000/10 验收判定通过；三路复审 1 P1+4 P2 当批清偿（信封写回、保留键层次、容量界、typegen 成员、校验守卫补测、hash 对照），P3 已知角落登记于契约文档。已知边界：首片单一总容量，无逐资源容量/槽绑定/损耗。下一批候选：G09.b 耐久/死亡、G02.d3 后续或剩余 24 例零散兼容失败。
 
 2026-10-08 G11.a 建筑配额首片交付：基线 `c8fcb8d`（M2D + 台账登记）。路线①+③ 合体落地：132 条 `builtin:structure.quota.{type}.rcl{N}`（键集=官方表形，默认=官方值）+ `StructureQuotaSnapshot` 装配期一次解析、Rc 共享入逐房 Plane + `fold_controller_structures` 折叠注入玩家 `CONTROLLER_STRUCTURES`（canary/玩家 worker 双点，switch/冷恢复同路径）；`allowed_for` 统一五消费者（工地创建/link isActive/spawn 放置/terminal/extractor，快照 miss 回退官方静态表）；顺带修复 link.rcl 规则不达玩家面的既有缺口（rcl0-8 迁入族、键集改官方形，LinkRules 去 rcl）；revision v18。三轮探针场景三面互证预检/结算同源：native 锚 6/2500，raise 塔 20、lower 墙 3，组合共存，四场景 plan_hash 互异，双通道一致，冷恢复身份一致。验证：完整门禁通过；棘轮 1983 持平（0 转红 0 转绿）；三 bot 2000/2000/10 指标+验收判定全通过；三路复审 0 P0/P1，P2（Plane 逐房深拷贝）当批改 Rc 清偿，P3 清偿或登记（折叠键序依赖 workspace preserve_order 已注释并加全表相等断言、配额族缺键拒绝补测、link 玩家面覆盖为间接、RCL0 键不声明为既知边界）。**间歇问题登记**：sim_tests 全套并行运行时 move_policy/heal_policy/move_arbitration 冷恢复子进程偶发退出码 1（复审方 5 次全套撞 2 次，隔离复跑全绿、非本批改动引入；本批新增测试或放大并行负载），再现时须保存失败子进程报告归因。下一批候选：G09.a 自有对象库存、G02.d3 后续（结构/rampart 通行声明）或剩余 24 例零散兼容失败。
 

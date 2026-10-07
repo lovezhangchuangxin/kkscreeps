@@ -116,6 +116,7 @@ export function createApi(namespace, config) {
         visibility: spec.visibility,
         fields,
         tick,
+        capacity: spec.capacity,
       });
       return { key, version: spec.version };
     },

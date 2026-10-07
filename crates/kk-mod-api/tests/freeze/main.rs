@@ -399,6 +399,7 @@ fn field_bare_name_collision_rejected_on_mod_types_only() {
         lifecycle_slots: BTreeSet::new(),
         visibility: ObjectVisibility::RoomVisible,
         player_class: "Thing".into(),
+        store_capacity: None,
     };
     ty.fields.sort_by(|a, b| a.key.cmp(&b.key));
     owner.object_types.push(ty);
@@ -430,4 +431,86 @@ fn field_bare_name_collision_rejected_on_mod_types_only() {
         field: field("nsb", "charge"),
     });
     plan(vec![builtin::link(), owner, builtin_mount]).unwrap();
+}
+
+#[test]
+fn object_store_declaration_freezes_and_reserved_keys_reject() {
+    // G09.a：capacity 声明进入冻结描述符，参与计划身份。
+    let mut c = module("stmod");
+    c.bindings.insert(key("stmod:crate.field.x"));
+    c.object_types.push(ObjectTypeDescriptor {
+        key: key("stmod:crate"),
+        schema_version: 1,
+        owner_field: None,
+        position_fields: None,
+        fields: vec![FieldDescriptor {
+            key: key("stmod:x"),
+            schema: ValueSchema {
+                kind: ValueKind::Number(NumberDomain::Unsigned { min: 0, max: 49 }),
+                nullable: false,
+            },
+            default: FieldDefault::Missing,
+            visibility: Visibility::Public,
+            binding: key("stmod:crate.field.x"),
+        }],
+        capabilities: Vec::new(),
+        lifecycle_slots: BTreeSet::new(),
+        visibility: ObjectVisibility::RoomVisible,
+        player_class: "Crate".into(),
+        store_capacity: Some(500),
+    });
+    let frozen = plan(vec![builtin::link(), c.clone()]).unwrap();
+    let ty = frozen
+        .projection()
+        .types()
+        .iter()
+        .find(|ty| ty.descriptor.key.as_str() == "stmod:crate")
+        .expect("类型已冻结");
+    assert_eq!(ty.descriptor.store_capacity, Some(500));
+    // 同一类型仅撤下 store 声明即改变计划身份（排除类型集合差异的干扰）。
+    c.object_types[0].store_capacity = None;
+    let plain = plan(vec![builtin::link(), c]).unwrap();
+    assert_ne!(plain.hash(), frozen.hash(), "store 声明参与计划身份");
+    let plain_ty = plain
+        .projection()
+        .types()
+        .iter()
+        .find(|ty| ty.descriptor.key.as_str() == "stmod:crate")
+        .expect("类型仍在计划中");
+    assert_eq!(plain_ty.descriptor.store_capacity, None);
+
+    // 保留键：字段裸名占用 store/storeCapacity 在玩家面导出时拒绝。
+    for reserved in ["store", "storeCapacity"] {
+        let mut bad = module("stmod");
+        let binding = key(&format!("stmod:crate.field.{reserved}"));
+        bad.bindings.insert(binding.clone());
+        bad.object_types.push(ObjectTypeDescriptor {
+            key: key("stmod:crate"),
+            schema_version: 1,
+            owner_field: None,
+            position_fields: None,
+            fields: vec![FieldDescriptor {
+                key: key(&format!("stmod:{reserved}")),
+                schema: ValueSchema {
+                    kind: ValueKind::Number(NumberDomain::Unsigned { min: 0, max: 9 }),
+                    nullable: false,
+                },
+                default: FieldDefault::Missing,
+                visibility: Visibility::Public,
+                binding,
+            }],
+            capabilities: Vec::new(),
+            lifecycle_slots: BTreeSet::new(),
+            visibility: ObjectVisibility::RoomVisible,
+            player_class: "Crate".into(),
+            store_capacity: None,
+        });
+        // 保留键在冻结期拒绝（含 ServerOnly 可见性；builtin:link 的
+        // 官方投影字段形状豁免）。
+        let err = plan(vec![builtin::link(), bad]).unwrap_err().to_string();
+        assert!(
+            err.contains("占用投影保留键"),
+            "字段 {reserved} 应拒绝：{err}"
+        );
+    }
 }

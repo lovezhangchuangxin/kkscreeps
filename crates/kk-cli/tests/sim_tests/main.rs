@@ -267,6 +267,7 @@ mod move_policy;
 mod move_precheck;
 mod move_pull_registration;
 mod move_static;
+mod obj_store;
 mod quota;
 mod replay;
 mod retaliation_policy;

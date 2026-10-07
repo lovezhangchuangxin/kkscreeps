@@ -40,8 +40,13 @@ impl EmbedEngine {
                     .engine
                     .mod_object_type(&parsed.type_key)
                     .ok_or_else(|| anyhow::anyhow!("类型 {} 不在已装配计划中", parsed.type_key))?;
-                let payload = kk_mod_api::objects::prepare_fields(&parsed.fields, descriptor)
+                let mut payload = kk_mod_api::objects::prepare_fields(&parsed.fields, descriptor)
                     .map_err(anyhow::Error::msg)?;
+                // store 声明类型放置即携带库存信封（G09.a），与结算期
+                // 对象创建同形。
+                if let Some(capacity) = descriptor.store_capacity {
+                    kk_mod_api::objects::inject_store_envelope(&mut payload, capacity);
+                }
                 let (x, y) = kk_mod_api::objects::position(&payload, descriptor)
                     .map_err(anyhow::Error::msg)?;
                 Ok(Some(kk_schema::room::RoomObject::Mod(

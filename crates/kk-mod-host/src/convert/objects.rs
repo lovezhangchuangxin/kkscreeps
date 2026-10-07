@@ -68,6 +68,15 @@ impl ContributionBuilder<'_> {
                 native_binding: process,
             });
         }
+        let store_capacity = match value.get("capacity") {
+            None | Some(Value::Null) => None,
+            Some(v) => Some(v.as_u64().ok_or_else(|| {
+                ModHostError::new(
+                    namespace.to_string(),
+                    format!("类型 {key} 的 capacity 须为非负整数"),
+                )
+            })?),
+        };
         self.contribution.object_types.push(ObjectTypeDescriptor {
             key,
             schema_version: as_u32(namespace, value, "version")?,
@@ -77,6 +86,7 @@ impl ContributionBuilder<'_> {
             capabilities: Vec::new(),
             lifecycle_slots,
             visibility: object_visibility(namespace, optional_str(value, "visibility"))?,
+            store_capacity,
             player_class: {
                 match optional_str(value, "playerClass") {
                     Some(name) if !name.is_empty() => name.to_string(),

@@ -207,6 +207,12 @@ fn emit_types(
         let _ = writeln!(out, "  pos: {{ x: number; y: number; roomName: string }};");
         let _ = writeln!(out, "  type: 'mod';");
         let _ = writeln!(out, "  modType: '{}';", ty.key);
+        // store 声明类型（G09.a）的投影携带库存信封键，声明面与投影
+        // 面同形。
+        if descriptor.store_capacity.is_some() {
+            let _ = writeln!(out, "  store: Record<string, number>;");
+            let _ = writeln!(out, "  storeCapacity: number;");
+        }
         for field in &descriptor.fields {
             let field_name = crate::validate::field_name(&field.key);
             // 投影把信封键最后写入（world_json mod_record_json），同名

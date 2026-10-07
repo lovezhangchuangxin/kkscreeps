@@ -52,3 +52,51 @@ pub fn position(fields: &Value, ty: &ObjectTypeDescriptor) -> Result<(u8, u8), S
     };
     Ok((read(x)?, read(y)?))
 }
+
+/// 库存信封键（G09.a）：store 声明类型的 payload 中由引擎维护的键。
+/// 字段校验只针对作者声明字段——校验前拆出信封、校验后按原值并回。
+pub const STORE_ENVELOPE_KEYS: [&str; 3] = ["store", "storeCapacity", "storeCapacityResource"];
+
+/// 创建时写入库存信封（与建筑完工同形：store 从 {"energy":0} 起，
+/// 容量为冻结声明值）。仅 store 声明类型调用。
+pub fn inject_store_envelope(fields: &mut Value, capacity: u64) {
+    let map = fields
+        .as_object_mut()
+        .expect("prepare_fields 已确认字段为对象");
+    map.insert("store".into(), serde_json::json!({"energy": 0}));
+    map.insert("storeCapacity".into(), serde_json::json!(capacity));
+}
+
+/// 拆出库存信封键：返回（无信封的字段值, 原信封键值对）。无信封类型
+/// 得到 None；信封值原样保留（数值不变量由资源动作维护，这里不动）。
+pub fn split_store_envelope(payload: &Value) -> (Value, Option<serde_json::Map<String, Value>>) {
+    let Some(map) = payload.as_object() else {
+        return (payload.clone(), None);
+    };
+    let mut envelope = serde_json::Map::new();
+    let mut fields = serde_json::Map::new();
+    for (key, value) in map {
+        if STORE_ENVELOPE_KEYS.contains(&key.as_str()) {
+            envelope.insert(key.clone(), value.clone());
+        } else {
+            fields.insert(key.clone(), value.clone());
+        }
+    }
+    let envelope = if envelope.is_empty() {
+        None
+    } else {
+        Some(envelope)
+    };
+    (Value::Object(fields), envelope)
+}
+
+/// 把拆出的库存信封并回字段值（保留原值，不重算）。
+pub fn merge_store_envelope(fields: &mut Value, envelope: Option<serde_json::Map<String, Value>>) {
+    let Some(envelope) = envelope else {
+        return;
+    };
+    let map = fields.as_object_mut().expect("校验路径已确认字段为对象");
+    for (key, value) in envelope {
+        map.insert(key, value);
+    }
+}

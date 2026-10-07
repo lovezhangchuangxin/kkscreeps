@@ -24,6 +24,7 @@ mod ext;
 mod minerals_and_boost;
 mod mod_buildings;
 mod mod_resources;
+mod mod_store;
 mod movement;
 mod movement_inter_room;
 mod notify;

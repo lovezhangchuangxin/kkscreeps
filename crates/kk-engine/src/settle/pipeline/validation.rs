@@ -120,12 +120,40 @@ impl Engine {
                         id.as_str()
                     ))
                 })?;
+                // 库存信封键（G09.a）不属于声明字段：拆出后校验，再按
+                // 类型声明核对信封在场的合法性（防篡改与防缺失）。
+                let (fields, envelope) = kk_mod_api::objects::split_store_envelope(&payload);
                 kk_mod_api::validate::check_object_payload(
-                    &payload,
+                    &fields,
                     &ty.descriptor.fields,
                     &o.type_key,
                 )
                 .map_err(SettleError)?;
+                let envelope_complete = envelope.as_ref().is_some_and(|env| {
+                    kk_mod_api::objects::STORE_ENVELOPE_KEYS
+                        .iter()
+                        .filter(|key| **key != "storeCapacityResource")
+                        .all(|key| env.contains_key(*key))
+                });
+                if ty.descriptor.store_capacity.is_some() {
+                    if !envelope_complete {
+                        return Err(SettleError(format!(
+                            "房间 {room_name} 的 Mod 对象 {} 声明 store 却缺少完整库存信封",
+                            id.as_str()
+                        )));
+                    }
+                    if kk_world::domain::generic::decode_store(&o.data).is_none() {
+                        return Err(SettleError(format!(
+                            "房间 {room_name} 的 Mod 对象 {} 库存信封非法",
+                            id.as_str()
+                        )));
+                    }
+                } else if envelope.is_some() {
+                    return Err(SettleError(format!(
+                        "房间 {room_name} 的 Mod 对象 {} 未声明 store 却携带库存信封",
+                        id.as_str()
+                    )));
+                }
                 if let Some([fx, fy]) = &ty.descriptor.position_fields {
                     let px = payload
                         .get(kk_mod_api::validate::field_name(fx))
@@ -284,6 +312,139 @@ mod invariant_tests {
     use super::*;
     use crate::intent::IntentBatch;
     use crate::settle::TickInput;
+
+    /// G09.a 库存信封三臂守卫：声明缺信封、信封键齐全但内容非法、
+    /// 未声明却携带信封；完整合法信封照常通过。绕过写入口直改世界的
+    /// 形态由发布前校验封住。
+    #[test]
+    fn mod_store_envelope_guards_discriminate() {
+        use std::collections::{BTreeMap, BTreeSet};
+        use std::sync::Arc;
+        let field = |name: String| kk_mod_api::FieldDescriptor {
+            binding: kk_mod_api::Key::new(format!("gval:crate.field.{name}")).unwrap(),
+            key: kk_mod_api::Key::new(format!("gval:{name}")).unwrap(),
+            schema: kk_mod_api::ValueSchema {
+                kind: kk_mod_api::ValueKind::Number(kk_mod_api::NumberDomain::Unsigned {
+                    min: 0,
+                    max: 49,
+                }),
+                nullable: false,
+            },
+            default: kk_mod_api::FieldDefault::Missing,
+            visibility: kk_mod_api::Visibility::Public,
+        };
+        let descriptor = |type_key: &str, capacity: Option<u64>| kk_mod_api::ObjectTypeDescriptor {
+            key: kk_mod_api::Key::new(type_key).unwrap(),
+            schema_version: 1,
+            owner_field: None,
+            position_fields: Some([
+                kk_mod_api::Key::new("gval:x").unwrap(),
+                kk_mod_api::Key::new("gval:y").unwrap(),
+            ]),
+            fields: vec![field("x".into()), field("y".into())],
+            capabilities: Vec::new(),
+            lifecycle_slots: BTreeSet::new(),
+            visibility: kk_mod_api::ObjectVisibility::RoomVisible,
+            player_class: "Obj".into(),
+            store_capacity: capacity,
+        };
+        let contribution = kk_mod_api::Contribution {
+            source: kk_mod_api::Source {
+                namespace: "gval".into(),
+                api_version: 1,
+                revision: "1".into(),
+                code_digest: [7; 32],
+                config_digest: [0; 32],
+                player_api_digest: [0; 32],
+            },
+            bindings: BTreeSet::from([
+                kk_mod_api::Key::new("gval:crate.field.x").unwrap(),
+                kk_mod_api::Key::new("gval:crate.field.y").unwrap(),
+            ]),
+            field_mounts: Vec::new(),
+            object_types: vec![
+                descriptor("gval:crate", Some(500)),
+                descriptor("gval:marker", None),
+            ],
+            intents: Vec::new(),
+            rules: Vec::new(),
+            overrides: Vec::new(),
+            constraints: BTreeSet::new(),
+            slots: Vec::new(),
+            handlers: Vec::new(),
+            resources: Vec::new(),
+            buildings: Vec::new(),
+        };
+        let plan = Arc::new(
+            kk_mod_api::freeze_with_builtin(
+                kk_mod_api::builtin::link(),
+                vec![contribution],
+                kk_mod_api::FreezeOptions::default(),
+            )
+            .unwrap(),
+        );
+        let validate = |type_key: &str, payload: Value| {
+            let mut world = kk_world::World::new(1);
+            world
+                .register_room("W1N1", kk_core::Terrain::plains())
+                .unwrap();
+            world
+                .insert(
+                    "W1N1",
+                    RoomObject::Mod(kk_schema::room::ModObj {
+                        id: 0,
+                        x: 10,
+                        y: 11,
+                        type_key: type_key.into(),
+                        data: payload.to_string(),
+                    }),
+                )
+                .unwrap();
+            let mut engine =
+                Engine::with_plan(world, plan.clone(), BTreeMap::new(), BTreeMap::new()).unwrap();
+            let mut txn = engine
+                .prepare_tick(IntentBatch::default(), TickInput { now_ms: 0 })
+                .unwrap();
+            txn.rooms = txn
+                .room_names
+                .iter()
+                .map(|name| (name.clone(), engine.world.room(name).unwrap().clone()))
+                .collect();
+            engine
+                .validate_stage(&mut txn)
+                .map_err(|err| err.to_string())
+        };
+        validate(
+            "gval:crate",
+            serde_json::json!({"x": 10, "y": 11, "store": {"energy": 0}, "storeCapacity": 500}),
+        )
+        .expect("完整合法信封通过");
+        for (type_key, payload, needle) in [
+            (
+                "gval:crate",
+                serde_json::json!({"x": 10, "y": 11}),
+                "缺少完整库存信封",
+            ),
+            (
+                "gval:crate",
+                serde_json::json!({"x": 10, "y": 11, "store": {"energy": 0}}),
+                "缺少完整库存信封",
+            ),
+            (
+                "gval:crate",
+                serde_json::json!({"x": 10, "y": 11, "store": {"energy": -5}, "storeCapacity": 500}),
+                "库存信封非法",
+            ),
+            (
+                "gval:marker",
+                serde_json::json!({"x": 10, "y": 11, "store": {"energy": 0}, "storeCapacity": 100}),
+                "未声明 store 却携带库存信封",
+            ),
+        ] {
+            let err = validate(type_key, payload).unwrap_err();
+            assert!(err.contains(needle), "类型 {type_key} 实得 {err}");
+        }
+    }
 
     #[test]
     fn publication_rejects_duplicate_cursor_record_id_and_coordinate_drift() {

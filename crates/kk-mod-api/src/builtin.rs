@@ -705,6 +705,7 @@ pub fn link() -> Contribution {
             lifecycle_slots: keys(&["link.tick"]),
             visibility: ObjectVisibility::RoomVisible,
             player_class: "StructureLink".into(),
+            store_capacity: None,
         }],
         intents: vec![IntentDescriptor {
             key: key("link.transfer"),

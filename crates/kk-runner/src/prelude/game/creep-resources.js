@@ -234,15 +234,23 @@
     }
     const structEntry = structureRegisterEntry(target.id);
     const targetRaw = gw.rawById.get(target.id);
+    // Mod 库存对象目标族（G09.a）：带 store 信封的 Mod 记录经其玩家类
+    // 绑定接收（与结构/creep 族并列）；预检读投影信封，与结算同源。
+    const modEntry = targetRaw !== undefined && targetRaw.type === 'mod'
+      && gw.modApi !== undefined && gw.modApi.types !== undefined
+        ? gw.modApi.types[targetRaw.modType] : undefined;
     const inRegisters = structEntry !== undefined
-      || !!targetRaw && (targetRaw.type === 'creep' || targetRaw.type === 'powerCreep');
+      || !!targetRaw && (targetRaw.type === 'creep' || targetRaw.type === 'powerCreep')
+      || modEntry !== undefined;
     if (!inRegisters
-      || (!gw.rawData(target.id).store && structEntry.structureType !== 'controller')
+      || (!gw.rawData(target.id).store
+        && (structEntry === undefined || structEntry.structureType !== 'controller'))
       || (target instanceof globalThis.Creep && target.spawning) // :445
       || !(target instanceof globalThis.StructureSpawn)
         && !(target instanceof globalThis.Structure)
         && !(target instanceof globalThis.Creep)
-        && !(target instanceof globalThis.PowerCreep)) {
+        && !(target instanceof globalThis.PowerCreep)
+        && !(modEntry !== undefined && target instanceof modEntry.cls)) {
       assertTargetObject(target);
       return C.ERR_INVALID_TARGET;
     }
@@ -288,10 +296,17 @@
     }
     const rawTarget = gw.rawData(target.id);
     const structEntry = structureRegisterEntry(target.id);
+    // Mod 库存对象目标族（G09.a）：带 store 信封的 Mod 记录经其玩家类
+    // 绑定提取；结构专属拒绝（terminal 封锁/nuker/powerBank）不适用。
+    const targetRaw = gw.rawById.get(target.id);
+    const modEntry = targetRaw !== undefined && targetRaw.type === 'mod'
+      && gw.modApi !== undefined && gw.modApi.types !== undefined
+        ? gw.modApi.types[targetRaw.modType] : undefined;
     if (!rawTarget.store
       || ((!structEntry || !(target instanceof globalThis.Structure))
         && !(target instanceof globalThis.Tombstone)
-        && !(target instanceof globalThis.Ruin))) {
+        && !(target instanceof globalThis.Ruin)
+        && !(modEntry !== undefined && target instanceof modEntry.cls))) {
       assertTargetObject(target);
       return C.ERR_INVALID_TARGET;
     }

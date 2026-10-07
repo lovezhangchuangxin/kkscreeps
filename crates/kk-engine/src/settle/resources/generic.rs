@@ -63,3 +63,12 @@ pub(in crate::settle) fn change_generic_store(
     }
     *data = value.to_string();
 }
+
+/// Mod 对象库存（G09.a）的纯变更：只动 store[resource]，不套用 Generic
+/// 结构的实验室槽切换与 structureType 语义（Mod 声明面无逐资源槽）。
+pub(in crate::settle) fn change_mod_store(data: &mut String, resource: &str, amount: i64) {
+    let mut value = generic_store(data).expect("读阶段已确认库存信封");
+    let next = value["store"][resource].as_i64().unwrap_or(0) + amount;
+    value["store"][resource] = next.into();
+    *data = value.to_string();
+}

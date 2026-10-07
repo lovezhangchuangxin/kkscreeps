@@ -168,6 +168,12 @@ pub struct ObjectTypeDescriptor {
     pub lifecycle_slots: BTreeSet<Key>,
     pub visibility: ObjectVisibility,
     pub player_class: String,
+    /// 总库存容量声明（G09.a）：Some 时对象创建即携带 store/storeCapacity
+    /// 信封键（初始 store 为 {"energy":0}，与建筑完工同形），库存只能经
+    /// 资源动作（creep transfer/withdraw、mod 资源槽）变动，字段更新拒绝
+    /// 写信封键。容量随类型冻结，不进 StoreRules（那是内建结构规则族）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub store_capacity: Option<u64>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]

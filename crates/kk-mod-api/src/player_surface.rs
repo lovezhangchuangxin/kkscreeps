@@ -13,11 +13,22 @@ pub const MOD_FIND_BASE: i64 = 1000;
 
 /// 记录保留键：Mod 对象投影信封与查找约定的键，字段裸名不得占用。
 /// `x`/`y` 不在列——声明的位置字段允许同名（信封坐标与字段值同步为
-/// 同一数据，投影时由信封覆写为等值）。`structureType`/`owner`/`user`
+/// 同一数据，投影时由信封覆写为等值）。`store`/`storeCapacity` 是库存
+/// 信封键（G09.a）：store 声明类型的 payload 由引擎维护库存，投影直供
+/// 三键（storeCapacityResource 是逐资源容量槽键，首片未开放一并保留）。`structureType`/`owner`/`user`
 /// 有意不在列：它们对 Mod 记录是惰性键——ext 键消费只按 structureType
 /// 登记（扩展写入门不认 Mod 对象 id，恒不命中）、视野授予方已排除
 /// Mod 记录，且字段值先进信封后写、不会被覆写穿透。
-const RESERVED_RECORD_KEYS: [&str; 6] = ["type", "modType", "id", "room", "pos", "ext"];
+pub(crate) const RESERVED_RECORD_KEYS: [&str; 8] = [
+    "type",
+    "modType",
+    "id",
+    "room",
+    "pos",
+    "ext",
+    "store",
+    "storeCapacity",
+];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SurfaceField {
@@ -172,6 +183,7 @@ mod tests {
             lifecycle_slots: BTreeSet::new(),
             visibility,
             player_class: "Counter".to_string(),
+            store_capacity: None,
         }
     }
 
@@ -196,8 +208,8 @@ mod tests {
         ValueKind::Number(NumberDomain::Unsigned { min: 0, max: 49 })
     }
 
-    fn plan_with(ty: ObjectTypeDescriptor) -> ContributionPlan {
-        let contribution = Contribution {
+    fn plan_contribution(ty: ObjectTypeDescriptor) -> Contribution {
+        Contribution {
             source: Source {
                 namespace: "extmod".into(),
                 api_version: 1,
@@ -221,10 +233,13 @@ mod tests {
             handlers: Vec::new(),
             resources: Vec::new(),
             buildings: Vec::new(),
-        };
+        }
+    }
+
+    fn plan_with(ty: ObjectTypeDescriptor) -> ContributionPlan {
         crate::freeze_with_builtin(
             crate::builtin::link(),
-            vec![contribution],
+            vec![plan_contribution(ty)],
             FreezeOptions::default(),
         )
         .unwrap()
@@ -253,10 +268,20 @@ mod tests {
 
     #[test]
     fn reserved_field_names_rejected() {
+        // 保留键在冻结期拒绝（validate::object，含 ServerOnly）；玩家面
+        // 导出处的同款检查是对历史路径的纵深防御。
         let mut ty = surface_type("extmod:counter", ObjectVisibility::RoomVisible);
         ty.fields = vec![field("type", Visibility::Public)];
-        let err = PlayerSurface::from_plan(&plan_with(ty.clone())).unwrap_err();
+        let err = crate::freeze_with_builtin(
+            crate::builtin::link(),
+            vec![plan_contribution(ty.clone())],
+            FreezeOptions::default(),
+        )
+        .unwrap_err()
+        .to_string();
         assert!(err.contains("保留键"), "{err}");
+        // 冻结已拒，携带保留键字段的计划无从构造——导出层的同款检查
+        // 是纵深防御，不经此路径单独断言。
 
         // x/y 只允许出现在声明的位置字段上。
         ty.fields = vec![field("x", Visibility::Public)];

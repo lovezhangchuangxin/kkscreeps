@@ -95,6 +95,14 @@ pub(crate) fn mod_record_json(
             record.insert(field.name.clone(), value.clone());
         }
     }
+    // 库存信封键（G09.a）：store 声明类型的 payload 由引擎维护库存；
+    // 投影直供两键（与结构 store 同公开口径），玩家面与 transfer/
+    // withdraw 预检的容量门同源读取。未声明类型无信封，记录不含两键。
+    for key in ["store", "storeCapacity"] {
+        if let Some(value) = payload.get(key) {
+            record.insert(key.into(), value.clone());
+        }
+    }
     record.insert("type".into(), json!("mod"));
     record.insert("modType".into(), json!(o.type_key));
     record.insert("id".into(), json!(id.as_str()));

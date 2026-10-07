@@ -58,6 +58,7 @@ fn building_key_cannot_collide_with_object_type() {
         lifecycle_slots: BTreeSet::new(),
         visibility: ObjectVisibility::RoomVisible,
         player_class: "Thing".into(),
+        store_capacity: None,
     });
     let mut b = building("alpha", "thing");
     b.player_class = "Foundry".into();

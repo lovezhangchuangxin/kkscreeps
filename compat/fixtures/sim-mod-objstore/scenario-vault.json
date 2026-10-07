@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "shard": {
+    "players": [
+      "p1"
+    ],
+    "rooms": [
+      {
+        "name": "W1N1",
+        "owner": "p1"
+      }
+    ]
+  },
+  "bots": [
+    {
+      "player": "p1",
+      "modules": "."
+    }
+  ],
+  "objects": [
+    {
+      "alias": "courier",
+      "room": "W1N1",
+      "kind": "creep",
+      "spec": {
+        "name": "courier",
+        "owner": "p1",
+        "pos": [
+          12,
+          10
+        ],
+        "body": [
+          "move",
+          "carry",
+          "carry",
+          "carry",
+          "carry",
+          "carry",
+          "carry"
+        ],
+        "store": {
+          "energy": 300
+        },
+        "ticksToLive": 100
+      }
+    },
+    {
+      "alias": "cache",
+      "room": "W1N1",
+      "kind": "mod",
+      "spec": {
+        "typeKey": "objstore-vault:cache",
+        "fields": {
+          "x": 11,
+          "y": 10
+        }
+      }
+    }
+  ],
+  "mods": {
+    "root": "../mod-objstore",
+    "selection": {
+      "include": [
+        "objstore-vault"
+      ]
+    }
+  },
+  "assertions": [
+    {
+      "pointer": "/players/p1/memory/vaultCapacity",
+      "op": "eq",
+      "value": 100
+    },
+    {
+      "pointer": "/players/p1/memory/vaultCode",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "pointer": "/players/p1/memory/committedVault",
+      "op": "eq",
+      "value": 100
+    },
+    {
+      "pointer": "/players/p1/memory/committedCourier",
+      "op": "eq",
+      "value": 200
+    },
+    {
+      "pointer": "/players/p1/memory/vaultFull",
+      "op": "eq",
+      "value": -8
+    },
+    {
+      "pointer": "/players/p1/memory/finalVault",
+      "op": "eq",
+      "value": 100
+    },
+    {
+      "pointer": "/players/p1/memory/finalCourier",
+      "op": "eq",
+      "value": 200
+    }
+  ]
+}

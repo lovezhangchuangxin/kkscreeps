@@ -12,7 +12,9 @@ use super::{
 };
 use crate::intent::IntentData;
 use crate::settle::Working;
-use crate::settle::resources::generic::{change_generic_store, generic_capacity, generic_store};
+use crate::settle::resources::generic::{
+    change_generic_store, change_mod_store, generic_capacity, generic_store,
+};
 
 /// 向相邻 creep 或有容量字段的结构转移资源。
 /// 请求超过自身持有量时整条拒绝；目标容量不足时只转可容纳的数量。
@@ -69,6 +71,15 @@ pub(in crate::settle) fn intent_transfer(w: &mut Working, id: ObjId, data: &Inte
             let (capacity, stored) = generic_capacity(&value, resource);
             (capacity, (t.x, t.y), stored)
         }
+        // Mod 对象库存（G09.a）：store 声明类型经创建写入信封；无信封
+        // （未声明类型）按不可转移处理，与 Generic 缺键同形。
+        Some(RoomObject::Mod(t)) => {
+            let Some(value) = generic_store(&t.data) else {
+                return;
+            };
+            let (capacity, stored) = generic_capacity(&value, resource);
+            (capacity, (t.x, t.y), stored)
+        }
         _ => return,
     };
     if (t_pos.0 as i32 - pos.0 as i32).abs() > 1 || (t_pos.1 as i32 - pos.1 as i32).abs() > 1 {
@@ -91,6 +102,7 @@ pub(in crate::settle) fn intent_transfer(w: &mut Working, id: ObjId, data: &Inte
         Some(RoomObject::Generic(t)) => {
             change_generic_store(&mut t.data, resource, amount, &w.plane.stores)
         }
+        Some(RoomObject::Mod(t)) => change_mod_store(&mut t.data, resource, amount),
         _ => return,
     }
     if let Some(c) = w.creep_mut(id) {
@@ -171,6 +183,16 @@ pub(in crate::settle) fn intent_withdraw(w: &mut Working, id: ObjId, data: &Inte
             }
             ((t.x, t.y), value["store"][resource].as_i64().unwrap_or(0))
         }
+        // Mod 对象库存（G09.a）：信封由创建写入，结构专属拒绝
+        // （nuker/powerBank/terminal）不适用。object_owner 对 Mod 返回
+        // None——声明 owner 字段不参与下方 rampart 门（与 Generic 结构
+        // 不同，首片口径：敌方私 rampart 下任何人不可提取）。
+        Some(RoomObject::Mod(t)) => {
+            let Some(value) = generic_store(&t.data) else {
+                return;
+            };
+            ((t.x, t.y), value["store"][resource].as_i64().unwrap_or(0))
+        }
         _ => return,
     };
     let target = &w.room.objects[&target_id];
@@ -212,6 +234,7 @@ pub(in crate::settle) fn intent_withdraw(w: &mut Working, id: ObjId, data: &Inte
         Some(RoomObject::Generic(t)) => {
             change_generic_store(&mut t.data, resource, -amount, &w.plane.stores)
         }
+        Some(RoomObject::Mod(t)) => change_mod_store(&mut t.data, resource, -amount),
         _ => return,
     }
     if let Some(c) = w.creep_mut(id) {

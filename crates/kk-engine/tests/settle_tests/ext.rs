@@ -92,6 +92,7 @@ fn counter_contribution(handlers: &[(&str, HandlerKind)]) -> Contribution {
             lifecycle_slots: BTreeSet::new(),
             visibility: ObjectVisibility::RoomVisible,
             player_class: "Counter".into(),
+            store_capacity: None,
         }],
         intents: vec![IntentDescriptor {
             key: intent_key.clone(),

@@ -50,6 +50,7 @@ fn multiple_type_catalogs_share_field_names_without_sharing_field_identity() {
         lifecycle_slots: BTreeSet::new(),
         visibility: ObjectVisibility::RoomVisible,
         player_class: "Counter".into(),
+        store_capacity: None,
     };
     c.object_types = vec![make_type("counter:z"), make_type("counter:a")];
     let original = plan(vec![c.clone(), builtin::link()]).unwrap();

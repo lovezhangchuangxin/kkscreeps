@@ -394,6 +394,31 @@ pub(crate) fn object(
     if ty.visibility == ObjectVisibility::OwnerCollection && ty.owner_field.is_none() {
         return Err(FreezeError::new(&context, "owner 集合要求归属字段"));
     }
+    // 保留键在冻结期对全部可见性生效（玩家面导出会跳过 ServerOnly，
+    // 那里再查会漏）：字段裸名不得占用投影信封与库存信封键。内置
+    // builtin:link 贡献的字段名即官方投影形状，不受此门约束。
+    if ty.key.namespace() != "builtin" {
+        for field in &ty.fields {
+            let name = field_name(&field.key);
+            if crate::player_surface::RESERVED_RECORD_KEYS.contains(&name) {
+                return Err(FreezeError::new(
+                    &context,
+                    format!(
+                        "字段裸名 {name} 占用投影保留键（保留：{:?}）",
+                        crate::player_surface::RESERVED_RECORD_KEYS
+                    ),
+                ));
+            }
+        }
+    }
+    if let Some(capacity) = ty.store_capacity
+        && capacity > 9_007_199_254_740_991
+    {
+        return Err(FreezeError::new(
+            &context,
+            "store 容量须为不超过 2^53-1（JS 安全整数）的非负整数",
+        ));
+    }
     if let ObjectVisibility::Conditional(key) = &ty.visibility {
         binding(key, bindings, &context)?;
     }

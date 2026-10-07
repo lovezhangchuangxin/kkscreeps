@@ -11,7 +11,7 @@ use kk_world::ObjId;
 use serde_json::{Value, json};
 
 use super::{Working, creep};
-use generic::{change_generic_store, generic_store};
+use generic::{change_generic_store, change_mod_store, generic_store};
 
 const MAX_SAFE: i64 = 9_007_199_254_740_991;
 
@@ -27,6 +27,50 @@ fn total(mut values: impl Iterator<Item = i64>) -> Result<i64, String> {
     values.try_fold(0_i64, |sum, value| {
         quantity(value).and_then(|value| quantity(sum + value))
     })
+}
+
+/// Generic 形态信封（store/storeCapacity[Resource]）的容量视图；Generic
+/// 结构与 Mod 对象库存（G09.a）共用同一语义。
+fn generic_inventory_view(value: &Value, resource: &str) -> Result<ResourceView, String> {
+    let store = value["store"].as_object().ok_or("库存记录非法")?;
+    // 先验证全部库存，避免无关大数或负数被共享容量忽略。
+    total(
+        store
+            .values()
+            .map(|v| v.as_i64().expect("decode_store 已校验库存")),
+    )?;
+    let slots = value["storeCapacityResource"].as_object();
+    let reserved = total(
+        slots
+            .into_iter()
+            .flat_map(|s| s.values())
+            .filter_map(Value::as_i64),
+    )?;
+    let amount = store.get(resource).and_then(Value::as_i64).unwrap_or(0);
+    let shared_capacity = match value.get("storeCapacity") {
+        None | Some(Value::Null) => 0,
+        Some(v) => quantity(v.as_i64().ok_or("共享容量须为非负整数")?)?,
+    };
+    let explicit = slots.and_then(|s| s.get(resource)).and_then(Value::as_i64);
+    let (capacity, used) = if let Some(cap) = explicit {
+        (cap, amount)
+    } else {
+        let cap = shared_capacity.saturating_sub(reserved).max(0);
+        // 未绑定的资源共用剩余容量；独立资源槽的库存不重复占用它。
+        let used = total(
+            store
+                .iter()
+                .filter(|(name, _)| {
+                    slots
+                        .and_then(|s| s.get(*name))
+                        .and_then(Value::as_i64)
+                        .is_none()
+                })
+                .map(|(_, v)| v.as_i64().expect("decode_store 已校验库存")),
+        )?;
+        (cap, used)
+    };
+    view(amount, Some(capacity), used)
 }
 
 /// 读取房间候选中的库存；只支持资源目录中的资源名与已接线的仓库形态。
@@ -80,44 +124,16 @@ pub fn inspect(w: &Working, id: ObjId, resource: &str) -> Result<ResourceView, S
         RoomObject::Storage(o) => shared(&o.store, &o.store_extra, Some(c::STORAGE_CAPACITY)),
         RoomObject::Tombstone(o) => shared(&o.store, &o.store_extra, None),
         RoomObject::Ruin(o) => shared(&o.store, &o.store_extra, None),
-        RoomObject::Generic(o) => {
-            let value = generic_store(&o.data).ok_or("Generic 库存或容量记录非法")?;
-            let store = value["store"].as_object().expect("已校验库存");
-            // 先验证全部库存，避免无关大数或负数被共享容量忽略。
-            total(store.values().map(|v| v.as_i64().expect("已校验库存")))?;
-            let slots = value["storeCapacityResource"].as_object();
-            let reserved = total(
-                slots
-                    .into_iter()
-                    .flat_map(|s| s.values())
-                    .filter_map(Value::as_i64),
-            )?;
-            let amount = store.get(resource).and_then(Value::as_i64).unwrap_or(0);
-            let shared_capacity = match value.get("storeCapacity") {
-                None | Some(Value::Null) => 0,
-                Some(v) => quantity(v.as_i64().ok_or("共享容量须为非负整数")?)?,
-            };
-            let explicit = slots.and_then(|s| s.get(resource)).and_then(Value::as_i64);
-            let (capacity, used) = if let Some(cap) = explicit {
-                (cap, amount)
-            } else {
-                let cap = shared_capacity.saturating_sub(reserved).max(0);
-                // 未绑定的资源共用剩余容量；独立资源槽的库存不重复占用它。
-                let used = total(
-                    store
-                        .iter()
-                        .filter(|(name, _)| {
-                            slots
-                                .and_then(|s| s.get(*name))
-                                .and_then(Value::as_i64)
-                                .is_none()
-                        })
-                        .map(|(_, v)| v.as_i64().expect("已校验库存")),
-                )?;
-                (cap, used)
-            };
-            view(amount, Some(capacity), used)
-        }
+        RoomObject::Generic(o) => generic_inventory_view(
+            &generic_store(&o.data).ok_or("Generic 库存或容量记录非法")?,
+            resource,
+        ),
+        // Mod 对象库存（G09.a）：store 声明类型的信封与 Generic 同形
+        // 同语义；未声明类型无信封，按未接线仓库拒绝。
+        RoomObject::Mod(o) => generic_inventory_view(
+            &generic_store(&o.data).ok_or("Mod 对象无库存信封或信封非法")?,
+            resource,
+        ),
         _ => Err("对象没有已接线的可用资源仓库".into()),
     }
 }
@@ -202,22 +218,43 @@ fn change(
         RoomObject::Ruin(o) => update(&mut o.store, &mut o.store_extra),
         RoomObject::Spawn(o) => update(&mut o.store, &mut Vec::new()),
         RoomObject::Extension(o) => update(&mut o.store, &mut Vec::new()),
-        RoomObject::Generic(o) => {
-            change_generic_store(&mut o.data, resource, delta, stores);
-            // 已超容的其他资源也可能占满安全整数范围；独立槽有余量
-            // 不代表写后合计仍可表示。副本上的检查失败不能扣除来源。
-            let value = generic_store(&o.data).ok_or("写后 Generic 库存非法")?;
+        RoomObject::Generic(o) => generic_change_and_check(&mut o.data, resource, delta, stores),
+        // Mod 对象库存（G09.a）：纯变更（无实验室槽语义）+ 写后合计检查。
+        RoomObject::Mod(o) => {
+            change_mod_store(&mut o.data, resource, delta);
+            let value = generic_store(&o.data).ok_or("写后库存信封非法")?;
             total(
                 value["store"]
                     .as_object()
-                    .expect("已校验库存")
+                    .ok_or("写后库存非对象")?
                     .values()
-                    .map(|slot| slot.as_i64().expect("已校验库存")),
+                    .map(|slot| slot.as_i64().expect("decode_store 已校验库存")),
             )?;
             Ok(())
         }
         _ => Err("资源对象类型未接线".into()),
     }
+}
+
+/// Generic 形态信封的库存变更与写后合计检查。已超容的其他资源也可能
+/// 占满安全整数范围；独立槽有余量不代表写后合计仍可表示。副本上的
+/// 检查失败不能扣除来源。
+fn generic_change_and_check(
+    data: &mut String,
+    resource: &str,
+    delta: i64,
+    stores: &kk_mod_api::builtin::StoreRules,
+) -> Result<(), String> {
+    change_generic_store(data, resource, delta, stores);
+    let value = generic_store(data).ok_or("写后库存信封非法")?;
+    total(
+        value["store"]
+            .as_object()
+            .ok_or("写后库存非对象")?
+            .values()
+            .map(|slot| slot.as_i64().expect("decode_store 已校验库存")),
+    )?;
+    Ok(())
 }
 
 #[cfg(test)]
