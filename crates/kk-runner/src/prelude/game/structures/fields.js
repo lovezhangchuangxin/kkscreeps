@@ -2,24 +2,29 @@
 (() => {
   'use strict';
   const gw = globalThis.__kkp.gw;
-  // 其余现状暴露 store/energy/energyCapacity 的结构（road/wall 与未列类型
-  // 兜底——官方 road/wall 无这些 getter，现状暴露面保持不变）；store 同样
-  // 吃整个 raw 投影（Generic 透传桶里带 storeCapacityResource 的结构——
-  // lab/tower/link 等——经此获得官方三函数族语义）。
-  //
-  // 本兜底是**实例级** own 属性，会遮蔽上方各 StructureXxx.prototype 的同名
-  // getter（lab/powerSpawn/nuker/link/tower 的 energyCapacity 都在这条路上）。
-  // 故 energyCapacity 必须照官方口径读 `storeCapacityResource`（structures.js
-  // :305 lab / :483 link / :760 tower / :605 powerSpawn / :1349 nuker 同一式
-  // `storeCapacityResource ? .energy || 0 : 0`）——**不能读原始键
-  // `o.energyCapacity`**：官方 DB 从无该键（能量容量在 storeCapacityResource
-  // 里），读它恒 0，而 P4 已声明 powerSpawn/lab 等 energyCapacity 转真。
-  // 与 storeCapacity 的平面键不同，官方对 energyCapacity 无平面回退分支，
-  // 故不补 `|| o.storeCapacity`（避免把官方的 0 抬成数值）。
+  // 未知/新增结构类型的兜底字段表（官方类字段表之外的未来类型与 Mod 建筑）。
+  // store 吃整个 raw 投影；energyCapacity 照官方口径读 `storeCapacityResource`——
+  // **不能读原始键 `o.energyCapacity`**：官方 DB 从无该键（能量容量在
+  // storeCapacityResource 里），读它恒 0。与 storeCapacity 的平面键不同，
+  // 官方对 energyCapacity 无平面回退分支，故不补 `|| o.storeCapacity`
+  // （避免把官方的 0 抬成数值）。公式口径：lab（structures.js:309）/
+  // powerSpawn（:607）/nuker（:1349）官方无内层 `|| 0`（键缺失返
+  // undefined），extension/link/tower 等其余类有——本兜底取 `|| 0` 的
+  // 多数式，投影侧恒写 energy 键（含 0），两式在 kk 数据面不可区分。
   const ELSE_STRUCTURE_FIELDS = {
     energy: (o) => (o.store && o.store.energy) || 0,
     energyCapacity: (o) => (o.storeCapacityResource && o.storeCapacityResource.energy) || 0,
     store: (o) => gw.makeStore(o),
+  };
+
+  // 有官方类字段表的 structureType 全集（values 不用、集合式判存）。与官方
+  // game.js structureTypes 映射对齐（减去走装配早退的 controller/source/
+  // mineral，加 'wall' 别名）；Mod 建筑键含冒号永不在表内，恒走兜底桶。
+  const KNOWN_STRUCTURE_TYPES = {
+    extension: 1, storage: 1, road: 1, constructedWall: 1, wall: 1,
+    rampart: 1, link: 1, tower: 1, lab: 1, terminal: 1, container: 1,
+    extractor: 1, spawn: 1, nuker: 1, powerSpawn: 1, factory: 1,
+    observer: 1, portal: 1, keeperLair: 1, powerBank: 1, invaderCore: 1,
   };
 
   function installCoreFields() {
@@ -36,11 +41,14 @@
       storeCapacity: (o) => o.storeCapacity,
     });
 
-    gw.defineGameObjectProperties(globalThis.StructureRoad.prototype, gw.rawData, ELSE_STRUCTURE_FIELDS);
-    gw.defineGameObjectProperties(globalThis.StructureWall.prototype, gw.rawData, ELSE_STRUCTURE_FIELDS);
+    // StructureWall（官方 structures.js:833-840）：仅 ticksToLive（原始键，
+    // 无衰减钟的墙读 undefined）；road/wall 均不挂 energy/store 族——
+    // 官方基面只有 hits/hitsMax/structureType。
+    gw.defineGameObjectProperties(globalThis.StructureWall.prototype, gw.rawData, {
+      ticksToLive: (o) => o.ticksToLive,
+    });
     // road 优先以 nextDecayTime 计算剩余 tick，再用 decayTime。
-    // wall 不添加 ticksToDecay，避免多出上游不存在的属性。
-    // 来源：上游 engine/src/game/structures.js 的 StructureRoad/StructureWall 属性定义。
+    // 来源：上游 engine/src/game/structures.js 的 StructureRoad 属性定义。
     gw.defineGameObjectProperties(globalThis.StructureRoad.prototype, gw.rawData, {
       ticksToDecay: (o) => (o.nextDecayTime ? o.nextDecayTime - gw.world.time
         : o.decayTime ? o.decayTime - gw.world.time : undefined),
@@ -49,15 +57,14 @@
 
   function installAssembler() {
     gw.assemblers.structure = (o, base) => {
-      base.isStructure = true;
       if (o.structureType === 'controller' || o.structureType === 'source' || o.structureType === 'mineral') {
         return base; // 字段/方法全在各自类原型
       }
-      // extension/storage 有官方字段表（上方已挂类原型）；road/wall 与未来新
-      // 结构类型兜底实例级 getter（同一回查机制）
-      const cls = { extension: 'StructureExtension', storage: 'StructureStorage',
-        road: 'StructureRoad', constructedWall: 'StructureWall', wall: 'StructureWall' }[o.structureType];
-      if (!cls) {
+      // 有官方类原型的结构类型（字段表全在类原型/基类）不吃实例级兜底——
+      // 兜底会把 energy/energyCapacity/store 泄漏到官方无这些 getter 的
+      // 类型（road/wall/rampart/extractor 等，官方类字段表见 structures.js
+      // 各 StructureXxx 定义）。
+      if (!KNOWN_STRUCTURE_TYPES[o.structureType]) {
         gw.defineGameObjectProperties(base, gw.rawData, ELSE_STRUCTURE_FIELDS);
         // Mod 建筑的自定义字段（存储键含命名空间冒号）以同一回查机制
         // 直供玩家；记录缺键（Missing 默认未写）读到 undefined。
@@ -116,7 +123,16 @@
     // links/tick.js:11-22 逐 tick 递减），与 lab/terminal/nuker/factory 的
     // `cooldownTime` 折算形态**不同**（vanilla index.ts:1145-1158 明文两形态）
     gw.defineGameObjectProperties(globalThis.StructureLink.prototype, gw.rawData, {
+      energy: (o) => (o.store && o.store.energy) || 0,
+      energyCapacity: (o) => (o.storeCapacityResource && o.storeCapacityResource.energy) || 0,
+      store: (o) => gw.makeStore(o),
       cooldown: (o) => o.cooldown || 0,
+    });
+    // StructureTower（官方 :758-762）——与 extension 同款三件族
+    gw.defineGameObjectProperties(globalThis.StructureTower.prototype, gw.rawData, {
+      energy: (o) => (o.store && o.store.energy) || 0,
+      energyCapacity: (o) => (o.storeCapacityResource && o.storeCapacityResource.energy) || 0,
+      store: (o) => gw.makeStore(o),
     });
     // StructureTerminal（官方 :709-713）
     gw.defineGameObjectProperties(globalThis.StructureTerminal.prototype, gw.rawData, {

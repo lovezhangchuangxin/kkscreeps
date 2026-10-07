@@ -595,7 +595,9 @@ pub(super) fn viewer_meta_semantics_impl() -> anyhow::Result<()> {
     assert_eq!(v[1], 500_000, "progress = 点数 − 2 级基数");
 
     // Game.cpu 预算真值：自定义配置（limit 10、初桶 30）+ 世界无 cpu 键——
-    // begin_tick 注入点创建并覆写（tickLimit = min(500, 10+30) = 40）
+    // begin_tick 注入点创建并覆写（tickLimit = min(500, 10+30) = 40）。
+    // shardLimits 官方 cpu 对象不存在（game.js:148-156 仅 limit/tickLimit/
+    // bucket + 方法），数据属性表面不含它——按官方钉缺席。
     let cfg = SandboxConfig {
         cpu_limit: 10.0,
         initial_bucket: 30.0,
@@ -604,13 +606,13 @@ pub(super) fn viewer_meta_semantics_impl() -> anyhow::Result<()> {
     let mut sb2 = Sandbox::new(cfg)?;
     sb2.begin_tick(&mk_world(0))?;
     let v = sb2.run_expr(
-        "[Game.cpu.limit, Game.cpu.tickLimit, Game.cpu.bucket, Game.cpu.shardLimits.shard0]",
+        "[Game.cpu.limit, Game.cpu.tickLimit, Game.cpu.bucket, 'shardLimits' in Game.cpu]",
     )?;
     let v = v["value"].as_array().expect("数组");
     assert_eq!(v[0], 10, "limit = 配置真值");
     assert_eq!(v[1], 40, "tickLimit = min(maxPerTick, limit+bucket)");
     assert_eq!(v[2], 30, "bucket = tick 初桶值");
-    assert_eq!(v[3], 10, "shardLimits 跟随 limit");
+    assert_eq!(v[3], false, "shardLimits 官方缺席");
     Ok(())
 }
 

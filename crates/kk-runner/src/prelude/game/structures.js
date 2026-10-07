@@ -337,7 +337,6 @@
     upgradeBlocked: (o) => (o.upgradeBlocked && o.upgradeBlocked > now()
       ? o.upgradeBlocked - now()
       : undefined),
-    activationDate: () => undefined,
   });
 
   // 当前 tick（getter 体内换算用——官方 getter 读 runtimeData.time 同款）

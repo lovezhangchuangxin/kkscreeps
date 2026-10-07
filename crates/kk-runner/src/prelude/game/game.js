@@ -117,13 +117,14 @@
     const game = {
       time: gw.world.time,
       shard: { name: 'shard0', type: 'normal', ptr: false },
+      // 官方 game.js:91/138：powerCreeps 恒为对象（power 体系未启用时为空）
+      powerCreeps: {},
       // 官方 game.js:145：cpuLimit = runtimeData.cpu（tick 窗口同值）
       cpuLimit: cpu.tickLimit,
       cpu: {
         limit: cpu.limit,
         tickLimit: cpu.tickLimit,
         bucket: cpu.bucket,
-        shardLimits: { shard0: cpu.limit },
         // 官方口径：真实耗时 + intents.cpu（虚拟计费，runtime.js:202-204）
         getUsed: () => ops.op_kk_get_used() + (gw.intents ? gw.intents.cpu : 0),
         // 返回 begin_tick 采样的堆统计浅拷贝，不是调用时的实时统计。

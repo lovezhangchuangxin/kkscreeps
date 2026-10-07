@@ -183,6 +183,10 @@ fn embed_engine_suite() -> anyhow::Result<()> {
         "storage_terminal_backfill_e2e_impl",
         storage_terminal_backfill_e2e_impl,
     )?;
+    scenarios.run(
+        "structure_surface_placement_impl",
+        structure_surface_placement_impl,
+    )?;
     scenarios.run("ranged_attack_e2e_impl", ranged_attack_e2e_impl)?;
     scenarios.run("saying_visibility_e2e_impl", saying_visibility_e2e_impl)?;
     scenarios.run(
@@ -341,7 +345,7 @@ fn embed_engine_suite() -> anyhow::Result<()> {
         cursor_and_header_pairing_impl,
     )?;
     scenarios.run("resume_and_lifecycle_impl", resume_and_lifecycle_impl)?;
-    scenarios.finish(94)?;
+    scenarios.finish(95)?;
     assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");
     Ok(())
 }

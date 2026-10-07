@@ -121,7 +121,7 @@ const DUMP: &str = r#"(function () {
       ['energy', 'energyCapacity', 'ticksToRegeneration']),
     roomProbe: r ? {
       name: r.name, energyAvailable: r.energyAvailable,
-      energyCapacityAvailable: r.energyCapacityAvailable, mode: r.mode,
+      energyCapacityAvailable: r.energyCapacityAvailable,
       controller: probe(r.controller,
         ['level', 'progress', 'progressTotal', 'owner', 'username', 'my',
          'safeMode', 'safeModeAvailable', 'ticksToDowngrade', 'isPowerEnabled']),

@@ -23,19 +23,23 @@
   function makeRoom(name, r) {
     const queries = makeRoomQueries(name);
     const { controller, storageObj, terminalObj, roomObjs } = queries;
+    // 官方 Room 构造器/Structure 构造器（rooms.js:422-437、structures.js:41-56）
+    // 的挂载面：name/energyAvailable/energyCapacityAvailable/survivalInfo/visual
+    // 恒为自有属性（survivalInfo 普通房恒 undefined），controller/storage/
+    // terminal 仅在对应结构存在时成为自有属性——缺失时键不存在（读 undefined），
+    // 数据属性表面与官方一致。官方无 mode 字段。
     const room = {
       name,
-      controller,
       // 官方 game.js:325-328：非 off 的 spawn/extension 计入（spawn 300 固定、
       // extension 按 RCL 表）——由 Rust 侧 world_json 房间投影携带
       energyAvailable: r.energyAvailable ?? 0,
       energyCapacityAvailable: r.energyCapacityAvailable ?? 300,
-      // 官方 game.js:330+：storage/terminal 为结构实例（无则 undefined）
-      storage: storageObj,
-      terminal: terminalObj,
+      survivalInfo: undefined,
       visual: new RoomVisual(name),
-      mode: 'world',
     };
+    if (controller !== undefined) room.controller = controller;
+    if (storageObj !== undefined) room.storage = storageObj;
+    if (terminalObj !== undefined) room.terminal = terminalObj;
     queries.install(room);
     room.getTerrain = function () { return new Terrain(name); };
     const creation = makeRoomCreation(name, roomObjs);

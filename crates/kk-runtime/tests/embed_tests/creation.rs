@@ -193,16 +193,17 @@ pub(super) fn creation_gates_and_helpers_e2e_impl() -> anyhow::Result<()> {
     )?;
     assert_eq!(run.expr["value"], -7, "同格同类 ERR_INVALID_TARGET");
 
-    // toJSON：stringify 不含 controller/storage/terminal 键
+    // toJSON：stringify 不含 controller/storage/terminal 键；官方 Room 无
+    // mode 字段（rooms.js 构造器不挂），toJSON 拷贝上同样缺席
     let run = e.run_player(
         "p1",
-        r#"(s => [ 'controller' in s, 'storage' in s, 'toJSON' in s, s.mode ])(JSON.parse(JSON.stringify(Game.rooms['W1N1'])))"#,
+        r#"(s => [ 'controller' in s, 'storage' in s, 'toJSON' in s, 'mode' in s ])(JSON.parse(JSON.stringify(Game.rooms['W1N1'])))"#,
     )?;
     let v = &run.expr["value"];
     assert_eq!(v[0], false, "controller 键不入 toJSON");
     assert_eq!(v[1], false);
     assert_eq!(v[2], false);
-    assert_eq!(v[3], "world");
+    assert_eq!(v[3], false, "官方无 mode 字段");
     Ok(())
 }
 
@@ -221,12 +222,61 @@ pub(super) fn storage_terminal_backfill_e2e_impl() -> anyhow::Result<()> {
     let run = e.run_player(
         "p1",
         r#"[ !!Game.rooms['W1N1'].storage, Game.rooms['W1N1'].storage.structureType,
-             Game.rooms['W1N1'].storage.store.energy, Game.rooms['W1N1'].terminal === undefined ]"#,
+             Game.rooms['W1N1'].storage.store.energy, Game.rooms['W1N1'].terminal === undefined,
+             'storage' in Game.rooms['W1N1'], 'terminal' in Game.rooms['W1N1'],
+             'mode' in Game.rooms['W1N1'], 'survivalInfo' in Game.rooms['W1N1'] ]"#,
     )?;
     let v = &run.expr["value"];
     assert_eq!(v[0], true, "storage 回填为结构实例");
     assert_eq!(v[1], "storage");
     assert_eq!(v[2], 100);
     assert_eq!(v[3], true, "无 terminal 为 undefined");
+    // 官方挂载面（rooms.js:422-437 / structures.js:41-56）：controller/
+    // storage/terminal 仅在结构存在时成为自有属性；无 mode 字段；
+    // survivalInfo 恒挂（普通房 undefined）。
+    assert_eq!(v[4], true, "storage 存在时为自有属性");
+    assert_eq!(v[5], false, "terminal 缺席时键不存在");
+    assert_eq!(v[6], false, "官方无 mode");
+    assert_eq!(v[7], true, "survivalInfo 恒挂");
+    Ok(())
+}
+
+/// 对象形状批（2026-10-08）：结构类字段表按官方类层次挂原型，兜底桶
+/// 不再把 energy/store 族泄漏到官方无这些 getter 的类型——官方
+/// structures.js StructureRoad 仅 ticksToDecay、StructureTower 三件族。
+pub(super) fn structure_surface_placement_impl() -> anyhow::Result<()> {
+    let mut e = EmbedEngine::new();
+    e.create_shard(&json!({
+        "players": ["p1"],
+        "rooms": [{ "name": "W1N1", "rcl": 4, "owner": "p1" }],
+    }))?;
+    e.place_object(
+        "W1N1",
+        "structure",
+        &json!({ "pos": [11, 11], "structureType": "road" }),
+    )?;
+    e.place_object(
+        "W1N1",
+        "structure",
+        &json!({ "pos": [12, 12], "structureType": "tower", "owner": "p1",
+                 "store": { "energy": 10 } }),
+    )?;
+    let run = e.run_player(
+        "p1",
+        r#"(function () {
+            const objs = Game.rooms['W1N1'].find(FIND_STRUCTURES);
+            const road = objs.find(o => o.structureType === 'road');
+            const tower = objs.find(o => o.structureType === 'tower');
+            return [ 'energy' in road, 'store' in road, 'ticksToDecay' in road,
+                     'energy' in tower, 'store' in tower, tower.energy ];
+        })()"#,
+    )?;
+    let v = &run.expr["value"];
+    assert_eq!(v[0], false, "road 无 energy getter");
+    assert_eq!(v[1], false, "road 无 store getter");
+    assert_eq!(v[2], true, "road 有 ticksToDecay");
+    assert_eq!(v[3], true, "tower 有 energy");
+    assert_eq!(v[4], true, "tower 有 store");
+    assert_eq!(v[5], 10, "tower energy 读 store");
     Ok(())
 }

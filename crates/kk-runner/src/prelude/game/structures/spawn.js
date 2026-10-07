@@ -407,12 +407,10 @@
     }
 
     function installAssembler() {
-      // spawn 的字段与方法来自原型，实例仅补 isStructure；InvaderCore 也复用 Spawning 类。
+      // spawn 的字段与方法全在原型（官方 Surface 无额外实例标记）；
+      // InvaderCore 也复用 Spawning 类。
       gw.Spawning = Spawning;
-      gw.assemblers.spawn = (o, base) => {
-        base.isStructure = true;
-        return base;
-      };
+      gw.assemblers.spawn = (o, base) => base;
     }
 
     return { resetNames, installView, installMethods, installNotify, installAssembler };
