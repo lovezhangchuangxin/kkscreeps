@@ -282,24 +282,32 @@
     my: (o) => (o.owner === undefined ? undefined : o.owner === gw.viewerName),
   });
 
-  // Source（官方 sources.js:38-43）
+  // Source（官方 sources.js:38-43）。ticksToRegeneration 官方为
+  // `nextRegenerationTime ? 剩余 : undefined`——无再生钟保持 undefined，
+  // 投影侧已把绝对钟折叠为相对值（无钟为 null）。
   gw.defineGameObjectProperties(globalThis.Source.prototype, gw.rawData, {
     energy: (o) => o.energy ?? 3000,
     energyCapacity: (o) => o.energyCapacity ?? 3000,
-    ticksToRegeneration: (o) => o.ticksToRegeneration ?? 0,
+    ticksToRegeneration: (o) => (o.ticksToRegeneration == null
+      ? undefined
+      : o.ticksToRegeneration),
   });
 
   // 矿物字段读取原始数据；缺失字段使用下方默认值。来源：上游 engine/src/game/minerals.js。
+  // ticksToRegeneration 同 source：无钟 undefined（minerals.js:39 真值判）。
   gw.defineGameObjectProperties(globalThis.Mineral.prototype, gw.rawData, {
     mineralType: (o) => o.mineralType || 'XUH2O',
     mineralAmount: (o) => o.mineralAmount ?? 0,
     density: (o) => o.density ?? 3,
-    ticksToRegeneration: (o) => o.ticksToRegeneration ?? 0,
+    ticksToRegeneration: (o) => (o.ticksToRegeneration == null
+      ? undefined
+      : o.ticksToRegeneration),
   });
 
-  // 控制器的绝对 tick 字段转换为剩余 tick；结束的 cooldown/upgradeBlocked 为 undefined。
-  // 本实现缺少 downgradeTime 时 ticksToDowngrade 为 0，safeMode 未生效时也为 0。
-  // 这与上游缺省 undefined 不完全相同，activateSafeMode 的预检返回码可能不同。
+  // 控制器的绝对 tick 字段转换为剩余 tick；结束的 cooldown/upgradeBlocked/safeMode
+  // 为 undefined（官方未生效 safeMode 读 undefined，快照序列化为 null）。本实现缺少
+  // downgradeTime 时 ticksToDowngrade 为 0，与上游缺省 undefined 不完全相同，
+  // activateSafeMode 的预检返回码可能不同。
   gw.defineGameObjectProperties(globalThis.StructureController.prototype, gw.rawData, {
     level: (o) => o.level || 0,
     // RCL 0 不暴露 progress，RCL 0 或 8 不暴露 progressTotal；不要将 undefined 改成 0。
@@ -307,7 +315,7 @@
     progress: (o) => (o.level > 0 ? o.progress : undefined),
     progressTotal: (o) => (o.level > 0 && o.level < 8 ? o.progressTotal : undefined),
     ticksToDowngrade: (o) => (o.downgradeTime != null ? o.downgradeTime - now() : 0),
-    safeMode: (o) => (o.safeMode && o.safeMode > now() ? o.safeMode - now() : 0),
+    safeMode: (o) => (o.safeMode && o.safeMode > now() ? o.safeMode - now() : undefined),
     safeModeAvailable: (o) => o.safeModeAvailable ?? 0,
     safeModeCooldown: (o) => (o.safeModeCooldown && o.safeModeCooldown > now()
       ? o.safeModeCooldown - now()

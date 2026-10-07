@@ -70,10 +70,12 @@ pub(crate) fn object_json(
             "type": "structure", "structureType": "source",
             "id": id_str, "room": room, "x": o.x, "y": o.y,
             "energy": o.energy, "energyCapacity": o.energy_capacity,
-            "ticksToRegeneration": match o.next_regeneration_time {
-                Some(t) => t.saturating_sub(time),
-                None => 0,
-            },
+            // 官方 getter（sources.js:38）：无再生钟为 undefined——投影以
+            // null 保留，由 prelude getter 还原为 undefined，不折成 0。
+            "ticksToRegeneration": crate::snapshot::remaining_opt(
+                o.next_regeneration_time,
+                time,
+            ),
         }),
         RoomObject::Controller(o) => {
             let mut v = json!({
@@ -297,10 +299,11 @@ pub(crate) fn object_json(
             "mineralType": o.mineral_type,
             "mineralAmount": o.mineral_amount,
             "density": o.density,
-            "ticksToRegeneration": match o.next_regeneration_time {
-                Some(t) => t.saturating_sub(time),
-                None => 0,
-            },
+            // 同 source：官方 minerals.js:39 无钟为 undefined，投影保留 null。
+            "ticksToRegeneration": crate::snapshot::remaining_opt(
+                o.next_regeneration_time,
+                time,
+            ),
         }),
         // extractor 的 cooldown 是逐 tick 递减的计数，不能当成截止时间换算。
         RoomObject::Extractor(o) => {

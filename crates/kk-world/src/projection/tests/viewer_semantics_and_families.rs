@@ -618,13 +618,43 @@ fn mineral_and_extractor_projection_and_find() {
     assert_eq!(j["mineralAmount"], 35_000);
     assert_eq!(j["density"], 2);
     assert_eq!(j["ticksToRegeneration"], 50, "getter 折叠 150−100");
-    // 无钟折叠 0（prelude ?? 0 兜底口径——与 source 同形）
+    // 无钟保持 null（官方 minerals.js:39 undefined——prelude getter 还原，
+    // 不再折 0；source 同形）
     if let RoomObject::Mineral(mm) = world.get_mut(mineral).unwrap() {
         mm.next_regeneration_time = None;
     }
     assert_eq!(
         world.object_json_by_id(mineral).unwrap()["ticksToRegeneration"],
-        0
+        serde_json::Value::Null
+    );
+
+    // source 同臂（object.rs 与 mineral 共用 remaining_opt）：挂钟折叠、
+    // 无钟 null 两条分支各自锁定。
+    let source = world
+        .insert(
+            "W1N1",
+            RoomObject::Source(kk_schema::room::SourceObj {
+                id: 0,
+                x: 12,
+                y: 10,
+                energy: 2_500,
+                energy_capacity: 3_000,
+                next_regeneration_time: Some(150),
+            }),
+        )
+        .unwrap();
+    assert_eq!(
+        world.object_json_by_id(source).unwrap()["ticksToRegeneration"],
+        50,
+        "source getter 折叠 150−100"
+    );
+    if let RoomObject::Source(ss) = world.get_mut(source).unwrap() {
+        ss.next_regeneration_time = None;
+    }
+    assert_eq!(
+        world.object_json_by_id(source).unwrap()["ticksToRegeneration"],
+        serde_json::Value::Null,
+        "source 无钟 null（sources.js:38 undefined）"
     );
 
     let e = world.object_json_by_id(extractor).unwrap();

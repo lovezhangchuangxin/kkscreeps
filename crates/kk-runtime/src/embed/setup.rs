@@ -492,8 +492,10 @@ impl EmbedEngine {
                         .and_then(Value::as_bool)
                         .unwrap_or(true);
                     if has_controller {
-                        // 有主控制器默认等级 1，无主默认 0。倒计时转成绝对 tick 时多加 1，
-                        // 来源：screeps-ok adapters/vanilla/index.ts 的 createShard 控制器初始化。
+                        // 有主控制器默认等级 1，无主默认 0。相对倒计时按创建
+                        // 时刻直接换算绝对 tick，不加 1——vanilla 适配器的 +1
+                        // 源于其 createShard 末尾有一次热身 tick（无热身则首
+                        // 视图剩余值即种子值），见下方两处换算点注释。
                         let owner = room.get("owner").and_then(Value::as_str);
                         let rcl = room
                             .get("rcl")
@@ -519,16 +521,18 @@ impl EmbedEngine {
                                 .find(|(k, _)| *k == rcl.to_string())
                                 .map(|(_, v)| *v)
                                 .unwrap_or(0);
-                            let downgrade_time =
-                                match room.get("ticksToDowngrade").and_then(Value::as_i64) {
-                                    Some(t) => {
-                                        Some(time.saturating_add(t.max(0) as u64).saturating_add(1))
-                                    }
-                                    None if rcl > 0 => Some(
-                                        time.saturating_add(default_clock as u64).saturating_add(1),
-                                    ),
-                                    None => None,
-                                };
+                            // 相对值按创建时刻直接换算绝对时钟（不加 1）：
+                            // 创建视图读回种子值，首个结算 tick 后减一——
+                            // 与 vanilla 适配器 `gameTime + ttd + 1` 在其
+                            // 「创建即完成一 tick」时间线上的可观察值一致。
+                            let downgrade_time = match room
+                                .get("ticksToDowngrade")
+                                .and_then(Value::as_i64)
+                            {
+                                Some(t) => Some(time.saturating_add(t.max(0) as u64)),
+                                None if rcl > 0 => Some(time.saturating_add(default_clock as u64)),
+                                None => None,
+                            };
                             if let Some(dt) = downgrade_time {
                                 spec["downgradeTime"] = serde_json::json!(dt);
                             }
@@ -537,9 +541,8 @@ impl EmbedEngine {
                                 .and_then(Value::as_i64)
                                 .filter(|v| *v > 0)
                             {
-                                spec["safeMode"] = serde_json::json!(
-                                    time.saturating_add(sm as u64).saturating_add(1)
-                                );
+                                spec["safeMode"] =
+                                    serde_json::json!(time.saturating_add(sm as u64));
                             }
                             if let Some(avail) =
                                 room.get("safeModeAvailable").and_then(Value::as_i64)

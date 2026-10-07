@@ -55,10 +55,9 @@ fn generate_safe_mode_consumes_ghodium() {
 fn activate_safe_mode_full_chain() {
     // activateSafeMode.js:6-24（意图半步）+ controllers/tick.js:25-31（消费
     // 半步）：available −1、safeMode = time+SAFE_MODE_DURATION(20000)、
-    // safeModeCooldown = time+SAFE_MODE_COOLDOWN(50000)。
-    // time 取 10：gameTime 0 时未挂冷却的 null 在官方 `cooldown >= gameTime`
-    // 数值比较中是 0 >= 0 → 拒（JS null 强制转换角落，行为已由
-    // activate_safe_mode_rejections 的 cooldown 用例锁住）
+    // safeModeCooldown = time+SAFE_MODE_COOLDOWN(50000)。time 取 10 任意
+    // （未挂冷却在任何时刻含 0 均放行，由
+    // activate_safe_mode_null_cooldown_at_time_zero_activates 单独锁定）。
     let mut f = Fixture::new(1, terrain_with(&[]));
     f.world.set_time_for_test(10).unwrap();
     let ctl = f.controller_full(1, Some("p1"), |t| {
@@ -157,7 +156,12 @@ fn activate_safe_mode_rejections() {
         IntentData::bare(),
     ));
     assert_eq!(ctl_of(&f6).safe_mode, 0, "无主 0 级拒");
-    // downgradeTime 未挂钟（null → 0 < time+5000）拒——新 claim 房当 tick不可激活
+    // downgradeTime 未挂钟：本实现 None 表示「无钟」（适配器种子缺省/挂钟
+    // 前窗口），按官方 undefined 参与比较恒 false（activateSafeMode.js:20）
+    // 放行、不落危险窗。注意与官方 claim 路径的差异：官方 claim 落的是
+    // null（claimController.js:44），数值化 0 参与 `0 < gameTime + 阈值`
+    // 在 gameTime ≥ 1 时恒拒——此处锁的是 None≡undefined 语义而非 claim
+    // 角落。
     let mut f7 = Fixture::new(1, terrain_with(&[]));
     let ctl7 = base(&mut f7, &|t| t.downgrade_time = None);
     f7.settle(controller_action(
@@ -166,7 +170,11 @@ fn activate_safe_mode_rejections() {
         Action::ActivateSafeMode,
         IntentData::bare(),
     ));
-    assert_eq!(ctl_of(&f7).safe_mode, 0, "未挂钟拒（官方 null 数值比较）");
+    assert_eq!(
+        ctl_of(&f7).safe_mode,
+        10 + 20_000,
+        "未挂钟放行（undefined 比较为 false）"
+    );
 }
 
 #[test]
@@ -263,10 +271,10 @@ fn activate_safe_mode_owner_gate_at_dispatch() {
 }
 
 #[test]
-fn activate_safe_mode_null_cooldown_at_time_zero_rejects() {
-    // activateSafeMode.js:14 的 JS null 数值比较角落：未挂冷却（null → 0）
-    // 时 `0 >= gameTime` 在 gameTime 0 为真——拒绝。我方 None 统一按 null
-    // 语义建模（undefined 初态的分歧仅放置态可达，见 controller.rs 注释）
+fn activate_safe_mode_null_cooldown_at_time_zero_activates() {
+    // activateSafeMode.js:14：上游未挂冷却是 undefined，`undefined >= gameTime`
+    // 恒为 false——世界时间 0 也放行。None 按 0 数值化会在新世界的首个
+    // tick 拒绝一切激活（适配器安全模式族 17 例失败的根因）。
     let mut f = Fixture::new(1, terrain_with(&[]));
     let ctl = f.controller_full(1, Some("p1"), |t| {
         t.safe_mode_available = 1;
@@ -279,7 +287,9 @@ fn activate_safe_mode_null_cooldown_at_time_zero_rejects() {
         Action::ActivateSafeMode,
         IntentData::bare(),
     ));
-    assert_eq!(ctl_of(&f).safe_mode, 0, "time=0 + 冷却 None（0>=0）拒");
+    let t = ctl_of(&f);
+    assert_eq!(t.safe_mode, 20_000, "time=0 + 冷却 None 放行并挂满时长");
+    assert_eq!(t.safe_mode_available, 0, "消耗一枚");
 }
 
 #[test]

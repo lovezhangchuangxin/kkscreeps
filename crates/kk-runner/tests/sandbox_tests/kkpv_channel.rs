@@ -116,6 +116,9 @@ const DUMP: &str = r#"(function () {
         creep: c ? Object.keys(c.store) : null,
       };
     })(),
+    // getter 口径锁定（undefined 保留）：source 无再生钟读 undefined。
+    sourceProbe: probe(Game.getObjectById('kk0000000000000004'),
+      ['energy', 'energyCapacity', 'ticksToRegeneration']),
     roomProbe: r ? {
       name: r.name, energyAvailable: r.energyAvailable,
       energyCapacityAvailable: r.energyCapacityAvailable, mode: r.mode,
@@ -376,6 +379,20 @@ pub fn kkpv_channel_equivalence_impl() -> anyhow::Result<()> {
         dump_str.contains("\"energy\",\"U\",\"XUH2O\""),
         "多资源 store 的键序必须是插入序（编码端保序）：{}",
         &dump_str[..dump_str.len().min(1500)]
+    );
+    // getter 口径锁定（undefined 保留）：controller 未生效 safeMode（原始
+    // 0）与无再生钟 source（原始 null）玩家面读 undefined，序列化为 null
+    // ——官方 structures.js safeMode / sources.js:38 真值判；两通道已由
+    // 上方整体一致断言覆盖，此处只需对参考 dump 断值。
+    let probe_dump = serde_json::from_str::<serde_json::Value>(dump_str)?;
+    assert_eq!(
+        probe_dump["roomProbe"]["controller"]["safeMode"],
+        serde_json::Value::Null
+    );
+    assert_eq!(probe_dump["sourceProbe"]["energy"], json!(2500));
+    assert_eq!(
+        probe_dump["sourceProbe"]["ticksToRegeneration"],
+        serde_json::Value::Null
     );
     // 地形面的正向锁定：三房地形走查与拷出语义必须在快照内（W1N1 全
     // 平原、E2N2 全墙、W2N2 全沼泽——三条地形路径的分型由夹具区分）。

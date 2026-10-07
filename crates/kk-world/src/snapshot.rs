@@ -60,7 +60,10 @@ fn remaining(t: u64, time: u64) -> Value {
     }
 }
 
-fn remaining_opt(t: Option<u64>, time: u64) -> Value {
+// 无钟语义与官方 getter 真值判一致（nextRegenerationTime 为 0 视同无钟）；
+// 投影与快照共用，避免两处折叠口径漂移。过期钟截为 0 不产负数（引擎在
+// regen-1 清钟，正常流不可达；见 sources/tick.js 同款清钟时机）。
+pub(crate) fn remaining_opt(t: Option<u64>, time: u64) -> Value {
     match t {
         Some(t) if t != 0 => json!(t.saturating_sub(time)),
         _ => Value::Null,

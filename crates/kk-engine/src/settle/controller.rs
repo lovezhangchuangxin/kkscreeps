@@ -73,19 +73,28 @@ fn intent_activate_safe_mode(w: &mut Working, id: ObjId) {
     if available == 0 {
         return;
     }
-    // 缺失冷却按 null 的数值 0 处理，因此 tick=0 时拒绝。
-    // 与上游字段未定义时的比较行为不同，不能改成只检查 Some。
-    if cooldown.unwrap_or(0) >= time {
+    // 冷却/封锁缺失即不阻止：上游 JS 里 undefined 参与比较恒为 false
+    //（`undefined >= gameTime` 不成立），None 不能按 0 数值化——否则
+    // 世界时间 0 时缺失冷却会拒绝首次激活。
+    if let Some(c) = cooldown
+        && c >= time
+    {
         return;
     }
-    if blocked.unwrap_or(0) > time {
+    if let Some(b) = blocked
+        && b > time
+    {
         return;
     }
-    // 缺失降级时钟按 0 比较。刚占领的房间尚未由 controller_tick 初始化时钟，
-    // 可能因此不能在当轮开启安全模式。
+    // 降级时钟缺失同样不阻止（undefined 比较为 false）；有值时低于
+    // 阈值则拒绝。已知角落差异：官方 claim 落 null（数值化 0 会拒），
+    // 本实现 claim 落 None——原始 intent 序可达时同批激活语义不同，
+    // 官方玩家面 claim 非己方挡在 API 层，不视作阻塞。
     let threshold = super::economy::controller_downgrade(level) as i64 / 2
         - kk_core::constants::CONTROLLER_DOWNGRADE_SAFEMODE_THRESHOLD;
-    if (downgrade_time.unwrap_or(0) as i64) < time as i64 + threshold {
+    if let Some(dt) = downgrade_time
+        && (dt as i64) < time as i64 + threshold
+    {
         return;
     }
     w.safe_mode_activated.insert(id);
