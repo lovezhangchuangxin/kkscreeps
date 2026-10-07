@@ -21,6 +21,12 @@
 
 **实施交付（同日）**：契约见[建筑 RCL 配额规则](../architecture/structure-quota.md)。`StructureQuotaSnapshot` 装配期一次解析、Rc 共享入逐房 Plane；`fold_controller_structures` 折叠表经 setup.rs canary 预检与玩家 worker 双点注入（switch/冷恢复同一路径）；五消费者统一 `allowed_for`（快照 miss 回退官方静态表，仅默认引擎/非官方类型可达）。夹具 [mod-quota](../../compat/fixtures/mod-quota/README.md)（quota-raise 塔 20 / quota-lower 墙 3 两独立包）与 [sim-mod-quota](../../compat/fixtures/sim-mod-quota/README.md)（三轮探针：首 tick 结算收口、次 tick 预检读「已提交数 vs 注入表」、末 tick 回读世界工地数，三面互证）；Rust 侧 `sim_tests/quota.rs` 四场景×双通道+冷恢复+组合身份互异。验证：完整门禁通过；棘轮 1983 持平（0 转红 0 转绿）；三 bot 2000/2000/10 指标+验收判定全通过；三路复审 0 P0/P1，P2（Plane 深拷贝→Rc）当批清偿，P3 清偿或登记（折叠键序依赖 workspace preserve_order 已注释；link 迁移玩家面覆盖为间接）。已知边界：RCL 0 级别键不声明（官方表无此键）；首片不开放逐房差异/动态配额/Mod 建筑配额。
 
+## G09.a 自有对象库存（2026-10-08 调查与选型登记，待实施）
+
+调查结论（登记时点现状）：`RoomObject::Mod`（`api.objects.define` 类型实例）今天完全不能作为资源端点——六条链全部按变体白名单拒绝：① 结算接收门 `settle/creep/store.rs` intent_transfer/intent_withdraw 只认 Creep/Spawn/Extension/Storage/Generic（withdraw 另有 Tombstone/Ruin），`_ => return` 静默拒 Mod；② Mod 侧资源槽 `settle/resources.rs::inspect/transfer/change` 同名单拒（「对象没有已接线的可用资源仓库」）；③ 玩家预检 `creep-resources.js` transfer/withdraw 要求 structureRegister（`raw.type === 'structure'`）或 creep + `instanceof Structure` 族，Mod 对象投影 `type:"mod"` 两门都不过；④ 对象字段 schema（definition.rs ValueKind：Bool/Number/String/ObjectRef/Enum/Array/Map/Record）无库存形态字段，ObjectTypeDescriptor 无容量槽；⑤ 投影 `mod_record_json` 只合成 type/modType/id/room/x/y/pos 信封键，且 `store` 不在保留键清单（player_surface.rs）——声明的同名字段是惰性数据；⑥ 既有先例是 Mod 建筑（G08.a）：`store_capacity` → 完工写 `store/storeCapacity` → 落 `RoomObject::Generic`，天然过①②③全部 Generic 臂——但建筑是静态放置+工地生命周期，不能替代可动态增删/移动/自定义玩家类的对象。
+
+**选型（路线①：对象级库存声明 + Generic 库存语义复用）**：ObjectTypeDescriptor 新增可选 `store` 声明（首片=单一总容量 u32，形态对齐建筑 `store_capacity`）；引擎把库存作为 ModObj.data 信封键 `store/storeCapacity` 维护（复用 `resources/generic.rs` 的 generic_capacity/change_generic_store，六链按「带合法库存字段的 Generic」同款语义接纳 Mod 对象）；`store/storeCapacity` 入 player_surface 保留键（冻结期拒绝声明同名字段，无存量用户）；投影 mod_record_json 合成两信封键；预检 creep-resources.js 增 `type:"mod"` 目标族（读同一信封键容量）；mod 侧 inspect/change 增 Mod 臂。容量来源=类型级冻结声明（与建筑同口径），不进 StoreRules（那是内建结构规则族）；首片不做逐资源容量/实验室式槽绑定/损耗（mod 可用 ctx.resources 槽组合）。验收=共同验收（两独立包：搬运型/仓储型 + 原生对照 + 组合 + 双通道 + 冷恢复）+ 领域项：creep transfer/withdraw 对 Mod 对象进出双向、预检错误码与结算同源、mod 槽 read/transfer 触达自有对象、保留键冻结拒绝、投影 store 键形状、事件与保存恢复随既有链路。G09.b 耐久/死亡、G09.c 结构受击另拆（本片不碰 hits/伤害）。
+
 ## 执行与更新规则
 
 以实际 HEAD、源码和适用验收为准。当前状态只在本台账维护；历史记录不得当作未完成指令。首片完成仍保留父项缺口；依赖和范围变化写清原因。普通修复与重构更新受影响契约及简短状态，不强制新建 research 文档；验证要求见 [AGENTS.md](../../AGENTS.md)。
