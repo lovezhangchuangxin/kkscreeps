@@ -100,7 +100,7 @@
   globalThis._ = _;
 
   // ---------------------------------------------------------------- 段间私有上下文
-  // 90_host 执行完删除本属性；各段在自身加载时捕获所需引用进闭包。
+  // Rust 捕获宿主句柄后删除本属性；各段在自身加载时捕获所需引用进闭包。
   globalThis.__kkp = { ops, probe, reportMissing, PROBE_IGNORE, missing, hasProbes, stubCalls, countStub, lodash: _,
     // 通过闭包中的 op 请求主动中断；Rust 据此区分 halt 与预算超时。
     cpuHalt: () => ops.op_kk_cpu_halt() };

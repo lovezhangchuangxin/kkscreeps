@@ -65,7 +65,7 @@ RawMemory/CPU 结果及控制台输出。玩家代码抛异常、CPU 超时和�
 可见 `Room` 上的创建接口只是来源之一，不能据此断言所有房间指令都受视野限制。
 上游 `engine/src/game/flags.js` 的 `Flag.remove/setColor` 可以操作不可见房间中的自有旗帜；
 `Flag.setPosition` 还可以为创建指令指定新房间，不检查该目标是否在 `Game.rooms` 中。
-当前玩家实现见 `prelude/30_game/sites-flags.js`。这类私有对象或自由目标指令必须单独纳入
+当前玩家实现见 `prelude/game/sites-flags.js`。这类私有对象或自由目标指令必须单独纳入
 依赖分析，或先进入等待全部相关玩家完成的全局阶段，再按已定义顺序与房间结果合并。
 市场、跨房传输及 Mod 动作也须逐类说明范围，不能仅从 `Game.rooms` 推导全部依赖。
 自由目标可能使某类指令必须等待全部玩家；不能预先承诺依赖集合永不退化为全体玩家。

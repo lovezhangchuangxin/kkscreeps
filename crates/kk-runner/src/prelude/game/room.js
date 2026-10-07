@@ -14,7 +14,7 @@
   const __jsonParse = JSON.parse;
   const Terrain = gw.Terrain;
   const RoomVisual = globalThis.RoomVisual;
-  // 装配期捕获工厂；90_host 删除临时 __kkp 后仍通过闭包调用。
+  // 装配期捕获工厂；宿主装配收尾 删除临时 __kkp 后仍通过闭包调用。
   const makeRoomQueries = gw.makeRoomQueries;
   const makeRoomCreation = gw.makeRoomCreation;
   const makeRoomFindPath = gw.makeRoomFindPath;

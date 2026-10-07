@@ -16,7 +16,7 @@ B.2 已把 link 有效规则接入放置、建造、结算、配额、伤害与�
 | 玩家意图 | `kk-engine/src/intent.rs` 的 `Action`、清洗器 | 保留内建编码优化，同时接受已注册动作；身份由宿主绑定 |
 | 结构结算 | `settle/structures.rs`、`settle/economy.rs` | 类型分派、默认处理器与规则数据有明确的替换入口 |
 | 初始化与建造 | `kk-world/src/place/place_structure.rs`、`settle/creep/build.rs` | 有效规则贯穿创建、容量与结算 |
-| 玩家 API | `kk-runner/src/prelude/30_game/structures_spawn.js` 等 | 预检、常量、Store、包装器与结算使用同一版本的定义 |
+| 玩家 API | `kk-runner/src/prelude/game/structures-spawn.js` 等 | 预检、常量、Store、包装器与结算使用同一版本的定义 |
 | 可见性 | `kk-world/src/world_json.rs`、`kk-runtime/src/embed.rs` | 对象权限、字段权限和全局集合分别处理；公开部分才可共享 |
 
 首个完整接入家族选 **link**。它涵盖初始化、Store、控制器配额、玩家预检、动作、双对象更新、事件和逐 tick 冷却，能够验证定义是否贯穿调用链。rampart 的动作较小，但完整家族还涉及移动、寻路、受伤遮挡与衰减，适合作为第二个家族。

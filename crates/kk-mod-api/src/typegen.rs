@@ -14,7 +14,7 @@ use crate::plan::ContributionPlan;
 use crate::player_surface::PlayerSurface;
 
 /// Mod 玩家类可继承的内建类名。与玩家面安装运行时
-/// （kk-runner `prelude/41_mod_player.js` 的 BUILTIN_CLASS_NAMES）同源，
+/// （kk-runner `prelude/mods/player-api.js` 的 BUILTIN_CLASS_NAMES）同源，
 /// kk-cli 测试断言两处一致；新增内建类须同时改这里。
 pub const MOD_BUILTIN_PLAYER_CLASSES: [&str; 38] = [
     "ConstructionSite",

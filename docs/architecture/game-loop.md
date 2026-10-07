@@ -21,7 +21,7 @@
 
 玩家 API 在 JavaScript 中检查参数、所有权、距离、资源和对象类型等条件，接受动作后收集指令。API 返回 `OK` 表示指令已接受，最终能否生效仍取决于结算时的状态与冲突规则。
 
-同一对象动作可覆盖此前收集的动作；某些指令通过数组累计，不能把所有指令都概括为“只保留最后一条”。指令收集和附加 CPU 费用的具体规则见 [game.js](../../crates/kk-runner/src/prelude/30_game/game.js) 的 `resetIntents`。
+同一对象动作可覆盖此前收集的动作；某些指令通过数组累计，不能把所有指令都概括为“只保留最后一条”。指令收集和附加 CPU 费用的具体规则见 [game.js](../../crates/kk-runner/src/prelude/game/game.js) 的 `resetIntents`。
 
 宿主通过 JSON 导出结果，Rust 再次清洗指令字段并绑定注册身份。当前并未使用二进制指令传输。结算后的世界经 `kk-world::world_json` 投影，下一轮才向玩家呈现新状态；查询接口使用独立的 `snapshot` 投影。
 

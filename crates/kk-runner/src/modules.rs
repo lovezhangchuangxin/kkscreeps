@@ -1,7 +1,7 @@
 //! 保存玩家 CommonJS 源码与二进制模块，按模块名精确查询。
 //!
 //! 目录加载器将 .js 后缀去掉，保留 .wasm 后缀，以 / 连接子目录名。
-//! JavaScript require 的缓存与名称处理见 prelude/20_cjs.js；二进制加载返回 Buffer。
+//! JavaScript require 的缓存与名称处理见 prelude/runtime/commonjs.js；二进制加载返回 Buffer。
 
 use std::collections::HashMap;
 use std::path::Path;

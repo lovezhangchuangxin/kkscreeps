@@ -53,7 +53,7 @@
 
 不能把所有红用例解释为“整个功能没有实现”。例如：
 
-1. **container 资源动作存在具体断链。** [玩家预检查](../../crates/kk-runner/src/prelude/30_game/creep_resources.js)识别 container 容量并能收集动作；[资源结算](../../crates/kk-engine/src/settle/creep/store.rs)的 transfer 目标只有 Creep/Spawn/Extension/Storage，withdraw 额外支持墓碑与废墟，却没有 Generic 存储结构。报告中的 TRANSFER-001/002、WITHDRAW-001/002 与 container 失败吻合，出现接受动作但没有资源变化。应补全权威存储能力和写入契约，而不是继续增加表面 API。
+1. **container 资源动作存在具体断链。** [玩家预检查](../../crates/kk-runner/src/prelude/game/creep-resources.js)识别 container 容量并能收集动作；[资源结算](../../crates/kk-engine/src/settle/creep/store.rs)的 transfer 目标只有 Creep/Spawn/Extension/Storage，withdraw 额外支持墓碑与废墟，却没有 Generic 存储结构。报告中的 TRANSFER-001/002、WITHDRAW-001/002 与 container 失败吻合，出现接受动作但没有资源变化。应补全权威存储能力和写入契约，而不是继续增加表面 API。
 2. **部分 claim 失败先被场景 GCL 挡住。** [player_handles](../../crates/kk-runtime/src/embed.rs)只提取名字，未应用 PlayerSpec.gcl/power；玩家预检查保留官方 GCL 门。报告中 CTRL-CLAIM-001 返回 -15，多个错误优先级用例也被同一门挡住。应先修场景 GCL 默认值和显式值，再评估 claim 结算本身的差异。
 3. **安全模式不只是补一个方法。** 源码已有激活、扣次数与 tick 时钟处理，但初值、缺失值、时间相对投影和跨动作守卫仍有差异。应把预检查、结算和下一轮读面一起验证。
 4. **模块失败有执行入口差异。** UNDOC-GLOBAL-002 的入库错误为 `Unknown module 'main'`；完整 bot 模块加载器与适配器表达式执行不是同一验收情形。不能直接据此认定生产沙箱没有跨 tick 模块缓存。

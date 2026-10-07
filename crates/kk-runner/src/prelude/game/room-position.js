@@ -7,7 +7,7 @@
   'use strict';
 
   const { lodash: _ } = globalThis.__kkp;
-  // gw 引用在加载期捕获进闭包：90_host 末段删除 __kkp 后，运行期（玩家 tick）
+  // gw 引用在加载期捕获进闭包：Rust 装配收尾删除 __kkp 后，运行期（玩家 tick）
   // 仍经此引用读写共享状态——延迟查找 globalThis.__kkp 会失效
   const gw = globalThis.__kkp.gw;
 

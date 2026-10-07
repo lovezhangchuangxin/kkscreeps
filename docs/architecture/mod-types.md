@@ -15,7 +15,7 @@ target/debug/kkscreeps mod types --root <Mod根> --out <声明文件> --check --
 - **建筑绑定**：`{PlayerClass}Constructor` 与 `api.buildings.bind` 字面量窄化。
 - **`ModInstallApi`**：`builtins`（内建类表，`abstract new (...args: never[]) => object` 使 `class X extends api.builtins.RoomObject` 在 strict 下成立）、`objects`/`buildings`（按类型键字面量窄化的 bind 重载）、`globals.define`、`view.field`（动态字段逃生舱）、`intents.emit`、`queries.install`（返回 `{ find: 数字字面量; look: 类型键 }`）。空目录退化为 `{}`。注意本文件是**全计划联合面**：安装 API 在运行时按各包命名空间裁剪（某包的 player.js 只能 bind/emit 本包命名空间的键），跨包键类型通过但运行时拒绝——生成头部有同样提示。
 - **`ModResourceName`**：本计划声明的命名空间资源联合（`RESOURCES_ALL` 的 Mod 部分）。
-- **内建类清单**：`ModBuiltinClassName` 联合与玩家面安装运行时（`kk-runner` prelude `41_mod_player.js` 的 `BUILTIN_CLASS_NAMES`）是**双份维护**，`kk-cli` 测试逐项断言一致（顺序与内容），漂移在测试期暴露而不是玩家安装期失败。
+- **内建类清单**：`ModBuiltinClassName` 联合与玩家面安装运行时（`kk-runner` prelude `mods/player-api.js` 的 `BUILTIN_CLASS_NAMES`）是**双份维护**，`kk-cli` 测试逐项断言一致（顺序与内容），漂移在测试期暴露而不是玩家安装期失败。
 
 ValueKind 全集映射：Bool→`boolean`；Number→`number`（Signed/Unsigned/Float 数值域、字节数与项数上限入 JSDoc）；String→`string`；ObjectRef→`string /* 类型键 */`（投影为对象 id）；Enum→字面量联合（集合序，与声明书写顺序无关）；Array→`ReadonlyArray<T>`（递归元素类型，可含枚举联合、可空元素或嵌套数组）；Map→`Record<string, T>`；Record→内联 interface 或具名 interface（意图参数）；nullable→`T | null`。
 

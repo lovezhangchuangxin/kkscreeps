@@ -18,7 +18,7 @@
 
 API 范围以[功能盘点](../research/notes/game-api-inventory.md)和采用版本的源码为依据；旧盘点数量不能代替当前覆盖表。上游行为应记录仓库版本、文件与符号，行号只用于辅助定位。
 
-不能用 Node 常识替代官方模块行为。例如官方循环 require 抛错，不返回半成品 exports；当前实现见 [20_cjs.js](../../crates/kk-runner/src/prelude/20_cjs.js)。同属 V8、复用 C++ 寻路源码或通过有限夹具，都不能单独证明完整兼容性。
+不能用 Node 常识替代官方模块行为。例如官方循环 require 抛错，不返回半成品 exports；当前实现见 [commonjs.js](../../crates/kk-runner/src/prelude/runtime/commonjs.js)。同属 V8、复用 C++ 寻路源码或通过有限夹具，都不能单独证明完整兼容性。
 
 ## 2. 允许优化的内部机制
 
@@ -49,11 +49,11 @@ API 范围以[功能盘点](../research/notes/game-api-inventory.md)和采用版
 | 范围 | 当前行为及影响 | 依据 |
 |---|---|---|
 | 玩家寻路 | PathFinder.search/Room.findPath/moveTo 已接原生搜索与同步回调（结构/creep/道路矩阵、嵌套、原值异常与预算终止）；stable vanilla 的 findClosestByPath 固定 range=1、疲劳+路径绘制仍重算与套件预期不同，已登记 parity；未注册房按全墙边界处理（起点在墙环外抛 `Could not load terrain data`），垃圾数值选项的确定性归一与官方未定义行为不同 | [地形直通设计](pathfinder-terrain.md)分歧表、[回调接入设计](pathfinder-callback.md)、crates/kk-runner/src/pathfinder.rs |
-| 地图数据 | 出口按坐标推导，缺少官方地图连通标记；getRoomStatus 只覆盖 normal/closed，getWorldSize 固定为 1，距离不实现完整环绕世界语义 | prelude/30_game/game.js 的地图接口 |
+| 地图数据 | 出口按坐标推导，缺少官方地图连通标记；getRoomStatus 只覆盖 normal/closed，getWorldSize 固定为 1，距离不实现完整环绕世界语义 | prelude/game/game.js 的地图接口 |
 | halt 生命周期 | 中断执行并跳过写回，当前不生成费用，但继续复用 V8；不能视为官方销毁实例的完整等价实现 | [沙箱说明](../architecture/sandbox.md)、sandbox.rs::after_halt |
 | CPU 与堆统计 | getUsed 使用墙钟；堆统计在本轮开始时采样，堆外内存不构成完整限额或峰值报告 | kk-runner 的 sandbox.rs、ops.rs 与玩家 cpu 接口 |
-| 常量可变性 | 部分玩家全局对象常量被就地深度冻结；玩家修改或 strict 模式报错行为与上游未冻结副本不同 | prelude/30_game/creep.js、structures.js 的 freezeConst |
-| RoomPosition 构造器 | 当前采用 class，无 new 调用的错误文案与 prototype 整体重绑行为不能按上游函数构造器保证 | prelude/30_game/room-position.js |
+| 常量可变性 | 部分玩家全局对象常量被就地深度冻结；玩家修改或 strict 模式报错行为与上游未冻结副本不同 | prelude/game/creep.js、structures.js 的 freezeConst |
+| RoomPosition 构造器 | 当前采用 class，无 new 调用的错误文案与 prototype 整体重绑行为不能按上游函数构造器保证 | prelude/game/room-position.js |
 | 通知 | Game.notify 在内存中保留有界记录，没有邮件或外部通知发送通路 | kk-engine::PlayerState.notifications 与 publish_tick |
 | 结算时间 | 同轮签名等处理共用 TickInput.now_ms；上游各动作单独读取 Date.now，跨毫秒边界可能观察到差异 | kk-engine::TickInput 与 sign_controller |
 | suicide 后续指令 | 对象删除后，当前后续动作重新查找对象并跳过；上游仍可能持有先前对象引用，后续指令行为不同 | settle/creep/lifecycle.rs::intent_suicide |

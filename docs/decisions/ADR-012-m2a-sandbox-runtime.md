@@ -17,7 +17,7 @@ M2A 接入真实玩家沙箱和核心 API，并达到 2A 的阶段门槛。本�
 
 ### 2. 玩家 API 在 prelude 中对照实现
 
-玩家对象、参数处理与 JavaScript 属性语义在 `kk-runner/src/prelude/30_game/` 实现，Rust 宿主提供计算、诊断和执行控制等原语。这样便于对照 instanceof、lodash 谓词、Store 下标访问与原型修改等玩家行为。
+玩家对象、参数处理与 JavaScript 属性语义在 `kk-runner/src/prelude/game/` 实现，Rust 宿主提供计算、诊断和执行控制等原语。这样便于对照 instanceof、lodash 谓词、Store 下标访问与原型修改等玩家行为。
 
 对象包装保存 ID，许多 getter 通过 `rawData(id)` 查询当前投影；跨 tick 的旧引用和对象消亡按具体 getter 验证。并非所有字段都是同一种惰性查询，不能从包装机制推导全部引用行为已经一致。
 

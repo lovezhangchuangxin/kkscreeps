@@ -7,7 +7,7 @@
 
   const { reportMissing } = globalThis.__kkp;
   const gw = globalThis.__kkp.gw;
-  // 预置 lodash（00_shared 装配的同一实例，闭包引用——玩家重绑 globalThis._
+  // 预置 lodash（runtime/shared.js 装配的同一实例，闭包引用——玩家重绑 globalThis._
   // 不影响本段；官方 API 闭包 require('lodash') 的同构）
 
   // ---------------------------------------------------------------- 预置捕获

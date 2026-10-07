@@ -212,7 +212,7 @@ fn builtin_class_list_matches_player_runtime() {
         .map(|member| member.trim_matches('\''))
         .collect();
     let runtime_source = std::fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../kk-runner/src/prelude/41_mod_player.js"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../kk-runner/src/prelude/mods/player-api.js"),
     )
     .unwrap();
     let start = runtime_source
@@ -227,7 +227,7 @@ fn builtin_class_list_matches_player_runtime() {
         .collect();
     assert_eq!(
         generated, declared,
-        "生成器与 41_mod_player.js 的内建类清单漂移"
+        "生成器与 mods/player-api.js 的内建类清单漂移"
     );
 }
 

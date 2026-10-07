@@ -123,7 +123,7 @@ impl TerrainPack {
                 return Err("公开束出现私有块".into());
             }
             // 公开块契约与沙箱解码器一致：不带对象记录、房名唯一
-            //（prelude/30_game/kkpv.js 的 decodePublicBundle 同校验）。
+            //（prelude/game/kkpv.js 的 decodePublicBundle 同校验）。
             if view.object_count() != 0 {
                 return Err("公开地形块不带对象".into());
             }

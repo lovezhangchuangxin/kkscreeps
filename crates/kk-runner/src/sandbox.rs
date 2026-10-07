@@ -23,7 +23,7 @@ use serde_json::Value;
 /// 默认 V8 堆上限，单位字节；不等于整个玩家线程的内存上限。
 const DEFAULT_HEAP_LIMIT: usize = 256 * 1024 * 1024;
 
-/// Mod 玩家面安装（41 段 + 全部玩家模块装载与 install 调用）的墙钟
+/// Mod 玩家面安装（mods/player-api.js + 全部玩家模块装载与 install 调用）的墙钟
 /// 期限：作者代码首次执行的总闸——超时中断使沙箱创建失败，不楔死
 /// 分片创建（正常安装是毫秒级）。
 const INSTALL_WALL_LIMIT: Duration = Duration::from_secs(10);
@@ -42,7 +42,7 @@ pub struct SandboxConfig {
     /// 只有分片计划含 Mod 意图时置 true；vanilla 分片的全局面不变。
     pub extension_intents: bool,
     /// Mod 玩家面安装清单：存在时装配安装运行时并逐包执行玩家模块
-    ///（prelude 段之后、宿主句柄捕获之前）；vanilla 分片为 None。
+    ///（基础装配后，捕获安装入口并删除私有桥，再执行作者模块）；vanilla 分片为 None。
     pub mod_api: Option<std::sync::Arc<crate::mod_api::ModPlayerApi>>,
     /// Mod 安装期的墙钟期限；None 用默认 10s。测试可缩短以验证挂死
     /// 兜底（作者代码死循环/TLA 使安装失败而不是楔死分片创建）。
@@ -170,21 +170,9 @@ impl Sandbox {
                 .borrow_mut()
                 .put(runtime.v8_isolate().thread_safe_handle());
 
-            // 先加载 lodash 和常量，再装配 prelude、捕获宿主函数句柄，最后删除临时 __kkp。
-            runtime.execute_script("kk-lodash", lodash_script())?;
-            runtime.execute_script("kk-constants", constants_script(&config.constant_overrides))?;
-            for (name, src) in PRELUDE_SEGMENTS {
-                runtime.execute_script(name, src.to_string())?;
-            }
-            // 条件段在 __kkp 删除前执行（原语需要闭包捕获 gw.intents）。
-            if config.extension_intents {
-                runtime.execute_script(
-                    "kk-prelude-40-ext-intents",
-                    include_str!("prelude/40_ext_intents.js").to_string(),
-                )?;
-            }
-            // Mod 玩家面安装（41 段 + 模块装载）先于 __kkp 删除与玩家可
-            // 见化：41 段在 __kkp 上定义安装运行时并把 createInstallApi/
+            prelude::install_base(&mut runtime, &config)?;
+            // Mod 玩家面安装（mods/player-api.js + 模块装载）先于 __kkp 删除与玩家可
+            // 见化：mods/player-api.js 在 __kkp 上定义安装运行时并把 createInstallApi/
             // finalize 捕获为 Rust 持有的 v8 句柄，随后先捕获宿主句柄、删
             // 除 __kkp，再经捕获句柄逐包装载玩家模块——Mod 代码执行时
             // __kkp 已删除，与玩家同权限面。任何一步失败都使沙箱创建失败
@@ -193,7 +181,7 @@ impl Sandbox {
             // Mod 代码是首次执行的作者代码：看门狗带安装墙钟期限、近堆
             // 回调先于安装挂好——死循环挂死与无界分配进程中止都有兜底，
             // 中断使安装失败而不是楔死分片创建。
-            // 宿主句柄在 __kkp 删除前捕获（90_host 段注册于其上）。
+            // 宿主句柄在 __kkp 删除前捕获（host.js 注册于其上）。
             let host = HostFns::capture(&mut runtime)?;
             let mod_install = match &config.mod_api {
                 Some(api) => {
@@ -202,7 +190,7 @@ impl Sandbox {
                     watchdog.arm(
                         Instant::now() + config.install_wall_limit.unwrap_or(INSTALL_WALL_LIMIT),
                     );
-                    let result = install_mod_player_api(&mut runtime, &tokio, api);
+                    let result = prelude::install_mod_player_api(&mut runtime, &tokio, api);
                     watchdog.disarm();
                     runtime.v8_isolate().cancel_terminate_execution();
                     match result {
@@ -218,7 +206,7 @@ impl Sandbox {
             mod_install?;
             // Mod 路径在安装内部已删除 __kkp；这里再删一次幂等（缺键 delete
             // 为 no-op），两路径共用同一收尾。
-            runtime.execute_script("kk-host-unlink", "delete globalThis.__kkp".to_string())?;
+            prelude::unlink(&mut runtime)?;
             host
         };
 
@@ -726,6 +714,7 @@ impl Drop for Sandbox {
 
 mod host;
 mod inject;
+mod prelude;
 use host::*;
 
 #[cfg(test)]
