@@ -5,6 +5,7 @@ use clap::{Parser, Subcommand};
 
 mod bot_check;
 mod embed_main;
+mod export_fixtures;
 mod mod_init;
 mod mod_inspect;
 mod mod_perf_probe;
@@ -132,6 +133,15 @@ enum Command {
         /// 经 KKPV 二进制通道注入世界（与 JSON 参考通道同负载 A/B）
         #[arg(long)]
         kkpv: bool,
+    },
+    /// 渲染器夹具导出：四张脚本世界跑 N tick 逐 tick 落 world_json（JSONL）——F2
+    ExportFixtures {
+        /// 输出目录（每夹具一个 <名>.jsonl）
+        #[arg(long)]
+        out: String,
+        /// 每夹具推进的 tick 数
+        #[arg(long, default_value_t = 30)]
+        ticks: u32,
     },
 }
 
@@ -444,6 +454,9 @@ fn main() {
                 &report,
                 kkpv,
             ));
+        }
+        Command::ExportFixtures { out, ticks } => {
+            std::process::exit(export_fixtures::run(&out, ticks));
         }
     }
 }

@@ -1,0 +1,18 @@
+{
+  "status": "failed-and-aborted",
+  "backend": "webgpu",
+  "chain": "standard",
+  "formalTicksComplete": false,
+  "warmupTicks": 1000,
+  "postGCCheckpoint0": {
+    "heapMedianBytes": 2572724132,
+    "views": 19,
+    "bindGroups": 127,
+    "nullSlots": 16
+  },
+  "error": "CDP -32000 Target crashed",
+  "evidenceSource": "perf-cdp.mjs stdout + terminal error, original run did not persist partial data",
+  "gc": "HeapProfiler.collectGarbage twice separated by setTimeout task, five Runtime.getHeapUsage samples median",
+  "animation": "15 actual update/render steps of 1000/15 ms per tick, queue completion each tick",
+  "limitations": "Only checkpoint0 was printed; no full raw heap window archive survived. Do not call this a 10k soak result."
+}

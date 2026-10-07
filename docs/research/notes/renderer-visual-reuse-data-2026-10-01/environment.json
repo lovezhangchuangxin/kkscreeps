@@ -1,0 +1,61 @@
+{
+  "hardware": {
+    "model": "Mac16,12",
+    "chip": "Apple M4",
+    "memoryBytes": 25769803776
+  },
+  "baselineCommit": "e7e30db",
+  "baselineVisualSHA256": "6f2f459df5c2e4aee70d1a23ae94c412dde373d896f4fe56170b904dc96996c6",
+  "setup": {
+    "css": [
+      1920,
+      1080
+    ],
+    "canvas": [
+      1920,
+      1080
+    ],
+    "resolution": 1,
+    "devicePixelRatio": 2,
+    "atlas": "@2x loaded at init before perf-only resize",
+    "profile": "1 for detailed chains; absent for final CPU-repeat and GL fresh ABBA repeat",
+    "lighting": "real/normal",
+    "gpu": "Apple Metal3; WebGL ANGLE renderer recorded in each startup",
+    "fonts": "loaded",
+    "scene": "synthetic 300 objects/50 creep/100 visual/all terrain types; official replay separate"
+  },
+  "limits": [
+    "Short windows only, no new 10k soak",
+    "No forced GC or isolation from natural browser/Pixi GC",
+    "First WG after CPU overlapped local verification commands; retain as a noisy diagnostic, not causal frame-speed evidence",
+    "Previous nested partCounts checkpoints shared mutable counters until new perf-only copy fix; older partCounts rows cannot establish temporal delta",
+    "RAF visual update samples are nonzero tick subset, not every sampled frame",
+    "Post-init resize is not a physical1080p cold startup acceptance test",
+    "Before/v1 early collection and final matched collection separated in wall-clock time; no thermal or ambient GPU isolation",
+    "GL fence completion upper includes setTimeout(0) polling, no cause assigned to repeat completion increase",
+    "Two cached shape contexts bound count, not GPU complex-path buffer high-water bytes"
+  ],
+  "v1SourceSHA256": {
+    "packages/renderer/src/scenes/visual-stage.ts": "866f5e76fe26b2e3a9f8b45c5a4cb8ca7fa1a0404072f829034170b029c845cc",
+    "packages/renderer/src/perf/probe.ts": "eeb1b7849448e488dc65c15277c86a209edd0a1a452e8ab7e59e2f310c6b785d",
+    "packages/renderer/dev/perf.ts": "35a682757b7e742d58cb3bfa8412ee5c9fdb68dbfba026ecdf61de2e6f55ff55",
+    "packages/renderer/dev/short.ts": "c70b75fdca466ce8b499691cffde9764dbea2b6bb913a982f84b4a6240a43252",
+    "packages/renderer/dev/short.html": "e4331283738726ea4ead27a212acdf302d4bcb240ff0f28cb66302aa7ae552d5"
+  },
+  "v3VisualSHA256": "ff1a0182445632086e3b23358617258b7c3876bd879c83a66ed7c974dbb9c960",
+  "finalSourceSHA256": {
+    "packages/renderer/src/scenes/visual-stage.ts": "ff1a0182445632086e3b23358617258b7c3876bd879c83a66ed7c974dbb9c960",
+    "packages/renderer/src/perf/probe.ts": "2d49c4fcbbfdcf89b456093298aebad569ca8d10eb2af6dc0aae3eedfa6057ba",
+    "packages/renderer/dev/perf.ts": "cf98b7484d848aab2096fd620d3879126b570b70ee40092503e5d481a108ef9b",
+    "packages/renderer/dev/short.ts": "a9f911664f0e235b4d9d94c250c3156a2f0ae8a022060f8a3fa38a5b73ffa051",
+    "packages/renderer/dev/short.html": "6e24d1350a058d63a6ad49be465a842cbb1450e8d8c855d3d9d50027494729cd",
+    "packages/renderer/test/visual-stage.test.ts": "8aeffdebf5b7eab35e6242801c9202746c1d2b272659e64d8ef03026bb6cbeb1",
+    "packages/renderer/scripts/summarize-visual-reuse.py": "96da842ebd6b355b5afeef68a0b476fbe800c1bb546d741195aabc685ac11c3b"
+  },
+  "reproduction": {
+    "summary": "python3 packages/renderer/scripts/summarize-visual-reuse.py docs/research/notes/renderer-visual-reuse-data-2026-10-01",
+    "statistics": "nearest rank p95, retain all trials and exploratory raw JSON",
+    "matchedSequence": "fresh load -> CPU button -> 100 warmup + 100 tick resource button; phase100/200 match",
+    "collection": "Each JSON environment date/UA/startup is authoritative; no new 10k run"
+  }
+}
