@@ -28,6 +28,8 @@ pub struct Options {
     pub mod_trace: bool,
     /// 开启持久输入日志（G25.a）：每轮提交后追加一段；报告附 input_log 摘要。
     pub input_log: Option<PathBuf>,
+    /// 运行成功后从起点快照按日志逐段重放并核对终态（G25.b；需 input_log）。
+    pub verify_replay: bool,
 }
 
 #[derive(Deserialize)]
@@ -154,6 +156,8 @@ pub fn run(options: Options) -> i32 {
                 // 则一行段都没有（含「损坏日志拒绝续接」路径）。
                 "input_log": options.input_log.as_ref().map(|path|
                     json!({"path": path, "status": "setup_failed"})),
+                // v9 契约：--verify-replay 启用时该键非 null。
+                "verify_replay": options.verify_replay.then(|| json!({"status": "setup_failed"})),
             }),
             1,
         ),
@@ -184,8 +188,9 @@ pub fn run(options: Options) -> i32 {
 /// 升版时不得只改一处（同通道版本分裂会误导按版本判读的消费方）。
 /// v6 顶层 `mods_switches`；v7 起顶层与最终观察新增 `seed`（世界种子，
 /// G22.b 随机协议的可复现身份）；v8 起顶层新增 `input_log`（--input-log
-/// 启用时非 null：段数、首末 tick 与读回校验结果）。
-const SIM_REPORT_VERSION: u32 = 8;
+/// 启用时非 null：段数、首末 tick 与读回校验结果）；v9 起顶层新增
+/// `verify_replay`（--verify-replay 启用时非 null：回放核对结果）。
+const SIM_REPORT_VERSION: u32 = 9;
 
 fn digest(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
@@ -337,10 +342,23 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
         (1..=32).contains(&options.concurrency),
         "concurrency 必须为 1..=32"
     );
+    if options.verify_replay {
+        anyhow::ensure!(
+            options.input_log.is_some(),
+            "--verify-replay 需同时启用 --input-log（回放以日志段为输入）"
+        );
+    }
     let path = std::fs::canonicalize(&options.scenario).context("读取场景路径")?;
     let bytes = std::fs::read(&path).context("读取场景")?;
     let scene: Scene = serde_json::from_slice(&bytes).context("解析场景 JSON")?;
     validate(&scene)?;
+    // 切换改变执行层身份：切换后段与恢复引擎的身份核对必然不符，
+    // 逐段身份重装编排属后续切片——显式拒绝而非静默跳过核对。
+    if options.verify_replay && scene.mods_switch.is_some() {
+        anyhow::bail!(
+            "--verify-replay 与 mods_switch 暂不兼容（切换场景的逐段身份重装属后续切片）"
+        );
+    }
     let base = path.parent().unwrap();
     let mut tables = BTreeMap::new();
     let mut modules = BTreeMap::new();
@@ -475,6 +493,12 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
             }),
         )?;
     }
+    // 回放起点快照（G25.b）：内存 Value，不落盘；此刻无开放轮次且未跑
+    // 任何轮，日志段将从同一起点完整覆盖本次运行。
+    let replay_start = options
+        .verify_replay
+        .then(|| engine.checkpoint(json!({"kind": "verify-replay-start"})))
+        .transpose()?;
     let start_time = engine.get_game_time();
     let start = std::time::Instant::now();
     let mut failure = None;
@@ -575,7 +599,7 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
     } else {
         "assertion_failed"
     };
-    Ok(json!({
+    let mut report = json!({
         "report_version": SIM_REPORT_VERSION, "success": success, "status": status,
         "engine_version": env!("CARGO_PKG_VERSION"), "executable_sha256": executable_hash,
         "scenario": path, "scenario_sha256": digest(&bytes), "modules": modules,
@@ -609,7 +633,86 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
             }
         }),
         "initial": initial, "final": final_state,
-    }))
+    });
+    // 回放核对放在报告主体之后：restore 会整体替换引擎实例，perf 等
+    // 引擎侧字段必须先取完。
+    if options.verify_replay {
+        report["verify_replay"] = match (&replay_start, &failure, &options.input_log) {
+            (Some(start), None, Some(log)) => verify_replay_in_process(
+                &mut engine,
+                start,
+                log,
+                loaded
+                    .as_ref()
+                    .map(|loaded| (&loaded.packages, &loaded.options)),
+            ),
+            (_, Some(_), _) => json!({"status": "skipped", "reason": "运行失败，未核对"}),
+            _ => json!({"status": "skipped", "reason": "起点快照缺失"}),
+        };
+        // 核对失败即结论失败：显式请求的验证不允许静默假阴性（按
+        // status/success/退出码判读的调用方必须看见 replay_failed）。
+        if report["verify_replay"]["status"] == "failed" {
+            report["status"] = json!("replay_failed");
+            report["success"] = json!(false);
+            report["error"] = report["verify_replay"]["error"].clone();
+        }
+    }
+    Ok(report)
+}
+
+/// 进程内回放核对（G25.b）：restore 起点快照后逐段重放，比较整份检查点
+/// （剥离 last_console——回放无沙箱执行；剥离 metadata——调用方自定）。
+/// CPU 桶按记录桶逐位参与比较（ADR-013 决策 5，不做 freeze 处理）。
+fn verify_replay_in_process(
+    engine: &mut EmbedEngine,
+    start: &Value,
+    log: &Path,
+    mods: Option<(
+        &BTreeMap<String, kk_mod_host::ModPackage>,
+        &kk_mod_host::RegisterOptions,
+    )>,
+) -> Value {
+    let outcome = (|| -> anyhow::Result<Value> {
+        let data = kk_runtime::embed::read_input_log(log)?;
+        let start_time = start["engine"]["world"]["time"]
+            .as_u64()
+            .context("起点快照缺少世界时间")?;
+        let segments = kk_runtime::embed::segments_from_checkpoint(start_time, &data.segments)?;
+        let replay_count = segments.len();
+        let final_live = engine.checkpoint(Value::Null)?;
+        engine.restore_checkpoint(start.clone(), mods)?;
+        engine.replay_input_rounds(&data.header, segments)?;
+        let replayed = engine.checkpoint(Value::Null)?;
+        let mut live = final_live;
+        let mut back = replayed;
+        for value in [&mut live, &mut back] {
+            let object = value.as_object_mut().expect("检查点是对象");
+            object.remove("last_console");
+            object.remove("metadata");
+        }
+        if live == back {
+            Ok(json!({
+                "status": "passed",
+                "segments": replay_count,
+                "first_tick": segments.first().and_then(|s| s["tick"].as_u64()),
+                "last_tick": segments.last().and_then(|s| s["tick"].as_u64()),
+                "note": "整份检查点逐位相等（剥离 last_console/metadata；CPU 按记录桶比较）",
+            }))
+        } else {
+            let mut diverged: Vec<&String> = live
+                .as_object()
+                .expect("检查点是对象")
+                .keys()
+                .filter(|key| live.get(key) != back.get(key))
+                .collect();
+            diverged.sort_unstable();
+            anyhow::bail!("回放终态与直跑终态不等，分歧域：{diverged:?}")
+        }
+    })();
+    match outcome {
+        Ok(value) => value,
+        Err(error) => json!({"status": "failed", "error": format!("{error:#}")}),
+    }
 }
 
 /// 输入日志的运行后摘要：整读校验（链/摘要/段号），写读两侧段数并

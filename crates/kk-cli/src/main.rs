@@ -237,6 +237,9 @@ enum SimCommand {
         /// 每轮提交后追加持久输入日志段（G25.a）；文件存在时先整读校验再续接
         #[arg(long)]
         input_log: Option<std::path::PathBuf>,
+        /// 运行成功后从起点快照按日志逐段重放并核对终态（需 --input-log）
+        #[arg(long)]
+        verify_replay: bool,
     },
 }
 
@@ -329,6 +332,7 @@ fn main() {
                     load_checkpoint,
                     mod_trace,
                     input_log,
+                    verify_replay,
                 },
         } => {
             std::process::exit(sim::run(sim::Options {
@@ -341,6 +345,7 @@ fn main() {
                 load_checkpoint,
                 mod_trace,
                 input_log,
+                verify_replay,
             }));
         }
         Command::BotCheck {

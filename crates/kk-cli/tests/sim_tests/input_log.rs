@@ -51,7 +51,7 @@ fn input_log_records_commits_and_resumes() -> anyhow::Result<()> {
     );
     let report: Value = serde_json::from_slice(&std::fs::read(&report)?)?;
     assert_eq!(report["status"], "passed");
-    assert_eq!(report["report_version"], 8, "v8 起顶层带 input_log 字段");
+    assert_eq!(report["report_version"], 9, "v8 起顶层带 input_log 字段");
     assert_eq!(report["input_log"]["segments"], 3);
     assert_eq!(report["input_log"]["read_back_segments"], 3);
     assert_eq!(report["input_log"]["validation"], "ok");

@@ -40,6 +40,8 @@ mod m2b_map_notify_cpu_family;
 mod m2b_structure_actions_family;
 #[path = "embed_tests/m2b_structure_readfaces_family.rs"]
 mod m2b_structure_readfaces_family;
+#[path = "embed_tests/replay_family.rs"]
+mod replay_family;
 #[path = "embed_tests/sim_setup_family.rs"]
 mod sim_setup_family;
 #[path = "embed_tests/stage_recovery_family.rs"]
@@ -59,6 +61,7 @@ use m2b_map_notify_cpu_family::*;
 use m2b_structure_actions_family::*;
 use m2b_structure_readfaces_family::*;
 use m2b2_terminal_market_family::*;
+use replay_family::*;
 use stage_recovery_family::*;
 use stop_run_regression::*;
 
@@ -149,6 +152,13 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     log_io_failure_commits_round_and_detaches_impl()?;
     tamper_matrix_impl()?;
     torn_tail_byte_forms_impl()?;
+    three_sources_replay_matches_live_impl()?;
+    dice_replay_matches_live_impl()?;
+    pairing_matrix_impl()?;
+    identity_and_tick_gates_impl()?;
+    rebuild_writeback_null_and_some_impl()?;
+    settle_replayed_round_contract_impl()?;
+
     resume_and_lifecycle_impl()?;
     assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");
     Ok(())

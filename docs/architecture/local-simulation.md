@@ -9,7 +9,7 @@ target/release/kkscreeps sim run \
   --ticks 2000 --report /tmp/sim-economy.json
 ```
 
-`--ticks` 默认 1000，必须大于零；`--concurrency` 默认 2，可选 1–32；`--kkpv` 选择二进制玩家投影，默认 JSON；`--mod-trace` 在报告附有界的 Mod 运行事件（槽结果、拒绝、故障与回退；默认关闭，见[运行 trace](mod-trace.md)）；`--input-log` 每轮成功提交后向指定文件追加一段可回放输入（默认关闭，完整契约见[输入日志](input-log.md)——运行期被切换/恢复摘除时报告如实标注 `detached`，损坏日志拒绝续接）。路径相对当前目录定位场景，场景里的模块目录相对场景所在目录定位。报告必须使用 `.json` 后缀，且不能覆盖场景或装载检查点；报告、保存检查点与输入日志均须在场景声明的玩家模块与 Mod 包根之外，且输入日志不得与报告、场景或检查点同路径（原子替换写会互相覆盖）。守卫在装载/执行和失败报告写入之前运行，逐组件解析符号链接，拒绝后不创建输出目录。`--save-checkpoint` 保存无开放轮次的完整状态，`--load-checkpoint` 从同一场景/模块身份恢复，`--ticks` 表示额外推进轮数；父目录须已存在，完整契约与示例见[检查点](checkpoints.md)。
+`--ticks` 默认 1000，必须大于零；`--concurrency` 默认 2，可选 1–32；`--kkpv` 选择二进制玩家投影，默认 JSON；`--mod-trace` 在报告附有界的 Mod 运行事件（槽结果、拒绝、故障与回退；默认关闭，见[运行 trace](mod-trace.md)）；`--input-log` 每轮成功提交后向指定文件追加一段可回放输入（默认关闭，完整契约见[输入日志](input-log.md)——运行期被切换/恢复摘除时报告如实标注 `detached`，损坏日志拒绝续接）；`--verify-replay` 运行成功后从起点快照按日志逐段重放并核对终态（需 `--input-log`，报告 v9 顶层 `verify_replay`）。路径相对当前目录定位场景，场景里的模块目录相对场景所在目录定位。报告必须使用 `.json` 后缀，且不能覆盖场景或装载检查点；报告、保存检查点与输入日志均须在场景声明的玩家模块与 Mod 包根之外，且输入日志不得与报告、场景或检查点同路径（原子替换写会互相覆盖）。守卫在装载/执行和失败报告写入之前运行，逐组件解析符号链接，拒绝后不创建输出目录。`--save-checkpoint` 保存无开放轮次的完整状态，`--load-checkpoint` 从同一场景/模块身份恢复，`--ticks` 表示额外推进轮数；父目录须已存在，完整契约与示例见[检查点](checkpoints.md)。
 
 ## 作者包模板
 
@@ -80,7 +80,7 @@ alias 或玩家名中的 `/`、`~` 分别转义为 `~1`、`~0`。对象死亡后
 
 报告记录场景字节、模块内容及 CLI 二进制 SHA-256、模块目录与清单、投影通道、并发配置、请求/尝试/已提交轮数、失败轮次、各玩家计数、断言及初始/最终状态。控制台和错误各保留前 20 条。当前运行时控制台仅提供文本，捕获异常后打印日志不会自动判为执行失败；开始执行后的 CPU 硬中断按现有协议记录为 runtime 错误，未进入求值的轮次另计。
 
-Mod 场景另记录实际加载包的目录、版本、SDK 要求、依赖、服务端代码/玩家入口/配置 SHA-256，以及引擎实际安装的 `plan_hash` 和 `disabled_mods`，顶层 composition 保存[冻结/活动组合诊断](mod-composition.md)，`execution_strategy` 保存[执行策略身份](mod-composition.md#执行策略身份)摘要。无 JS Mod VM 时两者为 null。未声明 mods 时包清单为空，仍记录原生计划身份。停用集合单独记录，因为 PlanHash 不包含执行掩码；报告本身仍是诊断数据；`--save-checkpoint` 另存完整恢复载荷，报告不能替代它。输入回放面：`--input-log` 自 G25.a 起记录每轮提交的可回放输入（报告 v8 顶层 `input_log` 摘要），回放消费端尚未实现（G25.b）。
+Mod 场景另记录实际加载包的目录、版本、SDK 要求、依赖、服务端代码/玩家入口/配置 SHA-256，以及引擎实际安装的 `plan_hash` 和 `disabled_mods`，顶层 composition 保存[冻结/活动组合诊断](mod-composition.md)，`execution_strategy` 保存[执行策略身份](mod-composition.md#执行策略身份)摘要。无 JS Mod VM 时两者为 null。未声明 mods 时包清单为空，仍记录原生计划身份。停用集合单独记录，因为 PlanHash 不包含执行掩码；报告本身仍是诊断数据；`--save-checkpoint` 另存完整恢复载荷，报告不能替代它。输入回放面：`--input-log` 自 G25.a 起记录每轮提交的可回放输入（报告顶层 `input_log` 摘要），`--verify-replay` 自 G25.b 起做结算重放核对（不重跑玩家沙箱）。
 
 `players` 中的 GCL 累计点数、Memory 和 CPU 桶来自实际 PlayerState；GCL 不是玩家 `Game.gcl` 的等级/进度对象。`world` 是宿主诊断投影，其公共 gcl/cpu 字段不是玩家状态。`world` 沿原生 JSON 诊断形态，不包含 Mod 对象；`mod_objects` 独立列出按房间名、ObjId 排序的全部已提交 Mod 对象及 server-only 字段，不能作为玩家可见性接口。报告不保存完整运行状态，也不能作为检查点恢复。
 

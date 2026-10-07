@@ -38,7 +38,7 @@
 | `kk-runtime/src/embed/mod_chain/resources.rs` | 同房资源能力、首次触达日志与字段缓存失效；移动与受击数值能力在 `mod_chain.rs`；战斗门控、首触日志与 consumed 标记在 `mod_chain/combat.rs` |
 | `kk-engine/src/settle/market.rs` | 市场状态和结算入口、成交调度；`market/orders.rs` 订单生命周期，`terminal.rs` 发送/成交共用的库存、费用与交易写入 |
 | `kk-runtime/src/run.rs` | 玩家执行参数、结果分类和未提交的指令/Memory/CPU 候选；由 crate 根导出，结算引擎不拥有这些类型 |
-| `kk-runtime/src/embed.rs` | 分片状态、管理和诊断入口；`embed/setup.rs` 配置校验与创建/放置，`execution.rs` 玩家候选和失败重试，`embed/input_log.rs` 逐轮提交后的输入日志（G25.a），`projection.rs` KKPV 与市场视图，`mod_chain.rs` Mod 候选桥，`switch.rs` 无开放轮次的包切换 |
+| `kk-runtime/src/embed.rs` | 分片状态、管理和诊断入口；`embed/setup.rs` 配置校验与创建/放置，`execution.rs` 玩家候选和失败重试，`embed/input_log.rs` 逐轮提交后的输入日志（G25.a），`embed/replay.rs` 段重建与回放配对（G25.b），`projection.rs` KKPV 与市场视图，`mod_chain.rs` Mod 候选桥，`switch.rs` 无开放轮次的包切换 |
 | `kk-runner/src/sandbox.rs` | V8 实例生命周期、运行与写回；`sandbox/host.rs` 加载清单、宿主句柄与 Mod 玩家面安装，`inject.rs` 每轮 JSON/KKPV 与 CPU 窗口注入 |
 | `kk-runner/src/prelude/30_game/game.js` | 世界注入、Game 装配和指令收集；`memory.js` 持有 RawMemory/segments 状态与写回，`market.js` 持有每轮市场视图缓存与指令 |
 

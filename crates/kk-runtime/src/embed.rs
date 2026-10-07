@@ -733,11 +733,13 @@ mod execution;
 mod input_log;
 mod mod_chain;
 mod projection;
+mod replay;
 mod setup;
 mod switch;
 
 pub use input_log::{InputLogData, InputLogError, read_input_log};
 use mod_chain::ModSlotExecutor;
 use projection::{kkpv_audience_hash, market_view};
+pub use replay::{ReplayRound, assert_header_paired, rebuild_round, segments_from_checkpoint};
 
 pub use setup::terrain_codes_from_json;

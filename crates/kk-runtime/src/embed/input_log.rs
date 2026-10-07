@@ -12,8 +12,8 @@
 //! 之后：崩溃丢尾段（RPO=1 轮），检查点不得领先日志头（G25.b 配对
 //! 规则）。回放的 CPU 口径：直接用记录的新桶，不从实测值重推。
 //!
-//! 契约见 docs/architecture/input-log.md；本片只交付写入与校验读取，
-//! 重放属 G25.b。
+//! 契约见 docs/architecture/input-log.md；写入与校验读取在本模块，
+//! 段重建与回放编排在 `embed/replay.rs`（G25.b）。
 
 use std::collections::BTreeMap;
 use std::io::Write;
@@ -288,7 +288,7 @@ fn write_and_sync(file: &mut std::fs::File, line: &str) -> Result<(), InputLogEr
 
 /// 校验读取器：解析、逐段摘要与链校验、段号连续性与必需字段。
 /// 头段（seq 0）校验格式/版本/身份形状；段的身份快照只查形状——
-/// 与检查点的身份配对属 G25.b 的回放入口。
+/// 与检查点的身份配对在 `embed/replay.rs` 的回放入口实施。
 #[derive(Debug)]
 pub struct InputLogData {
     pub header: Value,

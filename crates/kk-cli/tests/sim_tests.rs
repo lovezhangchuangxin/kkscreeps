@@ -285,6 +285,8 @@ mod move_policy;
 mod move_precheck;
 #[path = "sim_tests/move_pull_registration.rs"]
 mod move_pull_registration;
+#[path = "sim_tests/replay.rs"]
+mod replay;
 #[path = "sim_tests/retaliation_policy.rs"]
 mod retaliation_policy;
 

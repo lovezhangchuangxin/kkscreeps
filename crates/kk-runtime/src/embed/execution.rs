@@ -1,6 +1,7 @@
 //! 收集玩家候选、缓存失败轮并协调 Memory/CPU/世界统一发布。
 use super::*;
 use crate::mod_trace::{ModTraceEntry, ModTraceEvent};
+use anyhow::Context as _;
 
 impl EmbedEngine {
     /// 请求一个玩家并推进一轮；存在失败缓存时，仍会提交整轮缓存的结果。
@@ -594,8 +595,15 @@ impl EmbedEngine {
     pub fn settle_external(&mut self, batch: IntentBatch) -> anyhow::Result<()> {
         self.no_pending_round("settle_external")?;
         let (tick, generation) = (self.engine.world().time(), self.engine.world().generation());
-        // to_json 须在 batch 被结算消费前求值；此处是外部轮的唯一持久形态。
+        // 外部轮以线格式为权威：结算消费的批必须与日志记录、回放重建的
+        // 是同一规范化形态——直接构造的批先过 to_json→from_json 规范化
+        // （清洗限长/钳制在此生效，原样结算超规范载荷会让回放重放出
+        // 偏离原轮的历史）。
         let intents = batch.to_json();
+        let mut batch = IntentBatch::default();
+        for (player, wire) in intents.as_object().expect("to_json 恒产出玩家键对象") {
+            batch.extend_from(IntentBatch::from_json(player, wire));
+        }
         let input = TickInput::now();
         self.settle_world(batch, input)?;
         if self.input_log.is_some()
@@ -687,6 +695,71 @@ impl EmbedEngine {
             {
                 return Err(self.drop_log_for_io_failure(e));
             }
+        }
+        Ok(())
+    }
+
+    /// 回放一轮已记录的结算输入（G25.b）：注入记录的墙钟与写回，**不写
+    /// 新日志段**（链只属于产生它的那轮）。原轮必然成功才记段，此处的
+    /// 失败即实现缺陷或载荷损坏——引擎会进入恢复态，不可原地续放。
+    pub fn settle_replayed_round(
+        &mut self,
+        batch: IntentBatch,
+        input: TickInput,
+        writebacks: BTreeMap<String, PlayerWriteback>,
+    ) -> anyhow::Result<()> {
+        self.no_pending_round("settle_replayed_round")?;
+        self.settle_world_with_writebacks(batch, input, writebacks)
+    }
+
+    /// 从当前已恢复状态起逐段重放（G25.b）。头段先与引擎配对（种子/
+    /// 引擎版本——随机流派生根不在逐段身份里）；段集须已经过配对选择
+    /// （`segments_from_checkpoint`）。逐段校验身份快照与轮身份，任何
+    /// 失败立即终止并携带段 seq；不写新日志段。
+    pub fn replay_input_rounds(
+        &mut self,
+        header: &Value,
+        segments: &[Value],
+    ) -> anyhow::Result<()> {
+        replay::assert_header_paired(header, self.world_seed())
+            .context("回放入口：头段身份配对失败")?;
+        for segment in segments {
+            let seq = segment["seq"].as_u64().unwrap_or(0);
+            let at = || {
+                format!(
+                    "段 seq={seq}（tick={} source={}）：",
+                    segment["tick"].as_u64().unwrap_or(0),
+                    segment["source"].as_str().unwrap_or("?")
+                )
+            };
+            let (plan_hash, strategy, disabled) = self.log_identity_fields();
+            replay::assert_segment_identity(segment, &plan_hash, strategy.as_deref(), &disabled)
+                .with_context(|| format!("{}身份快照与引擎不符", at()))?;
+            let tick = segment["tick"].as_u64().context("段缺少 tick")?;
+            let generation = segment["generation"]
+                .as_u64()
+                .context("段缺少 generation")?;
+            // tick 硬门：段记录的是结算前世界时间，逐段必须与恢复后的
+            // 世界时间轴咬合（缺口/乱序/宿主未记录变异在此暴露）。
+            anyhow::ensure!(
+                tick == self.engine.world().time(),
+                "{}tick={tick} 与世界时间 {} 不符（配对缺口、宿主变异或日志损坏）",
+                at(),
+                self.engine.world().time()
+            );
+            // generation 强校验：结算前对结算前。对象放置等合法宿主变异
+            // 也会 bump generation，故以独立文案区分而非并入硬门。
+            anyhow::ensure!(
+                generation == self.engine.world().generation(),
+                "{}generation={generation} 与世界 {} 不符（轮间存在未记录的宿主世界变异或日志损坏）",
+                at(),
+                self.engine.world().generation()
+            );
+            let round = replay::rebuild_round(segment).with_context(at)?;
+            self.settle_replayed_round(round.batch, round.input, round.writebacks)
+                .with_context(|| {
+                    format!("{}回放结算失败（原轮必然成功——实现缺陷或载荷损坏）", at())
+                })?;
         }
         Ok(())
     }
