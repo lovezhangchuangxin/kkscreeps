@@ -41,6 +41,10 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     scenarios.run("combat_range_constants_impl", combat_range_constants_impl)?;
     scenarios.run("move_gate_constants_impl", move_gate_constants_impl)?;
     scenarios.run("console_capture", console_capture)?;
+    scenarios.run(
+        "shared_targets_and_deprecation_lifetime",
+        shared_targets_and_deprecation_lifetime,
+    )?;
     scenarios.run("stub_game_projection", stub_game_projection)?;
     scenarios.run(
         "intent_channel_prelude_forms_impl",
@@ -179,7 +183,7 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
         kkpv_shared_bundle_cross_thread_impl,
     )?;
     // LIFO 零违规断言在**全部**场景之后——中段断言会让其后场景的违规漏网
-    scenarios.finish(56)?;
+    scenarios.finish(57)?;
     assert_eq!(kk_runner::lifo_violations(), 0, "全流程 LIFO 纪律零违规");
     Ok(())
 }

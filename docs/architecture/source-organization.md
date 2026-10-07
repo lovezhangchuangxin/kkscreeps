@@ -50,6 +50,11 @@
 | `kk-runner/src/sandbox.rs` | V8 实例生命周期、运行与写回；`sandbox/prelude.rs` 内嵌脚本清单、基础环境和 Mod 玩家面装配，`sandbox/host.rs` 捕获宿主句柄与生命周期调用，`inject.rs` 每轮 JSON/KKPV 与 CPU 窗口注入 |
 | `kk-runner/src/prelude/game/game.js` | 玩家对象索引与 Game 装配、当前实例；`map.js` 持有每 tick 地图/路由/绘图实例，`intents.js` 持有指令清单与虚拟计费；`memory.js` 持有 RawMemory/segments 状态与写回，`market.js` 持有每轮市场视图缓存与指令 |
 | `kk-runner/src/prelude/runtime/world-tick.js` | JSON/KKPV 共用世界注入与 tick 初始化顺序；一次性捕获 Memory/CJS/指令桥，并由 Game 入口传入刷新函数，向宿主提供既有 memoryWorld 句柄 |
+| `kk-runner/src/prelude/game/targets.js` | 当前 tick 的 creep/structure 存在性检查及 lodash 口径序列化对象拒绝；消费者加载期捕获，公开实例判定仍由动作完成 |
+| `kk-runner/src/prelude/runtime/deprecation.js` | 共用弃用提示与本 tick 去重状态；捕获原 console，原结构 tick 钩子在孵化名称重置后调用诊断重置 |
+| `kk-runner/src/prelude/game/structure-api.js` | 结构动作与孵化/诊断 tick 重置编排；孵化及字段安装阶段在原位置显式调用 |
+| `kk-runner/src/prelude/game/structures/fields.js` | 私有通用字段表、类型选择及 Mod 建筑字段装配；专用结构资源/时间读面，按原顺序安装原型字段与结构装配器 |
+| `kk-runner/src/prelude/game/structures/spawn.js` | 独占本 tick 孵化名称、成本/能量计算、Spawning 和待出生视图，以及创建/续命/回收方法；装配与重置经一次性捕获的函数连接 |
 | `kk-runner/src/prelude/game/room.js` | 只装配公开属性、Memory/事件日志及玩家原型；`room/queries.js` 持有单房间类型/空间索引和出口缓存，`pathfinding.js` 持有按 Room 身份隔离的矩阵，`terrain.js` 安全拷出地形，`visual.js` 持有房间/map 绘图缓冲，`creation.js` 提供创建预检与指令方法 |
 
 Rust 子模块通过父模块保留既有公开路径；跨子模块的内部操作使用受限可见性，不能因拆文件把内部候选暴露为新的外部写能力。KKPV 合并通过视图的公开读方法访问目录与元数据，保持视图内部字段私有。
@@ -59,6 +64,12 @@ Prelude 按职责使用 `runtime/`、`game/`、`mods/` 与 `host.js`，JS 文件
 Room 子段先装配地形、绘图、查询、创建和寻路，再执行 Room 入口，随后保持其余玩家 API 的原加载顺序。Room 入口在装配期捕获工厂；查询索引和出口缓存每 tick 新建，原始对象列表仅传给创建预检和私有寻路缓存，不挂为玩家属性。方法属性插入、原型设置、probe 与 WeakMap 登记顺序保持，地形拷贝和索引装配仍使用捕获的内建函数。
 
 JS 的 Memory、市场、地图、指令和 Game 分别持有闭包。加载清单先执行 Memory/市场，再注册地图/指令工厂和世界注入桥，最后装配 Game；跨模块函数在加载期捕获，Rust 捕获宿主句柄后删除临时 `__kkp`。tick 中不能重新查找这一全局。RawMemory 重建、CJS 重绑、Memory getter 安装的先后顺序保持不变，两个世界投影通道共享该流程。Game 入口先刷新初始实例、登记 currentGame，再初始化指令收集器并连接宿主桥；每 tick 在原始对象索引建立后重置指令，在 Memory/CJS 和地形/API 重置之后刷新 Game。地图工厂每次装配新建路由缓存和惰性 MapVisual，保持公开方法与探针的插入顺序。
+
+孵化模块先注册工厂，结构 API 入口捕获工厂并传入共用目标检查/弃用诊断。孵化视图、方法、专用通知及装配器分阶段安装，使跨结构的原型/字段注册顺序保持；入口保留原位置的单个 tick 重置钩子，先重置孵化名称，再清空弃用诊断。重置钩子只捕获重置函数，不持有安装接口对象。名称数组由孵化闭包持有，不能在通用结构装配器中直接写入。创建成功的待出生对象仍只是本 tick 玩家视图，Rust 结算负责真正发布。
+
+结构字段模块持有通用字段表及字段装配选择规则，入口只捕获核心字段、装配器与专用字段三个安装函数。专用时间/资源字段和 Mod 建筑字段沿用 raw 回查，不复制为入口状态；实例级兜底属性仍可遮蔽对应原型 getter，缺失字段、资源容量及地形/对象类型排除保持。字段阶段与孵化/动作的交错顺序保持，Spawning 在 InvaderCore getter 使用前登记。
+
+目标检查及弃用诊断在 registry 之后、Room/Creep 之前注册，消费者在加载期捕获；结构模块不再替早于自身加载的 API 提供运行期函数登记。存活检查每次查询当前 rawById，不捕获某一 tick 的 Map；实例类型和动作顺序仍由调用方决定。Creep.moveTo 与结构共享 lodash 判定的序列化对象拒绝，资源 API 保留预置 Object/primitive-string 的独立口径，不能合并成同一种拒绝语义。
 
 V8 生命周期账本位于 `kk-vm/src/isolate_order.rs`，玩家沙箱与 Mod realm 共用；`kk-mod-host/src/realm/lifecycle.rs` 只负责冷恢复最后切换时的 Enter/Exit 配对。
 

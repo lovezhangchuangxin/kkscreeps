@@ -4,6 +4,7 @@
   'use strict';
   const gw = globalThis.__kkp.gw;
   const { lodash: _ } = globalThis.__kkp;
+  const { deprecated } = globalThis.__kkp.deprecation;
   const __Object = Object;
   const __WeakMap = WeakMap;
   const __weakGet = WeakMap.prototype.get;
@@ -84,11 +85,11 @@
   };
   gw.pathfindingDeprecated = function (opts, clear) {
     if (opts.avoid) {
-      gw.deprecated('`avoid` option cannot be used when `PathFinder.use()` is enabled. Use `costCallback` instead.');
+      deprecated('`avoid` option cannot be used when `PathFinder.use()` is enabled. Use `costCallback` instead.');
       if (clear) opts.avoid = undefined;
     }
     if (opts.ignore) {
-      gw.deprecated('`ignore` option cannot be used when `PathFinder.use()` is enabled. Use `costCallback` instead.');
+      deprecated('`ignore` option cannot be used when `PathFinder.use()` is enabled. Use `costCallback` instead.');
       if (clear) opts.ignore = undefined;
     }
   };

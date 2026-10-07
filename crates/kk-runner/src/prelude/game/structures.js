@@ -67,7 +67,7 @@
     // isActive 的配额表（官方 utils.js:470 读 driver.constants 同款注入）
     CONTROLLER_STRUCTURES: freezeConst(globalThis.CONTROLLER_STRUCTURES),
   };
-  gw.__structuresC = C; // structures-spawn.js 复用此常量表。
+  gw.__structuresC = C; // structure-api.js 复用此常量表。
 
   // Store 的资源缺省值与容量规则参考上游 engine/src/game/store.js 的 Store。
 
@@ -336,6 +336,6 @@
   function now() {
     return gw.world.time;
   }
-  gw.now = now; // structures-spawn.js 的 controller 方法复用此时间读取函数。
+  gw.now = now; // structure-api.js 的 controller 方法复用此时间读取函数。
 
 })();

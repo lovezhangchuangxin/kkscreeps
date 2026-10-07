@@ -24,6 +24,14 @@ const SEGMENTS: &[(&str, &str)] = &[
         include_str!("../prelude/game/registry.js"),
     ),
     (
+        "kk-prelude-runtime-deprecation",
+        include_str!("../prelude/runtime/deprecation.js"),
+    ),
+    (
+        "kk-prelude-game-targets",
+        include_str!("../prelude/game/targets.js"),
+    ),
+    (
         "kk-prelude-game-kkpv",
         include_str!("../prelude/game/kkpv.js"),
     ),
@@ -69,7 +77,15 @@ const SEGMENTS: &[(&str, &str)] = &[
     ),
     (
         "kk-prelude-game-structures-spawn",
-        include_str!("../prelude/game/structures-spawn.js"),
+        include_str!("../prelude/game/structures/spawn.js"),
+    ),
+    (
+        "kk-prelude-game-structures-fields",
+        include_str!("../prelude/game/structures/fields.js"),
+    ),
+    (
+        "kk-prelude-game-structure-api",
+        include_str!("../prelude/game/structure-api.js"),
     ),
     (
         "kk-prelude-game-tombstones",

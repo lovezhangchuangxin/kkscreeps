@@ -7,6 +7,7 @@
 
   const gw = globalThis.__kkp.gw;
   const _ = globalThis.__kkp.lodash;
+  const { assertTargetObject, isKnownCreep, isKnownStructure } = globalThis.__kkp.targets;
   // room.js（加载序在本段之前）挂载的官方序列化器；捕获防玩家替换
   // globalThis.Room 后影响 moveTo 路径缓存。
   const roomSerializePath = globalThis.Room.serializePath;
@@ -270,10 +271,7 @@
     if (x === undefined || y === undefined) {
       // 官方 creeps.js:182-184 先过 register.assertTargetObject（game.js:122-126）：
       // plain object + 24 位字符串 id 视为 Memory 序列化对象，抛官方文案
-      if (firstArg && _.isPlainObject(firstArg) && _.isString(firstArg.id)
-        && firstArg.id.length === 24) {
-        throw new Error("It seems you're trying to use a serialized game object stored in Memory which is not allowed. Please use `Game.getObjectById` to retrieve a live object reference instead.");
-      }
+      assertTargetObject(firstArg);
       return C.ERR_INVALID_TARGET;
     }
     const targetPos = new gw.RoomPosition(x, y, roomName);
@@ -397,7 +395,7 @@
       return C.OK;
     }
     if (!(target instanceof globalThis.Source)) {
-      // 其余目标同官方 register.assertTargetObject
+      // 当前实现对非 Source/Mineral 目标返回 INVALID_TARGET，不抛序列化对象错误。
       return C.ERR_INVALID_TARGET;
     }
     if (!target.energy) return C.ERR_NOT_ENOUGH_RESOURCES;
@@ -420,7 +418,7 @@
     if (blockedBySafeMode(this)) return C.ERR_NO_BODYPART;
     // 目标须在当前 tick 的原始数据中仍存在，并通过后面的实例类型检查。
     const okTarget = target && target.id
-      && (gw.isKnownCreep(target.id) || gw.isKnownStructure(target.id))
+      && (isKnownCreep(target.id) || isKnownStructure(target.id))
       && (target instanceof globalThis.Creep
         || target instanceof globalThis.StructureSpawn
         || target instanceof globalThis.Structure);
@@ -492,7 +490,7 @@
     if (countActiveParts(this.body, C.WORK) === 0) return C.ERR_NO_BODYPART;
     if (!carriedEnergy(this)) return C.ERR_NOT_ENOUGH_RESOURCES;
     const okTarget = target && target.id
-      && gw.isKnownStructure(target.id)
+      && isKnownStructure(target.id)
       && (target instanceof globalThis.Structure || target instanceof globalThis.StructureSpawn);
     if (!okTarget) return C.ERR_INVALID_TARGET;
     if (!this.pos.inRangeTo(target.pos, 3)) return C.ERR_NOT_IN_RANGE;
@@ -525,7 +523,7 @@
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;
     if (countActiveParts(this.body, C.HEAL) === 0) return C.ERR_NO_BODYPART;
-    if (!(target && target.id && gw.isKnownCreep(target.id)
+    if (!(target && target.id && isKnownCreep(target.id)
       && target instanceof globalThis.Creep)) {
       return C.ERR_INVALID_TARGET;
     }
@@ -558,7 +556,7 @@
     if (countActiveParts(this.body, C.RANGED_ATTACK) === 0) return C.ERR_NO_BODYPART;
     if (blockedBySafeMode(this)) return C.ERR_NO_BODYPART;
     const okTarget = target && target.id
-      && (gw.isKnownCreep(target.id) || gw.isKnownStructure(target.id))
+      && (isKnownCreep(target.id) || isKnownStructure(target.id))
       && (target instanceof globalThis.Creep
         || target instanceof globalThis.PowerCreep
         || target instanceof globalThis.StructureSpawn
@@ -593,7 +591,7 @@
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;
     if (countActiveParts(this.body, C.HEAL) === 0) return C.ERR_NO_BODYPART;
-    if (!(target && target.id && gw.isKnownCreep(target.id)
+    if (!(target && target.id && isKnownCreep(target.id)
       && target instanceof globalThis.Creep)) {
       return C.ERR_INVALID_TARGET;
     }

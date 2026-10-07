@@ -255,3 +255,77 @@ pub(super) fn memory_alias_setters() -> anyhow::Result<()> {
     assert_eq!(v["value"], "strict-ok");
     Ok(())
 }
+
+/// 共用目标检查读取当前投影；弃用提示保留原 console 和每 tick 去重边界。
+pub(super) fn shared_targets_and_deprecation_lifetime() -> anyhow::Result<()> {
+    let mut sb = Sandbox::new(SandboxConfig::default())?;
+    let mut table = ModuleTable::new();
+    table.insert_js("main", "module.exports.loop = function () {};");
+    sb.set_modules(table)?;
+    let mut w = world();
+    w["objects"][0]["body"] = json!(["move", "attack", "carry"]);
+    w["objects"].as_array_mut().unwrap().push(json!({
+        "id": "v1", "type": "creep", "room": "W1N1", "x": 26, "y": 25,
+        "name": "victim", "owner": "p2", "body": ["move"], "store": {"energy": 0}
+    }));
+    sb.begin_tick(&w)?;
+    sb.run_loop()?;
+    let v = sb.run_expr(
+        "globalThis.savedVictim = Game.getObjectById('v1'); Game.creeps.w1.attack(savedVictim)",
+    )?;
+    assert_eq!(v["value"], 0, "可见敌方 creep 是有效目标: {v:?}");
+    let v = sb.run_expr(
+        r#"(() => {
+      const target = {id: new String('012345678901234567890123')};
+      const thrown = fn => {try {fn(); return 'no-throw';} catch(e) {return e.message;}};
+      return [thrown(() => Game.creeps.w1.moveTo(target)),
+        thrown(() => Game.spawns.Spawn1.renewCreep(target)),
+        Game.creeps.w1.transfer(target, RESOURCE_ENERGY), typeof globalThis.__kkp];
+    })()"#,
+    )?;
+    let message = "It seems you're trying to use a serialized game object stored in Memory which is not allowed. Please use `Game.getObjectById` to retrieve a live object reference instead.";
+    assert_eq!(
+        v["value"],
+        json!([message, message, -7, "undefined"]),
+        "共用检查与资源 API 的 boxed String 差异须保留: {v:?}"
+    );
+    let warning = "`avoid` option cannot be used when `PathFinder.use()` is enabled. Use `costCallback` instead.";
+    let warn_twice = r#"(() => {
+      globalThis.console = {log() {throw new Error('player console must not receive diagnostics');}};
+      const room = Game.rooms.W1N1;
+      for (let i = 0; i < 2; i++) room.findPath(new RoomPosition(24,25,'W1N1'), new RoomPosition(26,25,'W1N1'), {avoid: []});
+      return true;
+    })()"#;
+    let v = sb.run_expr(warn_twice)?;
+    assert_eq!(v["value"], true, "诊断使用加载时捕获的 console: {v:?}");
+    assert_eq!(
+        sb.drain_console()
+            .iter()
+            .filter(|line| line.text == warning)
+            .count(),
+        1
+    );
+    sb.end_tick()?;
+    sb.settle_bill();
+    w["time"] = json!(2);
+    w["objects"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|object| object["id"] != "v1");
+    sb.begin_tick(&w)?;
+    sb.run_loop()?;
+    let v = sb.run_expr("Game.creeps.w1.attack(savedVictim)")?;
+    assert_eq!(v["value"], -7, "检查必须读取本 tick 投影而非旧 Map: {v:?}");
+    let v = sb.run_expr(warn_twice)?;
+    assert_eq!(v["value"], true, "下一 tick 诊断仍可执行: {v:?}");
+    assert_eq!(
+        sb.drain_console()
+            .iter()
+            .filter(|line| line.text == warning)
+            .count(),
+        1
+    );
+    sb.end_tick()?;
+    sb.settle_bill();
+    Ok(())
+}
