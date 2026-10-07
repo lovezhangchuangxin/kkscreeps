@@ -26,6 +26,8 @@
 | `kk-engine/src/settle/damage.rs` | 共用伤害/治疗应用、死亡与库存掉落；`damage/tough.rs` 独立计算原生 TOUGH 累计减伤，不写候选 |
 | `kk-engine/src/settle/creep/combat/batch_policy.rs` | 战斗分页与群体批量完整预检/应用；直接候选不变测试在 batch_policy/tests.rs |
 | `kk-engine/src/settle/resources.rs` | 资源领域读取与副本预检转账；`resources/generic.rs` 负责 native 容量与实验室槽写入；只读 Generic 解析复用 `kk-world/src/domain/generic.rs` |
+| `kk-mod-host/src/realm.rs` | VM 所有者与销毁顺序；`realm/bootstrap.rs` 捕获 SDK，`registration.rs` 负责逐包注册与冻结，`installation.rs` 安装规则/链，`execution.rs` 限定能力调用周期，`budget.rs` 统一注册/结算预算，`registry.rs` 独占注册阶段与首故障 |
+| `kk-mod-host/src/convert.rs` | 单包贡献候选及最终绑定校验；`convert/` 分别解析对象/字段挂载、动作、处理器、规则、资源/建筑，共享值/schema/字段读取；不在转换层创建 VM 或发布世界 |
 | `kk-mod-host/src/execution_plan.rs` | 链安装与诊断共用的活动顺序/中心回退选择 |
 | `kk-mod-host/src/rng.rs` | 玩法随机流 op 与域序号状态；无状态推导在 `kk-core/src/rng.rs` 的 `gameplay_draw`（协议见[确定性玩法时间与随机协议](gameplay-determinism.md)） |
 | `kk-mod-host/src/composition.rs` | 冻结来源、规则候选与选中来源、处理器/manifest 停用闭包 |
@@ -52,7 +54,7 @@ Rust 子模块通过父模块保留既有公开路径；跨子模块的内部操
 
 JS 的 Memory、市场和 Game 分别持有闭包。加载清单先执行 Memory 和市场，再装配 Game；Game 在加载期捕获桥函数，Rust 捕获宿主句柄后删除临时 `__kkp`。tick 中不能重新查找这一全局。RawMemory 重建、CJS 重绑、Memory getter 安装的先后顺序保持不变，两个世界投影通道共享该流程。
 
-V8 生命周期账本位于 `kk-vm/src/isolate_order.rs`，玩家沙箱与 Mod realm 共用；`kk-mod-host/src/realm_lifecycle.rs` 只负责冷恢复最后切换时的 Enter/Exit 配对。
+V8 生命周期账本位于 `kk-vm/src/isolate_order.rs`，玩家沙箱与 Mod realm 共用；`kk-mod-host/src/realm/lifecycle.rs` 只负责冷恢复最后切换时的 Enter/Exit 配对。
 
 检查点按所有权分层：`kk-world/src/world/checkpoint.rs` 保存世界/房间信封与扩展；`kk-engine/src/settle/checkpoint.rs` 保存账户/市场/Mod state 并复用发布校验；`kk-runtime/src/embed/checkpoint.rs` 装配替代分片并核验身份，`checkpoint/identity.rs` 保存包/工作者身份；`kk-runtime/src/checkpoint.rs` 负责文件信封和同步发布；`kk-cli/src/sim/checkpoint.rs` 只处理场景、alias 与原始断言起点。
 
@@ -71,3 +73,5 @@ V8 生命周期账本位于 `kk-vm/src/isolate_order.rs`，玩家沙箱与 Mod r
 管理初始化使用 `Engine::insert_objects` / `EmbedEngine::place_objects` 或一次 `edit_world`：按输入顺序分配 ID、读取此前已放置的控制器，末项失败不发布前缀，成功只推进一次编辑版本。sim 将全部场景对象作为一批放置；分片房间/控制器创建也在单份草稿上完成。单对象管理 API 保留，反复调用仍承担独立事务的复制成本。世界计划校验在无扩展字段时借用房间，避免额外整房复制。
 
 移动静态判定在 `kk-engine/src/settle/movement/static_obstacles.rs`，由登记和仲裁共用；`movement/precheck.rs` 保存登记拒绝快照与 JS 决策，`movement/inputs.rs` 投影输入及提交瞬态放行。专项测试在 `kk-runtime/tests/mod_chain_tests/move_static.rs` 与 `kk-cli/tests/sim_tests/move_static.rs`，避免继续扩大原预检测试文件。移动玩家门快照 `MoveGate` 与规则声明同在 `kk-mod-api/src/builtin.rs`（战斗射程先例），专项测试在 `kk-runtime/tests/mod_chain_tests/move_gate.rs` 与 `kk-cli/tests/sim_tests/move_playergate.rs`。
+
+开发中定向验证使用 `pnpm run check -- kk-cli --test sim_tests --filter move_static`：先发现实际测试，空匹配报错；格式、Clippy、当前 CLI 构建及工具/文档门禁仍执行，Rust 部分只验收所选目标。每步输出耗时供定位成本；无参数完整门禁保持全部目标。定向通过不代表完整验收，也不改变真实进程冷恢复场景的断言与轮数。

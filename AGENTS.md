@@ -59,7 +59,7 @@ kkscreeps/
 - `cargo build -p kk-cli`：构建 `target/debug/kkscreeps`。
 - `target/debug/kkscreeps embed`：在本地启动逐行 JSON 调用服务。
 - `pnpm run fmt`：使用 rustfmt 格式化 Rust 代码。
-- `pnpm run check`：唯一检查门禁入口，执行格式检查、Clippy、Rust/JavaScript workspace 与维护工具测试、文档链接及源码规模检查；不运行完整 screeps-ok 套件。无参数为完整门禁（提交前必须以无参数形态跑过）；开发中可限定 crate 加速子集检查：`pnpm run check -- kk-engine kk-runtime`。Rust 测试用 `--tests`、不含 doctest；改动或新增 doctest（文档注释里的 Rust 示例代码块）时，单独运行 `cargo test -p <crate> --doc`（或全量 `cargo test --workspace --doc`）验证后再提交。
+- `pnpm run check`：唯一检查门禁入口，执行格式检查、Clippy、Rust/JavaScript workspace 与维护工具测试、文档链接及源码规模检查；不运行完整 screeps-ok 套件。无参数为完整门禁（提交前必须以无参数形态跑过）；开发中可限定 crate 加速子集检查：`pnpm run check -- kk-engine kk-runtime`；也可定向单个测试目标：`pnpm run check -- kk-cli --test sim_tests --filter move_static`。定向模式先发现匹配用例，空匹配失败，明确标记子集；每步输出实际耗时，不能代替无参数完整门禁。Rust 测试用 `--tests`、不含 doctest；改动或新增 doctest（文档注释里的 Rust 示例代码块）时，单独运行 `cargo test -p <crate> --doc`（或全量 `cargo test --workspace --doc`）验证后再提交。
 - `cargo test -p kk-engine`：单独运行引擎 crate 的测试。
 - `KKSCREEPS_BIN="$PWD/target/debug/kkscreeps" pnpm --filter @kkscreeps/compat test`：构建适配器，并通过绝对路径选择上述 debug 二进制。
 
