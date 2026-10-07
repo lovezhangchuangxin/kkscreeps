@@ -6,16 +6,20 @@
 
 ## 当前接手位置
 
-- 当前任务：**M2D ID 构造器批已交付（随本次提交）**。screeps-ok ID 构造器/对象身份族 18 例清偿：游戏类构造器按官方四款签名落地（guardedId=Creep/Structure 族 `if(id)` 空实例、Structure 族键序 id 在前；strictId=Source/Mineral 等 8 类假参抛官方文案；powerCreep=不抛无条件挂 id、仅带 room 记录挂 room/pos；flag=六参不挂 id）、位置初始化与官方 RoomObject 构造器同构（room 取当前 Game.rooms 实例、effects 真值即挂含空数组）。**含 M2C 回归修复**：Room 挂载三键改「结构存在才有键」后，probe 的 `!(prop in t)` 缺失诊断把建造前的 room.storage/terminal 读计为缺 API（bot 验收判红，M2C 批只对了 tick 指标漏了判定）——PROBE_IGNORE_SCOPED 补三键豁免 + classOfLabel 剥 `[...]` 后缀。已知有意分歧登记：官方手动 `new StructureController(id)` 会重指 room.controller/storage/terminal，本实现不重指（保持 getObjectById 同引用）；Room 类保持桩（官方 new Room 机制不同）；effects 原始格式双轨（prelude 读 ticksRemaining、engine store.rs 读 endTime，无生产者，power 域开启时统一）。
+- 当前任务：**G11.a 建筑 RCL 配额首片已交付（随本次提交）**。132 条 `builtin:structure.quota.{type}.rcl{N}` 逐型逐级规则（键集/默认=官方表）+ `StructureQuotaSnapshot`（装配期解析、Rc 入逐房 Plane，五消费者统一 `allowed_for`）+ 折叠注入玩家 `CONTROLLER_STRUCTURES`（canary/worker 双点，switch/冷恢复同路径）；link.rcl0-8 迁入族修复「link 规则不达玩家面」既有缺口；builtin revision v18（旧检查点身份门拒绝）。契约见[配额规则](../architecture/structure-quota.md)，夹具 [mod-quota](../../compat/fixtures/mod-quota/README.md)/[sim-mod-quota](../../compat/fixtures/sim-mod-quota/README.md)，Rust 侧 `sim_tests/quota.rs`。上一任务 M2D ID 构造器批已交付，含 M2C 回归修复与 probe 诊断豁免，细节见实施记录。
 - 已完成基线：S01 `e0b457b`、S02 `5a25bc2`。旧 S03–S06 的纯搬迁限制由本轮职责治理方案替代，详见[维护结构方案](archive/structure-governance-2026-10.md)。
 - 已完成实现：移动领域跨层归拢；Working 统一构造与瞬态字段收口、engine 首触日志；世界容器/投影与 runtime 执行器分离、Generic 共享读取；串行场景名称/耗时/子集反馈；文档契约合并、旧计划归档与工具门禁。保留玩法语义和恢复身份，不推进 G02.d3 等新玩法。
-- 本轮实现：registry.js 游戏类构造器工厂（classShell 共享 Proxy、roomObjectInit 位置初始化、按类分派四款签名）；embed 新增 id_constructor_reconstruction 场景（96：instanceof/字段回查/子类 super(id)/空实例/未知 id 文案/strictId 假参/Flag 六参/Structure 键序）；shared.js 诊断豁免三键 + classOfLabel 方括号剥离。无 Rust 引擎语义改动、无 SDK/协议/版本变化、无新写入域。
-- 当前验证：无参数 `pnpm run check` 完整通过；release 重建后棘轮 **1965→1983**（本批 18 转绿零转红：UNDOC-IDCTOR 10 + UNDOC-CTOR 8；对 HEAD~1 基线 +37 = 本批 18 + M2C 19），ratchet 地板 1983；三组 bot 2000/2000/10 指标与基线一致且验收判定全部通过（Overmind 保留既有首轮异常 1；含 M2C 回归修复后的复验）。三路复审 0 P0；1 P1（Flag 官方六参签名）与 2 P2（PowerCreep 语义/effects 空数组键）当批清偿，P3 清偿或登记见上。剩余 24 失败集中于 keeper lair/getGameTime/setup 零散域。工作区含本次未提交改动。
+- 本轮实现：kk-mod-api 配额族+快照（builtin.rs）、engine Plane/Engine 接线与五消费者收口、runtime 双点常量注入（setup.rs/switch.rs 注释）、contrib_link/link_decline 键迁移、冻结与结算测试、sim 三轮探针场景与两独立夹具包、架构文档 structure-quota.md 及三处索引。无 SDK 协议变化；新增写入域无（规则值经既有冻结/恢复链路持久）。
+- 当前验证：无参数 `pnpm run check` 完整通过；release 重建后棘轮 **1983 持平**（0 转红 0 转绿），ratchet 地板 1983；三组 bot 2000/2000/10 指标与基线一致且验收判定全部通过（Overmind 保留既有首轮异常 1）。三路复审 0 P0/P1；P2（Plane 逐房深拷贝→Rc）当批清偿，P3 清偿或登记（折叠键序 preserve_order 依赖注释、缺族拒绝补测、全表折叠相等断言、link 玩家面间接覆盖、RCL0 键不声明边界、quota 恢复调用并发参数对齐）。**间歇登记**：sim_tests 全套并行下三例冷恢复子进程偶发退出码 1（非本批引入，隔离全绿；再现须存子进程报告归因）。剩余 24 失败集中于 keeper lair/getGameTime/setup 零散域。工作区含本次未提交改动。
 - 历史交接、阶段验证与审查过程见[历史记录](archive/mod-history-2026-10.md)；玩法缺口继续以本文件任务表为准。
 
-## G11.a 建筑配额策略（2026-10-08 登记，未实施）
+## G11.a 建筑配额策略（2026-10-08 登记；同日选型拍板并实施交付）
 
-调查结论（接手起点）：配额的引擎判定收口在 `settle/structures.rs::allowed_for`（link 走 `w.plane.links.rcl` 有效规则——`builtin:link.rcl0..8` 九条标量规则先例，其余类型查 `controller_allowed` 静态表），isActive 预检在 `check_structure_against_controller`；玩家面两个消费者读冻结常量表（`structures.js` isActive 的 `C.CONTROLLER_STRUCTURES` 两处 + `room/creation.js` checkControllerAvailability）。首片设计分叉（需拍板或专项设计）：① 逐类型逐等级标量规则（link 先例外推全——约 9×12 条规则，规则目录膨胀但零新机制）；② 房间级 JS 槽 `builtin:room.buildQuota`（G01–G04 房槽先例，JS 动态给配额，但预检同源需冻结计划回填玩家面）；③ 计划派生常量注入覆盖 `CONTROLLER_STRUCTURES`（射程四键/仓库十键先例，玩家面零改动能读同表，但常量表是「上游 dump+本地新增」混合面，覆盖整表与兼容基线耦合）。约束：预检与结算必须同源（G02.d2 双端冻结先例）；Mod 建筑自身配额已在 BuildingDescriptor 域，不并入本槽。验收按每批共同验收（两独立 JS 包+原生对照+组合+双通道+冷恢复）。
+调查结论（登记时点，改造前口径）：配额的引擎判定收口在 `settle/structures.rs::allowed_for`（link 走 `w.plane.links.rcl` 有效规则——`builtin:link.rcl0..8` 九条标量规则先例，其余类型查 `controller_allowed` 静态表）；引擎消费者五处（工地创建结算 room.rs、link 转移 isActive 门 structures.rs、spawn/extension 放置 mark_off、terminal 容量 economy、extractor 采集门 harvest）；玩家面两个消费者读冻结常量（`structures.js` isActive 与 `room/creation.js` checkControllerAvailability，后者在意图记录前返回 ERR_RCL_NOT_ENOUGH）。
+
+**选型（路线①+③ 合体）**：计划级逐型逐级标量规则 `builtin:structure.quota.{type}.rcl{N}`（132 条，type 为官方 CONTROLLER_STRUCTURES 全 16 型、N 按官方键集——spawn/extension/road/container 0-8 其余 1-8，默认=官方表值）+ 折叠注入 `CONTROLLER_STRUCTURES` 常量表（引擎 Plane 快照与玩家常量同计划派生，G02.d2/G07.a 双端同源同款；kk-constants 先于 prelude 段执行、表值可注入——RESOURCES_ALL 先例）。**房槽路线（②）的硬事实**：玩家预检在意图记录前拒绝超配额（错误码被兼容用例钉死），结算期槽收不到超配额意图 → 无法升配额，而升配额（TD 多塔/迷宫限墙）是主用例；单向降配额半值。**顺带修复既有缺口**：`builtin:link.rcl*` 至今只进引擎不进玩家面（link 的 isActive/createConstructionSite 预检读静态表）——link.rcl0-8 迁移并入本族（键集改官方形 1-8），LinkRules 去 rcl、allowed_for 统一走配额快照。约束：Mod 建筑不占内建配额表（既有口径不变）；builtin revision v17→v18，PlanHash 变化旧检查点按身份门拒绝（G02.d3 同款）。验收按每批共同验收（两独立 JS 包+原生对照+组合+双通道+冷恢复）+ 领域项：rcl8 超官方塔数无 mod 拒/配额包放行、降墙配额生效、玩家预检错误码与结算同源、link 迁移回归。
+
+**实施交付（同日）**：契约见[建筑 RCL 配额规则](../architecture/structure-quota.md)。`StructureQuotaSnapshot` 装配期一次解析、Rc 共享入逐房 Plane；`fold_controller_structures` 折叠表经 setup.rs canary 预检与玩家 worker 双点注入（switch/冷恢复同一路径）；五消费者统一 `allowed_for`（快照 miss 回退官方静态表，仅默认引擎/非官方类型可达）。夹具 [mod-quota](../../compat/fixtures/mod-quota/README.md)（quota-raise 塔 20 / quota-lower 墙 3 两独立包）与 [sim-mod-quota](../../compat/fixtures/sim-mod-quota/README.md)（三轮探针：首 tick 结算收口、次 tick 预检读「已提交数 vs 注入表」、末 tick 回读世界工地数，三面互证）；Rust 侧 `sim_tests/quota.rs` 四场景×双通道+冷恢复+组合身份互异。验证：完整门禁通过；棘轮 1983 持平（0 转红 0 转绿）；三 bot 2000/2000/10 指标+验收判定全通过；三路复审 0 P0/P1，P2（Plane 深拷贝→Rc）当批清偿，P3 清偿或登记（折叠键序依赖 workspace preserve_order 已注释；link 迁移玩家面覆盖为间接）。已知边界：RCL 0 级别键不声明（官方表无此键）；首片不开放逐房差异/动态配额/Mod 建筑配额。
 
 ## 执行与更新规则
 
@@ -37,7 +41,7 @@
 | G08 | Mod 建筑字段与生命周期 | 现有建筑目录、schema、tick | 部分完成 | G08.a 字段+tick 首片已交付（见[历史交付记录](archive/mod-history-2026-10.md)）；RCL 配额/逐资源容量/专属 FIND/生产事件未开始 |
 | G09 | 自有对象库存与耐久能力 | 现有对象/资源/伤害能力 | 未开始 | — |
 | G10 | 可编程生产与建筑动作 | G08；现有资源与配方 | 未开始 | — |
-| G11 | 建筑配额与资源容量策略 | 现有建筑/资源目录 | 未开始 | — |
+| G11 | 建筑配额与资源容量策略 | 现有建筑/资源目录 | 部分完成 | G11.a 配额族首片已交付（132 条逐型逐级规则+玩家表折叠注入+link.rcl 迁移，见[配额规则](../architecture/structure-quota.md)与[夹具](../../compat/fixtures/mod-quota/README.md)）；资源容量策略与逐房/动态配额未开始 |
 | G12 | 采集与资源再生策略 | 相关原生消费者与当批领域预检，G07 可随后通用化 | 未开始 | — |
 | G13 | 孵化、寿命与死亡策略 | 相关生命周期与当批领域预检，G07 可随后通用化 | 未开始 | — |
 | G14 | 塔的动作策略 | 现有伤害/治疗/受击策略 | 未开始 | — |
@@ -60,7 +64,7 @@
 
 ## 实际执行队列与前置门
 
-上一轮维护范围已提交；realm 注册/执行/预算及声明转换优化已提交为 `0c28c92`。Room API 状态所有权和历史文档入口治理已提交为 `8f822fd`；Prelude 命名与集中装配优化已提交 `de15765`；验收成本与首轮 research 文档价值优化已提交 `646e395`；Game 装配、地图缓存、指令状态与世界注入边界已提交 `a0d375e`；结构 API/孵化生命周期、字段/装配所有权及共用目标/诊断依赖优化已完成验收，三轮已提交 `b99cda3`，Creep 移动已提交 `3abb616`；engine/Mod 三组与 CLI 职责分组及整体复审已提交 `eedfbfb`；计划安装候选与统一发布已提交 `4443c3c`；runtime 单次调用与局部恢复治理已提交 `dd1e4f7`；字段校验边界治理已提交 `f32f972`。专项维护暂告一段落，剩余治理项不作为恢复开发的前置。G02.d1/d2/d3 首片均已交付；G02.d3 后续（结构/rampart 通行声明、逐房粒度）按需另拆，或按依赖选择下表其他领域（G11.a/G09.a 为备选，M2B 兼容批按路线图并行）。
+上一轮维护范围已提交；realm 注册/执行/预算及声明转换优化已提交为 `0c28c92`。Room API 状态所有权和历史文档入口治理已提交为 `8f822fd`；Prelude 命名与集中装配优化已提交 `de15765`；验收成本与首轮 research 文档价值优化已提交 `646e395`；Game 装配、地图缓存、指令状态与世界注入边界已提交 `a0d375e`；结构 API/孵化生命周期、字段/装配所有权及共用目标/诊断依赖优化已完成验收，三轮已提交 `b99cda3`，Creep 移动已提交 `3abb616`；engine/Mod 三组与 CLI 职责分组及整体复审已提交 `eedfbfb`；计划安装候选与统一发布已提交 `4443c3c`；runtime 单次调用与局部恢复治理已提交 `dd1e4f7`；字段校验边界治理已提交 `f32f972`。专项维护暂告一段落，剩余治理项不作为恢复开发的前置。G02.d1/d2/d3 首片均已交付；G02.d3 后续（结构/rampart 通行声明、逐房粒度）按需另拆。G11.a 配额首片已交付（见上方实施记录）；下一批候选：G09.a 自有对象库存、G02.d3 后续或剩余 24 例零散兼容失败（量小，见 M2D 记录）。M2B 兼容批按路线图并行。
 
 父编号用于领域归档，**不是一口气做完 G01 再顺序做到 G30 的调度表**。每个父任务首次实施前拆成可独立验收的子片，记录显式依赖；前置小片可先完成，父任务保留“部分完成”。默认兼容性 M2B 按现有路线图继续推进，不等全部 Mod 领域结束。
 
@@ -283,6 +287,8 @@ S01 已提交 `e0b457b`，S02 已提交 `5a25bc2`。旧 S03–S06 的按行数�
 ## 实施记录与交接模板
 
 当前会话只记录范围、剩余工作、实际验证和提交状态；历史过程见[归档](archive/mod-history-2026-10.md)。贡献与交接要求以 [AGENTS.md](../../AGENTS.md) 为准，不复制提示词或逐项复审流水账。
+
+2026-10-08 G11.a 建筑配额首片交付：基线 `c8fcb8d`（M2D + 台账登记）。路线①+③ 合体落地：132 条 `builtin:structure.quota.{type}.rcl{N}`（键集=官方表形，默认=官方值）+ `StructureQuotaSnapshot` 装配期一次解析、Rc 共享入逐房 Plane + `fold_controller_structures` 折叠注入玩家 `CONTROLLER_STRUCTURES`（canary/玩家 worker 双点，switch/冷恢复同路径）；`allowed_for` 统一五消费者（工地创建/link isActive/spawn 放置/terminal/extractor，快照 miss 回退官方静态表）；顺带修复 link.rcl 规则不达玩家面的既有缺口（rcl0-8 迁入族、键集改官方形，LinkRules 去 rcl）；revision v18。三轮探针场景三面互证预检/结算同源：native 锚 6/2500，raise 塔 20、lower 墙 3，组合共存，四场景 plan_hash 互异，双通道一致，冷恢复身份一致。验证：完整门禁通过；棘轮 1983 持平（0 转红 0 转绿）；三 bot 2000/2000/10 指标+验收判定全通过；三路复审 0 P0/P1，P2（Plane 逐房深拷贝）当批改 Rc 清偿，P3 清偿或登记（折叠键序依赖 workspace preserve_order 已注释并加全表相等断言、配额族缺键拒绝补测、link 玩家面覆盖为间接、RCL0 键不声明为既知边界）。**间歇问题登记**：sim_tests 全套并行运行时 move_policy/heal_policy/move_arbitration 冷恢复子进程偶发退出码 1（复审方 5 次全套撞 2 次，隔离复跑全绿、非本批改动引入；本批新增测试或放大并行负载），再现时须保存失败子进程报告归因。下一批候选：G09.a 自有对象库存、G02.d3 后续（结构/rampart 通行声明）或剩余 24 例零散兼容失败。
 
 2026-10-08 M2D ID 构造器批交付：基线 `5133968`（M2C 对象形状批）。ID 构造器/对象身份族 18 例清偿：registry.js 游戏类从计数桩改为官方构造器（四款签名：guardedId/strictId/powerCreep/flag），位置初始化同构官方 RoomObject 构造器；embed 场景 96 钉 instanceof/字段回查/子类/空实例/未知 id 文案/strictId/Flag 六参/Structure 键序。**含 M2C 回归修复**：room 挂载三键「结构存在才有键」使 probe 缺失诊断把建造前读计为缺 API、bot 验收判红（M2C 批验证只对了 tick 指标）——诊断豁免补 Room.controller/storage/terminal + classOfLabel 剥 `[...]`，三 bot 验收判定复验通过。教训：bot 验证必须核对验收判定行，不能只比四项指标。验证：完整门禁通过；棘轮 1965→1983（18 转绿零转红）；三 bot 指标+判定全通过；三路复审 0 P0、P1/P2 当批清偿。有意分歧登记：手动构造不重指 room 三键（保持 getObjectById 同引用）、Room 保持桩、effects 原始格式双轨待 power 域统一、类全局 Proxy 使 `X.prototype.constructor === X` 不成立（沿袭）。剩余 24 失败集中于 keeper lair/getGameTime/setup 零散域，量小不构成下批主体——下一批建议回主线（G11.a 建筑 RCL 配额或 G09.a 自有对象库存）或 keeper lair NPC 域。
 

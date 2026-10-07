@@ -123,16 +123,36 @@ fn builtin_link_values_match_constant_dump_and_use_native_slots() {
         get("builtin:link.buildCost"),
         &Number::Signed(constants["CONSTRUCTION_COST"]["link"].as_i64().unwrap())
     );
-    for level in 0..=8 {
+    // G11.a 配额族：逐型逐级默认值与官方表同源锁定（link 并入本族，
+    // 键集改官方形——官方无的级别键不声明）。
+    let quota_rules = [
+        ("structure.quota.link.rcl5", "link", "5"),
+        ("structure.quota.link.rcl8", "link", "8"),
+        ("structure.quota.tower.rcl8", "tower", "8"),
+        ("structure.quota.spawn.rcl0", "spawn", "0"),
+        ("structure.quota.container.rcl0", "container", "0"),
+        (
+            "structure.quota.constructedWall.rcl2",
+            "constructedWall",
+            "2",
+        ),
+    ];
+    for (rule, stype, level) in quota_rules {
         assert_eq!(
-            get(&format!("builtin:link.rcl{level}")),
+            get(&format!("builtin:{rule}")),
             &Number::Signed(
-                constants["CONTROLLER_STRUCTURES"]["link"][level.to_string()]
+                constants["CONTROLLER_STRUCTURES"][stype][level]
                     .as_i64()
-                    .unwrap_or(0)
+                    .unwrap()
             )
         );
     }
+    assert!(
+        plan.rules()
+            .resolve(&key("builtin:structure.quota.link.rcl0"))
+            .is_none(),
+        "官方无的级别键不声明"
+    );
     // 战斗射程规则默认值与玩家常量 dump 同源锁定（CombatRanges::from_plan
     // 与 runtime 常量注入共同依赖此一致性）。
     for (rule, constant) in [
@@ -175,7 +195,8 @@ fn builtin_link_values_match_constant_dump_and_use_native_slots() {
         &Number::Signed(0),
         "地形通行默认值即官方墙不可通行"
     );
-    assert_eq!(plan.rules().len(), 32);
+    // 155 = 32 − link.rcl0..8（9）+ 配额族（132，官方表全键集）。
+    assert_eq!(plan.rules().len(), 155);
     assert_eq!(plan.slots().len(), 20);
     for name in builtin::RESOURCE_ACTION_SLOTS
         .iter()

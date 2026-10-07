@@ -225,7 +225,7 @@ pub fn terminal_capacity_tick(w: &mut Working, id: ObjId) {
     };
     let level = ctl.level;
     let owner_opt = v.get("owner").and_then(Value::as_str);
-    let allowed = crate::settle::controller_allowed("terminal", i64::from(level));
+    let allowed = super::structures::allowed_for(w, "terminal", i64::from(level));
     let want = if i64::from(level) > 0 && ctl.owner.as_deref() == owner_opt && allowed > 0 {
         w.plane.stores.terminal
     } else {

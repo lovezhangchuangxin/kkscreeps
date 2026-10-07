@@ -34,8 +34,8 @@ use kk_world::types::BodyKind;
 use crate::settle::RoomCtx;
 
 use crate::intent::{Action, EXECUTION_ORDER, IntentData};
+use crate::settle::energy_resource_name;
 use crate::settle::spawn;
-use crate::settle::{controller_allowed, energy_resource_name};
 
 pub(in crate::settle) use combat::{
     heal_melee_native, heal_ranged_native, intent_attack, intent_ranged_attack, ranged_mass_native,

@@ -444,19 +444,14 @@ fn chebyshev(a: (u8, u8), b: (u8, u8)) -> i64 {
         .max((a.1 as i64 - b.1 as i64).abs())
 }
 
-/// 读取结构在某 RCL 的配额。link 走 Working.links 的有效规则，
-/// 其余类型查 CONTROLLER_STRUCTURES 官方表。
-pub(super) fn allowed_for(w: &Working, structure_type: &str, level: i64) -> i64 {
-    if structure_type == "link" {
-        // 等级越界（负数或 >8）判 0 配额，与 CONTROLLER_STRUCTURES
-        // 查表缺键时的 unwrap_or(0) 同语义；不要钳到 rcl8。
-        match usize::try_from(level) {
-            Ok(idx) if idx < 9 => w.plane.links.rcl[idx],
-            _ => 0,
-        }
-    } else {
-        super::controller_allowed(structure_type, level)
-    }
+/// 读取结构在某 RCL 的配额：计划配额快照优先（含 link——原 link 专属
+/// rcl 规则已并入配额族），快照无该型/级时回退 CONTROLLER_STRUCTURES
+/// 官方表。等级越界（负数或 >8）快照返回 None 后由官方表同语义判 0。
+pub(crate) fn allowed_for(w: &Working, structure_type: &str, level: i64) -> i64 {
+    w.plane
+        .quotas
+        .get(structure_type, level)
+        .unwrap_or_else(|| super::controller_allowed(structure_type, level))
 }
 
 /// 无主结构视为有效；有主须与 RCL>=1 的房主一致且有配额。

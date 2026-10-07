@@ -29,7 +29,7 @@ export default function register(api) {
 
 link 保持既有 `builtin:link.capacity`。spawn、extension、storage、creep 携带量及 boost 数值尚未迁入这组规则。
 
-内置贡献仍使用历史入口名 `builtin::link()`，现在同时声明 link、creep 资源、移动、战斗与建造族槽及仓库规则；默认规则目录为 25 条，内建槽共 13 个。数值消费者具名绑定为 `store.init/build/constants/labSlots/terminalTick/containerDeposit`，它们不是可挂 JS handler 的动作槽。
+内置贡献仍使用历史入口名 `builtin::link()`，现在同时声明 link、creep 资源、移动、战斗与建造族槽、仓库规则及[建筑 RCL 配额族](structure-quota.md)；默认规则目录为 155 条（含 132 条配额键），内建槽共 13 个。数值消费者具名绑定为 `store.init/build/constants/labSlots/terminalTick/containerDeposit`，它们不是可挂 JS handler 的动作槽。
 
 ## 权威字段与玩家行为
 

@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "shard": {
+    "players": [
+      "p1"
+    ],
+    "rooms": [
+      {
+        "name": "W1N1",
+        "owner": "p1",
+        "rcl": 8
+      }
+    ]
+  },
+  "bots": [
+    {
+      "player": "p1",
+      "modules": "."
+    }
+  ],
+  "objects": [],
+  "assertions": [
+    {
+      "pointer": "/players/p1/memory/quotaTower8",
+      "op": "eq",
+      "value": 6
+    },
+    {
+      "pointer": "/players/p1/memory/towerOkFirstTick",
+      "op": "eq",
+      "value": 10
+    },
+    {
+      "pointer": "/players/p1/memory/towerExtra",
+      "op": "eq",
+      "value": -14
+    },
+    {
+      "pointer": "/players/p1/memory/worldTowerSites",
+      "op": "eq",
+      "value": 6
+    },
+    {
+      "pointer": "/players/p1/memory/quotaWall8",
+      "op": "eq",
+      "value": 2500
+    },
+    {
+      "pointer": "/players/p1/memory/wallOkFirstTick",
+      "op": "eq",
+      "value": 5
+    },
+    {
+      "pointer": "/players/p1/memory/wallExtra",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "pointer": "/players/p1/memory/worldWallSites",
+      "op": "eq",
+      "value": 6
+    }
+  ]
+}

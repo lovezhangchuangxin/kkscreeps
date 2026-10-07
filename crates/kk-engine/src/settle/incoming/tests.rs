@@ -20,6 +20,7 @@ fn working() -> Working {
             stores: engine.stores,
             combat: engine.combat,
             move_gate: Default::default(),
+            quotas: std::rc::Rc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
             terrain_passability: Default::default(),
             resources: engine.resources.clone(),
             contrib: engine.contrib,

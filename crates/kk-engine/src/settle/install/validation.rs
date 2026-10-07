@@ -24,7 +24,7 @@ impl Engine {
             "builtin:link.build",
             // Store 容量在放置/建造时落入权威字段。
             "builtin:link.capacity",
-            // isActive 与配额检查读取 links.rcl。
+            // isActive 与配额检查读取配额快照（G11.a 起并入配额族）。
             "builtin:link.active",
             // 玩家预检读取权威字段与常量覆盖通道。
             "builtin:link.precheck",
@@ -72,6 +72,7 @@ impl Engine {
             // 地形通行声明驱动仲裁静态障碍的墙项（Plane 快照）与玩家面
             // 原生寻路地形（SandboxConfig），两端同源消费。
             "builtin:terrain.passability.native",
+            "builtin:structure.quota.native",
         ];
         for binding in plan.required_bindings() {
             let name = binding.as_str();

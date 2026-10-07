@@ -52,6 +52,7 @@ fn combat_plane(combat: kk_mod_api::builtin::CombatRanges) -> kk_engine::settle:
         stores: kk_world::place::builtin_store_rules(),
         combat,
         move_gate: Default::default(),
+        quotas: std::rc::Rc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
         terrain_passability: Default::default(),
         resources: Default::default(),
         contrib: std::rc::Rc::new(kk_engine::settle::contrib::ContributionDispatch::default()),

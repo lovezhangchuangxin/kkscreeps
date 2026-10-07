@@ -359,6 +359,15 @@ impl EmbedEngine {
                 let terrain =
                     kk_mod_api::builtin::TerrainPassability::from_plan(registered.plan.rules())
                         .map_err(anyhow::Error::msg)?;
+                // 建筑 RCL 配额族同步预检沙箱：工地创建预检读的
+                // CONTROLLER_STRUCTURES 与结算配额快照同一计划来源。
+                let quotas =
+                    kk_mod_api::builtin::StructureQuotaSnapshot::from_plan(registered.plan.rules())
+                        .map_err(anyhow::Error::msg)?;
+                constant_overrides.insert(
+                    "CONTROLLER_STRUCTURES".into(),
+                    quotas.fold_controller_structures(),
+                );
                 if let Some(resources_all) = &resources_all {
                     constant_overrides.insert("RESOURCES_ALL".into(), resources_all.clone());
                 }
@@ -447,6 +456,12 @@ impl EmbedEngine {
             // 地形通行声明同步玩家沙箱：json/kkpv 通道的原生寻路地形与
             // 结算静态障碍判定（引擎 Plane）读同一生效值。
             config.terrain_walls_passable = self.engine.terrain_passability().wall_passable;
+            // 建筑 RCL 配额族同步玩家全局常量：createConstructionSite 与
+            // isActive 预检读同一生效表；结算侧读 Plane 配额快照。
+            config.constant_overrides.insert(
+                "CONTROLLER_STRUCTURES".to_string(),
+                self.engine.structure_quotas().fold_controller_structures(),
+            );
             // Mod 声明资源目录同步玩家全局常量；与规则覆盖同源同批。
             // 测试配置里的同名覆盖先移除再按引擎目录决定——无声明资源时
             // 保持 vanilla 常量原值，不允许测试入口注入私有资源目录。

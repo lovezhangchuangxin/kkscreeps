@@ -23,6 +23,8 @@ pub struct Plane {
     /// 地形静态通行规则；仲裁静态障碍判定的墙项与玩家面原生寻路
     /// 地形同源读取。
     pub terrain_passability: kk_mod_api::builtin::TerrainPassability,
+    /// 内建结构 RCL 配额；结算配额判定与玩家面常量注入同源读取。
+    pub quotas: Rc<kk_mod_api::builtin::StructureQuotaSnapshot>,
     /// 资源目录：内建 RESOURCES_ALL 加计划声明的命名空间资源。
     /// 搬运/掉落/超容回收与领域能力按它校验；市场/跨房发送不读它。
     pub resources: Rc<kk_mod_api::resources::ResourceCatalog>,

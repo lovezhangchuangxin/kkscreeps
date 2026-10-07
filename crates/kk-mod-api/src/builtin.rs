@@ -116,8 +116,6 @@ pub struct LinkRules {
     /// 损耗率：ceil(amount * loss_ratio) 计算转移损耗。
     pub loss_ratio: f64,
     pub build_cost: i64,
-    /// RCL 0..=8 的可建数量。
-    pub rcl: [i64; 9],
 }
 
 impl LinkRules {
@@ -149,10 +147,6 @@ impl LinkRules {
                 None => return Err("规则 builtin:link.lossRatio 句柄越界".into()),
             }
         };
-        let mut rcl = [0i64; 9];
-        for (level, slot) in rcl.iter_mut().enumerate() {
-            *slot = signed(&format!("link.rcl{level}"))?;
-        }
         Ok(Self {
             hits: signed("link.hits")?,
             hits_max: signed("link.hitsMax")?,
@@ -160,8 +154,82 @@ impl LinkRules {
             cooldown: signed("link.cooldown")?,
             loss_ratio,
             build_cost: signed("link.buildCost")?,
-            rcl,
         })
+    }
+}
+
+/// 内建结构 RCL 配额的有效规则快照（G11.a）。键集与官方
+/// CONTROLLER_STRUCTURES 一一对应（逐型逐级，官方无的级别键不声明），
+/// 默认值即官方表值。引擎结算配额判定与玩家面 CONTROLLER_STRUCTURES
+/// 常量注入同源消费；空快照（默认引擎）在判定处回退官方静态表。
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct StructureQuotaSnapshot {
+    /// structureType →（RCL → 配额）。from_plan 恒填充全部官方键。
+    pub entries: std::collections::BTreeMap<String, std::collections::BTreeMap<u8, i64>>,
+}
+
+impl StructureQuotaSnapshot {
+    /// 从计划的有效规则提取全部配额规则；缺键说明计划不含配额族。
+    pub fn from_plan(rules: &EffectiveRules) -> Result<Self, String> {
+        let table: serde_json::Value = serde_json::from_str(c::CONTROLLER_STRUCTURES)
+            .expect("内建 RCL 表合法（kk-core 生成物测试锁定）");
+        let mut entries = std::collections::BTreeMap::new();
+        for (stype, levels) in table.as_object().expect("官方表为对象") {
+            let mut per_level = std::collections::BTreeMap::new();
+            for level in levels.as_object().expect("逐级键").keys() {
+                let rule_key = key(&format!("structure.quota.{stype}.rcl{level}"));
+                let Some(handle) = rules.resolve(&rule_key) else {
+                    return Err(format!(
+                        "计划缺少规则 builtin:structure.quota.{stype}.rcl{level}"
+                    ));
+                };
+                let quota = match rules.get(handle) {
+                    Some(Number::Signed(v)) => *v,
+                    Some(other) => {
+                        return Err(format!(
+                            "规则 builtin:structure.quota.{stype}.rcl{level} 须为整数，实得 {other:?}"
+                        ));
+                    }
+                    None => {
+                        return Err(format!(
+                            "规则 builtin:structure.quota.{stype}.rcl{level} 句柄越界"
+                        ));
+                    }
+                };
+                let parsed: u8 = level.parse().expect("级别键为 0..=8");
+                per_level.insert(parsed, quota);
+            }
+            entries.insert(stype.clone(), per_level);
+        }
+        Ok(Self { entries })
+    }
+
+    /// 查某型某级的生效配额；快照无该型/级时返回 None（调用方回退官方
+    /// 静态表——默认引擎的空快照即此路径）。
+    pub fn get(&self, structure_type: &str, level: i64) -> Option<i64> {
+        if !(0..=8).contains(&level) {
+            return None;
+        }
+        self.entries
+            .get(structure_type)?
+            .get(&(level as u8))
+            .copied()
+    }
+
+    /// 官方 CONTROLLER_STRUCTURES 常量表折叠本快照后的玩家面注入值。
+    /// 键形保持官方（快照键集恒等于官方键集），无覆盖时与官方表同值。
+    /// 键序保真依赖 workspace 经 deno_core 统一启用 serde_json 的
+    /// preserve_order（BTreeMap 后备会按字典序重排类型键，值不变但
+    /// 玩家面 Object.keys 顺序可观察）。
+    pub fn fold_controller_structures(&self) -> serde_json::Value {
+        let mut table: serde_json::Value = serde_json::from_str(c::CONTROLLER_STRUCTURES)
+            .expect("内建 RCL 表合法（kk-core 生成物测试锁定）");
+        for (stype, levels) in &self.entries {
+            for (level, quota) in levels {
+                table[stype][level.to_string()] = serde_json::json!(quota);
+            }
+        }
+        table
     }
 }
 
@@ -403,18 +471,27 @@ pub fn link() -> Contribution {
         default: Number::Float(c::LINK_LOSS_RATIO),
         consumers: consumers.clone(),
     });
+    // 内建结构 RCL 配额规则（G11.a）：逐型逐级标量，键集与官方
+    // CONTROLLER_STRUCTURES 一一对应（官方无的级别键不声明，折叠注入
+    // 保持官方键形）；默认即官方表值。消费三端同源：引擎结算配额判定
+    // （allowed_for 族）与玩家面 CONTROLLER_STRUCTURES 常量注入均从同一
+    // 冻结计划派生。link 原有的 link.rcl0..8 已并入本族（键集改官方形
+    // 1..8），修复其只进引擎不进玩家面的既有缺口。
+    let quota_consumers = keys(&["structure.quota.native"]);
     let quotas: serde_json::Value =
         serde_json::from_str(c::CONTROLLER_STRUCTURES).expect("内建 RCL 表合法");
-    for level in 0..=8 {
-        rules.push(RuleDescriptor {
-            key: key(&format!("link.rcl{level}")),
-            domain: NumberDomain::Signed {
-                min: 0,
-                max: i64::from(u32::MAX),
-            },
-            default: Number::Signed(quotas["link"][level.to_string()].as_i64().unwrap_or(0)),
-            consumers: consumers.clone(),
-        });
+    for (stype, levels) in quotas.as_object().expect("官方表为对象") {
+        for level in levels.as_object().expect("逐级键").keys() {
+            rules.push(RuleDescriptor {
+                key: key(&format!("structure.quota.{stype}.rcl{level}")),
+                domain: NumberDomain::Signed {
+                    min: 0,
+                    max: i64::from(u32::MAX),
+                },
+                default: Number::Signed(quotas[stype][level].as_i64().expect("官方配额为整数")),
+                consumers: quota_consumers.clone(),
+            });
+        }
     }
     // 单目标战斗射程规则：结算（Plane 快照）与玩家常量注入同源消费。
     // 上限 50 为房间对角线内的安全放宽空间；rangedMassAttack 的面积
@@ -493,6 +570,7 @@ pub fn link() -> Contribution {
         "room.movePullRegistration.native",
         "room.moveCost.native",
         "terrain.passability.native",
+        "structure.quota.native",
     ]));
     let slots = vec![
         SlotDescriptor {
@@ -601,7 +679,7 @@ pub fn link() -> Contribution {
             namespace: "builtin".into(),
             api_version: 1,
             revision:
-                "link-creep-store-move-combat-build-incoming-contest-admission-obstacle-precheck-pull-cost-ranges-static-precheck-movegate-terrain-v17"
+                "link-creep-store-move-combat-build-incoming-contest-admission-obstacle-precheck-pull-cost-ranges-static-precheck-movegate-terrain-quota-v18"
                     .into(),
             code_digest: {
                 let mut hash = Sha256::new();

@@ -170,7 +170,7 @@ fn extractor_active(w: &Working, ex_owner: &Option<String>) -> bool {
     let Some(ctl) = crate::settle::structure_rcl_prologue(w, owner) else {
         return false;
     };
-    super::controller_allowed("extractor", ctl.level as i64) > 0
+    crate::settle::structures::allowed_for(w, "extractor", i64::from(ctl.level)) > 0
 }
 
 /// 计算存活 WORK 的能量采集功率，包含 harvest boost。

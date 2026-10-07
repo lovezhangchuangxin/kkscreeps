@@ -30,8 +30,8 @@ pub fn calc_spawns(w: &mut Working) {
     mark_off(w, &mut extensions, "extension", rcl, ctl_pos);
 }
 
-fn allowed_count(structure_type: &str, rcl: i64) -> usize {
-    super::controller_allowed(structure_type, rcl).max(0) as usize
+fn allowed_count(w: &Working, structure_type: &str, rcl: i64) -> usize {
+    super::structures::allowed_for(w, structure_type, rcl).max(0) as usize
 }
 
 fn mark_off(
@@ -41,7 +41,7 @@ fn mark_off(
     rcl: i64,
     ctl_pos: Option<(u8, u8)>,
 ) {
-    let allowed = allowed_count(structure_type, rcl);
+    let allowed = allowed_count(w, structure_type, rcl);
     if items.len() <= allowed {
         for (id, _) in items.iter() {
             set_off(w, *id, structure_type, false);
@@ -392,11 +392,11 @@ fn structure_active_against_controller(
     if ctl.level < 1 || ctl.owner.as_deref() != Some(spawn.owner.as_str()) {
         return false;
     }
-    let mut allowed = allowed_count("spawn", ctl.level as i64);
+    let mut allowed = allowed_count(w, "spawn", i64::from(ctl.level));
     if allowed == 0 {
         return false;
     }
-    if allowed_count("spawn", 8) == 1 {
+    if allowed_count(w, "spawn", 8) == 1 {
         return true;
     }
     let object_dist = chebyshev((spawn.x, spawn.y), (ctl.x, ctl.y));

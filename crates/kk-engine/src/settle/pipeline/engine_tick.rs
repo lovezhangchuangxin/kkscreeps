@@ -129,6 +129,7 @@ impl Engine {
                 combat: self.combat,
                 move_gate: self.move_gate,
                 terrain_passability: self.terrain_passability,
+                quotas: self.quotas.clone(),
                 resources: self.resources.clone(),
                 buildings: self.buildings.clone(),
                 contrib: self.contrib.clone(),

@@ -88,15 +88,68 @@ fn link_rules_extract_builtin_defaults() {
     assert_eq!(rules.cooldown, kk_core::constants::LINK_COOLDOWN);
     assert_eq!(rules.loss_ratio, kk_core::constants::LINK_LOSS_RATIO);
     assert_eq!(rules.build_cost, 5000);
+}
+
+#[test]
+fn structure_quota_snapshot_builtin_defaults() {
+    // G11.a：配额族逐型逐级与官方表键集一致，默认值即官方值；
+    // link 配额并入本族（原 link.rcl0..8 快照字段已删）。
+    let frozen = plan(vec![builtin::link()]).unwrap();
+    let snapshot = builtin::StructureQuotaSnapshot::from_plan(frozen.rules()).unwrap();
     let quotas: serde_json::Value =
         serde_json::from_str(kk_core::constants::CONTROLLER_STRUCTURES).unwrap();
-    for level in 0..=8 {
-        assert_eq!(
-            rules.rcl[level],
-            quotas["link"][level.to_string()].as_i64().unwrap_or(0),
-            "RCL {level} 配额应与官方表一致"
-        );
+    for (stype, levels) in quotas.as_object().unwrap() {
+        for (level, value) in levels.as_object().unwrap() {
+            let level_i: i64 = level.parse().unwrap();
+            assert_eq!(
+                snapshot.get(stype, level_i),
+                Some(value.as_i64().unwrap()),
+                "{stype} RCL {level} 配额应与官方表一致"
+            );
+        }
     }
+    // 官方无的级别键不声明（link rcl0）：get 返回 None。
+    assert_eq!(snapshot.get("link", 0), None);
+    assert_eq!(snapshot.get("link", 9), None, "级别越界 None");
+    // 折叠表：无覆盖时与官方表全表同值同键形（含键序保真，经
+    // workspace 的 serde_json preserve_order）。
+    let folded = snapshot.fold_controller_structures();
+    assert_eq!(folded, quotas);
+    assert!(folded["link"].as_object().unwrap().get("0").is_none());
+}
+
+#[test]
+fn structure_quota_snapshot_rejects_incomplete_plan() {
+    // 不含配额族的计划在装配期整体拒绝，不留半填充快照；错误指名
+    // 首个缺失键（迭代序随 serde_json feature 图而定，只断言键前缀）。
+    let empty = plan(vec![module("none")]).unwrap();
+    let error = builtin::StructureQuotaSnapshot::from_plan(empty.rules()).unwrap_err();
+    assert!(
+        error.contains("builtin:structure.quota."),
+        "错误应指名缺失的配额键：{error}"
+    );
+}
+
+#[test]
+fn structure_quota_snapshot_follows_override() {
+    let mut contrib = override_rule("mods", Number::Signed(400));
+    contrib.overrides.push(RuleOverride {
+        rule: key("builtin:structure.quota.tower.rcl8"),
+        value: Number::Signed(50),
+    });
+    contrib.overrides.push(RuleOverride {
+        rule: key("builtin:structure.quota.link.rcl5"),
+        value: Number::Signed(3),
+    });
+    let frozen = plan(vec![builtin::link(), contrib]).unwrap();
+    let snapshot = builtin::StructureQuotaSnapshot::from_plan(frozen.rules()).unwrap();
+    assert_eq!(snapshot.get("tower", 8), Some(50), "覆盖生效");
+    assert_eq!(snapshot.get("tower", 7), Some(3), "未覆盖级保持官方值");
+    assert_eq!(snapshot.get("link", 5), Some(3), "link 并入本族可覆盖");
+    let folded = snapshot.fold_controller_structures();
+    assert_eq!(folded["tower"]["8"].as_i64().unwrap(), 50);
+    assert_eq!(folded["tower"]["7"].as_i64().unwrap(), 3);
+    assert_eq!(folded["link"]["5"].as_i64().unwrap(), 3);
 }
 
 #[test]

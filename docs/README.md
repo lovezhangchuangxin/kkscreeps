@@ -19,7 +19,7 @@
 | 如何从检查点+日志重放并核对完整状态？ | [输入日志（回放节）](architecture/input-log.md) |
 | 玩家行为应满足什么要求，如何验证？ | [兼容性设计](designs/compatibility.md)、[验收工具](../compat/README.md) |
 | 为什么采用 Rust、V8 和当前模块边界？ | [决策索引](decisions/README.md) |
-| 当前 Mod 处理链和自主对象 tick 怎样执行？ | [Mod 处理链执行](architecture/mod-execution.md)、[自有对象 tick](architecture/mod-object-tick.md)、[对象操作](architecture/mod-objects.md)、[组合诊断](architecture/mod-composition.md)、[有效规则读取](architecture/mod-rules.md)、[新世界内容选择](architecture/mod-content-selection.md)、[资源目录](architecture/mod-resource-catalog.md)、[可建造建筑](architecture/mod-buildings.md)、[战斗领域](architecture/combat.md)、[移动领域](architecture/movement.md)、[玩家预检规则](architecture/player-precheck-rules.md) |
+| 当前 Mod 处理链和自主对象 tick 怎样执行？ | [Mod 处理链执行](architecture/mod-execution.md)、[自有对象 tick](architecture/mod-object-tick.md)、[对象操作](architecture/mod-objects.md)、[组合诊断](architecture/mod-composition.md)、[有效规则读取](architecture/mod-rules.md)、[新世界内容选择](architecture/mod-content-selection.md)、[资源目录](architecture/mod-resource-catalog.md)、[可建造建筑](architecture/mod-buildings.md)、[战斗领域](architecture/combat.md)、[移动领域](architecture/movement.md)、[玩家预检规则](architecture/player-precheck-rules.md)、[建筑 RCL 配额规则](architecture/structure-quota.md) |
 | 作者如何获得玩家面 TypeScript 声明？ | [玩家类型生成](architecture/mod-types.md) |
 | 作者如何看到 Mod 拒绝/故障与回退过程？ | [运行 trace](architecture/mod-trace.md) |
 | 独立 JS Mod 距完整玩法还有哪些缺口，接下来怎样开发？ | [当前接手台账](plans/mod-next-batches.md)、[完整玩法计划](plans/mod-complete-gameplay.md)；历史差距分析见[专项复查](research/09-mod-capability-current-audit.md) |

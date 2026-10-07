@@ -67,7 +67,6 @@ fn rule_overrides_flow_into_transfer_settlement() {
         ("link.lossRatio", kk_mod_api::Number::Float(0.5)),
         ("link.cooldown", kk_mod_api::Number::Signed(3)),
     ]);
-    let links = rules_of(&plan);
 
     let mut f = Fixture::new(7, terrain_with(&[]));
     // CONTROLLER_STRUCTURES 中 link 的 rcl0..4 配额为 0、rcl5 起
@@ -107,7 +106,7 @@ fn rule_overrides_flow_into_transfer_settlement() {
             ..IntentData::bare()
         },
     );
-    f.settle_with_rules(batch, links);
+    f.settle_with_rules(batch, &plan);
 
     let d1 = data_of(&f, l1);
     let d2 = data_of(&f, l2);
@@ -149,7 +148,7 @@ fn rule_overrides_flow_into_transfer_settlement() {
             })
             .unwrap();
     }
-    f.settle_with_rules(batch, links);
+    f.settle_with_rules(batch, &plan);
     let d1 = data_of(&f, l1);
     let d2 = data_of(&f, l2);
     assert_eq!(d1["store"]["energy"], json!(375), "只进钳后 50−损耗 25");
@@ -163,10 +162,9 @@ fn rule_override_rcl_quota_gates_transfer() {
     // 常量表，kk-core 生成物），与覆盖值形成分歧窗口；若配额查表
     // 而不读规则，转移会错误通过。
     let plan = frozen_plan(&[
-        ("link.rcl5", kk_mod_api::Number::Signed(0)),
-        ("link.rcl8", kk_mod_api::Number::Signed(0)),
+        ("structure.quota.link.rcl5", kk_mod_api::Number::Signed(0)),
+        ("structure.quota.link.rcl8", kk_mod_api::Number::Signed(0)),
     ]);
-    let links = rules_of(&plan);
 
     let mut f = Fixture::new(7, terrain_with(&[]));
     f.controller(5, Some("p1"));
@@ -204,7 +202,7 @@ fn rule_override_rcl_quota_gates_transfer() {
             ..IntentData::bare()
         },
     );
-    f.settle_with_rules(batch, links);
+    f.settle_with_rules(batch, &plan);
     let d1 = data_of(&f, l1);
     assert_eq!(d1["store"]["energy"], json!(300), "配额为 0 时转移被拒");
 }
@@ -217,7 +215,6 @@ fn rule_overrides_flow_into_self_transfer() {
         ("link.lossRatio", kk_mod_api::Number::Float(0.5)),
         ("link.cooldown", kk_mod_api::Number::Signed(3)),
     ]);
-    let links = rules_of(&plan);
 
     let mut f = Fixture::new(7, terrain_with(&[]));
     f.controller(5, Some("p1"));
@@ -244,7 +241,7 @@ fn rule_overrides_flow_into_self_transfer() {
             ..IntentData::bare()
         },
     );
-    f.settle_with_rules(batch, links);
+    f.settle_with_rules(batch, &plan);
     let d1 = data_of(&f, l1);
     // 自转移先过自身余量钳（300+200>400 → amount=100），再扣损耗
     // ceil(100*0.5)=50：300−50=250；距离 0，冷却增加 3×0=0。
@@ -258,10 +255,9 @@ fn rule_override_rcl_quota_gates_player_site_creation() {
     // CONTROLLER_STRUCTURES 的 link rcl5=2（官方常量表，kk-core
     // 生成物）；覆盖为 0 形成分歧窗口——若配额查表而不读规则，工地照建。
     let plan = frozen_plan(&[
-        ("link.rcl5", kk_mod_api::Number::Signed(0)),
-        ("link.rcl8", kk_mod_api::Number::Signed(0)),
+        ("structure.quota.link.rcl5", kk_mod_api::Number::Signed(0)),
+        ("structure.quota.link.rcl8", kk_mod_api::Number::Signed(0)),
     ]);
-    let links = rules_of(&plan);
 
     let mut f = Fixture::new(7, terrain_with(&[]));
     f.controller(5, Some("p1"));
@@ -276,7 +272,7 @@ fn rule_override_rcl_quota_gates_player_site_creation() {
             name: None,
         },
     );
-    f.settle_with_rules(batch, links);
+    f.settle_with_rules(batch, &plan);
     let sites = f
         .world
         .room("W1N1")
@@ -293,7 +289,6 @@ fn rule_override_rcl_quota_gates_player_site_creation() {
 #[test]
 fn rule_override_build_cost_flows_into_player_site() {
     let plan = frozen_plan(&[("link.buildCost", kk_mod_api::Number::Signed(120))]);
-    let links = rules_of(&plan);
 
     let mut f = Fixture::new(7, terrain_with(&[]));
     f.controller(5, Some("p1"));
@@ -308,7 +303,7 @@ fn rule_override_build_cost_flows_into_player_site() {
             name: None,
         },
     );
-    f.settle_with_rules(batch, links);
+    f.settle_with_rules(batch, &plan);
     let site = f
         .world
         .room("W1N1")
@@ -333,7 +328,6 @@ fn rule_override_hits_max_caps_tower_repair() {
         ("link.hitsMax", kk_mod_api::Number::Signed(600)),
         ("link.hits", kk_mod_api::Number::Signed(100)),
     ]);
-    let links = rules_of(&plan);
 
     let mut f = Fixture::new(7, terrain_with(&[]));
     // RCL5 使 CONTROLLER_STRUCTURES 的 link 配额非零：native 转移可
@@ -361,7 +355,7 @@ fn rule_override_hits_max_caps_tower_repair() {
             ..IntentData::bare()
         },
     );
-    f.settle_with_rules(batch, links);
+    f.settle_with_rules(batch, &plan);
     let d = data_of(&f, link);
     assert_eq!(d["hits"], json!(600), "修复钳到覆盖的 hitsMax=600");
 }

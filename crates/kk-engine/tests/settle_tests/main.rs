@@ -318,6 +318,7 @@ impl Fixture {
                 stores: kk_world::place::builtin_store_rules(),
                 combat: kk_world::place::builtin_combat_ranges(),
                 move_gate: Default::default(),
+                quotas: std::rc::Rc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
                 terrain_passability: Default::default(),
                 resources: Default::default(),
                 contrib: std::rc::Rc::new(
@@ -337,12 +338,31 @@ impl Fixture {
         events
     }
 
-    /// 以显式 link 有效规则结算，供规则覆盖贯穿类场景使用。
-    fn settle_with_rules(&mut self, batch: IntentBatch, links: kk_mod_api::builtin::LinkRules) {
-        self.settle_with(
+    /// 以计划的有效规则结算（link 与配额快照同源），供规则覆盖贯穿类
+    /// 场景使用。
+    fn settle_with_rules(&mut self, batch: IntentBatch, plan: &kk_mod_api::ContributionPlan) {
+        let links = kk_mod_api::builtin::LinkRules::from_plan(plan.rules()).unwrap();
+        let quotas = std::rc::Rc::new(
+            kk_mod_api::builtin::StructureQuotaSnapshot::from_plan(plan.rules()).unwrap(),
+        );
+        let extensions = kk_mod_api::extension::ExtensionCatalog::default();
+        self.settle_with_plane(
             batch,
-            links,
-            std::rc::Rc::new(kk_engine::settle::contrib::ContributionDispatch::default()),
+            kk_engine::settle::Plane {
+                buildings: Default::default(),
+                links,
+                stores: kk_world::place::builtin_store_rules(),
+                combat: kk_world::place::builtin_combat_ranges(),
+                move_gate: Default::default(),
+                quotas,
+                terrain_passability: Default::default(),
+                resources: Default::default(),
+                contrib: std::rc::Rc::new(
+                    kk_engine::settle::contrib::ContributionDispatch::default(),
+                ),
+                extensions: std::rc::Rc::new(extensions),
+                plan: kk_engine::settle::builtin_plan(),
+            },
         );
     }
 
@@ -370,6 +390,7 @@ impl Fixture {
                 stores: kk_world::place::builtin_store_rules(),
                 combat: kk_world::place::builtin_combat_ranges(),
                 move_gate: Default::default(),
+                quotas: std::rc::Rc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
                 terrain_passability: Default::default(),
                 resources: Default::default(),
                 contrib: dispatch,

@@ -94,7 +94,7 @@ fn competition(
 ) -> anyhow::Result<(EmbedEngine, Vec<String>, String)> {
     let alpha = package(
         r#"
-api.rules.override('builtin:link.rcl6',6);
+api.rules.override('builtin:structure.quota.link.rcl6',6);
 api.handlers.before('builtin:link.transfer',{id:'pre'},ctx=>{ctx.state={count:(ctx.state?.count||0)+1};ctx.target.fields.cooldown=0;});
 api.handlers.wrap('builtin:link.transfer',{id:'outer'},(ctx,next)=>{
   try{next()}catch(e){}
