@@ -2,6 +2,44 @@
 //! 一致性与代价槽后检查点冷恢复。位置语义见夹具 README。
 use super::*;
 
+// 两个独立测试只共享同一场景的只读基准报告；保存/恢复仍各起真实新进程。
+// OnceLock 的作用域仅是当前测试进程，不跨构建缓存身份或世界状态。
+fn reference_reports()
+-> anyhow::Result<&'static std::collections::BTreeMap<&'static str, [Value; 2]>> {
+    type Reports = std::collections::BTreeMap<&'static str, [Value; 2]>;
+    static REPORTS: std::sync::OnceLock<Result<Reports, String>> = std::sync::OnceLock::new();
+    REPORTS
+        .get_or_init(|| {
+            let collect = || -> anyhow::Result<Reports> {
+                let fixture = Fixture::new()?;
+                let mut reports = Reports::new();
+                for name in ["plain", "swampwalker", "bog", "combined"] {
+                    let scene = Path::new(env!("CARGO_MANIFEST_DIR"))
+                        .join("../../compat/fixtures/sim-mod-move-cost")
+                        .join(format!("scenario-{name}.json"))
+                        .canonicalize()?;
+                    let mut channels = Vec::new();
+                    for binary in [false, true] {
+                        let (code, report) = run(
+                            &scene,
+                            &fixture.0.join(format!("{name}-{binary}.json")),
+                            4,
+                            binary,
+                            1,
+                        )?;
+                        anyhow::ensure!(code == 0, "基准场景 {name}/{binary} 失败：{report}");
+                        channels.push(report);
+                    }
+                    reports.insert(name, channels.try_into().expect("恰好两个投影通道"));
+                }
+                Ok(reports)
+            };
+            collect().map_err(|error| format!("{error:#}"))
+        })
+        .as_ref()
+        .map_err(|error| anyhow::anyhow!(error.clone()))
+}
+
 fn stable_final(report: &Value) -> Value {
     let mut result = report["final"].clone();
     for player in result["players"].as_object_mut().unwrap().values_mut() {
@@ -22,14 +60,7 @@ fn move_cost_packages_compose_across_channels_and_resume_state() -> anyhow::Resu
         let mut references = Vec::new();
         for binary in [false, true] {
             let prefix = format!("{name}-{binary}");
-            let (code, expected) = run(
-                &scene,
-                &fixture.0.join(format!("{prefix}-reference.json")),
-                4,
-                binary,
-                1,
-            )?;
-            assert_eq!(code, 0, "{expected}");
+            let expected = &reference_reports()?[name][usize::from(binary)];
             let checkpoint = fixture.0.join(format!("{prefix}-checkpoint.json"));
             let resumed = fixture.0.join(format!("{prefix}-resumed.json"));
             let invoke = |ticks: &str, report: &Path, option: &str| -> anyhow::Result<i32> {
@@ -59,12 +90,12 @@ fn move_cost_packages_compose_across_channels_and_resume_state() -> anyhow::Resu
             );
             assert_eq!(invoke("2", &resumed, "--load-checkpoint")?, 0);
             let actual: Value = serde_json::from_slice(&std::fs::read(resumed)?)?;
-            assert_eq!(stable_final(&actual), stable_final(&expected));
+            assert_eq!(stable_final(&actual), stable_final(expected));
             assert_eq!(actual["plan_hash"], expected["plan_hash"]);
             assert_eq!(actual["composition"], expected["composition"]);
             references.push(expected);
         }
-        assert_eq!(stable_final(&references[0]), stable_final(&references[1]));
+        assert_eq!(stable_final(references[0]), stable_final(references[1]));
         assert_eq!(references[0]["plan_hash"], references[1]["plan_hash"]);
         hashes.insert(references[0]["plan_hash"].as_str().unwrap().to_string());
     }
@@ -77,7 +108,6 @@ fn move_cost_overrides_gate_expected_movement_cadence() -> anyhow::Result<()> {
     // swampwalker 把无路沼泽压到平原当量（scout 续走）；bog 全量翻倍
     // （平原隔 tick、沼泽停走）；组合由 after 层压回；原生对照沼泽
     // 一步即停、平原每 tick 前进。
-    let fixture = Fixture::new()?;
     let expected = [
         ("plain", "scout", json!([20, 25])),
         ("plain", "walker", json!([8, 25])),
@@ -89,18 +119,7 @@ fn move_cost_overrides_gate_expected_movement_cadence() -> anyhow::Result<()> {
         ("combined", "walker", json!([7, 25])),
     ];
     for (name, alias, value) in expected {
-        let scene = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../compat/fixtures/sim-mod-move-cost")
-            .join(format!("scenario-{name}.json"))
-            .canonicalize()?;
-        let (code, report) = run(
-            &scene,
-            &fixture.0.join(format!("{name}-gates.json")),
-            4,
-            false,
-            1,
-        )?;
-        assert_eq!(code, 0, "{report}");
+        let report = &reference_reports()?[name][0];
         assert_eq!(
             report["final"]["players"]["p1"]["memory"]["positions"][alias], value,
             "场景 {name}"

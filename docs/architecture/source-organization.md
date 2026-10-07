@@ -80,3 +80,7 @@ V8 生命周期账本位于 `kk-vm/src/isolate_order.rs`，玩家沙箱与 Mod r
 移动静态判定在 `kk-engine/src/settle/movement/static_obstacles.rs`，由登记和仲裁共用；`movement/precheck.rs` 保存登记拒绝快照与 JS 决策，`movement/inputs.rs` 投影输入及提交瞬态放行。专项测试在 `kk-runtime/tests/mod_chain_tests/move_static.rs` 与 `kk-cli/tests/sim_tests/move_static.rs`，避免继续扩大原预检测试文件。移动玩家门快照 `MoveGate` 与规则声明同在 `kk-mod-api/src/builtin.rs`（战斗射程先例），专项测试在 `kk-runtime/tests/mod_chain_tests/move_gate.rs` 与 `kk-cli/tests/sim_tests/move_playergate.rs`。
 
 开发中定向验证使用 `pnpm run check -- kk-cli --test sim_tests --filter move_static`：先发现实际测试，空匹配报错；格式、Clippy、当前 CLI 构建及工具/文档门禁仍执行，Rust 部分只验收所选目标。每步输出耗时供定位成本；无参数完整门禁保持全部目标。定向通过不代表完整验收，也不改变真实进程冷恢复场景的断言与轮数。
+
+CLI 的开发/测试构建仅对 `sha2` 依赖启用 `opt-level = 3`。`sim run` 仍逐进程读取并计算完整可执行文件的 SHA-256，检查点身份校验保持；未复用摘要或跳过恢复门。业务 crate 的优化级别不变，release 配置不变。
+
+`sim_tests` 的移动代价和竞争策略模块在同一测试进程内共享只读基准报告，每个场景仍由当前 CLI 分别运行 JSON/KKPV 通道；行为与组合断言分别保留，保存/恢复过程仍各起新进程。报告不跨构建持久缓存，收集失败返回错误。开发时按受影响领域选择 `--filter move_cost` 或 `--filter move_policy`；同时修改共享模拟/恢复机制时扩大到 `--test sim_tests`，改变构建配置时执行无参数完整门禁。

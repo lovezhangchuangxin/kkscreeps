@@ -45,3 +45,11 @@ paste = "1"
 
 [workspace.lints.clippy]
 all = { level = "deny" }
+
+# sim 每个真实 CLI 进程都校验完整可执行文件；只优化 SHA-256 依赖，
+# 不跳过摘要或降低检查点身份门，业务代码仍保持开发/测试构建行为。
+[profile.dev.package.sha2]
+opt-level = 3
+
+[profile.test.package.sha2]
+opt-level = 3
