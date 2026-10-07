@@ -31,7 +31,7 @@ export interface WorldJson {
   objects: Array<RoomObjectState & { room?: string }>;
 }
 
-/** 导出器 JSONL 的一行（export_fixtures.rs 产物）。 */
+/** 导出器 JSONL 的一行（`kkscreeps export-fixtures` 子命令产物）。 */
 export interface WorldJsonTick {
   tick: number;
   world: WorldJson;

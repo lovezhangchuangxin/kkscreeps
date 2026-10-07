@@ -11,6 +11,8 @@
 > **2026-10-07 合并收尾**：分支已合并回 main（merge commit `fe55614`，零冲突），`.worktrees/renderer/`
 > worktree 与 `f2-renderer` 分支已清理——**R7 后续工作直接在 main 上继续**（正文提及的 worktree
 > 环境与分支名仅作历史快照）；export-fixtures 行为已在合并前端到端验证（6 夹具 × 4 快照全部生成）。
+> 同日 `export_fixtures.rs` 已按职责拆分为 `export_fixtures/{mod,factories,static_scenes,motion_scenes}.rs`
+> （纯搬移，mod.rs 持编排+测试），拆分后 6 夹具 × 31 tick 产物与拆分前逐字节一致，源码规模门禁转绿。
 
 > 当前有效入口：黑屏修复已提交`2bf8558`；随后继续RoomVisual性能/内存优化，
 > 见[新复核报告](../research/notes/renderer-visual-reuse-verification-2026-10-01.md)。

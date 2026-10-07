@@ -4,7 +4,7 @@
 
 ## 运行入口
 
-`kk-cli` 构建可执行程序 `kkscreeps`。各命令的实现位于其 `src/main.rs`、`embed_main.rs`、`bot_check.rs`、`perf_probe.rs` 和 `mod_perf_probe.rs`。
+`kk-cli` 构建可执行程序 `kkscreeps`。命令分派在 `src/main.rs`，各命令实现位于 `src/` 下对应模块（`sim/`、`export_fixtures/` 等目录模块随子命令增长）。
 
 | 命令 | 当前行为 |
 |---|---|
@@ -13,9 +13,10 @@
 | `perf-probe` | 在采集、升级和孵化负载下测量投影、玩家执行、结算与整轮耗时 |
 | `mod-perf-probe` | 同一 link 冷却负载的 native、空 Mod 与完整处理链纯结算对照；逐对象验证状态与链位计数 |
 | `sim run` | 加载版本化 JSON 场景与玩家模块，推进真实世界、检查断言并写报告，见[本地场景模拟](local-simulation.md) |
+| `export-fixtures` | 只读导出渲染器夹具：固定 seed 的脚本世界推进 N tick，逐 tick 落 world_json（JSONL，确定性输出，前端 build-fixtures 消费） |
 | `serve`、`test`、`import` | 预留入口，调用时返回“尚未实现”和退出码 2 |
 
-`embed` 使用自定义的 `{id, method, params}` / `{id, ok, result或error}` 消息格式，不是标准 JSON-RPC 2.0，也不提供网络监听。接入方式见 [兼容性验收](../../compat/README.md)。当前没有 `export` 子命令。
+`embed` 使用自定义的 `{id, method, params}` / `{id, ok, result或error}` 消息格式，不是标准 JSON-RPC 2.0，也不提供网络监听。接入方式见 [兼容性验收](../../compat/README.md)。
 
 目标是让服务器与本地开发工具共用引擎实现，减少规则分叉；不同配置、输入和外部环境仍需分别验证，不能仅凭共用二进制保证运行结果一致。开发工具设计见 [dev-kit.md](../designs/dev-kit.md)。
 
