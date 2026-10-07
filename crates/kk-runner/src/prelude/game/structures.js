@@ -67,7 +67,7 @@
     // isActive 的配额表（官方 utils.js:470 读 driver.constants 同款注入）
     CONTROLLER_STRUCTURES: freezeConst(globalThis.CONTROLLER_STRUCTURES),
   };
-  gw.__structuresC = C; // structures_spawn.js 复用此常量表。
+  gw.__structuresC = C; // structures-spawn.js 复用此常量表。
 
   // Store 的资源缺省值与容量规则参考上游 engine/src/game/store.js 的 Store。
 
@@ -92,7 +92,7 @@
 
   /** 创建 Store：资源真值作为自有键，已知资源缺键读 0，其他缺键读 undefined。
    * 方法为非枚举属性；总量 _sum 在实例内首次读取时缓存。
-   * 游戏对象的 store getter 还受 _registry.js 的字段缓存影响，不能假定每次访问都创建新 Store。
+   * 游戏对象的 store getter 还受 registry.js 的字段缓存影响，不能假定每次访问都创建新 Store。
    * 来源：上游 engine/src/game/store.js 的 Store。 */
   function Store(object) {
     const storeData = object.store || {};
@@ -166,7 +166,7 @@
   }
   gw.Store = Store;
   // 官方安装形（store.js:99 Object.defineProperty(globals,'Store',...) 无
-  // writable）：非可写绑定——_registry 段不再装 Store 桩（非可写会挡掉本安装）
+  // writable）：非可写绑定——registry.js 不再装 Store 桩（非可写会挡掉本安装）
   Object.defineProperty(globalThis, 'Store', { enumerable: true, value: Store });
 
   /** 官方 _storeGetter（structures.js:62-64 / creeps.js:37-39）：吃整个 raw
@@ -336,6 +336,6 @@
   function now() {
     return gw.world.time;
   }
-  gw.now = now; // structures_spawn.js 的 controller 方法复用此时间读取函数。
+  gw.now = now; // structures-spawn.js 的 controller 方法复用此时间读取函数。
 
 })();

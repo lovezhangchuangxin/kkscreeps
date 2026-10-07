@@ -1,5 +1,5 @@
 /* 墓碑与废墟的历史对象视图：描述死亡或销毁时的数据。
- * 从 structures_spawn.js 按领域拆出（源码行数门）；依赖同段装配的 gw 机制。
+ * 从 structures-spawn.js 按领域拆出（源码行数门）；依赖同段装配的 gw 机制。
  */
 (() => {
   'use strict';

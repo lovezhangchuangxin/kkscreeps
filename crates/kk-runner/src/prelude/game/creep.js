@@ -1,5 +1,5 @@
 /* 定义 Creep 字段、移动、采集与战斗方法，并记录通过预检的玩家指令。
- * getter 的缓存与当前 tick 回查由 _registry.js 管理；资源和控制器方法续于 creep_resources.js。
+ * getter 的缓存与当前 tick 回查由 registry.js 管理；资源和控制器方法续于 creep-resources.js。
  * moveTo 走 findPathTo 真路径并维护官方 _move 记忆缓存（结构代价归回调文档）。
  */
 (() => {
@@ -151,7 +151,7 @@
     STRUCTURE_NUKER: globalThis.STRUCTURE_NUKER,
     STRUCTURE_POWER_BANK: globalThis.STRUCTURE_POWER_BANK,
   };
-  gw.__creepC = C; // creep_resources.js 复用此常量表。
+  gw.__creepC = C; // creep-resources.js 复用此常量表。
 
   // 官方 _hasActiveBodypart（game/creeps.js:9-17 的等价物）：hits>0 的指定部件数
   function countActiveParts(body, type) {
