@@ -48,7 +48,8 @@
 | `kk-runtime/src/run.rs` | 玩家执行参数、结果分类和未提交的指令/Memory/CPU 候选；由 crate 根导出，结算引擎不拥有这些类型 |
 | `kk-runtime/src/embed.rs` | 分片状态、管理和诊断入口；`embed/setup.rs` 配置校验与创建，`embed/placement.rs` 原子批量放置，`execution.rs` 玩家候选和失败重试，`embed/input_log.rs` 逐轮提交后的输入日志（G25.a），`embed/replay.rs` 段重建与回放配对（G25.b），`projection.rs` KKPV 与市场视图，`mod_chain.rs` Mod 候选桥，`switch.rs` 无开放轮次的包切换 |
 | `kk-runner/src/sandbox.rs` | V8 实例生命周期、运行与写回；`sandbox/prelude.rs` 内嵌脚本清单、基础环境和 Mod 玩家面装配，`sandbox/host.rs` 捕获宿主句柄与生命周期调用，`inject.rs` 每轮 JSON/KKPV 与 CPU 窗口注入 |
-| `kk-runner/src/prelude/game/game.js` | 世界注入、Game 装配和指令收集；`memory.js` 持有 RawMemory/segments 状态与写回，`market.js` 持有每轮市场视图缓存与指令 |
+| `kk-runner/src/prelude/game/game.js` | 玩家对象索引与 Game 装配、当前实例；`map.js` 持有每 tick 地图/路由/绘图实例，`intents.js` 持有指令清单与虚拟计费；`memory.js` 持有 RawMemory/segments 状态与写回，`market.js` 持有每轮市场视图缓存与指令 |
+| `kk-runner/src/prelude/runtime/world-tick.js` | JSON/KKPV 共用世界注入与 tick 初始化顺序；一次性捕获 Memory/CJS/指令桥，并由 Game 入口传入刷新函数，向宿主提供既有 memoryWorld 句柄 |
 | `kk-runner/src/prelude/game/room.js` | 只装配公开属性、Memory/事件日志及玩家原型；`room/queries.js` 持有单房间类型/空间索引和出口缓存，`pathfinding.js` 持有按 Room 身份隔离的矩阵，`terrain.js` 安全拷出地形，`visual.js` 持有房间/map 绘图缓冲，`creation.js` 提供创建预检与指令方法 |
 
 Rust 子模块通过父模块保留既有公开路径；跨子模块的内部操作使用受限可见性，不能因拆文件把内部候选暴露为新的外部写能力。KKPV 合并通过视图的公开读方法访问目录与元数据，保持视图内部字段私有。
@@ -57,7 +58,7 @@ Prelude 按职责使用 `runtime/`、`game/`、`mods/` 与 `host.js`，JS 文件
 
 Room 子段先装配地形、绘图、查询、创建和寻路，再执行 Room 入口，随后保持其余玩家 API 的原加载顺序。Room 入口在装配期捕获工厂；查询索引和出口缓存每 tick 新建，原始对象列表仅传给创建预检和私有寻路缓存，不挂为玩家属性。方法属性插入、原型设置、probe 与 WeakMap 登记顺序保持，地形拷贝和索引装配仍使用捕获的内建函数。
 
-JS 的 Memory、市场和 Game 分别持有闭包。加载清单先执行 Memory 和市场，再装配 Game；Game 在加载期捕获桥函数，Rust 捕获宿主句柄后删除临时 `__kkp`。tick 中不能重新查找这一全局。RawMemory 重建、CJS 重绑、Memory getter 安装的先后顺序保持不变，两个世界投影通道共享该流程。
+JS 的 Memory、市场、地图、指令和 Game 分别持有闭包。加载清单先执行 Memory/市场，再注册地图/指令工厂和世界注入桥，最后装配 Game；跨模块函数在加载期捕获，Rust 捕获宿主句柄后删除临时 `__kkp`。tick 中不能重新查找这一全局。RawMemory 重建、CJS 重绑、Memory getter 安装的先后顺序保持不变，两个世界投影通道共享该流程。Game 入口先刷新初始实例、登记 currentGame，再初始化指令收集器并连接宿主桥；每 tick 在原始对象索引建立后重置指令，在 Memory/CJS 和地形/API 重置之后刷新 Game。地图工厂每次装配新建路由缓存和惰性 MapVisual，保持公开方法与探针的插入顺序。
 
 V8 生命周期账本位于 `kk-vm/src/isolate_order.rs`，玩家沙箱与 Mod realm 共用；`kk-mod-host/src/realm/lifecycle.rs` 只负责冷恢复最后切换时的 Enter/Exit 配对。
 

@@ -18,7 +18,7 @@
   // ---------------------------------------------------------------- per-tick 状态
   // 官方 structures.js:7/:27 的模块级闭包 createdCreepNames——make 每 tick
   // 重置（同 tick 同名拒、跨 tick 由 Game.creeps 接管）。等价物：gw.perTickReset
-  // 钩子由 game.js beginTick 调用（官方 game/structures.js make 的重置位）。
+  // 钩子由 runtime/world-tick.js beginTick 调用（官方 game/structures.js make 的重置位）。
   let createdCreepNames = [];
   const deprecatedShown = [];
   (gw.perTickReset = gw.perTickReset || []).push(() => {

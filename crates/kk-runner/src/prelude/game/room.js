@@ -1,5 +1,5 @@
 /* 根据当前世界数据装配可见 Room，提供 find、look、地形、创建指令与绘图接口。
- * 每 tick 重建房间对象和查询缓存；地形数组由 game.js 的 beginTick 注入。
+ * 每 tick 重建房间对象和查询缓存；地形数组由 runtime/world-tick.js 的 beginTick 注入。
  * findPath 走带房间代价矩阵的原生搜索；绘图数据仅保留在本 tick 的缓冲区。
  * 来源：上游 engine/src/game/rooms.js 与 console.js 的玩家接口。
  */

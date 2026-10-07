@@ -16,7 +16,7 @@
 
   let codeStamp = 0; // 官方 userCodeTimestamp 等价物（重绑时 bump）
   let latestStamp = 0;
-  // 当前查看者由 game.js 的 beginTick 更新；此段加载时世界状态尚未装配。
+  // 当前查看者由 world-tick.js 的 beginTick 更新；此段加载时世界状态尚未装配。
   let currentUser;
 
   function makeRequire() {
