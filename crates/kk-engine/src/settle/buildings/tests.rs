@@ -377,3 +377,84 @@ fn building_record_schema_is_enforced_at_edit_restore_and_publication() {
         );
     }
 }
+
+/// 完整回写直接使用命名空间键，递归规范化不能触及输入或失败候选。
+#[test]
+fn qualified_fields_normalize_nested_values_only_after_complete_validation() {
+    use kk_mod_api::{NumberDomain, ValueKind, ValueSchema};
+    let float = ValueSchema {
+        kind: ValueKind::Number(NumberDomain::Float {
+            min: 0.0,
+            max: 100.0,
+        }),
+        nullable: true,
+    };
+    let mut heat = field("heat", 1000, kk_mod_api::FieldDefault::Missing);
+    heat.schema = ValueSchema {
+        kind: ValueKind::Record {
+            fields: BTreeMap::from([
+                (
+                    "samples".into(),
+                    ValueSchema {
+                        kind: ValueKind::Array {
+                            element: Box::new(float.clone()),
+                            max_len: 10,
+                        },
+                        nullable: false,
+                    },
+                ),
+                (
+                    "ratios".into(),
+                    ValueSchema {
+                        kind: ValueKind::Map {
+                            value: Box::new(float),
+                            max_len: 10,
+                            max_key_bytes: 32,
+                        },
+                        nullable: false,
+                    },
+                ),
+            ]),
+            optional: BTreeSet::new(),
+        },
+        nullable: false,
+    };
+    let (mut w, id) = working_with_gauge();
+    w.plane.buildings = std::rc::Rc::new(
+        kk_mod_api::buildings::BuildingCatalog::from_plan(&gauge_plan_with_fields(vec![
+            heat,
+            field("cycles", 10000, kk_mod_api::FieldDefault::Missing),
+        ]))
+        .unwrap(),
+    );
+    let before = record(&w, id);
+    let mut proposed = before.clone();
+    proposed["bl:heat"] = serde_json::json!({"samples": [2, null], "ratios": {"x": 3}});
+    assert!(
+        w.update_building_fields(id, &proposed)
+            .unwrap_err()
+            .contains("缺少字段 cycles")
+    );
+    assert_eq!(record(&w, id), before);
+    proposed["bl:cycles"] = serde_json::json!(1);
+    let input = proposed.clone();
+    w.update_building_fields(id, &proposed).unwrap();
+    let actual = record(&w, id);
+    assert!(
+        actual["bl:heat"]["samples"][0]
+            .as_number()
+            .unwrap()
+            .is_f64()
+    );
+    assert!(
+        actual["bl:heat"]["ratios"]["x"]
+            .as_number()
+            .unwrap()
+            .is_f64()
+    );
+    assert!(actual["bl:heat"]["samples"][1].is_null());
+    assert_eq!(actual["hits"], before["hits"]);
+    assert_eq!(actual["store"], before["store"]);
+    assert!(actual.get("heat").is_none());
+    assert_eq!(proposed, input);
+}

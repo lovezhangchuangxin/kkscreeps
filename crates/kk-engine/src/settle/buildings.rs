@@ -364,10 +364,7 @@ impl Working {
             }
             _ => unreachable!("上面已判 Generic"),
         };
-        let proposed = record
-            .as_object()
-            .ok_or("target.fields 终值须为对象")?
-            .clone();
+        let proposed = record.as_object().ok_or("target.fields 终值须为对象")?;
         // 原生键（不含冒号）整体比对：任何漂移都拒绝，防止生命周期 tick
         // 顺带改写耐久/库存/归属绕开各自结算域。
         let mut native_equal = true;
@@ -380,18 +377,6 @@ impl Working {
                 break;
             }
         }
-        let custom_current: serde_json::Map<String, Value> = current
-            .as_object()
-            .expect("记录是对象")
-            .iter()
-            .filter(|(key, _)| key.contains(':'))
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
-        let custom_proposed: serde_json::Map<String, Value> = proposed
-            .iter()
-            .filter(|(key, _)| key.contains(':'))
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
         if !native_equal {
             return Err(format!(
                 "建筑 {st} 的原生记录键（耐久/库存/归属等）只读；自定义键以冒号命名空间区分"
@@ -407,29 +392,14 @@ impl Working {
                 ));
             }
         }
-        // 冗余自定义键先点名拒绝：下方目录校验以去命名空间的字段短名
-        // 构造载荷（与 Mod 对象 payload 同一入口），未声明键不先拦截会
-        // 静默落出校验载荷。
-        for key in custom_proposed.keys() {
-            if !building.fields.iter().any(|f| f.key.as_str() == key) {
-                return Err(format!("{st}: 字段 {key} 未在建筑中声明"));
-            }
-        }
-        // 校验载荷用字段短名；存储键保持 {ns}:{name} 与原生键结构不相交。
-        let mut validation = serde_json::Map::new();
-        for field in &building.fields {
-            let name = kk_mod_api::validate::field_name(&field.key);
-            if let Some(value) = custom_proposed.get(field.key.as_str()) {
-                validation.insert(name.to_string(), value.clone());
-            }
-        }
-        let mut fields = Value::Object(validation);
-        kk_mod_api::validate::check_object_payload(
-            &fields,
-            &building.fields,
-            &building.key.to_string(),
+        // 建筑目录直接消费命名空间键，不再复制为对象短名载荷再映回。
+        let fields = building.prepare_fields(
+            proposed
+                .iter()
+                .filter(|(key, _)| key.contains(':'))
+                .map(|(key, value)| (key.clone(), value.clone()))
+                .collect(),
         )?;
-        kk_mod_api::validate::normalize_object_payload(&mut fields, &building.fields);
         // 首触原值进链日志（拒绝/回滚按既有机制恢复整个对象）。
         if self.chain_mutations.as_ref().is_some_and(|log| {
             !log.iter()
@@ -443,18 +413,10 @@ impl Working {
                 .push(ChainMutation::ModUpdated(id, Box::new(original)));
         }
         // 以当前原生键 + 新自定义键重组记录：原生键始终取当前候选值。
-        let mut merged = current.clone();
+        let mut merged = current;
         let merged_object = merged.as_object_mut().expect("记录是对象");
-        for key in custom_current.keys() {
-            merged_object.remove(key);
-        }
-        let normalized = fields.as_object().expect("payload 已规范化");
-        for field in &building.fields {
-            let name = kk_mod_api::validate::field_name(&field.key);
-            if let Some(value) = normalized.get(name) {
-                merged_object.insert(field.key.as_str().to_string(), value.clone());
-            }
-        }
+        merged_object.retain(|key, _| !key.contains(':'));
+        merged_object.extend(fields);
         if let Some(RoomObject::Generic(g)) = self.room.objects.get_mut(&id) {
             g.data = merged.to_string();
         }

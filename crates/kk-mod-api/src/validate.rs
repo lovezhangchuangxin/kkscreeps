@@ -132,24 +132,58 @@ pub fn field_name(field: &Key) -> &str {
     field.as_str().split_once(':').expect("Key 含分隔符").1
 }
 
-/// 校验 Mod 类型对象的完整字段 payload：必须是 JSON 对象，键集合与
-/// 描述符声明的字段完全一致（未知键拒绝、缺字段拒绝），逐字段按
-/// schema 校验。写入侧（创建与处理器回写）共用此入口，保证存储中的
-/// payload 恒为已校验形态。
-/// 把 payload 数值按字段域改写为规范 backing：Float 域统一浮点
-/// backing（整数 backing 会让 KKPV 列式编码在同桶混派 Int/Float 列型，
-/// 使整轮投影失败——JSON 通道数值语义不变）。嵌套 schema（record/
-/// array/map 成员）同样递归规范化。调用方在 `check_object_payload`
-/// 通过后调用；未知键已被 check 拒绝，此处防御跳过。
-pub fn normalize_object_payload(payload: &mut Value, fields: &[FieldDescriptor]) {
-    let Some(map) = payload.as_object_mut() else {
-        return;
-    };
+/// 字段在对象载荷中使用短名，在建筑记录中使用命名空间全名。
+#[derive(Clone, Copy)]
+pub(crate) enum FieldKeys {
+    Short,
+    Qualified,
+}
+
+impl FieldKeys {
+    fn key(self, field: &FieldDescriptor) -> &str {
+        match self {
+            Self::Short => field_name(&field.key),
+            Self::Qualified => field.key.as_str(),
+        }
+    }
+}
+
+/// 整集写入要求全部声明字段；默认值由创建入口负责，不在此补齐。
+/// 错误仍用字段短名定位，键集合的额外约束由各领域入口检查。
+pub(crate) fn check_required_fields(
+    map: &serde_json::Map<String, Value>,
+    fields: &[FieldDescriptor],
+    keys: FieldKeys,
+    context: &str,
+) -> Result<(), String> {
     for field in fields {
         let name = field_name(&field.key);
-        if let Some(value) = map.get_mut(name) {
+        let Some(value) = map.get(keys.key(field)) else {
+            return Err(format!("{context}: 缺少字段 {name}"));
+        };
+        check_value(value, &field.schema, &format!("{context} / {name}"))?;
+    }
+    Ok(())
+}
+
+pub(crate) fn normalize_fields(
+    map: &mut serde_json::Map<String, Value>,
+    fields: &[FieldDescriptor],
+    keys: FieldKeys,
+) {
+    for field in fields {
+        if let Some(value) = map.get_mut(keys.key(field)) {
             normalize_value(value, &field.schema);
         }
+    }
+}
+
+/// 把已通过 `check_object_payload` 的短名字段按 schema 递归规范化。
+/// Float 域统一浮点 backing，避免 KKPV 同桶混派 Int/Float 列型；
+/// JSON 数值语义不变，未知键防御跳过。
+pub fn normalize_object_payload(payload: &mut Value, fields: &[FieldDescriptor]) {
+    if let Some(map) = payload.as_object_mut() {
+        normalize_fields(map, fields, FieldKeys::Short);
     }
 }
 
@@ -186,6 +220,7 @@ pub(crate) fn normalize_value(value: &mut Value, schema: &ValueSchema) {
     }
 }
 
+/// 校验对象短名载荷：须为对象，拒绝缺字段、域外值和未声明键。
 pub fn check_object_payload(
     payload: &Value,
     fields: &[FieldDescriptor],
@@ -194,13 +229,7 @@ pub fn check_object_payload(
     let Some(map) = payload.as_object() else {
         return Err(format!("{context}: 字段 payload 须为 JSON 对象"));
     };
-    for field in fields {
-        let name = field_name(&field.key);
-        let Some(value) = map.get(name) else {
-            return Err(format!("{context}: 缺少字段 {name}"));
-        };
-        check_value(value, &field.schema, &format!("{context} / {name}"))?;
-    }
+    check_required_fields(map, fields, FieldKeys::Short, context)?;
     for key in map.keys() {
         if !fields.iter().any(|f| field_name(&f.key) == key) {
             return Err(format!("{context}: 字段 {key} 未在类型中声明"));

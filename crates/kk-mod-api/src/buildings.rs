@@ -79,6 +79,32 @@ impl BuildingDescriptor {
         Ok(())
     }
 
+    /// 准备整体回写的自定义字段：只接受命名空间全名，先拒绝未知键，
+    /// 再校验全部声明字段并递归规范化。即使有默认值也不能省略字段；
+    /// 原生记录键与候选日志由引擎写面负责，不经过此入口。
+    pub fn prepare_fields(
+        &self,
+        mut fields: serde_json::Map<String, serde_json::Value>,
+    ) -> Result<serde_json::Map<String, serde_json::Value>, String> {
+        for key in fields.keys() {
+            if !self.fields.iter().any(|field| field.key.as_str() == key) {
+                return Err(format!("{}: 字段 {key} 未在建筑中声明", self.key));
+            }
+        }
+        crate::validate::check_required_fields(
+            &fields,
+            &self.fields,
+            crate::validate::FieldKeys::Qualified,
+            self.key.as_str(),
+        )?;
+        crate::validate::normalize_fields(
+            &mut fields,
+            &self.fields,
+            crate::validate::FieldKeys::Qualified,
+        );
+        Ok(fields)
+    }
+
     /// 总工程点数 = 最大成本量。工地 progress_total 与各资源比例分母共用。
     pub fn progress_total(&self) -> u64 {
         self.cost
