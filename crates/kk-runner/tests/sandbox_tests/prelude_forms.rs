@@ -329,3 +329,59 @@ pub(super) fn shared_targets_and_deprecation_lifetime() -> anyhow::Result<()> {
     sb.settle_bill();
     Ok(())
 }
+
+/// 移动模块使用私有编解码函数；路径缓存跨 tick 使用真实当前位置截断。
+pub(super) fn movement_codec_capture_and_cache_lifetime() -> anyhow::Result<()> {
+    let mut sb = Sandbox::new(SandboxConfig::default())?;
+    let mut table = ModuleTable::new();
+    table.insert_js("main", "module.exports.loop = function () {};");
+    sb.set_modules(table)?;
+    let mut w = world();
+    sb.begin_tick(&w)?;
+    sb.run_loop()?;
+    let v = sb.run_expr(
+        r#"(() => {
+      const decode = Room.deserializePath;
+      Room.serializePath = Room.deserializePath = () => {throw new Error('player replacement');};
+      const rc = Game.creeps.w1.moveTo(30,25,{reusePath:20});
+      const path = Memory.creeps.w1._move.path;
+      return {rc, pathType:typeof path, first:decode(path)[0], internal:typeof globalThis.__kkp};
+    })()"#,
+    )?;
+    assert_eq!(v["value"]["rc"], 0, "移动使用预置序列化器: {v:?}");
+    assert_eq!(v["value"]["pathType"], "string");
+    assert_eq!(v["value"]["internal"], "undefined");
+    let first = v["value"]["first"].clone();
+    assert!(first["x"].is_number() && first["y"].is_number());
+    sb.end_tick()?;
+    sb.settle_bill();
+    w["time"] = json!(2);
+    w["objects"][0]["x"] = first["x"].clone();
+    w["objects"][0]["y"] = first["y"].clone();
+    sb.begin_tick(&w)?;
+    sb.run_loop()?;
+    let v = sb.run_expr(
+        r#"(() => {
+      const before = Memory.creeps.w1._move.path;
+      const rc = Game.creeps.w1.moveTo(30,25,{reusePath:20,noPathFinding:true,
+        costCallback() {throw new Error('cache must be reused');}});
+      let malformed;
+      try {Game.creeps.w1.moveByPath('abc');} catch(e) {malformed = e.message;}
+      return [rc, typeof Memory.creeps.w1._move.path,
+        before !== Memory.creeps.w1._move.path, malformed];
+    })()"#,
+    )?;
+    assert_eq!(
+        v["value"],
+        json!([
+            0,
+            "string",
+            true,
+            "`path` is not a valid serialized path string"
+        ]),
+        "缓存应按新位置截断，且不调用玩家路径静态或重寻路: {v:?}"
+    );
+    sb.end_tick()?;
+    sb.settle_bill();
+    Ok(())
+}

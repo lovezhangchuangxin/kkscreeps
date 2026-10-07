@@ -96,7 +96,7 @@
   // 官方 utils.js:555-575 serializePath 逐字（Room 静态形态，rooms.js:528-530）：
   // 非数组抛 'path is not an array'、空数组 ''、首元素负坐标抛 'path
   // coordinates cannot be negative'、两位零填充起点 + 逐元素 direction 拼接。
-  // deserializePath 静态在 creep.js 挂（实现段在那，加载序 creep 后于 room）
+  // deserializePath 由 creep/movement.js 持有，creep.js 在原安装阶段挂到 Room 静态。
   function serializePath(path) {
     if (!_.isArray(path)) {
       throw new Error('path is not an array');

@@ -183,7 +183,11 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
         kkpv_shared_bundle_cross_thread_impl,
     )?;
     // LIFO 零违规断言在**全部**场景之后——中段断言会让其后场景的违规漏网
-    scenarios.finish(57)?;
+    scenarios.run(
+        "movement_codec_capture_and_cache_lifetime",
+        movement_codec_capture_and_cache_lifetime,
+    )?;
+    scenarios.finish(58)?;
     assert_eq!(kk_runner::lifo_violations(), 0, "全流程 LIFO 纪律零违规");
     Ok(())
 }

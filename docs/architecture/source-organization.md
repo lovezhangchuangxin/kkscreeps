@@ -50,6 +50,7 @@
 | `kk-runner/src/sandbox.rs` | V8 实例生命周期、运行与写回；`sandbox/prelude.rs` 内嵌脚本清单、基础环境和 Mod 玩家面装配，`sandbox/host.rs` 捕获宿主句柄与生命周期调用，`inject.rs` 每轮 JSON/KKPV 与 CPU 窗口注入 |
 | `kk-runner/src/prelude/game/game.js` | 玩家对象索引与 Game 装配、当前实例；`map.js` 持有每 tick 地图/路由/绘图实例，`intents.js` 持有指令清单与虚拟计费；`memory.js` 持有 RawMemory/segments 状态与写回，`market.js` 持有每轮市场视图缓存与指令 |
 | `kk-runner/src/prelude/runtime/world-tick.js` | JSON/KKPV 共用世界注入与 tick 初始化顺序；一次性捕获 Memory/CJS/指令桥，并由 Game 入口传入刷新函数，向宿主提供既有 memoryWorld 句柄 |
+| `kk-runner/src/prelude/game/creep/movement.js` | 移动参数解析、路径解码与 `_move` 缓存生命周期；入口分别安装路径静态与移动方法，传入同一规则常量/部件检查 |
 | `kk-runner/src/prelude/game/targets.js` | 当前 tick 的 creep/structure 存在性检查及 lodash 口径序列化对象拒绝；消费者加载期捕获，公开实例判定仍由动作完成 |
 | `kk-runner/src/prelude/runtime/deprecation.js` | 共用弃用提示与本 tick 去重状态；捕获原 console，原结构 tick 钩子在孵化名称重置后调用诊断重置 |
 | `kk-runner/src/prelude/game/structure-api.js` | 结构动作与孵化/诊断 tick 重置编排；孵化及字段安装阶段在原位置显式调用 |
@@ -70,6 +71,8 @@ JS 的 Memory、市场、地图、指令和 Game 分别持有闭包。加载清�
 结构字段模块持有通用字段表及字段装配选择规则，入口只捕获核心字段、装配器与专用字段三个安装函数。专用时间/资源字段和 Mod 建筑字段沿用 raw 回查，不复制为入口状态；实例级兜底属性仍可遮蔽对应原型 getter，缺失字段、资源容量及地形/对象类型排除保持。字段阶段与孵化/动作的交错顺序保持，Spawning 在 InvaderCore getter 使用前登记。
 
 目标检查及弃用诊断在 registry 之后、Room/Creep 之前注册，消费者在加载期捕获；结构模块不再替早于自身加载的 API 提供运行期函数登记。存活检查每次查询当前 rawById，不捕获某一 tick 的 Map；实例类型和动作顺序仍由调用方决定。Creep.moveTo 与结构共享 lodash 判定的序列化对象拒绝，资源 API 保留预置 Object/primitive-string 的独立口径，不能合并成同一种拒绝语义。
+
+Creep 移动工厂在加载期捕获原 Room 序列化器及 registry/lodash，私有解析函数和路径解码器不依赖玩家可替换的静态方法。入口先在原位置安装 Room 路径解码静态方法，再捕获共享规则常量、定义字段，最后在原动作位置安装 move/moveTo/moveByPath；采集/战斗及资源/控制器动作沿用原顺序。移动模块直接维护调用方的 Memory `_move`，不增加独立 tick 缓存，不改变 noPathFinding、缓存过期/截断、可视化及指令边界。
 
 V8 生命周期账本位于 `kk-vm/src/isolate_order.rs`，玩家沙箱与 Mod realm 共用；`kk-mod-host/src/realm/lifecycle.rs` 只负责冷恢复最后切换时的 Enter/Exit 配对。
 
