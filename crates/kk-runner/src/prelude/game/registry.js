@@ -102,10 +102,46 @@
   ];
   // Store 不在本表：真类由 structures 段安装（官方 store.js:99 defineProperty
   // 同形）——本表的非可写安装会挡掉那次唯一重绑
-  function makeStubClass(name) {
-    const ctor = function () {
-      countStub('new ' + name);
-    };
+  //
+  // id 构造器（官方 game 各文件的 class 定义形）按类分四款签名：
+  // - guardedId（Creep/Structure/OwnedStructure/Structure*，creeps.js:60-65、
+  //   structures.js:39-56）：`if(id)` 假参空实例；Structure 族先挂 id 再挂
+  //   room/pos（官方键序），Creep 族反之。
+  // - strictId（Source/Mineral/Deposit/Resource/Tombstone/Ruin/Nuke/
+  //   ConstructionSite，sources.js:19-31 等）：无守卫，假参走 rawData 抛
+  //   官方文案（`Could not find an object with ID undefined`）。
+  // - powerCreep（power-creeps.js:34-40）：不抛、无条件挂 id，仅记录带
+  //   room 时才挂 room/pos（power 域未启用，语义先行对齐）。
+  // - flag（flags.js:20-26）：六参 (name,color,secondaryColor,roomName,x,y)，
+  //   不挂 id——sites-flags.js 已按此口径装配旗实例。
+  // 位置初始化与官方 RoomObject 构造器（rooms.js:1648-1658）同构：room 取
+  // 当前 Game.rooms 实例（官方 register.rooms 同款引用语义）、pos 官方
+  // RoomPosition、effects 真值即挂（空数组也挂空表——官方同款）。
+  // 已知有意分歧：官方 Structure 构造器会重指 room.controller/storage/
+  // terminal 到新实例（structures.js:46/50/54），本实现不重指——装配实例
+  // 与 getObjectById 保持同引用；官方手动构造会翻转该身份，无套件或
+  // bot 依赖，登记缺口。
+  const ROOM_OBJECT_EFFECT_KEYS = ['power', 'effect', 'level', 'ticksRemaining'];
+  function roomObjectInit(x, y, roomName, effects) {
+    const game = gw.currentGame && gw.currentGame();
+    this.room = game && game.rooms ? game.rooms[roomName] : undefined;
+    this.pos = new gw.RoomPosition(x, y, roomName);
+    if (effects) {
+      const live = [];
+      for (let i = 0; i < effects.length; i++) {
+        const e = effects[i];
+        if (e && e.ticksRemaining > 0) {
+          const item = {};
+          for (let k = 0; k < ROOM_OBJECT_EFFECT_KEYS.length; k++) {
+            item[ROOM_OBJECT_EFFECT_KEYS[k]] = e[ROOM_OBJECT_EFFECT_KEYS[k]];
+          }
+          live.push(item);
+        }
+      }
+      this.effects = live;
+    }
+  }
+  function classShell(name, ctor) {
     Object.defineProperty(ctor, 'name', { value: name });
     return new Proxy(ctor, {
       get(t, prop) {
@@ -116,14 +152,62 @@
       },
     });
   }
+  const STRICT_ID_CLASSES = new Set(['Source', 'Mineral', 'Deposit', 'Resource',
+    'Tombstone', 'Ruin', 'Nuke', 'ConstructionSite']);
+  function makeGameObjectClass(name, signature) {
+    let ctor;
+    if (signature === 'roomObjectArgs') {
+      ctor = function (x, y, roomName, effects) {
+        roomObjectInit.call(this, x, y, roomName, effects);
+      };
+    } else if (signature === 'flag') {
+      ctor = function (flagName, color, secondaryColor, roomName, x, y) {
+        roomObjectInit.call(this, Number(x), Number(y), roomName);
+        this.name = flagName;
+        this.color = Number(color);
+        this.secondaryColor = Number(secondaryColor || color);
+      };
+    } else if (signature === 'powerCreep') {
+      ctor = function (id) {
+        const raw = __reflectApply(__mapGet, gw.rawById, [id]);
+        if (raw && raw.room) {
+          roomObjectInit.call(this, raw.x, raw.y, raw.room);
+        }
+        this.id = id;
+      };
+    } else {
+      const strict = STRICT_ID_CLASSES.has(name);
+      const idFirst = name === 'Structure' || name === 'OwnedStructure'
+        || name.startsWith('Structure');
+      ctor = function (id) {
+        if (strict || id) {
+          const raw = gw.rawData(id);
+          if (idFirst) this.id = id;
+          roomObjectInit.call(this, raw.x, raw.y, raw.room, raw.effects);
+          if (!idFirst) this.id = id;
+        }
+      };
+    }
+    return classShell(name, ctor);
+  }
+  function makeStubClass(name) {
+    return classShell(name, function () {
+      countStub('new ' + name);
+    });
+  }
   // 官方安装形（creeps.js:1123 defineProperty(globals,'Creep',{enumerable:true,
   // value}) 无 writable）：类全局绑定不可交换——玩家侧 instanceof/new 走真类，
   // 原型补丁（bot 生态唯一官方支持的扩展形）照常生效（绑定非可写 ≠ 对象冻结）
   for (const name of GAME_CLASS_NAMES) {
     if (globalThis[name] === undefined) {
+      const signature = name === 'RoomObject' ? 'roomObjectArgs'
+        : name === 'Room' ? undefined
+          : name === 'Flag' ? 'flag'
+            : name === 'PowerCreep' ? 'powerCreep' : 'id';
       Object.defineProperty(globalThis, name, {
         enumerable: true,
-        value: makeStubClass(name),
+        value: signature === undefined ? makeStubClass(name)
+          : makeGameObjectClass(name, signature),
       });
     }
   }

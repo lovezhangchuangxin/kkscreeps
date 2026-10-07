@@ -241,6 +241,103 @@ pub(super) fn storage_terminal_backfill_e2e_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// ID 构造器批（2026-10-08）：官方游戏类构造器吃 id 回查投影并挂
+/// id/pos/room 自有属性（官方 creeps.js:8-15 `if(id){data(id);
+/// RoomObject.call(...); this.id=id}`）；子类 extends 官方类经 super(id)
+/// 保留子类原型；无参构造空实例；未知 id 抛官方文案。
+pub(super) fn id_constructor_reconstruction_impl() -> anyhow::Result<()> {
+    let mut e = EmbedEngine::new();
+    e.create_shard(&json!({
+        "players": ["p1"],
+        "rooms": [{ "name": "W1N1", "rcl": 4, "owner": "p1" }],
+    }))?;
+    let creep_id = e.place_object(
+        "W1N1",
+        "creep",
+        &json!({ "pos": [10, 10], "owner": "p1", "body": ["move", "work"],
+                 "name": "ctor-pin", "store": { "energy": 50 } }),
+    )?;
+    e.place_object(
+        "W1N1",
+        "structure",
+        &json!({ "pos": [12, 12], "structureType": "spawn", "owner": "p1",
+                 "name": "Spawn1", "store": { "energy": 50 } }),
+    )?;
+    e.tick(1)?;
+    let run = e.run_player(
+        "p1",
+        &r#"(function () {
+            class RoleCreep extends Creep { constructor(id) { super(id); } }
+            const live = Game.getObjectById(CREEP_ID);
+            const made = new Creep(CREEP_ID);
+            const role = new RoleCreep(CREEP_ID);
+            const empty = new Creep();
+            return [
+                made instanceof Creep, made.id === live.id, made.name,
+                made.pos.x, made.pos.y, made.pos.roomName, made.room.name,
+                made.store.energy,
+                role instanceof RoleCreep, role instanceof Creep, role.name,
+                'id' in empty, Object.keys(empty).length,
+            ];
+        })()"#
+            .replace("CREEP_ID", &format!("{:?}", creep_id)),
+    )?;
+    let v = &run.expr["value"];
+    assert_eq!(v[0], true, "instanceof 构造类");
+    assert_eq!(v[1], true, "id 等于活对象");
+    assert_eq!(v[2], "ctor-pin", "原型 getter 经 rawData 回查");
+    assert_eq!(v[3], 10);
+    assert_eq!(v[4], 10);
+    assert_eq!(v[5], "W1N1", "pos 自有属性");
+    assert_eq!(v[6], "W1N1", "room 取当前 Game 实例");
+    assert_eq!(v[7], 50, "store getter 同源");
+    assert_eq!(v[8], true, "子类保留子类原型");
+    assert_eq!(v[9], true, "子类同时 instanceof 官方类");
+    assert_eq!(v[10], "ctor-pin", "super(id) 同款回查");
+    assert_eq!(v[11], false, "无参构造空实例");
+    assert_eq!(v[12], 0, "空实例无自有键");
+    // 未知 id：官方 data(id) 抛同款文案
+    let miss = e.run_player(
+        "p1",
+        r#"(function () { try { new Creep('kkdeadbeef'); return 'no-throw'; } catch (err) { return err.message; } })()"#,
+    )?;
+    assert_eq!(
+        miss.expr["value"], "Could not find an object with ID kkdeadbeef",
+        "未知 id 官方文案"
+    );
+    // strictId 族（sources.js:19-31 无守卫）：假参同样抛错而非空实例；
+    // Flag 六参构造器（flags.js:20-26）不挂 id；Structure 族键序 id 在前。
+    let extra = e.run_player(
+        "p1",
+        r#"(function () {
+            const strictThrow = (function () { try { new Source(); return 'no-throw'; } catch (err) { return err.message; } })();
+            const spawnId = Object.keys(Game.structures)[0];
+            const structKeys = Object.keys(new Structure(spawnId));
+            const flag = new Flag('f1', 1, 2, 'W1N1', 10, 11);
+            return [ strictThrow, structKeys[0],
+                     flag.name, flag.color, flag.secondaryColor,
+                     flag.pos.x, flag.pos.y, flag.pos.roomName, 'id' in flag ];
+        })()"#,
+    )?;
+    let x = &extra.expr["value"];
+    assert_eq!(
+        x[0], "Could not find an object with ID undefined",
+        "strictId 族假参抛官方文案"
+    );
+    assert_eq!(
+        x[1], "id",
+        "Structure 族键序 id 在前（官方 structures.js:39-45）"
+    );
+    assert_eq!(x[2], "f1");
+    assert_eq!(x[3], 1);
+    assert_eq!(x[4], 2);
+    assert_eq!(x[5], 10);
+    assert_eq!(x[6], 11);
+    assert_eq!(x[7], "W1N1");
+    assert_eq!(x[8], false, "Flag 构造器不挂 id");
+    Ok(())
+}
+
 /// 对象形状批（2026-10-08）：结构类字段表按官方类层次挂原型，兜底桶
 /// 不再把 energy/store 族泄漏到官方无这些 getter 的类型——官方
 /// structures.js StructureRoad 仅 ticksToDecay、StructureTower 三件族。

@@ -25,13 +25,22 @@
   // 忽略 Promise 检查、序列化和内部坐标探测等常见属性访问，降低诊断噪声。
   // 这些豁免只影响诊断；不存在的属性仍返回 undefined。
   const PROBE_IGNORE = new Set(['then', 'constructor', '__proto__', 'prototype', 'inspect', 'toJSON', 'nodeType', 'length', 'name', 'pos', '__packedPos', 'x', 'y']);
-  // 仅豁免 Flag.ref 和 StructureSpawn.storeCapacity 的缺失诊断。
-  // 按标签冒号前的类名判断；旗帜名中包含冒号不影响分类。
+  // 仅豁免 Flag.ref、StructureSpawn.storeCapacity 与 Room 挂载三键的缺失诊断。
+  // Room.controller/storage/terminal 官方为「结构存在才有键」（structures.js:41-56
+  // 构造器挂载）——建造前读 undefined 属官方语义，逐 tick 的建造前探测不是
+  // 缺 API。按标签冒号前的类名判断；旗帜名中包含冒号不影响分类。
   // 来源：上游 engine/src/game/flags.js 与 structures.js 的属性定义。
-  const PROBE_IGNORE_SCOPED = new Set(['Flag.ref', 'StructureSpawn.storeCapacity']);
+  const PROBE_IGNORE_SCOPED = new Set(['Flag.ref', 'StructureSpawn.storeCapacity',
+    'Room.controller', 'Room.storage', 'Room.terminal']);
   const classOfLabel = (basePath) => {
-    const i = basePath.indexOf(':');
-    return i === -1 ? basePath : basePath.slice(0, i);
+    // 两段剥离：冒号前（命名对象如 'Creep:采集者'）与方括号前（带名标签
+    // 如 'Room[W1N1]'）——都取类名部分做豁免匹配。
+    let s = basePath;
+    const i = s.indexOf(':');
+    if (i !== -1) s = s.slice(0, i);
+    const b = s.indexOf('[');
+    if (b !== -1) s = s.slice(0, b);
+    return s;
   };
   function probe(target, basePath) {
     return new Proxy(target, {
