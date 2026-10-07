@@ -5,11 +5,10 @@
 //! 提示）。生成内容对同一（注册输入、选择集）恒定；--check 与磁盘
 //! **字节**对比（编辑器改行尾同样判过期），缺失、过期或被手改都以
 //! 非零退出（区别于注册失败的 1），供作者与 CI 当门禁。
-use crate::{output_guard, report::write_report};
+use crate::support::{paths as output_guard, write_report};
 use anyhow::Context;
-use kk_mod_host::{ContentSelection, ModRealm, RegisterOptions, discover_packages};
+use kk_mod_host::ModRealm;
 use serde_json::{Value, json};
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 pub struct Options {
@@ -100,27 +99,16 @@ fn execute(options: &Options) -> anyhow::Result<(i32, Value)> {
 }
 
 fn generate(options: &Options) -> anyhow::Result<String> {
-    let root = std::fs::canonicalize(&options.root).context("读取 Mod 包根目录")?;
-    let packages = discover_packages(&root)?;
-    let configs = match &options.configs {
-        Some(path) => serde_json::from_slice::<BTreeMap<String, Value>>(
-            &std::fs::read(path).context("读取 Mod 配置")?,
-        )
-        .context("配置须为按包 ID 分组的 JSON 对象")?,
-        None => BTreeMap::new(),
-    };
-    for id in configs.keys() {
-        anyhow::ensure!(packages.contains_key(id), "Mod 配置指定了未加载的包 {id}");
-    }
-    let selection = ContentSelection {
-        include: options.select.iter().cloned().collect(),
-        exclude: options.exclude.iter().cloned().collect(),
-    };
-    let register_options = RegisterOptions {
-        configs,
-        selection,
-        ..Default::default()
-    };
+    let super::registration::Input {
+        packages,
+        options: register_options,
+        ..
+    } = super::registration::prepare(
+        &options.root,
+        options.configs.as_deref(),
+        &options.select,
+        &options.exclude,
+    )?;
     let mut realm = ModRealm::with_options(&register_options)?;
     let registered = realm.register(&packages, register_options)?;
     kk_mod_api::typegen::player_declarations(&registered.plan)
@@ -140,5 +128,5 @@ fn validated_out(out: &Path, root: &Path) -> anyhow::Result<()> {
 }
 
 fn write_declarations(out: &Path, text: &str) -> anyhow::Result<()> {
-    crate::report::write_bytes(out, text.as_bytes())
+    crate::support::write_bytes(out, text.as_bytes())
 }

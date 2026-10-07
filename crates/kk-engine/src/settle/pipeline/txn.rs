@@ -7,20 +7,20 @@ use std::rc::Rc;
 use kk_world::RoomState;
 use serde_json::Value;
 
-use super::{NOTIFY_RECORD_CAP, NotifyRecord, PlayerState, SettleError, TickInput, market};
 use crate::intent::IntentBatch;
+use crate::settle::{NOTIFY_RECORD_CAP, NotifyRecord, PlayerState, SettleError, TickInput, market};
 
 /// 候选发布时的拥有数据：玩家候选、ID 游标与 Mod 状态候选。
 pub type PublishedCore = (BTreeMap<String, PlayerState>, u64, BTreeMap<String, Value>);
 
-pub(crate) struct SharedState {
+pub(in crate::settle) struct SharedState {
     /// 宿主不变式故障不能被 JS 捕获或链内 decline/游标回滚清除。
     fatal_error: Option<SettleError>,
-    pub(crate) next_id: u64,
-    pub(crate) players: BTreeMap<String, PlayerState>,
+    pub(in crate::settle) next_id: u64,
+    pub(in crate::settle) players: BTreeMap<String, PlayerState>,
     /// 各 Mod 命名空间的候选状态；随候选一起发布或丢弃。服务端私有，
     /// 不进玩家投影。
-    pub(crate) mod_states: BTreeMap<String, Value>,
+    pub(in crate::settle) mod_states: BTreeMap<String, Value>,
 }
 
 /// 本轮共享的玩家候选和 ID 分配器，不引用引擎中的已提交数据。
@@ -28,7 +28,7 @@ pub(crate) struct SharedState {
 /// 发布前必须释放房间规则持有的克隆，才能取回拥有的数据。
 #[derive(Clone)]
 pub struct TickState {
-    pub(crate) inner: Rc<RefCell<SharedState>>,
+    pub(in crate::settle) inner: Rc<RefCell<SharedState>>,
 }
 
 impl TickState {
@@ -70,7 +70,7 @@ impl TickState {
             .insert(namespace.to_string(), value);
     }
 
-    pub(crate) fn allocate_id(&self) -> Result<u64, SettleError> {
+    pub(in crate::settle) fn allocate_id(&self) -> Result<u64, SettleError> {
         let mut state = self.inner.borrow_mut();
         if let Some(error) = &state.fatal_error {
             return Err(error.clone());
@@ -85,7 +85,7 @@ impl TickState {
         Ok(id)
     }
 
-    pub(crate) fn record_fatal(&self, error: SettleError) -> SettleError {
+    pub(in crate::settle) fn record_fatal(&self, error: SettleError) -> SettleError {
         self.inner
             .borrow_mut()
             .fatal_error
@@ -93,7 +93,7 @@ impl TickState {
             .clone()
     }
 
-    pub(crate) fn check_fatal(&self) -> Result<(), SettleError> {
+    pub(in crate::settle) fn check_fatal(&self) -> Result<(), SettleError> {
         match &self.inner.borrow().fatal_error {
             Some(error) => Err(error.clone()),
             None => Ok(()),
@@ -101,20 +101,20 @@ impl TickState {
     }
 
     /// 当前 ID 游标；供链内快照记录，拒绝回滚插入对象时一并恢复。
-    pub(crate) fn peek_next_id(&self) -> u64 {
+    pub(in crate::settle) fn peek_next_id(&self) -> u64 {
         self.inner.borrow().next_id
     }
 
     /// 回滚 ID 游标；仅允许在已删除本链全部新插入对象后调用，
     /// 否则会出现游标复用。游标只能回退到快照值，不得前进。
-    pub(crate) fn restore_next_id(&self, snapshot: u64) {
+    pub(in crate::settle) fn restore_next_id(&self, snapshot: u64) {
         let mut state = self.inner.borrow_mut();
         if state.next_id > snapshot {
             state.next_id = snapshot;
         }
     }
 
-    pub(crate) fn add_gcl(&self, player: &str, amount: i64) {
+    pub(in crate::settle) fn add_gcl(&self, player: &str, amount: i64) {
         self.inner
             .borrow_mut()
             .players
@@ -123,7 +123,7 @@ impl TickState {
             .gcl += amount;
     }
 
-    pub(crate) fn claim_state(&self, player: &str) -> (usize, i64) {
+    pub(in crate::settle) fn claim_state(&self, player: &str) -> (usize, i64) {
         self.inner
             .borrow()
             .players
@@ -144,29 +144,29 @@ impl TickState {
 
 /// 引擎本轮的全部结算候选与固定输入；失败时直接丢弃。
 /// 协调器提供的 RawMemory、segments 和 CPU 桶值在校验阶段合并。
-pub(crate) struct OwnedTickTxn {
-    pub(crate) time: u64,
-    pub(crate) input: TickInput,
-    pub(crate) room_names: Vec<String>,
-    pub(crate) state: TickState,
-    pub(crate) batch: IntentBatch,
-    pub(crate) rooms: Vec<(String, RoomState)>,
-    pub(crate) events: Vec<Value>,
-    pub(crate) market: market::MarketState,
+pub(in crate::settle) struct OwnedTickTxn {
+    pub(in crate::settle) time: u64,
+    pub(in crate::settle) input: TickInput,
+    pub(in crate::settle) room_names: Vec<String>,
+    pub(in crate::settle) state: TickState,
+    pub(in crate::settle) batch: IntentBatch,
+    pub(in crate::settle) rooms: Vec<(String, RoomState)>,
+    pub(in crate::settle) events: Vec<Value>,
+    pub(in crate::settle) market: market::MarketState,
 }
 
 /// 已完成派生状态处理且不再共享的发布数据。
-pub(crate) struct PreparedTick {
-    pub(crate) rooms: Vec<(String, RoomState)>,
-    pub(crate) players: BTreeMap<String, PlayerState>,
-    pub(crate) next_id: u64,
-    pub(crate) events: Vec<Value>,
-    pub(crate) market: market::MarketState,
-    pub(crate) mod_states: BTreeMap<String, Value>,
+pub(in crate::settle) struct PreparedTick {
+    pub(in crate::settle) rooms: Vec<(String, RoomState)>,
+    pub(in crate::settle) players: BTreeMap<String, PlayerState>,
+    pub(in crate::settle) next_id: u64,
+    pub(in crate::settle) events: Vec<Value>,
+    pub(in crate::settle) market: market::MarketState,
+    pub(in crate::settle) mod_states: BTreeMap<String, Value>,
 }
 
 impl OwnedTickTxn {
-    pub(crate) fn into_prepared(self) -> Result<PreparedTick, SettleError> {
+    pub(in crate::settle) fn into_prepared(self) -> Result<PreparedTick, SettleError> {
         let (mut players, next_id, mod_states) = self.state.into_parts()?;
         for (player, intents) in &self.batch.users {
             if intents.notify.is_empty() {

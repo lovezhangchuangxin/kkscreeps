@@ -15,7 +15,7 @@
 | P1 并发与线程 CPU | 已有 RunEpoch 和错轮回执拒收单测；RunPlayer 命令内部已合并 begin_tick、执行与 end_tick | Memory 注入仍是独立命令；生产路径逐玩家同步等待，无有界派发/回收与接收期限；计费仍使用墙钟 |
 | P2 对照测量 | 已有本仓 perf-probe 和负载有效性检查 | 当前统计为墙钟阶段耗时及 p50/p95/max；缺少进程 CPU/RSS、p99 和三引擎同负载对照 |
 
-主要源码入口：[阶段与候选类型](../../../crates/kk-engine/src/settle/stages.rs)、[引擎结算与发布](../../../crates/kk-engine/src/settle/mod.rs)、[嵌入协调器](../../../crates/kk-runtime/src/embed.rs)、[执行器与回执检查](../../../crates/kk-runtime/src/lib.rs)、[线程协议](../../../crates/kk-runner/src/proto.rs)、[计费实现](../../../crates/kk-runner/src/sandbox.rs)、[性能负载](../../../crates/kk-cli/src/perf_probe.rs)。
+主要源码入口：[阶段与候选类型](../../../crates/kk-engine/src/settle/pipeline/stages.rs)、[引擎结算与发布](../../../crates/kk-engine/src/settle/mod.rs)、[嵌入协调器](../../../crates/kk-runtime/src/embed.rs)、[执行器与回执检查](../../../crates/kk-runtime/src/lib.rs)、[线程协议](../../../crates/kk-runner/src/proto.rs)、[计费实现](../../../crates/kk-runner/src/sandbox.rs)、[性能负载](../../../crates/kk-cli/src/probes/workload.rs)。
 
 ## 2. 需要优先补齐的正确性边界
 

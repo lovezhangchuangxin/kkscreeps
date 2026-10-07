@@ -12,12 +12,13 @@
 | `kk-world/src/world/mod.rs` | 世界容器与读入口；`mutation.rs` 管理隔离编辑和发布，`checkpoint.rs` 管理保存恢复 |
 | `kk-world/src/projection/mod.rs` | JSON 玩家投影装配；`visibility.rs` 负责可见性和字段投影，`object.rs` 负责对象编码，`find.rs` 负责查询匹配；旧 `world_json` 路径重导出保留 |
 | `kk-world/src/domain/` | Generic 字段/仓库解析与房间领域值；JSON、KKPV 和结算共享只读访问，不把写入规则放入投影层 |
+| `kk-mod-api/src/contribution/mod.rs` | 声明、规则合并、处理器排序、冻结、计划与指纹；构建实现私有，领域消费者从 crate 根读取稳定公共契约 |
 | `kk-mod-api/src/movement/` | 登记、预检、仲裁、准入、障碍和代价的领域表示；crate 根保留旧模块路径 |
 | `kk-engine/src/settle/movement/` | 移动请求、策略候选、静态判定、仲裁及输入；同领域代码共同导航 |
 | `kk-runtime/src/executor.rs` | 玩家执行接口、线程注册与待收集结果；crate 根只负责模块入口和公开导出 |
 | `kk-world/src/kkpv.rs` | 权威世界和 JSON 参考数据到块的转换；单元测试独立在 `kkpv/tests.rs` |
 | `kk-engine/src/intent.rs` | 动作集合、执行优先级与输入清洗；测试按 JSON 收集、动作语义和市场输入分组 |
-| `kk-engine/src/settle/mod.rs` | 世界引擎状态和控制入口；`working.rs` 候选构造和上下文，`working/` 按对象、字段、移动、掉落、链快照与首触日志组织，`room_loop.rs` 房间循环，`install.rs` 冻结计划接线，`engine_tick.rs` 世界阶段与发布，`validation.rs` 发布前校验 |
+| `kk-engine/src/settle/mod.rs` | 世界引擎状态和控制入口；`working.rs` 候选构造和上下文，`working/` 按对象、字段、移动、掉落、链快照与首触日志组织，`room_loop.rs` 房间循环，`install.rs` 冻结计划接线，`pipeline/` 持有候选阶段/事务/写回/校验/发布 |
 | `kk-engine/src/settle/contrib.rs` | 槽、处理器和续行类型及运行入口；`contrib/assemble.rs` 冻结表装配，`incoming.rs` 受击数值链与默认回退，`execute.rs` 内建动作/tick 链执行与 Hosted 局部恢复（资源两端/事件、移动请求登记、战斗/建造族对象/延迟队列/链内增删） |
 | `kk-engine/src/settle/creep/combat/damage_policy.rs` | 单体策略伤害的表示校验、战斗视图；默认/native 和策略应用共用 damage.rs 的生命值与死亡路径 |
 | `kk-engine/src/settle/creep/combat/heal_policy.rs` | 策略治疗表示校验，native/JS 共用队列、日志与事件登记；最终身体恢复由 damage.rs 处理 |
@@ -26,12 +27,17 @@
 | `kk-engine/src/settle/damage.rs` | 共用伤害/治疗应用、死亡与库存掉落；`damage/tough.rs` 独立计算原生 TOUGH 累计减伤，不写候选 |
 | `kk-engine/src/settle/creep/combat/batch_policy.rs` | 战斗分页与群体批量完整预检/应用；直接候选不变测试在 batch_policy/tests.rs |
 | `kk-engine/src/settle/resources.rs` | 资源领域读取与副本预检转账；`resources/generic.rs` 负责 native 容量与实验室槽写入；只读 Generic 解析复用 `kk-world/src/domain/generic.rs` |
+| `kk-engine/src/settle/pipeline/mod.rs` | `txn.rs` 独占世界候选，`stages.rs` 阶段状态，`writeback.rs` 玩家候选，`validation.rs` 发布前校验，`engine_tick.rs` 阶段推进与统一发布；内部候选访问限定在 settle |
+| `kk-mod-host/src/package/mod.rs` | `snapshot.rs` 磁盘发现/快照与摘要，`manifest.rs` 元数据/版本，`dependencies.rs` 依赖序，`selection.rs` 内容选择，`loader.rs` 同快照包内模块装载；realm 只消费包管理入口 |
 | `kk-mod-host/src/realm.rs` | VM 所有者与销毁顺序；`realm/bootstrap.rs` 捕获 SDK，`registration.rs` 负责逐包注册与冻结，`installation.rs` 安装规则/链，`execution.rs` 限定能力调用周期，`budget.rs` 统一注册/结算预算，`registry.rs` 独占注册阶段与首故障 |
 | `kk-mod-host/src/convert.rs` | 单包贡献候选及最终绑定校验；`convert/` 分别解析对象/字段挂载、动作、处理器、规则、资源/建筑，共享值/schema/字段读取；不在转换层创建 VM 或发布世界 |
 | `kk-mod-host/src/execution_plan.rs` | 链安装与诊断共用的活动顺序/中心回退选择 |
 | `kk-mod-host/src/rng.rs` | 玩法随机流 op 与域序号状态；无状态推导在 `kk-core/src/rng.rs` 的 `gameplay_draw`（协议见[确定性玩法时间与随机协议](gameplay-determinism.md)） |
 | `kk-mod-host/src/composition.rs` | 冻结来源、规则候选与选中来源、处理器/manifest 停用闭包 |
-| `kk-cli/src/mod_inspect.rs` | 独立注册诊断与停用预览；`output_guard.rs` 共用只读路径与输入保护，`report.rs` 共用原子 JSON/声明写入 |
+| `kk-cli/src/mod_tools/` | 作者命令参数与 init/inspect/test/types；`registration.rs` 共用包发现、配置校验与选择输入准备 |
+| `kk-cli/src/probes/` | 默认负载、显式对照、Mod 链和玩家联合负载；进程采样/环境元数据由命令族共享，不依赖某个负载 |
+| `kk-cli/src/sim/` | 场景模型与校验、断言精度、已提交观察、执行编排、检查点与回放各自负责对应契约 |
+| `kk-cli/src/support/` | 只读路径与输入保护、原子 JSON/声明写入、完整字节执行身份；命令先检查路径再准备输入 |
 | `kk-mod-api/src/typegen.rs` | 冻结计划到 TS 声明；`typegen/symbols.rs` 独立维护模块级命名分配与冲突消歧 |
 | `kk-mod-api/src/objects.rs` | 对象视图/分页封套和管理初始化/候选创建共用的字段准备 |
 | `kk-engine/src/settle/objects.rs` | 同房 Mod 候选读写、命名空间检查；日志与索引恢复在 `working/chain_snapshot.rs` |
@@ -57,6 +63,10 @@
 | `kk-runner/src/prelude/game/structures/fields.js` | 私有通用字段表、类型选择及 Mod 建筑字段装配；专用结构资源/时间读面，按原顺序安装原型字段与结构装配器 |
 | `kk-runner/src/prelude/game/structures/spawn.js` | 独占本 tick 孵化名称、成本/能量计算、Spawning 和待出生视图，以及创建/续命/回收方法；装配与重置经一次性捕获的函数连接 |
 | `kk-runner/src/prelude/game/room.js` | 只装配公开属性、Memory/事件日志及玩家原型；`room/queries.js` 持有单房间类型/空间索引和出口缓存，`pathfinding.js` 持有按 Room 身份隔离的矩阵，`terrain.js` 安全拷出地形，`visual.js` 持有房间/map 绘图缓冲，`creation.js` 提供创建预检与指令方法 |
+
+目录分组对应执行或状态边界：`settle` 的领域规则（creep、spawn、structures、room、market、resources 等）与 `pipeline` 的世界候选提交分开，`working` 仍负责房间候选；不把各领域改为一个中心分派。`kk-mod-api/contribution` 是启动期计划构建，`validate` 的值校验同时服务运行期，因此保留公共独立入口；resources/buildings/extension/player_surface 等是冻结计划的只读消费目录，按领域保留。`kk-mod-host/package` 负责来源字节和包选择，realm 负责 VM 生命周期，convert 负责声明转换，chain 负责候选能力。包装载不重新读盘，SDK 虚拟 URL 和字节保持；各组通过父入口协作，消费者不导入实现子模块。
+
+小而职责单一的模块可平铺（例如 Mod API 的 outcome、combat/incoming 值协议和 host 的错误/预算/诊断类型）。是否建目录取决于共同状态、执行流程和修改责任，不以文件数量统一决定。`builtin.rs`/`builtin/store.rs` 的原始源码字节参与内建贡献身份，本轮不改其声明或内容，沿用既有 `builtin_capabilities` 加载方式。调整这些文件即使不改变规则也会改变 PlanHash，须单独评审恢复与版本影响。
 
 Rust 子模块通过父模块保留既有公开路径；跨子模块的内部操作使用受限可见性，不能因拆文件把内部候选暴露为新的外部写能力。KKPV 合并通过视图的公开读方法访问目录与元数据，保持视图内部字段私有。
 

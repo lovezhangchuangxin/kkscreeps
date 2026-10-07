@@ -1,6 +1,6 @@
 # Mod 玩家类型生成
 
-作者包声明的内容（对象类型、意图、资源、建筑）在玩家面有确定形态，但作者只能从架构文档拼装安装 API 的调用签名。`kkscreeps mod types` 从**冻结计划**确定性生成玩家面 TypeScript 声明（`.d.ts`），让玩家模块的 `api` 参数、类绑定、emit 调用与字段类型在 IDE 中直接可用。生成器在 `kk-mod-api/src/typegen.rs`（`player_declarations(plan)`），CLI 编排在 `kk-cli/src/mod_types.rs`，走与 [mod inspect](mod-composition.md) 相同的真实注册路径（发现 → 配置校验 → 选择展开 → 冻结），不推进世界。
+作者包声明的内容（对象类型、意图、资源、建筑）在玩家面有确定形态，但作者只能从架构文档拼装安装 API 的调用签名。`kkscreeps mod types` 从**冻结计划**确定性生成玩家面 TypeScript 声明（`.d.ts`），让玩家模块的 `api` 参数、类绑定、emit 调用与字段类型在 IDE 中直接可用。生成器在 `kk-mod-api/src/typegen.rs`（`player_declarations(plan)`），CLI 编排在 `kk-cli/src/mod_tools/types.rs`，走与 [mod inspect](mod-composition.md) 相同的真实注册路径（发现 → 配置校验 → 选择展开 → 冻结），不推进世界。
 
 ```bash
 cargo build -p kk-cli

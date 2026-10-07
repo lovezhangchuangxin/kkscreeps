@@ -4,9 +4,9 @@
 //! 与类型键一一对应，同一计划恒同值；跨计划不承诺稳定（计划指纹变化
 //! 即新面，玩家模块经安装 API 取注册常量，不硬抢全局整数）。
 
-use crate::definition::{Key, ObjectVisibility, Visibility};
-use crate::plan::ContributionPlan;
+use crate::ContributionPlan;
 use crate::validate::field_name;
+use crate::{Key, ObjectVisibility, Visibility};
 
 /// Mod FIND 常量的分配起点：避开官方 1..=123 的保留段。
 pub const MOD_FIND_BASE: i64 = 1000;
@@ -158,7 +158,7 @@ fn is_js_identifier(name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::definition::*;
+    use crate::*;
     use std::collections::BTreeSet;
 
     fn surface_type(key: &str, visibility: ObjectVisibility) -> ObjectTypeDescriptor {

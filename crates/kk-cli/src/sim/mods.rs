@@ -1,6 +1,10 @@
 //! 场景中的显式 Mod 输入、实际包身份与自有对象初始化。
-use super::*;
+use anyhow::Context;
 use kk_mod_host::{ContentSelection, ModPackage, RegisterOptions, discover_packages};
+use serde::Deserialize;
+use serde_json::{Value, json};
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]

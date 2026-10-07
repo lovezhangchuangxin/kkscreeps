@@ -9,9 +9,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
-use crate::definition::{NumberDomain, ObjectTypeDescriptor, ValueKind, ValueSchema, Visibility};
-use crate::plan::ContributionPlan;
+use crate::ContributionPlan;
 use crate::player_surface::PlayerSurface;
+use crate::{NumberDomain, ObjectTypeDescriptor, ValueKind, ValueSchema, Visibility};
 
 /// Mod 玩家类可继承的内建类名。与玩家面安装运行时
 /// （kk-runner `prelude/mods/player-api.js` 的 BUILTIN_CLASS_NAMES）同源，
@@ -182,10 +182,10 @@ fn emit_types(
             .get(ty.key.as_str())
             .ok_or_else(|| format!("玩家面类型 {} 不在计划投影中（目录与投影不一致）", ty.key))?;
         let scope = match ty.visibility {
-            crate::definition::ObjectVisibility::RoomVisible => "房间可见",
-            crate::definition::ObjectVisibility::OwnerCollection => "归属者集合可见",
-            crate::definition::ObjectVisibility::ServerOnly => unreachable!("Surface 已过滤"),
-            crate::definition::ObjectVisibility::Conditional(_) => unreachable!("Surface 已拒绝"),
+            crate::ObjectVisibility::RoomVisible => "房间可见",
+            crate::ObjectVisibility::OwnerCollection => "归属者集合可见",
+            crate::ObjectVisibility::ServerOnly => unreachable!("Surface 已过滤"),
+            crate::ObjectVisibility::Conditional(_) => unreachable!("Surface 已拒绝"),
         };
         doc_lines(
             out,

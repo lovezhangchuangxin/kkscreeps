@@ -63,13 +63,13 @@ pub enum RunState {
 }
 
 /// 记录当前阶段，并在进入指定阶段时注入错误。
-pub(crate) struct StageCursor {
+pub(in crate::settle) struct StageCursor {
     fail: Option<TickStage>,
     stage: TickStage,
 }
 
 impl StageCursor {
-    pub(crate) fn new(fail: Option<TickStage>) -> Self {
+    pub(in crate::settle) fn new(fail: Option<TickStage>) -> Self {
         Self {
             fail,
             stage: TickStage::Prepare,
@@ -77,7 +77,7 @@ impl StageCursor {
     }
 
     /// 先记录阶段再检查故障注入，使错误报告包含尚未执行的失败阶段。
-    pub(crate) fn enter(&mut self, stage: TickStage) -> Result<(), SettleError> {
+    pub(in crate::settle) fn enter(&mut self, stage: TickStage) -> Result<(), SettleError> {
         self.stage = stage;
         if self.fail == Some(stage) {
             return Err(SettleError(format!(
@@ -88,7 +88,7 @@ impl StageCursor {
         Ok(())
     }
 
-    pub(crate) fn stage(&self) -> TickStage {
+    pub(in crate::settle) fn stage(&self) -> TickStage {
         self.stage
     }
 }

@@ -2,7 +2,10 @@
 //! 保存时机与恢复选择的语义契约见 docs/architecture/checkpoints.md
 //! 「周期保存与恢复选择」。
 use super::checkpoint;
-use super::*;
+use kk_runtime::EmbedEngine;
+use serde_json::{Value, json};
+use std::collections::BTreeMap;
+use std::path::Path;
 
 /// 周期保存的运行内统计（报告 auto_checkpoint 字段的来源）。
 #[derive(Default)]

@@ -21,18 +21,18 @@ pub(crate) const SDK_URL: &str = "kkmods:sdk";
 // 固定表防止 Mod 猜测内部 URL 绕过注册入口。解析器只为 SDK 引用者开放。
 fn sdk_source(url: &str) -> Option<&'static str> {
     match url {
-        SDK_URL => Some(include_str!("sdk.js")),
-        "kkmods:sdk/state.js" => Some(include_str!("sdk/state.js")),
-        "kkmods:sdk/registration.js" => Some(include_str!("sdk/registration.js")),
-        "kkmods:sdk/rules.js" => Some(include_str!("sdk/rules.js")),
-        "kkmods:sdk/refresh.js" => Some(include_str!("sdk/refresh.js")),
-        "kkmods:sdk/chains.js" => Some(include_str!("sdk/chains.js")),
-        "kkmods:sdk/resources.js" => Some(include_str!("sdk/resources.js")),
-        "kkmods:sdk/objects.js" => Some(include_str!("sdk/objects.js")),
-        "kkmods:sdk/movement.js" => Some(include_str!("sdk/movement.js")),
-        "kkmods:sdk/combat.js" => Some(include_str!("sdk/combat.js")),
-        "kkmods:sdk/build.js" => Some(include_str!("sdk/build.js")),
-        "kkmods:sdk/determinism.js" => Some(include_str!("sdk/determinism.js")),
+        SDK_URL => Some(include_str!("../sdk.js")),
+        "kkmods:sdk/state.js" => Some(include_str!("../sdk/state.js")),
+        "kkmods:sdk/registration.js" => Some(include_str!("../sdk/registration.js")),
+        "kkmods:sdk/rules.js" => Some(include_str!("../sdk/rules.js")),
+        "kkmods:sdk/refresh.js" => Some(include_str!("../sdk/refresh.js")),
+        "kkmods:sdk/chains.js" => Some(include_str!("../sdk/chains.js")),
+        "kkmods:sdk/resources.js" => Some(include_str!("../sdk/resources.js")),
+        "kkmods:sdk/objects.js" => Some(include_str!("../sdk/objects.js")),
+        "kkmods:sdk/movement.js" => Some(include_str!("../sdk/movement.js")),
+        "kkmods:sdk/combat.js" => Some(include_str!("../sdk/combat.js")),
+        "kkmods:sdk/build.js" => Some(include_str!("../sdk/build.js")),
+        "kkmods:sdk/determinism.js" => Some(include_str!("../sdk/determinism.js")),
         _ => None,
     }
 }

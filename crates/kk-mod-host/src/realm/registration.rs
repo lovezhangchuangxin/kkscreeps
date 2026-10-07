@@ -116,7 +116,7 @@ impl ModRealm {
         // 玩家面；配置与停用输入指向未选包属于配置错误，在此整体拒绝。
         // 无显式选择时 resolve 返回 None，直接沿用发现的全部包，不复制包表。
         let (filtered, selection_report) =
-            crate::selection::resolve_selection(packages, &options.selection)?;
+            crate::package::resolve_selection(packages, &options.selection)?;
         let selected: &BTreeMap<String, ModPackage> = filtered.as_ref().unwrap_or(packages);
         if let Some(id) = disabled.iter().find(|id| !selected.contains_key(*id)) {
             return Err(ModHostError::new(

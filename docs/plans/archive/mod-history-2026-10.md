@@ -163,3 +163,25 @@ G02.d **静态移动阻挡可替换决策**登记为未开始：前置为本轮�
 ### G02.d2 移动玩家门双端冻结与寻路边界钉死（2026-10-07，基线 f84a2b4）
 
 照 G07.a 四层交付 `builtin:creep.move.fatigueLimit`（默认 0、域 0..=u32::MAX）与 `builtin:creep.move.minActiveMoves`（默认 1、域 0..=50）：`MoveGate::from_plan` 快照进 Engine/Plane，`can_move` 仲裁原生预填与玩家面 `move()`/`moveTo()` 预检常量（`MOVE_FATIGUE_LIMIT`/`MOVE_MIN_ACTIVE_MOVES`，常量表 427→429 三道门同步）同源；单一 override 双端生效，消除准入槽放行疲劳者但方向形态在 API 层即返 ERR_TIRED 的撕裂。被拉豁免维持 `move(target)` 结构通道；visualizePathStyle 官方怪癖保持；revision v15→v16、规则 29→31、槽仍 20、无新持久写入域。寻路面只钉边界不实现：moveTo 官方语义沿部分路径靠近（步进不越墙列、findPath 止于墙前），ghost 放行下同 tick 玩家 PathFinder 仍绕行原生墙格而结算穿墙（双断言）——放行决策在结算段产生，时序与粒度均不可被寻路感知，属设计约束。marathon/legless 独立包、四场景 × 双通道 × 冷恢复与回放已通过定向验证；引擎新增 1 测试、runner 新增 2 测组、runtime 新增 3+1 测试、方向形态 TIRED/NO_BODYPART 返回码首次直接钉死。三路复审 1 P1（prelude_and_room_forms.rs 1022 行超源码规模门——常量注入与门族拆出 constant_gate_forms.rs 847+178）/8 P3（含管道 tail 吞门禁退出码致首轮假通过的流程教训，最终轮显式落盘退出码）全部清偿；无参数完整门禁最终树通过（Rust 1219/12 既有忽略、compat JS 15、文档链接 334、源码规模 632），release ratchet 1918/2914 零转红。已随本批提交，提交 ID 由下次接手补录。
+
+## 维护结构各轮验证摘要（2026-10-07 归档）
+
+以下是已完成维护轮次的验证记录，原文从当前接手位置归档，历史提交状态保持当时描述；当前 HEAD/任务以台账为准。
+
+- 移动轮验证：完整无参数 `pnpm run check` 通过（Rust 1225 通过/12 忽略、Python 58+12、Node 门禁 7、JS workspace、287 Markdown/1846 本地链接、790 源码文件规模）；沙箱 2 项测试通过，串行场景增至 58 个。新建 release 棘轮 1918 通过/89 既有失败/907 跳过，2914 用例身份/状态与 `b99cda3` 逐项一致；三组 bot 完成 2000/2000/10 轮，核心指标及归一化异常保持，Overmind 仍有既有首轮异常。源码复审无阻塞问题。
+- 共用依赖轮验证：累计完整无参数 `pnpm run check` 通过（Rust 1225 通过/12 忽略、Python 58+12、Node 门禁 7、JS workspace、287 Markdown/1846 本地链接、789 源码文件规模）；沙箱 2 项测试通过，串行场景增至 57 个。新建 release 棘轮 1918 通过/89 既有失败/907 跳过，2914 用例逐项状态与 `a0d375e` 一致；三组 bot 完成 2000/2000/10 轮，核心指标及归一化异常保持，Overmind 仍有既有首轮异常。源码复审未发现阻塞问题。
+- 字段轮验证：累计改动的完整无参数 `pnpm run check` 通过（Rust 1225 通过/12 忽略、Python 58+12、Node 门禁 7、JS workspace、287 Markdown/1846 本地链接、787 源码文件规模）；沙箱定向测试 2 通过。新建 release 棘轮 1918 通过/89 既有失败/907 跳过，2914 用例逐项状态与 `a0d375e` 一致；三组 bot 核心指标及归一化异常保持，Overmind 仍有既有首轮异常。
+- 孵化轮验证：完整无参数 `pnpm run check` 通过（Rust 1225 通过/12 忽略、Python 58+12、Node 门禁 7、JS workspace、287 Markdown/1846 本地链接、786 源码文件规模）；沙箱定向测试 2 通过。新建 release 棘轮 1918 通过/89 既有失败/907 跳过，2914 用例逐项状态与 `a0d375e` 一致；三组 bot 核心指标及归一化异常保持，Overmind 仍有既有首轮异常。
+- Game 轮验证：完整无参数 `pnpm run check` 通过（Rust 1225 通过/12 忽略、Python 58+12、Node 门禁 7、JS workspace、287 Markdown/1846 本地链接、785 源码文件规模）；沙箱定向测试 2 通过。最终新建 release 棘轮 1918 通过/89 既有失败/907 跳过，2914 用例逐项状态与 `646e395` 一致；三组 bot 核心指标和归一化异常保持，Overmind 仍有既有首轮异常。
+- 验收成本轮验证：完整无参数 `pnpm run check` 通过（Rust 1225 通过/12 忽略，CLI sim 84 项通过；Python 58+12、Node 门禁 7、JS workspace、287 Markdown/1846 本地链接、782 源码文件规模）。Rust 测试步骤 204.44s，CLI sim 33.83s；移动代价与竞争策略定向测试各 2 通过。会话中其他任务已提交 `ab1a50b`，完整验证覆盖该 HEAD 的工作区，本轮未修改或提交其文件。
+- Prelude 轮验证：workspace 全目标编译与完整无参数门禁通过（Rust 1221 通过/12 忽略、Python 58+12、Node 门禁回归 7、JS workspace、274 Markdown/1749 本地链接、674 源码文件规模）。26 个 JS 的可执行 token 与 24 个基础段顺序保持；新建 release 的兼容棘轮 1918 通过/89 既有失败/907 跳过，2914 个用例状态与 `8f822fd` 完全一致；三组 bot 核心指标和归一化异常形态符合基线。用户已授权提交；提交号以 Git 历史为准，未推送。
+- Room 轮验证：完整无参数门禁通过（Rust 1221 通过/12 忽略、Python 58+12、Node 门禁回归 7、JS workspace、274 Markdown/1749 本地链接、673 源码文件规模）。重新构建 release 后兼容棘轮 1918 通过/89 既有失败/907 跳过，与 `0c28c92` 的 2914 个用例状态完全一致；三组 bot 核心指标和归一化异常形态符合基线。源码/文档复审未发现阻塞问题，已提交 `8f822fd`，未推送。
+- 上一轮验证：workspace 全目标编译、Mod host/runtime/runner 测试（443 通过/5 忽略）、host doctest、定向门禁及空匹配保护已通过；release 兼容棘轮 1918 通过/89 既有失败/907 跳过，与 `679c79d` 的 2914 个用例状态完全一致。三组 bot 的完成轮数、终止/惩罚跳过、缺失 API 与异常形态符合基线。无参数完整门禁通过（Rust 1221 通过/12 忽略、Python 58+12、Node 门禁回归 7、JS workspace、文档链接及源码规模）；已提交 `0c28c92`，未推送。
+
+
+### CLI 职责治理与工作区整体复审（2026-10-07，随本次提交交付）
+
+- `kk-cli` 根层从 13 个文件收为 5 个入口/独立命令；Mod 工具归 `mod_tools`，共享只读注册输入准备；性能命令归 `probes`，进程采样/环境证据脱离默认负载。`sim` 场景校验、观察、精确数值断言与执行编排各自拥有实现；输出保护、原子发布与完整流式摘要归 `support`。已有对照测试跟随对照实现，不再跨默认负载读取。
+- 复审 engine/API/host/CLI 的公开导出、包选择/配置错误顺序、SDK 资源字节、候选提交、输出路径守卫及恢复身份。迁移实现主体核对一致，15 个 CLI 帮助入口逐字一致；修复现行类型生成导航与历史源码链接。首轮完整门禁仅文档链接失败，修复后无参数完整重跑通过；Rust 1225/12 忽略（CLI sim 84）、Python 58+12、Node 7、JS workspace、287 文档/1846 链接/807 源码均通过。
+- 新 release 官方/typed 完整 inspect（除重编后的可执行文件摘要）与上轮一致；棘轮 2914 逐用例状态与 HEAD 一致（1918 通过/89 既有失败/907 跳过）。TooAngel/Overmind/WASM 完成 2000/2000/10 轮、无中断；Overmind 原有首轮异常 1 轮，归一化随机 directive ID 后栈一致。TooAngel 部分调用次数与日志、Overmind 随机 flag 日志波动，未宣称完整报告逐字相等。
+- 最终检查日志 `/tmp/kks-cli-full-check-final.log`，release `/tmp/kks-cli-release.log`，兼容性 `/tmp/kks-cli-ratchet.log`；整体复审无剩余阻塞问题。四 crate 变更随本次提交保存；后续可复审 engine 安装/领域分派依赖、API 运行期目录共享校验及 host 候选能力边界，不按行数机械搬迁。

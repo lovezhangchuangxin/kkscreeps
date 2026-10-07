@@ -1,9 +1,16 @@
 //! 世界候选准备、分阶段结算与统一发布。
-use super::*;
+use super::{stages, txn};
+use crate::intent::IntentBatch;
+use crate::settle::{
+    Engine, Plane, PlayerWriteback, RunState, SettleError, TickInput, TickStage, TickState,
+    WritebackStep, inter_room, market, settle_room,
+};
+use kk_schema::room::RoomObject;
+use std::collections::BTreeMap;
 
 impl Engine {
     /// 按准备、房间、市场、校验、发布的顺序处理候选。
-    pub(super) fn staged_body(
+    pub(in crate::settle) fn staged_body(
         &mut self,
         cursor: &mut stages::StageCursor,
         batch: IntentBatch,
@@ -55,7 +62,7 @@ impl Engine {
     }
 
     /// 构造玩家副本和 ID 起点，并复核安全模式指令。
-    pub(super) fn prepare_tick(
+    pub(in crate::settle) fn prepare_tick(
         &self,
         batch: IntentBatch,
         input: TickInput,

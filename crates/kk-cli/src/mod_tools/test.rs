@@ -5,8 +5,8 @@
 //! 场景按包的真实目录定位（目录名可与 manifest id 不同），退出码取
 //! 各场景退出码的最大值：0 全过、1 装载失败、2 运行或断言失败。
 
-use crate::report::write_report;
 use crate::sim;
+use crate::support::write_report;
 use serde_json::{Value, json};
 use std::path::PathBuf;
 
@@ -24,7 +24,7 @@ pub struct Options {
 }
 
 pub fn run(options: Options) -> i32 {
-    if let Err(error) = crate::output_guard::json_report(&options.report, &options.root, None) {
+    if let Err(error) = crate::support::paths::json_report(&options.report, &options.root, None) {
         eprintln!("mod test: {error:#}");
         return 1;
     }

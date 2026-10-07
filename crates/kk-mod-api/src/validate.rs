@@ -419,7 +419,6 @@ mod tests {
 #[cfg(test)]
 mod normalize_tests {
     use super::*;
-    use crate::definition::*;
     use std::collections::{BTreeMap, BTreeSet};
 
     fn float_field(name: &str) -> FieldDescriptor {

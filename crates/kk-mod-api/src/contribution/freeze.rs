@@ -1,9 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-use crate::fingerprint::canonical_hash;
-use crate::handlers::handler_plans;
-use crate::rules::effective_rules;
+use super::fingerprint::canonical_hash;
+use super::handlers::handler_plans;
+use super::rules::effective_rules;
 
 use crate::validate;
 use crate::*;
@@ -119,9 +119,7 @@ fn freeze_inner(
     let mut buildings: BTreeMap<Key, crate::buildings::BuildingDescriptor> = BTreeMap::new();
     for c in &mut contributions {
         let ns = &c.source.namespace;
-        if !crate::definition::valid_namespace(ns)
-            || c.source.api_version != 1
-            || c.source.revision.is_empty()
+        if !super::valid_namespace(ns) || c.source.api_version != 1 || c.source.revision.is_empty()
         {
             return Err(FreezeError::new(ns, "namespace、API 版本或 revision 无效"));
         }

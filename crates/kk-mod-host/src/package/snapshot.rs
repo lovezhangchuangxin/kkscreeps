@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+use super::manifest::ModManifest;
 use crate::error::{ModHostError, ModHostResult};
-use crate::manifest::ModManifest;
 
 /// 单包文件数、总字节与目录深度的装载上限：注册期把整个包读进内存
 /// 并参与指纹，超限说明这不是一个可评审的玩法包。目录深度独立设限，

@@ -63,7 +63,7 @@ SDK 可声明数值规则及消费者，但当前处理器 ctx 没有读取冻�
 
 ### 4. 恢复覆盖普通错误，尚未覆盖进程重启
 
-[txn.rs](../../crates/kk-engine/src/settle/txn.rs) 已把 namespace Mod state 纳入候选。模块全局不参与动作恢复，故障时重建 realm；停用不会删除数据或撤销有效规则。当前没有完整检查点、执行策略身份、迁移、缺包只读导出、持久输入日志和 outbox。房间二进制往返与 sim 报告都不能代替整个世界的保存恢复。
+[txn.rs](../../crates/kk-engine/src/settle/pipeline/txn.rs) 已把 namespace Mod state 纳入候选。模块全局不参与动作恢复，故障时重建 realm；停用不会删除数据或撤销有效规则。当前没有完整检查点、执行策略身份、迁移、缺包只读导出、持久输入日志和 outbox。房间二进制往返与 sim 报告都不能代替整个世界的保存恢复。
 
 ### 5. 作者缺少统一验证入口
 

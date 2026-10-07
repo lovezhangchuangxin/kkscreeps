@@ -24,9 +24,7 @@ use serde_json::Value;
 use crate::chain::{ActiveChain, ChainHost, ChainProgram, ChainState};
 use crate::convert::{Declaration, build_contribution};
 use crate::error::{ModFault, ModFaultKind, ModHostError, ModHostResult};
-use crate::graph::dependency_order;
-use crate::loader::{PackageModuleLoader, SDK_URL};
-use crate::package::ModPackage;
+use crate::package::{ModPackage, PackageModuleLoader, SDK_URL, dependency_order};
 use crate::{ChainProfiler, ModVmLimits};
 use kk_mod_api::{
     Contribution, ContributionPlan, FreezeOptions, Key, Number, SlotOutcome, Source, builtin,

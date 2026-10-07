@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use serde_json::Value;
 
-use super::{PlayerState, SettleError};
+use crate::settle::{PlayerState, SettleError};
 
 /// 候选已完成的子步，用于在部分候选写入后验证失败隔离。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -80,7 +80,7 @@ impl SegmentWriteback {
 }
 
 impl PlayerWriteback {
-    pub(crate) fn apply_with_checkpoints(
+    pub(in crate::settle) fn apply_with_checkpoints(
         self,
         state: &mut PlayerState,
         mut checkpoint: impl FnMut(WritebackStep) -> Result<(), SettleError>,

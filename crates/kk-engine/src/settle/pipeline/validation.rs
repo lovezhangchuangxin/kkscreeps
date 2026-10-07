@@ -1,9 +1,16 @@
 //! 世界发布前的不变式、Mod 对象和扩展字段校验。
-use super::*;
+use super::txn;
+use crate::settle::{Engine, SettleError};
+use kk_schema::room::RoomObject;
+use kk_world::{ObjId, RoomState};
+use serde_json::Value;
 
 impl Engine {
     /// 只读检查候选房间覆盖、ID 游标和玩家键，失败进入 NeedsRecovery。
-    pub(super) fn validate_stage(&self, cand: &mut txn::OwnedTickTxn) -> Result<(), SettleError> {
+    pub(in crate::settle) fn validate_stage(
+        &self,
+        cand: &mut txn::OwnedTickTxn,
+    ) -> Result<(), SettleError> {
         cand.state.check_fatal()?;
         // 房间数和顺序均须与准备阶段一致，集合相等不能验证顺序。
         if cand.rooms.len() != cand.room_names.len()
@@ -80,7 +87,7 @@ impl Engine {
         self.validate_mod_object_iter(rooms.iter().map(|(name, room)| (name, room)))
     }
 
-    pub(super) fn validate_mod_object_iter<'a>(
+    pub(in crate::settle) fn validate_mod_object_iter<'a>(
         &self,
         rooms: impl Iterator<Item = (&'a String, &'a RoomState)>,
     ) -> Result<(), SettleError> {
@@ -138,7 +145,7 @@ impl Engine {
         Ok(())
     }
 
-    pub(super) fn validate_building_rooms<'a>(
+    pub(in crate::settle) fn validate_building_rooms<'a>(
         &self,
         rooms: impl Iterator<Item = (&'a String, &'a RoomState)>,
     ) -> Result<(), SettleError> {
@@ -181,7 +188,7 @@ impl Engine {
         self.validate_extension_rooms(&mut cand.rooms)
     }
 
-    pub(super) fn validate_extension_rooms(
+    pub(in crate::settle) fn validate_extension_rooms(
         &self,
         rooms: &mut [(String, RoomState)],
     ) -> Result<(), SettleError> {
@@ -275,6 +282,8 @@ impl Engine {
 #[cfg(test)]
 mod invariant_tests {
     use super::*;
+    use crate::intent::IntentBatch;
+    use crate::settle::TickInput;
 
     #[test]
     fn publication_rejects_duplicate_cursor_record_id_and_coordinate_drift() {

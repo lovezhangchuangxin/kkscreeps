@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
+use super::manifest::VersionReq;
 use crate::error::{ModHostError, ModHostResult};
-use crate::manifest::VersionReq;
 use crate::package::ModPackage;
 
 /// 依赖拓扑序（被依赖者在前）。同层按包 id 排序，装载顺序不参与结果。
@@ -17,7 +17,7 @@ pub fn dependency_order(packages: &BTreeMap<String, ModPackage>) -> ModHostResul
             };
             let requirement =
                 VersionReq::parse(range, package.id()).expect("manifest 解析已校验范围写法");
-            let actual = crate::manifest::Version::parse(&target.manifest.version, target.id())
+            let actual = super::manifest::Version::parse(&target.manifest.version, target.id())
                 .expect("manifest 解析已校验版本");
             if !requirement.satisfied_by(actual) {
                 return Err(ModHostError::new(

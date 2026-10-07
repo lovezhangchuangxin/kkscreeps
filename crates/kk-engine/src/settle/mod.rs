@@ -22,14 +22,12 @@ pub mod objects;
 pub mod resources;
 pub mod room;
 pub mod spawn;
-mod stages;
 pub mod structures;
-mod txn;
-mod writeback;
 
-pub use stages::{RunState, TickStage};
-pub use txn::TickState;
-pub use writeback::{PlayerWriteback, SegmentWriteback, WritebackStep};
+mod pipeline;
+pub use pipeline::{
+    PlayerWriteback, RunState, SegmentWriteback, TickStage, TickState, WritebackStep,
+};
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
@@ -176,7 +174,7 @@ pub struct Engine {
     /// 持续生效的房间故障注入，由调用方显式解除。
     fail_room: Option<String>,
     /// 失败后记录恢复状态；世界版本检查不能检测玩家或市场的直接修改。
-    run_state: stages::RunState,
+    run_state: RunState,
     /// 持续生效的阶段入口故障注入。
     fail_stage: Option<TickStage>,
     fail_writeback: Option<WritebackStep>,
@@ -242,7 +240,7 @@ impl Engine {
             next_id,
             last_events: Vec::new(),
             fail_room: None,
-            run_state: stages::RunState::Ready,
+            run_state: RunState::Ready,
             fail_stage: None,
             fail_writeback: None,
             links: kk_world::place::builtin_link_rules(),
@@ -422,7 +420,7 @@ impl Engine {
         self.run_state = RunState::Running {
             tick: self.world.time(),
         };
-        let mut cursor = stages::StageCursor::new(self.fail_stage);
+        let mut cursor = pipeline::StageCursor::new(self.fail_stage);
         let result = self.staged_body(&mut cursor, batch, &input, writebacks);
         match result {
             Ok(()) => {
@@ -445,11 +443,9 @@ impl Engine {
     }
 }
 
-mod engine_tick;
 mod install;
 mod room_loop;
 mod state_api;
-mod validation;
 mod working;
 pub use room_loop::{energy_resource_name, settle_room};
 pub use working::{ChainSnapshot, ObjectJournal, Plane, RoomCtx, Working};

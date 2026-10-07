@@ -1,10 +1,9 @@
 //! 作者使用真实包注册路径检查组合；停用参数仅生成执行预览，
 //! 选择参数与 sim 场景、宿主注册选项共用同一展开语义。
-use crate::report::write_report;
+use crate::support::write_report;
 use anyhow::Context;
-use kk_mod_host::{ContentSelection, ModRealm, RegisterOptions, discover_packages};
+use kk_mod_host::ModRealm;
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
@@ -48,32 +47,21 @@ pub fn run(options: Options) -> i32 {
 /// 引用（v5 起顶层输出 execution_strategy）。
 const INSPECT_REPORT_VERSION: u32 = 5;
 fn output_path(options: &Options) -> anyhow::Result<PathBuf> {
-    crate::output_guard::json_report(&options.report, &options.root, options.configs.as_deref())?;
-    crate::output_guard::normalized(&options.report)
+    crate::support::paths::json_report(&options.report, &options.root, options.configs.as_deref())?;
+    crate::support::paths::normalized(&options.report)
 }
 
 fn inspect(options: &Options) -> anyhow::Result<Value> {
-    let root = std::fs::canonicalize(&options.root).context("读取 Mod 包根目录")?;
-    let packages = discover_packages(&root)?;
-    let configs = match &options.configs {
-        Some(path) => serde_json::from_slice::<BTreeMap<String, Value>>(
-            &std::fs::read(path).context("读取 Mod 配置")?,
-        )
-        .context("配置须为按包 ID 分组的 JSON 对象")?,
-        None => BTreeMap::new(),
-    };
-    for id in configs.keys() {
-        anyhow::ensure!(packages.contains_key(id), "Mod 配置指定了未加载的包 {id}");
-    }
-    let selection = ContentSelection {
-        include: options.select.iter().cloned().collect(),
-        exclude: options.exclude.iter().cloned().collect(),
-    };
-    let mut register_options = RegisterOptions {
-        configs,
-        selection,
-        ..Default::default()
-    };
+    let super::registration::Input {
+        root,
+        packages,
+        options: mut register_options,
+    } = super::registration::prepare(
+        &options.root,
+        options.configs.as_deref(),
+        &options.select,
+        &options.exclude,
+    )?;
     for input in &options.rule_sources {
         let (key, source) = input
             .split_once('=')
@@ -109,11 +97,7 @@ fn inspect(options: &Options) -> anyhow::Result<Value> {
             )
         })
         .collect();
-    let executable = std::env::current_exe()?;
-    let hash = Sha256::digest(std::fs::read(executable)?)
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>();
+    let hash = crate::support::executable_digest()?;
     // 执行策略身份与 sim 报告同源（G22.c 跟进项）：作者可离线预判
     // 停用对身份的影响；停用预览后按同口径重算。
     let execution_strategy = composition

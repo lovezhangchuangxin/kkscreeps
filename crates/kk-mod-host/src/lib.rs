@@ -18,15 +18,11 @@ mod composition;
 mod convert;
 mod error;
 mod execution_plan;
-mod graph;
 mod limits;
-mod loader;
-mod manifest;
 mod package;
 mod profile;
 mod realm;
 mod rng;
-mod selection;
 mod v8_convert;
 mod write;
 
@@ -36,15 +32,16 @@ pub use chain::{
 };
 pub use error::{ModFault, ModFaultKind, ModHostError, ModHostResult};
 pub use limits::{ModExecutionLimits, ModVmLimits};
-pub use manifest::{ModManifest, SDK_API_VERSION, Version, VersionReq};
-pub use package::{ModPackage, discover_packages};
+pub use package::{
+    ContentSelection, ModManifest, ModPackage, SDK_API_VERSION, SelectionReport, Version,
+    VersionReq, discover_packages,
+};
 pub use profile::{ChainProfiler, ProfileSample};
 pub use realm::{ModRealm, PlayerModulePackage, RegisterOptions, Registered};
 pub use write::ChainWrite;
 
 pub use composition::{ComposedSlot, CompositionReport, ExecutionMode, RuleSelection};
 pub use execution_plan::ExecutionChain;
-pub use selection::{ContentSelection, SelectionReport};
 
 /// 宿主 SDK 的可回放语义身份；时间/RNG/候选能力语义变更须升代。
 pub const GAMEPLAY_PROTOCOL: &str = "kk-gameplay-v2-utc-date";

@@ -4,7 +4,7 @@
 
 ## 实现与边界
 
-[mod-player-probe](../../../crates/kk-cli/src/mod_player_probe.rs) 驱动每玩家独立房间中的一个 worker、source 和 [Mod counter](../../../compat/fixtures/mod-player/workload/server.js)。每轮玩家 API 发出 counter.increment，并根据 worker 能量采集或升级，写回 Memory 序号。全部玩家的执行结果、原生/Mod 提交结果和 namespace 计数均须符合预期。worker 合成寿命覆盖整个窗口，不测孵化、死亡、共享房竞争或真实 bot。
+[mod-player-probe](../../../crates/kk-cli/src/probes/mod_player.rs) 驱动每玩家独立房间中的一个 worker、source 和 [Mod counter](../../../compat/fixtures/mod-player/workload/server.js)。每轮玩家 API 发出 counter.increment，并根据 worker 能量采集或升级，写回 Memory 序号。全部玩家的执行结果、原生/Mod 提交结果和 namespace 计数均须符合预期。worker 合成寿命覆盖整个窗口，不测孵化、死亡、共享房竞争或真实 bot。
 
 阶段时间沿用 runtime；进程窗口包括逐轮状态核验和 RSS 采样。预热与边界快照在窗口外；report 的 window_actions 排除预热次数。CLI 不改变默认玩家/Mod 预算，记录预算及包/脚本指纹。JSON/KKPV 和并发 1/2 的测试要求全部负载快照相同。空转 Mod 即使玩家方法返回 OK，状态检查仍须拒绝。
 

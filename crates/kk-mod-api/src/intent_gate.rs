@@ -2,9 +2,7 @@
 //! 保证意图描述符的支持范围同一口径；不代替执行入口与绑定校验。豁免按
 //! 意图键命名空间判定（builtin 意图由 Rust native 执行器消费），由
 //! 调用方先行过滤；入口槽解析与阶段检查留在引擎侧（依赖槽句柄）。
-use crate::definition::{
-    ArgumentConversion, IntentAuthority, IntentDescriptor, IntentScope, Merge,
-};
+use crate::{ArgumentConversion, IntentAuthority, IntentDescriptor, IntentScope, Merge};
 
 /// 逐项拦截未接线的执行形态；错误文案是装配期拒绝的一部分，引擎
 /// 测试按子串断言，修改须两侧同步。

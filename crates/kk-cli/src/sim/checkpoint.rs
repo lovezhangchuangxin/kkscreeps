@@ -1,5 +1,11 @@
 //! sim 检查点保存场景身份、原始断言起点与 alias；续跑不重新放置或重置 Memory。
-use super::*;
+use super::{Options, mods};
+use anyhow::Context;
+use kk_runtime::EmbedEngine;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -185,7 +191,7 @@ pub(super) fn recover_latest(dir: &Path, log: &Path) -> anyhow::Result<Recovery>
 
 /// 输出检查先于执行与失败报告写入；共享路径解析不创建任何目录。
 pub(super) fn validate_paths(options: &Options) -> anyhow::Result<()> {
-    use crate::output_guard::{distinct, normalized, outside_packages};
+    use crate::support::paths::{distinct, normalized, outside_packages};
     distinct(&options.report, &options.scenario)?;
     // 加载目录是恢复输入，整棵目录都必须保护；报告失败路径同样使用此门。
     if let Some(dir) = options
@@ -293,7 +299,7 @@ pub(super) fn protect_sources(
     roots: impl Iterator<Item = PathBuf>,
 ) -> anyhow::Result<()> {
     for root in roots {
-        crate::output_guard::outside_packages(path, &root)?;
+        crate::support::paths::outside_packages(path, &root)?;
     }
     Ok(())
 }

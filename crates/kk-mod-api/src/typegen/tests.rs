@@ -1,6 +1,6 @@
 //! 声明生成的映射与确定性测试；构造手法与 player_surface 测试同源。
 use super::*;
-use crate::definition::*;
+use crate::*;
 use crate::{Contribution, FreezeOptions, Source, freeze_with_builtin};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -49,7 +49,7 @@ fn signed(min: i64, max: i64) -> ValueKind {
     ValueKind::Number(NumberDomain::Signed { min, max })
 }
 
-fn rich_plan() -> crate::plan::ContributionPlan {
+fn rich_plan() -> crate::ContributionPlan {
     let mut c = module("alpha");
     let register = |c: &mut Contribution, fields: &[FieldDescriptor]| {
         for field in fields {

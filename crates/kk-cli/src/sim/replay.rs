@@ -1,6 +1,10 @@
 //! sim 级输入日志摘要与进程内回放核对（G25.b 起）。契约细节见
 //! docs/architecture/input-log.md。
-use super::*;
+use anyhow::Context;
+use kk_runtime::EmbedEngine;
+use serde_json::{Value, json};
+use std::collections::BTreeMap;
+use std::path::Path;
 
 /// 进程内回放核对（G25.b）：restore 起点快照后逐段重放，比较整份检查点
 /// （剥离 last_console——回放无沙箱执行；剥离 metadata——调用方自定）。

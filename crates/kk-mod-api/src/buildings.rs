@@ -5,8 +5,8 @@
 //! 宿主按本目录的纯数据执行，玩法规则（成本构成、生产配方、寻路语义）
 //! 留给声明方表达。这里只定义数据与冻结目录，不访问世界。
 
-use crate::definition::{FieldDescriptor, Key};
-use crate::plan::ContributionPlan;
+use crate::ContributionPlan;
+use crate::{FieldDescriptor, Key};
 use serde::Serialize;
 
 /// 建筑对寻路与移动仲裁的语义。`Road` 表示可通行且按道路成本寻路
