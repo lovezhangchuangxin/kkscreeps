@@ -827,5 +827,4 @@ fn send_to_self_room_converges_with_energy_cost() {
 }
 
 /// 官方 :22-24：发送方资源在 global 相被并行消耗（同 tick 其他结算）后
-#[path = "m2b2_terminal_market_family/receive.rs"]
 mod receive;

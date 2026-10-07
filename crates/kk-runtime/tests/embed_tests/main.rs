@@ -6,47 +6,26 @@ use serde_json::json;
 
 use kk_runtime::EmbedEngine;
 
-#[path = "embed_tests/c3_counter_chain_family.rs"]
 mod c3_counter_chain;
-#[path = "embed_tests/c4_player_api_family.rs"]
 mod c4_player_api;
-#[path = "embed_tests/c_mod_settle_family.rs"]
 mod c_mod_settle;
-#[path = "embed_tests/dual_room_live_fire.rs"]
 mod dual_room_live_fire;
-#[path = "embed_tests/economy_gcl_family.rs"]
 mod economy_gcl_family;
-#[path = "embed_tests/embed_channels_and_families.rs"]
 mod embed_channels_and_families;
-#[path = "embed_tests/embed_roundtrip_contract.rs"]
 mod embed_roundtrip_contract;
-#[path = "embed_tests/embed_strictness_and_partial_commit.rs"]
 mod embed_strictness_and_partial_commit;
-#[path = "embed_tests/execution_boundary.rs"]
 mod execution_boundary;
-#[path = "embed_tests/input_log_family.rs"]
 mod input_log_family;
-#[path = "embed_tests/m2b2_terminal_market_family.rs"]
 mod m2b2_terminal_market_family;
-#[path = "embed_tests/m2b_closing_family.rs"]
 mod m2b_closing_family;
-#[path = "embed_tests/m2b_creation_family.rs"]
 mod m2b_creation_family;
-#[path = "embed_tests/m2b_creep_tails.rs"]
 mod m2b_creep_tails;
-#[path = "embed_tests/m2b_map_notify_cpu_family.rs"]
 mod m2b_map_notify_cpu_family;
-#[path = "embed_tests/m2b_structure_actions_family.rs"]
 mod m2b_structure_actions_family;
-#[path = "embed_tests/m2b_structure_readfaces_family.rs"]
 mod m2b_structure_readfaces_family;
-#[path = "embed_tests/replay_family.rs"]
 mod replay_family;
-#[path = "embed_tests/sim_setup_family.rs"]
 mod sim_setup_family;
-#[path = "embed_tests/stage_recovery_family.rs"]
 mod stage_recovery_family;
-#[path = "embed_tests/stop_run_regression.rs"]
 mod stop_run_regression;
 
 use dual_room_live_fire::*;

@@ -366,11 +366,8 @@ fn build_rejects_existing_same_type_even_when_walkable() {
     }
 }
 
-#[path = "structures_and_attack/combat.rs"]
 mod combat;
 
-#[path = "structures_and_attack/resources.rs"]
 mod resources;
 
-#[path = "structures_and_attack/ownership.rs"]
 mod ownership;

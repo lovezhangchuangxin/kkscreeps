@@ -83,5 +83,4 @@ fn checked_amount(amount: i64) -> Result<(), String> {
 }
 
 #[cfg(test)]
-#[path = "incoming/tests.rs"]
 mod tests;

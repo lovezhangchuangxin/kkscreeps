@@ -184,10 +184,8 @@ pub(super) fn terrain_look_and_console_semantics() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[path = "watchdog_and_memory/memory_and_budget.rs"]
 mod memory_and_budget;
 pub(super) use memory_and_budget::*;
 
-#[path = "watchdog_and_memory/modules_and_api.rs"]
 mod modules_and_api;
 pub(super) use modules_and_api::*;

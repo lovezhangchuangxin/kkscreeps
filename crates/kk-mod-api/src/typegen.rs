@@ -661,10 +661,8 @@ fn kind_note(schema: &ValueSchema) -> String {
     notes.join("，")
 }
 
-#[path = "typegen/symbols.rs"]
 mod symbols;
 use symbols::Symbols;
 
 #[cfg(test)]
-#[path = "typegen/tests.rs"]
 mod tests;

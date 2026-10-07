@@ -298,7 +298,7 @@ fn bare_plan() -> std::sync::Arc<kk_mod_api::ContributionPlan> {
 
 /// 重复字段键在 freeze 权威层拒绝（目录层门保留为纵深防御）：
 /// 字段写面按目录路由自定义键，重复键会让校验载荷与存储键的映射
-/// 失去单射。freeze_cases 另有完整反例。
+/// 失去单射。kk-mod-api 的 tests/freeze 另有完整反例。
 #[test]
 fn duplicate_field_keys_are_rejected_at_freeze() {
     let error = kk_mod_api::freeze_with_builtin(

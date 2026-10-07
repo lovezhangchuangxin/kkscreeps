@@ -81,5 +81,4 @@ impl MoveCost {
 }
 
 #[cfg(test)]
-#[path = "move_cost/tests.rs"]
 mod tests;

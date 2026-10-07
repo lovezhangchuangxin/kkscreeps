@@ -78,5 +78,4 @@ impl PullRegistration {
 }
 
 #[cfg(test)]
-#[path = "pull_registration/tests.rs"]
 mod tests;

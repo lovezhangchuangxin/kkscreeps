@@ -1,4 +1,5 @@
 // 1000 行是职责复审门槛；应拆分领域模块，不能靠压缩代码或删除必要注释过关。
+// 超过 700 行（701 起）是预警档：不挡门，作为职责复审信号提示尽早按域拆分，避免贴线堆叠。
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, extname, resolve } from 'node:path';
@@ -17,6 +18,7 @@ const paths = new Set(execFileSync('git', ['ls-files', '--cached', '--others', '
 
 let checked = 0;
 const oversized = [];
+const nearLimit = [];
 for (const path of [...paths].sort()) {
   if (!roots.some(prefix => path.startsWith(prefix)) || !extensions.has(extname(path))) continue;
   if (exceptions.has(path)) continue;
@@ -31,6 +33,12 @@ for (const path of [...paths].sort()) {
   const lines = source === '' ? 0 : source.split('\n').length - Number(source.endsWith('\n'));
   checked++;
   if (lines > 1000) oversized.push({ path, lines });
+  else if (lines > 700) nearLimit.push({ path, lines });
+}
+
+if (nearLimit.length) {
+  console.log(`源码规模预警：${nearLimit.length} 个文件超过 700 行（职责复审信号，不挡门）：`);
+  for (const { path, lines } of nearLimit) console.log(`  ${lines} 行：${path}`);
 }
 
 if (oversized.length) {

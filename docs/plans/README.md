@@ -14,7 +14,8 @@
 | M2 单机可玩 | [m2-playable.md](m2-playable.md) | 沙箱与玩家 API、2A/2B 验收、存储和流水线的总体拆分 |
 | B0 运行协调 | [b0-runtime-coordinator.md](b0-runtime-coordinator.md) | 正确性问题、候选状态和统一提交要求 |
 | B0 实施记录 | [b0-slices.md](b0-slices.md) | 接口规格、切片与评审修复；须结合后续失败恢复修改阅读 |
-| B1 结构整理 | [b1-structure-governance.md](b1-structure-governance.md) | 文件拆分及保持行为的核对方法，文件规模属于当时的测量 |
+| B1 结构整理 | [b1-structure-governance.md](b1-structure-governance.md) | 文件拆分及保持行为的核对方法，文件规模属于当时的测量；其测试根 `#[path]` 结论已被 S 系列取代 |
+| S 结构治理 | [structure-governance-2026-10.md](structure-governance-2026-10.md) | 测试根 main.rs 化、按域归并、大文件预防性拆分与治理规则收口的批次拆分及验收 |
 | M2B 前置工作 | [m2b-prerequisite.md](m2b-prerequisite.md) | 世界来源接口、版本、地形缓存和编码宏；包含对象投影缓存收益为负的实验 |
 | B0 外部复审修复 | [b0-6-external-review-clearance.md](b0-6-external-review-clearance.md) | 失败轮缓存、结算时间与停跑回充的修复依据 |
 | 双房双玩家验证 | [dual-room-live-fire.md](dual-room-live-fire.md) | 跨房竞争、失败恢复、生命周期和性能夹具的阶段验证 |

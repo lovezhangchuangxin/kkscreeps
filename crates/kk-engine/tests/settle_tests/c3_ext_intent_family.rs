@@ -302,15 +302,10 @@ fn ext_batch(player: &str, id: ObjId, args: Value) -> IntentBatch {
     batch
 }
 
-#[path = "c3_ext_intent_family/installation.rs"]
 mod installation;
 
-#[path = "c3_ext_intent_family/execution.rs"]
 mod execution;
-#[path = "c3_ext_intent_family/object_ops.rs"]
 mod object_ops;
-#[path = "c3_ext_intent_family/object_tick.rs"]
 mod object_tick;
 
-#[path = "c3_ext_intent_family/suppression.rs"]
 mod suppression;

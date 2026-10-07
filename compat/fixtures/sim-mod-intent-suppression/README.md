@@ -20,4 +20,4 @@ bot 按 memory 的 `mode`/`prefix` 每轮发射扩展意图；期望（结算后
 第 2 tick 检查点冷恢复续跑等值、suppress 三场景同计划身份/free 单选与组合三个身份互异。
 引擎级语义矩阵（含跨对象隔离）见
 kk-engine c3_ext_intent_family/suppression.rs；SDK/冻结校验与冷恢复见
-kk-runtime c3_counter_chain_family。
+kk-runtime embed_tests/c3_counter_chain.rs。

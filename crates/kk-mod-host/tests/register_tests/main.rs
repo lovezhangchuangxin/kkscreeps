@@ -281,23 +281,16 @@ fn config_reaches_registration_and_digest() {
     );
 }
 
-#[path = "register_tests/package_loading.rs"]
 mod package_loading;
 
-#[path = "register_tests/declarations.rs"]
 mod declarations;
 
-#[path = "register_tests/invocation.rs"]
 mod invocation;
 
-#[path = "register_tests/composition.rs"]
 mod composition;
 
-#[path = "register_tests/rules_read.rs"]
 mod rules_read;
 
-#[path = "register_tests/selection.rs"]
 mod selection;
 
-#[path = "register_tests/determinism.rs"]
 mod determinism;

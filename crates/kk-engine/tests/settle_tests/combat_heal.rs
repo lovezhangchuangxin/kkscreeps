@@ -813,5 +813,4 @@ fn destroyed_work_part_repairs_at_half_power_next_tick() {
     }
 }
 
-#[path = "combat_heal/healing.rs"]
 mod healing;

@@ -3,10 +3,8 @@
 
 use super::*;
 
-#[path = "embed_channels_and_families/kkpv.rs"]
 mod kkpv;
 pub(super) use kkpv::*;
 
-#[path = "embed_channels_and_families/families.rs"]
 mod families;
 pub(super) use families::*;

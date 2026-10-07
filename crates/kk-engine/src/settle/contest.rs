@@ -111,5 +111,4 @@ pub fn arbitrate_room(ctx: &RoomCtx) -> Result<(), String> {
 }
 
 #[cfg(test)]
-#[path = "contest/tests.rs"]
 mod tests;

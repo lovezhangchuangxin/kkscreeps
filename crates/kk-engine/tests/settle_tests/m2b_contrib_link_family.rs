@@ -196,8 +196,6 @@ fn contrib_dispatch_native_vs_chained_bench() {
     );
 }
 
-#[path = "m2b_contrib_link_family/rules.rs"]
 mod rules;
 
-#[path = "m2b_contrib_link_family/chains.rs"]
 mod chains;

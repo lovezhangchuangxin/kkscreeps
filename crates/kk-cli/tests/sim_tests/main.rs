@@ -237,68 +237,38 @@ fn assertions_and_invalid_scenes_fail_without_stale_success_or_input_overwrite()
     Ok(())
 }
 
-#[path = "sim_tests/mods.rs"]
 mod mods;
-#[path = "sim_tests/object_ops.rs"]
 mod object_ops;
 
-#[path = "sim_tests/composition.rs"]
 mod composition;
 
-#[path = "sim_tests/rules.rs"]
 mod rules;
 
-#[path = "sim_tests/auto_checkpoint.rs"]
 mod auto_checkpoint;
-#[path = "sim_tests/building_fields.rs"]
 mod building_fields;
-#[path = "sim_tests/buildings.rs"]
 mod buildings;
-#[path = "sim_tests/checkpoint.rs"]
 mod checkpoint;
-#[path = "sim_tests/damage_policy.rs"]
 mod damage_policy;
-#[path = "sim_tests/heal_policy.rs"]
 mod heal_policy;
-#[path = "sim_tests/mass_policy.rs"]
 mod mass_policy;
 
-#[path = "sim_tests/combat_ranges.rs"]
 mod combat_ranges;
-#[path = "sim_tests/determinism.rs"]
 mod determinism;
-#[path = "sim_tests/incoming_policy.rs"]
 mod incoming_policy;
-#[path = "sim_tests/input_log.rs"]
 mod input_log;
-#[path = "sim_tests/intent_suppression.rs"]
 mod intent_suppression;
-#[path = "sim_tests/mod_trace.rs"]
 mod mod_trace;
-#[path = "sim_tests/move_admission.rs"]
 mod move_admission;
-#[path = "sim_tests/move_arbitration.rs"]
 mod move_arbitration;
-#[path = "sim_tests/move_cost.rs"]
 mod move_cost;
-#[path = "sim_tests/move_obstacle.rs"]
 mod move_obstacle;
-#[path = "sim_tests/move_playergate.rs"]
 mod move_playergate;
-#[path = "sim_tests/move_policy.rs"]
 mod move_policy;
-#[path = "sim_tests/move_precheck.rs"]
 mod move_precheck;
-#[path = "sim_tests/move_pull_registration.rs"]
 mod move_pull_registration;
-#[path = "sim_tests/move_static.rs"]
 mod move_static;
-#[path = "sim_tests/replay.rs"]
 mod replay;
-#[path = "sim_tests/retaliation_policy.rs"]
 mod retaliation_policy;
 
-#[path = "sim_tests/switch.rs"]
 mod switch;
-#[path = "sim_tests/tough_damage.rs"]
 mod tough_damage;

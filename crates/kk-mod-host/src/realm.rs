@@ -973,5 +973,4 @@ impl ModRealm {
 }
 
 #[cfg(test)]
-#[path = "realm/sdk_wiring_tests.rs"]
 mod sdk_wiring_tests;

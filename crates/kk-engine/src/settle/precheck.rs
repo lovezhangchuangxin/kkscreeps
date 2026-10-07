@@ -122,5 +122,4 @@ impl MovePrecheck {
 }
 
 #[cfg(test)]
-#[path = "precheck/tests.rs"]
 mod tests;

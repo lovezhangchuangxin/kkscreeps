@@ -482,10 +482,8 @@ pub(super) fn dual_inter_room_transition_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[path = "dual_room_live_fire/ordering_and_conservation.rs"]
 mod ordering_and_conservation;
 pub(super) use ordering_and_conservation::*;
 
-#[path = "dual_room_live_fire/recovery.rs"]
 mod recovery;
 pub(super) use recovery::*;

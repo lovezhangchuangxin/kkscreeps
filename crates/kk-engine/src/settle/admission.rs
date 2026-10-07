@@ -76,5 +76,4 @@ impl MoveAdmission {
 }
 
 #[cfg(test)]
-#[path = "admission/tests.rs"]
 mod tests;

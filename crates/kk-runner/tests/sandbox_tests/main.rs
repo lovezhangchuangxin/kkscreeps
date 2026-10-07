@@ -9,21 +9,13 @@ use serde_json::json;
 
 use kk_runner::{ModuleTable, Sandbox, SandboxConfig, TickOutcome, TickPlan, live_sandbox_count};
 
-#[path = "sandbox_tests/constant_gate_forms.rs"]
 mod constant_gate_forms;
-#[path = "sandbox_tests/kkpv_channel.rs"]
 mod kkpv_channel;
-#[path = "sandbox_tests/mod_player_api.rs"]
 mod mod_player_api;
-#[path = "sandbox_tests/pathfinder_family.rs"]
 mod pathfinder_family;
-#[path = "sandbox_tests/prelude_and_room_forms.rs"]
 mod prelude_and_room_forms;
-#[path = "sandbox_tests/resource_host_and_nearheap.rs"]
 mod resource_host_and_nearheap;
-#[path = "sandbox_tests/store_spawn_and_viewer.rs"]
 mod store_spawn_and_viewer;
-#[path = "sandbox_tests/watchdog_and_memory.rs"]
 mod watchdog_and_memory;
 // 子模块提供场景函数，由唯一的顶层测试串行调用；不要将它们改成并行测试。
 use constant_gate_forms::*;

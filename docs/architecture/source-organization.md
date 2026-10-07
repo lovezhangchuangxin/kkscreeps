@@ -1,6 +1,6 @@
 # 源码组织与规模约束
 
-主项目源码和测试按领域职责组织；单文件超过 1000 行时须拆分。行数是触发职责复审的门槛，不是架构质量的唯一指标。拆分应保留领域语义、注释、公开 API 和事务边界，不能通过压缩代码、删除必要注释或仅把连续代码搬到 `include!` 片段来过关。
+主项目源码和测试按领域职责组织；单文件超过 1000 行时须拆分。行数是触发职责复审的门槛，不是架构质量的唯一指标。拆分应保留领域语义、注释、公开 API 和事务边界，不能通过压缩代码、删除必要注释或仅把连续代码搬到 `include!` 片段来过关。超过 700 行的文件由检查输出职责复审预警（不挡门）；行数是复审信号，不是拆分理由，也不得把批次编号写入文件名或标识符。
 
 `pnpm run check:source-size` 检查 `crates/compat/apps/packages/scripts` 下的 Rust、JavaScript、TypeScript 与 C/C++ 源码，包含 Git 跟踪和未忽略的新文件；已删除文件跳过。这项检查已纳入 `pnpm run check`。第三方固定版本 `crates/kk-runner/assets/lodash-3.10.1.js` 保留原文，例外在检查脚本中显式列出。`spikes/` 独立实验不属于主项目门禁；其中 inspector 实验的长文件保留为实验记录，不能照搬为生产模块。
 
@@ -52,9 +52,9 @@ V8 生命周期账本位于 `kk-vm/src/isolate_order.rs`，玩家沙箱与 Mod r
 
 ## 测试组织
 
-公共夹具留在测试族父模块，案例按规则、执行链、领域写入、安装门、故障/拒绝/停用等职责分组；Mod 链测试的共享工厂与放置/投影/ID 契约见 [mod_chain_tests 夹具契约](../../crates/kk-runtime/tests/mod_chain_tests/README.md)。结构拆分本身保持原测试注册数量；后续功能测试在对应子模块显式注册。`sandbox_tests` 与 `embed_engine_suite` 的串行场景仍由原入口按原顺序调用，子模块不新增独立 `#[test]`，避免改变 V8 生命周期和进程级计数的约束。
+公共夹具留在测试族父模块，案例按规则、执行链、领域写入、安装门、故障/拒绝/停用等职责分组；Mod 链测试的共享工厂与放置/投影/ID 契约见 [mod_chain_tests 夹具契约](../../crates/kk-runtime/tests/mod_chain_tests/README.md)。多文件测试目标统一采用 `tests/<name>/main.rs` 形态（cargo 自动发现，`--test <name>` 目标名不变），根内 `mod` 声明按同目录规则解析，不使用 `#[path]` 挂接；kk-pathfinder 的单文件根 + 共享 `tests/support/`（裸 `mod support;`）是早于本规范的既有形态，同样不使用 `#[path]`，保留。结构拆分本身保持原测试注册数量；后续功能测试在对应子模块显式注册。`sandbox_tests` 与 `embed_engine_suite` 的串行场景仍由原入口按原顺序调用，子模块不新增独立 `#[test]`，避免改变 V8 生命周期和进程级计数的约束。
 
-接近 1000 行时应提前检查职责：新增规则、协议形态或故障恢复场景应放到对应模块；只有实际形成新领域边界时才增加模块。阶段记录见[结构治理验收](../research/notes/source-structure-2026-10-05.md)。
+接近 700 行预警线时应提前检查职责：新增规则、协议形态或故障恢复场景应放到对应模块；只有实际形成新领域边界时才增加模块。阶段记录见[结构治理验收](../research/notes/source-structure-2026-10-05.md)；2026-10 起的治理批次拆分与验收见[结构治理 S 系列](../plans/structure-governance-2026-10.md)。
 
 ## 权威状态与 SDK 模块
 

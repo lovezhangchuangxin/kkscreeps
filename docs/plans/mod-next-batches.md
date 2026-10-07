@@ -6,12 +6,13 @@
 
 ## 当前接手位置
 
-- 当前任务：**G02.d2 移动玩家门双端冻结与寻路边界钉死（2026-10-07 已交付，三路复审 1 P1/8 P3 全部清偿，随本批提交）**，基线 `f84a2b4`、接手时工作区干净。两路盘点已定边界：① 照 G07.a 四层把玩家 `move()`/`moveTo()` 的疲劳/MOVE 门改为计划派生数值规则——`builtin:creep.move.fatigueLimit`（默认 0=官方，域 0..=u32::MAX）与 `builtin:creep.move.minActiveMoves`（默认 1=官方，域 0..=50），玩家常量 `MOVE_FATIGUE_LIMIT`/`MOVE_MIN_ACTIVE_MOVES` 双通道注入，引擎 `can_move`（仲裁原生预填）同读 `Plane` 快照——单一 override 即双端生效；被拉豁免维持 `move(target)` 结构通道不进规则面，visualizePathStyle 豁免等官方怪癖保持；revision v15→v16、规则 29→31、槽仍 20。② 补寻路边界回归测试：moveTo 遇墙不穿墙（官方语义沿部分路径止于墙前、步进不越墙列）；挂 ghost 放行包后「结算穿墙成功 + 同 tick 玩家 PathFinder 仍不可穿墙」双断言，把架构推断变机器证据。③ 声明式寻路规则（仿 BuildingPathing：计划级可走性规则 → pathfinder 地形包/room.js 基线矩阵/static_obstacles 三点同源）只登记设计后置，tick 级 allowStatic 与服务器 JS 回调永久不得进玩家寻路。验收：引擎默认≡硬编码与两规则覆盖/组合、runner 方向形态 TIRED/NO_BODYPART 返回码钉死（既有缺口）+ 常量平铺、runtime 端到端双通道、sim 独立包×四场景×双通道×冷恢复；三路复审 1 P1（runner 测试文件超 1000 行，常量族拆出 constant_gate_forms.rs）/8 P3 全清偿，无参数完整门禁最终树通过（Rust 1219/12 既有忽略、compat JS 15）、release ratchet 1918/2914 零转红；证据见[交付记录](../research/notes/g02d2-move-playergate-2026-10-07.md)。已随本批提交，提交 ID 下次接手从 Git 补录。
+- 当前任务：**S01 结构治理·测试根 main.rs 化（2026-10-07 已交付，待提交）**，基线 `f54dca0`、接手时工作区干净。全仓结构治理 S01–S06 已拍板（串行套件保持单入口、prelude 全拆三件、convert 臂提取包含），拆分与验收见[结构治理计划](structure-governance-2026-10.md)。S01 机械层已落地：七个测试根转 `tests/<name>/main.rs` 并删全部 `#[path]`（157 个属性 + 1 条过时注释；embed 根三个 `_family` 文件改名对齐 mod 名）、源内冗余挂接清理 11 处（settle 七处 + typegen×2/realm/embed checkpoint 同型四处）、check-source-size 加 >700 行警告档（现报 39 文件，不挡门）、活链与门槛句同步（AGENTS/source-organization/mod-resource-catalog/mod-buildings/夹具 README/buildings 注释）。验收：七目标测试计数与基线一致（settle 301/sandbox 2/embed 1/mod_chain 269/sim 84/freeze 48/register 66）、m0_sandbox_suite 与 embed_engine_suite 场景序列逐字节不变、`crates/*/tests` `#[path]` 归零；三路复审通过（机械转换/行为不变量/文档数字），无 P1/P2，P3 全部清偿；最终树无参数完整门禁 CHECK_EXIT=0。
+- 上批任务：**G02.d2 移动玩家门双端冻结与寻路边界钉死（2026-10-07 已交付，三路复审 1 P1/8 P3 全部清偿，随本批提交）**，基线 `f84a2b4`、接手时工作区干净。两路盘点已定边界：① 照 G07.a 四层把玩家 `move()`/`moveTo()` 的疲劳/MOVE 门改为计划派生数值规则——`builtin:creep.move.fatigueLimit`（默认 0=官方，域 0..=u32::MAX）与 `builtin:creep.move.minActiveMoves`（默认 1=官方，域 0..=50），玩家常量 `MOVE_FATIGUE_LIMIT`/`MOVE_MIN_ACTIVE_MOVES` 双通道注入，引擎 `can_move`（仲裁原生预填）同读 `Plane` 快照——单一 override 即双端生效；被拉豁免维持 `move(target)` 结构通道不进规则面，visualizePathStyle 豁免等官方怪癖保持；revision v15→v16、规则 29→31、槽仍 20。② 补寻路边界回归测试：moveTo 遇墙不穿墙（官方语义沿部分路径止于墙前、步进不越墙列）；挂 ghost 放行包后「结算穿墙成功 + 同 tick 玩家 PathFinder 仍不可穿墙」双断言，把架构推断变机器证据。③ 声明式寻路规则（仿 BuildingPathing：计划级可走性规则 → pathfinder 地形包/room.js 基线矩阵/static_obstacles 三点同源）只登记设计后置，tick 级 allowStatic 与服务器 JS 回调永久不得进玩家寻路。验收：引擎默认≡硬编码与两规则覆盖/组合、runner 方向形态 TIRED/NO_BODYPART 返回码钉死（既有缺口）+ 常量平铺、runtime 端到端双通道、sim 独立包×四场景×双通道×冷恢复；三路复审 1 P1（runner 测试文件超 1000 行，常量族拆出 constant_gate_forms.rs）/8 P3 全清偿，无参数完整门禁最终树通过（Rust 1219/12 既有忽略、compat JS 15）、release ratchet 1918/2914 零转红；证据见[交付记录](../research/notes/g02d2-move-playergate-2026-10-07.md)。已随本批提交 `f54dca0`。
 
-- 上批任务：**G02.d1 静态移动障碍放行（2026-10-07 已交付，三路复审无 P1/P2、四处小问题清偿完毕）**，基线 `ee78894`、接手时工作区干净、提交 `f84a2b4`。扩展 `room.movePrecheck` 的 `allowStatic(id)`：登记时默认阻挡与仲裁静态初判入输入，允许墙/结构/私有 rampart/己方障碍工地；显式 block、动态占格取消链与拉拽/跨房复核保持，decline/停用/故障回退原生登记快照，无贡献路径行为与基线一致，无新持久写入域（revision v14→v15、槽数仍 20）。复审清偿：Working 死包装改 `apply_movement_precheck_decisions` 统一入口、`run_precheck` 注释同步新语义、文档/台账/证据槽数陈旧数字 18→20、host_movement 空行。无参数完整门禁清偿前后各通过一轮（Rust 1213/12 既有忽略、compat JS 15），release ratchet 1918/2914、零转红；证据见[交付记录](../research/notes/g02d1-static-movement-2026-10-07.md)。玩家方向 move 无静态预检、本片直接生效；疲劳/MOVE 玩家门与 moveTo/PathFinder 归 G02.d2，G02 父项仍部分完成。已随本批提交，提交 ID 下次接手从 Git 补录。
+- 最近完成：**G02.d1 静态移动障碍放行（2026-10-07 已交付，三路复审无 P1/P2、四处小问题清偿完毕）**，基线 `ee78894`、接手时工作区干净、提交 `f84a2b4`。扩展 `room.movePrecheck` 的 `allowStatic(id)`：登记时默认阻挡与仲裁静态初判入输入，允许墙/结构/私有 rampart/己方障碍工地；显式 block、动态占格取消链与拉拽/跨房复核保持，decline/停用/故障回退原生登记快照，无贡献路径行为与基线一致，无新持久写入域（revision v14→v15、槽数仍 20）。复审清偿：Working 死包装改 `apply_movement_precheck_decisions` 统一入口、`run_precheck` 注释同步新语义、文档/台账/证据槽数陈旧数字 18→20、host_movement 空行。无参数完整门禁清偿前后各通过一轮（Rust 1213/12 既有忽略、compat JS 15），release ratchet 1918/2914、零转红；证据见[交付记录](../research/notes/g02d1-static-movement-2026-10-07.md)。玩家方向 move 无静态预检、本片直接生效；疲劳/MOVE 玩家门与 moveTo/PathFinder 归 G02.d2，G02 父项仍部分完成。已随本批提交 `f84a2b4`。
 
 - 最近完成：**增量复审 R1–R11 深度修复与结构优化（2026-10-07，已完成，随本批提交）**。基线 `d8af3e6`；保留两轮审查原始证据。检查点输出隔离、完整初态摘要与哈希游标、切换历史继承、UTC Date（含函数转换）、日志续接身份、压制 DAG、类型符号、建筑字段三入口校验及文档样例、原子批量初始化已修复；字段桥接/移动委托/放置按领域拆分。G02 完成范围已纠偏，静态放行未实现。最终无参数完整门禁通过：Rust 1199 通过/12 既有忽略、JS 19 通过；最终 release ratchet 1918/2914 通过、零转红。复审新增两处边界缺口已清偿，无新阻塞项；详见[修复与验收记录](../research/notes/mod-deep-repairs-2026-10-07.md)。提交 `ee78894`；该修复批无其他未提交开发切片。
-- 下一接手位置：本批（G02.d2）完成后候选 **G02.d3 声明式寻路规则**（若设计拍板）或按执行队列取 G08 剩余/G09 起；不能将任意服务器 JS 回调塞进玩家 VM。旧时区检查点/缺身份日志没有自动迁移，按新协议创建验证世界；不得把协议拒绝误判为存量已经迁移。
+- 下一接手位置：结构治理 **S02–S06 按序推进**（S01 完成即收口该批提交），治理完毕后回到 **G02.d3 声明式寻路规则**（若设计拍板）或按执行队列取 G08 剩余/G09 起；不能将任意服务器 JS 回调塞进玩家 VM。旧时区检查点/缺身份日志没有自动迁移，按新协议创建验证世界；不得把协议拒绝误判为存量已经迁移。
 - 修复前补充审查：**实现架构与代码质量复审（2026-10-07，已完成，待修复）**。基础分层保留；新增 R10 建筑字段公共编辑/冷恢复/发布校验缺口、R11 逐个管理插入的近平方级复制校验开销（均 P2），与上一轮合计 **5 项 P1、6 项 P2，全部未修复**。详见[架构质量补充记录](../research/notes/mod-increment-deep-review-2026-10-07.md#架构与代码质量补充审查2026-10-07)。新证据为独立 JS 首次运行/冷恢复及外部 Rust debug 探针三次运行；完整门禁复用上一轮同 HEAD 结果。领域桥接职责、恢复关系、提交阶段错误类型、宿主协议身份与跨功能不变量测试登记为治理建议，不冒充已复现 bug。本轮只更新审查记录、机器证据与台账，未改产品代码、未提交；先稳定化再新增功能。
 - 修复前增量复审：**上次交付后增量深度 review（2026-10-07，已完成，未通过）**。基线 `e8ed252`，目标 `d8af3e6`（43 个提交）；开始时工作区干净。确认 **5 项 P1、4 项 P2，均未修复**，详见[复审记录与反例](../research/notes/mod-increment-deep-review-2026-10-07.md)。优先清偿检查点覆盖、日志历史配对、重复冷恢复的切换历史、Date 时区、日志续接头段身份，再处理压制长环、生成类型冲突、建筑样例与 G02 完成范围。现有完整 `pnpm run check` 通过，但没有覆盖上述反例；未跑 release 兼容 ratchet。本次只新增复审文档、机器证据和台账记录，未改产品代码、未提交；接手修复前不应按原开发队列直接推进新的功能片。
 - 更新日期：2026-10-07。
@@ -136,6 +137,21 @@
 | G29.c | G29.b | 客户端资产/渲染/面板贡献 |
 
 G28.a 的网络协议及只读原型可提前设计；开放会改变玩法的请求前须完成输入/提交边界。G23.a 不必等待玩法 RNG，实现其迁移时再依赖 G22.b；G25.b 则不能省略时间/RNG 输入。类型与工具可先交付，不把整个 G29 或 G05 作为移动策略的硬依赖。
+
+## 结构治理 S 系列（2026-10-07 登记）
+
+跨 G 领域的结构治理批次，与玩法队列并行推进；拆分、边界与验收详见[结构治理计划](structure-governance-2026-10.md)。已拍板：串行套件保持单入口、prelude 全拆三件、convert 臂提取包含。
+
+| 批次 | 内容 | 状态 |
+|---|---|---|
+| S01 | 测试根 main.rs 化 + 冗余 `#[path]` 清理 + 700 行预警档 | 已交付（2026-10-07，待提交） |
+| S02 | settle_tests/embed_tests 按域归并、批次号文件改名 | 待开工 |
+| S03 | kk-engine working.rs 拆分 + settle 卫生 + realm 归并 | 待开工 |
+| S04 | 各 crate 大文件预防性拆分 + convert 臂提取 | 待开工 |
+| S05 | prelude JS 分件（room/structures_spawn/game）+ ratchet 兜底 | 待开工 |
+| S06 | 治理规则收口（source-organization/AGENTS）+ 台账关闭 | 待开工 |
+
+约束：纯移动优先（仅 prelude 闭包提升、convert 臂提取、sim.rs 段提取三处已批准小改）；每批独立绿、测试注册数不变；`.worktrees/` 不动；`Working` 字段不得重组为子 struct。
 
 ## 近期：移动与作者工具
 

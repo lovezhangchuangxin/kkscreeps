@@ -11,54 +11,31 @@ use kk_world::types::BodyKind;
 use kk_world::{ObjId, World};
 use serde_json::Value;
 
-// 集成测试根（crate root）的 mod 声明解析到 tests/ 平级，故显式 #[path]
-#[path = "settle_tests/building_lifecycle.rs"]
+// 测试目标根采用 tests/<name>/main.rs 形态，mod 声明按同目录规则解析，
+// 不再使用 #[path] 挂接（S01 结构治理，取代 b1 批次的显式路径结论）。
 mod building_lifecycle;
-#[path = "settle_tests/c3_ext_intent_family.rs"]
 mod c3_ext_intent_family;
-#[path = "settle_tests/combat_heal.rs"]
 mod combat_heal;
-#[path = "settle_tests/combat_ranged.rs"]
 mod combat_ranged;
-#[path = "settle_tests/combat_ranges.rs"]
 mod combat_ranges;
-#[path = "settle_tests/controller_safemode.rs"]
 mod controller_safemode;
-#[path = "settle_tests/generic_store_family.rs"]
 mod generic_store_family;
-#[path = "settle_tests/inter_room_family.rs"]
 mod inter_room_family;
-#[path = "settle_tests/m2b2_terminal_market_family.rs"]
 mod m2b2_terminal_market_family;
-#[path = "settle_tests/m2b_contrib_link_family.rs"]
 mod m2b_contrib_link_family;
-#[path = "settle_tests/m2b_creation_family.rs"]
 mod m2b_creation_family;
-#[path = "settle_tests/m2b_extension_family.rs"]
 mod m2b_extension_family;
-#[path = "settle_tests/m2b_notify_family.rs"]
 mod m2b_notify_family;
-#[path = "settle_tests/m2b_structure_actions_family.rs"]
 mod m2b_structure_actions_family;
-#[path = "settle_tests/m2b_structure_decay_family.rs"]
 mod m2b_structure_decay_family;
-#[path = "settle_tests/minerals_and_boost.rs"]
 mod minerals_and_boost;
-#[path = "settle_tests/misc_and_notify.rs"]
 mod misc_and_notify;
-#[path = "settle_tests/mod_building_family.rs"]
 mod mod_building_family;
-#[path = "settle_tests/mod_resource_family.rs"]
 mod mod_resource_family;
-#[path = "settle_tests/movement_contest.rs"]
 mod movement_contest;
-#[path = "settle_tests/movement_spawn_basics.rs"]
 mod movement_spawn_basics;
-#[path = "settle_tests/structures_and_attack.rs"]
 mod structures_and_attack;
-#[path = "settle_tests/tombstone_ruin_engine.rs"]
 mod tombstone_ruin_engine;
-#[path = "settle_tests/tough_damage.rs"]
 mod tough_damage;
 
 fn terrain_with(swamps: &[(usize, usize)]) -> kk_core::Terrain {

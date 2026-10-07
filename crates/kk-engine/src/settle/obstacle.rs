@@ -70,5 +70,4 @@ impl MoveObstacle {
 }
 
 #[cfg(test)]
-#[path = "obstacle/tests.rs"]
 mod tests;

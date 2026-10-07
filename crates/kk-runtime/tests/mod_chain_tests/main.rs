@@ -148,93 +148,52 @@ export default function register(api) {{
 }
 
 // 共享夹具与契约说明见 mod_chain_tests/README.md。
-#[path = "mod_chain_tests/harness.rs"]
 mod harness;
 
-#[path = "mod_chain_tests/synchronization.rs"]
 mod synchronization;
 
-#[path = "mod_chain_tests/faults.rs"]
 mod faults;
 
-#[path = "mod_chain_tests/decline.rs"]
 mod decline;
 
-#[path = "mod_chain_tests/disable.rs"]
 mod disable;
 
-#[path = "mod_chain_tests/auto_disable.rs"]
 mod auto_disable;
-#[path = "mod_chain_tests/combat_ranges.rs"]
 mod combat_ranges;
-#[path = "mod_chain_tests/creep_build.rs"]
 mod creep_build;
-#[path = "mod_chain_tests/creep_build_world.rs"]
 mod creep_build_world;
-#[path = "mod_chain_tests/creep_combat.rs"]
 mod creep_combat;
-#[path = "mod_chain_tests/creep_combat_world.rs"]
 mod creep_combat_world;
-#[path = "mod_chain_tests/creep_move.rs"]
 mod creep_move;
-#[path = "mod_chain_tests/creep_move_world.rs"]
 mod creep_move_world;
-#[path = "mod_chain_tests/creep_store.rs"]
 mod creep_store;
-#[path = "mod_chain_tests/damage_policy.rs"]
 mod damage_policy;
-#[path = "mod_chain_tests/heal_policy.rs"]
 mod heal_policy;
-#[path = "mod_chain_tests/link_decline.rs"]
 mod link_decline;
-#[path = "mod_chain_tests/mass_policy.rs"]
 mod mass_policy;
-#[path = "mod_chain_tests/mass_policy_faults.rs"]
 mod mass_policy_faults;
-#[path = "mod_chain_tests/mod_building_fields.rs"]
 mod mod_building_fields;
-#[path = "mod_chain_tests/mod_building_world.rs"]
 mod mod_building_world;
-#[path = "mod_chain_tests/object_ops.rs"]
 mod object_ops;
-#[path = "mod_chain_tests/object_tick.rs"]
 mod object_tick;
-#[path = "mod_chain_tests/resource_domain.rs"]
 mod resource_domain;
-#[path = "mod_chain_tests/resource_faults.rs"]
 mod resource_faults;
-#[path = "mod_chain_tests/store_rules.rs"]
 mod store_rules;
 
-#[path = "mod_chain_tests/trace.rs"]
 mod trace;
 
-#[path = "mod_chain_tests/composition.rs"]
 mod composition;
 
-#[path = "mod_chain_tests/incoming_faults.rs"]
 mod incoming_faults;
-#[path = "mod_chain_tests/incoming_policy.rs"]
 mod incoming_policy;
-#[path = "mod_chain_tests/move_admission.rs"]
 mod move_admission;
-#[path = "mod_chain_tests/move_contest.rs"]
 mod move_contest;
-#[path = "mod_chain_tests/move_cost.rs"]
 mod move_cost;
-#[path = "mod_chain_tests/move_gate.rs"]
 mod move_gate;
-#[path = "mod_chain_tests/move_obstacle.rs"]
 mod move_obstacle;
-#[path = "mod_chain_tests/move_precheck.rs"]
 mod move_precheck;
-#[path = "mod_chain_tests/move_pull_registration.rs"]
 mod move_pull_registration;
-#[path = "mod_chain_tests/move_static.rs"]
 mod move_static;
-#[path = "mod_chain_tests/retaliation_faults.rs"]
 mod retaliation_faults;
-#[path = "mod_chain_tests/retaliation_policy.rs"]
 mod retaliation_policy;
-#[path = "mod_chain_tests/tough_damage.rs"]
 mod tough_damage;

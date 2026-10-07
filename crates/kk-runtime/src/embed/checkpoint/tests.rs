@@ -682,7 +682,6 @@ const SCHEMA_OPAQUE: &[&str] = &[
     "engine.mod_states",
 ];
 
-#[path = "tests/schema.rs"]
 mod schema;
 
 #[test]

@@ -70,19 +70,12 @@ fn error(c: Contribution, expected: &str) {
     assert!(error.contains(expected), "{error}");
 }
 
-#[path = "freeze_cases/buildings.rs"]
 mod buildings;
-#[path = "freeze_cases/catalog.rs"]
 mod catalog;
-#[path = "freeze_cases/handlers.rs"]
 mod handlers;
-#[path = "freeze_cases/projection.rs"]
 mod projection;
-#[path = "freeze_cases/resources.rs"]
 mod resources;
-#[path = "freeze_cases/rules.rs"]
 mod rules;
-#[path = "freeze_cases/store_rules.rs"]
 mod store_rules;
 
 #[test]

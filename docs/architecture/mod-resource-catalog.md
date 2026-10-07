@@ -44,5 +44,5 @@ export default function register(api) {
 
 ## 验收
 
-- Rust：冻结合并/归属/重复/PlanHash（`kk-mod-api/tests/freeze_cases/resources.rs`）、声明形状（`kk-mod-host` declarations）、结算闭环/拒绝/市场跨房（`kk-engine/tests/settle_tests/mod_resource_family.rs`）、快照往返（`kk-world`）。
+- Rust：冻结合并/归属/重复/PlanHash（`kk-mod-api/tests/freeze/resources.rs`）、声明形状（`kk-mod-host` declarations）、结算闭环/拒绝/市场跨房（`kk-engine/tests/settle_tests/mod_resource_family.rs`）、快照往返（`kk-world`）。
 - 独立 JS 夹具 [mod-resources](../../compat/fixtures/mod-resources/README.md) 与三场景 [sim-mod-resources](../../compat/fixtures/sim-mod-resources/README.md)：只选 ore、选 beacon（依赖闭包自动加入 ore）、无 Mod 对照世界；JSON/KKPV 双通路最终世界逐项一致，三个 PlanHash 互不相同。验证记录见 [N2a 交付](../research/notes/n2a-mod-resources-2026-10-05.md)。
