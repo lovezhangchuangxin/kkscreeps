@@ -13,6 +13,10 @@
 - 当前验证：无参数 `pnpm run check` 完整通过；release 重建后棘轮 **1965→1983**（本批 18 转绿零转红：UNDOC-IDCTOR 10 + UNDOC-CTOR 8；对 HEAD~1 基线 +37 = 本批 18 + M2C 19），ratchet 地板 1983；三组 bot 2000/2000/10 指标与基线一致且验收判定全部通过（Overmind 保留既有首轮异常 1；含 M2C 回归修复后的复验）。三路复审 0 P0；1 P1（Flag 官方六参签名）与 2 P2（PowerCreep 语义/effects 空数组键）当批清偿，P3 清偿或登记见上。剩余 24 失败集中于 keeper lair/getGameTime/setup 零散域。工作区含本次未提交改动。
 - 历史交接、阶段验证与审查过程见[历史记录](archive/mod-history-2026-10.md)；玩法缺口继续以本文件任务表为准。
 
+## G11.a 建筑配额策略（2026-10-08 登记，未实施）
+
+调查结论（接手起点）：配额的引擎判定收口在 `settle/structures.rs::allowed_for`（link 走 `w.plane.links.rcl` 有效规则——`builtin:link.rcl0..8` 九条标量规则先例，其余类型查 `controller_allowed` 静态表），isActive 预检在 `check_structure_against_controller`；玩家面两个消费者读冻结常量表（`structures.js` isActive 的 `C.CONTROLLER_STRUCTURES` 两处 + `room/creation.js` checkControllerAvailability）。首片设计分叉（需拍板或专项设计）：① 逐类型逐等级标量规则（link 先例外推全——约 9×12 条规则，规则目录膨胀但零新机制）；② 房间级 JS 槽 `builtin:room.buildQuota`（G01–G04 房槽先例，JS 动态给配额，但预检同源需冻结计划回填玩家面）；③ 计划派生常量注入覆盖 `CONTROLLER_STRUCTURES`（射程四键/仓库十键先例，玩家面零改动能读同表，但常量表是「上游 dump+本地新增」混合面，覆盖整表与兼容基线耦合）。约束：预检与结算必须同源（G02.d2 双端冻结先例）；Mod 建筑自身配额已在 BuildingDescriptor 域，不并入本槽。验收按每批共同验收（两独立 JS 包+原生对照+组合+双通道+冷恢复）。
+
 ## 执行与更新规则
 
 以实际 HEAD、源码和适用验收为准。当前状态只在本台账维护；历史记录不得当作未完成指令。首片完成仍保留父项缺口；依赖和范围变化写清原因。普通修复与重构更新受影响契约及简短状态，不强制新建 research 文档；验证要求见 [AGENTS.md](../../AGENTS.md)。
