@@ -6,7 +6,7 @@ const CONSTANTS_JSON: &str = include_str!("../../assets/constants.json");
 /// 按依赖顺序装配共享工具、模块加载、玩家 API 与宿主函数。
 /// 各段通过临时全局 __kkp 共享闭包状态；Rust 捕获宿主函数句柄后删除 __kkp。
 /// 因此 90_host 只能注册句柄，不能提前删除共享容器。
-pub(super) const PRELUDE_SEGMENTS: [(&str, &str); 19] = [
+pub(super) const PRELUDE_SEGMENTS: [(&str, &str); 24] = [
     (
         "kk-prelude-00-shared",
         include_str!("../prelude/00_shared.js"),
@@ -27,6 +27,26 @@ pub(super) const PRELUDE_SEGMENTS: [(&str, &str); 19] = [
     (
         "kk-prelude-30-game-room-position",
         include_str!("../prelude/30_game/room-position.js"),
+    ),
+    (
+        "kk-prelude-30-game-room-terrain",
+        include_str!("../prelude/30_game/room/terrain.js"),
+    ),
+    (
+        "kk-prelude-30-game-room-visual",
+        include_str!("../prelude/30_game/room/visual.js"),
+    ),
+    (
+        "kk-prelude-30-game-room-queries",
+        include_str!("../prelude/30_game/room/queries.js"),
+    ),
+    (
+        "kk-prelude-30-game-room-creation",
+        include_str!("../prelude/30_game/room/creation.js"),
+    ),
+    (
+        "kk-prelude-30-game-room-pathfinding",
+        include_str!("../prelude/30_game/room/pathfinding.js"),
     ),
     (
         "kk-prelude-30-game-room",

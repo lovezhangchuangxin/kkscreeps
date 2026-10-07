@@ -22,7 +22,7 @@
 | 当前 Mod 处理链和自主对象 tick 怎样执行？ | [Mod 处理链执行](architecture/mod-execution.md)、[自有对象 tick](architecture/mod-object-tick.md)、[对象操作](architecture/mod-objects.md)、[组合诊断](architecture/mod-composition.md)、[有效规则读取](architecture/mod-rules.md)、[新世界内容选择](architecture/mod-content-selection.md)、[资源目录](architecture/mod-resource-catalog.md)、[可建造建筑](architecture/mod-buildings.md)、[战斗领域](architecture/combat.md)、[移动领域](architecture/movement.md)、[玩家预检规则](architecture/player-precheck-rules.md) |
 | 作者如何获得玩家面 TypeScript 声明？ | [玩家类型生成](architecture/mod-types.md) |
 | 作者如何看到 Mod 拒绝/故障与回退过程？ | [运行 trace](architecture/mod-trace.md) |
-| 独立 JS Mod 距完整玩法还有哪些缺口，接下来怎样开发？ | [现状复查](research/09-mod-capability-current-audit.md)、[完整玩法计划](plans/mod-complete-gameplay.md) |
+| 独立 JS Mod 距完整玩法还有哪些缺口，接下来怎样开发？ | [当前接手台账](plans/mod-next-batches.md)、[完整玩法计划](plans/mod-complete-gameplay.md)；历史差距分析见[专项复查](research/09-mod-capability-current-audit.md) |
 | AI 接手从哪里继续，怎样维护进度？ | [后续任务与接手台账](plans/mod-next-batches.md)、[仓库贡献指南](../AGENTS.md#ai-接手与进度维护) |
 | 官方玩法怎样拆成可选 Mod，如何选择内容和处理存量数据？ | [官方内容包决策](decisions/ADR-016-official-content-packs.md)、[内容包设计](designs/content-packs.md) |
 | Mod、前端和开发工具计划如何工作？ | [功能设计](designs/README.md)、[前端架构](architecture/frontend.md) |
