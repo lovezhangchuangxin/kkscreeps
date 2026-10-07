@@ -1,14 +1,12 @@
-//! 移动请求预检策略的有界输入；预检是集合收紧，无数值域扩展。
+//! 移动请求预检策略输入：Hosted 路径含原生静态拒绝的暂存请求。
 //!
-//! 输入在全部意图登记完成后、竞争输入构造之前整房一次提供；列表中的
-//! 请求均已通过原生静态预检（结构/私有敌方 rampart），原生挡下的请求
-//! 不入矩阵也不进输入。`pulled/pulling` 是登记时点的原始配对标记，
-//! 配对一致性复核发生在准入预填时点。地形/占位摘要供策略做区域管制
-//! 类决策；坐标与表示合法性仍是宿主约束。
+//! 全部意图登记后、竞争前整房一次提供；登记时拒绝快照与当前静态
+//! 初判分列，避免对象后续变异改变原生回退。拉拽标记在配对复核前
+//! 提供；动态让位、坐标与对象有效性仍由宿主复核。
 
 use serde::Serialize;
 
-/// 整房视野中的一条移动请求登记（均已通过原生静态预检）。
+/// 整房视野中的一条移动请求登记（可含原生静态拒绝的请求）。
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PrecheckRequestInfo {
@@ -34,6 +32,10 @@ pub struct PrecheckRequestInfo {
     pub has_road: bool,
     /// 目的格对象占位摘要（结构/工地/creep 等，与障碍槽输入同形）。
     pub objects: Vec<PrecheckObjectInfo>,
+    /// 登记时结构/私有 rampart 的原生拒绝快照。
+    pub native_registration_blocked: bool,
+    /// 当前静态障碍初判（含墙/己方工地，不含 creep 占格）。
+    pub native_static_blocked: bool,
 }
 
 /// 目的格对象摘要；不携带让位预期（预检时点尚未选胜）。

@@ -102,7 +102,7 @@ fn blocked_request_never_contests_and_rival_takes_cell() {
     let candidate = MovePrecheck::new(input).unwrap().unwrap();
     candidate.block(ObjId(1)).unwrap();
     assert!(candidate.is_blocked(ObjId(1)));
-    assert!(!candidate.is_blocked(ObjId(2)), "原生初值恒为否");
+    assert!(!candidate.is_blocked(ObjId(2)), "本场景弱者无静态障碍");
     let blocks = candidate.into_blocks();
     m.apply_precheck_blocks(&blocks);
 
@@ -215,4 +215,109 @@ fn candidate_validates_domain_and_empty_input() {
     let input = empty.precheck_input(&room, &index);
     assert!(input.requests.is_empty());
     assert!(MovePrecheck::new(input).unwrap().is_none());
+}
+
+// 静态放行必须进入正式取消链及准入预演；动态占格仍会级联取消。
+#[test]
+fn static_allowance_matches_preview_and_keeps_dynamic_cancellation() {
+    for occupied in [false, true] {
+        let mut codes = vec![0; 2500];
+        codes[10 * 50 + 11] = kk_core::TERRAIN_MASK_WALL;
+        let mut room = RoomState::new("W1N1", kk_core::Terrain::from_codes(&codes).unwrap());
+        let mut m = movement::Movement::new();
+        put(&mut room, ObjId(1), 10, 10, &[BodyKind::Move]);
+        put(&mut room, ObjId(2), 9, 10, &[BodyKind::Move]);
+        m.add(ObjId(1), (10, 10), 1, 0);
+        m.add(ObjId(2), (9, 10), 1, 0);
+        if occupied {
+            put(&mut room, ObjId(3), 11, 10, &[BodyKind::Work]);
+        }
+        let index = RoomIndex::build(&room.objects);
+        let candidate = MovePrecheck::new(m.precheck_input(&room, &index))
+            .unwrap()
+            .unwrap();
+        assert!(candidate.is_blocked(ObjId(1)));
+        candidate.allow_static(ObjId(1)).unwrap();
+        assert!(!candidate.is_blocked(ObjId(1)));
+        m.apply_precheck_decisions(candidate.decisions(true));
+        m.rank_winners(&room, &BTreeMap::new());
+        m.prefill_admissions(&room, &BTreeMap::new());
+        let preview = m.simulate_survivors(
+            &room,
+            &index,
+            None,
+            &[(ObjId(1), true), (ObjId(2), true)].into_iter().collect(),
+        );
+        m.cancel_blocked(&room, &index, None);
+        assert_eq!(
+            preview,
+            m.winners().keys().copied().collect::<BTreeSet<_>>()
+        );
+        assert_eq!(m.winners().len(), if occupied { 0 } else { 2 });
+    }
+}
+
+#[test]
+fn static_allowance_cannot_clear_explicit_veto_and_decline_restores_registration() {
+    let (room, mut m) = contested_room();
+    // 模拟登记时挡下、预检时障碍已消失：不能按当前空格误放行。
+    m.mark_registration_blocked(ObjId(1), true);
+    let input = m.precheck_input(&room, &RoomIndex::build(&room.objects));
+    assert!(input.requests[0].native_registration_blocked);
+    assert!(!input.requests[0].native_static_blocked);
+    let c = MovePrecheck::new(input).unwrap().unwrap();
+    assert!(c.is_blocked(ObjId(1)));
+    assert!(c.allow_static(ObjId(99)).is_err());
+    c.allow_static(ObjId(1)).unwrap();
+    assert!(!c.is_blocked(ObjId(1)));
+    assert!(c.decisions(true).blocks.is_empty());
+    assert!(c.decisions(false).blocks.contains(&ObjId(1)));
+    assert!(c.decisions(false).static_allowed.is_empty());
+    c.block(ObjId(1)).unwrap();
+    c.allow_static(ObjId(1)).unwrap();
+    assert!(c.is_blocked(ObjId(1)));
+    assert!(c.decisions(true).blocks.contains(&ObjId(1)));
+    m.apply_precheck_decisions(c.decisions(true));
+    m.rank_winners(&room, &BTreeMap::new());
+    assert_eq!(m.winners().get(&ObjId(2)), Some(&(40, 19)));
+}
+
+#[test]
+fn overwriting_request_clears_static_registration_snapshot() {
+    let (room, mut m) = contested_room();
+    m.mark_registration_blocked(ObjId(1), true);
+    m.add(ObjId(1), (40, 20), 1, 0);
+    let input = m.precheck_input(&room, &RoomIndex::build(&room.objects));
+    assert!(!input.requests[0].native_registration_blocked);
+    assert!(
+        !MovePrecheck::new(input)
+            .unwrap()
+            .unwrap()
+            .is_blocked(ObjId(1))
+    );
+}
+
+#[test]
+fn losing_contenders_static_allowance_cannot_leak_to_winner() {
+    for allowed in [ObjId(1), ObjId(2)] {
+        let mut codes = vec![0; 2500];
+        codes[19 * 50 + 40] = kk_core::TERRAIN_MASK_WALL;
+        let (plain, mut m) = contested_room();
+        let mut room = RoomState::new("W1N1", kk_core::Terrain::from_codes(&codes).unwrap());
+        room.objects = plain.objects;
+        let index = RoomIndex::build(&room.objects);
+        let c = MovePrecheck::new(m.precheck_input(&room, &index))
+            .unwrap()
+            .unwrap();
+        c.allow_static(allowed).unwrap();
+        m.apply_precheck_decisions(c.decisions(true));
+        m.rank_winners(&room, &BTreeMap::new());
+        m.prefill_admissions(&room, &BTreeMap::new());
+        m.cancel_blocked(&room, &index, None);
+        assert_eq!(m.winners().contains_key(&ObjId(1)), allowed == ObjId(1));
+        assert!(
+            !m.winners().contains_key(&ObjId(2)),
+            "放行落选者不会重新选胜"
+        );
+    }
 }

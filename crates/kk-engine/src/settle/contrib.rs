@@ -465,10 +465,17 @@ impl ContributionDispatch {
         self.move_obstacle.run(ctx)
     }
 
-    /// 运行移动请求预检槽；成功返回否决集（调用方在竞争输入构造前
-    /// 应用），Native 或拒绝返回 None。
-    pub(crate) fn run_precheck(&self, ctx: &RoomCtx) -> Result<Option<BTreeSet<ObjId>>, String> {
+    /// 运行移动请求预检槽；Native 返回 None，Hosted 成功与正常拒绝均
+    /// 返回决策（拒绝只兑现登记时原生拒绝），调用方在竞争输入构造前应用。
+    pub(crate) fn run_precheck(
+        &self,
+        ctx: &RoomCtx,
+    ) -> Result<Option<crate::settle::precheck::PrecheckDecisions>, String> {
         self.move_precheck.run(ctx)
+    }
+
+    pub(crate) fn defers_static_precheck(&self) -> bool {
+        self.move_precheck.defers_static()
     }
 
     /// 运行拉拽登记槽；见 [`PullRegistrationSlot::run`] 的返回语义。

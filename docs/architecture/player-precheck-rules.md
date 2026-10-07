@@ -42,3 +42,7 @@
 ## 验收
 
 引擎（默认≡硬编码、扩程命中、零程拒绝、heal/rangedHeal 独立、mass 面积不受影响）见 `settle_tests/combat_ranges.rs`；runner 常量默认/覆盖平铺与四门读常量见 `sandbox_tests`；运行时端到端（常量注入、门与结算同源、越界拒绝、mass 排除）见 `mod_chain_tests/combat_ranges.rs`；reach/medic 两独立包 + 原生 + 组合四场景 × JSON/KKPV 双通道与检查点冷恢复见 [sim-mod-combat-ranges](../../compat/fixtures/sim-mod-combat-ranges/README.md)。证据见[交付记录](../research/notes/g07a-combat-ranges-2026-10-06.md)。压制（G07.b）：引擎语义矩阵（齐发/单发/存在性/跨对象/链式逐环/跨玩家隔离）见 `settle_tests/c3_ext_intent_family/suppression.rs`，冻结校验（同接收者/互压环）见 kk-mod-api freeze 用例，转换形态（非数组/非字符串/null 同缺省）见 kk-mod-host register 用例；SDK 声明→冻结→执行→冷恢复见 `kk-runtime` c3 压制族；suppress/free 独立包五场景（含组合选择）× 双通道 × 冷恢复见 [sim-mod-intent-suppression](../../compat/fixtures/sim-mod-intent-suppression/README.md)（原生对照由 c3「无 Mod 意图分片不装配发射原语」用例承担），证据见[交付记录](../research/notes/g07b-ext-intent-suppression-2026-10-07.md)。
+
+## 移动静态放行与玩家预检边界
+
+G02.d1 的 [静态移动放行](mod-move-precheck.md)在结算请求登记及仲裁同源生效。玩家 `move(direction)` 原本不预检墙和结构，正常身体/疲劳时返回 OK 并进入该策略。`moveTo` 与 PathFinder 仍按原生障碍寻路，不会自动规划穿墙；疲劳/MOVE 的玩家门仍需 G02.d2 盘点并贯通，不可据结算侧放行声明完整玩家预检已交付。

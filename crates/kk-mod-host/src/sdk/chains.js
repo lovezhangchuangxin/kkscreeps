@@ -25,7 +25,7 @@ import { createBuild } from './build.js';
 // 存活的胜者 ID（宿主同一取消链代码；按调用时点即时计算，非快照，
 // 障碍槽尚未追加、结果为上界）。房间级移动障碍槽的 ctx.obstacle 提供单向追加阻挡
 // （isBlocked/block），不能放行 native 判定的阻挡。房间级移动预检槽
-// 的 ctx.precheck 同为单向收紧（isBlocked/block），被否决的移动请求
+// 的 ctx.precheck 提供静态放行 allowStatic 与不可撤销 block；被否决的移动请求
 // 等同从未登记、不参与竞争。均不可枚举、不可替换且只在处理器同步期
 // 内有效。
 // 处理器的持久状态只准走 ctx.state——模块全局不随失败候选回滚，

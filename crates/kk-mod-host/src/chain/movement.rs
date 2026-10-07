@@ -21,7 +21,7 @@ pub(crate) fn op_mod_chain_move_pending(
 }
 
 /// 登记或替换执行者的移动请求。方向须为 1..=8 的整数；领域上
-/// 越界、静态障碍或孵化中不登记并返回 false（与 native 预检同口径）。
+/// 越界/孵化中返回 false；静态障碍有预检贡献时暂存，否则直接拒绝。
 #[op2(fast)]
 pub(crate) fn op_mod_chain_move_request(
     state: &mut OpState,

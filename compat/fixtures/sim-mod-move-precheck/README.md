@@ -10,7 +10,7 @@
 | `scenario-combined.json` | fenced replace + courtesy after 并集 | 原地 | strong 原地、weak 移动 |
 
 - **请求级语义**：预检否决的是**请求登记**（竞争输入构造之前移除，等同从未登记）——courtesy 否决 strong 的请求后 weak 成为 (40,19) 的唯一登记者而胜出；对照障碍槽（G02.b）挡下**胜者**后无人可动，两级语义不同。
-- 输入为整房请求摘要（`moverId/owner/originX/originY/targetX/targetY/movePower/weight/pulled/pulling` + 目的格 `terrainWall/terrainSwamp/hasRoad/objects[]` 占位摘要），按对象 ID 升序、不截断；列表中的请求均已通过原生静态预检。
+- 输入为整房请求摘要（`moverId/owner/originX/originY/targetX/targetY/movePower/weight/pulled/pulling` + 目的格 `terrainWall/terrainSwamp/hasRoad/objects[]` 占位摘要），按对象 ID 升序、不截断；这些场景中的请求均通过原生静态预检；G02.d1 起公共输入也包含暂存静态拒绝，见[现行契约](../../../docs/architecture/mod-move-precheck.md)。
 - 能力 `ctx.precheck.isBlocked/block` 单向收紧；正常拒绝整房丢弃否决（等同没进过 JS）。被否决请求不参与竞争评分、不让位、不占格（spawn 放置的 `is_tile_busy` 读不到它），与原生挡下的请求下游一致。
 
 ```bash
@@ -18,4 +18,4 @@ target/release/kkscreeps sim run --scenario compat/fixtures/sim-mod-move-prechec
 target/release/kkscreeps sim run --scenario compat/fixtures/sim-mod-move-precheck/scenario-courtesy.json --ticks 3 --kkpv --report /tmp/precheck-courtesy.json
 ```
 
-`kk-cli` 的 `sim_tests/move_precheck.rs` 核对四场景 × JSON/KKPV 的完整 final、PlanHash 与组合身份（四身份互异，内容选择与组合分别冻结；内建槽 17→18、revision v11 由 freeze 槽计数断言钉死）；在第 1 tick 后保存检查点、退出进程、加载再续跑，确认位置与 namespace 计数恰一次延续。策略包在 [../mod-move-precheck/](../mod-move-precheck/)。
+`kk-cli` 的 `sim_tests/move_precheck.rs` 核对四场景 × JSON/KKPV 的完整 final、PlanHash 与组合身份（四身份互异，内容选择与组合分别冻结；初批内建槽 17→18、revision v11；现行为 18 槽、revision v15）；在第 1 tick 后保存检查点、退出进程、加载再续跑，确认位置与 namespace 计数恰一次延续。策略包在 [../mod-move-precheck/](../mod-move-precheck/)。

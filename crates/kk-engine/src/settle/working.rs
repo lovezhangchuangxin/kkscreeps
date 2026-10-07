@@ -413,6 +413,8 @@ impl Working {
             for record in snapshot.requests {
                 self.movement.restore_request(id, record);
             }
+            self.movement
+                .mark_registration_blocked(id, snapshot.registration_blocked);
         }
         match snapshot.old_fatigue {
             Some(fatigue) => {
@@ -835,9 +837,13 @@ impl Working {
         self.movement.apply_costs(costs);
     }
 
-    /// 预检槽成功后的否决集应用；被否决请求从登记矩阵移除。
-    pub fn apply_movement_precheck_blocks(&mut self, blocks: &std::collections::BTreeSet<ObjId>) {
-        self.movement.apply_precheck_blocks(blocks);
+    /// 预检槽决策应用；成功与正常拒绝都调用（拒绝丢弃 JS 放行、只
+    /// 兑现登记时原生拒绝），被否决请求从登记矩阵移除。
+    pub fn apply_movement_precheck_decisions(
+        &mut self,
+        decisions: crate::settle::precheck::PrecheckDecisions,
+    ) {
+        self.movement.apply_precheck_decisions(decisions);
     }
 
     /// 此刻生效的安全模式主人：控制器处于安全模式时取房主，否则

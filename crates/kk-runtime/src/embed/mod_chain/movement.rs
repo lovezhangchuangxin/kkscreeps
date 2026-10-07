@@ -57,6 +57,11 @@ impl kk_mod_host::MovementHost for ModChainContext {
         let id = ObjId::parse(id).ok_or("请求者 ID 非法")?;
         precheck.block(id)
     }
+    fn precheck_allow_static(&mut self, id: &str) -> Result<(), String> {
+        let precheck = self.capability.precheck().ok_or("本次槽没有移动预检能力")?;
+        let id = ObjId::parse(id).ok_or("请求者 ID 非法")?;
+        precheck.allow_static(id)
+    }
     fn pull_denied(&mut self, id: &str) -> Result<bool, String> {
         let pull = self
             .capability

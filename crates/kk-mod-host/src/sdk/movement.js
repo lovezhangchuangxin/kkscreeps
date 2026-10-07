@@ -83,7 +83,7 @@ export function createMovement({ ops, token, fault, write }) {
       },
     });
   }
-  // 房间级预检槽的 ctx.precheck 追加请求否决；单向能力，不提供放行。
+  // 房间级预检槽累积静态放行与请求否决；放行不能清除显式否决或动态占格。
   function precheck(key, isOpen) {
     function checked(call) {
       try {
@@ -105,6 +105,12 @@ export function createMovement({ ops, token, fault, write }) {
         return checked(() => {
           if (typeof id !== 'string') throw new Error('请求者 ID 须为原始字符串');
           return ops.op_mod_chain_precheck_block(token, key, id);
+        });
+      },
+      allowStatic(id) {
+        return checked(() => {
+          if (typeof id !== 'string') throw new Error('请求者 ID 须为原始字符串');
+          return ops.op_mod_chain_precheck_allow_static(token, key, id);
         });
       },
     });

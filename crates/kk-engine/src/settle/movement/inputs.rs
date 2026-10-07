@@ -16,7 +16,7 @@ use super::{
 };
 
 impl Movement {
-    /// 构造移动请求预检输入：全部登记请求（均已通过原生静态预检）
+    /// 构造移动请求预检输入：全部登记请求（含 Hosted 暂存的静态拒绝）
     /// 按对象 ID 升序、不截断，附目的格地形与占位摘要。调用时点为
     /// 全部意图登记完成后、竞争输入构造之前；只读，不改变登记。
     pub(crate) fn precheck_input(
@@ -61,6 +61,14 @@ impl Movement {
                 ),
                 has_road: has_road(room, index, cell),
                 objects: Vec::new(),
+                native_registration_blocked: self.registration_blocks.contains(&id),
+                native_static_blocked: super::static_obstacles::arbitration_blocked(
+                    room,
+                    index,
+                    &self.buildings,
+                    cell,
+                    creep.map(|c| c.owner.as_str()).unwrap_or(""),
+                ),
             };
             if let Some(c) = creep {
                 info.owner = c.owner.clone();
@@ -118,8 +126,24 @@ impl Movement {
         kk_mod_api::precheck::MovePrecheckInput { requests }
     }
 
+    pub(crate) fn mark_registration_blocked(&mut self, id: ObjId, blocked: bool) {
+        if blocked {
+            self.registration_blocks.insert(id);
+        } else {
+            self.registration_blocks.remove(&id);
+        }
+    }
+
+    pub(crate) fn apply_precheck_decisions(
+        &mut self,
+        decisions: crate::settle::precheck::PrecheckDecisions,
+    ) {
+        self.apply_precheck_blocks(&decisions.blocks);
+        self.static_allowed = decisions.static_allowed;
+    }
+
     /// 预检槽成功后的否决集应用：被否决请求从登记矩阵移除，等同从未
-    /// 登记（不参与竞争评分、不让位、不占格）。Native/拒绝路径不调用。
+    /// 登记（不参与竞争评分、不让位、不占格）。Native 路径不调用；拒绝时仍过滤登记快照。
     pub(crate) fn apply_precheck_blocks(&mut self, blocks: &BTreeSet<ObjId>) {
         for id in blocks {
             self.remove_requests(*id);

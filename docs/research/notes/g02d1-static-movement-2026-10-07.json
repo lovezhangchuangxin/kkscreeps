@@ -1,0 +1,67 @@
+{
+  "baseline": "ee78894",
+  "scope": "G02.d1",
+  "catalog_revision": {
+    "from": 14,
+    "to": 15,
+    "slots": 20
+  },
+  "new_persistent_domains": [],
+  "targeted_checks": {
+    "engine": {
+      "passed": 8
+    },
+    "runtime": {
+      "passed": 9
+    },
+    "sim": {
+      "passed": 1,
+      "seconds": 99.19,
+      "scenarios": 4,
+      "channels": [
+        "JSON",
+        "KKPV"
+      ],
+      "cold_resume": true,
+      "replay_verified": true
+    }
+  },
+  "review": {
+    "agents": 3,
+    "p1": 0,
+    "p2": 0,
+    "cleared": [
+      "Working::apply_movement_precheck_blocks 死包装改 apply_movement_precheck_decisions 统一入口并回接 contest 调用点",
+      "ContributionDispatch::run_precheck 外层注释同步「正常拒绝也返回决策」新语义",
+      "内建槽数文档陈旧数字 18→20（本批未增槽）",
+      "host_movement trait 默认方法块多余空行"
+    ],
+    "deferred": [
+      "moveTo 不自动穿墙为架构推断、无回归测试，随 G02.d2 盘点钉住",
+      "ratchet 两条「豁免条目未命中」警告为历史豁免表陈旧条目提示，非本批引入"
+    ]
+  },
+  "full_gate": {
+    "status": "passed",
+    "runs": 2,
+    "note": "复审清偿前后各一轮",
+    "rust_passed": 1213,
+    "rust_ignored": 12,
+    "compat_js_passed": 15,
+    "renderer_js_passed": 1
+  },
+  "release_ratchet": {
+    "status": "passed",
+    "suite_total": 2914,
+    "suite_passed": 1918,
+    "suite_failed": 89,
+    "suite_skipped": 907,
+    "floor": 1918,
+    "new_red": 0
+  },
+  "remaining": [
+    "G02.d2: fatigue/MOVE player prechecks",
+    "moveTo/PathFinder movement policy consumers",
+    "full room arbitration replacement"
+  ]
+}

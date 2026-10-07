@@ -39,7 +39,9 @@ mod move_cost;
 mod precheck;
 mod pull_registration;
 pub(crate) use move_cost::{op_mod_chain_cost_fatigue_of, op_mod_chain_cost_set_fatigue};
-pub(crate) use precheck::{op_mod_chain_precheck_block, op_mod_chain_precheck_blocked};
+pub(crate) use precheck::{
+    op_mod_chain_precheck_allow_static, op_mod_chain_precheck_block, op_mod_chain_precheck_blocked,
+};
 pub(crate) use pull_registration::{op_mod_chain_pull_denied, op_mod_chain_pull_deny};
 mod combat_batch;
 pub(crate) use combat_batch::{

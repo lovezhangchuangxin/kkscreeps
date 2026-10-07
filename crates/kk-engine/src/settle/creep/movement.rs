@@ -14,7 +14,7 @@ use crate::settle::{SettleError, Working};
 use super::lifecycle::die_creep;
 
 /// 记录旧疲劳并登记移动请求。direction 优先，否则用相邻 creep 的 ID 求方向。
-/// 预检静态障碍和私有敌方 rampart，creep 冲突交给 Movement 仲裁。
+/// 无预检贡献时直接拒绝静态障碍；Hosted 保存判定等预检决策，creep 冲突由仲裁处理。
 pub(in crate::settle) fn intent_move(w: &mut Working, id: ObjId, data: &IntentData) {
     let (spawning, fatigue, x, y, owner) = match w.creep(id) {
         Some(c) => (
@@ -55,45 +55,18 @@ pub(in crate::settle) fn intent_move(w: &mut Working, id: ObjId, data: &IntentDa
     }
     let target = ((x + dx) as u8, (y + dy) as u8);
     let mover_owner = owner;
-    if has_static_obstacle(w, target, &mover_owner) {
+    let blocked = movement::static_obstacles::registration_blocked(
+        &w.room,
+        &w.index,
+        &w.plane.buildings,
+        target,
+        &mover_owner,
+    );
+    if blocked && !w.plane.contrib.defers_static_precheck() {
         return;
     }
     w.movement.add(id, (x as u8, y as u8), dx, dy);
-}
-
-/// 移动登记的静态预检：结构障碍与私有敌方 rampart。creep 不在此预检，
-/// 由仲裁阶段决定是否获准让位；native 意图与移动槽能力共用同一口径。
-fn has_static_obstacle(w: &Working, target: (u8, u8), mover_owner: &str) -> bool {
-    w.index
-        .at(target.0 as usize, target.1 as usize)
-        .iter()
-        .any(|tid| {
-            match w.room.objects.get(tid) {
-                Some(RoomObject::Creep(_)) => false, // creep 不预检
-                Some(RoomObject::Generic(o)) => {
-                    let data: serde_json::Value = serde_json::from_str(&o.data).unwrap_or_default();
-                    let st = data
-                        .get("structureType")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("");
-                    if st == "rampart" {
-                        let public = data
-                            .get("isPublic")
-                            .and_then(|v| v.as_bool())
-                            .unwrap_or(false);
-                        let owner = data.get("owner").and_then(|v| v.as_str()).unwrap_or("");
-                        !public && owner != mover_owner
-                    } else {
-                        kk_world::types::is_obstacle_type(st) || w.plane.buildings.is_obstacle(st)
-                    }
-                }
-                Some(other) => {
-                    let name = movement::type_name_of(other);
-                    kk_world::types::is_obstacle_type(&name) || w.plane.buildings.is_obstacle(&name)
-                }
-                None => false,
-            }
-        })
+    w.movement.mark_registration_blocked(id, blocked);
 }
 
 /// 移动槽能力：读取执行者当前登记的请求方向；未登记返回 `None`。
@@ -111,8 +84,8 @@ pub fn slot_pending_direction(w: &Working, id: ObjId) -> Result<Option<u8>, Stri
 }
 
 /// 移动槽能力：以受控方向登记或替换执行者的移动请求。
-/// 与 native 意图同一预检（越界、静态障碍、孵化中返回 `Ok(false)`，
-/// 不登记、不产生请求；creep 冲突仍由仲裁阶段处理），并同步维护
+/// 与 native 意图同一预检：越界、孵化中返回 `Ok(false)`；静态障碍
+/// 无贡献时直接拒绝，有预检贡献时暂存请求等该槽决策。同步维护
 /// 意图时疲劳，使疲劳门槛与仲裁评分沿用既有语义。重复调用时
 /// 后一次登记覆盖前一次（单执行者单请求）。
 pub fn slot_request_direction(w: &mut Working, id: ObjId, direction: u8) -> Result<bool, String> {
@@ -130,11 +103,19 @@ pub fn slot_request_direction(w: &mut Working, id: ObjId, direction: u8) -> Resu
         return Ok(false);
     }
     let target = ((x + dx) as u8, (y + dy) as u8);
-    if has_static_obstacle(w, target, &creep.owner) {
+    let blocked = movement::static_obstacles::registration_blocked(
+        &w.room,
+        &w.index,
+        &w.plane.buildings,
+        target,
+        &creep.owner,
+    );
+    if blocked && !w.plane.contrib.defers_static_precheck() {
         return Ok(false);
     }
     w.old_fatigue.insert(id, creep.fatigue);
     w.movement.add(id, (x as u8, y as u8), dx, dy);
+    w.movement.mark_registration_blocked(id, blocked);
     Ok(true)
 }
 

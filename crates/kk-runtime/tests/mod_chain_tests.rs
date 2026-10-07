@@ -228,6 +228,8 @@ mod move_obstacle;
 mod move_precheck;
 #[path = "mod_chain_tests/move_pull_registration.rs"]
 mod move_pull_registration;
+#[path = "mod_chain_tests/move_static.rs"]
+mod move_static;
 #[path = "mod_chain_tests/retaliation_faults.rs"]
 mod retaliation_faults;
 #[path = "mod_chain_tests/retaliation_policy.rs"]

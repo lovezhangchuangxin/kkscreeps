@@ -1,4 +1,4 @@
-//! 移动请求预检链；正常拒绝仅丢弃否决集，登记矩阵保持原状。
+//! 移动请求预检链；正常拒绝丢弃 JS 决策并兑现登记时原生拒绝。
 use super::assemble::dispatch_of;
 use super::*;
 use crate::settle::precheck::MovePrecheck;
@@ -18,13 +18,12 @@ impl PrecheckSlot {
         }
     }
 
-    /// 运行预检槽。Native、无登记请求或正常拒绝时返回 None（调用方
-    /// 保留登记矩阵原状），成功返回 JS 追加的否决集；调用方在竞争
-    /// 输入构造之前应用。
+    /// Native 或空输入不进入 JS；Hosted 成功/正常拒绝均返回请求过滤，
+    /// 后者只兑现登记时的原生拒绝。竞争输入构造前应用全部决策。
     pub(super) fn run(
         &self,
         ctx: &RoomCtx,
-    ) -> Result<Option<std::collections::BTreeSet<kk_world::ObjId>>, String> {
+    ) -> Result<Option<crate::settle::precheck::PrecheckDecisions>, String> {
         let Self::Hosted(slot) = self else {
             return Ok(None);
         };
@@ -43,9 +42,12 @@ impl PrecheckSlot {
                 candidate: candidate.clone(),
             },
         )?;
-        Ok(match outcome {
-            SlotOutcome::Completed => Some(candidate.into_blocks()),
-            SlotOutcome::Declined(_) => None,
-        })
+        Ok(Some(
+            candidate.decisions(matches!(outcome, SlotOutcome::Completed)),
+        ))
+    }
+
+    pub(super) fn defers_static(&self) -> bool {
+        matches!(self, Self::Hosted(_))
     }
 }

@@ -6,12 +6,12 @@
 //! 聚焦仲裁状态机）。
 
 mod inputs;
+pub(crate) mod static_obstacles;
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use kk_core::TERRAIN_MASK_WALL;
 use kk_schema::room::{CreepObj, RoomObject};
-use kk_world::types::{BodyKind, is_obstacle_type};
+use kk_world::types::BodyKind;
 use kk_world::{ObjId, RoomIndex, RoomState};
 
 /// 冲突评分，依次按优先级、原格被请求数量、被拉、拉者、MOVE 功率/重量
@@ -48,6 +48,10 @@ pub struct Movement {
     /// 代价槽的幸存者疲劳覆盖；缺项为原生代价（重量×地形费率）。
     /// 执行阶段同源读取，不进入检查点。
     costs: BTreeMap<ObjId, u32>,
+    /// Hosted 预检暂存登记时的拒绝，不按后续对象变异重新推导。
+    registration_blocks: BTreeSet<ObjId>,
+    /// 静态放行只作用于同一请求；动态占格仍在取消链中即时复核。
+    static_allowed: BTreeSet<ObjId>,
     buildings: std::rc::Rc<kk_mod_api::buildings::BuildingCatalog>,
 }
 
@@ -72,6 +76,7 @@ pub struct MoveRequestRecord {
 pub struct MoveRequestSnapshot {
     pub(crate) requests: Vec<MoveRequestRecord>,
     pub(crate) old_fatigue: Option<u32>,
+    pub(crate) registration_blocked: bool,
 }
 
 /// 按位移符号换算八方向；同格返回无效方向 0。
@@ -136,12 +141,15 @@ impl Movement {
         MoveRequestSnapshot {
             requests,
             old_fatigue: None,
+            registration_blocked: self.registration_blocks.contains(&id),
         }
     }
 
     /// 移除 id 的全部请求登记；清空的格移除键，保持矩阵形状与
     /// is_tile_busy 的语义。不触碰其他执行者的请求与拉拽关系。
     pub fn remove_requests(&mut self, id: ObjId) {
+        self.registration_blocks.remove(&id);
+        self.static_allowed.remove(&id);
         for entries in self.matrix.values_mut() {
             entries.retain(|entry| entry.id != id);
         }
@@ -353,7 +361,7 @@ impl Movement {
     /// 是最终取消结果的上界（追加只会收紧）。
     ///
     /// 克隆只复制取消链消费的字段（matrix/winners/extra_blocks/
-    /// buildings；`cancel_cell` 与 `check_obstacle_at_xy` 不读拉拽表
+    /// static_allowed/buildings；`cancel_cell` 与 `check_obstacle_at_xy` 不读拉拽表
     /// 与原始请求矩阵），避免为迭代式策略的多次预演放大深拷贝成本。
     pub(crate) fn simulate_survivors(
         &self,
@@ -374,6 +382,9 @@ impl Movement {
             // 链预演不消费代价覆盖；取消链不读代价表。
             costs: BTreeMap::new(),
             buildings: self.buildings.clone(),
+            // 取消链不再读取登记期过滤快照。
+            registration_blocks: BTreeSet::new(),
+            static_allowed: self.static_allowed.clone(),
         };
         sim.cancel_blocked(room, index, safe_mode_user);
         sim.winners.keys().copied().collect()
@@ -544,67 +555,32 @@ pub fn check_obstacle_at_xy(
     mover_owner: &str,
     safe_mode_user: Option<&str>,
 ) -> bool {
-    for id in index.at(at.0 as usize, at.1 as usize) {
-        let Some(obj) = room.objects.get(id) else {
-            continue;
+    let dynamic_blocked = index.at(at.0 as usize, at.1 as usize).iter().any(|id| {
+        let Some(RoomObject::Creep(target)) = room.objects.get(id) else {
+            return false;
         };
-        match obj {
-            RoomObject::Creep(target) => {
-                let is_winner = movement.winners.contains_key(id);
-                let blocked = !is_winner
-                    && match safe_mode_user {
-                        None => true,
-                        Some(sm) => sm != mover_owner || target.owner == mover_owner,
-                    };
-                if blocked {
-                    return true;
-                }
+        !movement.winners.contains_key(id)
+            && match safe_mode_user {
+                None => true,
+                Some(sm) => sm != mover_owner || target.owner == mover_owner,
             }
-            RoomObject::Generic(o) => {
-                let data: serde_json::Value = serde_json::from_str(&o.data).unwrap_or_default();
-                let st = data
-                    .get("structureType")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                if st == "rampart" {
-                    let public = data
-                        .get("isPublic")
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(false);
-                    let owner = data.get("owner").and_then(|v| v.as_str()).unwrap_or("");
-                    if !public && owner != mover_owner {
-                        return true;
-                    }
-                    continue;
-                }
-                if is_obstacle_type(st) || movement.buildings.is_obstacle(st) {
-                    return true;
-                }
-            }
-            RoomObject::ConstructionSite(s) => {
-                if s.owner.as_deref() == Some(mover_owner)
-                    && (is_obstacle_type(&s.structure_type)
-                        || movement.buildings.is_obstacle(&s.structure_type))
-                {
-                    return true;
-                }
-            }
-            other => {
-                let name = type_name_of(other);
-                if is_obstacle_type(&name) || movement.buildings.is_obstacle(&name) {
-                    return true;
-                }
-            }
-        }
-    }
-    if room
-        .terrain()
-        .check_mask(at.0 as usize, at.1 as usize, TERRAIN_MASK_WALL)
-        && !has_road(room, index, at)
-    {
-        return true;
-    }
-    false
+    });
+    // 仲裁与障碍输入均在选胜后调用：缩减矩阵每格只保留该胜者，
+    // 静态放行绑定请求者，不能借同格落选者的许可放行胜者。
+    let allowed = movement
+        .matrix
+        .get(&at)
+        .and_then(|entries| entries.first())
+        .is_some_and(|entry| movement.static_allowed.contains(&entry.id));
+    dynamic_blocked
+        || (!allowed
+            && static_obstacles::arbitration_blocked(
+                room,
+                index,
+                &movement.buildings,
+                at,
+                mover_owner,
+            ))
 }
 
 /// 读取游戏对象类型名；Generic 必须使用 structureType，而不是固定的 type=structure。

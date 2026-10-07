@@ -76,4 +76,4 @@ native 中心为无操作（保留候选中的原生准入终值，类比竞争�
 
 G03.a 的[场景夹具](../../compat/fixtures/sim-mod-move-arbitration/README.md)提供原生、wave（链预演全停）、calm（落选者视野扣胜者）与两包组合；同样双通道一致与冷恢复等价，引擎侧另有 预演幸存集 == 实际取消链幸存集 的等价性单测（交换/环/链/拉拽/覆盖/占位拓扑）。
 
-当前不开放障碍放行方向（仲裁半边见[JS 移动障碍](mod-move-obstacle.md)；意图静态预检已另开为[JS 移动预检](mod-move-precheck.md)）、孵化中/spawning 门槛、移动代价与执行效果（G04）、pull 配对登记策略（保持 native；开放时须重审 `validate_pull_pair` 胜者升序遍历的同拉者多目标顺序语义）。
+静态放行已由[JS 移动预检](mod-move-precheck.md)贯通，`evaluate()` 同源消费静态放行，动态占格仍复核。当前不开放孵化中/spawning 门槛和完整移动执行效果；移动代价与拉拽登记分别见[移动代价](mod-move-cost.md)和[拉拽登记](mod-move-pull-registration.md)。

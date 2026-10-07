@@ -1,0 +1,200 @@
+{
+  "version": 1,
+  "shard": {
+    "players": [
+      "p1"
+    ],
+    "rooms": [
+      {
+        "name": "W1N1",
+        "owner": "p1",
+        "rcl": 6
+      }
+    ]
+  },
+  "bots": [
+    {
+      "player": "p1",
+      "modules": "."
+    }
+  ],
+  "objects": [
+    {
+      "room": "W1N1",
+      "kind": "creep",
+      "alias": "wall",
+      "spec": {
+        "name": "wall",
+        "owner": "p1",
+        "pos": [
+          10,
+          10
+        ],
+        "body": [
+          "move"
+        ],
+        "ticksToLive": 100
+      }
+    },
+    {
+      "room": "W1N1",
+      "kind": "creep",
+      "alias": "rampart",
+      "spec": {
+        "name": "rampart",
+        "owner": "p1",
+        "pos": [
+          30,
+          20
+        ],
+        "body": [
+          "move"
+        ],
+        "ticksToLive": 100
+      }
+    },
+    {
+      "room": "W1N1",
+      "kind": "creep",
+      "alias": "free",
+      "spec": {
+        "name": "free",
+        "owner": "p1",
+        "pos": [
+          40,
+          30
+        ],
+        "body": [
+          "move"
+        ],
+        "ticksToLive": 100
+      }
+    },
+    {
+      "room": "W1N1",
+      "kind": "creep",
+      "alias": "occupied",
+      "spec": {
+        "name": "occupied",
+        "owner": "p1",
+        "pos": [
+          20,
+          40
+        ],
+        "body": [
+          "move"
+        ],
+        "ticksToLive": 100
+      }
+    },
+    {
+      "room": "W1N1",
+      "kind": "creep",
+      "alias": "parked",
+      "spec": {
+        "name": "parked",
+        "owner": "p1",
+        "pos": [
+          21,
+          40
+        ],
+        "body": [
+          "move"
+        ],
+        "ticksToLive": 100
+      }
+    },
+    {
+      "room": "W1N1",
+      "kind": "structure",
+      "alias": "solid",
+      "spec": {
+        "pos": [
+          11,
+          10
+        ],
+        "structureType": "constructedWall",
+        "owner": "p2",
+        "isPublic": false,
+        "hits": 10000
+      }
+    },
+    {
+      "room": "W1N1",
+      "kind": "structure",
+      "alias": "private",
+      "spec": {
+        "pos": [
+          31,
+          20
+        ],
+        "structureType": "rampart",
+        "owner": "p2",
+        "isPublic": false,
+        "hits": 10000
+      }
+    },
+    {
+      "room": "W1N1",
+      "kind": "structure",
+      "alias": "crowded",
+      "spec": {
+        "pos": [
+          21,
+          40
+        ],
+        "structureType": "constructedWall",
+        "owner": "p2",
+        "isPublic": false,
+        "hits": 10000
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "pointer": "/players/p1/memory/positions/wall",
+      "op": "eq",
+      "value": [
+        10,
+        10
+      ]
+    },
+    {
+      "pointer": "/players/p1/memory/positions/rampart",
+      "op": "eq",
+      "value": [
+        30,
+        20
+      ]
+    },
+    {
+      "pointer": "/players/p1/memory/positions/free",
+      "op": "eq",
+      "value": [
+        40,
+        30
+      ]
+    },
+    {
+      "pointer": "/players/p1/memory/positions/occupied",
+      "op": "eq",
+      "value": [
+        20,
+        40
+      ]
+    },
+    {
+      "pointer": "/mod_states/move-static-seal/applied",
+      "op": "eq",
+      "value": 1
+    }
+  ],
+  "mods": {
+    "root": "../mod-move-static",
+    "selection": {
+      "include": [
+        "move-static-seal"
+      ]
+    }
+  }
+}

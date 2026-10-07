@@ -28,6 +28,9 @@ pub trait MovementHost {
     fn precheck_block(&mut self, _id: &str) -> Result<(), String> {
         Err("本次槽没有移动预检能力".into())
     }
+    fn precheck_allow_static(&mut self, _id: &str) -> Result<(), String> {
+        Err("本次槽没有移动预检能力".into())
+    }
     fn pull_denied(&mut self, _id: &str) -> Result<bool, String> {
         Err("本次槽没有拉拽登记能力".into())
     }
