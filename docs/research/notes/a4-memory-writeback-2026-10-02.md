@@ -1,6 +1,6 @@
 # A4 玩家状态统一发布
 
-本次从 `54d692b` 开始，落实 [A4](../../plans/mod-plane-batches.md) 的玩家状态统一发布：RawMemory、segments 及 CPU 桶候选与房间、市场共用发布点。现有状态的候选子步故障矩阵、显式工作者重建及真实回执身份验证已补齐。并发调度、命令期限和线程 CPU 时钟仍属于 P1；Mod namespace 尚未接入，进程及磁盘恢复仍属于 E。
+本次从 `54d692b` 开始，落实 [A4](../../plans/archive/mod-plane-batches.md) 的玩家状态统一发布：RawMemory、segments 及 CPU 桶候选与房间、市场共用发布点。现有状态的候选子步故障矩阵、显式工作者重建及真实回执身份验证已补齐。并发调度、命令期限和线程 CPU 时钟仍属于 P1；Mod namespace 尚未接入，进程及磁盘恢复仍属于 E。
 
 后续并发与线程 CPU 计费的实现见 [P1 玩家执行](p1-player-execution-2026-10-02.md)；本文保留 A4 完成时的执行方式与验证数据。
 

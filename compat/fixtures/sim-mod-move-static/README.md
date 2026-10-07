@@ -15,4 +15,4 @@ target/debug/kkscreeps sim run --scenario compat/fixtures/sim-mod-move-static/sc
 
 `kk-cli/tests/sim_tests/move_static.rs` 核对四场景 × JSON/KKPV 的 final、四个计划身份、初轮保存后新进程续跑等值及两段运行的回放 passed。final 比较只剥离实测 CPU bucket；位置与 namespace 恰一次由场景断言验证。动态取消链、墙地形、己方工地、拉拽、跨房、能力门和失败重试另由引擎/运行时专项测试覆盖。
 
-公共包见[mod-move-static](../mod-move-static/README.md)，实现与剩余边界见[移动预检架构](../../../docs/architecture/mod-move-precheck.md)。
+公共包见[mod-move-static](../mod-move-static/README.md)，实现与剩余边界见[移动预检架构](../../../docs/architecture/movement.md#请求预检)。

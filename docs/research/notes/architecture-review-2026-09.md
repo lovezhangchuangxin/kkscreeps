@@ -1,7 +1,7 @@
 # 2026-09-29 全项目架构复审笔记（六路深查 + 外部结论交叉对比）
 
 > 性质：证据存档。结论与裁决已升格 [ADR-013](../../decisions/ADR-013-architecture-review-coordinator.md)，
-> 批次方案见 [b0-runtime-coordinator.md](../../plans/b0-runtime-coordinator.md)。
+> 批次方案见 [b0-runtime-coordinator.md](../../plans/archive/b0-runtime-coordinator.md)。
 > 方法：内部六路并行深查（文档决策链 / kk-engine / 沙箱与玩家 API / 数据层四 crate / 兼容测试基建 /
 > 工程健康）+ 本人精读四份契约（game-loop / sandbox / tick-contract / snapshot-contract），
 > 之后引入 GPT 外部独立复审（基于 d5de6ad，含最小复现实验），对其全部可验证主张逐条复核。

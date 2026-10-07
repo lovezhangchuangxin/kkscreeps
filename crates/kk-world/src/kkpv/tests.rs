@@ -684,7 +684,7 @@ fn kkpv_public_terrain_blocks_match_json_reference() {
         let payload = reference["rooms"][block.room_name.as_str()]["terrain"]["payload"]
             .as_str()
             .expect("JSON 参考的每注册房间都有地形载荷");
-        let encoded = crate::world_json::base64_encode(&block.terrain.clone().expect("地形"));
+        let encoded = crate::projection::base64_encode(&block.terrain.clone().expect("地形"));
         assert_eq!(
             encoded,
             payload,

@@ -8,10 +8,12 @@ pub mod domain;
 pub mod index;
 pub mod kkpv;
 pub mod place;
+pub mod projection;
 pub mod snapshot;
 pub mod types;
 pub mod world;
-pub mod world_json;
+// 兼容原沙箱投影路径；内部代码使用 projection。
+pub use projection as world_json;
 
 pub use index::RoomIndex;
 pub use world::{ObjId, RoomContents, RoomState, RoomVersionHandle, World};

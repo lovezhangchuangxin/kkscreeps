@@ -6,13 +6,14 @@ import { runCheck } from './check.mjs';
 test('门禁先构建当前 CLI，覆盖旧 release 与外部二进制选择', () => {
   const calls = [];
   const status = runCheck([], {
-    root: '/repo', env: { KKSCREEPS_BIN: '/repo/target/release/kkscreeps', CARGO_TARGET_DIR: '/old-build' },
+    root: '/repo', env: { KKSCREEPS_BIN: '/repo/target/release/kkscreeps', CARGO_TARGET_DIR: '/old-build', KKSCREEPS_SCENARIO: 'one-test' },
     run(command, args, options) { calls.push({ command, args, options }); return { status: 0 }; },
   });
   assert.equal(status, 0);
   const build = calls.findIndex(c => c.command === 'cargo' && c.args[0] === 'build');
   const js = calls.findIndex(c => c.command === 'pnpm');
   assert.ok(build >= 0 && build < js);
+  assert.equal(calls[js].options.env.KKSCREEPS_SCENARIO, undefined);
   assert.equal(calls[js].options.env.CARGO_TARGET_DIR, '/repo/target');
   assert.equal(calls[js].options.env.KKSCREEPS_BIN, '/repo/target/debug/kkscreeps');
   assert.ok(calls.some(c => c.args.includes('scripts/check-source-size.mjs')));

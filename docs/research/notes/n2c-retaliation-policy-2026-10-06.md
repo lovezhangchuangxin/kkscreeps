@@ -1,6 +1,6 @@
 # N2c 第四片：JS 反击表（2026-10-06）
 
-基于 `a2d82a1`，开放三个攻击槽的 `ctx.combat.setRetaliation`。JS 在执行前声明一次目标/反击量表，主攻击仍可由 native 中心、request 或自定义单体/群体伤害执行；反击按实际受击对象匹配并直接登记到原执行者，不递归攻击链。现行契约见[JS 反击策略](../../architecture/mod-retaliation-policy.md)，机器证据见[验收数据](n2c-retaliation-policy-2026-10-06.json)。
+基于 `a2d82a1`，开放三个攻击槽的 `ctx.combat.setRetaliation`。JS 在执行前声明一次目标/反击量表，主攻击仍可由 native 中心、request 或自定义单体/群体伤害执行；反击按实际受击对象匹配并直接登记到原执行者，不递归攻击链。现行契约见[JS 反击策略](../../architecture/combat.md#反击)，机器证据见[验收数据](n2c-retaliation-policy-2026-10-06.json)。
 
 ## 实现与复审
 

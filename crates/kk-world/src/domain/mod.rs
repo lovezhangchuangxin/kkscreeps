@@ -2,7 +2,9 @@
 //! JSON 的缺键、null 或数值缺省由各投影调用方决定。
 
 pub mod controller;
+pub mod generic;
 pub mod owner;
+pub(crate) mod room;
 pub mod store;
 
 pub use controller::controller_progress_total_opt;

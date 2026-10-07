@@ -1,7 +1,7 @@
 //! 移动竞争优先级链；正常拒绝仅丢弃优先级与暂存 state，回退默认评分。
 use super::assemble::dispatch_of;
 use super::*;
-use crate::settle::contest::MoveContest;
+use crate::settle::movement::contest::MoveContest;
 
 pub(super) enum ContestSlot {
     Native,

@@ -9,6 +9,7 @@ mod movement;
 mod objects;
 mod resources;
 use capability::ChainCapability;
+use kk_engine::settle::ObjectJournal;
 
 /// JS 组合的整槽执行器。进入 VM 一次，native 中心只经普通 op 执行。
 pub(super) struct ModSlotExecutor {
@@ -58,7 +59,7 @@ struct CombatChainState {
     action: kk_engine::settle::creep::CombatAction,
     consumed: bool,
     retaliation: Option<kk_engine::settle::creep::RetaliationPolicy>,
-    journal: Rc<RefCell<BTreeMap<ObjId, RedirectJournalEntry>>>,
+    journal: Rc<RefCell<ObjectJournal>>,
 }
 
 /// 建造族链的运行时状态与首触日志，与战斗链同型；触达对象不含延迟
@@ -67,13 +68,7 @@ struct CombatChainState {
 struct BuildChainState {
     action: kk_engine::settle::creep::BuildAction,
     consumed: bool,
-    journal: Rc<RefCell<BTreeMap<ObjId, RedirectJournalEntry>>>,
-}
-
-struct RedirectJournalEntry {
-    object: kk_schema::room::RoomObject,
-    damage: Option<i64>,
-    heal: Option<i64>,
+    journal: Rc<RefCell<ObjectJournal>>,
 }
 
 impl SlotExecutor for ModSlotExecutor {
@@ -196,7 +191,8 @@ impl SlotExecutor for ModSlotExecutor {
             || pull_registration.is_some()
             || move_cost.is_some())
         .then(|| Rc::new(RefCell::new(BTreeMap::new())));
-        let resource_journal = resource_action.then(|| Rc::new(RefCell::new(BTreeMap::new())));
+        let resource_journal =
+            resource_action.then(|| Rc::new(RefCell::new(ObjectJournal::default())));
         // 外层副本仅供 Declined 分支读共享 journal 与 is_some() 判定；
         // consumed/action 以链内上下文的副本为唯一权威（外层恒为初值）。
         let combat_state = combat_action.then(|| CombatChainState {
@@ -204,13 +200,13 @@ impl SlotExecutor for ModSlotExecutor {
                 .expect("战斗槽键已由 COMBAT_ACTION_SLOTS 判定"),
             consumed: false,
             retaliation: None,
-            journal: Rc::new(RefCell::new(BTreeMap::new())),
+            journal: Rc::new(RefCell::new(ObjectJournal::default())),
         });
         let build_state = build_action.then(|| BuildChainState {
             action: kk_engine::settle::creep::BuildAction::from_slot_key(slot.key.as_str())
                 .expect("建造族槽键已由 BUILD_ACTION_SLOTS 判定"),
             consumed: false,
-            journal: Rc::new(RefCell::new(BTreeMap::new())),
+            journal: Rc::new(RefCell::new(ObjectJournal::default())),
         });
         let capability = if extension {
             ChainCapability::Objects
@@ -349,10 +345,7 @@ impl SlotExecutor for ModSlotExecutor {
             }
             SlotOutcome::Declined(_) => {
                 if let Some(journal) = resource_journal {
-                    let mut w = ctx.borrow_mut();
-                    for (id, object) in std::mem::take(&mut *journal.borrow_mut()) {
-                        w.room.objects.insert(id, object);
-                    }
+                    journal.borrow_mut().restore(&mut ctx.borrow_mut());
                 }
                 // 战斗与建造族互斥（每槽至多一个能力面），恢复顺序无关。
                 for journal in [
@@ -362,7 +355,7 @@ impl SlotExecutor for ModSlotExecutor {
                 .into_iter()
                 .flatten()
                 {
-                    replay_redirect_journal(ctx, journal);
+                    journal.borrow_mut().restore(&mut ctx.borrow_mut());
                 }
                 if let Some(snapshot) = object_snapshot {
                     ctx.borrow_mut().restore_chain_snapshot(snapshot);
@@ -612,20 +605,7 @@ impl kk_mod_host::BuildHost for ModChainContext {
         {
             let mut w = self.ctx.borrow_mut();
             let mut journal = journal.borrow_mut();
-            for id in &touched {
-                if !journal.contains_key(id)
-                    && let Some(object) = w.room.objects.get(id).cloned()
-                {
-                    journal.insert(
-                        *id,
-                        RedirectJournalEntry {
-                            object,
-                            damage: w.damage_to_apply.get(id).copied(),
-                            heal: w.heal_to_apply.get(id).copied(),
-                        },
-                    );
-                }
-            }
+            journal.remember_redirects(&w, &touched);
             kk_engine::settle::creep::slot_build_request(&mut w, self.id, target_id, action)?;
         }
         self.cached_fields = None;
@@ -643,36 +623,5 @@ impl kk_mod_host::BuildHost for ModChainContext {
         }
         build.consumed = true;
         Ok(())
-    }
-}
-
-/// 拒绝时按首触日志恢复能力改向触达的对象与延迟队列条目；在引擎
-/// 边界之前执行，引擎快照随后落笔。journal 的 request 前值能当链前值
-/// 用，依赖两个前提：consumed 使 native 与改向互斥（至多一次真实
-/// 执行），且链内对这些对象没有其他候选写通道（creep 字段只读、
-/// 资源/移动能力默认拒绝）；给这两族槽开放新写能力时须重审。
-fn replay_redirect_journal(
-    ctx: &RoomCtx,
-    journal: &Rc<RefCell<BTreeMap<ObjId, RedirectJournalEntry>>>,
-) {
-    let mut w = ctx.borrow_mut();
-    for (id, entry) in std::mem::take(&mut *journal.borrow_mut()) {
-        w.room.objects.insert(id, entry.object);
-        match entry.damage {
-            Some(v) => {
-                w.damage_to_apply.insert(id, v);
-            }
-            None => {
-                w.damage_to_apply.remove(&id);
-            }
-        }
-        match entry.heal {
-            Some(v) => {
-                w.heal_to_apply.insert(id, v);
-            }
-            None => {
-                w.heal_to_apply.remove(&id);
-            }
-        }
     }
 }

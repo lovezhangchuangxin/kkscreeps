@@ -1,6 +1,6 @@
 # C.4 玩家 API 安装（2026-10-03）
 
-[计划](../../plans/mod-plane-batches.md) C 批第四片。范围：Mod 对象进入
+[计划](../../plans/archive/mod-plane-batches.md) C 批第四片。范围：Mod 对象进入
 玩家投影（可见性裁切、双通道）、FIND/LOOK 查询常量、player.js 装载进
 每个玩家 VM 与安装 API（类绑定/全局定义/字段 getter/emit 预检/查询
 安装）、KKPV 块头换真实计划指纹（B.5 残留收口）。**不含**：既有结构

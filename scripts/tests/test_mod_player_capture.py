@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = ROOT / 'docs/research/notes/mod-player-workload-capture-2026-10-04.py'
+SCRIPT = ROOT / 'scripts/benchmark/research/mod-player-workload-capture-2026-10-04.py'
 spec = importlib.util.spec_from_file_location('mod_player_capture', SCRIPT)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)

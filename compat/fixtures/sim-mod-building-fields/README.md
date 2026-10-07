@@ -26,4 +26,4 @@ target/debug/kkscreeps sim run --scenario compat/fixtures/sim-mod-building-field
 
 `kk-cli` 的 `sim_tests/building_fields.rs` 核对四场景 × JSON/KKPV 的完整
 final、PlanHash（四身份互异）与组合报告，以及第 2 tick 保存检查点、退出
-进程、加载再续跑的冷恢复一致。策略包在 [../mod-building-fields/](../mod-building-fields/)。
+进程、加载再续跑的冷恢复一致。策略包在 [../mod-building-fields/](../mod-building-fields)。

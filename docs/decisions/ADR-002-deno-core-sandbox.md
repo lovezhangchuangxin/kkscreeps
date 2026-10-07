@@ -31,4 +31,4 @@
 
 - [沙箱选型报告](../research/02-sandbox-evaluation.md)：采用版本、实验负载、硬要求与未覆盖项。
 - [游戏功能实验](../research/04-game-api-feasibility.md)：游戏 API 依赖的交互方式。
-- [deno_core 实验记录](../research/notes/spike-deno_core.md)及[实验工程](../../spikes/deno-spike/)：中断、内存、快照和调用测试。
+- [deno_core 实验记录](../research/notes/spike-deno_core.md)及[实验工程](../../spikes/deno-spike)：中断、内存、快照和调用测试。

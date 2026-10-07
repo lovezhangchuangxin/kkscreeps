@@ -54,7 +54,7 @@ target/release/kkscreeps sim run --scenario /tmp/my-mods/starter/scenario.json -
 
 ### 中途切换包集合
 
-`mods_switch` 声明一次[无开放轮次的包切换](mod-switching.md)：提交完第 `after_tick` 轮后，在同一 `mods.root` 上按本字段（整体替换初始 configs/selection，不是合并）重新装载并换装执行层。切换拒绝（残留、同包内容变更、开放轮次或切换装载本身的失败）不使运行失败——旧计划继续结算，报告 v6 顶层 `mods_switches` 记录每次切换：`applied` 含前后 plan_hash、执行策略身份与增删包清单，`rejected` 含错误。`--load-checkpoint` 续跑按检查点世界时间**与实际生效的切换**（保存进检查点元数据的 `applied_switches`）选择恢复用包集合——被拒绝的切换不改变身份，越过边界不等于携带切换后集合；续跑不重放已生效的切换，时间已越过边界的被拒切换也不再重试。报告顶层 `mods` 始终记录**初始装载输入**；切换后的实际身份以 `composition`/`execution_strategy` 顶层域为准。完整示例见[切换夹具](../../compat/fixtures/sim-mod-switch/)。
+`mods_switch` 声明一次[无开放轮次的包切换](mod-switching.md)：提交完第 `after_tick` 轮后，在同一 `mods.root` 上按本字段（整体替换初始 configs/selection，不是合并）重新装载并换装执行层。切换拒绝（残留、同包内容变更、开放轮次或切换装载本身的失败）不使运行失败——旧计划继续结算，报告 v6 顶层 `mods_switches` 记录每次切换：`applied` 含前后 plan_hash、执行策略身份与增删包清单，`rejected` 含错误。`--load-checkpoint` 续跑按检查点世界时间**与实际生效的切换**（保存进检查点元数据的 `applied_switches`）选择恢复用包集合——被拒绝的切换不改变身份，越过边界不等于携带切换后集合；续跑不重放已生效的切换，时间已越过边界的被拒切换也不再重试。报告顶层 `mods` 始终记录**初始装载输入**；切换后的实际身份以 `composition`/`execution_strategy` 顶层域为准。完整示例见[切换夹具](../../compat/fixtures/sim-mod-switch)。
 
 ## 状态与断言
 

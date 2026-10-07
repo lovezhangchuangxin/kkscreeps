@@ -1,6 +1,6 @@
 # JS 受击策略第二片（2026-10-06）
 
-基于 `4fab581`。当前契约见[JS 受击策略](../../architecture/mod-incoming-policy.md)，真实玩家夹具见[护甲/护盾组合](../../../compat/fixtures/sim-mod-incoming-policy/README.md)，机器证据见[验收数据](n2c-incoming-policy-2026-10-06.json)。
+基于 `4fab581`。当前契约见[JS 受击策略](../../architecture/combat.md#受击)，真实玩家夹具见[护甲/护盾组合](../../../compat/fixtures/sim-mod-incoming-policy/README.md)，机器证据见[验收数据](n2c-incoming-policy-2026-10-06.json)。
 
 ## 实现与复审
 

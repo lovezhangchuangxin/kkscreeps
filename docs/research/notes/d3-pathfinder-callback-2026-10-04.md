@@ -1,6 +1,6 @@
 # D3 玩家寻路回调：实现与验证（2026-10-04）
 
-[契约与 Mod 槽位设计](../../designs/pathfinder-callback.md)｜[批次登记](../../plans/mod-plane-batches.md)｜[原始验收摘要](d3-pathfinder-callback-2026-10-04.json)。本批接续 D2 地形直通，完成玩家回调通道；不代表完整玩法、存储或 Mod 寻路能力已交付。
+[契约与 Mod 槽位设计](../../designs/pathfinder-callback.md)｜[批次登记](../../plans/archive/mod-plane-batches.md)｜[原始验收摘要](d3-pathfinder-callback-2026-10-04.json)。本批接续 D2 地形直通，完成玩家回调通道；不代表完整玩法、存储或 Mod 寻路能力已交付。
 
 ## 实现
 

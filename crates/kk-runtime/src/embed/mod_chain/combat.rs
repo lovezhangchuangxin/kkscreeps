@@ -181,26 +181,9 @@ impl ModChainContext {
         Ok(())
     }
 
-    fn remember_combat_targets(
-        &self,
-        journal: &Rc<RefCell<BTreeMap<ObjId, RedirectJournalEntry>>>,
-        targets: &[ObjId],
-    ) {
+    fn remember_combat_targets(&self, journal: &Rc<RefCell<ObjectJournal>>, targets: &[ObjId]) {
         let w = self.ctx.borrow();
         let mut journal = journal.borrow_mut();
-        for id in targets {
-            if !journal.contains_key(id)
-                && let Some(object) = w.room.objects.get(id).cloned()
-            {
-                journal.insert(
-                    *id,
-                    RedirectJournalEntry {
-                        object,
-                        damage: w.damage_to_apply.get(id).copied(),
-                        heal: w.heal_to_apply.get(id).copied(),
-                    },
-                );
-            }
-        }
+        journal.remember_redirects(&w, targets);
     }
 }

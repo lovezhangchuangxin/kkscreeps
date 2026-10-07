@@ -4,4 +4,4 @@
 
 静态放行不能绕过动态 creep 占格、竞争、疲劳/MOVE 或后续障碍策略。`moveTo`/PathFinder 仍按原生地形/结构寻路；场景使用方向 `move` 展示能力。namespace 计数经 `ctx.state` 保存，不依赖模块全局累计。
 
-运行方式与位置对照见[真实场景](../sim-mod-move-static/README.md)，契约见[移动预检](../../../docs/architecture/mod-move-precheck.md)。
+运行方式与位置对照见[真实场景](../sim-mod-move-static/README.md)，契约见[移动预检](../../../docs/architecture/movement.md#请求预检)。

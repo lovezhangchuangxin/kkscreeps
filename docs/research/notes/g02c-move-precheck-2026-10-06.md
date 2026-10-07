@@ -2,7 +2,7 @@
 
 ## 范围
 
-G02 收尾子切片：新增房间级槽 `builtin:room.movePrecheck`（内建槽 17→18、revision `…-obstacle-precheck-descriptors-v11`；catalog 槽计数断言同步）。**请求级单向收紧**：全部意图与移动动作槽登记完成后、竞争输入构造之前（`arbitrate_room` 阶段 0）整房一次进 JS；`ctx.precheck.block(id)` 否决请求，被否决请求经 `Movement::apply_precheck_blocks` → `remove_requests` 在竞争输入构造之前移除，**等同从未登记**——不参与竞争评分、不让位、不占格（spawn 放置的 `is_tile_busy` 与准入槽整房请求视野均不含）。放行方向不开放：意图期放行语义惰性（仲裁期 `check_obstacle_at_xy` 对结构/私有 rampart/墙地形一律复检），与障碍槽口径一致。原生 `has_static_obstacle`（`intent_move` / `slot_request_direction` 两个登记入口共享）保持 native 并在登记时点先行生效——被原生挡下的请求不入矩阵、不进槽输入；两个入口的请求汇入同一矩阵，槽在矩阵上统一否决，同源成立。现行契约见[JS 移动预检](../../architecture/mod-move-precheck.md)。
+G02 收尾子切片：新增房间级槽 `builtin:room.movePrecheck`（内建槽 17→18、revision `…-obstacle-precheck-descriptors-v11`；catalog 槽计数断言同步）。**请求级单向收紧**：全部意图与移动动作槽登记完成后、竞争输入构造之前（`arbitrate_room` 阶段 0）整房一次进 JS；`ctx.precheck.block(id)` 否决请求，被否决请求经 `Movement::apply_precheck_blocks` → `remove_requests` 在竞争输入构造之前移除，**等同从未登记**——不参与竞争评分、不让位、不占格（spawn 放置的 `is_tile_busy` 与准入槽整房请求视野均不含）。放行方向不开放：意图期放行语义惰性（仲裁期 `check_obstacle_at_xy` 对结构/私有 rampart/墙地形一律复检），与障碍槽口径一致。原生 `has_static_obstacle`（`intent_move` / `slot_request_direction` 两个登记入口共享）保持 native 并在登记时点先行生效——被原生挡下的请求不入矩阵、不进槽输入；两个入口的请求汇入同一矩阵，槽在矩阵上统一否决，同源成立。现行契约见[JS 移动预检](../../architecture/movement.md#请求预检)。
 
 ## 关键设计判断
 

@@ -1,6 +1,6 @@
 # G01 移动竞争优先级策略交付记录（2026-10-06）
 
-基线 `8e28ac4`（功能）之上实施；本批交付 `builtin:room.moveContest` 房间级槽、竞争输入、优先级候选与排序接线，契约见[JS 移动竞争优先级策略](../../architecture/mod-move-contest.md)。
+基线 `8e28ac4`（功能）之上实施；本批交付 `builtin:room.moveContest` 房间级槽、竞争输入、优先级候选与排序接线，契约见[JS 移动竞争优先级策略](../../architecture/movement.md#竞争排序)。
 
 ## 交付内容
 
@@ -36,7 +36,7 @@
 |---|---|---|
 | move 意图登记（方向/相邻目标/follow） | 已实现 native + JS 改向拒绝槽 | `settle/creep/movement.rs`、[creep-move-slot](../../architecture/creep-move-slot.md) |
 | pull/pulled 登记 | 已实现 native；JS 槽未开放 | `Movement::add_pulling`；G03 |
-| 竞争排序（power/priority） | **本批开放 JS**（优先级层）；xxscreeps 随机平手未实现（本仓平手=登记序） | [mod-move-contest](../../architecture/mod-move-contest.md)；随机平手如需另行子片 |
+| 竞争排序（power/priority） | **本批开放 JS**（优先级层）；xxscreeps 随机平手未实现（本仓平手=登记序） | [mod-move-contest](../../architecture/movement.md#竞争排序)；随机平手如需另行子片 |
 | 仲裁选胜后阻塞链取消 | 已实现 native；获准集合替换未开放 | `remove_from_matrix`；G03 |
 | 递归让位/交换/循环/拉拽联动（xxscreeps resolver） | 未开放 | G03 |
 | 准入（疲劳门槛、MOVE 部件、地形/结构/rampart/安全模式） | 已实现 native；策略面未开放 | `can_move`、`check_obstacle_at_xy`、`has_static_obstacle`；G02（含执行阶段 `can_move` 复核同源） |

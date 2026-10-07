@@ -45,6 +45,6 @@ kk-schema 的声明宏生成类型、编码、解码与可计算的布局信息�
 
 ADR-008 的执行接口、地形排期、存储选型和嵌入接口由 M1 先建立骨架；ADR-013 将编排移到 kk-runtime，并补充重试与玩家写回候选；ADR-014 定义共享投影与完整扩展契约。
 
-阶段范围与结果见 [M1 方案](../plans/m1-engine-skeleton.md)、[初期代码审阅记录](../../compat/reports/m0-code-review.md)。后续缺口、修复和数字沿革见[路线图历史](../research/notes/roadmap-history.md)，不能沿用当时的“待支持墓碑”等记录判断当前状态。
+阶段范围与结果见 [M1 方案](../plans/archive/m1-engine-skeleton.md)、[初期代码审阅记录](../../compat/reports/m0-code-review.md)。后续缺口、修复和数字沿革见[路线图历史](../research/notes/roadmap-history.md)，不能沿用当时的“待支持墓碑”等记录判断当前状态。
 
 bot-check 的固定世界测试验证加载与执行环境，不证明实际结算中的游戏进展。具体玩法、客户端与性能仍按各自验收条件提供证据。

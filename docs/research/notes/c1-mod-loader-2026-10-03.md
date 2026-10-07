@@ -1,6 +1,6 @@
 # C.1 Mod 装载器与可信注册（2026-10-03）
 
-[计划](../../plans/mod-plane-batches.md) C 批首片。范围：从磁盘上的 JS Mod 包到
+[计划](../../plans/archive/mod-plane-batches.md) C 批首片。范围：从磁盘上的 JS Mod 包到
 冻结 `ContributionPlan` 的启动路径——包发现、manifest 校验、依赖拓扑、指纹、
 可信注册 realm（deno_core）、注册期 SDK 与贡献组装。**不含**：处理器在结算期
 的执行、玩家 API 安装、生产引擎（EmbedEngine）接线——默认世界不引用新 crate，

@@ -27,22 +27,7 @@ impl ModChainContext {
         let to = ObjId::parse(to).ok_or("资源目标 ID 非法")?;
         let mut w = self.ctx.borrow_mut();
         let mut journal = journal.borrow_mut();
-        let new_objects = [from, to]
-            .into_iter()
-            .filter(|id| !journal.contains_key(id))
-            .count();
-        // 原生对象副本位于 Rust 堆，不由 V8 堆门覆盖，故限制单动作触达量。
-        if journal.len() + new_objects > 256 {
-            return Err("单动作资源能力最多触达 256 个对象".into());
-        }
-        for id in [from, to] {
-            let object = w
-                .room
-                .objects
-                .get(&id)
-                .ok_or("资源对象不在本次房间候选中")?;
-            journal.entry(id).or_insert_with(|| object.clone());
-        }
+        journal.remember_resources(&w, &[from, to])?;
         let result =
             kk_engine::settle::resources::transfer(&mut w, from, to, resource, amount, loss)?;
         self.cached_fields = None;

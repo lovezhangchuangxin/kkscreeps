@@ -8,13 +8,13 @@ pub(super) enum ChainCapability {
     Combat(CombatChainState),
     Build(BuildChainState),
     Incoming(Rc<kk_engine::settle::incoming::IncomingDamage>),
-    Contest(Rc<kk_engine::settle::contest::MoveContest>),
-    Admission(Rc<kk_engine::settle::admission::MoveAdmission>),
-    Obstacle(Rc<kk_engine::settle::obstacle::MoveObstacle>),
-    Precheck(Rc<kk_engine::settle::precheck::MovePrecheck>),
-    PullRegistration(Rc<kk_engine::settle::pull_registration::PullRegistration>),
-    MoveCost(Rc<kk_engine::settle::move_cost::MoveCost>),
-    Resource(Rc<RefCell<BTreeMap<ObjId, kk_schema::room::RoomObject>>>),
+    Contest(Rc<kk_engine::settle::movement::contest::MoveContest>),
+    Admission(Rc<kk_engine::settle::movement::admission::MoveAdmission>),
+    Obstacle(Rc<kk_engine::settle::movement::obstacle::MoveObstacle>),
+    Precheck(Rc<kk_engine::settle::movement::precheck::MovePrecheck>),
+    PullRegistration(Rc<kk_engine::settle::movement::pull_registration::PullRegistration>),
+    MoveCost(Rc<kk_engine::settle::movement::move_cost::MoveCost>),
+    Resource(Rc<RefCell<ObjectJournal>>),
 }
 
 impl ChainCapability {
@@ -48,25 +48,31 @@ impl ChainCapability {
             _ => None,
         }
     }
-    pub(super) fn contest(&self) -> Option<&Rc<kk_engine::settle::contest::MoveContest>> {
+    pub(super) fn contest(&self) -> Option<&Rc<kk_engine::settle::movement::contest::MoveContest>> {
         match self {
             Self::Contest(state) => Some(state),
             _ => None,
         }
     }
-    pub(super) fn admission(&self) -> Option<&Rc<kk_engine::settle::admission::MoveAdmission>> {
+    pub(super) fn admission(
+        &self,
+    ) -> Option<&Rc<kk_engine::settle::movement::admission::MoveAdmission>> {
         match self {
             Self::Admission(state) => Some(state),
             _ => None,
         }
     }
-    pub(super) fn obstacle(&self) -> Option<&Rc<kk_engine::settle::obstacle::MoveObstacle>> {
+    pub(super) fn obstacle(
+        &self,
+    ) -> Option<&Rc<kk_engine::settle::movement::obstacle::MoveObstacle>> {
         match self {
             Self::Obstacle(state) => Some(state),
             _ => None,
         }
     }
-    pub(super) fn precheck(&self) -> Option<&Rc<kk_engine::settle::precheck::MovePrecheck>> {
+    pub(super) fn precheck(
+        &self,
+    ) -> Option<&Rc<kk_engine::settle::movement::precheck::MovePrecheck>> {
         match self {
             Self::Precheck(state) => Some(state),
             _ => None,
@@ -74,21 +80,21 @@ impl ChainCapability {
     }
     pub(super) fn pull_registration(
         &self,
-    ) -> Option<&Rc<kk_engine::settle::pull_registration::PullRegistration>> {
+    ) -> Option<&Rc<kk_engine::settle::movement::pull_registration::PullRegistration>> {
         match self {
             Self::PullRegistration(state) => Some(state),
             _ => None,
         }
     }
-    pub(super) fn move_cost(&self) -> Option<&Rc<kk_engine::settle::move_cost::MoveCost>> {
+    pub(super) fn move_cost(
+        &self,
+    ) -> Option<&Rc<kk_engine::settle::movement::move_cost::MoveCost>> {
         match self {
             Self::MoveCost(state) => Some(state),
             _ => None,
         }
     }
-    pub(super) fn resource_journal(
-        &self,
-    ) -> Option<&Rc<RefCell<BTreeMap<ObjId, kk_schema::room::RoomObject>>>> {
+    pub(super) fn resource_journal(&self) -> Option<&Rc<RefCell<ObjectJournal>>> {
         match self {
             Self::Resource(state) => Some(state),
             _ => None,

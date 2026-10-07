@@ -1087,6 +1087,7 @@ dependencies = [
  "kk-mod-host",
  "kk-runner",
  "kk-schema",
+ "kk-vm",
  "kk-world",
  "serde",
  "serde_json",
@@ -1122,6 +1123,7 @@ dependencies = [
 name = "kk-vm"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "deno_core",
  "libc",
 ]

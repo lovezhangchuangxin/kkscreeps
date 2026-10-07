@@ -388,6 +388,6 @@ export default function install(api) {
 
 ## 13. 与架构及实施计划的关系
 
-本文件定义 Mod 作者可获得的能力、组合行为、事务边界和验收要求。既有实现与历史批次见[贡献平面实施计划](../plans/mod-plane-batches.md)，2026-10-05 后完整玩法的建议优先级和下一片交接见[完整玩法计划](../plans/mod-complete-gameplay.md)，避免设计文档重复保存任务清单。
+本文件定义 Mod 作者可获得的能力、组合行为、事务边界和验收要求。既有实现与历史批次见[贡献平面实施计划](../plans/archive/mod-plane-batches.md)，2026-10-05 后完整玩法的建议优先级和下一片交接见[完整玩法计划](../plans/mod-complete-gameplay.md)，避免设计文档重复保存任务清单。
 
 新增封闭类型分派或硬编码玩法规则时，按 [ADR-014](../decisions/ADR-014-contribution-plane.md) 的评审要求提供具名槽位、有效规则数据通道，或登记明确的过渡范围。默认行为迁移须保持兼容性门禁，并验证规则替换不会被另一层隐藏的 vanilla 检查否决。

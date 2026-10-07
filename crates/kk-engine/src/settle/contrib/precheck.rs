@@ -1,7 +1,7 @@
 //! 移动请求预检链；正常拒绝丢弃 JS 决策并兑现登记时原生拒绝。
 use super::assemble::dispatch_of;
 use super::*;
-use crate::settle::precheck::MovePrecheck;
+use crate::settle::movement::precheck::MovePrecheck;
 
 pub(super) enum PrecheckSlot {
     Native,
@@ -23,7 +23,7 @@ impl PrecheckSlot {
     pub(super) fn run(
         &self,
         ctx: &RoomCtx,
-    ) -> Result<Option<crate::settle::precheck::PrecheckDecisions>, String> {
+    ) -> Result<Option<crate::settle::movement::precheck::PrecheckDecisions>, String> {
         let Self::Hosted(slot) = self else {
             return Ok(None);
         };

@@ -23,7 +23,7 @@ impl Movement {
         &self,
         room: &RoomState,
         index: &RoomIndex,
-    ) -> kk_mod_api::precheck::MovePrecheckInput {
+    ) -> kk_mod_api::movement::precheck::MovePrecheckInput {
         // 矩阵按目的格组织；先按对象 ID 排序再取各自请求，保证输入
         // 顺序确定（单执行者单请求不变量下每 id 至多一条）。
         let mut by_mover: BTreeMap<ObjId, ((u8, u8), RateEntry)> = BTreeMap::new();
@@ -38,7 +38,7 @@ impl Movement {
                 RoomObject::Creep(c) => Some(c),
                 _ => None,
             });
-            let mut info = kk_mod_api::precheck::PrecheckRequestInfo {
+            let mut info = kk_mod_api::movement::precheck::PrecheckRequestInfo {
                 mover_id: id.as_str().to_string(),
                 owner: String::new(),
                 origin_x: entry.origin.0,
@@ -113,17 +113,18 @@ impl Movement {
                     ),
                     other => (type_name_of(other).to_string(), String::new(), false, None),
                 };
-                info.objects.push(kk_mod_api::precheck::PrecheckObjectInfo {
-                    id: oid.as_str().to_string(),
-                    kind,
-                    owner: owner_of,
-                    is_public,
-                    structure_type,
-                });
+                info.objects
+                    .push(kk_mod_api::movement::precheck::PrecheckObjectInfo {
+                        id: oid.as_str().to_string(),
+                        kind,
+                        owner: owner_of,
+                        is_public,
+                        structure_type,
+                    });
             }
             requests.push(info);
         }
-        kk_mod_api::precheck::MovePrecheckInput { requests }
+        kk_mod_api::movement::precheck::MovePrecheckInput { requests }
     }
 
     pub(crate) fn mark_registration_blocked(&mut self, id: ObjId, blocked: bool) {
@@ -136,7 +137,7 @@ impl Movement {
 
     pub(crate) fn apply_precheck_decisions(
         &mut self,
-        decisions: crate::settle::precheck::PrecheckDecisions,
+        decisions: crate::settle::movement::precheck::PrecheckDecisions,
     ) {
         self.apply_precheck_blocks(&decisions.blocks);
         self.static_allowed = decisions.static_allowed;
@@ -156,7 +157,7 @@ impl Movement {
     pub(crate) fn pull_registration_input(
         &self,
         room: &RoomState,
-    ) -> kk_mod_api::pull_registration::PullRegistrationInput {
+    ) -> kk_mod_api::movement::pull_registration::PullRegistrationInput {
         let mut pulls = Vec::new();
         for (&puller, &target) in &self.pull_of {
             let (Some(RoomObject::Creep(p)), Some(RoomObject::Creep(t))) =
@@ -164,7 +165,7 @@ impl Movement {
             else {
                 continue;
             };
-            pulls.push(kk_mod_api::pull_registration::PullPairInfo {
+            pulls.push(kk_mod_api::movement::pull_registration::PullPairInfo {
                 puller_id: puller.as_str().to_string(),
                 target_id: target.as_str().to_string(),
                 puller_x: p.x,
@@ -175,7 +176,7 @@ impl Movement {
                 target_owner: t.owner.clone(),
             });
         }
-        kk_mod_api::pull_registration::PullRegistrationInput { pulls }
+        kk_mod_api::movement::pull_registration::PullRegistrationInput { pulls }
     }
 
     /// 构造移动代价输入：终局幸存者（取消链结算后）按对象 ID 升序、
@@ -187,7 +188,7 @@ impl Movement {
         &self,
         room: &RoomState,
         index: &RoomIndex,
-    ) -> kk_mod_api::move_cost::MoveCostInput {
+    ) -> kk_mod_api::movement::move_cost::MoveCostInput {
         let mut movers = Vec::new();
         for (&id, &cell) in &self.winners {
             let creep = room.objects.get(&id).and_then(|o| match o {
@@ -210,7 +211,7 @@ impl Movement {
             } else {
                 2
             };
-            movers.push(kk_mod_api::move_cost::MoveCostMoverInfo {
+            movers.push(kk_mod_api::movement::move_cost::MoveCostMoverInfo {
                 id: id.as_str().to_string(),
                 owner: creep.owner.clone(),
                 origin_x: creep.x,
@@ -229,7 +230,7 @@ impl Movement {
                 native_fatigue: weight * rate,
             });
         }
-        kk_mod_api::move_cost::MoveCostInput { movers }
+        kk_mod_api::movement::move_cost::MoveCostInput { movers }
     }
 
     /// 代价槽成功后的覆盖应用（接管所有权）；Native/拒绝路径不调用，
@@ -254,7 +255,10 @@ impl Movement {
     /// 构造房间移动竞争输入：全部有竞争者的目的格及按登记序排列的
     /// 竞争者摘要，含默认四键评分要素；不截断房间请求。调用时点为
     /// 登记完成之后、仲裁开始之前，矩阵仍是完整原始形态。
-    pub fn contest_input(&self, room: &RoomState) -> kk_mod_api::contest::MoveContestInput {
+    pub fn contest_input(
+        &self,
+        room: &RoomState,
+    ) -> kk_mod_api::movement::contest::MoveContestInput {
         let mut contests = Vec::new();
         for (&cell, entries) in &self.matrix {
             if entries.len() < 2 {
@@ -264,13 +268,13 @@ impl Movement {
                 .iter()
                 .map(|entry| self.contender_info(room, *entry, cell))
                 .collect();
-            contests.push(kk_mod_api::contest::ContestCell {
+            contests.push(kk_mod_api::movement::contest::ContestCell {
                 x: cell.0,
                 y: cell.1,
                 contenders,
             });
         }
-        kk_mod_api::contest::MoveContestInput { contests }
+        kk_mod_api::movement::contest::MoveContestInput { contests }
     }
 
     /// 单个竞争者摘要；评分要素与 [`rate_of`] 同源，对穿标志由原始
@@ -280,8 +284,8 @@ impl Movement {
         room: &RoomState,
         entry: RateEntry,
         cell: (u8, u8),
-    ) -> kk_mod_api::contest::ContenderInfo {
-        let mut info = kk_mod_api::contest::ContenderInfo {
+    ) -> kk_mod_api::movement::contest::ContenderInfo {
+        let mut info = kk_mod_api::movement::contest::ContenderInfo {
             id: entry.id.as_str(),
             owner: String::new(),
             origin_x: entry.origin.0,
@@ -324,7 +328,7 @@ impl Movement {
         &self,
         room: &RoomState,
         old_fatigue: &BTreeMap<ObjId, u32>,
-    ) -> kk_mod_api::admission::MoveAdmissionInput {
+    ) -> kk_mod_api::movement::admission::MoveAdmissionInput {
         let mut movers = Vec::new();
         for (&id, &cell) in &self.winners {
             let fatigue = old_fatigue.get(&id).copied().unwrap_or(0);
@@ -339,7 +343,7 @@ impl Movement {
                 .and_then(|entries| entries.first())
                 .map(|entry| entry.origin)
                 .unwrap_or(cell);
-            let mut info = kk_mod_api::admission::MoverInfo {
+            let mut info = kk_mod_api::movement::admission::MoverInfo {
                 id: id.as_str().to_string(),
                 owner: String::new(),
                 origin_x: origin.0,
@@ -377,7 +381,7 @@ impl Movement {
         let mut requests = Vec::new();
         for (&cell, entries) in &self.original_requests {
             for (index, entry) in entries.iter().enumerate() {
-                requests.push(kk_mod_api::admission::MoveRequestInfo {
+                requests.push(kk_mod_api::movement::admission::MoveRequestInfo {
                     mover_id: entry.id.as_str().to_string(),
                     x: cell.0,
                     y: cell.1,
@@ -388,7 +392,7 @@ impl Movement {
                 });
             }
         }
-        kk_mod_api::admission::MoveAdmissionInput { movers, requests }
+        kk_mod_api::movement::admission::MoveAdmissionInput { movers, requests }
     }
 
     /// 构造障碍槽输入；只读胜者表与对象摘要，不改变仲裁。native
@@ -399,7 +403,7 @@ impl Movement {
         room: &RoomState,
         index: &RoomIndex,
         safe_mode_user: Option<&str>,
-    ) -> kk_mod_api::obstacle::MoveObstacleInput {
+    ) -> kk_mod_api::movement::obstacle::MoveObstacleInput {
         let mut movers = Vec::new();
         for (&id, &cell) in &self.winners {
             let owner = room
@@ -461,7 +465,7 @@ impl Movement {
                         false,
                     ),
                 };
-                objects.push(kk_mod_api::obstacle::ObstacleObjectInfo {
+                objects.push(kk_mod_api::movement::obstacle::ObstacleObjectInfo {
                     id: oid.as_str().to_string(),
                     kind,
                     owner: owner_of,
@@ -470,7 +474,7 @@ impl Movement {
                     yielding,
                 });
             }
-            movers.push(kk_mod_api::obstacle::ObstacleMoverInfo {
+            movers.push(kk_mod_api::movement::obstacle::ObstacleMoverInfo {
                 id: id.as_str().to_string(),
                 owner,
                 target_x: cell.0,
@@ -485,6 +489,6 @@ impl Movement {
                 native_blocked,
             });
         }
-        kk_mod_api::obstacle::MoveObstacleInput { movers }
+        kk_mod_api::movement::obstacle::MoveObstacleInput { movers }
     }
 }

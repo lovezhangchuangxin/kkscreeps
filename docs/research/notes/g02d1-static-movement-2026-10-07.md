@@ -1,6 +1,6 @@
 # G02.d1 静态移动放行（2026-10-07）
 
-基线 `ee78894`。本记录交付请求登记与仲裁的静态放行切片，G02 父项仍部分完成。现行接口见[移动预检](../../architecture/mod-move-precheck.md)，示例见[ghost/seal](../../../compat/fixtures/mod-move-static/README.md)。机器结果见[同名证据](g02d1-static-movement-2026-10-07.json)。
+基线 `ee78894`。本记录交付请求登记与仲裁的静态放行切片，G02 父项仍部分完成。现行接口见[移动预检](../../architecture/movement.md#请求预检)，示例见[ghost/seal](../../../compat/fixtures/mod-move-static/README.md)。机器结果见[同名证据](g02d1-static-movement-2026-10-07.json)。
 
 ## 实施与复审
 

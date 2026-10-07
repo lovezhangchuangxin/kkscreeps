@@ -20,7 +20,7 @@
 
 - `kk-runtime`：`mod_trace.rs` 单测（上限/丢弃计数/字符边界截断/故障种类标签与 serde 名一致）；`mod_chain_tests/trace.rs` 端到端——默认关闭无快照且开启后健康链只有完成事件（非空断言 + tick/房间/槽/阶段字段齐）、拒绝事件带绑定与 code、故障→自动停用→缓存重试→重建→新链完成的**完整事件序**锁定（含 kind 名与错误文本）、停用后重试轮自有槽记 `SlotInactive`（恰 3 个、无新故障）、trace 跨 realm 重建保留历史；检查点单测覆盖装配后开启、失败恢复保留旧快照、带停用掩码的成功恢复清空旧事件并按恢复后的时间续跑，以及旧自动停用记录解码与矛盾来源拒绝。
 - `kk-cli`：`sim_tests/mod_trace.rs` 经真实 CLI——gatekeeper 场景（拒绝+完成，绑定 ∈ composition 活动链，默认关闭时无载荷且最终世界一致）、breaker 场景（`run_failed` 退出 2 且失败归因为结算故障，`slot_fault` 槽/绑定/错误文本 + `settlement_retry`，复现材料字段在报告内）、检查点续跑（保存 2 tick 后 `--load-checkpoint --mod-trace` 续跑继续记录且事件从恢复后的世界时间开始）。
-- JS 夹具 [mod-trace](../../compat/fixtures/mod-trace/) 与 [sim-mod-trace](../../compat/fixtures/sim-mod-trace/README.md)：gatekeeper（可通行/可扣押动作对，房间可见对象 + 玩家类 emit）与 breaker（link tick 前置抛错）。
+- JS 夹具 [mod-trace](../../compat/fixtures/mod-trace) 与 [sim-mod-trace](../../compat/fixtures/sim-mod-trace/README.md)：gatekeeper（可通行/可扣押动作对，房间可见对象 + 玩家类 emit）与 breaker（link tick 前置抛错）。
 
 ## 当前边界
 

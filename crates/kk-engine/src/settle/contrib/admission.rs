@@ -1,7 +1,7 @@
 //! 移动准入终值链；正常拒绝仅丢弃覆盖，保留原生预填终值。
 use super::assemble::dispatch_of;
 use super::*;
-use crate::settle::admission::MoveAdmission;
+use crate::settle::movement::admission::MoveAdmission;
 
 pub(super) enum AdmissionSlot {
     Native,

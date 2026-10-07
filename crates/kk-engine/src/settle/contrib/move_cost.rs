@@ -1,7 +1,7 @@
 //! 移动代价链；正常拒绝仅丢弃覆盖，执行阶段回退原生代价。
 use super::assemble::dispatch_of;
 use super::*;
-use crate::settle::move_cost::MoveCost;
+use crate::settle::movement::move_cost::MoveCost;
 
 pub(super) enum MoveCostSlot {
     Native,

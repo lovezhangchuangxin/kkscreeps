@@ -1,6 +1,6 @@
 # N2c 第二片：JS 治疗策略（2026-10-05）
 
-基于 `c45610d`，开放近程/远程治疗槽中的 `ctx.combat.applyHeal`。作者通过独立 JS 指定同房目标和治疗量，宿主继续维护延迟队列、身体耐久上限、死亡与统一候选提交。现行契约见[JS 治疗策略](../../architecture/mod-heal-policy.md)，机器证据见[验收数据](n2c-heal-policy-2026-10-05.json)。
+基于 `c45610d`，开放近程/远程治疗槽中的 `ctx.combat.applyHeal`。作者通过独立 JS 指定同房目标和治疗量，宿主继续维护延迟队列、身体耐久上限、死亡与统一候选提交。现行契约见[JS 治疗策略](../../architecture/combat.md#治疗)，机器证据见[验收数据](n2c-heal-policy-2026-10-05.json)。
 
 ## 实现与复审
 

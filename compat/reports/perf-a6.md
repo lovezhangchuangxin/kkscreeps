@@ -9,7 +9,7 @@
 > 仍有效——投影构建与动作无关；run 相为无 intent 的脚本执行；settle 相
 > 为零 intent 结算）。夹具已修复（对象摆进作用距离+出生 directions 控制
 > +负载自检），当日新基线与 A/B 归因见
-> [双房批方案 §7](../../docs/plans/dual-room-live-fire.md)。
+> [双房批方案 §7](../../docs/plans/archive/dual-room-live-fire.md)。
 
 - **日期**：2026-09-29
 - **工具**：`kkscreeps perf-probe`（A6 交付；驱动 EmbedEngine 完整闭环——per-viewer

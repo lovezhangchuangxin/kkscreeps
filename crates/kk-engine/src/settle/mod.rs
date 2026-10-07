@@ -4,10 +4,8 @@
 //! Engine 在副本中结算所有房间和市场，校验成功后统一写回内存并推进
 //! 时间；直接调用 settle_room 则由调用方负责副本和失败处理。
 
-pub mod admission;
 pub mod buildings;
 pub mod checkpoint;
-pub mod contest;
 pub mod contrib;
 pub mod controller;
 pub mod creep;
@@ -17,12 +15,10 @@ pub mod incoming;
 pub mod inter_room;
 pub mod market;
 mod mod_intents;
-pub mod move_cost;
 pub mod movement;
+// 兼容旧调用路径，领域实现只维护在 movement 中。
+pub use movement::{admission, contest, move_cost, obstacle, precheck, pull_registration};
 pub mod objects;
-pub mod obstacle;
-pub mod precheck;
-pub mod pull_registration;
 pub mod resources;
 pub mod room;
 pub mod spawn;
@@ -456,6 +452,6 @@ mod state_api;
 mod validation;
 mod working;
 pub use room_loop::{energy_resource_name, settle_room};
-pub use working::{ChainSnapshot, Plane, RoomCtx, Working};
+pub use working::{ChainSnapshot, ObjectJournal, Plane, RoomCtx, Working};
 #[cfg(test)]
 mod tests;

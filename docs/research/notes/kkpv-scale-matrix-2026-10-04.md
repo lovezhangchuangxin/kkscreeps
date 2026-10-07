@@ -19,12 +19,12 @@
 
 ```sh
 cargo build --release -p kk-cli
-python3 docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py /tmp/kkpv-matrix-new.json
+python3 scripts/benchmark/research/kkpv-scale-matrix-capture-2026-10-04.py /tmp/kkpv-matrix-new.json
 # 采集完成后将输出整体归档为本目录的 kkpv-scale-matrix-windows-2026-10-04.json
 ```
 
 - 采集脚本（门禁 + 原子归档 + 单测 20 项，`python -O` 下同样通过）：
-  [kkpv-scale-matrix-capture-2026-10-04.py](kkpv-scale-matrix-capture-2026-10-04.py)
+  [kkpv-scale-matrix-capture-2026-10-04.py](../../../scripts/benchmark/research/kkpv-scale-matrix-capture-2026-10-04.py)
 - 全部原始报告（30 个运行，含轮内序号与规模序）：
   [kkpv-scale-matrix-windows-2026-10-04.json](kkpv-scale-matrix-windows-2026-10-04.json)
 - 二进制 SHA-256 `f77cd694e8fc…`（源码基点 ac3b248，测试独占变更不影响

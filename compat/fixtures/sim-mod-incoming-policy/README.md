@@ -9,7 +9,7 @@
 | `scenario-shield.json` | 默认 TOUGH 后吸收 18 点护盾，先扣 0 再扣 12 | 188 / 88 |
 | `scenario-combined.json` | armor 后吸收护盾，先扣 0 再扣 2 | 198 / 98 |
 
-执行者均保持 200 hits；目标没有 ATTACK 部件，因此没有原生反击。事件 damage 保持 30。护甲包 applied=2；护盾包按目标 ID 保存剩余池，最后为 0、applied=2。公式替换后不再次应用原生 TOUGH；正常拒绝与数值边界见[JS 受击策略](../../../docs/architecture/mod-incoming-policy.md)。
+执行者均保持 200 hits；目标没有 ATTACK 部件，因此没有原生反击。事件 damage 保持 30。护甲包 applied=2；护盾包按目标 ID 保存剩余池，最后为 0、applied=2。公式替换后不再次应用原生 TOUGH；正常拒绝与数值边界见[JS 受击策略](../../../docs/architecture/combat.md#受击)。
 
 ```bash
 target/release/kkscreeps sim run --scenario compat/fixtures/sim-mod-incoming-policy/scenario-combined.json --ticks 3 --report /tmp/incoming.json

@@ -18,4 +18,4 @@ target/release/kkscreeps sim run --scenario compat/fixtures/sim-mod-combat-range
 target/release/kkscreeps sim run --scenario compat/fixtures/sim-mod-combat-ranges/scenario-reach.json --ticks 4 --kkpv --report /tmp/ranges-kkpv.json
 ```
 
-`kk-cli` 的 `sim_tests/combat_ranges.rs` 核对四场景 × JSON/KKPV 的完整 final、PlanHash 与组合身份（四身份互异），以及第 2 tick 保存检查点、退出进程、加载再续跑的冷恢复一致；门语义测试断言上表全部取值。策略包在 [../mod-combat-ranges/](../mod-combat-ranges/)。
+`kk-cli` 的 `sim_tests/combat_ranges.rs` 核对四场景 × JSON/KKPV 的完整 final、PlanHash 与组合身份（四身份互异），以及第 2 tick 保存检查点、退出进程、加载再续跑的冷恢复一致；门语义测试断言上表全部取值。策略包在 [../mod-combat-ranges/](../mod-combat-ranges)。

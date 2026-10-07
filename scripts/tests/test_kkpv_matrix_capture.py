@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = ROOT / 'docs/research/notes/kkpv-scale-matrix-capture-2026-10-04.py'
+SCRIPT = ROOT / 'scripts/benchmark/research/kkpv-scale-matrix-capture-2026-10-04.py'
 spec = importlib.util.spec_from_file_location('kkpv_matrix_capture', SCRIPT)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)

@@ -1,6 +1,6 @@
 # 调研底稿
 
-本目录保存源码分析、社区项目研究和技术实验的历史证据。报告结论适用于记录的版本、环境和场景；它们是决策依据，不是当前实现或完整系统收益的证明。已采用的方案见[决策记录](../decisions/)，当前机制与目标设计见[架构文档](../architecture/)。
+本目录保存源码分析、社区项目研究和技术实验的历史证据。报告结论适用于记录的版本、环境和场景；它们是决策依据，不是当前实现或完整系统收益的证明。已采用的方案见[决策记录](../decisions)，当前机制与目标设计见[架构文档](../architecture)。
 
 01–04 对应最初三轮调研（第一轮 = 01 与 02，第二轮 = 03，第三轮 = 04）；05 是报告编写时的 Mod 扩展能力专项复查；06 在用户明确 JS-only 后复审整体架构，并以新鲜构建和 JS/native 交互实验提出实施路线；07 调查注释的可读性与事实准确性，并提出规范和整改方案。建议按问题选择阅读；`notes/` 是报告的原始证据，报告中关键结论可回溯到出处。
 
@@ -101,15 +101,15 @@
 
 **实现复查**（2026-09-28 优化轮证据）：[m0-m1-code-quality-audit.md](m0-m1-code-quality-audit.md)
 
-**Mod 扩展实测**（05 报告证据，2026-10-01）：[复现脚本](notes/mod-extensibility-probe-2026-10-01.py)、[探针结果](notes/mod-extensibility-probe-2026-10-01.json)（临时内存世界的 Generic 管理查询、玩家对象字段与自定义 FIND 观察）
+**Mod 扩展实测**（05 报告证据，2026-10-01）：[复现脚本](../../scripts/benchmark/research/mod-extensibility-probe-2026-10-01.py)、[探针结果](notes/mod-extensibility-probe-2026-10-01.json)（临时内存世界的 Generic 管理查询、玩家对象字段与自定义 FIND 观察）
 
-**整体架构与 JS Mod 新实验**（06 报告证据，2026-10-01）：[当前构建性能采集](notes/architecture-perf-probe-2026-10-01.py)、[12 次原始性能结果](notes/architecture-perf-probe-2026-10-01.json)；[JS 宿主采集](notes/js-mod-host-probe-2026-10-01.py)、[5 次 release + debug 结果](notes/js-mod-host-probe-2026-10-01.json)；[Rust 宿主原型](../../spikes/deno-spike/examples/js_mod_host.rs)、[JS 行为原型](../../spikes/deno-spike/examples/js_mod_host.js)。均为研究证据，非生产 Mod 实装或正式性能验收。
+**整体架构与 JS Mod 新实验**（06 报告证据，2026-10-01）：[当前构建性能采集](../../scripts/benchmark/research/architecture-perf-probe-2026-10-01.py)、[12 次原始性能结果](notes/architecture-perf-probe-2026-10-01.json)；[JS 宿主采集](../../scripts/benchmark/research/js-mod-host-probe-2026-10-01.py)、[5 次 release + debug 结果](notes/js-mod-host-probe-2026-10-01.json)；[Rust 宿主原型](../../spikes/deno-spike/examples/js_mod_host.rs)、[JS 行为原型](../../spikes/deno-spike/examples/js_mod_host.js)。均为研究证据，非生产 Mod 实装或正式性能验收。
 
 **架构再思考复核**（ADR-014 证据，2026-10-01）：[architecture-rethink-2026-10-01.md](notes/architecture-rethink-2026-10-01.md)（对 05/06 断言的双路独立核实、xxscreeps 机制取证要点、定型结论与数字勘误表）
 
 **贡献链驱动模型**（2026-10-03，C 批前置片证据）：[链驱动模型记录](notes/mod-chain-driver-2026-10-03.md)（JS 驱动链的最小实验：两层 wrap 嵌套 + Rust native 中心全程 0 个 reentrant 标记；附 `after` 时点陷阱）、[Rust 实验体](../../spikes/deno-spike/examples/js_driven_chain.rs)、[JS 驱动器](../../spikes/deno-spike/examples/js_driven_chain.js)。结论推翻已落地实现的 reentrant 方向，重做与否待定。
 
-**KKPV 双通道规模矩阵**（2026-10-04，C.5 收口证据）：[规模矩阵记录](notes/kkpv-scale-matrix-2026-10-04.md)（4/8/32 玩家 × JSON/KKPV × 5 轮双重交错——通道序交换+规模序轮换：CPU/wall 亏损随规模收窄但 4..32p 无回本点、每玩家字节优势 −65%→−90% 单调扩大、RSS 8p→32p 交叉反超；32p 方向与 B.6 双样一致、幅度偏窄——跨会话比值不可比）、[采集脚本](notes/kkpv-scale-matrix-capture-2026-10-04.py)（门禁+原子归档，单测见 scripts/tests）、[全部原始报告](notes/kkpv-scale-matrix-windows-2026-10-04.json)。
+**KKPV 双通道规模矩阵**（2026-10-04，C.5 收口证据）：[规模矩阵记录](notes/kkpv-scale-matrix-2026-10-04.md)（4/8/32 玩家 × JSON/KKPV × 5 轮双重交错——通道序交换+规模序轮换：CPU/wall 亏损随规模收窄但 4..32p 无回本点、每玩家字节优势 −65%→−90% 单调扩大、RSS 8p→32p 交叉反超；32p 方向与 B.6 双样一致、幅度偏窄——跨会话比值不可比）、[采集脚本](../../scripts/benchmark/research/kkpv-scale-matrix-capture-2026-10-04.py)（门禁+原子归档，单测见 scripts/tests）、[全部原始报告](notes/kkpv-scale-matrix-windows-2026-10-04.json)。
 
 **存储选型基准**（2026-09-29 M2-C3 骨架证据）：[storage-bench.md](notes/storage-bench.md)（redb vs libmdbx 微基准方法学、三档场景夹具、macOS arm64 数字（初轮 + 评审清偿后复跑）与选型判据草案——非正式选型，正式选型待 2A 后真实负载）
 

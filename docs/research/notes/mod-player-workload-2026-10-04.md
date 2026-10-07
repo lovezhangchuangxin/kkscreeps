@@ -27,11 +27,11 @@
 
 ## 十个独立窗口
 
-[采集脚本](mod-player-workload-capture-2026-10-04.py) 固定两玩家、并发 2，JSON/KKPV 各五次独立进程，预热 500、采集 3000 tick；奇数轮 JSON→KKPV，偶数轮 KKPV→JSON。脚本核验 release、报告口径、阶段样本数、有限非负指标、包/脚本/预算身份和全部工作量；保留所有原始报告，失败不发布 complete=true。可在仓库根复跑，输出须为新路径：
+[采集脚本](../../../scripts/benchmark/research/mod-player-workload-capture-2026-10-04.py) 固定两玩家、并发 2，JSON/KKPV 各五次独立进程，预热 500、采集 3000 tick；奇数轮 JSON→KKPV，偶数轮 KKPV→JSON。脚本核验 release、报告口径、阶段样本数、有限非负指标、包/脚本/预算身份和全部工作量；保留所有原始报告，失败不发布 complete=true。可在仓库根复跑，输出须为新路径：
 
 ```sh
 cargo build --release -p kk-cli
-python3 docs/research/notes/mod-player-workload-capture-2026-10-04.py /tmp/mod-player-new-windows.json
+python3 scripts/benchmark/research/mod-player-workload-capture-2026-10-04.py /tmp/mod-player-new-windows.json
 ```
 
 [全部原始窗口](mod-player-workload-windows-2026-10-04.json) 共 30000 个采集 tick，加 5000 个预热 tick。两种通道的三个边界完整快照与动作次数一致；每窗口每名玩家实际执行 3000 轮，提交 3000 次 Mod 递增、2000 次升级、1000 次采集，Mod namespace 总计 7000（含两玩家预热）。没有失败、未执行或玩家异常的轮次。

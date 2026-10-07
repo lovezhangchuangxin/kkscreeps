@@ -1,6 +1,6 @@
 # C.3 counter 对象与动作全链（2026-10-03）
 
-[计划](../../plans/mod-plane-batches.md) C 批第三片。范围：Mod 声明类型
+[计划](../../plans/archive/mod-plane-batches.md) C 批第三片。范围：Mod 声明类型
 的对象进入世界存储、扩展意图从玩家面到结算的收集/校验/执行全链、
 Mod 自有槽动作处理绑定的执行接线（前批被装配门显式拒的面）、
 管理命令创建 counter 对象。**不含**：玩家 API 安装与投影扩展

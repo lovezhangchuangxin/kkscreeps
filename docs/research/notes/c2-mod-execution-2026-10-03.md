@@ -1,6 +1,6 @@
 # C.2 处理器执行与 EmbedEngine 接线（2026-10-03）
 
-[计划](../../plans/mod-plane-batches.md) C 批第二片。范围：JS 处理器进入
+[计划](../../plans/archive/mod-plane-batches.md) C 批第二片。范围：JS 处理器进入
 结算——执行器可失败化、Mod 状态候选域、realm 派发、`create_shard_with_mods`
 装配与零 Mod 开销验证。**不含**：wrap 的 next 续行接线、Mod 自有槽
 （动作处理）执行、对象/意图/挂载绑定的装配（C.3/C.4/C.5）。

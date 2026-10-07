@@ -15,10 +15,6 @@ pub(crate) use crate::execution_plan::ExecutionChain as ChainProgram;
 
 mod resources;
 pub(crate) use resources::{op_mod_chain_resource_read, op_mod_chain_resource_transfer};
-mod movement;
-pub(crate) use movement::{
-    op_mod_chain_move_cancel, op_mod_chain_move_pending, op_mod_chain_move_request,
-};
 mod combat;
 mod incoming;
 pub(crate) use combat::{
@@ -26,23 +22,6 @@ pub(crate) use combat::{
     op_mod_chain_combat_get, op_mod_chain_combat_request,
 };
 pub(crate) use incoming::{op_mod_chain_incoming_damage, op_mod_chain_incoming_set_damage};
-mod contest;
-pub(crate) use contest::{op_mod_chain_contest_priority, op_mod_chain_contest_set_priority};
-mod admission;
-pub(crate) use admission::{
-    op_mod_chain_admission_admitted, op_mod_chain_admission_evaluate,
-    op_mod_chain_admission_set_admitted,
-};
-mod obstacle;
-pub(crate) use obstacle::{op_mod_chain_obstacle_block, op_mod_chain_obstacle_blocked};
-mod move_cost;
-mod precheck;
-mod pull_registration;
-pub(crate) use move_cost::{op_mod_chain_cost_fatigue_of, op_mod_chain_cost_set_fatigue};
-pub(crate) use precheck::{
-    op_mod_chain_precheck_allow_static, op_mod_chain_precheck_block, op_mod_chain_precheck_blocked,
-};
-pub(crate) use pull_registration::{op_mod_chain_pull_denied, op_mod_chain_pull_deny};
 mod combat_batch;
 pub(crate) use combat_batch::{
     op_mod_chain_combat_apply_damage_batch, op_mod_chain_combat_list,
@@ -89,8 +68,17 @@ mod host_combat;
 pub use host_combat::CombatHost;
 mod host_build;
 pub use host_build::BuildHost;
-mod host_movement;
-pub use host_movement::MovementHost;
+mod movement;
+pub use movement::MovementHost;
+pub(crate) use movement::{
+    op_mod_chain_admission_admitted, op_mod_chain_admission_evaluate,
+    op_mod_chain_admission_set_admitted, op_mod_chain_contest_priority,
+    op_mod_chain_contest_set_priority, op_mod_chain_cost_fatigue_of, op_mod_chain_cost_set_fatigue,
+    op_mod_chain_move_cancel, op_mod_chain_move_pending, op_mod_chain_move_request,
+    op_mod_chain_obstacle_block, op_mod_chain_obstacle_blocked, op_mod_chain_precheck_allow_static,
+    op_mod_chain_precheck_block, op_mod_chain_precheck_blocked, op_mod_chain_pull_denied,
+    op_mod_chain_pull_deny,
+};
 
 // op 的 serde 输出包装；计时围住真实转换，不从 op/host 的差额推测。
 pub(crate) struct ChainRead {

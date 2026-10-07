@@ -19,4 +19,4 @@ target/release/kkscreeps sim run --scenario compat/fixtures/sim-mod-move-pull-re
 target/release/kkscreeps sim run --scenario compat/fixtures/sim-mod-move-pull-registration/scenario-leash.json --ticks 3 --kkpv --report /tmp/pull-leash.json
 ```
 
-`kk-cli` 的 `sim_tests/move_pull_registration.rs` 核对四场景 × JSON/KKPV 的完整 final、PlanHash 与组合身份（四身份互异；内建槽 18→19、revision v12 由 freeze 槽计数断言钉死）；在第 1 tick 后保存检查点、退出进程、加载再续跑，确认位置与 namespace 计数恰一次延续。策略包在 [../mod-move-pull-registration/](../mod-move-pull-registration/)。
+`kk-cli` 的 `sim_tests/move_pull_registration.rs` 核对四场景 × JSON/KKPV 的完整 final、PlanHash 与组合身份（四身份互异；内建槽 18→19、revision v12 由 freeze 槽计数断言钉死）；在第 1 tick 后保存检查点、退出进程、加载再续跑，确认位置与 namespace 计数恰一次延续。策略包在 [../mod-move-pull-registration/](../mod-move-pull-registration)。

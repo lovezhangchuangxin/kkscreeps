@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 
 PROBE = (Path(__file__).resolve().parents[2]
-         / "docs/research/notes/mod-attribution-probe-2026-10-03.py")
+         / "scripts/benchmark/research/mod-attribution-probe-2026-10-03.py")
 
 
 class ModAttributionIdentityTests(unittest.TestCase):

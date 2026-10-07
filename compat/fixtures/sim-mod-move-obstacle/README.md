@@ -9,7 +9,7 @@
 | `scenario-noswap.json` | no-swap 包 after：目的格含让位中 creep（yielding）追加阻挡 | 失效 | 移动 |
 | `scenario-combined.json` | stay-north replace + no-swap after，追加集并集 | 失效 | 不动 |
 
-障碍槽只允许**追加阻挡**（`ctx.obstacle.block`，单向；`isBlocked` 读预填时点 native 初判）——放行 native 阻挡会让移动者进入未让位对象占据的格、破坏坐标表示有效性。追加取消沿让位链传播：交换一方被阻挡后另一方失去让位依赖、随之取消，这个传播由引擎完成，JS 不逐格重算。让位取消后 native 初判只会收紧不会放宽。有移动胜者的 tick 恰好调用一次槽并使对应 namespace 的 `applied` 计数为 1。正常拒绝、非法写入与恢复边界见[JS 移动障碍](../../../docs/architecture/mod-move-obstacle.md)。
+障碍槽只允许**追加阻挡**（`ctx.obstacle.block`，单向；`isBlocked` 读预填时点 native 初判）——放行 native 阻挡会让移动者进入未让位对象占据的格、破坏坐标表示有效性。追加取消沿让位链传播：交换一方被阻挡后另一方失去让位依赖、随之取消，这个传播由引擎完成，JS 不逐格重算。让位取消后 native 初判只会收紧不会放宽。有移动胜者的 tick 恰好调用一次槽并使对应 namespace 的 `applied` 计数为 1。正常拒绝、非法写入与恢复边界见[JS 移动障碍](../../../docs/architecture/movement.md#障碍追加)。
 
 ```bash
 target/release/kkscreeps sim run --scenario compat/fixtures/sim-mod-move-obstacle/scenario-combined.json --ticks 3 --report /tmp/obstacle.json

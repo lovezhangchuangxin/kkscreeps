@@ -1,6 +1,6 @@
 # D2 寻路地形直通：实现与验证记录（2026-10-04）
 
-[设计要求](../../designs/pathfinder-terrain.md)｜[批次登记](../../plans/mod-plane-batches.md)。
+[设计要求](../../designs/pathfinder-terrain.md)｜[批次登记](../../plans/archive/mod-plane-batches.md)。
 本文记录实现落点、性能归因（含一次 TLS 物理内存回归的定位与修复）与验收证据。
 
 ## 实现落点

@@ -1,7 +1,7 @@
 //! G08.a 建筑字段写面：原生键只读、自定义键整集校验与合并语义。
 use super::*;
-use crate::settle::{Engine, Plane, TickState, movement};
-use kk_world::{ObjId, RoomIndex, RoomState};
+use crate::settle::{Engine, Plane, TickState};
+use kk_world::{ObjId, RoomState};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// 冻结一个带字段的 bl:gauge 建筑，返回其贡献平面组件。
@@ -86,25 +86,12 @@ fn working_with_gauge() -> (Working, ObjId) {
     let plan = gauge_plan();
     let engine = Engine::default();
     let room = RoomState::new("W1N1", kk_core::Terrain::plains());
-    let mut w = Working {
-        index: RoomIndex::build(&room.objects),
+    let mut w = Working::new(
         room,
-        time: 0,
-        now_ms: 0,
-        state: TickState::new(BTreeMap::new(), 100),
-        events: Vec::new(),
-        old_fatigue: BTreeMap::new(),
-        tick_fatigue: BTreeMap::new(),
-        upgraded: BTreeMap::new(),
-        damage_to_apply: BTreeMap::new(),
-        heal_to_apply: BTreeMap::new(),
-        upgrade_block_pending: BTreeMap::new(),
-        safe_mode_activated: BTreeSet::new(),
-        extractor_cooldown_pending: BTreeMap::new(),
-        movement: movement::Movement::new(),
-        pending_inter_room: Vec::new(),
-        chain_mutations: None,
-        plane: Plane {
+        0,
+        0,
+        TickState::new(BTreeMap::new(), 100),
+        Plane {
             buildings: std::rc::Rc::new(
                 kk_mod_api::buildings::BuildingCatalog::from_plan(&plan).unwrap(),
             ),
@@ -117,7 +104,7 @@ fn working_with_gauge() -> (Working, ObjId) {
             extensions: engine.extensions,
             plan,
         },
-    };
+    );
     let id = ObjId(2);
     let data = serde_json::json!({
         "type":"structure","structureType":"bl:gauge","owner":"p1",

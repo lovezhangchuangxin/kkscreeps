@@ -80,7 +80,7 @@ snapshot-contract 已明确共享字节仍是目标，是好的范例。overall/
 
 ## 3. 新鲜构建的性能证据
 
-[复现脚本](notes/architecture-perf-probe-2026-10-01.py)与[完整结果](notes/architecture-perf-probe-2026-10-01.json)记录机器、rustc、commit、二进制 SHA256、12 次原始报告与工作负载自检。release 默认特性；每档 3 个独立进程，轮转 1/2/4/8 玩家；预热 500、采集 800 tick，终点 1300，避开初始 creep 1500 TTL 分段；串行执行各进程避免基准互相抢资源。
+[复现脚本](../../scripts/benchmark/research/architecture-perf-probe-2026-10-01.py)与[完整结果](notes/architecture-perf-probe-2026-10-01.json)记录机器、rustc、commit、二进制 SHA256、12 次原始报告与工作负载自检。release 默认特性；每档 3 个独立进程，轮转 1/2/4/8 玩家；预热 500、采集 800 tick，终点 1300，避开初始 creep 1500 TTL 分段；串行执行各进程避免基准互相抢资源。
 
 表为各运行 p50 的中位数，单位 ms/tick：
 
@@ -111,7 +111,7 @@ snapshot-contract 已明确共享字节仍是目标，是好的范例。overall/
 
 ## 4. JS-only 的技术可行性已经进一步实测
 
-新增独立实验：[Rust 宿主](../../spikes/deno-spike/examples/js_mod_host.rs)、[JS Mod 行为](../../spikes/deno-spike/examples/js_mod_host.js)、[采集脚本](notes/js-mod-host-probe-2026-10-01.py)、[完整结果](notes/js-mod-host-probe-2026-10-01.json)。版本 deno_core 0.412.0；已有 spike manifest 增加独立 `[workspace]`，让证据项目能独立运行，未改变生产 workspace 或引擎。
+新增独立实验：[Rust 宿主](../../spikes/deno-spike/examples/js_mod_host.rs)、[JS Mod 行为](../../spikes/deno-spike/examples/js_mod_host.js)、[采集脚本](../../scripts/benchmark/research/js-mod-host-probe-2026-10-01.py)、[完整结果](notes/js-mod-host-probe-2026-10-01.json)。版本 deno_core 0.412.0；已有 spike manifest 增加独立 `[workspace]`，让证据项目能独立运行，未改变生产 workspace 或引擎。
 
 验证以下具体命题：
 

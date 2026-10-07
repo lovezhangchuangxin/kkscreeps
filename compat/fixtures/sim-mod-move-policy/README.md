@@ -9,7 +9,7 @@
 | `scenario-heaviest.json` | heaviest 包 after 调整：每格重量最大者设 +2 | `heavy` |
 | `scenario-combined.json` | seniority 的 replace 先设 ±1，heaviest 的 after 再把最重者抬到 +2 | `heavy` |
 
-三个策略产生三种不同胜者，组合语义独立可观察。失败者保持原格不移动（仲裁不递补落选者）。有竞争的 tick 恰好调用一次槽并使对应 namespace 的 `applied` 计数为 1；无请求的 tick 不进入 JS。正常拒绝、非法数值与恢复边界见[JS 移动竞争策略](../../../docs/architecture/mod-move-contest.md)。
+三个策略产生三种不同胜者，组合语义独立可观察。失败者保持原格不移动（仲裁不递补落选者）。有竞争的 tick 恰好调用一次槽并使对应 namespace 的 `applied` 计数为 1；无请求的 tick 不进入 JS。正常拒绝、非法数值与恢复边界见[JS 移动竞争策略](../../../docs/architecture/movement.md#竞争排序)。
 
 ```bash
 target/release/kkscreeps sim run --scenario compat/fixtures/sim-mod-move-policy/scenario-combined.json --ticks 3 --report /tmp/move.json

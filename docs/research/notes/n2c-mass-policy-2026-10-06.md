@@ -1,6 +1,6 @@
 # N2c 第三片：JS 群体伤害策略（2026-10-06）
 
-基于 `18e8ea6`，开放同房战斗分页 `ctx.combat.list` 和 rangedMassAttack 槽中的 `applyDamageBatch`。作者使用独立 JS 筛选目标与计算每项伤害，宿主保护批量表示、延迟队列、死亡与统一发布。现行契约见[JS 群体伤害](../../architecture/mod-mass-policy.md)，机器证据见[验收数据](n2c-mass-policy-2026-10-06.json)。
+基于 `18e8ea6`，开放同房战斗分页 `ctx.combat.list` 和 rangedMassAttack 槽中的 `applyDamageBatch`。作者使用独立 JS 筛选目标与计算每项伤害，宿主保护批量表示、延迟队列、死亡与统一发布。现行契约见[JS 群体伤害](../../architecture/combat.md#群体伤害)，机器证据见[验收数据](n2c-mass-policy-2026-10-06.json)。
 
 ## 实现与复审
 

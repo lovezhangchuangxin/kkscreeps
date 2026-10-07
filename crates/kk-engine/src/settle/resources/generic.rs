@@ -1,29 +1,7 @@
 //! Generic 仓库的解析、容量与实验室槽切换；native 与领域能力共用。
 use serde_json::Value;
 
-/// Generic 仓库通过 store/storeCapacity/storeCapacityResource 字段参与结算，
-/// 不按结构类型列容量白名单；扩展结构可复用同一数据通道。
-/// 来源：上游 utils.capacityForResource 和 creeps/transfer.js。
-pub(in crate::settle) fn generic_store(data: &str) -> Option<Value> {
-    let value: Value = serde_json::from_str(data).ok()?;
-    let store = value.get("store")?.as_object()?;
-    if !store
-        .values()
-        .all(|slot| slot.as_i64().is_some_and(|n| n >= 0))
-    {
-        return None;
-    }
-    if let Some(capacities) = value.get("storeCapacityResource").filter(|v| !v.is_null()) {
-        let slots = capacities.as_object()?;
-        if !slots
-            .values()
-            .all(|slot| slot.is_null() || slot.as_i64().is_some_and(|n| n >= 0))
-        {
-            return None;
-        }
-    }
-    Some(value)
-}
+pub(in crate::settle) use kk_world::domain::generic::decode_store as generic_store;
 
 pub(in crate::settle) fn generic_capacity(value: &Value, resource: &str) -> (i64, i64) {
     let capacities = value

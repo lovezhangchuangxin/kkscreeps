@@ -24,7 +24,7 @@ Rust 保留默认规则实现和宿主服务，向 JS 开放具名规则替换�
 
 [ADR-016](ADR-016-official-content-packs.md)进一步要求官方内容按可选包交付，其中一部分直接使用公共 JS SDK 实现，配套玩法预设与同类第三方包验收。Rust 默认实现保留为可选实现或加速能力，具体内容不再要求全部固定在 Rust 中。
 
-[ADR-014](ADR-014-contribution-plane.md)已确认贡献计划、默认玩法同契约、共享投影、全域候选、首版共同可信玩法 VM 和实施方向。本文不再把这些已确认方向写作待定；SDK 名称和具体接口仍按[Mod 设计](../designs/mod-system.md)与[实施方案](../plans/mod-plane-batches.md)逐项实现和验收。
+[ADR-014](ADR-014-contribution-plane.md)已确认贡献计划、默认玩法同契约、共享投影、全域候选、首版共同可信玩法 VM 和实施方向。本文不再把这些已确认方向写作待定；SDK 名称和具体接口仍按[Mod 设计](../designs/mod-system.md)与[实施方案](../plans/archive/mod-plane-batches.md)逐项实现和验收。
 
 当前已有独立包装载、注册冻结、JS 处理链、自有对象动作、玩家 API 与内存候选恢复，现行机制见[Mod 执行](../architecture/mod-execution.md)。对象生命周期、完整资源/对象能力、全域规则、持久恢复、服务与客户端贡献尚未全覆盖；不能由局部已交付通路证明完整玩法目标成立。基于 `1b40930` 的差距见[现状复查](../research/09-mod-capability-current-audit.md)，后续优先级见[完整玩法计划](../plans/mod-complete-gameplay.md)。
 

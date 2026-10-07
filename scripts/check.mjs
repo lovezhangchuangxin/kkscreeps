@@ -21,12 +21,17 @@ export function runCheck(argv, { run = spawnSync, env = process.env, root = reso
   const selection = args.length ? args.flatMap((c) => ['-p', c]) : ['--workspace'];
   const testEnv = { ...env, CARGO_TARGET_DIR: resolve(root, 'target'), KKSCREEPS_BIN: resolve(root, 'target/debug/kkscreeps') };
 
+  // 完整门禁不可继承开发时的场景过滤。
+  delete testEnv.KKSCREEPS_SCENARIO;
+
   const steps = [
     ['格式检查', ['cargo', 'fmt', '--all', '--check']],
     ['Clippy', ['cargo', 'clippy', ...selection, '--all-targets']],
     ['Rust 测试（不含 doctest）', ['cargo', 'test', ...selection, '--tests']],
     ['构建测试 CLI', ['cargo', 'build', '-p', 'kk-cli']],
-    ['门禁回归', ['node', '--test', 'scripts/check.test.mjs']],
+    ['门禁回归', ['node', '--test', 'scripts/check.test.mjs', 'scripts/check-doc-links.test.mjs']],
+    ['Python 工具测试', ['python3', '-m', 'unittest', 'discover', '-s', 'scripts/tests', '-p', 'test_*.py']],
+    ['性能工具测试', ['python3', '-m', 'unittest', 'discover', '-s', 'scripts/benchmark', '-p', '*test*.py']],
     ['JS workspace 测试', ['pnpm', 'run', '-r', 'test']],
     ['文档链接', ['node', 'scripts/check-doc-links.mjs']],
     ['源码规模', ['node', 'scripts/check-source-size.mjs']],

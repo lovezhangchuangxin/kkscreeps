@@ -20,18 +20,9 @@
 | [creep-move-slot.md](creep-move-slot.md) | creep 移动动作槽、受控请求能力与按执行者粒度的拒绝恢复 |
 | [creep-combat-slot.md](creep-combat-slot.md) | creep 战斗动作槽、目标改向/取消能力与延迟队列/结构摧毁的拒绝恢复 |
 | [player-precheck-rules.md](player-precheck-rules.md) | 规则驱动双端同源的玩家预检契约：战斗射程四条与扩展意图压制，含可扩展意图盘点 |
-| [mod-damage-policy.md](mod-damage-policy.md) | JS 单体伤害公式与应用、战斗读面、表示约束和恢复边界 |
-| [mod-heal-policy.md](mod-heal-policy.md) | JS 近/远程治疗公式、延迟身体恢复、恰一次与拒绝/故障边界 |
-| [mod-mass-policy.md](mod-mass-policy.md) | 同房战斗分页、群体伤害批量预检与应用、多目标拒绝恢复 |
-| [mod-retaliation-policy.md](mod-retaliation-policy.md) | 攻击前反击表、native/JS 伤害组合、实际命中与恰一次恢复 |
+| [combat.md](combat.md) | 伤害、治疗、群体伤害、反击与受击的统一契约 |
 | [creep-incoming-damage.md](creep-incoming-damage.md) | 原生强化 TOUGH、累计受伤/治疗、原始事件与恢复边界 |
-| [mod-incoming-policy.md](mod-incoming-policy.md) | JS 累计受击公式替换、护甲/护盾/免疫组合、来源摘要与拒绝回退 |
-| [mod-move-contest.md](mod-move-contest.md) | 房间级移动竞争优先级槽、竞争输入与默认排序回退 |
-| [mod-move-admission.md](mod-move-admission.md) | 房间级移动准入槽、原生门槛预填与同源终值消费 |
-| [mod-move-obstacle.md](mod-move-obstacle.md) | 房间级移动障碍槽、单向追加阻挡与让位链传播 |
-| [mod-move-precheck.md](mod-move-precheck.md) | 房间级移动请求预检槽、请求级单向否决与"等同从未登记"语义 |
-| [mod-move-pull-registration.md](mod-move-pull-registration.md) | 房间级拉拽登记槽、配对级单向否决与登记双射一致性 |
-| [mod-move-cost.md](mod-move-cost.md) | 房间级移动代价槽、疲劳数值替换与原生回退 |
+| [movement.md](movement.md) | 移动登记、预检、竞争、准入、障碍与代价的统一契约 |
 | [creep-build-slot.md](creep-build-slot.md) | creep 建造族动作槽（build/repair/dismantle）、目标改向/取消能力与完工变换/掉落面的拒绝恢复 |
 | [mod-resources.md](mod-resources.md) | Mod 同房库存读取、精确转账与损耗、多对象拒绝日志 |
 | [mod-resource-catalog.md](mod-resource-catalog.md) | 命名空间资源声明、冻结目录、玩家常量同步与市场/跨房显式拒绝 |

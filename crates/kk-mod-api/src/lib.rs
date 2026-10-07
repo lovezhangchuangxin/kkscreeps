@@ -12,13 +12,11 @@
 //! # Ok::<(), kk_mod_api::FreezeError>(())
 //! ```
 
-pub mod admission;
 pub mod buildings;
 pub mod builtin;
 #[path = "builtin/capabilities.rs"]
 pub mod builtin_capabilities;
 pub mod combat;
-pub mod contest;
 mod definition;
 pub mod extension;
 mod fingerprint;
@@ -28,14 +26,13 @@ mod freeze;
 mod handlers;
 pub mod incoming;
 pub mod intent_gate;
-pub mod move_cost;
+pub mod movement;
+// 兼容既有公开路径；内部消费者使用 movement 领域入口。
+pub use movement::{admission, contest, move_cost, obstacle, precheck, pull_registration};
 pub mod objects;
-pub mod obstacle;
 mod outcome;
 mod plan;
 pub mod player_surface;
-pub mod precheck;
-pub mod pull_registration;
 pub mod resources;
 mod rules;
 pub mod typegen;

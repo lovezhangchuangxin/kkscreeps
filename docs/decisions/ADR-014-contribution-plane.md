@@ -77,7 +77,7 @@ Mod 的权威状态保存在 Rust 事务中，JS 堆只保存可重建缓存。�
 
 ## 4. 实施方向与调整
 
-接受[贡献平面方案](../plans/mod-plane-batches.md)的 A–G 方向，具体切片按阶段验收。保留四项调整：
+接受[贡献平面方案](../plans/archive/mod-plane-batches.md)的 A–G 方向，具体切片按阶段验收。保留四项调整：
 
 1. 市场候选在 A 阶段早期完成；完成前不能在直接修改市场后增加可失败处理。当前市场已使用副本并随世界候选发布，完整事务仍有下述边界。
 2. RunJob 合并注入与执行、有界并发和线程 CPU 计费与 A 阶段并行。工作者 epoch 是故障状态机前提；计费切换不得晚于 M3 多用户承载。
@@ -107,4 +107,4 @@ Mod 的权威状态保存在 Rust 事务中，JS 堆只保存可重建缓存。�
 - [Mod 能力复查](../research/05-mod-extensibility-review.md)：业务扩展缺口与对象探针。
 - [JS Mod 架构复审](../research/06-architecture-and-js-mod-review.md)：性能、宿主交互实验和实施方向。
 - [架构复核笔记](../research/notes/architecture-rethink-2026-10-01.md)：采用版本的独立核实与数字勘误。
-- [JS Mod 设计](../designs/mod-system.md)、[贡献平面方案](../plans/mod-plane-batches.md)：机制、切片与验收条件。
+- [JS Mod 设计](../designs/mod-system.md)、[贡献平面方案](../plans/archive/mod-plane-batches.md)：机制、切片与验收条件。

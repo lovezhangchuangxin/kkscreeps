@@ -16,10 +16,9 @@ use kk_schema::kkpv::{KkpvBlockInput, KkpvLimits, KkpvObject, KkpvValue, KkpvVie
 use kk_schema::room::RoomObject;
 use serde_json::Value;
 
+use crate::domain::room::{room_energy, room_rcl};
+use crate::projection::{ext_entries_json, object_exported_for, object_json, room_visible_to};
 use crate::world::{ObjId, World};
-use crate::world_json::{
-    ext_entries_json, object_exported_for, object_json, room_energy, room_rcl, room_visible_to,
-};
 
 impl World {
     /// 为查看者生成每注册房间一个 KKPV 块输入。`plan_hash` 与
@@ -49,7 +48,7 @@ impl World {
                 // 会在不可见房被丢弃，造成与 JSON 通道的可见性分叉。
                 if let RoomObject::Mod(mod_object) = object {
                     if let Some(surface) = surface
-                        && let Some(record) = crate::world_json::mod_record_json(
+                        && let Some(record) = crate::projection::mod_record_json(
                             name,
                             *id,
                             mod_object,

@@ -25,3 +25,4 @@ bytes = { workspace = true }
 # 等价测试用夹具世界转换器（kkpv_bundle_from_world_json）与手工块
 # 构造（Ref 编码路径）；不是运行时依赖。
 kk-world.workspace = true
+kk-vm = { workspace = true, features = ["test-support"] }

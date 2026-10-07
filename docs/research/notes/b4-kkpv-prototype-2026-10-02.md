@@ -1,6 +1,6 @@
 # B.4 KKPV 二进制投影原型（2026-10-02）
 
-> 切片：[mod-plane-batches §3 B 行](../../plans/mod-plane-batches.md)、
+> 切片：[mod-plane-batches §3 B 行](../../plans/archive/mod-plane-batches.md)、
 > [domain-projection §8 B.4](../../designs/domain-projection.md)。
 > 判据：逐字段/缺失/null 对照；畸形数据拒绝；旧引用/慢工作者；缓冲区与权限测试。
 > 基线：f65653e（B.3 收口后）。本片不改任何生产 tick 路径——协调器/沙箱

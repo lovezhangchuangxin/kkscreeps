@@ -8,7 +8,7 @@ G03 首个子切片：准入槽（`builtin:creep.moveAdmission`）输入扩展 +
 2. `movers[].pulledBy/pulling`——预填配对复核后的有效拉拽配对对象 ID（`Option<String>`，无配对 null）；布尔 `pulled` 保留。
 3. `ctx.admission.evaluate()`——链预演：`Movement::simulate_survivors` 克隆自身、替换准入终值为候选快照（`MoveAdmission::finals_snapshot`）、运行与正式仲裁**完全相同**的 `cancel_blocked` 代码路径，返回幸存胜者对象 ID 升序数组。只读；调用时点障碍槽追加集必为空（槽序 admission→obstacle 固定），预演结果是最终取消结果的上界（追加只会收紧）。
 
-获准集合选择因此闭环：暂存候选（JS 布尔终值）→ 宿主链验证（预演/正式取消同代码）→ 终值整体替换原生预填；宿主不重跑默认门槛覆盖 JS 结果。拒绝仍是整房回退原生预填（G02.a 语义），不复用单执行者边界。现行契约见[JS 移动准入策略](../../architecture/mod-move-admission.md)。
+获准集合选择因此闭环：暂存候选（JS 布尔终值）→ 宿主链验证（预演/正式取消同代码）→ 终值整体替换原生预填；宿主不重跑默认门槛覆盖 JS 结果。拒绝仍是整房回退原生预填（G02.a 语义），不复用单执行者边界。现行契约见[JS 移动准入策略](../../architecture/movement.md#准入与预演)。
 
 ## 调用链
 

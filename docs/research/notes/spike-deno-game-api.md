@@ -1,7 +1,7 @@
 # deno_core 游戏 API 依赖的高风险沙箱交互模式实测（实验 F~K）
 
 - 日期：2026-09-27
-- 实验对象：与 [spike-deno_core.md](./spike-deno_core.md) 同一工程 `spikes/deno-spike/`（deno_core 0.412.0 / rusty_v8 150.4.0 / v8 `15.0.245.2-rusty`，macOS 15 arm64）。沙箱基础能力（硬中断/内存上限/性能基准/snapshot/Extension op）已在旧笔记验证，本篇只补测 **Screeps 游戏 API 形态决定的那批高风险交互模式**。
+- 实验对象：与 [spike-deno_core.md](spike-deno_core.md) 同一工程 `spikes/deno-spike/`（deno_core 0.412.0 / rusty_v8 150.4.0 / v8 `15.0.245.2-rusty`，macOS 15 arm64）。沙箱基础能力（硬中断/内存上限/性能基准/snapshot/Extension op）已在旧笔记验证，本篇只补测 **Screeps 游戏 API 形态决定的那批高风险交互模式**。
 - 新代码位置（未动 `src/main.rs` 与旧实验，旧实验复跑全部 pass，见 §8）：
   - `spikes/deno-spike/examples/game_api.rs` —— 实验 F/G/H/I/J/K 的独立二进制
   - `spikes/deno-spike/build.rs` —— 新增第二份 snapshot `snapshot-game.bin`（实验 J 用；原 `snapshot.bin` 生成逻辑原样保留，只是抽了 `make_snapshot()` 函数）

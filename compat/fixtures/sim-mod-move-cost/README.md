@@ -18,4 +18,4 @@ target/release/kkscreeps sim run --scenario compat/fixtures/sim-mod-move-cost/sc
 target/release/kkscreeps sim run --scenario compat/fixtures/sim-mod-move-cost/scenario-swampwalker.json --ticks 4 --kkpv --report /tmp/cost-swamp.json
 ```
 
-`kk-cli` 的 `sim_tests/move_cost.rs` 核对四场景 × JSON/KKPV 的完整 final、PlanHash 与组合身份（四身份互异；内建槽 19→20、revision v13 由 freeze 槽计数断言钉死）；第 2 tick 后保存检查点、退出进程、加载再续跑，确认位置与 namespace 计数恰一次延续。策略包在 [../mod-move-cost/](../mod-move-cost/)。
+`kk-cli` 的 `sim_tests/move_cost.rs` 核对四场景 × JSON/KKPV 的完整 final、PlanHash 与组合身份（四身份互异；内建槽 19→20、revision v13 由 freeze 槽计数断言钉死）；第 2 tick 后保存检查点、退出进程、加载再续跑，确认位置与 namespace 计数恰一次延续。策略包在 [../mod-move-cost/](../mod-move-cost)。

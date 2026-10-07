@@ -31,63 +31,155 @@ use watchdog_and_memory::*;
 
 #[test]
 fn m0_sandbox_suite() -> anyhow::Result<()> {
-    prelude_basics()?;
-    cjs_and_loop()?;
-    constant_overrides_reach_player_globals_impl()?;
-    combat_range_constants_impl()?;
-    move_gate_constants_impl()?;
-    console_capture()?;
-    stub_game_projection()?;
-    intent_channel_prelude_forms_impl()?;
-    ext_intent_primitive_impl()?;
-    mod_player_api_surface_impl()?;
-    mod_player_api_record_face_impl()?;
-    mod_player_api_module_gates_impl()?;
-    mod_player_api_global_surface_impl()?;
-    hostile_probes_impl()?;
-    move_misc_family_prelude_forms_impl()?;
-    pathfinder_search_family_impl()?;
-    move_to_never_paths_through_walls_impl()?;
-    pathfinder_callback_family_impl()?;
-    pathfinder_matrix_mutation_impl()?;
-    pathfinder_callback_budget_impl()?;
-    pathfinder_kkpv_channel_equivalence_impl()?;
-    same_revision_world_switch_uses_current_terrain_impl()?;
-    run_expr_channel()?;
-    wasm_binary_module()?;
-    watchdog_hard_terminate_and_reuse()?;
-    watchdog_late_expiry_does_not_kill_next_tick()?;
-    memory_gate_terminates_and_reuses()?;
-    skip_recharge_candidate_impl()?;
-    lifo_registry_drains()?;
-    memory_alias_setters()?;
-    roomposition_official_semantics()?;
-    roomposition_packedpos_forms()?;
-    roomlook_family_forms()?;
-    roomfind_exits_and_path_codec_forms()?;
-    terrain_look_and_console_semantics()?;
-    terrain_compact_protocol_form()?;
-    writeback_watchdog_and_contract()?;
-    stub_value_shapes()?;
-    official_string_and_error_shapes()?;
-    run_loop_without_loop_silent()?;
-    writeback_rearmed_after_cancel()?;
-    store_class_semantics_impl()?;
-    spawn_family_api_impl()?;
-    resource_family_prelude_matrix_impl()?;
-    viewer_meta_semantics_impl()?;
-    claim_gate_gcl_behavior_impl()?;
-    redirect_upgrade_positive_impl()?;
-    destroy_room_intent_channel()?;
-    host_face_closed()?;
-    strict_frame_hides_host_functions()?;
-    nearheap_trigger_then_restore_invariant()?;
-    kkpv_channel_equivalence_impl()?;
-    kkpv_ref_decode_impl()?;
-    kkpv_empty_bundle_impl()?;
-    kkpv_truncated_bundle_fails_impl()?;
-    kkpv_shared_bundle_cross_thread_impl()?;
+    let mut scenarios = kk_vm::test_support::ScenarioSuite::from_env()?;
+    scenarios.run("prelude_basics", prelude_basics)?;
+    scenarios.run("cjs_and_loop", cjs_and_loop)?;
+    scenarios.run(
+        "constant_overrides_reach_player_globals_impl",
+        constant_overrides_reach_player_globals_impl,
+    )?;
+    scenarios.run("combat_range_constants_impl", combat_range_constants_impl)?;
+    scenarios.run("move_gate_constants_impl", move_gate_constants_impl)?;
+    scenarios.run("console_capture", console_capture)?;
+    scenarios.run("stub_game_projection", stub_game_projection)?;
+    scenarios.run(
+        "intent_channel_prelude_forms_impl",
+        intent_channel_prelude_forms_impl,
+    )?;
+    scenarios.run("ext_intent_primitive_impl", ext_intent_primitive_impl)?;
+    scenarios.run("mod_player_api_surface_impl", mod_player_api_surface_impl)?;
+    scenarios.run(
+        "mod_player_api_record_face_impl",
+        mod_player_api_record_face_impl,
+    )?;
+    scenarios.run(
+        "mod_player_api_module_gates_impl",
+        mod_player_api_module_gates_impl,
+    )?;
+    scenarios.run(
+        "mod_player_api_global_surface_impl",
+        mod_player_api_global_surface_impl,
+    )?;
+    scenarios.run("hostile_probes_impl", hostile_probes_impl)?;
+    scenarios.run(
+        "move_misc_family_prelude_forms_impl",
+        move_misc_family_prelude_forms_impl,
+    )?;
+    scenarios.run(
+        "pathfinder_search_family_impl",
+        pathfinder_search_family_impl,
+    )?;
+    scenarios.run(
+        "move_to_never_paths_through_walls_impl",
+        move_to_never_paths_through_walls_impl,
+    )?;
+    scenarios.run(
+        "pathfinder_callback_family_impl",
+        pathfinder_callback_family_impl,
+    )?;
+    scenarios.run(
+        "pathfinder_matrix_mutation_impl",
+        pathfinder_matrix_mutation_impl,
+    )?;
+    scenarios.run(
+        "pathfinder_callback_budget_impl",
+        pathfinder_callback_budget_impl,
+    )?;
+    scenarios.run(
+        "pathfinder_kkpv_channel_equivalence_impl",
+        pathfinder_kkpv_channel_equivalence_impl,
+    )?;
+    scenarios.run(
+        "same_revision_world_switch_uses_current_terrain_impl",
+        same_revision_world_switch_uses_current_terrain_impl,
+    )?;
+    scenarios.run("run_expr_channel", run_expr_channel)?;
+    scenarios.run("wasm_binary_module", wasm_binary_module)?;
+    scenarios.run(
+        "watchdog_hard_terminate_and_reuse",
+        watchdog_hard_terminate_and_reuse,
+    )?;
+    scenarios.run(
+        "watchdog_late_expiry_does_not_kill_next_tick",
+        watchdog_late_expiry_does_not_kill_next_tick,
+    )?;
+    scenarios.run(
+        "memory_gate_terminates_and_reuses",
+        memory_gate_terminates_and_reuses,
+    )?;
+    scenarios.run("skip_recharge_candidate_impl", skip_recharge_candidate_impl)?;
+    scenarios.run("lifo_registry_drains", lifo_registry_drains)?;
+    scenarios.run("memory_alias_setters", memory_alias_setters)?;
+    scenarios.run(
+        "roomposition_official_semantics",
+        roomposition_official_semantics,
+    )?;
+    scenarios.run("roomposition_packedpos_forms", roomposition_packedpos_forms)?;
+    scenarios.run("roomlook_family_forms", roomlook_family_forms)?;
+    scenarios.run(
+        "roomfind_exits_and_path_codec_forms",
+        roomfind_exits_and_path_codec_forms,
+    )?;
+    scenarios.run(
+        "terrain_look_and_console_semantics",
+        terrain_look_and_console_semantics,
+    )?;
+    scenarios.run(
+        "terrain_compact_protocol_form",
+        terrain_compact_protocol_form,
+    )?;
+    scenarios.run(
+        "writeback_watchdog_and_contract",
+        writeback_watchdog_and_contract,
+    )?;
+    scenarios.run("stub_value_shapes", stub_value_shapes)?;
+    scenarios.run(
+        "official_string_and_error_shapes",
+        official_string_and_error_shapes,
+    )?;
+    scenarios.run("run_loop_without_loop_silent", run_loop_without_loop_silent)?;
+    scenarios.run(
+        "writeback_rearmed_after_cancel",
+        writeback_rearmed_after_cancel,
+    )?;
+    scenarios.run("store_class_semantics_impl", store_class_semantics_impl)?;
+    scenarios.run("spawn_family_api_impl", spawn_family_api_impl)?;
+    scenarios.run(
+        "resource_family_prelude_matrix_impl",
+        resource_family_prelude_matrix_impl,
+    )?;
+    scenarios.run("viewer_meta_semantics_impl", viewer_meta_semantics_impl)?;
+    scenarios.run("claim_gate_gcl_behavior_impl", claim_gate_gcl_behavior_impl)?;
+    scenarios.run(
+        "redirect_upgrade_positive_impl",
+        redirect_upgrade_positive_impl,
+    )?;
+    scenarios.run("destroy_room_intent_channel", destroy_room_intent_channel)?;
+    scenarios.run("host_face_closed", host_face_closed)?;
+    scenarios.run(
+        "strict_frame_hides_host_functions",
+        strict_frame_hides_host_functions,
+    )?;
+    scenarios.run(
+        "nearheap_trigger_then_restore_invariant",
+        nearheap_trigger_then_restore_invariant,
+    )?;
+    scenarios.run(
+        "kkpv_channel_equivalence_impl",
+        kkpv_channel_equivalence_impl,
+    )?;
+    scenarios.run("kkpv_ref_decode_impl", kkpv_ref_decode_impl)?;
+    scenarios.run("kkpv_empty_bundle_impl", kkpv_empty_bundle_impl)?;
+    scenarios.run(
+        "kkpv_truncated_bundle_fails_impl",
+        kkpv_truncated_bundle_fails_impl,
+    )?;
+    scenarios.run(
+        "kkpv_shared_bundle_cross_thread_impl",
+        kkpv_shared_bundle_cross_thread_impl,
+    )?;
     // LIFO 零违规断言在**全部**场景之后——中段断言会让其后场景的违规漏网
+    scenarios.finish(56)?;
     assert_eq!(kk_runner::lifo_violations(), 0, "全流程 LIFO 纪律零违规");
     Ok(())
 }

@@ -32,7 +32,7 @@ impl World {
             return Vec::new();
         };
         let terrain = &state.terrain;
-        let rcl = crate::world_json::room_rcl(state);
+        let rcl = crate::domain::room::room_rcl(state);
         state
             .objects
             .iter()
@@ -41,8 +41,8 @@ impl World {
                     return None;
                 }
                 let internal =
-                    crate::world_json::object_json(room, *id, o, self.time, terrain, rcl)?;
-                crate::world_json::matches_find(&internal, find_const, None)
+                    crate::projection::object_json(room, *id, o, self.time, terrain, rcl)?;
+                crate::projection::matches_find(&internal, find_const, None)
                     .then(|| snapshot_json(room, *id, o, self.time, terrain))
             })
             .collect()
@@ -163,7 +163,7 @@ fn snapshot_json(
             "pos": snap_pos(room, o.x, o.y),
             "hits": o.hits, "hitsMax": o.body.len() * 100,
             "fatigue": o.fatigue,
-            "body": o.body.iter().map(crate::world_json::part_json).collect::<Vec<_>>(),
+            "body": o.body.iter().map(crate::projection::part_json).collect::<Vec<_>>(),
             "owner": o.owner,
             "ticksToLive": remaining(o.age_time, time),
             "spawning": o.spawning,
@@ -247,7 +247,7 @@ fn snapshot_json(
         RoomObject::Road(o) => json!({
             "kind": "structure", "structureType": "road",
             "id": id_str, "pos": snap_pos(room, o.x, o.y),
-            "hits": o.hits, "hitsMax": crate::world_json::road_hits_max(terrain, o.x, o.y),
+            "hits": o.hits, "hitsMax": crate::domain::room::road_hits_max(terrain, o.x, o.y),
             "ticksToDecay": remaining(o.next_decay_time, time),
         }),
         RoomObject::Storage(o) => json!({
@@ -272,7 +272,7 @@ fn snapshot_json(
         RoomObject::Energy(o) => json!({
             "kind": "resource", "id": id_str,
             "pos": snap_pos(room, o.x, o.y),
-            "resourceType": crate::world_json::energy_resource_name(o),
+            "resourceType": crate::projection::energy_resource_name(o),
             "amount": o.amount,
         }),
         // 衰减时间限制为非负值；vanilla snapshotTombstone、snapshotRuin 使用裸减法。
@@ -322,10 +322,7 @@ fn snapshot_json(
         // 再由对象表覆盖 ID 和位置。这里只转换下方列出的计时字段，
         // 不会为其他类型补齐专用 getter 或缺省值。
         RoomObject::Generic(o) => {
-            let mut v: serde_json::Map<String, Value> = serde_json::from_str::<Value>(&o.data)
-                .ok()
-                .and_then(|d| d.as_object().cloned())
-                .unwrap_or_default();
+            let mut v = crate::domain::generic::decode_fields(&o.data).unwrap_or_default();
             let kind = match (
                 v.get("type").and_then(Value::as_str),
                 v.get("structureType").and_then(Value::as_str),

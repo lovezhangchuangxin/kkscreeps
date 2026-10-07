@@ -39,6 +39,12 @@ xxscreeps 由适配器编排生产服务，包含共享存储和消息队列成�
 每次对子结束检查两端源码、夹具脚本、适配器、Node、二进制、锁文件、xxscreeps 编译产物及 isolated-vm 模块没有变化。超时会终止采集进程组；服务退出、沙箱错误和行为差异使工具失败，失败日志仍保留，且不会生成成功汇总。较大的玩家档应给够 `--timeout`，默认每进程 600 秒。
 
 ```bash
-python3 -m unittest discover -s scripts/benchmark -p 'test_*.py'
+python3 -m unittest discover -s scripts/benchmark -p '*test*.py'
 node --check scripts/benchmark/xxs-probe.mjs
 ```
+
+## 历史研究采集工具
+
+`research/` 保存架构、Mod 宿主/归因、玩家工作量与 KKPV 规模实验的采集脚本。日期标识它们对应的实验协议；历史证据和复现参数仍在 [研究索引](../../docs/research/README.md)，默认报告位置保持在 `docs/research/notes/`。这些脚本可复跑对应实验，不作为当前性能达标结论。
+
+工具回归分别位于 `scripts/tests/` 和本目录。完整 `pnpm run check` 同时执行两组 Python 测试，以及门禁和文档链接检查器的 Node 回归测试。

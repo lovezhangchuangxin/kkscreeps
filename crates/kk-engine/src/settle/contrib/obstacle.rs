@@ -1,7 +1,7 @@
 //! 移动障碍追加链；正常拒绝仅丢弃追加集，native 障碍判定不变。
 use super::assemble::dispatch_of;
 use super::*;
-use crate::settle::obstacle::MoveObstacle;
+use crate::settle::movement::obstacle::MoveObstacle;
 
 pub(super) enum ObstacleSlot {
     Native,

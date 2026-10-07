@@ -9,7 +9,7 @@
 | `scenario-strict.json` | strict 包 after：`movePower<weight` 拒绝 | 不动 | 不动 |
 | `scenario-combined.json` | tireless replace 全放行后 strict after 再收紧 | 不动 | 不动 |
 
-准入初值即原生 `can_move` 结果，`ctx.admission.getAdmitted` 可读、`setAdmitted` 可覆盖；终值同源约束链取消与执行阶段。组合场景演示 after 层总能把 replace 的整面放行收回到自身门槛之上。有移动请求的 tick 恰好调用一次槽并使对应 namespace 的 `applied` 计数为 1；无请求的 tick 不进入 JS。正常拒绝、非法写入与恢复边界见[JS 移动准入策略](../../../docs/architecture/mod-move-admission.md)。
+准入初值即原生 `can_move` 结果，`ctx.admission.getAdmitted` 可读、`setAdmitted` 可覆盖；终值同源约束链取消与执行阶段。组合场景演示 after 层总能把 replace 的整面放行收回到自身门槛之上。有移动请求的 tick 恰好调用一次槽并使对应 namespace 的 `applied` 计数为 1；无请求的 tick 不进入 JS。正常拒绝、非法写入与恢复边界见[JS 移动准入策略](../../../docs/architecture/movement.md#准入与预演)。
 
 ```bash
 target/release/kkscreeps sim run --scenario compat/fixtures/sim-mod-move-admission/scenario-combined.json --ticks 3 --report /tmp/admission.json

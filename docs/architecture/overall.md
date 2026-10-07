@@ -51,7 +51,7 @@
 | `kk-engine` | core、mod-api、schema、world |
 | `kk-world` | core、mod-api、schema |
 | `kk-mod-api` | core |
-| `kk-mod-host` | mod-api、vm |
+| `kk-mod-host` | core、mod-api、vm |
 | `kk-schema` | 无内部依赖 |
 | `kk-runner` | core、vm、pathfinder、schema，world（仅测试），使用 deno_core 等外部库 |
 | `kk-vm` | 无内部依赖，使用 deno_core 与 libc |

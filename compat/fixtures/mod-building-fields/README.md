@@ -12,4 +12,4 @@
 字段默认值的落键（完工写 Value、Missing 不写）由引擎测试钉死
 （`kk-engine` `settle_tests/mod_buildings/lifecycle.rs`）；sim 场景的结构手放且不带自定义键，
 从空记录起步、首写由 tick 整集补齐。场景与断言见
-[../sim-mod-building-fields/](../sim-mod-building-fields/)。
+[../sim-mod-building-fields/](../sim-mod-building-fields)。

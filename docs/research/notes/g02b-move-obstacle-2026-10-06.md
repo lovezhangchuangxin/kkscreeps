@@ -2,7 +2,7 @@
 
 ## 范围
 
-开放 `builtin:room.moveObstacle` 房间级障碍槽：准入槽之后、阻塞链取消之前，对全部胜者整房一次进入 JS；输入提供目的格对象/地形摘要与预填时点 native 初判，JS 经 `ctx.obstacle`（`isBlocked`/`block`）**单向追加**阻挡；取消链按 追加阻挡 ∥ 链内 native `check_obstacle_at_xy` 取消，让位链传播（追加取消 A 后 A 阻挡其原格上的依赖请求）保留在引擎链内。放行方向不开放——放行 native 阻挡会让移动者进入未让位对象占据的格、破坏坐标表示有效性（宿主约束）。现行契约见[JS 移动障碍](../../architecture/mod-move-obstacle.md)。
+开放 `builtin:room.moveObstacle` 房间级障碍槽：准入槽之后、阻塞链取消之前，对全部胜者整房一次进入 JS；输入提供目的格对象/地形摘要与预填时点 native 初判，JS 经 `ctx.obstacle`（`isBlocked`/`block`）**单向追加**阻挡；取消链按 追加阻挡 ∥ 链内 native `check_obstacle_at_xy` 取消，让位链传播（追加取消 A 后 A 阻挡其原格上的依赖请求）保留在引擎链内。放行方向不开放——放行 native 阻挡会让移动者进入未让位对象占据的格、破坏坐标表示有效性（宿主约束）。现行契约见[JS 移动障碍](../../architecture/movement.md#障碍追加)。
 
 意图登记期静态预检 `has_static_obstacle`（intent_move/slot_request_direction 两处同口径）不并入本片——预检在仲裁前逐对象执行、无整房视野，登记为后续子片或并入 G07 预检族。
 

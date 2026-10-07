@@ -313,32 +313,32 @@ pub enum SlotCall<'a> {
     /// 房间级移动竞争：整房一次，无单一目标对象；native 中心为无操作
     /// （保留 before 设置的优先级）。
     Contest {
-        candidate: Rc<crate::settle::contest::MoveContest>,
+        candidate: Rc<crate::settle::movement::contest::MoveContest>,
     },
     /// 房间级移动准入：整房一次，无单一目标对象；native 中心为无操作
     /// （保留候选中的原生准入终值）。
     Admission {
-        candidate: Rc<crate::settle::admission::MoveAdmission>,
+        candidate: Rc<crate::settle::movement::admission::MoveAdmission>,
     },
     /// 房间级移动障碍：整房一次，无单一目标对象；native 中心为无操作
     /// （无追加阻挡）。
     Obstacle {
-        candidate: Rc<crate::settle::obstacle::MoveObstacle>,
+        candidate: Rc<crate::settle::movement::obstacle::MoveObstacle>,
     },
     /// 房间级移动请求预检：整房一次，无单一目标对象；native 中心为
     /// 无操作（无否决）。
     Precheck {
-        candidate: Rc<crate::settle::precheck::MovePrecheck>,
+        candidate: Rc<crate::settle::movement::precheck::MovePrecheck>,
     },
     /// 房间级拉拽登记：整房一次，无单一目标对象；native 中心为无操作
     /// （无否决）。
     PullRegistration {
-        candidate: Rc<crate::settle::pull_registration::PullRegistration>,
+        candidate: Rc<crate::settle::movement::pull_registration::PullRegistration>,
     },
     /// 房间级移动代价：整房一次，无单一目标对象；native 中心为无操作
     /// （无覆盖，执行原生代价）。
     MoveCost {
-        candidate: Rc<crate::settle::move_cost::MoveCost>,
+        candidate: Rc<crate::settle::movement::move_cost::MoveCost>,
     },
     Action {
         id: ObjId,
@@ -470,7 +470,7 @@ impl ContributionDispatch {
     pub(crate) fn run_precheck(
         &self,
         ctx: &RoomCtx,
-    ) -> Result<Option<crate::settle::precheck::PrecheckDecisions>, String> {
+    ) -> Result<Option<crate::settle::movement::precheck::PrecheckDecisions>, String> {
         self.move_precheck.run(ctx)
     }
 

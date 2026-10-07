@@ -1,6 +1,6 @@
 # 开放领域定义与玩家投影
 
-本文细化 [ADR-014](../decisions/ADR-014-contribution-plane.md) 和 [Mod 设计](mod-system.md)，作为[贡献平面计划](../plans/mod-plane-batches.md) B 阶段的实施依据。对象、字段、意图、规则与玩家投影共用启动时冻结的定义；实现可以分步接入，但不能各自维护类型目录和字段权限。
+本文细化 [ADR-014](../decisions/ADR-014-contribution-plane.md) 和 [Mod 设计](mod-system.md)，作为[贡献平面计划](../plans/archive/mod-plane-batches.md) B 阶段的实施依据。对象、字段、意图、规则与玩家投影共用启动时冻结的定义；实现可以分步接入，但不能各自维护类型目录和字段权限。
 
 B.2 已把 link 有效规则接入放置、建造、结算、配额、伤害与玩家常量，并落地槽执行器（Native/Chained、wrap-next 语义、装配拒绝）；实现与验证边界见 [B.2 接线记录](../research/notes/b2-link-wiring-2026-10-02.md)。B.3 已落地对象级扩展字段全链（挂载声明、扩展目录、写入门校验、发布前引用一致、投影按 Public/Owner/ServerOnly 裁切），见 [B.3 记录](../research/notes/b3-extension-fields-2026-10-02.md)。B.4 已落地 KKPV v1 编解码原型与同源桥（见 [B.4 记录](../research/notes/b4-kkpv-prototype-2026-10-02.md)）。
 

@@ -2,7 +2,7 @@
 
 ## 范围
 
-开放 `builtin:creep.moveAdmission` 房间级移动准入槽：仲裁选胜后对全部获胜执行者整房一次进入 JS，候选初值为原生 `can_move` 结果（疲劳 0 且有存活 MOVE，或有效被拉），JS 经 `ctx.admission`（`getAdmitted`/`setAdmitted`）读初值、覆盖终值；准入终值**同源**消费于两处——阻塞链取消（`cancel_blocked`）与执行阶段（`movement_execute`），执行阶段不再按当前身体二次 native 复核，缺项一律未获准（fail-closed）。现行契约见[JS 移动准入](../../architecture/mod-move-admission.md)。
+开放 `builtin:creep.moveAdmission` 房间级移动准入槽：仲裁选胜后对全部获胜执行者整房一次进入 JS，候选初值为原生 `can_move` 结果（疲劳 0 且有存活 MOVE，或有效被拉），JS 经 `ctx.admission`（`getAdmitted`/`setAdmitted`）读初值、覆盖终值；准入终值**同源**消费于两处——阻塞链取消（`cancel_blocked`）与执行阶段（`movement_execute`），执行阶段不再按当前身体二次 native 复核，缺项一律未获准（fail-closed）。现行契约见[JS 移动准入](../../architecture/movement.md#准入与预演)。
 
 障碍准入（`has_static_obstacle`/`check_obstacle_at_xy` 的地形/结构/rampart/安全模式判定）、孵化中拒绝与越界/坐标仍为原生或宿主约束，登记为 G02.b 及后续子片。
 

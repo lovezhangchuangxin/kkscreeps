@@ -1,6 +1,6 @@
 # N2c 首片：JS 单体伤害策略（2026-10-05）
 
-基于 `25b427d`，开放近战/单体远程槽的 `ctx.combat.applyDamage` 及五个战斗槽的 `get`。作者可读取同房耐久、身体部件/强化，使用独立 JS 公式指定伤害；同一通用应用器维护生命值、死亡/库存掉落、结构摧毁/废墟和事件。现行契约见[JS 伤害策略](../../architecture/mod-damage-policy.md)，机器证据见[验收数据](n2c-single-target-damage-2026-10-05.json)。
+基于 `25b427d`，开放近战/单体远程槽的 `ctx.combat.applyDamage` 及五个战斗槽的 `get`。作者可读取同房耐久、身体部件/强化，使用独立 JS 公式指定伤害；同一通用应用器维护生命值、死亡/库存掉落、结构摧毁/废墟和事件。现行契约见[JS 伤害策略](../../architecture/combat.md#单体伤害)，机器证据见[验收数据](n2c-single-target-damage-2026-10-05.json)。
 
 ## 实现与验证范围
 

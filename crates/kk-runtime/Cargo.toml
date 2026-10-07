@@ -20,3 +20,6 @@ serde = { workspace = true }
 anyhow = { workspace = true }
 # KKPV 私有块查看者摘要（SHA-256）；与 kk-mod-api 的指纹算法同版本。
 sha2 = "0.10.9"
+
+[dev-dependencies]
+kk-vm = { workspace = true, features = ["test-support"] }

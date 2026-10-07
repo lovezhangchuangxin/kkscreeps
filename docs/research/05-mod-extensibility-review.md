@@ -114,11 +114,11 @@ Generic 的注释有部分历史过渡表述：实际已有 tower/link/rampart/t
 
 最后一项不是说“放一个对象就应自动自增”：没有声明行为自然不会运行。它与固定结算分派、没有行为注册接口一起说明，Generic 本身只提供载荷，不能完成官方示例的自动 tick 行为。自定义类、字段和查询缺失则直接由探针观察到。原始结果另外记录了 Game.customObjects 不存在；官方的 customObjects 是内部 register 集合，并非普遍公开的 Game 属性，因此该记录不作为兼容差距证据。
 
-复现脚本：[mod-extensibility-probe-2026-10-01.py](notes/mod-extensibility-probe-2026-10-01.py)。完整结果：[mod-extensibility-probe-2026-10-01.json](notes/mod-extensibility-probe-2026-10-01.json)。运行方式：
+复现脚本：[mod-extensibility-probe-2026-10-01.py](../../scripts/benchmark/research/mod-extensibility-probe-2026-10-01.py)。完整结果：[mod-extensibility-probe-2026-10-01.json](notes/mod-extensibility-probe-2026-10-01.json)。运行方式：
 
 ```sh
 cargo build -p kk-cli
-python3 docs/research/notes/mod-extensibility-probe-2026-10-01.py
+python3 scripts/benchmark/research/mod-extensibility-probe-2026-10-01.py
 ```
 
 另外执行了 `cargo test -p kk-engine from_json`（7 通过）和 `cargo test -p kk-engine global_unknown_action_dropped_and_missing_fields_none`（1 通过）。现有对抗测试明确保证未知对象动作 `explode` 被丢弃；全局未知动作同样被丢弃。**不能为 Mod 简单取消清洗：必须由可信注册表扩充合法动作，而继续拒绝未注册动作。**

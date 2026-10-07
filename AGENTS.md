@@ -49,7 +49,7 @@ kkscreeps/
 
 开始任务、调整范围/依赖、完成批次，以及结束开发会话或转交其他 AI 前，主动更新台账的状态、当前接手位置和实施记录：写清已完成事项、剩余消费者、实际验证、复审问题、提交或未提交工作、下一步。不得只在聊天里交代，不得把未执行检查写成通过或把首个切片标成全领域完成。
 
-实现变化须同步现行 architecture、SDK 使用说明、独立 JS 样例与 research 机器证据；里程碑变化同步 roadmap 和完整玩法计划，新增文档同步索引。历史证据保留当时结论；当前台账持续维护并追加可追溯记录。单纯文档修改无需虚构 JS 示例或功能交付记录，执行适用的文档与仓库门禁即可。
+实现变更按影响更新现行契约；公共 SDK 行为改变时更新使用说明和适用样例，里程碑范围改变时更新 roadmap 和完整玩法计划。普通修复、内部重构和文档整理通过提交说明、测试结果及简短台账记录交代，不默认新建交付文档、样例或机器报告。重要技术选择写 ADR，独立实验保留可复现证据；新增文档须明确现行、目标或历史属性并同步索引。已完成计划与交接记录退出当前接手入口，历史正文保留当时结论。
 
 ## 构建、测试与开发命令
 
@@ -59,7 +59,7 @@ kkscreeps/
 - `cargo build -p kk-cli`：构建 `target/debug/kkscreeps`。
 - `target/debug/kkscreeps embed`：在本地启动逐行 JSON 调用服务。
 - `pnpm run fmt`：使用 rustfmt 格式化 Rust 代码。
-- `pnpm run check`：唯一检查门禁入口，执行格式检查、Clippy、Rust 测试、JavaScript workspace 测试和文档链接检查；不运行完整 screeps-ok 套件。无参数为完整门禁（提交前必须以无参数形态跑过）；开发中可限定 crate 加速子集检查：`pnpm run check -- kk-engine kk-runtime`。Rust 测试用 `--tests`、不含 doctest（rustdoc 每次全量重编 doctest 二进制，约占热缓存测试时间四分之三）；改动或新增 doctest（文档注释里的 Rust 示例代码块）时，单独运行 `cargo test -p <crate> --doc`（或全量 `cargo test --workspace --doc`）验证后再提交。
+- `pnpm run check`：唯一检查门禁入口，执行格式检查、Clippy、Rust/JavaScript workspace 与维护工具测试、文档链接及源码规模检查；不运行完整 screeps-ok 套件。无参数为完整门禁（提交前必须以无参数形态跑过）；开发中可限定 crate 加速子集检查：`pnpm run check -- kk-engine kk-runtime`。Rust 测试用 `--tests`、不含 doctest；改动或新增 doctest（文档注释里的 Rust 示例代码块）时，单独运行 `cargo test -p <crate> --doc`（或全量 `cargo test --workspace --doc`）验证后再提交。
 - `cargo test -p kk-engine`：单独运行引擎 crate 的测试。
 - `KKSCREEPS_BIN="$PWD/target/debug/kkscreeps" pnpm --filter @kkscreeps/compat test`：构建适配器，并通过绝对路径选择上述 debug 二进制。
 
@@ -71,7 +71,7 @@ HTTP 服务和前端开发服务器尚未实现。
 
 遵循[注释规范](docs/contributing/comment-style.md)：说明性注释默认使用简体中文，写清当前约束、原因及可核验的来源。
 
-主项目源码和测试文件不得超过 1000 行，`pnpm run check:source-size` 检查此门槛并纳入 `pnpm run check`；超过 700 行输出职责复审预警（不挡门）。接近门槛时按领域职责拆分，保持公开 API、候选提交边界和串行测试顺序；不要通过压缩代码或删除必要注释降低行数。第三方固定源码与独立实验的范围说明，以及当前模块导航见[源码组织](docs/architecture/source-organization.md)。
+模块按职责、状态所有权和变化原因组织，新增功能时即检查边界，不等待行数门槛。多种独立职责、跨层直取内部状态、分散的修改/恢复责任、持续增长的中心分派均触发职责复审；复审应改善接口和依赖，不能只搬文件。主项目源码和测试文件不得超过 1000 行，作为 `pnpm run check:source-size` 的兜底门禁；超过 700 行仅提示复审，不代表更短文件无需组织。小而职责单一的 crate 可以平铺，Rust 两种父模块文件形式均可。拆分保持行为和候选提交边界，不通过压缩代码或删除必要注释降低行数。第三方固定源码与独立实验的范围说明，以及当前模块导航见[源码组织](docs/architecture/source-organization.md)。
 
 ## 测试要求
 

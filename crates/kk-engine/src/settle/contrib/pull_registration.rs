@@ -1,7 +1,7 @@
 //! 拉拽登记链；正常拒绝仅丢弃否决集，配对表保持原状。
 use super::assemble::dispatch_of;
 use super::*;
-use crate::settle::pull_registration::PullRegistration;
+use crate::settle::movement::pull_registration::PullRegistration;
 
 pub(super) enum PullRegistrationSlot {
     Native,

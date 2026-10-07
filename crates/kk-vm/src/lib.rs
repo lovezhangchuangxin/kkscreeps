@@ -3,3 +3,6 @@ pub mod budget;
 pub mod cpu_clock;
 pub mod isolate_order;
 pub mod watchdog;
+
+#[cfg(feature = "test-support")]
+pub mod test_support;

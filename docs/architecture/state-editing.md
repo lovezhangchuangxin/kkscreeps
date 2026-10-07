@@ -10,6 +10,12 @@ World 不再公开整房可变引用或对象可变引用。`edit_room` 只提�
 
 世界实例身份是进程内 `Arc<()>`，独立 clone/重建/reset 使用新身份，受控副本编辑发布保留原身份。它与 terrain_epoch 一起标识寻路缓存，不进入检查点。检查点字段、格式版本和 PlanHash 没有因此改变；恢复继续拒绝违反状态不变式的载荷。
 
+## 房间候选与局部恢复
+
+`Working::new(room, time, now_ms, state, plane)` 是房间候选的构造入口，统一建立空间索引、空延迟队列和移动候选。外部调用方不再复制瞬态字段清单；疲劳、伤害/治疗队列及链内变更记录仅对 engine 内部开放。
+
+engine 的 `ObjectJournal` 保存资源和战斗/建造改向的首触对象及必要队列。runtime 只请求记录和恢复；外层 `ChainSnapshot` 继续负责索引、对象增删和游标，恢复顺序保持不变。正常 decline、宿主故障和整轮失败仍使用各自原有提交边界。
+
 ## Rust 调用方迁移
 
 | 旧调用 | 当前调用 |
@@ -21,6 +27,7 @@ World 不再公开整房可变引用或对象可变引用。`edit_room` 只提�
 | 逐房 `commit_room` + `advance_ticks` | `commit_tick_rooms(rooms, next_id)` |
 | 直接修改账户/订单/namespace state | `edit_players` / `edit_market` / `edit_mod_states` |
 | `World::advance_ticks` / `remove` / `bump_generation` | 处理 Result，时钟或版本耗尽时原状态保留 |
+| `Working { ... }` 及外部访问瞬态队列 | `Working::new(...)`，经领域方法操作；恢复使用 `ObjectJournal` |
 | `Working::insert_new` / `TickState::allocate_id` 的裸 ID | 处理 Result，创建失败立即结束本动作 |
 | `load_terrain` + `search(origin, ...)` | 构造不可变 `TerrainSet`，`search(&terrain, origin, ...)` |
 

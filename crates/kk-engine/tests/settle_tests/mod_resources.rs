@@ -279,26 +279,13 @@ fn overflow_drop_covers_declared_resources_after_builtin_order() {
     // 直接构造 Working 走掉落入口（与 settle/resources/tests.rs 同法）。
     let room = kk_world::RoomState::new("W1N1", kk_core::Terrain::plains());
     let plane = resource_plane();
-    let mut w = kk_engine::settle::Working {
-        index: kk_world::RoomIndex::build(&room.objects),
+    let mut w = kk_engine::settle::Working::new(
         room,
-        time: 0,
-        now_ms: 0,
-        state: kk_engine::TickState::new(BTreeMap::new(), 100),
-        events: Vec::new(),
-        old_fatigue: BTreeMap::new(),
-        tick_fatigue: BTreeMap::new(),
-        upgraded: BTreeMap::new(),
-        damage_to_apply: BTreeMap::new(),
-        heal_to_apply: BTreeMap::new(),
-        upgrade_block_pending: BTreeMap::new(),
-        safe_mode_activated: BTreeSet::new(),
-        extractor_cooldown_pending: BTreeMap::new(),
-        movement: kk_engine::settle::movement::Movement::new(),
-        pending_inter_room: Vec::new(),
-        chain_mutations: None,
+        0,
+        0,
+        kk_engine::TickState::new(BTreeMap::new(), 100),
         plane,
-    };
+    );
     let creep = kk_schema::room::CreepObj {
         id: 1,
         x: 10,

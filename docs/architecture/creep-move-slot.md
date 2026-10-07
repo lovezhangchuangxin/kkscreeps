@@ -29,7 +29,7 @@ export default function register(api) {
 | `request(direction)` | 以 1..8 的整数登记或替换本执行者的请求；返回是否登记成功 |
 | `cancel()` | 取消本执行者的请求登记 |
 
-`request` 与 native 意图共用同一预检：越界或孵化中返回 `false`；静态结构障碍（含私有敌方 rampart）无移动预检贡献时直接拒绝，有贡献时返回登记成功并暂存原生拒绝，交由 [移动预检](mod-move-precheck.md)统一决策。登记成功不保证获准位移。creep 冲突、疲劳门槛与 MOVE 部件检查由后续仲裁处理。登记时同步记录意图时疲劳。后到的有效登记覆盖先前登记；`pending()` 在 wrap 内可观察覆盖。pull 的登记经独立 [拉拽登记槽](mod-move-pull-registration.md)，被拉者随行仍是自己的 move 意图。
+`request` 与 native 意图共用同一预检：越界或孵化中返回 `false`；静态结构障碍（含私有敌方 rampart）无移动预检贡献时直接拒绝，有贡献时返回登记成功并暂存原生拒绝，交由 [移动预检](movement.md#请求预检)统一决策。登记成功不保证获准位移。creep 冲突、疲劳门槛与 MOVE 部件检查由后续仲裁处理。登记时同步记录意图时疲劳。后到的有效登记覆盖先前登记；`pending()` 在 wrap 内可观察覆盖。pull 的登记经独立 [拉拽登记槽](movement.md#拉拽登记)，被拉者随行仍是自己的 move 意图。
 
 实际位移、道路磨损、工地踩踏、疲劳结算、跨房过渡和空间索引更新都发生在其后的仲裁与对象 tick 阶段；本槽没有任意坐标写入或传送能力。
 

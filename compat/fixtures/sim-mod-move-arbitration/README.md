@@ -18,4 +18,4 @@ target/release/kkscreeps sim run --scenario compat/fixtures/sim-mod-move-arbitra
 target/release/kkscreeps sim run --scenario compat/fixtures/sim-mod-move-arbitration/scenario-wave.json --ticks 3 --kkpv --report /tmp/arbitration-wave.json
 ```
 
-`kk-cli` 的 `sim_tests/move_arbitration.rs` 核对四场景 × JSON/KKPV 的完整 final、PlanHash 与组合身份（四身份互异）；在第 1 tick 后保存检查点、退出进程、加载再续跑，确认位置与 namespace 计数恰一次延续。引擎侧等价性证据（预演幸存集 == 实际取消链幸存集：交换/环/链/拉拽/覆盖/占位拓扑）见 `kk-engine` 准入单测。策略包在 [../mod-move-arbitration/](../mod-move-arbitration/)。
+`kk-cli` 的 `sim_tests/move_arbitration.rs` 核对四场景 × JSON/KKPV 的完整 final、PlanHash 与组合身份（四身份互异）；在第 1 tick 后保存检查点、退出进程、加载再续跑，确认位置与 namespace 计数恰一次延续。引擎侧等价性证据（预演幸存集 == 实际取消链幸存集：交换/环/链/拉拽/覆盖/占位拓扑）见 `kk-engine` 准入单测。策略包在 [../mod-move-arbitration/](../mod-move-arbitration)。

@@ -1,6 +1,6 @@
 # C3 批次开发报告：存储选型基准骨架（kk-storage-bench）
 
-- **批次**：M2 轨 C 批 3（[m2-playable.md](../../docs/plans/m2-playable.md) §10 轨 C）
+- **批次**：M2 轨 C 批 3（[m2-playable.md](../../docs/plans/archive/m2-playable.md) §10 轨 C）
 - **日期**：2026-09-29
 - **分支**：`m2/track-c`（基于 main=74c16d5；不合入、不 push，合入门禁归主会话）
 - **定位重申**：本批只交付**基准骨架与场景夹具备料**。非正式选型——正式选型

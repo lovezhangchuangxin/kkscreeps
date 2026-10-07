@@ -1,6 +1,6 @@
 # 深度质量优化实施与验收（2026-10-06）
 
-开始 HEAD：`229bea4b702590b87d730f3a106b184538c62e5e`，工作区干净。六批按已批准计划推进并全部完成验收，随本批提交（真实提交 ID 见 git log）。保持公共 JS、SDK 入口、检查点字段/格式版本及 PlanHash 语义；没有新增玩法能力或降低兼容性通过数下限。收口于 2026-10-07，接手与冻结细节见[接手说明](../../plans/deep-quality-handoff-2026-10-07.md)。
+开始 HEAD：`229bea4b702590b87d730f3a106b184538c62e5e`，工作区干净。六批按已批准计划推进并全部完成验收，随本批提交（真实提交 ID 见 git log）。保持公共 JS、SDK 入口、检查点字段/格式版本及 PlanHash 语义；没有新增玩法能力或降低兼容性通过数下限。收口于 2026-10-07，接手与冻结细节见[接手说明](../../plans/archive/deep-quality-handoff-2026-10-07.md)。
 
 ## 已实施
 
@@ -28,7 +28,7 @@
 - 寻路四场景一致收益 4–7.5%：terrain 0.928 / callback_matrix 0.925 / callback_none 0.935 / room_grid 0.959——TerrainSet 借用与运行时地形缓存的回报。
 - 长期 RSS（[rss-long.json](deep-quality-evidence-2026-10-06/rss-long.json)）：1000 次预热后 5×10000 双世界替换 + 100000 次搜索，RSS 增长 512KB 即平台（末三检查点持平，断言 <16MiB），无旧地形缓冲累积。
 - cooldown 实验（[cooldown-experiment.json](deep-quality-evidence-2026-10-06/cooldown-experiment.json)，400 link chain 五轮交替）：借用比较+写后缓存分支 p50 +0.28% / p95 +0.63% / CPU +0.52%，无稳定收益，已撤回；失败原始数据保留。
-- 证据文件：[matrix/](deep-quality-evidence-2026-10-06/matrix/) 下 summary.json（结论中位数表）、identity.json（产物/夹具 SHA 绑定）、rounds.json（150 窗口逐轮指标合并）。逐窗口原始报告与日志（300 个文件）在采集期逐窗校验后合并为 rounds.json 并删除，可用 identity.json 登记身份重跑再生。
+- 证据文件：[matrix/](deep-quality-evidence-2026-10-06/matrix) 下 summary.json（结论中位数表）、identity.json（产物/夹具 SHA 绑定）、rounds.json（150 窗口逐轮指标合并）。逐窗口原始报告与日志（300 个文件）在采集期逐窗校验后合并为 rounds.json 并删除，可用 identity.json 登记身份重跑再生。
 
 ## 冻结产物与身份
 

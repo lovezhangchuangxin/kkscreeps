@@ -21,4 +21,4 @@ target/release/kkscreeps sim run --scenario compat/fixtures/sim-mod-damage-polic
 
 `--ticks 1 --save-checkpoint /tmp/damage-checkpoint.json` 提交了攻击，但 Memory 仍是结算前观测，所以退出码 2；随后 `--ticks 2 --load-checkpoint /tmp/damage-checkpoint.json` 与连续 3 轮的最终状态等价。CLI 集成测试逐包、逐通道验证完整 final 与 namespace state，只排除实际线程耗时导致不同的 CPU 桶。
 
-现行能力及限制见[JS 伤害策略](../../../docs/architecture/mod-damage-policy.md)。
+现行能力及限制见[JS 伤害策略](../../../docs/architecture/combat.md#单体伤害)。

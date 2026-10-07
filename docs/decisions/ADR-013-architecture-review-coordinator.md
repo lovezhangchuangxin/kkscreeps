@@ -55,8 +55,8 @@ kk-runtime 已连接真实沙箱与结算，宿主控制句柄已私有化，Wor
 
 ## 证据
 
-- [B0 方案](../plans/b0-runtime-coordinator.md)与[实施记录](../plans/b0-slices.md)：协调与提交修复。
-- [外部复审修复](../plans/b0-6-external-review-clearance.md)：重试缓存、时间输入和回充候选。
-- [前置接口方案](../plans/m2b-prerequisite.md)：版本、缓存与投影实验。
-- [双房验证](../plans/dual-room-live-fire.md)：跨房竞争与失败恢复证据。
+- [B0 方案](../plans/archive/b0-runtime-coordinator.md)与[实施记录](../plans/archive/b0-slices.md)：协调与提交修复。
+- [外部复审修复](../plans/archive/b0-6-external-review-clearance.md)：重试缓存、时间输入和回充候选。
+- [前置接口方案](../plans/archive/m2b-prerequisite.md)：版本、缓存与投影实验。
+- [双房验证](../plans/archive/dual-room-live-fire.md)：跨房竞争与失败恢复证据。
 - [ADR-014](ADR-014-contribution-plane.md)：完整候选与并发目标。

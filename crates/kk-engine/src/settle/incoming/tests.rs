@@ -1,33 +1,20 @@
 //! 表示域与来源摘要直接预检；不依赖整轮丢弃掩盖部分写入。
 use super::*;
-use crate::settle::{Engine, Plane, TickState, damage, movement};
+use crate::settle::{Engine, Plane, TickState, damage};
 use kk_schema::room::RoomObject;
-use kk_world::{RoomIndex, RoomState};
+use kk_world::RoomState;
 use serde_json::json;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 fn working() -> Working {
     let engine = Engine::default();
     let room = RoomState::new("W1N1", kk_core::Terrain::plains());
-    Working {
-        index: RoomIndex::build(&room.objects),
+    Working::new(
         room,
-        time: 0,
-        now_ms: 0,
-        state: TickState::new(BTreeMap::new(), 100),
-        events: Vec::new(),
-        old_fatigue: BTreeMap::new(),
-        tick_fatigue: BTreeMap::new(),
-        upgraded: BTreeMap::new(),
-        damage_to_apply: BTreeMap::new(),
-        heal_to_apply: BTreeMap::new(),
-        upgrade_block_pending: BTreeMap::new(),
-        safe_mode_activated: BTreeSet::new(),
-        extractor_cooldown_pending: BTreeMap::new(),
-        movement: movement::Movement::new(),
-        pending_inter_room: Vec::new(),
-        chain_mutations: None,
-        plane: Plane {
+        0,
+        0,
+        TickState::new(BTreeMap::new(), 100),
+        Plane {
             buildings: Default::default(),
             links: engine.links,
             stores: engine.stores,
@@ -38,7 +25,7 @@ fn working() -> Working {
             extensions: engine.extensions,
             plan: engine.plan,
         },
-    }
+    )
 }
 
 #[test]

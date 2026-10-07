@@ -7,6 +7,10 @@ edition.workspace = true
 [lints]
 workspace = true
 
+[features]
+test-support = ["dep:anyhow"]
+
 [dependencies]
+anyhow = { workspace = true, optional = true }
 deno_core.workspace = true
 libc = "0.2"

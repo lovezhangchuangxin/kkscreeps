@@ -1,7 +1,7 @@
 # deno_core inspector + deno_inspector_server 断点调试实测笔记
 
 - 日期：2026-09-28
-- 前置篇：[spike-deno_core.md](./spike-deno_core.md)（实验 A~E，§11 "inspector 未测" 项由本篇关闭）、[spike-deno-game-api.md](./spike-deno-game-api.md)（实验 F~L）
+- 前置篇：[spike-deno_core.md](spike-deno_core.md)（实验 A~E，§11 "inspector 未测" 项由本篇关闭）、[spike-deno-game-api.md](spike-deno-game-api.md)（实验 F~L）
 - 实验对象：`deno_core` 0.412.0（`deno_v8` 0.4.0 → `v8` crate 150.4.0）+ `deno_inspector_server` 0.33.0（该 crate 依赖 `deno_core ^0.412.0`，版本精确对齐；Deno CLI `--inspect` 同款实现，hyper + fastwebsockets）
 - 代码位置：`spikes/inspector-spike/`（独立 crate，不在 workspace 内）
 - 复现命令（在本目录 `spikes/inspector-spike/` 下）：

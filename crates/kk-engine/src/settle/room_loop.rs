@@ -60,29 +60,15 @@ pub fn settle_room(
     batch: &IntentBatch,
     plane: &Plane,
 ) -> Result<(RoomState, Vec<Value>, Vec<inter_room::InterRoomMove>), SettleError> {
-    let index = RoomIndex::build(&room.objects);
     // 候选以共享句柄持有：Rust 链与 JS 整槽宿主在本次调用期间共享
     // 同一候选，见 RoomCtx 的说明。
-    let ctx: RoomCtx = Rc::new(RefCell::new(Working {
+    let ctx: RoomCtx = Rc::new(RefCell::new(Working::new(
         room,
-        index,
         time,
         now_ms,
-        state: state.clone(),
-        events: Vec::new(),
-        old_fatigue: BTreeMap::new(),
-        tick_fatigue: BTreeMap::new(),
-        upgraded: BTreeMap::new(),
-        damage_to_apply: BTreeMap::new(),
-        heal_to_apply: BTreeMap::new(),
-        upgrade_block_pending: BTreeMap::new(),
-        safe_mode_activated: BTreeSet::new(),
-        extractor_cooldown_pending: BTreeMap::new(),
-        movement: movement::Movement::with_buildings(plane.buildings.clone()),
-        pending_inter_room: Vec::new(),
-        chain_mutations: None,
-        plane: plane.clone(),
-    }));
+        state.clone(),
+        plane.clone(),
+    )));
 
     // 先清空动作记录和说话载荷，避免上一轮内容继续可见。
     {
@@ -179,21 +165,23 @@ pub fn settle_room(
                 Some(RoomObject::Extractor(_)) => "extractor",
                 Some(RoomObject::Road(_)) => "road",
                 Some(RoomObject::Mod(_)) => "mod",
-                Some(RoomObject::Generic(g)) => match generic_structure_type(&g.data).as_deref() {
-                    Some("container" | "rampart") => "decay",
-                    Some("link") => "link",
-                    Some("terminal") => "terminal",
-                    // Mod 建筑：生产周期或生命周期 tick 任一声明即进入
-                    //（同访先产后 tick）；两者皆无的建筑不进入。
-                    Some(st)
-                        if plane.buildings.get(st).is_some_and(|b| {
-                            b.production.is_some() || !b.lifecycle_slots.is_empty()
-                        }) =>
-                    {
-                        "mod-building"
+                Some(RoomObject::Generic(g)) => {
+                    match kk_world::domain::generic::structure_type(&g.data).as_deref() {
+                        Some("container" | "rampart") => "decay",
+                        Some("link") => "link",
+                        Some("terminal") => "terminal",
+                        // Mod 建筑：生产周期或生命周期 tick 任一声明即进入
+                        //（同访先产后 tick）；两者皆无的建筑不进入。
+                        Some(st)
+                            if plane.buildings.get(st).is_some_and(|b| {
+                                b.production.is_some() || !b.lifecycle_slots.is_empty()
+                            }) =>
+                        {
+                            "mod-building"
+                        }
+                        _ => "",
                     }
-                    _ => "",
-                },
+                }
                 _ => "",
             }
         };
@@ -238,13 +226,4 @@ pub fn settle_room(
 
     let pending_inter_room = std::mem::take(&mut w.pending_inter_room);
     Ok((w.room, w.events, pending_inter_room))
-}
-
-/// 读取 Generic 的结构类型；缺失、类型错误或 JSON 无效时返回 None。
-fn generic_structure_type(data: &str) -> Option<String> {
-    serde_json::from_str::<Value>(data)
-        .ok()?
-        .get("structureType")
-        .and_then(Value::as_str)
-        .map(str::to_string)
 }

@@ -56,9 +56,9 @@ EmbedEngine 记录投影、玩家运行、结算和整轮墙钟耗时，perf-pro
 
 ## 后续关系与证据
 
-- [M2 方案](../plans/m2-playable.md)：API 与阶段验收的原始拆分。
+- [M2 方案](../plans/archive/m2-playable.md)：API 与阶段验收的原始拆分。
 - [ADR-013](ADR-013-architecture-review-coordinator.md)：运行协调、线程局部销毁与宿主私有句柄。
-- [双房验证](../plans/dual-room-live-fire.md)：性能夹具修正及结算场景证据。
+- [双房验证](../plans/archive/dual-room-live-fire.md)：性能夹具修正及结算场景证据。
 - [ADR-014](ADR-014-contribution-plane.md)：共享投影与 Mod 扩展的目标协议。
 
 结构动作、segments、市场等后续能力以当前源码和新报告为准，不继续复制 M2A 的旧待办清单。
