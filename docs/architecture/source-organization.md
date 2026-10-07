@@ -27,6 +27,7 @@
 | `kk-engine/src/settle/damage.rs` | 共用伤害/治疗应用、死亡与库存掉落；`damage/tough.rs` 独立计算原生 TOUGH 累计减伤，不写候选 |
 | `kk-engine/src/settle/creep/combat/batch_policy.rs` | 战斗分页与群体批量完整预检/应用；直接候选不变测试在 batch_policy/tests.rs |
 | `kk-engine/src/settle/resources.rs` | 资源领域读取与副本预检转账；`resources/generic.rs` 负责 native 容量与实验室槽写入；只读 Generic 解析复用 `kk-world/src/domain/generic.rs` |
+| `kk-engine/src/settle/install.rs` | 安装入口与两种执行表适配；`install/candidate.rs` 独占规则、目录、绑定与执行表准备和统一发布，`install/validation.rs` 负责准入校验 |
 | `kk-engine/src/settle/pipeline/mod.rs` | `txn.rs` 独占世界候选，`stages.rs` 阶段状态，`writeback.rs` 玩家候选，`validation.rs` 发布前校验，`engine_tick.rs` 阶段推进与统一发布；内部候选访问限定在 settle |
 | `kk-mod-host/src/package/mod.rs` | `snapshot.rs` 磁盘发现/快照与摘要，`manifest.rs` 元数据/版本，`dependencies.rs` 依赖序，`selection.rs` 内容选择，`loader.rs` 同快照包内模块装载；realm 只消费包管理入口 |
 | `kk-mod-host/src/realm.rs` | VM 所有者与销毁顺序；`realm/bootstrap.rs` 捕获 SDK，`registration.rs` 负责逐包注册与冻结，`installation.rs` 安装规则/链，`execution.rs` 限定能力调用周期，`budget.rs` 统一注册/结算预算，`registry.rs` 独占注册阶段与首故障 |

@@ -185,3 +185,11 @@ G02.d **静态移动阻挡可替换决策**登记为未开始：前置为本轮�
 - 复审 engine/API/host/CLI 的公开导出、包选择/配置错误顺序、SDK 资源字节、候选提交、输出路径守卫及恢复身份。迁移实现主体核对一致，15 个 CLI 帮助入口逐字一致；修复现行类型生成导航与历史源码链接。首轮完整门禁仅文档链接失败，修复后无参数完整重跑通过；Rust 1225/12 忽略（CLI sim 84）、Python 58+12、Node 7、JS workspace、287 文档/1846 链接/807 源码均通过。
 - 新 release 官方/typed 完整 inspect（除重编后的可执行文件摘要）与上轮一致；棘轮 2914 逐用例状态与 HEAD 一致（1918 通过/89 既有失败/907 跳过）。TooAngel/Overmind/WASM 完成 2000/2000/10 轮、无中断；Overmind 原有首轮异常 1 轮，归一化随机 directive ID 后栈一致。TooAngel 部分调用次数与日志、Overmind 随机 flag 日志波动，未宣称完整报告逐字相等。
 - 最终检查日志 `/tmp/kks-cli-full-check-final.log`，release `/tmp/kks-cli-release.log`，兼容性 `/tmp/kks-cli-ratchet.log`；整体复审无剩余阻塞问题。四 crate 变更随本次提交保存；后续可复审 engine 安装/领域分派依赖、API 运行期目录共享校验及 host 候选能力边界，不按行数机械搬迁。
+
+
+### engine 计划安装候选与统一发布（2026-10-08，随本次提交交付）
+
+- 基线 `eedfbfb`，干净工作区开始；本轮只统一 engine 的普通处理器/整槽宿主两条计划安装路径，不推进新玩法或 runtime 调用适配。`install.rs` 保留公开入口与执行器适配，`install/validation.rs` 保留原准入检查主体；`install/candidate.rs` 独占规则、目录、执行表与绑定准备，全部成功后经唯一发布点换入九个装配域，检查顺序与错误文本保持。
+- 新增两项回归，对两种入口核验成功时规则/资源/建筑/执行表/计划一起发布、末步未接线绑定拒绝时所有派生域及完整检查点保持、旧引擎继续结算；复审校验逻辑主体与原实现一致，无剩余阻塞问题。未变更 builtin 源字节、SDK、协议/检查点版本或 Rust 示例。
+- `/tmp/kks-install-full-check.log` 无参数完整门禁通过：Rust 1227/12 忽略（CLI sim 84），Python 58+12、Node 7、JS workspace、287 文档/1846 链接/810 源码均通过。`/tmp/kks-install-release.log` 新 release 完成；官方/typed 完整 inspect 除二进制摘要外与上轮一致。`/tmp/kks-install-ratchet.log` 棘轮通过，2914 用例状态逐项与 HEAD 一致（1918 通过/89 既有失败/907 跳过）。TooAngel/Overmind/WASM 完成 2000/2000/10 轮，核心指标与归一化异常栈保持，Overmind 原有首轮异常 1 轮；随机 flag/CPU 相关日志与调用数不作逐字相等声明。
+- 源码、现行架构、兼容性报告与台账随本次提交保存。下一轮建议整理 runtime 的 Mod 调用输入及临时状态所有权，保持调用能力与候选回滚边界；本轮未执行该项。
