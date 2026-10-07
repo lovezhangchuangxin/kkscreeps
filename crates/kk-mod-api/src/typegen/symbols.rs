@@ -5,6 +5,7 @@ pub(super) struct Symbols {
     pub objects: BTreeMap<String, String>,
     // 冻结门禁止对象与建筑共用类型键，构造器引用可共用这一映射。
     pub constructors: BTreeMap<String, String>,
+    pub building_fields: BTreeMap<String, String>,
     pub arguments: BTreeMap<String, String>,
 }
 
@@ -39,10 +40,23 @@ impl Symbols {
         }
         let mut sorted: Vec<_> = buildings.iter().collect();
         sorted.sort_by_key(|b| b.key.to_string());
-        for building in sorted {
+        for building in &sorted {
             constructors.insert(
                 building.key.to_string(),
                 allocate(&format!("{}Constructor", building.player_class), &mut used),
+            );
+        }
+        let mut building_fields = BTreeMap::new();
+        for building in sorted
+            .into_iter()
+            .filter(|building| !building.fields.is_empty())
+        {
+            building_fields.insert(
+                building.key.to_string(),
+                allocate(
+                    &format!("{}Fields", constructors[building.key.as_str()]),
+                    &mut used,
+                ),
             );
         }
         let arguments = args_type_names(plan, &mut used);
@@ -50,6 +64,7 @@ impl Symbols {
             objects,
             constructors,
             arguments,
+            building_fields,
         }
     }
 }

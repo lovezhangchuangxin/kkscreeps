@@ -215,7 +215,7 @@ fn suppression_is_scoped_to_same_receiver() {
     assert_eq!(counter_value(&f, b)["value"], json!(2));
 }
 
-/// 链式压制（A 压 B、B 压 C，freeze 允许——只拒互压环）：A 缺席时
+/// 链式压制（A 压 B、B 压 C，freeze 允许——拒绝所有压制环）：A 缺席时
 /// B 执行且压 C；A 在场时 B 被压、其压制效力仍在（C 被存在性判定跳
 /// 过——压制只看 B 的键存在，不看 B 是否执行）。
 #[test]
@@ -225,7 +225,7 @@ fn chained_suppression_each_link_presence_based() {
     // 独立标记值（value=1/2/4），效果可区分。
     let mut descriptors = Vec::new();
     let mut slots = Vec::new();
-    for (name, mark, suppressed) in [
+    for (name, _mark, suppressed) in [
         ("high", 4, None),
         ("mid", 2, Some("high")),
         ("low", 1, Some("mid")),

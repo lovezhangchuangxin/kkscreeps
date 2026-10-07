@@ -59,6 +59,7 @@ impl Engine {
         drop(state);
         self.validate_extensions(cand)?;
         self.validate_mod_objects(cand)?;
+        self.validate_building_rooms(cand.rooms.iter().map(|(name, room)| (name, room)))?;
         Ok(())
     }
 
@@ -76,17 +77,17 @@ impl Engine {
         &self,
         rooms: &[(String, RoomState)],
     ) -> Result<(), SettleError> {
+        self.validate_mod_object_iter(rooms.iter().map(|(name, room)| (name, room)))
+    }
+
+    pub(super) fn validate_mod_object_iter<'a>(
+        &self,
+        rooms: impl Iterator<Item = (&'a String, &'a RoomState)>,
+    ) -> Result<(), SettleError> {
         // 短路按候选内容而非计划布尔量：本函数封的是"绕过写入口的直改"，
         // 计划里没有 Mod 类型不能成为跳过校验的理由——快照恢复等新来源
         // 仍可能带入计划外对象。扫描是一次枚举判别匹配，与结算既有的
         // 逐对象遍历同阶。
-        if !rooms.iter().any(|(_, room)| {
-            room.objects
-                .values()
-                .any(|o| matches!(o, RoomObject::Mod(_)))
-        }) {
-            return Ok(());
-        }
         for (room_name, room) in rooms {
             for (id, obj) in &room.objects {
                 let kk_schema::room::RoomObject::Mod(o) = obj else {
@@ -131,6 +132,37 @@ impl Engine {
                             id.as_str()
                         )));
                     }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn validate_building_rooms<'a>(
+        &self,
+        rooms: impl Iterator<Item = (&'a String, &'a RoomState)>,
+    ) -> Result<(), SettleError> {
+        if self.buildings.is_empty() {
+            return Ok(());
+        }
+        for (name, room) in rooms {
+            for (id, object) in &room.objects {
+                let RoomObject::Generic(g) = object else {
+                    continue;
+                };
+                let record: Value = serde_json::from_str(&g.data).map_err(|error| {
+                    SettleError(format!(
+                        "房间 {name} 对象 {} 建筑记录非法：{error}",
+                        id.as_str()
+                    ))
+                })?;
+                if let Some(building) = record["structureType"]
+                    .as_str()
+                    .and_then(|key| self.buildings.get(key))
+                {
+                    building.validate_record(&record).map_err(|error| {
+                        SettleError(format!("房间 {name} 对象 {}：{error}", id.as_str()))
+                    })?;
                 }
             }
         }

@@ -776,7 +776,7 @@ fn chick_age_time_model() {
     f.settle(b); // time 0→1：雏形在（同格 spawn 在——正常孵化）
     let orphan = chick_of(&f, "orphan");
     assert!(f.world.get(orphan).is_some());
-    f.world.remove(spawn); // spawn 消亡
+    f.world.remove(spawn).unwrap(); // spawn 消亡
     f.settle(IntentBatch::default()); // time 1→2：孤儿雏形移除
     assert!(
         f.world.get(orphan).is_none(),

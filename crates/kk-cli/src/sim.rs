@@ -472,16 +472,17 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
         Some(path) => Some(kk_runtime::checkpoint::read_checkpoint(path)?),
         None => None,
     };
+    let mut applied_switches = loaded_value
+        .as_ref()
+        .map(checkpoint::applied_switches)
+        .transpose()?
+        .unwrap_or_default();
     let resume_switched = match (&loaded_value, &scene.mods_switch) {
         (Some(value), Some(switch)) => {
             let time = value["engine"]["world"]["time"]
                 .as_u64()
                 .context("检查点载荷缺少世界时间")?;
-            let applied = value["metadata"]["applied_switches"]
-                .as_array()
-                .map(|list| list.iter().filter_map(Value::as_u64).collect::<Vec<u64>>())
-                .unwrap_or_default();
-            (time >= switch.after_tick() && applied.contains(&switch.after_tick()))
+            (time >= switch.after_tick() && applied_switches.contains(&switch.after_tick()))
                 .then(|| {
                     mods::load(
                         base,
@@ -514,14 +515,20 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
         .cloned()
         .collect();
     let mut aliases = BTreeMap::new();
-    for object in scene
-        .objects
-        .iter()
-        .filter(|_| options.load_checkpoint.is_none())
-    {
-        let id = mods::place(&mut engine, object)
-            .with_context(|| format!("放置对象 {}", object.alias))?;
-        aliases.insert(object.alias.clone(), id);
+    if options.load_checkpoint.is_none() {
+        let input: Vec<_> = scene
+            .objects
+            .iter()
+            .map(|object| (object.room.as_str(), object.kind.as_str(), &object.spec))
+            .collect();
+        let ids = engine.place_objects(&input).context("批量放置场景对象")?;
+        aliases.extend(
+            scene
+                .objects
+                .iter()
+                .zip(ids)
+                .map(|(object, id)| (object.alias.clone(), id)),
+        );
     }
     let mut codes = BTreeMap::new();
     let mut stats = BTreeMap::new();
@@ -572,7 +579,11 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
     // 任何轮，日志段将从同一起点完整覆盖本次运行。
     let replay_start = options
         .verify_replay
-        .then(|| engine.checkpoint(json!({"kind": "verify-replay-start"})))
+        .then(|| {
+            engine.checkpoint(
+                json!({"kind": "verify-replay-start", "log_cursor": engine.input_log_cursor()}),
+            )
+        })
         .transpose()?;
     let start_time = engine.get_game_time();
     let start = std::time::Instant::now();
@@ -626,7 +637,6 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
                     every,
                     dir: options.checkpoint_dir.as_ref().expect("校验保证目录在"),
                     keep: options.checkpoint_keep,
-                    log: options.input_log.as_deref(),
                     scenario_sha256: &digest(&bytes),
                     executable_sha256: &executable_hash,
                     modules: &modules,
@@ -659,11 +669,14 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
         .iter()
         .map(|a| evaluate(a, &initial, &final_state))
         .collect();
-    let applied_switches: Vec<u64> = switches
-        .iter()
-        .filter(|record| record["status"] == "applied")
-        .filter_map(|record| record["after_tick"].as_u64())
-        .collect();
+    applied_switches.extend(
+        switches
+            .iter()
+            .filter(|record| record["status"] == "applied")
+            .filter_map(|record| record["after_tick"].as_u64())
+            .filter(|tick| !applied_switches.contains(tick))
+            .collect::<Vec<_>>(),
+    );
     if failure.is_none()
         && let Some(path) = &options.save_checkpoint
         && let Err(error) = checkpoint::save(
@@ -676,14 +689,7 @@ fn execute(options: &Options) -> anyhow::Result<Value> {
             &initial,
             &applied_switches,
             // 终态保存也带游标：文件内段数即最后 seq（日志挂载时）。
-            options
-                .input_log
-                .as_ref()
-                .and(engine.input_log_segments())
-                .map(|last_seq| checkpoint::LogCursor {
-                    last_seq,
-                    last_tick: engine.get_game_time().saturating_sub(1),
-                }),
+            engine.input_log_cursor(),
         )
     {
         failure = Some(

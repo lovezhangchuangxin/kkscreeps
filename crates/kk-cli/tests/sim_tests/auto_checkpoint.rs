@@ -530,10 +530,7 @@ fn checkpoint_beyond_log_tail_is_hard_error() -> anyhow::Result<()> {
     let report3: Value = serde_json::from_slice(&std::fs::read(&report3)?)?;
     assert_eq!(report3["status"], "setup_failed");
     let error = report3["error"].as_str().unwrap();
-    assert!(
-        error.contains("超出日志末段") && error.contains("摘除"),
-        "{error}"
-    );
+    assert!(error.contains("不覆盖检查点游标"), "{error}");
     assert_eq!(report3["recovery"]["status"], "setup_failed");
     Ok(())
 }
@@ -711,5 +708,102 @@ fn failed_player_round_skips_periodic_save() -> anyhow::Result<()> {
         .collect();
     names.sort();
     assert_eq!(names, vec![ckpt_name(1), ckpt_name(2)]);
+    Ok(())
+}
+
+#[test]
+fn loaded_checkpoint_directory_protects_every_output_before_failure_reporting() -> anyhow::Result<()>
+{
+    let case = Case::new("protect-load");
+    let dir = case.0.join("ckpt");
+    let log = case.0.join("log.jsonl");
+    let report = case.0.join("first.json");
+    run(
+        case.command(&report, 2)
+            .args(["--checkpoint-every", "2"])
+            .arg("--checkpoint-dir")
+            .arg(&dir)
+            .arg("--input-log")
+            .arg(&log),
+        &report,
+    )?;
+    let saved = dir.join(ckpt_name(2));
+    let before = std::fs::read(&saved)?;
+    for flag in ["--report", "--save-checkpoint", "--input-log"] {
+        let safe_report = case.0.join("safe.json");
+        let target_report = if flag == "--report" {
+            &saved
+        } else {
+            &safe_report
+        };
+        let mut command = case.command(target_report, 1);
+        command.arg("--load-checkpoint").arg(&dir);
+        if flag != "--input-log" {
+            command.arg("--input-log").arg(&log);
+        }
+        if flag != "--report" {
+            command.arg(flag).arg(&saved);
+        }
+        let output = command.output()?;
+        assert_eq!(output.status.code(), Some(1));
+        assert!(String::from_utf8_lossy(&output.stderr).contains("加载检查点目录"));
+        assert_eq!(std::fs::read(&saved)?, before);
+        assert!(!safe_report.exists(), "守卫失败不写失败报告");
+    }
+    #[cfg(unix)]
+    {
+        let alias = case.0.join("alias");
+        std::os::unix::fs::symlink(&dir, &alias)?;
+        // 场景损坏时也不能向输入目录写 setup_failed 报告。
+        std::fs::write(case.scene(), b"broken scenario")?;
+        let output = case
+            .command(&alias.join(ckpt_name(2)), 1)
+            .arg("--load-checkpoint")
+            .arg(&dir)
+            .arg("--input-log")
+            .arg(&log)
+            .output()?;
+        assert_eq!(output.status.code(), Some(1));
+        assert_eq!(std::fs::read(&saved)?, before);
+    }
+    Ok(())
+}
+
+#[test]
+fn zero_replay_rejects_another_valid_log_history() -> anyhow::Result<()> {
+    let case = Case::new("foreign-history");
+    let dir = case.0.join("ckpt");
+    let a = case.0.join("a.jsonl");
+    let b = case.0.join("b.jsonl");
+    let report = case.0.join("first.json");
+    run(
+        case.command(&report, 2)
+            .args(["--checkpoint-every", "2"])
+            .arg("--checkpoint-dir")
+            .arg(&dir)
+            .arg("--input-log")
+            .arg(&a),
+        &report,
+    )?;
+    let report = case.0.join("other.json");
+    run(case.command(&report, 2).arg("--input-log").arg(&b), &report)?;
+    assert_ne!(
+        kk_runtime::embed::read_input_log(&a)?.chain,
+        kk_runtime::embed::read_input_log(&b)?.chain
+    );
+    let report = case.0.join("rejected.json");
+    let output = case
+        .command(&report, 1)
+        .arg("--load-checkpoint")
+        .arg(&dir)
+        .arg("--input-log")
+        .arg(&b)
+        .output()?;
+    assert_eq!(output.status.code(), Some(1));
+    let report: Value = serde_json::from_slice(&std::fs::read(report)?)?;
+    assert!(
+        report["error"].as_str().unwrap().contains("历史哈希不匹配"),
+        "{report}"
+    );
     Ok(())
 }

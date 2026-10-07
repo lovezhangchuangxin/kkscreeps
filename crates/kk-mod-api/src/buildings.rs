@@ -64,6 +64,21 @@ pub struct BuildingDescriptor {
 }
 
 impl BuildingDescriptor {
+    /// 校验 Generic 记录中已存在的自定义字段；手工放置可省略默认值，
+    /// 但不能以错误类型或未声明的冒号键绕过 schema。原生键属于引擎域。
+    pub fn validate_record(&self, record: &serde_json::Value) -> Result<(), String> {
+        let object = record.as_object().ok_or("建筑记录须为对象")?;
+        for (key, value) in object.iter().filter(|(key, _)| key.contains(':')) {
+            let field = self
+                .fields
+                .iter()
+                .find(|field| field.key.as_str() == key)
+                .ok_or_else(|| format!("{}: 字段 {key} 未在建筑中声明", self.key))?;
+            crate::validate::check_value(value, &field.schema, &format!("{} / {key}", self.key))?;
+        }
+        Ok(())
+    }
+
     /// 总工程点数 = 最大成本量。工地 progress_total 与各资源比例分母共用。
     pub fn progress_total(&self) -> u64 {
         self.cost

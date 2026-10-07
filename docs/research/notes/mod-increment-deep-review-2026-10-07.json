@@ -1,0 +1,424 @@
+{
+  "review_version": 1,
+  "review_date": "2026-10-07",
+  "baseline": "e8ed252",
+  "head": "d8af3e6",
+  "commit_count": 43,
+  "working_tree_initial": "clean",
+  "product_changes": false,
+  "cli_sha256": "d62c0b7011fa1f49b5e7ea17fd36935f220760a8480ecd32d45c0172d7ecf895",
+  "findings": [
+    {
+      "id": "R1",
+      "priority": "P1",
+      "title": "报告覆盖目录输入检查点",
+      "source": "crates/kk-cli/src/sim/checkpoint.rs",
+      "line": 201,
+      "observed": {
+        "run_status": "passed",
+        "overwritten_top_level_keys": [
+          "report_version",
+          "success",
+          "status",
+          "engine_version",
+          "executable_sha256",
+          "scenario"
+        ],
+        "is_checkpoint_envelope": false
+      },
+      "reproduction": "复制 A 周期检查点目录；sim run --scenario scene.json --ticks 1 --load-checkpoint COPY --input-log A.jsonl --report COPY/ckpt-0000000002.json；运行退出 0，文件变成报告。",
+      "status": "confirmed_unfixed"
+    },
+    {
+      "id": "R2",
+      "priority": "P1",
+      "title": "日志历史与检查点游标未配对",
+      "source": "crates/kk-cli/src/sim/checkpoint.rs",
+      "line": 176,
+      "observed": {
+        "status": "passed",
+        "recovery": {
+          "selected": "/tmp/kkscreeps-review-repros/utc-cp/ckpt-0000000002.json",
+          "checkpoint_time": 2,
+          "log_cursor": {
+            "last_seq": 2,
+            "last_tick": 1
+          },
+          "replayed_segments": 0,
+          "skipped_broken": 0
+        },
+        "checkpoint_raw_memory": "{\"draw\":0.8081026448466624}",
+        "other_history_raw_memory": "{\"draw\":0.057428145387111273}"
+      },
+      "reproduction": "同一基础夹具在 TZ=UTC 独立运行 A/B 各两轮，A 加 --input-log A.jsonl --checkpoint-every 2 --checkpoint-dir A-cp，B 加 --input-log B.jsonl。用 A-cp 配 B.jsonl 恢复，接受零重放并续跑。玩家 Math.random 是有意的已记录输入差异，不要求玩家随机确定性。",
+      "status": "confirmed_unfixed"
+    },
+    {
+      "id": "R3",
+      "priority": "P1",
+      "title": "再次保存丢失 Mod 切换历史",
+      "source": "crates/kk-cli/src/sim.rs",
+      "line": 662,
+      "observed": {
+        "runs": [
+          {
+            "status": "passed",
+            "error": null
+          },
+          {
+            "status": "passed",
+            "error": null
+          },
+          {
+            "status": "setup_failed",
+            "error": "检查点 Mod 配置/选择/规则/预算/停用策略身份不匹配"
+          }
+        ],
+        "checkpoint_switches": [
+          [
+            2
+          ],
+          []
+        ],
+        "checkpoint_times": [
+          2,
+          3
+        ]
+      },
+      "reproduction": "复制 compat/fixtures/sim-mod-switch/scenario-add.json，assertions 设为空，bots.modules 与 mods.root 改成基于原目录解析的绝对路径。运行 2 轮保存 cp1；载入 cp1 运行 1 轮保存 cp2；载入 cp2 运行 1 轮。前两次退出 0，第三次退出 1。",
+      "status": "confirmed_unfixed"
+    },
+    {
+      "id": "R4",
+      "priority": "P1",
+      "title": "Date 受宿主本地时区影响",
+      "source": "crates/kk-mod-host/src/sdk/determinism.js",
+      "line": 48,
+      "observed": {
+        "utc_status": "passed",
+        "shanghai_status": "passed",
+        "utc_mod_states": {
+          "clock": {
+            "now": 3000,
+            "hour": 0,
+            "localParsed": 0
+          }
+        },
+        "shanghai_mod_states": {
+          "clock": {
+            "now": 3000,
+            "hour": 8,
+            "localParsed": -28800000
+          }
+        }
+      },
+      "reproduction": "将基础夹具写到独立目录；分别用 TZ=UTC 和 TZ=Asia/Shanghai 运行 sim run --scenario scene.json --ticks 2 --report OUT；比较 final.mod_states.clock。",
+      "status": "confirmed_unfixed"
+    },
+    {
+      "id": "R5",
+      "priority": "P1",
+      "title": "日志续接忽略不可变头段身份",
+      "source": "crates/kk-runtime/src/embed/input_log.rs",
+      "line": 155,
+      "observed": {
+        "status": "replay_failed",
+        "committed_ticks": 1,
+        "verify_replay": {
+          "status": "failed",
+          "error": "回放入口：头段身份配对失败: 日志头段种子与引擎不符（抽值流将整体错误）"
+        },
+        "line_count": 2
+      },
+      "reproduction": "复制 seed=42 日志首行加换行作为合法头段空日志；基础 scene.seed 改为 43。运行 sim run --ticks 1 --input-log HEADER_ONLY --verify-replay。返回 2，但已提交一轮并追加一段，回放报头段种子不符；应在挂载前拒绝。",
+      "status": "confirmed_unfixed"
+    },
+    {
+      "id": "R6",
+      "priority": "P2",
+      "title": "三节点压制环通过冻结",
+      "source": "crates/kk-mod-api/src/freeze.rs",
+      "line": 295,
+      "observed": {
+        "inspect_status": "passed",
+        "exit_code": 0
+      },
+      "reproduction": "写入 cycle 包夹具，执行 mod inspect --root cycle --report cycle-inspect.json；退出 0。完整图检测应拒绝该环。",
+      "status": "confirmed_unfixed"
+    },
+    {
+      "id": "R7",
+      "priority": "P2",
+      "title": "建筑字段接口与对象接口名称碰撞",
+      "source": "crates/kk-mod-api/src/typegen.rs",
+      "line": 435,
+      "observed": {
+        "types_status": "ok",
+        "same_named_interfaces": [
+          "export interface FooGaugeConstructorFields {",
+          "export interface FooGaugeConstructorFields { 'foo:heat': number }"
+        ],
+        "consumer_exit": 2,
+        "typescript_error": "TS2740: Type '{ 'foo:heat': number; }' is missing the following properties from type 'FooGaugeConstructorFields': id, room, x, y, and 4 more."
+      },
+      "reproduction": "mod types --root type-collision --out collision.d.ts --report collision-report.json；pnpm exec tsc --noEmit --skipLibCheck --target es2022 --module nodenext --moduleResolution nodenext collision-consumer.ts。",
+      "status": "confirmed_unfixed"
+    },
+    {
+      "id": "R8",
+      "priority": "P2",
+      "title": "建筑文档示例首轮缺字段失败",
+      "source": "docs/architecture/mod-buildings.md",
+      "line": 23,
+      "observed": {
+        "status": "run_failed",
+        "committed_ticks": 0,
+        "failure": {
+          "stage": "runtime",
+          "tick": 0,
+          "error": "结算失败: 槽 missing:gauge.tick @ W1N1: missing:gauge.tick: 处理器 missing:gauge.tick.process: missing:gauge: 缺少字段 label"
+        }
+      },
+      "reproduction": "写入 missing-building 包（必须含 manifest 的 player 条目）、player 绑定、building-scene.json；sim run --scenario building-scene.json --ticks 1 --report OUT，退出 2。",
+      "status": "confirmed_unfixed"
+    },
+    {
+      "id": "R9",
+      "priority": "P2",
+      "title": "G02 完成范围与可替换准入目标不符",
+      "source": "docs/plans/mod-next-batches.md",
+      "line": 54,
+      "observed": {
+        "verification": "源码与文档调用链核对，无运行反例",
+        "static_gate": "intent_move 在 has_static_obstacle 返回 false 后才调用 movement.add；后置 movePrecheck 不提供放行面",
+        "ledger_status": "已完成"
+      },
+      "reproduction": "核对台账 G02 定义、状态行及 mod-move-precheck 的放行关闭说明，与 settle/creep/movement.rs 静态登记门和仲裁障碍复检对照。",
+      "status": "confirmed_unfixed"
+    }
+  ],
+  "fixtures": {
+    "scene.json": "{\"version\": 1, \"seed\": 42, \"shard\": {\"players\": [\"p1\"], \"rooms\": [{\"name\": \"W1N1\", \"owner\": \"p1\", \"rcl\": 3}]}, \"bots\": [{\"player\": \"p1\", \"modules\": \"bots\"}], \"mods\": {\"root\": \"mods\"}, \"objects\": [{\"room\": \"W1N1\", \"kind\": \"mod\", \"alias\": \"watch\", \"spec\": {\"typeKey\": \"clock:watch\", \"fields\": {\"x\": 10, \"y\": 10}}}]}",
+    "bots/main.js": "module.exports.loop = function() { Memory.draw = Math.random(); };",
+    "mods/clock/mod.json": "{\"id\": \"clock\", \"version\": \"1.0.0\", \"apiVersion\": \"^1.0.0\"}",
+    "mods/clock/server.js": "export default function register(api) {\n  api.objects.define('clock:watch', { version: 1, playerClass:'Watch', visibility:'server-only', positionFields:['x','y'], fields: { x:{type:'u32',min:0,max:49}, y:{type:'u32',min:0,max:49} }, tick(ctx) { ctx.state = {now: Date.now(), hour: new Date().getHours(), localParsed: Date.parse('1970-01-01T00:00:00')}; } });\n}",
+    "cycle/cycle/mod.json": "{\"id\": \"cycle\", \"version\": \"1.0.0\", \"apiVersion\": \"^1.0.0\"}",
+    "cycle/cycle/server.js": "export default function register(api) {\n const target=api.objects.define('cycle:counter',{version:1,playerClass:'Counter',visibility:'server-only',fields:{value:{type:'i32',default:0}}});\n for (const [name,by] of [['a','b'],['b','c'],['c','a']]) {api.intents.define('cycle:'+name,{scope:'object',target,args:{type:'i32'},suppressedBy:['cycle:'+by],process(ctx){ctx.target.fields.value=ctx.args;}});}\n}",
+    "type-collision/foo/mod.json": "{\"id\": \"foo\", \"version\": \"1.0.0\", \"apiVersion\": \"^1.0.0\"}",
+    "type-collision/foo/server.js": "export default function register(api) {\n api.buildings.define('foo:gauge', {playerClass:'FooGauge',cost:{energy:1},hitsMax:10,pathing:'plain',fields:{heat:{type:'u32',default:0}}});\n api.objects.define('foo:counter',{version:1,playerClass:'FooGaugeConstructorFields',visibility:'room-visible',positionFields:['x','y'],fields:{x:{type:'u32',min:0,max:49},y:{type:'u32',min:0,max:49},value:{type:'i32',default:0}}});\n}\n",
+    "collision-consumer.ts": "import type { FooGaugeConstructorFields } from './collision.js';\nconst fields: FooGaugeConstructorFields = {'foo:heat': 1};\nvoid fields;\n",
+    "building-scene.json": "{\"version\": 1, \"shard\": {\"players\": [\"p1\"], \"rooms\": [{\"name\": \"W1N1\", \"owner\": \"p1\", \"rcl\": 3}]}, \"bots\": [{\"player\": \"p1\", \"modules\": \"bots\"}], \"mods\": {\"root\": \"missing-building\"}, \"objects\": [{\"room\": \"W1N1\", \"kind\": \"structure\", \"alias\": \"gauge\", \"spec\": {\"structureType\": \"missing:gauge\", \"pos\": [10, 10], \"owner\": \"p1\"}}]}",
+    "missing-building/missing/mod.json": "{\"id\": \"missing\", \"version\": \"1.0.0\", \"apiVersion\": \"^1.0.0\", \"player\": \"player.js\"}",
+    "missing-building/missing/server.js": "export default function register(api) {\n api.buildings.define('missing:gauge',{playerClass:'Gauge',cost:{energy:1},hitsMax:100,pathing:'plain',fields:{heat:{type:'u32',min:0,max:1000,default:7},label:{type:'string',maxBytes:64}},tick(ctx){ctx.target.fields['missing:heat']=(ctx.target.fields['missing:heat']||0)+1;}});\n}",
+    "missing-building/missing/player.js": "export default function install(api){ class Gauge extends api.builtins.OwnedStructure {} api.buildings.bind('missing:gauge',Gauge);}"
+  },
+  "seed42_header_line": "{\"format\":\"kkscreeps-input-log\",\"version\":1,\"seq\":0,\"kind\":\"header\",\"prev_hash\":null,\"identity\":{\"engine_version\":\"0.1.0\",\"seed\":42,\"plan_hash\":\"561dbbf0b5a57d2658322ec6daa9973db314dad6b48e4d9217f7bb9f981e9ad6\",\"execution_strategy\":\"dba4d98940f25e9a4e0cbce7ad46b795335ebf2be44391ede62babe9ff3dee8f\",\"disabled_mods\":{}},\"metadata\":{\"scenario_sha256\":\"7a8767bacf55e7ab3ae9ac551ca18a3e979b9e1a67ed04d4840242a71d03e428\",\"executable_sha256\":\"d62c0b7011fa1f49b5e7ea17fd36935f220760a8480ecd32d45c0172d7ecf895\",\"ticks_requested\":2},\"sha256\":\"09dcea6437d49f9ae48508a8382034a633fbc96d619b8f0b43a12056629a3730\"}",
+  "checks": {
+    "fresh_debug_build": {
+      "command": "cargo build -p kk-cli",
+      "exit_code": 0
+    },
+    "full_gate": {
+      "command": "pnpm run check",
+      "exit_code": 0,
+      "rust_passed": 1189,
+      "rust_failed": 0,
+      "rust_ignored": 12,
+      "rust_test_binaries": 51,
+      "commit_title_tests_passed": 3,
+      "javascript_workspace_passed": 20,
+      "javascript_workspace_skipped": 0,
+      "log_sha256": "047a7bca1a83cce3290bd8b1c016557ee54e7b8d27682ef6df3ce4df4fd5167d"
+    },
+    "not_run": [
+      "release compatibility ratchet",
+      "three bot baseline capture",
+      "RSS long window",
+      "doctest"
+    ]
+  },
+  "architecture_followup": {
+    "date": "2026-10-07",
+    "head": "d8af3e6",
+    "status": "review_complete_unfixed",
+    "confirmed_findings": [
+      {
+        "id": "R10",
+        "priority": "P2",
+        "title": "建筑字段未贯通公共编辑、恢复和发布校验",
+        "source": "crates/kk-engine/src/settle/checkpoint.rs",
+        "line": 60,
+        "observed": [
+          {
+            "name": "first",
+            "status": "passed",
+            "committed_ticks": 1,
+            "memory": {
+              "fieldType": "string",
+              "fieldValue": "not-a-number"
+            }
+          },
+          {
+            "name": "restored",
+            "status": "passed",
+            "committed_ticks": 1,
+            "memory": {
+              "fieldType": "string",
+              "fieldValue": "not-a-number"
+            }
+          }
+        ],
+        "reproduction": "写入下面的 building_schema_fixtures；sim run --scenario scene.json --ticks 1 --save-checkpoint state.json --report first.json；同一场景 --load-checkpoint state.json --ticks 1 --report restored.json。两次退出 0，但声明 u32 的字段为字符串。",
+        "status": "confirmed_unfixed"
+      },
+      {
+        "id": "R11",
+        "priority": "P2",
+        "title": "逐次管理放置重复全世界事务，累计近平方级开销",
+        "source": "crates/kk-engine/src/settle/state_api.rs",
+        "line": 37,
+        "observed": [
+          {
+            "objects": 500,
+            "individual_median_ms": 87.920541,
+            "bulk_median_ms": 0.6725420000000001
+          },
+          {
+            "objects": 1000,
+            "individual_median_ms": 345.814334,
+            "bulk_median_ms": 1.383834
+          },
+          {
+            "objects": 2000,
+            "individual_median_ms": 1385.470583,
+            "bulk_median_ms": 2.872042
+          }
+        ],
+        "scope": "批量管理/场景构造；未测每 tick、release 性能、RSS 或其他引擎对比",
+        "reproduction": "在仓库固定 Rust 工具链下，用下列外部 Cargo 探针依赖本地 crates；cargo run --offline --manifest-path <临时探针>/Cargo.toml --target-dir <仓库>/target，然后探针再串行运行两次。单次与多次提交的 generation 不同，探针核对相同对象数，不声称检查点逐位等价。",
+        "status": "confirmed_unfixed"
+      }
+    ],
+    "building_schema_fixtures": {
+      "scene.json": "{\"version\": 1, \"shard\": {\"players\": [\"p1\"], \"rooms\": [{\"name\": \"W1N1\", \"owner\": \"p1\", \"rcl\": 3}]}, \"bots\": [{\"player\": \"p1\", \"modules\": \"bots\"}], \"mods\": {\"root\": \"mods\"}, \"objects\": [{\"room\": \"W1N1\", \"kind\": \"structure\", \"alias\": \"gauge\", \"spec\": {\"structureType\": \"quality:gauge\", \"owner\": \"p1\", \"pos\": [10, 10], \"quality:heat\": \"not-a-number\"}}]}",
+      "bots/main.js": "module.exports.loop=function(){const obj=Game.rooms.W1N1.find(FIND_STRUCTURES).find(x=>x.structureType==='quality:gauge');Memory.fieldType=typeof obj['quality:heat'];Memory.fieldValue=obj['quality:heat'];};\n",
+      "mods/quality/mod.json": "{\"id\": \"quality\", \"version\": \"1.0.0\", \"apiVersion\": \"^1.0.0\", \"player\": \"player.js\"}",
+      "mods/quality/server.js": "export default function register(api) {\n api.buildings.define('quality:gauge', {playerClass:'QualityGauge',cost:{energy:1},hitsMax:100,pathing:'plain',fields:{heat:{type:'u32',min:0,max:100,default:7}},tick(ctx){ctx.state={visits:(ctx.state?.visits??0)+1};}});\n}\n",
+      "mods/quality/player.js": "export default function install(api){ class QualityGauge extends api.builtins.OwnedStructure {} api.buildings.bind('quality:gauge', QualityGauge); }\n"
+    },
+    "edit_probe": {
+      "profile": "debug",
+      "v8": false,
+      "runs": 3,
+      "cargo_toml": "[package]\nname = \"kkscreeps-structure-probe\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[dependencies]\nkk-engine = {path = \"/Users/keqing/Desktop/projects/games/kkscreeps/crates/kk-engine\"}\nkk-core = {path = \"/Users/keqing/Desktop/projects/games/kkscreeps/crates/kk-core\"}\nkk-schema = {path = \"/Users/keqing/Desktop/projects/games/kkscreeps/crates/kk-schema\"}\n",
+      "source": "use std::time::Instant;\nuse kk_engine::Engine;\nuse kk_schema::room::{RoomObject, EnergyObj};\nfn object() -> RoomObject { RoomObject::Energy(EnergyObj{id:0,x:10,y:10,resource_type:0,amount:1,resource:None}) }\nfn main() {\n for n in [500,1000,2000] {\n  let mut individual=Engine::default();individual.register_room(\"W1N1\",kk_core::Terrain::plains()).unwrap();\n  let start=Instant::now();for _ in 0..n {individual.insert_object(\"W1N1\",object()).unwrap();}let single_ms=start.elapsed().as_secs_f64()*1000.;\n  let mut bulk=Engine::default();bulk.register_room(\"W1N1\",kk_core::Terrain::plains()).unwrap();\n  let start=Instant::now();bulk.edit_world(|world| {for _ in 0..n {world.insert(\"W1N1\",object())?;} Ok(())}).unwrap();let bulk_ms=start.elapsed().as_secs_f64()*1000.;\n  assert_eq!(individual.world().room(\"W1N1\").unwrap().objects.len(),n);\n  assert_eq!(bulk.world().room(\"W1N1\").unwrap().objects.len(),n);\n  println!(\"{{\\\"objects\\\":{n},\\\"individual_ms\\\":{single_ms},\\\"bulk_ms\\\":{bulk_ms}}}\");\n }\n}\n",
+      "raw_measurements": [
+        {
+          "objects": 500,
+          "individual_ms": 97.49920800000001,
+          "bulk_ms": 0.6639579999999999
+        },
+        {
+          "objects": 1000,
+          "individual_ms": 347.15325,
+          "bulk_ms": 1.4058339999999998
+        },
+        {
+          "objects": 2000,
+          "individual_ms": 1428.751625,
+          "bulk_ms": 2.897875
+        },
+        {
+          "objects": 500,
+          "individual_ms": 85.29495800000001,
+          "bulk_ms": 0.972083
+        },
+        {
+          "objects": 1000,
+          "individual_ms": 337.008959,
+          "bulk_ms": 1.350625
+        },
+        {
+          "objects": 2000,
+          "individual_ms": 1385.470583,
+          "bulk_ms": 2.857458
+        },
+        {
+          "objects": 500,
+          "individual_ms": 87.920541,
+          "bulk_ms": 0.6725420000000001
+        },
+        {
+          "objects": 1000,
+          "individual_ms": 345.814334,
+          "bulk_ms": 1.383834
+        },
+        {
+          "objects": 2000,
+          "individual_ms": 1384.533916,
+          "bulk_ms": 2.872042
+        }
+      ],
+      "medians": [
+        {
+          "objects": 500,
+          "individual_median_ms": 87.920541,
+          "bulk_median_ms": 0.6725420000000001
+        },
+        {
+          "objects": 1000,
+          "individual_median_ms": 345.814334,
+          "bulk_median_ms": 1.383834
+        },
+        {
+          "objects": 2000,
+          "individual_median_ms": 1385.470583,
+          "bulk_median_ms": 2.872042
+        }
+      ]
+    },
+    "architecture_debt": [
+      {
+        "id": "Q1",
+        "topic": "Mod 桥接和 sim 中心模块职责集中",
+        "status": "design_recommendation_not_new_bug"
+      },
+      {
+        "id": "Q2",
+        "topic": "CLI/runtime/日志的恢复关系缺统一验证点",
+        "status": "design_recommendation_backed_by_R2_R3"
+      },
+      {
+        "id": "Q3",
+        "topic": "已提交日志错误与未提交结算错误共享 anyhow 通道",
+        "status": "documented_current_boundary_not_new_bug"
+      },
+      {
+        "id": "Q4",
+        "topic": "宿主 Date/RNG/SDK 协议缺显式运行时恢复身份，CLI 已有二进制门",
+        "status": "design_recommendation_cross_version_reproduction_not_run"
+      },
+      {
+        "id": "Q5",
+        "topic": "补跨功能、重复生命周期的不变量测试",
+        "status": "test_strategy_recommendation"
+      }
+    ],
+    "minor_observations": [
+      {
+        "source": "crates/kk-engine/src/settle/engine_tick.rs",
+        "line": 147,
+        "issue": "publish_tick 的旧注释与 Result 返回及 commit_tick_rooms 推进版本的行为不一致"
+      }
+    ],
+    "validation": {
+      "full_gate": "复用上轮同 HEAD 的 pnpm run check，无产品代码变化，未重复执行",
+      "product_changes": false,
+      "commit_created": false
+    },
+    "aggregate_confirmed_counts": {
+      "P1": 5,
+      "P2": 6
+    }
+  }
+}

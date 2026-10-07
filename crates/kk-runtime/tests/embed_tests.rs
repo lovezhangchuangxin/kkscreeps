@@ -161,6 +161,7 @@ fn embed_engine_suite() -> anyhow::Result<()> {
     rebuild_writeback_null_and_some_impl()?;
     settle_replayed_round_contract_impl()?;
 
+    cursor_and_header_pairing_impl()?;
     resume_and_lifecycle_impl()?;
     assert_eq!(kk_runner::lifo_violations(), 0, "LIFO 纪律零违规");
     Ok(())

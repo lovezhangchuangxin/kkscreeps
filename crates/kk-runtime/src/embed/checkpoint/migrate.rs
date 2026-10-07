@@ -14,15 +14,15 @@
 //! 在版本路由前就被拒。
 use serde_json::Value;
 
-/// 当前载荷格式版本。v2：新增 `checkpoint_format_version` 键本身，并把
+/// 当前载荷格式版本。v3：宿主玩法协议身份；v2：新增 `checkpoint_format_version` 键本身，并把
 /// `last_auto_disable` 的 trace 批次前旧形态（缺 `mod_id`，来源只在
 /// trigger.error.fault.binding）显式归一为结构化形态。
-pub(super) const CURRENT_FORMAT_VERSION: u32 = 2;
+pub(super) const CURRENT_FORMAT_VERSION: u32 = 3;
 
 type MigrationFn = fn(&mut Value) -> Result<(), String>;
 
 /// 升级链：第 n 项（0 起算）执行 n+1 → n+2。
-const MIGRATIONS: [MigrationFn; (CURRENT_FORMAT_VERSION - 1) as usize] = [v1_to_v2];
+const MIGRATIONS: [MigrationFn; (CURRENT_FORMAT_VERSION - 1) as usize] = [v1_to_v2, v2_to_v3];
 
 /// 把载荷迁移到当前格式；返回**迁移前的原始版本**供语义门决策
 ///（如执行策略身份硬门只约束 v2 起保存的检查点，v1 存量按 legacy 宽容）。
@@ -88,5 +88,15 @@ fn v1_to_v2(value: &mut Value) -> Result<(), String> {
         ));
     }
     record["mod_id"] = Value::String(namespace.to_string());
+    Ok(())
+}
+
+// 旧载荷显式标为旧语义，恢复门拒绝跨 SDK 语义自动升级；已有协议身份
+// 的降版本测试载荷保留其身份，不能伪造当前身份来掩盖旧时区历史。
+fn v2_to_v3(value: &mut Value) -> Result<(), String> {
+    let object = value.as_object_mut().ok_or("迁移 v2→v3：载荷须为对象")?;
+    object
+        .entry("host_protocol")
+        .or_insert_with(|| Value::String("kk-gameplay-v1-local-date".into()));
     Ok(())
 }

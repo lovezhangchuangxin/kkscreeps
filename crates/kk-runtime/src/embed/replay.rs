@@ -74,6 +74,15 @@ pub fn assert_header_paired(header: &Value, seed: u64) -> anyhow::Result<()> {
         .as_object()
         .context("头段缺少 identity 对象")?;
     anyhow::ensure!(
+        identity.get("host_protocol").and_then(Value::as_str)
+            == Some(kk_mod_host::GAMEPLAY_PROTOCOL),
+        "日志宿主玩法协议不符；旧日志没有自动迁移"
+    );
+    anyhow::ensure!(
+        super::input_log::has_initial_state_digest(header),
+        "日志缺少有效起始状态摘要；旧日志没有自动迁移"
+    );
+    anyhow::ensure!(
         identity.get("seed").and_then(Value::as_u64) == Some(seed),
         "日志头段种子与引擎不符（抽值流将整体错误）"
     );

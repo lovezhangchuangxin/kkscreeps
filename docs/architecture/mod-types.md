@@ -38,3 +38,5 @@ ValueKind 全集映射：Bool→`boolean`；Number→`number`（Signed/Unsigned/
 ## 当前边界
 
 首片不做：官方 Screeps 全量 API 的 `.d.ts`（与 `@types/screeps` 的关系后续批次评估）；Room/Player/World 域意图声明（执行通道未接线，注册即拒绝）；IDE 自动配置（tsconfig paths 由作者自行指向生成文件，头部有提示）。生成面是全计划联合面，按包的独立声明面（每包一份、键按命名空间裁剪）留待后续按需评估。
+
+所有导出符号共用分配表：对象接口、对象/建筑构造器、建筑字段接口和意图参数类型都按稳定顺序避让（数字后缀）。例如合法对象类 `FooGaugeConstructorFields` 与建筑 `FooGauge` 同时存在时，字段接口分配为 `FooGaugeConstructorFields2`，不会触发 TypeScript 的同名接口合并；消费者 `.ts` 编译回归验证实际字段形状。

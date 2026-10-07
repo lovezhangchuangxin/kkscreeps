@@ -89,19 +89,3 @@ pub(super) fn load(base: &Path, input: &Mods) -> anyhow::Result<Loaded> {
 fn hex(bytes: [u8; 32]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-struct ModObject {
-    type_key: String,
-    fields: Value,
-}
-
-pub(super) fn place(engine: &mut EmbedEngine, object: &Object) -> anyhow::Result<String> {
-    if object.kind != "mod" {
-        return engine.place_object(&object.room, &object.kind, &object.spec);
-    }
-    let spec: ModObject =
-        serde_json::from_value(object.spec.clone()).context("解析 Mod 对象 spec")?;
-    engine.place_mod_object(&object.room, &spec.type_key, &spec.fields)
-}

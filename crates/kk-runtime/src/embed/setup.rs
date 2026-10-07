@@ -446,81 +446,90 @@ impl EmbedEngine {
                 })
                 .map_err(anyhow::Error::msg)?;
         }
-        for setup in rooms {
-            let name = setup.name;
-            let room = setup.spec;
-            self.engine
-                .register_room(name, setup.terrain)
-                .map_err(anyhow::Error::msg)?;
-            let has_controller = room
-                .get("controller")
-                .and_then(Value::as_bool)
-                .unwrap_or(true);
-            if has_controller {
-                // 有主控制器默认等级 1，无主默认 0。倒计时转成绝对 tick 时多加 1，
-                // 来源：screeps-ok adapters/vanilla/index.ts 的 createShard 控制器初始化。
-                let owner = room.get("owner").and_then(Value::as_str);
-                let rcl = room
-                    .get("rcl")
-                    .and_then(Value::as_f64)
-                    .map(|f| f as i64)
-                    .unwrap_or(if owner.is_some() { 1 } else { 0 })
-                    .clamp(0, 8);
-                let time = self.engine.world().time();
-                let mut spec = serde_json::json!({
-                    "pos": [1, 1],
-                    "structureType": "controller",
-                    "level": rcl,
-                    "isPowerEnabled": room
-                        .get("powerEnabled")
+        let links = self.engine.links();
+        let stores = self.engine.stores();
+        let buildings = self.engine.buildings().clone();
+        self.engine
+            .edit_world(|world| {
+                for setup in rooms {
+                    let name = setup.name;
+                    let room = setup.spec;
+                    world.register_room(name, setup.terrain)?;
+                    let has_controller = room
+                        .get("controller")
                         .and_then(Value::as_bool)
-                        .unwrap_or(false),
-                });
-                if let Some(owner) = owner {
-                    spec["owner"] = serde_json::json!(owner);
-                    let downgrade_table = kk_core::constants::CONTROLLER_DOWNGRADE;
-                    let default_clock = downgrade_table
-                        .iter()
-                        .find(|(k, _)| *k == rcl.to_string())
-                        .map(|(_, v)| *v)
-                        .unwrap_or(0);
-                    let downgrade_time = match room.get("ticksToDowngrade").and_then(Value::as_i64)
-                    {
-                        Some(t) => Some(time.saturating_add(t.max(0) as u64).saturating_add(1)),
-                        None if rcl > 0 => {
-                            Some(time.saturating_add(default_clock as u64).saturating_add(1))
+                        .unwrap_or(true);
+                    if has_controller {
+                        // 有主控制器默认等级 1，无主默认 0。倒计时转成绝对 tick 时多加 1，
+                        // 来源：screeps-ok adapters/vanilla/index.ts 的 createShard 控制器初始化。
+                        let owner = room.get("owner").and_then(Value::as_str);
+                        let rcl = room
+                            .get("rcl")
+                            .and_then(Value::as_f64)
+                            .map(|f| f as i64)
+                            .unwrap_or(if owner.is_some() { 1 } else { 0 })
+                            .clamp(0, 8);
+                        let time = world.time();
+                        let mut spec = serde_json::json!({
+                            "pos": [1, 1],
+                            "structureType": "controller",
+                            "level": rcl,
+                            "isPowerEnabled": room
+                                .get("powerEnabled")
+                                .and_then(Value::as_bool)
+                                .unwrap_or(false),
+                        });
+                        if let Some(owner) = owner {
+                            spec["owner"] = serde_json::json!(owner);
+                            let downgrade_table = kk_core::constants::CONTROLLER_DOWNGRADE;
+                            let default_clock = downgrade_table
+                                .iter()
+                                .find(|(k, _)| *k == rcl.to_string())
+                                .map(|(_, v)| *v)
+                                .unwrap_or(0);
+                            let downgrade_time =
+                                match room.get("ticksToDowngrade").and_then(Value::as_i64) {
+                                    Some(t) => {
+                                        Some(time.saturating_add(t.max(0) as u64).saturating_add(1))
+                                    }
+                                    None if rcl > 0 => Some(
+                                        time.saturating_add(default_clock as u64).saturating_add(1),
+                                    ),
+                                    None => None,
+                                };
+                            if let Some(dt) = downgrade_time {
+                                spec["downgradeTime"] = serde_json::json!(dt);
+                            }
+                            if let Some(sm) = room
+                                .get("safeMode")
+                                .and_then(Value::as_i64)
+                                .filter(|v| *v > 0)
+                            {
+                                spec["safeMode"] = serde_json::json!(
+                                    time.saturating_add(sm as u64).saturating_add(1)
+                                );
+                            }
+                            if let Some(avail) =
+                                room.get("safeModeAvailable").and_then(Value::as_i64)
+                            {
+                                spec["safeModeAvailable"] = serde_json::json!(avail.max(0));
+                            }
                         }
-                        None => None,
-                    };
-                    if let Some(dt) = downgrade_time {
-                        spec["downgradeTime"] = serde_json::json!(dt);
-                    }
-                    if let Some(sm) = room
-                        .get("safeMode")
-                        .and_then(Value::as_i64)
-                        .filter(|v| *v > 0)
-                    {
-                        spec["safeMode"] =
-                            serde_json::json!(time.saturating_add(sm as u64).saturating_add(1));
-                    }
-                    if let Some(avail) = room.get("safeModeAvailable").and_then(Value::as_i64) {
-                        spec["safeModeAvailable"] = serde_json::json!(avail.max(0));
+                        let ctx = PlaceCtx {
+                            time,
+                            links,
+                            stores,
+                            buildings: buildings.clone(),
+                            controller: None,
+                            name_seq: world.next_obj_id() as usize,
+                        };
+                        let controller = normalize("structure", &spec, &ctx)?;
+                        world.insert(name, controller)?;
                     }
                 }
-                let ctx = PlaceCtx {
-                    time,
-                    links: self.engine.links(),
-                    stores: self.engine.stores(),
-                    buildings: self.engine.buildings().clone(),
-                    controller: None,
-                    name_seq: self.engine.world().next_obj_id() as usize,
-                };
-                let controller = normalize("structure", &spec, &ctx).map_err(anyhow::Error::msg)?;
-                self.engine
-                    .insert_object(name, controller)
-                    .map_err(anyhow::Error::msg)?;
-            }
-        }
+                Ok(())
+            })
+            .map_err(anyhow::Error::msg)?;
         Ok(())
     }
 
@@ -540,63 +549,6 @@ impl EmbedEngine {
         options: RegisterOptions,
     ) -> anyhow::Result<()> {
         self.create_shard_inner(spec, Some((packages, &options)))
-    }
-
-    /// 按适配器的对象类别和初始字段摆放对象，返回对象 ID。
-    /// 字段归一化由 [kk_world::place::normalize] 完成，显式字段优先。
-    pub fn place_object(&mut self, room: &str, kind: &str, spec: &Value) -> anyhow::Result<String> {
-        self.no_open_round("placeObject")?;
-        // 使用单调递增的对象 ID 生成默认名字；对象数量会随消亡减少，不能用作序号。
-        let ctx = PlaceCtx {
-            time: self.engine.world().time(),
-            links: self.engine.links(),
-            stores: self.engine.stores(),
-            buildings: self.engine.buildings().clone(),
-            controller: self.engine.world().room(room).and_then(|r| r.controller()),
-            name_seq: self.engine.world().next_obj_id() as usize,
-        };
-        let object = normalize(kind, spec, &ctx).map_err(anyhow::Error::msg)?;
-        let id = self
-            .engine
-            .insert_object(room, object)
-            .map_err(anyhow::Error::msg)?;
-        Ok(id.as_str())
-    }
-
-    /// 管理命令：按已装配计划里的 Mod 类型创建对象并放入房间，返回对象 ID。
-    /// `fields` 须提供除带默认值外的全部声明字段（挂载字段同样要求）；
-    /// 缺失的有默认值字段落入默认，整体通过 schema 校验后写入世界存储。
-    /// 声明位置字段的类型以 payload 位置为准（信封坐标同步）。
-    pub fn place_mod_object(
-        &mut self,
-        room: &str,
-        type_key: &str,
-        fields: &Value,
-    ) -> anyhow::Result<String> {
-        self.no_open_round("placeModObject")?;
-        let descriptor = self
-            .engine
-            .mod_object_type(type_key)
-            .ok_or_else(|| {
-                anyhow::anyhow!("类型 {type_key} 不在已装配计划中（Mod 对象须经 Mod 分片创建）")
-            })?
-            .clone();
-        let payload =
-            kk_mod_api::objects::prepare_fields(fields, &descriptor).map_err(anyhow::Error::msg)?;
-        let (x, y) =
-            kk_mod_api::objects::position(&payload, &descriptor).map_err(anyhow::Error::msg)?;
-        let object = kk_schema::room::RoomObject::Mod(kk_schema::room::ModObj {
-            id: 0,
-            x,
-            y,
-            type_key: type_key.to_string(),
-            data: payload.to_string(),
-        });
-        let id = self
-            .engine
-            .insert_object(room, object)
-            .map_err(anyhow::Error::msg)?;
-        Ok(id.as_str())
     }
 
     /// 直接注入测试用市场订单，不经过玩家 API 的资格检查和创建费用结算。

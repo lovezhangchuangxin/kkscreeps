@@ -144,9 +144,8 @@ impl Engine {
         Ok(())
     }
 
-    /// 将已校验候选写回内存；不返回 Result，也不捕获 panic。
-    /// World::commit_tick_rooms 不递增版本。全部房间写回后须先推进时间，再允许
-    /// 查询世界，使目录和投影缓存一起失效。
+    /// 将已校验候选发布到世界；World 在写入前检查所有可失败条件，
+    /// 一次推进时间与版本并使目录/投影缓存失效，随后换入账户等候选。
     pub(super) fn publish_tick(&mut self, prepared: txn::PreparedTick) -> Result<(), SettleError> {
         self.world
             .commit_tick_rooms(prepared.rooms, prepared.next_id)

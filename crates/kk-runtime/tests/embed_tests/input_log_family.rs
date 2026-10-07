@@ -204,6 +204,13 @@ pub(super) fn log_io_failure_commits_round_and_detaches_impl() -> anyhow::Result
         "错误必须说明世界已提交：{message}"
     );
     assert!(message.contains("不得重试"), "{message}");
+    assert_eq!(
+        error
+            .downcast_ref::<kk_runtime::embed::CommittedLogError>()
+            .unwrap()
+            .committed_time,
+        1
+    );
     assert_eq!(engine.get_game_time(), 1, "世界事实上已推进");
     assert_eq!(engine.input_log_segments(), None, "日志已停用摘除");
 
@@ -450,5 +457,123 @@ pub(super) fn resume_and_lifecycle_impl() -> anyhow::Result<()> {
     // 段号跨日志文件延续；世界 tick 属于新分片自己的时间线——与检查
     // 点配对恢复世界连续性是 G25.b 的规则，此处不伪造。
     assert_eq!(data.segments[3]["tick"], 0, "续接段记录新分片自己的 tick");
+    Ok(())
+}
+
+/// 相同 tick/seq 不能替代历史身份；游标选择后缀可以跳过旧分支前缀。
+pub(super) fn cursor_and_header_pairing_impl() -> anyhow::Result<()> {
+    let case = Case::new("cursor");
+    // 元数据、种子、计划与操作次数相同，起始 Memory 不同：历史根必须不同。
+    let (mut root_a, root_a_log) = new_engine(&case, "root-a.jsonl")?;
+    let (mut root_b, root_b_log) = new_engine(&case, "root-b.jsonl")?;
+    root_a.set_player_memory("p1", &json!({"root":"a"}))?;
+    root_b.set_player_memory("p1", &json!({"root":"b"}))?;
+    root_a.enable_input_log(&root_a_log, Value::Null)?;
+    root_b.enable_input_log(&root_b_log, Value::Null)?;
+    root_a.tick(1)?;
+    root_b.tick(1)?;
+    let root_a_data = read_input_log(&root_a_log)?;
+    let root_b_data = read_input_log(&root_b_log)?;
+    let mut a_identity = root_a_data.header["identity"].clone();
+    let mut b_identity = root_b_data.header["identity"].clone();
+    assert_ne!(
+        a_identity
+            .as_object_mut()
+            .unwrap()
+            .remove("initial_state_sha256"),
+        b_identity
+            .as_object_mut()
+            .unwrap()
+            .remove("initial_state_sha256")
+    );
+    assert_eq!(a_identity, b_identity);
+    assert!(
+        root_b_data
+            .segments_after_cursor(1, &root_a.input_log_cursor().unwrap())
+            .is_err()
+    );
+    let (mut engine, log) = new_engine(&case, "a.jsonl")?;
+    engine.enable_input_log(&log, json!({"history":"a"}))?;
+    engine.tick(2)?;
+    let cursor = engine.input_log_cursor().unwrap();
+    let saved = engine.checkpoint(Value::Null)?;
+    let original = read_input_log(&log)?;
+    assert!(original.segments_after_cursor(2, &cursor)?.is_empty());
+    let (mut foreign, other_log) = new_engine(&case, "b.jsonl")?;
+    foreign.enable_input_log(&other_log, json!({"history":"b"}))?;
+    foreign.tick(2)?;
+    assert!(
+        read_input_log(&other_log)?
+            .segments_after_cursor(2, &cursor)
+            .is_err()
+    );
+    engine.tick(2)?;
+    assert_eq!(
+        read_input_log(&log)?
+            .segments_after_cursor(2, &cursor)?
+            .len(),
+        2
+    );
+    let mut wrong_tick = cursor.clone();
+    wrong_tick.last_tick = 0;
+    assert!(original.segments_after_cursor(2, &wrong_tick).is_err());
+    // 同一文件续接新分支：旧分支 0..3，新分支从 2 开始；选新分支保存的
+    // 游标时，只消费其后缀，不在旧分支中重新按 tick 寻找起点。
+    engine.restore_checkpoint(saved, None)?;
+    engine.enable_input_log(&log, Value::Null)?;
+    assert_eq!(read_input_log(&log)?.header, original.header);
+    engine.tick(1)?;
+    let branch_cursor = engine.input_log_cursor().unwrap();
+    engine.tick(1)?;
+    assert_eq!(
+        read_input_log(&log)?
+            .segments_after_cursor(3, &branch_cursor)?
+            .len(),
+        1
+    );
+    assert!(
+        read_input_log(&log)?
+            .segments_after_cursor(2, &cursor)
+            .is_err()
+    );
+    drop(engine);
+    let header_only = case.path("header-only.jsonl");
+    let mut original = EmbedEngine::with_world_seed(42);
+    original.create_shard(&json!({"players":[],"rooms":[]}))?;
+    original.enable_input_log(&header_only, Value::Null)?;
+    drop(original);
+    let bytes = std::fs::read(&header_only)?;
+    let mut wrong_seed = EmbedEngine::with_world_seed(43);
+    wrong_seed.create_shard(&json!({"players":[],"rooms":[]}))?;
+    let error = wrong_seed
+        .enable_input_log(&header_only, Value::Null)
+        .unwrap_err();
+    assert!(matches!(
+        error.downcast_ref::<InputLogError>(),
+        Some(InputLogError::HeaderIdentityMismatch { field: "seed" })
+    ));
+    assert_eq!(std::fs::read(&header_only)?, bytes);
+    assert_eq!(wrong_seed.get_game_time(), 0);
+    // 重新封装摘要也不能让没有状态根的旧头段进入当前续接/回放协议。
+    let mut missing_root = read_input_log(&header_only)?.header;
+    missing_root["identity"]
+        .as_object_mut()
+        .unwrap()
+        .remove("initial_state_sha256");
+    assert!(kk_runtime::embed::assert_header_paired(&missing_root, 42).is_err());
+    let bytes = format!("{}\n", seal_line(missing_root.as_object().unwrap().clone()));
+    std::fs::write(&header_only, &bytes)?;
+    let mut same_seed = EmbedEngine::with_world_seed(42);
+    same_seed.create_shard(&json!({"players":[],"rooms":[]}))?;
+    assert!(matches!(
+        same_seed
+            .enable_input_log(&header_only, Value::Null)
+            .unwrap_err()
+            .downcast_ref::<InputLogError>(),
+        Some(InputLogError::HeaderIdentityMismatch {
+            field: "initial_state_sha256"
+        })
+    ));
+    assert_eq!(std::fs::read_to_string(&header_only)?, bytes);
     Ok(())
 }

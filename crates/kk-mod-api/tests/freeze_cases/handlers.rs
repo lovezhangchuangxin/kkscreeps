@@ -118,13 +118,29 @@ fn invalid_intent_scope_merge_conversion_and_suppression_are_rejected() {
     second.intents[0]
         .suppressed_by
         .insert(c.intents[0].key.clone());
-    let first_key = c.intents[0].key.clone();
     c.intents[0]
         .suppressed_by
         .insert(second.intents[0].key.clone());
-    let _ = first_key;
     // link() 的两条意图共用接收者 builtin:link：直接把 second 追加进 c。
     c.intents.push(second.intents[0].clone());
     c.slots.push(second.slots[0].clone());
     error(c, "压制关系成环");
+}
+
+#[test]
+fn suppression_rejects_long_cycles_but_accepts_chains() {
+    for count in [3, 8] {
+        let mut c = builtin::link();
+        let template = c.intents[0].clone();
+        for i in 0..count {
+            let mut intent = template.clone();
+            intent.key = key(&format!("builtin:cycle{i}"));
+            intent.suppressed_by =
+                BTreeSet::from([key(&format!("builtin:cycle{}", (i + 1) % count))]);
+            c.intents.push(intent);
+        }
+        error(c.clone(), "压制关系成环");
+        c.intents.last_mut().unwrap().suppressed_by.clear();
+        assert!(plan(vec![c]).is_ok(), "移除一条边后长链可冻结");
+    }
 }

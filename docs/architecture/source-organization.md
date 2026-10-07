@@ -35,10 +35,10 @@
 | `kk-mod-host/src/chain/incoming.rs` | 受击数值 op、原始浮点校验与能力故障归属 |
 | `kk-mod-host/src/chain/combat.rs` | 战斗读取/改向/取消/策略伤害与治疗 op 的同步能力访问与故障来源 |
 | `kk-mod-host/src/chain/combat_batch.rs` | 伤害批量/反击表共用有界转换、重入后重新检查能力与战斗分页 op |
-| `kk-runtime/src/embed/mod_chain/resources.rs` | 同房资源能力、首次触达日志与字段缓存失效；移动与受击数值能力在 `mod_chain.rs`；战斗门控、首触日志与 consumed 标记在 `mod_chain/combat.rs` |
+| `kk-runtime/src/embed/mod_chain/resources.rs` | 同房资源能力、首次触达日志与字段缓存失效；移动委托在 `mod_chain/movement.rs`，字段投影/写入在 `mod_chain/fields.rs`，受击数值能力在 `mod_chain.rs`；战斗门控、首触日志与 consumed 标记在 `mod_chain/combat.rs` |
 | `kk-engine/src/settle/market.rs` | 市场状态和结算入口、成交调度；`market/orders.rs` 订单生命周期，`terminal.rs` 发送/成交共用的库存、费用与交易写入 |
 | `kk-runtime/src/run.rs` | 玩家执行参数、结果分类和未提交的指令/Memory/CPU 候选；由 crate 根导出，结算引擎不拥有这些类型 |
-| `kk-runtime/src/embed.rs` | 分片状态、管理和诊断入口；`embed/setup.rs` 配置校验与创建/放置，`execution.rs` 玩家候选和失败重试，`embed/input_log.rs` 逐轮提交后的输入日志（G25.a），`embed/replay.rs` 段重建与回放配对（G25.b），`projection.rs` KKPV 与市场视图，`mod_chain.rs` Mod 候选桥，`switch.rs` 无开放轮次的包切换 |
+| `kk-runtime/src/embed.rs` | 分片状态、管理和诊断入口；`embed/setup.rs` 配置校验与创建，`embed/placement.rs` 原子批量放置，`execution.rs` 玩家候选和失败重试，`embed/input_log.rs` 逐轮提交后的输入日志（G25.a），`embed/replay.rs` 段重建与回放配对（G25.b），`projection.rs` KKPV 与市场视图，`mod_chain.rs` Mod 候选桥，`switch.rs` 无开放轮次的包切换 |
 | `kk-runner/src/sandbox.rs` | V8 实例生命周期、运行与写回；`sandbox/host.rs` 加载清单、宿主句柄与 Mod 玩家面安装，`inject.rs` 每轮 JSON/KKPV 与 CPU 窗口注入 |
 | `kk-runner/src/prelude/30_game/game.js` | 世界注入、Game 装配和指令收集；`memory.js` 持有 RawMemory/segments 状态与写回，`market.js` 持有每轮市场视图缓存与指令 |
 
@@ -61,3 +61,5 @@ V8 生命周期账本位于 `kk-vm/src/isolate_order.rs`，玩家沙箱与 Mod r
 `kk-engine/src/settle/state_api.rs` 提供只读 getters 和隔离编辑；`kk-world/src/world_mutation.rs` 管理内容编辑、结构验证与整轮提交。`kk-runtime/src/embed/mod_chain/capability.rs` 的枚举携带领域状态，宿主接口拆在 `kk-mod-host/src/chain/host_*.rs`。SDK 公共入口为 `sdk.js`，注册/规则/链/刷新/领域实现在 `sdk/`，只允许自身静态导入。
 
 `kk-pathfinder/terrain_adapter.rs` 在 OUT_DIR 生成地形适配源码，固定 `native/pf.cc` 与 `pf.h` 不改写。搜索显式接收 TerrainSet，运行时所有权与缓存见[地形设计](../designs/pathfinder-terrain.md)。
+
+管理初始化使用 `Engine::insert_objects` / `EmbedEngine::place_objects` 或一次 `edit_world`：按输入顺序分配 ID、读取此前已放置的控制器，末项失败不发布前缀，成功只推进一次编辑版本。sim 将全部场景对象作为一批放置；分片房间/控制器创建也在单份草稿上完成。单对象管理 API 保留，反复调用仍承担独立事务的复制成本。世界计划校验在无扩展字段时借用房间，避免额外整房复制。

@@ -312,3 +312,80 @@ fn duplicate_field_keys_are_rejected_at_freeze() {
     .to_string();
     assert!(error.contains("建筑字段重复声明 bl:heat"), "{error}");
 }
+
+#[test]
+fn building_record_schema_is_enforced_at_edit_restore_and_publication() {
+    let mut engine = Engine::default();
+    engine
+        .install_plan(gauge_plan(), BTreeMap::new(), BTreeMap::new())
+        .unwrap();
+    engine
+        .register_room("W1N1", kk_core::Terrain::plains())
+        .unwrap();
+    let object = RoomObject::Generic(kk_schema::room::GenericObj {
+        id: 0,
+        x: 10,
+        y: 10,
+        data: serde_json::json!({"type":"structure", "structureType":"bl:gauge", "bl:heat":7})
+            .to_string(),
+    });
+    let id = engine.insert_object("W1N1", object).unwrap();
+    let before = serde_json::to_value(engine.checkpoint().unwrap()).unwrap();
+    for invalid in [serde_json::json!("bad"), serde_json::json!(1001)] {
+        let edit = |room: &mut RoomState| {
+            let RoomObject::Generic(g) = room.objects.get_mut(&id).unwrap() else {
+                panic!()
+            };
+            let mut record: Value = serde_json::from_str(&g.data).unwrap();
+            record["bl:heat"] = invalid.clone();
+            g.data = record.to_string();
+        };
+        assert!(
+            engine
+                .edit_room("W1N1", |room| {
+                    let RoomObject::Generic(g) = room.objects.get_mut(&id).unwrap() else {
+                        panic!()
+                    };
+                    let mut record: Value = serde_json::from_str(&g.data).unwrap();
+                    record["bl:heat"] = invalid.clone();
+                    g.data = record.to_string();
+                    Ok(())
+                })
+                .is_err()
+        );
+        // 构造绕过公共写面的候选，发布门必须独立拒绝。
+        let mut txn = engine
+            .prepare_tick(
+                crate::intent::IntentBatch::default(),
+                crate::TickInput { now_ms: 0 },
+            )
+            .unwrap();
+        txn.rooms = engine
+            .world
+            .rooms()
+            .iter()
+            .map(|(name, room)| (name.clone(), room.clone()))
+            .collect();
+        edit(&mut txn.rooms[0].1);
+        assert!(engine.validate_stage(&mut txn).is_err());
+        let mut world = engine.world.clone();
+        world
+            .edit_room("W1N1", |room| {
+                let RoomObject::Generic(g) = room.objects.get_mut(&id).unwrap() else {
+                    panic!()
+                };
+                let mut record: Value = serde_json::from_str(&g.data).unwrap();
+                record["bl:heat"] = invalid.clone();
+                g.data = record.to_string();
+                Ok(())
+            })
+            .unwrap();
+        let mut saved = engine.checkpoint().unwrap();
+        saved.world = world.checkpoint();
+        assert!(engine.restore_checkpoint(saved).is_err());
+        assert_eq!(
+            serde_json::to_value(engine.checkpoint().unwrap()).unwrap(),
+            before
+        );
+    }
+}

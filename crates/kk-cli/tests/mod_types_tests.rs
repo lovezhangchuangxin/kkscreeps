@@ -331,7 +331,7 @@ fn recursive_arrays_and_all_generated_symbols_compile_without_shadowing() {
     .unwrap();
     std::fs::write(package.join("server.js"), r#"
 export default function register(api) {
-  const types = ['Foo', 'FooConstructor', 'ModInstallApi', 'Record', 'AlphaPingArgs', 'string'];
+  const types = ['Foo', 'FooConstructor', 'ModInstallApi', 'Record', 'AlphaPingArgs', 'string', 'FooGaugeConstructorFields'];
   let first;
   for (let i = 0; i < types.length; i++) {
     const object = api.objects.define('alpha:object' + i, {
@@ -348,6 +348,7 @@ export default function register(api) {
   api.intents.define('alpha:ping', {
     scope: 'object', target: first, args: { type: 'bool' }, process() {},
   });
+  api.buildings.define('alpha:gauge', { playerClass: 'FooGauge', cost: {energy: 5}, hitsMax: 100, pathing: 'plain', fields: { heat: {type: 'u32', default: 7} } });
   api.buildings.define('alpha:gate', { playerClass: 'Foo', cost: { energy: 5 }, hitsMax: 100, pathing: 'plain' });
 }
 "#).unwrap();
@@ -361,7 +362,10 @@ export default function register(api) {
     std::fs::write(
         &consumer,
         r#"
-import type { Foo, ModInstallApi } from './generated.d.ts';
+import type { Foo, ModInstallApi, FooGaugeConstructorFields2 } from './generated.d.ts';
+const gauge: FooGaugeConstructorFields2 = {'alpha:heat': 7};
+// @ts-expect-error 字段接口不能与合法对象类名合并
+const invalidGauge: FooGaugeConstructorFields2 = {'alpha:heat': 'bad'};
 declare const foo: Foo;
 declare const api: ModInstallApi;
 const modes: ReadonlyArray<'on' | 'off'> = foo.modes;

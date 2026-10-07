@@ -185,6 +185,7 @@ const PINNED_CHECKPOINT_KEYS: &[&str] = &[
     "fault_streak",
     "fault_streak.consecutive_faults",
     "fault_streak.mod_id",
+    "host_protocol",
     "kkpv",
     "last_auto_disable",
     "last_auto_disable.consecutive_faults",
@@ -231,8 +232,8 @@ fn checkpoint_schema_keys_are_pinned() -> anyhow::Result<()> {
     schema_tree_fault_and_extension_package(&mut tree)?;
     assert_eq!(
         PINNED_CHECKPOINT_KEYS.len(),
-        101,
-        "钉死键总数（G22.a 99 → G22.c 100 → G23.a 101）：新增或删减键时更新此计数"
+        102,
+        "钉死键总数（G22.a 99 → G22.c 100 → G23.a 101 → UTC 协议 102）：新增或删减键时更新此计数"
     );
     let expected: BTreeSet<String> = PINNED_CHECKPOINT_KEYS
         .iter()
@@ -299,8 +300,8 @@ fn strategy_key_compatibility_branches_are_pinned() -> anyhow::Result<()> {
     );
     assert_eq!(
         engine.checkpoint(Value::Null)?["checkpoint_format_version"],
-        json!(2),
-        "当前保存恒为格式 2"
+        json!(3),
+        "当前保存恒为格式 3"
     );
 
     // (b) 原生检查点注入该键 → 拒绝且旧分片保持原生形态。

@@ -553,7 +553,10 @@ impl EmbedEngine {
     /// 事实上已提交，错误文案必须如实说明不得重试结算。
     fn drop_log_for_io_failure(&mut self, error: String) -> anyhow::Error {
         self.input_log = None;
-        anyhow::anyhow!("输入日志写入失败，日志已停用；本轮结算已提交、不得重试：{error}")
+        anyhow::Error::new(input_log::CommittedLogError {
+            committed_time: self.get_game_time(),
+            reason: error,
+        })
     }
 
     /// 按发布者当前公开列表解析外部段；未指定 ID 时使用其默认公开段。

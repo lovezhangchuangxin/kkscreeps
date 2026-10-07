@@ -20,7 +20,8 @@
 | 玩家工作者 | `workers.*`（`heap_limit_bytes`、`cpu_limit`、`bucket_cap`、`max_per_tick`、`initial_bucket`、`install_wall_limit`、`constant_overrides.*`、`modules.*.js`、`modules.*.binary[]`） | 随 `engine_version` 整体硬门；schema 另被键树钉死 | 工作者注册与模块重装；配置重验后重建玩家线程 | 拒绝不迁移，G23 负责 |
 | Mod 包身份 | `mods.packages.*.manifest`、`mods.packages.*.files_sha256`（不透明） | 身份核验：恢复时与调用方提供的包 manifest 与全部文件 SHA-256 逐一比对，含未选择包 | `ModIdentity::verify`；相同包可换目录，缺包/多包/内容变化拒绝 | 拒绝不迁移，G23 负责 |
 | Mod 配置身份 | `mods.options`（不透明） | 与 `RegisterOptions` 重建身份核验（内容选择、逐包配置、冻结选项、VM 预算、profiler 开关、停用阈值） | `ModIdentity::verify` | 拒绝不迁移，G23 负责 |
-| 载荷格式版本 | `checkpoint_format_version` | 当前 2、必填（缺失即拒）；v1→v2 迁移已注册（last_auto_disable 归一） | `migrate::migrate_to_current` 解码前路由 | 显式迁移链（G23.a 起生效；后续格式变化逐链追加） |
+| 宿主玩法协议 | `host_protocol` | 当前 `kk-gameplay-v2-utc-date`，严格等值 | 替代分片装配前核验；日志头段同源 | 旧时区语义明确拒绝，无自动内容迁移 |
+| 载荷格式版本 | `checkpoint_format_version` | 当前 3、必填（缺失即拒）；v1→v2（last_auto_disable 归一）、v2→v3（缺 host_protocol 标旧语义）已注册 | `migrate::migrate_to_current` 解码前路由 | 显式迁移链（G23.a 起生效；后续格式变化逐链追加） |
 | Mod 执行状态 | `disabled_mods[]`、`execution_strategy`、`fault_streak`、`last_fault`、`last_auto_disable` | 无独立版本；停用集合须满足依赖闭包，恢复后停用包 schema/规则仍有效；`execution_strategy` 为组合摘要（plan_hash+停用闭包+每槽派生执行面），恢复在 realm 重建后重算等值核对，v2 起 Mod 检查点必填（v1 载荷宽容） | realm 重建后回填故障与停用状态，策略身份以重注册产物为准 | 拒绝不迁移，G23 负责（last_auto_disable 旧形态已收编为 v1→v2 迁移） |
 | 协调器 | `concurrency`、`kkpv` | 无独立版本 | 恢复后并发与投影通道初值（sim 可由 CLI 参数覆盖） | 拒绝不迁移，G23 负责 |
 | 最近 console | `last_console.*[]` | 无独立版本 | 恢复后 console 续接 | 拒绝不迁移，G23 负责 |
@@ -59,3 +60,5 @@
 - **版本门**：`engine_version`（kk-runtime 包版本）与 `room_schema_version` 双硬门，未知版本拒载；信封另有 `format=kkscreeps-checkpoint` / `version=1` 与 SHA-256 完整性校验。
 - **sim 附加身份**（不进载荷）：CLI 二进制 SHA-256、场景原始字节摘要、外部玩家模块清单与目录核验，防止无意换代码续跑。
 - **RNG**：随机协议自 G22.b 落地（[确定性玩法时间与随机协议](gameplay-determinism.md)）：Mod 面抽值由（世界种子、流域、tick、域内序号）无状态推导，序号按结算轮重置——持久化随机状态就是世界种子本身，不新增独立域；引擎结算墙钟仍按 ADR-013 记录型外部输入处理（每轮输入由[输入日志](input-log.md)逐轮记录并支持跨进程续接；G25.b 的回放核对是 sim 进程内旗标 `--verify-replay`，独立跨进程 replay 子命令未实现）。
+
+sim 的日志游标现为 `{last_seq,last_tick,sha256}`，由 runtime 导出末段真实链摘要，并由 `InputLogData::segments_after_cursor` 消费。它不进入引擎键树（metadata 为不透明叶子），但目录恢复端到端测试覆盖零段错历史、较旧份重放与分支后缀。Mod 建筑的已存在自定义字段在编辑、恢复、发布三处验证；缺默认键的手放记录仍允许存在，整集写回须补齐。

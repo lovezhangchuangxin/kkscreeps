@@ -29,9 +29,9 @@
 单文件 JSONL，每行一个 JSON 对象，逐段 `fsync`：
 
 - **头段**（首行，seq 0）：`format: "kkscreeps-input-log"`、`version: 1`、
-  `kind: "header"`、`prev_hash: null`、`identity`（启用时的引擎版本/
-  世界种子/PlanHash/执行策略/停用集）、调用方 `metadata`（sim 放场景与
-  可执行文件摘要；仅诊断，不参与链）。
+  `kind: "header"`、`prev_hash: null`、`identity`（启用时的引擎版本/宿主玩法协议/
+  世界种子/PlanHash/执行策略/停用集/完整起始状态摘要）、调用方 `metadata`（sim 放场景与
+  可执行文件摘要；诊断用途，随头段参与链摘要）。
 - **段**（后续行，seq 从 1 连续递增）：轮身份（`tick`/`generation`/
   `source`）+ `now_ms` + `intents` + `players` + 逐段 `identity` 快照 +
   `prev_hash` + `sha256`。
@@ -111,10 +111,14 @@ G22.b 起无状态（见协议页），重放同输入即同抽值。
 回放**不重跑玩家沙箱**：意图与玩家写回是记录的输入。内核在
 `kk_runtime::embed::replay`：
 
-- **配对选择** `segments_from_checkpoint(检查点时间, 段集)`：被跳过
+- **历史配对选择** `InputLogData::segments_after_cursor(检查点时间, 游标)`：核验
+  seq、链哈希与末段时间后选连续后缀；零后缀也验证历史。目录恢复与
+  已有段日志的进程内核对使用此接口，完整条件见下文「历史配对与提交后错误」。
+- **已知连续区间的时间选择** `segments_from_checkpoint(检查点时间, 段集)`：被跳过
   前缀必须整段 tick < 检查点时间；首个不早于检查点时间的段必须**恰好
   等于**检查点时间——更晚即为配对缺口（日志曾摘除后从新分片续接，世界
-  连续性断裂），显式拒绝；无覆盖段（检查点在日志末尾之后）拒绝。
+  连续性断裂），显式拒绝；无覆盖段（检查点在日志末尾之后）拒绝。此接口
+  不证明不同文件属于同一历史，仅适合调用方已知连续区间的情形。
 - **段重建** `rebuild_round(段)`：players 轮=每句柄
   `IntentBatch::from_json(句柄, 沙箱原始报告)` 一次后合并（`extend_from`
   非幂等，同句柄只合并一次）+ 玩家写回（CPU 新桶整桶反序列化、
@@ -122,7 +126,7 @@ G22.b 起无状态（见协议页），重放同输入即同抽值。
   external 轮=每玩家键 `from_json`（to_json 规范形态）；advance 轮=空批。
   players 轮的 intents 句柄集与 players 键集必须一致（原轮两者恒同落）。
 - **头段配对** `assert_header_paired(头段, 引擎种子)`：头段身份里的种子
-  与引擎版本先与回放引擎对照——种子是结算期玩法随机流的派生根（不在
+  与引擎版本、宿主玩法协议先与回放引擎对照，并检查起始状态摘要形状——种子是结算期玩法随机流的派生根（不在
   plan_hash/逐段身份里），错配的日志会在逐段门全过的情况下重放出错误
   的抽值历史，必须在入口拒绝。
 - **选区接缝检查**：日志允许从新分片续接（tick 时间线重启，G25.a 契约）；
@@ -185,3 +189,13 @@ G22.b 起无状态（见协议页），重放同输入即同抽值。
 - 外部轮的意图线格式经 `IntentBatch::to_json` 规范化：价格毫单位的
   反解发射保证 |milli| < 2^52 内往返逐位精确（`to_json_tests` 以混叠带
   扫描+抽样钉死）；线字段增删同 `LOG_VERSION` 升版口径。
+
+## 历史配对与提交后错误
+
+续接现有文件前，先校验头段 `seed/engine_version/host_protocol` 与新引擎相同；不匹配返回可下转的 `InputLogError::HeaderIdentityMismatch`，文件字节和世界均不变。计划、执行策略、停用集仍由各段身份负责，不以头段固定整个文件的动态计划。
+
+新建头段的 `identity.initial_state_sha256` 是首次记录时完整 `checkpoint(null)` 的 JSON 摘要，绑定起始世界、玩家与包状态；同种子、同输入但起始状态不同的日志具有不同历史根。续接保留旧头段，不把当前状态摘要拿来替换或比较旧根（检查点恢复和分支续写时状态本来就已改变）。缺失或非法状态摘要的旧头段仍可只读诊断，但拒绝续接与回放。
+
+`EmbedEngine::input_log_cursor()` 返回最近已落盘段的 `{last_seq,last_tick,sha256}`（只有头段时为 None）。`InputLogData::segments_after_cursor(time,cursor)` 核验游标链哈希、末段 tick 与检查点时间后返回 seq 后缀；后缀必须逐 tick 连续，零段也验证历史。目录恢复和已有段日志的进程内核对使用此接口；旧 `segments_from_checkpoint` 仅适合调用方已知单一连续区间的按时间选择，不能证明不同文件属于同一历史。
+
+提交后写入失败可下转为 `CommittedLogError{committed_time,reason}`；当前世界已提交，日志已摘除，宿主不能重试结算。它区别于提交前失败，不靠解析人类错误文案来决定是否重试。旧协议日志不自动迁移；底层只读摘要校验可用于诊断，续接/回放必须通过当前宿主协议身份门。

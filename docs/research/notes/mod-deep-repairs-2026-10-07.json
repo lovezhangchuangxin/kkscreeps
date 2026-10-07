@@ -1,0 +1,237 @@
+{
+  "date": "2026-10-07",
+  "baseline": "d8af3e6",
+  "status": "complete",
+  "review_evidence": "mod-increment-deep-review-2026-10-07.json",
+  "repairs": [
+    {
+      "id": "R1",
+      "change": "保护整个加载检查点目录，路径守卫先于执行/失败报告；覆盖 report/save/log 与 symlink"
+    },
+    {
+      "id": "R2",
+      "change": "新头段绑定完整起始状态摘要；runtime LogCursor 加链哈希，验证游标后按 seq 选择连续后缀；相同身份不同起始状态、零段也配对，支持后分支游标"
+    },
+    {
+      "id": "R3",
+      "change": "严格解码并继承已生效切换历史，仅追加新成功切换"
+    },
+    {
+      "id": "R4",
+      "change": "Date UTC 构造/getters/setters/解析/文本/locale，函数 Symbol.toPrimitive 同源转换且拒绝非原始结果；当前宿主协议 v2、检查点载荷 v3"
+    },
+    {
+      "id": "R5",
+      "change": "续接文件前核验 seed/engine_version/host_protocol，typed HeaderIdentityMismatch 保留世界和文件"
+    },
+    {
+      "id": "R6",
+      "change": "Kahn 入度算法拒绝任意长度压制环，允许 DAG"
+    },
+    {
+      "id": "R7",
+      "change": "建筑字段接口加入全局符号分配；消费者 tsc --strict 校验碰撞后的真实形状"
+    },
+    {
+      "id": "R8",
+      "change": "建筑文档样例默认 label 并补齐手放缺键，直接执行文档完整 JS 首次 tick"
+    },
+    {
+      "id": "R9",
+      "change": "G02 父项纠正为部分完成，登记 G02.d 静态阻挡/必要玩家预检/仲裁同源消费者；未冒充新增能力"
+    },
+    {
+      "id": "R10",
+      "change": "活动建筑已存在自定义字段在编辑/恢复/发布时共用 schema 门；手放缺键与移包惰性记录边界保留"
+    },
+    {
+      "id": "R11",
+      "change": "Engine.insert_objects / EmbedEngine.place_objects 原子批量 API；sim 场景与分片初始化一份草稿；无扩展字段借用校验"
+    }
+  ],
+  "structure": {
+    "mod_chain_lines_before": 941,
+    "mod_chain_lines_after": 678,
+    "new_modules": [
+      "embed/mod_chain/fields.rs",
+      "embed/mod_chain/movement.rs",
+      "embed/placement.rs"
+    ]
+  },
+  "additional_hardening": [
+    "CommittedLogError 的 committed_time 可下转识别，禁止重结算已提交轮",
+    "host_protocol 为检查点/日志统一的 SDK 语义身份",
+    "清除两处测试 warning 和发布阶段过期注释"
+  ],
+  "old_history_policy": {
+    "checkpoint_format": 3,
+    "gameplay_protocol": "kk-gameplay-v2-utc-date",
+    "v2_migration": "缺 host_protocol 标为 kk-gameplay-v1-local-date；恢复门拒绝，无自动内容迁移",
+    "jsonl_format": 1,
+    "old_log": "仍可只读诊断；缺当前协议身份或有效起始状态摘要不得续接/回放",
+    "old_directory_cursor": "缺链哈希拒绝自动配对"
+  },
+  "validation": [
+    {
+      "command": "pnpm run check",
+      "exit_code": 0,
+      "rust": {
+        "passed": 1199,
+        "failed": 0,
+        "ignored": 12,
+        "suites": 51
+      },
+      "javascript": {
+        "passed": 19,
+        "failed": 0,
+        "gate_regression": 4,
+        "workspace": 15
+      },
+      "docs": {
+        "markdown": 332,
+        "local_links": 2004
+      },
+      "source_size": {
+        "files": 620,
+        "max_lines": 1000
+      },
+      "sim": {
+        "passed": 82,
+        "failed": 0
+      },
+      "format": "passed",
+      "clippy": "passed"
+    },
+    {
+      "command": "cargo build --release -p kk-cli",
+      "exit_code": 0
+    },
+    {
+      "command": "KKSCREEPS_BIN=$PWD/target/release/kkscreeps node compat/scripts/ratchet.mjs",
+      "exit_code": 0,
+      "total": 2914,
+      "passed": 1918,
+      "failed": 89,
+      "skipped": 907,
+      "floor": 1918,
+      "turned_red": 0,
+      "turned_green": 0,
+      "exempted_red": 0,
+      "warnings": "两条既有豁免未命中警告，未修改豁免策略"
+    },
+    {
+      "command": "KKSCREEPS_BIN=$PWD/target/debug/kkscreeps cargo test -p kk-cli --test sim_tests utc_date_is_identical_across_process_timezones_and_cold_restore",
+      "exit_code": 0,
+      "passed": 1
+    },
+    {
+      "command": "cargo test -p kk-runtime --test embed_tests",
+      "exit_code": 0,
+      "passed": 1
+    },
+    {
+      "command": "node scripts/check-doc-links.mjs",
+      "exit_code": 0,
+      "markdown": 332,
+      "local_links": 2005,
+      "stage": "最终验收文档更新后"
+    },
+    {
+      "command": "node scripts/check-source-size.mjs",
+      "exit_code": 0,
+      "files": 620,
+      "max_lines": 1000
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    }
+  ],
+  "development_checks": {
+    "rust_subset": "kk-engine/kk-runtime --tests 通过（早于最后新增文档样例与 typed-error 回归）",
+    "clippy": "当前完整 Clippy 通过",
+    "docs_source": "完整门禁 332 Markdown/2004 本地链接；最终验收文档更新后独立检查 332/2005；620 源码测试文件 <=1000",
+    "interference": "早期 CLI 长测试与重建共用 binary 路径导致 SHA 身份拒绝；整轮不算通过。后续固定产物重跑完整门禁。另修复守卫测试重复 --report 参数及文档测试 Path 导入遗漏。",
+    "root_digest": "新增日志初态摘要、缺根拒绝与分支原根保留回归：cargo test -p kk-runtime --test embed_tests 通过",
+    "superseded_gate": "首轮完整门禁通过；后续门禁因复审发现 Date 函数转换漏口，在 CLI 模拟场景运行前停止，不记通过。最终 SDK 修复后重跑完整门禁与新鲜 release ratchet。"
+  },
+  "performance": {
+    "mode": "external Rust debug probe, no V8; CLI 测试/构建并发，非隔离性能测量",
+    "source": "use std::time::Instant;\nuse kk_engine::Engine;\nuse kk_schema::room::{RoomObject, EnergyObj};\nfn object() -> RoomObject { RoomObject::Energy(EnergyObj{id:0,x:10,y:10,resource_type:0,amount:1,resource:None}) }\nfn main() {\n for n in [500,1000,2000] {\n  let mut individual=Engine::default();individual.register_room(\"W1N1\",kk_core::Terrain::plains()).unwrap();\n  let start=Instant::now();for _ in 0..n {individual.insert_object(\"W1N1\",object()).unwrap();}let single_ms=start.elapsed().as_secs_f64()*1000.;\n  let mut bulk=Engine::default();bulk.register_room(\"W1N1\",kk_core::Terrain::plains()).unwrap();\n  let start=Instant::now();bulk.insert_objects((0..n).map(|_| (\"W1N1\".to_string(), object()))).unwrap();let bulk_ms=start.elapsed().as_secs_f64()*1000.;\n  assert_eq!(individual.world().room(\"W1N1\").unwrap().objects.len(),n);\n  assert_eq!(bulk.world().room(\"W1N1\").unwrap().objects.len(),n);\n  println!(\"{{\\\"objects\\\":{n},\\\"individual_ms\\\":{single_ms},\\\"bulk_ms\\\":{bulk_ms}}}\");\n }\n}\n",
+    "runs": [
+      [
+        {
+          "objects": 500,
+          "individual_ms": 164.10904100000002,
+          "bulk_ms": 1.5911250000000001
+        },
+        {
+          "objects": 1000,
+          "individual_ms": 1023.702667,
+          "bulk_ms": 6.487458
+        },
+        {
+          "objects": 2000,
+          "individual_ms": 3773.237416,
+          "bulk_ms": 7.071792
+        }
+      ],
+      [
+        {
+          "objects": 500,
+          "individual_ms": 128.30670899999998,
+          "bulk_ms": 1.208416
+        },
+        {
+          "objects": 1000,
+          "individual_ms": 756.3720000000001,
+          "bulk_ms": 3.410917
+        },
+        {
+          "objects": 2000,
+          "individual_ms": 5490.519167,
+          "bulk_ms": 19.07
+        }
+      ],
+      [
+        {
+          "objects": 500,
+          "individual_ms": 1032.9806669999998,
+          "bulk_ms": 8.182333
+        },
+        {
+          "objects": 1000,
+          "individual_ms": 4317.407249999999,
+          "bulk_ms": 24.200833000000003
+        },
+        {
+          "objects": 2000,
+          "individual_ms": 13166.76775,
+          "bulk_ms": 14.748707999999999
+        }
+      ]
+    ]
+  },
+  "remaining_scope": [
+    "G02.d 未实现，现已准确登记",
+    "单对象管理 API 保留独立事务复制成本；批量 API 与初始化消费者已接线",
+    "mod_chain 调用编排和 sim 主流程仍较长，下次新增域前按职责进一步拆分",
+    "不提供旧时区历史的自动语义迁移，不宣称完整 Intl 虚拟化"
+  ],
+  "post_fix_review": {
+    "scope": [
+      "编辑/恢复/发布三入口及批量 ID、顺序、回滚边界",
+      "日志起始根、哈希游标、续接/分支与提交后错误",
+      "Date UTC 与可转换对象/函数，宿主协议迁移拒绝",
+      "压制 DAG、统一类型符号与直接执行文档样例",
+      "G02 已实现消费者及静态放行待办范围"
+    ],
+    "additional_findings_fixed": [
+      "头段未绑定完整起始状态：新增摘要并验收",
+      "Date 单参数函数转换漏口：同源转换且拒绝非原始结果，三时区/冷恢复验收"
+    ],
+    "code_findings_remaining": [],
+    "validation_status": "passed"
+  },
+  "commit": "随本批提交，实际 ID 见 Git 历史"
+}

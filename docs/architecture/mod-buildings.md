@@ -19,11 +19,12 @@ export default function register(api) {
     },
     fields: {                       // 自定义字段：声明即获玩家面直供
       heat: { type: 'u32', min: 0, max: 1000, default: 7 },
-      label: { type: 'string', maxBytes: 64 },   // 无 default：创建时缺键
+      label: { type: 'string', maxBytes: 64, default: '' }, // 首次 tick 整体回写须有值
     },
     tick(ctx) {                     // 生命周期槽：先产后 tick
-      ctx.target.fields['smelter:heat'] = (ctx.target.fields['smelter:heat'] || 0) + 1;
-      // 缺键记录（Missing 默认/手放结构）请用 (x || 初值) 起步：
+      ctx.target.fields['smelter:heat'] = Math.min(1000, (ctx.target.fields['smelter:heat'] ?? 7) + 1);
+      ctx.target.fields['smelter:label'] ??= ''; // 手放结构也可能缺默认字段
+      // 整体回写前补齐所有声明字段（包括 Missing 默认）：
       // undefined 直接运算得 NaN，会被整集校验拒绝
     },
   });
@@ -60,7 +61,7 @@ export default function register(api) {
 
 `player.js` 经 `api.buildings.bind(typeKey, Class)` 绑定玩家类（finalize 强制全部建筑绑定；只能绑定本包命名空间的类型，与 emit 目录同律）。安装清单 `gw.modApi.buildings` 携带键、寻路语义、成本资源键与**自定义字段存储键表**，供工地预检、代价矩阵、结构注册白名单、拆解预检与对象装配消费；预检 canary 与真实玩家同源。
 
-**字段玩家面记录直供**：结构装配器为清单内的字段存储键（含冒号）定义实例级 getter（与内建字段同一 `rawData` 回查机制，两投影通道同源），玩家经 `gauge['bl:heat']` 读值，记录缺键（`Missing` 默认未写）读到 `undefined`；绑定类可在原型上补语义糖（`get heat() { return this['bl:heat']; }`）。服务端 tick 的行为仍只能经 `tick` 声明表达——玩家类只读。`mod types` 声明生成为每个有字段的建筑输出 `{构造器}Fields` 接口（存储键成员，`Missing` 默认为可选成员），供玩家交叉类型使用（见[类型生成](mod-types.md)）。
+**字段玩家面记录直供**：结构装配器为清单内的字段存储键（含冒号）定义实例级 getter（与内建字段同一 `rawData` 回查机制，两投影通道同源），玩家经 `gauge['bl:heat']` 读值，记录缺键（`Missing` 默认未写）读到 `undefined`；绑定类可在原型上补语义糖（`get heat() { return this['bl:heat']; }`）。服务端 tick 的行为仍只能经 `tick` 声明表达——玩家类只读。`mod types` 声明生成为每个有字段的建筑输出经全局符号分配的 `{构造器}Fields` 接口（碰撞时加数字后缀）（存储键成员，`Missing` 默认为可选成员），供玩家交叉类型使用（见[类型生成](mod-types.md)）。
 
 绑定类的两条契约：**应继承 `OwnedStructure`**（只继承 `RoomObject` 时 `owner`/`my` 及 attack/repair/transfer 等 `instanceof Structure` 预检会拒绝，而引擎结算本身放行）；实例级内建 getter 会遮蔽类原型上的同名属性——`store`/`energy`/`energyCapacity` 已由内建 Store 语义提供（投影直供 `store/storeCapacity` 键），自定义读数请用 `api.view.field` 或另起属性名，不要在原型上重定义这些名字。
 
@@ -85,3 +86,7 @@ export default function register(api) {
 - 独立 JS 场景 [sim-mod-buildings](../../compat/fixtures/sim-mod-buildings/README.md) 三件套（smelter / smelter+panel / 无 Mod 对照）：真实玩家 VM 完成建造、投料生产、产物搬运、受击维修与寻路矩阵断言；双投影通道全等；检查点续跑等价（`kk-cli` `sim_tests/buildings.rs`）。证据见 [N2b 交付记录](../research/notes/n2b-mod-buildings-2026-10-05.md)。
 - 字段与生命周期场景 [sim-mod-building-fields](../../compat/fixtures/sim-mod-building-fields/README.md) 四件套（bl:gauge / bk:beacon / 组合 / 无 Mod 对照）：两独立包的玩家面字段直供、先产后 tick、世界终态与冷恢复（`kk-cli` `sim_tests/building_fields.rs`）。证据见 [G08.a 交付记录](../research/notes/g08a-building-fields-2026-10-06.md)。
 - 满仓生产、出生障碍与夹具干净源码验收见 [review 修复记录](../research/notes/n2b-review-fixes-2026-10-05.md)。
+
+## 公共编辑与恢复校验
+
+活动目录建筑的 Generic 记录在公共编辑、冷恢复和候选发布时统一验证已存在的冒号字段：类型、范围与未声明键均拒绝。手工放置可以省略字段，不会自动补默认；无变更 tick 也不能绕过已有值的校验。移除包后的惰性 Generic 建筑不再按活动目录校验（去包策略见包切换文档）。生命周期整集回写仍要求所有声明字段，须先补齐缺键；上方完整 JS 样例由集成测试直接读取并执行首次 tick。

@@ -113,3 +113,41 @@ fn terrain_edit_replaces_warm_projection_and_exhausted_version_rejects_edit() {
     );
     assert_eq!(restored.world().generation(), 0);
 }
+
+#[test]
+fn batch_insert_preserves_order_ids_and_rolls_back_a_late_failure() {
+    let mut single = engine();
+    let mut batch = engine();
+    let objects: Vec<_> = (0..128)
+        .map(|i| {
+            (
+                "W1N1".to_string(),
+                RoomObject::Energy(EnergyObj {
+                    id: 0,
+                    x: (i % 50) as u8,
+                    y: (i / 50) as u8,
+                    resource_type: 0,
+                    amount: i,
+                    resource: None,
+                }),
+            )
+        })
+        .collect();
+    let ids: Vec<_> = objects
+        .iter()
+        .cloned()
+        .map(|(room, object)| single.insert_object(&room, object).unwrap())
+        .collect();
+    let generation = batch.world().generation();
+    assert_eq!(batch.insert_objects(objects.clone()).unwrap(), ids);
+    assert_eq!(batch.world().generation(), generation + 1);
+    assert_eq!(single.world().world_json(), batch.world().world_json());
+    let before = serde_json::to_value(batch.checkpoint().unwrap()).unwrap();
+    let mut bad = objects;
+    bad.last_mut().unwrap().0 = "W9N9".into();
+    assert!(batch.insert_objects(bad).is_err());
+    assert_eq!(
+        serde_json::to_value(batch.checkpoint().unwrap()).unwrap(),
+        before
+    );
+}

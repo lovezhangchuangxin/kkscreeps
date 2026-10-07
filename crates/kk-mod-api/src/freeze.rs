@@ -289,17 +289,9 @@ fn freeze_inner(
                     "压制动作须是同一接收者上的其他动作",
                 ));
             }
-            // 互压环（A 压 B、B 压 A）：存在性判定下两键齐发会双双静默
-            // 丢弃——vanilla 压制表是严格优先级 DAG，环不属于同语义开
-            // 放面，冻结期显式拒绝（G07.b 复审清偿）。
-            if other.suppressed_by.contains(&intent.key) {
-                return Err(FreezeError::new(
-                    context,
-                    format!("压制关系成环：{key} 与 {}", intent.key),
-                ));
-            }
         }
     }
+    validate_suppression_dag(&intents)?;
     let values = effective_rules(&rules, &overrides, &options, &bindings)?;
     // 建筑目录的形状与引用校验：类型目录与资源目录此时已完整合并，
     // 跨包引用（成本/配方消费他包声明的资源）在这里一并定论。
@@ -575,4 +567,47 @@ fn freeze_inner(
         bindings: bindings.into_iter().collect(),
         sources,
     })
+}
+
+// 按入度消除整张压制图，避免只检测双向边而遗漏长环；不使用递归以免
+// 大型合法声明耗尽宿主栈。接收者与引用形状已由冻结入口逐项校验。
+fn validate_suppression_dag(intents: &BTreeMap<Key, IntentDescriptor>) -> Result<(), FreezeError> {
+    let mut degrees: BTreeMap<_, _> = intents
+        .iter()
+        .map(|(key, intent)| (key, intent.suppressed_by.len()))
+        .collect();
+    let mut dependents: BTreeMap<&Key, Vec<&Key>> = BTreeMap::new();
+    for (key, intent) in intents {
+        for blocker in &intent.suppressed_by {
+            dependents.entry(blocker).or_default().push(key);
+        }
+    }
+    let mut ready: Vec<_> = degrees
+        .iter()
+        .filter(|(_, count)| **count == 0)
+        .map(|(key, _)| *key)
+        .collect();
+    let mut removed = 0;
+    while let Some(key) = ready.pop() {
+        removed += 1;
+        for next in dependents.get(key).into_iter().flatten() {
+            let degree = degrees.get_mut(next).expect("引用已校验");
+            *degree -= 1;
+            if *degree == 0 {
+                ready.push(*next);
+            }
+        }
+    }
+    if removed != intents.len() {
+        let key = degrees
+            .iter()
+            .find(|(_, count)| **count != 0)
+            .expect("存在环")
+            .0;
+        return Err(FreezeError::new(
+            key.as_str(),
+            "压制关系成环：须为有向无环图",
+        ));
+    }
+    Ok(())
 }

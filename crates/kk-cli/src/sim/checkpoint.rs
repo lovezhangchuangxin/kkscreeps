@@ -13,18 +13,18 @@ struct Metadata {
     /// 被拒绝的切换不改变身份，越过边界不等于携带切换后身份。
     #[serde(default)]
     applied_switches: Vec<u64>,
-    /// 保存时刻的日志配对游标（G26.a）：最后一段的 seq 与 tick，显式
+    /// 保存时刻的日志配对游标（G26.a）：最后一段的 seq、tick 与链哈希，显式
     /// 表达「检查点不领先日志头」。未挂日志的保存为 None。
     #[serde(default)]
     log_cursor: Option<LogCursor>,
 }
 
-/// 日志配对游标：seq 从 1 起按文件内段数计（续接文件含既有段）。
-#[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct LogCursor {
-    pub last_seq: u64,
-    pub last_tick: u64,
+pub(super) use kk_runtime::embed::LogCursor;
+
+pub(super) fn applied_switches(value: &Value) -> anyhow::Result<Vec<u64>> {
+    let metadata: Metadata =
+        serde_json::from_value(value["metadata"].clone()).context("解析 sim 检查点元数据")?;
+    Ok(metadata.applied_switches)
 }
 
 pub(super) fn resume(
@@ -108,8 +108,8 @@ pub(super) fn list_checkpoint_ticks(dir: &Path) -> anyhow::Result<Vec<u64>> {
 }
 
 /// 「最新可用」恢复选择（G26.a）：按 tick 降序逐份信封校验，坏文件跳
-/// 次新并计数；配对失败（缺口/接缝/检查点超出日志末段+1）是日志与检查
-/// 点的关系问题而非文件损坏——硬错误不降级。撕裂日志在读取处失败并
+/// 次新并计数；配对失败（历史哈希/缺口/接缝/未覆盖游标）是日志与检查
+/// 点的历史关系问题而非文件损坏——硬错误不降级。撕裂日志在读取处失败并
 /// 携带 valid_segments 供人工截断，不自动改写文件。
 pub(super) struct Recovery {
     pub value: Value,
@@ -135,11 +135,6 @@ pub(super) fn recover_latest(dir: &Path, log: &Path) -> anyhow::Result<Recovery>
             anyhow::anyhow!("输入日志不可读，恢复中止：{error}")
         }
     })?;
-    let last_tick = data
-        .segments
-        .last()
-        .and_then(|segment| segment["tick"].as_u64())
-        .context("日志没有任何段，无从与检查点配对")?;
     let mut ticks = list_checkpoint_ticks(dir)?;
     ticks.sort_unstable();
     ticks.reverse();
@@ -161,15 +156,6 @@ pub(super) fn recover_latest(dir: &Path, log: &Path) -> anyhow::Result<Recovery>
         let time = value["engine"]["world"]["time"]
             .as_u64()
             .context("检查点载荷缺少世界时间")?;
-        anyhow::ensure!(
-            time <= last_tick + 1,
-            "检查点 tick {time} 超出日志末段 {last_tick}+1（日志曾在检查点之前被摘除，世界连续性断裂）——恢复中止"
-        );
-        let replay_segments = if time == last_tick + 1 {
-            Vec::new()
-        } else {
-            kk_runtime::embed::segments_from_checkpoint(time, &data.segments)?.to_vec()
-        };
         // 游标按同一 deny_unknown_fields 结构严格解码：畸形游标在此早
         // 失败并指名，而非以 0 值混过（后续 resume 的 Metadata 门虽也
         // 会拦，错误归因不如这里明确）。
@@ -180,6 +166,10 @@ pub(super) fn recover_latest(dir: &Path, log: &Path) -> anyhow::Result<Recovery>
                     .context("检查点元数据的 log_cursor 畸形")
             })
             .transpose()?;
+        let cursor = log_cursor
+            .as_ref()
+            .context("目录恢复需要带哈希的 log_cursor；旧检查点不可自动配对")?;
+        let replay_segments = data.segments_after_cursor(time, cursor)?.to_vec();
         return Ok(Recovery {
             value,
             file,
@@ -197,6 +187,25 @@ pub(super) fn recover_latest(dir: &Path, log: &Path) -> anyhow::Result<Recovery>
 pub(super) fn validate_paths(options: &Options) -> anyhow::Result<()> {
     use crate::output_guard::{distinct, normalized, outside_packages};
     distinct(&options.report, &options.scenario)?;
+    // 加载目录是恢复输入，整棵目录都必须保护；报告失败路径同样使用此门。
+    if let Some(dir) = options
+        .load_checkpoint
+        .as_ref()
+        .filter(|path| path.is_dir())
+    {
+        let dir = normalized(dir)?;
+        for output in std::iter::once(&options.report)
+            .chain(options.save_checkpoint.iter())
+            .chain(options.input_log.iter())
+        {
+            let output = normalized(output)?;
+            anyhow::ensure!(
+                !output.starts_with(&dir),
+                "输出 {} 不得位于加载检查点目录内",
+                output.display()
+            );
+        }
+    }
     for input in [
         options.load_checkpoint.as_ref(),
         options.save_checkpoint.as_ref(),

@@ -1,7 +1,7 @@
 //! sim 级周期检查点（G26.a）：到点保存、保留策略与 v10 报告字段装配。
 //! 保存时机与恢复选择的语义契约见 docs/architecture/checkpoints.md
 //! 「周期保存与恢复选择」。
-use super::checkpoint::{self, LogCursor};
+use super::checkpoint;
 use super::*;
 
 /// 周期保存的运行内统计（报告 auto_checkpoint 字段的来源）。
@@ -20,7 +20,6 @@ pub(super) struct Periodic<'a> {
     pub(super) every: u32,
     pub(super) dir: &'a Path,
     pub(super) keep: Option<u32>,
-    pub(super) log: Option<&'a Path>,
     pub(super) scenario_sha256: &'a str,
     pub(super) executable_sha256: &'a str,
     pub(super) modules: &'a BTreeMap<String, Value>,
@@ -39,13 +38,7 @@ pub(super) fn save_if_due(input: &Periodic, stats: &mut Stats) -> Option<Value> 
     }
     // 游标与日志末段严格一致：段 tick 为结算前世界时间，结算成功后写
     // 段并使世界 +1，故此刻 time-1 恰为末段 tick。
-    let cursor = input
-        .log
-        .and(input.engine.input_log_segments())
-        .map(|last_seq| LogCursor {
-            last_seq,
-            last_tick: time - 1,
-        });
+    let cursor = input.engine.input_log_cursor();
     let saved_at = std::time::Instant::now();
     let outcome = checkpoint::save(
         input.engine,
@@ -120,9 +113,7 @@ pub(super) fn recovery_record(found: &checkpoint::Recovery) -> Value {
     json!({
         "selected": found.file,
         "checkpoint_time": found.checkpoint_time,
-        "log_cursor": found.log_cursor.as_ref().map(|cursor| json!({
-            "last_seq": cursor.last_seq, "last_tick": cursor.last_tick,
-        })),
+        "log_cursor": found.log_cursor,
         "replayed_segments": found.replay_segments.len(),
         "skipped_broken": found.skipped_broken,
     })

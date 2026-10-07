@@ -45,3 +45,6 @@ pub use write::ChainWrite;
 pub use composition::{ComposedSlot, CompositionReport, ExecutionMode, RuleSelection};
 pub use execution_plan::ExecutionChain;
 pub use selection::{ContentSelection, SelectionReport};
+
+/// 宿主 SDK 的可回放语义身份；时间/RNG/候选能力语义变更须升代。
+pub const GAMEPLAY_PROTOCOL: &str = "kk-gameplay-v2-utc-date";

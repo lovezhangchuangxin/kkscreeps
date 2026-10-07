@@ -52,13 +52,23 @@ impl Engine {
     }
 
     pub(super) fn validate_world_for_plan(&self, world: &kk_world::World) -> Result<(), String> {
+        self.validate_mod_object_iter(world.rooms().iter())
+            .map_err(|e| e.to_string())?;
+        self.validate_building_rooms(world.rooms().iter())
+            .map_err(|e| e.to_string())?;
+        // 无扩展字段时直接借用世界检查，不为纯管理插入再复制整房间。
+        if world
+            .rooms()
+            .values()
+            .all(|room| room.extensions.is_empty())
+        {
+            return Ok(());
+        }
         let mut rooms: Vec<_> = world
             .rooms()
             .iter()
             .map(|(name, room)| (name.clone(), room.clone()))
             .collect();
-        self.validate_mod_object_rooms(&rooms)
-            .map_err(|e| e.to_string())?;
         let before: Vec<_> = rooms
             .iter()
             .map(|(_, room)| room.extensions.clone())

@@ -44,12 +44,11 @@
 ## 玩法时间
 
 - 结算期（含建筑 tick、全部槽处理器）：`Date.now()`、`new Date()` 都等于
-  **当前结算 tick×3000**；可调用形态 `Date()` 返回该时刻的本地时区文本
-  （机器相关，不落持久状态）。当前结算 tick 是本轮玩家所见
+  **当前结算 tick×3000**；可调用形态 `Date()` 返回 UTC 文本。当前结算 tick 是本轮玩家所见
   的 `Game.time`（发布后世界时间才推进）。
 - 注册期（模块装载）：`Date` 恒为 0——装载不在玩法时间轴上，与装载
-  时刻的世界 tick 无关（重装不变式）。显式参数构造（`new Date(ms)` 等）
-  与 `Date.parse`/`Date.UTC` 纯函数保持原生语义。
+  时刻的世界 tick 无关（重装不变式）。`new Date(ms)` 保留毫秒语义；多参数构造、未带 UTC 的 getters/setters、`getYear/setYear` 均采用 UTC，`getTimezoneOffset()` 为 0（非法日期为 NaN）。`Date.UTC` 保持原生数值归一规则。
+- `Date.parse` 和字符串构造仅接受 ISO 日期/时间及带 GMT 的 `toUTCString()` 文本；ISO 时间缺时区时按 UTC 解析，其他宽松文本返回 NaN。`Date()/toString()` 使用 `toUTCString()`，日期/时间字符串从该文本提取；locale 方法固定 UTC，未指定 locale 时用 `en-US`。这是一项明确的 SDK 语义变更，不完全等同原生 Date 的本地时区 API。
 - `Temporal` 从玩法 realm 删除（`Temporal.Now` 是墙钟面）；其确定性
   部分待出现真实消费者再评估。玩家 realm 不受影响（见下）。
 - Mod 的调度用 `ctx.tick`（槽 ctx 一直携带）；`Date` 系是兼容 JS 生态
@@ -84,11 +83,14 @@
 - **CPU 计费与看门狗**：线程 CPU 毫秒进入持久玩家桶、超限可停用 Mod
   ——过程观测口径的非确定性，已在[状态域清单](state-inventory.md)
   登记，与随机协议无关。
-- `Date()` 字符串全文（含本地时区文本）不进入任何持久状态；需要文本
-  表示时用 `toISOString`（UTC，确定性）。
+- Date 相关文本在同一宿主协议内采用 UTC；国际化数据库、显式 locale 和可信 Mod 自行引入的外部输入仍须由部署者固定。全局 `Intl` 没有全面虚拟化，本协议只承诺上述 Date/RNG 入口；不要通过其他宿主能力绕过回放输入边界。
 
 ## 变更纪律
 
 改变混合常量、域拼装规则、轮重置时机或 Date 映射，都是协议变更：先升
 级本页与黄金断言的预期值，明确说明旧检查点在新协议下的抽值分叉（种子
 不变但序列变），再合入——不作为实现细节静默滑过。
+
+## 宿主协议身份与旧历史
+
+当前 `kk_mod_host::GAMEPLAY_PROTOCOL` 为 `kk-gameplay-v2-utc-date`，同时写入检查点 `host_protocol` 与输入日志头段 identity，恢复、回放、续接均核验。检查点载荷升为 v3：v2→v3 只把缺身份载荷标记为 `kk-gameplay-v1-local-date`，不会伪造当前身份。旧时区历史没有自动内容迁移，恢复明确拒绝并保留旧分片；JSONL 线格式仍为 v1，但旧头段缺协议身份时不能续接/回放。今后改变 Date、RNG 或 SDK 候选语义时必须升协议身份并说明迁移政策。

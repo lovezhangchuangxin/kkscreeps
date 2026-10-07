@@ -404,7 +404,7 @@ fn emit_buildings(
         // 自定义字段经存储键（含命名空间冒号）直供玩家；声明为独立
         // 接口供玩家交叉类型使用，Missing 默认（记录可缺键）为可选成员。
         if !building.fields.is_empty() {
-            let ctor = &symbols.constructors[building.key.as_str()];
+            let fields_name = &symbols.building_fields[building.key.as_str()];
             doc_lines(
                 out,
                 "",
@@ -432,7 +432,7 @@ fn emit_buildings(
                 .collect();
             let _ = writeln!(
                 out,
-                "export interface {ctor}Fields {{ {} }}",
+                "export interface {fields_name} {{ {} }}",
                 members.join("; ")
             );
         }

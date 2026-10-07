@@ -19,6 +19,7 @@ struct Checkpoint {
     /// 维护，见 migrate 模块）。必填——缺失即拒，v1 载荷经注册迁移升入。
     checkpoint_format_version: u32,
     engine_version: String,
+    host_protocol: String,
     room_schema_version: u16,
     engine: kk_engine::settle::checkpoint::EngineCheckpoint,
     workers: BTreeMap<String, Worker>,
@@ -75,6 +76,7 @@ impl EmbedEngine {
         let saved = Checkpoint {
             checkpoint_format_version: CURRENT_FORMAT_VERSION,
             engine_version: env!("CARGO_PKG_VERSION").into(),
+            host_protocol: kk_mod_host::GAMEPLAY_PROTOCOL.into(),
             room_schema_version: kk_schema::room::SCHEMA_VERSION,
             engine: self.engine.checkpoint().map_err(anyhow::Error::msg)?,
             workers,
@@ -137,6 +139,11 @@ impl EmbedEngine {
             saved.engine_version == env!("CARGO_PKG_VERSION")
                 && saved.room_schema_version == kk_schema::room::SCHEMA_VERSION,
             "检查点引擎/房间 schema 版本不匹配；尚未提供迁移"
+        );
+        anyhow::ensure!(
+            saved.host_protocol == kk_mod_host::GAMEPLAY_PROTOCOL,
+            "检查点宿主玩法协议不匹配（{}）；旧时区语义不能自动迁移",
+            saved.host_protocol
         );
         match (&saved.mods, mods) {
             (Some(identity), Some((packages, options))) => identity.verify(packages, options)?,

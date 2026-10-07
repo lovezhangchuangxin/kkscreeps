@@ -550,9 +550,9 @@ impl EmbedEngine {
         header.insert("seq".into(), json!(0));
         header.insert("kind".into(), json!("header"));
         header.insert("prev_hash".into(), Value::Null);
-        header.insert("identity".into(), self.input_log_identity());
+        header.insert("identity".into(), self.input_log_identity()?);
         header.insert("metadata".into(), metadata);
-        let log = input_log::InputLog::open(path, header).map_err(anyhow::Error::msg)?;
+        let log = input_log::InputLog::open(path, header)?;
         self.input_log = Some(log);
         Ok(())
     }
@@ -564,16 +564,27 @@ impl EmbedEngine {
             .map(input_log::InputLog::segments_written)
     }
 
-    /// 当前身份快照：头段与每段各带一份；切换后的段以新快照自描述。
-    fn input_log_identity(&self) -> Value {
+    /// 当前已持久化末段的历史凭据；未挂载日志或只有头段时没有游标。
+    pub fn input_log_cursor(&self) -> Option<LogCursor> {
+        self.input_log
+            .as_ref()
+            .and_then(input_log::InputLog::cursor)
+    }
+
+    /// 头段绑定首次记录时的完整持久状态；续接保留旧头段，不重新定义历史根。
+    fn input_log_identity(&self) -> anyhow::Result<Value> {
         let (plan_hash, strategy, disabled) = self.log_identity_fields();
-        json!({
+        let initial_state_sha256 =
+            input_log::sha256_hex(&serde_json::to_vec(&self.checkpoint(Value::Null)?)?);
+        Ok(json!({
             "engine_version": env!("CARGO_PKG_VERSION"),
+            "host_protocol": kk_mod_host::GAMEPLAY_PROTOCOL,
             "seed": self.world_seed(),
             "plan_hash": plan_hash,
             "execution_strategy": strategy,
             "disabled_mods": disabled,
-        })
+            "initial_state_sha256": initial_state_sha256,
+        }))
     }
 
     /// 段级身份三元组（plan_hash/执行策略/停用集），头段与逐段共用同源。
@@ -732,12 +743,13 @@ mod checkpoint;
 mod execution;
 mod input_log;
 mod mod_chain;
+mod placement;
 mod projection;
 mod replay;
 mod setup;
 mod switch;
 
-pub use input_log::{InputLogData, InputLogError, read_input_log};
+pub use input_log::{CommittedLogError, InputLogData, InputLogError, LogCursor, read_input_log};
 use mod_chain::ModSlotExecutor;
 use projection::{kkpv_audience_hash, market_view};
 pub use replay::{ReplayRound, assert_header_paired, rebuild_round, segments_from_checkpoint};

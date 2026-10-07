@@ -42,7 +42,26 @@ impl Engine {
     }
 
     pub fn insert_object(&mut self, room: &str, object: RoomObject) -> Result<ObjId, String> {
-        self.edit_world(|world| world.insert(room, object))
+        self.insert_objects([(room.to_string(), object)])
+            .map(|ids| ids[0])
+    }
+
+    /// 按输入顺序一次编辑/校验/提交；任意后项失败都保留原世界及 ID 游标。
+    pub fn insert_objects(
+        &mut self,
+        objects: impl IntoIterator<Item = (String, RoomObject)>,
+    ) -> Result<Vec<ObjId>, String> {
+        self.ensure_editable()?;
+        let objects: Vec<_> = objects.into_iter().collect();
+        if objects.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.edit_world(|world| {
+            objects
+                .into_iter()
+                .map(|(room, object)| world.insert(&room, object))
+                .collect()
+        })
     }
     pub fn register_room(
         &mut self,

@@ -99,7 +99,7 @@ processor 台账还须覆盖资源采集/再生、spawn 与寿命/死亡、塔�
 
 **受击策略第二片（2026-10-06 已交付）**：新增 `builtin:creep.receiveDamage`，原始/默认伤害和有界来源摘要供 JS 替换公式，`ctx.incoming` 数值候选支持多处理器组合；正常拒绝回退默认 TOUGH，显式零值提供免疫。独立护甲/护盾包、两包组合、原生对照，来源截断与能力门、缓存重试及双通道冷恢复有验收。没有开放结构受击或实际伤害反击；移动仲裁的排序片随后由 G01 交付（见下），准入与完整仲裁继续登记为未完成。现行契约见[JS 受击策略](../architecture/mod-incoming-policy.md)。
 
-**G01 移动竞争优先级策略（2026-10-06 已交付）**：新增房间级槽 `builtin:room.moveContest`，整房一次提供全部竞争格与默认评分要素，JS 以优先级数值候选改变竞争者排序，宿主按 优先级 → 默认四键 → 登记序 稳定选胜；未设置优先级为 0，原生默认与平手登记序保持兼容。seniority/heaviest 两个独立包与原生对照选出三种不同胜者，组合、拒绝回退、能力门、故障停用、缓存重试与双通道冷恢复有验收；无贡献路径不进入 realm，默认微基准无可测量回归。移动准入（G02）、获准集合与让位链（G03）、代价与执行效果（G04）中，疲劳/MOVE/被拉门槛准入已按 G02.a 交付（见[JS 移动准入](../architecture/mod-move-admission.md)），仲裁障碍追加阻挡已按 G02.b 交付（见[JS 移动障碍](../architecture/mod-move-obstacle.md)），意图静态预检已按 G02.c 交付（见[JS 移动预检](../architecture/mod-move-precheck.md)，请求级单向收紧）；放行方向（表示有效性/语义惰性宿主约束）及其余未开放。竞争现行契约见[JS 移动竞争](../architecture/mod-move-contest.md)，证据见[交付记录](../research/notes/g01-move-contest-2026-10-06.md)。
+**G01 移动竞争优先级策略（2026-10-06 已交付）**：新增房间级槽 `builtin:room.moveContest`，整房一次提供全部竞争格与默认评分要素，JS 以优先级数值候选改变竞争者排序，宿主按 优先级 → 默认四键 → 登记序 稳定选胜；未设置优先级为 0，原生默认与平手登记序保持兼容。seniority/heaviest 两个独立包与原生对照选出三种不同胜者，组合、拒绝回退、能力门、故障停用、缓存重试与双通道冷恢复有验收；无贡献路径不进入 realm，默认微基准无可测量回归。移动准入（G02）、获准集合与让位链（G03）、代价与执行效果（G04）中，疲劳/MOVE/被拉门槛准入已按 G02.a 交付（见[JS 移动准入](../architecture/mod-move-admission.md)），仲裁障碍追加阻挡已按 G02.b 交付（见[JS 移动障碍](../architecture/mod-move-obstacle.md)），意图静态预检已按 G02.c 交付（见[JS 移动预检](../architecture/mod-move-precheck.md)，请求级单向收紧）；静态阻挡放行方向及其必要玩家预检/仲裁复检未贯通（G02.d 未开始，G02 父项部分完成），不能据已有 native 二次否决关闭长期玩法目标。竞争现行契约见[JS 移动竞争](../architecture/mod-move-contest.md)，证据见[交付记录](../research/notes/g01-move-contest-2026-10-06.md)。
 
 坐标有效、ID 唯一、索引一致、数值合法和编码上限是宿主不变量；距离、目标准入、能量价格、部件效果、伤害公式和冲突优先级是可替换玩法。若 typed 表示无法表达新规则，提供扩展表示及相应处理/投影路径，不要求作者修改 enum 或字段宽度。JS 不持有 Rust 裸指针，也不直接破坏 native 假设。
 
@@ -131,3 +131,5 @@ N4 先建立数据清单：rooms/扩展字段、players/Memory/segments/CPU/通�
 6. 官方 JS 内容实际使用公共 SDK，第二个同类包无需专用 Rust 分支；每个已迁移包验证未选时无残留行为、依赖组合与存量内容变更。默认预设、原生/JS 等价配置、第三方增量开销按[内容包口径](../designs/content-packs.md#性能与兼容性口径)分别记录。
 
 每片同步现行架构、SDK 文档、样例与机器证据。按仓库贡献指南执行对应 crate 测试、重建测试二进制、兼容性棘轮与必要真实场景；开发中可用 `pnpm run check -- <crates>` 限定子集加速迭代，提交前仍须运行无参数完整 `pnpm run check`。所有源码/测试文件继续遵守 1000 行门禁。完成后先 code review、清偿问题，再提交。
+
+2026-10-07 稳定化纠偏：G02 的墙地形/结构/私有 rampart 放行仍是未实现的玩法能力，已登记 G02.d；宿主只永久保留坐标、ID、占格等表示/提交不变式。检查点现为载荷 v3，宿主玩法协议明确区分 UTC Date 与旧本地时区历史；目录恢复按链哈希游标配对，详见现行 checkpoints/input-log/gameplay-determinism。

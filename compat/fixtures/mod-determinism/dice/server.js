@@ -1,7 +1,8 @@
 // G22.b 确定性协议验收包：模块顶层捕获 init 流抽值与装载期 Date.now()
 // （协议规定恒 0）；每 tick 抽两次、记录 Date.now()/new Date() 终值。
 // 全部产物写 ctx.state，跨进程/冷恢复/重试等值即协议成立。
-// 不记录 Date() 字符串全文——其文本含进程本地时区，属机器相关面。
+// UTC Date 文本、本地方法与无时区解析都记录，跨进程 TZ 不改变玩法结果。
+const CapturedDate = Date;
 const initDraw = Math.random();
 const initNow = Date.now();
 const initNewDate = new Date().getTime();
@@ -24,6 +25,23 @@ export default function register(api) {
       s.draws = [...(s.draws ?? []), Math.random(), Math.random()];
       s.now = Date.now();
       s.newDate = new Date().getTime();
+      const local = new CapturedDate(1970, 0, 1, 8);
+      local.setHours(9);
+      // 函数也是可转换对象，不能把其无时区字符串交回原生 Date 构造。
+      const dateFunction = () => {};
+      dateFunction[Symbol.toPrimitive] = () => '1970-01-01T00:00:00';
+      let rejectedObject = false;
+      try { new Date({[Symbol.toPrimitive]: () => dateFunction}); }
+      catch (error) { rejectedObject = error instanceof TypeError; }
+      s.date = {
+        hour: new Date().getHours(), offset: new Date().getTimezoneOffset(),
+        parsed: Date.parse('1970-01-01T00:00:00'),
+        constructed: new CapturedDate(1970, 0, 1).getTime(),
+        coercedFunction: new Date(dateFunction).getTime(), rejectedObject,
+        set: local.getTime(), text: Date(),
+        localText: new Date().toLocaleString(),
+        roundtrip: Date.parse(new Date(0).toString()),
+      };
       ctx.state = s;
     },
   });

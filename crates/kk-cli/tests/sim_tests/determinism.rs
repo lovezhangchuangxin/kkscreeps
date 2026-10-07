@@ -131,3 +131,49 @@ fn checkpoint_cold_resume_matches_straight_run() -> anyhow::Result<()> {
     assert_eq!(second["final"]["time"], full["final"]["time"]);
     Ok(())
 }
+
+#[test]
+fn utc_date_is_identical_across_process_timezones_and_cold_restore() -> anyhow::Result<()> {
+    let scene = dice_scene("scenario-dice.json");
+    let case = Case::new("tz");
+    let mut states = Vec::new();
+    for (index, tz) in ["UTC", "Asia/Shanghai", "America/Los_Angeles"]
+        .iter()
+        .enumerate()
+    {
+        let report = case.report(&format!("tz{index}.json"));
+        let (code, value) = result(command(&scene, &report, 4).env("TZ", tz), &report)?;
+        assert_eq!(code, 0, "{value}");
+        let state = value["final"]["mod_states"]["dice"].clone();
+        assert_eq!(state["date"]["parsed"], 0);
+        assert_eq!(state["date"]["constructed"], 0);
+        assert_eq!(state["date"]["coercedFunction"], 0);
+        assert_eq!(state["date"]["rejectedObject"], true);
+        assert_eq!(state["date"]["set"], 9 * 3600 * 1000);
+        assert_eq!(state["date"]["offset"], 0);
+        assert_eq!(state["date"]["roundtrip"], 0);
+        states.push(state);
+    }
+    assert!(states.windows(2).all(|pair| pair[0] == pair[1]));
+    let cp = case.report("cp.json");
+    let report = case.report("first.json");
+    let (code, value) = result(
+        command(&scene, &report, 2)
+            .env("TZ", "UTC")
+            .arg("--save-checkpoint")
+            .arg(&cp),
+        &report,
+    )?;
+    assert_eq!(code, 0, "{value}");
+    let report = case.report("restored.json");
+    let (code, value) = result(
+        command(&scene, &report, 2)
+            .env("TZ", "Asia/Shanghai")
+            .arg("--load-checkpoint")
+            .arg(&cp),
+        &report,
+    )?;
+    assert_eq!(code, 0, "{value}");
+    assert_eq!(value["final"]["mod_states"]["dice"], states[0]);
+    Ok(())
+}

@@ -25,13 +25,24 @@ use sha2::{Digest, Sha256};
 pub(crate) const LOG_FORMAT: &str = "kkscreeps-input-log";
 pub(crate) const LOG_VERSION: u64 = 1;
 
-fn sha256_hex(bytes: &[u8]) -> String {
+pub(super) fn sha256_hex(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
     let mut out = String::with_capacity(64);
     for byte in digest {
         out.push_str(&format!("{byte:02x}"));
     }
     out
+}
+
+pub(super) fn has_initial_state_digest(header: &Value) -> bool {
+    header["identity"]["initial_state_sha256"]
+        .as_str()
+        .is_some_and(|digest| {
+            digest.len() == 64
+                && digest
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        })
 }
 
 /// 一段的身份快照：段自描述，交换/篡改身份可被逐段发现。
@@ -56,11 +67,41 @@ pub(crate) struct InputLog {
     seq: u64,
     prev_hash: String,
     segments_written: u64,
+    last_tick: Option<u64>,
 }
+
+/// 检查点与日志历史的配对凭据；哈希绑定此前的整条链，不能仅凭 tick 配对。
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LogCursor {
+    pub last_seq: u64,
+    pub last_tick: u64,
+    pub sha256: String,
+}
+
+/// 世界已提交但耐久日志写入失败；调用方可下转识别，不能重新结算此轮。
+#[derive(Debug)]
+pub struct CommittedLogError {
+    pub committed_time: u64,
+    pub reason: String,
+}
+impl std::fmt::Display for CommittedLogError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "输入日志写入失败，日志已停用；本轮结算已提交、不得重试（世界时间 {}）：{}",
+            self.committed_time, self.reason
+        )
+    }
+}
+impl std::error::Error for CommittedLogError {}
 
 #[derive(Debug)]
 pub enum InputLogError {
     Io(std::io::Error),
+    HeaderIdentityMismatch {
+        field: &'static str,
+    },
     /// 行不是合法 JSON（含撕裂尾：最后一行不完整）。
     BadLine {
         line: usize,
@@ -102,6 +143,9 @@ impl std::fmt::Display for InputLogError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Io(e) => write!(f, "输入日志 I/O 错误：{e}"),
+            Self::HeaderIdentityMismatch { field } => {
+                write!(f, "输入日志头段身份不符：{field}；拒绝续接")
+            }
             Self::BadLine { line } => write!(f, "输入日志第 {line} 行不是合法 JSON"),
             Self::BadHeader { line, reason } => {
                 write!(f, "输入日志第 {line} 行头段非法：{reason}")
@@ -153,8 +197,20 @@ impl InputLog {
     /// 新建日志（文件必须不存在）或在校验通过后续接既有日志。
     /// 续接要求既有日志完整无撕裂：从断链处续写会静默丢弃可回放历史。
     pub(crate) fn open(path: &Path, header: Map<String, Value>) -> Result<Self, InputLogError> {
-        let (file, seq, prev_hash, segments_written) = if path.exists() {
+        let (file, seq, prev_hash, segments_written, last_tick) = if path.exists() {
             let data = read_input_log(path)?;
+            for field in ["seed", "engine_version", "host_protocol"] {
+                if data.header["identity"][field].is_null()
+                    || data.header["identity"][field] != header["identity"][field]
+                {
+                    return Err(InputLogError::HeaderIdentityMismatch { field });
+                }
+            }
+            if !has_initial_state_digest(&data.header) {
+                return Err(InputLogError::HeaderIdentityMismatch {
+                    field: "initial_state_sha256",
+                });
+            }
             // 续接安全门：末行必须换行结尾。append 模式下缺换行会把新段
             // 拼进旧末行、静默毁掉整个日志；这是撕裂写的形态，先修复再续接。
             ensure_trailing_newline(path)?;
@@ -165,7 +221,11 @@ impl InputLog {
             let file = std::fs::OpenOptions::new().append(true).open(path)?;
             // chain 含 seq 0 的头段：既有数据段数 = len-1，下一段 seq = len。
             let existing = data.chain.len() as u64 - 1;
-            (file, existing, last.1.clone(), existing)
+            let last_tick = data
+                .segments
+                .last()
+                .and_then(|segment| segment["tick"].as_u64());
+            (file, existing, last.1.clone(), existing, last_tick)
         } else {
             let mut file = std::fs::OpenOptions::new()
                 .create_new(true)
@@ -173,18 +233,27 @@ impl InputLog {
                 .open(path)?;
             let (line, hash) = seal(header);
             write_and_sync(&mut file, &line)?;
-            (file, 0, hash, 0)
+            (file, 0, hash, 0, None)
         };
         Ok(Self {
             file,
             seq,
             prev_hash,
             segments_written,
+            last_tick,
         })
     }
 
     pub(crate) fn segments_written(&self) -> u64 {
         self.segments_written
+    }
+
+    pub(crate) fn cursor(&self) -> Option<LogCursor> {
+        Some(LogCursor {
+            last_seq: self.seq,
+            last_tick: self.last_tick?,
+            sha256: self.prev_hash.clone(),
+        })
     }
 
     /// 追加一段结算输入记录；调用点必须在引擎提交成功之后。
@@ -222,6 +291,7 @@ impl InputLog {
         self.seq += 1;
         self.prev_hash = hash;
         self.segments_written += 1;
+        self.last_tick = Some(tick);
         Ok(())
     }
 }
@@ -295,6 +365,39 @@ pub struct InputLogData {
     pub segments: Vec<Value>,
     /// (seq, sha256) 依段序；含头段（seq 0）。
     pub chain: Vec<(u64, String)>,
+}
+
+impl InputLogData {
+    /// 验证游标的历史身份与世界时间后选择后缀；零段也必须通过同一配对门。
+    pub fn segments_after_cursor(&self, time: u64, cursor: &LogCursor) -> anyhow::Result<&[Value]> {
+        use anyhow::Context as _;
+        let index = usize::try_from(cursor.last_seq).context("日志游标 seq 超出本机范围")?;
+        let (seq, hash) = self.chain.get(index).context("日志不覆盖检查点游标")?;
+        anyhow::ensure!(
+            *seq == cursor.last_seq && hash == &cursor.sha256,
+            "检查点 log_cursor 历史哈希不匹配"
+        );
+        let preceding = index
+            .checked_sub(1)
+            .and_then(|index| self.segments.get(index))
+            .context("检查点日志游标必须指向已提交段")?;
+        anyhow::ensure!(
+            preceding["tick"].as_u64() == Some(cursor.last_tick)
+                && cursor.last_tick.checked_add(1) == Some(time),
+            "检查点时间与日志游标不匹配"
+        );
+        let suffix = &self.segments[index..];
+        let mut expected = time;
+        for segment in suffix {
+            anyhow::ensure!(
+                segment["tick"].as_u64() == Some(expected),
+                "配对缺口或 tick 回退：预期 {expected}，实际 {}",
+                segment["tick"]
+            );
+            expected = expected.checked_add(1).context("回放时间溢出")?;
+        }
+        Ok(suffix)
+    }
 }
 
 /// 以最后一个换行为界切出完整行前缀与尾块：撕裂写只可能影响尾块

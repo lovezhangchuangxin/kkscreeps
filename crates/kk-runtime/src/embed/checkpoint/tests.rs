@@ -538,7 +538,7 @@ fn legacy_auto_disable_checkpoint_restores_structured_source() -> anyhow::Result
     assert_eq!(engine.last_mod_auto_disable().unwrap().mod_id, "clockwork");
     // 迁移后再保存即当前格式：结构化 mod_id 显式在载荷中。
     let resaved = engine.checkpoint(Value::Null)?;
-    assert_eq!(resaved["checkpoint_format_version"], json!(2));
+    assert_eq!(resaved["checkpoint_format_version"], json!(3));
     assert_eq!(resaved["last_auto_disable"]["mod_id"], json!("clockwork"));
     // v2 载荷内来源不一致仍拒（解码端一致性校验，非迁移修补）。
     let mut invalid = resaved.clone();
@@ -564,7 +564,7 @@ fn format_version_routing_and_migration_failure_keep_the_old_shard() -> anyhow::
     run(&mut engine, 2)?;
     let saved = engine.checkpoint(Value::Null)?;
 
-    for version in [0u64, 3] {
+    for version in [0u64, 4] {
         let mut bad = saved.clone();
         bad["checkpoint_format_version"] = json!(version);
         assert!(
@@ -614,7 +614,7 @@ fn migrate_to_current_normalizes_v1_and_routes_versions() {
         }
     });
     assert_eq!(migrate::migrate_to_current(&mut v1), Ok(1));
-    assert_eq!(v1["checkpoint_format_version"], json!(2));
+    assert_eq!(v1["checkpoint_format_version"], json!(3));
     assert_eq!(v1["last_auto_disable"]["mod_id"], json!("clockwork"));
 
     // 当前版本载荷：skip 语义下不重放任何步骤，载荷逐字保持。
@@ -645,7 +645,7 @@ fn migrate_to_current_normalizes_v1_and_routes_versions() {
         ("字符串", json!("2"), "必须是非负 u32 整数"),
         ("超 u32", json!(4_294_967_298u64), "必须是非负 u32 整数"),
         ("零", json!(0), "格式版本 0 无效"),
-        ("未来", json!(3), "高于当前支持"),
+        ("未来", json!(4), "高于当前支持"),
     ];
     for (label, version, message) in cases {
         let mut payload = json!({"checkpoint_format_version": version, "time": 1});
@@ -684,3 +684,21 @@ const SCHEMA_OPAQUE: &[&str] = &[
 
 #[path = "tests/schema.rs"]
 mod schema;
+
+#[test]
+fn old_date_protocol_and_missing_v3_identity_reject_without_changing_world() -> anyhow::Result<()> {
+    let mut engine = EmbedEngine::new();
+    engine.create_shard(&json!({"players":[],"rooms":[]}))?;
+    let saved = engine.checkpoint(Value::Null)?;
+    let mut old = saved.clone();
+    old["checkpoint_format_version"] = json!(2);
+    old.as_object_mut().unwrap().remove("host_protocol");
+    let error = engine.restore_checkpoint(old, None).unwrap_err();
+    assert!(error.to_string().contains("旧时区语义"));
+    assert_eq!(engine.checkpoint(Value::Null)?, saved);
+    let mut missing = saved.clone();
+    missing.as_object_mut().unwrap().remove("host_protocol");
+    assert!(engine.restore_checkpoint(missing, None).is_err());
+    assert_eq!(engine.checkpoint(Value::Null)?, saved);
+    Ok(())
+}

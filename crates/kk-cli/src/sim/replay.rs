@@ -19,7 +19,12 @@ pub(super) fn verify_in_process(
         let start_time = start["engine"]["world"]["time"]
             .as_u64()
             .context("起点快照缺少世界时间")?;
-        let segments = kk_runtime::embed::segments_from_checkpoint(start_time, &data.segments)?;
+        let segments = if start["metadata"]["log_cursor"].is_null() {
+            kk_runtime::embed::segments_from_checkpoint(start_time, &data.segments)?
+        } else {
+            let cursor = serde_json::from_value(start["metadata"]["log_cursor"].clone())?;
+            data.segments_after_cursor(start_time, &cursor)?
+        };
         let replay_count = segments.len();
         let final_live = engine.checkpoint(Value::Null)?;
         engine.restore_checkpoint(start.clone(), mods)?;

@@ -1,6 +1,7 @@
 //! G08.a 建筑自定义字段与生命周期 tick：整读整写契约、原生键只读、
 //! 槽拒绝即故障、先产后 tick、停用回退为惰性结构与玩家面记录直供。
 use super::*;
+use std::path::Path;
 
 fn gauge(body: &str) -> String {
     format!(
@@ -242,6 +243,97 @@ fn completion_defaults_reach_the_player_surface() -> anyhow::Result<()> {
         let memory: Value =
             serde_json::from_str(&e.player_state_for_test("p1").unwrap().raw_memory).unwrap();
         assert_eq!(memory["defaults"], json!([7, "fresh"]), "玩家读到完工默认");
+    }
+    Ok(())
+}
+
+#[test]
+fn building_fields_are_validated_even_without_tick_writes() -> anyhow::Result<()> {
+    let mut e = gauge_engine("ctx.state = {visited: true};", false)?;
+    let before = e.checkpoint(Value::Null)?;
+    for (field, value) in [
+        ("bl:heat", json!("wrong")),
+        ("bl:heat", json!(1001)),
+        ("bl:unknown", json!(1)),
+    ] {
+        let mut record = json!({"pos":[11,10], "structureType":"bl:gauge", "owner":"p1"});
+        record[field] = value;
+        assert!(e.place_object("W1N1", "structure", &record).is_err());
+        assert_eq!(e.checkpoint(Value::Null)?, before);
+    }
+    // 手工放置允许省略默认字段；一旦存在则不得逃过 schema。
+    e.place_objects(&[(
+        "W1N1",
+        "structure",
+        &json!({"pos":[11,10], "structureType":"bl:gauge", "owner":"p1"}),
+    )])?;
+    e.tick(1)?;
+    assert_eq!(e.get_game_time(), 1);
+    let before = e.checkpoint(Value::Null)?;
+    let error = e
+        .place_objects(&[
+            (
+                "W1N1",
+                "structure",
+                &json!({"pos":[12,10], "structureType":"bl:gauge", "owner":"p1", "bl:heat":7}),
+            ),
+            (
+                "W1N1",
+                "structure",
+                &json!({"pos":[13,10], "structureType":"bl:gauge", "owner":"p1", "bl:heat":false}),
+            ),
+        ])
+        .unwrap_err();
+    assert!(error.to_string().contains("bl:heat"));
+    assert_eq!(e.checkpoint(Value::Null)?, before);
+    Ok(())
+}
+
+#[test]
+fn published_building_document_example_runs_its_first_tick() -> anyhow::Result<()> {
+    let doc = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/architecture/mod-buildings.md"),
+    )?;
+    let source = doc
+        .split("```js\n")
+        .nth(1)
+        .unwrap()
+        .split("```")
+        .next()
+        .unwrap();
+    let root = PackageRoot(std::env::temp_dir().join(format!(
+        "kk-building-doc-{}-{}",
+        std::process::id(),
+        NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed)
+    )));
+    let dir = root.0.join("smelter");
+    std::fs::create_dir_all(&dir)?;
+    std::fs::write(
+        dir.join("mod.json"),
+        r#"{"id":"smelter","version":"1.0.0","apiVersion":"^1.0.0","player":"player.js"}"#,
+    )?;
+    std::fs::write(dir.join("server.js"), source)?;
+    std::fs::write(
+        dir.join("player.js"),
+        "export default function install(api) { class SmelterFoundry extends api.builtins.OwnedStructure {} api.buildings.bind('smelter:foundry', SmelterFoundry); }",
+    )?;
+    let packages = discover_packages(&root.0)?;
+    let mut e = EmbedEngine::new();
+    e.create_shard_with_mods(
+        &json!({"players":["p1"],"rooms":[{"name":"W1N1","owner":"p1","rcl":6}]}),
+        &packages,
+        RegisterOptions::default(),
+    )?;
+    for fields in [json!({}), json!({"smelter:heat":7,"smelter:label":""})] {
+        let mut spec = json!({"pos":[11,10], "structureType":"smelter:foundry", "owner":"p1"});
+        spec.as_object_mut()
+            .unwrap()
+            .extend(fields.as_object().unwrap().clone());
+        let id = e.place_object("W1N1", "structure", &spec)?;
+        e.tick(1)?;
+        let record = e.get_object(&id).unwrap();
+        assert_eq!(record["smelter:heat"], 8);
+        assert_eq!(record["smelter:label"], "");
     }
     Ok(())
 }

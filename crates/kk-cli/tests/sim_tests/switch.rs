@@ -254,3 +254,47 @@ fn rejected_switch_records_error_and_checkpoint_resumes_with_initial_set() -> an
     }
     Ok(())
 }
+
+#[test]
+fn successful_switch_history_survives_three_cold_resumes() -> anyhow::Result<()> {
+    let case = Case::new("repeated-resume", false);
+    let source = switch_scene("scenario-add.json").canonicalize()?;
+    let mut scene: Value = serde_json::from_slice(&std::fs::read(&source)?)?;
+    scene["assertions"] = json!([]);
+    scene["mods"]["root"] = json!(
+        source
+            .parent()
+            .unwrap()
+            .join(scene["mods"]["root"].as_str().unwrap())
+            .canonicalize()?
+    );
+    for bot in scene["bots"].as_array_mut().unwrap() {
+        bot["modules"] = json!(
+            source
+                .parent()
+                .unwrap()
+                .join(bot["modules"].as_str().unwrap())
+                .canonicalize()?
+        );
+    }
+    let scenario = case.report("scenario.json");
+    std::fs::write(&scenario, serde_json::to_vec(&scene)?)?;
+    let mut previous = None;
+    for round in 0..4 {
+        let checkpoint = case.report(&format!("cp{round}.json"));
+        let report = case.report(&format!("r{round}.json"));
+        let mut cmd = command(&scenario, &report, if round == 0 { 2 } else { 1 }, false);
+        cmd.arg("--save-checkpoint").arg(&checkpoint);
+        if let Some(path) = &previous {
+            cmd.arg("--load-checkpoint").arg(path);
+        }
+        let (code, value) = result(&mut cmd, &report)?;
+        assert_eq!(code, 0, "{value}");
+        assert_eq!(
+            kk_runtime::checkpoint::read_checkpoint(&checkpoint)?["metadata"]["applied_switches"],
+            json!([2])
+        );
+        previous = Some(checkpoint);
+    }
+    Ok(())
+}
