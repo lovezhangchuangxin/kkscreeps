@@ -1,6 +1,14 @@
 # F2 R7 交接提示词（2026-10-01）
 
-> 当前有效入口：黑屏修复已提交`e7e30db`；随后继续RoomVisual性能/内存优化，
+> **2026-10-07 rebase 注记**：本分支已整体 rebase 到 main（`de15765`），23 个提交全部改写哈希，
+> 正文中的哈希已按映射更新（黑屏修复→`2bf8558`，R7 首轮→`75414b7`，方案→`5866097`，
+> 二次复审→`3c03a3b`，当前 tip→`64ff013`）。冲突解决与 main 侧 API 漂移适配（kk-cli
+> Cargo/枚举/CreepObj 字段/Engine.world/register_room）已折回对应重放提交；验证：kk-cli
+> clippy 零告警、129 测全绿、renderer/shared 测试全绿、文档链接 1848 通过。遗留：
+> `crates/kk-cli/src/export_fixtures.rs` 1142 行超源码规模门禁（原分支即 1124 行超限，本次
+> 适配净增 18 行），拆分留给后续批；完整 `pnpm run check` 未在本分支整跑。
+
+> 当前有效入口：黑屏修复已提交`2bf8558`；随后继续RoomVisual性能/内存优化，
 > 见[新复核报告](../research/notes/renderer-visual-reuse-verification-2026-10-01.md)。
 > 用户恢复额度并授权自主开发，仍暂缓长时间测试。原gray整表已确认，normal/API/R6不重开。
 > 下文更早的HEAD/红测/未提交状态均为历史快照，不能覆盖本段或重新启动10k。
@@ -35,12 +43,12 @@
   主树有引擎未提交改动，禁止修改主树/引擎既有文件。本轮没有引擎/exporter扩展。
 - 所有 shell 命令前缀 `rtk`，原始执行用 `rtk proxy`；每次命令显式工作目录。
   开始读 `/Users/keqing/.codex/RTK.md`。每次 Edit 后立即 git diff核对。
-- 原始起点 `01558f0`；方案提交 `b0a5dd1`；当前HEAD **`821a02f`**，subject
+- 原始起点 `3c03a3b`；方案提交 `5866097`；当前HEAD **`75414b7`**，subject
   `renderer: R7 首轮性能测量与 Graphics 生命周期缺陷复现`。
-  821a02f有工具、首轮证据和旧实现失败的真实Graphics回归，故那个提交有一个刻意新增红测。
+  75414b7有工具、首轮证据和旧实现失败的真实Graphics回归，故那个提交有一个刻意新增红测。
   **当前未提交修复已使全套362测全绿**，不要把提交态红测与工作树态混淆。
 - 用户已批准方案全部推荐，授权开发；D4用户批准冻结阈值下完成所有实测并如实登记差距/降级。
-  用户随后要求“先提交这一轮任务，然后修复bug，优化性能”：821a02f是已完成的阶段提交；
+  用户随后要求“先提交这一轮任务，然后修复bug，优化性能”：75414b7是已完成的阶段提交；
   当前bug修复/优化/文档与新增数据尚未提交，最终收口仍需一笔独立提交。
 - lighting仅normal，low/disabled不补；公共createRenderer API/d.ts形态、R6 D1–D7不重开。
 - **G1–G13终裁已逐条建议后获用户“按整表推荐确认”**，不必再问同一问题；具体见灰区文件。
@@ -78,7 +86,7 @@
    真实空房复位、checkpoint0.001ms排空、soak分段落盘。正常库构建tree-shakes掉perf入口。
    预算原生GPU timestamps是render-pass跨度；Metal pass有重叠，不能把pass和当帧时间。
    上传/copy未覆盖，串行GPU完成时间只称保守上界。
-5. d.ts AST闭包守卫在821a02f已提交：动态import type/Pixi子路径/@pixi/裸包转递/未解析fail closed，
+5. d.ts AST闭包守卫在75414b7已提交：动态import type/Pixi子路径/@pixi/裸包转递/未解析fail closed，
    8真实CLI测试。真实公共闭包10文件=7renderer声明+3shared源，不是改公共API。
 
 ## 数据与当前结论（不得冒充收口）
