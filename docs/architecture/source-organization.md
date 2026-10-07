@@ -50,6 +50,7 @@
 | `kk-mod-host/src/chain/incoming.rs` | 受击数值 op、原始浮点校验与能力故障归属 |
 | `kk-mod-host/src/chain/combat.rs` | 战斗读取/改向/取消/策略伤害与治疗 op 的同步能力访问与故障来源 |
 | `kk-mod-host/src/chain/combat_batch.rs` | 伤害批量/反击表共用有界转换、重入后重新检查能力与战斗分页 op |
+| `kk-runtime/src/embed/mod_chain.rs` | 整槽 VM 调用与 trace/故障转交；`call.rs` 一次归一化参数/native/领域能力，`completion.rs` 根据能力统一暂存状态与完成/拒绝恢复，`capability.rs` 持有唯一领域状态 |
 | `kk-runtime/src/embed/mod_chain/resources.rs` | 同房资源能力与字段缓存失效；首触日志和恢复复用 engine 的 `ObjectJournal`；移动委托在 `mod_chain/movement.rs`，字段投影/写入在 `mod_chain/fields.rs`，受击数值能力在 `mod_chain.rs`；战斗门控、日志委托与 consumed 标记在 `mod_chain/combat.rs` |
 | `kk-engine/src/settle/market.rs` | 市场状态和结算入口、成交调度；`market/orders.rs` 订单生命周期，`terminal.rs` 发送/成交共用的库存、费用与交易写入 |
 | `kk-runtime/src/run.rs` | 玩家执行参数、结果分类和未提交的指令/Memory/CPU 候选；由 crate 根导出，结算引擎不拥有这些类型 |

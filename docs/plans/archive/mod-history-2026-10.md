@@ -187,9 +187,17 @@ G02.d **静态移动阻挡可替换决策**登记为未开始：前置为本轮�
 - 最终检查日志 `/tmp/kks-cli-full-check-final.log`，release `/tmp/kks-cli-release.log`，兼容性 `/tmp/kks-cli-ratchet.log`；整体复审无剩余阻塞问题。四 crate 变更随本次提交保存；后续可复审 engine 安装/领域分派依赖、API 运行期目录共享校验及 host 候选能力边界，不按行数机械搬迁。
 
 
-### engine 计划安装候选与统一发布（2026-10-08，随本次提交交付）
+### engine 计划安装候选与统一发布（2026-10-08，`4443c3c`）
 
 - 基线 `eedfbfb`，干净工作区开始；本轮只统一 engine 的普通处理器/整槽宿主两条计划安装路径，不推进新玩法或 runtime 调用适配。`install.rs` 保留公开入口与执行器适配，`install/validation.rs` 保留原准入检查主体；`install/candidate.rs` 独占规则、目录、执行表与绑定准备，全部成功后经唯一发布点换入九个装配域，检查顺序与错误文本保持。
 - 新增两项回归，对两种入口核验成功时规则/资源/建筑/执行表/计划一起发布、末步未接线绑定拒绝时所有派生域及完整检查点保持、旧引擎继续结算；复审校验逻辑主体与原实现一致，无剩余阻塞问题。未变更 builtin 源字节、SDK、协议/检查点版本或 Rust 示例。
 - `/tmp/kks-install-full-check.log` 无参数完整门禁通过：Rust 1227/12 忽略（CLI sim 84），Python 58+12、Node 7、JS workspace、287 文档/1846 链接/810 源码均通过。`/tmp/kks-install-release.log` 新 release 完成；官方/typed 完整 inspect 除二进制摘要外与上轮一致。`/tmp/kks-install-ratchet.log` 棘轮通过，2914 用例状态逐项与 HEAD 一致（1918 通过/89 既有失败/907 跳过）。TooAngel/Overmind/WASM 完成 2000/2000/10 轮，核心指标与归一化异常栈保持，Overmind 原有首轮异常 1 轮；随机 flag/CPU 相关日志与调用数不作逐字相等声明。
 - 源码、现行架构、兼容性报告与台账随本次提交保存。下一轮建议整理 runtime 的 Mod 调用输入及临时状态所有权，保持调用能力与候选回滚边界；本轮未执行该项。
+
+
+### runtime 单次 Mod 调用与局部恢复（2026-10-08，随本次提交交付）
+
+- 先提交上一轮 engine 装配为 `4443c3c`，再从干净工作区整理 runtime。调用入口的多次匹配及布尔/Option 门改为 `call.rs` 一次归一化目标、参数、native 与唯一领域能力；数值/移动候选 native 共用保留候选的无操作中心，参数/诊断目标保持。战斗/建造 action、consumed、retaliation 由能力唯一持有，不再克隆外层初值。
+- `completion.rs` 按能力确定对象快照、首触日志、引擎恢复或无局部边界；namespace 暂存同源推导，完成移交、拒绝丢弃。VM 错误、超限及基础设施失败仍进入整轮故障，不新增 Drop 自动恢复。调用前后、trace/故障转交和宿主能力实现主体差异复审通过；将调用依赖从 embed 父模块移至实际消费者，检查点测试自行导入 ObjId。
+- `/tmp/kks-mod-call-full-check.log` 无参数完整门禁通过：Rust 1227/12 忽略（CLI sim 84）、Python 58+12、Node 7、JS workspace、287 文档/1846 链接/812 源码。现有真实 JS 链测试覆盖正常拒绝、第三目标恢复、namespace 暂存、native 同步/消费、异常/预算失败、trace、双通道与冷恢复；未新增镜像实现测试。`/tmp/kks-mod-call-release.log` 新 release 完成；官方/typed 完整 inspect 除二进制摘要外保持；`/tmp/kks-mod-call-ratchet.log` 棘轮通过，2914 用例状态与 HEAD 逐项一致（1918 通过/89 既有失败/907 跳过）。三组 bot 完成 2000/2000/10 轮，核心指标和随机 directive ID 归一化后的异常栈保持，Overmind 原有首轮异常 1。
+- 未变更 SDK、冻结身份、协议/检查点版本或 Rust 示例；复审无剩余阻塞问题，源码、现行架构、兼容性报告和台账随本次提交保存。下一轮可复审 Mod API 对象/建筑/扩展字段的共同校验与必要领域差异，不能为共用而抹平契约。

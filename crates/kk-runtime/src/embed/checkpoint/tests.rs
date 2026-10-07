@@ -2,6 +2,7 @@
 use super::*;
 use kk_engine::settle::market::{MarketOrder, Transaction};
 use kk_runner::{ModuleTable, SandboxConfig};
+use kk_world::ObjId;
 
 fn packages() -> anyhow::Result<BTreeMap<String, ModPackage>> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))

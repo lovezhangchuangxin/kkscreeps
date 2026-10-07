@@ -19,14 +19,8 @@ use crate::mod_trace::ModTraceEntry;
 use crate::mod_vm::ModVm;
 use crate::{PlayerExecutor, RunEpoch, RunOutcome, RunResult, ThreadExecutor, WorldSource};
 use kk_engine::intent::IntentBatch;
-use kk_engine::settle::RoomCtx;
-use kk_engine::settle::contrib::{SlotCall, SlotExecutor};
 use kk_engine::{PlayerWriteback, RunState, SegmentWriteback, TickInput, TickStage};
-use kk_mod_api::{Key, SlotOutcome, SlotPlan};
-use kk_mod_host::{
-    ChainContext, ChainHost, ChainTarget, ChainWrite, ModPackage, ModRealm, RegisterOptions,
-};
-use kk_world::ObjId;
+use kk_mod_host::{ModPackage, ModRealm, RegisterOptions};
 use kk_world::place::{PlaceCtx, normalize};
 
 use kk_engine::settle::Engine;

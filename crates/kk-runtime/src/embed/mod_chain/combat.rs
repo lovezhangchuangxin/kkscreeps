@@ -1,5 +1,6 @@
 //! 战斗能力的候选门控、首触日志与恰一次消耗；不在候选借用内进入 JS。
 use super::*;
+use kk_engine::settle::ObjectJournal;
 
 type CombatEffect = fn(
     &mut kk_engine::settle::Working,

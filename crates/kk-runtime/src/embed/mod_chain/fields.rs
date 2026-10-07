@@ -1,5 +1,6 @@
 //! 字段投影缓存与领域写入校验；每次 native 执行前失效。
 use super::*;
+use serde_json::json;
 
 impl ModChainContext {
     pub(super) fn fields(&mut self) -> Result<&Value, String> {

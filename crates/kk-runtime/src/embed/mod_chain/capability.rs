@@ -1,5 +1,25 @@
 //! 能力携带唯一领域状态，避免布尔能力门与 Option 状态脱节。
-use super::*;
+use kk_engine::settle::ObjectJournal;
+use kk_mod_api::builtin_capabilities::SlotCapability;
+use std::cell::RefCell;
+use std::rc::Rc;
+
+/// 战斗链的运行时状态与首触日志。日志记录能力改向触达、且不在引擎
+/// 预计算受影响集内的对象原始记录与延迟队列条目；拒绝时恢复。
+pub(super) struct CombatChainState {
+    pub(super) action: kk_engine::settle::creep::CombatAction,
+    pub(super) consumed: bool,
+    pub(super) retaliation: Option<kk_engine::settle::creep::RetaliationPolicy>,
+    pub(super) journal: Rc<RefCell<ObjectJournal>>,
+}
+
+/// 建造族链的运行时状态与首触日志，与战斗链同型；触达对象不含延迟
+/// 队列写入面（建造族目标均为工地/结构），条目仍按同构保存。
+pub(super) struct BuildChainState {
+    pub(super) action: kk_engine::settle::creep::BuildAction,
+    pub(super) consumed: bool,
+    pub(super) journal: Rc<RefCell<ObjectJournal>>,
+}
 
 pub(super) enum ChainCapability {
     Plain,
@@ -18,6 +38,30 @@ pub(super) enum ChainCapability {
 }
 
 impl ChainCapability {
+    /// 只有对象动作按槽键装配能力，其他调用变体携带自己的候选状态。
+    pub(super) fn for_action(slot: &str) -> Self {
+        match SlotCapability::for_key(slot) {
+            Some(SlotCapability::Resource) => {
+                Self::Resource(Rc::new(RefCell::new(ObjectJournal::default())))
+            }
+            Some(SlotCapability::Move) => Self::Move,
+            Some(SlotCapability::Combat) => Self::Combat(CombatChainState {
+                action: kk_engine::settle::creep::CombatAction::from_slot_key(slot)
+                    .expect("战斗槽键已由 COMBAT_ACTION_SLOTS 判定"),
+                consumed: false,
+                retaliation: None,
+                journal: Rc::new(RefCell::new(ObjectJournal::default())),
+            }),
+            Some(SlotCapability::Build) => Self::Build(BuildChainState {
+                action: kk_engine::settle::creep::BuildAction::from_slot_key(slot)
+                    .expect("建造族槽键已由 BUILD_ACTION_SLOTS 判定"),
+                consumed: false,
+                journal: Rc::new(RefCell::new(ObjectJournal::default())),
+            }),
+            _ => Self::Plain,
+        }
+    }
+
     pub(super) fn combat(&self) -> Option<&CombatChainState> {
         match self {
             Self::Combat(state) => Some(state),

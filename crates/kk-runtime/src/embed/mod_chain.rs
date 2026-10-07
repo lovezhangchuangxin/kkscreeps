@@ -1,42 +1,30 @@
 //! 将 Mod 整槽链接到房间候选，暂存 state 并校验字段写面。
-use super::*;
 use crate::mod_trace::{ModTraceEntry, ModTraceEvent, fault_kind_label, stage_label, truncate};
+use crate::mod_vm::ModVm;
+use kk_engine::settle::RoomCtx;
+use kk_engine::settle::contrib::{SlotCall, SlotExecutor};
+use kk_mod_api::{Key, SlotOutcome, SlotPlan};
+use kk_mod_host::{ChainContext, ChainHost, ChainTarget, ChainWrite};
+use kk_world::ObjId;
+use serde_json::Value;
+use std::cell::RefCell;
+use std::rc::Rc;
 
+mod call;
 mod capability;
 mod combat;
+mod completion;
 mod fields;
 mod movement;
 mod objects;
 mod resources;
+use call::{NativeCall, PreparedCall};
 use capability::ChainCapability;
-use kk_engine::settle::ObjectJournal;
+use completion::StagedStates;
 
 /// JS 组合的整槽执行器。进入 VM 一次，native 中心只经普通 op 执行。
 pub(super) struct ModSlotExecutor {
     pub(super) realm: Rc<RefCell<ModVm>>,
-}
-
-enum NativeCall {
-    Action {
-        data: Box<kk_engine::intent::IntentData>,
-        step: fn(&mut kk_engine::settle::Working, ObjId, &kk_engine::intent::IntentData),
-    },
-    Tick(fn(&mut kk_engine::settle::Working, ObjId)),
-    /// 默认 TOUGH 已在入链前准备；中心保留数值，避免擦掉 before 的调整。
-    Incoming,
-    /// 移动竞争的默认中心：保留已设置的优先级，无默认计算可执行。
-    Contest,
-    /// 移动准入的默认中心：保留候选中的原生准入终值，无计算可执行。
-    Admission,
-    /// 移动障碍的默认中心：无追加阻挡，无计算可执行。
-    Obstacle,
-    /// 移动预检的默认中心：无否决，无计算可执行。
-    Precheck,
-    /// 拉拽登记的默认中心：无否决，无计算可执行。
-    PullRegistration,
-    /// 移动代价的默认中心：无覆盖，执行原生代价。
-    MoveCost,
-    None,
 }
 
 struct ModChainContext {
@@ -49,26 +37,7 @@ struct ModChainContext {
     /// 能力和其领域状态不可分离；同一槽只装配一个领域。
     capability: ChainCapability,
     /// 可拒绝动作的 namespace 写入暂存到调用成功；拒绝时丢弃。
-    staged_states: Option<Rc<RefCell<BTreeMap<String, Value>>>>,
-}
-
-/// 战斗链的运行时状态与首触日志。日志记录能力改向触达、且不在引擎
-/// 预计算受影响集内的对象原始记录与延迟队列条目；拒绝时恢复。
-#[derive(Clone)]
-struct CombatChainState {
-    action: kk_engine::settle::creep::CombatAction,
-    consumed: bool,
-    retaliation: Option<kk_engine::settle::creep::RetaliationPolicy>,
-    journal: Rc<RefCell<ObjectJournal>>,
-}
-
-/// 建造族链的运行时状态与首触日志，与战斗链同型；触达对象不含延迟
-/// 队列写入面（建造族目标均为工地/结构），条目仍按同构保存。
-#[derive(Clone)]
-struct BuildChainState {
-    action: kk_engine::settle::creep::BuildAction,
-    consumed: bool,
-    journal: Rc<RefCell<ObjectJournal>>,
+    staged_states: Option<StagedStates>,
 }
 
 impl SlotExecutor for ModSlotExecutor {
@@ -78,163 +47,10 @@ impl SlotExecutor for ModSlotExecutor {
         ctx: &RoomCtx,
         call: SlotCall<'_>,
     ) -> Result<SlotOutcome, String> {
-        // 自有对象变换与额外资源对象由此适配器恢复；内建资源动作的
-        // 原始两端/事件由引擎在整链外恢复；移动槽的请求登记与意图
-        // 疲劳同样由引擎按执行者粒度恢复。namespace 仅成功后移交。
-        let extension = matches!(&call, SlotCall::Extension { .. });
-        let incoming = match &call {
-            SlotCall::Incoming { candidate, .. } => Some(candidate.clone()),
-            _ => None,
-        };
-        let contest = match &call {
-            SlotCall::Contest { candidate } => Some(candidate.clone()),
-            _ => None,
-        };
-        let admission = match &call {
-            SlotCall::Admission { candidate } => Some(candidate.clone()),
-            _ => None,
-        };
-        let obstacle = match &call {
-            SlotCall::Obstacle { candidate } => Some(candidate.clone()),
-            _ => None,
-        };
-        let precheck = match &call {
-            SlotCall::Precheck { candidate } => Some(candidate.clone()),
-            _ => None,
-        };
-        let pull_registration = match &call {
-            SlotCall::PullRegistration { candidate } => Some(candidate.clone()),
-            _ => None,
-        };
-        let move_cost = match &call {
-            SlotCall::MoveCost { candidate } => Some(candidate.clone()),
-            _ => None,
-        };
-        let kind = kk_mod_api::builtin_capabilities::SlotCapability::for_key(slot.key.as_str());
-        let is_action = matches!(&call, SlotCall::Action { .. });
-        let resource_action =
-            is_action && kind == Some(kk_mod_api::builtin_capabilities::SlotCapability::Resource);
-        let move_action =
-            is_action && kind == Some(kk_mod_api::builtin_capabilities::SlotCapability::Move);
-        let combat_action =
-            is_action && kind == Some(kk_mod_api::builtin_capabilities::SlotCapability::Combat);
-        let build_action =
-            is_action && kind == Some(kk_mod_api::builtin_capabilities::SlotCapability::Build);
-        let (id, args, native) = match call {
-            SlotCall::Incoming { id, candidate } => (
-                id,
-                serde_json::to_value(candidate.input()).map_err(|e| e.to_string())?,
-                NativeCall::Incoming,
-            ),
-            SlotCall::Contest { candidate } => (
-                // 房间级槽没有对象目标；u64::MAX 不与真实对象 ID 冲突，
-                // 仅作为故障诊断中的占位 target。
-                ObjId(u64::MAX),
-                serde_json::to_value(candidate.input()).map_err(|e| e.to_string())?,
-                NativeCall::Contest,
-            ),
-            SlotCall::Admission { candidate } => (
-                ObjId(u64::MAX),
-                serde_json::to_value(candidate.input()).map_err(|e| e.to_string())?,
-                NativeCall::Admission,
-            ),
-            SlotCall::Obstacle { candidate } => (
-                ObjId(u64::MAX),
-                serde_json::to_value(candidate.input()).map_err(|e| e.to_string())?,
-                NativeCall::Obstacle,
-            ),
-            SlotCall::Precheck { candidate } => (
-                ObjId(u64::MAX),
-                serde_json::to_value(candidate.input()).map_err(|e| e.to_string())?,
-                NativeCall::Precheck,
-            ),
-            SlotCall::PullRegistration { candidate } => (
-                ObjId(u64::MAX),
-                serde_json::to_value(candidate.input()).map_err(|e| e.to_string())?,
-                NativeCall::PullRegistration,
-            ),
-            SlotCall::MoveCost { candidate } => (
-                ObjId(u64::MAX),
-                serde_json::to_value(candidate.input()).map_err(|e| e.to_string())?,
-                NativeCall::MoveCost,
-            ),
-            SlotCall::Action { id, data, native } => (
-                id,
-                if move_action {
-                    // move 槽固定参数面：方向或用于求方向的相邻 creep。
-                    json!({"id": data.id.map(|id| id.as_str()), "direction": data.direction})
-                } else {
-                    json!({
-                        "id": data.id.map(|id| id.as_str()), "amount": data.amount, "resourceType": data.resource_type,
-                    })
-                },
-                NativeCall::Action {
-                    data: Box::new(data.clone()),
-                    step: native,
-                },
-            ),
-            SlotCall::Tick { id, native } => (id, Value::Null, NativeCall::Tick(native)),
-            SlotCall::Extension { id, args } => (id, args.clone(), NativeCall::None),
-        };
+        let call = PreparedCall::new(slot.key.as_str(), call)?;
+        let id = call.id;
         let room = ctx.borrow().room.name.clone();
-        let object_snapshot = extension.then(|| ctx.borrow_mut().snapshot_mod_objects());
-        let staged_states = (extension
-            || resource_action
-            || move_action
-            || combat_action
-            || build_action
-            || incoming.is_some()
-            || contest.is_some()
-            || admission.is_some()
-            || obstacle.is_some()
-            || precheck.is_some()
-            || pull_registration.is_some()
-            || move_cost.is_some())
-        .then(|| Rc::new(RefCell::new(BTreeMap::new())));
-        let resource_journal =
-            resource_action.then(|| Rc::new(RefCell::new(ObjectJournal::default())));
-        // 外层副本仅供 Declined 分支读共享 journal 与 is_some() 判定；
-        // consumed/action 以链内上下文的副本为唯一权威（外层恒为初值）。
-        let combat_state = combat_action.then(|| CombatChainState {
-            action: kk_engine::settle::creep::CombatAction::from_slot_key(slot.key.as_str())
-                .expect("战斗槽键已由 COMBAT_ACTION_SLOTS 判定"),
-            consumed: false,
-            retaliation: None,
-            journal: Rc::new(RefCell::new(ObjectJournal::default())),
-        });
-        let build_state = build_action.then(|| BuildChainState {
-            action: kk_engine::settle::creep::BuildAction::from_slot_key(slot.key.as_str())
-                .expect("建造族槽键已由 BUILD_ACTION_SLOTS 判定"),
-            consumed: false,
-            journal: Rc::new(RefCell::new(ObjectJournal::default())),
-        });
-        let capability = if extension {
-            ChainCapability::Objects
-        } else if let Some(journal) = &resource_journal {
-            ChainCapability::Resource(journal.clone())
-        } else if move_action {
-            ChainCapability::Move
-        } else if let Some(state) = &combat_state {
-            ChainCapability::Combat(state.clone())
-        } else if let Some(state) = &build_state {
-            ChainCapability::Build(state.clone())
-        } else if let Some(state) = &incoming {
-            ChainCapability::Incoming(state.clone())
-        } else if let Some(state) = &contest {
-            ChainCapability::Contest(state.clone())
-        } else if let Some(state) = &admission {
-            ChainCapability::Admission(state.clone())
-        } else if let Some(state) = &obstacle {
-            ChainCapability::Obstacle(state.clone())
-        } else if let Some(state) = &precheck {
-            ChainCapability::Precheck(state.clone())
-        } else if let Some(state) = &pull_registration {
-            ChainCapability::PullRegistration(state.clone())
-        } else if let Some(state) = &move_cost {
-            ChainCapability::MoveCost(state.clone())
-        } else {
-            ChainCapability::Plain
-        };
+        let (context, completion) = call.into_context(ctx);
         let mut vm = self
             .realm
             .try_borrow_mut()
@@ -252,18 +68,9 @@ impl SlotExecutor for ModSlotExecutor {
                 slot.key.to_string(),
             )
         });
-        let result = vm.realm_mut()?.invoke_chain(
-            slot.key.as_str(),
-            Box::new(ModChainContext {
-                ctx: ctx.clone(),
-                id,
-                args,
-                native,
-                cached_fields: None,
-                staged_states: staged_states.clone(),
-                capability,
-            }),
-        );
+        let result = vm
+            .realm_mut()?
+            .invoke_chain(slot.key.as_str(), Box::new(context));
         let outcome = match result {
             Ok(outcome) => {
                 if let Some((tick, target, slot_key)) = &trace_parts {
@@ -331,50 +138,7 @@ impl SlotExecutor for ModSlotExecutor {
             }
         };
         drop(vm);
-        match &outcome {
-            SlotOutcome::Completed => {
-                if object_snapshot.is_some() {
-                    ctx.borrow_mut().finish_chain_snapshot();
-                }
-                if let Some(states) = staged_states {
-                    let states = std::mem::take(&mut *states.borrow_mut());
-                    for (namespace, value) in states {
-                        ctx.borrow().state.set_mod_state(&namespace, value);
-                    }
-                }
-            }
-            SlotOutcome::Declined(_) => {
-                if let Some(journal) = resource_journal {
-                    journal.borrow_mut().restore(&mut ctx.borrow_mut());
-                }
-                // 战斗与建造族互斥（每槽至多一个能力面），恢复顺序无关。
-                for journal in [
-                    combat_state.as_ref().map(|state| &state.journal),
-                    build_state.as_ref().map(|state| &state.journal),
-                ]
-                .into_iter()
-                .flatten()
-                {
-                    journal.borrow_mut().restore(&mut ctx.borrow_mut());
-                }
-                if let Some(snapshot) = object_snapshot {
-                    ctx.borrow_mut().restore_chain_snapshot(snapshot);
-                } else if !(resource_action
-                    || move_action
-                    || combat_state.is_some()
-                    || build_state.is_some()
-                    || incoming.is_some()
-                    || contest.is_some()
-                    || admission.is_some()
-                    || obstacle.is_some()
-                    || precheck.is_some()
-                    || pull_registration.is_some()
-                    || move_cost.is_some())
-                {
-                    return Err("该槽没有正常拒绝的局部恢复边界".into());
-                }
-            }
-        }
+        completion.finish(ctx, &outcome)?;
         Ok(outcome)
     }
 }
@@ -454,13 +218,7 @@ impl ChainHost for ModChainContext {
                 }
             }
             NativeCall::Tick(step) => step(&mut self.ctx.borrow_mut(), self.id),
-            NativeCall::Incoming => {}
-            NativeCall::Contest => {}
-            NativeCall::Admission => {}
-            NativeCall::Obstacle => {}
-            NativeCall::PullRegistration => {}
-            NativeCall::MoveCost => {}
-            NativeCall::Precheck => {}
+            NativeCall::Preserve => {}
             NativeCall::None => return Err("Mod 自有槽没有 Rust native 中心".into()),
         }
         if let Some(combat) = self.capability.combat_mut() {
