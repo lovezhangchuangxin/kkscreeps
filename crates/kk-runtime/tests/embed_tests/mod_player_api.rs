@@ -3,7 +3,7 @@
 
 use serde_json::json;
 
-use super::c3_counter_chain::{CHAIN_JS, chain_engine, place_counter, value_of};
+use super::ext_intent_counter::{CHAIN_JS, chain_engine, place_counter, value_of};
 use super::*;
 
 /// 带归属裁切字段的 counter 变体：secret 仅归属者可见。
@@ -64,7 +64,7 @@ fn counter_expr(id: &str) -> String {
 }
 
 /// FIND/LOOK 常量 + 类装配 + getter + 类方法 emit + 跨 tick 投影刷新。
-pub(super) fn c4_player_chain_full_impl() -> anyhow::Result<()> {
+pub(super) fn player_chain_full_impl() -> anyhow::Result<()> {
     let mut e = chain_engine("c4full", CHAIN_JS, None)?;
     let id = place_counter(&mut e, "p1")?;
     let run = e.run_player("p1", &counter_expr(&id))?;
@@ -84,7 +84,7 @@ pub(super) fn c4_player_chain_full_impl() -> anyhow::Result<()> {
 }
 
 /// 两通道一致：FIND/实例/getter/look 在 JSON 与 KKPV 通道同结果。
-pub(super) fn c4_dual_channel_parity_impl() -> anyhow::Result<()> {
+pub(super) fn dual_channel_parity_impl() -> anyhow::Result<()> {
     let mut e = chain_engine("c4parity", CHAIN_JS, None)?;
     let id = place_counter(&mut e, "p1")?;
     let mut results = Vec::new();
@@ -102,7 +102,7 @@ pub(super) fn c4_dual_channel_parity_impl() -> anyhow::Result<()> {
 }
 
 /// 字段可见性裁切：public 对所有人，owner 仅归属者（两通道）。
-pub(super) fn c4_field_visibility_cut_impl() -> anyhow::Result<()> {
+pub(super) fn field_visibility_cut_impl() -> anyhow::Result<()> {
     let dir = std::env::temp_dir().join(format!("kk-c4-vis-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let pkg = dir.join("chainmod");
@@ -153,7 +153,7 @@ pub(super) fn c4_field_visibility_cut_impl() -> anyhow::Result<()> {
 
 /// 装配门与防篡改：缺绑定失败、vanilla 分片无玩家面、全局不可改写、
 /// 类方法 emit 过结算侧归属门。
-pub(super) fn c4_install_gates_impl() -> anyhow::Result<()> {
+pub(super) fn install_gates_impl() -> anyhow::Result<()> {
     // 玩家面类型未被任何 player.js 绑定 → 分片创建失败。
     let dir = std::env::temp_dir().join(format!("kk-c4-gate-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
@@ -225,7 +225,7 @@ pub(super) fn c4_install_gates_impl() -> anyhow::Result<()> {
 }
 
 /// 服务器私有类型（server-only）不要求玩家绑定，也不进玩家投影。
-pub(super) fn c4_server_only_type_impl() -> anyhow::Result<()> {
+pub(super) fn server_only_type_impl() -> anyhow::Result<()> {
     let dir = std::env::temp_dir().join(format!("kk-c4-srv-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let pkg = dir.join("chainmod");
@@ -269,7 +269,7 @@ export default function register(api) {
 
 /// Float 域字段混合 backing（管理面整数 JSON 与小数）经写入口规范化后，
 /// KKPV 列式编码不因列型混派失败（清偿 R3 P1 的 e2e 验收）。
-pub(super) fn c4_float_field_dual_channel_impl() -> anyhow::Result<()> {
+pub(super) fn float_field_dual_channel_impl() -> anyhow::Result<()> {
     let dir = std::env::temp_dir().join(format!("kk-c4-f64-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let pkg = dir.join("chainmod");

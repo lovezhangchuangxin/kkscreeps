@@ -5,7 +5,7 @@
 use super::*;
 
 /// 冻结 builtin + 只带规则覆盖的贡献，返回解析后的战斗射程快照。
-/// 覆盖键不带 builtin: 前缀（与 m2b_contrib_link_family 的 overrides_mod 同形）。
+/// 覆盖键不带 builtin: 前缀（与 contrib_link 的 overrides_mod 同形）。
 fn combat_of(rules: &[(&str, i64)]) -> kk_mod_api::builtin::CombatRanges {
     let mut c = kk_mod_api::Contribution {
         source: kk_mod_api::Source {
@@ -82,16 +82,14 @@ fn zero_ranged_attack_range_rejects_adjacent_target() {
     let mut f = Fixture::new(1, terrain_with(&[]));
     let atk = f.creep("ra", "p1", 10, 10, &[BodyKind::RangedAttack], 0);
     let victim = f.creep("v", "p2", 10, 11, &[BodyKind::Move], 0);
-    f.settle(super::combat_ranged::ranged_attack_intent(
-        "p1", atk, victim,
-    ));
+    f.settle(super::ranged::ranged_attack_intent("p1", atk, victim));
     assert_eq!(creep_parts(&f, victim).0, 90, "默认射程 3：距离 1 命中");
 
     let mut f2 = Fixture::new(2, terrain_with(&[]));
     let atk2 = f2.creep("ra", "p1", 10, 10, &[BodyKind::RangedAttack], 0);
     let victim2 = f2.creep("v", "p2", 10, 11, &[BodyKind::Move], 0);
     f2.settle_with_plane(
-        super::combat_ranged::ranged_attack_intent("p1", atk2, victim2),
+        super::ranged::ranged_attack_intent("p1", atk2, victim2),
         combat_plane(combat_of(&[("creep.rangedAttack.range", 0)])),
     );
     assert_eq!(creep_parts(&f2, victim2).0, 100, "零射程：邻格拒绝");
@@ -182,7 +180,7 @@ fn ranged_mass_attack_keeps_native_area_semantics() {
     let atk = f.creep("atk", "p1", 10, 10, &[BodyKind::RangedAttack], 0);
     let victim = f.creep("v", "p2", 12, 10, &[BodyKind::Move], 0);
     f.settle_with_plane(
-        super::combat_ranged::ranged_mass_intent("p1", atk),
+        super::ranged::ranged_mass_intent("p1", atk),
         combat_plane(combat_of(&[("creep.rangedAttack.range", 1)])),
     );
     // 10×0.4=4：面积档不受单目标射程覆盖影响。

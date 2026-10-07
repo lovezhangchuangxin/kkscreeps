@@ -148,7 +148,7 @@ pub(super) fn value_of(e: &EmbedEngine, id: &str) -> Value {
 }
 
 /// 管理创建 + 玩家发射 + 结算执行 + after 审计全链；跨 tick 续传。
-pub(super) fn c3_counter_full_chain_impl() -> anyhow::Result<()> {
+pub(super) fn counter_full_chain_impl() -> anyhow::Result<()> {
     let mut e = chain_engine("full", CHAIN_JS, None)?;
     let id = place_counter(&mut e, "p1")?;
     // 创建读面：诊断快照带类型键与字段；默认 value=0 已落位。
@@ -183,7 +183,7 @@ pub(super) fn c3_counter_full_chain_impl() -> anyhow::Result<()> {
 
 /// 校验矩阵：非归属/越界参数/未知键/非 Mod 目标全部丢弃且结算成功；
 /// 同键两次发射 last-wins。
-pub(super) fn c3_counter_gates_impl() -> anyhow::Result<()> {
+pub(super) fn counter_gates_impl() -> anyhow::Result<()> {
     let mut e = chain_engine("gates", CHAIN_JS, None)?;
     let id = place_counter(&mut e, "p1")?;
     let creep = e.place_object(
@@ -240,7 +240,7 @@ pub(super) fn c3_counter_gates_impl() -> anyhow::Result<()> {
 
 /// process 异常使候选失败：世界、对象字段与 Mod 状态保持上一 tick，
 /// 重试同因失败。
-pub(super) fn c3_counter_failure_rolls_back_impl() -> anyhow::Result<()> {
+pub(super) fn counter_failure_rolls_back_impl() -> anyhow::Result<()> {
     let server_js = r#"
 import { createApi } from '@kkscreeps/mod';
 export default function register(api) {
@@ -290,7 +290,7 @@ export default function register(api) {
 
 /// 创建命令的输入校验：未知类型、缺无默认字段、未声明字段、越界值、
 /// 位置字段同步；vanilla 分片无 Mod 类型可用。
-pub(super) fn c3_counter_creation_gates_impl() -> anyhow::Result<()> {
+pub(super) fn counter_creation_gates_impl() -> anyhow::Result<()> {
     let mut e = chain_engine("create", CHAIN_JS, None)?;
     let err = e
         .place_mod_object("W1N1", "chainmod:ghost", &json!({}))
@@ -342,7 +342,7 @@ pub(super) fn c3_counter_creation_gates_impl() -> anyhow::Result<()> {
 
 /// 配置默认值到达创建面（value 默认读 api.config.start）；Mod 对象
 /// 不进玩家投影（JSON 与 KKPV 两通道一致——玩家执行正常、对象不可见）。
-pub(super) fn c3_counter_config_and_projection_impl() -> anyhow::Result<()> {
+pub(super) fn counter_config_and_projection_impl() -> anyhow::Result<()> {
     let config_js = r#"
 import { createApi } from '@kkscreeps/mod';
 export default function register(api) {
@@ -391,7 +391,7 @@ export default function register(api) {
 
 /// 创建与失败轮门的补充：builtin 类型键拒绝（builtin 类型有 Rust 权威
 /// 表示，不得以 Mod 信封再造）；失败轮 pending 时创建被拒。
-pub(super) fn c3_counter_creation_and_round_gates_impl() -> anyhow::Result<()> {
+pub(super) fn counter_creation_and_round_gates_impl() -> anyhow::Result<()> {
     let mut e = chain_engine("roundgate", CHAIN_JS, None)?;
     // builtin 命名空间类型键：管理面拒绝。
     let err = e
@@ -460,7 +460,7 @@ export default function register(api) {
 
 /// 只含 link 处理器（无 Mod 意图）的 Mod 分片：玩家面原语不装配——
 /// 门控按"计划含 Mod 意图"推导，不是按"是否 Mod 分片"。
-pub(super) fn c3_counter_link_only_shard_skips_primitive_impl() -> anyhow::Result<()> {
+pub(super) fn counter_link_only_shard_skips_primitive_impl() -> anyhow::Result<()> {
     let server_js = r#"
 import { createApi } from '@kkscreeps/mod';
 export default function register(api) {
@@ -528,7 +528,7 @@ export default function register(api) {
 
 /// SDK 压制声明端到端：齐发只执行压制者、压制者缺席则执行、压制按
 /// 键存在性（压制者参数越界被丢弃仍压制）、跨对象隔离；两通道一致。
-pub(super) fn c3_counter_suppression_impl() -> anyhow::Result<()> {
+pub(super) fn counter_suppression_impl() -> anyhow::Result<()> {
     let (mut e, kept_packages) = chain_engine_kept("suppress", SUPPRESSION_JS)?;
     for channel in [false, true] {
         e.set_kkpv_channel(channel);
@@ -629,7 +629,7 @@ pub(super) fn c3_counter_suppression_impl() -> anyhow::Result<()> {
 }
 
 /// 冻结校验经 SDK 面可见：压制动作不在计划（未知键）拒绝注册。
-pub(super) fn c3_counter_suppression_freeze_gates_impl() -> anyhow::Result<()> {
+pub(super) fn counter_suppression_freeze_gates_impl() -> anyhow::Result<()> {
     let server_js = r#"
 import { createApi } from '@kkscreeps/mod';
 export default function register(api) {

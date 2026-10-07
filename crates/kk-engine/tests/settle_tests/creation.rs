@@ -326,3 +326,38 @@ fn room_intent_dispatch_order_remove_before_create() {
         _ => panic!(),
     }
 }
+
+#[test]
+fn own_construction_site_blocks_movement() {
+    // 自家障碍工地在移动仲裁时挡路，而非请求预检时。
+    // 来源：上游 intents/movement.js 的 checkObstacleAtXY。
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let site = f.site(10, 11, "spawn", 0, 15000, "p1");
+    let c = f.creep("w1", "p1", 10, 10, &[BodyKind::Move], 0);
+    f.settle(move_intent(c, 5)); // → (10,11) 自家 spawn 工地
+    assert_eq!(f.creep_state(c), (10, 10, 0, 0), "自家 obstacle 工地挡路");
+    assert!(f.world.get(site).is_some(), "工地未被动");
+}
+
+#[test]
+fn moving_onto_enemy_site_stomps_it() {
+    // movement.js:224-233：进格踩掉敌方工地（safeMode 门外），退一半工程为
+    // 掉落能量；tick 期插入的 energy 不在阶段 8 键快照内 → 本 tick 不衰减
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let site = f.site(10, 11, "road", 10, 300, "p2");
+    let c = f.creep("w1", "p1", 10, 10, &[BodyKind::Move], 0);
+    f.settle(move_intent(c, 5));
+    assert_eq!(f.creep_state(c).1, 11, "敌方工地可入");
+    assert!(f.world.get(site).is_none(), "工地被踩掉");
+    let dropped = f
+        .world
+        .room("W1N1")
+        .unwrap()
+        .objects
+        .values()
+        .find_map(|o| match o {
+            RoomObject::Energy(e) => Some(e.amount),
+            _ => None,
+        });
+    assert_eq!(dropped, Some(5), "退半工程 10/2=5，本 tick 不衰减");
+}

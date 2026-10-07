@@ -46,7 +46,7 @@ fn engine_with_link(mods_root: &std::path::Path) -> anyhow::Result<EmbedEngine> 
 
 /// link tick 槽的 after 处理器累积状态：每 tick 每 link 计数一次，
 /// 状态跨 tick 提交续传。
-pub(super) fn c_mod_settle_state_accumulates_impl() -> anyhow::Result<()> {
+pub(super) fn mod_settle_state_accumulates_impl() -> anyhow::Result<()> {
     let root = write_mod_root(
         "tally",
         r#"
@@ -84,7 +84,7 @@ export default function register(api) {
 
 /// 处理器异常使本轮候选失败：世界与 Mod 状态都保持上一 tick，
 /// 重试同因失败（不静默跳过 Mod 后提交不同规则的世界）。
-pub(super) fn c_mod_settle_failure_rolls_back_state_impl() -> anyhow::Result<()> {
+pub(super) fn mod_settle_failure_rolls_back_state_impl() -> anyhow::Result<()> {
     let root = write_mod_root(
         "flaky",
         r#"
@@ -126,7 +126,7 @@ export default function register(api) {
 
 /// replace 中心执行与 wrap 续行均可装配。native 被替换语义由
 /// 引擎级 m2b 用例锁定，此处不重复断言冷却字段。
-pub(super) fn c_mod_settle_replace_and_wrap_gate_impl() -> anyhow::Result<()> {
+pub(super) fn mod_settle_replace_and_wrap_gate_impl() -> anyhow::Result<()> {
     let root = write_mod_root(
         "replacer",
         r#"
@@ -164,7 +164,7 @@ export default function register(api) {
 /// 装配失败（房间域动作的执行通道未接线）时分片按 vanilla 建立：引擎
 /// 保持默认计划、Mod 面不可用——与 create_shard 的“后续失败不恢复旧分片”
 /// 语义一致，且 vanilla tick 仍可推进。
-pub(super) fn c_mod_settle_registration_failure_impl() -> anyhow::Result<()> {
+pub(super) fn mod_settle_registration_failure_impl() -> anyhow::Result<()> {
     let root = write_mod_root(
         "orphan",
         r#"

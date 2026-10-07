@@ -189,3 +189,38 @@ pub(super) use memory_and_budget::*;
 
 mod modules_and_api;
 pub(super) use modules_and_api::*;
+
+/// 写回前交界竞态的确定性复现：run 成功后、写回前，terminate 已投递（看门狗
+/// 同代只投一次，不会再 terminate）——end_tick 的 cancel 清掉这个唯一信号后，
+/// 挂死的写回必须由重新武装的新代兜底掐断（否则线程永久挂死）。
+pub(super) fn writeback_rearmed_after_cancel() -> anyhow::Result<()> {
+    let cfg = SandboxConfig {
+        max_per_tick: 150.0,
+        initial_bucket: 150.0,
+        ..SandboxConfig::default()
+    };
+    let mut sb = Sandbox::new(cfg)?;
+    let mut table = ModuleTable::new();
+    table.insert_js(
+        "main",
+        "module.exports.loop = function () { Memory.toJSON = function () { while (true) {} }; };",
+    );
+    sb.set_modules(table)?;
+    sb.begin_tick(&world())?;
+    let out = sb.run_loop()?; // loop 快速返回（只装挂死用的 toJSON）
+    assert!(matches!(out, TickOutcome::Completed { .. }));
+    // 模拟"看门狗恰在 run 成功后投递 terminate"：手动武装一个已过期的 deadline
+    // 并等它 fire——此后该代已 fired，看门狗不会再投递（竞态窗口的前提）
+    sb.watchdog().arm(std::time::Instant::now());
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    let t0 = std::time::Instant::now();
+    let wb = sb.end_tick()?;
+    let elapsed = t0.elapsed().as_millis();
+    assert_eq!(
+        wb.get("terminated").and_then(serde_json::Value::as_bool),
+        Some(true),
+        "写回挂死被重新武装的新代兜底掐断: {wb:?}"
+    );
+    assert!(elapsed < 5_000, "不挂死线程（{elapsed}ms）");
+    Ok(())
+}

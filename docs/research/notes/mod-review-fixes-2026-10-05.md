@@ -8,7 +8,7 @@
 2. pickup 原来只检查对象、距离与容量，没有资源目录准入。现在在改写两端前拒绝目录外资源。回归覆盖装有其他资源时的未声明键、未知普通资源名，以及无 Mod 目录时的命名空间资源；creep 库存保持零，掉落堆只受正常对象阶段衰减，不能被拾取扣减或移除。既有声明资源 drop/pickup 正向闭环继续通过。
 3. 规则文档示例 tick 修改 value，但 schema 只声明 x/y，实际运行报未声明字段。补充 u32/default=0 声明，并说明 player.js 绑定要求。CLI 回归直接读取文档的 JS 示例，配置最小玩家绑定，在 JSON/KKPV 两通路各运行 9 tick，核对 tick 0/4/8 更新后 value=3。
 
-新增回归位于[宿主规则读取](../../../crates/kk-mod-host/tests/register_tests/rules_read.rs)、[资源结算](../../../crates/kk-engine/tests/settle_tests/mod_resource_family.rs)及[CLI 规则场景](../../../crates/kk-cli/tests/sim_tests/rules.rs)。定向结果为宿主 5 项、资源结算 6 项、CLI 规则场景 2 项通过。
+新增回归位于[宿主规则读取](../../../crates/kk-mod-host/tests/register_tests/rules_read.rs)、[资源结算](../../../crates/kk-engine/tests/settle_tests/mod_resources.rs)及[CLI 规则场景](../../../crates/kk-cli/tests/sim_tests/rules.rs)。定向结果为宿主 5 项、资源结算 6 项、CLI 规则场景 2 项通过。
 
 ## 提交前验证
 

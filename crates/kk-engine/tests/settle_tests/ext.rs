@@ -302,6 +302,7 @@ fn ext_batch(player: &str, id: ObjId, args: Value) -> IntentBatch {
     batch
 }
 
+mod fields;
 mod installation;
 
 mod execution;

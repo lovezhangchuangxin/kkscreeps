@@ -6,5 +6,5 @@
 - **beacon**：manifest 依赖 `ore`；自身声明 `beacon:spark` 并在 `builtin:link.tick` 写自有 state。选择 beacon 时 ore 经依赖闭包自动加入，用于组合验收。
 
 市场与跨房对 Mod 资源的显式拒绝由 Rust 测试覆盖
-（`crates/kk-engine/tests/settle_tests/mod_resource_family.rs`），
+（`crates/kk-engine/tests/settle_tests/mod_resources.rs`），
 不依赖这两个包。

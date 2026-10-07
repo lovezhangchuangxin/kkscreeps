@@ -412,3 +412,53 @@ fn link_cooldown_stops_at_zero() {
         "钳 0，不落负值"
     );
 }
+
+#[test]
+fn build_progress_and_completion() {
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let site = f.site(12, 10, "constructedWall", 0, 1, "p1");
+    // 1 work → 5/tick（BUILD_POWER=5）；墙成本 1 → 一次完成
+    let c = f.creep("w1", "p1", 11, 10, &[BodyKind::Move, BodyKind::Work], 10);
+    let mut b = IntentBatch::default();
+    b.add_object_intent("p1", c, Action::Build, IntentData::target(site));
+    let events = f.settle(b);
+    assert_eq!(events[0]["event"], kk_core::constants::EVENT_BUILD);
+    assert_eq!(events[0]["data"]["incomplete"], false);
+    assert!(
+        !f.world.room("W1N1").unwrap().objects.contains_key(&site),
+        "工地移除"
+    );
+    let wall = f
+        .world
+        .room("W1N1")
+        .unwrap()
+        .objects
+        .values()
+        .find_map(|o| match o {
+            RoomObject::ConstructedWall(w) => Some(w),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(wall.hits, 1, "官方落成墙 hits=WALL_HITS(1)");
+    assert_eq!(f.creep_state(c).3, 9, "耗 1 能量");
+}
+
+#[test]
+fn road_on_swamp_costs_more_to_build() {
+    // 本例直接放置 progress_total=1500 的道路工地，验证建造使用保存的总进度。
+    // 不覆盖工地创建时的沼泽倍率计算。
+    let mut f = Fixture::new(1, terrain_with(&[(12, 10)]));
+    let site = f.site(12, 10, "road", 0, 1500, "p1");
+    let c = f.creep("w1", "p1", 11, 10, &[BodyKind::Move, BodyKind::Work], 10);
+    let mut b = IntentBatch::default();
+    b.add_object_intent("p1", c, Action::Build, IntentData::target(site));
+    let events = f.settle(b);
+    assert_eq!(
+        events[0]["data"]["incomplete"], true,
+        "5 能量 < 1500 不完成"
+    );
+    match f.obj(site) {
+        RoomObject::ConstructionSite(s) => assert_eq!(s.progress, 5),
+        _ => panic!(),
+    }
+}

@@ -2,7 +2,7 @@
 
 use super::*;
 
-pub(super) fn m2b_structure_readfaces_e2e_impl() -> anyhow::Result<()> {
+pub(super) fn structure_readfaces_e2e_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
         "players": ["p1"],
@@ -167,7 +167,7 @@ pub(super) fn m2b_structure_readfaces_e2e_impl() -> anyhow::Result<()> {
 
 /// 检查默认容量从对象初始化经世界投影到玩家 getter 的结果。
 /// spawn、extension、storage 使用专门的投影逻辑，需与通用结构的默认字段分别验证。
-pub(super) fn m2b_structure_defaults_probe_impl() -> anyhow::Result<()> {
+pub(super) fn structure_defaults_probe_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
         "players": ["p1"],

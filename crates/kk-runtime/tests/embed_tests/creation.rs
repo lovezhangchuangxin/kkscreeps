@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use super::*;
 
-pub(super) fn m2b_create_flag_and_site_e2e_impl() -> anyhow::Result<()> {
+pub(super) fn create_flag_and_site_e2e_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
         "players": ["p1", "p2"],
@@ -136,7 +136,7 @@ pub(super) fn m2b_create_flag_and_site_e2e_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub(super) fn m2b_creation_gates_and_helpers_e2e_impl() -> anyhow::Result<()> {
+pub(super) fn creation_gates_and_helpers_e2e_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
         "players": ["p1"],
@@ -206,7 +206,7 @@ pub(super) fn m2b_creation_gates_and_helpers_e2e_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub(super) fn m2b_storage_terminal_backfill_e2e_impl() -> anyhow::Result<()> {
+pub(super) fn storage_terminal_backfill_e2e_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
         "players": ["p1"],

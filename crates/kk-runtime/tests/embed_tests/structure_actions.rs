@@ -2,7 +2,7 @@
 
 use super::*;
 
-pub(super) fn m2b_structure_actions_e2e_impl() -> anyhow::Result<()> {
+pub(super) fn structure_actions_e2e_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
         "players": ["p1"],

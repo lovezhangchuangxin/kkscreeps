@@ -13,8 +13,9 @@ mod constant_gate_forms;
 mod kkpv_channel;
 mod mod_player_api;
 mod pathfinder_family;
-mod prelude_and_room_forms;
+mod prelude_forms;
 mod resource_host_and_nearheap;
+mod room_forms;
 mod store_spawn_and_viewer;
 mod watchdog_and_memory;
 // 子模块提供场景函数，由唯一的顶层测试串行调用；不要将它们改成并行测试。
@@ -22,8 +23,9 @@ use constant_gate_forms::*;
 use kkpv_channel::*;
 use mod_player_api::*;
 use pathfinder_family::*;
-use prelude_and_room_forms::*;
+use prelude_forms::*;
 use resource_host_and_nearheap::*;
+use room_forms::*;
 use store_spawn_and_viewer::*;
 use watchdog_and_memory::*;
 
@@ -56,7 +58,7 @@ fn m0_sandbox_suite() -> anyhow::Result<()> {
     watchdog_hard_terminate_and_reuse()?;
     watchdog_late_expiry_does_not_kill_next_tick()?;
     memory_gate_terminates_and_reuses()?;
-    b06_skip_recharge_candidate_impl()?;
+    skip_recharge_candidate_impl()?;
     lifo_registry_drains()?;
     memory_alias_setters()?;
     roomposition_official_semantics()?;

@@ -3,55 +3,6 @@
 use super::*;
 
 #[test]
-fn safe_mode_blocks_hostile_attack_and_dismantle() {
-    // attack.js:30-32 / dismantle.js:24-26：他人 safeMode 生效期拒（引擎层二次门）。
-    // attack 与 dismantle 各自独立 settle 验证——两者同 creep 同 tick 会互相压制
-    // （dismantle 在 attack 的压制表里），单一空事件断言无法归因到 attack 的门
-    let mut f = Fixture::new(1, terrain_with(&[]));
-    let ctl = f.controller(2, Some("p2"));
-    let atk = f.creep("atk", "p1", 10, 10, &[BodyKind::Attack, BodyKind::Work], 0);
-    let wall = f
-        .world
-        .insert(
-            "W1N1",
-            RoomObject::ConstructedWall(kk_schema::room::ConstructedWallObj {
-                notify_when_attacked: None,
-                id: 0,
-                x: 10,
-                y: 11,
-                hits: 1000,
-            }),
-        )
-        .unwrap();
-    // 直接设置控制器的安全模式，单独验证攻击和拆解的结算检查。
-    f.world
-        .edit_object(ctl, |object| {
-            if let Some(RoomObject::Controller(t)) = Some(object) {
-                t.safe_mode = 1000;
-            }
-            Ok(())
-        })
-        .unwrap();
-    let ext = extension_at(&mut f, 11, 10, 1000, 0);
-    // attack 的门：单独 settle
-    let events = f.settle(attack_intent(atk, ext));
-    assert!(events.is_empty(), "safeMode：攻击拒");
-    match f.obj(ext) {
-        RoomObject::Extension(e) => assert_eq!(e.hits, 1000),
-        _ => panic!(),
-    }
-    // dismantle 的门：单独 settle
-    let mut batch = IntentBatch::default();
-    batch.add_object_intent("p1", atk, Action::Dismantle, IntentData::target(wall));
-    let events2 = f.settle(batch);
-    assert!(events2.is_empty(), "safeMode：拆解拒");
-    match f.obj(wall) {
-        RoomObject::ConstructedWall(w) => assert_eq!(w.hits, 1000),
-        _ => panic!(),
-    }
-}
-
-#[test]
 fn repair_effect_cost_and_clamps() {
     // repair.js:23-27：effect=min(功率,能量×100,缺口)；cost=min(存量,ceil(effect×0.01))
     let mut f = Fixture::new(1, terrain_with(&[]));
@@ -378,278 +329,6 @@ fn attack_suppresses_harvest() {
 }
 
 #[test]
-fn carry_death_drops_overflow_energy() {
-    // tick.js:141-143 → _drop-resources-without-space：CARRY 部件损毁缩容 → 超容掉落
-    let mut f = Fixture::new(1, terrain_with(&[]));
-    let a = f.creep("atk", "p1", 10, 10, &[BodyKind::Attack; 4], 0);
-    let b = f.creep(
-        "haul",
-        "p2",
-        11,
-        10,
-        &[BodyKind::Carry, BodyKind::Carry],
-        80,
-    );
-    f.settle(attack_intent(a, b));
-    let (hits, parts) = creep_parts(&f, b);
-    assert_eq!(hits, 80, "200-120");
-    assert_eq!(parts, vec![0, 80], "首个 carry 报废");
-    assert_eq!(f.creep_state(b).3, 50, "容量缩至 50");
-    let dropped = f
-        .world
-        .room("W1N1")
-        .unwrap()
-        .objects
-        .values()
-        .find_map(|o| match o {
-            RoomObject::Energy(e) if e.x == 11 && e.y == 10 => Some(e.amount),
-            _ => None,
-        });
-    assert_eq!(dropped, Some(30), "超容 80-50 掉地（tick 阶段不衰减）");
-}
-
-/// 命名矿物 Z 已占满容量，采得的 U 因超容掉落，energy 和 Z 不变。
-/// 来源：上游 creeps/harvest.js 的 calcResources 与矿物 drop 分支。
-#[test]
-fn harvest_mixed_holding_overflow_drops_mined_mineral() {
-    let mut f = Fixture::new(1, terrain_with(&[]));
-    f.controller(6, Some("p1"));
-    let m = f.mineral(10, 10, "U", 70_000, 3, None);
-    f.extractor(10, 10, Some("p1"), 0);
-    // 容量 50 已被 Z 占满（命名槽）
-    let c = f
-        .world
-        .insert(
-            "W1N1",
-            RoomObject::Creep(CreepObj {
-                id: 0,
-                x: 10,
-                y: 11,
-                fatigue: 0,
-                age_time: u64::MAX / 2,
-                hits: 300,
-                spawning: false,
-                action_log: 0,
-                name: "w1".into(),
-                owner: "p1".into(),
-                body: body(&[BodyKind::Work, BodyKind::Work, BodyKind::Carry]),
-                store: kk_schema::room::Store {
-                    energy: 0,
-                    ghodium: 0,
-                },
-                store_extra: vec![kk_schema::room::ResourceStack {
-                    resource: "Z".into(),
-                    amount: 50,
-                }],
-                say_message: None,
-                say_public: None,
-                notify_when_attacked: None,
-            }),
-        )
-        .unwrap();
-    let mut batch = IntentBatch::default();
-    batch.add_object_intent("p1", c, Action::Harvest, IntentData::target(m));
-    f.settle(batch);
-    // 全槽 sum = 50(Z)+2(U 产出)=52 > 50 → 掉 2 U（intent 相掉落同 tick 衰减
-    // ceil(2/1000)=1 → 堆 1）；Z 槽不动、energy 不动
-    match f.obj(c) {
-        RoomObject::Creep(cc) => {
-            assert_eq!(cc.store.energy, 0, "energy 槽不动（只掉本 tick 产出资源）");
-            assert_eq!(
-                cc.store_extra,
-                vec![
-                    kk_schema::room::ResourceStack {
-                        resource: "Z".into(),
-                        amount: 50
-                    },
-                    kk_schema::room::ResourceStack {
-                        resource: "U".into(),
-                        amount: 0
-                    },
-                ],
-                "Z 槽不动；U 产出全掉但键留 0（官方 store[U]=0 落库同构）"
-            );
-        }
-        _ => panic!(),
-    }
-    let u_pile = f
-        .world
-        .room("W1N1")
-        .unwrap()
-        .objects
-        .values()
-        .find_map(|o| match o {
-            RoomObject::Energy(e)
-                if e.x == 10 && e.y == 11 && e.resource.as_deref() == Some("U") =>
-            {
-                Some(e.amount)
-            }
-            _ => None,
-        });
-    assert_eq!(
-        u_pile,
-        Some(1),
-        "掉 2 U 同 tick 衰减 1 → 堆 1（官方出生 tick 衰减一致）"
-    );
-}
-
-/// Z 已占满容量，source 采集只增加 energy 槽；按全仓超容量掉落 energy。
-/// 不能将全仓总量写入 energy 槽，否则会复制已持有的矿物。
-#[test]
-fn harvest_source_mixed_holding_overflow_drops_energy_only() {
-    let mut f = Fixture::new(1, terrain_with(&[]));
-    let src = f
-        .world
-        .insert(
-            "W1N1",
-            RoomObject::Source(kk_schema::room::SourceObj {
-                id: 0,
-                x: 10,
-                y: 10,
-                energy: 3000,
-                energy_capacity: 3000,
-                next_regeneration_time: None,
-            }),
-        )
-        .unwrap();
-    // 容量 50 已被 Z 占满
-    let c = f
-        .world
-        .insert(
-            "W1N1",
-            RoomObject::Creep(CreepObj {
-                id: 0,
-                x: 10,
-                y: 11,
-                fatigue: 0,
-                age_time: u64::MAX / 2,
-                hits: 300,
-                spawning: false,
-                action_log: 0,
-                name: "w1".into(),
-                owner: "p1".into(),
-                body: body(&[BodyKind::Work, BodyKind::Work, BodyKind::Carry]),
-                store: kk_schema::room::Store {
-                    energy: 0,
-                    ghodium: 0,
-                },
-                store_extra: vec![kk_schema::room::ResourceStack {
-                    resource: "Z".into(),
-                    amount: 50,
-                }],
-                say_message: None,
-                say_public: None,
-                notify_when_attacked: None,
-            }),
-        )
-        .unwrap();
-    let mut batch = IntentBatch::default();
-    batch.add_object_intent("p1", c, Action::Harvest, IntentData::target(src));
-    f.settle(batch);
-    match f.obj(c) {
-        RoomObject::Creep(cc) => {
-            assert_eq!(
-                cc.store.energy, 0,
-                "采 4 → 全槽 54>50 → 掉 min(4, 4)=4，energy 归 0"
-            );
-            assert_eq!(
-                cc.store_extra,
-                vec![kk_schema::room::ResourceStack {
-                    resource: "Z".into(),
-                    amount: 50
-                }],
-                "Z 槽不动（只掉本 tick 产出的 energy）"
-            );
-        }
-        _ => panic!(),
-    }
-    // 掉 4 energy 同 tick 衰减 ceil(4/1000)=1 → 堆 3
-    let pile = f
-        .world
-        .room("W1N1")
-        .unwrap()
-        .objects
-        .values()
-        .find_map(|o| match o {
-            RoomObject::Energy(e) if e.x == 10 && e.y == 11 => Some(e.amount),
-            _ => None,
-        });
-    assert_eq!(pile, Some(3), "掉 4 同 tick 衰减 1");
-}
-
-/// CARRY 损毁后按 RESOURCES_ALL 顺序掉落全部资源中的超量部分。
-/// 本例先掉 energy，再掉 Z；对象 tick 中产生的掉落堆本轮不衰减。
-#[test]
-fn carry_death_drops_overflow_mixed_resources() {
-    let mut f = Fixture::new(1, terrain_with(&[]));
-    let a = f.creep("atk", "p1", 10, 10, &[BodyKind::Attack; 4], 0);
-    let b = f
-        .world
-        .insert(
-            "W1N1",
-            RoomObject::Creep(CreepObj {
-                id: 0,
-                x: 11,
-                y: 10,
-                fatigue: 0,
-                age_time: u64::MAX / 2,
-                hits: 200,
-                spawning: false,
-                action_log: 0,
-                name: "haul".into(),
-                owner: "p2".into(),
-                body: body(&[BodyKind::Carry, BodyKind::Carry]),
-                store: kk_schema::room::Store {
-                    energy: 40,
-                    ghodium: 0,
-                },
-                store_extra: vec![kk_schema::room::ResourceStack {
-                    resource: "Z".into(),
-                    amount: 60,
-                }],
-                say_message: None,
-                say_public: None,
-                notify_when_attacked: None,
-            }),
-        )
-        .unwrap();
-    f.settle(attack_intent(a, b));
-    // 容量 100→50（毁一 carry）；总持有 40e+60Z=100 > 50 → 掉 50：
-    // energy 40 全掉 → Z 补 10 → creep 留 Z 50
-    assert_eq!(f.creep_state(b).3, 0, "energy 全掉");
-    let piles: Vec<(String, u32)> = f
-        .world
-        .room("W1N1")
-        .unwrap()
-        .objects
-        .values()
-        .filter_map(|o| match o {
-            RoomObject::Energy(e) if e.x == 11 && e.y == 10 => Some((
-                kk_engine::settle::energy_resource_name(e).to_string(),
-                e.amount,
-            )),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(
-        piles,
-        vec![("energy".to_string(), 40), ("Z".to_string(), 10)],
-        "序贯掉落 energy 先 Z 补足（tick 相不衰减）"
-    );
-    match f.obj(b) {
-        RoomObject::Creep(cc) => assert_eq!(
-            cc.store_extra,
-            vec![kk_schema::room::ResourceStack {
-                resource: "Z".into(),
-                amount: 50
-            }],
-            "Z 留 50"
-        ),
-        _ => panic!(),
-    }
-}
-
-#[test]
 fn attack_target_validation_rejections() {
     // attack.js 各前置门：自指（:18）、射程（:21-23）、spawning 目标（:24-26）、
     // 无 hits 目标（:27-29）
@@ -814,3 +493,67 @@ fn destroyed_work_part_repairs_at_half_power_next_tick() {
 }
 
 mod healing;
+mod melee;
+mod ranged;
+mod ranges;
+mod tough;
+
+#[test]
+fn heal_target_validation_rejections() {
+    // heal.js 各前置门：spawning 施疗者（:11-13）、非 creep 目标（:17-19）、
+    // spawning 目标（:17-19）、射程外（:21-23）、他人 safeMode（:25-27）
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let medic = f.creep("medic", "p1", 10, 10, &[BodyKind::Heal], 0);
+    let ally = f.creep("ally", "p1", 12, 10, &[BodyKind::Tough], 0);
+    let chick = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Creep(CreepObj {
+                id: 0,
+                x: 11,
+                y: 10,
+                fatigue: 0,
+                age_time: u64::MAX / 2,
+                hits: 100,
+                spawning: true,
+                action_log: 0,
+                name: "chick".into(),
+                owner: "p1".into(),
+                body: body(&[BodyKind::Move]),
+                store: Default::default(),
+                store_extra: Vec::new(),
+                say_message: None,
+                say_public: None,
+                notify_when_attacked: None,
+            }),
+        )
+        .unwrap();
+    let ext = extension_at(&mut f, 11, 11, 1000, 0);
+    // 近战射程 2 拒
+    assert!(f.settle(heal_intent(medic, ally)).is_empty(), "射程 2 拒");
+    // 非 creep 目标拒
+    assert!(f.settle(heal_intent(medic, ext)).is_empty(), "结构不可治");
+    // spawning 目标拒
+    assert!(
+        f.settle(heal_intent(medic, chick)).is_empty(),
+        "spawning 拒"
+    );
+    // spawning 施疗者拒
+    let mut b0 = IntentBatch::default();
+    b0.add_object_intent("p1", chick, Action::Heal, IntentData::target(medic));
+    assert!(f.settle(b0).is_empty(), "spawning 施疗者拒");
+    // 他人 safeMode 拒（heal.js:25-27 与 attack 同形）
+    let ctl = f.controller(2, Some("p2"));
+    f.world
+        .edit_object(ctl, |object| {
+            if let Some(RoomObject::Controller(t)) = Some(object) {
+                t.safe_mode = 1000;
+            }
+            Ok(())
+        })
+        .unwrap();
+    let near = f.creep("near", "p1", 11, 10, &[BodyKind::Tough], 0);
+    assert!(f.settle(heal_intent(medic, near)).is_empty(), "safeMode 拒");
+    assert_eq!(creep_parts(&f, near).0, 100);
+}

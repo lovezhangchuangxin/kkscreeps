@@ -2,6 +2,7 @@
 //! 维修/拆解、寻路障碍与工地退款。配方经冻结计划进入贡献平面。
 use super::*;
 
+mod lifecycle;
 mod regressions;
 
 fn foundry() -> kk_mod_api::buildings::BuildingDescriptor {

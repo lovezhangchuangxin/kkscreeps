@@ -7,7 +7,7 @@ use serde_json::Value;
 
 use super::*;
 
-pub(super) fn m2b_ranged_attack_e2e_impl() -> anyhow::Result<()> {
+pub(super) fn ranged_attack_e2e_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
         "players": ["p1"],
@@ -58,7 +58,7 @@ pub(super) fn m2b_ranged_attack_e2e_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub(super) fn m2b_saying_visibility_e2e_impl() -> anyhow::Result<()> {
+pub(super) fn saying_visibility_e2e_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
         "players": ["p1", "p2"],
@@ -104,7 +104,7 @@ pub(super) fn m2b_saying_visibility_e2e_impl() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub(super) fn m2b_notify_when_attacked_creep_e2e_impl() -> anyhow::Result<()> {
+pub(super) fn notify_when_attacked_creep_e2e_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
         "players": ["p1"],

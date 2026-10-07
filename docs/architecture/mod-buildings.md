@@ -82,7 +82,7 @@ export default function register(api) {
 
 ## 验收
 
-- Rust：冻结语义与组合报告（`kk-mod-api` tests/freeze，含字段/槽声明面）、结算（`kk-engine` `mod_building_family` + `building_lifecycle`）、字段写面单测（`kk-engine` `settle::buildings::tests`）、事务边界（`kk-runtime` `mod_building_world` + `mod_building_fields`：tick 读写、原生键漂移整轮失败、decline 故障、停用回退）。
+- Rust：冻结语义与组合报告（`kk-mod-api` tests/freeze，含字段/槽声明面）、结算（`kk-engine` `mod_buildings`（含 lifecycle/regressions 子模块））、字段写面单测（`kk-engine` `settle::buildings::tests`）、事务边界（`kk-runtime` `mod_building_world` + `mod_building_fields`：tick 读写、原生键漂移整轮失败、decline 故障、停用回退）。
 - 独立 JS 场景 [sim-mod-buildings](../../compat/fixtures/sim-mod-buildings/README.md) 三件套（smelter / smelter+panel / 无 Mod 对照）：真实玩家 VM 完成建造、投料生产、产物搬运、受击维修与寻路矩阵断言；双投影通道全等；检查点续跑等价（`kk-cli` `sim_tests/buildings.rs`）。证据见 [N2b 交付记录](../research/notes/n2b-mod-buildings-2026-10-05.md)。
 - 字段与生命周期场景 [sim-mod-building-fields](../../compat/fixtures/sim-mod-building-fields/README.md) 四件套（bl:gauge / bk:beacon / 组合 / 无 Mod 对照）：两独立包的玩家面字段直供、先产后 tick、世界终态与冷恢复（`kk-cli` `sim_tests/building_fields.rs`）。证据见 [G08.a 交付记录](../research/notes/g08a-building-fields-2026-10-06.md)。
 - 满仓生产、出生障碍与夹具干净源码验收见 [review 修复记录](../research/notes/n2b-review-fixes-2026-10-05.md)。

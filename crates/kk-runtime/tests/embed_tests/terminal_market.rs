@@ -3,7 +3,7 @@
 
 use super::*;
 
-pub(super) fn m2b2_terminal_send_e2e_impl() -> anyhow::Result<()> {
+pub(super) fn terminal_send_e2e_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
         "players": ["p1", "p2"],
@@ -140,7 +140,7 @@ pub(super) fn m2b2_terminal_send_e2e_impl() -> anyhow::Result<()> {
 }
 
 /// 检查 Game.market 属性描述符、严格模式赋值，以及创建订单、交易和随附订单信息。
-pub(super) fn m2b2_market_book_e2e_impl() -> anyhow::Result<()> {
+pub(super) fn market_book_e2e_impl() -> anyhow::Result<()> {
     let mut e = EmbedEngine::new();
     e.create_shard(&json!({
         "players": ["p1", "p2"],

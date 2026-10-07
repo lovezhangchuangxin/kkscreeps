@@ -163,7 +163,7 @@ pub(crate) fn memory_gate_terminates_and_reuses() -> anyhow::Result<()> {
 
 /// 负余额 begin_tick 只暂存回充，settle_bill 更新余额，discard_bill 保持原余额。
 /// 覆盖 −40→−20→0 的恢复轨迹，以及 −580 恢复到 −40 的深度透支分支。
-pub(crate) fn b06_skip_recharge_candidate_impl() -> anyhow::Result<()> {
+pub(crate) fn skip_recharge_candidate_impl() -> anyhow::Result<()> {
     let mut sb = Sandbox::new(SandboxConfig {
         initial_bucket: -40.0,
         ..SandboxConfig::default()

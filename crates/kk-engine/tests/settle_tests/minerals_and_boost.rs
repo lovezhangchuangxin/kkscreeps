@@ -714,3 +714,160 @@ fn creep_death_carries_named_minerals_to_tombstone() {
         "携带矿物入墓碑命名槽"
     );
 }
+
+#[test]
+fn ghodium_resource_family_settles() {
+    // 依次验证 G 的转移、提取和掉落，使用 ghodium 固定槽，不混入 energy。
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let st = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Storage(kk_schema::room::StorageObj {
+                id: 0,
+                x: 20,
+                y: 20,
+                hits: 10_000,
+                owner: "p1".into(),
+                store: kk_schema::room::Store::default(),
+                store_extra: Vec::new(),
+                notify_when_attacked: None,
+            }),
+        )
+        .unwrap();
+    // G transfer：creep 40G → storage 20G
+    let c = f.creep("w1", "p1", 21, 20, &[BodyKind::Move, BodyKind::Carry], 0);
+    f.world
+        .edit_object(c, |object| {
+            if let Some(RoomObject::Creep(cc)) = Some(object) {
+                cc.store.ghodium = 40;
+            }
+            Ok(())
+        })
+        .unwrap();
+    let mut b = IntentBatch::default();
+    let mut d = IntentData::bare();
+    d.id = Some(st);
+    d.amount = Some(20);
+    d.resource_type = Some("G".into());
+    b.add_object_intent("p1", c, Action::Transfer, d);
+    f.settle(b);
+    match (f.obj(c), f.obj(st)) {
+        (RoomObject::Creep(cc), RoomObject::Storage(s)) => {
+            assert_eq!(cc.store.ghodium, 20, "creep G 40→20");
+            assert_eq!(s.store.ghodium, 20, "storage G 0→20");
+        }
+        _ => panic!(),
+    }
+    // G withdraw：storage 20 → creep 全量
+    let mut b2 = IntentBatch::default();
+    let mut d2 = IntentData::bare();
+    d2.id = Some(st);
+    d2.amount = Some(20);
+    d2.resource_type = Some("G".into());
+    b2.add_object_intent("p1", c, Action::Withdraw, d2);
+    f.settle(b2);
+    match (f.obj(c), f.obj(st)) {
+        (RoomObject::Creep(cc), RoomObject::Storage(s)) => {
+            assert_eq!(cc.store.ghodium, 40, "withdraw 回满");
+            assert_eq!(s.store.ghodium, 0);
+        }
+        _ => panic!(),
+    }
+    // G drop：掉落为 resource_type=2 的资源堆（同格同资源并堆）
+    let mut b3 = IntentBatch::default();
+    let mut d3 = IntentData::bare();
+    d3.amount = Some(5);
+    d3.resource_type = Some("G".into());
+    b3.add_object_intent("p1", c, Action::Drop, d3);
+    f.settle(b3);
+    let pile = f
+        .world
+        .rooms()
+        .get("W1N1")
+        .unwrap()
+        .objects
+        .values()
+        .find_map(|o| match o {
+            RoomObject::Energy(e) if e.resource_type == 2 => Some(e.amount),
+            _ => None,
+        });
+    assert_eq!(
+        pile,
+        Some(4),
+        "G 5 掉落 → 当 tick 衰减 ceil(5/1000)=1 → 4（官方全资源同式）"
+    );
+    assert_eq!(
+        match f.obj(c) {
+            RoomObject::Creep(cc) => cc.store.ghodium,
+            _ => 0,
+        },
+        35
+    );
+}
+
+#[test]
+fn boost_effectiveness_unified() {
+    // KH 使 CARRY 容量加倍，ZO 使 MOVE 疲劳恢复加倍；重量与恢复都须计入 boost。
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    // 1 carry(KH) + 2 move(ZO)：携带 80（无强化需 2 carry=weight 2；KH ×2
+    // 容量 100 ⇒ weight 1）+ 1 move 够驱 ⇒ move 后疲劳 = (1+1) - 2×2 = 0
+    let c = f
+        .world
+        .insert(
+            "W1N1",
+            RoomObject::Creep(CreepObj {
+                id: 0,
+                x: 10,
+                y: 10,
+                fatigue: 0,
+                age_time: 9_000,
+                hits: 300,
+                spawning: false,
+                action_log: 0,
+                name: "b1".into(),
+                owner: "p1".into(),
+                body: vec![
+                    kk_schema::room::BodyPart {
+                        kind: BodyKind::Carry.code(),
+                        hits: 100,
+                        boost: Some("KH".into()),
+                    },
+                    kk_schema::room::BodyPart {
+                        kind: BodyKind::Move.code(),
+                        hits: 100,
+                        boost: Some("ZO".into()),
+                    },
+                    kk_schema::room::BodyPart {
+                        kind: BodyKind::Move.code(),
+                        hits: 100,
+                        boost: Some("ZO".into()),
+                    },
+                ],
+                store: kk_schema::room::Store {
+                    energy: 80,
+                    ghodium: 0,
+                },
+                store_extra: Vec::new(),
+                say_message: None,
+                say_public: None,
+                notify_when_attacked: None,
+            }),
+        )
+        .unwrap();
+    let mut b = IntentBatch::default();
+    let mut d = IntentData::bare();
+    d.direction = Some(3);
+    b.add_object_intent("p1", c, Action::Move, d);
+    f.settle(b);
+    match f.obj(c) {
+        RoomObject::Creep(cc) => {
+            assert_eq!((cc.x, cc.y), (11, 10), "direction 3=RIGHT 落地");
+            assert_eq!(
+                cc.fatigue, 0,
+                "weight=1（KH 容量×2）− 恢复 2×2（ZO 效能×2）= 1−4 → 0"
+            );
+        }
+        _ => panic!(),
+    }
+}

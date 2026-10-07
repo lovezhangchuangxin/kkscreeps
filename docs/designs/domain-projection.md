@@ -31,7 +31,7 @@ link 当前是 `RoomObject::Generic`，没有专用 Rust Link 变体。第一步
 - 自转移只扣损耗，距离为零；不能用两份旧数据分别回写同一对象。冷却先由动作增加，再在同轮对象 tick 中减一。
 - 结算的 Generic 归属门允许无主对象进入，玩家 API 的归属检查另有顺序。迁移先保持行为，发现差异须另列修复和回归证据。
 
-对应测试位于 `kk-engine/tests/settle_tests/m2b_structure_actions_family.rs` 和 `m2b_structure_decay_family.rs`。默认贡献迁移不能借机“整理”这些语义。
+对应测试位于 `kk-engine/tests/settle_tests/tower_link_actions.rs` 和 `structure_lifecycle.rs`。默认贡献迁移不能借机“整理”这些语义。
 
 ## 2. 冻结定义与稳定身份
 

@@ -134,7 +134,7 @@ if (c.store.getFreeCapacity() > 0) c.harvest(c.room.find(FIND_SOURCES)[0]);
 }
 
 /// 双房失败轮中，检查错误重试保留缓存、签名复用首次墙钟，以及两房一并提交。
-pub(crate) fn dual_b06_variants_impl() -> anyhow::Result<()> {
+pub(crate) fn dual_recovery_variants_impl() -> anyhow::Result<()> {
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
     let now_ms = || {
         SystemTime::now()

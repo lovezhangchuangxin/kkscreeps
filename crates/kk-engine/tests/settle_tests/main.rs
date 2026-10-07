@@ -13,30 +13,27 @@ use serde_json::Value;
 
 // 测试目标根采用 tests/<name>/main.rs 形态，mod 声明按同目录规则解析，
 // 不再使用 #[path] 挂接（S01 结构治理，取代 b1 批次的显式路径结论）。
-mod building_lifecycle;
-mod c3_ext_intent_family;
-mod combat_heal;
-mod combat_ranged;
-mod combat_ranges;
+mod combat;
+mod contrib_link;
+mod controller;
 mod controller_safemode;
-mod generic_store_family;
-mod inter_room_family;
-mod m2b2_terminal_market_family;
-mod m2b_contrib_link_family;
-mod m2b_creation_family;
-mod m2b_extension_family;
-mod m2b_notify_family;
-mod m2b_structure_actions_family;
-mod m2b_structure_decay_family;
+mod creation;
+mod creep_actions;
+mod engine_world;
+mod ext;
 mod minerals_and_boost;
-mod misc_and_notify;
-mod mod_building_family;
-mod mod_resource_family;
-mod movement_contest;
-mod movement_spawn_basics;
-mod structures_and_attack;
-mod tombstone_ruin_engine;
-mod tough_damage;
+mod mod_buildings;
+mod mod_resources;
+mod movement;
+mod movement_inter_room;
+mod notify;
+mod resources;
+mod spawn;
+mod store_transfer;
+mod structure_lifecycle;
+mod terminal_market;
+mod tombstone_ruin;
+mod tower_link_actions;
 
 fn terrain_with(swamps: &[(usize, usize)]) -> kk_core::Terrain {
     let mut t = kk_core::Terrain::plains();
