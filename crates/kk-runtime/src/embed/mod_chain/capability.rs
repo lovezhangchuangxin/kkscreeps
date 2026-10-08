@@ -28,6 +28,8 @@ pub(super) enum ChainCapability {
     Combat(CombatChainState),
     Build(BuildChainState),
     Incoming(Rc<kk_engine::settle::incoming::IncomingDamage>),
+    /// G09.c 结构受击候选（Mod 目标）。
+    ModIncoming(Rc<kk_engine::settle::incoming::ModIncomingDamage>),
     Contest(Rc<kk_engine::settle::movement::contest::MoveContest>),
     Admission(Rc<kk_engine::settle::movement::admission::MoveAdmission>),
     Obstacle(Rc<kk_engine::settle::movement::obstacle::MoveObstacle>),
@@ -89,6 +91,14 @@ impl ChainCapability {
     pub(super) fn incoming(&self) -> Option<&Rc<kk_engine::settle::incoming::IncomingDamage>> {
         match self {
             Self::Incoming(state) => Some(state),
+            _ => None,
+        }
+    }
+    pub(super) fn mod_incoming(
+        &self,
+    ) -> Option<&Rc<kk_engine::settle::incoming::ModIncomingDamage>> {
+        match self {
+            Self::ModIncoming(state) => Some(state),
             _ => None,
         }
     }

@@ -59,6 +59,9 @@ pub struct Working {
     pub(crate) upgraded: BTreeMap<ObjId, i64>,
     /// 指令阶段累计的 creep 伤害，在该 creep 的 tick 阶段施加。
     pub(crate) damage_to_apply: BTreeMap<ObjId, i64>,
+    /// G09.c：托管结构受击槽挂起的 Mod 伤害，意图阶段后由房间循环统一
+    /// 跑槽再落地；Native 派发（默认引擎）不产生挂起。
+    pub(crate) mod_damage_pending: Vec<crate::settle::damage::PendingModDamage>,
     /// 待施加的治疗量，与伤害一起在 creep 死亡判断前处理。
     pub(crate) heal_to_apply: BTreeMap<ObjId, i64>,
     /// attackController 设置的升级封锁到期 tick，由 controller tick 写回对象。
@@ -110,6 +113,7 @@ impl Working {
             tick_fatigue: BTreeMap::new(),
             upgraded: BTreeMap::new(),
             damage_to_apply: BTreeMap::new(),
+            mod_damage_pending: Vec::new(),
             heal_to_apply: BTreeMap::new(),
             upgrade_block_pending: BTreeMap::new(),
             safe_mode_activated: BTreeSet::new(),

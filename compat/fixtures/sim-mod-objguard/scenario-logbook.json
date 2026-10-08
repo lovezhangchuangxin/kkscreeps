@@ -1,0 +1,111 @@
+{
+ "version": 1,
+ "shard": {
+  "players": [
+   "p1"
+  ],
+  "rooms": [
+   {
+    "name": "W1N1",
+    "owner": "p1"
+   }
+  ]
+ },
+ "bots": [
+  {
+   "player": "p1",
+   "modules": "."
+  }
+ ],
+ "objects": [
+  {
+   "alias": "brawler",
+   "room": "W1N1",
+   "kind": "creep",
+   "spec": {
+    "name": "brawler",
+    "owner": "p1",
+    "pos": [
+     10,
+     10
+    ],
+    "body": [
+     "attack",
+     "move"
+    ],
+    "store": {
+     "energy": 50
+    },
+    "ticksToLive": 100
+   }
+  },
+  {
+   "alias": "skirmisher",
+   "room": "W1N1",
+   "kind": "creep",
+   "spec": {
+    "name": "skirmisher",
+    "owner": "p1",
+    "pos": [
+     12,
+     10
+    ],
+    "body": [
+     "attack",
+     "move"
+    ],
+    "store": {
+     "energy": 50
+    },
+    "ticksToLive": 100
+   }
+  },
+  {
+   "alias": "monolith",
+   "room": "W1N1",
+   "kind": "mod",
+   "spec": {
+    "typeKey": "objguard-logbook:monolith",
+    "fields": {
+     "x": 12,
+     "y": 11
+    }
+   }
+  }
+ ],
+ "mods": {
+  "root": "../mod-objguard",
+  "selection": {
+   "include": [
+    "objguard-logbook"
+   ]
+  }
+ },
+ "assertions": [
+  {
+   "pointer": "/players/p1/memory/monoInitial",
+   "op": "eq",
+   "value": 200
+  },
+  {
+   "pointer": "/players/p1/memory/skirmisherCode",
+   "op": "eq",
+   "value": 0
+  },
+  {
+   "pointer": "/players/p1/memory/monoCommitted",
+   "op": "eq",
+   "value": 170
+  },
+  {
+   "pointer": "/players/p1/memory/monoMid",
+   "op": "eq",
+   "value": 140
+  },
+  {
+   "pointer": "/players/p1/memory/monoFinal",
+   "op": "eq",
+   "value": 110
+  }
+ ]
+}

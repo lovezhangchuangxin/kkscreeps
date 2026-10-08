@@ -92,6 +92,46 @@ fn package(body: &str) -> String {
     format!("export default function register(api) {{ {body} }}")
 }
 
+/// 同 [`engine`]，但可为指定包附带 player.js（声明玩家面类型的包需要
+/// api.objects.bind，见 mod_selection_tests 的双文件形态）。
+fn engine_with_player_files(
+    packages: &[(&str, String)],
+    player_files: &[(&str, &str)],
+    kkpv: bool,
+) -> anyhow::Result<EmbedEngine> {
+    let root = PackageRoot(std::env::temp_dir().join(format!(
+        "kk-mod-chain-{}-{}",
+        std::process::id(),
+        NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed)
+    )));
+    for (id, source) in packages {
+        let dir = root.0.join(id);
+        std::fs::create_dir_all(&dir)?;
+        let player = player_files
+            .iter()
+            .find(|(pkg, _)| pkg == id)
+            .map(|(_, file)| *file);
+        let mut manifest = json!({"id": id, "version": "1.0.0", "apiVersion": "^1.0.0"});
+        if player.is_some() {
+            manifest["player"] = json!("player.js");
+        }
+        std::fs::write(dir.join("mod.json"), manifest.to_string())?;
+        std::fs::write(dir.join("server.js"), source)?;
+        if let Some(file) = player {
+            std::fs::write(dir.join("player.js"), file)?;
+        }
+    }
+    let packages = discover_packages(&root.0)?;
+    let mut e = EmbedEngine::new();
+    e.set_kkpv_channel(kkpv);
+    e.create_shard_with_mods(
+        &json!({"players": ["p1"], "rooms": [{"name": "W1N1", "rcl": 6, "owner": "p1"}]}),
+        &packages,
+        RegisterOptions::default(),
+    )?;
+    Ok(e)
+}
+
 fn link(e: &mut EmbedEngine, x: u8, energy: u32, cooldown: u32) -> anyhow::Result<String> {
     e.place_object("W1N1", "structure", &json!({"pos": [x, 20], "structureType": "link", "owner": "p1", "store": {"energy": energy}, "cooldown": cooldown}))
 }
@@ -174,6 +214,7 @@ mod mass_policy;
 mod mass_policy_faults;
 mod mod_building_fields;
 mod mod_building_world;
+mod mod_guard;
 mod object_ops;
 mod object_tick;
 mod resource_domain;

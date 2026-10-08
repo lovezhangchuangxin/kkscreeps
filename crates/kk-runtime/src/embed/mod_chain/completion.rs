@@ -32,6 +32,7 @@ impl Completion {
             ChainCapability::Build(state) => Rollback::Journal(state.journal.clone()),
             ChainCapability::Move
             | ChainCapability::Incoming(_)
+            | ChainCapability::ModIncoming(_)
             | ChainCapability::Contest(_)
             | ChainCapability::Admission(_)
             | ChainCapability::Obstacle(_)

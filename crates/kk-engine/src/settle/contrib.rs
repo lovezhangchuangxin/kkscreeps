@@ -310,6 +310,11 @@ pub enum SlotCall<'a> {
         id: ObjId,
         candidate: Rc<crate::settle::incoming::IncomingDamage>,
     },
+    /// G09.c 结构受击（Mod 目标）：候选为当次伤害与来源摘要。
+    ModIncoming {
+        id: ObjId,
+        candidate: Rc<crate::settle::incoming::ModIncomingDamage>,
+    },
     /// 房间级移动竞争：整房一次，无单一目标对象；native 中心为无操作
     /// （保留 before 设置的优先级）。
     Contest {
@@ -391,6 +396,8 @@ pub struct ContributionDispatch {
     creep_repair: ActionSlot,
     creep_dismantle: ActionSlot,
     incoming: IncomingSlot,
+    /// G09.c 结构受击槽（Mod 目标受击数值）。
+    mod_incoming: ModIncomingSlot,
     /// 房间级移动竞争优先级槽。
     move_contest: ContestSlot,
     /// 房间级移动准入终值槽。
@@ -422,6 +429,7 @@ impl Default for ContributionDispatch {
             creep_repair: ActionSlot::Native(super::creep::intent_repair),
             creep_dismantle: ActionSlot::Native(super::creep::intent_dismantle),
             incoming: IncomingSlot::Native,
+            mod_incoming: ModIncomingSlot::Native,
             move_contest: ContestSlot::Native,
             move_admission: AdmissionSlot::Native,
             move_obstacle: ObstacleSlot::Native,
@@ -438,11 +446,27 @@ pub const LINK_SLOT_KEYS: [&str; 2] = [
     kk_mod_api::builtin::SLOT_KEYS[0],
     kk_mod_api::builtin::SLOT_KEYS[1],
 ];
-pub const BUILTIN_SLOT_KEYS: [&str; 20] = kk_mod_api::builtin::SLOT_KEYS;
+pub const BUILTIN_SLOT_KEYS: [&str; 21] = kk_mod_api::builtin::SLOT_KEYS;
 
 impl ContributionDispatch {
     pub(crate) fn run_incoming(&self, ctx: &RoomCtx, id: ObjId) -> Result<Option<i64>, String> {
         self.incoming.run(ctx, id)
+    }
+    /// G09.c：跑结构受击槽并返回修改后的伤害量（Native 直通，正常
+    /// 拒绝回退传入伤害）。挂起判定见 [`Self::is_mod_incoming_hosted`]。
+    pub(crate) fn run_mod_incoming(
+        &self,
+        ctx: &RoomCtx,
+        target: ObjId,
+        damage: i64,
+        attacker: ObjId,
+        attack_type: i64,
+    ) -> Result<i64, String> {
+        self.mod_incoming
+            .run(ctx, target, damage, attacker, attack_type)
+    }
+    pub(crate) fn is_mod_incoming_hosted(&self) -> bool {
+        matches!(self.mod_incoming, ModIncomingSlot::Hosted(_))
     }
     /// 运行移动竞争优先级槽；见 [`ContestSlot::run`] 的返回语义。
     pub(crate) fn run_contest(
@@ -596,7 +620,7 @@ mod precheck;
 mod pull_registration;
 use admission::AdmissionSlot;
 use contest::ContestSlot;
-use incoming::IncomingSlot;
+use incoming::{IncomingSlot, ModIncomingSlot};
 use move_cost::MoveCostSlot;
 use obstacle::ObstacleSlot;
 use precheck::PrecheckSlot;

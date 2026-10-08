@@ -228,7 +228,7 @@ fn zero_independent_capacity_does_not_borrow_shared_space() {
 
 /// 声明 stmod:crate（store 容量 500）与资源 stmod:gem 的贡献平面。
 fn mod_store_plane() -> Plane {
-    let mut contribution =
+    let contribution =
         kk_mod_api::Contribution {
             source: kk_mod_api::Source {
                 namespace: "stmod".into(),

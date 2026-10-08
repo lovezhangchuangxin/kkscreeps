@@ -46,10 +46,26 @@ api.objects.define('mymod:spike', {
 
 首片不做：按实际净伤害反击（依赖 G09.c 受击槽的修改后伤害值）、逐 attackType 差异比率、反击上限/触发次数声明、反击事件进 mod_states 通知面。
 
+## 结构受击槽（G09.c）
+
+`builtin:mod.receiveDamage` 让 JS 包在**结构扣减前**修改落入耐久对象的伤害量。声明面与 creep 受击槽同形（`api.handlers.replace/wrap/before/after('builtin:mod.receiveDamage', {id}, fn)`），无需新 JS API；数值面复用 `ctx.incoming`（getDamage/setDamage，JS 安全整数界）。输入是当次立即值：`ctx.args.damage`（原始伤害）与 `ctx.args.source`（当次攻击者摘要 `{sourceId, amount, attackType}`，无 creep 槽的累计队列语义；排空门保证到达槽的来源在场）；**目标形状不进输入**，经 `ctx.target` 的 payload（含耐久/库存信封）承载。输出即 `setDamage` 的修改值，可多次调整组合；正常拒绝回退默认伤害。
+
+**托管延迟排空**是本槽与 creep 槽的关键架构差：伤害入口（`apply_damage_inner`）只持有 `&mut Working`，而 JS 链需要 `RoomCtx` 共享句柄。因此 Native 派发（默认引擎，槽未被覆写）在伤害入口**零开销内联**（行为与 G09.b 完全一致，既有测试零扰动）；Hosted 派发（任一包覆写本槽即全局生效）把伤害挂 `mod_damage_pending` 队列，房间循环在**意图阶段后、对象 tick 前**统一排空——此点持有共享句柄，逐项跑槽得修改后伤害再落地。扣减与声明式反击效果提取为 `mod_damage_effects` 共用（内联路径与排空路径同一段代码）。
+
+**事件序偏差**（同 tick 内、确定性，与 creep 延迟路径同形）：Native 路径保持「摧毁→声明反击→主攻击」；Hosted 路径的主攻击事件与攻击者动作标记仍在意图时刻发出（挂起不提前返回），但扣减/摧毁/类型键反击事件移到排空时刻——即主攻击事件先于摧毁事件。显式反击策略仍在意图时刻经共用尾部落地。排空时目标已被更早挂起项击毁、或攻击者已消失的条目整项丢弃（槽不跑——宿主读取面以目标缺失为故障，集火同 tick 击穿时跑槽会拖垮候选；跳过同时避免观察者 state 与实际落地背离）。因此到达槽的调用来源摘要恒非空；输入的 `source` 可空形态是对未来调用点的防御性契约。槽故障使本房间候选整体失败（Err 丢弃候选，安全回滚）。同一计划内任何包覆写本槽即对所有耐久对象生效（见 combined 场景：减伤中心对两独立包的对象同时生效）。
+
+```js
+api.handlers.replace('builtin:mod.receiveDamage', { id: 'halve' }, ctx => {
+  ctx.incoming.setDamage(Math.ceil(ctx.args.damage / 2)); // 30 → 15
+});
+```
+
+全链：槽注册与 revision（`kk-mod-api/src/builtin.rs`，槽目录 21 项）、输入结构（`kk-mod-api/src/incoming.rs`）、候选（`settle/incoming.rs` `ModIncomingDamage`）、槽执行（`settle/contrib/incoming.rs` `ModIncomingSlot`）、挂起与效果（`settle/damage.rs`）、排空点（`settle/room_loop.rs`）、能力路由（`kk-runtime` capability/call/CombatHost 双变体；combat 读面与正常拒绝能力随 SlotCapability::Incoming 放行）。测试：结算域 `settle/damage/tests.rs`（挂起/排空/拒绝/内联四径）、宿主链 `mod_chain_tests/mod_guard.rs`（减伤/拒绝/免疫/组合/击毁双通道）、sim `sim_tests/obj_guard.rs`。夹具 [mod-objguard](../../compat/fixtures/mod-objguard/README.md)（warden 减伤型 / logbook 记录型两独立包）与场景 [sim-mod-objguard](../../compat/fixtures/sim-mod-objguard/README.md)（三场景四轮探针、组合链尾读值、双通道与冷恢复）。
+
 ## 边界
 
-首片不做：受击槽的结构形状（`builtin:creep.receiveDamage` 输入是 creep 专属数值形态，G09.c）、按净伤害/逐类型的动态反击（见上节）、repair/heal 覆盖与 Mod 自愈 API（维修绑定建筑成本模型，后续与 owner/工地联动另拆）、rangedMassAttack 覆盖（目标收集走 owner/powerBank 判别，`object_owner` 对 Mod 恒 None）、safeMode/rampart 主人保护（同因 owner 语义未接线）、废墟/掉落产物（store 信封内容随对象消失）、mod_states 死亡通知（namespace state 按命名空间键控，引擎无逐对象清理；事件是唯一通知形态）。攻击者仍是 creep/塔（Mod 对象不发攻击意图）。耐久随 `ModObj.data` 以不透明 JSON 持久化——检查点、KKPV 通道与冷恢复无需版本变化；旧计划（无 hits 声明）不受影响（`hits_max` 序列化省略 None，计划身份不变）。
+首片不做：受击槽按净伤害联动声明式反击（上节 G09.d 的动态反击候选，槽修改值已可经 G09.c 读到但反击比率仍按原始伤害计算）、repair/heal 覆盖与 Mod 自愈 API（维修绑定建筑成本模型，后续与 owner/工地联动另拆）、rangedMassAttack 覆盖（目标收集走 owner/powerBank 判别，`object_owner` 对 Mod 恒 None）、safeMode/rampart 主人保护（同因 owner 语义未接线）、废墟/掉落产物（store 信封内容随对象消失）、mod_states 死亡通知（namespace state 按命名空间键控，引擎无逐对象清理；事件是唯一通知形态）。攻击者仍是 creep/塔（Mod 对象不发攻击意图）。耐久随 `ModObj.data` 以不透明 JSON 持久化——检查点、KKPV 通道与冷恢复无需版本变化；旧计划（无 hits 声明）不受影响（`hits_max` 序列化省略 None，计划身份不变）。
 
-已知角落（首片口径）：位置型 rampart 改向在意图层按目标格判定，耐久对象与其同格时与结构同款处理；`object_owner` 对 Mod 返 None 意味着 massAttack 永不命中耐久对象（登记为后续与 owner_field 打通的候选）；dismantle 对耐久对象双重排除（玩家面 `instanceof Structure` 门 + 结算面 `cost_bearing` 为假）；战斗策略槽可把耐久对象列为伤害目标（`validate_damage_target` 接纳），但策略治疗仍 creep-only；Mod 玩家类若自选继承 `Structure` 且类型未声明耐久，attack 预检的 `instanceof Structure` 分支会放行而结算静默不动（与无耐久结构同形，作者自选继承的角落）。塔玩家面与 creep attack 共用同一目标族判别（结算侧测试覆盖；玩家路径与 attack/rangedAttack 共享同一助手）。
+已知角落（含 G09.c）：托管排空的 safeMode 抑制读排空时刻的控制器状态——同 tick「房主攻击自家声明反击对象→unclaim 房间」序会使 Hosted 与 Native 的抑制结论相反（窗口极窄，unclaim 即时改 controller）；测试排空助手与 room_loop 生产排空是双份实现（行为层由宿主链与 sim 场景兜底）。首片口径：位置型 rampart 改向在意图层按目标格判定，耐久对象与其同格时与结构同款处理；`object_owner` 对 Mod 返 None 意味着 massAttack 永不命中耐久对象（登记为后续与 owner_field 打通的候选）；dismantle 对耐久对象双重排除（玩家面 `instanceof Structure` 门 + 结算面 `cost_bearing` 为假）；战斗策略槽可把耐久对象列为伤害目标（`validate_damage_target` 接纳），但策略治疗仍 creep-only；Mod 玩家类若自选继承 `Structure` 且类型未声明耐久，attack 预检的 `instanceof Structure` 分支会放行而结算静默不动（与无耐久结构同形，作者自选继承的角落）。塔玩家面与 creep attack 共用同一目标族判别（结算侧测试覆盖；玩家路径与 attack/rangedAttack 共享同一助手）。
 
-夹具 [mod-objhits](../../compat/fixtures/mod-objhits/README.md)（siege barrel 300 / vault cache 200×100 双信封两独立包 + 无耐久 decoy 对照）与场景 [sim-mod-objhits](../../compat/fixtures/sim-mod-objhits/README.md)（四轮探针：预检返回码、逐击扣减、-7 对照、双信封互不扰动、组合共存、双通道与冷恢复）；反击夹具 [mod-objret](../../compat/fixtures/mod-objret/README.md)（thorn spike 0.5 反击 / reactor core 1.0 全额+容量 100 两独立包）与场景 [sim-mod-objret](../../compat/fixtures/sim-mod-objret/README.md)（攻击者同轮扣血、资源动作互不扰动）；Rust 侧断言见 `crates/kk-cli/tests/sim_tests/obj_hits.rs`、`obj_ret.rs`、结算域 `settle_tests/mod_hits.rs` 与校验/冻结/类型生成/宿主注册单元测试。
+夹具 [mod-objhits](../../compat/fixtures/mod-objhits/README.md)（siege barrel 300 / vault cache 200×100 双信封两独立包 + 无耐久 decoy 对照）与场景 [sim-mod-objhits](../../compat/fixtures/sim-mod-objhits/README.md)（四轮探针：预检返回码、逐击扣减、-7 对照、双信封互不扰动、组合共存、双通道与冷恢复）；反击夹具 [mod-objret](../../compat/fixtures/mod-objret/README.md)（thorn spike 0.5 反击 / reactor core 1.0 全额+容量 100 两独立包）与场景 [sim-mod-objret](../../compat/fixtures/sim-mod-objret/README.md)（攻击者同轮扣血、资源动作互不扰动）；受击槽夹具见上节。Rust 侧断言见 `crates/kk-cli/tests/sim_tests/obj_hits.rs`、`obj_ret.rs`、`obj_guard.rs`、结算域 `settle_tests/mod_hits.rs` 与校验/冻结/类型生成/宿主注册单元测试。

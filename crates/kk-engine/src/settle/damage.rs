@@ -6,6 +6,9 @@
 
 mod tough;
 
+#[cfg(test)]
+mod tests;
+
 use kk_core::constants as c;
 use kk_schema::room::{BodyPart, RoomObject};
 use kk_world::ObjId;
@@ -110,71 +113,29 @@ fn apply_damage_inner(
         }
         *w.damage_to_apply.entry(target_id).or_insert(0) += damage;
     } else if let RoomObject::Mod(m) = &target {
-        // 耐久声明对象（G09.b）走结构语义：立即扣减、不经受击槽/TOUGH；
-        // 死亡即移除并发事件，type 为类型键——不产废墟（废墟绑定建筑
-        // 成本模型，Mod 对象不经工地），store 信封内容随对象消失。
-        let new_hits = object_hits(&target) - damage;
-        if new_hits <= 0 {
-            w.remove_obj(target_id);
-            w.push_event(
-                c::EVENT_OBJECT_DESTROYED,
-                target_id,
-                json!({ "type": m.type_key }),
-            );
-        } else {
-            set_structure_hits(w, target_id, new_hits);
-        }
-        // 声明式反击（G09.d，官方 powerBank damage×0.5 同构）：任意攻击
-        // 类型、不耗自身耐久，毫精度整除向下取整（不足 1 不触发）。与
-        // 显式反击策略的关系同原生反击：策略存在即整体替换（空表可禁
-        // 用反击，combat.md 契约）。房主安全模式抑制与上游 _damage.js
-        // 的 powerBank 分支同款（controller 主人==攻击者主人且 safemode
-        // 激活时清零）。反击落点按攻击者类型分流：creep 走延迟队列
-        // （意图阶段先于其 tick，不丢）；塔等结构攻击者的队列无人消费，
-        // 立即扣减。立即扣减不经本函数重入（禁递归：反击不再触发被反
-        // 击方的反击）。事件序与既有反击一致：摧毁→反击→主攻击。
-        if retaliation.is_none()
-            && let Some(milli) = mod_retaliation_milli(w, &m.type_key)
-        {
-            let suppressed = w.controller().is_some_and(|ctl| {
-                ctl.owner.as_deref() == Some(attacker_owner.as_str()) && ctl.safe_mode > w.time
+        // G09.c：托管结构受击槽（Mod 包覆 builtin:mod.receiveDamage）时
+        // 扣减与声明反击挂起，意图阶段后由房间循环经共享句柄跑槽再落地；
+        // 主攻击事件与攻击者动作标记仍在意图时刻经共用尾部发出。Native
+        // 派发（默认引擎）零开销内联。
+        if w.plane.contrib.is_mod_incoming_hosted() {
+            w.mod_damage_pending.push(PendingModDamage {
+                target: target_id,
+                attacker,
+                damage,
+                attack_type,
+                retaliation,
             });
-            let back = if suppressed {
-                0
-            } else {
-                damage.saturating_mul(milli) / 1000
-            };
-            if back > 0 {
-                let attacker_is_creep =
-                    matches!(w.room.objects.get(&attacker), Some(RoomObject::Creep(_)));
-                if attacker_is_creep {
-                    *w.damage_to_apply.entry(attacker).or_insert(0) += back;
-                    if let Some(a) = w.creep_mut(attacker) {
-                        set_action_log(&mut a.action_log, ACTION_ATTACKED);
-                    }
-                } else if let Some(attacker_obj) = w.room.objects.get(&attacker).cloned() {
-                    let attacker_hits = object_hits(&attacker_obj) - back;
-                    if attacker_hits <= 0 {
-                        destroy_structure(w, attacker);
-                        w.push_event(
-                            c::EVENT_OBJECT_DESTROYED,
-                            attacker,
-                            json!({ "type": type_name_of(&attacker_obj) }),
-                        );
-                    } else {
-                        set_structure_hits(w, attacker, attacker_hits);
-                    }
-                }
-                w.push_event(
-                    c::EVENT_ATTACK,
-                    target_id,
-                    json!({
-                        "targetId": attacker.as_str(),
-                        "damage": back,
-                        "attackType": c::EVENT_ATTACK_TYPE_HIT_BACK,
-                    }),
-                );
-            }
+        } else {
+            mod_damage_effects(
+                w,
+                &m.type_key,
+                target_id,
+                attacker,
+                &attacker_owner,
+                damage,
+                damage,
+                retaliation,
+            );
         }
     } else {
         let new_hits = object_hits(&target) - damage;
@@ -445,6 +406,135 @@ fn static_hits_max(structure_type: &str, links: &kk_mod_api::builtin::LinkRules)
         "link" => links.hits_max,
         _ => return None,
     })
+}
+
+/// G09.c：托管受击槽挂起的一次 Mod 伤害（含反击原语），排空时经槽
+/// 修改伤害量后落地。目标或攻击者在排空前已消失的项由排空门整项丢弃。
+#[derive(Clone, Copy)]
+pub struct PendingModDamage {
+    pub target: ObjId,
+    pub attacker: ObjId,
+    pub damage: i64,
+    pub attack_type: i64,
+    pub retaliation: Option<i64>,
+}
+
+/// Mod 受击的扣减与声明式反击效果（G09.d）；Native 派发在伤害入口
+/// 内联调用，托管派发在意图阶段后的排空点调用（伤害量已经过结构
+/// 受击槽；主攻击事件已在意图时刻发出，此处不再重复）。
+// 扣减与反击参数各司其职（damage 与 retaliation_base 语义不同，见下），
+// 收敛结构体会掩盖这一区分；与 market/projection 的既有豁免同款。
+#[allow(clippy::too_many_arguments)]
+pub(in crate::settle) fn mod_damage_effects(
+    w: &mut Working,
+    type_key: &str,
+    target_id: ObjId,
+    attacker: ObjId,
+    attacker_owner: &str,
+    damage: i64,
+    // 声明反击的基数是原始伤害（combat 契约「按减伤前量」）；槽修改
+    // 只改变扣减量。Native 路径两者同值，托管排空路径分别传入。
+    retaliation_base: i64,
+    retaliation: Option<i64>,
+) {
+    let Some(target) = w.room.objects.get(&target_id).cloned() else {
+        return; // 内联路径目标已在场；排空路径有前置门，此为防御分支
+    };
+    // 耐久声明对象（G09.b）走结构语义：立即扣减、不经受击槽/TOUGH；
+    // 死亡即移除并发事件，type 为类型键——不产废墟（废墟绑定建筑
+    // 成本模型，Mod 对象不经工地），store 信封内容随对象消失。
+    let new_hits = object_hits(&target) - damage;
+    if new_hits <= 0 {
+        w.remove_obj(target_id);
+        w.push_event(
+            c::EVENT_OBJECT_DESTROYED,
+            target_id,
+            json!({ "type": type_key }),
+        );
+    } else {
+        set_structure_hits(w, target_id, new_hits);
+    }
+    // 声明式反击（G09.d，官方 powerBank damage×0.5 同构）：任意攻击
+    // 类型、不耗自身耐久，毫精度整除向下取整（不足 1 不触发）。与
+    // 显式反击策略的关系同原生反击：策略存在即整体替换（空表可禁
+    // 用反击，combat.md 契约）。房主安全模式抑制与上游 _damage.js
+    // 的 powerBank 分支同款（controller 主人==攻击者主人且 safemode
+    // 激活时清零）。反击落点按攻击者类型分流：creep 走延迟队列
+    // （意图阶段先于其 tick，不丢）；塔等结构攻击者的队列无人消费，
+    // 立即扣减。立即扣减不经伤害入口重入（禁递归）。事件序与既有
+    // 反击一致：摧毁→反击→主攻击。
+    if retaliation.is_none()
+        && let Some(milli) = mod_retaliation_milli(w, type_key)
+    {
+        let suppressed = w.controller().is_some_and(|ctl| {
+            ctl.owner.as_deref() == Some(attacker_owner) && ctl.safe_mode > w.time
+        });
+        let back = if suppressed {
+            0
+        } else {
+            retaliation_base.saturating_mul(milli) / 1000
+        };
+        if back > 0 {
+            let attacker_is_creep =
+                matches!(w.room.objects.get(&attacker), Some(RoomObject::Creep(_)));
+            if attacker_is_creep {
+                *w.damage_to_apply.entry(attacker).or_insert(0) += back;
+                if let Some(a) = w.creep_mut(attacker) {
+                    set_action_log(&mut a.action_log, ACTION_ATTACKED);
+                }
+            } else if let Some(attacker_obj) = w.room.objects.get(&attacker).cloned() {
+                let attacker_hits = object_hits(&attacker_obj) - back;
+                if attacker_hits <= 0 {
+                    destroy_structure(w, attacker);
+                    w.push_event(
+                        c::EVENT_OBJECT_DESTROYED,
+                        attacker,
+                        json!({ "type": type_name_of(&attacker_obj) }),
+                    );
+                } else {
+                    set_structure_hits(w, attacker, attacker_hits);
+                }
+            }
+            w.push_event(
+                c::EVENT_ATTACK,
+                target_id,
+                json!({
+                    "targetId": attacker.as_str(),
+                    "damage": back,
+                    "attackType": c::EVENT_ATTACK_TYPE_HIT_BACK,
+                }),
+            );
+        }
+    }
+}
+
+/// 排空点入口：跑过结构受击槽的伤害量落回 Mod 效果（含反击原语）。
+pub(in crate::settle) fn apply_mod_damage(w: &mut Working, pending: PendingModDamage, damage: i64) {
+    let target = w.room.objects.get(&pending.target).cloned();
+    let Some(RoomObject::Mod(m)) = target else {
+        return; // 目标在排空前已消失（同轮更早的挂起项击毁）
+    };
+    let owner = match w.room.objects.get(&pending.attacker) {
+        Some(RoomObject::Creep(o)) => o.owner.clone(),
+        Some(RoomObject::Generic(g)) => {
+            let data: serde_json::Value = serde_json::from_str(&g.data).unwrap_or_default();
+            data.get("owner")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default()
+                .to_string()
+        }
+        _ => return, // 攻击者已消失则伤害无处归因（与入口门一致丢弃）
+    };
+    mod_damage_effects(
+        w,
+        &m.type_key,
+        pending.target,
+        pending.attacker,
+        &owner,
+        damage,
+        pending.damage,
+        pending.retaliation,
+    );
 }
 
 /// 读 Mod 类型的声明式反击比率（G09.d，毫精度 1..=1000）；类型不在

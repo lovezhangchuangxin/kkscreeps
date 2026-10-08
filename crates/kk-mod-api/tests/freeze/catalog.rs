@@ -200,7 +200,7 @@ fn builtin_link_values_match_constant_dump_and_use_native_slots() {
     );
     // 155 = 32 − link.rcl0..8（9）+ 配额族（132，官方表全键集）。
     assert_eq!(plan.rules().len(), 155);
-    assert_eq!(plan.slots().len(), 20);
+    assert_eq!(plan.slots().len(), 21);
     for name in builtin::RESOURCE_ACTION_SLOTS
         .iter()
         .chain(builtin::MOVE_ACTION_SLOTS.iter())

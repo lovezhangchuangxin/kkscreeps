@@ -438,7 +438,7 @@ mod invariant_tests {
                     }),
                 )
                 .unwrap();
-            let mut engine =
+            let engine =
                 Engine::with_plan(world, plan.clone(), BTreeMap::new(), BTreeMap::new()).unwrap();
             let mut txn = engine
                 .prepare_tick(IntentBatch::default(), TickInput { now_ms: 0 })

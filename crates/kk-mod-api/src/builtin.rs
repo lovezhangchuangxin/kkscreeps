@@ -42,6 +42,10 @@ pub const BUILD_ACTION_SLOTS: [&str; 3] = [
 /// 对象 tick 中的受击数值链；不是玩家意图或整个 creep tick 替换。
 pub const INCOMING_DAMAGE_SLOT: &str = "builtin:creep.receiveDamage";
 
+/// G09.c 结构受击槽：耐久声明的 Mod 对象被伤害命中时（意图阶段扣减
+/// 前）进入的目标侧介入点；输入为当次伤害与来源摘要，输出修改伤害量。
+pub const MOD_INCOMING_SLOT: &str = "builtin:mod.receiveDamage";
+
 /// 房间级移动竞争优先级链；只改变竞争者排序，不是准入或获准集合替换。
 pub const MOVE_CONTEST_SLOT: &str = "builtin:room.moveContest";
 
@@ -61,7 +65,7 @@ pub const MOVE_PULL_REGISTRATION_SLOT: &str = "builtin:room.movePullRegistration
 pub const MOVE_COST_SLOT: &str = "builtin:room.moveCost";
 
 /// 内建实际派发的槽；自有动作装配必须跳过它们。
-pub const SLOT_KEYS: [&str; 20] = [
+pub const SLOT_KEYS: [&str; 21] = [
     RESOURCE_ACTION_SLOTS[0],
     "builtin:link.tick",
     RESOURCE_ACTION_SLOTS[1],
@@ -82,6 +86,7 @@ pub const SLOT_KEYS: [&str; 20] = [
     MOVE_PRECHECK_SLOT,
     MOVE_PULL_REGISTRATION_SLOT,
     MOVE_COST_SLOT,
+    MOD_INCOMING_SLOT,
 ];
 
 fn key(name: &str) -> Key {
@@ -571,6 +576,7 @@ pub fn link() -> Contribution {
         "room.moveCost.native",
         "terrain.passability.native",
         "structure.quota.native",
+        "mod.receiveDamage.native",
     ]));
     let slots = vec![
         SlotDescriptor {
@@ -673,13 +679,20 @@ pub fn link() -> Contribution {
             stage: Stage::Movement,
             native_binding: key("room.moveCost.native"),
         },
+        SlotDescriptor {
+            key: key("mod.receiveDamage"),
+            // 伤害应用发生在对象动作阶段（creep/塔攻击意图），受击槽在
+            // 意图阶段的伤害入口逐次进入（引擎侧由托管延迟排空承载）。
+            stage: Stage::ObjectAction,
+            native_binding: key("mod.receiveDamage.native"),
+        },
     ];
     Contribution {
         source: Source {
             namespace: "builtin".into(),
             api_version: 1,
             revision:
-                "link-creep-store-move-combat-build-incoming-contest-admission-obstacle-precheck-pull-cost-ranges-static-precheck-movegate-terrain-quota-v18"
+                "link-creep-store-move-combat-build-incoming-contest-admission-obstacle-precheck-pull-cost-ranges-static-precheck-movegate-terrain-quota-v18-modincoming-v19"
                     .into(),
             code_digest: {
                 let mut hash = Sha256::new();

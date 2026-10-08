@@ -285,15 +285,23 @@ impl kk_mod_host::ResourcesHost for ModChainContext {
 }
 
 impl kk_mod_host::CombatHost for ModChainContext {
+    /// creep 受击与 G09.c 结构受击共用同一 JS 数值面；按本次调用携带
+    /// 的候选变体路由。
     fn incoming_damage(&mut self) -> Result<i64, String> {
+        if let Some(c) = self.capability.incoming() {
+            return Ok(c.damage());
+        }
         self.capability
-            .incoming()
+            .mod_incoming()
             .map(|c| c.damage())
             .ok_or_else(|| "本次槽没有受击数值能力".into())
     }
     fn incoming_set_damage(&mut self, amount: i64) -> Result<(), String> {
+        if let Some(c) = self.capability.incoming() {
+            return c.set_damage(amount);
+        }
         self.capability
-            .incoming()
+            .mod_incoming()
             .ok_or("本次槽没有受击数值能力")?
             .set_damage(amount)
     }
@@ -326,7 +334,10 @@ impl kk_mod_host::CombatHost for ModChainContext {
         after: &str,
         limit: u32,
     ) -> Result<kk_mod_api::combat::CombatPage, String> {
-        if self.capability.combat().is_none() && self.capability.incoming().is_none() {
+        if self.capability.combat().is_none()
+            && self.capability.incoming().is_none()
+            && self.capability.mod_incoming().is_none()
+        {
             return Err("本次槽没有战斗读取能力".into());
         }
         kk_engine::settle::creep::slot_combat_list(&self.ctx.borrow(), after, limit)
@@ -335,7 +346,10 @@ impl kk_mod_host::CombatHost for ModChainContext {
         &mut self,
         target: &str,
     ) -> Result<Option<kk_mod_api::combat::CombatView>, String> {
-        if self.capability.combat().is_none() && self.capability.incoming().is_none() {
+        if self.capability.combat().is_none()
+            && self.capability.incoming().is_none()
+            && self.capability.mod_incoming().is_none()
+        {
             return Err("本次槽没有战斗读取能力".into());
         }
         let id = ObjId::parse(target).ok_or("战斗目标 ID 非法")?;

@@ -59,6 +59,14 @@ impl PreparedCall {
                 NativeCall::Preserve,
                 ChainCapability::Incoming(candidate),
             ),
+            // G09.c 结构受击：输入为当次伤害与来源摘要，目标形状经
+            // ctx.target（Mod payload 含耐久/库存信封）承载。
+            SlotCall::ModIncoming { id, candidate } => (
+                id,
+                serde_json::to_value(candidate.input()).map_err(|e| e.to_string())?,
+                NativeCall::Preserve,
+                ChainCapability::ModIncoming(candidate),
+            ),
             SlotCall::Contest { candidate } => (
                 ObjId(u64::MAX),
                 serde_json::to_value(candidate.input()).map_err(|e| e.to_string())?,

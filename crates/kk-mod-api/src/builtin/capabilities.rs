@@ -28,7 +28,7 @@ impl SlotCapability {
             Some(Self::Build)
         } else {
             match key {
-                INCOMING_DAMAGE_SLOT => Some(Self::Incoming),
+                INCOMING_DAMAGE_SLOT | MOD_INCOMING_SLOT => Some(Self::Incoming),
                 MOVE_CONTEST_SLOT => Some(Self::Contest),
                 MOVE_ADMISSION_SLOT => Some(Self::Admission),
                 MOVE_OBSTACLE_SLOT => Some(Self::Obstacle),
@@ -67,7 +67,7 @@ mod tests {
             .iter()
             .filter(|key| SlotCapability::for_key(key).is_some())
             .count();
-        assert_eq!(typed, 19);
+        assert_eq!(typed, 20);
         assert_eq!(SlotCapability::for_key("builtin:link.tick"), None);
         assert_eq!(SlotCapability::for_key("foreign:action"), None);
     }

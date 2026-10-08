@@ -18,7 +18,7 @@
 | [store-rules.md](store-rules.md) | 仓库容量的冻结规则、JS 数值覆盖与实际消费者 |
 | [structure-quota.md](structure-quota.md) | 建筑 RCL 配额规则族：132 条逐型逐级覆盖、玩家表折叠注入与预检/结算同源 |
 | [object-store.md](object-store.md) | 自有对象库存：类型级 capacity 声明、store/storeCapacity 信封、六链接纳与字段更新拒绝 |
-| [object-durability.md](object-durability.md) | 自有对象耐久与反击：类型级 hitsMax/retaliationRatio 声明、hits/hitsMax 信封、伤害/死亡/预检同源、逐 tick 守卫与声明式反击 |
+| [object-durability.md](object-durability.md) | 自有对象耐久与反击：类型级 hitsMax/retaliationRatio 声明、hits/hitsMax 信封、伤害/死亡/预检同源、逐 tick 守卫、声明式反击与 builtin:mod.receiveDamage 结构受击槽 |
 | [creep-resource-slots.md](creep-resource-slots.md) | creep 转入/提取动作链、只读候选面与局部拒绝恢复 |
 | [creep-move-slot.md](creep-move-slot.md) | creep 移动动作槽、受控请求能力与按执行者粒度的拒绝恢复 |
 | [creep-combat-slot.md](creep-combat-slot.md) | creep 战斗动作槽、目标改向/取消能力与延迟队列/结构摧毁的拒绝恢复 |

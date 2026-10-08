@@ -63,6 +63,7 @@ impl Engine {
             "builtin:creep.repair.native",
             "builtin:creep.dismantle.native",
             "builtin:creep.receiveDamage.native",
+            "builtin:mod.receiveDamage.native",
             "builtin:room.moveContest.native",
             "builtin:creep.moveAdmission.native",
             "builtin:room.moveObstacle.native",

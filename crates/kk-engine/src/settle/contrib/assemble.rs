@@ -73,6 +73,12 @@ impl ContributionDispatch {
             }
             _ => IncomingSlot::Hosted(host(kk_mod_api::builtin::INCOMING_DAMAGE_SLOT)?),
         };
+        let mod_incoming = match dispatch_of(plan, kk_mod_api::builtin::MOD_INCOMING_SLOT)? {
+            Dispatch::Native(binding) if binding.as_str() == "builtin:mod.receiveDamage.native" => {
+                ModIncomingSlot::Native
+            }
+            _ => ModIncomingSlot::Hosted(host(kk_mod_api::builtin::MOD_INCOMING_SLOT)?),
+        };
         let move_contest = match dispatch_of(plan, kk_mod_api::builtin::MOVE_CONTEST_SLOT)? {
             Dispatch::Native(binding) if binding.as_str() == "builtin:room.moveContest.native" => {
                 super::contest::ContestSlot::Native
@@ -186,6 +192,7 @@ impl ContributionDispatch {
             creep_repair,
             creep_dismantle,
             incoming,
+            mod_incoming,
             move_contest,
             move_admission,
             move_obstacle,
@@ -301,6 +308,7 @@ impl ContributionDispatch {
         )?;
         let ext = assemble_ext_slots(plan, ext_handlers, ext_processes)?;
         let incoming = IncomingSlot::native_from_plan(plan)?;
+        let mod_incoming = ModIncomingSlot::native_from_plan(plan)?;
         let move_contest = super::contest::ContestSlot::native_from_plan(plan)?;
         let move_admission = super::admission::AdmissionSlot::native_from_plan(plan)?;
         let move_obstacle = super::obstacle::ObstacleSlot::native_from_plan(plan)?;
@@ -323,6 +331,7 @@ impl ContributionDispatch {
             creep_repair,
             creep_dismantle,
             incoming,
+            mod_incoming,
             move_contest,
             move_admission,
             move_obstacle,

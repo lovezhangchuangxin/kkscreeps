@@ -2,7 +2,9 @@
 use std::cell::Cell;
 
 use kk_core::constants as c;
-use kk_mod_api::incoming::{DamageSource, IncomingInput, MAX_DAMAGE, MAX_SOURCES};
+use kk_mod_api::incoming::{
+    DamageSource, IncomingInput, MAX_DAMAGE, MAX_SOURCES, ModIncomingInput,
+};
 use kk_world::ObjId;
 
 use super::Working;
@@ -84,3 +86,52 @@ fn checked_amount(amount: i64) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests;
+
+/// G09.c 结构受击候选：立即伤害进入 Mod 目标前的一次数值选择；与 creep
+/// 受击候选同构（set_damage 多次可调、JS 安全整数界），不含世界写句柄。
+pub struct ModIncomingDamage {
+    input: ModIncomingInput,
+    amount: Cell<i64>,
+}
+
+impl ModIncomingDamage {
+    pub fn input(&self) -> &ModIncomingInput {
+        &self.input
+    }
+
+    pub fn damage(&self) -> i64 {
+        self.amount.get()
+    }
+
+    /// 可多次调整以组合处理器；每次写入均须在 JS 安全整数表示域内。
+    pub fn set_damage(&self, amount: i64) -> Result<(), String> {
+        checked_amount(amount)?;
+        self.amount.set(amount);
+        Ok(())
+    }
+
+    /// 来源为当次攻击的立即值（攻击者与攻击种类），无累计队列语义。
+    pub(super) fn prepare(
+        w: &Working,
+        target: ObjId,
+        damage: i64,
+        attacker: ObjId,
+        attack_type: i64,
+    ) -> Result<Self, String> {
+        checked_amount(damage)?;
+        let source = if w.room.objects.contains_key(&attacker) {
+            Some(DamageSource {
+                source_id: attacker.as_str(),
+                amount: damage,
+                attack_type,
+            })
+        } else {
+            None
+        };
+        let _ = target;
+        Ok(Self {
+            input: ModIncomingInput { damage, source },
+            amount: Cell::new(damage),
+        })
+    }
+}
