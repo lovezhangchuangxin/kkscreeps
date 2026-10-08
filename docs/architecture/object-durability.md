@@ -34,7 +34,7 @@ export default function register(api) {
 
 `hitsMax` 之外可再声明 `retaliationRatio`（(0,1] 浮点，JS 面作者形态；冻结为毫精度 1..=1000，`retaliation_milli` 无运行时字段，不占信封/保留键）。语义对齐官方 powerBank 的 damage×0.5：**任意攻击类型**触发（dismantle 经双重排除到不了 Mod 目标，见已知角落）、不耗自身耐久、毫精度整除**向下取整**（不足 1 不触发）；房主安全模式抑制在攻击时刻确定并随挂起条目保留，与上游 `_damage.js` 的 powerBank 分支同款（controller 主人==攻击者主人且 safemode 激活时清零）；与显式反击策略的关系同原生反击——策略存在即整体替换（空表可禁用反击）；要求耐久声明（无耐久类型无处触发，冻结层拒绝）。
 
-反击落点按攻击者类型分流（共用的 `mod_damage_effects`；原生在意图阶段，托管在排空阶段，均早于对象 tick）：creep 攻击者进 `damage_to_apply` 延迟队列（同轮 tick 消费、按部件扣血，置 ATTACKED 动作标记——攻击部件耗尽后输出归零，单挑决斗会结构性停滞，攻击者死亡须经由其他伤害来源）；塔等结构攻击者的队列无人消费（`apply_pending_hits_selected` 非 creep 早退、塔无 tick 分支），**立即扣减**且不经本函数重入（禁递归：反击不再触发被反击方的反击），击毁走结构销毁。事件复用 HIT_BACK（objectId=受击对象、`targetId`=攻击者），事件序保持摧毁→反击→主攻击。
+反击落点按攻击者类型分流（共用的 `mod_damage_effects`；原生在意图阶段，托管在排空阶段；动作伤害早于对象 tick，核弹伤害在该核弹 tick 后立即排空）：creep 攻击者进 `damage_to_apply` 延迟队列（同轮 tick 消费、按部件扣血，置 ATTACKED 动作标记——攻击部件耗尽后输出归零，单挑决斗会结构性停滞，攻击者死亡须经由其他伤害来源）；塔等结构攻击者的队列无人消费（`apply_pending_hits_selected` 非 creep 早退、塔无 tick 分支），**立即扣减**且不经本函数重入（禁递归：反击不再触发被反击方的反击），击毁走结构销毁。事件复用 HIT_BACK（objectId=受击对象、`targetId`=攻击者），事件序保持摧毁→反击→主攻击。
 
 ```js
 api.objects.define('mymod:spike', {
@@ -50,7 +50,7 @@ api.objects.define('mymod:spike', {
 
 `builtin:mod.receiveDamage` 让 JS 包在**结构扣减前**修改落入耐久对象的伤害量。声明面与 creep 受击槽同形（`api.handlers.replace/wrap/before/after('builtin:mod.receiveDamage', {id}, fn)`），无需新 JS API；数值面复用 `ctx.incoming`（getDamage/setDamage，JS 安全整数界）。输入是当次立即值：`ctx.args.damage`（原始伤害）与 `ctx.args.source`（当次攻击者摘要 `{sourceId, amount, attackType}`，无 creep 槽的累计队列语义；来源摘要保留攻击时刻 ID，即使攻击者随后消失仍可读；`ctx.combat.get(sourceId)` 此时返回 null）；**目标形状不进输入**，经只读 `ctx.target.fields` 的 payload（含耐久/库存信封）承载，提交字段改写会导致槽故障并撤销整轮候选；正常拒绝直接丢弃尚未提交的本地字段副本。输出即 `setDamage` 的修改值，可多次调整组合；正常拒绝回退默认伤害。
 
-**托管延迟排空**是本槽与 creep 槽的关键架构差：伤害入口（`apply_damage_inner`）只持有 `&mut Working`，而 JS 链需要 `RoomCtx` 共享句柄。因此 Native 派发（默认引擎，槽未被覆写）在伤害入口**零开销内联**（行为与 G09.b 完全一致，既有测试零扰动）；Hosted 派发（任一包覆写本槽即全局生效）把伤害挂 `mod_damage_pending` 队列，房间循环在**意图阶段后、对象 tick 前**统一排空——此点持有共享句柄，逐项跑槽得修改后伤害再落地。扣减与声明式反击效果提取为 `mod_damage_effects` 共用（内联路径与排空路径同一段代码）。
+**托管延迟排空**是本槽与 creep 槽的关键架构差：伤害入口（`apply_damage_inner`）只持有 `&mut Working`，而 JS 链需要 `RoomCtx` 共享句柄。因此 Native 派发（默认引擎，槽未被覆写）在伤害入口**零开销内联**（行为与 G09.b 完全一致，既有测试零扰动）；Hosted 派发（任一包覆写本槽即全局生效）把伤害挂 `mod_damage_pending` 队列，房间循环在**意图阶段后、对象 tick 前**统一排空，并在每次核弹对象 tick 后立即排空该次爆炸产生的伤害（后续对象读取应用后的耐久）——此点持有共享句柄，逐项跑槽得修改后伤害再落地。扣减与声明式反击效果提取为 `mod_damage_effects` 共用（内联路径与排空路径同一段代码）。
 
 **事件序偏差**（同 tick 内、确定性，与 creep 延迟路径同形）：Native 路径保持「摧毁→声明反击→主攻击」；Hosted 路径的主攻击事件与攻击者动作标记仍在意图时刻发出（挂起不提前返回），但扣减/摧毁/类型键反击事件移到排空时刻——即主攻击事件先于摧毁事件。显式反击策略仍在意图时刻经共用尾部落地。排空时目标已被更早挂起项击毁的条目整项丢弃（槽不跑——宿主读取面以目标缺失为故障，集火同 tick 击穿时跑槽会拖垮候选；跳过同时避免观察者 state 与实际落地背离）。攻击者已消失不撤销已经执行的主伤害，声明反击只对仍在场的攻击者落地，也不产生指向失效攻击者的反击事件。动作链正常拒绝会恢复挂起队列长度，既有成功条目与后续动作保持。到达槽的调用来源摘要恒非空；输入的 `source` 可空形态是对未来调用点的防御性契约。槽故障使本房间候选整体失败（Err 丢弃候选，安全回滚）。同一计划内任何包覆写本槽即对所有耐久对象生效（见 combined 场景：减伤中心对两独立包的对象同时生效）。
 

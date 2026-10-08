@@ -86,20 +86,19 @@ pub fn process_structure_intents(
                 terminal_send(&mut w, id, d);
             }
         }
-        // lab 四动作独立派发：run/reverse/unboost 各自的冷却门天然串行
-        // 同 tick 重复请求，boost 官方无冷却门（与处理器一致）。
+        // 官方 labs/intents.js：先强化/解除，再在 run 与 reverse 间择一。
+        // 解除会设置冷却，必须先于反应处理，不能靠不同顺序的冷却门代替。
         "lab" => {
-            if let Some(d) = actions.get(&Action::RunReaction) {
-                super::labs::run_reaction(&mut w, id, d);
-            }
-            if let Some(d) = actions.get(&Action::ReverseReaction) {
-                super::labs::reverse_reaction(&mut w, id, d);
-            }
             if let Some(d) = actions.get(&Action::BoostCreep) {
                 super::labs::boost_creep(&mut w, id, d);
             }
             if let Some(d) = actions.get(&Action::UnboostCreep) {
                 super::labs::unboost_creep(&mut w, id, d);
+            }
+            if let Some(d) = actions.get(&Action::RunReaction) {
+                super::labs::run_reaction(&mut w, id, d);
+            } else if let Some(d) = actions.get(&Action::ReverseReaction) {
+                super::labs::reverse_reaction(&mut w, id, d);
             }
         }
         // factory 单动作直派发（produce）；冷却门在处理器内。

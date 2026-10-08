@@ -247,7 +247,12 @@ pub fn settle_room(
                 contrib.run_tick(&ctx, id).map_err(SettleError)?
             }
             "terminal" => economy::terminal_capacity_tick(&mut ctx.borrow_mut(), id),
-            "nuke" => nukes::nuke_tick(&mut ctx.borrow_mut(), id),
+            "nuke" => {
+                nukes::nuke_tick(&mut ctx.borrow_mut(), id);
+                // 核弹在对象 tick 中产生托管结构伤害；释放 Working 借用后
+                // 立即跑受击链，使后续对象/核弹读取已应用的候选耐久。
+                damage::drain_mod_damage(&ctx)?;
+            }
             "powerCreep" => powers::power_creep_tick(&mut ctx.borrow_mut(), id)?,
             "mod-building" => buildings::building_object_tick(&ctx, id).map_err(SettleError)?,
             "mod" => mod_intents::process_object_tick(&ctx, id).map_err(SettleError)?,

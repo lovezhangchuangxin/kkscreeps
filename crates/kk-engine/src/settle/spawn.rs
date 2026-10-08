@@ -119,6 +119,9 @@ pub fn process_spawn_intents(
 /// 取身体前 50 件计算费用，先验证资金足额再扣款，创建同格孵化 creep 和任务。
 /// 此处不检查名称唯一性；任务耗时为身体件数乘 CREEP_SPAWN_TIME。
 pub fn intent_create_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) {
+    if super::nukes::blocks_spawning(&w.room, w.time) {
+        return;
+    }
     if let Some(RoomObject::Spawn(s)) = w.room.objects.get(&spawn_id)
         && s.spawning.is_some()
     {

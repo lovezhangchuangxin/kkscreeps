@@ -630,7 +630,7 @@ pub fn check_obstacle_at_xy(
             ))
 }
 
-/// 读取游戏对象类型名；Generic 必须使用 structureType，而不是固定的 type=structure。
+/// 读取游戏对象类型名；Generic 结构使用 structureType，非结构对象使用 type。
 /// JSON 无效或字段缺失时返回空串，公开性和所有权由调用方另查。
 pub fn type_name_of(obj: &RoomObject) -> std::borrow::Cow<'static, str> {
     match obj {
@@ -638,6 +638,7 @@ pub fn type_name_of(obj: &RoomObject) -> std::borrow::Cow<'static, str> {
             let data: serde_json::Value = serde_json::from_str(&o.data).unwrap_or_default();
             std::borrow::Cow::Owned(
                 data.get("structureType")
+                    .or_else(|| data.get("type"))
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .to_string(),

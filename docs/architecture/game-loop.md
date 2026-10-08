@@ -27,11 +27,15 @@
 
 包含 JS 贡献的规则槽通过一次 VM 调用完成整条处理链；native 中心经普通 op 修改同一 Rust 候选，默认无扩展槽仍直调 Rust。组合顺序、候选同步和故障语义见 [Mod 处理链执行](mod-execution.md)。
 
+核弹在 `landTime = gameTime + 1` 当轮冲击。该轮意图阶段先取消房内全部新 `createCreep`，不扣孵化能量；对象 tick 阶段清扫已有 creep/孵化任务并结算爆炸伤害。仅取消新孵化，其他 spawn 动作仍按原顺序处理。
+
+lab 动作顺序为 boost → unboost → runReaction，否则 reverseReaction；已登记 runReaction 时即使结算失败也不回落 reverseReaction。
+
 ### 仓库资源与 GCL
 
 `transfer`/`withdraw` 除既有类型化仓库外，也读写 Generic 的 `store`；转入容量由 `storeCapacity` 和 `storeCapacityResource` 字段决定，无需扩充结构类型白名单。放置及建造落成的空仓也带原始 `store`，满足玩家 API 的目标预检；固定能量仓与新建仓库带显式 `energy: 0`。共享仓按所有资源的合计库存计算余量，分资源仓按对应槽计算；实验室首次装入矿物时绑定矿物槽，取空后恢复未绑定容量。同轮动作读取先前动作修改后的候选库存，避免竞争时超容。提取保留安全模式、敌方私有 rampart、nuker/powerBank 禁止提取和 terminal 干扰截止时间限制。Generic 仓库的 10 条默认容量已接入[冻结规则表](store-rules.md)，包括实验室槽绑定/释放的数值和终端容量归一；这些特殊动作策略仍由默认 native 执行；[creep 资源槽](creep-resource-slots.md)已开放 before/wrap/replace/after 与局部拒绝；[资源领域能力](mod-resources.md)允许可信 Mod 通过 replace 自定义转账、显式损耗及同房路由。默认特殊策略尚无各自独立入口，原例外依据见[核心经济记录](../research/notes/economy-gcl-2026-10-04.md)。
 
-分片创建支持 `PlayerSpec.gcl = { level, progress? }`。输入按 `ceil(GCL_MULTIPLY × (level−1)^GCL_POW) + progress` 转成累计点数，验证等级回读、整数进度与 JS 安全整数范围；不提供 GCL 时，初始等级为 `max(已拥有房间数+1, 2)`。校验先于回收旧分片。升级的累计点数已由引擎候选更新，JSON 与 KKPV 玩家投影读取同一玩家状态；账户 `power` 输入尚未接入。
+分片创建支持 `PlayerSpec.gcl = { level, progress? }`。输入按 `ceil(GCL_MULTIPLY × (level−1)^GCL_POW) + progress` 转成累计点数，验证等级回读、整数进度与 JS 安全整数范围；不提供 GCL 时，初始等级为 `max(已拥有房间数+1, 2)`。校验先于回收旧分片。升级的累计点数已由引擎候选更新，JSON 与 KKPV 玩家投影读取同一玩家状态；账号 `power` 可在 `PlayerSpec` 中提供，未提供时为 0；GPL 与 powerCreep 注册表由玩家候选持有。
 
 ## 候选提交与失败
 

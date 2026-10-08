@@ -325,6 +325,11 @@ pub(crate) fn object_json(
             // 恢复 Generic 的 JSON，ID 和位置以对象表中的字段为准。
             let mut v: Value = serde_json::from_str(&o.data).unwrap_or(json!({}));
             if let Some(map) = v.as_object_mut() {
+                // 当前世界只运行 shard0，房内 powerCreep 的生成态决定 shard；
+                // 派生字段不入持久数据，旧检查点与放置路径采用同一口径。
+                if map.get("type").and_then(Value::as_str) == Some("powerCreep") {
+                    map.insert("shard".into(), json!("shard0"));
+                }
                 map.insert("id".into(), json!(id_str));
                 map.insert("room".into(), json!(room));
                 map.insert("x".into(), json!(o.x));

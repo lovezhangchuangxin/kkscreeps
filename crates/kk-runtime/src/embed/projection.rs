@@ -181,6 +181,8 @@ pub(super) fn power_account_view(
                     "owner": viewer,
                     "name": r.name,
                     "className": r.class_name,
+                    // 单 shard 世界：已生成记录属于 shard0，未生成/死亡态无 shard。
+                    "shard": r.spawn_cooldown_time.is_none().then_some("shard0"),
                     "level": r.level,
                     "hitsMax": r.hits_max,
                     "storeCapacity": r.store_capacity,

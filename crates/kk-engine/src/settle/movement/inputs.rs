@@ -12,7 +12,8 @@ use kk_world::types::BodyKind;
 use kk_world::{ObjId, RoomIndex, RoomState};
 
 use super::{
-    Movement, RateEntry, check_obstacle_at_xy, has_road, move_weight, movers_at, type_name_of,
+    Movement, RateEntry, check_obstacle_at_xy, dynamic_owner, has_road, move_weight, movers_at,
+    type_name_of,
 };
 
 impl Movement {
@@ -40,7 +41,7 @@ impl Movement {
             });
             let mut info = kk_mod_api::movement::precheck::PrecheckRequestInfo {
                 mover_id: id.as_str().to_string(),
-                owner: String::new(),
+                owner: dynamic_owner(room.objects.get(&id)),
                 origin_x: entry.origin.0,
                 origin_y: entry.origin.1,
                 target_x: cell.0,
@@ -68,7 +69,7 @@ impl Movement {
                     &self.buildings,
                     self.walls_passable,
                     cell,
-                    creep.map(|c| c.owner.as_str()).unwrap_or(""),
+                    &dynamic_owner(room.objects.get(&id)),
                 ),
             };
             if let Some(c) = creep {
@@ -92,10 +93,7 @@ impl Movement {
                         let data: serde_json::Value =
                             serde_json::from_str(&o.data).unwrap_or_default();
                         (
-                            data.get("structureType")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("")
-                                .to_string(),
+                            type_name_of(obj).into_owned(),
                             data.get("owner")
                                 .and_then(|v| v.as_str())
                                 .unwrap_or("")
@@ -279,7 +277,7 @@ impl Movement {
     }
 
     /// 单个竞争者摘要；评分要素与 [`rate_of`] 同源，对穿标志由原始
-    /// 矩阵推导。非 creep 登记者按防御值填充（默认评分为全 0）。
+    /// 矩阵推导。powerCreep 没有身体，功率与比率按原生规则为 0。
     fn contender_info(
         &self,
         room: &RoomState,
@@ -288,7 +286,7 @@ impl Movement {
     ) -> kk_mod_api::movement::contest::ContenderInfo {
         let mut info = kk_mod_api::movement::contest::ContenderInfo {
             id: entry.id.as_str(),
-            owner: String::new(),
+            owner: dynamic_owner(room.objects.get(&entry.id)),
             origin_x: entry.origin.0,
             origin_y: entry.origin.1,
             origin_request_count: self
@@ -346,7 +344,7 @@ impl Movement {
                 .unwrap_or(cell);
             let mut info = kk_mod_api::movement::admission::MoverInfo {
                 id: id.as_str().to_string(),
-                owner: String::new(),
+                owner: dynamic_owner(room.objects.get(&id)),
                 origin_x: origin.0,
                 origin_y: origin.1,
                 target_x: cell.0,
@@ -407,14 +405,7 @@ impl Movement {
     ) -> kk_mod_api::movement::obstacle::MoveObstacleInput {
         let mut movers = Vec::new();
         for (&id, &cell) in &self.winners {
-            let owner = room
-                .objects
-                .get(&id)
-                .and_then(|o| match o {
-                    RoomObject::Creep(c) => Some(c.owner.clone()),
-                    _ => None,
-                })
-                .unwrap_or_default();
+            let owner = dynamic_owner(room.objects.get(&id));
             let native_blocked =
                 check_obstacle_at_xy(room, index, self, cell, owner.as_str(), safe_mode_user);
             let mut objects = Vec::new();
@@ -436,10 +427,7 @@ impl Movement {
                         let data: serde_json::Value =
                             serde_json::from_str(&o.data).unwrap_or_default();
                         (
-                            data.get("structureType")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("")
-                                .to_string(),
+                            type_name_of(obj).into_owned(),
                             data.get("owner")
                                 .and_then(|v| v.as_str())
                                 .unwrap_or("")
@@ -448,7 +436,9 @@ impl Movement {
                                 .and_then(|v| v.as_bool())
                                 .unwrap_or(false),
                             None,
-                            false,
+                            super::super::powers::is_power_creep(obj)
+                                && self.winners.contains_key(oid)
+                                && self.admitted(*oid),
                         )
                     }
                     RoomObject::ConstructionSite(site) => (

@@ -521,3 +521,21 @@ fn lab_intent_names_and_payload_roundtrip() {
     );
     assert_eq!(d.body_parts_count, Some(3));
 }
+
+/// 官方 run/else reverse：即使 run 因空试剂失败，同 tick reverse 也不执行。
+#[test]
+fn failed_run_does_not_fall_back_to_reverse() {
+    let mut f = Fixture::new(9, terrain_with(&[]));
+    f.controller(6, Some("p1"));
+    let calling = lab(&mut f, 25, 25, json!({"UH":5}), 0);
+    let l1 = lab(&mut f, 26, 25, json!({}), 0);
+    let l2 = lab(&mut f, 25, 26, json!({}), 0);
+    let mut batch = IntentBatch::default();
+    for action in [Action::RunReaction, Action::ReverseReaction] {
+        batch.add_object_intent("p1", calling, action, reaction_intent(l1, l2));
+    }
+    f.settle(batch);
+    assert_eq!(data_of(&f, calling)["store"]["UH"], 5);
+    assert!(data_of(&f, l1)["store"].get("U").is_none());
+    assert!(data_of(&f, l2)["store"].get("H").is_none());
+}

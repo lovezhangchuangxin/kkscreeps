@@ -84,9 +84,14 @@ pub fn settle_power(
                 }
                 PowerIntent::SuicidePowerCreep { id } => {
                     if let Some((_, room)) = find_room(rooms, *id) {
-                        let owner = room.objects.get(id).and_then(pc_data).and_then(|v| {
-                            v.get("owner").and_then(Value::as_str).map(str::to_string)
-                        });
+                        let owner = room
+                            .objects
+                            .get(id)
+                            .filter(|o| super::is_power_creep(o))
+                            .and_then(pc_data)
+                            .and_then(|v| {
+                                v.get("owner").and_then(Value::as_str).map(str::to_string)
+                            });
                         if owner.as_deref() == Some(player.as_str()) {
                             die_power_creep(room, state, player, *id, time, now_ms)?;
                         }

@@ -188,6 +188,24 @@ pub fn settle_launches(
     Ok(())
 }
 
+/// 官方 nukes/pretick.js 在意图阶段取消落地房间的 createCreep，
+/// 只禁本拍新孵化；已有孵化仍由冲击清扫，其他 spawn 动作照常处理。
+pub(super) fn blocks_spawning(room: &RoomState, time: u64) -> bool {
+    room.objects.values().any(|obj| {
+        let RoomObject::Generic(g) = obj else {
+            return false;
+        };
+        let Ok(data) = serde_json::from_str::<Value>(&g.data) else {
+            return false;
+        };
+        data.get("type").and_then(Value::as_str) == Some("nuke")
+            && data
+                .get("landTime")
+                .and_then(Value::as_u64)
+                .is_some_and(|land| Some(land) == time.checked_add(1))
+    })
+}
+
 /// 飞行核弹的逐 tick 结算。来源：processor/intents/nukes/tick.js。
 pub fn nuke_tick(w: &mut Working, id: ObjId) {
     let Some(RoomObject::Generic(g)) = w.room.objects.get(&id) else {

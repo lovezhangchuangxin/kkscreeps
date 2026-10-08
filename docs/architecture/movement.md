@@ -2,6 +2,8 @@
 
 移动按拉拽登记 → 请求预检 → 竞争选胜 → 准入 → 障碍追加 → 取消链 → 代价 → 对象 tick 执行。各阶段的候选、拒绝与读取时点见下文；玩家门与寻路边界见[玩家预检规则](player-precheck-rules.md#移动玩家门g02d2)。
 
+已生成 `powerCreep` 参加请求预检、竞争、准入与障碍槽，输入保留真实 owner，占位摘要的 kind 为 `powerCreep`，让位标记与 creep 共用胜者/准入终值。原生静态判定使用该 owner（含自有 rampart），身体功率与比率为 0；原生准入不要求 MOVE 或疲劳门。它不参加仅针对 creep 身体的拉拽登记与疲劳代价槽。
+
 ## 代码与维护入口
 
 纯数据在 `kk-mod-api/src/movement/`，候选与仲裁在 `kk-engine/src/settle/movement/`，候选适配在 `settle/working/movement.rs`，JS 操作在 `kk-mod-host/src/chain/movement/`，运行时委托在 `kk-runtime/src/embed/mod_chain/movement.rs`。旧公开模块路径保留重导出；新增能力使用领域入口。
@@ -243,7 +245,7 @@ before/中心/replace/after 与其他槽同构：native 中心为无操作（保
 
 `ctx.args.requests` 是**仲裁前的完整原始请求矩阵**（G03.a）：每个房间请求一条（含竞争落选者——他们不在 `movers` 中），按 目的格坐标、格内登记序 排列，逐条 `moverId/x/y/index/originX/originY/won`；`won` 标记该登记者是否为其目的格的仲裁胜者。原始矩阵在选胜时零拷贝暂存，Working 每房每 tick 重建，天然瞬态。
 
-`ctx.target.fields` 恒为 null（房间级槽没有对象目标）；本槽不开放移动请求、资源、战斗或对象能力。非 creep 胜者按防御值填充（owner 空串、部件 0、功率 0、重量 1），原生准入为否——与原生一致。`ctx.admission` 是槽专属能力（不可枚举、只在处理器同步期有效）：
+`ctx.target.fields` 恒为 null（房间级槽没有对象目标）；本槽不开放移动请求、资源、战斗或对象能力。powerCreep 胜者保留 owner、身体要素填零（owner 空串、部件 0、功率 0、重量 1），原生准入为否——与原生一致。`ctx.admission` 是槽专属能力（不可枚举、只在处理器同步期有效）：
 
 | 方法 | 语义 |
 |---|---|

@@ -141,6 +141,22 @@
 
 **选型（effects side table + 统一 applyEffect + 按域消费面）**：`RoomState.effects: BTreeMap<ObjId, Vec<EffectEntry>>`（effect/power/level/end_time 四字段结构体）——仿既有 `extensions` side table 先例（随房间候选克隆、对象删除时同步清理=宿主摧毁语义、完整世界检查点走独立字段、二进制房间快照不动）；结算消费统一经 helper `active_power_effect(rooms/working, id, power) -> Option<(level, end_time)>`（`end_time > time` 惰性过滤，官方同款；同 power 重抹=写入时替换条目）；投影每对象挂 `effects: [{effect, power, level, ticksRemaining=end_time-time}]` 活跃条目（到 0 当拍不可见=EFFECT-DECAY-002）；玩家面 fields/装配层读投影键（与 rawData 直通同机制）。usePower 补全 19 分支（15 挂效果族统一尾部；OPERATE_EXTENSION 即时灌能；SHIELD 临时 rampart 插入；FACTORY level 门），GENERATE_OPS 保持既有。消费面子片顺序：**b-2 结构域**（塔 attack/heal/repair、spawn 孵化、source 双 power、mineral、storage、lab、factory、terminal+market 费用、observer、controller、powerSpawn、withdraw-disrupt）；**b-3 战斗面**（FORTIFY 受伤倍率与 rampart hitsMax、SHIELD rampart 衰减/移除、INVUL 六处消费门、rangedMassAttack/dismantle/attackController/nuke）。能力开关 powerEffects:true 随批正式翻转（探测已验证翻转安全）。验收=in-crate settle_tests（effects 生命周期/applyEffect 替换语义/每域量值锚点/SHIELD 全程）+ 棘轮 floor 上调（预期 +77±：13 即绿保持）+ 三 bot + 无参 check，逐用例 0 转红；量值锚以 POWER_INFO 常量为准（官方公式逐字移植）。
 
+## 2026-10-09 提交范围复审（7673cb0 至 a2cf647，含起点）
+
+前轮仅审查，基线 HEAD `a2cf647`，开始时工作区干净。核对 M2E/M2F/M2G/M2H.a 实现、玩家预检、意图、投影、账号状态与仓库固定的官方源码。确认 4 项待修：① 核弹在对象 tick 阶段向托管 Mod 受击队列入队，但该阶段之后未排空，伤害与处理器调用被丢弃（P1）；② power 自杀全局意图只查 owner 未限定 powerCreep，借用原型方法可删除己方 Generic factory 并生成墓碑（P2）；③ lab 分派 run/reverse/boost/unboost 顺序偏离官方 boost/unboost/run-else-reverse，同 tick run+unboost 两次返回 OK 但解除强化被反应冷却吞掉（P2）；④ create→spawn 已生成 powerCreep 的账号/房间投影均缺 shard，getter 返回 undefined（P2）。未修改实现、未提交或推送；下一步先清偿上述边界并补相应行为回归，M2H.b 后续实施仍待用户点名。
+
+实际验证：`cargo build -p kk-cli` 通过；`cargo test -p kk-engine --test settle_tests` 361 passed / 2 ignored；当前 debug CLI embed 复现 lab 双动作、自杀错误类型与正常 create→spawn 的 shard 缺失（脚本 `/tmp/kks-review-7673.py`）；sim 2 tick 在 JSON/KKPV 双通道复现托管核弹对象保持 200 hits 且 namespace state 未更新，原生对照对象被摧毁（场景 `/tmp/kks-review-nuke{,-native}.json`，报告 `/tmp/kks-review-nuke{,-kkpv,-native}-report.json`）。临时复现场景未设断言，其 passed 只表示执行完成，行为结论来自最终对象与状态核查。本轮未运行无参数完整门禁、release 棘轮或三 bot，不将历史结果当本轮验证；M2H.b 已登记的 18 个未实现效果与已正式翻转的能力开关不重复作为新缺陷。
+
+## 2026-10-09 审查修复与第二轮深度复审（完成）
+
+用户授权修复前轮全部问题并再次深度复审。接手 HEAD `a2cf647`，工作区只有前轮台账记录未提交。已清偿前轮 4 项：核弹对象 tick 后立即排空托管受击队列（处理器故障撤销整轮候选）；power 自杀全局意图限定对象类型；lab 按 boost → unboost → run-else-reverse 官方顺序结算；已生成 powerCreep 在账号与 JSON/KKPV 房间投影派生 shard0，未生成/死亡不暴露 shard，兼容旧检查点。
+
+第二轮逐层复核官方处理顺序、资源/伤害/移动消费者、玩家投影、跨房与账号状态及恢复边界，新增确认并修复 2 项（均 P2）：① powerCreep 托管移动输入缺 owner/kind/让位信息，可误判自有 rampart；请求预检、竞争、准入与障碍统一保留 owner，powerCreep 占位摘要正确标记类型与获准让位。② 核弹落地未执行官方 nukes/pretick.js 的新孵化取消门，会先扣能量再清掉 newborn；现在落地当轮不扣新孵化能量，下一拍恢复孵化，其他 spawn 动作保持原顺序。新增真实链集成回归在 JSON/KKPV 双通道覆盖同 tick lab 竞争、错误类型自杀、spawn→检查点冷恢复→死亡 shard、核弹托管受击/异常回滚、power 移动互换/同格竞争/自有 rampart与核弹新孵化取消。同步现行游戏循环、移动与对象耐久契约。第二轮未发现其他新的可确认缺陷；M2H.b 已登记的 18 个效果族及原有 P3 差异仍是后续任务。
+
+实际验证：`cargo test -p kk-runtime --test mod_chain_tests production_boundaries` 7 passed；`cargo test -p kk-engine --test settle_tests lab_actions` 14 passed。最终无参数 `pnpm run check` 通过（Rust 46 个测试目标合计 1351 passed / 12 ignored / 0 failed，含最新 7 个集成回归；JavaScript、维护工具、文档链接与源码规模门禁通过；日志 `/tmp/kks-review-fix-check-final.log`）。无 doctest 变更。release CLI 重建、固定 screeps-ok pin `34a630e` 依赖准备、bot 夹具准备与适配器 build 完成；`node compat/scripts/ratchet.mjs` 通过：2645 passed / 103 failed / 166 skipped = 2914，相对 HEAD~1 转红 0 / 转绿 13，额外核对当前 HEAD 转红 0 / 转绿 0（日志 `/tmp/kks-review-ratchet.log`，刷新入库机器报告）。三 bot 均完成全部请求：TooAngel 2000/2000、Overmind 2000/2000、WASM 10/10，均中断/惩罚跳过 0、missing_api 空；Overmind 有基线已有的首轮 colony 异常，归一随机 directive ID 后错误与入库报告一致，不能宣称零错误（报告 `/tmp/kks-review-fix-{tooangel,overmind,wasm}.json`）。前轮 embed 复现脚本重跑确认 lab 解除成功、factory 保留、生成态 shard0；临时脚本不是正式测试替代。
+
+用户复核后授权提交；全部实现、回归、现行契约与兼容报告随本轮 `fix` 提交，未推送。后续 M2H.b 的效果实施与剩余消费者继续按既有选型队列推进，本次未扩大到该领域。
+
 ## 实际执行队列与前置门
 
 上一轮维护范围已提交；realm 注册/执行/预算及声明转换优化已提交为 `0c28c92`。Room API 状态所有权和历史文档入口治理已提交为 `8f822fd`；Prelude 命名与集中装配优化已提交 `de15765`；验收成本与首轮 research 文档价值优化已提交 `646e395`；Game 装配、地图缓存、指令状态与世界注入边界已提交 `a0d375e`；结构 API/孵化生命周期、字段/装配所有权及共用目标/诊断依赖优化已完成验收，三轮已提交 `b99cda3`，Creep 移动已提交 `3abb616`；engine/Mod 三组与 CLI 职责分组及整体复审已提交 `eedfbfb`；计划安装候选与统一发布已提交 `4443c3c`；runtime 单次调用与局部恢复治理已提交 `dd1e4f7`；字段校验边界治理已提交 `f32f972`。专项维护暂告一段落，剩余治理项不作为恢复开发的前置。G02.d1/d2/d3 首片均已交付；G02.d3 后续（结构/rampart 通行声明、逐房粒度）按需另拆。G11.a 与 G09 全四子片（a 库存/b 耐久/c 结构受击槽/d 声明式反击）均已交付（见上方实施记录）；下一批候选：G02.d3 后续（结构/rampart 通行声明）、剩余 24 例零散兼容失败（量小，见 M2D 记录）或 G11 后续。M2B 兼容批按路线图并行。
