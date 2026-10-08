@@ -188,7 +188,9 @@ pub(super) fn normalize_structure(
             let next_regen = spec
                 .get("ticksToRegeneration")
                 .and_then(Value::as_u64)
-                // 0 也表示已设置再生时间，首个结算 tick 即可触发再生。
+                // 0 也表示已设置再生时间；立即到点仅在放置时 ctx.time > 0
+                // 成立——time 0 放 0 间隔得 Some(0)，结算按官方 falsy 视为
+                // 未设置重挂 50000 钟。
                 // 来源：vanilla index.ts 的 placeMineral，及引擎 minerals/tick.js。
                 .map(|t| ctx.time.saturating_add(t));
             Ok(RoomObject::Mineral(MineralObj {

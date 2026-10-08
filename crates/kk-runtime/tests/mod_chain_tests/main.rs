@@ -223,6 +223,7 @@ mod heal_policy;
 mod link_decline;
 mod mass_policy;
 mod mass_policy_faults;
+mod mineral_power_effects;
 mod mod_building_fields;
 mod mod_building_world;
 mod mod_guard;

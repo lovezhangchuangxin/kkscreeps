@@ -5,9 +5,9 @@
 //! power-spawns/process-power.js 与 processor/global-intents/power.js。
 //! powerCreep 以 Generic 承载（data.type=="powerCreep"），账号注册表在
 //! `PlayerState.power_creeps`，两侧同 ID。usePower 已结算 PWR_GENERATE_OPS、
-//! 两种 tower power、两种 spawn power、OPERATE_LAB/POWER/FACTORY、两种 source power；
-//! 效果写入房间公共效果表，由塔动作、孵化、生产与资源再生结算消费。
-//! 其余 9 个 power 通过官方预检门后
+//! 两种 tower power、两种 spawn power、OPERATE_LAB/POWER/FACTORY、两种 source
+//! power 与 REGEN_MINERAL；效果写入房间公共效果表，由塔动作、孵化、生产与
+//! 资源再生结算消费。其余 8 个 power 通过官方预检门后
 //! 仍不结算，施放与效果消费者待后续补齐；capability powerEffects 已开启。
 
 mod account;
@@ -296,7 +296,8 @@ fn pc_use_power(w: &mut Working, id: ObjId, d: &IntentData) {
         | c::PWR_OPERATE_POWER
         | c::PWR_OPERATE_FACTORY
         | c::PWR_REGEN_SOURCE
-        | c::PWR_DISRUPT_SOURCE => {
+        | c::PWR_DISRUPT_SOURCE
+        | c::PWR_REGEN_MINERAL => {
             let Some(target_id) = d.id else { return };
             let valid_target = match w.room.objects.get(&target_id) {
                 Some(RoomObject::Spawn(_)) => {
@@ -304,6 +305,13 @@ fn pc_use_power(w: &mut Working, id: ObjId, d: &IntentData) {
                 }
                 Some(RoomObject::Source(_)) => {
                     matches!(power, c::PWR_REGEN_SOURCE | c::PWR_DISRUPT_SOURCE)
+                }
+                // 官方 usePower.js 的 REGEN_MINERAL 门：非耗尽且无待再生
+                // 时钟（nextRegenerationTime 真值判，0 视为未设置）。
+                Some(RoomObject::Mineral(m)) => {
+                    power == c::PWR_REGEN_MINERAL
+                        && m.mineral_amount != 0
+                        && !m.next_regeneration_time.is_some_and(|t| t != 0)
                 }
                 Some(target) => {
                     let expected = match power {

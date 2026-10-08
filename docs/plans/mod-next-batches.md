@@ -4,11 +4,12 @@
 
 ## 当前接手位置
 
-- 更新日期：2026-10-09；实现基线 `b550835`（source power 效果链），已提交、未推送。接手先核对实际 HEAD 与工作区。
-- 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座已交付。M2H.b 当前 **10/19 powers** 完整接通，剩余 9 个见下表。
-- 下一片：**REGEN_MINERAL**；随后资源/容量效果，再推进 terminal/controller、observer 与战斗效果。每片贯通施放、真实消费者、玩家投影、失败边界和冷恢复。
+- 更新日期：2026-10-09；实现基线 `049e9df`（source power 效果链后文档整理）。接手先核对实际 HEAD 与工作区。
+- 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座已交付。M2H.b 当前 **11/19 powers** 完整接通，剩余 8 个见下表。
+- 下一片：**OPERATE_STORAGE / OPERATE_EXTENSION**（资源/容量效果族）；随后 terminal/controller、observer 与战斗效果。每片贯通施放、真实消费者、玩家投影、失败边界和冷恢复。
 - Mod 扩展：移动策略、对象/建筑/资源、库存/耐久/受击、作者 CLI/类型、输入回放和检查点已有基础；未完成范围以任务表为准。默认玩法已有消费者不代表对应 Mod 替换能力已经开放。
 - 网络服务、持久 storage 后端与真实游戏客户端仍未实现；renderer R0–R6 已交付，R7 最终矩阵/长测未收口。现有 bot-check 不能代替持续推进世界中的可玩验收。
+- M2B 验收标准（2026-10-09 调整）：screeps-ok ≥95% 为中间检查点、≥99% 为后续覆盖目标；最终完成要求约定范围内功能全部通过验收，剩余例外逐项有明确范围、证据和可审查理由，见[路线图](../roadmap.md)。
 
 ## 当前执行队列
 
@@ -28,9 +29,9 @@
 
 | 状态 | Power / 消费者 |
 |---|---|
-| 已完成 10 项 | GENERATE_OPS；OPERATE_TOWER / DISRUPT_TOWER；OPERATE_SPAWN / DISRUPT_SPAWN；OPERATE_LAB；OPERATE_POWER；OPERATE_FACTORY；REGEN_SOURCE / DISRUPT_SOURCE |
-| 下一片 | REGEN_MINERAL：周期补充、耗尽与普通再生时钟的资格/到期边界 |
-| 待实现 | OPERATE_STORAGE；OPERATE_EXTENSION；OPERATE_TERMINAL / DISRUPT_TERMINAL；OPERATE_CONTROLLER；OPERATE_OBSERVER；FORTIFY；SHIELD |
+| 已完成 11 项 | GENERATE_OPS；OPERATE_TOWER / DISRUPT_TOWER；OPERATE_SPAWN / DISRUPT_SPAWN；OPERATE_LAB；OPERATE_POWER；OPERATE_FACTORY；REGEN_SOURCE / DISRUPT_SOURCE；REGEN_MINERAL |
+| 下一片 | OPERATE_STORAGE / OPERATE_EXTENSION：storage 容量与库存消费者同源；extension 即时灌能，按目标房主、距离顺序和整批预算结算 |
+| 待实现 | OPERATE_TERMINAL / DISRUPT_TERMINAL；OPERATE_CONTROLLER；OPERATE_OBSERVER；FORTIFY；SHIELD |
 
 剩余任务的具体门序和量值须核对锁定的官方源码与 POWER_INFO：
 
@@ -128,14 +129,12 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 
 ## 最近交付与实际验证
 
-最近功能批次：`b550835`，REGEN_SOURCE / DISRUPT_SOURCE。覆盖五等级、施放相位/刷新、干扰到期、两效果共存、满源/采集/容量切换、普通再生同拍、公开伪造拒绝、失败缓存重试与跨进程冷恢复；复审修复零绝对再生时钟。现行规则见[游戏循环](../architecture/game-loop.md)，详细过程已[归档](archive/mod-history-2026-10.md)。
+最近功能批次：REGEN_MINERAL 效果链（M2H.b 第 11 个 power）。覆盖五等级施放相位与刷新窗口、耗尽/带钟目标静默拒绝、Some(0) 时钟按官方 falsy 施放照常、超距拒绝、低等级 ERR_FULL 与伪造效果无效、采集耗尽停补与自然钟接管、无上限补量、失败缓存重试与跨进程冷恢复；引擎级另锁定自然再生当拍与在位效果叠加（官方 bulk.update 以对象引用调用时 `_.merge` 回写内存，效果门读回填后新值——正常施放不可达，装填/导入可达）及 Some(0) 真值性。复审（三路：结算保真/测试边界/全局影响）当批清偿 P1×1（叠加语义）、P2×4（Some(0) 施放+脉冲、超距、无上限、注释与暂存完整性）。现行规则见[游戏循环](../architecture/game-loop.md)，详细过程已[归档](archive/mod-history-2026-10.md)。
 
-- 完整无参数 `pnpm run check`：46 个 Rust 测试程序，1389 passed / 0 failed / 12 ignored；JS workspace、工具、文档链接与源码规模通过；无 doctest 变更。
-- release CLI 与适配器重建，固定 screeps-ok HEAD `34a630e`；全量 2914 例：2697 passed / 51 failed / 166 skipped，相对 `9578ffa` +10 转绿 / 0 转红。
+- 完整无参数 `pnpm run check`：46 个 Rust 测试程序，1396 passed / 0 failed / 12 ignored；JS workspace、工具、文档链接与源码规模通过；无 doctest 变更。
+- release CLI 与适配器重建，固定 screeps-ok HEAD `34a630e`；全量 2914 例：2703 passed / 45 failed / 166 skipped，相对上一基线 +6 转绿 / 0 转红，地板 2697→2703。
 - 三 bot 完成 2000/2000/10 tick，无中断/惩罚跳过/missing_api；Overmind 如上保留既有报错。
 - 持久证据：[兼容机器报告](../../compat/reports/kkscreeps.json)、[棘轮配置](../../compat/reports/ratchet.json)、[TooAngel](../../compat/reports/bot-tooangel.json)、[Overmind](../../compat/reports/bot-overmind.json)、[WASM](../../compat/reports/bot-wasm.json)。原临时日志路径仅在历史过程保留，不作为长期证据入口。
-
-2026-10-09 文档整理（基线 `b550835`）：当前入口 536→148 行、约 166→18 KiB；历史迁移完整性、G01–G30 状态一致性和文档链接检查通过，无参数完整门禁通过（1389 passed / 0 failed / 12 ignored）。仅文档整理，release/兼容/bot 证据沿用上述功能批次；随本次文档提交入库，未推送。
 
 ## 台账维护与每批验收
 

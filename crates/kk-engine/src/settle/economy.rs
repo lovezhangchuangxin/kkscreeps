@@ -418,56 +418,73 @@ fn controller_levels(level: u8) -> i64 {
 }
 
 /// 矿物耗尽后设置再生时钟，到期按旧 density 补充数量，再决定下一次 density。
+/// REGEN_MINERAL 按剩余效果时间周期补量；效果门读当前值——官方
+/// bulk.update 以对象引用调用时 `_.merge` 回写内存，自然再生当拍的
+/// 新存量/清钟参与效果门判定，相位命中即叠加。
 /// 随机序列由房间名、对象 ID 和 tick 派生，不使用 World.seed。
 pub fn mineral_tick(w: &mut Working, id: ObjId) {
     let Some(RoomObject::Mineral(m)) = w.room.objects.get(&id) else {
         return;
     };
     let (density, amount, next_regen) = (m.density, m.mineral_amount, m.next_regeneration_time);
-    if amount != 0 {
-        return;
-    }
-    let next_regen = match next_regen {
-        None => {
-            let t = w.time + c::MINERAL_REGEN_TIME as u64;
-            if let Some(RoomObject::Mineral(m)) = w.room.objects.get_mut(&id) {
-                m.next_regeneration_time = Some(t);
+    if amount == 0 {
+        // nextRegenerationTime 真值判：0 与未设置等价（官方 falsy 语义，
+        // 与 source_tick 同款过滤）。
+        let next_regen = match next_regen.filter(|t| *t != 0) {
+            None => {
+                let t = w.time + c::MINERAL_REGEN_TIME as u64;
+                if let Some(RoomObject::Mineral(m)) = w.room.objects.get_mut(&id) {
+                    m.next_regeneration_time = Some(t);
+                }
+                t
             }
-            t
+            Some(t) => t,
+        };
+        if w.time < next_regen.saturating_sub(1) {
+            return; // 未到点
         }
-        Some(t) => t,
-    };
-    if w.time < next_regen.saturating_sub(1) {
-        return; // 未到点
-    }
-    let mut rng = MineralRng::new(&w.room.name, id, w.time);
-    let new_amount = kk_world::types::mineral_density(density);
-    let rotate = density == c::DENSITY_LOW as u8
-        || density == c::DENSITY_ULTRA as u8
-        || rng.next_f64() < c::MINERAL_DENSITY_CHANGE;
-    let new_density = if rotate {
-        loop {
-            let r = rng.next_f64();
-            let picked = if r <= 0.1 {
-                1
-            } else if r <= 0.5 {
-                2
-            } else if r <= 0.9 {
-                3
-            } else {
-                4
-            };
-            if picked != density {
-                break picked;
+        let mut rng = MineralRng::new(&w.room.name, id, w.time);
+        let new_amount = kk_world::types::mineral_density(density);
+        let rotate = density == c::DENSITY_LOW as u8
+            || density == c::DENSITY_ULTRA as u8
+            || rng.next_f64() < c::MINERAL_DENSITY_CHANGE;
+        let new_density = if rotate {
+            loop {
+                let r = rng.next_f64();
+                let picked = if r <= 0.1 {
+                    1
+                } else if r <= 0.5 {
+                    2
+                } else if r <= 0.9 {
+                    3
+                } else {
+                    4
+                };
+                if picked != density {
+                    break picked;
+                }
             }
+        } else {
+            density
+        };
+        if let Some(RoomObject::Mineral(m)) = w.room.objects.get_mut(&id) {
+            m.next_regeneration_time = None;
+            m.mineral_amount = new_amount.max(0) as u32;
+            m.density = new_density;
         }
-    } else {
-        density
-    };
-    if let Some(RoomObject::Mineral(m)) = w.room.objects.get_mut(&id) {
-        m.next_regeneration_time = None;
-        m.mineral_amount = new_amount.max(0) as u32;
-        m.density = new_density;
+    }
+    // 官方 minerals/tick.js 后半段：存量真值 + 无待再生时钟（新挂的 50000
+    // 钟同样拦截）+ 相位 (endTime-time-1)%period；补量无上限。
+    if let Some(effect) =
+        kk_world::effects::active_power(w.room.effects.get(&id), c::PWR_REGEN_MINERAL, w.time)
+        && let Some(period) = super::powers::power_period(c::PWR_REGEN_MINERAL)
+        && (effect.end_time - w.time - 1).is_multiple_of(period)
+        && let Some(gain) = super::powers::power_effect(c::PWR_REGEN_MINERAL, effect.level)
+        && let Some(RoomObject::Mineral(m)) = w.room.objects.get_mut(&id)
+        && m.mineral_amount != 0
+        && !m.next_regeneration_time.is_some_and(|t| t != 0)
+    {
+        m.mineral_amount = m.mineral_amount.saturating_add(gain.max(0) as u32);
     }
 }
 

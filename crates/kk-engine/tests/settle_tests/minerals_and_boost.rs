@@ -284,6 +284,77 @@ fn mineral_regeneration_clock_and_density_rotation() {
     }
 }
 
+/// 官方 nextRegenerationTime 真值判（minerals/tick.js `if(!object.
+/// nextRegenerationTime)`）：时钟 0 视同未设置——不立即回填，挂新钟。
+#[test]
+fn mineral_zero_clock_is_treated_as_unset_for_natural_regen() {
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let m = f.mineral(10, 10, "U", 0, 2, Some(0));
+    f.settle(IntentBatch::default()); // time 0
+    match f.obj(m) {
+        RoomObject::Mineral(mm) => {
+            assert_eq!(mm.next_regeneration_time, Some(50_000), "0 与未设置等价");
+            assert_eq!(mm.mineral_amount, 0, "不因 0 钟立即回填");
+        }
+        _ => panic!(),
+    }
+}
+
+/// 自然再生当拍与在位 REGEN_MINERAL 效果叠加（官方 bulk.update 以对象引用
+/// 调用时 `_.merge` 回写内存，效果门读回填后的新值）；相位不命中不叠。
+/// 该状态正常玩家序列不可达（施放门拒耗尽矿物、耗尽挂 50000 钟），由
+/// 装填/导入数据构造，锁定官方同拍语义。
+#[test]
+fn mineral_regen_effect_stacks_on_natural_regeneration_tick() {
+    // 相位命中：end_time 11 在 time 0 满足 (11-0-1)%10==0，回填 35000 后 +6。
+    let mut f = Fixture::new(1, terrain_with(&[]));
+    let m = f.mineral(10, 10, "U", 0, 2, Some(1)); // time 0 >= 1-1 → 回填拍
+    f.world
+        .edit_room("W1N1", |room| {
+            room.effects.insert(
+                m,
+                vec![kk_world::EffectEntry {
+                    effect: 14,
+                    power: 14,
+                    level: 3,
+                    end_time: 11,
+                }],
+            );
+            Ok(())
+        })
+        .unwrap();
+    f.settle(IntentBatch::default()); // time 0
+    match f.obj(m) {
+        RoomObject::Mineral(mm) => {
+            assert_eq!(mm.mineral_amount, 35_006, "回填 35000 叠加等级 3 补量 6");
+            assert_eq!(mm.next_regeneration_time, None);
+        }
+        _ => panic!(),
+    }
+    // 相位不命中：end_time 12 → (12-0-1)%10==1，只回填不叠。
+    let mut f2 = Fixture::new(1, terrain_with(&[]));
+    let m2 = f2.mineral(10, 10, "U", 0, 2, Some(1));
+    f2.world
+        .edit_room("W1N1", |room| {
+            room.effects.insert(
+                m2,
+                vec![kk_world::EffectEntry {
+                    effect: 14,
+                    power: 14,
+                    level: 3,
+                    end_time: 12,
+                }],
+            );
+            Ok(())
+        })
+        .unwrap();
+    f2.settle(IntentBatch::default());
+    match f2.obj(m2) {
+        RoomObject::Mineral(mm) => assert_eq!(mm.mineral_amount, 35_000, "相位不命中不叠加"),
+        _ => panic!(),
+    }
+}
+
 /// harvest.js mineral 分支（67-112）全链：矿量/邻接/extractor 存在性/归属/
 /// RCL 门/cooldown、HARVEST_MINERAL_POWER、产出入命名槽、事件 amount 是
 /// 未钳制的 harvestAmount（:110 官方 quirk）、extractor cooldown 六 tick 周期。
