@@ -35,7 +35,7 @@ lab 动作顺序为 boost → unboost → runReaction，否则 reverseReaction�
 
 `RoomState.effects` 按对象 ID 持有 `effect/power/level/end_time`，与对象候选一起克隆、删除和跨房迁移；同 power 施放替换，异 power 共存。常规消费以 `end_time > time` 判断有效，不逐拍改写或清空过期条目；factory 配方门与 powerSpawn 处理量保留官方 `≥` 边界。管理员 Generic 输入中的 effects 在插入或编辑时归一到此表，发布和恢复拒绝双权威或悬空条目。
 
-`usePower` 当前完成 GENERATE_OPS、OPERATE_TOWER、DISRUPT_TOWER、OPERATE_SPAWN、DISRUPT_SPAWN、OPERATE_LAB、OPERATE_POWER、OPERATE_FACTORY、REGEN_SOURCE、DISRUPT_SOURCE、REGEN_MINERAL、OPERATE_STORAGE、OPERATE_EXTENSION、两种 terminal power 和 OPERATE_CONTROLLER。tower 两种效果分别通过目标类型、射程、等级覆盖、ops 与冷却门后挂到目标，统一扣 ops、设置冷却、发 EVENT_POWER 和动作日志。塔 attack/heal/repair 先计算距离衰减，再乘两种有效效果的 POWER_INFO 小数倍率，最后一次 floor；塔的能量费用保持固定值。其余 3 个 power 的结算消费者仍待后续切片。
+`usePower` 当前完成 GENERATE_OPS、OPERATE_TOWER、DISRUPT_TOWER、OPERATE_SPAWN、DISRUPT_SPAWN、OPERATE_LAB、OPERATE_POWER、OPERATE_FACTORY、REGEN_SOURCE、DISRUPT_SOURCE、REGEN_MINERAL、OPERATE_STORAGE、OPERATE_EXTENSION、两种 terminal power、OPERATE_CONTROLLER 和 FORTIFY/SHIELD。tower 两种效果分别通过目标类型、射程、等级覆盖、ops 与冷却门后挂到目标，统一扣 ops、设置冷却、发 EVENT_POWER 和动作日志。塔 attack/heal/repair 先计算距离衰减，再乘两种有效效果的 POWER_INFO 小数倍率，最后一次 floor；塔的能量费用保持固定值。其余 1 个 power（OPERATE_OBSERVER）的结算消费者仍待后续切片。
 
 spawn 两种效果复用同一施放、费用、冷却和效果表通路。OPERATE_SPAWN 仅在创建任务时将身体数 × CREEP_SPAWN_TIME 乘以等级倍率并 ceil，不重算已有任务；DISRUPT_SPAWN 每个有效 tick 将 spawnTime 延后一拍，保留 needTime，并暂停出生尝试。两效果可共存，干扰不阻止创建、续命或回收等其他动作。新增 creep 下一轮才参加对象 tick；一拍任务当轮先清除 spawning，creep 下一轮经孤儿出生路径使用默认方向。若一拍任务被同轮干扰延期，任务及指定方向保留，到期后按指定方向出生。公共效果表、任务绝对时钟和 creep 状态随检查点恢复及失败候选一起提交。
 
@@ -52,6 +52,8 @@ OPERATE_STORAGE 效果挂在 storage 上，容量消费者为结算与投影同�
 REGEN_MINERAL 施放门要求目标为非耗尽且无待再生时钟的矿物（nextRegenerationTime 真值判，0 与未设置等价），否则结算静默拒绝。消费者与 source 同用 `(endTime - gameTime - 1) % period` 相位（period 10、等级补量 2/4/6/8/10，无 ops 费用），补量无上限；效果门读当前存量与时钟——官方 bulk.update 以对象引用调用时 `_.merge` 回写内存，自然再生当拍回填后的新值参与判定、相位命中即叠加（该状态正常施放不可达，由装填/导入数据构造并有引擎级测试锁定）。耗尽矿物停补并交给普通再生时钟接管。普通再生对存量 0 的 Some(0) 时钟同样按官方 falsy 视为未设置——不立即回填，重新挂 50000 时钟。
 
 OPERATE_CONTROLLER（[18] duration 1000/cooldown 800/range 3/ops 200/effect [10..50]）挂在控制器上，唯一消费者是 8 级控制器的升级意图（官方 upgradeController.js）：每 tick 升级限额从 CONTROLLER_MAX_UPGRADE_PER_TICK=15 抬升 effect 值，本轮多次升级按未强化量累计钳制，边界 endTime >= time（与 factory/powerSpawn 及 terminal 的 send 意图相同形；terminal 仅 market 费用/冷却为严格 >）；限额只钳未强化量，boost 增量不受限（既有语义）。8 级升级不写控制器 progress 只涨 GCL，效果在 8 级以下惰性（可施放、无消费）。玩家面 upgradeController 预检不涉限额（官方同形，纯结算侧）。
+
+FORTIFY（[17] duration [1..5]/cooldown 5/range 3/ops 5）挂在 constructedWall/rampart 上：非核弹伤害被完全免疫（官方 _damage.js，严格 > 边界，免疫含扣血/摧毁/反击/事件整段）；dismantle 的能量回收被 SHIELD/FORTIFY/INVULNERABILITY 归零（官方 dismantle.js，>= 边界，伤害照常走 _damage 门）；rangedMassAttack 跳过 FORTIFY/INVULNERABILITY 目标（>= 边界）；玩家面 attack/rangedAttack/dismantle 预检对 FORTIFY/INVULNERABILITY 目标即拒 ERR_INVALID_TARGET（ticksRemaining > 0，SHIELD 不在预检门）。SHIELD（[12] effect [5000..25000]/duration 50/cooldown 20）无 ops 无目标：先删自身位置 constructionSite，过对象/地形放置门（同类 rampart 不重叠、本格非墙、贴边时三块边界格全墙——官方 checkConstructionSite 的 rampart 子集）后原地插入临时 rampart（hits=effect、hitsMax=0、nextDecayTime=endTime、携带 PWR_SHIELD 效果）；护盾本体可正常受伤，衰减 tick 跳过 hitsMax 同步与衰减，endTime <= time 时由衰减门删除；POWER_INFO.energy 字段官方无消费者，不扣。EFFECT_INVULNERABILITY（1001）与 FORTIFY 共享全部消费门，其生产者属后续 invader core/NPC 域。
 
 JSON/KKPV 内部记录携带 endTime 和剩余时间，供原始预检使用；Game 对象装配和手动构造均只复制公开四键（effect/power/level/ticksRemaining），过滤到期项。管理查询快照同样只返回活跃效果。检查点 v4 独立保存房间效果表，字段必填、恢复重验引用/等级/时间/同 power 唯一性；完整失败撤销整个候选，局部拆毁拒绝恢复对象及效果，缓存重试不重复运行玩家。
 

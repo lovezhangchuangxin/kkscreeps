@@ -4,9 +4,9 @@
 
 ## 当前接手位置
 
-- 更新日期：2026-10-09；实现基线 `2e791ff`（OPERATE_TERMINAL/DISRUPT_TERMINAL 效果链），本批 OPERATE_CONTROLLER 效果链随本提交交付。接手先核对实际 HEAD 与工作区。
-- 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座已交付。M2H.b 当前 **16/19 powers** 完整接通，剩余 3 个见下表。
-- 下一片：**FORTIFY / SHIELD**（战斗效果族），或按队列切 deposit；OPERATE_OBSERVER 依赖观察业务可与 deposit 换序。每片贯通施放、真实消费者、玩家投影、失败边界和冷恢复。
+- 更新日期：2026-10-09；实现基线含 `9a9cbeb`（OPERATE_CONTROLLER）与本批 FORTIFY/SHIELD（随本提交交付）。接手先核对实际 HEAD 与工作区。
+- 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座已交付。M2H.b 当前 **18/19 powers** 完整接通，剩余 1 个（OPERATE_OBSERVER，依赖观察业务）见下表。
+- 下一片：**deposit 完整业务**（队列顺位 2；OPERATE_OBSERVER 依赖观察视野业务随后）。每片贯通施放、真实消费者、玩家投影、失败边界和冷恢复。
 - Mod 扩展：移动策略、对象/建筑/资源、库存/耐久/受击、作者 CLI/类型、输入回放和检查点已有基础；未完成范围以任务表为准。默认玩法已有消费者不代表对应 Mod 替换能力已经开放。
 - 网络服务、持久 storage 后端与真实游戏客户端仍未实现；renderer R0–R6 已交付，R7 最终矩阵/长测未收口。现有 bot-check 不能代替持续推进世界中的可玩验收。
 - M2B 验收标准（2026-10-09 调整）：screeps-ok ≥95% 为中间检查点、≥99% 为后续覆盖目标；最终完成要求约定范围内功能全部通过验收，剩余例外逐项有明确范围、证据和可审查理由，见[路线图](../roadmap.md)。
@@ -15,7 +15,7 @@
 
 | 顺位 | 任务 | 首片与完成条件 |
 |---|---|---|
-| 1 | M2H.b 剩余 power 效果 | 先 FORTIFY/SHIELD，再 OPERATE_OBSERVER（依赖观察业务可与 deposit 换序）；逐域实现公式/费用/冷却/事件、有效期、消费者与保存恢复，不只挂 effects |
+| 1 | M2H.b 剩余 power 效果 | 仅剩 OPERATE_OBSERVER（依赖观察视野业务，可与 deposit 换序）；逐域实现公式/费用/冷却/事件、有效期、消费者与保存恢复，不只挂 effects |
 | 2 | deposit 完整业务 | 采集、累计耗尽冷却、掉落、寿命、字段；开启能力后完整兼容与恢复验收 |
 | 3 | observer 与 OPERATE_OBSERVER | 动作、范围/RCL/owner、下一轮限时视野、双投影权限与恢复；可与 deposit 独立实施 |
 | 4 | 其他兼容差异与真实 bot | 按最新报告逐例归因；keeper/NPC 单独拆片；真实场景验证采集、搬运、孵化、建造、升级、存活与重启 |
@@ -29,8 +29,8 @@
 
 | 状态 | Power / 消费者 |
 |---|---|
-| 已完成 16 项 | GENERATE_OPS；OPERATE_TOWER / DISRUPT_TOWER；OPERATE_SPAWN / DISRUPT_SPAWN；OPERATE_LAB；OPERATE_POWER；OPERATE_FACTORY；REGEN_SOURCE / DISRUPT_SOURCE；REGEN_MINERAL；OPERATE_STORAGE；OPERATE_EXTENSION；OPERATE_TERMINAL / DISRUPT_TERMINAL；OPERATE_CONTROLLER |
-| 待实现 | OPERATE_OBSERVER；FORTIFY；SHIELD |
+| 已完成 18 项 | GENERATE_OPS；OPERATE_TOWER / DISRUPT_TOWER；OPERATE_SPAWN / DISRUPT_SPAWN；OPERATE_LAB；OPERATE_POWER；OPERATE_FACTORY；REGEN_SOURCE / DISRUPT_SOURCE；REGEN_MINERAL；OPERATE_STORAGE；OPERATE_EXTENSION；OPERATE_TERMINAL / DISRUPT_TERMINAL；OPERATE_CONTROLLER；FORTIFY / SHIELD |
+| 待实现 | OPERATE_OBSERVER（依赖观察业务） |
 
 剩余任务的具体门序和量值须核对锁定的官方源码与 POWER_INFO：
 
@@ -121,6 +121,7 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 
 - G09 的 owner、massAttack/dismantle/维修/死亡产物，以及私有 rampart 的预检/结算差异，仍按[库存](../architecture/object-store.md)和[耐久](../architecture/object-durability.md)的限制选型；不把四个首片交付标成全领域完成。
 - G02.d3 历史登记的 worker 配置传递、跨房墙环端到端、allowStatic 与声明叠加等增强项，在相关切片开始时复核；安全模式主人摘要为可解释性增强，孵化门槛归 G13。按[移动契约](../architecture/movement.md)与实际测试核验。
+- attackController 的 EFFECT_INVULNERABILITY 预检门（官方 creeps.js:914-919）kk 未接——INVULN 生产者属后续 invader core/NPC 域，落地时须连同 attackController/伤害/拆毁等消费门一起盘点（FORTIFY/SHIELD 批已把结算侧免伤/回收/跳过门备好）。
 - upgradeController 对无 WORK 但有能量的 creep，官方仍发 amount=0 的 EVENT_UPGRADE_CONTROLLER 与 actionLog，kk 提前返回不发（复审登记的既有分歧，暂无套件/bot 触达）。
 - 历史登记过 sim 并行冷恢复子进程偶发失败，隔离复跑通过且后续完整门禁通过；若再现须保留失败报告归因，不能把重跑成功当作已修根因。
 - Overmind bot-check 保留基线已有的 1 个 console-error tick；不宣称零错误。keeper/NPC、多 shard 和其余能力门控缺口以最新兼容报告核对，旧批次数字不参与当前决策。
@@ -128,10 +129,10 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 
 ## 最近交付与实际验证
 
-最近功能批次：OPERATE_CONTROLLER 效果链（本提交）。唯一消费者是 8 级控制器升级意图（官方 upgradeController.js）：每 tick 限额 CONTROLLER_MAX_UPGRADE_PER_TICK=15 抬升 effect [10..50]，本轮多次升级按未强化量累计钳制，边界 endTime >= time（与 factory/powerSpawn 同形，区别于 terminal 严格 >）；限额只钳未强化量、boost 增量不受限，8 级升级不写 progress 只涨 GCL，8 级以下效果惰性（可施放无消费），玩家面预检不涉限额。三路复审（结算保真/测试边界/全局影响）发现项当批清偿：过期回落一腿原被能量钳空（补第二满能量 creep 钉住）、boost×限额交互零覆盖（补 XGH2O 只钳未强化量用例）、台账丢失的 powers/mod.rs 拆分义务补回并当批执行（powers/mod.rs 785→443 行，use_power.rs 354 行承接施放门序/共用臂/即时灌能；纯重构零行为变化）、terminal 边界措辞精确化、无 WORK creep 的 amount-0 事件既有分歧登记入已知限制。
+最近功能批次：OPERATE_CONTROLLER（`9a9cbeb`）、powers/mod.rs 拆分（use_power.rs 承接施放门序/共用臂/即时灌能，纯重构零行为变化）与 FORTIFY/SHIELD 效果链（本提交）。FORTIFY 挂 constructedWall/rampart：非核弹伤害完全免疫（_damage 严格 >，免疫含扣血/摧毁/反击/事件）、dismantle 能量回收归零（SHIELD/FORTIFY/INVULN，>= 边界，伤害照常）、rangedMassAttack 跳过目标（>=）、attack/rangedAttack/dismantle 预检即拒 ERR_INVALID_TARGET（SHIELD 不在预检门）。SHIELD 无 ops 无目标：删自身位工地、过官方 checkConstructionSite 的 rampart 放置子集（同类不重叠/本格非墙/贴边三块边界格全墙）后插临时 rampart（hits=effect、hitsMax=0、nextDecayTime=endTime）；护盾可受伤、dismantle 无回收、衰减 tick 跳过同步并到期删除；POWER_INFO.energy 官方无消费者不扣。EFFECT_INVULNERABILITY 与 FORTIFY 共享全部消费门（生产者属后续 NPC 域）。三路复审（结算保真/测试边界/全局影响）发现项当批清偿：rangedAttack 预检效果门移到射程检查后（官方顺序，超射程且无敌返回 -9）、SHIELD 边界检查移到工地删除后（越界 pc 的工地同样先删）、贴边四角选边改顺序赋值（y 覆盖 x，官方与 room.rs 既有决策同形）、插入不带 notifyWhenAttacked、免伤正路径补塔攻击例（无预检门的唯一可达通道）、到期拍用绝对时间钉住（此前 tick 计数失真未落边界）、dismantle 回收加 carry 部件使 0/1 可区分、massAttack 用有主 rampart 钉 >= 边界、rampart 腿预检与 SHIELD 拒绝路径工地删除副作用补断言、attackController 的 INVULN 预检缺口登记。行为变化：无效果路径逐位不变（免伤/回收/跳过门仅活跃效果命中介入）。damage.rs 现 762 行超 700 复审线，下一批涉及时先拆分。
 
-- 完整无参数 `pnpm run check`：46 个 Rust 测试程序，1412 passed / 0 failed / 12 ignored；JS workspace、工具、文档链接与源码规模通过；无 doctest 变更。
-- release CLI 与适配器重建，固定 screeps-ok HEAD `34a630e`；全量 2914 例：2715 passed / 33 failed / 166 skipped，相对 `2e791ff` 基线 +2 转绿 / 0 转红（OPERATE_CONTROLLER 用例），地板 2713→2715。
+- 完整无参数 `pnpm run check`：46 个 Rust 测试程序，1415 passed / 0 failed / 12 ignored；JS workspace、工具、文档链接与源码规模通过；无 doctest 变更。
+- release CLI 与适配器重建，固定 screeps-ok HEAD `34a630e`；全量 2914 例：2719 passed / 29 failed / 166 skipped，相对 `9a9cbeb` 基线 +4 转绿 / 0 转红（FORTIFY/SHIELD 用例），地板 2715→2719。
 - 三 bot 完成 2000/2000/10 tick，无中断/惩罚跳过/missing_api；Overmind 如上保留既有报错。
 - 持久证据：[兼容机器报告](../../compat/reports/kkscreeps.json)、[棘轮配置](../../compat/reports/ratchet.json)、[TooAngel](../../compat/reports/bot-tooangel.json)、[Overmind](../../compat/reports/bot-overmind.json)、[WASM](../../compat/reports/bot-wasm.json)。原临时日志路径仅在历史过程保留，不作为长期证据入口。
 

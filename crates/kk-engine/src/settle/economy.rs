@@ -143,6 +143,23 @@ pub fn generic_decay_tick(w: &mut Working, id: ObjId) {
         return;
     }
     if st == "rampart" {
+        // 官方 ramparts/tick.js:10-17：带 PWR_SHIELD 效果的临时 rampart
+        // 不参与 hitsMax 同步与衰减，效果到期（endTime <= time）即删除。
+        if w.room.effects.get(&id).is_some_and(|entries| {
+            entries
+                .iter()
+                .any(|e| e.power == kk_core::constants::PWR_SHIELD && e.end_time <= w.time)
+        }) {
+            w.remove_obj(id);
+            return;
+        }
+        if w.room.effects.get(&id).is_some_and(|entries| {
+            entries
+                .iter()
+                .any(|e| e.power == kk_core::constants::PWR_SHIELD)
+        }) {
+            return;
+        }
         let target = w.controller().map(|ctl| {
             if v.get("owner").and_then(Value::as_str) == ctl.owner.as_deref() {
                 let key = ctl.level.to_string();

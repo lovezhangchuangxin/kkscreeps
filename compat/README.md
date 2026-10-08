@@ -43,7 +43,7 @@ node compat/scripts/ratchet.mjs
 
 ### 如何判断回归
 
-[ratchet.json](reports/ratchet.json) 指定通过数下限和总用例数。[kkscreeps.json](reports/kkscreeps.json) 是最近入库的机器报告，工作区报告在运行后会被覆盖。当前验证为 **2715 passed / 33 failed / 166 skipped**，共 2914 例；通过数地板已升至 2715。tower、spawn、lab、powerSpawn、factory、source、mineral 的效果链、storage 容量/extension 灌能、两种 terminal power 与 OPERATE_CONTROLLER 已完成，连同 GENERATE_OPS 共完成 16 个 power，其余 3 个消费者仍在开发。门禁要求：
+[ratchet.json](reports/ratchet.json) 指定通过数下限和总用例数。[kkscreeps.json](reports/kkscreeps.json) 是最近入库的机器报告，工作区报告在运行后会被覆盖。当前验证为 **2719 passed / 29 failed / 166 skipped**，共 2914 例；通过数地板已升至 2719。tower、spawn、lab、powerSpawn、factory、source、mineral 的效果链、storage 容量/extension 灌能、两种 terminal power、OPERATE_CONTROLLER 与 FORTIFY/SHIELD 已完成，连同 GENERATE_OPS 共完成 18 个 power，其余 1 个消费者仍在开发。门禁要求：
 
 1. 报告更新时间改变，并且 JSON 可以解析。
 2. 总用例数匹配配置，通过数不低于下限。

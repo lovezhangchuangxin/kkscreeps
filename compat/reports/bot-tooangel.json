@@ -85,7 +85,7 @@
     ]
   ],
   "console_head": [
-    "[tick 1][log] 1 Script reload - Load: 4 tickLimit: 500 limit: 20 Bucket: 10000",
+    "[tick 1][log] 1 Script reload - Load: 5 tickLimit: 500 limit: 20 Bucket: 10000",
     "[tick 1][log] 1 W1N1                        Setting misplacedSpawn",
     "[tick 1][log] 1 W1N1                        Setup complete - storing data",
     "[tick 1][log] 1 W1N1                        Setup completed - storing data",

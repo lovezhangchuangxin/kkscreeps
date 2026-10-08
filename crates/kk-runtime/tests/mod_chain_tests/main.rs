@@ -221,6 +221,7 @@ mod creep_move_world;
 mod creep_store;
 mod damage_policy;
 mod factory_power_effects;
+mod fortify_shield_power_effects;
 mod heal_policy;
 mod link_decline;
 mod mass_policy;

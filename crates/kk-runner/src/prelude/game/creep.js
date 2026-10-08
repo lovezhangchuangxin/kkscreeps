@@ -206,6 +206,26 @@
     return C.OK;
   };
 
+  /** 官方 creeps.js:613/649/1048：attack/rangedAttack/dismantle 对带
+   *  FORTIFY/EFFECT_INVULNERABILITY 活跃效果的目标预检即拒
+   *  ERR_INVALID_TARGET（ticksRemaining > 0；SHIELD 不在预检门）。 */
+  function invulnerableTarget(target) {
+    const effects = target && target.effects;
+    if (!effects) return false;
+    for (let i = 0; i < effects.length; i++) {
+      const e = effects[i];
+      if (
+        e &&
+        (e.power === globalThis.PWR_FORTIFY ||
+          e.effect === globalThis.EFFECT_INVULNERABILITY) &&
+        e.ticksRemaining > 0
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /** Mod 耐久对象目标族（G09.b）：带 hits 信封的 Mod 记录经其玩家类绑定
    * 接收；信封在场与结算 object_hits>0 门同源（无信封类型结算静默不动，
    * 预检即拒 -7）。attack/rangedAttack 与塔 attack 共用同一判别。 */
@@ -223,7 +243,8 @@
 
   gw.modDurabilityTargetOk = modDurabilityTargetOk;
 
-  /** 检查 ATTACK 部件、目标存活与类型、ATTACK_RANGE 射程及敌方安全模式；未实现 invulnerability effects 检查。
+  /** 检查 ATTACK 部件、目标存活与类型、FORTIFY/INVULNERABILITY 效果门、
+   * ATTACK_RANGE 射程及敌方安全模式。
    * 射程读常量表（规则 builtin:creep.attack.range 注入的生效值），
    * 与 Rust 结算同源。来源：上游 engine/src/game/creeps.js 的 attack。 */
   globalThis.Creep.prototype.attack = function attack(target) {
@@ -246,6 +267,7 @@
         target instanceof globalThis.Structure ||
         modTargetOk);
     if (!okTarget) return C.ERR_INVALID_TARGET;
+    if (invulnerableTarget(target)) return C.ERR_INVALID_TARGET;
     if (!target.pos.inRangeTo(this.pos, C.ATTACK_RANGE)) return C.ERR_NOT_IN_RANGE;
     gw.intents.set(this.id, 'attack', { id: target.id, x: target.pos.x, y: target.pos.y });
     return C.OK;
@@ -326,8 +348,8 @@
     return C.OK;
   };
 
-  /** 检查 WORK 部件、可拆结构、邻接和安全模式；未实现 effects 检查。
-   * 来源：上游 engine/src/game/creeps.js 的 dismantle。 */
+  /** 检查 WORK 部件、可拆结构、邻接、安全模式与 FORTIFY/INVULNERABILITY
+   * 效果门。来源：上游 engine/src/game/creeps.js 的 dismantle。 */
   globalThis.Creep.prototype.dismantle = function dismantle(target) {
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;
@@ -344,6 +366,7 @@
     if (!okTarget) return C.ERR_INVALID_TARGET;
     if (!target.pos.isNearTo(this.pos)) return C.ERR_NOT_IN_RANGE;
     if (blockedBySafeMode(this)) return C.ERR_NO_BODYPART;
+    if (invulnerableTarget(target)) return C.ERR_INVALID_TARGET;
     gw.intents.set(this.id, 'dismantle', { id: target.id });
     return C.OK;
   };
@@ -384,8 +407,9 @@
     return count;
   };
 
-  /** 检查 RANGED_ATTACK、当前目标类型、RANGED_ATTACK_RANGE 射程及敌方安全模式，再记录指令。
-   * 不建模 invulnerability effects；rampart 重定向由 Rust 结算处理。
+  /** 检查 RANGED_ATTACK、当前目标类型、RANGED_ATTACK_RANGE 射程、敌方
+   * 安全模式与 FORTIFY/INVULNERABILITY 效果门（官方 range 在效果门之前），
+   * 再记录指令；rampart 重定向由 Rust 结算处理。
    * 来源：上游 engine/src/game/creeps.js 的 rangedAttack。 */
   globalThis.Creep.prototype.rangedAttack = function rangedAttack(target) {
     if (!this.my) return C.ERR_NOT_OWNER;
@@ -408,6 +432,9 @@
         modTargetOk);
     if (!okTarget) return C.ERR_INVALID_TARGET;
     if (!this.pos.inRangeTo(target, C.RANGED_ATTACK_RANGE)) return C.ERR_NOT_IN_RANGE;
+    // 官方 creeps.js:645-652：range 检查在效果门之前（超射程且无敌 →
+    // ERR_NOT_IN_RANGE，与 attack 的顺序相反）。
+    if (invulnerableTarget(target)) return C.ERR_INVALID_TARGET;
     gw.intents.set(this.id, 'rangedAttack', { id: target.id });
     return C.OK;
   };

@@ -4,14 +4,15 @@
 //! 移植官方 engine/src/processor/intents/power-creeps/*.js、
 //! power-spawns/process-power.js 与 processor/global-intents/power.js。
 //! powerCreep 以 Generic 承载（data.type=="powerCreep"），账号注册表在
-//! `PlayerState.power_creeps`，两侧同 ID。usePower 已结算 16 个 power：
+//! `PlayerState.power_creeps`，两侧同 ID。usePower 已结算 18 个 power：
 //! GENERATE_OPS、两种 tower、两种 spawn、LAB/POWER/FACTORY、两种 source、
-//! REGEN_MINERAL、OPERATE_STORAGE/EXTENSION、两种 terminal power 与
-//! OPERATE_CONTROLLER。效果写入房间公共效果表，由塔动作、孵化、生产、
-//! 资源再生、storage 容量、terminal 发送/市场费用与冷却、withdraw 提取门
-//! 与 8 级控制器升级限额结算消费（OPERATE_EXTENSION 为即时灌能，不落
-//! 效果表）。其余 3 个 power 通过官方预检门后仍不结算，施放与效果消费者
-//! 待后续补齐；capability powerEffects 已开启。
+//! REGEN_MINERAL、OPERATE_STORAGE/EXTENSION、两种 terminal power、
+//! OPERATE_CONTROLLER 与 FORTIFY/SHIELD。效果写入房间公共效果表，由塔
+//! 动作、孵化、生产、资源再生、storage 容量、terminal 发送/市场费用与
+//! 冷却、withdraw 提取门、8 级控制器升级限额与墙体免伤/护盾回收门结算
+//! 消费（OPERATE_EXTENSION 为即时灌能，SHIELD 直接插临时 rampart，均不
+//! 落目标效果表）。其余 1 个 power（OPERATE_OBSERVER）通过官方预检门后
+//! 仍不结算，施放与效果消费者待后续补齐；capability powerEffects 已开启。
 
 mod account;
 mod resources;

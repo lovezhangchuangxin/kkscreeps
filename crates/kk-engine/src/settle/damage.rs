@@ -188,6 +188,23 @@ fn apply_damage_inner(
             );
         }
     } else {
+        // 官方 _damage.js:26-31：非核弹对 constructedWall/rampart 的伤害被
+        // FORTIFY 或 EFFECT_INVULNERABILITY 完全免疫（严格 >），整个跳过
+        // 扣血、摧毁与后续事件；SHIELD 不在此门（护盾 rampart 可被打）。
+        if attack_type != c::EVENT_ATTACK_TYPE_NUKE
+            && matches!(
+                type_name_of(&target).as_ref(),
+                "constructedWall" | "rampart"
+            )
+            && w.room.effects.get(&target_id).is_some_and(|entries| {
+                entries.iter().any(|e| {
+                    (e.power == c::PWR_FORTIFY || e.effect == c::EFFECT_INVULNERABILITY)
+                        && e.end_time > w.time
+                })
+            })
+        {
+            return;
+        }
         let new_hits = object_hits(&target) - damage;
         if new_hits <= 0 {
             destroy_structure_with(w, target_id, attack_type);

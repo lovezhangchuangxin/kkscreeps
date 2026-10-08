@@ -291,6 +291,16 @@ pub(in crate::settle) fn intent_dismantle(w: &mut Working, id: ObjId, data: &Int
     if amount <= 0 {
         return;
     }
+    // 官方 dismantle.js:37-40：目标带 SHIELD/FORTIFY/INVULNERABILITY
+    //（>= 边界，与 _damage 的严格 > 分叉）时能量回收为 0，伤害照常走门。
+    let invul_gain_block = w.room.effects.get(&target_id).is_some_and(|entries| {
+        entries.iter().any(|e| {
+            (e.power == c::PWR_SHIELD
+                || e.power == c::PWR_FORTIFY
+                || e.effect == c::EFFECT_INVULNERABILITY)
+                && e.end_time >= w.time
+        })
+    });
     // Mod 建筑按成本构成比例回收各资源；内建结构维持能量 amount/200。
     let redirected_type = w
         .room
@@ -298,7 +308,9 @@ pub(in crate::settle) fn intent_dismantle(w: &mut Working, id: ObjId, data: &Int
         .get(&target_id)
         .map(|o| movement::type_name_of(o).to_string())
         .unwrap_or_default();
-    if let Some(building) = w.plane.buildings.get(&redirected_type).cloned() {
+    if invul_gain_block {
+        // 无回收；伤害仍经 apply_damage（其 wall/rampart FORTIFY 门另行生效）。
+    } else if let Some(building) = w.plane.buildings.get(&redirected_type).cloned() {
         crate::settle::buildings::dismantle_refund(w, id, &building, amount);
     } else if let Some(creep) = w.creep_mut(id) {
         creep.store.energy = creep
@@ -434,6 +446,16 @@ fn intent_ranged_mass_attack_policy(
             continue;
         }
         if damage::object_hits(&obj) <= 0 {
+            continue;
+        }
+        // 官方 rangedMassAttack.js:47：FORTIFY/INVULNERABILITY 目标
+        //（>= 边界）整体跳过（含护盾下的 rampart 本体）。
+        if w.room.effects.get(&tid).is_some_and(|entries| {
+            entries.iter().any(|e| {
+                (e.power == c::PWR_FORTIFY || e.effect == c::EFFECT_INVULNERABILITY)
+                    && e.end_time >= w.time
+            })
+        }) {
             continue;
         }
         if let RoomObject::Creep(t) = &obj
