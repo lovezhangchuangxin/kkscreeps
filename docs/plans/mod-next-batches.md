@@ -1,536 +1,148 @@
-# Mod 后续开发任务与接手记录
+# Mod 后续开发任务与接手台账
 
-本文件是**持续更新的执行台账**，用于 AI 接手、上下文恢复和每批进度交接。它细化[完整玩法计划](mod-complete-gameplay.md)，不替代 N1–N6 的范围、ADR 或现行架构。G01–G30 只是本台账的稳定任务编号；尚未完成的条目是目标，不代表接口已经存在。
-
-长期目标：开发者通过独立 JS Mod 轻松创造各种完整玩法，覆盖调研版本 xxscreeps 的扩展领域，并提供更完善的组合、恢复和开发工具。项目自身逐步以公共 SDK 提供可选官方内容；第二种同类玩法不应再要求修改 Rust 或重编宿主。
+本页只维护**当前状态、执行队列、未完成范围和最近验证**。长期目标与全量领域范围见[完整玩法计划](mod-complete-gameplay.md)，现行机制见[架构索引](../architecture/README.md)，已完成批次的过程见[历史记录](archive/mod-history-2026-10.md)。G01–G30 是稳定任务编号，不是串行开发顺序。
 
 ## 当前接手位置
 
-- 当前接手（2026-10-09）：接手基线 `9578ffa`；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座及跨域修复已交付。用户已授权持续推进 M2H.b；公共效果表与 tower、spawn、lab/powerSpawn、factory、source 五片完整效果链均已完成，当前 10/19 powers 接通。M2H.b-5 REGEN_SOURCE/DISRUPT_SOURCE 的实现、深度复审、完整门禁、release 棘轮和三 bot 证据见下文；随本次提交入库，未推送。剩余 9 个 power 消费者、deposit/observer 和其他兼容差异继续按队列推进；下一片优先 REGEN_MINERAL，再接资源/容量效果；后台服务另按依赖推进。
-- 上轮维护：**完整门禁代码优化完成（2026-10-08）**。接手基线为审查修复提交 `5a43b54`（8 项边界修复，审查范围 `f32f972..6b461a8` 的 14 个提交）；代码优化已提交 `69a6357`，未推送；系统授权排查结果另行补记。全部检查与用例范围保留，不扩展玩法范围。增量门禁已缩短；经用户确认启用当前应用开发者工具权限并重启后，两类新链接测试程序首次启动均降到毫秒级，启动等待在本次复测中消除；尚未重编整个 workspace 的全部产物，不能把增量门禁数据当作全量冷构建数据。此前 G11.a、G09.a/b/c/d 交付细节保留于下文。
-- 已完成基线：S01 `e0b457b`、S02 `5a25bc2`。旧 S03–S06 的纯搬迁限制由本轮职责治理方案替代，详见[维护结构方案](archive/structure-governance-2026-10.md)。
-- 已完成实现：移动领域跨层归拢；Working 统一构造与瞬态字段收口、engine 首触日志；世界容器/投影与 runtime 执行器分离、Generic 共享读取；串行场景名称/耗时/子集反馈；文档契约合并、旧计划归档与工具门禁。历史维护保留当时玩法语义和恢复身份；后续玩法交付以本文件任务表和现行架构为准。
-- 本轮实现：已修复 8 项边界问题：动作拒绝截断托管伤害队列；攻击者消失仍应用主伤害并保留来源摘要；反击 safeMode 抑制保留攻击时刻决定；受击槽目标字段只读；库存第三信封键冻结保留；库存容量/安全整数/逐资源槽在发布与恢复时完整校验；配额为单件仍按实际对象清点（JS、link 与 spawn）；Mod 业务字段不触发终端封锁预检。生产与测试共用结构受击排空路径。现行耐久、库存、配额与战斗文档同步；无新增持久化域，无玩法范围扩展。
-- 本轮门禁优化：CLI 六个命令测试目标归并为 `command_tests`，各命令族和夹具保留独立模块，27 个用例均已通过；workspace Rust 总数 1299 持平。在所有摘要消费者的共同依赖 kk-mod-api 显式启用固定 sha2 0.10.9 的 ARM asm 后端，避免 crate 子集切换导致特征反复编译（运行时指令检测与软件回退），新增空输入、短输入及跨块长输入标准摘要向量；仍完整读取当前 CLI，不缓存或跳过身份摘要。另将 kk-pathfinder 开发/测试包 opt-level 设为 3，使 cc 编译的原生寻路跳过零优化成本；黄金测试的五轮与全部断言保留。中间硬件配置门禁因纳入寻路配置而停止，不作为完整通过证据；最终配置首次无参数完整门禁已通过（Rust 1300 passed / 0 failed / 12 ignored），包括 27 个命令契约、95 个模拟、283 个整槽链及原生黄金校验和；日志 /tmp/kkscreeps-gate-final-cold.log。同机 Apple M4 增量无参数门禁再次通过（/tmp/kkscreeps-gate-final-warm.log）：步骤总耗时 103.42→69.01 秒（约缩短 33%），Rust 94.88→59.64 秒；51→46 个测试程序。逐用例比对无缺失，仅新增 1 个摘要向量测试；原六命令模块逐字节保留。寻路黄金 16.45→2.37 秒，固定五轮与校验和不变；真实 mod inspect 五次平均 0.267→0.119 秒，完整 CLI 摘要与 Python hashlib 一致，composition/执行策略身份与旧报告相同。macOS 系统日志确认新程序首次执行存在 Gatekeeper 评估，临时无扩展属性副本的探测同样超过 30 秒，并非已建立的解决方案；最终配置迁移后的首次完整门禁步骤总耗时仍为 1239.03 秒（约 20 分 39 秒），不构成首次执行等待已解决的证据。此前系统授权数据库读取被拒，未据此推断授权状态；用户随后授予电脑操作权限，系统设置实读仅列终端且关闭。经用户单独确认并完成系统认证后，为当前应用（显示名 ChatGPT，标识 com.openai.codex）添加并启用开发者工具授权，界面已确认 on。仅此应用由代理添加；终端在用户认证期间也变为 on，代理未操作其开关。授权后以 cargo rustc 对 command_tests 设置独立 metadata 重新链接（7.60 秒，不改源码），第一次 --list 23.016 秒、第二次 0.005 秒，27 个命令测试全通过（2.65 秒）；/tmp/kkscreeps-devtool-startup.json。syspolicyd 日志仍记录该新程序的 GK 扫描与评估（/tmp/kkscreeps-devtool-policy.log）；不能认为首次执行等待已解决。授权后的无参数完整门禁再次通过（Rust 1300 passed / 0 failed / 12 ignored，步骤总耗时 69.61 秒；/tmp/kkscreeps-gate-devtool-confirm.log），确认增量优化仍有效。上述授权后测试发生于应用重启前，后续重启验证见下条。此轮没有公共 SDK 或玩法语义变更，兼容棘轮与三 bot 证据仍见审查提交的验证记录。
-- 重启后启动验证（2026-10-08）：用户重启当前应用后，再次用独立 metadata 重新链接 command_tests（7.67 秒，完整二进制 SHA-256 与重启前不同），首次 --list 0.0083 秒、第二次 0.0050 秒，27 个测试全部通过（1.94 秒）；/tmp/kkscreeps-devtool-restart-startup.json。另重新链接含 V8 的 kk-runtime mod_chain_tests（33.74 秒），首次 --list 0.0067 秒、第二次 0.0046 秒，283 个测试全部通过（5.31 秒）；/tmp/kkscreeps-devtool-restart-chain-startup.json。两类新链接程序均未复现此前数十秒的启动等待；两类程序对应时段均未查到 syspolicyd 的同名扫描记录。无参数完整门禁再次通过（Rust 1300 passed / 0 failed / 12 ignored，步骤总耗时 69.98 秒；/tmp/kkscreeps-gate-devtool-restart.log）。证据支持此次授权并重启后本机 Codex 运行路径恢复正常；没有改变源码、全局 Gatekeeper 或程序签名。未清空 target 或全量重编全部依赖，不将本次结果表述为全量冷构建门禁的耗时。
-- 本轮职责复审：托管伤害队列的排空与效果由 damage 域持有，room_loop 只调用阶段入口；生产/单元测试排空和库存发布/恢复校验各自共用一条实现。`damage.rs` 708 行触发规模提示，新增内容仍围绕同一伤害队列与应用边界，本轮未按行数机械拆分。
-- 审查补丁验证：无参数 `pnpm run check` 完整门禁通过（Rust 1299 passed / 0 failed / 12 ignored，包含整槽链 283/283；CLI 模拟 95/95；格式、Clippy、JS workspace、维护工具、文档链接及规模检查通过）。新 release 棘轮 1983 passed / 24 既有 failed / 907 skipped，逐用例相对 HEAD~1 与修复前 HEAD 均 0 转红、0 转绿；三 bot 2000/2000/10 完成且验收通过（核心指标同入库基线，Overmind 保持 1 个含 console-error 的 tick）。过程中校正了回归夹具的默认控制器距离和未提交字段拒绝语义，并修正把旧漏洞行为当作期望的单元测试；macOS 新二进制启动延迟经采样定位，恢复后最终完整门禁通过。最终日志 `/tmp/kkscreeps-fix-check.log`、`/tmp/kkscreeps-fix-ratchet.log`、`/tmp/kkscreeps-fix-release-confirm.log`；bot 报告 `/tmp/kkscreeps-fix-{tooangel,overmind,wasm}.json`。审查补丁已提交；本轮优化验证见上条记录。
-- 历史交接、阶段验证与审查过程见[历史记录](archive/mod-history-2026-10.md)；玩法缺口继续以本文件任务表为准。
+- 更新日期：2026-10-09；实现基线 `b550835`（source power 效果链），已提交、未推送。接手先核对实际 HEAD 与工作区。
+- 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座已交付。M2H.b 当前 **10/19 powers** 完整接通，剩余 9 个见下表。
+- 下一片：**REGEN_MINERAL**；随后资源/容量效果，再推进 terminal/controller、observer 与战斗效果。每片贯通施放、真实消费者、玩家投影、失败边界和冷恢复。
+- Mod 扩展：移动策略、对象/建筑/资源、库存/耐久/受击、作者 CLI/类型、输入回放和检查点已有基础；未完成范围以任务表为准。默认玩法已有消费者不代表对应 Mod 替换能力已经开放。
+- 网络服务、持久 storage 后端与真实游戏客户端仍未实现；renderer R0–R6 已交付，R7 最终矩阵/长测未收口。现有 bot-check 不能代替持续推进世界中的可玩验收。
 
-## G11.a 建筑配额策略（2026-10-08 登记；同日选型拍板并实施交付）
+## 当前执行队列
 
-调查结论（登记时点，改造前口径）：配额的引擎判定收口在 `settle/structures.rs::allowed_for`（link 走 `w.plane.links.rcl` 有效规则——`builtin:link.rcl0..8` 九条标量规则先例，其余类型查 `controller_allowed` 静态表）；引擎消费者五处（工地创建结算 room.rs、link 转移 isActive 门 structures.rs、spawn/extension 放置 mark_off、terminal 容量 economy、extractor 采集门 harvest）；玩家面两个消费者读冻结常量（`structures.js` isActive 与 `room/creation.js` checkControllerAvailability，后者在意图记录前返回 ERR_RCL_NOT_ENOUGH）。
+| 顺位 | 任务 | 首片与完成条件 |
+|---|---|---|
+| 1 | M2H.b 剩余 power 效果 | 先 REGEN_MINERAL；逐域实现公式/费用/冷却/事件、有效期、消费者与保存恢复，不只挂 effects |
+| 2 | deposit 完整业务 | 采集、累计耗尽冷却、掉落、寿命、字段；开启能力后完整兼容与恢复验收 |
+| 3 | observer 与 OPERATE_OBSERVER | 动作、范围/RCL/owner、下一轮限时视野、双投影权限与恢复；可与 deposit 独立实施 |
+| 4 | 其他兼容差异与真实 bot | 按最新报告逐例归因；keeper/NPC 单独拆片；真实场景验证采集、搬运、孵化、建造、升级、存活与重启 |
+| 独立候选 | G02.d3 后续、G27.a | 前者贯通结构/rampart 通行与寻路；后者提供异步后台生命周期，随后才接 storage/outbox/网络 |
 
-**选型（路线①+③ 合体）**：计划级逐型逐级标量规则 `builtin:structure.quota.{type}.rcl{N}`（132 条，type 为官方 CONTROLLER_STRUCTURES 全 16 型、N 按官方键集——spawn/extension/road/container 0-8 其余 1-8，默认=官方表值）+ 折叠注入 `CONTROLLER_STRUCTURES` 常量表（引擎 Plane 快照与玩家常量同计划派生，G02.d2/G07.a 双端同源同款；kk-constants 先于 prelude 段执行、表值可注入——RESOURCES_ALL 先例）。**房槽路线（②）的硬事实**：玩家预检在意图记录前拒绝超配额（错误码被兼容用例钉死），结算期槽收不到超配额意图 → 无法升配额，而升配额（TD 多塔/迷宫限墙）是主用例；单向降配额半值。**顺带修复既有缺口**：`builtin:link.rcl*` 至今只进引擎不进玩家面（link 的 isActive/createConstructionSite 预检读静态表）——link.rcl0-8 迁移并入本族（键集改官方形 1-8），LinkRules 去 rcl、allowed_for 统一走配额快照。约束：Mod 建筑不占内建配额表（既有口径不变）；builtin revision v17→v18，PlanHash 变化旧检查点按身份门拒绝（G02.d3 同款）。验收按每批共同验收（两独立 JS 包+原生对照+组合+双通道+冷恢复）+ 领域项：rcl8 超官方塔数无 mod 拒/配额包放行、降墙配额生效、玩家预检错误码与结算同源、link 迁移回归。
+维护优化已完成的轮次不作为新功能前置。任务首次实施前按业务闭环拆片；G30.a 覆盖清单与 G30.d 同功能参考随领域滚动，不等最终收口才补证据。
 
-**实施交付（同日）**：契约见[建筑 RCL 配额规则](../architecture/structure-quota.md)。`StructureQuotaSnapshot` 装配期一次解析、Rc 共享入逐房 Plane；`fold_controller_structures` 折叠表经 setup.rs canary 预检与玩家 worker 双点注入（switch/冷恢复同一路径）；五消费者统一 `allowed_for`（快照 miss 回退官方静态表，仅默认引擎/非官方类型可达）。夹具 [mod-quota](../../compat/fixtures/mod-quota/README.md)（quota-raise 塔 20 / quota-lower 墙 3 两独立包）与 [sim-mod-quota](../../compat/fixtures/sim-mod-quota/README.md)（三轮探针：首 tick 结算收口、次 tick 预检读「已提交数 vs 注入表」、末 tick 回读世界工地数，三面互证）；Rust 侧 `sim_tests/quota.rs` 四场景×双通道+冷恢复+组合身份互异。验证：完整门禁通过；棘轮 1983 持平（0 转红 0 转绿）；三 bot 2000/2000/10 指标+验收判定全通过；三路复审 0 P0/P1，P2（Plane 深拷贝→Rc）当批清偿，P3 清偿或登记（折叠键序依赖 workspace preserve_order 已注释；link 迁移玩家面覆盖为间接）。已知边界：RCL 0 级别键不声明（官方表无此键）；首片不开放逐房差异/动态配额/Mod 建筑配额。
+## M2H.b power 进度
 
-## G09.a 自有对象库存（2026-10-08 交付）
+公共效果表、施放共用门、JSON/KKPV 投影、当前格式检查点和候选回滚已实现，机制见[游戏循环](../architecture/game-loop.md#power-效果链当前首片)与[检查点](../architecture/checkpoints.md)。
 
-调查结论（登记时点现状）：`RoomObject::Mod`（`api.objects.define` 类型实例）今天完全不能作为资源端点——六条链全部按变体白名单拒绝：① 结算接收门 `settle/creep/store.rs` intent_transfer/intent_withdraw 只认 Creep/Spawn/Extension/Storage/Generic（withdraw 另有 Tombstone/Ruin），`_ => return` 静默拒 Mod；② Mod 侧资源槽 `settle/resources.rs::inspect/transfer/change` 同名单拒（「对象没有已接线的可用资源仓库」）；③ 玩家预检 `creep-resources.js` transfer/withdraw 要求 structureRegister（`raw.type === 'structure'`）或 creep + `instanceof Structure` 族，Mod 对象投影 `type:"mod"` 两门都不过；④ 对象字段 schema（definition.rs ValueKind：Bool/Number/String/ObjectRef/Enum/Array/Map/Record）无库存形态字段，ObjectTypeDescriptor 无容量槽；⑤ 投影 `mod_record_json` 只合成 type/modType/id/room/x/y/pos 信封键，且 `store` 不在保留键清单（player_surface.rs）——声明的同名字段是惰性数据；⑥ 既有先例是 Mod 建筑（G08.a）：`store_capacity` → 完工写 `store/storeCapacity` → 落 `RoomObject::Generic`，天然过①②③全部 Generic 臂——但建筑是静态放置+工地生命周期，不能替代可动态增删/移动/自定义玩家类的对象。
+| 状态 | Power / 消费者 |
+|---|---|
+| 已完成 10 项 | GENERATE_OPS；OPERATE_TOWER / DISRUPT_TOWER；OPERATE_SPAWN / DISRUPT_SPAWN；OPERATE_LAB；OPERATE_POWER；OPERATE_FACTORY；REGEN_SOURCE / DISRUPT_SOURCE |
+| 下一片 | REGEN_MINERAL：周期补充、耗尽与普通再生时钟的资格/到期边界 |
+| 待实现 | OPERATE_STORAGE；OPERATE_EXTENSION；OPERATE_TERMINAL / DISRUPT_TERMINAL；OPERATE_CONTROLLER；OPERATE_OBSERVER；FORTIFY；SHIELD |
 
-**选型（路线①：对象级库存声明 + Generic 库存语义复用）**：ObjectTypeDescriptor 新增可选 `store` 声明（首片=单一总容量 u32，形态对齐建筑 `store_capacity`）；引擎把库存作为 ModObj.data 信封键 `store/storeCapacity` 维护（复用 `resources/generic.rs` 的 generic_capacity/change_generic_store，六链按「带合法库存字段的 Generic」同款语义接纳 Mod 对象）；`store/storeCapacity` 入 player_surface 保留键（冻结期拒绝声明同名字段，无存量用户）；投影 mod_record_json 合成两信封键；预检 creep-resources.js 增 `type:"mod"` 目标族（读同一信封键容量）；mod 侧 inspect/change 增 Mod 臂。容量来源=类型级冻结声明（与建筑同口径），不进 StoreRules（那是内建结构规则族）；首片不做逐资源容量/实验室式槽绑定/损耗（mod 可用 ctx.resources 槽组合）。验收=共同验收（两独立包：搬运型/仓储型 + 原生对照 + 组合 + 双通道 + 冷恢复）+ 领域项：creep transfer/withdraw 对 Mod 对象进出双向、预检错误码与结算同源、mod 槽 read/transfer 触达自有对象、保留键冻结拒绝、投影 store 键形状、事件与保存恢复随既有链路。G09.b 耐久/死亡、G09.c 结构受击另拆（本片不碰 hits/伤害）。
+剩余任务的具体门序和量值须核对锁定的官方源码与 POWER_INFO：
 
-**实施交付（同日）**：契约见[自有对象库存](../architecture/object-store.md)。`store_capacity` 为 Option<u64> 且冻结界 ≤2^53-1（登记为 u32，实施放宽以对齐 JS 安全整数；`skip_serializing_if` 使未用 store 的计划 PlanHash 稳定）；三条创建路径（结算 create、embed 放置、既有建筑线）同形注入 `{"energy":0}` 信封。六链接纳：creep 双向结算四臂、mod 资源槽 inspect/change（新增 `change_mod_store` 纯助手，不带实验室槽语义）、`mod_record_json` 投影合成信封键、`creep-resources.js` modEntry 目标族（容量门读同一信封）、对象 tick 读、发布前校验三臂守卫（声明缺信封/信封非法/未声明携带）。保留键 +store/storeCapacity（共 8 项）并移到**冻结层**拒绝（validate::object，builtin:link 豁免——其字段名即官方投影形状；storeCapacityResource 经信封拆分隔离，不占保留键）；字段写回丢弃处理器提供的信封、回填世界当前值（同时防篡改与防陈旧快照回滚）；typegen 为 store 声明类型合成 `store/storeCapacity` 成员。夹具 [mod-objstore](../../compat/fixtures/mod-objstore/README.md)（objstore-hauler/objstore-vault 两独立包）与 [sim-mod-objstore](../../compat/fixtures/sim-mod-objstore/README.md)（hauler/vault/combined 三场景四轮探针，`--ticks 4`）；Rust 侧 `sim_tests/obj_store.rs` 三场景×双通道+冷恢复+plan_hash 互异。验证：完整门禁通过；棘轮 1983 持平（0 转红 0 转绿）；三 bot 2000/2000/10 验收判定全通过；三路复审 1 P1（信封写回边界）+4 P2 当批清偿，P3 已知角落登记于契约文档（structureType:terminal 预检分歧、object_owner 对 Mod 返 None 的 rampart 语义、同 tick 预提交读与单意图覆盖）。首片不做逐资源容量/槽绑定/损耗。
-
-## G09.b 自有对象耐久与死亡（2026-10-08 交付）
-
-调查结论（登记时点现状）：Mod 对象今天完全不能被攻击——近战/远程/塔伤害全部收敛于单一类型门 `damage::object_hits(&target) > 0`（combat.rs 意图层与 apply_damage_inner 双处），**没有变体白名单**，Mod 落 `object_hits` 的 `_ => 0` 臂被静默忽略（无事件无错误）。伤害应用二分：creep 分支走延迟队列（受击槽+TOUGH+治疗合并+墓碑）；结构分支立即扣耐久（`set_structure_hits`）→ 0 即 `destroy_structure`（remove_obj+Ruin 转存）+ `EVENT_OBJECT_DESTROYED {type: structureType}`。周边事实：受击槽 `builtin:creep.receiveDamage` 输入形状 creep 专属（无对象分型，G09.c 界）；玩家预检 attack 门要求 `isKnownStructure`+`instanceof Structure` 族（Mod 投影 `type:"mod"` 得 -7，G09.a 已在资源门开 modEntry 先例）；`hits/hitsMax` 不在保留键清单（键位空闲）；G08.a 建筑耐久=Generic data JSON 键（`hits_max` 冻结声明、完工写 `hits/hitsMax/notifyWhenAttacked`），`object_hits`/`structure_hits_max`/`set_structure_hits` 的 Generic 臂即为它开口；`remove_obj` 一次清索引/扩展字段/疲劳/伤害治疗队列/链日志，投影与 KKPV 每轮派生无增量链，扩展字段不可能键控在 Mod 对象上——死亡移除的伴随清理全部白吃；rangedMassAttack 走 owner/powerBank 判别（`object_owner` 对 Mod 恒 None）；策略伤害目标校验 `validate_damage_target` = creep 或 `structure_hits_max().is_some()`（Mod 得 None 被拒）；战斗读面 `slot_combat_get` 同源排除。
-
-**选型（信封键路线，与 G09.a 库存同构）**：ObjectTypeDescriptor 新增可选 `hits_max`（>0 且 ≤u32::MAX，对齐建筑冻结口径；可与 store_capacity 同时声明）；引擎把耐久作为 ModObj.data 第二族信封键 `hits/hitsMax` 维护（创建路径注入满血 `hits=hitsMax=声明值`，三条创建路径同形）；`hits/hitsMax` 入保留键（冻结层拒绝同名字段，builtin 豁免）与字段更新拒绝；`object_hits`/`structure_hits_max`/`set_structure_hits` 增 Mod 臂读写信封（结构分支立即扣耐久语义，不经受击槽/TOUGH/反击——creep 语义属 G09.c/d）；死亡=扣至 0 → remove_obj + `EVENT_OBJECT_DESTROYED {type: 类型键}`（无废墟无掉落——废墟绑定建筑成本模型，Mod 对象不经工地，另拆；store 信封内容随对象消失）；投影 mod_record_json 合成 hits/hitsMax；预检 creep.js attack/rangedAttack 增 modEntry 目标族（G09.a 资源门同款）；策略伤害目标与战斗读面随 structure_hits_max 的 Mod 臂自动接纳；逐 tick 校验三臂守卫（声明缺信封/信封非法/未声明携带）；typegen 合成两成员；type_name_of/object_owner 的 Mod 臂按逐调用点影响面核验后最小接线（事件标识优先，movement 等消费点不得被顺带改变行为）。首片不做：受击槽结构形状（G09.c）、反击（G09.d）、repair/heal 覆盖与自愈 API（维修绑定建筑成本模型，后续与 owner/工地联动另拆）、rangedMassAttack 覆盖与 safeMode/rampart 主人保护（owner_field 语义未接线，object_owner 维持 None）、废墟/掉落产物、mod_states 死亡通知。rampart 位置改向若为纯位置判定则自动覆盖，实现期核实。验收=共同验收（两独立包：可击毁型+耐久×库存双信封组合型 + 原生对照（无耐久类型预检 -7 与结算静默不动）+ 组合 + 双通道 + 冷恢复）+ 领域项：attack/rangedAttack 逐 tick 扣血、击毁移除+事件 type=类型键、塔攻击命中、字段写回不覆盖信封、保留键冻结拒绝、投影 hits 形状、策略伤害目标接纳、逐 tick 校验拒绝缺/伪信封。
-
-**实施交付（同日）**：契约见[自有对象耐久](../architecture/object-durability.md)。`hits_max`（Option<u64>，冻结界 1..=u32::MAX 与建筑同口径）随 ObjectTypeDescriptor 冻结；两条创建路径（结算 create、embed 放置）同形满血注入 `hits/hitsMax` 信封；`object_hits`/`structure_hits_max`/`set_structure_hits` 增 Mod 臂读写信封（近战/远程/塔/策略伤害全走同一门）；死亡=扣至 0 → remove_obj + `objectDestroyed {type: 类型键}`，不产废墟不掉落；保留键 10 项（+hits/hitsMax）冻结层拒绝；字段更新拒绝信封键、字段写回丢弃输入信封回填世界值（与库存同款）；逐 tick 校验三臂守卫（缺信封/信封非法——**hitsMax 须等于冻结声明、hits 须在 1..=hitsMax 内**——0 只能直改造出，发布前拒绝；未声明携带）。**与登记的偏差**：塔玩家面 attack 也开了 modEntry 目标族（登记只写 creep.js；三处共用 `gw.modDurabilityTargetOk` 助手，塔结算侧测试覆盖、玩家路径与 attack/rangedAttack 共享判别）；`type_name_of` 对 Mod 保持空串（战斗读面 CombatView 单独取类型键，movement 等消费点零影响——登记的"最小接线"落地为不接线）。夹具 [mod-objhits](../../compat/fixtures/mod-objhits/README.md)（objhits-siege barrel 300/objhits-vault cache 200×100 双信封两独立包 + 无耐久 decoy 对照）与 [sim-mod-objhits](../../compat/fixtures/sim-mod-objhits/README.md)（siege 近战 30/击 300→210、vault 远程 10/击 200→170+转入 50 互不扰动、combined 共存，`--ticks 4`）；Rust 侧 `sim_tests/obj_hits.rs` 三场景×双通道+冷恢复+plan_hash 互异、`settle_tests/mod_hits.rs` 近战/远程/塔/无耐久静默/击毁事件+无废墟、`damage_policy.rs` 战斗读面与策略目标接纳、validation/freeze/typegen 单测。首片不做：受击槽结构形状（G09.c）、反击（G09.d）、repair/自愈、massAttack 与 owner 联动、废墟/掉落、死亡通知面。
-
-## G09.c 结构受击槽 与 G09.d 声明式反击（2026-10-08 调查、选型与交付）
-
-调查结论（登记时点现状，两片共用同一份调查）：结构/Mod 的立即扣减路径（apply_damage_inner 结构与 Mod 分支）今天**没有任何 Mod 介入点**——受击槽 `builtin:creep.receiveDamage` 的 `default_pending_damage` 以 creep 为门（非 creep 整槽不调用），IncomingInput 形状是纯数值+来源 ID 摘要（无目标对象形状）；反击两条路（原生=仅 creep 目标+近战+无 rampart 按 ATTACK 部件；显式 RetaliationPolicy=攻击者侧 JS 预声明表）都不覆盖结构/Mod 目标；反击伤害统一落 `damage_to_apply[attacker]` 延迟队列——该队列只在 creep tick 消费，**塔/结构攻击者的反击会静默丢失**（apply_pending_hits_selected 非 creep 早退、塔无 tick 分支）；受击槽在目标自己的对象 tick 运行，ID 更小的攻击者已 tick 完成，此刻向其排反击队列随候选丢弃（父任务警告的机制基础）。官方对照（上游 _damage.js：仓库注释/研究记录取证）：反击仅近战+带 ATTACK 部件的 creep 目标，结构不反击；唯一结构例外 powerBank=任意 attackType 伤害×0.5 反击（特殊硬编码）；结构受击=立即扣减无 TOUGH。
-
-**选型（G09.d 先行：声明式反击首片，官方 powerBank 同构）**：ObjectTypeDescriptor 新增可选反击声明（首片=固定比率 `retaliation_ratio`，值域 0..=1（milli 精度 i64 存储，对齐价格毫单位先例），可与 hits_max 组合（无耐久类型拒绝声明——无处触发））；落点在 apply_damage_inner 的 Mod 受击分支（意图阶段，安全——不踩对象 tick 丢反击坑）：受击耐久对象按声明比率计算反击量（任意 attackType，对齐 powerBank），**按攻击者类型分落点**——creep 攻击者沿用 `damage_to_apply` 延迟队列（现有 HIT_BACK 事件与「摧毁→反击→主攻击」事件序），塔/结构攻击者立即扣减（直接结算，禁递归：反击施加不再触发被反击方的反击）；界值预检沿 RetaliationPolicy::preflight 先例（i64 表示域）。反击量不占用耐久（与 powerBank 同构，无自伤）。首片不做：按实际净伤害反击（依赖 G09.c 的修改后伤害值）、逐 attackType 差异、反击上限声明、mod_states 通知面。
-
-**选型（G09.c 结构受击槽，G09.d 后实施）**：新槽（键名区分 creep 语义，如 `builtin:mod.receiveDamage`），介入点在 apply_damage_inner 的 Mod 分支扣减前（意图阶段）；输入形状=伤害值+来源摘要（复用事件归因）+目标形状（类型键/hits/库存信封摘要，沿 ctx.target mod_fields 先例）；输出=修改伤害量（钳 JS 安全整数）；沿 receiveDamage 槽全链接线（builtin.rs 槽清单+revision、incoming 输入结构、settle/incoming prepare、contrib 三件、install NATIVE 清单、kk-runtime capability/ops、kk-mod-host chain/sdk、夹具）。新增槽键改 PlanHash。首片不做：治疗合并/pendingHeal（结构无延迟队列）、放行型减免、结构（非 Mod）目标覆盖。
-
-验收（两片各自按共同验收形态）：G09.d=两独立包（纯反击型/反击×库存组合型）+无耐久对照+组合+双通道+冷恢复+领域项（creep 攻击者延迟扣血+HIT_BACK 事件、塔攻击者立即扣减、事件序、比率界值、无递归、反击不耗自身耐久）；G09.c=两独立包（减伤型/记录型）+无耐久对照+组合+双通道+冷恢复+领域项（修改后伤害参与判死、界值钳制、来源归因、默认值回退、creep 受击槽零扰动）。
-
-**G09.d 实施交付（同日）**：契约见[自有对象耐久](../architecture/object-durability.md)的声明式反击节。`retaliation_milli`（Option<i64>，冻结层毫精度 1..=1000 + 要求耐久声明；JS 面作者形态 `retaliationRatio` (0,1] 浮点、round 换毫精度、四舍五入后 <1 拒绝）无运行时字段——不占信封/保留键、typegen 无变化。落点在 apply_damage_inner 的 Mod 受击分支（意图阶段）：creep 攻击者走 `damage_to_apply` 延迟队列（同轮 tick 按部件扣血+ATTACKED 标记），塔/结构攻击者立即扣减（禁递归：不重入伤害应用器）；事件复用 HIT_BACK，序=摧毁→反击→主攻击。**与登记的偏差（复审驱动）**：① 值域收紧 (0,1]（登记 0..=1——0 等价不声明，冻结层拒绝）；② 「界值预检沿 preflight 先例」落地为 saturating 乘（damage 界 1e9×1000 无溢出，与原生路径同不加检）；③ 登记时「powerBank 语义无 safeMode 抑制」判断**错误**——上游 `_damage.js:39-41` 实际抑制 powerBank 反击，已改为同款抑制（controller 主人==攻击者主人且激活清零）并补测试；④ 显式反击策略与声明反击的关系明确为**策略存在即整体替换**（combat.md 既有契约「空表可禁用反击」，复审 P1 修复双触发）；⑤ 无耐久对照落地为冻结层拒绝+结算无声明对照（无耐久类型无法声明反击，sim 级对照不可构造）；⑥ 无递归为构造性保证（立即扣减不重入；Mod 不发攻击意图，无可测递归场景）。**行为发现**：反伤沿队列按部件扣血且输出口径是 count_active——攻击部件耗尽后输出归零，creep 攻击者单挑反击型对象会**结构性停滞**（存活但打不动），死亡须经其他伤害来源；已钉停滞测试并入文档。夹具 [mod-objret](../../compat/fixtures/mod-objret/README.md)（thorn spike 0.5 / reactor core 1.0×容量 100 两独立包）与 [sim-mod-objret](../../compat/fixtures/sim-mod-objret/README.md)（三场景四轮探针）；Rust 侧 `settle_tests/mod_hits.rs` 反击七测（近战/远程/塔/塔毁/safeMode 抑制/停滞/多攻击者/极小比率）、`damage_policy.rs` 策略替换测试、freeze/host 注册测试、`sim_tests/obj_ret.rs` 双通道+冷恢复。首片不做：按净伤害反击（依赖 G09.c）、逐 attackType 差异、触发次数/上限声明、反击通知面。
-
-**G09.c 实施交付（同日，G09.d 后）**：契约见[自有对象耐久](../architecture/object-durability.md)的结构受击槽节。新槽 `builtin:mod.receiveDamage`（槽目录 21 项、revision v19、install NATIVE 清单、能力映射 SlotCapability::Incoming——正常拒绝与战斗读面随之放行）。**托管延迟排空**（与登记「介入点在 Mod 分支扣减前」的落地偏差，动机：伤害入口只有 `&mut Working`，JS 链需 RoomCtx 共享句柄）：Native 派发（默认引擎）在伤害入口内联零开销（行为与 G09.b 逐位一致，既有测试零扰动）；Hosted 派发把伤害挂 `Working.mod_damage_pending`，room_loop 意图循环后、移动仲裁前统一排空——逐项跑槽得修改后伤害再落地；扣减与声明反击效果提取为 `mod_damage_effects` 供内联/排空共用。**与登记的偏差**：① 「目标形状进输入」落地为经 `ctx.target`（Mod payload 含耐久/库存信封）承载，ModIncomingInput 只含 damage+source 摘要（当次攻击者，无累计队列语义）；② 事件序偏差（同 tick 内确定性）：Hosted 主攻击事件/动作标记/显式反击仍在意图时刻，扣减/摧毁/类型键反击移到排空时刻——主攻击事件先于摧毁事件（Native 保持摧毁→反击→主攻击）；③ 排空点选在移动仲裁前而非对象 tick 前（同批内更早、语义等价，排空项的 creep 反击队列仍被同轮 tick 消费）；④ 目标被更早挂起项击毁的条目整项丢弃不跑槽（自查发现：宿主读取面以目标缺失为故障，集火同 tick 击穿会把整个 tick 候选拖垮），补集火测试钉住。输入/输出/JS 声明面与登记一致（setDamage 多次可调、JS 安全整数界、正常拒绝回退默认、api.handlers.replace 通用）。kk-runtime：ChainCapability::ModIncoming 变体 + CombatHost incoming 双变体路由 + combat 读面门三变体放行；JS SDK/宿主 ops 零改动。夹具 [mod-objguard](../../compat/fixtures/mod-objguard/README.md)（warden 减伤型 30→15 + 无耐久 decoy -7 对照 / logbook 记录型 After 两独立包）与 [sim-mod-objguard](../../compat/fixtures/sim-mod-objguard/README.md)（三场景四轮探针、combined 减伤中心对两包对象同时生效且观察者读链尾值）；Rust 侧 `settle/damage/tests.rs` 挂起/排空/拒绝/内联四径、`mod_chain_tests/mod_guard.rs` 减伤/输入形状/拒绝/免疫/组合/放大击毁×双通道、`sim_tests/obj_guard.rs` 三场景×双通道+mod_states+plan_hash 互异+冷恢复。首片不做：治疗合并/pendingHeal（结构无延迟队列）、放行型减免、结构（非 Mod）目标覆盖、按修改后伤害联动声明反击（G09.d 候选）。
-
-## M2F 工厂域（2026-10-08 调查与选型登记）
-
-调查结论（登记时点现状）：factory 开关门控 112 例主文件（11.4-11.5）+ 1 例 setup 的 level 透传断言（放置全键透传+读面 getter 已在位，零成本）+ 19-powers 一例（仍被 power 三开关压住维持 skip）；另有 7 例经 capability 变量**间接门控**的散例（setup 的 cooldown spec 例、15.3 CONSTRUCTION-COST、15.1 STRUCTURE-HITS、23.x STORE-OPEN×2、26.0 SHAPE-STRUCT——字面 grep `requires('factory')` 搜不到，复审补归因；下批调查门控面应改搜 capabilities 键值映射）。与 lab 批不同，本批**官方两侧源码全量可得**：processor `engine/src/processor/intents/factories/produce.js` 与 driver 预检 `engine/src/game/structures.js:1434-1469`（非 bundled 推断）。基座盘点：COMMODITIES（45 配方，amount/cooldown/components/level）已在 constants.json 注入沙箱（FACTORY-COMMODITY-001 的运行时读表直接可用）；读面 level/store/storeCapacity/cooldown（cooldownFold）M2B 已在 fields.js；放置 level 与 cooldown 透传已在位（generic_fields 全键拷贝 + factory 在 cooldownTime 族）；factory 用**平面容量**（storeCapacity=50000 共享池，无 storeCapacityResource 资源槽——与 lab 双槽形态不同）；断言全走 runPlayer 玩家 API，**无快照派生字段需求**（M2E 的 snapshot 分支不适用本批）。
-
-**选型（M2F=produce 全量）**：意图一条 `Action::Produce`（官方载荷 `{resourceType}`——system.js:55，IntentData 既有 resource_type 字段，**零新载荷字段**）；结算独立模块 `settle/factories.rs`（structures.rs "factory" 臂直派发），照 processor 六门静默 no-op：配方存在+等级匹配（COMMODITIES[rt].level 存在且 ≠ data.level 即拒）→ cooldownTime → checkStructureAgainstController → power 效应门（配方有 level 且 data.level>0 须有同级 PWR_OPERATE_FACTORY 效果——effects 缺失即 no-op，COMMODITY-003 由 power 域解锁）→ 组件足量 → 平面容量（store 合计−组件合计+产量 > storeCapacity 拒）→ 消耗组件/产出/`cooldownTime = time + 配方 cooldown`（不写 actionLog，与 structures.rs 约定一致）。预检 `StructureFactory.prototype.produce` 按 driver 九步逐字（FACTORY-PRODUCE-011 矩阵钉序）：not-owner > cooldown > invalid-args（非配方资源）> level-mismatch(INVALID_TARGET) > rcl > power-effect(BUSY) > not-enough > full（含 `!storeCapacity` 先拒形态）；矩阵排除对 [level-mismatch,full]/[power-effect,full]（夹具互斥：full 走 level-0 energy 配方）。BUSY 门实现读取面 effects 数组（power 域未接线时恒无 → 直接 BUSY，但按官方形状查 PWR_OPERATE_FACTORY 同级同有效期）。能力开关 factory:true 随批翻转。验收=棘轮 floor 上调（预期 +114~116：主文件 116 中 COMMODITY-003 因 power 三开关维持 skip）+ in-crate settle 测试（配方消耗/产出/冷却/六拒绝族/等级门/容量门）+ 三 bot + 无参 check，逐用例 0 转红。
-
-**M2F 实施交付（同日）**：`Action::Produce` 单变体（零新载荷字段——resourceType 复用 IntentData 既有字段；官方白名单 {resourceType, amount} 的 amount 进并集解析、结算忽略，与官方等价）；结算 `settle/factories.rs`（Recipe 结构体 + 六门静默 no-op 逐条移植 processor：配方/等级 → cooldownTime → checkStructureAgainstController → PWR_OPERATE_FACTORY 效果门（配方有 level 且 level>0 须有**同级**且 endTime≥time 的效果——effects 数组按官方形状查询，power 域未接线时恒拒）→ 组件足量 → 平面容量（store 合计−组件合计+产量 > storeCapacity）→ 消耗/产出/`cooldownTime = time + 配方 cooldown`）；预检 `StructureFactory.prototype.produce` 九步逐字（driver structures.js:1434-1469，本批两侧官方源码全量可得非 bundled 推断）；C 表补 COMMODITIES（freezeConst 深冻，45 配方与 kk-core/官方三源逐字一致）+ PWR_OPERATE_FACTORY；factory:true 翻转。in-crate `settle_tests/factory_actions.rs` 7 例（battery/双向 bar 配方、效果门两向——endTime=1 在 time=0 的 `>=` 边界正向 + 推进 50 tick 过期 no-op、六拒绝族、RCL 配额、冷却串行、意图往返）。验证：棘轮 2274→2392（+118 转绿 0 转红：主文件 111 + 间接门控散例 7——setup cooldown/level×2、15.3 CONSTRUCTION-COST、15.1 STRUCTURE-HITS、23.x STORE-OPEN×2、26.0 SHAPE-STRUCT；总数 2914 不变，24 既有 failed 与 HEAD 同集）；三 bot 2000/2000/10 零数值漂移；无参 check 通过（中途清偿 factories.rs clippy type_complexity/redundant_locals——Recipe 结构体重构，行为无变化）。三路复审：R2 预检九步逐字一致 + 34 例矩阵逐对推演全吻合（0 P0-P2）；R1 结算六门与官方逐条对齐（0 P0），P1（效果过期测试被配额偏差掩盖——endTime=1 在 time=0 官方语义有效）已按时间边界法重写当批清偿；R3 全局影响（118 逐条归因闭合、三源 COMMODITIES 全量比对零差异、容量口径同源）P1×2（部分报告/台账缺失——前者经终轮全量棘轮自然解决、后者即本段）与 P2（登记段 116/114~116 数字失准——已改为 112/+118 并补 7 散例归因）清偿。已登记未修（P3，均畸形数据或既有约定）：结算/预检 `!==`/`===` vs 官方 `!=`/`==` 的字符串形态理论差异；processor 不写 actionLog.produce（模块约定）；预检 isActive 替官方直调（合意外延，tower/terminal 同款）；storeCapacity 缺失时结算按 0 拒 vs 官方 NaN 放行（预检 `!storeCapacity` 先拒，不可达）；resourceType 只收 JSON 字符串 vs 官方 `""+value` 物化（transfer/drop 同款既有约定）；**check_structure_against_controller 无官方单件捷径**（utils.js:474-476 `quota[8]===1 → 配额非 0 即过`——kk 按距离实际清点，G11.a 有意偏差（mod 配额覆盖），factory 为该偏差首个单件型结构消费者，正常玩法不可达，同房重复同主 factory 时行为异于官方）。**方法论登记：能力开关门控面调查不能只字面 grep `requires('<cap>')`——散例经 capability 变量间接引用（siteCap/requiredCapability/entry.cap），下批应搜 capabilities 键值映射。**剩余消费者：nukes（101）、powers 族（~137，含本批 COMMODITY-003 与 PWR_OPERATE_LAB 两例）、deposit（35）等。
-
-## M2E 化学域（2026-10-08 调查与选型登记）
-
-调查结论（登记时点现状）：907 例 skip 的分布——lab 171、factory 112、nukes 101、powers 族 ~137、boost 104、deposit 35、其余零散；全部经 compat/src/capabilities.ts 能力开关门控（`shard.requires`）。**chemistry 开关同时门控 lab（11.1-11.2）与 boost（8.1-8.3、8.4-8.13）两组**，无法只开一半——化学域须 lab 反应链与 boost 应用两片一体交付。基座超预期完整：REACTIONS/BOOSTS/REACTION_TIME/LAB_* 常量全在 kk-core；lab 读取面（mineralType/mineralAmount/mineralCapacity/cooldown 折算）M2B P4 已交付（structures/fields.js，cooldown 走 `cooldownTime` 绝对 tick 折算——与 link 的剩余计数器形态不同）；放置面已为 lab 补矿物容量默认；**boost 乘数消费端已在引擎**（`calc_body_effectiveness` 带 BOOSTS 表查乘数，attack/ranged/heal/carry/tough/move fatigue 全走它）——缺的只是应用入口。
-
-**选型（M2E 首片=chemistry 全开：lab 反应链 + boost 应用/解除一体）**：新意图四条（Action::RunReaction/ReverseReaction/BoostCreep/UnboostCreep，IntentData 增第二目标 id）；结算落 settle/structures.rs 的 lab 分支（tower/terminal 同款直派发，无新槽——结构动作不是 Mod 可替换域，G16 才是）；反应表助手进 kk-world::types（BOOSTS 先例）：reaction_product(a,b)/reaction_reagents(product)（排序对）/total_reaction_time(compound)（递归链和，unboost 冷却公式用）。lab 冷却表示用 data JSON `cooldownTime` 绝对 tick（与既有折算读面同族、零 tick 接线）；放置 spec `cooldown`（剩余语义）在 normalize 映射为 `time + cooldown`（仅 cooldownTime 族：lab/nuker/factory/terminal）。**预检顺序按三组验证矩阵钉死**（singles+全 pairs 取声明序前者码）：run=not-owner>cooldown>rcl>invalid-target>range>full>not-enough>invalid-args（invalid-args 含「调用 lab 已含非产物矿物」与「试剂对无产物」两形态）；reverse 同序但 same-lab（INVALID_ARGS）插在 range 后、full 最后；boost=not-owner>rcl>invalid-target>range>not-enough-energy>not-enough-mineral>not-found；unboost=invalid-target>lab-not-owner>creep-not-owner>rcl>cooldown>not-found>range（invalid-target+not-found 组合被排除）。boost 应用=lab.mineralType 化合物对**未 boost 的匹配部件**逐个应用（每部件 30 矿物+20 能量，bodyPartsCount 限制数量）；unboost=清全部 boost、每部件按化合物在 creep 格掉 15 单位资源堆、冷却=Σ部件数×total_reaction_time×15/5、无资源成本、无 boost 部件 NOT_FOUND。量级与聚合（8.3/8.4-8.13）依赖既有引擎消费端，实现后以测试定位缺口补齐。能力开关 chemistry:true 随本批翻转；PWR_OPERATE_LAB 两例（LAB-RUN/REVERSE-003）仍被 powerCreeps/powerEffects 门控维持 skip。验收=棘轮 floor 上调至新通过数（预计 1983+~260，逐用例 0 转红）+ bot 三基线 + 无参 check；结算语义补 in-crate settle 测试（反应产物/消耗/冷却/拒绝码序）。
-
-**M2E 实施交付（同日）**：意图四变体按官方载荷字段落地（IntentData 增 `lab1`/`lab2`/`body_parts_count` 三字段，sanitize/to_json 往返钉住）；结算为独立模块 `settle/labs.rs`（structures.rs "lab" 臂直派发，run→reverse→boost→unboost 顺序、各自冷却门天然串行，boost 无冷却门）。预检四方法挂 StructureLab.prototype（structure-api.js），C 表补 LAB_*/REACTIONS/BOOSTS（freezeConst 深冻）；boost 预检含官方第二 NOT_FOUND 形态（bodyPartsCount 真值且超过可强化部件数）；run/reverse 目标门拒「参数为调用 lab 自身」（官方 driver 同款，LAB-REVERSE-013 的 invalidTargetBeforeSameLab 对锁死）；射程门加跨房恒超程。**与登记的偏差**：① 放置 spec cooldown→cooldownTime 映射经核实 M2B 已在位（place_structure.rs:285-295），本批未重复实现；② 反应助手形态修订——`reaction_reagents` 降为 total_reaction_time 的私有内部件（排序对只影响链和，序无关），reverse 结算与预检统一按官方 `getReactionVariants` 表序取**有向**试剂对（serde_json 经 deno_core 启用的 preserve_order 保持常量键序，与 kk-mod-api 配额快照同依赖），空输出 lab 的方向分配与官方一致；③ 顺带修复两处既有缺口：lab 查询快照补派生字段（snapshot.rs Generic→lab 分支：正量 store/mineralType/storeCapacityByResource，null 槽过滤——boost/unboost 断言链此前根本读不到 mineralType）、upgradeController 的 boost 增量原被 `apply_boost` cap=effect 自钳（官方 `floor(buildEffect+Σ增量)` 无上限、RCL8 限额与 `_upgraded`/能耗均按未强化量——BOOST-UPGRADE-001/002 由红转绿）；④ `boost_increments` 按官方 build/repair/upgrade 的 `_.map` 移除 hits==0 过滤（死亡强化部件进增量池，基础量仍按存活部件）；负 bodyPartsCount 截空候选时仍写目标 healed 位（官方 slice(0,负) 形态）。in-crate 测试 `settle_tests/lab_actions.rs` 13 例（产物/消耗/冷却/槽绑定解绑/六拒绝族/TOUGH-first 次序/资源耗尽停/掉落与冷却公式/敌方目标拒绝/意图名与载荷往返/冷却期 boost 放行）。验证：棘轮 1983→2274（+291 转绿 0 转红，总数 2914 不变；24 既有 failed 与 HEAD 同集——adapter-contract 英文文案/keeperLair/getGameTime 等 chemistry 门外旧红）；三 bot 2000/2000/10 与入库基线零数值漂移（Overmind 保持 1 个含 console-error tick）；无参 check 通过（中途清偿 kk-world 测试 clippy as_deref）。三路后台复审：R2 预检矩阵逐对静态推演+实测全过、P1（boostCreep 部件数门）与 P2×2（run self 门、射程同房）当批清偿；R1 结算逐条对官方 processor，P1（reverse 方向表序）即上述②、P2×2（负计数 healed 位、boost_increments 死亡部件）当批清偿；R3 全局影响（非 lab Generic 零扰动、三处容量口径一致、chemistry 门控 14 文件全覆盖、floor 与报告复算吻合）0 P0/P1，P2（测试名与实测不符）已补 boost 冷却腿。已登记未修（P3）：结算 drain 删槽键 vs 官方置 null 的持久形状差异（读等价）；settle 满仓门读 plane.stores 与预检常量在 mod 覆写 lab 容量时脱钩（lab 容量覆写非声明特性）；unboost 的 RCL 门与同 tick 多动作派发序无 in-crate 锚；upgradeController 无 WORK 部件时不写 actionLog/eventLog(0)（既有行为）。剩余消费者：factory（112 例）/nukes（101）/powers 族（~137）仍门控 skip，为化学域后续候选。
-
-## 执行与更新规则
-
-以实际 HEAD、源码和适用验收为准。当前状态只在本台账维护；历史记录不得当作未完成指令。首片完成仍保留父项缺口；依赖和范围变化写清原因。普通修复与重构更新受影响契约及简短状态，不强制新建 research 文档；验证要求见 [AGENTS.md](../../AGENTS.md)。
+- 资源/容量：storage 容量与库存消费者同源；extension 为即时灌能，按目标房主、距离顺序和整批预算结算。
+- terminal：同时覆盖 send 与 market 费用消费者；干扰覆盖 send/withdraw，不遗漏账户或跨房候选。
+- observer：依赖真实观察和限时视野业务，不以当前房间可见替代观察效果。
+- 战斗：FORTIFY/SHIELD 联动伤害、拆毁、临时 rampart 耐久与衰减；EFFECT_INVULNERABILITY 的伤害/dismantle/attackController/nuke/rangedMassAttack 等消费门同片盘点，其生产者属于后续 invader core/NPC 域，不计入 19 个 power。
 
 ## 任务台账
 
-“依赖/前置”表示实施前需核验的能力，不是已冻结的 API 或调度顺序。领域预检随本领域首次开放一起接通，不能以 G07 未完成为由留下隐藏 native 否决。
+“部分完成”必须保留父项缺口；“未开始”表示 Mod 能力尚未交付，不否定该领域的默认玩法实现。依赖须在开始任务时核验。
 
-| 编号 | 任务 | 依赖/前置 | 状态 | 交付证据 |
-|---|---|---|---|---|
-| G01 | 移动竞争优先级策略 | 现有 move 请求与仲裁 | 已完成 | [mod-move-contest](../architecture/movement.md#竞争排序)、[交付记录](../research/notes/g01-move-contest-2026-10-06.md)（G02/G03/G04 均已分片开放） |
-| G02 | 移动准入策略 | 已稳定的移动请求输入；同步必要玩家预检，G01 不作硬依赖 | 部分完成 | G02.a 准入槽（b7e65d5）、G02.b 障碍槽（e032991）、G02.c 预检槽（`0f390b5`）：[mod-move-admission](../architecture/movement.md#准入与预演)、[mod-move-obstacle](../architecture/movement.md#障碍追加)、[mod-move-precheck](../architecture/movement.md#请求预检)（G02.d1 静态放行、G02.d2 玩家门双端冻结、G02.d3 首片墙地形静态通行声明均已交付，见[静态通行声明](../architecture/movement.md#静态通行声明g02d3)；孵化门槛归 G13；安全模式主人摘要为可解释性增强另登记） |
-| G03 | 完整房间移动仲裁 | G01、G02 | 部分完成 | G03.a 整房请求视野 + evaluate 链预演（`0efd645`）：[mod-move-admission](../architecture/movement.md#准入与预演)、[记录](../research/notes/g03a-move-arbitration-2026-10-06.md)；pull 登记已开放（`movePullRegistration` 槽 + add_pulling 双射修复，见[移动契约](../architecture/movement.md)）；静态放行由 G02.d1 实现，障碍槽第二预演与完整仲裁替换仍未开放 |
-| G04 | 移动代价与执行效果 | G02；代价可先行，完整仲裁交互在 G03 后验收 | 部分完成 | G04.a 代价槽已交付（`builtin:room.moveCost` + add_fatigue u32 钳制，见[移动契约](../architecture/movement.md)）；疲劳恢复/重量评分要素未开放 |
-| G05 | Mod 作者基础 CLI | 现有 sim、inspect、检查点 | 已完成 | G05.a `mod init` `ee296cb`；G05.b `mod test` `dbc82a4`（[模板与测试说明](../architecture/local-simulation.md#作者包模板)）；后续增强另登记 |
-| G06 | 运行 trace 与故障复现 | 现有活动链与故障诊断 | 部分完成 | G06.a 槽调用/回退事件 trace + `--mod-trace` CLI `ce84345`：[mod-trace](../architecture/mod-trace.md)、[记录](../research/notes/g06a-mod-trace-2026-10-06.md)；过滤参数/停用阈值暴露/一键复现未做 |
-| G07 | 玩家预检策略扩展 | 各领域策略契约；可分族穿插 | 部分完成 | G07.a 战斗射程首片（[player-precheck-rules](../architecture/player-precheck-rules.md)、[记录](../research/notes/g07a-combat-ranges-2026-10-06.md)）；G07.b ext 意图压制接线+可扩展意图盘点篇（2026-10-07，见[历史交付记录](archive/mod-history-2026-10.md)）——动作互斥的 ext 声明面已开放、vanilla 压制表与 EXECUTION_ORDER 未动；EXECUTION_ORDER 策略化（G07.c 候选，设计前置）与参数策略未开始 |
-| G08 | Mod 建筑字段与生命周期 | 现有建筑目录、schema、tick | 部分完成 | G08.a 字段+tick 首片已交付（见[历史交付记录](archive/mod-history-2026-10.md)）；RCL 配额/逐资源容量/专属 FIND/生产事件未开始 |
-| G09 | 自有对象库存与耐久能力 | 现有对象/资源/伤害能力 | 部分完成 | 四子片已交付：G09.a 库存（store 声明+信封六链）、G09.b 耐久（hitsMax+信封、伤害/死亡/预检同源）、G09.d 声明式反击（retaliationRatio、creep 延迟/塔立即、safeMode 抑制、策略替换）、G09.c 结构受击槽（builtin:mod.receiveDamage、托管延迟排空、修改后伤害落地）（[自有对象库存](../architecture/object-store.md)、[自有对象耐久](../architecture/object-durability.md)）；实际伤害联动反击等按需另拆子片 |
-| G10 | 可编程生产与建筑动作 | G08；现有资源与配方 | 未开始 | — |
-| G11 | 建筑配额与资源容量策略 | 现有建筑/资源目录 | 部分完成 | G11.a 配额族首片已交付（132 条逐型逐级规则+玩家表折叠注入+link.rcl 迁移，见[配额规则](../architecture/structure-quota.md)与[夹具](../../compat/fixtures/mod-quota/README.md)）；资源容量策略与逐房/动态配额未开始 |
-| G12 | 采集与资源再生策略 | 相关原生消费者与当批领域预检，G07 可随后通用化 | 未开始 | — |
-| G13 | 孵化、寿命与死亡策略 | 相关生命周期与当批领域预检，G07 可随后通用化 | 未开始 | — |
-| G14 | 塔的动作策略 | 现有伤害/治疗/受击策略 | 未开始 | — |
-| G15 | 控制器与玩家成长策略 | 对象与账户候选边界 | 未开始 | — |
-| G16 | 实验室与工厂策略 | G10/G11 相关能力与默认玩法核查 | 未开始 | — |
-| G17 | 跨房 Mod 资源传输 | 现有 terminal 全局结算与资源目录 | 未开始 | — |
-| G18 | 市场扩展 | G17；订单/账户候选 | 未开始 | — |
-| G19 | 房间生命周期 | 房间阶段与受控候选访问 | 未开始 | — |
-| G20 | 玩家与世界生命周期 | G19；全局串行屏障 | 未开始 | — |
-| G21 | 地图初始化与自主世界事件 | G19/G20 对应域、G22.b 时间/RNG、地形缓存 | 未开始 | — |
-| G22 | 执行身份、玩法时间与随机协议 | .a 状态清单先行；.b 在随机事件前；.c 在更新/回放前 | 已完成 | G22.a/.c/.b 全部交付（.b：确定性时间/随机协议+种子面，2026-10-07，见[历史交付记录](archive/mod-history-2026-10.md)） |
-| G23 | 包/schema/state 迁移 | G22.a/c；RNG 迁移另依赖 G22.b | 部分完成 | G23.a 已交付（`97f4ed9`）：载荷格式版本与解码前显式迁移链（v1→v2 收编 last_auto_disable 旧形态、v2 起执行策略硬门）；内容级迁移与 RNG 联动未开始 |
-| G24 | tick 边界更新与 watch | G23；玩家工作者/API 原子切换 | 部分完成 | G24.a 已交付（`1ee4fc9`）：无开放轮次的包/API 切换（替代分片换装、残留硬门、sim mods_switch 与冷恢复闭环）；watch 未开始 |
-| G25 | 持久输入日志与结算回放 | G22；.a 日志协议与保存，再 .b 重放校验 | 已完成 | G25.a/.b 全部交付（.a：写入与校验读取；.b：结算回放与完整状态核对，2026-10-07，见[历史交付记录](archive/mod-history-2026-10.md)） |
-| G26 | 自动检查点与 JS storage provider | .a 基于现有检查点；.b 依赖 G27.a；回放恢复接 G25 | 部分完成 | G26.a 已交付（2026-10-07：sim 周期保存、keep 淘汰与目录「最新可用」恢复选择，见[历史交付记录](archive/mod-history-2026-10.md)）；.b 待 G27.a |
-| G27 | 提交后输出与后台服务 | .a 最小后台宿主；.b 依赖 G25.a/G26.a，按需接 G20 | 未开始 | — |
-| G28 | Backend 贡献入口 | .a 实现 M3 网络基础；.b 依赖 G27 与 .a | 未开始 | — |
-| G29 | 玩家类型与客户端贡献 | .a 类型生成前置；.b 客户端基础依赖 G28.a；.c 依赖 .b | 部分完成 | G29.a `mod types` 声明生成与 `--check` 门禁 `73b0f1b`：[mod-types](../architecture/mod-types.md)、[记录](../research/notes/g29a-mod-types-2026-10-06.md)；.b/.c 未开始 |
-| G30 | 官方预设、覆盖审计与性能验收 | .a/.d 先建立再滚动；.b/.c 随领域交付，存量变更依赖 G23 | 未开始 | — |
+| 编号 | 任务 | 状态 | 已完成与剩余范围 / 入口 |
+|---|---|---|---|
+| G01 | 移动竞争优先级 | 已完成 | [竞争排序](../architecture/movement.md#竞争排序)；排序能力不等于完整仲裁 |
+| G02 | 移动准入 | 部分完成 | .a 准入、.b 障碍追加、.c 请求预检、.d1 静态放行、.d2 双端玩家门、.d3 墙通行声明已交付；剩余结构/rampart 通行、逐房粒度及摘要增强；[移动契约](../architecture/movement.md) |
+| G03 | 完整房间仲裁 | 部分完成 | .a 请求视野/链预演与 pull 登记已开放；剩余障碍槽第二预演、完整仲裁替换；[移动契约](../architecture/movement.md) |
+| G04 | 移动代价与效果 | 部分完成 | .a 代价槽已交付；剩余疲劳恢复、重量评分要素；[移动契约](../architecture/movement.md) |
+| G05 | 作者 CLI | 已完成 | mod init/test；[本地模拟](../architecture/local-simulation.md#作者包模板)，增强按实际痛点另拆 |
+| G06 | trace 与故障复现 | 部分完成 | .a 槽 trace / --mod-trace 已交付；剩余过滤、停用阈值、一键复现；[trace](../architecture/mod-trace.md) |
+| G07 | 玩家预检策略 | 部分完成 | .a 战斗射程、.b ext 压制声明已交付；剩余 EXECUTION_ORDER 策略化和参数策略；[预检规则](../architecture/player-precheck-rules.md) |
+| G08 | 建筑字段与生命周期 | 部分完成 | .a 字段/tick 已交付；剩余 Mod 建筑 RCL、逐资源容量、专属 FIND、生产事件；[建筑契约](../architecture/mod-buildings.md) |
+| G09 | 自有对象能力 | 部分完成 | .a 库存、.b 耐久/死亡、.c 结构受击、.d 声明反击已交付；实际伤害联动反击、owner、维修/掉落等增强按需拆片；[库存](../architecture/object-store.md)、[耐久](../architecture/object-durability.md) |
+| G10 | 可编程生产与动作 | 未开始 | 依赖 G08 与资源/配方；具名动作、多配方、进度、冷却和原子支付/产出 |
+| G11 | 配额与容量策略 | 部分完成 | .a 内建逐型逐级配额已交付；剩余资源容量、逐房/动态配额；[配额](../architecture/structure-quota.md) |
+| G12 | 采集与再生策略 | 未开始 | 依赖实际采集/再生消费者；产量、消耗、耗尽、周期恢复和竞争 |
+| G13 | 孵化、寿命与死亡 | 未开始 | 分拆成本/耗时、出生/出口、寿命、死亡产物；含孵化门槛 |
+| G14 | 塔动作策略 | 未开始 | 依赖伤害/治疗/受击边界；公式、消耗、距离、改向与事件 |
+| G15 | 控制器与成长 | 未开始 | 对象/账户候选边界；升级、占领/预定、控制器周期与 GCL |
+| G16 | lab/factory 策略 | 未开始 | 依赖 G10/G11 相关能力；分拆化学/工厂，贯通配方、预检、库存、冷却和事件 |
+| G17 | 跨房 Mod 资源 | 未开始 | 依赖 terminal 全局结算与资源目录；费用、两端库存、目标房和跨房原子性 |
+| G18 | 市场扩展 | 未开始 | 依赖 G17 与订单/账户边界；余额、余量、费用、记录和游标 |
+| G19 | 房间生命周期 | 未开始 | 分拆对象 preTick/房间阶段顺序与资格、受控房间操作；双房失败不发布 |
+| G20 | 玩家/世界生命周期 | 未开始 | 依赖对应房间阶段与串行屏障；玩家/世界阶段、服务端命令、账户和跨域访问 |
+| G21 | 地图与世界事件 | 未开始 | 依赖 G19/G20、G22.b；初始化/NPC/周期事件，地形/寻路缓存与恢复同源 |
+| G22 | 执行身份/时间/RNG | 已完成 | .a 状态清单、.b 确定性时间/RNG、.c 执行身份；[状态清单](../architecture/state-inventory.md)与[检查点](../architecture/checkpoints.md) |
+| G23 | 包/schema/state 迁移 | 部分完成 | .a 载荷版本/显式迁移已交付；剩余内容级迁移与 RNG 联动；[检查点](../architecture/checkpoints.md) |
+| G24 | tick 边界更新/watch | 部分完成 | .a 无开放轮次的包/API 切换已交付；watch 未开始；[检查点](../architecture/checkpoints.md) |
+| G25 | 输入日志与结算回放 | 已完成 | .a 日志协议/保存、.b 回放/完整状态核对；[输入日志](../architecture/input-log.md) |
+| G26 | 自动检查点/storage | 部分完成 | .a 周期保存/keep/恢复选择已交付；.b provider 待 G27.a；[检查点](../architecture/checkpoints.md) |
+| G27 | 后台服务/outbox | 未开始 | .a 最小异步宿主；.b 耐久输入/outbox，依赖 G25.a/G26.a |
+| G28 | Backend 贡献 | 未开始 | .a M3 最小真实服务；.b 路由/订阅/provider，依赖后台与输入边界 |
+| G29 | 玩家类型与客户端 | 部分完成 | .a mod types / --check 已交付；.b 真实客户端、.c 资产/渲染/面板未开始；[类型生成](../architecture/mod-types.md) |
+| G30 | 预设/覆盖/性能验收 | 未开始 | .a 覆盖清单、.d 同功能参考先滚动；.b 官方预设、.c 内容所有权迁移、.e 最终收口 |
 
-## M2G 核弹域（2026-10-08 调查与选型登记）
+## 子片依赖与实施边界
 
-调查结论（登记时点现状）：nuke 能力门控共 137 例 skip——主文件 7.13-7.14-nukes（101：发射 7.13 含 NUKE-LAUNCH-001..013 直例 + 008 验证矩阵 13 例 + 014..017 房间状态 4 例 + NUKER-PROPS 4 例；落地 7.14 含 001..007/009..013 直例 + 008 对象矩阵 8 例 + 014 足迹矩阵 49 例）、18.3-nuke-flight（7 含可见性矩阵 3）、间接散例约 29（4.2 withdraw 13——nuker 提取拒绝与 invalid-nuker 阻断行、16.6 eventlog 4、00-adapter-contract 2（placeNuke 契约）、12.1 rampart 2、23.1 store 2、26.0 shape 2、6.4/15.1/15.3/27.14/00-framework 各 1）。其中 NUKE-LAUNCH-014..017 另需 roomStatus、NUKE-IMPACT-008 的 powerCreep/deposit/portal 三行另需三外开关——维持 skip，预期转绿 ≈130。既有铺垫远超预期：kk-core 常量全齐且与官方逐字一致（NUKER_COOLDOWN=100000、CONTROLLER_NUKE_BLOCKED_UPGRADE=200、NUKE_DAMAGE[0]=1e7/[2]=5e6）；prelude 常量表已含 FIND_NUKES=117 与 NUKE 族；registry 已注册 Nuke 类（RoomObject 子类、strictId 形）与 look 'nuke' 桶；fields.js StructureNuker 四别名（energy/ghodium/energyCapacity/ghodiumCapacity）+cooldown 折叠；place_structure 已给 nuker 容量（energy/G 双槽）与绝对冷却；适配器 placeNuke → placeObject type 'nuke'（spec 原样透传）；withdraw 对 nuker 的拒绝已与官方一致（withdraw.js 显式 return）。缺口：意图 Action 无 LaunchNuke；nuke 对象无承载（place 归一化未把 timeToLand 换算 landTime、snapshot Generic kind 映射无 nuke 臂、room_loop 无 nuke tick 分派）；预检 launchNuke 与 find(FIND_NUKES) 臂、Nuke getter 不存在；die_creep 现注释「不模拟核弹抑制墓碑」；destroy_structure 恒建废墟（官方 _destroy 对 NUKE attackType 跳过）；spawn 裸清 spawning、controller safeMode 立即结束/upgradeBlocked 设置、5×5 爆炸循环与全房清扫均未实现。
+下表只列关键子片；已完成的前置仍须按实际源码与契约核验。
 
-官方源（本批全量可得）：发射预检 structures.js:1356-1389（序：not-owner > invalid-args（instanceof RoomPosition，plainObject 拒）> 房间状态（novice/respawn → INVALID_TARGET）> TIRED > RCL > NOT_IN_RANGE（roomNameToXY 差绝对值 > NUKE_RANGE=10）> NOT_ENOUGH_RESOURCES）；结算 nukers/launch-nuke.js（静默门：配额/资源/冷却/x-y 界/房间状态/房名正则/射程 → store energy/G 归 0 键保留、cooldownTime=gameTime+NUKER_COOLDOWN、插 nuke 对象 {type,x,y,landTime=gameTime+NUKE_LAND_TIME,launchRoomName}）；落地 nukes/tick.js（**impact 在 landTime-1 那一 tick**：全房 forEach——creep 走 _die(attackType=NUKE)（无墓碑、恒发 OBJECT_DESTROYED）、powerCreep hits=0、constructionSite/energy/tombstone/ruin 全房移除（非仅爆区）、spawn spawning 裸清（不删 chick——creep 循环已覆盖）；5×5 循环 range=chebyshev，damage=range0?NUKE_DAMAGE[0]:NUKE_DAMAGE[2]，同格 rampart 先吃全量再 damage-=受击前 hits，余量>0 时同格其余对象**各吃全量**；控制器：safeMode>gameTime → safeMode=gameTime+safeModeCooldown=null，有主且无 EFFECT_INVULNERABILITY 且（无 upgradeBlocked 或 < gameTime）→ upgradeBlocked=gameTime+CONTROLLER_NUKE_BLOCKED_UPGRADE；gameTime>=landTime 移除核弹）；_damage.js（NUKE attackType 绕过 fortify/invulnerability 检查、结构摧毁经 _destroy 跳废墟、事件 EVENT_ATTACK{attacker=nuke,targetId,damage,attackType}）；_die.js（attackType==NUKE 跳墓碑创建但保留 OBJECT_DESTROYED 事件）；game/nukes.js（读面仅 timeToLand=landTime-time、launchRoomName）。
-
-**选型（M2G=发射+飞行+落地全量，Generic 承载）**：意图一条 `Action::LaunchNuke`（官方载荷 {roomName,x,y}——system.js；x/y 既有字段，roomName 落 IntentData.target_room_name（sanitize 增读官方键 "roomName"），**零新载荷字段**）。结算两层沿 terminal send 标记模式：房间意图层 `settle/nukers.rs::launch_nuke`（structures.rs "nuker" 臂直派发）验证官方静默门后写 data.launchNuke 标记；全局 market 阶段旁 `nukes::settle_launches(rooms,time)` 清标记+清库（energy/G 归 0 键保留）+`cooldownTime=time+NUKER_COOLDOWN`+向目标房候选插 Generic nuke。nuke 对象=Generic（data.type='nuke'，landTime/launchRoomName 原始键——与 deposit 同款）：place::normalize 增 "nuke" 臂（landTime=ctx.time+timeToLand，放置不推进时间，00-adapter 契约钉死）；snapshot Generic kind 映射增 nuke 臂（landTime 原样透传，prelude 算剩余）；room_loop Generic 分派增 data.type=='nuke' → `nukes::nuke_tick`（官方 tick.js 逐条移植；die_creep 增核弹变体——移除+OBJECT_DESTROYED 无墓碑；destroy_structure 增不建废墟参数化；爆炸伤害走 apply_damage_inner（nuke 作攻击者——Generic 攻击者臂已有，EVENT_ATTACK 事件形状与 eventlog 用例吻合、rampart 先于同格余量的顺序即循环序）；无 hits 面（controller/source/mineral/flag/无 structureType 的 Generic）不进爆炸目标）。预检 `StructureNuker.prototype.launchNuke` 八步逐字（房间状态门 kk 无 roomStatus 数据，跳过——4 例维持 skip）；`gw.roomNameToXY` 既有。读面：新 prelude 文件 Nuke getter（timeToLand/launchRoomName，官方 nukes.js 两行）；queries.js find 增 117/FIND_NUKES 臂（look 桶既有）。能力开关 nuke:true 随批翻转。验收=in-crate `settle_tests/nuke_actions.rs`（发射消耗/冷却锚定/跨房插入/落地足迹矩阵抽样/全房清扫/无墓碑废墟/safeMode/upgradeBlocked/多弹叠加）+ 棘轮 floor 上调（预期 +~130，总数 2914 不变）+ 三 bot + 无参 check，逐用例 0 转红。
-
-**M2G 实施交付（同日）**：`Action::LaunchNuke`（零新载荷字段——roomName 进 target_room_name 并集读取，与 send 的 targetRoomName 无互相污染：两动作写侧各只发自己的键、读侧先命中即短路）；结算 `settle/nukes.rs` 单文件两层（**登记勘误**：选型写 `settle/nukers.rs`，落地合并为 nukes.rs 含 launch/settle_launches/nuke_tick 三段）——房间意图层七静默门（配额/资源/冷却/x-y 界/房名正则/射程）写 data.launchNuke 标记，全局 market 阶段旁 settle_launches 消费标记+清库（energy/G 归 0 键保留）+`cooldownTime=time+NUKER_COOLDOWN`+向目标房候选插 Generic nuke（terminal send 同款标记模式，跨房经 TickState.allocate_id 直插）；nuke_tick 在 landTime-1 结算：全房清扫（creep `die_creep_nuke` 无墓碑+恒发 OBJECT_DESTROYED、constructionSite/energy/tombstone/ruin 全房移除、spawn 裸清 spawning 不删 chick、powerCreep hits=0）→ 5×5 爆炸（range0=NUKE_DAMAGE[0] 其余=[2]、rampart 先吃全量再 `damage-=受击前 hits`、余量同格各吃全量、无 hits 面经 object_hits=0 天然豁免）→ 控制器（safeMode=落地 tick+冷却清 None；upgradeBlocked 按官方 `(user && !effects && !blocked) || blocked < gameTime`——**R1-P3-2 当批清偿**：JS 优先级下无主控制器的遗留过期封锁也刷新，初版 owner 早退偏差已改）；`destroy_structure_with(attack_type)`（仅 NUKE 跳废墟，官方 _destroy.js:21）。预检 `StructureNuker.prototype.launchNuke` 八步逐字（房间状态门跳过）——**初版 C 表漏 NUKE_RANGE 致射程门 `>undefined` 恒假**（靶向 4 例红定位，C 表补键后全绿）；place "nuke" 臂（timeToLand→landTime=ctx.time+ttl，放置不推进时间）；snapshot kind+nuke；queries.js FIND_NUKES(117) 臂；prelude nukes.js Nuke 双 getter。**顺带修（官方夹具硬前置）**：mineral 放置校验从七矿表放宽到 RESOURCES_ALL（套件 NUKE-IMPACT-008 mineral 行摆 silicon 矿——R3 逐项核对 84 资源名与官方目录同序全等、全仓无依赖旧校验的消费者；采掉落链对任意目录名安全）。in-crate `settle_tests/nuke_actions.rs` 7 例（发射全链/跨房插入、9 形态拒绝族、落地全链、rampart 击穿余量均摊、双弹叠加、upgradeBlocked 保持、射程含界正向 W1N1→W11N1 恰 10 放行+powerCreep 归零）。验证：棘轮 2392→2523（**+131 转绿 0 转红**，维持 skip 恰 7=roomStatus 4+外开关 3 逐字吻合；总数 2914 不变，24 既有 failed 同集）；三 bot 2000/2000/10 零漂移；无参 check 通过（中途清偿 fmt×1、clippy collapsible_if×1、type_complexity×1——拒绝表八元组按 M2F 先例重构 Reject 结构体）。三路复审：R1 结算保真 0 P0-P2+P3×6（P3-2 无主过期封锁当批改、P3-1 store 键缺失方向——官方 NaN 放行 vs kk 从严，玩家预检层先拒仅直注可达，注释登记、P3-4 与 R3-P2 同项、P3-3/P3-5 注释登记或修正）；R2 预检与矩阵 0 P0-P2（13 矩阵例逐对推演全命中、NUKER-PROPS 逐字、FIND/look/载荷/时序全核、P3×3 注释行号陈旧已修）；R3 全局影响 0 P0/P1+P2×1（反击×核弹）+P3×4（探针残留已删、ratchet note 归因勘误、双解析优化登记、先扣后丢边界登记）。**P2 跨域边界当批修**：Mod 声明反击（G09.d「任意攻击类型」）× 核弹攻击者——kk 立即扣减分支会把 0 耐久 nuke 本体「摧毁」并截断余下爆炸格；官方 powerBank 式 hitback 写入攻击者 _damageToApply 而该队列仅 creeps/tick 消费（creeps/tick.js:120-122）对核弹等效丢弃，damage.rs 反击落点补「无耐久面攻击者跳过」守卫同款丢弃。已登记未修（P3）：room_loop/settle_launches 对 Generic 的 JSON 双解析合并单次（与 market 扫描同阶，后续优化）；place nuke 缺/非法 timeToLand → 无 landTime 永不落地也永不清除（畸形数据形态，代码注释登记）；未注册目标房「先清库后丢弃核弹」——与 send 先例「早退不扣」相反但无条件消费可避免标记残留进玩家投影（kk 世界仅含注册房，正常不可达，注释登记）。**归因勘误**：nuke 门控总数实为 138（登记写 137）——23.1 store 实翻转 3 例（非 2）、00-framework test-claims 1 例为解析器元测试（合成夹具、从不读真实适配器，HEAD 时已 passed）非门控；ratchet note 已同勘误。剩余消费者：powers 族（~137，powerCreeps/powerEffects/powerSpawn 三开关联动）、deposit（35）、G02.d3 后续、24 例零散既有红。兼容率 2523/2914≈86.6%（95% 需 2769，缺口 246）。
-
-## M2H.a power 基座：powerCreep 生命周期与 powerSpawn（2026-10-08 调查与选型登记）
-
-调查结论（登记时点现状）：power 四开关（powerCreeps/powerCreepAccountApi/powerEffects/powerSpawn）共门控 25 个测试文件；名字含 power 的 skip 184 例（含与其他开关交叉）。核心文件：19.1-lifecycle（33：create/rename/delete 账号 API、TTL/死亡/移动零疲劳/资源四动作/enableRoom/spawn/renew/upgrade）、19.0-gpl（9：GPL 数学、配额「GPL 级数=可分配 power 等级数」）、19.9-generate-ops（7：PWR_GENERATE_OPS 的 usePower 最小面）、11.6-power-spawn（6：processPower 及其门/OPERATE_POWER 增产）、1.7 移动（1）、00-adapter 契约（5：placePowerCreep 放置+计时）、26.0/27.14/15.1 形状（各 1-2）等。**效果族（19.4-19.8 的 73 例 usePower 19 powers + 15.5/15.6 substrate + 7.17/17.2/12.4 等结构 power 散例）另需 powerEffects，划入 M2H.b 本批不做**。官方源全量可得：game/power-creeps.js（416 行读面——PowerCreep 类 getter/方法/账号 API，**双态数据模型**：账号级 userPowerCreeps{id:name/className/level/powers{power:{level,cooldownTime}}/spawnCooldownTime/deleteTime/shard} 与已生成侧 roomObjects（x/y/hits/store/ageTime/actionLog/notifyWhenAttacked）同 _id 合并读）、processor/intents/power-creeps/（move 复用 creeps/move、renew=邻接 powerBank/powerSpawn 置 ageTime、enableRoom=邻接控制器置 isPowerEnabled+safeMode 门、tick=移动+伤害/治疗合并+hits 钳 hitsMax）、processor/global-intents/power/（**六全局意图**：create[名字截 50+配额+operator 类校验]/rename/delete[墙钟 deleteTime 24h，cancel 可撤]/upgrade[level+1、每级 storeCapacity+100、hitsMax+1000、powers[power].level+1，房间侧同步]/spawnPowerCreep[占位检查+_justSpawned 去重+插房间对象 hits=hitsMax/ageTime=time+5000]/suicidePowerCreep + **_diePowerCreep**[墓碑带 powerCreep* 五字段、容器先收、账号记录回 shard=null+spawnCooldownTime=墙钟 8h]——TTL 到期或 hits≤0 在全局阶段扫 powerCreep 触发）、processor/intents/power-spawns/process-power.js（配额门→量 1+OPERATE_POWER effects 增产→power/energy 双扣→账号 power += 量）。**坑**：官方 spawnCooldownTime/deleteTime 是 Date.now() 墙钟毫秒（kk TickInput.now_ms 可同源）；GPL 数学 level=floor((power/1000)^(1/2.4))、progress=power−level^2.4×1000、progressTotal=(level+1)^2×1000−base（官方 game.js:164 用 (level+1)^2 而非 ^2.4——按官方代码形态移植）；used 等级数=记录数+Σlevel。kk 现状：PlayerState 无 power/powerCreeps 域；Game.powerCreeps 恒空对象（game.js:135 注释「power 体系未启用」）；registry PowerCreep 类骨架已注册（构造器 powerCreep 形注释在案）；placePowerCreep→Generic type 'powerCreep'（spec 原样：pos/owner/powers/store/name 可选——**LIFETIME-001 无名放置也须进 Game.powerCreeps**）；M2G 全房清扫已留 powerCreep hits=0 臂；store.rs 资源四动作、movement、attack 目标门、tombstone 形状、getObjectById 装配（classGlobalFor 'powerCreep'→PowerCreep）均未接。
-
-**选型（M2H.a=账号注册表+生命周期+powerSpawn，Generic 已生成态承载）**：PlayerState 新增 `power: i64`（账号 power，processPower 累计）与 `power_creeps: BTreeMap<u64, PowerCreepRecord>`（name/className/level/hitsMax/storeCapacity/powers:Vec<(i64 level by power)>/spawn_cooldown_time:Option<u64 墙钟>/delete_time:Option<u64>——serde 默认值保证旧检查点可读，新增写入域当批过保存恢复）；place "powerCreep" 臂**同时**建账号记录（name 缺省自动序号名）+插房间 Generic（data: type/owner/name/className/level/hitsMax/hits/store(ops 走 store_extra)/ageTime=time+5000/notifyWhenAttacked/powers 快照）。六个全局意图沿 market 先例进全局阶段（wall-clock 用 input.now_ms）：spawnPowerCreep 找 powerSpawn→占位/冷却门→账号记录置已生成+插房间对象；die（TTL/hits≤0 全局扫）→墓碑（TombstoneObj 复用 creep_* 字段承载官方 powerCreep* 五字段：creep_name/creep_ticks_to_live 直存、class/level/powers 进 data 需投影扩展——**实施时按 26.0 期望形状定**，若 Tombstone 形状测试属 powerEffects 门控则最小面先行）+容器先收+账号回冷却。玩家面：Game.powerCreeps（账号记录装配，spawned 记录 room/pos 取房间对象）、Game.gpl（官方数学）、PowerCreep 类读面（name/my/owner/level/className/hits/hitsMax/shard/spawnCooldownTime/deleteTime/powers(level+cooldown 剩余)/store(ops)/ticksToLive=ageTime−time/未生成 room=undefined）、方法（move/moveTo/moveByPath/transfer/withdraw/drop/pickup/say 转发 Creep 原型+未生成 BUSY；spawn/renew/enableRoom/delete/rename/upgrade/notifyWhenAttacked/cancelOrder/suicide 按官方预检序；usePower 本批仅 PWR_GENERATE_OPS 全量+其余 powers NO_BODYPART 形态——**待 M2H.b 效果族**）；资源四动作与 attack/目标门开 Generic powerCreep 臂（结算侧 store.rs 既有 Generic 仓库路径复用）；移动：独立无疲劳路径（地形代价+占位，不经 fatigue 体系——官方 creeps/move 对空 body 算零疲劳，等价）；processPower 结算+预检。能力开关 powerCreeps/powerCreepAccountApi/powerSpawn:true（powerEffects 维持 false）。验收=in-crate settle_tests（create/rename/delete/upgrade/spawn/die/processPower/GPL 数学）+ 棘轮 floor 上调（预期 +~60：19.0 九例+19.1 三十三例+11.6 六例+移动/契约/形状散例；19.9 generate-ops 7 例需 usePower 最小面计入）+ 三 bot + 无参 check，逐用例 0 转红。M2H.b（usePower 效果族 19 powers+effects 数组+结构消费面+15.5/15.6 substrate）另批登记。
-
-**M2H.a 实施交付（同日）**：基线 `fe6d759`（登记提交）。落地=选型全量+治疗面：`settle/powers/` 三文件（mod.rs 动作序 tick/usePower/enableRoom/renew/say/移动执行、resources.rs 资源四动作镜像 store.rs、account.rs 六全局意图+GPL 数学+死亡扫+delete 到期）；PlayerState `power`+`power_creeps`（记录 8 字段，serde 默认回填）；place "powerCreep" 臂+snapshot kind+placement 单一事实源派生账号记录；power_account 注入（JSON/KKPV 双通道，每记录带 owner=my getter 依赖）；prelude `power-creeps.js`（getter 族/八委托方法/九自实现方法/create）；Game.powerCreeps+gpl；creep attack/countActiveParts(falsy→Infinity)；processPower 预检+结算双扣；移动三处接入（admissions 恒真/rate4=0 平局恒败/动态挡格）；damage 延迟队列+EVENT_ATTACK；capabilities 三开（powerEffects 维持 false）。检查点：钉死键 102→**111**、SCHEMA_DYNAMIC_MAPS +power_creeps(+.powers)、旧检查点回填测试（默认态序列化后剥两新键）。
-
-**修复沿革（实施中发现）**：from_json 全局容器只遍历市场五名→power 意图永不解析（POWER_INTENT_ORDER 补链+单测）；PlayerSpec 缺省 power 0→10,000,000（screeps-ok adapter.ts:30-33 契约，+19 例）；**官方源 vs 套件契约两处互斥分歧，经 xxscreeps 仲裁**（screeps-ok 是新套件不默认其对，用户 2026-10-08 拍板方法论）——①配额：xxscreeps freeLevels（powercreep.ts:541-544，注释明言 "minus one per creep and each creep's own level"）无 counter，与套件 GPL-004/005 联合契约一致，官方开源源 createPowerCreep.js 末行 `_usedPowerLevels += 1` 双计是异类不采，实装 used=len+Σlevel，`used_power_levels` 字段无写入方整体删除（schema 112→111）；②名字：官方玩家预检（power-creeps.js:396）与 xxscreeps（powercreep.ts:568）均 >100 拒 ERR_INVALID_ARGS、≤100 放行，但结算落库统一截 50（官方 createPowerCreep.js / xxscreeps model.ts:83 slice(0,50)），套件 CREATE-003/RENAME-001 断言 "length===100 完整保留" 与两个参考实现均矛盾属**套件缺陷**——实装预检 >100 拒+落库截 50，两例保持红（HEAD~1 基线即红、无翻转无需豁免条目），floor 随 2634→2632 有意下调并归因 ratchet note。分歧与仲裁依据均在 account.rs 注释登记。**坑**：prelude JS 嵌在二进制内，改后必须重建 release 再跑棘轮（又一次）；actionLog 1-tick 生命周期使跨 tick 断言必空。
-
-**三路复审清偿（P0 0；P1 全清、P2 当批清偿、P3 登记）**：R1 引擎（P1×3）+R2 玩家面（P1×1）+R3 接线（P1×4）去重后——actionLog 每 tick 清空（room_loop 移除键，六键全 null 的等价形态）；死亡扫加 is_power_creep 过滤（防误伤 hits=0 Generic）；治疗面全链（intent_heal/塔 heal 双类型门+pc tick 消费 heal_to_apply+heal_policy 写 healed+玩家面 heal/rangedHeal 门）；rangedAttack/塔 attack 第一判别组补 PowerCreep；FIND_MY/HOSTILE_POWER_CREEPS(120/121) 双通道（JS+Rust，修复 Structure.destroy 敌方 pc 门恒空击穿）；delete 到期消费（官方 cronjobs.js:533-553 公式逐字：GPL 插值降 power+删记录，cron 周期 10min→每 tick）；memory setter 丢值（setMemoryFor）；spawn Memory 初始化副作用；POWER_INFO/POWER_CLASS freezeConst；墓碑公开遗言（creep_saying）。R3-P2-1（getObjectById 未生成 pc 注册）**复审误报**：官方 game.js:255-258 只入 register.powerCreeps 名字表、register._objects 仅房间对象（:286-292），死后 null 由 NUKE-IMPACT-008 钉死——已按官方回退。引擎测试 10→14 例（+enableRoom 门/renew 相邻/usePower powerEnabled+冷却/delete 到期插值）。P3 登记未清偿（均低风险）：截断 Unicode 标量 vs UTF-16 码元、无主 pc/powerSpawn 空玩家项、EVENT_POWER targetId null 形态、容器先收无 hits>0 门、同 tick 同名双 create kk 更严、portal/NPC 排除同 creep 待遇、墓碑 class/level/powers 三字段无承载位（M2H.b 随效果族定形状）、pcData 双缺席抛错 vs 官方 {}、notifyWhenAttacked 严比较、usePower 效果门 `===`/包装实例无 .effects（M2H.b 接线时补挂）、renew register 检查、spawnCooldownTime now 采样、RCL 门返码、processPower OPERATE_POWER 增产（M2H.b）、intent.rs 997 行近 1000 门禁（下次新增动作前拆 intent/power 子模块）、选型"NO_BODYPART 形态"与实现（过官方门后静默）偏差。
-
-验证：无参 check 通过；棘轮 2523→**2632**（净 +109 绿 0 转红；floor 沿革 2610→2629→2634→2632——末次为 xxscreeps 仲裁翻回官方名字口径的有意下调）；三 bot 2000/2000/10 核心指标+missing_api 与基线一致（overmind 归一化日志排名漂移为随机 flag 名频次转移，既有非确定性口径）；tooangel 基线 bot 字段与 README 命令对齐（去 /src 后缀）。剩余 26 失败为 keeper-lair/movement/market/roompos/undocumented 既有域 + CREATE-003/RENAME-001 套件缺陷。**用户指令：M2H.a 后暂停，不自动进 M2H.b，等点名**。
-
-## M2H.b power 效果族：19 powers 结算 + effects 数组 + powerEffects 开关（2026-10-08 调查与选型登记）
-
-调查结论（登记时点，探测实证）：powerEffects 开启后解锁 90 例（skip 256→166）——13 例开开关即绿（usePower 预检面 M2H.a 已就绪、只断言返回 OK/ops/冷却的用例），**77 例红**等真实效果结算。分布：19-power 25（POWER-OPERATE-001/002 量值与冷却/ops 对照 POWER_INFO、OPERATE-003 OBSERVER 射程、OPERATE-004 FACTORY 等级、OPERATE-005/DISRUPT-003 十六类 valid 目标扣 ops 进冷却、POWER-COMBAT-002/003 SHIELD 临时 rampart、REGEN-001/002）、15-structure-common 21（substrate 5：ticksRemaining 每 tick 减 1（endTime 派生）/到期当 tick 不可见/同 power 重抹不叠加/异 power 共存/宿主摧毁不迁移；hosts 16：每 power→目标类的 effects 暴露）、07-combat 11（塔功率/失能/FORTIFY/SHIELD）、17-source-mineral 11（REGEN_SOURCE/DISRUPT_SOURCE/REGEN_MINERAL）、11-production 4（lab/factory/powerSpawn）、散例（09 spawn、13 terminal、04 withdraw-disrupt、12 rampart、16 eventlog、26 shape）。官方架构：usePower.js 统一 switch——15 个挂效果 power 过类型门后走统一 applyEffectOnTarget 尾部（目标 effects 数组 `_.remove({power})` 再 push `{effect, power, level, endTime: gameTime+duration}`，duration 可为数组按等级取）；OPERATE_EXTENSION 即时结算（向房主 extensions 按距离序灌能量至 effect×Σ容量，无 effects）；SHIELD 特殊（pc 所在格插临时 rampart：hits=effect[level-1]、hitsMax=0、nextDecayTime=time+duration、自带 effects 记录，同格工地先移除）；OPERATE_FACTORY（level 缺省设 pc level、不等拒，再挂效果）；统一尾部冷却+扣 ops+EVENT_POWER+actionLog.power。effects 消费全走惰性 `_.find(effects,{power}) && endTime > gameTime`（无统一过期 sweep；COLLAPSE_TIMER 是 invader core NPC 域例外），公式统一 `×/ceil(×) POWER_INFO[power].effect[level-1]`：塔 attack/heal/repair 双 power（OPERATE×effect/DISRUPT×effect 连乘后 floor）、spawn needTime=ceil(×effect)、source DISRUPT 每拍 regen 钟 +1 / REGEN 每 period 拍 +effect、mineral REGEN、storage 容量 ×effect、lab 反应 ×effect、terminal send 成本 ×effect + market 三处费用、DISRUPT_TERMINAL 拒 send/withdraw、observer 冷却/射程、controller upgradeController ×effect、powerSpawn processPower 量 = min(store.power, 1+effect)、factory produce 等级门、FORTIFY/SHIELD/INVULNERABILITY 在 _damage（受伤倍率）/dismantle（免除）/attackController/nukes tick（核弹落地无敌）/rangedMassAttack 六处门、market transferFee 终点塔费。EFFECT_INVULNERABILITY/COLLAPSE_TIMER 的生产者是 invader core（stronghold NPC 域）不在本批，**消费门先接线**（无生产者时零行为变化）。kk 现状：pc_use_power 仅 GENERATE_OPS 分支、其余 18 power 过门后静默；结构化 RoomObject 变体无 effects 字段；POWER_INFO 常量已含 effect/duration/period（kk-core 验证）；玩家面包装实例无 .effects getter（M2H.a P3 登记）；M2E lab boost/M2F factory/M2G nuke 的 PWR_OPERATE_LAB/COMMODITY-003/EFFECT_INVULNERABILITY 三处遗留门控随本批解锁。
-
-**选型（effects side table + 统一 applyEffect + 按域消费面）**：`RoomState.effects: BTreeMap<ObjId, Vec<EffectEntry>>`（effect/power/level/end_time 四字段结构体）——仿既有 `extensions` side table 先例（随房间候选克隆、对象删除时同步清理=宿主摧毁语义、完整世界检查点走独立字段、二进制房间快照不动）；结算消费统一经 helper `active_power_effect(rooms/working, id, power) -> Option<(level, end_time)>`（`end_time > time` 惰性过滤，官方同款；同 power 重抹=写入时替换条目）；投影每对象挂 `effects: [{effect, power, level, ticksRemaining=end_time-time}]` 活跃条目（到 0 当拍不可见=EFFECT-DECAY-002）；玩家面 fields/装配层读投影键（与 rawData 直通同机制）。usePower 补全 19 分支（15 挂效果族统一尾部；OPERATE_EXTENSION 即时灌能；SHIELD 临时 rampart 插入；FACTORY level 门），GENERATE_OPS 保持既有。消费面子片顺序：**b-2 结构域**（塔 attack/heal/repair、spawn 孵化、source 双 power、mineral、storage、lab、factory、terminal+market 费用、observer、controller、powerSpawn、withdraw-disrupt）；**b-3 战斗面**（FORTIFY 受伤倍率与 rampart hitsMax、SHIELD rampart 衰减/移除、INVUL 六处消费门、rangedMassAttack/dismantle/attackController/nuke）。能力开关 powerEffects:true 随批正式翻转（探测已验证翻转安全）。验收=in-crate settle_tests（effects 生命周期/applyEffect 替换语义/每域量值锚点/SHIELD 全程）+ 棘轮 floor 上调（预期 +77±：13 即绿保持）+ 三 bot + 无参 check，逐用例 0 转红；量值锚以 POWER_INFO 常量为准（官方公式逐字移植）。
-
-## 2026-10-09 提交范围复审（7673cb0 至 a2cf647，含起点）
-
-前轮仅审查，基线 HEAD `a2cf647`，开始时工作区干净。核对 M2E/M2F/M2G/M2H.a 实现、玩家预检、意图、投影、账号状态与仓库固定的官方源码。确认 4 项待修：① 核弹在对象 tick 阶段向托管 Mod 受击队列入队，但该阶段之后未排空，伤害与处理器调用被丢弃（P1）；② power 自杀全局意图只查 owner 未限定 powerCreep，借用原型方法可删除己方 Generic factory 并生成墓碑（P2）；③ lab 分派 run/reverse/boost/unboost 顺序偏离官方 boost/unboost/run-else-reverse，同 tick run+unboost 两次返回 OK 但解除强化被反应冷却吞掉（P2）；④ create→spawn 已生成 powerCreep 的账号/房间投影均缺 shard，getter 返回 undefined（P2）。未修改实现、未提交或推送；下一步先清偿上述边界并补相应行为回归，M2H.b 后续实施仍待用户点名。
-
-实际验证：`cargo build -p kk-cli` 通过；`cargo test -p kk-engine --test settle_tests` 361 passed / 2 ignored；当前 debug CLI embed 复现 lab 双动作、自杀错误类型与正常 create→spawn 的 shard 缺失（脚本 `/tmp/kks-review-7673.py`）；sim 2 tick 在 JSON/KKPV 双通道复现托管核弹对象保持 200 hits 且 namespace state 未更新，原生对照对象被摧毁（场景 `/tmp/kks-review-nuke{,-native}.json`，报告 `/tmp/kks-review-nuke{,-kkpv,-native}-report.json`）。临时复现场景未设断言，其 passed 只表示执行完成，行为结论来自最终对象与状态核查。本轮未运行无参数完整门禁、release 棘轮或三 bot，不将历史结果当本轮验证；M2H.b 已登记的 18 个未实现效果与已正式翻转的能力开关不重复作为新缺陷。
-
-## 2026-10-09 审查修复与第二轮深度复审（完成）
-
-用户授权修复前轮全部问题并再次深度复审。接手 HEAD `a2cf647`，工作区只有前轮台账记录未提交。已清偿前轮 4 项：核弹对象 tick 后立即排空托管受击队列（处理器故障撤销整轮候选）；power 自杀全局意图限定对象类型；lab 按 boost → unboost → run-else-reverse 官方顺序结算；已生成 powerCreep 在账号与 JSON/KKPV 房间投影派生 shard0，未生成/死亡不暴露 shard，兼容旧检查点。
-
-第二轮逐层复核官方处理顺序、资源/伤害/移动消费者、玩家投影、跨房与账号状态及恢复边界，新增确认并修复 2 项（均 P2）：① powerCreep 托管移动输入缺 owner/kind/让位信息，可误判自有 rampart；请求预检、竞争、准入与障碍统一保留 owner，powerCreep 占位摘要正确标记类型与获准让位。② 核弹落地未执行官方 nukes/pretick.js 的新孵化取消门，会先扣能量再清掉 newborn；现在落地当轮不扣新孵化能量，下一拍恢复孵化，其他 spawn 动作保持原顺序。新增真实链集成回归在 JSON/KKPV 双通道覆盖同 tick lab 竞争、错误类型自杀、spawn→检查点冷恢复→死亡 shard、核弹托管受击/异常回滚、power 移动互换/同格竞争/自有 rampart与核弹新孵化取消。同步现行游戏循环、移动与对象耐久契约。第二轮未发现其他新的可确认缺陷；M2H.b 已登记的 18 个效果族及原有 P3 差异仍是后续任务。
-
-实际验证：`cargo test -p kk-runtime --test mod_chain_tests production_boundaries` 7 passed；`cargo test -p kk-engine --test settle_tests lab_actions` 14 passed。最终无参数 `pnpm run check` 通过（Rust 46 个测试目标合计 1351 passed / 12 ignored / 0 failed，含最新 7 个集成回归；JavaScript、维护工具、文档链接与源码规模门禁通过；日志 `/tmp/kks-review-fix-check-final.log`）。无 doctest 变更。release CLI 重建、固定 screeps-ok pin `34a630e` 依赖准备、bot 夹具准备与适配器 build 完成；`node compat/scripts/ratchet.mjs` 通过：2645 passed / 103 failed / 166 skipped = 2914，相对 HEAD~1 转红 0 / 转绿 13，额外核对当前 HEAD 转红 0 / 转绿 0（日志 `/tmp/kks-review-ratchet.log`，刷新入库机器报告）。三 bot 均完成全部请求：TooAngel 2000/2000、Overmind 2000/2000、WASM 10/10，均中断/惩罚跳过 0、missing_api 空；Overmind 有基线已有的首轮 colony 异常，归一随机 directive ID 后错误与入库报告一致，不能宣称零错误（报告 `/tmp/kks-review-fix-{tooangel,overmind,wasm}.json`）。前轮 embed 复现脚本重跑确认 lab 解除成功、factory 保留、生成态 shard0；临时脚本不是正式测试替代。
-
-用户复核后授权提交；全部实现、回归、现行契约与兼容报告随本轮 `fix` 提交，未推送。后续 M2H.b 的效果实施与剩余消费者继续按既有选型队列推进，本次未扩大到该领域。
-
-## M2H.b-5 source 再生/干扰效果链（2026-10-09 完成，随本次提交入库）
-
-接手基线 `9578ffa`，工作区干净。REGEN_SOURCE/DISRUPT_SOURCE 通过类型化 Source 目标门后复用费用、冷却、等级覆盖、事件及公共效果表；source tick 接通施放相位决定的 15 tick 周期补充、五等级增量/容量钳制，以及普通再生时钟逐拍延期。两种效果独立共存、严格到期，满源不处理再生，同轮采集在补充之前，普通再生与补充均先使用旧容量再调整控制器容量。同级刷新重置相位；保存恢复沿用 source 绝对时钟与公共效果表，无新增检查点字段。深度复审发现并修复既有零绝对钟误触发立即再生，按官方真值门重新挂钟；已逾期时钟仍按延期后的实际 deadline 判断，不粗略跳过普通再生。其余 9 个 power 不在本片完成范围。
-
-实际验证：新增 runtime 7/7（双通道五等级/非全局周期相位/刷新、干扰到期与恢复、共存及最后脉冲、满源/采集/容量钳制、普通再生同拍、低等级拒绝/公开伪造、晚期失败缓存重试/冷恢复）、native 2/2（空钟/零钟/已逾期时钟、容量切换）、CLI 1/1（双通道输入回放与 110 tick 直跑对比 13+97 tick 跨进程恢复）通过。补丁后无参数 `pnpm run check` 完整通过：46 个 Rust 程序，1389 passed / 0 failed / 12 ignored；JS workspace/工具/文档链接/源码规模通过（`/tmp/source-power-check-final.log`），无新增 doctest。最终 release CLI 重建、适配器构建与固定 screeps-ok HEAD `34a630e` 核验完成；全量棘轮 **2697 passed / 51 failed / 166 skipped**，固定 2914 例，相对 HEAD `9578ffa` +10 绿/0 转红（HEAD~1 +14/0），floor 2687→2697（`/tmp/source-power-ratchet-final.log`）。三 bot 2000/2000/10 全部完成，0 中断/跳帧/missing_api；Overmind 保留既有 1 console-error tick（`/tmp/source-power-{tooangel,overmind,wasm}-final.json`）。复审未留新的待清偿问题；实现、契约、报告和台账随本次提交入库（父提交 `9578ffa`），未推送。下一片优先 REGEN_MINERAL，再接资源/容量效果。
-
-## M2H.b-4 OPERATE_FACTORY（2026-10-09 完成，随本次提交入库）
-
-接手基线 `3a23511`，工作区干净。复用已有工厂生产与公共效果表，补齐施放、首次等级锁定、同级刷新与异级拒绝，验证五等级配方、效果包含截止 tick 的门、资源/冷却和失败重试/冷恢复/回放。既有 Generic level 已在检查点内，不新增格式字段。已完成施放目标门、首次锁级与异级拒绝、同级刷新/费用/冷却/事件；已有 produce 消费者与玩家配方预检通过公共效果表接通。效果过期不清 level，等级配方保留 endTime ≥ gameTime 的门，公开效果伪造无法绕过内部配方门。剩余 11 个 power 不在本片范围。
-
-四组新增 runtime 回归通过：双通道五等级配方/精确耗料/冷却、到期保级/异级拒绝无费用事件/同级刷新、包含截止 tick 的门与公开伪造拒绝、施放/生产晚期失败重试及冷恢复；CLI 新增双通道输入回放与跨进程锁级恢复 1/1 通过。代码复审核对官方 usePower 与 produce 的检查顺序，已更新陈旧函数说明，未发现待清偿问题。最终无参数 `pnpm run check` 完整通过（46 个 Rust 测试程序，1379 passed / 0 failed / 12 ignored；JS workspace/工具/文档链接/规模通过；日志 `/tmp/factory-power-check.log`）。最终 release CLI 重建和适配器构建完成，固定 screeps-ok 依赖沿用已准备版本并核验 HEAD `34a630e`；全量棘轮 **2687 passed / 61 failed / 166 skipped**，固定 2914 例，相对 HEAD `3a23511` +4 绿/0 转红（HEAD~1 +11/0），floor 2683→2687；日志 `/tmp/factory-power-ratchet.log`。改动 JS 单文件 oxfmt 检查通过，无新增 doctest。三 bot 2000/2000/10 完成，0 硬中断/跳帧/missing_api；Overmind 保留既有 1 console-error tick。实现、报告和台账随本次提交入库（父提交 `3a23511`），未推送；下一片优先 source 再生/干扰，再接 mineral 与资源/容量效果。
-
-## M2H.b-3 lab/powerSpawn 生产效果链（2026-10-09 完成，随本次提交入库）
-
-接手基线 `43eef59`，工作区干净。范围为 OPERATE_LAB 与 OPERATE_POWER：复用公共效果表和施放通路，接正/逆反应的增量及费用、powerSpawn 批量处理与账号 power 记账；保留官方 lab 严格过期和 processPower 包含截止 tick 的边界。覆盖五等级、库存/容量/能量不足、玩家双通道、冷恢复和失败重试；已完成两种 power 的施放类型门、费用/冷却/事件与效果宿主；lab 正/逆反应和玩家预检共用增强批量规则，输入/输出资源同步增减，清零沿用容量解绑；powerSpawn 按剩余 power 钳制批量、能量不足整次拒绝、原子写回库存与账号 power。预检仍按基础量 1，结算保留 endTime ≥ gameTime 的官方边界。新增状态仍复用既有效果表/检查点布局，无格式扩展。其余 12 个 power 不在本片完成范围。
-
-复审清偿结构预检常量捕获遗漏，更新陈旧文件头和函数说明；捕获 lab 标识与私有冻结增量数组，原生结算不受玩家公开 effects 修改影响。五组 runtime 回归覆盖两投影 × 五等级正逆反应/矿物解绑、满仓/不足与公开效果伪造、power 限量/能量不足、两种到期边界、晚期写回失败缓存重试和冷恢复；CLI 覆盖双通道直跑 vs 跨进程恢复与输入回放、生产库存及账号状态等值。
-
-实际验证：runtime 新增 5/5、CLI 新增 1/1 通过；无参数 `pnpm run check` 完整通过（46 个 Rust 测试程序，1374 passed / 0 failed / 12 ignored，JS workspace/工具/文档链接/规模均通过；日志 `/tmp/production-power-check.log`）。最终 release CLI 重建、适配器构建完成，复用已准备的固定 screeps-ok 依赖并核验 HEAD `34a630e`；全量棘轮 **2683 passed / 65 failed / 166 skipped**，固定 2914 例，相对 HEAD `43eef59` +7 绿/0 转红（HEAD~1 +13/0），floor 2676→2683；日志 `/tmp/production-power-ratchet.log`。两份改动 JS 单文件 oxfmt 检查通过；没有新增 doctest。三 bot 2000/2000/10 完成，0 硬中断/跳帧/missing_api；Overmind 保留既有 1 console-error tick。实现、机器报告与台账随本次提交入库（父提交 `43eef59`），未推送；后续优先 OPERATE_FACTORY，再接资源/容量族。
-
-## M2H.b-2 spawn power 效果链（2026-10-09 完成，随本次提交入库）
-
-接手基线 `e98fd8a`，工作区干净。下一片选择 OPERATE_SPAWN 与 DISRUPT_SPAWN：复用公共效果表，补齐 typed Spawn 目标施放、孵化耗时与干扰暂停；核对官方阶段与出生方向行为，覆盖 JSON/KKPV、效果过期、冷恢复与失败重试。已实现两种 power 的类型门、施放、费用/冷却/事件，孵化耗时按等级倍率 ceil 且只在创建时生效，干扰按有效 tick 推迟 spawnTime 并暂停出生；两效果共存。调研清偿一拍孵化阶段边界：官方 bulk.insert 的新增 creep 下一轮才参加对象 tick，一拍任务先清 spawning，下一轮按默认方向出生；同轮被干扰延期则保留指定方向。本地阶段以初始 creep ID 集合判定，任务和效果复用现有检查点字段，不新增持久化域或格式版本。五组 runtime 回归覆盖五等级、精确暂停/过期、已有任务不重算、一拍出生/干扰、缓存失败重试与冷恢复；CLI 增加双通道跨进程恢复与输入日志回放对照。其他 14 个 power 不在本片完成范围。
-
-实际验证：新增 runtime 5/5、CLI 1/1 通过；最终无参数 `pnpm run check` 完整通过（46 个 Rust 测试程序，1368 passed / 0 failed / 12 ignored；日志 `/tmp/spawn-power-check-final.log`）。release CLI 重建、固定 screeps-ok `34a630e` 依赖准备和适配器构建完成；全量棘轮 **2676 passed / 72 failed / 166 skipped**，固定 2914 例，相对 HEAD `e98fd8a` +6 绿/0 转红（HEAD~1 +31/0），floor 2670→2676；日志 `/tmp/spawn-power-ratchet.log`。三 bot 2000/2000/10 完成，0 硬中断/跳帧/missing_api；Overmind 保留既有 1 console-error tick。代码复审已核对官方 create-creep/tick/usePower 及一拍出生路径，未发现未清偿问题；最终变更与机器报告随本次提交入库（父提交 `e98fd8a`），未推送。后续优先继续 lab/powerSpawn 等生产消费者。
-
-## M2H.b-1 power 效果链首片（2026-10-09 完成，随本次提交入库）
-
-用户授权推进建议中的完整效果链；基线 `b0029b3`，工作区只有本会话调研台账。首片按「公共 effects 状态 + OPERATE_TOWER/DISRUPT_TOWER 完整业务链」实施，覆盖施放/费用/冷却/事件、塔 attack/heal/repair 公式、JSON/KKPV 玩家面、当前检查点格式、删除/跨房/局部拒绝与整轮失败边界。统一既有 Generic data.effects 消费，避免双权威；其他效果消费族仍待后续子片，本片不标 M2H.b 全量完成。当前实现已接入：独立效果表与统一有效期、Generic 输入归一、三类既有消费者迁移；两种 tower power 的施放费用/冷却/事件/动作与三动作小数乘数；玩家装配/手动构造与 JSON/KKPV、公开四键过滤；对象删除与跨房迁移、拆毁局部拒绝日志；检查点 v4 必填字段/键树/恢复校验与输入日志回放。其他 16 个 power 的施放与消费者仍未实现。
-
-深度复审清偿：Game 装配绕过构造器导致 effects 缺席；factory 原始预检须保留 endTime 的 ≥ 边界；直接替房/二进制恢复拒绝夹带第二份 effects（含转义 JSON 键）；非法 effect 标识不能回退伪装为 power；Mod 同名业务字段由其自有 getter 读取，不接受内建效果装配。公开数组修改不能骗过结算覆盖门已补回归。新增验收覆盖两 power × 五等级 × 三动作 × 双通道、共存/刷新/过期/低级拒绝、晚期写回失败缓存重试、删除/跨房与拆毁拒绝、畸形检查点保留旧世界、CLI 双通道回放和跨进程恢复等值；现行机制见 game-loop、checkpoints 和 state-inventory。
-
-实际验证（当前已完成）：release CLI 构建、固定 screeps-ok 准备及适配器构建通过；最终 `node compat/scripts/ratchet.mjs`：**2670 passed / 78 failed / 166 skipped**，固定 2914 例；相对 HEAD~1 及 HEAD 均 +25 绿、0 转红，floor 2632→2670。最终无参数 `pnpm run check` 完整通过（46 个 Rust 测试程序，1362 passed / 0 failed / 12 ignored；JS workspace、维护工具、文档链接及源码规模均通过；日志 `/tmp/power-tower-check-final.log`）。变更 registry.js 的 oxfmt 单文件检查通过；未新增 doctest。最终三 bot 2000/2000/10 完成，0 硬中断/0 跳帧/0 missing_api；Overmind 保留基线首 tick colony 异常（1 console-error tick），随机 directive 名及调用频次有既有漂移。兼容与 bot 机器报告已刷新。用户随后要求修正 power 模块文件头并提交；陈旧的仅 GENERATE_OPS/其余 18 个/powerEffects 关闭说明已改为当前三种 power 与剩余 16 个消费者。后台独立复审未发现可确认的行为缺陷，独立运行的 runtime/world/CLI 定向用例通过。提交前修正文档后再次执行无参数 `pnpm run check` 完整通过（日志 `/tmp/power-tower-check-commit.log`）；本次追加仅为注释与交接记录修正，兼容与 bot 证据沿用上述本轮最终验证。代码、回归与台账随本次提交入库（父提交 `b0029b3`），未推送；当前接手位置转到生产/资源效果消费者（spawn/storage/lab/extension/source/mineral/terminal+market/controller/powerSpawn/factory），observer 等待完整视野业务链，战斗效果另片；不重复公共效果表与 tower。
-
-## 2026-10-09 开发进展核查与下一批建议
-
-核查基线 `b0029b3`，开始时工作区干净。本轮读取实现、现行契约、路线图、作者/恢复任务状态和入库兼容报告，并与 `7e6b219` 报告逐例比较；不重跑游戏构建/测试，不把上轮验证称为本轮新验证。旧 2026-10-08 调研与台账的 1983/24/907 数字、factory/nuke/power 全域未实现等描述属于历史，不能继续当当前执行入口。总体架构中把所有 packages 称为占位也已过时：shared/renderer 有实装，game/api/editor、backend/storage 仍占位。
-
-当前实际能力：内存引擎、玩家 V8、核心经济/战斗/市场/跨房、真实寻路、lab/factory/nuke/power 生命周期；Mod 自主对象、资源、可建造建筑、库存/耐久/受击、移动与战斗策略；mod init/test/inspect/types、sim、检查点、输入日志与结算回放。默认玩法可用不等于同领域 Mod 替换已开放（G12–G21 多项未开始）；bot-check 是固定世界环境验证，尚不能代表外部 bot 在持续推进世界中完整游玩。renderer R0–R6 已交付，R7 最终矩阵/长测尚未收口；真实网络客户端未实现。
-
-兼容现状：2645 passed / 103 failed / 166 skipped，固定 2914 用例，全量通过率 90.77%；只看已执行用例是 96.25%，不能据此宣布 M2B 的 ≥95% 达标。103 失败中 77 是开启 powerEffects 后新增的未实现效果探测，26 为此前残余。95% 至少需 2769 passed，当前差 124；即使全部 103 失败修复也只到 2748，仍需至少 21 个跳过用例通过。deposit 主文件 26 个采集+9 个生命周期、observer 主文件 16 个用例另有跨文件消费者，适合作为接下来的完整业务片；NPC/stronghold/raid、多 shard 等范围更大，应另拆。通过数预算只是覆盖收益估计，完成与数字以实际全量验证为准。
-
-| 优先级 | 建议范围 | 具体首片与验收 |
+| 子片 | 硬依赖 | 交付边界 |
 |---|---|---|
-| 1 主线 | M2H.b power 效果族 | 沿已有 effects side table 选型，从「公共效果状态+塔的完整效果链」切入：权威状态/统一有效期与覆盖门、usePower ops/冷却/事件、塔 attack/heal/repair 数值、JSON/KKPV 投影、对象删除清理、当前格式检查点/重试/回放同批接线。随后扩到生产/资源/费用，再做 FORTIFY/SHIELD/INVULNERABILITY 战斗消费。总范围仍为 19 powers（GENERATE_OPS 已有，补其余 18），不能只挂 effects 宣称结算完成。 |
-| 2 玩法覆盖 | deposit 与 observer | deposit 完整接采集/累计耗尽冷却/掉落/寿命/字段；observer 接动作、范围/RCL/owner、下一轮限时视野、双投影权限与恢复，并接 OPERATE_OBSERVER。二者依赖边界不同，可独立实施；默认单人建议 effects 后 deposit，再 observer。 |
-| 3 兼容清偿与可玩验收 | 剩余 26 失败、持续推进世界中的 bot | 按 setup/时间/事件、路径/疲劳/缓存、VM 模块生命周期与 NPC 分类，核对锁定官方/xxscreeps 证据后修复或记录差异；keeper 单独业务片。外部 bot 逐个准备真实可进展场景，验证采集/搬运/孵化/建造/升级/存活与重启，不能以当前 bot-check 替代。 |
-| 独立扩展方向 | G02.d3 结构/rampart 通行与 G27.a 后台 | 若希望优先提升 JS 创作能力，结构/rampart 声明须贯通 moveTo/Room.findPath/PathFinder 与仲裁，不只放行执行。若希望优先向可登录服务器推进，则先 G27.a 异步后台生命周期→G26.b/native 耐久后端与 G27.b 输入/outbox→G28.a 网络写入→G29.b 客户端。只读观战原型可提前；不从 embed 直接推导联网闭环已完成。 |
-
-近期不把内容级历史存档迁移、微服务、分布式部署或长时间性能验收放在 effects 的前置链；当前新增状态的保存/冷恢复与失败边界仍同批验证。作者 init/test/types 已有，watch/trace 增强按真实开发痛点补，不重新开发已有工具。G30 能力覆盖与同功能参考持续滚动，不以默认兼容率替代完整 JS Mod 验收。
-
-后续用户已授权启动 M2H.b-1，实施状态与验证以其记录为准；本节保留调研时的建议和数字，不再作为未启动实现的状态声明。下一位接手优先从首片剩余验证或后续生产/资源消费者继续，不重复开发公共效果表。
-
-## 实际执行队列与前置门
-
-上一轮维护范围已提交；realm 注册/执行/预算及声明转换优化已提交为 `0c28c92`。Room API 状态所有权和历史文档入口治理已提交为 `8f822fd`；Prelude 命名与集中装配优化已提交 `de15765`；验收成本与首轮 research 文档价值优化已提交 `646e395`；Game 装配、地图缓存、指令状态与世界注入边界已提交 `a0d375e`；结构 API/孵化生命周期、字段/装配所有权及共用目标/诊断依赖优化已完成验收，三轮已提交 `b99cda3`，Creep 移动已提交 `3abb616`；engine/Mod 三组与 CLI 职责分组及整体复审已提交 `eedfbfb`；计划安装候选与统一发布已提交 `4443c3c`；runtime 单次调用与局部恢复治理已提交 `dd1e4f7`；字段校验边界治理已提交 `f32f972`。专项维护暂告一段落，剩余治理项不作为恢复开发的前置。G02.d1/d2/d3 首片均已交付；G02.d3 后续（结构/rampart 通行声明、逐房粒度）按需另拆。G11.a 与 G09 全四子片（a 库存/b 耐久/c 结构受击槽/d 声明式反击）均已交付（见上方实施记录）；当前下一批建议以 2026-10-09 核查为准：优先 M2H.b power 效果状态与真实消费链，随后 deposit/observer、剩余 26 例兼容失败和真实世界 bot 验收；G02.d3 后续与 G27.a 为独立候选线。M2B 兼容批按路线图继续，M2E/F/G/H.a 不重复开发。
-
-父编号用于领域归档，**不是一口气做完 G01 再顺序做到 G30 的调度表**。每个父任务首次实施前拆成可独立验收的子片，记录显式依赖；前置小片可先完成，父任务保留“部分完成”。默认兼容性 M2B 按现有路线图继续推进，不等全部 Mod 领域结束。
-
-| 阶段 | 建议执行 | 阶段出口 |
-|---|---|---|
-| 启动 | G30.a 当前领域能力清单、G30.d 同功能默认参考；G01 | 排序扩展没有改变默认选胜/阻塞传播，输入有界且拒绝可恢复 |
-| 作者与移动 | G05.a init、G05.b test、G29.a 类型生成；G02/G03/G04 分片；G06.a 链诊断 | 作者能用公共工具运行两个策略包、定位失败和保存恢复；每批均有必要预检 |
-| 对象与规则 | G22.a 全状态/身份清单；G08/G09/G10/G11；G12–G18 逐领域 | 每新增写入域同时保存、冷恢复和失败重试；G30.b/c 随已开放能力提取官方内容 |
-| 房间与世界 | G19/G20；G22.b 时间/RNG 在 G21 随机事件前接通；G21 | 权限/阶段、跨房原子候选和新增持久输入清晰 |
-| 更新与耐久 | G22.c 执行身份；G23.a 状态版本及显式迁移；G24/G25 分片；G26.a 周期检查点可提前 | 旧数据明确拒绝或显式迁移；切换失败保旧版，回放不重跑玩家 |
-| 异步与存储 | G27.a 最小异步后台宿主；G26.b provider；G27.b 持久输入/outbox | 同步 tick 与异步 I/O 分域，世界与待输出原子持久，确认耐久后投递 |
-| 网络与客户端 | G28.a M3 最小真实服务、G28.b provider；G29.b 最小客户端、G29.c 贡献 | HTTP/订阅与渲染有真实消费者；认证/授权由宿主检查 |
-| 收口 | G30.a–e 的滚动覆盖、官方预设、完整证据与基准 | 未完成的领域继续新增任务，不能以 30 个父编号结束代替完整目标 |
-
-前置门：
-
-- **新增写入域当批恢复**：开新字段、对象能力、账户、跨房、RNG、外部输入或 outbox 时，当批扩展[检查点清单](../architecture/checkpoints.md)及验证，不等 G23/G26。改变持久布局/语义时登记版本；迁移尚未实现可明确拒绝旧版本、验收新世界，不能静默默认填值宣称兼容。
-- **预检在首片接线**：G02/G12/G13 等先实现自己所需的冻结数据与玩家/引擎检查；G07 负责通用化，不得让 G07 等所有领域、所有领域又等 G07。玩法纯函数/声明用于预检，不能从玩家 VM 同步回调可信服务器 realm。
-- **后台与持久化拆开**：G27.a 不依赖 outbox 或 JS storage，先提供受控异步执行与生命周期；G26.b 依赖 G27.a；G27.b 依赖 G25 的持久输入协议与 G26.a 的原子发布基础，可使用 native 后端，无须等 JS provider。因此不形成 provider ↔ outbox 循环。
-- **协议设计与实际交付分开**：G27.b 首片即明确耐久确认点、输入消费/输出记录与世界的原子保存；仅“提交后发送”不保证崩溃恢复。先用模拟接收端验收幂等/去重，再接 G28 的真实服务。
-- **M3 基础不能当免费前置**：G28.a 包含原生最小网络宿主、认证/授权、代码上传、房间订阅、控制台等[路线图 M3](../roadmap.md#m3-网络客户端与多用户)基础；G29.b 包含最小真实客户端。两者各自拆子片，基础未实现时 provider/渲染贡献不标完成。
-
-关键子片硬依赖如下；“现有”表示本次核查可用的基础，实施时仍须确认源码。其余领域首次拆片时追加自己的依赖与验收，不能从这个局部图推断所有远期设计已经冻结。
-
-| 子片 | 硬依赖 | 首片交付 |
-|---|---|---|
-| G22.a | 现有 | 全状态/版本与身份清单 |
-| G22.b | G22.a | 可恢复玩法时间/RNG |
-| G22.c | G22.a | 活动执行策略的持久身份 |
-| G23.a | G22.c | 状态版本与显式替代候选迁移 |
-| G24.a | G23.a | 无开放轮次的包/API 切换 |
-| G25.a | G22.c | 持久输入与玩家结果日志协议/保存 |
-| G25.b | G25.a、G22.b | 结算回放与完整状态核对 |
-| G26.a | 现有 | 单写者周期完整检查点、RPO 与恢复选择 |
-| G27.a | 现有 | 独立异步后台生命周期，仅探针 I/O/已提交读面，不改玩法 |
-| G26.b | G26.a、G27.a | native 与 JS provider 等价原子发布/读取 |
-| G27.b | G27.a、G25.a、G26.a | 持久输入消费与 outbox，确认耐久后投递 |
-| G28.a | G27.b | M3 最小真实服务，外部写入走受控输入 |
-| G28.b | G28.a | JS 路由/订阅/业务 provider |
-| G29.a | 现有 | 冻结描述的玩家类型生成 |
-| G29.b | G28.a | 最小真实客户端 |
-| G29.c | G29.b | 客户端资产/渲染/面板贡献 |
-
-G28.a 的网络协议及只读原型可提前设计；开放会改变玩法的请求前须完成输入/提交边界。G23.a 不必等待玩法 RNG，实现其迁移时再依赖 G22.b；G25.b 则不能省略时间/RNG 输入。类型与工具可先交付，不把整个 G29 或 G05 作为移动策略的硬依赖。
-
-## 维护结构优化
-
-2026-10-08 开发缺口与并行调研结束：基于 HEAD `6be27b0`、工作区、现行架构和兼容报告静态核查，见[调研记录](../research/10-development-gaps-and-parallel-work.md)。开始时已有未提交 M2E 化学实现与报告（lab 四动作、boost、投影；报告 2274/24/616，HEAD 为 1983/24/907），本次未改动、未提交该实现，也未重跑游戏门禁；报告不视为本次独立验证。建议化学负责线收口后推进默认玩法覆盖，并行移动结构/rampart 通行声明、G27.a 后台宿主、客户端协议/mock；真实网络写入继续依赖 G27.b 耐久输入/outbox，内容迁移与 watch 另链推进。剩余消费者及集成所有权详见记录，未启动开发或宣称 G30 完成。本次仅新增调研记录、索引与本段台账，未提交；`node scripts/check-doc-links.mjs` 通过（303 个 Markdown、1918 个本地链接），未运行构建/游戏测试。
-
-S01 已提交 `e0b457b`，S02 已提交 `5a25bc2`。旧 S03–S06 的按行数拆文件和禁止调整候选字段约束由[职责治理方案](archive/structure-governance-2026-10.md)替代；串行场景默认顺序和 V8 生命周期约束继续保持。本轮维护已完成验收并提交；专项优化暂告一段落，建议恢复功能开发，具体选型见文件开头。
-
-## 近期：移动与作者工具
-
-### G01 移动竞争优先级策略
-
-开放房间级竞争的只读输入及可组合优先级候选，让 JS 改变竞争者排序。原生默认排序与平手登记顺序保持兼容。至少两种独立策略及原生对照，覆盖抢格、多处理器组合、正常拒绝默认回退、故障与缓存重试。这只是排序切片，不代表完整仲裁已开放。当前 `Movement::check_impl` 使用完整原始矩阵评分，先给每个目的格选一个胜者，再取消不可移动/阻塞者，**不自动递补落选者**；G01 默认路径不能改为先过滤资格再选胜者。实际执行阶段还会复核 `can_move`，G02 必须同时处理这处消费者。G01 先通过有界同步调用生成数值/排序候选，再稳定排序，不在 Rust 排序比较器中回入 realm 执行有副作用回调；明确平手、非法值、来源完整性和 before/native/replace 的关系。不得静默截断房间请求。入口先核查[默认仲裁](../../crates/kk-engine/src/settle/movement/mod.rs)、[移动执行复核](../../crates/kk-engine/src/settle/creep/movement.rs)、`room_loop.rs` 和[移动动作槽](../architecture/creep-move-slot.md)。
-
-### G02 移动准入策略
-
-盘点疲劳、MOVE、地形/结构障碍等默认限制，开放具名可替换入口；玩家预检、请求登记、仲裁和实际执行同源消费，不得 JS 放行后又被隐藏 native 检查否决。未开放的检查逐项登记。数值、坐标和索引一致性属于宿主约束，准入规则属于玩法。
-
-**G02.b 仲裁障碍单向追加阻挡槽（2026-10-06 已交付）**：新增房间级槽 `builtin:room.moveObstacle`（内建槽 16→17、revision v10）：准入槽之后、取消链之前整房一次进 JS；输入含全部胜者（准入被拒者仍在列）的目的格对象摘要（creep 让位=胜者∧准入终值、rampart 公开性、工地 structureType、墙/路）与预填时点 native 初判；`ctx.obstacle.block(id)` 单向追加 + `isBlocked` 读初判，decline 丢弃追加。取消链 obstacle = 追加集 ∥ 链内 `check_obstacle_at_xy`，让位链增量传播（挡 b → b 取消 → a 失让位随链取消）由引擎完成；静态放行未开放（2026-10-07 登记 G02.d；动态占格保持宿主约束）。stay-north（replace 区域管制）与 no-swap（after 禁止依赖让位）两独立包 + 原生 + 组合并集验收，双通道冷恢复等价；默认路径零新增可测开销。意图静态预检 `has_static_obstacle`（intent_move/slot_request_direction）与摘要安全模式主人登记为剩余。
-
-**G02.c 意图静态预检槽（2026-10-06 已交付，`0f390b5`）**：新增房间级槽 `builtin:room.movePrecheck`（内建槽 17→18、revision v11、PlanHash 变更；catalog 断言同步）：全部意图与移动动作槽登记完成后、竞争输入构造之前整房一次进 JS；输入为整房请求摘要（moverId/owner/origin/target/movePower/weight/pulled/pulling + 目的格 terrainWall/terrainSwamp/hasRoad/objects[]，按对象 ID 升序）；`ctx.precheck.isBlocked/block` 单向收紧，被否决请求经 `remove_requests` 在竞争前移除，**等同从未登记**（不参与竞争评分、不让位、不占格；old_fatigue 残项仅胜者可读、pull 配对保留与基线逐步一致——均有引擎基线对照测试）。放行方向当前未接线（仲裁期 native 障碍仍复检；2026-10-07 登记 G02.d 贯通）；两登记入口（玩家意图/移动槽能力）共享矩阵统一否决，同源有运行时可观测证据。请求级 vs 胜者级语义（否决强竞争者请求 → 弱者独占目的格）与障碍槽互补、可同房组合（有测试）。验收：引擎 4（输入完整性/请求级语义+准入视野不含/拉者否决基线/候选域）+ 运行时 8（字段形态+原生对照、decline 回退含 before 层暂存 state 丢弃、组合 isBlocked、移动槽通道同源、预检×障碍两级组合、能力门、故障停用回退+晚期重试恰一次、无请求不进 JS）+ fenced/courtesy 两独立包四场景 × JSON/KKPV + 检查点冷恢复 + 四 plan_hash 身份。movement.rs 超限按职责拆出 `movement/inputs.rs`（槽输入投影子模块）。三路复审无高危，14 项发现全部清偿（staged_states 缺失、gitignore 白名单、槽计数史实、恒真断言等），详见[交付记录](../research/notes/g02c-move-precheck-2026-10-06.md)。当时记录 G02 父任务收口；2026-10-07 深度复审已纠正该范围判断，父项恢复部分完成，静态阻挡放行及必要玩家预检登记 G02.d。孵化门槛归 G13、障碍摘要安全模式主人为可解释性增强另登记。**下一步按队列：G22.a 状态清单**；G03 剩余（pull 登记策略、障碍槽预演）与 G04 按依赖另拆。
-
-**G02.a 疲劳/MOVE/有效被拉门槛准入槽（2026-10-06 已交付）**：新增房间级槽 `builtin:creep.moveAdmission`，仲裁拆为 排名 → 原生预填（配对复核 + can_move 终值表）→ JS 覆盖（`ctx.admission.getAdmitted/setAdmitted`，初值即原生结果）→ 取消链四阶段；执行阶段 `movement_execute` 改读准入终值（同源、fail-closed）。配对复核遍历顺序改为胜者对象 ID 升序（集合等价；同拉者多目标残标在现有意图流不可达，G03/G04 开放 pull 登记时须重审）。tireless（replace 全放行）与 strict（after 收紧配重不足）两独立包 + 原生对照 + 组合（after 收回 replace 放行）验收，双通道冷恢复等价；默认路径输入构造零付费，微基准 1.84–1.95µs/房对基线 1.61–1.75（密集 32 移动者场景准入终值表维护 +0.2–0.3µs）。内建槽 16、revision v9、PlanHash 变更；旧检查点按身份拒绝。剩余：G02.b 障碍准入（`has_static_obstacle` 意图预检、`check_obstacle_at_xy` 仲裁障碍与让位链耦合）、孵化中拒绝、越界/坐标（宿主约束）。
-
-### G03 完整房间移动仲裁
-
-允许 JS 选择获准移动集合，覆盖让位链、交换、循环、拉拽和阻塞传播。宿主验证表示与索引，不重新运行默认算法覆盖结果。明确整条房间链的数值/集合候选、暂存 state、正常拒绝与 native 回退，不复用单执行者拒绝边界冒充房间恢复。
-
-**G03.a 整房请求视野与获准集合链预演（2026-10-06 已交付，`0efd645`）**：准入槽输入扩展 + 只读链预演，不动槽集合（17 槽、revision v10、PlanHash 不变——基线对照构建实测一致 `72d231e2…`）。交付：① `ctx.args.requests` 整房原始请求视野——全部登记（含竞争落选者）按 目的格→格内登记序 排列，逐条 `moverId/x/y/index/originX/originY/won`；原始矩阵在 `rank_winners` 零拷贝暂存（Working 每房每 tick 重建，天然瞬态）。② `movers[].pulledBy`（有效配对拉者 ID，与 `pulled` 同点复核）与 `pulling`（拉者侧登记态，目标落选本轮不生效）。③ `ctx.admission.evaluate()` 暂存候选链预演——按候选**当前**终值在瘦克隆（只复制链消费字段）上运行与正式仲裁完全相同的 `cancel_blocked`，返回幸存胜者 ID 升序数组；只读、即时计算非快照；障碍槽追加集此时必为空（槽序固定 + 预演能力随准入槽令牌过期双重保障），预演结果是最终结果的上界。拒绝仍整房回退原生预填（非单执行者边界）；`Working::active_safe_mode_user` 抽取后障碍输入/预演/正式链三处同源。验收：引擎等价性 5 函数 11 拓扑案（交换/环/扣环员级联/链式/占位/覆盖/拉拽双案/安全模式分支/快照不消费）+ 运行时 3 测试（覆盖→预演端到端闭环含 requests 字段形态、evaluate 在障碍/竞争/动作槽走能力门不可被 decline 掩盖）+ wave（replace，预演发现级联损失全房停）/calm（after，落选者视野扣同格胜者）两独立包 + 原生对照 + 组合并集，JSON/KKPV 双通道、四 plan_hash 身份互异、准入后检查点冷恢复等价（CLI 2 测试）。三路复审无高危（正确性/一致性路零中级），14 项发现全部清偿（含夹具 gitignore 强制入库、克隆瘦身、安全模式等价护栏），详见[交付记录](../research/notes/g03a-move-arbitration-2026-10-06.md)。剩余另拆：pull 登记策略开放（须重审 `validate_pull_pair` 胜者 ID 升序遍历的同拉者多目标顺序语义）、障碍槽预演/静态放行方向（G02.d；动态占格保持宿主约束）、G04 代价执行。
-
-### G04 移动代价与执行效果
-
-开放重量、地形代价、疲劳生成/恢复等策略，明确道路磨损、工地踩踏、跨房过渡的顺序。真实玩家验证不同规则；任意传送若需新能力另行设计，不混入方向请求。覆盖战斗受伤后身体效能及失败重试。
-
-### G05 Mod 作者基础 CLI
-
-实现 `mod init`、`mod test` 最小闭环：模板包含 manifest、server/player、场景、断言和保存恢复示例，作者只用公开 CLI 即可验收。不得覆盖现有目录；独立包示例无需内部 Rust 测试。名称及参数在实施时核查既有 CLI，避免占位命令冲突。
-
-### G06 运行 trace 与故障复现
-
-提供可选、有界 trace，包含 tick/房间/目标/binding/阶段、拒绝、故障和回退，与 inspect 活动链一致。输出可复现材料，说明它是否足以回放，不把诊断快照当确定性日志。限制记录量、开启成本和玩家私有数据范围。
-
-## 对象能力与内建规则
-
-### G07 玩家预检策略扩展
-
-建立可扩展的玩家预检契约，逐族调整射程、目标准入、部件条件等玩法；身份、归属、参数表示检查保留。canary 与真实玩家 VM 同源，结算端有对应权威检查。领域首片先接通必要消费者，本任务收口通用机制。玩家只得到该预检所需的公开规则/纯函数，不获得服务器字段或世界写句柄；清洗器的 `EXECUTION_ORDER`、动作互斥、参数策略和可扩展意图也要逐项盘点，不能只改 API 返回值。身份可按明确的服务端命令授权扩展，不通过玩家伪造 owner 绕过。
-
-### G08 Mod 建筑字段与生命周期
-
-接通 schema 字段、玩家读取和自主 tick，兼容现有工地/完工/库存/配方。验收初始化、受损维修、摧毁、检查点、异常和缓存重试。与[当前建筑边界](../architecture/mod-buildings.md)核对，不另建不参与建造的伪建筑。先拆 G08.a 字段/初始化及投影，G08.b tick/阶段资格；新增字段随当批检查点保存，preTick 另在 G19.a 收口对象与房间的相对顺序。
-
-### G09 自有对象库存与耐久能力
-
-通过通用能力声明让自有对象参与资源搬运、伤害、治疗/维修及死亡。明确类型适用范围，贯通预检、查询、事件、快照、索引。第二种对象不新增专用 Rust 变体；结构受击与实际伤害反击须明确另拆子片，不能假定现有 creep 受击槽已覆盖。至少拆 G09.a 库存、G09.b 耐久/死亡、G09.c 结构受击；需要实际伤害反击时另立 G09.d，明确减伤前/后、治疗前/后数值、来源归因、截断摘要、非递归与同轮追加结算顺序。不要直接在当前受击槽向已经 tick 完成的来源排队而丢失反击。新的部件/效果/能力表示随 G30.a 的差距清单单列，不假定 `BodyKind` 永久封闭。
-
-### G10 可编程生产与建筑动作
-
-在声明式配方之外提供自定义生产决策、具名动作、多配方、状态条件、冷却和进度。全部资源支付/产出完整预检、原子应用，覆盖满仓、拒绝、异常与恰一次恢复。
-
-### G11 建筑配额与资源容量策略
-
-补齐 RCL 配额、isActive、逐资源容量。玩家常量、工地预检、建造、搬运、生产、超容处理共同消费目录，明确内容选择和检查点身份变化。
-
-### G12 采集与资源再生策略
-
-开放采集产量/消耗及再生入口；验证耗尽、周期恢复、多人竞争、玩家面和失败恢复。资源对象的投影/生命周期与现有声明资源区别写清。
-
-### G13 孵化、寿命与死亡策略
-
-至少拆孵化成本/耗时、出生/出口、寿命、死亡产物四个子片，分别开放。保持出口、名字/ID、孵化对象、库存事务一致，用真实 spawnCreep 验收，不伪造 spawning。
-
-### G14 塔的动作策略
-
-开放攻击/治疗/维修公式及消耗，复用统一伤害/受击。覆盖距离、改向、结构摧毁、事件和拒绝；不能把 tower 已可造成原生伤害当作策略已开放。
-
-### G15 控制器与玩家成长策略
-
-开放升级、占领/预定、控制器周期与成长规则；明确房间归属、GCL/账户候选，不能只改对象字段遗漏玩家状态。跨域写入不足时先完善边界或分片登记。
-
-### G16 实验室与工厂策略
-
-核查实际默认实现后拆片，开放配方、库存约束、冷却与玩家方法。至少拆 G16.a 实验室/化学和 G16.b 工厂；配方、玩家预检、库存消费、冷却、事件与恢复按领域完整接线。配置表存在不等于消费者接线，尚未实现的默认能力另行登记，不放宽兼容跳过来掩盖缺口。
-
-### G17 跨房 Mod 资源传输
-
-在解除 terminal 对声明资源拒绝之前接齐目录、费用、目标房、两端库存、事件与检查点。跨房成功/失败原子，缓存重试和冷恢复不重复支付；当前 terminal 已存在不等于接受 Mod 资源。
-
-### G18 市场扩展
-
-接通 Mod 资源订单和交易策略，覆盖余额、订单余量、费用、记录及游标，明确玩家预检、全局结算与账户访问域。与 G17 共享资源身份，非法输入不得局部入账。
-
-## 世界规则、恢复与更新
-
-### G19 房间生命周期
-
-提供房间 pre/post 及受控候选，明确相对对象动作、仲裁、对象 tick 的顺序。拆 G19.a 对象 preTick 与房间阶段的顺序/资格、G19.b 受控房间操作，验证无玩家意图自主玩法、双房失败不发布；不只相信作者 parallelSafe 声明。生命周期不默认继承动作 decline；每个阶段明确成功/故障或经完整局部边界支持的拒绝。
-
-### G20 玩家与世界生命周期
-
-拆玩家阶段、世界阶段、服务端/跨房命令、账户操作子片，提供具名入口与可核验访问域/串行屏障。玩家全局、动态集合和运行连接器随 G30.a 领域清单落实到对应子片，连接器不绕过玩家沙箱隔离。输入、对象与账户一起提交，异常不会只发布部分房间。
-
-### G21 地图初始化与自主世界事件
-
-开放地图/地形初始化、NPC、周期事件；初始化与运行期更新分开。地形、投影、查询、寻路缓存及检查点同源更新，随机输入按 G22 协议完善。
-
-### G22 执行身份、玩法时间与随机协议
-
-区分 PlanHash、内容身份和停用后的实际执行身份，建立可记录/恢复的玩法时间与 RNG。拆 G22.a 全状态与身份清单（对象能力前置）、G22.b 确定性玩法时间/RNG（随机事件前置）、G22.c 可持久化执行策略身份（更新/回放前置）。任意 Date/Math.random/全局缓存不能被称为可回放状态；保持现有身份校验，不直接放宽旧检查点加载。
-
-### G23 包/schema/state 迁移
-
-在替代候选中显式迁移对象字段、namespace state、规则和包内容，预检失败保留旧世界/计划。缺包默认拒绝可写启动，保留只读导出。格式号变化必须配套读取/迁移，不自动修补不一致载荷。
-
-### G24 tick 边界更新与 watch
-
-依赖迁移实现包更新/watch；存在开放轮次、玩家缓存或待恢复 VM 时不直接切换。成功后玩家 API、计划、工作者与链一致，失败保留旧版。明确开发更新与存量世界升级的区别。
-
-### G25 持久输入日志与结算回放
-
-记录玩家已执行结果、外部输入及执行身份，从检查点重放结算，不重跑玩家代码代替日志。核对完整状态/事件；损坏、缺段、身份不匹配明确拒绝，实测 CPU 等输入的保存/比较口径写清。
-
-### G26 自动检查点与 JS storage provider
-
-拆 G26.a 基于现有完整检查点的周期保存/版本恢复选择，和 G26.b 基于 G27.a 后台宿主的可替换 provider。先明确 RPO、单写者发布、崩溃完整性；.a 无需等待 JS provider 或数据库，采用本地文件即可验收。异步 JS 存储属于后台域，不把同步玩法 realm 改成任意异步结算；用两种实现证明替换，故障注入覆盖发布各阶段。仅检查点不得承诺零丢失。
-
-### G27 提交后输出与后台服务
-
-拆 G27.a 异步后台 VM/模块生命周期及受控消息契约，先用有限模拟 I/O 验证可用于 storage；G27.b 再接持久输入/outbox。输入有身份/顺序，响应只能进入后续 tick；世界、输入消费游标与待输出记录须按所选耐久策略原子发布并确认后投递。定义去重或幂等、失败重试，覆盖发布前、确认后发送前和发送后确认前崩溃；不对任意外部系统承诺恰一次。后台不能直接写正在结算的权威世界。
-
-## 服务、客户端与最终验收
-
-### G28 Backend 贡献入口
-
-拆 G28.a 真实最小网络宿主（纳入 M3 认证、上传、房间订阅与控制台消费者），G28.b JS 路由/订阅/业务 provider。明确访问/管理边界及协议版本，玩家上传脚本不能被作为管理员可信 Mod 装载；provider 返回数据仍按宿主认证/授权检查。至少两种实现可替换；接口占位不算服务交付。
-
-### G29 玩家类型与客户端贡献
-
-拆 G29.a 冻结类型/资源/字段/意图的 TypeScript 声明（近期穿插）、G29.b 最小真实客户端（M3）、G29.c 资源资产/渲染/面板贡献。玩家 JS 方法无法从源码可靠推断的签名须有显式描述或作者声明，不用全 any 冒充类型支持。未选包不残留声明，生成物新鲜度进门禁；客户端贡献在 G28.a 有真实 API 后验收，JSON 投影不算图形交付。
-
-### G30 官方预设、覆盖审计与性能验收
-
-拆成贯穿全程的子片：
-
-- G30.a 覆盖与缺口清单：开始每个领域前核对本地 xxscreeps 实际版本和可执行消费者，登记当前/部分/未实现、本项目子片、独立包及证据。新增缺口要新增子片或 G31+，不能用父领域名字代替全量覆盖。
-- G30.b 官方内容与新世界预设：随能力开放交付真实公共 SDK 内容、依赖组合与默认/精简/自定义预设。新世界选择不必等 G23；存量卸载/升级另依赖 G23。
-- G30.c 内建内容所有权迁移：第一次提取原生玩法时解决 builtin 固定装配、键/数字常量所有权、选择门和默认兼容。选中包可用通用 native 加速，未选不得由 native fallback 恢复已卸载内容；故障停用保留目录的回退另按既有契约。不要用两个目录互相覆盖绕过冻结冲突。
-- G30.d 性能与工作量证据：重大重构前保存同功能默认参考，每片测量相同输入规模、原生/JS/组合的时间、资源和 VM 调用。不能先删掉参考实现再到收口补基准，或为了零开销禁止独立 JS 策略；优化如 native 加速应公开且语义等价。
-- G30.e 最终收口：汇总全部领域、官方预设、真实作者工作流、恢复/升级与同场景对照；未完成项继续留在台账，不因 G01–G30 的父任务有首片而宣布全面超越。
-
-2026-10-06 路线复审抽查本地 xxscreeps `5ff0d1a682170f6b5f9c8bac3e703767625988e0`：`config/loader.ts` 提供 11 个领域；`mods/classic/index.ts` 还聚合 powercreep、observer、nuker、effects、portal、intershardResource 与 messages/visual 等内容。以下是责任映射和待细化范围，**不是本次已经完成的逐能力覆盖审计**。
-
-| 领域 | 责任任务 | 不能遗漏的待核查消费者 |
-|---|---|---|
-| config | G05、G22、G23、G30.b/c | 配置 schema/默认值、版本与能力清单、预设依赖与实际展开身份 |
-| constants | G07、G09、G11、G29.a、G30.c | 资源/类型/效果/数值、玩家与服务端同源、内建数字常量所有权 |
-| schema | G08、G09、G22.a、G23 | 新字段/枚举/能力表示、内建挂载、编码、引用与迁移 |
-| processor | G01–G04、G08–G21 | 对象 preTick/tick、动作与互斥/执行序、房间/世界阶段、默认规则替换 |
-| game | G07、G20、G29.a | 玩家类/方法/全局、动态集合、查询/预检、环境初始化和声明 |
-| driver | G20、G22、G25、G27 | 玩家输入/输出/持久数据连接器、隔离、已执行结果与重试 |
-| main | G20、G21、G26、G27 | 服务器启动/关闭、周期调度、NPC/世界初始化和管理 |
-| terrain | G21 | 地图/地形生成、更新、缓存 epoch、寻路与恢复 |
-| storage | G25、G26、G27.b | 完整快照、日志、业务存储与底层 JS provider、原子耐久发布 |
-| backend | G27、G28、G29.b/c | 认证/授权、路由/订阅、messages/notifications、版本与客户端资产 |
-| test | G05、G06、G25.b、G30 | 作者场景/断言、组合/故障复现、回放、独立包与成本基线 |
-
-全量玩法清单还需展开 power/effects、observer、nuker、portal/跨 shard、intershardResource、flag/visual 等在 30 个父标题中不明显的内容：G09 负责对象/能力通路，G20 负责世界/跨域规则，G21 负责初始化，G27–G29 负责服务/客户端；G30.a 按真实源码明确每个子片或新增父任务，不用这些责任范围宣称已有实现。现代玩法或跨 shard 基础缺失时同时登记默认玩法前置，不能依赖不存在的域开始对外开放写入。
-
-## 每批共同验收
-
-- 先明确公开契约、候选/拒绝/故障边界和实际消费者。可替换玩法/能力至少两种独立 JS 实现及原生对照；CLI/类型工具用多包输入与失败/保护案例，迁移/日志/存储用多版本与崩溃故障矩阵，审计用源代码/消费者证据。不能为通用工具强造两个玩法实现，也不能用一个硬编码包冒充通用能力。作者创作不依赖 Rust 特判或重编。
-- 距离、价格、公式、准入和竞争优先级属于可替换玩法；ID、合法表示、字段/索引/编码一致性和原子发布属于宿主约束。现有表示不够时设计扩展，不能静默否决 JS。
-- engine 不依赖 V8，mod-api 保持纯数据；玩法 JS 同步，进入 VM 前释放候选借用，复用预算、首故障、缓存重试和停用机制。
-- 按相关性覆盖组合、已定义局部边界的拒绝、异常/预算、停用回退、晚期写回失败、缓存重试和真实进程冷恢复；JSON/KKPV 完整业务状态一致，非确定 CPU 等字段说明口径。
-- 源码/测试不超过 1000 行，按职责拆分；按影响更新现行契约与适用夹具，记录实际验证后复审。
-- 每片首次设计记录输入范围/大小、单位与整数/浮点域、完整预检、权限及 state/世界写面；变更持久域同时更新清单与版本策略。native 中心、before/replace 与拒绝的关系逐槽定义，生命周期不自动支持动作式局部拒绝。
-- 修改 Rust 后重新构建测试 CLI、显式指定 `KKSCREEPS_BIN`；提交前运行完整 `pnpm run check`。兼容相关改动按 [compat/README.md](../../compat/README.md) 新构建 release、核验固定依赖、构建适配器并运行 ratchet，另外比较本批实际基线的逐用例状态，不能只比较总通过数。
-
-## 实施记录与交接模板
-
-当前会话只记录范围、剩余工作、实际验证和提交状态；历史过程见[归档](archive/mod-history-2026-10.md)。贡献与交接要求以 [AGENTS.md](../../AGENTS.md) 为准，不复制提示词或逐项复审流水账。
-
-2026-10-08 G09.b 自有对象耐久首片交付：基线 `39334ae` 后的 G09.b 登记提交（同日三连批：G09.a `978a042` → 登记 → 本批）。信封键路线落地：`hits_max` 冻结声明（1..=u32::MAX 与建筑同口径）+ ModObj.data 第二族信封键 `hits/hitsMax`（与 store 族键集不相交、可并存；持久化随不透明 data 串，无 revision bump）；伤害链全线同门（近战/远程/塔/策略伤害经 `object_hits`/`structure_hits_max` Mod 臂）；死亡=remove_obj+事件 `type=类型键`（无废墟无掉落）；保留键 10 项冻结层拒绝；写回丢弃输入信封回填世界值；逐 tick 校验三臂（hitsMax==声明、hits∈1..=hitsMax——复审收紧，0 只能直改造出）。与登记偏差：塔玩家面也开 modEntry 族（三处共用 `gw.modDurabilityTargetOk`）；type_name_of 对 Mod 保持空串（战斗读面单独取类型键）。验收：两独立包（siege 近战/vault 双信封+远程）+无耐久 decoy -7 对照+组合+双通道+冷恢复全绿，三场景 plan_hash 互异；领域项补齐 rangedAttack（RANGED_ATTACK_POWER=10）、塔击毁、战斗读面/策略目标接纳、击毁无废墟、计划内无耐久类型静默（settle_room 不走 validate_stage，直插构造测的就是结算纵深门——Lane C 核实）。验证：fmt/crate 686+sim 91 全绿（间歇问题未再现）；棘轮 1983 持平（0 转红 0 转绿）；三 bot 2000/2000/10 验收判定通过；无参 check 通过。三路复审 0 P0，P1×6/P2×8 当批清偿（信封文案、okTarget 重建事故、塔门、ranged/tower/策略读面补测、marker 真类型、界值两端接受等），P3 登记或清偿（自选继承 Structure 角落、dismantle 双重排除、冷恢复不跨死亡——hits 为不透明串+remove_obj 通用清理，低风险登记）。**本批坑：prelude JS 嵌在二进制内——改 creep.js 后必须重建再跑 sim（提取共享助手时丢 okTarget 定义，旧二进制下 vault 过而 siege run_failed 的分裂形态即此因）；python 正则替换多步脚本一步断言失败全弃是安全的，但断言锚点要随早前修改更新。** 下一批候选：G09.c 结构受击或 G09.d 反击（依赖面待调查）、G02.d3 后续或剩余 24 例零散兼容失败。
-
-2026-10-08 G09.a 自有对象库存首片交付：基线 `39334ae`（G09.a 登记，前序 G11.a 为 `bd1a87c`）。路线①落地：`store_capacity` 冻结声明（Option<u64> ≤2^53-1，登记为 u32、实施放宽以对齐 JS 安全整数，无存量用户）+ ModObj.data 信封键 `store/storeCapacity`（库存作为不透明 data 串的内嵌键，不新增持久化形态，KKPV/检查点随既有链路，无 revision bump）；六链接纳（creep 双向结算、mod 资源槽 inspect/change、投影合成、玩家预检 modEntry 目标族、对象 tick 读、发布前校验三臂守卫）；保留键 8 项（+store/storeCapacity）在冻结层拒绝（builtin:link 豁免；storeCapacityResource 经信封拆分隔离）；字段写回丢弃处理器信封、回填世界值。验收：两独立包（搬运型/仓储型）+原生对照（无容量 marker 预检 -7）+组合+双通道+冷恢复全绿，三场景 plan_hash 互异；领域项（双向 transfer/withdraw、错误码同源、mod 槽触达、保留键冻结拒绝、投影形状）随 sim 断言。验证：完整门禁通过；棘轮 1983 持平（0 转红 0 转绿）；三 bot 2000/2000/10 验收判定通过；三路复审 1 P1+4 P2 当批清偿（信封写回、保留键层次、容量界、typegen 成员、校验守卫补测、hash 对照），P3 已知角落登记于契约文档。已知边界：首片单一总容量，无逐资源容量/槽绑定/损耗。下一批候选：G09.b 耐久/死亡、G02.d3 后续或剩余 24 例零散兼容失败。
-
-2026-10-08 G11.a 建筑配额首片交付：基线 `c8fcb8d`（M2D + 台账登记）。路线①+③ 合体落地：132 条 `builtin:structure.quota.{type}.rcl{N}`（键集=官方表形，默认=官方值）+ `StructureQuotaSnapshot` 装配期一次解析、Rc 共享入逐房 Plane + `fold_controller_structures` 折叠注入玩家 `CONTROLLER_STRUCTURES`（canary/玩家 worker 双点，switch/冷恢复同路径）；`allowed_for` 统一五消费者（工地创建/link isActive/spawn 放置/terminal/extractor，快照 miss 回退官方静态表）；顺带修复 link.rcl 规则不达玩家面的既有缺口（rcl0-8 迁入族、键集改官方形，LinkRules 去 rcl）；revision v18。三轮探针场景三面互证预检/结算同源：native 锚 6/2500，raise 塔 20、lower 墙 3，组合共存，四场景 plan_hash 互异，双通道一致，冷恢复身份一致。验证：完整门禁通过；棘轮 1983 持平（0 转红 0 转绿）；三 bot 2000/2000/10 指标+验收判定全通过；三路复审 0 P0/P1，P2（Plane 逐房深拷贝）当批改 Rc 清偿，P3 清偿或登记（折叠键序依赖 workspace preserve_order 已注释并加全表相等断言、配额族缺键拒绝补测、link 玩家面覆盖为间接、RCL0 键不声明为既知边界）。**间歇问题登记**：sim_tests 全套并行运行时 move_policy/heal_policy/move_arbitration 冷恢复子进程偶发退出码 1（复审方 5 次全套撞 2 次，隔离复跑全绿、非本批改动引入；本批新增测试或放大并行负载），再现时须保存失败子进程报告归因。下一批候选：G09.a 自有对象库存、G02.d3 后续（结构/rampart 通行声明）或剩余 24 例零散兼容失败。
-
-2026-10-08 M2D ID 构造器批交付：基线 `5133968`（M2C 对象形状批）。ID 构造器/对象身份族 18 例清偿：registry.js 游戏类从计数桩改为官方构造器（四款签名：guardedId/strictId/powerCreep/flag），位置初始化同构官方 RoomObject 构造器；embed 场景 96 钉 instanceof/字段回查/子类/空实例/未知 id 文案/strictId/Flag 六参/Structure 键序。**含 M2C 回归修复**：room 挂载三键「结构存在才有键」使 probe 缺失诊断把建造前读计为缺 API、bot 验收判红（M2C 批验证只对了 tick 指标）——诊断豁免补 Room.controller/storage/terminal + classOfLabel 剥 `[...]`，三 bot 验收判定复验通过。教训：bot 验证必须核对验收判定行，不能只比四项指标。验证：完整门禁通过；棘轮 1965→1983（18 转绿零转红）；三 bot 指标+判定全通过；三路复审 0 P0、P1/P2 当批清偿。有意分歧登记：手动构造不重指 room 三键（保持 getObjectById 同引用）、Room 保持桩、effects 原始格式双轨待 power 域统一、类全局 Proxy 使 `X.prototype.constructor === X` 不成立（沿袭）。剩余 24 失败集中于 keeper lair/getGameTime/setup 零散域，量小不构成下批主体——下一批建议回主线（G11.a 建筑 RCL 配额或 G09.a 自有对象库存）或 keeper lair NPC 域。
-
-2026-10-08 M2C 对象形状批交付：基线 `2effa30`（M2B 安全模式批）。对象形状族 18 例 + ROOM-SURVIVAL-001 清偿，全部为 prelude 挂载面对齐、无引擎语义改动：结构类字段表按官方类层次挂原型（fields.js known 类型表覆盖全部官方 structureType，ELSE 兜底桶仅剩 Mod 建筑与真未知类型；road/wall/rampart/extractor 撤泄漏的 energy/store 族，terminal/container 保留官方 store/storeCapacity，link/tower 补三件族，wall 补 ticksToLive）；摘除实例标记 isStructure（全仓无读者）与 controller activationDate 桩；room 的 controller/storage/terminal 改官方「结构存在才有键」自有属性挂载（官方 Structure 构造器 structures.js:41-56 同款）、撤 mode、恒挂 survivalInfo；Game.powerCreeps 恒对象、Game.cpu 撤 shardLimits。验证：完整门禁通过；棘轮 1946→1965（本批 19 转绿零转红）；三 bot 基线一致（Overmind terminal.energy 读值随官方语义转 undefined，指标不变）；三路复审 0 P0/P1/P2，P3 已清偿或登记（cpu setShardLimits 方法面待 multi-shard 补数据面、powerBank 防御分支、room memory 挂载位差异）。下一批候选：ID 构造器/对象身份族（剩余 42 失败的主体 18 例——`new Creep(id)` 官方构造器语义）、keeper lair NPC 域、G11.a/G09.a。
-
-2026-10-08 M2B 安全模式批交付：基线 `8c69481`（G02.d3 首片）。归因：21 例安全模式族失败非守卫缺失——`blockedBySafeMode`/withdraw 门/activateSafeMode 预检本已在位，根因是 (1) 引擎激活门把缺失冷却/降级钟数值化为 0 拒绝（官方 undefined 比较恒 false；世界时间 0 首激活被 `0 >= 0` 拒），(2) embed 种子相对钟 +1（vanilla 的 +1 系其 createShard 热身 tick 所致），(3) prelude `safeMode` 未生效读 0 导致敌方守卫恒不放行。修复：controller.rs 三门 `if let Some`、setup.rs 去 +1、structures.js getter undefined 化；同批清偿同族 undefined 保留（ticksToRegeneration 投影 null + getter 还原）。已知角落（复审 P3）：官方 claim 落 null 数值化会拒同批激活、本实现 claim 落 None 放行——原始 intent 序才可达，官方玩家面挡在 API 层，已在 controller.rs 注释登记；prelude `ticksToDowngrade` 缺省仍 0（与引擎 None 放行两半建模差异，对象形状族后续批）；economy/creep 侧 sibling `unwrap_or(0)` 恒等价待按约定对齐。验证：完整门禁通过；棘轮 1918→1946（+28 零转红零豁免增长），allow 清理 D3 两项惰性条目；三 bot 2000/2000/10 与基线一致；三路复审 0 P0/P1、2 P2 注释清偿。下一批候选：对象形状/ID 构造族（剩余 61 失败的主体）、G11.a、G09.a 或 G02.d3 后续。
-
-2026-10-08 G02.d3 首片交付：基线 `f32f972`。实现与验收细节见上文 G02.d3 节与[交付记录](../research/notes/g02d3-terrain-passability-2026-10-08.md)。验证：无参数 `pnpm run check` 完整通过（Rust 1235 通过/0 失败，sim 85，文档链接与源码规模绿，817 文件无超 1000；pathfinder.rs 879 行越过 700 复审线为既有+本批增量，登记后续按职责复审）；release 重建后棘轮 1918 通过/89 既有失败/907 跳过，零转红零转绿；三组 bot 完成 2000/2000/10 轮，核心指标与入库基线一致（Overmind 保留既有首轮异常 1）。三路复审无 P0/P1 代码问题，P1 文档层已清偿，P3 登记见上。下一批候选：G02.d3 后续（结构/rampart 通行声明）、G11.a 建筑 RCL 配额、G09.a 自有对象库存或 M2B 兼容批（安全模式 17 项失败优先复现）；恢复开发时按依赖与价值重选。
-
-上一轮验证：完整 `pnpm run check` 通过（Rust 1221 通过/12 忽略、Python 工具 58+12、Node 门禁回归、JS workspace、文档链接与源码规模）；`cargo test --workspace --doc` 通过（6 通过/2 忽略），最终 Clippy/格式通过。重建 release 后兼容棘轮 1918 通过/89 既有失败/907 跳过，零转红；三组 bot 指标及错误形态与入库基线一致（TooAngel/Overmind 2000 轮、WASM 10 轮；Overmind 有既有首轮初始化异常）。本记录随维护重构提交入库；开发基线为 `5a25bc2`，提交号以 Git 历史为准，未推送。
-
-2026-10-07 维护结构优化完成：移动领域归拢、Working 构造/瞬态及首触恢复所有权、世界/投影/执行器组织、Generic 读取、串行诊断及文档/工具治理已落地。架构页 46→37，当前 plans 页 17→4（含索引），历史结论保留归档。本轮不扩展玩法或放宽恢复身份；builtin.rs 与 builtin/store.rs 字节同 HEAD，串行 56+94 场景调用和顺序保持。Working 外部字面构造迁至 new，调用方已迁移，见[Rust 迁移说明](../architecture/state-editing.md#rust-调用方迁移)。
-
-完整门禁、doctest、最终 Clippy/格式、release ratchet 和三组 bot 已执行，结果见当前接手位置；定向 `embed_snapshot_contract_impl` 通过，未匹配的 `__no_such_scenario__` 正确失败（退出 101），完整门禁清除过滤条件。兼容机器报告更新；bot 对照报告保存在 `/tmp/kks-maintenance-{tooangel,overmind,wasm}.json`，不替换历史基线。复审未发现阻塞问题；现有长文件与共享 VM 故障半径仍需按实际职责持续改善，不以本轮宣布全仓架构完成。下一玩法任务仍须审定 G02.d3 设计或按依赖选择其他领域；本轮未自动继续新玩法。用户已授权提交本轮改动；提交记录以 Git 历史为准，未推送。
-
-## G02.d3 声明式寻路规则（2026-10-07 登记；2026-10-08 首片交付）
-
-G02.d2 盘点结论登记：数据面=计划级可走性规则（仿建筑 `BuildingPathing::{Obstacle,Plain,Road}` 先例，冻结计划承载墙/结构可走性声明）；消费面三点同源=kk-pathfinder 地形包/room.js `getPathfindingGrid2` 基线矩阵/engine `static_obstacles.rs` 原生默认；开放问题=玩家可见地形形状（`room.getTerrain().get`）是否随规则改写、跨房矩阵投影边界。验收至少包括：独立 JS 包声明墙可走、原生对照、双端寻路一致、结算与寻路同源、双通道冷恢复。tick 级 allowStatic 决策与服务器 JS 回调永久不进玩家寻路（时序与粒度不可行，宿主约束）。
-
-2026-10-08 开发选型建议（据此实施）：首片限定计划级墙地形通行声明，统一 native 寻路地形/Room 基线矩阵/engine 静态默认，保留动态占格、组合否决与玩家 CostMatrix 的既有语义。物理地形查询保持原值，仅派生通行视图；不可见的已注册房可消费公开静态规则，不暴露对象信息，未注册房的全墙保护环不得被规则放开。**当日已按此范围交付**：`builtin:terrain.wallPassable` 规则 + `TerrainPassability` 快照（kk-mod-api）；engine `arbitration_blocked` 墙项与预检输入同源（Plane/Movement 携带旗标，链预演克隆同值）；玩家寻路 `TerrainPack::native_with_walls` 打包后清真实房间的 wall 位（1→平原、3→沼泽），墙环保留；三通道接线（Frozen 缓存键含旗标、`SandboxConfig.terrain_walls_passable` 覆盖 json/kkpv、canary 与工作者配置从计划装配）。执行语义零新分支：疲劳按既有位掩码判沼泽，墙=平原费率、墙|沼泽=沼泽费率。组合语义为 freeze 既有约束：同规则双包一律覆盖冲突（即使值相同），组合验收用跨规则（wallPassable+fatigueLimit）；等值共装若要放开属 freeze 组合语义变更，后续另行设计。验收：引擎 4 测（平原费率放行+原生对照、墙|沼泽沼泽费率、动态占格不放开、结构障碍不放开）、runner 单测 4 项（清位+墙环保留、false=物理表逐字节、kkpv 物化、x≠y 取样）、沙箱串行 59 场景（JSON 通道旗标两态对照，默认分支与 G02.d2 moveTo 边界互证）、sim 四场景（native/ghost/deepwalk/combined）双通道+冷恢复+verify-replay+四 plan_hash 身份、物理查询四场景均读回 TERRAIN_MASK_WALL。三路复审无 P0/P1 代码问题（P1 均为文档/台账层，已清偿；清偿含 native 场景"原地不动"改"沿墙面绕行不越墙列"、combined/deepwalk"同值共装"表述纠正、switch.rs 封闭集注释补 MOVE 两键与旗标、三处批次号注释改行为描述、测试 x≠y 取样）；P3 登记：Worker 快照不含旗标（靠 create 路径覆盖的隐式约定）、kk-world place 无 builtin_terrain_passability 对应物（catalog 测试兜底）、跨房墙环端到端与 allowStatic×声明叠加测试缺口。详见[交付记录](../research/notes/g02d3-terrain-passability-2026-10-08.md)。
-
-备选排序：G11.a 建筑 RCL 配额/isActive（已有建筑、工地和库存通路，需玩家预检/结算同源），G09.a 自有对象库存（价值高，但须贯通通用 Store/目标类型/投影/日志/保存，范围更大）。M2B 单列兼容开发批次（2026-10-08 安全模式/对象形状/ID 构造器三批连续清偿，见实施记录）：当前报告 1983/2914 通过、24 失败、907 跳过，剩余失败为 keeper lair/getGameTime/setup 等零散个例与 NPC 未实现域，量小不构成下批主体；跳过集中于实验室、工厂及 power/nuke 等未启用能力。建议下一批回主线（G11.a/G09.a）或清 keeper lair NPC 域。G27/G28 服务链与内容迁移/watch 暂列后续，不把占位 crate 视为已就绪。
-
-2026-10-07 维护续轮：基线 `679c79d`。realm 按装配、注册、执行、安装、预算、诊断与生命周期组织；Registry 将空闲/注册包/密封阶段和首故障封装，调用方经阶段方法操作；活动链和预算参数改为具名类型。声明转换按对象/意图/处理器/规则/建筑资源领域组织，由单包 ContributionBuilder 持有候选和绑定覆盖校验。VM 字段销毁顺序、SDK/内建身份源码、宿主协议与公开 API 保持。开发门禁支持单目标过滤、空匹配失败及步骤耗时，无参数仍为完整验收；真实定向通过，虚构过滤退出 1。实现及适用架构已同步，无新玩法或任务报告。完整无参数门禁通过（Rust 1221/12 忽略、Python 58+12、Node 7、JS workspace、274 Markdown/1742 本地链接、668 源码文件规模）；host doctest 1 通过/1 依赖宏示例忽略。Rust 全量测试实际耗时 703.71s；本轮改善定向反馈，不声称已降低完整测试成本。复审确认 8 类声明转换分支保留默认值/校验/错误语义，未发现阻塞问题。后续仍需按实际消费者复审玩家 Room API、research 文档价值和全量 CLI 测试成本；整个项目的维护优化并非全部结束。用户已授权提交续轮；提交号以 Git 历史为准，未推送。bot 证据位于 `/tmp/kks-host-{tooangel,overmind,wasm}.json`：TooAngel/Overmind 2000 轮、WASM 10 轮，全部完成，无终止/惩罚跳过/缺失 API；Overmind 保留既有首轮初始化异常。对照仅核验上述指标及归一化异常，日志时序、随机 flag 名与部分调用计数存在差异，不声称机器报告逐字一致。
-
-2026-10-07 Room API 续轮开始：基线 `0c28c92`，查询索引/出口缓存、Room 身份寻路矩阵、地形安全拷出、绘图缓冲与创建预检分别持有状态，Room 入口保留公开方法装配顺序。临时桥工厂在装配期捕获，玩家执行前仍删除 `__kkp`。现有沙箱测试通过；40 个具名函数/方法体复核保持，属性赋值保留匿名方法 name 形态。research 索引去重、已修复审查链接后续处置，08/09 报告注明历史基线，当前进度入口统一指向台账。最终完整门禁与 release 回归通过，实际结果见当前接手位置。13 个公开方法的赋值顺序经 AST 对照保持，内建构造器/真 TypedArray.set/数组 push 的捕获约束保留。bot 证据位于 `/tmp/kks-room-{tooangel,overmind,wasm}.json`：2000/2000/10 轮全部完成，无终止/惩罚跳过/缺失 API，Overmind 仍有既有首轮异常；只比较核心指标和归一化异常，不宣称随机名称、日志与全部调用计数相同。未新增玩法、未新增任务报告、未减少验收断言或轮数；剩余消费者及公开方法均已迁移，复审未发现阻塞问题。用户已授权提交本轮，提交号以 Git 历史为准，未推送。全量 CLI 测试成本与其余 research 文档的逐项价值复审仍是后续事项，不以本轮宣称整个项目完成优化。
-
-2026-10-07 Prelude 命名与装配续轮开始：基线 `8f822fd`，用户已授权执行语义目录与集中装配方案；语义目录、kebab-case 文件名和 V8 脚本名已迁移；内嵌脚本清单、lodash/常量、条件扩展意图及 Mod 安装入口统一归 `sandbox/prelude.rs`，`host.rs` 保留句柄捕获/生命周期调用。已确认 26 个 JS 文件可执行 token 与基线一致、24 个基础段顺序一致，workspace 全目标编译与文档链接通过；完整门禁与新建 release 回归通过，实际结果见当前接手位置。V8 来源名改为职责名称，仅改变诊断定位；宿主句柄捕获、Mod 安装预算、安装入口捕获/解绑/作者模块执行及无 Mod 收尾顺序保持。类型生成校验和现行文档路径已同步，历史证据只修链接、不改当时结论；无未迁移消费者，复审未发现阻塞问题。bot 证据位于 `/tmp/kks-prelude-{tooangel,overmind,wasm}.json`，2000/2000/10 轮全部完成，无终止/惩罚跳过/缺失 API，Overmind 仍有既有首轮初始化异常；对照仅核验核心指标与归一化异常，不声称日志和全部调用计数相同。用户已授权提交；提交号以 Git 历史为准，未推送，不推进新玩法；全量 CLI 测试成本及其余 research 文档价值复审仍待后续优化。
-
-2026-10-07 验收成本与文档价值续轮开始：基线 `0f082f5`，工作区已有其他任务的 renderer/导出夹具/F2 文档修改，不纳入本轮；当前测量 CLI 固定启动成本及场景重复执行，未提交。
-
-2026-10-07 验收成本与文档价值续轮完成：`sim run` 每进程完整可执行文件 SHA-256 是主要固定成本，仅将 dev/test 的 `sha2` 依赖设为 opt-level 3，业务优化级别和 release 不变，仍保留逐进程完整摘要及检查点身份门。同一 117263160 字节文件、相同 64KiB 流式读取、调用方未优化，依赖优化前后各三次：3.824/3.858/3.878s 与 0.228/0.198/0.199s；六次摘要均与 Python hashlib 一致（本地原始结果 `/tmp/kks-hash-comparison.json`）。普通四轮 move-cost 场景优化后约 0.24s，首轮热身另记，不将测量解释为 gameplay tick 收益。
-
-移动代价/竞争策略测试按模块用 OnceLock 共享本次测试进程内的只读 JSON/KKPV 基准报告，正常全目标减少 8 次等价 CLI 启动（每模块 28→24 次进程启动，基准 12 次调用收敛为共享 8 次）；注册的 84 项 sim 测试、业务断言和独立进程保存/恢复均保留，失败收集不缓存为成功。完整门禁结果见当前接手位置（日志 `/tmp/kks-cost-full-check.log`），此前 Rust 步骤 703.71–799.47s 与本轮 204.44s 属跨轮观察，代码/负载不同，不作严格成对倍率声明。未改玩家 API、玩法语义或 release 配置，本轮未重跑完整 release screeps-ok/bot 矩阵，旧轮结果只作历史记录。
-
-逐项复审 research 的 01–09 主报告与九份候选笔记；有独立上游取证、实验/性能方法、边界矩阵的内容保留。N2b 两份后续修复正文并入建筑记录，上下文复审正文并入读取封套，删除三份独立 Markdown，原始 JSON 全部保留，标题仅降一级；正文完整性对照通过，引用/索引与适用架构同步，无新任务报告。该范围之外的存量 research 尚未逐篇复审，项目整体维护优化仍未全部完成。代码复审确认共享报告无跨构建缓存且恢复仍为真实新进程；本轮改动未提交、未推送，下一维护方向为 Game 装配/注入/指令边界，未自动启动新玩法。
-
-
-2026-10-07 Game 装配续轮开始：验收成本轮已提交 `646e395`，本轮不推进新玩法；按地图缓存、指令状态与 tick 初始化职责建立模块，保持现有公开 API 和宿主句柄，未提交。
-
-
-2026-10-07 Game 装配续轮完成：Game 入口持有对象装配与当前实例；地图工厂持有每 tick 路由工作数组及惰性 MapVisual；指令模块持有清单/显示计费；world-tick 通过一次性传入的刷新函数协调双通道注入，并提供既有宿主桥。加载期捕获桥，玩家期不查 __kkp；初始 Game/currentGame/指令初始化以及每 tick 索引→指令→Memory/CJS→地形/API→Game 顺序保持。可执行 token 对照确认地图完整工厂体（含属性顺序）、resetIntents/intentsPayload/beginTickImpl 和宿主桥对象保持，buildGame 仅改地图工厂调用；未新增公开写能力或玩法。
-
-完整门禁及最终 release 回归见当前接手位置；Rust 步骤 141.38s，仅记录当前观察，不归因于本轮模块整理。日志 `/tmp/kks-game-{full-check,release,ratchet}.log`；bot 报告 `/tmp/kks-game-{tooangel,overmind,wasm}.json`，2000/2000/10 轮完成，无终止/惩罚跳过/缺失 API，归一化异常与入库基线一致，不宣称所有调用计数或日志逐字相同。兼容机器报告与适用架构/注释同步，无新任务文档。无未迁移消费者，复审未发现阻塞问题；改动未提交、未推送。下一维护方向为 spawn 创建/孵化生命周期的职责及状态所有权，仍须按实际消费者复审；本轮不代表全仓优化完成。
-
-
-2026-10-07 Game 轮提交前复审：核验新增闭包自由变量与捕获来源、地图缓存每 tick 生命周期、初始刷新/指令重置与双通道注入顺序、宿主桥捕获后解绑，以及其余内嵌脚本顺序。领域函数/装配体可执行 token 和各模块加载期捕获初始化表达式对照通过；未发现需要修复的阻塞问题。完整门禁及最终 release/逐用例/bot 证据沿用本轮已执行结果；用户授权审查通过后提交，提交号以 Git 历史为准。
-
-
-2026-10-07 结构 API 续轮开始：Game 轮已提交 `a0d375e`；structures-spawn 混合多类结构读面/动作和孵化状态，提取孵化闭包并显式维持装配顺序，剩余入口按实际职责命名，不扩展玩法，未提交。
-
-
-2026-10-07 结构 API 续轮完成：混合的 structures-spawn 入口改为 structure-api，孵化名称数组、成本/能量计算、Spawning、待出生视图及创建/续命/回收方法归 structures/spawn 闭包。入口传入共用目标检查与弃用诊断，分阶段安装视图/方法/通知/装配器以维持跨结构注册顺序；单个 tick 钩子的注册位置及名称→诊断重置顺序保持，只捕获重置函数，不保留安装接口对象。30 个具名函数/方法的完整 token 保持，展开阶段调用后的 49 个装配表达式内容/顺序保持；安装期捕获内建函数/常量来源、延迟调用与 TDZ、InvaderCore 的 Spawning 复用、同 tick 名称拒绝与 Memory/待出生视图/指令边界经源码复审，无阻塞问题。所有当前消费者与适用注释/架构/设计入口已迁移；无新玩法、无新任务文档。
-
-完整门禁和新建 release 的逐用例/三组 bot 验证见当前接手位置，日志 `/tmp/kks-spawn-{full-check,release,ratchet}.log`；bot 报告 `/tmp/kks-spawn-{tooangel,overmind,wasm}.json`，2000/2000/10 轮完成，无终止/惩罚跳过/缺失 API，归一化异常保持，不宣称全部调用计数和日志逐字相同。兼容机器报告同步。本轮改动未提交、未推送；上一轮 Game 复审通过后已提交 `a0d375e`。后续维护优先复审结构字段目录/通用装配与目标检查的消费者边界，避免继续让结构入口承担无关职责；本轮未把其余结构域或全仓优化标为完成。
-
-
-2026-10-07 结构字段续轮开始：沿用未提交但已验收的孵化轮工作区，实际 HEAD `a0d375e`；通用字段表被结构入口和装配器共享，时间折算/专用字段混在动作入口，本轮按读面所有权归拢，不提交或改写前轮工作。
-
-
-2026-10-07 结构字段续轮完成：structures/fields 持有通用字段表、类型选择、Mod 建筑字段回查与专用时间/资源读面；结构入口仅捕获核心字段、结构装配器与专用字段三个安装函数，在原位置调用，私有字段表不进入共享桥。17 个具名函数/方法体、展开阶段后的 40 个装配表达式及字段表/常量初始化表达式保持；实例兜底遮蔽、Missing/0/undefined、冷却计数器/绝对时间区别、Source/Mineral/Controller 排除与 InvaderCore 的 Spawning 复用经源码复审，无阻塞问题。未新增玩法、公开写能力或任务文档。
-
-累计孵化+字段改动的完整门禁和新建 release 回归见当前接手位置；日志 `/tmp/kks-fields-{full-check,release,ratchet}.log`，bot 报告 `/tmp/kks-fields-{tooangel,overmind,wasm}.json`，2000/2000/10 轮完成，核心指标及归一化异常保持，不宣称所有日志/调用计数相同。现行架构与兼容机器报告同步。HEAD 仍为 `a0d375e`，两轮累计改动均未提交、未推送；其余结构动作和共用目标/诊断消费者仍由结构入口持有，后续应按实际变化原因复审，不机械继续拆文件。
-
-
-2026-10-07 共用目标与诊断续轮开始：HEAD `a0d375e`，孵化/字段两轮保持未提交；Creep/Room 运行期直查结构模块稍后登记的函数，改为独立依赖与加载期捕获。资源 API 的 primitive/string-object 与 plain-object 判定差异保留，不统一拒绝语义，不扩展玩法。
-
-2026-10-07 共用目标与诊断续轮完成：`game/targets.js` 持有当前 rawById 的存在性检查与 lodash 口径序列化拒绝，`runtime/deprecation.js` 独占弃用消息去重数组；在 Room/Creep 前登记，消费者加载期捕获，取消结构入口的反向函数登记。moveTo 在原拒绝分支复用共用检查，资源 API 的 Object/primitive-string 口径保持；修正 harvest 不抛序列化错误的误导注释。原位置单个 tick 钩子保持名称→诊断重置顺序。四个共用函数的完整可执行 token 保持；加载/调用时序、当前索引回查和内建捕获经源码复审，无阻塞问题。
-
-在现有串行沙箱套件增加行为场景，验证有效敌方目标、下一 tick 删除后的旧引用拒绝、boxed String 的 API 差异、删除 __kkp 后的可用性、玩家替换 console 后诊断仍使用原 console，以及 tick 内去重/下一 tick 重发；同步场景计数 56→57。初次测试编译暴露日志字段名错误，随后修正为 text；首次运行发现场景计数未同步，修正后定向与完整门禁均通过。累计验证见当前接手位置；日志 `/tmp/kks-targets-{sandbox,full-check,release,ratchet}.log`，bot 报告 `/tmp/kks-targets-{tooangel,overmind,wasm}.json`。HEAD 仍为 `a0d375e`，孵化/字段/共用依赖三轮累计改动未提交、未推送；现行架构和兼容报告已更新，无新增任务交付文档。后续可复审 Creep 的动作分组与共享预检边界，不按行数机械拆分。
-
-2026-10-07 用户授权提交孵化/字段/共用目标诊断三轮累计改动；最终源码差异和链接复审通过，完整门禁及 release 回归见上条，提交号以 Git 历史为准。随后继续复审 Creep 动作与共享预检职责。
-
-2026-10-07 Creep 移动续轮开始：HEAD `b99cda3`，上轮已提交且工作区干净。移动参数解析/路径解码/Memory `_move` 生命周期与其他动作混合；拟建立移动安装接口，保留 Room 静态与原型方法装配次序，共享部件检查和规则常量仍由入口传入，避免复制计划常量或统一不同动作的预检顺序。
-
-2026-10-07 Creep 移动续轮完成：`creep/movement.js` 的工厂私有持有参数解析、方向表、路径解码及 `_move` 缓存逻辑；加载期捕获 registry/lodash/原 Room 序列化器，入口分别安装路径静态和移动方法，显式传入同一计划常量/部件检查/目标拒绝函数。21 个既有具名函数的完整可执行 token 保持；展开两个安装阶段后，35 条装配语句的内容/顺序保持。复审确认仅加载期查找 __kkp，路径静态在常量捕获/字段定义前安装、移动方法仍在其他动作前安装，不增加 tick 状态、不复制规则常量、不改变预检/可视化/Memory/指令行为。
-
-在现有串行沙箱套件增加行为回归，玩家替换 Room 路径编解码静态方法后仍可移动，下一 tick 根据真实新位置截断并复用 Memory 路径，在 noPathFinding 下不重寻路，非法串仍抛原错误；场景计数 57→58，既有场景相对顺序保持。验证见当前接手位置，日志 `/tmp/kks-creep-movement-{sandbox,full-check,release,ratchet}.log`，三组 bot 报告 `/tmp/kks-creep-movement-{tooangel,overmind,wasm}.json`。现行架构和兼容报告已更新，无新增交付文档。HEAD `b99cda3`，本轮改动未提交、未推送；剩余 Creep 字段/共用常量和检查、采集/建造/战斗仍在入口，资源/控制器仍为独立模块，后续按消费者与变化原因复审，不能把本片标成全部 Creep 职责治理完成。
-
-2026-10-07 用户授权提交 Creep 移动续轮；完整门禁、release 棘轮、bot 与源码复审证据见上条，提交号以 Git 历史为准。后续维护方向扩大到 engine 结算与 Mod API/host 的职责组织，不继续优先拆 Prelude。
-
-2026-10-07 crate 职责治理开始：HEAD `3abb616`，工作区干净。复审 settle 的规则/候选混排、Mod API 的贡献构建环节与运行期目录混排、host 的包发现/选择/模块加载混排。按状态与流程边界分组并收口内部入口；小而单一的领域模块不强制加目录，领域规则不统一成一个中心分派。
-
-2026-10-07 engine/Mod 职责分组完成：settle 的阶段/世界事务/玩家写回/校验/发布归 pipeline，事务内部可见性由 crate 收至 settle，Engine 与检查点仍通过原入口协作；Mod API 的声明/规则合并/处理器排序/冻结/计划/指纹归 contribution，运行期目录从 crate 根读取稳定公共类型，构建子模块保持私有；host 的 snapshot/manifest/dependencies/selection/loader 归 package，realm 只从父入口取得依赖序、选择和模块装载接口。16 份迁移实现除导入/可见性/include 相对路径及 rustfmt 调整外保持，SDK 虚拟 URL 与嵌入字节未变。公开类型/模块路径保持，无新玩法和协议版本改变。小而职责单一的领域/值协议模块继续平铺，未把三个 crate 标为全部治理完成。
-
-复审发现 builtin.rs 的源码字节参与 code_digest：尝试用自然模块声明替代 builtin_capabilities 的 path 属性会改变 PlanHash，已撤回该附带改动，保留 builtin.rs/store.rs 原文。重建最终 release 后，官方与 typed inspect 的全部报告（除重新构建的 executable_sha256）与改动前完全一致，恢复身份没有额外变化。定向全目标编译最初暴露候选测试跨模块可见性问题，恢复原 settle 内访问范围并清除多余导入后通过。中间两轮门禁重叠且共用 debug CLI 的重建，最终版测试出现 5 个检查点加载拒绝；固定产物后恢复子集 13 项、全 sim 84 项及最终串行完整门禁通过，未放宽恢复身份/断言。中间失败结果不计为最终通过。
-
-最终证据见当前接手位置；日志 `/tmp/kks-crate-boundaries-{compile,targeted,doc,full-check-serial,release-final,ratchet-final,resume-recheck}.log`；inspect 的 before/final 和三组 bot 的 final JSON 位于 `/tmp/kks-crate-boundaries-*`。兼容报告、现行模块导航与边界已更新，历史可点击源码链接只改目标、不追改结论；已完成轮次验证摘要归入现有历史记录，当前接手入口不再堆积旧验证。HEAD `3abb616`，本轮改动未提交、未推送。后续重点是 engine install/contrib 的计划与分派依赖、API 运行期目录/校验消费及 host chain 的候选能力边界；按共同状态和变更原因逐组复审，不把所有平级文件机械塞进目录，不恢复优先拆 Prelude。
-
-2026-10-08 G09.c 结构受击槽交付：基线 `4e31928`（G09.d 交付）后实施，登记见上方选型段（登记提交 `96c0d7a`）。核心架构=托管延迟排空（伤害入口 `&mut Working` 与 JS 链的 `RoomCtx` 不可调和：Native 内联零开销/Hosted 挂 `mod_damage_pending` 意图后排空），扣减与声明反击提取 `mod_damage_effects` 两路共用。与登记偏差四处（目标形状经 ctx.target、事件序偏差、排空点在移动仲裁前、集火排空门）均已记入交付段。验证：fmt/release 后棘轮 1983 持平 0 转红、compat fail 0、三 bot 2000/2000/10 全过（overmind 1 例 console-error 为既知基线）、无参 check 通过（终轮）；测试新增引擎 5（挂起/排空/拒绝/内联/反击基数/攻击者消失）+ 宿主链 7（减伤/输入形状/拒绝/免疫/组合/击毁/集火/故障侧/双槽路由，×双通道）+ sim 2（三场景×双通道+mod_states 双通道一致+plan_hash 互异+冷恢复）。三路后台复审：A（引擎语义）P1×1 P2×1 P3×3、B（全链接线）P3×3、C（测试夹具）P1×1 P2×3 P3×5。清偿：反击基数分裂（P1，两位一致：retaliation_base 拆分+钉测）、攻击者消失门（P2，排空门+引擎测试）、故障侧/双槽路由/mod_states 双通道/decoy 贴脸/expect 早退/槽计数兄弟文档/source null 表述全部修复；登记：engine_with_player_files 构建器漂移、测试排空助手双实现、safemode 排空时点角落（已入 object-durability 已知角落）。G09 四子片至此全部交付；下一批候选：G02.d3 后续（结构/rampart 通行声明）、剩余 24 例零散兼容失败或 G11 后续。
+| G23 内容迁移 | G22.a/c；涉及 RNG 时加 .b | 替代候选迁移，失败保留原世界/计划；缺包与只读导出明确区分 |
+| G24 watch | G23 对应更新能力 | 无开放轮次或待恢复玩家缓存；API/计划/工作者一起切换，失败保留原版 |
+| G26.b storage provider | G26.a、G27.a | native / JS provider 等价原子发布与读取；异步 storage 属后台域 |
+| G27.a 后台宿主 | 现有 VM/预算/已提交读面 | 受控异步生命周期与有限探针 I/O；不依赖 outbox，不直接改玩法 |
+| G27.b 耐久输入/outbox | G27.a、G25.a、G26.a | 世界、输入消费游标、待输出记录原子耐久；确认后投递 |
+| G28.a 最小真实服务 | G27.b | M3 认证/授权、代码上传、订阅、控制台；玩法写入走受控输入 |
+| G28.b 业务 provider | G28.a | 可替换路由/订阅/provider；返回结果仍经过宿主授权 |
+| G29.b 真实客户端 | G28.a | 实际 API/订阅消费者；JSON 投影不算图形客户端交付 |
+| G29.c 客户端贡献 | G29.b | 可替换资源资产、渲染与面板，包选择和类型声明一致 |
+| G30.b/c 内容预设/提取 | 对应能力已开放；存量变化依赖 G23 | 公开 SDK 内容；未选包不被 native fallback 恢复 |
+
+G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提交边界。G27.a → G26.b 与 G27.a → G27.b 是两条后续线，outbox 可先用 native 后端，不等待 JS provider。
+
+### 移动与作者工具
+
+- G02.d3 后续须同时接通 PathFinder、Room.findPath/moveTo、请求预检、仲裁默认与链预演；物理地形查询保持原值，不放开未注册房墙环或动态占格。tick 级 allowStatic/服务器 JS 回调不能同步进入玩家寻路。
+- G03 完整替换须覆盖交换、循环、拉拽、阻塞传播、整房候选与拒绝回退。默认路径先选胜者再取消，不自动递补；不得静默截断请求或在排序比较器内执行有副作用 JS。
+- G04 覆盖受伤后身体效能、疲劳生成/恢复、道路磨损、工地踩踏与跨房顺序；任意传送另设计能力。
+- G06 trace 必须有界，注明记录量/成本/私有数据范围；诊断快照不冒充可回放日志。G07 当领域首片即接必要预检，后续再通用化，不形成循环等待。
+
+### 对象、经济与世界
+
+- G08/G09 贯通声明、建造/创建、字段、预检、投影、事件、索引与恢复；第二种对象不新增专用 Rust 变体。新的 body/effect/能力表示由 G30.a 单列，不假定现有表示永久封闭。
+- G09 实际伤害反击先定义减伤/治疗前后基数、来源归因、非递归与同轮追加顺序；不能向已完成 tick 的对象挂队列后不消费。
+- G10–G18 逐域确认消费者，覆盖满仓/耗尽、完整资源支付、多人竞争、冷却、全局账户及跨房原子性。孵化用真实 spawnCreep 验收，不伪造 spawning；默认 lab/factory/tower 已实现不等于策略开放。
+- G19/G20 明确对象动作、仲裁、tick、房间与世界阶段的相对顺序、访问域和串行屏障；生命周期不默认继承动作式局部拒绝。玩家连接器保持沙箱隔离，不只相信 parallelSafe 声明。
+- G21 的初始化与运行期更新分开；地形/投影/查询/寻路缓存 epoch/检查点同源，时间和随机按 G22 协议输入。
+
+### 耐久、服务与收口
+
+- G26 明确 RPO、单写者、发布与恢复选择；检查点不能承诺零丢失。G27.b 覆盖发布前、耐久确认后发送前、发送后确认前崩溃，先用模拟接收端验收幂等/去重。
+- 后台响应进入后续 tick；不能直接写正在结算的权威世界。玩家上传代码不能按管理员可信 Mod 装载。
+- G29 类型签名须有显式描述，不用全 any 替代；未选包不残留声明，生成物新鲜度进门禁。
+- G30.a 展开 config/constants/schema/processor/game/driver/main/terrain/storage/backend/test 的真实消费者，以及 power/effects、observer、NPC、portal/跨 shard、intershardResource、flag/visual/messages 等未显式列出的子片。缺口可新增 G31+，不以父编号齐全宣布全量覆盖。
+- G30.d 在重大重构前保存同功能参考，测相同规模的原生/JS/组合成本；不能删参考后才补基准。官方内容提取须明确常量/目录所有权、冻结冲突与默认兼容，native 加速保持公开语义等价。
+
+## 已知限制与复审入口
+
+- G09 的 owner、massAttack/dismantle/维修/死亡产物，以及私有 rampart 的预检/结算差异，仍按[库存](../architecture/object-store.md)和[耐久](../architecture/object-durability.md)的限制选型；不把四个首片交付标成全领域完成。
+- G02.d3 历史登记的 worker 配置传递、跨房墙环端到端、allowStatic 与声明叠加等增强项，在相关切片开始时复核；安全模式主人摘要为可解释性增强，孵化门槛归 G13。按[移动契约](../architecture/movement.md)与实际测试核验。
+- 历史登记过 sim 并行冷恢复子进程偶发失败，隔离复跑通过且后续完整门禁通过；若再现须保留失败报告归因，不能把重跑成功当作已修根因。
+- Overmind bot-check 保留基线已有的 1 个 console-error tick；不宣称零错误。keeper/NPC、多 shard 和其余能力门控缺口以最新兼容报告核对，旧批次数字不参与当前决策。
+- 本地检查点的文件大小、单写者及耐久适用范围见[检查点契约](../architecture/checkpoints.md)；存储和真实网络服务不能从 embed 能力直接推导为已完成。
+
+## 最近交付与实际验证
+
+最近功能批次：`b550835`，REGEN_SOURCE / DISRUPT_SOURCE。覆盖五等级、施放相位/刷新、干扰到期、两效果共存、满源/采集/容量切换、普通再生同拍、公开伪造拒绝、失败缓存重试与跨进程冷恢复；复审修复零绝对再生时钟。现行规则见[游戏循环](../architecture/game-loop.md)，详细过程已[归档](archive/mod-history-2026-10.md)。
+
+- 完整无参数 `pnpm run check`：46 个 Rust 测试程序，1389 passed / 0 failed / 12 ignored；JS workspace、工具、文档链接与源码规模通过；无 doctest 变更。
+- release CLI 与适配器重建，固定 screeps-ok HEAD `34a630e`；全量 2914 例：2697 passed / 51 failed / 166 skipped，相对 `9578ffa` +10 转绿 / 0 转红。
+- 三 bot 完成 2000/2000/10 tick，无中断/惩罚跳过/missing_api；Overmind 如上保留既有报错。
+- 持久证据：[兼容机器报告](../../compat/reports/kkscreeps.json)、[棘轮配置](../../compat/reports/ratchet.json)、[TooAngel](../../compat/reports/bot-tooangel.json)、[Overmind](../../compat/reports/bot-overmind.json)、[WASM](../../compat/reports/bot-wasm.json)。原临时日志路径仅在历史过程保留，不作为长期证据入口。
+
+2026-10-09 文档整理（基线 `b550835`）：当前入口 536→148 行、约 166→18 KiB；历史迁移完整性、G01–G30 状态一致性和文档链接检查通过，无参数完整门禁通过（1389 passed / 0 failed / 12 ignored）。仅文档整理，release/兼容/bot 证据沿用上述功能批次；随本次文档提交入库，未推送。
+
+## 台账维护与每批验收
+
+- 开始/调整范围/结束会话时更新接手位置、任务状态、剩余消费者和实际验证；只记录本批必要摘要。已完成的详细过程退出当前入口，普通修复使用提交说明和测试，不逐批新建交付文档。
+- 当前页维护进度和依赖；现行机制回写 architecture，公共 SDK 行为变更更新用法/样例，里程碑范围变化更新 roadmap/完整玩法计划。历史结论不追改。
+- 新增写入域当片更新[状态清单](../architecture/state-inventory.md)和检查点/版本策略，验证保存恢复与失败边界。预检、意图、结算与消费者同步接线，不等远期通用任务。
+- 可替换玩法至少两种独立 JS 实现、原生对照与组合；工具用多包/保护失败案例，迁移/日志/storage 用版本与崩溃矩阵；按相关性覆盖拒绝、异常/预算、停用回退、晚期失败、缓存重试与冷恢复，JSON/KKPV 业务状态一致。
+- 公式/准入属于玩法，ID/合法表示/索引/编码一致性/原子发布属于宿主约束；engine 不依赖 V8，mod-api 保持纯数据，同步玩法 VM 入口前释放候选借用。
+- 首片明确输入规模、单位/数值域、权限、写面及 before/native/replace/拒绝关系；源码按职责组织，源码/测试不超过 1000 行。
+- 验证与提交按 [AGENTS.md](../../AGENTS.md) 和 [compat/README.md](../../compat/README.md)；Rust 改动重建测试 CLI，提交前运行无参数完整门禁。兼容改动重建 release/适配器并运行 ratchet，另与实际开发基线逐例比较，不只看总通过数。

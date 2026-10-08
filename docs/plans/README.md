@@ -1,6 +1,6 @@
 # 开发计划与接手
 
-当前执行位置与任务状态只维护在[任务台账](mod-next-batches.md)。现行机制见[架构索引](../architecture/README.md)，范围目标见[路线图](../roadmap.md)。
+当前执行位置与任务状态只维护在[任务台账](mod-next-batches.md)，保留下一步、依赖、缺口与最近验证；已完成批次的详细过程按需查阅[历史记录](archive/mod-history-2026-10.md)。现行机制见[架构索引](../architecture/README.md)，范围目标见[路线图](../roadmap.md)。
 
 | 当前计划 | 用途 |
 |---|---|
