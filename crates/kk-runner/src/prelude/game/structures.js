@@ -76,6 +76,10 @@
     LAB_MINERAL_CAPACITY: globalThis.LAB_MINERAL_CAPACITY,
     REACTIONS: freezeConst(globalThis.REACTIONS),
     BOOSTS: freezeConst(globalThis.BOOSTS),
+    // factory produce（M2F）：配方表与 power 常量（BUSY 门的效果查询；
+    // ERR_BUSY 已在上方表内）。
+    COMMODITIES: freezeConst(globalThis.COMMODITIES),
+    PWR_OPERATE_FACTORY: globalThis.PWR_OPERATE_FACTORY,
   };
   gw.__structuresC = C; // structure-api.js 复用此常量表。
 

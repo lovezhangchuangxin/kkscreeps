@@ -102,6 +102,12 @@ pub fn process_structure_intents(
                 super::labs::unboost_creep(&mut w, id, d);
             }
         }
+        // factory 单动作直派发（produce）；冷却门在处理器内。
+        "factory" => {
+            if let Some(d) = actions.get(&Action::Produce) {
+                super::factories::produce(&mut w, id, d);
+            }
+        }
         _ => {}
     }
     Ok(())

@@ -632,4 +632,74 @@
     }
     return null;
   }
+
+  /** StructureFactory.produce（官方 game/structures.js:1434-1469 九步逐字，
+   *  FACTORY-PRODUCE-011 矩阵钉序）：not-owner > cooldown > invalid-args
+   *  （非配方资源）> level-mismatch(INVALID_TARGET) > rcl（checkStructureAgainstController
+   *  ——isActive 等价）> power-effect(BUSY) > not-enough > full。BUSY 门按
+   *  官方形状查 effects 数组（power 域未接线时恒无 → 有级配方直接 BUSY）；
+   *  full 含 `!storeCapacity` 先拒形态与平面容量合计（store 总量−组件
+   *  合计+产量 > storeCapacity）。 */
+  globalThis.StructureFactory.prototype.produce = function produce(resourceType) {
+    if (!this.my) {
+      return C.ERR_NOT_OWNER; // :1435-1437
+    }
+    if (this.cooldown > 0) {
+      return C.ERR_TIRED; // :1439-1441
+    }
+    const recipe = C.COMMODITIES[resourceType];
+    if (!recipe) {
+      return C.ERR_INVALID_ARGS; // :1443-1445
+    }
+    const raw = gw.rawData(this.id);
+    if (recipe.level && recipe.level !== raw.level) {
+      return C.ERR_INVALID_TARGET; // :1448-1450
+    }
+    if (!this.isActive()) {
+      return C.ERR_RCL_NOT_ENOUGH; // :1453-1455
+    }
+    if (recipe.level && raw.level > 0) {
+      const effects = raw.effects || [];
+      let operated = false;
+      for (let i = 0; i < effects.length; i++) {
+        const e = effects[i];
+        if (
+          e.power === C.PWR_OPERATE_FACTORY &&
+          e.level === recipe.level &&
+          e.endTime >= now()
+        ) {
+          operated = true;
+          break;
+        }
+      }
+      if (!operated) {
+        return C.ERR_BUSY; // :1458-1460
+      }
+    }
+    let missing = false;
+    for (const p of Object.keys(recipe.components)) {
+      if ((raw.store ? raw.store[p] || 0 : 0) < recipe.components[p]) {
+        missing = true;
+        break;
+      }
+    }
+    if (missing) {
+      return C.ERR_NOT_ENOUGH_RESOURCES; // :1463-1465
+    }
+    if (!raw.storeCapacity) {
+      return C.ERR_FULL; // :1468 前半（无平面容量即满）
+    }
+    let total = 0;
+    const store = raw.store || {};
+    for (const r of Object.keys(store)) total += store[r] || 0;
+    let componentsTotal = 0;
+    for (const p of Object.keys(recipe.components)) {
+      componentsTotal += recipe.components[p];
+    }
+    if (total - componentsTotal + (recipe.amount || 1) > raw.storeCapacity) {
+      return C.ERR_FULL; // :1468 后半
+    }
+    gw.intents.set(this.id, 'produce', { resourceType });
+    return C.OK;
+  };
 })();

@@ -58,6 +58,10 @@ pub enum Action {
     ReverseReaction,
     BoostCreep,
     UnboostCreep,
+    /// factory 的 produce（官方意图名 system.js:55，白名单
+    /// {resourceType, amount} 但处理器只读 resourceType——amount 进意图
+    /// 并集解析、结算忽略，与官方等价）；由 settle::factories 分派。
+    Produce,
 }
 
 impl Action {
@@ -100,6 +104,7 @@ impl Action {
             Self::ReverseReaction => "reverseReaction",
             Self::BoostCreep => "boostCreep",
             Self::UnboostCreep => "unboostCreep",
+            Self::Produce => "produce",
         }
     }
 
@@ -142,6 +147,7 @@ impl Action {
             "reverseReaction" => Self::ReverseReaction,
             "boostCreep" => Self::BoostCreep,
             "unboostCreep" => Self::UnboostCreep,
+            "produce" => Self::Produce,
             _ => return None,
         })
     }

@@ -38,7 +38,7 @@ export const capabilities: AdapterCapabilities = {
   powerCreepAccountApi: false,
   powerEffects: false,
   powerSpawn: false,
-  factory: false,
+  factory: true,
   terminal: true,
   marketBasics: true,
   market: true,
