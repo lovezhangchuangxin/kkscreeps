@@ -229,6 +229,7 @@ mod object_ops;
 mod object_tick;
 mod power_effects;
 mod production_boundaries;
+mod production_power_effects;
 mod quota_boundaries;
 mod resource_domain;
 mod resource_faults;

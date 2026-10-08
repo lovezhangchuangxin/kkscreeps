@@ -5,8 +5,9 @@
 //! power-spawns/process-power.js 与 processor/global-intents/power.js。
 //! powerCreep 以 Generic 承载（data.type=="powerCreep"），账号注册表在
 //! `PlayerState.power_creeps`，两侧同 ID。usePower 已结算 PWR_GENERATE_OPS、
-//! 两种 tower power 与两种 spawn power；效果写入房间公共效果表，
-//! 由塔动作与孵化任务结算消费。其余 14 个 power 通过官方预检门后
+//! 两种 tower power、两种 spawn power、OPERATE_LAB 与 OPERATE_POWER；
+//! 效果写入房间公共效果表，由塔动作、孵化与生产结算消费。
+//! 其余 12 个 power 通过官方预检门后
 //! 仍不结算，施放与效果消费者待后续补齐；capability powerEffects 已开启。
 
 mod account;
@@ -186,7 +187,7 @@ pub(in crate::settle) fn set_pc_action_log(w: &mut Working, id: ObjId, key: &str
 }
 
 /// usePower：官方门序（房主 powerEnabled → power 等级/冷却 → ops → 射程
-/// /效果覆盖）后结算 generateOps、tower 与 spawn 效果；其余 power 尚待消费者接线。
+/// /效果覆盖）后结算 generateOps、tower、spawn 与 lab/powerSpawn 效果。
 /// 来源：processor/intents/power-creeps/usePower.js。
 fn pc_use_power(w: &mut Working, id: ObjId, d: &IntentData) {
     let Some(RoomObject::Generic(g)) = w.room.objects.get(&id).cloned() else {
@@ -282,14 +283,22 @@ fn pc_use_power(w: &mut Working, id: ObjId, d: &IntentData) {
         c::PWR_OPERATE_TOWER
         | c::PWR_DISRUPT_TOWER
         | c::PWR_OPERATE_SPAWN
-        | c::PWR_DISRUPT_SPAWN => {
+        | c::PWR_DISRUPT_SPAWN
+        | c::PWR_OPERATE_LAB
+        | c::PWR_OPERATE_POWER => {
             let Some(target_id) = d.id else { return };
             let valid_target = match w.room.objects.get(&target_id) {
                 Some(RoomObject::Spawn(_)) => {
                     matches!(power, c::PWR_OPERATE_SPAWN | c::PWR_DISRUPT_SPAWN)
                 }
-                Some(target) if matches!(power, c::PWR_OPERATE_TOWER | c::PWR_DISRUPT_TOWER) => {
-                    pc_data(target).is_some_and(|target| target["structureType"] == "tower")
+                Some(target) => {
+                    let expected = match power {
+                        c::PWR_OPERATE_TOWER | c::PWR_DISRUPT_TOWER => "tower",
+                        c::PWR_OPERATE_LAB => "lab",
+                        c::PWR_OPERATE_POWER => "powerSpawn",
+                        _ => return,
+                    };
+                    pc_data(target).is_some_and(|target| target["structureType"] == expected)
                 }
                 _ => false,
             };
@@ -426,9 +435,9 @@ fn pc_say(w: &mut Working, id: ObjId, d: &IntentData) {
     }
 }
 
-/// powerSpawn.processPower：RCL 门 + 双扣（power 量 1、energy 量 50）后
-/// 经 TickState 累计账号 power。PWR_OPERATE_POWER 增产依赖 effects 面，
-/// 未实现（M2H.b）恒为量 1。来源：processor/intents/power-spawns/process-power.js。
+/// powerSpawn.processPower：增强量受剩余 power 钳制，能量不足整次拒绝，
+/// 成功后双扣库存并经 TickState 累计账号 power。官方效果边界为 endTime ≥
+/// gameTime。来源：processor/intents/power-spawns/process-power.js。
 pub fn process_power(w: &mut Working, id: ObjId) {
     let Some(view) = generic_view(w, id) else {
         return;
@@ -439,7 +448,6 @@ pub fn process_power(w: &mut Working, id: ObjId) {
     if !check_structure_against_controller(w, id, &view) {
         return;
     }
-    let amount = 1_i64;
     let power = view
         .data
         .pointer("/store/power")
@@ -450,6 +458,15 @@ pub fn process_power(w: &mut Working, id: ObjId) {
         .pointer("/store/energy")
         .and_then(Value::as_i64)
         .unwrap_or(0);
+    // 此消费者保留官方包含截止 tick 的边界，不使用常规 active_power。
+    let effect = w.room.effects.get(&id).and_then(|entries| {
+        entries
+            .iter()
+            .find(|e| e.power == c::PWR_OPERATE_POWER && e.end_time >= w.time)
+    });
+    let amount = effect
+        .and_then(|e| power_effect(e.power, e.level))
+        .map_or(1, |extra| power.min(1 + extra));
     if power < amount || energy < amount * c::POWER_SPAWN_ENERGY_RATIO {
         return;
     }

@@ -385,6 +385,15 @@
     );
   }
 
+  /** 官方 lab 正/逆反应预检均按当前公开效果计算整批产量。 */
+  function labReactionAmount(lab) {
+    const effect = (lab.effects || []).find((e) => e.power === C.PWR_OPERATE_LAB);
+    return (
+      C.LAB_REACTION_AMOUNT +
+      (effect && effect.ticksRemaining > 0 ? C.OPERATE_LAB_EFFECT[effect.level - 1] : 0)
+    );
+  }
+
   /** StructureLab.runReaction（LAB-RUN-013 序）：not-owner > cooldown >
    *  rcl > invalid-target > range > full > not-enough > invalid-args。
    *  invalid-target 含试剂 lab 为调用 lab 自身的形态（官方 driver 目标门
@@ -416,20 +425,13 @@
     if (inRangeLabs(this, [lab1, lab2]) === false) {
       return C.ERR_NOT_IN_RANGE;
     }
-    if (
-      this.mineralType &&
-      this.store[this.mineralType] + C.LAB_REACTION_AMOUNT > this.mineralCapacity
-    ) {
+    const reactionAmount = labReactionAmount(this);
+    if (this.mineralType && this.store[this.mineralType] + reactionAmount > this.mineralCapacity) {
       return C.ERR_FULL;
     }
     const m1 = lab1.mineralType;
     const m2 = lab2.mineralType;
-    if (
-      !m1 ||
-      lab1.store[m1] < C.LAB_REACTION_AMOUNT ||
-      !m2 ||
-      lab2.store[m2] < C.LAB_REACTION_AMOUNT
-    ) {
+    if (!m1 || lab1.store[m1] < reactionAmount || !m2 || lab2.store[m2] < reactionAmount) {
       return C.ERR_NOT_ENOUGH_RESOURCES;
     }
     const product = C.REACTIONS[m1] && C.REACTIONS[m1][m2];
@@ -474,8 +476,9 @@
     if (lab1.id === lab2.id) {
       return C.ERR_INVALID_ARGS;
     }
+    const reactionAmount = labReactionAmount(this);
     const mineral = this.mineralType;
-    if (!mineral || this.store[mineral] < C.LAB_REACTION_AMOUNT) {
+    if (!mineral || this.store[mineral] < reactionAmount) {
       return C.ERR_NOT_ENOUGH_RESOURCES;
     }
     const variant = reactionVariant(mineral, lab1, lab2);
@@ -490,7 +493,7 @@
       const [lab, reagent] = outputs[i];
       if (
         lab.mineralType === reagent &&
-        lab.store[reagent] + C.LAB_REACTION_AMOUNT > lab.mineralCapacity
+        lab.store[reagent] + reactionAmount > lab.mineralCapacity
       ) {
         return C.ERR_FULL;
       }
@@ -675,11 +678,7 @@
       let operated = false;
       for (let i = 0; i < effects.length; i++) {
         const e = effects[i];
-        if (
-          e.power === C.PWR_OPERATE_FACTORY &&
-          e.level === recipe.level &&
-          e.endTime >= now()
-        ) {
+        if (e.power === C.PWR_OPERATE_FACTORY && e.level === recipe.level && e.endTime >= now()) {
           operated = true;
           break;
         }
@@ -754,7 +753,7 @@
   /** StructurePowerSpawn.processPower（官方 game/structures.js:1337-1354）：
    *  not-owner > RCL（checkStructureAgainstController——isActive 等价）>
    *  库存（power≥1 且 energy≥POWER_SPAWN_ENERGY_RATIO）。PWR_OPERATE_POWER
-   *  增产量由结算侧 effects 面决定（M2H.b），预检侧恒按量 1。 */
+   *  增产量由结算侧 effects 面决定，预检侧恒按量 1。 */
   globalThis.StructurePowerSpawn.prototype.processPower = function processPower() {
     if (!this.my) {
       return C.ERR_NOT_OWNER; // :1338-1340

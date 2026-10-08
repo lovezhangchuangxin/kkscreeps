@@ -286,3 +286,56 @@ fn spawn_power_replay_and_cold_resume_match_straight_run() -> anyhow::Result<()>
     }
     Ok(())
 }
+
+/// 化学库存与账号 power 在结算重放及跨进程恢复后保持一致。
+#[test]
+fn production_power_replay_and_cold_resume_match_straight_run() -> anyhow::Result<()> {
+    for binary in [false, true] {
+        let fixture = Fixture::new()?;
+        let scene = fixture.scene(&json!({
+            "version":1,
+            "shard":{"players":[{"name":"p1","power":100000}],"rooms":[{"name":"W1N1","owner":"p1","rcl":8,"powerEnabled":true}]},
+            "bots":[{"player":"p1","modules":"modules"}],
+            "objects":[
+                {"alias":"lab","room":"W1N1","kind":"structure","spec":{"structureType":"lab","owner":"p1","pos":[20,20],"store":{}}},
+                {"alias":"first","room":"W1N1","kind":"structure","spec":{"structureType":"lab","owner":"p1","pos":[21,20],"store":{"H":100}}},
+                {"alias":"second","room":"W1N1","kind":"structure","spec":{"structureType":"lab","owner":"p1","pos":[22,20],"store":{"O":100}}},
+                {"alias":"powerSpawn","room":"W1N1","kind":"structure","spec":{"structureType":"powerSpawn","owner":"p1","pos":[21,21],"store":{"energy":5000,"power":100}}},
+                {"alias":"operator","room":"W1N1","kind":"powerCreep","spec":{"name":"operator","owner":"p1","pos":[20,19],"powers":{"5":5},"store":{"ops":100}}},
+                {"alias":"processor","room":"W1N1","kind":"powerCreep","spec":{"name":"processor","owner":"p1","pos":[20,21],"powers":{"16":5},"store":{"ops":300}}}
+            ]
+        }))?;
+        fixture.module("exports.loop=()=>{const labs=Game.rooms.W1N1.find(FIND_MY_STRUCTURES).filter(s=>s.structureType===STRUCTURE_LAB);const ps=Game.rooms.W1N1.find(FIND_MY_STRUCTURES).find(s=>s.structureType===STRUCTURE_POWER_SPAWN);if(!Memory.cast){Game.powerCreeps.operator.usePower(PWR_OPERATE_LAB,labs[0]);Game.powerCreeps.processor.usePower(PWR_OPERATE_POWER,ps);Memory.cast=true;}else{labs[0].runReaction(labs[1],labs[2]);ps.processPower();}};")?;
+        let checkpoint = fixture.0.join("checkpoint.json");
+        let invoke = |name: &str, ticks: u32, option: Option<&str>| -> anyhow::Result<Value> {
+            let report = fixture.0.join(format!("{name}.json"));
+            let log = fixture.0.join(format!("{name}.jsonl"));
+            let mut command = sim_command(&scene, &report, &log, ticks);
+            if binary {
+                command.arg("--kkpv");
+            }
+            if let Some(option) = option {
+                command.arg(option).arg(&checkpoint);
+            }
+            let (code, value) = result(&mut command, &report)?;
+            assert_eq!(code, 0, "{value}");
+            assert_eq!(value["verify_replay"]["status"], "passed", "{value}");
+            Ok(value)
+        };
+        let mut straight = invoke("straight", 4, None)?["final"].clone();
+        invoke("first", 2, Some("--save-checkpoint"))?;
+        let mut resumed = invoke("resumed", 2, Some("--load-checkpoint"))?["final"].clone();
+        for value in [&mut straight, &mut resumed] {
+            for player in value["players"].as_object_mut().unwrap().values_mut() {
+                player.as_object_mut().unwrap().remove("cpu_bucket");
+            }
+        }
+        assert_eq!(straight, resumed);
+        assert_eq!(resumed["objects"]["lab"]["store"]["OH"], 15);
+        assert_eq!(resumed["objects"]["powerSpawn"]["store"]["power"], 82);
+        assert_eq!(resumed["objects"]["powerSpawn"]["store"]["energy"], 4100);
+        assert_eq!(resumed["objects"]["operator"]["store"]["ops"], 90);
+        assert_eq!(resumed["objects"]["processor"]["store"]["ops"], 100);
+    }
+    Ok(())
+}

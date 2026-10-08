@@ -2,7 +2,7 @@
 //!
 //! 逐条移植官方 engine/src/processor/intents/labs/*.js：处理器对一切失败
 //! 静默 no-op（错误码由玩家预检层产生），本模块只镜像官方检查顺序与记账。
-//! PWR_OPERATE_LAB 增量未实现（power 域未接线，见兼容能力开关）。
+//! PWR_OPERATE_LAB 增量由公共效果表读取，正/逆反应共用严格有效期。
 //! 不保存上游渲染用 actionLog 的结构侧字段（与 structures.rs 同约定）；
 //! boost 对目标 creep 写 healed 位是官方 processor 的既有行为，保留。
 
@@ -144,7 +144,15 @@ fn on_cooldown(data: &Value, time: u64) -> bool {
         .is_some_and(|t| t > time)
 }
 
-/// 调用 lab 消耗两试剂 lab 各 LAB_REACTION_AMOUNT，产出反应产物并进入
+/// run/reverse 同源：效果提高产量，也提高每份试剂的消耗量。
+fn reaction_amount(w: &Working, id: ObjId) -> i64 {
+    c::LAB_REACTION_AMOUNT
+        + kk_world::effects::active_power(w.room.effects.get(&id), c::PWR_OPERATE_LAB, w.time)
+            .and_then(|e| super::powers::power_effect(e.power, e.level))
+            .unwrap_or(0)
+}
+
+/// 调用 lab 按有效效果计算批量，消耗两试剂各一份批量，产出反应产物并进入
 /// REACTION_TIME[产物] 冷却。来源：processor/intents/labs/run-reaction.js。
 pub fn run_reaction(w: &mut Working, id: ObjId, d: &IntentData) {
     let Some(((x, y), data)) = lab_snapshot(w, id) else {
@@ -153,7 +161,7 @@ pub fn run_reaction(w: &mut Working, id: ObjId, d: &IntentData) {
     if on_cooldown(&data, w.time) {
         return;
     }
-    let amount = c::LAB_REACTION_AMOUNT;
+    let amount = reaction_amount(w, id);
     let (Some(lab1), Some(lab2)) = (d.lab1, d.lab2) else {
         return;
     };
@@ -204,7 +212,7 @@ pub fn run_reaction(w: &mut Working, id: ObjId, d: &IntentData) {
     update_lab(w, lab2, |v| lab_drain(v, &m2, amount, &stores));
 }
 
-/// 调用 lab 分解化合物，向两个输出 lab 各发 LAB_REACTION_AMOUNT 试剂并进入
+/// 调用 lab 按有效效果计算批量，分解化合物并向两个输出 lab 各发一份试剂，进入
 /// REACTION_TIME[化合物] 冷却。官方 processor 不检查射程（driver 预检负责），
 /// 本移植保持同形。来源：processor/intents/labs/reverse-reaction.js。
 pub fn reverse_reaction(w: &mut Working, id: ObjId, d: &IntentData) {
@@ -220,7 +228,7 @@ pub fn reverse_reaction(w: &mut Working, id: ObjId, d: &IntentData) {
     if lab1 == lab2 {
         return;
     }
-    let amount = c::LAB_REACTION_AMOUNT;
+    let amount = reaction_amount(w, id);
     let Some(mineral) = mineral_type_of(&data) else {
         return;
     };

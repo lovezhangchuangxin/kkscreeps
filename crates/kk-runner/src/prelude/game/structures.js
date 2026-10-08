@@ -67,6 +67,10 @@
     // isActive 的配额表（官方 utils.js:470 读 driver.constants 同款注入）
     CONTROLLER_STRUCTURES: freezeConst(globalThis.CONTROLLER_STRUCTURES),
     // lab 四动作（M2E）：反应量、boost 消耗、容量与查找表。
+    PWR_OPERATE_LAB: globalThis.PWR_OPERATE_LAB,
+    OPERATE_LAB_EFFECT: freezeConst(
+      globalThis.POWER_INFO[globalThis.PWR_OPERATE_LAB].effect.slice(),
+    ),
     // 表常量递归深冻（freezeConst 原地冻结，与上表同规格）。
     ERR_NOT_FOUND: globalThis.ERR_NOT_FOUND,
     STRUCTURE_LAB: globalThis.STRUCTURE_LAB,
