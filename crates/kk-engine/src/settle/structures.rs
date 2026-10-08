@@ -108,6 +108,12 @@ pub fn process_structure_intents(
                 super::factories::produce(&mut w, id, d);
             }
         }
+        // nuker 单动作直派发（launchNuke 写标记，跨房插入在全局阶段）。
+        "nuker" => {
+            if let Some(d) = actions.get(&Action::LaunchNuke) {
+                super::nukes::launch_nuke(&mut w, id, d);
+            }
+        }
         _ => {}
     }
     Ok(())

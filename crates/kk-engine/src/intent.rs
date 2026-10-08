@@ -62,6 +62,9 @@ pub enum Action {
     /// {resourceType, amount} 但处理器只读 resourceType——amount 进意图
     /// 并集解析、结算忽略，与官方等价）；由 settle::factories 分派。
     Produce,
+    /// nuker 的 launchNuke（官方载荷 {roomName, x, y}，system.js）；房间
+    /// 阶段验证官方门并写 launchNuke 标记，跨房插入在全局阶段执行。
+    LaunchNuke,
 }
 
 impl Action {
@@ -105,6 +108,7 @@ impl Action {
             Self::BoostCreep => "boostCreep",
             Self::UnboostCreep => "unboostCreep",
             Self::Produce => "produce",
+            Self::LaunchNuke => "launchNuke",
         }
     }
 
@@ -148,6 +152,7 @@ impl Action {
             "boostCreep" => Self::BoostCreep,
             "unboostCreep" => Self::UnboostCreep,
             "produce" => Self::Produce,
+            "launchNuke" => Self::LaunchNuke,
             _ => return None,
         })
     }
@@ -873,6 +878,9 @@ pub fn sanitize_object_intent(_action: Action, raw: &Value) -> IntentData {
             .unwrap_or_default(),
         target_room_name: f("targetRoomName")
             .and_then(Value::as_str)
+            // launchNuke 的官方载荷键是 roomName（system.js），send 用
+            // targetRoomName；并集解析两键都收，消费方只读自己的字段。
+            .or_else(|| f("roomName").and_then(Value::as_str))
             .map(str::to_string),
         description: to_user_string(f("description")),
         lab1: to_id(f("lab1")),

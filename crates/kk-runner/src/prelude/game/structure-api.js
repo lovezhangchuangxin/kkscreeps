@@ -702,4 +702,40 @@
     gw.intents.set(this.id, 'produce', { resourceType });
     return C.OK;
   };
+
+  /** StructureNuker.launchNuke（官方 game/structures.js:1356-1389 逐字，
+   *  NUKE-LAUNCH-008 矩阵钉序）：not-owner > invalid-args（instanceof
+   *  RoomPosition——plainObject 拒）> [房间状态 novice/respawn→INVALID_TARGET
+   *  ——kk 无 roomStatus 数据，跳过] > TIRED > RCL（checkStructureAgainstController
+   *  ——isActive 等价，nuker 在 CONTROLLER_STRUCTURES 表内）> NOT_IN_RANGE
+   *  （roomNameToXY 差绝对值 > NUKE_RANGE）> NOT_ENOUGH_RESOURCES
+   *  （energy<energyCapacity || ghodium<ghodiumCapacity）。 */
+  globalThis.StructureNuker.prototype.launchNuke = function launchNuke(pos) {
+    if (!this.my) {
+      return C.ERR_NOT_OWNER; // :1357-1359
+    }
+    if (!(pos instanceof gw.RoomPosition)) {
+      return C.ERR_INVALID_ARGS; // :1360-1362
+    }
+    if (this.cooldown > 0) {
+      return C.ERR_TIRED; // :1370-1372
+    }
+    if (!this.isActive()) {
+      return C.ERR_RCL_NOT_ENOUGH; // :1373-1375
+    }
+    const [tx, ty] = gw.roomNameToXY(pos.roomName);
+    const [x, y] = gw.roomNameToXY(this.room.name);
+    if (Math.abs(tx - x) > C.NUKE_RANGE || Math.abs(ty - y) > C.NUKE_RANGE) {
+      return C.ERR_NOT_IN_RANGE; // :1379-1381
+    }
+    if (this.energy < this.energyCapacity || this.ghodium < this.ghodiumCapacity) {
+      return C.ERR_NOT_ENOUGH_RESOURCES; // :1382-1384
+    }
+    gw.intents.set(this.id, 'launchNuke', {
+      roomName: pos.roomName,
+      x: pos.x,
+      y: pos.y,
+    });
+    return C.OK;
+  };
 })();

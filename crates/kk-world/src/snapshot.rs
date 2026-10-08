@@ -334,6 +334,7 @@ fn snapshot_json(
                 (Some("ruin"), _) | (_, Some("ruin")) => "ruin",
                 (Some("mineral"), _) | (_, Some("mineral")) => "mineral",
                 (Some("deposit"), _) | (_, Some("deposit")) => "deposit",
+                (Some("nuke"), _) | (_, Some("nuke")) => "nuke",
                 _ => "structure",
             };
             v.insert("kind".into(), json!(kind));

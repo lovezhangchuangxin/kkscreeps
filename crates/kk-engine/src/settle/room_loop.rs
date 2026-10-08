@@ -168,20 +168,24 @@ pub fn settle_room(
                 Some(RoomObject::Road(_)) => "road",
                 Some(RoomObject::Mod(_)) => "mod",
                 Some(RoomObject::Generic(g)) => {
-                    match kk_world::domain::generic::structure_type(&g.data).as_deref() {
-                        Some("container" | "rampart") => "decay",
-                        Some("link") => "link",
-                        Some("terminal") => "terminal",
-                        // Mod 建筑：生产周期或生命周期 tick 任一声明即进入
-                        //（同访先产后 tick）；两者皆无的建筑不进入。
-                        Some(st)
-                            if plane.buildings.get(st).is_some_and(|b| {
-                                b.production.is_some() || !b.lifecycle_slots.is_empty()
-                            }) =>
-                        {
-                            "mod-building"
+                    if kk_world::domain::generic::type_name(&g.data).as_deref() == Some("nuke") {
+                        "nuke"
+                    } else {
+                        match kk_world::domain::generic::structure_type(&g.data).as_deref() {
+                            Some("container" | "rampart") => "decay",
+                            Some("link") => "link",
+                            Some("terminal") => "terminal",
+                            // Mod 建筑：生产周期或生命周期 tick 任一声明即进入
+                            //（同访先产后 tick）；两者皆无的建筑不进入。
+                            Some(st)
+                                if plane.buildings.get(st).is_some_and(|b| {
+                                    b.production.is_some() || !b.lifecycle_slots.is_empty()
+                                }) =>
+                            {
+                                "mod-building"
+                            }
+                            _ => "",
                         }
-                        _ => "",
                     }
                 }
                 _ => "",
@@ -211,6 +215,7 @@ pub fn settle_room(
                 contrib.run_tick(&ctx, id).map_err(SettleError)?
             }
             "terminal" => economy::terminal_capacity_tick(&mut ctx.borrow_mut(), id),
+            "nuke" => nukes::nuke_tick(&mut ctx.borrow_mut(), id),
             "mod-building" => buildings::building_object_tick(&ctx, id).map_err(SettleError)?,
             "mod" => mod_intents::process_object_tick(&ctx, id).map_err(SettleError)?,
             _ => {}

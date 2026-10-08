@@ -198,7 +198,7 @@
       powerCapacity: (o) => (o.storeCapacityResource ? o.storeCapacityResource.power : 0),
       store: (o) => gw.makeStore(o),
     });
-    // StructureNuker（官方 :723-731）
+    // StructureNuker（官方 :1347-1354）
     gw.defineGameObjectProperties(globalThis.StructureNuker.prototype, gw.rawData, {
       energy: (o) => (o.store ? o.store.energy || 0 : 0),
       energyCapacity: (o) => (o.storeCapacityResource ? o.storeCapacityResource.energy : 0),

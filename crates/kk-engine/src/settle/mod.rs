@@ -18,6 +18,7 @@ pub mod labs;
 pub mod market;
 mod mod_intents;
 pub mod movement;
+pub mod nukes;
 // 兼容旧调用路径，领域实现只维护在 movement 中。
 pub use movement::{admission, contest, move_cost, obstacle, precheck, pull_registration};
 pub mod objects;

@@ -168,15 +168,12 @@ pub(super) fn normalize_structure(
         // 矿量默认按密度查表，显式再生间隔转换为绝对 tick。
         // 矿物的 0 间隔也有效，不能套用 source 的正值过滤。
         "mineral" => {
-            // 只接受 MINERAL_MIN_AMOUNT 表中的七种矿物 H/O/U/K/L/Z/X。
-            // 否则采集后可能产生掉落资源入口不接受的资源名。
+            // 只接受官方资源目录内的名字（RESOURCES_ALL）：矿物类型本身
+            // 不限七基础矿——兼容夹具用 silicon 等 deposit 资源名摆矿物
+            //（nuke 矩阵用例），采掉落仍是资源目录可接受的名称。
             let mineral_type = spec_str(spec, "mineralType")
-                .filter(|t| {
-                    kk_core::constants::MINERAL_MIN_AMOUNT
-                        .iter()
-                        .any(|(k, _)| k == t)
-                })
-                .ok_or_else(|| "mineral 缺 mineralType 或非官方矿种".to_string())?
+                .filter(|t| kk_core::constants::RESOURCES_ALL.iter().any(|k| k == t))
+                .ok_or_else(|| "mineral 缺 mineralType 或非官方资源名".to_string())?
                 .to_string();
             let density = spec
                 .get("density")

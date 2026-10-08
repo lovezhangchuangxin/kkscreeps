@@ -116,6 +116,10 @@ pub fn normalize(kind: &str, spec: &Value, ctx: &PlaceCtx) -> Result<RoomObject,
 
         "tombstone" => Ok(RoomObject::Tombstone(normalize_tombstone(spec, x, y, ctx))),
         "ruin" => Ok(RoomObject::Ruin(normalize_ruin(spec, x, y, ctx))),
+        // nuke 以 landTime 为权威键：适配器 spec 给相对 timeToLand，
+        // 放置不推进时间，此处按放置时刻换算（适配器契约：放置后一次
+        // tick 读 timeToLand 恰好减一）。launchRoomName 原样保留。
+        "nuke" => Ok(RoomObject::Generic(normalize_nuke(spec, x, y, ctx))),
         // 两种入口共用结构分派，确保矿物与提取器使用相同默认值和校验。
         "mineral" | "extractor" => {
             let mut s = spec.clone();
@@ -125,6 +129,21 @@ pub fn normalize(kind: &str, spec: &Value, ctx: &PlaceCtx) -> Result<RoomObject,
             normalize_structure(&s, x, y, ctx)
         }
         _ => Ok(RoomObject::Generic(generic_from_spec(kind, spec, x, y))),
+    }
+}
+
+/// 把 timeToLand 换算为 landTime 并丢弃相对键；timeToLand 缺失或非法
+/// 时不写 landTime（该 nuke 永不落地，与官方不可达形态一致）。
+fn normalize_nuke(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> GenericObj {
+    let mut data = generic_fields("nuke", spec);
+    if let Some(ttl) = data.remove("timeToLand").and_then(|v| v.as_i64()) {
+        data.insert("landTime".into(), json!(ctx.time + ttl.max(0) as u64));
+    }
+    GenericObj {
+        id: 0,
+        x,
+        y,
+        data: Value::Object(data).to_string(),
     }
 }
 

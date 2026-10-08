@@ -18,6 +18,15 @@ pub fn structure_type(data: &str) -> Option<String> {
         .map(str::to_string)
 }
 
+/// 读取对象类别键 `type`（nuke/deposit/powerCreep 等非结构对象）；
+/// 缺失、类型错误和无效 JSON 均返回 None。
+pub fn type_name(data: &str) -> Option<String> {
+    decode_fields(data)?
+        .get("type")?
+        .as_str()
+        .map(str::to_string)
+}
+
 /// Generic 仓库通过 store/storeCapacity/storeCapacityResource 字段参与结算，
 /// 不按结构类型列容量白名单；扩展结构可复用同一数据通道。
 /// 来源：上游 utils.capacityForResource 和 creeps/transfer.js。

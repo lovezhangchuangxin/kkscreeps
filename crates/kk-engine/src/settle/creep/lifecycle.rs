@@ -73,9 +73,25 @@ pub fn die_creep(w: &mut Working, id: ObjId) {
     die_creep_with_rate(w, id, c::CREEP_CORPSE_RATE);
 }
 
+/// 核弹击杀：只移除本体并记录死亡事件，不建墓碑、不转移资源。
+/// 来源：上游 _die.js 在 attackType == EVENT_ATTACK_TYPE_NUKE 时跳过
+/// 墓碑创建（资源全部损失），EVENT_OBJECT_DESTROYED 仍恒发。
+pub fn die_creep_nuke(w: &mut Working, id: ObjId) {
+    if w.creep(id).is_none() {
+        return;
+    }
+    w.remove_obj(id);
+    w.push_event(
+        c::EVENT_OBJECT_DESTROYED,
+        id,
+        serde_json::json!({ "type": "creep" }),
+    );
+}
+
 /// 移除本体，将部件回收资源和携带资源先放入同格容器，余量进入墓碑，
 /// 最后记录死亡事件。drop_rate<=0 仍创建墓碑，但不转移资源。
-/// 不模拟核弹抑制墓碑、NPC 特殊回收、userSummoned 或 strongholdId。
+/// 核弹击杀（无墓碑）走 die_creep_nuke；不模拟 NPC 特殊回收、
+/// userSummoned 或 strongholdId。
 /// 来源：上游 engine/src/processor/intents/creeps/_die.js。
 pub fn die_creep_with_rate(w: &mut Working, id: ObjId, drop_rate: f64) {
     let Some(c) = w.creep(id) else { return };

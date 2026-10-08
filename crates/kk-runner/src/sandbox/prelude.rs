@@ -104,6 +104,10 @@ const SEGMENTS: &[(&str, &str)] = &[
         include_str!("../prelude/game/resources.js"),
     ),
     (
+        "kk-prelude-game-nukes",
+        include_str!("../prelude/game/nukes.js"),
+    ),
+    (
         "kk-prelude-game-path-finder",
         include_str!("../prelude/game/path-finder.js"),
     ),

@@ -18,7 +18,7 @@ pub use combat::{
 };
 pub(in crate::settle) use combat::{intent_dismantle, intent_repair};
 pub use harvest::harvest_power;
-pub use lifecycle::{die_creep, die_creep_with_rate};
+pub use lifecycle::{die_creep, die_creep_nuke, die_creep_with_rate};
 pub use movement::{creep_tick, creep_tick_prepare};
 pub use movement::{slot_cancel_direction, slot_pending_direction, slot_request_direction};
 pub(in crate::settle) use store::intent_drop_amount_res;

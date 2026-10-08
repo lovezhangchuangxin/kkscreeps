@@ -301,6 +301,7 @@
             )
               out.push(w);
             // 这些查询分支从当前世界对象中收集墓碑、powerCreep、deposit 与废墟；无对象时返回空。
+            else if (type === 117 /* FIND_NUKES */ && o.type === 'nuke') out.push(w);
             else if (type === 118 /* FIND_TOMBSTONES */ && o.type === 'tombstone') out.push(w);
             else if (type === 119 /* FIND_POWER_CREEPS */ && o.type === 'powerCreep') out.push(w);
             else if (type === 122 /* FIND_DEPOSITS */ && o.type === 'deposit') out.push(w);

@@ -3,7 +3,7 @@ use super::{stages, txn};
 use crate::intent::IntentBatch;
 use crate::settle::{
     Engine, Plane, PlayerWriteback, RunState, SettleError, TickInput, TickStage, TickState,
-    WritebackStep, inter_room, market, settle_room,
+    WritebackStep, inter_room, market, nukes, settle_room,
 };
 use kk_schema::room::RoomObject;
 use std::collections::BTreeMap;
@@ -31,6 +31,9 @@ impl Engine {
         self.settle_rooms_stage(&mut txn)?;
         cursor.enter(TickStage::Market)?;
         {
+            // 核弹发射在全部房间结算后跨房落位（terminal send 同款标记模式）；
+            // 先于市场阶段，nuker 的库与冷却在提交前一并定型。
+            nukes::settle_launches(&mut txn.rooms, &txn.state, txn.time)?;
             let mut state = txn.state.inner.borrow_mut();
             market::settle_market(
                 &mut txn.rooms,

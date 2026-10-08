@@ -175,7 +175,7 @@ fn apply_damage_inner(
     } else {
         let new_hits = object_hits(&target) - damage;
         if new_hits <= 0 {
-            destroy_structure(w, target_id);
+            destroy_structure_with(w, target_id, attack_type);
             w.push_event(
                 c::EVENT_OBJECT_DESTROYED,
                 target_id,
@@ -518,6 +518,14 @@ pub(in crate::settle) fn mod_damage_effects(
                     set_action_log(&mut a.action_log, ACTION_ATTACKED);
                 }
             } else {
+                // 无耐久面攻击者（如核弹本体）无处落反击：官方把
+                // powerBank 式 hitback 写进攻击者 _damageToApply，而该
+                // 队列只有 creeps/tick 消费（creeps/tick.js:120-122）——
+                // 对核弹等效丢弃。此处同款丢弃，防止移除核弹本体截断
+                // 余下爆炸格。
+                if object_hits(&attacker_obj) <= 0 {
+                    return;
+                }
                 let attacker_hits = object_hits(&attacker_obj) - back;
                 if attacker_hits <= 0 {
                     destroy_structure(w, attacker);
@@ -612,7 +620,18 @@ pub fn rampart_at(w: &Working, at: (u8, u8)) -> Option<ObjId> {
 /// 移除结构并创建废墟，转存资源；spawn 的同主同名 creep 一并移除。
 /// 不在这里发事件，由调用方决定。未模拟核弹抑制、NPC 与 power 特殊分支。
 /// 来源：上游 engine/src/processor/intents/structures/_destroy.js。
+/// 常规摧毁：建废墟（EVENT_OBJECT_DESTROYED 由调用方发出）。
 pub(super) fn destroy_structure(w: &mut Working, id: ObjId) {
+    destroy_structure_inner(w, id, true);
+}
+
+/// 按攻击类型摧毁：核弹击杀不建废墟（官方 _destroy.js:21 对
+/// EVENT_ATTACK_TYPE_NUKE 跳过废墟创建）。
+pub(super) fn destroy_structure_with(w: &mut Working, id: ObjId, attack_type: i64) {
+    destroy_structure_inner(w, id, attack_type != c::EVENT_ATTACK_TYPE_NUKE);
+}
+
+fn destroy_structure_inner(w: &mut Working, id: ObjId, make_ruin: bool) {
     let chick_query = match w.room.objects.get(&id) {
         Some(RoomObject::Spawn(s)) => s
             .spawning
@@ -650,6 +669,9 @@ pub(super) fn destroy_structure(w: &mut Working, id: ObjId) {
     let (store, store_extra) = structure_store(obj);
     w.remove_obj(id);
     // 动作到此结束；分配错误由共享候选在发布前报告。
+    if !make_ruin {
+        return;
+    }
     let _ = w.insert_new(RoomObject::Ruin(kk_schema::room::RuinObj {
         id: 0,
         x: pos.0,
