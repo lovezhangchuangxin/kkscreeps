@@ -71,7 +71,9 @@
         }
         return false;
       },
-      get cpu() { return cpu; },
+      get cpu() {
+        return cpu;
+      },
     };
   }
   /** 官方 run 闭包尾等价物：intentsList 原样带出（runtime.js:274-296）。 */

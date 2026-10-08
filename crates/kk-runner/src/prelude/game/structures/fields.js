@@ -21,10 +21,27 @@
   // game.js structureTypes 映射对齐（减去走装配早退的 controller/source/
   // mineral，加 'wall' 别名）；Mod 建筑键含冒号永不在表内，恒走兜底桶。
   const KNOWN_STRUCTURE_TYPES = {
-    extension: 1, storage: 1, road: 1, constructedWall: 1, wall: 1,
-    rampart: 1, link: 1, tower: 1, lab: 1, terminal: 1, container: 1,
-    extractor: 1, spawn: 1, nuker: 1, powerSpawn: 1, factory: 1,
-    observer: 1, portal: 1, keeperLair: 1, powerBank: 1, invaderCore: 1,
+    extension: 1,
+    storage: 1,
+    road: 1,
+    constructedWall: 1,
+    wall: 1,
+    rampart: 1,
+    link: 1,
+    tower: 1,
+    lab: 1,
+    terminal: 1,
+    container: 1,
+    extractor: 1,
+    spawn: 1,
+    nuker: 1,
+    powerSpawn: 1,
+    factory: 1,
+    observer: 1,
+    portal: 1,
+    keeperLair: 1,
+    powerBank: 1,
+    invaderCore: 1,
   };
 
   function installCoreFields() {
@@ -50,14 +67,22 @@
     // road 优先以 nextDecayTime 计算剩余 tick，再用 decayTime。
     // 来源：上游 engine/src/game/structures.js 的 StructureRoad 属性定义。
     gw.defineGameObjectProperties(globalThis.StructureRoad.prototype, gw.rawData, {
-      ticksToDecay: (o) => (o.nextDecayTime ? o.nextDecayTime - gw.world.time
-        : o.decayTime ? o.decayTime - gw.world.time : undefined),
+      ticksToDecay: (o) =>
+        o.nextDecayTime
+          ? o.nextDecayTime - gw.world.time
+          : o.decayTime
+            ? o.decayTime - gw.world.time
+            : undefined,
     });
   }
 
   function installAssembler() {
     gw.assemblers.structure = (o, base) => {
-      if (o.structureType === 'controller' || o.structureType === 'source' || o.structureType === 'mineral') {
+      if (
+        o.structureType === 'controller' ||
+        o.structureType === 'source' ||
+        o.structureType === 'mineral'
+      ) {
         return base; // 字段/方法全在各自类原型
       }
       // 有官方类原型的结构类型（字段表全在类原型/基类）不吃实例级兜底——
@@ -68,8 +93,10 @@
         gw.defineGameObjectProperties(base, gw.rawData, ELSE_STRUCTURE_FIELDS);
         // Mod 建筑的自定义字段（存储键含命名空间冒号）以同一回查机制
         // 直供玩家；记录缺键（Missing 默认未写）读到 undefined。
-        const entry = gw.modApi !== undefined && gw.modApi.buildings !== undefined
-          ? gw.modApi.buildings[o.structureType] : undefined;
+        const entry =
+          gw.modApi !== undefined && gw.modApi.buildings !== undefined
+            ? gw.modApi.buildings[o.structureType]
+            : undefined;
         if (entry !== undefined && entry.fields !== undefined && entry.fields.length > 0) {
           const props = {};
           for (let i = 0; i < entry.fields.length; i++) {
@@ -101,8 +128,7 @@
     const C_LAB_MINERAL_CAPACITY = globalThis.LAB_MINERAL_CAPACITY;
     function decayFold(o) {
       const t = gw.world.time;
-      return o.nextDecayTime ? o.nextDecayTime - t
-        : o.decayTime ? o.decayTime - t : undefined;
+      return o.nextDecayTime ? o.nextDecayTime - t : o.decayTime ? o.decayTime - t : undefined;
     }
     function cooldownFold(o) {
       const t = gw.world.time;
@@ -229,6 +255,8 @@
 
   // 入口加载时捕获安装函数；字段表与类型选择不暴露为可修改的共享值。
   globalThis.__kkp.structureFields = {
-    installCoreFields, installAssembler, installSpecialFields,
+    installCoreFields,
+    installAssembler,
+    installSpecialFields,
   };
 })();

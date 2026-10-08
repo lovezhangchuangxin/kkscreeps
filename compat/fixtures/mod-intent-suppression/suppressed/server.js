@@ -20,13 +20,17 @@ export default function register(api) {
     scope: 'object',
     target: counter,
     args: { type: 'record', fields: { amount: { type: 'i32', min: 1, max: 10 } } },
-    process(ctx) { ctx.target.fields.value = ctx.args.amount; },
+    process(ctx) {
+      ctx.target.fields.value = ctx.args.amount;
+    },
   });
   api.intents.define('suppress:mark', {
     scope: 'object',
     target: counter,
     args: { type: 'record', fields: { mark: { type: 'i32', min: 0, max: 9 } } },
     suppressedBy: ['suppress:bump'],
-    process(ctx) { ctx.target.fields.value = ctx.args.mark; },
+    process(ctx) {
+      ctx.target.fields.value = ctx.args.mark;
+    },
   });
 }

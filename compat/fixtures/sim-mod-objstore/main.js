@@ -5,10 +5,10 @@
 exports.loop = function () {
   const room = Game.rooms.W1N1;
   const mule = Game.creeps.mule;
-  const crate = typeof FIND_HAULER_CRATES !== 'undefined'
-    ? room.find(FIND_HAULER_CRATES)[0] : undefined;
-  const cache = typeof FIND_VAULT_CACHES !== 'undefined'
-    ? room.find(FIND_VAULT_CACHES)[0] : undefined;
+  const crate =
+    typeof FIND_HAULER_CRATES !== 'undefined' ? room.find(FIND_HAULER_CRATES)[0] : undefined;
+  const cache =
+    typeof FIND_VAULT_CACHES !== 'undefined' ? room.find(FIND_VAULT_CACHES)[0] : undefined;
   const courier = Game.creeps.courier;
   if (!Memory.phase) {
     if (crate === undefined) {

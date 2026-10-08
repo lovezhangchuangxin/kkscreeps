@@ -1,7 +1,11 @@
 export default function install(api) {
   class HaulerCrate extends api.builtins.RoomObject {
-    get store() { return api.view.field(this, 'store'); }
-    get storeCapacity() { return api.view.field(this, 'storeCapacity'); }
+    get store() {
+      return api.view.field(this, 'store');
+    }
+    get storeCapacity() {
+      return api.view.field(this, 'storeCapacity');
+    }
   }
   class HaulerMarker extends api.builtins.RoomObject {}
   api.objects.bind('objstore-hauler:crate', HaulerCrate);

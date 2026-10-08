@@ -7,20 +7,36 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const roots = ['crates/', 'compat/', 'apps/', 'packages/', 'mods/', 'scripts/'];
-const extensions = new Set(['.rs', '.js', '.mjs', '.ts', '.tsx', '.jsx', '.cpp', '.cc', '.c', '.h', '.hpp']);
+const extensions = new Set([
+  '.rs',
+  '.js',
+  '.mjs',
+  '.ts',
+  '.tsx',
+  '.jsx',
+  '.cpp',
+  '.cc',
+  '.c',
+  '.h',
+  '.hpp',
+]);
 const exceptions = new Map([
   ['crates/kk-runner/assets/lodash-3.10.1.js', '第三方固定版本源码，保留原文'],
 ]);
-const paths = new Set(execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z'], {
-  cwd: root,
-  encoding: 'utf8',
-}).split('\0').filter(Boolean));
+const paths = new Set(
+  execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z'], {
+    cwd: root,
+    encoding: 'utf8',
+  })
+    .split('\0')
+    .filter(Boolean),
+);
 
 let checked = 0;
 const oversized = [];
 const nearLimit = [];
 for (const path of [...paths].sort()) {
-  if (!roots.some(prefix => path.startsWith(prefix)) || !extensions.has(extname(path))) continue;
+  if (!roots.some((prefix) => path.startsWith(prefix)) || !extensions.has(extname(path))) continue;
   if (exceptions.has(path)) continue;
   let source;
   try {

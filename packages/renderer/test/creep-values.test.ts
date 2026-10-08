@@ -23,7 +23,12 @@ function env(opts: Partial<PartEnv> = {}): PartEnv {
   };
 }
 
-function run(parts: typeof PARTS_CREEP, id: string, s: RoomObjectState, e: PartEnv): ReturnType<NonNullable<ReturnType<typeof Object>>> | null {
+function run(
+  parts: typeof PARTS_CREEP,
+  id: string,
+  s: RoomObjectState,
+  e: PartEnv,
+): ReturnType<NonNullable<ReturnType<typeof Object>>> | null {
   const part = parts.find((p) => p.id === id);
   if (!part) throw new Error(`无件 ${id}`);
   return part.values(s, e);
@@ -35,14 +40,29 @@ function creep(fields: Record<string, unknown>): RoomObjectState {
 
 describe('PARTS_CREEP.main（creep.metadata.js）', () => {
   it('body 环扁平编码 [color,a1,a2,ccw]×n', () => {
-    const v = run(PARTS_CREEP, 'main', creep({ body: [{ type: 'work', hits: 100 }], user: 'p1' }), env())!;
+    const v = run(
+      PARTS_CREEP,
+      'main',
+      creep({ body: [{ type: 'work', hits: 100 }], user: 'p1' }),
+      env(),
+    )!;
     const ring = v.ring as number[];
     expect(ring).toHaveLength(8); // 一对镜像弧 = 2×4
     expect(ring[0]).toBe(CREEP_SPEC.ring.colors.work);
   });
 
   it('tough 旗标（任一 tough 存活）', () => {
-    const alive = run(PARTS_CREEP, 'main', creep({ body: [{ type: 'tough', hits: 40 }, { type: 'move', hits: 100 }] }), env())!;
+    const alive = run(
+      PARTS_CREEP,
+      'main',
+      creep({
+        body: [
+          { type: 'tough', hits: 40 },
+          { type: 'move', hits: 100 },
+        ],
+      }),
+      env(),
+    )!;
     expect(alive.tough).toBe(1);
     const dead = run(PARTS_CREEP, 'main', creep({ body: [{ type: 'tough', hits: 0 }] }), env())!;
     expect(dead.tough).toBe(0);
@@ -55,7 +75,12 @@ describe('PARTS_CREEP.main（creep.metadata.js）', () => {
   });
 
   it('资源圆半径 = min(1, x/cap)×20（:33-47）', () => {
-    const v = run(PARTS_CREEP, 'main', creep({ store: { energy: 50, power: 50 }, storeCapacity: 200 }), env())!;
+    const v = run(
+      PARTS_CREEP,
+      'main',
+      creep({ store: { energy: 50, power: 50 }, storeCapacity: 200 }),
+      env(),
+    )!;
     expect(v.totalR).toBeCloseTo(20 * (100 / 200));
     expect(v.powerR).toBeCloseTo(20 * (100 / 200)); // power 圆=energy+power（:46）
     expect(v.energyR).toBeCloseTo(20 * (50 / 200));
@@ -83,12 +108,23 @@ describe('PARTS_CREEP.main（creep.metadata.js）', () => {
 
   it('敌方 safemode α0.5（calculations.safeMode :49-62）', () => {
     const ctl = { user: 'p1', safeModeUntil: 100 };
-    const enemy = run(PARTS_CREEP, 'main', creep({ user: 'p2' }), env({ time: 50, controller: ctl }))!;
+    const enemy = run(
+      PARTS_CREEP,
+      'main',
+      creep({ user: 'p2' }),
+      env({ time: 50, controller: ctl }),
+    )!;
     expect(enemy.alpha).toBe(CREEP_SPEC.safeModeAlpha);
     // 己方不暗、safemode 过期不暗、无 controller 不暗
-    expect(run(PARTS_CREEP, 'main', creep({ user: 'p1' }), env({ time: 50, controller: ctl }))!.alpha).toBe(1);
-    expect(run(PARTS_CREEP, 'main', creep({ user: 'p2' }), env({ time: 100, controller: ctl }))!.alpha).toBe(1);
-    expect(run(PARTS_CREEP, 'main', creep({ user: 'p2' }), env({ controller: null }))!.alpha).toBe(1);
+    expect(
+      run(PARTS_CREEP, 'main', creep({ user: 'p1' }), env({ time: 50, controller: ctl }))!.alpha,
+    ).toBe(1);
+    expect(
+      run(PARTS_CREEP, 'main', creep({ user: 'p2' }), env({ time: 100, controller: ctl }))!.alpha,
+    ).toBe(1);
+    expect(run(PARTS_CREEP, 'main', creep({ user: 'p2' }), env({ controller: null }))!.alpha).toBe(
+      1,
+    );
   });
 });
 
@@ -114,7 +150,9 @@ describe('PARTS_CREEP mask/glow/glowNpc/name（layer 件）', () => {
     expect(own.text).toBe('worker');
     expect(own.fill).toBe(0x8fbb93);
     expect(run(PARTS_CREEP, 'name', creep({ name: 'x', user: 'p2' }), env())).toBeNull();
-    expect(run(PARTS_CREEP, 'name', creep({ name: 'x', user: 'p1', spawning: true }), env())).toBeNull();
+    expect(
+      run(PARTS_CREEP, 'name', creep({ name: 'x', user: 'p1', spawning: true }), env()),
+    ).toBeNull();
   });
 });
 
@@ -126,23 +164,47 @@ describe('PARTS_POWER_CREEP（powerCreep.metadata.js）', () => {
     expect(powerCreepTexture('operator', 12)).toBe('operator-lvl2');
     expect(powerCreepTexture('operator', 24)).toBe('operator-lvl4');
     expect(powerCreepTexture('operator', 30)).toBe('operator-lvl4');
-    const v = run(PARTS_POWER_CREEP, 'main', { id: 'p1', type: 'powerCreep', className: 'executor', level: 10 } as RoomObjectState, env())!;
+    const v = run(
+      PARTS_POWER_CREEP,
+      'main',
+      { id: 'p1', type: 'powerCreep', className: 'executor', level: 10 } as RoomObjectState,
+      env(),
+    )!;
     expect(v.texture).toBe('executor-lvl2');
   });
 
   it('light 件可见键与纹理同源（:138-149 texture 计算——texture-light 死代码）', () => {
-    const v = run(PARTS_POWER_CREEP, 'light', { id: 'p1', type: 'powerCreep', className: 'operator', level: 3 } as RoomObjectState, env())!;
+    const v = run(
+      PARTS_POWER_CREEP,
+      'light',
+      { id: 'p1', type: 'powerCreep', className: 'operator', level: 3 } as RoomObjectState,
+      env(),
+    )!;
     expect(v).toEqual({ texture: 'operator-lvl1', visible: true, alpha: 1 }); // visible 必须是 boolean（vBool === true——评审 B-B1）
-    expect(run(PARTS_POWER_CREEP, 'light', { id: 'p1', type: 'powerCreep' } as RoomObjectState, env())).toBeNull();
+    expect(
+      run(PARTS_POWER_CREEP, 'light', { id: 'p1', type: 'powerCreep' } as RoomObjectState, env()),
+    ).toBeNull();
   });
 
   it('className 缺位 → main 纹理空（join 面隐藏；官方此路径即崩）', () => {
-    const v = run(PARTS_POWER_CREEP, 'main', { id: 'p1', type: 'powerCreep', level: 3 } as RoomObjectState, env())!;
+    const v = run(
+      PARTS_POWER_CREEP,
+      'main',
+      { id: 'p1', type: 'powerCreep', level: 3 } as RoomObjectState,
+      env(),
+    )!;
     expect(v.texture).toBe('');
   });
 
   it('name 无 additionalWhen（:124）', () => {
-    expect(run(PARTS_POWER_CREEP, 'name', { id: 'p1', type: 'powerCreep', name: 'pc', user: 'p1' } as RoomObjectState, env())!.text).toBe('pc');
+    expect(
+      run(
+        PARTS_POWER_CREEP,
+        'name',
+        { id: 'p1', type: 'powerCreep', name: 'pc', user: 'p1' } as RoomObjectState,
+        env(),
+      )!.text,
+    ).toBe('pc');
   });
 });
 

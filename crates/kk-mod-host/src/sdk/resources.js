@@ -17,14 +17,25 @@ export function createResources({ ops, token, fault, write }) {
     }
     return Object.freeze({
       read(id, resourceType) {
-        return checked([id, resourceType], () => ops.op_mod_chain_resource_read(token, key, id, resourceType));
+        return checked([id, resourceType], () =>
+          ops.op_mod_chain_resource_read(token, key, id, resourceType),
+        );
       },
       transfer(from, to, resourceType, amount, loss = 0) {
         return checked([from, to, resourceType], () => {
-          if (typeof amount !== 'number' || typeof loss !== 'number') throw new Error('资源数量须为原始数字');
+          if (typeof amount !== 'number' || typeof loss !== 'number')
+            throw new Error('资源数量须为原始数字');
           // 先验证并暂存当前上下文；资源写入后刷新持久成员和旧库存引用。
           write(key, ctx);
-          const result = ops.op_mod_chain_resource_transfer(token, key, from, to, resourceType, amount, loss);
+          const result = ops.op_mod_chain_resource_transfer(
+            token,
+            key,
+            from,
+            to,
+            resourceType,
+            amount,
+            loss,
+          );
           refreshContext(ctx, ops.op_mod_chain_read(token, key));
           return result;
         });

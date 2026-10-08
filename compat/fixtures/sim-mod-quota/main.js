@@ -27,8 +27,10 @@ exports.loop = function () {
     Memory.phase = 2;
     return;
   }
-  Memory.worldTowerSites = room.find(FIND_CONSTRUCTION_SITES)
+  Memory.worldTowerSites = room
+    .find(FIND_CONSTRUCTION_SITES)
     .filter((s) => s.structureType === STRUCTURE_TOWER).length;
-  Memory.worldWallSites = room.find(FIND_CONSTRUCTION_SITES)
+  Memory.worldWallSites = room
+    .find(FIND_CONSTRUCTION_SITES)
     .filter((s) => s.structureType === STRUCTURE_WALL).length;
 };

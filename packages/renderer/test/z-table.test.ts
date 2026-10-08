@@ -43,13 +43,15 @@ describe('Z_TABLE（官方 zIndex 全表）', () => {
 describe('resolveTypeKey', () => {
   it('structure + structureType → s:<type>', () => {
     expect(resolveTypeKey({ id: '1', type: 'structure', structureType: 'tower' })).toBe('s:tower');
-    expect(resolveTypeKey({ id: '1', type: 'structure', structureType: 'constructedWall' }))
-      .toBe('s:constructedWall');
+    expect(resolveTypeKey({ id: '1', type: 'structure', structureType: 'constructedWall' })).toBe(
+      's:constructedWall',
+    );
   });
   it('spawn/constructionSite/resource 自成键（structureType 单向蕴含）', () => {
     expect(resolveTypeKey({ id: '1', type: 'spawn', structureType: 'spawn' })).toBe('spawn');
-    expect(resolveTypeKey({ id: '1', type: 'constructionSite', structureType: 'extension' }))
-      .toBe('constructionSite');
+    expect(resolveTypeKey({ id: '1', type: 'constructionSite', structureType: 'extension' })).toBe(
+      'constructionSite',
+    );
     expect(resolveTypeKey({ id: '1', type: 'resource', resourceType: 'energy' })).toBe('resource');
   });
   it('其余类型直通', () => {
@@ -74,7 +76,21 @@ describe('PART_DECL_TABLE', () => {
   });
 
   it('含 store/user 消费面的类型追加 _isDisabled 公共件', () => {
-    for (const typeKey of ['s:extension', 's:storage', 's:factory', 's:nuker', 'spawn', 's:link', 's:observer', 's:tower', 's:lab', 's:terminal', 's:extractor', 's:controller', 's:container']) {
+    for (const typeKey of [
+      's:extension',
+      's:storage',
+      's:factory',
+      's:nuker',
+      'spawn',
+      's:link',
+      's:observer',
+      's:tower',
+      's:lab',
+      's:terminal',
+      's:extractor',
+      's:controller',
+      's:container',
+    ]) {
       const ids = PART_DECL_TABLE[typeKey]!.map((p) => p.id);
       expect(ids, typeKey).toContain('disabled');
     }

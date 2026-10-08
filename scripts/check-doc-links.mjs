@@ -11,10 +11,20 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // Git 决定仓库检查范围，不遍历个人 worktree、依赖或忽略目录。
 export function collectMarkdown(root) {
-  const paths = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z'], {
-    cwd: root, encoding: 'utf8',
-  }).split('\0').filter(path => path.endsWith('.md') && !path.startsWith('spikes/'));
-  return [...new Set(paths)].sort().map(path => resolve(root, path)).filter(existsSync);
+  const paths = execFileSync(
+    'git',
+    ['ls-files', '--cached', '--others', '--exclude-standard', '-z'],
+    {
+      cwd: root,
+      encoding: 'utf8',
+    },
+  )
+    .split('\0')
+    .filter((path) => path.endsWith('.md') && !path.startsWith('spikes/'));
+  return [...new Set(paths)]
+    .sort()
+    .map((path) => resolve(root, path))
+    .filter(existsSync);
 }
 
 // 简化的标题锚点：转小写、去标点、合并空白；不等同于完整 GitHub Markdown 规则。
@@ -59,7 +69,8 @@ export function checkDocLinks(root = repoRoot) {
       }
       if (anchor !== undefined && anchor !== '') {
         // 当前文件链接直接查本文件；非 .md 目标按目录中的 README.md 查锚点。
-        const mdFile = pathPart === '' ? file : baseDir.endsWith('.md') ? baseDir : join(baseDir, 'README.md');
+        const mdFile =
+          pathPart === '' ? file : baseDir.endsWith('.md') ? baseDir : join(baseDir, 'README.md');
         if (!existsSync(mdFile) || !anchorsOf(mdFile).has(anchor)) {
           errors.push(`${rel(file)}: 锚点不存在 → ${target}`);
         }

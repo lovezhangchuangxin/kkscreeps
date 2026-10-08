@@ -13,7 +13,10 @@
   // 死亡 creep 代理继承 Creep.prototype，但属性由专门 getter 提供，不回查已消亡的 creep id。
   function tombstoneCreepProxy(o) {
     const proxy = {};
-    const carryCap = (o.creepBody || []).reduce((n, t) => n + (t === 'carry' ? C.CARRY_CAPACITY : 0), 0);
+    const carryCap = (o.creepBody || []).reduce(
+      (n, t) => n + (t === 'carry' ? C.CARRY_CAPACITY : 0),
+      0,
+    );
     // 复用构造时的位置实例，连续读取 pos 保持同一引用。
     const posInstance = new gw.RoomPosition(o.x, o.y, o.room);
     const defs = {
@@ -21,11 +24,17 @@
       name: { enumerable: true, get: () => o.creepName },
       // 死亡 creep 视图也提供位置和房间引用；来源：上游 engine/src/game/tombstones.js。
       pos: { enumerable: true, get: () => posInstance },
-      room: { enumerable: true, get: () => (gw.currentGame() ? gw.currentGame().rooms[o.room] : undefined) },
+      room: {
+        enumerable: true,
+        get: () => (gw.currentGame() ? gw.currentGame().rooms[o.room] : undefined),
+      },
       spawning: { enumerable: true, get: () => false },
       my: { enumerable: true, get: () => o.user === gw.viewerName },
       body: { enumerable: true, get: () => (o.creepBody || []).map((t) => ({ type: t, hits: 0 })) },
-      owner: { enumerable: true, get: () => (o.user === undefined || o.user === null ? undefined : { username: o.user }) },
+      owner: {
+        enumerable: true,
+        get: () => (o.user === undefined || o.user === null ? undefined : { username: o.user }),
+      },
       ticksToLive: { enumerable: true, get: () => o.creepTicksToLive },
       carryCapacity: { enumerable: true, get: () => carryCap },
       // 死亡 creep 的 Store 恒空，容量按其原 body 计算；可提取库存属于墓碑自身的 store。
@@ -67,12 +76,15 @@
       defs.my = { enumerable: true, get: () => st.user === gw.viewerName };
     }
     for (const k of __Object.keys(defs)) __Object.defineProperty(proxy, k, defs[k]);
-    __Object.setPrototypeOf(proxy, st.user ? globalThis.OwnedStructure.prototype : globalThis.Structure.prototype);
+    __Object.setPrototypeOf(
+      proxy,
+      st.user ? globalThis.OwnedStructure.prototype : globalThis.Structure.prototype,
+    );
     return proxy;
   }
 
   gw.defineGameObjectProperties(globalThis.Ruin.prototype, gw.rawData, {
-    structureType: (o) => (o.structure && o.structure.type),
+    structureType: (o) => o.structure && o.structure.type,
     destroyTime: (o) => o.destroyTime,
     ticksToDecay: (o) => o.ticksToDecay, // 投影已折叠
     store: (o) => gw.makeStore(o),

@@ -2,8 +2,12 @@
 export default function install(api) {
   const { RoomObject } = api.builtins;
   class Widget extends RoomObject {
-    get charge() { return api.view.field(this, 'charge'); }
-    get owner() { return api.view.field(this, 'owner'); }
+    get charge() {
+      return api.view.field(this, 'charge');
+    }
+    get owner() {
+      return api.view.field(this, 'owner');
+    }
     recharge(amount = 1) {
       return api.intents.emit('demo-base:recharge', this, { amount });
     }

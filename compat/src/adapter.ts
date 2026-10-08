@@ -60,11 +60,7 @@ export class RunPlayerError extends Error {
   }
 
   static [Symbol.hasInstance](v: unknown): boolean {
-    return (
-      typeof v === 'object' &&
-      v !== null &&
-      (v as Record<symbol, unknown>)[MARKER] === true
-    );
+    return typeof v === 'object' && v !== null && (v as Record<symbol, unknown>)[MARKER] === true;
   }
 }
 
@@ -80,21 +76,39 @@ export class KkscreepsAdapter {
     return r.id;
   }
 
-  placeCreep(room: string, spec: PlaceSpec): Promise<string> { return this.place('creep', room, spec); }
-  placeStructure(room: string, spec: PlaceSpec): Promise<string> { return this.place('structure', room, spec); }
-  placeSite(room: string, spec: PlaceSpec): Promise<string> { return this.place('constructionSite', room, spec); }
+  placeCreep(room: string, spec: PlaceSpec): Promise<string> {
+    return this.place('creep', room, spec);
+  }
+  placeStructure(room: string, spec: PlaceSpec): Promise<string> {
+    return this.place('structure', room, spec);
+  }
+  placeSite(room: string, spec: PlaceSpec): Promise<string> {
+    return this.place('constructionSite', room, spec);
+  }
   placeSource(room: string, spec: PlaceSpec): Promise<string> {
     return this.place('structure', room, { structureType: 'source', ...spec });
   }
   placeMineral(room: string, spec: PlaceSpec): Promise<string> {
     return this.place('structure', room, { structureType: 'mineral', ...spec });
   }
-  placeFlag(room: string, spec: PlaceSpec): Promise<string> { return this.place('flag', room, spec); }
-  placeTombstone(room: string, spec: PlaceSpec): Promise<string> { return this.place('tombstone', room, spec); }
-  placeRuin(room: string, spec: PlaceSpec): Promise<string> { return this.place('ruin', room, spec); }
-  placeDroppedResource(room: string, spec: PlaceSpec): Promise<string> { return this.place('resource', room, spec); }
-  placePowerCreep(room: string, spec: PlaceSpec): Promise<string> { return this.place('powerCreep', room, spec); }
-  placeNuke(room: string, spec: PlaceSpec): Promise<string> { return this.place('nuke', room, spec); }
+  placeFlag(room: string, spec: PlaceSpec): Promise<string> {
+    return this.place('flag', room, spec);
+  }
+  placeTombstone(room: string, spec: PlaceSpec): Promise<string> {
+    return this.place('tombstone', room, spec);
+  }
+  placeRuin(room: string, spec: PlaceSpec): Promise<string> {
+    return this.place('ruin', room, spec);
+  }
+  placeDroppedResource(room: string, spec: PlaceSpec): Promise<string> {
+    return this.place('resource', room, spec);
+  }
+  placePowerCreep(room: string, spec: PlaceSpec): Promise<string> {
+    return this.place('powerCreep', room, spec);
+  }
+  placeNuke(room: string, spec: PlaceSpec): Promise<string> {
+    return this.place('nuke', room, spec);
+  }
   /** 注入测试订单，绕过玩家 API 的创建资格检查与费用。
    * price 单位为 credits，createdTimestamp 为 Unix 时间毫秒数。
    * 字段来源：screeps-ok/src/adapter.ts 的 MarketOrderSpec。 */
@@ -112,7 +126,10 @@ export class KkscreepsAdapter {
 
   /** 求值并结算一轮后返回表达式结果；玩家错误可能在世界推进后才抛出。 */
   async runPlayer(userId: string, playerCode: PlayerCode): Promise<unknown> {
-    const r = await client().call<PlayerRunResult>('runPlayer', { handle: userId, code: String(playerCode) });
+    const r = await client().call<PlayerRunResult>('runPlayer', {
+      handle: userId,
+      code: String(playerCode),
+    });
     return mapRunResult(r);
   }
 

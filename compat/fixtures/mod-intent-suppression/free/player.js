@@ -1,7 +1,9 @@
 export default function install(api) {
   const { RoomObject } = api.builtins;
   class FreeCounter extends RoomObject {
-    get value() { return api.view.field(this, 'value'); }
+    get value() {
+      return api.view.field(this, 'value');
+    }
   }
   api.objects.bind('free:counter', FreeCounter);
   const q = api.queries.install('free:counter');

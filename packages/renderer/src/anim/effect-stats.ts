@@ -5,7 +5,16 @@
  */
 
 /** 有限效果运行时统计（EffectsStage.stats）。 */
-export interface EffectsStats { active: number; nodes: number; texts: number; skipped: number }
+export interface EffectsStats {
+  active: number;
+  nodes: number;
+  texts: number;
+  skipped: number;
+}
 
 /** 常驻动画调度统计（AmbientScheduler.stats）。 */
-export interface AmbientStats { active: number; awake: number; sleeping: number }
+export interface AmbientStats {
+  active: number;
+  awake: number;
+  sleeping: number;
+}

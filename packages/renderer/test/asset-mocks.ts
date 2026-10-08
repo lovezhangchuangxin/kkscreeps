@@ -10,13 +10,17 @@ export class TestBitmap {
 export function mockAssetIO(pages: Array<{ json: { file: string } }> = []) {
   const bitmaps: TestBitmap[] = [];
   vi.stubGlobal('ImageBitmap', TestBitmap);
-  vi.stubGlobal('createImageBitmap', vi.fn(async () => {
-    const bitmap = new TestBitmap();
-    bitmaps.push(bitmap);
-    return bitmap;
-  }));
+  vi.stubGlobal(
+    'createImageBitmap',
+    vi.fn(async () => {
+      const bitmap = new TestBitmap();
+      bitmaps.push(bitmap);
+      return bitmap;
+    }),
+  );
   const fetcher = vi.fn(async (_url: URL) => ({
-    ok: true, status: 200,
+    ok: true,
+    status: 200,
     json: async () => ({ format: 1, atlas: { '1': { pages } } }),
     blob: async () => new Blob(),
   }));

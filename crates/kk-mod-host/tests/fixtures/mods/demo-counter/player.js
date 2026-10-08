@@ -4,8 +4,12 @@
 export default function install(api) {
   const { RoomObject } = api.builtins;
   class Counter extends RoomObject {
-    get value() { return api.view.field(this, 'value'); }
-    get owner() { return api.view.field(this, 'owner'); }
+    get value() {
+      return api.view.field(this, 'value');
+    }
+    get owner() {
+      return api.view.field(this, 'owner');
+    }
     increment(amount = 1) {
       return api.intents.emit('demo-counter:increment', this, { amount });
     }

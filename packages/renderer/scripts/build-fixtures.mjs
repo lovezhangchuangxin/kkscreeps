@@ -50,7 +50,9 @@ try {
   console.log(run.stdout.trim());
 
   mkdirSync(fixturesDir, { recursive: true });
-  for (const file of readdirSync(outDir).filter((f) => f.endsWith('.jsonl')).sort()) {
+  for (const file of readdirSync(outDir)
+    .filter((f) => f.endsWith('.jsonl'))
+    .sort()) {
     const ticksOut = readFileSync(join(outDir, file), 'utf8')
       .split('\n')
       .filter((l) => l.trim().length > 0)
@@ -59,9 +61,10 @@ try {
     const outPath = join(fixturesDir, file.replace(/\.jsonl$/, '.json'));
     writeFileSync(outPath, JSON.stringify(fixture));
     const deltas = fixture.ticks.length - 1;
-    const changed = deltas === 0
-      ? 0
-      : fixture.ticks.slice(1).filter((d) => d.upsert.length + d.removedIds.length > 0).length;
+    const changed =
+      deltas === 0
+        ? 0
+        : fixture.ticks.slice(1).filter((d) => d.upsert.length + d.removedIds.length > 0).length;
     console.log(`✓ ${outPath}（1 快照 + ${deltas} 增量，其中 ${changed} 个非空）`);
   }
 } finally {

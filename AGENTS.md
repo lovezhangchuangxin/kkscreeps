@@ -59,6 +59,7 @@ kkscreeps/
 - `cargo build -p kk-cli`：构建 `target/debug/kkscreeps`。
 - `target/debug/kkscreeps embed`：在本地启动逐行 JSON 调用服务。
 - `pnpm run fmt`：使用 rustfmt 格式化 Rust 代码。
+- `pnpm run fmt:js`：使用 oxfmt 格式化我们自己写的 JavaScript/TypeScript，配置见 `.oxfmtrc.json`；`pnpm run fmt:js:check` 只检查不改写。第三方固定源码与构建产物不在范围内（`.oxfmtrc.json` 的 `ignorePatterns`）。目前手动运行，未接入完整门禁与 Git hooks。
 - `pnpm run check`：唯一检查门禁入口，执行格式检查、Clippy、Rust/JavaScript workspace 与维护工具测试、文档链接及源码规模检查；不运行完整 screeps-ok 套件。无参数为完整门禁（提交前必须以无参数形态跑过）；开发中可限定 crate 加速子集检查：`pnpm run check -- kk-engine kk-runtime`；也可定向单个测试目标：`pnpm run check -- kk-cli --test sim_tests --filter move_static`。定向模式先发现匹配用例，空匹配失败，明确标记子集；每步输出实际耗时，不能代替无参数完整门禁。Rust 测试用 `--tests`、不含 doctest；改动或新增 doctest（文档注释里的 Rust 示例代码块）时，单独运行 `cargo test -p <crate> --doc`（或全量 `cargo test --workspace --doc`）验证后再提交。
 - `cargo test -p kk-engine`：单独运行引擎 crate 的测试。
 - `KKSCREEPS_BIN="$PWD/target/debug/kkscreeps" pnpm --filter @kkscreeps/compat test`：构建适配器，并通过绝对路径选择上述 debug 二进制。
@@ -67,7 +68,7 @@ HTTP 服务和前端开发服务器尚未实现。
 
 ## 代码风格与命名约定
 
-遵循 Rust 2024 约定：四空格缩进，函数和模块使用 `snake_case`，类型使用 `PascalCase`。格式以 rustfmt 为准；workspace 将 Clippy 的 `all` 组设为 `deny`。TypeScript/JavaScript 沿用现有风格：两空格缩进、单引号、分号和 ESM 导入；目前未配置 JavaScript 格式化或 lint 工具。
+遵循 Rust 2024 约定：四空格缩进，函数和模块使用 `snake_case`，类型使用 `PascalCase`。格式以 rustfmt 为准；workspace 将 Clippy 的 `all` 组设为 `deny`。TypeScript/JavaScript 沿用现有风格：两空格缩进、单引号、分号和 ESM 导入；格式由 oxfmt 统一（`pnpm run fmt:js` 改写，`pnpm run fmt:js:check` 校验，配置见 `.oxfmtrc.json`）。
 
 遵循[注释规范](docs/contributing/comment-style.md)：说明性注释默认使用简体中文，写清当前约束、原因及可核验的来源。
 

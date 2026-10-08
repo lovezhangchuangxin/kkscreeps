@@ -6,6 +6,7 @@ module.exports.loop = function () {
   Memory.target_hits = target.hits;
   Memory.tough_hits = target.body[0].hits;
   Memory.actor_hits = actor.hits;
-  Memory.raw_damage = Game.rooms.W1N1.getEventLog()
-    .find(event => event.event === EVENT_ATTACK && event.objectId === actor.id)?.data.damage;
+  Memory.raw_damage = Game.rooms.W1N1.getEventLog().find(
+    (event) => event.event === EVENT_ATTACK && event.objectId === actor.id,
+  )?.data.damage;
 };

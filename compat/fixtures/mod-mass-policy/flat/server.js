@@ -5,8 +5,17 @@ export default function register(api) {
     do {
       const page = ctx.combat.list(after, 2);
       for (const target of page.objects) {
-        const distance = Math.max(Math.abs(target.x - ctx.target.fields.x), Math.abs(target.y - ctx.target.fields.y));
-        if (target.owner && target.owner !== ctx.target.fields.owner && !target.spawning && target.hits > 0 && distance <= 6) {
+        const distance = Math.max(
+          Math.abs(target.x - ctx.target.fields.x),
+          Math.abs(target.y - ctx.target.fields.y),
+        );
+        if (
+          target.owner &&
+          target.owner !== ctx.target.fields.owner &&
+          !target.spawning &&
+          target.hits > 0 &&
+          distance <= 6
+        ) {
           requests.push({ id: target.id, amount: 23 });
         }
       }

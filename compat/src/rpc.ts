@@ -48,7 +48,9 @@ export function locateBinary(): string {
   for (const c of candidates) {
     if (existsSync(c)) return c;
   }
-  throw new Error(`找不到 kkscreeps 二进制（设置 KKSCREEPS_BIN 或构建 target/release|debug/kkscreeps）`);
+  throw new Error(
+    `找不到 kkscreeps 二进制（设置 KKSCREEPS_BIN 或构建 target/release|debug/kkscreeps）`,
+  );
 }
 
 interface PendingWaiter {

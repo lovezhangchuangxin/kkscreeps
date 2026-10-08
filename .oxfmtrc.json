@@ -1,0 +1,24 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 100,
+  "tabWidth": 2,
+  "useTabs": false,
+  "semi": true,
+  "singleQuote": true,
+  "trailingComma": "all",
+  "sortImports": false,
+  "sortPackageJson": false,
+  "ignorePatterns": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "target/**",
+    ".compat/**",
+    ".zcode/**",
+    ".worktrees/**",
+    "compat/fixtures/tooangel/**",
+    "compat/fixtures/overmind-dist/**",
+    "compat/fixtures/wasm-bot/**",
+    "crates/kk-runner/assets/lodash-3.10.1.js",
+    "packages/renderer/src/objects/joins-structures.ts"
+  ]
+}

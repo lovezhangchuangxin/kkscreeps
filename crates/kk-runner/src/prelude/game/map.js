@@ -29,8 +29,10 @@
     const K_ROUTE_GRID = 30;
     const GRID_W = K_ROUTE_GRID * 2;
     function describeExitsImpl(roomName) {
-      if (!ROOM_NAME_RE.test(roomName)
-        || !Object.prototype.hasOwnProperty.call(worldRooms, roomName)) {
+      if (
+        !ROOM_NAME_RE.test(roomName) ||
+        !Object.prototype.hasOwnProperty.call(worldRooms, roomName)
+      ) {
         return null;
       }
       const xy = gw.roomNameToXY(roomName);
@@ -136,7 +138,7 @@
           if (this.priorities[this.heap[ii]] <= this.priorities[this.heap[ii >>> 1]]) {
             let tmp = this.heap[ii];
             this.heap[ii] = this.heap[ii >>> 1];
-            this.heap[ii = ii >>> 1] = tmp;
+            this.heap[(ii = ii >>> 1)] = tmp;
           } else {
             return;
           }
@@ -156,8 +158,10 @@
       if (!ROUTE_RE.test(fromRoom) || !ROUTE_RE.test(toRoom)) return C_ERR_NO_PATH;
       const fromXY = gw.roomNameToXY(fromRoom);
       const toXY = gw.roomNameToXY(toRoom);
-      const fromX = fromXY[0], fromY = fromXY[1];
-      const toX2 = toXY[0], toY2 = toXY[1];
+      const fromX = fromXY[0],
+        fromY = fromXY[1];
+      const toX2 = toXY[0],
+        toY2 = toXY[1];
       // 官方 :126-128：同名异写（同坐标不同房名）→ []
       if (fromX === toX2 && fromY === toY2) return [];
       const originX = fromX + K_ROUTE_GRID;
@@ -170,7 +174,7 @@
         return ox * GRID_W + oy;
       }
       function indexToXY(index) {
-        return [originX - Math.floor(index / GRID_W), originY - index % GRID_W];
+        return [originX - Math.floor(index / GRID_W), originY - (index % GRID_W)];
       }
       function heuristic(xx, yy) {
         return Math.abs(xx - toX2) + Math.abs(yy - toY2);
@@ -187,7 +191,11 @@
       }
       const fromIndex = xyToIndex(fromX, fromY);
       heap.push(fromIndex, heuristic(fromX, fromY));
-      const routeCallback = (opts && opts.routeCallback) || function () { return 1; };
+      const routeCallback =
+        (opts && opts.routeCallback) ||
+        function () {
+          return 1;
+        };
       // 官方 :134-194 Astar 主循环逐字（含 cost `Number(cb(...)) || 1`
       // 的 0→1 归一、Infinity 剪枝、decrease-key 更新序）
       while (heap.size()) {
@@ -238,7 +246,7 @@
         }
       }
 
-    return C_ERR_NO_PATH;
+      return C_ERR_NO_PATH;
     }
     return {
       getWorldSize: () => 1,
@@ -289,73 +297,116 @@
         return Object.prototype.hasOwnProperty.call(worldRooms, roomName);
       },
       // 官方 map.js:262-264：getRoomTerrain 返回 Room.Terrain 实例
-      getRoomTerrain: (roomName) => new (gw.Terrain)(roomName),
+      getRoomTerrain: (roomName) => new gw.Terrain(roomName),
       // 绘图点要求 RoomPosition，并携带房间名；style 缺省为空对象。
       // 图形加入 map 缓冲区，限制由 addVisual 检查。
       get visual() {
         if (!_mapVisual) {
           _mapVisual = {};
           Object.defineProperties(_mapVisual, {
-            circle: { value: function (pos, style) {
-              if (!(pos instanceof globalThis.RoomPosition)) {
-                throw new Error('Invalid pos, RoomPosition expected');
-              }
-              gw.addVisual('map', { t: 'c', x: pos.x, y: pos.y, n: pos.roomName, s: style || {} });
-              return this;
-            } },
-            line: { value: function (pos1, pos2, style) {
-              if (!(pos1 instanceof globalThis.RoomPosition)) {
-                throw new Error('Invalid pos1, RoomPosition expected');
-              }
-              if (!(pos2 instanceof globalThis.RoomPosition)) {
-                throw new Error('Invalid pos2, RoomPosition expected');
-              }
-              gw.addVisual('map', {
-                t: 'l',
-                x1: pos1.x, y1: pos1.y, n1: pos1.roomName,
-                x2: pos2.x, y2: pos2.y, n2: pos2.roomName,
-                s: style || {},
-              });
-              return this;
-            } },
-            rect: { value: function (pos, w, h, style) {
-              if (!(pos instanceof globalThis.RoomPosition)) {
-                throw new Error('Invalid pos, RoomPosition expected');
-              }
-              gw.addVisual('map', { t: 'r', x: pos.x, y: pos.y, n: pos.roomName, w, h, s: style || {} });
-              return this;
-            } },
-            poly: { value: function (points, style) {
-              if (Array.isArray(points) && points.some(Boolean)) {
-                points = points.map((i) => {
-                  const p = i.pos || i;
-                  return { x: p.x, y: p.y, n: p.roomName };
+            circle: {
+              value: function (pos, style) {
+                if (!(pos instanceof globalThis.RoomPosition)) {
+                  throw new Error('Invalid pos, RoomPosition expected');
+                }
+                gw.addVisual('map', {
+                  t: 'c',
+                  x: pos.x,
+                  y: pos.y,
+                  n: pos.roomName,
+                  s: style || {},
                 });
-                gw.addVisual('map', { t: 'p', points, s: style || {} });
-              }
-              return this;
-            } },
-            text: { value: function (text, pos, style) {
-              if (!(pos instanceof globalThis.RoomPosition)) {
-                throw new Error('Invalid pos , RoomPosition expected');
-              }
-              gw.addVisual('map', { t: 't', text, x: pos.x, y: pos.y, n: pos.roomName, s: style || {} });
-              return this;
-            } },
-            clear: { value: function () {
-              gw.clearVisual('map');
-              return this;
-            } },
-            getSize: { value: function () {
-              return gw.getVisualSize('map');
-            } },
-            export: { value: function () {
-              return gw.getVisual('map');
-            } },
-            import: { value: function (data) {
-              gw.addVisual('map', '' + data);
-              return this;
-            } },
+                return this;
+              },
+            },
+            line: {
+              value: function (pos1, pos2, style) {
+                if (!(pos1 instanceof globalThis.RoomPosition)) {
+                  throw new Error('Invalid pos1, RoomPosition expected');
+                }
+                if (!(pos2 instanceof globalThis.RoomPosition)) {
+                  throw new Error('Invalid pos2, RoomPosition expected');
+                }
+                gw.addVisual('map', {
+                  t: 'l',
+                  x1: pos1.x,
+                  y1: pos1.y,
+                  n1: pos1.roomName,
+                  x2: pos2.x,
+                  y2: pos2.y,
+                  n2: pos2.roomName,
+                  s: style || {},
+                });
+                return this;
+              },
+            },
+            rect: {
+              value: function (pos, w, h, style) {
+                if (!(pos instanceof globalThis.RoomPosition)) {
+                  throw new Error('Invalid pos, RoomPosition expected');
+                }
+                gw.addVisual('map', {
+                  t: 'r',
+                  x: pos.x,
+                  y: pos.y,
+                  n: pos.roomName,
+                  w,
+                  h,
+                  s: style || {},
+                });
+                return this;
+              },
+            },
+            poly: {
+              value: function (points, style) {
+                if (Array.isArray(points) && points.some(Boolean)) {
+                  points = points.map((i) => {
+                    const p = i.pos || i;
+                    return { x: p.x, y: p.y, n: p.roomName };
+                  });
+                  gw.addVisual('map', { t: 'p', points, s: style || {} });
+                }
+                return this;
+              },
+            },
+            text: {
+              value: function (text, pos, style) {
+                if (!(pos instanceof globalThis.RoomPosition)) {
+                  throw new Error('Invalid pos , RoomPosition expected');
+                }
+                gw.addVisual('map', {
+                  t: 't',
+                  text,
+                  x: pos.x,
+                  y: pos.y,
+                  n: pos.roomName,
+                  s: style || {},
+                });
+                return this;
+              },
+            },
+            clear: {
+              value: function () {
+                gw.clearVisual('map');
+                return this;
+              },
+            },
+            getSize: {
+              value: function () {
+                return gw.getVisualSize('map');
+              },
+            },
+            export: {
+              value: function () {
+                return gw.getVisual('map');
+              },
+            },
+            import: {
+              value: function (data) {
+                gw.addVisual('map', '' + data);
+                return this;
+              },
+            },
           });
         }
         return _mapVisual;
@@ -363,7 +414,11 @@
       // 官方 map.js:235-258：返回 'wall'|'swamp'|'plain'（完整词，非缩写）；
       // 越界或缺少该房间的地形数据时返回 undefined；位码由 TERRAIN_MASK_* 解释。
       getTerrainAt(x, y, roomName) {
-        if (x && typeof x === 'object') { y = x.y; roomName = x.roomName; x = x.x; }
+        if (x && typeof x === 'object') {
+          y = x.y;
+          roomName = x.roomName;
+          x = x.x;
+        }
         if (x < 0 || x > 49 || y < 0 || y > 49) return undefined;
         const terrain = gw.terrainByRoom[roomName];
         if (!terrain) return undefined;

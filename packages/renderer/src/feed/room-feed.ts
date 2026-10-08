@@ -83,7 +83,13 @@ export class FeedStore implements FeedView {
     return () => this.listeners.delete(listener);
   }
 
-  private notify(room: string, events: RoomEvent[], kind: FeedChange['kind'], actionLogs: ActionLogEntry[] = [], says: SayEntry[] = []): void {
+  private notify(
+    room: string,
+    events: RoomEvent[],
+    kind: FeedChange['kind'],
+    actionLogs: ActionLogEntry[] = [],
+    says: SayEntry[] = [],
+  ): void {
     const state = this.rooms.get(room);
     if (!state) return;
     const change: FeedChange = {

@@ -20,7 +20,9 @@
       if (roomName === 'map') {
         throw new Error('MapVisual size has exceeded ' + sizeLimit + ' KB limit');
       }
-      throw new Error('RoomVisual size in room ' + roomName + ' has exceeded ' + sizeLimit + ' KB limit');
+      throw new Error(
+        'RoomVisual size in room ' + roomName + ' has exceeded ' + sizeLimit + ' KB limit',
+      );
     }
     visualStore[roomName] = (visualStore[roomName] || '') + dataString;
   };
@@ -41,10 +43,14 @@
   // 官方 RoomVisual（rooms.js:1144-1218）逐字：六绘制方法（坐标/位置双形）+
   // getSize/clear/export/import，全部经 console.addVisual 族路由（我方 gw 桥）。
   class RoomVisual {
-    constructor(roomName) { this.roomName = roomName; }
+    constructor(roomName) {
+      this.roomName = roomName;
+    }
     circle(x, y, style) {
       if (typeof x === 'object') {
-        style = y; y = x.y; x = x.x;
+        style = y;
+        y = x.y;
+        x = x.x;
       }
       gw.addVisual(this.roomName, { t: 'c', x, y, s: style });
       return this;
@@ -52,16 +58,21 @@
     line(x1, y1, x2, y2, style) {
       if (typeof x1 === 'object' && typeof y1 === 'object') {
         style = x2;
-        x2 = y1.x; y2 = y1.y;
-        y1 = x1.y; x1 = x1.x;
+        x2 = y1.x;
+        y2 = y1.y;
+        y1 = x1.y;
+        x1 = x1.x;
       }
       gw.addVisual(this.roomName, { t: 'l', x1, y1, x2, y2, s: style });
       return this;
     }
     rect(x, y, w, h, style) {
       if (typeof x === 'object') {
-        style = h; h = w; w = y;
-        y = x.y; x = x.x;
+        style = h;
+        h = w;
+        w = y;
+        y = x.y;
+        x = x.x;
       }
       gw.addVisual(this.roomName, { t: 'r', x, y, w, h, s: style });
       return this;
@@ -75,19 +86,31 @@
     }
     text(text, x, y, style) {
       if (typeof x === 'object') {
-        style = y; y = x.y; x = x.x;
+        style = y;
+        y = x.y;
+        x = x.x;
       }
       gw.addVisual(this.roomName, { t: 't', text, x, y, s: style });
       return this;
     }
-    getSize() { return gw.getVisualSize(this.roomName); }
-    clear() { gw.clearVisual(this.roomName); return this; }
-    export() { return gw.getVisual(this.roomName); }
-    import(data) { gw.addVisual(this.roomName, '' + data); return this; }
+    getSize() {
+      return gw.getVisualSize(this.roomName);
+    }
+    clear() {
+      gw.clearVisual(this.roomName);
+      return this;
+    }
+    export() {
+      return gw.getVisual(this.roomName);
+    }
+    import(data) {
+      gw.addVisual(this.roomName, '' + data);
+      return this;
+    }
   }
   // RoomVisual 全局绑定不可写。来源：上游 engine/src/game/rooms.js 的 RoomVisual 导出。
   Object.defineProperty(globalThis, 'RoomVisual', {
-    enumerable: true, value: RoomVisual,
+    enumerable: true,
+    value: RoomVisual,
   });
-
 })();

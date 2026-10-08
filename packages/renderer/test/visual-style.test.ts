@@ -62,8 +62,16 @@ describe('parseColor（官方 any web format）', () => {
   ])('完整 CSS token：%s', (input, color, alpha) => {
     expect(parseColor(input)).toEqual({ color, alpha });
   });
-  it.each(['rgbx(255,0,0)', 'rgb(255,0,0,junk)', 'rgb(1 2 3 garbage)',
-    'rgb(1,2,3 / .5)', 'hsl(1foo,100%,50%)', '#ggg', 'constructor', 'toString'])('非法颜色不误命中：%s', (input) => {
+  it.each([
+    'rgbx(255,0,0)',
+    'rgb(255,0,0,junk)',
+    'rgb(1 2 3 garbage)',
+    'rgb(1,2,3 / .5)',
+    'hsl(1foo,100%,50%)',
+    '#ggg',
+    'constructor',
+    'toString',
+  ])('非法颜色不误命中：%s', (input) => {
     expect(parseColor(input)).toBeNull();
   });
   it('系统色等非基础形态 → null（G1 退默认）', () => {
@@ -76,7 +84,12 @@ describe('resolveLine（width 0.1 / color #ffffff / opacity 0.5）', () => {
   const cell = 100;
   it('全缺省=官方默认值', () => {
     const r = resolveLine(undefined, cell);
-    expect(r).toEqual({ color: { color: 0xffffff, alpha: 1 }, widthPx: 10, opacity: 0.5, dash: 'solid' });
+    expect(r).toEqual({
+      color: { color: 0xffffff, alpha: 1 },
+      widthPx: 10,
+      opacity: 0.5,
+      dash: 'solid',
+    });
   });
   it('显式样式覆盖 + dash 透传', () => {
     const style: VisualStyle = { width: 0.2, color: '#00ff00', opacity: 1, lineStyle: 'dashed' };
@@ -106,13 +119,19 @@ describe('resolveRect（fill #ffffff / stroke 无 / strokeWidth 0.1）', () => {
     });
   });
   it('transparent 填充 → α0；显式描边生效', () => {
-    const r = resolveRect({ fill: 'transparent', stroke: '#105010', strokeWidth: 0.25 } as VisualStyle, cell);
+    const r = resolveRect(
+      { fill: 'transparent', stroke: '#105010', strokeWidth: 0.25 } as VisualStyle,
+      cell,
+    );
     expect(r.fill!.alpha).toBe(0);
     expect(r.stroke).toEqual({ color: 0x105010, alpha: 1 });
     expect(r.strokePx).toBe(25);
   });
   it('不支持的颜色形态：默认有色字段退默认色；默认无层字段保持无层（评审 A-J1）', () => {
-    expect(resolveRect({ fill: 'not-a-color' } as VisualStyle, cell).fill).toEqual({ color: 0xffffff, alpha: 1 });
+    expect(resolveRect({ fill: 'not-a-color' } as VisualStyle, cell).fill).toEqual({
+      color: 0xffffff,
+      alpha: 1,
+    });
     expect(resolveRect({ stroke: 'not-a-color' } as VisualStyle, cell).stroke).toBeNull();
   });
 });
@@ -188,17 +207,22 @@ describe('resolveText（font 0.8 缺省 / strokeWidth 0.15 / padding 0.3 / align
     expect(full.fontStyle).toBe('italic');
     expect(full.fontFamily).toBe('Times New Roman');
     // small-caps 变体
-    expect(resolveText({ font: 'small-caps 1 serif' } as VisualStyle, cell).fontVariant).toBe('small-caps');
+    expect(resolveText({ font: 'small-caps 1 serif' } as VisualStyle, cell).fontVariant).toBe(
+      'small-caps',
+    );
   });
   it('对齐/描边/背景：背景启用 verticalMiddle（官方明载）', () => {
-    const styled = resolveText({
-      align: 'right',
-      stroke: '#000000',
-      strokeWidth: 0.2,
-      backgroundColor: 'rgba(0, 0, 0, 0.7)',
-      backgroundPadding: 0.5,
-      opacity: 0.8,
-    } as VisualStyle, cell);
+    const styled = resolveText(
+      {
+        align: 'right',
+        stroke: '#000000',
+        strokeWidth: 0.2,
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+        backgroundPadding: 0.5,
+        opacity: 0.8,
+      } as VisualStyle,
+      cell,
+    );
     expect(styled.align).toBe('right');
     expect(styled.stroke).toEqual({ color: 0x000000, alpha: 1 });
     expect(styled.strokePx).toBe(20);
@@ -206,8 +230,12 @@ describe('resolveText（font 0.8 缺省 / strokeWidth 0.15 / padding 0.3 / align
     expect(styled.paddingPx).toBe(50);
     expect(styled.opacity).toBe(0.8);
     expect(styled.verticalMiddle).toBe(true);
-    expect(resolveText({ backgroundColor: 'transparent' } as VisualStyle, cell).verticalMiddle).toBe(true); // 已启用（α0 观感无层）
-    expect(resolveText({ backgroundColor: 'not-a-color' } as VisualStyle, cell).background).toBeNull(); // A-J1
+    expect(
+      resolveText({ backgroundColor: 'transparent' } as VisualStyle, cell).verticalMiddle,
+    ).toBe(true); // 已启用（α0 观感无层）
+    expect(
+      resolveText({ backgroundColor: 'not-a-color' } as VisualStyle, cell).background,
+    ).toBeNull(); // A-J1
   });
   it('非法 align 退 center', () => {
     expect(resolveText({ align: 'up' } as unknown as VisualStyle, cell).align).toBe('center');
@@ -217,20 +245,45 @@ describe('resolveText（font 0.8 缺省 / strokeWidth 0.15 / padding 0.3 / align
 describe('dashSegments（节奏 G1 登记自定：dashed 0.5/0.25 · dotted 0.05/0.30）', () => {
   it('直线切段数与段长符合节奏', () => {
     const cell = 100; // 1 格=100px；dashed on=50px off=25px
-    const segs = dashSegments([{ x: 0, y: 0 }, { x: 2000, y: 0 }], 'dashed', cell);
+    const segs = dashSegments(
+      [
+        { x: 0, y: 0 },
+        { x: 2000, y: 0 },
+      ],
+      'dashed',
+      cell,
+    );
     // 2000px = 26 段节奏（50+25）×26=1950 + 尾 50 → 27 段 on
     expect(segs.length).toBe(27);
     expect(segs[0]![0]).toEqual({ x: 0, y: 0 });
     expect(segs[0]![1]!.x - segs[0]![0]!.x).toBeCloseTo(DASH_PATTERN.dashed.on * cell);
-    expect(segs.every(([a, b]) => Math.abs(b!.x - a!.x - DASH_PATTERN.dashed.on * cell) < 1e-9)).toBe(true);
+    expect(
+      segs.every(([a, b]) => Math.abs(b!.x - a!.x - DASH_PATTERN.dashed.on * cell) < 1e-9),
+    ).toBe(true);
   });
   it('短于一个 on 段的线整段画出', () => {
-    const segs = dashSegments([{ x: 0, y: 0 }, { x: 30, y: 0 }], 'dashed', 100);
-    expect(segs).toEqual([[{ x: 0, y: 0 }, { x: 30, y: 0 }]]);
+    const segs = dashSegments(
+      [
+        { x: 0, y: 0 },
+        { x: 30, y: 0 },
+      ],
+      'dashed',
+      100,
+    );
+    expect(segs).toEqual([
+      [
+        { x: 0, y: 0 },
+        { x: 30, y: 0 },
+      ],
+    ]);
   });
   it('跨拐点连续行走（L 形累计长度）', () => {
     const cell = 100;
-    const pts = [{ x: 0, y: 0 }, { x: 600, y: 0 }, { x: 600, y: 600 }]; // 600+600=1200
+    const pts = [
+      { x: 0, y: 0 },
+      { x: 600, y: 0 },
+      { x: 600, y: 600 },
+    ]; // 600+600=1200
     const segs = dashSegments(pts, 'dashed', cell);
     const total = segs.reduce((sum, [a, b]) => sum + Math.hypot(b!.x - a!.x, b!.y - a!.y), 0);
     // 1200px = 16 整节奏（on50+off25）→ on 段总长 16×50=800，off 恰好收尾
@@ -239,28 +292,85 @@ describe('dashSegments（节奏 G1 登记自定：dashed 0.5/0.25 · dotted 0.05
   });
   it('dotted 短 on 段（round 端帽成点）', () => {
     const cell = 100;
-    const segs = dashSegments([{ x: 0, y: 0 }, { x: 1000, y: 0 }], 'dotted', cell);
+    const segs = dashSegments(
+      [
+        { x: 0, y: 0 },
+        { x: 1000, y: 0 },
+      ],
+      'dotted',
+      cell,
+    );
     expect(segs[0]![1]!.x - segs[0]![0]!.x).toBeCloseTo(DASH_PATTERN.dotted.on * cell);
   });
   it('间隙宽度感知（评审 A-B1）：默认宽 0.1 下 off ≥ width+0.1 格，点/划离散', () => {
     const cell = 100;
     const w = 0.1 * cell; // 形状原语默认 strokeWidth（官方权威值）
-    const dotted = dashSegments([{ x: 0, y: 0 }, { x: 4000, y: 0 }], 'dotted', cell, w);
+    const dotted = dashSegments(
+      [
+        { x: 0, y: 0 },
+        { x: 4000, y: 0 },
+      ],
+      'dotted',
+      cell,
+      w,
+    );
     expect(dotted[1]![0]!.x - dotted[0]![1]!.x).toBe(DASH_PATTERN.dotted.off * cell); // 30px ≥ 20px，文档节奏胜出
-    const dashed = dashSegments([{ x: 0, y: 0 }, { x: 4000, y: 0 }], 'dashed', cell, w);
+    const dashed = dashSegments(
+      [
+        { x: 0, y: 0 },
+        { x: 4000, y: 0 },
+      ],
+      'dashed',
+      cell,
+      w,
+    );
     expect(dashed[1]![0]!.x - dashed[0]![1]!.x).toBe(DASH_PATTERN.dashed.off * cell); // 25px ≥ 20px，文档节奏胜出
     // 宽描边（0.5=历史默认）下取宽度感知间隙
-    const wide = dashSegments([{ x: 0, y: 0 }, { x: 4000, y: 0 }], 'dashed', cell, 0.5 * cell);
+    const wide = dashSegments(
+      [
+        { x: 0, y: 0 },
+        { x: 4000, y: 0 },
+      ],
+      'dashed',
+      cell,
+      0.5 * cell,
+    );
     expect(wide[1]![0]!.x - wide[0]![1]!.x).toBe(0.5 * cell + 0.1 * cell);
   });
   it('非有限坐标防御：不挂起、返回已产出段（评审 GPT-P1#8 死循环回归锚）', () => {
     const cell = 100;
-    expect(dashSegments([{ x: 0, y: 0 }, { x: Number.POSITIVE_INFINITY, y: 0 }], 'dashed', cell)).toEqual([]);
+    expect(
+      dashSegments(
+        [
+          { x: 0, y: 0 },
+          { x: Number.POSITIVE_INFINITY, y: 0 },
+        ],
+        'dashed',
+        cell,
+      ),
+    ).toEqual([]);
     // 整路径含非有限点 → 顶栏守卫直接拒（不进入分段循环）
-    expect(dashSegments([{ x: 0, y: 0 }, { x: 50, y: 0 }, { x: Number.NaN, y: 5 }], 'dotted', cell)).toEqual([]);
+    expect(
+      dashSegments(
+        [
+          { x: 0, y: 0 },
+          { x: 50, y: 0 },
+          { x: Number.NaN, y: 5 },
+        ],
+        'dotted',
+        cell,
+      ),
+    ).toEqual([]);
     // 超大有限坐标（hypot(1e308,1e308)≈1.4e308 有限！）→ 段数上限截断，
     // 不挂起不 OOM（评审 GPT-P1#8 回归锚）
-    const capped = dashSegments([{ x: 0, y: 0 }, { x: 1e308, y: 1e308 }], 'dotted', cell);
+    const capped = dashSegments(
+      [
+        { x: 0, y: 0 },
+        { x: 1e308, y: 1e308 },
+      ],
+      'dotted',
+      cell,
+    );
     expect(capped.length).toBe(4096);
     expect(capped[0]![0]).toEqual({ x: 0, y: 0 });
     expect(capped[0]!.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y))).toBe(true);

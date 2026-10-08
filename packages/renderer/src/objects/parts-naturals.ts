@@ -4,20 +4,9 @@
  * 语义注释附官方 metadata file:line。零 pixi 导入。
  */
 import type { RoomObjectState } from '@kkscreeps/shared';
-import {
-  ownerOf,
-  storeCapacityOf,
-  storeOf,
-  type PartDecl,
-  type PartValues,
-} from './part-decl.js';
+import { ownerOf, storeCapacityOf, storeOf, type PartDecl, type PartValues } from './part-decl.js';
 import { playerColor } from './player-color.js';
-import {
-  DECAY_SPEC,
-  DEPOSIT_SPEC,
-  MINERAL_SPEC,
-  RESOURCE_SPEC,
-} from './specs.js';
+import { DECAY_SPEC, DEPOSIT_SPEC, MINERAL_SPEC, RESOURCE_SPEC } from './specs.js';
 
 function num(v: unknown): number {
   return typeof v === 'number' ? v : 0;
@@ -68,8 +57,10 @@ export const PARTS_SOURCE: PartDecl[] = [
 
 export function mineralColors(mineralType: unknown): { foreground: number; background: number } {
   // 官方 COLORS[mineralType] 未类型缺失即崩——防御性退 O 灰对（§12 分歧登记）
-  return MINERAL_SPEC.colors[typeof mineralType === 'string' ? mineralType : ''] ??
-    MINERAL_SPEC.colors.O!;
+  return (
+    MINERAL_SPEC.colors[typeof mineralType === 'string' ? mineralType : ''] ??
+    MINERAL_SPEC.colors.O!
+  );
 }
 
 export const PARTS_MINERAL: PartDecl[] = [
@@ -99,16 +90,19 @@ export const PARTS_MINERAL: PartDecl[] = [
 
 // ---- 掉落资源（energy.metadata.js + resourceCircle.js） ----
 
-export function resourceCircleValues(
-  s: RoomObjectState,
-): { color: number; radius: number; radiusLighting: number } {
+export function resourceCircleValues(s: RoomObjectState): {
+  color: number;
+  radius: number;
+  radiusLighting: number;
+} {
   const resourceType = typeof s.resourceType === 'string' ? s.resourceType : 'energy';
   // 官方读 state[resourceType]（legacy 同名字段）；kk 投影为 amount（R1 §12）
   const amount = num(s[resourceType] ?? s.amount);
   const capacity = num(s[`${resourceType}Capacity`]) || RESOURCE_SPEC.defaultCapacity;
-  const color = (RESOURCE_SPEC.colors as Record<string, number | undefined>)[resourceType] ??
-    0xffffff;
-  const baseRadius = (RESOURCE_SPEC.radii as Record<string, number | undefined>)[resourceType] ??
+  const color =
+    (RESOURCE_SPEC.colors as Record<string, number | undefined>)[resourceType] ?? 0xffffff;
+  const baseRadius =
+    (RESOURCE_SPEC.radii as Record<string, number | undefined>)[resourceType] ??
     RESOURCE_SPEC.defaultRadius;
   const radius = baseRadius * Math.min(1, amount / capacity);
   // lighting 圆半径整数化（C-B1 防退化：radiusLighting 是 lighting 层唯一连续量，
@@ -139,7 +133,10 @@ export const PARTS_DEPOSIT: PartDecl[] = [
       const kind = typeof s.depositType === 'string' ? s.depositType : '';
       const color = DEPOSIT_SPEC.colors[kind] ?? 0xffffff;
       // fill alpha = max(0, 0.6 − harvested/1e5)（deposit.metadata.js:53-58）
-      const fillAlpha = Math.max(0, DEPOSIT_SPEC.fillBase - num(s.harvested) / DEPOSIT_SPEC.fillDivisor);
+      const fillAlpha = Math.max(
+        0,
+        DEPOSIT_SPEC.fillBase - num(s.harvested) / DEPOSIT_SPEC.fillDivisor,
+      );
       return { color, fillAlpha, kind };
     },
   },
@@ -239,9 +236,7 @@ function decayPart(textureKey: 'tombstone' | 'ruin'): PartDecl[] {
         return {
           borderAlpha: decayAlpha(s, env.time, textureKey === 'ruin' ? 'destroyTime' : 'deathTime'),
           // resourceColor = resourcesTotal>0 ? playerColor : 0x000000（tombstone:11-14）
-          resourceTint: total > 0
-            ? playerColor(ownerOf(s), env.isOwn)
-            : DECAY_SPEC.emptyColor,
+          resourceTint: total > 0 ? playerColor(ownerOf(s), env.isOwn) : DECAY_SPEC.emptyColor,
         };
       },
     },

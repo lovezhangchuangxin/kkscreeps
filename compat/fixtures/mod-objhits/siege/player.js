@@ -1,7 +1,11 @@
 export default function install(api) {
   class SiegeBarrel extends api.builtins.RoomObject {
-    get hits() { return api.view.field(this, 'hits'); }
-    get hitsMax() { return api.view.field(this, 'hitsMax'); }
+    get hits() {
+      return api.view.field(this, 'hits');
+    }
+    get hitsMax() {
+      return api.view.field(this, 'hitsMax');
+    }
   }
   class SiegeDecoy extends api.builtins.RoomObject {}
   api.objects.bind('objhits-siege:barrel', SiegeBarrel);

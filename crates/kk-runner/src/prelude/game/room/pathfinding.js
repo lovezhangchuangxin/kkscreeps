@@ -28,8 +28,20 @@
     let obstacles = _.clone(C_OBSTACLE_OBJECT_TYPES);
     obstacles.push('portal');
     if (opts.ignoreDestructibleStructures) {
-      obstacles = _.without(obstacles, 'constructedWall', 'spawn', 'extension', 'link',
-        'storage', 'observer', 'tower', 'powerBank', 'powerSpawn', 'lab', 'terminal');
+      obstacles = _.without(
+        obstacles,
+        'constructedWall',
+        'spawn',
+        'extension',
+        'link',
+        'storage',
+        'observer',
+        'tower',
+        'powerBank',
+        'powerSpawn',
+        'lab',
+        'terminal',
+      );
     }
     const safeMode = room.controller && room.controller.safeMode && room.controller.my;
     if (opts.ignoreCreeps || safeMode) obstacles = _.without(obstacles, 'creep', 'powerCreep');
@@ -41,27 +53,41 @@
       let type = object.type === 'structure' ? object.structureType : object.type;
       if (type === 'wall') type = 'constructedWall';
       const modPathing = modBuildings === undefined ? undefined : modBuildings[type];
-      if (_.contains(obstacles, type)
-        || !opts.ignoreCreeps && safeMode && (type === 'creep' || type === 'powerCreep')
-          && object.owner === gw.viewerName
-        || !opts.ignoreDestructibleStructures && type === 'rampart' && !object.isPublic
-          && object.owner !== gw.viewerName
-        || !opts.ignoreDestructibleStructures && modPathing !== undefined
-          && object.type === 'structure' && modPathing.pathing === 'obstacle'
-        || !opts.ignoreDestructibleStructures && type === 'constructionSite'
-          && object.owner === gw.viewerName
-          && (_.contains(C_OBSTACLE_OBJECT_TYPES, object.structureType)
-            || (modBuildings !== undefined && modBuildings[object.structureType] !== undefined
-              && modBuildings[object.structureType].pathing === 'obstacle'))) {
+      if (
+        _.contains(obstacles, type) ||
+        (!opts.ignoreCreeps &&
+          safeMode &&
+          (type === 'creep' || type === 'powerCreep') &&
+          object.owner === gw.viewerName) ||
+        (!opts.ignoreDestructibleStructures &&
+          type === 'rampart' &&
+          !object.isPublic &&
+          object.owner !== gw.viewerName) ||
+        (!opts.ignoreDestructibleStructures &&
+          modPathing !== undefined &&
+          object.type === 'structure' &&
+          modPathing.pathing === 'obstacle') ||
+        (!opts.ignoreDestructibleStructures &&
+          type === 'constructionSite' &&
+          object.owner === gw.viewerName &&
+          (_.contains(C_OBSTACLE_OBJECT_TYPES, object.structureType) ||
+            (modBuildings !== undefined &&
+              modBuildings[object.structureType] !== undefined &&
+              modBuildings[object.structureType].pathing === 'obstacle')))
+      ) {
         costs.set(object.x, object.y, 255);
       }
       if (type === 'swamp' && costs.get(object.x, object.y) === 0) {
         costs.set(object.x, object.y, opts.ignoreRoads ? 5 : 10);
       }
-      if (!opts.ignoreRoads && (type === 'road'
-          || (modPathing !== undefined && object.type === 'structure'
-            && modPathing.pathing === 'road'))
-        && costs.get(object.x, object.y) < 255) {
+      if (
+        !opts.ignoreRoads &&
+        (type === 'road' ||
+          (modPathing !== undefined &&
+            object.type === 'structure' &&
+            modPathing.pathing === 'road')) &&
+        costs.get(object.x, object.y) < 255
+      ) {
         costs.set(object.x, object.y, 1);
       }
     }
@@ -85,11 +111,15 @@
   };
   gw.pathfindingDeprecated = function (opts, clear) {
     if (opts.avoid) {
-      deprecated('`avoid` option cannot be used when `PathFinder.use()` is enabled. Use `costCallback` instead.');
+      deprecated(
+        '`avoid` option cannot be used when `PathFinder.use()` is enabled. Use `costCallback` instead.',
+      );
       if (clear) opts.avoid = undefined;
     }
     if (opts.ignore) {
-      deprecated('`ignore` option cannot be used when `PathFinder.use()` is enabled. Use `costCallback` instead.');
+      deprecated(
+        '`ignore` option cannot be used when `PathFinder.use()` is enabled. Use `costCallback` instead.',
+      );
       if (clear) opts.ignore = undefined;
     }
   };
@@ -139,8 +169,11 @@
       }
       gw.pathfindingDeprecated(opts, true);
       // :239-241 跨房且未限时缺省 maxOps 20000（注意 maxRooms>1 条件）
-      if (opts.maxOps === undefined && (opts.maxRooms === undefined || opts.maxRooms > 1)
-        && fromPos.roomName !== toPos.roomName) {
+      if (
+        opts.maxOps === undefined &&
+        (opts.maxRooms === undefined || opts.maxRooms > 1) &&
+        fromPos.roomName !== toPos.roomName
+      ) {
         opts.maxOps = 20000;
       }
       const searchOpts = {
@@ -165,15 +198,18 @@
         searchOpts,
       );
       // :266-271 无 range 时的终点贴近回填（与官方同含"零路径且起点贴近"臂）
-      if (!opts.range && (
-        ret.path.length && ret.path[ret.path.length - 1].isNearTo(toPos)
-          && !ret.path[ret.path.length - 1].isEqualTo(toPos)
-        || !ret.path.length && fromPos.isNearTo(toPos)
-      )) {
+      if (
+        !opts.range &&
+        ((ret.path.length &&
+          ret.path[ret.path.length - 1].isNearTo(toPos) &&
+          !ret.path[ret.path.length - 1].isEqualTo(toPos)) ||
+          (!ret.path.length && fromPos.isNearTo(toPos)))
+      ) {
         ret.path.push(toPos);
       }
       // :273-292 房界截断 + 步进 {x,y,dx,dy,direction}
-      let curX = fromPos.x, curY = fromPos.y;
+      let curX = fromPos.x,
+        curY = fromPos.y;
       const resultPath = [];
       for (let i = 0; i < ret.path.length; i++) {
         const pos = ret.path[i];

@@ -9,7 +9,7 @@
   const { probe, reportMissing, PROBE_IGNORE, countStub } = globalThis.__kkp;
 
   // 各段共用此容器；beginTick 更新世界、查看者及索引，类装配函数在加载时注册。
-  const gw = globalThis.__kkp.gw = {
+  const gw = (globalThis.__kkp.gw = {
     world: { time: 0, cpu: { limit: 20, tickLimit: 500, bucket: 10000 }, rooms: {}, objects: [] },
     terrainByRoom: {},
     objectsById: new Map(),
@@ -23,7 +23,7 @@
     // 类型装配注册表：o.type → assembler(o, base, pos, now)（各文件注册，
     // wrapObject 分发——对照官方各 game/ 文件在注册表登记类型）
     assemblers: Object.create(null),
-  };
+  });
 
   // rawData 查不到当前 tick 的 id 时抛错，防止消亡对象继续读取陈旧数据。
   // 捕获 Map.get 与 Reflect.apply，回查不受玩家替换这些方法影响。
@@ -54,7 +54,12 @@
   // 来源：上游 engine/src/utils.js 的 defineGameObjectProperties。
   const __objectKeys = Object.keys;
   const __objectDefineProperties = Object.defineProperties;
-  gw.defineGameObjectProperties = function defineGameObjectProperties(obj, dataFn, properties, opts) {
+  gw.defineGameObjectProperties = function defineGameObjectProperties(
+    obj,
+    dataFn,
+    properties,
+    opts,
+  ) {
     opts = opts || {};
     const enumerable = opts.enumerable === undefined ? true : !!opts.enumerable;
     const info = {};
@@ -72,7 +77,9 @@
           return this['_' + name];
         },
         set: opts.canSet
-          ? function (value) { this['_' + name] = value; }
+          ? function (value) {
+              this['_' + name] = value;
+            }
           : undefined,
       };
     }
@@ -91,14 +98,42 @@
   // 绑定不能替换，但类对象与原型没有因此冻结，玩家仍能补充原型方法。
 
   const GAME_CLASS_NAMES = [
-    'ConstructionSite', 'Creep', 'Deposit', 'Flag', 'Mineral', 'Nuke',
-    'OwnedStructure', 'PowerCreep', 'Resource', 'Ruin', 'Room', 'RoomObject',
-    'Source', 'Structure', 'StructureContainer', 'StructureController',
-    'StructureExtension', 'StructureExtractor', 'StructureFactory', 'StructureInvaderCore',
-    'StructureKeeperLair', 'StructureLab', 'StructureLink', 'StructureNuker',
-    'StructureObserver', 'StructurePortal', 'StructurePowerBank', 'StructurePowerSpawn',
-    'StructureRampart', 'StructureRoad', 'StructureSpawn', 'StructureStorage',
-    'StructureTerminal', 'StructureTower', 'StructureWall', 'Tombstone',
+    'ConstructionSite',
+    'Creep',
+    'Deposit',
+    'Flag',
+    'Mineral',
+    'Nuke',
+    'OwnedStructure',
+    'PowerCreep',
+    'Resource',
+    'Ruin',
+    'Room',
+    'RoomObject',
+    'Source',
+    'Structure',
+    'StructureContainer',
+    'StructureController',
+    'StructureExtension',
+    'StructureExtractor',
+    'StructureFactory',
+    'StructureInvaderCore',
+    'StructureKeeperLair',
+    'StructureLab',
+    'StructureLink',
+    'StructureNuker',
+    'StructureObserver',
+    'StructurePortal',
+    'StructurePowerBank',
+    'StructurePowerSpawn',
+    'StructureRampart',
+    'StructureRoad',
+    'StructureSpawn',
+    'StructureStorage',
+    'StructureTerminal',
+    'StructureTower',
+    'StructureWall',
+    'Tombstone',
   ];
   // Store 不在本表：真类由 structures 段安装（官方 store.js:99 defineProperty
   // 同形）——本表的非可写安装会挡掉那次唯一重绑
@@ -152,8 +187,16 @@
       },
     });
   }
-  const STRICT_ID_CLASSES = new Set(['Source', 'Mineral', 'Deposit', 'Resource',
-    'Tombstone', 'Ruin', 'Nuke', 'ConstructionSite']);
+  const STRICT_ID_CLASSES = new Set([
+    'Source',
+    'Mineral',
+    'Deposit',
+    'Resource',
+    'Tombstone',
+    'Ruin',
+    'Nuke',
+    'ConstructionSite',
+  ]);
   function makeGameObjectClass(name, signature) {
     let ctor;
     if (signature === 'roomObjectArgs') {
@@ -177,8 +220,8 @@
       };
     } else {
       const strict = STRICT_ID_CLASSES.has(name);
-      const idFirst = name === 'Structure' || name === 'OwnedStructure'
-        || name.startsWith('Structure');
+      const idFirst =
+        name === 'Structure' || name === 'OwnedStructure' || name.startsWith('Structure');
       ctor = function (id) {
         if (strict || id) {
           const raw = gw.rawData(id);
@@ -200,38 +243,64 @@
   // 原型补丁（bot 生态唯一官方支持的扩展形）照常生效（绑定非可写 ≠ 对象冻结）
   for (const name of GAME_CLASS_NAMES) {
     if (globalThis[name] === undefined) {
-      const signature = name === 'RoomObject' ? 'roomObjectArgs'
-        : name === 'Room' ? undefined
-          : name === 'Flag' ? 'flag'
-            : name === 'PowerCreep' ? 'powerCreep' : 'id';
+      const signature =
+        name === 'RoomObject'
+          ? 'roomObjectArgs'
+          : name === 'Room'
+            ? undefined
+            : name === 'Flag'
+              ? 'flag'
+              : name === 'PowerCreep'
+                ? 'powerCreep'
+                : 'id';
       Object.defineProperty(globalThis, name, {
         enumerable: true,
-        value: signature === undefined ? makeStubClass(name)
-          : makeGameObjectClass(name, signature),
+        value: signature === undefined ? makeStubClass(name) : makeGameObjectClass(name, signature),
       });
     }
   }
   // 官方类层级（RoomObject 为根；bot 生态跨层级打补丁，如 RoomObject.prototype.ref）：
   // Structure* 大多 extends OwnedStructure，wall/road/container/portal 直接 extends Structure
   const CLASS_PARENTS = {
-    Creep: 'RoomObject', PowerCreep: 'RoomObject', Structure: 'RoomObject',
-    OwnedStructure: 'Structure', Source: 'RoomObject', Mineral: 'RoomObject',
-    Deposit: 'RoomObject', Resource: 'RoomObject', Tombstone: 'RoomObject',
-    Ruin: 'RoomObject', Nuke: 'RoomObject', ConstructionSite: 'RoomObject',
-    StructureContainer: 'Structure', StructureRoad: 'Structure',
-    StructureWall: 'Structure', StructurePortal: 'Structure',
+    Creep: 'RoomObject',
+    PowerCreep: 'RoomObject',
+    Structure: 'RoomObject',
+    OwnedStructure: 'Structure',
+    Source: 'RoomObject',
+    Mineral: 'RoomObject',
+    Deposit: 'RoomObject',
+    Resource: 'RoomObject',
+    Tombstone: 'RoomObject',
+    Ruin: 'RoomObject',
+    Nuke: 'RoomObject',
+    ConstructionSite: 'RoomObject',
+    StructureContainer: 'Structure',
+    StructureRoad: 'Structure',
+    StructureWall: 'Structure',
+    StructurePortal: 'Structure',
   };
   for (const [cls, parent] of Object.entries(CLASS_PARENTS)) {
-    const c = globalThis[cls], p = globalThis[parent];
-    if (c && p && c.prototype && p.prototype
-      && Object.getPrototypeOf(c.prototype) === Object.prototype) {
+    const c = globalThis[cls],
+      p = globalThis[parent];
+    if (
+      c &&
+      p &&
+      c.prototype &&
+      p.prototype &&
+      Object.getPrototypeOf(c.prototype) === Object.prototype
+    ) {
       Object.setPrototypeOf(c.prototype, p.prototype);
     }
   }
   for (const name of GAME_CLASS_NAMES) {
-    if (name.startsWith('Structure') && name !== 'Structure' && name !== 'OwnedStructure'
-      && !CLASS_PARENTS[name]) {
-      const c = globalThis[name], p = globalThis.OwnedStructure;
+    if (
+      name.startsWith('Structure') &&
+      name !== 'Structure' &&
+      name !== 'OwnedStructure' &&
+      !CLASS_PARENTS[name]
+    ) {
+      const c = globalThis[name],
+        p = globalThis.OwnedStructure;
       if (c && p && Object.getPrototypeOf(c.prototype) === Object.prototype) {
         Object.setPrototypeOf(c.prototype, p.prototype);
       }
@@ -240,10 +309,12 @@
   // Spawn 与 StructureSpawn、Energy 与 Resource 分别共用构造器引用，绑定不可写。
   // 来源：上游 engine/src/game/structures.js 与 resources.js 的别名定义。
   Object.defineProperty(globalThis, 'Spawn', {
-    enumerable: true, value: globalThis.StructureSpawn,
+    enumerable: true,
+    value: globalThis.StructureSpawn,
   });
   Object.defineProperty(globalThis, 'Energy', {
-    enumerable: true, value: globalThis.Resource,
+    enumerable: true,
+    value: globalThis.Resource,
   });
 
   // 官方 toString 家族（engine/src/game 各文件 prototype.toString，bot 生态日志
@@ -274,7 +345,9 @@
   for (const [name, fmt] of Object.entries(OFFICIAL_TOSTRING)) {
     const c = globalThis[name];
     if (c && c.prototype) {
-      c.prototype.toString = function () { return fmt(this); };
+      c.prototype.toString = function () {
+        return fmt(this);
+      };
     }
   }
 
@@ -284,30 +357,56 @@
 
   function classGlobalFor(o) {
     switch (o.type) {
-      case 'creep': return 'Creep';
-      case 'spawn': return 'StructureSpawn';
-      case 'flag': return 'Flag';
-      case 'constructionSite': return 'ConstructionSite';
-      case 'resource': return 'Resource';
-      case 'tombstone': return 'Tombstone';
-      case 'ruin': return 'Ruin';
-      case 'deposit': return 'Deposit';
-      case 'powerCreep': return 'PowerCreep';
-      case 'nuke': return 'Nuke';
+      case 'creep':
+        return 'Creep';
+      case 'spawn':
+        return 'StructureSpawn';
+      case 'flag':
+        return 'Flag';
+      case 'constructionSite':
+        return 'ConstructionSite';
+      case 'resource':
+        return 'Resource';
+      case 'tombstone':
+        return 'Tombstone';
+      case 'ruin':
+        return 'Ruin';
+      case 'deposit':
+        return 'Deposit';
+      case 'powerCreep':
+        return 'PowerCreep';
+      case 'nuke':
+        return 'Nuke';
       case 'structure': {
-        const m = { controller: 'StructureController', source: 'Source', mineral: 'Mineral',
-          storage: 'StructureStorage', terminal: 'StructureTerminal', tower: 'StructureTower',
-          extension: 'StructureExtension', link: 'StructureLink', lab: 'StructureLab',
-          rampart: 'StructureRampart', road: 'StructureRoad', wall: 'StructureWall',
+        const m = {
+          controller: 'StructureController',
+          source: 'Source',
+          mineral: 'Mineral',
+          storage: 'StructureStorage',
+          terminal: 'StructureTerminal',
+          tower: 'StructureTower',
+          extension: 'StructureExtension',
+          link: 'StructureLink',
+          lab: 'StructureLab',
+          rampart: 'StructureRampart',
+          road: 'StructureRoad',
+          wall: 'StructureWall',
           constructedWall: 'StructureWall',
-          container: 'StructureContainer', extractor: 'StructureExtractor',
-          factory: 'StructureFactory', nuker: 'StructureNuker', observer: 'StructureObserver',
-          powerBank: 'StructurePowerBank', powerSpawn: 'StructurePowerSpawn',
-          portal: 'StructurePortal', invaderCore: 'StructureInvaderCore',
-          keeperLair: 'StructureKeeperLair' };
+          container: 'StructureContainer',
+          extractor: 'StructureExtractor',
+          factory: 'StructureFactory',
+          nuker: 'StructureNuker',
+          observer: 'StructureObserver',
+          powerBank: 'StructurePowerBank',
+          powerSpawn: 'StructurePowerSpawn',
+          portal: 'StructurePortal',
+          invaderCore: 'StructureInvaderCore',
+          keeperLair: 'StructureKeeperLair',
+        };
         return m[o.structureType] || 'Structure';
       }
-      default: return null;
+      default:
+        return null;
     }
   }
   gw.classGlobalFor = classGlobalFor;
@@ -315,14 +414,41 @@
   // 装配期捕获构造器引用，避免首次出现某种对象时才从玩家全局查找。
   // 使用时仍读取构造器的 prototype，因此玩家的原型扩展可见。
   const classTable = gw.__Object.create(null);
-  const CLASS_TABLE_NAMES = ['Creep', 'StructureSpawn', 'Flag', 'ConstructionSite',
-    'Resource', 'Tombstone', 'Ruin', 'Deposit', 'PowerCreep', 'Nuke',
-    'StructureController', 'Source', 'Mineral', 'StructureStorage', 'StructureTerminal',
-    'StructureTower', 'StructureExtension', 'StructureLink', 'StructureLab',
-    'StructureRampart', 'StructureRoad', 'StructureWall', 'StructureContainer',
-    'StructureExtractor', 'StructureFactory', 'StructureNuker', 'StructureObserver',
-    'StructurePowerBank', 'StructurePowerSpawn', 'StructurePortal',
-    'StructureInvaderCore', 'StructureKeeperLair', 'Structure'];
+  const CLASS_TABLE_NAMES = [
+    'Creep',
+    'StructureSpawn',
+    'Flag',
+    'ConstructionSite',
+    'Resource',
+    'Tombstone',
+    'Ruin',
+    'Deposit',
+    'PowerCreep',
+    'Nuke',
+    'StructureController',
+    'Source',
+    'Mineral',
+    'StructureStorage',
+    'StructureTerminal',
+    'StructureTower',
+    'StructureExtension',
+    'StructureLink',
+    'StructureLab',
+    'StructureRampart',
+    'StructureRoad',
+    'StructureWall',
+    'StructureContainer',
+    'StructureExtractor',
+    'StructureFactory',
+    'StructureNuker',
+    'StructureObserver',
+    'StructurePowerBank',
+    'StructurePowerSpawn',
+    'StructurePortal',
+    'StructureInvaderCore',
+    'StructureKeeperLair',
+    'Structure',
+  ];
   for (let i = 0; i < CLASS_TABLE_NAMES.length; i++) {
     classTable[CLASS_TABLE_NAMES[i]] = globalThis[CLASS_TABLE_NAMES[i]];
   }
@@ -352,9 +478,12 @@
       const entry = gw.modApi === undefined ? undefined : gw.modApi.types[o.modType];
       ctor = entry === undefined ? null : entry.cls;
       label = o.modType;
-    } else if (o.type === 'structure' && gw.modApi !== undefined
-      && gw.modApi.buildings !== undefined
-      && gw.modApi.buildings[o.structureType] !== undefined) {
+    } else if (
+      o.type === 'structure' &&
+      gw.modApi !== undefined &&
+      gw.modApi.buildings !== undefined &&
+      gw.modApi.buildings[o.structureType] !== undefined
+    ) {
       // Mod 建筑的玩家类由玩家模块安装（gw.modApi.buildings[key].cls）。
       const entry = gw.modApi.buildings[o.structureType];
       ctor = entry.cls;

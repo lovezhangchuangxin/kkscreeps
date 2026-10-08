@@ -34,8 +34,17 @@
 
   const { missing, hasProbes, stubCalls } = globalThis.__kkp;
   const { resetForNewModules } = globalThis.__kkp.cjs;
-  const { beginTick, beginTickKkpv, writeBackMemory, intentsPayload, setRawMemoryHost, rawMemoryDataHost,
-    setSegmentsWindowHost, setForeignSegmentHost, segmentsOutHost } = globalThis.__kkp.memoryWorld;
+  const {
+    beginTick,
+    beginTickKkpv,
+    writeBackMemory,
+    intentsPayload,
+    setRawMemoryHost,
+    rawMemoryDataHost,
+    setSegmentsWindowHost,
+    setForeignSegmentHost,
+    segmentsOutHost,
+  } = globalThis.__kkp.memoryWorld;
 
   globalThis.__kkp.host = {
     /** 每 tick 注入世界快照并重建 Game。cpuMeta：宿主预算真值（Rust 侧
@@ -124,19 +133,25 @@
           // 返回值序列化暂时忽略 Object/Array 根原型的 toJSON；对象自己的 toJSON 仍可能执行。
           json = safeStringify(v);
         } catch (e) {
-          return safeStringify(nullEnv({
-            ok: false, kind: 'serialization',
-            error: 'Return value is not JSON-serializable: ' + safeErrorText(e, false),
-          }));
+          return safeStringify(
+            nullEnv({
+              ok: false,
+              kind: 'serialization',
+              error: 'Return value is not JSON-serializable: ' + safeErrorText(e, false),
+            }),
+          );
         }
         // toJSON 返回非字符串（如 undefined）时 stringify 产物不是字符串——失败
         // 发生在返回值序列化阶段，按契约归 serialization（不得漏到 JSON.parse 再
         // 被"not valid JSON"误报 runtime）
         if (typeof json !== 'string') {
-          return safeStringify(nullEnv({
-            ok: false, kind: 'serialization',
-            error: 'Return value is not JSON-serializable: toJSON produced ' + typeof json,
-          }));
+          return safeStringify(
+            nullEnv({
+              ok: false,
+              kind: 'serialization',
+              error: 'Return value is not JSON-serializable: toJSON produced ' + typeof json,
+            }),
+          );
         }
         // 使用捕获的 parse 还原 JSON 值，避免玩家替换全局 parse 后改写返回值。
         return safeStringify(nullEnv({ ok: true, value: parse(json) }));

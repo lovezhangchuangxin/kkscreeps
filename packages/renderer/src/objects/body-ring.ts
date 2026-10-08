@@ -61,8 +61,18 @@ export function bodyRingArcs(body: readonly BodyPartLike[] | undefined): RingArc
     const start = BACK_SIDE.has(type) ? backAngle : frontAngle;
     const sweep = ring.partAngle * (hits / ring.maxPartHits);
     // 一对镜像弧（官方两次 createBodyPartSprite 调用，:140-143）
-    arcs.push({ color, startAngle: ring.angleShift + start, endAngle: ring.angleShift + start + sweep, anticlockwise: false });
-    arcs.push({ color, startAngle: ring.angleShift - start, endAngle: ring.angleShift - (start + sweep), anticlockwise: true });
+    arcs.push({
+      color,
+      startAngle: ring.angleShift + start,
+      endAngle: ring.angleShift + start + sweep,
+      anticlockwise: false,
+    });
+    arcs.push({
+      color,
+      startAngle: ring.angleShift - start,
+      endAngle: ring.angleShift - (start + sweep),
+      anticlockwise: true,
+    });
     if (BACK_SIDE.has(type)) backAngle += sweep;
     else frontAngle += sweep;
   }

@@ -50,7 +50,12 @@ async function load(root: string): Promise<FontStatus> {
       const face = new FontFace(FONT_FAMILY, `url(${url})`, { weight: spec.weight });
       owned.push(face); // add/load 同步异常也须回滚本次所有 face
       fontSet.add(face);
-      pending.push(face.load().then(() => true, () => false));
+      pending.push(
+        face.load().then(
+          () => true,
+          () => false,
+        ),
+      );
     }
     loaded = (await Promise.all(pending)).every(Boolean);
     return loaded ? 'loaded' : 'fallback';
@@ -60,7 +65,11 @@ async function load(root: string): Promise<FontStatus> {
   } finally {
     if (!loaded && fontSet) {
       for (const face of owned) {
-        try { fontSet.delete(face); } catch { /* 清理异常也不得 reject；继续清理其他 face */ }
+        try {
+          fontSet.delete(face);
+        } catch {
+          /* 清理异常也不得 reject；继续清理其他 face */
+        }
       }
     }
   }

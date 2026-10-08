@@ -4,5 +4,10 @@ export const bindings = new Map();
 export const declines = new WeakMap();
 export let effectiveRules = new Map();
 export let rulesInstalled = false;
-export function sealState() { sealed = true; }
-export function setRules(rules) { effectiveRules = rules; rulesInstalled = true; }
+export function sealState() {
+  sealed = true;
+}
+export function setRules(rules) {
+  effectiveRules = rules;
+  rulesInstalled = true;
+}

@@ -1,7 +1,11 @@
 // 官方生命周期样例使用公共 SDK；没有依赖包 ID 的宿主分支。
 export default function register(api) {
   const config = api.config ?? {};
-  if (typeof config !== 'object' || Array.isArray(config) || Object.keys(config).some(key => key !== 'step')) {
+  if (
+    typeof config !== 'object' ||
+    Array.isArray(config) ||
+    Object.keys(config).some((key) => key !== 'step')
+  ) {
     throw new Error('clockwork config must be an object with optional step');
   }
   const step = config.step ?? 1;

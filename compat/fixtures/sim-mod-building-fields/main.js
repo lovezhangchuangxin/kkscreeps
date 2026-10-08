@@ -6,8 +6,8 @@ module.exports.loop = function () {
   // 断言，退出码 2，冷恢复后补齐。
   if (Game.time < 3) return;
   const room = Game.rooms['W1N1'];
-  const gauge = room.find(FIND_STRUCTURES).filter(s => s.structureType === 'bl:gauge')[0];
-  const beacon = room.find(FIND_STRUCTURES).filter(s => s.structureType === 'bk:beacon')[0];
+  const gauge = room.find(FIND_STRUCTURES).filter((s) => s.structureType === 'bl:gauge')[0];
+  const beacon = room.find(FIND_STRUCTURES).filter((s) => s.structureType === 'bk:beacon')[0];
   Memory.hasGauge = !!gauge;
   Memory.hasBeacon = !!beacon;
   if (gauge) {

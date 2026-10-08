@@ -83,7 +83,18 @@ export class LightingPass {
   /** 确保 RT 与渲染器匹配并按需重渲（ticker 驱动；dirty 才有成本）。
    * 内容为世界尺度，渲进 renderSize² RT 前按 view/renderSize 缩放（评审 A1：
    * 缩放缺失会把成员裁剪到世界 [0,renderSize]² 并放大 view/renderSize 倍）。 */
-  update(renderer: { render(options: { container: Container; target: RenderTexture; clear?: boolean; transform?: Matrix }): void }, renderSize: number, view: number): void {
+  update(
+    renderer: {
+      render(options: {
+        container: Container;
+        target: RenderTexture;
+        clear?: boolean;
+        transform?: Matrix;
+      }): void;
+    },
+    renderSize: number,
+    view: number,
+  ): void {
     if (this.degraded || !this.dirty) return;
     try {
       if (!this.rt || this.rt.width !== renderSize || this.rt.height !== renderSize) {
@@ -98,7 +109,12 @@ export class LightingPass {
       // 显式 render transform 不改动成员容器的局部变换。
       const scale = renderSize / view;
       this.renderTransform.set(scale, 0, 0, scale, this.half * scale, this.half * scale);
-      renderer.render({ container: this.content, target: this.rt, clear: true, transform: this.renderTransform });
+      renderer.render({
+        container: this.content,
+        target: this.rt,
+        clear: true,
+        transform: this.renderTransform,
+      });
       this.renders++;
       this.display.visible = true;
       this.dirty = false;
@@ -115,8 +131,12 @@ export class LightingPass {
     return this.degraded;
   }
   get stats(): { invalidations: number; renders: number; members: number; privateSources: number } {
-    return { invalidations: this.invalidations, renders: this.renders, members: this.content.children.length,
-      privateSources: this.ownedMembers.size + (this.rt ? 1 : 0) };
+    return {
+      invalidations: this.invalidations,
+      renders: this.renders,
+      members: this.content.children.length,
+      privateSources: this.ownedMembers.size + (this.rt ? 1 : 0),
+    };
   }
 
   destroy(): void {

@@ -1,7 +1,11 @@
 export default function install(api) {
   class Counter extends api.builtins.RoomObject {
-    get value() { return api.view.field(this, 'value'); }
-    increment() { return api.intents.emit('workload:increment', this, {amount: 1}); }
+    get value() {
+      return api.view.field(this, 'value');
+    }
+    increment() {
+      return api.intents.emit('workload:increment', this, { amount: 1 });
+    }
   }
   api.objects.bind('workload:counter', Counter);
   api.globals.define('Counter', Counter);

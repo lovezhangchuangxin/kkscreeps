@@ -65,9 +65,20 @@ export class VisualStage {
         this.entries[i] = null;
         continue;
       }
-      if (entry && entry.type !== visual.type) { this.dispose(entry); entry = null; }
-      entry ??= { type: visual.type, container: visual.type === 'text'
-        ? new Container({ label: 'visual-text' }) : new Graphics(), text: null, background: null, styleKey: '', geometryKey: '', shapes: [] };
+      if (entry && entry.type !== visual.type) {
+        this.dispose(entry);
+        entry = null;
+      }
+      entry ??= {
+        type: visual.type,
+        container:
+          visual.type === 'text' ? new Container({ label: 'visual-text' }) : new Graphics(),
+        text: null,
+        background: null,
+        styleKey: '',
+        geometryKey: '',
+        shapes: [],
+      };
       if (!this.render(visual, entry)) {
         this.dispose(entry);
         this.entries[i] = null;
@@ -75,11 +86,13 @@ export class VisualStage {
       }
       this.entries[i] = entry;
       if (entry.container.parent !== this.root) this.root.addChildAt(entry.container, applied);
-      else if (this.root.children[applied] !== entry.container) this.root.setChildIndex(entry.container, applied);
+      else if (this.root.children[applied] !== entry.container)
+        this.root.setChildIndex(entry.container, applied);
       applied++;
     }
     for (let i = visuals.length; i < this.entries.length; i++) {
-      const entry = this.entries[i]; if (entry) this.dispose(entry);
+      const entry = this.entries[i];
+      if (entry) this.dispose(entry);
     }
     this.entries.length = visuals.length;
     this.applied = applied;
@@ -112,57 +125,81 @@ export class VisualStage {
       else {
         switch (visual.type) {
           case 'line': {
-            const points = visual.points.map(p => ({ x: p.x * this.cell, y: p.y * this.cell }));
+            const points = visual.points.map((p) => ({ x: p.x * this.cell, y: p.y * this.cell }));
             const r = resolveLine(visual.style, this.cell);
-            this.shape(entry, { points, r }, g => this.drawLine(g, points, r));
+            this.shape(entry, { points, r }, (g) => this.drawLine(g, points, r));
             break;
           }
           case 'rect': {
             const r = resolveRect(visual.style, this.cell);
-            this.shape(entry, { x: visual.x, y: visual.y, w: visual.w, h: visual.h, r },
-              g => this.drawRect(g, visual, r));
+            this.shape(entry, { x: visual.x, y: visual.y, w: visual.w, h: visual.h, r }, (g) =>
+              this.drawRect(g, visual, r),
+            );
             break;
           }
           case 'circle': {
             const r = resolveCircle(visual.style, this.cell);
-            this.shape(entry, { x: visual.x, y: visual.y, r }, g => this.drawCircle(g, visual, r));
+            this.shape(entry, { x: visual.x, y: visual.y, r }, (g) =>
+              this.drawCircle(g, visual, r),
+            );
             break;
           }
           case 'poly': {
-            const points = visual.points.map(p => ({ x: p.x * this.cell, y: p.y * this.cell }));
+            const points = visual.points.map((p) => ({ x: p.x * this.cell, y: p.y * this.cell }));
             const r = resolvePoly(visual.style, this.cell);
-            this.shape(entry, { points, r }, g => this.drawPoly(g, points, r));
+            this.shape(entry, { points, r }, (g) => this.drawPoly(g, points, r));
             break;
           }
         }
       }
       return true;
-    } catch { return false; }
+    } catch {
+      return false;
+    }
   }
 
   /** Only resolved primitive values enter the key; malformed/circular raw style
    * fields retain the existing resolver defaults instead of poisoning serialization. */
   private shape(entry: Entry, geometry: unknown, draw: (g: Graphics) => void): void {
-    const key = JSON.stringify(geometry), g = entry.container as Graphics;
-    const hit = entry.shapes.findIndex(shape => shape.key === key);
+    const key = JSON.stringify(geometry),
+      g = entry.container as Graphics;
+    const hit = entry.shapes.findIndex((shape) => shape.key === key);
     if (hit >= 0) {
       const shape = entry.shapes.splice(hit, 1)[0]!;
-      entry.shapes.push(shape); g.context = shape.context;
+      entry.shapes.push(shape);
+      g.context = shape.context;
       return;
     }
     // Fixed two-entry LRU: misses repaint a context instead of allocating more UIDs.
-    const shape = entry.shapes.length === 0 ? { key, context: g.context }
-      : entry.shapes.length < 2 ? { key, context: new GraphicsContext() } : entry.shapes.shift()!;
+    const shape =
+      entry.shapes.length === 0
+        ? { key, context: g.context }
+        : entry.shapes.length < 2
+          ? { key, context: new GraphicsContext() }
+          : entry.shapes.shift()!;
     g.context = shape.context;
     // Register before paint so a drawing failure releases this context too.
     entry.shapes.push(shape);
-    g.clear(); draw(g); shape.key = key;
+    g.clear();
+    draw(g);
+    shape.key = key;
   }
 
   /** 折线描边：实线=原生单路径；dashed/dotted=切段后多子路径一次 stroke。 */
-  private strokePath(g: Graphics, points: readonly Pt[], shape: ShapeResolved, widthPx: number, closed: boolean): void {
+  private strokePath(
+    g: Graphics,
+    points: readonly Pt[],
+    shape: ShapeResolved,
+    widthPx: number,
+    closed: boolean,
+  ): void {
     if (shape.stroke === null || shape.stroke.alpha <= 0 || widthPx <= 0) return;
-    const style = { color: shape.stroke.color, alpha: shape.stroke.alpha * shape.opacity, width: widthPx, ...STROKE_CAP };
+    const style = {
+      color: shape.stroke.color,
+      alpha: shape.stroke.alpha * shape.opacity,
+      width: widthPx,
+      ...STROKE_CAP,
+    };
     if (shape.dash === 'solid') {
       g.moveTo(points[0]!.x, points[0]!.y);
       for (let i = 1; i < points.length; i++) g.lineTo(points[i]!.x, points[i]!.y);
@@ -183,17 +220,28 @@ export class VisualStage {
       g.moveTo(points[0]!.x, points[0]!.y);
       g.lineTo(points[1]!.x, points[1]!.y);
     } else {
-      for (const [a, b] of dashSegments(points, resolved.dash, this.cell, resolved.widthPx)) g.moveTo(a.x, a.y).lineTo(b.x, b.y);
+      for (const [a, b] of dashSegments(points, resolved.dash, this.cell, resolved.widthPx))
+        g.moveTo(a.x, a.y).lineTo(b.x, b.y);
     }
-    g.stroke({ color: resolved.color.color, alpha: resolved.color.alpha * resolved.opacity, width: resolved.widthPx, ...STROKE_CAP });
+    g.stroke({
+      color: resolved.color.color,
+      alpha: resolved.color.alpha * resolved.opacity,
+      width: resolved.widthPx,
+      ...STROKE_CAP,
+    });
   }
 
-  private drawRect(g: Graphics, visual: Extract<RoomVisual, { type: 'rect' }>, r: ReturnType<typeof resolveRect>): void {
+  private drawRect(
+    g: Graphics,
+    visual: Extract<RoomVisual, { type: 'rect' }>,
+    r: ReturnType<typeof resolveRect>,
+  ): void {
     const x = visual.x * this.cell;
     const y = visual.y * this.cell;
     const w = visual.w * this.cell;
     const h = visual.h * this.cell;
-    if (r.fill !== null && r.fill.alpha > 0) g.rect(x, y, w, h).fill({ color: r.fill.color, alpha: r.fill.alpha * r.opacity });
+    if (r.fill !== null && r.fill.alpha > 0)
+      g.rect(x, y, w, h).fill({ color: r.fill.color, alpha: r.fill.alpha * r.opacity });
     const corners: Pt[] = [
       { x, y },
       { x: x + w, y },
@@ -203,13 +251,23 @@ export class VisualStage {
     this.strokePath(g, corners, r, r.strokePx, true);
   }
 
-  private drawCircle(g: Graphics, visual: Extract<RoomVisual, { type: 'circle' }>, r: ReturnType<typeof resolveCircle>): void {
+  private drawCircle(
+    g: Graphics,
+    visual: Extract<RoomVisual, { type: 'circle' }>,
+    r: ReturnType<typeof resolveCircle>,
+  ): void {
     const cx = visual.x * this.cell;
     const cy = visual.y * this.cell;
-    if (r.fill !== null && r.fill.alpha > 0) g.circle(cx, cy, r.radiusPx).fill({ color: r.fill.color, alpha: r.fill.alpha * r.opacity });
+    if (r.fill !== null && r.fill.alpha > 0)
+      g.circle(cx, cy, r.radiusPx).fill({ color: r.fill.color, alpha: r.fill.alpha * r.opacity });
     if (r.stroke !== null && r.stroke.alpha > 0 && r.strokePx > 0) {
       if (r.dash === 'solid') {
-        g.circle(cx, cy, r.radiusPx).stroke({ color: r.stroke.color, alpha: r.stroke.alpha * r.opacity, width: r.strokePx, ...STROKE_CAP });
+        g.circle(cx, cy, r.radiusPx).stroke({
+          color: r.stroke.color,
+          alpha: r.stroke.alpha * r.opacity,
+          width: r.strokePx,
+          ...STROKE_CAP,
+        });
       } else {
         this.strokePath(g, circlePoints(cx, cy, r.radiusPx), r, r.strokePx, true);
       }
@@ -228,11 +286,23 @@ export class VisualStage {
   private drawText(visual: Extract<RoomVisual, { type: 'text' }>, entry: Entry): void {
     const r = resolveText(visual.style, this.cell);
     const style = {
-      fontFamily: r.fontFamily, fontSize: r.fontSizePx, fontWeight: r.fontWeight,
-      fontStyle: r.fontStyle, fontVariant: r.fontVariant,
-      fill: { color: r.color.color, alpha: r.color.alpha }, align: r.align,
+      fontFamily: r.fontFamily,
+      fontSize: r.fontSizePx,
+      fontWeight: r.fontWeight,
+      fontStyle: r.fontStyle,
+      fontVariant: r.fontVariant,
+      fill: { color: r.color.color, alpha: r.color.alpha },
+      align: r.align,
       ...(r.stroke !== null && r.stroke.alpha > 0 && r.strokePx > 0
-        ? { stroke: { color: r.stroke.color, alpha: r.stroke.alpha, width: r.strokePx, join: 'round' as const } } : {}),
+        ? {
+            stroke: {
+              color: r.stroke.color,
+              alpha: r.stroke.alpha,
+              width: r.strokePx,
+              join: 'round' as const,
+            },
+          }
+        : {}),
     };
     const styleKey = JSON.stringify(style);
     if (!entry.text) {
@@ -259,11 +329,28 @@ export class VisualStage {
         entry.background = new Graphics();
         entry.container.addChildAt(entry.background, 0);
       }
-      const bg = entry.background, pad = r.paddingPx, width = text.width, height = text.height;
-      const key = JSON.stringify({ ax, ay, pad, width, height, background: r.background, opacity: r.opacity });
+      const bg = entry.background,
+        pad = r.paddingPx,
+        width = text.width,
+        height = text.height;
+      const key = JSON.stringify({
+        ax,
+        ay,
+        pad,
+        width,
+        height,
+        background: r.background,
+        opacity: r.opacity,
+      });
       if (entry.geometryKey !== key) {
         bg.clear();
-        bg.roundRect(-ax * width - pad, -ay * height - pad, width + pad * 2, height + pad * 2, Math.min(pad, height / 2));
+        bg.roundRect(
+          -ax * width - pad,
+          -ay * height - pad,
+          width + pad * 2,
+          height + pad * 2,
+          Math.min(pad, height / 2),
+        );
         bg.fill({ color: r.background.color, alpha: r.background.alpha * r.opacity });
         entry.geometryKey = key;
       }

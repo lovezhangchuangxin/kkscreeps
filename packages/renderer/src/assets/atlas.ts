@@ -63,7 +63,9 @@ interface SheetEntry {
 // Assets 缓存跨 Application 共享；页租约防一个 renderer 销毁另一个的帧源。
 const sheets = new Map<string, SheetEntry>();
 
-async function acquireSheet(url: string): Promise<{ sheet: Spritesheet; release(): Promise<void> }> {
+async function acquireSheet(
+  url: string,
+): Promise<{ sheet: Spritesheet; release(): Promise<void> }> {
   let entry = sheets.get(url);
   while (entry?.unloading) {
     await entry.unloading;
@@ -90,7 +92,9 @@ async function acquireSheet(url: string): Promise<{ sheet: Spritesheet; release(
       released = true;
       if (--held.users !== 0) return;
       // 保留卸载中的条目，让并发重挂载等待卸载完成后重新加载。
-      held.unloading = Assets.unload(url).finally(() => { sheets.delete(url); });
+      held.unloading = Assets.unload(url).finally(() => {
+        sheets.delete(url);
+      });
       await held.unloading;
     },
   };
@@ -126,17 +130,18 @@ export async function loadAtlas(baseUrl: string, pixelRatio: number): Promise<Lo
   const standalone = new Map<string, StandaloneTexture>();
   const releases: Array<() => Promise<void>> = [];
   let disposal: Promise<void> | undefined;
-  const dispose = (): Promise<void> => disposal ??= (async () => {
-    for (const { texture, bitmap } of standalone.values()) {
-      texture.destroy(true);
-      bitmap.close();
-    }
-    standalone.clear();
-    frames.clear();
-    const results = await Promise.allSettled(releases.splice(0).map((release) => release()));
-    const failure = results.find((result) => result.status === 'rejected');
-    if (failure?.status === 'rejected') throw failure.reason;
-  })();
+  const dispose = (): Promise<void> =>
+    (disposal ??= (async () => {
+      for (const { texture, bitmap } of standalone.values()) {
+        texture.destroy(true);
+        bitmap.close();
+      }
+      standalone.clear();
+      frames.clear();
+      const results = await Promise.allSettled(releases.splice(0).map((release) => release()));
+      const failure = results.find((result) => result.status === 'rejected');
+      if (failure?.status === 'rejected') throw failure.reason;
+    })());
 
   const atlas = manifest.atlas[scale];
   if (!atlas) throw new Error(`manifest 缺 ${scale}x atlas`);
@@ -166,7 +171,11 @@ export async function loadAtlas(baseUrl: string, pixelRatio: number): Promise<Lo
   const results = await Promise.allSettled(jobs);
   const failure = results.find((result) => result.status === 'rejected');
   if (failure?.status === 'rejected') {
-    try { await dispose(); } catch { /* 保留原始加载错误。 */ }
+    try {
+      await dispose();
+    } catch {
+      /* 保留原始加载错误。 */
+    }
     throw failure.reason;
   }
   return { frames, standalone, dispose };

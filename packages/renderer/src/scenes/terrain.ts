@@ -90,10 +90,22 @@ export class TerrainStage {
   private buildExits(): void {
     const half = this.cell / 2;
     const spec = TERRAIN_SPEC.exit;
-    const strips: Array<{ key: keyof TerrainTextures; x: number; y: number; w: number; h: number }> = [
+    const strips: Array<{
+      key: keyof TerrainTextures;
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+    }> = [
       { key: 'exit-left', x: -half, y: -half, w: this.cell, h: this.view },
       { key: 'exit-top', x: -half, y: -half, w: this.view, h: this.cell },
-      { key: 'exit-bottom', x: -half, y: -half + this.view - this.cell, w: this.view, h: this.cell },
+      {
+        key: 'exit-bottom',
+        x: -half,
+        y: -half + this.view - this.cell,
+        w: this.view,
+        h: this.cell,
+      },
       { key: 'exit-right', x: -half + this.view - this.cell, y: -half, w: this.cell, h: this.view },
     ];
     for (const { key, x, y, w, h } of strips) {
@@ -122,7 +134,12 @@ export class TerrainStage {
   }
 
   private rebuildSwamp(codes: ArrayLike<number>): void {
-    const merged = mergedOutlinePath(codes, (c) => (c & 2) !== 0, { cell: this.cell }, this.swampHash);
+    const merged = mergedOutlinePath(
+      codes,
+      (c) => (c & 2) !== 0,
+      { cell: this.cell },
+      this.swampHash,
+    );
     if (merged.hash === this.swampHash) return;
     this.swampHash = merged.hash;
     if (merged.count === 0) {
@@ -191,8 +208,13 @@ export class TerrainStage {
       // are needed. Keep the same red-channel mask shader and hidden overlay.
       mask.renderable = false;
       mask.measurable = false;
-      const filter = new MaskFilter({ sprite: mask, channel: 'red', inverse: false,
-        resolution: 'inherit', antialias: 'inherit' });
+      const filter = new MaskFilter({
+        sprite: mask,
+        channel: 'red',
+        inverse: false,
+        resolution: 'inherit',
+        antialias: 'inherit',
+      });
       // The constructor overrides this option; set the public property after it.
       filter.clipToViewport = true;
       noise.filters = [filter];
@@ -227,7 +249,12 @@ export class TerrainStage {
   }
 
   private rebuildWall(codes: ArrayLike<number>): boolean {
-    const merged = mergedOutlinePath(codes, (c) => (c & 1) !== 0, { cell: this.cell }, this.wallHash);
+    const merged = mergedOutlinePath(
+      codes,
+      (c) => (c & 1) !== 0,
+      { cell: this.cell },
+      this.wallHash,
+    );
     if (merged.hash === this.wallHash) return false;
     this.wallHash = merged.hash;
     if (merged.count === 0) {

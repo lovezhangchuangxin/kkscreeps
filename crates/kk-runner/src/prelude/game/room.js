@@ -41,15 +41,23 @@
     if (storageObj !== undefined) room.storage = storageObj;
     if (terminalObj !== undefined) room.terminal = terminalObj;
     queries.install(room);
-    room.getTerrain = function () { return new Terrain(name); };
+    room.getTerrain = function () {
+      return new Terrain(name);
+    };
     const creation = makeRoomCreation(name, roomObjs);
     /** 官方 rooms.js:540-549 toJSON：for-in 枚举（含原型可枚举法——stringify
      *  时函数值自然丢弃）+ 跳过 _ 前缀与五键。 */
     room.toJSON = function () {
       const result = {};
       for (const i in this) {
-        if (i[0] === '_' || i === 'toJSON' || i === 'toString'
-          || i === 'controller' || i === 'storage' || i === 'terminal') {
+        if (
+          i[0] === '_' ||
+          i === 'toJSON' ||
+          i === 'toString' ||
+          i === 'controller' ||
+          i === 'storage' ||
+          i === 'terminal'
+        ) {
           continue;
         }
         result[i] = this[i];

@@ -101,13 +101,26 @@ for (const [key, value] of Object.entries(data)) {
   const c = classify(value);
   let type;
   switch (c.kind) {
-    case 'int': type = 'i64'; break;
-    case 'float': type = 'f64'; break;
-    case 'str': type = '&str'; break;
-    case 'int_list': type = '&[i64]'; break;
-    case 'str_list': type = '&[&str]'; break;
-    case 'json': type = '&str'; break;
-    default: type = c.rustType;
+    case 'int':
+      type = 'i64';
+      break;
+    case 'float':
+      type = 'f64';
+      break;
+    case 'str':
+      type = '&str';
+      break;
+    case 'int_list':
+      type = '&[i64]';
+      break;
+    case 'str_list':
+      type = '&[&str]';
+      break;
+    case 'json':
+      type = '&str';
+      break;
+    default:
+      type = c.rustType;
   }
   out += `pub const ${rustIdent(key)}: ${type} = ${c.value};\n`;
 }
@@ -116,13 +129,17 @@ for (const [key, value] of Object.entries(data)) {
 writeFileSync(output, out);
 const fmt = spawnSync('rustfmt', ['--edition', '2024', output], { stdio: 'inherit' });
 if (fmt.error || fmt.status !== 0) {
-  console.error(`rustfmt 不可用或失败（status=${fmt.status ?? fmt.error.code}），已写入未格式化产物——本地补跑 rustfmt 后再提交`);
+  console.error(
+    `rustfmt 不可用或失败（status=${fmt.status ?? fmt.error.code}），已写入未格式化产物——本地补跑 rustfmt 后再提交`,
+  );
   process.exit(1);
 }
 
 // 只检查每个源键是否出现在声明中；此检查不能证明生成值与 Rust 类型正确。
 const written = readFileSync(output, 'utf8');
-const missing = Object.keys(data).filter((k) => !written.includes(`pub const ${/^[0-9]/.test(k) ? '_' : ''}${k}:`));
+const missing = Object.keys(data).filter(
+  (k) => !written.includes(`pub const ${/^[0-9]/.test(k) ? '_' : ''}${k}:`),
+);
 if (missing.length > 0) {
   console.error(`生成物缺键: ${missing.join(', ')}`);
   process.exit(1);

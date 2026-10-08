@@ -27,12 +27,12 @@
   // 来源：上游 engine/src/game/construction-sites.js 的 remove。
   globalThis.ConstructionSite.prototype.remove = function remove() {
     // 官方 :56-58 逐字：!my（含 undefined——无主工地同拒）且房主非本人
-    if (this.my !== true
-      && !(this.room && this.room.controller && this.room.controller.my)) {
+    if (this.my !== true && !(this.room && this.room.controller && this.room.controller.my)) {
       return C_ERR_NOT_OWNER;
     }
     gw.intents.pushByName('room', 'removeConstructionSite', {
-      roomName: gw.rawData(this.id).room, id: this.id,
+      roomName: gw.rawData(this.id).room,
+      id: this.id,
     });
     return 0;
   };
@@ -56,7 +56,8 @@
   // 来源：上游 engine/src/game/flags.js 的三个修改方法。
   globalThis.Flag.prototype.remove = function remove() {
     gw.intents.pushByName('room', 'removeFlag', {
-      roomName: this.pos.roomName, name: this.name,
+      roomName: this.pos.roomName,
+      name: this.name,
     });
     return 0;
   };
@@ -73,11 +74,16 @@
       return C_ERR_INVALID_TARGET;
     }
     gw.intents.pushByName('room', 'removeFlag', {
-      roomName: this.pos.roomName, name: this.name,
+      roomName: this.pos.roomName,
+      name: this.name,
     });
     gw.intents.pushByName('room', 'createFlag', {
-      roomName, x, y, name: this.name,
-      color: this.color, secondaryColor: this.secondaryColor,
+      roomName,
+      x,
+      y,
+      name: this.name,
+      color: this.color,
+      secondaryColor: this.secondaryColor,
     });
     return 0;
   };
@@ -92,11 +98,16 @@
       return C_ERR_INVALID_ARGS;
     }
     gw.intents.pushByName('room', 'removeFlag', {
-      roomName: this.pos.roomName, name: this.name,
+      roomName: this.pos.roomName,
+      name: this.name,
     });
     gw.intents.pushByName('room', 'createFlag', {
-      roomName: this.pos.roomName, x: this.pos.x, y: this.pos.y,
-      name: this.name, color, secondaryColor,
+      roomName: this.pos.roomName,
+      x: this.pos.x,
+      y: this.pos.y,
+      name: this.name,
+      color,
+      secondaryColor,
     });
     return 0;
   };

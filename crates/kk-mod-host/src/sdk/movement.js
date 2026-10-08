@@ -13,16 +13,25 @@ export function createMovement({ ops, token, fault, write }) {
       }
     }
     return Object.freeze({
-      pending() { return checked(() => ops.op_mod_chain_move_pending(token, key)); },
+      pending() {
+        return checked(() => ops.op_mod_chain_move_pending(token, key));
+      },
       request(direction) {
         return checked(() => {
-          if (typeof direction !== 'number' || !Number.isInteger(direction) || direction < 1 || direction > 8) {
+          if (
+            typeof direction !== 'number' ||
+            !Number.isInteger(direction) ||
+            direction < 1 ||
+            direction > 8
+          ) {
             throw new Error('移动方向须为 1..=8 的整数');
           }
           return ops.op_mod_chain_move_request(token, key, direction);
         });
       },
-      cancel() { return checked(() => ops.op_mod_chain_move_cancel(token, key)); },
+      cancel() {
+        return checked(() => ops.op_mod_chain_move_cancel(token, key));
+      },
     });
   }
   function contest(key, isOpen) {
@@ -162,7 +171,8 @@ export function createMovement({ ops, token, fault, write }) {
       setFatigue(id, value) {
         return checked(() => {
           if (typeof id !== 'string') throw new Error('移动者 ID 须为原始字符串');
-          if (!Number.isSafeInteger(value) || value < 0) throw new Error('移动代价须为非负安全整数');
+          if (!Number.isSafeInteger(value) || value < 0)
+            throw new Error('移动代价须为非负安全整数');
           return ops.op_mod_chain_cost_set_fatigue(token, key, id, value);
         });
       },

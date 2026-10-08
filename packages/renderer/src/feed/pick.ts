@@ -10,7 +10,10 @@
 import type { RoomObjectState } from '@kkscreeps/shared';
 import { resolveTypeKey, Z_TABLE } from '../objects/z-table.js';
 
-export function resolvePickObject(cell: { x: number; y: number }, objects: readonly RoomObjectState[]): string | undefined {
+export function resolvePickObject(
+  cell: { x: number; y: number },
+  objects: readonly RoomObjectState[],
+): string | undefined {
   let bestId: string | undefined;
   let bestZ = -Infinity;
   for (const o of objects) {

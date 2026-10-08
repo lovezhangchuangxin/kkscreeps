@@ -79,8 +79,12 @@
         // visibleRooms 注入，此回退只服务手搓世界）。
         // 来源：上游 driver/lib/runtime/data.js 的房间视野归集。
         const own = o.owner !== undefined ? o.owner : o.user;
-        if (own === gw.viewerName && o.type !== 'constructionSite' && o.type !== 'flag'
-          && o.type !== 'mod') {
+        if (
+          own === gw.viewerName &&
+          o.type !== 'constructionSite' &&
+          o.type !== 'flag' &&
+          o.type !== 'mod'
+        ) {
           __reflectApply(__setAdd, visibleRooms, [o.room]);
         }
       }
@@ -100,13 +104,23 @@
     }
 
     const cpu = gw.world.cpu || {
-      limit: 20, tickLimit: 500, bucket: 10000,
+      limit: 20,
+      tickLimit: 500,
+      bucket: 10000,
       // 裸 run（无宿主 cpu 注入）的堆面兜底：全零形态（套件路径恒经
       // begin_tick 注入真值——sandbox 侧采样）
-      heap: { total_heap_size: 0, total_heap_size_executable: 0, total_physical_size: 0,
-        total_available_size: 0, used_heap_size: 0, heap_size_limit: 0,
-        malloced_memory: 0, peak_malloced_memory: 0, does_zap_garbage: 0,
-        externally_allocated_size: 0 },
+      heap: {
+        total_heap_size: 0,
+        total_heap_size_executable: 0,
+        total_physical_size: 0,
+        total_available_size: 0,
+        used_heap_size: 0,
+        heap_size_limit: 0,
+        malloced_memory: 0,
+        peak_malloced_memory: 0,
+        does_zap_garbage: 0,
+        externally_allocated_size: 0,
+      },
     };
     // Game.gcl 真值（官方 game.js:130-163 点数正变换）：world.gcl = 官方
     // runtimeData.user.gcl 点数（PlayerState 投影）；缺省 0 点 = 1 级满配
@@ -133,7 +147,10 @@
         // 主动 halt 请求 V8 中断；保留沙箱且本 tick 不计费，写回与指令丢弃。
         halt: cpuHalt,
         setShardLimits: () => 0,
-        generatePixel: () => { countStub('Game.cpu.generatePixel'); return -9; },
+        generatePixel: () => {
+          countStub('Game.cpu.generatePixel');
+          return -9;
+        },
         unlock: () => -4,
       },
       gcl: {

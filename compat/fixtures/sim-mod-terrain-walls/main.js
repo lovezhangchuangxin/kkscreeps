@@ -6,10 +6,10 @@
 module.exports.loop = function () {
   const creep = Game.creeps.runner;
   if (Game.time === 0) {
-    const ret = PathFinder.search(
-      new RoomPosition(22, 25, 'W1N1'),
-      { pos: new RoomPosition(28, 25, 'W1N1'), range: 0 },
-    );
+    const ret = PathFinder.search(new RoomPosition(22, 25, 'W1N1'), {
+      pos: new RoomPosition(28, 25, 'W1N1'),
+      range: 0,
+    });
     Memory.pf = { len: ret.path.length, incomplete: ret.incomplete };
     Memory.terrainWall = Game.rooms.W1N1.getTerrain().get(25, 25);
   }

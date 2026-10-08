@@ -40,8 +40,10 @@
       for (const id of energyStructures) {
         const o = id == null ? undefined : gw.rawById.get(id);
         const kind =
-          o && (o.type === 'spawn' || o.type === 'extension'
-            || (o.type === 'structure' && o.structureType === 'extension'));
+          o &&
+          (o.type === 'spawn' ||
+            o.type === 'extension' ||
+            (o.type === 'structure' && o.structureType === 'extension'));
         if (kind && !o.off && o.store) {
           sum += o.store.energy;
         }
@@ -78,7 +80,12 @@
           // convert directions to numbers, eliminate duplicates
           directions = _.uniq(_.map(directions, (e) => +e));
           // bail if any numbers are out of bounds or non-integers
-          if (!_.any(directions, (direction) => direction < 1 || direction > 8 || direction !== (direction | 0))) {
+          if (
+            !_.any(
+              directions,
+              (direction) => direction < 1 || direction > 8 || direction !== (direction | 0),
+            )
+          ) {
             gw.intents.set(this.spawn.id, 'setSpawnDirections', { directions });
             return C.OK;
           }
@@ -136,29 +143,88 @@
         ghost.room = spawn.room;
         ghost.pos = new gw.RoomPosition(spawn.pos.x, spawn.pos.y, spawn.pos.roomName);
         __Object.defineProperties(ghost, {
-          name: { enumerable: true, get() { return name; } },
-          spawning: { enumerable: true, get() { return true; } },
-          my: { enumerable: true, get() { return true; } },
+          name: {
+            enumerable: true,
+            get() {
+              return name;
+            },
+          },
+          spawning: {
+            enumerable: true,
+            get() {
+              return true;
+            },
+          },
+          my: {
+            enumerable: true,
+            get() {
+              return true;
+            },
+          },
           body: {
             enumerable: true,
             get() {
               return _.map(body, (type) => ({ type, hits: 100 }));
             },
           },
-          owner: { enumerable: true, get() { return { username: gw.viewerName }; } },
-          ticksToLive: { enumerable: true, get() { return C.CREEP_LIFE_TIME; } },
+          owner: {
+            enumerable: true,
+            get() {
+              return { username: gw.viewerName };
+            },
+          },
+          ticksToLive: {
+            enumerable: true,
+            get() {
+              return C.CREEP_LIFE_TIME;
+            },
+          },
           carryCapacity: {
             enumerable: true,
             get() {
-              return _.reduce(body, (result, type) => (result += type === C.CARRY ? C.CARRY_CAPACITY : 0), 0);
+              return _.reduce(
+                body,
+                (result, type) => (result += type === C.CARRY ? C.CARRY_CAPACITY : 0),
+                0,
+              );
             },
           },
-          carry: { enumerable: true, get() { return { energy: 0 }; } },
-          store: { enumerable: true, get() { return new Store({ store: { energy: 0 } }); } },
-          fatigue: { enumerable: true, get() { return 0; } },
-          hits: { enumerable: true, get() { return body.length * 100; } },
-          hitsMax: { enumerable: true, get() { return body.length * 100; } },
-          saying: { enumerable: true, get() { return undefined; } },
+          carry: {
+            enumerable: true,
+            get() {
+              return { energy: 0 };
+            },
+          },
+          store: {
+            enumerable: true,
+            get() {
+              return new Store({ store: { energy: 0 } });
+            },
+          },
+          fatigue: {
+            enumerable: true,
+            get() {
+              return 0;
+            },
+          },
+          hits: {
+            enumerable: true,
+            get() {
+              return body.length * 100;
+            },
+          },
+          hitsMax: {
+            enumerable: true,
+            get() {
+              return body.length * 100;
+            },
+          },
+          saying: {
+            enumerable: true,
+            get() {
+              return undefined;
+            },
+          },
         });
         gw.currentGame().creeps[name] = ghost;
       }
@@ -175,7 +241,8 @@
         if (gw.currentGame().creeps[name] || createdCreepNames.indexOf(name) !== -1) {
           return C.ERR_NAME_EXISTS;
         }
-        let energyStructures = options.energyStructures && _.uniq(_.map(options.energyStructures, 'id'));
+        let energyStructures =
+          options.energyStructures && _.uniq(_.map(options.energyStructures, 'id'));
         let directions = options.directions;
         if (directions !== undefined) {
           if (!_.isArray(directions)) {
@@ -184,7 +251,13 @@
           // convert directions to numbers, eliminate duplicates
           directions = _.uniq(_.map(directions, (d) => +d));
           // bail if any numbers are out of bounds or non-integers
-          if (directions.length === 0 || !_.all(directions, (direction) => direction >= 1 && direction <= 8 && direction === (direction | 0))) {
+          if (
+            directions.length === 0 ||
+            !_.all(
+              directions,
+              (direction) => direction >= 1 && direction <= 8 && direction === (direction | 0),
+            )
+          ) {
             return C.ERR_INVALID_ARGS;
           }
         }
@@ -205,7 +278,9 @@
             return C.ERR_INVALID_ARGS;
           }
         }
-        const energyAvailable = energyStructures ? calcEnergyAvailable(energyStructures) : this.room.energyAvailable;
+        const energyAvailable = energyStructures
+          ? calcEnergyAvailable(energyStructures)
+          : this.room.energyAvailable;
         if (energyAvailable < calcCreepCost(body)) {
           return C.ERR_NOT_ENOUGH_ENERGY;
         }
@@ -232,10 +307,214 @@
 
       // 随机从名称池选取未使用的名字；第五次尝试起拼接两个名字，再继续重试。
       // 来源：上游 engine/src/game/names.js 的 getUniqueName。
-      const boyNames = ['Jackson', 'Aiden', 'Liam', 'Lucas', 'Noah', 'Mason', 'Jayden', 'Ethan', 'Jacob', 'Jack', 'Caden', 'Logan', 'Benjamin', 'Michael', 'Caleb', 'Ryan', 'Alexander', 'Elijah', 'James', 'William', 'Oliver', 'Connor', 'Matthew', 'Daniel', 'Luke', 'Brayden', 'Jayce', 'Henry', 'Carter', 'Dylan', 'Gabriel', 'Joshua', 'Nicholas', 'Isaac', 'Owen', 'Nathan', 'Grayson', 'Eli', 'Landon', 'Andrew', 'Max', 'Samuel', 'Gavin', 'Wyatt', 'Christian', 'Hunter', 'Cameron', 'Evan', 'Charlie', 'David', 'Sebastian', 'Joseph', 'Dominic', 'Anthony', 'Colton', 'John', 'Tyler', 'Zachary', 'Thomas', 'Julian', 'Levi', 'Adam', 'Isaiah', 'Alex', 'Aaron', 'Parker', 'Cooper', 'Miles', 'Chase', 'Muhammad', 'Christopher', 'Blake', 'Austin', 'Jordan', 'Leo', 'Jonathan', 'Adrian', 'Colin', 'Hudson', 'Ian', 'Xavier', 'Camden', 'Tristan', 'Carson', 'Jason', 'Nolan', 'Riley', 'Lincoln', 'Brody', 'Bentley', 'Nathaniel', 'Josiah', 'Declan', 'Jake', 'Asher', 'Jeremiah', 'Cole', 'Mateo', 'Micah', 'Elliot'];
-      const girlNames = ['Sophia', 'Emma', 'Olivia', 'Isabella', 'Mia', 'Ava', 'Lily', 'Zoe', 'Emily', 'Chloe', 'Layla', 'Madison', 'Madelyn', 'Abigail', 'Aubrey', 'Charlotte', 'Amelia', 'Ella', 'Kaylee', 'Avery', 'Aaliyah', 'Hailey', 'Hannah', 'Addison', 'Riley', 'Harper', 'Aria', 'Arianna', 'Mackenzie', 'Lila', 'Evelyn', 'Adalyn', 'Grace', 'Brooklyn', 'Ellie', 'Anna', 'Kaitlyn', 'Isabelle', 'Sophie', 'Scarlett', 'Natalie', 'Leah', 'Sarah', 'Nora', 'Mila', 'Elizabeth', 'Lillian', 'Kylie', 'Audrey', 'Lucy', 'Maya', 'Annabelle', 'Makayla', 'Gabriella', 'Elena', 'Victoria', 'Claire', 'Savannah', 'Peyton', 'Maria', 'Alaina', 'Kennedy', 'Stella', 'Liliana', 'Allison', 'Samantha', 'Keira', 'Alyssa', 'Reagan', 'Molly', 'Alexandra', 'Violet', 'Charlie', 'Julia', 'Sadie', 'Ruby', 'Eva', 'Alice', 'Eliana', 'Taylor', 'Callie', 'Penelope', 'Camilla', 'Bailey', 'Kaelyn', 'Alexis', 'Kayla', 'Katherine', 'Sydney', 'Lauren', 'Jasmine', 'London', 'Bella', 'Adeline', 'Caroline', 'Vivian', 'Juliana', 'Gianna', 'Skyler', 'Jordyn'];
+      const boyNames = [
+        'Jackson',
+        'Aiden',
+        'Liam',
+        'Lucas',
+        'Noah',
+        'Mason',
+        'Jayden',
+        'Ethan',
+        'Jacob',
+        'Jack',
+        'Caden',
+        'Logan',
+        'Benjamin',
+        'Michael',
+        'Caleb',
+        'Ryan',
+        'Alexander',
+        'Elijah',
+        'James',
+        'William',
+        'Oliver',
+        'Connor',
+        'Matthew',
+        'Daniel',
+        'Luke',
+        'Brayden',
+        'Jayce',
+        'Henry',
+        'Carter',
+        'Dylan',
+        'Gabriel',
+        'Joshua',
+        'Nicholas',
+        'Isaac',
+        'Owen',
+        'Nathan',
+        'Grayson',
+        'Eli',
+        'Landon',
+        'Andrew',
+        'Max',
+        'Samuel',
+        'Gavin',
+        'Wyatt',
+        'Christian',
+        'Hunter',
+        'Cameron',
+        'Evan',
+        'Charlie',
+        'David',
+        'Sebastian',
+        'Joseph',
+        'Dominic',
+        'Anthony',
+        'Colton',
+        'John',
+        'Tyler',
+        'Zachary',
+        'Thomas',
+        'Julian',
+        'Levi',
+        'Adam',
+        'Isaiah',
+        'Alex',
+        'Aaron',
+        'Parker',
+        'Cooper',
+        'Miles',
+        'Chase',
+        'Muhammad',
+        'Christopher',
+        'Blake',
+        'Austin',
+        'Jordan',
+        'Leo',
+        'Jonathan',
+        'Adrian',
+        'Colin',
+        'Hudson',
+        'Ian',
+        'Xavier',
+        'Camden',
+        'Tristan',
+        'Carson',
+        'Jason',
+        'Nolan',
+        'Riley',
+        'Lincoln',
+        'Brody',
+        'Bentley',
+        'Nathaniel',
+        'Josiah',
+        'Declan',
+        'Jake',
+        'Asher',
+        'Jeremiah',
+        'Cole',
+        'Mateo',
+        'Micah',
+        'Elliot',
+      ];
+      const girlNames = [
+        'Sophia',
+        'Emma',
+        'Olivia',
+        'Isabella',
+        'Mia',
+        'Ava',
+        'Lily',
+        'Zoe',
+        'Emily',
+        'Chloe',
+        'Layla',
+        'Madison',
+        'Madelyn',
+        'Abigail',
+        'Aubrey',
+        'Charlotte',
+        'Amelia',
+        'Ella',
+        'Kaylee',
+        'Avery',
+        'Aaliyah',
+        'Hailey',
+        'Hannah',
+        'Addison',
+        'Riley',
+        'Harper',
+        'Aria',
+        'Arianna',
+        'Mackenzie',
+        'Lila',
+        'Evelyn',
+        'Adalyn',
+        'Grace',
+        'Brooklyn',
+        'Ellie',
+        'Anna',
+        'Kaitlyn',
+        'Isabelle',
+        'Sophie',
+        'Scarlett',
+        'Natalie',
+        'Leah',
+        'Sarah',
+        'Nora',
+        'Mila',
+        'Elizabeth',
+        'Lillian',
+        'Kylie',
+        'Audrey',
+        'Lucy',
+        'Maya',
+        'Annabelle',
+        'Makayla',
+        'Gabriella',
+        'Elena',
+        'Victoria',
+        'Claire',
+        'Savannah',
+        'Peyton',
+        'Maria',
+        'Alaina',
+        'Kennedy',
+        'Stella',
+        'Liliana',
+        'Allison',
+        'Samantha',
+        'Keira',
+        'Alyssa',
+        'Reagan',
+        'Molly',
+        'Alexandra',
+        'Violet',
+        'Charlie',
+        'Julia',
+        'Sadie',
+        'Ruby',
+        'Eva',
+        'Alice',
+        'Eliana',
+        'Taylor',
+        'Callie',
+        'Penelope',
+        'Camilla',
+        'Bailey',
+        'Kaelyn',
+        'Alexis',
+        'Kayla',
+        'Katherine',
+        'Sydney',
+        'Lauren',
+        'Jasmine',
+        'London',
+        'Bella',
+        'Adeline',
+        'Caroline',
+        'Vivian',
+        'Juliana',
+        'Gianna',
+        'Skyler',
+        'Jordyn',
+      ];
       function getUniqueName(checkExistingFn) {
-        let c = 0, name, exists;
+        let c = 0,
+          name,
+          exists;
         do {
           const list = Math.random() > 0.5 ? boyNames : girlNames;
           name = list[Math.floor(Math.random() * list.length)];
@@ -290,7 +569,11 @@
        *  spawnCreep 的 `opts.memory || 旧值 || {}` 不同：**显式 creepMemory 覆盖
        *  旧值**，:976-982）→ 幽灵壳 → intent（无 energyStructures/directions
        *  面）→ **返回 name**（错误时返回错误码）。 */
-      globalThis.StructureSpawn.prototype.createCreep = function createCreep(body, name, creepMemory) {
+      globalThis.StructureSpawn.prototype.createCreep = function createCreep(
+        body,
+        name,
+        creepMemory,
+      ) {
         if (_.isObject(name) && _.isUndefined(creepMemory)) {
           creepMemory = name;
           name = undefined;
@@ -341,7 +624,14 @@
         if (this.spawning) {
           return C.ERR_BUSY;
         }
-        if (!target || !target.id || !isKnownCreep(target.id) || !(target instanceof globalThis.Creep) || target.spawning || _.any(target.body, { type: C.CLAIM })) {
+        if (
+          !target ||
+          !target.id ||
+          !isKnownCreep(target.id) ||
+          !(target instanceof globalThis.Creep) ||
+          target.spawning ||
+          _.any(target.body, { type: C.CLAIM })
+        ) {
           assertTargetObject(target);
           return C.ERR_INVALID_TARGET;
         }
@@ -354,14 +644,29 @@
         if (!target.pos.isNearTo(this.pos)) {
           return C.ERR_NOT_IN_RANGE;
         }
-        if (this.room.energyAvailable < __MathCeil((C.SPAWN_RENEW_RATIO * calcCreepCost(target.body)) / C.CREEP_SPAWN_TIME / target.body.length)) {
+        if (
+          this.room.energyAvailable <
+          __MathCeil(
+            (C.SPAWN_RENEW_RATIO * calcCreepCost(target.body)) /
+              C.CREEP_SPAWN_TIME /
+              target.body.length,
+          )
+        ) {
           return C.ERR_NOT_ENOUGH_ENERGY;
         }
-        if (target.ticksToLive + __MathFloor((C.SPAWN_RENEW_RATIO * C.CREEP_LIFE_TIME) / C.CREEP_SPAWN_TIME / target.body.length) > C.CREEP_LIFE_TIME) {
+        if (
+          target.ticksToLive +
+            __MathFloor(
+              (C.SPAWN_RENEW_RATIO * C.CREEP_LIFE_TIME) / C.CREEP_SPAWN_TIME / target.body.length,
+            ) >
+          C.CREEP_LIFE_TIME
+        ) {
           return C.ERR_FULL;
         }
         if (_.any(target.body, (i) => !!i.boost)) {
-          deprecated('Using `StructureSpawn.renewCreep` on a boosted creep is deprecated and will throw an error soon. Please remove boosts using `StructureLab.unboostCreep` before renewing.');
+          deprecated(
+            'Using `StructureSpawn.renewCreep` on a boosted creep is deprecated and will throw an error soon. Please remove boosts using `StructureLab.unboostCreep` before renewing.',
+          );
         }
         gw.intents.set(this.id, 'renewCreep', { id: target.id });
         return C.OK;
@@ -373,7 +678,13 @@
         if (!this.my) {
           return C.ERR_NOT_OWNER;
         }
-        if (!target || !target.id || !isKnownCreep(target.id) || !(target instanceof globalThis.Creep) || target.spawning) {
+        if (
+          !target ||
+          !target.id ||
+          !isKnownCreep(target.id) ||
+          !(target instanceof globalThis.Creep) ||
+          target.spawning
+        ) {
           assertTargetObject(target);
           return C.ERR_INVALID_TARGET;
         }
@@ -395,7 +706,9 @@
       /** StructureSpawn.notifyWhenAttacked 覆盖版（官方 structures.js:1220-1233）：
        *  与基类版的差异——无 `!this.room` 门、无 controller 归属分支（spawn 恒有
        *  主，my 判定即足）。 */
-      globalThis.StructureSpawn.prototype.notifyWhenAttacked = function notifyWhenAttacked(enabled) {
+      globalThis.StructureSpawn.prototype.notifyWhenAttacked = function notifyWhenAttacked(
+        enabled,
+      ) {
         if (!this.my) return C.ERR_NOT_OWNER;
         if (typeof enabled !== 'boolean') return C.ERR_INVALID_ARGS;
         if (enabled !== gw.rawData(this.id).notifyWhenAttacked) {
@@ -403,7 +716,6 @@
         }
         return C.OK;
       };
-
     }
 
     function installAssembler() {

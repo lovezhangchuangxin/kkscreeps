@@ -3,8 +3,12 @@
 // alpha 互不依赖，选择门互不残留。
 export default function register(api) {
   const relay = api.objects.define('beta:relay', {
-    version: 1, playerClass: 'TypedRelay', visibility: 'owner-collection',
-    ownerField: 'owner', positionFields: ['x', 'y'], fields: {
+    version: 1,
+    playerClass: 'TypedRelay',
+    visibility: 'owner-collection',
+    ownerField: 'owner',
+    positionFields: ['x', 'y'],
+    fields: {
       owner: { type: 'string', maxBytes: 128 },
       x: { type: 'u32', min: 0, max: 49 },
       y: { type: 'u32', min: 0, max: 49 },
@@ -16,9 +20,19 @@ export default function register(api) {
     },
   });
   api.intents.define('beta:ping', {
-    scope: 'object', target: relay,
-    args: { type: 'record', fields: { code: { type: 'enum', values: ['echo', 'sync'] } }, nullable: true },
-    process(ctx) { ctx.target.fields.history = [...(ctx.target.fields.history ?? []), ctx.args?.code === 'sync' ? 1 : 0]; },
+    scope: 'object',
+    target: relay,
+    args: {
+      type: 'record',
+      fields: { code: { type: 'enum', values: ['echo', 'sync'] } },
+      nullable: true,
+    },
+    process(ctx) {
+      ctx.target.fields.history = [
+        ...(ctx.target.fields.history ?? []),
+        ctx.args?.code === 'sync' ? 1 : 0,
+      ];
+    },
   });
   api.resources.define('beta:spark');
 }

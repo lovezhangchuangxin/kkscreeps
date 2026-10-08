@@ -4,14 +4,23 @@
 // 生产与寻路），本包不提供任何处理器。
 export default function register(api) {
   const config = api.config ?? {};
-  if (typeof config !== 'object' || Array.isArray(config)
-    || Object.keys(config).some(key => !['interval', 'yield'].includes(key))) {
+  if (
+    typeof config !== 'object' ||
+    Array.isArray(config) ||
+    Object.keys(config).some((key) => !['interval', 'yield'].includes(key))
+  ) {
     throw new Error('smelter config accepts only interval and yield');
   }
   const interval = config.interval ?? 12;
   const yieldPerCycle = config.yield ?? 10;
-  if (!Number.isInteger(interval) || interval < 2 || interval > 1000
-    || !Number.isInteger(yieldPerCycle) || yieldPerCycle < 1 || yieldPerCycle > 1000) {
+  if (
+    !Number.isInteger(interval) ||
+    interval < 2 ||
+    interval > 1000 ||
+    !Number.isInteger(yieldPerCycle) ||
+    yieldPerCycle < 1 ||
+    yieldPerCycle > 1000
+  ) {
     throw new Error('smelter interval must be 2..1000 and yield must be 1..1000');
   }
   api.resources.define('smelter:ore');

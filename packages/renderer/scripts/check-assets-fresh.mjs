@@ -26,8 +26,10 @@ function main() {
       continue;
     }
     const buf = readFileSync(abs);
-    if (buf.length !== entry.bytes) problems.push(`字节数不符: ${entry.path}（磁盘 ${buf.length} ≠ 清单 ${entry.bytes}）`);
-    if (sha256(buf) !== entry.sha256) problems.push(`sha256 不符: ${entry.path}（源文件已改，需重跑 pnpm run build:assets）`);
+    if (buf.length !== entry.bytes)
+      problems.push(`字节数不符: ${entry.path}（磁盘 ${buf.length} ≠ 清单 ${entry.bytes}）`);
+    if (sha256(buf) !== entry.sha256)
+      problems.push(`sha256 不符: ${entry.path}（源文件已改，需重跑 pnpm run build:assets）`);
   }
 
   const listedByDir = new Map();
@@ -43,10 +45,13 @@ function main() {
   ]) {
     const absDir = join(pkgRoot, 'assets', dir);
     const actual = existsSync(absDir)
-      ? readdirSync(absDir).filter((f) => exts.some((e) => f.endsWith(e))).sort()
+      ? readdirSync(absDir)
+          .filter((f) => exts.some((e) => f.endsWith(e)))
+          .sort()
       : [];
     const listed = [...(listedByDir.get(dir) ?? [])].sort();
-    for (const f of actual) if (!listed.includes(f)) problems.push(`磁盘多出（清单缺）: ${dir}/${f}`);
+    for (const f of actual)
+      if (!listed.includes(f)) problems.push(`磁盘多出（清单缺）: ${dir}/${f}`);
     for (const f of listed) if (!actual.includes(f)) problems.push(`清单有（磁盘无）: ${dir}/${f}`);
   }
 
@@ -59,7 +64,9 @@ function main() {
           continue;
         }
         if (sha256(readFileSync(abs)) !== page[key].sha256) {
-          problems.push(`atlas 产物过期: ${page[key].file}（源变更后需重跑 pnpm run build:assets）`);
+          problems.push(
+            `atlas 产物过期: ${page[key].file}（源变更后需重跑 pnpm run build:assets）`,
+          );
         }
       }
     }
@@ -70,17 +77,25 @@ function main() {
         continue;
       }
       if (sha256(readFileSync(abs)) !== standalone.sha256) {
-        problems.push(`standalone 产物过期: ${standalone.file}（源变更后需重跑 pnpm run build:assets）`);
+        problems.push(
+          `standalone 产物过期: ${standalone.file}（源变更后需重跑 pnpm run build:assets）`,
+        );
       }
     }
   }
 
   if (problems.length > 0) {
     for (const p of problems) console.error(`✗ ${p}`);
-    console.error(`✗ 资产新鲜度校验失败（${problems.length} 项）——运行 pnpm run build:assets 重新生成`);
+    console.error(
+      `✗ 资产新鲜度校验失败（${problems.length} 项）——运行 pnpm run build:assets 重新生成`,
+    );
     process.exit(1);
   }
-  console.log(`✓ 资产新鲜度：${manifest.sources.length} 源 + atlas ${Object.entries(manifest.atlas).map(([s, a]) => `${s}x×${a.pages.length}页`).join(' / ')} 全部一致`);
+  console.log(
+    `✓ 资产新鲜度：${manifest.sources.length} 源 + atlas ${Object.entries(manifest.atlas)
+      .map(([s, a]) => `${s}x×${a.pages.length}页`)
+      .join(' / ')} 全部一致`,
+  );
 }
 
 main();

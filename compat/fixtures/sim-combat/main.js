@@ -12,7 +12,7 @@ module.exports.loop = function () {
       if (creep.pos.inRangeTo(foe.pos, 1)) {
         creep.attack(foe);
       } else if (
-        creep.body.some(p => p.type === RANGED_ATTACK) &&
+        creep.body.some((p) => p.type === RANGED_ATTACK) &&
         creep.pos.inRangeTo(foe.pos, 3)
       ) {
         creep.rangedAttack(foe);
@@ -23,7 +23,7 @@ module.exports.loop = function () {
     }
     const spawn = room
       .find(FIND_HOSTILE_STRUCTURES)
-      .find(s => s.structureType === STRUCTURE_SPAWN);
+      .find((s) => s.structureType === STRUCTURE_SPAWN);
     if (spawn) {
       if (creep.pos.inRangeTo(spawn.pos, 1)) creep.attack(spawn);
       else creep.moveTo(spawn.pos, { reusePath: 50 });

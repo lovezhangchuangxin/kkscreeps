@@ -10,7 +10,7 @@
  * api 对象的权限止于闭包引用（gw 与安装期捕获的内建类）；__kkp 删除后
  * 依然可用，玩家后续的原型改写不影响安装结果。
  */
-;(() => {
+(() => {
   'use strict';
   const gw = globalThis.__kkp.gw;
   const manifest = globalThis.__kkModApiManifest;
@@ -51,15 +51,44 @@
   // Mod 玩家类可继承的内建类集合：安装期捕获（全部 prelude 段已完成），
   // 玩家随后替换全局绑定不影响已捕获引用。
   const BUILTIN_CLASS_NAMES = [
-    'ConstructionSite', 'Creep', 'Deposit', 'Flag', 'Mineral', 'Nuke',
-    'OwnedStructure', 'PowerCreep', 'Resource', 'Ruin', 'Room', 'RoomObject',
-    'RoomPosition', 'Source', 'Store', 'Structure', 'StructureContainer',
-    'StructureController', 'StructureExtension', 'StructureExtractor',
-    'StructureFactory', 'StructureInvaderCore', 'StructureKeeperLair',
-    'StructureLab', 'StructureLink', 'StructureNuker', 'StructureObserver',
-    'StructurePortal', 'StructurePowerBank', 'StructurePowerSpawn',
-    'StructureRampart', 'StructureRoad', 'StructureSpawn', 'StructureStorage',
-    'StructureTerminal', 'StructureTower', 'StructureWall', 'Tombstone',
+    'ConstructionSite',
+    'Creep',
+    'Deposit',
+    'Flag',
+    'Mineral',
+    'Nuke',
+    'OwnedStructure',
+    'PowerCreep',
+    'Resource',
+    'Ruin',
+    'Room',
+    'RoomObject',
+    'RoomPosition',
+    'Source',
+    'Store',
+    'Structure',
+    'StructureContainer',
+    'StructureController',
+    'StructureExtension',
+    'StructureExtractor',
+    'StructureFactory',
+    'StructureInvaderCore',
+    'StructureKeeperLair',
+    'StructureLab',
+    'StructureLink',
+    'StructureNuker',
+    'StructureObserver',
+    'StructurePortal',
+    'StructurePowerBank',
+    'StructurePowerSpawn',
+    'StructureRampart',
+    'StructureRoad',
+    'StructureSpawn',
+    'StructureStorage',
+    'StructureTerminal',
+    'StructureTower',
+    'StructureWall',
+    'Tombstone',
   ];
   const builtins = __Object.create(null);
   for (let i = 0; i < BUILTIN_CLASS_NAMES.length; i++) {
@@ -79,7 +108,9 @@
   function createInstallApi(namespace) {
     const prefix = namespace + ':';
     const intents = new __Set(
-      allIntents.filter(function (key) { return typeof key === 'string' && key.indexOf(prefix) === 0; })
+      allIntents.filter(function (key) {
+        return typeof key === 'string' && key.indexOf(prefix) === 0;
+      }),
     );
     function bind(typeKey, cls) {
       if (typeof typeKey !== 'string' || types[typeKey] === undefined) {
@@ -124,7 +155,10 @@
         throw new Error('全局 ' + name + ' 已存在（不得覆盖内建或其他 Mod 的安装结果）');
       }
       __defineProperty(globalThis, name, {
-        enumerable: true, writable: false, configurable: false, value,
+        enumerable: true,
+        writable: false,
+        configurable: false,
+        value,
       });
       definedGlobals.push(name);
     }
@@ -162,7 +196,9 @@
       install(typeKey) {
         const t = types[typeKey];
         if (t === undefined) {
-          throw new Error('类型 ' + JSON.stringify(typeKey) + ' 不在冻结计划中（不能安装查询常量）');
+          throw new Error(
+            '类型 ' + JSON.stringify(typeKey) + ' 不在冻结计划中（不能安装查询常量）',
+          );
         }
         return { find: t.find, look: t.look };
       },
@@ -188,8 +224,11 @@
       if (types[keys[i]].cls === null) missing.push(keys[i]);
     }
     if (missing.length > 0) {
-      throw new Error('玩家模块未绑定玩家面类型：' + missing.join(', ')
-        + '（声明包须在 player.js 内 api.objects.bind）');
+      throw new Error(
+        '玩家模块未绑定玩家面类型：' +
+          missing.join(', ') +
+          '（声明包须在 player.js 内 api.objects.bind）',
+      );
     }
     const missingBuildings = [];
     const buildingKeys = __keys(buildings);
@@ -197,13 +236,17 @@
       if (buildings[buildingKeys[i]].cls === null) missingBuildings.push(buildingKeys[i]);
     }
     if (missingBuildings.length > 0) {
-      throw new Error('玩家模块未绑定建筑玩家类：' + missingBuildings.join(', ')
-        + '（声明包须在 player.js 内 api.buildings.bind）');
+      throw new Error(
+        '玩家模块未绑定建筑玩家类：' +
+          missingBuildings.join(', ') +
+          '（声明包须在 player.js 内 api.buildings.bind）',
+      );
     }
     // modFindBase 是 Rust 清单权威下界（Rust 侧唯一来源，沙箱不重复
     // 硬编码）；无类型时为 Infinity——mod 查询分支恒不命中。
     gw.modApi = {
-      types, findByConst,
+      types,
+      findByConst,
       modFindBase: manifest.findBase === undefined ? Infinity : manifest.findBase,
       buildings,
     };

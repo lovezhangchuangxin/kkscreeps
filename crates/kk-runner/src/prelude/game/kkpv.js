@@ -80,7 +80,7 @@
     const hi = u32(dv, at + 4);
     if (hi <= 0x7fffffff) return hi * TWO_32 + lo;
     let magLo = (0 - lo) >>> 0;
-    let magHi = ((0 - hi) >>> 0);
+    let magHi = (0 - hi) >>> 0;
     if (lo !== 0) magHi = (magHi - 1) >>> 0;
     return -(magHi * TWO_32 + magLo);
   }
@@ -119,8 +119,12 @@
       i += need;
       if (cp >= 0xd800 && cp <= 0xdfff) fail('UTF-8 代理区码点');
       if (cp > 0x10ffff) fail('UTF-8 码点越界');
-      if (cp < 0x80 || (b0 <= 0xdf && cp < 0x80) || (b0 >= 0xe0 && b0 <= 0xef && cp < 0x800)
-        || (b0 >= 0xf0 && cp < 0x10000)) {
+      if (
+        cp < 0x80 ||
+        (b0 <= 0xdf && cp < 0x80) ||
+        (b0 >= 0xe0 && b0 <= 0xef && cp < 0x800) ||
+        (b0 >= 0xf0 && cp < 0x10000)
+      ) {
         fail('超长 UTF-8 编码');
       }
       if (cp <= 0xffff) {
@@ -150,7 +154,8 @@
     const tag = u8(dv, at);
     at += 1;
     switch (tag) {
-      case 0: return [null, at];
+      case 0:
+        return [null, at];
       case 1: {
         if (at >= end) fail('布尔载荷截断');
         const b = u8(dv, at);
@@ -211,13 +216,17 @@
           // DefineOwnProperty 语义一致（"__proto__" 等键不改写原型），
           // 键序保持载荷顺序。
           __defineProperty(out, key, {
-            value: r[0], writable: true, enumerable: true, configurable: true,
+            value: r[0],
+            writable: true,
+            enumerable: true,
+            configurable: true,
           });
           at = r[1];
         }
         return [out, at];
       }
-      default: fail('未知嵌套标签 ' + tag);
+      default:
+        fail('未知嵌套标签 ' + tag);
     }
   }
 
@@ -235,18 +244,17 @@
         if (b > 1) fail('非法 bool 字节');
         return b === 1;
       }
-      case 1: return readInt(dv, field.colAt + row * 8);
-      case 2: return readUint(dv, field.colAt + row * 8);
+      case 1:
+        return readInt(dv, field.colAt + row * 8);
+      case 2:
+        return readUint(dv, field.colAt + row * 8);
       case 3: {
         const v = __reflectApply(__dvGetFloat64, dv, [field.colAt + row * 8, true]);
         if (v !== v || v === __Infinity || v === -__Infinity) fail('非有限浮点');
         return v;
       }
       case 4: {
-        return idFromHalves(
-          u32(dv, field.colAt + row * 8),
-          u32(dv, field.colAt + row * 8 + 4),
-        );
+        return idFromHalves(u32(dv, field.colAt + row * 8), u32(dv, field.colAt + row * 8 + 4));
       }
       default: {
         const off = u32(dv, field.colAt + row * 8);
@@ -268,13 +276,19 @@
       get() {
         const v = readField(dv, field, row, arenaBase, arenaLen);
         __defineProperty(rec, field.key, {
-          value: v, writable: true, enumerable: true, configurable: true,
+          value: v,
+          writable: true,
+          enumerable: true,
+          configurable: true,
         });
         return v;
       },
       set(v) {
         __defineProperty(rec, field.key, {
-          value: v, writable: true, enumerable: true, configurable: true,
+          value: v,
+          writable: true,
+          enumerable: true,
+          configurable: true,
         });
       },
     });
@@ -319,8 +333,15 @@
       }
     }
     return {
-      flags, objectCount, typeCount, terrain, directory, buckets, arena,
-      arenaBase: start + arena[0], arenaLen: arena[1],
+      flags,
+      objectCount,
+      typeCount,
+      terrain,
+      directory,
+      buckets,
+      arena,
+      arenaBase: start + arena[0],
+      arenaLen: arena[1],
     };
   }
 
@@ -356,9 +377,13 @@
           fail('字段项保留字节非零');
         }
         fields[fields.length] = {
-          key: null, kind,
-          keyOff: u32(dv, cur), keyLen: u32(dv, cur + 4),
-          missingAt: 0, nullAt: 0, colAt: 0,
+          key: null,
+          kind,
+          keyOff: u32(dv, cur),
+          keyLen: u32(dv, cur + 4),
+          missingAt: 0,
+          nullAt: 0,
+          colAt: 0,
         };
         cur += 12;
       }
@@ -406,7 +431,9 @@
       const rec = {};
       __defineProperty(rec, 'id', {
         value: idFromHalves(lo, hi),
-        writable: true, enumerable: true, configurable: true,
+        writable: true,
+        enumerable: true,
+        configurable: true,
       });
       for (let f = 0; f < bucket.fields.length; f++) {
         const field = bucket.fields[f];
@@ -480,7 +507,10 @@
       // 视图锚定在共享缓冲区的地形段上；构造器来自加载期捕获。
       const view = new __Uint8Array(buffer, start + h.terrain[0], h.terrain[1]);
       __defineProperty(out, room, {
-        value: view, writable: true, enumerable: true, configurable: true,
+        value: view,
+        writable: true,
+        enumerable: true,
+        configurable: true,
       });
     });
     return out;

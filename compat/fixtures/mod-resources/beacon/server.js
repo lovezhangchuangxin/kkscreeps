@@ -3,7 +3,7 @@
 // 验证资源目录与已有处理链/规则在同一计划内共存。
 export default function register(api) {
   api.resources.define('beacon:spark');
-  api.handlers.before('builtin:link.tick', { id: 'mark' }, ctx => {
+  api.handlers.before('builtin:link.tick', { id: 'mark' }, (ctx) => {
     ctx.state = { marked: (ctx.state?.marked ?? 0) + 1 };
   });
 }

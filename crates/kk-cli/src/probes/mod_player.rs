@@ -469,6 +469,9 @@ mod tests {
             })
             .collect::<anyhow::Result<_>>()?;
         opts.fixtures = cleanup.0.to_string_lossy().into_owned();
+        // needle 必须与 compat/fixtures/mod-player/workload 的当前文本逐字一致：
+        // 该夹具经 oxfmt 统一格式（对象字面量规范成 `{ amount: 1 }`），
+        // 写成压缩形式会让替换静默失效、故障注不进去，测试反而以"报告成功"失败。
         for (needle, replacement, expected) in [
             (
                 "ctx.target.fields.value += ctx.args.amount;",
@@ -476,7 +479,7 @@ mod tests {
                 "Mod 动作未提交",
             ),
             (
-                "return api.intents.emit('workload:increment', this, {amount: 1});",
+                "return api.intents.emit('workload:increment', this, { amount: 1 });",
                 "throw Error('player-fault');",
                 "player-fault",
             ),

@@ -121,7 +121,12 @@
             }
             return this._sum;
           }
-          return storeData[resource] || (!!object.storeCapacityResource && capacityForResource(object, resource) === 0 ? null : 0);
+          return (
+            storeData[resource] ||
+            (!!object.storeCapacityResource && capacityForResource(object, resource) === 0
+              ? null
+              : 0)
+          );
         },
       },
       getFreeCapacity: {
@@ -214,12 +219,21 @@
     // 配额可覆盖或在换包后降低，RCL8 单件上限不能保证实际只有一件。
     // Scan through the room objects of the same type and count how many are closer.
     let foundSelf = false;
-    let objectDist = __MathMax(__MathAbs(object.x - roomController.x), __MathAbs(object.y - roomController.y));
+    let objectDist = __MathMax(
+      __MathAbs(object.x - roomController.x),
+      __MathAbs(object.y - roomController.y),
+    );
     for (let i = 0; i < roomObjects.length; i++) {
       const compareObj = roomObjects[i];
-      if (compareObj.type === object.type && structureTypeOf(compareObj) === structureTypeOf(object)
-        && compareObj.owner === object.owner) {
-        let compareDist = __MathMax(__MathAbs(compareObj.x - roomController.x), __MathAbs(compareObj.y - roomController.y));
+      if (
+        compareObj.type === object.type &&
+        structureTypeOf(compareObj) === structureTypeOf(object) &&
+        compareObj.owner === object.owner
+      ) {
+        let compareDist = __MathMax(
+          __MathAbs(compareObj.x - roomController.x),
+          __MathAbs(compareObj.y - roomController.y),
+        );
 
         if (compareDist < objectDist) {
           allowedRemaining--;
@@ -268,7 +282,6 @@
     return checkStructureAgainstController(o, roomObjects, ctl);
   };
 
-
   // OwnedStructure（官方 structures.js:135-139）：owner 的 undefined 语义
   // （_.isUndefined(o.user) || o.user === null ? undefined——降级归零的
   // user:null 哨兵同样归 undefined）；my 三态（官方 :139，null 走比较得
@@ -284,9 +297,7 @@
   gw.defineGameObjectProperties(globalThis.Source.prototype, gw.rawData, {
     energy: (o) => o.energy ?? 3000,
     energyCapacity: (o) => o.energyCapacity ?? 3000,
-    ticksToRegeneration: (o) => (o.ticksToRegeneration == null
-      ? undefined
-      : o.ticksToRegeneration),
+    ticksToRegeneration: (o) => (o.ticksToRegeneration == null ? undefined : o.ticksToRegeneration),
   });
 
   // 矿物字段读取原始数据；缺失字段使用下方默认值。来源：上游 engine/src/game/minerals.js。
@@ -295,9 +306,7 @@
     mineralType: (o) => o.mineralType || 'XUH2O',
     mineralAmount: (o) => o.mineralAmount ?? 0,
     density: (o) => o.density ?? 3,
-    ticksToRegeneration: (o) => (o.ticksToRegeneration == null
-      ? undefined
-      : o.ticksToRegeneration),
+    ticksToRegeneration: (o) => (o.ticksToRegeneration == null ? undefined : o.ticksToRegeneration),
   });
 
   // 控制器的绝对 tick 字段转换为剩余 tick；结束的 cooldown/upgradeBlocked/safeMode
@@ -313,26 +322,26 @@
     ticksToDowngrade: (o) => (o.downgradeTime != null ? o.downgradeTime - now() : 0),
     safeMode: (o) => (o.safeMode && o.safeMode > now() ? o.safeMode - now() : undefined),
     safeModeAvailable: (o) => o.safeModeAvailable ?? 0,
-    safeModeCooldown: (o) => (o.safeModeCooldown && o.safeModeCooldown > now()
-      ? o.safeModeCooldown - now()
-      : undefined),
+    safeModeCooldown: (o) =>
+      o.safeModeCooldown && o.safeModeCooldown > now() ? o.safeModeCooldown - now() : undefined,
     isPowerEnabled: (o) => o.isPowerEnabled === true,
-    reservation: (o) => (o.reservation
-      ? { username: o.reservation.user, ticksToEnd: o.reservation.endTime - now() }
-      : undefined),
-    sign: (o) => (o.sign
-      ? {
-          username: o.sign.user,
-          text: o.sign.text,
-          time: o.sign.time,
-          // 从签名时保存的墙钟构造 Date，重复读取同一签名的时间不漂移。
-          // 手写世界缺 datetime 时回退到当前墙钟。来源：上游 engine/src/game/structures.js 的 sign getter。
-          datetime: o.sign.datetime != null ? new Date(o.sign.datetime) : new Date(),
-        }
-      : undefined),
-    upgradeBlocked: (o) => (o.upgradeBlocked && o.upgradeBlocked > now()
-      ? o.upgradeBlocked - now()
-      : undefined),
+    reservation: (o) =>
+      o.reservation
+        ? { username: o.reservation.user, ticksToEnd: o.reservation.endTime - now() }
+        : undefined,
+    sign: (o) =>
+      o.sign
+        ? {
+            username: o.sign.user,
+            text: o.sign.text,
+            time: o.sign.time,
+            // 从签名时保存的墙钟构造 Date，重复读取同一签名的时间不漂移。
+            // 手写世界缺 datetime 时回退到当前墙钟。来源：上游 engine/src/game/structures.js 的 sign getter。
+            datetime: o.sign.datetime != null ? new Date(o.sign.datetime) : new Date(),
+          }
+        : undefined,
+    upgradeBlocked: (o) =>
+      o.upgradeBlocked && o.upgradeBlocked > now() ? o.upgradeBlocked - now() : undefined,
   });
 
   // 当前 tick（getter 体内换算用——官方 getter 读 runtimeData.time 同款）
@@ -340,5 +349,4 @@
     return gw.world.time;
   }
   gw.now = now; // structure-api.js 的 controller 方法复用此时间读取函数。
-
 })();

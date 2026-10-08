@@ -21,7 +21,7 @@ export default function register(api) {
       y: { type: 'u32', min: 0, max: 49 },
     },
   });
-  api.handlers.replace('builtin:mod.receiveDamage', { id: 'halve' }, ctx => {
+  api.handlers.replace('builtin:mod.receiveDamage', { id: 'halve' }, (ctx) => {
     ctx.incoming.setDamage(Math.ceil(ctx.args.damage / 2));
     ctx.state = { calls: (ctx.state?.calls || 0) + 1, lastDamage: ctx.args.damage };
   });

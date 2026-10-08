@@ -62,7 +62,6 @@
     return C.OK;
   };
 
-
   // 动作方法挂在类原型上；装配器不能再添加同名实例方法，否则会遮蔽这些实现。
 
   // 控制器操作方法。
@@ -81,17 +80,25 @@
   globalThis.StructureController.prototype.activateSafeMode = function activateSafeMode() {
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.safeModeAvailable <= 0) return C.ERR_NOT_ENOUGH_RESOURCES;
-    if (this.safeModeCooldown || this.upgradeBlocked > 0
-      || this.ticksToDowngrade < C.CONTROLLER_DOWNGRADE[this.level] / 2
-        - C.CONTROLLER_DOWNGRADE_SAFEMODE_THRESHOLD) {
+    if (
+      this.safeModeCooldown ||
+      this.upgradeBlocked > 0 ||
+      this.ticksToDowngrade <
+        C.CONTROLLER_DOWNGRADE[this.level] / 2 - C.CONTROLLER_DOWNGRADE_SAFEMODE_THRESHOLD
+    ) {
       return C.ERR_TIRED;
     }
     // 扫描所有自家控制器是否已有生效的安全模式，按索引读取以避开数组迭代器补丁。
     const objs = gw.world.objects || [];
     for (let i = 0; i < objs.length; i++) {
       const o = objs[i];
-      if (o.type === 'structure' && o.structureType === 'controller'
-        && o.owner === gw.viewerName && o.safeMode && o.safeMode > now()) {
+      if (
+        o.type === 'structure' &&
+        o.structureType === 'controller' &&
+        o.owner === gw.viewerName &&
+        o.safeMode &&
+        o.safeMode > now()
+      ) {
         return C.ERR_BUSY;
       }
     }
@@ -102,7 +109,6 @@
     gw.intents.set(this.id, 'activateSafeMode', {});
     return C.OK;
   };
-
 
   installSpawnNotify();
 
@@ -116,8 +122,10 @@
   globalThis.Structure.prototype.destroy = function destroy() {
     if (!this.room) return C.ERR_INVALID_TARGET;
     if (!this.room.controller || !this.room.controller.my) return C.ERR_NOT_OWNER;
-    if (this.room.find(C.FIND_HOSTILE_CREEPS).length > 0
-      || this.room.find(C.FIND_HOSTILE_POWER_CREEPS).length > 0) {
+    if (
+      this.room.find(C.FIND_HOSTILE_CREEPS).length > 0 ||
+      this.room.find(C.FIND_HOSTILE_POWER_CREEPS).length > 0
+    ) {
       return C.ERR_BUSY;
     }
     gw.intents.pushByName('room', 'destroyStructure', { roomName: this.room.name, id: this.id });
@@ -148,14 +156,16 @@
     }
     // Mod 耐久对象目标族（G09.b）与 creep attack 同款判别（经 gw 共享，
     // creep.js 装配期挂载）；结算侧塔伤害经同一 object_hits 门接纳。
-    const modTargetOk = gw.modDurabilityTargetOk !== undefined
-      ? gw.modDurabilityTargetOk(target) : false;
-    const okTarget = target && target.id
-      && (isKnownCreep(target.id) || isKnownStructure(target.id) || modTargetOk)
-      && (target instanceof globalThis.Creep
-        || target instanceof globalThis.StructureSpawn
-        || target instanceof globalThis.Structure
-        || modTargetOk);
+    const modTargetOk =
+      gw.modDurabilityTargetOk !== undefined ? gw.modDurabilityTargetOk(target) : false;
+    const okTarget =
+      target &&
+      target.id &&
+      (isKnownCreep(target.id) || isKnownStructure(target.id) || modTargetOk) &&
+      (target instanceof globalThis.Creep ||
+        target instanceof globalThis.StructureSpawn ||
+        target instanceof globalThis.Structure ||
+        modTargetOk);
     if (!okTarget) {
       assertTargetObject(target);
       return C.ERR_INVALID_TARGET;
@@ -174,8 +184,7 @@
     if (!this.my) {
       return C.ERR_NOT_OWNER;
     }
-    if (!(target && target.id && isKnownCreep(target.id)
-      && target instanceof globalThis.Creep)) {
+    if (!(target && target.id && isKnownCreep(target.id) && target instanceof globalThis.Creep)) {
       assertTargetObject(target);
       return C.ERR_INVALID_TARGET;
     }
@@ -192,9 +201,11 @@
     if (!this.my) {
       return C.ERR_NOT_OWNER;
     }
-    const okTarget = target && target.id
-      && isKnownStructure(target.id)
-      && (target instanceof globalThis.Structure || target instanceof globalThis.StructureSpawn);
+    const okTarget =
+      target &&
+      target.id &&
+      isKnownStructure(target.id) &&
+      (target instanceof globalThis.Structure || target instanceof globalThis.StructureSpawn);
     if (!okTarget) {
       assertTargetObject(target);
       return C.ERR_INVALID_TARGET;
@@ -220,19 +231,24 @@
     if (amount < 0) {
       return C.ERR_INVALID_ARGS;
     }
-    if (!target || !target.id
-      || !isKnownStructure(target.id)
-      || !(target instanceof globalThis.Structure)
-      || target === this
-      || target.structureType !== C.STRUCTURE_LINK) {
+    if (
+      !target ||
+      !target.id ||
+      !isKnownStructure(target.id) ||
+      !(target instanceof globalThis.Structure) ||
+      target === this ||
+      target.structureType !== C.STRUCTURE_LINK
+    ) {
       assertTargetObject(target);
       return C.ERR_INVALID_TARGET;
     }
     if (!target.my) {
       return C.ERR_NOT_OWNER;
     }
-    if (this.my === false
-      && _.any(this.pos.lookFor(C.LOOK_STRUCTURES), (i) => i.structureType === C.STRUCTURE_RAMPART)) {
+    if (
+      this.my === false &&
+      _.any(this.pos.lookFor(C.LOOK_STRUCTURES), (i) => i.structureType === C.STRUCTURE_RAMPART)
+    ) {
       return C.ERR_NOT_OWNER;
     }
     if (this.cooldown > 0) {
@@ -259,8 +275,11 @@
       return C.ERR_NOT_ENOUGH_ENERGY;
     }
     const t = gw.rawData(target.id);
-    if (!t.storeCapacityResource || !t.storeCapacityResource.energy
-      || t.store.energy + amount > t.storeCapacityResource.energy) {
+    if (
+      !t.storeCapacityResource ||
+      !t.storeCapacityResource.energy ||
+      t.store.energy + amount > t.storeCapacityResource.energy
+    ) {
       return C.ERR_FULL;
     }
     if (target.pos.roomName !== this.pos.roomName) {
@@ -293,7 +312,12 @@
    *  **无最小量门**（TERMINAL_MIN_SEND 死常量不消费——TERMINAL-SEND-014 锁
    *  amount=1 可发）；intent payload 官方键序（send.js 消费 targetRoomName/
    *  resourceType/amount/description，description 经 userString 帽在清洗层）。 */
-  globalThis.StructureTerminal.prototype.send = function send(resourceType, amount, targetRoomName, description) {
+  globalThis.StructureTerminal.prototype.send = function send(
+    resourceType,
+    amount,
+    targetRoomName,
+    description,
+  ) {
     if (!this.my) {
       return C.ERR_NOT_OWNER; // :715-717
     }
@@ -319,8 +343,10 @@
     const xy2 = gw.roomNameToXY(targetRoomName);
     const range = Math.max(Math.abs(xy2[0] - xy1[0]), Math.abs(xy2[1] - xy1[1]));
     const cost = Math.ceil(amount * (1 - Math.exp(-range / 30)));
-    if ((resourceType !== C.RESOURCE_ENERGY && o.store.energy < cost)
-      || (resourceType === C.RESOURCE_ENERGY && o.store.energy < amount + cost)) {
+    if (
+      (resourceType !== C.RESOURCE_ENERGY && o.store.energy < cost) ||
+      (resourceType === C.RESOURCE_ENERGY && o.store.energy < amount + cost)
+    ) {
       return C.ERR_NOT_ENOUGH_RESOURCES; // :738-741
     }
     if (description && (!_.isString(description) || description.length > 100)) {

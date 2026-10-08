@@ -7,7 +7,13 @@
  * 不属渲染器（§2.2）。全部经冻结公共面：字体 fontsBaseUrl（G7 库责任）、
  * 定帧 advanceAnimation（原 __room 直驱迁出）、计时 onFrameTiming（smoke）。
  */
-import { isDelta, isSnapshot, type FixtureFile, type RoomSnapshot, type RoomVisual } from '@kkscreeps/shared';
+import {
+  isDelta,
+  isSnapshot,
+  type FixtureFile,
+  type RoomSnapshot,
+  type RoomVisual,
+} from '@kkscreeps/shared';
 import { createRenderer } from '../src/index.js';
 import creeps from '../fixtures/creeps.json';
 import denseEdge from '../fixtures/dense-edge.json';
@@ -26,8 +32,11 @@ const stageHost = document.getElementById('stage') as HTMLElement;
 const hud = document.getElementById('hud') as HTMLElement;
 
 const params = new URLSearchParams(window.location.search);
-const TICK_MS = params.get('fixture') === 'official-room' ? officialRoom.provenance.tickDurationMs : 1000;
-const localPlayer = params.get('player') ?? (params.get('fixture') === 'official-room' ? officialRoom.provenance.originalPlayer : 'p1');
+const TICK_MS =
+  params.get('fixture') === 'official-room' ? officialRoom.provenance.tickDurationMs : 1000;
+const localPlayer =
+  params.get('player') ??
+  (params.get('fixture') === 'official-room' ? officialRoom.provenance.originalPlayer : 'p1');
 const multi = params.has('multi');
 // ?smoke=1 仅计实际场景更新与 lighting 提交的 CPU 时间（onFrameTiming，
 // R5 方法学同源）；不冒充 GPU 耗时。
@@ -241,7 +250,8 @@ window.addEventListener('keydown', (e) => {
     if (playing) setPlaying(true);
     else renderHud();
   } else if (e.key === 'ArrowRight' && !playing) {
-    e.preventDefault(); sampleFrame(50);
+    e.preventDefault();
+    sampleFrame(50);
   } else if (e.key === 'Tab') {
     e.preventDefault();
     const rooms = renderer.feed.roomNames();
@@ -319,8 +329,11 @@ function renderHud(): void {
       const sorted = [...values].sort((a, b) => a - b);
       return `n=${sorted.length} p50=${(sorted[Math.floor(sorted.length * 0.5)] ?? 0).toFixed(3)}ms p95=${(sorted[Math.floor(sorted.length * 0.95)] ?? 0).toFixed(3)}ms`;
     };
-    lines.push(`CPU objects : ${summary(samples.objects)}`, `CPU lighting: ${summary(samples.lighting)}`,
-      `lighting RT : renders=${s.lightingPass.renders} dirty=${s.lightingPass.invalidations} members=${s.lightingPass.members} privateSources=${s.lightingPass.privateSources}`);
+    lines.push(
+      `CPU objects : ${summary(samples.objects)}`,
+      `CPU lighting: ${summary(samples.lighting)}`,
+      `lighting RT : renders=${s.lightingPass.renders} dirty=${s.lightingPass.invalidations} members=${s.lightingPass.members} privateSources=${s.lightingPass.privateSources}`,
+    );
   }
   hud.innerHTML = lines.map((l) => `<div>${l}</div>`).join('');
 }

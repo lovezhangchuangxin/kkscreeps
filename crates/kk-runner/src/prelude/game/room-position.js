@@ -20,10 +20,14 @@
   const __Error = Error;
   // 方向/look 常量加载期捕获：官方经闭包 C.RIGHT 免疫玩家覆写（utils.js:70-99），
   // 捕获平铺常量同形（常量段在 prelude 前安装，sandbox.rs 注入序）
-  const RIGHT = globalThis.RIGHT, LEFT = globalThis.LEFT,
-    TOP = globalThis.TOP, BOTTOM = globalThis.BOTTOM,
-    TOP_LEFT = globalThis.TOP_LEFT, TOP_RIGHT = globalThis.TOP_RIGHT,
-    BOTTOM_LEFT = globalThis.BOTTOM_LEFT, BOTTOM_RIGHT = globalThis.BOTTOM_RIGHT,
+  const RIGHT = globalThis.RIGHT,
+    LEFT = globalThis.LEFT,
+    TOP = globalThis.TOP,
+    BOTTOM = globalThis.BOTTOM,
+    TOP_LEFT = globalThis.TOP_LEFT,
+    TOP_RIGHT = globalThis.TOP_RIGHT,
+    BOTTOM_LEFT = globalThis.BOTTOM_LEFT,
+    BOTTOM_RIGHT = globalThis.BOTTOM_RIGHT,
     LOOK_TERRAIN = globalThis.LOOK_TERRAIN;
 
   // 官方 rooms.js:1260-1261：世界尺寸常量（房间坐标 ±128 半径）
@@ -45,7 +49,7 @@
         y = firstArg.y;
         roomName = firstArg.roomName;
       }
-      if (firstArg.pos && (firstArg.pos instanceof gw.RoomPosition)) {
+      if (firstArg.pos && firstArg.pos instanceof gw.RoomPosition) {
         x = firstArg.pos.x;
         y = firstArg.pos.y;
         roomName = firstArg.pos.roomName;
@@ -67,7 +71,8 @@
   //   |dx| > 2|dy| → 左右；|dy| > 2|dx| → 上下；否则对角。
   // 官方对 (0,0) 无特判（落到 else 无命中分支 → undefined）
   function getDirection(dx, dy) {
-    const adx = Math.abs(dx), ady = Math.abs(dy);
+    const adx = Math.abs(dx),
+      ady = Math.abs(dy);
     if (adx > ady * 2) {
       return dx > 0 ? RIGHT : LEFT;
     } else if (ady > adx * 2) {
@@ -89,8 +94,13 @@
     if (xx >= 100) verticalPos = 4;
     else if (xx >= 10) verticalPos = 3;
     let yy = __parseInt(__reflectApply(__substr, name, [verticalPos + 1]), 10);
-    if (__reflectApply(__charAt, name, [0]) === 'W' || __reflectApply(__charAt, name, [0]) === 'w') xx = -xx - 1;
-    if (__reflectApply(__charAt, name, [verticalPos]) === 'N' || __reflectApply(__charAt, name, [verticalPos]) === 'n') yy = -yy - 1;
+    if (__reflectApply(__charAt, name, [0]) === 'W' || __reflectApply(__charAt, name, [0]) === 'w')
+      xx = -xx - 1;
+    if (
+      __reflectApply(__charAt, name, [verticalPos]) === 'N' ||
+      __reflectApply(__charAt, name, [verticalPos]) === 'n'
+    )
+      yy = -yy - 1;
     return [xx, yy];
   }
 
@@ -113,10 +123,10 @@
   // + 槽 0 预置 'sim'（sim 房间坐标偏移后恰为 0,0）
   const roomNames = [];
   function getRoomNameFromXY(xx, yy) {
-    const id = (xx + kMaxWorldSize2) << 8 | (yy + kMaxWorldSize2);
+    const id = ((xx + kMaxWorldSize2) << 8) | (yy + kMaxWorldSize2);
     const roomName = roomNames[id];
     if (roomName === undefined) {
-      return roomNames[id] = getRoomNameFromXYSlow(xx, yy);
+      return (roomNames[id] = getRoomNameFromXYSlow(xx, yy));
     }
     return roomName;
   }
@@ -132,16 +142,24 @@
       xy[0] += kMaxWorldSize2;
       xy[1] += kMaxWorldSize2;
       if (
-        xy[0] < 0 || xy[0] > kMaxWorldSize || xy[0] !== xy[0] ||
-        xy[1] < 0 || xy[1] > kMaxWorldSize || xy[1] !== xy[1] ||
-        xx < 0 || xx > 49 || xx !== xx ||
-        yy < 0 || yy > 49 || yy !== yy
+        xy[0] < 0 ||
+        xy[0] > kMaxWorldSize ||
+        xy[0] !== xy[0] ||
+        xy[1] < 0 ||
+        xy[1] > kMaxWorldSize ||
+        xy[1] !== xy[1] ||
+        xx < 0 ||
+        xx > 49 ||
+        xx !== xx ||
+        yy < 0 ||
+        yy > 49 ||
+        yy !== yy
       ) {
         throw new __Error('Invalid arguments in RoomPosition constructor');
       }
       __defineProperty(this, '__packedPos', {
         enumerable: false,
-        value: xy[0] << 24 | xy[1] << 16 | xx << 8 | yy,
+        value: (xy[0] << 24) | (xy[1] << 16) | (xx << 8) | yy,
         writable: true,
       });
     }
@@ -161,7 +179,7 @@
         if (val < 0 || val > 49 || val !== val) {
           throw new __Error('Invalid coordinate');
         }
-        this.__packedPos = this.__packedPos & ~(0xff << 8) | val << 8;
+        this.__packedPos = (this.__packedPos & ~(0xff << 8)) | (val << 8);
       },
     },
     y: {
@@ -173,7 +191,7 @@
         if (val < 0 || val > 49 || val !== val) {
           throw new __Error('Invalid coordinate');
         }
-        this.__packedPos = this.__packedPos & ~0xff | val;
+        this.__packedPos = (this.__packedPos & ~0xff) | val;
       },
     },
     roomName: {
@@ -183,7 +201,7 @@
         if (roomName === undefined) {
           return getRoomNameFromXY(
             (this.__packedPos >>> 24) - kMaxWorldSize2,
-            (this.__packedPos >>> 16 & 0xff) - kMaxWorldSize2
+            ((this.__packedPos >>> 16) & 0xff) - kMaxWorldSize2,
           );
         }
         return roomName;
@@ -193,12 +211,16 @@
         xy[0] += kMaxWorldSize2;
         xy[1] += kMaxWorldSize2;
         if (
-          xy[0] < 0 || xy[0] > kMaxWorldSize || xy[0] !== xy[0] ||
-          xy[1] < 0 || xy[1] > kMaxWorldSize || xy[1] !== xy[1]
+          xy[0] < 0 ||
+          xy[0] > kMaxWorldSize ||
+          xy[0] !== xy[0] ||
+          xy[1] < 0 ||
+          xy[1] > kMaxWorldSize ||
+          xy[1] !== xy[1]
         ) {
           throw new __Error('Invalid roomName');
         }
-        this.__packedPos = this.__packedPos & ~(0xffff << 16) | xy[0] << 24 | xy[1] << 16;
+        this.__packedPos = (this.__packedPos & ~(0xffff << 16)) | (xy[0] << 24) | (xy[1] << 16);
       },
     },
   });
@@ -207,11 +229,14 @@
   // 合并；本类 own 仅非枚举 __packedPos 不参与）——基础三键先字面量定格。
   // 用运行期全局 Object.assign（官方 realm 语义，玩家可换全局属自害面）
   RoomPosition.prototype.toJSON = function () {
-    return Object.assign({
-      x: this.x,
-      y: this.y,
-      roomName: this.roomName,
-    }, this);
+    return Object.assign(
+      {
+        x: this.x,
+        y: this.y,
+        roomName: this.roomName,
+      },
+      this,
+    );
   };
 
   // 官方 :1358：`[room ${roomName} pos ${x},${y}]`——bot 生态日志拼接的事实标准
@@ -223,7 +248,10 @@
   // (target,range) 形态解包 .pos 且 roomName 必须相等（无缺省豁免——
   // 裸 {x,y} 对象目标恒 false，官方怪癖）
   RoomPosition.prototype.inRangeTo = function (firstArg, secondArg, thirdArg) {
-    let x = firstArg, y = secondArg, range = thirdArg, roomName = this.roomName;
+    let x = firstArg,
+      y = secondArg,
+      range = thirdArg,
+      roomName = this.roomName;
     if (_.isUndefined(thirdArg)) {
       let pos = firstArg;
       if (pos.pos) {
@@ -234,15 +262,19 @@
       roomName = pos.roomName;
       range = secondArg;
     }
-    return Math.abs(x - this.x) <= range && Math.abs(y - this.y) <= range
-      && roomName == this.roomName;
+    return (
+      Math.abs(x - this.x) <= range && Math.abs(y - this.y) <= range && roomName == this.roomName
+    );
   };
 
   // 官方 :1378-1381 逐字：fetchXY + 逐轴 abs<=1（roomName 缺省视为同房间）
   RoomPosition.prototype.isNearTo = function (firstArg, secondArg) {
     const [x, y, roomName] = fetchXYArguments(firstArg, secondArg);
-    return Math.abs(x - this.x) <= 1 && Math.abs(y - this.y) <= 1
-      && (!roomName || roomName == this.roomName);
+    return (
+      Math.abs(x - this.x) <= 1 &&
+      Math.abs(y - this.y) <= 1 &&
+      (!roomName || roomName == this.roomName)
+    );
   };
 
   // 官方 :1383-1394 逐字：同房间（或数值形态）直接阈值判定；跨房间按世界
@@ -256,7 +288,7 @@
     const [thatRoomX, thatRoomY] = roomNameToXY(roomName);
     return getDirection(
       thatRoomX * 50 + x - thisRoomX * 50 - this.x,
-      thatRoomY * 50 + y - thisRoomY * 50 - this.y
+      thatRoomY * 50 + y - thisRoomY * 50 - this.y,
     );
   };
 
@@ -442,7 +474,8 @@
 
   // RoomPosition 全局绑定不可写，原型仍可扩展。
   Object.defineProperty(globalThis, 'RoomPosition', {
-    enumerable: true, value: RoomPosition,
+    enumerable: true,
+    value: RoomPosition,
   });
   // 内部装配面走捕获引用（与拆分前单闭包绑定等价）：玩家覆写 globalThis.RoomPosition
   // 不影响 wrapObject/makeRoom/PathFinder 内部闭包的构造

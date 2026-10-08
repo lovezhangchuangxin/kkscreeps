@@ -6,12 +6,14 @@ exports.loop = function () {
   const room = Game.rooms.W1N1;
   const brawler = Game.creeps.brawler;
   const skirmisher = Game.creeps.skirmisher;
-  const aegis = typeof FIND_WARDEN_AEGISES !== 'undefined'
-    ? room.find(FIND_WARDEN_AEGISES)[0] : undefined;
-  const monolith = typeof FIND_LOGBOOK_MONOLITHS !== 'undefined'
-    ? room.find(FIND_LOGBOOK_MONOLITHS)[0] : undefined;
-  const decoy = typeof FIND_WARDEN_DECOYS !== 'undefined'
-    ? room.find(FIND_WARDEN_DECOYS)[0] : undefined;
+  const aegis =
+    typeof FIND_WARDEN_AEGISES !== 'undefined' ? room.find(FIND_WARDEN_AEGISES)[0] : undefined;
+  const monolith =
+    typeof FIND_LOGBOOK_MONOLITHS !== 'undefined'
+      ? room.find(FIND_LOGBOOK_MONOLITHS)[0]
+      : undefined;
+  const decoy =
+    typeof FIND_WARDEN_DECOYS !== 'undefined' ? room.find(FIND_WARDEN_DECOYS)[0] : undefined;
   if (!Memory.phase) {
     if (aegis !== undefined) {
       Memory.aegisInitial = aegis.hits;

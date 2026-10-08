@@ -5,9 +5,7 @@
 export default function register(api) {
   api.handlers.after('builtin:creep.moveAdmission', { id: 'calm' }, (ctx) => {
     for (const loser of ctx.args.requests.filter((r) => !r.won)) {
-      const winner = ctx.args.requests.find(
-        (r) => r.won && r.x === loser.x && r.y === loser.y
-      );
+      const winner = ctx.args.requests.find((r) => r.won && r.x === loser.x && r.y === loser.y);
       if (winner) ctx.admission.setAdmitted(winner.moverId, false);
     }
     ctx.state = { applied: (ctx.state?.applied || 0) + 1 };

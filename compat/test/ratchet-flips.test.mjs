@@ -60,8 +60,14 @@ test('豁免表：精确/前缀命中分流，未命中计红', () => {
     ['other > c', null],
   ];
   const { blocked, allowed, stale } = applyAllow(red, ['suite > a', 'suite > b*']);
-  assert.deepEqual(allowed.map((e) => e[0]), ['suite > a', 'suite > b1']);
-  assert.deepEqual(blocked.map((e) => e[0]), ['other > c']);
+  assert.deepEqual(
+    allowed.map((e) => e[0]),
+    ['suite > a', 'suite > b1'],
+  );
+  assert.deepEqual(
+    blocked.map((e) => e[0]),
+    ['other > c'],
+  );
   assert.deepEqual(stale, []);
 });
 

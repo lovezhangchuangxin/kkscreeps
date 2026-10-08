@@ -4,12 +4,12 @@
 exports.loop = function () {
   const room = Game.rooms.W1N1;
   const raider = Game.creeps.raider;
-  const spike = typeof FIND_THORN_SPIKES !== 'undefined'
-    ? room.find(FIND_THORN_SPIKES)[0] : undefined;
+  const spike =
+    typeof FIND_THORN_SPIKES !== 'undefined' ? room.find(FIND_THORN_SPIKES)[0] : undefined;
   const sniper = Game.creeps.sniper;
   const mule = Game.creeps.mule;
-  const core = typeof FIND_REACTOR_CORES !== 'undefined'
-    ? room.find(FIND_REACTOR_CORES)[0] : undefined;
+  const core =
+    typeof FIND_REACTOR_CORES !== 'undefined' ? room.find(FIND_REACTOR_CORES)[0] : undefined;
   if (!Memory.phase) {
     if (spike === undefined) {
       Memory.attackCode = -7;

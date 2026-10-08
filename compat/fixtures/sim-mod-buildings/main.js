@@ -11,13 +11,16 @@ module.exports.loop = function () {
   if (!hasSmelter) {
     // 对照世界：类型白名单与资源目录都不认识 Mod 内容，且无任何残留。
     Memory.plain_world = true;
-    Memory.no_globals = typeof SmelterFoundry === 'undefined'
-      && typeof PanelCollector === 'undefined';
+    Memory.no_globals =
+      typeof SmelterFoundry === 'undefined' && typeof PanelCollector === 'undefined';
     const builder = Game.creeps.builder;
-    Memory.site_rejected = room.createConstructionSite(14, 12, 'smelter:foundry') === ERR_INVALID_ARGS;
+    Memory.site_rejected =
+      room.createConstructionSite(14, 12, 'smelter:foundry') === ERR_INVALID_ARGS;
     Memory.withdraw_rejected = builder.withdraw(storage, 'smelter:ore', 10) === ERR_INVALID_ARGS;
     Memory.no_sites = room.find(FIND_CONSTRUCTION_SITES).length === 0;
-    Memory.no_foundry = room.find(FIND_STRUCTURES).every((s) => s.structureType !== 'smelter:foundry');
+    Memory.no_foundry = room
+      .find(FIND_STRUCTURES)
+      .every((s) => s.structureType !== 'smelter:foundry');
     return;
   }
   const builder = Game.creeps.builder;
@@ -27,24 +30,33 @@ module.exports.loop = function () {
   const medic = Game.creeps.medic;
   const foundry = room.find(FIND_MY_STRUCTURES).find((s) => s.structureType === 'smelter:foundry');
   const panel = hasPanel
-    ? room.find(FIND_MY_STRUCTURES).find((s) => s.structureType === 'panel:collector') : undefined;
+    ? room.find(FIND_MY_STRUCTURES).find((s) => s.structureType === 'panel:collector')
+    : undefined;
   const sites = room.find(FIND_CONSTRUCTION_SITES);
   // 真实玩家路径创建工地（预检白名单经 Mod 建筑目录放行）。
-  if (!foundry && !sites.some((s) => s.structureType === 'smelter:foundry')
-    && !Memory.site_created) {
+  if (
+    !foundry &&
+    !sites.some((s) => s.structureType === 'smelter:foundry') &&
+    !Memory.site_created
+  ) {
     Memory.site_code = room.createConstructionSite(14, 12, 'smelter:foundry');
     Memory.site_created = true;
   }
-  if (hasPanel && !panel && !sites.some((s) => s.structureType === 'panel:collector')
-    && !Memory.panel_site_created) {
+  if (
+    hasPanel &&
+    !panel &&
+    !sites.some((s) => s.structureType === 'panel:collector') &&
+    !Memory.panel_site_created
+  ) {
     Memory.panel_site_code = room.createConstructionSite(15, 14, 'panel:collector');
     Memory.panel_site_created = true;
   }
 
   // 建造：成本资源任一为空回仓补货，两种资源都有则施工。
   // panel 只有能量成本（单资源规则走同一通用接口）。
-  const site = sites.find((s) => s.structureType === 'smelter:foundry')
-    || (hasPanel && sites.find((s) => s.structureType === 'panel:collector'));
+  const site =
+    sites.find((s) => s.structureType === 'smelter:foundry') ||
+    (hasPanel && sites.find((s) => s.structureType === 'panel:collector'));
   // 一次性预检探针：空载 creep 对 Mod 工地 build 须被玩家面
   // ERR_NOT_ENOUGH_RESOURCES 拒绝（成本资源集判断，内建则查能量）。
   if (Memory.probe_loops === undefined && site && builder) {
@@ -98,8 +110,11 @@ module.exports.loop = function () {
         if (code === ERR_NOT_IN_RANGE) feeder.moveTo(storage, { reusePath: 20 });
       } else if (feeder.pos.inRangeTo(foundry, 1)) {
         const transferOre = foundry.store[SMELTER_ORE] < 60;
-        feeder.transfer(foundry, transferOre ? SMELTER_ORE : 'energy',
-          transferOre ? ore : Math.min(energy, 200));
+        feeder.transfer(
+          foundry,
+          transferOre ? SMELTER_ORE : 'energy',
+          transferOre ? ore : Math.min(energy, 200),
+        );
       } else {
         feeder.moveTo(foundry, { reusePath: 20 });
       }
@@ -148,5 +163,5 @@ module.exports.loop = function () {
       });
     }
   }
-  Memory.storage_ore = storage ? (storage.store[SMELTER_ORE] || 0) : -1;
+  Memory.storage_ore = storage ? storage.store[SMELTER_ORE] || 0 : -1;
 };

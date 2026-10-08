@@ -44,7 +44,8 @@ export class ActiveRoomController {
 
   /** 显式切换活动房；未知房间抛错（fail-fast 同 feed 纪律）；同房幂等。 */
   setActive(room: string): void {
-    if (!this.hasRoom(room)) throw new Error(`setActiveRoom 于未知房间 ${room}（房间须先有 feed 数据）`);
+    if (!this.hasRoom(room))
+      throw new Error(`setActiveRoom 于未知房间 ${room}（房间须先有 feed 数据）`);
     if (room === this.active) return;
     this.active = room;
     this.host.rebuild(room);

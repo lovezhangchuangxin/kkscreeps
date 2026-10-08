@@ -1,6 +1,15 @@
 // 在临时目录运行真实脚本，用假构建命令和套件验证输入更新检查，无需跑完整套件。
 import assert from 'node:assert/strict';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -11,7 +20,13 @@ const script = resolve(import.meta.dirname, '../scripts/run-suite.sh');
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), 'kk-run-suite-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  for (const dir of ['compat/scripts', 'compat/src', 'compat/dist', '.compat/screeps-ok/node_modules', 'bin']) {
+  for (const dir of [
+    'compat/scripts',
+    'compat/src',
+    'compat/dist',
+    '.compat/screeps-ok/node_modules',
+    'bin',
+  ]) {
     mkdirSync(join(root, dir), { recursive: true });
   }
   copyFileSync(script, join(root, 'compat/scripts/run-suite.sh'));
@@ -27,14 +42,26 @@ function fixture(t) {
   utimesSync(join(root, 'compat/src/adapter.ts'), old, old);
   utimesSync(builtParity, built, built);
   utimesSync(join(root, 'compat/dist/adapter.js'), built, built);
-  writeFileSync(join(root, 'bin/pnpm'), '#!/bin/sh\ntouch build-called\n[ "${FAIL_BUILD:-}" != 1 ] || exit 1\ncp src/parity.json dist/parity.json\n', { mode: 0o755 });
+  writeFileSync(
+    join(root, 'bin/pnpm'),
+    '#!/bin/sh\ntouch build-called\n[ "${FAIL_BUILD:-}" != 1 ] || exit 1\ncp src/parity.json dist/parity.json\n',
+    { mode: 0o755 },
+  );
   writeFileSync(join(root, 'bin/npx'), '#!/bin/sh\ntouch suite-called\n', { mode: 0o755 });
   return {
-    root, sourceParity, builtParity,
-    run: (extra = {}) => spawnSync('bash', [join(root, 'compat/scripts/run-suite.sh')], {
-      encoding: 'utf8',
-      env: { ...process.env, PATH: join(root, 'bin') + ':' + process.env.PATH, KKSCREEPS_BIN: '/unused/fake-engine', ...extra },
-    }),
+    root,
+    sourceParity,
+    builtParity,
+    run: (extra = {}) =>
+      spawnSync('bash', [join(root, 'compat/scripts/run-suite.sh')], {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          PATH: join(root, 'bin') + ':' + process.env.PATH,
+          KKSCREEPS_BIN: '/unused/fake-engine',
+          ...extra,
+        },
+      }),
     built: () => existsSync(join(root, 'compat/build-called')),
     ran: () => existsSync(join(root, '.compat/screeps-ok/suite-called')),
   };

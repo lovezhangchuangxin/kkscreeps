@@ -7,11 +7,14 @@
   },
   "scripts": {
     "fmt": "cargo fmt --all",
+    "fmt:js": "oxfmt '**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}'",
+    "fmt:js:check": "oxfmt --check '**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}'",
     "check": "node scripts/check.mjs",
     "check:source-size": "node scripts/check-source-size.mjs",
     "prepare": "simple-git-hooks"
   },
   "devDependencies": {
+    "oxfmt": "^0.72.0",
     "simple-git-hooks": "2.14.0"
   },
   "simple-git-hooks": {

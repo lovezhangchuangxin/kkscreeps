@@ -132,7 +132,11 @@ export const EXTENSION_SPEC = {
    * ===100→border100、===200→border200，其余容量无 border 件）。 */
   tierLarge: 200,
   tierMedium: 100,
-  borders: { small: 'extension-border50', medium: 'extension-border100', large: 'extension-border200' },
+  borders: {
+    small: 'extension-border50',
+    medium: 'extension-border100',
+    large: 'extension-border200',
+  },
   base: { texture: 'extension', width: 100, height: 100 },
   /** 资源圆：r=size×0.32，scale=min(1, energy/cap)（:82-87）。 */
   circleFactor: 0.32,
@@ -256,7 +260,13 @@ export const POWER_SPAWN_SPEC = {
 
 export const TOWER_SPEC = {
   base: { texture: 'tower-base', width: 200, height: 200 },
-  rotatable: { texture: 'tower-rotatable', npcTexture: 'tower-rotatable-npc', width: 115, height: 115, pivotY: 32 },
+  rotatable: {
+    texture: 'tower-rotatable',
+    npcTexture: 'tower-rotatable-npc',
+    width: 115,
+    height: 115,
+    pivotY: 32,
+  },
   barFullHeight: 66.7,
   barWidth: 90,
   barX: -45,
@@ -314,7 +324,12 @@ export const INVADER_CORE_SPEC = {
 // ---- controller（controller.metadata.js:74-135,254-298,374-400,402-439,440-464） ----
 
 export const CONTROLLER_SPEC = {
-  status: { alpha: 0.05, blinkAlpha: 0.4, radius: 110, colors: { own: 0x33ff33, enemy: 0xff3333, safe: 0xffd180 } },
+  status: {
+    alpha: 0.05,
+    blinkAlpha: 0.4,
+    radius: 110,
+    colors: { own: 0x33ff33, enemy: 0xff3333, safe: 0xffd180 },
+  },
   whiteCircle: { alpha: 0.05, color: 0xffffff, radius: 92 },
   base: { texture: 'controller', width: 200, height: 200, tint: 0x000000 },
   levelSprite: { texture: 'controller-level', width: 100, height: 100, anchorY: 1 },

@@ -21,4 +21,3 @@ export function installRules(entries) {
   }
   setRules(nextRules);
 }
-

@@ -53,7 +53,10 @@ export function playerColorHex(user: string | null | undefined, isOwn: OwnFn): s
 }
 
 /** rampartColor（rampart.metadata.js:4-8 userOwnerColor 分支）。 */
-export function rampartCoverColor(user: string | null | undefined, isOwn: OwnFn): {
+export function rampartCoverColor(
+  user: string | null | undefined,
+  isOwn: OwnFn,
+): {
   fill: number;
   stroke: number;
 } {

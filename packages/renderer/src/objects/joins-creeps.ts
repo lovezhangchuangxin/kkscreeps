@@ -18,7 +18,17 @@
  */
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import { CREEP_SPEC, LIGHTING_MEMBER_BLEND, POWER_CREEP_SPEC } from './specs.js';
-import { gfxCircle, makeGlow, makeText, redraw, setSpriteSize, vBool, vNum, vNums, vStr } from './draw-helpers.js';
+import {
+  gfxCircle,
+  makeGlow,
+  makeText,
+  redraw,
+  setSpriteSize,
+  vBool,
+  vNum,
+  vNums,
+  vStr,
+} from './draw-helpers.js';
 import type { JoinAssets, PartJoin } from './joins-naturals.js';
 
 function frameSprite(assets: JoinAssets, name: string, width: number, height: number): Container {
@@ -40,13 +50,19 @@ export function joinCreep(assets: JoinAssets): PartJoin {
       // （官方声明序；NPC 分支互斥由 apply 显隐）
       create: () => {
         const root = new Container({ label: 'creep-main' });
-        const outer = gfxCircle(new Graphics(), CREEP_SPEC.outerCircle.radius, { fill: CREEP_SPEC.outerCircle.color });
+        const outer = gfxCircle(new Graphics(), CREEP_SPEC.outerCircle.radius, {
+          fill: CREEP_SPEC.outerCircle.color,
+        });
         outer.label = 'outer';
         const ringG = new Graphics();
         ringG.label = 'ring';
-        const inner = gfxCircle(new Graphics(), CREEP_SPEC.innerCircle.radius, { fill: CREEP_SPEC.innerCircle.color });
+        const inner = gfxCircle(new Graphics(), CREEP_SPEC.innerCircle.radius, {
+          fill: CREEP_SPEC.innerCircle.color,
+        });
         inner.label = 'inner';
-        const badge = gfxCircle(new Graphics(), CREEP_SPEC.badge.radius, { fill: CREEP_SPEC.badge.color });
+        const badge = gfxCircle(new Graphics(), CREEP_SPEC.badge.radius, {
+          fill: CREEP_SPEC.badge.color,
+        });
         badge.label = 'badge';
         const resourceTotal = new Graphics();
         resourceTotal.label = 'resource-total';
@@ -58,7 +74,17 @@ export function joinCreep(assets: JoinAssets): PartJoin {
         tough.label = 'tough';
         const npc = frameSprite(assets, 'creep-npc', CREEP_SPEC.npc.size, CREEP_SPEC.npc.size);
         npc.label = 'npc';
-        root.addChild(outer, ringG, inner, badge, resourceTotal, resourcePower, resourceEnergy, tough, npc);
+        root.addChild(
+          outer,
+          ringG,
+          inner,
+          badge,
+          resourceTotal,
+          resourcePower,
+          resourceEnergy,
+          tough,
+          npc,
+        );
         return root;
       },
       apply: (v, node) => {
@@ -83,7 +109,16 @@ export function joinCreep(assets: JoinAssets): PartJoin {
         drawResource('resource-power', vNum(v, 'powerR'), CREEP_SPEC.resourceColors.power);
         drawResource('resource-energy', vNum(v, 'energyR'), CREEP_SPEC.resourceColors.energy);
         // NPC 互斥：本体件全隐，NPC 精灵独显（官方 when isNpc/isNotNpc）
-        for (const label of ['outer', 'ring', 'inner', 'badge', 'resource-total', 'resource-power', 'resource-energy', 'tough'] as const) {
+        for (const label of [
+          'outer',
+          'ring',
+          'inner',
+          'badge',
+          'resource-total',
+          'resource-power',
+          'resource-energy',
+          'tough',
+        ] as const) {
           node.getChildByLabel(label)!.visible = !npc;
         }
         node.getChildByLabel('tough')!.visible = !npc && vNum(v, 'tough') === 1;
@@ -95,19 +130,32 @@ export function joinCreep(assets: JoinAssets): PartJoin {
     mask: {
       // creep-mask.png 100×100（lighting 层 SCREEN 成员）；holder α 传导
       // safemode 暗化（官方 mainContainer 子件语义等价，评审 A-B3）
-      create: () => makeGlow(assets.creepMask, CREEP_SPEC.mask.width, CREEP_SPEC.mask.height, CREEP_SPEC.mask.alpha),
+      create: () =>
+        makeGlow(
+          assets.creepMask,
+          CREEP_SPEC.mask.width,
+          CREEP_SPEC.mask.height,
+          CREEP_SPEC.mask.alpha,
+        ),
       apply: (v, node) => {
         node.alpha = vNum(v, 'alpha');
       },
     },
     glow: {
-      create: () => makeGlow(assets.glow, CREEP_SPEC.glow.width, CREEP_SPEC.glow.height, CREEP_SPEC.glow.alpha),
+      create: () =>
+        makeGlow(assets.glow, CREEP_SPEC.glow.width, CREEP_SPEC.glow.height, CREEP_SPEC.glow.alpha),
       apply: (v, node) => {
         node.alpha = vNum(v, 'alpha');
       },
     },
     glowNpc: {
-      create: () => makeGlow(assets.glow, CREEP_SPEC.npcGlow.width, CREEP_SPEC.npcGlow.height, CREEP_SPEC.npcGlow.alpha),
+      create: () =>
+        makeGlow(
+          assets.glow,
+          CREEP_SPEC.npcGlow.width,
+          CREEP_SPEC.npcGlow.height,
+          CREEP_SPEC.npcGlow.alpha,
+        ),
       apply: (v, node) => {
         node.alpha = vNum(v, 'alpha');
       },
@@ -145,10 +193,17 @@ export function joinPowerCreep(assets: JoinAssets): PartJoin {
       // （userBadge circle 退化面——G3）
       create: () => {
         const root = new Container({ label: 'pcreep-main' });
-        const body = frameSprite(assets, 'operator-lvl0', POWER_CREEP_SPEC.spriteSize, POWER_CREEP_SPEC.spriteSize);
+        const body = frameSprite(
+          assets,
+          'operator-lvl0',
+          POWER_CREEP_SPEC.spriteSize,
+          POWER_CREEP_SPEC.spriteSize,
+        );
         body.label = 'body';
         (body as Sprite).tint = POWER_CREEP_SPEC.spriteTint;
-        const badge = gfxCircle(new Graphics(), POWER_CREEP_SPEC.badge.radius, { fill: POWER_CREEP_SPEC.badge.color });
+        const badge = gfxCircle(new Graphics(), POWER_CREEP_SPEC.badge.radius, {
+          fill: POWER_CREEP_SPEC.badge.color,
+        });
         badge.label = 'badge';
         root.addChild(body, badge);
         return root;
@@ -182,7 +237,14 @@ export function joinPowerCreep(assets: JoinAssets): PartJoin {
     },
     glow: {
       // glow 400×400 α1.0 tint 0xFF5555（:151-162）；α 传导 safemode
-      create: () => makeGlow(assets.glow, POWER_CREEP_SPEC.glow.width, POWER_CREEP_SPEC.glow.height, POWER_CREEP_SPEC.glow.alpha, POWER_CREEP_SPEC.glow.tint),
+      create: () =>
+        makeGlow(
+          assets.glow,
+          POWER_CREEP_SPEC.glow.width,
+          POWER_CREEP_SPEC.glow.height,
+          POWER_CREEP_SPEC.glow.alpha,
+          POWER_CREEP_SPEC.glow.tint,
+        ),
       apply: (v, node) => {
         node.alpha = vNum(v, 'alpha');
       },
@@ -196,7 +258,10 @@ export function joinPowerCreep(assets: JoinAssets): PartJoin {
             fill: 0xffffff,
             fontFamily: POWER_CREEP_SPEC.name.fontFamily,
             fontSize: POWER_CREEP_SPEC.name.fontSize,
-            stroke: { color: POWER_CREEP_SPEC.name.strokeColor, width: POWER_CREEP_SPEC.name.strokeThickness },
+            stroke: {
+              color: POWER_CREEP_SPEC.name.strokeColor,
+              width: POWER_CREEP_SPEC.name.strokeThickness,
+            },
           },
           anchorX: 0.5,
           anchorY: POWER_CREEP_SPEC.name.anchorY,

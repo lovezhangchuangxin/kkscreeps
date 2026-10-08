@@ -8,26 +8,27 @@
     if (frozen || hooks.has(name)) throw new Error('registration closed or duplicate');
     hooks.set(name, callback);
   };
-  register('replace', id => ops.op_mod_set(id, 10));
-  register('wrap', id => {
+  register('replace', (id) => ops.op_mod_set(id, 10));
+  register('wrap', (id) => {
     // next() delegates to Rust; the native implementation calls a JS lifecycle
     // callback which itself reads/writes the same owned transaction through ops.
-    const next = () => ops.op_mod_native(id, () => {
-      ops.op_mod_set(id, ops.op_mod_get(id) + 2);
-      return ops.op_mod_get(id);
-    });
+    const next = () =>
+      ops.op_mod_native(id, () => {
+        ops.op_mod_set(id, ops.op_mod_get(id) + 2);
+        return ops.op_mod_get(id);
+      });
     ops.op_mod_set(id, ops.op_mod_get(id) + 1);
     next();
     ops.op_mod_set(id, ops.op_mod_get(id) + 4);
   });
-  register('fail', id => {
+  register('fail', (id) => {
     globalThis.volatileAttempts = (globalThis.volatileAttempts || 0) + 1;
     ops.op_mod_set(id, 999);
     throw new Error('mod failed after write');
   });
   frozen = true;
   globalThis.runHook = (name, id) => hooks.get(name)(id);
-  globalThis.fieldIncrement = n => {
+  globalThis.fieldIncrement = (n) => {
     for (let i = 0; i < n; i++) ops.op_mod_set(i, ops.op_mod_get(i) + 1);
   };
   globalThis.batchIncrement = () => {

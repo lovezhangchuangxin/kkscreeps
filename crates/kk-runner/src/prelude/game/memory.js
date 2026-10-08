@@ -64,13 +64,23 @@
     const sa = AP.toJSON;
     // 不可配置属性删除失败时尝试赋 undefined；两者都失败则抛错，由宿主出口返回固定 JSON。
     const lift = (proto) => {
-      try { delete proto.toJSON; } catch (_) {
-        try { proto.toJSON = undefined; } catch (_) { throw new Error('根原型已冻结'); }
+      try {
+        delete proto.toJSON;
+      } catch (_) {
+        try {
+          proto.toJSON = undefined;
+        } catch (_) {
+          throw new Error('根原型已冻结');
+        }
       }
     };
     const restore = (proto, saved) => {
       if (saved === undefined) return;
-      try { proto.toJSON = saved; } catch (_) { /* 玩家自见面，尽力恢复 */ }
+      try {
+        proto.toJSON = saved;
+      } catch (_) {
+        /* 玩家自见面，尽力恢复 */
+      }
     };
     try {
       lift(OP);
@@ -132,7 +142,9 @@
     for (let i = 0; i < entries.length; i++) segs[entries[i][0]] = entries[i][1];
     const props = {
       get: {
-        value() { return rawMemoryData; },
+        value() {
+          return rawMemoryData;
+        },
       },
       set: {
         value(v) {
@@ -312,7 +324,9 @@
           throw new Error('Memory segment #' + segmentKeys[i] + ' is not a string');
         }
         if (segs[segmentKeys[i]].length > 100 * 1024) {
-          throw new Error('Memory segment #' + segmentKeys[i] + ' has exceeded 100 KB length limit');
+          throw new Error(
+            'Memory segment #' + segmentKeys[i] + ' has exceeded 100 KB length limit',
+          );
         }
         writes.push([id, '' + segs[segmentKeys[i]]]);
       }
@@ -328,10 +342,13 @@
       out.defaultPublic = defaultPublicSegmentReq === null ? null : defaultPublicSegmentReq;
     }
     if (foreignSegmentReq !== undefined) {
-      out.foreign = foreignSegmentReq === null ? null : {
-        username: foreignSegmentReq.username,
-        id: foreignSegmentReq.id === undefined ? null : foreignSegmentReq.id,
-      };
+      out.foreign =
+        foreignSegmentReq === null
+          ? null
+          : {
+              username: foreignSegmentReq.username,
+              id: foreignSegmentReq.id === undefined ? null : foreignSegmentReq.id,
+            };
     }
     return out;
   }
@@ -357,7 +374,11 @@
       } catch (e) {
         // 玩家异常对象的 message 可是污染 getter（抛错逃逸会被宿主误判硬中断）
         let why;
-        try { why = String((e && e.message) || e); } catch (_) { why = 'unprintable player error'; }
+        try {
+          why = String((e && e.message) || e);
+        } catch (_) {
+          why = 'unprintable player error';
+        }
         return nullEnv({ ok: false, error: 'Memory 不可序列化: ' + why });
       }
     }
@@ -376,17 +397,24 @@
   __Object.defineProperty(globalThis, 'Memory', {
     configurable: true,
     enumerable: true,
-    get() { return ensureMemory(); },
+    get() {
+      return ensureMemory();
+    },
   });
-
 
   // Rust 捕获这些入口后删除 __kkp；Game 只持有闭包函数，不在 tick 中重查临时全局。
   globalThis.__kkp.memory = {
-    setRawMemoryHost(data) { rawMemoryData = data; },
-    rawMemoryDataHost() { return rawMemoryData; },
+    setRawMemoryHost(data) {
+      rawMemoryData = data;
+    },
+    rawMemoryDataHost() {
+      return rawMemoryData;
+    },
     setSegmentsWindowHost,
     setForeignSegmentHost,
-    segmentsOutHost() { return segmentsOutStash; },
+    segmentsOutHost() {
+      return segmentsOutStash;
+    },
     writeBackMemory,
     resetRawMemoryHost() {
       RawMemory = makeRawMemory();
@@ -396,7 +424,9 @@
       __Object.defineProperty(globalThis, 'Memory', {
         configurable: true,
         enumerable: true,
-        get() { return ensureMemory(); },
+        get() {
+          return ensureMemory();
+        },
       });
     },
   };

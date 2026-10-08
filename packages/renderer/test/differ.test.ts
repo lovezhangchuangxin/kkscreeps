@@ -38,7 +38,11 @@ describe('convertWorldJsonTicks', () => {
   it('首条转快照（terrain/能量面直通），后续按 id 对账转增量', () => {
     const a = obj(ROOM, 20);
     const b = obj(ROOM, 22);
-    const ticks = [tick(0, world(0, ROOM, [a, b])), tick(1, world(1, ROOM, [a, b])), tick(2, world(2, ROOM, [b]))];
+    const ticks = [
+      tick(0, world(0, ROOM, [a, b])),
+      tick(1, world(1, ROOM, [a, b])),
+      tick(2, world(2, ROOM, [b])),
+    ];
     const f = convertWorldJsonTicks(ticks);
     expect(f.room).toBe(ROOM);
     expect(f.ticks).toHaveLength(3);
@@ -63,7 +67,11 @@ describe('convertWorldJsonTicks', () => {
   it('事件从该 tick 的 rooms[room].events 透传（空则缺省键）', () => {
     const a = obj(ROOM, 20);
     const ev = { event: 1, objectId: a.id, data: { x: 20, y: 10 } };
-    const ticks = [tick(0, world(0, ROOM, [a])), tick(1, world(1, ROOM, [a], [ev])), tick(2, world(2, ROOM, [a]))];
+    const ticks = [
+      tick(0, world(0, ROOM, [a])),
+      tick(1, world(1, ROOM, [a], [ev])),
+      tick(2, world(2, ROOM, [a])),
+    ];
     const [, d1, d2] = convertWorldJsonTicks(ticks).ticks;
     expect(d1!.events).toEqual([ev]);
     expect('events' in d2!).toBe(false);
@@ -80,8 +88,8 @@ describe('convertWorldJsonTicks', () => {
     const twoRooms: WorldJson = {
       time: 0,
       rooms: {
-        W1N1: { name: 'W1N1', terrain: [], },
-        E9S9: { name: 'E9S9', terrain: [], },
+        W1N1: { name: 'W1N1', terrain: [] },
+        E9S9: { name: 'E9S9', terrain: [] },
       },
       objects: [],
     };

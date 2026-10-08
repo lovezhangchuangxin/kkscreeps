@@ -26,9 +26,7 @@ function isNpcUser(user: string | null): boolean {
 function safeModeAlpha(s: RoomObjectState, env: Parameters<PartDecl['values']>[1]): number {
   const ctl = env.controller;
   const user = ownerOf(s);
-  return ctl && ctl.safeModeUntil > env.time && ctl.user !== user
-    ? CREEP_SPEC.safeModeAlpha
-    : 1;
+  return ctl && ctl.safeModeUntil > env.time && ctl.user !== user ? CREEP_SPEC.safeModeAlpha : 1;
 }
 
 /** body 字段防御性读取（契约 body: {type,hits}[]）。 */
@@ -150,7 +148,11 @@ export const PARTS_POWER_CREEP: PartDecl[] = [
       const className = str(s.className);
       if (!className) return null;
       const level = num(s.level);
-      return { texture: `${className}-lvl${Math.min(4, Math.ceil(level / 6))}`, visible: true, alpha: safeModeAlpha(s, env) };
+      return {
+        texture: `${className}-lvl${Math.min(4, Math.ceil(level / 6))}`,
+        visible: true,
+        alpha: safeModeAlpha(s, env),
+      };
     },
   },
   {

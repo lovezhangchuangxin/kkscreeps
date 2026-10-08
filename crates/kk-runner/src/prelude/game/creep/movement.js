@@ -12,8 +12,14 @@
 
     // 官方 utils.js:80-100 offsetsByDirection 表（deserializePath 的方向位移源）
     const OFFSETS_BY_DIRECTION = {
-      1: [0, -1], 2: [1, -1], 3: [1, 0], 4: [1, 1],
-      5: [0, 1], 6: [-1, 1], 7: [-1, 0], 8: [-1, -1],
+      1: [0, -1],
+      2: [1, -1],
+      3: [1, 0],
+      4: [1, 1],
+      5: [0, 1],
+      6: [-1, 1],
+      7: [-1, 0],
+      8: [-1, -1],
     };
 
     /** 官方 `_.isObject`（creeps.js:172 的 moveTo opts 归位门）：对象与函数
@@ -32,13 +38,18 @@
       if (secondArg === undefined || typeof secondArg !== 'number') {
         if (!isObjectLike(firstArg)) return [undefined, undefined, undefined];
         if (firstArg instanceof gw.RoomPosition) {
-          x = firstArg.x; y = firstArg.y; roomName = firstArg.roomName;
+          x = firstArg.x;
+          y = firstArg.y;
+          roomName = firstArg.roomName;
         }
         if (firstArg.pos && firstArg.pos instanceof gw.RoomPosition) {
-          x = firstArg.pos.x; y = firstArg.pos.y; roomName = firstArg.pos.roomName;
+          x = firstArg.pos.x;
+          y = firstArg.pos.y;
+          roomName = firstArg.pos.roomName;
         }
       } else {
-        x = firstArg; y = secondArg;
+        x = firstArg;
+        y = secondArg;
       }
       if (Number.isNaN(x)) x = undefined;
       if (Number.isNaN(y)) y = undefined;
@@ -67,8 +78,12 @@
         if (!offs) {
           throw new Error('`path` is not a valid serialized path string');
         }
-        const dx = offs[0], dy = offs[1];
-        if (i > 4) { x += dx; y += dy; }
+        const dx = offs[0],
+          dy = offs[1];
+        if (i > 4) {
+          x += dx;
+          y += dy;
+        }
         result.push({ x, y, dx, dy, direction });
       }
       return result;
@@ -140,7 +155,11 @@
         // 官方 :196-198 绘图样式缺省（官方经 _.defaults 原地补全调用方对象）
         if (opts.visualizePathStyle) {
           _.defaults(opts.visualizePathStyle, {
-            fill: 'transparent', stroke: '#fff', lineStyle: 'dashed', strokeWidth: 0.15, opacity: 0.1,
+            fill: 'transparent',
+            stroke: '#fff',
+            lineStyle: 'dashed',
+            strokeWidth: 0.15,
+            opacity: 0.1,
           });
         }
         if (x == this.pos.x && y == this.pos.y && roomName == this.pos.roomName) {
@@ -150,7 +169,10 @@
         let visualized = false;
         if (opts.reusePath && this.memory && isObjectLike(this.memory) && this.memory._move) {
           const _move = this.memory._move;
-          if (gw.world.time > _move.time + parseInt(opts.reusePath) || _move.room != this.pos.roomName) {
+          if (
+            gw.world.time > _move.time + parseInt(opts.reusePath) ||
+            _move.room != this.pos.roomName
+          ) {
             delete this.memory._move;
           } else if (_move.dest.room == roomName && _move.dest.x == x && _move.dest.y == y) {
             let path = _.isString(_move.path) ? deserializePath(_move.path) : _move.path;
@@ -204,7 +226,10 @@
         if (Array.isArray(path) && path.length > 0 && path[0] instanceof gw.RoomPosition) {
           let idx = -1;
           for (let i = 0; i < path.length; i++) {
-            if (path[i].isEqualTo(this.pos)) { idx = i; break; }
+            if (path[i].isEqualTo(this.pos)) {
+              idx = i;
+              break;
+            }
           }
           if (idx === -1 && !path[0].isNearTo(this.pos)) {
             return C.ERR_NOT_FOUND;
@@ -217,9 +242,7 @@
           path = deserializePath(path);
         }
         if (!Array.isArray(path)) return C.ERR_INVALID_ARGS;
-        const cur = path.find(
-          (i) => i.x - i.dx == this.pos.x && i.y - i.dy == this.pos.y,
-        );
+        const cur = path.find((i) => i.x - i.dx == this.pos.x && i.y - i.dy == this.pos.y);
         if (!cur) return C.ERR_NOT_FOUND;
         return this.move(cur.direction);
       };

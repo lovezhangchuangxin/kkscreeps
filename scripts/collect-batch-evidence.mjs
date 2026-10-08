@@ -68,7 +68,10 @@ if (ratchet.passed < ratchet.floor) {
 // bot 报告：文件名即夹具名；只搬运固定字段，缺失即失败。
 const bots = args.bots.map((path) => {
   const raw = readJson(path);
-  const name = path.split('/').pop().replace(/^bot-|\.json$/g, '');
+  const name = path
+    .split('/')
+    .pop()
+    .replace(/^bot-|\.json$/g, '');
   const entry = { name };
   for (const key of [
     'ticks_requested',

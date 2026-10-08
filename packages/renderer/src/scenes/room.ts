@@ -14,7 +14,13 @@
  */
 import { Container, Graphics } from 'pixi.js';
 import { LightingPass } from '../core/lighting.js';
-import type { ActionLogEntry, RoomEvent, RoomObjectState, RoomVisual, SayEntry } from '@kkscreeps/shared';
+import type {
+  ActionLogEntry,
+  RoomEvent,
+  RoomObjectState,
+  RoomVisual,
+  SayEntry,
+} from '@kkscreeps/shared';
 import type { Viewport } from '../anim/ambient-scheduler.js';
 import { DEFAULT_CELL_SIZE, ROOM_SIZE } from './terrain-geometry.js';
 import { TERRAIN_SPEC } from '../core/terrain-spec.js';
@@ -62,7 +68,11 @@ export class RoomScene {
   private walledBaseCodes: ArrayLike<number> | null = null;
   private walledExtras: ReadonlySet<number> | null = null;
 
-  constructor(textures: TerrainTextures, cellSize: number = DEFAULT_CELL_SIZE, objects?: ObjectsSetup) {
+  constructor(
+    textures: TerrainTextures,
+    cellSize: number = DEFAULT_CELL_SIZE,
+    objects?: ObjectsSetup,
+  ) {
     this.cellSize = cellSize;
     this.view = ROOM_SIZE * cellSize;
 
@@ -79,7 +89,15 @@ export class RoomScene {
     const visualsStage = new VisualStage(cellSize);
     visualsStage.root.label = 'layer-visuals';
     const hoverRoot = new Container({ label: 'layer-hover' });
-    this.root.addChild(terrain, ground, objectsLayer, lightingDisplay, effects, visualsStage.root, hoverRoot);
+    this.root.addChild(
+      terrain,
+      ground,
+      objectsLayer,
+      lightingDisplay,
+      effects,
+      visualsStage.root,
+      hoverRoot,
+    );
     this.layers = { terrain, ground, objects: objectsLayer, lightingDisplay, effects };
     this.visuals = visualsStage;
     this.hoverRoot = hoverRoot;
@@ -131,12 +149,21 @@ export class RoomScene {
    * 交互辅助面，非官方形态（官方为 hover 信息卡），登记 G13。 */
   setHighlight(cell: { x: number; y: number } | null): void {
     if (cell === null && this.hoverCell === null) return;
-    if (cell !== null && this.hoverCell !== null && cell.x === this.hoverCell.x && cell.y === this.hoverCell.y) return;
+    if (
+      cell !== null &&
+      this.hoverCell !== null &&
+      cell.x === this.hoverCell.x &&
+      cell.y === this.hoverCell.y
+    )
+      return;
     this.hoverCell = cell;
-    this.hoverRoot.removeChildren().forEach((child) => child.destroy({ children: true, context: true }));
+    this.hoverRoot
+      .removeChildren()
+      .forEach((child) => child.destroy({ children: true, context: true }));
     if (cell === null) return;
     const ring = new Graphics();
-    ring.circle(cell.x * this.cellSize, cell.y * this.cellSize, this.cellSize / 2)
+    ring
+      .circle(cell.x * this.cellSize, cell.y * this.cellSize, this.cellSize / 2)
       .stroke({ width: 2, color: 0xffffff, alpha: 0.6, cap: 'round', join: 'round' });
     this.hoverRoot.addChild(ring);
   }
@@ -163,7 +190,11 @@ export class RoomScene {
 
   /** ticker 驱动（elapsedMS=未经 ticker 截断的真实帧时间）：swamp 滚动 + lighting 离屏按需重渲
    * + 对象运动 tween（R4——数据断流动画照跑）。 */
-  update(elapsedMS: number, renderer: Parameters<LightingPass['update']>[0], viewport?: Viewport): void {
+  update(
+    elapsedMS: number,
+    renderer: Parameters<LightingPass['update']>[0],
+    viewport?: Viewport,
+  ): void {
     const timed = elapsedMS > 0;
     if (timed) this.terrain.update(elapsedMS / TERRAIN_SPEC.frameBaseMs);
     const t1 = performance.now();

@@ -18,7 +18,13 @@
       if (c < 0x80) out.push(c);
       else if (c < 0x800) out.push(0xc0 | (c >> 6), 0x80 | (c & 63));
       else if (c < 0x10000) out.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
-      else out.push(0xf0 | (c >> 18), 0x80 | ((c >> 12) & 63), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+      else
+        out.push(
+          0xf0 | (c >> 18),
+          0x80 | ((c >> 12) & 63),
+          0x80 | ((c >> 6) & 63),
+          0x80 | (c & 63),
+        );
     }
     return out;
   }
@@ -34,19 +40,50 @@
     const n = bytes.length;
     while (i < n) {
       const b = bytes[i];
-      if (b < 0x80) { s += String.fromCharCode(b); i += 1; continue; }
+      if (b < 0x80) {
+        s += String.fromCharCode(b);
+        i += 1;
+        continue;
+      }
       let size, lo2, hi2;
-      if (b >= 0xc2 && b <= 0xdf) { size = 2; lo2 = 0x80; hi2 = 0xbf; }
-      else if (b === 0xe0) { size = 3; lo2 = 0xa0; hi2 = 0xbf; }
-      else if (b >= 0xe1 && b <= 0xec) { size = 3; lo2 = 0x80; hi2 = 0xbf; }
-      else if (b === 0xed) { size = 3; lo2 = 0x80; hi2 = 0x9f; }
-      else if (b === 0xf0) { size = 4; lo2 = 0x90; hi2 = 0xbf; }
-      else if (b >= 0xf1 && b <= 0xf3) { size = 4; lo2 = 0x80; hi2 = 0xbf; }
-      else if (b === 0xf4) { size = 4; lo2 = 0x80; hi2 = 0x8f; }
-      else { s += REPL; i += 1; continue; } // 0xc0/0xc1（overlong）与 0xf5-0xff：非法 leading
+      if (b >= 0xc2 && b <= 0xdf) {
+        size = 2;
+        lo2 = 0x80;
+        hi2 = 0xbf;
+      } else if (b === 0xe0) {
+        size = 3;
+        lo2 = 0xa0;
+        hi2 = 0xbf;
+      } else if (b >= 0xe1 && b <= 0xec) {
+        size = 3;
+        lo2 = 0x80;
+        hi2 = 0xbf;
+      } else if (b === 0xed) {
+        size = 3;
+        lo2 = 0x80;
+        hi2 = 0x9f;
+      } else if (b === 0xf0) {
+        size = 4;
+        lo2 = 0x90;
+        hi2 = 0xbf;
+      } else if (b >= 0xf1 && b <= 0xf3) {
+        size = 4;
+        lo2 = 0x80;
+        hi2 = 0xbf;
+      } else if (b === 0xf4) {
+        size = 4;
+        lo2 = 0x80;
+        hi2 = 0x8f;
+      } else {
+        s += REPL;
+        i += 1;
+        continue;
+      } // 0xc0/0xc1（overlong）与 0xf5-0xff：非法 leading
       const b2 = bytes[i + 1];
       if (b2 === undefined || b2 < lo2 || b2 > hi2) {
-        s += REPL; i += 1; continue; // 第二字节非法或截断：只吃 leading 一个字节
+        s += REPL;
+        i += 1;
+        continue; // 第二字节非法或截断：只吃 leading 一个字节
       }
       let cp = ((b & (size === 2 ? 0x1f : size === 3 ? 0x0f : 0x07)) << 6) | (b2 & 0x3f);
       let j = i + 2;
@@ -54,7 +91,11 @@
         cp = (cp << 6) | (bytes[j] & 0x3f);
         j += 1;
       }
-      if (j - i < size) { s += REPL; i = j; continue; } // 截断：已验证前缀整体一个 FFFD
+      if (j - i < size) {
+        s += REPL;
+        i = j;
+        continue;
+      } // 截断：已验证前缀整体一个 FFFD
       s += String.fromCodePoint(cp);
       i = j;
     }
@@ -68,7 +109,9 @@
     return v < 0 ? -1 : v < 16 ? v : v - 6;
   }
   const BASE64_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  function base64Val(ch) { return BASE64_CHARS.indexOf(ch); }
+  function base64Val(ch) {
+    return BASE64_CHARS.indexOf(ch);
+  }
 
   class Buffer extends Uint8Array {
     static from(input, encoding) {
@@ -81,7 +124,8 @@
           bytes = [];
           const len = input.length - (input.length % 2);
           for (let i = 0; i < len; i += 2) {
-            const hi = hexVal(input[i]), lo = hexVal(input[i + 1]);
+            const hi = hexVal(input[i]),
+              lo = hexVal(input[i + 1]);
             if (hi < 0 || lo < 0) break;
             bytes.push((hi << 4) | lo);
           }
@@ -97,7 +141,10 @@
             if (v < 0) continue;
             buf = (buf << 6) | v;
             bits += 6;
-            if (bits >= 8) { bits -= 8; bytes.push((buf >> bits) & 0xff); }
+            if (bits >= 8) {
+              bits -= 8;
+              bytes.push((buf >> bits) & 0xff);
+            }
           }
         } else {
           // 未支持的编码显式报错，不静默按 utf8 处理（wasm 工具链会拿到错误数据）
@@ -155,8 +202,12 @@
       }
       return b;
     }
-    static allocUnsafe(size) { return new Buffer(size); }
-    static isBuffer(x) { return x instanceof Buffer; }
+    static allocUnsafe(size) {
+      return new Buffer(size);
+    }
+    static isBuffer(x) {
+      return x instanceof Buffer;
+    }
     static byteLength(s) {
       if (typeof s === 'string') return utf8Encode(s).length;
       if (s instanceof Uint8Array) return s.length;
@@ -166,7 +217,10 @@
       const total = list.reduce((n, b) => n + b.length, 0);
       const out = new Buffer(total);
       let off = 0;
-      for (const b of list) { out.set(b, off); off += b.length; }
+      for (const b of list) {
+        out.set(b, off);
+        off += b.length;
+      }
       return out;
     }
     toString(encoding) {
@@ -180,7 +234,9 @@
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
         let s = '';
         for (let i = 0; i < this.length; i += 3) {
-          const b0 = this[i], b1 = this[i + 1], b2 = this[i + 2];
+          const b0 = this[i],
+            b1 = this[i + 1],
+            b2 = this[i + 2];
           s += chars[b0 >> 2];
           s += chars[((b0 & 3) << 4) | ((b1 ?? 0) >> 4)];
           s += b1 === undefined ? '=' : chars[((b1 & 15) << 2) | ((b2 ?? 0) >> 6)];

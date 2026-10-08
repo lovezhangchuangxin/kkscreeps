@@ -1,6 +1,8 @@
 export default function install(api) {
   class AlphaNode extends api.builtins.RoomObject {
-    get value() { return api.view.field(this, 'value'); }
+    get value() {
+      return api.view.field(this, 'value');
+    }
   }
   api.objects.bind('alpha:node', AlphaNode);
   api.globals.define('AlphaNode', AlphaNode);

@@ -5,7 +5,7 @@
 // 全部由宿主结算侧独立校验，伪造目标或参数最多得到一次不执行。Mod 的
 // 玩家 SDK 在此之上安装类方法（emit 的公开形态随玩家模块装载器提供）。
 // 运行时点在 __kkp 删除之前，gw 经闭包捕获后不再依赖全局容器。
-;(() => {
+(() => {
   'use strict';
   const gw = globalThis.__kkp.gw;
   Object.defineProperty(globalThis, '__kkEmitExtensionIntent', {

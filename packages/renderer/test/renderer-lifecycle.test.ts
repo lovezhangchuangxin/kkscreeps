@@ -13,21 +13,34 @@ function makeKernel() {
   const ticker = new Ticker();
   const listeners = new Set<() => void>();
   const renderer = {
-    screen: { width: 800, height: 800 }, resolution: 1, render: vi.fn(),
-    on: vi.fn((_event: string, listener: () => void) => { listeners.add(listener); }),
-    off: vi.fn((_event: string, listener: () => void) => { listeners.delete(listener); }),
+    screen: { width: 800, height: 800 },
+    resolution: 1,
+    render: vi.fn(),
+    on: vi.fn((_event: string, listener: () => void) => {
+      listeners.add(listener);
+    }),
+    off: vi.fn((_event: string, listener: () => void) => {
+      listeners.delete(listener);
+    }),
   };
   const domListeners = new Map<string, Set<(e: Partial<PointerEvent>) => void>>();
   const capturedPointers = new Set<number>();
   const canvas = {
     style: {},
     getBoundingClientRect: vi.fn(() => ({ left: 0, top: 0 })),
-    setPointerCapture: vi.fn((id: number) => { capturedPointers.add(id); }),
-    releasePointerCapture: vi.fn((id: number) => { capturedPointers.delete(id); }),
+    setPointerCapture: vi.fn((id: number) => {
+      capturedPointers.add(id);
+    }),
+    releasePointerCapture: vi.fn((id: number) => {
+      capturedPointers.delete(id);
+    }),
     hasPointerCapture: vi.fn((id: number) => capturedPointers.has(id)),
     addEventListener: vi.fn((event: string, listener: (e: Partial<PointerEvent>) => void) => {
       let set = domListeners.get(event);
-      if (!set) { set = new Set(); domListeners.set(event, set); }
+      if (!set) {
+        set = new Set();
+        domListeners.set(event, set);
+      }
       set.add(listener);
     }),
     removeEventListener: vi.fn((event: string, listener: (e: Partial<PointerEvent>) => void) => {
@@ -36,19 +49,37 @@ function makeKernel() {
   };
   /** 合成派发 DOM 指针事件（拾取/悬停测试）。 */
   const firePointer = (event: string, e: Partial<PointerEvent>): void => {
-    for (const listener of [...(domListeners.get(event) ?? [])]) listener({ pointerId: 1, isPrimary: true, ...e });
+    for (const listener of [...(domListeners.get(event) ?? [])])
+      listener({ pointerId: 1, isPrimary: true, ...e });
   };
-  const destroy = vi.fn(async () => { ticker.destroy(); stage.destroy({ children: true }); });
-  const kernel: Kernel = { stage, backend: 'webgl', destroy,
-    app: { stage, ticker, renderer, canvas } as unknown as Kernel['app'] };
+  const destroy = vi.fn(async () => {
+    ticker.destroy();
+    stage.destroy({ children: true });
+  });
+  const kernel: Kernel = {
+    stage,
+    backend: 'webgl',
+    destroy,
+    app: { stage, ticker, renderer, canvas } as unknown as Kernel['app'],
+  };
   return { kernel, ticker, renderer, canvas, listeners, destroy, stage, domListeners, firePointer };
 }
 
 const handles: RendererHandle[] = [];
 let runtime: ReturnType<typeof makeKernel>;
-const creep = (x: number) => ({ id: 'c', type: 'creep', x, y: 10, user: 'p1', body: [{ type: 'work', hits: 100 }] });
+const creep = (x: number) => ({
+  id: 'c',
+  type: 'creep',
+  x,
+  y: 10,
+  user: 'p1',
+  body: [{ type: 'work', hits: 100 }],
+});
 async function mounted(): Promise<RendererHandle> {
-  const handle = await createRenderer({ container: {} as HTMLElement, atlasBaseUrl: 'https://renderer.invalid/' });
+  const handle = await createRenderer({
+    container: {} as HTMLElement,
+    atlasBaseUrl: 'https://renderer.invalid/',
+  });
   handles.push(handle);
   return handle;
 }
@@ -58,14 +89,20 @@ beforeEach(() => {
 });
 afterEach(async () => {
   for (const handle of handles.splice(0)) await handle.destroy();
-  vi.restoreAllMocks(); vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('公共句柄生命周期与真实 ticker 接线', () => {
   it('长帧使用 elapsedMS，500ms 后 1s 移动到半程', async () => {
     mockAssetIO();
     const handle = await mounted();
-    handle.feed.applySnapshot({ room: 'W0N0', time: 0, terrain: { codes: new Array(2500).fill(0) }, objects: [creep(10)] });
+    handle.feed.applySnapshot({
+      room: 'W0N0',
+      time: 0,
+      terrain: { codes: new Array(2500).fill(0) },
+      objects: [creep(10)],
+    });
     handle.feed.applyDelta({ room: 'W0N0', time: 1, upsert: [creep(11)], removedIds: [] });
     runtime.ticker.lastTime = 0;
     runtime.ticker.update(500);
@@ -78,7 +115,12 @@ describe('公共句柄生命周期与真实 ticker 接线', () => {
   it('倍率变化保留已完成进度，0 暂停，恢复后继续', async () => {
     mockAssetIO();
     const handle = await mounted();
-    handle.feed.applySnapshot({ room: 'W0N0', time: 0, terrain: { codes: new Array(2500).fill(0) }, objects: [creep(10)] });
+    handle.feed.applySnapshot({
+      room: 'W0N0',
+      time: 0,
+      terrain: { codes: new Array(2500).fill(0) },
+      objects: [creep(10)],
+    });
     handle.feed.applyDelta({ room: 'W0N0', time: 1, upsert: [creep(11)], removedIds: [] });
     runtime.ticker.lastTime = 0;
     handle.setPlaybackRate(2);
@@ -115,12 +157,21 @@ describe('公共句柄生命周期与真实 ticker 接线', () => {
     expect(runtime.listeners.size).toBe(0);
     expect(bitmaps.every((bitmap) => bitmap.close.mock.calls.length === 1)).toBe(true);
     // feed 可作为数据仓库继续使用，不能再调用已销毁场景。
-    expect(() => handle.feed.applySnapshot({ room: 'W0N0', time: 0, terrain: { codes: new Array(2500).fill(0) }, objects: [creep(10)] })).not.toThrow();
+    expect(() =>
+      handle.feed.applySnapshot({
+        room: 'W0N0',
+        time: 0,
+        terrain: { codes: new Array(2500).fill(0) },
+        objects: [creep(10)],
+      }),
+    ).not.toThrow();
   });
 
   it('资产加载失败也拆卸相机监听和已创建内核', async () => {
     mockAssetIO();
-    vi.stubGlobal('fetch', async () => { throw new Error('offline'); });
+    vi.stubGlobal('fetch', async () => {
+      throw new Error('offline');
+    });
     await expect(mounted()).rejects.toThrow('offline');
     expect(runtime.destroy).toHaveBeenCalledTimes(1);
     // 失败发生在拾取监听装配之前：仅相机 8 监听
@@ -129,7 +180,9 @@ describe('公共句柄生命周期与真实 ticker 接线', () => {
 
   it('资产成功后装配失败也释放资产与场景', async () => {
     const { bitmaps } = mockAssetIO();
-    runtime.renderer.on.mockImplementation(() => { throw new Error('setup failure'); });
+    runtime.renderer.on.mockImplementation(() => {
+      throw new Error('setup failure');
+    });
     await expect(mounted()).rejects.toThrow('setup failure');
     expect(runtime.destroy).toHaveBeenCalledTimes(1);
     expect(runtime.stage.destroyed).toBe(true);
@@ -139,7 +192,8 @@ describe('公共句柄生命周期与真实 ticker 接线', () => {
 
 describe('R6：活动房间 / visuals / 拾取悬停 / 字体 / advanceAnimation', () => {
   it('同 tick visuals/terrain 不重复对账、不打断移动；同时间快照仍即时同步', async () => {
-    mockAssetIO(); const h = await mounted();
+    mockAssetIO();
+    const h = await mounted();
     const spy = vi.spyOn(RoomScene.prototype, 'applyObjects');
     const terrain = { codes: new Array(2500).fill(0) };
     h.feed.applySnapshot({ room: 'A', time: 0, terrain, objects: [creep(10)] });
@@ -158,7 +212,8 @@ describe('R6：活动房间 / visuals / 拾取悬停 / 字体 / advanceAnimation
   });
 
   it('同时间 A→B→A 均重建；对象对账失败后同时间通知可以恢复', async () => {
-    mockAssetIO(); const h = await mounted();
+    mockAssetIO();
+    const h = await mounted();
     const terrain = { codes: new Array(2500).fill(0) };
     h.feed.applySnapshot({ room: 'A', time: 0, terrain, objects: [creep(10)] });
     h.feed.applySnapshot({ room: 'B', time: 0, terrain, objects: [creep(3)] });
@@ -167,8 +222,12 @@ describe('R6：活动房间 / visuals / 拾取悬停 / 字体 / advanceAnimation
     h.setActiveRoom('A');
     expect(runtime.stage.getChildByLabel('obj-c', true)!.x).toBe(1000);
     const spy = vi.spyOn(RoomScene.prototype, 'applyObjects');
-    spy.mockImplementationOnce(() => { throw new Error('retry object apply'); });
-    expect(() => h.feed.applyDelta({ room: 'A', time: 1, upsert: [creep(11)], removedIds: [] })).toThrow('retry object apply');
+    spy.mockImplementationOnce(() => {
+      throw new Error('retry object apply');
+    });
+    expect(() =>
+      h.feed.applyDelta({ room: 'A', time: 1, upsert: [creep(11)], removedIds: [] }),
+    ).toThrow('retry object apply');
     h.feed.setVisuals('A', []);
     expect(spy).toHaveBeenCalledTimes(2);
     h.advanceAnimation(1000);
@@ -176,11 +235,16 @@ describe('R6：活动房间 / visuals / 拾取悬停 / 字体 / advanceAnimation
   });
 
   it('同时间快照的地形阶段失败也失效旧对象标记', async () => {
-    mockAssetIO(); const h = await mounted();
+    mockAssetIO();
+    const h = await mounted();
     const terrain = { codes: new Array(2500).fill(0) };
     h.feed.applySnapshot({ room: 'A', time: 0, terrain, objects: [creep(10)] });
-    vi.spyOn(RoomScene.prototype, 'setTerrain').mockImplementationOnce(() => { throw new Error('retry terrain'); });
-    expect(() => h.feed.applySnapshot({ room: 'A', time: 0, terrain, objects: [creep(3)] })).toThrow('retry terrain');
+    vi.spyOn(RoomScene.prototype, 'setTerrain').mockImplementationOnce(() => {
+      throw new Error('retry terrain');
+    });
+    expect(() =>
+      h.feed.applySnapshot({ room: 'A', time: 0, terrain, objects: [creep(3)] }),
+    ).toThrow('retry terrain');
     h.feed.setVisuals('A', []);
     expect(runtime.stage.getChildByLabel('obj-c', true)!.x).toBe(300);
   });
@@ -193,7 +257,14 @@ describe('R6：活动房间 / visuals / 拾取悬停 / 字体 / advanceAnimation
     expect(handle.activeRoom).toBe('W0N0');
     expect(runtime.stage.getChildByLabel('obj-c', true)).toBeDefined();
     // 非活动房：对象与 visuals 只进仓库，场景零触达
-    handle.feed.applySnapshot({ room: 'W1N1', time: 0, terrain, objects: [{ id: 'bo', type: 'creep', x: 3, y: 3, user: 'p1', body: [{ type: 'work', hits: 100 }] }] });
+    handle.feed.applySnapshot({
+      room: 'W1N1',
+      time: 0,
+      terrain,
+      objects: [
+        { id: 'bo', type: 'creep', x: 3, y: 3, user: 'p1', body: [{ type: 'work', hits: 100 }] },
+      ],
+    });
     expect(runtime.stage.getChildByLabel('obj-bo', true)).toBeNull();
     handle.feed.setVisuals('W1N1', [{ type: 'circle', x: 3, y: 3 }]);
     expect(handle.getStats().visuals).toBe(0);
@@ -214,8 +285,15 @@ describe('R6：活动房间 / visuals / 拾取悬停 / 字体 / advanceAnimation
   it('visuals 跨增量存续（getStats 口径；短路细锚在 room-feed/visual-stage 单测）', async () => {
     mockAssetIO();
     const handle = await mounted();
-    handle.feed.applySnapshot({ room: 'W0N0', time: 0, terrain: { codes: new Array(2500).fill(0) }, objects: [] });
-    const visuals: RoomVisual[] = [{ type: 'rect', x: 1, y: 1, w: 1, h: 1, style: { fill: 'transparent', stroke: '#ffffff' } }];
+    handle.feed.applySnapshot({
+      room: 'W0N0',
+      time: 0,
+      terrain: { codes: new Array(2500).fill(0) },
+      objects: [],
+    });
+    const visuals: RoomVisual[] = [
+      { type: 'rect', x: 1, y: 1, w: 1, h: 1, style: { fill: 'transparent', stroke: '#ffffff' } },
+    ];
     handle.feed.setVisuals('W0N0', visuals);
     expect(handle.getStats().visuals).toBe(1);
     handle.feed.applyDelta({ room: 'W0N0', time: 1, upsert: [], removedIds: [] });
@@ -225,14 +303,23 @@ describe('R6：活动房间 / visuals / 拾取悬停 / 字体 / advanceAnimation
   it('onPick/onHover：命中回调、变化触发、拖拽抑制、退订与销毁清理', async () => {
     mockAssetIO();
     const handle = await mounted();
-    handle.feed.applySnapshot({ room: 'W0N0', time: 0, terrain: { codes: new Array(2500).fill(0) }, objects: [creep(10)] });
+    handle.feed.applySnapshot({
+      room: 'W0N0',
+      time: 0,
+      terrain: { codes: new Array(2500).fill(0) },
+      objects: [creep(10)],
+    });
     handle.setCameraState({ x: 1000, y: 1000, zoom: 1 }); // 屏幕中心 (400,400)=格 (10,10)
     const picks: string[] = [];
-    const unsub = handle.onPick((r) => picks.push(`${r.cell?.x},${r.cell?.y}:${r.objectId ?? '-'}`));
+    const unsub = handle.onPick((r) =>
+      picks.push(`${r.cell?.x},${r.cell?.y}:${r.objectId ?? '-'}`),
+    );
     const pickRooms: Array<string | undefined> = [];
     handle.onPick((r) => pickRooms.push(r.room));
     const hovers: Array<string | null> = [];
-    handle.onHover((r) => hovers.push(r === null ? null : `${r.cell?.x},${r.cell?.y}:${r.objectId ?? '-'}`));
+    handle.onHover((r) =>
+      hovers.push(r === null ? null : `${r.cell?.x},${r.cell?.y}:${r.objectId ?? '-'}`),
+    );
     runtime.firePointer('pointermove', { button: 0, clientX: 400, clientY: 400 });
     runtime.firePointer('pointermove', { button: 0, clientX: 400, clientY: 400 });
     expect(hovers).toEqual(['10,10:c']); // 同格同对象不重复触发
@@ -267,7 +354,9 @@ describe('R6：活动房间 / visuals / 拾取悬停 / 字体 / advanceAnimation
     expect(picks).toEqual(['10,10:c']); // 退订后不再触发
     // 销毁后 DOM 监听摘除：合成事件不再触达任何回调
     await handle.destroy();
-    expect(() => runtime.firePointer('pointermove', { button: 0, clientX: 700, clientY: 400 })).not.toThrow();
+    expect(() =>
+      runtime.firePointer('pointermove', { button: 0, clientX: 700, clientY: 400 }),
+    ).not.toThrow();
     expect(runtime.canvas.removeEventListener).toHaveBeenCalledTimes(14);
   });
 
@@ -296,40 +385,71 @@ describe('R6：活动房间 / visuals / 拾取悬停 / 字体 / advanceAnimation
   });
 
   it('离开后 feed/切房/相机变化不复活悬停', async () => {
-    mockAssetIO(); const h = await mounted(); const terrain = { codes: new Array(2500).fill(0) };
+    mockAssetIO();
+    const h = await mounted();
+    const terrain = { codes: new Array(2500).fill(0) };
     h.feed.applySnapshot({ room: 'A', time: 0, terrain, objects: [creep(10)] });
     h.feed.applySnapshot({ room: 'B', time: 0, terrain, objects: [creep(10)] });
     h.setCameraState({ x: 1000, y: 1000, zoom: 1 });
-    const hover = vi.fn(); h.onHover(hover);
+    const hover = vi.fn();
+    h.onHover(hover);
     runtime.firePointer('pointermove', { clientX: 400, clientY: 400 });
     runtime.firePointer('pointerleave', {});
     expect(hover).toHaveBeenLastCalledWith(null);
     h.feed.applyDelta({ room: 'A', time: 1, upsert: [], removedIds: ['c'] });
-    h.setActiveRoom('B'); h.setCameraState({ x: 1100, y: 1000, zoom: 1 }); h.advanceAnimation(1);
+    h.setActiveRoom('B');
+    h.setCameraState({ x: 1100, y: 1000, zoom: 1 });
+    h.advanceAnimation(1);
     expect(hover).toHaveBeenCalledTimes(2);
     expect(runtime.stage.getChildByLabel('layer-hover', true)!.children).toHaveLength(0);
   });
   it('手势期所有重估冻结，释放后恢复当前悬停且不触发拖拽 pick', async () => {
-    mockAssetIO(); const h = await mounted();
-    h.feed.applySnapshot({ room: 'A', time: 0, terrain: { codes: new Array(2500).fill(0) }, objects: [creep(10)] });
+    mockAssetIO();
+    const h = await mounted();
+    h.feed.applySnapshot({
+      room: 'A',
+      time: 0,
+      terrain: { codes: new Array(2500).fill(0) },
+      objects: [creep(10)],
+    });
     h.setCameraState({ x: 1000, y: 1000, zoom: 1 });
-    const hover = vi.fn(), pick = vi.fn(); h.onHover(hover); h.onPick(pick);
+    const hover = vi.fn(),
+      pick = vi.fn();
+    h.onHover(hover);
+    h.onPick(pick);
     runtime.firePointer('pointermove', { clientX: 400, clientY: 400 });
     runtime.firePointer('pointerdown', { button: 0, clientX: 400, clientY: 400 });
     runtime.firePointer('pointermove', { clientX: 500, clientY: 400 });
     h.feed.applyDelta({ room: 'A', time: 1, upsert: [], removedIds: ['c'] });
-    h.setCameraState({ x: 2000, y: 1000, zoom: 1 }); h.advanceAnimation(1);
+    h.setCameraState({ x: 2000, y: 1000, zoom: 1 });
+    h.advanceAnimation(1);
     expect(hover).toHaveBeenCalledTimes(1);
     runtime.firePointer('pointerup', { clientX: 500, clientY: 400 });
-    expect(hover).toHaveBeenLastCalledWith(expect.objectContaining({ cell: { x: 21, y: 10 }, room: 'A' }));
+    expect(hover).toHaveBeenLastCalledWith(
+      expect.objectContaining({ cell: { x: 21, y: 10 }, room: 'A' }),
+    );
     expect(pick).not.toHaveBeenCalled();
   });
   it('多指不串扰，capture 丢失后空手不拖动，拖回原点不点击', async () => {
-    mockAssetIO(); const h = await mounted(); h.setCameraState({ x: 1000, y: 1000, zoom: 1 });
-    const pick = vi.fn(); h.onPick(pick);
+    mockAssetIO();
+    const h = await mounted();
+    h.setCameraState({ x: 1000, y: 1000, zoom: 1 });
+    const pick = vi.fn();
+    h.onPick(pick);
     runtime.firePointer('pointerdown', { button: 0, clientX: 400, clientY: 400 });
-    runtime.firePointer('pointerdown', { pointerId: 2, isPrimary: false, button: 0, clientX: 700, clientY: 400 });
-    runtime.firePointer('pointermove', { pointerId: 2, isPrimary: false, clientX: 700, clientY: 400 });
+    runtime.firePointer('pointerdown', {
+      pointerId: 2,
+      isPrimary: false,
+      button: 0,
+      clientX: 700,
+      clientY: 400,
+    });
+    runtime.firePointer('pointermove', {
+      pointerId: 2,
+      isPrimary: false,
+      clientX: 700,
+      clientY: 400,
+    });
     runtime.firePointer('pointercancel', { pointerId: 2, isPrimary: false });
     // 不同输入设备可能各自 isPrimary=true，仍必须匹配 pointerId。
     runtime.firePointer('pointermove', { pointerId: 2, clientX: 700, clientY: 400 });
@@ -350,10 +470,19 @@ describe('R6：活动房间 / visuals / 拾取悬停 / 字体 / advanceAnimation
     expect(pick).not.toHaveBeenCalled();
   });
   it('主指取消后不点击、不复活悬停；销毁释放仍持有的 capture', async () => {
-    mockAssetIO(); const h = await mounted();
-    h.feed.applySnapshot({ room: 'A', time: 0, terrain: { codes: new Array(2500).fill(0) }, objects: [] });
+    mockAssetIO();
+    const h = await mounted();
+    h.feed.applySnapshot({
+      room: 'A',
+      time: 0,
+      terrain: { codes: new Array(2500).fill(0) },
+      objects: [],
+    });
     h.setCameraState({ x: 1000, y: 1000, zoom: 1 });
-    const hover = vi.fn(), pick = vi.fn(); h.onHover(hover); h.onPick(pick);
+    const hover = vi.fn(),
+      pick = vi.fn();
+    h.onHover(hover);
+    h.onPick(pick);
     runtime.firePointer('pointermove', { clientX: 400, clientY: 400 });
     runtime.firePointer('pointerdown', { button: 0, clientX: 400, clientY: 400 });
     runtime.firePointer('pointercancel', {});
@@ -373,7 +502,12 @@ describe('R6：活动房间 / visuals / 拾取悬停 / 字体 / advanceAnimation
     const spy = vi.spyOn(RoomScene.prototype, 'setTerrain');
     try {
       const handle = await mounted();
-      handle.feed.applySnapshot({ room: 'W0N0', time: 0, terrain: { codes: new Array(2500).fill(0) }, objects: [] });
+      handle.feed.applySnapshot({
+        room: 'W0N0',
+        time: 0,
+        terrain: { codes: new Array(2500).fill(0) },
+        objects: [],
+      });
       expect(spy).toHaveBeenCalledTimes(1); // 快照注入
       handle.feed.setVisuals('W9N9', [{ type: 'circle', x: 5, y: 5 }]); // 无地形房（惰性建）
       handle.setActiveRoom('W9N9');
@@ -390,7 +524,12 @@ describe('R6：活动房间 / visuals / 拾取悬停 / 字体 / advanceAnimation
   it('销毁后场景面方法 no-op、feed 数据面可用（评审 B-B5）', async () => {
     mockAssetIO();
     const handle = await mounted();
-    handle.feed.applySnapshot({ room: 'W0N0', time: 0, terrain: { codes: new Array(2500).fill(0) }, objects: [creep(10)] });
+    handle.feed.applySnapshot({
+      room: 'W0N0',
+      time: 0,
+      terrain: { codes: new Array(2500).fill(0) },
+      objects: [creep(10)],
+    });
     await handle.destroy();
     expect(() => {
       handle.setActiveRoom('W0N0');
@@ -406,7 +545,9 @@ describe('R6：活动房间 / visuals / 拾取悬停 / 字体 / advanceAnimation
     const stats = handle.getStats();
     expect(stats).toMatchObject({ fps: 0, visuals: 0, atlasFrames: 0 });
     expect(handle.pickAt(400, 400)).toEqual({ world: { x: 0, y: 0 }, cell: null });
-    expect(() => handle.feed.applyDelta({ room: 'W0N0', time: 1, upsert: [], removedIds: [] })).not.toThrow();
+    expect(() =>
+      handle.feed.applyDelta({ room: 'W0N0', time: 1, upsert: [], removedIds: [] }),
+    ).not.toThrow();
   });
 
   it('advanceAnimation 与 ticker 同路径推进（不受 playbackRate 暂停影响），onFrameTiming 收到计时', async () => {
@@ -418,7 +559,12 @@ describe('R6：活动房间 / visuals / 拾取悬停 / 字体 / advanceAnimation
       onFrameTiming: (t) => timings.push(t),
     });
     handles.push(handle);
-    handle.feed.applySnapshot({ room: 'W0N0', time: 0, terrain: { codes: new Array(2500).fill(0) }, objects: [creep(10)] });
+    handle.feed.applySnapshot({
+      room: 'W0N0',
+      time: 0,
+      terrain: { codes: new Array(2500).fill(0) },
+      objects: [creep(10)],
+    });
     handle.feed.applyDelta({ room: 'W0N0', time: 1, upsert: [creep(11)], removedIds: [] });
     runtime.ticker.lastTime = 0;
     handle.setPlaybackRate(0);
@@ -434,7 +580,9 @@ describe('R6：活动房间 / visuals / 拾取悬停 / 字体 / advanceAnimation
     expect(root.x).toBe(1050); // 不推进
     expect(timings.length).toBe(timingsBefore); // 零推进真 no-op：不触发计时回调（评审 GPT-P2#10）
     expect(timings.length).toBeGreaterThan(0);
-    expect(timings.every((t) => Number.isFinite(t.objectsMs) && Number.isFinite(t.lightingMs))).toBe(true);
+    expect(
+      timings.every((t) => Number.isFinite(t.objectsMs) && Number.isFinite(t.lightingMs)),
+    ).toBe(true);
   });
 
   it('fonts 契约：缺省 unset', async () => {

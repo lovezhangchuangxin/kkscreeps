@@ -91,11 +91,24 @@ export function joinSource(assets: JoinAssets): PartJoin {
       },
     },
     glowBig: {
-      create: () => makeGlow(assets.glow, SOURCE_SPEC.glowBig.width, SOURCE_SPEC.glowBig.height, SOURCE_SPEC.glowBig.alpha, SOURCE_SPEC.glowBig.tint),
+      create: () =>
+        makeGlow(
+          assets.glow,
+          SOURCE_SPEC.glowBig.width,
+          SOURCE_SPEC.glowBig.height,
+          SOURCE_SPEC.glowBig.alpha,
+          SOURCE_SPEC.glowBig.tint,
+        ),
       apply: () => {},
     },
     glowSmall: {
-      create: () => makeGlow(assets.glow, SOURCE_SPEC.glowSmall.width, SOURCE_SPEC.glowSmall.height, SOURCE_SPEC.glowSmall.alpha),
+      create: () =>
+        makeGlow(
+          assets.glow,
+          SOURCE_SPEC.glowSmall.width,
+          SOURCE_SPEC.glowSmall.height,
+          SOURCE_SPEC.glowSmall.alpha,
+        ),
       apply: (v, node) => {
         node.visible = vBool(v, 'visible');
       },
@@ -119,18 +132,19 @@ export function joinMineral(assets: JoinAssets): PartJoin {
       },
     },
     symbol: {
-      create: () => makeText({
-        text: '',
-        style: {
-          align: 'center',
-          fill: 0xffffff,
-          fontFamily: MINERAL_SPEC.text.fontFamily,
-          fontSize: MINERAL_SPEC.text.fontSize,
-          fontWeight: MINERAL_SPEC.text.fontWeight,
-        },
-        anchorX: 0.5,
-        anchorY: 0.5,
-      }),
+      create: () =>
+        makeText({
+          text: '',
+          style: {
+            align: 'center',
+            fill: 0xffffff,
+            fontFamily: MINERAL_SPEC.text.fontFamily,
+            fontSize: MINERAL_SPEC.text.fontSize,
+            fontWeight: MINERAL_SPEC.text.fontWeight,
+          },
+          anchorX: 0.5,
+          anchorY: 0.5,
+        }),
       apply: (v, node) => {
         const t = node as unknown as Text;
         t.text = vStr(v, 'text');
@@ -138,7 +152,13 @@ export function joinMineral(assets: JoinAssets): PartJoin {
       },
     },
     glowSmall: {
-      create: () => makeGlow(assets.glow, MINERAL_SPEC.glowSmall.width, MINERAL_SPEC.glowSmall.height, MINERAL_SPEC.glowSmall.alpha),
+      create: () =>
+        makeGlow(
+          assets.glow,
+          MINERAL_SPEC.glowSmall.width,
+          MINERAL_SPEC.glowSmall.height,
+          MINERAL_SPEC.glowSmall.alpha,
+        ),
       apply: () => {},
     },
     glowBig: {
@@ -146,7 +166,15 @@ export function joinMineral(assets: JoinAssets): PartJoin {
       apply: (v, node) => {
         // tint 随矿物色（mineral.metadata.js:110-119）
         if (node.children.length === 0) {
-          node.addChild(makeGlow(assets.glow, MINERAL_SPEC.glowBig.width, MINERAL_SPEC.glowBig.height, MINERAL_SPEC.glowBig.alpha, vNum(v, 'tint')));
+          node.addChild(
+            makeGlow(
+              assets.glow,
+              MINERAL_SPEC.glowBig.width,
+              MINERAL_SPEC.glowBig.height,
+              MINERAL_SPEC.glowBig.alpha,
+              vNum(v, 'tint'),
+            ),
+          );
         }
       },
     },
@@ -225,7 +253,12 @@ export function joinDeposit(assets: JoinAssets): PartJoin {
         const main = sprite(assets, 'deposit-biomass', DEPOSIT_SPEC.size, DEPOSIT_SPEC.size);
         main.label = 'deposit-lighting';
         main.blendMode = LIGHTING_MEMBER_BLEND;
-        const glow = makeGlow(assets.glow, DEPOSIT_SPEC.glow.width, DEPOSIT_SPEC.glow.height, DEPOSIT_SPEC.glow.alpha);
+        const glow = makeGlow(
+          assets.glow,
+          DEPOSIT_SPEC.glow.width,
+          DEPOSIT_SPEC.glow.height,
+          DEPOSIT_SPEC.glow.alpha,
+        );
         glow.label = 'deposit-glow';
         root.addChild(main, glow);
         return root;
@@ -249,10 +282,20 @@ export function joinContainer(assets: JoinAssets): PartJoin {
     frame: {
       create: () => {
         const root = new Container();
-        const border = sprite(assets, 'rectangle', CONTAINER_SPEC.border.width, CONTAINER_SPEC.border.height);
+        const border = sprite(
+          assets,
+          'rectangle',
+          CONTAINER_SPEC.border.width,
+          CONTAINER_SPEC.border.height,
+        );
         border.label = 'container-border';
         (border as Sprite).tint = CONTAINER_SPEC.border.tint;
-        const internal = sprite(assets, 'rectangle', CONTAINER_SPEC.internalBorder.width, CONTAINER_SPEC.internalBorder.height);
+        const internal = sprite(
+          assets,
+          'rectangle',
+          CONTAINER_SPEC.internalBorder.width,
+          CONTAINER_SPEC.internalBorder.height,
+        );
         internal.label = 'container-internal';
         (internal as Sprite).tint = CONTAINER_SPEC.internalBorder.tint;
         root.addChild(border, internal);
@@ -289,7 +332,13 @@ export function joinContainer(assets: JoinAssets): PartJoin {
       },
     },
     glow: {
-      create: () => makeGlow(assets.glow, CONTAINER_SPEC.glow.width, CONTAINER_SPEC.glow.height, CONTAINER_SPEC.glow.alpha),
+      create: () =>
+        makeGlow(
+          assets.glow,
+          CONTAINER_SPEC.glow.width,
+          CONTAINER_SPEC.glow.height,
+          CONTAINER_SPEC.glow.alpha,
+        ),
       apply: (v, node) => {
         node.visible = vBool(v, 'visible');
       },
@@ -321,49 +370,81 @@ function joinDecay(assets: JoinAssets, borderTexture: string): PartJoin {
       },
     },
     glow: {
-      create: () => sprite(assets, 'tombstone-resource', DECAY_SPEC.size, DECAY_SPEC.size, (s) => {
-        s.blendMode = LIGHTING_MEMBER_BLEND;
-      }),
+      create: () =>
+        sprite(assets, 'tombstone-resource', DECAY_SPEC.size, DECAY_SPEC.size, (s) => {
+          s.blendMode = LIGHTING_MEMBER_BLEND;
+        }),
       apply: () => {},
     },
   };
 }
 
-export const joinTombstone = (assets: JoinAssets): PartJoin => joinDecay(assets, 'tombstone-border');
+export const joinTombstone = (assets: JoinAssets): PartJoin =>
+  joinDecay(assets, 'tombstone-border');
 export const joinRuin = (assets: JoinAssets): PartJoin => joinDecay(assets, 'ruin');
 
 // ---- portal / keeperLair（portal/keeperLair.metadata.js：底盘+双波，波动画 R5） ----
 
-function joinWaveFamily(assets: JoinAssets, spec: {
-  baseCircle: { radius: number; color: number; alpha: number };
-  wave: { radius: number; color: number; alpha: number };
-  wave2: { radius: number; color: number; alpha: number };
-  glowBig: { width: number; height: number; alpha: number; tint?: number };
-  glowSmall: { width: number; height: number; alpha: number; tint?: number };
-}): PartJoin {
+function joinWaveFamily(
+  assets: JoinAssets,
+  spec: {
+    baseCircle: { radius: number; color: number; alpha: number };
+    wave: { radius: number; color: number; alpha: number };
+    wave2: { radius: number; color: number; alpha: number };
+    glowBig: { width: number; height: number; alpha: number; tint?: number };
+    glowSmall: { width: number; height: number; alpha: number; tint?: number };
+  },
+): PartJoin {
   return {
     disc: {
-      create: () => gfxCircle(new Graphics(), spec.baseCircle.radius, { fill: spec.baseCircle.color, fillAlpha: spec.baseCircle.alpha }),
+      create: () =>
+        gfxCircle(new Graphics(), spec.baseCircle.radius, {
+          fill: spec.baseCircle.color,
+          fillAlpha: spec.baseCircle.alpha,
+        }),
       apply: () => {},
     },
     wave1: {
-      create: () => gfxCircle(new Graphics(), spec.wave.radius, { fill: spec.wave.color, fillAlpha: spec.wave.alpha }),
+      create: () =>
+        gfxCircle(new Graphics(), spec.wave.radius, {
+          fill: spec.wave.color,
+          fillAlpha: spec.wave.alpha,
+        }),
       apply: () => {},
     },
     wave2: {
-      create: () => gfxCircle(new Graphics(), spec.wave2.radius, { fill: spec.wave2.color, fillAlpha: spec.wave2.alpha }),
+      create: () =>
+        gfxCircle(new Graphics(), spec.wave2.radius, {
+          fill: spec.wave2.color,
+          fillAlpha: spec.wave2.alpha,
+        }),
       apply: () => {},
     },
     glowBig: {
-      create: () => makeGlow(assets.glow, spec.glowBig.width, spec.glowBig.height, spec.glowBig.alpha, spec.glowBig.tint),
+      create: () =>
+        makeGlow(
+          assets.glow,
+          spec.glowBig.width,
+          spec.glowBig.height,
+          spec.glowBig.alpha,
+          spec.glowBig.tint,
+        ),
       apply: () => {},
     },
     glowSmall: {
-      create: () => makeGlow(assets.glow, spec.glowSmall.width, spec.glowSmall.height, spec.glowSmall.alpha, spec.glowSmall.tint),
+      create: () =>
+        makeGlow(
+          assets.glow,
+          spec.glowSmall.width,
+          spec.glowSmall.height,
+          spec.glowSmall.alpha,
+          spec.glowSmall.tint,
+        ),
       apply: () => {},
     },
   };
 }
 
 export const joinPortal = (assets: JoinAssets): PartJoin => joinWaveFamily(assets, PORTAL_SPEC);
-export const joinKeeperLair = (assets: JoinAssets): PartJoin => joinWaveFamily(assets, KEEPER_LAIR_SPEC);
+export const joinKeeperLair = (assets: JoinAssets): PartJoin =>
+  joinWaveFamily(assets, KEEPER_LAIR_SPEC);

@@ -71,7 +71,10 @@ describe('mergedOutlinePath（对照官方 pathHelper.js 的保真断言）', ()
     set(codes, 0, 0);
     set(codes, 1, 1);
     const separated = mergedOutlinePath(codes, (c) => c === 1, { cell: 100 });
-    const connected = mergedOutlinePath(codes, (c) => c === 1, { cell: 100, diagonalConnect: true });
+    const connected = mergedOutlinePath(codes, (c) => c === 1, {
+      cell: 100,
+      diagonalConnect: true,
+    });
     expect(separated.path).toBe(
       'M 0 50 v -50 h 50 h 50 v 50 a 50 50 0 0 1 -50 50 h -50 v -50 Z ' +
         'M 100 150 a 50 50 0 0 1 50 -50 a 50 50 0 0 1 50 50 ' +

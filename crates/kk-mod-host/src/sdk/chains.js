@@ -39,20 +39,21 @@ export function dispatch(key, ctx) {
   if (entry.kind === 'wrap') throw new Error('wrap 必须经整槽执行入口调用');
   // 处理器执行期建立随机流域与确定性时钟作用域；直接派发路径的 ctx
   // 可能缺少 tick（测试直呼），按注册期口径 0 对齐。
-  const result = withStreamScope(
-    { domain: streamDomain(key, ctx), tick: ctx?.tick ?? 0 },
-    () => entry.fn(ctx),
+  const result = withStreamScope({ domain: streamDomain(key, ctx), tick: ctx?.tick ?? 0 }, () =>
+    entry.fn(ctx),
   );
-  if (result !== null && (typeof result === 'object' || typeof result === 'function') && declines.has(result)) {
+  if (
+    result !== null &&
+    (typeof result === 'object' || typeof result === 'function') &&
+    declines.has(result)
+  ) {
     throw new Error('正常拒绝必须经支持局部回滚的整槽动作入口执行');
   }
   if (result !== undefined && result !== null && typeof result.then === 'function') {
     throw new Error(`绑定 ${JSON.stringify(key)} 的处理器返回了 Promise（结算回调必须同步完成）`);
   }
   const target =
-    ctx.target === undefined || ctx.target.fields === undefined
-      ? null
-      : ctx.target.fields;
+    ctx.target === undefined || ctx.target.fields === undefined ? null : ctx.target.fields;
   return {
     state: ctx.state === undefined ? null : ctx.state,
     target,
@@ -67,7 +68,12 @@ export function installChains(programs) {
   for (const program of programs) {
     function check(key, kind) {
       const entry = bindings.get(key);
-      if (!entry || (kind === 'center' ? entry.kind !== undefined && entry.kind !== 'replace' : entry.kind !== kind)) {
+      if (
+        !entry ||
+        (kind === 'center'
+          ? entry.kind !== undefined && entry.kind !== 'replace'
+          : entry.kind !== kind)
+      ) {
         throw new Error(`绑定 ${key} 与链位 ${kind} 不匹配`);
       }
     }
@@ -108,7 +114,10 @@ export function runChain(slot, token) {
     if (firstFault !== undefined) throw new Error(firstFault);
     // 内层拒绝即使被 wrap 捕获，也阻止外层回写；异常仍由 catch 留存。
     if (firstDeclined !== undefined) throw declinedSignal;
-    const code = result !== null && (typeof result === 'object' || typeof result === 'function') ? declines.get(result) : undefined;
+    const code =
+      result !== null && (typeof result === 'object' || typeof result === 'function')
+        ? declines.get(result)
+        : undefined;
     if (code !== undefined) {
       ops.op_mod_chain_decline(token, key, code);
       firstDeclined = code;
@@ -124,7 +133,12 @@ export function runChain(slot, token) {
   }
   const { resources } = createResources({ ops, token, fault, write });
   const { objects } = createObjects({ ops, token, fault, write });
-  const { movement, contest, admission, precheck, pull, cost, obstacle } = createMovement({ ops, token, fault, write });
+  const { movement, contest, admission, precheck, pull, cost, obstacle } = createMovement({
+    ops,
+    token,
+    fault,
+    write,
+  });
   const { combat, incoming } = createCombat({ ops, token, fault, write });
   const { build } = createBuild({ ops, token, fault, write });
   function simple(key) {

@@ -107,7 +107,13 @@ export function clampToRect(
 ): CameraState {
   const halfW = viewWidth / 2 / cam.zoom;
   const halfH = viewHeight / 2 / cam.zoom;
-  const cx = halfW * 2 >= maxX - minX ? (minX + maxX) / 2 : Math.min(maxX - halfW, Math.max(minX + halfW, cam.x));
-  const cy = halfH * 2 >= maxY - minY ? (minY + maxY) / 2 : Math.min(maxY - halfH, Math.max(minY + halfH, cam.y));
+  const cx =
+    halfW * 2 >= maxX - minX
+      ? (minX + maxX) / 2
+      : Math.min(maxX - halfW, Math.max(minX + halfW, cam.x));
+  const cy =
+    halfH * 2 >= maxY - minY
+      ? (minY + maxY) / 2
+      : Math.min(maxY - halfH, Math.max(minY + halfH, cam.y));
   return { ...cam, x: cx, y: cy };
 }

@@ -45,17 +45,14 @@ function bool(v: unknown): boolean {
 
 /** 官方 spawningAngle（spawn.metadata.js:31-39 / invaderCore.metadata.js:11-20）：
  * −π/2 + 2π×(needTime−remaining)/needTime，needTime=0 → 0。 */
-export function spawningAngle(
-  spawning: unknown,
-  time: number,
-): number {
+export function spawningAngle(spawning: unknown, time: number): number {
   if (typeof spawning !== 'object' || spawning === null) return SPAWN_START_ANGLE;
   const s = spawning as Record<string, unknown>;
   const needTime = optNum(s.needTime) ?? 0;
   const spawnTime = optNum(s.spawnTime) ?? time + 0.01;
   const remaining = spawnTime - time;
   if (!needTime) return SPAWN_START_ANGLE;
-  return SPAWN_START_ANGLE + ((2 * Math.PI) * (needTime - remaining)) / needTime;
+  return SPAWN_START_ANGLE + (2 * Math.PI * (needTime - remaining)) / needTime;
 }
 
 const SPAWN_START_ANGLE = -Math.PI / 2;
@@ -103,9 +100,7 @@ export const PARTS_EXTENSION: PartDecl[] = [
     keys: ['store', 'storeCapacityResource'],
     values: (s) => {
       const capacity = energyCapacityOf(s);
-      const scale = capacity > 0
-        ? Math.min(1, (storeOf(s).energy ?? 0) / capacity)
-        : 0;
+      const scale = capacity > 0 ? Math.min(1, (storeOf(s).energy ?? 0) / capacity) : 0;
       // 圆半径随容量档位（size×0.32，extension.metadata.js:82）
       const tier = extensionTier(capacity);
       return { scale, radius: EXTENSION_SPEC.sizes[tier] * EXTENSION_SPEC.circleFactor };
@@ -190,7 +185,9 @@ export const PARTS_FACTORY: PartDecl[] = [
     keys: ['cooldownTime'],
     values: (s, env) => ({
       // 常显 0.4，cooldown 闪到 1（factory.metadata.js:75-116；R5 动态时序）
-      alpha: isCooldown(s, env.time) ? FACTORY_SPEC.highlightFlashAlpha : FACTORY_SPEC.highlightAlpha,
+      alpha: isCooldown(s, env.time)
+        ? FACTORY_SPEC.highlightFlashAlpha
+        : FACTORY_SPEC.highlightAlpha,
     }),
   },
   {
@@ -372,9 +369,7 @@ export const PARTS_OBSERVER: PartDecl[] = [
 
 export function powerBankRadius(power: number): number {
   // r = sqrt((power/CAPACITY_MAX × 3000)/π)（powerBank.metadata.js:16-22）
-  return Math.sqrt(
-    ((power / POWER_BANK_SPEC.capacityMax) * POWER_BANK_SPEC.areaFactor) / Math.PI,
-  );
+  return Math.sqrt(((power / POWER_BANK_SPEC.capacityMax) * POWER_BANK_SPEC.areaFactor) / Math.PI);
 }
 
 export const PARTS_POWER_BANK: PartDecl[] = [
@@ -400,8 +395,8 @@ export const PARTS_POWER_SPAWN: PartDecl[] = [
       const capRes = s.storeCapacityResource as Record<string, unknown> | undefined;
       const capacityPower = capRes ? num(capRes.power) : 0;
       const power = num((storeOf(s) as Record<string, unknown>).power);
-      const angle = SPAWN_START_ANGLE +
-        (capacityPower > 0 ? ((2 * Math.PI) * power) / capacityPower : 0);
+      const angle =
+        SPAWN_START_ANGLE + (capacityPower > 0 ? (2 * Math.PI * power) / capacityPower : 0);
       return { angle };
     },
   },
@@ -411,9 +406,7 @@ export const PARTS_POWER_SPAWN: PartDecl[] = [
     values: (s) => {
       const cap = s.storeCapacityResource as Record<string, unknown> | undefined;
       const capacityEnergy = cap ? num(cap.energy) : 0;
-      const scale = capacityEnergy > 0
-        ? Math.min(1, (storeOf(s).energy ?? 0) / capacityEnergy)
-        : 0;
+      const scale = capacityEnergy > 0 ? Math.min(1, (storeOf(s).energy ?? 0) / capacityEnergy) : 0;
       return { scale };
     },
   },
@@ -441,7 +434,10 @@ export const PARTS_TOWER: PartDecl[] = [
       const height = npc
         ? 0
         : capacity > 0
-          ? Math.min(TOWER_SPEC.barFullHeight, (TOWER_SPEC.barFullHeight * (storeOf(s).energy ?? 0)) / capacity)
+          ? Math.min(
+              TOWER_SPEC.barFullHeight,
+              (TOWER_SPEC.barFullHeight * (storeOf(s).energy ?? 0)) / capacity,
+            )
           : 0;
       return {
         npc,
@@ -469,8 +465,8 @@ export function labMineralLevel(s: RoomObjectState): { type: string; scale: numb
   const sumCapRes = capRes
     ? Object.values(capRes).reduce((a: number, v) => a + (typeof v === 'number' ? v : 0), 0)
     : 0;
-  const capacity = (capRes ? num(capRes[type]) : 0) ||
-    (storeCapacityOf(s) ? storeCapacityOf(s) - sumCapRes : 0);
+  const capacity =
+    (capRes ? num(capRes[type]) : 0) || (storeCapacityOf(s) ? storeCapacityOf(s) - sumCapRes : 0);
   if (!capacity) return { type, scale: 0 };
   return { type, scale: (LAB_SPEC.mineral.baseScale * (store[type] ?? 0)) / capacity };
 }
@@ -486,7 +482,9 @@ export const PARTS_LAB: PartDecl[] = [
     keys: ['cooldownTime'],
     values: (s, env) => ({
       // lab isCooldown 用严格 >（lab.metadata.js:29-30）
-      alpha: isCooldown(s, env.time, true) ? LAB_SPEC.highlight.cooldownAlpha : LAB_SPEC.highlight.restAlpha,
+      alpha: isCooldown(s, env.time, true)
+        ? LAB_SPEC.highlight.cooldownAlpha
+        : LAB_SPEC.highlight.restAlpha,
     }),
   },
   { id: 'mineralRest', values: () => ({}) },
@@ -503,9 +501,8 @@ export const PARTS_LAB: PartDecl[] = [
     keys: ['store', 'storeCapacityResource'],
     values: (s) => {
       const capacity = energyCapacityOf(s);
-      const width = capacity > 0
-        ? (LAB_SPEC.energyRect.width * (storeOf(s).energy ?? 0)) / capacity
-        : 0;
+      const width =
+        capacity > 0 ? (LAB_SPEC.energyRect.width * (storeOf(s).energy ?? 0)) / capacity : 0;
       return { width };
     },
   },
@@ -735,7 +732,10 @@ export const PARTS_INVADER_CORE: PartDecl[] = [
 
 // ---- flag（flag.metadata.js；名字文字 R6） ----
 
-export function flagColors(s: RoomObjectState): { primary: number | null; secondary: number | null } {
+export function flagColors(s: RoomObjectState): {
+  primary: number | null;
+  secondary: number | null;
+} {
   const c = num(s.color);
   const sc = num(s.secondaryColor);
   return {

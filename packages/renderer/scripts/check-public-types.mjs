@@ -14,38 +14,58 @@ export function checkPublicTypes(entry) {
     const project = snapshot.getDefaultProjectForFile(entryFile);
     if (!project) throw new Error(`No declaration project: ${entryFile}`);
     const { program, checker } = project;
-    const queue = [entryFile], seen = new Set();
+    const queue = [entryFile],
+      seen = new Set();
     while (queue.length) {
       const path = queue.pop();
       const source = program.getSourceFile(path);
       if (!source) throw new Error(`Unresolved public declaration: ${path}`);
       if (seen.has(source.path)) continue;
       seen.add(source.path);
-      if (program.getSyntacticDiagnostics(source.fileName).length) throw new Error(`Invalid declaration syntax: ${source.fileName}`);
+      if (program.getSyntacticDiagnostics(source.fileName).length)
+        throw new Error(`Invalid declaration syntax: ${source.fileName}`);
       const literals = [];
-      const walk = node => {
-        if ((node.kind === SyntaxKind.ImportDeclaration || node.kind === SyntaxKind.ExportDeclaration) && node.moduleSpecifier) literals.push(node.moduleSpecifier);
-        if (node.kind === SyntaxKind.ImportType && node.argument?.literal) literals.push(node.argument.literal);
-        if (node.kind === SyntaxKind.ImportEqualsDeclaration && node.moduleReference?.expression) literals.push(node.moduleReference.expression);
+      const walk = (node) => {
+        if (
+          (node.kind === SyntaxKind.ImportDeclaration ||
+            node.kind === SyntaxKind.ExportDeclaration) &&
+          node.moduleSpecifier
+        )
+          literals.push(node.moduleSpecifier);
+        if (node.kind === SyntaxKind.ImportType && node.argument?.literal)
+          literals.push(node.argument.literal);
+        if (node.kind === SyntaxKind.ImportEqualsDeclaration && node.moduleReference?.expression)
+          literals.push(node.moduleReference.expression);
         node.forEachChild(walk);
       };
       walk(source);
       for (const literal of literals) {
         const specifier = literal.text;
-        if (typeof specifier !== 'string') throw new Error(`Nonliteral module in ${source.fileName}`);
-        if (/^(?:pixi\.js(?:\/|$)|@pixi\/)/.test(specifier)) throw new Error(`Pixi public type: ${source.fileName} → ${specifier}`);
+        if (typeof specifier !== 'string')
+          throw new Error(`Nonliteral module in ${source.fileName}`);
+        if (/^(?:pixi\.js(?:\/|$)|@pixi\/)/.test(specifier))
+          throw new Error(`Pixi public type: ${source.fileName} → ${specifier}`);
         const symbol = checker.getSymbolAtLocation(literal);
-        const targets = symbol?.declarations?.filter(d => d.kind === SyntaxKind.SourceFile).map(d => d.path) ?? [];
-        if (!targets.length) throw new Error(`Unresolved public type module: ${source.fileName} → ${specifier}`);
+        const targets =
+          symbol?.declarations
+            ?.filter((d) => d.kind === SyntaxKind.SourceFile)
+            .map((d) => d.path) ?? [];
+        if (!targets.length)
+          throw new Error(`Unresolved public type module: ${source.fileName} → ${specifier}`);
         queue.push(...targets);
       }
-      for (const ref of source.referencedFiles) queue.push(resolve(dirname(source.fileName), ref.fileName));
+      for (const ref of source.referencedFiles)
+        queue.push(resolve(dirname(source.fileName), ref.fileName));
       // No type-reference package may silently bypass the module graph. Current
       // public declarations have none; add proper resolution before allowing any.
-      if (source.typeReferenceDirectives.length) throw new Error(`Unresolved public type reference: ${source.fileName}`);
+      if (source.typeReferenceDirectives.length)
+        throw new Error(`Unresolved public type reference: ${source.fileName}`);
       for (const ref of source.libReferenceDirectives) {
-        const lib = program.getSourceFileNames().find(p => p.endsWith(`/lib.${ref.fileName}.d.ts`));
-        if (!lib || !program.isSourceFileDefaultLibrary(program.getSourceFile(lib))) throw new Error(`Unknown standard library: ${ref.fileName}`);
+        const lib = program
+          .getSourceFileNames()
+          .find((p) => p.endsWith(`/lib.${ref.fileName}.d.ts`));
+        if (!lib || !program.isSourceFileDefaultLibrary(program.getSourceFile(lib)))
+          throw new Error(`Unknown standard library: ${ref.fileName}`);
         queue.push(lib);
       }
     }

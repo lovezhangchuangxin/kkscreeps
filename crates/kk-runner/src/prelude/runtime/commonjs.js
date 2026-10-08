@@ -58,7 +58,8 @@
       };
       try {
         const wrapper = __Function(
-          'module', 'exports',
+          'module',
+          'exports',
           source + '\n//# sourceURL=kk_module/' + name,
         );
         // 以 undefined 作为 this 调用模块：非严格模块体会看到全局对象，严格模块体保持 undefined。
@@ -84,9 +85,13 @@
    *  命中即整体重绑：新 require 函数对象 + 新缓存对象（官方同形）。 */
   function ensureRequire() {
     const req = globalThis.require;
-    if (typeof req !== 'function' || req.timestamp !== latestStamp
-      || !isObjectLike(req.cache) || !isObjectLike(req.cache.main)
-      || typeof req.cache.main.loop !== 'function') {
+    if (
+      typeof req !== 'function' ||
+      req.timestamp !== latestStamp ||
+      !isObjectLike(req.cache) ||
+      !isObjectLike(req.cache.main) ||
+      typeof req.cache.main.loop !== 'function'
+    ) {
       globalThis.require = makeRequire();
     }
   }
@@ -100,7 +105,9 @@
   globalThis.__kkp.cjs = {
     ensureRequire,
     resetForNewModules,
-    setCurrentUser(u) { currentUser = u; },
+    setCurrentUser(u) {
+      currentUser = u;
+    },
     lodash: _,
   };
 })();

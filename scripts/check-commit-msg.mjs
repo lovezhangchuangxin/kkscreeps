@@ -10,13 +10,26 @@ import { readFileSync } from 'node:fs';
 const MAX_SUBJECT_LENGTH = 350;
 const MAX_PREFIX_LENGTH = 48;
 
-const TYPES = ['feat', 'fix', 'docs', 'style', 'refactor', 'perf', 'test', 'build', 'ci', 'chore', 'revert'];
+const TYPES = [
+  'feat',
+  'fix',
+  'docs',
+  'style',
+  'refactor',
+  'perf',
+  'test',
+  'build',
+  'ci',
+  'chore',
+  'revert',
+];
 // type(scope)!?: 空格 描述。scope 段独立成组便于报错时点名。
 const SUBJECT_RE = new RegExp(`^(${TYPES.join('|')})(\\([A-Za-z0-9_.-]+\\))?!?: (.+)$`);
 
 // 匹配这些前缀的 merge/revert/fixup/squash 标题免检；这里只匹配文本，
 // 不验证提交类型（小写 `revert:` 类型本身在词表内，走常规校验）。
-const EXEMPT_RE = /^(Merge (?:branch(?:es)?|remote-tracking branch|pull request|tag|commit) |Revert |(?:fixup|squash)! )/;
+const EXEMPT_RE =
+  /^(Merge (?:branch(?:es)?|remote-tracking branch|pull request|tag|commit) |Revert |(?:fixup|squash)! )/;
 
 const file = process.argv[2];
 if (!file) {
@@ -48,7 +61,8 @@ function reject(reason) {
 
 if (EXEMPT_RE.test(subject)) process.exit(0);
 if (subject.trim().length === 0) reject('subject 不能为空');
-if (/^\s|\s$/.test(subject)) reject('subject 首尾不能有空白字符（注意不可见的 CR/BOM 已归一，此处多为普通空格）');
+if (/^\s|\s$/.test(subject))
+  reject('subject 首尾不能有空白字符（注意不可见的 CR/BOM 已归一，此处多为普通空格）');
 if (chars.length > MAX_SUBJECT_LENGTH) {
   reject(`subject ${chars.length} 字符，超过上限 ${MAX_SUBJECT_LENGTH}`);
 }
@@ -63,7 +77,12 @@ if (!m) {
   if (typeOnly && !TYPES.includes(typeOnly[1])) {
     reject(`未知 type「${typeOnly[1]}」——词表固定为 {${TYPES.join(', ')}}`);
   }
-  if (/^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([A-Za-z0-9_.-]+\))?!?:/.test(subject) && !/^ /.test(subject.slice(colonAt + 1))) {
+  if (
+    /^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([A-Za-z0-9_.-]+\))?!?:/.test(
+      subject,
+    ) &&
+    !/^ /.test(subject.slice(colonAt + 1))
+  ) {
     reject('冒号后须紧跟一个空格：`type: 描述`');
   }
   if (/[：]/.test(beforeColon)) {

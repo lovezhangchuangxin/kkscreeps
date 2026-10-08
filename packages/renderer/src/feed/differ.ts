@@ -66,7 +66,9 @@ export function convertWorldJsonTicks(ticks: readonly WorldJsonTick[]): FixtureF
     room,
     terrain: { codes: firstState.terrain },
     objects: objectsInRoom(first.world),
-    ...(firstState.energyAvailable !== undefined ? { energyAvailable: firstState.energyAvailable } : {}),
+    ...(firstState.energyAvailable !== undefined
+      ? { energyAvailable: firstState.energyAvailable }
+      : {}),
     ...(firstState.energyCapacityAvailable !== undefined
       ? { energyCapacityAvailable: firstState.energyCapacityAvailable }
       : {}),

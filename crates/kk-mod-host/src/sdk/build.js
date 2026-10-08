@@ -25,7 +25,9 @@ export function createBuild({ ops, token, fault, write }) {
           return result;
         });
       },
-      cancel() { return checked(() => ops.op_mod_chain_build_cancel(token, key)); },
+      cancel() {
+        return checked(() => ops.op_mod_chain_build_cancel(token, key));
+      },
     });
   }
   return { build };

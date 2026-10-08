@@ -52,7 +52,10 @@ function intrinsicSize(svgText, name) {
   }
   const viewBox = svgText.match(/\bviewBox\s*=\s*["']([^"']+)["']/);
   if (viewBox) {
-    const parts = viewBox[1].trim().split(/[\s,]+/).map(Number);
+    const parts = viewBox[1]
+      .trim()
+      .split(/[\s,]+/)
+      .map(Number);
     if (parts.length === 4 && parts.every(Number.isFinite) && parts[2] > 0 && parts[3] > 0) {
       return { width: parts[2], height: parts[3], from: 'viewBox' };
     }
@@ -72,7 +75,8 @@ function renderRgba(svgText, scale, size) {
     font: { loadSystemFonts: false },
   });
   const rendered = resvg.render();
-  if (rendered.width !== targetW) throw new Error(`resvg 宽度不符: ${rendered.width} != ${targetW}`);
+  if (rendered.width !== targetW)
+    throw new Error(`resvg 宽度不符: ${rendered.width} != ${targetW}`);
   return { pixels: rendered.pixels, width: targetW, height: rendered.height };
 }
 
@@ -133,15 +137,26 @@ function packFrames(frames) {
 }
 
 function main() {
-  const svgFiles = readdirSync(svgDir).filter((f) => f.endsWith('.svg')).sort();
-  const pngFiles = readdirSync(svgDir).filter((f) => f.endsWith('.png')).sort();
+  const svgFiles = readdirSync(svgDir)
+    .filter((f) => f.endsWith('.svg'))
+    .sort();
+  const pngFiles = readdirSync(svgDir)
+    .filter((f) => f.endsWith('.png'))
+    .sort();
   const fontFiles = existsSync(join(pkgRoot, 'assets', 'fonts'))
-    ? readdirSync(join(pkgRoot, 'assets', 'fonts')).filter((f) => f.endsWith('.woff2')).sort()
+    ? readdirSync(join(pkgRoot, 'assets', 'fonts'))
+        .filter((f) => f.endsWith('.woff2'))
+        .sort()
     : [];
   if (svgFiles.length === 0) throw new Error('assets/svg/ 下没有 SVG');
 
-  const effectFiles = readdirSync(effectsDir).filter(f => f.endsWith('.svg')).sort();
-  const rasterFiles = [...svgFiles.map(file => ({ file, dir: 'svg' })), ...effectFiles.map(file => ({ file, dir: 'effects' }))];
+  const effectFiles = readdirSync(effectsDir)
+    .filter((f) => f.endsWith('.svg'))
+    .sort();
+  const rasterFiles = [
+    ...svgFiles.map((file) => ({ file, dir: 'svg' })),
+    ...effectFiles.map((file) => ({ file, dir: 'effects' })),
+  ];
   const sources = [];
   const byScale = { 1: [], 2: [] };
   for (const { file, dir } of rasterFiles) {
@@ -205,7 +220,12 @@ function main() {
         const { pixels, width, height, name } = r.frame;
         for (let y = 0; y < height; y++) {
           const srcStart = y * width * 4;
-          pixels.copy(pagePixels, (r.y + y) * BIN_SIZE * 4 + r.x * 4, srcStart, srcStart + width * 4);
+          pixels.copy(
+            pagePixels,
+            (r.y + y) * BIN_SIZE * 4 + r.x * 4,
+            srcStart,
+            srcStart + width * 4,
+          );
         }
         frames[name] = { page: pageIdx, x: r.x, y: r.y, w: width, h: height };
       }
@@ -238,19 +258,30 @@ function main() {
       };
       const jsonBuf = Buffer.from(JSON.stringify(sheet));
       writeFileSync(join(outDir, jsonName), jsonBuf);
-      return { page: pageIdx, png: { file: pngName, sha256: sha256(pngBuf) }, json: { file: jsonName, sha256: sha256(jsonBuf) }, frames };
+      return {
+        page: pageIdx,
+        png: { file: pngName, sha256: sha256(pngBuf) },
+        json: { file: jsonName, sha256: sha256(jsonBuf) },
+        frames,
+      };
     });
     manifest.atlas[String(scale)] = {
       pages: pageEntries.map(({ page, png, json }) => ({ page, png, json })),
-      frames: Object.fromEntries(pageEntries.flatMap((p) => Object.entries(p.frames).map(([k, v]) => [k, v]))),
+      frames: Object.fromEntries(
+        pageEntries.flatMap((p) => Object.entries(p.frames).map(([k, v]) => [k, v])),
+      ),
       standalone,
     };
   }
 
   writeFileSync(manifestPath, JSON.stringify(manifest));
 
-  const summary = Object.fromEntries([1, 2].map((s) => [`${s}x`, manifest.atlas[String(s)].pages.length]));
-  console.log(`✓ 栅格化 ${svgFiles.length} 官方 SVG + ${effectFiles.length} 效果 SVG → atlas ${JSON.stringify(summary)} 页（${pngFiles.length} PNG 与 ${fontFiles.length} 字体为直通资产，记入 manifest）`);
+  const summary = Object.fromEntries(
+    [1, 2].map((s) => [`${s}x`, manifest.atlas[String(s)].pages.length]),
+  );
+  console.log(
+    `✓ 栅格化 ${svgFiles.length} 官方 SVG + ${effectFiles.length} 效果 SVG → atlas ${JSON.stringify(summary)} 页（${pngFiles.length} PNG 与 ${fontFiles.length} 字体为直通资产，记入 manifest）`,
+  );
   console.log(`✓ manifest.json：${sources.length} 源条目，确定性生成可重跑比对`);
 }
 

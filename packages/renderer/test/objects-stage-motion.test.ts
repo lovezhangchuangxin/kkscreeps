@@ -27,7 +27,15 @@ function mockLighting(): LightingPass {
 
 /** 测试诊断面（views/dying 是实现私有——测试经此窄化访问）。 */
 interface StageInternals {
-  views: Map<string, { root: Container; parts: Map<string, { node: Container }>; lastRotation: number; cover?: Container }>;
+  views: Map<
+    string,
+    {
+      root: Container;
+      parts: Map<string, { node: Container }>;
+      lastRotation: number;
+      cover?: Container;
+    }
+  >;
   dying: Map<string, { root: Container }>;
 }
 
@@ -35,7 +43,12 @@ function internals(stage: ObjectsStage): StageInternals {
   return stage as unknown as StageInternals;
 }
 
-function creep(id: string, x: number, y: number, extra: Record<string, unknown> = {}): RoomObjectState {
+function creep(
+  id: string,
+  x: number,
+  y: number,
+  extra: Record<string, unknown> = {},
+): RoomObjectState {
   return {
     id,
     type: 'creep',
@@ -79,8 +92,14 @@ describe('ObjectsStage 运动/快照/事件/淡出（R4）', () => {
   it('lighting 部件从停用恢复，重新显示并触发 RT dirty', () => {
     const lighting = mockLighting();
     const dirty = vi.spyOn(lighting, 'markDirty');
-    const s = new ObjectsStage({ cell: 100, lighting, objectsLayer: new Container(),
-      assets: { frames: new Map(), glow: Texture.WHITE, creepMask: null }, player: 'p1', tickDurationMS: 1000 });
+    const s = new ObjectsStage({
+      cell: 100,
+      lighting,
+      objectsLayer: new Container(),
+      assets: { frames: new Map(), glow: Texture.WHITE, creepMask: null },
+      player: 'p1',
+      tickDurationMS: 1000,
+    });
     s.apply([creep('a', 10, 10)], 0);
     const glow = internals(s).views.get('a')!.parts.get('glow')!.node;
     s.apply([creep('a', 10, 10, { spawning: true })], 1);
@@ -97,8 +116,9 @@ describe('ObjectsStage 运动/快照/事件/淡出（R4）', () => {
     const a = internals(stage).views.get('a')!;
     const b = internals(stage).views.get('b')!;
     const main = a.parts.get('main')!.node;
-    stage.apply([creep('a', 10, 11), creep('b', 20, 20)], 1,
-      [{ event: 1, objectId: 'b', data: { targetId: 'a' } }]);
+    stage.apply([creep('a', 10, 11), creep('b', 20, 20)], 1, [
+      { event: 1, objectId: 'b', data: { targetId: 'a' } },
+    ]);
     stage.update(100);
     const cover = a.cover!;
     expect(main.rotation).not.toBe(0);
@@ -120,7 +140,12 @@ describe('ObjectsStage 运动/快照/事件/淡出（R4）', () => {
     stage.apply([creep('b', 20, 20)], 1);
     stage.update(100);
     const b = internals(stage).views.get('b')!;
-    stage.apply([{ id: 'b', type: 'structure', structureType: 'constructedWall', x: 20, y: 20 }], 0, [], 'snapshot');
+    stage.apply(
+      [{ id: 'b', type: 'structure', structureType: 'constructedWall', x: 20, y: 20 }],
+      0,
+      [],
+      'snapshot',
+    );
     expect(a.root.destroyed).toBe(true);
     expect(b.root.destroyed).toBe(true);
     expect(internals(stage).dying.size).toBe(0);
@@ -149,8 +174,21 @@ describe('ObjectsStage 运动/快照/事件/淡出（R4）', () => {
     stage.apply([enemy], 1, [{ event: 1, objectId: 'x', data: { targetId: 'e' } }]);
     stage.update(100);
     const view = internals(stage).views.get('e')!;
-    stage.apply([enemy, { id: 'ctl', type: 'structure', structureType: 'controller',
-      x: 40, y: 40, owner: 'p1', safeMode: 100 }], 2);
+    stage.apply(
+      [
+        enemy,
+        {
+          id: 'ctl',
+          type: 'structure',
+          structureType: 'controller',
+          x: 40,
+          y: 40,
+          owner: 'p1',
+          safeMode: 100,
+        },
+      ],
+      2,
+    );
     stage.update(125);
     expect(view.cover!.alpha).toBeCloseTo(0.25); // 罩峰值 0.5 × safemode 0.5
   });
@@ -236,14 +274,28 @@ describe('ObjectsStage 运动/快照/事件/淡出（R4）', () => {
     const stage2 = new ObjectsStage({
       cell: 100,
       lighting: mockLighting(),
-      assets: { frames: new Map([['cover', Texture.WHITE], ['operator-lvl1', Texture.WHITE]]), glow: Texture.WHITE, creepMask: null },
+      assets: {
+        frames: new Map([
+          ['cover', Texture.WHITE],
+          ['operator-lvl1', Texture.WHITE],
+        ]),
+        glow: Texture.WHITE,
+        creepMask: null,
+      },
       player: 'p1',
       objectsLayer: new Container(),
       tickDurationMS: 1000,
     });
     const pc = {
-      id: 'pc', type: 'powerCreep', x: 5, y: 5, className: 'operator', level: 8,
-      user: 'p2', owner: 'p2', name: 'pc',
+      id: 'pc',
+      type: 'powerCreep',
+      x: 5,
+      y: 5,
+      className: 'operator',
+      level: 8,
+      user: 'p2',
+      owner: 'p2',
+      name: 'pc',
     } as unknown as RoomObjectState;
     stage2.apply([pc], 0, [], 'snapshot');
     const view = internals(stage2).views.get('pc')!;
@@ -256,7 +308,12 @@ describe('ObjectsStage 运动/快照/事件/淡出（R4）', () => {
   it('罩事件对非视图目标（已死对象 id）静默忽略', () => {
     stage.apply([creep('a', 10, 10)], 0, [], 'snapshot');
     expect(() =>
-      stage.apply([creep('a', 10, 10)], 1, [{ event: 1, objectId: 'x', data: { targetId: 'ghost' } }], 'delta'),
+      stage.apply(
+        [creep('a', 10, 10)],
+        1,
+        [{ event: 1, objectId: 'x', data: { targetId: 'ghost' } }],
+        'delta',
+      ),
     ).not.toThrow();
     expect(internals(stage).views.get('a')!.cover).toBeUndefined();
   });
@@ -264,7 +321,12 @@ describe('ObjectsStage 运动/快照/事件/淡出（R4）', () => {
   it('罩事件对非 motion 类型（结构承伤）不挂罩（官方 creepActions 声明域——评审 A-B1 回归锚）', () => {
     // constructedWall：非 motion 结构且不触发 rampart 顶罩烘焙（node 测试无 DOM）
     const wall: RoomObjectState = {
-      id: 'w', type: 'structure', structureType: 'constructedWall', x: 30, y: 30, hits: 1000,
+      id: 'w',
+      type: 'structure',
+      structureType: 'constructedWall',
+      x: 30,
+      y: 30,
+      hits: 1000,
     } as unknown as RoomObjectState;
     stage.apply([creep('a', 10, 10), wall], 0, [], 'snapshot');
     stage.apply(
@@ -282,8 +344,13 @@ describe('ObjectsStage 运动/快照/事件/淡出（R4）', () => {
     const enemy = creep('e', 10, 10, { user: 'p2' });
     // controller 对象供 stage 的 env 扫描（官方 stateExtra.controller 同路径）
     const controller: RoomObjectState = {
-      id: 'ctl', type: 'structure', structureType: 'controller', x: 40, y: 40,
-      owner: 'p1', safeMode: 100,
+      id: 'ctl',
+      type: 'structure',
+      structureType: 'controller',
+      x: 40,
+      y: 40,
+      owner: 'p1',
+      safeMode: 100,
     } as unknown as RoomObjectState;
     stage.apply([enemy, controller], 0, [], 'snapshot');
     const view = internals(stage).views.get('e')!;

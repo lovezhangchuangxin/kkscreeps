@@ -1,6 +1,8 @@
 export default function install(api) {
   class ClockworkCounter extends api.builtins.RoomObject {
-    get value() { return api.view.field(this, 'value'); }
+    get value() {
+      return api.view.field(this, 'value');
+    }
   }
   api.objects.bind('clockwork:counter', ClockworkCounter);
   api.globals.define('ClockworkCounter', ClockworkCounter);

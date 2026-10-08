@@ -3,8 +3,12 @@
 // 拒绝事件携带绑定与 code；对象房间可见，玩家类经 player.js 绑定。
 export default function register(api) {
   const door = api.objects.define('gatekeeper:door', {
-    version: 1, playerClass: 'GatekeeperDoor', visibility: 'room-visible',
-    ownerField: 'owner', positionFields: ['x', 'y'], fields: {
+    version: 1,
+    playerClass: 'GatekeeperDoor',
+    visibility: 'room-visible',
+    ownerField: 'owner',
+    positionFields: ['x', 'y'],
+    fields: {
       owner: { type: 'string', maxBytes: 128 },
       x: { type: 'u32', min: 0, max: 49 },
       y: { type: 'u32', min: 0, max: 49 },
@@ -12,7 +16,8 @@ export default function register(api) {
     },
   });
   api.intents.define('gatekeeper:pass', {
-    scope: 'object', target: door,
+    scope: 'object',
+    target: door,
     args: { type: 'record', fields: {} },
     process(ctx) {
       ctx.target.fields.value += 1;
@@ -20,7 +25,8 @@ export default function register(api) {
     },
   });
   api.intents.define('gatekeeper:hold', {
-    scope: 'object', target: door,
+    scope: 'object',
+    target: door,
     args: { type: 'record', fields: {} },
     process() {
       return api.decline('gate-closed');

@@ -62,8 +62,11 @@
     function _getOrders(resourceType) {
       if (!resourceType) resourceType = 'all';
       if (!cachedOrders[resourceType]) {
-        if (resourceType !== 'all' && !lodash.contains(C_RESOURCES_ALL, resourceType)
-          && !lodash.contains(C_INTERSHARD_RESOURCES, resourceType)) {
+        if (
+          resourceType !== 'all' &&
+          !lodash.contains(C_RESOURCES_ALL, resourceType) &&
+          !lodash.contains(C_INTERSHARD_RESOURCES, resourceType)
+        ) {
           return {};
         }
         const raw = ordersView[resourceType] || {};
@@ -107,11 +110,16 @@
       getHistory(resourceType) {
         if (!resourceType) resourceType = 'all';
         if (!cachedHistory[resourceType]) {
-          if (resourceType !== 'all' && !lodash.contains(C_RESOURCES_ALL, resourceType)
-            && !lodash.contains(C_INTERSHARD_RESOURCES, resourceType)) {
+          if (
+            resourceType !== 'all' &&
+            !lodash.contains(C_RESOURCES_ALL, resourceType) &&
+            !lodash.contains(C_INTERSHARD_RESOURCES, resourceType)
+          ) {
             return {};
           }
-          cachedHistory[resourceType] = __jsonParse(__jsonStringify(historyView[resourceType] || {}));
+          cachedHistory[resourceType] = __jsonParse(
+            __jsonStringify(historyView[resourceType] || {}),
+          );
         }
         return cachedHistory[resourceType];
       },
@@ -136,8 +144,10 @@
         if (typeof type === 'object' && type !== null) {
           ({ type, resourceType, price, totalAmount, roomName } = type);
         }
-        if (!lodash.contains(C_RESOURCES_ALL, resourceType)
-          && !lodash.contains(C_INTERSHARD_RESOURCES, resourceType)) {
+        if (
+          !lodash.contains(C_RESOURCES_ALL, resourceType) &&
+          !lodash.contains(C_INTERSHARD_RESOURCES, resourceType)
+        ) {
           return C_ERR_INVALID_ARGS;
         }
         if (type !== C_ORDER_BUY && type !== C_ORDER_SELL) {
@@ -151,8 +161,10 @@
         if (price * totalAmount * C_MARKET_FEE > this.credits) {
           return C_ERR_NOT_ENOUGH_RESOURCES;
         }
-        if (!lodash.contains(C_INTERSHARD_RESOURCES, resourceType)
-          && (!roomName || !myTerminalIn(roomName))) {
+        if (
+          !lodash.contains(C_INTERSHARD_RESOURCES, resourceType) &&
+          (!roomName || !myTerminalIn(roomName))
+        ) {
           return C_ERR_NOT_OWNER;
         }
         if (lodash.size(this.orders) + ordersCreatedDuringTick >= C_MARKET_MAX_ORDERS) {
@@ -160,7 +172,11 @@
         }
         ordersCreatedDuringTick++;
         gw.intents.pushByName('global', 'createOrder', {
-          type, resourceType, price, totalAmount, roomName,
+          type,
+          resourceType,
+          price,
+          totalAmount,
+          roomName,
         });
         return C_OK;
       },
@@ -186,9 +202,12 @@
           return C_ERR_INVALID_ARGS;
         }
         if (lodash.contains(C_INTERSHARD_RESOURCES, order.resourceType)) {
-          if (order.type === C_ORDER_BUY
-            && ((gw.world.market && gw.world.market.resources
-              ? gw.world.market.resources[order.resourceType] : 0) || 0) < amount) {
+          if (
+            order.type === C_ORDER_BUY &&
+            ((gw.world.market && gw.world.market.resources
+              ? gw.world.market.resources[order.resourceType]
+              : 0) || 0) < amount
+          ) {
             return C_ERR_NOT_ENOUGH_RESOURCES;
           }
         } else {
@@ -209,10 +228,12 @@
             return C_ERR_TIRED_MKT;
           }
           if (order.type === C_ORDER_BUY) {
-            if ((order.resourceType !== C_RESOURCE_ENERGY_NAME
-              && (!t.store[order.resourceType] || t.store[order.resourceType] < amount))
-              || (order.resourceType === C_RESOURCE_ENERGY_NAME
-                && t.store[C_RESOURCE_ENERGY_NAME] < amount + transferCost)) {
+            if (
+              (order.resourceType !== C_RESOURCE_ENERGY_NAME &&
+                (!t.store[order.resourceType] || t.store[order.resourceType] < amount)) ||
+              (order.resourceType === C_RESOURCE_ENERGY_NAME &&
+                t.store[C_RESOURCE_ENERGY_NAME] < amount + transferCost)
+            ) {
               return C_ERR_NOT_ENOUGH_RESOURCES;
             }
           }
@@ -236,8 +257,10 @@
         if (!newPrice || newPrice <= 0) {
           return C_ERR_INVALID_ARGS;
         }
-        if (newPrice > order.price
-          && (newPrice - order.price) * order.remainingAmount * C_MARKET_FEE > this.credits) {
+        if (
+          newPrice > order.price &&
+          (newPrice - order.price) * order.remainingAmount * C_MARKET_FEE > this.credits
+        ) {
           return C_ERR_NOT_ENOUGH_RESOURCES;
         }
         gw.intents.pushByName('global', 'changeOrderPrice', { orderId, newPrice }, 50);
@@ -265,7 +288,9 @@
       // 毫原值，除法在 getter=官方同位）
       credits: {
         enumerable: true,
-        get() { return (view.money_milli || 0) / 1000; },
+        get() {
+          return (view.money_milli || 0) / 1000;
+        },
       },
       incomingTransactions: {
         enumerable: true,
@@ -287,12 +312,15 @@
         enumerable: true,
         get() {
           if (!_orders) {
-            _orders = lodash.indexBy(myOrdersRaw.map((i) => {
-              const o = __jsonParse(__jsonStringify(i));
-              delete o.user;
-              o.price /= 1000;
-              return o;
-            }), 'id');
+            _orders = lodash.indexBy(
+              myOrdersRaw.map((i) => {
+                const o = __jsonParse(__jsonStringify(i));
+                delete o.user;
+                o.price /= 1000;
+                return o;
+              }),
+              'id',
+            );
           }
           return _orders;
         },

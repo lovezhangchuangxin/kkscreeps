@@ -4,7 +4,7 @@ export default function register(api) {
     ctx.state ??= {};
     ctx.state[key] = (ctx.state[key] || 0) + 1;
   };
-  api.handlers.before('builtin:link.tick', { id: 'before' }, ctx => count(ctx, 'before'));
+  api.handlers.before('builtin:link.tick', { id: 'before' }, (ctx) => count(ctx, 'before'));
   api.handlers.wrap('builtin:link.tick', { id: 'a_outer' }, (ctx, next) => {
     count(ctx, 'outer');
     next();
@@ -13,5 +13,5 @@ export default function register(api) {
     count(ctx, 'inner');
     next();
   });
-  api.handlers.after('builtin:link.tick', { id: 'after' }, ctx => count(ctx, 'after'));
+  api.handlers.after('builtin:link.tick', { id: 'after' }, (ctx) => count(ctx, 'after'));
 }

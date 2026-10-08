@@ -2,7 +2,9 @@
 // 查询不到实例；可空参数意图 emit 允许省略 args（宿主归一为 null）。
 export default function install(api) {
   class TypedRelay extends api.builtins.RoomObject {
-    get charge() { return api.view.field(this, 'charge'); }
+    get charge() {
+      return api.view.field(this, 'charge');
+    }
     ping(code) {
       return api.intents.emit('beta:ping', this, code === undefined ? null : { code });
     }

@@ -21,7 +21,10 @@ function ownKey(namespace, key) {
 
 // 跨命名空间键的形状预检（归属由 Rust 侧权威校验；此处只拦明显畸形）。
 export function anyKey(key, where) {
-  if (typeof key !== 'string' || !/^[a-z][a-z0-9_-]{0,63}:[A-Za-z][A-Za-z0-9._-]{0,126}$/.test(key)) {
+  if (
+    typeof key !== 'string' ||
+    !/^[a-z][a-z0-9_-]{0,63}:[A-Za-z][A-Za-z0-9._-]{0,126}$/.test(key)
+  ) {
     throw new Error(`${where} 的键 ${JSON.stringify(key)} 形状无效`);
   }
   return key;
@@ -45,7 +48,11 @@ function schemaOf(namespace, spec, where) {
   switch (spec.type) {
     case 'bool':
       return out;
-    case 'i32': case 'i64': case 'u32': case 'u64': case 'f64':
+    case 'i32':
+    case 'i64':
+    case 'u32':
+    case 'u64':
+    case 'f64':
       out.min = spec.min;
       out.max = spec.max;
       return out;
@@ -157,14 +164,19 @@ export function createApi(namespace, config) {
       }
       const key = ownKey(namespace, `${namespace}:handler.${id}`);
       requireFunction(namespace, key, fn, kind);
-      declare('handler', { key, slot, kind, get options() {
-        // 原始属性读取留在声明 op 的转换期；原型上的依赖也不能静默丢失。
-        const options = Object.create(null);
-        for (const name of Object.keys(spec)) options[name] = null;
-        options.id = id;
-        options.dependsOn = spec.dependsOn;
-        return options;
-      } });
+      declare('handler', {
+        key,
+        slot,
+        kind,
+        get options() {
+          // 原始属性读取留在声明 op 的转换期；原型上的依赖也不能静默丢失。
+          const options = Object.create(null);
+          for (const name of Object.keys(spec)) options[name] = null;
+          options.id = id;
+          options.dependsOn = spec.dependsOn;
+          return options;
+        },
+      });
       return key;
     };
   }
@@ -231,7 +243,16 @@ export function createApi(namespace, config) {
       if (spec === null || typeof spec !== 'object' || Array.isArray(spec)) {
         throw new Error(`建筑 ${key} 的说明须为对象`);
       }
-      const known = ['playerClass', 'cost', 'hitsMax', 'pathing', 'capacity', 'production', 'fields', 'tick'];
+      const known = [
+        'playerClass',
+        'cost',
+        'hitsMax',
+        'pathing',
+        'capacity',
+        'production',
+        'fields',
+        'tick',
+      ];
       for (const member of Object.keys(spec)) {
         if (known.indexOf(member) === -1) {
           throw new Error(`建筑 ${key} 声明了未知选项 ${member}`);
@@ -254,8 +275,10 @@ export function createApi(namespace, config) {
       if (spec.pathing !== 'obstacle' && spec.pathing !== 'plain' && spec.pathing !== 'road') {
         throw new Error(`建筑 ${key} 的 pathing 须为 obstacle/plain/road`);
       }
-      if (spec.capacity !== undefined
-        && (!Number.isSafeInteger(spec.capacity) || spec.capacity < 0)) {
+      if (
+        spec.capacity !== undefined &&
+        (!Number.isSafeInteger(spec.capacity) || spec.capacity < 0)
+      ) {
         throw new Error(`建筑 ${key} 的 capacity 须为非负整数`);
       }
       if (spec.production !== undefined && spec.production !== null) {
@@ -278,7 +301,9 @@ export function createApi(namespace, config) {
           }
           for (const [resource, amount] of Object.entries(p[table])) {
             if (!Number.isSafeInteger(amount) || amount < 0) {
-              throw new Error(`建筑 ${key} 的生产${table === 'inputs' ? '输入' : '输出'}资源 ${resource} 数量须为非负整数`);
+              throw new Error(
+                `建筑 ${key} 的生产${table === 'inputs' ? '输入' : '输出'}资源 ${resource} 数量须为非负整数`,
+              );
             }
           }
         }
@@ -289,8 +314,12 @@ export function createApi(namespace, config) {
           throw new Error(`建筑 ${key} 的字段表须为对象`);
         }
         for (const [name, value] of Object.entries(spec.fields)) {
-          if (value !== null && typeof value === 'object' && value.visibility !== undefined
-            && value.visibility !== 'public') {
+          if (
+            value !== null &&
+            typeof value === 'object' &&
+            value.visibility !== undefined &&
+            value.visibility !== 'public'
+          ) {
             throw new Error(`建筑 ${key} 的字段 ${name} 可见性首片只支持 public`);
           }
           fields.push(fieldOf(namespace, name, value));
@@ -342,4 +371,3 @@ export function seal() {
   sealState();
   return Array.from(bindings.keys());
 }
-

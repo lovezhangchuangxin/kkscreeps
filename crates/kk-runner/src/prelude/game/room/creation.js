@@ -24,10 +24,12 @@
     /** 在自家所有 Game.spawns 和 Game.constructionSites 中检查 spawn 重名。
      * 跨房工地也参与检查；与上游 register.spawns 的差异是此处不检查他人 spawn 名。 */
     function spawnNameTaken(name) {
-      return Object.values(gw.currentGame().spawns).some((s) => s.name === name)
-        || Object.values(gw.currentGame().constructionSites).some(
+      return (
+        Object.values(gw.currentGame().spawns).some((s) => s.name === name) ||
+        Object.values(gw.currentGame().constructionSites).some(
           (o) => o.structureType === 'spawn' && o.name === name,
-        );
+        )
+      );
     }
     /** 官方 utils.js:338-354 checkControllerAvailability：现存同类型（含
      *  工地）< CONTROLLER_STRUCTURES[type][rcl]（rcl：有主 controller 的
@@ -44,8 +46,10 @@
       if (controller && controller.level && controller.owner) rcl = controller.level;
       let cnt = 0;
       for (const o of roomObjs) {
-        if (o.structureType === structureType
-          && (o.type === 'structure' || o.type === 'spawn' || o.type === 'constructionSite')) {
+        if (
+          o.structureType === structureType &&
+          (o.type === 'structure' || o.type === 'spawn' || o.type === 'constructionSite')
+        ) {
           cnt++;
         }
       }
@@ -56,11 +60,13 @@
      * 其他非 road/rampart 结构与造价对象互斥，房间边界拒绝建造。
      * 来源：上游 engine/src/utils.js 的 checkConstructionSite 对象分支。 */
     function checkConstructionSiteObjects(structureType, x, y) {
-      const typeOf = (o) => ((o.type === 'structure' || o.type === 'spawn') && o.structureType)
-        ? o.structureType : o.type;
+      const typeOf = (o) =>
+        (o.type === 'structure' || o.type === 'spawn') && o.structureType
+          ? o.structureType
+          : o.type;
       const modBuildings = gw.modApi === undefined ? undefined : gw.modApi.buildings;
-      const costBearing = (t) => C_CONSTRUCTION_COST[t]
-        || (modBuildings !== undefined && modBuildings[t] !== undefined);
+      const costBearing = (t) =>
+        C_CONSTRUCTION_COST[t] || (modBuildings !== undefined && modBuildings[t] !== undefined);
       let hasMineral = false;
       let hasExtractor = false;
       const isExtractor = structureType === 'extractor';
@@ -72,8 +78,13 @@
         if (t === 'mineral') hasMineral = true;
         if (t === 'extractor') hasExtractor = true;
         if (isExtractor) continue;
-        if (structureType !== 'rampart' && structureType !== 'road'
-          && t !== 'rampart' && t !== 'road' && costBearing(t)) {
+        if (
+          structureType !== 'rampart' &&
+          structureType !== 'road' &&
+          t !== 'rampart' &&
+          t !== 'road' &&
+          costBearing(t)
+        ) {
           return false;
         }
       }
@@ -87,15 +98,38 @@
       const terrain = gw.terrainByRoom[name];
       if (!terrain) return false;
       const isWall = (tx, ty) => (terrain[ty * 50 + tx] & TERRAIN_MASK_WALL) !== 0;
-      if (structureType !== 'road' && structureType !== 'container'
-        && (x === 1 || x === 48 || y === 1 || y === 48)) {
+      if (
+        structureType !== 'road' &&
+        structureType !== 'container' &&
+        (x === 1 || x === 48 || y === 1 || y === 48)
+      ) {
         // 先检查 x 边，再检查 y 边；角落位置取最后命中的 y 边三格。
         // 来源：上游 engine/src/utils.js 的 checkConstructionSite 地形检查。
         let border;
-        if (x === 1) border = [[0, y - 1], [0, y], [0, y + 1]];
-        if (x === 48) border = [[49, y - 1], [49, y], [49, y + 1]];
-        if (y === 1) border = [[x - 1, 0], [x, 0], [x + 1, 0]];
-        if (y === 48) border = [[x - 1, 49], [x, 49], [x + 1, 49]];
+        if (x === 1)
+          border = [
+            [0, y - 1],
+            [0, y],
+            [0, y + 1],
+          ];
+        if (x === 48)
+          border = [
+            [49, y - 1],
+            [49, y],
+            [49, y + 1],
+          ];
+        if (y === 1)
+          border = [
+            [x - 1, 0],
+            [x, 0],
+            [x + 1, 0],
+          ];
+        if (y === 48)
+          border = [
+            [x - 1, 49],
+            [x, 49],
+            [x + 1, 49],
+          ];
         for (let i = 0; i < border.length; i++) {
           if (!isWall(border[i][0], border[i][1])) return false;
         }
@@ -109,7 +143,8 @@
      * 来源：上游 engine/src/game/rooms.js 的 createConstructionSite。 */
     methods.createConstructionSite = function (firstArg, secondArg, structureType, name) {
       const xy = gw.fetchXYArguments(firstArg, secondArg);
-      const x = xy[0], y = xy[1];
+      const x = xy[0],
+        y = xy[1];
       if (x === undefined || y === undefined || x < 0 || x > 49 || y < 0 || y > 49) {
         return ERR_INVALID_ARGS;
       }
@@ -117,8 +152,10 @@
         structureType = secondArg;
       }
       const modBuildings = gw.modApi === undefined ? undefined : gw.modApi.buildings;
-      if (!C_CONSTRUCTION_COST[structureType]
-        && !(modBuildings !== undefined && modBuildings[structureType] !== undefined)) {
+      if (
+        !C_CONSTRUCTION_COST[structureType] &&
+        !(modBuildings !== undefined && modBuildings[structureType] !== undefined)
+      ) {
         return ERR_INVALID_ARGS;
       }
       if (structureType === 'spawn' && typeof name === 'string') {
@@ -131,15 +168,20 @@
       if (this.controller && this.controller.level > 0 && !this.controller.my) {
         return C_ERR_NOT_OWNER;
       }
-      if (this.controller && this.controller.reservation
-        && this.controller.reservation.username !== gw.viewerName) {
+      if (
+        this.controller &&
+        this.controller.reservation &&
+        this.controller.reservation.username !== gw.viewerName
+      ) {
         return C_ERR_NOT_OWNER;
       }
       if (!checkControllerAvailability(structureType, this)) {
         return C_ERR_RCL_NOT_ENOUGH;
       }
-      if (!checkConstructionSiteObjects(structureType, x, y)
-        || !checkConstructionSiteTerrain(structureType, x, y)) {
+      if (
+        !checkConstructionSiteObjects(structureType, x, y) ||
+        !checkConstructionSiteTerrain(structureType, x, y)
+      ) {
         return C_ERR_INVALID_TARGET;
       }
       // 官方 rooms.js:1071-1073：自家工地总数 + 本 tick 已建数 < 帽（官方
@@ -173,7 +215,8 @@
      *  本地 Game.flags 装配 + intent → 返回名。 */
     methods.createFlag = function (firstArg, secondArg, name, color, secondaryColor) {
       const xy = gw.fetchXYArguments(firstArg, secondArg);
-      let x = xy[0], y = xy[1];
+      let x = xy[0],
+        y = xy[1];
       if (x === undefined || y === undefined || x < 0 || x > 49 || y < 0 || y > 49) {
         return ERR_INVALID_ARGS;
       }
@@ -212,7 +255,12 @@
       shell.room = this;
       gw.currentGame().flags[name] = shell;
       gw.intents.pushByName('room', 'createFlag', {
-        roomName, x, y, name, color, secondaryColor,
+        roomName,
+        x,
+        y,
+        name,
+        color,
+        secondaryColor,
       });
       return name;
     };

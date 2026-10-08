@@ -13,7 +13,7 @@ export default function register(api) {
       y: { type: 'u32', min: 0, max: 49 },
     },
   });
-  api.handlers.after('builtin:mod.receiveDamage', { id: 'record' }, ctx => {
+  api.handlers.after('builtin:mod.receiveDamage', { id: 'record' }, (ctx) => {
     ctx.state = {
       calls: (ctx.state?.calls || 0) + 1,
       finalDamage: ctx.incoming.getDamage(),

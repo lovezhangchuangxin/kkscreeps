@@ -40,7 +40,13 @@ describe('bodyRingArcs', () => {
   });
 
   it('过滤 tough/carry/hits≤0（:108-109）', () => {
-    const arcs = bodyRingArcs([part('tough', 100), part('carry', 100), part('work', 100), part('move', 0), part('work', -10)]);
+    const arcs = bodyRingArcs([
+      part('tough', 100),
+      part('carry', 100),
+      part('work', 100),
+      part('move', 0),
+      part('work', -10),
+    ]);
     // work 100 → 一对镜像弧
     expect(arcs).toHaveLength(2);
     expect(arcs[0]!.color).toBe(R.colors.work);

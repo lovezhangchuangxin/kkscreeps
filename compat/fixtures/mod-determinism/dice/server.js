@@ -31,14 +31,20 @@ export default function register(api) {
       const dateFunction = () => {};
       dateFunction[Symbol.toPrimitive] = () => '1970-01-01T00:00:00';
       let rejectedObject = false;
-      try { new Date({[Symbol.toPrimitive]: () => dateFunction}); }
-      catch (error) { rejectedObject = error instanceof TypeError; }
+      try {
+        new Date({ [Symbol.toPrimitive]: () => dateFunction });
+      } catch (error) {
+        rejectedObject = error instanceof TypeError;
+      }
       s.date = {
-        hour: new Date().getHours(), offset: new Date().getTimezoneOffset(),
+        hour: new Date().getHours(),
+        offset: new Date().getTimezoneOffset(),
         parsed: Date.parse('1970-01-01T00:00:00'),
         constructed: new CapturedDate(1970, 0, 1).getTime(),
-        coercedFunction: new Date(dateFunction).getTime(), rejectedObject,
-        set: local.getTime(), text: Date(),
+        coercedFunction: new Date(dateFunction).getTime(),
+        rejectedObject,
+        set: local.getTime(),
+        text: Date(),
         localText: new Date().toLocaleString(),
         roundtrip: Date.parse(new Date(0).toString()),
       };

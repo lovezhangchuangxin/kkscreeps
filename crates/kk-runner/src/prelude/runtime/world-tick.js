@@ -110,7 +110,10 @@
       // 产生该形态，防御面针对手搓世界注入）。
       const setTerrain = (room, bytes) => {
         __Object.defineProperty(gw.terrainByRoom, room, {
-          value: bytes, writable: true, enumerable: true, configurable: true,
+          value: bytes,
+          writable: true,
+          enumerable: true,
+          configurable: true,
         });
       };
       if (terrainViews !== null) {

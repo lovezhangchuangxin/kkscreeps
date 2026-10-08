@@ -62,11 +62,20 @@ export function setSpriteSize(sprite: Sprite, width: number, height?: number): v
 export function gfxCircle(
   g: Graphics,
   radius: number,
-  opts: { fill?: number; fillAlpha?: number; stroke?: number; strokeWidth?: number; strokeAlpha?: number },
+  opts: {
+    fill?: number;
+    fillAlpha?: number;
+    stroke?: number;
+    strokeWidth?: number;
+    strokeAlpha?: number;
+  },
 ): Graphics {
   if (opts.stroke !== undefined && (opts.strokeWidth ?? 0) > 0) {
-    g.circle(0, 0, radius)
-      .stroke({ width: opts.strokeWidth, color: opts.stroke, alpha: opts.strokeAlpha ?? 1 });
+    g.circle(0, 0, radius).stroke({
+      width: opts.strokeWidth,
+      color: opts.stroke,
+      alpha: opts.strokeAlpha ?? 1,
+    });
   }
   if (opts.fill !== undefined) {
     g.circle(0, 0, radius).fill({ color: opts.fill, alpha: opts.fillAlpha ?? 1 });
@@ -102,7 +111,14 @@ export function gfxRoundRect(
   return g;
 }
 
-export function gfxRect(g: Graphics, x: number, y: number, w: number, h: number, color: number): Graphics {
+export function gfxRect(
+  g: Graphics,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  color: number,
+): Graphics {
   if (w > 0 && h > 0) g.rect(x, y, w, h).fill({ color });
   return g;
 }
@@ -146,11 +162,7 @@ export function gfxSiteProgress(
     g.circle(0, 0, radius + lineWidth / 2).stroke({ width: lineWidth, color });
   }
   if (angle > 0) {
-    g.moveTo(0, 0)
-      .lineTo(radius, 0)
-      .arc(0, 0, radius, 0, angle)
-      .lineTo(0, 0)
-      .fill({ color });
+    g.moveTo(0, 0).lineTo(radius, 0).arc(0, 0, radius, 0, angle).lineTo(0, 0).fill({ color });
     g.stroke({ width: 1, color });
   }
   return g;

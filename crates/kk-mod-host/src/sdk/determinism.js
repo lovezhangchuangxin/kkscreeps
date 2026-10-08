@@ -43,43 +43,78 @@ function deterministicNow() {
 // 避免原生宽松解析把没有时区的输入解释为机器本地时间。
 function parseDate(value) {
   const text = String(value);
-  if (/^[+-]?\d{4,6}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})?)?$/.test(text)) {
-    return realDate.parse(text.includes('T') && !/(Z|[+-]\d{2}:\d{2})$/.test(text) ? `${text}Z` : text);
+  if (
+    /^[+-]?\d{4,6}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})?)?$/.test(
+      text,
+    )
+  ) {
+    return realDate.parse(
+      text.includes('T') && !/(Z|[+-]\d{2}:\d{2})$/.test(text) ? `${text}Z` : text,
+    );
   }
   // toUTCString 的输出有显式 GMT，解析不读取本地时区。
-  if (/^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} [A-Z][a-z]{2} [+-]?\d{4,6} \d{2}:\d{2}:\d{2} GMT$/.test(text)) return realDate.parse(text);
+  if (
+    /^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} [A-Z][a-z]{2} [+-]?\d{4,6} \d{2}:\d{2}:\d{2} GMT$/.test(
+      text,
+    )
+  )
+    return realDate.parse(text);
   return NaN;
 }
 function dateArgument(value) {
   if (value !== null && (typeof value === 'object' || typeof value === 'function')) {
-    try { return realDate.prototype.getTime.call(value); } catch {}
+    try {
+      return realDate.prototype.getTime.call(value);
+    } catch {}
     const convert = value[Symbol.toPrimitive];
     if (convert !== undefined) value = convert.call(value, 'default');
     else {
       const object = value;
       value = typeof object.valueOf === 'function' ? object.valueOf() : object;
-      if (value !== null && (typeof value === 'object' || typeof value === 'function')) value = object.toString();
+      if (value !== null && (typeof value === 'object' || typeof value === 'function'))
+        value = object.toString();
     }
-    if (value !== null && (typeof value === 'object' || typeof value === 'function')) throw new TypeError('Cannot convert date argument');
+    if (value !== null && (typeof value === 'object' || typeof value === 'function'))
+      throw new TypeError('Cannot convert date argument');
   }
   return typeof value === 'string' ? parseDate(value) : value;
 }
 function KkDate(...args) {
   if (!new.target) return new realDate(deterministicNow()).toUTCString();
-  const time = args.length === 0 ? deterministicNow()
-    : args.length === 1 ? dateArgument(args[0]) : realDate.UTC(...args);
+  const time =
+    args.length === 0
+      ? deterministicNow()
+      : args.length === 1
+        ? dateArgument(args[0])
+        : realDate.UTC(...args);
   return Reflect.construct(realDate, [time], new.target);
 }
 Object.setPrototypeOf(KkDate.prototype, realDate.prototype);
 Object.defineProperty(realDate.prototype, 'constructor', {
-  value: KkDate, writable: true, configurable: true, enumerable: false,
+  value: KkDate,
+  writable: true,
+  configurable: true,
+  enumerable: false,
 });
-for (const stem of ['FullYear', 'Month', 'Date', 'Day', 'Hours', 'Minutes', 'Seconds', 'Milliseconds']) {
+for (const stem of [
+  'FullYear',
+  'Month',
+  'Date',
+  'Day',
+  'Hours',
+  'Minutes',
+  'Seconds',
+  'Milliseconds',
+]) {
   realDate.prototype[`get${stem}`] = realDate.prototype[`getUTC${stem}`];
   if (stem !== 'Day') realDate.prototype[`set${stem}`] = realDate.prototype[`setUTC${stem}`];
 }
-realDate.prototype.getTimezoneOffset = function () { return Number.isNaN(this.getTime()) ? NaN : 0; };
-realDate.prototype.getYear = function () { return this.getUTCFullYear() - 1900; };
+realDate.prototype.getTimezoneOffset = function () {
+  return Number.isNaN(this.getTime()) ? NaN : 0;
+};
+realDate.prototype.getYear = function () {
+  return this.getUTCFullYear() - 1900;
+};
 realDate.prototype.setYear = function (year) {
   year = Number(year);
   year = Number.isNaN(year) ? year : Math.trunc(year);
@@ -102,8 +137,17 @@ for (const name of ['toLocaleString', 'toLocaleDateString', 'toLocaleTimeString'
     return native.call(this, locales ?? 'en-US', { ...options, timeZone: 'UTC' });
   };
 }
-for (const [name, value] of [['now', deterministicNow], ['parse', parseDate], ['UTC', realDate.UTC]]) {
-  Object.defineProperty(KkDate, name, { value, writable: true, configurable: true, enumerable: false });
+for (const [name, value] of [
+  ['now', deterministicNow],
+  ['parse', parseDate],
+  ['UTC', realDate.UTC],
+]) {
+  Object.defineProperty(KkDate, name, {
+    value,
+    writable: true,
+    configurable: true,
+    enumerable: false,
+  });
 }
 Object.defineProperty(KkDate, 'name', { value: 'Date', configurable: true });
 Object.defineProperty(KkDate, 'length', { value: 7, configurable: true });

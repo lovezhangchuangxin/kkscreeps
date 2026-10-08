@@ -22,7 +22,14 @@ import type { ActionLogEntry, SayEntry, RoomEvent, RoomObjectState } from '@kksc
 import { bakeCanvas, textureFromBaked } from '../core/bake.js';
 import type { LightingPass } from '../core/lighting.js';
 import { mergedOutlinePath } from '../core/path-merge.js';
-import { AlphaKeyframesTween, AlphaTween, MoveTween, RotateTween, TweenManager, type Tween } from '../anim/tweens.js';
+import {
+  AlphaKeyframesTween,
+  AlphaTween,
+  MoveTween,
+  RotateTween,
+  TweenManager,
+  type Tween,
+} from '../anim/tweens.js';
 import type { PartEnv, PartValues } from './part-decl.js';
 import { ownerOf, valuesEqual } from './part-decl.js';
 import { OverlayGroup } from './overlay-group.js';
@@ -38,7 +45,13 @@ import type { JoinAssets } from './joins-naturals.js';
 import { CREEP_SPEC, ROAD_SPEC } from './specs.js';
 import { TERRAIN_SPEC } from '../core/terrain-spec.js';
 import { roadNodes } from './road-geometry.js';
-import { rampartGroupHash, rampartGroups, rampartRasterBounds, ROOM_GRID, type RampartGroup } from './rampart-groups.js';
+import {
+  rampartGroupHash,
+  rampartGroups,
+  rampartRasterBounds,
+  ROOM_GRID,
+  type RampartGroup,
+} from './rampart-groups.js';
 import { RAMPART_COVER_SPEC } from './specs.js';
 import { ROOM_SIZE } from '../scenes/terrain-geometry.js';
 import { resolveTypeKey } from './z-table.js';
@@ -147,7 +160,13 @@ export class ObjectsStage {
     this.assets = options.assets;
     this.registry = buildRegistry(options.assets);
     this.ambient = new AmbientScheduler(this.tickDurationMS);
-    this.effects = new EffectsStage(this.assets, this.lighting, this.cell, this.tickDurationMS, id => this.actorBinding(id));
+    this.effects = new EffectsStage(
+      this.assets,
+      this.lighting,
+      this.cell,
+      this.tickDurationMS,
+      (id) => this.actorBinding(id),
+    );
     this.effectsRoot.addChild(this.effects.root);
   }
 
@@ -195,8 +214,12 @@ export class ObjectsStage {
     }
     const extras = new Set<number>();
     for (const o of objects) {
-      if (o.type === 'structure' && o.structureType === 'constructedWall'
-        && typeof o.x === 'number' && typeof o.y === 'number') {
+      if (
+        o.type === 'structure' &&
+        o.structureType === 'constructedWall' &&
+        typeof o.x === 'number' &&
+        typeof o.y === 'number'
+      ) {
         extras.add(o.y * ROOM_GRID + o.x);
       }
     }
@@ -270,7 +293,10 @@ export class ObjectsStage {
           root,
           parts: new Map(),
           overlays,
-          position: new PositionChannels(x, y, (px, py) => { root.position.set(px, py); overlays.moveTo(px, py); }),
+          position: new PositionChannels(x, y, (px, py) => {
+            root.position.set(px, py);
+            overlays.moveTo(px, py);
+          }),
           x,
           y,
           motion: MOTION_TYPE_KEYS.has(typeKey),
@@ -296,23 +322,44 @@ export class ObjectsStage {
     }
 
     if (kind !== 'snapshot') {
-      const resolution = resolveActions({ current: wanted, previous: this.previous, events, ...input });
+      const resolution = resolveActions({
+        current: wanted,
+        previous: this.previous,
+        events,
+        ...input,
+      });
       this.effects.recordSkipped(resolution.skipped);
       for (const hit of resolution.hits) {
         const view = this.views.get(hit.targetId);
-        if (view && HIT_COVER_TYPES.has(view.typeKey)) this.triggerCover(view, hit.attacked && hit.healed
-          ? CREEP_SPEC.cover.colors.both : hit.attacked ? CREEP_SPEC.cover.colors.attack : CREEP_SPEC.cover.colors.heal);
+        if (view && HIT_COVER_TYPES.has(view.typeKey))
+          this.triggerCover(
+            view,
+            hit.attacked && hit.healed
+              ? CREEP_SPEC.cover.colors.both
+              : hit.attacked
+                ? CREEP_SPEC.cover.colors.attack
+                : CREEP_SPEC.cover.colors.heal,
+          );
       }
-      this.effects.play(resolution.commands.filter(c => {
-        if (c.action !== 'say' || !c.private) return true;
-        // No local identity: private speech is invisible (official isPublic||isOwner).
-        if (this.player === null) return false;
-        const state = wanted.get(c.sourceId) ?? this.previous.get(c.sourceId);
-        return state !== undefined && ownerOf(state) === this.player;
-      }));
+      this.effects.play(
+        resolution.commands.filter((c) => {
+          if (c.action !== 'say' || !c.private) return true;
+          // No local identity: private speech is invisible (official isPublic||isOwner).
+          if (this.player === null) return false;
+          const state = wanted.get(c.sourceId) ?? this.previous.get(c.sourceId);
+          return state !== undefined && ownerOf(state) === this.player;
+        }),
+      );
       for (const previous of this.previous.values()) {
-        if (previous.type !== 'nuke' || typeof previous.landTime !== 'number' || previous.landTime <= this.previousTime || previous.landTime > time) continue;
-        const target = point(previous); if (target) this.effects.nukeBlast(target);
+        if (
+          previous.type !== 'nuke' ||
+          typeof previous.landTime !== 'number' ||
+          previous.landTime <= this.previousTime ||
+          previous.landTime > time
+        )
+          continue;
+        const target = point(previous);
+        if (target) this.effects.nukeBlast(target);
       }
     }
     // 官方 effects 层插入序：displayName（名字 overlay）先于一次性效果创建，
@@ -363,8 +410,14 @@ export class ObjectsStage {
           }
           view.overlays.add(node, layer === 'lighting');
         }
-        entry = { node, prev: null, sampled: null, channels: new PropertyChannels(node,
-          () => { if (node.parent === this.lighting.content) this.lighting.markDirty(); }) };
+        entry = {
+          node,
+          prev: null,
+          sampled: null,
+          channels: new PropertyChannels(node, () => {
+            if (node.parent === this.lighting.content) this.lighting.markDirty();
+          }),
+        };
         view.parts.set(decl.id, entry);
       }
       if (!valuesEqual(entry.prev, values)) {
@@ -380,12 +433,23 @@ export class ObjectsStage {
         };
         const keys = continuousKeys(view.typeKey, decl.id);
         const from = entry.sampled;
-        const interpolate = entry.prev !== null && from !== null && keys.some(k => typeof from[k] === 'number' && typeof values[k] === 'number' && from[k] !== values[k]);
+        const interpolate =
+          entry.prev !== null &&
+          from !== null &&
+          keys.some(
+            (k) =>
+              typeof from[k] === 'number' && typeof values[k] === 'number' && from[k] !== values[k],
+          );
         if (interpolate) {
           entry.tween = new ValueTween(from!, values, keys, this.tickDurationMS, write);
-          this.tweens.run(entry.tween, () => { part.tween = undefined; });
+          this.tweens.run(entry.tween, () => {
+            part.tween = undefined;
+          });
           entry.tween.update(0);
-        } else { entry.tween = undefined; write(values); }
+        } else {
+          entry.tween = undefined;
+          write(values);
+        }
         entry.prev = values;
         // lighting 成员在树内的可见性/几何变化不影响 membership——必须显式
         // 置脏离屏 RT（C-B1：官方每帧渲染层恒新鲜，我方 dirty 门控等价物）
@@ -408,7 +472,13 @@ export class ObjectsStage {
       // 标志，否则等 GCSystem 60s 兜底）；其余共享 atlas/standalone 纹理
       // 绝不带 texture 销毁（R2 评审⑤纪律）
       if (node instanceof Text) {
-        node.destroy({ children: true, context: true, style: true, texture: true, textureSource: true });
+        node.destroy({
+          children: true,
+          context: true,
+          style: true,
+          texture: true,
+          textureSource: true,
+        });
       } else {
         node.destroy({ children: true, context: true });
       }
@@ -434,23 +504,36 @@ export class ObjectsStage {
   }
 
   private actorBinding(id: string): ActorBinding | undefined {
-    const view = this.views.get(id); if (!view) return undefined;
+    const view = this.views.get(id);
+    if (!view) return undefined;
     return {
-      get position() { return view.root.position; },
-      get moving() { return view.moveTween !== undefined; },
+      get position() {
+        return view.root.position;
+      },
+      get moving() {
+        return view.moveTween !== undefined;
+      },
       offset: (x, y) => view.position.setOffset(x, y),
       turn: (angle, duration) => {
-        const main = view.parts.get('main'); if (!main) return;
+        const main = view.parts.get('main');
+        if (!main) return;
         if (view.rotateTween) this.tweens.cancel(view.rotateTween);
         view.lastRotation = angle;
-        view.rotateTween = new RotateTween(r => main.channels.setRotation(r), main.node.rotation, angle, duration);
-        this.tweens.run(view.rotateTween, () => { view.rotateTween = undefined; });
+        view.rotateTween = new RotateTween(
+          (r) => main.channels.setRotation(r),
+          main.node.rotation,
+          angle,
+          duration,
+        );
+        this.tweens.run(view.rotateTween, () => {
+          view.rotateTween = undefined;
+        });
       },
-      towerAim: angle => {
+      towerAim: (angle) => {
         const gun = view.parts.get('rotatable')?.node.getChildByLabel('gun');
         if (gun) this.ambient.aim(id, angle, gun);
       },
-      towerGlow: factor => view.parts.get('glowBig')?.channels.sample(factor),
+      towerGlow: (factor) => view.parts.get('glowBig')?.channels.sample(factor),
     };
   }
 
@@ -476,7 +559,9 @@ export class ObjectsStage {
       toY,
       this.tickDurationMS,
     );
-    this.tweens.run(view.moveTween, () => { view.moveTween = undefined; });
+    this.tweens.run(view.moveTween, () => {
+      view.moveTween = undefined;
+    });
 
     const angle = calculateAngle(prevGameX, prevGameY, toX / this.cell, toY / this.cell);
     if (angle !== view.lastRotation) {
@@ -492,7 +577,9 @@ export class ObjectsStage {
           angle,
           this.tickDurationMS * 0.2,
         );
-        this.tweens.run(view.rotateTween, () => { view.rotateTween = undefined; });
+        this.tweens.run(view.rotateTween, () => {
+          view.rotateTween = undefined;
+        });
       }
     }
   }
@@ -588,7 +675,11 @@ export class ObjectsStage {
     view.lastRotation = 0;
     const main = view.parts.get('main')?.node;
     if (main) view.parts.get('main')!.channels.setRotation(0);
-    for (const entry of view.parts.values()) { entry.channels.reset(); entry.prev = null; entry.tween = undefined; }
+    for (const entry of view.parts.values()) {
+      entry.channels.reset();
+      entry.prev = null;
+      entry.tween = undefined;
+    }
   }
 
   private cancelViewTweens(view: ObjectView): void {
@@ -606,7 +697,8 @@ export class ObjectsStage {
     const key = nodes.map((n) => `${n.x},${n.y}`).join(';');
     if (key === this.roadKey) return;
     this.roadKey = key;
-    for (const child of [...this.roadRoot.children]) child.destroy({ children: true, context: true });
+    for (const child of [...this.roadRoot.children])
+      child.destroy({ children: true, context: true });
 
     const r = ROAD_SPEC.radiusFactor * this.cell;
     const rb = r * SIN_45;
@@ -616,13 +708,17 @@ export class ObjectsStage {
       g.position.set(node.x * this.cell, node.y * this.cell);
       g.circle(0, 0, r).fill({ color: ROAD_SPEC.color });
       if (node.mm) {
-        g.poly([rb, -rb, -rb, rb, -rb - l, rb - l, rb - l, -rb - l]).fill({ color: ROAD_SPEC.color });
+        g.poly([rb, -rb, -rb, rb, -rb - l, rb - l, rb - l, -rb - l]).fill({
+          color: ROAD_SPEC.color,
+        });
       }
       if (node.zm) {
         g.poly([r, 0, -r, 0, -r, -l, r, -l]).fill({ color: ROAD_SPEC.color });
       }
       if (node.pm) {
-        g.poly([-rb, -rb, rb, rb, rb + l, rb - l, -rb + l, -rb - l]).fill({ color: ROAD_SPEC.color });
+        g.poly([-rb, -rb, rb, rb, rb + l, rb - l, -rb + l, -rb - l]).fill({
+          color: ROAD_SPEC.color,
+        });
       }
       if (node.mz) {
         g.poly([0, r, 0, -r, -l, -r, -l, r]).fill({ color: ROAD_SPEC.color });
@@ -667,14 +763,27 @@ export class ObjectsStage {
     const merged = mergedOutlinePath(codes, (c) => c !== 0, { cell: this.cell });
     const half = this.cell / 2;
     // paint-order:stroke——描边在下（外半环可见），官方 stroke-width 25
-    const region = rampartRasterBounds(group.cells, this.cell, this.view, this.renderSize, RAMPART_COVER_SPEC.strokeWidth);
-    const canvas = bakeCanvas(merged.path ?? '', this.view, this.renderSize, (ctx, p) => {
-      ctx.lineWidth = RAMPART_COVER_SPEC.strokeWidth;
-      ctx.strokeStyle = cssColor(group.stroke);
-      ctx.stroke(p);
-      ctx.fillStyle = cssColor(group.fill);
-      ctx.fill(p);
-    }, region, previous?.texture.source.resource as HTMLCanvasElement | undefined);
+    const region = rampartRasterBounds(
+      group.cells,
+      this.cell,
+      this.view,
+      this.renderSize,
+      RAMPART_COVER_SPEC.strokeWidth,
+    );
+    const canvas = bakeCanvas(
+      merged.path ?? '',
+      this.view,
+      this.renderSize,
+      (ctx, p) => {
+        ctx.lineWidth = RAMPART_COVER_SPEC.strokeWidth;
+        ctx.strokeStyle = cssColor(group.stroke);
+        ctx.stroke(p);
+        ctx.fillStyle = cssColor(group.fill);
+        ctx.fill(p);
+      },
+      region,
+      previous?.texture.source.resource as HTMLCanvasElement | undefined,
+    );
     let sprite = previous;
     if (sprite) {
       sprite.texture.source.update();
@@ -703,7 +812,8 @@ export class ObjectsStage {
     this.views.clear();
     for (const slot of [...this.slots.values()]) slot.destroy({ children: true, context: true });
     this.slots.clear();
-    for (const child of [...this.roadRoot.children]) child.destroy({ children: true, context: true });
+    for (const child of [...this.roadRoot.children])
+      child.destroy({ children: true, context: true });
     // 顶罩为烘焙私有 canvas 纹理——可带纹理销毁
     for (const child of [...this.coverRoot.children]) {
       child.destroy({ children: true, context: true, texture: true, textureSource: true });

@@ -46,7 +46,9 @@ export function rampartGroups(
     groups.push({ user: user || null, cells, fill: color.fill, stroke: color.stroke });
   }
   // 码点比较（B-S6：localeCompare 有 ICU 环境差异，违背夹具确定性纪律）
-  return groups.sort((a, b) => (a.user ?? '') < (b.user ?? '') ? -1 : (a.user ?? '') > (b.user ?? '') ? 1 : 0);
+  return groups.sort((a, b) =>
+    (a.user ?? '') < (b.user ?? '') ? -1 : (a.user ?? '') > (b.user ?? '') ? 1 : 0,
+  );
 }
 
 /** 组重建门控键（cells + 色；FNV 门控语义同地形）。 */
@@ -61,12 +63,19 @@ export function rampartGroupHash(group: RampartGroup): string {
 }
 
 /** Full-room pixel bounds, including stroke/AA; room-edge clipping stays identical. */
-export function rampartRasterBounds(cells: readonly number[], cell: number, view: number, renderSize: number, strokeWidth: number) {
+export function rampartRasterBounds(
+  cells: readonly number[],
+  cell: number,
+  view: number,
+  renderSize: number,
+  strokeWidth: number,
+) {
   const scale = renderSize / view;
-  cells = cells.filter(i => Number.isInteger(i) && i >= 0 && i < ROOM_GRID * ROOM_GRID);
+  cells = cells.filter((i) => Number.isInteger(i) && i >= 0 && i < ROOM_GRID * ROOM_GRID);
   if (cells.length === 0) return { x: 0, y: 0, width: 1, height: 1 };
-  const xs = cells.map(i => i % ROOM_GRID), ys = cells.map(i => Math.floor(i / ROOM_GRID));
-  const margin = strokeWidth * scale / 2 + 1;
+  const xs = cells.map((i) => i % ROOM_GRID),
+    ys = cells.map((i) => Math.floor(i / ROOM_GRID));
+  const margin = (strokeWidth * scale) / 2 + 1;
   const x = Math.max(0, Math.floor(Math.min(...xs) * cell * scale - margin));
   const y = Math.max(0, Math.floor(Math.min(...ys) * cell * scale - margin));
   const right = Math.min(renderSize, Math.ceil((Math.max(...xs) + 1) * cell * scale + margin));

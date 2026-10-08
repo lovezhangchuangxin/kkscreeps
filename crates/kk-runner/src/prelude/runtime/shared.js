@@ -24,14 +24,33 @@
   const hasProbes = new Map();
   // 忽略 Promise 检查、序列化和内部坐标探测等常见属性访问，降低诊断噪声。
   // 这些豁免只影响诊断；不存在的属性仍返回 undefined。
-  const PROBE_IGNORE = new Set(['then', 'constructor', '__proto__', 'prototype', 'inspect', 'toJSON', 'nodeType', 'length', 'name', 'pos', '__packedPos', 'x', 'y']);
+  const PROBE_IGNORE = new Set([
+    'then',
+    'constructor',
+    '__proto__',
+    'prototype',
+    'inspect',
+    'toJSON',
+    'nodeType',
+    'length',
+    'name',
+    'pos',
+    '__packedPos',
+    'x',
+    'y',
+  ]);
   // 仅豁免 Flag.ref、StructureSpawn.storeCapacity 与 Room 挂载三键的缺失诊断。
   // Room.controller/storage/terminal 官方为「结构存在才有键」（structures.js:41-56
   // 构造器挂载）——建造前读 undefined 属官方语义，逐 tick 的建造前探测不是
   // 缺 API。按标签冒号前的类名判断；旗帜名中包含冒号不影响分类。
   // 来源：上游 engine/src/game/flags.js 与 structures.js 的属性定义。
-  const PROBE_IGNORE_SCOPED = new Set(['Flag.ref', 'StructureSpawn.storeCapacity',
-    'Room.controller', 'Room.storage', 'Room.terminal']);
+  const PROBE_IGNORE_SCOPED = new Set([
+    'Flag.ref',
+    'StructureSpawn.storeCapacity',
+    'Room.controller',
+    'Room.storage',
+    'Room.terminal',
+  ]);
   const classOfLabel = (basePath) => {
     // 两段剥离：冒号前（命名对象如 'Creep:采集者'）与方括号前（带名标签
     // 如 'Room[W1N1]'）——都取类名部分做豁免匹配。
@@ -45,8 +64,12 @@
   function probe(target, basePath) {
     return new Proxy(target, {
       get(t, prop) {
-        if (typeof prop === 'string' && !(prop in t) && !PROBE_IGNORE.has(prop)
-          && !PROBE_IGNORE_SCOPED.has(classOfLabel(basePath) + '.' + prop)) {
+        if (
+          typeof prop === 'string' &&
+          !(prop in t) &&
+          !PROBE_IGNORE.has(prop) &&
+          !PROBE_IGNORE_SCOPED.has(classOfLabel(basePath) + '.' + prop)
+        ) {
           reportMissing(basePath + '.' + prop);
         }
         return t[prop];
@@ -54,8 +77,13 @@
       has(t, prop) {
         // 含 ./[ 的"属性名"是 lodash 等库的路径探测串（如 isKey 对 'owner.username'
         // 整串做 in 检查），不是真实属性访问，不报仪表
-        if (typeof prop === 'string' && !prop.includes('.') && !prop.includes('[')
-          && !(prop in t) && !PROBE_IGNORE.has(prop)) {
+        if (
+          typeof prop === 'string' &&
+          !prop.includes('.') &&
+          !prop.includes('[') &&
+          !(prop in t) &&
+          !PROBE_IGNORE.has(prop)
+        ) {
           hasProbes.set(basePath + '.' + prop, (hasProbes.get(basePath + '.' + prop) || 0) + 1);
         }
         return prop in t;
@@ -81,23 +109,28 @@
   // falsy 分支官方用调用时全局 stringify（console.js:25 逐字）——玩家覆写全局
   // 影响自家 console 渲染是官方行为，保持一致
   function fmtArgs(args) {
-    return __reflectApply(__arrayMap, args, [(i) => {
-      if (i && i.toString) return i.toString();
-      if (typeof i === 'undefined') return 'undefined';
-      return JSON.stringify(i);
-    }]).join(' ');
+    return __reflectApply(__arrayMap, args, [
+      (i) => {
+        if (i && i.toString) return i.toString();
+        if (typeof i === 'undefined') return 'undefined';
+        return JSON.stringify(i);
+      },
+    ]).join(' ');
   }
   const mkLevel = (level) =>
     function (...args) {
       ops.op_kk_console(level, fmtArgs(args));
     };
-  globalThis.console = probe({
-    log: mkLevel('log'),
-    info: mkLevel('info'),
-    warn: mkLevel('warn'),
-    error: mkLevel('error'),
-    debug: mkLevel('debug'),
-  }, 'console');
+  globalThis.console = probe(
+    {
+      log: mkLevel('log'),
+      info: mkLevel('info'),
+      warn: mkLevel('warn'),
+      error: mkLevel('error'),
+      debug: mkLevel('debug'),
+    },
+    'console',
+  );
 
   // ---------------------------------------------------------------- lodash
   // lodash 资产脚本已执行并把结果放在 globalThis.__kkLodash（CJS 导出或 UMD 根挂载）。
@@ -110,7 +143,17 @@
 
   // ---------------------------------------------------------------- 段间私有上下文
   // Rust 捕获宿主句柄后删除本属性；各段在自身加载时捕获所需引用进闭包。
-  globalThis.__kkp = { ops, probe, reportMissing, PROBE_IGNORE, missing, hasProbes, stubCalls, countStub, lodash: _,
+  globalThis.__kkp = {
+    ops,
+    probe,
+    reportMissing,
+    PROBE_IGNORE,
+    missing,
+    hasProbes,
+    stubCalls,
+    countStub,
+    lodash: _,
     // 通过闭包中的 op 请求主动中断；Rust 据此区分 halt 与预算超时。
-    cpuHalt: () => ops.op_kk_cpu_halt() };
+    cpuHalt: () => ops.op_kk_cpu_halt(),
+  };
 })();

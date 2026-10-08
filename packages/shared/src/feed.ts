@@ -230,7 +230,10 @@ export function isRoomVisual(value: unknown): value is RoomVisual {
   const v = value as RoomVisual;
   const num = (n: unknown): boolean => typeof n === 'number' && Number.isFinite(n);
   const isPoint = (p: unknown): boolean =>
-    typeof p === 'object' && p !== null && num((p as { x: unknown }).x) && num((p as { y: unknown }).y);
+    typeof p === 'object' &&
+    p !== null &&
+    num((p as { x: unknown }).x) &&
+    num((p as { y: unknown }).y);
   switch (v.type) {
     case 'line':
       return Array.isArray(v.points) && v.points.length === 2 && v.points.every(isPoint);

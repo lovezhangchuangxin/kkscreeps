@@ -6,7 +6,7 @@ module.exports.loop = function () {
   const room = Game.rooms.W1N1;
   const spawn = Game.spawns.Spawn1;
   const source = room.find(FIND_SOURCES)[0];
-  const container = room.find(FIND_STRUCTURES).find(s => s.structureType === STRUCTURE_CONTAINER);
+  const container = room.find(FIND_STRUCTURES).find((s) => s.structureType === STRUCTURE_CONTAINER);
 
   if (!spawn.spawning) {
     for (const role of ['miner', 'upgrader']) {
@@ -26,13 +26,15 @@ module.exports.loop = function () {
       if (!creep.store.getFreeCapacity()) creep.memory.delivering = true;
       if (creep.memory.delivering) {
         const target = spawn.store.getFreeCapacity(RESOURCE_ENERGY) ? spawn : container;
-        if (target.store.getFreeCapacity(RESOURCE_ENERGY)) actions.perform(creep, target, 'transfer');
+        if (target.store.getFreeCapacity(RESOURCE_ENERGY))
+          actions.perform(creep, target, 'transfer');
       } else if (source.energy) {
         actions.perform(creep, source, 'harvest');
       }
     } else if (creep.memory.role === 'upgrader') {
       if (creep.memory.upgrading && !creep.store.energy) creep.memory.upgrading = false;
-      if (!creep.store.getFreeCapacity() || (creep.store.energy && !container.store.energy)) creep.memory.upgrading = true;
+      if (!creep.store.getFreeCapacity() || (creep.store.energy && !container.store.energy))
+        creep.memory.upgrading = true;
       if (creep.memory.upgrading) actions.perform(creep, room.controller, 'upgradeController');
       else if (container.store.energy) actions.perform(creep, container, 'withdraw');
     } else {

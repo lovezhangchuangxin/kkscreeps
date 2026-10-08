@@ -9,7 +9,15 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 // 门禁不能沿用调用方指定的旧二进制；CLI 构建与 JS 测试共享同一绝对路径。
-export function runCheck(argv, { run = spawnSync, env = process.env, now = () => performance.now(), root = resolve(import.meta.dirname, '..') } = {}) {
+export function runCheck(
+  argv,
+  {
+    run = spawnSync,
+    env = process.env,
+    now = () => performance.now(),
+    root = resolve(import.meta.dirname, '..'),
+  } = {},
+) {
   const args = [];
   let target;
   let filter;
@@ -18,7 +26,11 @@ export function runCheck(argv, { run = spawnSync, env = process.env, now = () =>
     if (arg === '--') continue;
     if (arg === '--test' || arg === '--filter') {
       const value = argv[++i];
-      if (!value || value.startsWith('--') || (arg === '--test' ? target !== undefined : filter !== undefined)) {
+      if (
+        !value ||
+        value.startsWith('--') ||
+        (arg === '--test' ? target !== undefined : filter !== undefined)
+      ) {
         console.error(`check: ${arg} 须指定一个非空值，且不可重复`);
         return 1;
       }
@@ -31,13 +43,22 @@ export function runCheck(argv, { run = spawnSync, env = process.env, now = () =>
       return 1;
     }
   }
-  if ((target && (args.length !== 1 || !/^[\w-]+$/.test(target))) || (filter !== undefined && !target)) {
+  if (
+    (target && (args.length !== 1 || !/^[\w-]+$/.test(target))) ||
+    (filter !== undefined && !target)
+  ) {
     console.error('check: --test 要求恰好一个 crate；--filter 必须与 --test 一起使用');
     return 1;
   }
   const selection = args.length ? args.flatMap((c) => ['-p', c]) : ['--workspace'];
-  const tests = target ? ['--test', target, ...(filter !== undefined ? [filter] : [])] : ['--tests'];
-  const testEnv = { ...env, CARGO_TARGET_DIR: resolve(root, 'target'), KKSCREEPS_BIN: resolve(root, 'target/debug/kkscreeps') };
+  const tests = target
+    ? ['--test', target, ...(filter !== undefined ? [filter] : [])]
+    : ['--tests'];
+  const testEnv = {
+    ...env,
+    CARGO_TARGET_DIR: resolve(root, 'target'),
+    KKSCREEPS_BIN: resolve(root, 'target/debug/kkscreeps'),
+  };
 
   // 完整门禁不可继承开发时的场景过滤。
   delete testEnv.KKSCREEPS_SCENARIO;
@@ -45,12 +66,20 @@ export function runCheck(argv, { run = spawnSync, env = process.env, now = () =>
   const steps = [
     ['格式检查', ['cargo', 'fmt', '--all', '--check']],
     ['Clippy', ['cargo', 'clippy', ...selection, '--all-targets']],
-    ...(target ? [['Rust 目标发现', ['cargo', 'test', ...selection, ...tests, '--', '--list']]] : []),
+    ...(target
+      ? [['Rust 目标发现', ['cargo', 'test', ...selection, ...tests, '--', '--list']]]
+      : []),
     ['Rust 测试（不含 doctest）', ['cargo', 'test', ...selection, ...tests]],
     ['构建测试 CLI', ['cargo', 'build', '-p', 'kk-cli']],
     ['门禁回归', ['node', '--test', 'scripts/check.test.mjs', 'scripts/check-doc-links.test.mjs']],
-    ['Python 工具测试', ['python3', '-m', 'unittest', 'discover', '-s', 'scripts/tests', '-p', 'test_*.py']],
-    ['性能工具测试', ['python3', '-m', 'unittest', 'discover', '-s', 'scripts/benchmark', '-p', '*test*.py']],
+    [
+      'Python 工具测试',
+      ['python3', '-m', 'unittest', 'discover', '-s', 'scripts/tests', '-p', 'test_*.py'],
+    ],
+    [
+      '性能工具测试',
+      ['python3', '-m', 'unittest', 'discover', '-s', 'scripts/benchmark', '-p', '*test*.py'],
+    ],
     ['JS workspace 测试', ['pnpm', 'run', '-r', 'test']],
     ['文档链接', ['node', 'scripts/check-doc-links.mjs']],
     ['源码规模', ['node', 'scripts/check-source-size.mjs']],
@@ -62,7 +91,9 @@ export function runCheck(argv, { run = spawnSync, env = process.env, now = () =>
     const discovery = label === 'Rust 目标发现';
     const result = run(command[0], command.slice(1), {
       stdio: discovery ? ['inherit', 'pipe', 'inherit'] : 'inherit',
-      ...(discovery ? { encoding: 'utf8' } : {}), cwd: root, env: testEnv,
+      ...(discovery ? { encoding: 'utf8' } : {}),
+      cwd: root,
+      env: testEnv,
     });
     console.log(`check · ${label} · ${((now() - started) / 1000).toFixed(2)}s`);
     if (result.status !== 0) {
@@ -79,9 +110,13 @@ export function runCheck(argv, { run = spawnSync, env = process.env, now = () =>
     }
   }
   if (args.length) {
-    console.log(`\ncheck 通过（限定子集：${args.join(' ')}${target ? ` / ${target}` : ''}${filter !== undefined ? ` / 过滤 ${filter}` : ''}——提交前须再跑无参数的完整 pnpm run check）`);
+    console.log(
+      `\ncheck 通过（限定子集：${args.join(' ')}${target ? ` / ${target}` : ''}${filter !== undefined ? ` / 过滤 ${filter}` : ''}——提交前须再跑无参数的完整 pnpm run check）`,
+    );
   } else {
-    console.log('\ncheck 通过（完整门禁；doctest 不在其中，改动或新增 doctest 时手动跑 cargo test -p <crate> --doc）');
+    console.log(
+      '\ncheck 通过（完整门禁；doctest 不在其中，改动或新增 doctest 时手动跑 cargo test -p <crate> --doc）',
+    );
   }
   return 0;
 }

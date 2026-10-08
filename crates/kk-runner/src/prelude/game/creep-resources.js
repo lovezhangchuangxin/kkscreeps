@@ -34,8 +34,7 @@
     const objs = gw.world.objects || [];
     for (let i = 0; i < objs.length; i++) {
       const o = objs[i];
-      if (o.type === 'structure' && o.structureType === 'controller'
-        && o.owner === gw.viewerName) {
+      if (o.type === 'structure' && o.structureType === 'controller' && o.owner === gw.viewerName) {
         seen.add(o.room);
       }
     }
@@ -55,9 +54,30 @@
   /** 官方 structureTypes 键集（game.js:224-247，21 型）+ 'wall' 投影别名
    *  （classGlobalFor 将 wall/constructedWall 归并 StructureWall——手写世界
    *  两种拼法等价；官方 raw type 恒为 'constructedWall'）。 */
-  const STRUCTURE_REGISTER_TYPES = new Set(['rampart', 'road', 'extension', 'constructedWall', 'wall',
-    'keeperLair', 'controller', 'link', 'storage', 'tower', 'observer', 'powerBank', 'powerSpawn',
-    'lab', 'extractor', 'terminal', 'container', 'spawn', 'nuker', 'portal', 'factory', 'invaderCore']);
+  const STRUCTURE_REGISTER_TYPES = new Set([
+    'rampart',
+    'road',
+    'extension',
+    'constructedWall',
+    'wall',
+    'keeperLair',
+    'controller',
+    'link',
+    'storage',
+    'tower',
+    'observer',
+    'powerBank',
+    'powerSpawn',
+    'lab',
+    'extractor',
+    'terminal',
+    'container',
+    'spawn',
+    'nuker',
+    'portal',
+    'factory',
+    'invaderCore',
+  ]);
 
   /** register.structures[id] 的投影等价（官方 game.js:295-299 收录 + :224-247
    *  键集；spawn 的 raw type 是 'spawn' 单列）。命中返回 raw 投影（官方表存
@@ -66,10 +86,13 @@
     const raw = gw.rawById.get(id);
     if (!raw) return undefined;
     if (raw.type === 'spawn') return raw;
-    if (raw.type === 'structure'
-      && (STRUCTURE_REGISTER_TYPES.has(raw.structureType)
-        || (gw.modApi !== undefined && gw.modApi.buildings !== undefined
-          && gw.modApi.buildings[raw.structureType] !== undefined))) {
+    if (
+      raw.type === 'structure' &&
+      (STRUCTURE_REGISTER_TYPES.has(raw.structureType) ||
+        (gw.modApi !== undefined &&
+          gw.modApi.buildings !== undefined &&
+          gw.modApi.buildings[raw.structureType] !== undefined))
+    ) {
       return raw;
     }
     return undefined;
@@ -86,7 +109,9 @@
    *  拒绝——预检拒绝分支的抛错点，文案逐字。 */
   function assertTargetObject(obj) {
     if (obj && isPlainObject(obj) && typeof obj.id === 'string' && obj.id.length === 24) {
-      throw new Error("It seems you're trying to use a serialized game object stored in Memory which is not allowed. Please use `Game.getObjectById` to retrieve a live object reference instead.");
+      throw new Error(
+        "It seems you're trying to use a serialized game object stored in Memory which is not allowed. Please use `Game.getObjectById` to retrieve a live object reference instead.",
+      );
     }
   }
   // _.isPlainObject 等价（原型为 Object.prototype 或 null）——经 gw.__Object
@@ -140,8 +165,10 @@
     }
     switch (structureKindOf(raw)) {
       case 'spawn': // build.js:124：scr {energy: SPAWN_ENERGY_CAPACITY}
-        return { capacity: undefined,
-          perResource: { energy: raw.energyCapacity || C.SPAWN_ENERGY_CAPACITY } };
+        return {
+          capacity: undefined,
+          perResource: { energy: raw.energyCapacity || C.SPAWN_ENERGY_CAPACITY },
+        };
       case 'extension': // build.js:134 落成 0，extensions/tick.js:8-17 按 rcl 归一
         return { capacity: undefined, perResource: { energy: extensionCapacityIn(raw.room) } };
       case 'storage': // build.js:155
@@ -157,14 +184,23 @@
       case 'link': // build.js:144
         return { capacity: undefined, perResource: { energy: C.LINK_CAPACITY } };
       case 'lab': // build.js:230-231
-        return { capacity: C.LAB_ENERGY_CAPACITY + C.LAB_MINERAL_CAPACITY,
-          perResource: { energy: C.LAB_ENERGY_CAPACITY } };
+        return {
+          capacity: C.LAB_ENERGY_CAPACITY + C.LAB_MINERAL_CAPACITY,
+          perResource: { energy: C.LAB_ENERGY_CAPACITY },
+        };
       case 'powerSpawn': // build.js:239
-        return { capacity: undefined,
-          perResource: { energy: C.POWER_SPAWN_ENERGY_CAPACITY, power: C.POWER_SPAWN_POWER_CAPACITY } };
+        return {
+          capacity: undefined,
+          perResource: {
+            energy: C.POWER_SPAWN_ENERGY_CAPACITY,
+            power: C.POWER_SPAWN_POWER_CAPACITY,
+          },
+        };
       case 'nuker': // build.js:265（ptr 变体不建模）
-        return { capacity: undefined,
-          perResource: { energy: C.NUKER_ENERGY_CAPACITY, G: C.NUKER_GHODIUM_CAPACITY } };
+        return {
+          capacity: undefined,
+          perResource: { energy: C.NUKER_ENERGY_CAPACITY, G: C.NUKER_GHODIUM_CAPACITY },
+        };
       default: // 其余类型官方无容量键 ⇒ capacityForResource 得 0
         return { capacity: undefined, perResource: undefined };
     }
@@ -208,7 +244,8 @@
   globalThis.Creep.prototype.drop = function drop(resourceType, amount) {
     if (!this.my) return C.ERR_NOT_OWNER; // :405-407
     if (this.spawning) return C.ERR_BUSY; // :408-410
-    if (!__reflectApply(__arrayIncludes, C.RESOURCES_ALL || [], [resourceType])) return C.ERR_INVALID_ARGS; // :411-413
+    if (!__reflectApply(__arrayIncludes, C.RESOURCES_ALL || [], [resourceType]))
+      return C.ERR_INVALID_ARGS; // :411-413
     if (!gw.rawData(this.id).store || !gw.rawData(this.id).store[resourceType]) {
       return C.ERR_NOT_ENOUGH_RESOURCES; // :414-416
     }
@@ -225,7 +262,8 @@
     if (!this.my) return C.ERR_NOT_OWNER; // :429-431
     if (this.spawning) return C.ERR_BUSY; // :432-434
     if (amount < 0) return C.ERR_INVALID_ARGS; // :435-437
-    if (!__reflectApply(__arrayIncludes, C.RESOURCES_ALL || [], [resourceType])) return C.ERR_INVALID_ARGS; // :438-440
+    if (!__reflectApply(__arrayIncludes, C.RESOURCES_ALL || [], [resourceType]))
+      return C.ERR_INVALID_ARGS; // :438-440
     // 有 store 时短路跳过 structEntry 解引用；无 store 的非结构目标可能在此抛 TypeError。
     // 不建模 customObjects。来源：上游 engine/src/game/creeps.js 的 transfer 目标检查。
     if (!target || !target.id) {
@@ -236,28 +274,38 @@
     const targetRaw = gw.rawById.get(target.id);
     // Mod 库存对象目标族（G09.a）：带 store 信封的 Mod 记录经其玩家类
     // 绑定接收（与结构/creep 族并列）；预检读投影信封，与结算同源。
-    const modEntry = targetRaw !== undefined && targetRaw.type === 'mod'
-      && gw.modApi !== undefined && gw.modApi.types !== undefined
-        ? gw.modApi.types[targetRaw.modType] : undefined;
-    const inRegisters = structEntry !== undefined
-      || !!targetRaw && (targetRaw.type === 'creep' || targetRaw.type === 'powerCreep')
-      || modEntry !== undefined;
-    if (!inRegisters
-      || (!gw.rawData(target.id).store
-        && (structEntry === undefined || structEntry.structureType !== 'controller'))
-      || (target instanceof globalThis.Creep && target.spawning) // :445
-      || !(target instanceof globalThis.StructureSpawn)
-        && !(target instanceof globalThis.Structure)
-        && !(target instanceof globalThis.Creep)
-        && !(target instanceof globalThis.PowerCreep)
-        && !(modEntry !== undefined && target instanceof modEntry.cls)) {
+    const modEntry =
+      targetRaw !== undefined &&
+      targetRaw.type === 'mod' &&
+      gw.modApi !== undefined &&
+      gw.modApi.types !== undefined
+        ? gw.modApi.types[targetRaw.modType]
+        : undefined;
+    const inRegisters =
+      structEntry !== undefined ||
+      (!!targetRaw && (targetRaw.type === 'creep' || targetRaw.type === 'powerCreep')) ||
+      modEntry !== undefined;
+    if (
+      !inRegisters ||
+      (!gw.rawData(target.id).store &&
+        (structEntry === undefined || structEntry.structureType !== 'controller')) ||
+      (target instanceof globalThis.Creep && target.spawning) || // :445
+      (!(target instanceof globalThis.StructureSpawn) &&
+        !(target instanceof globalThis.Structure) &&
+        !(target instanceof globalThis.Creep) &&
+        !(target instanceof globalThis.PowerCreep) &&
+        !(modEntry !== undefined && target instanceof modEntry.cls))
+    ) {
       assertTargetObject(target);
       return C.ERR_INVALID_TARGET;
     }
     // 向控制器 transfer 能量时转发 upgradeController，复用其权限、部件和距离检查。
     // 来源：上游 engine/src/game/creeps.js 的 transfer。
-    if (resourceType === C.RESOURCE_ENERGY && structEntry
-      && structureKindOf(structEntry) === 'controller') {
+    if (
+      resourceType === C.RESOURCE_ENERGY &&
+      structEntry &&
+      structureKindOf(structEntry) === 'controller'
+    ) {
       return this.upgradeController(target);
     }
     const rawTarget = gw.rawData(target.id);
@@ -269,7 +317,9 @@
     // :470-471：scr 目标按资源槽、通用仓按总量（calcResources —— 同 tick 内
     // wrapper store 求和 === raw store 求和，raw 面等价）
     const fields = capacityFields(rawTarget);
-    const storedAmount = fields.perResource ? (rawTarget.store[resourceType] || 0) : sumStore(rawTarget);
+    const storedAmount = fields.perResource
+      ? rawTarget.store[resourceType] || 0
+      : sumStore(rawTarget);
     const targetCapacity = capacityForResource(rawTarget, resourceType);
     if (!rawTarget.store || storedAmount >= targetCapacity) return C.ERR_FULL; // :473-475
     if (!amount) {
@@ -287,7 +337,8 @@
     if (!this.my) return C.ERR_NOT_OWNER; // :494-496
     if (this.spawning) return C.ERR_BUSY; // :497-499
     if (amount < 0) return C.ERR_INVALID_ARGS; // :500-502
-    if (!__reflectApply(__arrayIncludes, C.RESOURCES_ALL || [], [resourceType])) return C.ERR_INVALID_ARGS; // :503-505
+    if (!__reflectApply(__arrayIncludes, C.RESOURCES_ALL || [], [resourceType]))
+      return C.ERR_INVALID_ARGS; // :503-505
     // 目标门 :507-516：store 面在 data() 读——未知 id 在此抛官方同文案错误
     // （rawData 的求值点 = 官方第三操作数，早于 assertTargetObject）
     if (!target || !target.id) {
@@ -299,14 +350,20 @@
     // Mod 库存对象目标族（G09.a）：带 store 信封的 Mod 记录经其玩家类
     // 绑定提取；结构专属拒绝（terminal 封锁/nuker/powerBank）不适用。
     const targetRaw = gw.rawById.get(target.id);
-    const modEntry = targetRaw !== undefined && targetRaw.type === 'mod'
-      && gw.modApi !== undefined && gw.modApi.types !== undefined
-        ? gw.modApi.types[targetRaw.modType] : undefined;
-    if (!rawTarget.store
-      || ((!structEntry || !(target instanceof globalThis.Structure))
-        && !(target instanceof globalThis.Tombstone)
-        && !(target instanceof globalThis.Ruin)
-        && !(modEntry !== undefined && target instanceof modEntry.cls))) {
+    const modEntry =
+      targetRaw !== undefined &&
+      targetRaw.type === 'mod' &&
+      gw.modApi !== undefined &&
+      gw.modApi.types !== undefined
+        ? gw.modApi.types[targetRaw.modType]
+        : undefined;
+    if (
+      !rawTarget.store ||
+      ((!structEntry || !(target instanceof globalThis.Structure)) &&
+        !(target instanceof globalThis.Tombstone) &&
+        !(target instanceof globalThis.Ruin) &&
+        !(modEntry !== undefined && target instanceof modEntry.cls))
+    ) {
       assertTargetObject(target);
       return C.ERR_INVALID_TARGET;
     }
@@ -316,9 +373,12 @@
       if (effect && effect.ticksRemaining > 0) return C.ERR_INVALID_TARGET;
     }
     // 敌方非公开 rampart 保护的目标不能提取资源；公开 rampart 不触发此拒绝。
-    if (target.my === false
-      && target.pos.lookFor('structure').some(
-        (i) => i.structureType === C.STRUCTURE_RAMPART && !i.my && !i.isPublic)) {
+    if (
+      target.my === false &&
+      target.pos
+        .lookFor('structure')
+        .some((i) => i.structureType === C.STRUCTURE_RAMPART && !i.my && !i.isPublic)
+    ) {
       return C.ERR_NOT_OWNER;
     }
     // :528-530：他人 safeMode 生效期拒（this.room 官方直解引用；引擎态房间恒
@@ -326,13 +386,19 @@
     const ctl = this.room && this.room.controller;
     if (ctl && !ctl.my && ctl.safeMode) return C.ERR_NOT_OWNER;
     // :532-534：nuker/powerBank 不可提取
-    if (structEntry && (structureKindOf(structEntry) === C.STRUCTURE_NUKER
-      || structureKindOf(structEntry) === C.STRUCTURE_POWER_BANK)) {
+    if (
+      structEntry &&
+      (structureKindOf(structEntry) === C.STRUCTURE_NUKER ||
+        structureKindOf(structEntry) === C.STRUCTURE_POWER_BANK)
+    ) {
       return C.ERR_INVALID_TARGET;
     }
     // :536-538：容量 0 且目标无该资源且非 Tombstone 拒
-    if (!capacityForResource(rawTarget, resourceType) && !rawTarget.store[resourceType]
-      && !(target instanceof globalThis.Tombstone)) {
+    if (
+      !capacityForResource(rawTarget, resourceType) &&
+      !rawTarget.store[resourceType] &&
+      !(target instanceof globalThis.Tombstone)
+    ) {
       return C.ERR_INVALID_TARGET;
     }
     if (!target.pos.isNearTo(this.pos)) return C.ERR_NOT_IN_RANGE; // :540-542
@@ -355,8 +421,13 @@
     if (this.spawning) return C.ERR_BUSY; // :571-573
     // 目标门 :574-577（register.energy 的投影等价 = raw type 'resource'）
     const rawTarget = target ? gw.rawById.get(target.id) : undefined;
-    if (!target || !target.id || !rawTarget || rawTarget.type !== 'resource'
-      || !(target instanceof globalThis.Energy)) {
+    if (
+      !target ||
+      !target.id ||
+      !rawTarget ||
+      rawTarget.type !== 'resource' ||
+      !(target instanceof globalThis.Energy)
+    ) {
       assertTargetObject(target);
       return C.ERR_INVALID_TARGET;
     }
@@ -380,8 +451,10 @@
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;
     const controllersClaimed = myClaimedRoomCount() + (gw.controllersClaimedInTick || 0);
-    if (controllersClaimed
-      && (!gclPoints() || gclPoints() < calcNeededGcl(controllersClaimed + 1))) {
+    if (
+      controllersClaimed &&
+      (!gclPoints() || gclPoints() < calcNeededGcl(controllersClaimed + 1))
+    ) {
       return C.ERR_GCL_NOT_ENOUGH;
     }
     if (!(target && target.id && target instanceof globalThis.Structure)) {
@@ -421,7 +494,6 @@
     return C.OK;
   };
 
-
   /** 依次检查权限、孵化、WORK、能量、控制器类型、升级封锁、3 格距离与目标归属。
    * 检查顺序会决定多个条件同时失败时的返回码。来源：上游 engine/src/game/creeps.js 的 upgradeController。 */
   globalThis.Creep.prototype.upgradeController = function upgradeController(target) {
@@ -429,8 +501,7 @@
     if (this.spawning) return C.ERR_BUSY;
     if (countActiveParts(this.body, C.WORK) === 0) return C.ERR_NO_BODYPART;
     if (!this.carry.energy) return C.ERR_NOT_ENOUGH_RESOURCES;
-    if (!target || !target.id
-      || !(target instanceof globalThis.StructureController)) {
+    if (!target || !target.id || !(target instanceof globalThis.StructureController)) {
       return C.ERR_INVALID_TARGET;
     }
     if (target.upgradeBlocked && target.upgradeBlocked > 0) return C.ERR_INVALID_TARGET;
@@ -526,9 +597,14 @@
   globalThis.Creep.prototype.pull = function pull(target) {
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;
-    if (!target || !target.id || !gw.rawById.has(target.id)
-      || !(target instanceof globalThis.Creep) || target.spawning
-      || target.id == this.id) {
+    if (
+      !target ||
+      !target.id ||
+      !gw.rawById.has(target.id) ||
+      !(target instanceof globalThis.Creep) ||
+      target.spawning ||
+      target.id == this.id
+    ) {
       return C.ERR_INVALID_TARGET;
     }
     if (!target.pos.isNearTo(this.pos)) return C.ERR_NOT_IN_RANGE;

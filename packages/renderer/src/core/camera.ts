@@ -37,7 +37,15 @@ export class CameraController {
   private clamp(cam: CameraState): CameraState {
     if (!this.bounds) return cam;
     const { width, height } = this.getViewSize();
-    return clampToRect(cam, width, height, this.bounds.minX, this.bounds.minY, this.bounds.maxX, this.bounds.maxY);
+    return clampToRect(
+      cam,
+      width,
+      height,
+      this.bounds.minX,
+      this.bounds.minY,
+      this.bounds.maxX,
+      this.bounds.maxY,
+    );
   }
 
   private readonly onWheel = (e: WheelEvent) => {
@@ -50,7 +58,9 @@ export class CameraController {
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
     const factor = Math.exp(-delta * 0.0015);
-    this.cam = this.clamp(zoomAtScreenPoint(this.cam, width, height, sx, sy, factor, this.minZoom, this.maxZoom));
+    this.cam = this.clamp(
+      zoomAtScreenPoint(this.cam, width, height, sx, sy, factor, this.minZoom, this.maxZoom),
+    );
     this.apply();
   };
   private readonly onPointerDown = (e: PointerEvent) => {
@@ -72,12 +82,17 @@ export class CameraController {
     if (this.draggingPointerId === null || e.pointerId !== this.draggingPointerId) return;
     this.draggingPointerId = null;
     // pointercancel 路径浏览器可能已隐式释放捕获，先查再放
-    if (this.canvas!.hasPointerCapture(e.pointerId)) this.canvas!.releasePointerCapture(e.pointerId);
+    if (this.canvas!.hasPointerCapture(e.pointerId))
+      this.canvas!.releasePointerCapture(e.pointerId);
     this.canvas!.style.cursor = 'grab';
   };
   private readonly onContextMenu = (e: MouseEvent) => e.preventDefault();
 
-  constructor(stage: Container, getViewSize: () => { width: number; height: number }, options: CameraOptions = {}) {
+  constructor(
+    stage: Container,
+    getViewSize: () => { width: number; height: number },
+    options: CameraOptions = {},
+  ) {
     this.stage = stage;
     this.getViewSize = getViewSize;
     this.minZoom = options.minZoom ?? MIN_ZOOM;
@@ -120,7 +135,8 @@ export class CameraController {
     canvas.removeEventListener('pointerleave', this.endDrag);
     const pointerId = this.draggingPointerId;
     this.draggingPointerId = null;
-    if (pointerId !== null && canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId);
+    if (pointerId !== null && canvas.hasPointerCapture(pointerId))
+      canvas.releasePointerCapture(pointerId);
     canvas.removeEventListener('contextmenu', this.onContextMenu);
     canvas.style.cursor = '';
     this.canvas = null;
@@ -154,6 +170,9 @@ export class CameraController {
     this.viewWidth = width;
     this.viewHeight = height;
     this.stage.scale.set(this.cam.zoom);
-    this.stage.position.set(width / 2 - this.cam.x * this.cam.zoom, height / 2 - this.cam.y * this.cam.zoom);
+    this.stage.position.set(
+      width / 2 - this.cam.x * this.cam.zoom,
+      height / 2 - this.cam.y * this.cam.zoom,
+    );
   }
 }

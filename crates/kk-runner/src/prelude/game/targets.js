@@ -9,7 +9,9 @@
   // 分支），从 vanilla 迁移的 bot 其 Memory 残留 24 字符 Mongo id 同样命中。
   function assertTargetObject(obj) {
     if (obj && _.isPlainObject(obj) && _.isString(obj.id) && obj.id.length === 24) {
-      throw new Error("It seems you're trying to use a serialized game object stored in Memory which is not allowed. Please use `Game.getObjectById` to retrieve a live object reference instead.");
+      throw new Error(
+        "It seems you're trying to use a serialized game object stored in Memory which is not allowed. Please use `Game.getObjectById` to retrieve a live object reference instead.",
+      );
     }
   }
 

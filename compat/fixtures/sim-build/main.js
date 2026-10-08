@@ -9,7 +9,7 @@ module.exports.loop = function () {
   const move = (target) => creep.moveTo(target, { reusePath: 20 });
   if (creep.store.energy < 20) {
     const pile = creep.pos.findClosestByRange(FIND_DROPPED_RESOURCES, {
-      filter: r => r.resourceType === RESOURCE_ENERGY,
+      filter: (r) => r.resourceType === RESOURCE_ENERGY,
     });
     if (pile) {
       if (creep.pickup(pile) === ERR_NOT_IN_RANGE) move(pile);
@@ -20,15 +20,22 @@ module.exports.loop = function () {
   const build = (site) => {
     const result = creep.build(site);
     if (result === ERR_NOT_IN_RANGE) move(site);
-    else if (result === OK) Memory['built_' + site.structureType] = (Memory['built_' + site.structureType] || 0) + 1;
+    else if (result === OK)
+      Memory['built_' + site.structureType] = (Memory['built_' + site.structureType] || 0) + 1;
   };
-  const road = sites.find(s => s.structureType === STRUCTURE_ROAD);
-  if (road) { build(road); return; }
+  const road = sites.find((s) => s.structureType === STRUCTURE_ROAD);
+  if (road) {
+    build(road);
+    return;
+  }
   Memory.road_done = true;
-  const ext = sites.find(s => s.structureType === STRUCTURE_EXTENSION);
-  if (ext) { build(ext); return; }
+  const ext = sites.find((s) => s.structureType === STRUCTURE_EXTENSION);
+  if (ext) {
+    build(ext);
+    return;
+  }
   Memory.ext_done = true;
-  const wall = room.find(FIND_STRUCTURES).find(s => s.structureType === STRUCTURE_WALL);
+  const wall = room.find(FIND_STRUCTURES).find((s) => s.structureType === STRUCTURE_WALL);
   if (wall && wall.hits < 1200) {
     const result = creep.repair(wall);
     if (result === ERR_NOT_IN_RANGE) move(wall);
@@ -36,7 +43,7 @@ module.exports.loop = function () {
     return;
   }
   Memory.repair_done = true;
-  const tower = room.find(FIND_STRUCTURES).find(s => s.structureType === STRUCTURE_TOWER);
+  const tower = room.find(FIND_STRUCTURES).find((s) => s.structureType === STRUCTURE_TOWER);
   if (tower) {
     const result = creep.dismantle(tower);
     if (result === ERR_NOT_IN_RANGE) move(tower);

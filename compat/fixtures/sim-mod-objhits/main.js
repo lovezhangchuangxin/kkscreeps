@@ -6,14 +6,14 @@
 exports.loop = function () {
   const room = Game.rooms.W1N1;
   const raider = Game.creeps.raider;
-  const barrel = typeof FIND_SIEGE_BARRELS !== 'undefined'
-    ? room.find(FIND_SIEGE_BARRELS)[0] : undefined;
-  const decoy = typeof FIND_SIEGE_DECOYS !== 'undefined'
-    ? room.find(FIND_SIEGE_DECOYS)[0] : undefined;
+  const barrel =
+    typeof FIND_SIEGE_BARRELS !== 'undefined' ? room.find(FIND_SIEGE_BARRELS)[0] : undefined;
+  const decoy =
+    typeof FIND_SIEGE_DECOYS !== 'undefined' ? room.find(FIND_SIEGE_DECOYS)[0] : undefined;
   const sniper = Game.creeps.sniper;
   const mule = Game.creeps.mule;
-  const cache = typeof FIND_VAULT_CACHES !== 'undefined'
-    ? room.find(FIND_VAULT_CACHES)[0] : undefined;
+  const cache =
+    typeof FIND_VAULT_CACHES !== 'undefined' ? room.find(FIND_VAULT_CACHES)[0] : undefined;
   if (!Memory.phase) {
     if (barrel === undefined) {
       Memory.initialHits = 0;

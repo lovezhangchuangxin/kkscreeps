@@ -185,7 +185,8 @@ const PICK_SLOP_PX = 4;
 export async function createRenderer(options: CreateRendererOptions): Promise<RendererHandle> {
   const cellSize = options.cellSize ?? DEFAULT_CELL_SIZE;
   // 字体与内核初始化并行；两者都就绪才建场景（字体失败不阻塞——G7）
-  const fontsPending = options.fontsBaseUrl !== undefined ? ensureFonts(options.fontsBaseUrl) : null;
+  const fontsPending =
+    options.fontsBaseUrl !== undefined ? ensureFonts(options.fontsBaseUrl) : null;
   let fontStatus: FontStatus = 'unset';
   const kernel: Kernel = await initKernel({
     container: options.container,
@@ -207,16 +208,21 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
   let disposal: Promise<void> | undefined;
   // 销毁后场景面设防（评审 B-B5）：拆树后 Pixi 对象不可再触达
   let destroyed = false;
-  const dispose = (): Promise<void> => disposal ??= (async () => {
-    destroyed = true;
-    disconnect?.();
-    camera.detach();
-    try {
-      destroyScene?.();
-    } finally {
-      try { await kernel.destroy(); } finally { await atlas?.dispose(); }
-    }
-  })();
+  const dispose = (): Promise<void> =>
+    (disposal ??= (async () => {
+      destroyed = true;
+      disconnect?.();
+      camera.detach();
+      try {
+        destroyScene?.();
+      } finally {
+        try {
+          await kernel.destroy();
+        } finally {
+          await atlas?.dispose();
+        }
+      }
+    })());
 
   try {
     // 字体等待纳入统一回滚路径（评审 GPT-P2#9：构造异常时 kernel 须释放）
@@ -249,7 +255,10 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
     const objectsSetup = atlas
       ? {
           assets: {
-            frames: new Map([...atlas.frames, ...[...atlas.standalone].map(([key, value]) => [key, value.texture] as const)]),
+            frames: new Map([
+              ...atlas.frames,
+              ...[...atlas.standalone].map(([key, value]) => [key, value.texture] as const),
+            ]),
             glow: atlas.standalone.get('glow')?.texture ?? null,
             creepMask: atlas.standalone.get('creep-mask')?.texture ?? null,
           },
@@ -276,11 +285,20 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
         apply: (name, change) => {
           // A same-time snapshot can replace objects. Invalidate before terrain
           // work as well, so a partial failure remains retryable on the next notify.
-          if (change.kind === 'snapshot') { appliedObjectsRoom = null; pendingObjectSnapshot = true; }
+          if (change.kind === 'snapshot') {
+            appliedObjectsRoom = null;
+            pendingObjectSnapshot = true;
+          }
           const terrain = feed.terrain(name);
           if (terrain) room.setTerrain(terrain.codes);
           if (appliedObjectsRoom !== name || appliedObjectsTime !== change.time) {
-            room.applyObjects(change.objects, change.time, change.events, pendingObjectSnapshot ? 'snapshot' : change.kind, change);
+            room.applyObjects(
+              change.objects,
+              change.time,
+              change.events,
+              pendingObjectSnapshot ? 'snapshot' : change.kind,
+              change,
+            );
             appliedObjectsRoom = name;
             appliedObjectsTime = change.time;
             pendingObjectSnapshot = false;
@@ -322,9 +340,10 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
       const inside = cx >= 0 && cy >= 0 && cx < ROOM_SIZE && cy < ROOM_SIZE;
       const cell = inside ? { x: cx, y: cy } : null;
       const current = activeRoomCtrl.activeRoom;
-      const objectId = cell !== null && current !== null
-        ? resolvePickObject(cell, feed.objects(current))
-        : undefined;
+      const objectId =
+        cell !== null && current !== null
+          ? resolvePickObject(cell, feed.objects(current))
+          : undefined;
       return { world, cell, objectId, room: current ?? undefined };
     };
 
@@ -337,13 +356,14 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
     let lastClient: { x: number; y: number } | null = null;
     let lastHover: PickResult | null = null;
     const fireHover = (result: PickResult | null): void => {
-      const changed = (result === null) !== (lastHover === null) ||
-        (result !== null && lastHover !== null && (
-          result.cell?.x !== lastHover.cell?.x ||
-          result.cell?.y !== lastHover.cell?.y ||
-          result.objectId !== lastHover.objectId ||
-          result.room !== lastHover.room
-        ));
+      const changed =
+        (result === null) !== (lastHover === null) ||
+        (result !== null &&
+          lastHover !== null &&
+          (result.cell?.x !== lastHover.cell?.x ||
+            result.cell?.y !== lastHover.cell?.y ||
+            result.objectId !== lastHover.objectId ||
+            result.room !== lastHover.room));
       lastHover = result;
       if (!changed) return;
       room.setHighlight(result?.cell ?? null);
@@ -365,10 +385,14 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
       pressedMaxDisp = 0;
     };
     const onPointerMove = (e: PointerEvent): void => {
-      if (e.isPrimary === false || (pressedPointerId !== null && e.pointerId !== pressedPointerId)) return;
+      if (e.isPrimary === false || (pressedPointerId !== null && e.pointerId !== pressedPointerId))
+        return;
       lastClient = { x: e.clientX, y: e.clientY };
       if (pressedPointerId !== null) {
-        pressedMaxDisp = Math.max(pressedMaxDisp, Math.hypot(e.clientX - pressedStart.x, e.clientY - pressedStart.y));
+        pressedMaxDisp = Math.max(
+          pressedMaxDisp,
+          Math.hypot(e.clientX - pressedStart.x, e.clientY - pressedStart.y),
+        );
         return; // 手势期间所有重估入口统一冻结
       }
       const rect = canvasEl.getBoundingClientRect();
@@ -377,7 +401,10 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
     };
     const onPointerUp = (e: PointerEvent): void => {
       if (e.pointerId !== pressedPointerId) return; // 非按下指针的释放不触发
-      const disp = Math.max(pressedMaxDisp, Math.hypot(e.clientX - pressedStart.x, e.clientY - pressedStart.y));
+      const disp = Math.max(
+        pressedMaxDisp,
+        Math.hypot(e.clientX - pressedStart.x, e.clientY - pressedStart.y),
+      );
       pressedPointerId = null;
       lastClient = { x: e.clientX, y: e.clientY };
       reevaluateHover();
@@ -399,7 +426,8 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
       reevaluateHover();
     };
     const onPointerLeave = (e: PointerEvent): void => {
-      if (e.isPrimary === false || (pressedPointerId !== null && e.pointerId !== pressedPointerId)) return;
+      if (e.isPrimary === false || (pressedPointerId !== null && e.pointerId !== pressedPointerId))
+        return;
       pressedPointerId = null;
       lastClient = null;
       fireHover(null);
@@ -421,8 +449,10 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
       const { width, height } = viewSize();
       const cam = camera.state;
       room.update(scaled ? clock.advance(elapsedMS) : elapsedMS, kernel.app.renderer, {
-        minX: cam.x - width / cam.zoom / 2, minY: cam.y - height / cam.zoom / 2,
-        maxX: cam.x + width / cam.zoom / 2, maxY: cam.y + height / cam.zoom / 2,
+        minX: cam.x - width / cam.zoom / 2,
+        minY: cam.y - height / cam.zoom / 2,
+        maxX: cam.x + width / cam.zoom / 2,
+        maxY: cam.y + height / cam.zoom / 2,
       });
       options.onFrameTiming?.({
         objectsMs: room.lastStageMs.objectsMs,
@@ -468,8 +498,13 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
         // 销毁后 Pixi ticker/场景不可触达——返回归零形状（评审 B-B5）
         if (destroyed) {
           return {
-            backend: kernel.backend, fps: 0, zoom: 0, atlasFrames: 0,
-            lighting: 'real', visuals: 0, fonts: fontStatus,
+            backend: kernel.backend,
+            fps: 0,
+            zoom: 0,
+            atlasFrames: 0,
+            lighting: 'real',
+            visuals: 0,
+            fonts: fontStatus,
             effects: { active: 0, nodes: 0, texts: 0, skipped: 0 },
             ambient: { active: 0, awake: 0, sleeping: 0 },
             lightingPass: { invalidations: 0, renders: 0, members: 0, privateSources: 0 },
@@ -537,7 +572,11 @@ export async function createRenderer(options: CreateRendererOptions): Promise<Re
     return handle;
   } catch (error) {
     // 所有初始化阶段共用销毁路径，回滚已创建的节点、监听和资产。
-    try { await dispose(); } catch { /* 保留原始初始化错误。 */ }
+    try {
+      await dispose();
+    } catch {
+      /* 保留原始初始化错误。 */
+    }
     throw error;
   }
 }

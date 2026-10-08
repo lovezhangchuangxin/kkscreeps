@@ -10,7 +10,9 @@ import { test } from 'node:test';
 const repoRoot = resolve(import.meta.dirname, '../..');
 const bin =
   process.env['KKSCREEPS_BIN'] ??
-  [resolve(repoRoot, 'target/release/kkscreeps'), resolve(repoRoot, 'target/debug/kkscreeps')].find(existsSync);
+  [resolve(repoRoot, 'target/release/kkscreeps'), resolve(repoRoot, 'target/debug/kkscreeps')].find(
+    existsSync,
+  );
 
 test(
   'kkscreeps 适配器端到端',

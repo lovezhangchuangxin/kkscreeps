@@ -8,8 +8,32 @@ import { describe, expect, it } from 'vitest';
 const pkgRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const manifest = JSON.parse(readFileSync(join(pkgRoot, 'assets', 'manifest.json'), 'utf8')) as {
   format: number;
-  sources: Array<{ path: string; sha256: string; bytes: number; rasterWidth?: number; rasterHeight?: number; sizeFrom?: string }>;
-  atlas: Record<string, { pages: Array<{ page: number; png: { file: string; sha256: string }; json: { file: string; sha256: string } }>; frames: Record<string, { page: number; x: number; y: number; w: number; h: number }>; standalone?: Array<{ name: string; file: string; sha256: string; width: number; height: number }> }>;
+  sources: Array<{
+    path: string;
+    sha256: string;
+    bytes: number;
+    rasterWidth?: number;
+    rasterHeight?: number;
+    sizeFrom?: string;
+  }>;
+  atlas: Record<
+    string,
+    {
+      pages: Array<{
+        page: number;
+        png: { file: string; sha256: string };
+        json: { file: string; sha256: string };
+      }>;
+      frames: Record<string, { page: number; x: number; y: number; w: number; h: number }>;
+      standalone?: Array<{
+        name: string;
+        file: string;
+        sha256: string;
+        width: number;
+        height: number;
+      }>;
+    }
+  >;
 };
 
 const BIN = 2048;
@@ -17,8 +41,12 @@ const BIN = 2048;
 describe('assets/manifest.json', () => {
   it('format=1，源面 = 117 SVG + 9 PNG + 2 字体', () => {
     expect(manifest.format).toBe(1);
-    const svg = manifest.sources.filter((s) => s.path.startsWith('svg/') && s.path.endsWith('.svg'));
-    const png = manifest.sources.filter((s) => s.path.startsWith('svg/') && s.path.endsWith('.png'));
+    const svg = manifest.sources.filter(
+      (s) => s.path.startsWith('svg/') && s.path.endsWith('.svg'),
+    );
+    const png = manifest.sources.filter(
+      (s) => s.path.startsWith('svg/') && s.path.endsWith('.png'),
+    );
     const fonts = manifest.sources.filter((s) => s.path.startsWith('fonts/'));
     expect(svg.length).toBe(117);
     expect(png.length).toBe(9);
@@ -40,8 +68,14 @@ describe('assets/manifest.json', () => {
         from = 'width/height';
       } else {
         const vb = text.match(/\bviewBox\s*=\s*["']([^"']+)["']/);
-        if (!vb) throw new Error(`${s.path}: 无 width/height 也无 viewBox（build 侧会走 100×100 兜底告警）`);
-        const p = vb[1]!.trim().split(/[\s,]+/).map(Number);
+        if (!vb)
+          throw new Error(
+            `${s.path}: 无 width/height 也无 viewBox（build 侧会走 100×100 兜底告警）`,
+          );
+        const p = vb[1]!
+          .trim()
+          .split(/[\s,]+/)
+          .map(Number);
         expectW = p[2]!;
         expectH = p[3]!;
         from = 'viewBox';
@@ -55,7 +89,9 @@ describe('assets/manifest.json', () => {
   it('字体是合法 woff2（wOF2 魔数）', () => {
     for (const s of manifest.sources) {
       if (!s.path.startsWith('fonts/')) continue;
-      const magic = readFileSync(join(pkgRoot, 'assets', s.path)).subarray(0, 4).toString('ascii');
+      const magic = readFileSync(join(pkgRoot, 'assets', s.path))
+        .subarray(0, 4)
+        .toString('ascii');
       expect(magic, s.path).toBe('wOF2');
     }
   });
@@ -89,7 +125,7 @@ describe('atlas 几何', () => {
         expect(f.x + f.w).toBeLessThanOrEqual(BIN);
         expect(f.y + f.h).toBeLessThanOrEqual(BIN);
       }
-      const byPage = new Map<number, Array<[string, typeof frames[number][1]]>>();
+      const byPage = new Map<number, Array<[string, (typeof frames)[number][1]]>>();
       for (const entry of frames) {
         if (!byPage.has(entry[1].page)) byPage.set(entry[1].page, []);
         byPage.get(entry[1].page)!.push(entry);
@@ -99,8 +135,12 @@ describe('atlas 几何', () => {
           for (let j = i + 1; j < entries.length; j++) {
             const a = entries[i]![1];
             const b = entries[j]![1];
-            const overlap = a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-            expect(overlap, `${scale}x 页${page} 帧重叠: ${entries[i]![0]} vs ${entries[j]![0]}`).toBe(false);
+            const overlap =
+              a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+            expect(
+              overlap,
+              `${scale}x 页${page} 帧重叠: ${entries[i]![0]} vs ${entries[j]![0]}`,
+            ).toBe(false);
           }
         }
       }
@@ -111,7 +151,10 @@ describe('atlas 几何', () => {
     const raster = Object.fromEntries(
       manifest.sources
         .filter((s) => s.rasterWidth != null && s.rasterHeight != null)
-        .map((s) => [s.path.split('/').at(-1)!.replace('.svg', ''), s as typeof s & { rasterWidth: number; rasterHeight: number }]),
+        .map((s) => [
+          s.path.split('/').at(-1)!.replace('.svg', ''),
+          s as typeof s & { rasterWidth: number; rasterHeight: number },
+        ]),
     );
     for (const [name, f1] of Object.entries(manifest.atlas['1']!.frames)) {
       const r = raster[name]!;
@@ -131,7 +174,9 @@ describe('atlas 几何', () => {
         expect(existsSync(pngPath), page.png.file).toBe(true);
         expect(existsSync(jsonPath), page.json.file).toBe(true);
         const header = readFileSync(pngPath).subarray(0, 24);
-        expect([...header.subarray(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+        expect([...header.subarray(0, 8)]).toEqual([
+          0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+        ]);
         expect(header.readUInt32BE(16)).toBe(BIN);
         expect(header.readUInt32BE(20)).toBe(BIN);
       }
@@ -141,7 +186,9 @@ describe('atlas 几何', () => {
   it('spritesheet JSON meta 与页文件互指一致', () => {
     for (const scale of ['1', '2']) {
       for (const page of manifest.atlas[scale]!.pages) {
-        const sheet = JSON.parse(readFileSync(join(pkgRoot, 'assets', 'atlas', page.json.file), 'utf8'));
+        const sheet = JSON.parse(
+          readFileSync(join(pkgRoot, 'assets', 'atlas', page.json.file), 'utf8'),
+        );
         expect(sheet.meta.image).toBe(page.png.file);
         expect(sheet.meta.scale).toBe(scale);
         expect(sheet.meta.size).toEqual({ w: BIN, h: BIN });
@@ -153,14 +200,19 @@ describe('atlas 几何', () => {
   it('出口条独立纹理（standalone）：四边 × 双档在盘且为合法 PNG（sha256 由 check-assets-fresh 承担）', () => {
     for (const scale of ['1', '2']) {
       const standalone = manifest.atlas[scale]!.standalone;
-      expect(standalone?.map((s) => s.name).sort()).toEqual(
-        ['exit-bottom', 'exit-left', 'exit-right', 'exit-top'],
-      );
+      expect(standalone?.map((s) => s.name).sort()).toEqual([
+        'exit-bottom',
+        'exit-left',
+        'exit-right',
+        'exit-top',
+      ]);
       for (const entry of standalone!) {
         const abs = join(pkgRoot, 'assets', 'atlas', entry.file);
         expect(existsSync(abs), entry.file).toBe(true);
         const header = readFileSync(abs).subarray(0, 24);
-        expect([...header.subarray(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+        expect([...header.subarray(0, 8)]).toEqual([
+          0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+        ]);
       }
     }
   });

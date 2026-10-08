@@ -3,9 +3,15 @@
 // 结算侧在链内表达——trace 的 slot_declined 事件即此形态）。
 export default function install(api) {
   class GatekeeperDoor extends api.builtins.RoomObject {
-    get value() { return api.view.field(this, 'value'); }
-    pass() { return api.intents.emit('gatekeeper:pass', this, {}); }
-    hold() { return api.intents.emit('gatekeeper:hold', this, {}); }
+    get value() {
+      return api.view.field(this, 'value');
+    }
+    pass() {
+      return api.intents.emit('gatekeeper:pass', this, {});
+    }
+    hold() {
+      return api.intents.emit('gatekeeper:hold', this, {});
+    }
   }
   api.objects.bind('gatekeeper:door', GatekeeperDoor);
   api.globals.define('GatekeeperDoor', GatekeeperDoor);

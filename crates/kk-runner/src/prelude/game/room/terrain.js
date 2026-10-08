@@ -22,7 +22,7 @@
     if (!array) throw new Error('Could not access room ' + roomName);
     this.get = function (x, y) {
       const value = array[y * 50 + x];
-      return (value & TERRAIN_MASK_WALL) || (value & TERRAIN_MASK_SWAMP) || 0;
+      return value & TERRAIN_MASK_WALL || value & TERRAIN_MASK_SWAMP || 0;
     };
     this.getRawBuffer = function (destinationArray) {
       if (destinationArray) {
@@ -52,5 +52,4 @@
     return result;
   }
   gw.terrainWordAt = terrainWordAt;
-
 })();

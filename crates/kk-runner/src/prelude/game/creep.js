@@ -9,10 +9,7 @@
   const _ = globalThis.__kkp.lodash;
   const { assertTargetObject, isKnownCreep, isKnownStructure } = globalThis.__kkp.targets;
   const { createCreepMovementApi } = globalThis.__kkp;
-  const {
-    installPathCodec,
-    installMethods: installMovementMethods,
-  } = createCreepMovementApi();
+  const { installPathCodec, installMethods: installMovementMethods } = createCreepMovementApi();
   // 路径静态方法仍在常量捕获、字段和动作注册之前安装。
   installPathCodec();
 
@@ -115,8 +112,6 @@
     return (self.store && self.store.energy) || 0;
   }
 
-
-
   // 字段读取当前 tick 数据：body 字符串部件补 hits=100，store/carry 由 makeStore 构造。
   // 说话内容由 say/sayPublic 决定可见性，只有本人或公开消息可见。
   // 来源：上游 engine/src/game/creeps.js 的属性定义。
@@ -175,8 +170,12 @@
       const objs = gw.world.objects || [];
       for (let i = 0; i < objs.length; i++) {
         const o = objs[i];
-        if (o.room === target.pos.roomName && o.x === target.pos.x && o.y === target.pos.y
-          && o.structureType === 'extractor') {
+        if (
+          o.room === target.pos.roomName &&
+          o.x === target.pos.x &&
+          o.y === target.pos.y &&
+          o.structureType === 'extractor'
+        ) {
           extractor = gw.objectsById.get(o.id);
           break;
         }
@@ -209,11 +208,14 @@
    * 预检即拒 -7）。attack/rangedAttack 与塔 attack 共用同一判别。 */
   function modDurabilityTargetOk(target) {
     const raw = target && target.id !== undefined ? gw.rawById.get(target.id) : undefined;
-    const modEntry = raw !== undefined && raw.type === 'mod'
-      && gw.modApi !== undefined && gw.modApi.types !== undefined
-        ? gw.modApi.types[raw.modType] : undefined;
-    return modEntry !== undefined && target instanceof modEntry.cls
-      && raw.hits !== undefined;
+    const modEntry =
+      raw !== undefined &&
+      raw.type === 'mod' &&
+      gw.modApi !== undefined &&
+      gw.modApi.types !== undefined
+        ? gw.modApi.types[raw.modType]
+        : undefined;
+    return modEntry !== undefined && target instanceof modEntry.cls && raw.hits !== undefined;
   }
 
   gw.modDurabilityTargetOk = modDurabilityTargetOk;
@@ -228,12 +230,14 @@
     if (blockedBySafeMode(this)) return C.ERR_NO_BODYPART;
     // 目标须在当前 tick 的原始数据中仍存在，并通过后面的实例类型检查。
     const modTargetOk = modDurabilityTargetOk(target);
-    const okTarget = target && target.id
-      && (isKnownCreep(target.id) || isKnownStructure(target.id) || modTargetOk)
-      && (target instanceof globalThis.Creep
-        || target instanceof globalThis.StructureSpawn
-        || target instanceof globalThis.Structure
-        || modTargetOk);
+    const okTarget =
+      target &&
+      target.id &&
+      (isKnownCreep(target.id) || isKnownStructure(target.id) || modTargetOk) &&
+      (target instanceof globalThis.Creep ||
+        target instanceof globalThis.StructureSpawn ||
+        target instanceof globalThis.Structure ||
+        modTargetOk);
     if (!okTarget) return C.ERR_INVALID_TARGET;
     if (!target.pos.inRangeTo(this.pos, C.ATTACK_RANGE)) return C.ERR_NOT_IN_RANGE;
     gw.intents.set(this.id, 'attack', { id: target.id, x: target.pos.x, y: target.pos.y });
@@ -248,8 +252,8 @@
     if (countActiveParts(this.body, C.WORK) === 0) return C.ERR_NO_BODYPART;
     // Mod 建筑的成本资源集可不含 energy：任一成本资源有持有即可通过
     // 预检，支付比例由结算按配方定论。
-    const modBuilding = gw.modApi === undefined ? undefined
-      : gw.modApi.buildings[target && target.structureType];
+    const modBuilding =
+      gw.modApi === undefined ? undefined : gw.modApi.buildings[target && target.structureType];
     if (modBuilding === undefined && !carriedEnergy(this)) {
       return C.ERR_NOT_ENOUGH_RESOURCES;
     }
@@ -263,8 +267,9 @@
       return C.ERR_INVALID_TARGET;
     }
     if (!this.pos.inRangeTo(target.pos, 3)) return C.ERR_NOT_IN_RANGE;
-    const siteIsObstacle = (C.OBSTACLE_OBJECT_TYPES || []).includes(target.structureType)
-      || (modBuilding !== undefined && modBuilding.pathing === 'obstacle');
+    const siteIsObstacle =
+      (C.OBSTACLE_OBJECT_TYPES || []).includes(target.structureType) ||
+      (modBuilding !== undefined && modBuilding.pathing === 'obstacle');
     if (siteIsObstacle) {
       let objectsInTile = false;
       let creepsInTile = false;
@@ -272,12 +277,14 @@
       const objs = gw.world.objects || [];
       for (let i = 0; i < objs.length; i++) {
         const o = objs[i];
-        if (o.room !== target.pos.roomName || o.x !== target.pos.x || o.y !== target.pos.y) continue;
-        const t = o.type === 'structure' || o.type === 'spawn'
-          ? (o.structureType || 'spawn') : o.type;
+        if (o.room !== target.pos.roomName || o.x !== target.pos.x || o.y !== target.pos.y)
+          continue;
+        const t =
+          o.type === 'structure' || o.type === 'spawn' ? o.structureType || 'spawn' : o.type;
         const entry = gw.modApi === undefined ? undefined : gw.modApi.buildings[t];
-        const obstacleType = (C.OBSTACLE_OBJECT_TYPES || []).includes(t)
-          || (entry !== undefined && entry.pathing === 'obstacle' && o.type === 'structure');
+        const obstacleType =
+          (C.OBSTACLE_OBJECT_TYPES || []).includes(t) ||
+          (entry !== undefined && entry.pathing === 'obstacle' && o.type === 'structure');
         if (!obstacleType) continue;
         if (o.type === 'creep') {
           creepsInTile = true;
@@ -301,9 +308,11 @@
     if (this.spawning) return C.ERR_BUSY;
     if (countActiveParts(this.body, C.WORK) === 0) return C.ERR_NO_BODYPART;
     if (!carriedEnergy(this)) return C.ERR_NOT_ENOUGH_RESOURCES;
-    const okTarget = target && target.id
-      && isKnownStructure(target.id)
-      && (target instanceof globalThis.Structure || target instanceof globalThis.StructureSpawn);
+    const okTarget =
+      target &&
+      target.id &&
+      isKnownStructure(target.id) &&
+      (target instanceof globalThis.Structure || target instanceof globalThis.StructureSpawn);
     if (!okTarget) return C.ERR_INVALID_TARGET;
     if (!this.pos.inRangeTo(target.pos, 3)) return C.ERR_NOT_IN_RANGE;
     gw.intents.set(this.id, 'repair', { id: target.id, x: target.pos.x, y: target.pos.y });
@@ -317,12 +326,14 @@
     if (this.spawning) return C.ERR_BUSY;
     if (countActiveParts(this.body, C.WORK) === 0) return C.ERR_NO_BODYPART;
     // 可拆类型 = 内建造价表或 Mod 建筑目录（与结算侧 cost_bearing 同源）。
-    const modBuilding = gw.modApi === undefined ? undefined
-      : gw.modApi.buildings[target && target.structureType];
-    const okTarget = target && target.id
-      && (target instanceof globalThis.Structure || target instanceof globalThis.StructureSpawn)
-      && ((C.CONSTRUCTION_COST && target.structureType in C.CONSTRUCTION_COST)
-        || modBuilding !== undefined);
+    const modBuilding =
+      gw.modApi === undefined ? undefined : gw.modApi.buildings[target && target.structureType];
+    const okTarget =
+      target &&
+      target.id &&
+      (target instanceof globalThis.Structure || target instanceof globalThis.StructureSpawn) &&
+      ((C.CONSTRUCTION_COST && target.structureType in C.CONSTRUCTION_COST) ||
+        modBuilding !== undefined);
     if (!okTarget) return C.ERR_INVALID_TARGET;
     if (!target.pos.isNearTo(this.pos)) return C.ERR_NOT_IN_RANGE;
     if (blockedBySafeMode(this)) return C.ERR_NO_BODYPART;
@@ -335,8 +346,7 @@
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;
     if (countActiveParts(this.body, C.HEAL) === 0) return C.ERR_NO_BODYPART;
-    if (!(target && target.id && isKnownCreep(target.id)
-      && target instanceof globalThis.Creep)) {
+    if (!(target && target.id && isKnownCreep(target.id) && target instanceof globalThis.Creep)) {
       return C.ERR_INVALID_TARGET;
     }
     if (!target.pos.inRangeTo(this.pos, C.HEAL_RANGE)) return C.ERR_NOT_IN_RANGE;
@@ -369,13 +379,15 @@
     if (blockedBySafeMode(this)) return C.ERR_NO_BODYPART;
     // Mod 耐久对象目标族（G09.b）与近战同款。
     const modTargetOk = modDurabilityTargetOk(target);
-    const okTarget = target && target.id
-      && (isKnownCreep(target.id) || isKnownStructure(target.id) || modTargetOk)
-      && (target instanceof globalThis.Creep
-        || target instanceof globalThis.PowerCreep
-        || target instanceof globalThis.StructureSpawn
-        || target instanceof globalThis.Structure
-        || modTargetOk);
+    const okTarget =
+      target &&
+      target.id &&
+      (isKnownCreep(target.id) || isKnownStructure(target.id) || modTargetOk) &&
+      (target instanceof globalThis.Creep ||
+        target instanceof globalThis.PowerCreep ||
+        target instanceof globalThis.StructureSpawn ||
+        target instanceof globalThis.Structure ||
+        modTargetOk);
     if (!okTarget) return C.ERR_INVALID_TARGET;
     if (!this.pos.inRangeTo(target, C.RANGED_ATTACK_RANGE)) return C.ERR_NOT_IN_RANGE;
     gw.intents.set(this.id, 'rangedAttack', { id: target.id });
@@ -406,8 +418,7 @@
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;
     if (countActiveParts(this.body, C.HEAL) === 0) return C.ERR_NO_BODYPART;
-    if (!(target && target.id && isKnownCreep(target.id)
-      && target instanceof globalThis.Creep)) {
+    if (!(target && target.id && isKnownCreep(target.id) && target instanceof globalThis.Creep)) {
       return C.ERR_INVALID_TARGET;
     }
     if (blockedBySafeMode(this)) return C.ERR_NO_BODYPART;
@@ -415,5 +426,4 @@
     gw.intents.set(this.id, 'rangedHeal', { id: target.id });
     return C.OK;
   };
-
 })();
