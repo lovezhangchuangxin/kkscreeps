@@ -23,6 +23,7 @@ mod engine_world;
 mod ext;
 mod minerals_and_boost;
 mod mod_buildings;
+mod mod_hits;
 mod mod_resources;
 mod mod_store;
 mod movement;

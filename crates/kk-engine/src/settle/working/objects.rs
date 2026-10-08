@@ -88,24 +88,28 @@ impl Working {
             .projection()
             .get(handle)
             .expect("句柄来自计划");
-        // 库存信封键（G09.a）不参与字段校验：拆出→校验声明字段→并回
-        // **世界当前**信封。调用方（ctx.objects.update 与槽写回）传入的
-        // 信封值一律丢弃——库存只能经资源动作变动，槽内先读后写也不
-        // 会用陈旧快照回滚转账结果。
-        let current_envelope = match self.room.objects.get(&id) {
+        // 库存/耐久信封键（G09.a/G09.b）不参与字段校验：拆出→校验声明
+        // 字段→并回 **世界当前** 信封。调用方（ctx.objects.update 与槽
+        // 写回）传入的信封值一律丢弃——库存只能经资源动作、耐久只能经
+        // 伤害动作变动，槽内先读后写也不会用陈旧快照回滚结算结果。
+        let (current_store, current_hits) = match self.room.objects.get(&id) {
             Some(RoomObject::Mod(o)) => {
                 let payload: Value = serde_json::from_str(&o.data)
                     .map_err(|e| format!("Mod 对象 payload 非法 JSON：{e}"))?;
-                kk_mod_api::objects::split_store_envelope(&payload).1
+                let (bare, store) = kk_mod_api::objects::split_store_envelope(&payload);
+                let (_, hits) = kk_mod_api::objects::split_hits_envelope(&bare);
+                (store, hits)
             }
             _ => unreachable!("上面已判 Mod"),
         };
-        let (mut fields, _) = kk_mod_api::objects::split_store_envelope(&fields);
+        let (bare, _) = kk_mod_api::objects::split_store_envelope(&fields);
+        let (mut fields, _) = kk_mod_api::objects::split_hits_envelope(&bare);
         kk_mod_api::validate::check_object_payload(&fields, &ty.descriptor.fields, &type_key)?;
         // 数值 backing 规范化（Float 域统一浮点 backing）：KKPV 列式编码
         // 按值分派列型，整数/浮点 backing 混桶会使整轮投影失败。
         kk_mod_api::validate::normalize_object_payload(&mut fields, &ty.descriptor.fields);
-        kk_mod_api::objects::merge_store_envelope(&mut fields, current_envelope);
+        kk_mod_api::objects::merge_store_envelope(&mut fields, current_store);
+        kk_mod_api::objects::merge_hits_envelope(&mut fields, current_hits);
         if self.chain_mutations.as_ref().is_some_and(|log| {
             !log.iter()
                 .any(|entry| matches!(entry, ChainMutation::ModUpdated(old, _) if *old == id))

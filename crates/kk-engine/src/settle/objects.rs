@@ -86,6 +86,10 @@ pub fn create(
     if let Some(capacity) = ty.store_capacity {
         kk_mod_api::objects::inject_store_envelope(&mut fields, capacity);
     }
+    // hits 声明类型创建即满血（G09.b），耐久只能经伤害动作变动。
+    if let Some(hits_max) = ty.hits_max {
+        kk_mod_api::objects::inject_hits_envelope(&mut fields, hits_max);
+    }
     w.check_mod_mutation_budget()?;
     let id = w
         .insert_new(RoomObject::Mod(kk_schema::room::ModObj {
@@ -108,11 +112,11 @@ pub fn update(
     let current = get(w, id)?.ok_or("更新目标不在本次房间候选中")?;
     own_type(w, namespace, &current.type_key)?;
     let patch = patch.as_object().ok_or("对象更新须为字段对象")?;
-    if patch
-        .keys()
-        .any(|key| kk_mod_api::objects::STORE_ENVELOPE_KEYS.contains(&key.as_str()))
-    {
-        return Err("库存信封键由资源动作维护，不能经字段更新写入".into());
+    if patch.keys().any(|key| {
+        kk_mod_api::objects::STORE_ENVELOPE_KEYS.contains(&key.as_str())
+            || kk_mod_api::objects::HITS_ENVELOPE_KEYS.contains(&key.as_str())
+    }) {
+        return Err("库存/耐久信封键分别由资源/伤害动作维护，不能经字段更新写入".into());
     }
     let mut fields = current.fields;
     fields
@@ -171,6 +175,7 @@ mod tests {
                 visibility: kk_mod_api::ObjectVisibility::RoomVisible,
                 player_class: "Box".into(),
                 store_capacity: Some(100),
+                hits_max: Some(100),
             }],
             intents: Vec::new(),
             rules: Vec::new(),
@@ -231,7 +236,7 @@ mod tests {
         )
         .err()
         .expect("信封键应拒绝");
-        assert!(err.contains("库存信封键"), "实得 {err}");
+        assert!(err.contains("不能经字段更新写入"), "实得 {err}");
         // 无关字段更新在信封在场时仍可行（拆出→校验→并回，信封原值保留）。
         // 本类型无业务字段，改用非法键证明校验仍覆盖声明字段集。
         let err = update(
@@ -243,6 +248,15 @@ mod tests {
         .err()
         .expect("未声明键应拒绝");
         assert!(err.contains("未在类型中声明"), "实得 {err}");
+        let err = update(
+            &mut w,
+            "upmod",
+            ObjId::parse(&created.id).unwrap(),
+            &serde_json::json!({"label": "x", "hits": 1, "hitsMax": 1}),
+        )
+        .err()
+        .expect("耐久信封键应拒绝");
+        assert!(err.contains("耐久信封键"), "实得 {err}");
     }
 
     #[test]
@@ -254,13 +268,15 @@ mod tests {
         w.update_mod_fields(
             id,
             &serde_json::json!({"label": "hi", "store": {"energy": 0},
-                                "storeCapacity": 100}),
+                                "storeCapacity": 100, "hits": 100, "hitsMax": 100}),
         )
         .unwrap();
         let view = get(&w, id).unwrap().unwrap();
         assert_eq!(view.fields["label"], serde_json::json!("hi"));
         assert_eq!(view.fields["store"]["energy"], serde_json::json!(0));
         assert_eq!(view.fields["storeCapacity"], serde_json::json!(100));
+        assert_eq!(view.fields["hits"], serde_json::json!(100));
+        assert_eq!(view.fields["hitsMax"], serde_json::json!(100));
         // 资源动作写入库存后，携带陈旧/篡改信封的字段写回不覆盖库存。
         w.room.objects.get_mut(&id).and_then(|o| match o {
             RoomObject::Mod(m) => {
@@ -274,7 +290,7 @@ mod tests {
         w.update_mod_fields(
             id,
             &serde_json::json!({"label": "stale", "store": {"energy": 999},
-                                "storeCapacity": 1}),
+                                "storeCapacity": 1, "hits": 999, "hitsMax": 1}),
         )
         .unwrap();
         let view = get(&w, id).unwrap().unwrap();
@@ -285,5 +301,23 @@ mod tests {
             "写回信封一律丢弃，世界库存为准"
         );
         assert_eq!(view.fields["storeCapacity"], serde_json::json!(100));
+        // 伤害动作扣血后同理：写回携带的耐久信封被丢弃，世界耐久为准。
+        w.room.objects.get_mut(&id).and_then(|o| match o {
+            RoomObject::Mod(m) => {
+                let mut payload: Value = serde_json::from_str(&m.data).unwrap();
+                payload["hits"] = serde_json::json!(60);
+                m.data = payload.to_string();
+                Some(())
+            }
+            _ => None,
+        });
+        w.update_mod_fields(
+            id,
+            &serde_json::json!({"label": "again", "hits": 1, "hitsMax": 2}),
+        )
+        .unwrap();
+        let view = get(&w, id).unwrap().unwrap();
+        assert_eq!(view.fields["hits"], serde_json::json!(60));
+        assert_eq!(view.fields["hitsMax"], serde_json::json!(100));
     }
 }

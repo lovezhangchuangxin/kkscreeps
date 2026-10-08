@@ -120,9 +120,10 @@ impl Engine {
                         id.as_str()
                     ))
                 })?;
-                // 库存信封键（G09.a）不属于声明字段：拆出后校验，再按
-                // 类型声明核对信封在场的合法性（防篡改与防缺失）。
-                let (fields, envelope) = kk_mod_api::objects::split_store_envelope(&payload);
+                // 库存/耐久信封键（G09.a/G09.b）不属于声明字段：拆出后
+                // 校验，再按类型声明核对信封在场的合法性（防篡改与防缺失）。
+                let (bare, envelope) = kk_mod_api::objects::split_store_envelope(&payload);
+                let (fields, hits_env) = kk_mod_api::objects::split_hits_envelope(&bare);
                 kk_mod_api::validate::check_object_payload(
                     &fields,
                     &ty.descriptor.fields,
@@ -151,6 +152,37 @@ impl Engine {
                 } else if envelope.is_some() {
                     return Err(SettleError(format!(
                         "房间 {room_name} 的 Mod 对象 {} 未声明 store 却携带库存信封",
+                        id.as_str()
+                    )));
+                }
+                // 耐久信封（G09.b）三臂：声明缺信封、信封与冻结声明不符、
+                // 未声明携带。hitsMax 恒等于冻结声明（写一次语义），hits
+                // 在 1..=hitsMax 内（伤害扣至 0 即移除，存活对象恒 ≥1；
+                // 0 只能由直改造出，发布前拒绝）。
+                let hits_complete = hits_env
+                    .as_ref()
+                    .is_some_and(|env| env.contains_key("hits") && env.contains_key("hitsMax"));
+                if let Some(declared) = ty.descriptor.hits_max {
+                    if !hits_complete {
+                        return Err(SettleError(format!(
+                            "房间 {room_name} 的 Mod 对象 {} 声明耐久却缺少完整耐久信封",
+                            id.as_str()
+                        )));
+                    }
+                    let env = hits_env.as_ref().expect("上面已判 complete");
+                    let hits = env.get("hits").and_then(serde_json::Value::as_i64);
+                    let hits_max = env.get("hitsMax").and_then(serde_json::Value::as_i64);
+                    if hits_max != Some(declared as i64)
+                        || !hits.is_some_and(|h| (1..=declared as i64).contains(&h))
+                    {
+                        return Err(SettleError(format!(
+                            "房间 {room_name} 的 Mod 对象 {} 耐久信封非法",
+                            id.as_str()
+                        )));
+                    }
+                } else if hits_env.is_some() {
+                    return Err(SettleError(format!(
+                        "房间 {room_name} 的 Mod 对象 {} 未声明耐久却携带耐久信封",
                         id.as_str()
                     )));
                 }
@@ -313,9 +345,9 @@ mod invariant_tests {
     use crate::intent::IntentBatch;
     use crate::settle::TickInput;
 
-    /// G09.a 库存信封三臂守卫：声明缺信封、信封键齐全但内容非法、
-    /// 未声明却携带信封；完整合法信封照常通过。绕过写入口直改世界的
-    /// 形态由发布前校验封住。
+    /// 库存/耐久信封（G09.a/G09.b）三臂守卫：声明缺信封、信封键齐全但
+    /// 内容非法、未声明却携带信封；完整合法信封（含双信封并存）照常
+    /// 通过。绕过写入口直改世界的形态由发布前校验封住。
     #[test]
     fn mod_store_envelope_guards_discriminate() {
         use std::collections::{BTreeMap, BTreeSet};
@@ -333,20 +365,23 @@ mod invariant_tests {
             default: kk_mod_api::FieldDefault::Missing,
             visibility: kk_mod_api::Visibility::Public,
         };
-        let descriptor = |type_key: &str, capacity: Option<u64>| kk_mod_api::ObjectTypeDescriptor {
-            key: kk_mod_api::Key::new(type_key).unwrap(),
-            schema_version: 1,
-            owner_field: None,
-            position_fields: Some([
-                kk_mod_api::Key::new("gval:x").unwrap(),
-                kk_mod_api::Key::new("gval:y").unwrap(),
-            ]),
-            fields: vec![field("x".into()), field("y".into())],
-            capabilities: Vec::new(),
-            lifecycle_slots: BTreeSet::new(),
-            visibility: kk_mod_api::ObjectVisibility::RoomVisible,
-            player_class: "Obj".into(),
-            store_capacity: capacity,
+        let descriptor = |type_key: &str, capacity: Option<u64>, hits_max: Option<u64>| {
+            kk_mod_api::ObjectTypeDescriptor {
+                key: kk_mod_api::Key::new(type_key).unwrap(),
+                schema_version: 1,
+                owner_field: None,
+                position_fields: Some([
+                    kk_mod_api::Key::new("gval:x").unwrap(),
+                    kk_mod_api::Key::new("gval:y").unwrap(),
+                ]),
+                fields: vec![field("x".into()), field("y".into())],
+                capabilities: Vec::new(),
+                lifecycle_slots: BTreeSet::new(),
+                visibility: kk_mod_api::ObjectVisibility::RoomVisible,
+                player_class: "Obj".into(),
+                store_capacity: capacity,
+                hits_max,
+            }
         };
         let contribution = kk_mod_api::Contribution {
             source: kk_mod_api::Source {
@@ -363,8 +398,10 @@ mod invariant_tests {
             ]),
             field_mounts: Vec::new(),
             object_types: vec![
-                descriptor("gval:crate", Some(500)),
-                descriptor("gval:marker", None),
+                descriptor("gval:crate", Some(500), None),
+                descriptor("gval:marker", None, None),
+                descriptor("gval:bunker", None, Some(300)),
+                descriptor("gval:depot", Some(200), Some(300)),
             ],
             intents: Vec::new(),
             rules: Vec::new(),
@@ -419,6 +456,17 @@ mod invariant_tests {
             serde_json::json!({"x": 10, "y": 11, "store": {"energy": 0}, "storeCapacity": 500}),
         )
         .expect("完整合法信封通过");
+        validate(
+            "gval:bunker",
+            serde_json::json!({"x": 10, "y": 11, "hits": 120, "hitsMax": 300}),
+        )
+        .expect("耐久信封合法通过（hits 可低于上限）");
+        validate(
+            "gval:depot",
+            serde_json::json!({"x": 10, "y": 11, "store": {"energy": 0}, "storeCapacity": 200,
+                                "hits": 300, "hitsMax": 300}),
+        )
+        .expect("双信封并存合法通过");
         for (type_key, payload, needle) in [
             (
                 "gval:crate",
@@ -439,6 +487,41 @@ mod invariant_tests {
                 "gval:marker",
                 serde_json::json!({"x": 10, "y": 11, "store": {"energy": 0}, "storeCapacity": 100}),
                 "未声明 store 却携带库存信封",
+            ),
+            (
+                "gval:bunker",
+                serde_json::json!({"x": 10, "y": 11}),
+                "声明耐久却缺少完整耐久信封",
+            ),
+            (
+                "gval:bunker",
+                serde_json::json!({"x": 10, "y": 11, "hits": 300}),
+                "声明耐久却缺少完整耐久信封",
+            ),
+            (
+                "gval:bunker",
+                serde_json::json!({"x": 10, "y": 11, "hitsMax": 300}),
+                "声明耐久却缺少完整耐久信封",
+            ),
+            (
+                "gval:bunker",
+                serde_json::json!({"x": 10, "y": 11, "hits": 300, "hitsMax": 200}),
+                "耐久信封非法",
+            ),
+            (
+                "gval:bunker",
+                serde_json::json!({"x": 10, "y": 11, "hits": 400, "hitsMax": 300}),
+                "耐久信封非法",
+            ),
+            (
+                "gval:bunker",
+                serde_json::json!({"x": 10, "y": 11, "hits": 0, "hitsMax": 300}),
+                "耐久信封非法",
+            ),
+            (
+                "gval:marker",
+                serde_json::json!({"x": 10, "y": 11, "hits": 100, "hitsMax": 100}),
+                "未声明耐久却携带耐久信封",
             ),
         ] {
             let err = validate(type_key, payload).unwrap_err();

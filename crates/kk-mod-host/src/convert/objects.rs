@@ -77,6 +77,17 @@ impl ContributionBuilder<'_> {
                 )
             })?),
         };
+        // 耐久声明键 hitsMax 与建筑声明同名（G09.b）；界值在冻结层
+        // 统一把关（1..=u32::MAX）。
+        let hits_max = match value.get("hitsMax") {
+            None | Some(Value::Null) => None,
+            Some(v) => Some(v.as_u64().ok_or_else(|| {
+                ModHostError::new(
+                    namespace.to_string(),
+                    format!("类型 {key} 的 hitsMax 须为非负整数"),
+                )
+            })?),
+        };
         self.contribution.object_types.push(ObjectTypeDescriptor {
             key,
             schema_version: as_u32(namespace, value, "version")?,
@@ -87,6 +98,7 @@ impl ContributionBuilder<'_> {
             lifecycle_slots,
             visibility: object_visibility(namespace, optional_str(value, "visibility"))?,
             store_capacity,
+            hits_max,
             player_class: {
                 match optional_str(value, "playerClass") {
                     Some(name) if !name.is_empty() => name.to_string(),

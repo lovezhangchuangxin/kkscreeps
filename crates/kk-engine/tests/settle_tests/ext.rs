@@ -93,6 +93,7 @@ fn counter_contribution(handlers: &[(&str, HandlerKind)]) -> Contribution {
             visibility: ObjectVisibility::RoomVisible,
             player_class: "Counter".into(),
             store_capacity: None,
+            hits_max: None,
         }],
         intents: vec![IntentDescriptor {
             key: intent_key.clone(),

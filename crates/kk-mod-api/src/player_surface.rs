@@ -19,7 +19,7 @@ pub const MOD_FIND_BASE: i64 = 1000;
 /// 有意不在列：它们对 Mod 记录是惰性键——ext 键消费只按 structureType
 /// 登记（扩展写入门不认 Mod 对象 id，恒不命中）、视野授予方已排除
 /// Mod 记录，且字段值先进信封后写、不会被覆写穿透。
-pub(crate) const RESERVED_RECORD_KEYS: [&str; 8] = [
+pub(crate) const RESERVED_RECORD_KEYS: [&str; 10] = [
     "type",
     "modType",
     "id",
@@ -28,6 +28,8 @@ pub(crate) const RESERVED_RECORD_KEYS: [&str; 8] = [
     "ext",
     "store",
     "storeCapacity",
+    "hits",
+    "hitsMax",
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -184,6 +186,7 @@ mod tests {
             visibility,
             player_class: "Counter".to_string(),
             store_capacity: None,
+            hits_max: None,
         }
     }
 

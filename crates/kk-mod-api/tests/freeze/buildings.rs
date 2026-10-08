@@ -59,6 +59,7 @@ fn building_key_cannot_collide_with_object_type() {
         visibility: ObjectVisibility::RoomVisible,
         player_class: "Thing".into(),
         store_capacity: None,
+        hits_max: None,
     });
     let mut b = building("alpha", "thing");
     b.player_class = "Foundry".into();

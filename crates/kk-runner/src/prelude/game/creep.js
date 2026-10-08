@@ -204,6 +204,20 @@
     return C.OK;
   };
 
+  /** Mod 耐久对象目标族（G09.b）：带 hits 信封的 Mod 记录经其玩家类绑定
+   * 接收；信封在场与结算 object_hits>0 门同源（无信封类型结算静默不动，
+   * 预检即拒 -7）。attack/rangedAttack 与塔 attack 共用同一判别。 */
+  function modDurabilityTargetOk(target) {
+    const raw = target && target.id !== undefined ? gw.rawById.get(target.id) : undefined;
+    const modEntry = raw !== undefined && raw.type === 'mod'
+      && gw.modApi !== undefined && gw.modApi.types !== undefined
+        ? gw.modApi.types[raw.modType] : undefined;
+    return modEntry !== undefined && target instanceof modEntry.cls
+      && raw.hits !== undefined;
+  }
+
+  gw.modDurabilityTargetOk = modDurabilityTargetOk;
+
   /** 检查 ATTACK 部件、目标存活与类型、ATTACK_RANGE 射程及敌方安全模式；未实现 invulnerability effects 检查。
    * 射程读常量表（规则 builtin:creep.attack.range 注入的生效值），
    * 与 Rust 结算同源。来源：上游 engine/src/game/creeps.js 的 attack。 */
@@ -213,11 +227,13 @@
     if (countActiveParts(this.body, C.ATTACK) === 0) return C.ERR_NO_BODYPART;
     if (blockedBySafeMode(this)) return C.ERR_NO_BODYPART;
     // 目标须在当前 tick 的原始数据中仍存在，并通过后面的实例类型检查。
+    const modTargetOk = modDurabilityTargetOk(target);
     const okTarget = target && target.id
-      && (isKnownCreep(target.id) || isKnownStructure(target.id))
+      && (isKnownCreep(target.id) || isKnownStructure(target.id) || modTargetOk)
       && (target instanceof globalThis.Creep
         || target instanceof globalThis.StructureSpawn
-        || target instanceof globalThis.Structure);
+        || target instanceof globalThis.Structure
+        || modTargetOk);
     if (!okTarget) return C.ERR_INVALID_TARGET;
     if (!target.pos.inRangeTo(this.pos, C.ATTACK_RANGE)) return C.ERR_NOT_IN_RANGE;
     gw.intents.set(this.id, 'attack', { id: target.id, x: target.pos.x, y: target.pos.y });
@@ -351,12 +367,15 @@
     if (this.spawning) return C.ERR_BUSY;
     if (countActiveParts(this.body, C.RANGED_ATTACK) === 0) return C.ERR_NO_BODYPART;
     if (blockedBySafeMode(this)) return C.ERR_NO_BODYPART;
+    // Mod 耐久对象目标族（G09.b）与近战同款。
+    const modTargetOk = modDurabilityTargetOk(target);
     const okTarget = target && target.id
-      && (isKnownCreep(target.id) || isKnownStructure(target.id))
+      && (isKnownCreep(target.id) || isKnownStructure(target.id) || modTargetOk)
       && (target instanceof globalThis.Creep
         || target instanceof globalThis.PowerCreep
         || target instanceof globalThis.StructureSpawn
-        || target instanceof globalThis.Structure);
+        || target instanceof globalThis.Structure
+        || modTargetOk);
     if (!okTarget) return C.ERR_INVALID_TARGET;
     if (!this.pos.inRangeTo(target, C.RANGED_ATTACK_RANGE)) return C.ERR_NOT_IN_RANGE;
     gw.intents.set(this.id, 'rangedAttack', { id: target.id });

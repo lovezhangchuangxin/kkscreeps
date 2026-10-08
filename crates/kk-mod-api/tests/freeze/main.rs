@@ -400,6 +400,7 @@ fn field_bare_name_collision_rejected_on_mod_types_only() {
         visibility: ObjectVisibility::RoomVisible,
         player_class: "Thing".into(),
         store_capacity: None,
+        hits_max: None,
     };
     ty.fields.sort_by(|a, b| a.key.cmp(&b.key));
     owner.object_types.push(ty);
@@ -434,6 +435,122 @@ fn field_bare_name_collision_rejected_on_mod_types_only() {
 }
 
 #[test]
+fn object_hits_declaration_freezes_and_bounds_reject() {
+    // G09.b：hitsMax 声明进入冻结描述符，参与计划身份；界值与建筑
+    // hits_max 同口径（1..=u32::MAX）。
+    let mut c = module("stmod");
+    c.bindings.insert(key("stmod:bunker.field.x"));
+    c.object_types.push(ObjectTypeDescriptor {
+        key: key("stmod:bunker"),
+        schema_version: 1,
+        owner_field: None,
+        position_fields: None,
+        fields: vec![FieldDescriptor {
+            key: key("stmod:x"),
+            schema: ValueSchema {
+                kind: ValueKind::Number(NumberDomain::Unsigned { min: 0, max: 49 }),
+                nullable: false,
+            },
+            default: FieldDefault::Missing,
+            visibility: Visibility::Public,
+            binding: key("stmod:bunker.field.x"),
+        }],
+        capabilities: Vec::new(),
+        lifecycle_slots: BTreeSet::new(),
+        visibility: ObjectVisibility::RoomVisible,
+        player_class: "Bunker".into(),
+        store_capacity: None,
+        hits_max: Some(500),
+    });
+    let frozen = plan(vec![builtin::link(), c.clone()]).unwrap();
+    let ty = frozen
+        .projection()
+        .types()
+        .iter()
+        .find(|ty| ty.descriptor.key.as_str() == "stmod:bunker")
+        .expect("类型已冻结");
+    assert_eq!(ty.descriptor.hits_max, Some(500));
+    // 合法界值两端接受：1 与 u32::MAX。
+    for ok in [1u64, u32::MAX as u64] {
+        let mut c = module("stmod");
+        c.object_types.push(ObjectTypeDescriptor {
+            key: key("stmod:bunker"),
+            schema_version: 1,
+            owner_field: None,
+            position_fields: None,
+            fields: Vec::new(),
+            capabilities: Vec::new(),
+            lifecycle_slots: BTreeSet::new(),
+            visibility: ObjectVisibility::RoomVisible,
+            player_class: "Bunker".into(),
+            store_capacity: None,
+            hits_max: Some(ok),
+        });
+        plan(vec![builtin::link(), c]).unwrap();
+    }
+    // 同一类型仅撤下耐久声明即改变计划身份（排除类型集合差异的干扰）。
+    c.object_types[0].hits_max = None;
+    let plain = plan(vec![builtin::link(), c]).unwrap();
+    assert_ne!(plain.hash(), frozen.hash(), "耐久声明参与计划身份");
+    let plain_ty = plain
+        .projection()
+        .types()
+        .iter()
+        .find(|ty| ty.descriptor.key.as_str() == "stmod:bunker")
+        .expect("类型仍在计划中");
+    assert_eq!(plain_ty.descriptor.hits_max, None);
+    // 界值：0 无意义、超 u32 拒绝（与建筑 hits_max 同口径）。
+    for bad in [0u64, u32::MAX as u64 + 1] {
+        let mut c = module("stmod");
+        c.bindings.insert(key("stmod:bunker.field.x"));
+        c.object_types.push(ObjectTypeDescriptor {
+            key: key("stmod:bunker"),
+            schema_version: 1,
+            owner_field: None,
+            position_fields: None,
+            fields: Vec::new(),
+            capabilities: Vec::new(),
+            lifecycle_slots: BTreeSet::new(),
+            visibility: ObjectVisibility::RoomVisible,
+            player_class: "Bunker".into(),
+            store_capacity: None,
+            hits_max: Some(bad),
+        });
+        let err = plan(vec![builtin::link(), c]).unwrap_err().to_string();
+        assert!(err.contains("耐久须为"), "界值 {bad} 实得 {err}");
+    }
+    // 保留键：字段裸名占用 hits/hitsMax 在冻结层拒绝。
+    for reserved in ["hits", "hitsMax"] {
+        let mut bad = module("stmod");
+        bad.bindings.insert(key(&format!("stmod:{reserved}")));
+        bad.object_types.push(ObjectTypeDescriptor {
+            key: key("stmod:bunker"),
+            schema_version: 1,
+            owner_field: None,
+            position_fields: None,
+            fields: vec![FieldDescriptor {
+                key: key(&format!("stmod:{reserved}")),
+                schema: ValueSchema {
+                    kind: ValueKind::Number(NumberDomain::Unsigned { min: 0, max: 49 }),
+                    nullable: false,
+                },
+                default: FieldDefault::Missing,
+                visibility: Visibility::Public,
+                binding: key(&format!("stmod:{reserved}")),
+            }],
+            capabilities: Vec::new(),
+            lifecycle_slots: BTreeSet::new(),
+            visibility: ObjectVisibility::RoomVisible,
+            player_class: "Bunker".into(),
+            store_capacity: None,
+            hits_max: None,
+        });
+        let err = plan(vec![builtin::link(), bad]).unwrap_err().to_string();
+        assert!(err.contains("占用投影保留键"), "{reserved} 实得 {err}");
+    }
+}
+
+#[test]
 fn object_store_declaration_freezes_and_reserved_keys_reject() {
     // G09.a：capacity 声明进入冻结描述符，参与计划身份。
     let mut c = module("stmod");
@@ -458,6 +575,7 @@ fn object_store_declaration_freezes_and_reserved_keys_reject() {
         visibility: ObjectVisibility::RoomVisible,
         player_class: "Crate".into(),
         store_capacity: Some(500),
+        hits_max: None,
     });
     let frozen = plan(vec![builtin::link(), c.clone()]).unwrap();
     let ty = frozen
@@ -504,6 +622,7 @@ fn object_store_declaration_freezes_and_reserved_keys_reject() {
             visibility: ObjectVisibility::RoomVisible,
             player_class: "Crate".into(),
             store_capacity: None,
+            hits_max: None,
         });
         // 保留键在冻结期拒绝（含 ServerOnly 可见性；builtin:link 的
         // 官方投影字段形状豁免）。

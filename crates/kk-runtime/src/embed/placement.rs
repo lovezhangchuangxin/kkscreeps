@@ -47,6 +47,10 @@ impl EmbedEngine {
                 if let Some(capacity) = descriptor.store_capacity {
                     kk_mod_api::objects::inject_store_envelope(&mut payload, capacity);
                 }
+                // hits 声明类型放置即满血（G09.b），与结算期创建同形。
+                if let Some(hits_max) = descriptor.hits_max {
+                    kk_mod_api::objects::inject_hits_envelope(&mut payload, hits_max);
+                }
                 let (x, y) = kk_mod_api::objects::position(&payload, descriptor)
                     .map_err(anyhow::Error::msg)?;
                 Ok(Some(kk_schema::room::RoomObject::Mod(

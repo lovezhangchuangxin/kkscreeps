@@ -6,7 +6,8 @@ use kk_mod_api::combat::{CombatBodyPart, CombatView};
 use kk_schema::room::RoomObject;
 use kk_world::ObjId;
 
-/// 同房候选的脱离副本。不返回无耐久对象或 Mod 自有字段对象；跨房与
+/// 同房候选的脱离副本。不返回无耐久对象（含未声明耐久的 Mod 对象）；
+/// 耐久声明的 Mod 对象按结构语义返回（hitsMax 经信封键读出）；跨房与
 /// 缺失目标同样为 None，不扩大写能力的访问域。
 pub fn slot_combat_get(w: &Working, id: ObjId) -> Option<CombatView> {
     let object = w.room.objects.get(&id)?;
@@ -31,9 +32,15 @@ pub fn slot_combat_get(w: &Working, id: ObjId) -> Option<CombatView> {
         ),
         _ => (damage::structure_hits_max(w, object)?, None),
     };
+    // Mod 对象（G09.b）的类型标识为类型键：type_name_of 对 Mod 返回
+    // 空串（结构规则不认 Mod），战斗读面需要非空标识与事件 type 同源。
+    let type_key = match object {
+        RoomObject::Mod(m) => m.type_key.clone(),
+        _ => crate::settle::movement::type_name_of(object).into_owned(),
+    };
     Some(CombatView {
         id: id.as_str(),
-        type_key: crate::settle::movement::type_name_of(object).into_owned(),
+        type_key,
         owner: kk_world::domain::object_owner(object).map(|owner| owner.into_owned()),
         x: object.pos().0,
         y: object.pos().1,
@@ -107,4 +114,139 @@ pub(super) fn validate_damage_target(w: &Working, target_id: ObjId) -> Result<()
         return Err("策略目标须为存活 creep 或有耐久的结构".into());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod mod_view_tests {
+    use super::*;
+    use crate::settle::Plane;
+    use crate::settle::{TickState, Working};
+    use kk_schema::room::{ModObj, RoomObject};
+    use kk_world::RoomState;
+
+    /// G09.b：耐久声明的 Mod 对象进入战斗读面与策略伤害目标校验，
+    /// CombatView 类型标识为类型键（type_name_of 对 Mod 恒空串）。
+    #[test]
+    fn combat_view_and_damage_target_accept_durability_mod() {
+        let contribution = kk_mod_api_test_type();
+        let plan = std::sync::Arc::new(
+            kk_mod_api::freeze_with_builtin(
+                kk_mod_api::builtin::link(),
+                vec![contribution],
+                kk_mod_api::FreezeOptions::default(),
+            )
+            .unwrap(),
+        );
+        let room = RoomState::new("W1N1", kk_core::Terrain::plains());
+        let mut w = Working::new(
+            room,
+            0,
+            0,
+            TickState::new(std::collections::BTreeMap::new(), 100),
+            Plane {
+                buildings: Default::default(),
+                links: kk_mod_api::builtin::LinkRules::from_plan(plan.rules()).unwrap(),
+                stores: kk_mod_api::builtin::StoreRules::from_plan(plan.rules()).unwrap(),
+                combat: kk_mod_api::builtin::CombatRanges::from_plan(plan.rules()).unwrap(),
+                move_gate: Default::default(),
+                quotas: std::rc::Rc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
+                terrain_passability: Default::default(),
+                resources: std::rc::Rc::new(kk_mod_api::resources::ResourceCatalog::from_plan(
+                    &plan,
+                )),
+                contrib: std::rc::Rc::new(crate::settle::contrib::ContributionDispatch::default()),
+                extensions: std::rc::Rc::new(kk_mod_api::extension::ExtensionCatalog::default()),
+                plan,
+            },
+        );
+        let armored = kk_world::ObjId(1);
+        w.room.objects.insert(
+            armored,
+            RoomObject::Mod(ModObj {
+                id: 1,
+                x: 10,
+                y: 10,
+                type_key: "cvmod:bunker".into(),
+                data: r#"{"x":10,"y":10,"hits":120,"hitsMax":300}"#.into(),
+            }),
+        );
+        let view = slot_combat_get(&w, armored).expect("耐久对象进入战斗读面");
+        assert_eq!(view.type_key, "cvmod:bunker");
+        assert_eq!(view.hits, 120);
+        assert_eq!(view.hits_max, 300);
+        assert!(
+            view.body.is_none() && view.spawning.is_none(),
+            "结构语义无身体"
+        );
+        validate_damage_target(&w, armored).expect("策略伤害目标接纳");
+        // 缺信封（无耐久）对象被双面拒绝。
+        let bare = kk_world::ObjId(2);
+        w.room.objects.insert(
+            bare,
+            RoomObject::Mod(ModObj {
+                id: 2,
+                x: 11,
+                y: 10,
+                type_key: "cvmod:bunker".into(),
+                data: r#"{"x":11,"y":10}"#.into(),
+            }),
+        );
+        assert!(slot_combat_get(&w, bare).is_none());
+        assert!(validate_damage_target(&w, bare).is_err());
+    }
+
+    fn kk_mod_api_test_type() -> kk_mod_api::Contribution {
+        let field = |name: &str| kk_mod_api::FieldDescriptor {
+            key: kk_mod_api::Key::new(format!("cvmod:{name}")).unwrap(),
+            schema: kk_mod_api::ValueSchema {
+                kind: kk_mod_api::ValueKind::Number(kk_mod_api::NumberDomain::Unsigned {
+                    min: 0,
+                    max: 49,
+                }),
+                nullable: false,
+            },
+            default: kk_mod_api::FieldDefault::Missing,
+            visibility: kk_mod_api::Visibility::Public,
+            binding: kk_mod_api::Key::new(format!("cvmod:bunker.field.{name}")).unwrap(),
+        };
+        kk_mod_api::Contribution {
+            source: kk_mod_api::Source {
+                namespace: "cvmod".into(),
+                api_version: 1,
+                revision: "1".into(),
+                code_digest: [13; 32],
+                config_digest: [0; 32],
+                player_api_digest: [0; 32],
+            },
+            bindings: std::collections::BTreeSet::from([
+                kk_mod_api::Key::new("cvmod:bunker.field.x").unwrap(),
+                kk_mod_api::Key::new("cvmod:bunker.field.y").unwrap(),
+            ]),
+            field_mounts: Vec::new(),
+            object_types: vec![kk_mod_api::ObjectTypeDescriptor {
+                key: kk_mod_api::Key::new("cvmod:bunker").unwrap(),
+                schema_version: 1,
+                owner_field: None,
+                position_fields: Some([
+                    kk_mod_api::Key::new("cvmod:x").unwrap(),
+                    kk_mod_api::Key::new("cvmod:y").unwrap(),
+                ]),
+                fields: vec![field("x"), field("y")],
+                capabilities: Vec::new(),
+                lifecycle_slots: std::collections::BTreeSet::new(),
+                visibility: kk_mod_api::ObjectVisibility::RoomVisible,
+                player_class: "Bunker".into(),
+                store_capacity: None,
+                hits_max: Some(300),
+            }],
+            intents: Vec::new(),
+            rules: Vec::new(),
+            overrides: Vec::new(),
+            constraints: std::collections::BTreeSet::new(),
+            slots: Vec::new(),
+            handlers: Vec::new(),
+            resources: Vec::new(),
+            buildings: Vec::new(),
+        }
+    }
 }

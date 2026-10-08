@@ -144,6 +144,7 @@ fn rich_plan() -> crate::ContributionPlan {
         visibility: ObjectVisibility::RoomVisible,
         player_class: "Beacon".into(),
         store_capacity: None,
+        hits_max: None,
     });
     c.intents.push(IntentDescriptor {
         key: key("alpha:salute"),
@@ -339,6 +340,7 @@ fn non_object_intent_scope_is_rejected_consistently_with_install() {
         visibility: ObjectVisibility::RoomVisible,
         player_class: "Beacon".into(),
         store_capacity: None,
+        hits_max: None,
     });
     c.intents.push(IntentDescriptor {
         key: key("alpha:shout"),
@@ -378,6 +380,7 @@ fn non_object_intent_scope_is_rejected_consistently_with_install() {
         visibility: ObjectVisibility::RoomVisible,
         player_class: "Beacon".into(),
         store_capacity: None,
+        hits_max: None,
     });
     c.intents.push(IntentDescriptor {
         key: key("alpha:queued"),
@@ -426,6 +429,7 @@ fn args_type_names_survive_hostile_keys_and_collisions() {
             visibility: ObjectVisibility::RoomVisible,
             player_class: format!("{}Node", namespace.replace(['-', '.'], "")),
             store_capacity: None,
+            hits_max: None,
         });
         c.intents.push(IntentDescriptor {
             key: key(&format!("{namespace}:{name}")),
@@ -509,6 +513,7 @@ fn store_declaring_types_carry_envelope_members() {
         visibility: ObjectVisibility::RoomVisible,
         player_class: "Crate".into(),
         store_capacity: Some(300),
+        hits_max: None,
     });
     let plan =
         crate::freeze_with_builtin(crate::builtin::link(), vec![c], Default::default()).unwrap();
@@ -517,4 +522,46 @@ fn store_declaring_types_carry_envelope_members() {
     assert!(text.contains("store: Record<string, number>;"), "{text}");
     assert!(text.contains("storeCapacity: number;"), "{text}");
     // 无声明类型不携带两键（rich_plan 的 Beacon 断言反向覆盖）。
+}
+
+#[test]
+fn hits_declaring_types_carry_envelope_members() {
+    // G09.b：hitsMax 声明类型的投影携带 hits/hitsMax 信封键。
+    let mut c = module("alpha");
+    let x = key("alpha:x");
+    let y = key("alpha:y");
+    let fields = vec![
+        field(
+            "x",
+            ValueKind::Number(NumberDomain::Unsigned { min: 0, max: 49 }),
+            Visibility::Public,
+        ),
+        field(
+            "y",
+            ValueKind::Number(NumberDomain::Unsigned { min: 0, max: 49 }),
+            Visibility::Public,
+        ),
+    ];
+    for f in &fields {
+        c.bindings.insert(f.binding.clone());
+    }
+    c.object_types.push(ObjectTypeDescriptor {
+        key: key("alpha:bunker"),
+        schema_version: 1,
+        owner_field: None,
+        position_fields: Some([x, y]),
+        fields,
+        capabilities: Vec::new(),
+        lifecycle_slots: BTreeSet::new(),
+        visibility: ObjectVisibility::RoomVisible,
+        player_class: "Bunker".into(),
+        store_capacity: None,
+        hits_max: Some(300),
+    });
+    let plan =
+        crate::freeze_with_builtin(crate::builtin::link(), vec![c], Default::default()).unwrap();
+    let text = player_declarations(&plan).unwrap();
+    assert!(text.contains("export interface Bunker {"), "{text}");
+    assert!(text.contains("hits: number;"), "{text}");
+    assert!(text.contains("hitsMax: number;"), "{text}");
 }

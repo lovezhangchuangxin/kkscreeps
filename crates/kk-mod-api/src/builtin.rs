@@ -706,6 +706,7 @@ pub fn link() -> Contribution {
             visibility: ObjectVisibility::RoomVisible,
             player_class: "StructureLink".into(),
             store_capacity: None,
+            hits_max: None,
         }],
         intents: vec![IntentDescriptor {
             key: key("link.transfer"),

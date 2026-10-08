@@ -174,6 +174,13 @@ pub struct ObjectTypeDescriptor {
     /// 写信封键。容量随类型冻结，不进 StoreRules（那是内建结构规则族）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub store_capacity: Option<u64>,
+    /// 耐久声明（G09.b）：Some 时对象创建即携带 hits/hitsMax 信封键
+    /// （满血创建，hits=hitsMax=声明值），可被 creep 攻击与塔伤害命中，
+    /// 扣至 0 即移除并发 objectDestroyed 事件（type 为类型键；不产废墟，
+    /// 废墟绑定建筑成本模型）。耐久只能经伤害动作变动，字段更新拒绝
+    /// 写信封键。与建筑 hits_max 同口径（>0 且 ≤u32::MAX）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hits_max: Option<u64>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]

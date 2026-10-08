@@ -213,6 +213,11 @@ fn emit_types(
             let _ = writeln!(out, "  store: Record<string, number>;");
             let _ = writeln!(out, "  storeCapacity: number;");
         }
+        // hits 声明类型（G09.b）的投影携带耐久信封键，与库存信封同理。
+        if descriptor.hits_max.is_some() {
+            let _ = writeln!(out, "  hits: number;");
+            let _ = writeln!(out, "  hitsMax: number;");
+        }
         for field in &descriptor.fields {
             let field_name = crate::validate::field_name(&field.key);
             // 投影把信封键最后写入（world_json mod_record_json），同名

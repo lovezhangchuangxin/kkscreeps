@@ -109,6 +109,21 @@ fn apply_damage_inner(
             );
         }
         *w.damage_to_apply.entry(target_id).or_insert(0) += damage;
+    } else if let RoomObject::Mod(m) = &target {
+        // 耐久声明对象（G09.b）走结构语义：立即扣减、不经受击槽/TOUGH；
+        // 死亡即移除并发事件，type 为类型键——不产废墟（废墟绑定建筑
+        // 成本模型，Mod 对象不经工地），store 信封内容随对象消失。
+        let new_hits = object_hits(&target) - damage;
+        if new_hits <= 0 {
+            w.remove_obj(target_id);
+            w.push_event(
+                c::EVENT_OBJECT_DESTROYED,
+                target_id,
+                json!({ "type": m.type_key }),
+            );
+        } else {
+            set_structure_hits(w, target_id, new_hits);
+        }
     } else {
         let new_hits = object_hits(&target) - damage;
         if new_hits <= 0 {
@@ -298,6 +313,12 @@ pub fn object_hits(obj: &RoomObject) -> i64 {
             let data: serde_json::Value = serde_json::from_str(&o.data).unwrap_or_default();
             data.get("hits").and_then(|v| v.as_i64()).unwrap_or(0)
         }
+        // 耐久信封键（G09.b）：hits 声明类型的耐久由伤害动作维护，
+        // 未携带或非法值按无耐久处理（发布前校验封直改形态）。
+        RoomObject::Mod(o) => {
+            let data: serde_json::Value = serde_json::from_str(&o.data).unwrap_or_default();
+            data.get("hits").and_then(|v| v.as_i64()).unwrap_or(0)
+        }
         _ => 0,
     }
 }
@@ -348,6 +369,12 @@ pub fn structure_hits_max(w: &Working, obj: &RoomObject) -> Option<i64> {
                 static_hits_max(structure_type, &w.plane.links)?
             }
         }
+        // 耐久声明（G09.b）的上限即冻结声明值，经信封键读出——
+        // 玩家战斗读面与策略伤害目标校验同此接纳。
+        RoomObject::Mod(o) => {
+            let data: serde_json::Value = serde_json::from_str(&o.data).unwrap_or_default();
+            data.get("hitsMax").and_then(|v| v.as_i64())?
+        }
         _ => return None,
     })
 }
@@ -379,6 +406,11 @@ pub fn set_structure_hits(w: &mut Working, id: ObjId, hits: i64) {
         Some(RoomObject::Storage(o)) => o.hits = hits,
         Some(RoomObject::Extractor(o)) => o.hits = hits,
         Some(RoomObject::Generic(o)) => {
+            let mut data: serde_json::Value = serde_json::from_str(&o.data).unwrap_or_default();
+            data["hits"] = json!(hits);
+            o.data = data.to_string();
+        }
+        Some(RoomObject::Mod(o)) => {
             let mut data: serde_json::Value = serde_json::from_str(&o.data).unwrap_or_default();
             data["hits"] = json!(hits);
             o.data = data.to_string();

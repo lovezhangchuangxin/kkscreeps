@@ -67,16 +67,42 @@ pub fn inject_store_envelope(fields: &mut Value, capacity: u64) {
     map.insert("storeCapacity".into(), serde_json::json!(capacity));
 }
 
+/// 耐久信封键（G09.b）：hits 声明类型的 payload 中由引擎维护的键，
+/// 与库存信封键同构、键集不相交（两类声明可并存于同一类型）。
+pub const HITS_ENVELOPE_KEYS: [&str; 2] = ["hits", "hitsMax"];
+
+/// 创建时写入耐久信封（满血创建，与建筑完工同形）。
+/// 仅 hits 声明类型调用。
+pub fn inject_hits_envelope(fields: &mut Value, hits_max: u64) {
+    let map = fields
+        .as_object_mut()
+        .expect("prepare_fields 已确认字段为对象");
+    map.insert("hits".into(), serde_json::json!(hits_max));
+    map.insert("hitsMax".into(), serde_json::json!(hits_max));
+}
+
 /// 拆出库存信封键：返回（无信封的字段值, 原信封键值对）。无信封类型
 /// 得到 None；信封值原样保留（数值不变量由资源动作维护，这里不动）。
 pub fn split_store_envelope(payload: &Value) -> (Value, Option<serde_json::Map<String, Value>>) {
+    split_envelope_keys(payload, &STORE_ENVELOPE_KEYS)
+}
+
+/// 拆出耐久信封键，语义同库存信封拆分。
+pub fn split_hits_envelope(payload: &Value) -> (Value, Option<serde_json::Map<String, Value>>) {
+    split_envelope_keys(payload, &HITS_ENVELOPE_KEYS)
+}
+
+fn split_envelope_keys(
+    payload: &Value,
+    keys: &[&str],
+) -> (Value, Option<serde_json::Map<String, Value>>) {
     let Some(map) = payload.as_object() else {
         return (payload.clone(), None);
     };
     let mut envelope = serde_json::Map::new();
     let mut fields = serde_json::Map::new();
     for (key, value) in map {
-        if STORE_ENVELOPE_KEYS.contains(&key.as_str()) {
+        if keys.contains(&key.as_str()) {
             envelope.insert(key.clone(), value.clone());
         } else {
             fields.insert(key.clone(), value.clone());
@@ -92,6 +118,15 @@ pub fn split_store_envelope(payload: &Value) -> (Value, Option<serde_json::Map<S
 
 /// 把拆出的库存信封并回字段值（保留原值，不重算）。
 pub fn merge_store_envelope(fields: &mut Value, envelope: Option<serde_json::Map<String, Value>>) {
+    merge_envelope_keys(fields, envelope)
+}
+
+/// 把拆出的耐久信封并回字段值（保留原值，不重算）。
+pub fn merge_hits_envelope(fields: &mut Value, envelope: Option<serde_json::Map<String, Value>>) {
+    merge_envelope_keys(fields, envelope)
+}
+
+fn merge_envelope_keys(fields: &mut Value, envelope: Option<serde_json::Map<String, Value>>) {
     let Some(envelope) = envelope else {
         return;
     };

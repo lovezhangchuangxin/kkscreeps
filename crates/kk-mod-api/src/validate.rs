@@ -419,6 +419,16 @@ pub(crate) fn object(
             "store 容量须为不超过 2^53-1（JS 安全整数）的非负整数",
         ));
     }
+    // 耐久界与建筑 hits_max 同口径：0 无意义（创建即死），u32 界对齐
+    // Generic 结构耐久算术域。
+    if let Some(hits_max) = ty.hits_max
+        && (hits_max == 0 || hits_max > u32::MAX as u64)
+    {
+        return Err(FreezeError::new(
+            &context,
+            "耐久须为 1..=u32::MAX 的整数（与建筑 hits_max 同口径）",
+        ));
+    }
     if let ObjectVisibility::Conditional(key) = &ty.visibility {
         binding(key, bindings, &context)?;
     }

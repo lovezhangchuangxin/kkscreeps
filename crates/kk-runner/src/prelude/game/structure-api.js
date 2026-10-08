@@ -146,11 +146,16 @@
     if (!this.my) {
       return C.ERR_NOT_OWNER;
     }
+    // Mod 耐久对象目标族（G09.b）与 creep attack 同款判别（经 gw 共享，
+    // creep.js 装配期挂载）；结算侧塔伤害经同一 object_hits 门接纳。
+    const modTargetOk = gw.modDurabilityTargetOk !== undefined
+      ? gw.modDurabilityTargetOk(target) : false;
     const okTarget = target && target.id
-      && (isKnownCreep(target.id) || isKnownStructure(target.id))
+      && (isKnownCreep(target.id) || isKnownStructure(target.id) || modTargetOk)
       && (target instanceof globalThis.Creep
         || target instanceof globalThis.StructureSpawn
-        || target instanceof globalThis.Structure);
+        || target instanceof globalThis.Structure
+        || modTargetOk);
     if (!okTarget) {
       assertTargetObject(target);
       return C.ERR_INVALID_TARGET;

@@ -103,6 +103,14 @@ pub(crate) fn mod_record_json(
             record.insert(key.into(), value.clone());
         }
     }
+    // 耐久信封键（G09.b）：hits 声明类型同口径直供（与结构 hits 同
+    // 公开面），玩家面 attack 预检与结算伤害读同一信封。未声明类型
+    // 无信封，记录不含两键。
+    for key in kk_mod_api::objects::HITS_ENVELOPE_KEYS {
+        if let Some(value) = payload.get(key) {
+            record.insert(key.into(), value.clone());
+        }
+    }
     record.insert("type".into(), json!("mod"));
     record.insert("modType".into(), json!(o.type_key));
     record.insert("id".into(), json!(id.as_str()));
