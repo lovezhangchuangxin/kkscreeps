@@ -35,7 +35,7 @@ lab 动作顺序为 boost → unboost → runReaction，否则 reverseReaction�
 
 `RoomState.effects` 按对象 ID 持有 `effect/power/level/end_time`，与对象候选一起克隆、删除和跨房迁移；同 power 施放替换，异 power 共存。常规消费以 `end_time > time` 判断有效，不逐拍改写或清空过期条目；factory 配方门与 powerSpawn 处理量保留官方 `≥` 边界。管理员 Generic 输入中的 effects 在插入或编辑时归一到此表，发布和恢复拒绝双权威或悬空条目。
 
-`usePower` 当前完成 GENERATE_OPS、OPERATE_TOWER、DISRUPT_TOWER、OPERATE_SPAWN、DISRUPT_SPAWN、OPERATE_LAB、OPERATE_POWER、OPERATE_FACTORY、REGEN_SOURCE、DISRUPT_SOURCE、REGEN_MINERAL、OPERATE_STORAGE 和 OPERATE_EXTENSION。tower 两种效果分别通过目标类型、射程、等级覆盖、ops 与冷却门后挂到目标，统一扣 ops、设置冷却、发 EVENT_POWER 和动作日志。塔 attack/heal/repair 先计算距离衰减，再乘两种有效效果的 POWER_INFO 小数倍率，最后一次 floor；塔的能量费用保持固定值。其余 6 个 power 的结算消费者仍待后续切片。
+`usePower` 当前完成 GENERATE_OPS、OPERATE_TOWER、DISRUPT_TOWER、OPERATE_SPAWN、DISRUPT_SPAWN、OPERATE_LAB、OPERATE_POWER、OPERATE_FACTORY、REGEN_SOURCE、DISRUPT_SOURCE、REGEN_MINERAL、OPERATE_STORAGE、OPERATE_EXTENSION 和两种 terminal power。tower 两种效果分别通过目标类型、射程、等级覆盖、ops 与冷却门后挂到目标，统一扣 ops、设置冷却、发 EVENT_POWER 和动作日志。塔 attack/heal/repair 先计算距离衰减，再乘两种有效效果的 POWER_INFO 小数倍率，最后一次 floor；塔的能量费用保持固定值。其余 4 个 power 的结算消费者仍待后续切片。
 
 spawn 两种效果复用同一施放、费用、冷却和效果表通路。OPERATE_SPAWN 仅在创建任务时将身体数 × CREEP_SPAWN_TIME 乘以等级倍率并 ceil，不重算已有任务；DISRUPT_SPAWN 每个有效 tick 将 spawnTime 延后一拍，保留 needTime，并暂停出生尝试。两效果可共存，干扰不阻止创建、续命或回收等其他动作。新增 creep 下一轮才参加对象 tick；一拍任务当轮先清除 spawning，creep 下一轮经孤儿出生路径使用默认方向。若一拍任务被同轮干扰延期，任务及指定方向保留，到期后按指定方向出生。公共效果表、任务绝对时钟和 creep 状态随检查点恢复及失败候选一起提交。
 
@@ -44,6 +44,8 @@ OPERATE_LAB 同时提高正反应产量/两份试剂消耗，以及逆反应化�
 OPERATE_FACTORY 首次成功施放将工厂 level 锁定为 power 等级，之后只有同级施放能刷新效果；效果到期不清等级，异级拒绝不扣 ops、不进冷却、不发事件。等级配方仍须工厂 level 与配方 level 相同，并在 endTime ≥ gameTime 时具有同级效果；无等级配方不要求此效果。工厂等级、效果、产出与组件库存均参与整轮候选和冷恢复，沿用现有 Generic level 与公共效果表布局。
 
 REGEN_SOURCE 按 `(endTime - gameTime - 1) % period == 0` 补充能量，当前 period 为 15、等级补充量为 50/100/150/200/250；相位由施放/刷新时刻确定，补充不超过 source 当前容量。普通再生时钟为空或 0 时先重新挂钟。DISRUPT_SOURCE 在未满源的每个有效 tick 将普通 nextRegenerationTime 延后 1，再判断普通再生是否到点；不阻止 REGEN_SOURCE 的周期补充。满源跳过两种再生处理，同轮采集先结算；普通再生及 power 补充均先使用旧容量，再按控制器占有状态调整容量。两种效果都以 endTime > gameTime 为有效期，可共存，同级刷新重置相位；现有 source 时钟与公共效果表共同参与候选回滚、保存恢复和输入回放，不新增检查点字段。
+
+OPERATE_TERMINAL（[8] duration 1000/cooldown 500/range 3/ops 100/effect [0.9..0.5]）挂在 terminal 上：terminal send 的意图相费用乘倍率 ceil 且边界 endTime >= time（官方 send.js），全局 market 相的转账费用乘承担方 terminal 倍率 ceil、send/deal 冷却 round(10×倍率) 且边界 endTime > time（官方 market.js）——截止拍两相按官方分叉（意图相享折扣、全局相收全费；意图相折扣被更严的玩家面预检支配，经玩家链不可独立观测）。deal 的费用端与冷却端恒为 dealer 终端（官方 executeTransfer 第五参 targetTerminal：SELL 单为接收端、BUY 单为发出端）。玩家面 send/deal 预检不乘倍率（官方 game 层同形，预检更严）。DISRUPT_TERMINAL（[15] duration 10/cooldown 8/range 50/ops 按级 [50..10]）封锁 creep/powerCreep 从 terminal withdraw（严格 > 边界，玩家面预检同门返回 ERR_INVALID_TARGET），并拒绝 OPERATE_EXTENSION 对该目标的灌能。订单生命周期每 tick 同步订单可成交量与 active：SELL 按 terminal 存量、BUY 按玩家 money 与 terminal 空余容量钳制，订单房缺失订单主的 terminal 时 active 置 false（不删除，市场投影只列 active 订单，本人订单另含非活动）。
 
 OPERATE_STORAGE 效果挂在 storage 上，容量消费者为结算与投影同源的派生值：基础量按官方 storages/tick.js 的控制器归属/RCL 门（不匹配或 RCL<4 为 0，无控制器房间保持 1M），效果增量 [500k..7M] 仅在基础量 >0 时叠加、endTime > time 严格有效。creep/powerCreep 的 transfer、Mod 精确转账检查、玩家投影与查询快照同用该值（withdraw 只出不进不消费容量）；效果到期回基础量，已超存库存不钳、仅拒绝继续转入。官方将权威容量落库并在对象 tick 相重算、意图相读上一拍值；kk 读时派生，同 tick 控制器升级/易主窗口内更宽松，tick 末收敛一致。OPERATE_EXTENSION 为即时动作不落效果表：目标须为带 store 的 storage/terminal/factory/container 且有主时与房主一致、目标带活跃 DISRUPT_TERMINAL 效果拒绝；向房内同主非 off extension 按到目标的 Chebyshev 距离升序灌能，预算 min(目标 energy, effect[level-1] × Σextension 容量)（小数倍率，50 倍数容量下恒整），未移动能量整次静默拒绝（不扣 ops、不进冷却、不发事件）。
 

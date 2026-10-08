@@ -4,13 +4,13 @@
 //! 移植官方 engine/src/processor/intents/power-creeps/*.js、
 //! power-spawns/process-power.js 与 processor/global-intents/power.js。
 //! powerCreep 以 Generic 承载（data.type=="powerCreep"），账号注册表在
-//! `PlayerState.power_creeps`，两侧同 ID。usePower 已结算 13 个 power：
+//! `PlayerState.power_creeps`，两侧同 ID。usePower 已结算 15 个 power：
 //! GENERATE_OPS、两种 tower、两种 spawn、LAB/POWER/FACTORY、两种 source、
-//! REGEN_MINERAL、OPERATE_STORAGE 与 OPERATE_EXTENSION。效果写入房间公共
-//! 效果表，由塔动作、孵化、生产、资源再生与 storage 容量结算消费
-//! （OPERATE_EXTENSION 为即时灌能，不落效果表）。其余 6 个 power 通过官方
-//! 预检门后仍不结算，施放与效果消费者待后续补齐；capability powerEffects
-//! 已开启。
+//! REGEN_MINERAL、OPERATE_STORAGE/EXTENSION 与两种 terminal power。效果写入
+//! 房间公共效果表，由塔动作、孵化、生产、资源再生、storage 容量、terminal
+//! 发送/市场费用与冷却、以及 withdraw 提取门结算消费（OPERATE_EXTENSION
+//! 为即时灌能，不落效果表）。其余 4 个 power 通过官方预检门后仍不结算，
+//! 施放与效果消费者待后续补齐；capability powerEffects 已开启。
 
 mod account;
 mod resources;
@@ -309,7 +309,9 @@ fn pc_use_power(w: &mut Working, id: ObjId, d: &IntentData) {
         | c::PWR_REGEN_SOURCE
         | c::PWR_DISRUPT_SOURCE
         | c::PWR_REGEN_MINERAL
-        | c::PWR_OPERATE_STORAGE => {
+        | c::PWR_OPERATE_STORAGE
+        | c::PWR_OPERATE_TERMINAL
+        | c::PWR_DISRUPT_TERMINAL => {
             let Some(target_id) = d.id else { return };
             let valid_target = match w.room.objects.get(&target_id) {
                 Some(RoomObject::Spawn(_)) => {
@@ -332,6 +334,7 @@ fn pc_use_power(w: &mut Working, id: ObjId, d: &IntentData) {
                         c::PWR_OPERATE_LAB => "lab",
                         c::PWR_OPERATE_POWER => "powerSpawn",
                         c::PWR_OPERATE_FACTORY => "factory",
+                        c::PWR_OPERATE_TERMINAL | c::PWR_DISRUPT_TERMINAL => "terminal",
                         _ => return,
                     };
                     pc_data(target).is_some_and(|target| target["structureType"] == expected)

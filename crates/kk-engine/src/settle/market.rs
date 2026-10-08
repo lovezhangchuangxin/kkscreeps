@@ -392,13 +392,20 @@ fn execute_terminal_deal(
         "type": order_type,
         "price": price_milli as f64 / 1000.0,
     });
+    // 官方 market.js:339 executeTransfer 的费用端恒为 targetTerminal
+    // （dealer 终端）：SELL 单 dealer 是接收端（To），BUY 单是发出端（From）。
+    let fee_side = if order_type == c::ORDER_SELL {
+        FeeSide::To
+    } else {
+        FeeSide::From
+    };
     let ok = execute_transfer(
         rooms,
         seller,
         buyer,
         &rt,
         amount,
-        FeeSide::To,
+        fee_side,
         None,
         Some(order_payload),
         market,
@@ -425,7 +432,7 @@ fn execute_terminal_deal(
         rooms,
         target_idx,
         target_terminal,
-        time + c::TERMINAL_COOLDOWN as u64,
+        time + terminal::terminal_cooldown(rooms, (target_idx, target_terminal), time),
     );
 }
 

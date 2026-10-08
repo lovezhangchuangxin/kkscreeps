@@ -39,7 +39,12 @@ pub(super) fn execute_send(
         time,
     );
     if ok {
-        write_cooldown(rooms, s.room, s.id, time + c::TERMINAL_COOLDOWN as u64);
+        write_cooldown(
+            rooms,
+            s.room,
+            s.id,
+            time + terminal_cooldown(rooms, (s.room, s.id), time),
+        );
     }
 }
 
@@ -47,12 +52,12 @@ pub(super) fn execute_send(
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(super) enum FeeSide {
     From,
-    #[allow(dead_code)]
     To,
 }
 
 /// 按目标共享容量限制数量，再对限制后的数量计算费用。成功时写回两侧资源
-/// 和费用、记录交易；失败时不写冷却。当前不模拟 terminal power 效果。
+/// 和费用、记录交易；失败时不写冷却。费用端由调用方按官方语义选择：
+/// send 为发送终端（From），deal 恒为 dealer 终端（market.js:339）。
 #[allow(clippy::too_many_arguments)]
 pub(super) fn execute_transfer(
     rooms: &mut [(String, RoomState)],
@@ -109,7 +114,24 @@ pub(super) fn execute_transfer(
     let Some(range) = calc_rooms_distance(&from_room, &to_room) else {
         return false;
     };
-    let cost = calc_terminal_energy_cost(amount, range);
+    let mut cost = calc_terminal_energy_cost(amount, range);
+    // 官方 market.js:33-40：费用按承担方 terminal 的 OPERATE_TERMINAL
+    // 倍率 ceil；全局 market 相边界为 endTime > time（严格）。
+    let fee_terminal = match fee_side {
+        FeeSide::From => from,
+        FeeSide::To => to,
+    };
+    if let Some(effect) = rooms[fee_terminal.0]
+        .1
+        .effects
+        .get(&fee_terminal.1)
+        .and_then(|entries| entries.iter().find(|e| e.power == c::PWR_OPERATE_TERMINAL))
+        && effect.end_time > time
+        && let Some(multiplier) =
+            super::super::powers::power_effect_value(c::PWR_OPERATE_TERMINAL, effect.level)
+    {
+        cost = ((cost as f64) * multiplier).ceil() as i64;
+    }
     let energy_ok = match fee_side {
         FeeSide::From => {
             let energy = from_data
@@ -187,4 +209,26 @@ pub(super) fn execute_transfer(
         order,
     });
     true
+}
+
+/// 官方 market.js:83-88（send）与 :391-396（deal，效果读 targetTerminal）：
+/// terminal 冷却按 OPERATE_TERMINAL 倍率 round，边界 endTime > time（严格）。
+pub(super) fn terminal_cooldown(
+    rooms: &[(String, RoomState)],
+    terminal: (usize, ObjId),
+    time: u64,
+) -> u64 {
+    if let Some(effect) = rooms[terminal.0]
+        .1
+        .effects
+        .get(&terminal.1)
+        .and_then(|entries| entries.iter().find(|e| e.power == c::PWR_OPERATE_TERMINAL))
+        && effect.end_time > time
+        && let Some(multiplier) =
+            super::super::powers::power_effect_value(c::PWR_OPERATE_TERMINAL, effect.level)
+    {
+        (((c::TERMINAL_COOLDOWN as f64) * multiplier).round()) as u64
+    } else {
+        c::TERMINAL_COOLDOWN as u64
+    }
 }

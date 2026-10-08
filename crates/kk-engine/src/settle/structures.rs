@@ -160,7 +160,21 @@ fn terminal_send(w: &mut Working, id: ObjId, d: &IntentData) {
     }
     let range =
         crate::settle::market::calc_rooms_distance(&w.room.name, target_room).unwrap_or(i64::MAX);
-    let cost = crate::settle::market::calc_terminal_energy_cost(amount, range);
+    let mut cost = crate::settle::market::calc_terminal_energy_cost(amount, range);
+    // 官方 terminal/send.js:22-25：意图相费用乘 OPERATE_TERMINAL 倍率并
+    // ceil，边界为 endTime >= time（与全局 market 相的严格 > 不同，
+    // 截止拍两相分叉按官方保留）。
+    if let Some(effect) = w
+        .room
+        .effects
+        .get(&id)
+        .and_then(|entries| entries.iter().find(|e| e.power == c::PWR_OPERATE_TERMINAL))
+        && effect.end_time >= w.time
+        && let Some(multiplier) =
+            crate::settle::powers::power_effect_value(c::PWR_OPERATE_TERMINAL, effect.level)
+    {
+        cost = ((cost as f64) * multiplier).ceil() as i64;
+    }
     let energy = store
         .and_then(|s| s.get("energy"))
         .and_then(Value::as_i64)

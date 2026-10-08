@@ -4,9 +4,9 @@
 
 ## 当前接手位置
 
-- 更新日期：2026-10-09；实现基线 `5d2a022`（REGEN_MINERAL 效果链）。接手先核对实际 HEAD 与工作区。
-- 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座已交付。M2H.b 当前 **13/19 powers** 完整接通，剩余 6 个见下表。
-- 下一片：**OPERATE_TERMINAL / DISRUPT_TERMINAL**（send 与市场费用消费者+干扰）；随后 controller、observer 与战斗效果。每片贯通施放、真实消费者、玩家投影、失败边界和冷恢复。
+- 更新日期：2026-10-09；实现基线 `16ef4f7`（OPERATE_STORAGE/EXTENSION 效果链），本批 OPERATE_TERMINAL / DISRUPT_TERMINAL 效果链随本提交交付。接手先核对实际 HEAD 与工作区。
+- 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座已交付。M2H.b 当前 **15/19 powers** 完整接通，剩余 4 个见下表。
+- 下一片：**OPERATE_CONTROLLER**（控制器升级/ downgrade 加成与 GCL 联动消费者），随后 observer 与战斗效果；或按队列切 deposit。每片贯通施放、真实消费者、玩家投影、失败边界和冷恢复。
 - Mod 扩展：移动策略、对象/建筑/资源、库存/耐久/受击、作者 CLI/类型、输入回放和检查点已有基础；未完成范围以任务表为准。默认玩法已有消费者不代表对应 Mod 替换能力已经开放。
 - 网络服务、持久 storage 后端与真实游戏客户端仍未实现；renderer R0–R6 已交付，R7 最终矩阵/长测未收口。现有 bot-check 不能代替持续推进世界中的可玩验收。
 - M2B 验收标准（2026-10-09 调整）：screeps-ok ≥95% 为中间检查点、≥99% 为后续覆盖目标；最终完成要求约定范围内功能全部通过验收，剩余例外逐项有明确范围、证据和可审查理由，见[路线图](../roadmap.md)。
@@ -15,7 +15,7 @@
 
 | 顺位 | 任务 | 首片与完成条件 |
 |---|---|---|
-| 1 | M2H.b 剩余 power 效果 | 先 REGEN_MINERAL；逐域实现公式/费用/冷却/事件、有效期、消费者与保存恢复，不只挂 effects |
+| 1 | M2H.b 剩余 power 效果 | 先 OPERATE_CONTROLLER，再 OPERATE_OBSERVER（依赖观察业务可与 deposit 换序）、FORTIFY、SHIELD；逐域实现公式/费用/冷却/事件、有效期、消费者与保存恢复，不只挂 effects |
 | 2 | deposit 完整业务 | 采集、累计耗尽冷却、掉落、寿命、字段；开启能力后完整兼容与恢复验收 |
 | 3 | observer 与 OPERATE_OBSERVER | 动作、范围/RCL/owner、下一轮限时视野、双投影权限与恢复；可与 deposit 独立实施 |
 | 4 | 其他兼容差异与真实 bot | 按最新报告逐例归因；keeper/NPC 单独拆片；真实场景验证采集、搬运、孵化、建造、升级、存活与重启 |
@@ -29,14 +29,12 @@
 
 | 状态 | Power / 消费者 |
 |---|---|
-| 已完成 13 项 | GENERATE_OPS；OPERATE_TOWER / DISRUPT_TOWER；OPERATE_SPAWN / DISRUPT_SPAWN；OPERATE_LAB；OPERATE_POWER；OPERATE_FACTORY；REGEN_SOURCE / DISRUPT_SOURCE；REGEN_MINERAL；OPERATE_STORAGE；OPERATE_EXTENSION |
-| 下一片 | OPERATE_TERMINAL / DISRUPT_TERMINAL：同时覆盖 send 与 market 费用消费者；干扰覆盖 send/withdraw |
+| 已完成 15 项 | GENERATE_OPS；OPERATE_TOWER / DISRUPT_TOWER；OPERATE_SPAWN / DISRUPT_SPAWN；OPERATE_LAB；OPERATE_POWER；OPERATE_FACTORY；REGEN_SOURCE / DISRUPT_SOURCE；REGEN_MINERAL；OPERATE_STORAGE；OPERATE_EXTENSION；OPERATE_TERMINAL / DISRUPT_TERMINAL |
 | 待实现 | OPERATE_CONTROLLER；OPERATE_OBSERVER；FORTIFY；SHIELD |
 
 剩余任务的具体门序和量值须核对锁定的官方源码与 POWER_INFO：
 
 - 资源/容量：storage 容量与库存消费者同源；extension 为即时灌能，按目标房主、距离顺序和整批预算结算。
-- terminal：同时覆盖 send 与 market 费用消费者；干扰覆盖 send/withdraw，不遗漏账户或跨房候选。
 - observer：依赖真实观察和限时视野业务，不以当前房间可见替代观察效果。
 - 战斗：FORTIFY/SHIELD 联动伤害、拆毁、临时 rampart 耐久与衰减；EFFECT_INVULNERABILITY 的伤害/dismantle/attackController/nuke/rangedMassAttack 等消费门同片盘点，其生产者属于后续 invader core/NPC 域，不计入 19 个 power。
 
@@ -129,10 +127,10 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 
 ## 最近交付与实际验证
 
-最近功能批次：REGEN_MINERAL（`5d2a022`）与 OPERATE_STORAGE / OPERATE_EXTENSION 资源容量族。storage 容量从常量 1M 改为结算/投影/快照同源的派生值（官方 storages/tick 归属/RCL 门 + 效果加成 [500k..7M]，超存不钳、到期回基础量）；OPERATE_EXTENSION 即时灌能（目标门/房主一致/DISRUPT_TERMINAL 拒绝/全房同主非 off extension 按到目标 Chebyshev 距离升序/预算 min(energy, 倍率×Σ容量)/未移动能量静默拒绝）。三路复审（结算保真/测试边界/全局影响）零 P0/P1 正确性问题，当批清偿：Generic 目标臂（terminal/container 源）覆盖、灌能锚点区分（目标而非施放者）、off 由配额重算产生的真实构造、0 容量转入 ERR_INVALID_TARGET、时序偏差与负灌能有意偏离注释、Storage/Generic 两臂 truthiness 统一。行为变化：RCL<4 或归属不匹配的 storage 容量 1M→0（对齐官方，结构读面断言同步）。现行规则见[游戏循环](../architecture/game-loop.md)。
+最近功能批次：OPERATE_TERMINAL / DISRUPT_TERMINAL 效果链（本提交）。OPERATE_TERMINAL 挂 terminal：send 意图相费用乘倍率 ceil 且边界 endTime >= time（官方 send.js），全局 market 相转账费乘倍率 ceil、send/deal 冷却 round(10×倍率) 且边界严格 > time（官方 market.js）——两相边界分叉为官方原样；deal 费用端与冷却端恒为 dealer 终端（官方 executeTransfer 第五参 targetTerminal）。玩家面预检不乘倍率（官方 game 层同形）。DISRUPT_TERMINAL 封锁 creep/powerCreep 从 terminal withdraw（玩家预检同门 ERR_INVALID_TARGET）、拒绝 OPERATE_EXTENSION 灌能，ops 按级数组 [50..10]。三路复审（结算保真/测试边界/全局影响）发现项当批清偿：BUY deal 费用端从订单主终端修正为 dealer 终端（基线既有 `FeeSide::To` 分歧随倍率接线扩散，测试期望同步官方语义）、截止拍全局相边界补真实夹具（原用例从未在 endTime==time 拍发送且注释失称已验证）、DISRUPT 严格边界 tick 9/10 双端、过期冷却回满断言、订单生命周期文档失实修正（tick 同步 active/amount 而非删除）、两处失实注释与 unused 警告。powers/mod.rs 782 行超 700 预警，拆分（use_power.rs 承接门序与共用臂）留给下一片。行为变化：无效果时 send 费用/deal 冷却与费用逐位不变（倍率仅 active_power 命中介入）。现行规则见[游戏循环](../architecture/game-loop.md)。
 
-- 完整无参数 `pnpm run check`：46 个 Rust 测试程序，1404 passed / 0 failed / 12 ignored；JS workspace、工具、文档链接与源码规模通过；无 doctest 变更。
-- release CLI 与适配器重建，固定 screeps-ok HEAD `34a630e`；全量 2914 例：2706 passed / 42 failed / 166 skipped，相对 `5d2a022` 基线 +9 转绿 / 0 转红，地板 2703→2706。
+- 完整无参数 `pnpm run check`：46 个 Rust 测试程序，1408 passed / 0 failed / 12 ignored；JS workspace、工具、文档链接与源码规模通过；无 doctest 变更。
+- release CLI 与适配器重建，固定 screeps-ok HEAD `34a630e`；全量 2914 例：2713 passed / 35 failed / 166 skipped，相对 `16ef4f7` 基线逐用例 +7 转绿 / 0 转红（全部 terminal power 用例），地板 2706→2713。
 - 三 bot 完成 2000/2000/10 tick，无中断/惩罚跳过/missing_api；Overmind 如上保留既有报错。
 - 持久证据：[兼容机器报告](../../compat/reports/kkscreeps.json)、[棘轮配置](../../compat/reports/ratchet.json)、[TooAngel](../../compat/reports/bot-tooangel.json)、[Overmind](../../compat/reports/bot-overmind.json)、[WASM](../../compat/reports/bot-wasm.json)。原临时日志路径仅在历史过程保留，不作为长期证据入口。
 

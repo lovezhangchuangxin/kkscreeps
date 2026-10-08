@@ -240,6 +240,7 @@ mod source_power_effects;
 mod spawn_power_effects;
 mod store_boundaries;
 mod store_rules;
+mod terminal_power_effects;
 
 mod trace;
 

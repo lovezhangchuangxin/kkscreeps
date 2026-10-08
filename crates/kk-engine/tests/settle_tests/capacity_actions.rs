@@ -6,8 +6,8 @@ fn terrain_plain() -> kk_core::Terrain {
 }
 
 /// OPERATE_EXTENSION 施放在目标带活跃 DISRUPT_TERMINAL 效果时静默拒绝
-///（官方 usePower.js 分支门；DISRUPT_TERMINAL 未实现，效果经装填注入构造，
-/// 移除后同轮施放恢复灌能作对照）。
+///（官方 usePower.js 分支门；DISRUPT_TERMINAL 施放链已接通，本测试仍以
+/// 装填注入构造效果以便独立控制移除时机，移除后同轮施放恢复灌能作对照）。
 #[test]
 fn operate_extension_rejected_while_disrupt_terminal_active() {
     let mut f = Fixture::new(1, terrain_plain());
