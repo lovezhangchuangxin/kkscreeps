@@ -36,7 +36,7 @@ export const capabilities: AdapterCapabilities = {
   chemistry: true,
   powerCreeps: true,
   powerCreepAccountApi: true,
-  powerEffects: false,
+  powerEffects: true,
   powerSpawn: true,
   factory: true,
   terminal: true,
