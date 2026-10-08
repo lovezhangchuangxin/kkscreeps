@@ -537,3 +537,83 @@ fn dropped_energy_decays() {
         "≤0 移除"
     );
 }
+
+/// 零绝对钟按官方真值门重新挂钟；干扰先延后，再判断已逾期的普通再生。
+#[test]
+fn source_disrupt_initializes_absent_zero_clock_and_preserves_overdue_regeneration() {
+    use kk_core::constants as c;
+    for (clock, expected_clock, expected_energy) in [
+        (None, Some(401), 0),
+        (Some(0), Some(401), 0),
+        (Some(101), Some(102), 0),
+        (Some(99), None, 3000),
+    ] {
+        let mut f = Fixture::new(1, terrain_with(&[]));
+        f.controller(8, Some("p1"));
+        let src = f.source(10, 10, 0);
+        f.world.set_time_for_test(100).unwrap();
+        f.world
+            .edit_room("W1N1", |room| {
+                if let Some(RoomObject::Source(s)) = room.objects.get_mut(&src) {
+                    s.next_regeneration_time = clock;
+                }
+                room.effects.insert(
+                    src,
+                    vec![kk_world::EffectEntry {
+                        effect: c::PWR_DISRUPT_SOURCE,
+                        power: c::PWR_DISRUPT_SOURCE,
+                        level: 1,
+                        end_time: 200,
+                    }],
+                );
+                Ok(())
+            })
+            .unwrap();
+        f.settle(IntentBatch::default());
+        let RoomObject::Source(s) = f.obj(src) else {
+            panic!("非 source")
+        };
+        assert_eq!(s.next_regeneration_time, expected_clock, "{clock:?}");
+        assert_eq!(s.energy, expected_energy, "{clock:?}");
+    }
+}
+
+/// 容量切换同轮的周期补充先使用旧容量；所有权调整随后发生。
+#[test]
+fn source_regen_pulse_uses_old_capacity_before_controller_capacity_update() {
+    use kk_core::constants as c;
+    for (owner, old_cap, energy, expected_cap, expected_energy) in [
+        (Some("p1"), 1500, 1490, 3000, 1500),
+        (None, 3000, 1490, 1500, 1500),
+    ] {
+        let mut f = Fixture::new(1, terrain_with(&[]));
+        f.controller(8, owner);
+        let src = f.source(10, 10, energy);
+        f.world.set_time_for_test(100).unwrap();
+        f.world
+            .edit_room("W1N1", |room| {
+                if let Some(RoomObject::Source(s)) = room.objects.get_mut(&src) {
+                    s.energy_capacity = old_cap;
+                    s.next_regeneration_time = Some(500);
+                }
+                room.effects.insert(
+                    src,
+                    vec![kk_world::EffectEntry {
+                        effect: c::PWR_REGEN_SOURCE,
+                        power: c::PWR_REGEN_SOURCE,
+                        level: 5,
+                        end_time: 101,
+                    }],
+                );
+                Ok(())
+            })
+            .unwrap();
+        f.settle(IntentBatch::default());
+        let RoomObject::Source(s) = f.obj(src) else {
+            panic!("非 source")
+        };
+        assert_eq!(s.energy_capacity, expected_cap);
+        assert_eq!(s.energy, expected_energy);
+        assert_eq!(s.next_regeneration_time, Some(500));
+    }
+}

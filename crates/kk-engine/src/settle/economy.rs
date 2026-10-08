@@ -10,14 +10,16 @@ use serde_json::{Value, json};
 use super::Working;
 
 /// 不足容量时设置再生时钟，到 next_regeneration_time-1 按旧容量补满。
-/// 随后根据房主或预定调整容量；只有转为中性容量时同时压低超量能量。
+/// DISRUPT_SOURCE 逐拍延后普通时钟；REGEN_SOURCE 按剩余效果时间独立补充。
+/// 两者均使用严格有效期，满源不处理再生；先按旧容量补充，再调整房主容量。
+/// 来源：官方 processor/intents/sources/tick.js。
 pub fn source_tick(w: &mut Working, id: ObjId) {
     let Some(RoomObject::Source(s)) = w.room.objects.get(&id) else {
         return;
     };
     let (energy, capacity, regen) = (s.energy, s.energy_capacity, s.next_regeneration_time);
     if energy < capacity {
-        let regen = match regen {
+        let mut regen = match regen.filter(|t| *t != 0) {
             None => {
                 let t = w.time + c::ENERGY_REGEN_TIME as u64;
                 if let Some(RoomObject::Source(s)) = w.room.objects.get_mut(&id) {
@@ -27,11 +29,31 @@ pub fn source_tick(w: &mut Working, id: ObjId) {
             }
             Some(t) => t,
         };
+        if kk_world::effects::active_power(w.room.effects.get(&id), c::PWR_DISRUPT_SOURCE, w.time)
+            .is_some()
+        {
+            regen += 1;
+            if let Some(RoomObject::Source(s)) = w.room.objects.get_mut(&id) {
+                s.next_regeneration_time = Some(regen);
+            }
+        }
         if w.time >= regen.saturating_sub(1)
             && let Some(RoomObject::Source(s)) = w.room.objects.get_mut(&id)
         {
             s.next_regeneration_time = None;
             s.energy = s.energy_capacity;
+        }
+        if let Some(effect) =
+            kk_world::effects::active_power(w.room.effects.get(&id), c::PWR_REGEN_SOURCE, w.time)
+            && let Some(period) = super::powers::power_period(c::PWR_REGEN_SOURCE)
+            && (effect.end_time - w.time - 1).is_multiple_of(period)
+            && let Some(amount) = super::powers::power_effect(c::PWR_REGEN_SOURCE, effect.level)
+            && let Some(RoomObject::Source(s)) = w.room.objects.get_mut(&id)
+        {
+            s.energy = s
+                .energy
+                .saturating_add(amount as u32)
+                .min(s.energy_capacity);
         }
     }
     let ctl = w.controller();

@@ -30,7 +30,7 @@
     ],
     [
       "room.find:107",
-      2048
+      2030
     ],
     [
       "room.find:105",
@@ -38,19 +38,19 @@
     ],
     [
       "room.find:1",
-      35
+      28
     ],
     [
       "room.find:3",
-      35
+      28
     ],
     [
       "room.find:5",
-      35
+      28
     ],
     [
       "room.find:7",
-      35
+      28
     ],
     [
       "room.find:117",
@@ -58,7 +58,7 @@
     ],
     [
       "room.find:116",
-      6
+      5
     ]
   ],
   "console_errors_head": [],
@@ -89,13 +89,13 @@
     ]
   ],
   "console_head": [
-    "[tick 1][log] 1 Script reload - Load: 8 tickLimit: 500 limit: 20 Bucket: 10000",
+    "[tick 1][log] 1 Script reload - Load: 9 tickLimit: 500 limit: 20 Bucket: 10000",
     "[tick 1][log] 1 W1N1                        Skipping checkPath, routing not initialized, try remove memory",
     "[tick 1][log] 1 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
-    "[tick 2][log] 2 W1N1                        Setting misplacedSpawn",
-    "[tick 2][log] 2 W1N1                        Setup complete - storing data",
-    "[tick 2][log] 2 W1N1                        Setup completed - storing data",
     "[tick 2][log] 2 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 3][log] 3 W1N1                        Setting misplacedSpawn",
+    "[tick 3][log] 3 W1N1                        Setup complete - storing data",
+    "[tick 3][log] 3 W1N1                        Setup completed - storing data",
     "[tick 3][log] 3 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
     "[tick 4][log] 4 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
     "[tick 5][log] 5 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",

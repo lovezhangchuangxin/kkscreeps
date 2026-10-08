@@ -5,9 +5,9 @@
 //! power-spawns/process-power.js 与 processor/global-intents/power.js。
 //! powerCreep 以 Generic 承载（data.type=="powerCreep"），账号注册表在
 //! `PlayerState.power_creeps`，两侧同 ID。usePower 已结算 PWR_GENERATE_OPS、
-//! 两种 tower power、两种 spawn power、OPERATE_LAB/POWER/FACTORY；
-//! 效果写入房间公共效果表，由塔动作、孵化与生产结算消费。
-//! 其余 11 个 power 通过官方预检门后
+//! 两种 tower power、两种 spawn power、OPERATE_LAB/POWER/FACTORY、两种 source power；
+//! 效果写入房间公共效果表，由塔动作、孵化、生产与资源再生结算消费。
+//! 其余 9 个 power 通过官方预检门后
 //! 仍不结算，施放与效果消费者待后续补齐；capability powerEffects 已开启。
 
 mod account;
@@ -62,6 +62,14 @@ fn power_info(power: i64) -> Option<&'static Value> {
             .unwrap_or_default()
     });
     table.get(&power.to_string())
+}
+
+/// 周期效果的触发间隔；缺失或非正间隔不参与周期结算。
+pub(in crate::settle) fn power_period(power: i64) -> Option<u64> {
+    power_info(power)?
+        .get("period")?
+        .as_u64()
+        .filter(|p| *p > 0)
 }
 
 /// POWER_INFO[power].effect[level-1]；effect 缺失或越界返回 None。
@@ -187,7 +195,7 @@ pub(in crate::settle) fn set_pc_action_log(w: &mut Working, id: ObjId, key: &str
 }
 
 /// usePower：官方门序（房主 powerEnabled → power 等级/冷却 → ops → 射程
-/// /效果覆盖）后结算 generateOps、tower、spawn 与 lab/powerSpawn/factory 效果。
+/// /效果覆盖）后结算 generateOps、tower、spawn、lab/powerSpawn/factory 与 source 效果。
 /// 来源：processor/intents/power-creeps/usePower.js。
 fn pc_use_power(w: &mut Working, id: ObjId, d: &IntentData) {
     let Some(RoomObject::Generic(g)) = w.room.objects.get(&id).cloned() else {
@@ -286,11 +294,16 @@ fn pc_use_power(w: &mut Working, id: ObjId, d: &IntentData) {
         | c::PWR_DISRUPT_SPAWN
         | c::PWR_OPERATE_LAB
         | c::PWR_OPERATE_POWER
-        | c::PWR_OPERATE_FACTORY => {
+        | c::PWR_OPERATE_FACTORY
+        | c::PWR_REGEN_SOURCE
+        | c::PWR_DISRUPT_SOURCE => {
             let Some(target_id) = d.id else { return };
             let valid_target = match w.room.objects.get(&target_id) {
                 Some(RoomObject::Spawn(_)) => {
                     matches!(power, c::PWR_OPERATE_SPAWN | c::PWR_DISRUPT_SPAWN)
+                }
+                Some(RoomObject::Source(_)) => {
+                    matches!(power, c::PWR_REGEN_SOURCE | c::PWR_DISRUPT_SOURCE)
                 }
                 Some(target) => {
                     let expected = match power {
