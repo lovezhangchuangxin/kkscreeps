@@ -53,3 +53,12 @@ opt-level = 3
 
 [profile.test.package.sha2]
 opt-level = 3
+
+# cc 按包的 OPT_LEVEL 编译固定上游 C++ 算法；黄金测试的五轮搜索
+# 保持原样，避免开发构建的零优化让原生寻路占据门禁固定成本。
+# 仍继承开发/测试配置的调试信息与断言，release 已使用同一优化级别。
+[profile.dev.package.kk-pathfinder]
+opt-level = 3
+
+[profile.test.package.kk-pathfinder]
+opt-level = 3

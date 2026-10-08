@@ -19,3 +19,25 @@ pub(crate) fn executable_digest() -> anyhow::Result<String> {
     }
     Ok(format!("{:x}", hash.finalize()))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::digest;
+
+    // 后端切换必须保留标准 SHA-256，覆盖空输入、短输入与跨块长输入。
+    #[test]
+    fn digest_matches_sha256_known_vectors() {
+        assert_eq!(
+            digest(b""),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+        assert_eq!(
+            digest(b"abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        assert_eq!(
+            digest(&vec![b'a'; 1_000_000]),
+            "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0"
+        );
+    }
+}

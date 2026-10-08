@@ -12,3 +12,9 @@ kk-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.10.9"
+
+# sha2 0.10.9 的 ARM 硬件后端需显式启用 asm，运行时检测后可回退软件。
+# 所有 SHA-256 消费者都依赖本 crate，在共同依赖处选择后端，避免完整
+# 门禁、crate 子集与单独 CLI 构建切换特征后重复编译；其他架构保持原后端。
+[target.'cfg(target_arch = "aarch64")'.dependencies]
+sha2 = { version = "0.10.9", features = ["asm"] }

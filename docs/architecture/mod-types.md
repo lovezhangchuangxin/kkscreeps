@@ -32,7 +32,7 @@ ValueKind 全集映射：Bool→`boolean`；Number→`number`（Signed/Unsigned/
 ## 验收
 
 - Rust 单测（`kk-mod-api/src/typegen/tests.rs`）：ValueKind 全覆盖与信封（含 bool/ObjectRef/Float、引号键与枚举转义）、意图/资源/建筑类型化、参数命名撞名消歧、确定性与空计划退化、未接线形态与装配共用门同口径拒绝。
-- 端到端（`kk-cli/tests/mod_types_tests.rs`）：两独立包组合互不串扰（含信封去重、ServerOnly 不出现、可选 args、bool/ObjectRef 映射）、选择门不残留且 select/exclude 同集同产物、新鲜度失败与恢复全周期（check 不重写手改文件）、路径守卫拒绝包内输出（含父目录不存在的投毒路径）与非 `.d.ts` 后缀、报告守卫（包外、不覆盖声明）、内建类清单与玩家面运行时逐项一致、生成物经 compat 工作区 tsc（`--noEmit --strict`）核验且消费者正例（含 extends 内建类 + bind）通过、负例（目录外意图键/错误字段类型）被 TS 编译拒绝；递归数组、类/构造器/参数/SDK/泛型重名经真实 tsc 核验，枚举元素、嵌套元素、只读约束与重命名后的参数约束用 @ts-expect-error 锁定。输入保护另见 `kk-cli/tests/mod_output_guard_tests.rs`。
+- 端到端（`kk-cli/tests/command_tests/mod_types_tests.rs`）：两独立包组合互不串扰（含信封去重、ServerOnly 不出现、可选 args、bool/ObjectRef 映射）、选择门不残留且 select/exclude 同集同产物、新鲜度失败与恢复全周期（check 不重写手改文件）、路径守卫拒绝包内输出（含父目录不存在的投毒路径）与非 `.d.ts` 后缀、报告守卫（包外、不覆盖声明）、内建类清单与玩家面运行时逐项一致、生成物经 compat 工作区 tsc（`--noEmit --strict`）核验且消费者正例（含 extends 内建类 + bind）通过、负例（目录外意图键/错误字段类型）被 TS 编译拒绝；递归数组、类/构造器/参数/SDK/泛型重名经真实 tsc 核验，枚举元素、嵌套元素、只读约束与重命名后的参数约束用 @ts-expect-error 锁定。输入保护另见 `kk-cli/tests/command_tests/mod_output_guard_tests.rs`。
 - JS 夹具 [mod-typed](../../compat/fixtures/mod-typed/README.md)：alpha（全 ValueKind 字段、三种字段可见性、enum/array/map/ref、意图、资源、建筑）与 beta（owner-collection 对象、可空参数意图）互不依赖；`player.js` 是按生成声明编写的玩家模块样例。
 
 ## 当前边界

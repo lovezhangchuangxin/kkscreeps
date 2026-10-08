@@ -108,6 +108,10 @@ V8 生命周期账本位于 `kk-vm/src/isolate_order.rs`，玩家沙箱与 Mod r
 
 开发中定向验证使用 `pnpm run check -- kk-cli --test sim_tests --filter move_static`：先发现实际测试，空匹配报错；格式、Clippy、当前 CLI 构建及工具/文档门禁仍执行，Rust 部分只验收所选目标。每步输出耗时供定位成本；无参数完整门禁保持全部目标。定向通过不代表完整验收，也不改变真实进程冷恢复场景的断言与轮数。
 
-CLI 的开发/测试构建仅对 `sha2` 依赖启用 `opt-level = 3`。`sim run` 仍逐进程读取并计算完整可执行文件的 SHA-256，检查点身份校验保持；未复用摘要或跳过恢复门。业务 crate 的优化级别不变，release 配置不变。
+CLI 命令契约测试在 `kk-cli/tests/command_tests/`，embed RPC 和 mod init/inspect/test/types/输出保护按模块组织，共用 `command_tests` 测试目标。它们仅通过独立 CLI 子进程执行命令，夹具仍各自持有，减少测试入口的重复链接和启动；sim 场景继续保留独立的 `sim_tests` 目标。验证某一命令族可使用 `pnpm run check -- kk-cli --test command_tests --filter mod_types_tests`；原有同名独立测试目标已合并，历史验收命令保留当时记录。
+
+CLI 的开发/测试构建对 `sha2` 依赖启用 `opt-level = 3`，ARM 后端特征在共同依赖 kk-mod-api 声明，使完整门禁、crate 子集和单独 CLI 构建统一选择；ARM 目标启用固定 `sha2 0.10.9` 的 `asm` 特征：该版本的 ARM SHA-256 硬件后端由此开关控制，运行时检测指令支持，缺失则回退软件实现。`sim run` 仍逐进程读取并计算完整可执行文件的 SHA-256，检查点身份校验保持；未复用摘要或跳过恢复门。硬件后端选择同样适用于 ARM release 构建。标准摘要向量与真实命令/检查点测试验证后端语义。
+
+`kk-pathfinder` 的开发/测试包也单独启用 `opt-level = 3`，其 `cc` 构建脚本按包级 `OPT_LEVEL` 编译固定上游 C++ 算法；调试信息和断言仍继承原配置，其余 crate 的优化级别不变。原生黄金测试保留全部 24 个位置、两两搜索五轮和官方校验和，回调安全、重入及玩家 API 测试仍执行；release 原有优化级别不变。首次重建与 macOS 首次执行评估的等待不能当作后续增量门禁耗时。
 
 `sim_tests` 的移动代价和竞争策略模块在同一测试进程内共享只读基准报告，每个场景仍由当前 CLI 分别运行 JSON/KKPV 通道；行为与组合断言分别保留，保存/恢复过程仍各起新进程。报告不跨构建持久缓存，收集失败返回错误。开发时按受影响领域选择 `--filter move_cost` 或 `--filter move_policy`；同时修改共享模拟/恢复机制时扩大到 `--test sim_tests`，改变构建配置时执行无参数完整门禁。
