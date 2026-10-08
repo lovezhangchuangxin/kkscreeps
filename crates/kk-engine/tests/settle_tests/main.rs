@@ -13,6 +13,7 @@ use serde_json::Value;
 
 // 测试目标根采用 tests/<name>/main.rs 形态，mod 声明按同目录规则解析，
 // 不再使用 #[path] 挂接（S01 结构治理，取代 b1 批次的显式路径结论）。
+mod capacity_actions;
 mod combat;
 mod contrib_link;
 mod controller;

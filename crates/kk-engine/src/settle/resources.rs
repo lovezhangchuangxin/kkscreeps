@@ -121,7 +121,16 @@ pub fn inspect(w: &Working, id: ObjId, resource: &str) -> Result<ResourceView, S
                     .unwrap_or(0),
             ),
         ),
-        RoomObject::Storage(o) => shared(&o.store, &o.store_extra, Some(c::STORAGE_CAPACITY)),
+        RoomObject::Storage(o) => shared(
+            &o.store,
+            &o.store_extra,
+            Some(kk_world::types::storage_capacity(
+                w.controller(),
+                &o.owner,
+                w.room.effects.get(&id),
+                w.time,
+            )),
+        ),
         RoomObject::Tombstone(o) => shared(&o.store, &o.store_extra, None),
         RoomObject::Ruin(o) => shared(&o.store, &o.store_extra, None),
         RoomObject::Generic(o) => generic_inventory_view(

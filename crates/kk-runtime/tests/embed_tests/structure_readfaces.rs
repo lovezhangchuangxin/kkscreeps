@@ -207,7 +207,9 @@ pub(super) fn structure_defaults_probe_impl() -> anyhow::Result<()> {
         v[1], 50,
         "extension energyCapacity = EXTENSION_ENERGY_CAPACITY[rcl=3]"
     );
-    assert_eq!(v[2], 1000000, "storage storeCapacity = STORAGE_CAPACITY");
+    // 官方 storages/tick.js：容量由控制器归属/RCL 门控——RCL3 时
+    // CONTROLLER_STRUCTURES.storage[3]=0，容量 0（曾按常量 1M 硬编码）。
+    assert_eq!(v[2], 0, "storage storeCapacity = 0（RCL3 无 storage 配额）");
     // 官方 spawn/extension 带 storeCapacityResource → 无参 getCapacity() 读 null
     //（store.js:28-33）
     assert_eq!(

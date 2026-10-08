@@ -209,6 +209,7 @@ mod decline;
 mod disable;
 
 mod auto_disable;
+mod capacity_power_effects;
 mod combat_ranges;
 mod creep_build;
 mod creep_build_world;

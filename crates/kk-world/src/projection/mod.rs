@@ -109,7 +109,7 @@ impl World {
             entry.insert("name".into(), json!(name));
             entry.insert("terrain".into(), self.terrain_json(name, state));
 
-            let rcl = room_rcl(state);
+            let controller = state.controller();
             if visible.contains(name) {
                 // 玩家能量统计只计己方可用的 spawn、extension；内部全量投影统计全房。
                 let (available, capacity) = room_energy(state, user);
@@ -151,7 +151,7 @@ impl World {
                         object,
                         self.time,
                         &state.terrain,
-                        rcl,
+                        controller,
                         state.effects.get(id),
                     )
                     .expect("Mod 对象已在 world_json_impl 上文分流"),
@@ -204,7 +204,7 @@ impl World {
         let Some(state) = self.rooms.get(room) else {
             return Vec::new();
         };
-        let rcl = room_rcl(state);
+        let controller = state.controller();
         state
             .objects
             .iter()
@@ -215,7 +215,7 @@ impl World {
                     o,
                     self.time,
                     &state.terrain,
-                    rcl,
+                    controller,
                     state.effects.get(id),
                 )?;
                 matches_find(&record, find_const, viewer).then_some((*id, record))
@@ -245,7 +245,7 @@ impl World {
             object,
             self.time,
             terrain,
-            room_rcl(state),
+            state.controller(),
             state.effects.get(&id),
         )
     }
@@ -254,7 +254,7 @@ impl World {
 mod find;
 mod object;
 mod visibility;
-pub(crate) use crate::domain::room::{road_hits_max, room_energy, room_rcl};
+pub(crate) use crate::domain::room::{road_hits_max, room_energy};
 pub use find::matches_find;
 pub(crate) use object::{energy_resource_name, object_json, part_json};
 pub(crate) use visibility::{

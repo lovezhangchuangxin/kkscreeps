@@ -19,7 +19,15 @@ impl World {
             return None;
         }
         let state = self.rooms.get(room)?;
-        let mut record = snapshot_json(room, id, object, self.time, &state.terrain);
+        let mut record = snapshot_json(
+            room,
+            id,
+            object,
+            self.time,
+            &state.terrain,
+            state.controller(),
+            state.effects.get(&id),
+        );
         crate::effects::project(&mut record, state.effects.get(&id), self.time);
         Some(record)
     }
@@ -34,7 +42,6 @@ impl World {
             return Vec::new();
         };
         let terrain = &state.terrain;
-        let rcl = crate::domain::room::room_rcl(state);
         state
             .objects
             .iter()
@@ -48,11 +55,19 @@ impl World {
                     o,
                     self.time,
                     terrain,
-                    rcl,
+                    state.controller(),
                     state.effects.get(id),
                 )?;
                 crate::projection::matches_find(&internal, find_const, None).then(|| {
-                    let mut record = snapshot_json(room, *id, o, self.time, terrain);
+                    let mut record = snapshot_json(
+                        room,
+                        *id,
+                        o,
+                        self.time,
+                        terrain,
+                        state.controller(),
+                        state.effects.get(id),
+                    );
                     crate::effects::project(&mut record, state.effects.get(id), self.time);
                     record
                 })
@@ -159,6 +174,8 @@ fn snapshot_json(
     object: &RoomObject,
     time: u64,
     terrain: &kk_core::Terrain,
+    controller: Option<&kk_schema::room::ControllerObj>,
+    effects: Option<&Vec<crate::EffectEntry>>,
 ) -> Value {
     let id_str = id.as_str();
     match object {
@@ -270,7 +287,12 @@ fn snapshot_json(
             "id": id_str, "pos": snap_pos(room, o.x, o.y), "owner": o.owner,
             "hits": o.hits, "hitsMax": c::STORAGE_HITS,
             "store": snap_store_extra(&o.store, &o.store_extra),
-            "storeCapacity": c::STORAGE_CAPACITY,
+            "storeCapacity": crate::types::storage_capacity(
+                controller,
+                &o.owner,
+                effects,
+                time,
+            ),
         }),
         RoomObject::ConstructionSite(o) => {
             let mut v = json!({

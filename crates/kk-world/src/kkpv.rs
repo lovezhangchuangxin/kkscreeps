@@ -16,7 +16,7 @@ use kk_schema::kkpv::{KkpvBlockInput, KkpvLimits, KkpvObject, KkpvValue, KkpvVie
 use kk_schema::room::RoomObject;
 use serde_json::Value;
 
-use crate::domain::room::{room_energy, room_rcl};
+use crate::domain::room::room_energy;
 use crate::projection::{ext_entries_json, object_exported_for, object_json, room_visible_to};
 use crate::world::{ObjId, World};
 
@@ -39,7 +39,7 @@ impl World {
         let mut blocks = Vec::with_capacity(self.rooms.len());
         for (name, state) in &self.rooms {
             let room_visible = room_visible_to(state, user);
-            let rcl = room_rcl(state);
+            let controller = state.controller();
             let mut objects = Vec::new();
             for (id, object) in &state.objects {
                 // Mod 分支先于内建导出门（与 world_json_impl 同序）：
@@ -70,7 +70,7 @@ impl World {
                     object,
                     self.time,
                     &state.terrain,
-                    rcl,
+                    controller,
                     state.effects.get(id),
                 )
                 .expect("Mod 对象已在 kkpv_room_blocks_for_viewer 上文分流");

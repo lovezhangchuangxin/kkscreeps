@@ -20,7 +20,8 @@ pub(crate) fn energy_resource_name(o: &kk_schema::room::EnergyObj) -> String {
 }
 
 /// 将对象转换为 prelude 消费的原始记录，并附加 pos。
-/// rcl 决定 extension 的能量容量；不会读取或改变对象所属世界的状态。
+/// 控制器（等级与归属）决定 extension 容量与 storage 权威容量，效果表
+/// 决定 storage 的 power 加成；不会读取或改变对象所属世界的状态。
 /// 可选通知开关只在 Some 时输出，None 保持缺键。Mod 对象返回 None：
 /// 玩家投影两通道走带可见性裁切的 mod_record_json，本函数从返回类型上
 /// 杜绝"空对象 + 补造 pos 坐标"的残影记录进入任何查询路径。
@@ -31,10 +32,11 @@ pub(crate) fn object_json(
     object: &RoomObject,
     time: u64,
     terrain: &kk_core::Terrain,
-    rcl: u8,
+    controller: Option<&kk_schema::room::ControllerObj>,
     effects: Option<&Vec<crate::EffectEntry>>,
 ) -> Option<Value> {
     let id_str = id.as_str();
+    let rcl = controller.map(|ctl| ctl.level).unwrap_or(0);
     let mut v = match object {
         RoomObject::Creep(o) => {
             // age_time=0 表示尚未设置寿命，不输出 ticksToLive。
@@ -184,8 +186,14 @@ pub(crate) fn object_json(
             "id": id_str, "room": room, "x": o.x, "y": o.y,
             "owner": o.owner,
             "store": store_with_extra_json(&o.store, &o.store_extra),
-            // storage 使用通用容量，无 storeCapacityResource。
-            "storeCapacity": c::STORAGE_CAPACITY,
+            // storage 使用通用容量，无 storeCapacityResource；容量含
+            // 控制器归属基础门与 PWR_OPERATE_STORAGE 效果加成。
+            "storeCapacity": crate::types::storage_capacity(
+                controller,
+                &o.owner,
+                effects,
+                time,
+            ),
             "hits": o.hits, "hitsMax": c::STORAGE_HITS,
             });
             if let Some(flag) = o.notify_when_attacked {
