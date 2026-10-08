@@ -14,15 +14,16 @@
 //! 在版本路由前就被拒。
 use serde_json::Value;
 
-/// 当前载荷格式版本。v3：宿主玩法协议身份；v2：新增 `checkpoint_format_version` 键本身，并把
+/// 当前载荷格式版本。v4：房间对象效果独立表（必填）；v3：宿主玩法协议身份；v2：新增 `checkpoint_format_version` 键本身，并把
 /// `last_auto_disable` 的 trace 批次前旧形态（缺 `mod_id`，来源只在
 /// trigger.error.fault.binding）显式归一为结构化形态。
-pub(super) const CURRENT_FORMAT_VERSION: u32 = 3;
+pub(super) const CURRENT_FORMAT_VERSION: u32 = 4;
 
 type MigrationFn = fn(&mut Value) -> Result<(), String>;
 
 /// 升级链：第 n 项（0 起算）执行 n+1 → n+2。
-const MIGRATIONS: [MigrationFn; (CURRENT_FORMAT_VERSION - 1) as usize] = [v1_to_v2, v2_to_v3];
+const MIGRATIONS: [MigrationFn; (CURRENT_FORMAT_VERSION - 1) as usize] =
+    [v1_to_v2, v2_to_v3, v3_to_v4];
 
 /// 把载荷迁移到当前格式；返回**迁移前的原始版本**供语义门决策
 ///（如执行策略身份硬门只约束 v2 起保存的检查点，v1 存量按 legacy 宽容）。
@@ -98,5 +99,17 @@ fn v2_to_v3(value: &mut Value) -> Result<(), String> {
     object
         .entry("host_protocol")
         .or_insert_with(|| Value::String("kk-gameplay-v1-local-date".into()));
+    Ok(())
+}
+
+// 不补造缺失效果域；旧布局必须拒绝，避免恢复时静默丢失生效状态。
+fn v3_to_v4(value: &mut Value) -> Result<(), String> {
+    if let Some(rooms) = value
+        .pointer("/engine/world/rooms")
+        .and_then(Value::as_object)
+        && rooms.values().any(|room| room.get("effects").is_none())
+    {
+        return Err("检查点房间缺少 effects，无法恢复效果状态".into());
+    }
     Ok(())
 }

@@ -19,6 +19,7 @@ pub struct WorldCheckpoint {
 #[serde(deny_unknown_fields)]
 pub struct RoomCheckpoint {
     pub snapshot: Vec<u8>,
+    pub effects: BTreeMap<u64, Vec<crate::EffectEntry>>,
     pub extensions: BTreeMap<u64, BTreeMap<String, serde_json::Value>>,
 }
 
@@ -43,6 +44,11 @@ impl World {
                                 self.seed,
                                 self.next_obj_id(),
                             )),
+                            effects: room
+                                .effects
+                                .iter()
+                                .map(|(id, entries)| (id.0, entries.clone()))
+                                .collect(),
                             extensions: room
                                 .extensions
                                 .iter()
@@ -88,6 +94,12 @@ impl World {
                     return Err(format!("检查点全局对象 ID 非法或重复：{}", id.as_str()));
                 }
             }
+            room.effects = data
+                .effects
+                .into_iter()
+                .map(|(id, entries)| (ObjId(id), entries))
+                .collect();
+            World::validate_room_objects([(name.as_str(), &room)], saved.next_obj_id)?;
             for (id, fields) in data.extensions {
                 if !room.objects.contains_key(&ObjId(id)) {
                     return Err(format!("检查点扩展字段引用不存在的对象 {id}"));

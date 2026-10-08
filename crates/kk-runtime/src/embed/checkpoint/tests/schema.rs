@@ -68,6 +68,24 @@ fn schema_tree_official_packages(tree: &mut BTreeSet<String>) -> anyhow::Result<
                 Ok(())
             })
             .unwrap();
+        engine
+            .engine
+            .edit_world(|world| {
+                world.edit_room("W1N1", |room| {
+                    let id = *room.objects.keys().next().unwrap();
+                    room.effects.insert(
+                        id,
+                        vec![kk_world::EffectEntry {
+                            effect: 3,
+                            power: 3,
+                            level: 1,
+                            end_time: 100,
+                        }],
+                    );
+                    Ok(())
+                })
+            })
+            .unwrap();
         engine.disable_mod("clockwork")?;
         engine.rebuild_mod_realm()?;
         collect_schema_keys(
@@ -196,6 +214,11 @@ const PINNED_CHECKPOINT_KEYS: &[&str] = &[
     "engine.world.generation",
     "engine.world.next_obj_id",
     "engine.world.player_ticks",
+    "engine.world.rooms.*.effects.*[]",
+    "engine.world.rooms.*.effects.*[].effect",
+    "engine.world.rooms.*.effects.*[].power",
+    "engine.world.rooms.*.effects.*[].level",
+    "engine.world.rooms.*.effects.*[].end_time",
     "engine.world.rooms.*.extensions.*",
     "engine.world.rooms.*.snapshot[]",
     "engine.world.seed",
@@ -253,8 +276,8 @@ fn checkpoint_schema_keys_are_pinned() -> anyhow::Result<()> {
     schema_tree_fault_and_extension_package(&mut tree)?;
     assert_eq!(
         PINNED_CHECKPOINT_KEYS.len(),
-        111,
-        "钉死键总数（G22.a 99 → G22.c 100 → G23.a 101 → UTC 协议 102 → M2H.a power 域 111）：新增或删减键时更新此计数"
+        116,
+        "钉死键总数（G22.a 99 → G22.c 100 → G23.a 101 → UTC 协议 102 → M2H.a power 域 111 → M2H.b effects 116）：新增或删减键时更新此计数"
     );
     let expected: BTreeSet<String> = PINNED_CHECKPOINT_KEYS
         .iter()
@@ -321,8 +344,8 @@ fn strategy_key_compatibility_branches_are_pinned() -> anyhow::Result<()> {
     );
     assert_eq!(
         engine.checkpoint(Value::Null)?["checkpoint_format_version"],
-        json!(3),
-        "当前保存恒为格式 3"
+        json!(4),
+        "当前保存恒为格式 4"
     );
 
     // (b) 原生检查点注入该键 → 拒绝且旧分片保持原生形态。

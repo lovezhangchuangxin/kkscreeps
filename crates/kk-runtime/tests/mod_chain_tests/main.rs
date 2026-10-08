@@ -227,6 +227,7 @@ mod mod_building_world;
 mod mod_guard;
 mod object_ops;
 mod object_tick;
+mod power_effects;
 mod production_boundaries;
 mod quota_boundaries;
 mod resource_domain;

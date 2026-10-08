@@ -64,20 +64,13 @@ fn on_cooldown(data: &Value, time: u64) -> bool {
         .is_some_and(|t| t > time)
 }
 
-/// 官方效果查询：data.effects 中存在同 power、同级且 endTime≥time 的项。
-/// power 域未接线时 data 无 effects 键，恒为 false。
-fn has_effect(data: &Value, power: i64, level: i64, time: u64) -> bool {
-    data.get("effects")
-        .and_then(Value::as_array)
-        .is_some_and(|effects| {
-            effects.iter().any(|e| {
-                e.get("power").and_then(Value::as_i64) == Some(power)
-                    && e.get("level").and_then(Value::as_i64) == Some(level)
-                    && e.get("endTime")
-                        .and_then(Value::as_u64)
-                        .is_some_and(|t| t >= time)
-            })
-        })
+/// 官方 factory 配方门保留 endTime ≥ time，与 tower 的严格有效期判断不同。
+fn has_effect(w: &Working, id: ObjId, power: i64, level: i64) -> bool {
+    w.room.effects.get(&id).is_some_and(|effects| {
+        effects
+            .iter()
+            .any(|e| e.power == power && e.level == level && e.end_time >= w.time)
+    })
 }
 
 /// factory 按配方消耗组件并产出商品，进入配方冷却。来源：
@@ -107,12 +100,7 @@ pub fn produce(w: &mut Working, id: ObjId, d: &IntentData) {
     }
     if recipe.level.is_some()
         && factory_level > 0
-        && !has_effect(
-            &view.data,
-            c::PWR_OPERATE_FACTORY,
-            recipe.level.unwrap_or(0),
-            w.time,
-        )
+        && !has_effect(w, id, c::PWR_OPERATE_FACTORY, recipe.level.unwrap_or(0))
     {
         return;
     }

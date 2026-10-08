@@ -50,6 +50,8 @@ pub struct RoomState {
     /// 二进制房间快照（encode/decode_snapshot）当前不保存扩展；
     /// 完整世界检查点通过独立 extensions 字段保存，不改变房间二进制布局。
     pub extensions: BTreeMap<ObjId, BTreeMap<String, serde_json::Value>>,
+    /// 内建效果独立存储，随对象删除/迁移，随整轮候选提交。
+    pub effects: BTreeMap<ObjId, Vec<crate::EffectEntry>>,
 }
 
 impl RoomState {
@@ -64,6 +66,7 @@ impl RoomState {
             objects: BTreeMap::new(),
             events: Vec::new(),
             extensions: BTreeMap::new(),
+            effects: BTreeMap::new(),
         }
     }
 
@@ -84,7 +87,11 @@ impl RoomState {
         if self.objects.contains_key(&ObjId(id)) {
             return Err(format!("对象 id 重复: {}", ObjId(id).as_str()));
         }
+        let effects = crate::effects::extract(&mut object)?;
         object.set_id(id);
+        if let Some(effects) = effects {
+            self.effects.insert(ObjId(id), effects);
+        }
         self.objects.insert(ObjId(id), object);
         Ok(())
     }
@@ -417,12 +424,10 @@ impl World {
             return Ok(None);
         };
         let generation = self.next_generation()?;
-        let removed = self
-            .rooms
-            .get_mut(&name)
-            .expect("目录来自房间")
-            .objects
-            .remove(&id);
+        let room = self.rooms.get_mut(&name).expect("目录来自房间");
+        let removed = room.objects.remove(&id);
+        room.effects.remove(&id);
+        room.extensions.remove(&id);
         if removed.is_some() {
             self.generation = generation;
         }

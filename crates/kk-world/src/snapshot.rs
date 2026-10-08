@@ -18,8 +18,10 @@ impl World {
         if matches!(object, RoomObject::Flag(_)) {
             return None;
         }
-        let terrain = &self.rooms.get(room)?.terrain;
-        Some(snapshot_json(room, id, object, self.time, terrain))
+        let state = self.rooms.get(room)?;
+        let mut record = snapshot_json(room, id, object, self.time, &state.terrain);
+        crate::effects::project(&mut record, state.effects.get(&id), self.time);
+        Some(record)
     }
 
     /// 返回房内匹配 FIND 常量的快照，按对象 ID 排序；房间不存在时返回空列表。
@@ -40,10 +42,20 @@ impl World {
                 if matches!(*o, RoomObject::Flag(_)) {
                     return None;
                 }
-                let internal =
-                    crate::projection::object_json(room, *id, o, self.time, terrain, rcl)?;
-                crate::projection::matches_find(&internal, find_const, None)
-                    .then(|| snapshot_json(room, *id, o, self.time, terrain))
+                let internal = crate::projection::object_json(
+                    room,
+                    *id,
+                    o,
+                    self.time,
+                    terrain,
+                    rcl,
+                    state.effects.get(id),
+                )?;
+                crate::projection::matches_find(&internal, find_const, None).then(|| {
+                    let mut record = snapshot_json(room, *id, o, self.time, terrain);
+                    crate::effects::project(&mut record, state.effects.get(id), self.time);
+                    record
+                })
             })
             .collect()
     }

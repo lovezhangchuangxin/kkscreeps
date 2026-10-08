@@ -19,3 +19,6 @@ pub use index::RoomIndex;
 pub use world::{ObjId, RoomContents, RoomState, RoomVersionHandle, World};
 
 pub use world::checkpoint;
+
+pub mod effects;
+pub use effects::EffectEntry;

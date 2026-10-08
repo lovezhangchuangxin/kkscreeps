@@ -145,8 +145,16 @@ impl World {
                     continue;
                 }
                 objects.push(
-                    object_json(name, *id, object, self.time, &state.terrain, rcl)
-                        .expect("Mod 对象已在 world_json_impl 上文分流"),
+                    object_json(
+                        name,
+                        *id,
+                        object,
+                        self.time,
+                        &state.terrain,
+                        rcl,
+                        state.effects.get(id),
+                    )
+                    .expect("Mod 对象已在 world_json_impl 上文分流"),
                 );
             }
         }
@@ -201,7 +209,15 @@ impl World {
             .objects
             .iter()
             .filter_map(|(id, o)| {
-                let record = object_json(room, *id, o, self.time, &state.terrain, rcl)?;
+                let record = object_json(
+                    room,
+                    *id,
+                    o,
+                    self.time,
+                    &state.terrain,
+                    rcl,
+                    state.effects.get(id),
+                )?;
                 matches_find(&record, find_const, viewer).then_some((*id, record))
             })
             .collect()
@@ -223,7 +239,15 @@ impl World {
         let (room, object) = self.get(id)?;
         let state = self.rooms.get(room)?;
         let terrain = &state.terrain;
-        object_json(room, id, object, self.time, terrain, room_rcl(state))
+        object_json(
+            room,
+            id,
+            object,
+            self.time,
+            terrain,
+            room_rcl(state),
+            state.effects.get(&id),
+        )
     }
 }
 

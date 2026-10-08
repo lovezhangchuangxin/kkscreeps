@@ -21,7 +21,7 @@
 | Mod 包身份 | `mods.packages.*.manifest`、`mods.packages.*.files_sha256`（不透明） | 身份核验：恢复时与调用方提供的包 manifest 与全部文件 SHA-256 逐一比对，含未选择包 | `ModIdentity::verify`；相同包可换目录，缺包/多包/内容变化拒绝 | 拒绝不迁移，G23 负责 |
 | Mod 配置身份 | `mods.options`（不透明） | 与 `RegisterOptions` 重建身份核验（内容选择、逐包配置、冻结选项、VM 预算、profiler 开关、停用阈值） | `ModIdentity::verify` | 拒绝不迁移，G23 负责 |
 | 宿主玩法协议 | `host_protocol` | 当前 `kk-gameplay-v2-utc-date`，严格等值 | 替代分片装配前核验；日志头段同源 | 旧时区语义明确拒绝，无自动内容迁移 |
-| 载荷格式版本 | `checkpoint_format_version` | 当前 3、必填（缺失即拒）；v1→v2（last_auto_disable 归一）、v2→v3（缺 host_protocol 标旧语义）已注册 | `migrate::migrate_to_current` 解码前路由 | 显式迁移链（G23.a 起生效；后续格式变化逐链追加） |
+| 载荷格式版本 | `checkpoint_format_version` | 当前 4、必填（缺失即拒）；v1→v2（last_auto_disable 归一）、v2→v3（缺 host_protocol 标旧语义）、v3→v4（缺房间 effects 拒绝）已注册 | `migrate::migrate_to_current` 解码前路由 | 显式迁移链（G23.a 起生效；后续格式变化逐链追加） |
 | Mod 执行状态 | `disabled_mods[]`、`execution_strategy`、`fault_streak`、`last_fault`、`last_auto_disable` | 无独立版本；停用集合须满足依赖闭包，恢复后停用包 schema/规则仍有效；`execution_strategy` 为组合摘要（plan_hash+停用闭包+每槽派生执行面），恢复在 realm 重建后重算等值核对，v2 起 Mod 检查点必填（v1 载荷宽容） | realm 重建后回填故障与停用状态，策略身份以重注册产物为准 | 拒绝不迁移，G23 负责（last_auto_disable 旧形态已收编为 v1→v2 迁移） |
 | 协调器 | `concurrency`、`kkpv` | 无独立版本 | 恢复后并发与投影通道初值（sim 可由 CLI 参数覆盖） | 拒绝不迁移，G23 负责 |
 | 最近 console | `last_console.*[]` | 无独立版本 | 恢复后 console 续接 | 拒绝不迁移，G23 负责 |
@@ -33,6 +33,7 @@
 |---|---|---|---|---|
 | 世界标量 | `engine.world.time`、`seed`、`player_ticks`、`next_obj_id`、`generation`、`terrain_epoch` | 随 `engine_version` 硬门；装配时校验时间/种子/游标一致性 | 世界重建；`player_ticks` 回填按玩家执行计数 | 拒绝不迁移，G23 负责 |
 | 房间快照 | `engine.world.rooms.*.snapshot[]`（顺序二进制） | `room_schema_version`（kk-schema `SCHEMA_VERSION`）硬门 | 房间对象/地形/事件整体解码；房名、坐标、地形与全局 ID 唯一性校验 | 拒绝不迁移，G23 负责 |
+| 房间对象效果 | `engine.world.rooms.*.effects.*[]`（effect/power/level/end_time） | 载荷 v4 必填；缺失不补造，引用、等级、时间与同 power 唯一性重验 | `World::from_checkpoint` 重建表；投影/玩法读取绝对时间，删除/跨房与宿主同行 | 缺该域的旧布局拒绝，当前格式冷恢复与失败重试已覆盖 |
 | 房间扩展字段 | `engine.world.rooms.*.extensions`（动态映射，载荷不透明） | 扩展字段按 schema/引用校验 | Mod 对象扩展字段回填 | 拒绝不迁移，G23 负责 |
 | 玩家账户 | `engine.players.*`：`cpu.*`（桶 5 字段）、`gcl`、`rooms[]`、`raw_memory`、`segments.*`、`active_request[]`、`public_ids[]`、`default_public`、`foreign_request`、`money`、`resources.*`（动态映射） | 随 `engine_version` 硬门；CPU 与 Memory/segments 限额在装配时校验 | 玩家状态重建、下一次执行的注入与授权 | 拒绝不迁移，G23 负责 |
 | power 账号域 | `engine.players.*.power`（账号 power，GPL 源）、`power_creeps.*`（动态映射：注册表记录 8 字段，`powers.*` 为等级表；`spawn_cooldown_time`/`delete_time` 为墙钟毫秒） | 随 `engine_version` 硬门；旧检查点缺失按 serde 默认回填（0/空表） | powerCreep 注册表重建、GPL 配额与冷却判定 | 拒绝不迁移，G23 负责 |
@@ -56,7 +57,7 @@
 
 ## 覆盖边界与身份门现状
 
-- **夹具覆盖**：订单表、交易、账户（含跨 shard 资源与全部标量域）、工作者（含常量覆盖与二进制模块）、Mod 身份、故障三域（含自动停用记录展开）与房间扩展字段均在键树内。`fault_streak`/`last_fault`/`last_auto_disable` 是持久化链上没有 `deny_unknown_fields` 的少数结构（自动停用记录为宽松自定义反序列化，未知字段被静默忽略），其 schema 变化只能由故障场景的键树发现——解码端不会拒绝。
+- **夹具覆盖**：订单表、交易、账户（含跨 shard 资源与全部标量域）、工作者（含常量覆盖与二进制模块）、Mod 身份、故障三域（含自动停用记录展开）、房间效果与扩展字段均在键树内。`fault_streak`/`last_fault`/`last_auto_disable` 是持久化链上没有 `deny_unknown_fields` 的少数结构（自动停用记录为宽松自定义反序列化，未知字段被静默忽略），其 schema 变化只能由故障场景的键树发现——解码端不会拒绝。
 - **残余边界**：数组只下钻首元素，`engine.last_events[]` 为自由 `Value`，事件变体的形状只按夹具当时首位钉死；不透明叶子的内部形状不设防；取值等价仍由冷恢复往返相等测试与 sim 双通道验收负责。持久输入日志的写入与校验读取自 G25.a 落地、结算回放核对自 G25.b 落地（[输入日志](input-log.md)，日志自身独立于检查点载荷、不进版本门；回放不新增持久域）。
 - **版本门**：`engine_version`（kk-runtime 包版本）与 `room_schema_version` 双硬门，未知版本拒载；信封另有 `format=kkscreeps-checkpoint` / `version=1` 与 SHA-256 完整性校验。
 - **sim 附加身份**（不进载荷）：CLI 二进制 SHA-256、场景原始字节摘要、外部玩家模块清单与目录核验，防止无意换代码续跑。

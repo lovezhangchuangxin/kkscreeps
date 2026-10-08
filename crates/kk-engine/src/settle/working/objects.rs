@@ -39,6 +39,7 @@ impl Working {
                     id,
                     object: object.clone(),
                     extensions: self.room.extensions.get(&id).cloned(),
+                    effects: self.room.effects.get(&id).cloned(),
                     old_fatigue: self.old_fatigue.get(&id).copied(),
                     tick_fatigue: self.tick_fatigue.get(&id).copied(),
                     damage: self.damage_to_apply.get(&id).copied(),
@@ -50,6 +51,7 @@ impl Working {
         let (x, y) = obj.pos();
         self.index.remove(id, (x, y));
         self.room.extensions.remove(&id);
+        self.room.effects.remove(&id);
         self.old_fatigue.remove(&id);
         self.tick_fatigue.remove(&id);
         self.damage_to_apply.remove(&id);

@@ -170,12 +170,12 @@ pub(in crate::settle) fn intent_withdraw(w: &mut Working, id: ObjId, data: &Inte
             match value["structureType"].as_str() {
                 Some("nuker" | "powerBank") => return,
                 Some("terminal")
-                    if value["effects"].as_array().is_some_and(|effects| {
-                        effects.iter().any(|effect| {
-                            effect["power"].as_i64() == Some(c::PWR_DISRUPT_TERMINAL)
-                                && effect["endTime"].as_u64().is_some_and(|end| end > w.time)
-                        })
-                    }) =>
+                    if kk_world::effects::active_power(
+                        w.room.effects.get(&target_id),
+                        c::PWR_DISRUPT_TERMINAL,
+                        w.time,
+                    )
+                    .is_some() =>
                 {
                     return;
                 }

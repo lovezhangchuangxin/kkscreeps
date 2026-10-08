@@ -7,6 +7,7 @@ pub struct RoomContents<'a> {
     pub objects: &'a mut BTreeMap<ObjId, RoomObject>,
     pub events: &'a mut Vec<String>,
     pub extensions: &'a mut BTreeMap<ObjId, BTreeMap<String, serde_json::Value>>,
+    pub effects: &'a mut BTreeMap<ObjId, Vec<crate::EffectEntry>>,
 }
 
 impl World {
@@ -24,6 +25,14 @@ impl World {
                 return Err(format!("房间键与名称不一致：{name}"));
             }
             for (id, object) in &room.objects {
+                // 二进制恢复或直接替房不得夹带第二份 effects 权威状态。
+                if let RoomObject::Generic(g) = object
+                    && serde_json::from_str::<serde_json::Value>(&g.data)
+                        .ok()
+                        .is_some_and(|data| data.get("effects").is_some())
+                {
+                    return Err("Generic effects 须归一到房间效果表".into());
+                }
                 let (x, y) = object.pos();
                 if id.0 == 0
                     || id.0 >= next_id
@@ -36,6 +45,18 @@ impl World {
                         "房间 {name} 对象 {} 的 ID/坐标不变式无效",
                         id.as_str()
                     ));
+                }
+            }
+            for (id, entries) in &room.effects {
+                if !room.objects.contains_key(id) {
+                    return Err(format!("房间 {name} 含悬空效果"));
+                }
+                let mut powers = HashSet::new();
+                for entry in entries {
+                    entry.validate()?;
+                    if !powers.insert(entry.power) {
+                        return Err("同 power 效果重复".into());
+                    }
                 }
             }
             if room
@@ -63,7 +84,13 @@ impl World {
             objects: &mut room.objects,
             events: &mut room.events,
             extensions: &mut room.extensions,
+            effects: &mut room.effects,
         })?;
+        for (id, object) in &mut room.objects {
+            if let Some(entries) = crate::effects::extract(object)? {
+                room.effects.insert(*id, entries);
+            }
+        }
         self.replace_room(name.to_string(), room)?;
         Ok(result)
     }

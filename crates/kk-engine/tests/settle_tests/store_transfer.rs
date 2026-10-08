@@ -115,7 +115,7 @@ fn generic_withdraw_respects_special_targets_and_terminal_effect_expiry() {
         let target = warehouse(
             &mut f,
             kind,
-            json!({"store": {"energy": 50}, "storeCapacity": 100, "effects": [{"power": 15, "endTime": 1}]}),
+            json!({"store": {"energy": 50}, "storeCapacity": 100, "effects": [{"power": 15, "level": 1, "endTime": 1}]}),
         );
         let actor = f.creep("hauler", "p1", 10, 10, &[BodyKind::Carry], 0);
         assert!(exchange(&mut f, actor, target, Action::Withdraw, "energy", 10).is_empty());

@@ -32,6 +32,7 @@ pub(crate) fn object_json(
     time: u64,
     terrain: &kk_core::Terrain,
     rcl: u8,
+    effects: Option<&Vec<crate::EffectEntry>>,
 ) -> Option<Value> {
     let id_str = id.as_str();
     let mut v = match object {
@@ -351,6 +352,7 @@ pub(crate) fn object_json(
             json!({ "x": x, "y": y, "roomName": room_name }),
         );
     }
+    crate::effects::project_raw(&mut v, effects, time);
     Some(v)
 }
 

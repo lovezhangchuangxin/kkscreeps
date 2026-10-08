@@ -64,8 +64,16 @@ impl World {
                 if !object_exported_for(Some(user), room_visible, object) {
                     continue;
                 }
-                let record = object_json(name, *id, object, self.time, &state.terrain, rcl)
-                    .expect("Mod 对象已在 kkpv_room_blocks_for_viewer 上文分流");
+                let record = object_json(
+                    name,
+                    *id,
+                    object,
+                    self.time,
+                    &state.terrain,
+                    rcl,
+                    state.effects.get(id),
+                )
+                .expect("Mod 对象已在 kkpv_room_blocks_for_viewer 上文分流");
                 let mut kkpv_object = record_to_kkpv(*id, object, &record)?;
                 // 扩展目录只按 structureType 登记；非结构类型无 ext 键，
                 // 与 JSON 投影的裁切入口一致。

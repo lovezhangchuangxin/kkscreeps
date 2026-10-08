@@ -11,12 +11,17 @@ api.objects.define('cargo:crate', {version:1,playerClass:'Crate',positionFields:
 }});
 "#,
     );
-    let player = "export default function install(api){class Crate extends api.builtins.RoomObject{} api.objects.bind('cargo:crate',Crate);}";
+    let player = "export default function install(api){class Crate extends api.builtins.RoomObject{get effects(){return api.view.field(this,'effects');}} api.objects.bind('cargo:crate',Crate);}";
     for binary in [false, true] {
         let mut e =
             engine_with_player_files(&[("cargo", source.clone())], &[("cargo", player)], binary)?;
         let actor = harness::fighter(&mut e, "a", 10, 10, &["carry", "move"])?;
         let target = e.place_mod_object("W1N1","cargo:crate", &json!({"x":10,"y":11,"structureType":"terminal","effects":[{"power":15,"ticksRemaining":10}]}))?;
+        let fields = e.run_player(
+            "p1",
+            &format!("Object.keys(Game.getObjectById('{target}').effects[0]).sort()"),
+        )?;
+        assert_eq!(fields.expr["value"], json!(["power", "ticksRemaining"]));
         let transfer = e.run_player(
             "p1",
             &format!("Game.creeps.a.transfer(Game.getObjectById('{target}'),'energy',10)"),

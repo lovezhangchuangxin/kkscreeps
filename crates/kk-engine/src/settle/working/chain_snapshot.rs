@@ -7,6 +7,7 @@ pub struct RemovedObject {
     pub id: ObjId,
     pub object: RoomObject,
     pub extensions: Option<BTreeMap<String, Value>>,
+    pub effects: Option<Vec<kk_world::EffectEntry>>,
     pub old_fatigue: Option<u32>,
     pub tick_fatigue: Option<i64>,
     pub damage: Option<i64>,
@@ -199,6 +200,7 @@ impl Working {
                         self.index.remove(id, (x, y));
                     }
                     self.room.extensions.remove(&id);
+                    self.room.effects.remove(&id);
                     self.damage_to_apply.remove(&id);
                     self.heal_to_apply.remove(&id);
                 }
@@ -206,6 +208,14 @@ impl Working {
                     let (x, y) = bundle.object.pos();
                     self.room.objects.insert(bundle.id, bundle.object);
                     self.index.insert(bundle.id, (x, y));
+                    match bundle.effects {
+                        Some(entries) => {
+                            self.room.effects.insert(bundle.id, entries);
+                        }
+                        None => {
+                            self.room.effects.remove(&bundle.id);
+                        }
+                    }
                     match bundle.extensions {
                         Some(fields) => {
                             self.room.extensions.insert(bundle.id, fields);

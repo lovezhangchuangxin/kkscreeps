@@ -210,12 +210,20 @@ fn tower_state(w: &Working, id: ObjId) -> Option<TowerState> {
 }
 
 /// 以 Chebyshev 距离线性衰减：5 格内全功率，20 格及以上保留 25%，最后向下取整。
-fn tower_falloff_amount(power: i64, range: i64) -> i64 {
+fn tower_falloff_amount(w: &Working, id: ObjId, power: i64, range: i64) -> i64 {
     let mut amount = power as f64;
     if range > c::TOWER_OPTIMAL_RANGE {
         let r = range.min(c::TOWER_FALLOFF_RANGE);
         amount -= amount * c::TOWER_FALLOFF * (r - c::TOWER_OPTIMAL_RANGE) as f64
             / (c::TOWER_FALLOFF_RANGE - c::TOWER_OPTIMAL_RANGE) as f64;
+    }
+    for power in [c::PWR_OPERATE_TOWER, c::PWR_DISRUPT_TOWER] {
+        if let Some(effect) =
+            kk_world::effects::active_power(w.room.effects.get(&id), power, w.time)
+            && let Some(multiplier) = super::powers::power_effect_value(power, effect.level)
+        {
+            amount *= multiplier;
+        }
     }
     amount.floor() as i64
 }
@@ -263,7 +271,7 @@ fn tower_attack(w: &mut Working, id: ObjId, d: &IntentData) {
         return;
     };
     let range = chebyshev((tower.x, tower.y), target.pos());
-    let amount = tower_falloff_amount(c::TOWER_POWER_ATTACK, range);
+    let amount = tower_falloff_amount(w, id, c::TOWER_POWER_ATTACK, range);
     if amount == 0 {
         return;
     }
@@ -292,7 +300,7 @@ fn tower_heal(w: &mut Working, id: ObjId, d: &IntentData) {
         return;
     }
     let range = chebyshev((tower.x, tower.y), pos);
-    let amount = tower_falloff_amount(c::TOWER_POWER_HEAL, range);
+    let amount = tower_falloff_amount(w, id, c::TOWER_POWER_HEAL, range);
     if amount == 0 {
         return;
     }
@@ -335,7 +343,7 @@ fn tower_repair(w: &mut Working, id: ObjId, d: &IntentData) {
         return;
     }
     let range = chebyshev((tower.x, tower.y), target.pos());
-    let amount = tower_falloff_amount(c::TOWER_POWER_REPAIR, range);
+    let amount = tower_falloff_amount(w, id, c::TOWER_POWER_REPAIR, range);
     if amount == 0 {
         return;
     }

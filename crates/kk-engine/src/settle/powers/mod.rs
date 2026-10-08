@@ -4,9 +4,10 @@
 //! 移植官方 engine/src/processor/intents/power-creeps/*.js、
 //! power-spawns/process-power.js 与 processor/global-intents/power.js。
 //! powerCreep 以 Generic 承载（data.type=="powerCreep"），账号注册表在
-//! `PlayerState.power_creeps`，两侧同 ID。本批 usePower 仅结算
-//! PWR_GENERATE_OPS 的效果；其余 18 个 power 通过全部官方门后静默不结算
-//! （效果族属 M2H.b，capability powerEffects 关闭时玩家面不可达）。
+//! `PlayerState.power_creeps`，两侧同 ID。usePower 已结算 PWR_GENERATE_OPS、
+//! PWR_OPERATE_TOWER 与 PWR_DISRUPT_TOWER；塔效果写入房间公共效果表，
+//! 由塔的攻击、治疗和修理结算消费。其余 16 个 power 通过官方预检门后
+//! 仍不结算，施放与效果消费者待后续补齐；capability powerEffects 已开启。
 
 mod account;
 mod resources;
@@ -64,12 +65,16 @@ fn power_info(power: i64) -> Option<&'static Value> {
 
 /// POWER_INFO[power].effect[level-1]；effect 缺失或越界返回 None。
 pub(crate) fn power_effect(power: i64, level: i64) -> Option<i64> {
+    power_effect_value(power, level).map(|f| f as i64)
+}
+
+/// 效果乘数保留小数，tower 在衰减与两种 power 相乘后统一取整。
+pub(crate) fn power_effect_value(power: i64, level: i64) -> Option<f64> {
     power_info(power)?
         .get("effect")?
         .as_array()?
         .get((level - 1).max(0) as usize)?
         .as_f64()
-        .map(|f| f as i64)
 }
 
 /// 房间相位意图入口：所有权门后按官方动作序分派。
@@ -181,7 +186,7 @@ pub(in crate::settle) fn set_pc_action_log(w: &mut Working, id: ObjId, key: &str
 }
 
 /// usePower：官方门序（房主 powerEnabled → power 等级/冷却 → ops → 射程
-/// /效果覆盖）后仅结算 PWR_GENERATE_OPS；其余 power 在门全过后静默不结算。
+/// /效果覆盖）后结算 generateOps 和 tower 效果；其余 power 尚待消费者接线。
 /// 来源：processor/intents/power-creeps/usePower.js。
 fn pc_use_power(w: &mut Working, id: ObjId, d: &IntentData) {
     let Some(RoomObject::Generic(g)) = w.room.objects.get(&id).cloned() else {
@@ -211,7 +216,7 @@ fn pc_use_power(w: &mut Working, id: ObjId, d: &IntentData) {
         return;
     };
     let level = entry.get("level").and_then(Value::as_i64).unwrap_or(0);
-    if level == 0 {
+    if !(1..=5).contains(&level) {
         return;
     }
     if entry
@@ -249,49 +254,61 @@ fn pc_use_power(w: &mut Working, id: ObjId, d: &IntentData) {
         {
             return;
         }
-        // 目标 effects 面仅 Generic 承载（结构 effects 属 M2H.b）；controller
-        // 等专用结构视为无效果。
-        if let Some(t_effects) = pc_data(target)
-            .and_then(|tv| tv.get("effects").cloned())
-            .and_then(|e| e.as_array().cloned())
-            && t_effects.iter().any(|effect| {
-                effect.get("power").and_then(Value::as_i64) == Some(power)
-                    && effect
-                        .get("level")
-                        .and_then(Value::as_i64)
-                        .is_some_and(|l| l > level)
-                    && effect
-                        .get("endTime")
-                        .and_then(Value::as_u64)
-                        .is_some_and(|end| end > w.time)
-            })
+        if kk_world::effects::active_power(w.room.effects.get(&target_id), power, w.time)
+            .is_some_and(|effect| effect.level > level)
         {
             return;
         }
     }
-    if power != c::PWR_GENERATE_OPS {
-        // 其余 18 个 power 的效果族未实现（M2H.b）；门全过后静默不结算，
-        // 不扣 ops、不进冷却、不发事件——powerEffects 能力关闭时玩家面
-        // 不可达，能力开启前效果族必须落地（台账 M2H.b 验收）。
-        return;
-    }
-    // PWR_GENERATE_OPS：store.ops += effect[level-1]，总量超容部分原地掉落
-    // （官方委托 drop，掉落量 = min(ops, sum - capacity)）。
-    let gained = power_effect(power, level).unwrap_or(0);
-    let new_ops = held_ops - ops + gained;
-    let capacity = v.get("storeCapacity").and_then(Value::as_i64).unwrap_or(0);
-    let other_total: i64 = v
-        .get("store")
-        .and_then(Value::as_object)
-        .map(|s| {
-            s.iter()
-                .filter(|(k, _)| k.as_str() != "ops")
-                .map(|(_, n)| n.as_i64().unwrap_or(0))
-                .sum()
-        })
-        .unwrap_or(0);
-    let overflow = (other_total + new_ops - capacity).max(0).min(new_ops);
-    v["store"]["ops"] = json!(new_ops - overflow);
+    let overflow = match power {
+        c::PWR_GENERATE_OPS => {
+            let gained = power_effect(power, level).unwrap_or(0);
+            let new_ops = held_ops - ops + gained;
+            let capacity = v.get("storeCapacity").and_then(Value::as_i64).unwrap_or(0);
+            let other_total: i64 = v
+                .get("store")
+                .and_then(Value::as_object)
+                .map(|s| {
+                    s.iter()
+                        .filter(|(k, _)| k.as_str() != "ops")
+                        .map(|(_, n)| n.as_i64().unwrap_or(0))
+                        .sum()
+                })
+                .unwrap_or(0);
+            let overflow = (other_total + new_ops - capacity).max(0).min(new_ops);
+            v["store"]["ops"] = json!(new_ops - overflow);
+            overflow
+        }
+        c::PWR_OPERATE_TOWER | c::PWR_DISRUPT_TOWER => {
+            let Some(target_id) = d.id else { return };
+            if !w
+                .room
+                .objects
+                .get(&target_id)
+                .and_then(pc_data)
+                .is_some_and(|target| target["structureType"] == "tower")
+            {
+                return;
+            }
+            let duration = match info.get("duration") {
+                Some(Value::Array(a)) => a.get((level - 1) as usize).and_then(Value::as_u64),
+                Some(n) => n.as_u64(),
+                None => None,
+            };
+            let Some(duration) = duration else { return };
+            let effects = w.room.effects.entry(target_id).or_default();
+            effects.retain(|effect| effect.power != power);
+            effects.push(kk_world::EffectEntry {
+                effect: power,
+                power,
+                level,
+                end_time: w.time + duration,
+            });
+            v["store"]["ops"] = json!(held_ops - ops);
+            0
+        }
+        _ => return,
+    };
     let cooldown = info.get("cooldown").and_then(Value::as_i64).unwrap_or(0);
     let power_key = power.to_string();
     v["powers"][&power_key] = json!({ "level": level, "cooldownTime": w.time + cooldown as u64 });

@@ -31,6 +31,14 @@
 
 lab 动作顺序为 boost → unboost → runReaction，否则 reverseReaction；已登记 runReaction 时即使结算失败也不回落 reverseReaction。
 
+### power 效果链（当前首片）
+
+`RoomState.effects` 按对象 ID 持有 `effect/power/level/end_time`，与对象候选一起克隆、删除和跨房迁移；同 power 施放替换，异 power 共存。常规消费以 `end_time > time` 判断有效，不逐拍改写或清空过期条目；factory 配方门保留官方 `≥` 边界。管理员 Generic 输入中的 effects 在插入或编辑时归一到此表，发布和恢复拒绝双权威或悬空条目。
+
+`usePower` 当前完成 GENERATE_OPS、OPERATE_TOWER 和 DISRUPT_TOWER。tower 两种效果分别通过目标类型、射程、等级覆盖、ops 与冷却门后挂到目标，统一扣 ops、设置冷却、发 EVENT_POWER 和动作日志。塔 attack/heal/repair 先计算距离衰减，再乘两种有效效果的 POWER_INFO 小数倍率，最后一次 floor；塔的能量费用保持固定值。其余 16 个 power 的结算消费者仍待后续切片。
+
+JSON/KKPV 内部记录携带 endTime 和剩余时间，供原始预检使用；Game 对象装配和手动构造均只复制公开四键（effect/power/level/ticksRemaining），过滤到期项。管理查询快照同样只返回活跃效果。检查点 v4 独立保存房间效果表，字段必填、恢复重验引用/等级/时间/同 power 唯一性；完整失败撤销整个候选，局部拆毁拒绝恢复对象及效果，缓存重试不重复运行玩家。
+
 ### 仓库资源与 GCL
 
 `transfer`/`withdraw` 除既有类型化仓库外，也读写 Generic 的 `store`；转入容量由 `storeCapacity` 和 `storeCapacityResource` 字段决定，无需扩充结构类型白名单。放置及建造落成的空仓也带原始 `store`，满足玩家 API 的目标预检；固定能量仓与新建仓库带显式 `energy: 0`。共享仓按所有资源的合计库存计算余量，分资源仓按对应槽计算；实验室首次装入矿物时绑定矿物槽，取空后恢复未绑定容量。同轮动作读取先前动作修改后的候选库存，避免竞争时超容。提取保留安全模式、敌方私有 rampart、nuker/powerBank 禁止提取和 terminal 干扰截止时间限制。Generic 仓库的 10 条默认容量已接入[冻结规则表](store-rules.md)，包括实验室槽绑定/释放的数值和终端容量归一；这些特殊动作策略仍由默认 native 执行；[creep 资源槽](creep-resource-slots.md)已开放 before/wrap/replace/after 与局部拒绝；[资源领域能力](mod-resources.md)允许可信 Mod 通过 replace 自定义转账、显式损耗及同房路由。默认特殊策略尚无各自独立入口，原例外依据见[核心经济记录](../research/notes/economy-gcl-2026-10-04.md)。

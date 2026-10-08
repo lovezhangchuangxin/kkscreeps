@@ -161,6 +161,10 @@
     const game = gw.currentGame && gw.currentGame();
     this.room = game && game.rooms ? game.rooms[roomName] : undefined;
     this.pos = new gw.RoomPosition(x, y, roomName);
+    initEffects.call(this, effects);
+  }
+  // 手动构造和 Game 装配都要附带脱离权威记录的效果数组。
+  function initEffects(effects) {
     if (effects) {
       const live = [];
       for (let i = 0; i < effects.length; i++) {
@@ -467,6 +471,8 @@
       pos,
       room: undefined, // 由 buildGame 回填（Game.rooms[name]）
     };
+    // Mod 的 effects 可是声明的业务字段，不能覆盖其玩家面 getter。
+    if (o.type !== 'mod') initEffects.call(base, o.effects);
     const assemble = gw.assemblers[o.type];
     const obj = assemble ? assemble(o, base, pos, now) : base;
     // Mod 对象的类由玩家模块安装（gw.modApi.types[typeKey].cls）；探测

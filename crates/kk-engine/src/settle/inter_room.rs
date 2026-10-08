@@ -63,8 +63,51 @@ pub fn apply_inter_room_moves(rooms: &mut [(String, RoomState)], moves: &[InterR
         };
         obj.set_pos(mv.x, mv.y);
         rooms[target_idx].1.objects.insert(mv.id, obj);
+        if let Some(entries) = rooms[source_idx].1.effects.remove(&mv.id) {
+            rooms[target_idx].1.effects.insert(mv.id, entries);
+        }
         if let Some(fields) = rooms[source_idx].1.extensions.remove(&mv.id) {
             rooms[target_idx].1.extensions.insert(mv.id, fields);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn effect_state_moves_with_host_and_stays_when_destination_is_absent() {
+        let mut source = RoomState::new("W1N1", kk_core::Terrain::plains());
+        let object = kk_schema::room::RoomObject::Generic(kk_schema::room::GenericObj {
+            id: 1,
+            x: 0,
+            y: 20,
+            data: serde_json::json!({"type":"powerCreep"}).to_string(),
+        });
+        source.insert_with_id(1, object).unwrap();
+        let entries = vec![kk_world::EffectEntry {
+            effect: 3,
+            power: 3,
+            level: 1,
+            end_time: 100,
+        }];
+        source.effects.insert(ObjId(1), entries.clone());
+        let mut rooms = vec![("W1N1".into(), source)];
+        let moves = [InterRoomMove {
+            id: ObjId(1),
+            to_room: "W2N1".into(),
+            x: 49,
+            y: 20,
+        }];
+        apply_inter_room_moves(&mut rooms, &moves);
+        assert_eq!(rooms[0].1.effects[&ObjId(1)], entries);
+        rooms.push((
+            "W2N1".into(),
+            RoomState::new("W2N1", kk_core::Terrain::plains()),
+        ));
+        apply_inter_room_moves(&mut rooms, &moves);
+        assert!(rooms[0].1.effects.is_empty());
+        assert_eq!(rooms[1].1.effects[&ObjId(1)], entries);
+        assert_eq!(rooms[1].1.objects[&ObjId(1)].pos(), (49, 20));
     }
 }

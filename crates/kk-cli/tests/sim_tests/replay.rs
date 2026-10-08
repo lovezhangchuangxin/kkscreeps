@@ -187,3 +187,54 @@ fn verify_replay_requires_input_log() -> anyhow::Result<()> {
     );
     Ok(())
 }
+
+/// 效果表参与逐段重放；跨进程恢复后继续消费同一塔效果，终态等于直跑。
+#[test]
+fn tower_power_effect_replay_and_cold_resume_match_straight_run() -> anyhow::Result<()> {
+    for binary in [false, true] {
+        let fixture = Fixture::new()?;
+        let scene = fixture.scene(&json!({
+            "version":1,
+            "shard":{"players":["p1"],"rooms":[{"name":"W1N1","owner":"p1","rcl":8,"powerEnabled":true}]},
+            "bots":[{"player":"p1","modules":"modules"}],
+            "objects":[
+                {"alias":"tower","room":"W1N1","kind":"structure","spec":{"structureType":"tower","owner":"p1","pos":[20,20],"store":{"energy":1000}}},
+                {"alias":"operator","room":"W1N1","kind":"powerCreep","spec":{"name":"operator","owner":"p1","pos":[19,20],"powers":{"3":5},"store":{"ops":100}}},
+                {"alias":"enemy","room":"W1N1","kind":"creep","spec":{"name":"enemy","owner":"p2","pos":[27,20],"body":vec!["move";30]}}
+            ]
+        }))?;
+        fixture.module("exports.loop=()=>{const tower=Game.rooms.W1N1.find(FIND_MY_STRUCTURES).find(s=>s.structureType===STRUCTURE_TOWER);if(!Memory.cast){Game.powerCreeps.operator.usePower(PWR_OPERATE_TOWER,tower);Memory.cast=true;}else{tower.attack(Game.rooms.W1N1.find(FIND_HOSTILE_CREEPS)[0]);}};")?;
+        let checkpoint = fixture.0.join("checkpoint.json");
+        let invoke = |name: &str, ticks: u32, option: Option<&str>| -> anyhow::Result<Value> {
+            let report = fixture.0.join(format!("{name}.json"));
+            let log = fixture.0.join(format!("{name}.jsonl"));
+            let mut command = sim_command(&scene, &report, &log, ticks);
+            if binary {
+                command.arg("--kkpv");
+            }
+            if let Some(option) = option {
+                command.arg(option).arg(&checkpoint);
+            }
+            let (code, value) = result(&mut command, &report)?;
+            assert_eq!(code, 0, "{value}");
+            assert_eq!(value["verify_replay"]["status"], "passed", "{value}");
+            Ok(value)
+        };
+        let mut straight = invoke("straight", 3, None)?["final"].clone();
+        invoke("first", 1, Some("--save-checkpoint"))?;
+        let mut resumed = invoke("resumed", 2, Some("--load-checkpoint"))?["final"].clone();
+        for value in [&mut straight, &mut resumed] {
+            for player in value["players"].as_object_mut().unwrap().values_mut() {
+                player.as_object_mut().unwrap().remove("cpu_bucket");
+            }
+        }
+        assert_eq!(straight, resumed);
+        assert_eq!(resumed["objects"]["enemy"]["hits"], 1380);
+        assert_eq!(resumed["objects"]["operator"]["store"]["ops"], 90);
+        assert_eq!(
+            resumed["objects"]["tower"]["effects"][0]["ticksRemaining"],
+            97
+        );
+    }
+    Ok(())
+}

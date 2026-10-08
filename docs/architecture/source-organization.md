@@ -11,6 +11,7 @@
 | `kk-schema/src/kkpv.rs` | 公开值模型、限制和错误；`kkpv/wire.rs` 共享布局，`encode.rs` 编码与束校验，`view.rs` 单块校验与字段解码，`merge.rs` 同版本覆盖合并 |
 | `kk-world/src/world/mod.rs` | 世界容器与读入口；`mutation.rs` 管理隔离编辑和发布，`checkpoint.rs` 管理保存恢复 |
 | `kk-world/src/projection/mod.rs` | JSON 玩家投影装配；`visibility.rs` 负责可见性和字段投影，`object.rs` 负责对象编码，`find.rs` 负责查询匹配；旧 `world_json` 路径重导出保留 |
+| `kk-world/src/effects.rs` | 对象效果权威条目、输入归一、有效期与双投影；具体 power 公式在 engine 消费者 |
 | `kk-world/src/domain/` | Generic 字段/仓库解析与房间领域值；JSON、KKPV 和结算共享只读访问，不把写入规则放入投影层 |
 | `kk-mod-api/src/contribution/mod.rs` | 声明、规则合并、处理器排序、冻结、计划与指纹；构建实现私有，领域消费者从 crate 根读取稳定公共契约 |
 | `kk-mod-api/src/movement/` | 登记、预检、仲裁、准入、障碍和代价的领域表示；crate 根保留旧模块路径 |
@@ -88,7 +89,7 @@ Creep 移动工厂在加载期捕获原 Room 序列化器及 registry/lodash，�
 
 V8 生命周期账本位于 `kk-vm/src/isolate_order.rs`，玩家沙箱与 Mod realm 共用；`kk-mod-host/src/realm/lifecycle.rs` 只负责冷恢复最后切换时的 Enter/Exit 配对。
 
-检查点按所有权分层：`kk-world/src/world/checkpoint.rs` 保存世界/房间信封与扩展；`kk-engine/src/settle/checkpoint.rs` 保存账户/市场/Mod state 并复用发布校验；`kk-runtime/src/embed/checkpoint.rs` 装配替代分片并核验身份，`checkpoint/identity.rs` 保存包/工作者身份；`kk-runtime/src/checkpoint.rs` 负责文件信封和同步发布；`kk-cli/src/sim/checkpoint.rs` 只处理场景、alias 与原始断言起点。
+检查点按所有权分层：`kk-world/src/world/checkpoint.rs` 保存世界/房间信封、扩展与对象效果；`kk-engine/src/settle/checkpoint.rs` 保存账户/市场/Mod state 并复用发布校验；`kk-runtime/src/embed/checkpoint.rs` 装配替代分片并核验身份，`checkpoint/identity.rs` 保存包/工作者身份；`kk-runtime/src/checkpoint.rs` 负责文件信封和同步发布；`kk-cli/src/sim/checkpoint.rs` 只处理场景、alias 与原始断言起点。
 
 ## 测试组织
 

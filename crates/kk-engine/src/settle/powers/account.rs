@@ -594,6 +594,7 @@ fn die_power_creep(
     // 墓碑 ID 先于任何 players 借用分配（allocate_id 自持独立借用）。
     let tombstone_id = state.allocate_id()?;
     room.objects.remove(&id);
+    room.effects.remove(&id);
     room.objects.insert(
         ObjId(tombstone_id),
         RoomObject::Tombstone(TombstoneObj {
