@@ -51,14 +51,6 @@ fn cast(name: &str, power: i64, target: &str) -> String {
     format!("Game.powerCreeps.{name}.usePower({power},{target})")
 }
 
-fn wall(e: &mut EmbedEngine) -> anyhow::Result<String> {
-    e.place_object(
-        "W1N1",
-        "structure",
-        &json!({"pos":[23,23],"structureType":"constructedWall","hits":10000}),
-    )
-}
-
 /// FORTIFY：施放期内（t1..t4）attack/rangedAttack/dismantle 预检
 /// ERR_INVALID_TARGET（wall 与 rampart 两腿）、massAttack 跳过、塔攻击
 /// （无预检门的唯一免伤正路径）被拦；到期拍 t5（end_time == time）：

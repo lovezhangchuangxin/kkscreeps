@@ -212,6 +212,10 @@ pub fn settle_room(
                         == Some("powerCreep")
                     {
                         "powerCreep"
+                    } else if kk_world::domain::generic::type_name(&g.data).as_deref()
+                        == Some("deposit")
+                    {
+                        "deposit"
                     } else {
                         match kk_world::domain::generic::structure_type(&g.data).as_deref() {
                             Some("container" | "rampart") => "decay",
@@ -255,6 +259,7 @@ pub fn settle_room(
             "tombstone" => economy::tombstone_tick(&mut ctx.borrow_mut(), id),
             "ruin" => economy::ruin_tick(&mut ctx.borrow_mut(), id),
             "mineral" => economy::mineral_tick(&mut ctx.borrow_mut(), id),
+            "deposit" => economy::deposit_tick(&mut ctx.borrow_mut(), id),
             "extractor" => economy::extractor_tick(&mut ctx.borrow_mut(), id),
             "road" => economy::road_decay_tick(&mut ctx.borrow_mut(), id),
             "decay" => economy::generic_decay_tick(&mut ctx.borrow_mut(), id),

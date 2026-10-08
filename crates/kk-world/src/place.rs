@@ -120,6 +120,10 @@ pub fn normalize(kind: &str, spec: &Value, ctx: &PlaceCtx) -> Result<RoomObject,
         // 放置不推进时间，此处按放置时刻换算（适配器契约：放置后一次
         // tick 读 timeToLand 恰好减一）。launchRoomName 原样保留。
         "nuke" => Ok(RoomObject::Generic(normalize_nuke(spec, x, y, ctx))),
+        // deposit 的冷却与寿命同为绝对权威键（cooldownTime/decayTime），
+        // 适配器 spec 给相对 cooldown/ticksToDecay，按放置时刻换算
+        // （适配器契约：放置后一次 tick 读恰好减一，与 nuke 同形）。
+        "deposit" => Ok(RoomObject::Generic(normalize_deposit(spec, x, y, ctx))),
         // powerCreep 的放置是「已生成」形态：等级取 powers 等级和，
         // hitsMax/storeCapacity 随等级派生（官方 upgrade 步进），寿命
         // time+5000；同名账号记录由放置层（kk-runtime）从成品 data 建立。
@@ -142,6 +146,25 @@ fn normalize_nuke(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> GenericObj {
     let mut data = generic_fields("nuke", spec);
     if let Some(ttl) = data.remove("timeToLand").and_then(|v| v.as_i64()) {
         data.insert("landTime".into(), json!(ctx.time + ttl.max(0) as u64));
+    }
+    GenericObj {
+        id: 0,
+        x,
+        y,
+        data: Value::Object(data).to_string(),
+    }
+}
+
+/// deposit 放置归一：相对 cooldown/ticksToDecay 换算为绝对
+/// cooldownTime/decayTime 并丢弃相对键；缺失时不写权威键（无冷却可采、
+/// 无寿命不移除，与官方 cronjobs 创建的初始形态一致）。
+fn normalize_deposit(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> GenericObj {
+    let mut data = generic_fields("deposit", spec);
+    if let Some(cd) = data.remove("cooldown").and_then(|v| v.as_u64()) {
+        data.insert("cooldownTime".into(), json!(ctx.time + cd));
+    }
+    if let Some(td) = data.remove("ticksToDecay").and_then(|v| v.as_u64()) {
+        data.insert("decayTime".into(), json!(ctx.time + td));
     }
     GenericObj {
         id: 0,

@@ -45,7 +45,7 @@ export const capabilities: AdapterCapabilities = {
   terminalSend: true,
   observer: false,
   nuke: true,
-  deposit: false,
+  deposit: true,
   powerBank: false,
   terrain: true,
   roomStatus: false,

@@ -385,14 +385,23 @@ fn unknown_types_go_generic_passthrough() {
     // 非法输入拒绝
     let bad = spec(json!({ "pos": [50, 0] }));
     assert!(normalize("creep", &bad, &ctx()).is_err());
-    // 未知类别保存 type 和原始字段，供投影及后续能力使用。
+    // deposit：绝对权威键原样透传；相对 cooldown/ticksToDecay 按放置
+    // 时刻换算为 cooldownTime/decayTime（适配器契约，与 nuke 同形）。
     let s2 = spec(json!({ "pos": [1, 1], "decayTime": 88 }));
     let RoomObject::Generic(g2) = normalize("deposit", &s2, &ctx()).unwrap() else {
         panic!()
     };
     let d2: Value = serde_json::from_str(&g2.data).unwrap();
     assert_eq!(d2["type"], "deposit");
-    assert_eq!(d2["decayTime"], 88);
+    assert_eq!(d2["decayTime"], 88, "绝对键透传不换算");
+    let s2 = spec(json!({ "pos": [1, 1], "cooldown": 25, "ticksToDecay": 100 }));
+    let RoomObject::Generic(g2) = normalize("deposit", &s2, &ctx()).unwrap() else {
+        panic!()
+    };
+    let d2: Value = serde_json::from_str(&g2.data).unwrap();
+    assert_eq!(d2["cooldownTime"], 125, "相对冷却 → ctx.time(100)+25");
+    assert_eq!(d2["decayTime"], 200, "相对寿命 → ctx.time(100)+100");
+    assert!(d2.get("cooldown").is_none() && d2.get("ticksToDecay").is_none());
     // structure 通道的 tower 透传也带 type
     let RoomObject::Generic(g3) = normalize("structure", &s, &ctx()).unwrap() else {
         panic!()

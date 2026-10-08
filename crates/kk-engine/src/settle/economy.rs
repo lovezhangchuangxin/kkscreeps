@@ -125,6 +125,34 @@ pub fn road_decay_tick(w: &mut Working, id: ObjId) {
     }
 }
 
+/// deposit 对象 tick：本 tick 采集写入的待落冷却落成 cooldownTime；寿命门
+/// 以官方 processor.js 移除相的 `gameTime >= decayTime-1` 为准——生效时间
+/// 更早的 processor 门是实际边界，deposits/tick.js 的严格 `> decayTime`
+/// 门为不可达兜底。
+/// 来源：processor/intents/deposits/tick.js 与 processor.js 的移除分支。
+pub fn deposit_tick(w: &mut Working, id: ObjId) {
+    let Some(RoomObject::Generic(g)) = w.room.objects.get(&id) else {
+        return;
+    };
+    let mut v: Value = serde_json::from_str(&g.data).unwrap_or_default();
+    if v.get("type").and_then(Value::as_str) != Some("deposit") {
+        return;
+    }
+    if let Some(pending) = w.deposit_cooldown_pending.remove(&id) {
+        v["cooldownTime"] = json!(w.time + pending);
+        if let Some(RoomObject::Generic(g)) = w.room.objects.get_mut(&id) {
+            g.data = v.to_string();
+        }
+    }
+    let expired = v
+        .get("decayTime")
+        .and_then(Value::as_u64)
+        .is_some_and(|d| w.time >= d.saturating_sub(1));
+    if expired {
+        w.remove_obj(id);
+    }
+}
+
 /// 处理 container/rampart 衰减；rampart 的 hitsMax 每 tick 同步，不等衰减到期。
 /// Container 消失时先写入非正耐久，再掉落仓内资源，避免资源又存回即将删除的容器。
 pub fn generic_decay_tick(w: &mut Working, id: ObjId) {

@@ -13,7 +13,7 @@ use crate::settle::Working;
 use super::store::{intent_drop_amount, intent_drop_amount_res};
 use super::{ACTION_HARVEST, set_action_log, slots_add, store_capacity};
 
-/// 检查已出生和相邻条件，再分派 source 或 mineral；不处理 deposit。
+/// 检查已出生和相邻条件，再分派 source、mineral 或 deposit。
 /// 来源：上游 engine/src/processor/intents/creeps/harvest.js。
 pub(super) fn intent_harvest(w: &mut Working, id: ObjId, data: &IntentData) {
     let Some(target_id) = data.id else { return };
@@ -31,7 +31,88 @@ pub(super) fn intent_harvest(w: &mut Working, id: ObjId, data: &IntentData) {
     match target {
         RoomObject::Source(_) => intent_harvest_source(w, id, target_id),
         RoomObject::Mineral(_) => intent_harvest_mineral(w, id, target_id),
+        RoomObject::Generic(g)
+            if kk_world::domain::generic::type_name(&g.data).as_deref() == Some("deposit") =>
+        {
+            intent_harvest_deposit(w, id, target_id)
+        }
         _ => {}
+    }
+}
+
+/// 采集 deposit：冷却中静默拒绝；产出 WORK×HARVEST_DEPOSIT_POWER（含
+/// harvest 类 boost）直接入仓并超容掉落；累计 harvested 决定下一轮冷却
+/// ceil(0.001×harvested^1.2)（>1 才挂，经对象 tick 相落成 cooldownTime，
+/// 同轮后续采集读旧值），每次采集刷新寿命 decayTime=time+50000。
+/// 不发 EVENT_HARVEST（官方 deposit 分支无事件）。无库存上限。
+/// 来源：harvest.js:114-139 与 deposits/tick.js。
+fn intent_harvest_deposit(w: &mut Working, id: ObjId, target_id: ObjId) {
+    let (body, store_cap) = match w.creep(id) {
+        Some(c) => (c.body.clone(), store_capacity(c)),
+        None => return,
+    };
+    let (deposit_type, cooldown_time) = {
+        let Some(RoomObject::Generic(g)) = w.room.objects.get(&target_id) else {
+            return;
+        };
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(&g.data) else {
+            return;
+        };
+        let Some(dt) = v.get("depositType").and_then(serde_json::Value::as_str) else {
+            return;
+        };
+        (
+            dt.to_string(),
+            v.get("cooldownTime").and_then(serde_json::Value::as_u64),
+        )
+    };
+    if cooldown_time.is_some_and(|t| t > w.time) {
+        return;
+    }
+    let work_power = kk_world::types::calc_body_effectiveness(
+        &body,
+        BodyKind::Work,
+        "work",
+        "harvest",
+        c::HARVEST_DEPOSIT_POWER,
+    );
+    // 官方 deposit 分支无 amount 门（harvest.js:114-139，source/mineral 才有）：
+    // WORK 全熄的 amount=0 仍走完整流程——落动作日志、harvested +0、按当前
+    // 累计重算冷却并刷新寿命。
+    let amount = work_power;
+    let held_total = match w.creep(id) {
+        Some(c) => kk_world::types::store_total(&c.store, &c.store_extra),
+        None => return,
+    };
+    let sum = held_total + amount;
+    if let Some(c) = w.creep_mut(id) {
+        slots_add(&mut c.store, &mut c.store_extra, &deposit_type, amount);
+        set_action_log(&mut c.action_log, ACTION_HARVEST);
+    }
+    if sum > store_cap {
+        intent_drop_amount_res(w, id, &deposit_type, sum - store_cap);
+    }
+    let harvested = {
+        let Some(RoomObject::Generic(g)) = w.room.objects.get_mut(&target_id) else {
+            return;
+        };
+        let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&g.data) else {
+            return;
+        };
+        let harvested = v
+            .get("harvested")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0)
+            + amount as u64;
+        v["harvested"] = serde_json::json!(harvested);
+        v["decayTime"] = serde_json::json!(w.time + c::DEPOSIT_DECAY_TIME as u64);
+        g.data = v.to_string();
+        harvested
+    };
+    let cooldown = (c::DEPOSIT_EXHAUST_MULTIPLY * (harvested as f64).powf(c::DEPOSIT_EXHAUST_POW))
+        .ceil() as u64;
+    if cooldown > 1 {
+        w.deposit_cooldown_pending.insert(target_id, cooldown);
     }
 }
 

@@ -389,6 +389,21 @@ fn snapshot_json(
                 );
                 v.remove("cooldownTime");
             }
+            // deposit 查询面补官方派生字段：lastCooldown 随 harvested 总量、
+            // decayTime 折算剩余 ticksToDecay（玩家 rawData 投影通道仍透传
+            // 绝对键，由 Deposit 类 getter 折算）。来源：game/deposits.js。
+            if kind == "deposit" {
+                if let Some(h) = v.get("harvested").and_then(Value::as_u64) {
+                    let lc = (kk_core::constants::DEPOSIT_EXHAUST_MULTIPLY
+                        * (h as f64).powf(kk_core::constants::DEPOSIT_EXHAUST_POW))
+                    .ceil();
+                    v.insert("lastCooldown".into(), json!(lc as u64));
+                }
+                if let Some(d) = v.get("decayTime").and_then(Value::as_u64) {
+                    v.insert("ticksToDecay".into(), remaining(d, time));
+                    v.remove("decayTime");
+                }
+            }
             // lab 快照补派生字段（vanilla snapshots.ts 的 lab 分支）：store 只
             // 留正量、mineralType 取首个非 energy 正量键、容量按已绑槽展开。
             // 其他 Generic 类型不在此补齐专用 getter。

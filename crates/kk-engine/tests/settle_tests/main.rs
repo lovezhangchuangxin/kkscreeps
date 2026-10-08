@@ -20,6 +20,7 @@ mod controller;
 mod controller_safemode;
 mod creation;
 mod creep_actions;
+mod deposit_actions;
 mod engine_world;
 mod ext;
 mod factory_actions;

@@ -15,6 +15,8 @@
   const __Object = gw.__Object;
   const __MathMax = Math.max;
   const __MathAbs = Math.abs;
+  const __MathCeil = Math.ceil;
+  const __MathPow = Math.pow;
   // 结构名额检查会在玩家执行时收集对象；捕获 push 与 Reflect.apply，避免受玩家替换影响。
   const __arrayPush = Array.prototype.push;
   const __reflectApply = Reflect.apply;
@@ -329,6 +331,22 @@
     mineralAmount: (o) => o.mineralAmount ?? 0,
     density: (o) => o.density ?? 3,
     ticksToRegeneration: (o) => (o.ticksToRegeneration == null ? undefined : o.ticksToRegeneration),
+  });
+
+  // deposit 字段读取原始数据；cooldown/lastCooldown/ticksToDecay 为官方
+  // deposits.js 的派生 getter。rawData 通道（投影）透传绝对 cooldownTime，
+  // 快照通道才折算为剩余 cooldown，此处按投影通道计算。
+  // 来源：上游 engine/src/game/deposits.js。
+  gw.defineGameObjectProperties(globalThis.Deposit.prototype, gw.rawData, {
+    depositType: (o) => o.depositType,
+    cooldown: (o) =>
+      o.cooldownTime && o.cooldownTime > now() ? o.cooldownTime - now() : 0,
+    lastCooldown: (o) =>
+      __MathCeil(
+        globalThis.DEPOSIT_EXHAUST_MULTIPLY *
+          __MathPow(o.harvested || 0, globalThis.DEPOSIT_EXHAUST_POW),
+      ),
+    ticksToDecay: (o) => (o.decayTime != null ? o.decayTime - now() : undefined),
   });
 
   // 控制器的绝对 tick 字段转换为剩余 tick；结束的 cooldown/upgradeBlocked/safeMode

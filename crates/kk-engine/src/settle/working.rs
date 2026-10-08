@@ -70,6 +70,9 @@ pub struct Working {
     pub(crate) safe_mode_activated: BTreeSet<ObjId>,
     /// 采矿时设置的提取器冷却，由 extractor tick 写回冷却计数。
     pub(crate) extractor_cooldown_pending: BTreeMap<ObjId, u64>,
+    /// 本 tick 采集 deposit 写入的待落冷却；对象 tick 相落成 cooldownTime，
+    /// 同轮后续采集读旧值（官方 _cooldown + deposits/tick.js 同形）。
+    pub(crate) deposit_cooldown_pending: BTreeMap<ObjId, u64>,
     pub(crate) movement: crate::settle::movement::Movement,
     /// 本 tick 登记的跨房过渡：位于边缘格的 creep 在全部房间结算后由
     /// 引擎阶段移入邻房候选。
@@ -118,6 +121,7 @@ impl Working {
             upgrade_block_pending: BTreeMap::new(),
             safe_mode_activated: BTreeSet::new(),
             extractor_cooldown_pending: BTreeMap::new(),
+            deposit_cooldown_pending: BTreeMap::new(),
             movement: crate::settle::movement::Movement::with_buildings(
                 plane.buildings.clone(),
                 plane.terrain_passability.wall_passable,

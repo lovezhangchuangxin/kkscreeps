@@ -158,15 +158,15 @@
   // ---------------------------------------------------------------- Creep 原型：动作方法
   installMovementMethods({ C, countActiveParts, assertTargetObject });
 
-  /** 支持 Source 和 Mineral；矿物还检查同格 extractor 的归属、启用状态与冷却。
-   * 不支持 Deposit 分支。来源：上游 engine/src/game/creeps.js 的 harvest。 */
+  /** 支持 Source、Mineral 与 Deposit；矿物检查同格 extractor 门，deposit
+   * 检查邻接与冷却（ERR_TIRED）。来源：上游 engine/src/game/creeps.js 的 harvest。 */
   globalThis.Creep.prototype.harvest = function harvest(target) {
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;
     if (countActiveParts(this.body, C.WORK) === 0) return C.ERR_NO_BODYPART;
     if (!target || !target.id) return C.ERR_INVALID_TARGET;
     if (target instanceof globalThis.Mineral) {
-      // 矿物采集检查数量、邻接与提取器的归属、启用和冷却；deposit 不支持。
+      // 矿物采集检查数量、邻接与提取器的归属、启用和冷却；deposit 走下方独立分支。
       if (!target.mineralAmount) return C.ERR_NOT_ENOUGH_RESOURCES;
       if (!target.pos.isNearTo(this.pos)) return C.ERR_NOT_IN_RANGE;
       let extractor = null;
@@ -192,8 +192,15 @@
       gw.intents.set(this.id, 'harvest', { id: target.id });
       return C.OK;
     }
+    if (target instanceof globalThis.Deposit) {
+      // 官方 creeps.js:387-394：deposit 只查邻接与冷却。
+      if (!target.pos.isNearTo(this.pos)) return C.ERR_NOT_IN_RANGE;
+      if (target.cooldown) return C.ERR_TIRED;
+      gw.intents.set(this.id, 'harvest', { id: target.id });
+      return C.OK;
+    }
     if (!(target instanceof globalThis.Source)) {
-      // 当前实现对非 Source/Mineral 目标返回 INVALID_TARGET，不抛序列化对象错误。
+      // 当前实现对非 Source/Mineral/Deposit 目标返回 INVALID_TARGET，不抛序列化对象错误。
       return C.ERR_INVALID_TARGET;
     }
     if (!target.energy) return C.ERR_NOT_ENOUGH_RESOURCES;
