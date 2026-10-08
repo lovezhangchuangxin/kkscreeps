@@ -88,10 +88,13 @@
   };
   gw.__creepC = C; // creep-resources.js 复用此常量表。
 
-  // 官方 _hasActiveBodypart（game/creeps.js:9-17 的等价物）：hits>0 的指定部件数
+  // 官方 _hasActiveBodypart（game/creeps.js:9-17 的等价物）：hits>0 的指定部件数。
+  // falsy body（powerCreep 委托 move/moveTo 的路径）官方恒真，返回 Infinity
+  // 使「数量 ≥ 门槛」类门全部通过。
   function countActiveParts(body, type) {
+    if (!body) return Infinity;
     let n = 0;
-    for (const p of body || []) if (p.type === type && p.hits > 0) n += 1;
+    for (const p of body) if (p.type === type && p.hits > 0) n += 1;
     return n;
   }
 
@@ -233,8 +236,12 @@
     const okTarget =
       target &&
       target.id &&
-      (isKnownCreep(target.id) || isKnownStructure(target.id) || modTargetOk) &&
+      (isKnownCreep(target.id) ||
+        isKnownStructure(target.id) ||
+        modTargetOk ||
+        target instanceof globalThis.PowerCreep) &&
       (target instanceof globalThis.Creep ||
+        target instanceof globalThis.PowerCreep ||
         target instanceof globalThis.StructureSpawn ||
         target instanceof globalThis.Structure ||
         modTargetOk);
@@ -346,7 +353,15 @@
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;
     if (countActiveParts(this.body, C.HEAL) === 0) return C.ERR_NO_BODYPART;
-    if (!(target && target.id && isKnownCreep(target.id) && target instanceof globalThis.Creep)) {
+    // 官方门（creeps.js:687-690/715-718）接受 creep 与 powerCreep 双类型。
+    if (
+      !(
+        target &&
+        target.id &&
+        (isKnownCreep(target.id) || target instanceof globalThis.PowerCreep) &&
+        (target instanceof globalThis.Creep || target instanceof globalThis.PowerCreep)
+      )
+    ) {
       return C.ERR_INVALID_TARGET;
     }
     if (!target.pos.inRangeTo(this.pos, C.HEAL_RANGE)) return C.ERR_NOT_IN_RANGE;
@@ -382,7 +397,10 @@
     const okTarget =
       target &&
       target.id &&
-      (isKnownCreep(target.id) || isKnownStructure(target.id) || modTargetOk) &&
+      (isKnownCreep(target.id) ||
+        isKnownStructure(target.id) ||
+        modTargetOk ||
+        target instanceof globalThis.PowerCreep) &&
       (target instanceof globalThis.Creep ||
         target instanceof globalThis.PowerCreep ||
         target instanceof globalThis.StructureSpawn ||
@@ -418,7 +436,15 @@
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;
     if (countActiveParts(this.body, C.HEAL) === 0) return C.ERR_NO_BODYPART;
-    if (!(target && target.id && isKnownCreep(target.id) && target instanceof globalThis.Creep)) {
+    // 官方门（creeps.js:687-690/715-718）接受 creep 与 powerCreep 双类型。
+    if (
+      !(
+        target &&
+        target.id &&
+        (isKnownCreep(target.id) || target instanceof globalThis.PowerCreep) &&
+        (target instanceof globalThis.Creep || target instanceof globalThis.PowerCreep)
+      )
+    ) {
       return C.ERR_INVALID_TARGET;
     }
     if (blockedBySafeMode(this)) return C.ERR_NO_BODYPART;

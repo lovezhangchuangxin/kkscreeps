@@ -34,10 +34,10 @@ export interface AdapterCapabilities {
 
 export const capabilities: AdapterCapabilities = {
   chemistry: true,
-  powerCreeps: false,
-  powerCreepAccountApi: false,
+  powerCreeps: true,
+  powerCreepAccountApi: true,
   powerEffects: false,
-  powerSpawn: false,
+  powerSpawn: true,
   factory: true,
   terminal: true,
   marketBasics: true,

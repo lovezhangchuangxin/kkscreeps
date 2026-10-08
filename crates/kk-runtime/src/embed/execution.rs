@@ -318,6 +318,9 @@ impl EmbedEngine {
             }
         };
         let source: &dyn WorldSource = self.engine.world();
+        // power 账号视图的墙钟：本轮投影统一采样一次（官方 game.js 读
+        // Date.now() 同义；结算墙钟由调用方在执行后另取，两者不共享）。
+        let now_ms = kk_engine::settle::TickInput::now().now_ms;
         // 包括提前返回路径在内，检查玩家执行期间世界未改变。
         let assert_bound = || {
             debug_assert_eq!(
@@ -401,6 +404,10 @@ impl EmbedEngine {
                             .and_then(|(mut envelope, blocks)| {
                                 if let Some(obj) = envelope.as_object_mut() {
                                     obj.insert("market".into(), market_view(&self.engine, &handle));
+                                    obj.insert(
+                                        "power_account".into(),
+                                        power_account_view(&self.engine, &handle, now_ms),
+                                    );
                                 }
                                 kk_schema::kkpv::encode_bundle(
                                     &blocks,
@@ -432,9 +439,14 @@ impl EmbedEngine {
                         self.engine.extensions(),
                         self.player_surface.as_deref(),
                     );
-                    // 市场读取已提交的引擎状态，随世界 JSON 注入，不存放在 V8 持久闭包中。
+                    // 市场与 power 账号读取已提交的引擎状态，随世界 JSON 注入，
+                    // 不存放在 V8 持久闭包中。
                     if let Some(obj) = world.as_object_mut() {
                         obj.insert("market".into(), market_view(&self.engine, &handle));
+                        obj.insert(
+                            "power_account".into(),
+                            power_account_view(&self.engine, &handle, now_ms),
+                        );
                     }
                     (world, None)
                 };

@@ -120,6 +120,10 @@ pub fn normalize(kind: &str, spec: &Value, ctx: &PlaceCtx) -> Result<RoomObject,
         // 放置不推进时间，此处按放置时刻换算（适配器契约：放置后一次
         // tick 读 timeToLand 恰好减一）。launchRoomName 原样保留。
         "nuke" => Ok(RoomObject::Generic(normalize_nuke(spec, x, y, ctx))),
+        // powerCreep 的放置是「已生成」形态：等级取 powers 等级和，
+        // hitsMax/storeCapacity 随等级派生（官方 upgrade 步进），寿命
+        // time+5000；同名账号记录由放置层（kk-runtime）从成品 data 建立。
+        "powerCreep" => Ok(RoomObject::Generic(normalize_power_creep(spec, x, y, ctx))),
         // 两种入口共用结构分派，确保矿物与提取器使用相同默认值和校验。
         "mineral" | "extractor" => {
             let mut s = spec.clone();
@@ -144,6 +148,62 @@ fn normalize_nuke(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> GenericObj {
         x,
         y,
         data: Value::Object(data).to_string(),
+    }
+}
+
+/// powerCreep 放置归一：powers 规格为 {pid: level | {level, cooldown?}}，
+/// cooldown 相对 tick 换算为绝对 cooldownTime；等级和派生 hitsMax
+/// （1000+1000/级）与 storeCapacity（100+100/级），hits 取满值。
+/// 缺名按放置序号生成（无名放置也要进 Game.powerCreeps，账号记录由
+/// 放置层按成品 data 建立）。ageTime=time+POWER_CREEP_LIFE_TIME。
+fn normalize_power_creep(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> GenericObj {
+    let mut powers = serde_json::Map::new();
+    let mut level_sum: i64 = 0;
+    if let Some(map) = spec.get("powers").and_then(Value::as_object) {
+        for (pid, entry) in map {
+            let (level, cooldown) = match entry {
+                Value::Object(_) => (
+                    entry.get("level").and_then(Value::as_i64).unwrap_or(0),
+                    entry.get("cooldown").and_then(Value::as_i64),
+                ),
+                other => (other.as_i64().unwrap_or(0), None),
+            };
+            level_sum += level;
+            let mut item = serde_json::Map::new();
+            item.insert("level".into(), json!(level));
+            if let Some(cd) = cooldown {
+                item.insert("cooldownTime".into(), json!(ctx.time + cd.max(0) as u64));
+            }
+            powers.insert(pid.clone(), Value::Object(item));
+        }
+    }
+    let hits_max = 1000 + level_sum * 1000;
+    let name = spec
+        .get("name")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("pc{}", ctx.name_seq));
+    let store = spec.get("store").cloned().unwrap_or_else(|| json!({}));
+    let data = json!({
+        "type": "powerCreep",
+        "owner": spec.get("owner").cloned().unwrap_or(Value::Null),
+        "name": name,
+        "className": "operator",
+        "level": level_sum,
+        "hits": hits_max,
+        "hitsMax": hits_max,
+        "store": store,
+        "storeCapacity": 100 + level_sum * 100,
+        "ageTime": ctx.time + kk_core::constants::POWER_CREEP_LIFE_TIME as u64,
+        "notifyWhenAttacked": true,
+        "powers": Value::Object(powers),
+        "actionLog": {},
+    });
+    GenericObj {
+        id: 0,
+        x,
+        y,
+        data: data.to_string(),
     }
 }
 

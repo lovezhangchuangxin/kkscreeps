@@ -149,7 +149,7 @@ pub fn set_action_log(bits: &mut u16, bit: impl Into<u16>) {
 }
 
 /// 读取固定 energy/G 槽，其他资源返回 0；不适用于有命名资源的共享仓。
-fn store_slot(store: &kk_schema::room::Store, resource: &str) -> i64 {
+pub(in crate::settle) fn store_slot(store: &kk_schema::room::Store, resource: &str) -> i64 {
     match resource {
         "energy" => store.energy as i64,
         "G" => store.ghodium as i64,
@@ -157,7 +157,11 @@ fn store_slot(store: &kk_schema::room::Store, resource: &str) -> i64 {
     }
 }
 
-fn store_slot_sub(store: &mut kk_schema::room::Store, resource: &str, amount: i64) {
+pub(in crate::settle) fn store_slot_sub(
+    store: &mut kk_schema::room::Store,
+    resource: &str,
+    amount: i64,
+) {
     match resource {
         "energy" => store.energy = store.energy.saturating_sub(amount as u32),
         "G" => store.ghodium = store.ghodium.saturating_sub(amount as u32),
@@ -165,7 +169,11 @@ fn store_slot_sub(store: &mut kk_schema::room::Store, resource: &str, amount: i6
     }
 }
 
-fn store_slot_add(store: &mut kk_schema::room::Store, resource: &str, amount: i64) {
+pub(in crate::settle) fn store_slot_add(
+    store: &mut kk_schema::room::Store,
+    resource: &str,
+    amount: i64,
+) {
     match resource {
         "energy" => store.energy = store.energy.saturating_add(amount as u32),
         "G" => store.ghodium = store.ghodium.saturating_add(amount as u32),

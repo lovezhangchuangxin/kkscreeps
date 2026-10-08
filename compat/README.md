@@ -59,7 +59,7 @@ node compat/scripts/ratchet.mjs
 
 ```bash
 bash scripts/fetch-bots.sh
-target/release/kkscreeps bot-check --path compat/fixtures/tooangel/src --ticks 2000 --report /tmp/tooangel.json
+target/release/kkscreeps bot-check --path compat/fixtures/tooangel --ticks 2000 --report /tmp/tooangel.json
 target/release/kkscreeps bot-check --path compat/fixtures/overmind-dist --ticks 2000 --report /tmp/overmind.json
 target/release/kkscreeps bot-check --path compat/fixtures/wasm-bot --ticks 10 --report /tmp/wasm-bot.json
 ```

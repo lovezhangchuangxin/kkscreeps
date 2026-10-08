@@ -3,7 +3,7 @@ use super::{stages, txn};
 use crate::intent::IntentBatch;
 use crate::settle::{
     Engine, Plane, PlayerWriteback, RunState, SettleError, TickInput, TickStage, TickState,
-    WritebackStep, inter_room, market, nukes, settle_room,
+    WritebackStep, inter_room, market, nukes, powers, settle_room,
 };
 use kk_schema::room::RoomObject;
 use std::collections::BTreeMap;
@@ -43,6 +43,18 @@ impl Engine {
                 txn.time,
                 txn.input.now_ms,
             );
+        }
+        {
+            // power 账号域全局意图与已生成侧死亡扫描（墙钟冷却用同源
+            // now_ms）；players 经共享 TickState 内短借用访问，独立于
+            // 市场阶段的借用块。
+            powers::settle_power(
+                &mut txn.rooms,
+                &txn.batch,
+                txn.time,
+                txn.input.now_ms,
+                &txn.state,
+            )?;
         }
         self.writeback_checkpoint(WritebackStep::Market)?;
         cursor.enter(TickStage::Validate)?;

@@ -82,6 +82,8 @@
     PWR_OPERATE_FACTORY: globalThis.PWR_OPERATE_FACTORY,
     // nuker launchNuke（M2F 后 M2G）：射程判定。
     NUKE_RANGE: globalThis.NUKE_RANGE,
+    // powerSpawn processPower（M2H.a）：能量换算比。
+    POWER_SPAWN_ENERGY_RATIO: globalThis.POWER_SPAWN_ENERGY_RATIO,
   };
   gw.__structuresC = C; // structure-api.js 复用此常量表。
 

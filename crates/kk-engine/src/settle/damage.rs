@@ -146,6 +146,21 @@ fn apply_damage_inner(
             );
         }
         *w.damage_to_apply.entry(target_id).or_insert(0) += damage;
+    } else if let RoomObject::Generic(t) = &target
+        && kk_world::domain::generic::type_name(&t.data).as_deref() == Some("powerCreep")
+    {
+        // powerCreep 受击与 creep 同走延迟队列（对象 tick 应用并钳上限），
+        // 无近战反击（官方 _damage.js 的 powerCreep 分支）；死亡由全局
+        // 阶段的 hits<=0 扫描结算，不走结构摧毁/废墟路径。
+        *w.damage_to_apply.entry(target_id).or_insert(0) += damage;
+        // 官方 _damage.js:74 对受击的 powerCreep 同写 attacked（坐标=
+        // 攻击者），与 creep 分支同形。
+        super::powers::set_pc_action_log(
+            w,
+            target_id,
+            "attacked",
+            json!({ "x": attacker_pos.0, "y": attacker_pos.1 }),
+        );
     } else if let RoomObject::Mod(m) = &target {
         // G09.c：托管结构受击槽（Mod 包覆 builtin:mod.receiveDamage）时
         // 扣减与声明反击挂起，意图阶段后由房间循环经共享句柄跑槽再落地；

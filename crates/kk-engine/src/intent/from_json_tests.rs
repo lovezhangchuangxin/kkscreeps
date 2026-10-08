@@ -289,3 +289,28 @@ fn from_json_misc_family_whitelist_and_order() {
     assert!(pos(Action::Say) < pos(Action::Suicide));
     assert!(pos(Action::Suicide) < pos(Action::Pull));
 }
+
+#[test]
+fn global_container_collects_power_intents() {
+    // global 容器的 power 六动作按官方处理序收集；与市场动作共用容器。
+    let raw = serde_json::json!({
+        "global": {
+            "createPowerCreep": [{ "name": "PC1", "className": "operator" }],
+            "createOrder": [{ "type": "buy", "resourceType": "energy", "price": 1, "totalAmount": 100, "roomName": "W1N1" }],
+            "renamePowerCreep": [{ "id": "kk1", "name": "PC2" }],
+        }
+    });
+    let batch = IntentBatch::from_json("p1", &raw);
+    let u = &batch.users["p1"];
+    assert_eq!(u.power.len(), 2, "create 与 rename 均收集");
+    assert!(matches!(
+        &u.power[0],
+        PowerIntent::CreatePowerCreep { name, class_name }
+            if name == "PC1" && class_name == "operator"
+    ));
+    assert!(matches!(
+        &u.power[1],
+        PowerIntent::RenamePowerCreep { id, name } if name == "PC2"
+    ));
+    assert_eq!(u.market.len(), 1, "市场动作不因 power 并列遍历丢失");
+}

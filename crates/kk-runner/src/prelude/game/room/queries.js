@@ -304,6 +304,20 @@
             else if (type === 117 /* FIND_NUKES */ && o.type === 'nuke') out.push(w);
             else if (type === 118 /* FIND_TOMBSTONES */ && o.type === 'tombstone') out.push(w);
             else if (type === 119 /* FIND_POWER_CREEPS */ && o.type === 'powerCreep') out.push(w);
+            // MY/HOSTILE powerCreep 与 creep 族同口径（owner 字符串严格比较）。
+            else if (
+              type === 120 /* FIND_MY_POWER_CREEPS */ &&
+              o.type === 'powerCreep' &&
+              o.owner === gw.viewerName
+            )
+              out.push(w);
+            else if (
+              type === 121 /* FIND_HOSTILE_POWER_CREEPS */ &&
+              o.type === 'powerCreep' &&
+              typeof o.owner === 'string' &&
+              o.owner !== gw.viewerName
+            )
+              out.push(w);
             else if (type === 122 /* FIND_DEPOSITS */ && o.type === 'deposit') out.push(w);
             else if (type === 123 /* FIND_RUINS */ && o.type === 'ruin') out.push(w);
             // Mod 查询常量（注册期分配，下界见 modFindBase）：命中对应类型。

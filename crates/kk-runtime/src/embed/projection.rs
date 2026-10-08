@@ -154,6 +154,58 @@ impl EmbedEngine {
     }
 }
 
+/// 构造玩家 power 账号视图：GPL 源 power、配额计数、墙钟 now（官方
+/// spawnCooldownTime 门与 Date.now() 同源）与 powerCreep 注册表。prelude
+/// 以 world.power_account 读取（Game.gpl/Game.powerCreeps/类 getter 面）。
+pub(super) fn power_account_view(
+    engine: &kk_engine::settle::Engine,
+    viewer: &str,
+    now_ms: u64,
+) -> Value {
+    let empty = kk_engine::settle::PlayerState::default();
+    let p = engine.players().get(viewer).unwrap_or(&empty);
+    let power_creeps: serde_json::Map<String, Value> = p
+        .power_creeps
+        .iter()
+        .map(|(id, r)| {
+            let powers: serde_json::Map<String, Value> = r
+                .powers
+                .iter()
+                .map(|(pid, level)| (pid.to_string(), json!({ "level": level })))
+                .collect();
+            (
+                kk_world::ObjId(*id).as_str().to_string(),
+                json!({
+                    // 注册表按 viewer 查询，owner 恒为本人（未生成记录的
+                    // my/owner getter 面依赖此键）。
+                    "owner": viewer,
+                    "name": r.name,
+                    "className": r.class_name,
+                    "level": r.level,
+                    "hitsMax": r.hits_max,
+                    "storeCapacity": r.store_capacity,
+                    "powers": Value::Object(powers),
+                    // 三态与 PlayerState 注释同义：null=已生成；数值=冷却
+                    //（0 为新建未生成）。
+                    "spawnCooldownTime": match r.spawn_cooldown_time {
+                        Some(t) => json!(t),
+                        None => Value::Null,
+                    },
+                    "deleteTime": match r.delete_time {
+                        Some(t) => json!(t),
+                        None => Value::Null,
+                    },
+                }),
+            )
+        })
+        .collect();
+    json!({
+        "power": p.power,
+        "now": now_ms,
+        "powerCreeps": Value::Object(power_creeps),
+    })
+}
+
 /// 构造玩家市场视图：收支交易各取最近 100 条，金额和价格保留千分之一 credit 单位。
 /// 交易中的玩家名保持字符串，由 prelude 转成 `{username}` 并换算价格。
 pub(super) fn market_view(engine: &kk_engine::settle::Engine, viewer: &str) -> Value {

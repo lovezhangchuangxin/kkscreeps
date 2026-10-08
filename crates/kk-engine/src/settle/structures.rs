@@ -114,6 +114,12 @@ pub fn process_structure_intents(
                 super::nukes::launch_nuke(&mut w, id, d);
             }
         }
+        // powerSpawn 单动作直派发（processPower 双扣并累计账号 power）。
+        "powerSpawn" => {
+            if let Some(_payload) = actions.get(&Action::ProcessPower) {
+                super::powers::process_power(&mut w, id);
+            }
+        }
         _ => {}
     }
     Ok(())
@@ -266,7 +272,8 @@ fn tower_attack(w: &mut Working, id: ObjId, d: &IntentData) {
     consume_tower_energy(w, id);
 }
 
-/// 治疗已出生 creep，累加待治疗量，在目标自身 tick 处理；事件类型为远程治疗。
+/// 治疗已出生 creep 或 powerCreep（官方塔目标门 towers/heal.js:13 双类型），
+/// 累加待治疗量，在目标自身 tick 处理；事件类型为远程治疗。
 fn tower_heal(w: &mut Working, id: ObjId, d: &IntentData) {
     let Some(tower) = tower_state(w, id) else {
         return;
@@ -274,16 +281,18 @@ fn tower_heal(w: &mut Working, id: ObjId, d: &IntentData) {
     let Some(target_id) = d.id else {
         return;
     };
-    let Some(RoomObject::Creep(t)) = w.room.objects.get(&target_id) else {
+    let Some(target) = w.room.objects.get(&target_id).cloned() else {
         return;
     };
-    if t.spawning {
-        return;
-    }
+    let pos = match &target {
+        RoomObject::Creep(t) if !t.spawning => (t.x, t.y),
+        RoomObject::Generic(_) if super::powers::is_power_creep(&target) => target.pos(),
+        _ => return,
+    };
     if tower.energy < c::TOWER_ENERGY_COST {
         return;
     }
-    let range = chebyshev((tower.x, tower.y), (t.x, t.y));
+    let range = chebyshev((tower.x, tower.y), pos);
     let amount = tower_falloff_amount(c::TOWER_POWER_HEAL, range);
     if amount == 0 {
         return;

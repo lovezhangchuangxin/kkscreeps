@@ -23,10 +23,48 @@
   const C_OK = globalThis.OK;
   const GCL_MULTIPLY = globalThis.GCL_MULTIPLY;
   const GCL_POW = globalThis.GCL_POW;
+  const POWER_LEVEL_MULTIPLY = globalThis.POWER_LEVEL_MULTIPLY;
+  const POWER_LEVEL_POW = globalThis.POWER_LEVEL_POW;
   // ---------------------------------------------------------------- Game 装配
 
   const { probe, makeMarket, makeMap, createWorldTick } = globalThis.__kkp;
   const { resetIntents } = globalThis.__kkp.intentCollector;
+
+  // Game.gpl（官方 game.js:164-167）：level=floor((power/1000)^(1/2))，
+  // base=level^2*1000；Math.pow 精确浮点与官方逐位一致。
+  function buildGpl() {
+    const power =
+      gw.world.power_account && typeof gw.world.power_account.power === 'number'
+        ? gw.world.power_account.power
+        : 0;
+    const level = mathFloor(mathPow(power / POWER_LEVEL_MULTIPLY, 1 / POWER_LEVEL_POW));
+    const base = mathPow(level, POWER_LEVEL_POW) * POWER_LEVEL_MULTIPLY;
+    return {
+      level,
+      progress: power - base,
+      progressTotal: mathPow(level + 1, POWER_LEVEL_POW) * POWER_LEVEL_MULTIPLY - base,
+    };
+  }
+
+  // Game.powerCreeps：账号注册表按名装配；已生成侧的房间包装实例优先
+  //（objectsById 同 ID），未生成侧 new PowerCreep(id)（构造器对 rawById
+  // 缺席安全——无 room/pos，方法走 BUSY 分支）。
+  function buildPowerCreeps() {
+    const out = {};
+    const account = gw.world.power_account;
+    const records = account && account.powerCreeps;
+    if (!records) return out;
+    for (const id in records) {
+      const wrapped = __reflectApply(__mapGet, gw.objectsById, [id]);
+      const inst = wrapped || new globalThis.PowerCreep(id);
+      // 未生成侧不进 objectsById：官方 game.js:255-258 只入 register.
+      // powerCreeps（名字索引表），register._objects（getObjectById 源，
+      // game.js:286-292）仅含房间对象——死亡的 pc 回未生成态后
+      // getObjectById 为 null（NUKE-IMPACT-008 契约）。
+      out[records[id].name] = inst;
+    }
+    return out;
+  }
 
   function buildGame() {
     gw.objectsById = new __Map();
@@ -131,8 +169,10 @@
     const game = {
       time: gw.world.time,
       shard: { name: 'shard0', type: 'normal', ptr: false },
-      // 官方 game.js:91/138：powerCreeps 恒为对象（power 体系未启用时为空）
-      powerCreeps: {},
+      // 官方 game.js：由 userPowerCreeps 装配（本人账号记录；已生成侧复用
+      // objectsById 的房间包装实例，未生成侧直接构造——原型 getter 读
+      // 账号+房间合并面）。power_account 缺省（无注入）时恒为空对象。
+      powerCreeps: buildPowerCreeps(),
       // 官方 game.js:145：cpuLimit = runtimeData.cpu（tick 窗口同值）
       cpuLimit: cpu.tickLimit,
       cpu: {
@@ -158,7 +198,7 @@
         progress: gclPoints - gclBaseProgress,
         progressTotal: mathPow(gclLevel, GCL_POW) * GCL_MULTIPLY - gclBaseProgress,
       },
-      gpl: { level: 0, progress: 0, progressTotal: 1000 },
+      gpl: buildGpl(),
       creeps,
       spawns,
       structures,

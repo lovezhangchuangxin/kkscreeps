@@ -65,6 +65,10 @@ pub fn matches_find(o: &Value, find_const: i64, viewer: Option<&str>) -> bool {
         f if f == c::FIND_MINERALS => kind == "structure" && st == "mineral",
         f if f == c::FIND_TOMBSTONES => kind == "tombstone",
         f if f == c::FIND_POWER_CREEPS => kind == "powerCreep",
+        f if f == c::FIND_MY_POWER_CREEPS => kind == "powerCreep" && viewer.is_some_and(owned_by),
+        f if f == c::FIND_HOSTILE_POWER_CREEPS => {
+            kind == "powerCreep" && viewer.is_some_and(hostile_of)
+        }
         f if f == c::FIND_DEPOSITS => kind == "deposit",
         f if f == c::FIND_RUINS => kind == "ruin",
         _ => false,

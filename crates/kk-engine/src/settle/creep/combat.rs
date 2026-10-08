@@ -491,13 +491,13 @@ pub(super) fn intent_heal(w: &mut Working, id: ObjId, data: &IntentData, ranged:
     let Some(target) = w.room.objects.get(&target_id).cloned() else {
         return;
     };
-    let RoomObject::Creep(t) = &target else {
-        return;
+    // 目标门接受 creep（非孵化）与 powerCreep（官方 heal.js:16、
+    // rangedHeal.js:16 的双类型门；pc 无孵化态）。
+    let (tx, ty) = match &target {
+        RoomObject::Creep(t) if !t.spawning => (t.x, t.y),
+        RoomObject::Generic(g) if super::super::powers::is_power_creep(&target) => (g.x, g.y),
+        _ => return,
     };
-    if t.spawning {
-        return;
-    }
-    let (tx, ty) = (t.x, t.y);
     // 射程来自 Plane 的战斗射程快照（builtin:creep.heal/rangedHeal.range）。
     let range = if ranged {
         w.plane.combat.ranged_heal

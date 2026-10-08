@@ -64,10 +64,12 @@ impl EmbedEngine {
                 )))
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
-        self.engine
+        let placements = objects.to_vec();
+        let ids = self
+            .engine
             .edit_world(|world| {
-                let mut ids = Vec::with_capacity(objects.len());
-                for (&(room, kind, spec), prepared) in objects.iter().zip(prepared) {
+                let mut ids = Vec::with_capacity(placements.len());
+                for (&(room, kind, spec), prepared) in placements.iter().zip(prepared) {
                     let object = if let Some(object) = prepared {
                         object
                     } else {
@@ -81,11 +83,72 @@ impl EmbedEngine {
                         };
                         normalize(kind, spec, &ctx)?
                     };
-                    ids.push(world.insert(room, object)?.as_str());
+                    ids.push((world.insert(room, object)?.as_str().to_string(), kind, room));
                 }
                 Ok(ids)
             })
-            .map_err(anyhow::Error::msg)
+            .map_err(anyhow::Error::msg)?;
+        // powerCreep 放置即建账号记录（放置即已生成形态，spawnCooldownTime
+        // 置 None）；记录字段从成品房间 data 派生，与对象同源不重复推导。
+        let pc_records: Vec<(String, String, kk_engine::settle::PowerCreepRecord)> = ids
+            .iter()
+            .filter(|(_, kind, _)| *kind == "powerCreep")
+            .filter_map(|(id, _, room)| {
+                let obj_id = kk_world::ObjId::parse(id)?;
+                let owner = self
+                    .engine
+                    .world()
+                    .room(room)?
+                    .objects
+                    .get(&obj_id)
+                    .and_then(|o| match o {
+                        kk_schema::room::RoomObject::Generic(g) => Some(g.clone()),
+                        _ => None,
+                    })?;
+                let data: serde_json::Value = serde_json::from_str(&owner.data).ok()?;
+                let owner_name = data.get("owner")?.as_str()?.to_string();
+                let record = kk_engine::settle::PowerCreepRecord {
+                    name: data.get("name")?.as_str()?.to_string(),
+                    class_name: data
+                        .get("className")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("operator")
+                        .to_string(),
+                    level: data.get("level")?.as_i64()?,
+                    hits_max: data.get("hitsMax")?.as_i64()?,
+                    store_capacity: data.get("storeCapacity")?.as_i64()?,
+                    powers: data
+                        .get("powers")
+                        .and_then(|p| p.as_object())
+                        .map(|map| {
+                            map.iter()
+                                .filter_map(|(pid, entry)| {
+                                    Some((pid.parse::<i64>().ok()?, entry.get("level")?.as_i64()?))
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default(),
+                    // 放置即已生成（对象在场）；死亡后由全局阶段改写。
+                    spawn_cooldown_time: None,
+                    delete_time: None,
+                };
+                Some((owner_name, id.clone(), record))
+            })
+            .collect();
+        if !pc_records.is_empty() {
+            self.engine
+                .edit_players(|players| {
+                    for (owner, id, record) in pc_records {
+                        if let Some(state) = players.get_mut(&owner) {
+                            let key = kk_world::ObjId::parse(&id).map(|o| o.0).unwrap_or(0);
+                            state.power_creeps.insert(key, record);
+                        }
+                    }
+                    Ok(())
+                })
+                .map_err(anyhow::Error::msg)?;
+        }
+        Ok(ids.into_iter().map(|(id, _, _)| id).collect())
     }
 
     /// 管理命令：按已装配计划里的 Mod 类型创建对象并放入房间，返回对象 ID。

@@ -82,9 +82,10 @@ fn room_setups(spec: &Value) -> anyhow::Result<Vec<RoomSetup<'_>>> {
     Ok(setups)
 }
 
-/// 校验玩家名及 GCL，统一转成累计点数；power 尚未接入账户状态。
-/// 默认等级给已有房间留一次扩张空间，来源：screeps-ok PlayerSpec/gclPoints。
-fn player_setups(spec: &Value) -> anyhow::Result<Vec<(String, i64)>> {
+/// 校验玩家名及 GCL/power，GCL 统一转成累计点数、power 直入账号状态
+/// （GPL 等级源）。默认等级给已有房间留一次扩张空间，来源：
+/// screeps-ok PlayerSpec/gclPoints。
+fn player_setups(spec: &Value) -> anyhow::Result<Vec<(String, i64, i64)>> {
     let mut handles = Vec::new();
     let mut seen = BTreeSet::new();
     let players = spec
@@ -148,7 +149,12 @@ fn player_setups(spec: &Value) -> anyhow::Result<Vec<(String, i64)>> {
         {
             anyhow::bail!("PlayerSpec {name}: gcl 等级、进度或累计点数非法");
         }
-        handles.push((name.to_string(), points as i64));
+        // screeps-ok PlayerSpec 契约：缺省 power = 10,000,000（GPL 100）。
+        let power = entry
+            .get("power")
+            .and_then(Value::as_i64)
+            .unwrap_or(10_000_000);
+        handles.push((name.to_string(), points as i64, power));
     }
     Ok(handles)
 }
@@ -414,7 +420,7 @@ impl EmbedEngine {
         let players = self.players.get_or_insert_with(ThreadExecutor::new);
         // 先取走全部配置，避免注册中途失败后残留配置被下一次创建意外使用。
         let configs = std::mem::take(&mut self.sandbox_configs_for_test);
-        for (handle, gcl) in handles {
+        for (handle, gcl, power) in handles {
             let mut config = configs.get(&handle).cloned().unwrap_or_default();
             // link 与仓库容量同步到玩家全局常量。计划是常量的
             // 权威来源，测试配置里的同名覆盖以引擎规则为准。
@@ -487,6 +493,9 @@ impl EmbedEngine {
                     let state = players.entry(handle.clone()).or_default();
                     state.cpu = cpu;
                     state.gcl = gcl;
+                    // 账号 power（GPL 源）：processPower 从此累计，夹具
+                    // 在 createShard 一次注入。
+                    state.power = power;
                     // 初始余额 10M credits，内部按千分之一存储（vanilla createShard）。
                     state.money = 10_000_000_000;
                     Ok(())

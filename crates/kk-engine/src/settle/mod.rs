@@ -19,6 +19,7 @@ pub mod market;
 mod mod_intents;
 pub mod movement;
 pub mod nukes;
+pub mod powers;
 // 兼容旧调用路径，领域实现只维护在 movement 中。
 pub use movement::{admission, contest, move_cost, obstacle, precheck, pull_registration};
 pub mod objects;
@@ -115,6 +116,38 @@ pub struct PlayerState {
     pub money: i64,
     /// token、pixel 等跨 shard 资源余额，供市场成交划转；缺省为空。
     pub resources: BTreeMap<String, i64>,
+    /// 账号 power 总量：powerSpawn.processPower 累计，GPL 等级由此派生。
+    /// 旧检查点缺失按 0 回填（新增字段，deny_unknown_fields 只拒未知键）。
+    #[serde(default)]
+    pub power: i64,
+    /// 账号级 powerCreep 注册表：键为对象 ID，已生成侧房间对象同 ID。
+    /// 旧检查点缺失按空表回填；记录形态见 PowerCreepRecord。
+    #[serde(default)]
+    pub power_creeps: BTreeMap<u64, PowerCreepRecord>,
+}
+
+/// 账号级 powerCreep 记录。已生成（房间对象在场）与未生成（仅有记录）
+/// 共用；spawnCooldownTime/deleteTime 是墙钟毫秒，与官方 Date.now() 同源。
+#[derive(Debug, Default, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PowerCreepRecord {
+    pub name: String,
+    /// 官方 className（POWER_CLASS.OPERATOR 等）。
+    pub class_name: String,
+    pub level: i64,
+    pub hits_max: i64,
+    pub store_capacity: i64,
+    /// power 常量 ID -> 已升级等级；冷却挂在房间侧使用时写入。
+    #[serde(default)]
+    pub powers: BTreeMap<i64, i64>,
+    /// 官方三态映射：None = null（当前已生成在场）；Some(0) = 新建未
+    /// 生成（可立即 spawn）；Some(墙钟毫秒) = 死亡后的重生冷却，早于
+    /// now 时已到期可 spawn。rename/delete 仅对非 None 生效。
+    #[serde(default)]
+    pub spawn_cooldown_time: Option<u64>,
+    /// 官方 deleteTime 墙钟毫秒；None 表示未排队删除。
+    #[serde(default)]
+    pub delete_time: Option<u64>,
 }
 
 /// 一条已提交的内存通知；tick 是处理指令时的世界时间。

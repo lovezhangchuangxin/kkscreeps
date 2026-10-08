@@ -12,7 +12,9 @@ fn notify_when_attacked(w: &mut Working, player: &str, id: ObjId, data: &IntentD
         return; // 拒绝他人对象；无主结构不在此拦截。
     }
     // 控制器、资源源、工地和旗帜不接受此开关；无主可建造结构可以接受。
+    // powerCreep（Generic 承载）与 creep 同形接受。
     let type_gated = matches!(obj, RoomObject::Creep(_))
+        || super::powers::is_power_creep(obj)
         || super::buildings::cost_bearing(w, &movement::type_name_of(obj));
     if !type_gated {
         return;
@@ -78,6 +80,17 @@ pub fn settle_room(
                 c.action_log = 0;
                 c.say_message = None;
                 c.say_public = None;
+            } else if super::powers::is_power_creep(creep)
+                && let RoomObject::Generic(g) = creep
+                && let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&g.data)
+                && v.as_object().is_some_and(|m| m.contains_key("actionLog"))
+            {
+                // powerCreep 的动作记录按官方 processor.js:151-157 每 tick
+                // 开头重置为六键全 null；键整体移除在读取链（saying getter 的
+                // falsy 守卫、墓碑遗言分支）下与之等价，且免去每 tick 全量
+                // JSON 序列化。变更时由写入方整体回写。
+                v.as_object_mut().unwrap().remove("actionLog");
+                g.data = v.to_string();
             }
         }
         // 处理指令前，按控制器配额计算 spawn/extension 是否启用。
@@ -104,6 +117,13 @@ pub fn settle_room(
                     {
                         Some("controller")
                     }
+                    // powerCreep 是 Generic 承载的非结构对象，先于结构臂拦截。
+                    Some(RoomObject::Generic(g))
+                        if kk_world::domain::generic::type_name(&g.data).as_deref()
+                            == Some("powerCreep") =>
+                    {
+                        Some("powerCreep")
+                    }
                     // 真实类型在 structureType 中，处理器再检查结构类型和所有权。
                     Some(RoomObject::Generic(_)) => Some("structure"),
                     _ => None,
@@ -118,6 +138,14 @@ pub fn settle_room(
                 }
                 Some("controller") => {
                     controller::process_controller_intents(&mut ctx.borrow_mut(), *obj_id, actions);
+                }
+                Some("powerCreep") => {
+                    powers::process_power_creep_intents(
+                        &mut ctx.borrow_mut(),
+                        *obj_id,
+                        player,
+                        actions,
+                    );
                 }
                 Some("structure") => {
                     structures::process_structure_intents(&ctx, *obj_id, player, actions)
@@ -170,6 +198,10 @@ pub fn settle_room(
                 Some(RoomObject::Generic(g)) => {
                     if kk_world::domain::generic::type_name(&g.data).as_deref() == Some("nuke") {
                         "nuke"
+                    } else if kk_world::domain::generic::type_name(&g.data).as_deref()
+                        == Some("powerCreep")
+                    {
+                        "powerCreep"
                     } else {
                         match kk_world::domain::generic::structure_type(&g.data).as_deref() {
                             Some("container" | "rampart") => "decay",
@@ -216,6 +248,7 @@ pub fn settle_room(
             }
             "terminal" => economy::terminal_capacity_tick(&mut ctx.borrow_mut(), id),
             "nuke" => nukes::nuke_tick(&mut ctx.borrow_mut(), id),
+            "powerCreep" => powers::power_creep_tick(&mut ctx.borrow_mut(), id)?,
             "mod-building" => buildings::building_object_tick(&ctx, id).map_err(SettleError)?,
             "mod" => mod_intents::process_object_tick(&ctx, id).map_err(SettleError)?,
             _ => {}

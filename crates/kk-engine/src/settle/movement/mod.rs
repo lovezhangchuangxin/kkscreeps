@@ -358,14 +358,16 @@ impl Movement {
         for (&id, cell) in winners {
             let effective_pulled = validate_pull_pair(room, pull_of, pulled_by, id, *cell);
             let fatigue = old_fatigue.get(&id).copied().unwrap_or(0);
-            let creep = room.objects.get(&id).and_then(|o| match o {
-                RoomObject::Creep(c) => Some(c),
-                _ => None,
-            });
-            admissions.insert(
-                id,
-                creep.is_some_and(|c| can_move(c, fatigue, effective_pulled, gate)),
-            );
+            let movable = match room.objects.get(&id) {
+                Some(RoomObject::Creep(c)) => can_move(c, fatigue, effective_pulled, gate),
+                // powerCreep 无部件与疲劳面，官方 canMove 首支恒真
+                // （movement.js:11-14）。
+                Some(RoomObject::Generic(g)) => {
+                    kk_world::domain::generic::type_name(&g.data).as_deref() == Some("powerCreep")
+                }
+                _ => false,
+            };
+            admissions.insert(id, movable);
         }
     }
 
@@ -460,22 +462,12 @@ impl Movement {
         };
         let object_id = entries[0].id;
         let entry = entries[0];
-        let creep = room.objects.get(&object_id).and_then(|o| match o {
-            RoomObject::Creep(c) => Some(c),
-            _ => None,
-        });
+        let mover_owner = dynamic_owner(room.objects.get(&object_id));
         let movable = self.admitted(object_id);
         // 障碍槽只允许追加阻挡：追加集与链内 native 判定取或；让位
         // 链的增量语义（取消 A 后 A 阻挡其原格请求）保留在 native。
         let obstacle = self.extra_blocks.contains(&object_id)
-            || check_obstacle_at_xy(
-                room,
-                index,
-                self,
-                key,
-                creep.map(|c| c.owner.as_str()).unwrap_or(""),
-                safe_mode_user,
-            );
+            || check_obstacle_at_xy(room, index, self, key, &mover_owner, safe_mode_user);
         if !movable || obstacle {
             self.matrix.remove(&key);
             self.winners.remove(&object_id);
@@ -491,7 +483,9 @@ impl Movement {
 }
 
 /// 用完整请求矩阵评分。原格请求中包含站在目标格的竞争者时，对穿评分为 100；
-/// MOVE 功率包含 boost，重量至少取 1 以避免除零。
+/// MOVE 功率包含 boost，重量至少取 1 以避免除零。rate1/2/3 与对象类型无关；
+/// rate4 仅 creep 有身体面——powerCreep 官方 moves=0/weight=1 恒为 0
+/// （movement.js:117-121），移动平局对任何带 MOVE 的 creep 落败。
 fn rate_of(
     original: &BTreeMap<(u8, u8), Vec<RateEntry>>,
     room: &RoomState,
@@ -500,17 +494,6 @@ fn rate_of(
     entry: RateEntry,
     cell: (u8, u8),
 ) -> Rate {
-    let Some(RoomObject::Creep(creep)) = room.objects.get(&entry.id) else {
-        return Rate {
-            object: entry.id,
-            origin: entry.origin,
-            priority: 0,
-            rate1: 0,
-            rate2: 0,
-            rate3: 0,
-            rate4: 0.0,
-        };
-    };
     let mut rate1 = original
         .get(&entry.origin)
         .map(|v| v.len() as i64)
@@ -523,10 +506,20 @@ fn rate_of(
     }
     let rate2 = i64::from(pulled_by.contains_key(&entry.id));
     let rate3 = i64::from(pull_of.contains_key(&entry.id));
-    let moves =
-        kk_world::types::calc_body_effectiveness(&creep.body, BodyKind::Move, "move", "fatigue", 1)
-            as f64;
-    let weight = move_weight(creep).max(1) as f64;
+    let rate4 = match room.objects.get(&entry.id) {
+        Some(RoomObject::Creep(creep)) => {
+            let moves = kk_world::types::calc_body_effectiveness(
+                &creep.body,
+                BodyKind::Move,
+                "move",
+                "fatigue",
+                1,
+            ) as f64;
+            let weight = move_weight(creep).max(1) as f64;
+            moves / weight
+        }
+        _ => 0.0,
+    };
     Rate {
         object: entry.id,
         origin: entry.origin,
@@ -534,7 +527,19 @@ fn rate_of(
         rate1,
         rate2,
         rate3,
-        rate4: moves / weight,
+        rate4,
+    }
+}
+
+/// 动态占格单位（creep/powerCreep）的主人名；非单位或无主返回空串。
+fn dynamic_owner(obj: Option<&RoomObject>) -> String {
+    match obj {
+        Some(RoomObject::Creep(c)) => c.owner.clone(),
+        Some(RoomObject::Generic(g)) => serde_json::from_str::<serde_json::Value>(&g.data)
+            .ok()
+            .and_then(|v| v.get("owner").and_then(|v| v.as_str()).map(str::to_string))
+            .unwrap_or_default(),
+        _ => String::new(),
     }
 }
 
@@ -585,14 +590,26 @@ pub fn check_obstacle_at_xy(
     safe_mode_user: Option<&str>,
 ) -> bool {
     let dynamic_blocked = index.at(at.0 as usize, at.1 as usize).iter().any(|id| {
-        let Some(RoomObject::Creep(target)) = room.objects.get(id) else {
+        let Some(target) = room.objects.get(id) else {
             return false;
         };
-        !movement.winners.contains_key(id)
-            && match safe_mode_user {
-                None => true,
-                Some(sm) => sm != mover_owner || target.owner == mover_owner,
+        // 未获准移动的 creep/powerCreep 占格阻挡（官方 checkObstacleAtXY 首支
+        // 同列两种类型）；其他类型走静态障碍门。
+        let is_unit = match target {
+            RoomObject::Creep(_) => true,
+            RoomObject::Generic(g) => {
+                kk_world::domain::generic::type_name(&g.data).as_deref() == Some("powerCreep")
             }
+            _ => false,
+        };
+        if !is_unit || movement.winners.contains_key(id) {
+            return false;
+        }
+        let target_owner = dynamic_owner(Some(target));
+        match safe_mode_user {
+            None => true,
+            Some(sm) => sm != mover_owner || target_owner == mover_owner,
+        }
     });
     // 仲裁与障碍输入均在选胜后调用：缩减矩阵每格只保留该胜者，
     // 静态放行绑定请求者，不能借同格落选者的许可放行胜者。

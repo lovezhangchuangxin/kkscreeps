@@ -48,11 +48,23 @@ fn schema_tree_official_packages(tree: &mut BTreeSet<String>) -> anyhow::Result<
         engine
             .engine
             .edit_players(|players| {
-                players
-                    .get_mut("p1")
-                    .unwrap()
-                    .resources
-                    .insert("pixel".into(), 5);
+                let p1 = players.get_mut("p1").unwrap();
+                p1.resources.insert("pixel".into(), 5);
+                // power 域（M2H.a）：塞入一条记录使注册表子树进键树钉死。
+                p1.power_creeps.insert(
+                    7,
+                    kk_engine::settle::PowerCreepRecord {
+                        name: "PC".into(),
+                        class_name: "operator".into(),
+                        level: 1,
+                        hits_max: 2000,
+                        store_capacity: 200,
+                        powers: [(1, 1)].into_iter().collect(),
+                        spawn_cooldown_time: None,
+                        delete_time: None,
+                    },
+                );
+                p1.power = 16000;
                 Ok(())
             })
             .unwrap();
@@ -167,6 +179,15 @@ const PINNED_CHECKPOINT_KEYS: &[&str] = &[
     "engine.players.*.notifications[].group_interval",
     "engine.players.*.notifications[].message",
     "engine.players.*.notifications[].tick",
+    "engine.players.*.power",
+    "engine.players.*.power_creeps.*.class_name",
+    "engine.players.*.power_creeps.*.delete_time",
+    "engine.players.*.power_creeps.*.hits_max",
+    "engine.players.*.power_creeps.*.level",
+    "engine.players.*.power_creeps.*.name",
+    "engine.players.*.power_creeps.*.powers.*",
+    "engine.players.*.power_creeps.*.spawn_cooldown_time",
+    "engine.players.*.power_creeps.*.store_capacity",
     "engine.players.*.public_ids[]",
     "engine.players.*.raw_memory",
     "engine.players.*.resources.*",
@@ -232,8 +253,8 @@ fn checkpoint_schema_keys_are_pinned() -> anyhow::Result<()> {
     schema_tree_fault_and_extension_package(&mut tree)?;
     assert_eq!(
         PINNED_CHECKPOINT_KEYS.len(),
-        102,
-        "钉死键总数（G22.a 99 → G22.c 100 → G23.a 101 → UTC 协议 102）：新增或删减键时更新此计数"
+        111,
+        "钉死键总数（G22.a 99 → G22.c 100 → G23.a 101 → UTC 协议 102 → M2H.a power 域 111）：新增或删减键时更新此计数"
     );
     let expected: BTreeSet<String> = PINNED_CHECKPOINT_KEYS
         .iter()

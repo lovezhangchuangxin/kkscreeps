@@ -65,6 +65,16 @@ pub enum Action {
     /// nuker 的 launchNuke（官方载荷 {roomName, x, y}，system.js）；房间
     /// 阶段验证官方门并写 launchNuke 标记，跨房插入在全局阶段执行。
     LaunchNuke,
+    /// powerCreep 的 renew（官方载荷 {id: 目标 powerBank/powerSpawn}）；
+    /// 由 settle::powers 分派。
+    Renew,
+    /// powerCreep 的 enableRoom（官方载荷 {id: 控制器}）。
+    EnableRoom,
+    /// powerCreep 的 usePower（官方载荷 {power, id: 可选目标}）；本批仅
+    /// PWR_GENERATE_OPS 结算效果，其余 power 静默不结算。
+    UsePower,
+    /// powerSpawn 的 processPower（官方无载荷）。
+    ProcessPower,
 }
 
 impl Action {
@@ -109,6 +119,10 @@ impl Action {
             Self::UnboostCreep => "unboostCreep",
             Self::Produce => "produce",
             Self::LaunchNuke => "launchNuke",
+            Self::Renew => "renew",
+            Self::EnableRoom => "enableRoom",
+            Self::UsePower => "usePower",
+            Self::ProcessPower => "processPower",
         }
     }
 
@@ -153,6 +167,10 @@ impl Action {
             "unboostCreep" => Self::UnboostCreep,
             "produce" => Self::Produce,
             "launchNuke" => Self::LaunchNuke,
+            "renew" => Self::Renew,
+            "enableRoom" => Self::EnableRoom,
+            "usePower" => Self::UsePower,
+            "processPower" => Self::ProcessPower,
             _ => return None,
         })
     }
@@ -303,6 +321,8 @@ pub struct IntentData {
     /// lab boostCreep 的部件数上限（官方载荷键 bodyPartsCount，system.js:37）；
     /// 缺失或 0 表示不限制。复用 amount 会与官方字段名脱钩，故独立存放。
     pub body_parts_count: Option<i64>,
+    /// usePower 的 power 常量 ID（官方载荷键 power，system.js）。
+    pub power: Option<i64>,
 }
 
 impl IntentData {
@@ -327,6 +347,7 @@ impl IntentData {
             lab1: None,
             lab2: None,
             body_parts_count: None,
+            power: None,
         }
     }
 
@@ -351,6 +372,7 @@ impl IntentData {
             lab1: None,
             lab2: None,
             body_parts_count: None,
+            power: None,
         }
     }
 }
@@ -435,6 +457,9 @@ pub struct UserIntents {
     pub notify: Vec<NotifyIntent>,
     /// Game.market 的全局列表，由市场阶段按动作类别处理。
     pub market: Vec<MarketIntent>,
+    /// power 账号域全局列表（create/rename/delete/upgrade/spawn/suicide
+    /// PowerCreep），由全局 power 阶段处理。
+    pub power: Vec<PowerIntent>,
     /// 扩展意图：对象目标按 ObjId 分组，动作键为冻结计划里的意图稳定键；
     /// 同一对象同一意图后发覆盖先发（合并模式的队列形态尚未接线）。
     /// args 保留原始 JSON，参数 schema、接收者与所有权由结算侧按计划校验。
@@ -483,6 +508,18 @@ pub enum MarketIntent {
     },
 }
 
+/// power 账号域全局动作（官方 global 容器，processor/global-intents/power）。
+/// id 均指 powerCreep 对象 ID；spawnCooldownTime/deleteTime 是墙钟毫秒。
+#[derive(Debug, Clone, PartialEq)]
+pub enum PowerIntent {
+    CreatePowerCreep { name: String, class_name: String },
+    RenamePowerCreep { id: ObjId, name: String },
+    DeletePowerCreep { id: ObjId, cancel: bool },
+    UpgradePowerCreep { id: ObjId, power: i64 },
+    SpawnPowerCreep { power_spawn: ObjId, name: String },
+    SuicidePowerCreep { id: ObjId },
+}
+
 /// 本轮各玩家的指令，按玩家名字排序以固定结算顺序。
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct IntentBatch {
@@ -525,16 +562,28 @@ impl IntentBatch {
                     "deal",
                     "extendOrder",
                 ];
+                // power 六动作按官方处理序（global-intents/power.js:8）；
+                // 与市场动作名不相交，两表顺序拼接即全局解析序。
+                static POWER_INTENT_ORDER: [&str; 6] = [
+                    "spawnPowerCreep",
+                    "suicidePowerCreep",
+                    "deletePowerCreep",
+                    "upgradePowerCreep",
+                    "createPowerCreep",
+                    "renamePowerCreep",
+                ];
                 let Some(actions) = actions.as_object() else {
                     continue;
                 };
                 let entry = batch.users.entry(player.to_string()).or_default();
-                for name in MARKET_INTENT_ORDER {
-                    let Some(items) = actions.get(name).and_then(Value::as_array) else {
+                for name in MARKET_INTENT_ORDER.iter().chain(POWER_INTENT_ORDER.iter()) {
+                    let Some(items) = actions.get(*name).and_then(Value::as_array) else {
                         continue;
                     };
                     for item in items {
-                        if let Some(intent) = parse_market_intent(name, item) {
+                        if let Some(intent) = parse_power_intent(name, item) {
+                            entry.power.push(intent);
+                        } else if let Some(intent) = parse_market_intent(name, item) {
                             entry.market.push(intent);
                         }
                     }
@@ -622,6 +671,7 @@ impl IntentBatch {
             entry.room.extend(intents.room);
             entry.notify.extend(intents.notify);
             entry.market.extend(intents.market);
+            entry.power.extend(intents.power);
         }
     }
 
@@ -830,6 +880,37 @@ fn parse_market_intent(name: &str, item: &Value) -> Option<MarketIntent> {
     }
 }
 
+/// 解析 global 容器中的六种 power 账号动作；其余全局动作不在此处理。
+/// 官方载荷键：create{name,className}/rename{id,name}/delete{id,cancel}/
+/// upgrade{id,power}/spawnPowerCreep{id,name}/suicidePowerCreep{id}。
+fn parse_power_intent(name: &str, item: &Value) -> Option<PowerIntent> {
+    let id = || to_id(item.get("id"));
+    match name {
+        "createPowerCreep" => Some(PowerIntent::CreatePowerCreep {
+            name: to_plain_string(item.get("name"))?,
+            class_name: to_plain_string(item.get("className"))?,
+        }),
+        "renamePowerCreep" => Some(PowerIntent::RenamePowerCreep {
+            id: id()?,
+            name: to_plain_string(item.get("name"))?,
+        }),
+        "deletePowerCreep" => Some(PowerIntent::DeletePowerCreep {
+            id: id()?,
+            cancel: to_bool(item.get("cancel")).unwrap_or(false),
+        }),
+        "upgradePowerCreep" => Some(PowerIntent::UpgradePowerCreep {
+            id: id()?,
+            power: to_int(item.get("power"))?,
+        }),
+        "spawnPowerCreep" => Some(PowerIntent::SpawnPowerCreep {
+            power_spawn: id()?,
+            name: to_plain_string(item.get("name"))?,
+        }),
+        "suicidePowerCreep" => Some(PowerIntent::SuicidePowerCreep { id: id()? }),
+        _ => None,
+    }
+}
+
 /// 转换对象载荷中已知字段，忽略未知字段；缺失值通常保留为 None。
 ///
 /// 当前读取所有动作字段的并集，不根据 action 分别执行上游白名单。
@@ -886,6 +967,7 @@ pub fn sanitize_object_intent(_action: Action, raw: &Value) -> IntentData {
         lab1: to_id(f("lab1")),
         lab2: to_id(f("lab2")),
         body_parts_count: to_int(f("bodyPartsCount")),
+        power: to_int(f("power")),
     }
 }
 

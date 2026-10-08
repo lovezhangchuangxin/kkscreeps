@@ -55,6 +55,25 @@ pub(super) fn apply_heal(
     }
     if let Some(target) = w.creep_mut(target_id) {
         set_action_log(&mut target.action_log, ACTION_HEALED);
+    } else {
+        // powerCreep 目标的动作记录在 data.actionLog（官方 heal.js:31 对
+        // creep/powerCreep 目标同写 healed；坐标=治疗者）。
+        let (hx, hy) = match w.room.objects.get(&id) {
+            Some(o) => o.pos(),
+            None => return Ok(()),
+        };
+        if w.room
+            .objects
+            .get(&target_id)
+            .is_some_and(crate::settle::powers::is_power_creep)
+        {
+            crate::settle::powers::set_pc_action_log(
+                w,
+                target_id,
+                "healed",
+                serde_json::json!({ "x": hx, "y": hy }),
+            );
+        }
     }
     w.push_event(
         c::EVENT_HEAL,

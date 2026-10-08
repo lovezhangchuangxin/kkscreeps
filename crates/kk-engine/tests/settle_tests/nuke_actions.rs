@@ -651,20 +651,24 @@ fn range_boundary_launches_and_power_creep_zeroed() {
         "差恰 10 放行并进入冷却"
     );
 
-    // powerCreep 全房归零（官方 tick.js:25-27，kk 以 Generic 承载）。
+    // powerCreep 全房归零（官方 tick.js:25-27，kk 以 Generic 承载）；
+    // 归零当拍由全局死亡扫收尾（M2H.a）：对象移除并落墓碑。
     let pc = f.generic(
         "W1N1",
         5,
         5,
-        json!({"type": "powerCreep", "name": "PC1", "hits": 1000}),
+        json!({"type": "powerCreep", "name": "PC1", "owner": "p1", "hits": 1000}),
     );
     f.nuke_at("W1N1", 25, 25, 1);
     f.tick();
-    f.tick();
-    assert!(f.exists(pc), "powerCreep 不移除");
-    assert_eq!(
-        f.data_of(pc).pointer("/hits"),
-        Some(&json!(0)),
-        "powerCreep hits 归零"
-    );
+    assert!(!f.exists(pc), "powerCreep 归零当拍死亡移除");
+    let tombstoned = f
+        .engine
+        .world()
+        .room("W1N1")
+        .expect("房间存在")
+        .objects
+        .values()
+        .any(|o| matches!(o, RoomObject::Tombstone(t) if t.creep_name.as_deref() == Some("PC1")));
+    assert!(tombstoned, "powerCreep 死亡落墓碑");
 }

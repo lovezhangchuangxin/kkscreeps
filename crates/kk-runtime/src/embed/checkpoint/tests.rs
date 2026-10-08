@@ -667,6 +667,9 @@ const SCHEMA_DYNAMIC_MAPS: &[&str] = &[
     "engine.players",
     "engine.players.*.segments",
     "engine.players.*.resources",
+    // power 域（M2H.a）：powerCreep 注册表与其 powers 等级表是动态映射。
+    "engine.players.*.power_creeps",
+    "engine.players.*.power_creeps.*.powers",
     "engine.market.orders",
     "workers",
     "workers.*.modules",

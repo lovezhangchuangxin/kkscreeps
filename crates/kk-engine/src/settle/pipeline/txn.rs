@@ -123,6 +123,17 @@ impl TickState {
             .gcl += amount;
     }
 
+    /// powerSpawn.processPower 的账号 power 累计；房间相位直写共享候选，
+    /// 与市场阶段消费同一份 players（发布或丢弃随整轮候选）。
+    pub(in crate::settle) fn add_power(&self, player: &str, amount: i64) {
+        self.inner
+            .borrow_mut()
+            .players
+            .entry(player.into())
+            .or_default()
+            .power += amount;
+    }
+
     pub(in crate::settle) fn claim_state(&self, player: &str) -> (usize, i64) {
         self.inner
             .borrow()

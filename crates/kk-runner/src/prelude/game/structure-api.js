@@ -161,8 +161,12 @@
     const okTarget =
       target &&
       target.id &&
-      (isKnownCreep(target.id) || isKnownStructure(target.id) || modTargetOk) &&
+      (isKnownCreep(target.id) ||
+        isKnownStructure(target.id) ||
+        modTargetOk ||
+        target instanceof globalThis.PowerCreep) &&
       (target instanceof globalThis.Creep ||
+        target instanceof globalThis.PowerCreep ||
         target instanceof globalThis.StructureSpawn ||
         target instanceof globalThis.Structure ||
         modTargetOk);
@@ -178,13 +182,21 @@
     return C.OK;
   };
 
-  /** 目标限当前 tick 中存活的 Creep，检查能量与启用状态后记录 heal。
-   * 此实现尚不接受 PowerCreep。来源：上游 engine/src/game/structures.js 的 StructureTower.heal。 */
+  /** 目标限当前 tick 中存活的 Creep 或 PowerCreep（官方塔目标门
+   * towers/heal.js:13 双类型），检查能量与启用状态后记录 heal。
+   * 来源：上游 engine/src/game/structures.js 的 StructureTower.heal。 */
   globalThis.StructureTower.prototype.heal = function heal(target) {
     if (!this.my) {
       return C.ERR_NOT_OWNER;
     }
-    if (!(target && target.id && isKnownCreep(target.id) && target instanceof globalThis.Creep)) {
+    if (
+      !(
+        target &&
+        target.id &&
+        (isKnownCreep(target.id) || target instanceof globalThis.PowerCreep) &&
+        (target instanceof globalThis.Creep || target instanceof globalThis.PowerCreep)
+      )
+    ) {
       assertTargetObject(target);
       return C.ERR_INVALID_TARGET;
     }
@@ -736,6 +748,27 @@
       x: pos.x,
       y: pos.y,
     });
+    return C.OK;
+  };
+
+  /** StructurePowerSpawn.processPower（官方 game/structures.js:1337-1354）：
+   *  not-owner > RCL（checkStructureAgainstController——isActive 等价）>
+   *  库存（power≥1 且 energy≥POWER_SPAWN_ENERGY_RATIO）。PWR_OPERATE_POWER
+   *  增产量由结算侧 effects 面决定（M2H.b），预检侧恒按量 1。 */
+  globalThis.StructurePowerSpawn.prototype.processPower = function processPower() {
+    if (!this.my) {
+      return C.ERR_NOT_OWNER; // :1338-1340
+    }
+    if (!this.isActive()) {
+      return C.ERR_RCL_NOT_ENOUGH; // :1341-1343
+    }
+    const raw = gw.rawData(this.id);
+    const power = (raw.store && raw.store.power) || 0;
+    const energy = (raw.store && raw.store.energy) || 0;
+    if (power < 1 || energy < C.POWER_SPAWN_ENERGY_RATIO) {
+      return C.ERR_NOT_ENOUGH_RESOURCES; // :1344-1346
+    }
+    gw.intents.set(this.id, 'processPower', {});
     return C.OK;
   };
 })();

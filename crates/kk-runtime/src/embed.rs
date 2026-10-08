@@ -747,7 +747,7 @@ mod switch;
 
 pub use input_log::{CommittedLogError, InputLogData, InputLogError, LogCursor, read_input_log};
 use mod_chain::ModSlotExecutor;
-use projection::{kkpv_audience_hash, market_view};
+use projection::{kkpv_audience_hash, market_view, power_account_view};
 pub use replay::{ReplayRound, assert_header_paired, rebuild_round, segments_from_checkpoint};
 
 pub use setup::terrain_codes_from_json;
