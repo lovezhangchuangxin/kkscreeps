@@ -187,6 +187,7 @@ mod tests {
             player_class: "Counter".to_string(),
             store_capacity: None,
             hits_max: None,
+            retaliation_milli: None,
         }
     }
 

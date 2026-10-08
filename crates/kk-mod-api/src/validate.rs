@@ -429,6 +429,22 @@ pub(crate) fn object(
             "耐久须为 1..=u32::MAX 的整数（与建筑 hits_max 同口径）",
         ));
     }
+    // 反击比率（G09.d）毫精度 1..=1000（0.001..=1 倍）；只对耐久类型
+    // 有意义——受击才触发，无耐久类型无处生效。
+    if let Some(milli) = ty.retaliation_milli {
+        if ty.hits_max.is_none() {
+            return Err(FreezeError::new(
+                &context,
+                "反击声明要求耐久声明（无耐久类型无处触发）",
+            ));
+        }
+        if !(1..=1000).contains(&milli) {
+            return Err(FreezeError::new(
+                &context,
+                "反击比率须为 (0,1]（毫精度 1..=1000）",
+            ));
+        }
+    }
     if let ObjectVisibility::Conditional(key) = &ty.visibility {
         binding(key, bindings, &context)?;
     }

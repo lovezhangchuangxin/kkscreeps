@@ -46,6 +46,7 @@ fn store_plane() -> kk_engine::settle::Plane {
             player_class: "Crate".into(),
             store_capacity: Some(500),
             hits_max: None,
+            retaliation_milli: None,
         }],
         intents: Vec::new(),
         rules: Vec::new(),

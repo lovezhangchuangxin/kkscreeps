@@ -707,6 +707,7 @@ pub fn link() -> Contribution {
             player_class: "StructureLink".into(),
             store_capacity: None,
             hits_max: None,
+            retaliation_milli: None,
         }],
         intents: vec![IntentDescriptor {
             key: key("link.transfer"),

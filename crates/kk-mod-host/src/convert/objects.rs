@@ -88,6 +88,33 @@ impl ContributionBuilder<'_> {
                 )
             })?),
         };
+        // 反击比率（G09.d）：JS 面收 (0,1] 浮点，此处换毫精度整数；四舍
+        // 五入后低于 1 视为超出可表示域拒绝。
+        let retaliation_milli = match value.get("retaliationRatio") {
+            None | Some(Value::Null) => None,
+            Some(v) => {
+                let ratio = v.as_f64().ok_or_else(|| {
+                    ModHostError::new(
+                        namespace.to_string(),
+                        format!("类型 {key} 的 retaliationRatio 须为数值"),
+                    )
+                })?;
+                if !(0.0..=1.0).contains(&ratio) || ratio == 0.0 {
+                    return Err(ModHostError::new(
+                        namespace.to_string(),
+                        format!("类型 {key} 的 retaliationRatio 须为 (0,1]"),
+                    ));
+                }
+                let milli = (ratio * 1000.0).round() as i64;
+                if milli < 1 {
+                    return Err(ModHostError::new(
+                        namespace.to_string(),
+                        format!("类型 {key} 的 retaliationRatio 过小，毫精度不可表示"),
+                    ));
+                }
+                Some(milli)
+            }
+        };
         self.contribution.object_types.push(ObjectTypeDescriptor {
             key,
             schema_version: as_u32(namespace, value, "version")?,
@@ -99,6 +126,7 @@ impl ContributionBuilder<'_> {
             visibility: object_visibility(namespace, optional_str(value, "visibility"))?,
             store_capacity,
             hits_max,
+            retaliation_milli,
             player_class: {
                 match optional_str(value, "playerClass") {
                     Some(name) if !name.is_empty() => name.to_string(),

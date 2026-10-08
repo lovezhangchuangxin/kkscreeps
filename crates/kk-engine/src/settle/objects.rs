@@ -176,6 +176,7 @@ mod tests {
                 player_class: "Box".into(),
                 store_capacity: Some(100),
                 hits_max: Some(100),
+                retaliation_milli: None,
             }],
             intents: Vec::new(),
             rules: Vec::new(),

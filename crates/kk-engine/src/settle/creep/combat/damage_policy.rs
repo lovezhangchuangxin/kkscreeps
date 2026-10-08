@@ -195,6 +195,111 @@ mod mod_view_tests {
         assert!(validate_damage_target(&w, bare).is_err());
     }
 
+    /// G09.d：显式反击策略整体替换声明式反击（combat.md「空表可禁用
+    /// 反击」契约）；未列目标得 0 反击，列表目标只得策略量。
+    #[test]
+    fn explicit_policy_replaces_declared_retaliation() {
+        let contribution = kk_mod_api_test_type();
+        let plan = std::sync::Arc::new(
+            kk_mod_api::freeze_with_builtin(
+                kk_mod_api::builtin::link(),
+                vec![contribution],
+                kk_mod_api::FreezeOptions::default(),
+            )
+            .unwrap(),
+        );
+        let room = RoomState::new("W1N1", kk_core::Terrain::plains());
+        let mut w = Working::new(
+            room,
+            0,
+            0,
+            TickState::new(std::collections::BTreeMap::new(), 100),
+            Plane {
+                buildings: Default::default(),
+                links: kk_mod_api::builtin::LinkRules::from_plan(plan.rules()).unwrap(),
+                stores: kk_mod_api::builtin::StoreRules::from_plan(plan.rules()).unwrap(),
+                combat: kk_mod_api::builtin::CombatRanges::from_plan(plan.rules()).unwrap(),
+                move_gate: Default::default(),
+                quotas: std::rc::Rc::new(kk_mod_api::builtin::StructureQuotaSnapshot::default()),
+                terrain_passability: Default::default(),
+                resources: std::rc::Rc::new(kk_mod_api::resources::ResourceCatalog::from_plan(
+                    &plan,
+                )),
+                contrib: std::rc::Rc::new(crate::settle::contrib::ContributionDispatch::default()),
+                extensions: std::rc::Rc::new(kk_mod_api::extension::ExtensionCatalog::default()),
+                plan,
+            },
+        );
+        let spike = kk_world::ObjId(1);
+        w.room.objects.insert(
+            spike,
+            RoomObject::Mod(ModObj {
+                id: 1,
+                x: 10,
+                y: 10,
+                type_key: "cvmod:spike".into(),
+                data: r#"{"x":10,"y":10,"hits":300,"hitsMax":300}"#.into(),
+            }),
+        );
+        // 攻击者是敌对 creep（200 血，免疫治疗差异无关）。
+        let attacker = kk_world::ObjId(2);
+        w.room.objects.insert(
+            attacker,
+            RoomObject::Creep(kk_schema::room::CreepObj {
+                id: 2,
+                x: 10,
+                y: 9,
+                fatigue: 0,
+                age_time: u64::MAX / 2,
+                hits: 200,
+                spawning: false,
+                action_log: 0,
+                name: "atk".into(),
+                owner: "p2".into(),
+                body: vec![
+                    kk_schema::room::BodyPart {
+                        kind: 4,
+                        hits: 100,
+                        boost: None,
+                    },
+                    kk_schema::room::BodyPart {
+                        kind: 0,
+                        hits: 100,
+                        boost: None,
+                    },
+                ],
+                store: kk_schema::room::Store {
+                    energy: 0,
+                    ghodium: 0,
+                },
+                store_extra: Vec::new(),
+                say_message: None,
+                say_public: None,
+                notify_when_attacked: None,
+            }),
+        );
+        // 策略表列出 spike：只得策略量 7，不吃声明反击 15。
+        crate::settle::damage::apply_damage_with_retaliation(
+            &mut w,
+            attacker,
+            spike,
+            30,
+            kk_core::constants::EVENT_ATTACK_TYPE_MELEE,
+            7,
+        );
+        let events = std::mem::take(&mut w.events);
+        let hit_backs: Vec<_> = events
+            .iter()
+            .filter(|e| {
+                e["data"]["attackType"]
+                    == serde_json::json!(kk_core::constants::EVENT_ATTACK_TYPE_HIT_BACK)
+            })
+            .collect();
+        assert_eq!(hit_backs.len(), 1, "恰一条 HIT_BACK：{events:?}");
+        assert_eq!(hit_backs[0]["data"]["damage"], serde_json::json!(7));
+        assert_eq!(w.damage_to_apply.get(&attacker), Some(&7), "不叠加声明反击");
+    }
+
     fn kk_mod_api_test_type() -> kk_mod_api::Contribution {
         let field = |name: &str| kk_mod_api::FieldDescriptor {
             key: kk_mod_api::Key::new(format!("cvmod:{name}")).unwrap(),
@@ -221,24 +326,46 @@ mod mod_view_tests {
             bindings: std::collections::BTreeSet::from([
                 kk_mod_api::Key::new("cvmod:bunker.field.x").unwrap(),
                 kk_mod_api::Key::new("cvmod:bunker.field.y").unwrap(),
+                kk_mod_api::Key::new("cvmod:spike.field.x").unwrap(),
+                kk_mod_api::Key::new("cvmod:spike.field.y").unwrap(),
             ]),
             field_mounts: Vec::new(),
-            object_types: vec![kk_mod_api::ObjectTypeDescriptor {
-                key: kk_mod_api::Key::new("cvmod:bunker").unwrap(),
-                schema_version: 1,
-                owner_field: None,
-                position_fields: Some([
-                    kk_mod_api::Key::new("cvmod:x").unwrap(),
-                    kk_mod_api::Key::new("cvmod:y").unwrap(),
-                ]),
-                fields: vec![field("x"), field("y")],
-                capabilities: Vec::new(),
-                lifecycle_slots: std::collections::BTreeSet::new(),
-                visibility: kk_mod_api::ObjectVisibility::RoomVisible,
-                player_class: "Bunker".into(),
-                store_capacity: None,
-                hits_max: Some(300),
-            }],
+            object_types: vec![
+                kk_mod_api::ObjectTypeDescriptor {
+                    key: kk_mod_api::Key::new("cvmod:spike").unwrap(),
+                    schema_version: 1,
+                    owner_field: None,
+                    position_fields: Some([
+                        kk_mod_api::Key::new("cvmod:x").unwrap(),
+                        kk_mod_api::Key::new("cvmod:y").unwrap(),
+                    ]),
+                    fields: vec![field("x"), field("y")],
+                    capabilities: Vec::new(),
+                    lifecycle_slots: std::collections::BTreeSet::new(),
+                    visibility: kk_mod_api::ObjectVisibility::RoomVisible,
+                    player_class: "Spike".into(),
+                    store_capacity: None,
+                    hits_max: Some(300),
+                    retaliation_milli: Some(500),
+                },
+                kk_mod_api::ObjectTypeDescriptor {
+                    key: kk_mod_api::Key::new("cvmod:bunker").unwrap(),
+                    schema_version: 1,
+                    owner_field: None,
+                    position_fields: Some([
+                        kk_mod_api::Key::new("cvmod:x").unwrap(),
+                        kk_mod_api::Key::new("cvmod:y").unwrap(),
+                    ]),
+                    fields: vec![field("x"), field("y")],
+                    capabilities: Vec::new(),
+                    lifecycle_slots: std::collections::BTreeSet::new(),
+                    visibility: kk_mod_api::ObjectVisibility::RoomVisible,
+                    player_class: "Bunker".into(),
+                    store_capacity: None,
+                    hits_max: Some(300),
+                    retaliation_milli: None,
+                },
+            ],
             intents: Vec::new(),
             rules: Vec::new(),
             overrides: Vec::new(),

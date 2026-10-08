@@ -813,3 +813,92 @@ export default function register() {
     }
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// G09.d：对象反击比率 retaliationRatio 从 JS 浮点转毫精度整数入冻结
+/// 描述符；非法比率与无耐久声明在注册/冻结层拒绝。
+#[test]
+fn object_retaliation_ratio_converts_and_rejects_bad_values() {
+    // 合法：0.5 → 500 毫。
+    let root = std::env::temp_dir().join("kk-mod-host-retaliation-ok");
+    let _ = std::fs::remove_dir_all(&root);
+    write_pkg(
+        &root,
+        "retaliation-ok-spike",
+        &[
+            (
+                "mod.json",
+                r#"{"id": "retaliation-ok-spike", "version": "1.0.0", "apiVersion": "^1.0.0"}"#,
+            ),
+            (
+                "server.js",
+                r#"
+export default function register(api) {
+  api.objects.define('retaliation-ok-spike:spike', {
+    version: 1, playerClass: 'Spike', hitsMax: 300, retaliationRatio: 0.5,
+    fields: {},
+  });
+}
+"#,
+            ),
+        ],
+    );
+    let packages = discover_packages(&root).expect("可装载");
+    let mut realm = ModRealm::new().expect("realm 可创建");
+    let registered = realm
+        .register(&packages, RegisterOptions::default())
+        .expect("可注册");
+    let ty = registered
+        .plan
+        .projection()
+        .types()
+        .iter()
+        .find(|ty| ty.descriptor.key.as_str() == "retaliation-ok-spike:spike")
+        .expect("类型已冻结");
+    assert_eq!(ty.descriptor.retaliation_milli, Some(500));
+    assert_eq!(ty.descriptor.hits_max, Some(300));
+    let _ = std::fs::remove_dir_all(&root);
+
+    // 非法：超界、零、无耐久声明。
+    for (name, ratio, needle) in [
+        ("retaliation-too-big", "1.5", "retaliationRatio 须为 (0,1]"),
+        ("retaliation-zero", "0", "retaliationRatio 须为 (0,1]"),
+        ("retaliation-no-hits", "0.5", "反击声明要求耐久声明"),
+    ] {
+        let hits = if name == "retaliation-no-hits" {
+            ""
+        } else {
+            "hitsMax: 300, "
+        };
+        let root = std::env::temp_dir().join(format!("kk-mod-host-{name}"));
+        let _ = std::fs::remove_dir_all(&root);
+        write_pkg(
+            &root,
+            name,
+            &[
+                (
+                    "mod.json",
+                    &format!(r#"{{"id": "{name}", "version": "1.0.0", "apiVersion": "^1.0.0"}}"#),
+                ),
+                (
+                    "server.js",
+                    &format!(
+                        r#"
+export default function register(api) {{
+  api.objects.define('{name}:spike', {{
+    version: 1, playerClass: 'Spike', {hits}retaliationRatio: {ratio},
+    fields: {{}},
+  }});
+}}
+"#
+                    ),
+                ),
+            ],
+        );
+        let error = register_root_error(&root);
+        assert!(
+            error.contains(needle),
+            "包 {name} 的错误应包含 {needle:?}，实得 {error}"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+}

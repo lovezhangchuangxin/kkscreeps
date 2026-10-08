@@ -145,6 +145,7 @@ fn rich_plan() -> crate::ContributionPlan {
         player_class: "Beacon".into(),
         store_capacity: None,
         hits_max: None,
+        retaliation_milli: None,
     });
     c.intents.push(IntentDescriptor {
         key: key("alpha:salute"),
@@ -341,6 +342,7 @@ fn non_object_intent_scope_is_rejected_consistently_with_install() {
         player_class: "Beacon".into(),
         store_capacity: None,
         hits_max: None,
+        retaliation_milli: None,
     });
     c.intents.push(IntentDescriptor {
         key: key("alpha:shout"),
@@ -381,6 +383,7 @@ fn non_object_intent_scope_is_rejected_consistently_with_install() {
         player_class: "Beacon".into(),
         store_capacity: None,
         hits_max: None,
+        retaliation_milli: None,
     });
     c.intents.push(IntentDescriptor {
         key: key("alpha:queued"),
@@ -430,6 +433,7 @@ fn args_type_names_survive_hostile_keys_and_collisions() {
             player_class: format!("{}Node", namespace.replace(['-', '.'], "")),
             store_capacity: None,
             hits_max: None,
+            retaliation_milli: None,
         });
         c.intents.push(IntentDescriptor {
             key: key(&format!("{namespace}:{name}")),
@@ -514,6 +518,7 @@ fn store_declaring_types_carry_envelope_members() {
         player_class: "Crate".into(),
         store_capacity: Some(300),
         hits_max: None,
+        retaliation_milli: None,
     });
     let plan =
         crate::freeze_with_builtin(crate::builtin::link(), vec![c], Default::default()).unwrap();
@@ -557,6 +562,7 @@ fn hits_declaring_types_carry_envelope_members() {
         player_class: "Bunker".into(),
         store_capacity: None,
         hits_max: Some(300),
+        retaliation_milli: None,
     });
     let plan =
         crate::freeze_with_builtin(crate::builtin::link(), vec![c], Default::default()).unwrap();

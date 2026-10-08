@@ -401,6 +401,7 @@ fn field_bare_name_collision_rejected_on_mod_types_only() {
         player_class: "Thing".into(),
         store_capacity: None,
         hits_max: None,
+        retaliation_milli: None,
     };
     ty.fields.sort_by(|a, b| a.key.cmp(&b.key));
     owner.object_types.push(ty);
@@ -435,6 +436,102 @@ fn field_bare_name_collision_rejected_on_mod_types_only() {
 }
 
 #[test]
+fn object_retaliation_declaration_freezes_with_bounds_and_durability_requirement() {
+    // G09.d：反击比率（毫精度 1..=1000）随类型冻结、要求耐久声明。
+    let mut c = module("stmod");
+    c.bindings.insert(key("stmod:spike.field.x"));
+    c.object_types.push(ObjectTypeDescriptor {
+        key: key("stmod:spike"),
+        schema_version: 1,
+        owner_field: None,
+        position_fields: None,
+        fields: Vec::new(),
+        capabilities: Vec::new(),
+        lifecycle_slots: BTreeSet::new(),
+        visibility: ObjectVisibility::RoomVisible,
+        player_class: "Spike".into(),
+        store_capacity: None,
+        hits_max: Some(300),
+        retaliation_milli: None,
+    });
+    let frozen = plan(vec![builtin::link(), c.clone()]).unwrap();
+    let ty = frozen
+        .projection()
+        .types()
+        .iter()
+        .find(|ty| ty.descriptor.key.as_str() == "stmod:spike")
+        .expect("类型已冻结");
+    assert_eq!(ty.descriptor.retaliation_milli, None);
+    // 同一类型仅加反击声明即改变计划身份。
+    c.object_types[0].retaliation_milli = Some(500);
+    let armed = plan(vec![builtin::link(), c]).unwrap();
+    assert_ne!(armed.hash(), frozen.hash(), "反击声明参与计划身份");
+    let armed_ty = armed
+        .projection()
+        .types()
+        .iter()
+        .find(|ty| ty.descriptor.key.as_str() == "stmod:spike")
+        .expect("类型已冻结");
+    assert_eq!(armed_ty.descriptor.retaliation_milli, Some(500));
+    // 界值：毫精度 1..=1000 内接受（两端），界外拒绝。
+    for milli in [1i64, 1000] {
+        let mut c = module("stmod");
+        c.object_types.push(ObjectTypeDescriptor {
+            key: key("stmod:spike"),
+            schema_version: 1,
+            owner_field: None,
+            position_fields: None,
+            fields: Vec::new(),
+            capabilities: Vec::new(),
+            lifecycle_slots: BTreeSet::new(),
+            visibility: ObjectVisibility::RoomVisible,
+            player_class: "Spike".into(),
+            store_capacity: None,
+            hits_max: Some(300),
+            retaliation_milli: Some(milli),
+        });
+        plan(vec![builtin::link(), c]).unwrap();
+    }
+    for bad in [0i64, 1001, -1] {
+        let mut c = module("stmod");
+        c.object_types.push(ObjectTypeDescriptor {
+            key: key("stmod:spike"),
+            schema_version: 1,
+            owner_field: None,
+            position_fields: None,
+            fields: Vec::new(),
+            capabilities: Vec::new(),
+            lifecycle_slots: BTreeSet::new(),
+            visibility: ObjectVisibility::RoomVisible,
+            player_class: "Spike".into(),
+            store_capacity: None,
+            hits_max: Some(300),
+            retaliation_milli: Some(bad),
+        });
+        let err = plan(vec![builtin::link(), c]).unwrap_err().to_string();
+        assert!(err.contains("反击比率"), "界值 {bad} 实得 {err}");
+    }
+    // 无耐久类型拒绝声明反击（无处触发）。
+    let mut c = module("stmod");
+    c.object_types.push(ObjectTypeDescriptor {
+        key: key("stmod:ghost"),
+        schema_version: 1,
+        owner_field: None,
+        position_fields: None,
+        fields: Vec::new(),
+        capabilities: Vec::new(),
+        lifecycle_slots: BTreeSet::new(),
+        visibility: ObjectVisibility::RoomVisible,
+        player_class: "Ghost".into(),
+        store_capacity: None,
+        hits_max: None,
+        retaliation_milli: Some(500),
+    });
+    let err = plan(vec![builtin::link(), c]).unwrap_err().to_string();
+    assert!(err.contains("反击声明要求耐久声明"), "实得 {err}");
+}
+
+#[test]
 fn object_hits_declaration_freezes_and_bounds_reject() {
     // G09.b：hitsMax 声明进入冻结描述符，参与计划身份；界值与建筑
     // hits_max 同口径（1..=u32::MAX）。
@@ -461,6 +558,7 @@ fn object_hits_declaration_freezes_and_bounds_reject() {
         player_class: "Bunker".into(),
         store_capacity: None,
         hits_max: Some(500),
+        retaliation_milli: None,
     });
     let frozen = plan(vec![builtin::link(), c.clone()]).unwrap();
     let ty = frozen
@@ -485,6 +583,7 @@ fn object_hits_declaration_freezes_and_bounds_reject() {
             player_class: "Bunker".into(),
             store_capacity: None,
             hits_max: Some(ok),
+            retaliation_milli: None,
         });
         plan(vec![builtin::link(), c]).unwrap();
     }
@@ -515,6 +614,7 @@ fn object_hits_declaration_freezes_and_bounds_reject() {
             player_class: "Bunker".into(),
             store_capacity: None,
             hits_max: Some(bad),
+            retaliation_milli: None,
         });
         let err = plan(vec![builtin::link(), c]).unwrap_err().to_string();
         assert!(err.contains("耐久须为"), "界值 {bad} 实得 {err}");
@@ -544,6 +644,7 @@ fn object_hits_declaration_freezes_and_bounds_reject() {
             player_class: "Bunker".into(),
             store_capacity: None,
             hits_max: None,
+            retaliation_milli: None,
         });
         let err = plan(vec![builtin::link(), bad]).unwrap_err().to_string();
         assert!(err.contains("占用投影保留键"), "{reserved} 实得 {err}");
@@ -576,6 +677,7 @@ fn object_store_declaration_freezes_and_reserved_keys_reject() {
         player_class: "Crate".into(),
         store_capacity: Some(500),
         hits_max: None,
+        retaliation_milli: None,
     });
     let frozen = plan(vec![builtin::link(), c.clone()]).unwrap();
     let ty = frozen
@@ -623,6 +725,7 @@ fn object_store_declaration_freezes_and_reserved_keys_reject() {
             player_class: "Crate".into(),
             store_capacity: None,
             hits_max: None,
+            retaliation_milli: None,
         });
         // 保留键在冻结期拒绝（含 ServerOnly 可见性；builtin:link 的
         // 官方投影字段形状豁免）。

@@ -118,6 +118,7 @@ export function createApi(namespace, config) {
         tick,
         capacity: spec.capacity,
         hitsMax: spec.hitsMax,
+        retaliationRatio: spec.retaliationRatio,
       });
       return { key, version: spec.version };
     },

@@ -1,0 +1,201 @@
+{
+ "version": 1,
+ "shard": {
+  "players": [
+   "p1"
+  ],
+  "rooms": [
+   {
+    "name": "W1N1",
+    "owner": "p1"
+   }
+  ]
+ },
+ "bots": [
+  {
+   "player": "p1",
+   "modules": "."
+  }
+ ],
+ "objects": [
+  {
+   "alias": "raider",
+   "room": "W1N1",
+   "kind": "creep",
+   "spec": {
+    "name": "raider",
+    "owner": "p1",
+    "pos": [
+     11,
+     11
+    ],
+    "body": [
+     "attack",
+     "move"
+    ],
+    "store": {
+     "energy": 50
+    },
+    "ticksToLive": 100
+   }
+  },
+  {
+   "alias": "sniper",
+   "room": "W1N1",
+   "kind": "creep",
+   "spec": {
+    "name": "sniper",
+    "owner": "p1",
+    "pos": [
+     11,
+     10
+    ],
+    "body": [
+     "ranged_attack",
+     "move"
+    ],
+    "store": {
+     "energy": 50
+    },
+    "ticksToLive": 100
+   }
+  },
+  {
+   "alias": "mule",
+   "room": "W1N1",
+   "kind": "creep",
+   "spec": {
+    "name": "mule",
+    "owner": "p1",
+    "pos": [
+     12,
+     9
+    ],
+    "body": [
+     "move",
+     "carry",
+     "carry"
+    ],
+    "store": {
+     "energy": 100
+    },
+    "ticksToLive": 100
+   }
+  },
+  {
+   "alias": "spike",
+   "room": "W1N1",
+   "kind": "mod",
+   "spec": {
+    "typeKey": "objret-thorn:spike",
+    "fields": {
+     "x": 10,
+     "y": 11
+    }
+   }
+  },
+  {
+   "alias": "core",
+   "room": "W1N1",
+   "kind": "mod",
+   "spec": {
+    "typeKey": "objret-reactor:core",
+    "fields": {
+     "x": 12,
+     "y": 10
+    }
+   }
+  }
+ ],
+ "mods": {
+  "root": "../mod-objret",
+  "selection": {
+   "include": [
+    "objret-thorn",
+    "objret-reactor"
+   ]
+  }
+ },
+ "assertions": [
+  {
+   "pointer": "/players/p1/memory/attackCode",
+   "op": "eq",
+   "value": 0
+  },
+  {
+   "pointer": "/players/p1/memory/spikeHits",
+   "op": "eq",
+   "value": 270
+  },
+  {
+   "pointer": "/players/p1/memory/raiderHits",
+   "op": "eq",
+   "value": 185
+  },
+  {
+   "pointer": "/players/p1/memory/spikeHits2",
+   "op": "eq",
+   "value": 240
+  },
+  {
+   "pointer": "/players/p1/memory/raiderHits2",
+   "op": "eq",
+   "value": 170
+  },
+  {
+   "pointer": "/players/p1/memory/finalSpike",
+   "op": "eq",
+   "value": 210
+  },
+  {
+   "pointer": "/players/p1/memory/finalRaider",
+   "op": "eq",
+   "value": 155
+  },
+  {
+   "pointer": "/players/p1/memory/snipeCode",
+   "op": "eq",
+   "value": 0
+  },
+  {
+   "pointer": "/players/p1/memory/coreInitialHits",
+   "op": "eq",
+   "value": 200
+  },
+  {
+   "pointer": "/players/p1/memory/transferCode",
+   "op": "eq",
+   "value": 0
+  },
+  {
+   "pointer": "/players/p1/memory/coreHits",
+   "op": "eq",
+   "value": 190
+  },
+  {
+   "pointer": "/players/p1/memory/sniperHits",
+   "op": "eq",
+   "value": 190
+  },
+  {
+   "pointer": "/players/p1/memory/coreEnergy",
+   "op": "eq",
+   "value": 50
+  },
+  {
+   "pointer": "/players/p1/memory/finalCore",
+   "op": "eq",
+   "value": 170
+  },
+  {
+   "pointer": "/players/p1/memory/finalSniper",
+   "op": "eq",
+   "value": 170
+  },
+  {
+   "pointer": "/players/p1/memory/finalEnergy",
+   "op": "eq",
+   "value": 50
+  }
+ ]
+}

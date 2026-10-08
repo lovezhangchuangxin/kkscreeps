@@ -52,9 +52,9 @@ fn object_hits_scenarios_hold_durability_across_channels() -> anyhow::Result<()>
         let channels = &reference_reports()?[name];
         for (binary, report) in [false, true].iter().zip(channels) {
             anyhow::ensure!(
-                report["assertions"]
-                    .as_array()
-                    .is_some_and(|list| list.iter().all(|a| a["passed"] == true)),
+                report["assertions"].as_array().is_some_and(
+                    |list| !list.is_empty() && list.iter().all(|a| a["passed"] == true)
+                ),
                 "场景 {name}/{binary} 断言未全过：{}",
                 report["assertions"]
             );

@@ -124,6 +124,58 @@ fn apply_damage_inner(
         } else {
             set_structure_hits(w, target_id, new_hits);
         }
+        // 声明式反击（G09.d，官方 powerBank damage×0.5 同构）：任意攻击
+        // 类型、不耗自身耐久，毫精度整除向下取整（不足 1 不触发）。与
+        // 显式反击策略的关系同原生反击：策略存在即整体替换（空表可禁
+        // 用反击，combat.md 契约）。房主安全模式抑制与上游 _damage.js
+        // 的 powerBank 分支同款（controller 主人==攻击者主人且 safemode
+        // 激活时清零）。反击落点按攻击者类型分流：creep 走延迟队列
+        // （意图阶段先于其 tick，不丢）；塔等结构攻击者的队列无人消费，
+        // 立即扣减。立即扣减不经本函数重入（禁递归：反击不再触发被反
+        // 击方的反击）。事件序与既有反击一致：摧毁→反击→主攻击。
+        if retaliation.is_none()
+            && let Some(milli) = mod_retaliation_milli(w, &m.type_key)
+        {
+            let suppressed = w.controller().is_some_and(|ctl| {
+                ctl.owner.as_deref() == Some(attacker_owner.as_str()) && ctl.safe_mode > w.time
+            });
+            let back = if suppressed {
+                0
+            } else {
+                damage.saturating_mul(milli) / 1000
+            };
+            if back > 0 {
+                let attacker_is_creep =
+                    matches!(w.room.objects.get(&attacker), Some(RoomObject::Creep(_)));
+                if attacker_is_creep {
+                    *w.damage_to_apply.entry(attacker).or_insert(0) += back;
+                    if let Some(a) = w.creep_mut(attacker) {
+                        set_action_log(&mut a.action_log, ACTION_ATTACKED);
+                    }
+                } else if let Some(attacker_obj) = w.room.objects.get(&attacker).cloned() {
+                    let attacker_hits = object_hits(&attacker_obj) - back;
+                    if attacker_hits <= 0 {
+                        destroy_structure(w, attacker);
+                        w.push_event(
+                            c::EVENT_OBJECT_DESTROYED,
+                            attacker,
+                            json!({ "type": type_name_of(&attacker_obj) }),
+                        );
+                    } else {
+                        set_structure_hits(w, attacker, attacker_hits);
+                    }
+                }
+                w.push_event(
+                    c::EVENT_ATTACK,
+                    target_id,
+                    json!({
+                        "targetId": attacker.as_str(),
+                        "damage": back,
+                        "attackType": c::EVENT_ATTACK_TYPE_HIT_BACK,
+                    }),
+                );
+            }
+        }
     } else {
         let new_hits = object_hits(&target) - damage;
         if new_hits <= 0 {
@@ -393,6 +445,16 @@ fn static_hits_max(structure_type: &str, links: &kk_mod_api::builtin::LinkRules)
         "link" => links.hits_max,
         _ => return None,
     })
+}
+
+/// 读 Mod 类型的声明式反击比率（G09.d，毫精度 1..=1000）；类型不在
+/// 计划中或未声明返回 None。Engine::mod_object_type 的查找在 Working
+/// 语境不可达，此处按计划投影同形解析。
+fn mod_retaliation_milli(w: &Working, type_key: &str) -> Option<i64> {
+    let key = kk_mod_api::Key::new(type_key.to_string()).ok()?;
+    let handle = w.plane.plan.projection().resolve(&key)?;
+    let ty = w.plane.plan.projection().get(handle)?;
+    ty.descriptor.retaliation_milli
 }
 
 /// 写回结构耐久，钳在 u32 范围；Generic 写入 JSON，其他类型不变。

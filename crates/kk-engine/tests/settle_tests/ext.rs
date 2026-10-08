@@ -94,6 +94,7 @@ fn counter_contribution(handlers: &[(&str, HandlerKind)]) -> Contribution {
             player_class: "Counter".into(),
             store_capacity: None,
             hits_max: None,
+            retaliation_milli: None,
         }],
         intents: vec![IntentDescriptor {
             key: intent_key.clone(),

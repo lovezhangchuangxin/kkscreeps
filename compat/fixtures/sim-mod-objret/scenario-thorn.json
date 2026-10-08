@@ -1,0 +1,100 @@
+{
+ "version": 1,
+ "shard": {
+  "players": [
+   "p1"
+  ],
+  "rooms": [
+   {
+    "name": "W1N1",
+    "owner": "p1"
+   }
+  ]
+ },
+ "bots": [
+  {
+   "player": "p1",
+   "modules": "."
+  }
+ ],
+ "objects": [
+  {
+   "alias": "raider",
+   "room": "W1N1",
+   "kind": "creep",
+   "spec": {
+    "name": "raider",
+    "owner": "p1",
+    "pos": [
+     11,
+     11
+    ],
+    "body": [
+     "attack",
+     "move"
+    ],
+    "store": {
+     "energy": 50
+    },
+    "ticksToLive": 100
+   }
+  },
+  {
+   "alias": "spike",
+   "room": "W1N1",
+   "kind": "mod",
+   "spec": {
+    "typeKey": "objret-thorn:spike",
+    "fields": {
+     "x": 10,
+     "y": 11
+    }
+   }
+  }
+ ],
+ "mods": {
+  "root": "../mod-objret",
+  "selection": {
+   "include": [
+    "objret-thorn"
+   ]
+  }
+ },
+ "assertions": [
+  {
+   "pointer": "/players/p1/memory/attackCode",
+   "op": "eq",
+   "value": 0
+  },
+  {
+   "pointer": "/players/p1/memory/spikeHits",
+   "op": "eq",
+   "value": 270
+  },
+  {
+   "pointer": "/players/p1/memory/raiderHits",
+   "op": "eq",
+   "value": 185
+  },
+  {
+   "pointer": "/players/p1/memory/spikeHits2",
+   "op": "eq",
+   "value": 240
+  },
+  {
+   "pointer": "/players/p1/memory/raiderHits2",
+   "op": "eq",
+   "value": 170
+  },
+  {
+   "pointer": "/players/p1/memory/finalSpike",
+   "op": "eq",
+   "value": 210
+  },
+  {
+   "pointer": "/players/p1/memory/finalRaider",
+   "op": "eq",
+   "value": 155
+  }
+ ]
+}

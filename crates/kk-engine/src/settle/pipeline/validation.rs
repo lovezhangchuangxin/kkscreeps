@@ -381,6 +381,7 @@ mod invariant_tests {
                 player_class: "Obj".into(),
                 store_capacity: capacity,
                 hits_max,
+                retaliation_milli: None,
             }
         };
         let contribution = kk_mod_api::Contribution {

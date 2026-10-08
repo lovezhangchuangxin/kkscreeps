@@ -60,6 +60,7 @@ fn building_key_cannot_collide_with_object_type() {
         player_class: "Thing".into(),
         store_capacity: None,
         hits_max: None,
+        retaliation_milli: None,
     });
     let mut b = building("alpha", "thing");
     b.player_class = "Foundry".into();

@@ -268,6 +268,7 @@ mod move_precheck;
 mod move_pull_registration;
 mod move_static;
 mod obj_hits;
+mod obj_ret;
 mod obj_store;
 mod quota;
 mod replay;

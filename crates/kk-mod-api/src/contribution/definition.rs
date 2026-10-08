@@ -174,6 +174,12 @@ pub struct ObjectTypeDescriptor {
     /// 写信封键。容量随类型冻结，不进 StoreRules（那是内建结构规则族）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub store_capacity: Option<u64>,
+    /// 声明式反击（G09.d）：与耐久声明组合的类型级反击比率（毫精度，
+    /// 1..=1000 即 0.001..=1 倍），任意攻击类型触发（官方 powerBank
+    /// damage×0.5 同构）。反击不耗自身耐久；creep 攻击者落延迟队列、
+    /// 塔/结构攻击者立即扣减且禁递归。无运行时字段（不占信封/保留键）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retaliation_milli: Option<i64>,
     /// 耐久声明（G09.b）：Some 时对象创建即携带 hits/hitsMax 信封键
     /// （满血创建，hits=hitsMax=声明值），可被 creep 攻击与塔伤害命中，
     /// 扣至 0 即移除并发 objectDestroyed 事件（type 为类型键；不产废墟，

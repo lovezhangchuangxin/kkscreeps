@@ -37,7 +37,7 @@
 
 **实施交付（同日）**：契约见[自有对象耐久](../architecture/object-durability.md)。`hits_max`（Option<u64>，冻结界 1..=u32::MAX 与建筑同口径）随 ObjectTypeDescriptor 冻结；两条创建路径（结算 create、embed 放置）同形满血注入 `hits/hitsMax` 信封；`object_hits`/`structure_hits_max`/`set_structure_hits` 增 Mod 臂读写信封（近战/远程/塔/策略伤害全走同一门）；死亡=扣至 0 → remove_obj + `objectDestroyed {type: 类型键}`，不产废墟不掉落；保留键 10 项（+hits/hitsMax）冻结层拒绝；字段更新拒绝信封键、字段写回丢弃输入信封回填世界值（与库存同款）；逐 tick 校验三臂守卫（缺信封/信封非法——**hitsMax 须等于冻结声明、hits 须在 1..=hitsMax 内**——0 只能直改造出，发布前拒绝；未声明携带）。**与登记的偏差**：塔玩家面 attack 也开了 modEntry 目标族（登记只写 creep.js；三处共用 `gw.modDurabilityTargetOk` 助手，塔结算侧测试覆盖、玩家路径与 attack/rangedAttack 共享判别）；`type_name_of` 对 Mod 保持空串（战斗读面 CombatView 单独取类型键，movement 等消费点零影响——登记的"最小接线"落地为不接线）。夹具 [mod-objhits](../../compat/fixtures/mod-objhits/README.md)（objhits-siege barrel 300/objhits-vault cache 200×100 双信封两独立包 + 无耐久 decoy 对照）与 [sim-mod-objhits](../../compat/fixtures/sim-mod-objhits/README.md)（siege 近战 30/击 300→210、vault 远程 10/击 200→170+转入 50 互不扰动、combined 共存，`--ticks 4`）；Rust 侧 `sim_tests/obj_hits.rs` 三场景×双通道+冷恢复+plan_hash 互异、`settle_tests/mod_hits.rs` 近战/远程/塔/无耐久静默/击毁事件+无废墟、`damage_policy.rs` 战斗读面与策略目标接纳、validation/freeze/typegen 单测。首片不做：受击槽结构形状（G09.c）、反击（G09.d）、repair/自愈、massAttack 与 owner 联动、废墟/掉落、死亡通知面。
 
-## G09.c 结构受击槽 与 G09.d 声明式反击（2026-10-08 调查与选型登记，待实施）
+## G09.c 结构受击槽 与 G09.d 声明式反击（2026-10-08 调查与选型登记；G09.d 同日交付，G09.c 待实施）
 
 调查结论（登记时点现状，两片共用同一份调查）：结构/Mod 的立即扣减路径（apply_damage_inner 结构与 Mod 分支）今天**没有任何 Mod 介入点**——受击槽 `builtin:creep.receiveDamage` 的 `default_pending_damage` 以 creep 为门（非 creep 整槽不调用），IncomingInput 形状是纯数值+来源 ID 摘要（无目标对象形状）；反击两条路（原生=仅 creep 目标+近战+无 rampart 按 ATTACK 部件；显式 RetaliationPolicy=攻击者侧 JS 预声明表）都不覆盖结构/Mod 目标；反击伤害统一落 `damage_to_apply[attacker]` 延迟队列——该队列只在 creep tick 消费，**塔/结构攻击者的反击会静默丢失**（apply_pending_hits_selected 非 creep 早退、塔无 tick 分支）；受击槽在目标自己的对象 tick 运行，ID 更小的攻击者已 tick 完成，此刻向其排反击队列随候选丢弃（父任务警告的机制基础）。官方对照（上游 _damage.js：仓库注释/研究记录取证）：反击仅近战+带 ATTACK 部件的 creep 目标，结构不反击；唯一结构例外 powerBank=任意 attackType 伤害×0.5 反击（特殊硬编码）；结构受击=立即扣减无 TOUGH。
 
@@ -46,6 +46,8 @@
 **选型（G09.c 结构受击槽，G09.d 后实施）**：新槽（键名区分 creep 语义，如 `builtin:mod.receiveDamage`），介入点在 apply_damage_inner 的 Mod 分支扣减前（意图阶段）；输入形状=伤害值+来源摘要（复用事件归因）+目标形状（类型键/hits/库存信封摘要，沿 ctx.target mod_fields 先例）；输出=修改伤害量（钳 JS 安全整数）；沿 receiveDamage 槽全链接线（builtin.rs 槽清单+revision、incoming 输入结构、settle/incoming prepare、contrib 三件、install NATIVE 清单、kk-runtime capability/ops、kk-mod-host chain/sdk、夹具）。新增槽键改 PlanHash。首片不做：治疗合并/pendingHeal（结构无延迟队列）、放行型减免、结构（非 Mod）目标覆盖。
 
 验收（两片各自按共同验收形态）：G09.d=两独立包（纯反击型/反击×库存组合型）+无耐久对照+组合+双通道+冷恢复+领域项（creep 攻击者延迟扣血+HIT_BACK 事件、塔攻击者立即扣减、事件序、比率界值、无递归、反击不耗自身耐久）；G09.c=两独立包（减伤型/记录型）+无耐久对照+组合+双通道+冷恢复+领域项（修改后伤害参与判死、界值钳制、来源归因、默认值回退、creep 受击槽零扰动）。
+
+**G09.d 实施交付（同日）**：契约见[自有对象耐久](../architecture/object-durability.md)的声明式反击节。`retaliation_milli`（Option<i64>，冻结层毫精度 1..=1000 + 要求耐久声明；JS 面作者形态 `retaliationRatio` (0,1] 浮点、round 换毫精度、四舍五入后 <1 拒绝）无运行时字段——不占信封/保留键、typegen 无变化。落点在 apply_damage_inner 的 Mod 受击分支（意图阶段）：creep 攻击者走 `damage_to_apply` 延迟队列（同轮 tick 按部件扣血+ATTACKED 标记），塔/结构攻击者立即扣减（禁递归：不重入伤害应用器）；事件复用 HIT_BACK，序=摧毁→反击→主攻击。**与登记的偏差（复审驱动）**：① 值域收紧 (0,1]（登记 0..=1——0 等价不声明，冻结层拒绝）；② 「界值预检沿 preflight 先例」落地为 saturating 乘（damage 界 1e9×1000 无溢出，与原生路径同不加检）；③ 登记时「powerBank 语义无 safeMode 抑制」判断**错误**——上游 `_damage.js:39-41` 实际抑制 powerBank 反击，已改为同款抑制（controller 主人==攻击者主人且激活清零）并补测试；④ 显式反击策略与声明反击的关系明确为**策略存在即整体替换**（combat.md 既有契约「空表可禁用反击」，复审 P1 修复双触发）；⑤ 无耐久对照落地为冻结层拒绝+结算无声明对照（无耐久类型无法声明反击，sim 级对照不可构造）；⑥ 无递归为构造性保证（立即扣减不重入；Mod 不发攻击意图，无可测递归场景）。**行为发现**：反伤沿队列按部件扣血且输出口径是 count_active——攻击部件耗尽后输出归零，creep 攻击者单挑反击型对象会**结构性停滞**（存活但打不动），死亡须经其他伤害来源；已钉停滞测试并入文档。夹具 [mod-objret](../../compat/fixtures/mod-objret/README.md)（thorn spike 0.5 / reactor core 1.0×容量 100 两独立包）与 [sim-mod-objret](../../compat/fixtures/sim-mod-objret/README.md)（三场景四轮探针）；Rust 侧 `settle_tests/mod_hits.rs` 反击七测（近战/远程/塔/塔毁/safeMode 抑制/停滞/多攻击者/极小比率）、`damage_policy.rs` 策略替换测试、freeze/host 注册测试、`sim_tests/obj_ret.rs` 双通道+冷恢复。首片不做：按净伤害反击（依赖 G09.c）、逐 attackType 差异、触发次数/上限声明、反击通知面。
 
 ## 执行与更新规则
 
@@ -65,7 +67,7 @@
 | G06 | 运行 trace 与故障复现 | 现有活动链与故障诊断 | 部分完成 | G06.a 槽调用/回退事件 trace + `--mod-trace` CLI `ce84345`：[mod-trace](../architecture/mod-trace.md)、[记录](../research/notes/g06a-mod-trace-2026-10-06.md)；过滤参数/停用阈值暴露/一键复现未做 |
 | G07 | 玩家预检策略扩展 | 各领域策略契约；可分族穿插 | 部分完成 | G07.a 战斗射程首片（[player-precheck-rules](../architecture/player-precheck-rules.md)、[记录](../research/notes/g07a-combat-ranges-2026-10-06.md)）；G07.b ext 意图压制接线+可扩展意图盘点篇（2026-10-07，见[历史交付记录](archive/mod-history-2026-10.md)）——动作互斥的 ext 声明面已开放、vanilla 压制表与 EXECUTION_ORDER 未动；EXECUTION_ORDER 策略化（G07.c 候选，设计前置）与参数策略未开始 |
 | G08 | Mod 建筑字段与生命周期 | 现有建筑目录、schema、tick | 部分完成 | G08.a 字段+tick 首片已交付（见[历史交付记录](archive/mod-history-2026-10.md)）；RCL 配额/逐资源容量/专属 FIND/生产事件未开始 |
-| G09 | 自有对象库存与耐久能力 | 现有对象/资源/伤害能力 | 部分完成 | G09.a 库存首片（store 声明+信封六链，[自有对象库存](../architecture/object-store.md)）与 G09.b 耐久首片（hitsMax 声明+信封、伤害/死亡/预检同源，[自有对象耐久](../architecture/object-durability.md)）均已交付；结构受击（G09.c）与反击（G09.d）未开始 |
+| G09 | 自有对象库存与耐久能力 | 现有对象/资源/伤害能力 | 部分完成 | G09.a 库存（store 声明+信封六链）、G09.b 耐久（hitsMax+信封、伤害/死亡/预检同源）与 G09.d 声明式反击（retaliationRatio、creep 延迟/塔立即、safeMode 抑制、策略替换）已交付（[自有对象库存](../architecture/object-store.md)、[自有对象耐久](../architecture/object-durability.md)）；结构受击槽（G09.c）未开始 |
 | G10 | 可编程生产与建筑动作 | G08；现有资源与配方 | 未开始 | — |
 | G11 | 建筑配额与资源容量策略 | 现有建筑/资源目录 | 部分完成 | G11.a 配额族首片已交付（132 条逐型逐级规则+玩家表折叠注入+link.rcl 迁移，见[配额规则](../architecture/structure-quota.md)与[夹具](../../compat/fixtures/mod-quota/README.md)）；资源容量策略与逐房/动态配额未开始 |
 | G12 | 采集与资源再生策略 | 相关原生消费者与当批领域预检，G07 可随后通用化 | 未开始 | — |
@@ -90,7 +92,7 @@
 
 ## 实际执行队列与前置门
 
-上一轮维护范围已提交；realm 注册/执行/预算及声明转换优化已提交为 `0c28c92`。Room API 状态所有权和历史文档入口治理已提交为 `8f822fd`；Prelude 命名与集中装配优化已提交 `de15765`；验收成本与首轮 research 文档价值优化已提交 `646e395`；Game 装配、地图缓存、指令状态与世界注入边界已提交 `a0d375e`；结构 API/孵化生命周期、字段/装配所有权及共用目标/诊断依赖优化已完成验收，三轮已提交 `b99cda3`，Creep 移动已提交 `3abb616`；engine/Mod 三组与 CLI 职责分组及整体复审已提交 `eedfbfb`；计划安装候选与统一发布已提交 `4443c3c`；runtime 单次调用与局部恢复治理已提交 `dd1e4f7`；字段校验边界治理已提交 `f32f972`。专项维护暂告一段落，剩余治理项不作为恢复开发的前置。G02.d1/d2/d3 首片均已交付；G02.d3 后续（结构/rampart 通行声明、逐房粒度）按需另拆。G11.a、G09.a 与 G09.b（耐久/死亡首片）均已交付（见上方实施记录）；G09.c 结构受击槽与 G09.d 声明式反击已登记选型（见上，推荐 G09.d 先行）；下一批候选：G09.d 实施、G02.d3 后续（结构/rampart 通行声明）或剩余 24 例零散兼容失败（量小，见 M2D 记录）。M2B 兼容批按路线图并行。
+上一轮维护范围已提交；realm 注册/执行/预算及声明转换优化已提交为 `0c28c92`。Room API 状态所有权和历史文档入口治理已提交为 `8f822fd`；Prelude 命名与集中装配优化已提交 `de15765`；验收成本与首轮 research 文档价值优化已提交 `646e395`；Game 装配、地图缓存、指令状态与世界注入边界已提交 `a0d375e`；结构 API/孵化生命周期、字段/装配所有权及共用目标/诊断依赖优化已完成验收，三轮已提交 `b99cda3`，Creep 移动已提交 `3abb616`；engine/Mod 三组与 CLI 职责分组及整体复审已提交 `eedfbfb`；计划安装候选与统一发布已提交 `4443c3c`；runtime 单次调用与局部恢复治理已提交 `dd1e4f7`；字段校验边界治理已提交 `f32f972`。专项维护暂告一段落，剩余治理项不作为恢复开发的前置。G02.d1/d2/d3 首片均已交付；G02.d3 后续（结构/rampart 通行声明、逐房粒度）按需另拆。G11.a、G09.a、G09.b 与 G09.d（声明式反击）均已交付（见上方实施记录）；G09.c 结构受击槽已登记选型待实施；下一批候选：G09.c 实施、G02.d3 后续（结构/rampart 通行声明）或剩余 24 例零散兼容失败（量小，见 M2D 记录）。M2B 兼容批按路线图并行。
 
 父编号用于领域归档，**不是一口气做完 G01 再顺序做到 G30 的调度表**。每个父任务首次实施前拆成可独立验收的子片，记录显式依赖；前置小片可先完成，父任务保留“部分完成”。默认兼容性 M2B 按现有路线图继续推进，不等全部 Mod 领域结束。
 
