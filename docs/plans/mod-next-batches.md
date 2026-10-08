@@ -4,9 +4,9 @@
 
 ## 当前接手位置
 
-- 更新日期：2026-10-09；实现基线 `16ef4f7`（OPERATE_STORAGE/EXTENSION 效果链），本批 OPERATE_TERMINAL / DISRUPT_TERMINAL 效果链随本提交交付。接手先核对实际 HEAD 与工作区。
-- 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座已交付。M2H.b 当前 **15/19 powers** 完整接通，剩余 4 个见下表。
-- 下一片：**OPERATE_CONTROLLER**（控制器升级/ downgrade 加成与 GCL 联动消费者），随后 observer 与战斗效果；或按队列切 deposit。每片贯通施放、真实消费者、玩家投影、失败边界和冷恢复。
+- 更新日期：2026-10-09；实现基线 `2e791ff`（OPERATE_TERMINAL/DISRUPT_TERMINAL 效果链），本批 OPERATE_CONTROLLER 效果链随本提交交付。接手先核对实际 HEAD 与工作区。
+- 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座已交付。M2H.b 当前 **16/19 powers** 完整接通，剩余 3 个见下表。
+- 下一片：**FORTIFY / SHIELD**（战斗效果族），或按队列切 deposit；OPERATE_OBSERVER 依赖观察业务可与 deposit 换序。每片贯通施放、真实消费者、玩家投影、失败边界和冷恢复。
 - Mod 扩展：移动策略、对象/建筑/资源、库存/耐久/受击、作者 CLI/类型、输入回放和检查点已有基础；未完成范围以任务表为准。默认玩法已有消费者不代表对应 Mod 替换能力已经开放。
 - 网络服务、持久 storage 后端与真实游戏客户端仍未实现；renderer R0–R6 已交付，R7 最终矩阵/长测未收口。现有 bot-check 不能代替持续推进世界中的可玩验收。
 - M2B 验收标准（2026-10-09 调整）：screeps-ok ≥95% 为中间检查点、≥99% 为后续覆盖目标；最终完成要求约定范围内功能全部通过验收，剩余例外逐项有明确范围、证据和可审查理由，见[路线图](../roadmap.md)。
@@ -15,7 +15,7 @@
 
 | 顺位 | 任务 | 首片与完成条件 |
 |---|---|---|
-| 1 | M2H.b 剩余 power 效果 | 先 OPERATE_CONTROLLER，再 OPERATE_OBSERVER（依赖观察业务可与 deposit 换序）、FORTIFY、SHIELD；逐域实现公式/费用/冷却/事件、有效期、消费者与保存恢复，不只挂 effects |
+| 1 | M2H.b 剩余 power 效果 | 先 FORTIFY/SHIELD，再 OPERATE_OBSERVER（依赖观察业务可与 deposit 换序）；逐域实现公式/费用/冷却/事件、有效期、消费者与保存恢复，不只挂 effects |
 | 2 | deposit 完整业务 | 采集、累计耗尽冷却、掉落、寿命、字段；开启能力后完整兼容与恢复验收 |
 | 3 | observer 与 OPERATE_OBSERVER | 动作、范围/RCL/owner、下一轮限时视野、双投影权限与恢复；可与 deposit 独立实施 |
 | 4 | 其他兼容差异与真实 bot | 按最新报告逐例归因；keeper/NPC 单独拆片；真实场景验证采集、搬运、孵化、建造、升级、存活与重启 |
@@ -29,8 +29,8 @@
 
 | 状态 | Power / 消费者 |
 |---|---|
-| 已完成 15 项 | GENERATE_OPS；OPERATE_TOWER / DISRUPT_TOWER；OPERATE_SPAWN / DISRUPT_SPAWN；OPERATE_LAB；OPERATE_POWER；OPERATE_FACTORY；REGEN_SOURCE / DISRUPT_SOURCE；REGEN_MINERAL；OPERATE_STORAGE；OPERATE_EXTENSION；OPERATE_TERMINAL / DISRUPT_TERMINAL |
-| 待实现 | OPERATE_CONTROLLER；OPERATE_OBSERVER；FORTIFY；SHIELD |
+| 已完成 16 项 | GENERATE_OPS；OPERATE_TOWER / DISRUPT_TOWER；OPERATE_SPAWN / DISRUPT_SPAWN；OPERATE_LAB；OPERATE_POWER；OPERATE_FACTORY；REGEN_SOURCE / DISRUPT_SOURCE；REGEN_MINERAL；OPERATE_STORAGE；OPERATE_EXTENSION；OPERATE_TERMINAL / DISRUPT_TERMINAL；OPERATE_CONTROLLER |
+| 待实现 | OPERATE_OBSERVER；FORTIFY；SHIELD |
 
 剩余任务的具体门序和量值须核对锁定的官方源码与 POWER_INFO：
 
@@ -121,16 +121,17 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 
 - G09 的 owner、massAttack/dismantle/维修/死亡产物，以及私有 rampart 的预检/结算差异，仍按[库存](../architecture/object-store.md)和[耐久](../architecture/object-durability.md)的限制选型；不把四个首片交付标成全领域完成。
 - G02.d3 历史登记的 worker 配置传递、跨房墙环端到端、allowStatic 与声明叠加等增强项，在相关切片开始时复核；安全模式主人摘要为可解释性增强，孵化门槛归 G13。按[移动契约](../architecture/movement.md)与实际测试核验。
+- upgradeController 对无 WORK 但有能量的 creep，官方仍发 amount=0 的 EVENT_UPGRADE_CONTROLLER 与 actionLog，kk 提前返回不发（复审登记的既有分歧，暂无套件/bot 触达）。
 - 历史登记过 sim 并行冷恢复子进程偶发失败，隔离复跑通过且后续完整门禁通过；若再现须保留失败报告归因，不能把重跑成功当作已修根因。
 - Overmind bot-check 保留基线已有的 1 个 console-error tick；不宣称零错误。keeper/NPC、多 shard 和其余能力门控缺口以最新兼容报告核对，旧批次数字不参与当前决策。
 - 本地检查点的文件大小、单写者及耐久适用范围见[检查点契约](../architecture/checkpoints.md)；存储和真实网络服务不能从 embed 能力直接推导为已完成。
 
 ## 最近交付与实际验证
 
-最近功能批次：OPERATE_TERMINAL / DISRUPT_TERMINAL 效果链（本提交）。OPERATE_TERMINAL 挂 terminal：send 意图相费用乘倍率 ceil 且边界 endTime >= time（官方 send.js），全局 market 相转账费乘倍率 ceil、send/deal 冷却 round(10×倍率) 且边界严格 > time（官方 market.js）——两相边界分叉为官方原样；deal 费用端与冷却端恒为 dealer 终端（官方 executeTransfer 第五参 targetTerminal）。玩家面预检不乘倍率（官方 game 层同形）。DISRUPT_TERMINAL 封锁 creep/powerCreep 从 terminal withdraw（玩家预检同门 ERR_INVALID_TARGET）、拒绝 OPERATE_EXTENSION 灌能，ops 按级数组 [50..10]。三路复审（结算保真/测试边界/全局影响）发现项当批清偿：BUY deal 费用端从订单主终端修正为 dealer 终端（基线既有 `FeeSide::To` 分歧随倍率接线扩散，测试期望同步官方语义）、截止拍全局相边界补真实夹具（原用例从未在 endTime==time 拍发送且注释失称已验证）、DISRUPT 严格边界 tick 9/10 双端、过期冷却回满断言、订单生命周期文档失实修正（tick 同步 active/amount 而非删除）、两处失实注释与 unused 警告。powers/mod.rs 782 行超 700 预警，拆分（use_power.rs 承接门序与共用臂）留给下一片。行为变化：无效果时 send 费用/deal 冷却与费用逐位不变（倍率仅 active_power 命中介入）。现行规则见[游戏循环](../architecture/game-loop.md)。
+最近功能批次：OPERATE_CONTROLLER 效果链（本提交）。唯一消费者是 8 级控制器升级意图（官方 upgradeController.js）：每 tick 限额 CONTROLLER_MAX_UPGRADE_PER_TICK=15 抬升 effect [10..50]，本轮多次升级按未强化量累计钳制，边界 endTime >= time（与 factory/powerSpawn 同形，区别于 terminal 严格 >）；限额只钳未强化量、boost 增量不受限，8 级升级不写 progress 只涨 GCL，8 级以下效果惰性（可施放无消费），玩家面预检不涉限额。三路复审（结算保真/测试边界/全局影响）发现项当批清偿：过期回落一腿原被能量钳空（补第二满能量 creep 钉住）、boost×限额交互零覆盖（补 XGH2O 只钳未强化量用例）、台账丢失的 powers/mod.rs 拆分义务补回（现 785 行超 700 复审线，FORTIFY/SHIELD 开片前先拆分为 use_power.rs 承接门序与共用臂）、terminal 边界措辞精确化、无 WORK creep 的 amount-0 事件既有分歧登记入已知限制。
 
-- 完整无参数 `pnpm run check`：46 个 Rust 测试程序，1408 passed / 0 failed / 12 ignored；JS workspace、工具、文档链接与源码规模通过；无 doctest 变更。
-- release CLI 与适配器重建，固定 screeps-ok HEAD `34a630e`；全量 2914 例：2713 passed / 35 failed / 166 skipped，相对 `16ef4f7` 基线逐用例 +7 转绿 / 0 转红（全部 terminal power 用例），地板 2706→2713。
+- 完整无参数 `pnpm run check`：46 个 Rust 测试程序，1412 passed / 0 failed / 12 ignored；JS workspace、工具、文档链接与源码规模通过；无 doctest 变更。
+- release CLI 与适配器重建，固定 screeps-ok HEAD `34a630e`；全量 2914 例：2715 passed / 33 failed / 166 skipped，相对 `2e791ff` 基线 +2 转绿 / 0 转红（OPERATE_CONTROLLER 用例），地板 2713→2715。
 - 三 bot 完成 2000/2000/10 tick，无中断/惩罚跳过/missing_api；Overmind 如上保留既有报错。
 - 持久证据：[兼容机器报告](../../compat/reports/kkscreeps.json)、[棘轮配置](../../compat/reports/ratchet.json)、[TooAngel](../../compat/reports/bot-tooangel.json)、[Overmind](../../compat/reports/bot-overmind.json)、[WASM](../../compat/reports/bot-wasm.json)。原临时日志路径仅在历史过程保留，不作为长期证据入口。
 

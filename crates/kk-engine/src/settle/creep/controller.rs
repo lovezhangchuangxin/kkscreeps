@@ -60,7 +60,19 @@ pub(super) fn intent_upgrade_controller(w: &mut Working, id: ObjId, data: &Inten
     let mut effect = base_power.min(energy);
     let upgraded = *w.upgraded.get(&target_id).unwrap_or(&0);
     if level == 8 {
-        let limit = c::CONTROLLER_MAX_UPGRADE_PER_TICK;
+        // 官方 upgradeController.js:44-52：8 级限额加上 OPERATE_CONTROLLER
+        // 效果值 [10..50]，边界 endTime >= time（与 factory/powerSpawn 同形）。
+        let mut limit = c::CONTROLLER_MAX_UPGRADE_PER_TICK;
+        if let Some(e) = w.room.effects.get(&target_id).and_then(|entries| {
+            entries
+                .iter()
+                .find(|e| e.power == c::PWR_OPERATE_CONTROLLER)
+        }) && e.end_time >= w.time
+            && let Some(v) =
+                crate::settle::powers::power_effect_value(c::PWR_OPERATE_CONTROLLER, e.level)
+        {
+            limit += v as i64;
+        }
         if upgraded >= limit {
             return;
         }

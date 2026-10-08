@@ -35,7 +35,7 @@ lab 动作顺序为 boost → unboost → runReaction，否则 reverseReaction�
 
 `RoomState.effects` 按对象 ID 持有 `effect/power/level/end_time`，与对象候选一起克隆、删除和跨房迁移；同 power 施放替换，异 power 共存。常规消费以 `end_time > time` 判断有效，不逐拍改写或清空过期条目；factory 配方门与 powerSpawn 处理量保留官方 `≥` 边界。管理员 Generic 输入中的 effects 在插入或编辑时归一到此表，发布和恢复拒绝双权威或悬空条目。
 
-`usePower` 当前完成 GENERATE_OPS、OPERATE_TOWER、DISRUPT_TOWER、OPERATE_SPAWN、DISRUPT_SPAWN、OPERATE_LAB、OPERATE_POWER、OPERATE_FACTORY、REGEN_SOURCE、DISRUPT_SOURCE、REGEN_MINERAL、OPERATE_STORAGE、OPERATE_EXTENSION 和两种 terminal power。tower 两种效果分别通过目标类型、射程、等级覆盖、ops 与冷却门后挂到目标，统一扣 ops、设置冷却、发 EVENT_POWER 和动作日志。塔 attack/heal/repair 先计算距离衰减，再乘两种有效效果的 POWER_INFO 小数倍率，最后一次 floor；塔的能量费用保持固定值。其余 4 个 power 的结算消费者仍待后续切片。
+`usePower` 当前完成 GENERATE_OPS、OPERATE_TOWER、DISRUPT_TOWER、OPERATE_SPAWN、DISRUPT_SPAWN、OPERATE_LAB、OPERATE_POWER、OPERATE_FACTORY、REGEN_SOURCE、DISRUPT_SOURCE、REGEN_MINERAL、OPERATE_STORAGE、OPERATE_EXTENSION、两种 terminal power 和 OPERATE_CONTROLLER。tower 两种效果分别通过目标类型、射程、等级覆盖、ops 与冷却门后挂到目标，统一扣 ops、设置冷却、发 EVENT_POWER 和动作日志。塔 attack/heal/repair 先计算距离衰减，再乘两种有效效果的 POWER_INFO 小数倍率，最后一次 floor；塔的能量费用保持固定值。其余 3 个 power 的结算消费者仍待后续切片。
 
 spawn 两种效果复用同一施放、费用、冷却和效果表通路。OPERATE_SPAWN 仅在创建任务时将身体数 × CREEP_SPAWN_TIME 乘以等级倍率并 ceil，不重算已有任务；DISRUPT_SPAWN 每个有效 tick 将 spawnTime 延后一拍，保留 needTime，并暂停出生尝试。两效果可共存，干扰不阻止创建、续命或回收等其他动作。新增 creep 下一轮才参加对象 tick；一拍任务当轮先清除 spawning，creep 下一轮经孤儿出生路径使用默认方向。若一拍任务被同轮干扰延期，任务及指定方向保留，到期后按指定方向出生。公共效果表、任务绝对时钟和 creep 状态随检查点恢复及失败候选一起提交。
 
@@ -50,6 +50,8 @@ OPERATE_TERMINAL（[8] duration 1000/cooldown 500/range 3/ops 100/effect [0.9..0
 OPERATE_STORAGE 效果挂在 storage 上，容量消费者为结算与投影同源的派生值：基础量按官方 storages/tick.js 的控制器归属/RCL 门（不匹配或 RCL<4 为 0，无控制器房间保持 1M），效果增量 [500k..7M] 仅在基础量 >0 时叠加、endTime > time 严格有效。creep/powerCreep 的 transfer、Mod 精确转账检查、玩家投影与查询快照同用该值（withdraw 只出不进不消费容量）；效果到期回基础量，已超存库存不钳、仅拒绝继续转入。官方将权威容量落库并在对象 tick 相重算、意图相读上一拍值；kk 读时派生，同 tick 控制器升级/易主窗口内更宽松，tick 末收敛一致。OPERATE_EXTENSION 为即时动作不落效果表：目标须为带 store 的 storage/terminal/factory/container 且有主时与房主一致、目标带活跃 DISRUPT_TERMINAL 效果拒绝；向房内同主非 off extension 按到目标的 Chebyshev 距离升序灌能，预算 min(目标 energy, effect[level-1] × Σextension 容量)（小数倍率，50 倍数容量下恒整），未移动能量整次静默拒绝（不扣 ops、不进冷却、不发事件）。
 
 REGEN_MINERAL 施放门要求目标为非耗尽且无待再生时钟的矿物（nextRegenerationTime 真值判，0 与未设置等价），否则结算静默拒绝。消费者与 source 同用 `(endTime - gameTime - 1) % period` 相位（period 10、等级补量 2/4/6/8/10，无 ops 费用），补量无上限；效果门读当前存量与时钟——官方 bulk.update 以对象引用调用时 `_.merge` 回写内存，自然再生当拍回填后的新值参与判定、相位命中即叠加（该状态正常施放不可达，由装填/导入数据构造并有引擎级测试锁定）。耗尽矿物停补并交给普通再生时钟接管。普通再生对存量 0 的 Some(0) 时钟同样按官方 falsy 视为未设置——不立即回填，重新挂 50000 时钟。
+
+OPERATE_CONTROLLER（[18] duration 1000/cooldown 800/range 3/ops 200/effect [10..50]）挂在控制器上，唯一消费者是 8 级控制器的升级意图（官方 upgradeController.js）：每 tick 升级限额从 CONTROLLER_MAX_UPGRADE_PER_TICK=15 抬升 effect 值，本轮多次升级按未强化量累计钳制，边界 endTime >= time（与 factory/powerSpawn 及 terminal 的 send 意图相同形；terminal 仅 market 费用/冷却为严格 >）；限额只钳未强化量，boost 增量不受限（既有语义）。8 级升级不写控制器 progress 只涨 GCL，效果在 8 级以下惰性（可施放、无消费）。玩家面 upgradeController 预检不涉限额（官方同形，纯结算侧）。
 
 JSON/KKPV 内部记录携带 endTime 和剩余时间，供原始预检使用；Game 对象装配和手动构造均只复制公开四键（effect/power/level/ticksRemaining），过滤到期项。管理查询快照同样只返回活跃效果。检查点 v4 独立保存房间效果表，字段必填、恢复重验引用/等级/时间/同 power 唯一性；完整失败撤销整个候选，局部拆毁拒绝恢复对象及效果，缓存重试不重复运行玩家。
 
