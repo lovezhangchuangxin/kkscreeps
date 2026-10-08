@@ -6,7 +6,7 @@
 
 ## 当前接手位置
 
-- 当前接手（2026-10-09）：接手基线 `43eef59`；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座已交付，六项跨域修复已提交。用户已授权推进 M2H.b；首片公共效果表与两种 tower power 完整链已完成并通过深度复审、完整门禁与 release 棘轮。M2H.b-2 两种 spawn power 已完成，验证与实施记录见下文；M2H.b-3 两种生产 power 已完成并随本次提交入库；当前已完整接通 7/19 powers，其余 12 个 power 消费者、deposit/observer 和剩余兼容差异继续按队列推进。下一片优先 OPERATE_FACTORY，随后资源/容量效果；后台服务另按依赖推进。首片代码、回归与调研台账随本次提交入库（父提交 `b0029b3`），未推送；后台独立复审未发现可确认的行为缺陷，文件头陈旧说明已修正。
+- 当前接手（2026-10-09）：接手基线 `3a23511`；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座已交付，六项跨域修复已提交。用户已授权推进 M2H.b；首片公共效果表与两种 tower power 完整链已完成并通过深度复审、完整门禁与 release 棘轮。M2H.b-2 两种 spawn power 已完成，验证与实施记录见下文；M2H.b-3 两种生产 power 已完成并随本次提交入库；M2H.b-4 OPERATE_FACTORY 已完成并随本次提交入库；当前已完整接通 8/19 powers，其余 11 个 power 消费者、deposit/observer 和剩余兼容差异继续按队列推进。下一片优先 REGEN_SOURCE/DISRUPT_SOURCE，随后 mineral 与资源/容量效果；后台服务另按依赖推进。首片代码、回归与调研台账随本次提交入库（父提交 `b0029b3`），未推送；后台独立复审未发现可确认的行为缺陷，文件头陈旧说明已修正。
 - 上轮维护：**完整门禁代码优化完成（2026-10-08）**。接手基线为审查修复提交 `5a43b54`（8 项边界修复，审查范围 `f32f972..6b461a8` 的 14 个提交）；代码优化已提交 `69a6357`，未推送；系统授权排查结果另行补记。全部检查与用例范围保留，不扩展玩法范围。增量门禁已缩短；经用户确认启用当前应用开发者工具权限并重启后，两类新链接测试程序首次启动均降到毫秒级，启动等待在本次复测中消除；尚未重编整个 workspace 的全部产物，不能把增量门禁数据当作全量冷构建数据。此前 G11.a、G09.a/b/c/d 交付细节保留于下文。
 - 已完成基线：S01 `e0b457b`、S02 `5a25bc2`。旧 S03–S06 的纯搬迁限制由本轮职责治理方案替代，详见[维护结构方案](archive/structure-governance-2026-10.md)。
 - 已完成实现：移动领域跨层归拢；Working 统一构造与瞬态字段收口、engine 首触日志；世界容器/投影与 runtime 执行器分离、Generic 共享读取；串行场景名称/耗时/子集反馈；文档契约合并、旧计划归档与工具门禁。历史维护保留当时玩法语义和恢复身份；后续玩法交付以本文件任务表和现行架构为准。
@@ -157,6 +157,12 @@
 实际验证：`cargo test -p kk-runtime --test mod_chain_tests production_boundaries` 7 passed；`cargo test -p kk-engine --test settle_tests lab_actions` 14 passed。最终无参数 `pnpm run check` 通过（Rust 46 个测试目标合计 1351 passed / 12 ignored / 0 failed，含最新 7 个集成回归；JavaScript、维护工具、文档链接与源码规模门禁通过；日志 `/tmp/kks-review-fix-check-final.log`）。无 doctest 变更。release CLI 重建、固定 screeps-ok pin `34a630e` 依赖准备、bot 夹具准备与适配器 build 完成；`node compat/scripts/ratchet.mjs` 通过：2645 passed / 103 failed / 166 skipped = 2914，相对 HEAD~1 转红 0 / 转绿 13，额外核对当前 HEAD 转红 0 / 转绿 0（日志 `/tmp/kks-review-ratchet.log`，刷新入库机器报告）。三 bot 均完成全部请求：TooAngel 2000/2000、Overmind 2000/2000、WASM 10/10，均中断/惩罚跳过 0、missing_api 空；Overmind 有基线已有的首轮 colony 异常，归一随机 directive ID 后错误与入库报告一致，不能宣称零错误（报告 `/tmp/kks-review-fix-{tooangel,overmind,wasm}.json`）。前轮 embed 复现脚本重跑确认 lab 解除成功、factory 保留、生成态 shard0；临时脚本不是正式测试替代。
 
 用户复核后授权提交；全部实现、回归、现行契约与兼容报告随本轮 `fix` 提交，未推送。后续 M2H.b 的效果实施与剩余消费者继续按既有选型队列推进，本次未扩大到该领域。
+
+## M2H.b-4 OPERATE_FACTORY（2026-10-09 完成，随本次提交入库）
+
+接手基线 `3a23511`，工作区干净。复用已有工厂生产与公共效果表，补齐施放、首次等级锁定、同级刷新与异级拒绝，验证五等级配方、效果包含截止 tick 的门、资源/冷却和失败重试/冷恢复/回放。既有 Generic level 已在检查点内，不新增格式字段。已完成施放目标门、首次锁级与异级拒绝、同级刷新/费用/冷却/事件；已有 produce 消费者与玩家配方预检通过公共效果表接通。效果过期不清 level，等级配方保留 endTime ≥ gameTime 的门，公开效果伪造无法绕过内部配方门。剩余 11 个 power 不在本片范围。
+
+四组新增 runtime 回归通过：双通道五等级配方/精确耗料/冷却、到期保级/异级拒绝无费用事件/同级刷新、包含截止 tick 的门与公开伪造拒绝、施放/生产晚期失败重试及冷恢复；CLI 新增双通道输入回放与跨进程锁级恢复 1/1 通过。代码复审核对官方 usePower 与 produce 的检查顺序，已更新陈旧函数说明，未发现待清偿问题。最终无参数 `pnpm run check` 完整通过（46 个 Rust 测试程序，1379 passed / 0 failed / 12 ignored；JS workspace/工具/文档链接/规模通过；日志 `/tmp/factory-power-check.log`）。最终 release CLI 重建和适配器构建完成，固定 screeps-ok 依赖沿用已准备版本并核验 HEAD `34a630e`；全量棘轮 **2687 passed / 61 failed / 166 skipped**，固定 2914 例，相对 HEAD `3a23511` +4 绿/0 转红（HEAD~1 +11/0），floor 2683→2687；日志 `/tmp/factory-power-ratchet.log`。改动 JS 单文件 oxfmt 检查通过，无新增 doctest。三 bot 2000/2000/10 完成，0 硬中断/跳帧/missing_api；Overmind 保留既有 1 console-error tick。实现、报告和台账随本次提交入库（父提交 `3a23511`），未推送；下一片优先 source 再生/干扰，再接 mineral 与资源/容量效果。
 
 ## M2H.b-3 lab/powerSpawn 生产效果链（2026-10-09 完成，随本次提交入库）
 

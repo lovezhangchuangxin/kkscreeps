@@ -30,7 +30,7 @@
     ],
     [
       "room.find:107",
-      2031
+      2048
     ],
     [
       "room.find:105",
@@ -38,19 +38,19 @@
     ],
     [
       "room.find:1",
-      28
+      35
     ],
     [
       "room.find:3",
-      28
+      35
     ],
     [
       "room.find:5",
-      28
+      35
     ],
     [
       "room.find:7",
-      28
+      35
     ],
     [
       "room.find:117",
@@ -58,7 +58,7 @@
     ],
     [
       "room.find:116",
-      5
+      6
     ]
   ],
   "console_errors_head": [],
@@ -89,7 +89,7 @@
     ]
   ],
   "console_head": [
-    "[tick 1][log] 1 Script reload - Load: 9 tickLimit: 500 limit: 20 Bucket: 10000",
+    "[tick 1][log] 1 Script reload - Load: 8 tickLimit: 500 limit: 20 Bucket: 10000",
     "[tick 1][log] 1 W1N1                        Skipping checkPath, routing not initialized, try remove memory",
     "[tick 1][log] 1 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
     "[tick 2][log] 2 W1N1                        Setting misplacedSpawn",

@@ -34,7 +34,7 @@
     ],
     [
       "room.find:107",
-      46
+      45
     ],
     [
       "room.find:116",
@@ -50,8 +50,8 @@
     ]
   ],
   "console_errors_head": [
-    "[tick 1] [loop] Caught unhandled exception instantiating colony W1N1: \nTypeError: Cannot read properties of undefined (reading 'harvest:46f244')\n    at DirectiveHarvest.create (kk_module/main, <anonymous>:14448:76)\n    at DirectiveHarvest.createIfNotPresent (kk_module/main, <anonymous>:14524:33)\n    at Colony.registerRoomObjects_cached (kk_module/main, <anonymous>:15316:30)\n    at Colony.build (kk_module/main, <anonymous>:15239:14)\n    at new Colony (kk_module/main, <anonymous>:15222:14)\n    at _Overmind.registerColonies (kk_module/main, <anonymous>:24047:4844)\n    at _Overmind.build (kk_module/main, <anonymous>:24047:1597)\n    at main (kk_module/main, <anonymous>:24294:18)\n    at Object.wrap (kk_module/main, <anonymous>:971:16)\n    at Object.loop (kk_module/main, <anonymous>:24308:21)",
-    "[tick 1] Caught unhandled exception instantiating colony W1N1: \nTypeError: Cannot read properties of undefined (reading 'harvest:46f244')\n    at DirectiveHarvest.create (kk_module/main, <anonymous>:14448:76)\n    at DirectiveHarvest.createIfNotPresent (kk_module/main, <anonymous>:14524:33)\n    at Colony.registerRoomObjects_cached (kk_module/main, <anonymous>:15316:30)\n    at Colony.build (kk_module/main, <anonymous>:15239:14)\n    at new Colony (kk_module/main, <anonymous>:15222:14)\n    at _Overmind.registerColonies (kk_module/main, <anonymous>:24047:4844)\n    at _Overmind.build (kk_module/main, <anonymous>:24047:1597)\n    at main (kk_module/main, <anonymous>:24294:18)\n    at Object.wrap (kk_module/main, <anonymous>:971:16)\n    at Object.loop (kk_module/main, <anonymous>:24308:21)"
+    "[tick 1] [loop] Caught unhandled exception instantiating colony W1N1: \nTypeError: Cannot read properties of undefined (reading 'harvest:07d707')\n    at DirectiveHarvest.create (kk_module/main, <anonymous>:14448:76)\n    at DirectiveHarvest.createIfNotPresent (kk_module/main, <anonymous>:14524:33)\n    at Colony.registerRoomObjects_cached (kk_module/main, <anonymous>:15316:30)\n    at Colony.build (kk_module/main, <anonymous>:15239:14)\n    at new Colony (kk_module/main, <anonymous>:15222:14)\n    at _Overmind.registerColonies (kk_module/main, <anonymous>:24047:4844)\n    at _Overmind.build (kk_module/main, <anonymous>:24047:1597)\n    at main (kk_module/main, <anonymous>:24294:18)\n    at Object.wrap (kk_module/main, <anonymous>:971:16)\n    at Object.loop (kk_module/main, <anonymous>:24308:21)",
+    "[tick 1] Caught unhandled exception instantiating colony W1N1: \nTypeError: Cannot read properties of undefined (reading 'harvest:07d707')\n    at DirectiveHarvest.create (kk_module/main, <anonymous>:14448:76)\n    at DirectiveHarvest.createIfNotPresent (kk_module/main, <anonymous>:14524:33)\n    at Colony.registerRoomObjects_cached (kk_module/main, <anonymous>:15316:30)\n    at Colony.build (kk_module/main, <anonymous>:15239:14)\n    at new Colony (kk_module/main, <anonymous>:15222:14)\n    at _Overmind.registerColonies (kk_module/main, <anonymous>:24047:4844)\n    at _Overmind.build (kk_module/main, <anonymous>:24047:1597)\n    at main (kk_module/main, <anonymous>:24294:18)\n    at Object.wrap (kk_module/main, <anonymous>:971:16)\n    at Object.loop (kk_module/main, <anonymous>:24308:21)"
   ],
   "console_errors_folded": [
     [
@@ -63,11 +63,19 @@
       101
     ],
     [
-      "[log] <font color='orange'>WARNING</font> <font color='gray'>#</font> Missing flag for directive <a href=\"#!/room/shard#/W#N#\">[harvest:#f#]</a>! Removing directive.",
+      "[log] <font color='orange'>WARNING</font> <font color='gray'>#</font> Missing flag for directive <a href=\"#!/room/shard#/W#N#\">[harvest:#]</a>! Removing directive.",
+      5
+    ],
+    [
+      "[log] <font color='orange'>WARNING</font> <font color='gray'>#</font> Missing flag for directive <a href=\"#!/room/shard#/W#N#\">[harvest:#a#]</a>! Removing directive.",
       5
     ],
     [
       "[log] <font color='orange'>WARNING</font> <font color='gray'>#</font> Missing flag for directive <a href=\"#!/room/shard#/W#N#\">[harvest:#c#]</a>! Removing directive.",
+      5
+    ],
+    [
+      "[log] <font color='orange'>WARNING</font> <font color='gray'>#</font> Missing flag for directive <a href=\"#!/room/shard#/W#N#\">[harvest:#b#]</a>! Removing directive.",
       4
     ],
     [
@@ -75,20 +83,12 @@
       4
     ],
     [
-      "[log] <font color='orange'>WARNING</font> <font color='gray'>#</font> Missing flag for directive <a href=\"#!/room/shard#/W#N#\">[harvest:#]</a>! Removing directive.",
-      3
-    ],
-    [
-      "[log] <font color='orange'>WARNING</font> <font color='gray'>#</font> Missing flag for directive <a href=\"#!/room/shard#/W#N#\">[harvest:#a]</a>! Removing directive.",
-      3
-    ],
-    [
-      "[log] <font color='orange'>WARNING</font> <font color='gray'>#</font> Missing flag for directive <a href=\"#!/room/shard#/W#N#\">[harvest:#e#]</a>! Removing directive.",
-      3
-    ],
-    [
       "[log] <font color='yellow'>ALERT  </font> <font color='gray'>#</font> Version migration from #.#.x -> #.#.x (part #) completed successfully.",
       3
+    ],
+    [
+      "[log] <font color='orange'>WARNING</font> <font color='gray'>#</font> Missing flag for directive <a href=\"#!/room/shard#/W#N#\">[harvest:#b#b#]</a>! Removing directive.",
+      2
     ],
     [
       "[log] <font color='orange'>WARNING</font> <font color='gray'>#</font> Missing flag for directive <a href=\"#!/room/shard#/W#N#\">[harvest:#c]</a>! Removing directive.",
@@ -107,14 +107,14 @@
     "[tick 1][log] <font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.5.1 -> 0.5.2 completed successfully.",
     "[tick 1][log] <font color='yellow'>ALERT  </font> <font color='gray'>1</font> Codebase updated or global reset. Type \"help\" for a list of console commands.\n                ‣ Version:        Overmind v0.5.2\n                ‣ Checksum:       0x34e6838c39d\n                ‣ Assimilated:    No (clearance code: null) [WIP]\n                ‣ Operating mode: automatic",
     "[tick 1][log] <font color='yellow'>ALERT  </font> <font color='gray'>1</font> Creating harvest directive at <a href=\"#!/room/shard0/W1N1\">[W1N1, 15, 15]</a>!",
-    "[tick 1][log] <font color='red'>ERROR  </font> <font color='gray'>1</font> Could not find colony match for harvest:46f244 in W1N1!Try setting memory.maxPathLength and memory.maxLinearRange.",
-    "[tick 1][log] <font color='yellow'>ALERT  </font> <font color='gray'>1</font> Could not get colony for directive <a href=\"#!/room/shard0/W1N1\">[harvest:46f244]</a>; exceptions present this tick, so won't remove",
+    "[tick 1][log] <font color='red'>ERROR  </font> <font color='gray'>1</font> Could not find colony match for harvest:07d707 in W1N1!Try setting memory.maxPathLength and memory.maxLinearRange.",
+    "[tick 1][log] <font color='yellow'>ALERT  </font> <font color='gray'>1</font> Could not get colony for directive <a href=\"#!/room/shard0/W1N1\">[harvest:07d707]</a>; exceptions present this tick, so won't remove",
     "[tick 1][log] <font color='orange'>WARNING</font> <font color='gray'>1</font> Exceptions present this tick! Rebuilding Overmind object in next tick.",
-    "[tick 1][error] Caught unhandled exception instantiating colony W1N1: \nTypeError: Cannot read properties of undefined (reading 'harvest:46f244')\n    at DirectiveHarvest.create (kk_module/main, <anonymous>:14448:76)\n    at DirectiveHarvest.createIfNotPresent (kk_module/main, <anonymous>:14524:33)\n    at Colony.registerRoomObjects_cached (kk_module/main, <anonymous>:15316:30)\n    at Colony.build (kk_module/main, <anonymous>:15239:14)\n    at new Colony (kk_module/main, <anonymous>:15222:14)\n    at _Overmind.registerColonies (kk_module/main, <anonymous>:24047:4844)\n    at _Overmind.build (kk_module/main, <anonymous>:24047:1597)\n    at main (kk_module/main, <anonymous>:24294:18)\n    at Object.wrap (kk_module/main, <anonymous>:971:16)\n    at Object.loop (kk_module/main, <anonymous>:24308:21)",
+    "[tick 1][error] Caught unhandled exception instantiating colony W1N1: \nTypeError: Cannot read properties of undefined (reading 'harvest:07d707')\n    at DirectiveHarvest.create (kk_module/main, <anonymous>:14448:76)\n    at DirectiveHarvest.createIfNotPresent (kk_module/main, <anonymous>:14524:33)\n    at Colony.registerRoomObjects_cached (kk_module/main, <anonymous>:15316:30)\n    at Colony.build (kk_module/main, <anonymous>:15239:14)\n    at new Colony (kk_module/main, <anonymous>:15222:14)\n    at _Overmind.registerColonies (kk_module/main, <anonymous>:24047:4844)\n    at _Overmind.build (kk_module/main, <anonymous>:24047:1597)\n    at main (kk_module/main, <anonymous>:24294:18)\n    at Object.wrap (kk_module/main, <anonymous>:971:16)\n    at Object.loop (kk_module/main, <anonymous>:24308:21)",
     "[tick 2][log] <font color='yellow'>ALERT  </font> <font color='gray'>2</font> Creating harvest directive at <a href=\"#!/room/shard0/W1N1\">[W1N1, 15, 15]</a>!",
     "[tick 2][log] <font color='yellow'>ALERT  </font> <font color='gray'>2</font> Upgrade site at <a href=\"#!/room/shard0/W1N1\">[W1N1, 10, 10]</a>: no batteryPos!",
     "[tick 2][log] <font color='yellow'>ALERT  </font> <font color='gray'>2</font> Creating bootstrap directive at <a href=\"#!/room/shard0/W1N1\">[W1N1, 20, 20]</a>!",
     "[tick 2][log] Room layout and flag positions have been saved.",
-    "[tick 3][log] <font color='orange'>WARNING</font> <font color='gray'>3</font> Missing flag for directive <a href=\"#!/room/shard0/W1N1\">[harvest:9017e0]</a>! Removing directive."
+    "[tick 3][log] <font color='orange'>WARNING</font> <font color='gray'>3</font> Missing flag for directive <a href=\"#!/room/shard0/W1N1\">[harvest:ad868d]</a>! Removing directive."
   ]
 }

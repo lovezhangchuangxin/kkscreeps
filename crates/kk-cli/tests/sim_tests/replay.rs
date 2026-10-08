@@ -339,3 +339,50 @@ fn production_power_replay_and_cold_resume_match_straight_run() -> anyhow::Resul
     }
     Ok(())
 }
+
+/// 首次锁级和商品生产在回放及跨进程恢复后与直跑一致。
+#[test]
+fn factory_power_replay_and_cold_resume_match_straight_run() -> anyhow::Result<()> {
+    for binary in [false, true] {
+        let fixture = Fixture::new()?;
+        let scene = fixture.scene(&json!({
+            "version":1,
+            "shard":{"players":["p1"],"rooms":[{"name":"W1N1","owner":"p1","rcl":8,"powerEnabled":true}]},
+            "bots":[{"player":"p1","modules":"modules"}],
+            "objects":[
+                {"alias":"factory","room":"W1N1","kind":"structure","spec":{"structureType":"factory","owner":"p1","pos":[20,20],"store":{"utrium_bar":20,"zynthium_bar":20,"energy":20}}},
+                {"alias":"operator","room":"W1N1","kind":"powerCreep","spec":{"name":"operator","owner":"p1","pos":[19,20],"powers":{"19":1},"store":{"ops":200}}}
+            ]
+        }))?;
+        fixture.module("exports.loop=()=>{const f=Game.rooms.W1N1.find(FIND_MY_STRUCTURES).find(s=>s.structureType===STRUCTURE_FACTORY);if(!Memory.cast){Game.powerCreeps.operator.usePower(PWR_OPERATE_FACTORY,f);Memory.cast=true;}else{f.produce(RESOURCE_COMPOSITE);}};")?;
+        let checkpoint = fixture.0.join("checkpoint.json");
+        let invoke = |name: &str, ticks: u32, option: Option<&str>| -> anyhow::Result<Value> {
+            let report = fixture.0.join(format!("{name}.json"));
+            let log = fixture.0.join(format!("{name}.jsonl"));
+            let mut command = sim_command(&scene, &report, &log, ticks);
+            if binary {
+                command.arg("--kkpv");
+            }
+            if let Some(option) = option {
+                command.arg(option).arg(&checkpoint);
+            }
+            let (code, value) = result(&mut command, &report)?;
+            assert_eq!(code, 0, "{value}");
+            assert_eq!(value["verify_replay"]["status"], "passed", "{value}");
+            Ok(value)
+        };
+        let mut straight = invoke("straight", 3, None)?["final"].clone();
+        invoke("first", 1, Some("--save-checkpoint"))?;
+        let mut resumed = invoke("resumed", 2, Some("--load-checkpoint"))?["final"].clone();
+        for value in [&mut straight, &mut resumed] {
+            for player in value["players"].as_object_mut().unwrap().values_mut() {
+                player.as_object_mut().unwrap().remove("cpu_bucket");
+            }
+        }
+        assert_eq!(straight, resumed);
+        assert_eq!(resumed["objects"]["factory"]["level"], 1);
+        assert_eq!(resumed["objects"]["factory"]["store"]["composite"], 20);
+        assert_eq!(resumed["objects"]["operator"]["store"]["ops"], 100);
+    }
+    Ok(())
+}

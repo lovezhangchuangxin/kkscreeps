@@ -652,7 +652,7 @@
    *  FACTORY-PRODUCE-011 矩阵钉序）：not-owner > cooldown > invalid-args
    *  （非配方资源）> level-mismatch(INVALID_TARGET) > rcl（checkStructureAgainstController
    *  ——isActive 等价）> power-effect(BUSY) > not-enough > full。BUSY 门按
-   *  官方形状查 effects 数组（power 域未接线时恒无 → 有级配方直接 BUSY）；
+   *  查内部 effects 数组，等级配方须存在同级且 endTime ≥ 当前 tick 的效果；
    *  full 含 `!storeCapacity` 先拒形态与平面容量合计（store 总量−组件
    *  合计+产量 > storeCapacity）。 */
   globalThis.StructureFactory.prototype.produce = function produce(resourceType) {

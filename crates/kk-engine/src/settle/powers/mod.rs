@@ -5,9 +5,9 @@
 //! power-spawns/process-power.js 与 processor/global-intents/power.js。
 //! powerCreep 以 Generic 承载（data.type=="powerCreep"），账号注册表在
 //! `PlayerState.power_creeps`，两侧同 ID。usePower 已结算 PWR_GENERATE_OPS、
-//! 两种 tower power、两种 spawn power、OPERATE_LAB 与 OPERATE_POWER；
+//! 两种 tower power、两种 spawn power、OPERATE_LAB/POWER/FACTORY；
 //! 效果写入房间公共效果表，由塔动作、孵化与生产结算消费。
-//! 其余 12 个 power 通过官方预检门后
+//! 其余 11 个 power 通过官方预检门后
 //! 仍不结算，施放与效果消费者待后续补齐；capability powerEffects 已开启。
 
 mod account;
@@ -187,7 +187,7 @@ pub(in crate::settle) fn set_pc_action_log(w: &mut Working, id: ObjId, key: &str
 }
 
 /// usePower：官方门序（房主 powerEnabled → power 等级/冷却 → ops → 射程
-/// /效果覆盖）后结算 generateOps、tower、spawn 与 lab/powerSpawn 效果。
+/// /效果覆盖）后结算 generateOps、tower、spawn 与 lab/powerSpawn/factory 效果。
 /// 来源：processor/intents/power-creeps/usePower.js。
 fn pc_use_power(w: &mut Working, id: ObjId, d: &IntentData) {
     let Some(RoomObject::Generic(g)) = w.room.objects.get(&id).cloned() else {
@@ -285,7 +285,8 @@ fn pc_use_power(w: &mut Working, id: ObjId, d: &IntentData) {
         | c::PWR_OPERATE_SPAWN
         | c::PWR_DISRUPT_SPAWN
         | c::PWR_OPERATE_LAB
-        | c::PWR_OPERATE_POWER => {
+        | c::PWR_OPERATE_POWER
+        | c::PWR_OPERATE_FACTORY => {
             let Some(target_id) = d.id else { return };
             let valid_target = match w.room.objects.get(&target_id) {
                 Some(RoomObject::Spawn(_)) => {
@@ -296,6 +297,7 @@ fn pc_use_power(w: &mut Working, id: ObjId, d: &IntentData) {
                         c::PWR_OPERATE_TOWER | c::PWR_DISRUPT_TOWER => "tower",
                         c::PWR_OPERATE_LAB => "lab",
                         c::PWR_OPERATE_POWER => "powerSpawn",
+                        c::PWR_OPERATE_FACTORY => "factory",
                         _ => return,
                     };
                     pc_data(target).is_some_and(|target| target["structureType"] == expected)
@@ -305,12 +307,33 @@ fn pc_use_power(w: &mut Working, id: ObjId, d: &IntentData) {
             if !valid_target {
                 return;
             }
+            if power == c::PWR_OPERATE_FACTORY {
+                let factory_level = w
+                    .room
+                    .objects
+                    .get(&target_id)
+                    .and_then(pc_data)
+                    .and_then(|data| data["level"].as_i64())
+                    .unwrap_or(0);
+                if factory_level != 0 && factory_level != level {
+                    return;
+                }
+            }
             let duration = match info.get("duration") {
                 Some(Value::Array(a)) => a.get((level - 1) as usize).and_then(Value::as_u64),
                 Some(n) => n.as_u64(),
                 None => None,
             };
             let Some(duration) = duration else { return };
+            if power == c::PWR_OPERATE_FACTORY
+                && let Some(RoomObject::Generic(g)) = w.room.objects.get_mut(&target_id)
+                && let Ok(mut data) = serde_json::from_str::<Value>(&g.data)
+            {
+                // 首次施放永久锁定等级；到期不降级，同级可重新刷新效果。
+                // 来源：power-creeps/usePower.js 的 OPERATE_FACTORY 分支。
+                data["level"] = json!(level);
+                g.data = data.to_string();
+            }
             let effects = w.room.effects.entry(target_id).or_default();
             effects.retain(|effect| effect.power != power);
             effects.push(kk_world::EffectEntry {
