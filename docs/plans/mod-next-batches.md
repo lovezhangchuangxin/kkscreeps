@@ -6,7 +6,7 @@
 
 ## 当前接手位置
 
-- 当前接手（2026-10-09）：HEAD `b0029b3`；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座已交付，六项跨域修复已提交。用户已授权推进 M2H.b；首片公共效果表与两种 tower power 完整链已完成并通过深度复审、完整门禁与 release 棘轮。其余 16 个 power 消费者、deposit/observer 和剩余兼容差异继续按队列推进；后台服务另按依赖推进。首片代码、回归与调研台账随本次提交入库（父提交 `b0029b3`），未推送；后台独立复审未发现可确认的行为缺陷，文件头陈旧说明已修正。
+- 当前接手（2026-10-09）：HEAD `e98fd8a`；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座已交付，六项跨域修复已提交。用户已授权推进 M2H.b；首片公共效果表与两种 tower power 完整链已完成并通过深度复审、完整门禁与 release 棘轮。M2H.b-2 两种 spawn power 已完成，验证与实施记录见下文；当前已完整接通 5/19 powers，其余 14 个 power 消费者、deposit/observer 和剩余兼容差异继续按队列推进。下一片优先 OPERATE_LAB/OPERATE_POWER 等生产效果；后台服务另按依赖推进。首片代码、回归与调研台账随本次提交入库（父提交 `b0029b3`），未推送；后台独立复审未发现可确认的行为缺陷，文件头陈旧说明已修正。
 - 上轮维护：**完整门禁代码优化完成（2026-10-08）**。接手基线为审查修复提交 `5a43b54`（8 项边界修复，审查范围 `f32f972..6b461a8` 的 14 个提交）；代码优化已提交 `69a6357`，未推送；系统授权排查结果另行补记。全部检查与用例范围保留，不扩展玩法范围。增量门禁已缩短；经用户确认启用当前应用开发者工具权限并重启后，两类新链接测试程序首次启动均降到毫秒级，启动等待在本次复测中消除；尚未重编整个 workspace 的全部产物，不能把增量门禁数据当作全量冷构建数据。此前 G11.a、G09.a/b/c/d 交付细节保留于下文。
 - 已完成基线：S01 `e0b457b`、S02 `5a25bc2`。旧 S03–S06 的纯搬迁限制由本轮职责治理方案替代，详见[维护结构方案](archive/structure-governance-2026-10.md)。
 - 已完成实现：移动领域跨层归拢；Working 统一构造与瞬态字段收口、engine 首触日志；世界容器/投影与 runtime 执行器分离、Generic 共享读取；串行场景名称/耗时/子集反馈；文档契约合并、旧计划归档与工具门禁。历史维护保留当时玩法语义和恢复身份；后续玩法交付以本文件任务表和现行架构为准。
@@ -157,6 +157,12 @@
 实际验证：`cargo test -p kk-runtime --test mod_chain_tests production_boundaries` 7 passed；`cargo test -p kk-engine --test settle_tests lab_actions` 14 passed。最终无参数 `pnpm run check` 通过（Rust 46 个测试目标合计 1351 passed / 12 ignored / 0 failed，含最新 7 个集成回归；JavaScript、维护工具、文档链接与源码规模门禁通过；日志 `/tmp/kks-review-fix-check-final.log`）。无 doctest 变更。release CLI 重建、固定 screeps-ok pin `34a630e` 依赖准备、bot 夹具准备与适配器 build 完成；`node compat/scripts/ratchet.mjs` 通过：2645 passed / 103 failed / 166 skipped = 2914，相对 HEAD~1 转红 0 / 转绿 13，额外核对当前 HEAD 转红 0 / 转绿 0（日志 `/tmp/kks-review-ratchet.log`，刷新入库机器报告）。三 bot 均完成全部请求：TooAngel 2000/2000、Overmind 2000/2000、WASM 10/10，均中断/惩罚跳过 0、missing_api 空；Overmind 有基线已有的首轮 colony 异常，归一随机 directive ID 后错误与入库报告一致，不能宣称零错误（报告 `/tmp/kks-review-fix-{tooangel,overmind,wasm}.json`）。前轮 embed 复现脚本重跑确认 lab 解除成功、factory 保留、生成态 shard0；临时脚本不是正式测试替代。
 
 用户复核后授权提交；全部实现、回归、现行契约与兼容报告随本轮 `fix` 提交，未推送。后续 M2H.b 的效果实施与剩余消费者继续按既有选型队列推进，本次未扩大到该领域。
+
+## M2H.b-2 spawn power 效果链（2026-10-09 完成，随本次提交入库）
+
+接手基线 `e98fd8a`，工作区干净。下一片选择 OPERATE_SPAWN 与 DISRUPT_SPAWN：复用公共效果表，补齐 typed Spawn 目标施放、孵化耗时与干扰暂停；核对官方阶段与出生方向行为，覆盖 JSON/KKPV、效果过期、冷恢复与失败重试。已实现两种 power 的类型门、施放、费用/冷却/事件，孵化耗时按等级倍率 ceil 且只在创建时生效，干扰按有效 tick 推迟 spawnTime 并暂停出生；两效果共存。调研清偿一拍孵化阶段边界：官方 bulk.insert 的新增 creep 下一轮才参加对象 tick，一拍任务先清 spawning，下一轮按默认方向出生；同轮被干扰延期则保留指定方向。本地阶段以初始 creep ID 集合判定，任务和效果复用现有检查点字段，不新增持久化域或格式版本。五组 runtime 回归覆盖五等级、精确暂停/过期、已有任务不重算、一拍出生/干扰、缓存失败重试与冷恢复；CLI 增加双通道跨进程恢复与输入日志回放对照。其他 14 个 power 不在本片完成范围。
+
+实际验证：新增 runtime 5/5、CLI 1/1 通过；最终无参数 `pnpm run check` 完整通过（46 个 Rust 测试程序，1368 passed / 0 failed / 12 ignored；日志 `/tmp/spawn-power-check-final.log`）。release CLI 重建、固定 screeps-ok `34a630e` 依赖准备和适配器构建完成；全量棘轮 **2676 passed / 72 failed / 166 skipped**，固定 2914 例，相对 HEAD `e98fd8a` +6 绿/0 转红（HEAD~1 +31/0），floor 2670→2676；日志 `/tmp/spawn-power-ratchet.log`。三 bot 2000/2000/10 完成，0 硬中断/跳帧/missing_api；Overmind 保留既有 1 console-error tick。代码复审已核对官方 create-creep/tick/usePower 及一拍出生路径，未发现未清偿问题；最终变更与机器报告随本次提交入库（父提交 `e98fd8a`），未推送。后续优先继续 lab/powerSpawn 等生产消费者。
 
 ## M2H.b-1 power 效果链首片（2026-10-09 完成，随本次提交入库）
 

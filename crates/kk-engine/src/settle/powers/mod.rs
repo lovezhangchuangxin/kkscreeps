@@ -5,8 +5,8 @@
 //! power-spawns/process-power.js 与 processor/global-intents/power.js。
 //! powerCreep 以 Generic 承载（data.type=="powerCreep"），账号注册表在
 //! `PlayerState.power_creeps`，两侧同 ID。usePower 已结算 PWR_GENERATE_OPS、
-//! PWR_OPERATE_TOWER 与 PWR_DISRUPT_TOWER；塔效果写入房间公共效果表，
-//! 由塔的攻击、治疗和修理结算消费。其余 16 个 power 通过官方预检门后
+//! 两种 tower power 与两种 spawn power；效果写入房间公共效果表，
+//! 由塔动作与孵化任务结算消费。其余 14 个 power 通过官方预检门后
 //! 仍不结算，施放与效果消费者待后续补齐；capability powerEffects 已开启。
 
 mod account;
@@ -186,7 +186,7 @@ pub(in crate::settle) fn set_pc_action_log(w: &mut Working, id: ObjId, key: &str
 }
 
 /// usePower：官方门序（房主 powerEnabled → power 等级/冷却 → ops → 射程
-/// /效果覆盖）后结算 generateOps 和 tower 效果；其余 power 尚待消费者接线。
+/// /效果覆盖）后结算 generateOps、tower 与 spawn 效果；其余 power 尚待消费者接线。
 /// 来源：processor/intents/power-creeps/usePower.js。
 fn pc_use_power(w: &mut Working, id: ObjId, d: &IntentData) {
     let Some(RoomObject::Generic(g)) = w.room.objects.get(&id).cloned() else {
@@ -279,15 +279,21 @@ fn pc_use_power(w: &mut Working, id: ObjId, d: &IntentData) {
             v["store"]["ops"] = json!(new_ops - overflow);
             overflow
         }
-        c::PWR_OPERATE_TOWER | c::PWR_DISRUPT_TOWER => {
+        c::PWR_OPERATE_TOWER
+        | c::PWR_DISRUPT_TOWER
+        | c::PWR_OPERATE_SPAWN
+        | c::PWR_DISRUPT_SPAWN => {
             let Some(target_id) = d.id else { return };
-            if !w
-                .room
-                .objects
-                .get(&target_id)
-                .and_then(pc_data)
-                .is_some_and(|target| target["structureType"] == "tower")
-            {
+            let valid_target = match w.room.objects.get(&target_id) {
+                Some(RoomObject::Spawn(_)) => {
+                    matches!(power, c::PWR_OPERATE_SPAWN | c::PWR_DISRUPT_SPAWN)
+                }
+                Some(target) if matches!(power, c::PWR_OPERATE_TOWER | c::PWR_DISRUPT_TOWER) => {
+                    pc_data(target).is_some_and(|target| target["structureType"] == "tower")
+                }
+                _ => false,
+            };
+            if !valid_target {
                 return;
             }
             let duration = match info.get("duration") {

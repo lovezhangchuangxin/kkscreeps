@@ -117,7 +117,7 @@ pub fn process_spawn_intents(
 }
 
 /// 取身体前 50 件计算费用，先验证资金足额再扣款，创建同格孵化 creep 和任务。
-/// 此处不检查名称唯一性；任务耗时为身体件数乘 CREEP_SPAWN_TIME。
+/// 此处不检查名称唯一性；operateSpawn 在任务创建时缩短耗时，向上取整。
 pub fn intent_create_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) {
     if super::nukes::blocks_spawning(&w.room, w.time) {
         return;
@@ -154,7 +154,14 @@ pub fn intent_create_creep(w: &mut Working, spawn_id: ObjId, data: &IntentData) 
     if !charge_energy(w, &spawn, cost, data.energy_structures.as_deref()) {
         return;
     }
-    let need_time = c::CREEP_SPAWN_TIME * body.len() as i64;
+    let mut need_time = c::CREEP_SPAWN_TIME * body.len() as i64;
+    if let Some(effect) =
+        kk_world::effects::active_power(w.room.effects.get(&spawn_id), c::PWR_OPERATE_SPAWN, w.time)
+    {
+        let multiplier =
+            super::powers::power_effect_value(effect.power, effect.level).unwrap_or(1.0);
+        need_time = (need_time as f64 * multiplier).ceil() as i64;
+    }
     let name = data.name.clone().unwrap_or_default();
     if let Some(RoomObject::Spawn(s)) = w.room.objects.get_mut(&spawn_id) {
         s.spawning = Some(SpawningJob {
@@ -428,15 +435,38 @@ fn structure_active_against_controller(
 
 /// 任务到 spawn_time-1 尝试出生，失败则推迟到下一 tick 重试。
 /// 免费能量判断使用全房动作结算后的固定合计值，不随逐个 spawn 增加能量而更新。
-pub fn spawn_tick(w: &mut Working, id: ObjId, energy_available: i64) {
+pub fn spawn_tick(
+    w: &mut Working,
+    id: ObjId,
+    energy_available: i64,
+    initial_creeps: &std::collections::BTreeSet<ObjId>,
+) {
     let Some(RoomObject::Spawn(spawn)) = w.room.objects.get(&id) else {
         return;
     };
-    if let Some(job) = &spawn.spawning
+    let disrupted = spawn.spawning.is_some()
+        && kk_world::effects::active_power(w.room.effects.get(&id), c::PWR_DISRUPT_SPAWN, w.time)
+            .is_some();
+    if disrupted {
+        if let Some(RoomObject::Spawn(s)) = w.room.objects.get_mut(&id)
+            && let Some(job) = &mut s.spawning
+        {
+            job.spawn_time += 1;
+        }
+    } else if let Some(job) = &spawn.spawning
         && w.time >= job.spawn_time.saturating_sub(1)
     {
         let job = job.clone();
-        let born = born_creep(w, id, &job.name, &job.directions);
+        // 官方 bulk.insert 的新 creep 本轮不在 roomObjects：一拍任务先清
+        // spawning，下一轮 creep tick 才走默认方向的孤儿出生路径。已有
+        // creep（包括曾被 disrupt 延期的一拍任务）仍使用任务指定方向。
+        // 来源：spawns/tick.js 与 creeps/tick.js。
+        let newly_inserted = w.room.objects.iter().any(|(id, object)| {
+            matches!(object, RoomObject::Creep(c)
+                if c.spawning && c.name == job.name && c.x == spawn.x && c.y == spawn.y)
+                && !initial_creeps.contains(id)
+        });
+        let born = newly_inserted || born_creep(w, id, &job.name, &job.directions);
         if born {
             if let Some(RoomObject::Spawn(s)) = w.room.objects.get_mut(&id) {
                 s.spawning = None;

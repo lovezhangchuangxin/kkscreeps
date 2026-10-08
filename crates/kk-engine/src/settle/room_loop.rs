@@ -97,6 +97,16 @@ pub fn settle_room(
         spawn::calc_spawns(&mut w);
     }
 
+    // 官方 bulk.insert 的新 creep 下一轮才进入对象 tick；记录初始集合，
+    // 避免一拍孵化的任务清除后，新 creep 同轮提前走孤儿出生路径。
+    let initial_creeps: std::collections::BTreeSet<ObjId> = ctx
+        .borrow()
+        .room
+        .objects
+        .iter()
+        .filter_map(|(id, object)| matches!(object, RoomObject::Creep(_)).then_some(*id))
+        .collect();
+
     // 玩家按名字排序，先处理房间指令，再按对象 ID 处理对象动作。
     for (player, intents) in &batch.users {
         room::process_room_intents(&mut ctx.borrow_mut(), player, &intents.room);
@@ -177,7 +187,7 @@ pub fn settle_room(
     // 按指令处理后的存量重算可用能量，供 spawn tick 的低能量补给判断。
     let _energy_available = spawn::energy_available(&ctx.borrow());
 
-    // 此时固定 ID 列表：指令阶段创建的对象参加 tick，
+    // 此时固定 ID 列表：指令阶段创建的对象参加 tick（新 creep 除外），
     // 逐对象 tick 中新建的对象不参加这一轮。对象按 ID 升序处理。
     let ids: Vec<ObjId> = ctx.borrow().room.objects.keys().copied().collect();
     for id in ids {
@@ -227,12 +237,20 @@ pub fn settle_room(
             "energy" => economy::energy_tick(&mut ctx.borrow_mut(), id),
             "source" => economy::source_tick(&mut ctx.borrow_mut(), id),
             "creep" => {
+                if !initial_creeps.contains(&id) {
+                    continue;
+                }
                 creep::creep_tick_prepare(&mut ctx.borrow_mut(), id)?;
                 let contrib = ctx.borrow().plane.contrib.clone();
                 let selected = contrib.run_incoming(&ctx, id).map_err(SettleError)?;
                 damage::apply_pending_hits_selected(&mut ctx.borrow_mut(), id, selected);
             }
-            "spawn" => spawn::spawn_tick(&mut ctx.borrow_mut(), id, _energy_available),
+            "spawn" => spawn::spawn_tick(
+                &mut ctx.borrow_mut(),
+                id,
+                _energy_available,
+                &initial_creeps,
+            ),
             "controller" => economy::controller_tick(&mut ctx.borrow_mut(), id),
             "tombstone" => economy::tombstone_tick(&mut ctx.borrow_mut(), id),
             "ruin" => economy::ruin_tick(&mut ctx.borrow_mut(), id),

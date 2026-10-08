@@ -232,6 +232,7 @@ mod production_boundaries;
 mod quota_boundaries;
 mod resource_domain;
 mod resource_faults;
+mod spawn_power_effects;
 mod store_boundaries;
 mod store_rules;
 

@@ -18,7 +18,7 @@
     ],
     [
       "room.find:112",
-      6011
+      6009
     ],
     [
       "room.find:108",
@@ -26,31 +26,31 @@
     ],
     [
       "room.find:102",
-      4010
+      4008
     ],
     [
       "room.find:107",
-      2036
+      2026
     ],
     [
       "room.find:105",
-      2011
+      2006
     ],
     [
       "room.find:1",
-      29
+      28
     ],
     [
       "room.find:3",
-      29
+      28
     ],
     [
       "room.find:5",
-      29
+      28
     ],
     [
       "room.find:7",
-      29
+      28
     ],
     [
       "room.find:117",
@@ -58,7 +58,7 @@
     ],
     [
       "room.find:116",
-      6
+      4
     ]
   ],
   "console_errors_head": [],
@@ -82,15 +82,10 @@
     [
       "[log] # W#N#                        Setup completed - storing data",
       1
-    ],
-    [
-      "[log] # W#N#                        Skipping checkPath, routing not initialized, try remove memory",
-      1
     ]
   ],
   "console_head": [
-    "[tick 1][log] 1 Script reload - Load: 7 tickLimit: 500 limit: 20 Bucket: 10000",
-    "[tick 1][log] 1 W1N1                        Skipping checkPath, routing not initialized, try remove memory",
+    "[tick 1][log] 1 Script reload - Load: 5 tickLimit: 500 limit: 20 Bucket: 10000",
     "[tick 1][log] 1 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
     "[tick 2][log] 2 W1N1                        Setting misplacedSpawn",
     "[tick 2][log] 2 W1N1                        Setup complete - storing data",
@@ -108,6 +103,7 @@
     "[tick 12][log] 12 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
     "[tick 13][log] 13 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
     "[tick 14][log] 14 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
-    "[tick 15][log] 15 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester"
+    "[tick 15][log] 15 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester",
+    "[tick 16][log] 16 W1N1   harvester1           [room W1N1 pos 25,25] Creep role not defined for: crp1 harvester"
   ]
 }
