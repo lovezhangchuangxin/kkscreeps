@@ -26,12 +26,14 @@ export default function register(api) {
 | 投影 | `mod_record_json` | 信封键直供玩家记录（公开口径与结构 store 一致）；玩家类经 `api.view.field(this, 'store')` 读 |
 | 对象 tick | `ctx.target.fields` | payload 含信封键，Mod 执行期可读库存 |
 
-`store`/`storeCapacity` 是投影保留键：字段声明占用在玩家面导出时拒绝。字段更新（`ctx.objects.update`）拒绝写信封键（「库存信封键由资源动作维护」）；字段校验拆出信封后针对声明字段执行。逐 tick 世界校验按类型声明核对信封在场：未声明 store 却携带信封、声明 store 却缺失信封、信封数值非法（store 非负整数映射）都拒绝结算。
+`store`/`storeCapacity`/`storeCapacityResource` 是信封保留键：字段声明占用在冻结层拒绝，包含 server-only 类型。字段更新（`ctx.objects.update`）拒绝写信封键（「库存信封键由资源动作维护」）；字段校验拆出信封后针对声明字段执行。逐 tick 世界校验按类型声明核对信封在场：未声明 store 却携带信封、声明 store 却缺失信封、信封数值非法都拒绝结算与检查点恢复：`storeCapacity` 须等于冻结声明；`store` 须为非负整数映射，单值及总和不超过 JS 安全整数；未开放的 `storeCapacityResource` 不得携带。
 
 ## 边界
 
 首片为单一共享总容量（未绑定资源共用剩余容量，与 Generic 共享仓同语义）；逐资源容量槽、实验室式槽绑定、损耗与跨房转账未开放（Mod 可在资源动作槽内组合）。对象死亡掉落、耐久与受击属 G09.b/c。库存随 `ModObj.data` 以不透明 JSON 持久化——检查点、KKPV 通道与冷恢复无需版本变化；无存量用户，旧计划（无 store 声明）不受影响（`store_capacity` 序列化省略 None，计划身份不变）。
 
-已知角落（首片口径）：声明 `structureType` 字段且取值 `terminal` 的类型会让 withdraw **预检**施加终端封锁拒绝，而结算不适用（结算权威，预检偏严方向）；Mod 对象不参与 `object_owner`——敌方私 rampart 下任何人不可提取，声明 owner 字段不豁免（与 Generic 结构不同），预检侧同场景可能放行后由结算静默丢弃；字段写回（`ctx.target.fields`）传入的信封值一律丢弃并回填世界当前信封——槽内先读后写不会回滚资源转账。
+结构专属预检只对结构注册表命中的对象执行；自有对象的 `structureType`/`effects` 业务字段不会触发终端封锁规则。
+
+已知角落（首片口径）：Mod 对象不参与 `object_owner`——敌方私 rampart 下任何人不可提取，声明 owner 字段不豁免（与 Generic 结构不同），预检侧同场景可能放行后由结算静默丢弃；字段写回（`ctx.target.fields`）传入的信封值一律丢弃并回填世界当前信封——槽内先读后写不会回滚资源转账。
 
 夹具 [mod-objstore](../../compat/fixtures/mod-objstore/README.md)（hauler crate 300 / vault cache 100 两独立包 + 无容量 marker 对照）与场景 [sim-mod-objstore](../../compat/fixtures/sim-mod-objstore/README.md)（四轮双 creep 探针：预检返回码、提交后信封读值、满载 -8/无容量 -7 对照、组合共存、双通道与冷恢复）；Rust 侧断言见 `crates/kk-cli/tests/sim_tests/obj_store.rs`、结算域 `settle_tests/mod_store.rs` 与资源/对象单元测试。

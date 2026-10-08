@@ -24,9 +24,9 @@ export default function register(api) {
 
 ### 单体伤害：读面与表示边界
 
-五个[战斗动作槽](creep-combat-slot.md)均开放 `ctx.combat.get(id)`，返回同房候选的脱离副本：`id/typeKey/owner/x/y/hits/hitsMax/body/spawning`。creep 的 body 是 `{type,hits,boost}` 数组，结构 body 为 null；部件类型用玩家字符串，未强化的 boost 为 null；spawning 对 creep 为布尔值，对结构为 null。已声明的 Mod 建筑按建筑目录给出耐久上限。缺失、跨房、无耐久类型或 Mod 自有字段对象返回 null；畸形 ID 是能力故障。修改副本不会写回候选，也不会消耗动作。
+五个[战斗动作槽](creep-combat-slot.md)均开放 `ctx.combat.get(id)`，返回同房候选的脱离副本：`id/typeKey/owner/x/y/hits/hitsMax/body/spawning`。creep 的 body 是 `{type,hits,boost}` 数组，结构 body 为 null；部件类型用玩家字符串，未强化的 boost 为 null；spawning 对 creep 为布尔值，对结构为 null。已声明的 Mod 建筑按建筑目录给出耐久上限。缺失、跨房或无耐久类型返回 null；声明耐久的 Mod 自有对象使用类型键与信封耐久；畸形 ID 是能力故障。修改副本不会写回候选，也不会消耗动作。
 
-执行者的 `ctx.target.fields` 新增只读 `hitsMax` 和同形 `body`。creep 伤害仍延迟到对象 tick 应用，链内查询 hits/body 不包含尚未落地的待伤害；结构伤害立即生效。能力仅在所属处理器同步期有效，不能保存到另一个处理器或下一次槽调用后使用。
+执行者的 `ctx.target.fields` 新增只读 `hitsMax` 和同形 `body`。creep 伤害仍延迟到对象 tick 应用，链内查询 hits/body 不包含尚未落地的待伤害；结构伤害立即生效；托管的 Mod 结构受击按[自有对象耐久](object-durability.md#结构受击槽g09c)在意图阶段后排空。能力仅在所属处理器同步期有效，不能保存到另一个处理器或下一次槽调用后使用。
 
 策略伤害须为 **0..=1e9 的整数**，SDK、op 和引擎分别校验；这是表示上限，不是 ATTACK 功率上限。零伤害合法并记录攻击事件。执行者须为已出生 creep；目标须为同房存活 creep 或宿主已有耐久表示的结构，不能整值替换对象或给无耐久类型补造 hits。目标不存在、无耐久或仍在孵化时是能力故障。
 
@@ -121,7 +121,7 @@ export default function register(api) {
 
 ### 群体伤害：查询与批量表示
 
-- `list(after = '', limit = 100)` 在五个战斗槽开放，返回 `{objects,next}`。对象形状与[战斗 get](#单体伤害读面与表示边界)相同，按对象 ID 升序，页为脱离副本。包含执行者、孵化和零耐久对象；缺少耐久表示的对象、自有 Mod 字段对象和跨房对象不列出，资格由 JS 筛选。
+- `list(after = '', limit = 100)` 在五个战斗槽开放，返回 `{objects,next}`。对象形状与[战斗 get](#单体伤害读面与表示边界)相同，按对象 ID 升序，页为脱离副本。包含执行者、孵化和零耐久对象；缺少耐久表示的对象和跨房对象不列出；声明耐久的 Mod 自有对象可列出，资格由 JS 筛选。
 - 空游标从头查询；非空游标须为合法 ID，继续查询严格大于该 ID 的对象，游标对象已经删除仍可继续。`next` 是本页最后一个 ID，有后页时返回它，否则为 null。每页限 **1..256 整数**；每次读取当前候选，不保证修改期间的跨页快照一致性。
 - `applyDamageBatch([{id,amount},...])` 仅在 rangedMassAttack 槽开放，最多 **256 项**。ID 须为原始字符串；amount 为 **0..=1e9 整数**，与[单体伤害](#单体伤害)同域。条目只读取 id/amount，其他字段不参与应用。
 - 执行者须为已出生 creep，目标须为同房存活、已出生 creep 或有耐久结构。同一实际 ID 不可重复，即使使用 `kk3` 与规范长形式两个不同字符串指向同一对象也拒绝。
@@ -252,4 +252,4 @@ export default function register(api) {
 
 [真实玩家场景](../../compat/fixtures/sim-mod-incoming-policy/README.md)提供原生、独立护甲、独立护盾和两包组合；JSON/KKPV 完整 final 一致，受击后保存退出与冷启动续跑等价。专项覆盖五位置拒绝、非法原始 op、能力过期、来源截断、不同伤害来源、停用回退和晚期失败缓存重试；结果见[交付记录](../research/notes/n2c-incoming-policy-2026-10-06.md)。
 
-当前不开放结构受击、自有对象伤害 trait、按实际净伤害自动反击或 power 免疫语义。移动竞争排序已另行开放（见[JS 移动竞争](movement.md#竞争排序)），移动准入已开放（见[JS 移动准入](movement.md#准入与预演)），完整仲裁、玩家预检策略替换与可配置批量预算仍待实现。来源提取在 Hosted 路径扫描房间事件流，密集受击场景性能尚未单独采集。
+自有对象耐久、声明反击与 Mod 结构受击已按[自有对象耐久](object-durability.md)开放；其他结构的受击槽、按实际净伤害自动反击或 power 免疫语义仍未开放。移动竞争排序已另行开放（见[JS 移动竞争](movement.md#竞争排序)），移动准入已开放（见[JS 移动准入](movement.md#准入与预演)），完整仲裁、玩家预检策略替换与可配置批量预算仍待实现。来源提取在 Hosted 路径扫描房间事件流，密集受击场景性能尚未单独采集。

@@ -99,6 +99,20 @@ fn engine_with_player_files(
     player_files: &[(&str, &str)],
     kkpv: bool,
 ) -> anyhow::Result<EmbedEngine> {
+    engine_with_player_files_and_shard(
+        packages,
+        player_files,
+        kkpv,
+        &json!({"players": ["p1"], "rooms": [{"name": "W1N1", "rcl": 6, "owner": "p1"}]}),
+    )
+}
+
+fn engine_with_player_files_and_shard(
+    packages: &[(&str, String)],
+    player_files: &[(&str, &str)],
+    kkpv: bool,
+    shard: &Value,
+) -> anyhow::Result<EmbedEngine> {
     let root = PackageRoot(std::env::temp_dir().join(format!(
         "kk-mod-chain-{}-{}",
         std::process::id(),
@@ -124,11 +138,7 @@ fn engine_with_player_files(
     let packages = discover_packages(&root.0)?;
     let mut e = EmbedEngine::new();
     e.set_kkpv_channel(kkpv);
-    e.create_shard_with_mods(
-        &json!({"players": ["p1"], "rooms": [{"name": "W1N1", "rcl": 6, "owner": "p1"}]}),
-        &packages,
-        RegisterOptions::default(),
-    )?;
+    e.create_shard_with_mods(shard, &packages, RegisterOptions::default())?;
     Ok(e)
 }
 
@@ -217,8 +227,10 @@ mod mod_building_world;
 mod mod_guard;
 mod object_ops;
 mod object_tick;
+mod quota_boundaries;
 mod resource_domain;
 mod resource_faults;
+mod store_boundaries;
 mod store_rules;
 
 mod trace;

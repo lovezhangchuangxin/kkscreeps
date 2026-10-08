@@ -31,7 +31,7 @@ impl SlotExecutor for GuardExecutor {
             .input()
             .source
             .as_ref()
-            .expect("在场攻击者进入来源摘要");
+            .expect("攻击时刻的来源摘要保留");
         assert_eq!(source.source_id, ObjId(3).as_str());
         assert_eq!(source.attack_type, c::EVENT_ATTACK_TYPE_MELEE);
         if self.decline {
@@ -192,36 +192,14 @@ fn main_attack_count(w: &Working) -> usize {
         .count()
 }
 
-/// 按 room_loop 的排空顺序消费挂起队列并归还 Working。
+/// 使用生产排空路径消费挂起队列并归还 Working。
 fn drain(ctx: RoomCtx) -> Working {
-    let pending = std::mem::take(&mut ctx.borrow_mut().mod_damage_pending);
-    assert_eq!(pending.len(), 1, "托管伤害恰挂起一项");
-    let contrib = ctx.borrow().plane.contrib.clone();
-    let mut drained = Vec::new();
-    for item in pending {
-        // 与 room_loop 排空同款门：目标或攻击者已消失的条目整项丢弃。
-        let gone = {
-            let w = ctx.borrow();
-            !matches!(w.room.objects.get(&item.target), Some(RoomObject::Mod(_)))
-                || !w.room.objects.contains_key(&item.attacker)
-        };
-        if gone {
-            continue;
-        }
-        let damage = contrib
-            .run_mod_incoming(
-                &ctx,
-                item.target,
-                item.damage,
-                item.attacker,
-                item.attack_type,
-            )
-            .unwrap();
-        drained.push((item, damage));
-    }
-    for (item, damage) in drained {
-        apply_mod_damage(&mut ctx.borrow_mut(), item, damage);
-    }
+    assert_eq!(
+        ctx.borrow().mod_damage_pending.len(),
+        1,
+        "托管伤害恰挂起一项"
+    );
+    drain_mod_damage(&ctx).unwrap();
     Rc::into_inner(ctx).unwrap().into_inner()
 }
 
@@ -333,13 +311,17 @@ fn hosted_retaliation_base_stays_raw_damage() {
     assert_eq!(hit_backs[0]["data"]["damage"], json!(25));
 }
 
-/// 排空前攻击者已消失：条目整项丢弃（不跑槽、不扣减、不反击、无 panic）。
+/// 排空前攻击者已消失：仍经槽应用主伤害，来源摘要不依赖当前对象在场。
 #[test]
-fn pending_item_with_vanished_attacker_is_dropped() {
+fn pending_item_with_vanished_attacker_still_applies_damage() {
     let ctx = hosted_after_damage(false);
-    ctx.borrow_mut().room.objects.remove(&ObjId(3));
+    ctx.borrow_mut().remove_obj(ObjId(3));
     let w = drain(ctx);
-    assert_eq!(hits_of(&w, ObjId(5)), 120, "伤害无处归因，整项丢弃");
+    assert_eq!(
+        hits_of(&w, ObjId(5)),
+        95,
+        "来源消失仍按槽选中的 25 点伤害扣减"
+    );
     assert!(!w.damage_to_apply.contains_key(&ObjId(3)));
     assert_eq!(main_attack_count(&w), 1, "意图时刻的主攻击事件保留");
 }

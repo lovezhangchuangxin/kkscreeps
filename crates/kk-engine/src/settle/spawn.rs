@@ -396,9 +396,6 @@ fn structure_active_against_controller(
     if allowed == 0 {
         return false;
     }
-    if allowed_count(w, "spawn", 8) == 1 {
-        return true;
-    }
     let object_dist = chebyshev((spawn.x, spawn.y), (ctl.x, ctl.y));
     let mut found_self = false;
     for (id, obj) in &w.room.objects {

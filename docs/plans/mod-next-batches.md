@@ -6,11 +6,12 @@
 
 ## 当前接手位置
 
-- 当前任务：**G11.a 建筑 RCL 配额首片已交付（随本次提交）**。132 条 `builtin:structure.quota.{type}.rcl{N}` 逐型逐级规则（键集/默认=官方表）+ `StructureQuotaSnapshot`（装配期解析、Rc 入逐房 Plane，五消费者统一 `allowed_for`）+ 折叠注入玩家 `CONTROLLER_STRUCTURES`（canary/worker 双点，switch/冷恢复同路径）；link.rcl0-8 迁入族修复「link 规则不达玩家面」既有缺口；builtin revision v18（旧检查点身份门拒绝）。契约见[配额规则](../architecture/structure-quota.md)，夹具 [mod-quota](../../compat/fixtures/mod-quota/README.md)/[sim-mod-quota](../../compat/fixtures/sim-mod-quota/README.md)，Rust 侧 `sim_tests/quota.rs`。上一任务 M2D ID 构造器批已交付，含 M2C 回归修复与 probe 诊断豁免，细节见实施记录。
+- 当前任务：**`f32f972..6b461a8` 审查修复完成（2026-10-08）**。审查范围为基线之后 14 个提交，HEAD 仍为 `6b461a8`；接手时工作区干净，当前 8 项修复与回归、契约及兼容报告改动均未提交、未推送。已清偿本轮确认的问题，不扩展 G09 首片范围。下次先核对和审阅当前补丁，再按实际执行队列恢复玩法选型；此前 G11.a、G09.a/b/c/d 交付细节保留于下文。
 - 已完成基线：S01 `e0b457b`、S02 `5a25bc2`。旧 S03–S06 的纯搬迁限制由本轮职责治理方案替代，详见[维护结构方案](archive/structure-governance-2026-10.md)。
-- 已完成实现：移动领域跨层归拢；Working 统一构造与瞬态字段收口、engine 首触日志；世界容器/投影与 runtime 执行器分离、Generic 共享读取；串行场景名称/耗时/子集反馈；文档契约合并、旧计划归档与工具门禁。保留玩法语义和恢复身份，不推进 G02.d3 等新玩法。
-- 本轮实现：kk-mod-api 配额族+快照（builtin.rs）、engine Plane/Engine 接线与五消费者收口、runtime 双点常量注入（setup.rs/switch.rs 注释）、contrib_link/link_decline 键迁移、冻结与结算测试、sim 三轮探针场景与两独立夹具包、架构文档 structure-quota.md 及三处索引。无 SDK 协议变化；新增写入域无（规则值经既有冻结/恢复链路持久）。
-- 当前验证：无参数 `pnpm run check` 完整通过；release 重建后棘轮 **1983 持平**（0 转红 0 转绿），ratchet 地板 1983；三组 bot 2000/2000/10 指标与基线一致且验收判定全部通过（Overmind 保留既有首轮异常 1）。三路复审 0 P0/P1；P2（Plane 逐房深拷贝→Rc）当批清偿，P3 清偿或登记（折叠键序 preserve_order 依赖注释、缺族拒绝补测、全表折叠相等断言、link 玩家面间接覆盖、RCL0 键不声明边界、quota 恢复调用并发参数对齐）。**间歇登记**：sim_tests 全套并行下三例冷恢复子进程偶发退出码 1（非本批引入，隔离全绿；再现须存子进程报告归因）。剩余 24 失败集中于 keeper lair/getGameTime/setup 零散域。工作区含本次未提交改动。
+- 已完成实现：移动领域跨层归拢；Working 统一构造与瞬态字段收口、engine 首触日志；世界容器/投影与 runtime 执行器分离、Generic 共享读取；串行场景名称/耗时/子集反馈；文档契约合并、旧计划归档与工具门禁。历史维护保留当时玩法语义和恢复身份；后续玩法交付以本文件任务表和现行架构为准。
+- 本轮实现：已修复 8 项边界问题：动作拒绝截断托管伤害队列；攻击者消失仍应用主伤害并保留来源摘要；反击 safeMode 抑制保留攻击时刻决定；受击槽目标字段只读；库存第三信封键冻结保留；库存容量/安全整数/逐资源槽在发布与恢复时完整校验；配额为单件仍按实际对象清点（JS、link 与 spawn）；Mod 业务字段不触发终端封锁预检。生产与测试共用结构受击排空路径。现行耐久、库存、配额与战斗文档同步；无新增持久化域，无玩法范围扩展。
+- 本轮职责复审：托管伤害队列的排空与效果由 damage 域持有，room_loop 只调用阶段入口；生产/单元测试排空和库存发布/恢复校验各自共用一条实现。`damage.rs` 708 行触发规模提示，新增内容仍围绕同一伤害队列与应用边界，本轮未按行数机械拆分。
+- 当前验证：无参数 `pnpm run check` 完整门禁通过（Rust 1299 passed / 0 failed / 12 ignored，包含整槽链 283/283；CLI 模拟 95/95；格式、Clippy、JS workspace、维护工具、文档链接及规模检查通过）。新 release 棘轮 1983 passed / 24 既有 failed / 907 skipped，逐用例相对 HEAD~1 与修复前 HEAD 均 0 转红、0 转绿；三 bot 2000/2000/10 完成且验收通过（核心指标同入库基线，Overmind 保持 1 个含 console-error 的 tick）。过程中校正了回归夹具的默认控制器距离和未提交字段拒绝语义，并修正把旧漏洞行为当作期望的单元测试；macOS 新二进制启动延迟经采样定位，恢复后最终完整门禁通过。最终日志 `/tmp/kkscreeps-fix-check.log`、`/tmp/kkscreeps-fix-ratchet.log`、`/tmp/kkscreeps-fix-release-confirm.log`；bot 报告 `/tmp/kkscreeps-fix-{tooangel,overmind,wasm}.json`。当前无待验证项，补丁未提交。
 - 历史交接、阶段验证与审查过程见[历史记录](archive/mod-history-2026-10.md)；玩法缺口继续以本文件任务表为准。
 
 ## G11.a 建筑配额策略（2026-10-08 登记；同日选型拍板并实施交付）

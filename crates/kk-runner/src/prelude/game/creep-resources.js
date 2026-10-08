@@ -311,7 +311,7 @@
       return C.ERR_INVALID_TARGET;
     }
     // 按 effects 中 power/ticksRemaining 判断 terminal 是否被 PWR_DISRUPT_TERMINAL 封锁。
-    if (structureKindOf(rawTarget) === 'terminal') {
+    if (structEntry && structureKindOf(structEntry) === 'terminal') {
       const effect = (rawTarget.effects || []).find((e) => e && e.power === C.PWR_DISRUPT_TERMINAL);
       if (effect && effect.ticksRemaining > 0) return C.ERR_INVALID_TARGET;
     }

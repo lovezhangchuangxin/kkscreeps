@@ -211,11 +211,7 @@
       return false;
     }
 
-    // if only one object ever allowed, this is it
-    if (quota[8] === 1) {
-      return allowedRemaining !== 0;
-    }
-
+    // 配额可覆盖或在换包后降低，RCL8 单件上限不能保证实际只有一件。
     // Scan through the room objects of the same type and count how many are closer.
     let foundSelf = false;
     let objectDist = __MathMax(__MathAbs(object.x - roomController.x), __MathAbs(object.y - roomController.y));

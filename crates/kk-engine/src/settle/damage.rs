@@ -6,6 +6,36 @@
 
 mod tough;
 
+/// 意图阶段后逐项运行结构受击槽并落地，目标已消失则跳过。
+/// 来源消失不撤销主伤害；槽失败由调用方丢弃整个房间候选。
+pub(super) fn drain_mod_damage(ctx: &super::RoomCtx) -> Result<(), super::SettleError> {
+    let pending = std::mem::take(&mut ctx.borrow_mut().mod_damage_pending);
+    if !pending.is_empty() {
+        let contrib = ctx.borrow().plane.contrib.clone();
+        for item in pending {
+            let gone = {
+                let w = ctx.borrow();
+                !matches!(w.room.objects.get(&item.target), Some(RoomObject::Mod(_)))
+            };
+            if gone {
+                continue;
+            }
+            let damage = contrib
+                .run_mod_incoming(
+                    ctx,
+                    item.target,
+                    item.damage,
+                    item.attacker,
+                    item.attack_type,
+                )
+                .map_err(super::SettleError)?;
+            apply_mod_damage(&mut ctx.borrow_mut(), item, damage);
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests;
 
@@ -98,6 +128,10 @@ fn apply_damage_inner(
     };
 
     let mut attack_back: i64 = retaliation.unwrap_or(0);
+    // 反击抑制取攻击发生时的房主状态，托管排空不能被后续 unclaim/激活改变。
+    let retaliation_suppressed = w.controller().is_some_and(|ctl| {
+        ctl.owner.as_deref() == Some(attacker_owner.as_str()) && ctl.safe_mode > w.time
+    });
     if let RoomObject::Creep(t) = &target {
         if native_retaliation
             && attack_type == c::EVENT_ATTACK_TYPE_MELEE
@@ -124,6 +158,7 @@ fn apply_damage_inner(
                 damage,
                 attack_type,
                 retaliation,
+                retaliation_suppressed,
             });
         } else {
             mod_damage_effects(
@@ -131,7 +166,7 @@ fn apply_damage_inner(
                 &m.type_key,
                 target_id,
                 attacker,
-                &attacker_owner,
+                retaliation_suppressed,
                 damage,
                 damage,
                 retaliation,
@@ -409,7 +444,7 @@ fn static_hits_max(structure_type: &str, links: &kk_mod_api::builtin::LinkRules)
 }
 
 /// G09.c：托管受击槽挂起的一次 Mod 伤害（含反击原语），排空时经槽
-/// 修改伤害量后落地。目标或攻击者在排空前已消失的项由排空门整项丢弃。
+/// 修改伤害量后落地。攻击者 ID 与抑制决定保留攻击时刻语义，不依赖来源继续存活。
 #[derive(Clone, Copy)]
 pub struct PendingModDamage {
     pub target: ObjId,
@@ -417,6 +452,7 @@ pub struct PendingModDamage {
     pub damage: i64,
     pub attack_type: i64,
     pub retaliation: Option<i64>,
+    pub retaliation_suppressed: bool,
 }
 
 /// Mod 受击的扣减与声明式反击效果（G09.d）；Native 派发在伤害入口
@@ -430,7 +466,7 @@ pub(in crate::settle) fn mod_damage_effects(
     type_key: &str,
     target_id: ObjId,
     attacker: ObjId,
-    attacker_owner: &str,
+    retaliation_suppressed: bool,
     damage: i64,
     // 声明反击的基数是原始伤害（combat 契约「按减伤前量」）；槽修改
     // 只改变扣减量。Native 路径两者同值，托管排空路径分别传入。
@@ -466,23 +502,22 @@ pub(in crate::settle) fn mod_damage_effects(
     if retaliation.is_none()
         && let Some(milli) = mod_retaliation_milli(w, type_key)
     {
-        let suppressed = w.controller().is_some_and(|ctl| {
-            ctl.owner.as_deref() == Some(attacker_owner) && ctl.safe_mode > w.time
-        });
-        let back = if suppressed {
+        let back = if retaliation_suppressed {
             0
         } else {
             retaliation_base.saturating_mul(milli) / 1000
         };
         if back > 0 {
-            let attacker_is_creep =
-                matches!(w.room.objects.get(&attacker), Some(RoomObject::Creep(_)));
-            if attacker_is_creep {
+            // 来源消失不撤销主伤害；反击无存活落点时不登记幽灵队列或事件。
+            let Some(attacker_obj) = w.room.objects.get(&attacker).cloned() else {
+                return;
+            };
+            if matches!(attacker_obj, RoomObject::Creep(_)) {
                 *w.damage_to_apply.entry(attacker).or_insert(0) += back;
                 if let Some(a) = w.creep_mut(attacker) {
                     set_action_log(&mut a.action_log, ACTION_ATTACKED);
                 }
-            } else if let Some(attacker_obj) = w.room.objects.get(&attacker).cloned() {
+            } else {
                 let attacker_hits = object_hits(&attacker_obj) - back;
                 if attacker_hits <= 0 {
                     destroy_structure(w, attacker);
@@ -514,23 +549,12 @@ pub(in crate::settle) fn apply_mod_damage(w: &mut Working, pending: PendingModDa
     let Some(RoomObject::Mod(m)) = target else {
         return; // 目标在排空前已消失（同轮更早的挂起项击毁）
     };
-    let owner = match w.room.objects.get(&pending.attacker) {
-        Some(RoomObject::Creep(o)) => o.owner.clone(),
-        Some(RoomObject::Generic(g)) => {
-            let data: serde_json::Value = serde_json::from_str(&g.data).unwrap_or_default();
-            data.get("owner")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default()
-                .to_string()
-        }
-        _ => return, // 攻击者已消失则伤害无处归因（与入口门一致丢弃）
-    };
     mod_damage_effects(
         w,
         &m.type_key,
         pending.target,
         pending.attacker,
-        &owner,
+        pending.retaliation_suppressed,
         damage,
         pending.damage,
         pending.retaliation,

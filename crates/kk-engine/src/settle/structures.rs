@@ -455,7 +455,7 @@ pub(crate) fn allowed_for(w: &Working, structure_type: &str, level: i64) -> i64 
 }
 
 /// 无主结构视为有效；有主须与 RCL>=1 的房主一致且有配额。
-/// 单件类型通过等级检查即可，多件类型按到控制器的距离占配额，
+/// 按到控制器的距离占配额（覆盖后的 RCL8 上限不保证实际单件），
 /// 等距时 ObjId 较小者优先。来源：上游 engine/src/utils.js::checkStructureAgainstController。
 fn check_structure_against_controller(w: &Working, id: ObjId, view: &GenericView) -> bool {
     let Some(owner) = view.owner.as_deref() else {
@@ -467,9 +467,6 @@ fn check_structure_against_controller(w: &Working, id: ObjId, view: &GenericView
     let mut allowed_remaining = allowed_for(w, &view.structure_type, ctl.level as i64);
     if allowed_remaining == 0 {
         return false;
-    }
-    if allowed_for(w, &view.structure_type, 8) == 1 {
-        return true;
     }
     let obj = match w.room.objects.get(&id) {
         Some(RoomObject::Generic(g)) => (g.x, g.y),

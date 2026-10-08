@@ -19,7 +19,7 @@ pub const MOD_FIND_BASE: i64 = 1000;
 /// 有意不在列：它们对 Mod 记录是惰性键——ext 键消费只按 structureType
 /// 登记（扩展写入门不认 Mod 对象 id，恒不命中）、视野授予方已排除
 /// Mod 记录，且字段值先进信封后写、不会被覆写穿透。
-pub(crate) const RESERVED_RECORD_KEYS: [&str; 10] = [
+pub(crate) const RESERVED_RECORD_KEYS: [&str; 11] = [
     "type",
     "modType",
     "id",
@@ -28,6 +28,7 @@ pub(crate) const RESERVED_RECORD_KEYS: [&str; 10] = [
     "ext",
     "store",
     "storeCapacity",
+    "storeCapacityResource",
     "hits",
     "hitsMax",
 ];
@@ -300,6 +301,27 @@ mod tests {
         ];
         ty.position_fields = Some([x, y]);
         PlayerSurface::from_plan(&plan_with(ty)).unwrap();
+    }
+
+    #[test]
+    fn inventory_envelope_keys_are_reserved_for_all_object_visibilities() {
+        for visibility in [ObjectVisibility::RoomVisible, ObjectVisibility::ServerOnly] {
+            for name in crate::objects::STORE_ENVELOPE_KEYS {
+                let mut ty = surface_type("extmod:counter", visibility.clone());
+                ty.fields = vec![field(name, Visibility::Public)];
+                let err = crate::freeze_with_builtin(
+                    crate::builtin::link(),
+                    vec![plan_contribution(ty)],
+                    FreezeOptions::default(),
+                )
+                .unwrap_err()
+                .to_string();
+                assert!(
+                    err.contains("保留键") && err.contains(name),
+                    "{visibility:?}/{name}: {err}"
+                );
+            }
+        }
     }
 
     #[test]

@@ -140,40 +140,7 @@ pub fn settle_room(
         }
     }
 
-    // G09.c：托管结构受击排空。意图阶段挂起的 Mod 目标伤害在此经结构
-    // 受击槽（builtin:mod.receiveDamage）修改后落地——此点持有共享句柄，
-    // 槽链可安全借用候选。显式反击与主攻击事件已在意图时刻发出，排空
-    // 只落扣减与类型键声明反击（不经伤害入口，避免事件双发）。目标已
-    // 被更早挂起项击毁、或攻击者已消失的条目整项丢弃：槽输出无处落地
-    // 或无处归因，且宿主读取面以目标缺失为故障——集火同 tick 击穿时
-    // 跑槽会拖垮整个候选；跳过同时避免观察者 state 与实际落地背离。槽失败
-    // 使本房间候选整体失败（Err 丢弃候选，安全回滚）。
-    {
-        let pending = std::mem::take(&mut ctx.borrow_mut().mod_damage_pending);
-        if !pending.is_empty() {
-            let contrib = ctx.borrow().plane.contrib.clone();
-            for item in pending {
-                let gone = {
-                    let w = ctx.borrow();
-                    !matches!(w.room.objects.get(&item.target), Some(RoomObject::Mod(_)))
-                        || !w.room.objects.contains_key(&item.attacker)
-                };
-                if gone {
-                    continue;
-                }
-                let damage = contrib
-                    .run_mod_incoming(
-                        &ctx,
-                        item.target,
-                        item.damage,
-                        item.attacker,
-                        item.attack_type,
-                    )
-                    .map_err(SettleError)?;
-                damage::apply_mod_damage(&mut ctx.borrow_mut(), item, damage);
-            }
-        }
-    }
+    damage::drain_mod_damage(&ctx)?;
 
     // 所有 move/pull 登记完成后，再统一仲裁目的格冲突。有竞争策略
     // 贡献时先释放借用经整槽宿主生成优先级候选；正常拒绝回退默认评分。

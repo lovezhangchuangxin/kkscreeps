@@ -74,13 +74,7 @@ impl ModIncomingSlot {
         let Self::Hosted(slot) = self else {
             return Ok(damage);
         };
-        let candidate = Rc::new(ModIncomingDamage::prepare(
-            &ctx.borrow(),
-            target,
-            damage,
-            attacker,
-            attack_type,
-        )?);
+        let candidate = Rc::new(ModIncomingDamage::prepare(damage, attacker, attack_type)?);
         let outcome = slot.executor.run(
             &slot.plan,
             ctx,

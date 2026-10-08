@@ -136,14 +136,32 @@ impl Engine {
                         .filter(|key| **key != "storeCapacityResource")
                         .all(|key| env.contains_key(*key))
                 });
-                if ty.descriptor.store_capacity.is_some() {
+                if let Some(declared) = ty.descriptor.store_capacity {
                     if !envelope_complete {
                         return Err(SettleError(format!(
                             "房间 {room_name} 的 Mod 对象 {} 声明 store 却缺少完整库存信封",
                             id.as_str()
                         )));
                     }
-                    if kk_world::domain::generic::decode_store(&o.data).is_none() {
+                    let env = envelope.as_ref().expect("上面已判 complete");
+                    // Mod 当前只有冻结的总容量；单资源槽未开放。库存数值与
+                    // 总和须能在玩家 JS 读面中精确表示，恢复时同样校验。
+                    let total = env
+                        .get("store")
+                        .and_then(serde_json::Value::as_object)
+                        .and_then(|store| {
+                            store.values().try_fold(0_u64, |total, value| {
+                                total
+                                    .checked_add(value.as_u64()?)
+                                    .filter(|sum| *sum <= 9_007_199_254_740_991)
+                            })
+                        });
+                    if env.get("storeCapacity").and_then(serde_json::Value::as_u64)
+                        != Some(declared)
+                        || env.contains_key("storeCapacityResource")
+                        || total.is_none()
+                        || kk_world::domain::generic::decode_store(&o.data).is_none()
+                    {
                         return Err(SettleError(format!(
                             "房间 {room_name} 的 Mod 对象 {} 库存信封非法",
                             id.as_str()
@@ -448,9 +466,24 @@ mod invariant_tests {
                 .iter()
                 .map(|name| (name.clone(), engine.world.room(name).unwrap().clone()))
                 .collect();
-            engine
+            let validation = engine
                 .validate_stage(&mut txn)
-                .map_err(|err| err.to_string())
+                .map_err(|err| err.to_string());
+            let saved = engine.checkpoint().unwrap();
+            let mut restored = Engine::with_plan(
+                kk_world::World::new(1),
+                plan.clone(),
+                BTreeMap::new(),
+                BTreeMap::new(),
+            )
+            .unwrap();
+            let recovery = restored.restore_checkpoint(saved);
+            assert_eq!(
+                validation.is_ok(),
+                recovery.is_ok(),
+                "发布与恢复同一信封校验：{payload} {recovery:?}"
+            );
+            validation
         };
         validate(
             "gval:crate",
@@ -468,6 +501,19 @@ mod invariant_tests {
                                 "hits": 300, "hitsMax": 300}),
         )
         .expect("双信封并存合法通过");
+        // 恢复与发布共用此门：共享容量须等于冻结声明，库存合计须可表示，
+        // 不允许直改引入首片未开放的逐资源槽。
+        for payload in [
+            serde_json::json!({"x":10,"y":11,"store":{"energy":0},"storeCapacity":999}),
+            serde_json::json!({"x":10,"y":11,"store":{"energy":0},"storeCapacity":"infinite"}),
+            serde_json::json!({"x":10,"y":11,"store":{"energy":0},"storeCapacity":null}),
+            serde_json::json!({"x":10,"y":11,"store":{"energy":9007199254740992u64},"storeCapacity":500}),
+            serde_json::json!({"x":10,"y":11,"store":{"energy":9007199254740991u64,"H":1},"storeCapacity":500}),
+            serde_json::json!({"x":10,"y":11,"store":{"energy":0},"storeCapacity":500,"storeCapacityResource":{"energy":1000}}),
+        ] {
+            let err = validate("gval:crate", payload.clone()).expect_err(&payload.to_string());
+            assert!(err.contains("库存信封非法"), "{err}");
+        }
         for (type_key, payload, needle) in [
             (
                 "gval:crate",

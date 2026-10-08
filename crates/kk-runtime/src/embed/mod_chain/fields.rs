@@ -87,6 +87,10 @@ impl ModChainContext {
         if self.fields()? == fields {
             return Ok(());
         }
+        // 受击槽只提交数值候选；没有对象写权限，也没有字段回滚快照。
+        if matches!(self.capability, ChainCapability::ModIncoming(_)) {
+            return Err("结构受击槽的 target.fields 当前只读".into());
+        }
         if matches!(
             self.ctx.borrow().room.objects.get(&self.id),
             Some(kk_schema::room::RoomObject::Creep(_))

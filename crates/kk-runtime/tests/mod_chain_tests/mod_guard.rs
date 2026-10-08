@@ -279,7 +279,7 @@ fn creep_and_mod_incoming_slots_route_independently() -> anyhow::Result<()> {
             &[("guard", &player_surface("guard:cell"))],
             binary,
         )?;
-        let a = fighter(&mut e, "a", 10, 10, &["attack"])?;
+        fighter(&mut e, "a", 10, 10, &["attack"])?;
         let v = fighter(&mut e, "v", 11, 10, &["tough", "move"])?;
         let b = cell(&mut e)?;
         // 同一 creep 同 tick 只一条 attack 意图：T0 打 creep 目标、T1 打 mod 目标。
@@ -307,3 +307,5 @@ fn creep_and_mod_incoming_slots_route_independently() -> anyhow::Result<()> {
     }
     Ok(())
 }
+
+mod boundaries;

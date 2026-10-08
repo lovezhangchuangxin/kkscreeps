@@ -111,24 +111,14 @@ impl ModIncomingDamage {
     }
 
     /// 来源为当次攻击的立即值（攻击者与攻击种类），无累计队列语义。
-    pub(super) fn prepare(
-        w: &Working,
-        target: ObjId,
-        damage: i64,
-        attacker: ObjId,
-        attack_type: i64,
-    ) -> Result<Self, String> {
+    pub(super) fn prepare(damage: i64, attacker: ObjId, attack_type: i64) -> Result<Self, String> {
         checked_amount(damage)?;
-        let source = if w.room.objects.contains_key(&attacker) {
-            Some(DamageSource {
-                source_id: attacker.as_str(),
-                amount: damage,
-                attack_type,
-            })
-        } else {
-            None
-        };
-        let _ = target;
+        // 摘要描述攻击发生时的来源；自杀或后续结构摧毁不能抹掉已执行伤害。
+        let source = Some(DamageSource {
+            source_id: attacker.as_str(),
+            amount: damage,
+            attack_type,
+        });
         Ok(Self {
             input: ModIncomingInput { damage, source },
             amount: Cell::new(damage),

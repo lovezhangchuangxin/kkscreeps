@@ -34,6 +34,8 @@ pub enum ChainMutation {
 pub struct ChainSnapshot {
     objects: Vec<(ObjId, RoomObject)>,
     queues: Vec<(ObjId, Option<i64>, Option<i64>)>,
+    /// 托管 Mod 伤害在动作链内只追加、在意图阶段后排空；拒绝撤销本链追加。
+    mod_damage_len: usize,
     event_len: usize,
     next_id: u64,
 }
@@ -119,6 +121,7 @@ impl Working {
         let snapshot = ChainSnapshot {
             objects,
             queues,
+            mod_damage_len: self.mod_damage_pending.len(),
             event_len: self.events.len(),
             next_id: self.state.peek_next_id(),
         };
@@ -276,6 +279,7 @@ impl Working {
             }
         }
         self.events.truncate(snapshot.event_len);
+        self.mod_damage_pending.truncate(snapshot.mod_damage_len);
         for (position, ids) in cells {
             self.index.restore_cell(position, ids);
         }
