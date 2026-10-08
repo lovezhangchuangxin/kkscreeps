@@ -69,7 +69,9 @@ pub(super) fn intent_upgrade_controller(w: &mut Working, id: ObjId, data: &Inten
     if effect <= 0 {
         return;
     }
-    let boosted = kk_world::types::apply_boost(&boost_incs, effect, effect);
+    // 官方 upgradeController.js:64：boostedEffect = floor(buildEffect + Σ增量)，
+    // 不设上限——RCL8 限额只钳未强化量；_upgraded 也按未强化量累计。
+    let boosted = kk_world::types::apply_boost(&boost_incs, effect, i64::MAX);
     let new_progress;
     if level < 8 {
         let next_level_progress = controller_levels(level);
@@ -85,7 +87,7 @@ pub(super) fn intent_upgrade_controller(w: &mut Working, id: ObjId, data: &Inten
             })
         {
             new_progress = progress + boosted as u64 - next_level_progress;
-            *w.upgraded.entry(target_id).or_insert(0) += boosted;
+            *w.upgraded.entry(target_id).or_insert(0) += effect;
             if let Some(RoomObject::Controller(t)) = w.room.objects.get_mut(&target_id) {
                 t.level = level + 1;
                 t.progress = new_progress;
@@ -97,13 +99,13 @@ pub(super) fn intent_upgrade_controller(w: &mut Working, id: ObjId, data: &Inten
             }
         } else {
             new_progress = progress + boosted as u64;
-            *w.upgraded.entry(target_id).or_insert(0) += boosted;
+            *w.upgraded.entry(target_id).or_insert(0) += effect;
             if let Some(RoomObject::Controller(t)) = w.room.objects.get_mut(&target_id) {
                 t.progress = new_progress;
             }
         }
     } else {
-        *w.upgraded.entry(target_id).or_insert(0) += boosted;
+        *w.upgraded.entry(target_id).or_insert(0) += effect;
     }
     w.state.add_gcl(&owner, boosted);
     if let Some(c) = w.creep_mut(id) {

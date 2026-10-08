@@ -12,6 +12,9 @@ fn wire() -> Value {
             "createCreep": {"body": ["work", "carry", "move"], "name": "w1",
                             "energyStructures": ["kk64f000000000003"]},
             "setSpawnDirections": {"directions": [1, 3, 3, 300]},
+            "runReaction": {"lab1": "kk64f000000000002", "lab2": "kk64f000000000003"},
+            "boostCreep": {"id": "kk64f000000000004", "bodyPartsCount": 3},
+            "unboostCreep": {"id": "kk64f000000000004"},
             "mod:dual.gift": {"amount": 7}
         },
         "room": {

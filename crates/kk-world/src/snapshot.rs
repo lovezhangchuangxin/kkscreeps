@@ -353,6 +353,42 @@ fn snapshot_json(
                 );
                 v.remove("cooldownTime");
             }
+            // lab 快照补派生字段（vanilla snapshots.ts 的 lab 分支）：store 只
+            // 留正量、mineralType 取首个非 energy 正量键、容量按已绑槽展开。
+            // 其他 Generic 类型不在此补齐专用 getter。
+            if v.get("structureType").and_then(Value::as_str) == Some("lab") {
+                let store = v.get("store").cloned().unwrap_or_default();
+                let positive: serde_json::Map<String, Value> = store
+                    .as_object()
+                    .map(|s| {
+                        s.iter()
+                            .filter(|(_, val)| val.as_i64().unwrap_or(0) > 0)
+                            .map(|(k, val)| (k.clone(), val.clone()))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let mineral_type = positive
+                    .iter()
+                    .find(|(k, val)| k.as_str() != "energy" && val.as_i64().unwrap_or(0) > 0)
+                    .map(|(k, _)| json!(k.as_str()))
+                    .unwrap_or(Value::Null);
+                let mut by_resource = serde_json::Map::new();
+                if let Some(slots) = v.get("storeCapacityResource").and_then(Value::as_object) {
+                    for (k, cap) in slots {
+                        // transfer/withdraw 的解绑写 null 不删键；vanilla 快照
+                        // 只暴露有效容量槽，null 槽在此过滤。
+                        if cap.as_i64().is_some() {
+                            by_resource.insert(k.clone(), cap.clone());
+                        }
+                    }
+                }
+                by_resource
+                    .entry("energy".to_string())
+                    .or_insert_with(|| json!(c::LAB_ENERGY_CAPACITY));
+                v.insert("store".into(), Value::Object(positive));
+                v.insert("mineralType".into(), mineral_type);
+                v.insert("storeCapacityByResource".into(), Value::Object(by_resource));
+            }
             Value::Object(v)
         }
         // 两个公开查询入口已经排除旗。

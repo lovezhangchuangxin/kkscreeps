@@ -66,6 +66,16 @@
     CONTROLLER_DOWNGRADE_SAFEMODE_THRESHOLD: globalThis.CONTROLLER_DOWNGRADE_SAFEMODE_THRESHOLD,
     // isActive 的配额表（官方 utils.js:470 读 driver.constants 同款注入）
     CONTROLLER_STRUCTURES: freezeConst(globalThis.CONTROLLER_STRUCTURES),
+    // lab 四动作（M2E）：反应量、boost 消耗、容量与查找表。
+    // 表常量递归深冻（freezeConst 原地冻结，与上表同规格）。
+    ERR_NOT_FOUND: globalThis.ERR_NOT_FOUND,
+    STRUCTURE_LAB: globalThis.STRUCTURE_LAB,
+    LAB_REACTION_AMOUNT: globalThis.LAB_REACTION_AMOUNT,
+    LAB_BOOST_MINERAL: globalThis.LAB_BOOST_MINERAL,
+    LAB_BOOST_ENERGY: globalThis.LAB_BOOST_ENERGY,
+    LAB_MINERAL_CAPACITY: globalThis.LAB_MINERAL_CAPACITY,
+    REACTIONS: freezeConst(globalThis.REACTIONS),
+    BOOSTS: freezeConst(globalThis.BOOSTS),
   };
   gw.__structuresC = C; // structure-api.js 复用此常量表。
 

@@ -52,6 +52,12 @@ pub enum Action {
     SetPublic,
     /// 房间阶段校验并保存 terminal 发送请求，跨房资源划转在市场阶段执行。
     Send,
+    /// lab 四动作（官方意图名 runReaction/reverseReaction/boostCreep/unboostCreep，
+    /// system.js:37/:64/:77）；由 settle::labs 按 Generic structureType=lab 分派。
+    RunReaction,
+    ReverseReaction,
+    BoostCreep,
+    UnboostCreep,
 }
 
 impl Action {
@@ -90,6 +96,10 @@ impl Action {
             Self::Unclaim => "unclaim",
             Self::SetPublic => "setPublic",
             Self::Send => "send",
+            Self::RunReaction => "runReaction",
+            Self::ReverseReaction => "reverseReaction",
+            Self::BoostCreep => "boostCreep",
+            Self::UnboostCreep => "unboostCreep",
         }
     }
 
@@ -128,6 +138,10 @@ impl Action {
             "unclaim" => Self::Unclaim,
             "setPublic" => Self::SetPublic,
             "send" => Self::Send,
+            "runReaction" => Self::RunReaction,
+            "reverseReaction" => Self::ReverseReaction,
+            "boostCreep" => Self::BoostCreep,
+            "unboostCreep" => Self::UnboostCreep,
             _ => return None,
         })
     }
@@ -271,6 +285,13 @@ pub struct IntentData {
     pub target_room_name: Option<String>,
     /// terminal.send 的描述，最多 100 个 Unicode 字符。
     pub description: Option<String>,
+    /// lab runReaction/reverseReaction 的两个试剂/输出 lab（官方载荷键
+    /// lab1/lab2，system.js:64）；调用方 lab 是意图对象本身。
+    pub lab1: Option<ObjId>,
+    pub lab2: Option<ObjId>,
+    /// lab boostCreep 的部件数上限（官方载荷键 bodyPartsCount，system.js:37）；
+    /// 缺失或 0 表示不限制。复用 amount 会与官方字段名脱钩，故独立存放。
+    pub body_parts_count: Option<i64>,
 }
 
 impl IntentData {
@@ -292,6 +313,9 @@ impl IntentData {
             directions: Vec::new(),
             target_room_name: None,
             description: None,
+            lab1: None,
+            lab2: None,
+            body_parts_count: None,
         }
     }
 
@@ -313,6 +337,9 @@ impl IntentData {
             directions: Vec::new(),
             target_room_name: None,
             description: None,
+            lab1: None,
+            lab2: None,
+            body_parts_count: None,
         }
     }
 }
@@ -842,6 +869,9 @@ pub fn sanitize_object_intent(_action: Action, raw: &Value) -> IntentData {
             .and_then(Value::as_str)
             .map(str::to_string),
         description: to_user_string(f("description")),
+        lab1: to_id(f("lab1")),
+        lab2: to_id(f("lab2")),
+        body_parts_count: to_int(f("bodyPartsCount")),
     }
 }
 

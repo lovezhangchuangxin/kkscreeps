@@ -13,6 +13,7 @@ pub mod damage;
 pub mod economy;
 pub mod incoming;
 pub mod inter_room;
+pub mod labs;
 pub mod market;
 mod mod_intents;
 pub mod movement;

@@ -17,13 +17,13 @@ use super::movement::type_name_of;
 use super::{RoomCtx, Working};
 use crate::intent::{Action, IntentData};
 
-struct GenericView {
-    owner: Option<String>,
-    structure_type: String,
-    data: Value,
+pub(super) struct GenericView {
+    pub(super) owner: Option<String>,
+    pub(super) structure_type: String,
+    pub(super) data: Value,
 }
 
-fn generic_view(w: &Working, id: ObjId) -> Option<GenericView> {
+pub(super) fn generic_view(w: &Working, id: ObjId) -> Option<GenericView> {
     let RoomObject::Generic(g) = w.room.objects.get(&id)? else {
         return None;
     };
@@ -84,6 +84,22 @@ pub fn process_structure_intents(
         "terminal" => {
             if let Some(d) = actions.get(&Action::Send) {
                 terminal_send(&mut w, id, d);
+            }
+        }
+        // lab 四动作独立派发：run/reverse/unboost 各自的冷却门天然串行
+        // 同 tick 重复请求，boost 官方无冷却门（与处理器一致）。
+        "lab" => {
+            if let Some(d) = actions.get(&Action::RunReaction) {
+                super::labs::run_reaction(&mut w, id, d);
+            }
+            if let Some(d) = actions.get(&Action::ReverseReaction) {
+                super::labs::reverse_reaction(&mut w, id, d);
+            }
+            if let Some(d) = actions.get(&Action::BoostCreep) {
+                super::labs::boost_creep(&mut w, id, d);
+            }
+            if let Some(d) = actions.get(&Action::UnboostCreep) {
+                super::labs::unboost_creep(&mut w, id, d);
             }
         }
         _ => {}
@@ -438,7 +454,7 @@ fn rampart_set_public(w: &mut Working, id: ObjId, d: &IntentData) {
     }
 }
 
-fn chebyshev(a: (u8, u8), b: (u8, u8)) -> i64 {
+pub(super) fn chebyshev(a: (u8, u8), b: (u8, u8)) -> i64 {
     (a.0 as i64 - b.0 as i64)
         .abs()
         .max((a.1 as i64 - b.1 as i64).abs())
@@ -457,7 +473,11 @@ pub(crate) fn allowed_for(w: &Working, structure_type: &str, level: i64) -> i64 
 /// 无主结构视为有效；有主须与 RCL>=1 的房主一致且有配额。
 /// 按到控制器的距离占配额（覆盖后的 RCL8 上限不保证实际单件），
 /// 等距时 ObjId 较小者优先。来源：上游 engine/src/utils.js::checkStructureAgainstController。
-fn check_structure_against_controller(w: &Working, id: ObjId, view: &GenericView) -> bool {
+pub(super) fn check_structure_against_controller(
+    w: &Working,
+    id: ObjId,
+    view: &GenericView,
+) -> bool {
     let Some(owner) = view.owner.as_deref() else {
         return true;
     };

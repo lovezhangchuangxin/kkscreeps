@@ -189,6 +189,13 @@ fn object_params(data: &IntentData) -> Value {
     put_ints(&mut m, "directions", &data.directions);
     put_str(&mut m, "targetRoomName", &data.target_room_name);
     put_str(&mut m, "description", &data.description);
+    if let Some(lab) = &data.lab1 {
+        m.insert("lab1".into(), json!(lab.as_str()));
+    }
+    if let Some(lab) = &data.lab2 {
+        m.insert("lab2".into(), json!(lab.as_str()));
+    }
+    put(&mut m, "bodyPartsCount", data.body_parts_count);
     Value::Object(m)
 }
 

@@ -120,6 +120,77 @@ pub fn calc_body_effectiveness(
     power
 }
 
+/// 反应表查询：两种试剂的产物（REACTIONS 双向对称）。找不到产物返回 None。
+/// 参考：engine/src/utils.js 的 REACTIONS 常量。
+pub fn reaction_product(a: &str, b: &str) -> Option<&'static str> {
+    static REACTIONS: std::sync::OnceLock<Option<serde_json::Value>> = std::sync::OnceLock::new();
+    let table = REACTIONS.get_or_init(|| serde_json::from_str(c::REACTIONS).ok());
+    let table = table.as_ref()?;
+    let hit = |x: &str, y: &str| {
+        table
+            .get(x)
+            .and_then(|t| t.get(y))
+            .and_then(serde_json::Value::as_str)
+    };
+    hit(a, b).or(hit(b, a))
+}
+
+/// 逆反应查询：化合物的两种试剂（按名称排序的稳定对）。基础矿物（无
+/// 逆反应条目）返回 None。仅供 total_reaction_time 的链递归——顺序不
+/// 影响求和；reverseReaction 结算的试剂方向在 kk-engine 按表序单独取。
+fn reaction_reagents(compound: &str) -> Option<(String, String)> {
+    static INVERSE: std::sync::OnceLock<Option<Vec<(String, String, String)>>> =
+        std::sync::OnceLock::new();
+    let inverse = INVERSE.get_or_init(|| {
+        let table: serde_json::Value = serde_json::from_str(c::REACTIONS).ok()?;
+        let mut rows: Vec<(String, String, String)> = Vec::new();
+        for (a, inner) in table.as_object()?.iter() {
+            for (b, product) in inner.as_object()?.iter() {
+                // 同一产物可能来自对称条目（A+B 与 B+A），只留一对。
+                let product = product.as_str()?.to_string();
+                if rows.iter().any(|(_, _, p)| *p == product) {
+                    continue;
+                }
+                rows.push((a.clone(), b.clone(), product));
+            }
+        }
+        Some(rows)
+    });
+    let rows = inverse.as_ref()?;
+    let (a, b, _) = rows.iter().find(|(_, _, p)| p == compound)?;
+    // 排序对：与官方 labReverseCases 矩阵的 localeCompare 序一致。
+    Some(if a <= b {
+        (a.clone(), b.clone())
+    } else {
+        (b.clone(), a.clone())
+    })
+}
+
+/// 化合物的完整反应链时长（reactionTime 的递归和，官方
+/// calcTotalReactionsTime）：产物时间 + 两试剂各自的链时长。基础矿物为 0。
+/// 用于 unboost 冷却公式（每部件 total×15/5）。
+pub fn total_reaction_time(compound: &str) -> i64 {
+    fn chain(name: &str, seen: &mut Vec<String>) -> i64 {
+        if seen.iter().any(|n| n == name) {
+            return 0; // 表成环（理论不可达）时按不重复计
+        }
+        seen.push(name.to_string());
+        let own = c::REACTION_TIME
+            .iter()
+            .find(|(k, _)| *k == name)
+            .map(|(_, v)| *v)
+            .unwrap_or(0);
+        let Some((a, b)) = reaction_reagents(name) else {
+            seen.pop();
+            return own;
+        };
+        let total = own + chain(&a, seen) + chain(&b, seen);
+        seen.pop();
+        total
+    }
+    chain(compound, &mut Vec::new())
+}
+
 /// 汇总 energy、G 及额外资源的数量，包括值为 0 的条目。
 /// 额外资源名应唯一且不重复专用字段，否则会被重复计数。
 pub fn store_total(
@@ -221,7 +292,9 @@ pub fn boost_increments(
     let table = BOOSTS.get_or_init(|| serde_json::from_str(c::BOOSTS).ok());
     let mut increments: Vec<f64> = Vec::new();
     for part in body {
-        if part.hits == 0 || BodyKind::from_code(part.kind) != Some(kind) {
+        // 官方 build/repair/upgradeController 的 _.map 不过滤 hits==0 的
+        // 死亡部件（增量池含死亡强化部件，基础量另按存活部件计）。
+        if BodyKind::from_code(part.kind) != Some(kind) {
             continue;
         }
         let inc = match &part.boost {
@@ -267,4 +340,36 @@ pub fn boosted_effect(
 ) -> i64 {
     let incs = boost_increments(body, kind, part_key, effect, base);
     apply_boost(&incs, effect_points, cap)
+}
+
+#[cfg(test)]
+mod reaction_tests {
+    use super::*;
+
+    /// REACTIONS 对称查询、逆反应排序对与反应链时长（官方矩阵与
+    /// UNBOOST-005 的锚值：UH 链 = REACTION_TIME[UH] = 10）。
+    #[test]
+    fn reaction_helpers_match_official_tables() {
+        assert_eq!(reaction_product("H", "O"), Some("OH"));
+        assert_eq!(reaction_product("O", "H"), Some("OH"));
+        assert_eq!(reaction_product("H", "H"), None);
+        assert_eq!(reaction_product("ZK", "UL"), Some("G"));
+        let oh = reaction_reagents("OH");
+        assert_eq!(
+            oh.as_ref().map(|(a, b)| (a.as_str(), b.as_str())),
+            Some(("H", "O"))
+        );
+        let g = reaction_reagents("G");
+        assert_eq!(
+            g.as_ref().map(|(a, b)| (a.as_str(), b.as_str())),
+            Some(("UL", "ZK"))
+        );
+        assert_eq!(reaction_reagents("H"), None);
+        assert_eq!(total_reaction_time("UH"), 10);
+        assert_eq!(total_reaction_time("OH"), 20);
+        // G 链：G(5) + ZK(5) + UL(5) 的递归和。
+        assert_eq!(total_reaction_time("G"), 15);
+        // X 化合物：60 + UH2O 链（UH2O 5 + UH 10 + OH 20）。
+        assert_eq!(total_reaction_time("XUH2O"), 60 + 5 + 10 + 20);
+    }
 }

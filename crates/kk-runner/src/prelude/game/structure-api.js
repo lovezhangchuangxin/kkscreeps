@@ -356,4 +356,280 @@
     gw.intents.set(this.id, 'send', { resourceType, amount, targetRoomName, description });
     return C.OK; // :745
   };
+
+  // ---- lab 四动作（M2E）。官方 processor 对失败静默 no-op，错误码全在
+  // driver 预检层；下列各方法按 screeps-ok 验证矩阵钉死的优先级序输出
+  // 错误码（LAB-RUN-013/LAB-REVERSE-013/BOOST-CREEP-010/UNBOOST-006 的
+  // singles+pairs 期望取声明序前者的码——即此处的判定顺序）。
+
+  /** lab 动作共用的目标门：存在、在结构注册表且是 StructureLab 实例。 */
+  function assertLabTarget(lab) {
+    return !!(
+      lab &&
+      lab.id &&
+      isKnownStructure(lab.id) &&
+      lab instanceof globalThis.Structure &&
+      lab.structureType === C.STRUCTURE_LAB
+    );
+  }
+
+  /** StructureLab.runReaction（LAB-RUN-013 序）：not-owner > cooldown >
+   *  rcl > invalid-target > range > full > not-enough > invalid-args。
+   *  invalid-target 含试剂 lab 为调用 lab 自身的形态（官方 driver 目标门
+   *  拒 self，与 reverseReaction 同款；processor 无此检查，结算侧自指向
+   *  因自持矿物≠产物自然 no-op）。full 读调用 lab 自持矿物的常量容量
+   *  （官方驱动同式，不读已绑槽）；invalid-args 含两形态：试剂对无产物、
+   *  调用 lab 已含非产物矿物。
+   *  来源：processor/intents/labs/run-reaction.js 与官方 driver 预检。 */
+  globalThis.StructureLab.prototype.runReaction = function runReaction(lab1, lab2) {
+    if (!this.my) {
+      return C.ERR_NOT_OWNER;
+    }
+    if (this.cooldown > 0) {
+      return C.ERR_TIRED;
+    }
+    if (!this.isActive()) {
+      return C.ERR_RCL_NOT_ENOUGH;
+    }
+    if (
+      !assertLabTarget(lab1) ||
+      !assertLabTarget(lab2) ||
+      lab1.id === this.id ||
+      lab2.id === this.id
+    ) {
+      assertTargetObject(lab1);
+      assertTargetObject(lab2);
+      return C.ERR_INVALID_TARGET;
+    }
+    if (inRangeLabs(this, [lab1, lab2]) === false) {
+      return C.ERR_NOT_IN_RANGE;
+    }
+    if (
+      this.mineralType &&
+      this.store[this.mineralType] + C.LAB_REACTION_AMOUNT > this.mineralCapacity
+    ) {
+      return C.ERR_FULL;
+    }
+    const m1 = lab1.mineralType;
+    const m2 = lab2.mineralType;
+    if (
+      !m1 ||
+      lab1.store[m1] < C.LAB_REACTION_AMOUNT ||
+      !m2 ||
+      lab2.store[m2] < C.LAB_REACTION_AMOUNT
+    ) {
+      return C.ERR_NOT_ENOUGH_RESOURCES;
+    }
+    const product = C.REACTIONS[m1] && C.REACTIONS[m1][m2];
+    if (!product || (this.mineralType && this.mineralType !== product)) {
+      return C.ERR_INVALID_ARGS;
+    }
+    gw.intents.set(this.id, 'runReaction', { lab1: lab1.id, lab2: lab2.id });
+    return C.OK;
+  };
+
+  /** StructureLab.reverseReaction（LAB-REVERSE-013 序）：not-owner >
+   *  cooldown > rcl > invalid-target > range > same-lab(INVALID_ARGS) >
+   *  not-enough > invalid-reverse-pair(INVALID_ARGS) > full。
+   *  invalid-target 含输出 lab 为调用 lab 自身的形态（矩阵对
+   *  invalidTargetBeforeSameLab 用调用 lab 充两参锁 INVALID_TARGET——
+   *  官方 driver 目标门拒 self；processor 无此检查，结算侧自指向会因
+   *  试剂不匹配自然 no-op）。试剂对存在性取 REACTIONS 逆查；输出 lab
+   *  已持不相容矿物或化合物无试剂对同为 invalid-reverse-pair 形态。
+   *  full 只在输出 lab 已持同种矿物且加量越容量时成立。 */
+  globalThis.StructureLab.prototype.reverseReaction = function reverseReaction(lab1, lab2) {
+    if (!this.my) {
+      return C.ERR_NOT_OWNER;
+    }
+    if (this.cooldown > 0) {
+      return C.ERR_TIRED;
+    }
+    if (!this.isActive()) {
+      return C.ERR_RCL_NOT_ENOUGH;
+    }
+    if (
+      !assertLabTarget(lab1) ||
+      !assertLabTarget(lab2) ||
+      lab1.id === this.id ||
+      lab2.id === this.id
+    ) {
+      assertTargetObject(lab1);
+      return C.ERR_INVALID_TARGET;
+    }
+    if (inRangeLabs(this, [lab1, lab2]) === false) {
+      return C.ERR_NOT_IN_RANGE;
+    }
+    if (lab1.id === lab2.id) {
+      return C.ERR_INVALID_ARGS;
+    }
+    const mineral = this.mineralType;
+    if (!mineral || this.store[mineral] < C.LAB_REACTION_AMOUNT) {
+      return C.ERR_NOT_ENOUGH_RESOURCES;
+    }
+    const variant = reactionVariant(mineral, lab1, lab2);
+    if (!variant) {
+      return C.ERR_INVALID_ARGS;
+    }
+    const outputs = [
+      [lab1, variant[0]],
+      [lab2, variant[1]],
+    ];
+    for (let i = 0; i < outputs.length; i++) {
+      const [lab, reagent] = outputs[i];
+      if (
+        lab.mineralType === reagent &&
+        lab.store[reagent] + C.LAB_REACTION_AMOUNT > lab.mineralCapacity
+      ) {
+        return C.ERR_FULL;
+      }
+    }
+    gw.intents.set(this.id, 'reverseReaction', { lab1: lab1.id, lab2: lab2.id });
+    return C.OK;
+  };
+
+  /** StructureLab.boostCreep（BOOST-CREEP-010 序）：not-owner > rcl >
+   *  invalid-target > range > not-enough-energy > not-enough-mineral >
+   *  not-found。无冷却门（官方同形）。not-found 判定与结算同源：
+   *  身体中存在未强化且 BOOSTS 表命中该矿物的部件。 */
+  globalThis.StructureLab.prototype.boostCreep = function boostCreep(target, bodyPartsCount) {
+    if (!this.my) {
+      return C.ERR_NOT_OWNER;
+    }
+    if (!this.isActive()) {
+      return C.ERR_RCL_NOT_ENOUGH;
+    }
+    if (
+      !target ||
+      !target.id ||
+      !isKnownCreep(target.id) ||
+      !(target instanceof globalThis.Creep) ||
+      target.spawning
+    ) {
+      assertTargetObject(target);
+      return C.ERR_INVALID_TARGET;
+    }
+    if (cheb1(this, target) === false) {
+      return C.ERR_NOT_IN_RANGE;
+    }
+    if (this.store.energy < C.LAB_BOOST_ENERGY) {
+      return C.ERR_NOT_ENOUGH_RESOURCES;
+    }
+    const mineral = this.mineralType;
+    if (!mineral || this.store[mineral] < C.LAB_BOOST_MINERAL) {
+      return C.ERR_NOT_ENOUGH_RESOURCES;
+    }
+    const body = target.body || [];
+    let candidates = 0;
+    for (let i = 0; i < body.length; i++) {
+      const p = body[i];
+      if (!p.boost && C.BOOSTS[p.type] && C.BOOSTS[p.type][mineral]) {
+        candidates += 1;
+      }
+    }
+    if (candidates === 0) {
+      return C.ERR_NOT_FOUND;
+    }
+    // 官方 driver 第二形态（API 文档载明；processor 无此检查）：bodyPartsCount
+    // 真值且超过可强化部件数时同样拒绝，不会部分强化。
+    if (bodyPartsCount && bodyPartsCount > candidates) {
+      return C.ERR_NOT_FOUND;
+    }
+    gw.intents.set(this.id, 'boostCreep', { id: target.id, bodyPartsCount });
+    return C.OK;
+  };
+
+  /** StructureLab.unboostCreep（UNBOOST-006 序）：invalid-target >
+   *  lab-not-owner > creep-not-owner > rcl > cooldown > not-found > range
+   *  （官方 `!this.my || !target.my` 同级 NOT_OWNER 门）。not-found 判
+   *  目标身体存在任一强化部件。 */
+  globalThis.StructureLab.prototype.unboostCreep = function unboostCreep(target) {
+    if (
+      !target ||
+      !target.id ||
+      !isKnownCreep(target.id) ||
+      !(target instanceof globalThis.Creep)
+    ) {
+      assertTargetObject(target);
+      return C.ERR_INVALID_TARGET;
+    }
+    if (!this.my || !target.my) {
+      return C.ERR_NOT_OWNER;
+    }
+    if (!this.isActive()) {
+      return C.ERR_RCL_NOT_ENOUGH;
+    }
+    if (this.cooldown > 0) {
+      return C.ERR_TIRED;
+    }
+    const body = target.body || [];
+    let boosted = false;
+    for (let i = 0; i < body.length; i++) {
+      if (body[i].boost) {
+        boosted = true;
+        break;
+      }
+    }
+    if (!boosted) {
+      return C.ERR_NOT_FOUND;
+    }
+    if (cheb1(this, target) === false) {
+      return C.ERR_NOT_IN_RANGE;
+    }
+    gw.intents.set(this.id, 'unboostCreep', { id: target.id });
+    return C.OK;
+  };
+
+  /** 官方射程门（run/reverse）：两坐标差均 ≤2，跨房恒超程（官方
+   *  RoomPosition 距离语义）。返回 false 表示超程。 */
+  function inRangeLabs(self, labs) {
+    for (let i = 0; i < labs.length; i++) {
+      const lab = labs[i];
+      if (
+        lab.pos.roomName !== self.pos.roomName ||
+        Math.abs(lab.pos.x - self.pos.x) > 2 ||
+        Math.abs(lab.pos.y - self.pos.y) > 2
+      ) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /** 官方射程门（boost/unboost）：Chebyshev ≤1，跨房恒超程。
+   *  返回 false 表示超程。 */
+  function cheb1(self, target) {
+    if (target.pos.roomName !== self.pos.roomName) {
+      return false;
+    }
+    return Math.max(Math.abs(target.pos.x - self.pos.x), Math.abs(target.pos.y - self.pos.y)) <= 1;
+  }
+
+  /** REACTIONS 逆查：产物的两个有向试剂对中取首个与两输出 lab 现有
+   *  内容相容的方向（空 lab 接收任一试剂）。与官方 getReactionVariants +
+   *  _.find 等价（表迭代序与排序序的差异只影响空 lab 的分配方向，
+   *  不影响存在性判定）。 */
+  function reactionVariant(mineral, lab1, lab2) {
+    let pair = null;
+    for (const r1 of Object.keys(C.REACTIONS)) {
+      const inner = C.REACTIONS[r1];
+      for (const r2 of Object.keys(inner)) {
+        if (inner[r2] === mineral) {
+          pair = [r1, r2];
+          break;
+        }
+      }
+      if (pair) break;
+    }
+    if (!pair) {
+      return null;
+    }
+    const ok = (m, reagent) => !m || m === reagent;
+    if (ok(lab1.mineralType, pair[0]) && ok(lab2.mineralType, pair[1])) {
+      return pair;
+    }
+    if (ok(lab1.mineralType, pair[1]) && ok(lab2.mineralType, pair[0])) {
+      return [pair[1], pair[0]];
+    }
+    return null;
+  }
 })();

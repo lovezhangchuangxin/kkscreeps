@@ -33,7 +33,7 @@ export interface AdapterCapabilities {
 }
 
 export const capabilities: AdapterCapabilities = {
-  chemistry: false,
+  chemistry: true,
   powerCreeps: false,
   powerCreepAccountApi: false,
   powerEffects: false,

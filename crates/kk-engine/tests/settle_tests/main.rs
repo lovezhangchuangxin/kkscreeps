@@ -21,6 +21,7 @@ mod creation;
 mod creep_actions;
 mod engine_world;
 mod ext;
+mod lab_actions;
 mod minerals_and_boost;
 mod mod_buildings;
 mod mod_hits;
