@@ -128,7 +128,7 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 
 ## 最近交付与实际验证
 
-最近功能批次：OPERATE_CONTROLLER 效果链（本提交）。唯一消费者是 8 级控制器升级意图（官方 upgradeController.js）：每 tick 限额 CONTROLLER_MAX_UPGRADE_PER_TICK=15 抬升 effect [10..50]，本轮多次升级按未强化量累计钳制，边界 endTime >= time（与 factory/powerSpawn 同形，区别于 terminal 严格 >）；限额只钳未强化量、boost 增量不受限，8 级升级不写 progress 只涨 GCL，8 级以下效果惰性（可施放无消费），玩家面预检不涉限额。三路复审（结算保真/测试边界/全局影响）发现项当批清偿：过期回落一腿原被能量钳空（补第二满能量 creep 钉住）、boost×限额交互零覆盖（补 XGH2O 只钳未强化量用例）、台账丢失的 powers/mod.rs 拆分义务补回（现 785 行超 700 复审线，FORTIFY/SHIELD 开片前先拆分为 use_power.rs 承接门序与共用臂）、terminal 边界措辞精确化、无 WORK creep 的 amount-0 事件既有分歧登记入已知限制。
+最近功能批次：OPERATE_CONTROLLER 效果链（本提交）。唯一消费者是 8 级控制器升级意图（官方 upgradeController.js）：每 tick 限额 CONTROLLER_MAX_UPGRADE_PER_TICK=15 抬升 effect [10..50]，本轮多次升级按未强化量累计钳制，边界 endTime >= time（与 factory/powerSpawn 同形，区别于 terminal 严格 >）；限额只钳未强化量、boost 增量不受限，8 级升级不写 progress 只涨 GCL，8 级以下效果惰性（可施放无消费），玩家面预检不涉限额。三路复审（结算保真/测试边界/全局影响）发现项当批清偿：过期回落一腿原被能量钳空（补第二满能量 creep 钉住）、boost×限额交互零覆盖（补 XGH2O 只钳未强化量用例）、台账丢失的 powers/mod.rs 拆分义务补回并当批执行（powers/mod.rs 785→443 行，use_power.rs 354 行承接施放门序/共用臂/即时灌能；纯重构零行为变化）、terminal 边界措辞精确化、无 WORK creep 的 amount-0 事件既有分歧登记入已知限制。
 
 - 完整无参数 `pnpm run check`：46 个 Rust 测试程序，1412 passed / 0 failed / 12 ignored；JS workspace、工具、文档链接与源码规模通过；无 doctest 变更。
 - release CLI 与适配器重建，固定 screeps-ok HEAD `34a630e`；全量 2914 例：2715 passed / 33 failed / 166 skipped，相对 `2e791ff` 基线 +2 转绿 / 0 转红（OPERATE_CONTROLLER 用例），地板 2713→2715。
