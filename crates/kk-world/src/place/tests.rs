@@ -438,3 +438,58 @@ fn unknown_types_go_generic_passthrough() {
     assert_eq!(d3["type"], "structure");
     assert_eq!(d3["structureType"], "tower");
 }
+
+/// 相对时钟在输入值和加法结果两处校验，缺省与零仍保持原语义。
+#[test]
+fn deposit_rejects_invalid_numbers_and_deadline_overflow() {
+    for key in [
+        "cooldown",
+        "ticksToDecay",
+        "cooldownTime",
+        "decayTime",
+        "harvested",
+    ] {
+        for value in [
+            json!(-1),
+            json!(1.5),
+            json!("10"),
+            Value::Null,
+            json!(u64::MAX),
+            json!(9_007_199_254_740_992u64),
+        ] {
+            let mut spec = json!({"pos":[20,20]});
+            spec[key] = value;
+            assert!(
+                normalize("deposit", &spec, &ctx()).is_err(),
+                "{key}: {spec}"
+            );
+        }
+    }
+    for key in ["cooldown", "ticksToDecay"] {
+        let mut spec = json!({"pos":[20,20]});
+        spec[key] = json!(crate::domain::deposit::MAX_SAFE_INTEGER);
+        assert!(
+            normalize("deposit", &spec, &ctx()).is_err(),
+            "有效输入换算后超限"
+        );
+        let mut overflow_ctx = ctx();
+        overflow_ctx.time = u64::MAX;
+        spec[key] = json!(1);
+        assert!(
+            normalize("deposit", &spec, &overflow_ctx).is_err(),
+            "u64 加法溢出"
+        );
+    }
+    let RoomObject::Generic(g) = normalize(
+        "deposit",
+        &json!({"pos":[20,20],
+        "cooldown":0,"ticksToDecay":0,"harvested":0}),
+        &ctx(),
+    )
+    .unwrap() else {
+        panic!()
+    };
+    let data: Value = serde_json::from_str(&g.data).unwrap();
+    assert_eq!(data["cooldownTime"], 100);
+    assert_eq!(data["decayTime"], 100);
+}

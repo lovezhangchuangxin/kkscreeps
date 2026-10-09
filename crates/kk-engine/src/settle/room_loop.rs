@@ -282,7 +282,7 @@ pub fn settle_room(
                 let contrib = ctx.borrow().plane.contrib.clone();
                 contrib.run_tick(&ctx, id).map_err(SettleError)?
             }
-            "storage" => economy::storage_capacity_tick(&mut ctx.borrow_mut(), id),
+            "storage" => storage::tick(&mut ctx.borrow_mut(), id),
             "terminal" => economy::terminal_capacity_tick(&mut ctx.borrow_mut(), id),
             "nuke" => {
                 nukes::nuke_tick(&mut ctx.borrow_mut(), id);

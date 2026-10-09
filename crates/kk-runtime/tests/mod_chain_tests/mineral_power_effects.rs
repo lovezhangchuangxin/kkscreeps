@@ -40,14 +40,16 @@ fn mineral_regen_all_levels_follow_cast_phase_and_refresh_extends_window() -> an
             let (mut e, s) = fixture(binary, 1000, None)?;
             let pc = actor(&mut e, "regen", level)?;
             e.tick(7)?;
+            let cast_time = e.get_game_time();
             assert_eq!(e.run_player("p1", &cast("regen", &s))?.expr["value"], 0);
-            e.tick(8)?; // 结算 tick 8..15，首脉冲在 16
+            e.tick(8)?; // 尚未结算施放后第 9 拍的首脉冲
+            assert_eq!(e.get_game_time(), cast_time + 9);
             assert_eq!(e.get_object(&s).unwrap()["mineralAmount"], 1000);
             e.tick(1)?;
             assert_eq!(e.get_object(&s).unwrap()["mineralAmount"], 1000 + 2 * level);
             e.tick(9)?;
             assert_eq!(e.get_object(&s).unwrap()["mineralAmount"], 1000 + 2 * level);
-            e.tick(1)?; // tick 26 第二拍
+            e.tick(1)?; // 首脉冲后间隔 10 拍的第二次补量
             assert_eq!(e.get_object(&s).unwrap()["mineralAmount"], 1000 + 4 * level);
             assert_eq!(
                 e.get_object(&pc).unwrap()["store"]["ops"],
@@ -56,15 +58,14 @@ fn mineral_regen_all_levels_follow_cast_phase_and_refresh_extends_window() -> an
             );
             assert_eq!(
                 e.get_object(&pc).unwrap()["powers"]["14"]["cooldownTime"],
-                108
+                json!(cast_time + 100)
             );
             // 同 creep 冷却内重施 → ERR_TIRED（玩家面 power-creeps.js:262）。
             assert_eq!(
                 e.run_player("p1", &cast("regen", &s))?.expr["value"],
                 c::ERR_TIRED
             );
-            // 刷新（time 31 施放 → end 131）：效果表单条、窗口重置；相位按
-            // 新 endTime 对齐（131-1≡0 mod 10 → 40 起，区别于旧相位 36）。
+            // 刷新后效果表仍单条，新施放时间决定周期相位。
             e.tick(4)?;
             actor(&mut e, "refresh", level)?;
             e.run_player("p1", &cast("refresh", &s))?;
@@ -79,9 +80,9 @@ fn mineral_regen_all_levels_follow_cast_phase_and_refresh_extends_window() -> an
                 e.get_object(&s).unwrap()["effects"][0]["ticksRemaining"],
                 99
             );
-            e.tick(8)?; // 结算 32..39，旧相位 36 不再补
+            e.tick(8)?; // 刷新后的首脉冲尚未到，旧相位也不再补
             assert_eq!(e.get_object(&s).unwrap()["mineralAmount"], 1000 + 4 * level);
-            e.tick(1)?; // tick 40：新相位首拍
+            e.tick(1)?; // 刷新后的首脉冲
             assert_eq!(e.get_object(&s).unwrap()["mineralAmount"], 1000 + 6 * level);
         }
     }
@@ -90,8 +91,7 @@ fn mineral_regen_all_levels_follow_cast_phase_and_refresh_extends_window() -> an
 
 /// 资格门（官方 usePower.js REGEN_MINERAL 分支）：耗尽与有待再生时钟的
 /// 矿物都拒绝施放——玩家预检不拦（返回 OK），结算静默：无事件、无效果、
-/// 不写冷却，自然再生钟不被误清。时钟 Some(0) 按官方 falsy 视为未设置
-/// （放置于 time 0 得 Some(0)），施放照常成功且脉冲不受影响。
+/// 不写冷却，自然再生钟不被误清；Some(0) 的原始时钟语义由引擎测试验证。
 #[test]
 fn mineral_regen_rejects_depleted_and_clocked_targets_silently() -> anyhow::Result<()> {
     for binary in [false, true] {
@@ -106,7 +106,7 @@ fn mineral_regen_rejects_depleted_and_clocked_targets_silently() -> anyhow::Resu
         assert_eq!(
             e.get_object(&s).unwrap()["ticksToRegeneration"],
             50_000 - 8,
-            "首 tick 挂的自然钟保留（读取时 time 8）"
+            "首个结算 tick 挂的自然钟保留"
         );
 
         let (mut e, s) = fixture(binary, 500, Some(50))?;
@@ -120,7 +120,7 @@ fn mineral_regen_rejects_depleted_and_clocked_targets_silently() -> anyhow::Resu
         // 热身后放置发生于 time 1：Some(0) 经换算（ctx.time + 剩余）得
         // 真实一拍钟——非耗尽矿物的钟不会自行到期，施放被资格门拒绝
         //（同上块「带钟拒绝」）。0 ≡ 未设置的 falsy 边只在引擎层可达：
-        // settle_tests::minerals_and_boost 的
+        // settle_tests::mineral_power_gates 的
         // regen_mineral_gate_treats_zero_clock_as_unset 直测。
         let (mut e, s) = fixture(binary, 500, Some(0))?;
         let pc = actor(&mut e, "regen", 1)?;
@@ -173,7 +173,7 @@ fn mineral_regen_lower_level_err_full_and_forged_effects_do_not_change_native_pu
             e.get_object(&lower).unwrap()["powers"]["14"]["cooldownTime"].is_null(),
             "拒绝轮不写冷却"
         );
-        e.tick(7)?; // time 9 后结算 9..15，脉冲位 16 未到
+        e.tick(7)?; // 尚未结算下一脉冲
         let rc = e.run_player(
             "p1",
             &format!(
@@ -181,16 +181,16 @@ fn mineral_regen_lower_level_err_full_and_forged_effects_do_not_change_native_pu
             ),
         )?;
         assert_eq!(rc.expr["value"], json!([1000, null]));
-        // 该 run_player 同步结算 tick 16：脉冲按原生 level 5 生效。
+        // 该 run_player 同步结算首脉冲：按原生 level 5 生效。
         assert_eq!(e.get_object(&s).unwrap()["mineralAmount"], 1010);
         assert_eq!(e.get_object(&s).unwrap()["effects"][0]["level"], 5);
 
         // 补量无上限：44999 + 等级 5 一拍 → 45009，越过 ULTRA 密度存量。
         let (mut e, s) = fixture(binary, 44_999, None)?;
         actor(&mut e, "regen", 5)?;
-        e.run_player("p1", &cast("regen", &s))?; // 结算 tick 0 → end 100，脉冲位 9、19…
-        e.tick(8)?; // 结算 1..8
-        e.tick(1)?; // tick 9 脉冲
+        e.run_player("p1", &cast("regen", &s))?; // 施放后第 9、19…拍补量
+        e.tick(8)?; // 首脉冲前的空拍
+        e.tick(1)?; // 首脉冲
         assert_eq!(e.get_object(&s).unwrap()["mineralAmount"], 45_009);
     }
     Ok(())
@@ -215,14 +215,14 @@ fn mineral_regen_stops_when_depleted_and_natural_clock_takes_over() -> anyhow::R
                 "body":["work","carry"],"ticksToLive":1500}),
         )?;
         e.tick(7)?;
-        e.run_player("p1", &cast("regen", &s))?; // tick 7：end 107
+        e.run_player("p1", &cast("regen", &s))?; // 施放挂钟与周期相位
         e.run_player(
             "p1",
             &format!("Game.creeps.miner.harvest(Game.getObjectById('{s}'))"),
-        )?; // tick 8：1→0，同拍 mineral_tick 挂钟 50008
+        )?; // 下一拍采尽，同拍 mineral_tick 挂自然再生钟
         assert_eq!(e.get_object(&miner).unwrap()["store"]["X"], 1);
-        e.tick(7)?; // time 16
-        e.tick(1)?; // tick 16 脉冲位：存量 0 → 不补
+        e.tick(7)?; // 推进至首脉冲前
+        e.tick(1)?; // 首脉冲位：存量 0 → 不补
         assert_eq!(e.get_object(&s).unwrap()["mineralAmount"], 0);
         assert_eq!(
             e.get_object(&s).unwrap()["ticksToRegeneration"],
@@ -232,7 +232,7 @@ fn mineral_regen_stops_when_depleted_and_natural_clock_takes_over() -> anyhow::R
             e.get_object(&s).unwrap()["effects"][0]["ticksRemaining"],
             90
         );
-        e.tick(10)?; // tick 26 脉冲位：仍不补
+        e.tick(10)?; // 下一脉冲位：仍不补
         assert_eq!(e.get_object(&s).unwrap()["mineralAmount"], 0);
     }
     Ok(())
@@ -264,13 +264,13 @@ fn mineral_power_cast_and_pulses_retry_and_cold_restore_atomically() -> anyhow::
         let mut restored = EmbedEngine::new();
         restored.set_kkpv_channel(binary);
         restored.restore_checkpoint(e.checkpoint(Value::Null)?, None)?;
-        // [8,1,90,1] 推进到 time 108；再越过一个对齐位 116 确认到期后不补。
+        // [8,1,90,1] 跨过效果截止拍；再跨一个周期确认到期后不补。
         for ticks in [8, 1, 90, 1, 8, 1] {
             e.tick(ticks)?;
             restored.tick(ticks)?;
             assert_eq!(e.world_snapshot(), restored.world_snapshot());
         }
-        // tick 7 施放（end 107），level 2 每拍 +4；脉冲 16..106 共 10 拍。
+        // level 2 每脉冲 +4；100 拍效果期、10 拍周期共 10 次补量。
         assert_eq!(e.get_object(&s).unwrap()["mineralAmount"], 1040);
         assert_eq!(e.get_object(&s).unwrap()["effects"], json!([]));
         assert_eq!(e.run_player("p1", "Memory.runs")?.expr["value"], 1);

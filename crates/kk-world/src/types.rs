@@ -87,63 +87,6 @@ pub fn extension_energy_capacity(rcl: u8) -> i64 {
         .unwrap_or(0)
 }
 
-/// storage 对象 tick 的新容量：控制器等级、归属与严格有效的效果共同决定。
-/// 无控制器时调用方保留已保存容量，不调用本函数重算。
-/// 来源：engine/src/processor/intents/storages/tick.js。
-pub fn storage_capacity(
-    controller: Option<&kk_schema::room::ControllerObj>,
-    storage_owner: &str,
-    effects: Option<&Vec<crate::EffectEntry>>,
-    time: u64,
-) -> i64 {
-    let base = match controller {
-        None => c::STORAGE_CAPACITY,
-        Some(ctl)
-            if ctl.level > 0
-                && ctl.owner.as_deref() == Some(storage_owner)
-                && controller_allows("storage", i64::from(ctl.level)) =>
-        {
-            c::STORAGE_CAPACITY
-        }
-        Some(_) => 0,
-    };
-    if base == 0 {
-        return 0;
-    }
-    match crate::effects::active_power(effects, c::PWR_OPERATE_STORAGE, time) {
-        Some(effect) => base + power_effect(c::PWR_OPERATE_STORAGE, effect.level).unwrap_or(0),
-        None => base,
-    }
-}
-
-/// CONTROLLER_STRUCTURES[type][level] 的进程级查表；缺键或非法返回 0。
-fn controller_allows(structure_type: &str, level: i64) -> bool {
-    use std::sync::OnceLock;
-    static TABLE: OnceLock<serde_json::Value> = OnceLock::new();
-    let table = TABLE.get_or_init(|| {
-        serde_json::from_str::<serde_json::Value>(c::CONTROLLER_STRUCTURES).unwrap_or_default()
-    });
-    table[structure_type][level.to_string()]
-        .as_i64()
-        .is_some_and(|n| n > 0)
-}
-
-/// POWER_INFO[power].effect[level-1] 取整；缺失或越界返回 None。
-/// 官方 storages/tick.js 的效果增量是整数表，与 kk-engine 的同名私有
-/// 查表语义一致；此处独立缓存供投影/结算共用。
-fn power_effect(power: i64, level: i64) -> Option<i64> {
-    use std::sync::OnceLock;
-    static INFO: OnceLock<serde_json::Value> = OnceLock::new();
-    let info = INFO.get_or_init(|| {
-        serde_json::from_str::<serde_json::Value>(c::POWER_INFO).unwrap_or_default()
-    });
-    info[power.to_string()]["effect"]
-        .as_array()?
-        .get((level - 1).max(0) as usize)?
-        .as_f64()
-        .map(|f| f as i64)
-}
-
 /// 对 hits>0 且类型匹配的部件求和，每个部件贡献 base × 强化乘数。
 /// part_key 与 effect 指定 BOOSTS 表中的部件名和效果名，找不到乘数时使用 1。
 /// 每个部件的浮点结果转换为 i64 后再求和；不使用上游的 _oldHits 字段。

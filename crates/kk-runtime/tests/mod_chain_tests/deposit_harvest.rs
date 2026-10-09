@@ -91,14 +91,14 @@ fn deposit_harvest_cooldown_accumulation() -> anyhow::Result<()> {
                  Game.creeps.m1.store.mist,Game.creeps.m2.store.mist]"
             ),
         )?;
-        assert_eq!(r.expr["value"][0], 4, "cooldownTime 0+5，读取时 time 1");
+        assert_eq!(r.expr["value"][0], 4, "施放后下一拍，冷却剩余 4");
         assert_eq!(r.expr["value"][1], 5, "ceil(0.001×1012^1.2)");
-        assert_eq!(r.expr["value"][2], 49999, "寿命刷新 0+50000，读取时 time 1");
+        assert_eq!(r.expr["value"][2], 49999, "采集后下一拍，寿命剩余 49999");
         assert_eq!(r.expr["value"][3], "mist");
         assert_eq!(r.expr["value"][4], 6);
         assert_eq!(r.expr["value"][5], 6);
 
-        // 冷却期（cooldownTime 5 > time 2..4）：预检 ERR_TIRED、结算静默。
+        // 冷却期：预检 ERR_TIRED、结算静默。
         let rc = e.run_player("p1", &format!("Game.creeps.m1.harvest({dep}[0])"))?;
         assert_eq!(rc.expr["value"], c::ERR_TIRED);
         assert_eq!(
@@ -106,12 +106,12 @@ fn deposit_harvest_cooldown_accumulation() -> anyhow::Result<()> {
             1012,
             "冷却期不再累计"
         );
-        // 到期拍两侧钉边：T=4 cooldown=1（严格 > 仍拒），T=5 归 0 恢复。
-        e.tick(1)?; // 上轮结算 t2 后 time 3 → 4
+        // 到期拍两侧钉边：截止前一拍 cooldown=1（严格 > 仍拒），截止拍归 0 恢复。
+        e.tick(1)?; // 再推进一拍冷却
         let rc = e.run_player("p1", &format!("Game.creeps.m1.harvest({dep}[0])"))?;
-        assert_eq!(rc.expr["value"], c::ERR_TIRED, "T=4 最后一次拒绝");
+        assert_eq!(rc.expr["value"], c::ERR_TIRED, "截止前一拍最后一次拒绝");
         let rc = e.run_player("p1", &format!("Game.creeps.m1.harvest({dep}[0])"))?;
-        assert_eq!(rc.expr["value"], 0, "T=5 到期拍即恢复");
+        assert_eq!(rc.expr["value"], 0, "截止拍即恢复");
         assert_eq!(e.get_object(&dep_id).unwrap()["harvested"], 1018);
     }
     Ok(())
@@ -246,7 +246,7 @@ fn deposit_decay_and_refresh() -> anyhow::Result<()> {
         )?;
         assert_eq!(r.expr["value"], 1, "缺 decayTime 永不移除");
 
-        // 采集刷新：decayTime 10，t0 采集后寿命 50000，远超原到期。
+        // 采集刷新后的寿命为当前时间 +50000，远超原 decayTime 10。
         let mut e = fixture(binary)?;
         deposit(
             &mut e,
@@ -293,9 +293,8 @@ fn deposit_retry_and_cold_restore_atomically() -> anyhow::Result<()> {
             "p1",
             &format!("[{dep}[0].cooldown,Game.creeps.m1.store.mist]"),
         )?;
-        // 该轮重放失败轮的缓存候选（throw 代码不执行）：结算 t0，
-        // cooldownTime=0+5；读取轮运行于 time 1 → 4。
-        assert_eq!(r.expr["value"][0], 4, "cooldownTime 5−time 1");
+        // 重试发布缓存候选（throw 代码不执行），随后下一拍读取剩余冷却。
+        assert_eq!(r.expr["value"][0], 4, "原冷却 5，下一拍读取剩余 4");
         assert_eq!(r.expr["value"][1], 6);
         let mut restored = EmbedEngine::new();
         restored.set_kkpv_channel(binary);
@@ -306,6 +305,67 @@ fn deposit_retry_and_cold_restore_atomically() -> anyhow::Result<()> {
             assert_eq!(e.world_snapshot(), restored.world_snapshot());
         }
         assert_eq!(e.run_player("p1", "Memory.runs")?.expr["value"], 1);
+    }
+    Ok(())
+}
+
+/// 管理放置错误保留世界和 ID 游标，随后合法请求仍可运行。
+#[test]
+fn deposit_invalid_placement_is_atomic_and_restore_revalidates_numbers() -> anyhow::Result<()> {
+    for binary in [false, true] {
+        let mut e = fixture(binary)?;
+        let before = e.checkpoint(Value::Null)?;
+        for key in [
+            "cooldown",
+            "ticksToDecay",
+            "cooldownTime",
+            "decayTime",
+            "harvested",
+        ] {
+            let mut spec = json!({"pos":[25,25],"depositType":"mist"});
+            spec[key] = json!(u64::MAX);
+            assert!(deposit(&mut e, spec).is_err());
+            assert_eq!(e.checkpoint(Value::Null)?, before, "{key} 不修改世界或游标");
+        }
+        let id = deposit(
+            &mut e,
+            json!({"pos":[25,25],"depositType":"mist",
+            "cooldown":2,"ticksToDecay":100,"harvested":0}),
+        )?;
+        e.tick(1)?;
+        assert_eq!(e.get_object(&id).unwrap()["cooldown"], 1);
+        // 合法检查点冷恢复成功；损坏的同版本载荷在替代分片校验时拒绝。
+        let saved = e.checkpoint(Value::Null)?;
+        let mut restored = EmbedEngine::new();
+        restored.set_kkpv_channel(binary);
+        restored.restore_checkpoint(saved.clone(), None)?;
+        assert_eq!(restored.checkpoint(Value::Null)?, saved);
+        for key in ["cooldownTime", "decayTime", "harvested"] {
+            let mut bad = saved.clone();
+            let bytes: Vec<u8> = serde_json::from_value(
+                bad["engine"]["world"]["rooms"]["W1N1"]["snapshot"].clone(),
+            )?;
+            let mut snapshot = kk_schema::room::decode_snapshot(&bytes)?;
+            let object = snapshot
+                .objects
+                .iter_mut()
+                .find(|o| o.id() == kk_world::ObjId::parse(&id).unwrap().0)
+                .unwrap();
+            let kk_schema::room::RoomObject::Generic(g) = object else {
+                panic!()
+            };
+            let mut data: Value = serde_json::from_str(&g.data)?;
+            data[key] = json!(u64::MAX);
+            g.data = data.to_string();
+            bad["engine"]["world"]["rooms"]["W1N1"]["snapshot"] =
+                json!(kk_schema::room::encode_snapshot(&snapshot));
+            assert!(restored.restore_checkpoint(bad, None).is_err());
+            assert_eq!(
+                restored.checkpoint(Value::Null)?,
+                saved,
+                "{key} 恢复失败保留现行分片"
+            );
+        }
     }
     Ok(())
 }

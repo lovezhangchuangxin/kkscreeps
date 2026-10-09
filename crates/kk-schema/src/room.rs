@@ -9,9 +9,8 @@
 
 use crate::{Cursor, Schema, SchemaError};
 
-/// 当前快照版本号，写入封套；版本 0 不属于可升级版本。
-/// 字段的增删、顺序、类型或标签变化都会改变二进制格式。需保留旧字节可读性时，
-/// 必须增加版本并提供升级步骤；仅向结构体末尾追加字段也不会自动兼容旧载荷。
+/// 当前快照版本号，写入封套；开发期只接受当前格式，不迁移旧数据。
+/// 字段的增删、顺序、类型或标签变化须提升版本，避免按新布局误读旧载荷。
 pub const SCHEMA_VERSION: u16 = 2;
 /// 封套的格式标识，小端字节为 `50 53 4B 4B`，即 ASCII "PSKK"。
 pub const SNAPSHOT_MAGIC: u32 = 0x4b4b_5350;
@@ -467,31 +466,8 @@ pub fn encode_snapshot(s: &RoomSnapshot) -> Vec<u8> {
     out
 }
 
-/// 接收完整封套字节并输出下一版本的完整封套；必须同时更新头部版本号。
-type UpgradeFn = fn(Vec<u8>) -> Result<Vec<u8>, SchemaError>;
-// 第 n 项把版本 n+1 升为 n+2，数组长度保证每个旧版本都有相邻步骤。
-// v1 未保存 storage 权威容量，无法无损还原截止拍和归属变化窗口；
-// 开发期旧快照显式拒绝，避免猜测容量后改变继续运行的行为。
-const UPGRADE_CHAIN: [UpgradeFn; (SCHEMA_VERSION - 1) as usize] = [reject_v1];
-
-fn reject_v1(_: Vec<u8>) -> Result<Vec<u8>, SchemaError> {
-    Err(SchemaError::UnsupportedVersion(1))
-}
-
-/// 按版本顺序执行升级函数。版本 0 和未来版本始终拒绝，不尝试转换。
-/// 调用方保证 from 与封套头部一致；每一步负责更新载荷和封套版本号。
-fn upgrade_snapshot(from: u16, mut bytes: Vec<u8>) -> Result<Vec<u8>, SchemaError> {
-    if from == 0 || from > SCHEMA_VERSION {
-        return Err(SchemaError::UnsupportedVersion(from));
-    }
-    for step in UPGRADE_CHAIN.iter().skip((from - 1) as usize) {
-        bytes = step(bytes)?;
-    }
-    Ok(bytes)
-}
-
 /// 解码完整快照，先检查魔数和版本，再读取全部载荷。
-/// 当前版本直接解码；可支持的旧版本先转换完整封套再解码。
+/// 只接受当前版本；旧版本和未来版本均直接拒绝。
 /// 返回成功只表示二进制格式有效，不保证对象或地形可用于世界运行。
 ///
 /// # Errors
@@ -505,9 +481,7 @@ pub fn decode_snapshot(bytes: &[u8]) -> Result<RoomSnapshot, SchemaError> {
     }
     let version = u16::decode_from(&mut cur)?;
     if version != SCHEMA_VERSION {
-        // 旧版本：整封套（含头）过升级链，产出当前版本字节后重解码
-        let upgraded = upgrade_snapshot(version, bytes.to_vec())?;
-        return decode_snapshot(&upgraded);
+        return Err(SchemaError::UnsupportedVersion(version));
     }
     let snap = RoomSnapshot::decode_from(&mut cur)?;
     if cur.remaining() != 0 {

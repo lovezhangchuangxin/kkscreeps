@@ -87,6 +87,11 @@ impl RoomState {
         if self.objects.contains_key(&ObjId(id)) {
             return Err(format!("对象 id 重复: {}", ObjId(id).as_str()));
         }
+        if let RoomObject::Generic(g) = &object
+            && let Ok(data) = serde_json::from_str::<serde_json::Value>(&g.data)
+        {
+            crate::domain::deposit::validate(&data)?;
+        }
         let effects = crate::effects::extract(&mut object)?;
         object.set_id(id);
         if let Some(effects) = effects {

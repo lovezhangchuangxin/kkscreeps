@@ -5,7 +5,7 @@
 //! JSON 载荷域布局的版本。`engine_version`/`room_schema_version` 双硬门
 //! 语义不变（二进制身份），不承担载荷形状。
 //!
-//! 迁移契约仿房间快照的 `UPGRADE_CHAIN`（kk-schema room.rs）：第 n 项
+//! JSON 载荷迁移按相邻版本注册：第 n 项
 //!（0 起算）把版本 n+1 升到 n+2，`skip(raw - 1)` 起依次执行到当前版本；
 //! 版本号由 [`migrate_to_current`] 在链执行完毕后统一改写，单步不触碰。
 //! 版本 0、未来版本、缺失与非法版本值一律拒绝；任一步失败整体拒绝——

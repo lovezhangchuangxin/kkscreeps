@@ -51,7 +51,7 @@ fn cast(name: &str, power: i64, target: &str) -> String {
     format!("Game.powerCreeps.{name}.usePower({power},{target})")
 }
 
-/// FORTIFY：施放期内（t1..t4）attack/rangedAttack/dismantle 预检
+/// FORTIFY：效果有效期内attack/rangedAttack/dismantle 预检
 /// ERR_INVALID_TARGET（wall 与 rampart 两腿）、massAttack 跳过、塔攻击
 /// （无预检门的唯一免伤正路径）被拦；到期拍 t5（end_time == time）：
 /// _damage 严格 > 恢复伤害、dismantle >= 回收仍 0、massAttack >= 仍跳过；
@@ -99,7 +99,8 @@ fn fortify_blocks_structured_damage_until_strict_expiry() -> anyhow::Result<()> 
         let tower =
             "Game.rooms.W1N1.find(FIND_MY_STRUCTURES).find(s=>s.structureType===STRUCTURE_TOWER)";
 
-        // t0：双施放同拍结算（均 end 5）。
+        // 双施放同拍结算，持续 5 拍。
+        let end_time = e.get_game_time() + 5;
         e.run_player(
             "p1",
             &format!(
@@ -114,7 +115,7 @@ fn fortify_blocks_structured_damage_until_strict_expiry() -> anyhow::Result<()> 
         );
         assert_eq!(e.get_object(&pc).unwrap()["store"]["ops"], 45, "ops 5");
 
-        // t1：预检三拒（wall 两动作 + rampart 一动作）+ massAttack 跳过。
+        // 效果期内：预检三拒（wall 两动作 + rampart 一动作）+ massAttack 跳过。
         let rc = e.run_player(
             "p2",
             &format!(
@@ -144,7 +145,7 @@ fn fortify_blocks_structured_damage_until_strict_expiry() -> anyhow::Result<()> 
             "期内 massAttack 跳过"
         );
 
-        // t2：塔攻击自有 FORTIFY 墙——无预检门，唯一免伤正路径。
+        // 效果期内：塔攻击自有 FORTIFY 墙——无预检门，唯一免伤正路径。
         let rc = e.run_player("p1", &format!("{tower}.attack({tw})"))?;
         assert_eq!(rc.expr["value"], 0);
         assert_eq!(
@@ -153,9 +154,10 @@ fn fortify_blocks_structured_damage_until_strict_expiry() -> anyhow::Result<()> 
             "塔伤害被免伤门拦截"
         );
 
-        // t5（end_time == time）：attack 伤害恢复（> 为假）、dismantle 伤害
+        // 等号拍（end_time == time）：attack 伤害恢复（> 为假）、dismantle 伤害
         // 照常回收仍 0（>= 为真）、massAttack 仍跳过（>= 为真）。
-        e.tick(2)?; // time 3 → 5（结算 t3、t4）
+        e.tick(end_time - e.get_game_time())?;
+        assert_eq!(e.get_game_time(), end_time);
         let rc = e.run_player(
             "p2",
             &format!(
@@ -174,7 +176,7 @@ fn fortify_blocks_structured_damage_until_strict_expiry() -> anyhow::Result<()> 
         let wrk = e.run_player("p2", "(Game.creeps.wrk.store||{})[RESOURCE_ENERGY]||0")?;
         assert_eq!(wrk.expr["value"], 0, "到期拍回收仍 0（>=）");
 
-        // t6（过期）：回收恢复 1（>= 与 < 分叉），massAttack 落伤 60。
+        // 过期后：回收恢复 1（>= 与 < 分叉），massAttack 落伤 60。
         let rc = e.run_player(
             "p2",
             &format!(
@@ -232,6 +234,7 @@ fn shield_creates_and_expires_temporary_rampart() -> anyhow::Result<()> {
             &json!({"name":"wrk2","owner":"p2","pos":[25,25],
                 "body":["work","work","work","work","work"],"ticksToLive":1500}),
         )?;
+        let end_time = e.get_game_time() + 50;
         e.run_player("p1", &cast("op", c::PWR_SHIELD, "undefined"))?;
         // 事件 1-tick 生命期：施放后立即核对，再读工地与 rampart。
         assert_eq!(harness::events(&e, c::EVENT_POWER).len(), 1);
@@ -277,9 +280,8 @@ fn shield_creates_and_expires_temporary_rampart() -> anyhow::Result<()> {
         let wrk = e.run_player("p2", "(Game.creeps.wrk2.store||{})[RESOURCE_ENERGY]||0")?;
         assert_eq!(wrk.expr["value"], 0, "SHIELD dismantle 无回收");
 
-        // 到期拍用绝对时间钉住：施放结算于 t0 → end 50；删除结算于 t50，
-        // 首个读到 0 的世界时间为 51（此前每拍都存活——衰减门 <= 在 t49
-        // 为假、跳过分支承担该拍）。
+        // endTime 当拍对象 tick 删除，下一世界拍首次读到消失。
+        // 逐拍检查此前始终存活，防止提前衰减或删除。
         let start = e.get_game_time();
         let mut gone_at: Option<u64> = None;
         for i in 0..60u64 {
@@ -291,8 +293,8 @@ fn shield_creates_and_expires_temporary_rampart() -> anyhow::Result<()> {
         }
         assert_eq!(
             gone_at,
-            Some(52),
-            "到期拍 t51 删除（首个 0 读取时 time 52）"
+            Some(end_time + 1),
+            "endTime 结算删除，下一拍首次读到消失"
         );
 
         // 放置门一：同格已有 rampart → 静默拒绝（无冷却、无事件）。

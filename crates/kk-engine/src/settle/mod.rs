@@ -26,6 +26,7 @@ pub mod objects;
 pub mod resources;
 pub mod room;
 pub mod spawn;
+mod storage;
 pub mod structures;
 
 mod pipeline;

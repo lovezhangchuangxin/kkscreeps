@@ -96,16 +96,16 @@ fn operate_controller_raises_level8_cap_with_strict_boundary() -> anyhow::Result
             assert_eq!(g.expr["value"][3], json!(0), "8 级不写 progress");
         }
 
-        // 截止拍：施放于 tick 0（end 1000），tick 1000 升级仍享抬升限额
-        // （官方 >= 边界）；tick 1001 过期回基础限额——ua 剩 15 能量恰好
-        // 被能量钳死，须以第二满能量 ub 钉住回落（若效果未过期，限额 25
-        // 下 ub 会再花 10）。
+        // 等号拍仍享 >= 的抬升限额；过期后 ua 的 15 能量用尽基础限额，
+        // 满能量 ub 必须保持不动，才能区分效果是否仍在生效。
         let mut e = fixture(binary, 8)?;
         actor(&mut e, "op", 1)?;
         upgrader(&mut e, "ua", 40)?;
         upgrader(&mut e, "ub", 40)?;
-        e.run_player("p1", &cast("op", CTL))?; // tick 0，end 1000
-        e.tick(999)?; // time 1000
+        let end_time = e.get_game_time() + 1000;
+        e.run_player("p1", &cast("op", CTL))?;
+        e.tick(end_time - e.get_game_time())?;
+        assert_eq!(e.get_game_time(), end_time);
         e.run_player("p1", &format!("Game.creeps.ua.upgradeController({CTL})"))?;
         let g = e.run_player("p1", "[Game.gcl.progress,Game.creeps.ua.store.energy]")?;
         assert_eq!(g.expr["value"][0], json!(25), "截止拍限额仍 25");
@@ -115,7 +115,7 @@ fn operate_controller_raises_level8_cap_with_strict_boundary() -> anyhow::Result
             &format!(
                 "[Game.creeps.ua.upgradeController({CTL}),Game.creeps.ub.upgradeController({CTL})]"
             ),
-        )?; // tick 1001：效果过期
+        )?; // 已越过 endTime，效果过期
         let g = e.run_player(
             "p1",
             "[Game.gcl.progress,Game.creeps.ua.store.energy,Game.creeps.ub.store.energy]",
@@ -222,7 +222,11 @@ fn operate_controller_cast_gates_and_below_level8_inert() -> anyhow::Result<()> 
             "p1",
             &format!("{CTL}.effects[0] && [{CTL}.effects[0].power,{CTL}.effects[0].level,{CTL}.effects[0].ticksRemaining]"),
         )?;
-        assert_eq!(eff.expr["value"], json!([18, 2, 999]), "读取时 time 1");
+        assert_eq!(
+            eff.expr["value"],
+            json!([18, 2, 999]),
+            "施放后下一拍读取，剩余 999"
+        );
 
         // 射程门：远离控制器的 pc 预检 ERR_NOT_IN_RANGE。
         e.place_object(

@@ -27,11 +27,12 @@ impl World {
             for (id, object) in &room.objects {
                 // 二进制恢复或直接替房不得夹带第二份 effects 权威状态。
                 if let RoomObject::Generic(g) = object
-                    && serde_json::from_str::<serde_json::Value>(&g.data)
-                        .ok()
-                        .is_some_and(|data| data.get("effects").is_some())
+                    && let Ok(data) = serde_json::from_str::<serde_json::Value>(&g.data)
                 {
-                    return Err("Generic effects 须归一到房间效果表".into());
+                    if data.get("effects").is_some() {
+                        return Err("Generic effects 须归一到房间效果表".into());
+                    }
+                    crate::domain::deposit::validate(&data)?;
                 }
                 if let RoomObject::Storage(storage) = object
                     && !(0..=9_007_199_254_740_991).contains(&storage.store_capacity)
