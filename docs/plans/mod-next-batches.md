@@ -6,11 +6,11 @@
 
 - 2026-10-09 review 修复（已提交 `2b68002`）：invaderCore 放置的孵化守军初始 `ageTime=0`，出生后再起算普通寿命；stronghold 部署绑定 `decayTime` 的路径保持原值。新增超过 1500 tick 孵化回归；定向 `pnpm run check -- kk-runtime --test mod_chain_tests --filter invader_core_long_incubation` 与无参数 `pnpm run check` 均通过（不含 doctest；本次未改 doctest）。其余 G02/G03 与 NPC 后续消费者不受此修复影响，下一步按当前执行队列继续。
 
-- 更新日期：2026-10-10；控制器 INVULNERABILITY 消费者已提交 `d48d6ea`；Invader core 生命周期首片已提交 `2b68002`；Stronghold 布防首片已提交 `4f7dd2bd`；raid 调度首片已提交 `e316a07`；powerBank 生成与消费者首片已提交 `e5249ff2`；边缘环绕+核弹簇已提交 `9ff9d2e`；弃用告警已提交 `c39777a`；tick({random}) 注入已提交 `038c1aa`；InterShardMemory 本地段与 CPU shardLimits 已提交 `5daaa88`；动作记录导出与 captureActionLog（settle 旁路通道/检查点 145 键/套件最后 21 个跳过例全簇转绿）随本提交交付。最近完整门禁 Rust 全绿；最近 release 棘轮 2905 passed / 9 failed / 0 skipped（转绿 21、跳过清零；**99% 检查点达成并超出 20 例**）。TooAngel/Overmind 六阶段为既有入库证据；本批未重跑 bot 长测。
+- 更新日期：2026-10-10；控制器 INVULNERABILITY 消费者已提交 `d48d6ea`；Invader core 生命周期首片已提交 `2b68002`；Stronghold 布防首片已提交 `4f7dd2bd`；raid 调度首片已提交 `e316a07`；powerBank 生成与消费者首片已提交 `e5249ff2`；边缘环绕+核弹簇已提交 `9ff9d2e`；弃用告警已提交 `c39777a`；tick({random}) 注入已提交 `038c1aa`；InterShardMemory 本地段与 CPU shardLimits 已提交 `5daaa88`；动作记录导出与 captureActionLog 已提交 `4cef2ba`（套件最后 21 个跳过例全簇转绿、跳过清零）；TooAngel 防御战斗与冷恢复（敌方脚本坦克 + 真实防御链，520 tick 六阶段）随本提交交付。最近完整门禁 Rust 全绿；最近 release 棘轮 2905 passed / 9 failed / 0 skipped（**99% 检查点达成并超出 20 例**）。TooAngel/Overmind 经济六阶段与防御战斗为既有入库证据；本批未重跑经济长测。
 - 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座、deposit 采集链、observer 限时视野已交付。**M2H.b 19/19 powers 全部接通**。
 - 当前接手：G02.d3 结构/rampart 计划级通行及默认玩家/NPC 寻路已提交 `fd27fbd`；G03 障碍追加后的同源链预演已提交 `3f3d9a7`；障碍摘要的安全模式主人已提交 `41de432`；控制器零升级量修复已提交 `10eb812`；G27.a 独立异步后台宿主已提交 `b25e280`；控制器 INVULNERABILITY 三处消费门已提交 `d48d6ea`；invaderCore 生命周期首片已提交 `2b68002`；stronghold 布防首片已提交 `4f7dd2bd`；raid 调度首片已提交 `e316a07`；powerBank 生成与消费者首片已提交 `e5249ff2`；边缘环绕+核弹簇（portal 传送/衰变/核爆免伤、roomStatus 种子域与 getRoomStatus/launchNuke 门、worldSize 活算与 map/market/terminal 三处环绕计费、检查点 v9）随本提交交付，生产者侧仍缺地图生成、战术 AI（maintainPopulation/refillTowers/focusClosest）与 create-creep 等意图。逐房通行粒度、摘要增强、完整仲裁替换仍未完成。
 - 本次完成：JSON/KKPV 各 200 tick 持续战斗、100+100 tick 跨进程冷恢复和完整检查点回放；实际位置/hits 证明移动、受伤与恢复，双通道及直跑/续跑世界与 Memory 等值。TooAngel v6 双通道 2000 tick 连跑及 1000+1000 tick 冷恢复六阶段复验通过。
-- 剩余：真实 bot 战斗/多房/长期存活验收；地图生成与 G21 Mod 世界事件；stronghold 战术 AI/create-creep 意图；walkTo/Keeper lastMove 按实际 stronghold 消费者接线；G02.d3 逐房/摘要后续、G03 完整仲裁替换与 G27.a。NPC 场景不标 M2B 或 G21 完成。
+- 剩余：真实 bot 多房进攻（attackunreserve/Overmind 指令旗标）、bot 对战与长期存活；地图生成与 G21 Mod 世界事件；stronghold 战术 AI/create-creep 意图；walkTo/Keeper lastMove 按实际 stronghold 消费者接线；G02.d3 逐房/摘要后续、G03 完整仲裁替换与 G27.a。NPC 场景不标 M2B 或 G21 完成。
 - 兼容率 **2905/2914≈99.7%（99% 检查点 2885 已达成并超出 20 例；跳过清零）**，9 失败=8 既有官方对齐豁免+1 SHAPE-GAME-002 形状互斥豁免。剩余提升面在豁免例（须官方语义仲裁或上游形状通道）。下一队列：真实 bot 多房战斗验收（顺位 2）、G02.d3 逐房、G03 完整仲裁替换、G27.b outbox、玩家面 actionLog 投影/prelude 与渲染 feed 消费。
 - Mod 扩展：移动策略、对象/建筑/资源、库存/耐久/受击、作者 CLI/类型、输入回放和检查点已有基础；未完成范围以任务表为准。默认玩法已有消费者不代表对应 Mod 替换能力已经开放。
 - 网络服务、持久 storage 后端与真实游戏客户端仍未实现；renderer R0–R6 已交付，R7 最终矩阵/长测未收口。现有 bot-check 不能代替持续推进世界中的可玩验收。
@@ -21,7 +21,7 @@
 | 顺位 | 任务 | 首片与完成条件 |
 |---|---|---|
 | 1 | 零散红逐例归因与修复 | 8 条既有官方对齐豁免保留证据；Invader 自动远程攻击已交付；零步相邻近战已交付；普通 Invader 路径建筑改向/追击/治疗已贯通；NPC 持续战斗已验（Source Keeper 同房巡守/战斗、stronghold 布防、raid 生成已交付），剩余地图生成/powerBank 生成另拆；每例有官方源或套件仲裁证据 |
-| 2 | 真实 bot 验收与 G02.d3 后续 | TooAngel 单房经济/死亡后补员/冷恢复已验；Overmind 单房经济/寿命/冷恢复已验；剩余真实 bot 战斗、多房，以及结构/rampart 通行与寻路贯通 |
+| 2 | 真实 bot 验收与 G02.d3 后续 | TooAngel 单房经济/死亡后补员/冷恢复已验；Overmind 单房经济/寿命/冷恢复已验；TooAngel 防御战斗（塔/防御者/安全模式）已验；剩余多房进攻（attackunreserve/Overmind 旗标）、bot 对战与长期存活 |
 | 独立候选 | G02.d3 后续、G27.a | 前者继续逐房粒度与摘要增强（结构/rampart 已贯通）；后者提供异步后台生命周期，随后才接 storage/outbox/网络 |
 
 维护优化已完成的轮次不作为新功能前置。任务首次实施前按业务闭环拆片；G30.a 覆盖清单与 G30.d 同功能参考随领域滚动，不等最终收口才补证据。
@@ -331,7 +331,17 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 
 - 最终无参数完整门禁通过：Rust 1512 passed / 0 failed，Clippy、JS workspace/维护工具、307 个 Markdown / 1971 个本地链接与 936 个源码/测试规模通过。release CLI 重建通过，公共 services 包由 release 实际运行，start/request/stop 与 world_unchanged=true 验收通过；JS 格式检查通过，无 doctest 改动。固定 bot 准备、适配器构建和显式 release 兼容棘轮通过：2802 passed / 8 failed / 104 skipped、floor 2802、0 转红/0 转绿（8 例既有豁免）。本片未运行 bot 长测，不标网络/耐久任务完成；实现/测试/公共示例/契约及报告随本批提交。
 
-## 2026-10-10 动作记录导出与 captureActionLog（已完成，已提交 `2b0225e`，99% 检查点达成）
+## 2026-10-10 TooAngel 防御战斗与冷恢复（已完成，随本提交交付）
+
+- 基线 `4cef2ba`（动作记录导出批），起始工作区干净。真实 bot 战斗首片：锁定 TooAngel 在 RCL4 自家房对抗敌方脚本坦克（敌方为脚本玩家而非引擎 NPC，共同点仅是"非真实第三方 bot"），验证 bot 真实防御链——findEnemies 判敌（Memory 预置 reputation=-100，TooAngel diplomacy 未知玩家默认友好、checkPlayers `reputation || 0` 保留负值，终态 -620）、塔 attack 自 2 拍（90 发耗尽 900 能量后断能）、defendranged 250 相位门 385 拍开孵 394 拍出生、安全模式 398 拍激活 399 拍可见、经济共存（采集 2080）。
+- 夹具 `compat/fixtures/sim-tooangel-battle/`（场景/敌方脚本/观察器）+ wrapper `compat/scripts/bot-battle.mjs`（默认 520/260 即验证窗口；观察器经 prepareModules 以 kk_battle 模块身份部署，不混入经济夹具模块；JSON/KKPV × 连跑/前缀+跨进程冷恢复六阶段，前缀段只验通用与 harness 检查（战斗域跳过），每段 --verify-replay 逐位重放比较完整检查点，二进制/观察器/敌方脚本哈希逐段断言）。入库证据 `compat/reports/gameplay-tooangel-battle/`（六报告+summary 含溯源补注：attackEvents 181=塔 90+defendranged 91、塔伤 13500、敌方承伤 14410/自疗 13584、combatBirths 2）。
+- 迭代中两个实质发现：(1) **safe-mode 敌方 creep 穿行堆叠是官方语义**——kk `check_obstacle_at_xy` 的房主安全模式分支与官方 movement.js `checkObstacleAtXY` 真值表逐条同形（获准移动豁免先于安全模式分支，两侧一致），非 kk bug；(2) **TooAngel defendmelee 潜在自伤崩溃**——与敌同格后 `PathFinder.search(自,自)` 返回空 path（官方 pf.cc:506 同形），bot role_defendmelee.js:34 的 `search.path[0].isBorder` 崩溃，官方服同样触发；defendmelee 498 拍入队 516 拍出生，约 556 拍抵达坦克同格。验收窗口 520 拍取防御三腿与堆叠点之间，不触发该崩溃。
+- 三路复审（夹具断言/官方语义时序/验收纪律）发现全部当批清偿：语义证伪两处——安全模式 399 的真实触发路径是 handleReviveRoom 的 400 拍相位门（控制器 (1,1)→T≡398 mod 400，isStruggling+findHostileAttackingCreeps 把含 heal 部件坦克算作敌），checkForSafeMode 的 attackTimer>100 路径是死代码（enemies>0 数组比较恒 false，登记为 bot 潜在缺陷家族）；defendmelee"498 出生"口径错（498 入队开孵、516 出生）。纪律——脚本默认窗口曾与 README 不符（1200/600，裸命令会跑进崩溃窗）改为 520/260、README 节位曾错拆 Invader 节、"通用 12 项"计数失准、summary 补先例溯源字段（evidence_note/implementation_commit/validated_harness_sha256）。夹具——EVENT_ATTACK 伤害字段 damage 归因、safeMode 玩家面是剩余拍数（观察器与终态断言从绝对拍比较改为剩余拍语义）、塔攻击按攻击者 objectId 单独归因（原"塔攻击"检查实为全房间事件计数，现 towerAttackEvents≥50 独立断言）、敌方坦克注释机理勘误（塔断能时序+安全模式禁疗而非免伤保护）。
+- 新发现（CPU 墙钟语义）：kk-vm cpu_clock 用 Instant/thread_cpu_time 计量玩家 CPU（官方同形）——验收重跑时与评审代理并发的 json-continuous 段出现防御时序平移（防御者 394→420、attackEvents 181→155、采集 2080→1632，其余三段不变），空闲机器重跑四段全窗口逐位恢复一致；跨段指标等值是空闲机器观察结果而非引擎不变量，引擎结算确定性由每段 verify_replay 保证，指标阈值均为留裕度下限（重负载下仍全过）。
+- 登记后续：多房进攻切片（TooAngel attackunreserve 需 RCL5+storage+侦察+1600 拍间隔，或 Overmind 预置指令旗标驱动出兵——两者都不改 bot 源码）、bot 对战、长期存活；TooAngel `global.data.rooms` 侦察数据是 heap 态（冷恢复丢失会重置扩张/攻击计时——跨恢复断言只看最终态与事件累计）；经验：EVENT_ATTACK 伤害字段是 damage 非 amount（观察器已按此实现）。
+- 验证：debug 与 release 二进制六阶段全绿；终版 release 证据（三重身份断言，26/16 项检查零失败，四段全窗口指标逐位一致）；无参数 `pnpm run check` 通过（JS 格式/Clippy/Rust 测试/文档链接/源码规模）；本片不关闭 M2B 战斗验收（多房/对战/长存仍开）。
+
+## 2026-10-10 动作记录导出与 captureActionLog（已完成，已提交 `4cef2ba`，99% 检查点达成）
 
 - 基线 `5daaa88`（ISM+shardLimits 批），起始工作区干净。套件最后 21 个跳过例（27.10-actionlog，actionLogCapture 能力门控）整簇交付；语义源=官方 4.3.0 processor 各 intent 写入点+vanilla 适配器读 history[gameTime-1] 报 tick=gameTime 的口径。
 - 交付：`settle::action_log` 旁路通道——`Working.action_log` 每拍新建（官方每拍重置模板同形）/同键后写覆盖（DEDUP）→ 结算尾按**最终对象集**装配（同拍死亡对象丢弃，官方 saveRoomHistory 同形）→ `SettledRoom` → `OwnedTickTxn` → `Engine.last_action_log`（与 last_events 同为检查点载荷，钉死键 137→145，冷恢复保留上一拍）；embed RPC `captureActionLog(room)` 返回 `{room, tick, objects}`（tick=当前世界时间、产物属上一拍；非公开 say 裁剪——官方历史快照删除非公开 say）；适配器透传与 actionLogCapture 翻转。写入点覆盖：creep 13 键模板全量（rangedHeal 独立键、attackController/dismantle 复用 attack、rangedMassAttack 空对象、rangedAttack 与塔远程分键）、目标侧 attacked/healed（坐标=来源；含持有模板的五类结构目标 tower/link/lab/invaderCore/factory）、结构源侧 tower 3 键/link/lab 4 坐标/invaderCore reserve、pc 侧 power `{id,x,y}`（新枚举变体）/enableRoom 复用 attack/renew healed 自身坐标官方怪癖/say 公开、spawn renew 与 lab boost 的 healed、Mod 声明反击配对。

@@ -1,0 +1,4644 @@
+{
+  "version": 1,
+  "success": true,
+  "scope": "TooAngel 单房防御战斗/冷恢复（敌方脚本坦克 + 真实防御链）；不含多房进攻、bot 对战或完整 M2B",
+  "bot": "tooangel",
+  "ticks": 520,
+  "split": 260,
+  "runs": [
+    {
+      "name": "json-continuous",
+      "channel": "json",
+      "exit_code": 0,
+      "report": "json-continuous.json",
+      "executable_sha256": "b20a6028492457719bc009085df67eb8365305eeab88061c6234e1cfaca7c148",
+      "success": true,
+      "checks": [
+        {
+          "name": "运行成功",
+          "passed": true,
+          "actual": "passed"
+        },
+        {
+          "name": "提交完整轮数",
+          "passed": true,
+          "actual": 520
+        },
+        {
+          "name": "bot 玩家无执行失败或跳帧",
+          "passed": true,
+          "actual": {
+            "successful_ticks": 520,
+            "error_ticks": 0,
+            "not_evaluated_ticks": 0,
+            "errors_head": [],
+            "console_head": [
+              {
+                "tick": 1,
+                "text": "1 Script reload - Load: 6 tickLimit: 500 limit: 20 Bucket: 10000"
+              },
+              {
+                "tick": 2,
+                "text": "2 W1N1                        Setting misplacedSpawn"
+              },
+              {
+                "tick": 2,
+                "text": "2 W1N1                        Setup complete - storing data"
+              },
+              {
+                "tick": 2,
+                "text": "2 W1N1                        Setup completed - storing data"
+              },
+              {
+                "tick": 55,
+                "text": "55 W1N1                        Under attack: hostiles: 1 attackTimer: 54"
+              },
+              {
+                "tick": 60,
+                "text": "60 W1N1                        Under attack: hostiles: 1 attackTimer: 59"
+              },
+              {
+                "tick": 65,
+                "text": "65 W1N1                        Under attack: hostiles: 1 attackTimer: 64"
+              },
+              {
+                "tick": 70,
+                "text": "70 W1N1                        Under attack: hostiles: 1 attackTimer: 69"
+              },
+              {
+                "tick": 75,
+                "text": "75 W1N1                        Under attack: hostiles: 1 attackTimer: 74"
+              },
+              {
+                "tick": 80,
+                "text": "80 W1N1                        Under attack: hostiles: 1 attackTimer: 79"
+              },
+              {
+                "tick": 85,
+                "text": "85 W1N1                        Under attack: hostiles: 1 attackTimer: 84"
+              },
+              {
+                "tick": 90,
+                "text": "90 W1N1                        Under attack: hostiles: 1 attackTimer: 89"
+              },
+              {
+                "tick": 95,
+                "text": "95 W1N1                        Under attack: hostiles: 1 attackTimer: 94"
+              },
+              {
+                "tick": 100,
+                "text": "100 W1N1                        Under attack: hostiles: 1 attackTimer: 99"
+              },
+              {
+                "tick": 105,
+                "text": "105 W1N1                        Under attack: hostiles: 1 attackTimer: 104"
+              },
+              {
+                "tick": 110,
+                "text": "110 W1N1                        Under attack: hostiles: 1 attackTimer: 109"
+              },
+              {
+                "tick": 115,
+                "text": "115 W1N1                        Under attack: hostiles: 1 attackTimer: 114"
+              },
+              {
+                "tick": 120,
+                "text": "120 W1N1                        Under attack: hostiles: 1 attackTimer: 119"
+              },
+              {
+                "tick": 125,
+                "text": "125 W1N1                        Under attack: hostiles: 1 attackTimer: 124"
+              },
+              {
+                "tick": 130,
+                "text": "130 W1N1                        Under attack: hostiles: 1 attackTimer: 129"
+              }
+            ]
+          }
+        },
+        {
+          "name": "敌方玩家无执行失败或跳帧",
+          "passed": true,
+          "actual": {
+            "successful_ticks": 520,
+            "error_ticks": 0,
+            "not_evaluated_ticks": 0,
+            "errors_head": [],
+            "console_head": []
+          }
+        },
+        {
+          "name": "世界时间接续",
+          "passed": true,
+          "actual": [
+            1,
+            521
+          ]
+        },
+        {
+          "name": "公开观察 Memory 跨恢复接续",
+          "passed": true,
+          "actual": 520
+        },
+        {
+          "name": "上一拍事件观察窗口完整",
+          "passed": true,
+          "actual": 519
+        },
+        {
+          "name": "bot 未记录捕获异常",
+          "passed": true,
+          "actual": []
+        },
+        {
+          "name": "输入日志完整",
+          "passed": true,
+          "actual": {
+            "path": "/private/tmp/tooangel-battle-r3/json-continuous.jsonl",
+            "segments": 520,
+            "read_back_segments": 520,
+            "first_tick": 1,
+            "last_tick": 520,
+            "validation": "ok"
+          }
+        },
+        {
+          "name": "整份检查点输入回放相等",
+          "passed": true,
+          "actual": {
+            "status": "passed",
+            "segments": 520,
+            "first_tick": 1,
+            "last_tick": 520,
+            "note": "整份检查点逐位相等（剥离 last_console/metadata；CPU 按记录桶比较）"
+          }
+        },
+        {
+          "name": "场景断言通过",
+          "passed": true,
+          "actual": [
+            {
+              "pointer": "/objects/spawn",
+              "op": "exists",
+              "expected": null,
+              "before": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 300
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "actual": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 80
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "delta": null,
+              "passed": true
+            },
+            {
+              "pointer": "/objects/raider",
+              "op": "exists",
+              "expected": null,
+              "before": {
+                "kind": "creep",
+                "id": "kk0000000000000007",
+                "name": "raider",
+                "pos": {
+                  "x": 5,
+                  "y": 45,
+                  "roomName": "W1N1"
+                },
+                "hits": 4000,
+                "hitsMax": 4000,
+                "fatigue": 0,
+                "body": [
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  }
+                ],
+                "owner": "enemy",
+                "ticksToLive": 1500,
+                "spawning": false,
+                "store": {},
+                "storeCapacity": null
+              },
+              "actual": {
+                "kind": "creep",
+                "id": "kk0000000000000007",
+                "name": "raider",
+                "pos": {
+                  "x": 5,
+                  "y": 45,
+                  "roomName": "W1N1"
+                },
+                "hits": 3080,
+                "hitsMax": 4000,
+                "fatigue": 0,
+                "body": [
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 80
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  }
+                ],
+                "owner": "enemy",
+                "ticksToLive": 980,
+                "spawning": false,
+                "store": {},
+                "storeCapacity": null
+              },
+              "delta": null,
+              "passed": true
+            },
+            {
+              "pointer": "/rooms/W1N1/controller/owner",
+              "op": "eq",
+              "expected": "bot",
+              "before": "bot",
+              "actual": "bot",
+              "delta": null,
+              "passed": true
+            },
+            {
+              "pointer": "/players/bot/memory/__kkAcceptance/loops",
+              "op": "gte",
+              "expected": 100,
+              "before": null,
+              "actual": 520,
+              "delta": null,
+              "passed": true
+            }
+          ]
+        },
+        {
+          "name": "初始安全模式额度为 1",
+          "passed": true,
+          "actual": 1
+        },
+        {
+          "name": "对敌攻击事件实际发生",
+          "passed": true,
+          "actual": 181
+        },
+        {
+          "name": "塔对敌 creep 实际攻击",
+          "passed": true,
+          "actual": 90
+        },
+        {
+          "name": "敌方 creep 实际承伤",
+          "passed": true,
+          "actual": 14410
+        },
+        {
+          "name": "敌方 creep 实际自疗",
+          "passed": true,
+          "actual": 13584
+        },
+        {
+          "name": "防御者实际出生",
+          "passed": true,
+          "actual": {
+            "combatBirths": 2,
+            "firstTick": 394
+          }
+        },
+        {
+          "name": "安全模式实际激活",
+          "passed": true,
+          "actual": 399
+        },
+        {
+          "name": "终态安全模式生效且所有权保持",
+          "passed": true,
+          "actual": {
+            "kind": "structure",
+            "structureType": "controller",
+            "id": "kk0000000000000001",
+            "pos": {
+              "x": 1,
+              "y": 1,
+              "roomName": "W1N1"
+            },
+            "level": 4,
+            "progress": 0,
+            "progressTotal": 405000,
+            "ticksToDowngrade": 39480,
+            "safeMode": 19877,
+            "safeModeAvailable": 0,
+            "safeModeCooldown": 49877,
+            "reservation": null,
+            "sign": null,
+            "upgradeBlocked": null,
+            "isPowerEnabled": false,
+            "owner": "bot"
+          }
+        },
+        {
+          "name": "战斗期间经济未停摆",
+          "passed": true,
+          "actual": 2080
+        },
+        {
+          "name": "终态 spawn 存活",
+          "passed": true,
+          "actual": 1
+        },
+        {
+          "name": "实际投影通道",
+          "passed": true,
+          "actual": "json"
+        },
+        {
+          "name": "CLI 成功退出",
+          "passed": true,
+          "actual": 0
+        },
+        {
+          "name": "CLI 二进制身份一致",
+          "passed": true,
+          "actual": "b20a6028492457719bc009085df67eb8365305eeab88061c6234e1cfaca7c148"
+        },
+        {
+          "name": "观察器模块身份一致",
+          "passed": true,
+          "actual": "24a79639949f489cd4421850a90a5d3796eb4edfdd076d20e358127f6c17cc80"
+        },
+        {
+          "name": "敌方脚本身份一致",
+          "passed": true,
+          "actual": "bf8a4ae48d9a18145b3dc485c2d50b28c0c33ba4f11afea388583122e8eeea76"
+        }
+      ],
+      "metrics": {
+        "loops": 520,
+        "births": 6,
+        "deaths": 0,
+        "harvested": 2080,
+        "built": 0,
+        "upgraded": 0,
+        "seen": {
+          "kk0000000000000009": true,
+          "kk000000000000000a": true,
+          "kk000000000000000b": true,
+          "kk000000000000000d": true,
+          "kk000000000000000f": true,
+          "kk0000000000000010": true
+        },
+        "combatSeen": {
+          "kk000000000000000f": true,
+          "kk0000000000000010": true
+        },
+        "attackEvents": 181,
+        "towerAttackEvents": 90,
+        "towerDamage": 13500,
+        "raiderDamage": 14410,
+        "raiderHealed": 13584,
+        "combatBirths": 2,
+        "towerFirstTick": 2,
+        "defenderFirstTick": 394,
+        "safeModeTick": 399,
+        "safeModeAvailableTick0": 1,
+        "caughtErrors": 0,
+        "errorSamples": [],
+        "eventsThroughTick": 519
+      }
+    },
+    {
+      "name": "json-prefix",
+      "channel": "json",
+      "exit_code": 0,
+      "report": "json-prefix.json",
+      "executable_sha256": "b20a6028492457719bc009085df67eb8365305eeab88061c6234e1cfaca7c148",
+      "success": true,
+      "checks": [
+        {
+          "name": "运行成功",
+          "passed": true,
+          "actual": "passed"
+        },
+        {
+          "name": "提交完整轮数",
+          "passed": true,
+          "actual": 260
+        },
+        {
+          "name": "bot 玩家无执行失败或跳帧",
+          "passed": true,
+          "actual": {
+            "successful_ticks": 260,
+            "error_ticks": 0,
+            "not_evaluated_ticks": 0,
+            "errors_head": [],
+            "console_head": [
+              {
+                "tick": 1,
+                "text": "1 Script reload - Load: 8 tickLimit: 500 limit: 20 Bucket: 10000"
+              },
+              {
+                "tick": 2,
+                "text": "2 W1N1                        Setting misplacedSpawn"
+              },
+              {
+                "tick": 2,
+                "text": "2 W1N1                        Setup complete - storing data"
+              },
+              {
+                "tick": 2,
+                "text": "2 W1N1                        Setup completed - storing data"
+              },
+              {
+                "tick": 55,
+                "text": "55 W1N1                        Under attack: hostiles: 1 attackTimer: 54"
+              },
+              {
+                "tick": 60,
+                "text": "60 W1N1                        Under attack: hostiles: 1 attackTimer: 59"
+              },
+              {
+                "tick": 65,
+                "text": "65 W1N1                        Under attack: hostiles: 1 attackTimer: 64"
+              },
+              {
+                "tick": 70,
+                "text": "70 W1N1                        Under attack: hostiles: 1 attackTimer: 69"
+              },
+              {
+                "tick": 75,
+                "text": "75 W1N1                        Under attack: hostiles: 1 attackTimer: 74"
+              },
+              {
+                "tick": 80,
+                "text": "80 W1N1                        Under attack: hostiles: 1 attackTimer: 79"
+              },
+              {
+                "tick": 85,
+                "text": "85 W1N1                        Under attack: hostiles: 1 attackTimer: 84"
+              },
+              {
+                "tick": 90,
+                "text": "90 W1N1                        Under attack: hostiles: 1 attackTimer: 89"
+              },
+              {
+                "tick": 95,
+                "text": "95 W1N1                        Under attack: hostiles: 1 attackTimer: 94"
+              },
+              {
+                "tick": 100,
+                "text": "100 W1N1                        Under attack: hostiles: 1 attackTimer: 99"
+              },
+              {
+                "tick": 105,
+                "text": "105 W1N1                        Under attack: hostiles: 1 attackTimer: 104"
+              },
+              {
+                "tick": 110,
+                "text": "110 W1N1                        Under attack: hostiles: 1 attackTimer: 109"
+              },
+              {
+                "tick": 115,
+                "text": "115 W1N1                        Under attack: hostiles: 1 attackTimer: 114"
+              },
+              {
+                "tick": 120,
+                "text": "120 W1N1                        Under attack: hostiles: 1 attackTimer: 119"
+              },
+              {
+                "tick": 125,
+                "text": "125 W1N1                        Under attack: hostiles: 1 attackTimer: 124"
+              },
+              {
+                "tick": 130,
+                "text": "130 W1N1                        Under attack: hostiles: 1 attackTimer: 129"
+              }
+            ]
+          }
+        },
+        {
+          "name": "敌方玩家无执行失败或跳帧",
+          "passed": true,
+          "actual": {
+            "successful_ticks": 260,
+            "error_ticks": 0,
+            "not_evaluated_ticks": 0,
+            "errors_head": [],
+            "console_head": []
+          }
+        },
+        {
+          "name": "世界时间接续",
+          "passed": true,
+          "actual": [
+            1,
+            261
+          ]
+        },
+        {
+          "name": "公开观察 Memory 跨恢复接续",
+          "passed": true,
+          "actual": 260
+        },
+        {
+          "name": "上一拍事件观察窗口完整",
+          "passed": true,
+          "actual": 259
+        },
+        {
+          "name": "bot 未记录捕获异常",
+          "passed": true,
+          "actual": []
+        },
+        {
+          "name": "输入日志完整",
+          "passed": true,
+          "actual": {
+            "path": "/private/tmp/tooangel-battle-r3/json-resume.jsonl",
+            "segments": 260,
+            "read_back_segments": 260,
+            "first_tick": 1,
+            "last_tick": 260,
+            "validation": "ok"
+          }
+        },
+        {
+          "name": "整份检查点输入回放相等",
+          "passed": true,
+          "actual": {
+            "status": "passed",
+            "segments": 260,
+            "first_tick": 1,
+            "last_tick": 260,
+            "note": "整份检查点逐位相等（剥离 last_console/metadata；CPU 按记录桶比较）"
+          }
+        },
+        {
+          "name": "场景断言通过",
+          "passed": true,
+          "actual": [
+            {
+              "pointer": "/objects/spawn",
+              "op": "exists",
+              "expected": null,
+              "before": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 300
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "actual": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 110
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "delta": null,
+              "passed": true
+            },
+            {
+              "pointer": "/objects/raider",
+              "op": "exists",
+              "expected": null,
+              "before": {
+                "kind": "creep",
+                "id": "kk0000000000000007",
+                "name": "raider",
+                "pos": {
+                  "x": 5,
+                  "y": 45,
+                  "roomName": "W1N1"
+                },
+                "hits": 4000,
+                "hitsMax": 4000,
+                "fatigue": 0,
+                "body": [
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  }
+                ],
+                "owner": "enemy",
+                "ticksToLive": 1500,
+                "spawning": false,
+                "store": {},
+                "storeCapacity": null
+              },
+              "actual": {
+                "kind": "creep",
+                "id": "kk0000000000000007",
+                "name": "raider",
+                "pos": {
+                  "x": 5,
+                  "y": 45,
+                  "roomName": "W1N1"
+                },
+                "hits": 4000,
+                "hitsMax": 4000,
+                "fatigue": 0,
+                "body": [
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  }
+                ],
+                "owner": "enemy",
+                "ticksToLive": 1240,
+                "spawning": false,
+                "store": {},
+                "storeCapacity": null
+              },
+              "delta": null,
+              "passed": true
+            },
+            {
+              "pointer": "/rooms/W1N1/controller/owner",
+              "op": "eq",
+              "expected": "bot",
+              "before": "bot",
+              "actual": "bot",
+              "delta": null,
+              "passed": true
+            },
+            {
+              "pointer": "/players/bot/memory/__kkAcceptance/loops",
+              "op": "gte",
+              "expected": 100,
+              "before": null,
+              "actual": 260,
+              "delta": null,
+              "passed": true
+            }
+          ]
+        },
+        {
+          "name": "实际投影通道",
+          "passed": true,
+          "actual": "json"
+        },
+        {
+          "name": "CLI 成功退出",
+          "passed": true,
+          "actual": 0
+        },
+        {
+          "name": "CLI 二进制身份一致",
+          "passed": true,
+          "actual": "b20a6028492457719bc009085df67eb8365305eeab88061c6234e1cfaca7c148"
+        },
+        {
+          "name": "观察器模块身份一致",
+          "passed": true,
+          "actual": "24a79639949f489cd4421850a90a5d3796eb4edfdd076d20e358127f6c17cc80"
+        },
+        {
+          "name": "敌方脚本身份一致",
+          "passed": true,
+          "actual": "bf8a4ae48d9a18145b3dc485c2d50b28c0c33ba4f11afea388583122e8eeea76"
+        }
+      ],
+      "metrics": {
+        "loops": 260,
+        "births": 3,
+        "deaths": 0,
+        "harvested": 360,
+        "built": 0,
+        "upgraded": 0,
+        "seen": {
+          "kk0000000000000009": true,
+          "kk000000000000000a": true,
+          "kk000000000000000b": true
+        },
+        "combatSeen": {},
+        "attackEvents": 90,
+        "towerAttackEvents": 90,
+        "towerDamage": 13500,
+        "raiderDamage": 13500,
+        "raiderHealed": 13584,
+        "combatBirths": 0,
+        "towerFirstTick": 2,
+        "defenderFirstTick": null,
+        "safeModeTick": null,
+        "safeModeAvailableTick0": 1,
+        "caughtErrors": 0,
+        "errorSamples": [],
+        "eventsThroughTick": 259
+      }
+    },
+    {
+      "name": "json-resumed",
+      "channel": "json",
+      "exit_code": 0,
+      "report": "json-resumed.json",
+      "executable_sha256": "b20a6028492457719bc009085df67eb8365305eeab88061c6234e1cfaca7c148",
+      "success": true,
+      "checks": [
+        {
+          "name": "运行成功",
+          "passed": true,
+          "actual": "passed"
+        },
+        {
+          "name": "提交完整轮数",
+          "passed": true,
+          "actual": 260
+        },
+        {
+          "name": "bot 玩家无执行失败或跳帧",
+          "passed": true,
+          "actual": {
+            "successful_ticks": 260,
+            "error_ticks": 0,
+            "not_evaluated_ticks": 0,
+            "errors_head": [],
+            "console_head": [
+              {
+                "tick": 261,
+                "text": "261 Script reload - Load: 6 tickLimit: 500 limit: 20 Bucket: 10000"
+              },
+              {
+                "tick": 265,
+                "text": "265 W1N1                        Under attack: hostiles: 1 attackTimer: 264"
+              },
+              {
+                "tick": 270,
+                "text": "270 W1N1                        Under attack: hostiles: 1 attackTimer: 269"
+              },
+              {
+                "tick": 275,
+                "text": "275 W1N1                        Under attack: hostiles: 1 attackTimer: 274"
+              },
+              {
+                "tick": 280,
+                "text": "280 W1N1                        Under attack: hostiles: 1 attackTimer: 279"
+              },
+              {
+                "tick": 285,
+                "text": "285 W1N1                        Under attack: hostiles: 1 attackTimer: 284"
+              },
+              {
+                "tick": 290,
+                "text": "290 W1N1                        Under attack: hostiles: 1 attackTimer: 289"
+              },
+              {
+                "tick": 295,
+                "text": "295 W1N1                        Under attack: hostiles: 1 attackTimer: 294"
+              },
+              {
+                "tick": 300,
+                "text": "300 W1N1                        Under attack: hostiles: 1 attackTimer: 299"
+              },
+              {
+                "tick": 305,
+                "text": "305 W1N1                        Under attack: hostiles: 1 attackTimer: 304"
+              },
+              {
+                "tick": 310,
+                "text": "310 W1N1                        Under attack: hostiles: 1 attackTimer: 309"
+              },
+              {
+                "tick": 315,
+                "text": "315 W1N1                        Under attack: hostiles: 1 attackTimer: 314"
+              },
+              {
+                "tick": 320,
+                "text": "320 W1N1                        Under attack: hostiles: 1 attackTimer: 319"
+              },
+              {
+                "tick": 325,
+                "text": "325 W1N1                        Under attack: hostiles: 1 attackTimer: 324"
+              },
+              {
+                "tick": 330,
+                "text": "330 W1N1                        Under attack: hostiles: 1 attackTimer: 329"
+              },
+              {
+                "tick": 335,
+                "text": "335 W1N1                        Under attack: hostiles: 1 attackTimer: 334"
+              },
+              {
+                "tick": 340,
+                "text": "340 W1N1                        Under attack: hostiles: 1 attackTimer: 339"
+              },
+              {
+                "tick": 345,
+                "text": "345 W1N1                        Under attack: hostiles: 1 attackTimer: 344"
+              },
+              {
+                "tick": 350,
+                "text": "350 W1N1                        Under attack: hostiles: 1 attackTimer: 349"
+              },
+              {
+                "tick": 355,
+                "text": "355 W1N1                        Under attack: hostiles: 1 attackTimer: 354"
+              }
+            ]
+          }
+        },
+        {
+          "name": "敌方玩家无执行失败或跳帧",
+          "passed": true,
+          "actual": {
+            "successful_ticks": 260,
+            "error_ticks": 0,
+            "not_evaluated_ticks": 0,
+            "errors_head": [],
+            "console_head": []
+          }
+        },
+        {
+          "name": "世界时间接续",
+          "passed": true,
+          "actual": [
+            261,
+            521
+          ]
+        },
+        {
+          "name": "公开观察 Memory 跨恢复接续",
+          "passed": true,
+          "actual": 520
+        },
+        {
+          "name": "上一拍事件观察窗口完整",
+          "passed": true,
+          "actual": 519
+        },
+        {
+          "name": "bot 未记录捕获异常",
+          "passed": true,
+          "actual": []
+        },
+        {
+          "name": "输入日志完整",
+          "passed": true,
+          "actual": {
+            "path": "/private/tmp/tooangel-battle-r3/json-resume.jsonl",
+            "segments": 520,
+            "read_back_segments": 520,
+            "first_tick": 1,
+            "last_tick": 520,
+            "validation": "ok"
+          }
+        },
+        {
+          "name": "整份检查点输入回放相等",
+          "passed": true,
+          "actual": {
+            "status": "passed",
+            "segments": 260,
+            "first_tick": 261,
+            "last_tick": 520,
+            "note": "整份检查点逐位相等（剥离 last_console/metadata；CPU 按记录桶比较）"
+          }
+        },
+        {
+          "name": "场景断言通过",
+          "passed": true,
+          "actual": [
+            {
+              "pointer": "/objects/spawn",
+              "op": "exists",
+              "expected": null,
+              "before": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 300
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "actual": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 80
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "delta": null,
+              "passed": true
+            },
+            {
+              "pointer": "/objects/raider",
+              "op": "exists",
+              "expected": null,
+              "before": {
+                "kind": "creep",
+                "id": "kk0000000000000007",
+                "name": "raider",
+                "pos": {
+                  "x": 5,
+                  "y": 45,
+                  "roomName": "W1N1"
+                },
+                "hits": 4000,
+                "hitsMax": 4000,
+                "fatigue": 0,
+                "body": [
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  }
+                ],
+                "owner": "enemy",
+                "ticksToLive": 1500,
+                "spawning": false,
+                "store": {},
+                "storeCapacity": null
+              },
+              "actual": {
+                "kind": "creep",
+                "id": "kk0000000000000007",
+                "name": "raider",
+                "pos": {
+                  "x": 5,
+                  "y": 45,
+                  "roomName": "W1N1"
+                },
+                "hits": 3080,
+                "hitsMax": 4000,
+                "fatigue": 0,
+                "body": [
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 80
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  }
+                ],
+                "owner": "enemy",
+                "ticksToLive": 980,
+                "spawning": false,
+                "store": {},
+                "storeCapacity": null
+              },
+              "delta": null,
+              "passed": true
+            },
+            {
+              "pointer": "/rooms/W1N1/controller/owner",
+              "op": "eq",
+              "expected": "bot",
+              "before": "bot",
+              "actual": "bot",
+              "delta": null,
+              "passed": true
+            },
+            {
+              "pointer": "/players/bot/memory/__kkAcceptance/loops",
+              "op": "gte",
+              "expected": 100,
+              "before": null,
+              "actual": 520,
+              "delta": null,
+              "passed": true
+            }
+          ]
+        },
+        {
+          "name": "初始安全模式额度为 1",
+          "passed": true,
+          "actual": 1
+        },
+        {
+          "name": "对敌攻击事件实际发生",
+          "passed": true,
+          "actual": 181
+        },
+        {
+          "name": "塔对敌 creep 实际攻击",
+          "passed": true,
+          "actual": 90
+        },
+        {
+          "name": "敌方 creep 实际承伤",
+          "passed": true,
+          "actual": 14410
+        },
+        {
+          "name": "敌方 creep 实际自疗",
+          "passed": true,
+          "actual": 13584
+        },
+        {
+          "name": "防御者实际出生",
+          "passed": true,
+          "actual": {
+            "combatBirths": 2,
+            "firstTick": 394
+          }
+        },
+        {
+          "name": "安全模式实际激活",
+          "passed": true,
+          "actual": 399
+        },
+        {
+          "name": "终态安全模式生效且所有权保持",
+          "passed": true,
+          "actual": {
+            "kind": "structure",
+            "structureType": "controller",
+            "id": "kk0000000000000001",
+            "pos": {
+              "x": 1,
+              "y": 1,
+              "roomName": "W1N1"
+            },
+            "level": 4,
+            "progress": 0,
+            "progressTotal": 405000,
+            "ticksToDowngrade": 39480,
+            "safeMode": 19877,
+            "safeModeAvailable": 0,
+            "safeModeCooldown": 49877,
+            "reservation": null,
+            "sign": null,
+            "upgradeBlocked": null,
+            "isPowerEnabled": false,
+            "owner": "bot"
+          }
+        },
+        {
+          "name": "战斗期间经济未停摆",
+          "passed": true,
+          "actual": 2080
+        },
+        {
+          "name": "终态 spawn 存活",
+          "passed": true,
+          "actual": 1
+        },
+        {
+          "name": "实际投影通道",
+          "passed": true,
+          "actual": "json"
+        },
+        {
+          "name": "CLI 成功退出",
+          "passed": true,
+          "actual": 0
+        },
+        {
+          "name": "CLI 二进制身份一致",
+          "passed": true,
+          "actual": "b20a6028492457719bc009085df67eb8365305eeab88061c6234e1cfaca7c148"
+        },
+        {
+          "name": "观察器模块身份一致",
+          "passed": true,
+          "actual": "24a79639949f489cd4421850a90a5d3796eb4edfdd076d20e358127f6c17cc80"
+        },
+        {
+          "name": "敌方脚本身份一致",
+          "passed": true,
+          "actual": "bf8a4ae48d9a18145b3dc485c2d50b28c0c33ba4f11afea388583122e8eeea76"
+        }
+      ],
+      "metrics": {
+        "loops": 520,
+        "births": 6,
+        "deaths": 0,
+        "harvested": 2080,
+        "built": 0,
+        "upgraded": 0,
+        "seen": {
+          "kk0000000000000009": true,
+          "kk000000000000000a": true,
+          "kk000000000000000b": true,
+          "kk000000000000000d": true,
+          "kk000000000000000f": true,
+          "kk0000000000000010": true
+        },
+        "combatSeen": {
+          "kk000000000000000f": true,
+          "kk0000000000000010": true
+        },
+        "attackEvents": 181,
+        "towerAttackEvents": 90,
+        "towerDamage": 13500,
+        "raiderDamage": 14410,
+        "raiderHealed": 13584,
+        "combatBirths": 2,
+        "towerFirstTick": 2,
+        "defenderFirstTick": 394,
+        "safeModeTick": 399,
+        "safeModeAvailableTick0": 1,
+        "caughtErrors": 0,
+        "errorSamples": [],
+        "eventsThroughTick": 519
+      }
+    },
+    {
+      "name": "kkpv-continuous",
+      "channel": "kkpv",
+      "exit_code": 0,
+      "report": "kkpv-continuous.json",
+      "executable_sha256": "b20a6028492457719bc009085df67eb8365305eeab88061c6234e1cfaca7c148",
+      "success": true,
+      "checks": [
+        {
+          "name": "运行成功",
+          "passed": true,
+          "actual": "passed"
+        },
+        {
+          "name": "提交完整轮数",
+          "passed": true,
+          "actual": 520
+        },
+        {
+          "name": "bot 玩家无执行失败或跳帧",
+          "passed": true,
+          "actual": {
+            "successful_ticks": 520,
+            "error_ticks": 0,
+            "not_evaluated_ticks": 0,
+            "errors_head": [],
+            "console_head": [
+              {
+                "tick": 1,
+                "text": "1 Script reload - Load: 7 tickLimit: 500 limit: 20 Bucket: 10000"
+              },
+              {
+                "tick": 2,
+                "text": "2 W1N1                        Setting misplacedSpawn"
+              },
+              {
+                "tick": 2,
+                "text": "2 W1N1                        Setup complete - storing data"
+              },
+              {
+                "tick": 2,
+                "text": "2 W1N1                        Setup completed - storing data"
+              },
+              {
+                "tick": 55,
+                "text": "55 W1N1                        Under attack: hostiles: 1 attackTimer: 54"
+              },
+              {
+                "tick": 60,
+                "text": "60 W1N1                        Under attack: hostiles: 1 attackTimer: 59"
+              },
+              {
+                "tick": 65,
+                "text": "65 W1N1                        Under attack: hostiles: 1 attackTimer: 64"
+              },
+              {
+                "tick": 70,
+                "text": "70 W1N1                        Under attack: hostiles: 1 attackTimer: 69"
+              },
+              {
+                "tick": 75,
+                "text": "75 W1N1                        Under attack: hostiles: 1 attackTimer: 74"
+              },
+              {
+                "tick": 80,
+                "text": "80 W1N1                        Under attack: hostiles: 1 attackTimer: 79"
+              },
+              {
+                "tick": 85,
+                "text": "85 W1N1                        Under attack: hostiles: 1 attackTimer: 84"
+              },
+              {
+                "tick": 90,
+                "text": "90 W1N1                        Under attack: hostiles: 1 attackTimer: 89"
+              },
+              {
+                "tick": 95,
+                "text": "95 W1N1                        Under attack: hostiles: 1 attackTimer: 94"
+              },
+              {
+                "tick": 100,
+                "text": "100 W1N1                        Under attack: hostiles: 1 attackTimer: 99"
+              },
+              {
+                "tick": 105,
+                "text": "105 W1N1                        Under attack: hostiles: 1 attackTimer: 104"
+              },
+              {
+                "tick": 110,
+                "text": "110 W1N1                        Under attack: hostiles: 1 attackTimer: 109"
+              },
+              {
+                "tick": 115,
+                "text": "115 W1N1                        Under attack: hostiles: 1 attackTimer: 114"
+              },
+              {
+                "tick": 120,
+                "text": "120 W1N1                        Under attack: hostiles: 1 attackTimer: 119"
+              },
+              {
+                "tick": 125,
+                "text": "125 W1N1                        Under attack: hostiles: 1 attackTimer: 124"
+              },
+              {
+                "tick": 130,
+                "text": "130 W1N1                        Under attack: hostiles: 1 attackTimer: 129"
+              }
+            ]
+          }
+        },
+        {
+          "name": "敌方玩家无执行失败或跳帧",
+          "passed": true,
+          "actual": {
+            "successful_ticks": 520,
+            "error_ticks": 0,
+            "not_evaluated_ticks": 0,
+            "errors_head": [],
+            "console_head": []
+          }
+        },
+        {
+          "name": "世界时间接续",
+          "passed": true,
+          "actual": [
+            1,
+            521
+          ]
+        },
+        {
+          "name": "公开观察 Memory 跨恢复接续",
+          "passed": true,
+          "actual": 520
+        },
+        {
+          "name": "上一拍事件观察窗口完整",
+          "passed": true,
+          "actual": 519
+        },
+        {
+          "name": "bot 未记录捕获异常",
+          "passed": true,
+          "actual": []
+        },
+        {
+          "name": "输入日志完整",
+          "passed": true,
+          "actual": {
+            "path": "/private/tmp/tooangel-battle-r3/kkpv-continuous.jsonl",
+            "segments": 520,
+            "read_back_segments": 520,
+            "first_tick": 1,
+            "last_tick": 520,
+            "validation": "ok"
+          }
+        },
+        {
+          "name": "整份检查点输入回放相等",
+          "passed": true,
+          "actual": {
+            "status": "passed",
+            "segments": 520,
+            "first_tick": 1,
+            "last_tick": 520,
+            "note": "整份检查点逐位相等（剥离 last_console/metadata；CPU 按记录桶比较）"
+          }
+        },
+        {
+          "name": "场景断言通过",
+          "passed": true,
+          "actual": [
+            {
+              "pointer": "/objects/spawn",
+              "op": "exists",
+              "expected": null,
+              "before": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 300
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "actual": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 80
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "delta": null,
+              "passed": true
+            },
+            {
+              "pointer": "/objects/raider",
+              "op": "exists",
+              "expected": null,
+              "before": {
+                "kind": "creep",
+                "id": "kk0000000000000007",
+                "name": "raider",
+                "pos": {
+                  "x": 5,
+                  "y": 45,
+                  "roomName": "W1N1"
+                },
+                "hits": 4000,
+                "hitsMax": 4000,
+                "fatigue": 0,
+                "body": [
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  }
+                ],
+                "owner": "enemy",
+                "ticksToLive": 1500,
+                "spawning": false,
+                "store": {},
+                "storeCapacity": null
+              },
+              "actual": {
+                "kind": "creep",
+                "id": "kk0000000000000007",
+                "name": "raider",
+                "pos": {
+                  "x": 5,
+                  "y": 45,
+                  "roomName": "W1N1"
+                },
+                "hits": 3080,
+                "hitsMax": 4000,
+                "fatigue": 0,
+                "body": [
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 80
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  }
+                ],
+                "owner": "enemy",
+                "ticksToLive": 980,
+                "spawning": false,
+                "store": {},
+                "storeCapacity": null
+              },
+              "delta": null,
+              "passed": true
+            },
+            {
+              "pointer": "/rooms/W1N1/controller/owner",
+              "op": "eq",
+              "expected": "bot",
+              "before": "bot",
+              "actual": "bot",
+              "delta": null,
+              "passed": true
+            },
+            {
+              "pointer": "/players/bot/memory/__kkAcceptance/loops",
+              "op": "gte",
+              "expected": 100,
+              "before": null,
+              "actual": 520,
+              "delta": null,
+              "passed": true
+            }
+          ]
+        },
+        {
+          "name": "初始安全模式额度为 1",
+          "passed": true,
+          "actual": 1
+        },
+        {
+          "name": "对敌攻击事件实际发生",
+          "passed": true,
+          "actual": 181
+        },
+        {
+          "name": "塔对敌 creep 实际攻击",
+          "passed": true,
+          "actual": 90
+        },
+        {
+          "name": "敌方 creep 实际承伤",
+          "passed": true,
+          "actual": 14410
+        },
+        {
+          "name": "敌方 creep 实际自疗",
+          "passed": true,
+          "actual": 13584
+        },
+        {
+          "name": "防御者实际出生",
+          "passed": true,
+          "actual": {
+            "combatBirths": 2,
+            "firstTick": 394
+          }
+        },
+        {
+          "name": "安全模式实际激活",
+          "passed": true,
+          "actual": 399
+        },
+        {
+          "name": "终态安全模式生效且所有权保持",
+          "passed": true,
+          "actual": {
+            "kind": "structure",
+            "structureType": "controller",
+            "id": "kk0000000000000001",
+            "pos": {
+              "x": 1,
+              "y": 1,
+              "roomName": "W1N1"
+            },
+            "level": 4,
+            "progress": 0,
+            "progressTotal": 405000,
+            "ticksToDowngrade": 39480,
+            "safeMode": 19877,
+            "safeModeAvailable": 0,
+            "safeModeCooldown": 49877,
+            "reservation": null,
+            "sign": null,
+            "upgradeBlocked": null,
+            "isPowerEnabled": false,
+            "owner": "bot"
+          }
+        },
+        {
+          "name": "战斗期间经济未停摆",
+          "passed": true,
+          "actual": 2080
+        },
+        {
+          "name": "终态 spawn 存活",
+          "passed": true,
+          "actual": 1
+        },
+        {
+          "name": "实际投影通道",
+          "passed": true,
+          "actual": "kkpv"
+        },
+        {
+          "name": "CLI 成功退出",
+          "passed": true,
+          "actual": 0
+        },
+        {
+          "name": "CLI 二进制身份一致",
+          "passed": true,
+          "actual": "b20a6028492457719bc009085df67eb8365305eeab88061c6234e1cfaca7c148"
+        },
+        {
+          "name": "观察器模块身份一致",
+          "passed": true,
+          "actual": "24a79639949f489cd4421850a90a5d3796eb4edfdd076d20e358127f6c17cc80"
+        },
+        {
+          "name": "敌方脚本身份一致",
+          "passed": true,
+          "actual": "bf8a4ae48d9a18145b3dc485c2d50b28c0c33ba4f11afea388583122e8eeea76"
+        }
+      ],
+      "metrics": {
+        "loops": 520,
+        "births": 6,
+        "deaths": 0,
+        "harvested": 2080,
+        "built": 0,
+        "upgraded": 0,
+        "seen": {
+          "kk0000000000000009": true,
+          "kk000000000000000a": true,
+          "kk000000000000000b": true,
+          "kk000000000000000d": true,
+          "kk000000000000000f": true,
+          "kk0000000000000010": true
+        },
+        "combatSeen": {
+          "kk000000000000000f": true,
+          "kk0000000000000010": true
+        },
+        "attackEvents": 181,
+        "towerAttackEvents": 90,
+        "towerDamage": 13500,
+        "raiderDamage": 14410,
+        "raiderHealed": 13584,
+        "combatBirths": 2,
+        "towerFirstTick": 2,
+        "defenderFirstTick": 394,
+        "safeModeTick": 399,
+        "safeModeAvailableTick0": 1,
+        "caughtErrors": 0,
+        "errorSamples": [],
+        "eventsThroughTick": 519
+      }
+    },
+    {
+      "name": "kkpv-prefix",
+      "channel": "kkpv",
+      "exit_code": 0,
+      "report": "kkpv-prefix.json",
+      "executable_sha256": "b20a6028492457719bc009085df67eb8365305eeab88061c6234e1cfaca7c148",
+      "success": true,
+      "checks": [
+        {
+          "name": "运行成功",
+          "passed": true,
+          "actual": "passed"
+        },
+        {
+          "name": "提交完整轮数",
+          "passed": true,
+          "actual": 260
+        },
+        {
+          "name": "bot 玩家无执行失败或跳帧",
+          "passed": true,
+          "actual": {
+            "successful_ticks": 260,
+            "error_ticks": 0,
+            "not_evaluated_ticks": 0,
+            "errors_head": [],
+            "console_head": [
+              {
+                "tick": 1,
+                "text": "1 Script reload - Load: 7 tickLimit: 500 limit: 20 Bucket: 10000"
+              },
+              {
+                "tick": 2,
+                "text": "2 W1N1                        Setting misplacedSpawn"
+              },
+              {
+                "tick": 2,
+                "text": "2 W1N1                        Setup complete - storing data"
+              },
+              {
+                "tick": 2,
+                "text": "2 W1N1                        Setup completed - storing data"
+              },
+              {
+                "tick": 55,
+                "text": "55 W1N1                        Under attack: hostiles: 1 attackTimer: 54"
+              },
+              {
+                "tick": 60,
+                "text": "60 W1N1                        Under attack: hostiles: 1 attackTimer: 59"
+              },
+              {
+                "tick": 65,
+                "text": "65 W1N1                        Under attack: hostiles: 1 attackTimer: 64"
+              },
+              {
+                "tick": 70,
+                "text": "70 W1N1                        Under attack: hostiles: 1 attackTimer: 69"
+              },
+              {
+                "tick": 75,
+                "text": "75 W1N1                        Under attack: hostiles: 1 attackTimer: 74"
+              },
+              {
+                "tick": 80,
+                "text": "80 W1N1                        Under attack: hostiles: 1 attackTimer: 79"
+              },
+              {
+                "tick": 85,
+                "text": "85 W1N1                        Under attack: hostiles: 1 attackTimer: 84"
+              },
+              {
+                "tick": 90,
+                "text": "90 W1N1                        Under attack: hostiles: 1 attackTimer: 89"
+              },
+              {
+                "tick": 95,
+                "text": "95 W1N1                        Under attack: hostiles: 1 attackTimer: 94"
+              },
+              {
+                "tick": 100,
+                "text": "100 W1N1                        Under attack: hostiles: 1 attackTimer: 99"
+              },
+              {
+                "tick": 105,
+                "text": "105 W1N1                        Under attack: hostiles: 1 attackTimer: 104"
+              },
+              {
+                "tick": 110,
+                "text": "110 W1N1                        Under attack: hostiles: 1 attackTimer: 109"
+              },
+              {
+                "tick": 115,
+                "text": "115 W1N1                        Under attack: hostiles: 1 attackTimer: 114"
+              },
+              {
+                "tick": 120,
+                "text": "120 W1N1                        Under attack: hostiles: 1 attackTimer: 119"
+              },
+              {
+                "tick": 125,
+                "text": "125 W1N1                        Under attack: hostiles: 1 attackTimer: 124"
+              },
+              {
+                "tick": 130,
+                "text": "130 W1N1                        Under attack: hostiles: 1 attackTimer: 129"
+              }
+            ]
+          }
+        },
+        {
+          "name": "敌方玩家无执行失败或跳帧",
+          "passed": true,
+          "actual": {
+            "successful_ticks": 260,
+            "error_ticks": 0,
+            "not_evaluated_ticks": 0,
+            "errors_head": [],
+            "console_head": []
+          }
+        },
+        {
+          "name": "世界时间接续",
+          "passed": true,
+          "actual": [
+            1,
+            261
+          ]
+        },
+        {
+          "name": "公开观察 Memory 跨恢复接续",
+          "passed": true,
+          "actual": 260
+        },
+        {
+          "name": "上一拍事件观察窗口完整",
+          "passed": true,
+          "actual": 259
+        },
+        {
+          "name": "bot 未记录捕获异常",
+          "passed": true,
+          "actual": []
+        },
+        {
+          "name": "输入日志完整",
+          "passed": true,
+          "actual": {
+            "path": "/private/tmp/tooangel-battle-r3/kkpv-resume.jsonl",
+            "segments": 260,
+            "read_back_segments": 260,
+            "first_tick": 1,
+            "last_tick": 260,
+            "validation": "ok"
+          }
+        },
+        {
+          "name": "整份检查点输入回放相等",
+          "passed": true,
+          "actual": {
+            "status": "passed",
+            "segments": 260,
+            "first_tick": 1,
+            "last_tick": 260,
+            "note": "整份检查点逐位相等（剥离 last_console/metadata；CPU 按记录桶比较）"
+          }
+        },
+        {
+          "name": "场景断言通过",
+          "passed": true,
+          "actual": [
+            {
+              "pointer": "/objects/spawn",
+              "op": "exists",
+              "expected": null,
+              "before": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 300
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "actual": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 110
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "delta": null,
+              "passed": true
+            },
+            {
+              "pointer": "/objects/raider",
+              "op": "exists",
+              "expected": null,
+              "before": {
+                "kind": "creep",
+                "id": "kk0000000000000007",
+                "name": "raider",
+                "pos": {
+                  "x": 5,
+                  "y": 45,
+                  "roomName": "W1N1"
+                },
+                "hits": 4000,
+                "hitsMax": 4000,
+                "fatigue": 0,
+                "body": [
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  }
+                ],
+                "owner": "enemy",
+                "ticksToLive": 1500,
+                "spawning": false,
+                "store": {},
+                "storeCapacity": null
+              },
+              "actual": {
+                "kind": "creep",
+                "id": "kk0000000000000007",
+                "name": "raider",
+                "pos": {
+                  "x": 5,
+                  "y": 45,
+                  "roomName": "W1N1"
+                },
+                "hits": 4000,
+                "hitsMax": 4000,
+                "fatigue": 0,
+                "body": [
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  }
+                ],
+                "owner": "enemy",
+                "ticksToLive": 1240,
+                "spawning": false,
+                "store": {},
+                "storeCapacity": null
+              },
+              "delta": null,
+              "passed": true
+            },
+            {
+              "pointer": "/rooms/W1N1/controller/owner",
+              "op": "eq",
+              "expected": "bot",
+              "before": "bot",
+              "actual": "bot",
+              "delta": null,
+              "passed": true
+            },
+            {
+              "pointer": "/players/bot/memory/__kkAcceptance/loops",
+              "op": "gte",
+              "expected": 100,
+              "before": null,
+              "actual": 260,
+              "delta": null,
+              "passed": true
+            }
+          ]
+        },
+        {
+          "name": "实际投影通道",
+          "passed": true,
+          "actual": "kkpv"
+        },
+        {
+          "name": "CLI 成功退出",
+          "passed": true,
+          "actual": 0
+        },
+        {
+          "name": "CLI 二进制身份一致",
+          "passed": true,
+          "actual": "b20a6028492457719bc009085df67eb8365305eeab88061c6234e1cfaca7c148"
+        },
+        {
+          "name": "观察器模块身份一致",
+          "passed": true,
+          "actual": "24a79639949f489cd4421850a90a5d3796eb4edfdd076d20e358127f6c17cc80"
+        },
+        {
+          "name": "敌方脚本身份一致",
+          "passed": true,
+          "actual": "bf8a4ae48d9a18145b3dc485c2d50b28c0c33ba4f11afea388583122e8eeea76"
+        }
+      ],
+      "metrics": {
+        "loops": 260,
+        "births": 3,
+        "deaths": 0,
+        "harvested": 360,
+        "built": 0,
+        "upgraded": 0,
+        "seen": {
+          "kk0000000000000009": true,
+          "kk000000000000000a": true,
+          "kk000000000000000b": true
+        },
+        "combatSeen": {},
+        "attackEvents": 90,
+        "towerAttackEvents": 90,
+        "towerDamage": 13500,
+        "raiderDamage": 13500,
+        "raiderHealed": 13584,
+        "combatBirths": 0,
+        "towerFirstTick": 2,
+        "defenderFirstTick": null,
+        "safeModeTick": null,
+        "safeModeAvailableTick0": 1,
+        "caughtErrors": 0,
+        "errorSamples": [],
+        "eventsThroughTick": 259
+      }
+    },
+    {
+      "name": "kkpv-resumed",
+      "channel": "kkpv",
+      "exit_code": 0,
+      "report": "kkpv-resumed.json",
+      "executable_sha256": "b20a6028492457719bc009085df67eb8365305eeab88061c6234e1cfaca7c148",
+      "success": true,
+      "checks": [
+        {
+          "name": "运行成功",
+          "passed": true,
+          "actual": "passed"
+        },
+        {
+          "name": "提交完整轮数",
+          "passed": true,
+          "actual": 260
+        },
+        {
+          "name": "bot 玩家无执行失败或跳帧",
+          "passed": true,
+          "actual": {
+            "successful_ticks": 260,
+            "error_ticks": 0,
+            "not_evaluated_ticks": 0,
+            "errors_head": [],
+            "console_head": [
+              {
+                "tick": 261,
+                "text": "261 Script reload - Load: 7 tickLimit: 500 limit: 20 Bucket: 10000"
+              },
+              {
+                "tick": 265,
+                "text": "265 W1N1                        Under attack: hostiles: 1 attackTimer: 264"
+              },
+              {
+                "tick": 270,
+                "text": "270 W1N1                        Under attack: hostiles: 1 attackTimer: 269"
+              },
+              {
+                "tick": 275,
+                "text": "275 W1N1                        Under attack: hostiles: 1 attackTimer: 274"
+              },
+              {
+                "tick": 280,
+                "text": "280 W1N1                        Under attack: hostiles: 1 attackTimer: 279"
+              },
+              {
+                "tick": 285,
+                "text": "285 W1N1                        Under attack: hostiles: 1 attackTimer: 284"
+              },
+              {
+                "tick": 290,
+                "text": "290 W1N1                        Under attack: hostiles: 1 attackTimer: 289"
+              },
+              {
+                "tick": 295,
+                "text": "295 W1N1                        Under attack: hostiles: 1 attackTimer: 294"
+              },
+              {
+                "tick": 300,
+                "text": "300 W1N1                        Under attack: hostiles: 1 attackTimer: 299"
+              },
+              {
+                "tick": 305,
+                "text": "305 W1N1                        Under attack: hostiles: 1 attackTimer: 304"
+              },
+              {
+                "tick": 310,
+                "text": "310 W1N1                        Under attack: hostiles: 1 attackTimer: 309"
+              },
+              {
+                "tick": 315,
+                "text": "315 W1N1                        Under attack: hostiles: 1 attackTimer: 314"
+              },
+              {
+                "tick": 320,
+                "text": "320 W1N1                        Under attack: hostiles: 1 attackTimer: 319"
+              },
+              {
+                "tick": 325,
+                "text": "325 W1N1                        Under attack: hostiles: 1 attackTimer: 324"
+              },
+              {
+                "tick": 330,
+                "text": "330 W1N1                        Under attack: hostiles: 1 attackTimer: 329"
+              },
+              {
+                "tick": 335,
+                "text": "335 W1N1                        Under attack: hostiles: 1 attackTimer: 334"
+              },
+              {
+                "tick": 340,
+                "text": "340 W1N1                        Under attack: hostiles: 1 attackTimer: 339"
+              },
+              {
+                "tick": 345,
+                "text": "345 W1N1                        Under attack: hostiles: 1 attackTimer: 344"
+              },
+              {
+                "tick": 350,
+                "text": "350 W1N1                        Under attack: hostiles: 1 attackTimer: 349"
+              },
+              {
+                "tick": 355,
+                "text": "355 W1N1                        Under attack: hostiles: 1 attackTimer: 354"
+              }
+            ]
+          }
+        },
+        {
+          "name": "敌方玩家无执行失败或跳帧",
+          "passed": true,
+          "actual": {
+            "successful_ticks": 260,
+            "error_ticks": 0,
+            "not_evaluated_ticks": 0,
+            "errors_head": [],
+            "console_head": []
+          }
+        },
+        {
+          "name": "世界时间接续",
+          "passed": true,
+          "actual": [
+            261,
+            521
+          ]
+        },
+        {
+          "name": "公开观察 Memory 跨恢复接续",
+          "passed": true,
+          "actual": 520
+        },
+        {
+          "name": "上一拍事件观察窗口完整",
+          "passed": true,
+          "actual": 519
+        },
+        {
+          "name": "bot 未记录捕获异常",
+          "passed": true,
+          "actual": []
+        },
+        {
+          "name": "输入日志完整",
+          "passed": true,
+          "actual": {
+            "path": "/private/tmp/tooangel-battle-r3/kkpv-resume.jsonl",
+            "segments": 520,
+            "read_back_segments": 520,
+            "first_tick": 1,
+            "last_tick": 520,
+            "validation": "ok"
+          }
+        },
+        {
+          "name": "整份检查点输入回放相等",
+          "passed": true,
+          "actual": {
+            "status": "passed",
+            "segments": 260,
+            "first_tick": 261,
+            "last_tick": 520,
+            "note": "整份检查点逐位相等（剥离 last_console/metadata；CPU 按记录桶比较）"
+          }
+        },
+        {
+          "name": "场景断言通过",
+          "passed": true,
+          "actual": [
+            {
+              "pointer": "/objects/spawn",
+              "op": "exists",
+              "expected": null,
+              "before": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 300
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "actual": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 80
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "delta": null,
+              "passed": true
+            },
+            {
+              "pointer": "/objects/raider",
+              "op": "exists",
+              "expected": null,
+              "before": {
+                "kind": "creep",
+                "id": "kk0000000000000007",
+                "name": "raider",
+                "pos": {
+                  "x": 5,
+                  "y": 45,
+                  "roomName": "W1N1"
+                },
+                "hits": 4000,
+                "hitsMax": 4000,
+                "fatigue": 0,
+                "body": [
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  }
+                ],
+                "owner": "enemy",
+                "ticksToLive": 1500,
+                "spawning": false,
+                "store": {},
+                "storeCapacity": null
+              },
+              "actual": {
+                "kind": "creep",
+                "id": "kk0000000000000007",
+                "name": "raider",
+                "pos": {
+                  "x": 5,
+                  "y": 45,
+                  "roomName": "W1N1"
+                },
+                "hits": 3080,
+                "hitsMax": 4000,
+                "fatigue": 0,
+                "body": [
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 0
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 80
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "tough",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "heal",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  },
+                  {
+                    "type": "move",
+                    "hits": 100
+                  }
+                ],
+                "owner": "enemy",
+                "ticksToLive": 980,
+                "spawning": false,
+                "store": {},
+                "storeCapacity": null
+              },
+              "delta": null,
+              "passed": true
+            },
+            {
+              "pointer": "/rooms/W1N1/controller/owner",
+              "op": "eq",
+              "expected": "bot",
+              "before": "bot",
+              "actual": "bot",
+              "delta": null,
+              "passed": true
+            },
+            {
+              "pointer": "/players/bot/memory/__kkAcceptance/loops",
+              "op": "gte",
+              "expected": 100,
+              "before": null,
+              "actual": 520,
+              "delta": null,
+              "passed": true
+            }
+          ]
+        },
+        {
+          "name": "初始安全模式额度为 1",
+          "passed": true,
+          "actual": 1
+        },
+        {
+          "name": "对敌攻击事件实际发生",
+          "passed": true,
+          "actual": 181
+        },
+        {
+          "name": "塔对敌 creep 实际攻击",
+          "passed": true,
+          "actual": 90
+        },
+        {
+          "name": "敌方 creep 实际承伤",
+          "passed": true,
+          "actual": 14410
+        },
+        {
+          "name": "敌方 creep 实际自疗",
+          "passed": true,
+          "actual": 13584
+        },
+        {
+          "name": "防御者实际出生",
+          "passed": true,
+          "actual": {
+            "combatBirths": 2,
+            "firstTick": 394
+          }
+        },
+        {
+          "name": "安全模式实际激活",
+          "passed": true,
+          "actual": 399
+        },
+        {
+          "name": "终态安全模式生效且所有权保持",
+          "passed": true,
+          "actual": {
+            "kind": "structure",
+            "structureType": "controller",
+            "id": "kk0000000000000001",
+            "pos": {
+              "x": 1,
+              "y": 1,
+              "roomName": "W1N1"
+            },
+            "level": 4,
+            "progress": 0,
+            "progressTotal": 405000,
+            "ticksToDowngrade": 39480,
+            "safeMode": 19877,
+            "safeModeAvailable": 0,
+            "safeModeCooldown": 49877,
+            "reservation": null,
+            "sign": null,
+            "upgradeBlocked": null,
+            "isPowerEnabled": false,
+            "owner": "bot"
+          }
+        },
+        {
+          "name": "战斗期间经济未停摆",
+          "passed": true,
+          "actual": 2080
+        },
+        {
+          "name": "终态 spawn 存活",
+          "passed": true,
+          "actual": 1
+        },
+        {
+          "name": "实际投影通道",
+          "passed": true,
+          "actual": "kkpv"
+        },
+        {
+          "name": "CLI 成功退出",
+          "passed": true,
+          "actual": 0
+        },
+        {
+          "name": "CLI 二进制身份一致",
+          "passed": true,
+          "actual": "b20a6028492457719bc009085df67eb8365305eeab88061c6234e1cfaca7c148"
+        },
+        {
+          "name": "观察器模块身份一致",
+          "passed": true,
+          "actual": "24a79639949f489cd4421850a90a5d3796eb4edfdd076d20e358127f6c17cc80"
+        },
+        {
+          "name": "敌方脚本身份一致",
+          "passed": true,
+          "actual": "bf8a4ae48d9a18145b3dc485c2d50b28c0c33ba4f11afea388583122e8eeea76"
+        }
+      ],
+      "metrics": {
+        "loops": 520,
+        "births": 6,
+        "deaths": 0,
+        "harvested": 2080,
+        "built": 0,
+        "upgraded": 0,
+        "seen": {
+          "kk0000000000000009": true,
+          "kk000000000000000a": true,
+          "kk000000000000000b": true,
+          "kk000000000000000d": true,
+          "kk000000000000000f": true,
+          "kk0000000000000010": true
+        },
+        "combatSeen": {
+          "kk000000000000000f": true,
+          "kk0000000000000010": true
+        },
+        "attackEvents": 181,
+        "towerAttackEvents": 90,
+        "towerDamage": 13500,
+        "raiderDamage": 14410,
+        "raiderHealed": 13584,
+        "combatBirths": 2,
+        "towerFirstTick": 2,
+        "defenderFirstTick": 394,
+        "safeModeTick": 399,
+        "safeModeAvailableTick0": 1,
+        "caughtErrors": 0,
+        "errorSamples": [],
+        "eventsThroughTick": 519
+      }
+    }
+  ],
+  "executable_sha256": "b20a6028492457719bc009085df67eb8365305eeab88061c6234e1cfaca7c148",
+  "upstream": {
+    "commit": "87645a0b933360224737cca3b18ae9d112f46fef",
+    "source": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/tooangel/src",
+    "files": [
+      {
+        "name": "brain_main.js",
+        "sha256": "20eea34118518126e014ab6f69e3626447a65b74b311947ed0060b6da50e0818"
+      },
+      {
+        "name": "brain_memory.js",
+        "sha256": "fcc467ae7943ca71393f58df6ccaf42a036b773c39c48e3135a7c239af1cd14d"
+      },
+      {
+        "name": "brain_memory_market.js",
+        "sha256": "78cf4a5401e209a97e1b35c6435aa2bd64cfcfa4b89c89bbde1cf067f6433246"
+      },
+      {
+        "name": "brain_nextroom.js",
+        "sha256": "1d6c84f3f6744901f6969214ef47c543a9fa9b6a63fbefdbeb57d07a1ce27382"
+      },
+      {
+        "name": "brain_squadmanager.js",
+        "sha256": "ece1aa1d1f0ca65c5143531c43023e71a7cde62b276a2d04d07c201fa5fbcc98"
+      },
+      {
+        "name": "brain_stats.js",
+        "sha256": "08e7fd4c6416ed954a14f8fa75a1be90f273dfd1c14a49f7d50204ece0310e61"
+      },
+      {
+        "name": "brain_trapped.js",
+        "sha256": "4f57a09f69ede5e58130bd31db93942b48cfba1a216e2f4be0cd178dcc3f84d0"
+      },
+      {
+        "name": "config.js",
+        "sha256": "3cc3bb05af41062c36f6be78777f8b281edafeb56f0ad8603b1e8a1e1456614a"
+      },
+      {
+        "name": "diplomacy.js",
+        "sha256": "a62c89c9feb5503ca4ecfa5a51e5fb575e564e7e28bb5ce244244665096817ae"
+      },
+      {
+        "name": "find.js",
+        "sha256": "97eb516cfc6e052988e2bc296ecee19c926ff7fe359fc04ebe5f13647d665a3c"
+      },
+      {
+        "name": "helper_findMyRooms.js",
+        "sha256": "752d1e0051807ec23e21e903a28c6ca176489c0f7ca9032586d25bd44d7119c8"
+      },
+      {
+        "name": "helpers.js",
+        "sha256": "d5f38b969061df80991a64a911186cc8988939b047dacea2b5a17a3b1586f8f6"
+      },
+      {
+        "name": "logging.js",
+        "sha256": "1eb7e728c9be3b46d3365dc22b0ab6d386f730f349488a366d6c9cbcb00c2db3"
+      },
+      {
+        "name": "main.js",
+        "sha256": "ccc535b44018be18e75295ec589455d29f7f1e420282944502cfda59213d54c5"
+      },
+      {
+        "name": "pixel.js",
+        "sha256": "059e8769f0e75ad29aa8991d5a15ffc2c29ff1b39bc02ac0fc6fc7a2540b7553"
+      },
+      {
+        "name": "prototype_creep.js",
+        "sha256": "f299c0fbdfd52dfe204bbc1504dc8481b9b27a9fec3fe25e892c5d5c62d9ecbf"
+      },
+      {
+        "name": "prototype_creep_clean.js",
+        "sha256": "6de9b504bd3cf86a2b28218b6a61ccf5adaff448374b66a1363cccda568a0d9e"
+      },
+      {
+        "name": "prototype_creep_fight.js",
+        "sha256": "4bdb3170e0813b940c3ecb5524f5e7faa93882d1a22f7b9283e15dec73c0eb06"
+      },
+      {
+        "name": "prototype_creep_harvest.js",
+        "sha256": "dc2ac27262a0ce5dc4acc60aa883e562ffe5636946ec1e281ea1870c29f67146"
+      },
+      {
+        "name": "prototype_creep_heal.js",
+        "sha256": "fafced27c525ad7f55c2a1cb2a2f04ed409d7897e102fc708413a6a03c265461"
+      },
+      {
+        "name": "prototype_creep_mineral.js",
+        "sha256": "6ccf835f0b739cb85374b849c6a76003038e1833650cefe532c536fc819d4420"
+      },
+      {
+        "name": "prototype_creep_move.js",
+        "sha256": "fae32dec3a6f52a2ae57aa859b202a4f00765144c73872167b5dbf898a81ad5b"
+      },
+      {
+        "name": "prototype_creep_resources.js",
+        "sha256": "060ebadc13a0977a10d68e9184807384e6186428df11f746c9a30b595651e5b0"
+      },
+      {
+        "name": "prototype_creep_routing.js",
+        "sha256": "4d87a0199d993f7bb3e05dc704196476e0c87963ac0412980742155b8c85c219"
+      },
+      {
+        "name": "prototype_creep_squad.js",
+        "sha256": "54921925d363805f509561dcab4a5676a6e64c624a624cd5ce71e16ca8a92a9c"
+      },
+      {
+        "name": "prototype_creep_startup_tasks.js",
+        "sha256": "012666045f0231e51d49a2509a1eaaf71a5e7cf27a0013a8885997da6f7d50ab"
+      },
+      {
+        "name": "prototype_room.js",
+        "sha256": "8e912c51c3931c44cd9acca51f14e9e6bf97d95c1cd79c7b1faccd02f915e8c4"
+      },
+      {
+        "name": "prototype_roomPosition.js",
+        "sha256": "571670b21326256b6aead63410b915c03a8d1001e3483365ae73e4b9a2551c85"
+      },
+      {
+        "name": "prototype_roomPosition_structures.js",
+        "sha256": "db5f316e53eb811a3294b3785bcf712ae9caa47ff572451946aea176c8a41378"
+      },
+      {
+        "name": "prototype_room_basebuilder.js",
+        "sha256": "89720bc524163d1b8628e492682e9b0b05d3316dfbac0b131f9617bea95bb759"
+      },
+      {
+        "name": "prototype_room_controller.js",
+        "sha256": "9d57da1eab999bd13c582d79ad4e4f00671f32c988c58d6534e4630361d7e746"
+      },
+      {
+        "name": "prototype_room_costmatrix.js",
+        "sha256": "321a755361485b8d2f8341aea54ef87ce73f070b3cea26af7bdb6fde517df57f"
+      },
+      {
+        "name": "prototype_room_creepbuilder.js",
+        "sha256": "5a03e00b20f2f92a151c249a70372cc220b954b4cf3e76ed0d95b7a5e093c3cc"
+      },
+      {
+        "name": "prototype_room_defense.js",
+        "sha256": "96440c4e6a676e23d7c8f9762533c8e59ec1a2795a2b429c0616190c4e8b217a"
+      },
+      {
+        "name": "prototype_room_external.js",
+        "sha256": "f883a8bf62550b072d7e09ceb0a887f6d187841a02ac3cc378af9fa855dbf1bb"
+      },
+      {
+        "name": "prototype_room_find.js",
+        "sha256": "d2585d756002c0ff7bc10c7f35a9b57666f4b9d4d1b6b89c8798ed63cb2f5929"
+      },
+      {
+        "name": "prototype_room_init.js",
+        "sha256": "3cd4623f2754d7feb2113bb57757f4e423c53b30019a919fc84e1b68ac0a748e"
+      },
+      {
+        "name": "prototype_room_keeper.js",
+        "sha256": "52941afb62f99f7578c07815e32913e8c2b73e78472483a7b0e0656ccdcf9520"
+      },
+      {
+        "name": "prototype_room_market.js",
+        "sha256": "d6569263d8c0a581ec1a989319b1909f7616800cd22d50152a1050d45b0ed9bb"
+      },
+      {
+        "name": "prototype_room_memory.js",
+        "sha256": "b7e2bc609c296a170691592ffd8b628035ef6936a038f3ed6e3c9f21eeddec74"
+      },
+      {
+        "name": "prototype_room_mineral.js",
+        "sha256": "a7e622105001c17f26ee46c658af87675ab597a3d3d937d6a46a5e575f8a441f"
+      },
+      {
+        "name": "prototype_room_my.js",
+        "sha256": "00ab75cf95a62604995414f35dcd66656b61a25131be23a2e8f54ef89c514b10"
+      },
+      {
+        "name": "prototype_room_routing.js",
+        "sha256": "d8b260f928207b57d268590ea0f1dc5a700575e5cf0889aa465b92d0045e2cfb"
+      },
+      {
+        "name": "prototype_room_utils.js",
+        "sha256": "f699202462f334eea62fd484b77fadc581ec4c5896a86c964600cf4882cf327a"
+      },
+      {
+        "name": "prototype_room_wallsetter.js",
+        "sha256": "266715fee5a602ce5f8b7ba4b0d5b6a7354a117cbb561ee1b947d3e01bfe97e1"
+      },
+      {
+        "name": "prototype_string.js",
+        "sha256": "fa3fff6621a150c52e29e9885bc4ee38ae0c7a38b833bb9969f200c4729d2cd7"
+      },
+      {
+        "name": "prototype_structure.js",
+        "sha256": "08ad211f64296feb38dcefba6578847a0a5e898747a498a6adbc0e46f168b4a8"
+      },
+      {
+        "name": "prototype_structureController.js",
+        "sha256": "654d6340046358c2ce1008b5539dfb931754aed534f583a277d73c650a933205"
+      },
+      {
+        "name": "prototype_structureStorage.js",
+        "sha256": "c1fa9a8626fce256bde01a7e3a81c38a165ba11e52467218c66dc3350b55fee0"
+      },
+      {
+        "name": "quests_host.js",
+        "sha256": "f4ebf5b1e3b45ade194311ed25efff0a623715ad0a2b4d59add0f359726188a2"
+      },
+      {
+        "name": "quests_player.js",
+        "sha256": "876b61db5bda640529320f5741f8556a17aca2205684460c41aaf97550a65598"
+      },
+      {
+        "name": "require.js",
+        "sha256": "f838289a629a35e376a1c991efd86f271251fa34e128520571aa95477a9614e5"
+      },
+      {
+        "name": "role_atkeeper.js",
+        "sha256": "a2b4c4ce34b8925e0a74f0c88d65c5f83d112bfe602b58d679d06ab115ffc8e8"
+      },
+      {
+        "name": "role_atkeepermelee.js",
+        "sha256": "eaea1d1713198e89a6f8e7d06ffe20af77e21fb8a4decf5228fbc9ef6d39583b"
+      },
+      {
+        "name": "role_attackunreserve.js",
+        "sha256": "aa8749d5cd0d0b23decd81640e79a9569439eb7bf15f393b6c2100e5caeacec5"
+      },
+      {
+        "name": "role_autoattackmelee.js",
+        "sha256": "d6ded89b73131f1d0ed7b1c927fc4e919798821353e7f1a75f44d15a5aa31475"
+      },
+      {
+        "name": "role_builder.js",
+        "sha256": "ff2dd0a8d41e5eeae005c9f07f50ccff0aea5359c3e55de68db672841a71328a"
+      },
+      {
+        "name": "role_carry.js",
+        "sha256": "ca2541a202173708cad97891b9a178080dfa888b3a8503a5c117c14ea07fe994"
+      },
+      {
+        "name": "role_claimer.js",
+        "sha256": "cc8c0f339d97b3efcd3427aeabeabee9ed297e1e1c2eb8569f9a67c15b0f722a"
+      },
+      {
+        "name": "role_defender.js",
+        "sha256": "c33ee6b857b6627bab2c8f1738dfeaeadd9591947c15b88b504575677204cd98"
+      },
+      {
+        "name": "role_defendmelee.js",
+        "sha256": "9a54298be00bfd380e2e6c051bbde038a2bd5e944e314be36eebcdf2c249c2f2"
+      },
+      {
+        "name": "role_defendranged.js",
+        "sha256": "01c3e87245e5fc2eb2a8b4c6ca23a8b26de471fe72184dee388ac6d06323933e"
+      },
+      {
+        "name": "role_extractor.js",
+        "sha256": "56d91d2a83d3544cedc96892e18de5cf93f733e350899c61c1441d5e091cd62f"
+      },
+      {
+        "name": "role_mineral.js",
+        "sha256": "8aa96c1a787fd927f59435dcf15e344c72c3b5379c461fb43205a63a8ce7abdd"
+      },
+      {
+        "name": "role_nextroomer.js",
+        "sha256": "b4c820e85c534f8d0dec824727af885129f3a988b3bdc0fbec7b3c31828e27dd"
+      },
+      {
+        "name": "role_nextroomerattack.js",
+        "sha256": "c11ce5748c35192fe022610a6d4231729992210031290f607bc61f807f252bd2"
+      },
+      {
+        "name": "role_powerattacker.js",
+        "sha256": "b02e542f131fc6d2f4280483b4c8ccd0f7e5812705a7b6584171e70ffd25bbf9"
+      },
+      {
+        "name": "role_powerdefender.js",
+        "sha256": "cefede4c7f31e86e044fd6c11e0a8d9bb0a94bd6ebbc9ed98894cddcea4c72bd"
+      },
+      {
+        "name": "role_powerhealer.js",
+        "sha256": "a6219f1c8dd299371e630742f69a66ae21f7a09dce21fbc6079293ecf24fb114"
+      },
+      {
+        "name": "role_powertransporter.js",
+        "sha256": "a073291b4ba62de28aafedd333087269d97aa3310cb54bdab2a7817ea9ea02a7"
+      },
+      {
+        "name": "role_quester.js",
+        "sha256": "5c5d32560fc1cbe2e3a4bb114ca1727ab36fe2daa76ee87760bfb03729b389d4"
+      },
+      {
+        "name": "role_questplayer.js",
+        "sha256": "6690750e73661acb662c28bb9143a7b3551133b5f8a772546ceaa9c4f391626b"
+      },
+      {
+        "name": "role_repairer.js",
+        "sha256": "566f1baa1635cd0d5e4a14673d64d5fb0313236cdd5e9faddfee4ceeee3269b1"
+      },
+      {
+        "name": "role_reserver.js",
+        "sha256": "157fec05433acaf43bde38b182a0e93564261d76b3ddf2919e452636f8cc73e1"
+      },
+      {
+        "name": "role_scout.js",
+        "sha256": "2763513eb9d7e2c4a0f4872b172d07f3d5e2cc319382f295c01e077653990f1f"
+      },
+      {
+        "name": "role_signer.js",
+        "sha256": "7c83f7f084172054d9624acf0abfc8ce5fb9b05c8dab59e61ee0db09b67537e8"
+      },
+      {
+        "name": "role_sourcer.js",
+        "sha256": "0bf4673a45c839dbaebdec80659124bc10114ec73fcdde86b0b74f7c9c3918e4"
+      },
+      {
+        "name": "role_squadheal.js",
+        "sha256": "092d7c65063010a79e92b306f4f5080c7722766ee8e66c2dd53304d3416ad930"
+      },
+      {
+        "name": "role_squadsiege.js",
+        "sha256": "6c29729dc28c9cdb32277da5e0f1b796e982ed202d2bd1fdb462f99fbff42885"
+      },
+      {
+        "name": "role_storagefiller.js",
+        "sha256": "bbe479d37447740ce02be22246795bed951453f9230a4c8b2c76f8716d4c7a92"
+      },
+      {
+        "name": "role_structurer.js",
+        "sha256": "26e58740dcbd916ecb72aba6213743a235856bc9c412613ce36fa3a7c320f313"
+      },
+      {
+        "name": "role_towerdrainer.js",
+        "sha256": "0dcb20d1a99858f3806738a12cef2cfb0262cbd3f24386243cf97db1d76acfb5"
+      },
+      {
+        "name": "role_universal.js",
+        "sha256": "abb985c3070a7cee21bacd8568452b0d51d64c8af6c1caf39cd936832f11b0c3"
+      },
+      {
+        "name": "role_upgrader.js",
+        "sha256": "84de8832875a04c30f46c08231c7770980d2cd1d23ee8558d968c447290cd14a"
+      },
+      {
+        "name": "role_watcher.js",
+        "sha256": "0acf946e0723924fef2bb578c5021221a9fde892a715a6ef0b594146405847b4"
+      },
+      {
+        "name": "screepsplus.js",
+        "sha256": "4678c6e8622dc0f0fe80c88eea5f00ff27cdee771690522db71a7d9b010f59d5"
+      },
+      {
+        "name": "utils.js",
+        "sha256": "975b73f4f78c66efd2bfc9fef3a9f038cf5ee2d4666997a2035f15706e5fa5d9"
+      },
+      {
+        "name": "utils_creep_part.js",
+        "sha256": "3b643e20f35e95d12f22195b2206015b3fd076dfef5438d717f552918d82efa8"
+      },
+      {
+        "name": "visualizer.js",
+        "sha256": "f36242a896c573306cfbb77d1ded124b00c609e3dc3f351303a6e67de9bfe97d"
+      }
+    ],
+    "observer_sha256": "24a79639949f489cd4421850a90a5d3796eb4edfdd076d20e358127f6c17cc80"
+  },
+  "observer_sha256": {
+    "file": "observer.js",
+    "sha256": "24a79639949f489cd4421850a90a5d3796eb4edfdd076d20e358127f6c17cc80"
+  },
+  "enemy_sha256": "bf8a4ae48d9a18145b3dc485c2d50b28c0c33ba4f11afea388583122e8eeea76",
+  "validated_harness_sha256": "8780d5f4eb8bee35c9c4613a873bc33b6a7aba48d899c0f5011e35a55f0135fa",
+  "implementation_commit": "4cef2ba",
+  "evidence_note": "TooAngel 防御战斗与冷恢复六阶段验收；原始输入日志和检查点在运行输出目录，入库保存汇总与 sim 报告，可按 README 固定来源复现。玩家 CPU 计量为墙钟语义（官方同形），跨段指标等值是空闲机器观察结果；引擎结算确定性由每段 verify_replay 保证。"
+}

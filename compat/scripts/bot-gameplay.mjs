@@ -20,7 +20,11 @@ const fixture = join(root, 'compat/fixtures/sim-tooangel');
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
 // 仅复制锁定提交的 src/*.js；校验 git blob 与目录清单，不能信根目录旧副本。
-export function prepareModules(botRoot, destination) {
+// observer 可选 { source, target }：随模块部署的观察器，默认经济夹具的
+// acceptance.js；其它验收（如战斗）传自己的观察器，避免无关模块进入
+// 模块目录与报告身份元数据。
+export function prepareModules(botRoot, destination, observer) {
+  observer ||= { source: join(fixture, 'acceptance.js'), target: 'acceptance.js' };
   const git = (...args) =>
     execFileSync('git', ['-C', botRoot, ...args], { encoding: 'utf8' }).trim();
   if (git('rev-parse', 'HEAD') !== TOOANGEL_PIN) throw new Error('TooAngel HEAD 不符合锁定版本');
@@ -52,12 +56,12 @@ export function prepareModules(botRoot, destination) {
   // 全部身份核验完成后才写输出，不覆盖 bot 源码。
   mkdirSync(destination);
   for (const { name, bytes } of files) writeFileSync(join(destination, name), bytes);
-  copyFileSync(join(fixture, 'acceptance.js'), join(destination, 'acceptance.js'));
+  copyFileSync(observer.source, join(destination, observer.target));
   return {
     commit: TOOANGEL_PIN,
     source: resolve(botRoot, 'src'),
     files: files.map(({ name, sha256 }) => ({ name, sha256 })),
-    observer_sha256: sha256(readFileSync(join(fixture, 'acceptance.js'))),
+    observer_sha256: sha256(readFileSync(observer.source)),
   };
 }
 

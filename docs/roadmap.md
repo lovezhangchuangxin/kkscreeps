@@ -43,7 +43,7 @@ M2 分为两道关卡，避免把运行环境可用与完整玩法可玩混为�
 
 核心仓库搬运与分片 GCL 输入已接入；两种玩家投影分别通过连续 40 tick 的采集、容器搬运和升级守恒场景，记录见[核心经济链与 GCL](research/notes/economy-gcl-2026-10-04.md)。现已提供 [sim run](architecture/local-simulation.md) 和可复跑的采集、搬运、升级、寿命到期后孵化替补场景；完整外部 bot 的玩法验收、特殊存储规则开放及数据库/迁移/日志恢复仍须继续推进；已提供显式[基础检查点](architecture/checkpoints.md)。
 
-2026-10-09 新增 [TooAngel 单房经济与冷恢复验收](../compat/README.md#tooangel-单房经济与冷恢复)：锁定的未修改 bot 在 JSON/KKPV 各完成 2000 tick 连跑与 1000+1000 tick 跨进程续跑，验证实际采集、转账、建造、升级、死亡后补员和输入回放。TooAngel 首片不包含战斗或多房，不关闭 M2B 整体验收。随后新增 [Overmind 原版单房经济与冷恢复](../compat/README.md#overmind-持续世界与冷恢复) 和 [普通 Invader 持续战斗](../compat/README.md#普通-invader-持续战斗与冷恢复)：前者通过同样的六阶段经济/寿命矩阵，后者以实际位置/hits 与事件验证 NPC 行为及 200 tick 直跑/冷恢复等值。真实 bot 战斗、多房、长期存活与存储/完整世界仍未收口。
+2026-10-09 新增 [TooAngel 单房经济与冷恢复验收](../compat/README.md#tooangel-单房经济与冷恢复)：锁定的未修改 bot 在 JSON/KKPV 各完成 2000 tick 连跑与 1000+1000 tick 跨进程续跑，验证实际采集、转账、建造、升级、死亡后补员和输入回放。TooAngel 首片不包含战斗或多房，不关闭 M2B 整体验收。随后新增 [Overmind 原版单房经济与冷恢复](../compat/README.md#overmind-持续世界与冷恢复) 和 [普通 Invader 持续战斗](../compat/README.md#普通-invader-持续战斗与冷恢复)：前者通过同样的六阶段经济/寿命矩阵，后者以实际位置/hits 与事件验证 NPC 行为及 200 tick 直跑/冷恢复等值。2026-10-10 新增 [TooAngel 防御战斗与冷恢复](../compat/README.md#tooangel-防御战斗与冷恢复)：真实 bot 防御链（塔攻击/防御者出生/安全模式激活）经敌方脚本坦克在 520 tick 双通道六阶段矩阵验证。真实 bot 多房进攻、bot 对战、长期存活与存储/完整世界仍未收口。
 
 并发调度、统一提交和共享视图遵循 [tick 契约](architecture/tick-contract.md)与[快照契约](architecture/snapshot-contract.md)。这些文档分别说明现状和目标；提出契约不等于生产通路已经完整接入。端到端基线按[性能验收方案](architecture/performance-acceptance.md)采集，须先确认夹具实际产生动作与状态变化。
 
