@@ -23,6 +23,7 @@ mod package;
 mod profile;
 mod realm;
 mod rng;
+pub mod services;
 mod v8_convert;
 mod write;
 

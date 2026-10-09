@@ -1,9 +1,31 @@
 //! Mod 作者命令参数及选项映射。
-use super::{init, inspect, test, types};
+use super::{init, inspect, services, test, types};
 use clap::Subcommand;
 
 #[derive(Subcommand)]
 pub(crate) enum ModCommand {
+    /// 在独立后台域运行真实服务包的生命周期、异步探针与请求
+    Services {
+        #[arg(long)]
+        root: std::path::PathBuf,
+        #[arg(long)]
+        configs: Option<std::path::PathBuf>,
+        #[arg(long)]
+        select: Vec<String>,
+        #[arg(long)]
+        exclude: Vec<String>,
+        /// 已提交检查点；省略时构造最小作者世界
+        #[arg(long)]
+        checkpoint: Option<std::path::PathBuf>,
+        /// [{service,args}] 请求数组
+        #[arg(long)]
+        requests: std::path::PathBuf,
+        /// namespace:name=path，显式授予常规文件只读探针，可重复
+        #[arg(long)]
+        probe: Vec<String>,
+        #[arg(long)]
+        report: std::path::PathBuf,
+    },
     /// 生成作者最小包模板（对象 tick、玩家类、场景与断言）
     Init {
         /// 包根目录；模板落在 <root>/<id>/，已存在时拒绝
@@ -81,6 +103,25 @@ pub(crate) enum ModCommand {
 impl ModCommand {
     pub(crate) fn run(self) -> i32 {
         match self {
+            Self::Services {
+                root,
+                configs,
+                select,
+                exclude,
+                checkpoint,
+                requests,
+                probe,
+                report,
+            } => services::run(services::Options {
+                root,
+                configs,
+                select,
+                exclude,
+                checkpoint,
+                requests,
+                probes: probe,
+                report,
+            }),
             Self::Init { root, id } => init::run(init::Options { root, id }),
             Self::Test {
                 root,

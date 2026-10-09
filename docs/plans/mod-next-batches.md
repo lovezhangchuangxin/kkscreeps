@@ -4,9 +4,9 @@
 
 ## 当前接手位置
 
-- 更新日期：2026-10-09；普通 Invader 行为与移动记忆恢复已提交 `5c544cf`；持续 NPC 战斗验收已提交 `4a3016e`；Overmind 单房验收已提交 `d4f4403`。最近完整门禁 Rust 1502 passed / 0 failed；最近 release 棘轮 2802 passed / 8 failed / 104 skipped（0 转红，8 例既有豁免）。本批重跑 TooAngel 持续世界六阶段，没有重跑固定世界三 bot。
+- 更新日期：2026-10-09；普通 Invader 行为与移动记忆恢复已提交 `5c544cf`；持续 NPC 战斗验收已提交 `4a3016e`；Overmind 单房验收已提交 `d4f4403`。最近完整门禁 Rust 1512 passed / 0 failed；最近 release 棘轮 2802 passed / 8 failed / 104 skipped（0 转红，8 例既有豁免）。本批重跑 TooAngel 持续世界六阶段，没有重跑固定世界三 bot。
 - 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座、deposit 采集链、observer 限时视野已交付。**M2H.b 19/19 powers 全部接通**。
-- 当前接手：G02.d3 结构/rampart 计划级通行及默认玩家/NPC 寻路已提交 `fd27fbd`；G03 障碍追加后的同源链预演已提交 `3f3d9a7`；障碍摘要的安全模式主人已提交 `41de432`；控制器零升级量的动作/事件分歧已修复，随本批提交；下一项 G27.a 独立异步后台宿主。逐房通行粒度、摘要增强、完整仲裁替换仍未完成。
+- 当前接手：G02.d3 结构/rampart 计划级通行及默认玩家/NPC 寻路已提交 `fd27fbd`；G03 障碍追加后的同源链预演已提交 `3f3d9a7`；障碍摘要的安全模式主人已提交 `41de432`；控制器零升级量修复已提交 `10eb812`；G27.a 独立异步后台宿主已完成，随本批提交；下一项补齐 attackController 的 INVULNERABILITY 玩家预检。逐房通行粒度、摘要增强、完整仲裁替换仍未完成。
 - 本次完成：JSON/KKPV 各 200 tick 持续战斗、100+100 tick 跨进程冷恢复和完整检查点回放；实际位置/hits 证明移动、受伤与恢复，双通道及直跑/续跑世界与 Memory 等值。TooAngel v6 双通道 2000 tick 连跑及 1000+1000 tick 冷恢复六阶段复验通过。
 - 剩余：真实 bot 战斗/多房/长期存活验收；地图生成/raid/stronghold 与 G21 Mod 世界事件；walkTo/Keeper lastMove 按实际 stronghold 消费者接线；G02.d3 逐房/摘要后续、G03 完整仲裁替换与 G27.a。NPC 场景不标 M2B 或 G21 完成。
 - 兼容率 2802/2914≈96.2%（**95% 中间检查点已越过**；99% 目标需 2885）。
@@ -71,7 +71,7 @@
 | G24 | tick 边界更新/watch | 部分完成 | .a 无开放轮次的包/API 切换已交付；watch 未开始；[检查点](../architecture/checkpoints.md) |
 | G25 | 输入日志与结算回放 | 已完成 | .a 日志协议/保存、.b 回放/完整状态核对；[输入日志](../architecture/input-log.md) |
 | G26 | 自动检查点/storage | 部分完成 | .a 周期保存/keep/恢复选择已交付；.b provider 待 G27.a；[检查点](../architecture/checkpoints.md) |
-| G27 | 后台服务/outbox | 未开始 | .a 最小异步宿主；.b 耐久输入/outbox，依赖 G25.a/G26.a |
+| G27 | 后台服务/outbox | 部分完成 | .a 独立异步宿主与有限只读探针已交付，见[后台服务](../architecture/background-services.md)；.b 耐久输入/outbox 未实现 |
 | G28 | Backend 贡献 | 未开始 | .a M3 最小真实服务；.b 路由/订阅/provider，依赖后台与输入边界 |
 | G29 | 玩家类型与客户端 | 部分完成 | .a mod types / --check 已交付；.b 真实客户端、.c 资产/渲染/面板未开始；[类型生成](../architecture/mod-types.md) |
 | G30 | 预设/覆盖/性能验收 | 未开始 | .a 覆盖清单、.d 同功能参考先滚动；.b 官方预设、.c 内容所有权迁移、.e 最终收口 |
@@ -320,3 +320,11 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 - 基线 `41de432`，起始工作区干净。核对固定官方 engine 4.3.0 的 upgradeController.js：有能量且其他门通过时，即便 WORK 效果为 0，仍写 actionLog 与 amount=0/energySpent=0 事件；RCL8 满额仍提前拒绝。补原生结算回归，验证不付费/不涨 GCL、限额与其他拒绝门保留。不扩大 G15 Mod 策略范围，无新增保存域。
 
 - 删除零量提前返回，保留原生所有拒绝门；新增无 WORK/损毁 WORK × RCL1/8、能量/归属/距离/等级/封锁/孵化拒绝和 RCL8 同轮先耗尽限额回归，三组定向测试通过。首版测试夹具编译失误已修正；红测真实复现原来的零量事件缺失，孵化孤儿清理导致的夹具查询也已按可选对象修正。无参数完整门禁通过：Rust 1502 passed / 0 failed，Clippy、JS workspace/维护工具与 924 个源码/测试规模通过。release CLI 已重建；固定 bot 准备、适配器构建与显式 release 兼容棘轮通过：2802 passed / 8 failed / 104 skipped、floor 2802、0 转红/0 转绿（8 例既有豁免）。文档链接 304 个 Markdown / 1953 个本地链接通过，无 doctest 改动。无新 SDK 示例需求，不新建交付报告；本片没有运行 bot 长测。
+
+## 2026-10-09 G27.a 独立异步后台宿主（完成）
+
+- 基线 `10eb812`，起始工作区干净。首片使用独立线程/V8 与有界请求队列，包内 services 入口同步注册、start/request/stop 可 await；只接脱离世界的已提交快照与显式命名的有限只读探针。复用 VM CPU/墙钟/内存预算，失败销毁后台域，不直接访问 Working/玩家权限。后台进程态是瞬态，冷启动重新 start；不承诺耐久任务，G27.b outbox/输入游标与 G26.b storage provider 仍未实现。验收须含真实包、异步 I/O、生命周期、队列满、资源故障、未选包隔离与持续世界并行。
+
+- 独立 worker/realm、原生登记能力门、同步注册/异步生命周期、队列快拒绝、过期/跨包/未授予/调用和字节限额及共享 VM 预算已接线；FileProbe 使用常规文件的有限只读异步任务。实际发现异步 op 会在 V8 调用时提前轮询，首轮测试因没有 Tokio 上下文而中止，已将预算调用统一进入 worker 执行器上下文；随后宿主六组、CLI 三组与双通道持续世界一组定向回归通过。CLI 冷检查点身份读取/输入守卫、后台等待读期间世界继续推进及重启 calls 归零均实测。新增 ADR-017、现行后台契约/源码导航/状态域清单与公共示例，无新玩法持久域或载荷版本；可选 services 清单/代码沿既有 Mod 身份与包摘要保存，无服务旧清单保持原序列化形态。首轮完整门禁通过，最后的故障来源诊断和协议常量收口后须再次完整复验。
+
+- 最终无参数完整门禁通过：Rust 1512 passed / 0 failed，Clippy、JS workspace/维护工具、307 个 Markdown / 1971 个本地链接与 936 个源码/测试规模通过。release CLI 重建通过，公共 services 包由 release 实际运行，start/request/stop 与 world_unchanged=true 验收通过；JS 格式检查通过，无 doctest 改动。固定 bot 准备、适配器构建和显式 release 兼容棘轮通过：2802 passed / 8 failed / 104 skipped、floor 2802、0 转红/0 转绿（8 例既有豁免）。本片未运行 bot 长测，不标网络/耐久任务完成；实现/测试/公共示例/契约及报告随本批提交。

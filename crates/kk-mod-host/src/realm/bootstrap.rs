@@ -34,6 +34,7 @@ impl ModRealm {
         let mut runtime = JsRuntime::new(RuntimeOptions {
             extensions: vec![kk_mod_host::init()],
             module_loader: Some(Rc::new(PackageModuleLoader {
+                services: false,
                 packages: loader_packages.clone(),
             })),
             create_params: Some(v8::CreateParams::default().heap_limits(0, limits.memory_bytes)),

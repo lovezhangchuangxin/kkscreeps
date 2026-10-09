@@ -25,6 +25,8 @@
 | [ADR-015](ADR-015-mod-chain-execution.md) | JS 组合处理链与 Rust 候选访问 | 整槽进入 JS、native op 访问候选；当前机制见 Mod 执行文档 |
 | [ADR-016](ADR-016-official-content-packs.md) | 官方玩法包、内容选择与公共 JS SDK 验收 | 细化 ADR-007/014/015：部分官方内容由 JS 实现，预设装配与存量迁移尚未实现 |
 
+| [ADR-017](ADR-017-background-services.md) | 独立线程的异步后台服务域 | G27.a 首片已交付；耐久任务与 outbox 另有提交边界 |
+
 上述记录均已接受，具体修订与范围以各记录正文为准。
 
 ## 评估后未采用的方案

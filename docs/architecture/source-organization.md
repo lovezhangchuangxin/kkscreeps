@@ -124,3 +124,5 @@ CLI 的开发/测试构建对 `sha2` 依赖启用 `opt-level = 3`，ARM 后端�
 静态通行规则的目录与冻结快照位于 `kk-mod-api/src/builtin/passability.rs`，统一持有墙与对象/rampart 三轴；引擎登记/仲裁、玩家默认矩阵和 NPC 搜索读取同一计划来源。注册目录入口只汇入声明，避免不同消费者重复解析规则值域。
 
 移动准入与障碍后的预演共用 Movement 的只读克隆/取消链函数；Working 统一提供当前安全模式主人。障碍候选仅提供追加集脱离快照，Mod host 读 op 与 SDK 只负责同步能力窗和故障归属，不重复实现链传播算法。
+
+G27.a 的 kk-mod-host/src/services 按职责拆为队列句柄/配置（mod.rs）、线程生命周期（worker.rs）、V8 装载与预算（realm.rs）、能力与探针 op（ops.rs）、常规文件读实现（file_probe.rs）和独立 SDK（sdk.js）。共同 PackageModuleLoader 显式区分 SDK 域；后台线程不持有 Working。CLI services.rs 只协调输入、真实快照与报告，玩法与后台测试分域，见[后台契约](background-services.md)。

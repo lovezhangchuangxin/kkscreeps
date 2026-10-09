@@ -38,8 +38,10 @@ fn sdk_source(url: &str) -> Option<&'static str> {
 }
 
 /// 包内模块加载器：字节来自装载期的内存快照，注册期不触碰磁盘。
-/// 只允许包内相对导入与 `@kkscreeps/mod`；跨包导入与裸导入拒绝。
+/// 只允许包内相对导入与所属域的 SDK；跨包导入与其他裸导入拒绝。
 pub(crate) struct PackageModuleLoader {
+    /// 后台域只接受后台 SDK；玩法域只接受玩法 SDK，避免入口误用能力。
+    pub(crate) services: bool,
     pub(crate) packages: Rc<RefCell<BTreeMap<PathBuf, Rc<ModPackage>>>>,
 }
 
@@ -49,7 +51,14 @@ impl PackageModuleLoader {
         specifier: &ModuleSpecifier,
         maybe_referrer: Option<&ModuleLoadReferrer>,
     ) -> Result<ModuleSource, JsErrorBox> {
-        if let Some(source) = sdk_source(specifier.as_str()) {
+        let source = if self.services && specifier.as_str() == "kkservices:sdk" {
+            Some(include_str!("../services/sdk.js"))
+        } else if !self.services {
+            sdk_source(specifier.as_str())
+        } else {
+            None
+        };
+        if let Some(source) = source {
             let sdk = source.as_bytes().to_vec();
             return Ok(ModuleSource::new(
                 ModuleType::JavaScript,
@@ -117,6 +126,15 @@ impl ModuleLoader for PackageModuleLoader {
         referrer: &str,
         kind: ResolutionKind,
     ) -> Result<ModuleSpecifier, JsErrorBox> {
+        if self.services && matches!(specifier, "@kkscreeps/services" | "kkservices:sdk") {
+            return ModuleSpecifier::parse("kkservices:sdk").map_err(JsErrorBox::from_err);
+        }
+        if self.services && matches!(specifier, SDK_SPECIFIER | SDK_URL) {
+            return Err(JsErrorBox::generic("后台域不能装载玩法 SDK"));
+        }
+        if !self.services && matches!(specifier, "@kkscreeps/services" | "kkservices:sdk") {
+            return Err(JsErrorBox::generic("玩法域不能装载后台 SDK"));
+        }
         if specifier == SDK_SPECIFIER || specifier == SDK_URL {
             return ModuleSpecifier::parse(SDK_URL)
                 .map_err(|error| JsErrorBox::generic(error.to_string()));

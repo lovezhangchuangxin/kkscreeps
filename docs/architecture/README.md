@@ -9,6 +9,7 @@
 | [overall.md](overall.md) | 当前运行入口、模块职责、实际依赖和数据表示；区分预留模块与目标服务 |
 | [source-organization.md](source-organization.md) | 当前源码模块导航、测试分组与文件规模门禁 |
 | [game-loop.md](game-loop.md) | 当前玩家执行与结算流程，以及并行流水线的目标 |
+| [background-services.md](background-services.md) | G27.a 独立后台线程/V8、受控异步生命周期、有限只读探针和作者 CLI；耐久/网络仍待后续 |
 | [mod-execution.md](mod-execution.md) | JS/native 组合链、候选访问与当前支持范围 |
 | [mod-composition.md](mod-composition.md) | JS handler 依赖、冻结/活动链、规则来源、停用闭包及 mod inspect |
 | [mod-rules.md](mod-rules.md) | 玩法 JS 读取冻结有效规则值：可用范围、错误行为、数值语义与恢复/停用一致性 |

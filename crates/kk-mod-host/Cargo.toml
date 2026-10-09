@@ -19,3 +19,6 @@ sha2 = "0.10.9"
 tokio.workspace = true
 
 [dev-dependencies]
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

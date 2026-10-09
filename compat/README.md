@@ -187,3 +187,5 @@ KKSCREEPS_BIN="$PWD/target/release/kkscreeps" node compat/scripts/bot-gameplay.m
 ### 移动障碍后的链预演
 
 公共 SDK 的 `ctx.obstacle.evaluate()` 只读预演当前追加阻挡后的正式取消链，帮助多个 JS 策略组合时观察交换/跟随/拉拽的级联后果。它只在障碍槽同步窗口有效，不消费候选；继续追加、后续钩子或 decline 会使先前结果失效。使用示例与范围见[障碍场景说明](fixtures/sim-mod-move-obstacle/README.md#障碍后预演当前能力)。
+
+后台服务公共 SDK 示例见[mod-services](fixtures/mod-services/README.md)，作者命令验证独立后台 VM 的异步探针和真实世界/检查点只读输入；它不是网络服务或耐久 outbox 验收。

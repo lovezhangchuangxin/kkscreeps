@@ -22,4 +22,5 @@ anyhow = { workspace = true }
 sha2 = "0.10.9"
 
 [dev-dependencies]
+tokio = { workspace = true }
 kk-vm = { workspace = true, features = ["test-support"] }

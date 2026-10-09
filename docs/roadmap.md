@@ -131,3 +131,5 @@ Mod 后续工作使用[30 项任务与接手台账](plans/mod-next-batches.md)�
 2026-10-07 G02.d2 移动玩家门双端冻结已交付（完整门禁与 release ratchet 通过）：fatigueLimit/minActiveMoves 两条规则同源驱动玩家面 move()/moveTo() 预检与仲裁原生预填；moveTo 不穿墙、PathFinder 不感知放行已由回归测试钉死。声明式寻路规则登记 G02.d3 设计；G02 父项仍部分完成。契约见[玩家预检规则](architecture/player-precheck-rules.md)，最终检查与提交以持续台账为准。
 
 2026-10-08 G02.d3 首片墙地形静态通行声明已交付（完整门禁与 release ratchet 通过）：`builtin:terrain.wallPassable` 规则同源驱动仲裁静态墙项与玩家面原生寻路地形（三通道），物理地形查询保持原值，全墙保护环不放开；默认零行为变化（棘轮零转红）。结构/rampart 通行声明属后续切片，G02 父项仍部分完成。契约见[静态通行声明](architecture/movement.md#静态通行声明g02d3)，最终检查与提交以持续台账为准。
+
+G27.a 后台首片已交付独立线程/V8、受控异步生命周期、已提交世界副本读面、有限只读探针和作者 CLI，见[后台服务](architecture/background-services.md)。M3 的耐久输入/outbox、storage/provider、HTTP/WS 与客户端仍按原验收范围推进，不从后台首片推导为完成。

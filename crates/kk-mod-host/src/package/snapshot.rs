@@ -96,6 +96,9 @@ impl ModPackage {
         if let Some(player) = &manifest.player {
             declared.push(PathBuf::from(player));
         }
+        if let Some(services) = &manifest.services {
+            declared.push(PathBuf::from(services));
+        }
         for required in declared {
             if !files.contains_key(&required) {
                 return Err(ModHostError::new(

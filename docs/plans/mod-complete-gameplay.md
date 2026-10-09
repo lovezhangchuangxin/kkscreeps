@@ -87,3 +87,5 @@ N4 先建立数据清单：rooms/扩展字段、players/Memory/segments/CPU/通�
 6. 官方 JS 内容实际使用公共 SDK，第二个同类包无需专用 Rust 分支；每个已迁移包验证未选时无残留行为、依赖组合与存量内容变更。默认预设、原生/JS 等价配置、第三方增量开销按[内容包口径](../designs/content-packs.md#性能与兼容性口径)分别记录。
 
 按变更影响更新现行契约、SDK 和适用样例；普通内部重构不要求新增交付文档。按仓库贡献指南执行对应 crate 测试、重建测试二进制、兼容性棘轮与必要真实场景；开发中可用 `pnpm run check -- <crates>` 限定子集加速迭代，提交前仍须运行无参数完整 `pnpm run check`。所有源码/测试文件继续遵守 1000 行门禁。完成后先 code review、清偿问题，再提交。
+
+G27.a 首片已接独立后台线程/V8、start/request/stop、有限只读探针与作者 CLI，读取真实已提交世界副本；全局与队列为进程态。N5 的业务 provider、storage provider、耐久 outbox 与实际 HTTP/WS 仍未交付，现行边界见[后台服务](../architecture/background-services.md)。

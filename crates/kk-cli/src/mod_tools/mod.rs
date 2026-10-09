@@ -3,6 +3,7 @@ mod command;
 mod init;
 mod inspect;
 mod registration;
+mod services;
 mod test;
 mod types;
 

@@ -101,7 +101,7 @@ impl VersionReq {
     }
 }
 
-/// mod.json 的严格子集；未实现的服务侧/客户端字段按未知字段拒绝，
+/// mod.json 的严格子集；未实现的客户端字段按未知字段拒绝，
 /// 能力补齐时再显式放开，避免装出“字段被接受但无效果”的包。
 #[derive(Clone, Debug, Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
@@ -116,6 +116,8 @@ pub struct ModManifest {
     pub entry: String,
     #[serde(default)]
     pub player: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub services: Option<String>,
 }
 
 fn default_entry() -> String {
@@ -154,6 +156,15 @@ impl ModManifest {
                 return Err(ModHostError::new(
                     context,
                     "player 与 entry 不得指向同一文件（该文件会被剔出服务端代码摘要）",
+                ));
+            }
+        }
+        if let Some(services) = &manifest.services {
+            manifest.check_module_path(services, "services")?;
+            if services == &manifest.entry || manifest.player.as_ref() == Some(services) {
+                return Err(ModHostError::new(
+                    context,
+                    "services 须与 entry/player 分属不同模块",
                 ));
             }
         }

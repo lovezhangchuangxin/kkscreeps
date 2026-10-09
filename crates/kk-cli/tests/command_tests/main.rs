@@ -6,3 +6,5 @@ mod mod_inspect_tests;
 mod mod_output_guard_tests;
 mod mod_test_tests;
 mod mod_types_tests;
+
+mod mod_services_tests;

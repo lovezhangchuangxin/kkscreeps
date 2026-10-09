@@ -106,3 +106,5 @@
 房间任务并行、玩家与房间结算重叠、共享快照、数据库与输入日志持久化、网络服务和前端尚需分别实现与验收。详细要求见 [架构索引](README.md)，取舍依据见 [ADR-004](../decisions/ADR-004-core-architecture.md)、[ADR-013](../decisions/ADR-013-architecture-review-coordinator.md)和 [ADR-014](../decisions/ADR-014-contribution-plane.md)。
 
 常量来源为 Screeps common，指令规则和玩家 API 主要对照 Screeps engine，原生寻路对照 Screeps driver。具体版本与符号在相应源码中注明；原始研究见 [研究索引](../research/README.md)。
+
+G27.a 后台首片由 kk-mod-host::services 提供独立线程/V8 和异步读探针，kk-cli 的 mod services 是真实消费者；已提交世界副本由 runtime 提供，后台等待不阻塞玩家推进。该路径不经过 kk-backend 或 kk-storage，没有网络监听/耐久 outbox/provider。见[后台服务](background-services.md)。

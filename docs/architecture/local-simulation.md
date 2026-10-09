@@ -105,3 +105,5 @@ CLI 参数解析失败沿用 Clap 的退出码 2，不写报告。报告通过�
 ### 原版 Overmind 持续世界验收
 
 [Overmind 验收入口](../../compat/scripts/bot-gameplay.mjs) 用 `--bot overmind` 选择锁定官方发布资产与[单房场景](../../compat/fixtures/sim-overmind/scenario.json)，核验资产 SHA-256 后原样复制。与 TooAngel 共用双通道连跑/跨进程冷恢复及整份检查点回放门禁；观察器在原版 loop 后读取当前 Memory，兼容原版重用 `RawMemory._parsed` 的行为。指标只计上一拍正量结算和已出生 creep，完整运行窗口截获官方 logger 的异常。验收范围为单房经济/寿命，未覆盖战斗或多房；报告与复跑说明见 [compat 使用说明](../../compat/README.md#overmind-持续世界与冷恢复)。
+
+`kkscreeps mod services` 从真实最小世界或既有检查点取得只读副本，在独立后台线程验证服务 start/request/stop 和显式授予的文件探针；请求不会直接写游戏状态。参数、限额和公共包见[后台服务](background-services.md)。
