@@ -287,7 +287,7 @@ pub fn settle_room(
             "controller" => economy::controller_tick(&mut ctx.borrow_mut(), id),
             "tombstone" => economy::tombstone_tick(&mut ctx.borrow_mut(), id),
             "ruin" => economy::ruin_tick(&mut ctx.borrow_mut(), id),
-            "mineral" => economy::mineral_tick(&mut ctx.borrow_mut(), id),
+            "mineral" => economy::mineral_tick(&mut ctx.borrow_mut(), id)?,
             "deposit" => economy::deposit_tick(&mut ctx.borrow_mut(), id),
             "powerBank" => economy::power_bank_tick(&mut ctx.borrow_mut(), id),
             "portal" => portals::portal_tick(&mut ctx.borrow_mut(), id),

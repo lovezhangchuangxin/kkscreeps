@@ -29,6 +29,8 @@ pub(in crate::settle) struct SharedState {
 #[derive(Clone)]
 pub struct TickState {
     pub(in crate::settle) inner: Rc<RefCell<SharedState>>,
+    /// 本拍处理器随机源（Engine 在 prepare 时带入，mineral_tick 消费）。
+    pub(in crate::settle) random: crate::settle::ProcessorRandom,
 }
 
 impl TickState {
@@ -49,7 +51,14 @@ impl TickState {
                 players,
                 mod_states,
             })),
+            random: crate::settle::ProcessorRandom::default(),
         }
+    }
+
+    /// 附加处理器随机源（Engine prepare 时调用；默认构造为 Derived）。
+    pub(in crate::settle) fn with_random(mut self, random: crate::settle::ProcessorRandom) -> Self {
+        self.random = random;
+        self
     }
 
     /// 读取某命名空间的候选状态；未初始化的命名空间返回 null。

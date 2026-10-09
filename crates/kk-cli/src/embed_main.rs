@@ -126,8 +126,25 @@ fn handle_line(engine: &mut EmbedEngine, line: &str) -> anyhow::Result<Value> {
             if count == 0 {
                 anyhow::bail!("tick 次数须至少为 1");
             }
-            engine.tick(u64::from(count))?;
-            json!({ "time": engine.get_game_time() })
+            // 可选注入序列（适配器 tick({random})）：数组元素须为数；值域
+            // [0,1) 与耗尽语义由引擎侧统一校验/报错。
+            let random = match params.get("random") {
+                None => None,
+                Some(Value::Null) => None,
+                Some(Value::Array(values)) => {
+                    let mut seq = Vec::with_capacity(values.len());
+                    for (i, v) in values.iter().enumerate() {
+                        let f = v
+                            .as_f64()
+                            .ok_or_else(|| anyhow::anyhow!("random[{i}] 须为数，实得 {v}"))?;
+                        seq.push(f);
+                    }
+                    Some(seq)
+                }
+                Some(v) => anyhow::bail!("random 须为数字数组，实得 {v}"),
+            };
+            let random_consumed = engine.tick_with_random(u64::from(count), random)?;
+            json!({ "time": engine.get_game_time(), "randomConsumed": random_consumed })
         }
         "getObject" => {
             let id = s(&params, "id")?;

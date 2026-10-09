@@ -699,25 +699,76 @@ impl EmbedEngine {
     /// 不运行玩家代码，逐轮结算 `count` 个 tick。
     /// 途中失败仅保留失败 tick 之前的状态，已经成功的 tick 不会撤销。
     pub fn tick(&mut self, count: u64) -> anyhow::Result<()> {
+        self.tick_with_random(count, None).map(|_| ())
+    }
+
+    /// tick({random}) 注入：序列先整单校验（[0,1)，越界即拒且不推进
+    /// 时间），随后整次调用共享一个序列逐值供结算处理器消费，耗尽报错
+    /// 且该拍候选整体回滚（此前已成功的 tick 保留）。多余的注入值无害。
+    /// 返回本次调用实际消耗的注入值数——signal 逐拍模式下适配器据此
+    /// 切片续传剩余序列。
+    pub fn tick_with_random(
+        &mut self,
+        count: u64,
+        random: Option<Vec<f64>>,
+    ) -> anyhow::Result<u64> {
         self.no_pending_round("tick")?;
-        for _ in 0..count {
-            let (tick, generation) = (self.engine.world().time(), self.engine.world().generation());
-            let input = TickInput::now();
-            self.settle_world(IntentBatch::default(), input)?;
-            if self.input_log.is_some()
-                && let Err(e) = self.log_round(
-                    tick,
-                    generation,
-                    "advance",
-                    input.now_ms,
-                    json!({}),
-                    json!({}),
-                )
-            {
-                return Err(self.drop_log_for_io_failure(e));
+        // serde_json 解析会把距 1.0 一 ULP 内的合法值（如
+        // 0.9999999999999999）进位为 1.0 而被此处误拒——fail-closed 方向
+        //（无 ≥1 字面量被误收），登记为可接受误拒边界。
+        if let Some(values) = &random {
+            for (i, v) in values.iter().enumerate() {
+                if !(0.0..1.0).contains(v) {
+                    anyhow::bail!(
+                        "tick options.random[{i}] 越界：须为 [0,1) 内的数，实得 {v}（时间未推进）"
+                    );
+                }
             }
         }
-        Ok(())
+        let injected = random.map(|values| {
+            let total = values.len();
+            (
+                total,
+                std::rc::Rc::new(std::cell::RefCell::new(values.into_iter().collect())),
+            )
+        });
+        if let Some((_, rc)) = &injected {
+            self.engine
+                .set_processor_random(kk_engine::settle::ProcessorRandom::Injected(rc.clone()));
+        }
+        let result = (|| {
+            for _ in 0..count {
+                let (tick, generation) =
+                    (self.engine.world().time(), self.engine.world().generation());
+                let input = TickInput::now();
+                self.settle_world(IntentBatch::default(), input)?;
+                if self.input_log.is_some()
+                    && let Err(e) = self.log_round(
+                        tick,
+                        generation,
+                        "advance",
+                        input.now_ms,
+                        json!({}),
+                        json!({}),
+                    )
+                {
+                    return Err(self.drop_log_for_io_failure(e));
+                }
+            }
+            Ok(())
+        })();
+        let consumed = match &injected {
+            Some((total, rc)) => {
+                let left = rc.borrow().len();
+                u64::try_from(total - left).unwrap_or(0)
+            }
+            None => 0,
+        };
+        if injected.is_some() {
+            self.engine
+                .set_processor_random(kk_engine::settle::ProcessorRandom::default());
+        }
+        result.map(|_| consumed)
     }
 
     /// 回放一轮已记录的结算输入（G25.b）：注入记录的墙钟与写回，**不写

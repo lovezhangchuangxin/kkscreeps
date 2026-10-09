@@ -58,6 +58,6 @@ export const capabilities: AdapterCapabilities = {
   cpuShardLimits: false,
   liveWorldSize: true,
   actionLogCapture: false,
-  randomInjection: false,
+  randomInjection: true,
   deprecationNotices: true,
 };

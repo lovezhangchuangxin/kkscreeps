@@ -172,6 +172,17 @@ pub struct NotifyRecord {
 /// 内存通知最多保留最近 100 条。
 const NOTIFY_RECORD_CAP: usize = 100;
 
+/// 结算处理器随机源：tick({random}) 注入序列逐值消费（耗尽报错回滚
+/// 整拍候选），缺省用既有确定性派生流（矿物 MineralRng 同现状）。
+/// 挂在 Engine 上由调用方在注入 tick 调用期间设置并复位——run_player
+/// 等其余执行轮恒为 Derived，玩家沙箱的 Math.random 不在此域。
+#[derive(Clone, Default)]
+pub enum ProcessorRandom {
+    #[default]
+    Derived,
+    Injected(std::rc::Rc<std::cell::RefCell<std::collections::VecDeque<f64>>>),
+}
+
 /// 本轮结算的外部输入；控制器签名与市场订单时间使用此墙钟。
 /// 重试或重放须复用首次尝试的值，由调用方保存并注入。
 /// 来源：ADR-013 的非确定性输入约定。
@@ -222,6 +233,8 @@ pub struct Engine {
     next_id: u64,
     /// 最近成功 tick 的事件，按房间结算顺序拼接；失败不覆盖。
     pub(crate) last_events: Vec<serde_json::Value>,
+    /// 处理器随机源（tick({random}) 注入期间生效，见类型注释）。
+    pub(crate) processor_random: ProcessorRandom,
     /// 持续生效的房间故障注入，由调用方显式解除。
     fail_room: Option<String>,
     /// 失败后记录恢复状态；世界版本检查不能检测玩家或市场的直接修改。
@@ -296,6 +309,7 @@ impl Engine {
             market: market::MarketState::default(),
             next_id,
             last_events: Vec::new(),
+            processor_random: ProcessorRandom::default(),
             fail_room: None,
             run_state: RunState::Ready,
             fail_stage: None,
@@ -332,6 +346,12 @@ impl Engine {
         }
         let handle = self.plan.projection().resolve(&key)?;
         Some(&self.plan.projection().get(handle)?.descriptor)
+    }
+
+    /// 设置处理器随机源（tick({random}) 注入期间生效；调用方负责在调用
+    /// 结束后——无论成败——复位为 Derived）。
+    pub fn set_processor_random(&mut self, random: ProcessorRandom) {
+        self.processor_random = random;
     }
 
     /// 结算指定房间前返回错误，传 None 解除。

@@ -250,6 +250,7 @@ mod power_effects;
 mod production_boundaries;
 mod production_power_effects;
 mod quota_boundaries;
+mod random_injection;
 mod resource_domain;
 mod resource_faults;
 mod room_prototype;

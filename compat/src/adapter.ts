@@ -31,10 +31,12 @@ export interface PlaceSpec {
 
 export type PlayerCode = string;
 
-/** 上游 TickOptions（screeps-ok src/adapter.ts）的已实装子集：signal（AbortSignal）。
- *  random 注入要求 randomInjection capability（本适配器为 false，未声明）。 */
+/** 上游 TickOptions（screeps-ok src/adapter.ts）的已实装子集：signal
+ *  （AbortSignal）与 random（注入序列，值域 [0,1)，整次 tick 调用共享，
+ *  引擎处理器随机调用逐值消费、耗尽报错回滚该拍）。 */
 export interface TickOptions {
   signal?: AbortSignal;
+  random?: number[];
 }
 
 /** 上游 InvaderRaidRoomStateSpec：逐键种子，未提供的键保持不变。 */
@@ -182,14 +184,27 @@ export class KkscreepsAdapter {
   async tick(count = 1, options?: TickOptions): Promise<void> {
     // 有 signal 时逐 tick 发请求，在下一 tick 开始前检查中止；不取消正在处理的 RPC。
     // 来源：screeps-ok/src/adapter.ts 的 TickOptions.signal。
-    const signal = options?.signal;
+    // random：tick({random}) 注入序列整次调用共享（值域校验与耗尽报错在引擎侧）。
+    const { signal, random } = options ?? {};
     if (!signal) {
-      await client().call('tick', { count });
+      await client().call('tick', random ? { count, random } : { count });
       return;
     }
+    // signal 逐拍模式：每拍开始前检查中止；random 序列跨整次调用共享——
+    // 逐拍按引擎回报的 randomConsumed 切片续传，不重复消费。
+    let remaining = random ? [...random] : undefined;
     for (let i = 0; i < count; i++) {
       if (signal.aborted) throw signal.reason ?? new Error('tick 序列已中止');
-      await client().call('tick', { count: 1 });
+      // 序列耗尽后仍发送 random: []（空数组）：引擎按注入序列耗尽报错
+      // 回滚，与非 signal 单发模式的 exhausted 语义一致，不静默回落派生流。
+      const res = await client().call<{ randomConsumed?: number }>(
+        'tick',
+        remaining !== undefined ? { count: 1, random: remaining } : { count: 1 },
+      );
+      const used = res?.randomConsumed;
+      if (remaining !== undefined && typeof used === 'number' && used > 0) {
+        remaining = remaining.slice(used);
+      }
     }
   }
 

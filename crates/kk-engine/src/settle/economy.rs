@@ -488,10 +488,11 @@ fn controller_levels(level: u8) -> i64 {
 /// REGEN_MINERAL 按剩余效果时间周期补量；效果门读当前值——官方
 /// bulk.update 以对象引用调用时 `_.merge` 回写内存，自然再生当拍的
 /// 新存量/清钟参与效果门判定，相位命中即叠加。
-/// 随机序列由房间名、对象 ID 和 tick 派生，不使用 World.seed。
-pub fn mineral_tick(w: &mut Working, id: ObjId) {
+/// 随机序列由房间名、对象 ID 和 tick 派生，不使用 World.seed；注入序列
+///（tick({random})）优先逐值消费，耗尽返回 Err 令整拍候选回滚。
+pub fn mineral_tick(w: &mut Working, id: ObjId) -> Result<(), super::SettleError> {
     let Some(RoomObject::Mineral(m)) = w.room.objects.get(&id) else {
-        return;
+        return Ok(());
     };
     let (density, amount, next_regen) = (m.density, m.mineral_amount, m.next_regeneration_time);
     if amount == 0 {
@@ -508,16 +509,33 @@ pub fn mineral_tick(w: &mut Working, id: ObjId) {
             Some(t) => t,
         };
         if w.time < next_regen.saturating_sub(1) {
-            return; // 未到点
+            return Ok(()); // 未到点
         }
+        // 注入序列逐值消费（耗尽报错）；缺省走 MineralRng 派生流，
+        // 派生路径保持单实例两次以上抽取的既有语义。
+        let mut next_random = match &w.state.random {
+            super::ProcessorRandom::Injected(seq) => Some(seq.clone()),
+            super::ProcessorRandom::Derived => None,
+        };
         let mut rng = MineralRng::new(&w.room.name, id, w.time);
+        let mut draw = |rng: &mut MineralRng| -> Result<f64, super::SettleError> {
+            match &next_random {
+                Some(seq) => seq.borrow_mut().pop_front().ok_or_else(|| {
+                    super::SettleError(
+                        "tick options.random 注入序列 exhausted：处理器随机调用次数超出注入值数"
+                            .into(),
+                    )
+                }),
+                None => Ok(rng.next_f64()),
+            }
+        };
         let new_amount = kk_world::types::mineral_density(density);
         let rotate = density == c::DENSITY_LOW as u8
             || density == c::DENSITY_ULTRA as u8
-            || rng.next_f64() < c::MINERAL_DENSITY_CHANGE;
+            || draw(&mut rng)? < c::MINERAL_DENSITY_CHANGE;
         let new_density = if rotate {
             loop {
-                let r = rng.next_f64();
+                let r = draw(&mut rng)?;
                 let picked = if r <= 0.1 {
                     1
                 } else if r <= 0.5 {
@@ -553,6 +571,7 @@ pub fn mineral_tick(w: &mut Working, id: ObjId) {
     {
         m.mineral_amount = m.mineral_amount.saturating_add(gain.max(0) as u32);
     }
+    Ok(())
 }
 
 /// 先递减旧 cooldown，再覆盖本轮采集登记的新值，首次采集后的冷却不被提前减 1。

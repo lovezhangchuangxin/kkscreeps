@@ -117,7 +117,8 @@ impl Engine {
             time,
             input,
             room_names,
-            state: TickState::with_mod_states(players, next, self.mod_states.clone()),
+            state: TickState::with_mod_states(players, next, self.mod_states.clone())
+                .with_random(self.processor_random.clone()),
             batch,
             rooms: Vec::new(),
             events: Vec::new(),

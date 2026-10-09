@@ -6,12 +6,12 @@
 
 - 2026-10-09 review 修复（本次提交）：invaderCore 放置的孵化守军初始 `ageTime=0`，出生后再起算普通寿命；stronghold 部署绑定 `decayTime` 的路径保持原值。新增超过 1500 tick 孵化回归；定向 `pnpm run check -- kk-runtime --test mod_chain_tests --filter invader_core_long_incubation` 与无参数 `pnpm run check` 均通过（不含 doctest；本次未改 doctest）。其余 G02/G03 与 NPC 后续消费者不受此修复影响，下一步按当前执行队列继续。
 
-- 更新日期：2026-10-10；控制器 INVULNERABILITY 消费者已提交 `d48d6ea`；Invader core 生命周期首片已提交 `2b68002`；Stronghold 布防首片已提交 `4f7dd2bd`；raid 调度首片已提交 `e316a07`；powerBank 生成与消费者首片已提交 `e5249ff2`；边缘环绕+核弹簇已提交 `9ff9d2e`；弃用告警（register.deprecated 三处补点 + deprecationNotices 翻转）随本提交交付。最近完整门禁 Rust 全绿；最近 release 棘轮 2871 passed / 8 failed / 35 skipped（0 转红，8 例既有豁免）。TooAngel/Overmind 六阶段为既有入库证据；本批未重跑 bot 长测。
+- 更新日期：2026-10-10；控制器 INVULNERABILITY 消费者已提交 `d48d6ea`；Invader core 生命周期首片已提交 `2b68002`；Stronghold 布防首片已提交 `4f7dd2bd`；raid 调度首片已提交 `e316a07`；powerBank 生成与消费者首片已提交 `e5249ff2`；边缘环绕+核弹簇已提交 `9ff9d2e`；弃用告警已提交 `c39777a`；tick({random}) 处理器随机注入（越界拒收/耗尽回滚/矿物再密化消费 + randomInjection 翻转）随本提交交付。最近完整门禁 Rust 全绿；最近 release 棘轮 2878 passed / 8 failed / 28 skipped（0 转红，8 例既有豁免）。TooAngel/Overmind 六阶段为既有入库证据；本批未重跑 bot 长测。
 - 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座、deposit 采集链、observer 限时视野已交付。**M2H.b 19/19 powers 全部接通**。
 - 当前接手：G02.d3 结构/rampart 计划级通行及默认玩家/NPC 寻路已提交 `fd27fbd`；G03 障碍追加后的同源链预演已提交 `3f3d9a7`；障碍摘要的安全模式主人已提交 `41de432`；控制器零升级量修复已提交 `10eb812`；G27.a 独立异步后台宿主已提交 `b25e280`；控制器 INVULNERABILITY 三处消费门已提交 `d48d6ea`；invaderCore 生命周期首片已提交 `2b68002`；stronghold 布防首片已提交 `4f7dd2bd`；raid 调度首片已提交 `e316a07`；powerBank 生成与消费者首片已提交 `e5249ff2`；边缘环绕+核弹簇（portal 传送/衰变/核爆免伤、roomStatus 种子域与 getRoomStatus/launchNuke 门、worldSize 活算与 map/market/terminal 三处环绕计费、检查点 v9）随本提交交付，生产者侧仍缺地图生成、战术 AI（maintainPopulation/refillTowers/focusClosest）与 create-creep 等意图。逐房通行粒度、摘要增强、完整仲裁替换仍未完成。
 - 本次完成：JSON/KKPV 各 200 tick 持续战斗、100+100 tick 跨进程冷恢复和完整检查点回放；实际位置/hits 证明移动、受伤与恢复，双通道及直跑/续跑世界与 Memory 等值。TooAngel v6 双通道 2000 tick 连跑及 1000+1000 tick 冷恢复六阶段复验通过。
 - 剩余：真实 bot 战斗/多房/长期存活验收；地图生成与 G21 Mod 世界事件；stronghold 战术 AI/create-creep 意图；walkTo/Keeper lastMove 按实际 stronghold 消费者接线；G02.d3 逐房/摘要后续、G03 完整仲裁替换与 G27.a。NPC 场景不标 M2B 或 G21 完成。
-- 兼容率 2871/2914≈98.6%（**95% 中间检查点已越过**；99% 目标需 2885，缺口 14；跳过 35 中 actionLog 21 例既缓，其余需全吃：多 shard 7、矿物密度注入 4、random 注入契约 3 及若干原估口径差；弃用告警 7 例已随本批全绿）。
+- 兼容率 2878/2914≈98.7%（**95% 中间检查点已越过**；99% 目标需 2885，缺口 7=跳过 28 中 actionLog 21 例既缓之外的全部：多 shard 7——**收 99% 只差多 shard 一簇**，含 InterShardMemory/shardLimits；random+矿物密度注入 7 例已随本批全绿）。
 - Mod 扩展：移动策略、对象/建筑/资源、库存/耐久/受击、作者 CLI/类型、输入回放和检查点已有基础；未完成范围以任务表为准。默认玩法已有消费者不代表对应 Mod 替换能力已经开放。
 - 网络服务、持久 storage 后端与真实游戏客户端仍未实现；renderer R0–R6 已交付，R7 最终矩阵/长测未收口。现有 bot-check 不能代替持续推进世界中的可玩验收。
 - M2B 验收标准（2026-10-09 调整）：screeps-ok ≥95% 为中间检查点、≥99% 为后续覆盖目标；最终完成要求约定范围内功能全部通过验收，剩余例外逐项有明确范围、证据和可审查理由，见[路线图](../roadmap.md)。
@@ -330,6 +330,15 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 - 独立 worker/realm、原生登记能力门、同步注册/异步生命周期、队列快拒绝、过期/跨包/未授予/调用和字节限额及共享 VM 预算已接线；FileProbe 使用常规文件的有限只读异步任务。实际发现异步 op 会在 V8 调用时提前轮询，首轮测试因没有 Tokio 上下文而中止，已将预算调用统一进入 worker 执行器上下文；随后宿主六组、CLI 三组与双通道持续世界一组定向回归通过。CLI 冷检查点身份读取/输入守卫、后台等待读期间世界继续推进及重启 calls 归零均实测。新增 ADR-017、现行后台契约/源码导航/状态域清单与公共示例，无新玩法持久域或载荷版本；可选 services 清单/代码沿既有 Mod 身份与包摘要保存，无服务旧清单保持原序列化形态。首轮完整门禁通过，最后的故障来源诊断和协议常量收口后须再次完整复验。
 
 - 最终无参数完整门禁通过：Rust 1512 passed / 0 failed，Clippy、JS workspace/维护工具、307 个 Markdown / 1971 个本地链接与 936 个源码/测试规模通过。release CLI 重建通过，公共 services 包由 release 实际运行，start/request/stop 与 world_unchanged=true 验收通过；JS 格式检查通过，无 doctest 改动。固定 bot 准备、适配器构建和显式 release 兼容棘轮通过：2802 passed / 8 failed / 104 skipped、floor 2802、0 转红/0 转绿（8 例既有豁免）。本片未运行 bot 长测，不标网络/耐久任务完成；实现/测试/公共示例/契约及报告随本批提交。
+
+## 2026-10-10 tick({random}) 处理器随机注入（已完成，随本提交交付）
+
+- 基线 `c39777a`（弃用告警批），起始工作区干净。官方/契约参考：engine processor/intents/minerals/tick.js:8-38（门 `Math.random()<MINERAL_DENSITY_CHANGE` 仅非 LOW/ULTRA 求值（|| 短路不消耗门值）、选择 do-while 排除旧密度、概率表 for-in 键序 1..4 `random<=概率` 命中即停、补量按旧 density 容量）；套件 src/adapter.ts TickOptions 契约（random 跨整次调用共享、signal 逐拍前检查、"once exhausted, adapters must throw rather than falling back"）与 vanilla 适配器（补丁覆写 engine_processor 进程级 Math.random、耗尽 sentinel 报错）。
+- 交付内容：`ProcessorRandom`（Derived/Injected(Rc<RefCell<VecDeque<f64>>>)）挂 Engine（`set_processor_random`，调用期间设置成败均复位——run_player 路径零扰动），prepare_tick 带入 TickState、mineral_tick 的门与选择循环逐值消费（耗尽 SettleError 整拍候选回滚；Derived 派生流逐行等值保持 MineralRng 单实例语义）；embed RPC `tick` 新增 random 数组（整单前置值域校验 [0,1) 点名 `random[i]` 拒收不推进时间；响应回传 `randomConsumed`）与适配器透传（非 signal 单发整序列；signal 逐拍按消耗计数切片续传，耗尽后仍发 `random: []` 保留报错语义不静默回落）；capabilities.randomInjection 翻转。gameplay-determinism.md 新增"处理器随机注入（测试面）"节。
+- 套件 7 例转绿：adapter-contract tick options.random 三例（越界/耗尽/多余值）+ MINERAL-REGEN-009 四例（MODERATE/HIGH × 门过/门不过）。套件 fixture 恒注入 signal → 7 例全部实测适配器逐拍切片路径。
+- Rust 集成 5 例（mod_chain_tests/random_injection.rs，双通道）：越界双点位（random[0]=1.0/random[1]=-0.1）不推进时间、耗尽报错含 exhausted 且**已成功拍保留**（再生拍=time+3 门、第 3 拍耗尽回滚前 2 拍提交，终态 +2）、多余值无害、密度门矩阵（2/3 × 过→LOW+按旧密度补量 35000/70000/不过→原密度）、LOW/ULTRA 短路不消耗门值（单值 [0.5]/[0.05] 可区分）+ do-while 排除旧密度重掷分支（[0.04,0.7,0.95]→density 4）。
+- 三路复审（官方语义/对抗安全/测试边界）发现当批清偿：语义+边界+安全三方独立同发现适配器 signal 模式空切片静默回落 Derived（违背上游"耗尽必抛"契约、与非 signal 路径自相矛盾）——修为耗尽后仍发 `random: []`；语义 P2 两处 settle/mod.rs 文档归属错位（ProcessorRandom doc 并吞 TickInput 原 doc、set_fail_room_for_test 的 doc/#[doc(hidden)] 错挂）归还。登记差异四处：注入域仅矿物再密化（vanilla 还覆盖掉落落点/stronghold 衰减/tower 补给掷骰）；耗尽时 kk 回滚整拍中止后续拍（vanilla 只冻结出错房间当拍、其余照常提交循环跑完）；注入值不进恢复缓存（PendingRound）也不进输入日志——注入拍失败后的重试与日志段回放按派生流结算；serde_json 上界进位（距 1.0 一 ULP 内合法值如 0.9999999999999999 被解析为 1.0 误拒——fail-closed 方向，无反向绕过）。embed random 数组无长度上限属既有模式（本地 stdin 可信面），接网络面前须补请求体上限。
+- 验证：无参数 `pnpm run check` 通过；release 棘轮 2878 passed / 8 failed / 28 skipped（floor 2871→2878，0 转红、7 转绿，8 例既有官方对齐豁免）。
 
 ## 2026-10-10 弃用告警（已完成，随本提交交付）
 
