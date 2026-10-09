@@ -1,0 +1,2760 @@
+{
+  "report_version": 10,
+  "success": true,
+  "status": "passed",
+  "engine_version": "0.1.0",
+  "executable_sha256": "c397abdb95478d65ccf17c3c3eb498c38d1237009f63bc1ffbfb0bcb662f3b8b",
+  "scenario": "/private/tmp/kkscreeps-overmind-acceptance-20261009/scenario.json",
+  "scenario_sha256": "b695b28c72789d249323dc20726e96966874adfb65776ad0534f62d655f4213a",
+  "modules": {
+    "bot": {
+      "directory": "/private/tmp/kkscreeps-overmind-acceptance-20261009/modules",
+      "sha256": "465c407f80b0a95ca5521d0ce97aee71ee79ae2d8e9a86dfdbe4fca6a484666c",
+      "files": [
+        {
+          "name": "acceptance",
+          "kind": "js",
+          "bytes": 2201,
+          "sha256": "81b94b6e06d53255c4ba4b82301d94e8786f9f2da7d30f353aa2f0ffb26d0aaf"
+        },
+        {
+          "name": "main",
+          "kind": "js",
+          "bytes": 1067777,
+          "sha256": "e78ad3c8e58a955163fc81adf6be1d584c881081a6b0a78156d519f202b5a4b8"
+        }
+      ]
+    }
+  },
+  "mods": {
+    "packages": {}
+  },
+  "mods_switches": [],
+  "plan_hash": "e931198f10bc0e3f36a044862caa8428fe456eef9c0d425d6e61c895f0daa251",
+  "composition": null,
+  "execution_strategy": null,
+  "disabled_mods": [],
+  "channel": "json",
+  "concurrency": 1,
+  "ticks_requested": 1000,
+  "ticks_attempted": 1000,
+  "world_ticks_committed": 1000,
+  "seed": 0,
+  "start_time": 1001,
+  "end_time": 2001,
+  "checkpoint_loaded": "/private/tmp/kkscreeps-overmind-acceptance-20261009/json-checkpoint.json",
+  "checkpoint_saved": null,
+  "run_wall_ms": 5343.191584,
+  "phases": {
+    "ticks": 1000,
+    "phases": {
+      "project": {
+        "count": 1000,
+        "p50_ms": 0.329708,
+        "p95_ms": 0.404459,
+        "p99_ms": 0.460208,
+        "max_ms": 1.002167,
+        "total_ms": 323.5640080000004
+      },
+      "run": {
+        "count": 1000,
+        "p50_ms": 1.4845,
+        "p95_ms": 2.415333,
+        "p99_ms": 2.978959,
+        "max_ms": 22.686001,
+        "total_ms": 1582.5503829999993
+      },
+      "settle": {
+        "count": 1000,
+        "p50_ms": 3.326792,
+        "p95_ms": 4.341916,
+        "p99_ms": 4.7005,
+        "max_ms": 6.922666,
+        "total_ms": 3419.8833280000013
+      },
+      "wall": {
+        "count": 1000,
+        "p50_ms": 5.04075,
+        "p95_ms": 6.25725,
+        "p99_ms": 7.094083,
+        "max_ms": 26.555,
+        "total_ms": 5330.148881999999
+      }
+    }
+  },
+  "input_log": {
+    "path": "/private/tmp/kkscreeps-overmind-acceptance-20261009/json-resume.jsonl",
+    "segments": 2000,
+    "read_back_segments": 2000,
+    "first_tick": 1,
+    "last_tick": 2000,
+    "validation": "ok"
+  },
+  "auto_checkpoint": null,
+  "recovery": null,
+  "failure": null,
+  "players": {
+    "bot": {
+      "successful_ticks": 1000,
+      "error_ticks": 0,
+      "not_evaluated_ticks": 0,
+      "errors_head": [],
+      "console_head": [
+        {
+          "tick": 1001,
+          "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1001</font> Codebase updated or global reset. Type \"help\" for a list of console commands.\n                ‣ Version:        Overmind v0.5.2\n                ‣ Checksum:       0x34e6838c39d\n                ‣ Assimilated:    No (clearance code: null) [WIP]\n                ‣ Operating mode: automatic"
+        },
+        {
+          "tick": 1017,
+          "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1017</font> No viable expansion rooms found!"
+        },
+        {
+          "tick": 2000,
+          "text": "<font color='yellow'>ALERT   </font><font color='gray'>2000</font> <font color='#ff00ff'>New clearance code obtained: null (expiration: 1999) </font>"
+        }
+      ]
+    }
+  },
+  "aliases": {
+    "mineral": "kk0000000000000005",
+    "source1": "kk0000000000000003",
+    "source2": "kk0000000000000004",
+    "spawn": "kk0000000000000002"
+  },
+  "assertions": [
+    {
+      "pointer": "/objects/spawn",
+      "op": "exists",
+      "expected": null,
+      "before": {
+        "kind": "structure",
+        "structureType": "spawn",
+        "id": "kk0000000000000002",
+        "pos": {
+          "x": 25,
+          "y": 25,
+          "roomName": "W1N1"
+        },
+        "owner": "bot",
+        "hits": 5000,
+        "hitsMax": 5000,
+        "name": "Spawn1",
+        "store": {
+          "energy": 300
+        },
+        "storeCapacity": null,
+        "spawning": null
+      },
+      "actual": {
+        "kind": "structure",
+        "structureType": "spawn",
+        "id": "kk0000000000000002",
+        "pos": {
+          "x": 25,
+          "y": 25,
+          "roomName": "W1N1"
+        },
+        "owner": "bot",
+        "hits": 5000,
+        "hitsMax": 5000,
+        "name": "Spawn1",
+        "store": {
+          "energy": 300
+        },
+        "storeCapacity": null,
+        "spawning": null
+      },
+      "delta": null,
+      "passed": true
+    },
+    {
+      "pointer": "/rooms/W1N1/controller/owner",
+      "op": "eq",
+      "expected": "bot",
+      "before": "bot",
+      "actual": "bot",
+      "delta": null,
+      "passed": true
+    }
+  ],
+  "mod_fault": null,
+  "mod_trace": null,
+  "initial": {
+    "time": 1,
+    "seed": 0,
+    "players": {
+      "bot": {
+        "gcl": 1000000,
+        "rooms": [
+          "W1N1"
+        ],
+        "memory": {
+          "creeps": {},
+          "flags": {},
+          "rooms": {}
+        },
+        "raw_memory": "{\"creeps\":{},\"flags\":{},\"rooms\":{}}",
+        "cpu_bucket": 10000.0
+      }
+    },
+    "objects": {
+      "mineral": {
+        "kind": "mineral",
+        "id": "kk0000000000000005",
+        "pos": {
+          "x": 30,
+          "y": 30,
+          "roomName": "W1N1"
+        },
+        "mineralType": "H",
+        "mineralAmount": 50000,
+        "density": 3,
+        "ticksToRegeneration": null
+      },
+      "source1": {
+        "kind": "source",
+        "id": "kk0000000000000003",
+        "pos": {
+          "x": 10,
+          "y": 10,
+          "roomName": "W1N1"
+        },
+        "energy": 3000,
+        "energyCapacity": 3000,
+        "ticksToRegeneration": null
+      },
+      "source2": {
+        "kind": "source",
+        "id": "kk0000000000000004",
+        "pos": {
+          "x": 40,
+          "y": 40,
+          "roomName": "W1N1"
+        },
+        "energy": 3000,
+        "energyCapacity": 3000,
+        "ticksToRegeneration": null
+      },
+      "spawn": {
+        "kind": "structure",
+        "structureType": "spawn",
+        "id": "kk0000000000000002",
+        "pos": {
+          "x": 25,
+          "y": 25,
+          "roomName": "W1N1"
+        },
+        "owner": "bot",
+        "hits": 5000,
+        "hitsMax": 5000,
+        "name": "Spawn1",
+        "store": {
+          "energy": 300
+        },
+        "storeCapacity": null,
+        "spawning": null
+      }
+    },
+    "rooms": {
+      "W1N1": {
+        "controller": {
+          "kind": "structure",
+          "structureType": "controller",
+          "id": "kk0000000000000001",
+          "pos": {
+            "x": 1,
+            "y": 1,
+            "roomName": "W1N1"
+          },
+          "level": 1,
+          "progress": 0,
+          "progressTotal": 200,
+          "ticksToDowngrade": 20000,
+          "safeMode": null,
+          "safeModeAvailable": 0,
+          "safeModeCooldown": null,
+          "reservation": null,
+          "sign": null,
+          "upgradeBlocked": null,
+          "isPowerEnabled": false,
+          "owner": "bot"
+        }
+      }
+    },
+    "world": {
+      "time": 1,
+      "cpu": {
+        "limit": 20,
+        "tickLimit": 500,
+        "bucket": 10000
+      },
+      "user": null,
+      "gcl": 0,
+      "visibleRooms": [
+        "W1N1"
+      ],
+      "rooms": {
+        "W1N1": {
+          "name": "W1N1",
+          "terrain": {
+            "rev": 1,
+            "payload": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQ=="
+          },
+          "energyAvailable": 300,
+          "energyCapacityAvailable": 300
+        }
+      },
+      "objects": [
+        {
+          "type": "structure",
+          "structureType": "controller",
+          "id": "kk0000000000000001",
+          "room": "W1N1",
+          "x": 1,
+          "y": 1,
+          "level": 1,
+          "progress": 0,
+          "progressTotal": 200,
+          "safeMode": 0,
+          "safeModeAvailable": 0,
+          "downgradeTime": 20001,
+          "isPowerEnabled": false,
+          "upgradeBlocked": null,
+          "safeModeCooldown": null,
+          "reservation": null,
+          "sign": null,
+          "owner": "bot",
+          "pos": {
+            "x": 1,
+            "y": 1,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "spawn",
+          "structureType": "spawn",
+          "id": "kk0000000000000002",
+          "room": "W1N1",
+          "x": 25,
+          "y": 25,
+          "name": "Spawn1",
+          "owner": "bot",
+          "store": {
+            "energy": 300
+          },
+          "energy": 300,
+          "energyCapacity": 300,
+          "storeCapacityResource": {
+            "energy": 300
+          },
+          "off": false,
+          "hits": 5000,
+          "hitsMax": 5000,
+          "spawning": null,
+          "notifyWhenAttacked": true,
+          "pos": {
+            "x": 25,
+            "y": 25,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "structure",
+          "structureType": "source",
+          "id": "kk0000000000000003",
+          "room": "W1N1",
+          "x": 10,
+          "y": 10,
+          "energy": 3000,
+          "energyCapacity": 3000,
+          "ticksToRegeneration": null,
+          "pos": {
+            "x": 10,
+            "y": 10,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "structure",
+          "structureType": "source",
+          "id": "kk0000000000000004",
+          "room": "W1N1",
+          "x": 40,
+          "y": 40,
+          "energy": 3000,
+          "energyCapacity": 3000,
+          "ticksToRegeneration": null,
+          "pos": {
+            "x": 40,
+            "y": 40,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "structure",
+          "structureType": "mineral",
+          "id": "kk0000000000000005",
+          "room": "W1N1",
+          "x": 30,
+          "y": 30,
+          "mineralType": "H",
+          "mineralAmount": 50000,
+          "density": 3,
+          "ticksToRegeneration": null,
+          "pos": {
+            "x": 30,
+            "y": 30,
+            "roomName": "W1N1"
+          }
+        }
+      ]
+    },
+    "mod_objects": [],
+    "mod_states": {}
+  },
+  "final": {
+    "time": 2001,
+    "seed": 0,
+    "players": {
+      "bot": {
+        "gcl": 1000350,
+        "rooms": [
+          "W1N1"
+        ],
+        "memory": {
+          "creeps": {
+            "queen_0": {
+              "colony": "W1N1",
+              "overlord": "hatchery@W1N1>supply",
+              "role": "queen",
+              "task": null,
+              "data": {
+                "origin": "W1N1"
+              },
+              "_go": {
+                "path": "44444444444444",
+                "state": [
+                  9,
+                  11,
+                  0,
+                  0,
+                  24,
+                  24,
+                  "W1N1",
+                  10,
+                  12
+                ]
+              }
+            },
+            "worker_0": {
+              "colony": "W1N1",
+              "overlord": "W1N1>worker",
+              "role": "worker",
+              "task": null,
+              "data": {
+                "origin": "W1N1"
+              }
+            },
+            "worker_1": {
+              "colony": "W1N1",
+              "overlord": "W1N1>worker",
+              "role": "worker",
+              "task": {
+                "name": "pickup",
+                "_creep": {
+                  "name": "worker_1"
+                },
+                "_target": {
+                  "ref": "kk000000000000000f",
+                  "_pos": {
+                    "x": 40,
+                    "y": 39,
+                    "roomName": "W1N1"
+                  }
+                },
+                "_parent": null,
+                "tick": 1992,
+                "options": {},
+                "data": {}
+              },
+              "data": {
+                "origin": "W1N1"
+              },
+              "_go": {
+                "path": "44433",
+                "state": [
+                  34,
+                  37,
+                  0,
+                  0,
+                  40,
+                  39,
+                  "W1N1",
+                  35,
+                  38
+                ]
+              }
+            },
+            "worker_2": {
+              "colony": "W1N1",
+              "overlord": "W1N1>worker",
+              "role": "worker",
+              "task": {
+                "name": "pickup",
+                "_creep": {
+                  "name": "worker_2"
+                },
+                "_target": {
+                  "ref": "kk000000000000000f",
+                  "_pos": {
+                    "x": 40,
+                    "y": 39,
+                    "roomName": "W1N1"
+                  }
+                },
+                "_parent": null,
+                "tick": 1993,
+                "options": {},
+                "data": {}
+              },
+              "data": {
+                "origin": "W1N1"
+              },
+              "_go": {
+                "path": "44443",
+                "state": [
+                  34,
+                  36,
+                  0,
+                  0,
+                  40,
+                  39,
+                  "W1N1",
+                  35,
+                  37
+                ]
+              }
+            },
+            "worker_3": {
+              "colony": "W1N1",
+              "overlord": "W1N1>worker",
+              "role": "worker",
+              "task": {
+                "name": "pickup",
+                "_creep": {
+                  "name": "worker_3"
+                },
+                "_target": {
+                  "ref": "kk000000000000000f",
+                  "_pos": {
+                    "x": 40,
+                    "y": 39,
+                    "roomName": "W1N1"
+                  }
+                },
+                "_parent": null,
+                "tick": 1992,
+                "options": {},
+                "data": {}
+              },
+              "data": {
+                "origin": "W1N1"
+              },
+              "_go": {
+                "path": "4444",
+                "state": [
+                  35,
+                  36,
+                  0,
+                  0,
+                  40,
+                  39,
+                  "W1N1",
+                  36,
+                  37
+                ]
+              }
+            },
+            "worker_4": {
+              "colony": "W1N1",
+              "overlord": "W1N1>worker",
+              "role": "worker",
+              "task": {
+                "name": "pickup",
+                "_creep": {
+                  "name": "worker_4"
+                },
+                "_target": {
+                  "ref": "kk000000000000000f",
+                  "_pos": {
+                    "x": 40,
+                    "y": 39,
+                    "roomName": "W1N1"
+                  }
+                },
+                "_parent": null,
+                "tick": 1992,
+                "options": {},
+                "data": {}
+              },
+              "data": {
+                "origin": "W1N1"
+              },
+              "_go": {
+                "path": "44333",
+                "state": [
+                  34,
+                  38,
+                  0,
+                  0,
+                  40,
+                  39,
+                  "W1N1",
+                  35,
+                  39
+                ]
+              }
+            },
+            "worker_5": {
+              "colony": "W1N1",
+              "overlord": "W1N1>worker",
+              "role": "worker",
+              "task": {
+                "name": "pickup",
+                "_creep": {
+                  "name": "worker_5"
+                },
+                "_target": {
+                  "ref": "kk0000000000000027",
+                  "_pos": {
+                    "x": 9,
+                    "y": 9,
+                    "roomName": "W1N1"
+                  }
+                },
+                "_parent": null,
+                "tick": 1660,
+                "options": {},
+                "data": {}
+              },
+              "data": {
+                "origin": "W1N1"
+              },
+              "_go": {
+                "state": [
+                  11,
+                  11,
+                  1,
+                  1,
+                  9,
+                  9,
+                  "W1N1",
+                  10,
+                  10
+                ],
+                "path": "8"
+              }
+            },
+            "worker_6": {
+              "colony": "W1N1",
+              "overlord": "W1N1>worker",
+              "role": "worker",
+              "task": {
+                "name": "build",
+                "_creep": {
+                  "name": "worker_6"
+                },
+                "_target": {
+                  "ref": "kk0000000000000020",
+                  "_pos": {
+                    "x": 24,
+                    "y": 27,
+                    "roomName": "W1N1"
+                  }
+                },
+                "_parent": null,
+                "tick": 1969,
+                "options": {},
+                "data": {}
+              },
+              "data": {
+                "origin": "W1N1"
+              }
+            },
+            "worker_7": {
+              "colony": "W1N1",
+              "overlord": "W1N1>worker",
+              "role": "worker",
+              "task": {
+                "name": "build",
+                "_creep": {
+                  "name": "worker_7"
+                },
+                "_target": {
+                  "ref": "kk0000000000000020",
+                  "_pos": {
+                    "x": 24,
+                    "y": 27,
+                    "roomName": "W1N1"
+                  }
+                },
+                "_parent": null,
+                "tick": 1970,
+                "options": {},
+                "data": {}
+              },
+              "data": {
+                "origin": "W1N1"
+              }
+            },
+            "worker_8": {
+              "colony": "W1N1",
+              "overlord": "W1N1>worker",
+              "role": "worker",
+              "task": {
+                "name": "pickup",
+                "_creep": {
+                  "name": "worker_8"
+                },
+                "_target": {
+                  "ref": "kk0000000000000011",
+                  "_pos": {
+                    "x": 39,
+                    "y": 39,
+                    "roomName": "W1N1"
+                  }
+                },
+                "_parent": null,
+                "tick": 1830,
+                "options": {},
+                "data": {}
+              },
+              "data": {
+                "origin": "W1N1"
+              },
+              "_go": {
+                "state": [
+                  29,
+                  29,
+                  1,
+                  0,
+                  39,
+                  39,
+                  "W1N1",
+                  30,
+                  30
+                ],
+                "path": "4544434444"
+              }
+            },
+            "worker_9": {
+              "colony": "W1N1",
+              "overlord": "W1N1>worker",
+              "role": "worker",
+              "task": {
+                "name": "build",
+                "_creep": {
+                  "name": "worker_9"
+                },
+                "_target": {
+                  "ref": "kk0000000000000020",
+                  "_pos": {
+                    "x": 24,
+                    "y": 27,
+                    "roomName": "W1N1"
+                  }
+                },
+                "_parent": null,
+                "tick": 1969,
+                "options": {},
+                "data": {}
+              },
+              "data": {
+                "origin": "W1N1"
+              },
+              "_go": {
+                "state": [
+                  31,
+                  31,
+                  1,
+                  0,
+                  24,
+                  27,
+                  "W1N1",
+                  30,
+                  30
+                ],
+                "path": "8787"
+              }
+            },
+            "scout_0": {
+              "colony": "W1N1",
+              "overlord": "W1N1>scout",
+              "role": "scout",
+              "task": null,
+              "data": {
+                "origin": "W1N1"
+              }
+            },
+            "scout_1": {
+              "colony": "W1N1",
+              "overlord": "W1N1>scout",
+              "role": "scout",
+              "task": null,
+              "data": {
+                "origin": "W1N1"
+              }
+            },
+            "scout_2": {
+              "colony": "W1N1",
+              "overlord": "W1N1>scout",
+              "role": "scout",
+              "task": null,
+              "data": {
+                "origin": "W1N1"
+              },
+              "_go": {}
+            },
+            "drone_4": {
+              "colony": "W1N1",
+              "overlord": "harvest:1efee8>mine",
+              "role": "drone",
+              "task": null,
+              "data": {
+                "origin": "W1N1"
+              },
+              "_go": {
+                "state": [
+                  11,
+                  10,
+                  0,
+                  0,
+                  11,
+                  9,
+                  "W1N1"
+                ],
+                "path": ""
+              }
+            },
+            "drone_0": {
+              "colony": "W1N1",
+              "overlord": "harvest:1efee8>mine",
+              "role": "drone",
+              "task": null,
+              "data": {
+                "origin": "W1N1"
+              },
+              "_go": {
+                "state": [
+                  11,
+                  9,
+                  0,
+                  0,
+                  11,
+                  10,
+                  "W1N1"
+                ],
+                "path": ""
+              }
+            },
+            "drone_1": {
+              "colony": "W1N1",
+              "overlord": "harvest:857f71>mine",
+              "role": "drone",
+              "task": null,
+              "data": {
+                "origin": "W1N1"
+              },
+              "_go": {
+                "state": [
+                  39,
+                  39,
+                  0,
+                  0,
+                  40,
+                  39,
+                  "W1N1"
+                ],
+                "path": ""
+              }
+            },
+            "drone_2": {
+              "colony": "W1N1",
+              "overlord": "harvest:857f71>mine",
+              "role": "drone",
+              "task": null,
+              "data": {
+                "origin": "W1N1"
+              },
+              "_go": {
+                "state": [
+                  40,
+                  39,
+                  0,
+                  0,
+                  39,
+                  39,
+                  "W1N1"
+                ],
+                "path": ""
+              }
+            },
+            "queen_1": {
+              "colony": "W1N1",
+              "overlord": "hatchery@W1N1>supply",
+              "role": "queen",
+              "task": {
+                "name": "pickup",
+                "_creep": {
+                  "name": "queen_1"
+                },
+                "_target": {
+                  "ref": "kk0000000000000011",
+                  "_pos": {
+                    "x": 39,
+                    "y": 39,
+                    "roomName": "W1N1"
+                  }
+                },
+                "_parent": null,
+                "tick": 2000,
+                "options": {},
+                "data": {}
+              },
+              "data": {
+                "origin": "W1N1"
+              },
+              "_go": {
+                "path": "244444444444444",
+                "state": [
+                  24,
+                  25,
+                  0,
+                  0,
+                  39,
+                  39,
+                  "W1N1",
+                  25,
+                  24
+                ]
+              }
+            }
+          },
+          "flags": {
+            "harvest:1efee8": {
+              "created": 1,
+              "colony": "W1N1",
+              "stats": {
+                "usage": 0.8093333333333333,
+                "downtime": 0
+              }
+            },
+            "harvest:857f71": {
+              "created": 1,
+              "colony": "W1N1",
+              "stats": {
+                "usage": 0.808,
+                "downtime": 0
+              }
+            }
+          },
+          "rooms": {
+            "W1N1": {
+              "safety": {
+                "safeFor": 2000,
+                "unsafeFor": 0,
+                "safety1k": 1,
+                "safety10k": 1,
+                "tick": 2000
+              },
+              "invasionData": {
+                "harvested": 24716,
+                "lastSeen": 0
+              },
+              "harvest": {
+                "amt": 24716,
+                "avg10k": 18.77700833361688,
+                "avg100k": 19.8645106467044,
+                "avg1M": 19.986311585612466,
+                "tick": 1911
+              },
+              "casualties": {
+                "cost": {
+                  "amt": 113.2,
+                  "avg10k": 0.01132,
+                  "avg100k": 0.001132,
+                  "avg1M": 0.0001132,
+                  "tick": 561
+                }
+              },
+              "src": [
+                {
+                  "c": "10:10"
+                },
+                {
+                  "c": "40:40"
+                }
+              ],
+              "ctrl": {
+                "c": "1:1",
+                "level": 2,
+                "owner": "bot",
+                "SMavail": 1,
+                "prog": 150,
+                "progTot": 45000
+              },
+              "mnrl": {
+                "c": "30:30",
+                "density": 3,
+                "mineralType": "H"
+              },
+              "SKlairs": [],
+              "importantStructs": {
+                "towers": [],
+                "spawns": [
+                  "25:25"
+                ],
+                "walls": [],
+                "ramparts": []
+              },
+              "tick": 1874,
+              "expiration": 2669
+            }
+          },
+          "segmenter": {
+            "activeSegments": [],
+            "publicSegments": [],
+            "activeForeignSegment": {
+              "username": "Muon",
+              "id": 98
+            }
+          },
+          "assimilator": {
+            "masterLedger": {},
+            "clearanceCodes": {}
+          },
+          "settings": {
+            "log": {
+              "level": 3,
+              "showSource": false,
+              "showTick": true
+            },
+            "signature": "«ᴏᴠᴇʀᴍɪɴᴅ»",
+            "operationMode": "automatic",
+            "enableVisuals": true
+          },
+          "Overmind": {
+            "versionMigrator": {
+              "versions": {
+                "04Xto05X": true,
+                "04Xto05X_part2": true,
+                "04Xto05X_part3": true,
+                "05Xto051": true,
+                "05Xto051_part2": true,
+                "05Xto051_part3": true,
+                "05Xto051_part4": true,
+                "051to052": true
+              }
+            },
+            "terminalNetwork": {
+              "equalizeIndex": -1
+            },
+            "trader": {
+              "cache": {
+                "sell": {},
+                "buy": {},
+                "tick": 1976
+              },
+              "equalizeIndex": 0
+            },
+            "versionUpdater": {
+              "versions": {}
+            }
+          },
+          "colonies": {
+            "W1N1": {
+              "defcon": {
+                "level": 0,
+                "tick": null
+              },
+              "expansionData": {
+                "possibleExpansions": {},
+                "expiration": 0
+              },
+              "logisticsNetwork": {
+                "transporterCache": {}
+              },
+              "roomPlanner": {
+                "active": false,
+                "savedFlags": [],
+                "bunkerData": {
+                  "anchor": {
+                    "x": 21,
+                    "y": 25,
+                    "roomName": "W1N1"
+                  }
+                },
+                "lastGenerated": 1,
+                "recheckStructuresAt": 951
+              },
+              "barrierPlanner": {
+                "barrierLookup": {
+                  "13:17": true,
+                  "13:18": true,
+                  "13:19": true,
+                  "13:20": true,
+                  "13:21": true,
+                  "13:22": true,
+                  "13:23": true,
+                  "13:24": true,
+                  "13:25": true,
+                  "13:26": true,
+                  "13:27": true,
+                  "13:28": true,
+                  "13:29": true,
+                  "13:30": true,
+                  "13:31": true,
+                  "13:32": true,
+                  "13:33": true,
+                  "14:17": true,
+                  "14:33": true,
+                  "15:17": true,
+                  "15:33": true,
+                  "16:17": true,
+                  "16:33": true,
+                  "17:17": true,
+                  "17:33": true,
+                  "18:17": true,
+                  "18:33": true,
+                  "19:17": true,
+                  "19:33": true,
+                  "20:17": true,
+                  "20:33": true,
+                  "21:17": true,
+                  "21:33": true,
+                  "22:17": true,
+                  "22:33": true,
+                  "23:17": true,
+                  "23:33": true,
+                  "24:17": true,
+                  "24:33": true,
+                  "25:17": true,
+                  "25:33": true,
+                  "26:17": true,
+                  "26:33": true,
+                  "27:17": true,
+                  "27:33": true,
+                  "28:17": true,
+                  "28:33": true,
+                  "29:17": true,
+                  "29:18": true,
+                  "29:19": true,
+                  "29:20": true,
+                  "29:21": true,
+                  "29:22": true,
+                  "29:23": true,
+                  "29:24": true,
+                  "29:25": true,
+                  "29:26": true,
+                  "29:27": true,
+                  "29:28": true,
+                  "29:29": true,
+                  "29:30": true,
+                  "29:31": true,
+                  "29:32": true,
+                  "29:33": true,
+                  "1:2": true,
+                  "2:1": true,
+                  "2:2": true
+                }
+              },
+              "roadPlanner": {
+                "roadLookup": {
+                  "W1N1": {
+                    "19:24": true,
+                    "20:23": true,
+                    "21:22": true,
+                    "22:23": true,
+                    "23:24": true,
+                    "24:25": true,
+                    "20:21": true,
+                    "19:20": true,
+                    "18:19": true,
+                    "17:18": true,
+                    "16:17": true,
+                    "15:16": true,
+                    "14:15": true,
+                    "13:14": true,
+                    "12:13": true,
+                    "11:12": true,
+                    "10:11": true,
+                    "19:26": true,
+                    "20:27": true,
+                    "21:28": true,
+                    "22:29": true,
+                    "23:30": true,
+                    "24:31": true,
+                    "25:32": true,
+                    "26:33": true,
+                    "27:34": true,
+                    "28:35": true,
+                    "29:36": true,
+                    "30:37": true,
+                    "31:38": true,
+                    "32:39": true,
+                    "33:40": true,
+                    "34:41": true,
+                    "35:41": true,
+                    "36:41": true,
+                    "37:41": true,
+                    "38:41": true,
+                    "39:41": true,
+                    "23:26": true,
+                    "22:27": true,
+                    "18:25": true,
+                    "24:20": true,
+                    "26:22": true,
+                    "26:28": true,
+                    "24:30": true,
+                    "16:22": true,
+                    "18:20": true,
+                    "16:28": true,
+                    "18:30": true,
+                    "20:19": true,
+                    "22:19": true,
+                    "23:19": true,
+                    "27:23": true,
+                    "27:24": true,
+                    "27:25": true,
+                    "27:26": true,
+                    "27:27": true,
+                    "23:31": true,
+                    "22:31": true,
+                    "20:31": true,
+                    "19:31": true,
+                    "15:27": true,
+                    "15:26": true,
+                    "15:25": true,
+                    "15:24": true,
+                    "21:19": true,
+                    "15:23": true,
+                    "21:31": true,
+                    "19:19": true,
+                    "25:21": true,
+                    "17:21": true,
+                    "17:29": true,
+                    "25:29": true,
+                    "17:26": true,
+                    "25:24": true,
+                    "26:23": true,
+                    "16:27": true
+                  }
+                },
+                "roadCoverage": 0,
+                "roadCoverages": {
+                  "W1N1:25:25": {
+                    "roadCount": 0,
+                    "length": 4,
+                    "exp": 3001
+                  },
+                  "W1N1:10:10": {
+                    "roadCount": 0,
+                    "length": 14,
+                    "exp": 3003
+                  },
+                  "W1N1:40:40": {
+                    "roadCount": 0,
+                    "length": 19,
+                    "exp": 3002
+                  },
+                  "W1N1:3:3": {
+                    "roadCount": 0,
+                    "length": 21,
+                    "exp": 3025
+                  }
+                }
+              },
+              "abathur": {
+                "sleepUntil": 0
+              },
+              "hatchery": {
+                "stats": {
+                  "overload": 0.3809610459637776,
+                  "uptime": 0.08659199892806163,
+                  "longUptime": 0.0276493826507796
+                }
+              },
+              "upgradeSite": {
+                "stats": {
+                  "downtime": 0
+                }
+              }
+            }
+          },
+          "pathing": {
+            "paths": {},
+            "distances": {
+              "W1N1:25:25": {
+                "W1N1:25:25": 0,
+                "W1N1:40:40": 14
+              },
+              "W1N1:10:10": {
+                "W1N1:25:25": 14
+              }
+            },
+            "weightedDistances": {}
+          },
+          "stats": {
+            "persistent": {
+              "lastGlobalReset": 1001,
+              "terminalNetwork": {
+                "transfers": {
+                  "costs": {}
+                }
+              },
+              "trader": {
+                "credits": 10000000,
+                "bought": {},
+                "sold": {}
+              },
+              "lastMemoryReset": 1001,
+              "globalAge": 1000,
+              "avgCPU": 4.066813657700445
+            },
+            "cpu": {
+              "usage": {
+                "W1N1": {
+                  "init": 0.03512
+                }
+              },
+              "limit": 20,
+              "bucket": 10000,
+              "getUsed": 4.3392
+            },
+            "colonies": {
+              "W1N1": {
+                "hatchery": {
+                  "uptime": 0.08659,
+                  "overload": 0.38096
+                },
+                "storage": {},
+                "rcl": {
+                  "level": 2,
+                  "progress": 150,
+                  "progressTotal": 45000
+                },
+                "miningSites": {
+                  "avgDowntime": 0,
+                  "avgUsage": 0.80866,
+                  "energyInPerTick": 8.08666
+                },
+                "assets": {
+                  "energy": 536
+                },
+                "defcon": 0,
+                "avgBarrierHits": null
+              }
+            },
+            "cpu.heapStatistics": {
+              "total_heap_size": 50167808,
+              "total_heap_size_executable": 8126464,
+              "total_physical_size": 50167808,
+              "total_available_size": 238569640,
+              "used_heap_size": 29794056,
+              "heap_size_limit": 268435456,
+              "malloced_memory": 373808,
+              "peak_malloced_memory": 5810688,
+              "does_zap_garbage": 0,
+              "externally_allocated_size": 0
+            },
+            "gcl": {
+              "progress": 350,
+              "progressTotal": 4278031.64309,
+              "level": 2
+            },
+            "memory": {
+              "used": 10787
+            }
+          },
+          "constructionSites": {
+            "kk000000000000001c": 810,
+            "kk0000000000000020": 910,
+            "kk0000000000000021": 910,
+            "kk0000000000000022": 910,
+            "kk0000000000000024": 910
+          },
+          "overseer": {
+            "suspendUntil": {}
+          },
+          "strategist": {},
+          "__kkAcceptance": {
+            "loops": 2000,
+            "births": 24,
+            "birthsAfterDeath": 19,
+            "deaths": 5,
+            "harvested": 26704,
+            "transferred": 4086,
+            "built": 9215,
+            "upgraded": 350,
+            "seen": {
+              "kk0000000000000009": true,
+              "kk000000000000000b": true,
+              "kk000000000000000c": true,
+              "kk000000000000000e": true,
+              "kk0000000000000010": true,
+              "kk0000000000000012": true,
+              "kk0000000000000015": true,
+              "kk0000000000000016": true,
+              "kk0000000000000017": true,
+              "kk0000000000000018": true,
+              "kk0000000000000019": true,
+              "kk000000000000001b": true,
+              "kk000000000000001e": true,
+              "kk0000000000000025": true,
+              "kk0000000000000029": true,
+              "kk000000000000002a": true,
+              "kk000000000000002b": true,
+              "kk000000000000002c": true,
+              "kk000000000000002d": true,
+              "kk000000000000002e": true,
+              "kk0000000000000033": true,
+              "kk0000000000000036": true,
+              "kk0000000000000039": true,
+              "kk000000000000003a": true
+            },
+            "caughtErrors": 0,
+            "errorSamples": [],
+            "eventsThroughTick": 1999
+          }
+        },
+        "raw_memory": "{\"creeps\":{\"queen_0\":{\"colony\":\"W1N1\",\"overlord\":\"hatchery@W1N1>supply\",\"role\":\"queen\",\"task\":null,\"data\":{\"origin\":\"W1N1\"},\"_go\":{\"path\":\"44444444444444\",\"state\":[9,11,0,0,24,24,\"W1N1\",10,12]}},\"worker_0\":{\"colony\":\"W1N1\",\"overlord\":\"W1N1>worker\",\"role\":\"worker\",\"task\":null,\"data\":{\"origin\":\"W1N1\"}},\"worker_1\":{\"colony\":\"W1N1\",\"overlord\":\"W1N1>worker\",\"role\":\"worker\",\"task\":{\"name\":\"pickup\",\"_creep\":{\"name\":\"worker_1\"},\"_target\":{\"ref\":\"kk000000000000000f\",\"_pos\":{\"x\":40,\"y\":39,\"roomName\":\"W1N1\"}},\"_parent\":null,\"tick\":1992,\"options\":{},\"data\":{}},\"data\":{\"origin\":\"W1N1\"},\"_go\":{\"path\":\"44433\",\"state\":[34,37,0,0,40,39,\"W1N1\",35,38]}},\"worker_2\":{\"colony\":\"W1N1\",\"overlord\":\"W1N1>worker\",\"role\":\"worker\",\"task\":{\"name\":\"pickup\",\"_creep\":{\"name\":\"worker_2\"},\"_target\":{\"ref\":\"kk000000000000000f\",\"_pos\":{\"x\":40,\"y\":39,\"roomName\":\"W1N1\"}},\"_parent\":null,\"tick\":1993,\"options\":{},\"data\":{}},\"data\":{\"origin\":\"W1N1\"},\"_go\":{\"path\":\"44443\",\"state\":[34,36,0,0,40,39,\"W1N1\",35,37]}},\"worker_3\":{\"colony\":\"W1N1\",\"overlord\":\"W1N1>worker\",\"role\":\"worker\",\"task\":{\"name\":\"pickup\",\"_creep\":{\"name\":\"worker_3\"},\"_target\":{\"ref\":\"kk000000000000000f\",\"_pos\":{\"x\":40,\"y\":39,\"roomName\":\"W1N1\"}},\"_parent\":null,\"tick\":1992,\"options\":{},\"data\":{}},\"data\":{\"origin\":\"W1N1\"},\"_go\":{\"path\":\"4444\",\"state\":[35,36,0,0,40,39,\"W1N1\",36,37]}},\"worker_4\":{\"colony\":\"W1N1\",\"overlord\":\"W1N1>worker\",\"role\":\"worker\",\"task\":{\"name\":\"pickup\",\"_creep\":{\"name\":\"worker_4\"},\"_target\":{\"ref\":\"kk000000000000000f\",\"_pos\":{\"x\":40,\"y\":39,\"roomName\":\"W1N1\"}},\"_parent\":null,\"tick\":1992,\"options\":{},\"data\":{}},\"data\":{\"origin\":\"W1N1\"},\"_go\":{\"path\":\"44333\",\"state\":[34,38,0,0,40,39,\"W1N1\",35,39]}},\"worker_5\":{\"colony\":\"W1N1\",\"overlord\":\"W1N1>worker\",\"role\":\"worker\",\"task\":{\"name\":\"pickup\",\"_creep\":{\"name\":\"worker_5\"},\"_target\":{\"ref\":\"kk0000000000000027\",\"_pos\":{\"x\":9,\"y\":9,\"roomName\":\"W1N1\"}},\"_parent\":null,\"tick\":1660,\"options\":{},\"data\":{}},\"data\":{\"origin\":\"W1N1\"},\"_go\":{\"state\":[11,11,1,1,9,9,\"W1N1\",10,10],\"path\":\"8\"}},\"worker_6\":{\"colony\":\"W1N1\",\"overlord\":\"W1N1>worker\",\"role\":\"worker\",\"task\":{\"name\":\"build\",\"_creep\":{\"name\":\"worker_6\"},\"_target\":{\"ref\":\"kk0000000000000020\",\"_pos\":{\"x\":24,\"y\":27,\"roomName\":\"W1N1\"}},\"_parent\":null,\"tick\":1969,\"options\":{},\"data\":{}},\"data\":{\"origin\":\"W1N1\"}},\"worker_7\":{\"colony\":\"W1N1\",\"overlord\":\"W1N1>worker\",\"role\":\"worker\",\"task\":{\"name\":\"build\",\"_creep\":{\"name\":\"worker_7\"},\"_target\":{\"ref\":\"kk0000000000000020\",\"_pos\":{\"x\":24,\"y\":27,\"roomName\":\"W1N1\"}},\"_parent\":null,\"tick\":1970,\"options\":{},\"data\":{}},\"data\":{\"origin\":\"W1N1\"}},\"worker_8\":{\"colony\":\"W1N1\",\"overlord\":\"W1N1>worker\",\"role\":\"worker\",\"task\":{\"name\":\"pickup\",\"_creep\":{\"name\":\"worker_8\"},\"_target\":{\"ref\":\"kk0000000000000011\",\"_pos\":{\"x\":39,\"y\":39,\"roomName\":\"W1N1\"}},\"_parent\":null,\"tick\":1830,\"options\":{},\"data\":{}},\"data\":{\"origin\":\"W1N1\"},\"_go\":{\"state\":[29,29,1,0,39,39,\"W1N1\",30,30],\"path\":\"4544434444\"}},\"worker_9\":{\"colony\":\"W1N1\",\"overlord\":\"W1N1>worker\",\"role\":\"worker\",\"task\":{\"name\":\"build\",\"_creep\":{\"name\":\"worker_9\"},\"_target\":{\"ref\":\"kk0000000000000020\",\"_pos\":{\"x\":24,\"y\":27,\"roomName\":\"W1N1\"}},\"_parent\":null,\"tick\":1969,\"options\":{},\"data\":{}},\"data\":{\"origin\":\"W1N1\"},\"_go\":{\"state\":[31,31,1,0,24,27,\"W1N1\",30,30],\"path\":\"8787\"}},\"scout_0\":{\"colony\":\"W1N1\",\"overlord\":\"W1N1>scout\",\"role\":\"scout\",\"task\":null,\"data\":{\"origin\":\"W1N1\"}},\"scout_1\":{\"colony\":\"W1N1\",\"overlord\":\"W1N1>scout\",\"role\":\"scout\",\"task\":null,\"data\":{\"origin\":\"W1N1\"}},\"scout_2\":{\"colony\":\"W1N1\",\"overlord\":\"W1N1>scout\",\"role\":\"scout\",\"task\":null,\"data\":{\"origin\":\"W1N1\"},\"_go\":{}},\"drone_4\":{\"colony\":\"W1N1\",\"overlord\":\"harvest:1efee8>mine\",\"role\":\"drone\",\"task\":null,\"data\":{\"origin\":\"W1N1\"},\"_go\":{\"state\":[11,10,0,0,11,9,\"W1N1\"],\"path\":\"\"}},\"drone_0\":{\"colony\":\"W1N1\",\"overlord\":\"harvest:1efee8>mine\",\"role\":\"drone\",\"task\":null,\"data\":{\"origin\":\"W1N1\"},\"_go\":{\"state\":[11,9,0,0,11,10,\"W1N1\"],\"path\":\"\"}},\"drone_1\":{\"colony\":\"W1N1\",\"overlord\":\"harvest:857f71>mine\",\"role\":\"drone\",\"task\":null,\"data\":{\"origin\":\"W1N1\"},\"_go\":{\"state\":[39,39,0,0,40,39,\"W1N1\"],\"path\":\"\"}},\"drone_2\":{\"colony\":\"W1N1\",\"overlord\":\"harvest:857f71>mine\",\"role\":\"drone\",\"task\":null,\"data\":{\"origin\":\"W1N1\"},\"_go\":{\"state\":[40,39,0,0,39,39,\"W1N1\"],\"path\":\"\"}},\"queen_1\":{\"colony\":\"W1N1\",\"overlord\":\"hatchery@W1N1>supply\",\"role\":\"queen\",\"task\":{\"name\":\"pickup\",\"_creep\":{\"name\":\"queen_1\"},\"_target\":{\"ref\":\"kk0000000000000011\",\"_pos\":{\"x\":39,\"y\":39,\"roomName\":\"W1N1\"}},\"_parent\":null,\"tick\":2000,\"options\":{},\"data\":{}},\"data\":{\"origin\":\"W1N1\"},\"_go\":{\"path\":\"244444444444444\",\"state\":[24,25,0,0,39,39,\"W1N1\",25,24]}}},\"flags\":{\"harvest:1efee8\":{\"created\":1,\"colony\":\"W1N1\",\"stats\":{\"usage\":0.8093333333333333,\"downtime\":0}},\"harvest:857f71\":{\"created\":1,\"colony\":\"W1N1\",\"stats\":{\"usage\":0.808,\"downtime\":0}}},\"rooms\":{\"W1N1\":{\"safety\":{\"safeFor\":2000,\"unsafeFor\":0,\"safety1k\":1,\"safety10k\":1,\"tick\":2000},\"invasionData\":{\"harvested\":24716,\"lastSeen\":0},\"harvest\":{\"amt\":24716,\"avg10k\":18.77700833361688,\"avg100k\":19.8645106467044,\"avg1M\":19.986311585612466,\"tick\":1911},\"casualties\":{\"cost\":{\"amt\":113.2,\"avg10k\":0.01132,\"avg100k\":0.001132,\"avg1M\":0.0001132,\"tick\":561}},\"src\":[{\"c\":\"10:10\"},{\"c\":\"40:40\"}],\"ctrl\":{\"c\":\"1:1\",\"level\":2,\"owner\":\"bot\",\"SMavail\":1,\"prog\":150,\"progTot\":45000},\"mnrl\":{\"c\":\"30:30\",\"density\":3,\"mineralType\":\"H\"},\"SKlairs\":[],\"importantStructs\":{\"towers\":[],\"spawns\":[\"25:25\"],\"walls\":[],\"ramparts\":[]},\"tick\":1874,\"expiration\":2669}},\"segmenter\":{\"activeSegments\":[],\"publicSegments\":[],\"activeForeignSegment\":{\"username\":\"Muon\",\"id\":98}},\"assimilator\":{\"masterLedger\":{},\"clearanceCodes\":{}},\"settings\":{\"log\":{\"level\":3,\"showSource\":false,\"showTick\":true},\"signature\":\"«ᴏᴠᴇʀᴍɪɴᴅ»\",\"operationMode\":\"automatic\",\"enableVisuals\":true},\"Overmind\":{\"versionMigrator\":{\"versions\":{\"04Xto05X\":true,\"04Xto05X_part2\":true,\"04Xto05X_part3\":true,\"05Xto051\":true,\"05Xto051_part2\":true,\"05Xto051_part3\":true,\"05Xto051_part4\":true,\"051to052\":true}},\"terminalNetwork\":{\"equalizeIndex\":-1},\"trader\":{\"cache\":{\"sell\":{},\"buy\":{},\"tick\":1976},\"equalizeIndex\":0},\"versionUpdater\":{\"versions\":{}}},\"colonies\":{\"W1N1\":{\"defcon\":{\"level\":0,\"tick\":null},\"expansionData\":{\"possibleExpansions\":{},\"expiration\":0},\"logisticsNetwork\":{\"transporterCache\":{}},\"roomPlanner\":{\"active\":false,\"savedFlags\":[],\"bunkerData\":{\"anchor\":{\"x\":21,\"y\":25,\"roomName\":\"W1N1\"}},\"lastGenerated\":1,\"recheckStructuresAt\":951},\"barrierPlanner\":{\"barrierLookup\":{\"13:17\":true,\"13:18\":true,\"13:19\":true,\"13:20\":true,\"13:21\":true,\"13:22\":true,\"13:23\":true,\"13:24\":true,\"13:25\":true,\"13:26\":true,\"13:27\":true,\"13:28\":true,\"13:29\":true,\"13:30\":true,\"13:31\":true,\"13:32\":true,\"13:33\":true,\"14:17\":true,\"14:33\":true,\"15:17\":true,\"15:33\":true,\"16:17\":true,\"16:33\":true,\"17:17\":true,\"17:33\":true,\"18:17\":true,\"18:33\":true,\"19:17\":true,\"19:33\":true,\"20:17\":true,\"20:33\":true,\"21:17\":true,\"21:33\":true,\"22:17\":true,\"22:33\":true,\"23:17\":true,\"23:33\":true,\"24:17\":true,\"24:33\":true,\"25:17\":true,\"25:33\":true,\"26:17\":true,\"26:33\":true,\"27:17\":true,\"27:33\":true,\"28:17\":true,\"28:33\":true,\"29:17\":true,\"29:18\":true,\"29:19\":true,\"29:20\":true,\"29:21\":true,\"29:22\":true,\"29:23\":true,\"29:24\":true,\"29:25\":true,\"29:26\":true,\"29:27\":true,\"29:28\":true,\"29:29\":true,\"29:30\":true,\"29:31\":true,\"29:32\":true,\"29:33\":true,\"1:2\":true,\"2:1\":true,\"2:2\":true}},\"roadPlanner\":{\"roadLookup\":{\"W1N1\":{\"19:24\":true,\"20:23\":true,\"21:22\":true,\"22:23\":true,\"23:24\":true,\"24:25\":true,\"20:21\":true,\"19:20\":true,\"18:19\":true,\"17:18\":true,\"16:17\":true,\"15:16\":true,\"14:15\":true,\"13:14\":true,\"12:13\":true,\"11:12\":true,\"10:11\":true,\"19:26\":true,\"20:27\":true,\"21:28\":true,\"22:29\":true,\"23:30\":true,\"24:31\":true,\"25:32\":true,\"26:33\":true,\"27:34\":true,\"28:35\":true,\"29:36\":true,\"30:37\":true,\"31:38\":true,\"32:39\":true,\"33:40\":true,\"34:41\":true,\"35:41\":true,\"36:41\":true,\"37:41\":true,\"38:41\":true,\"39:41\":true,\"23:26\":true,\"22:27\":true,\"18:25\":true,\"24:20\":true,\"26:22\":true,\"26:28\":true,\"24:30\":true,\"16:22\":true,\"18:20\":true,\"16:28\":true,\"18:30\":true,\"20:19\":true,\"22:19\":true,\"23:19\":true,\"27:23\":true,\"27:24\":true,\"27:25\":true,\"27:26\":true,\"27:27\":true,\"23:31\":true,\"22:31\":true,\"20:31\":true,\"19:31\":true,\"15:27\":true,\"15:26\":true,\"15:25\":true,\"15:24\":true,\"21:19\":true,\"15:23\":true,\"21:31\":true,\"19:19\":true,\"25:21\":true,\"17:21\":true,\"17:29\":true,\"25:29\":true,\"17:26\":true,\"25:24\":true,\"26:23\":true,\"16:27\":true}},\"roadCoverage\":0,\"roadCoverages\":{\"W1N1:25:25\":{\"roadCount\":0,\"length\":4,\"exp\":3001},\"W1N1:10:10\":{\"roadCount\":0,\"length\":14,\"exp\":3003},\"W1N1:40:40\":{\"roadCount\":0,\"length\":19,\"exp\":3002},\"W1N1:3:3\":{\"roadCount\":0,\"length\":21,\"exp\":3025}}},\"abathur\":{\"sleepUntil\":0},\"hatchery\":{\"stats\":{\"overload\":0.3809610459637776,\"uptime\":0.08659199892806163,\"longUptime\":0.0276493826507796}},\"upgradeSite\":{\"stats\":{\"downtime\":0}}}},\"pathing\":{\"paths\":{},\"distances\":{\"W1N1:25:25\":{\"W1N1:25:25\":0,\"W1N1:40:40\":14},\"W1N1:10:10\":{\"W1N1:25:25\":14}},\"weightedDistances\":{}},\"stats\":{\"persistent\":{\"lastGlobalReset\":1001,\"terminalNetwork\":{\"transfers\":{\"costs\":{}}},\"trader\":{\"credits\":10000000,\"bought\":{},\"sold\":{}},\"lastMemoryReset\":1001,\"globalAge\":1000,\"avgCPU\":4.066813657700445},\"cpu\":{\"usage\":{\"W1N1\":{\"init\":0.03512}},\"limit\":20,\"bucket\":10000,\"getUsed\":4.3392},\"colonies\":{\"W1N1\":{\"hatchery\":{\"uptime\":0.08659,\"overload\":0.38096},\"storage\":{},\"rcl\":{\"level\":2,\"progress\":150,\"progressTotal\":45000},\"miningSites\":{\"avgDowntime\":0,\"avgUsage\":0.80866,\"energyInPerTick\":8.08666},\"assets\":{\"energy\":536},\"defcon\":0,\"avgBarrierHits\":null}},\"cpu.heapStatistics\":{\"total_heap_size\":50167808,\"total_heap_size_executable\":8126464,\"total_physical_size\":50167808,\"total_available_size\":238569640,\"used_heap_size\":29794056,\"heap_size_limit\":268435456,\"malloced_memory\":373808,\"peak_malloced_memory\":5810688,\"does_zap_garbage\":0,\"externally_allocated_size\":0},\"gcl\":{\"progress\":350,\"progressTotal\":4278031.64309,\"level\":2},\"memory\":{\"used\":10787}},\"constructionSites\":{\"kk000000000000001c\":810,\"kk0000000000000020\":910,\"kk0000000000000021\":910,\"kk0000000000000022\":910,\"kk0000000000000024\":910},\"overseer\":{\"suspendUntil\":{}},\"strategist\":{},\"__kkAcceptance\":{\"loops\":2000,\"births\":24,\"birthsAfterDeath\":19,\"deaths\":5,\"harvested\":26704,\"transferred\":4086,\"built\":9215,\"upgraded\":350,\"seen\":{\"kk0000000000000009\":true,\"kk000000000000000b\":true,\"kk000000000000000c\":true,\"kk000000000000000e\":true,\"kk0000000000000010\":true,\"kk0000000000000012\":true,\"kk0000000000000015\":true,\"kk0000000000000016\":true,\"kk0000000000000017\":true,\"kk0000000000000018\":true,\"kk0000000000000019\":true,\"kk000000000000001b\":true,\"kk000000000000001e\":true,\"kk0000000000000025\":true,\"kk0000000000000029\":true,\"kk000000000000002a\":true,\"kk000000000000002b\":true,\"kk000000000000002c\":true,\"kk000000000000002d\":true,\"kk000000000000002e\":true,\"kk0000000000000033\":true,\"kk0000000000000036\":true,\"kk0000000000000039\":true,\"kk000000000000003a\":true},\"caughtErrors\":0,\"errorSamples\":[],\"eventsThroughTick\":1999}}",
+        "cpu_bucket": 10000.0
+      }
+    },
+    "objects": {
+      "mineral": {
+        "kind": "mineral",
+        "id": "kk0000000000000005",
+        "pos": {
+          "x": 30,
+          "y": 30,
+          "roomName": "W1N1"
+        },
+        "mineralType": "H",
+        "mineralAmount": 50000,
+        "density": 3,
+        "ticksToRegeneration": null
+      },
+      "source1": {
+        "kind": "source",
+        "id": "kk0000000000000003",
+        "pos": {
+          "x": 10,
+          "y": 10,
+          "roomName": "W1N1"
+        },
+        "energy": 1872,
+        "energyCapacity": 3000,
+        "ticksToRegeneration": 159
+      },
+      "source2": {
+        "kind": "source",
+        "id": "kk0000000000000004",
+        "pos": {
+          "x": 40,
+          "y": 40,
+          "roomName": "W1N1"
+        },
+        "energy": 2212,
+        "energyCapacity": 3000,
+        "ticksToRegeneration": 211
+      },
+      "spawn": {
+        "kind": "structure",
+        "structureType": "spawn",
+        "id": "kk0000000000000002",
+        "pos": {
+          "x": 25,
+          "y": 25,
+          "roomName": "W1N1"
+        },
+        "owner": "bot",
+        "hits": 5000,
+        "hitsMax": 5000,
+        "name": "Spawn1",
+        "store": {
+          "energy": 300
+        },
+        "storeCapacity": null,
+        "spawning": null
+      }
+    },
+    "rooms": {
+      "W1N1": {
+        "controller": {
+          "kind": "structure",
+          "structureType": "controller",
+          "id": "kk0000000000000001",
+          "pos": {
+            "x": 1,
+            "y": 1,
+            "roomName": "W1N1"
+          },
+          "level": 2,
+          "progress": 150,
+          "progressTotal": 45000,
+          "ticksToDowngrade": 8879,
+          "safeMode": null,
+          "safeModeAvailable": 1,
+          "safeModeCooldown": null,
+          "reservation": null,
+          "sign": {
+            "owner": "bot",
+            "text": "«ᴏᴠᴇʀᴍɪɴᴅ»",
+            "time": 656
+          },
+          "upgradeBlocked": null,
+          "isPowerEnabled": false,
+          "owner": "bot"
+        }
+      }
+    },
+    "world": {
+      "time": 2001,
+      "cpu": {
+        "limit": 20,
+        "tickLimit": 500,
+        "bucket": 10000
+      },
+      "user": null,
+      "gcl": 0,
+      "visibleRooms": [
+        "W1N1"
+      ],
+      "rooms": {
+        "W1N1": {
+          "name": "W1N1",
+          "terrain": {
+            "rev": 1,
+            "payload": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQ=="
+          },
+          "energyAvailable": 400,
+          "energyCapacityAvailable": 400,
+          "events": [
+            {
+              "event": 4,
+              "objectId": "kk000000000000001e",
+              "data": {
+                "targetId": "kk0000000000000020",
+                "amount": 5,
+                "structureType": "extension",
+                "x": 24,
+                "y": 27,
+                "incomplete": true
+              }
+            },
+            {
+              "event": 4,
+              "objectId": "kk0000000000000025",
+              "data": {
+                "targetId": "kk0000000000000020",
+                "amount": 5,
+                "structureType": "extension",
+                "x": 24,
+                "y": 27,
+                "incomplete": true
+              }
+            },
+            {
+              "event": 5,
+              "objectId": "kk000000000000002e",
+              "data": {
+                "targetId": "kk0000000000000003",
+                "amount": 4
+              }
+            },
+            {
+              "event": 5,
+              "objectId": "kk0000000000000033",
+              "data": {
+                "targetId": "kk0000000000000003",
+                "amount": 4
+              }
+            },
+            {
+              "event": 5,
+              "objectId": "kk0000000000000036",
+              "data": {
+                "targetId": "kk0000000000000004",
+                "amount": 4
+              }
+            },
+            {
+              "event": 5,
+              "objectId": "kk0000000000000039",
+              "data": {
+                "targetId": "kk0000000000000004",
+                "amount": 4
+              }
+            }
+          ]
+        }
+      },
+      "objects": [
+        {
+          "type": "structure",
+          "structureType": "controller",
+          "id": "kk0000000000000001",
+          "room": "W1N1",
+          "x": 1,
+          "y": 1,
+          "level": 2,
+          "progress": 150,
+          "progressTotal": 45000,
+          "safeMode": 0,
+          "safeModeAvailable": 1,
+          "downgradeTime": 10880,
+          "isPowerEnabled": false,
+          "upgradeBlocked": null,
+          "safeModeCooldown": null,
+          "reservation": null,
+          "sign": {
+            "user": "bot",
+            "text": "«ᴏᴠᴇʀᴍɪɴᴅ»",
+            "time": 656,
+            "datetime": 1791538353780
+          },
+          "owner": "bot",
+          "pos": {
+            "x": 1,
+            "y": 1,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "spawn",
+          "structureType": "spawn",
+          "id": "kk0000000000000002",
+          "room": "W1N1",
+          "x": 25,
+          "y": 25,
+          "name": "Spawn1",
+          "owner": "bot",
+          "store": {
+            "energy": 300
+          },
+          "energy": 300,
+          "energyCapacity": 300,
+          "storeCapacityResource": {
+            "energy": 300
+          },
+          "off": false,
+          "hits": 5000,
+          "hitsMax": 5000,
+          "spawning": null,
+          "notifyWhenAttacked": true,
+          "pos": {
+            "x": 25,
+            "y": 25,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "structure",
+          "structureType": "source",
+          "id": "kk0000000000000003",
+          "room": "W1N1",
+          "x": 10,
+          "y": 10,
+          "energy": 1872,
+          "energyCapacity": 3000,
+          "ticksToRegeneration": 159,
+          "pos": {
+            "x": 10,
+            "y": 10,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "structure",
+          "structureType": "source",
+          "id": "kk0000000000000004",
+          "room": "W1N1",
+          "x": 40,
+          "y": 40,
+          "energy": 2212,
+          "energyCapacity": 3000,
+          "ticksToRegeneration": 211,
+          "pos": {
+            "x": 40,
+            "y": 40,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "structure",
+          "structureType": "mineral",
+          "id": "kk0000000000000005",
+          "room": "W1N1",
+          "x": 30,
+          "y": 30,
+          "mineralType": "H",
+          "mineralAmount": 50000,
+          "density": 3,
+          "ticksToRegeneration": null,
+          "pos": {
+            "x": 30,
+            "y": 30,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "flag",
+          "id": "kk0000000000000006",
+          "room": "W1N1",
+          "x": 10,
+          "y": 10,
+          "name": "harvest:1efee8",
+          "color": 6,
+          "secondaryColor": 6,
+          "owner": "bot",
+          "pos": {
+            "x": 10,
+            "y": 10,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "flag",
+          "id": "kk0000000000000007",
+          "room": "W1N1",
+          "x": 40,
+          "y": 40,
+          "name": "harvest:857f71",
+          "color": 6,
+          "secondaryColor": 6,
+          "owner": "bot",
+          "pos": {
+            "x": 40,
+            "y": 40,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "resource",
+          "resourceType": "energy",
+          "id": "kk000000000000000f",
+          "room": "W1N1",
+          "x": 40,
+          "y": 39,
+          "amount": 731,
+          "energy": 731,
+          "pos": {
+            "x": 40,
+            "y": 39,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "resource",
+          "resourceType": "energy",
+          "id": "kk0000000000000011",
+          "room": "W1N1",
+          "x": 39,
+          "y": 39,
+          "amount": 441,
+          "energy": 441,
+          "pos": {
+            "x": 39,
+            "y": 39,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk0000000000000012",
+          "room": "W1N1",
+          "x": 10,
+          "y": 12,
+          "name": "queen_0",
+          "owner": "bot",
+          "body": [
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 2063,
+          "hits": 600,
+          "hitsMax": 600,
+          "store": {
+            "energy": 150
+          },
+          "storeCapacity": 150,
+          "spawning": false,
+          "ticksToLive": 62,
+          "notifyWhenAttacked": true,
+          "pos": {
+            "x": 10,
+            "y": 12,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk0000000000000015",
+          "room": "W1N1",
+          "x": 39,
+          "y": 40,
+          "name": "worker_0",
+          "owner": "bot",
+          "body": [
+            {
+              "type": "work",
+              "hits": 100
+            },
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 2131,
+          "hits": 400,
+          "hitsMax": 400,
+          "store": {
+            "energy": 50
+          },
+          "storeCapacity": 50,
+          "spawning": false,
+          "ticksToLive": 130,
+          "notifyWhenAttacked": true,
+          "pos": {
+            "x": 39,
+            "y": 40,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk0000000000000016",
+          "room": "W1N1",
+          "x": 35,
+          "y": 38,
+          "name": "worker_1",
+          "owner": "bot",
+          "body": [
+            {
+              "type": "work",
+              "hits": 100
+            },
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 2161,
+          "hits": 400,
+          "hitsMax": 400,
+          "store": {
+            "energy": 0
+          },
+          "storeCapacity": 50,
+          "spawning": false,
+          "ticksToLive": 160,
+          "notifyWhenAttacked": true,
+          "pos": {
+            "x": 35,
+            "y": 38,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk0000000000000017",
+          "room": "W1N1",
+          "x": 35,
+          "y": 37,
+          "name": "worker_2",
+          "owner": "bot",
+          "body": [
+            {
+              "type": "work",
+              "hits": 100
+            },
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 2192,
+          "hits": 400,
+          "hitsMax": 400,
+          "store": {
+            "energy": 0
+          },
+          "storeCapacity": 50,
+          "spawning": false,
+          "ticksToLive": 191,
+          "notifyWhenAttacked": true,
+          "pos": {
+            "x": 35,
+            "y": 37,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk0000000000000018",
+          "room": "W1N1",
+          "x": 36,
+          "y": 37,
+          "name": "worker_3",
+          "owner": "bot",
+          "body": [
+            {
+              "type": "work",
+              "hits": 100
+            },
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 2248,
+          "hits": 400,
+          "hitsMax": 400,
+          "store": {
+            "energy": 0
+          },
+          "storeCapacity": 50,
+          "spawning": false,
+          "ticksToLive": 247,
+          "notifyWhenAttacked": true,
+          "pos": {
+            "x": 36,
+            "y": 37,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk0000000000000019",
+          "room": "W1N1",
+          "x": 35,
+          "y": 39,
+          "name": "worker_4",
+          "owner": "bot",
+          "body": [
+            {
+              "type": "work",
+              "hits": 100
+            },
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 2279,
+          "hits": 400,
+          "hitsMax": 400,
+          "store": {
+            "energy": 0
+          },
+          "storeCapacity": 50,
+          "spawning": false,
+          "ticksToLive": 278,
+          "notifyWhenAttacked": true,
+          "pos": {
+            "x": 35,
+            "y": 39,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk000000000000001b",
+          "room": "W1N1",
+          "x": 11,
+          "y": 11,
+          "name": "worker_5",
+          "owner": "bot",
+          "body": [
+            {
+              "type": "work",
+              "hits": 100
+            },
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 2307,
+          "hits": 300,
+          "hitsMax": 300,
+          "store": {
+            "energy": 0
+          },
+          "storeCapacity": 50,
+          "spawning": false,
+          "ticksToLive": 306,
+          "notifyWhenAttacked": true,
+          "pos": {
+            "x": 11,
+            "y": 11,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "constructionSite",
+          "structureType": "container",
+          "id": "kk000000000000001c",
+          "room": "W1N1",
+          "x": 3,
+          "y": 3,
+          "progress": 500,
+          "progressTotal": 5000,
+          "owner": "bot",
+          "pos": {
+            "x": 3,
+            "y": 3,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk000000000000001e",
+          "room": "W1N1",
+          "x": 27,
+          "y": 26,
+          "name": "worker_6",
+          "owner": "bot",
+          "body": [
+            {
+              "type": "work",
+              "hits": 100
+            },
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 2364,
+          "hits": 300,
+          "hitsMax": 300,
+          "store": {
+            "energy": 5
+          },
+          "storeCapacity": 50,
+          "spawning": false,
+          "ticksToLive": 363,
+          "notifyWhenAttacked": true,
+          "pos": {
+            "x": 27,
+            "y": 26,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "constructionSite",
+          "structureType": "extension",
+          "id": "kk0000000000000020",
+          "room": "W1N1",
+          "x": 24,
+          "y": 27,
+          "progress": 2725,
+          "progressTotal": 3000,
+          "owner": "bot",
+          "pos": {
+            "x": 24,
+            "y": 27,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "constructionSite",
+          "structureType": "extension",
+          "id": "kk0000000000000021",
+          "room": "W1N1",
+          "x": 23,
+          "y": 27,
+          "progress": 0,
+          "progressTotal": 3000,
+          "owner": "bot",
+          "pos": {
+            "x": 23,
+            "y": 27,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "constructionSite",
+          "structureType": "extension",
+          "id": "kk0000000000000022",
+          "room": "W1N1",
+          "x": 23,
+          "y": 28,
+          "progress": 0,
+          "progressTotal": 3000,
+          "owner": "bot",
+          "pos": {
+            "x": 23,
+            "y": 28,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "constructionSite",
+          "structureType": "container",
+          "id": "kk0000000000000024",
+          "room": "W1N1",
+          "x": 23,
+          "y": 30,
+          "progress": 0,
+          "progressTotal": 5000,
+          "owner": "bot",
+          "pos": {
+            "x": 23,
+            "y": 30,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk0000000000000025",
+          "room": "W1N1",
+          "x": 27,
+          "y": 25,
+          "name": "worker_7",
+          "owner": "bot",
+          "body": [
+            {
+              "type": "work",
+              "hits": 100
+            },
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 2424,
+          "hits": 300,
+          "hitsMax": 300,
+          "store": {
+            "energy": 20
+          },
+          "storeCapacity": 50,
+          "spawning": false,
+          "ticksToLive": 423,
+          "notifyWhenAttacked": true,
+          "pos": {
+            "x": 27,
+            "y": 25,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "resource",
+          "resourceType": "energy",
+          "id": "kk0000000000000027",
+          "room": "W1N1",
+          "x": 9,
+          "y": 9,
+          "amount": 516,
+          "energy": 516,
+          "pos": {
+            "x": 9,
+            "y": 9,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk0000000000000029",
+          "room": "W1N1",
+          "x": 29,
+          "y": 29,
+          "name": "worker_8",
+          "owner": "bot",
+          "body": [
+            {
+              "type": "work",
+              "hits": 100
+            },
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 2583,
+          "hits": 300,
+          "hitsMax": 300,
+          "store": {
+            "energy": 0
+          },
+          "storeCapacity": 50,
+          "spawning": false,
+          "ticksToLive": 582,
+          "notifyWhenAttacked": true,
+          "pos": {
+            "x": 29,
+            "y": 29,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk000000000000002a",
+          "room": "W1N1",
+          "x": 31,
+          "y": 31,
+          "name": "worker_9",
+          "owner": "bot",
+          "body": [
+            {
+              "type": "work",
+              "hits": 100
+            },
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 2783,
+          "hits": 300,
+          "hitsMax": 300,
+          "store": {
+            "energy": 50
+          },
+          "storeCapacity": 50,
+          "spawning": false,
+          "ticksToLive": 782,
+          "notifyWhenAttacked": true,
+          "pos": {
+            "x": 31,
+            "y": 31,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk000000000000002b",
+          "room": "W1N1",
+          "x": 26,
+          "y": 28,
+          "name": "scout_0",
+          "owner": "bot",
+          "body": [
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 2827,
+          "hits": 100,
+          "hitsMax": 100,
+          "store": {
+            "energy": 0
+          },
+          "storeCapacity": 0,
+          "spawning": false,
+          "ticksToLive": 826,
+          "notifyWhenAttacked": false,
+          "pos": {
+            "x": 26,
+            "y": 28,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk000000000000002c",
+          "room": "W1N1",
+          "x": 26,
+          "y": 27,
+          "name": "scout_1",
+          "owner": "bot",
+          "body": [
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 2877,
+          "hits": 100,
+          "hitsMax": 100,
+          "store": {
+            "energy": 0
+          },
+          "storeCapacity": 0,
+          "spawning": false,
+          "ticksToLive": 876,
+          "notifyWhenAttacked": false,
+          "pos": {
+            "x": 26,
+            "y": 27,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk000000000000002d",
+          "room": "W1N1",
+          "x": 23,
+          "y": 22,
+          "name": "scout_2",
+          "owner": "bot",
+          "body": [
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 2927,
+          "hits": 100,
+          "hitsMax": 100,
+          "store": {
+            "energy": 0
+          },
+          "storeCapacity": 0,
+          "spawning": false,
+          "ticksToLive": 926,
+          "notifyWhenAttacked": false,
+          "pos": {
+            "x": 23,
+            "y": 22,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk000000000000002e",
+          "room": "W1N1",
+          "x": 11,
+          "y": 10,
+          "name": "drone_4",
+          "owner": "bot",
+          "body": [
+            {
+              "type": "work",
+              "hits": 100
+            },
+            {
+              "type": "work",
+              "hits": 100
+            },
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 3006,
+          "hits": 400,
+          "hitsMax": 400,
+          "store": {
+            "energy": 50
+          },
+          "storeCapacity": 50,
+          "spawning": false,
+          "ticksToLive": 1005,
+          "notifyWhenAttacked": true,
+          "pos": {
+            "x": 11,
+            "y": 10,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "structure",
+          "structureType": "extension",
+          "id": "kk0000000000000030",
+          "room": "W1N1",
+          "x": 25,
+          "y": 26,
+          "owner": "bot",
+          "store": {
+            "energy": 50
+          },
+          "energy": 50,
+          "storeCapacityResource": {
+            "energy": 50
+          },
+          "off": false,
+          "hits": 1000,
+          "hitsMax": 1000,
+          "notifyWhenAttacked": true,
+          "pos": {
+            "x": 25,
+            "y": 26,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "resource",
+          "resourceType": "energy",
+          "id": "kk0000000000000031",
+          "room": "W1N1",
+          "x": 11,
+          "y": 10,
+          "amount": 194,
+          "energy": 194,
+          "pos": {
+            "x": 11,
+            "y": 10,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "structure",
+          "structureType": "extension",
+          "id": "kk0000000000000032",
+          "room": "W1N1",
+          "x": 24,
+          "y": 26,
+          "owner": "bot",
+          "store": {
+            "energy": 50
+          },
+          "energy": 50,
+          "storeCapacityResource": {
+            "energy": 50
+          },
+          "off": false,
+          "hits": 1000,
+          "hitsMax": 1000,
+          "notifyWhenAttacked": true,
+          "pos": {
+            "x": 24,
+            "y": 26,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk0000000000000033",
+          "room": "W1N1",
+          "x": 11,
+          "y": 9,
+          "name": "drone_0",
+          "owner": "bot",
+          "body": [
+            {
+              "type": "work",
+              "hits": 100
+            },
+            {
+              "type": "work",
+              "hits": 100
+            },
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 3217,
+          "hits": 400,
+          "hitsMax": 400,
+          "store": {
+            "energy": 32
+          },
+          "storeCapacity": 50,
+          "spawning": false,
+          "ticksToLive": 1216,
+          "notifyWhenAttacked": true,
+          "pos": {
+            "x": 11,
+            "y": 9,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "resource",
+          "resourceType": "energy",
+          "id": "kk0000000000000034",
+          "room": "W1N1",
+          "x": 11,
+          "y": 9,
+          "amount": 727,
+          "energy": 727,
+          "pos": {
+            "x": 11,
+            "y": 9,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk0000000000000036",
+          "room": "W1N1",
+          "x": 39,
+          "y": 39,
+          "name": "drone_1",
+          "owner": "bot",
+          "body": [
+            {
+              "type": "work",
+              "hits": 100
+            },
+            {
+              "type": "work",
+              "hits": 100
+            },
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 3317,
+          "hits": 400,
+          "hitsMax": 400,
+          "store": {
+            "energy": 50
+          },
+          "storeCapacity": 50,
+          "spawning": false,
+          "ticksToLive": 1316,
+          "notifyWhenAttacked": true,
+          "pos": {
+            "x": 39,
+            "y": 39,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "resource",
+          "resourceType": "energy",
+          "id": "kk0000000000000037",
+          "room": "W1N1",
+          "x": 41,
+          "y": 39,
+          "amount": 195,
+          "energy": 195,
+          "pos": {
+            "x": 41,
+            "y": 39,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk0000000000000039",
+          "room": "W1N1",
+          "x": 40,
+          "y": 39,
+          "name": "drone_2",
+          "owner": "bot",
+          "body": [
+            {
+              "type": "work",
+              "hits": 100
+            },
+            {
+              "type": "work",
+              "hits": 100
+            },
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 3410,
+          "hits": 400,
+          "hitsMax": 400,
+          "store": {
+            "energy": 40
+          },
+          "storeCapacity": 50,
+          "spawning": false,
+          "ticksToLive": 1409,
+          "notifyWhenAttacked": true,
+          "pos": {
+            "x": 40,
+            "y": 39,
+            "roomName": "W1N1"
+          }
+        },
+        {
+          "type": "creep",
+          "id": "kk000000000000003a",
+          "room": "W1N1",
+          "x": 25,
+          "y": 24,
+          "name": "queen_1",
+          "owner": "bot",
+          "body": [
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "carry",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            },
+            {
+              "type": "move",
+              "hits": 100
+            }
+          ],
+          "fatigue": 0,
+          "ageTime": 3468,
+          "hits": 800,
+          "hitsMax": 800,
+          "store": {
+            "energy": 137
+          },
+          "storeCapacity": 200,
+          "spawning": false,
+          "ticksToLive": 1467,
+          "notifyWhenAttacked": true,
+          "pos": {
+            "x": 25,
+            "y": 24,
+            "roomName": "W1N1"
+          }
+        }
+      ]
+    },
+    "mod_objects": [],
+    "mod_states": {}
+  },
+  "verify_replay": {
+    "status": "passed",
+    "segments": 1000,
+    "first_tick": 1001,
+    "last_tick": 2000,
+    "note": "整份检查点逐位相等（剥离 last_console/metadata；CPU 按记录桶比较）"
+  }
+}

@@ -268,6 +268,7 @@
   const CLASS_PARENTS = {
     Creep: 'RoomObject',
     PowerCreep: 'RoomObject',
+    Flag: 'RoomObject',
     Structure: 'RoomObject',
     OwnedStructure: 'Structure',
     Source: 'RoomObject',

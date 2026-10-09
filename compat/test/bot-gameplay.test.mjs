@@ -1,11 +1,20 @@
 // 防止固定世界、空回放和 bot 自吞异常被新验收入口计为通过。
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import vm from 'node:vm';
 import { evaluateRun, runAcceptance } from '../scripts/bot-gameplay.mjs';
+import { prepareOvermindModules } from '../scripts/overmind-gameplay.mjs';
 
 const expected = { ticks: 1000, totalTicks: 2000, startTime: 1001 };
 function passingReport() {
@@ -129,7 +138,7 @@ const observer = readFileSync(
   resolve(import.meta.dirname, '../fixtures/sim-tooangel/acceptance.js'),
   'utf8',
 );
-function sandbox(memory, loop, events = []) {
+function sandbox(memory, loop, events = [], source = observer) {
   const context = {
     module: { exports: {} },
     Memory: memory,
@@ -149,7 +158,7 @@ function sandbox(memory, loop, events = []) {
       return { loop };
     },
   };
-  vm.runInNewContext(observer, context);
+  vm.runInNewContext(source, context);
   return context;
 }
 
@@ -221,6 +230,66 @@ test('既有输出目录和成功报告不能被复用或覆盖', () => {
       /EEXIST/,
     );
     assert.equal(readFileSync(report, 'utf8'), 'original successful report');
+  } finally {
+    rmSync(path, { recursive: true, force: true });
+  }
+});
+
+const overmindObserver = readFileSync(
+  resolve(import.meta.dirname, '../fixtures/sim-overmind/acceptance.js'),
+  'utf8',
+);
+test('Overmind 替换 Memory 后观察计数接续，冷恢复不重复出生，完整捕获日志', () => {
+  let context;
+  const reused = {};
+  context = sandbox(
+    {},
+    () => {
+      context.Memory = reused;
+    },
+    [{ event: 1, data: { amount: 4 } }],
+    overmindObserver,
+  );
+  context.module.exports.loop();
+  context.Game.time = 2;
+  context.Memory = {};
+  context.module.exports.loop();
+  assert.equal(reused.__kkAcceptance.loops, 2);
+  assert.equal(reused.__kkAcceptance.births, 1);
+  assert.equal(reused.__kkAcceptance.harvested, 8);
+  const restored = JSON.parse(JSON.stringify(reused));
+  sandbox(restored, () => {}, [], overmindObserver).module.exports.loop();
+  assert.equal(restored.__kkAcceptance.loops, 3);
+  assert.equal(restored.__kkAcceptance.births, 1);
+  let failing;
+  failing = sandbox(
+    {},
+    () => {
+      for (let i = 0; i < 30; i++) failing.console.log('ordinary log');
+      failing.Memory = restored;
+      failing.console.log("<font color='red'>FATAL  </font> Multiple exceptions caught this tick!");
+    },
+    [],
+    overmindObserver,
+  );
+  const log = failing.console.log;
+  assert.throws(() => failing.module.exports.loop(), /Overmind caught exception/);
+  assert.equal(restored.__kkAcceptance.caughtErrors, 1);
+  assert.equal(failing.console.log, log);
+});
+
+test('Overmind 资产身份失败时不写模块，额外模块也不能混入', () => {
+  const path = mkdtempSync(join(tmpdir(), 'kkscreeps-overmind-source-'));
+  try {
+    const source = join(path, 'source'),
+      output = join(path, 'modules');
+    mkdirSync(source);
+    writeFileSync(join(source, 'main.js'), 'modified upstream');
+    assert.throws(() => prepareOvermindModules(source, output), /锁定官方发布资产/);
+    assert.equal(existsSync(output), false);
+    writeFileSync(join(source, 'extra.js'), 'extra');
+    assert.throws(() => prepareOvermindModules(source, output), /只有 main.js/);
+    assert.equal(existsSync(output), false);
   } finally {
     rmSync(path, { recursive: true, force: true });
   }

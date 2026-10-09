@@ -1,0 +1,1845 @@
+{
+  "version": 1,
+  "success": true,
+  "scope": "Overmind 单房经济/寿命/冷恢复；不含战斗、多房或完整 M2B",
+  "bot": "overmind",
+  "ticks": 2000,
+  "split": 1000,
+  "runs": [
+    {
+      "name": "json-continuous",
+      "channel": "json",
+      "exit_code": 0,
+      "report": "json-continuous.json",
+      "executable_sha256": "c397abdb95478d65ccf17c3c3eb498c38d1237009f63bc1ffbfb0bcb662f3b8b",
+      "success": true,
+      "checks": [
+        {
+          "name": "运行成功",
+          "passed": true,
+          "actual": "passed"
+        },
+        {
+          "name": "提交完整轮数",
+          "passed": true,
+          "actual": 2000
+        },
+        {
+          "name": "玩家无执行失败或跳帧",
+          "passed": true,
+          "actual": {
+            "successful_ticks": 2000,
+            "error_ticks": 0,
+            "not_evaluated_ticks": 0,
+            "errors_head": [],
+            "console_head": [
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.4.x -> 0.5.x (part 1) completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.4.x -> 0.5.x (part 2) completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.4.x -> 0.5.x (part 3) completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Genocide complete: suicided 0 innocent drones."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.5.0 -> 0.5.1 (part 1) completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.5.0 -> 0.5.1 (part 2) completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.5.0 -> 0.5.1 (part 3) completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.5.0 -> 0.5.1 (part 4) completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.5.1 -> 0.5.2 completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Codebase updated or global reset. Type \"help\" for a list of console commands.\n                ‣ Version:        Overmind v0.5.2\n                ‣ Checksum:       0x34e6838c39d\n                ‣ Assimilated:    No (clearance code: null) [WIP]\n                ‣ Operating mode: automatic"
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Creating harvest directive at <a href=\"#!/room/shard0/W1N1\">[W1N1, 10, 10]</a>!"
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Creating harvest directive at <a href=\"#!/room/shard0/W1N1\">[W1N1, 40, 40]</a>!"
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Upgrade site at <a href=\"#!/room/shard0/W1N1\">[W1N1, 1, 1]</a>: no batteryPos!"
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Creating bootstrap directive at <a href=\"#!/room/shard0/W1N1\">[W1N1, 25, 25]</a>!"
+              },
+              {
+                "tick": 1,
+                "text": "Room layout and flag positions have been saved."
+              },
+              {
+                "tick": 17,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>17</font> No viable expansion rooms found!"
+              },
+              {
+                "tick": 100,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>100</font> Colony <a href=\"#!/room/shard0/W1N1\">W1N1</a> is in emergency recovery mode."
+              },
+              {
+                "tick": 200,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>200</font> Colony <a href=\"#!/room/shard0/W1N1\">W1N1</a> is in emergency recovery mode."
+              },
+              {
+                "tick": 300,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>300</font> Colony <a href=\"#!/room/shard0/W1N1\">W1N1</a> is in emergency recovery mode."
+              },
+              {
+                "tick": 400,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>400</font> Colony <a href=\"#!/room/shard0/W1N1\">W1N1</a> is in emergency recovery mode."
+              }
+            ]
+          }
+        },
+        {
+          "name": "世界时间接续",
+          "passed": true,
+          "actual": [
+            1,
+            2001
+          ]
+        },
+        {
+          "name": "公开观察 Memory 跨恢复接续",
+          "passed": true,
+          "actual": 2000
+        },
+        {
+          "name": "上一拍事件观察窗口完整",
+          "passed": true,
+          "actual": 1999
+        },
+        {
+          "name": "bot 未记录捕获异常",
+          "passed": true,
+          "actual": []
+        },
+        {
+          "name": "输入日志完整",
+          "passed": true,
+          "actual": {
+            "path": "/private/tmp/kkscreeps-overmind-acceptance-20261009/json-continuous.jsonl",
+            "segments": 2000,
+            "read_back_segments": 2000,
+            "first_tick": 1,
+            "last_tick": 2000,
+            "validation": "ok"
+          }
+        },
+        {
+          "name": "整份检查点输入回放相等",
+          "passed": true,
+          "actual": {
+            "status": "passed",
+            "segments": 2000,
+            "first_tick": 1,
+            "last_tick": 2000,
+            "note": "整份检查点逐位相等（剥离 last_console/metadata；CPU 按记录桶比较）"
+          }
+        },
+        {
+          "name": "场景断言通过",
+          "passed": true,
+          "actual": [
+            {
+              "pointer": "/objects/spawn",
+              "op": "exists",
+              "expected": null,
+              "before": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 300
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "actual": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 102
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "delta": null,
+              "passed": true
+            },
+            {
+              "pointer": "/rooms/W1N1/controller/owner",
+              "op": "eq",
+              "expected": "bot",
+              "before": "bot",
+              "actual": "bot",
+              "delta": null,
+              "passed": true
+            }
+          ]
+        },
+        {
+          "name": "初始无 creep 或预建 extension",
+          "passed": true,
+          "actual": 5
+        },
+        {
+          "name": "实际结算/观察 births",
+          "passed": true,
+          "actual": 23
+        },
+        {
+          "name": "实际结算/观察 deaths",
+          "passed": true,
+          "actual": 5
+        },
+        {
+          "name": "实际结算/观察 birthsAfterDeath",
+          "passed": true,
+          "actual": 18
+        },
+        {
+          "name": "实际结算/观察 harvested",
+          "passed": true,
+          "actual": 26704
+        },
+        {
+          "name": "实际结算/观察 transferred",
+          "passed": true,
+          "actual": 4009
+        },
+        {
+          "name": "实际结算/观察 built",
+          "passed": true,
+          "actual": 9870
+        },
+        {
+          "name": "实际结算/观察 upgraded",
+          "passed": true,
+          "actual": 450
+        },
+        {
+          "name": "终态至少两只已出生 creep 存活",
+          "passed": true,
+          "actual": 18
+        },
+        {
+          "name": "实际建成 extension",
+          "passed": true,
+          "actual": 5
+        },
+        {
+          "name": "控制器升级并保持所有权",
+          "passed": true,
+          "actual": {
+            "kind": "structure",
+            "structureType": "controller",
+            "id": "kk0000000000000001",
+            "pos": {
+              "x": 1,
+              "y": 1,
+              "roomName": "W1N1"
+            },
+            "level": 2,
+            "progress": 250,
+            "progressTotal": 45000,
+            "ticksToDowngrade": 8896,
+            "safeMode": null,
+            "safeModeAvailable": 1,
+            "safeModeCooldown": null,
+            "reservation": null,
+            "sign": {
+              "owner": "bot",
+              "text": "«ᴏᴠᴇʀᴍɪɴᴅ»",
+              "time": 656
+            },
+            "upgradeBlocked": null,
+            "isPowerEnabled": false,
+            "owner": "bot"
+          }
+        },
+        {
+          "name": "账户 GCL 实际增长",
+          "passed": true,
+          "actual": 450
+        },
+        {
+          "name": "实际投影通道",
+          "passed": true,
+          "actual": "json"
+        },
+        {
+          "name": "CLI 成功退出",
+          "passed": true,
+          "actual": 0
+        },
+        {
+          "name": "CLI 二进制身份一致",
+          "passed": true,
+          "actual": "c397abdb95478d65ccf17c3c3eb498c38d1237009f63bc1ffbfb0bcb662f3b8b"
+        }
+      ],
+      "metrics": {
+        "loops": 2000,
+        "births": 23,
+        "birthsAfterDeath": 18,
+        "deaths": 5,
+        "harvested": 26704,
+        "transferred": 4009,
+        "built": 9870,
+        "upgraded": 450,
+        "seen": {
+          "kk0000000000000009": true,
+          "kk000000000000000b": true,
+          "kk000000000000000c": true,
+          "kk000000000000000e": true,
+          "kk0000000000000010": true,
+          "kk0000000000000012": true,
+          "kk0000000000000015": true,
+          "kk0000000000000016": true,
+          "kk0000000000000017": true,
+          "kk0000000000000019": true,
+          "kk000000000000001a": true,
+          "kk000000000000001b": true,
+          "kk000000000000001d": true,
+          "kk000000000000001e": true,
+          "kk0000000000000020": true,
+          "kk0000000000000028": true,
+          "kk0000000000000029": true,
+          "kk000000000000002a": true,
+          "kk000000000000002b": true,
+          "kk000000000000002d": true,
+          "kk0000000000000032": true,
+          "kk0000000000000034": true,
+          "kk0000000000000037": true
+        },
+        "caughtErrors": 0,
+        "errorSamples": [],
+        "eventsThroughTick": 1999
+      }
+    },
+    {
+      "name": "json-prefix",
+      "channel": "json",
+      "exit_code": 0,
+      "report": "json-prefix.json",
+      "executable_sha256": "c397abdb95478d65ccf17c3c3eb498c38d1237009f63bc1ffbfb0bcb662f3b8b",
+      "success": true,
+      "checks": [
+        {
+          "name": "运行成功",
+          "passed": true,
+          "actual": "passed"
+        },
+        {
+          "name": "提交完整轮数",
+          "passed": true,
+          "actual": 1000
+        },
+        {
+          "name": "玩家无执行失败或跳帧",
+          "passed": true,
+          "actual": {
+            "successful_ticks": 1000,
+            "error_ticks": 0,
+            "not_evaluated_ticks": 0,
+            "errors_head": [],
+            "console_head": [
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.4.x -> 0.5.x (part 1) completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.4.x -> 0.5.x (part 2) completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.4.x -> 0.5.x (part 3) completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Genocide complete: suicided 0 innocent drones."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.5.0 -> 0.5.1 (part 1) completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.5.0 -> 0.5.1 (part 2) completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.5.0 -> 0.5.1 (part 3) completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.5.0 -> 0.5.1 (part 4) completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.5.1 -> 0.5.2 completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Codebase updated or global reset. Type \"help\" for a list of console commands.\n                ‣ Version:        Overmind v0.5.2\n                ‣ Checksum:       0x34e6838c39d\n                ‣ Assimilated:    No (clearance code: null) [WIP]\n                ‣ Operating mode: automatic"
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Creating harvest directive at <a href=\"#!/room/shard0/W1N1\">[W1N1, 10, 10]</a>!"
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Creating harvest directive at <a href=\"#!/room/shard0/W1N1\">[W1N1, 40, 40]</a>!"
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Upgrade site at <a href=\"#!/room/shard0/W1N1\">[W1N1, 1, 1]</a>: no batteryPos!"
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Creating bootstrap directive at <a href=\"#!/room/shard0/W1N1\">[W1N1, 25, 25]</a>!"
+              },
+              {
+                "tick": 1,
+                "text": "Room layout and flag positions have been saved."
+              },
+              {
+                "tick": 17,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>17</font> No viable expansion rooms found!"
+              },
+              {
+                "tick": 100,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>100</font> Colony <a href=\"#!/room/shard0/W1N1\">W1N1</a> is in emergency recovery mode."
+              },
+              {
+                "tick": 200,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>200</font> Colony <a href=\"#!/room/shard0/W1N1\">W1N1</a> is in emergency recovery mode."
+              },
+              {
+                "tick": 300,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>300</font> Colony <a href=\"#!/room/shard0/W1N1\">W1N1</a> is in emergency recovery mode."
+              },
+              {
+                "tick": 400,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>400</font> Colony <a href=\"#!/room/shard0/W1N1\">W1N1</a> is in emergency recovery mode."
+              }
+            ]
+          }
+        },
+        {
+          "name": "世界时间接续",
+          "passed": true,
+          "actual": [
+            1,
+            1001
+          ]
+        },
+        {
+          "name": "公开观察 Memory 跨恢复接续",
+          "passed": true,
+          "actual": 1000
+        },
+        {
+          "name": "上一拍事件观察窗口完整",
+          "passed": true,
+          "actual": 999
+        },
+        {
+          "name": "bot 未记录捕获异常",
+          "passed": true,
+          "actual": []
+        },
+        {
+          "name": "输入日志完整",
+          "passed": true,
+          "actual": {
+            "path": "/private/tmp/kkscreeps-overmind-acceptance-20261009/json-resume.jsonl",
+            "segments": 1000,
+            "read_back_segments": 1000,
+            "first_tick": 1,
+            "last_tick": 1000,
+            "validation": "ok"
+          }
+        },
+        {
+          "name": "整份检查点输入回放相等",
+          "passed": true,
+          "actual": {
+            "status": "passed",
+            "segments": 1000,
+            "first_tick": 1,
+            "last_tick": 1000,
+            "note": "整份检查点逐位相等（剥离 last_console/metadata；CPU 按记录桶比较）"
+          }
+        },
+        {
+          "name": "场景断言通过",
+          "passed": true,
+          "actual": [
+            {
+              "pointer": "/objects/spawn",
+              "op": "exists",
+              "expected": null,
+              "before": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 300
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "actual": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 126
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "delta": null,
+              "passed": true
+            },
+            {
+              "pointer": "/rooms/W1N1/controller/owner",
+              "op": "eq",
+              "expected": "bot",
+              "before": "bot",
+              "actual": "bot",
+              "delta": null,
+              "passed": true
+            }
+          ]
+        },
+        {
+          "name": "实际投影通道",
+          "passed": true,
+          "actual": "json"
+        },
+        {
+          "name": "CLI 成功退出",
+          "passed": true,
+          "actual": 0
+        },
+        {
+          "name": "CLI 二进制身份一致",
+          "passed": true,
+          "actual": "c397abdb95478d65ccf17c3c3eb498c38d1237009f63bc1ffbfb0bcb662f3b8b"
+        }
+      ],
+      "metrics": {
+        "loops": 1000,
+        "births": 14,
+        "birthsAfterDeath": 9,
+        "deaths": 1,
+        "harvested": 10568,
+        "transferred": 2352,
+        "built": 1000,
+        "upgraded": 350,
+        "seen": {
+          "kk0000000000000009": true,
+          "kk000000000000000b": true,
+          "kk000000000000000c": true,
+          "kk000000000000000e": true,
+          "kk0000000000000010": true,
+          "kk0000000000000012": true,
+          "kk0000000000000015": true,
+          "kk0000000000000016": true,
+          "kk0000000000000017": true,
+          "kk0000000000000018": true,
+          "kk0000000000000019": true,
+          "kk000000000000001b": true,
+          "kk000000000000001e": true,
+          "kk0000000000000025": true
+        },
+        "caughtErrors": 0,
+        "errorSamples": [],
+        "eventsThroughTick": 999
+      }
+    },
+    {
+      "name": "json-resumed",
+      "channel": "json",
+      "exit_code": 0,
+      "report": "json-resumed.json",
+      "executable_sha256": "c397abdb95478d65ccf17c3c3eb498c38d1237009f63bc1ffbfb0bcb662f3b8b",
+      "success": true,
+      "checks": [
+        {
+          "name": "运行成功",
+          "passed": true,
+          "actual": "passed"
+        },
+        {
+          "name": "提交完整轮数",
+          "passed": true,
+          "actual": 1000
+        },
+        {
+          "name": "玩家无执行失败或跳帧",
+          "passed": true,
+          "actual": {
+            "successful_ticks": 1000,
+            "error_ticks": 0,
+            "not_evaluated_ticks": 0,
+            "errors_head": [],
+            "console_head": [
+              {
+                "tick": 1001,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1001</font> Codebase updated or global reset. Type \"help\" for a list of console commands.\n                ‣ Version:        Overmind v0.5.2\n                ‣ Checksum:       0x34e6838c39d\n                ‣ Assimilated:    No (clearance code: null) [WIP]\n                ‣ Operating mode: automatic"
+              },
+              {
+                "tick": 1017,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1017</font> No viable expansion rooms found!"
+              },
+              {
+                "tick": 2000,
+                "text": "<font color='yellow'>ALERT   </font><font color='gray'>2000</font> <font color='#ff00ff'>New clearance code obtained: null (expiration: 1999) </font>"
+              }
+            ]
+          }
+        },
+        {
+          "name": "世界时间接续",
+          "passed": true,
+          "actual": [
+            1001,
+            2001
+          ]
+        },
+        {
+          "name": "公开观察 Memory 跨恢复接续",
+          "passed": true,
+          "actual": 2000
+        },
+        {
+          "name": "上一拍事件观察窗口完整",
+          "passed": true,
+          "actual": 1999
+        },
+        {
+          "name": "bot 未记录捕获异常",
+          "passed": true,
+          "actual": []
+        },
+        {
+          "name": "输入日志完整",
+          "passed": true,
+          "actual": {
+            "path": "/private/tmp/kkscreeps-overmind-acceptance-20261009/json-resume.jsonl",
+            "segments": 2000,
+            "read_back_segments": 2000,
+            "first_tick": 1,
+            "last_tick": 2000,
+            "validation": "ok"
+          }
+        },
+        {
+          "name": "整份检查点输入回放相等",
+          "passed": true,
+          "actual": {
+            "status": "passed",
+            "segments": 1000,
+            "first_tick": 1001,
+            "last_tick": 2000,
+            "note": "整份检查点逐位相等（剥离 last_console/metadata；CPU 按记录桶比较）"
+          }
+        },
+        {
+          "name": "场景断言通过",
+          "passed": true,
+          "actual": [
+            {
+              "pointer": "/objects/spawn",
+              "op": "exists",
+              "expected": null,
+              "before": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 300
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "actual": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 300
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "delta": null,
+              "passed": true
+            },
+            {
+              "pointer": "/rooms/W1N1/controller/owner",
+              "op": "eq",
+              "expected": "bot",
+              "before": "bot",
+              "actual": "bot",
+              "delta": null,
+              "passed": true
+            }
+          ]
+        },
+        {
+          "name": "初始无 creep 或预建 extension",
+          "passed": true,
+          "actual": 5
+        },
+        {
+          "name": "实际结算/观察 births",
+          "passed": true,
+          "actual": 24
+        },
+        {
+          "name": "实际结算/观察 deaths",
+          "passed": true,
+          "actual": 5
+        },
+        {
+          "name": "实际结算/观察 birthsAfterDeath",
+          "passed": true,
+          "actual": 19
+        },
+        {
+          "name": "实际结算/观察 harvested",
+          "passed": true,
+          "actual": 26704
+        },
+        {
+          "name": "实际结算/观察 transferred",
+          "passed": true,
+          "actual": 4086
+        },
+        {
+          "name": "实际结算/观察 built",
+          "passed": true,
+          "actual": 9215
+        },
+        {
+          "name": "实际结算/观察 upgraded",
+          "passed": true,
+          "actual": 350
+        },
+        {
+          "name": "终态至少两只已出生 creep 存活",
+          "passed": true,
+          "actual": 19
+        },
+        {
+          "name": "实际建成 extension",
+          "passed": true,
+          "actual": 5
+        },
+        {
+          "name": "控制器升级并保持所有权",
+          "passed": true,
+          "actual": {
+            "kind": "structure",
+            "structureType": "controller",
+            "id": "kk0000000000000001",
+            "pos": {
+              "x": 1,
+              "y": 1,
+              "roomName": "W1N1"
+            },
+            "level": 2,
+            "progress": 150,
+            "progressTotal": 45000,
+            "ticksToDowngrade": 8879,
+            "safeMode": null,
+            "safeModeAvailable": 1,
+            "safeModeCooldown": null,
+            "reservation": null,
+            "sign": {
+              "owner": "bot",
+              "text": "«ᴏᴠᴇʀᴍɪɴᴅ»",
+              "time": 656
+            },
+            "upgradeBlocked": null,
+            "isPowerEnabled": false,
+            "owner": "bot"
+          }
+        },
+        {
+          "name": "账户 GCL 实际增长",
+          "passed": true,
+          "actual": 350
+        },
+        {
+          "name": "实际投影通道",
+          "passed": true,
+          "actual": "json"
+        },
+        {
+          "name": "CLI 成功退出",
+          "passed": true,
+          "actual": 0
+        },
+        {
+          "name": "CLI 二进制身份一致",
+          "passed": true,
+          "actual": "c397abdb95478d65ccf17c3c3eb498c38d1237009f63bc1ffbfb0bcb662f3b8b"
+        }
+      ],
+      "metrics": {
+        "loops": 2000,
+        "births": 24,
+        "birthsAfterDeath": 19,
+        "deaths": 5,
+        "harvested": 26704,
+        "transferred": 4086,
+        "built": 9215,
+        "upgraded": 350,
+        "seen": {
+          "kk0000000000000009": true,
+          "kk000000000000000b": true,
+          "kk000000000000000c": true,
+          "kk000000000000000e": true,
+          "kk0000000000000010": true,
+          "kk0000000000000012": true,
+          "kk0000000000000015": true,
+          "kk0000000000000016": true,
+          "kk0000000000000017": true,
+          "kk0000000000000018": true,
+          "kk0000000000000019": true,
+          "kk000000000000001b": true,
+          "kk000000000000001e": true,
+          "kk0000000000000025": true,
+          "kk0000000000000029": true,
+          "kk000000000000002a": true,
+          "kk000000000000002b": true,
+          "kk000000000000002c": true,
+          "kk000000000000002d": true,
+          "kk000000000000002e": true,
+          "kk0000000000000033": true,
+          "kk0000000000000036": true,
+          "kk0000000000000039": true,
+          "kk000000000000003a": true
+        },
+        "caughtErrors": 0,
+        "errorSamples": [],
+        "eventsThroughTick": 1999
+      }
+    },
+    {
+      "name": "kkpv-continuous",
+      "channel": "kkpv",
+      "exit_code": 0,
+      "report": "kkpv-continuous.json",
+      "executable_sha256": "c397abdb95478d65ccf17c3c3eb498c38d1237009f63bc1ffbfb0bcb662f3b8b",
+      "success": true,
+      "checks": [
+        {
+          "name": "运行成功",
+          "passed": true,
+          "actual": "passed"
+        },
+        {
+          "name": "提交完整轮数",
+          "passed": true,
+          "actual": 2000
+        },
+        {
+          "name": "玩家无执行失败或跳帧",
+          "passed": true,
+          "actual": {
+            "successful_ticks": 2000,
+            "error_ticks": 0,
+            "not_evaluated_ticks": 0,
+            "errors_head": [],
+            "console_head": [
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.4.x -> 0.5.x (part 1) completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.4.x -> 0.5.x (part 2) completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.4.x -> 0.5.x (part 3) completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Genocide complete: suicided 0 innocent drones."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.5.0 -> 0.5.1 (part 1) completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.5.0 -> 0.5.1 (part 2) completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.5.0 -> 0.5.1 (part 3) completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.5.0 -> 0.5.1 (part 4) completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.5.1 -> 0.5.2 completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Codebase updated or global reset. Type \"help\" for a list of console commands.\n                ‣ Version:        Overmind v0.5.2\n                ‣ Checksum:       0x34e6838c39d\n                ‣ Assimilated:    No (clearance code: null) [WIP]\n                ‣ Operating mode: automatic"
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Creating harvest directive at <a href=\"#!/room/shard0/W1N1\">[W1N1, 10, 10]</a>!"
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Creating harvest directive at <a href=\"#!/room/shard0/W1N1\">[W1N1, 40, 40]</a>!"
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Upgrade site at <a href=\"#!/room/shard0/W1N1\">[W1N1, 1, 1]</a>: no batteryPos!"
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Creating bootstrap directive at <a href=\"#!/room/shard0/W1N1\">[W1N1, 25, 25]</a>!"
+              },
+              {
+                "tick": 1,
+                "text": "Room layout and flag positions have been saved."
+              },
+              {
+                "tick": 17,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>17</font> No viable expansion rooms found!"
+              },
+              {
+                "tick": 100,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>100</font> Colony <a href=\"#!/room/shard0/W1N1\">W1N1</a> is in emergency recovery mode."
+              },
+              {
+                "tick": 200,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>200</font> Colony <a href=\"#!/room/shard0/W1N1\">W1N1</a> is in emergency recovery mode."
+              },
+              {
+                "tick": 300,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>300</font> Colony <a href=\"#!/room/shard0/W1N1\">W1N1</a> is in emergency recovery mode."
+              },
+              {
+                "tick": 400,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>400</font> Colony <a href=\"#!/room/shard0/W1N1\">W1N1</a> is in emergency recovery mode."
+              }
+            ]
+          }
+        },
+        {
+          "name": "世界时间接续",
+          "passed": true,
+          "actual": [
+            1,
+            2001
+          ]
+        },
+        {
+          "name": "公开观察 Memory 跨恢复接续",
+          "passed": true,
+          "actual": 2000
+        },
+        {
+          "name": "上一拍事件观察窗口完整",
+          "passed": true,
+          "actual": 1999
+        },
+        {
+          "name": "bot 未记录捕获异常",
+          "passed": true,
+          "actual": []
+        },
+        {
+          "name": "输入日志完整",
+          "passed": true,
+          "actual": {
+            "path": "/private/tmp/kkscreeps-overmind-acceptance-20261009/kkpv-continuous.jsonl",
+            "segments": 2000,
+            "read_back_segments": 2000,
+            "first_tick": 1,
+            "last_tick": 2000,
+            "validation": "ok"
+          }
+        },
+        {
+          "name": "整份检查点输入回放相等",
+          "passed": true,
+          "actual": {
+            "status": "passed",
+            "segments": 2000,
+            "first_tick": 1,
+            "last_tick": 2000,
+            "note": "整份检查点逐位相等（剥离 last_console/metadata；CPU 按记录桶比较）"
+          }
+        },
+        {
+          "name": "场景断言通过",
+          "passed": true,
+          "actual": [
+            {
+              "pointer": "/objects/spawn",
+              "op": "exists",
+              "expected": null,
+              "before": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 300
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "actual": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 300
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "delta": null,
+              "passed": true
+            },
+            {
+              "pointer": "/rooms/W1N1/controller/owner",
+              "op": "eq",
+              "expected": "bot",
+              "before": "bot",
+              "actual": "bot",
+              "delta": null,
+              "passed": true
+            }
+          ]
+        },
+        {
+          "name": "初始无 creep 或预建 extension",
+          "passed": true,
+          "actual": 5
+        },
+        {
+          "name": "实际结算/观察 births",
+          "passed": true,
+          "actual": 24
+        },
+        {
+          "name": "实际结算/观察 deaths",
+          "passed": true,
+          "actual": 5
+        },
+        {
+          "name": "实际结算/观察 birthsAfterDeath",
+          "passed": true,
+          "actual": 19
+        },
+        {
+          "name": "实际结算/观察 harvested",
+          "passed": true,
+          "actual": 26576
+        },
+        {
+          "name": "实际结算/观察 transferred",
+          "passed": true,
+          "actual": 4594
+        },
+        {
+          "name": "实际结算/观察 built",
+          "passed": true,
+          "actual": 9750
+        },
+        {
+          "name": "实际结算/观察 upgraded",
+          "passed": true,
+          "actual": 500
+        },
+        {
+          "name": "终态至少两只已出生 creep 存活",
+          "passed": true,
+          "actual": 19
+        },
+        {
+          "name": "实际建成 extension",
+          "passed": true,
+          "actual": 5
+        },
+        {
+          "name": "控制器升级并保持所有权",
+          "passed": true,
+          "actual": {
+            "kind": "structure",
+            "structureType": "controller",
+            "id": "kk0000000000000001",
+            "pos": {
+              "x": 1,
+              "y": 1,
+              "roomName": "W1N1"
+            },
+            "level": 2,
+            "progress": 300,
+            "progressTotal": 45000,
+            "ticksToDowngrade": 8923,
+            "safeMode": null,
+            "safeModeAvailable": 1,
+            "safeModeCooldown": null,
+            "reservation": null,
+            "sign": {
+              "owner": "bot",
+              "text": "«ᴏᴠᴇʀᴍɪɴᴅ»",
+              "time": 657
+            },
+            "upgradeBlocked": null,
+            "isPowerEnabled": false,
+            "owner": "bot"
+          }
+        },
+        {
+          "name": "账户 GCL 实际增长",
+          "passed": true,
+          "actual": 500
+        },
+        {
+          "name": "实际投影通道",
+          "passed": true,
+          "actual": "kkpv"
+        },
+        {
+          "name": "CLI 成功退出",
+          "passed": true,
+          "actual": 0
+        },
+        {
+          "name": "CLI 二进制身份一致",
+          "passed": true,
+          "actual": "c397abdb95478d65ccf17c3c3eb498c38d1237009f63bc1ffbfb0bcb662f3b8b"
+        }
+      ],
+      "metrics": {
+        "loops": 2000,
+        "births": 24,
+        "birthsAfterDeath": 19,
+        "deaths": 5,
+        "harvested": 26576,
+        "transferred": 4594,
+        "built": 9750,
+        "upgraded": 500,
+        "seen": {
+          "kk0000000000000009": true,
+          "kk000000000000000b": true,
+          "kk000000000000000c": true,
+          "kk000000000000000e": true,
+          "kk0000000000000010": true,
+          "kk0000000000000012": true,
+          "kk0000000000000015": true,
+          "kk0000000000000016": true,
+          "kk0000000000000017": true,
+          "kk0000000000000019": true,
+          "kk000000000000001a": true,
+          "kk000000000000001b": true,
+          "kk000000000000001d": true,
+          "kk000000000000001e": true,
+          "kk0000000000000020": true,
+          "kk0000000000000027": true,
+          "kk0000000000000029": true,
+          "kk000000000000002b": true,
+          "kk000000000000002c": true,
+          "kk000000000000002f": true,
+          "kk0000000000000035": true,
+          "kk0000000000000038": true,
+          "kk000000000000003b": true,
+          "kk000000000000003c": true
+        },
+        "caughtErrors": 0,
+        "errorSamples": [],
+        "eventsThroughTick": 1999
+      }
+    },
+    {
+      "name": "kkpv-prefix",
+      "channel": "kkpv",
+      "exit_code": 0,
+      "report": "kkpv-prefix.json",
+      "executable_sha256": "c397abdb95478d65ccf17c3c3eb498c38d1237009f63bc1ffbfb0bcb662f3b8b",
+      "success": true,
+      "checks": [
+        {
+          "name": "运行成功",
+          "passed": true,
+          "actual": "passed"
+        },
+        {
+          "name": "提交完整轮数",
+          "passed": true,
+          "actual": 1000
+        },
+        {
+          "name": "玩家无执行失败或跳帧",
+          "passed": true,
+          "actual": {
+            "successful_ticks": 1000,
+            "error_ticks": 0,
+            "not_evaluated_ticks": 0,
+            "errors_head": [],
+            "console_head": [
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.4.x -> 0.5.x (part 1) completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.4.x -> 0.5.x (part 2) completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.4.x -> 0.5.x (part 3) completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Genocide complete: suicided 0 innocent drones."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.5.0 -> 0.5.1 (part 1) completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.5.0 -> 0.5.1 (part 2) completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.5.0 -> 0.5.1 (part 3) completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.5.0 -> 0.5.1 (part 4) completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Version migration from 0.5.1 -> 0.5.2 completed successfully."
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Codebase updated or global reset. Type \"help\" for a list of console commands.\n                ‣ Version:        Overmind v0.5.2\n                ‣ Checksum:       0x34e6838c39d\n                ‣ Assimilated:    No (clearance code: null) [WIP]\n                ‣ Operating mode: automatic"
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Creating harvest directive at <a href=\"#!/room/shard0/W1N1\">[W1N1, 10, 10]</a>!"
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Creating harvest directive at <a href=\"#!/room/shard0/W1N1\">[W1N1, 40, 40]</a>!"
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Upgrade site at <a href=\"#!/room/shard0/W1N1\">[W1N1, 1, 1]</a>: no batteryPos!"
+              },
+              {
+                "tick": 1,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1</font> Creating bootstrap directive at <a href=\"#!/room/shard0/W1N1\">[W1N1, 25, 25]</a>!"
+              },
+              {
+                "tick": 1,
+                "text": "Room layout and flag positions have been saved."
+              },
+              {
+                "tick": 17,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>17</font> No viable expansion rooms found!"
+              },
+              {
+                "tick": 100,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>100</font> Colony <a href=\"#!/room/shard0/W1N1\">W1N1</a> is in emergency recovery mode."
+              },
+              {
+                "tick": 200,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>200</font> Colony <a href=\"#!/room/shard0/W1N1\">W1N1</a> is in emergency recovery mode."
+              },
+              {
+                "tick": 300,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>300</font> Colony <a href=\"#!/room/shard0/W1N1\">W1N1</a> is in emergency recovery mode."
+              },
+              {
+                "tick": 400,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>400</font> Colony <a href=\"#!/room/shard0/W1N1\">W1N1</a> is in emergency recovery mode."
+              }
+            ]
+          }
+        },
+        {
+          "name": "世界时间接续",
+          "passed": true,
+          "actual": [
+            1,
+            1001
+          ]
+        },
+        {
+          "name": "公开观察 Memory 跨恢复接续",
+          "passed": true,
+          "actual": 1000
+        },
+        {
+          "name": "上一拍事件观察窗口完整",
+          "passed": true,
+          "actual": 999
+        },
+        {
+          "name": "bot 未记录捕获异常",
+          "passed": true,
+          "actual": []
+        },
+        {
+          "name": "输入日志完整",
+          "passed": true,
+          "actual": {
+            "path": "/private/tmp/kkscreeps-overmind-acceptance-20261009/kkpv-resume.jsonl",
+            "segments": 1000,
+            "read_back_segments": 1000,
+            "first_tick": 1,
+            "last_tick": 1000,
+            "validation": "ok"
+          }
+        },
+        {
+          "name": "整份检查点输入回放相等",
+          "passed": true,
+          "actual": {
+            "status": "passed",
+            "segments": 1000,
+            "first_tick": 1,
+            "last_tick": 1000,
+            "note": "整份检查点逐位相等（剥离 last_console/metadata；CPU 按记录桶比较）"
+          }
+        },
+        {
+          "name": "场景断言通过",
+          "passed": true,
+          "actual": [
+            {
+              "pointer": "/objects/spawn",
+              "op": "exists",
+              "expected": null,
+              "before": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 300
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "actual": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 269
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "delta": null,
+              "passed": true
+            },
+            {
+              "pointer": "/rooms/W1N1/controller/owner",
+              "op": "eq",
+              "expected": "bot",
+              "before": "bot",
+              "actual": "bot",
+              "delta": null,
+              "passed": true
+            }
+          ]
+        },
+        {
+          "name": "实际投影通道",
+          "passed": true,
+          "actual": "kkpv"
+        },
+        {
+          "name": "CLI 成功退出",
+          "passed": true,
+          "actual": 0
+        },
+        {
+          "name": "CLI 二进制身份一致",
+          "passed": true,
+          "actual": "c397abdb95478d65ccf17c3c3eb498c38d1237009f63bc1ffbfb0bcb662f3b8b"
+        }
+      ],
+      "metrics": {
+        "loops": 1000,
+        "births": 19,
+        "birthsAfterDeath": 14,
+        "deaths": 1,
+        "harvested": 10352,
+        "transferred": 3096,
+        "built": 985,
+        "upgraded": 400,
+        "seen": {
+          "kk0000000000000009": true,
+          "kk000000000000000b": true,
+          "kk000000000000000c": true,
+          "kk000000000000000e": true,
+          "kk0000000000000010": true,
+          "kk0000000000000012": true,
+          "kk0000000000000015": true,
+          "kk0000000000000016": true,
+          "kk0000000000000017": true,
+          "kk0000000000000019": true,
+          "kk000000000000001a": true,
+          "kk000000000000001b": true,
+          "kk000000000000001d": true,
+          "kk000000000000001f": true,
+          "kk0000000000000021": true,
+          "kk0000000000000028": true,
+          "kk000000000000002a": true,
+          "kk000000000000002b": true,
+          "kk000000000000002c": true
+        },
+        "caughtErrors": 0,
+        "errorSamples": [],
+        "eventsThroughTick": 999
+      }
+    },
+    {
+      "name": "kkpv-resumed",
+      "channel": "kkpv",
+      "exit_code": 0,
+      "report": "kkpv-resumed.json",
+      "executable_sha256": "c397abdb95478d65ccf17c3c3eb498c38d1237009f63bc1ffbfb0bcb662f3b8b",
+      "success": true,
+      "checks": [
+        {
+          "name": "运行成功",
+          "passed": true,
+          "actual": "passed"
+        },
+        {
+          "name": "提交完整轮数",
+          "passed": true,
+          "actual": 1000
+        },
+        {
+          "name": "玩家无执行失败或跳帧",
+          "passed": true,
+          "actual": {
+            "successful_ticks": 1000,
+            "error_ticks": 0,
+            "not_evaluated_ticks": 0,
+            "errors_head": [],
+            "console_head": [
+              {
+                "tick": 1001,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1001</font> Codebase updated or global reset. Type \"help\" for a list of console commands.\n                ‣ Version:        Overmind v0.5.2\n                ‣ Checksum:       0x34e6838c39d\n                ‣ Assimilated:    No (clearance code: null) [WIP]\n                ‣ Operating mode: automatic"
+              },
+              {
+                "tick": 1017,
+                "text": "<font color='yellow'>ALERT  </font> <font color='gray'>1017</font> No viable expansion rooms found!"
+              },
+              {
+                "tick": 2000,
+                "text": "<font color='yellow'>ALERT   </font><font color='gray'>2000</font> <font color='#ff00ff'>New clearance code obtained: null (expiration: 1999) </font>"
+              }
+            ]
+          }
+        },
+        {
+          "name": "世界时间接续",
+          "passed": true,
+          "actual": [
+            1001,
+            2001
+          ]
+        },
+        {
+          "name": "公开观察 Memory 跨恢复接续",
+          "passed": true,
+          "actual": 2000
+        },
+        {
+          "name": "上一拍事件观察窗口完整",
+          "passed": true,
+          "actual": 1999
+        },
+        {
+          "name": "bot 未记录捕获异常",
+          "passed": true,
+          "actual": []
+        },
+        {
+          "name": "输入日志完整",
+          "passed": true,
+          "actual": {
+            "path": "/private/tmp/kkscreeps-overmind-acceptance-20261009/kkpv-resume.jsonl",
+            "segments": 2000,
+            "read_back_segments": 2000,
+            "first_tick": 1,
+            "last_tick": 2000,
+            "validation": "ok"
+          }
+        },
+        {
+          "name": "整份检查点输入回放相等",
+          "passed": true,
+          "actual": {
+            "status": "passed",
+            "segments": 1000,
+            "first_tick": 1001,
+            "last_tick": 2000,
+            "note": "整份检查点逐位相等（剥离 last_console/metadata；CPU 按记录桶比较）"
+          }
+        },
+        {
+          "name": "场景断言通过",
+          "passed": true,
+          "actual": [
+            {
+              "pointer": "/objects/spawn",
+              "op": "exists",
+              "expected": null,
+              "before": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 300
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "actual": {
+                "kind": "structure",
+                "structureType": "spawn",
+                "id": "kk0000000000000002",
+                "pos": {
+                  "x": 25,
+                  "y": 25,
+                  "roomName": "W1N1"
+                },
+                "owner": "bot",
+                "hits": 5000,
+                "hitsMax": 5000,
+                "name": "Spawn1",
+                "store": {
+                  "energy": 295
+                },
+                "storeCapacity": null,
+                "spawning": null
+              },
+              "delta": null,
+              "passed": true
+            },
+            {
+              "pointer": "/rooms/W1N1/controller/owner",
+              "op": "eq",
+              "expected": "bot",
+              "before": "bot",
+              "actual": "bot",
+              "delta": null,
+              "passed": true
+            }
+          ]
+        },
+        {
+          "name": "初始无 creep 或预建 extension",
+          "passed": true,
+          "actual": 5
+        },
+        {
+          "name": "实际结算/观察 births",
+          "passed": true,
+          "actual": 21
+        },
+        {
+          "name": "实际结算/观察 deaths",
+          "passed": true,
+          "actual": 5
+        },
+        {
+          "name": "实际结算/观察 birthsAfterDeath",
+          "passed": true,
+          "actual": 16
+        },
+        {
+          "name": "实际结算/观察 harvested",
+          "passed": true,
+          "actual": 25728
+        },
+        {
+          "name": "实际结算/观察 transferred",
+          "passed": true,
+          "actual": 3270
+        },
+        {
+          "name": "实际结算/观察 built",
+          "passed": true,
+          "actual": 6500
+        },
+        {
+          "name": "实际结算/观察 upgraded",
+          "passed": true,
+          "actual": 400
+        },
+        {
+          "name": "终态至少两只已出生 creep 存活",
+          "passed": true,
+          "actual": 16
+        },
+        {
+          "name": "实际建成 extension",
+          "passed": true,
+          "actual": 5
+        },
+        {
+          "name": "控制器升级并保持所有权",
+          "passed": true,
+          "actual": {
+            "kind": "structure",
+            "structureType": "controller",
+            "id": "kk0000000000000001",
+            "pos": {
+              "x": 1,
+              "y": 1,
+              "roomName": "W1N1"
+            },
+            "level": 2,
+            "progress": 200,
+            "progressTotal": 45000,
+            "ticksToDowngrade": 8888,
+            "safeMode": null,
+            "safeModeAvailable": 1,
+            "safeModeCooldown": null,
+            "reservation": null,
+            "sign": {
+              "owner": "bot",
+              "text": "«ᴏᴠᴇʀᴍɪɴᴅ»",
+              "time": 656
+            },
+            "upgradeBlocked": null,
+            "isPowerEnabled": false,
+            "owner": "bot"
+          }
+        },
+        {
+          "name": "账户 GCL 实际增长",
+          "passed": true,
+          "actual": 400
+        },
+        {
+          "name": "实际投影通道",
+          "passed": true,
+          "actual": "kkpv"
+        },
+        {
+          "name": "CLI 成功退出",
+          "passed": true,
+          "actual": 0
+        },
+        {
+          "name": "CLI 二进制身份一致",
+          "passed": true,
+          "actual": "c397abdb95478d65ccf17c3c3eb498c38d1237009f63bc1ffbfb0bcb662f3b8b"
+        }
+      ],
+      "metrics": {
+        "loops": 2000,
+        "births": 21,
+        "birthsAfterDeath": 16,
+        "deaths": 5,
+        "harvested": 25728,
+        "transferred": 3270,
+        "built": 6500,
+        "upgraded": 400,
+        "seen": {
+          "kk0000000000000009": true,
+          "kk000000000000000b": true,
+          "kk000000000000000c": true,
+          "kk000000000000000e": true,
+          "kk0000000000000010": true,
+          "kk0000000000000012": true,
+          "kk0000000000000015": true,
+          "kk0000000000000016": true,
+          "kk0000000000000017": true,
+          "kk0000000000000019": true,
+          "kk000000000000001a": true,
+          "kk000000000000001b": true,
+          "kk000000000000001d": true,
+          "kk000000000000001f": true,
+          "kk0000000000000021": true,
+          "kk0000000000000028": true,
+          "kk000000000000002a": true,
+          "kk000000000000002b": true,
+          "kk000000000000002c": true,
+          "kk0000000000000033": true,
+          "kk0000000000000037": true
+        },
+        "caughtErrors": 0,
+        "errorSamples": [],
+        "eventsThroughTick": 1999
+      }
+    }
+  ],
+  "executable_sha256": "c397abdb95478d65ccf17c3c3eb498c38d1237009f63bc1ffbfb0bcb662f3b8b",
+  "upstream": {
+    "version": "v0.5.2.1",
+    "source": "/Users/keqing/Desktop/projects/games/kkscreeps/compat/fixtures/overmind-dist",
+    "release_url": "https://github.com/bencbartlett/Overmind/releases/download/v0.5.2.1/main.js",
+    "files": [
+      {
+        "name": "main.js",
+        "sha256": "e78ad3c8e58a955163fc81adf6be1d584c881081a6b0a78156d519f202b5a4b8"
+      }
+    ],
+    "observer_sha256": "81b94b6e06d53255c4ba4b82301d94e8786f9f2da7d30f353aa2f0ffb26d0aaf"
+  },
+  "implementation_commit": "4a3016e4195734311187704e6631152f1506783f",
+  "implementation_changes": "本提交补齐 Flag → RoomObject 继承；发行 CLI 包含该修复。",
+  "validated_harness_sha256": "4d69cd471455d9c0e172622b422fffe369dad7fd8e6f187fa166a1e868eb310d",
+  "scenario_sha256": "b695b28c72789d249323dc20726e96966874adfb65776ad0534f62d655f4213a",
+  "evidence_note": "完整六阶段实际通过；运行模块/输入日志/检查点位于临时目录，可由锁定原版资产和公开命令重建。独立运行按业务门槛验收，不承诺随机名称/CPU 跨运行等值。"
+}

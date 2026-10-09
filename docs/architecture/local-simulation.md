@@ -101,3 +101,7 @@ CLI 参数解析失败沿用 Clap 的退出码 2，不写报告。报告通过�
 原生场景验收见[初始交付记录](../research/notes/sim-run-2026-10-04.md)，Mod 场景验收见[生命周期交付记录](../research/notes/n1a-object-tick-2026-10-05.md)和[对象操作交付记录](../research/notes/n1b-mod-objects-2026-10-05.md)。
 
 普通 Invader 持续战斗切片使用公开事件、hits 和位置观察，在 JSON/KKPV 上运行 200 tick 连跑与 100+100 tick 冷恢复，各阶段 `--verify-replay` 核对完整状态（包含载荷 v6 私有 NPC 记忆）。其 world/Memory 终态等值属于固定无随机脚本的验收，不能推及任意真实 bot；场景与命令见[兼容验收](../../compat/README.md#普通-invader-持续战斗与冷恢复)。
+
+### 原版 Overmind 持续世界验收
+
+[Overmind 验收入口](../../compat/scripts/bot-gameplay.mjs) 用 `--bot overmind` 选择锁定官方发布资产与[单房场景](../../compat/fixtures/sim-overmind/scenario.json)，核验资产 SHA-256 后原样复制。与 TooAngel 共用双通道连跑/跨进程冷恢复及整份检查点回放门禁；观察器在原版 loop 后读取当前 Memory，兼容原版重用 `RawMemory._parsed` 的行为。指标只计上一拍正量结算和已出生 creep，完整运行窗口截获官方 logger 的异常。验收范围为单房经济/寿命，未覆盖战斗或多房；报告与复跑说明见 [compat 使用说明](../../compat/README.md#overmind-持续世界与冷恢复)。

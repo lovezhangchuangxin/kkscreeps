@@ -1,4 +1,4 @@
-// TooAngel 单房经济验收：真实结算、双投影、跨进程冷恢复与逐位输入回放。
+// 锁定原版 bot 单房经济验收：真实结算、双投影、跨进程冷恢复与逐位输入回放。
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
@@ -11,6 +11,8 @@ import {
 } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
+
+import { prepareOvermindModules } from './overmind-gameplay.mjs';
 
 export const TOOANGEL_PIN = '87645a0b933360224737cca3b18ae9d112f46fef';
 const root = resolve(import.meta.dirname, '../..');
@@ -161,10 +163,16 @@ export function evaluateRun(report, { ticks, totalTicks, startTime, economy = tr
 export function runAcceptance({
   out,
   binary,
-  botRoot = join(root, 'compat/fixtures/tooangel'),
+  bot = 'tooangel',
+  botRoot,
   ticks = 2000,
   split = 1000,
 }) {
+  if (!['tooangel', 'overmind'].includes(bot)) throw new Error('bot 须为 tooangel 或 overmind');
+  botRoot ||= join(root, `compat/fixtures/${bot === 'tooangel' ? 'tooangel' : 'overmind-dist'}`);
+  const selectedFixture = bot === 'tooangel' ? fixture : join(root, 'compat/fixtures/sim-overmind');
+  const prepare = bot === 'tooangel' ? prepareModules : prepareOvermindModules;
+  const label = bot === 'tooangel' ? 'TooAngel' : 'Overmind';
   if (
     !Number.isSafeInteger(ticks) ||
     ticks < 2000 ||
@@ -175,7 +183,7 @@ export function runAcceptance({
     throw new Error('ticks 须 ≥2000；split 须为 1..ticks-1 的整数');
   }
   out = join(realpathSync(dirname(resolve(out))), basename(out));
-  for (const source of [botRoot, fixture]) {
+  for (const source of [botRoot, selectedFixture]) {
     const path = relative(realpathSync(source), out);
     if (path === '' || (path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path))) {
       throw new Error('输出目录不得位于 bot 或验收夹具源码内');
@@ -186,16 +194,17 @@ export function runAcceptance({
   const summary = {
     version: 1,
     success: false,
-    scope: 'TooAngel 单房经济/寿命/冷恢复；不含战斗、多房或完整 M2B',
+    scope: `${label} 单房经济/寿命/冷恢复；不含战斗、多房或完整 M2B`,
+    bot,
     ticks,
     split,
     runs: [],
   };
   try {
     summary.executable_sha256 = sha256(readFileSync(binary));
-    summary.upstream = prepareModules(botRoot, join(out, 'modules'));
+    summary.upstream = prepare(botRoot, join(out, 'modules'));
     const scenario = join(out, 'scenario.json');
-    copyFileSync(join(fixture, 'scenario.json'), scenario);
+    copyFileSync(join(selectedFixture, 'scenario.json'), scenario);
     const run = (name, channel, rounds, extra, totalTicks, startTime, economy) => {
       const reportPath = join(out, `${name}.json`);
       const args = [
@@ -294,6 +303,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
       '--out': 'out',
       '--bin': 'binary',
       '--bot-root': 'botRoot',
+      '--bot': 'bot',
       '--ticks': 'ticks',
       '--split': 'split',
     };
@@ -302,9 +312,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
       const key = names[process.argv[i]],
         value = process.argv[i + 1];
       if (!key || seen.has(key) || !value || value.startsWith('--'))
-        throw new Error('参数须为 --out/--bin/--bot-root/--ticks/--split 的唯一键值对');
+        throw new Error('参数须为 --out/--bin/--bot-root/--bot/--ticks/--split 的唯一键值对');
       seen.add(key);
-      options[key] = key === 'ticks' || key === 'split' ? Number(value) : resolve(value);
+      options[key] =
+        key === 'bot' ? value : key === 'ticks' || key === 'split' ? Number(value) : resolve(value);
     }
     if (!options.out || !isAbsolute(options.out))
       throw new Error('须用 --out 指定不存在的输出目录（父目录须已存在）');

@@ -165,3 +165,17 @@ Mod 生命周期场景可运行 `target/release/kkscreeps sim run --scenario com
 | [初始代码审阅](reports/m0-code-review.md) | 当时的修复与待办记录 |
 
 历史数字和问题保留其时间、版本与场景，当前结果以重新构建后的报告为准。
+
+### Overmind 持续世界与冷恢复
+
+固定官方发布 `v0.5.2.1` 的 `main.js`，按 SHA-256 验证后原样复制；[场景](fixtures/sim-overmind/scenario.json) 从 RCL1、满能 spawn 和两个 source 启动，无初始 creep 或 extension。初始 Memory 显式声明 creeps/flags/rooms，观察入口不修改 bot 配置或发额外意图。
+
+```bash
+cargo build --release -p kk-cli
+bash scripts/fetch-bots.sh
+KKSCREEPS_BIN="$PWD/target/release/kkscreeps" node compat/scripts/bot-gameplay.mjs --bot overmind --out /tmp/overmind-gameplay-new
+```
+
+输出目录须全新。验收与 TooAngel 共用六阶段矩阵：JSON/KKPV 各 2000 tick 连跑、1000 tick 保存及新进程 1000 tick 续跑，每阶段输入回放比较完整检查点；实际出生、死亡后补员、正量采集/搬运/建造/升级、建成 extension、RCL2 与 GCL 增长均设门槛。Overmind 会替换 Memory 以重用解析结果，观察器在原版 loop 后写入当前 Memory，并在完整窗口截获官方 logger 的 FATAL/ERROR/异常输出；不能只检查宿主成功或日志头部。Flag 按官方继承 RoomObject，使原版 ref 补丁及持久任务引用有效。
+
+本片范围是单房经济与寿命/冷恢复，战斗、多房和完整 M2B 验收仍未完成。最新证据见 [Overmind 持续世界汇总](reports/gameplay-overmind/summary.json)。

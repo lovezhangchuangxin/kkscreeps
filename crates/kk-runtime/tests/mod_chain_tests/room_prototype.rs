@@ -106,3 +106,48 @@ fn room_prototype_creation_and_event_buffers_remain_room_local() -> anyhow::Resu
     }
     Ok(())
 }
+
+/// 官方 flags.js:28 继承 RoomObject；Overmind 以 ref 补丁生成持久 overlord 引用。
+#[test]
+fn flag_room_object_patch_survives_projection_and_cold_restore() -> anyhow::Result<()> {
+    for binary in [false, true] {
+        let mut e = fixture(binary)?;
+        let patch = r#"Object.defineProperty(RoomObject.prototype,'ref',{
+            get(){return this.id || this.name || ''},configurable:true});"#;
+        let create = format!(
+            r#"{patch}
+            Game.rooms.W1N1.createFlag(21,21,'Mine');
+            const flag=Game.flags.Mine;
+            flag.memory.overlord=flag.ref+'>mine';
+            [flag instanceof Flag,flag instanceof RoomObject,flag.ref,flag.memory.overlord]
+        "#
+        );
+        assert_eq!(
+            e.run_player("p1", &create)?.expr["value"],
+            json!([true, true, "Mine", "Mine>mine"])
+        );
+        assert_eq!(
+            e.run_player(
+                "p1",
+                r#"[Game.flags.Mine instanceof RoomObject,
+            Game.flags.Mine.ref,Game.flags.Mine.memory.overlord]"#
+            )?
+            .expr["value"],
+            json!([true, "Mine", "Mine>mine"])
+        );
+        let saved = e.checkpoint(Value::Null)?;
+        let mut restored = EmbedEngine::new();
+        restored.set_kkpv_channel(binary);
+        restored.restore_checkpoint(saved, None)?;
+        // VM 补丁需在新进程重新装载；持久引用随玩家 Memory 保存。
+        let read = format!(
+            r#"{patch}[Game.flags.Mine instanceof RoomObject,
+            Game.flags.Mine.ref,Game.flags.Mine.memory.overlord]"#
+        );
+        assert_eq!(
+            restored.run_player("p1", &read)?.expr["value"],
+            json!([true, "Mine", "Mine>mine"])
+        );
+    }
+    Ok(())
+}

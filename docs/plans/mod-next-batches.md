@@ -4,11 +4,11 @@
 
 ## 当前接手位置
 
-- 更新日期：2026-10-09；普通 Invader 行为与移动记忆恢复已提交 `5c544cf`；持续 NPC 战斗验收随本提交交付。最近完整门禁 Rust 1482 passed / 0 failed；最近 release 棘轮 2802 passed / 8 failed / 104 skipped（0 转红，8 例既有豁免）。本批重跑 TooAngel 持续世界六阶段，没有重跑固定世界三 bot。
+- 更新日期：2026-10-09；普通 Invader 行为与移动记忆恢复已提交 `5c544cf`；持续 NPC 战斗验收已提交 `4a3016e`；Overmind 单房验收随本提交交付。最近完整门禁 Rust 1483 passed / 0 failed；最近 release 棘轮 2802 passed / 8 failed / 104 skipped（0 转红，8 例既有豁免）。本批重跑 TooAngel 持续世界六阶段，没有重跑固定世界三 bot。
 - 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座、deposit 采集链、observer 限时视野已交付。**M2H.b 19/19 powers 全部接通**。
-- 当前接手：持续 NPC 战斗与输入回放/冷恢复已验，直接继续 Overmind 真实单房经济验收。初步 100 tick 探针发现 Flag 原型继承疑点，须核对官方源码并补回归；探针不等于长期验收完成。
+- 当前接手：Overmind 单房经济/寿命/冷恢复验收已收口，接着推进 G02.d3 结构/rampart 的计划级通行与玩家寻路贯通。Flag 原型继承缺口已按官方修复，双通道创建/跨拍/冷恢复回归通过。
 - 本次完成：JSON/KKPV 各 200 tick 持续战斗、100+100 tick 跨进程冷恢复和完整检查点回放；实际位置/hits 证明移动、受伤与恢复，双通道及直跑/续跑世界与 Memory 等值。TooAngel v6 双通道 2000 tick 连跑及 1000+1000 tick 冷恢复六阶段复验通过。
-- 剩余：Overmind/真实 bot 战斗/多房/长期存活验收；地图生成/raid/stronghold 与 G21 Mod 世界事件；walkTo/Keeper lastMove 按实际 stronghold 消费者接线；G02.d3 后续与 G27.a。NPC 场景不标 M2B 或 G21 完成。
+- 剩余：真实 bot 战斗/多房/长期存活验收；地图生成/raid/stronghold 与 G21 Mod 世界事件；walkTo/Keeper lastMove 按实际 stronghold 消费者接线；G02.d3 后续与 G27.a。NPC 场景不标 M2B 或 G21 完成。
 - 兼容率 2802/2914≈96.2%（**95% 中间检查点已越过**；99% 目标需 2885）。
 - Mod 扩展：移动策略、对象/建筑/资源、库存/耐久/受击、作者 CLI/类型、输入回放和检查点已有基础；未完成范围以任务表为准。默认玩法已有消费者不代表对应 Mod 替换能力已经开放。
 - 网络服务、持久 storage 后端与真实游戏客户端仍未实现；renderer R0–R6 已交付，R7 最终矩阵/长测未收口。现有 bot-check 不能代替持续推进世界中的可玩验收。
@@ -19,7 +19,7 @@
 | 顺位 | 任务 | 首片与完成条件 |
 |---|---|---|
 | 1 | 零散红逐例归因与修复 | 8 条既有官方对齐豁免保留证据；Invader 自动远程攻击已交付；零步相邻近战已交付；普通 Invader 路径建筑改向/追击/治疗已贯通；NPC 持续战斗已验，后续为地图/raid/stronghold（Source Keeper 同房巡守/战斗已交付），raid/stronghold 另拆；每例有官方源或套件仲裁证据 |
-| 2 | 真实 bot 验收与 G02.d3 后续 | TooAngel 单房经济/死亡后补员/冷恢复已验；剩余 Overmind、战斗、多房，以及结构/rampart 通行与寻路贯通 |
+| 2 | 真实 bot 验收与 G02.d3 后续 | TooAngel 单房经济/死亡后补员/冷恢复已验；Overmind 单房经济/寿命/冷恢复已验；剩余真实 bot 战斗、多房，以及结构/rampart 通行与寻路贯通 |
 | 独立候选 | G02.d3 后续、G27.a | 前者贯通结构/rampart 通行与寻路；后者提供异步后台生命周期，随后才接 storage/outbox/网络 |
 
 维护优化已完成的轮次不作为新功能前置。任务首次实施前按业务闭环拆片；G30.a 覆盖清单与 G30.d 同功能参考随领域滚动，不等最终收口才补证据。
@@ -274,3 +274,14 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 - TooAngel 六阶段重新实跑通过：各通道 2000 tick 连跑、1000+1000 tick 冷恢复，出生/死亡后补员、采集/搬运/建造/升级与 GCL 条件及完整检查点回放通过，最新 v6 报告覆盖原位置；历史证据保留于 Git。
 - 完整无参数 `pnpm run check` 通过：Rust 1482 passed / 0 failed，Clippy、debug CLI、JS workspace/维护工具、303 个 Markdown / 1932 个本地链接、914 个源码/测试文件规模通过；release CLI 重建、JS 格式检查通过。无生产实现/适配器或 doctest 变化，本片不重复棘轮，最近 `5c544cf` 的 release 棘轮 2802/8/104、零转红仍是对应实现证据。
 - 场景/CLI 回归、机器报告和现行模拟契约随本提交交付，无实现残项；下一步 Overmind 单房经济验收。场景不替代真实 bot 战斗/多房验收，不标 M2B 或 G21 完成。
+
+## 2026-10-09 Overmind 持续世界验收（已收口，随本提交交付）
+
+- 基线 `4a3016e`，起始工作区干净；按持续开发授权直接推进执行队列第二项。使用未修改 v0.5.2.1 原版模块，初始 Memory 显式包含 creeps/flags/rooms；100 tick 探针成功不能代替经济闭环与完整日志检查。
+- 探针发现 Overmind 的 RoomObject.prototype.ref 未被 Flag 继承，overlord 引用成为 undefined>mine。锁定官方 engine 4.3.0 flags.js:28 明确继承 RoomObject；当前 registry 类层级漏 Flag。修复共用继承后补双通道即时创建、跨拍投影与检查点冷恢复回归，再继续长期经济/捕获异常验收。无新保存域。
+
+- 原版发布资产已从官方 v0.5.2.1 独立下载核验，SHA-256 为 e78ad3c8…b5a4b8；工具按完整固定 SHA-256 与目录清单验证后复制，不改 bot。共用 bot-gameplay 六阶段矩阵，新增 --bot overmind；仍支持原 TooAngel 默认入口。
+- 观察器复审发现运行前写 Memory 的计数会被原版 Mem.load() 替换丢弃，已改为原版 loop 后写当前 Memory；完整窗口拦截 logger 的 FATAL/ERROR/异常，补 Memory 替换、冷恢复不重复出生、日志头部之外捕获及源身份失败不写输出反例（工具 8/8 通过）。
+- 六阶段矩阵实际通过：JSON/KKPV 各 2000 tick 连跑、1000+1000 tick 跨进程冷恢复，每阶段完整检查点回放相等；四份终态实际出生 21–24、死亡 5、死亡后出生 16–19，采集 25728–26704、搬运 3270–4594、建造 6500–9870、升级/GCL 增长 350–500，均 RCL2、建成 extension、无捕获异常。报告见 [Overmind 汇总](../../compat/reports/gameplay-overmind/summary.json)。独立运行按业务条件验收，不宣称随机名称/CPU/最终世界跨运行逐位等值。
+- Flag 修复定向门禁通过；release CLI 重建、固定 bot 准备、适配器重建后 release 棘轮 2802 passed / 8 failed / 104 skipped、0 转红/0 转绿（既有 8 豁免）。最终完整无参数 `pnpm run check` 通过：Rust 1483 passed / 0 failed，Clippy、debug CLI、JS workspace/维护工具、文档链接与 916 个源码/测试文件规模通过；JS 格式检查通过。无 doctest 或新增保存域。
+- 本片代码/场景/报告、沙箱及模拟契约、使用说明与 roadmap 随提交交付；下一项 G02.d3 后续。真实 bot 战斗、多房和长期验收仍未完成，不标 M2B 完成。
