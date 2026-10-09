@@ -227,7 +227,12 @@ fn place_invader_core_links(
             controller: world.room(room).and_then(|r| r.controller()),
             name_seq: world.next_obj_id() as usize,
         };
-        let creep = normalize("creep", &creep_spec, &ctx)?;
+        let mut creep = normalize("creep", &creep_spec, &ctx)?;
+        if let kk_schema::room::RoomObject::Creep(chick) = &mut creep {
+            // 孵化期不消耗寿命；出生后的首个 creep tick 按身体初始化截止时刻。
+            // Stronghold 部署时仍可将此值改为核心的 decayTime。
+            chick.age_time = 0;
+        }
         world.insert(room, creep)?;
     }
     Ok(())

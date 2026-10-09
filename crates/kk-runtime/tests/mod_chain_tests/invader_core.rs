@@ -98,6 +98,35 @@ fn invader_core_spawning_incubates_and_borns_on_adjacent_tile() -> anyhow::Resul
 }
 
 #[test]
+fn invader_core_long_incubation_starts_lifetime_after_birth() -> anyhow::Result<()> {
+    let mut e = fixture(false)?;
+    core(
+        &mut e,
+        "W2N1",
+        json!({"pos":[25,25],"level":2,
+               "spawning":{"name":"late_guard","body":["move"],"needTime":1501,"remainingTime":1501}}),
+    )?;
+    let before = e.world_snapshot();
+    let guard = before["objects"]
+        .as_array()
+        .and_then(|objects| objects.iter().find(|o| o["name"] == "late_guard"))
+        .expect("孵化守军存在");
+    assert_eq!(guard["ageTime"], 0, "孵化中不预先起算寿命");
+    e.tick(1502)?;
+    let after = e.world_snapshot();
+    let born = after["objects"]
+        .as_array()
+        .and_then(|objects| objects.iter().find(|o| o["name"] == "late_guard"))
+        .expect("守军出生后存活");
+    assert_eq!(born["spawning"], false);
+    assert!(
+        born["ageTime"].as_u64().unwrap() > e.get_game_time(),
+        "经过超过 1500 tick 的孵化后，守军仍有完整寿命"
+    );
+    Ok(())
+}
+
+#[test]
 fn invader_core_collapse_clears_controller_and_removes_core_without_ruin() -> anyhow::Result<()> {
     for binary in [false, true] {
         let mut e = fixture(binary)?;
