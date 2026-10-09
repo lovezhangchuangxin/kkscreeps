@@ -1,4 +1,4 @@
-//! NPC 预意图生成与合并；Keeper 巡守/战斗、Invader 无目标退场/远程攻击。
+//! NPC 预意图生成与合并；Keeper 巡守/战斗、Invader 无目标退场/相邻近战/远程攻击。
 mod invader;
 mod keeper;
 mod path;

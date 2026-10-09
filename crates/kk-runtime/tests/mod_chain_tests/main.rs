@@ -225,6 +225,7 @@ mod factory_power_effects;
 mod fortify_shield_power_effects;
 mod heal_policy;
 mod invader_combat;
+mod invader_melee;
 mod keeper_ai;
 mod keeper_lair;
 mod link_decline;

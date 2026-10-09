@@ -75,15 +75,21 @@ keeper lair 由 Generic 结构记录保存 `structureType=keeperLair` 与绝对 
 
 战斗分类与官方 `keepers/pretick.js` 一致：creep（含孵化雏形，与 Invader 退场的 `!spawning` 分类不同）与 powerCreep 且归属非 NPC（官方 `user != 2 && user != 3`）均视为敌方。距离 ≤1 桶按最低 hits 发 `attack`；≤3 桶按 `[10,10,4,1]`（索引即距离）估计 rangedMassAttack 收益，严格 >13 发 `rangedMassAttack`，否则对最低 hits 目标发 `rangedAttack`；两个目标独立选取。入桶不读 hits：手工检查点注入缺失 hits 的 powerCreep 仍参与 mass 估计，最低 hits 选择跳过它、全部缺失时不发（官方 `_.min` 跳过 undefined、全缺得 Infinity 发废意图由结算丢弃，kk 直接不发，可观察等价）。mass 估计是固定查表，不读实际身体效能或 rampart 减伤。
 
-私有巡守记忆是房间级新保存域 `keeper_memory`（`source_id` 与可空 `move_cache`：目的地、绝对时钟、按行走顺序的同房路径），随整轮候选提交、随对象删除清理并参与候选回滚（对象恢复时记忆同恢复）；不进入任何玩家投影。编辑、恢复与候选发布共用值域校验：执行者必须是 Source Keeper 的 creep、目标 ID 在已分配范围、坐标 0..49、时钟为安全整数、路径 ≤2500 格且逐步相邻；载荷格式 v5 起必填（v4_to_v5 对缺域房间显式拒绝），不补造记忆。来源：锁定官方 `processor/intents/creeps/keepers/pretick.js` 与 `processor/common/fake-runtime.js`。已知对齐边界：官方 moveTo 成功时写 `memory_move.lastMove`（唯一消费者是 walkTo 的 NPC 推挤判定），kk 暂不保存——实现 Invader 寻路/walkTo 片时须连同该语义补齐；NPC 预意图在 kk 中先于玩家派发（官方玩家在前、仲裁按对象 ID 重排洗平登记序），官方 roomObjects 取回序按 _id 升序是外部行为假设。Invader 近战/追击/治疗、keeper 跨房移动、raid/stronghold 仍未实现。
+私有巡守记忆是房间级新保存域 `keeper_memory`（`source_id` 与可空 `move_cache`：目的地、绝对时钟、按行走顺序的同房路径），随整轮候选提交、随对象删除清理并参与候选回滚（对象恢复时记忆同恢复）；不进入任何玩家投影。编辑、恢复与候选发布共用值域校验：执行者必须是 Source Keeper 的 creep、目标 ID 在已分配范围、坐标 0..49、时钟为安全整数、路径 ≤2500 格且逐步相邻；载荷格式 v5 起必填（v4_to_v5 对缺域房间显式拒绝），不补造记忆。来源：锁定官方 `processor/intents/creeps/keepers/pretick.js` 与 `processor/common/fake-runtime.js`。已知对齐边界：官方 moveTo 成功时写 `memory_move.lastMove`（唯一消费者是 walkTo 的 NPC 推挤判定），kk 暂不保存——实现 Invader 寻路/walkTo 片时须连同该语义补齐；NPC 预意图在 kk 中先于玩家派发（官方玩家在前、仲裁按对象 ID 重排洗平登记序），官方 roomObjects 取回序按 _id 升序是外部行为假设。Invader 追击/治疗、keeper 跨房移动、raid/stronghold 仍未实现。
 
 分片创建支持 `PlayerSpec.gcl = { level, progress? }`。输入按 `ceil(GCL_MULTIPLY × (level−1)^GCL_POW) + progress` 转成累计点数，验证等级回读、整数进度与 JS 安全整数范围；不提供 GCL 时，初始等级为 `max(已拥有房间数+1, 2)`。校验先于回收旧分片。升级的累计点数已由引擎候选更新，JSON 与 KKPV 玩家投影读取同一玩家状态；账号 `power` 可在 `PlayerSpec` 中提供，未提供时为 0；GPL 与 powerCreep 注册表由玩家候选持有。
+
+### Invader 相邻近战（当前首片）
+
+非治疗型（身体不含 HEAL，含损毁 HEAL 仍算治疗型）且有有效 ATTACK 的 Invader，可自动攻击同房相邻敌方。敌方分类共用远程入桶：已出生 creep 与 powerCreep，排除两种 NPC 归属。近战不按 hits 选择；锁定官方 `findAttack.js` 先选首个相邻敌人，随后由 `findClosestByPath` 的零步结果覆盖：同格敌人优先首个，否则稳定对象序中的最后一个相邻敌人。入桶不要求 hits，缺 hits 的 powerCreep 仍能挡住其他目标选择，最后由战斗门拒绝。
+
+本片实现零步选敌与 `attack` 消费，没有接入 `moveTo`。官方随后还会根据移动路径首格建筑覆盖攻击、生成 dismantle；复杂阻塞导致的路径/建筑改向、非相邻目标和追击/逃离均留给后续寻路片。因此本片不宣称完整 `findAttack` 对齐。近战和远程分别选目标；显式同名指令优先，Mod 战斗槽取消、孵化、射程、安全模式、boost、rampart 重定向及死亡均共用原结算链。无新增保存域或版本，每轮从对象/身体/位置重建，晚期失败、重试和冷恢复继续原候选边界。来源：锁定 `@screeps/engine` 4.3.0 的 `invaders/pretick.js`、`findAttack.js`、`processor/common/fake-runtime.js` 的 `findClosestByPath` 与 `creeps/attack.js`。
 
 ### Invader 自动远程攻击（当前首片）
 
 房间预意图基于同一候选扫描精确归属 `Invader`、含有效 RANGED_ATTACK 的 creep；治疗型也参与。敌方为非 Invader / Source Keeper 的已出生 creep 与 powerCreep（后者不读取 spawning），按 Chebyshev 距离 ≤3、最低 hits 选择单体目标，平手保持稳定对象顺序；不根据敌人数切换 mass attack。手工检查点注入缺失 hits 的 powerCreep 不参与最低值选择，全缺时不发有效攻击，与官方无效目标在结算被丢弃的可观察结果一致。
 
-自动 `rangedAttack` 与显式指令共用合并规则（显式同名动作优先）及现有战斗槽链，接受 Mod 取消/改向，再经孵化、射程、安全模式、boost、rampart 重定向、延迟伤害、事件及死亡路径结算；AI 不直接扣血。无新增保存域或格式版本：每轮从保存的对象、身体与位置重建目标，写回失败不发布伤害，重试和冷恢复继续同一规则。当前没有 Invader 近战、追击、逃离和治疗预意图，raid/stronghold 仍待实现；不能把本首片视为完整 NPC AI。来源：锁定 `@screeps/engine` 4.3.0 的 `processor.js`、`invaders/pretick.js`、`shootAtWill.js` 与 `creeps/rangedAttack.js`。
+自动 `rangedAttack` 与显式指令共用合并规则（显式同名动作优先）及现有战斗槽链，接受 Mod 取消/改向，再经孵化、射程、安全模式、boost、rampart 重定向、延迟伤害、事件及死亡路径结算；AI 不直接扣血。无新增保存域或格式版本：每轮从保存的对象、身体与位置重建目标，写回失败不发布伤害，重试和冷恢复继续同一规则。当前没有 Invader 追击、逃离和治疗预意图，raid/stronghold 仍待实现；不能把本首片视为完整 NPC AI。来源：锁定 `@screeps/engine` 4.3.0 的 `processor.js`、`invaders/pretick.js`、`shootAtWill.js` 与 `creeps/rangedAttack.js`。
 
 ### Invader 退场（当前首片）
 

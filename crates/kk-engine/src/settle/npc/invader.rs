@@ -1,4 +1,4 @@
-//! Invader 的无目标退场与自动远程攻击；追击/治疗另行接线。
+//! Invader 的无目标退场、相邻近战与自动远程攻击；追击/治疗另行接线。
 use std::borrow::Cow;
 
 use kk_schema::room::RoomObject;
@@ -81,20 +81,35 @@ fn retirement_intents(room: &RoomState) -> UserIntents {
     intents
 }
 
-/// 官方 @screeps/engine 4.3.0 的 invaders/pretick.js + shootAtWill.js：
-/// 有效 RANGED_ATTACK 即对三格内最低 hits 敌方发单体攻击，治疗型也参与。
-/// 不做寻路、移动或直接扣血；同 hits 按房间稳定对象顺序选择。
+/// 官方 @screeps/engine 4.3.0 的 invaders/pretick.js：非治疗型零步
+/// 相邻近战与 shootAtWill 远程独立；目标选择交由各自规则。
+/// 不做寻路、移动或直接扣血，生成的动作走共用战斗链。
 pub(super) fn intents(room: &RoomState) -> UserIntents {
     let mut out = retirement_intents(room);
     for (id, object) in &room.objects {
         let RoomObject::Creep(actor) = object else {
             continue;
         };
-        if actor.owner != INVADER_OWNER
-            || !actor
+        if actor.owner != INVADER_OWNER {
+            continue;
+        }
+        // 含损毁 HEAL 仍走官方 healer 分支，不执行 findAttack；远程独立。
+        if !actor.body.iter().any(|p| p.kind == BodyKind::Heal.code())
+            && actor
                 .body
                 .iter()
-                .any(|p| p.kind == BodyKind::RangedAttack.code() && p.hits > 0)
+                .any(|p| p.kind == BodyKind::Attack.code() && p.hits > 0)
+            && let Some(target) = adjacent_target(room, (actor.x, actor.y))
+        {
+            out.objects
+                .entry(*id)
+                .or_default()
+                .insert(Action::Attack, IntentData::target(target));
+        }
+        if !actor
+            .body
+            .iter()
+            .any(|p| p.kind == BodyKind::RangedAttack.code() && p.hits > 0)
         {
             continue;
         }
@@ -102,7 +117,7 @@ pub(super) fn intents(room: &RoomState) -> UserIntents {
             .objects
             .iter()
             .filter_map(|(id, object)| {
-                let hits = hostile_hits(object)?;
+                let hits = hostile_hits(object)??;
                 let (x, y) = object.pos();
                 (actor.x.abs_diff(x).max(actor.y.abs_diff(y)) <= 3).then_some((*id, hits))
             })
@@ -117,16 +132,16 @@ pub(super) fn intents(room: &RoomState) -> UserIntents {
     out
 }
 
-/// 孵化 creep 排除；powerCreep 不读 spawning。缺失 hits 的人工载荷
-/// 不参与 _.min 选择（全缺时官方发无效目标，结算无效果）。
-fn hostile_hits(object: &RoomObject) -> Option<u64> {
+/// 孵化 creep 排除；powerCreep 不读 spawning。入桶不读取 hits，近战
+/// 零步选择仍保留缺 hits 的目标，远程最低值选择单独跳过它。
+fn hostile_hits(object: &RoomObject) -> Option<Option<u64>> {
     match object {
         RoomObject::Creep(c)
             if !c.spawning
                 && c.owner != INVADER_OWNER
                 && c.owner != kk_world::domain::keeper::OWNER =>
         {
-            Some(u64::from(c.hits))
+            Some(Some(u64::from(c.hits)))
         }
         RoomObject::Generic(g) => {
             let data: serde_json::Value = serde_json::from_str(&g.data).ok()?;
@@ -137,8 +152,28 @@ fn hostile_hits(object: &RoomObject) -> Option<u64> {
             {
                 return None;
             }
-            data["hits"].as_u64()
+            Some(data["hits"].as_u64())
         }
         _ => None,
     }
+}
+
+/// findAttack.js 最后一次 attack 覆盖来自 findClosestByPath 的零步结果：
+/// 同格优先首个，否则空路径扫描相邻桶取最后一个，不能按最低 hits。
+/// 仅实现已相邻分支；moveTo 路径中的建筑改向/拆毁随追击片接线。
+fn adjacent_target(room: &RoomState, actor: (u8, u8)) -> Option<kk_world::ObjId> {
+    let mut adjacent = None;
+    for (id, object) in &room.objects {
+        if hostile_hits(object).is_none() {
+            continue;
+        }
+        let pos = object.pos();
+        if pos == actor {
+            return Some(*id);
+        }
+        if actor.0.abs_diff(pos.0).max(actor.1.abs_diff(pos.1)) <= 1 {
+            adjacent = Some(*id);
+        }
+    }
+    adjacent
 }
