@@ -385,6 +385,34 @@ fn unknown_types_go_generic_passthrough() {
     // 非法输入拒绝
     let bad = spec(json!({ "pos": [50, 0] }));
     assert!(normalize("creep", &bad, &ctx()).is_err());
+    // 旗名含引擎数据分隔符拒绝（官方 |~ 拼串存储的放置契约对齐）。
+    // 断言绑定输入名而非分隔符本身——错误模板恒含 |~，后者无法判别门是否触发。
+    for name in ["Bad|Flag", "Bad~Flag"] {
+        let bad = spec(json!({ "pos": [1, 2], "name": name }));
+        let err = normalize("flag", &bad, &ctx()).unwrap_err();
+        assert!(err.contains(name), "错误消息含被拒旗名：{err}");
+    }
+    // spawn 缺 owner 拒绝（必有主结构）。
+    let bad = spec(json!({ "pos": [1, 2], "structureType": "spawn" }));
+    let err = normalize("structure", &bad, &ctx()).unwrap_err();
+    assert!(err.contains("owner"), "错误消息含 owner：{err}");
+    // 公开 object-only 类型经 structure 通道拒绝并提示 placeObject。
+    for ty in [
+        "deposit",
+        "keeperLair",
+        "invaderCore",
+        "portal",
+        "powerBank",
+    ] {
+        let bad = spec(json!({ "pos": [1, 2], "structureType": ty }));
+        let err = normalize("structure", &bad, &ctx()).unwrap_err();
+        assert!(
+            err.contains("placeObject"),
+            "{ty} 拒绝并提示对象通道：{err}"
+        );
+    }
+    // deposit 走专用 kind 通道不受 object-only 门影响。
+    assert!(normalize("deposit", &spec(json!({ "pos": [1, 2] })), &ctx()).is_ok());
     // deposit：绝对权威键原样透传；相对 cooldown/ticksToDecay 按放置
     // 时刻换算为 cooldownTime/decayTime（适配器契约，与 nuke 同形）。
     let s2 = spec(json!({ "pos": [1, 1], "decayTime": 88 }));

@@ -6,7 +6,10 @@ use serde_json::{Value, json};
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EffectEntry {
-    pub effect: i64,
+    /// 效果标识；官方 PWR_SHIELD 专用分支只写 {power, level, endTime}
+    /// 不写 effect（usePower.js:248-253），玩家面读 undefined——None 表
+    /// 该形态；通用路径 effect==power 恒写。
+    pub effect: Option<i64>,
     pub power: i64,
     pub level: i64,
     pub end_time: u64,
@@ -14,12 +17,13 @@ pub struct EffectEntry {
 
 impl EffectEntry {
     pub fn validate(&self) -> Result<(), String> {
-        if self.effect <= 0
-            || self.power <= 0
+        if self.power <= 0
             || !(1..=5).contains(&self.level)
-            || self.effect > 9_007_199_254_740_991
             || self.power > 9_007_199_254_740_991
             || self.end_time > 9_007_199_254_740_991
+            || self
+                .effect
+                .is_some_and(|e| e <= 0 || e > 9_007_199_254_740_991)
         {
             return Err("效果标识、等级或截止时间非法".into());
         }
@@ -41,8 +45,22 @@ pub fn active_power(
 /// 玩家面与查询快照共用剩余时间，绝对截止时间不暴露。
 pub(crate) fn project(record: &mut Value, entries: Option<&Vec<EffectEntry>>, time: u64) {
     if let Some(entries) = entries {
-        record["effects"] = Value::Array(entries.iter().filter(|e| e.end_time > time)
-            .map(|e| json!({"effect":e.effect,"power":e.power,"level":e.level,"ticksRemaining":e.end_time-time})).collect());
+        record["effects"] = Value::Array(
+            entries
+                .iter()
+                .filter(|e| e.end_time > time)
+                .map(|e| {
+                    let mut m = serde_json::Map::new();
+                    if let Some(effect) = e.effect {
+                        m.insert("effect".into(), json!(effect));
+                    }
+                    m.insert("power".into(), json!(e.power));
+                    m.insert("level".into(), json!(e.level));
+                    m.insert("ticksRemaining".into(), json!(e.end_time - time));
+                    Value::Object(m)
+                })
+                .collect(),
+        );
     }
 }
 
@@ -54,8 +72,18 @@ pub(crate) fn project_raw(record: &mut Value, entries: Option<&Vec<EffectEntry>>
             entries
                 .iter()
                 .map(|e| {
-                    json!({"effect":e.effect,"power":e.power,"level":e.level,
-                "endTime":e.end_time,"ticksRemaining":e.end_time.saturating_sub(time)})
+                    let mut m = serde_json::Map::new();
+                    if let Some(effect) = e.effect {
+                        m.insert("effect".into(), json!(effect));
+                    }
+                    m.insert("power".into(), json!(e.power));
+                    m.insert("level".into(), json!(e.level));
+                    m.insert("endTime".into(), json!(e.end_time));
+                    m.insert(
+                        "ticksRemaining".into(),
+                        json!(e.end_time.saturating_sub(time)),
+                    );
+                    Value::Object(m)
                 })
                 .collect(),
         );
@@ -83,8 +111,10 @@ pub(crate) fn extract(
             .ok_or("effect 缺 power")?;
         let entry = EffectEntry {
             effect: match e.get("effect") {
-                Some(value) => value.as_i64().ok_or("effect 标识须为整数")?,
-                None => power,
+                Some(value) => Some(value.as_i64().ok_or("effect 标识须为整数")?),
+                // 管理放置默认按通用形 effect=power；官方 SHIELD 的无 effect
+                // 形态只由引擎施放写入产生（usePower.js:248-253）。
+                None => Some(power),
             },
             power,
             level: e

@@ -198,7 +198,7 @@ fn apply_damage_inner(
             )
             && w.room.effects.get(&target_id).is_some_and(|entries| {
                 entries.iter().any(|e| {
-                    (e.power == c::PWR_FORTIFY || e.effect == c::EFFECT_INVULNERABILITY)
+                    (e.power == c::PWR_FORTIFY || e.effect == Some(c::EFFECT_INVULNERABILITY))
                         && e.end_time > w.time
                 })
             })

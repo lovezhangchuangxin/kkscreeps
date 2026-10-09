@@ -86,7 +86,7 @@ mod tests {
         });
         source.insert_with_id(1, object).unwrap();
         let entries = vec![kk_world::EffectEntry {
-            effect: 3,
+            effect: Some(3),
             power: 3,
             level: 1,
             end_time: 100,

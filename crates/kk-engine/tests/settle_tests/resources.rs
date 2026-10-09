@@ -560,7 +560,7 @@ fn source_disrupt_initializes_absent_zero_clock_and_preserves_overdue_regenerati
                 room.effects.insert(
                     src,
                     vec![kk_world::EffectEntry {
-                        effect: c::PWR_DISRUPT_SOURCE,
+                        effect: Some(c::PWR_DISRUPT_SOURCE),
                         power: c::PWR_DISRUPT_SOURCE,
                         level: 1,
                         end_time: 200,
@@ -599,7 +599,7 @@ fn source_regen_pulse_uses_old_capacity_before_controller_capacity_update() {
                 room.effects.insert(
                     src,
                     vec![kk_world::EffectEntry {
-                        effect: c::PWR_REGEN_SOURCE,
+                        effect: Some(c::PWR_REGEN_SOURCE),
                         power: c::PWR_REGEN_SOURCE,
                         level: 5,
                         end_time: 101,

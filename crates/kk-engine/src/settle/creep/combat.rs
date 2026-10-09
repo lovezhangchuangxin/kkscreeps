@@ -297,7 +297,7 @@ pub(in crate::settle) fn intent_dismantle(w: &mut Working, id: ObjId, data: &Int
         entries.iter().any(|e| {
             (e.power == c::PWR_SHIELD
                 || e.power == c::PWR_FORTIFY
-                || e.effect == c::EFFECT_INVULNERABILITY)
+                || e.effect == Some(c::EFFECT_INVULNERABILITY))
                 && e.end_time >= w.time
         })
     });
@@ -452,7 +452,7 @@ fn intent_ranged_mass_attack_policy(
         //（>= 边界）整体跳过（含护盾下的 rampart 本体）。
         if w.room.effects.get(&tid).is_some_and(|entries| {
             entries.iter().any(|e| {
-                (e.power == c::PWR_FORTIFY || e.effect == c::EFFECT_INVULNERABILITY)
+                (e.power == c::PWR_FORTIFY || e.effect == Some(c::EFFECT_INVULNERABILITY))
                     && e.end_time >= w.time
             })
         }) {

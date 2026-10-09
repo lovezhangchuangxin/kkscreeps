@@ -193,7 +193,7 @@ pub(super) fn pc_use_power(w: &mut Working, id: ObjId, d: &IntentData) {
             let effects = w.room.effects.entry(target_id).or_default();
             effects.retain(|effect| effect.power != power);
             effects.push(kk_world::EffectEntry {
-                effect: power,
+                effect: Some(power),
                 power,
                 level,
                 end_time: w.time + duration,
@@ -292,7 +292,9 @@ pub(super) fn pc_use_power(w: &mut Working, id: ObjId, d: &IntentData) {
                 .entry(new_id)
                 .or_default()
                 .push(kk_world::EffectEntry {
-                    effect: power,
+                    // 官方 SHIELD 专用分支不写 effect（usePower.js:248-253），
+                    // 玩家面读 undefined；通用路径 effect==power。
+                    effect: None,
                     power,
                     level,
                     end_time,

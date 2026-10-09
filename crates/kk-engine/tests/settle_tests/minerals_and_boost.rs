@@ -314,7 +314,7 @@ fn mineral_regen_effect_stacks_on_natural_regeneration_tick() {
             room.effects.insert(
                 m,
                 vec![kk_world::EffectEntry {
-                    effect: 14,
+                    effect: Some(14),
                     power: 14,
                     level: 3,
                     end_time: 11,
@@ -339,7 +339,7 @@ fn mineral_regen_effect_stacks_on_natural_regeneration_tick() {
             room.effects.insert(
                 m2,
                 vec![kk_world::EffectEntry {
-                    effect: 14,
+                    effect: Some(14),
                     power: 14,
                     level: 3,
                     end_time: 12,

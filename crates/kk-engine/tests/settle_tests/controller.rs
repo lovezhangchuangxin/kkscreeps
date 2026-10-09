@@ -339,8 +339,9 @@ fn attack_controller_owned_downgrade_and_block() {
         events.iter().any(
             |e| e["event"] == kk_core::constants::EVENT_ATTACK_CONTROLLER
                 && e["objectId"] == c.as_str()
+                && e.get("data").is_none()
         ),
-        "EVENT_ATTACK_CONTROLLER(3)（官方无 data 键——我方封套空对象）"
+        "EVENT_ATTACK_CONTROLLER(3) 官方无 data 键（attack-controller.js:52）"
     );
     match f.obj(c) {
         RoomObject::Creep(cr) => assert_eq!(cr.action_log, 1 << 3, "attack 位"),

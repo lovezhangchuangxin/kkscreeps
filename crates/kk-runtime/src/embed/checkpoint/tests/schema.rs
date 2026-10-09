@@ -76,7 +76,7 @@ fn schema_tree_official_packages(tree: &mut BTreeSet<String>) -> anyhow::Result<
                     room.effects.insert(
                         id,
                         vec![kk_world::EffectEntry {
-                            effect: 3,
+                            effect: Some(3),
                             power: 3,
                             level: 1,
                             end_time: 100,

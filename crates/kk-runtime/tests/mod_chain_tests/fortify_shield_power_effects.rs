@@ -242,13 +242,18 @@ fn shield_creates_and_expires_temporary_rampart() -> anyhow::Result<()> {
             &format!(
                 "[{find_rampart}.length,{find_rampart}[0]&&{find_rampart}[0].hits,\
                  {find_rampart}[0]&&{find_rampart}[0].hitsMax,\
-                 {find_rampart}[0]&&{find_rampart}[0].effects[0].power]"
+                 {find_rampart}[0]&&{find_rampart}[0].effects[0].power,\
+                 {find_rampart}[0]&&{find_rampart}[0].effects[0].effect===undefined]"
             ),
         )?;
         assert_eq!(r.expr["value"][0], 1, "临时 rampart 落位");
         assert_eq!(r.expr["value"][1], 5000, "L1 hits=effect");
         assert_eq!(r.expr["value"][2], 0, "hitsMax=0");
         assert_eq!(r.expr["value"][3], c::PWR_SHIELD);
+        assert_eq!(
+            r.expr["value"][4], true,
+            "SHIELD 条目无 effect 键（官方专用分支）"
+        );
         assert_eq!(
             e.get_object(&pc).unwrap()["powers"]["12"]["cooldownTime"],
             20,

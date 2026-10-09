@@ -111,7 +111,7 @@ pub fn normalize(kind: &str, spec: &Value, ctx: &PlaceCtx) -> Result<RoomObject,
             &ctx.links,
             &ctx.buildings,
         )?)),
-        "flag" => Ok(RoomObject::Flag(normalize_flag(spec, x, y))),
+        "flag" => normalize_flag(spec, x, y).map(RoomObject::Flag),
         "resource" => Ok(RoomObject::Energy(normalize_resource(spec, x, y)?)),
 
         "tombstone" => Ok(RoomObject::Tombstone(normalize_tombstone(spec, x, y, ctx))),
@@ -380,7 +380,11 @@ fn normalize_spawn(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<SpawnOb
     let name = spec_str(spec, "name")
         .map(str::to_string)
         .unwrap_or_else(|| format!("Spawn_{}", ctx.name_seq));
-    let owner = spec_str(spec, "owner").unwrap_or_default().to_string();
+    // spawn 是必有主结构：缺 owner 直接报错（官方/适配器契约的可操作
+    // 错误，静默落空主会让 spawn 集合与孵化 API 不可识别）。
+    let Some(owner) = spec_str(spec, "owner").map(str::to_string) else {
+        return Err("spawn 放置缺少必填 owner 字段".into());
+    };
     let hits = spec
         .get("hits")
         .and_then(Value::as_u64)
@@ -419,17 +423,24 @@ fn normalize_spawn(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<SpawnOb
 }
 
 /// 构造旗，color 默认 1，secondaryColor 默认跟随 color。
-fn normalize_flag(spec: &Value, x: u8, y: u8) -> FlagObj {
+fn normalize_flag(spec: &Value, x: u8, y: u8) -> Result<FlagObj, String> {
+    // 官方旗以 `name|color|secondaryColor` 拼串存储，名称含 | 或 ~ 会破
+    // 坏编码；kk 结构化存储虽无此约束，放置契约与官方对齐拒绝。
+    // 来源：00-adapter-contract/setup.test.ts 的分隔符拒绝用例。
+    let name = spec_str(spec, "name").unwrap_or_default().to_string();
+    if name.contains('|') || name.contains('~') {
+        return Err(format!("flag 名称含引擎数据分隔符 | 或 ~：{name}"));
+    }
     let color = spec
         .get("color")
         .and_then(Value::as_u64)
         .unwrap_or(1)
         .min(u8::MAX as u64) as u8;
-    FlagObj {
+    Ok(FlagObj {
         id: 0,
         x,
         y,
-        name: spec_str(spec, "name").unwrap_or_default().to_string(),
+        name,
         color,
         secondary_color: spec
             .get("secondaryColor")
@@ -438,7 +449,7 @@ fn normalize_flag(spec: &Value, x: u8, y: u8) -> FlagObj {
             .min(u8::MAX as u64) as u8,
         // 无主旗仅在可见房间导出，不授予房间视野。
         owner: spec_str(spec, "owner").map(str::to_string),
-    }
+    })
 }
 
 /// 构造掉落资源，只接受 RESOURCES_ALL 中的资源名。

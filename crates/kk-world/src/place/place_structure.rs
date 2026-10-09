@@ -24,6 +24,16 @@ pub(super) fn normalize_structure(
     let st = spec_str(spec, "structureType")
         .or_else(|| spec_str(spec, "type"))
         .unwrap_or_default();
+    // 公开 object-only 类型不是可建造结构：经 structure 通道放置直接拒
+    // 绝并提示走对象通道（deposit/keeperLair/invaderCore/portal/powerBank
+    // 由 placeObject 各自的专用归一放置）。
+    // 来源：00-adapter-contract/setup.test.ts 的 object-only 拒绝用例。
+    if matches!(
+        st,
+        "deposit" | "keeperLair" | "invaderCore" | "portal" | "powerBank"
+    ) {
+        return Err(format!("{st} 是对象而非结构，请经 placeObject 放置"));
+    }
     let owner = spec_str(spec, "owner").map(str::to_string);
     let hits_override = spec.get("hits").and_then(Value::as_u64);
     match st {

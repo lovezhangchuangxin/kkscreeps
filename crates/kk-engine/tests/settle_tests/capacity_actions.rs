@@ -67,7 +67,7 @@ fn operate_extension_rejected_while_disrupt_terminal_active() {
             room.effects.insert(
                 storage,
                 vec![kk_world::EffectEntry {
-                    effect: 15,
+                    effect: Some(15),
                     power: 15,
                     level: 1,
                     end_time: 100,

@@ -277,7 +277,7 @@ impl EmbedEngine {
             .players();
         for handle in codes.keys() {
             if !registered.iter().any(|p| p == handle) {
-                anyhow::bail!("未知玩家 handle: {handle}");
+                anyhow::bail!("Unknown player（未知玩家）handle: {handle}");
             }
         }
         let mut results = BTreeMap::new();

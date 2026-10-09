@@ -43,7 +43,7 @@ node compat/scripts/ratchet.mjs
 
 ### 如何判断回归
 
-[ratchet.json](reports/ratchet.json) 指定通过数下限和总用例数。[kkscreeps.json](reports/kkscreeps.json) 是最近入库的机器报告，工作区报告在运行后会被覆盖。当前验证为 **2783 passed / 27 failed / 104 skipped**，共 2914 例（≈95.4%，越过 95% 中间检查点）；通过数地板已升至 2783（observer 能力开启，套件 observer 组与两项 POWER-OPERATE 转绿）。19 个 power 全部接通（OPERATE_OBSERVER 收口）；deposit 采集/冷却/寿命链与 observer 限时视野已交付。门禁要求：
+[ratchet.json](reports/ratchet.json) 指定通过数下限和总用例数。[kkscreeps.json](reports/kkscreeps.json) 是最近入库的机器报告，工作区报告在运行后会被覆盖。当前验证为 **2789 passed / 21 failed / 104 skipped**，共 2914 例（≈95.7%）；通过数地板已升至 2789（零散红 G1/G4 批：放置边界校验、SHIELD 无 effect 形、事件空 payload 省略 data 键）。19 个 power 全部接通（OPERATE_OBSERVER 收口）；deposit 采集/冷却/寿命链与 observer 限时视野已交付。门禁要求：
 
 1. 报告更新时间改变，并且 JSON 可以解析。
 2. 总用例数匹配配置，通过数不低于下限。

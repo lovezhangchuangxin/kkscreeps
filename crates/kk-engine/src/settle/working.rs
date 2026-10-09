@@ -154,10 +154,20 @@ impl Working {
     }
 
     pub fn push_event(&mut self, event: i64, object_id: ObjId, data: Value) {
-        self.events.push(json!({
-            "event": event,
-            "objectId": object_id.as_str(),
-            "data": data,
-        }));
+        // 空 payload 省略 data 键：官方部分事件（如 attackController 的
+        // {event, objectId}，attack-controller.js:52）无 data 字段，玩家面
+        // 读 undefined 而非空对象。
+        if data.as_object().is_some_and(|m| m.is_empty()) {
+            self.events.push(json!({
+                "event": event,
+                "objectId": object_id.as_str(),
+            }));
+        } else {
+            self.events.push(json!({
+                "event": event,
+                "objectId": object_id.as_str(),
+                "data": data,
+            }));
+        }
     }
 }
