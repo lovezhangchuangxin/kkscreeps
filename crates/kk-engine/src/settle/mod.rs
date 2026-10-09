@@ -30,6 +30,7 @@ pub mod resources;
 pub mod room;
 pub mod spawn;
 mod storage;
+pub mod stronghold;
 pub mod structures;
 
 mod pipeline;

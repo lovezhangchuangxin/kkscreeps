@@ -61,6 +61,22 @@ pub(crate) fn validate(data: &Value) -> Result<(), String> {
             )?;
         }
     }
+    // templateName 是布防部署的模板键：有值时必须在官方 bunker 模板集内，
+    // 部署结算据此取布局与奖励档位。strongholdId 为自由字符串标识，
+    // 部署时复制到布防结构上，供战术 AI 与坍塌分组使用。
+    if let Some(name) = data.get("templateName").filter(|v| !v.is_null()) {
+        let name = name
+            .as_str()
+            .ok_or_else(|| "invaderCore templateName 必须是字符串或 null".to_string())?;
+        if super::stronghold::template(name).is_none() {
+            return Err(format!("invaderCore templateName 未知布防模板: {name}"));
+        }
+    }
+    if let Some(id) = data.get("strongholdId").filter(|v| !v.is_null())
+        && !id.is_string()
+    {
+        return Err("invaderCore strongholdId 必须是字符串或 null".into());
+    }
     Ok(())
 }
 
@@ -160,6 +176,37 @@ mod tests {
         }
         // 非 invaderCore 的 Generic 对象不受本域校验。
         assert!(validate(&json!({"structureType":"keeperLair"})).is_ok());
+        // 布防键：模板名必须在官方集合内，strongholdId 只接受字符串。
+        assert!(
+            validate(
+                &json!({"structureType":"invaderCore","owner":INVADER_OWNER,"level":1,
+                    "templateName":"bunker3","strongholdId":"sh-1"})
+            )
+            .is_ok()
+        );
+        assert!(
+            validate(
+                &json!({"structureType":"invaderCore","owner":INVADER_OWNER,"level":1,
+                "templateName":Value::Null})
+            )
+            .is_ok()
+        );
+        for bad in [json!("bunker6"), json!(3)] {
+            assert!(
+                validate(
+                    &json!({"structureType":"invaderCore","owner":INVADER_OWNER,"level":1,
+                        "templateName":bad})
+                )
+                .is_err()
+            );
+        }
+        assert!(
+            validate(
+                &json!({"structureType":"invaderCore","owner":INVADER_OWNER,"level":1,
+                    "strongholdId":17})
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -199,6 +246,8 @@ mod tests {
         // 非法相对值整单拒绝。
         for bad in [json!(-1), json!(0.5), json!(u64::MAX), json!("3")] {
             let mut data = json!({"ticksToDeploy": bad}).as_object().unwrap().clone();
+            assert!(normalize(&mut data, 1).is_err());
+            let mut data = json!({"ticksToCollapse": bad}).as_object().unwrap().clone();
             assert!(normalize(&mut data, 1).is_err());
             let mut data = json!({"spawning":{"name":"d","remainingTime":bad}})
                 .as_object()

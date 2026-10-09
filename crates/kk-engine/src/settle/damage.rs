@@ -694,6 +694,20 @@ fn destroy_structure_inner(w: &mut Working, id: ObjId, make_ruin: bool) {
         .find(|(k, _)| *k == structure_type)
         .map(|(_, v)| *v)
         .unwrap_or(c::RUIN_DECAY) as u64;
+    // 官方 _destroy.js：对象带 EFFECT_COLLAPSE_TIMER 时废墟衰减延至
+    // 坍塌截止（布防结构战毁后残骸留到据点坍塌）。正常世界截止恒在
+    // 未来；已过期条目仅经管理/恢复通道出现，饱和减避免下溢回绕。
+    let decay = w
+        .room
+        .effects
+        .get(&id)
+        .and_then(|entries| {
+            entries
+                .iter()
+                .find(|e| e.effect == Some(c::EFFECT_COLLAPSE_TIMER))
+                .map(|e| e.end_time.saturating_sub(w.time))
+        })
+        .map_or(decay, |remaining| decay.max(remaining));
     let hits_max = structure_hits_max(w, obj).map(|v| v.clamp(0, u32::MAX as i64) as u32);
     let owner = kk_world::domain::object_owner(obj)
         .filter(|o| !o.is_empty())

@@ -43,7 +43,7 @@ node compat/scripts/ratchet.mjs
 
 ### 如何判断回归
 
-[ratchet.json](reports/ratchet.json) 指定通过数下限和总用例数。[kkscreeps.json](reports/kkscreeps.json) 是最近入库的机器报告，工作区报告在运行后会被覆盖。当前验证为 **2811 passed / 8 failed / 95 skipped**，共 2914 例（≈96.5%）；通过数地板已升至 2811（invader core 生命周期首片翻转 capabilities.invaderCore，九例转绿）。19 个 power 全部接通（OPERATE_OBSERVER 收口）；deposit 采集/冷却/寿命链、observer 限时视野、keeper lair 倒计时/刷怪、普通 Invader 追击/逃离/治疗/路径建筑改向/退场与远程攻击、Source Keeper 巡守/战斗与 invaderCore 倒计时/孵化/坍塌/预定生命周期已交付；raid 调度/stronghold 布防与地图生成仍未实现。门禁要求：
+[ratchet.json](reports/ratchet.json) 指定通过数下限和总用例数。[kkscreeps.json](reports/kkscreeps.json) 是最近入库的机器报告，工作区报告在运行后会被覆盖。当前验证为 **2816 passed / 8 failed / 90 skipped**，共 2914 例（≈96.7%）；通过数地板已升至 2816（invaderCore 生命周期首片 +9、stronghold 布防首片 +5 转绿）。19 个 power 全部接通（OPERATE_OBSERVER 收口）；deposit 采集/冷却/寿命链、observer 限时视野、keeper lair 倒计时/刷怪、普通 Invader 追击/逃离/治疗/路径建筑改向/退场与远程攻击、Source Keeper 巡守/战斗与 invaderCore 倒计时/孵化/坍塌/预定生命周期、stronghold 布防部署（五套 bunker 布局）已交付；raid 调度与地图生成仍未实现。门禁要求：
 
 1. 报告更新时间改变，并且 JSON 可以解析。
 2. 总用例数匹配配置，通过数不低于下限。

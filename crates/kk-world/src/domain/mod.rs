@@ -12,6 +12,8 @@ pub mod npc;
 pub mod owner;
 pub(crate) mod room;
 pub mod store;
+pub mod stronghold;
+pub(crate) mod stronghold_templates;
 
 pub use controller::controller_progress_total_opt;
 pub(crate) use owner::controller_owner_value;

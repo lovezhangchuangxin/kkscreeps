@@ -65,6 +65,20 @@ pub(super) fn tick(w: &mut Working, id: ObjId) -> Result<(), SettleError> {
         }
         return Ok(());
     }
+    // 布防部署（官方 pretick 的 'deploy' 行为）：模板核心到期铺场。官方
+    // deploy 在房间 pretick、先于玩家意图执行；kk 在对象 tick 内接线，
+    // 晚于意图与移动仲裁——部署当拍从布防格移出的 creep 得以逃逸（窗口
+    // 限部署拍与模板脚印，登记差异）；坍塌检查先行——到期时官方两侧都
+    // 会跑但部署随即被移除覆盖，此处保持先坍塌后部署，正常世界两者不
+    // 同时到期。
+    let deploy_due = data
+        .get("deployTime")
+        .and_then(Value::as_u64)
+        .is_some_and(|d| d <= 1 + w.time)
+        && data.get("templateName").and_then(Value::as_str).is_some();
+    if deploy_due {
+        super::stronghold::deploy(w, id, &mut data)?;
+    }
     // 孵化到期（官方 gameTime >= spawnTime-1）：经通用出生落格并清
     // spawning；被围时按官方 spawnTime = 1+gameTime 顺延重试。
     if let Some(spawning) = data.get("spawning")

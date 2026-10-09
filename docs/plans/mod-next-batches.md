@@ -4,12 +4,12 @@
 
 ## 当前接手位置
 
-- 更新日期：2026-10-09；控制器 INVULNERABILITY 消费者已提交 `d48d6ea`；Invader core 生命周期首片随本提交交付。最近完整门禁 Rust 1525 passed / 0 failed；最近 release 棘轮 2811 passed / 8 failed / 95 skipped（0 转红，8 例既有豁免）。TooAngel/Overmind 六阶段为既有入库证据；本批未重跑 bot 长测。
+- 更新日期：2026-10-09；控制器 INVULNERABILITY 消费者已提交 `d48d6ea`；Invader core 生命周期首片已提交 `2b68002`；Stronghold 布防首片随本提交交付。最近完整门禁 Rust 全绿（源码规模含模板数据逐 bunker 拆分）；最近 release 棘轮 2816 passed / 8 failed / 90 skipped（0 转红，8 例既有豁免）。TooAngel/Overmind 六阶段为既有入库证据；本批未重跑 bot 长测。
 - 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座、deposit 采集链、observer 限时视野已交付。**M2H.b 19/19 powers 全部接通**。
-- 当前接手：G02.d3 结构/rampart 计划级通行及默认玩家/NPC 寻路已提交 `fd27fbd`；G03 障碍追加后的同源链预演已提交 `3f3d9a7`；障碍摘要的安全模式主人已提交 `41de432`；控制器零升级量修复已提交 `10eb812`；G27.a 独立异步后台宿主已提交 `b25e280`；控制器 INVULNERABILITY 三处消费门已提交 `d48d6ea`；invaderCore 生命周期首片（倒计时/孵化/坍塌/预定/归属）随本提交交付，生产者侧仍缺 deployStronghold/raid。逐房通行粒度、摘要增强、完整仲裁替换仍未完成。
+- 当前接手：G02.d3 结构/rampart 计划级通行及默认玩家/NPC 寻路已提交 `fd27fbd`；G03 障碍追加后的同源链预演已提交 `3f3d9a7`；障碍摘要的安全模式主人已提交 `41de432`；控制器零升级量修复已提交 `10eb812`；G27.a 独立异步后台宿主已提交 `b25e280`；控制器 INVULNERABILITY 三处消费门已提交 `d48d6ea`；invaderCore 生命周期首片已提交 `2b68002`；stronghold 布防首片（五套 bunker 布局/清格/奖励/decayTime 寿命绑定）随本提交交付，生产者侧仍缺 raid 调度与地图生成、战术 AI（maintainPopulation/refillTowers/focusClosest）与 create-creep 等意图。逐房通行粒度、摘要增强、完整仲裁替换仍未完成。
 - 本次完成：JSON/KKPV 各 200 tick 持续战斗、100+100 tick 跨进程冷恢复和完整检查点回放；实际位置/hits 证明移动、受伤与恢复，双通道及直跑/续跑世界与 Memory 等值。TooAngel v6 双通道 2000 tick 连跑及 1000+1000 tick 冷恢复六阶段复验通过。
-- 剩余：真实 bot 战斗/多房/长期存活验收；地图生成/raid/stronghold 与 G21 Mod 世界事件；walkTo/Keeper lastMove 按实际 stronghold 消费者接线；G02.d3 逐房/摘要后续、G03 完整仲裁替换与 G27.a。NPC 场景不标 M2B 或 G21 完成。
-- 兼容率 2811/2914≈96.5%（**95% 中间检查点已越过**；99% 目标需 2885，缺口 74）。
+- 剩余：真实 bot 战斗/多房/长期存活验收；地图生成/raid 调度与 G21 Mod 世界事件；stronghold 战术 AI/create-creep 意图；walkTo/Keeper lastMove 按实际 stronghold 消费者接线；G02.d3 逐房/摘要后续、G03 完整仲裁替换与 G27.a。NPC 场景不标 M2B 或 G21 完成。
+- 兼容率 2816/2914≈96.7%（**95% 中间检查点已越过**；99% 目标需 2885，缺口 69；跳过 90 中 actionLog 21 例既缓，其余 69 需全吃）。
 - Mod 扩展：移动策略、对象/建筑/资源、库存/耐久/受击、作者 CLI/类型、输入回放和检查点已有基础；未完成范围以任务表为准。默认玩法已有消费者不代表对应 Mod 替换能力已经开放。
 - 网络服务、持久 storage 后端与真实游戏客户端仍未实现；renderer R0–R6 已交付，R7 最终矩阵/长测未收口。现有 bot-check 不能代替持续推进世界中的可玩验收。
 - M2B 验收标准（2026-10-09 调整）：screeps-ok ≥95% 为中间检查点、≥99% 为后续覆盖目标；最终完成要求约定范围内功能全部通过验收，剩余例外逐项有明确范围、证据和可审查理由，见[路线图](../roadmap.md)。
@@ -328,6 +328,13 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 - 独立 worker/realm、原生登记能力门、同步注册/异步生命周期、队列快拒绝、过期/跨包/未授予/调用和字节限额及共享 VM 预算已接线；FileProbe 使用常规文件的有限只读异步任务。实际发现异步 op 会在 V8 调用时提前轮询，首轮测试因没有 Tokio 上下文而中止，已将预算调用统一进入 worker 执行器上下文；随后宿主六组、CLI 三组与双通道持续世界一组定向回归通过。CLI 冷检查点身份读取/输入守卫、后台等待读期间世界继续推进及重启 calls 归零均实测。新增 ADR-017、现行后台契约/源码导航/状态域清单与公共示例，无新玩法持久域或载荷版本；可选 services 清单/代码沿既有 Mod 身份与包摘要保存，无服务旧清单保持原序列化形态。首轮完整门禁通过，最后的故障来源诊断和协议常量收口后须再次完整复验。
 
 - 最终无参数完整门禁通过：Rust 1512 passed / 0 failed，Clippy、JS workspace/维护工具、307 个 Markdown / 1971 个本地链接与 936 个源码/测试规模通过。release CLI 重建通过，公共 services 包由 release 实际运行，start/request/stop 与 world_unchanged=true 验收通过；JS 格式检查通过，无 doctest 改动。固定 bot 准备、适配器构建和显式 release 兼容棘轮通过：2802 passed / 8 failed / 104 skipped、floor 2802、0 转红/0 转绿（8 例既有豁免）。本片未运行 bot 长测，不标网络/耐久任务完成；实现/测试/公共示例/契约及报告随本批提交。
+
+## 2026-10-09 Stronghold 布防首片（已完成，随本提交交付）
+
+- 基线 `2b68002`，起始工作区干净。按队列拆片交付 deployStronghold 布防：核心布防键 templateName（域校验限官方 bunker1..5）/strongholdId（字符串校验）；部署在 invader_core::tick 坍塌检查后接线（官方 pretick 先行——kk 晚于意图与移动仲裁，部署当拍移出布防格的 creep 逃逸，窗口限部署拍与模板脚印，登记差异）；部署执行逐字对照官方 stronghold.js：随机衰减时长（STRONGHOLD_DECAY_TICKS×(0.9+r×0.2)，DeployRng 房名+核心 ID+tick 派生，重试/回放/冷恢复同值）写核心 decayTime+满血+坍塌条目（同 power 改写不重复），先整体移除 Invader rampart（无废墟），逐格清格（击杀已出生 creep 留墓碑、工地 progress>1 折半掉能量、有建造成本的玩家结构摧毁留废墟且不发事件）后按模板插结构：rampart（hits=奖励档/hitsMax=8 级/hitsTarget=核心级/nextDecayTime=decayTime/私有）、tower（满能量+双容量键）、container（显式 storeCapacity 0+奖励）、road（专用变体）；全部结构复制 strongholdId 并登记同截止坍塌条目，到期与核心一起被通用坍塌门移除。清格豁免谓词 is_bunker_member：Generic 数据 strongholdId 或效果表已有坍塌条目（同拍先铺 road 变体靠后者豁免——修复了后铺 rampart 清掉先铺 road 的自伤 bug）。calcReward 逐字复刻含官方怪癖（末项除数按位置下标取密度表第三项 5，末位密度非 5 时总量超发，金标测试钉住）。放置路径孵化守军寿命部署时绑定核心 decayTime（官方 create-creep ageTime 同源，回补上批登记缺口）。带坍塌效果的结构战毁时废墟衰减与坍塌截止取 max（官方 _destroy.js 同款，饱和减防管理通道过期条目下溢）。capabilities.strongholdDeploy 翻转。
+- 三路复审（官方语义对照/对抗安全/测试边界）发现项当批清偿：calcReward 末项除数官方怪癖（P1，逐字复刻+金标）、damage.rs end_time 下溢饱和减（P2）、衰减窗口上界收紧 67500..=82500、坐标裁剪分支测试（bunker5 靠边）、ticksToCollapse+模板组合（部署改写截止）、rampart/container decayTime 与核心交叉断言、progress=1 无掉落边界、核心格击杀、模板 rampart 不受旧 rampart 清除波及、坍塌扩面（非 controller 全清+控制器清空）、域坏值循环补 ticksToCollapse、奖励金标钉官方超发形态（liquid 密度 30÷5=28）。安全侧核对通过：玩家指令不可写布防数据键、豁免谓词不可伪造（1002 效果仅布防链路可写）、随机流不掺候选态、发布校验不拒部署产物。
+- 登记（后续片回补）：raid 调度、maintainPopulation/refillTowers/focusClosest 战术、create-creep/transfer/attack/upgrade 意图处理器；tower actionLog 键（全仓无 actionLog 既有决策）、creep 的 strongholdId（kk CreepObj 无数据袋）、road 变体不携带 strongholdId、powerCreep 清格击杀（官方杀、kk 存活，罕见边角）、rampart hits/hitsTarget 查表互换不可区分（全模板 reward_level==core_level）、container 0 档空奖励分支经模板不可达、tower 平铺 storeCapacity 为 kk 建造同款双键约定。
+- 定向与门禁：运行时双通道 7 例（布局/数值奖励/清格/确定性重试冷恢复/寿命绑定坍塌协同/边缘裁剪/非法放置）+域单测 4 例通过；无参数完整 `pnpm run check` 通过（源码规模：模板数据按 bunker 逐文件拆分 stronghold_templates/），`pnpm run fmt:js:check` 通过，无 doctest 变更。release CLI 重建，固定 screeps-ok 全量 2914 例 **2816 passed / 8 failed / 90 skipped**，棘轮通过（地板 2811→2816、0 转红/14 转绿，8 例既有官方对齐豁免；5 例 STRONGHOLD-LAYOUT-001 转绿）。本批未跑 bot 长测。
 
 ## 2026-10-09 Invader core 生命周期首片（已完成，随本提交交付）
 

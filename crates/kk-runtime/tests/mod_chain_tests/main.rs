@@ -273,6 +273,7 @@ mod obstacle_preview;
 mod retaliation_faults;
 mod retaliation_policy;
 mod static_objects;
+mod stronghold;
 mod tough_damage;
 
 mod safe_mode_summary;
