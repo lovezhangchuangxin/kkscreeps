@@ -107,6 +107,13 @@ pub fn process_structure_intents(
                 super::factories::produce(&mut w, id, d);
             }
         }
+        // invaderCore 单动作直派发（reserveController）；布防/战术片的
+        // create-creep/transfer/attack/upgrade 意图处理器接线后再开放。
+        "invaderCore" => {
+            if let Some(d) = actions.get(&Action::ReserveController) {
+                super::invader_core::reserve_controller(&mut w, id, d);
+            }
+        }
         // nuker 单动作直派发（launchNuke 写标记，跨房插入在全局阶段）。
         "nuker" => {
             if let Some(d) = actions.get(&Action::LaunchNuke) {

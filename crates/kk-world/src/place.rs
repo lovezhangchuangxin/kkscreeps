@@ -134,6 +134,21 @@ pub fn normalize(kind: &str, spec: &Value, ctx: &PlaceCtx) -> Result<RoomObject,
                 data: Value::Object(data).to_string(),
             }))
         }
+        // invaderCore 的归属固定给 Invader NPC；相对键 ticksToDeploy/
+        // spawning.remainingTime 归一为绝对键，坍塌效果与孵化 creep 由
+        // 放置层（kk-runtime）写入房间效果表/另插对象。
+        "invaderCore" => {
+            let mut data = generic_fields("structure", spec);
+            data.insert("structureType".into(), json!("invaderCore"));
+            data.insert("owner".into(), json!(crate::domain::npc::INVADER_OWNER));
+            crate::domain::invader_core::normalize(&mut data, ctx.time)?;
+            Ok(RoomObject::Generic(GenericObj {
+                id: 0,
+                x,
+                y,
+                data: Value::Object(data).to_string(),
+            }))
+        }
         // deposit 的冷却与寿命同为绝对权威键（cooldownTime/decayTime），
         // 适配器 spec 给相对 cooldown/ticksToDecay，按放置时刻换算
         // （适配器契约：放置后一次 tick 读恰好减一，与 nuke 同形）。
@@ -372,7 +387,12 @@ fn normalize_creep(spec: &Value, x: u8, y: u8, ctx: &PlaceCtx) -> Result<CreepOb
         fatigue: 0,
         age_time: ctx.time.saturating_add(ttl),
         hits,
-        spawning: false,
+        // 孵化中的 creep（invaderCore 孵化夹具）以 spawning 形态放置，
+        // 由对应宿主对象的 tick 负责落格出生；普通放置恒为已出生。
+        spawning: spec
+            .get("spawning")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
         action_log: 0,
         name,
         owner,

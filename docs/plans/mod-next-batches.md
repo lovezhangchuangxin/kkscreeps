@@ -4,12 +4,12 @@
 
 ## 当前接手位置
 
-- 更新日期：2026-10-09；普通 Invader 行为与移动记忆恢复已提交 `5c544cf`；持续 NPC 战斗验收已提交 `4a3016e`；Overmind 单房验收已提交 `d4f4403`；控制器 INVULNERABILITY 消费者随本提交交付。最近完整门禁 Rust 1516 passed / 0 failed；最近 release 棘轮 2802 passed / 8 failed / 104 skipped（0 转红，8 例既有豁免）。TooAngel/Overmind 六阶段为既有入库证据；本批未重跑 bot 长测。
+- 更新日期：2026-10-09；控制器 INVULNERABILITY 消费者已提交 `d48d6ea`；Invader core 生命周期首片随本提交交付。最近完整门禁 Rust 1525 passed / 0 failed；最近 release 棘轮 2811 passed / 8 failed / 95 skipped（0 转红，8 例既有豁免）。TooAngel/Overmind 六阶段为既有入库证据；本批未重跑 bot 长测。
 - 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座、deposit 采集链、observer 限时视野已交付。**M2H.b 19/19 powers 全部接通**。
-- 当前接手：G02.d3 结构/rampart 计划级通行及默认玩家/NPC 寻路已提交 `fd27fbd`；G03 障碍追加后的同源链预演已提交 `3f3d9a7`；障碍摘要的安全模式主人已提交 `41de432`；控制器零升级量修复已提交 `10eb812`；G27.a 独立异步后台宿主已提交 `b25e280`；控制器 INVULNERABILITY 三处消费门（玩家预检/原生攻击/核弹封锁）随本提交交付。逐房通行粒度、摘要增强、完整仲裁替换仍未完成。
+- 当前接手：G02.d3 结构/rampart 计划级通行及默认玩家/NPC 寻路已提交 `fd27fbd`；G03 障碍追加后的同源链预演已提交 `3f3d9a7`；障碍摘要的安全模式主人已提交 `41de432`；控制器零升级量修复已提交 `10eb812`；G27.a 独立异步后台宿主已提交 `b25e280`；控制器 INVULNERABILITY 三处消费门已提交 `d48d6ea`；invaderCore 生命周期首片（倒计时/孵化/坍塌/预定/归属）随本提交交付，生产者侧仍缺 deployStronghold/raid。逐房通行粒度、摘要增强、完整仲裁替换仍未完成。
 - 本次完成：JSON/KKPV 各 200 tick 持续战斗、100+100 tick 跨进程冷恢复和完整检查点回放；实际位置/hits 证明移动、受伤与恢复，双通道及直跑/续跑世界与 Memory 等值。TooAngel v6 双通道 2000 tick 连跑及 1000+1000 tick 冷恢复六阶段复验通过。
 - 剩余：真实 bot 战斗/多房/长期存活验收；地图生成/raid/stronghold 与 G21 Mod 世界事件；walkTo/Keeper lastMove 按实际 stronghold 消费者接线；G02.d3 逐房/摘要后续、G03 完整仲裁替换与 G27.a。NPC 场景不标 M2B 或 G21 完成。
-- 兼容率 2802/2914≈96.2%（**95% 中间检查点已越过**；99% 目标需 2885）。
+- 兼容率 2811/2914≈96.5%（**95% 中间检查点已越过**；99% 目标需 2885，缺口 74）。
 - Mod 扩展：移动策略、对象/建筑/资源、库存/耐久/受击、作者 CLI/类型、输入回放和检查点已有基础；未完成范围以任务表为准。默认玩法已有消费者不代表对应 Mod 替换能力已经开放。
 - 网络服务、持久 storage 后端与真实游戏客户端仍未实现；renderer R0–R6 已交付，R7 最终矩阵/长测未收口。现有 bot-check 不能代替持续推进世界中的可玩验收。
 - M2B 验收标准（2026-10-09 调整）：screeps-ok ≥95% 为中间检查点、≥99% 为后续覆盖目标；最终完成要求约定范围内功能全部通过验收，剩余例外逐项有明确范围、证据和可审查理由，见[路线图](../roadmap.md)。
@@ -328,6 +328,14 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 - 独立 worker/realm、原生登记能力门、同步注册/异步生命周期、队列快拒绝、过期/跨包/未授予/调用和字节限额及共享 VM 预算已接线；FileProbe 使用常规文件的有限只读异步任务。实际发现异步 op 会在 V8 调用时提前轮询，首轮测试因没有 Tokio 上下文而中止，已将预算调用统一进入 worker 执行器上下文；随后宿主六组、CLI 三组与双通道持续世界一组定向回归通过。CLI 冷检查点身份读取/输入守卫、后台等待读期间世界继续推进及重启 calls 归零均实测。新增 ADR-017、现行后台契约/源码导航/状态域清单与公共示例，无新玩法持久域或载荷版本；可选 services 清单/代码沿既有 Mod 身份与包摘要保存，无服务旧清单保持原序列化形态。首轮完整门禁通过，最后的故障来源诊断和协议常量收口后须再次完整复验。
 
 - 最终无参数完整门禁通过：Rust 1512 passed / 0 failed，Clippy、JS workspace/维护工具、307 个 Markdown / 1971 个本地链接与 936 个源码/测试规模通过。release CLI 重建通过，公共 services 包由 release 实际运行，start/request/stop 与 world_unchanged=true 验收通过；JS 格式检查通过，无 doctest 改动。固定 bot 准备、适配器构建和显式 release 兼容棘轮通过：2802 passed / 8 failed / 104 skipped、floor 2802、0 转红/0 转绿（8 例既有豁免）。本片未运行 bot 长测，不标网络/耐久任务完成；实现/测试/公共示例/契约及报告随本批提交。
+
+## 2026-10-09 Invader core 生命周期首片（已完成，随本提交交付）
+
+- 基线 `1a26bfc`，起始工作区干净。按队列零散红的地图/raid/stronghold 后续拆片交付 invaderCore 对象生命周期：放置归一（level/ticksToDeploy→deployTime、spawning 剥 body 换算绝对 spawnTime、ticksToCollapse→效果表条目、owner 强制 Invader、hits/hitsMax 默认满血、效果空槽恒入表投影空数组属性）、坍塌到期按官方清单清控制器（upgradeBlocked/sign/reservation 保持）+通用效果门静默移除无 ruin、孵化到期经通用出生落格（与 spawn 共用 `_born-creep` 8 方向/踩踏语义，被围顺延）、reserveController 意图（无邻接/部件门、time+1 起步、常量加成、RESERVE_MAX 封顶、事件）与 default 行为 handleController 预意图（仅 reserve 分支发射）、孤儿宿主判定扩展为官方 `spawn||invaderCore` 同格同形。capabilities.invaderCore 翻转。对象走 Generic + 既有 effects 表与 CreepObj，无新增保存域；效果沿 v6 检查点。
+- 集成缝修复两处：孵化 creep 原被孤儿判定（宿主表缺 invaderCore）一拍移除；驻防 creep 无 strongholdId 按官方语义落入普通 Invader 退场（官方 processor.js 收集条件同形，测试出生当拍捕获）。
+- 三路复审（官方语义对照/对抗安全/测试边界）零语义分歧，发现项当批清偿：rustfmt、坍塌断言补强（ticksToDowngrade null/效果条目随清/sign 等三项经代码复审锁定——结构化字段在二进制快照不可注入）、坍塌冷恢复两腿用例（到期照常清+未到期不提前）、通用门注释精化（同拍新对象与官方 bulk.insert 同形）、effects 空槽+hits 默认补齐（SHAPE-NPC-002 形状例转绿，评审预告外发现：26.0-discovery 也挂 invaderCore 能力键）。安全评审的「宿主遮蔽分歧」经官方原文复核证伪——creeps/tick.js 谓词仅位置+类型无名字匹配，kk 与官方逐字同形，未改。
+- 登记（后续片回补）：deployStronghold 布防/模板（含核心 decayTime 键与孵化寿命绑定 core.decayTime——当前放置默认 1500）、raid 调度、maintainPopulation/refillTowers/focusClosest 战术、create-creep/transfer/attack/upgrade 意图处理器（handleController 的 own→upgrade、他人预定→attack 分支因此不发射）、结构 actionLog/roomInfo.active（全仓结构无 actionLog 既有决策，无消费者）、出生 chick 查找多 spawning 过滤（官方无、边角更保守）、多核心同房逐核心发射（官方单变量，仅夹具差异）、效果条目 level:1 投影差异（效果表既有约定）。
+- 定向与门禁：运行时双通道 7 例（含坍塌冷恢复）+域单测 2 例通过；无参数完整 `pnpm run check` 通过：Rust 1525 passed / 0 failed，JS workspace、维护工具、307 个 Markdown / 1976 个本地链接与源码规模通过；`pnpm run fmt:js:check` 通过，无 doctest 变更。release CLI 重建，固定 screeps-ok 全量 2914 例 **2811 passed / 8 failed / 95 skipped**，棘轮通过（地板 2802→2811、0 转红/9 转绿，8 例既有官方对齐豁免）。本批未跑 bot 长测，不以历史报告宣称本批 bot 验收。
 
 ## 2026-10-09 控制器 INVULNERABILITY 消费者（已完成，随本提交交付）
 

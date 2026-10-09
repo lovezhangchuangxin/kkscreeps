@@ -50,7 +50,7 @@ export const capabilities: AdapterCapabilities = {
   terrain: true,
   roomStatus: false,
   portals: false,
-  invaderCore: false,
+  invaderCore: true,
   strongholdDeploy: false,
   invaderRaidSpawner: false,
   multiShard: false,

@@ -238,6 +238,7 @@ pub fn settle_room(
                             Some("link") => "link",
                             Some("terminal") => "terminal",
                             Some("keeperLair") => "keeperLair",
+                            Some("invaderCore") => "invaderCore",
                             // Mod 建筑：生产周期或生命周期 tick 任一声明即进入
                             //（同访先产后 tick）；两者皆无的建筑不进入。
                             Some(st)
@@ -278,6 +279,7 @@ pub fn settle_room(
             "mineral" => economy::mineral_tick(&mut ctx.borrow_mut(), id),
             "deposit" => economy::deposit_tick(&mut ctx.borrow_mut(), id),
             "keeperLair" => keeper::tick(&mut ctx.borrow_mut(), id)?,
+            "invaderCore" => invader_core::tick(&mut ctx.borrow_mut(), id)?,
             "extractor" => economy::extractor_tick(&mut ctx.borrow_mut(), id),
             "road" => economy::road_decay_tick(&mut ctx.borrow_mut(), id),
             "decay" => economy::generic_decay_tick(&mut ctx.borrow_mut(), id),
@@ -299,6 +301,23 @@ pub fn settle_room(
             "mod-building" => buildings::building_object_tick(&ctx, id).map_err(SettleError)?,
             "mod" => mod_intents::process_object_tick(&ctx, id).map_err(SettleError)?,
             _ => {}
+        }
+        // 官方 processor 对象循环末段的通用坍塌门：任何对象携带已到期
+        // EFFECT_COLLAPSE_TIMER 即静默移除（无 ruin、无事件）。核心专属的
+        // 控制器清空已在上面的类型 tick 内先行执行，与官方顺序一致；
+        // 指令期新建的 creep 不在本轮 ids 快照内，与官方 bulk.insert
+        // 对象当轮不进 roomObjects 同形。
+        let collapse_expired = {
+            let w = ctx.borrow();
+            w.room.effects.get(&id).is_some_and(|entries| {
+                entries.iter().any(|e| {
+                    e.effect == Some(kk_core::constants::EFFECT_COLLAPSE_TIMER)
+                        && e.end_time <= w.time
+                })
+            })
+        };
+        if collapse_expired {
+            ctx.borrow_mut().remove_obj(id);
         }
     }
 

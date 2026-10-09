@@ -512,16 +512,31 @@ pub(crate) fn born_creep(
     chick_name: &str,
     job_directions: &[u8],
 ) -> bool {
-    let Some(RoomObject::Spawn(spawn)) = w.room.objects.get(&spawn_id).cloned() else {
+    let Some((host, owner)) = w.room.objects.get(&spawn_id).and_then(|o| match o {
+        RoomObject::Spawn(s) => Some(((s.x, s.y), s.owner.clone())),
+        _ => None,
+    }) else {
         return false;
     };
+    born_creep_at(w, host, &owner, chick_name, job_directions)
+}
+
+/// 通用孵化出生：以宿主坐标与主人为中心找首个可落格（invaderCore 的
+/// 孵化出生与 spawn 共用官方 _born-creep 的落格/踩踏语义）。
+pub(crate) fn born_creep_at(
+    w: &mut Working,
+    host: (u8, u8),
+    owner: &str,
+    chick_name: &str,
+    job_directions: &[u8],
+) -> bool {
     let chick = w
         .room
         .objects
         .iter()
         .find(|(_, o)| match o {
             RoomObject::Creep(c) => {
-                c.spawning && c.name == chick_name && c.x == spawn.x && c.y == spawn.y
+                c.spawning && c.name == chick_name && c.x == host.0 && c.y == host.1
             }
             _ => false,
         })
@@ -540,8 +555,8 @@ pub(crate) fn born_creep(
         let Some((dx, dy)) = offsets_by_direction(d) else {
             continue;
         };
-        let nx = spawn.x as i32 + dx;
-        let ny = spawn.y as i32 + dy;
+        let nx = host.0 as i32 + dx;
+        let ny = host.1 as i32 + dy;
         if !(0..=49).contains(&nx) || !(0..=49).contains(&ny) {
             continue;
         }
@@ -573,7 +588,7 @@ pub(crate) fn born_creep(
         if hostile.is_none() {
             hostile = w.index.at(nx as usize, ny as usize).iter().find_map(|tid| {
                 match w.room.objects.get(tid) {
-                    Some(RoomObject::Creep(c)) if c.owner != spawn.owner => Some(*tid),
+                    Some(RoomObject::Creep(c)) if c.owner != owner => Some(*tid),
                     _ => None,
                 }
             });
@@ -593,8 +608,8 @@ pub(crate) fn born_creep(
         let Some((dx, dy)) = offsets_by_direction(d) else {
             continue;
         };
-        let nx = spawn.x as i32 + dx;
-        let ny = spawn.y as i32 + dy;
+        let nx = host.0 as i32 + dx;
+        let ny = host.1 as i32 + dy;
         if !(0..=49).contains(&nx) || !(0..=49).contains(&ny) {
             continue;
         }

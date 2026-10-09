@@ -151,34 +151,68 @@ pub fn creep_tick_prepare(w: &mut Working, id: ObjId) -> Result<(), SettleError>
         None => return Ok(()),
     };
     if spawning {
-        let spawn_id = w
-            .index
-            .at(x as usize, y as usize)
-            .iter()
-            .find(|tid| matches!(w.room.objects.get(tid), Some(RoomObject::Spawn(_))))
-            .copied();
-        match spawn_id {
+        // 官方宿主同格判定：spawn 或 invaderCore（creeps/tick.js:38）；
+        // 无宿主的孵化 creep 按孤儿移除，宿主孵化名不匹配时立即出生。
+        let host = w.index.at(x as usize, y as usize).iter().find_map(|tid| {
+            match w.room.objects.get(tid) {
+                Some(RoomObject::Spawn(_)) => Some((*tid, true)),
+                Some(RoomObject::Generic(g)) => {
+                    (kk_world::domain::generic::structure_type(&g.data).as_deref()
+                        == Some("invaderCore"))
+                    .then_some((*tid, false))
+                }
+                _ => None,
+            }
+        });
+        match host {
             None => {
                 w.remove_obj(id);
                 return Ok(());
             }
-            Some(sid) => {
-                let mismatch = match w.room.objects.get(&sid) {
-                    Some(RoomObject::Spawn(s)) => {
-                        s.spawning.as_ref().map(|j| j.name.as_str()) != Some(name.as_str())
+            Some((sid, is_spawn)) => {
+                let (mismatch, directions) = if is_spawn {
+                    match w.room.objects.get(&sid) {
+                        Some(RoomObject::Spawn(s)) => (
+                            s.spawning.as_ref().map(|j| j.name.as_str()) != Some(name.as_str()),
+                            s.spawning
+                                .as_ref()
+                                .map(|j| j.directions.clone())
+                                .unwrap_or_default(),
+                        ),
+                        _ => (true, Vec::new()),
                     }
-                    _ => true,
+                } else {
+                    // 核心的孵化状态存于 Generic data；无孵化或名不匹配即出生。
+                    let core_name = w
+                        .room
+                        .objects
+                        .get(&sid)
+                        .and_then(|o| match o {
+                            RoomObject::Generic(g) => {
+                                serde_json::from_str::<serde_json::Value>(&g.data).ok()
+                            }
+                            _ => None,
+                        })
+                        .and_then(|v| {
+                            v.get("spawning")
+                                .and_then(|s| s.get("name"))
+                                .and_then(serde_json::Value::as_str)
+                                .map(str::to_string)
+                        });
+                    (core_name.as_deref() != Some(name.as_str()), Vec::new())
                 };
                 if mismatch {
-                    let job_directions = match w.room.objects.get(&sid) {
-                        Some(RoomObject::Spawn(s)) => s
-                            .spawning
-                            .as_ref()
-                            .map(|j| j.directions.clone())
-                            .unwrap_or_default(),
-                        _ => Vec::new(),
-                    };
-                    super::spawn::born_creep(w, sid, &name, &job_directions);
+                    if is_spawn {
+                        super::spawn::born_creep(w, sid, &name, &directions);
+                    } else {
+                        super::spawn::born_creep_at(
+                            w,
+                            (x, y),
+                            kk_world::domain::npc::INVADER_OWNER,
+                            &name,
+                            &[],
+                        );
+                    }
                 }
             }
         }

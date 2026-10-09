@@ -17,6 +17,8 @@ pub(super) fn with_npc_intents<'a>(
     batch: &'a IntentBatch,
 ) -> Result<Cow<'a, IntentBatch>, super::SettleError> {
     let mut all = vec![(INVADER_OWNER, invader::intents(w)?)];
+    // invaderCore 的 handleController 预意图与普通 Invader 同用户合并。
+    all.push((INVADER_OWNER, super::invader_core::intents(w)));
     all.push((kk_world::domain::keeper::OWNER, keeper::intents(w)?));
     let mut batch = Cow::Borrowed(batch);
     for (owner, generated) in all {

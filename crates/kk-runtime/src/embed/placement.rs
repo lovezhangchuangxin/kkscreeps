@@ -83,7 +83,19 @@ impl EmbedEngine {
                         };
                         normalize(kind, spec, &ctx)?
                     };
-                    ids.push((world.insert(room, object)?.as_str().to_string(), kind, room));
+                    let id = world.insert(room, object)?;
+                    if kind == "invaderCore" {
+                        place_invader_core_links(
+                            world,
+                            room,
+                            id,
+                            spec,
+                            links,
+                            stores,
+                            buildings.clone(),
+                        )?;
+                    }
+                    ids.push((id.as_str().to_string(), kind, room));
                 }
                 Ok(ids)
             })
@@ -164,4 +176,59 @@ impl EmbedEngine {
         self.place_objects(&[(room, "mod", &json!({"typeKey": type_key, "fields": fields}))])
             .map(|ids| ids[0].clone())
     }
+}
+
+/// invaderCore 放置的联动件：ticksToCollapse 写入 EFFECT_COLLAPSE_TIMER
+/// 房间效果条目（对象数据不携带 effects——发布校验拒绝双份权威状态）；
+/// spawning 孵化按官方 invader-core/create-creep 形态在同格另插
+/// spawning 形态的 NPC creep，出生落格由引擎 tick 完成。两项与核心
+/// 对象同一 edit_world 候选，后项失败不发布前项。
+fn place_invader_core_links(
+    world: &mut kk_world::World,
+    room: &str,
+    id: kk_world::ObjId,
+    spec: &Value,
+    links: kk_mod_api::builtin::LinkRules,
+    stores: kk_mod_api::builtin::StoreRules,
+    buildings: kk_mod_api::buildings::BuildingCatalog,
+) -> Result<(), String> {
+    // 官方放置恒带 effects 数组：空槽也入表（玩家面投影空数组属性，
+    // 对象形状契约），ticksToCollapse 时写入 EFFECT_COLLAPSE_TIMER 条目。
+    let mut entries = Vec::new();
+    if let Some(ttl) = spec.get("ticksToCollapse") {
+        // 值域已由域归一先行校验（同一 spec 先经 normalize），此处换算。
+        let ttl = ttl
+            .as_u64()
+            .ok_or_else(|| "ticksToCollapse 必须是非负整数".to_string())?;
+        let end_time = kk_world::domain::invader_core::deadline(world.time(), ttl)?;
+        entries.push(kk_world::EffectEntry {
+            effect: Some(kk_core::constants::EFFECT_COLLAPSE_TIMER),
+            power: kk_core::constants::EFFECT_COLLAPSE_TIMER,
+            level: 1,
+            end_time,
+        });
+    }
+    world.set_effects(room, id, entries)?;
+    if let Some(spawning) = spec.get("spawning") {
+        // 身体缺省 [MOVE] 与套件 incubation 契约一致；寿命走放置默认，
+        // 不绑定核心 decayTime（布防片接线时再随 deployStronghold 对齐）。
+        let creep_spec = serde_json::json!({
+            "name": spawning.get("name"),
+            "owner": kk_world::domain::npc::INVADER_OWNER,
+            "pos": spec.get("pos"),
+            "body": spawning.get("body").cloned().unwrap_or_else(|| serde_json::json!(["move"])),
+            "spawning": true,
+        });
+        let ctx = PlaceCtx {
+            time: world.time(),
+            links,
+            stores,
+            buildings,
+            controller: world.room(room).and_then(|r| r.controller()),
+            name_seq: world.next_obj_id() as usize,
+        };
+        let creep = normalize("creep", &creep_spec, &ctx)?;
+        world.insert(room, creep)?;
+    }
+    Ok(())
 }

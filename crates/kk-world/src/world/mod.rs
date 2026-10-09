@@ -98,6 +98,7 @@ impl RoomState {
         {
             crate::domain::deposit::validate(&data)?;
             crate::domain::keeper::validate(&data)?;
+            crate::domain::invader_core::validate(&data)?;
         }
         let effects = crate::effects::extract(&mut object)?;
         object.set_id(id);
@@ -286,6 +287,27 @@ impl World {
             obj_dir: RefCell::new(ObjDir::default()),
             max_id_cache: RefCell::new((0, 0)),
         }
+    }
+
+    /// 管理放置联动：为已插入对象整组设置房间效果表条目（invaderCore 的
+    /// 空效果槽与 EFFECT_COLLAPSE_TIMER 坍塌倒计时）。目标须存在；同
+    /// power 重复与条目值域由发布统一校验。空组保留——官方放置恒带
+    /// effects 数组，玩家面投影为空数组属性（对象形状契约）。
+    pub fn set_effects(
+        &mut self,
+        room_name: &str,
+        id: ObjId,
+        entries: Vec<crate::EffectEntry>,
+    ) -> Result<(), String> {
+        let Some(room) = self.rooms.get_mut(room_name) else {
+            return Err(format!("房间 {room_name} 不存在"));
+        };
+        if !room.objects.contains_key(&id) {
+            return Err("效果目标对象不存在".into());
+        }
+        room.effects.insert(id, entries);
+        self.generation += 1; // 保守失效：可变访问即视为内容可能变更
+        Ok(())
     }
 
     /// 放入对象并分配全局唯一 id（对象 id 字段被覆写为分配值）。

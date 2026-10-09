@@ -389,6 +389,26 @@ fn snapshot_json(
                 v.insert("ticksToSpawn".into(), remaining_opt(next, time));
                 v.remove("nextSpawnTime");
             }
+            // invaderCore 快照折算相对键（玩家 rawData 通道仍透传绝对键，
+            // 由 StructureInvaderCore 类 getter 折算）：部署倒计时与孵化
+            // 剩余时间；level/name/needTime 原样保留。
+            if v.get("structureType").and_then(Value::as_str) == Some("invaderCore") {
+                let deploy = v
+                    .get("deployTime")
+                    .and_then(Value::as_u64)
+                    .filter(|n| *n != 0);
+                v.insert("ticksToDeploy".into(), remaining_opt(deploy, time));
+                v.remove("deployTime");
+                if let Some(spawn_time) = v
+                    .get("spawning")
+                    .and_then(|s| s.get("spawnTime"))
+                    .and_then(Value::as_u64)
+                    && let Some(spawning) = v.get_mut("spawning").and_then(Value::as_object_mut)
+                {
+                    spawning.insert("remainingTime".into(), remaining(spawn_time, time));
+                    spawning.remove("spawnTime");
+                }
+            }
             // lab 快照补派生字段（vanilla snapshots.ts 的 lab 分支）：store 只
             // 留正量、mineralType 取首个非 energy 正量键、容量按已绑槽展开。
             // 其他 Generic 类型不在此补齐专用 getter。

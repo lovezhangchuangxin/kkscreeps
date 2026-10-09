@@ -4,6 +4,7 @@
 pub mod controller;
 pub(crate) mod deposit;
 pub mod generic;
+pub mod invader_core;
 pub mod invader_memory;
 pub mod keeper;
 pub mod keeper_memory;
