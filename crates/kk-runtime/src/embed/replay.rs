@@ -203,9 +203,16 @@ fn rebuild_writeback(entry: &Value) -> anyhow::Result<PlayerWriteback> {
         Value::Null => None,
         value => Some(SegmentWriteback::from_runner(value)),
     };
+    // 旧日志无 ism_local 键（特性前不产生写入）——缺失按 None。
+    let ism_local = match entry.get("ism_local") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(text)) => Some(text.clone()),
+        other => anyhow::bail!("ism_local 必须是字符串或 null：{other:?}"),
+    };
     Ok(PlayerWriteback {
         cpu: Some(bucket),
         raw_memory,
+        ism_local,
         segments,
     })
 }

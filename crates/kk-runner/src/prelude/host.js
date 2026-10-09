@@ -49,6 +49,9 @@
     setSegmentsWindowHost,
     setForeignSegmentHost,
     segmentsOutHost,
+    setIsmHost,
+    ismLocalHost,
+    ismDirtyHost,
   } = globalThis.__kkp.memoryWorld;
 
   globalThis.__kkp.host = {
@@ -194,6 +197,8 @@
           // 同时带出活动 segment 窗口写入，以及 active/public/defaultPublic/foreign 请求。
           const so = segmentsOutHost();
           if (so !== null && so !== undefined) out.segmentsOut = so;
+          // ISM 本地段仅在 setLocal 触发的拍带出（与 rawMemory 同门）。
+          if (ismDirtyHost()) out.ismLocal = ismLocalHost();
         }
       }
       // 载荷中的 getter 或 toJSON 可能抛错；转换成普通写回失败，避免被宿主归为硬中断。
@@ -213,11 +218,14 @@
     setRawMemory(data) {
       setRawMemoryHost(data);
     },
-    /** 在 beginTick 前注入 RawMemory、活动 segment 窗口和 foreignSegment。 */
-    setMemoryState(data, segmentsJson, foreignJson) {
+    /** 在 beginTick 前注入 RawMemory、活动 segment 窗口、foreignSegment
+     * 和 InterShardMemory 本地段（ismJson 为 JSON 串，null=未设置）。 */
+    setMemoryState(data, segmentsJson, foreignJson, ismJson) {
       setRawMemoryHost(data);
       setSegmentsWindowHost(segmentsJson);
       setForeignSegmentHost(foreignJson);
+      const ism = parse(ismJson);
+      setIsmHost(ism === null || ism === undefined ? null : ism);
     },
     drainMissing() {
       // 两桶：missing（get-trap 确定缺失）+ hasProbes（has-trap 低置信，可能是否定式探测）

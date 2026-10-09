@@ -32,6 +32,9 @@ pub struct PlayerWriteback {
     pub cpu: Option<kk_core::cpu::Bucket>,
     pub raw_memory: Option<String>,
     pub segments: Option<SegmentWriteback>,
+    /// InterShardMemory 本地段候选：仅 setLocal 触发的拍携带（快照语义，
+    /// 与 raw_memory 同门——写回失败轮不带，旧值保留）。
+    pub ism_local: Option<String>,
 }
 
 /// 已过滤非法段 ID 的写回请求。缺省字段保留旧请求，显式 null 清除可选请求。
@@ -92,6 +95,10 @@ impl PlayerWriteback {
         if let Some(raw) = self.raw_memory {
             state.raw_memory = raw;
         }
+        // ISM 写回与 RawMemory 同门提交：写回失败轮整体丢弃时两者一起回滚。
+        if let Some(ism) = self.ism_local {
+            state.ism_local = Some(ism);
+        }
         checkpoint(WritebackStep::RawMemory)?;
         if let Some(segments) = self.segments {
             state.segments.extend(segments.writes);
@@ -131,6 +138,7 @@ mod tests {
         };
         PlayerWriteback {
             cpu: None,
+            ism_local: None,
             raw_memory: Some("new memory".into()),
             segments: Some(SegmentWriteback::from_runner(&json!({
                 "writes": [[0, "first"], [256, "must not wrap"], [99, "valid"],

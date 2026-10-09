@@ -239,13 +239,14 @@ impl ThreadExecutor {
         raw: &str,
         segments_json: &str,
         foreign_json: &str,
+        ism_json: &str,
     ) -> anyhow::Result<()> {
         let id = *self
             .handles
             .get(player)
             .ok_or_else(|| anyhow::anyhow!("未知玩家 {player}"))?;
         self.pool
-            .set_memory_state(id, raw, segments_json, foreign_json)
+            .set_memory_state(id, raw, segments_json, foreign_json, ism_json)
     }
 
     /// 独立执行通道的计费提交。EmbedEngine 使用宿主桶，此方法不修改宿主状态。
@@ -348,6 +349,7 @@ fn eval_report_to_run_result(player: &str, report: kk_runner::EvalReport) -> Run
         // 仅转换回执；协调器计算桶候选并将 Memory、段及桶值交给引擎发布。
         cpu_billed_ms: report.cpu_billed_ms,
         raw_memory: report.raw_memory,
+        ism_local: report.ism_local,
         segments_out: report.segments_out,
         console: report.console.iter().map(|l| l.text.clone()).collect(),
     }
@@ -373,6 +375,7 @@ mod tests {
                 expr: self.expr.clone(),
                 cpu_billed_ms: None,
                 raw_memory: None,
+                ism_local: None,
                 segments_out: None,
                 console: Vec::new(),
             }
@@ -493,6 +496,7 @@ mod tests {
             intents: serde_json::Value::Null,
             cpu_billed_ms: None,
             raw_memory: None,
+            ism_local: None,
             segments_out: None,
             epoch: RunEpoch::default(),
         };
@@ -528,6 +532,7 @@ mod tests {
             raw_memory: r#"{"saved":42}"#.into(),
             segments_json: "[]".into(),
             foreign_json: "null".into(),
+            ism_json: "null".into(),
             budget: kk_core::cpu::RunBudget::new(&kk_core::cpu::Bucket::default()),
         };
         let old_worker = ex.handles["p1"];

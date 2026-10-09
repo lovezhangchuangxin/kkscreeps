@@ -22,6 +22,7 @@ fn result(intents: IntentBatch) -> RunResult {
         expr: serde_json::Value::Null,
         cpu_billed_ms: None,
         raw_memory: None,
+        ism_local: None,
         segments_out: None,
         console: Vec::new(),
     }

@@ -128,6 +128,10 @@ impl Engine {
                     .foreign_request
                     .as_ref()
                     .is_some_and(|(_, id)| id.is_some_and(|id| id > 99))
+                || player
+                    .ism_local
+                    .as_ref()
+                    .is_some_and(|v| v.encode_utf16().count() > 100 * 1024)
             {
                 return Err(format!("检查点玩家 {name} Memory/segments 超出限额"));
             }

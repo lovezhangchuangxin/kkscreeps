@@ -41,7 +41,7 @@
 
 TypedArray backing store、WebAssembly 线性内存和宿主分配不都受此堆限制覆盖。墙钟看门狗也不是内存总量限额；堆外分配治理和进程隔离尚需另行实现。
 
-JavaScript 写入限制采用字符串 `length`，即 UTF-16 码元计数：RawMemory.set 上限为 `2×1024×1024`，segment 数据为 `100×1024`，活动 segment 最多 10 个。不能将这些值直接称为 UTF-8 字节上限；Memory 自动序列化也不具有与 RawMemory.set 完全相同的长度检查路径。
+JavaScript 写入限制采用字符串 `length`，即 UTF-16 码元计数：RawMemory.set 上限为 `2×1024×1024`，segment 数据为 `100×1024`，活动 segment 最多 10 个。不能将这些值直接称为 UTF-8 字节上限；Memory 自动序列化也不具有与 RawMemory.set 完全相同的长度检查路径。InterShardMemory 本地段同为字符串面（≤`100×1024` 码元、仅 setLocal 写入、非字符串/超限抛错不留痕），候选与 RawMemory 同门随写回提交，持久于 `PlayerState.ism_local` 并随检查点保存——官方 OSS 引擎无此模块（后端专有），语义按套件契约；getRemote 需多 shard 宿主未安装。`Game.cpu.shardLimits`/`setShardLimits` 同为后端专有面：单 shard 读面恒 `{shard0: limit}`，setShardLimits 校验键集/非负整数/总和恒等（非法一律 ERR_INVALID_ARGS），唯一合法分配即现状、成功为 no-op（分配持久化与 12h 冷却随 multiShard 簇接线）。
 
 ## 控制台输出与弃用告警
 

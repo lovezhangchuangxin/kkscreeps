@@ -52,6 +52,8 @@ pub struct EvalReport {
     pub cpu_billed_ms: Option<f64>,
     /// RawMemory 候选（写回成功时的 rawMemoryData 快照；None = 写回失败/未达）。
     pub raw_memory: Option<String>,
+    /// InterShardMemory 本地段候选；仅 setLocal 触发的拍为 Some。
+    pub ism_local: Option<String>,
     /// 待提交的 segment 内容写入及四类请求；写回失败或未写回时为 None。
     pub segments_out: Option<Value>,
     /// 原样返回命令携带的轮次标识；调用方负责核对是否属于本轮。
@@ -81,6 +83,8 @@ pub struct RunJob {
     pub raw_memory: String,
     pub segments_json: String,
     pub foreign_json: String,
+    /// InterShardMemory 本地段注入（JSON 串，"null"=未设置）。
+    pub ism_json: String,
     pub budget: kk_core::cpu::RunBudget,
 }
 
@@ -153,7 +157,13 @@ enum Cmd {
     /// 注入 RawMemory 初值（tick 边界——协调层提交点统一驱动的通道面）。
     SetRawMemory(String, mpsc::Sender<anyhow::Result<()>>),
     /// 注入 RawMemory、活动 segment 窗口及 foreignSegment，供下一次 begin_tick 使用。
-    SetMemoryState(String, String, String, mpsc::Sender<anyhow::Result<()>>),
+    SetMemoryState(
+        String,
+        String,
+        String,
+        String,
+        mpsc::Sender<anyhow::Result<()>>,
+    ),
     /// 提交计费候选（统一提交点的成功臂）。
     SettleBill(mpsc::Sender<anyhow::Result<()>>),
     /// 丢弃计费候选（统一提交点的失败/回退臂）。
@@ -243,8 +253,8 @@ impl PlayerThreads {
                         Cmd::SetRawMemory(data, ack) => {
                             let _ = ack.send(sandbox.set_raw_memory(&data));
                         }
-                        Cmd::SetMemoryState(raw, segs, foreign, ack) => {
-                            let _ = ack.send(sandbox.set_memory_state(&raw, &segs, &foreign));
+                        Cmd::SetMemoryState(raw, segs, foreign, ism, ack) => {
+                            let _ = ack.send(sandbox.set_memory_state(&raw, &segs, &foreign, &ism));
                         }
                         Cmd::SettleBill(ack) => {
                             sandbox.settle_bill();
@@ -320,6 +330,7 @@ impl PlayerThreads {
                                         &job.raw_memory,
                                         &job.segments_json,
                                         &job.foreign_json,
+                                        &job.ism_json,
                                     )
                                     .and_then(|()| {
                                         sandbox.set_host_terrain(job.terrain.clone());
@@ -398,6 +409,7 @@ impl PlayerThreads {
         raw: &str,
         segments_json: &str,
         foreign_json: &str,
+        ism_json: &str,
     ) -> anyhow::Result<()> {
         let p = self.player_mut(id)?;
         let (ack_tx, ack_rx) = mpsc::channel();
@@ -405,6 +417,7 @@ impl PlayerThreads {
             raw.to_string(),
             segments_json.to_string(),
             foreign_json.to_string(),
+            ism_json.to_string(),
             ack_tx,
         ));
         ack_rx
@@ -864,6 +877,7 @@ fn run_eval_tick_with_budget(
                 intents: Value::Null,
                 cpu_billed_ms: bill,
                 raw_memory: None,
+                ism_local: None,
                 segments_out: None,
                 epoch,
             });
@@ -881,6 +895,7 @@ fn run_eval_tick_with_budget(
             intents: Value::Null,
             cpu_billed_ms: None,
             raw_memory: None,
+            ism_local: None,
             segments_out: None,
             epoch,
         }),
@@ -915,6 +930,10 @@ fn run_eval_tick_with_budget(
                 segments_out: writeback.get("segmentsOut").cloned(),
                 raw_memory: writeback
                     .get("rawMemory")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned),
+                ism_local: writeback
+                    .get("ismLocal")
                     .and_then(Value::as_str)
                     .map(str::to_owned),
                 epoch,

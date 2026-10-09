@@ -126,6 +126,11 @@ pub struct PlayerState {
     pub money: i64,
     /// token、pixel 等跨 shard 资源余额，供市场成交划转；缺省为空。
     pub resources: BTreeMap<String, i64>,
+    /// InterShardMemory 本地段：官方后端专有 API（OSS 引擎无此模块），
+    /// 语义按套件契约——每玩家字符串、≤100×1024 个 UTF-16 码元、仅
+    /// setLocal 写入（无清除），跨 tick/检查点保留。旧检查点缺失回填 None。
+    #[serde(default)]
+    pub ism_local: Option<String>,
     /// 账号 power 总量：powerSpawn.processPower 累计，GPL 等级由此派生。
     /// 旧检查点缺失按 0 回填（新增字段，deny_unknown_fields 只拒未知键）。
     #[serde(default)]

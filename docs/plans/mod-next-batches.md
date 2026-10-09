@@ -4,14 +4,14 @@
 
 ## 当前接手位置
 
-- 2026-10-09 review 修复（本次提交）：invaderCore 放置的孵化守军初始 `ageTime=0`，出生后再起算普通寿命；stronghold 部署绑定 `decayTime` 的路径保持原值。新增超过 1500 tick 孵化回归；定向 `pnpm run check -- kk-runtime --test mod_chain_tests --filter invader_core_long_incubation` 与无参数 `pnpm run check` 均通过（不含 doctest；本次未改 doctest）。其余 G02/G03 与 NPC 后续消费者不受此修复影响，下一步按当前执行队列继续。
+- 2026-10-09 review 修复（已提交 `2b68002`）：invaderCore 放置的孵化守军初始 `ageTime=0`，出生后再起算普通寿命；stronghold 部署绑定 `decayTime` 的路径保持原值。新增超过 1500 tick 孵化回归；定向 `pnpm run check -- kk-runtime --test mod_chain_tests --filter invader_core_long_incubation` 与无参数 `pnpm run check` 均通过（不含 doctest；本次未改 doctest）。其余 G02/G03 与 NPC 后续消费者不受此修复影响，下一步按当前执行队列继续。
 
-- 更新日期：2026-10-10；控制器 INVULNERABILITY 消费者已提交 `d48d6ea`；Invader core 生命周期首片已提交 `2b68002`；Stronghold 布防首片已提交 `4f7dd2bd`；raid 调度首片已提交 `e316a07`；powerBank 生成与消费者首片已提交 `e5249ff2`；边缘环绕+核弹簇已提交 `9ff9d2e`；弃用告警已提交 `c39777a`；tick({random}) 处理器随机注入（越界拒收/耗尽回滚/矿物再密化消费 + randomInjection 翻转）随本提交交付。最近完整门禁 Rust 全绿；最近 release 棘轮 2878 passed / 8 failed / 28 skipped（0 转红，8 例既有豁免）。TooAngel/Overmind 六阶段为既有入库证据；本批未重跑 bot 长测。
+- 更新日期：2026-10-10；控制器 INVULNERABILITY 消费者已提交 `d48d6ea`；Invader core 生命周期首片已提交 `2b68002`；Stronghold 布防首片已提交 `4f7dd2bd`；raid 调度首片已提交 `e316a07`；powerBank 生成与消费者首片已提交 `e5249ff2`；边缘环绕+核弹簇已提交 `9ff9d2e`；弃用告警已提交 `c39777a`；tick({random}) 注入已提交 `038c1aa`；InterShardMemory 本地段与 CPU shardLimits（六层写回链+检查点 137 键+SHAPE-GAME-002 形状互斥豁免）随本提交交付。最近完整门禁 Rust 全绿；最近 release 棘轮 2884 passed / 9 failed / 21 skipped（转绿 7、豁免转红 1；99% 检查点差 1 例）。TooAngel/Overmind 六阶段为既有入库证据；本批未重跑 bot 长测。
 - 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座、deposit 采集链、observer 限时视野已交付。**M2H.b 19/19 powers 全部接通**。
 - 当前接手：G02.d3 结构/rampart 计划级通行及默认玩家/NPC 寻路已提交 `fd27fbd`；G03 障碍追加后的同源链预演已提交 `3f3d9a7`；障碍摘要的安全模式主人已提交 `41de432`；控制器零升级量修复已提交 `10eb812`；G27.a 独立异步后台宿主已提交 `b25e280`；控制器 INVULNERABILITY 三处消费门已提交 `d48d6ea`；invaderCore 生命周期首片已提交 `2b68002`；stronghold 布防首片已提交 `4f7dd2bd`；raid 调度首片已提交 `e316a07`；powerBank 生成与消费者首片已提交 `e5249ff2`；边缘环绕+核弹簇（portal 传送/衰变/核爆免伤、roomStatus 种子域与 getRoomStatus/launchNuke 门、worldSize 活算与 map/market/terminal 三处环绕计费、检查点 v9）随本提交交付，生产者侧仍缺地图生成、战术 AI（maintainPopulation/refillTowers/focusClosest）与 create-creep 等意图。逐房通行粒度、摘要增强、完整仲裁替换仍未完成。
 - 本次完成：JSON/KKPV 各 200 tick 持续战斗、100+100 tick 跨进程冷恢复和完整检查点回放；实际位置/hits 证明移动、受伤与恢复，双通道及直跑/续跑世界与 Memory 等值。TooAngel v6 双通道 2000 tick 连跑及 1000+1000 tick 冷恢复六阶段复验通过。
 - 剩余：真实 bot 战斗/多房/长期存活验收；地图生成与 G21 Mod 世界事件；stronghold 战术 AI/create-creep 意图；walkTo/Keeper lastMove 按实际 stronghold 消费者接线；G02.d3 逐房/摘要后续、G03 完整仲裁替换与 G27.a。NPC 场景不标 M2B 或 G21 完成。
-- 兼容率 2878/2914≈98.7%（**95% 中间检查点已越过**；99% 目标需 2885，缺口 7=跳过 28 中 actionLog 21 例既缓之外的全部：多 shard 7——**收 99% 只差多 shard 一簇**，含 InterShardMemory/shardLimits；random+矿物密度注入 7 例已随本批全绿）。
+- 兼容率 2884/2914≈99.0%（**95% 中间检查点已越过**；99% 检查点 2885 恰差 1——多 shard 一簇 7 例已交付 6 绿但被 SHAPE-GAME-002 形状互斥抵消 1；剩余跳过 21 例全部为 actionLog 既缓簇，吃下即越检查点；random+矿物密度注入 7 例与 ISM/shardLimits 6 例已全绿）。
 - Mod 扩展：移动策略、对象/建筑/资源、库存/耐久/受击、作者 CLI/类型、输入回放和检查点已有基础；未完成范围以任务表为准。默认玩法已有消费者不代表对应 Mod 替换能力已经开放。
 - 网络服务、持久 storage 后端与真实游戏客户端仍未实现；renderer R0–R6 已交付，R7 最终矩阵/长测未收口。现有 bot-check 不能代替持续推进世界中的可玩验收。
 - M2B 验收标准（2026-10-09 调整）：screeps-ok ≥95% 为中间检查点、≥99% 为后续覆盖目标；最终完成要求约定范围内功能全部通过验收，剩余例外逐项有明确范围、证据和可审查理由，见[路线图](../roadmap.md)。
@@ -330,6 +330,14 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 - 独立 worker/realm、原生登记能力门、同步注册/异步生命周期、队列快拒绝、过期/跨包/未授予/调用和字节限额及共享 VM 预算已接线；FileProbe 使用常规文件的有限只读异步任务。实际发现异步 op 会在 V8 调用时提前轮询，首轮测试因没有 Tokio 上下文而中止，已将预算调用统一进入 worker 执行器上下文；随后宿主六组、CLI 三组与双通道持续世界一组定向回归通过。CLI 冷检查点身份读取/输入守卫、后台等待读期间世界继续推进及重启 calls 归零均实测。新增 ADR-017、现行后台契约/源码导航/状态域清单与公共示例，无新玩法持久域或载荷版本；可选 services 清单/代码沿既有 Mod 身份与包摘要保存，无服务旧清单保持原序列化形态。首轮完整门禁通过，最后的故障来源诊断和协议常量收口后须再次完整复验。
 
 - 最终无参数完整门禁通过：Rust 1512 passed / 0 failed，Clippy、JS workspace/维护工具、307 个 Markdown / 1971 个本地链接与 936 个源码/测试规模通过。release CLI 重建通过，公共 services 包由 release 实际运行，start/request/stop 与 world_unchanged=true 验收通过；JS 格式检查通过，无 doctest 改动。固定 bot 准备、适配器构建和显式 release 兼容棘轮通过：2802 passed / 8 failed / 104 skipped、floor 2802、0 转红/0 转绿（8 例既有豁免）。本片未运行 bot 长测，不标网络/耐久任务完成；实现/测试/公共示例/契约及报告随本批提交。
+
+## 2026-10-10 InterShardMemory 本地段与 CPU shardLimits（已完成，随本提交交付）
+
+- 基线 `038c1aa`（random 注入批），起始工作区干净。官方 OSS 引擎无这两个 API（后端专有）——语义源为套件契约（29-multi-shard 测试全文 + adapter.ts 能力注释）。套件 7 例转绿：ISM-001..004、CPU-SHARD-001..003。
+- 交付内容：InterShardMemory 本地段六层写回链——prelude `globalThis.InterShardMemory`（getLocal/setLocal；非字符串与超 100×1024 UTF-16 码元抛错不留痕、同拍 round-trip 读闭包现行值）→ host endTick 仅 setLocal 触发拍带出 `ismLocal`（与 RawMemory 同门：写回失败轮整轮丢弃）→ proto `EvalReport.ism_local`（`Cmd::SetMemoryState` 扩第四参注入 JSON 串）→ `RunResult.ism_local` → `PlayerWriteback.ism_local`（apply 挂 RawMemory 步同门回滚）→ `PlayerState.ism_local`（serde(default)，旧检查点回填 null；钉死键 136→137、state-inventory 补行）→ 输入日志 `ism_local` 键 + 回放缺键按 None。`Game.cpu.shardLimits` 读面（单 shard 恒 {shard0: limit}，getter 每次新对象）与 `setShardLimits` 真校验（非对象/未知 shard/非整数/负值/缺键/和≠limit→ERR_INVALID_ARGS；唯一合法分配即现状、成功 no-op 返回 OK——分配持久化与 12h 冷却随 multiShard 簇登记缓接）。capabilities.interShardMemory/cpuShardLimits 翻转。
+- Rust 集成 5 例（mod_chain_tests/intershard_cpu.rs，双通道）：null 起点同拍 round-trip+**跨拍持久+冷恢复**（超套件）、非字符串/超限六型拒绝不留痕、双玩家隔离（单轮双写双读各得各值）、读面键值/和==limit、四错误分支+合法分配 OK 腿。套件 7/7 定向全绿。
+- 三路复审（官方语义/对抗安全/测试边界）发现当批清偿：测试边界 G2 写回失败轮（Memory.big=1n）ISM 候选随整轮丢弃不泄漏组合测试；G3 四项补齐——恰 102400 码元成功腿（严格大于门）、shardLimits getter 新对象语义（改返回值不污染后续读）、回放 Some 分支（three_sources 写串并入 setLocal）、双玩家隔离（run_players 单轮双写双读各得各值）。安全 P2 检查点装载 ism_local 100KiB 限额校验（与 raw_memory/segments 同形）、InterShardMemory 全局随 resetRawMemoryHost 每 tick 重装（与 RawMemory/Memory 防篡改纪律对齐，闭包状态不重置）、陈旧注释清理。语义 P2 setShardLimits 捕获 Array.isArray/Number.isInteger（捕获纪律）。登记后续批：lone surrogate 使 endTick JSON 不可解析误判硬中断（ISM/RawMemory.set/segments 三通道同形的既有缺陷家族，自伤面，随写回出口统一 lossy 清洗修）；cpu.limit 非整数配置下 setShardLimits 合法分支不可达（当前恒 20.0 整数）；`RawMemory.interShardSegment` 死面与新闭包面并存（multiShard 簇接线时统一）；分配持久化与 12h 冷却（multiShard 簇）。守卫测试随批更新：沙箱全局白名单 +InterShardMemory、shardLimits 缺席钉改在场形状钉。
+- 验证：无参数 `pnpm run check` 通过；release 棘轮 2884 passed / 9 failed / 21 skipped（floor 2878→2884，转绿 7、豁免转红 1——SHAPE-GAME-002 与 cpuShardLimits 套件契约互斥：dataProps 计入一切非函数属性且无 gameCpu divergence 通道，同一适配器无法同时通过形状例与 CPU-SHARD 读面例；ratchet-allow/parity.json 双登记归因，撤销暴露即转绿）。**99% 检查点（2885）恰差 1**——被互斥消耗；2884/2914≈99.0%，检查点达成移至 actionLog 21 例簇（唯一剩余跳过簇）。
 
 ## 2026-10-10 tick({random}) 处理器随机注入（已完成，随本提交交付）
 

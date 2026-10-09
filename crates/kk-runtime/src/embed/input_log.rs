@@ -59,6 +59,7 @@ pub(crate) struct PlayerLogEntry<'a> {
     pub cpu_bucket: &'a kk_core::cpu::Bucket,
     pub cpu_billed_ms: Option<f64>,
     pub raw_memory: Option<&'a str>,
+    pub ism_local: Option<&'a str>,
     pub segments_out: Option<&'a Value>,
 }
 
@@ -313,6 +314,10 @@ pub(crate) fn players_map<'a>(entries: &BTreeMap<&str, PlayerLogEntry<'a>>) -> V
         m.insert(
             "raw_memory".into(),
             entry.raw_memory.map_or(Value::Null, |v| json!(v)),
+        );
+        m.insert(
+            "ism_local".into(),
+            entry.ism_local.map_or(Value::Null, |v| json!(v)),
         );
         m.insert(
             "segments".into(),

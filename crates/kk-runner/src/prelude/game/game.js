@@ -16,10 +16,14 @@
   const __setHas = Set.prototype.has;
   const __reflectApply = Reflect.apply;
   const __objectEntries = Object.entries;
+  const __objectKeys = Object.keys;
+  const __isArray = Array.isArray;
+  const __numberIsInteger = Number.isInteger;
   const mathPow = Math.pow;
   const mathFloor = Math.floor;
   const cpuHalt = globalThis.__kkp.cpuHalt;
   const C_ERR_FULL = globalThis.ERR_FULL;
+  const C_ERR_INVALID_ARGS = globalThis.ERR_INVALID_ARGS;
   const C_OK = globalThis.OK;
   const GCL_MULTIPLY = globalThis.GCL_MULTIPLY;
   const GCL_POW = globalThis.GCL_POW;
@@ -186,7 +190,32 @@
         getHeapStatistics: () => ({ ...cpu.heap }),
         // 主动 halt 请求 V8 中断；保留沙箱且本 tick 不计费，写回与指令丢弃。
         halt: cpuHalt,
-        setShardLimits: () => 0,
+        // 官方后端专有 API（OSS 引擎无实现），语义按套件契约：每日 CPU
+        // 配额按 shard 分配。单 shard 世界读面恒 {shard0: limit}（与
+        // Game.shard.name 同源常量）；setShardLimits 校验键集/非负整数/
+        // 总和恒等，唯一合法分配即现状——成功为 no-op 返回 OK（分配
+        // 持久化随 multiShard 簇接线，12h 冷却套件既缓未接）。
+        get shardLimits() {
+          return { shard0: cpu.limit };
+        },
+        setShardLimits(limits) {
+          if (limits === null || typeof limits !== 'object' || __isArray(limits)) {
+            return C_ERR_INVALID_ARGS;
+          }
+          let sum = 0;
+          let hasShard0 = false;
+          for (const name of __objectKeys(limits)) {
+            const v = limits[name];
+            if (name !== 'shard0') return C_ERR_INVALID_ARGS;
+            if (typeof v !== 'number' || !__numberIsInteger(v) || v < 0) {
+              return C_ERR_INVALID_ARGS;
+            }
+            hasShard0 = true;
+            sum += v;
+          }
+          if (!hasShard0 || sum !== cpu.limit) return C_ERR_INVALID_ARGS;
+          return 0;
+        },
         generatePixel: () => {
           countStub('Game.cpu.generatePixel');
           return -9;

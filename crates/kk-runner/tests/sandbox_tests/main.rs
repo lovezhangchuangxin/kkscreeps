@@ -329,6 +329,7 @@ fn is_allowed_global(name: &str) -> bool {
         "Game",
         "Memory",
         "RawMemory",
+        "InterShardMemory",
         // deno_core 注入（V8 内建微任务调度，无内部面可达）
         "queueMicrotask",
         // 官方游戏类（GAME_CLASS_NAMES + 独立类 + 两个别名）

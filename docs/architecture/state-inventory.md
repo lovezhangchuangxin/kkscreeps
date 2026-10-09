@@ -44,6 +44,7 @@
 | 玩家账户 | `engine.players.*`：`cpu.*`（桶 5 字段）、`gcl`、`rooms[]`、`raw_memory`、`segments.*`、`active_request[]`、`public_ids[]`、`default_public`、`foreign_request`、`money`、`resources.*`（动态映射） | 随 `engine_version` 硬门；CPU 与 Memory/segments 限额在装配时校验 | 玩家状态重建、下一次执行的注入与授权 | 拒绝不迁移，G23 负责 |
 | power 账号域 | `engine.players.*.power`（账号 power，GPL 源）、`power_creeps.*`（动态映射：注册表记录 8 字段，`powers.*` 为等级表；`spawn_cooldown_time`/`delete_time` 为墙钟毫秒） | 随 `engine_version` 硬门；旧检查点缺失按 serde 默认回填（0/空表） | powerCreep 注册表重建、GPL 配额与冷却判定 | 拒绝不迁移，G23 负责 |
 | 玩家通知 | `engine.players.*.notifications[]`（`message`、`tick`、`group_interval`） | 无独立版本 | 跨 tick 最近 100 条内存记录 | 拒绝不迁移，G23 负责 |
+| InterShardMemory 本地段 | `engine.players.*.ism_local`（字符串或 null，≤100×1024 UTF-16 码元） | 随 `engine_version` 硬门；旧检查点缺失按 serde 默认回填 null | 每玩家跨 tick 的 ISM 本地段注入与写回（setLocal 触发拍携带候选） | 拒绝不迁移，G23 负责 |
 | 市场 | `engine.market.orders.*`（订单 12 字段，动态映射）、`transactions[]`、`next_order_seq`、`next_transaction_id` | 随 `engine_version` 硬门；订单生命周期按墙钟判过期，装配时校验市场游标 | 市场状态重建与游标续发 | 拒绝不迁移，G23 负责 |
 | 事件 | `engine.last_events[]` | 无独立版本 | 最近成功轮事件回填 | 拒绝不迁移，G23 负责 |
 | Mod 提交状态 | `engine.mod_states`（动态映射，载荷不透明——namespace state 是 Mod 自管 JSON） | 无独立版本；与包身份一致性由 realm 重建核对 | Mod namespace state 回填 | 拒绝不迁移，G23 负责 |

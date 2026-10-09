@@ -109,7 +109,7 @@ pub(super) fn three_sources_replay_matches_live_impl() -> anyhow::Result<()> {
 
     // 段写回必须走真实路径：回放侧经 from_runner 重放的 segments 驱动
     // 玩家段状态，重建丢失 segments 会破坏等值。
-    let write = "Memory.note = 'round-a'; RawMemory.segments[3] = 'seg'; RawMemory.setActiveSegments([3]); Game.creeps.c1.move(3); true";
+    let write = "Memory.note = 'round-a'; RawMemory.segments[3] = 'seg'; RawMemory.setActiveSegments([3]); InterShardMemory.setLocal('replay-ism'); Game.creeps.c1.move(3); true";
     engine.run_players(&BTreeMap::from([("p1".to_string(), write.to_string())]))?;
     // 第二轮玩家不写 Memory：写回仍落段（Memory 序列化恒有），重放按
     // 记录值逐位复现——覆盖「同句柄多轮、每轮一次 extend」的路径。

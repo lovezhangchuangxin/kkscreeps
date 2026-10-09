@@ -52,6 +52,7 @@ fn memory_writebacks_publish_with_market_and_retry_without_partial_commit() {
                     "writes": [[5, "new segment"]], "active": [5], "public": [5],
                     "defaultPublic": 5, "foreign": {"username": "p2", "id": 7}
                 }))),
+                ism_local: None,
             },
         )]);
         let input = TickInput {

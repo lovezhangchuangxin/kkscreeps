@@ -58,6 +58,7 @@ impl EmbedEngine {
                                 .map_err(anyhow::Error::msg)?,
                         ),
                         raw_memory: result.raw_memory.clone(),
+                        ism_local: result.ism_local.clone(),
                         segments: result
                             .segments_out
                             .as_ref()
@@ -101,6 +102,7 @@ impl EmbedEngine {
                             cpu_bucket: bucket,
                             cpu_billed_ms: result.cpu_billed_ms,
                             raw_memory: result.raw_memory.as_deref(),
+                            ism_local: result.ism_local.as_deref(),
                             segments_out: result.segments_out.as_ref(),
                         },
                     )
@@ -381,6 +383,8 @@ impl EmbedEngine {
                 let foreign_json = self
                     .resolve_foreign_segment(&handle)
                     .unwrap_or(serde_json::Value::Null);
+                let ism_json = serde_json::to_string(&state.and_then(|p| p.ism_local.clone()))
+                    .unwrap_or_else(|_| "null".into());
                 let gcl = self
                     .engine
                     .players()
@@ -466,6 +470,7 @@ impl EmbedEngine {
                         raw_memory: raw_mem,
                         segments_json,
                         foreign_json: foreign_json.to_string(),
+                        ism_json,
                         budget,
                     },
                     Some(notify.clone()),

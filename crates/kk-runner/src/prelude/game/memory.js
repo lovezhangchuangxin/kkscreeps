@@ -283,6 +283,12 @@
     sub[name] = value;
   };
 
+  // InterShardMemory 本地段：官方后端专有 API（OSS 引擎无此模块），语义
+  // 按套件契约——每玩家字符串、≤100×1024 个 UTF-16 码元、仅 setLocal 写入。
+  // getRemote 需要多 shard 宿主，本片不安装（未定义即调用报 TypeError）。
+  let interShardLocal = null;
+  let interShardDirty = false;
+
   /** 宿主注入通道（setMemoryState）：本 tick 的活动窗口内容与 foreignSegment
    * （官方 data.memorySegments / data.foreignMemorySegment 同位——begin_tick
    * 之前注入，协调器从 PlayerState 解算）。 */
@@ -299,6 +305,28 @@
     const v = __jsonParse(fsJson);
     foreignSegmentData = v === null || v === undefined ? undefined : v;
   }
+
+  // InterShardMemory（官方后端 API）：非字符串与超限抛错（segment 保持
+  // 旧值——套件契约"拒绝不留痕"）；同 tick round-trip 读闭包现行值。
+  __Object.defineProperty(globalThis, 'InterShardMemory', {
+    enumerable: true,
+    configurable: true,
+    value: {
+      getLocal() {
+        return interShardLocal;
+      },
+      setLocal(value) {
+        if (typeof value !== 'string') {
+          throw new Error('The value to InterShardMemory.setLocal must be a string');
+        }
+        if (value.length > 100 * 1024) {
+          throw new Error('InterShardMemory segment has exceeded 100 KB length limit');
+        }
+        interShardLocal = value;
+        interShardDirty = true;
+      },
+    },
+  });
 
   /** 校验并生成 segment 写入与请求候选。
    * 最多 10 槽，id 为 0–99，内容须为字符串且不超过 100×1024 个 UTF-16 码元。
@@ -406,6 +434,16 @@
   globalThis.__kkp.memory = {
     setRawMemoryHost(data) {
       rawMemoryData = data;
+    },
+    setIsmHost(value) {
+      interShardLocal = value;
+      interShardDirty = false;
+    },
+    ismLocalHost() {
+      return interShardLocal;
+    },
+    ismDirtyHost() {
+      return interShardDirty;
     },
     rawMemoryDataHost() {
       return rawMemoryData;

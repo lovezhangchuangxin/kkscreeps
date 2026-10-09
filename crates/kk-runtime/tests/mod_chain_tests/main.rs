@@ -225,6 +225,7 @@ mod deprecation;
 mod factory_power_effects;
 mod fortify_shield_power_effects;
 mod heal_policy;
+mod intershard_cpu;
 mod invader_ai;
 mod invader_combat;
 mod invader_core;

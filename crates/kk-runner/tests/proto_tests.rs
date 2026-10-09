@@ -336,6 +336,7 @@ fn host_budget_job() -> anyhow::Result<()> {
                 deadline: None,
                 raw_memory: r#"{"saved":42}"#.into(),
                 segments_json: "[]".into(),
+                ism_json: "null".into(),
                 foreign_json: "null".into(),
                 budget: kk_core::cpu::RunBudget::new(&committed),
             },
@@ -367,6 +368,7 @@ fn pending_receipts_are_independent() -> anyhow::Result<()> {
         deadline: None,
         raw_memory: "{}".into(),
         segments_json: "[]".into(),
+        ism_json: "null".into(),
         foreign_json: "null".into(),
         budget: kk_core::cpu::RunBudget::new(&kk_core::cpu::Bucket::default()),
     };
@@ -399,6 +401,7 @@ fn queued_command_deadline() -> anyhow::Result<()> {
         deadline: None,
         raw_memory: "{}".into(),
         segments_json: "[]".into(),
+        ism_json: "null".into(),
         foreign_json: "null".into(),
         budget: kk_core::cpu::RunBudget::new(&kk_core::cpu::Bucket::default()),
     };

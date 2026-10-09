@@ -250,6 +250,7 @@ const PINNED_CHECKPOINT_KEYS: &[&str] = &[
     "engine.players.*.default_public",
     "engine.players.*.foreign_request",
     "engine.players.*.gcl",
+    "engine.players.*.ism_local",
     "engine.players.*.money",
     "engine.players.*.notifications[]",
     "engine.players.*.notifications[].group_interval",
@@ -357,7 +358,7 @@ fn checkpoint_schema_keys_are_pinned() -> anyhow::Result<()> {
     schema_tree_invader_memory(&mut tree)?;
     assert_eq!(
         PINNED_CHECKPOINT_KEYS.len(),
-        136,
+        137,
         "钉死键总数；可空 binary 的 null 与数组分支、无包分片的 mods null 分支分别计键，增删时同步清单"
     );
     let expected: BTreeSet<String> = PINNED_CHECKPOINT_KEYS

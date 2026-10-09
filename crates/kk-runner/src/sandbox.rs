@@ -313,6 +313,7 @@ impl Sandbox {
         raw: &str,
         segments_json: &str,
         foreign_json: &str,
+        ism_json: &str,
     ) -> anyhow::Result<()> {
         call_host_unit(
             &self.tokio,
@@ -322,6 +323,7 @@ impl Sandbox {
                 raw.to_string(),
                 segments_json.to_string(),
                 foreign_json.to_string(),
+                ism_json.to_string(),
             ],
         )
         .inspect_err(|_| self.clear_terminate_flag())?;

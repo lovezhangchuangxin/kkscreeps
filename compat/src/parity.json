@@ -1,21 +1,29 @@
 {
-  "expected_failures": {
-    "roomposition-find-closest-by-path-range-ignored": {
-      "actual": "Stable vanilla's `_findClosestByPath2` (`@screeps/engine/src/game/rooms.js:304-374`) never reads `opts.range`: it hardcodes `{range: 1, pos: i}` on the PathFinder goal at line 328 and post-filters reachability with `lastPos.isNearTo(obj)` at line 368.",
-      "expected": "RoomPosition.findClosestByPath uses opts.range as the goal range when deciding reachability.",
-      "why": "Canonical claim is PR-derived: screeps/engine#121 (open, enhancement/needs-testing) proposes honoring the range option (#136 is a closed duplicate). Stable vanilla has not shipped it, so this row is an expected failure on BOTH adapters until upstream lands — it is not an xxscreeps bug.",
-      "tests": [
-        "ROOMPOS-FIND-010"
-      ]
-    },
-    "movecache-fatigue-visualization-recomputes": {
-      "actual": "Stable vanilla's `Creep.moveTo` short-circuits `if (fatigue>0 && !opts.visualizePathStyle) return ERR_TIRED` (`@screeps/engine/src/game/creeps.js:173`), so setting `visualizePathStyle` bypasses the early return. The reusable-cache branch (`creeps.js:241-302`) then calls `moveByPath` → `move` (which returns `ERR_TIRED`) and falls through to `findPathTo` at line 283, which re-invokes the supplied `costCallback`.",
-      "expected": "A fatigued moveTo call with a valid reusable path and visualizePathStyle returns ERR_TIRED without recomputing a path.",
-      "why": "Canonical claim is PR-derived: screeps/engine#152 (open) stops moveTo recomputing a path when the creep is fatigued, visualizePathStyle is set, and a valid memorized path exists. xxscreeps already implements it; vanilla stays expected-fail until upstream lands.",
-      "tests": [
-        "UNDOC-MOVECACHE-004"
-      ]
-    }
+ "expected_failures": {
+  "roomposition-find-closest-by-path-range-ignored": {
+   "actual": "Stable vanilla's `_findClosestByPath2` (`@screeps/engine/src/game/rooms.js:304-374`) never reads `opts.range`: it hardcodes `{range: 1, pos: i}` on the PathFinder goal at line 328 and post-filters reachability with `lastPos.isNearTo(obj)` at line 368.",
+   "expected": "RoomPosition.findClosestByPath uses opts.range as the goal range when deciding reachability.",
+   "why": "Canonical claim is PR-derived: screeps/engine#121 (open, enhancement/needs-testing) proposes honoring the range option (#136 is a closed duplicate). Stable vanilla has not shipped it, so this row is an expected failure on BOTH adapters until upstream lands — it is not an xxscreeps bug.",
+   "tests": [
+    "ROOMPOS-FIND-010"
+   ]
   },
-  "skips": {}
+  "movecache-fatigue-visualization-recomputes": {
+   "actual": "Stable vanilla's `Creep.moveTo` short-circuits `if (fatigue>0 && !opts.visualizePathStyle) return ERR_TIRED` (`@screeps/engine/src/game/creeps.js:173`), so setting `visualizePathStyle` bypasses the early return. The reusable-cache branch (`creeps.js:241-302`) then calls `moveByPath` → `move` (which returns `ERR_TIRED`) and falls through to `findPathTo` at line 283, which re-invokes the supplied `costCallback`.",
+   "expected": "A fatigued moveTo call with a valid reusable path and visualizePathStyle returns ERR_TIRED without recomputing a path.",
+   "why": "Canonical claim is PR-derived: screeps/engine#152 (open) stops moveTo recomputing a path when the creep is fatigued, visualizePathStyle is set, and a valid memorized path exists. xxscreeps already implements it; vanilla stays expected-fail until upstream lands.",
+   "tests": [
+    "UNDOC-MOVECACHE-004"
+   ]
+  },
+  "game-cpu-shape-vs-shard-limits": {
+   "actual": "kk 按 cpuShardLimits 能力契约暴露 Game.cpu.shardLimits（读面 getter）。套件的 dataProps 形状探测计入一切非函数属性（getter/数据值均入键集，26.0-discovery.test.ts:50-67），且 ShapeDivergenceTarget 闭合枚举无 gameCpu 通道（shape-divergences.ts:14-20）。",
+   "expected": "SHAPE-GAME-002 断言 Game.cpu 数据属性面恰为 canonical OSS 形状 {bucket, limit, tickLimit}。",
+   "why": "套件自身契约互斥：同一适配器无法同时通过 SHAPE-GAME-002（OSS 形状，vanilla 适配器因 cpuShardLimits=false 从不触达）与 CPU-SHARD-001..003（须读 Game.cpu.shardLimits 对象）。kk 选取暴露后端面并豁免形状例——形状例的其余两键断言仍被豁免条目逐字钉住，撤销暴露即可转绿。",
+   "tests": [
+    "SHAPE-GAME-002"
+   ]
+  }
+ },
+ "skips": {}
 }

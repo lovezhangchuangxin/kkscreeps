@@ -22,6 +22,11 @@
       setRawMemoryHost: memory.setRawMemoryHost,
       /** 读取当前 RawMemory 数据作为待提交候选；真正保存到 PlayerState 由 Rust 协调器完成。 */
       rawMemoryDataHost: memory.rawMemoryDataHost,
+      /** InterShardMemory 本地段注入（PlayerState.ism_local，null=未设置）。 */
+      setIsmHost: memory.setIsmHost,
+      /** 当前 ISM 本地段与脏标记；endTick 仅在 setLocal 触发时带出候选。 */
+      ismLocalHost: memory.ismLocalHost,
+      ismDirtyHost: memory.ismDirtyHost,
       /** 设置活动 segment 窗口，下一次 beginTick 将内容复制到新的 RawMemory.segments。 */
       setSegmentsWindowHost: memory.setSegmentsWindowHost,
       /** 宿主私有通道（P6）：注入本 tick 的 foreignSegment（官方

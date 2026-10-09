@@ -61,6 +61,8 @@ pub struct RunResult {
     pub cpu_billed_ms: Option<f64>,
     /// 本轮 RawMemory 写回候选；None 表示未产出或写回失败。
     pub raw_memory: Option<String>,
+    /// InterShardMemory 本地段候选；仅 setLocal 触发的拍为 Some。
+    pub ism_local: Option<String>,
     /// 段写回与请求：`{writes, active?, public?, defaultPublic?, foreign?}`。
     /// None 表示没有产出；请求的校验和提交由 kk-runtime 完成。
     pub segments_out: Option<serde_json::Value>,
@@ -81,6 +83,7 @@ impl RunResult {
             }),
             cpu_billed_ms: None,
             raw_memory: None,
+            ism_local: None,
             segments_out: None,
             console: Vec::new(),
         }
@@ -96,6 +99,7 @@ impl RunResult {
             expr: serde_json::Value::Null,
             cpu_billed_ms: None,
             raw_memory: None,
+            ism_local: None,
             segments_out: None,
             console: Vec::new(),
         }
