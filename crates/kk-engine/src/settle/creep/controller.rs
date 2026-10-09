@@ -265,6 +265,17 @@ pub(super) fn intent_attack_controller(w: &mut Working, id: ObjId, data: &Intent
     {
         return;
     }
+    // 官方 attackController.js:29：免疫按 effect 标识且严格 endTime > time。
+    // 结算独立复核，不能信任玩家可改写的 effects 摘要或跳过预检的原生输入。
+    if kk_world::effects::active_effect(
+        w.room.effects.get(&target_id),
+        c::EFFECT_INVULNERABILITY,
+        w.time,
+    )
+    .is_some()
+    {
+        return;
+    }
     let claim_parts = w
         .creep(id)
         .map(|c| BodyKind::count_active(&c.body, BodyKind::Claim) as i64)

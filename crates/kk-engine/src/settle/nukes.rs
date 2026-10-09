@@ -330,8 +330,7 @@ fn nuke_damage(slot: &str) -> i64 {
 
 /// 控制器结算：激活中的 safeMode 立即结束并清冷却；有主且当前无更晚
 /// upgradeBlocked 时设置核弹升级封锁。来源：nukes/tick.js 尾段。
-/// 官方另有 EFFECT_INVULNERABILITY 免疫门——控制器 effects 属 power 域，
-/// 未接线恒视为无保护。
+/// EFFECT_INVULNERABILITY 仅约束无现有封锁的有主首支，不拦过期刷新或安全模式结束。
 fn controller_impact(w: &mut Working) {
     let Some(ctl) = w.controller().cloned() else {
         return;
@@ -353,7 +352,13 @@ fn controller_impact(w: &mut Working) {
     // 官方判据 `(user && !effects && !blocked) || blocked < gameTime`
     //（tick.js:70-72，&& 优先于 ||）：无主控制器的遗留过期封锁也会被
     // 刷新（unclaim 不清 upgradeBlocked），仅「无主且无封锁」不设。
-    let set_blocked = (ctl.owner.is_some() && ctl.upgrade_blocked.is_none())
+    let immune = kk_world::effects::active_effect(
+        w.room.effects.get(&ctl_id),
+        c::EFFECT_INVULNERABILITY,
+        w.time,
+    )
+    .is_some();
+    let set_blocked = (ctl.owner.is_some() && !immune && ctl.upgrade_blocked.unwrap_or(0) == 0)
         || ctl.upgrade_blocked.is_some_and(|t| t < w.time);
     if set_blocked && let Some(RoomObject::Controller(t)) = w.room.objects.get_mut(&ctl_id) {
         t.upgrade_blocked = Some(w.time + c::CONTROLLER_NUKE_BLOCKED_UPGRADE as u64);

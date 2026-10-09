@@ -42,6 +42,17 @@ pub fn active_power(
         .find(|e| e.power == power && e.end_time > time)
 }
 
+/// 按效果标识查询严格有效条目；不能用 power 代替 effect，SHIELD 可无 effect。
+pub fn active_effect(
+    entries: Option<&Vec<EffectEntry>>,
+    effect: i64,
+    time: u64,
+) -> Option<&EffectEntry> {
+    entries?
+        .iter()
+        .find(|entry| entry.effect == Some(effect) && entry.end_time > time)
+}
+
 /// 玩家面与查询快照共用剩余时间，绝对截止时间不暴露。
 pub(crate) fn project(record: &mut Value, entries: Option<&Vec<EffectEntry>>, time: u64) {
     if let Some(entries) = entries {

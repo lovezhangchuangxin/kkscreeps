@@ -672,3 +672,5 @@ fn range_boundary_launches_and_power_creep_zeroed() {
         .any(|o| matches!(o, RoomObject::Tombstone(t) if t.creep_name.as_deref() == Some("PC1")));
     assert!(tombstoned, "powerCreep 死亡落墓碑");
 }
+
+mod invulnerability;

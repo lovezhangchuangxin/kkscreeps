@@ -474,11 +474,11 @@
   };
 
   /** Creep.attackController：官方 creeps.js:888-920。目标须 StructureController
-   /*  实例（:897）；CLAIM 部件（:901——官方 _getActiveBodyparts 复数形，零部件
+   *  实例（:897）；CLAIM 部件（:901——官方 _getActiveBodyparts 复数形，零部件
    *  同判 NO_BODYPART）；邻接（:905）；原始房（无主无预定）不可攻（:908-910）；
    *  upgradeBlocked 显式回查原始投影（:908-910——`data(target.id)` 的我方对齐
    *  gw.rawData，绝对 tick > 当前 tick 判 TIRED）；本房 safeMode（:914-916）；
-   *  EFFECT_INVULNERABILITY 免疫（:917-919，power 体系 N/A）。 */
+   *  EFFECT_INVULNERABILITY 免疫（效果标识匹配且 ticksRemaining > 0）。 */
   globalThis.Creep.prototype.attackController = function attackController(target) {
     if (!this.my) return C.ERR_NOT_OWNER;
     if (this.spawning) return C.ERR_BUSY;
@@ -490,6 +490,12 @@
     if (!target.owner && !target.reservation) return C.ERR_INVALID_TARGET;
     if (gw.rawData(target.id).upgradeBlocked > gw.world.time) return C.ERR_TIRED;
     if (blockedBySafeMode(this)) return C.ERR_NO_BODYPART;
+    if (
+      (target.effects || []).some(
+        (effect) => effect.effect === C.EFFECT_INVULNERABILITY && effect.ticksRemaining > 0,
+      )
+    )
+      return C.ERR_INVALID_TARGET;
     gw.intents.set(this.id, 'attackController', { id: target.id });
     return C.OK;
   };

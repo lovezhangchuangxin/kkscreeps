@@ -609,3 +609,5 @@ fn controller_intent(creep: ObjId, action: Action, target: ObjId) -> IntentBatch
 }
 
 mod controller_upgrade;
+
+mod controller_invulnerability;

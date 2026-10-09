@@ -4,9 +4,9 @@
 
 ## 当前接手位置
 
-- 更新日期：2026-10-09；普通 Invader 行为与移动记忆恢复已提交 `5c544cf`；持续 NPC 战斗验收已提交 `4a3016e`；Overmind 单房验收已提交 `d4f4403`。最近完整门禁 Rust 1512 passed / 0 failed；最近 release 棘轮 2802 passed / 8 failed / 104 skipped（0 转红，8 例既有豁免）。本批重跑 TooAngel 持续世界六阶段，没有重跑固定世界三 bot。
+- 更新日期：2026-10-09；普通 Invader 行为与移动记忆恢复已提交 `5c544cf`；持续 NPC 战斗验收已提交 `4a3016e`；Overmind 单房验收已提交 `d4f4403`；控制器 INVULNERABILITY 消费者随本提交交付。最近完整门禁 Rust 1516 passed / 0 failed；最近 release 棘轮 2802 passed / 8 failed / 104 skipped（0 转红，8 例既有豁免）。TooAngel/Overmind 六阶段为既有入库证据；本批未重跑 bot 长测。
 - 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座、deposit 采集链、observer 限时视野已交付。**M2H.b 19/19 powers 全部接通**。
-- 当前接手：G02.d3 结构/rampart 计划级通行及默认玩家/NPC 寻路已提交 `fd27fbd`；G03 障碍追加后的同源链预演已提交 `3f3d9a7`；障碍摘要的安全模式主人已提交 `41de432`；控制器零升级量修复已提交 `10eb812`；G27.a 独立异步后台宿主已完成，随本批提交；下一项补齐 attackController 的 INVULNERABILITY 玩家预检。逐房通行粒度、摘要增强、完整仲裁替换仍未完成。
+- 当前接手：G02.d3 结构/rampart 计划级通行及默认玩家/NPC 寻路已提交 `fd27fbd`；G03 障碍追加后的同源链预演已提交 `3f3d9a7`；障碍摘要的安全模式主人已提交 `41de432`；控制器零升级量修复已提交 `10eb812`；G27.a 独立异步后台宿主已提交 `b25e280`；控制器 INVULNERABILITY 三处消费门（玩家预检/原生攻击/核弹封锁）随本提交交付。逐房通行粒度、摘要增强、完整仲裁替换仍未完成。
 - 本次完成：JSON/KKPV 各 200 tick 持续战斗、100+100 tick 跨进程冷恢复和完整检查点回放；实际位置/hits 证明移动、受伤与恢复，双通道及直跑/续跑世界与 Memory 等值。TooAngel v6 双通道 2000 tick 连跑及 1000+1000 tick 冷恢复六阶段复验通过。
 - 剩余：真实 bot 战斗/多房/长期存活验收；地图生成/raid/stronghold 与 G21 Mod 世界事件；walkTo/Keeper lastMove 按实际 stronghold 消费者接线；G02.d3 逐房/摘要后续、G03 完整仲裁替换与 G27.a。NPC 场景不标 M2B 或 G21 完成。
 - 兼容率 2802/2914≈96.2%（**95% 中间检查点已越过**；99% 目标需 2885）。
@@ -122,7 +122,7 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 
 - G09 的 owner、massAttack/dismantle/维修/死亡产物，以及私有 rampart 的预检/结算差异，仍按[库存](../architecture/object-store.md)和[耐久](../architecture/object-durability.md)的限制选型；不把四个首片交付标成全领域完成。
 - G02.d3 历史登记的 worker 配置传递、跨房墙环端到端、allowStatic 与声明叠加等增强项，在相关切片开始时复核；安全模式主人摘要为可解释性增强，孵化门槛归 G13。按[移动契约](../architecture/movement.md)与实际测试核验。
-- attackController 的 EFFECT_INVULNERABILITY 预检门（官方 creeps.js:914-919）kk 未接——INVULN 生产者属后续 invader core/NPC 域，落地时须连同 attackController/伤害/拆毁等消费门一起盘点（FORTIFY/SHIELD 批已把结算侧免伤/回收/跳过门备好）。
+- 控制器 INVULNERABILITY 的玩家/原生攻击与核弹消费门本批补齐；此前“结算全部备好”的登记不覆盖这两条漏门。生产者仍属后续 invader core/NPC 域，G21 未交付。
 - upgradeController 零量动作/事件分歧已修复；RCL8 同轮满额仍拒绝，回归见控制器升级边界测试。
 - 历史登记过 sim 并行冷恢复子进程偶发失败，隔离复跑通过且后续完整门禁通过；若再现须保留失败报告归因，不能把重跑成功当作已修根因。
 - Overmind bot-check 保留基线已有的 1 个 console-error tick；不宣称零错误。keeper/NPC、多 shard 和其余能力门控缺口以最新兼容报告核对，旧批次数字不参与当前决策。
@@ -328,3 +328,12 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 - 独立 worker/realm、原生登记能力门、同步注册/异步生命周期、队列快拒绝、过期/跨包/未授予/调用和字节限额及共享 VM 预算已接线；FileProbe 使用常规文件的有限只读异步任务。实际发现异步 op 会在 V8 调用时提前轮询，首轮测试因没有 Tokio 上下文而中止，已将预算调用统一进入 worker 执行器上下文；随后宿主六组、CLI 三组与双通道持续世界一组定向回归通过。CLI 冷检查点身份读取/输入守卫、后台等待读期间世界继续推进及重启 calls 归零均实测。新增 ADR-017、现行后台契约/源码导航/状态域清单与公共示例，无新玩法持久域或载荷版本；可选 services 清单/代码沿既有 Mod 身份与包摘要保存，无服务旧清单保持原序列化形态。首轮完整门禁通过，最后的故障来源诊断和协议常量收口后须再次完整复验。
 
 - 最终无参数完整门禁通过：Rust 1512 passed / 0 failed，Clippy、JS workspace/维护工具、307 个 Markdown / 1971 个本地链接与 936 个源码/测试规模通过。release CLI 重建通过，公共 services 包由 release 实际运行，start/request/stop 与 world_unchanged=true 验收通过；JS 格式检查通过，无 doctest 改动。固定 bot 准备、适配器构建和显式 release 兼容棘轮通过：2802 passed / 8 failed / 104 skipped、floor 2802、0 转红/0 转绿（8 例既有豁免）。本片未运行 bot 长测，不标网络/耐久任务完成；实现/测试/公共示例/契约及报告随本批提交。
+
+## 2026-10-09 控制器 INVULNERABILITY 消费者（已完成，随本提交交付）
+
+- 基线 `b25e280`，起始工作区干净。核对固定官方 engine 4.3.0：creeps.js attackController 预检、creeps/attackController.js 原生免疫和 nukes/tick.js 控制器封锁免疫均有实际消费者，kk 三处缺门。核弹 safeMode 结束独立于免疫；已有过期封锁刷新分支因官方 OR 优先级也独立于免疫，不能扩大免疫范围。补双通道、严格到期、effect 与 power 不混淆、绕过玩家摘要的原生防线与保存恢复验证。生产者/raid/stronghold/G21 仍未实现，无新增保存域。
+
+- 原生攻击红测复现缺免疫门；补严格 active_effect 查询并接两条结算消费者，玩家预检保持门序。原生攻击/核弹两组回归通过（核弹夹具按实际 landTime-1 改为 ttl=1）；端到端夹具按实际 controller structureType/坐标与检查点数字对象键修正，验证效果标识、到期、摘要改写后的结算防线、晚期失败缓存重试与冷恢复。无新保存域，效果沿既有表/v6 保存；本片不添加生产者。
+
+- 三路复审（官方语义对照/对抗安全/测试边界）零阻塞，发现项当批清偿：免疫路径补动作日志不落断言（事件/封锁/降级之外的第四面）、核弹期望值改按封锁象限写死不再镜像实现公式、预检改用装载期捕获的 C.EFFECT_INVULNERABILITY（发现 `__creepC` 为逐键白名单表，补登该键）防玩家改写全局常量劣化错误码；`ticksRemaining>0` 冗余判据与官方同形保留；Some(0) 封锁值引擎写点不可达、`unwrap_or(0)==0` 为官方 falsy 语义保真度修正，均经评审取证。
+- 定向与门禁：引擎 settle_tests 2 例、运行时 controller_invulnerability_tests 2 例（JSON/KKPV 双通道）通过；无参数完整 `pnpm run check` 通过：Rust 1516 passed / 0 failed，JS workspace、维护工具、307 个 Markdown / 1976 个本地链接与源码规模通过；`pnpm run fmt:js:check` 通过，无 doctest 变更。release CLI 重建，固定 screeps-ok 全量 2914 例 2802 passed / 8 failed / 104 skipped，棘轮通过（floor 2802、0 转红/0 转绿，8 例既有官方对齐豁免）。本批未重跑 bot 长测，不以历史报告宣称本批 bot 验收。
