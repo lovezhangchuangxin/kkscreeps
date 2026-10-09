@@ -113,13 +113,13 @@
       storageObj,
       terminalObj,
       roomObjs,
-      install(room) {
+      install(methods) {
         // 方向出口缓存未过滤结果；FIND_EXIT 首次合并的缓存已经过当次 filter。
         // 再次调用的 filter 作用于该缓存，不能恢复首次已过滤掉的出口。
         // 返回新数组但复用元素引用；对象类查询每次扫描本房对象。
         // 来源：上游 engine/src/game/rooms.js 的 Room.find。
         const findCache = {};
-        room.find = function (type, opts) {
+        methods.find = function (type, opts) {
           countStub('room.find:' + type);
           // 官方 rooms.js:592-601：FIND_EXIT = 四向臂 concat（官方序
           // TOP/BOTTOM/RIGHT/LEFT），子臂各自应用 opts（含 filter）；缓存后
@@ -440,7 +440,7 @@
         // terrain 第 10 位→nuke→tombstone→ruin→powerCreep）；Mod 类型键（带
         // 冒号）按键序追加在内建固定序之后，官方 customObjectPrototypes 协议
         // 不接入
-        room.lookAt = function (firstArg, secondArg) {
+        methods.lookAt = function (firstArg, secondArg) {
           const xy = gw.fetchXYArguments(firstArg, secondArg);
           const x = xy[0],
             y = xy[1];
@@ -466,7 +466,7 @@
         };
         // 官方 rooms.js:798-806 lookForAt 逐字：未知类型（非 terrain 且不在
         // spatial 寄存器键集）返 ERR_INVALID_ARGS；terrain 走 [单词]
-        room.lookForAt = function (type, firstArg, secondArg) {
+        methods.lookForAt = function (type, firstArg, secondArg) {
           const xy = gw.fetchXYArguments(firstArg, secondArg);
           const x = xy[0],
             y = xy[1];
@@ -477,7 +477,7 @@
         };
         // 官方 rooms.js:808-845 lookAtArea 逐字：非 asArray 预填稠密格阵 []，
         // asArray 得 [{x,y,type,[type]:obj}]（terrain 项带坐标）
-        room.lookAtArea = function (top, left, bottom, right, asArray) {
+        methods.lookAtArea = function (top, left, bottom, right, asArray) {
           const result = asArray ? [] : {};
           if (!asArray) {
             for (let y = top; y <= bottom; y++) {
@@ -526,7 +526,7 @@
         };
         // 官方 rooms.js:847-860 lookForAtArea 逐字：非 asArray 只预填行对象（格
         // 惰性建——sparse map 原始对象无 type 包裹），asArray 得 [{x,y,[type]:obj}]
-        room.lookForAtArea = function (type, top, left, bottom, right, asArray) {
+        methods.lookForAtArea = function (type, top, left, bottom, right, asArray) {
           const result = asArray ? [] : {};
           if (!asArray) {
             for (let y = top; y <= bottom; y++) {

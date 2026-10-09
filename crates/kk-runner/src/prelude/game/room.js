@@ -20,18 +20,78 @@
   const makeRoomFindPath = gw.makeRoomFindPath;
   const trackRoomPathfinding = gw.trackRoomPathfinding;
 
+  const __weakGet = WeakMap.prototype.get;
+  const __weakSet = WeakMap.prototype.set;
+  const __reflectApply = Reflect.apply;
+  const contexts = new WeakMap();
+
+  // 公共方法只安装一次，玩家包装原型后不会被下一 tick 的装配覆盖。
+  // 单房索引/缓存留在私有上下文；同时登记原对象与探测代理，允许借用
+  // 原型方法的 call/apply 按接收者选择房间，而不捕获首次房间。
+  // 来源：上游 engine/src/game/rooms.js 的 Room.prototype 方法与 privateStore。
+  for (const method of [
+    'find',
+    'lookAt',
+    'lookForAt',
+    'lookAtArea',
+    'lookForAtArea',
+    'findPath',
+    'createConstructionSite',
+    'createFlag',
+    'getEventLog',
+  ]) {
+    __RoomCtor.prototype[method] = function (...args) {
+      const methods = __reflectApply(__weakGet, contexts, [this]);
+      return __reflectApply(methods[method], this, args);
+    };
+  }
+  __RoomCtor.prototype.getTerrain = function () {
+    return new Terrain(this.name);
+  };
+  /** 官方 toJSON 枚举原型可枚举成员，排除私有键和结构引用；函数值由
+   * stringify 自然丢弃。来源：rooms.js 的 Room.prototype.toJSON。 */
+  __RoomCtor.prototype.toJSON = function () {
+    const result = {};
+    for (const i in this) {
+      if (
+        i[0] === '_' ||
+        i === 'toJSON' ||
+        i === 'toString' ||
+        i === 'controller' ||
+        i === 'storage' ||
+        i === 'terminal'
+      )
+        continue;
+      result[i] = this[i];
+    }
+    return result;
+  };
+  __RoomCtor.prototype.findExitTo = function (target) {
+    return gw.currentGame().map.findExit(this.name, target);
+  };
+  __RoomCtor.prototype.getPositionAt = function (x, y) {
+    if (x < 0 || x > 49 || y < 0 || y > 49) return null;
+    return new gw.RoomPosition(x, y, this.name);
+  };
+  // memory 沿用每次按房名读取的契约，不保存房间对象的局部副本。
+  __Object.defineProperty(__RoomCtor.prototype, 'memory', {
+    configurable: true,
+    get() {
+      return gw.memoryFor('rooms', this.name);
+    },
+    set(v) {
+      gw.setMemoryFor('rooms', this.name, v, 'room');
+    },
+  });
+
   function makeRoom(name, r) {
     const queries = makeRoomQueries(name);
     const { controller, storageObj, terminalObj, roomObjs } = queries;
-    // 官方 Room 构造器/Structure 构造器（rooms.js:422-437、structures.js:41-56）
-    // 的挂载面：name/energyAvailable/energyCapacityAvailable/survivalInfo/visual
-    // 恒为自有属性（survivalInfo 普通房恒 undefined），controller/storage/
-    // terminal 仅在对应结构存在时成为自有属性——缺失时键不存在（读 undefined），
-    // 数据属性表面与官方一致。官方无 mode 字段。
+    // name/energyAvailable/energyCapacityAvailable/survivalInfo/visual 恒为
+    // 自有属性；controller/storage/terminal 只在对应结构存在时挂载。
+    // 来源：官方 Room 构造器与 Structure 构造器的挂载面。
     const room = {
       name,
-      // 官方 game.js:325-328：非 off 的 spawn/extension 计入（spawn 300 固定、
-      // extension 按 RCL 表）——由 Rust 侧 world_json 房间投影携带
       energyAvailable: r.energyAvailable ?? 0,
       energyCapacityAvailable: r.energyCapacityAvailable ?? 300,
       survivalInfo: undefined,
@@ -40,65 +100,22 @@
     if (controller !== undefined) room.controller = controller;
     if (storageObj !== undefined) room.storage = storageObj;
     if (terminalObj !== undefined) room.terminal = terminalObj;
-    queries.install(room);
-    room.getTerrain = function () {
-      return new Terrain(name);
-    };
+    const methods = __Object.create(null);
+    queries.install(methods);
     const creation = makeRoomCreation(name, roomObjs);
-    /** 官方 rooms.js:540-549 toJSON：for-in 枚举（含原型可枚举法——stringify
-     *  时函数值自然丢弃）+ 跳过 _ 前缀与五键。 */
-    room.toJSON = function () {
-      const result = {};
-      for (const i in this) {
-        if (
-          i[0] === '_' ||
-          i === 'toJSON' ||
-          i === 'toString' ||
-          i === 'controller' ||
-          i === 'storage' ||
-          i === 'terminal'
-        ) {
-          continue;
-        }
-        result[i] = this[i];
-      }
-      return result;
-    };
-    room.findPath = makeRoomFindPath(name);
-    room.createConstructionSite = creation.createConstructionSite;
-    // 装配时分别保存事件 JSON 字符串和解析数组；修改解析数组不会反向改变 raw 返回值。
-    // 同 tick 的非 raw 调用复用解析数组。来源：上游 engine/src/game/rooms.js 的 getEventLog。
+    methods.findPath = makeRoomFindPath(name);
+    methods.createConstructionSite = creation.createConstructionSite;
+    methods.createFlag = creation.createFlag;
+    // raw 与解析数组各自保存；同 tick 复用解析数组，修改它不改变 raw。
     const eventLogRaw = __jsonStringify((r && r.events) || []);
     const eventLogParsed = __jsonParse(eventLogRaw);
-    room.getEventLog = function (raw) {
+    methods.getEventLog = function (raw) {
       return raw ? eventLogRaw : eventLogParsed;
     };
-    room.createFlag = creation.createFlag;
-    // 官方 rooms.js:1128-1131：map.findExit 转发（无 opts 参——两参形态）
-    room.findExitTo = function (target) {
-      return gw.currentGame().map.findExit(name, target);
-    };
-    // 官方 rooms.js:971-976：越界坐标返 null（构造器抛错前拦截——不依赖
-    // 'Invalid arguments' 通道）
-    room.getPositionAt = (x, y) => {
-      if (x < 0 || x > 49 || y < 0 || y > 49) return null;
-      return new gw.RoomPosition(x, y, name);
-    };
-    // 官方 rooms.js:551-571：memory 为 getter/setter（gw.memoryFor 官方同形——
-    // 含 'undefined' 病态检查与非对象分支），tooangel 等 bot 直接对 room.memory 赋值
-    __Object.defineProperty(room, 'memory', {
-      configurable: true,
-      get() {
-        return gw.memoryFor('rooms', name);
-      },
-      set(v) {
-        gw.setMemoryFor('rooms', name, v, 'room');
-      },
-    });
-    if (__RoomCtor && __RoomCtor.prototype) {
-      __Object.setPrototypeOf(room, __RoomCtor.prototype);
-    }
+    __Object.setPrototypeOf(room, __RoomCtor.prototype);
     const result = probe(room, 'Room[' + name + ']');
+    __reflectApply(__weakSet, contexts, [room, methods]);
+    __reflectApply(__weakSet, contexts, [result, methods]);
     trackRoomPathfinding(result, roomObjs);
     return result;
   }

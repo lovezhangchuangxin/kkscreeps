@@ -65,6 +65,8 @@ CommonJS 加载器按上传模块名加载，只去掉 `./` 前缀，不解析 `
 
 原生算法持有固定 `Box<[Cell<u8>;2500]>` 的指针；宿主按 TypedArray 的 byteOffset/byteLength 取 backing store，每次玩家房间回调后重新同步所有此前矩阵，保留共享矩阵和嵌套修改的可见性。Backing store 在搜索结束前保持存活；可缩放缓冲收缩后不可读的矩阵区域清零为地形默认值，避免残留旧障碍或越界读取。Rust 不对可写 V8 内存建立不可变切片借用。原异常对象经 Global 句柄重新抛出；终止异常在 TryCatch 内重挂，原生主循环同时轮询真实 isolate 终止状态，不能转成成功空结果或可捕获普通错误。
 
+Room 的 find/look、创建、寻路、事件日志及序列化方法安装在 Room.prototype，实例只持有公开数据属性；玩家包装原型会作用于当前和后续 tick 的实例。房间查询索引、出口缓存和事件缓冲由私有 WeakMap 按实例身份保存，原型方法的 call/apply 根据接收者取上下文，避免借用方法时串房；探测代理和原对象登记同一上下文。每 tick 重建实例及其缓存，冷恢复重建 V8 原型，不保存玩家包装函数。来源：官方 engine/src/game/rooms.js 的 Room.prototype 与 privateStore。
+
 `Room.findPath` 家族按实际 Room 身份保存每 tick、每组选项的基础矩阵；障碍、私有 rampart、自有障碍工地、道路及安全模式分支对齐官方。玩家 costCallback 收到克隆矩阵，返回 CostMatrix 时替换该次副本。可信 Mod 寻路成本槽位仍为目标设计，不能从玩家回调已接入推导 Mod 已可改寻路。
 
 ## 宿主与故障边界

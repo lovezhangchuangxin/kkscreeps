@@ -69,7 +69,7 @@
 | `kk-runner/src/prelude/game/structure-api.js` | 结构动作与孵化/诊断 tick 重置编排；孵化及字段安装阶段在原位置显式调用 |
 | `kk-runner/src/prelude/game/structures/fields.js` | 私有通用字段表、类型选择及 Mod 建筑字段装配；专用结构资源/时间读面，按原顺序安装原型字段与结构装配器 |
 | `kk-runner/src/prelude/game/structures/spawn.js` | 独占本 tick 孵化名称、成本/能量计算、Spawning 和待出生视图，以及创建/续命/回收方法；装配与重置经一次性捕获的函数连接 |
-| `kk-runner/src/prelude/game/room.js` | 只装配公开属性、Memory/事件日志及玩家原型；`room/queries.js` 持有单房间类型/空间索引和出口缓存，`pathfinding.js` 持有按 Room 身份隔离的矩阵，`terrain.js` 安全拷出地形，`visual.js` 持有房间/map 绘图缓冲，`creation.js` 提供创建预检与指令方法 |
+| `kk-runner/src/prelude/game/room.js` | 装配公开属性，安装共享原型方法，按实例持有私有查询/事件上下文；`room/queries.js` 持有单房间类型/空间索引和出口缓存，`pathfinding.js` 持有按 Room 身份隔离的矩阵，`terrain.js` 安全拷出地形，`visual.js` 持有房间/map 绘图缓冲，`creation.js` 提供创建预检与指令方法 |
 
 目录分组对应执行或状态边界：`settle` 的领域规则（creep、spawn、structures、room、market、resources 等）与 `pipeline` 的世界候选提交分开，`working` 仍负责房间候选；不把各领域改为一个中心分派。`kk-mod-api/contribution` 是启动期计划构建，`validate` 的值校验同时服务运行期，因此保留公共独立入口；resources/buildings/extension/player_surface 等是冻结计划的只读消费目录，按领域保留。`kk-mod-host/package` 负责来源字节和包选择，realm 负责 VM 生命周期，convert 负责声明转换，chain 负责候选能力。包装载不重新读盘，SDK 虚拟 URL 和字节保持；各组通过父入口协作，消费者不导入实现子模块。
 

@@ -241,6 +241,7 @@ mod production_power_effects;
 mod quota_boundaries;
 mod resource_domain;
 mod resource_faults;
+mod room_prototype;
 mod source_power_effects;
 mod spawn_power_effects;
 mod store_boundaries;
