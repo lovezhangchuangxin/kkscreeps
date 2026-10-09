@@ -138,3 +138,5 @@ Mod realm 在整轮结算返回错误时销毁，下次执行前按原启动快�
 `EmbedEngine::create_shard`（含 Mod 创建入口）在房间、控制器、玩家工作者与计划装配后执行一次空意图世界结算，与锁定的 screeps-ok vanilla 适配器 `createShard` 末尾 `guardedTick` 对齐。它不求值玩家代码、不写玩家 Memory/CPU 候选，但运行正常世界与 Mod 结算；成功创建的世界时间为 1。RoomSpec 的相对 ticksToDowngrade/safeMode 在种子时加一拍补偿，创建完成读回种子值。场景对象在此后放置，不受热身拍影响。
 
 热身输入 `TickInput.warmup=true` 只影响发布时的计数：推进 time/generation，保持 player_ticks 不变，因此 setTerrain 在首个显式推进轮之前仍可用。普通玩家、外部意图、空推进与回放轮均为 false。createShard 先摘除旧输入日志，热身拍不产生日志段；日志起点是热身后状态。检查点保存既有 time/player_ticks 标量，恢复直接装配已提交状态，不重复热身。装配热身失败沿用创建后段的失败契约：旧分片已回收，调用方须重新创建。
+
+控制器升级的零量路径：creep 有能量、非孵化中，且目标等级/归属/距离/升级封锁和 RCL8 累计限额门通过后，即便无有效 WORK，仍记录 upgradeController 动作和 amount=0、energySpent=0 的升级事件；库存和 GCL 增量为 0。RCL8 已满额时继续提前拒绝。对齐固定官方 engine 4.3.0 的 upgradeController.js，回归见[控制器升级边界](../../crates/kk-engine/tests/settle_tests/controller_upgrade.rs)。该修复不开放 G15 Mod 策略、不新增保存域。

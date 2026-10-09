@@ -607,3 +607,5 @@ fn controller_intent(creep: ObjId, action: Action, target: ObjId) -> IntentBatch
     b.add_object_intent("p1", creep, action, IntentData::target(target));
     b
 }
+
+mod controller_upgrade;

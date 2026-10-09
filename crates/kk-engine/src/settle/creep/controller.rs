@@ -78,9 +78,8 @@ pub(super) fn intent_upgrade_controller(w: &mut Working, id: ObjId, data: &Inten
         }
         effect = effect.min(limit - upgraded);
     }
-    if effect <= 0 {
-        return;
-    }
+    // 官方即使无有效 WORK（effect=0）也继续写动作和零量事件；
+    // 能量/归属/范围/封锁及 RCL8 已满额门仍在上方提前拒绝。
     // 官方 upgradeController.js:64：boostedEffect = floor(buildEffect + Σ增量)，
     // 不设上限——RCL8 限额只钳未强化量；_upgraded 也按未强化量累计。
     let boosted = kk_world::types::apply_boost(&boost_incs, effect, i64::MAX);

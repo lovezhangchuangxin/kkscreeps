@@ -4,9 +4,9 @@
 
 ## 当前接手位置
 
-- 更新日期：2026-10-09；普通 Invader 行为与移动记忆恢复已提交 `5c544cf`；持续 NPC 战斗验收已提交 `4a3016e`；Overmind 单房验收已提交 `d4f4403`。最近完整门禁 Rust 1499 passed / 0 failed；最近 release 棘轮 2802 passed / 8 failed / 104 skipped（0 转红，8 例既有豁免）。本批重跑 TooAngel 持续世界六阶段，没有重跑固定世界三 bot。
+- 更新日期：2026-10-09；普通 Invader 行为与移动记忆恢复已提交 `5c544cf`；持续 NPC 战斗验收已提交 `4a3016e`；Overmind 单房验收已提交 `d4f4403`。最近完整门禁 Rust 1502 passed / 0 failed；最近 release 棘轮 2802 passed / 8 failed / 104 skipped（0 转红，8 例既有豁免）。本批重跑 TooAngel 持续世界六阶段，没有重跑固定世界三 bot。
 - 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座、deposit 采集链、observer 限时视野已交付。**M2H.b 19/19 powers 全部接通**。
-- 当前接手：G02.d3 结构/rampart 计划级通行及默认玩家/NPC 寻路已提交 `fd27fbd`；G03 障碍追加后的同源链预演已提交 `3f3d9a7`；障碍摘要的安全模式主人已完成，随本批提交；下一项修复控制器零升级量的动作/事件分歧。逐房通行粒度、摘要增强、完整仲裁替换仍未完成。
+- 当前接手：G02.d3 结构/rampart 计划级通行及默认玩家/NPC 寻路已提交 `fd27fbd`；G03 障碍追加后的同源链预演已提交 `3f3d9a7`；障碍摘要的安全模式主人已提交 `41de432`；控制器零升级量的动作/事件分歧已修复，随本批提交；下一项 G27.a 独立异步后台宿主。逐房通行粒度、摘要增强、完整仲裁替换仍未完成。
 - 本次完成：JSON/KKPV 各 200 tick 持续战斗、100+100 tick 跨进程冷恢复和完整检查点回放；实际位置/hits 证明移动、受伤与恢复，双通道及直跑/续跑世界与 Memory 等值。TooAngel v6 双通道 2000 tick 连跑及 1000+1000 tick 冷恢复六阶段复验通过。
 - 剩余：真实 bot 战斗/多房/长期存活验收；地图生成/raid/stronghold 与 G21 Mod 世界事件；walkTo/Keeper lastMove 按实际 stronghold 消费者接线；G02.d3 逐房/摘要后续、G03 完整仲裁替换与 G27.a。NPC 场景不标 M2B 或 G21 完成。
 - 兼容率 2802/2914≈96.2%（**95% 中间检查点已越过**；99% 目标需 2885）。
@@ -123,7 +123,7 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 - G09 的 owner、massAttack/dismantle/维修/死亡产物，以及私有 rampart 的预检/结算差异，仍按[库存](../architecture/object-store.md)和[耐久](../architecture/object-durability.md)的限制选型；不把四个首片交付标成全领域完成。
 - G02.d3 历史登记的 worker 配置传递、跨房墙环端到端、allowStatic 与声明叠加等增强项，在相关切片开始时复核；安全模式主人摘要为可解释性增强，孵化门槛归 G13。按[移动契约](../architecture/movement.md)与实际测试核验。
 - attackController 的 EFFECT_INVULNERABILITY 预检门（官方 creeps.js:914-919）kk 未接——INVULN 生产者属后续 invader core/NPC 域，落地时须连同 attackController/伤害/拆毁等消费门一起盘点（FORTIFY/SHIELD 批已把结算侧免伤/回收/跳过门备好）。
-- upgradeController 对无 WORK 但有能量的 creep，官方仍发 amount=0 的 EVENT_UPGRADE_CONTROLLER 与 actionLog，kk 提前返回不发（复审登记的既有分歧，暂无套件/bot 触达）。
+- upgradeController 零量动作/事件分歧已修复；RCL8 同轮满额仍拒绝，回归见控制器升级边界测试。
 - 历史登记过 sim 并行冷恢复子进程偶发失败，隔离复跑通过且后续完整门禁通过；若再现须保留失败报告归因，不能把重跑成功当作已修根因。
 - Overmind bot-check 保留基线已有的 1 个 console-error tick；不宣称零错误。keeper/NPC、多 shard 和其余能力门控缺口以最新兼容报告核对，旧批次数字不参与当前决策。
 - 本地检查点的文件大小、单写者及耐久适用范围见[检查点契约](../architecture/checkpoints.md)；存储和真实网络服务不能从 embed 能力直接推导为已完成。
@@ -314,3 +314,9 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 - 基线 `3f3d9a7`，起始工作区干净。新增只读 ctx.args.safeModeOwner，复用正式取消链的有效主人计算；无主/无安全模式/到期为 null，不改变物理对象摘要或通行规则。验证双通道、生物归属、到期边界、候选重试和冷恢复。公共输入变化同步 catalog 身份，无新增保存域。逐房通行与完整仲裁仍待后续。
 
 - 实现复用 Working.active_safe_mode_user，输入所有者与 native/预演/取消同源，补充 creep/powerCreep yielding 注释。双通道覆盖主人/非主人执行者 × 自有/外来占据者 × 两种生物 × 激活/未激活；一拍到期边界、晚期失败缓存重试、活跃时保存后到期冷恢复均通过。无参数完整门禁通过：Rust 1499 passed / 0 failed，Clippy、JS workspace/维护工具与 923 个源码/测试规模通过；JS 格式通过，无 doctest 改动。release CLI 已重建，固定 bot 准备与适配器构建通过；显式 release 兼容棘轮通过：2802 passed / 8 failed / 104 skipped、floor 2802、0 转红/0 转绿（8 例既有豁免）。文档链接 304 个 Markdown / 1952 个本地链接通过；不声明 bot 长测。
+
+## 2026-10-09 控制器零升级量兼容修复（完成）
+
+- 基线 `41de432`，起始工作区干净。核对固定官方 engine 4.3.0 的 upgradeController.js：有能量且其他门通过时，即便 WORK 效果为 0，仍写 actionLog 与 amount=0/energySpent=0 事件；RCL8 满额仍提前拒绝。补原生结算回归，验证不付费/不涨 GCL、限额与其他拒绝门保留。不扩大 G15 Mod 策略范围，无新增保存域。
+
+- 删除零量提前返回，保留原生所有拒绝门；新增无 WORK/损毁 WORK × RCL1/8、能量/归属/距离/等级/封锁/孵化拒绝和 RCL8 同轮先耗尽限额回归，三组定向测试通过。首版测试夹具编译失误已修正；红测真实复现原来的零量事件缺失，孵化孤儿清理导致的夹具查询也已按可选对象修正。无参数完整门禁通过：Rust 1502 passed / 0 failed，Clippy、JS workspace/维护工具与 924 个源码/测试规模通过。release CLI 已重建；固定 bot 准备、适配器构建与显式 release 兼容棘轮通过：2802 passed / 8 failed / 104 skipped、floor 2802、0 转红/0 转绿（8 例既有豁免）。文档链接 304 个 Markdown / 1953 个本地链接通过，无 doctest 改动。无新 SDK 示例需求，不新建交付报告；本片没有运行 bot 长测。
