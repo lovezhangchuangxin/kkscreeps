@@ -4,9 +4,9 @@
 
 ## 当前接手位置
 
-- 更新日期：2026-10-09；普通 Invader 行为与移动记忆恢复已提交 `5c544cf`；持续 NPC 战斗验收已提交 `4a3016e`；Overmind 单房验收已提交 `d4f4403`。最近完整门禁 Rust 1497 passed / 0 failed；最近 release 棘轮 2802 passed / 8 failed / 104 skipped（0 转红，8 例既有豁免）。本批重跑 TooAngel 持续世界六阶段，没有重跑固定世界三 bot。
+- 更新日期：2026-10-09；普通 Invader 行为与移动记忆恢复已提交 `5c544cf`；持续 NPC 战斗验收已提交 `4a3016e`；Overmind 单房验收已提交 `d4f4403`。最近完整门禁 Rust 1499 passed / 0 failed；最近 release 棘轮 2802 passed / 8 failed / 104 skipped（0 转红，8 例既有豁免）。本批重跑 TooAngel 持续世界六阶段，没有重跑固定世界三 bot。
 - 主线：M2B 默认玩法兼容；M2E lab/boost、M2F factory、M2G nuke、M2H.a power 基座、deposit 采集链、observer 限时视野已交付。**M2H.b 19/19 powers 全部接通**。
-- 当前接手：G02.d3 结构/rampart 计划级通行及默认玩家/NPC 寻路已提交 `fd27fbd`；G03 障碍追加后的同源链预演已完成并待本批提交；下一项补齐障碍摘要的安全模式主人。逐房通行粒度、摘要增强、完整仲裁替换仍未完成。
+- 当前接手：G02.d3 结构/rampart 计划级通行及默认玩家/NPC 寻路已提交 `fd27fbd`；G03 障碍追加后的同源链预演已提交 `3f3d9a7`；障碍摘要的安全模式主人已完成，随本批提交；下一项修复控制器零升级量的动作/事件分歧。逐房通行粒度、摘要增强、完整仲裁替换仍未完成。
 - 本次完成：JSON/KKPV 各 200 tick 持续战斗、100+100 tick 跨进程冷恢复和完整检查点回放；实际位置/hits 证明移动、受伤与恢复，双通道及直跑/续跑世界与 Memory 等值。TooAngel v6 双通道 2000 tick 连跑及 1000+1000 tick 冷恢复六阶段复验通过。
 - 剩余：真实 bot 战斗/多房/长期存活验收；地图生成/raid/stronghold 与 G21 Mod 世界事件；walkTo/Keeper lastMove 按实际 stronghold 消费者接线；G02.d3 逐房/摘要后续、G03 完整仲裁替换与 G27.a。NPC 场景不标 M2B 或 G21 完成。
 - 兼容率 2802/2914≈96.2%（**95% 中间检查点已越过**；99% 目标需 2885）。
@@ -46,7 +46,7 @@
 | 编号 | 任务 | 状态 | 已完成与剩余范围 / 入口 |
 |---|---|---|---|
 | G01 | 移动竞争优先级 | 已完成 | [竞争排序](../architecture/movement.md#竞争排序)；排序能力不等于完整仲裁 |
-| G02 | 移动准入 | 部分完成 | .a 准入、.b 障碍追加、.c 请求预检、.d1 静态放行、.d2 双端玩家门、.d3 墙与静态对象/rampart 通行声明已贯通；剩余逐房粒度及摘要增强；[移动契约](../architecture/movement.md) |
+| G02 | 移动准入 | 部分完成 | .a 准入、.b 障碍追加、.c 请求预检、.d1 静态放行、.d2 双端玩家门、.d3 墙与静态对象/rampart 通行声明已贯通；安全模式主人摘要已接通；剩余逐房粒度及其余摘要增强；[移动契约](../architecture/movement.md) |
 | G03 | 完整房间仲裁 | 部分完成 | .a 请求视野/链预演与 pull 登记已开放；障碍槽第二预演已开放；剩余完整仲裁替换；[移动契约](../architecture/movement.md) |
 | G04 | 移动代价与效果 | 部分完成 | .a 代价槽已交付；剩余疲劳恢复、重量评分要素；[移动契约](../architecture/movement.md) |
 | G05 | 作者 CLI | 已完成 | mod init/test；[本地模拟](../architecture/local-simulation.md#作者包模板)，增强按实际痛点另拆 |
@@ -308,3 +308,9 @@ G28 的协议设计和只读原型可提前；玩法写入必须先有输入/提
 - 公共使用说明/既有障碍样例 README 与移动契约已更新，catalog revision v21。无新增保存域/版本；准入/追加候选仍为瞬态，冷恢复只保存真实世界与已提交 Mod state/Memory。G03 完整仲裁替换仍未完成。
 
 - release CLI 重建、固定 bot 准备、适配器构建与显式 release 棘轮通过：2802 passed / 8 failed / 104 skipped，floor 2802，0 转红/0 转绿（8 例既有豁免）；JS 格式检查通过，无 doctest 改动。去除误重复的静态通行正文后，文档链接复验通过：304 个 Markdown / 1951 个本地链接。未重跑 bot 长测。实现/测试/使用说明/兼容报告随本批提交；下一项安全模式主人摘要，G02/G03 父项仍部分完成。
+
+## 2026-10-09 G02 障碍摘要安全模式主人（完成）
+
+- 基线 `3f3d9a7`，起始工作区干净。新增只读 ctx.args.safeModeOwner，复用正式取消链的有效主人计算；无主/无安全模式/到期为 null，不改变物理对象摘要或通行规则。验证双通道、生物归属、到期边界、候选重试和冷恢复。公共输入变化同步 catalog 身份，无新增保存域。逐房通行与完整仲裁仍待后续。
+
+- 实现复用 Working.active_safe_mode_user，输入所有者与 native/预演/取消同源，补充 creep/powerCreep yielding 注释。双通道覆盖主人/非主人执行者 × 自有/外来占据者 × 两种生物 × 激活/未激活；一拍到期边界、晚期失败缓存重试、活跃时保存后到期冷恢复均通过。无参数完整门禁通过：Rust 1499 passed / 0 failed，Clippy、JS workspace/维护工具与 923 个源码/测试规模通过；JS 格式通过，无 doctest 改动。release CLI 已重建，固定 bot 准备与适配器构建通过；显式 release 兼容棘轮通过：2802 passed / 8 failed / 104 skipped、floor 2802、0 转红/0 转绿（8 例既有豁免）。文档链接 304 个 Markdown / 1952 个本地链接通过；不声明 bot 长测。

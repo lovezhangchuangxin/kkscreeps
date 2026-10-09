@@ -654,7 +654,7 @@ pub fn link() -> Contribution {
             namespace: "builtin".into(),
             api_version: 1,
             revision:
-                "link-creep-store-move-combat-build-incoming-contest-admission-obstacle-precheck-pull-cost-ranges-static-precheck-movegate-terrain-quota-v18-modincoming-v19-staticobjects-v20-obstaclepreview-v21"
+                "link-creep-store-move-combat-build-incoming-contest-admission-obstacle-precheck-pull-cost-ranges-static-precheck-movegate-terrain-quota-v18-modincoming-v19-staticobjects-v20-obstaclepreview-v21-safemode-summary-v22"
                     .into(),
             code_digest: {
                 let mut hash = Sha256::new();

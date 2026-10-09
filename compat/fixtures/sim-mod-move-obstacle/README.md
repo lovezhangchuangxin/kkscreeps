@@ -29,3 +29,5 @@ api.handlers.after('builtin:room.moveObstacle', { id: 'audit' }, (ctx) => {
 ```
 
 回归见[障碍后链预演](../../../crates/kk-runtime/tests/mod_chain_tests/obstacle_preview.rs)，本目录原有场景断言保留。
+
+`ctx.args.safeModeOwner` 给出当前结算时点有效的安全模式主人，未激活、到期或无主为 null。可与 movers 的 owner 和目的格生物摘要一起解释 nativeBlocked；不改变阻挡能力或通行规则。主人移动时可忽略其他归属的未让位 creep/powerCreep，自有生物仍阻挡。参见[双通道归属与到期回归](../../../crates/kk-runtime/tests/mod_chain_tests/safe_mode_summary.rs)。

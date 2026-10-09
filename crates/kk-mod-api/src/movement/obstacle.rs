@@ -18,7 +18,7 @@ pub struct ObstacleObjectInfo {
     pub is_public: bool,
     /// 工地专用：在建结构类型；其余对象为 null。
     pub structure_type: Option<String>,
-    /// creep 专用：胜者且准入终值为真（准入被拒的胜者必被链内取消，
+    /// creep / powerCreep 专用：胜者且准入终值为真（准入被拒的胜者必被链内取消，
     /// 让位预期不成立）。
     pub yielding: bool,
 }
@@ -43,6 +43,9 @@ pub struct ObstacleMoverInfo {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MoveObstacleInput {
+    /// 当前结算时点有效的安全模式主人；未激活、已到期或无主时为 null。
+    /// 与 native 初判、链预演及正式取消链读取同一个主人。
+    pub safe_mode_owner: Option<String>,
     /// 按对象 ID 升序；含全部胜者（准入终值已定，被拒者仍在列）。
     pub movers: Vec<ObstacleMoverInfo>,
 }

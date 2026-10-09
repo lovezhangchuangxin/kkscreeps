@@ -204,7 +204,7 @@ fn obstacle_preview_failure_retry_commits_once_and_cold_restore_keeps_observatio
                 r#"
             api.handlers.before('builtin:room.moveObstacle',{id:'preview'},ctx=>{
                 const first=ctx.args.movers.find(m=>m.targetX<20);ctx.obstacle.block(first.id);
-                ctx.state={calls:(ctx.state?.calls||0)+1,ids:ctx.obstacle.evaluate()};
+                ctx.state={calls:(ctx.state?.calls||0)+1,ids:ctx.obstacle.evaluate(),owner:ctx.args.safeModeOwner};
             });
         "#,
             ),
@@ -213,7 +213,7 @@ fn obstacle_preview_failure_retry_commits_once_and_cold_restore_keeps_observatio
         let mut e = EmbedEngine::new();
         e.set_kkpv_channel(binary);
         e.create_shard_with_mods(
-            &json!({"players":["p1"],"rooms":[{"name":"W1N1","owner":"p1","rcl":6}]}),
+            &json!({"players":["p1"],"rooms":[{"name":"W1N1","owner":"p1","rcl":6,"safeMode":1}]}),
             &mods,
             RegisterOptions::default(),
         )?;
@@ -227,7 +227,10 @@ fn obstacle_preview_failure_retry_commits_once_and_cold_restore_keeps_observatio
         assert_eq!(e.world_snapshot(), before);
         assert_eq!(e.engine_mod_state("preview"), Value::Null);
         e.run_player("p1", "throw Error('must use cached input')")?;
-        assert_eq!(e.engine_mod_state("preview"), json!({"calls":1,"ids":[c]}));
+        assert_eq!(
+            e.engine_mod_state("preview"),
+            json!({"calls":1,"ids":[c],"owner":"p1"})
+        );
         assert_eq!(pos_in(&e, "W1N1", &a), (10, 10));
         assert_eq!(pos_in(&e, "W1N1", &b), (10, 11));
         let saved = e.checkpoint(Value::Null)?;
@@ -246,6 +249,7 @@ fn obstacle_preview_failure_retry_commits_once_and_cold_restore_keeps_observatio
             restored.player_state("p1").unwrap().raw_memory
         );
         assert_eq!(restored.engine_mod_state("preview")["calls"], 2);
+        assert_eq!(restored.engine_mod_state("preview")["owner"], Value::Null);
     }
     Ok(())
 }

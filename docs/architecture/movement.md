@@ -118,7 +118,7 @@ export default function register(api) {
 - `api.decline(code)` 丢弃整条链全部 JS 放行、显式否决和暂存 namespace state，再按登记快照恢复原生过滤；其他移动槽仍正常运行。这是整房回退边界。
 - 域外 ID、非字符串、跨槽或异步过期调用走能力故障，不能被 catch + decline 掩盖；整轮不发布，按[Mod 执行恢复](mod-execution.md)重建 realm。
 - 晚期写回失败重用玩家结果缓存，重新决策后世界与 state 恰一次提交；停用包重装后按有效链执行，全部贡献摘除则恢复 native 登记。
-- 新集合是 tick 内瞬态，无新持久写入域；检查点只保存已提交世界与 Mod state。内建槽现为 21（结构受击槽入列，G09.c），catalog revision 随本族演进（G02.d1 自 v14 升 v15、G02.d2 升 v16、G02.d3 墙片升 v17、静态对象后续升 v20、障碍后预演升 **v21** 现行），覆盖输入/能力语义变更；旧计划身份的检查点按已有身份门拒绝，没有自动迁移。
+- 新集合是 tick 内瞬态，无新持久写入域；检查点只保存已提交世界与 Mod state。内建槽现为 21（结构受击槽入列，G09.c），catalog revision 随本族演进（G02.d1 自 v14 升 v15、G02.d2 升 v16、G02.d3 墙片升 v17、静态对象后续升 v20、障碍后预演升 v21、安全模式主人摘要升 **v22** 现行），覆盖输入/能力语义变更；旧计划身份的检查点按已有身份门拒绝，没有自动迁移。
 
 ### 请求预检：验收与后续
 
@@ -335,6 +335,7 @@ G03.a 的[场景夹具](../../compat/fixtures/sim-mod-move-arbitration/README.md
 
 | 字段 | 含义 |
 |---|---|
+| `safeModeOwner` | 当前结算时点有效的安全模式主人；未激活、到期或无主时为 null。与 native 初判、链预演和正式取消链同源 |
 | `movers[].id/owner` | 胜者对象 ID 与归属 |
 | `movers[].targetX/targetY` | 获准的目的格 |
 | `movers[].terrainWall` | 目的格地形为墙（无路时 native 阻挡） |
@@ -342,7 +343,7 @@ G03.a 的[场景夹具](../../compat/fixtures/sim-mod-move-arbitration/README.md
 | `movers[].objects[]` | 目的格对象摘要：`id/kind/owner/isPublic/structureType/yielding` |
 | `movers[].objects[].kind` | `creep` / structureType / `constructionSite` / 类型名；Mod 对象为空串 |
 | `movers[].objects[].structureType` | 工地在建结构类型；其余对象为 null |
-| `movers[].objects[].yielding` | creep 让位预期成立：胜者且准入终值为真。准入被拒的胜者必被链内取消，不标让位 |
+| `movers[].objects[].yielding` | creep / powerCreep 让位预期成立：胜者且准入终值为真。准入被拒的胜者必被链内取消，不标让位 |
 | `movers[].nativeBlocked` | 预填时点（全部胜者未取消）的 native 初判；链内让位取消只会收紧 |
 
 `ctx.target.fields` 恒为 null（房间级槽没有对象目标）；本槽不开放移动请求、准入、竞争优先级、资源或对象能力。`ctx.obstacle` 是槽专属能力（不可枚举、只在处理器同步期有效）：
@@ -389,7 +390,7 @@ native 中心为无操作（无追加阻挡）；多包平手关系按[handler �
 - `return api.decline(code)` 正常拒绝整条障碍链：丢弃全部追加与暂存 namespace state，取消链只按 native 判定；此前竞争/准入槽的结果不受影响。
 - 障碍候选不直接改写世界。输入外 ID、非字符串参数、越权能力（竞争优先级/准入/移动请求/资源）的故障不能被 catch + decline 掩盖；错误/预算超限使整轮候选失败，沿[Mod 执行恢复](mod-execution.md)销毁并重建 realm。
 - 晚期写回失败经玩家缓存重试整轮：追加结果与 namespace state 恰一次提交。停用出错的 replace 后回退 native 障碍判定，健康钩子继续组合。
-- 追加集是 tick 内瞬态，不进入检查点；检查点只保存已提交世界与 Mod state。该批内建槽增至 17（现 18，见[JS 移动预检](#请求预检)），新增冻结描述和 native 绑定改变 PlanHash；旧计划身份的检查点不会被当作同一玩法静默加载。
+- 追加集是 tick 内瞬态，不进入检查点；检查点只保存已提交世界与 Mod state。该批内建槽增至 17（现 21，结构受击槽入列），新增冻结描述和 native 绑定改变 PlanHash；旧计划身份的检查点不会被当作同一玩法静默加载。
 
 ### 障碍追加：验收与剩余范围
 
@@ -409,7 +410,7 @@ api.handlers.after('builtin:room.moveObstacle', { id: 'audit' }, (ctx) => {
 
 无新增持久域；瞬态候选不保存，只保存已提交世界/Mod state。内建目录 revision v21 记录能力语义变化，旧计划检查点按身份门拒绝。[双通道回归](../../crates/kk-runtime/tests/mod_chain_tests/obstacle_preview.rs) 包含多次调用、两包组合、四类拓扑、静态/动态/准入、安全模式、拒绝/能力过期、失败重试与冷恢复。
 
-本槽保留单向追加；静态地形/结构放行已由[JS 移动预检](#请求预检)贯通，`nativeBlocked` 在选胜后消费该放行及动态占格初判。本槽的 block 仍可否决放行者。当前未开放：摘要中的安全模式主人（creep 阻挡的安全模式分支现只能依赖 `nativeBlocked` 初判，后续切片可附带以增强可解释性）、完整移动执行效果。整房请求视野经准入槽 `ctx.args.requests` 提供。
+本槽保留单向追加；静态地形/结构放行已由[JS 移动预检](#请求预检)贯通，`nativeBlocked` 在选胜后消费该放行及动态占格初判。本槽的 block 仍可否决放行者。当前未开放完整移动执行效果。安全模式主人摘要已开放为 `ctx.args.safeModeOwner`：安全模式有效时，主人执行者可忽略其他归属的未让位 creep/powerCreep，自己归属的占格仍阻挡；非主人执行者仍按占格阻挡。摘要不提供修改安全模式或放行能力。整房请求视野经准入槽 `ctx.args.requests` 提供。
 
 ## 移动代价
 
@@ -444,3 +445,5 @@ api.handlers.after('builtin:room.moveObstacle', { id: 'audit' }, (ctx) => {
 ### 移动代价：验收
 
 引擎测试（输入完整性含原生要素与链首拉者、覆盖替换与缺项回退、域与值域校验）与运行时测试（沼泽原生停走 vs 策略续走的原生对照、decline 回退、replace×after 组合、能力门、故障停用回退）见 `settle/move_cost/tests.rs` 与 `mod_chain_tests/move_cost.rs`；swampwalker（沼泽压平原当量）/bog（全量翻倍）两独立包 + 原生对照 + 组合的四场景 × JSON/KKPV 双通道与检查点冷恢复见 [sim-mod-move-cost](../../compat/fixtures/sim-mod-move-cost/README.md)。证据见[交付记录](../research/notes/g04a-move-cost-2026-10-06.md)。
+
+安全模式摘要回归见[归属与到期边界](../../crates/kk-runtime/tests/mod_chain_tests/safe_mode_summary.rs)，双通道对照 native 初判、预演和真实移动；既有障碍预演冷恢复/失败重试同时验证摘要。输入是 tick 内瞬态，不新增检查点域；catalog revision v21→v22，旧计划按已有身份门拒绝。

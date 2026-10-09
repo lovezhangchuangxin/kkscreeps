@@ -480,6 +480,9 @@ impl Movement {
                 native_blocked,
             });
         }
-        kk_mod_api::movement::obstacle::MoveObstacleInput { movers }
+        kk_mod_api::movement::obstacle::MoveObstacleInput {
+            safe_mode_owner: safe_mode_user.map(str::to_string),
+            movers,
+        }
     }
 }
