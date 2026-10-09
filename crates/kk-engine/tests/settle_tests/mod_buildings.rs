@@ -101,6 +101,7 @@ fn building_plane_with(
         .unwrap(),
     );
     kk_engine::settle::Plane {
+        world_span: kk_engine::settle::Plane::UNWRAPPED_SPAN,
         links: kk_mod_api::builtin::LinkRules::from_plan(plan.rules()).unwrap(),
         stores: kk_mod_api::builtin::StoreRules::from_plan(plan.rules()).unwrap(),
         combat: kk_mod_api::builtin::CombatRanges::from_plan(plan.rules()).unwrap(),

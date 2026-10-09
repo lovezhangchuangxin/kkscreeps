@@ -258,6 +258,9 @@ pub fn creep_tick_prepare(w: &mut Working, id: ObjId) -> Result<(), SettleError>
             if let Some(creep) = w.creep_mut(id) {
                 creep.age_time = born_at;
             }
+            // 官方在寿命补设之前求 portal 门（creeps/tick.js:80 先于
+            // :88-91），首个活跃拍豁免传送——登记进本拍 fresh 集合。
+            w.fresh_age.insert(id);
         }
         if let Some(age_time) = w.creep(id).map(|c| c.age_time)
             && w.time >= age_time.saturating_sub(1)

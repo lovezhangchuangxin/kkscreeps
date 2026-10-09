@@ -109,6 +109,7 @@ fn completion_writes_declared_field_defaults() {
     );
     let mut f = Fixture::new(1, terrain_with(&[]));
     let plane = kk_engine::settle::Plane {
+        world_span: kk_engine::settle::Plane::UNWRAPPED_SPAN,
         links: kk_mod_api::builtin::LinkRules::from_plan(plan.rules()).unwrap(),
         stores: kk_mod_api::builtin::StoreRules::from_plan(plan.rules()).unwrap(),
         combat: kk_mod_api::builtin::CombatRanges::from_plan(plan.rules()).unwrap(),

@@ -403,7 +403,7 @@ fn schedule_survives_cold_restore_and_drives_spawn() -> anyhow::Result<()> {
     for binary in [false, true] {
         let e = build(binary)?;
         let saved = e.checkpoint(Value::Null)?;
-        assert_eq!(saved["checkpoint_format_version"], json!(8));
+        assert_eq!(saved["checkpoint_format_version"], json!(9));
         assert!(
             saved["engine"]["world"]["rooms"][HIGHWAY]["power_bank_time"]
                 .as_u64()

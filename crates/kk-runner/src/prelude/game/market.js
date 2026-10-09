@@ -86,18 +86,20 @@
       return room && room.terminal && room.terminal.my ? gw.rawData(room.terminal.id) : null;
     }
     const market = {
-      // 官方 :31-34：calcRoomsDistance(continuous) + calcTerminalEnergyCost
-      //（utils.js:644-659）=ceil(amount×(1−e^(−range/30)))。**不环绕**：
-      // 官方 MMO 经 getWorldSize 环绕取 min(size−d,d)；我方单机世界 plain
-      // Chebyshev（与 Rust settle/market.rs calc_rooms_distance 同判登记，
-      // liveWorldSize 能力键 false）。畸形房名：gw.roomNameToXY 是官方
-      // utils.js:374-390 的宽松逐字移植——畸形名产 NaN 不抛错 → 距离/成本
-      // NaN（number 返回，两侧同函数同形）
+      // 官方 :31-34：calcRoomsDistance(continuous=true) + calcTerminalEnergyCost
+      //（utils.js:644-659）=ceil(amount×(1−e^(−range/30)))。连续形经
+      // getWorldSize() 逐轴环绕 min(size−d,d)（map.js 的 computeWorldSpan
+      // 同源——当前房集活算跨度，liveWorldSize 能力键已开放）。畸形房名：
+      // gw.roomNameToXY 是官方 utils.js:374-390 的宽松逐字移植——畸形名产
+      // NaN 不抛错 → 距离/成本 NaN（number 返回，两侧同函数同形）
       calcTransactionCost(amount, roomName1, roomName2) {
         const xy1 = gw.roomNameToXY(roomName1);
         const xy2 = gw.roomNameToXY(roomName2);
-        const dx = Math.abs(xy2[0] - xy1[0]);
-        const dy = Math.abs(xy2[1] - xy1[1]);
+        const size = gw.computeWorldSpan();
+        let dx = Math.abs(xy2[0] - xy1[0]);
+        let dy = Math.abs(xy2[1] - xy1[1]);
+        dx = Math.min(size - dx, dx);
+        dy = Math.min(size - dy, dy);
         return Math.ceil(amount * (1 - Math.exp(-Math.max(dx, dy) / 30)));
       },
       // 官方 :36-39：_getOrders 快照 + lodash.filter（filter 缺省=全量）

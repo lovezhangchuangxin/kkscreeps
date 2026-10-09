@@ -55,6 +55,7 @@ impl TwoRooms {
         let state =
             kk_engine::TickState::new(std::mem::take(&mut self.players), self.world.next_obj_id());
         let plane = kk_engine::settle::Plane {
+            world_span: kk_engine::settle::Plane::UNWRAPPED_SPAN,
             buildings: Default::default(),
             links: kk_world::place::builtin_link_rules(),
             stores: kk_world::place::builtin_store_rules(),
@@ -72,7 +73,11 @@ impl TwoRooms {
         for name in ["W1N1", "W2N1"] {
             let mut room = self.world.room(name).unwrap().clone();
             room.name = name.into();
-            let (settled, _events, mut pending) = settle_room(
+            let kk_engine::settle::SettledRoom {
+                room: settled,
+                inter_room: mut pending,
+                ..
+            } = settle_room(
                 room,
                 self.world.time(),
                 1_700_000_000_000,
@@ -208,13 +213,18 @@ fn inter_room_unregistered_target_keeps_creep() {
     let state = kk_engine::TickState::new(std::mem::take(&mut players), world.next_obj_id());
     let mut room = world.room("W1N1").unwrap().clone();
     room.name = "W1N1".into();
-    let (settled, _events, moves) = settle_room(
+    let kk_engine::settle::SettledRoom {
+        room: settled,
+        inter_room: moves,
+        ..
+    } = settle_room(
         room,
         world.time(),
         1_700_000_000_000,
         &state,
         &IntentBatch::default(),
         &kk_engine::settle::Plane {
+            world_span: kk_engine::settle::Plane::UNWRAPPED_SPAN,
             buildings: Default::default(),
             links: kk_world::place::builtin_link_rules(),
             stores: kk_world::place::builtin_store_rules(),

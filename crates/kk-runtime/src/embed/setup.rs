@@ -66,6 +66,19 @@ fn room_setups(spec: &Value) -> anyhow::Result<Vec<RoomSetup<'_>>> {
         {
             anyhow::bail!("RoomSpec {name}: rcl 非法（需 0..=8 整数）: {value}");
         }
+        // 房间公共状态种子：四值枚举（适配器契约 RoomStatusSpec）；时间戳
+        // 与官方 vanilla 适配同款为「未来 1 小时墙钟毫秒」——套件断言
+        // timestamp 为正数；到期轮转（cron 级）不在本域。
+        if let Some(status) = room.get("status") {
+            let status = status.as_str().unwrap_or("");
+            if status != "normal"
+                && kk_world::domain::room_status::RoomStatusKind::parse(status).is_err()
+            {
+                anyhow::bail!(
+                    "RoomSpec {name}: status 非法（需 normal/novice/respawn/closed）: {status}"
+                );
+            }
+        }
         let mut terrain = match room.get("terrain") {
             Some(value) => {
                 Terrain::from_codes(&terrain_codes_from_json(value)?).map_err(anyhow::Error::msg)?
@@ -525,6 +538,24 @@ impl EmbedEngine {
                     let name = setup.name;
                     let room = setup.spec;
                     world.register_room(name, setup.terrain)?;
+                    // 房间公共状态种子先于控制器装配落位（正常房跳过写入）。
+                    if let Some(status) = room.get("status").and_then(Value::as_str)
+                        && let Ok(kind) =
+                            kk_world::domain::room_status::RoomStatusKind::parse(status)
+                    {
+                        let until = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_millis() as u64)
+                            .unwrap_or(0)
+                            + 3_600_000;
+                        world.set_room_status(
+                            name,
+                            Some(kk_world::domain::room_status::RoomStatus {
+                                status: kind,
+                                timestamp: until,
+                            }),
+                        )?;
+                    }
                     let has_controller = room
                         .get("controller")
                         .and_then(Value::as_bool)

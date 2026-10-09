@@ -10,7 +10,7 @@ use std::rc::Rc;
 use super::*;
 use kk_engine::intent::IntentBatch;
 use kk_engine::settle::contrib::{ContributionDispatch, ExtHandler, ExtSimple};
-use kk_engine::settle::{Engine, Plane, TickState, builtin_plan, settle_room};
+use kk_engine::settle::{Engine, Plane, SettledRoom, TickState, builtin_plan, settle_room};
 use kk_mod_api::builtin;
 use kk_mod_api::{
     ArgumentConversion, Contribution, FieldDefault, FieldDescriptor, FreezeOptions,
@@ -226,6 +226,7 @@ fn settle_quiet(
     let mut room = f.world.room("W1N1").unwrap().clone();
     room.name = "W1N1".into();
     let plane = Plane {
+        world_span: kk_engine::settle::Plane::UNWRAPPED_SPAN,
         links: kk_world::place::builtin_link_rules(),
         stores: kk_world::place::builtin_store_rules(),
         combat: kk_world::place::builtin_combat_ranges(),
@@ -247,7 +248,7 @@ fn settle_quiet(
         &plane,
     );
     let result = settled.as_ref().map(|_| ()).map_err(|e| e.0.clone());
-    if let Ok((room, _events, _moves)) = settled {
+    if let Ok(SettledRoom { room, .. }) = settled {
         let (players, next, _) = state.into_parts().unwrap();
         f.players = players;
         let name = room.name.clone();

@@ -99,9 +99,10 @@ pub(super) fn terminal_send_e2e_impl() -> anyhow::Result<()> {
     let v = &run.expr["value"];
     assert_eq!(v[0], json!(-11), "冷却期 TIRED");
     assert_eq!(v[1], json!(500), "H 1000−500");
-    let cost = (500.0_f64 * (1.0 - (-4.0_f64 / 30.0).exp())).ceil() as i64;
-    assert_eq!(cost, 63, "公式锚 range=4");
-    assert_eq!(v[2], json!(100000 - 63), "能量扣成本");
+    // 距离环绕：房集 W1N1+W5N1 跨度 7（E0 锚点），直线 dx=4 → min(7−4,4)=3。
+    let cost = (500.0_f64 * (1.0 - (-3.0_f64 / 30.0).exp())).ceil() as i64;
+    assert_eq!(cost, 48, "公式锚 环绕 range=3");
+    assert_eq!(v[2], json!(100000 - 48), "能量扣成本");
     // 冷却账：run1 执行于 t=1、其结算段挂 cooldownTime=1+10=11 并推进 t=2；
     // tick(1) → t=3；run2 于 t=3 读 11−3=8（embed 侧 runPlayer=执行+结算+
     // 推进一拍——与 suite 的 tick 语义差一拍，实测对齐）

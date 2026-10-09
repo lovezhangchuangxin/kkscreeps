@@ -163,6 +163,15 @@ impl World {
         for (name, state) in &self.rooms {
             let mut entry = serde_json::Map::new();
             entry.insert("name".into(), Value::String(name.clone()));
+            // 与 JSON 通道 world_json_impl 同源：房间公共状态种子随房导出
+            //（公共地图数据不按视野裁切），normal 缺省由玩家面兜底。
+            if let Some(status) = &state.room_status {
+                entry.insert(
+                    "status".into(),
+                    Value::String(status.status.as_str().into()),
+                );
+                entry.insert("statusTimestamp".into(), Value::from(status.timestamp));
+            }
             if visible.contains(name) {
                 let (available, capacity) = room_energy(state, Some(user));
                 entry.insert("energyAvailable".into(), Value::from(available));

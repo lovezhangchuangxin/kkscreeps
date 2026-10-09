@@ -43,7 +43,7 @@ node compat/scripts/ratchet.mjs
 
 ### 如何判断回归
 
-[ratchet.json](reports/ratchet.json) 指定通过数下限和总用例数。[kkscreeps.json](reports/kkscreeps.json) 是最近入库的机器报告，工作区报告在运行后会被覆盖。当前验证为 **2844 passed / 8 failed / 62 skipped**，共 2914 例（≈97.5%）；通过数地板已升至 2844（invaderCore 生命周期首片 +9、stronghold 布防首片 +5、raid 调度首片 +21、powerBank 域批 +7 转绿）。19 个 power 全部接通（OPERATE_OBSERVER 收口）；deposit 采集/冷却/寿命链、observer 限时视野、keeper lair 倒计时/刷怪、普通 Invader 追击/逃离/治疗/路径建筑改向/退场与远程攻击、Source Keeper 巡守/战斗与 invaderCore 倒计时/孵化/坍塌/预定生命周期、stronghold 布防部署（五套 bunker 布局）、raid 生成器（资格门/出口资格/官方组合/阈值重掷）、powerBank 生成与消费者（反射/衰变/废墟/泼洒）已交付；地图生成仍未实现。门禁要求：
+[ratchet.json](reports/ratchet.json) 指定通过数下限和总用例数。[kkscreeps.json](reports/kkscreeps.json) 是最近入库的机器报告，工作区报告在运行后会被覆盖。当前验证为 **2864 passed / 8 failed / 42 skipped**，共 2914 例（≈98.3%）；通过数地板已升至 2864（raid 调度首片 +21、powerBank 域批 +7、边缘环绕+核弹簇 +27 转绿：portal 传送/衰变/跨 shard 目的地、房间状态 getRoomStatus、worldSize 活算与连续距离环绕、launchNuke novice/respawn 门、核爆中心 portal 存活）。19 个 power 全部接通（OPERATE_OBSERVER 收口）；deposit 采集/冷却/寿命链、observer 限时视野、keeper lair 倒计时/刷怪、普通 Invader 追击/逃离/治疗/路径建筑改向/退场与远程攻击、Source Keeper 巡守/战斗与 invaderCore 倒计时/孵化/坍塌/预定生命周期、stronghold 布防部署（五套 bunker 布局）、raid 生成器（资格门/出口资格/官方组合/阈值重掷）、powerBank 生成与消费者（反射/衰变/废墟/泼洒）已交付；地图生成仍未实现。门禁要求：
 
 1. 报告更新时间改变，并且 JSON 可以解析。
 2. 总用例数匹配配置，通过数不低于下限。

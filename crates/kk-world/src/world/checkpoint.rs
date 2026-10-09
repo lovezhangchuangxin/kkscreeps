@@ -25,6 +25,7 @@ pub struct RoomCheckpoint {
     pub invader_memory: BTreeMap<u64, crate::domain::invader_memory::InvaderMemory>,
     pub raid: crate::domain::invader_raid::RaidRoomState,
     pub power_bank_time: Option<u64>,
+    pub room_status: Option<crate::domain::room_status::RoomStatus>,
 }
 
 impl World {
@@ -65,6 +66,7 @@ impl World {
                                 .collect(),
                             raid: room.raid.clone(),
                             power_bank_time: room.power_bank_time,
+                            room_status: room.room_status.clone(),
                             extensions: room
                                 .extensions
                                 .iter()
@@ -137,6 +139,11 @@ impl World {
                 ));
             }
             room.power_bank_time = data.power_bank_time;
+            if let Some(status) = &data.room_status {
+                crate::domain::room_status::validate(status)
+                    .map_err(|e| format!("检查点房间 {name} {e}"))?;
+            }
+            room.room_status = data.room_status;
             World::validate_room_objects([(name.as_str(), &room)], saved.next_obj_id)?;
             for (id, fields) in data.extensions {
                 if !room.objects.contains_key(&ObjId(id)) {

@@ -39,6 +39,7 @@ impl World {
                     crate::domain::keeper::validate(&data)?;
                     crate::domain::invader_core::validate(&data)?;
                     crate::domain::power_bank::validate(&data)?;
+                    crate::domain::portal::validate(&data)?;
                 }
                 if let RoomObject::Storage(storage) = object
                     && !(0..=9_007_199_254_740_991).contains(&storage.store_capacity)

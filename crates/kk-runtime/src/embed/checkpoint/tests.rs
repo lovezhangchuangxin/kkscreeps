@@ -539,7 +539,7 @@ fn legacy_auto_disable_checkpoint_restores_structured_source() -> anyhow::Result
     assert_eq!(engine.last_mod_auto_disable().unwrap().mod_id, "clockwork");
     // 迁移后再保存即当前格式：结构化 mod_id 显式在载荷中。
     let resaved = engine.checkpoint(Value::Null)?;
-    assert_eq!(resaved["checkpoint_format_version"], json!(8));
+    assert_eq!(resaved["checkpoint_format_version"], json!(9));
     assert_eq!(resaved["last_auto_disable"]["mod_id"], json!("clockwork"));
     // v2 载荷内来源不一致仍拒（解码端一致性校验，非迁移修补）。
     let mut invalid = resaved.clone();
@@ -565,7 +565,7 @@ fn format_version_routing_and_migration_failure_keep_the_old_shard() -> anyhow::
     run(&mut engine, 2)?;
     let saved = engine.checkpoint(Value::Null)?;
 
-    for version in [0u64, 9] {
+    for version in [0u64, 10] {
         let mut bad = saved.clone();
         bad["checkpoint_format_version"] = json!(version);
         assert!(
@@ -615,7 +615,7 @@ fn migrate_to_current_normalizes_v1_and_routes_versions() {
         }
     });
     assert_eq!(migrate::migrate_to_current(&mut v1), Ok(1));
-    assert_eq!(v1["checkpoint_format_version"], json!(8));
+    assert_eq!(v1["checkpoint_format_version"], json!(9));
     assert_eq!(v1["last_auto_disable"]["mod_id"], json!("clockwork"));
 
     // 当前版本载荷：skip 语义下不重放任何步骤，载荷逐字保持。
@@ -646,7 +646,7 @@ fn migrate_to_current_normalizes_v1_and_routes_versions() {
         ("字符串", json!("2"), "必须是非负 u32 整数"),
         ("超 u32", json!(4_294_967_298u64), "必须是非负 u32 整数"),
         ("零", json!(0), "格式版本 0 无效"),
-        ("未来", json!(9), "高于当前支持"),
+        ("未来", json!(10), "高于当前支持"),
     ];
     for (label, version, message) in cases {
         let mut payload = json!({"checkpoint_format_version": version, "time": 1});
@@ -668,7 +668,7 @@ fn migrate_v4_to_v5_rejects_missing_keeper_memory_and_upgrades_complete_payloads
             "engine": {"world": {"rooms": {"W1N1": {
                 "snapshot": [], "effects": {}, "extensions": {}, "keeper_memory": memory, "invader_memory": {},
                 "raid": {"invader_goal": null, "harvested_energy": 0, "active": false, "status": "normal"},
-                "power_bank_time": null
+                "power_bank_time": null, "room_status": null
             }}}}
         })
     };
@@ -683,7 +683,7 @@ fn migrate_v4_to_v5_rejects_missing_keeper_memory_and_upgrades_complete_payloads
     );
     let mut complete = payload(json!({}));
     assert_eq!(migrate::migrate_to_current(&mut complete), Ok(4));
-    assert_eq!(complete["checkpoint_format_version"], json!(8));
+    assert_eq!(complete["checkpoint_format_version"], json!(9));
 }
 
 /// 键为数据的映射表（玩家/房间/包/订单/段等）：折叠为首个条目的
@@ -742,7 +742,7 @@ fn migrate_v5_to_v6_rejects_missing_invader_memory_and_preserves_complete_domain
     let mut saved = json!({"checkpoint_format_version":5,"engine":{"world":{"rooms":{"W1N1":{
         "invader_memory":{},
         "raid": {"invader_goal": null, "harvested_energy": 0, "active": false, "status": "normal"},
-        "power_bank_time": null
+        "power_bank_time": null, "room_status": null
     }}}}});
     let mut missing = saved.clone();
     missing["engine"]["world"]["rooms"]["W1N1"]
@@ -754,7 +754,7 @@ fn migrate_v5_to_v6_rejects_missing_invader_memory_and_preserves_complete_domain
         "检查点房间缺少 invader_memory，无法恢复 Invader 移动记忆"
     );
     assert_eq!(migrate::migrate_to_current(&mut saved), Ok(5));
-    assert_eq!(saved["checkpoint_format_version"], 8);
+    assert_eq!(saved["checkpoint_format_version"], 9);
     assert_eq!(
         saved["engine"]["world"]["rooms"]["W1N1"]["invader_memory"],
         json!({})
@@ -769,7 +769,7 @@ fn migrate_v6_to_v7_rejects_missing_raid_and_preserves_complete_domain() {
     let raid =
         json!({"invader_goal": 120000, "harvested_energy": 7, "active": true, "status": "closed"});
     let mut saved = json!({"checkpoint_format_version":6,"engine":{"world":{"rooms":{"W1N1":{
-        "raid": raid, "power_bank_time": null
+        "raid": raid, "power_bank_time": null, "room_status": null
     }}}}});
     let mut missing = saved.clone();
     missing["engine"]["world"]["rooms"]["W1N1"]
@@ -781,10 +781,41 @@ fn migrate_v6_to_v7_rejects_missing_raid_and_preserves_complete_domain() {
         "检查点房间缺少 raid，无法恢复 Invader raid 房间状态"
     );
     assert_eq!(migrate::migrate_to_current(&mut saved), Ok(6));
-    assert_eq!(saved["checkpoint_format_version"], 8);
+    assert_eq!(saved["checkpoint_format_version"], 9);
     assert_eq!(
         saved["engine"]["world"]["rooms"]["W1N1"]["raid"],
         json!({"invader_goal": 120000, "harvested_energy": 7, "active": true, "status": "closed"})
+    );
+}
+
+/// v8→v9：房间缺 room_status 显式拒绝（种子驱动玩家面 getRoomStatus 与
+/// 发射门，不补造 null 默认——种子房静默回到 normal 是不可接受的丢失）；
+/// 完整 v8 载荷升级到当前版本且种子值逐字保留。
+#[test]
+fn migrate_v8_to_v9_rejects_missing_room_status_and_preserves_domain() {
+    let seed = json!({"status": "novice", "timestamp": 1_760_000_000_000u64});
+    let mut saved = json!({"checkpoint_format_version":8,"engine":{"world":{"rooms":{
+        "W1N1": {"power_bank_time": null, "room_status": seed},
+        "W2N1": {"power_bank_time": null, "room_status": null}
+    }}}});
+    let mut missing = saved.clone();
+    missing["engine"]["world"]["rooms"]["W1N1"]
+        .as_object_mut()
+        .unwrap()
+        .remove("room_status");
+    assert_eq!(
+        migrate::migrate_to_current(&mut missing).unwrap_err(),
+        "检查点房间缺少 room_status，无法恢复房间公共状态"
+    );
+    assert_eq!(migrate::migrate_to_current(&mut saved), Ok(8));
+    assert_eq!(saved["checkpoint_format_version"], 9);
+    assert_eq!(
+        saved["engine"]["world"]["rooms"]["W1N1"]["room_status"],
+        seed
+    );
+    assert_eq!(
+        saved["engine"]["world"]["rooms"]["W2N1"]["room_status"],
+        json!(null)
     );
 }
 
@@ -794,8 +825,8 @@ fn migrate_v6_to_v7_rejects_missing_raid_and_preserves_complete_domain() {
 #[test]
 fn migrate_v7_to_v8_rejects_missing_power_bank_time_and_preserves_domain() {
     let mut saved = json!({"checkpoint_format_version":7,"engine":{"world":{"rooms":{
-        "W1N1": {"power_bank_time": 12345},
-        "W2N1": {"power_bank_time": null}
+        "W1N1": {"power_bank_time": 12345, "room_status": null},
+        "W2N1": {"power_bank_time": null, "room_status": null}
     }}}});
     let mut missing = saved.clone();
     missing["engine"]["world"]["rooms"]["W1N1"]
@@ -807,7 +838,7 @@ fn migrate_v7_to_v8_rejects_missing_power_bank_time_and_preserves_domain() {
         "检查点房间缺少 power_bank_time，无法恢复 powerBank 生成调度"
     );
     assert_eq!(migrate::migrate_to_current(&mut saved), Ok(7));
-    assert_eq!(saved["checkpoint_format_version"], 8);
+    assert_eq!(saved["checkpoint_format_version"], 9);
     assert_eq!(
         saved["engine"]["world"]["rooms"]["W1N1"]["power_bank_time"],
         json!(12345)

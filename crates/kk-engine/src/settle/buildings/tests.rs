@@ -92,6 +92,7 @@ fn working_with_gauge() -> (Working, ObjId) {
         0,
         TickState::new(BTreeMap::new(), 100),
         Plane {
+            world_span: Plane::UNWRAPPED_SPAN,
             buildings: std::rc::Rc::new(
                 kk_mod_api::buildings::BuildingCatalog::from_plan(&plan).unwrap(),
             ),

@@ -687,7 +687,9 @@ fn buy_order_lifecycle_sync() {
 
 /// TERMINAL-SEND-012/003 等价链：跨房送达 + 发送方扣资源与能量成本 +
 /// 冷却 + 交易入账。W1N1→W5N1 距离 4（plain Chebyshev），
-/// cost=ceil(1000×(1−e^(−4/30)))=ceil(1000×0.124839)=125。
+/// 距离环绕后 range=3（夹具世界 W1N1+W5N1 的包含跨度 7——官方
+/// calcWorldSize 的 E0 锚点；直线 dx=4 → min(7−4,4)=3）。
+/// cost=ceil(1000×(1−e^(−3/30)))=ceil(95.16)=96。
 #[test]
 fn send_transfers_resource_energy_cost_cooldown_and_transaction() {
     let mut f = MarketFixture::new();
@@ -697,9 +699,9 @@ fn send_transfers_resource_energy_cost_cooldown_and_transaction() {
 
     let fd = f.data_of(from);
     assert_eq!(fd.pointer("/store/H"), Some(&json!(0)), "资源送达扣减");
-    let cost = (1000.0_f64 * (1.0 - (-4.0_f64 / 30.0).exp())).ceil() as i64;
-    assert_eq!(cost, 125, "公式锚：range=4 → 125");
-    assert_eq!(fd.pointer("/store/energy"), Some(&json!(100000 - 125)));
+    let cost = (1000.0_f64 * (1.0 - (-3.0_f64 / 30.0).exp())).ceil() as i64;
+    assert_eq!(cost, 96, "公式锚：环绕 range=3 → 96");
+    assert_eq!(fd.pointer("/store/energy"), Some(&json!(100000 - 96)));
     assert_eq!(
         fd.pointer("/cooldownTime"),
         Some(&json!(10)),

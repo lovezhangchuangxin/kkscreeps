@@ -144,6 +144,7 @@ mod mod_view_tests {
             0,
             TickState::new(std::collections::BTreeMap::new(), 100),
             Plane {
+                world_span: Plane::UNWRAPPED_SPAN,
                 buildings: Default::default(),
                 links: kk_mod_api::builtin::LinkRules::from_plan(plan.rules()).unwrap(),
                 stores: kk_mod_api::builtin::StoreRules::from_plan(plan.rules()).unwrap(),
@@ -215,6 +216,7 @@ mod mod_view_tests {
             0,
             TickState::new(std::collections::BTreeMap::new(), 100),
             Plane {
+                world_span: Plane::UNWRAPPED_SPAN,
                 buildings: Default::default(),
                 links: kk_mod_api::builtin::LinkRules::from_plan(plan.rules()).unwrap(),
                 stores: kk_mod_api::builtin::StoreRules::from_plan(plan.rules()).unwrap(),

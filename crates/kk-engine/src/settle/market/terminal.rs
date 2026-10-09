@@ -111,7 +111,10 @@ pub(super) fn execute_transfer(
     }
     let from_room = rooms[from.0].0.clone();
     let to_room = rooms[to.0].0.clone();
-    let Some(range) = calc_rooms_distance(&from_room, &to_room) else {
+    // 官方 terminal/send.js:19-25：距离取 calcRoomsDistance(continuous=true)
+    //（按当前房集活算跨度逐轴环绕）。
+    let span = super::world_span(rooms.iter().map(|(name, _)| name.as_str()));
+    let Some(range) = calc_rooms_distance(&from_room, &to_room, span) else {
         return false;
     };
     let mut cost = calc_terminal_energy_cost(amount, range);

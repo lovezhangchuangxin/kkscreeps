@@ -580,6 +580,7 @@ fn cascade_removal_clears_chain_on_head_failure() {
 /// 带地形通行声明的贡献平面；其余域取内置默认。
 fn passability_plane(walls: bool) -> kk_engine::settle::Plane {
     kk_engine::settle::Plane {
+        world_span: kk_engine::settle::Plane::UNWRAPPED_SPAN,
         buildings: Default::default(),
         links: kk_world::place::builtin_link_rules(),
         stores: kk_world::place::builtin_store_rules(),

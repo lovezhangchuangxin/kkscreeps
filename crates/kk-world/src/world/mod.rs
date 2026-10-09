@@ -63,6 +63,10 @@ pub struct RoomState {
     /// None 表示生成器尚未为本房调度（首轮 cron 只写入到期时间）。
     /// 完整检查点保存，任意投影不暴露。
     pub power_bank_time: Option<u64>,
+    /// 房间公共状态种子（novice/respawn/closed + 到期墙钟）；None 为
+    /// normal。驱动 `Game.map.getRoomStatus`、launchNuke 的 novice/respawn
+    /// 门与路由规划状态；完整检查点保存。
+    pub room_status: Option<crate::domain::room_status::RoomStatus>,
 }
 
 impl RoomState {
@@ -82,6 +86,7 @@ impl RoomState {
             invader_memory: BTreeMap::new(),
             raid: Default::default(),
             power_bank_time: None,
+            room_status: None,
         }
     }
 
@@ -109,6 +114,7 @@ impl RoomState {
             crate::domain::keeper::validate(&data)?;
             crate::domain::invader_core::validate(&data)?;
             crate::domain::power_bank::validate(&data)?;
+            crate::domain::portal::validate(&data)?;
         }
         let effects = crate::effects::extract(&mut object)?;
         object.set_id(id);
@@ -346,6 +352,25 @@ impl World {
             return Err(format!("房间 {room_name} 不存在"));
         };
         room.power_bank_time = value;
+        self.generation += 1; // 保守失效：可变访问即视为内容可能变更
+        Ok(())
+    }
+
+    /// 写入房间公共状态种子；None 回到 normal。createShard 装配与
+    /// 管理命令在候选编辑内调用；房间不存在或值域非法返回错误。
+    pub fn set_room_status(
+        &mut self,
+        room_name: &str,
+        value: Option<crate::domain::room_status::RoomStatus>,
+    ) -> Result<(), String> {
+        if let Some(status) = &value {
+            crate::domain::room_status::validate(status)
+                .map_err(|e| format!("房间 {room_name} {e}"))?;
+        }
+        let Some(room) = self.rooms.get_mut(room_name) else {
+            return Err(format!("房间 {room_name} 不存在"));
+        };
+        room.room_status = value;
         self.generation += 1; // 保守失效：可变访问即视为内容可能变更
         Ok(())
     }

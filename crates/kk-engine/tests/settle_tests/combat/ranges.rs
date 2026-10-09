@@ -47,6 +47,7 @@ fn combat_of(rules: &[(&str, i64)]) -> kk_mod_api::builtin::CombatRanges {
 /// 以覆盖射程构造贡献平面；其余域保持内置默认（与 Fixture::settle_with 同基线）。
 fn combat_plane(combat: kk_mod_api::builtin::CombatRanges) -> kk_engine::settle::Plane {
     kk_engine::settle::Plane {
+        world_span: kk_engine::settle::Plane::UNWRAPPED_SPAN,
         buildings: Default::default(),
         links: kk_world::place::builtin_link_rules(),
         stores: kk_world::place::builtin_store_rules(),

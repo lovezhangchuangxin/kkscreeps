@@ -86,6 +86,7 @@ fn working_with_contest() -> (Working, movement::Movement) {
         0,
         TickState::new(BTreeMap::new(), 100),
         Plane {
+            world_span: Plane::UNWRAPPED_SPAN,
             buildings: Default::default(),
             links: engine.links,
             stores: engine.stores,

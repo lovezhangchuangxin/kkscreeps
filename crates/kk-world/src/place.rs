@@ -164,6 +164,21 @@ pub fn normalize(kind: &str, spec: &Value, ctx: &PlaceCtx) -> Result<RoomObject,
         // "Defaults to POWER_BANK_DECAY"，vanilla/starter 适配器同款，
         // 官方 cron 创建的对象也恒带 decayTime）。
         "powerBank" => Ok(RoomObject::Generic(normalize_power_bank(spec, x, y, ctx)?)),
+        // portal 放置归一：目的地透传校验形态（同 shard {room,x,y}/跨 shard
+        // {shard,room}，目的房只需合法房名格式）；相对 ticksToDecay 换算为
+        // 绝对 decayTime，缺省为永久门；无主无库存（store/owner 拒绝）。
+        "portal" => {
+            let mut data = generic_fields("structure", spec);
+            data.insert("structureType".into(), json!("portal"));
+            crate::domain::portal::normalize(&mut data, ctx.time)?;
+            crate::domain::portal::validate(&Value::Object(data.clone()))?;
+            Ok(RoomObject::Generic(GenericObj {
+                id: 0,
+                x,
+                y,
+                data: Value::Object(data).to_string(),
+            }))
+        }
         // powerCreep 的放置是「已生成」形态：等级取 powers 等级和，
         // hitsMax/storeCapacity 随等级派生（官方 upgrade 步进），寿命
         // time+5000；同名账号记录由放置层（kk-runtime）从成品 data 建立。

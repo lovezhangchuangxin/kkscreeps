@@ -191,6 +191,7 @@ fn extension_projection_applies_visibility() {
     f.settle_with_plane(
         transfer_batch(l1, l2),
         Plane {
+            world_span: Plane::UNWRAPPED_SPAN,
             links: kk_world::place::builtin_link_rules(),
             stores: kk_world::place::builtin_store_rules(),
             combat: kk_world::place::builtin_combat_ranges(),
@@ -318,6 +319,7 @@ fn extension_write_validates_against_catalog() {
             &state,
             &transfer_batch(a, b),
             &Plane {
+                world_span: kk_engine::settle::Plane::UNWRAPPED_SPAN,
                 buildings: Default::default(),
                 links: kk_world::place::builtin_link_rules(),
                 stores: kk_world::place::builtin_store_rules(),
@@ -499,6 +501,7 @@ fn object_removal_clears_extensions_and_raw_writes_are_rejected() {
     f.settle_with_plane(
         transfer_batch(l1, l2),
         Plane {
+            world_span: Plane::UNWRAPPED_SPAN,
             buildings: Default::default(),
             links: kk_world::place::builtin_link_rules(),
             stores: kk_world::place::builtin_store_rules(),

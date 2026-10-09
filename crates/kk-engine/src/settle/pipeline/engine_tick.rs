@@ -2,8 +2,8 @@
 use super::{stages, txn};
 use crate::intent::IntentBatch;
 use crate::settle::{
-    Engine, Plane, PlayerWriteback, RunState, SettleError, TickInput, TickStage, TickState,
-    WritebackStep, inter_room, market, nukes, powers, settle_room,
+    Engine, Plane, PlayerWriteback, RunState, SettleError, SettledRoom, TickInput, TickStage,
+    TickState, WritebackStep, inter_room, market, nukes, portals, powers, settle_room,
 };
 use kk_schema::room::RoomObject;
 use std::collections::BTreeMap;
@@ -131,6 +131,7 @@ impl Engine {
         txn: &mut txn::OwnedTickTxn,
     ) -> Result<(), SettleError> {
         let mut inter_room_moves = Vec::new();
+        let mut fresh_age = std::collections::BTreeSet::new();
         for name in &txn.room_names {
             if self.fail_room.as_deref() == Some(name.as_str()) {
                 return Err(SettleError(format!("故障注入：房间 {name} 结算失败")));
@@ -149,9 +150,15 @@ impl Engine {
                 buildings: self.buildings.clone(),
                 contrib: self.contrib.clone(),
                 extensions: self.extensions.clone(),
+                world_span: market::world_span(self.world.rooms().keys().map(String::as_str)),
                 plan: self.plan.clone(),
             };
-            let (room, mut room_events, mut moves) = settle_room(
+            let SettledRoom {
+                room,
+                events: mut room_events,
+                inter_room: mut moves,
+                fresh_age: mut fresh,
+            } = settle_room(
                 room,
                 txn.time,
                 txn.input.now_ms,
@@ -160,11 +167,21 @@ impl Engine {
                 &plane,
             )?;
             inter_room_moves.append(&mut moves);
+            fresh_age.append(&mut fresh);
             txn.rooms.push((name.clone(), room));
             txn.events.append(&mut room_events);
         }
-        // 跨房过渡在全部房间结算完成后应用到候选：到达对象不参与目的房
-        // 本 tick 的结算（其对象 tick 已在来源房执行），发布后对下一轮可见。
+        // portal 传送先于边缘过渡收集应用（官方两段式同 tick：creep tick
+        // 的 portal 标记覆盖 edge 标记——既在边缘格又在 portal 格的对象只
+        // 走传送；目的房未注册或 closed 时对象保持原位逐拍重试）。fresh_age
+        // 是本拍刚初始化寿命的 creep，官方门在其补设前求值故当拍豁免。
+        let portal_moves = portals::collect_portal_transports(&txn.rooms, &fresh_age);
+        let portal_ids: std::collections::BTreeSet<_> =
+            portal_moves.iter().map(|mv| mv.id).collect();
+        inter_room_moves.retain(|mv| !portal_ids.contains(&mv.id));
+        inter_room::apply_inter_room_moves(&mut txn.rooms, &portal_moves);
+        // 跨房过渡随后应用到候选：到达对象不参与目的房本 tick 的结算
+        //（其对象 tick 已在来源房执行），发布后对下一轮可见。
         inter_room::apply_inter_room_moves(&mut txn.rooms, &inter_room_moves);
         Ok(())
     }

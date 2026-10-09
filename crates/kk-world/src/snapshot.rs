@@ -365,6 +365,10 @@ fn snapshot_json(
                     if t > time { json!(t - time) } else { json!(0) },
                 );
                 v.remove("cooldownTime");
+            } else if v.get("structureType").and_then(Value::as_str) == Some("nuker") {
+                // 官方 nuker 快照恒带 cooldown（未发射读 0）；结构玩家面
+                // getter 同形缺省——适配器 expectStructure 契约。
+                v.insert("cooldown".into(), json!(0));
             }
             // deposit 查询面补官方派生字段：lastCooldown 随 harvested 总量、
             // decayTime 折算剩余 ticksToDecay（玩家 rawData 投影通道仍透传
@@ -376,20 +380,24 @@ fn snapshot_json(
                     .ceil();
                     v.insert("lastCooldown".into(), json!(lc as u64));
                 }
-                if let Some(d) = v.get("decayTime").and_then(Value::as_u64) {
-                    v.insert("ticksToDecay".into(), remaining(d, time));
-                    v.remove("decayTime");
-                }
+                let decay = v.remove("decayTime").and_then(|d| d.as_u64());
+                // 永久门（无 decayTime）官方也恒暴露 ticksToDecay: null。
+                v.insert(
+                    "ticksToDecay".into(),
+                    decay.map(|d| remaining(d, time)).unwrap_or(Value::Null),
+                );
             }
             // powerBank 快照补官方派生字段：decayTime 折算剩余
             // ticksToDecay、store.power 提升为顶层 power（玩家 rawData
             // 通道仍透传绝对键与 store，由 StructurePowerBank 类 getter
             // 折算）。来源：game/structures.js 的 StructurePowerBank。
             if v.get("structureType").and_then(Value::as_str) == Some("powerBank") {
-                if let Some(d) = v.get("decayTime").and_then(Value::as_u64) {
-                    v.insert("ticksToDecay".into(), remaining(d, time));
-                    v.remove("decayTime");
-                }
+                let decay = v.remove("decayTime").and_then(|d| d.as_u64());
+                // 永久门（无 decayTime）官方也恒暴露 ticksToDecay: null。
+                v.insert(
+                    "ticksToDecay".into(),
+                    decay.map(|d| remaining(d, time)).unwrap_or(Value::Null),
+                );
                 if let Some(p) = v
                     .get("store")
                     .and_then(|s| s.get("power"))
@@ -405,6 +413,27 @@ fn snapshot_json(
                     .filter(|n| *n != 0);
                 v.insert("ticksToSpawn".into(), remaining_opt(next, time));
                 v.remove("nextSpawnTime");
+            }
+            // portal 快照折算官方玩家面形态（玩家 rawData 通道仍透传
+            // {room,x,y}/绝对 decayTime，由 StructurePortal 类 getter 折算）：
+            // 同 shard 目的地 room 键改写 roomName（官方 RoomPosition 序列化
+            // 形态，inspection 契约 toEqual {x,y,roomName}；跨 shard
+            // {shard,room} 原样）、decayTime 折算剩余 ticksToDecay。
+            if v.get("structureType").and_then(Value::as_str) == Some("portal") {
+                // 跨 shard 目的地 {shard, room} 原样（玩家面 POJO 同键）；
+                // 仅同 shard {room,x,y} 改写 room→roomName。
+                if let Some(dest) = v.get_mut("destination").and_then(Value::as_object_mut)
+                    && !dest.contains_key("shard")
+                    && let Some(room) = dest.remove("room")
+                {
+                    dest.insert("roomName".into(), room);
+                }
+                let decay = v.remove("decayTime").and_then(|d| d.as_u64());
+                // 永久门（无 decayTime）官方也恒暴露 ticksToDecay: null。
+                v.insert(
+                    "ticksToDecay".into(),
+                    decay.map(|d| remaining(d, time)).unwrap_or(Value::Null),
+                );
             }
             // invaderCore 快照折算相对键（玩家 rawData 通道仍透传绝对键，
             // 由 StructureInvaderCore 类 getter 折算）：部署倒计时与孵化

@@ -230,14 +230,16 @@ pub(super) fn process_market_intents(
         }
     }
 
-    // Terminal deal 按两房距离升序执行，距离相同保持收集顺序。
+    // Terminal deal 按两房距离升序执行，距离相同保持收集顺序；官方
+    // global-intents/market.js:34-35 用 continuous 距离（环绕同源）。
+    let span = world_span(rooms.iter().map(|(name, _)| name.as_str()));
     terminal_deals.sort_by_key(|(_, oid, _, target)| {
         let room = market
             .orders
             .get(oid)
             .and_then(|o| o.room_name.clone())
             .unwrap_or_default();
-        calc_rooms_distance(target, &room).unwrap_or(i64::MAX)
+        calc_rooms_distance(target, &room, span).unwrap_or(i64::MAX)
     });
     for (dealer, oid, deal_amount, target_room) in terminal_deals {
         execute_terminal_deal(

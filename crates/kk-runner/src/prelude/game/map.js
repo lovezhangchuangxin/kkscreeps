@@ -19,8 +19,10 @@
     // 同一 tick 中惰性创建并复用 MapVisual；绘图缓冲区在 beginTick 清空。
     let _mapVisual;
     // 地图数据来自世界 rooms 键集，包括只携带地形的不可见房间。
-    // 现有房间推导四向出口；不建模单边封闭、novice 或 respawn 状态。
-    // getRoomStatus 只返回 normal/closed，getWorldSize 固定为 1；距离计算不环绕。
+    // 现有房间推导四向出口；不建模单边封闭。房间公共状态种子
+    //（novice/respawn/closed + statusTimestamp）随房导出，驱动
+    // getRoomStatus 与 launchNuke 等消费门；getWorldSize 按官方
+    // calcWorldSize 从当前房集活算（含跨度包含式、E/S 半轴锚 0）。
     const worldRooms = gw.world.rooms || {};
     const ROOM_NAME_RE = /^(W|E)\d+(N|S)\d+$/;
     const ROUTE_RE = /(W|E)\d+(N|S)\d+$/;
@@ -248,36 +250,58 @@
 
       return C_ERR_NO_PATH;
     }
+    // 官方 common/index.js calcWorldSize：现有房间坐标的包含跨度
+    // max(maxX-minX+1, maxY-minY+1)；maxX/maxY 初值为 0（E0/S0 锚点），
+    // 纯 W/N 世界会量到 E0/S0。空世界无此形态，兜底 1（登记）。
+    // 挂 gw 供 market.js 的 calcTransactionCost 环绕同源消费。
+    gw.computeWorldSpan = function () {
+      let minX = Infinity,
+        minY = Infinity,
+        maxX = 0,
+        maxY = 0,
+        has = false;
+      for (const name in worldRooms) {
+        const xy = gw.roomNameToXY(name);
+        if (!Number.isFinite(xy[0]) || !Number.isFinite(xy[1])) continue;
+        has = true;
+        if (xy[0] < minX) minX = xy[0];
+        if (xy[1] < minY) minY = xy[1];
+        if (xy[0] > maxX) maxX = xy[0];
+        if (xy[1] > maxY) maxY = xy[1];
+      }
+      if (!has) return 1;
+      return Math.max(maxX - minX + 1, maxY - minY + 1);
+    };
     return {
-      getWorldSize: () => 1,
-      // 官方 utils.js:644-658 calcRoomsDistance：Chebyshev max(|dx|,|dy|)
-      //（连续形按 worldSize 环绕——我方 worldSize 登记面恒 1，环绕臂
-      // 形态保留）；无房名正则门（垃圾输入 NaN 透传，官方同形）
+      getWorldSize: () => gw.computeWorldSpan(),
+      // 官方 utils.js:644-658 calcRoomsDistance：Chebyshev max(|dx|,|dy|)；
+      // 连续形经 getWorldSize() 逐轴环绕 min(size−d,d)（我方 size 为当前
+      // 房集活算跨度——liveWorldSize 能力键已开放）；无房名正则门
+      //（垃圾输入 NaN 透传，官方同形）
       getRoomLinearDistance(roomName1, roomName2, continuous) {
         const a = gw.roomNameToXY(roomName1);
         const b = gw.roomNameToXY(roomName2);
         let dx = Math.abs(b[0] - a[0]);
         let dy = Math.abs(b[1] - a[1]);
-        // 2B 批 P2 勘正：continuous 环绕经 getWorldSize()（官方 map.js 同位
-        // min(size−d,d)）——我方单机世界**不环绕**（getWorldSize=1 登记面；
-        // 原 worldSize=1 字面套环绕公式会把邻房距离折成 0——MARKET-
-        // QUERY-001 红），与 Rust settle/market.rs calc_rooms_distance/
-        // calcTransactionCost 三处同判（liveWorldSize 能力键 false，
-        // TERMINAL-SEND-015 wrap 计费维持 skip）
         if (continuous) {
-          const worldSize = Infinity;
+          const worldSize = gw.computeWorldSpan();
           dx = Math.min(worldSize - dx, dx);
           dy = Math.min(worldSize - dy, dy);
         }
         return Math.max(dx, dy);
       },
-      // 官方 map.js:204-233：novice/respawn/closed 三态无数据源跳过
-      //（登记）；在场房 normal、合法名 off-world closed、非法名 undefined
-      //（正则对非字符串的 .test 强转语义官方同形）；官方 runtimeData
-      // 无 roomStatusData 时抛错——我方恒有数据面不抛（登记）
+      // 官方 map.js:209-233：closed>novice>respawn 优先（种子域两两
+      // 互斥，此处单键直读）、在场 normal、合法名 off-world closed
+      //（timestamp null）、非法名 undefined（正则对非字符串的 .test
+      // 强转语义官方同形）；novice/respawn/closed 的 timestamp 为种子
+      // 墙钟毫秒（vanilla 适配同款未来 1 小时）。
       getRoomStatus(roomName) {
         if (!ROOM_NAME_RE.test(roomName)) return undefined;
         if (Object.prototype.hasOwnProperty.call(worldRooms, roomName)) {
+          const status = worldRooms[roomName].status;
+          if (status && status !== 'normal') {
+            return { status, timestamp: worldRooms[roomName].statusTimestamp ?? null };
+          }
           return { status: 'normal', timestamp: null };
         }
         return { status: 'closed', timestamp: null };

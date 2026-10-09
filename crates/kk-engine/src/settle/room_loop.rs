@@ -48,6 +48,15 @@ pub fn energy_resource_name(o: &kk_schema::room::EnergyObj) -> &str {
     }
 }
 
+/// 房间结算产物：候选房间、事件、跨房移动与本拍 fresh-age 集合
+///（portal 传送首拍豁免的输入，见 Working::fresh_age）。
+pub struct SettledRoom {
+    pub room: RoomState,
+    pub events: Vec<Value>,
+    pub inter_room: Vec<inter_room::InterRoomMove>,
+    pub fresh_age: std::collections::BTreeSet<ObjId>,
+}
+
 /// 原地结算房间，返回事件并替换 room.events。
 ///
 /// 本函数不创建副本，也不回滚 room 与共享状态。调用方须提供
@@ -61,7 +70,7 @@ pub fn settle_room(
     state: &TickState,
     batch: &IntentBatch,
     plane: &Plane,
-) -> Result<(RoomState, Vec<Value>, Vec<inter_room::InterRoomMove>), SettleError> {
+) -> Result<SettledRoom, SettleError> {
     // 候选以共享句柄持有：Rust 链与 JS 整槽宿主在本次调用期间共享
     // 同一候选，见 RoomCtx 的说明。
     let ctx: RoomCtx = Rc::new(RefCell::new(Working::new(
@@ -236,6 +245,7 @@ pub fn settle_room(
                         match kk_world::domain::generic::structure_type(&g.data).as_deref() {
                             Some("container" | "rampart") => "decay",
                             Some("powerBank") => "powerBank",
+                            Some("portal") => "portal",
                             Some("link") => "link",
                             Some("terminal") => "terminal",
                             Some("keeperLair") => "keeperLair",
@@ -280,6 +290,7 @@ pub fn settle_room(
             "mineral" => economy::mineral_tick(&mut ctx.borrow_mut(), id),
             "deposit" => economy::deposit_tick(&mut ctx.borrow_mut(), id),
             "powerBank" => economy::power_bank_tick(&mut ctx.borrow_mut(), id),
+            "portal" => portals::portal_tick(&mut ctx.borrow_mut(), id),
             "keeperLair" => keeper::tick(&mut ctx.borrow_mut(), id)?,
             "invaderCore" => invader_core::tick(&mut ctx.borrow_mut(), id)?,
             "extractor" => economy::extractor_tick(&mut ctx.borrow_mut(), id),
@@ -332,6 +343,14 @@ pub fn settle_room(
         .into_inner();
     w.room.events = w.events.iter().map(Value::to_string).collect();
 
-    let pending_inter_room = std::mem::take(&mut w.pending_inter_room);
-    Ok((w.room, w.events, pending_inter_room))
+    let inter_room = std::mem::take(&mut w.pending_inter_room);
+    // 本拍从 0 初始化寿命的 creep 集合随结算产物带出：官方 portal 门
+    //（creeps/tick.js:80）在寿命补设（:88-91）之前求值，首个活跃拍豁免。
+    let fresh_age = std::mem::take(&mut w.fresh_age);
+    Ok(SettledRoom {
+        room: w.room,
+        events: w.events,
+        inter_room,
+        fresh_age,
+    })
 }

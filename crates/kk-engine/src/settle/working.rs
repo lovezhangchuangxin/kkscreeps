@@ -33,9 +33,19 @@ pub struct Plane {
     pub buildings: Rc<kk_mod_api::buildings::BuildingCatalog>,
     pub contrib: Rc<contrib::ContributionDispatch>,
     pub extensions: Rc<kk_mod_api::extension::ExtensionCatalog>,
+    /// 当前世界房集的包含跨度（官方 calcWorldSize 同式，装配时活算）：
+    /// terminal send 意图相的费用距离按它逐轴环绕，与全局 market 相、
+    /// 玩家面 getWorldSize/calcTransactionCost 三处同源。
+    pub world_span: i64,
     /// 冻结计划：意图描述符与投影类型目录经它解析（键解析发生在
     /// 装配期以外此处，是扩展意图的低频路径）。
     pub plan: Arc<kk_mod_api::ContributionPlan>,
+}
+
+impl Plane {
+    /// 测试构造使用的跨度：大于房名坐标域（±127 → 差 ≤254）的任意值
+    /// 使 continuous 环绕退化为不环绕（min(span-d,d)=d）。
+    pub const UNWRAPPED_SPAN: i64 = 10_000;
 }
 
 /// 单房间结算上下文：房间副本、位置索引及共享候选状态，
@@ -77,6 +87,10 @@ pub struct Working {
     /// 本 tick 登记的跨房过渡：位于边缘格的 creep 在全部房间结算后由
     /// 引擎阶段移入邻房候选。
     pub(crate) pending_inter_room: Vec<inter_room::InterRoomMove>,
+    /// 本拍从 0 初始化寿命的 creep（出生后首个活跃拍）——portal 传送的
+    /// 官方 `if(object.ageTime)` 门在 ageTime 补设**之前**求值，此类对象
+    /// 当拍豁免传送；集合作房间结算产物随跨房管线带给全局收集点。
+    pub(crate) fresh_age: std::collections::BTreeSet<ObjId>,
     /// 链内对象变换日志；在自有对象及战斗/建造族 Hosted 链
     /// 期间武装，正常拒绝时逆序撤销。链故障（Err）路径不解除武装——
     /// 它依赖"链 Err 使整轮候选丢弃、本字段随 Working 一起 drop"兜底；
@@ -127,6 +141,7 @@ impl Working {
                 plane.static_passability,
             ),
             pending_inter_room: Vec::new(),
+            fresh_age: std::collections::BTreeSet::new(),
             chain_mutations: None,
             plane,
         }

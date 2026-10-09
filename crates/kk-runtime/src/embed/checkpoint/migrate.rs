@@ -14,19 +14,20 @@
 //! 在版本路由前就被拒。
 use serde_json::Value;
 
-/// 当前载荷格式版本。v8：房间 powerBank 生成调度 `power_bank_time`（必填可空）；
+/// 当前载荷格式版本。v9：房间公共状态种子 `room_status`（必填可空）；
+/// v8：房间 powerBank 生成调度 `power_bank_time`（必填可空）；
 /// v7：房间 Invader raid 状态独立域（必填）；v6：必填 Invader 移动记忆表；v5：房间 NPC 巡守记忆独立表（必填，与 v4 的 effects
 /// 同一拒绝策略）；v4：房间对象效果独立表（必填）；v3：宿主玩法协议身份；
 /// v2：新增 `checkpoint_format_version` 键本身，并把
 /// `last_auto_disable` 的 trace 批次前旧形态（缺 `mod_id`，来源只在
 /// trigger.error.fault.binding）显式归一为结构化形态。
-pub(super) const CURRENT_FORMAT_VERSION: u32 = 8;
+pub(super) const CURRENT_FORMAT_VERSION: u32 = 9;
 
 type MigrationFn = fn(&mut Value) -> Result<(), String>;
 
 /// 升级链：第 n 项（0 起算）执行 n+1 → n+2。
 const MIGRATIONS: [MigrationFn; (CURRENT_FORMAT_VERSION - 1) as usize] = [
-    v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6, v6_to_v7, v7_to_v8,
+    v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6, v6_to_v7, v7_to_v8, v8_to_v9,
 ];
 
 /// 把载荷迁移到当前格式；返回**迁移前的原始版本**供语义门决策
@@ -171,6 +172,20 @@ fn v7_to_v8(value: &mut Value) -> Result<(), String> {
             .any(|room| room.get("power_bank_time").is_none())
     {
         return Err("检查点房间缺少 power_bank_time，无法恢复 powerBank 生成调度".into());
+    }
+    Ok(())
+}
+
+// 与 v7→v8 同一拒绝策略：room_status（novice/respawn/closed 种子）驱动
+// 玩家面 getRoomStatus 与发射门，缺键的旧房间不补造 null 默认（否则
+// 种子房静默回到 normal）。
+fn v8_to_v9(value: &mut Value) -> Result<(), String> {
+    if let Some(rooms) = value
+        .pointer("/engine/world/rooms")
+        .and_then(Value::as_object)
+        && rooms.values().any(|room| room.get("room_status").is_none())
+    {
+        return Err("检查点房间缺少 room_status，无法恢复房间公共状态".into());
     }
     Ok(())
 }

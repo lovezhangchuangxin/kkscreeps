@@ -57,7 +57,8 @@ fn operate_terminal_send_discount_cooldown_and_boundary_tick() -> anyhow::Result
                 &format!("Game.getObjectById('{src}').send('H', 100, 'W3N1')"),
             )?; // 下一 tick 发送结算
             assert_eq!(rc.expr["value"], 0);
-            // W1N1→W3N1 距离 2：基费 ceil(100×(1−e^(−2/30))) = ceil(6.44) = 7。
+            // W1N1→W3N1 距离 2（环绕不变：房集跨度 5、dx 2 → min(5−2,2)=2）：
+            // 基费 ceil(100×(1−e^(−2/30))) = ceil(6.44) = 7。
             let base = 7i64;
             let discounted = ((base as f64) * terminal_multiplier(level)).ceil() as i64;
             assert_eq!(

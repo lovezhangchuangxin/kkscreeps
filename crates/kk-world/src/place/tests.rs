@@ -489,7 +489,7 @@ fn power_bank_placement_normalizes_relative_keys_and_store() {
 fn power_bank_placement_rejects_invalid_numbers() {
     for key in ["power", "hits", "ticksToDecay"] {
         for value in [json!(-1), json!(1.5), json!("3"), json!(9.1e15)] {
-            let s = spec(json!({ "pos": [25, 25], key.clone(): value.clone() }));
+            let s = spec(json!({ "pos": [25, 25], key: value.clone() }));
             let err = normalize("powerBank", &s, &ctx()).unwrap_err();
             assert!(err.contains("非负安全整数"), "{key}={value}: {err}");
         }
@@ -521,7 +521,7 @@ fn power_bank_placement_rejects_invalid_numbers() {
     for key in ["store", "owner"] {
         let err = normalize(
             "powerBank",
-            &spec(json!({ "pos": [25, 25], key.clone(): json!({"power": 1}) })),
+            &spec(json!({ "pos": [25, 25], key: json!({"power": 1}) })),
             &ctx(),
         )
         .unwrap_err();

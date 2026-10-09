@@ -32,8 +32,8 @@ fn send_clamps_to_receiver_free_space() {
         "钳后送达 500（299000+500）"
     );
     let fd = f.data_of(from);
-    // 成本按 500 算：ceil(500×(1−e^(−4/30)))=ceil(62.42)=63
-    assert_eq!(fd.pointer("/store/energy"), Some(&json!(100000 - 63)));
+    // 成本按钳后 500、环绕 range=3 算：ceil(500×(1−e^(−3/30)))=ceil(47.58)=48
+    assert_eq!(fd.pointer("/store/energy"), Some(&json!(100000 - 48)));
     assert_eq!(
         fd.pointer("/store/H"),
         Some(&json!(500)),
@@ -47,8 +47,8 @@ fn send_clamps_to_receiver_free_space() {
 #[test]
 fn send_global_phase_energy_gate_rejects() {
     let mut f = MarketFixture::new();
-    // cost(range=4, amount=1000)=125 → energy=124
-    let from = f.terminal("W1N1", "p1", json!({"energy": 124, "H": 1000}));
+    // cost(环绕 range=3, amount=1000)=96 → energy=95
+    let from = f.terminal("W1N1", "p1", json!({"energy": 95, "H": 1000}));
     let _to = f.terminal("W5N1", "p2", json!({"energy": 500}));
     // 直注 stow（绕过房间相能量门——只锁全局相门）
     f.stow_send(from, "W5N1", "H", 1000);
@@ -56,16 +56,17 @@ fn send_global_phase_energy_gate_rejects() {
 
     let fd = f.data_of(from);
     assert_eq!(fd.pointer("/store/H"), Some(&json!(1000)), "能量不足不转移");
-    assert_eq!(fd.pointer("/store/energy"), Some(&json!(124)), "能量不动");
+    assert_eq!(fd.pointer("/store/energy"), Some(&json!(95)), "能量不动");
     assert_eq!(fd.pointer("/cooldownTime"), Some(&json!(0)), "不挂冷却");
     assert_eq!(market(&f).transactions.len(), 0);
 }
 
-/// 发送 energy 时须同时持有 amount 和 cost，本例 1125 恰好成功，1124 拒绝。
+/// 发送 energy 时须同时持有 amount 和 cost（环绕 range=3 → cost=96），
+/// 本例 1096 恰好成功，1095 拒绝。
 #[test]
 fn send_energy_type_amount_plus_cost_branch() {
     let mut f = MarketFixture::new();
-    let from = f.terminal("W1N1", "p1", json!({"energy": 1125}));
+    let from = f.terminal("W1N1", "p1", json!({"energy": 1096}));
     let to = f.terminal("W5N1", "p2", json!({"energy": 0}));
     f.send_intent("p1", from, "W5N1", "energy", 1000);
 
@@ -73,20 +74,20 @@ fn send_energy_type_amount_plus_cost_branch() {
     assert_eq!(
         fd.pointer("/store/energy"),
         Some(&json!(0)),
-        "1125−(1000+125)"
+        "1096−(1000+96)"
     );
     let td = f.data_of(to);
     assert_eq!(td.pointer("/store/energy"), Some(&json!(1000)), "送达 1000");
     assert_eq!(market(&f).transactions[0].resource_type, "energy");
 
-    // 边界下侧：1124 拒（amount+cost 差 1）
+    // 边界下侧：1095 拒（amount+cost 差 1）
     let mut f2 = MarketFixture::new();
-    let from2 = f2.terminal("W1N1", "p1", json!({"energy": 1124}));
+    let from2 = f2.terminal("W1N1", "p1", json!({"energy": 1095}));
     let _to2 = f2.terminal("W5N1", "p2", json!({"energy": 0}));
     f2.send_intent("p1", from2, "W5N1", "energy", 1000);
     assert_eq!(
         f2.data_of(from2).pointer("/store/energy"),
-        Some(&json!(1124)),
+        Some(&json!(1095)),
         "拒"
     );
     assert_eq!(f2.data_of(from2).pointer("/cooldownTime"), Some(&json!(0)));

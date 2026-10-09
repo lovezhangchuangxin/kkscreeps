@@ -40,12 +40,47 @@ pub fn is_valid_room_name(name: &str) -> bool {
     i == b.len() && i > d2
 }
 
-/// 解析房名并返回 Chebyshev 距离，解析失败返回 None。
-/// 当前世界不环绕，与上游闭合 MMO 世界的最短距离计费不同。
-pub fn calc_rooms_distance(room1: &str, room2: &str) -> Option<i64> {
+/// 官方 calcWorldSize（common/index.js:183-193）：现有房间坐标的包含
+/// 跨度 `max(maxX-minX+1, maxY-minY+1)`，maxX/maxY 以 0 为初值（E0/S0
+/// 锚点——纯 W/N 世界量到 E0/S0）。玩家面 getWorldSize 与本函数同式。
+/// 空房集无官方形态，兜底 1（登记）。
+pub fn world_span<'a>(names: impl IntoIterator<Item = &'a str>) -> i64 {
+    let mut has = false;
+    let (mut min_x, mut min_y) = (i32::MAX, i32::MAX);
+    let (mut max_x, mut max_y) = (0i32, 0i32);
+    for name in names {
+        let Ok(parsed) = kk_core::RoomName::parse(name) else {
+            continue;
+        };
+        has = true;
+        min_x = min_x.min(parsed.xx);
+        min_y = min_y.min(parsed.yy);
+        max_x = max_x.max(parsed.xx);
+        max_y = max_y.max(parsed.yy);
+    }
+    if !has {
+        return 1;
+    }
+    i64::from((max_x - min_x + 1).max(max_y - min_y + 1))
+}
+
+/// 解析房名并返回 Chebyshev 距离；`continuous`（官方 calcRoomsDistance
+/// 的 continuous=true，terminal send/market 计费用）按 `span` 逐轴环绕
+/// `min(span-d, d)`（官方 utils.js:644-655——两轴共用同一 worldSize，
+/// xxscreeps 的逐轴各自跨度是分歧不采）。解析失败返回 None。
+pub fn calc_rooms_distance(room1: &str, room2: &str, span: i64) -> Option<i64> {
     let a = kk_core::RoomName::parse(room1).ok()?;
     let b = kk_core::RoomName::parse(room2).ok()?;
-    Some(((a.xx - b.xx).abs().max((a.yy - b.yy).abs())) as i64)
+    let dx = i64::from((a.xx - b.xx).abs());
+    let dy = i64::from((a.yy - b.yy).abs());
+    // 世界内房间 dx/dy 恒小于 span（span 取自现有房间包含盒），不会触
+    // 及退化域；仅对世界外房名（意图阶段未注册目标）可能出现 dx > span，
+    // 此时 JS 的 span-dx 为负而 Rust saturating_sub 钳 0——本仓按不小于
+    // 官方计费（多收不少收），全局阶段本就拒绝未注册目标房间。
+    Some(
+        dx.min(span.saturating_sub(dx))
+            .max(dy.min(span.saturating_sub(dy))),
+    )
 }
 
 /// 按 ceil(amount * (1-exp(-range/30))) 计算能量费用。

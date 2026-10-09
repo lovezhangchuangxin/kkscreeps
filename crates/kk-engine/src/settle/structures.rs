@@ -172,7 +172,8 @@ fn terminal_send(w: &mut Working, id: ObjId, d: &IntentData) {
         return;
     }
     let range =
-        crate::settle::market::calc_rooms_distance(&w.room.name, target_room).unwrap_or(i64::MAX);
+        crate::settle::market::calc_rooms_distance(&w.room.name, target_room, w.plane.world_span)
+            .unwrap_or(i64::MAX);
     let mut cost = crate::settle::market::calc_terminal_energy_cost(amount, range);
     // 官方 terminal/send.js:22-25：意图相费用乘 OPERATE_TERMINAL 倍率并
     // ceil，边界为 endTime >= time（与全局 market 相的严格 > 不同，

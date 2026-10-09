@@ -716,17 +716,27 @@
 
   /** StructureNuker.launchNuke（官方 game/structures.js:1356-1389 逐字，
    *  NUKE-LAUNCH-008 矩阵钉序）：not-owner > invalid-args（instanceof
-   *  RoomPosition——plainObject 拒）> [房间状态 novice/respawn→INVALID_TARGET
-   *  ——kk 无 roomStatus 数据，跳过] > TIRED > RCL（checkStructureAgainstController
-   *  ——isActive 等价，nuker 在 CONTROLLER_STRUCTURES 表内）> NOT_IN_RANGE
-   *  （roomNameToXY 差绝对值 > NUKE_RANGE）> NOT_ENOUGH_RESOURCES
-   *  （energy<energyCapacity || ghodium<ghodiumCapacity）。 */
+   *  RoomPosition——plainObject 拒）> 房间状态（:1363-1369 源房
+   *  novice/respawn 或目标房 roomStatusData.novice/respawn→INVALID_TARGET
+   *  ——房间公共状态种子域；目标房合法名但不在世界不拦）> TIRED > RCL
+   *  （checkStructureAgainstController——isActive 等价，nuker 在
+   *  CONTROLLER_STRUCTURES 表内）> NOT_IN_RANGE（roomNameToXY 差绝对值
+   *  > NUKE_RANGE）> NOT_ENOUGH_RESOURCES（energy<energyCapacity ||
+   *  ghodium<ghodiumCapacity）。 */
   globalThis.StructureNuker.prototype.launchNuke = function launchNuke(pos) {
     if (!this.my) {
       return C.ERR_NOT_OWNER; // :1357-1359
     }
     if (!(pos instanceof gw.RoomPosition)) {
       return C.ERR_INVALID_ARGS; // :1360-1362
+    }
+    const srcStatus = (gw.world.rooms || {})[this.room.name];
+    const dstStatus = (gw.world.rooms || {})[pos.roomName];
+    if (
+      (srcStatus && (srcStatus.status === 'novice' || srcStatus.status === 'respawn')) ||
+      (dstStatus && (dstStatus.status === 'novice' || dstStatus.status === 'respawn'))
+    ) {
+      return C.ERR_INVALID_TARGET; // :1363-1369
     }
     if (this.cooldown > 0) {
       return C.ERR_TIRED; // :1370-1372

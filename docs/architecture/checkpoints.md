@@ -105,3 +105,5 @@ target/release/kkscreeps sim run \
 Invader raid 房间状态自载荷 v7 保存于每房 `raid`（阈值覆盖/采集预算/活跃/房态四键必填）；v6_to_v7 对缺域房间显式拒绝（不补造——活跃房静默变为可生成是不可接受的丢失）。生成器消费者与随机流约定见[游戏循环](game-loop.md#invader-raid-调度当前首片)。
 
 powerBank 生成调度自载荷 v8 保存于每房 `power_bank_time`（Option<u64>，null 或到期 tick）；v7_to_v8 对缺键房间显式拒绝（不补造——已调度房静默回到首轮形态是不可接受的丢失）。生成器与消费者见[游戏循环](game-loop.md#powerbank-生成与消费者当前首片)。
+
+房间公共状态种子自载荷 v9 保存于每房 `room_status`（Option<{status,timestamp}>，null 为 normal；novice/respawn/closed + 墙钟毫秒时间戳）；v8_to_v9 对缺键房间显式拒绝（种子房静默回到 normal 是不可接受的丢失）。玩家面 getRoomStatus、launchNuke 房间状态门与传送机制见[游戏循环](game-loop.md#portal房间状态与世界边缘当前首片)。

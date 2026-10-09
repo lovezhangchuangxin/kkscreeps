@@ -81,6 +81,7 @@ fn hits_plane() -> kk_engine::settle::Plane {
         .unwrap(),
     );
     kk_engine::settle::Plane {
+        world_span: kk_engine::settle::Plane::UNWRAPPED_SPAN,
         buildings: Default::default(),
         links: kk_mod_api::builtin::LinkRules::from_plan(plan.rules()).unwrap(),
         stores: kk_mod_api::builtin::StoreRules::from_plan(plan.rules()).unwrap(),
@@ -222,7 +223,7 @@ fn settle_events(
 ) -> Vec<Value> {
     let state = kk_engine::TickState::new(std::mem::take(&mut f.players), f.world.next_obj_id());
     let room = f.world.room("W1N1").unwrap().clone();
-    let (room, events, _moves) = settle_room(
+    let kk_engine::settle::SettledRoom { room, events, .. } = settle_room(
         room,
         f.world.time(),
         1_700_000_000_000,

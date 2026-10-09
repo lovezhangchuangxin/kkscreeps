@@ -5,7 +5,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use kk_engine::intent::{Action, IntentBatch, IntentData, NotifyIntent};
-use kk_engine::settle::{PlayerState, settle_room};
+use kk_engine::settle::{PlayerState, SettledRoom, settle_room};
 use kk_schema::room::{CreepObj, RoomObject, SpawnObj};
 use kk_world::types::BodyKind;
 use kk_world::{ObjId, World};
@@ -318,13 +318,14 @@ impl Fixture {
         let state =
             kk_engine::TickState::new(std::mem::take(&mut self.players), self.world.next_obj_id());
         let room = self.world.room("W1N1").unwrap().clone();
-        let (room, events, _moves) = settle_room(
+        let SettledRoom { room, events, .. } = settle_room(
             room,
             self.world.time(),
             input.now_ms,
             &state,
             &batch,
             &kk_engine::settle::Plane {
+                world_span: kk_engine::settle::Plane::UNWRAPPED_SPAN,
                 buildings: Default::default(),
                 links: kk_world::place::builtin_link_rules(),
                 stores: kk_world::place::builtin_store_rules(),
@@ -361,6 +362,7 @@ impl Fixture {
         self.settle_with_plane(
             batch,
             kk_engine::settle::Plane {
+                world_span: kk_engine::settle::Plane::UNWRAPPED_SPAN,
                 buildings: Default::default(),
                 links,
                 stores: kk_world::place::builtin_store_rules(),
@@ -397,6 +399,7 @@ impl Fixture {
         self.settle_with_plane(
             batch,
             kk_engine::settle::Plane {
+                world_span: kk_engine::settle::Plane::UNWRAPPED_SPAN,
                 buildings: Default::default(),
                 links,
                 stores: kk_world::place::builtin_store_rules(),
@@ -417,7 +420,7 @@ impl Fixture {
         let state =
             kk_engine::TickState::new(std::mem::take(&mut self.players), self.world.next_obj_id());
         let room = self.world.room("W1N1").unwrap().clone();
-        let (room, events, _moves) = settle_room(
+        let SettledRoom { room, events, .. } = settle_room(
             room,
             self.world.time(),
             1_700_000_000_000,

@@ -114,6 +114,13 @@ impl World {
         for (name, state) in &self.rooms {
             let mut entry = serde_json::Map::new();
             entry.insert("name".into(), json!(name));
+            // 房间公共状态种子（novice/respawn/closed）随房导出——状态是
+            // 公共地图数据，官方 roomStatusData 不按视野裁切；normal 缺省
+            // 由玩家面 getRoomStatus 兜底。
+            if let Some(status) = &state.room_status {
+                entry.insert("status".into(), json!(status.status.as_str()));
+                entry.insert("statusTimestamp".into(), json!(status.timestamp));
+            }
             entry.insert("terrain".into(), self.terrain_json(name, state));
 
             let controller = state.controller();

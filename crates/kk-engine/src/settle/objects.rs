@@ -196,6 +196,7 @@ mod tests {
             .unwrap(),
         );
         Plane {
+            world_span: Plane::UNWRAPPED_SPAN,
             buildings: Default::default(),
             links: kk_mod_api::builtin::LinkRules::from_plan(plan.rules()).unwrap(),
             stores: kk_mod_api::builtin::StoreRules::from_plan(plan.rules()).unwrap(),

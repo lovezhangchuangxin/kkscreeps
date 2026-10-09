@@ -5,8 +5,10 @@
 //! [`launch_nuke`] 验证官方静默门后把请求写入 nuker 的 `launchNuke` 标记；
 //! 全局阶段 [`settle_launches`] 清标记、扣库设冷却并向目标房候选插入
 //! nuke 对象（目标房可以是另一间已结算房间）。落地 [`nuke_tick`] 在
-//! landTime-1 那一 tick 结算，landTime 及以后移除核弹。房间 novice/respawn
-//! 免疫属房间状态域，本仓无该形态，未移植。
+//! landTime-1 那一 tick 结算，landTime 及以后移除核弹。房间状态门同官方
+//!（launch-nuke.js:22-24 与 nukes/tick.js:10-14）：novice/respawn 源房禁发
+//!（预检与处理器两层，closed 不拦发射），novice/respawn 房内的飞行核弹
+//! 逐 tick 移除不落地。
 
 use kk_core::RoomName;
 use kk_core::constants as c;
@@ -83,6 +85,12 @@ pub fn launch_nuke(w: &mut Working, id: ObjId, d: &IntentData) {
     if !(0..=49).contains(&x) || !(0..=49).contains(&y) {
         return;
     }
+    // 官方 launch-nuke.js:22-24：源房 novice/respawn 到期前服务端静默丢弃
+    //（目标房门只在玩家面 roomStatusData 检查；飞行核弹落入保护区由
+    // nuke_tick 的移除分支兜底）。
+    if source_room_protected(&w.room) {
+        return;
+    }
     let Some(target) = d.target_room_name.as_deref() else {
         return;
     };
@@ -112,6 +120,18 @@ fn truthy(v: &Value) -> bool {
     }
 }
 
+/// 源房是否处于 novice/respawn 保护（官方 `room.novice/respawnArea >
+/// Date.now()` 的种子域等价判定；closed 不拦发射）。
+fn source_room_protected(room: &RoomState) -> bool {
+    room.room_status.as_ref().is_some_and(|status| {
+        matches!(
+            status.status,
+            kk_world::domain::room_status::RoomStatusKind::Novice
+                | kk_world::domain::room_status::RoomStatusKind::Respawn
+        )
+    })
+}
+
 /// 全局阶段消费 launchNuke 标记：清库、设冷却、向目标房候选插入 nuke
 /// 对象。目标房不在候选（未注册房间）时静默不插——官方世界全房存在，
 /// 本仓世界仅含注册房。来源：launch-nuke.js 的 bulk.update/insert 尾段。
@@ -128,6 +148,7 @@ pub fn settle_launches(
     }
     let mut launches: Vec<Pending> = Vec::new();
     for (name, room) in rooms.iter_mut() {
+        let source_protected = source_room_protected(room);
         for obj in room.objects.values_mut() {
             let RoomObject::Generic(g) = obj else {
                 continue;
@@ -142,6 +163,12 @@ pub fn settle_launches(
                 continue;
             };
             v["launchNuke"] = Value::Null;
+            // 源房 novice/respawn：官方处理器在扣库前丢弃（launch-nuke.js:22-24），
+            // 只清标记不消耗库存与冷却。
+            if source_protected {
+                g.data = v.to_string();
+                continue;
+            }
             // 官方置 0 保留键；不预置 store 键（畸形数据无库时同样清冷却
             // ——官方会物化 store{energy:0,G:0} 两键，仅手造数据可观测）。
             if v.get("store").is_some() {
@@ -207,6 +234,7 @@ pub(super) fn blocks_spawning(room: &RoomState, time: u64) -> bool {
 }
 
 /// 飞行核弹的逐 tick 结算。来源：processor/intents/nukes/tick.js。
+/// 落入 novice/respawn 房的核弹直接移除（tick.js:10-14，房间状态域）。
 pub fn nuke_tick(w: &mut Working, id: ObjId) {
     let Some(RoomObject::Generic(g)) = w.room.objects.get(&id) else {
         return;
@@ -217,6 +245,16 @@ pub fn nuke_tick(w: &mut Working, id: ObjId) {
     let Some(land_time) = data.get("landTime").and_then(Value::as_u64) else {
         return;
     };
+    if let Some(status) = &w.room.room_status
+        && matches!(
+            status.status,
+            kk_world::domain::room_status::RoomStatusKind::Novice
+                | kk_world::domain::room_status::RoomStatusKind::Respawn
+        )
+    {
+        w.remove_obj(id);
+        return;
+    }
     let (nx, ny) = (g.x, g.y);
     if w.time == land_time.saturating_sub(1) {
         impact(w, id, nx, ny);

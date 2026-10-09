@@ -96,6 +96,19 @@ impl NukeFixture {
             .unwrap()
     }
 
+    /// 预置 launchNuke 标记的满库 nuker（stow 形态，覆盖全局相自身的门）。
+    fn nuker_with_marker(&mut self, store: Value) -> ObjId {
+        let mut data = json!({
+            "type": "structure", "structureType": "nuker", "owner": "p1",
+            "hits": 1000, "hitsMax": 1000,
+            "store": store,
+            "storeCapacityResource": {"energy": 300000, "G": 5000},
+            "launchNuke": {"roomName": "W2N1", "x": 25, "y": 25},
+        });
+        data.as_object_mut().unwrap().remove("cooldownTime");
+        self.generic("W1N1", 25, 25, data)
+    }
+
     /// 直插飞行核弹：landTime = 当前时间 + ttl。
     fn nuke_at(&mut self, room: &str, x: u8, y: u8, ttl: u64) -> ObjId {
         let land = self.engine.world().time() + ttl;
@@ -671,6 +684,97 @@ fn range_boundary_launches_and_power_creep_zeroed() {
         .values()
         .any(|o| matches!(o, RoomObject::Tombstone(t) if t.creep_name.as_deref() == Some("PC1")));
     assert!(tombstoned, "powerCreep 死亡落墓碑");
+}
+
+/// 源房 novice：房间相与全局相双门静默拒绝（官方 launch-nuke.js:22-24
+/// 处理器只查源房）——直注意图注入不消耗库存冷却、目标房无核弹；
+/// 预置标记腿覆盖全局相自身的门；closed 源房不拦（官方门只含
+/// novice/respawnArea，closed 经 openTime 不参与发射门）。
+#[test]
+fn launch_from_protected_source_room_settle_side_silent_reject() {
+    let seed = |kind| kk_world::domain::room_status::RoomStatus {
+        status: kind,
+        timestamp: 1,
+    };
+    use kk_world::domain::room_status::RoomStatusKind;
+
+    // 直注意图 + 源房 novice：房间相早退，不写标记。
+    let mut f = NukeFixture::new();
+    f.controller(8);
+    let nuker = f.nuker(json!({"energy": 300000, "G": 5000}), None);
+    f.engine
+        .edit_world(|world| world.set_room_status("W1N1", Some(seed(RoomStatusKind::Novice))))
+        .unwrap();
+    f.launch(nuker, "W2N1", 25, 25);
+    let data = f.data_of(nuker);
+    assert_eq!(
+        data.pointer("/store/energy"),
+        Some(&json!(300000)),
+        "库存不动"
+    );
+    assert_eq!(data.pointer("/store/G"), Some(&json!(5000)));
+    assert!(data.get("cooldownTime").is_none(), "不挂冷却");
+    assert!(data.get("launchNuke").is_none(), "不写标记");
+    assert!(f.nukes_in("W2N1").is_empty(), "目标房无核弹");
+
+    // 预置 launchNuke 标记（stow 形态）+ 源房 respawn：全局相只清标记
+    // 不消耗（预检通过后房态被置保护的直注意图等价面）。
+    let mut f2 = NukeFixture::new();
+    f2.controller(8);
+    let stowed = f2.nuker_with_marker(json!({"energy": 300000, "G": 5000}));
+    f2.engine
+        .edit_world(|world| world.set_room_status("W1N1", Some(seed(RoomStatusKind::Respawn))))
+        .unwrap();
+    f2.tick();
+    let data = f2.data_of(stowed);
+    assert_eq!(
+        data.pointer("/store/energy"),
+        Some(&json!(300000)),
+        "标记被清但库存不动"
+    );
+    assert!(data["launchNuke"].is_null(), "标记清空（官方置保留键）");
+    assert!(data.get("cooldownTime").is_none());
+    assert!(f2.nukes_in("W2N1").is_empty());
+
+    // 反向：closed 源房不拦发射（官方门只含 novice/respawnArea）。
+    let mut f3 = NukeFixture::new();
+    f3.controller(8);
+    let nuker3 = f3.nuker(json!({"energy": 300000, "G": 5000}), None);
+    f3.engine
+        .edit_world(|world| world.set_room_status("W1N1", Some(seed(RoomStatusKind::Closed))))
+        .unwrap();
+    f3.launch(nuker3, "W2N1", 25, 25);
+    assert_eq!(f3.nukes_in("W2N1").len(), 1, "closed 源房照常发射");
+    assert_eq!(f3.data_of(nuker3).pointer("/store/energy"), Some(&json!(0)));
+
+    // 飞行核弹落入 novice 房：tick 移除不爆（官方 nukes/tick.js:10-14）。
+    let mut f4 = NukeFixture::new();
+    f4.controller(8);
+    let wall = f4
+        .engine
+        .insert_object(
+            "W2N1",
+            RoomObject::ConstructedWall(kk_schema::room::ConstructedWallObj {
+                id: 0,
+                x: 25,
+                y: 25,
+                hits: 1000,
+                notify_when_attacked: None,
+            }),
+        )
+        .unwrap();
+    f4.nuke_at("W2N1", 25, 25, 1);
+    f4.engine
+        .edit_world(|world| world.set_room_status("W2N1", Some(seed(RoomStatusKind::Novice))))
+        .unwrap();
+    f4.tick();
+    f4.tick();
+    assert!(f4.nukes_in("W2N1").is_empty(), "novice 房飞行核弹被移除");
+    let wall_hits = match f4.engine.world().get(wall) {
+        Some((_, RoomObject::ConstructedWall(w))) => w.hits,
+        other => panic!("墙应存活：{other:?}"),
+    };
+    assert_eq!(wall_hits, 1000, "不爆——爆心墙无伤");
 }
 
 mod invulnerability;

@@ -243,6 +243,7 @@ mod module_context;
 mod npc_retirement;
 mod object_ops;
 mod object_tick;
+mod portals;
 mod power_bank;
 mod power_effects;
 mod production_boundaries;
