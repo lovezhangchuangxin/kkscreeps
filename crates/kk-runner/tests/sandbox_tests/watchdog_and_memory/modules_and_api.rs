@@ -90,9 +90,9 @@ pub(crate) fn prelude_basics() -> anyhow::Result<()> {
     let v = sb.run_expr("Spawn === StructureSpawn && Energy === Resource")?;
     assert_eq!(v["value"], true, "官方类别名指向同一引用");
 
-    // runExpr 间接 eval：全局作用域求值，prelude 闭包（含捕获的 ops 引用）不可达
+    // 控制台求值器仅有独立参数作用域，prelude 闭包（含 ops 引用）不可达
     let v = sb.run_expr("ops")?;
-    assert_eq!(v["ok"], false, "runExpr 求值在全局作用域: {v:?}");
+    assert_eq!(v["ok"], false, "runExpr 不可访问宿主闭包: {v:?}");
     assert!(
         v["error"]
             .as_str()

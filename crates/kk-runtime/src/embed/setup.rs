@@ -491,6 +491,12 @@ impl EmbedEngine {
                 config.initial_bucket,
             );
             players.spawn(&handle, config)?;
+            // 表达式场景也有真实入口模块，保证 require('main') 及缓存形态。
+            // 后续 set_player_modules 整体替换它；不为上传代码补造缺失入口。
+            // 来源：screeps-ok adapters/vanilla/index.ts 的 createShard loopCode。
+            let mut modules = kk_runner::ModuleTable::new();
+            modules.insert_js("main", "module.exports.loop = function () {};");
+            players.set_modules(&handle, modules)?;
             self.engine
                 .edit_players(|players| {
                     let state = players.entry(handle.clone()).or_default();

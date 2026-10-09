@@ -6,12 +6,17 @@
 (() => {
   'use strict';
 
-  // 捕获 JSON.parse 和 eval；消息序列化委托给 gw.sanitizedStringify。
+  // 捕获 JSON.parse；消息序列化委托给 gw.sanitizedStringify。
   // 它只临时移除 Object/Array 根原型上的 toJSON，不能阻止所有玩家回调；
   // Memory 写回仍按原生 JSON.stringify 语义调用玩家自己的 toJSON。
   const stringify = JSON.stringify;
   const parse = JSON.parse;
-  const __eval = eval;
+  // Function 创建的求值器只拥有全局与显式参数作用域，不能访问本段的
+  // gw/op/序列化闭包；直接在 host 方法内 eval 会泄露宿主私有状态。
+  // 控制台 var/let/const 每次独立，显式 globalThis 写入才跨请求保留。
+  // 来源：driver/lib/runtime/runtime-driver.js 的 evalCode(returnValue)。
+  const evaluateExpression = Function('code', 'module', 'exports', 'return eval(code);');
+  let consoleSequence = 0;
   const gw = globalThis.__kkp.gw;
   const nullEnv = gw.nullEnv;
   const safeStringify = gw.sanitizedStringify;
@@ -91,11 +96,14 @@
       let out;
       let v;
       try {
-        // 间接 eval（(0,eval)）在全局作用域求值——切断对 prelude 闭包（含捕获的
-        // Deno.core.ops 引用等引擎内部状态）的访问；官方控制台命令同样在全局作用域
-        // 求值（game.js:535-547），不得有超常特权（screeps-ok 契约）
-        // eslint-disable-next-line no-eval
-        v = __eval(code);
+        const module = {
+          exports: {},
+          user: gw.viewerName,
+          name: '_console' + consoleSequence++,
+          code,
+        };
+        // 本次控制台导出与 main 的缓存导出互不相连；module/exports 不注入全局。
+        v = evaluateExpression(code, module, module.exports);
       } catch (e) {
         // 按异常对象分类：SyntaxError 记为 syntax，其他异常记为 runtime。
         // 这里也会将执行过程中显式抛出的 SyntaxError 归为 syntax，未单独解析代码。

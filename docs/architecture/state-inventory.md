@@ -10,6 +10,7 @@
 - **故障自动停用场景**：mounts 声明包的处理器连续故障跨过停用阈值，`fault_streak`/`last_fault`/`last_auto_disable` 取非空值，并携带已声明 mount 的扩展字段钉住 `extensions` 字段存在性。
 - 对象展开全部键；数组折叠为 `路径[]` 并下钻首元素；数据键映射（玩家/房间/包/订单等）折叠为 `.*` 仍下钻内部 schema；调用方或 Mod 自管内容（`metadata`、`mods.options`、manifest、扩展字段载荷、`engine.mod_states` 的 namespace state）作为不透明叶子不再下钻。
 - 任何批次给持久化结构**新增或删除**字段，本测试即红。处置顺序：先补齐该字段的保存/恢复与版本策略（当批接线，不能等 G23），再同步本页表格与钉死清单；新增动态映射表或不透明叶子须同步登记 `SCHEMA_DYNAMIC_MAPS` / `SCHEMA_OPAQUE`。
+- 可空数组的 null 与数组分支分别记为 `path` 和 `path[]`；工作者模块的 binary 两种形态均登记。Embed 默认 main 是真实 JS 源码（binary=null），显式上传可整体替换；该值域沿用既有模块信封，无新增字段或版本升级。
 - 键树只约束 schema 形状，不约束取值；取值等价由既有冷恢复往返相等测试与 sim 双通道验收覆盖。夹具为空的映射表（见下文"覆盖边界"）不会产生键，schema 变化不被本门禁发现，仍靠解码端 `deny_unknown_fields` 兜底。
 
 ## 编排层域（`kk-runtime` `embed::checkpoint::Checkpoint`）
@@ -17,7 +18,7 @@
 | 域 | 字段路径 | 版本策略 | 恢复消费者 | 迁移状态 |
 |---|---|---|---|---|
 | 版本门 | `engine_version`、`room_schema_version` | 与当前二进制硬等值，不等即拒 | `restore_checkpoint` 入口检查 | 拒绝不迁移，G23 负责 |
-| 玩家工作者 | `workers.*`（`heap_limit_bytes`、`cpu_limit`、`bucket_cap`、`max_per_tick`、`initial_bucket`、`install_wall_limit`、`constant_overrides.*`、`modules.*.js`、`modules.*.binary[]`） | 随 `engine_version` 整体硬门；schema 另被键树钉死 | 工作者注册与模块重装；配置重验后重建玩家线程 | 拒绝不迁移，G23 负责 |
+| 玩家工作者 | `workers.*`（`heap_limit_bytes`、`cpu_limit`、`bucket_cap`、`max_per_tick`、`initial_bucket`、`install_wall_limit`、`constant_overrides.*`、`modules.*.js`、`modules.*.binary`（null 或字节数组）） | 随 `engine_version` 整体硬门；schema 另被键树钉死 | 工作者注册与模块重装；配置重验后重建玩家线程 | 拒绝不迁移，G23 负责 |
 | Mod 包身份 | `mods.packages.*.manifest`、`mods.packages.*.files_sha256`（不透明） | 身份核验：恢复时与调用方提供的包 manifest 与全部文件 SHA-256 逐一比对，含未选择包 | `ModIdentity::verify`；相同包可换目录，缺包/多包/内容变化拒绝 | 拒绝不迁移，G23 负责 |
 | Mod 配置身份 | `mods.options`（不透明） | 与 `RegisterOptions` 重建身份核验（内容选择、逐包配置、冻结选项、VM 预算、profiler 开关、停用阈值） | `ModIdentity::verify` | 拒绝不迁移，G23 负责 |
 | 宿主玩法协议 | `host_protocol` | 当前 `kk-gameplay-v2-utc-date`，严格等值 | 替代分片装配前核验；日志头段同源 | 旧时区语义明确拒绝，无自动内容迁移 |

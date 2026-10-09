@@ -53,6 +53,10 @@ JavaScript 写入限制采用字符串 `length`，即 UTF-16 码元计数：RawM
 
 ## 模块加载与原生调用
 
+表达式入口采用独立的 `(code,module,exports)` 函数作用域直接 eval，`module.exports` 初始与 `exports` 同引用，且与上传 main 的导出无关；每次请求创建新的控制台模块，var/let/const 不跨请求保留，显式 global/globalThis 写入仍跨 tick 存活。求值器由 Function 在全局环境创建，无法捕获 host 的 gw/op/序列化闭包；module/exports 不添加到全局。直接 eval 使用玩家当前全局 eval，覆写它影响自家表达式求值。来源：锁定官方 driver 的 `runtime-driver.js::evalCode(returnValue)`；返回值仍使用宿主既有 JSON 契约，不采用官方的字符串化结果。
+
+Embed 分片创建为每名玩家安装真实的空 `main.loop` 模块，供表达式场景 require 与缓存查询使用；显式 `set_player_modules` 整体替换默认表，不补造上传代码缺失的 main。控制台请求只求值表达式，不额外执行上传 loop；生产玩家任务的 loop 通道继续使用 `require('main').loop()`。模块源码随工作者检查点保存，冷恢复重新加载，V8 导出引用与控制台局部变量不持久化。
+
 CommonJS 加载器按上传模块名加载，只去掉 `./` 前缀，不解析 `../` 或自动补 `.js`。缓存直接保存 exports；初始化期间使用哨兵，循环加载会抛错，不返回 Node 风格的半成品导出。模块执行失败删除其缓存后重抛，后续加载可再尝试。二进制模块返回 Buffer。
 
 模块有效且入口符合缓存检查时可跨 tick 复用；每轮检查 require、timestamp、cache 和 main.loop，条件不满足则整体重建缓存。全局提供 lodash 3.10.1；Buffer 是项目实现的子集，不能据此承诺完整 Node 环境。
