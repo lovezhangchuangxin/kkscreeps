@@ -17,7 +17,7 @@ fn store_plane() -> kk_engine::settle::Plane {
         visibility: kk_mod_api::Visibility::Public,
         binding: kk_mod_api::Key::new(format!("cmod:crate.field.{name}")).unwrap(),
     };
-    let mut contribution = kk_mod_api::Contribution {
+    let contribution = kk_mod_api::Contribution {
         source: kk_mod_api::Source {
             namespace: "cmod".into(),
             api_version: 1,
