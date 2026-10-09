@@ -76,7 +76,13 @@ fn every_editor_rejects_recovery_and_account_edits_invalidate_receipts() {
     engine.set_fail_stage_for_test(Some(TickStage::Market));
     assert!(
         engine
-            .tick_with_intents_with_input(IntentBatch::default(), TickInput { now_ms: 0 })
+            .tick_with_intents_with_input(
+                IntentBatch::default(),
+                TickInput {
+                    now_ms: 0,
+                    warmup: false
+                }
+            )
             .is_err()
     );
     assert!(engine.edit_world(|_| Ok(())).is_err());
@@ -85,7 +91,13 @@ fn every_editor_rejects_recovery_and_account_edits_invalidate_receipts() {
     assert!(engine.edit_mod_states(|_| Ok(())).is_err());
     engine.set_fail_stage_for_test(None);
     engine
-        .tick_with_intents_with_input(IntentBatch::default(), TickInput { now_ms: 0 })
+        .tick_with_intents_with_input(
+            IntentBatch::default(),
+            TickInput {
+                now_ms: 0,
+                warmup: false,
+            },
+        )
         .unwrap();
     assert_eq!(engine.players()["p1"].money, 100);
 }

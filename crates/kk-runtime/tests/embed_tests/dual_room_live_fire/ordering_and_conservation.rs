@@ -242,7 +242,7 @@ pub(crate) fn dual_multi_tick_conservation_impl() -> anyhow::Result<()> {
         "能量守恒：Δsource + Δstore + Δprogress = 0（双房合计）"
     );
     assert!(p1_ > p0, "50 tick 内 upgrade 臂真实工作");
-    assert_eq!(e.get_game_time(), TICKS, "时间恰推进 50");
+    assert_eq!(e.get_game_time(), TICKS + 1, "时间恰推进 50（另含热身拍）");
     assert_eq!(
         e.find_in_room("W0N1", FIND_CREEPS).len() + e.find_in_room("W1N1", FIND_CREEPS).len(),
         2,
@@ -308,7 +308,11 @@ pub(crate) fn dual_multi_tick_conservation_impl() -> anyhow::Result<()> {
         100,
         "总采集恰 100（25 tick × 2 人 × 2）"
     );
-    assert_eq!(b.get_game_time(), TICKS, "B 世界时间恰推进 50");
+    assert_eq!(
+        b.get_game_time(),
+        TICKS + 1,
+        "B 世界时间恰推进 50（另含热身拍）"
+    );
     b.teardown();
     Ok(())
 }

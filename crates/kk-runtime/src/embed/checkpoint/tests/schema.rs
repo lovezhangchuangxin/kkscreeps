@@ -328,7 +328,7 @@ fn strategy_key_compatibility_branches_are_pinned() -> anyhow::Result<()> {
     map.insert("checkpoint_format_version".into(), json!(1));
     engine.restore_checkpoint(v1_payload, Some((&packages, &options)))?;
     run(&mut engine, 1)?;
-    assert_eq!(engine.get_game_time(), 2, "v1 宽容语义恢复后正常续跑");
+    assert_eq!(engine.get_game_time(), 3, "v1 宽容语义恢复后正常续跑");
 
     // (a3) 缺格式版本 → 畸形载荷拒绝（无缺键猜测）。
     let mut no_version = saved.clone();

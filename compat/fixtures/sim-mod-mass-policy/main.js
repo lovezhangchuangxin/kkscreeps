@@ -1,5 +1,5 @@
 exports.loop = function () {
-  if (Game.time === 0) Memory.code = Game.creeps.attacker.rangedMassAttack();
+  if (Game.time === 1) Memory.code = Game.creeps.attacker.rangedMassAttack();
   const room = Game.rooms.W1N1;
   const enemies = room.find(FIND_HOSTILE_CREEPS);
   Memory.nearHits = enemies.find((creep) => creep.name === 'near').hits;

@@ -12,19 +12,19 @@ fn official_nursery_creates_updates_and_removes_in_two_rooms_and_channels() -> a
         let (code, report) = run(
             &scene,
             &fixture.0.join(format!("nursery-{binary}.json")),
-            53,
+            52,
             binary,
             2,
         )?;
         assert_eq!(code, 0, "{report}");
-        assert_eq!(report["world_ticks_committed"], 53);
+        assert_eq!(report["world_ticks_committed"], 52);
         assert_eq!(
             report["final"]["mod_states"]["nursery"],
-            json!({"born":22,"expired":20})
+            json!({"born":20,"expired":18})
         );
         for player in ["p1", "p2"] {
-            assert_eq!(report["final"]["players"][player]["memory"]["loops"], 53);
-            assert_eq!(report["final"]["players"][player]["memory"]["emitted"], 11);
+            assert_eq!(report["final"]["players"][player]["memory"]["loops"], 52);
+            assert_eq!(report["final"]["players"][player]["memory"]["emitted"], 10);
             assert_eq!(report["final"]["players"][player]["memory"]["sparks"], 1);
             assert_eq!(
                 report["final"]["players"][player]["memory"]["ages"],

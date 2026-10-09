@@ -186,10 +186,10 @@ fn observer_operate_power_unlimited_range() -> anyhow::Result<()> {
         );
         // 冷却是 raw 字段（玩家面 powers 不暴露 cooldownTime），经快照读。
         // 施放前已有两次 run_player（无效施放 + ops/effects 读数）：
-        // 有效施放结算于 t2，冷却 = 2+400。
+        // 有效施放结算于 t3，冷却 = 3+400。
         assert_eq!(
             e.get_object(&pc_id).unwrap()["powers"]["7"]["cooldownTime"],
-            402,
+            403,
             "冷却 2+400"
         );
 

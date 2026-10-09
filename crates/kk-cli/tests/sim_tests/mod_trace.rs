@@ -72,7 +72,7 @@ fn trace_records_decline_and_completion_events_consistent_with_composition() -> 
     assert_eq!(decline["slot"], "gatekeeper:hold.slot");
     assert_eq!(decline["stage"], "object_action");
     assert_eq!(decline["room"], "W1N1");
-    assert_eq!(decline["tick"], 0, "槽在提交前的世界时间执行");
+    assert_eq!(decline["tick"], 1, "槽在提交前的世界时间执行");
     assert!(decline["target"].as_str().is_some_and(|id| !id.is_empty()));
     // 单元变体序列化为字符串字面量；struct 变体保持对象形态。
     assert!(
@@ -195,8 +195,8 @@ fn trace_flag_survives_checkpoint_resume() -> anyhow::Result<()> {
         "恢复分片的续跑必须继续记录 trace：{trace}"
     );
     assert!(
-        entries.iter().all(|entry| entry["tick"] == 2),
-        "续跑事件从恢复后的世界时间（2）开始：{entries:?}"
+        entries.iter().all(|entry| entry["tick"] == 3),
+        "续跑事件从恢复后的世界时间（3）开始：{entries:?}"
     );
     assert!(
         entries

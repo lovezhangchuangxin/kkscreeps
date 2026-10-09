@@ -44,7 +44,7 @@ fn trace_is_off_by_default_and_snapshots_only_after_enabling() -> anyhow::Result
         "健康链只有完成事件：{entries:?}"
     );
     // 槽在提交前的世界时间执行：结算 tick N 记录为 N（提交后游戏时间 N+1）。
-    assert!(entries.iter().all(|entry| entry.tick == 0
+    assert!(entries.iter().all(|entry| entry.tick == 1
         && entry.room == "W1N1"
         && entry.slot == "builtin:link.tick"
         && entry.stage == "object_tick"));
@@ -177,8 +177,8 @@ fn trace_records_fault_retry_rebuild_and_auto_disable_sequence() -> anyhow::Resu
         .find(|entry| matches!(entry.event, kk_runtime::ModTraceEvent::RealmRebuilt))
         .unwrap();
     assert_eq!(
-        rebuilt.tick, 0,
-        "重建发生在下一次结算入口（世界时间仍为 0），槽/目标为空"
+        rebuilt.tick, 1,
+        "重建发生在下一次结算入口（世界时间为热身后的 1），槽/目标为空"
     );
     assert_eq!(rebuilt.slot, "");
     Ok(())

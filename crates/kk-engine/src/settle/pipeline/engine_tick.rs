@@ -72,7 +72,7 @@ impl Engine {
         let prepared = txn.into_prepared()?;
         self.run_state = RunState::Prepared { tick: time };
         cursor.enter(TickStage::Publish)?;
-        self.publish_tick(prepared)?;
+        self.publish_tick(prepared, input.warmup)?;
         Ok(())
     }
 
@@ -171,9 +171,13 @@ impl Engine {
 
     /// 将已校验候选发布到世界；World 在写入前检查所有可失败条件，
     /// 一次推进时间与版本并使目录/投影缓存失效，随后换入账户等候选。
-    pub(super) fn publish_tick(&mut self, prepared: txn::PreparedTick) -> Result<(), SettleError> {
+    pub(super) fn publish_tick(
+        &mut self,
+        prepared: txn::PreparedTick,
+        warmup: bool,
+    ) -> Result<(), SettleError> {
         self.world
-            .commit_tick_rooms(prepared.rooms, prepared.next_id)
+            .commit_tick_rooms(prepared.rooms, prepared.next_id, !warmup)
             .map_err(SettleError)?;
         self.market = prepared.market;
         self.players = prepared.players;

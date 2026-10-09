@@ -146,7 +146,7 @@ api.handlers.after(slot,{{id:'post'}},()=>api.decline('blocked'));
                     e.player_state("p1").unwrap().raw_memory,
                     "{\"committed\":true}"
                 );
-                assert_eq!(e.get_game_time(), 1);
+                assert_eq!(e.get_game_time(), 2);
                 assert!(!e.needs_mod_recovery());
                 assert!(e.last_mod_settlement_fault().is_none());
             }
@@ -231,7 +231,7 @@ fn assert_competing(e: &EmbedEngine, ids: &[String], action: &str) {
         e.player_state("p1").unwrap().raw_memory,
         "{\"executions\":1}"
     );
-    assert_eq!(e.get_game_time(), 1);
+    assert_eq!(e.get_game_time(), 2);
     assert!(!e.needs_mod_recovery());
     assert!(e.last_mod_settlement_fault().is_none());
 }

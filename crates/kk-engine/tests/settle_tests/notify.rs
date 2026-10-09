@@ -58,7 +58,10 @@ fn shared_candidates_retry_without_leaking_players_ids_or_notifications() {
                 Ok(())
             })
             .unwrap();
-        let input = kk_engine::TickInput { now_ms: 42 };
+        let input = kk_engine::TickInput {
+            now_ms: 42,
+            warmup: false,
+        };
         reference
             .tick_with_intents_with_input(batch.clone(), input)
             .unwrap();

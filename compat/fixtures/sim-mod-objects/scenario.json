@@ -1,22 +1,92 @@
 {
-  "version": 1,
-  "mods": { "root": "../../../mods/official", "configs": { "nursery": { "period": 5, "life": 3 } } },
-  "shard": {
-    "players": ["p1", "p2"],
-    "rooms": [{ "name": "W1N1", "owner": "p1" }, { "name": "W2N2", "owner": "p2" }]
-  },
-  "bots": [
-    { "player": "p1", "modules": ".", "memory": { "room": "W1N1" } },
-    { "player": "p2", "modules": ".", "memory": { "room": "W2N2" } }
+ "version": 1,
+ "mods": {
+  "root": "../../../mods/official",
+  "configs": {
+   "nursery": {
+    "period": 5,
+    "life": 3
+   }
+  }
+ },
+ "shard": {
+  "players": [
+   "p1",
+   "p2"
   ],
-  "objects": [
-    { "alias": "first", "room": "W1N1", "kind": "mod", "spec": { "typeKey": "nursery:emitter", "fields": { "x": 10, "y": 12 } } },
-    { "alias": "second", "room": "W2N2", "kind": "mod", "spec": { "typeKey": "nursery:emitter", "fields": { "x": 20, "y": 22 } } }
-  ],
-  "assertions": [
-    { "pointer": "/mod_states/nursery/born", "op": "gte", "value": 22 },
-    { "pointer": "/mod_states/nursery/expired", "op": "gte", "value": 20 },
-    { "pointer": "/objects/first/fields/emitted", "op": "gte", "value": 11 },
-    { "pointer": "/objects/second/fields/emitted", "op": "gte", "value": 11 }
+  "rooms": [
+   {
+    "name": "W1N1",
+    "owner": "p1"
+   },
+   {
+    "name": "W2N2",
+    "owner": "p2"
+   }
   ]
+ },
+ "bots": [
+  {
+   "player": "p1",
+   "modules": ".",
+   "memory": {
+    "room": "W1N1"
+   }
+  },
+  {
+   "player": "p2",
+   "modules": ".",
+   "memory": {
+    "room": "W2N2"
+   }
+  }
+ ],
+ "objects": [
+  {
+   "alias": "first",
+   "room": "W1N1",
+   "kind": "mod",
+   "spec": {
+    "typeKey": "nursery:emitter",
+    "fields": {
+     "x": 10,
+     "y": 12
+    }
+   }
+  },
+  {
+   "alias": "second",
+   "room": "W2N2",
+   "kind": "mod",
+   "spec": {
+    "typeKey": "nursery:emitter",
+    "fields": {
+     "x": 20,
+     "y": 22
+    }
+   }
+  }
+ ],
+ "assertions": [
+  {
+   "pointer": "/mod_states/nursery/born",
+   "op": "gte",
+   "value": 20
+  },
+  {
+   "pointer": "/mod_states/nursery/expired",
+   "op": "gte",
+   "value": 18
+  },
+  {
+   "pointer": "/objects/first/fields/emitted",
+   "op": "gte",
+   "value": 10
+  },
+  {
+   "pointer": "/objects/second/fields/emitted",
+   "op": "gte",
+   "value": 10
+  }
+ ]
 }

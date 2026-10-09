@@ -168,6 +168,7 @@ fn market_tick(engine: &mut Engine, player: &str, intents: Vec<kk_engine::Market
             batch,
             kk_engine::TickInput {
                 now_ms: BENCH_NOW_MS,
+                warmup: false,
             },
         )
         .unwrap();
@@ -280,6 +281,7 @@ fn change_price_skips_same_tick_deals() {
             batch,
             kk_engine::TickInput {
                 now_ms: BENCH_NOW_MS,
+                warmup: false,
             },
         )
         .unwrap();
@@ -405,6 +407,7 @@ fn negative_price_change_rejected_no_skip() {
             batch,
             kk_engine::TickInput {
                 now_ms: BENCH_NOW_MS,
+                warmup: false,
             },
         )
         .unwrap();

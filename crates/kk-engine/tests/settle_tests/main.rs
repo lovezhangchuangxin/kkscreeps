@@ -25,6 +25,7 @@ mod engine_world;
 mod ext;
 mod factory_actions;
 mod lab_actions;
+mod mineral_power_gates;
 mod minerals_and_boost;
 mod mod_buildings;
 mod mod_hits;
@@ -303,6 +304,7 @@ impl Fixture {
             batch,
             kk_engine::settle::TickInput {
                 now_ms: 1_700_000_000_000,
+                warmup: false,
             },
         )
     }

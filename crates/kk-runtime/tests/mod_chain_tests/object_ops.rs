@@ -21,7 +21,7 @@ fn tick_creates_children_next_round_and_self_deletion_invalidates_id() -> anyhow
     for binary in [false, true] {
         let body = r#"
 if(ctx.target.fields.x===10){
-  if(ctx.tick===0){const child=ctx.objects.create('chain:node',{x:20,y:12});ctx.state={child:child.id,created:child.fields.value};}
+  if(ctx.tick===1){const child=ctx.objects.create('chain:node',{x:20,y:12});ctx.state={child:child.id,created:child.fields.value};}
   ctx.target.fields.value++;
 }else{
   ctx.target.fields.value++;
@@ -103,7 +103,7 @@ fn foreign_types_native_objects_other_rooms_and_native_slots_do_not_gain_write_a
         let mut e = engine(&[("chain", source(body, ""))], false)?;
         node(&mut e, "W1N1", 10)?;
         assert!(e.tick(1).is_err());
-        assert_eq!(e.get_game_time(), 0);
+        assert_eq!(e.get_game_time(), 1, "故障轮不推进（热身拍已过）");
     }
     for operation in ["update", "remove"] {
         let body = format!(

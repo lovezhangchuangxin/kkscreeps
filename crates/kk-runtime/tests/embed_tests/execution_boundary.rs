@@ -51,7 +51,7 @@ pub(super) fn multi_player_writeback_retry_impl() -> anyhow::Result<()> {
         e.fail_next_writeback_for_test(kk_engine::WritebackStep::Segments);
         assert!(e.run_players(&codes).is_err());
         assert!(e.has_pending_round());
-        assert_eq!(e.get_game_time(), 0);
+        assert_eq!(e.get_game_time(), 1, "失败轮世界不动（热身拍已过）");
         for (index, player) in ["p1", "p2"].into_iter().enumerate() {
             assert_eq!(e.player_state_for_test(player).unwrap(), &before[index]);
             assert_eq!(e.get_object(&ids[index]).unwrap(), objects[index]);
@@ -62,7 +62,7 @@ pub(super) fn multi_player_writeback_retry_impl() -> anyhow::Result<()> {
         ]);
         let runs = e.run_players(&replacement)?;
         assert!(!e.has_pending_round());
-        assert_eq!(e.get_game_time(), 1);
+        assert_eq!(e.get_game_time(), 2, "重试轮 +1");
         for (index, player) in ["p1", "p2"].into_iter().enumerate() {
             assert_eq!(runs[player].expr["value"], 1);
             let state = e.player_state_for_test(player).unwrap();

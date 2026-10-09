@@ -52,7 +52,13 @@ fn restored_near_exhausted_allocator_discards_all_rooms_and_retries_without_publ
     restored.restore_checkpoint(saved).unwrap();
     for _ in 0..2 {
         let error = restored
-            .tick_with_intents_with_input(batch.clone(), TickInput { now_ms: 0 })
+            .tick_with_intents_with_input(
+                batch.clone(),
+                TickInput {
+                    now_ms: 0,
+                    warmup: false,
+                },
+            )
             .unwrap_err();
         assert!(error.0.contains("ID"), "{error}");
         assert!(matches!(

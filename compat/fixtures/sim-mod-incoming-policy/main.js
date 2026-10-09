@@ -2,7 +2,7 @@
 module.exports.loop = function () {
   const target = Game.rooms.W1N1.find(FIND_HOSTILE_CREEPS)[0];
   const actor = Game.creeps.attacker;
-  if (Game.time < 2) Memory.code = actor.attack(target);
+  if (Game.time < 3) Memory.code = actor.attack(target);
   Memory.target_hits = target.hits;
   Memory.tough_hits = target.body[0].hits;
   Memory.actor_hits = actor.hits;

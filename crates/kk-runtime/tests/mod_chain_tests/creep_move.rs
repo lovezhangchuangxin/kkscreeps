@@ -160,7 +160,7 @@ api.handlers.after('builtin:creep.move',{{id:'post'}},ctx=>{{if(isTarget(ctx))re
                 e.player_state("p1").unwrap().raw_memory,
                 "{\"committed\":true}"
             );
-            assert_eq!(e.get_game_time(), 1, "{position}: 整轮照常发布");
+            assert_eq!(e.get_game_time(), 2, "{position}: 整轮照常发布");
             assert!(!e.needs_mod_recovery());
             assert!(e.last_mod_settlement_fault().is_none());
         }

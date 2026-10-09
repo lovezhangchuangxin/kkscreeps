@@ -86,7 +86,7 @@ fn cpu_timeout_keeps_player_candidates_and_reuses_original_limits_on_retry() -> 
             assert!(e.mod_fault_streak().is_none());
             assert!(e.disabled_mods().is_empty());
             assert!(e.last_mod_auto_disable().is_none());
-            assert_eq!(e.get_game_time(), 0);
+            assert_eq!(e.get_game_time(), 1);
             assert_eq!(e.engine_generation(), generation);
             assert_eq!(e.player_state_for_test("p1"), Some(&player));
             assert_eq!(e.engine_mod_state("budget"), Value::Null);
@@ -95,7 +95,7 @@ fn cpu_timeout_keeps_player_candidates_and_reuses_original_limits_on_retry() -> 
         e.discard_pending_round();
         let run = e.run_player("p1", &code(2))?;
         assert_eq!(run.expr["value"], 2, "失败重试未运行新玩家代码");
-        assert_eq!(e.get_game_time(), 1);
+        assert_eq!(e.get_game_time(), 2);
         assert_eq!(e.get_object(&a).unwrap()["store"]["energy"], 98);
         assert_eq!(e.engine_mod_state("budget"), json!({"amount":2}));
     }
@@ -124,7 +124,7 @@ fn external_memory_limit_discards_native_and_mod_writes() -> anyhow::Result<()> 
             assert!(e.mod_fault_streak().is_none());
             assert!(e.disabled_mods().is_empty());
             assert!(e.last_mod_auto_disable().is_none());
-            assert_eq!(e.get_game_time(), 0);
+            assert_eq!(e.get_game_time(), 1);
             assert_eq!(e.engine_generation(), generation);
             assert_eq!(e.get_object(&id), before);
             assert_eq!(e.engine_mod_state("budget"), Value::Null);
@@ -159,7 +159,7 @@ fn many_short_object_callbacks_share_one_tick_budget() -> anyhow::Result<()> {
     assert!(e.mod_fault_streak().is_none());
     assert!(e.disabled_mods().is_empty());
     assert!(e.last_mod_auto_disable().is_none());
-    assert_eq!(e.get_game_time(), 0);
+    assert_eq!(e.get_game_time(), 1);
     assert_eq!(e.engine_generation(), generation);
     assert_eq!(e.engine_mod_state("budget"), Value::Null);
     for id in ids {

@@ -131,7 +131,7 @@ pub(super) fn economy_gcl_e2e_impl() -> anyhow::Result<()> {
                 e.get_object(&miner)
             );
         }
-        assert_eq!(e.get_game_time(), 40);
+        assert_eq!(e.get_game_time(), 41);
         let run = e.run_player(
             "p1",
             "[Memory.cycles, Game.rooms.W1N1.controller.progress, Game.gcl.progress]",

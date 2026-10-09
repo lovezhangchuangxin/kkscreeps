@@ -459,7 +459,13 @@ mod invariant_tests {
             let engine =
                 Engine::with_plan(world, plan.clone(), BTreeMap::new(), BTreeMap::new()).unwrap();
             let mut txn = engine
-                .prepare_tick(IntentBatch::default(), TickInput { now_ms: 0 })
+                .prepare_tick(
+                    IntentBatch::default(),
+                    TickInput {
+                        now_ms: 0,
+                        warmup: false,
+                    },
+                )
                 .unwrap();
             txn.rooms = txn
                 .room_names
@@ -601,7 +607,13 @@ mod invariant_tests {
         }
         for mutation in 0..4 {
             let mut txn = engine
-                .prepare_tick(IntentBatch::default(), TickInput { now_ms: 0 })
+                .prepare_tick(
+                    IntentBatch::default(),
+                    TickInput {
+                        now_ms: 0,
+                        warmup: false,
+                    },
+                )
                 .unwrap();
             txn.rooms = engine
                 .world

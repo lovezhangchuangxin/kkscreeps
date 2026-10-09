@@ -243,14 +243,14 @@ fn production_effect_expiration_keeps_distinct_lab_and_power_spawn_boundaries() 
             "powerSpawn",
             20,
             json!({"power":100,"energy":5000}),
-            json!([{"power":c::PWR_OPERATE_POWER,"level":5,"endTime":1}]),
+            json!([{"power":c::PWR_OPERATE_POWER,"level":5,"endTime":2}]),
         )?;
         let output = structure(
             &mut e,
             "lab",
             20,
             json!({}),
-            json!([{"power":c::PWR_OPERATE_LAB,"level":5,"endTime":1}]),
+            json!([{"power":c::PWR_OPERATE_LAB,"level":5,"endTime":2}]),
         )?;
         let first = structure(&mut e, "lab", 21, json!({"H":50}), json!([]))?;
         let second = structure(&mut e, "lab", 22, json!({"O":50}), json!([]))?;

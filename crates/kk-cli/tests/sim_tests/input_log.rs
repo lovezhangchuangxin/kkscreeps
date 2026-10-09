@@ -55,8 +55,8 @@ fn input_log_records_commits_and_resumes() -> anyhow::Result<()> {
     assert_eq!(report["input_log"]["segments"], 3);
     assert_eq!(report["input_log"]["read_back_segments"], 3);
     assert_eq!(report["input_log"]["validation"], "ok");
-    assert_eq!(report["input_log"]["first_tick"], 0);
-    assert_eq!(report["input_log"]["last_tick"], 2);
+    assert_eq!(report["input_log"]["first_tick"], 1);
+    assert_eq!(report["input_log"]["last_tick"], 3);
 
     // 独立读回：三段全为玩家轮，段号 1..=3，写回随段落位。
     let data = read_input_log(&log)?;
@@ -83,9 +83,9 @@ fn input_log_records_commits_and_resumes() -> anyhow::Result<()> {
     let data = read_input_log(&log)?;
     assert_eq!(data.segments.len(), 5);
     assert_eq!(data.segments[4]["seq"], 5);
-    // 续跑是全新分片（未带检查点），世界 tick 从 0 重新开始；日志只保证
-    // 段号结构延续。世界连续性须与检查点配对，是 G25.b 的回放规则。
-    assert_eq!(data.segments[4]["tick"], 1);
+    // 续跑是全新分片（未带检查点），世界 tick 重启（热身后首段为 1）；
+    // 日志只保证段号结构延续。世界连续性须与检查点配对，是 G25.b 的回放规则。
+    assert_eq!(data.segments[4]["tick"], 2);
 
     // 损坏（中段字节翻转）后拒绝续接：整读校验失败属 setup 失败。
     let text = std::fs::read_to_string(&log)?;
@@ -142,7 +142,7 @@ fn input_log_pairs_with_checkpoint_across_processes() -> anyhow::Result<()> {
     let report2: Value = serde_json::from_slice(&std::fs::read(&report2)?)?;
     assert_eq!(report2["input_log"]["segments"], 4, "段号跨进程延续");
     assert_eq!(
-        report2["input_log"]["last_tick"], 3,
+        report2["input_log"]["last_tick"], 4,
         "恢复后续跑从检查点 tick 继续"
     );
 
@@ -153,7 +153,7 @@ fn input_log_pairs_with_checkpoint_across_processes() -> anyhow::Result<()> {
         .iter()
         .filter_map(|s| s["tick"].as_u64())
         .collect();
-    assert_eq!(ticks, [0, 1, 2, 3], "恢复配对下世界 tick 连续");
+    assert_eq!(ticks, [1, 2, 3, 4], "恢复配对下世界 tick 连续");
     Ok(())
 }
 
@@ -183,6 +183,6 @@ fn input_log_detaches_on_mods_switch() -> anyhow::Result<()> {
     assert_eq!(summary["validation"], "ok");
     // 该场景 after_tick=2：前两轮记段，切换及其后轮次不记。
     assert_eq!(summary["read_back_segments"], 2);
-    assert_eq!(summary["last_tick"], 1);
+    assert_eq!(summary["last_tick"], 2);
     Ok(())
 }

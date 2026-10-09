@@ -140,7 +140,8 @@ fn mod_building_completion_rolls_back_on_build_slot_decline() -> anyhow::Result<
 fn writeback_failure_retry_settles_production_exactly_once() -> anyhow::Result<()> {
     for kkpv in [false, true] {
         let mut e = building_engine("", kkpv)?;
-        // 完工建筑 + 周期输入就位；世界时间 0 是生产周期点。
+        // 完工建筑 + 周期输入就位；生产周期锚定房间绝对时间
+        //（time % 10 == 0，热身拍消耗 tick 0），推进到下一周期点 t10。
         let foundry = e.place_object(
             "W1N1",
             "structure",
@@ -148,10 +149,11 @@ fn writeback_failure_retry_settles_production_exactly_once() -> anyhow::Result<(
                 "store":{"energy":50,"bm:ore":20},"storeCapacity":500}),
         )?;
         let _feeder = worker(&mut e, "f", 10, 10, 100, 0)?;
+        e.tick(9)?;
         e.fail_next_writeback_for_test(kk_engine::WritebackStep::RawMemory);
         let run = e.run_player("p1", "Memory.n=(Memory.n||0)+1; Game.creeps.f.say('hi');");
         assert!(run.is_err(), "晚期写回失败必须返回错误");
-        assert_eq!(e.get_game_time(), 0, "失败轮不提交");
+        assert_eq!(e.get_game_time(), 10, "失败轮不提交");
         assert!(
             e.get_object(&foundry).unwrap()["store"]
                 .get("bm:ingot")
@@ -216,7 +218,7 @@ fn build_slot_handler_fault_discards_round_without_publishing() -> anyhow::Resul
             )
             .expect_err("处理器异常必须使本轮失败");
         assert!(err.to_string().contains("boom"), "{err}");
-        assert_eq!(e.get_game_time(), 0, "故障轮不提交");
+        assert_eq!(e.get_game_time(), 1, "故障轮不提交");
         assert!(foundry_of(&e).is_none(), "无结构残留");
         assert_eq!(e.get_object(&site).unwrap()["progress"], json!(990));
         assert_eq!(e.get_object(&w).unwrap()["store"]["energy"], json!(1000));

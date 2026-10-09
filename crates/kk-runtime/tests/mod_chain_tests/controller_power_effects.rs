@@ -213,8 +213,8 @@ fn operate_controller_cast_gates_and_below_level8_inert() -> anyhow::Result<()> 
         );
         assert_eq!(
             e.get_object(&pc_id).unwrap()["powers"]["18"]["cooldownTime"],
-            json!(800),
-            "冷却 800（施放结算于 tick 0）"
+            json!(801),
+            "冷却 800（施放结算于 tick 1：热身后首个玩家拍）"
         );
         // 事件 1-tick 生命期：施放后立即核对，再读效果。
         assert_eq!(harness::events(&e, c::EVENT_POWER).len(), 1);

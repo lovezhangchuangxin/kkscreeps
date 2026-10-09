@@ -144,14 +144,14 @@ pub(super) fn dual_a_one_player_two_rooms_impl() -> anyhow::Result<()> {
     assert_eq!(src_w1 - source_energy(&e, "W1N1"), 2, "W1N1 harvest 臂");
     assert_eq!(creep_energy_by_owner(&e, "W1N1", "p1"), 2, "采集入仓");
 
-    // RawMemory 提交恰一次：下一轮读回上轮标记（首轮 Game.time=0）
+    // RawMemory 提交恰一次：下一轮读回上轮标记（首轮 Game.time=1）
     let runs2 = e.run_players(&codes_for("p1", "JSON.stringify(Memory.mark)"))?;
     assert_eq!(
         runs2["p1"].expr["value"].as_str().unwrap_or("<非串>"),
-        "0",
+        "1",
         "双房轮后 memory 已提交"
     );
-    assert_eq!(e.get_game_time(), 2, "两轮各恰 +1（评审 3 P2-1 清偿）");
+    assert_eq!(e.get_game_time(), 3, "两轮各恰 +1（评审 3 P2-1 清偿）");
 
     e.teardown();
     Ok(())

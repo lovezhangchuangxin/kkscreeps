@@ -73,7 +73,7 @@ export default function register(api) {
         "3 tick × 1 link 的 after 计数；实得 {state}"
     );
     assert_eq!(state["room"], serde_json::json!("W1N1"));
-    assert_eq!(state["tick"], serde_json::json!(2), "末次处理的 tick 序号");
+    assert_eq!(state["tick"], serde_json::json!(3), "末次处理的 tick 序号");
     // 再来两 tick：状态从已提交值续传。
     e.tick(2)?;
     let state = e.engine_mod_state("settle-mod");

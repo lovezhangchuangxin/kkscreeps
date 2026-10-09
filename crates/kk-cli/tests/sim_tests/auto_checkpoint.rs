@@ -201,13 +201,16 @@ fn directory_recovery_replays_log_and_matches_straight_run() -> anyhow::Result<(
     );
     assert_eq!(
         recovery["checkpoint_time"], 6,
-        "零段边界：检查点时间 = 日志末段 5 + 1"
+        "零段边界：检查点时间锚世界时间（保存节奏不随热身平移）"
     );
-    assert_eq!(recovery["replayed_segments"], 0, "零段合法终态");
+    assert_eq!(
+        recovery["replayed_segments"], 1,
+        "保存后恰剩末轮一段（日志随热身平移、保存锚世界时间）"
+    );
     assert_eq!(recovery["skipped_broken"], 0);
     assert_eq!(recovery["log_cursor"]["last_tick"], 5, "游标随保存落盘");
     assert_eq!(
-        recovery["log_cursor"]["last_seq"], 6,
+        recovery["log_cursor"]["last_seq"], 5,
         "游标 seq = 文件内段数"
     );
     assert_eq!(report2["verify_replay"]["status"], "passed");
@@ -254,8 +257,11 @@ fn recovery_from_older_checkpoint_matches_straight_run() -> anyhow::Result<()> {
         &report2,
     )?;
     assert_eq!(report2["recovery"]["checkpoint_time"], 2);
-    assert_eq!(report2["recovery"]["replayed_segments"], 4, "段 2..5 重放");
-    assert_eq!(report2["final"]["time"], 7);
+    assert_eq!(
+        report2["recovery"]["replayed_segments"], 5,
+        "段 2..6 重放（热身平移起点）"
+    );
+    assert_eq!(report2["final"]["time"], 8);
     assert_eq!(
         without_cpu(&report2["final"]),
         without_cpu(&reference["final"]),
@@ -302,8 +308,8 @@ fn broken_newest_checkpoint_downgrades_to_previous() -> anyhow::Result<()> {
     let recovery = &report2["recovery"];
     assert_eq!(recovery["skipped_broken"], 1, "坏最新份被跳过");
     assert_eq!(recovery["checkpoint_time"], 4);
-    assert_eq!(recovery["replayed_segments"], 2, "段 4/5 重放到日志尾");
-    assert_eq!(report2["final"]["time"], 7);
+    assert_eq!(recovery["replayed_segments"], 3, "段 4..6 重放到日志尾");
+    assert_eq!(report2["final"]["time"], 8);
 
     let reference = Case::new("refd");
     let ref_report = reference.0.join("r.json");
@@ -562,8 +568,8 @@ fn periodic_save_io_failure_fails_the_run() -> anyhow::Result<()> {
     assert_eq!(value["failure"]["tick"], 2, "首个到点保存即失败");
     assert_eq!(value["auto_checkpoint"]["saved"], 0, "失败前无成功保存");
     assert_eq!(
-        value["world_ticks_committed"], 2,
-        "失败前轮次已提交并如实上报"
+        value["world_ticks_committed"], 1,
+        "失败前轮次已提交并如实上报（热身拍：到点保存在首轮后）"
     );
     Ok(())
 }
@@ -608,7 +614,7 @@ fn recovered_run_continues_periodic_checkpointing() -> anyhow::Result<()> {
         &report2,
     )?;
     assert_eq!(report2["recovery"]["checkpoint_time"], 6);
-    assert_eq!(report2["recovery"]["replayed_segments"], 0);
+    assert_eq!(report2["recovery"]["replayed_segments"], 1);
     let auto = &report2["auto_checkpoint"];
     assert_eq!(
         auto["saved"], 1,
@@ -621,9 +627,12 @@ fn recovered_run_continues_periodic_checkpointing() -> anyhow::Result<()> {
         .collect();
     names.sort();
     assert_eq!(names, vec![ckpt_name(8)]);
-    assert_eq!(report2["final"]["time"], 8);
+    assert_eq!(report2["final"]["time"], 9);
     let lines = std::fs::read_to_string(&log)?.lines().count();
-    assert_eq!(lines, 9, "header + 6 旧段 + 2 新段，续接不双重记录");
+    assert_eq!(
+        lines, 9,
+        "header + 6 旧段 + 2 新段（重放不写段），续接不双重记录"
+    );
     assert_eq!(
         without_cpu(&report2["final"]),
         without_cpu(&reference["final"]),
@@ -657,7 +666,7 @@ fn interval_edges_cover_every_tick_and_beyond_run_length() -> anyhow::Result<()>
         .map(|entry| entry.file_name().into_string().unwrap())
         .collect();
     names.sort();
-    assert_eq!(names, vec![ckpt_name(2), ckpt_name(3)]);
+    assert_eq!(names, vec![ckpt_name(3), ckpt_name(4)]);
 
     let dir2 = case.0.join("ckpt2");
     let report2 = case.0.join("r2.json");
@@ -707,7 +716,7 @@ fn failed_player_round_skips_periodic_save() -> anyhow::Result<()> {
         .map(|entry| entry.file_name().into_string().unwrap())
         .collect();
     names.sort();
-    assert_eq!(names, vec![ckpt_name(1), ckpt_name(2)]);
+    assert_eq!(names, vec![ckpt_name(2), ckpt_name(3)]);
     Ok(())
 }
 

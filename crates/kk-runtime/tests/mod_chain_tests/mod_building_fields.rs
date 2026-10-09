@@ -138,7 +138,7 @@ fn native_key_drift_in_building_tick_fails_the_round() -> anyhow::Result<()> {
         let id = gauge_at(&mut e)?;
         let err = e.tick(1).expect_err("原生键漂移必须整轮失败");
         assert!(err.to_string().contains("原生记录键"), "{err}");
-        assert_eq!(e.get_game_time(), 0, "故障轮不提交");
+        assert_eq!(e.get_game_time(), 1, "故障轮不提交");
         let object = e.get_object(&id).unwrap();
         assert_eq!(object["bl:heat"], json!(7));
         assert_eq!(object["store"]["energy"], json!(0), "生产与 tick 一起回滚");
@@ -154,7 +154,7 @@ fn building_tick_decline_is_a_fault() -> anyhow::Result<()> {
         let id = gauge_at(&mut e)?;
         let err = e.tick(1).expect_err("生命周期槽拒绝须失败");
         assert!(err.to_string().contains("不支持正常拒绝"), "{err}");
-        assert_eq!(e.get_game_time(), 0);
+        assert_eq!(e.get_game_time(), 1);
         assert_eq!(e.get_object(&id).unwrap()["store"]["energy"], json!(0));
     }
     Ok(())
@@ -175,7 +175,7 @@ fn disabled_mod_stops_building_tick_but_host_production_persists() -> anyhow::Re
         assert_eq!(e.get_object(&id).unwrap()["bl:heat"], json!(8));
         e.disable_mod("bl")?;
         e.tick(2)?;
-        assert_eq!(e.get_game_time(), 3);
+        assert_eq!(e.get_game_time(), 4);
         let object = e.get_object(&id).unwrap();
         assert_eq!(object["bl:heat"], json!(8), "tick 停止，字段停在停用前值");
         assert_eq!(
@@ -268,7 +268,7 @@ fn building_fields_are_validated_even_without_tick_writes() -> anyhow::Result<()
         &json!({"pos":[11,10], "structureType":"bl:gauge", "owner":"p1"}),
     )])?;
     e.tick(1)?;
-    assert_eq!(e.get_game_time(), 1);
+    assert_eq!(e.get_game_time(), 2);
     let before = e.checkpoint(Value::Null)?;
     let error = e
         .place_objects(&[

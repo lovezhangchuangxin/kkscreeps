@@ -31,7 +31,7 @@
 
 | 域 | 字段路径 | 版本策略 | 恢复消费者 | 迁移状态 |
 |---|---|---|---|---|
-| 世界标量 | `engine.world.time`、`seed`、`player_ticks`、`next_obj_id`、`generation`、`terrain_epoch` | 随 `engine_version` 硬门；装配时校验时间/种子/游标一致性 | 世界重建；`player_ticks` 回填按玩家执行计数 | 拒绝不迁移，G23 负责 |
+| 世界标量 | `engine.world.time`、`seed`、`player_ticks`、`next_obj_id`、`generation`、`terrain_epoch` | 随 `engine_version` 硬门；装配时校验时间/种子/游标一致性 | 世界重建；`player_ticks` 回填按显式推进轮计数（createShard 装配热身拍只推进 time，不计入该值） | 拒绝不迁移，G23 负责 |
 | 房间快照 | `engine.world.rooms.*.snapshot[]`（顺序二进制） | `room_schema_version`（kk-schema `SCHEMA_VERSION`）硬门 | 房间对象/地形/事件整体解码；房名、坐标、地形与全局 ID 唯一性校验 | 拒绝不迁移，G23 负责 |
 | 房间对象效果 | `engine.world.rooms.*.effects.*[]`（effect/power/level/end_time；effect 可空——PWR_SHIELD 引擎施放形态（官方专用分支无 effect 键），载荷中为 null，管理放置 ingress 缺省 effect=power；v4 内放宽，旧读取器不认 null，无存量检查点） | 载荷 v4 必填；缺失不补造，引用、等级、时间与同 power 唯一性重验 | `World::from_checkpoint` 重建表；投影/玩法读取绝对时间，删除/跨房与宿主同行 | 缺该域的旧布局拒绝，当前格式冷恢复与失败重试已覆盖 |
 | 房间扩展字段 | `engine.world.rooms.*.extensions`（动态映射，载荷不透明） | 扩展字段按 schema/引用校验 | Mod 对象扩展字段回填 | 拒绝不迁移，G23 负责 |

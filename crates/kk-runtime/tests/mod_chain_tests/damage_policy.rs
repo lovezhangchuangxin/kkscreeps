@@ -56,7 +56,7 @@ fn captured_policy_capability_cannot_write_in_a_later_invocation() -> anyhow::Re
     let code = format!("Game.creeps.a.attack(Game.getObjectById('{b}'))");
     e.run_player("p1", &code)?;
     e.run_player("p1", &code)?;
-    assert_eq!(e.get_game_time(), 2);
+    assert_eq!(e.get_game_time(), 3);
     assert_eq!(hits(&e, &b), 70, "旧 token 不可访问新调用的候选");
     assert!(events(&e, kk_core::constants::EVENT_ATTACK).is_empty());
     Ok(())
@@ -171,7 +171,7 @@ fn decline_restores_policy_target_queue_but_keeps_prior_action() -> anyhow::Resu
         assert_eq!(hits(&e, &far), 93, "首触日志恢复此前动作的待伤害");
         assert_eq!(events(&e, kk_core::constants::EVENT_ATTACK).len(), 1);
         assert_eq!(e.engine_mod_state("alpha"), json!({"count":1}));
-        assert_eq!(e.get_game_time(), 1);
+        assert_eq!(e.get_game_time(), 2);
     }
     Ok(())
 }

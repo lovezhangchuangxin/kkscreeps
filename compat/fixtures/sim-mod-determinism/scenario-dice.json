@@ -2572,12 +2572,12 @@
   {
    "pointer": "/mod_states/dice/draws/0",
    "op": "eq",
-   "value": 0.5319516882459987
+   "value": 0.2984591717735505
   },
   {
    "pointer": "/mod_states/dice/draws/1",
    "op": "eq",
-   "value": 0.1238327901967533
+   "value": 0.9225850068048582
   }
  ]
 }

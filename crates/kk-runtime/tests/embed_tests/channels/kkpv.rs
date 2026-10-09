@@ -236,8 +236,8 @@ pub(crate) fn kkpv_injection_size_sample_impl() -> anyhow::Result<()> {
     assert!(result.executed, "零房世界的 KKPV 轮须照常执行");
     assert_eq!(
         result.expr["value"],
-        json!("{\"rooms\":[],\"time\":0}"),
-        "零房玩家面两通道同形（空 Game.rooms）"
+        json!("{\"rooms\":[],\"time\":1}"),
+        "零房玩家面两通道同形（空 Game.rooms，time 为热身后首拍）"
     );
     Ok(())
 }
@@ -428,10 +428,14 @@ pub(crate) fn kkpv_public_bundle_pin_hostile_impl() -> anyhow::Result<()> {
                 .expect("p2 读取探针返回字符串"),
         )?;
         let time = p1["time"].as_u64().expect("time 为数值");
-        assert_eq!(time, round, "第 {round} 轮的执行绑定 tick");
+        assert_eq!(
+            time,
+            round + 1,
+            "第 {round} 轮的执行绑定 tick（热身后偏移 1）"
+        );
         assert_eq!(
             p2["time"].as_u64(),
-            Some(round),
+            Some(round + 1),
             "两名玩家同轮绑定同一 tick"
         );
         assert_eq!(
@@ -475,7 +479,11 @@ pub(crate) fn kkpv_public_bundle_pin_hostile_impl() -> anyhow::Result<()> {
         // 固定计划），束体积逐轮必须相等——随代际累积膨胀属泄漏形态。
         let report = e.kkpv_public_retention_report();
         assert_eq!(report.len(), 1, "稳态保留报告只列当前代际");
-        assert_eq!(report[0].epoch.tick, round, "当前代际即本轮执行绑定 tick");
+        assert_eq!(
+            report[0].epoch.tick,
+            round + 1,
+            "当前代际即本轮执行绑定 tick（热身后偏移 1）"
+        );
         assert_eq!(report[0].handles, 0, "派发结束后无库外句柄");
         assert!(report[0].bytes > 0, "当前代际束非空");
         if let Some(prev) = bundle_bytes {

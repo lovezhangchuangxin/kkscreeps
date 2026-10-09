@@ -4,7 +4,7 @@
 module.exports.loop = function () {
   // time>=3 才记录（已结算 3 轮）；--ticks 2 的检查点保存轮不满足
   // 断言，退出码 2，冷恢复后补齐。
-  if (Game.time < 3) return;
+  if (Game.time < 4) return;
   const room = Game.rooms['W1N1'];
   const gauge = room.find(FIND_STRUCTURES).filter((s) => s.structureType === 'bl:gauge')[0];
   const beacon = room.find(FIND_STRUCTURES).filter((s) => s.structureType === 'bk:beacon')[0];

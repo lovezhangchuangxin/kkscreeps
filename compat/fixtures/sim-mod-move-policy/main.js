@@ -2,13 +2,13 @@
 // 默认排序按 MOVE 功率/重量比：light(2 MOVE) > mid(work,move) > heavy(2 work,move)。
 module.exports.loop = function () {
   const plan = { mid: BOTTOM, light: LEFT, heavy: TOP };
-  if (Game.time === 0) {
+  if (Game.time === 1) {
     for (const name in plan) {
       const creep = Game.creeps[name];
       if (creep) creep.move(plan[name]);
     }
   }
-  if (Game.time >= 1) {
+  if (Game.time >= 2) {
     Memory.winner = 'none';
     Memory.positions = {};
     for (const name in plan) {

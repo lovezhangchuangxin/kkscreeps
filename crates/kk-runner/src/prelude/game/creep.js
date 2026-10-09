@@ -223,8 +223,7 @@
       const e = effects[i];
       if (
         e &&
-        (e.power === globalThis.PWR_FORTIFY ||
-          e.effect === globalThis.EFFECT_INVULNERABILITY) &&
+        (e.power === globalThis.PWR_FORTIFY || e.effect === globalThis.EFFECT_INVULNERABILITY) &&
         e.ticksRemaining > 0
       ) {
         return true;

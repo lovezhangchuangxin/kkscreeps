@@ -563,7 +563,13 @@ fn tick_input_replay_consistency() {
         let mut d = IntentData::target(ctl);
         d.sign = Some("replayable".into());
         b.add_object_intent("p1", c, Action::SignController, d);
-        f.settle_with_input(b, kk_engine::settle::TickInput { now_ms });
+        f.settle_with_input(
+            b,
+            kk_engine::settle::TickInput {
+                now_ms,
+                warmup: false,
+            },
+        );
         let s = ctl_of(&f).sign.as_ref().unwrap();
         let sign = (s.user.clone(), s.text.clone(), s.time, s.datetime);
         let world = serde_json::to_string(&f.world.world_json_for_viewer("p1", 0)).unwrap();
@@ -664,7 +670,13 @@ fn tick_input_replay_consistency_engine_level() {
             })
             .unwrap();
         engine
-            .tick_with_intents_with_input(batch, TickInput { now_ms })
+            .tick_with_intents_with_input(
+                batch,
+                TickInput {
+                    now_ms,
+                    warmup: false,
+                },
+            )
             .unwrap();
         serde_json::to_string(&engine.world().world_json_for_viewer("p1", 0)).unwrap()
     }

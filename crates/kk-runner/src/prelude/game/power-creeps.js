@@ -81,50 +81,47 @@
   // 官方 power-creeps.js:45-73 的属性定义；未生成侧无房间键（undefined 形态
   // 由各 getter 自带缺省表达）。ticksToLive 对无 ageTime（未生成）返回
   // undefined——官方 NaN 分支按套件契约折 undefined。
-  gw.defineGameObjectProperties(
-    globalThis.PowerCreep.prototype,
-    gw.pcData,
-    {
-      name: (o) => o.name,
-      my: (o) => o.owner === gw.viewerName,
-      owner: (o) => ({ username: o.owner || 'unknown' }),
-      level: (o) => o.level,
-      className: (o) => o.className,
-      hitsMax: (o) => o.hitsMax,
-      hits: (o) => o.hits,
-      shard: (o) => o.shard || undefined,
-      spawnCooldownTime: (o) => {
-        const now = gw.world.power_account ? gw.world.power_account.now : 0;
-        return o.spawnCooldownTime !== null && o.spawnCooldownTime !== undefined &&
-          o.spawnCooldownTime > now
-          ? o.spawnCooldownTime
-          : undefined;
-      },
-      deleteTime: (o) => o.deleteTime || undefined,
-      powers: (o) => {
-        const out = {};
-        const powers = o.powers || {};
-        for (const key in powers) {
-          const entry = powers[key];
-          out[key] = {
-            level: entry.level,
-            cooldown: mathMax(0, (entry.cooldownTime || 0) - gw.world.time),
-          };
-        }
-        return out;
-      },
-      saying: (o) => {
-        const say = o.actionLog && o.actionLog.say;
-        if (!say) return undefined;
-        if (o.owner === gw.viewerName) return say.message;
-        return say.isPublic ? say.message : undefined;
-      },
-      carry: (o) => gw.makeStore(o),
-      store: (o) => gw.makeStore(o),
-      carryCapacity: (o) => o.storeCapacity,
-      ticksToLive: (o) => (o.ageTime === undefined ? undefined : o.ageTime - gw.world.time),
+  gw.defineGameObjectProperties(globalThis.PowerCreep.prototype, gw.pcData, {
+    name: (o) => o.name,
+    my: (o) => o.owner === gw.viewerName,
+    owner: (o) => ({ username: o.owner || 'unknown' }),
+    level: (o) => o.level,
+    className: (o) => o.className,
+    hitsMax: (o) => o.hitsMax,
+    hits: (o) => o.hits,
+    shard: (o) => o.shard || undefined,
+    spawnCooldownTime: (o) => {
+      const now = gw.world.power_account ? gw.world.power_account.now : 0;
+      return o.spawnCooldownTime !== null &&
+        o.spawnCooldownTime !== undefined &&
+        o.spawnCooldownTime > now
+        ? o.spawnCooldownTime
+        : undefined;
     },
-  );
+    deleteTime: (o) => o.deleteTime || undefined,
+    powers: (o) => {
+      const out = {};
+      const powers = o.powers || {};
+      for (const key in powers) {
+        const entry = powers[key];
+        out[key] = {
+          level: entry.level,
+          cooldown: mathMax(0, (entry.cooldownTime || 0) - gw.world.time),
+        };
+      }
+      return out;
+    },
+    saying: (o) => {
+      const say = o.actionLog && o.actionLog.say;
+      if (!say) return undefined;
+      if (o.owner === gw.viewerName) return say.message;
+      return say.isPublic ? say.message : undefined;
+    },
+    carry: (o) => gw.makeStore(o),
+    store: (o) => gw.makeStore(o),
+    carryCapacity: (o) => o.storeCapacity,
+    ticksToLive: (o) => (o.ageTime === undefined ? undefined : o.ageTime - gw.world.time),
+  });
 
   // memory（官方独立 getter/setter，不走 defineGameObjectProperties 缓存）：
   // 非本人读 undefined、写抛错。
@@ -159,7 +156,16 @@
       return globalThis.Creep.prototype[name].apply(this, args);
     };
   }
-  for (const name of ['move', 'moveTo', 'moveByPath', 'transfer', 'withdraw', 'drop', 'pickup', 'say']) {
+  for (const name of [
+    'move',
+    'moveTo',
+    'moveByPath',
+    'transfer',
+    'withdraw',
+    'drop',
+    'pickup',
+    'say',
+  ]) {
     globalThis.PowerCreep.prototype[name] = delegateToCreep(name);
   }
 

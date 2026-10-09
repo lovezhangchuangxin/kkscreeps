@@ -3,14 +3,14 @@
 // strong/weak 竞争同一目的格（strong 功率高胜出，weak 落选）。
 // 之后各 tick 只记录位置。
 module.exports.loop = function () {
-  if (Game.time === 0) {
+  if (Game.time === 1) {
     Game.creeps.a.move(TOP);
     Game.creeps.b.move(BOTTOM);
     Game.creeps.stranger.move(TOP);
     Game.creeps.strong.move(TOP);
     Game.creeps.weak.move(TOP_LEFT);
   }
-  if (Game.time >= 1) {
+  if (Game.time >= 2) {
     Memory.positions = {};
     for (const name of ['a', 'b', 'stranger', 'parked', 'strong', 'weak']) {
       const creep = Game.creeps[name];

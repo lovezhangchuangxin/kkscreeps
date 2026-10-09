@@ -257,8 +257,9 @@ fn verify(
     generation: u64,
     mode: Mode,
 ) -> anyhow::Result<Value> {
+    // 世界时间含 createShard 的热身结算拍（官方同形），探测轮数之外恰 +1。
     anyhow::ensure!(
-        engine.get_game_time() == u64::from(elapsed),
+        engine.get_game_time() == u64::from(elapsed) + 1,
         "世界 tick 不符"
     );
     anyhow::ensure!(

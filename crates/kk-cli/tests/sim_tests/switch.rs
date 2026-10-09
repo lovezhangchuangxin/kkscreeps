@@ -149,8 +149,8 @@ fn switch_checkpoint_cold_resumes_with_post_switch_packages() -> anyhow::Result<
             &resumed,
         )?;
         assert_eq!(code, 0, "{actual}");
-        assert_eq!(actual["start_time"], json!(2));
-        assert_eq!(actual["end_time"], json!(6));
+        assert_eq!(actual["start_time"], json!(3));
+        assert_eq!(actual["end_time"], json!(7));
         assert_eq!(actual["mods_switches"], json!([]), "续跑不重放已生效的切换");
         assert_eq!(actual["aliases"], expected["aliases"]);
         assert_eq!(actual["composition"], expected["composition"]);
@@ -184,8 +184,8 @@ fn switch_checkpoint_cold_resumes_with_post_switch_packages() -> anyhow::Result<
             &continued,
         )?;
         assert_eq!(code, 0, "{continued}");
-        assert_eq!(continued["start_time"], json!(1));
-        assert_eq!(continued["end_time"], json!(6));
+        assert_eq!(continued["start_time"], json!(2));
+        assert_eq!(continued["end_time"], json!(7));
         assert_eq!(
             continued["mods_switches"][0]["status"],
             json!("applied"),
@@ -244,8 +244,8 @@ fn rejected_switch_records_error_and_checkpoint_resumes_with_initial_set() -> an
             &resumed,
         )?;
         assert_eq!(code, 0, "越界但未生效的检查点按初始集合续跑：{actual}");
-        assert_eq!(actual["start_time"], json!(3));
-        assert_eq!(actual["end_time"], json!(6));
+        assert_eq!(actual["start_time"], json!(4));
+        assert_eq!(actual["end_time"], json!(7));
         assert_eq!(actual["mods_switches"], json!([]), "时间已过边界不再重试");
         assert_eq!(
             actual["composition"]["selection"]["selected"],
@@ -295,6 +295,55 @@ fn successful_switch_history_survives_three_cold_resumes() -> anyhow::Result<()>
             json!([2])
         );
         previous = Some(checkpoint);
+    }
+    Ok(())
+}
+
+/// after_tick=1 不能被装配热身拍吞掉；首轮提交后换装，冷恢复不重复切换。
+#[test]
+fn first_explicit_round_switch_survives_warmup_and_cold_resume() -> anyhow::Result<()> {
+    for binary in [false, true] {
+        let case = Case::new("first-round", binary);
+        let source = switch_scene("scenario-remove.json").canonicalize()?;
+        let mut scene: Value = serde_json::from_slice(&std::fs::read(&source)?)?;
+        scene["assertions"] = json!([]);
+        scene["mods_switch"]["after_tick"] = json!(1);
+        let base = source.parent().unwrap();
+        scene["mods"]["root"] = json!(
+            base.join(scene["mods"]["root"].as_str().unwrap())
+                .canonicalize()?
+        );
+        for bot in scene["bots"].as_array_mut().unwrap() {
+            bot["modules"] = json!(base.join(bot["modules"].as_str().unwrap()).canonicalize()?);
+        }
+        let scenario = case.report("scenario.json");
+        std::fs::write(&scenario, serde_json::to_vec(&scene)?)?;
+        let checkpoint = case.report("checkpoint.json");
+        let first = case.report("first.json");
+        let (code, report) = result(
+            command(&scenario, &first, 1, binary)
+                .arg("--save-checkpoint")
+                .arg(&checkpoint),
+            &first,
+        )?;
+        assert_eq!(code, 0, "{report}");
+        assert_eq!(report["end_time"], 2);
+        assert_eq!(report["mods_switches"][0]["status"], "applied");
+        assert_eq!(
+            report["composition"]["selection"]["selected"],
+            json!(["base"])
+        );
+        let resumed = case.report("resumed.json");
+        let (code, actual) = result(
+            command(&scenario, &resumed, 1, binary)
+                .arg("--load-checkpoint")
+                .arg(&checkpoint),
+            &resumed,
+        )?;
+        assert_eq!(code, 0, "{actual}");
+        assert_eq!(actual["mods_switches"], json!([]));
+        assert_eq!(actual["composition"], report["composition"]);
+        assert_eq!(actual["final"]["players"]["p1"]["memory"]["linkCap"], 800);
     }
     Ok(())
 }

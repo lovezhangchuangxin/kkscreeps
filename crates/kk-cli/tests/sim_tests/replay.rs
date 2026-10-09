@@ -54,8 +54,8 @@ fn verify_replay_passes_on_plain_scenario() -> anyhow::Result<()> {
         let verify = &report["verify_replay"];
         assert_eq!(verify["status"], "passed", "{verify}");
         assert_eq!(verify["segments"], 3);
-        assert_eq!(verify["first_tick"], 0);
-        assert_eq!(verify["last_tick"], 2);
+        assert_eq!(verify["first_tick"], 1);
+        assert_eq!(verify["last_tick"], 3);
     }
     Ok(())
 }
@@ -88,8 +88,8 @@ fn verify_replay_after_checkpoint_resume_skips_prior_segments() -> anyhow::Resul
         verify["segments"], 2,
         "只重放本次续跑的两段（跳过前次旧段）"
     );
-    assert_eq!(verify["first_tick"], 2, "续跑段从恢复点 tick 开始");
-    assert_eq!(verify["last_tick"], 3);
+    assert_eq!(verify["first_tick"], 3, "续跑段从恢复点 tick 开始");
+    assert_eq!(verify["last_tick"], 4);
     Ok(())
 }
 

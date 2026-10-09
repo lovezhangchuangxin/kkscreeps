@@ -18,7 +18,7 @@ fn settlement_fault_survives_recovery_and_clears_only_on_actual_settlement() -> 
         );
         assert!(e.run_player("p1", &code).is_err());
         let record = e.last_mod_settlement_fault().expect("保留槽故障");
-        assert_eq!(record.tick, 0);
+        assert_eq!(record.tick, 1, "首个玩家结算拍（热身后）");
         assert_eq!(record.room, "W1N1");
         assert_eq!(record.target, source);
         let fault = record.error.fault.as_ref().unwrap();
@@ -50,7 +50,7 @@ fn settlement_fault_survives_recovery_and_clears_only_on_actual_settlement() -> 
         assert!(e.last_mod_settlement_fault().is_none());
         assert!(!e.needs_mod_recovery());
         assert!(e.last_mod_settlement_fault().is_none());
-        assert_eq!(e.get_game_time(), 1);
+        assert_eq!(e.get_game_time(), 2);
     }
     Ok(())
 }
@@ -83,7 +83,7 @@ api.handlers.after('builtin:link.tick',{{id:'post'}},ctx=>{{ctx.target.fields.co
         for _ in 0..2 {
             let error = e.tick(1).expect_err("捕获错误不能使有故障的候选成功");
             assert!(!error.to_string().is_empty());
-            assert_eq!(e.get_game_time(), 0);
+            assert_eq!(e.get_game_time(), 1);
             assert_eq!(e.engine_generation(), generation);
             assert_eq!(cooldown(&e, &id), json!(100));
             assert_eq!(e.engine_mod_state("chain"), Value::Null);
@@ -136,7 +136,7 @@ api.handlers.after('builtin:link.tick',{{id:'after'}},ctx=>{{ctx.target.fields.c
                     .tick(1)
                     .expect_err("吞掉转换异常不能提交 getter 的 native 副作用");
                 assert!(error.to_string().contains("转换失败"), "{error}");
-                assert_eq!(e.get_game_time(), 0);
+                assert_eq!(e.get_game_time(), 1);
                 assert_eq!(e.engine_generation(), generation);
                 assert_eq!(cooldown(&e, &id), json!(100));
                 assert_eq!(e.engine_mod_state("chain"), Value::Null);

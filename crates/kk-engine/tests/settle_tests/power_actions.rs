@@ -236,6 +236,7 @@ impl PowerFixture {
                 batch,
                 kk_engine::settle::TickInput {
                     now_ms: self.now_ms,
+                    warmup: false,
                 },
             )
             .unwrap();

@@ -78,7 +78,7 @@ api.handlers.after('builtin:link.transfer',{{id:'post'}},()=>api.decline('blocke
                         "{\"committed\":true}"
                     }
                 );
-                assert_eq!(e.get_game_time(), 1);
+                assert_eq!(e.get_game_time(), 2);
                 assert!(!e.needs_mod_recovery());
                 assert!(e.last_mod_settlement_fault().is_none());
             }
@@ -153,7 +153,7 @@ fn assert_competition(e: &EmbedEngine, ids: &[String]) {
     assert_eq!(events[1]["data"]["amount"], 16);
     assert_eq!(e.engine_mod_state("alpha"), json!({"count":2}));
     assert_eq!(e.engine_mod_state("beta"), json!({"count":2,"calls":3}));
-    assert_eq!(e.get_game_time(), 1);
+    assert_eq!(e.get_game_time(), 2);
     assert_eq!(
         e.player_state("p1").unwrap().raw_memory,
         "{\"executions\":1}"

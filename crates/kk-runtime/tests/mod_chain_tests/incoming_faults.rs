@@ -148,7 +148,7 @@ fn incoming_abilities_are_unavailable_in_attack_and_old_tokens_do_not_write_new_
                 170,
                 "旧能力不可把新调用改成免疫；拒绝仍按默认受击"
             );
-            assert_eq!(e.get_game_time(), 2);
+            assert_eq!(e.get_game_time(), 3);
         }
     }
     Ok(())

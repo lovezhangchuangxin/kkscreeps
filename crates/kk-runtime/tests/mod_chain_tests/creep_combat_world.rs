@@ -53,7 +53,7 @@ fn creep_combat_kill_boundary_restores_on_decline() -> anyhow::Result<()> {
                 events(&e, kk_core::constants::EVENT_ATTACK).is_empty(),
                 "{label}"
             );
-            assert_eq!(e.get_game_time(), 1, "{label}: 整轮照常发布");
+            assert_eq!(e.get_game_time(), 2, "{label}: 整轮照常发布");
         }
     }
     Ok(())
@@ -139,7 +139,7 @@ fn creep_combat_structure_destroy_restores_object_and_ruin_on_decline() -> anyho
                 events(&e, kk_core::constants::EVENT_ATTACK).is_empty(),
                 "{label}"
             );
-            assert_eq!(e.get_game_time(), 1, "{label}");
+            assert_eq!(e.get_game_time(), 2, "{label}");
         }
     }
     Ok(())
@@ -338,7 +338,7 @@ fn creep_ranged_mass_attack_rates_cancel_and_decline() -> anyhow::Result<()> {
         assert_eq!(hits(&e, &own), 100, "{label}: 己方免伤");
         if outcome == "cancel" {
             assert_eq!(e.engine_mod_state("alpha"), json!({"held":true}));
-            assert_eq!(e.get_game_time(), 1, "{label}: 取消仍成功提交");
+            assert_eq!(e.get_game_time(), 2, "{label}: 取消仍成功提交");
         }
     }
     // mass 槽目标改向为故障，不能被 decline 掩盖。

@@ -20,7 +20,7 @@ fn disabling_faulting_replace_retries_cached_players_with_native_and_healthy_hoo
         );
         assert!(e.run_player("p1", &code).is_err());
         let fault = e.last_mod_settlement_fault().unwrap();
-        assert_eq!(e.get_game_time(), 0);
+        assert_eq!(e.get_game_time(), 1);
         assert_eq!(e.engine_generation(), generation);
         assert_eq!(e.get_object(&source).unwrap()["store"]["energy"], 100);
         assert_eq!(e.engine_mod_state("healthy"), Value::Null);
@@ -33,10 +33,10 @@ fn disabling_faulting_replace_retries_cached_players_with_native_and_healthy_hoo
         e.fail_next_mod_rebuild_for_test()?;
         assert!(e.run_player("p1", "throw Error('不得重跑')").is_err());
         assert_eq!(e.last_mod_settlement_fault(), Some(fault));
-        assert_eq!(e.get_game_time(), 0);
+        assert_eq!(e.get_game_time(), 1);
         let retried = e.run_player("p1", "throw Error('不得重跑')")?;
         assert_eq!(retried.expr["value"], "cached");
-        assert_eq!(e.get_game_time(), 1);
+        assert_eq!(e.get_game_time(), 2);
         assert_eq!(e.get_object(&source).unwrap()["store"]["energy"], 75);
         assert_eq!(e.get_object(&target).unwrap()["store"]["energy"], 24);
         assert_eq!(e.engine_mod_state("healthy"), json!({"energy":75}));
@@ -116,7 +116,7 @@ fn disabling_own_slot_drops_hooks_and_actions_but_preserves_objects_state_and_de
         assert_eq!(e.engine_mod_state("a"), state);
         assert_eq!(e.engine_mod_state("healthy"), json!({"count":1}));
         assert_eq!(cooldown(&e, &link_id), 9);
-        assert_eq!(e.get_game_time(), 2);
+        assert_eq!(e.get_game_time(), 3);
         assert!(e.last_mod_settlement_fault().is_none());
         // 目录仍有效：旧对象继续投影，原 schema 仍能用于新对象。
         e.place_mod_object("W1N1", "a:counter", &json!({"owner":"p1","x":11,"y":12}))?;
@@ -149,7 +149,7 @@ fn disabled_replace_on_enabled_own_slot_restores_original_process() -> anyhow::R
         e.run_player("p1", "throw Error('不得重跑')")?;
         assert_eq!(e.get_object(&id).unwrap()["fields"]["value"], 1);
         assert_eq!(e.engine_mod_state("a"), json!({"count":1,"calls":1}));
-        assert_eq!(e.get_game_time(), 1);
+        assert_eq!(e.get_game_time(), 2);
     }
     Ok(())
 }
@@ -165,7 +165,7 @@ fn disabled_bindings_are_removed_from_active_candidate_capabilities() -> anyhow:
     e.disable_mod("bad")?;
     assert!(e.tick(1).is_err(), "被捕获的非法能力故障仍应阻止发布");
     assert_eq!(cooldown(&e, &id), 10);
-    assert_eq!(e.get_game_time(), 0);
+    assert_eq!(e.get_game_time(), 1);
     let fault = e.last_mod_settlement_fault().unwrap().error.fault.unwrap();
     assert_eq!(fault.kind, kk_mod_host::ModFaultKind::Capability);
     assert!(fault.binding.is_none());

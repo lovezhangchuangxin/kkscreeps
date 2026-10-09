@@ -169,6 +169,10 @@ const NOTIFY_RECORD_CAP: usize = 100;
 pub struct TickInput {
     /// Unix 毫秒墙钟。
     pub now_ms: u64,
+    /// 热身拍（createShard 装配段的世界结算）：推进时间但不计入
+    /// player_ticks——setTerrain 的「首个玩家 tick 之前」门以宿主发起
+    /// 的执行轮为准（官方 guardedTick 同属装配期）。
+    pub warmup: bool,
 }
 
 impl TickInput {
@@ -179,6 +183,7 @@ impl TickInput {
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_millis() as u64)
                 .unwrap_or(0),
+            warmup: false,
         }
     }
 }

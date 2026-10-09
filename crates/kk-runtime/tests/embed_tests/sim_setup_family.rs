@@ -15,8 +15,8 @@ pub(super) fn sim_setup_preserves_tick_and_failure_candidates_impl() -> anyhow::
     assert!(e.set_player_memory("p1", &json!(null)).is_err());
     e.set_player_modules("p1", modules)?;
     e.set_player_memory("p1", &json!({"count": 4}))?;
-    assert_eq!(e.get_game_time(), 0);
-    assert_eq!(e.world_snapshot()["time"], 0);
+    assert_eq!(e.get_game_time(), 1, "创建含热身拍，设置操作不再推进");
+    assert_eq!(e.world_snapshot()["time"], 1);
     let code = "require('main').loop(); Memory.count";
     assert_eq!(e.run_player("p1", code)?.expr["value"], 6);
     e.fail_next_writeback_for_test(kk_engine::WritebackStep::RawMemory);
@@ -26,7 +26,7 @@ pub(super) fn sim_setup_preserves_tick_and_failure_candidates_impl() -> anyhow::
     assert!(e.set_player_modules("p1", replacement).is_err());
     assert!(e.set_player_memory("p1", &json!({"count": 1000})).is_err());
     assert_eq!(e.player_state("p1").unwrap().raw_memory, "{\"count\":6}");
-    assert_eq!(e.get_game_time(), 1);
+    assert_eq!(e.get_game_time(), 2);
     assert_eq!(e.run_player("p1", "'ignored'")?.expr["value"], 8);
     assert_eq!(e.run_player("p1", code)?.expr["value"], 10);
 
@@ -42,7 +42,7 @@ pub(super) fn sim_setup_preserves_tick_and_failure_candidates_impl() -> anyhow::
         serde_json::from_str::<serde_json::Value>(&e.player_state("p1").unwrap().raw_memory)?,
         unicode
     );
-    assert_eq!(e.get_game_time(), 3);
+    assert_eq!(e.get_game_time(), 4);
     e.teardown();
     Ok(())
 }

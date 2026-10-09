@@ -27,7 +27,7 @@ pub(super) fn stage_recovery_family_impl() -> anyhow::Result<()> {
             "rooms": [{ "name": "W1N1", "rcl": 3, "owner": "p1" }],
         }))?;
         e.run_player("p1", "'warmup'")?;
-        assert_eq!(e.get_game_time(), 1);
+        assert_eq!(e.get_game_time(), 2, "热身拍 + warmup 轮");
 
         // 轮 A：计数代码（globalThis 跨 tick 持久——执行次数取证通道）+
         // 段入口注入 → 整轮 Err、候选缓存、世界不动
@@ -50,7 +50,7 @@ pub(super) fn stage_recovery_family_impl() -> anyhow::Result<()> {
         let err = e.run_player("p1", counter).unwrap_err();
         assert!(err.to_string().contains(label), "{stage:?}: {err}");
         assert!(e.has_pending_round(), "{stage:?}: 失败轮候选已缓存");
-        assert_eq!(e.get_game_time(), 1, "{stage:?}: 失败轮世界不动");
+        assert_eq!(e.get_game_time(), 2, "{stage:?}: 失败轮世界不动");
         assert_eq!(
             e.player_state_for_test("p1").unwrap(),
             &before,
@@ -70,7 +70,11 @@ pub(super) fn stage_recovery_family_impl() -> anyhow::Result<()> {
         assert_eq!(committed.active_request, vec![5]);
         assert_eq!(committed.public_ids, vec![5]);
         assert_eq!(committed.default_public, Some(5));
-        assert_eq!(e.get_game_time(), 2, "{stage:?}: warmup 1 + 重试轮推进 1");
+        assert_eq!(
+            e.get_game_time(),
+            3,
+            "{stage:?}: warmup 轮 2 + 重试轮推进 1"
+        );
         // 执行次数终检：恰一次
         let run = e.run_player("p1", "[globalThis.n, Memory.saved, RawMemory.segments[5]]")?;
         assert_eq!(
@@ -214,7 +218,7 @@ pub(super) fn execution_failure_blocks_redispatch_impl() -> anyhow::Result<()> {
                 .to_string()
                 .contains("执行轮中止")
         );
-        assert_eq!(e.get_game_time(), 0);
+        assert_eq!(e.get_game_time(), 1, "中止轮世界不动（热身拍已过）");
         assert_eq!(e.player_state_for_test("p1").unwrap(), &before1);
         assert_eq!(e.player_state_for_test("p2").unwrap(), &before2);
         assert!(
@@ -271,7 +275,7 @@ pub(super) fn lost_worker_rebuild_impl() -> anyhow::Result<()> {
             .contains("未返回执行回执")
     );
     assert!(e.has_pending_round());
-    assert_eq!(e.get_game_time(), 1);
+    assert_eq!(e.get_game_time(), 2);
     assert_eq!(e.player_state_for_test("p1").unwrap(), &before1);
     assert_eq!(e.player_state_for_test("p2").unwrap(), &before2);
     assert!(e.run_players(&codes).is_err());
@@ -284,12 +288,12 @@ pub(super) fn lost_worker_rebuild_impl() -> anyhow::Result<()> {
     );
     assert!(e.has_pending_round(), "重建失败不能解除执行故障门");
     assert!(e.run_players(&codes).is_err());
-    assert_eq!(e.get_game_time(), 1);
+    assert_eq!(e.get_game_time(), 2);
     assert_eq!(e.player_state_for_test("p1").unwrap(), &before1);
     assert_eq!(e.player_state_for_test("p2").unwrap(), &before2);
     e.rebuild_player_workers()?;
     assert!(!e.has_pending_round());
-    assert_eq!(e.get_game_time(), 1);
+    assert_eq!(e.get_game_time(), 2);
     assert_eq!(e.player_state_for_test("p1").unwrap(), &before1);
     assert_eq!(e.player_state_for_test("p2").unwrap(), &before2);
     let read = "[globalThis.dirty||0,Memory.saved,RawMemory.segments[5],Game.cpu.bucket,globalThis.oldGlobal||0]";
@@ -305,7 +309,7 @@ pub(super) fn lost_worker_rebuild_impl() -> anyhow::Result<()> {
         assert_eq!(values[3].as_f64(), Some(before.cpu.bucket()));
         assert_eq!(values[4], 0, "工作者重建丢弃全局变量");
     }
-    assert_eq!(e.get_game_time(), 2);
+    assert_eq!(e.get_game_time(), 3);
     assert!(
         e.rebuild_player_workers().is_err(),
         "健康分片不得隐式清空全局状态"

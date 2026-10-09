@@ -347,7 +347,10 @@ fn building_record_schema_is_enforced_at_edit_restore_and_publication() {
         let mut txn = engine
             .prepare_tick(
                 crate::intent::IntentBatch::default(),
-                crate::TickInput { now_ms: 0 },
+                crate::TickInput {
+                    now_ms: 0,
+                    warmup: false,
+                },
             )
             .unwrap();
         txn.rooms = engine

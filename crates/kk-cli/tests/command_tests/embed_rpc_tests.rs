@@ -59,7 +59,7 @@ fn embed_rpc_roundtrip() -> anyhow::Result<()> {
 
     let resp: Value = serde_json::from_str(lines.next().expect("第 2 条响应"))?;
     assert_eq!(resp["id"], 2);
-    assert_eq!(resp["result"], 0, "getGameTime 初始为 0");
+    assert_eq!(resp["result"], 1, "getGameTime 创建即热身拍（官方同形）");
 
     // 未知方法：错误响应仍带回原 id
     let resp: Value = serde_json::from_str(lines.next().expect("第 3 条响应"))?;
@@ -126,11 +126,11 @@ fn embed_rpc_roundtrip() -> anyhow::Result<()> {
     let resp: Value = serde_json::from_str(lines.next().expect("缺省一次 tick 响应"))?;
     assert_eq!(resp["id"], 12);
     assert_eq!(resp["ok"], true);
-    assert_eq!(resp["result"]["time"], 1, "缺省 count=1 推进一 tick");
+    assert_eq!(resp["result"]["time"], 2, "缺省 count=1 推进一 tick");
     let resp: Value = serde_json::from_str(lines.next().expect("tick 后时间响应"))?;
     assert_eq!(resp["id"], 13);
     assert_eq!(resp["ok"], true);
-    assert_eq!(resp["result"], 1, "被拒的 tick 不得推进世界");
+    assert_eq!(resp["result"], 2, "被拒的 tick 不得推进世界");
 
     assert!(lines.next().is_none(), "无多余输出");
     Ok(())

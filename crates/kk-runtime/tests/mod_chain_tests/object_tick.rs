@@ -131,7 +131,7 @@ fn second_room_fault_rolls_back_objects_state_and_memory_then_retries_cached_pla
             )
             .is_err()
         );
-        assert_eq!(e.get_game_time(), 0);
+        assert_eq!(e.get_game_time(), 1);
         assert_eq!(e.engine_generation(), generation);
         for id in [&first, &second] {
             assert_eq!(e.get_object(id).unwrap()["fields"]["value"], 0);
@@ -167,7 +167,7 @@ fn late_writeback_failure_does_not_publish_tick_and_retry_does_not_double_apply(
         let id = counter(&mut e)?;
         e.fail_next_writeback_for_test(kk_engine::WritebackStep::RawMemory);
         assert!(e.run_player("p1", "Memory.n=1;'cached'").is_err());
-        assert_eq!(e.get_game_time(), 0);
+        assert_eq!(e.get_game_time(), 1);
         assert_eq!(e.get_object(&id).unwrap()["fields"]["value"], 0);
         assert_eq!(e.engine_mod_state("chain"), Value::Null);
         assert_eq!(
@@ -205,7 +205,7 @@ fn decline_invalid_fields_async_native_and_resource_access_are_tick_faults() -> 
             let id = counter(&mut e)?;
             let before = e.get_object(&id).unwrap();
             assert!(e.tick(1).is_err(), "{body}");
-            assert_eq!(e.get_game_time(), 0);
+            assert_eq!(e.get_game_time(), 1);
             assert_eq!(e.get_object(&id).unwrap(), before);
             assert_eq!(e.engine_mod_state("chain"), Value::Null);
             assert!(e.last_mod_settlement_fault().is_some(), "{body}");

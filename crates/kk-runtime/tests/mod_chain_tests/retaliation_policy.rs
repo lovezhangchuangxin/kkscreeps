@@ -291,7 +291,7 @@ fn lethal_retaliation_writeback_retry_publishes_death_and_state_once() -> anyhow
 #[test]
 fn policy_is_discarded_after_each_chain_and_native_misses_cannot_counter() -> anyhow::Result<()> {
     let source = package(
-        "api.handlers.before('builtin:creep.attack',{id:'policy'},ctx=>{if(ctx.tick===0)ctx.combat.setRetaliation([{id:ctx.args.id,amount:7}]);});",
+        "api.handlers.before('builtin:creep.attack',{id:'policy'},ctx=>{if(ctx.tick===1)ctx.combat.setRetaliation([{id:ctx.args.id,amount:7}]);});",
     );
     let mut e = engine(&[("alpha", source)], false)?;
     let a = fighter(&mut e, "a", 10, 10, &["attack", "move"])?;

@@ -4,7 +4,7 @@
 module.exports.loop = function () {
   Game.creeps.scout.move(RIGHT);
   Game.creeps.walker.move(RIGHT);
-  if (Game.time >= 3) {
+  if (Game.time >= 4) {
     Memory.positions = {};
     for (const name of ['scout', 'walker']) {
       const creep = Game.creeps[name];

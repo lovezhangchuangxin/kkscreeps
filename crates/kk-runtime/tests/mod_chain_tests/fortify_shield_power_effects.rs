@@ -256,8 +256,8 @@ fn shield_creates_and_expires_temporary_rampart() -> anyhow::Result<()> {
         );
         assert_eq!(
             e.get_object(&pc).unwrap()["powers"]["12"]["cooldownTime"],
-            20,
-            "冷却 20（施放结算于 tick 0）"
+            21,
+            "冷却 20（施放结算于 tick 1：热身后首个玩家拍）"
         );
 
         // 护盾本体不在 _damage 免伤门：attack 正常扣血。
@@ -291,8 +291,8 @@ fn shield_creates_and_expires_temporary_rampart() -> anyhow::Result<()> {
         }
         assert_eq!(
             gone_at,
-            Some(51),
-            "到期拍 t50 删除（首个 0 读取时 time 51）"
+            Some(52),
+            "到期拍 t51 删除（首个 0 读取时 time 52）"
         );
 
         // 放置门一：同格已有 rampart → 静默拒绝（无冷却、无事件）。
@@ -340,7 +340,7 @@ fn shield_creates_and_expires_temporary_rampart() -> anyhow::Result<()> {
         e.run_player("p1", &cast("edge2", c::PWR_SHIELD, "undefined"))?;
         assert_eq!(
             e.get_object(&edge2).unwrap()["powers"]["12"]["cooldownTime"],
-            20,
+            21,
             "边界全墙放行"
         );
     }

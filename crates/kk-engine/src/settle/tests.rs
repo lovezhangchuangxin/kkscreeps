@@ -54,7 +54,10 @@ fn memory_writebacks_publish_with_market_and_retry_without_partial_commit() {
                 }))),
             },
         )]);
-        let input = TickInput { now_ms: 1234 };
+        let input = TickInput {
+            now_ms: 1234,
+            warmup: false,
+        };
         engine.set_fail_stage_for_test(stage);
         engine.set_fail_writeback_for_test(step);
         assert!(
@@ -102,7 +105,14 @@ fn unknown_writeback_player_rejects_entire_tick() {
     ]);
     assert!(
         engine
-            .tick_with_writebacks(IntentBatch::default(), TickInput { now_ms: 0 }, patches)
+            .tick_with_writebacks(
+                IntentBatch::default(),
+                TickInput {
+                    now_ms: 0,
+                    warmup: false
+                },
+                patches
+            )
             .is_err()
     );
     assert_eq!(engine.players, original);
@@ -463,7 +473,13 @@ fn validate_stage_tripwires_discriminate() {
     engine.players.entry("p1".to_string()).or_default();
     let mk_cand = |next| {
         let mut txn = engine
-            .prepare_tick(IntentBatch::default(), TickInput { now_ms: 0 })
+            .prepare_tick(
+                IntentBatch::default(),
+                TickInput {
+                    now_ms: 0,
+                    warmup: false,
+                },
+            )
             .unwrap();
         txn.state.inner.borrow_mut().next_id = next;
         txn.rooms = txn

@@ -561,7 +561,7 @@ api.handlers.after('builtin:creep.dismantle',{{id:'no'}},ctx=>{{
         "执行者能量复原"
     );
     assert!(events(&e, kk_core::constants::EVENT_ATTACK).is_empty());
-    assert_eq!(e.get_game_time(), 1, "整轮照常发布");
+    assert_eq!(e.get_game_time(), 2, "整轮照常发布");
     assert!(!e.needs_mod_recovery());
     Ok(())
 }

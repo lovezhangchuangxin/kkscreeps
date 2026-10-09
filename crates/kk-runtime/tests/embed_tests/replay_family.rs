@@ -296,10 +296,13 @@ pub(super) fn settle_replayed_round_contract_impl() -> anyhow::Result<()> {
     let (mut engine, _log) = plain_engine(&case, "unused.jsonl")?;
     engine.settle_replayed_round(
         kk_engine::intent::IntentBatch::default(),
-        kk_engine::TickInput { now_ms: 1 },
+        kk_engine::TickInput {
+            now_ms: 1,
+            warmup: false,
+        },
         BTreeMap::new(),
     )?;
-    assert_eq!(engine.get_game_time(), 1, "直调回放入口推进一轮");
+    assert_eq!(engine.get_game_time(), 2, "直调回放入口推进一轮");
 
     let codes = BTreeMap::from([("p1".to_string(), "true".to_string())]);
     engine.fail_next_settle_for_test();
@@ -307,7 +310,10 @@ pub(super) fn settle_replayed_round_contract_impl() -> anyhow::Result<()> {
     let error = engine
         .settle_replayed_round(
             kk_engine::intent::IntentBatch::default(),
-            kk_engine::TickInput { now_ms: 2 },
+            kk_engine::TickInput {
+                now_ms: 2,
+                warmup: false,
+            },
             BTreeMap::new(),
         )
         .unwrap_err();
@@ -352,7 +358,7 @@ pub(super) fn identity_and_tick_gates_impl() -> anyhow::Result<()> {
     replay.restore_checkpoint(start.clone(), None)?;
     let data = read_input_log(&path)?;
     let error = replay
-        .replay_input_rounds(&data.header, segments_from_checkpoint(0, &data.segments)?)
+        .replay_input_rounds(&data.header, segments_from_checkpoint(1, &data.segments)?)
         .unwrap_err();
     let message = format!("{error:#}");
     assert!(message.contains("身份快照"), "{message}");
@@ -379,7 +385,7 @@ pub(super) fn identity_and_tick_gates_impl() -> anyhow::Result<()> {
         replay.restore_checkpoint(start.clone(), None)?;
         let data = read_input_log(&path)?;
         let error = replay
-            .replay_input_rounds(&data.header, segments_from_checkpoint(0, &data.segments)?)
+            .replay_input_rounds(&data.header, segments_from_checkpoint(1, &data.segments)?)
             .unwrap_err();
         let message = format!("{error:#}");
         assert!(message.contains("身份快照"), "{}（{}）", message, field);
@@ -403,7 +409,7 @@ pub(super) fn identity_and_tick_gates_impl() -> anyhow::Result<()> {
     replay.restore_checkpoint(start.clone(), None)?;
     let data = read_input_log(&path)?;
     let error = replay
-        .replay_input_rounds(&data.header, segments_from_checkpoint(0, &data.segments)?)
+        .replay_input_rounds(&data.header, segments_from_checkpoint(1, &data.segments)?)
         .unwrap_err();
     let message = format!("{error:#}");
     assert!(
@@ -430,7 +436,7 @@ pub(super) fn identity_and_tick_gates_impl() -> anyhow::Result<()> {
     replay.restore_checkpoint(start.clone(), None)?;
     let data = read_input_log(&path)?;
     let error = replay
-        .replay_input_rounds(&data.header, segments_from_checkpoint(0, &data.segments)?)
+        .replay_input_rounds(&data.header, segments_from_checkpoint(1, &data.segments)?)
         .unwrap_err();
     let message = format!("{error:#}");
     assert!(message.contains("与世界时间"), "{message}");
@@ -455,7 +461,7 @@ pub(super) fn identity_and_tick_gates_impl() -> anyhow::Result<()> {
     let mut replay = EmbedEngine::new();
     replay.restore_checkpoint(start.clone(), None)?;
     let error = replay
-        .replay_input_rounds(&data.header, segments_from_checkpoint(0, &data.segments)?)
+        .replay_input_rounds(&data.header, segments_from_checkpoint(1, &data.segments)?)
         .unwrap_err();
     assert!(
         format!("{error:#}").contains("种子"),

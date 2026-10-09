@@ -497,6 +497,7 @@ fn market_and_terminal_send_reject_declared_resources() {
             batch,
             kk_engine::TickInput {
                 now_ms: 1_700_000_000_000,
+                warmup: false,
             },
         )
         .unwrap();

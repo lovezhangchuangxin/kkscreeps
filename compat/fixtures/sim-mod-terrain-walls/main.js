@@ -5,7 +5,7 @@
 // TERRAIN_MASK_WALL(1)。
 module.exports.loop = function () {
   const creep = Game.creeps.runner;
-  if (Game.time === 0) {
+  if (Game.time === 1) {
     const ret = PathFinder.search(new RoomPosition(22, 25, 'W1N1'), {
       pos: new RoomPosition(28, 25, 'W1N1'),
       range: 0,
@@ -15,7 +15,7 @@ module.exports.loop = function () {
   }
   if (creep) {
     creep.moveTo(28, 25, { reusePath: 0 });
-    if (Game.time >= 6) {
+    if (Game.time >= 7) {
       Memory.position = [creep.pos.x, creep.pos.y];
     }
   }

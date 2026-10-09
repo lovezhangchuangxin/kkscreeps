@@ -104,7 +104,7 @@ fn late_settle_failures_reset_mod_globals_and_match_cold_start() -> anyhow::Resu
                 "stage={stage:?}, step={step:?}"
             );
             assert!(e.needs_mod_recovery());
-            assert_eq!(e.get_game_time(), 0);
+            assert_eq!(e.get_game_time(), 1);
             assert_eq!(e.engine_generation(), generation);
             assert_eq!(e.engine_mod_state("recovery"), Value::Null);
             assert_eq!(e.get_object(&id).unwrap()["cooldown"], 100);
@@ -166,7 +166,7 @@ fn recovery_failure_preserves_pending_players_and_never_redispatches() -> anyhow
         );
         assert!(e.has_pending_round());
         assert!(e.needs_mod_recovery());
-        assert_eq!(e.get_game_time(), 0);
+        assert_eq!(e.get_game_time(), 1);
         assert_eq!(e.engine_generation(), generation);
         assert_eq!(e.player_state_for_test("p1"), Some(&before));
         assert!(e.capture_console_logs("p1").is_empty());
@@ -221,7 +221,7 @@ fn discarded_round_cannot_bypass_mod_recovery_gate() -> anyhow::Result<()> {
     assert!(e.set_terrain("W1N1", vec![0; 2500]).is_err());
     e.fail_next_mod_rebuild_for_test()?;
     assert!(e.run_player("p1", "globalThis.unwanted=1").is_err());
-    assert_eq!(e.get_game_time(), 0);
+    assert_eq!(e.get_game_time(), 1);
     e.rebuild_mod_realm()?;
     let run = e.run_player("p1", "globalThis.unwanted||0")?;
     assert_eq!(run.expr["value"], 0, "恢复失败时不能执行新玩家轮");
@@ -256,7 +256,7 @@ export default function register(api) {
                 .contains("first call fails")
         );
         assert!(e.needs_mod_recovery());
-        assert_eq!(e.get_game_time(), 0);
+        assert_eq!(e.get_game_time(), 1);
         assert_eq!(e.engine_mod_state("recovery"), Value::Null);
         assert_eq!(e.get_object(&id).unwrap()["cooldown"], 100);
     }

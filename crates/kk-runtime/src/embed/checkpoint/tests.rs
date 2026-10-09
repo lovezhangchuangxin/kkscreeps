@@ -40,7 +40,7 @@ fn prepare(
     }
     for player in ["p1", "p2"] {
         let mut table = ModuleTable::new();
-        table.insert_js("main", "exports.loop = () => { Memory.loops = (Memory.loops || 0) + 1; RawMemory.setActiveSegments([3]); RawMemory.segments[3] = String(Memory.loops); if (Game.time === 0) { Game.notify('saved notice'); RawMemory.setPublicSegments([3]); RawMemory.setDefaultPublicSegment(3); } return Memory.loops; };");
+        table.insert_js("main", "exports.loop = () => { Memory.loops = (Memory.loops || 0) + 1; RawMemory.setActiveSegments([3]); RawMemory.segments[3] = String(Memory.loops); if (Game.time === 1) { Game.notify('saved notice'); RawMemory.setPublicSegments([3]); RawMemory.setDefaultPublicSegment(3); } return Memory.loops; };");
         table.insert_binary("asset.wasm", [0, 97, 115, 109]);
         engine.set_player_modules(player, table)?;
     }
@@ -226,7 +226,7 @@ fn mismatch_and_invalid_payload_keep_the_running_mod_shard() -> anyhow::Result<(
         );
     }
     run(&mut engine, 1)?;
-    assert_eq!(engine.get_game_time(), 3);
+    assert_eq!(engine.get_game_time(), 4);
     Ok(())
 }
 
@@ -444,7 +444,7 @@ fn automatic_disable_fault_counter_continues_across_a_cold_restart() -> anyhow::
         2
     );
     restored.tick(1)?;
-    assert_eq!(restored.get_game_time(), 1);
+    assert_eq!(restored.get_game_time(), 2);
     Ok(())
 }
 
@@ -597,7 +597,7 @@ fn format_version_routing_and_migration_failure_keep_the_old_shard() -> anyhow::
         "迁移失败后旧分片保持完整"
     );
     run(&mut engine, 1)?;
-    assert_eq!(engine.get_game_time(), 3, "旧分片继续可运行");
+    assert_eq!(engine.get_game_time(), 4, "旧分片继续可运行");
     Ok(())
 }
 

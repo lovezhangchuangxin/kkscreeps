@@ -3,13 +3,13 @@
 // 在玩家面预检疲劳/MOVE 部件（同官方），无件移动者只有朝向相邻 creep
 // 的 move(target) 形态能到达引擎仲裁，准入策略在那里覆盖原生门槛。
 module.exports.loop = function () {
-  if (Game.time === 0) {
+  if (Game.time === 1) {
     Game.creeps.puller.move(TOP);
     if (Game.creeps.f) Game.creeps.f.move(Game.creeps.puller);
     Game.creeps.heavy.move(BOTTOM);
     Game.creeps.light.move(TOP);
   }
-  if (Game.time >= 1) {
+  if (Game.time >= 2) {
     Memory.positions = {};
     for (const name of ['puller', 'f', 'heavy', 'light']) {
       const creep = Game.creeps[name];

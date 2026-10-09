@@ -278,7 +278,7 @@ pub(super) fn embed_run_players_shared_snapshot_impl() -> anyhow::Result<()> {
         "players": ["p1", "p2"],
         "rooms": [{ "name": "W1N1", "rcl": 1, "owner": "p1" }],
     }))?;
-    e.run_player("p1", "1")?; // time 0 → 1
+    e.run_player("p1", "1")?; // time 1 → 2
     let t = e.get_game_time();
     let mut codes = std::collections::BTreeMap::new();
     codes.insert("p1".to_string(), "Game.time".to_string());
@@ -409,18 +409,21 @@ pub(super) fn embed_engine_roundtrip_impl() -> anyhow::Result<()> {
     assert_eq!(run.expr["kind"], "syntax");
 
     // 同一引擎二次 create_shard：完全重置（screeps-ok 套件每个测试都走的路径——
-    // 旧沙箱回收、时间归零、handle 重建后 run_player 正常服务）
+    // 旧沙箱回收、时间重置到热身拍、handle 重建后 run_player 正常服务）
     e.create_shard(&json!({
         "players": ["p1"],
         "rooms": [{ "name": "W2N2", "rcl": 1, "owner": "p1" }],
     }))?;
-    assert_eq!(e.get_game_time(), 0, "二次 createShard 时间重置");
+    assert_eq!(e.get_game_time(), 1, "二次 createShard 时间重置（热身拍）");
     assert_eq!(e.get_controller_pos("W2N2"), Some((1, 1)), "新房间布局生效");
     assert!(e.get_controller_pos("W1N1").is_none(), "旧房间已清除");
     let run = e.run_player("p1", "Game.time")?;
     assert!(run.executed);
-    assert_eq!(run.expr["value"], 0, "重置后的第一 tick：注入的世界 time=0");
-    assert_eq!(e.get_game_time(), 1, "runPlayer 恰好 +1 tick");
+    assert_eq!(
+        run.expr["value"], 1,
+        "重置后的第一 tick 读到热身后的 time=1"
+    );
+    assert_eq!(e.get_game_time(), 2, "runPlayer 恰好 +1 tick");
 
     // createShard 的 PlayerSpec 对象形式（screeps-ok 契约 players: (string|PlayerSpec)[]）
     e.create_shard(&json!({

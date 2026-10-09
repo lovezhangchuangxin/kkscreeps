@@ -146,6 +146,7 @@ impl World {
         &mut self,
         rooms: Vec<(String, RoomState)>,
         next_id: u64,
+        count_player_tick: bool,
     ) -> Result<(), String> {
         if rooms.len() != self.rooms.len()
             || rooms
@@ -165,7 +166,13 @@ impl World {
             next_id,
         )?;
         let time = self.time.checked_add(1).ok_or("世界时间已耗尽")?;
-        let player_ticks = self.player_ticks.checked_add(1).ok_or("玩家轮数已耗尽")?;
+        // 玩家轮只计宿主发起的执行轮；热身拍（createShard 装配结算）推进
+        // 世界时间但保持 setTerrain 前置门可用（官方 guardedTick 同理）。
+        let player_ticks = if count_player_tick {
+            self.player_ticks.checked_add(1).ok_or("玩家轮数已耗尽")?
+        } else {
+            self.player_ticks
+        };
         let generation = self.next_generation()?;
         self.rooms = rooms.into_iter().collect();
         self.next_obj_id = next_id;
@@ -208,6 +215,32 @@ impl World {
 mod tests {
     use super::*;
     #[test]
+    fn warmup_publishes_world_but_preserves_terrain_setup_window() {
+        let mut world = World::default();
+        world.register_room("W1N1", Terrain::plains()).unwrap();
+        let rooms = world
+            .rooms()
+            .iter()
+            .map(|(n, r)| (n.clone(), r.clone()))
+            .collect();
+        world
+            .commit_tick_rooms(rooms, world.next_obj_id, false)
+            .unwrap();
+        assert_eq!((world.time, world.player_ticks), (1, 0));
+        world.set_terrain("W1N1", Terrain::plains()).unwrap();
+        let rooms = world
+            .rooms()
+            .iter()
+            .map(|(n, r)| (n.clone(), r.clone()))
+            .collect();
+        world
+            .commit_tick_rooms(rooms, world.next_obj_id, true)
+            .unwrap();
+        assert_eq!((world.time, world.player_ticks), (2, 1));
+        assert!(world.set_terrain("W1N1", Terrain::plains()).is_err());
+    }
+
+    #[test]
     fn invalid_whole_tick_does_not_publish_a_prefix_or_advance_time() {
         let mut world = World::default();
         world.register_room("W1N1", Terrain::plains()).unwrap();
@@ -228,7 +261,7 @@ mod tests {
         });
         rooms[0].1.insert_with_id(1, object.clone()).unwrap();
         rooms[1].1.insert_with_id(1, object).unwrap();
-        assert!(world.commit_tick_rooms(rooms, 2).is_err());
+        assert!(world.commit_tick_rooms(rooms, 2, true).is_err());
         assert_eq!(world.time(), 0);
         assert_eq!(world.generation(), generation);
         assert!(world.rooms().values().all(|room| room.objects.is_empty()));
@@ -270,7 +303,11 @@ mod boundary_tests {
                 .iter()
                 .map(|(n, r)| (n.clone(), r.clone()))
                 .collect();
-            assert!(world.commit_tick_rooms(rooms, world.next_obj_id).is_err());
+            assert!(
+                world
+                    .commit_tick_rooms(rooms, world.next_obj_id, true)
+                    .is_err()
+            );
             assert_eq!((world.time, world.player_ticks, world.generation), before);
             assert!(world.room("W1N1").unwrap().objects.is_empty());
         }

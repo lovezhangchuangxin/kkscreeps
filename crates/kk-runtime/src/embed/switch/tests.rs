@@ -98,7 +98,7 @@ fn switch_adds_package_reseals_identity_and_survives_cold_restore() -> anyhow::R
         Some((&packages, &selection(&["nursery", "clockwork"]))),
     )?;
     run(&mut restored, 1)?;
-    assert_eq!(restored.get_game_time(), 4);
+    assert_eq!(restored.get_game_time(), 5);
     let mut stale = EmbedEngine::new();
     assert!(
         stale
@@ -132,7 +132,7 @@ fn switch_removes_package_without_residue_and_falls_back_rules() -> anyhow::Resu
 
     // base:counter 独立对象中心不依赖被移除的链成员，继续结算。
     run(&mut engine, 2)?;
-    assert_eq!(engine.get_game_time(), 3);
+    assert_eq!(engine.get_game_time(), 4);
     let saved = engine.checkpoint(Value::Null)?;
     let mut restored = EmbedEngine::new();
     restored.restore_checkpoint(saved, Some((&packages, &selection(&["base"]))))?;
@@ -168,7 +168,7 @@ fn switch_rejects_residue_and_content_change_keeping_old_shard() -> anyhow::Resu
         Some(strategy_before.as_str())
     );
     run(&mut engine, 1)?;
-    assert_eq!(engine.get_game_time(), 2, "旧分片继续运行");
+    assert_eq!(engine.get_game_time(), 3, "旧分片继续运行");
 
     // 同包内容变更：交集包文件摘要漂移即拒绝。
     let mut drifted = official()?;
@@ -184,7 +184,7 @@ fn switch_rejects_residue_and_content_change_keeping_old_shard() -> anyhow::Resu
         content.to_string().contains("内容级迁移"),
         "内容变更拒绝要指路 G23：{content:#}"
     );
-    assert_eq!(engine.get_game_time(), 2, "内容拒绝同样不动旧分片");
+    assert_eq!(engine.get_game_time(), 3, "内容拒绝同样不动旧分片");
     Ok(())
 }
 
@@ -236,7 +236,7 @@ fn switch_rejects_open_round_and_injected_failure_keeps_old_shard() -> anyhow::R
     )]);
     let results = engine.run_players(&codes)?;
     assert!(results.values().all(|r| r.expr["ok"] == true));
-    assert_eq!(engine.get_game_time(), 2, "注入失败后旧计划继续结算");
+    assert_eq!(engine.get_game_time(), 3, "注入失败后旧计划继续结算");
 
     engine.switch_mod_packages(&packages, &selection(&["nursery", "clockwork"]))?;
     // last_console 记录的是最近一次完成结算的输出：在续跑覆盖之前核对
@@ -246,7 +246,7 @@ fn switch_rejects_open_round_and_injected_failure_keeps_old_shard() -> anyhow::R
         "成功切换保留 console 历史"
     );
     run(&mut engine, 1)?;
-    assert_eq!(engine.get_game_time(), 3);
+    assert_eq!(engine.get_game_time(), 4);
     Ok(())
 }
 
@@ -305,7 +305,7 @@ fn switch_projects_disabled_set_and_filters_fault_diagnostics() -> anyhow::Resul
         );
     }
     run(&mut engine, 1)?;
-    assert_eq!(engine.get_game_time(), 2);
+    assert_eq!(engine.get_game_time(), 3);
     Ok(())
 }
 
@@ -329,7 +329,7 @@ fn switch_keeps_disabled_set_for_installed_packages() -> anyhow::Result<()> {
         "仍安装的停用包跨切换保持停用"
     );
     run(&mut engine, 1)?;
-    assert_eq!(engine.get_game_time(), 2);
+    assert_eq!(engine.get_game_time(), 3);
     Ok(())
 }
 
@@ -362,6 +362,6 @@ fn switch_rejects_projection_closure_growth() -> anyhow::Result<()> {
         "拒绝路径不动旧分片的停用集"
     );
     run(&mut engine, 1)?;
-    assert_eq!(engine.get_game_time(), 2, "旧分片继续运行");
+    assert_eq!(engine.get_game_time(), 3, "旧分片继续运行");
     Ok(())
 }

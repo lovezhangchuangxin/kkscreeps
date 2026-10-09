@@ -246,7 +246,7 @@ api.handlers.after('builtin:creep.build',{{id:'post'}},ctx=>{{if(isTarget(ctx))r
                 e.player_state("p1").unwrap().raw_memory,
                 "{\"committed\":true}"
             );
-            assert_eq!(e.get_game_time(), 1, "{position}: 整轮照常发布");
+            assert_eq!(e.get_game_time(), 2, "{position}: 整轮照常发布");
             assert!(!e.needs_mod_recovery());
             assert!(e.last_mod_settlement_fault().is_none());
         }
@@ -511,7 +511,7 @@ api.handlers.wrap('builtin:creep.build',{id:'once'},(ctx,next)=>{
         30,
         "能量返还"
     );
-    assert_eq!(e.get_game_time(), 1);
+    assert_eq!(e.get_game_time(), 2);
     assert_eq!(e.engine_mod_state("alpha"), Value::Null);
     e.run_player(
         "p1",

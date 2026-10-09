@@ -56,7 +56,7 @@ fn mineral_regen_all_levels_follow_cast_phase_and_refresh_extends_window() -> an
             );
             assert_eq!(
                 e.get_object(&pc).unwrap()["powers"]["14"]["cooldownTime"],
-                107
+                108
             );
             // 同 creep 冷却内重施 → ERR_TIRED（玩家面 power-creeps.js:262）。
             assert_eq!(
@@ -117,18 +117,18 @@ fn mineral_regen_rejects_depleted_and_clocked_targets_silently() -> anyhow::Resu
         assert!(e.get_object(&pc).unwrap()["powers"]["14"]["cooldownTime"].is_null());
         assert_eq!(e.get_object(&s).unwrap()["mineralAmount"], 500);
 
-        // Some(0) 时钟 ≡ 未设置：施放成功（结算于 tick 1 → end 101，脉冲
-        // 位 t≡0 mod 10：10、20…），自然钟也不因 0 立即回填。
+        // 热身后放置发生于 time 1：Some(0) 经换算（ctx.time + 剩余）得
+        // 真实一拍钟——非耗尽矿物的钟不会自行到期，施放被资格门拒绝
+        //（同上块「带钟拒绝」）。0 ≡ 未设置的 falsy 边只在引擎层可达：
+        // settle_tests::minerals_and_boost 的
+        // regen_mineral_gate_treats_zero_clock_as_unset 直测。
         let (mut e, s) = fixture(binary, 500, Some(0))?;
-        actor(&mut e, "regen", 1)?;
-        e.tick(1)?;
-        e.run_player("p1", &cast("regen", &s))?; // 结算 tick 1 → end 101
-        assert_eq!(harness::events(&e, c::EVENT_POWER).len(), 1);
-        assert!(e.get_object(&s).unwrap()["ticksToRegeneration"].is_null());
-        e.tick(8)?; // 结算 2..9，脉冲位 10 未到
+        let pc = actor(&mut e, "regen", 1)?;
+        e.run_player("p1", &cast("regen", &s))?;
+        assert_eq!(harness::events(&e, c::EVENT_POWER).len(), 0);
+        assert!(e.get_object(&s).unwrap()["effects"].is_null());
+        assert!(e.get_object(&pc).unwrap()["powers"]["14"]["cooldownTime"].is_null());
         assert_eq!(e.get_object(&s).unwrap()["mineralAmount"], 500);
-        e.tick(1)?; // tick 10 脉冲
-        assert_eq!(e.get_object(&s).unwrap()["mineralAmount"], 502);
 
         // 超距（range 3）：玩家面预检 ERR_NOT_IN_RANGE，结算无事件。
         let (mut e, s) = fixture(binary, 500, None)?;

@@ -521,7 +521,7 @@ pub(super) fn embed_shard_input_strictness_impl() -> anyhow::Result<()> {
         json!({ "players": [], "rooms": [{ "name": "middle0" }] }),
     ] {
         assert!(engine.create_shard(&invalid).is_err());
-        assert_eq!(engine.get_game_time(), 1);
+        assert_eq!(engine.get_game_time(), 2, "创建热身拍 + 失败创建不推进");
     }
     Ok(())
 }
@@ -585,7 +585,7 @@ pub(super) fn b05_partial_commit_settle_failure_impl() -> anyhow::Result<()> {
     // 建立基线：n=1 已提交
     e.run_player("p1", "Memory.n = (Memory.n || 0) + 1; 'ok'")?;
     let time_before = e.get_game_time();
-    assert_eq!(time_before, 1);
+    assert_eq!(time_before, 2, "热身拍 + 一轮提交");
 
     // 注入结算失败 + 增量（若玩家重跑会变成 3——执行次数取证）
     e.fail_next_settle_for_test();
@@ -653,7 +653,7 @@ pub(super) fn b06_rejected_retry_preserves_pending_impl() -> anyhow::Result<()> 
         "rooms": [{ "name": "W1N1", "rcl": 3, "owner": "p1" }],
     }))?;
     e.run_player("p1", "'warmup'")?;
-    assert_eq!(e.get_game_time(), 1);
+    assert_eq!(e.get_game_time(), 2, "热身拍 + warmup 轮");
 
     // 轮 A：结算失败 + 计数代码（globalThis 跨 tick 持久——V8 全局不随世界
     // 回滚，执行次数的取证通道；b05 注入失败场景的 defineProperty 已证该通道）
@@ -662,7 +662,7 @@ pub(super) fn b06_rejected_retry_preserves_pending_impl() -> anyhow::Result<()> 
     let err = e.run_player("p1", counter).unwrap_err();
     assert!(err.to_string().contains("故障注入"), "{err}");
     assert!(e.has_pending_round(), "失败轮候选已缓存");
-    assert_eq!(e.get_game_time(), 1, "失败轮世界不动");
+    assert_eq!(e.get_game_time(), 2, "失败轮世界不动");
 
     // 轮 B：重试请求携带缓存轮之外的玩家 → 拒绝，但缓存必须幸存
     let mut wrong: BTreeMap<String, String> = BTreeMap::new();
@@ -683,7 +683,7 @@ pub(super) fn b06_rejected_retry_preserves_pending_impl() -> anyhow::Result<()> 
         run.expr
     );
     assert!(!e.has_pending_round(), "重试成功后缓存清空");
-    assert_eq!(e.get_game_time(), 2, "warmup 1 + 重试轮推进 1");
+    assert_eq!(e.get_game_time(), 3, "warmup 轮 2 + 重试轮推进 1");
     // V8 全局计数器不随世界回滚；值仍为 1 才能证明重试没有重复执行。
     let run = e.run_player("p1", "globalThis.n")?;
     assert_eq!(

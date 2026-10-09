@@ -22,7 +22,7 @@ fn declined_intent_rolls_back_only_its_fields_and_all_namespace_states() -> anyh
         let id = e.place_mod_object("W1N1", "a:counter", &json!({"owner":"p1","x":10,"y":12}))?;
         let result = e.run_player("p1", &format!("Memory.committed=true;for(const key of ['a:a-accept','a:b-test','a:c-accept']) __kkEmitExtensionIntent(key,'{id}',{{}}); 'ok'"))?;
         assert_eq!(result.expr["value"], json!("ok"));
-        assert_eq!(e.get_game_time(), 1);
+        assert_eq!(e.get_game_time(), 2);
         assert!(!e.needs_mod_recovery());
         assert!(e.last_mod_settlement_fault().is_none());
         let object = e.get_object(&id).unwrap();
@@ -113,7 +113,7 @@ fn decline_at_each_chain_position_discards_the_entire_action() -> anyhow::Result
                 "p1",
                 &format!("__kkEmitExtensionIntent('a:b-test','{id}',{{}})"),
             )?;
-            assert_eq!(e.get_game_time(), 1, "{position}");
+            assert_eq!(e.get_game_time(), 2, "{position}");
             assert!(!e.needs_mod_recovery(), "{position}");
             assert_eq!(e.engine_mod_state("a"), Value::Null, "{position}");
             assert_eq!(
@@ -153,7 +153,7 @@ fn decline_cannot_downgrade_a_later_exception_or_an_earlier_conversion_fault() -
                 error.to_string().contains("异常") || error.to_string().contains("转换失败"),
                 "{error}"
             );
-            assert_eq!(e.get_game_time(), 0);
+            assert_eq!(e.get_game_time(), 1);
             assert_eq!(e.get_object(&id).unwrap(), old);
             assert_eq!(e.engine_mod_state("a"), Value::Null);
             assert!(e.needs_mod_recovery());
@@ -174,7 +174,7 @@ fn builtin_tick_rejects_decline_without_a_local_restore_boundary() -> anyhow::Re
         let id = link(&mut e, 20, 100, initial_cooldown)?;
         let error = e.tick(1).unwrap_err();
         assert!(error.to_string().contains("尚不支持正常拒绝"), "{error}");
-        assert_eq!(e.get_game_time(), 0);
+        assert_eq!(e.get_game_time(), 1);
         assert_eq!(cooldown(&e, &id), json!(initial_cooldown));
         assert!(e.needs_mod_recovery());
     }

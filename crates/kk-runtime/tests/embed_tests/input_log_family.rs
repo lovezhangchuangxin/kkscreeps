@@ -121,7 +121,7 @@ pub(super) fn three_sources_round_trip_impl() -> anyhow::Result<()> {
         .iter()
         .filter_map(|s| s["tick"].as_u64())
         .collect();
-    assert_eq!(ticks, [0, 1, 2, 3], "段按结算 tick 递增");
+    assert_eq!(ticks, [1, 2, 3, 4], "段按结算 tick 递增");
     for (index, segment) in data.segments.iter().enumerate() {
         assert_eq!(segment["seq"], index as u64 + 1);
         assert!(segment["identity"]["plan_hash"].is_string(), "逐段身份快照");
@@ -180,12 +180,12 @@ pub(super) fn failed_round_and_retry_semantics_impl() -> anyhow::Result<()> {
     engine.run_players(&codes)?;
     let data = read_input_log(&log)?;
     assert_eq!(data.segments.len(), 1, "重试成功只记一次");
-    assert_eq!(data.segments[0]["tick"], 0, "重试轮仍执行缓存时的 tick");
+    assert_eq!(data.segments[0]["tick"], 1, "重试轮仍执行缓存时的 tick");
 
     engine.run_players(&codes)?;
     let data = read_input_log(&log)?;
     assert_eq!(data.segments.len(), 2);
-    assert_eq!(data.segments[1]["tick"], 1);
+    assert_eq!(data.segments[1]["tick"], 2);
     Ok(())
 }
 
@@ -209,9 +209,9 @@ pub(super) fn log_io_failure_commits_round_and_detaches_impl() -> anyhow::Result
             .downcast_ref::<kk_runtime::embed::CommittedLogError>()
             .unwrap()
             .committed_time,
-        1
+        2
     );
-    assert_eq!(engine.get_game_time(), 1, "世界事实上已推进");
+    assert_eq!(engine.get_game_time(), 2, "世界事实上已推进");
     assert_eq!(engine.input_log_segments(), None, "日志已停用摘除");
 
     // 停用后继续运行不写段也不报错；磁盘日志保持头段。
@@ -456,7 +456,7 @@ pub(super) fn resume_and_lifecycle_impl() -> anyhow::Result<()> {
     assert_eq!(data.segments[3]["seq"], 4);
     // 段号跨日志文件延续；世界 tick 属于新分片自己的时间线——与检查
     // 点配对恢复世界连续性是 G25.b 的规则，此处不伪造。
-    assert_eq!(data.segments[3]["tick"], 0, "续接段记录新分片自己的 tick");
+    assert_eq!(data.segments[3]["tick"], 1, "续接段记录新分片自己的 tick");
     Ok(())
 }
 
@@ -489,7 +489,7 @@ pub(super) fn cursor_and_header_pairing_impl() -> anyhow::Result<()> {
     assert_eq!(a_identity, b_identity);
     assert!(
         root_b_data
-            .segments_after_cursor(1, &root_a.input_log_cursor().unwrap())
+            .segments_after_cursor(2, &root_a.input_log_cursor().unwrap())
             .is_err()
     );
     let (mut engine, log) = new_engine(&case, "a.jsonl")?;
@@ -498,19 +498,19 @@ pub(super) fn cursor_and_header_pairing_impl() -> anyhow::Result<()> {
     let cursor = engine.input_log_cursor().unwrap();
     let saved = engine.checkpoint(Value::Null)?;
     let original = read_input_log(&log)?;
-    assert!(original.segments_after_cursor(2, &cursor)?.is_empty());
+    assert!(original.segments_after_cursor(3, &cursor)?.is_empty());
     let (mut foreign, other_log) = new_engine(&case, "b.jsonl")?;
     foreign.enable_input_log(&other_log, json!({"history":"b"}))?;
     foreign.tick(2)?;
     assert!(
         read_input_log(&other_log)?
-            .segments_after_cursor(2, &cursor)
+            .segments_after_cursor(3, &cursor)
             .is_err()
     );
     engine.tick(2)?;
     assert_eq!(
         read_input_log(&log)?
-            .segments_after_cursor(2, &cursor)?
+            .segments_after_cursor(3, &cursor)?
             .len(),
         2
     );
@@ -527,13 +527,13 @@ pub(super) fn cursor_and_header_pairing_impl() -> anyhow::Result<()> {
     engine.tick(1)?;
     assert_eq!(
         read_input_log(&log)?
-            .segments_after_cursor(3, &branch_cursor)?
+            .segments_after_cursor(4, &branch_cursor)?
             .len(),
         1
     );
     assert!(
         read_input_log(&log)?
-            .segments_after_cursor(2, &cursor)
+            .segments_after_cursor(3, &cursor)
             .is_err()
     );
     drop(engine);
@@ -553,7 +553,7 @@ pub(super) fn cursor_and_header_pairing_impl() -> anyhow::Result<()> {
         Some(InputLogError::HeaderIdentityMismatch { field: "seed" })
     ));
     assert_eq!(std::fs::read(&header_only)?, bytes);
-    assert_eq!(wrong_seed.get_game_time(), 0);
+    assert_eq!(wrong_seed.get_game_time(), 1, "创建含热身拍");
     // 重新封装摘要也不能让没有状态根的旧头段进入当前续接/回放协议。
     let mut missing_root = read_input_log(&header_only)?.header;
     missing_root["identity"]

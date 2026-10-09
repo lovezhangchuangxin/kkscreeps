@@ -141,6 +141,7 @@ pub(crate) fn assert_segment_identity(
 /// 轮两者皆空对象。
 pub fn rebuild_round(segment: &Value) -> anyhow::Result<ReplayRound> {
     let input = TickInput {
+        warmup: false,
         now_ms: segment["now_ms"].as_u64().context("段缺少 now_ms 字段")?,
     };
     let source = segment["source"].as_str().context("段缺少 source 字段")?;

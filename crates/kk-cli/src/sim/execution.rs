@@ -162,8 +162,8 @@ pub(super) fn execute(options: &Options) -> anyhow::Result<Value> {
         .as_ref()
         .map(|loaded| loaded.metadata.clone())
         .unwrap_or_else(|| json!({"packages": {}}));
-    // 续跑按检查点世界时间与**实际生效的切换**选择恢复用包集合：被
-    // 拒绝的切换不改变身份，越过边界（world.time >= after_tick）不一
+    // 续跑按检查点显式推进轮数与**实际生效的切换**选择恢复用包集合：被
+    // 拒绝的切换不改变身份，越过边界（player_ticks >= after_tick）不一
     // 定携带切换后身份。载荷只读一次，resume 复用同一 Value。
     // 目录形态=「最新可用」恢复（G26.a）：选出的检查点与需要重放的日志
     // 段一起暂存，resume 后、日志挂载前逐段重放到日志尾。
@@ -186,10 +186,10 @@ pub(super) fn execute(options: &Options) -> anyhow::Result<Value> {
         .unwrap_or_default();
     let resume_switched = match (&loaded_value, &scene.mods_switch) {
         (Some(value), Some(switch)) => {
-            let time = value["engine"]["world"]["time"]
+            let rounds = value["engine"]["world"]["player_ticks"]
                 .as_u64()
-                .context("检查点载荷缺少世界时间")?;
-            (time >= switch.after_tick() && applied_switches.contains(&switch.after_tick()))
+                .context("检查点载荷缺少显式推进轮数")?;
+            (rounds >= switch.after_tick() && applied_switches.contains(&switch.after_tick()))
                 .then(|| {
                     mods::load(
                         base,
@@ -359,7 +359,7 @@ pub(super) fn execute(options: &Options) -> anyhow::Result<Value> {
         // 已提交边界应用场景声明的包切换：恰在提交完第 after_tick 轮后。
         // 拒绝不使运行失败——引擎保证旧计划继续结算，rejected 记录入报告。
         if let Some(switch) = &scene.mods_switch
-            && engine.get_game_time() == switch.after_tick()
+            && engine.committed_rounds() == switch.after_tick()
         {
             switches.push(apply_mods_switch(
                 &mut engine,

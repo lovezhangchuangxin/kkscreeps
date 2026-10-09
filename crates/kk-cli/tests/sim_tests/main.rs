@@ -133,8 +133,8 @@ fn two_players_load_cjs_and_seed_memory_without_hidden_setup_ticks() -> anyhow::
             concurrency,
         )?;
         assert_eq!(code, 0, "{report}");
-        assert_eq!(report["initial"]["time"], 0);
-        assert_eq!(report["final"]["time"], 4);
+        assert_eq!(report["initial"]["time"], 1, "创建即热身拍");
+        assert_eq!(report["final"]["time"], 5);
         assert_eq!(report["final"]["players"]["p1"]["memory"]["n"], 9);
         assert_eq!(
             report["modules"]["p1"]["sha256"],

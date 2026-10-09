@@ -32,11 +32,11 @@ fn effective_rule_reads_drive_gameplay_across_channels() -> anyhow::Result<()> {
         assert_eq!(r["final"]["mod_states"]["base"]["rate"], 0.25);
         assert_eq!(r["final"]["mod_states"]["base"]["capacity"], 700);
         assert_eq!(r["final"]["mod_states"]["base"]["ticks"], 200);
-        // 玩家经公共玩家 API 读到规则驱动的已提交结果。tick 从 0 计且玩家
-        // 先于同轮 Mod tick 执行：最后一轮读到前 99 轮的累计，偶数节拍
-        // 0..=98 共 50 次，因此是 50 而不是本轮回合结束后的值。
+        // 玩家经公共玩家 API 读到规则驱动的已提交结果。玩家先于同轮
+        // Mod tick 执行：最后一轮读到前 99 轮的累计；热身后对象 tick
+        // 从 1 起，偶数节拍 2..=98 共 49 次（相位随绝对 tick 平移）。
         for player in ["p1", "p2"] {
-            assert_eq!(r["final"]["players"][player]["memory"]["value"], 50);
+            assert_eq!(r["final"]["players"][player]["memory"]["value"], 49);
         }
         // 组合诊断与执行计划来自同一冻结计划。
         assert_eq!(r["composition"]["plan_hash"], r["plan_hash"]);
@@ -103,8 +103,9 @@ fn documented_rule_example_runs_with_its_declared_fields() -> anyhow::Result<()>
         )?;
         assert_eq!(code, 0, "{report}");
         assert_eq!(report["world_ticks_committed"], 9);
-        // 默认 period=4，tick 0/4/8 分别更新；value 由文档 schema 默认初始化。
-        assert_eq!(report["final"]["objects"]["meter"]["fields"]["value"], 3);
+        // 默认 period=4，热身后对象 tick 从 1 起：4/8 两拍更新（相位随绝对
+        // tick 平移）；value 由文档 schema 默认初始化。
+        assert_eq!(report["final"]["objects"]["meter"]["fields"]["value"], 2);
     }
     Ok(())
 }

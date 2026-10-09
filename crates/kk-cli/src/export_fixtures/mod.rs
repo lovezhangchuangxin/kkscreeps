@@ -98,6 +98,7 @@ fn render_fixture(
                 batch,
                 TickInput {
                     now_ms: FIXED_NOW_MS,
+                    warmup: false,
                 },
             )
             .expect("夹具世界结算不应失败（空意图或静态脚本）");

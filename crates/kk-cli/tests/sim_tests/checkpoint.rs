@@ -71,8 +71,8 @@ fn cold_cli_resume_matches_uninterrupted_multiplayer_mod_world() -> anyhow::Resu
             &resumed,
         )?;
         assert_eq!(code, 0, "{actual}");
-        assert_eq!(actual["start_time"], 7);
-        assert_eq!(actual["end_time"], 12);
+        assert_eq!(actual["start_time"], 8);
+        assert_eq!(actual["end_time"], 13);
         assert_eq!(actual["world_ticks_committed"], 5);
         assert_eq!(
             actual["initial"], expected["initial"],

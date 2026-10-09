@@ -11,7 +11,7 @@ module.exports.loop = function () {
     heal: Game.creeps.medic.heal(Game.creeps.ally),
     rangedHeal: Game.creeps.medic.rangedHeal(Game.creeps.pal),
   };
-  if (Game.time >= 3) {
+  if (Game.time >= 4) {
     Memory.record = { foeHits: foe ? foe.hits : null };
   }
 };

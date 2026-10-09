@@ -437,9 +437,11 @@ mod tests {
         opts.warmup = 1500;
         opts.ticks = 3;
         let report = measure(&opts)?;
-        assert_eq!(report["workload"]["after"]["time"], 1503);
+        // 世界时间含 createShard 热身结算拍：1503 探测轮 + 1。
+        assert_eq!(report["workload"]["after"]["time"], 1504);
         for player in report["workload"]["after"]["players"].as_array().unwrap() {
             assert_eq!(player["creep"]["ticksToLive"], 1);
+            // 计数器只在玩家结算轮递增：热身拍先于对象放置，不计数。
             assert_eq!(player["counter"]["fields"]["value"], 1503);
         }
         Ok(())

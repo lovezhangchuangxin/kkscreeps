@@ -43,7 +43,7 @@ pub(super) fn stop_run_commit_blind_impl() -> anyhow::Result<()> {
         runs["p2"].expr["kind"], "terminated",
         "p2 结局分类 Terminated"
     );
-    assert_eq!(e.get_game_time(), 1, "停跑轮世界照常推进");
+    assert_eq!(e.get_game_time(), 2, "停跑轮世界照常推进");
     // 跳帧玩家也要提交回充，桶从 -2000 变为 -2 * limit，即 -40。
     assert_eq!(
         e.player_bucket_for_test("p2")?,

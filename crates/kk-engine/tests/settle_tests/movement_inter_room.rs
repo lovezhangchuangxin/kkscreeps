@@ -87,7 +87,7 @@ impl TwoRooms {
         kk_engine::settle::inter_room::apply_inter_room_moves(&mut rooms, &moves);
         let (players, next, _) = state.into_parts().unwrap();
         self.players = players;
-        self.world.commit_tick_rooms(rooms, next).unwrap();
+        self.world.commit_tick_rooms(rooms, next, true).unwrap();
     }
 }
 

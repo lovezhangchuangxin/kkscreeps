@@ -6,7 +6,7 @@
 module.exports.loop = function () {
   const others = Game.rooms.W1N1 ? Game.rooms.W1N1.find(FIND_CREEPS) : [];
   const findCreep = (name) => Game.creeps[name] || others.find((c) => c.name === name);
-  if (Game.time === 0) {
+  if (Game.time === 1) {
     if (Game.creeps.hauler) {
       Game.creeps.hauler.pull(Game.creeps.cart);
       Game.creeps.hauler.move(TOP);
@@ -22,7 +22,7 @@ module.exports.loop = function () {
       }
     }
   }
-  if (Game.time >= 1) {
+  if (Game.time >= 2) {
     Memory.positions = {};
     for (const name of ['hauler', 'cart', 'thief', 'victim']) {
       const creep = findCreep(name);

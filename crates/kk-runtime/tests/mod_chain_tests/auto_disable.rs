@@ -57,7 +57,7 @@ fn automatic_disable_retains_streak_across_recovery_and_retries_cached_players()
                 .contains("已自动停用 Mod [bad, dependent]"),
             "{error}"
         );
-        assert_eq!(e.get_game_time(), 0);
+        assert_eq!(e.get_game_time(), 1);
         assert_eq!(e.engine_generation(), generation);
         assert_eq!(e.player_state_for_test("p1"), Some(&player));
         assert_eq!(e.player_bucket_for_test("p1")?, before_bucket);
@@ -72,7 +72,7 @@ fn automatic_disable_retains_streak_across_recovery_and_retries_cached_players()
         legacy["mod_id"] = json!("healthy");
         assert!(serde_json::from_value::<kk_runtime::ModAutoDisable>(legacy).is_err());
         assert_eq!(decision.consecutive_faults, 2);
-        assert_eq!(decision.trigger.tick, 0);
+        assert_eq!(decision.trigger.tick, 1, "首个玩家结算拍（热身后）");
         assert_eq!(decision.trigger.target, source);
         assert_eq!(
             decision
@@ -98,7 +98,7 @@ fn automatic_disable_retains_streak_across_recovery_and_retries_cached_players()
         assert_eq!(e.mod_fault_streak().unwrap().consecutive_faults, 2);
         let retried = e.run_player("p1", "throw Error('不得重跑')")?;
         assert_eq!(retried.expr["value"], 1);
-        assert_eq!(e.get_game_time(), 1);
+        assert_eq!(e.get_game_time(), 2);
         assert!(e.mod_fault_streak().is_none());
         assert_eq!(e.get_object(&source).unwrap()["store"]["energy"], 75);
         assert_eq!(e.get_object(&target).unwrap()["store"]["energy"], 24);
@@ -188,7 +188,7 @@ fn automatic_disable_handles_control_context_conversion_and_domain_write_faults(
         let decision = e.last_mod_auto_disable().unwrap();
         assert_eq!(decision.trigger.error.fault.unwrap().kind, kind);
         assert_eq!(cooldown(&e, &id), 10);
-        assert_eq!(e.get_game_time(), 0);
+        assert_eq!(e.get_game_time(), 1);
         e.tick(1)?;
         assert_eq!(cooldown(&e, &id), 9);
     }
@@ -256,7 +256,7 @@ fn changing_fault_source_starts_new_streak_instead_of_accumulating_another_mod()
         std::collections::BTreeSet::from(["b".into()])
     );
     e.run_player("p1", "")?;
-    assert_eq!(e.get_game_time(), 1);
+    assert_eq!(e.get_game_time(), 2);
     Ok(())
 }
 
@@ -277,7 +277,7 @@ fn automatic_disable_is_off_by_default_but_counter_is_retained() -> anyhow::Resu
         assert_eq!(e.mod_fault_streak().unwrap().consecutive_faults, count);
         assert!(e.disabled_mods().is_empty());
         assert!(e.last_mod_auto_disable().is_none());
-        assert_eq!(e.get_game_time(), 0);
+        assert_eq!(e.get_game_time(), 1);
     }
     Ok(())
 }

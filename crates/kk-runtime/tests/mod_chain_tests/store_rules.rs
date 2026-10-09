@@ -101,7 +101,7 @@ fn overridden_capacity_clamps_real_transfer_and_retries_once() -> anyhow::Result
         e.fail_next_writeback_for_test(kk_engine::WritebackStep::RawMemory);
         assert!(e.run_player("p1",&format!("Memory.count=(Memory.count||0)+1;[Game.creeps.hauler.transfer(Game.getObjectById({container:?}),RESOURCE_ENERGY),Game.creeps.second.transfer(Game.getObjectById({container:?}),RESOURCE_ENERGY)]")).is_err());
         assert_eq!(e.world_snapshot(), before);
-        assert_eq!(e.get_game_time(), 0);
+        assert_eq!(e.get_game_time(), 1);
         assert_eq!(e.player_state("p1").unwrap().raw_memory, memory_before);
         // 待重试轮次忽略此脚本；原已执行玩家结果只提交一次。
         let run = e.run_player("p1", "throw Error('cannot rerun')")?;

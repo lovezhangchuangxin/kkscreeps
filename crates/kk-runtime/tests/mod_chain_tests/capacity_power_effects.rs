@@ -225,8 +225,8 @@ fn operate_extension_fill_order_budget_and_gates() -> anyhow::Result<()> {
         assert_eq!(e.get_object(&pc).unwrap()["store"]["ops"], 298, "ops 扣 2");
         assert_eq!(
             e.get_object(&pc).unwrap()["powers"]["6"]["cooldownTime"],
-            50,
-            "cooldown 50（结算于 tick 0）"
+            51,
+            "cooldown 50（施放结算于 tick 1：热身后首个玩家拍）"
         );
         assert!(
             e.get_object(&s).unwrap()["effects"].is_null(),

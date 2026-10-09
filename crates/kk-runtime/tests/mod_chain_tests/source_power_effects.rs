@@ -51,7 +51,7 @@ fn source_regen_all_levels_follow_cast_phase_and_refresh_restarts_phase() -> any
             assert_eq!(e.get_object(&pc).unwrap()["store"]["ops"], 300);
             assert_eq!(
                 e.get_object(&pc).unwrap()["powers"][c::PWR_REGEN_SOURCE.to_string()]["cooldownTime"],
-                107
+                108
             );
             actor(&mut e, "refresh", c::PWR_REGEN_SOURCE, level)?;
             e.run_player("p1", &cast("refresh", c::PWR_REGEN_SOURCE, &s))?;
